@@ -22,7 +22,6 @@ import { MathConstants } from "../../MathHelpers.js";
 //  - Support view-space and screen-space primitives
 //  - Line width emulation?
 //  - Depth fade?
-//  - Drop indexless draws, both for code simplification, and to merge draws
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [
     { numUniformBuffers: 1, numSamplers: 0 },
@@ -69,9 +68,9 @@ enum BehaviorType {
 
 class BufferPage {
     public vertexData: Float32Array;
-    public indexData: Uint16Array | null = null;
+    public indexData: Uint16Array;
     public vertexBuffer: GfxBuffer;
-    public indexBuffer: GfxBuffer | null = null;
+    public indexBuffer: GfxBuffer;
     public inputLayout: GfxInputLayout;
 
     public vertexBufferOffs = 0;
@@ -88,10 +87,8 @@ class BufferPage {
         this.vertexData = new Float32Array(vertexCount * this.vertexStride);
         this.vertexBuffer = device.createBuffer(this.vertexData.length, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Dynamic);
 
-        if (indexCount > 0) {
-            this.indexData = new Uint16Array(align(indexCount, 2));
-            this.indexBuffer = device.createBuffer(this.indexData.length >>> 1, GfxBufferUsage.Index, GfxBufferFrequencyHint.Dynamic);
-        }
+        this.indexData = new Uint16Array(align(indexCount, 2));
+        this.indexBuffer = device.createBuffer(this.indexData.length >>> 1, GfxBufferUsage.Index, GfxBufferFrequencyHint.Dynamic);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: 0, format: GfxFormat.F32_RGB, bufferIndex: 0, bufferByteOffset: 0 },
@@ -102,7 +99,7 @@ class BufferPage {
         ];
 
         this.inputLayout = cache.createInputLayout({
-            indexBufferFormat: indexCount > 0 ? GfxFormat.U16_R : null,
+            indexBufferFormat: GfxFormat.U16_R,
             vertexAttributeDescriptors,
             vertexBufferDescriptors,
         });
@@ -110,15 +107,10 @@ class BufferPage {
 
     public getCurrentVertexID() { return (this.vertexBufferOffs / this.vertexStride) >>> 0; }
     private remainVertex() { return this.vertexData.length - this.vertexBufferOffs; }
-    private remainIndex() { return this.indexData!.length - this.indexBufferOffs; }
+    private remainIndex() { return this.indexData.length - this.indexBufferOffs; }
 
-    public canAllocVertices(vertexCount: number, indexCount: number | null): boolean {
-        if ((vertexCount * this.vertexStride) > this.remainVertex())
-            return false;
-        if (indexCount !== null)
-            return this.indexData !== null && indexCount <= this.remainIndex();
-        else
-            return this.indexData === null;
+    public canAllocVertices(vertexCount: number, indexCount: number): boolean {
+        return (vertexCount * this.vertexStride) <= this.remainVertex() && indexCount <= this.remainIndex();
     }
 
     public endFrame(device: GfxDevice, templateRenderInst: GfxRenderInst): boolean {
@@ -132,22 +124,20 @@ class BufferPage {
         }
 
         device.uploadBufferData(this.vertexBuffer, 0, new Uint8Array(this.vertexData.buffer), 0, this.vertexBufferOffs * 4);
-        if (this.indexData !== null)
-            device.uploadBufferData(this.indexBuffer!, 0, new Uint8Array(this.indexData.buffer), 0, this.indexBufferOffs * 2);
+        device.uploadBufferData(this.indexBuffer, 0, new Uint8Array(this.indexData.buffer), 0, this.indexBufferOffs * 2);
 
         this.renderInst.copyFrom(templateRenderInst);
 
         this.renderInst.setPrimitiveTopology(this.behaviorType === BehaviorType.Lines ? GfxPrimitiveTopology.Lines : GfxPrimitiveTopology.Triangles);
         this.renderInst.setVertexInput(this.inputLayout, [
             { buffer: this.vertexBuffer, byteOffset: 0 },
-        ], this.indexBuffer !== null ? { buffer: this.indexBuffer, byteOffset: 0 } : null);
+        ], { buffer: this.indexBuffer, byteOffset: 0 });
 
         setAttachmentStateSimple(this.renderInst.getMegaStateFlags(), { blendMode: GfxBlendMode.Add, blendSrcFactor: GfxBlendFactor.One, blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha });
         if (this.behaviorType === BehaviorType.Transparent)
             this.renderInst.setMegaStateFlags({ depthWrite: false });
 
-        const drawCount = this.indexBuffer !== null ? this.indexBufferOffs : this.getCurrentVertexID();
-        this.renderInst.setDrawCount(drawCount);
+        this.renderInst.setDrawCount(this.indexBufferOffs);
 
         this.vertexBufferOffs = 0;
         this.indexBufferOffs = 0;
@@ -187,25 +177,29 @@ export class DebugDraw {
         offs += fillMatrix4x3(d, offs, viewFromWorldMatrix);
     }
 
-    private findPage(behaviorType: BehaviorType, vertexCount: number, indexCount: number | null = null): BufferPage {
+    private findPage(behaviorType: BehaviorType, vertexCount: number, indexCount: number): BufferPage {
         for (let i = 0; i < this.pages.length; i++)
             if (this.pages[i].behaviorType === behaviorType && this.pages[i].canAllocVertices(vertexCount, indexCount))
                 return this.pages[i];
 
         vertexCount = align(vertexCount, this.defaultPageVertexCount);
-        indexCount = indexCount !== null ? align(indexCount, this.defaultPageIndexCount) : 0;
+        indexCount = align(indexCount, this.defaultPageIndexCount);
         const page = new BufferPage(this.cache, behaviorType, vertexCount, indexCount);
         this.pages.push(page);
         return page;
     }
 
     public drawWorldLine(p0: ReadonlyVec3, p1: ReadonlyVec3, color0: Color, color1 = color0): void {
-        const page = this.findPage(BehaviorType.Lines, 2);
+        const page = this.findPage(BehaviorType.Lines, 2, 2);
 
+        const baseVertex = page.getCurrentVertexID();
         page.vertexBufferOffs += fillVec3p(page.vertexData, page.vertexBufferOffs, p0);
         page.vertexBufferOffs += fillColor(page.vertexData, page.vertexBufferOffs, color0);
         page.vertexBufferOffs += fillVec3p(page.vertexData, page.vertexBufferOffs, p1);
         page.vertexBufferOffs += fillColor(page.vertexData, page.vertexBufferOffs, color1);
+
+        page.indexData[page.indexBufferOffs++] = baseVertex + 0;
+        page.indexData[page.indexBufferOffs++] = baseVertex + 1;
     }
 
     public drawWorldDiscSolidN(center: ReadonlyVec3, n: ReadonlyVec3, r: number, color: Color, sides = 32): void {
@@ -233,14 +227,14 @@ export class DebugDraw {
 
         // construct trifans by hand
         for (let i = 0; i < sides - 2; i++) {
-            page.indexData![page.indexBufferOffs++] = baseVertex;
-            page.indexData![page.indexBufferOffs++] = baseVertex + 1 + i;
-            page.indexData![page.indexBufferOffs++] = baseVertex + 2 + i;
+            page.indexData[page.indexBufferOffs++] = baseVertex;
+            page.indexData[page.indexBufferOffs++] = baseVertex + 1 + i;
+            page.indexData[page.indexBufferOffs++] = baseVertex + 2 + i;
         }
 
-        page.indexData![page.indexBufferOffs++] = baseVertex;
-        page.indexData![page.indexBufferOffs++] = baseVertex + sides - 1;
-        page.indexData![page.indexBufferOffs++] = baseVertex + 1;
+        page.indexData[page.indexBufferOffs++] = baseVertex;
+        page.indexData[page.indexBufferOffs++] = baseVertex + sides - 1;
+        page.indexData[page.indexBufferOffs++] = baseVertex + 1;
     }
 
     public drawWorldRectSolid(p0: ReadonlyVec3, p1: ReadonlyVec3, p2: ReadonlyVec3, p3: ReadonlyVec3, color: Color): void {
@@ -248,7 +242,6 @@ export class DebugDraw {
         const page = this.findPage(behaviorType, 4, 6);
 
         const baseVertex = page.getCurrentVertexID();
-
         page.vertexBufferOffs += fillVec3p(page.vertexData, page.vertexBufferOffs, p0);
         page.vertexBufferOffs += fillColor(page.vertexData, page.vertexBufferOffs, color);
         page.vertexBufferOffs += fillVec3p(page.vertexData, page.vertexBufferOffs, p1);
@@ -258,7 +251,7 @@ export class DebugDraw {
         page.vertexBufferOffs += fillVec3p(page.vertexData, page.vertexBufferOffs, p3);
         page.vertexBufferOffs += fillColor(page.vertexData, page.vertexBufferOffs, color);
 
-        page.indexBufferOffs += convertToTrianglesRange(page.indexData!, page.indexBufferOffs, GfxTopology.Quads, baseVertex, 4);
+        page.indexBufferOffs += convertToTrianglesRange(page.indexData, page.indexBufferOffs, GfxTopology.Quads, baseVertex, 4);
     }
 
     private endFrame(): boolean {
