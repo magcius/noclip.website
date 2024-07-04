@@ -119,7 +119,7 @@ class WiiUTransferToolRenderer extends BasicGXRendererHelper implements SceneGfx
 
         // Change interactivity based on whether we're paused or not...
         const isPaused = viewerInput.deltaTime === 0;
-        this.context.inputManager.isInteractive = isPaused;
+        this.context.inputManager.isMouseEnabled = isPaused;
 
         const isFinished = this.stages[this.currentStage].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput, isPaused);
         if (isFinished) {

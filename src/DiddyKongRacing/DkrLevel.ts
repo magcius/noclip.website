@@ -108,7 +108,6 @@ export class DkrLevel {
         const camera = viewerInput.camera;
 
         viewerInput.camera.worldMatrix[12] = -viewerInput.camera.worldMatrix[12];
-        mat4.invert(camera.viewMatrix, camera.worldMatrix);
         camera.worldMatrixUpdated();
 
         this.cameraInMirrorMode = DkrControlGlobals.ADV2_MIRROR.on;

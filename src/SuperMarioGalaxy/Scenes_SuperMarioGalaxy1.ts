@@ -133,12 +133,14 @@ class DayInTheLifeOfALumaController extends NameObj {
     public override movement(sceneObjHolder: SceneObjHolder): void {
         super.movement(sceneObjHolder);
 
-        this.tryPickNewTico(sceneObjHolder.deltaTimeFrames);
+        if (sceneObjHolder.inputManager.isKeyDownEventTriggered('Space'))
+            this.pickNewTico();
+        else
+            this.tryPickNewTico(sceneObjHolder.deltaTimeFrames);
         this.camera();
 
         const camera = sceneObjHolder.viewerInput.camera;
-        mat4.lookAt(camera.viewMatrix, this.cameraEye, this.cameraCenter, scratchVec3b);
-        mat4.invert(camera.worldMatrix, camera.viewMatrix);
+        mat4.targetTo(camera.worldMatrix, this.cameraEye, this.cameraCenter, scratchVec3b);
         camera.worldMatrixUpdated();
     }
 }
@@ -151,7 +153,7 @@ class DayInTheLifeOfALuma extends SMG1SceneDesc {
     }
 
     protected override setup(context: SceneContext, renderer: SMGRenderer): void {
-        context.inputManager.isInteractive = false;
+        context.inputManager.isMouseEnabled = false;
     }
 }
 

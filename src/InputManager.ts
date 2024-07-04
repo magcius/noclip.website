@@ -48,7 +48,7 @@ export default class InputManager {
     public ondraggingmodechanged: (() => void) | null = null;
     private scrollListeners: Listener[] = [];
     private usePointerLock: boolean = true;
-    public isInteractive: boolean = true;
+    public isMouseEnabled: boolean = true;
 
     private touchGesture: TouchGesture = TouchGesture.None;
     private prevTouchX: number = 0; // When scrolling, contains finger X; when pinching, contains midpoint X
@@ -75,7 +75,7 @@ export default class InputManager {
         });
         this.toplevel.addEventListener('wheel', this._onWheel, { passive: true });
         this.toplevel.addEventListener('mousedown', (e) => {
-            if (!this.isInteractive)
+            if (!this.isMouseEnabled)
                 return;
             this.buttons = e.buttons;
             GlobalGrabManager.takeGrab(this, e, { takePointerLock: this.usePointerLock, useGrabbingCursor: true, releaseOnMouseUp: this.releaseOnMouseUp });
@@ -223,7 +223,7 @@ export default class InputManager {
     }
 
     private _onTouchChange = (e: TouchEvent) => { // start, end or cancel a touch
-        if (!this.isInteractive)
+        if (!this.isMouseEnabled)
             return;
         if (e.touches.length == 1) {
             const scaledTouches = this._getScaledTouches(e.touches);
@@ -247,7 +247,7 @@ export default class InputManager {
     };
 
     private _onTouchMove = (e: TouchEvent) => {
-        if (!this.isInteractive)
+        if (!this.isMouseEnabled)
             return;
         if (e.touches.length == 1) {
             const scaledTouches = this._getScaledTouches(e.touches);
@@ -288,6 +288,6 @@ export default class InputManager {
     }
 
     public reset(): void {
-        this.isInteractive = true;
+        this.isMouseEnabled = true;
     }
 }

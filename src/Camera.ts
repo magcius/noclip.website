@@ -56,6 +56,7 @@ export class Camera {
     }
 
     public worldMatrixUpdated(): void {
+        mat4.invert(this.viewMatrix, this.worldMatrix);
         this.updateClipFromWorld();
     }
 
@@ -498,14 +499,10 @@ export class FPSCameraController implements CameraController {
             if (Math.abs(this.mouseMovement[1]) < mouseMoveLowSpeedCap) this.mouseMovement[1] = 0.0;
         }
 
-        updated = updated || this.forceUpdate;
+        this.camera.isOrthographic = false;
+        this.camera.worldMatrixUpdated();
 
-        if (updated) {
-            this.camera.isOrthographic = false;
-            mat4.invert(this.camera.viewMatrix, this.camera.worldMatrix);
-            this.camera.worldMatrixUpdated();
-            this.forceUpdate = false;
-        }
+        this.forceUpdate = false;
 
         return important ? CameraUpdateResult.ImportantChange : updated ? CameraUpdateResult.Changed : CameraUpdateResult.Unchanged;
     }
@@ -524,10 +521,8 @@ export class StudioCameraController extends FPSCameraController {
 
         if (this.isAnimationPlaying) {
             result = this.updateAnimation(dt);
-            if (result === CameraUpdateResult.Changed) {
-                mat4.invert(this.camera.viewMatrix, this.camera.worldMatrix);
+            if (result === CameraUpdateResult.Changed)
                 this.camera.worldMatrixUpdated();
-            }
             // Set result to unchanged to prevent needless savestate creation during playback.
             result = CameraUpdateResult.Unchanged;
         } else {
@@ -556,10 +551,8 @@ export class StudioCameraController extends FPSCameraController {
     public setToPosition(setStep: InterpolationStep): void {
         mat4.targetTo(this.camera.worldMatrix, setStep.pos, setStep.lookAtPos, Vec3UnitY);
         mat4.rotateZ(this.camera.worldMatrix, this.camera.worldMatrix, setStep.bank);
-        mat4.invert(this.camera.viewMatrix, this.camera.worldMatrix);
         this.camera.worldMatrixUpdated();
     }
-
 }
 
 export class XRCameraController {
@@ -640,7 +633,6 @@ export class XRCameraController {
             camera.isOrthographic = false;
 
             mat4.copy(camera.worldMatrix, cameraWorldMatrix);
-            mat4.invert(camera.viewMatrix, camera.worldMatrix);
             camera.worldMatrixUpdated();
 
             // Unpack the projection matrix to get required parameters for setting clip / frustrum etc...
@@ -802,8 +794,7 @@ export class OrbitCameraController implements CameraController {
             vec3.scale(eyePos, eyePos, this.z);
             vec3.add(eyePos, eyePos, this.translation);
             this.camera.isOrthographic = false;
-            mat4.lookAt(this.camera.viewMatrix, eyePos, this.translation, Vec3UnitY);
-            mat4.invert(this.camera.worldMatrix, this.camera.viewMatrix);
+            mat4.targetTo(this.camera.worldMatrix, eyePos, this.translation, Vec3UnitY);
             this.camera.worldMatrixUpdated();
             this.forceUpdate = false;
         }
@@ -980,8 +971,7 @@ export class OrthoCameraController implements CameraController {
         computeUnitSphericalCoordinates(eyePos, this.x, this.y);
         vec3.scale(eyePos, eyePos, -this.farPlane / 2);
         vec3.add(eyePos, eyePos, this.translation);
-        mat4.lookAt(this.camera.viewMatrix, eyePos, this.translation, Vec3UnitY);
-        mat4.invert(this.camera.worldMatrix, this.camera.viewMatrix);
+        mat4.targetTo(this.camera.worldMatrix, eyePos, this.translation, Vec3UnitY);
         this.camera.setOrthographic(-this.z * 10, this.camera.aspect, this.nearPlane, this.farPlane);
         this.camera.worldMatrixUpdated();
 
@@ -1027,7 +1017,6 @@ export function deserializeCamera(camera: Camera, view: DataView, byteOffs: numb
     m[7]  = 0;
     m[11] = 0;
     m[15] = 1;
-    mat4.invert(camera.viewMatrix, camera.worldMatrix);
     camera.worldMatrixUpdated();
     return 0x04*4*3;
 }

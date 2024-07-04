@@ -3134,13 +3134,13 @@ export class SCN0Animator {
             const aimZ = sampleFloatAnimationTrack(scn0Cam.aimZ, animFrame);
             vec3.set(this.scratchAim, aimX, aimY, aimZ);
 
-            mat4.lookAt(camera.viewMatrix, this.scratchPos, this.scratchAim, Vec3UnitY);
+            mat4.targetTo(camera.worldMatrix, this.scratchPos, this.scratchAim, Vec3UnitY);
 
             // TODO(jstpierre): What units is twist in?
             // const twist = sampleFloatAnimationTrack(scn0Cam.twist, animFrame);
             // mat4.rotateZ(camera.viewMatrix, camera.viewMatrix, twist);
 
-            mat4.invert(camera.worldMatrix, camera.viewMatrix);
+            camera.worldMatrixUpdated();
         } else {
             // TODO(jstpierre): Support rotation.
             assert(false);

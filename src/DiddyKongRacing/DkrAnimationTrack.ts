@@ -171,7 +171,6 @@ export class DkrAnimationTrack {
             this.setScratches(this.points.length - 1, true);
         }
         mat4.fromRotationTranslation(camera.worldMatrix, quat_scratch, pos_scratch);
-        mat4.invert(camera.viewMatrix, camera.worldMatrix);
         camera.worldMatrixUpdated();
     }
 

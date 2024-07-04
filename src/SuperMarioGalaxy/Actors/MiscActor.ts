@@ -3394,8 +3394,7 @@ class SeaGull extends LiveActor<SeaGullNrv> {
             this.camera();
 
             const camera = sceneObjHolder.viewerInput.camera;
-            mat4.lookAt(camera.viewMatrix, this.cameraEye, this.cameraCenter, scratchVec3b);
-            mat4.invert(camera.worldMatrix, camera.viewMatrix);
+            mat4.targetTo(camera.worldMatrix, this.cameraEye, this.cameraCenter, scratchVec3b);
             camera.worldMatrixUpdated();
         }
 
