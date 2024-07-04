@@ -5,7 +5,7 @@ use deku::prelude::*;
 use deku::ctx::ByteSize;
 
 use wasm_bindgen::prelude::*;
-use crate::wow::animation::*;
+use crate::wow::{animation::*, common::parse};
 
 use super::common::{
     fixed_precision_6_9_to_f32, parse_array, AABBox, ChunkedData, Fixedi16, Quat, Vec2, Vec3, WowArray, WowCharArray
@@ -230,11 +230,13 @@ impl M2 {
         let mut txid: Option<Vec<u32>> = None;
         let mut sfid: Option<Vec<u32>> = None;
         let mut txac: Option<Vec<u16>> = None;
+        let mut maybe_exp2: Option<WowArray<Exp2Record>> = None;
         for (chunk, chunk_data) in &mut chunked_data {
             match &chunk.magic {
                 b"TXID" => txid = Some(parse_array(chunk_data, 4)?),
                 b"SFID" => sfid = Some(parse_array(chunk_data, 4)?),
                 b"TXAC" => txac = Some(parse_array(chunk_data, 2)?),
+                b"EXP2" => maybe_exp2 = Some(parse(chunk_data)?),
                 _ => {},
             }
         }
@@ -252,6 +254,7 @@ impl M2 {
             header.get_bones(m2_data)?,
             header.get_lights(m2_data)?,
             particle_emitters.clone(),
+            maybe_exp2.is_some(),
         ));
 
         let mut legacy_textures = Vec::new();
@@ -326,6 +329,19 @@ impl M2 {
     pub fn take_vertex_data(&mut self) -> Vec<u8> {
         self.vertex_data.take().expect("M2 vertex data already taken")
     }
+}
+
+#[derive(DekuRead, Debug, Clone)]
+pub struct Exp2Record {
+    pub z_source: f32,
+    pub unk1: u32,
+    pub unk2: u32,
+    pub unk3: M2TrackPartial<Fixedi16>,
+}
+
+#[derive(DekuRead, Debug, Clone)]
+pub struct Exp2 {
+    pub exp2s: WowArray<Exp2Record>,
 }
 
 #[derive(DekuRead, Debug, Clone)]
