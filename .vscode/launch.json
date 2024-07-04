@@ -2,14 +2,11 @@
     "version": "0.2.0",
     "configurations": [
       {
-        "name": "TS-Node",
-        "type": "node",
-        "request": "launch",
-        "runtimeExecutable": "${workspaceRoot}/node_modules/.bin/tsx",
-        "program": "${file}",
-        "cwd": "${workspaceRoot}",
-        "internalConsoleOptions": "openOnSessionStart",
-        "skipFiles": ["<node_internals>/**", "node_modules/**"]
-      }
+      "type": "chrome",
+      "request": "launch",
+      "name": "Launch in Chrome",
+      "url": "http://localhost:8080",
+      "sourceMaps": true
+    }
     ]
 }

@@ -1,11 +1,11 @@
-import { WowLightResult, WowVec3 } from "../../rust/pkg/index.js";
+import { WowLightResult, WowM2BlendingMode, WowVec3 } from "../../rust/pkg/index.js";
 import { DeviceProgram } from "../Program.js";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
 import { fillMatrix4x4, fillVec4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers.js";
 import { GfxBindingLayoutDescriptor } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderInst } from "../gfx/render/GfxRenderInstManager.js";
 import { rust } from "../rustlib.js";
-import { LiquidCategory } from "./data.js";
+import { LiquidCategory, ParticleEmitter } from "./data.js";
 import { SkyboxColor } from './mesh.js';
 import { View } from "./scenes.js";
 
@@ -394,7 +394,7 @@ void mainPS() {
     vec4 tex3 = texture(SAMPLER_2D(u_Texture2), v_UV2);
 
     int blendMode = int(materialParams.x);
-    if (blendMode == 1) {
+    if (blendMode == ${rust.WowM2BlendingMode.AlphaKey}) {
       if (tex.a < 0.501960814) {
         discard;
       }
@@ -808,7 +808,7 @@ export class ModelProgram extends BaseProgram {
   private static buildVertexShaderBlock(colorType: string, uvs: string[]): string {
     const colorAssignment = colorType === 'diffuse' ? `v_DiffuseColor = vec4(combinedColorHalved.r, combinedColorHalved.g, combinedColorHalved.b, combinedColor.a);`
       : colorType === 'color' ? `v_DiffuseColor = vec4(0.5, 0.5, 0.5, 1.0);`
-      : colorType === 'edgeFade' ? `v_DiffuseColor = v_DiffuseColor = vec4(combinedColorHalved.r, combinedColorHalved.g, combinedColorHalved.b, combinedColor.a * edgeScanVal);`
+      : colorType === 'edgeFade' ? `v_DiffuseColor = vec4(combinedColorHalved.r, combinedColorHalved.g, combinedColorHalved.b, combinedColor.a * edgeScanVal);`
       : `v_DiffuseColor = vec4(combinedColor.rgb * 0.5, combinedColor.a);`;
     const uvAssignments = uvs.map((uv, uvIndex) => {
       if (uv.startsWith('t')) {
@@ -1220,6 +1220,110 @@ void mainPS() {
    }
     
    gl_FragColor = finalColor;
+}
+#endif
+`;
+}
+
+export class ParticleProgram extends BaseProgram {
+  public static ub_EmitterParams = 1;
+  public static ub_DoodadParams = 2;
+
+  public static bindingLayouts: GfxBindingLayoutDescriptor[] = [
+      { numUniformBuffers: super.numUniformBuffers + 2, numSamplers: super.numSamplers + 4 },
+  ];
+
+  public override both = `
+${BaseProgram.commonDeclarations}
+
+struct DoodadInstance {
+    Mat4x4 transform;
+};
+
+struct BoneParams {
+  Mat4x4 transform;
+  vec4 params; // isSphericalBillboard, _, _, _
+};
+
+layout(std140) uniform ub_EmitterParams {
+    vec4 params; // boneIndex, alphaTest, fragShaderType, useBoneTransform
+    vec4 ub_emitterPosition;
+    vec4 ub_texScale; // x, y, _, _
+};
+
+layout(std140) uniform ub_DoodadParams {
+    DoodadInstance instances[${MAX_DOODAD_INSTANCES}];
+    BoneParams bones[${MAX_BONE_TRANSFORMS}];
+};
+
+layout(binding = 0) uniform sampler2D u_DataTex;
+layout(binding = 1) uniform sampler2D u_Tex0;
+layout(binding = 2) uniform sampler2D u_Tex1;
+layout(binding = 3) uniform sampler2D u_Tex2;
+
+varying float v_InstanceID;
+varying vec4 v_Color;
+varying vec2 v_UV0;
+varying vec2 v_UV1;
+varying vec2 v_UV2;
+
+#ifdef VERT
+void mainVS() {
+  DoodadInstance doodad = instances[gl_InstanceID];
+  int vertNum = gl_VertexID % 4;
+  int texelY = gl_VertexID / 4;
+  vec3 pos = texelFetch(SAMPLER_2D(u_DataTex), ivec2(0, texelY), 0).xyz;
+  v_Color = texelFetch(SAMPLER_2D(u_DataTex), ivec2(1, texelY), 0);
+  vec2 scale = texelFetch(SAMPLER_2D(u_DataTex), ivec2(2, texelY), 0).xy;
+  vec2 texPos = texelFetch(SAMPLER_2D(u_DataTex), ivec2(3, texelY), 0).xy;
+  vec4 viewSpacePos = Mul(u_ModelView, Mul(doodad.transform, vec4(pos, 1.0)));
+  vec2 texScale = ub_texScale.xy;
+  if (vertNum == 0) {
+    viewSpacePos.x -= scale.x;
+    viewSpacePos.y += scale.y;
+    v_UV0 = texPos + vec2(0.0, 0.0) * texScale;
+  } else if (vertNum == 1) {
+    viewSpacePos.x += scale.x;
+    viewSpacePos.y += scale.y;
+    v_UV0 = texPos + vec2(1.0, 0.0) * texScale;
+  } else if (vertNum == 2) {
+    viewSpacePos.x += scale.x;
+    viewSpacePos.y -= scale.y;
+    v_UV0 = texPos + vec2(1.0, 1.0) * texScale;
+  } else if (vertNum == 3) {
+    viewSpacePos.x -= scale.x;
+    viewSpacePos.y -= scale.y;
+    v_UV0 = texPos + vec2(0.0, 1.0) * texScale;
+  }
+  gl_Position = Mul(u_Projection, vec4(viewSpacePos.xyz, 1.0));
+}
+#endif
+
+#ifdef FRAG
+void mainPS() {
+  vec4 tex0 = texture(SAMPLER_2D(u_Tex0), v_UV0);
+  vec4 tex1 = texture(SAMPLER_2D(u_Tex1), v_UV1);
+  vec4 tex2 = texture(SAMPLER_2D(u_Tex2), v_UV2);
+
+  int shaderType = int(params.z);
+  vec4 finalColor;
+  if (shaderType == ${rust.WowM2ParticleShaderType.Mod}) {
+    finalColor = v_Color * tex0;
+  } else if (shaderType == ${rust.WowM2ParticleShaderType.TwoColorTexThreeAlphaTex}) {
+    finalColor = vec4(1.0, 0.0, 1.0, 1.0);
+  } else if (shaderType == ${rust.WowM2ParticleShaderType.ThreeColorTexThreeAlphaTex}) {
+    finalColor = vec4(1.0, 0.0, 1.0, 1.0);
+  } else if (shaderType == ${rust.WowM2ParticleShaderType.ThreeColorTexThreeAlphaTexUV}) {
+    finalColor = vec4(1.0, 0.0, 1.0, 1.0);
+  } else if (shaderType == ${rust.WowM2ParticleShaderType.Refraction}) {
+    finalColor = vec4(1.0, 0.0, 1.0, 1.0);
+  }
+
+  if (finalColor.a < params.y) {
+    discard;
+  }
+
+  gl_FragColor = finalColor;
 }
 #endif
 `;

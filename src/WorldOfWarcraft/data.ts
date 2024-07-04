@@ -1,13 +1,13 @@
-import { ReadonlyMat4, ReadonlyVec3, mat4, quat, vec3, vec4 } from "gl-matrix";
-import { WowAABBox, WowAdt, WowAdtChunkDescriptor, WowAdtLiquidLayer, WowAdtWmoDefinition, WowBgra, WowBlp, WowDatabase, WowDoodad, WowDoodadDef, WowGlobalWmoDefinition, WowLightResult, WowLiquidResult, WowM2, WowM2AnimationManager, WowM2BlendingMode, WowM2BoneFlags, WowM2MaterialFlags, WowMapFileDataIDs, WowModelBatch, WowSkin, WowSkinSubmesh, WowSkyboxMetadata, WowVec3, WowWmo, WowWmoBspNode, WowWmoGroupFlags, WowWmoGroupInfo, WowWmoHeaderFlags, WowWmoLiquidResult, WowWmoMaterial, WowWmoMaterialBatch, WowWmoMaterialFlags, WowWmoMaterialPixelShader, WowWmoMaterialVertexShader, WowWmoPortal, WowWmoPortalRef } from "../../rust/pkg/index.js";
+import { ReadonlyMat4, ReadonlyVec3, mat3, mat4, quat, vec2, vec3, vec4 } from "gl-matrix";
+import { WowAABBox, WowAdt, WowAdtChunkDescriptor, WowAdtLiquidLayer, WowAdtWmoDefinition, WowBgra, WowBlp, WowDatabase, WowDoodad, WowDoodadDef, WowGlobalWmoDefinition, WowLightResult, WowLiquidResult, WowM2, WowM2AnimationManager, WowM2BlendingMode, WowM2BoneFlags, WowM2MaterialFlags, WowM2ParticleEmitter, WowM2ParticleShaderType, WowMapFileDataIDs, WowModelBatch, WowSkin, WowSkinSubmesh, WowSkyboxMetadata, WowVec3, WowWmo, WowWmoBspNode, WowWmoGroupFlags, WowWmoGroupInfo, WowWmoHeaderFlags, WowWmoLiquidResult, WowWmoMaterial, WowWmoMaterialBatch, WowWmoMaterialFlags, WowWmoMaterialPixelShader, WowWmoMaterialVertexShader, WowWmoPortal, WowWmoPortalRef } from "../../rust/pkg/index.js";
 import { DataFetcher } from "../DataFetcher.js";
 import { AABB, Frustum, Plane } from "../Geometry.js";
-import { MathConstants, Vec3NegZ, rayTriangleIntersect, setMatrixTranslation } from "../MathHelpers.js";
+import { MathConstants, Vec3NegZ, clamp, lerp, rayTriangleIntersect, setMatrixTranslation } from "../MathHelpers.js";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
 import { reverseDepthForCompareMode } from "../gfx/helpers/ReversedDepthHelpers.js";
 import { fillMatrix4x4, fillVec4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers.js";
-import { GfxBlendFactor, GfxBlendMode, GfxBufferUsage, GfxChannelWriteMask, GfxCompareMode, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxMegaStateDescriptor, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform.js";
+import { GfxBlendFactor, GfxBlendMode, GfxBufferUsage, GfxChannelWriteMask, GfxCompareMode, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxMegaStateDescriptor, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { GfxRenderInst, GfxRendererLayer, makeSortKey } from "../gfx/render/GfxRenderInstManager.js";
 import { rust } from "../rustlib.js";
@@ -15,6 +15,7 @@ import { assert } from "../util.js";
 import { ModelProgram, WmoProgram } from "./program.js";
 import { MapArray, View, WdtScene, adtSpaceFromPlacementSpace, modelSpaceFromPlacementSpace, noclipSpaceFromAdtSpace, placementSpaceFromAdtSpace, placementSpaceFromModelSpace } from "./scenes.js";
 import { Sheepfile } from "./util.js";
+import { getDerivativeBezier, getPointBezier } from "../Spline.js";
 
 export class Database {
   private inner: WowDatabase;
@@ -303,6 +304,532 @@ export class SkyboxData {
   }
 }
 
+function uniform(min: number, max: number): number {
+  return lerp(min, max, Math.random());
+}
+
+class Particle {
+  public age = 0;
+  public alive = true;
+  public color = vec4.create();
+  public scale = vec2.create();
+  public texCoordHead = vec2.create();
+  public texCoordTail = vec2.create();
+
+  static createSpline(emitter: ParticleEmitter, dt: number): Particle {
+    let areaX = clamp(emitter.emissionAreaWidth, 0, 1);
+    let t = clamp(emitter.emissionAreaLength, 0, 1);
+    console.warn(`SPLINE`)
+
+    assert(emitter.spline !== undefined);
+
+    let position: vec3;
+    if (t > 0) {
+      if (t < 1) {
+        position = emitter.spline.calculateParametricSpline(vec3.create(), t);
+      } else {
+        position = emitter.spline.points[emitter.spline.points.length - 1];
+      }
+    } else {
+        position = emitter.spline.points[0];
+    }
+
+    let velocity: vec3;
+    if (emitter.zSource > 0.001) {
+      const dz = position[2] - emitter.zSource;
+      velocity = vec3.clone(position);
+      velocity[2] = dz;
+      vec3.normalize(velocity, velocity);
+      vec3.scale(velocity, velocity, emitter.getEmissionSpeed());
+    } else if (emitter.verticalRange !== 0.0) {
+      // this is insane. treat the spline's derivative at t as a rotation vector, and the
+      // emitter's verticalRange parameter as a rotation (in degrees). then, set the velocity
+      // to the resulting rotation along just the Z axis. i guess.
+      const rotAxis = emitter.spline.calculateParametricSplineDerivative(vec3.create(), t);
+      vec3.normalize(rotAxis, rotAxis);
+      const rotRadians = emitter.verticalRange * Math.PI / 180.0;
+      const rotQuat = quat.setAxisAngle(quat.create(), rotAxis, uniform(-1, 1) * rotRadians);
+      const rotMat = mat3.fromQuat(mat3.create(), rotQuat);
+      velocity = vec3.set(rotAxis, rotMat[6], rotMat[7], rotMat[8]);
+      vec3.scale(velocity, velocity, emitter.getEmissionSpeed());
+      if (emitter.horizontalRange !== 0.0) {
+        const posOffset = uniform(-1, 1) * emitter.horizontalRange;
+        position[0] += posOffset;
+        position[1] += posOffset;
+        position[2] += posOffset;
+      }
+    } else {
+      velocity = vec3.fromValues(0, 0, emitter.getEmissionSpeed());
+    }
+
+    return new Particle(position, velocity, emitter.getLifespan());
+  }
+
+  static createSpherical(emitter: ParticleEmitter, dt: number): Particle {
+    const emissionArea = emitter.emissionAreaWidth - emitter.emissionAreaLength;
+    const radius = emitter.emissionAreaLength + Math.random() * emissionArea;
+    const polar = uniform(-1, 1) * emitter.verticalRange;
+    const azimuth = uniform(-1, 1) * emitter.horizontalRange;
+    const cosPolar = Math.cos(polar);
+    const emissionDir = vec3.fromValues(
+      cosPolar * Math.cos(azimuth),
+      cosPolar * Math.sin(azimuth),
+      Math.sin(polar),
+    );
+    const position = vec3.scale(emissionDir, emissionDir, radius);
+
+    let velocity: vec3;
+    if (emitter.zSource < 0.001) {
+      const particlesGoUp = (emitter.emitter.flags & 0x100) > 0;
+      if (particlesGoUp) {
+        velocity = vec3.fromValues(0, 0, 1);
+      } else {
+        velocity = vec3.fromValues(
+          cosPolar * Math.cos(azimuth),
+          cosPolar * Math.sin(azimuth),
+          Math.sin(polar)
+        );
+      }
+    } else {
+      velocity = vec3.fromValues(0, 0, emitter.zSource);
+      vec3.sub(velocity, position, velocity);
+      if (vec3.len(velocity) > 0.0001) {
+        vec3.normalize(velocity, velocity);
+      }
+    }
+    vec3.scale(velocity, velocity, emitter.getEmissionSpeed());
+
+    return new Particle(position, velocity, emitter.getLifespan());
+  }
+
+  static createPlanar(emitter: ParticleEmitter, dt: number): Particle {
+    const position = vec3.fromValues(
+      uniform(-1, 1) * emitter.emissionAreaLength * 0.5,
+      uniform(-1, 1) * emitter.emissionAreaWidth * 0.5,
+      0,
+    );
+    let velocity: vec3;
+    if (emitter.zSource < 0.001) {
+      const polar = emitter.verticalRange * uniform(-1, 1);
+      const azimuth = emitter.horizontalRange * uniform(-1, 1);
+      const sinPolar = Math.sin(polar);
+      const sinAzimuth = Math.sin(azimuth);
+      const cosPolar = Math.cos(polar);
+      const cosAzimuth = Math.cos(azimuth);
+      velocity = vec3.fromValues(
+        cosAzimuth * sinPolar,
+        sinAzimuth * sinPolar,
+        cosPolar,
+      );
+      vec3.scale(velocity, velocity, emitter.getEmissionSpeed());
+    } else {
+      velocity = vec3.fromValues(0, 0, emitter.zSource);
+      vec3.sub(velocity, position, velocity);
+      if (vec3.len(velocity) > 0.0001) {
+        vec3.normalize(velocity, velocity);
+        vec3.scale(velocity, velocity, emitter.getEmissionSpeed())
+      }
+    }
+
+    return new Particle(position, velocity, emitter.getLifespan());
+  }
+
+  constructor(public position: vec3, public velocity: vec3, public lifespan: number) {
+  }
+}
+
+const PARTICLE_COORDINATE_FIX: mat4 = mat4.fromValues(
+  0.0, 1.0, 0.0, 0.0,
+  -1.0, 0.0, 0.0, 0.0,
+  0.0, 0.0, 1.0, 0.0,
+  0.0, 0.0, 0.0, 1.0
+);
+
+class BezierSpline {
+  public segmentLengths: number[];
+  public totalLength: number;
+
+  constructor(public points: vec3[]) {
+    this.calculateSplineArcLengths();
+  }
+
+  public calculateParametricSpline(out: vec3, t: number): vec3 {
+    assert(t >= 0 && t <= 1);
+    const [segment, segmentT] = this.findParametricSegment(t);
+    this.evaluateSegment(out, segment, segmentT);
+    return out;
+  }
+
+  public calculateParametricSplineDerivative(out: vec3, t: number): vec3 {
+    assert(t >= 0 && t <= 1);
+    const [segment, segmentT] = this.findParametricSegment(t);
+    this.evaluateDerivative(out, segment, segmentT);
+    return out;
+  }
+
+  private findParametricSegment(t: number): [number, number] {
+    const targetLength = t * this.totalLength;
+    let length = 0;
+    const numSegments = (this.points.length - 1) / 3;
+    for (let segment=0; segment<numSegments; segment++) {
+      const segmentLength = this.segmentLengths[segment];
+      if (length + segmentLength < targetLength) {
+        length += segmentLength;
+      } else {
+        const segmentT = (targetLength - length) / segmentLength;
+        return [segment, segmentT];
+      }
+    }
+    throw new Error(`failed to find spline segment for parametric t=${t}`);
+  }
+
+  private evaluateSegment(out: vec3, segment: number, t: number) {
+    const p0 = this.points[segment * 3 + 0];
+    const p1 = this.points[segment * 3 + 1];
+    const p2 = this.points[segment * 3 + 2];
+    const p3 = this.points[segment * 3 + 3];
+    out[0] = getPointBezier(p0[0], p1[0], p2[0], p3[0], t);
+    out[1] = getPointBezier(p0[1], p1[1], p2[1], p3[1], t);
+    out[2] = getPointBezier(p0[2], p1[2], p2[2], p3[2], t);
+  }
+
+  private evaluateDerivative(out: vec3, segment: number, t: number) {
+    const p0 = this.points[segment * 3 + 0];
+    const p1 = this.points[segment * 3 + 1];
+    const p2 = this.points[segment * 3 + 2];
+    const p3 = this.points[segment * 3 + 3];
+    out[0] = getDerivativeBezier(p0[0], p1[0], p2[0], p3[0], t);
+    out[1] = getDerivativeBezier(p0[1], p1[1], p2[1], p3[1], t);
+    out[2] = getDerivativeBezier(p0[2], p1[2], p2[2], p3[2], t);
+  }
+
+  private calculateSplineArcLengths() {
+    this.segmentLengths = [];
+    this.totalLength = 0;
+    const numSegments = (this.points.length - 1) / 3;
+    const iterationsPerSegment = 20;
+    const dt = 1/iterationsPerSegment;
+    const lastPos = vec3.create();
+    const currPos = vec3.create();
+
+    for (let segment=0; segment<numSegments; segment++) {
+      let length = 0;
+      if (lastPos[0] === 0 && lastPos[1] === 0 && lastPos[2] === 0) {
+        this.evaluateSegment(lastPos, segment, 0);
+      }
+
+      let t = dt;
+      for (let iteration=0; iteration<iterationsPerSegment; iteration++) {
+        this.evaluateSegment(currPos, segment, t);
+        length += vec3.dist(currPos, lastPos);
+        vec3.copy(lastPos, currPos);
+        t += dt;
+      }
+      this.segmentLengths.push(length);
+      this.totalLength += length;
+    }
+  }
+}
+
+export class ParticleEmitter {
+  static MAX_PARTICLES = 2000;
+  static TEXELS_PER_PARTICLE = 4; // pos, color, scale, texCoord
+
+  public enabled = 0;
+  private emissionSpeed = 0;
+  private speedVariation = 0;
+  public verticalRange = 0;
+  public horizontalRange = 0;
+  public gravity = vec3.create();
+  private lifespan = 0;
+  private emissionRate = 0;
+  public emissionAreaLength = 0;
+  public emissionAreaWidth = 0;
+  public zSource = 0;
+  public particles: Particle[] = [];
+  private baseSpin = 0;
+  private spin = 0;
+  public wind: vec3;
+  public textures: (BlpData | null)[] = [];
+  public texScaleX: number;
+  public texScaleY: number;
+  public alphaTest: number;
+  public fragShaderType: number;
+  public blendMode: WowM2BlendingMode;
+  public position: vec3;
+  public modelMatrix = mat4.create();
+  private force = vec3.create();
+  private updateBuffer: Float32Array;
+  private particlesToEmit = 0.0;
+  private dataTexture: GfxTexture | undefined;
+  private textureColMask: number;
+  private textureColBits: number;
+  public particleType: number;
+  public spline?: BezierSpline;
+
+  constructor(public index: number, public emitter: WowM2ParticleEmitter, private model: ModelData, public txac: number) {
+    this.updateBuffer = new Float32Array(11);
+    this.wind = convertWowVec3(emitter.wind_vector);
+    this.position = convertWowVec3(emitter.position);
+    this.particleType = this.calculateParticleType();
+    if (emitter.has_multiple_textures()) {
+      this.textures.push(model.blps[emitter.texture_id & 0x1F]);
+      this.textures.push(model.blps[(emitter.texture_id >> 5) & 0x1F]);
+      this.textures.push(model.blps[(emitter.texture_id >> 10) & 0x1F]);
+    } else {
+      this.textures.push(model.blps[emitter.texture_id]);
+      this.textures.push(null);
+      this.textures.push(null);
+    }
+    const wowSplinePoints = this.emitter.take_spline_points();
+    if (wowSplinePoints !== undefined) {
+      const splinePoints = [];
+      for (const point of wowSplinePoints) {
+        splinePoints.push(convertWowVec3(point));
+      }
+      this.spline = new BezierSpline(splinePoints);
+    }
+    this.textureColBits = Math.ceil(Math.log2(emitter.texture_dimensions_cols));
+    this.textureColMask = (1 << this.textureColBits) - 1;
+    this.texScaleX = 1.0 / emitter.texture_dimension_rows;
+    this.texScaleY = 1.0 / emitter.texture_dimensions_cols;
+    if (emitter.blending_type === 0) {
+      this.alphaTest = -1;
+    } else if (emitter.blending_type === 1) {
+      this.alphaTest = 0.501960814;
+    } else {
+      this.alphaTest = 0.0039215689;
+    }
+    this.fragShaderType = this.calculateShaderType();
+    this.blendMode = emitter.get_blend_mode();
+  }
+
+  private calculateParticleType(): number {
+    if (!this.emitter.check_flag(0x10100000)) {
+      return 0;
+    } else {
+      if (this.emitter.check_flag(0x1c)) {
+        return 2;
+      } else {
+        return 3;
+      }
+    }
+  }
+
+  private calculateShaderType(): WowM2ParticleShaderType {
+    // some awful undocumented flag stuff
+    let material0x20 = false;
+    let material0x01 = true;
+    if (this.emitter.check_flag(0x10000000)) {
+      material0x01 = false;
+      material0x20 = this.emitter.check_flag(0x40000000);
+    } else if (this.emitter.check_flag(0x100000)) {
+      material0x01 = false;
+    } else {
+      material0x01 = !this.emitter.check_flag(0x1);
+    }
+
+    const multiTex = this.emitter.check_flag(0x10000000);
+    if (this.particleType === 2 || (this.particleType === 4 && multiTex) && this.txac !== 0) {
+      assert(material0x20);
+      return rust.WowM2ParticleShaderType.ThreeColorTexThreeAlphaTexUV;
+    } else if (this.particleType === 2 || (this.particleType === 4 && multiTex)) {
+      if (material0x20) {
+        return rust.WowM2ParticleShaderType.ThreeColorTexThreeAlphaTex;
+      } else {
+        return rust.WowM2ParticleShaderType.TwoColorTexThreeAlphaTex;
+      }
+    } else if (this.particleType === 3) {
+      return rust.WowM2ParticleShaderType.Refraction;
+    } else {
+      return rust.WowM2ParticleShaderType.Mod;
+    }
+  }
+
+  private updateParams(dt: number, animationManager: WowM2AnimationManager) {
+    animationManager.update_particle_emitter(this.index, this.updateBuffer);
+    [
+      this.enabled,
+      this.emissionSpeed,
+      this.speedVariation,
+      this.verticalRange,
+      this.horizontalRange,
+      this.lifespan,
+      this.emissionRate,
+      this.emissionAreaLength,
+      this.emissionAreaWidth,
+      this.zSource,
+    ] = this.updateBuffer;
+    if (this.emitter.use_compressed_gravity()) {
+      console.warn(`compressed!!`)
+      this.gravity[0] = this.updateBuffer[10];
+      this.gravity[1] = this.updateBuffer[11];
+      this.gravity[2] = this.updateBuffer[12];
+    } else {
+      this.gravity[0] = 0;
+      this.gravity[1] = 0;
+      this.gravity[2] = this.updateBuffer[10];
+    }
+
+    mat4.identity(this.modelMatrix);
+    mat4.translate(this.modelMatrix, this.modelMatrix, this.position);
+    mat4.mul(this.modelMatrix, this.model.boneTransforms[this.emitter.bone], this.modelMatrix);
+    mat4.mul(this.modelMatrix, this.modelMatrix, PARTICLE_COORDINATE_FIX);
+  }
+
+  public getEmissionRate(): number {
+    return this.emissionRate + uniform(-1, 1) * this.emitter.emission_rate_variance;
+  }
+
+  public getEmissionSpeed(): number {
+    return this.emissionSpeed * (1 + uniform(-1, 1) * this.speedVariation);
+  }
+
+  public getLifespan(): number {
+    return this.lifespan + uniform(-1, 1) * this.emitter.lifespan_variance;
+  }
+
+  public getBaseSpin(): number {
+    return this.emitter.base_spin + uniform(-1, 1) * this.emitter.base_spin_variance;
+  }
+
+  public getSpin(): number {
+    return this.emitter.spin + uniform(-1, 1) * this.emitter.spin_variance;
+  }
+
+  private createParticle(dt: number) {
+    let particle: Particle;
+    if (this.emitter.emitter_type === 1) { // Plane
+      particle = Particle.createPlanar(this, dt);
+    } else if (this.emitter.emitter_type === 2) { // Sphere
+      particle = Particle.createSpherical(this, dt);
+    } else if (this.emitter.emitter_type === 3) { // Spline
+      particle = Particle.createSpline(this, dt);
+    } else {
+      throw new Error(`unknown particle emitter type ${this.emitter.emitter_type}`);
+    }
+
+    if (!this.emitter.check_flag(0x10)) {
+      vec3.transformMat4(particle.position, particle.position, this.modelMatrix);
+      const transformedVelocity = vec4.fromValues(particle.velocity[0], particle.velocity[1], particle.velocity[2], 0);
+      vec4.transformMat4(transformedVelocity, transformedVelocity, this.modelMatrix);
+      vec3.set(particle.velocity, transformedVelocity[0], transformedVelocity[1], transformedVelocity[2]);
+      if (this.emitter.check_flag(0x2000)) {
+        particle.position[2] = 0;
+      }
+    }
+    if (this.emitter.check_flag(0x40)) {
+      // TODO: add random burst value to velocity
+    }
+    if (this.emitter.check_flag(0x10000000)) {
+      // TODO: randomize particle texture stuff
+    }
+    this.particles.push(particle);
+  }
+
+  public setMegaStateFlags(renderInst: GfxRenderInst) {
+    setM2BlendModeMegaState(renderInst,
+      this.blendMode,
+      GfxCullMode.None,
+      this.emitter.blending_type <= 1,
+      GfxCompareMode.Greater,
+      makeSortKey(GfxRendererLayer.TRANSLUCENT + this.index),
+    );
+  }
+
+  private ensureTexture(device: GfxDevice) {
+    if (this.dataTexture === undefined) {
+      this.dataTexture = device.createTexture({
+        dimension: GfxTextureDimension.n2D,
+        pixelFormat: GfxFormat.F32_RGBA,
+        width: ParticleEmitter.TEXELS_PER_PARTICLE,
+        height: ParticleEmitter.MAX_PARTICLES,
+        numLevels: 1,
+        depthOrArrayLayers: 1,
+        usage: GfxTextureUsage.Sampled,
+      });
+    }
+  }
+
+  private maxLifespan(): number {
+    return this.lifespan + this.emitter.lifespan_variance
+  }
+
+  public update(dtMilliseconds: number, animationManager: WowM2AnimationManager) {
+    // the particle system's units are seconds
+    const dtSeconds = dtMilliseconds / 1000;
+    this.updateParams(dtSeconds, animationManager);
+
+    if (this.enabled > 0.0) {
+      this.particlesToEmit += this.getEmissionRate() * dtSeconds;
+      while (this.particlesToEmit > 1.0) {
+        if (this.particles.length < ParticleEmitter.MAX_PARTICLES) {
+          this.createParticle(dtSeconds);
+        }
+        this.particlesToEmit -= 1.0;
+      }
+    }
+
+    vec3.copy(this.force, this.wind);
+    vec3.sub(this.force, this.force, this.gravity);
+
+    for (let i=this.particles.length - 1; i >= 0; i--) {
+      const particle = this.particles[i];
+      particle.age += dtSeconds;
+      if (particle.age > this.lifespan) {
+        this.particles.splice(i, 1);
+      } else {
+        const agePercent = particle.age / this.maxLifespan();
+        animationManager.update_particle(this.index, agePercent, this.updateBuffer);
+        particle.color[0] = this.updateBuffer[0] / 255.0;
+        particle.color[1] = this.updateBuffer[1] / 255.0;
+        particle.color[2] = this.updateBuffer[2] / 255.0;
+        particle.color[3] = this.updateBuffer[3];
+        particle.scale[0] = this.updateBuffer[4];
+        particle.scale[1] = this.updateBuffer[5];
+        const cellHead = this.updateBuffer[6];
+        this.extractTexCoords(particle.texCoordHead, cellHead);
+        const cellTail = this.updateBuffer[6];
+        this.extractTexCoords(particle.texCoordTail, cellTail);
+
+        vec3.scaleAndAdd(particle.velocity, particle.velocity, this.force, dtSeconds);
+        if (this.emitter.drag > 0) {
+          vec3.scale(particle.velocity, particle.velocity, 1.0 - this.emitter.drag * dtSeconds);
+        }
+        vec3.scaleAndAdd(particle.position, particle.position, particle.velocity, dtSeconds);
+      }
+    }
+  }
+
+  public extractTexCoords(out: vec2, cell: number) {
+    const xInt = cell & this.textureColMask;
+    const yInt = cell >> this.textureColBits;
+    vec2.set(out, xInt * this.texScaleX, yInt * this.texScaleY);
+  }
+
+  public updateDataTex(device: GfxDevice): GfxTexture {
+    this.ensureTexture(device);
+    const bytesPerParticle = ParticleEmitter.TEXELS_PER_PARTICLE * 4;
+    const pixels = new Float32Array(ParticleEmitter.MAX_PARTICLES * bytesPerParticle);
+    const scratchVec3 = vec3.create();
+    for (let i=0; i<this.particles.length; i++) {
+      const particle = this.particles[i];
+      let offs = ParticleEmitter.TEXELS_PER_PARTICLE * i * 4;
+      vec3.copy(scratchVec3, particle.position);
+      if (this.emitter.translate_particle_with_bone()) {
+        vec3.transformMat4(scratchVec3, scratchVec3, this.modelMatrix);
+      }
+      // offs += fillVec4(pixels, offs, particle.position[0], particle.position[1], particle.position[2]);
+      offs += fillVec4(pixels, offs, scratchVec3[0], scratchVec3[1], scratchVec3[2]);
+      offs += fillVec4v(pixels, offs, particle.color);
+      offs += fillVec4(pixels, offs, particle.scale[0], particle.scale[1]);
+      offs += fillVec4(pixels, offs, particle.texCoordHead[0], particle.texCoordHead[1]);
+    }
+    device.uploadTextureData(this.dataTexture!, 0, [pixels]);
+    return this.dataTexture!;
+  }
+}
+
 export class ModelData {
   public skins: SkinData[] = [];
   public blps: BlpData[] = [];
@@ -315,6 +842,7 @@ export class ModelData {
   public textureTranslations: Float32Array;
   public numColors: number;
   public numBones: number;
+  public flags: number;
   public boneRotations: Float32Array;
   public boneScalings: Float32Array;
   public boneTranslations: Float32Array;
@@ -339,6 +867,7 @@ export class ModelData {
   public lightVisibilities: Uint8Array;
   public lightBones: Int16Array;
   public lightPositions: Float32Array;
+  public particleEmitters: ParticleEmitter[] = [];
 
   constructor(public fileId: number) {
   }
@@ -360,6 +889,15 @@ export class ModelData {
     }));
   }
 
+  public lookupTexture(n: number): BlpData | null {
+    if (this.textureLookupTable[n] !== undefined) {
+      if (this.blps[this.textureLookupTable[n]] !== undefined) {
+        return this.blps[this.textureLookupTable[n]];
+      }
+    }
+    return null;
+  }
+
   private loadSkins(cache: WowCache, m2: WowM2): Promise<SkinData[]> {
     return Promise.all(Array.from(m2.skin_ids).map(async (fileId) => {
       const skin = await cache.fetchFileByID(fileId, rust.WowSkin.new);
@@ -370,6 +908,7 @@ export class ModelData {
 
   public async load(cache: WowCache): Promise<undefined> {
     const m2 = await cache.fetchFileByID(this.fileId, rust.WowM2.new);
+    this.flags = m2.flags;
 
     this.vertexBuffer = m2.take_vertex_data();
     this.modelAABB = convertWowAABB(m2.get_bounding_box());
@@ -388,6 +927,14 @@ export class ModelData {
     this.blps = await this.loadTextures(cache, m2);
     this.skins = await this.loadSkins(cache, m2);
 
+    this.particleEmitters = m2.take_particle_emitters().map((emitter, i) => {
+      let txac = m2.get_txac_value(i)
+      if (txac === undefined) {
+        txac = 0;
+      }
+      return new ParticleEmitter(i, emitter, this, txac);
+    });
+
     this.animationManager = m2.take_animation_manager();
     this.textureWeights = new Float32Array(this.animationManager.get_num_texture_weights());
     this.numTextureTransformations = this.animationManager.get_num_transformations();
@@ -401,7 +948,7 @@ export class ModelData {
     this.numColors = this.animationManager.get_num_colors();
     this.numLights = this.animationManager.get_num_lights();
     assert(this.numLights <= 4, `model ${this.fileId} has ${this.numLights} lights`);
-    this.vertexColors = new Float32Array(this.numColors * 3);
+    this.vertexColors = new Float32Array(this.numColors * 4);
     this.ambientLightColors = new Float32Array(this.numLights * 4);
     this.diffuseLightColors = new Float32Array(this.numLights * 4);
     this.lightAttenuationStarts = new Float32Array(this.numLights);
@@ -426,16 +973,20 @@ export class ModelData {
   }
 
   public updateAnimation(view: View) {
-    this.animationManager.update_animations(
-      view.deltaTime,
+    this.animationManager.update(view.deltaTime);
+    this.animationManager.update_textures(
       this.textureWeights,
       this.textureTranslations,
       this.textureRotations,
       this.textureScalings,
+    );
+    this.animationManager.update_bones(
       this.boneTranslations,
       this.boneRotations,
       this.boneScalings,
-      this.vertexColors,
+    );
+    this.animationManager.update_vertex_colors(this.vertexColors);
+    this.animationManager.update_lights(
       this.ambientLightColors,
       this.diffuseLightColors,
       this.lightAttenuationStarts,
@@ -465,6 +1016,11 @@ export class ModelData {
         mat4.mul(this.boneTransforms[i], this.boneTransforms[parentId], this.boneTransforms[i]);
       }
     }
+
+    // if (this.fileId === 197012) debugger;
+    this.particleEmitters.forEach(emitter => {
+      emitter.update(view.deltaTime, this.animationManager);
+    });
   }
 
   public getVertexColor(index: number): vec4 {
@@ -494,7 +1050,6 @@ export class WmoBatchData {
   public vertexShader: WowWmoMaterialVertexShader;
   public pixelShader: WowWmoMaterialPixelShader;
   public textures: (BlpData | null)[] = [];
-  public megaStateFlags: Partial<GfxMegaStateDescriptor>;
   public visible = true;
 
   constructor(batch: WowWmoMaterialBatch, wmo: WmoData) {
@@ -516,74 +1071,16 @@ export class WmoBatchData {
     this.materialFlags = rust.WowWmoMaterialFlags.new(this.material.flags);
     this.vertexShader = this.material.get_vertex_shader();
     this.pixelShader = this.material.get_pixel_shader();
-    this.megaStateFlags = {
-      cullMode: this.materialFlags.unculled ? GfxCullMode.None : GfxCullMode.Back,
-      depthWrite: this.material.blend_mode <= 1,
-    };
   }
 
   public setMegaStateFlags(renderInst: GfxRenderInst) {
-    // TODO setSortKeyDepth based on distance to transparent object
-    switch (this.material.blend_mode) {
-      case rust.WowM2BlendingMode.Alpha: {
-        setAttachmentStateSimple(this.megaStateFlags, {
-          blendMode: GfxBlendMode.Add,
-          blendSrcFactor: GfxBlendFactor.SrcAlpha,
-          blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
-        });
-        renderInst.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT)
-        break;
-      }
-      case rust.WowM2BlendingMode.NoAlphaAdd: {
-        setAttachmentStateSimple(this.megaStateFlags, {
-          blendMode: GfxBlendMode.Add,
-          blendSrcFactor: GfxBlendFactor.One,
-          blendDstFactor: GfxBlendFactor.One,
-        });
-        renderInst.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT)
-        break;
-      }
-      case rust.WowM2BlendingMode.Add: {
-        setAttachmentStateSimple(this.megaStateFlags, {
-          blendMode: GfxBlendMode.Add,
-          blendSrcFactor: GfxBlendFactor.SrcAlpha,
-          blendDstFactor: GfxBlendFactor.One,
-        });
-        renderInst.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT)
-        break;
-      }
-      case rust.WowM2BlendingMode.Mod: {
-        setAttachmentStateSimple(this.megaStateFlags, {
-          blendMode: GfxBlendMode.Add,
-          blendSrcFactor: GfxBlendFactor.Dst,
-          blendDstFactor: GfxBlendFactor.Zero,
-        });
-        renderInst.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT)
-        break;
-      }
-      case rust.WowM2BlendingMode.Mod2x: {
-        setAttachmentStateSimple(this.megaStateFlags, {
-          blendMode: GfxBlendMode.Add,
-          blendSrcFactor: GfxBlendFactor.Dst,
-          blendDstFactor: GfxBlendFactor.Src,
-        });
-        renderInst.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT)
-        break;
-      }
-      case rust.WowM2BlendingMode.BlendAdd: {
-        setAttachmentStateSimple(this.megaStateFlags, {
-          blendMode: GfxBlendMode.Add,
-          blendSrcFactor: GfxBlendFactor.One,
-          blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
-        });
-        renderInst.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT)
-        break;
-      }
-      case rust.WowM2BlendingMode.Opaque:
-      case rust.WowM2BlendingMode.AlphaKey:
-        break;
-    }
-    renderInst.setMegaStateFlags(this.megaStateFlags);
+    setM2BlendModeMegaState(renderInst,
+      this.material.blend_mode,
+      this.materialFlags.unculled ? GfxCullMode.None : GfxCullMode.Back,
+      this.material.blend_mode <= 1,
+      undefined,
+      makeSortKey(GfxRendererLayer.TRANSLUCENT),
+    );
   }
 }
 
@@ -1106,125 +1603,18 @@ export class ModelRenderPass {
   }
 
   public setMegaStateFlags(renderInst: GfxRenderInst) {
-    const defaultBlendState = {
-        blendMode: GfxBlendMode.Add,
-        blendSrcFactor: GfxBlendFactor.One,
-        blendDstFactor: GfxBlendFactor.Zero,
-    };
-    let settings: Partial<GfxMegaStateDescriptor> = {
-      cullMode: this.materialFlags.two_sided ? GfxCullMode.None : GfxCullMode.Back,
-      depthWrite: this.materialFlags.depth_write,
-      depthCompare: this.materialFlags.depth_tested ? reverseDepthForCompareMode(GfxCompareMode.LessEqual) : GfxCompareMode.Always,
-      attachmentsState: [{
-        channelWriteMask: GfxChannelWriteMask.RGB,
-        rgbBlendState: defaultBlendState,
-        alphaBlendState: defaultBlendState,
-      }],
-    };
-
-    let sortKeyLayer = makeSortKey(GfxRendererLayer.TRANSLUCENT + this.layer);
-
-    // TODO setSortKeyDepth based on distance to transparent object
-    switch (this.blendMode) {
-      case rust.WowM2BlendingMode.Alpha: {
-        settings.attachmentsState![0].rgbBlendState = {
-          blendMode: GfxBlendMode.Add,
-          blendSrcFactor: GfxBlendFactor.SrcAlpha,
-          blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
-        };
-        settings.attachmentsState![0].alphaBlendState = {
-          blendMode: GfxBlendMode.Add,
-          blendSrcFactor: GfxBlendFactor.One,
-          blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
-        };
-        settings.attachmentsState![0].channelWriteMask = GfxChannelWriteMask.AllChannels;
-        renderInst.sortKey = sortKeyLayer
-        break;
-      }
-      case rust.WowM2BlendingMode.NoAlphaAdd: {
-        settings.attachmentsState![0].rgbBlendState = {
-          blendMode: GfxBlendMode.Add,
-          blendSrcFactor: GfxBlendFactor.One,
-          blendDstFactor: GfxBlendFactor.One,
-        };
-        settings.attachmentsState![0].alphaBlendState = {
-          blendMode: GfxBlendMode.Add,
-          blendSrcFactor: GfxBlendFactor.Zero,
-          blendDstFactor: GfxBlendFactor.One,
-        };
-        renderInst.sortKey = sortKeyLayer
-        break;
-      }
-      case rust.WowM2BlendingMode.Add: {
-        settings.attachmentsState![0].rgbBlendState = {
-          blendMode: GfxBlendMode.Add,
-          blendSrcFactor: GfxBlendFactor.SrcAlpha,
-          blendDstFactor: GfxBlendFactor.One,
-        };
-        settings.attachmentsState![0].alphaBlendState = {
-          blendMode: GfxBlendMode.Add,
-          blendSrcFactor: GfxBlendFactor.Zero,
-          blendDstFactor: GfxBlendFactor.One,
-        };
-        settings.attachmentsState![0].channelWriteMask = GfxChannelWriteMask.AllChannels;
-        renderInst.sortKey = sortKeyLayer
-        break;
-      }
-      case rust.WowM2BlendingMode.Mod: {
-        settings.attachmentsState![0].rgbBlendState = {
-          blendMode: GfxBlendMode.Add,
-          blendSrcFactor: GfxBlendFactor.Dst,
-          blendDstFactor: GfxBlendFactor.Zero,
-        };
-        settings.attachmentsState![0].alphaBlendState = {
-          blendMode: GfxBlendMode.Add,
-          blendSrcFactor: GfxBlendFactor.DstAlpha,
-          blendDstFactor: GfxBlendFactor.Zero,
-        };
-        renderInst.sortKey = sortKeyLayer
-        break;
-      }
-      case rust.WowM2BlendingMode.Mod2x: {
-        settings.attachmentsState![0].rgbBlendState = {
-          blendMode: GfxBlendMode.Add,
-          blendSrcFactor: GfxBlendFactor.Dst,
-          blendDstFactor: GfxBlendFactor.Src,
-        };
-        settings.attachmentsState![0].alphaBlendState = {
-          blendMode: GfxBlendMode.Add,
-          blendSrcFactor: GfxBlendFactor.DstAlpha,
-          blendDstFactor: GfxBlendFactor.SrcAlpha,
-        };
-        renderInst.sortKey = sortKeyLayer
-        break;
-      }
-      case rust.WowM2BlendingMode.BlendAdd: {
-        settings.attachmentsState![0].rgbBlendState = {
-          blendMode: GfxBlendMode.Add,
-          blendSrcFactor: GfxBlendFactor.One,
-          blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
-        };
-        settings.attachmentsState![0].alphaBlendState = {
-          blendMode: GfxBlendMode.Add,
-          blendSrcFactor: GfxBlendFactor.One,
-          blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
-        };
-        renderInst.sortKey = sortKeyLayer
-        break;
-      }
-      case rust.WowM2BlendingMode.Opaque:
-      case rust.WowM2BlendingMode.AlphaKey:
-        break;
-    }
-    renderInst.setMegaStateFlags(settings);
+    setM2BlendModeMegaState(renderInst,
+      this.blendMode,
+      this.materialFlags.two_sided ? GfxCullMode.None : GfxCullMode.Back,
+      this.materialFlags.depth_write, 
+      this.materialFlags.depth_tested ? reverseDepthForCompareMode(GfxCompareMode.LessEqual) : GfxCompareMode.Always,
+      makeSortKey(GfxRendererLayer.TRANSLUCENT + this.layer),
+    );
   }
 
   private getBlp(n: number): BlpData | null {
     if (n < this.batch.texture_count) {
-      const i = this.model.textureLookupTable[this.batch.texture_combo_index + n]!;
-      if (this.model.blps[i]) {
-        return this.model.blps[i];
-      }
+      return this.model.lookupTexture(this.batch.texture_combo_index + n);
     }
     return null;
   }
@@ -1297,6 +1687,119 @@ export class ModelRenderPass {
     offset += fillVec4v(uniformBuf, offset, textureWeight);
   }
 }
+
+function setM2BlendModeMegaState(renderInst: GfxRenderInst, blendMode: WowM2BlendingMode, cullMode: GfxCullMode, depthWrite: boolean, depthCompare: GfxCompareMode | undefined, sortKeyLayer: number) {
+  const defaultBlendState = {
+      blendMode: GfxBlendMode.Add,
+      blendSrcFactor: GfxBlendFactor.One,
+      blendDstFactor: GfxBlendFactor.Zero,
+  };
+  let settings: Partial<GfxMegaStateDescriptor> = {
+    cullMode,
+    depthWrite,
+    depthCompare,
+    attachmentsState: [{
+      channelWriteMask: GfxChannelWriteMask.RGB,
+      rgbBlendState: defaultBlendState,
+      alphaBlendState: defaultBlendState,
+    }],
+  };
+
+  // TODO setSortKeyDepth based on distance to transparent object
+  switch (blendMode) {
+    case rust.WowM2BlendingMode.Alpha: {
+      settings.attachmentsState![0].rgbBlendState = {
+        blendMode: GfxBlendMode.Add,
+        blendSrcFactor: GfxBlendFactor.SrcAlpha,
+        blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
+      };
+      settings.attachmentsState![0].alphaBlendState = {
+        blendMode: GfxBlendMode.Add,
+        blendSrcFactor: GfxBlendFactor.One,
+        blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
+      };
+      settings.attachmentsState![0].channelWriteMask = GfxChannelWriteMask.AllChannels;
+      renderInst.sortKey = sortKeyLayer
+      break;
+    }
+    case rust.WowM2BlendingMode.NoAlphaAdd: {
+      settings.attachmentsState![0].rgbBlendState = {
+        blendMode: GfxBlendMode.Add,
+        blendSrcFactor: GfxBlendFactor.One,
+        blendDstFactor: GfxBlendFactor.One,
+      };
+      settings.attachmentsState![0].alphaBlendState = {
+        blendMode: GfxBlendMode.Add,
+        blendSrcFactor: GfxBlendFactor.Zero,
+        blendDstFactor: GfxBlendFactor.One,
+      };
+      renderInst.sortKey = sortKeyLayer
+      break;
+    }
+    case rust.WowM2BlendingMode.Add: {
+      settings.attachmentsState![0].rgbBlendState = {
+        blendMode: GfxBlendMode.Add,
+        blendSrcFactor: GfxBlendFactor.SrcAlpha,
+        blendDstFactor: GfxBlendFactor.One,
+      };
+      settings.attachmentsState![0].alphaBlendState = {
+        blendMode: GfxBlendMode.Add,
+        blendSrcFactor: GfxBlendFactor.Zero,
+        blendDstFactor: GfxBlendFactor.One,
+      };
+      settings.attachmentsState![0].channelWriteMask = GfxChannelWriteMask.AllChannels;
+      renderInst.sortKey = sortKeyLayer
+      break;
+    }
+    case rust.WowM2BlendingMode.Mod: {
+      settings.attachmentsState![0].rgbBlendState = {
+        blendMode: GfxBlendMode.Add,
+        blendSrcFactor: GfxBlendFactor.Dst,
+        blendDstFactor: GfxBlendFactor.Zero,
+      };
+      settings.attachmentsState![0].alphaBlendState = {
+        blendMode: GfxBlendMode.Add,
+        blendSrcFactor: GfxBlendFactor.DstAlpha,
+        blendDstFactor: GfxBlendFactor.Zero,
+      };
+      renderInst.sortKey = sortKeyLayer
+      break;
+    }
+    case rust.WowM2BlendingMode.Mod2x: {
+      settings.attachmentsState![0].rgbBlendState = {
+        blendMode: GfxBlendMode.Add,
+        blendSrcFactor: GfxBlendFactor.Dst,
+        blendDstFactor: GfxBlendFactor.Src,
+      };
+      settings.attachmentsState![0].alphaBlendState = {
+        blendMode: GfxBlendMode.Add,
+        blendSrcFactor: GfxBlendFactor.DstAlpha,
+        blendDstFactor: GfxBlendFactor.SrcAlpha,
+      };
+      renderInst.sortKey = sortKeyLayer
+      break;
+    }
+    case rust.WowM2BlendingMode.BlendAdd: {
+      settings.attachmentsState![0].rgbBlendState = {
+        blendMode: GfxBlendMode.Add,
+        blendSrcFactor: GfxBlendFactor.One,
+        blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
+      };
+      settings.attachmentsState![0].alphaBlendState = {
+        blendMode: GfxBlendMode.Add,
+        blendSrcFactor: GfxBlendFactor.One,
+        blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
+      };
+      renderInst.sortKey = sortKeyLayer
+      break;
+    }
+    case rust.WowM2BlendingMode.Opaque:
+    case rust.WowM2BlendingMode.AlphaKey:
+      break;
+  }
+  renderInst.setMegaStateFlags(settings);
+}
+
 
 export class PortalData {
   public points: vec3[] = [];
