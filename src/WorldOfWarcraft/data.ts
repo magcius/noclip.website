@@ -2,11 +2,11 @@ import { ReadonlyMat4, ReadonlyVec3, mat3, mat4, quat, vec2, vec3, vec4 } from "
 import { WowAABBox, WowAdt, WowAdtChunkDescriptor, WowAdtLiquidLayer, WowAdtWmoDefinition, WowBgra, WowBlp, WowDatabase, WowDoodad, WowDoodadDef, WowGlobalWmoDefinition, WowLightResult, WowLiquidResult, WowM2, WowM2AnimationManager, WowM2BlendingMode, WowM2BoneFlags, WowM2MaterialFlags, WowM2ParticleEmitter, WowM2ParticleShaderType, WowMapFileDataIDs, WowModelBatch, WowSkin, WowSkinSubmesh, WowSkyboxMetadata, WowVec3, WowWmo, WowWmoBspNode, WowWmoGroupFlags, WowWmoGroupInfo, WowWmoHeaderFlags, WowWmoLiquidResult, WowWmoMaterial, WowWmoMaterialBatch, WowWmoMaterialFlags, WowWmoMaterialPixelShader, WowWmoMaterialVertexShader, WowWmoPortal, WowWmoPortalRef } from "../../rust/pkg/index.js";
 import { DataFetcher } from "../DataFetcher.js";
 import { AABB, Frustum, Plane } from "../Geometry.js";
-import { MathConstants, Vec3NegZ, clamp, lerp, rayTriangleIntersect, setMatrixTranslation } from "../MathHelpers.js";
+import { MathConstants, Vec3NegZ, randomRange, rayTriangleIntersect, saturate, setMatrixTranslation, transformVec3Mat4w0 } from "../MathHelpers.js";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
 import { reverseDepthForCompareMode } from "../gfx/helpers/ReversedDepthHelpers.js";
-import { fillMatrix4x4, fillVec4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers.js";
+import { fillMatrix4x4, fillVec3v, fillVec4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers.js";
 import { GfxBlendFactor, GfxBlendMode, GfxBufferUsage, GfxChannelWriteMask, GfxCompareMode, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxMegaStateDescriptor, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { GfxRenderInst, GfxRendererLayer, makeSortKey } from "../gfx/render/GfxRenderInstManager.js";
@@ -304,10 +304,6 @@ export class SkyboxData {
   }
 }
 
-function uniform(min: number, max: number): number {
-  return lerp(min, max, Math.random());
-}
-
 class Particle {
   public age = 0;
   public alive = true;
@@ -317,9 +313,7 @@ class Particle {
   public texCoordTail = vec2.create();
 
   static createSpline(emitter: ParticleEmitter, dt: number): Particle {
-    let areaX = clamp(emitter.emissionAreaWidth, 0, 1);
-    let t = clamp(emitter.emissionAreaLength, 0, 1);
-    console.warn(`SPLINE`)
+    let t = saturate(emitter.emissionAreaLength);
 
     assert(emitter.spline !== undefined);
 
@@ -347,13 +341,13 @@ class Particle {
       // to the resulting rotation along just the Z axis. i guess.
       const rotAxis = emitter.spline.calculateParametricSplineDerivative(vec3.create(), t);
       vec3.normalize(rotAxis, rotAxis);
-      const rotRadians = emitter.verticalRange * Math.PI / 180.0;
-      const rotQuat = quat.setAxisAngle(quat.create(), rotAxis, uniform(-1, 1) * rotRadians);
+      const rotRadians = emitter.verticalRange * MathConstants.DEG_TO_RAD;
+      const rotQuat = quat.setAxisAngle(quat.create(), rotAxis, randomRange(-1, 1) * rotRadians);
       const rotMat = mat3.fromQuat(mat3.create(), rotQuat);
       velocity = vec3.set(rotAxis, rotMat[6], rotMat[7], rotMat[8]);
       vec3.scale(velocity, velocity, emitter.getEmissionSpeed());
       if (emitter.horizontalRange !== 0.0) {
-        const posOffset = uniform(-1, 1) * emitter.horizontalRange;
+        const posOffset = randomRange(-1, 1) * emitter.horizontalRange;
         position[0] += posOffset;
         position[1] += posOffset;
         position[2] += posOffset;
@@ -368,8 +362,8 @@ class Particle {
   static createSpherical(emitter: ParticleEmitter, dt: number): Particle {
     const emissionArea = emitter.emissionAreaWidth - emitter.emissionAreaLength;
     const radius = emitter.emissionAreaLength + Math.random() * emissionArea;
-    const polar = uniform(-1, 1) * emitter.verticalRange;
-    const azimuth = uniform(-1, 1) * emitter.horizontalRange;
+    const polar = randomRange(-1, 1) * emitter.verticalRange;
+    const azimuth = randomRange(-1, 1) * emitter.horizontalRange;
     const cosPolar = Math.cos(polar);
     const emissionDir = vec3.fromValues(
       cosPolar * Math.cos(azimuth),
@@ -404,14 +398,14 @@ class Particle {
 
   static createPlanar(emitter: ParticleEmitter, dt: number): Particle {
     const position = vec3.fromValues(
-      uniform(-1, 1) * emitter.emissionAreaLength * 0.5,
-      uniform(-1, 1) * emitter.emissionAreaWidth * 0.5,
+      randomRange(-1, 1) * emitter.emissionAreaLength * 0.5,
+      randomRange(-1, 1) * emitter.emissionAreaWidth * 0.5,
       0,
     );
     let velocity: vec3;
     if (emitter.zSource < 0.001) {
-      const polar = emitter.verticalRange * uniform(-1, 1);
-      const azimuth = emitter.horizontalRange * uniform(-1, 1);
+      const polar = emitter.verticalRange * randomRange(-1, 1);
+      const azimuth = emitter.horizontalRange * randomRange(-1, 1);
       const sinPolar = Math.sin(polar);
       const sinAzimuth = Math.sin(azimuth);
       const cosPolar = Math.cos(polar);
@@ -661,7 +655,6 @@ export class ParticleEmitter {
       this.zSource,
     ] = this.updateBuffer;
     if (this.emitter.use_compressed_gravity()) {
-      console.warn(`compressed!!`)
       this.gravity[0] = this.updateBuffer[10];
       this.gravity[1] = this.updateBuffer[11];
       this.gravity[2] = this.updateBuffer[12];
@@ -678,23 +671,23 @@ export class ParticleEmitter {
   }
 
   public getEmissionRate(): number {
-    return this.emissionRate + uniform(-1, 1) * this.emitter.emission_rate_variance;
+    return this.emissionRate + randomRange(-1, 1) * this.emitter.emission_rate_variance;
   }
 
   public getEmissionSpeed(): number {
-    return this.emissionSpeed * (1 + uniform(-1, 1) * this.speedVariation);
+    return this.emissionSpeed * (1 + randomRange(-1, 1) * this.speedVariation);
   }
 
   public getLifespan(): number {
-    return this.lifespan + uniform(-1, 1) * this.emitter.lifespan_variance;
+    return this.lifespan + randomRange(-1, 1) * this.emitter.lifespan_variance;
   }
 
   public getBaseSpin(): number {
-    return this.emitter.base_spin + uniform(-1, 1) * this.emitter.base_spin_variance;
+    return this.emitter.base_spin + randomRange(-1, 1) * this.emitter.base_spin_variance;
   }
 
   public getSpin(): number {
-    return this.emitter.spin + uniform(-1, 1) * this.emitter.spin_variance;
+    return this.emitter.spin + randomRange(-1, 1) * this.emitter.spin_variance;
   }
 
   private createParticle(dt: number) {
@@ -711,9 +704,7 @@ export class ParticleEmitter {
 
     if (!this.emitter.check_flag(0x10)) {
       vec3.transformMat4(particle.position, particle.position, this.modelMatrix);
-      const transformedVelocity = vec4.fromValues(particle.velocity[0], particle.velocity[1], particle.velocity[2], 0);
-      vec4.transformMat4(transformedVelocity, transformedVelocity, this.modelMatrix);
-      vec3.set(particle.velocity, transformedVelocity[0], transformedVelocity[1], transformedVelocity[2]);
+      transformVec3Mat4w0(particle.velocity, this.modelMatrix, particle.velocity);
       if (this.emitter.check_flag(0x2000)) {
         particle.position[2] = 0;
       }
@@ -794,7 +785,7 @@ export class ParticleEmitter {
 
         vec3.scaleAndAdd(particle.velocity, particle.velocity, this.force, dtSeconds);
         if (this.emitter.drag > 0) {
-          vec3.scale(particle.velocity, particle.velocity, 1.0 - this.emitter.drag * dtSeconds);
+          vec3.scale(particle.velocity, particle.velocity, (1.0 - this.emitter.drag) ** dtSeconds);
         }
         vec3.scaleAndAdd(particle.position, particle.position, particle.velocity, dtSeconds);
       }
@@ -819,8 +810,7 @@ export class ParticleEmitter {
       if (this.emitter.translate_particle_with_bone()) {
         vec3.transformMat4(scratchVec3, scratchVec3, this.modelMatrix);
       }
-      // offs += fillVec4(pixels, offs, particle.position[0], particle.position[1], particle.position[2]);
-      offs += fillVec4(pixels, offs, scratchVec3[0], scratchVec3[1], scratchVec3[2]);
+      offs += fillVec3v(pixels, offs, scratchVec3);
       offs += fillVec4v(pixels, offs, particle.color);
       offs += fillVec4(pixels, offs, particle.scale[0], particle.scale[1]);
       offs += fillVec4(pixels, offs, particle.texCoordHead[0], particle.texCoordHead[1]);
@@ -1017,7 +1007,6 @@ export class ModelData {
       }
     }
 
-    // if (this.fileId === 197012) debugger;
     this.particleEmitters.forEach(emitter => {
       emitter.update(view.deltaTime, this.animationManager);
     });
