@@ -562,7 +562,7 @@ export class ParticleEmitter {
   public spline?: BezierSpline;
 
   constructor(public index: number, public emitter: WowM2ParticleEmitter, private model: ModelData, public txac: number) {
-    this.updateBuffer = new Float32Array(11);
+    this.updateBuffer = new Float32Array(16);
     this.wind = convertWowVec3(emitter.wind_vector);
     this.position = convertWowVec3(emitter.position);
     this.particleType = this.calculateParticleType();
@@ -780,7 +780,7 @@ export class ParticleEmitter {
         particle.scale[1] = this.updateBuffer[5];
         const cellHead = this.updateBuffer[6];
         this.extractTexCoords(particle.texCoordHead, cellHead);
-        const cellTail = this.updateBuffer[6];
+        const cellTail = this.updateBuffer[7];
         this.extractTexCoords(particle.texCoordTail, cellTail);
 
         vec3.scaleAndAdd(particle.velocity, particle.velocity, this.force, dtSeconds);

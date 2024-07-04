@@ -616,6 +616,7 @@ export class WdtScene implements Viewer.SceneGfx {
       }
       renderer.update(this.mainView);
       renderer.prepareToRenderSkybox(renderInstManager, skybox.flags, skybox.weight);
+
       skybox.free();
     }
     renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
@@ -684,6 +685,25 @@ export class WdtScene implements Viewer.SceneGfx {
 
   public adjustCameraController(c: CameraController) {
       c.setSceneMoveSpeedMult(0.01);
+  }
+
+  public dbgTeleportWorldSpaceCoord(pos: vec3) {
+    vec3.transformMat4(pos, pos, noclipSpaceFromAdtSpace);
+    const wmtx = window.main.viewer.camera.worldMatrix;
+    wmtx[12] = pos[0];
+    wmtx[13] = pos[1];
+    wmtx[14] = pos[2];
+    console.log(`Teleported to: ${pos}`);
+  }
+
+  public debugTeleport() {
+    const worldPos = vec3.create();
+    if (this.world.globalWmoDef) {
+      this.world.globalWmoDef!.worldAABB.centerPoint(worldPos);
+    } else {
+      this.world.adts[this.world.adts.length - 1].worldSpaceAABB.centerPoint(worldPos);
+    }
+    this.dbgTeleportWorldSpaceCoord(worldPos);
   }
 
   render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
