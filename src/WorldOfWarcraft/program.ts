@@ -1240,20 +1240,13 @@ struct DoodadInstance {
     Mat4x4 transform;
 };
 
-struct BoneParams {
-  Mat4x4 transform;
-  vec4 params; // isSphericalBillboard, _, _, _
-};
-
 layout(std140) uniform ub_EmitterParams {
-    vec4 params; // boneIndex, alphaTest, fragShaderType, useBoneTransform
-    vec4 ub_emitterPosition;
+    vec4 params; // alphaTest, fragShaderType
     vec4 ub_texScale; // x, y, _, _
 };
 
 layout(std140) uniform ub_DoodadParams {
     DoodadInstance instances[${MAX_DOODAD_INSTANCES}];
-    BoneParams bones[${MAX_BONE_TRANSFORMS}];
 };
 
 layout(binding = 0) uniform sampler2D u_DataTex;
@@ -1305,7 +1298,7 @@ void mainPS() {
   vec4 tex1 = texture(SAMPLER_2D(u_Tex1), v_UV1);
   vec4 tex2 = texture(SAMPLER_2D(u_Tex2), v_UV2);
 
-  int shaderType = int(params.z);
+  int shaderType = int(params.y);
   vec4 finalColor;
   if (shaderType == ${rust.WowM2ParticleShaderType.Mod}) {
     finalColor = v_Color * tex0;
@@ -1319,7 +1312,7 @@ void mainPS() {
     finalColor = vec4(1.0, 0.0, 1.0, 1.0);
   }
 
-  if (finalColor.a < params.y) {
+  if (finalColor.a < params.x) {
     discard;
   }
 

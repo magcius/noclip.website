@@ -246,26 +246,10 @@ export class ModelRenderer {
 
     for (let doodadChunk of chunk(visibleDoodads, MAX_DOODAD_INSTANCES)) {
       const template = renderInstManager.pushTemplateRenderInst();
-      const instanceParamsSize = 16;
-      const boneParamsSize = 16 + 4;
-      const baseOffs = template.allocateUniformBuffer(ParticleProgram.ub_DoodadParams,
-        instanceParamsSize * MAX_DOODAD_INSTANCES + boneParamsSize * MAX_BONE_TRANSFORMS);
-      let offs = baseOffs;
+      let offs = template.allocateUniformBuffer(ParticleProgram.ub_DoodadParams, 16 * MAX_DOODAD_INSTANCES);
       const mapped = template.mapUniformBufferF32(ParticleProgram.ub_DoodadParams);
       for (let doodad of doodadChunk) {
         offs += fillMatrix4x4(mapped, offs, doodad.modelMatrix);
-      }
-      offs = baseOffs + instanceParamsSize * MAX_DOODAD_INSTANCES;
-      assert(this.model.boneTransforms.length < MAX_BONE_TRANSFORMS, `model got too many bones (${this.model.boneTransforms.length})`);
-      mat4.identity(this.scratchMat4);
-      for (let i=0; i<MAX_BONE_TRANSFORMS; i++) {
-        if (i < this.model.boneTransforms.length) {
-          offs += fillMatrix4x4(mapped, offs, this.model.boneTransforms[i]);
-          offs += fillVec4(mapped, offs, this.model.boneFlags[i].spherical_billboard ? 1 : 0);
-        } else {
-          offs += fillMatrix4x4(mapped, offs, this.scratchMat4);
-          offs += fillVec4(mapped, offs, 0);
-        }
       }
 
       for (let i=0; i<this.model.particleEmitters.length; i++) {
@@ -276,15 +260,12 @@ export class ModelRenderer {
         emitter.updateDataTex(this.device);
 
         let renderInst = renderInstManager.newRenderInst();
-        let offs = renderInst.allocateUniformBuffer(ParticleProgram.ub_EmitterParams, 4 * 3);
+        let offs = renderInst.allocateUniformBuffer(ParticleProgram.ub_EmitterParams, 4 * 2);
         const mapped = renderInst.mapUniformBufferF32(ParticleProgram.ub_EmitterParams);
         offs += fillVec4(mapped, offs,
-          emitter.emitter.bone,
           emitter.alphaTest,
           emitter.fragShaderType,
-          emitter.emitter.translate_particle_with_bone() ? 1 : 0,
         );
-        offs += fillVec4(mapped, offs, 0);
         offs += fillVec4(mapped, offs,
           emitter.texScaleX,
           emitter.texScaleY,

@@ -184,6 +184,7 @@ pub struct AnimationManager {
     bones: Vec<M2CompBone>,
     lights: Vec<M2Light>,
     particle_emitters: Vec<ParticleEmitter>,
+    has_exp2: bool,
 }
 
 #[wasm_bindgen(js_class = "WowM2AnimationManager")]
@@ -425,8 +426,11 @@ impl AnimationManager {
             update_buffer.set_index(7, self.get_current_value_with_blend(&emitter.emission_area_length, 0.0));
             update_buffer.set_index(8, self.get_current_value_with_blend(&emitter.emission_area_width, 0.0));
 
-            // TODO: handle exp2 and set z_sources
-            update_buffer.set_index(9, 0.0);
+            if !self.has_exp2 {
+                update_buffer.set_index(9, self.get_current_value_with_blend(&emitter.z_source, 0.0));
+            } else {
+                update_buffer.set_index(9, 0.0);
+            }
 
             if emitter.use_compressed_gravity() {
                 let gravity: Vec3 = self.get_current_value_with_blend(&emitter.gravity, Vec3::new(1.0));
@@ -510,6 +514,7 @@ impl AnimationManager {
         bones: Vec<M2CompBone>,
         lights: Vec<M2Light>,
         particle_emitters: Vec<ParticleEmitter>,
+        has_exp2: bool,
     ) -> Self {
         let global_sequence_times = vec![0.0; global_sequence_durations.len()];
         // pull out the "Stand" animation, which is the resting animation for all models
@@ -535,6 +540,7 @@ impl AnimationManager {
             global_sequence_times,
             particle_emitters,
             rng,
+            has_exp2,
         }
     }
 
