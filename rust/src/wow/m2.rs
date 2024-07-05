@@ -340,11 +340,6 @@ pub struct Exp2Record {
 }
 
 #[derive(DekuRead, Debug, Clone)]
-pub struct Exp2 {
-    pub exp2s: WowArray<Exp2Record>,
-}
-
-#[derive(DekuRead, Debug, Clone)]
 pub struct M2Light {
     pub _light_type: u16, // should be 1 (point light) in all cases except the login screen
     pub bone: i16,
