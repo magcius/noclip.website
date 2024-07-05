@@ -1007,17 +1007,23 @@ export class ModelData {
         this.boneScalings.slice(i * 3, (i + 1) * 3),
       );
       mat4.mul(localBoneTransform, bone.pivot, localBoneTransform);
-      mat4.mul(localBoneTransform, localBoneTransform, bone.antiPivot);
       if (bone.parentBoneId >= 0) {
         const parentBone = this.boneData[bone.parentBoneId];
         if (bone.isSphericalBillboard) {
-          mat4.copy(bone.transform, parentBone.transform);
+          mat4.mul(bone.transform, parentBone.transform, bone.antiPivot);
           mat4.mul(bone.postBillboardTransform, parentBone.postBillboardTransform, localBoneTransform);
         } else {
-          mat4.mul(bone.transform, parentBone.transform, localBoneTransform);
+          mat4.mul(localBoneTransform, localBoneTransform, bone.antiPivot);
+          mat4.mul(bone.postBillboardTransform, parentBone.postBillboardTransform, localBoneTransform);
         }
       } else {
-        mat4.copy(bone.transform, localBoneTransform);
+        if (bone.isSphericalBillboard) {
+          mat4.copy(bone.transform, bone.antiPivot);
+          mat4.copy(bone.postBillboardTransform, localBoneTransform);
+        } else {
+          mat4.mul(localBoneTransform, localBoneTransform, bone.antiPivot);
+          mat4.copy(bone.postBillboardTransform, localBoneTransform);
+        }
       }
     }
 

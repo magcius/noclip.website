@@ -916,8 +916,8 @@ mat4 convertMat4x4(Mat4x4 m) {
 
 void calcBillboardMat(inout mat4 m) {
   vec3 upVec = vec3(0, 0, 1);
-  vec3 forwardVec = (u_CameraPos.xyz - m[3].xyz);
-  vec3 leftVec = cross(forwardVec, upVec); // might be backwards
+  vec3 forwardVec = normalize(u_CameraPos.xyz - m[3].xyz);
+  vec3 leftVec = normalize(cross(upVec, forwardVec));
   m[0].xyz = forwardVec;
   m[1].xyz = leftVec;
   m[2].xyz = upVec;

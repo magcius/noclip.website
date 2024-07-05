@@ -208,6 +208,7 @@ export class ModelRenderer {
           offs += fillVec4(mapped, offs, bone.isSphericalBillboard ? 1 : 0);
         } else {
           offs += fillMatrix4x4(mapped, offs, this.scratchMat4);
+          offs += fillMatrix4x4(mapped, offs, this.scratchMat4);
           offs += fillVec4(mapped, offs, 0);
         }
       }
