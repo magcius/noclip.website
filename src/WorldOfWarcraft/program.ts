@@ -918,6 +918,7 @@ void calcBillboardMat(inout mat4 m) {
   vec3 upVec = vec3(0, 0, 1);
   vec3 forwardVec = normalize(u_CameraPos.xyz - m[3].xyz);
   vec3 leftVec = normalize(cross(upVec, forwardVec));
+  upVec = normalize(cross(forwardVec, leftVec));
   m[0].xyz = forwardVec;
   m[1].xyz = leftVec;
   m[2].xyz = upVec;

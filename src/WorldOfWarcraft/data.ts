@@ -990,11 +990,11 @@ export class ModelData {
     );
 
     for (let i = 0; i < this.numTextureTransformations; i++) {
-      mat4.fromRotationTranslationScale(this.textureTransforms[i],
-        this.textureRotations.slice(i * 4, (i + 1) * 4),
-        this.textureTranslations.slice(i * 3, (i + 1) * 3),
-        this.textureScalings.slice(i * 3, (i + 1) * 3),
-      );
+      const rot = this.textureRotations.slice(i * 4, (i + 1) * 4);
+      const trans = this.textureTranslations.slice(i * 3, (i + 1) * 3);
+      const scale = this.textureScalings.slice(i * 3, (i + 1) * 3);
+      const dst = this.textureTransforms[i];
+      mat4.fromRotationTranslationScaleOrigin(dst, rot, trans, scale, [0.5, 0.5, 0]);
     }
 
     const localBoneTransform = mat4.create();
