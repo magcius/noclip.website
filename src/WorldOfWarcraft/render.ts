@@ -128,6 +128,7 @@ export class ModelRenderer {
 
     for (let doodadChunk of chunk(visibleDoodads, MAX_DOODAD_INSTANCES)) {
       const template = renderInstManager.pushTemplateRenderInst();
+      template.setAllowSkippingIfPipelineNotReady(false);
       const numMat4s = 2;
       const numVec4s = 3;
       const instanceParamsSize = (16 * numMat4s + 4 * numVec4s);

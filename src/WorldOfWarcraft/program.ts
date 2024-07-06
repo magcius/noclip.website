@@ -65,10 +65,14 @@ vec3 calcLight(
     return sqrt(gammaDiffTerm*gammaDiffTerm + linearDiffTerm) + specular + emissive;
 }
 
-vec3 calcFog(vec3 inColor, vec3 worldPosition) {
+vec3 calcFog(vec3 inColor, vec3 worldPosition, bool isAdditive) {
     float dist = distance(u_CameraPos.xyz, worldPosition);
     float t = saturate(invlerp(fogParams.x, fogParams.y, dist)) * skyFogColor.a;
-    return mix(inColor, skyFogColor.rgb, t);
+    if (isAdditive) {
+      return mix(inColor, vec3(0.0), t);
+    } else {
+      return mix(inColor, skyFogColor.rgb, t);
+    }
 }
 
 vec2 envmapTexCoord(const vec3 viewSpacePos, const vec3 viewSpaceNormal) {
@@ -541,7 +545,7 @@ void mainPS() {
     }
 
     if (!unfogged) {
-      finalColor.rgb = calcFog(finalColor.rgb, v_Position.xyz);
+      finalColor.rgb = calcFog(finalColor.rgb, v_Position.xyz, false);
     }
 
     gl_FragColor = finalColor;
@@ -683,7 +687,7 @@ void mainPS() {
         specularColor = vec4(vec3(0.25) * tex.a, 0.0);
         finalColor = diffuseColor + specularColor;
     }
-    finalColor.rgb = calcFog(finalColor.rgb, v_Position.xyz);
+    finalColor.rgb = calcFog(finalColor.rgb, v_Position.xyz, false);
     gl_FragColor = finalColor;
 }
 #endif
@@ -779,7 +783,7 @@ void mainPS() {
       shadow
     ), 1.0);
 
-    finalColor.rgb = calcFog(finalColor.rgb, v_Position);
+    finalColor.rgb = calcFog(finalColor.rgb, v_Position, false);
 
     gl_FragColor = finalColor;
 }
@@ -859,7 +863,7 @@ layout(std140) uniform ub_DoodadParams {
 
 layout(std140) uniform ub_MaterialParams {
     vec4 shaderTypes; // [pixelShader, vertexShader, _, _]
-    vec4 materialParams; // [blendMode, unfogged, unlit, alphaTest]
+    vec4 materialParams; // [blendMode, unfogged, unlit, _]
     vec4 meshColor;
     Mat4x4 texMat0;
     Mat4x4 texMat1;
@@ -965,6 +969,7 @@ void mainVS() {
     v_InstanceID = float(gl_InstanceID); // FIXME: hack until we get flat variables working
 
     vec4 combinedColor = clamp(meshColor, 0.0, 1.0);
+
     vec4 combinedColorHalved = combinedColor * 0.5;
     vec2 envCoord = envmapTexCoord(viewPosition, v_Normal);
     float edgeScanVal = edgeScan(viewPosition, v_Normal);
@@ -1233,7 +1238,8 @@ void mainPS() {
     }
 
    if (materialParams.g == 0.0) { // unfogged
-    finalColor.rgb = calcFog(finalColor.rgb, v_Position.xyz);
+    bool isAdditive = (blendMode == ${rust.WowM2BlendingMode.Add});
+    finalColor.rgb = calcFog(finalColor.rgb, v_Position.xyz, isAdditive);
    }
     
    gl_FragColor = finalColor;

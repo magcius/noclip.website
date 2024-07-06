@@ -1668,17 +1668,13 @@ export class ModelRenderPass {
     return 1.0;
   }
 
-  private getAlphaTest(): number {
-    if (this.blendMode == rust.WowM2BlendingMode.AlphaKey) {
-      const color = this.getCurrentVertexColor();
-      let finalTransparency = color[3];
-      if (!(this.batch.flags & 0x40))
-        finalTransparency *= this.getTextureWeight(0);
-      // TODO skyboxes need another alpha value mixed in
-      return (128/255) * finalTransparency;
-    } else {
-      return 1/255;
-    }
+  private getVertexColorAlpha(): number {
+    const color = this.getCurrentVertexColor();
+    let finalTransparency = color[3];
+    if (!(this.batch.flags & 0x40))
+      finalTransparency *= this.getTextureWeight(0);
+    // TODO skyboxes need another alpha value mixed in
+    return finalTransparency;
   }
 
   public setModelParams(renderInst: GfxRenderInst) {
@@ -1696,9 +1692,14 @@ export class ModelRenderPass {
       this.blendMode,
       this.materialFlags.unfogged ? 1 : 0,
       this.materialFlags.unlit ? 1 : 0,
-      this.getAlphaTest()
     );
-    offset += fillVec4v(uniformBuf, offset, this.getCurrentVertexColor());
+    const color = this.getCurrentVertexColor();
+    offset += fillVec4(uniformBuf, offset,
+      color[0],
+      color[1],
+      color[2],
+      this.getVertexColorAlpha(),
+    );
     offset += fillMatrix4x4(uniformBuf, offset, this.getTextureTransform(0));
     offset += fillMatrix4x4(uniformBuf, offset, this.getTextureTransform(1));
     const textureWeight: vec4 = [
