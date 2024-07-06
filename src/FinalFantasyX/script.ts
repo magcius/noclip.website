@@ -753,6 +753,7 @@ export interface LevelObjectHolder {
     parts: LevelPartInstance[];
     activeEffects: BIN.ActiveEffect[];
     effectData: BIN.PartEffect[];
+    map?: BIN.HeightMap;
 }
 
 function deactivateEffect(level: LevelObjectHolder, partIndex: number, effectType: number): void {

@@ -108,6 +108,7 @@ export interface LevelData {
     animatedTextures: AnimatedTexture[];
     clearColor: Color;
     lightDirection: mat4;
+    map?: HeightMap;
 }
 
 export interface GSConfiguration {
@@ -693,12 +694,69 @@ function parseLevelModel(view: DataView, offs: number, gsMap: GSMemoryMap, textu
     return { vertexData, indexData, drawCalls, bbox, flags, isTranslucent, center };
 }
 
+interface MapTri {
+    indices: number[];
+    edgeAB: number;
+    edgeBC: number;
+    edgeCA: number;
+    location: number;
+    surfaceType: number;
+    passability: number;
+    someBattleValue: number;
+    data: number;
+}
+
+export interface HeightMap {
+    scale: number;
+    vertices: Int16Array;
+    tris: MapTri[];
+}
+
 export function parseLevelGeometry(buffer: ArrayBufferSlice, textureData: LevelTextures): LevelData {
     assert(readString(buffer, 0, 4) === "MAP1");
 
     const gsMap = textureData.gsMap;
     const paletteType = textureData.paletteType;
     const view = buffer.createDataView();
+    const heightmapOffs = view.getUint32(0x18, true);
+
+    let map: HeightMap | undefined;
+    if (heightmapOffs !== 0) {
+        const scale = view.getFloat32(heightmapOffs + 0xC, true);
+        const vertexOffs = view.getUint32(heightmapOffs + 0x18, true) + heightmapOffs;
+        const triOffs = view.getUint32(heightmapOffs + 0x1C, true) + heightmapOffs;
+        const triCount = view.getUint16(triOffs + 0x8, true);
+        let offs = view.getUint32(triOffs + 0xC, true) + heightmapOffs;
+        const tris: MapTri[] = [];
+        let maxVertex = 0;
+        for (let i = 0; i < triCount; i++) {
+            const data = view.getUint32(offs + 0xC, true);
+            const indices: number[] = [
+                view.getUint16(offs + 0x0, true),
+                view.getUint16(offs + 0x2, true),
+                view.getUint16(offs + 0x4, true),
+            ];
+            tris.push({
+                indices,
+                edgeAB: view.getInt16(offs + 0x6, true),
+                edgeBC: view.getInt16(offs + 0x8, true),
+                edgeCA: view.getInt16(offs + 0xA, true),
+                data,
+                passability: data & 0x7F,
+                someBattleValue: (data >>> 7) & 3,
+                // 9 ??
+                location: (data >>> 0xB) & 3,
+                // 13 ??
+                surfaceType: (data >>> 0xF) & 3,
+                // upper bytes?
+            });
+            maxVertex = Math.max(maxVertex, Math.max(...indices));
+            offs += 0x10;
+        }
+        const vertices = buffer.createTypedArray(Int16Array, vertexOffs, (maxVertex+1)*4);
+        map = {scale, tris, vertices};
+    }
+
     let offs = view.getUint32(0x14, true);
 
     assert(view.getUint32(offs) === 0x65432100)
@@ -856,7 +914,7 @@ export function parseLevelGeometry(buffer: ArrayBufferSlice, textureData: LevelT
         offs += sectionLength;
     }
 
-    return { parts, textures, effects, lightDirection, clearColor, animatedTextures };
+    return { parts, textures, effects, lightDirection, clearColor, animatedTextures, map };
 }
 
 export const enum KeyframeFormat {
