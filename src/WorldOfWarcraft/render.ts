@@ -128,10 +128,11 @@ export class ModelRenderer {
 
     for (let doodadChunk of chunk(visibleDoodads, MAX_DOODAD_INSTANCES)) {
       const template = renderInstManager.pushTemplateRenderInst();
+      template.setAllowSkippingIfPipelineNotReady(false);
       const numMat4s = 2;
       const numVec4s = 3;
       const instanceParamsSize = (16 * numMat4s + 4 * numVec4s);
-      const boneParamsSize = (16 * 1 + 4 * 1);
+      const boneParamsSize = (16 * 2 + 4 * 1);
       const lightSize = (4 * 4);
       const baseOffs = template.allocateUniformBuffer(ModelProgram.ub_DoodadParams,
         lightSize * 4 + instanceParamsSize * MAX_DOODAD_INSTANCES + boneParamsSize * MAX_BONE_TRANSFORMS);
@@ -198,13 +199,16 @@ export class ModelRenderer {
         );
       }
       offs = baseOffs + lightSize * 4 + instanceParamsSize * MAX_DOODAD_INSTANCES;
-      assert(this.model.boneTransforms.length < MAX_BONE_TRANSFORMS, `model got too many bones (${this.model.boneTransforms.length})`);
+      assert(this.model.boneData.length < MAX_BONE_TRANSFORMS, `model got too many bones (${this.model.boneData.length})`);
       mat4.identity(this.scratchMat4);
       for (let i=0; i<MAX_BONE_TRANSFORMS; i++) {
-        if (i < this.model.boneTransforms.length) {
-          offs += fillMatrix4x4(mapped, offs, this.model.boneTransforms[i]);
-          offs += fillVec4(mapped, offs, this.model.boneFlags[i].spherical_billboard ? 1 : 0);
+        if (i < this.model.boneData.length) {
+          const bone = this.model.boneData[i];
+          offs += fillMatrix4x4(mapped, offs, bone.transform);
+          offs += fillMatrix4x4(mapped, offs, bone.postBillboardTransform);
+          offs += fillVec4(mapped, offs, bone.isSphericalBillboard ? 1 : 0);
         } else {
+          offs += fillMatrix4x4(mapped, offs, this.scratchMat4);
           offs += fillMatrix4x4(mapped, offs, this.scratchMat4);
           offs += fillVec4(mapped, offs, 0);
         }

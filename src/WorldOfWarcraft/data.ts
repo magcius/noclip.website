@@ -666,7 +666,9 @@ export class ParticleEmitter {
 
     mat4.identity(this.modelMatrix);
     mat4.translate(this.modelMatrix, this.modelMatrix, this.position);
-    mat4.mul(this.modelMatrix, this.model.boneTransforms[this.emitter.bone], this.modelMatrix);
+    const bone = this.model.boneData[this.emitter.bone];
+    mat4.mul(this.modelMatrix, bone.transform, this.modelMatrix);
+    mat4.mul(this.modelMatrix, bone.postBillboardTransform, this.modelMatrix);
     mat4.mul(this.modelMatrix, this.modelMatrix, PARTICLE_COORDINATE_FIX);
   }
 
@@ -836,12 +838,8 @@ export class ModelData {
   public boneRotations: Float32Array;
   public boneScalings: Float32Array;
   public boneTranslations: Float32Array;
+  public boneData: BoneData[] = [];
   public textureTransforms: mat4[] = [];
-  public boneTransforms: mat4[] = [];
-  public bonePivots: mat4[] = [];
-  public boneAntipivots: mat4[] = [];
-  public boneParents: Int16Array;
-  public boneFlags: WowM2BoneFlags[] = [];
   public materials: [WowM2BlendingMode, WowM2MaterialFlags][] = [];
   public animationManager: WowM2AnimationManager;
   public textureLookupTable: Uint16Array;
@@ -949,16 +947,23 @@ export class ModelData {
     for (let i=0; i<this.numTextureTransformations; i++) {
       this.textureTransforms.push(mat4.create());
     }
+
+    const boneParents = this.animationManager.get_bone_parents();
+    const boneFlags = this.animationManager.get_bone_flags();
+    const bonePivots = this.animationManager.get_bone_pivots();
     for (let i=0; i<this.numBones; i++) {
-      this.boneTransforms.push(mat4.create());
+      const bonePivot = bonePivots[i];
+      const pivot = mat4.fromTranslation(mat4.create(), [bonePivot.x, bonePivot.y, bonePivot.z]);
+      const antiPivot = mat4.fromTranslation(mat4.create(), [-bonePivot.x, -bonePivot.y, -bonePivot.z]);
+      const bone = new BoneData(pivot, antiPivot, boneFlags[i], boneParents[i]);
+      if (bone.parentBoneId >= 0) {
+        bone.isSphericalBillboard ||= this.boneData[bone.parentBoneId].isSphericalBillboard;
+      }
+      this.boneData.push(bone);
+
+      bonePivot.free();
     }
-    this.boneParents = this.animationManager.get_bone_parents();
-    this.boneFlags = this.animationManager.get_bone_flags();
-    for (let pivot of this.animationManager.get_bone_pivots()) {
-      this.bonePivots.push(mat4.fromTranslation(mat4.create(), [pivot.x, pivot.y, pivot.z]));
-      this.boneAntipivots.push(mat4.fromTranslation(mat4.create(), [-pivot.x, -pivot.y, -pivot.z]));
-      pivot.free();
-    }
+
     m2.free();
   }
 
@@ -985,25 +990,40 @@ export class ModelData {
     );
 
     for (let i = 0; i < this.numTextureTransformations; i++) {
-      mat4.fromRotationTranslationScale(this.textureTransforms[i],
-        this.textureRotations.slice(i * 4, (i + 1) * 4),
-        this.textureTranslations.slice(i * 3, (i + 1) * 3),
-        this.textureScalings.slice(i * 3, (i + 1) * 3),
-      );
+      const rot = this.textureRotations.slice(i * 4, (i + 1) * 4);
+      const trans = this.textureTranslations.slice(i * 3, (i + 1) * 3);
+      const scale = this.textureScalings.slice(i * 3, (i + 1) * 3);
+      const dst = this.textureTransforms[i];
+      mat4.fromRotationTranslationScaleOrigin(dst, rot, trans, scale, [0.5, 0.5, 0]);
     }
 
+    const localBoneTransform = mat4.create();
     for (let i = 0; i < this.numBones; i++) {
-      const parentId = this.boneParents[i];
-      assert(parentId < i, "bone parent > bone");
-      mat4.fromRotationTranslationScale(this.boneTransforms[i],
+      const bone = this.boneData[i];
+      assert(bone.parentBoneId < i, "bone parent > bone");
+      mat4.fromRotationTranslationScale(localBoneTransform,
         this.boneRotations.slice(i * 4, (i + 1) * 4),
         this.boneTranslations.slice(i * 3, (i + 1) * 3),
         this.boneScalings.slice(i * 3, (i + 1) * 3),
       );
-      mat4.mul(this.boneTransforms[i], this.bonePivots[i], this.boneTransforms[i]);
-      mat4.mul(this.boneTransforms[i], this.boneTransforms[i], this.boneAntipivots[i]);
-      if (parentId >= 0) {
-        mat4.mul(this.boneTransforms[i], this.boneTransforms[parentId], this.boneTransforms[i]);
+      mat4.mul(localBoneTransform, bone.pivot, localBoneTransform);
+      if (bone.parentBoneId >= 0) {
+        const parentBone = this.boneData[bone.parentBoneId];
+        if (bone.isSphericalBillboard) {
+          mat4.mul(bone.transform, parentBone.transform, bone.antiPivot);
+          mat4.mul(bone.postBillboardTransform, parentBone.postBillboardTransform, localBoneTransform);
+        } else {
+          mat4.mul(localBoneTransform, localBoneTransform, bone.antiPivot);
+          mat4.mul(bone.postBillboardTransform, parentBone.postBillboardTransform, localBoneTransform);
+        }
+      } else {
+        if (bone.isSphericalBillboard) {
+          mat4.copy(bone.transform, bone.antiPivot);
+          mat4.copy(bone.postBillboardTransform, localBoneTransform);
+        } else {
+          mat4.mul(localBoneTransform, localBoneTransform, bone.antiPivot);
+          mat4.copy(bone.postBillboardTransform, localBoneTransform);
+        }
       }
     }
 
@@ -1021,7 +1041,7 @@ export class ModelData {
 
   public destroy() {
     this.animationManager.free();
-    this.boneFlags.forEach(flags => flags.free());
+    this.boneData.forEach(bone => bone.destroy());
   }
 }
 
@@ -1070,6 +1090,20 @@ export class WmoBatchData {
       undefined,
       makeSortKey(GfxRendererLayer.TRANSLUCENT),
     );
+  }
+}
+
+export class BoneData {
+  public transform = mat4.create();
+  public postBillboardTransform = mat4.create();
+  public isSphericalBillboard: boolean;
+
+  constructor(public pivot: mat4, public antiPivot: mat4, public flags: WowM2BoneFlags, public parentBoneId: number) {
+    this.isSphericalBillboard = flags.spherical_billboard;
+  }
+
+  public destroy() {
+    this.flags.free();
   }
 }
 
@@ -1634,17 +1668,13 @@ export class ModelRenderPass {
     return 1.0;
   }
 
-  private getAlphaTest(): number {
-    if (this.blendMode == rust.WowM2BlendingMode.AlphaKey) {
-      const color = this.getCurrentVertexColor();
-      let finalTransparency = color[3];
-      if (!(this.batch.flags & 0x40))
-        finalTransparency *= this.getTextureWeight(0);
-      // TODO skyboxes need another alpha value mixed in
-      return (128/255) * finalTransparency;
-    } else {
-      return 1/255;
-    }
+  private getVertexColorAlpha(): number {
+    const color = this.getCurrentVertexColor();
+    let finalTransparency = color[3];
+    if (!(this.batch.flags & 0x40))
+      finalTransparency *= this.getTextureWeight(0);
+    // TODO skyboxes need another alpha value mixed in
+    return finalTransparency;
   }
 
   public setModelParams(renderInst: GfxRenderInst) {
@@ -1662,9 +1692,14 @@ export class ModelRenderPass {
       this.blendMode,
       this.materialFlags.unfogged ? 1 : 0,
       this.materialFlags.unlit ? 1 : 0,
-      this.getAlphaTest()
     );
-    offset += fillVec4v(uniformBuf, offset, this.getCurrentVertexColor());
+    const color = this.getCurrentVertexColor();
+    offset += fillVec4(uniformBuf, offset,
+      color[0],
+      color[1],
+      color[2],
+      this.getVertexColorAlpha(),
+    );
     offset += fillMatrix4x4(uniformBuf, offset, this.getTextureTransform(0));
     offset += fillMatrix4x4(uniformBuf, offset, this.getTextureTransform(1));
     const textureWeight: vec4 = [

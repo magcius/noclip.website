@@ -65,10 +65,14 @@ vec3 calcLight(
     return sqrt(gammaDiffTerm*gammaDiffTerm + linearDiffTerm) + specular + emissive;
 }
 
-vec3 calcFog(vec3 inColor, vec3 worldPosition) {
+vec3 calcFog(vec3 inColor, vec3 worldPosition, bool isAdditive) {
     float dist = distance(u_CameraPos.xyz, worldPosition);
     float t = saturate(invlerp(fogParams.x, fogParams.y, dist)) * skyFogColor.a;
-    return mix(inColor, skyFogColor.rgb, t);
+    if (isAdditive) {
+      return mix(inColor, vec3(0.0), t);
+    } else {
+      return mix(inColor, skyFogColor.rgb, t);
+    }
 }
 
 vec2 envmapTexCoord(const vec3 viewSpacePos, const vec3 viewSpaceNormal) {
@@ -541,7 +545,7 @@ void mainPS() {
     }
 
     if (!unfogged) {
-      finalColor.rgb = calcFog(finalColor.rgb, v_Position.xyz);
+      finalColor.rgb = calcFog(finalColor.rgb, v_Position.xyz, false);
     }
 
     gl_FragColor = finalColor;
@@ -683,7 +687,7 @@ void mainPS() {
         specularColor = vec4(vec3(0.25) * tex.a, 0.0);
         finalColor = diffuseColor + specularColor;
     }
-    finalColor.rgb = calcFog(finalColor.rgb, v_Position.xyz);
+    finalColor.rgb = calcFog(finalColor.rgb, v_Position.xyz, false);
     gl_FragColor = finalColor;
 }
 #endif
@@ -779,7 +783,7 @@ void mainPS() {
       shadow
     ), 1.0);
 
-    finalColor.rgb = calcFog(finalColor.rgb, v_Position);
+    finalColor.rgb = calcFog(finalColor.rgb, v_Position, false);
 
     gl_FragColor = finalColor;
 }
@@ -847,6 +851,7 @@ struct M2Light {
 
 struct BoneParams {
   Mat4x4 transform;
+  Mat4x4 postBillboardTransform;
   vec4 params; // isSphericalBillboard, _, _, _
 };
 
@@ -858,7 +863,7 @@ layout(std140) uniform ub_DoodadParams {
 
 layout(std140) uniform ub_MaterialParams {
     vec4 shaderTypes; // [pixelShader, vertexShader, _, _]
-    vec4 materialParams; // [blendMode, unfogged, unlit, alphaTest]
+    vec4 materialParams; // [blendMode, unfogged, unlit, _]
     vec4 meshColor;
     Mat4x4 texMat0;
     Mat4x4 texMat1;
@@ -899,30 +904,55 @@ void ScaledAddMat(inout Mat4x4 self, float t, Mat4x4 other) {
     self.mw += t * other.mw;
 }
 
-Mat4x4 getCombinedBoneMat() {
-    Mat4x4 result;
-    result.mx = vec4(0.0);
-    result.my = vec4(0.0);
-    result.mz = vec4(0.0);
-    result.mw = vec4(0.0);
-    ScaledAddMat(result, a_BoneWeights.x, bones[int(a_BoneIndices.x)].transform);
-    ScaledAddMat(result, a_BoneWeights.y, bones[int(a_BoneIndices.y)].transform);
-    ScaledAddMat(result, a_BoneWeights.z, bones[int(a_BoneIndices.z)].transform);
-    ScaledAddMat(result, a_BoneWeights.w, bones[int(a_BoneIndices.w)].transform);
-    return result;
+Mat4x4 convertMat4(mat4 m) {
+  mat4 t = transpose(m);
+  Mat4x4 result;
+  result.mx = t[0];
+  result.my = t[1];
+  result.mz = t[2];
+  result.mw = t[3];
+  return result;
 }
 
 mat4 convertMat4x4(Mat4x4 m) {
   return transpose(mat4(m.mx, m.my, m.mz, m.mw));
 }
 
-void CalcBillboardMat(inout mat4 m) {
-  // extract scale from column vectors
-  mat4 colMat = transpose(m);
-  m[0] = vec4(0.0, 0.0, -length(colMat[2].xyz), 0.0);
-  m[1] = vec4(length(colMat[0].xyz), 0.0, 0.0, 0.0);
-  m[2] = vec4(0.0, length(colMat[1].xyz), 0.0, 0.0);
+void calcBillboardMat(inout mat4 m) {
+  vec3 upVec = vec3(0, 0, 1);
+  vec3 forwardVec = normalize(u_CameraPos.xyz - m[3].xyz);
+  vec3 leftVec = normalize(cross(upVec, forwardVec));
+  upVec = normalize(cross(forwardVec, leftVec));
+  m[0].xyz = forwardVec;
+  m[1].xyz = leftVec;
+  m[2].xyz = upVec;
 }
+
+Mat4x4 getBoneMatrix(int index) {
+  BoneParams bone = bones[index];
+  DoodadInstance params = instances[gl_InstanceID];
+  mat4 modelMatrix = convertMat4x4(params.transform);
+  mat4 transform = modelMatrix * convertMat4x4(bone.postBillboardTransform);
+  if (bone.params.x > 0.0) {
+    calcBillboardMat(transform);
+  }
+  transform = transform * convertMat4x4(bone.transform);
+  return convertMat4(transform);
+}
+
+Mat4x4 getCombinedBoneMat() {
+    Mat4x4 result;
+    result.mx = vec4(0.0);
+    result.my = vec4(0.0);
+    result.mz = vec4(0.0);
+    result.mw = vec4(0.0);
+    ScaledAddMat(result, a_BoneWeights.x, getBoneMatrix(int(a_BoneIndices.x)));
+    ScaledAddMat(result, a_BoneWeights.y, getBoneMatrix(int(a_BoneIndices.y)));
+    ScaledAddMat(result, a_BoneWeights.z, getBoneMatrix(int(a_BoneIndices.z)));
+    ScaledAddMat(result, a_BoneWeights.w, getBoneMatrix(int(a_BoneIndices.w)));
+    return result;
+}
+
 
 void mainVS() {
     DoodadInstance params = instances[gl_InstanceID];
@@ -930,24 +960,16 @@ void mainVS() {
     float w = isSkybox ? 0.0 : 1.0;
     Mat4x4 boneTransform = getCombinedBoneMat();
 
-    v_Position = Mul(params.transform, Mul(boneTransform, vec4(a_Position, w))).xyz;
-    v_Normal = normalize(Mul(params.transform, Mul(boneTransform, vec4(a_Normal, 0.0))).xyz);
+    v_Position = Mul(boneTransform, vec4(a_Position, w)).xyz;
+    v_Normal = normalize(Mul(boneTransform, vec4(a_Normal, 0.0)).xyz);
 
-    vec3 viewPosition;
-
-    bool isSphericalBone = bones[int(a_BoneIndices.x)].params.x > 0.0;
-    if (isSphericalBone) {
-      mat4 combinedModelMat = convertMat4x4(u_ModelView) * convertMat4x4(params.transform) * convertMat4x4(boneTransform);
-      CalcBillboardMat(combinedModelMat);
-      viewPosition = (combinedModelMat * vec4(a_Position, w)).xyz;
-    } else {
-      viewPosition = Mul(u_ModelView, Mul(params.transform, Mul(boneTransform, vec4(a_Position, w)))).xyz;
-    }
+    vec3 viewPosition = Mul(u_ModelView, Mul(boneTransform, vec4(a_Position, w))).xyz;
 
     gl_Position = Mul(u_Projection, vec4(viewPosition, 1.0));
     v_InstanceID = float(gl_InstanceID); // FIXME: hack until we get flat variables working
 
     vec4 combinedColor = clamp(meshColor, 0.0, 1.0);
+
     vec4 combinedColorHalved = combinedColor * 0.5;
     vec2 envCoord = envmapTexCoord(viewPosition, v_Normal);
     float edgeScanVal = edgeScan(viewPosition, v_Normal);
@@ -1216,7 +1238,8 @@ void mainPS() {
     }
 
    if (materialParams.g == 0.0) { // unfogged
-    finalColor.rgb = calcFog(finalColor.rgb, v_Position.xyz);
+    bool isAdditive = (blendMode == ${rust.WowM2BlendingMode.Add});
+    finalColor.rgb = calcFog(finalColor.rgb, v_Position.xyz, isAdditive);
    }
     
    gl_FragColor = finalColor;
