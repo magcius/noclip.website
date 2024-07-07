@@ -184,7 +184,7 @@ class FFXRenderer implements Viewer.SceneGfx {
                     mapScratch[j][1] += .05; // poor man's polygon offset
                 }
                 passableColor(col, tri.passability);
-                this.renderHelper.debugDraw.drawRectSolidP(mapScratch[0], mapScratch[1], mapScratch[2], mapScratch[1], col, opts);
+                this.renderHelper.debugDraw.drawTriSolidP(mapScratch[0], mapScratch[1], mapScratch[2], col);
             }
         }
 

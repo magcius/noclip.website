@@ -89,7 +89,7 @@ void main() {
     if ((v_Flags & uint(${DebugDrawFlags.DepthTint})) != 0u) {
         float t_DepthSample = texelFetch(SAMPLER_2D(u_TextureFramebufferDepth), ivec2(gl_FragCoord.xy), 0).r;
         if (IsSomethingInFront(t_DepthSample))
-            t_Color.rgba *= 0.4;
+            t_Color.rgba *= 0.2;
     }
 
     gl_FragColor = t_Color;
@@ -388,6 +388,19 @@ export class DebugDraw {
             vec3.scaleAndAdd(s, center, right, signX * rightMag);
             vec3.scaleAndAdd(s, s, up, signY * upMag);
         }
+    }
+
+    public drawTriSolidP(p0: ReadonlyVec3, p1: ReadonlyVec3, p2: ReadonlyVec3, color: Color, options: DebugDrawOptions = { flags: DebugDrawFlags.Default }): void {
+        const behaviorType = color.a < 1.0 ? BehaviorType.Transparent : BehaviorType.Opaque;
+        const page = this.findPage(behaviorType, 3, 3);
+
+        const baseVertex = page.getCurrentVertexID();
+        page.vertexPCF(p0, color, options);
+        page.vertexPCF(p1, color, options);
+        page.vertexPCF(p2, color, options);
+
+        for (let i = 0; i < 3; i++)
+            page.index(baseVertex + i);
     }
 
     public drawRectLineP(p0: ReadonlyVec3, p1: ReadonlyVec3, p2: ReadonlyVec3, p3: ReadonlyVec3, color: Color, options: DebugDrawOptions = { flags: DebugDrawFlags.Default }): void {
