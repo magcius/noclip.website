@@ -677,12 +677,12 @@ const sceneDescs = [
     // new FFXLevelSceneDesc(506, "Dome - Front", [0x1626]),
     new FFXLevelSceneDesc(515, "Dome - Interior", [0x0F9C]),
     new FFXLevelSceneDesc(516, "Dome - Corridor", [0x1638]),
+    new FFXLevelSceneDesc(522, "Dome - Trials", [0x1680]),
     new FFXLevelSceneDesc(517, "Dome - Cloister of Trials", [0x164A]),
     new FFXLevelSceneDesc(518, "Dome - Chamber of the Fayth", [0x165C]),
     new FFXLevelSceneDesc(519, "Dome - Great Hall", [0x0FC0]),
     new FFXLevelSceneDesc(520, "Dome - Great Hall (ruins)", [0x166E]),
     new FFXLevelSceneDesc(521, "Dome - The Beyond", [0x12FC]),
-    new FFXLevelSceneDesc(522, "Dome - Trials", [0x1680]),
     "Fighting Sin",
     new FFXLevelSceneDesc(565, "Airship - Deck", [0x0DFE]),
     // new FFXLevelSceneDesc(566, "Airship - Deck", [0x0E10]), identical

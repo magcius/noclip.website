@@ -1033,10 +1033,64 @@ export interface ScriptData {
     intConsts: Int32Array;
     floatConsts: Float32Array;
     code: DataView;
+    shared: DataView;
+
+    arrays: ScriptArray[];
 
     controllers: ControllerSpec[]
 
     mapPoints: MapPoint[];
+}
+
+export enum ArraySource {
+    GLOBAL,
+    UNK,
+    UNUSED,
+    PRIVATE,
+    SHARED,
+    OBJECT,
+    EVENT,
+}
+
+export const enum DataFormat {
+    U8,
+    I8,
+    U16,
+    I16,
+    U32,
+    I32,
+    FLOAT,
+}
+
+interface ScriptArray {
+    rawDesc: number;
+    source: ArraySource;
+    offset: number;
+    elementType: DataFormat;
+    count: number;
+    values?: number[];
+}
+
+function readValue(view: DataView, offset: number, format: DataFormat): number {
+    switch (format) {
+        case DataFormat.U8: return view.getUint8(offset);
+        case DataFormat.I8: return view.getInt8(offset);
+        case DataFormat.U16: return view.getUint16(offset, true);
+        case DataFormat.I16: return view.getInt16(offset, true);
+        case DataFormat.U32: return view.getUint32(offset, true);
+        case DataFormat.I32: return view.getInt32(offset, true);
+        case DataFormat.FLOAT: return view.getFloat32(offset, true);
+    }
+    throw `bad format ${format}`;
+}
+
+export function byteSize(format: DataFormat): number {
+    switch (format) {
+        case DataFormat.U8: case DataFormat.I8: return 1;
+        case DataFormat.U16: case DataFormat.I16: return 2;
+        case DataFormat.U32: case DataFormat.I32: case DataFormat.FLOAT: return 4;
+    }
+    throw `bad format ${format}`;
 }
 
 export function parseEvent(buffer: ArrayBufferSlice): ScriptData {
@@ -1053,6 +1107,7 @@ export function parseEvent(buffer: ArrayBufferSlice): ScriptData {
 
     // these can correspond to different pause menu location names
     const zoneCount = view.getUint16(scriptStart + 0x1E, true);
+    const eventVarStart = view.getUint32(scriptStart + 0x20, true);
     const zoneStart = view.getUint32(scriptStart + 0x28, true);
     const moreDataStart = view.getUint32(scriptStart + 0x2C, true);
 
@@ -1073,8 +1128,8 @@ export function parseEvent(buffer: ArrayBufferSlice): ScriptData {
     }
 
 
-    let bufferDescriptionStart = -1;
-    let bufferDescriptionCount = -1;
+    let arrayDescriptionStart = -1;
+    let arrayDescriptionCount = -1;
     let intConstStart = -1;
     let intConstCount = -1;
     let floatConstStart = -1;
@@ -1089,12 +1144,13 @@ export function parseEvent(buffer: ArrayBufferSlice): ScriptData {
 
     const controllers: ControllerSpec[] = [];
     let offset = controllerStart + scriptStart;
+    const seenPrivateOffsets = new Set<number>();
     for (let i = 0; i < controllerCount; i++, offset += 0x34) {
         // offsets are given as if the structre were variable length, but it isn't
         assert(view.getUint32(scriptStart + 0x38 + 4 * i, true) === offset - scriptStart);
 
         const type: ControllerType = view.getUint8(offset + 0x00);
-        const bufferCount = view.getUint16(offset + 0x02, true);
+        const arrayCount = view.getUint16(offset + 0x02, true);
         const intCount = view.getUint16(offset + 0x04, true);
         const floatCount = view.getUint16(offset + 0x06, true);
         const entryCount = view.getUint16(offset + 0x08, true);
@@ -1102,7 +1158,7 @@ export function parseEvent(buffer: ArrayBufferSlice): ScriptData {
         const unusedLength = view.getUint32(offset + 0x0C, true);
         const privateLength = view.getUint32(offset + 0x10, true);
 
-        const bufferStart = view.getUint32(offset + 0x14, true);
+        const arrayStart = view.getUint32(offset + 0x14, true);
         const intStart = view.getUint32(offset + 0x18, true);
         const floatStart = view.getUint32(offset + 0x1C, true);
         const entryStart = view.getUint32(offset + 0x20, true);
@@ -1112,9 +1168,11 @@ export function parseEvent(buffer: ArrayBufferSlice): ScriptData {
         const sharedStart = view.getUint32(offset + 0x30, true);
 
         assert(unusedDataStart === 0);
+        assert(privateLength === 0 || !seenPrivateOffsets.has(privateDataStart));
+        seenPrivateOffsets.add(privateDataStart);
 
-        bufferDescriptionStart = match(bufferDescriptionStart, bufferStart);
-        bufferDescriptionCount = match(bufferDescriptionCount, bufferCount);
+        arrayDescriptionStart = match(arrayDescriptionStart, arrayStart);
+        arrayDescriptionCount = match(arrayDescriptionCount, arrayCount);
         intConstStart = match(intConstStart, intStart);
         floatConstStart = match(floatConstStart, floatStart);
         intConstCount = match(intConstCount, intCount);
@@ -1136,6 +1194,27 @@ export function parseEvent(buffer: ArrayBufferSlice): ScriptData {
     const floatConsts = new Float32Array(buffer.arrayBuffer, scriptStart + floatConstStart, floatConstCount);
     const instructionEnd = sharedDataStart < 0 ? moreDataStart : sharedDataStart;
     const code = buffer.createDataView(instructionStart + scriptStart, instructionEnd - instructionStart);
+    const shared = buffer.createDataView(scriptStart + sharedDataStart);
+    const arrays: ScriptArray[] = [];
+    for (let i = 0, offs = scriptStart + arrayDescriptionStart; i < arrayDescriptionCount; i++, offs += 8) {
+        const info = view.getUint32(offs, true);
+        const offset = info & 0xFFFFFF;
+        const elementType : DataFormat = info >>> 28;
+        const source = (info >>> 25) & 7;
+        const count = view.getUint16(offs + 4, true);
 
-    return { mapPoints, intConsts, floatConsts, code, controllers };
+        const arr: ScriptArray = {rawDesc: info, count, offset, elementType, source};
+        if (source === ArraySource.SHARED || source === ArraySource.EVENT) {
+            const values: number[] = [];
+            let offs = scriptStart + offset + (source === ArraySource.SHARED ? sharedDataStart : eventVarStart);
+            for (let j = 0; j < count; j++) {
+                values.push(readValue(view, offs, elementType));
+                offs += byteSize(elementType);
+            }
+            arr.values = values;
+        }
+        arrays.push(arr);
+    }
+
+    return { mapPoints, intConsts, floatConsts, code, shared, controllers, arrays };
 }

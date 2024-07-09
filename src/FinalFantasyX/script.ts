@@ -1,7 +1,7 @@
 import { mat4, ReadonlyVec3, vec3 } from "gl-matrix";
 import { CompType } from "../gx/gx_enum.js";
 import { angleDist, clamp, MathConstants, setMatrixTranslation } from "../MathHelpers.js";
-import { assertExists, hexzero, nArray } from "../util.js";
+import { assert, assertExists, hexzero, nArray } from "../util.js";
 
 import * as BIN from "./bin.js";
 import { LevelPartInstance } from "./render.js";
@@ -511,6 +511,8 @@ class Controller {
     public motions: MotionState[];
     public rotations: RotationState[];
 
+    public privateArrays: number[][] = [];
+
     constructor(private script: EventScript, public spec: BIN.ControllerSpec, public index: number) {
         this.position = {
             targetIndex: -1,
@@ -545,6 +547,13 @@ class Controller {
             const newThread = new Thread(script, index, this.motions[i], this.rotations[i]);
             this.threads.push(newThread);
             this.resetThread(i);
+        }
+
+        for (let i = 0; i < script.data.arrays.length; i++) {
+            const arr = script.data.arrays[i];
+            if (arr.source !== BIN.ArraySource.PRIVATE)
+                continue;
+            this.privateArrays[i] = nArray(arr.count, () => 0);
         }
     }
 
@@ -783,6 +792,58 @@ export function activateEffect(level: LevelObjectHolder, partIndex: number, effe
     console.warn("could not activate effect", effectIndex, "on part", partIndex);
 }
 
+const enum Global {
+    Tinder = 0x180,
+    Flint = 0x181,
+    GameProgress = 0xA00,
+    BaajProgress = 0xA70,
+    BlitzballOpponent = 0x1465,
+}
+
+function truncateValue(raw: number, format: BIN.DataFormat): number {
+    let min = 0, max = 0;
+    switch (format) {
+        case BIN.DataFormat.I8:
+            min = -0x80; max = 0x7F; break;
+        case BIN.DataFormat.U8:
+            min = 0; max = 0xFF; break;
+        case BIN.DataFormat.I16:
+            min = 0; max = 0xFF; break;
+        case BIN.DataFormat.U16:
+            min = 0; max = 0xFF; break;
+        case BIN.DataFormat.U32:
+            return raw >>> 0;
+        case BIN.DataFormat.I32:
+            return raw | 0;
+        case BIN.DataFormat.FLOAT:
+            return raw;
+    }
+    return clamp(raw | 0, min, max);
+}
+
+function wrapValue(raw: number, format: BIN.DataFormat): number {
+    let signed = false;
+    const size = 8*BIN.byteSize(format);
+    switch (format) {
+        case BIN.DataFormat.I8:
+        case BIN.DataFormat.I16:
+        case BIN.DataFormat.I32:
+            signed = true; break;
+        case BIN.DataFormat.U8:
+        case BIN.DataFormat.U16:
+        case BIN.DataFormat.U32:
+            signed = false; break;
+        case BIN.DataFormat.FLOAT:
+            return raw; // technically we could need to process 32-bit values, but seems unlikely
+    }
+    const shift = 32 - size;
+    const mid = raw << shift;
+    if (signed)
+        return mid >> shift;
+    else
+        return mid >>> shift;
+}
+
 const scratchVec = vec3.create();
 export class EventScript {
     public controllers: Controller[] = [];
@@ -791,6 +852,8 @@ export class EventScript {
     private finishedInit = false;
     public mapEntranceID = 0;
     private flags = 0;
+
+    public globals: number[] = [];
 
     constructor(public data: BIN.ScriptData, private level: LevelObjectHolder) {
 
@@ -897,7 +960,7 @@ export class EventScript {
             this.run(index, dt, apply);
         } catch (e) {
             this.controllers[index].flags |= ControllerFlags.ERROR | ControllerFlags.DONE;
-            console.warn("error running script at", index, this.controllers[index].currThread, hexzero(this.controllers[index].getThread().offset, 4), e);
+            console.warn(`error running script w${hexzero(index, 2)}`, this.controllers[index].currThread, hexzero(this.controllers[index].getThread().offset, 4), e);
         }
     }
 
@@ -926,7 +989,11 @@ export class EventScript {
                 }
             }
         }
+        let counter = 0;
         while (running) {
+            counter++;
+            if (counter > 0x1000)
+                throw `running too long`;
             let nextOffset = thread.offset;
             const rawOp = this.data.code.getUint8(nextOffset++);
             let imm = 0;
@@ -1027,23 +1094,45 @@ export class EventScript {
                 const a = c.stack.pop();
                 c.stack.push(~a);
             } else if (op === Opcode.GET_DATUM) {
-                throw `unhandled op ${hexzero(op, 2)}`;
-            } else if (op === Opcode.SET_DATUM_W) {
-                throw `unhandled op ${hexzero(op, 2)}`;
-            } else if (op === Opcode.SET_DATUM_T) {
-                throw `unhandled op ${hexzero(op, 2)}`;
+                const arr = assertExists(this.data.arrays[imm]);
+                if (arr.values) {
+                    c.stack.push(arr.values[0]);
+                } else if (arr.source === BIN.ArraySource.GLOBAL) {
+                    // console.log("getting global", arr.offset.toString(16));
+                    c.stack.push(this.globals[arr.offset] || 0);
+                } else if (arr.source === BIN.ArraySource.PRIVATE) {
+                    c.stack.push(assertExists(c.privateArrays[imm])[0]);
+                } else {
+                    console.warn("getting", arr, "from", c.index)
+                    c.stack.push(0);
+                }
+            } else if (op === Opcode.SET_DATUM_W || op === Opcode.SET_DATUM_T) {
+                const rawValue = c.stack.pop();
+                this.storeToVariable(c, imm, 0, rawValue, op === Opcode.SET_DATUM_T);
             } else if (op === Opcode.GET_DATUM_INDEX) {
-                throw `unhandled op ${hexzero(op, 2)}`;
-            } else if (op === Opcode.SET_DATUM_INDEX_W) {
-                throw `unhandled op ${hexzero(op, 2)}`;
-            } else if (op === Opcode.SET_DATUM_INDEX_T) {
-                throw `unhandled op ${hexzero(op, 2)}`;
+                const arr = assertExists(this.data.arrays[imm]);
+                const index = clamp(c.stack.pop(), 0, arr.count - 1);
+                if (arr.values) {
+                    c.stack.push(arr.values[index]);
+                } else if (arr.source === BIN.ArraySource.GLOBAL) {
+                    c.stack.push(this.globals[arr.offset + index*BIN.byteSize(arr.elementType)]);
+                } else if (arr.source === BIN.ArraySource.PRIVATE) {
+                    c.stack.push(assertExists(c.privateArrays[imm])[index]);
+                } else {
+                    console.warn("getting", arr, "from", c.index)
+                    c.stack.push(0);
+                }
+            } else if (op === Opcode.SET_DATUM_INDEX_W || op === Opcode.SET_DATUM_INDEX_T) {
+                const rawValue = c.stack.pop();
+                const index = c.stack.pop();
+                this.storeToVariable(c, imm, index, rawValue, op === Opcode.SET_DATUM_INDEX_T);
             } else if (op === Opcode.SET_RETURN_VALUE) {
                 thread.return = c.stack.pop();
             } else if (op === Opcode.GET_RETURN_VALUE) {
                 c.stack.push(thread.return);
             } else if (op === Opcode.GET_DATUM_DESC) {
-                throw `unhandled op ${hexzero(op, 2)}`;
+                // we should reconstruct the description here, but we aren't going to use it, anyway
+                c.stack.push(imm);
             } else if (op === Opcode.GET_TEST) {
                 c.stack.push(thread.test);
             } else if (op === Opcode.GET_CASE) {
@@ -1260,6 +1349,35 @@ export class EventScript {
         else if (id === 0x001B)
             return (c.getThread().rotation.flags & RotationFlags.TYPE_MASK) === 0;
         return true;
+    }
+
+    private storeToVariable(c: Controller, varIndex: number, eltIndex: number, rawValue: number, truncate: boolean): void {
+        const arr = assertExists(this.data.arrays[varIndex]);
+        const value = truncate ? truncateValue(rawValue, arr.elementType) : wrapValue(rawValue, arr.elementType);
+        if (arr.values) {
+            arr.values[eltIndex] = value;
+        } else if (arr.source === BIN.ArraySource.GLOBAL) {
+            this.globals[arr.offset + eltIndex*BIN.byteSize(arr.elementType)] = value;
+        } else if (arr.source === BIN.ArraySource.PRIVATE) {
+            assertExists(c.privateArrays[varIndex])[eltIndex] = value;
+        } else
+            console.warn(`ignoring write of ${value} to var${varIndex.toString(16)}[${eltIndex}] (${BIN.ArraySource[arr.source]}+${arr.offset.toString(16)})`);
+    }
+
+    private storeToArbitraryArray(c: Controller, desc: number, value: number): void {
+        for (let i = 0; i < this.data.arrays.length; i++) {
+            const arr = this.data.arrays[i];
+            const delta = desc - arr.rawDesc;
+            if (delta < 0 || delta > 0xFFFFFF)
+                continue;
+            const index = delta / BIN.byteSize(arr.elementType);
+            if (index >= arr.count)
+                continue;
+            assert(index === (index | 0));
+            this.storeToVariable(c, i, index, value, true);
+            return;
+        }
+        throw `couldn't resolve ${desc.toString(16)} to a variable`;
     }
 
     public runScriptFunc(c: Controller, id: number, dt: number): number {
