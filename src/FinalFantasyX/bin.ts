@@ -694,7 +694,7 @@ function parseLevelModel(view: DataView, offs: number, gsMap: GSMemoryMap, textu
     return { vertexData, indexData, drawCalls, bbox, flags, isTranslucent, center };
 }
 
-interface MapTri {
+export interface MapTri {
     indices: number[];
     edgeAB: number;
     edgeBC: number;
@@ -702,7 +702,7 @@ interface MapTri {
     location: number;
     surfaceType: number;
     passability: number;
-    someBattleValue: number;
+    encounter: number;
     data: number;
 }
 
@@ -710,6 +710,8 @@ export interface HeightMap {
     scale: number;
     vertices: Int16Array;
     tris: MapTri[];
+    hasBattle: boolean;
+    hasCollision: boolean;
 }
 
 export function parseLevelGeometry(buffer: ArrayBufferSlice, textureData: LevelTextures): LevelData {
@@ -722,13 +724,15 @@ export function parseLevelGeometry(buffer: ArrayBufferSlice, textureData: LevelT
 
     let map: HeightMap | undefined;
     if (heightmapOffs !== 0) {
+        const vertexCount = view.getUint16(heightmapOffs + 0xA, true);
         const scale = view.getFloat32(heightmapOffs + 0xC, true);
         const vertexOffs = view.getUint32(heightmapOffs + 0x18, true) + heightmapOffs;
         const triOffs = view.getUint32(heightmapOffs + 0x1C, true) + heightmapOffs;
         const triCount = view.getUint16(triOffs + 0x8, true);
         let offs = view.getUint32(triOffs + 0xC, true) + heightmapOffs;
         const tris: MapTri[] = [];
-        let maxVertex = 0;
+        let hasCollision = false;
+        let hasBattle = false;
         for (let i = 0; i < triCount; i++) {
             const data = view.getUint32(offs + 0xC, true);
             const indices: number[] = [
@@ -736,25 +740,29 @@ export function parseLevelGeometry(buffer: ArrayBufferSlice, textureData: LevelT
                 view.getUint16(offs + 0x2, true),
                 view.getUint16(offs + 0x4, true),
             ];
-            tris.push({
+            const t = {
                 indices,
                 edgeAB: view.getInt16(offs + 0x6, true),
                 edgeBC: view.getInt16(offs + 0x8, true),
                 edgeCA: view.getInt16(offs + 0xA, true),
                 data,
                 passability: data & 0x7F,
-                someBattleValue: (data >>> 7) & 3,
+                encounter: (data >>> 7) & 3,
                 // 9 ??
                 location: (data >>> 0xB) & 3,
                 // 13 ??
                 surfaceType: (data >>> 0xF) & 3,
                 // upper bytes?
-            });
-            maxVertex = Math.max(maxVertex, Math.max(...indices));
+            };
+            if (t.passability)
+                hasCollision = true;
+            if (t.encounter)
+                hasBattle = true;
+            tris.push(t);
             offs += 0x10;
         }
-        const vertices = buffer.createTypedArray(Int16Array, vertexOffs, (maxVertex+1)*4);
-        map = {scale, tris, vertices};
+        const vertices = buffer.createTypedArray(Int16Array, vertexOffs, vertexCount*4);
+        map = {scale, tris, vertices, hasCollision, hasBattle};
     }
 
     let offs = view.getUint32(0x14, true);

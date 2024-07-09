@@ -19,6 +19,7 @@ import { GfxRenderInstList } from "../gfx/render/GfxRenderInstManager.js";
 import { Color, Cyan, Magenta, colorNewFromRGBA } from "../Color.js";
 import { DebugDrawFlags } from "../gfx/helpers/DebugDraw.js";
 import { Vec3UnitX, Vec3UnitZ } from "../MathHelpers.js";
+import { drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk.js";
 
 const pathBase = `FinalFantasyX`;
 
@@ -26,24 +27,46 @@ const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 2, nu
 
 const mapScratch = nArray(3, () => vec3.create());
 
-function passableColor(dst: Color, val: number): void {
-    if (val === 1) { // totally blocked
-        dst.r = 1;
-        dst.g = 0;
-        dst.b = 0;
-    } else if (val === 0xE) { // blocked for player
-        dst.r = 0;
-        dst.g = 0;
-        dst.b = 1;
-    } else if (val >= 0x30) { // controlled by script
-        dst.r = 1;
-        dst.g = 0;
-        dst.b = 1;
-    } else {
-        dst.r = 1;
-        dst.g = 1;
-        dst.b = 1;
+function mapColor(dst: Color, mode: number, tri: BIN.MapTri): boolean {
+    dst.r = 1;
+    dst.g = 1;
+    dst.b = 1;
+    if (mode === 1) {
+        const val = tri.passability;
+        if (val === 1) { // totally blocked
+            dst.r = 1;
+            dst.g = .3;
+            dst.b = .3;
+        } else if (val === 0xE) { // blocked for player
+            dst.r = .2;
+            dst.g = 1;
+            dst.b = 1;
+        } else if (val >= 0x30) { // controlled by script
+            dst.r = 1;
+            dst.g = .2;
+            dst.b = 1;
+        } else {
+            return false;
+        }
+    } else if (mode === 2) {
+        const val = tri.encounter;
+        if (val === 1) { // totally blocked
+            dst.r = 1;
+            dst.g = .5;
+            dst.b = .5;
+        } else if (val === 2) { // blocked for player
+            dst.r = .5;
+            dst.g = 1;
+            dst.b = .5;
+        } else if (val === 3) { // controlled by script
+            dst.r = .5;
+            dst.g = .5;
+            dst.b = 1;
+        } else {
+            return false;
+        }
     }
+    return true;
 }
 
 class FFXRenderer implements Viewer.SceneGfx {
@@ -62,8 +85,9 @@ class FFXRenderer implements Viewer.SceneGfx {
     private animationController = new AnimationController(60);
     public script: EventScript | null = null;
 
-    private showCollision = false;
+    private collisionMode = 0;
     private showTriggers = false;
+    private debug = false;
 
     constructor(device: GfxDevice, public levelObjects: LevelObjectHolder) {
         this.renderHelper = new GfxRenderHelper(device);
@@ -149,7 +173,7 @@ class FFXRenderer implements Viewer.SceneGfx {
         for (let i = 0; i < this.levelObjects.parts.length; i++)
             this.levelObjects.parts[i].prepareToRender(this.renderHelper.renderInstManager, viewerInput, this.textureRemaps);
 
-        if (this.showCollision && this.levelObjects.map) {
+        if (this.collisionMode && this.levelObjects.map) {
             const vv = this.levelObjects.map.vertices;
             const tt = this.levelObjects.map.tris;
             const col = colorNewFromRGBA(1, 1, 1, 1);
@@ -164,7 +188,7 @@ class FFXRenderer implements Viewer.SceneGfx {
                 }
 
                 // carefully draw every edge once
-                passableColor(col, tri.passability);
+                mapColor(col, this.collisionMode, tri);
                 if (tri.edgeAB < 0 || tri.indices[0] < tri.indices[1])
                     this.renderHelper.debugDraw.drawLine(mapScratch[0], mapScratch[1], col, col, opts);
                 if (tri.edgeBC < 0 || tri.indices[1] < tri.indices[2])
@@ -176,19 +200,18 @@ class FFXRenderer implements Viewer.SceneGfx {
             col.a = .5;
             for (let i = 0; i < tt.length; i++) {
                 const tri = tt[i];
-                if (tri.passability === 0)
-                    continue;
-                for (let j = 0; j < 3; j++) {
-                    vec3.set(mapScratch[j], vv[4*tri.indices[j] + 0], -vv[4*tri.indices[j] + 1], -vv[4*tri.indices[j] + 2]);
-                    vec3.scale(mapScratch[j], mapScratch[j], 1/this.levelObjects.map.scale);
-                    mapScratch[j][1] += .05; // poor man's polygon offset
+                if (mapColor(col, this.collisionMode, tri)) {
+                    for (let j = 0; j < 3; j++) {
+                        vec3.set(mapScratch[j], vv[4*tri.indices[j] + 0], -vv[4*tri.indices[j] + 1], -vv[4*tri.indices[j] + 2]);
+                        vec3.scale(mapScratch[j], mapScratch[j], 1/this.levelObjects.map.scale);
+                        mapScratch[j][1] += .05; // poor man's polygon offset
+                    }
+                    this.renderHelper.debugDraw.drawTriSolidP(mapScratch[0], mapScratch[1], mapScratch[2], col);
                 }
-                passableColor(col, tri.passability);
-                this.renderHelper.debugDraw.drawTriSolidP(mapScratch[0], mapScratch[1], mapScratch[2], col);
             }
         }
 
-        if (this.showTriggers && this.script) {
+        if (this.script && (this.showTriggers || this.debug)) {
             for (let i = 0; i < this.script.controllers.length; i++) {
                 const c = this.script.controllers[i];
                 vec3.scale(mapScratch[0], c.position.pos, .1);
@@ -201,11 +224,22 @@ class FFXRenderer implements Viewer.SceneGfx {
                         mapScratch[1][1] *= -1;
                         mapScratch[1][2] *= -1;
                         this.renderHelper.debugDraw.drawLine(mapScratch[0], mapScratch[1], Magenta);
+                        if (this.debug) {
+                            const ctx = getDebugOverlayCanvas2D();
+                            vec3.lerp(mapScratch[0], mapScratch[0], mapScratch[1], .5);
+                            drawWorldSpaceText(ctx, viewerInput.camera.clipFromWorldMatrix, mapScratch[0], `w${hexzero(i, 2)}`, 15*((i % 2) - .5), Magenta);
+                        }
                         break;
                     case BIN.ControllerType.ZONE:
                     case BIN.ControllerType.PLAYER_ZONE:
                         this.renderHelper.debugDraw.drawRectLineRU(mapScratch[0], Vec3UnitX, Vec3UnitZ,
                             c.position.miscVec[0]/10, c.position.miscVec[2]/10, Cyan);
+                        if (this.debug) {
+                            const ctx = getDebugOverlayCanvas2D();
+                            mapScratch[0][0] += c.position.miscVec[0]/10;
+                            mapScratch[0][2] += c.position.miscVec[2]/10;
+                            drawWorldSpaceText(ctx, viewerInput.camera.clipFromWorldMatrix, mapScratch[0], `w${hexzero(i, 2)}`, 0, Cyan);
+                        }
                         break;
                 }
             }
@@ -220,12 +254,26 @@ class FFXRenderer implements Viewer.SceneGfx {
         layersPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
         layersPanel.setTitle(UI.LAYER_ICON, 'Collision');
         if (this.levelObjects.map) {
-            const collisionCheckbox = new UI.Checkbox('Show collision mesh', false);
-            collisionCheckbox.onchanged = () => {
-                this.showCollision = collisionCheckbox.checked;
+            const map = this.levelObjects.map;
+            const options = ['Off'];
+            if (map.hasCollision)
+                options.push('Collision');
+            if (map.hasBattle)
+                options.push('Battle');
+            if (options.length === 1)
+                options.push('On');
+            const mapRadios = new UI.RadioButtons('Show map mesh', options);
+            mapRadios.onselectedchange = () => {
+                this.collisionMode = mapRadios.selectedIndex;
+                if (!map.hasCollision && this.collisionMode === 1)
+                    this.collisionMode = 2;
+                if (this.collisionMode === 1)
+                    mapRadios.elem.title = "red = blocked; cyan = blocked for player; purple = blocked by script";
+                else
+                    mapRadios.elem.title = "";
             };
-            collisionCheckbox.elem.title = "red = blocked; blue = blocked for player; purple = blocked by script";
-            layersPanel.contents.appendChild(collisionCheckbox.elem);
+            mapRadios.setSelectedIndex(0);
+            layersPanel.contents.appendChild(mapRadios.elem);
         }
         if (this.script) {
             const triggerCheckbox = new UI.Checkbox('Show script triggers', false);
