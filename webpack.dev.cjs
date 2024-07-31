@@ -3,10 +3,11 @@ const webpack = require('webpack');
 const path = require('path');
 const { merge } = require('webpack-merge');
 const common = require('./webpack.common.cjs');
-const WasmPackPlugin = require("@wasm-tool/wasm-pack-plugin");
+const { RustWasm2 } = require('./src/RustWasm2.cjs');
 const ForkTsCheckerWebpackPlugin = require('fork-ts-checker-webpack-plugin');
 
 module.exports = merge(common, {
+  infrastructureLogging: { level: 'verbose', },
   mode: 'development',
   devtool: 'eval-cheap-module-source-map',
   cache: {
@@ -49,10 +50,9 @@ module.exports = merge(common, {
       'process.env.NODE_ENV': JSON.stringify('development'),
     }),
     new ForkTsCheckerWebpackPlugin(),
-    new WasmPackPlugin({
-      crateDirectory: path.join(__dirname, 'rust'),
-      forceMode: "production",
-      extraArgs: "--profiling",
+    new RustWasm2({
+      crateName: `noclip_support`,
+      crateDir: path.join(__dirname, 'rust'),
     }),
   ],
 });

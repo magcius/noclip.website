@@ -37,6 +37,7 @@
   },
   "scripts": {
     "start": "webpack serve --config webpack.dev.cjs",
+    "rust_setup": "rustup target add wasm32-unknown-unknown && cargo install wasm-bindgen-cli",
     "build": "webpack --config webpack.prod.cjs",
     "build:ZeldaWindWaker": "cd src/ZeldaWindWaker/tools && tsx --experimental-wasm-modules zww_extractor.ts",
     "build:ztp": "cd src/ZeldaTwilightPrincess/tools && tsx ztp_extractor.ts",

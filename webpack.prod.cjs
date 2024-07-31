@@ -21,9 +21,5 @@ module.exports = merge(common, {
     new webpack.DefinePlugin({
       'process.env.NODE_ENV': JSON.stringify('production'),
     }),
-    new WasmPackPlugin({
-      crateDirectory: path.join(__dirname, 'rust'),
-      forceMode: "production",
-    }),
   ],
 });
