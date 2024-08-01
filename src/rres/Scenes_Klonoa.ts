@@ -321,9 +321,9 @@ const sceneDescs = [
     new KlonoaSceneDesc("s636", "Vision 6-2 Area 15", "tex62.bin"),
 
     "Ending",
-    new KlonoaSceneDesc("s730", "Final Vision, Area 1"),
-    new KlonoaSceneDesc("s731", "Final Vision, Area 2"),
-    new KlonoaSceneDesc("s732", "Final Vision, Area 3"),
+    new KlonoaSceneDesc("s730", "Final Vision, Area 1", "tex71.bin"),
+    new KlonoaSceneDesc("s731", "Final Vision, Area 2", "tex71.bin"),
+    new KlonoaSceneDesc("s732", "Final Vision, Area 3", "tex71.bin"),
 
     "Klonoa's Grand Gale Strategy ~Balue's Tower~",
     new KlonoaSceneDesc("s810", "Bonus Vision, Area 1"),

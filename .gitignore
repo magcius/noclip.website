@@ -56,3 +56,6 @@ data/*
 !data/.empty
 dist/*
 !dist/.htaccess
+
+# wasm-pack not working correctly
+pkg/index.js
