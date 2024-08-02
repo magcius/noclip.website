@@ -383,13 +383,11 @@ export class WdtScene implements Viewer.SceneGfx {
         adt.setLodLevel(distance < this.ADT_LOD0_DISTANCE ? 0 : 1);
         adt.setupWmoCandidates(worldCamera, worldFrustum);
 
-        if (adt.insideWmoCandidates.length > 0) {
-          for (let def of adt.insideWmoCandidates) {
-            const wmo = adt.wmos.get(def.wmoId)!;
-            const cullResult = this.cullWmoDef(def, wmo);
-            if (cullResult === CullWmoResult.CameraInside) {
-              exteriorVisible = false;
-            }
+        for (let def of adt.insideWmoCandidates) {
+          const wmo = adt.wmos.get(def.wmoId)!;
+          const cullResult = this.cullWmoDef(def, wmo);
+          if (cullResult === CullWmoResult.CameraInside) {
+            exteriorVisible = false;
           }
         }
       }
@@ -414,11 +412,6 @@ export class WdtScene implements Viewer.SceneGfx {
             const wmo = adt.wmos.get(def.wmoId)!;
             this.cullWmoDef(def, wmo);
           }
-        } else {
-          adt.setVisible(false);
-          for (let def of adt.visibleWmoCandidates) {
-            def.setVisible(false);
-          }
         }
       }
     }
@@ -426,8 +419,6 @@ export class WdtScene implements Viewer.SceneGfx {
 
   public cullWmoDef(def: WmoDefinition, wmo: WmoData): CullWmoResult {
     const [worldCamera, worldFrustum] = this.getCameraAndFrustum();
-    vec3.transformMat4(this.modelCamera, worldCamera, def.invPlacementMatrix);
-    this.modelFrustum.transform(worldFrustum, def.invPlacementMatrix);
 
     // Start with everything invisible
     def.setVisible(false);
@@ -438,6 +429,9 @@ export class WdtScene implements Viewer.SceneGfx {
     if (!def.visible) {
       return CullWmoResult.CameraOutside;
     }
+
+    vec3.transformMat4(this.modelCamera, worldCamera, def.invPlacementMatrix);
+    this.modelFrustum.transform(worldFrustum, def.invPlacementMatrix);
 
     // Categorize groups by interior/exterior, and whether
     // the camera is present in them
