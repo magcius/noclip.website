@@ -59,10 +59,14 @@ export class Database {
 
 type LoadFunc<T> = (fileId: number) => Promise<T>;
 
+// fileID, uniqueID, lodLevel
+type WmoDefinitionKey = [number, number, number];
+
 export class WowCache {
   private sheepfile: Sheepfile;
   private promiseCache = new Map<number, Promise<unknown>>();
   private promiseCacheLiquidTypes = new Map<number, Promise<LiquidType>>(); // liquid types aren't fileIDs
+  private wmoDefinitionCache = new Map<string, WmoDefinition>(); // keys are WmoDefinitionKey.toString()
 
   constructor(public dataFetcher: DataFetcher, public db: Database) {
     this.sheepfile = new Sheepfile();
@@ -83,6 +87,17 @@ export class WowCache {
     } else {
       return result;
     }
+  }
+
+  public getWmoDefinition(def: WowAdtWmoDefinition, data: WmoData, lodLevel: number): WmoDefinition {
+    const key: WmoDefinitionKey = [def.name_id, def.unique_id, lodLevel];
+    const keyString = key.toString();
+    let result = this.wmoDefinitionCache.get(keyString);
+    if (!result) {
+      result = WmoDefinition.fromAdtDefinition(def, data);
+      this.wmoDefinitionCache.set(keyString, result);
+    }
+    return result;
   }
 
   public async fetchFileByID<T>(fileId: number, constructor: (data: Uint8Array) => T): Promise<T> {
@@ -2208,7 +2223,7 @@ export class AdtLodData {
     return Promise.all(data.get_wmo_defs(lodLevel).map(async (wmoDef) => {
       const wmo = await cache.loadWmo(wmoDef.name_id);
       this.wmos.set(wmoDef.name_id, wmo);
-      this.wmoDefs.push(WmoDefinition.fromAdtDefinition(wmoDef, wmo));
+      this.wmoDefs.push(cache.getWmoDefinition(wmoDef, wmo, lodLevel));
     }));
   }
 
@@ -2221,6 +2236,9 @@ export class AdtLodData {
   }
 
   public setVisible(visible: boolean) {
+    for (let def of this.wmoDefs) {
+      def.setVisible(false);
+    }
     for (let doodad of this.doodads) {
       doodad.setVisible(visible);
     }
