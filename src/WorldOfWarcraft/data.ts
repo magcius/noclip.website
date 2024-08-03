@@ -2236,6 +2236,9 @@ export class AdtLodData {
   }
 
   public setVisible(visible: boolean) {
+    for (let def of this.wmoDefs) {
+      def.setVisible(false);
+    }
     for (let doodad of this.doodads) {
       doodad.setVisible(visible);
     }

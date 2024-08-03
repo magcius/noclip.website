@@ -373,6 +373,12 @@ export class WdtScene implements Viewer.SceneGfx {
       this.cullWmoDef(this.world.globalWmoDef!, this.world.globalWmo);
     } else {
       const [worldCamera, worldFrustum] = this.getCameraAndFrustum();
+
+      // start off with everything invisible
+      for (let adt of this.world.adts) {
+        adt.setVisible(false);
+      }
+
       // Do a first pass and get candidate WMOs the camera's inside of,
       // disable WMOs not in the frustum, and determine if any ADTs are
       // visible based on where the camera is
@@ -405,8 +411,6 @@ export class WdtScene implements Viewer.SceneGfx {
             for (let doodad of adt.lodDoodads()) {
               doodad.setVisible(worldFrustum.contains(doodad.worldAABB));
             }
-          } else {
-            adt.setVisible(false);
           }
           for (let def of adt.visibleWmoCandidates) {
             const wmo = adt.wmos.get(def.wmoId)!;
@@ -420,7 +424,6 @@ export class WdtScene implements Viewer.SceneGfx {
   public cullWmoDef(def: WmoDefinition, wmo: WmoData): CullWmoResult {
     const [worldCamera, worldFrustum] = this.getCameraAndFrustum();
 
-    // Start with everything invisible
     def.setVisible(false);
 
     // Check if we're looking at this particular world-space WMO, then do the
@@ -551,25 +554,14 @@ export class WdtScene implements Viewer.SceneGfx {
       renderer.prepareToRenderTerrain(renderInstManager);
     }
 
-    let visibleWmoUniqueIds = new Set();
     template.setGfxProgram(this.wmoProgram);
     template.setBindingLayouts(WmoProgram.bindingLayouts);
     for (let [wmoId, renderer] of this.wmoRenderers.entries()) {
       const defs = this.wmoIdToDefs.get(wmoId)!
-        .filter(wmoDef => wmoDef.visible)
-        .filter(wmoDef => {
-          if (visibleWmoUniqueIds.has(wmoDef.uniqueId)) {
-            wmoDef.setVisible(false);
-            return false;
-          }
-          visibleWmoUniqueIds.add(wmoDef.uniqueId);
-          return true;
-        });
+        .filter(wmoDef => wmoDef.visible);
       renderer.prepareToRenderWmo(renderInstManager, defs);
     }
 
-    // reset so we can draw liquids
-    visibleWmoUniqueIds.clear();
     template.setGfxProgram(this.waterProgram);
     template.setBindingLayouts(WaterProgram.bindingLayouts);
     for (let renderer of this.adtWaterRenderers.values()) {
@@ -578,14 +570,7 @@ export class WdtScene implements Viewer.SceneGfx {
     }
     for (let [wmoId, renderer] of this.wmoWaterRenderers.entries()) {
       const defs = this.wmoIdToDefs.get(wmoId)!
-        .filter(wmoDef => wmoDef.visible)
-        .filter(wmoDef => {
-          if (visibleWmoUniqueIds.has(wmoDef.uniqueId)) {
-            return false;
-          }
-          visibleWmoUniqueIds.add(wmoDef.uniqueId);
-          return true;
-        });
+        .filter(wmoDef => wmoDef.visible);
       renderer.update(this.mainView);
       renderer.prepareToRenderWmoWater(renderInstManager, defs);
     }
