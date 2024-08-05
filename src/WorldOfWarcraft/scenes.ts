@@ -151,6 +151,16 @@ export class MapArray<K, V> {
     return result;
   }
 
+  public appendUnique(key: K, value: V): void {
+    if (this.map.has(key)) {
+      const L = this.map.get(key)!;
+      if (!L.includes(value))
+        L.push(value);
+    } else {
+      this.map.set(key, [value]);
+    }
+  }
+
   public append(key: K, value: V) {
     if (this.map.has(key)) {
       this.map.get(key)!.push(value);
@@ -249,9 +259,9 @@ export class WdtScene implements Viewer.SceneGfx {
   }
 
   public setupWmoDef(def: WmoDefinition) {
-    this.wmoIdToDefs.append(def.wmoId, def);
+    this.wmoIdToDefs.appendUnique(def.wmoId, def);
     for (let doodad of def.doodadIndexToDoodad.values()) {
-      this.modelIdToDoodads.append(doodad.modelId, doodad);
+      this.modelIdToDoodads.appendUnique(doodad.modelId, doodad);
     }
   }
 

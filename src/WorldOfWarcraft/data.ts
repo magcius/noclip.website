@@ -1,10 +1,10 @@
 import { ReadonlyMat4, ReadonlyVec3, mat3, mat4, quat, vec2, vec3, vec4 } from "gl-matrix";
-import { WowAABBox, WowAdt, WowAdtChunkDescriptor, WowAdtLiquidLayer, WowAdtWmoDefinition, WowBgra, WowBlp, WowDatabase, WowDoodad, WowDoodadDef, WowGlobalWmoDefinition, WowLightResult, WowLiquidResult, WowM2, WowM2AnimationManager, WowM2BlendingMode, WowM2BoneFlags, WowM2MaterialFlags, WowM2ParticleEmitter, WowM2ParticleShaderType, WowMapFileDataIDs, WowModelBatch, WowSkin, WowSkinSubmesh, WowSkyboxMetadata, WowVec3, WowWmo, WowWmoBspNode, WowWmoGroupFlags, WowWmoGroupInfo, WowWmoHeaderFlags, WowWmoLiquidResult, WowWmoMaterial, WowWmoMaterialBatch, WowWmoMaterialFlags, WowWmoMaterialPixelShader, WowWmoMaterialVertexShader, WowWmoPortal, WowWmoPortalRef } from "../../rust/pkg/index.js";
+import type { WowAABBox, WowAdt, WowAdtChunkDescriptor, WowAdtLiquidLayer, WowAdtWmoDefinition, WowBgra, WowBlp, WowDatabase, WowDoodad, WowDoodadDef, WowGlobalWmoDefinition, WowLightResult, WowLiquidResult, WowM2, WowM2AnimationManager, WowM2BlendingMode, WowM2BoneFlags, WowM2MaterialFlags, WowM2ParticleEmitter, WowM2ParticleShaderType, WowMapFileDataIDs, WowModelBatch, WowSkin, WowSkinSubmesh, WowSkyboxMetadata, WowVec3, WowWmo, WowWmoBspNode, WowWmoGroupFlags, WowWmoGroupInfo, WowWmoHeaderFlags, WowWmoLiquidResult, WowWmoMaterial, WowWmoMaterialBatch, WowWmoMaterialFlags, WowWmoMaterialPixelShader, WowWmoMaterialVertexShader, WowWmoPortal, WowWmoPortalRef } from "../../rust/pkg/index.js";
 import { DataFetcher } from "../DataFetcher.js";
 import { AABB, Frustum, Plane } from "../Geometry.js";
-import { MathConstants, Vec3NegZ, randomRange, rayTriangleIntersect, saturate, setMatrixTranslation, transformVec3Mat4w0 } from "../MathHelpers.js";
+import { MathConstants, randomRange, saturate, setMatrixTranslation, transformVec3Mat4w0 } from "../MathHelpers.js";
+import { getDerivativeBezier, getPointBezier } from "../Spline.js";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
-import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
 import { reverseDepthForCompareMode } from "../gfx/helpers/ReversedDepthHelpers.js";
 import { fillMatrix4x4, fillVec3v, fillVec4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers.js";
 import { GfxBlendFactor, GfxBlendMode, GfxBufferUsage, GfxChannelWriteMask, GfxCompareMode, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxMegaStateDescriptor, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform.js";
@@ -13,9 +13,8 @@ import { GfxRenderInst, GfxRendererLayer, makeSortKey } from "../gfx/render/GfxR
 import { rust } from "../rustlib.js";
 import { assert } from "../util.js";
 import { ModelProgram, WmoProgram } from "./program.js";
-import { MapArray, View, WdtScene, adtSpaceFromPlacementSpace, modelSpaceFromPlacementSpace, noclipSpaceFromAdtSpace, placementSpaceFromAdtSpace, placementSpaceFromModelSpace } from "./scenes.js";
+import { MapArray, View, adtSpaceFromPlacementSpace, modelSpaceFromPlacementSpace, noclipSpaceFromAdtSpace, placementSpaceFromAdtSpace, placementSpaceFromModelSpace } from "./scenes.js";
 import { Sheepfile } from "./util.js";
-import { getDerivativeBezier, getPointBezier } from "../Spline.js";
 
 export class Database {
   private inner: WowDatabase;
@@ -1153,21 +1152,22 @@ export class BspTree {
       return undefined;
     }
     assert(i < this.nodes.length);
-    if (this.nodes[i].is_leaf()) {
-      nodes.push(this.nodes[i]);
+    const node = this.nodes[i];
+    if (node.is_leaf()) {
+      nodes.push(node);
       return;
     }
-    const nodeDistance = this.nodes[i].plane_distance;
-    const nodeType = this.nodes[i].get_axis_type();
-    if (nodeType === rust.WowWmoBspAxisType.Z) {
-      this.query(pos, nodes, this.nodes[i].negative_child);
-      this.query(pos, nodes, this.nodes[i].positive_child);
+    const nodeDistance = node.plane_distance;
+    const axis = node.get_axis_type();
+    if (axis === rust.WowWmoBspAxisType.Z) {
+      this.query(pos, nodes, node.negative_child);
+      this.query(pos, nodes, node.positive_child);
     } else {
-      let posComponent = nodeType === rust.WowWmoBspAxisType.X ? pos[0] : pos[1];
-      if (posComponent - nodeDistance < 0) {
-        this.query(pos, nodes, this.nodes[i].negative_child);
+      const posComponent = pos[axis];
+      if (posComponent < nodeDistance) {
+        this.query(pos, nodes, node.negative_child);
       } else {
-        this.query(pos, nodes, this.nodes[i].positive_child);
+        this.query(pos, nodes, node.positive_child);
       }
     }
   }
@@ -1202,13 +1202,17 @@ export class WmoGroupData {
   public bsp: BspTree;
   public bspIndices: Uint16Array;
 
-  public scratchAABB = new AABB();
-  private scratchVec3a = vec3.create();
-  private scratchVec3b = vec3.create();
-  private scratchVec3c = vec3.create();
-  private scratchVec3d = vec3.create();
-  private scratchVec3e = vec3.create();
-  private scratchVec4 = vec4.create();
+  private static scratchAABB = new AABB();
+  private static scratchVec4 = vec4.create();
+  private static scratchVec3a = vec3.create();
+  private static scratchVec3b = vec3.create();
+  private static scratchVec3c = vec3.create();
+  private static scratchVec3d = vec3.create();
+  private static scratchVec3e = vec3.create();
+  private static scratchVec3f = vec3.create();
+  private static scratchVec3g = vec3.create();
+  private static scratchVec3h = vec3.create();
+  private static scratchVec3i = vec3.create();
 
   constructor(public fileId: number) {
   }
@@ -1291,84 +1295,95 @@ export class WmoGroupData {
     return { byteOffset: 0, buffer: makeStaticDataBuffer(device, GfxBufferUsage.Index, this.indices.buffer) }
   }
 
-  private getClosestIntersectedTriangle(barycentricOut: vec3, p: ReadonlyVec3, dir: ReadonlyVec3): number[] | undefined {
+  private getClosestIntersectedTriangleNegZ(barycentricOut: vec3, p: ReadonlyVec3): number {
     const bspNodes: WowWmoBspNode[] = [];
-    const scratchBary = vec3.create();
     let minDist = Infinity;
-    let resultIndices = undefined;
+    let minFaceIdx = -1;
+    // XXX(jstpierre): Select the closest BSP node? Why do we have more than one returned here?
     this.bsp.query(p, bspNodes);
     if (bspNodes.length !== 0) {
       for (let nodeIndex=0; nodeIndex<bspNodes.length; nodeIndex++) {
         const node = bspNodes[nodeIndex];
-        for (let i = node.faces_start; i < node.faces_start + node.num_faces; i++) {
-          const index0 = this.indices[3 * this.bspIndices[i] + 0];
-          const vertex0 = vec3.set(this.scratchVec3c,
+        const faces_start = node.faces_start, num_faces = node.num_faces;
+        for (let i = faces_start; i < faces_start + num_faces; i++) {
+          const faceIdx = this.bspIndices[i];
+          const index0 = this.indices[3 * faceIdx + 0];
+          const vertex0 = vec3.set(WmoGroupData.scratchVec3c,
               this.vertices[3 * index0 + 0],
               this.vertices[3 * index0 + 1],
               this.vertices[3 * index0 + 2],
           );
-          const index1 = this.indices[3 * this.bspIndices[i] + 1];
-          const vertex1 = vec3.set(this.scratchVec3d,
+          const index1 = this.indices[3 * faceIdx + 1];
+          const vertex1 = vec3.set(WmoGroupData.scratchVec3d,
               this.vertices[3 * index1 + 0],
               this.vertices[3 * index1 + 1],
               this.vertices[3 * index1 + 2],
           );
-          const index2 = this.indices[3 * this.bspIndices[i] + 2];
-          const vertex2 = vec3.set(this.scratchVec3e,
+          const index2 = this.indices[3 * faceIdx + 2];
+          const vertex2 = vec3.set(WmoGroupData.scratchVec3e,
               this.vertices[3 * index2 + 0],
               this.vertices[3 * index2 + 1],
               this.vertices[3 * index2 + 2],
           );
-          // check if the tri is above/below our point
-          this.scratchAABB.setFromPoints([vertex0, vertex1, vertex2]);
-          this.scratchAABB.minZ = -Infinity;
-          this.scratchAABB.maxZ = Infinity;
-          if (!this.scratchAABB.containsPoint(p)) {
+
+          // check that the ray will intersect in the xy plane
+          const minX = Math.min(vertex0[0], vertex1[0], vertex2[0]), maxX = Math.max(vertex0[0], vertex1[0], vertex2[0]);
+          if (p[0] < minX || p[0] > maxX)
             continue;
-          }
-
-          // check if the tri is nearly vertical
-          const plane = new Plane();
-          plane.setTri(vertex0, vertex1, vertex2);
-          if (plane.n[2] < 0.0001) {
-            continue;
-          }
-
-          let verts, indices;
-          if (plane.distanceVec3(p) < 0) {
-            verts = [vertex2, vertex1, vertex0];
-            indices = [index2, index1, index0];
-          } else {
-            verts = [vertex0, vertex1, vertex2];
-            indices = [index0, index1, index2];
-          }
-
-          const t = rayTriangleIntersect(scratchBary, p, dir, verts[0], verts[1], verts[2]);
-          if (t <= 0.0)
+          const minY = Math.min(vertex0[1], vertex1[1], vertex2[1]), maxY = Math.max(vertex0[1], vertex1[1], vertex2[1]);
+          if (p[1] < minY || p[2] > maxY)
             continue;
 
-          if (t < minDist) {
-            minDist = t;
-            vec3.copy(barycentricOut, scratchBary);
-            resultIndices = indices;
-          }
+          // check that the ray is above on z
+          const maxZ = Math.max(vertex0[2], vertex1[2], vertex2[2]);
+          if (p[2] > maxZ)
+            continue; // ray starts below triangle
+
+          const ab = WmoGroupData.scratchVec3f;
+          const ac = WmoGroupData.scratchVec3g;
+          const n = WmoGroupData.scratchVec3h;
+          const temp = WmoGroupData.scratchVec3i
+
+          // inlined rayTriangleIntersect, assuming that axis = negative z
+          vec3.sub(ab, vertex1, vertex0);
+          vec3.sub(ac, vertex2, vertex0);
+          vec3.cross(n, ab, ac);
+
+          vec3.sub(temp, p, vertex0);
+          const t = vec3.dot(temp, n) / n[2];
+          if (t <= 0.0 || t >= minDist)
+            continue;
+
+          // inlined cross assuming dir = negative z
+          const ex = -temp[0], ey = temp[1];
+          const v = (ac[0]*ex + ac[1]*ey) / n[2];
+          if (v < 0.0 || v > 1.0)
+            continue;
+
+          const w = (ab[0]*ex + ac[1]*ey) / -n[2];
+          if (w < 0.0 || w > 1.0)
+            continue;
+
+          minDist = t;
+          minFaceIdx = faceIdx;
+          vec3.set(barycentricOut, v, w, 1.0 - v - w);
         }
       }
     }
-    return resultIndices;
+    return minFaceIdx;
   }
 
   public getVertexColorForModelSpacePoint(p: vec3): vec4 | undefined {
     // project a line downwards for an intersection test
-    const w = this.scratchVec3b;
-    const indices = this.getClosestIntersectedTriangle(w, p, Vec3NegZ);
-    if (indices !== undefined) {
-      const idx0 = 4*indices[0], idx1 = 4*indices[1], idx2 = 4*indices[2];
+    const w = WmoGroupData.scratchVec3b;
+    const faceIdx = this.getClosestIntersectedTriangleNegZ(w, p);
+    if (faceIdx >= 0) {
+      const idx0 = 4*this.bspIndices[3*faceIdx+0], idx1 = 4*this.bspIndices[3*faceIdx+1], idx2 = 4*this.bspIndices[3*faceIdx+2];
       const r = (this.colors[idx0+0]*w[0] + this.colors[idx1+0]*w[1] + this.colors[idx2+0]*w[2]) / 255.0;
       const g = (this.colors[idx0+1]*w[0] + this.colors[idx1+1]*w[1] + this.colors[idx2+1]*w[2]) / 255.0;
       const b = (this.colors[idx0+2]*w[0] + this.colors[idx1+2]*w[1] + this.colors[idx2+2]*w[2]) / 255.0;
       const a = (this.colors[idx0+3]*w[0] + this.colors[idx1+3]*w[1] + this.colors[idx2+3]*w[2]) / 255.0;
-      return vec4.set(this.scratchVec4, r, g, b, a);
+      return vec4.set(WmoGroupData.scratchVec4, r, g, b, a);
     }
     return undefined;
   }
@@ -1416,36 +1431,37 @@ export class WmoGroupData {
     if (nodes.length === 0) {
       return false;
     }
-    this.scratchAABB.reset();
+    const aabb = WmoGroupData.scratchAABB;
+    aabb.reset();
     for (let node of nodes) {
       for (let i = node.faces_start; i < node.faces_start + node.num_faces; i++) {
         const index0 = this.indices[3 * this.bspIndices[i] + 0];
-        const vertex0 = vec3.set(this.scratchVec3a,
+        const vertex0 = vec3.set(WmoGroupData.scratchVec3a,
           this.vertices[3 * index0 + 0],
           this.vertices[3 * index0 + 1],
           this.vertices[3 * index0 + 2],
         );
-        this.scratchAABB.unionPoint(vertex0);
+        aabb.unionPoint(vertex0);
         const index1 = this.indices[3 * this.bspIndices[i] + 1];
-        const vertex1 = vec3.set(this.scratchVec3b,
+        const vertex1 = vec3.set(WmoGroupData.scratchVec3b,
           this.vertices[3 * index1 + 0],
           this.vertices[3 * index1 + 1],
           this.vertices[3 * index1 + 2],
         );
-        this.scratchAABB.unionPoint(vertex1);
+        aabb.unionPoint(vertex1);
         const index2 = this.indices[3 * this.bspIndices[i] + 2];
-        const vertex2 = vec3.set(this.scratchVec3c,
+        const vertex2 = vec3.set(WmoGroupData.scratchVec3c,
           this.vertices[3 * index2 + 0],
           this.vertices[3 * index2 + 1],
           this.vertices[3 * index2 + 2],
         );
-        this.scratchAABB.unionPoint(vertex2);
+        aabb.unionPoint(vertex2);
       }
     }
     // add a bit of headroom to AABBs, since WoW's AABBs are mostly built for
     // ground-based transit
-    this.scratchAABB.maxZ += 50;
-    return this.scratchAABB.containsPoint(pos);
+    aabb.maxZ += 50;
+    return aabb.containsPoint(pos);
   }
 }
 
@@ -1869,10 +1885,8 @@ export class PortalData {
   public aabb = new AABB();
   public vertexCount = 0;
   public vertexStart = 0;
-  private scratchVec4 = vec4.create();
   private scratchVec3A = vec3.create();
   private scratchVec3B = vec3.create();
-  private scratchVec3C = vec3.create();
   private scratchMat4 = mat4.create();
 
   constructor() {
