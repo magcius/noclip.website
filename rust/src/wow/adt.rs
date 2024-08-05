@@ -487,7 +487,7 @@ pub struct MapChunk {
     pub vertex_colors: Option<VertexColors>,
     pub vertex_lighting: Option<VertexLighting>,
     pub texture_layers: Vec<MapChunkTextureLayer>,
-    pub alpha_map: Option<AlphaMap>,
+    pub alpha_map: Option<Vec<u8>>,
 }
 
 impl MapChunk {
@@ -539,7 +539,7 @@ impl MapChunk {
 
     // These two flags come from the WDT definition block flags
     pub fn build_alpha_texture(&self, adt_has_big_alpha: bool, adt_has_height_texturing: bool) -> Option<Vec<u8>> {
-        let alpha_map = &self.alpha_map.as_ref()?.data;
+        let alpha_map = &self.alpha_map.as_ref()?;
         assert!(!self.texture_layers.is_empty());
         let mut result = vec![0; (64 * 4) * 64];
         for layer_idx in 0..self.texture_layers.len() {
@@ -612,7 +612,7 @@ impl MapChunk {
         for (subchunk, subchunk_data) in &mut chunked_data {
             match &subchunk.magic {
                 b"YLCM" => self.texture_layers = parse_array(subchunk_data, 16)?,
-                b"LACM" => self.alpha_map = parse_with_byte_size(subchunk_data)?,
+                b"LACM" => self.alpha_map = Some(subchunk_data.to_vec()),
                 b"HSCM" => self.shadows = Some(parse(subchunk_data)?),
                 _ => {},
             }
@@ -672,14 +672,6 @@ impl From<u32> for MapChunkTextureLayerSettings {
             use_cube_map_reflection: (value & 0b10000000000) > 0,
         }
     }
-}
-
-#[wasm_bindgen(js_name = "WowAdtChunkAlphaMap")]
-#[derive(DekuRead, Debug, Clone)]
-#[deku(ctx = "ByteSize(size): ByteSize")]
-pub struct AlphaMap {
-    #[deku(count = "size")]
-    data: Vec<u8>
 }
 
 #[derive(Debug, Clone, DekuRead)]
