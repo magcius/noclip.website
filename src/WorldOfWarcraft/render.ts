@@ -7,7 +7,7 @@ import { GfxTopology, convertToTriangleIndexBuffer, makeTriangleIndexBuffer } fr
 import { fillMatrix4x4, fillVec4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers.js";
 import { GfxBlendFactor, GfxBlendMode, GfxBufferUsage, GfxCullMode, GfxDevice, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxMegaStateDescriptor, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform.js";
 import { GfxFormat } from "../gfx/platform/GfxPlatformFormat.js";
-import { GfxBuffer, GfxInputLayout } from "../gfx/platform/GfxPlatformImpl.js";
+import { GfxInputLayout } from "../gfx/platform/GfxPlatformImpl.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
 import { GfxRenderInstManager, GfxRendererLayer, makeSortKey } from "../gfx/render/GfxRenderInstManager.js";
 import { rust } from "../rustlib.js";
@@ -15,7 +15,7 @@ import { assert } from "../util.js";
 import { AdtData, BlpData, ChunkData, DoodadData, LiquidInstance, LiquidType, ModelData, ModelRenderPass, ParticleEmitter, SkinData, WmoBatchData, WmoData, WmoDefinition, WmoGroupData, getSkyboxDoodad } from "./data.js";
 import { loadingAdtIndices, loadingAdtVertices, skyboxIndices, skyboxVertices } from "./mesh.js";
 import { LoadingAdtProgram, MAX_BONE_TRANSFORMS, MAX_DOODAD_INSTANCES, ModelProgram, ParticleProgram, SkyboxProgram, TerrainProgram, WaterProgram, WmoProgram } from "./program.js";
-import { MAP_SIZE, MapArray, View } from "./scenes.js";
+import { MAP_SIZE, MapArray, View, WdtScene } from "./scenes.js";
 import { TextureCache } from "./tex.js";
 
 type TextureMappingArray = (TextureMapping | null)[];
@@ -244,7 +244,7 @@ export class ModelRenderer {
   }
 
   public prepareToRenderParticles(renderInstManager: GfxRenderInstManager, doodads: DoodadData[]): void {
-    if (!this.isDrawable()) return;
+    if (!this.isDrawable() || this.model.particleEmitters.length === 0) return;
 
     const visibleDoodads = doodads.filter(d => d.visible);
 
@@ -261,7 +261,10 @@ export class ModelRenderer {
         if (emitter.particles.length === 0) {
           continue;
         }
-        emitter.updateDataTex(this.device);
+
+        if (emitter.needsRedraw) {
+          emitter.updateDataTex(this.device);
+        }
 
         let renderInst = renderInstManager.newRenderInst();
         let offs = renderInst.allocateUniformBuffer(ParticleProgram.ub_EmitterParams, 4 * 2);

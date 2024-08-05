@@ -1,7 +1,7 @@
 import { mat4, vec3, vec4 } from 'gl-matrix';
 import { CameraController } from '../Camera.js';
 import { AABB, Frustum } from '../Geometry.js';
-import { getMatrixTranslation, lerp, projectionMatrixForFrustum } from "../MathHelpers.js";
+import { getMatrixTranslation, lerp, projectionMatrixForFrustum, saturate } from "../MathHelpers.js";
 import { SceneContext } from '../SceneBase.js';
 import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { GfxClipSpaceNearZ, GfxCullMode, GfxDevice } from '../gfx/platform/GfxPlatform.js';
@@ -11,7 +11,7 @@ import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
 import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
 import { rust } from '../rustlib.js';
 import * as Viewer from '../viewer.js';
-import { AdtCoord, AdtData, Database, DoodadData, LazyWorldData, ModelData, SkyboxData, WmoData, WmoDefinition, WorldData, WowCache } from './data.js';
+import { AdtCoord, AdtData, Database, DoodadData, LazyWorldData, ModelData, ParticleEmitter, SkyboxData, WmoData, WmoDefinition, WorldData, WowCache } from './data.js';
 import { BaseProgram, LoadingAdtProgram, ModelProgram, ParticleProgram, SkyboxProgram, TerrainProgram, WaterProgram, WmoProgram } from './program.js';
 import { LoadingAdtRenderer, ModelRenderer, SkyboxRenderer, TerrainRenderer, WaterRenderer, WmoRenderer } from './render.js';
 import { TextureCache } from './tex.js';
@@ -214,6 +214,8 @@ export class WdtScene implements Viewer.SceneGfx {
   public loadingAdts: [number, number][] = [];
 
   public debug = false;
+  public enableFog = true;
+  public enableParticles = true;
   public cullingState = CullingState.Running;
   public cameraState = CameraState.Running;
   public frozenCamera = vec3.create();
@@ -394,14 +396,6 @@ export class WdtScene implements Viewer.SceneGfx {
 
       for (let adt of this.world.adts) {
         if (exteriorVisible) {
-          if (adt.skyboxes.length > 0) {
-            let originalMinZ = adt.worldSpaceAABB.minZ;
-            let originalMaxZ = adt.worldSpaceAABB.maxZ;
-            adt.worldSpaceAABB.minZ = -Infinity;
-            adt.worldSpaceAABB.maxZ = Infinity;
-            adt.worldSpaceAABB.minZ = originalMinZ;
-            adt.worldSpaceAABB.maxZ = originalMaxZ;
-          }
           if (worldFrustum.contains(adt.worldSpaceAABB)) {
             adt.visible = true;
             for (let chunk of adt.chunkData) {
@@ -622,8 +616,16 @@ export class WdtScene implements Viewer.SceneGfx {
     renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
 
     for (let [modelId, renderer] of this.modelRenderers.entries()) {
+      let minDistance = Infinity;
       const doodads = this.modelIdToDoodads.get(modelId)!
         .filter(doodad => doodad.visible)
+        .filter(doodad => {
+          const dist = this.mainView.cameraDistanceToWorldSpaceAABB(doodad.worldAABB);
+          if (dist < minDistance) {
+            minDistance = dist;
+          }
+          return dist < this.mainView.cullingFarPlane;
+        })
         .filter(doodad => {
           if (doodad.uniqueId === undefined)
             return true;
@@ -641,9 +643,21 @@ export class WdtScene implements Viewer.SceneGfx {
       renderer.update(this.mainView);
       renderer.prepareToRenderModel(renderInstManager, doodads);
 
-      template.setBindingLayouts(ParticleProgram.bindingLayouts);
-      template.setGfxProgram(this.particleProgram);
-      renderer.prepareToRenderParticles(renderInstManager, doodads);
+      if (this.enableParticles && renderer.model.particleEmitters.length > 0) {
+        template.setBindingLayouts(ParticleProgram.bindingLayouts);
+        template.setGfxProgram(this.particleProgram);
+
+        // LOD scales linearly w/ distance after 100 units
+        let lod = ParticleEmitter.MAX_LOD;
+        if (minDistance > 100.0) {
+          lod *= (1.0 - saturate(minDistance / this.mainView.cullingFarPlane));
+          lod = Math.floor(lod);
+        }
+        renderer.model.particleEmitters.forEach(emitter => {
+          emitter.lod = lod;
+        });
+        renderer.prepareToRenderParticles(renderInstManager, doodads);
+      }
     }
 
     renderInstManager.popTemplateRenderInst();

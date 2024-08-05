@@ -528,6 +528,7 @@ class BezierSpline {
 export class ParticleEmitter {
   static MAX_PARTICLES = 2000;
   static TEXELS_PER_PARTICLE = 4; // pos, color, scale, texCoord
+  public static MAX_LOD = 4;
 
   public enabled = 0;
   private emissionSpeed = 0;
@@ -560,6 +561,10 @@ export class ParticleEmitter {
   private textureColBits: number;
   public particleType: number;
   public spline?: BezierSpline;
+  public lod: number = ParticleEmitter.MAX_LOD;
+  private msSinceLastUpdate = 0;
+  private framesSinceLastUpdate = 0;
+  public needsRedraw = true;
 
   constructor(public index: number, public emitter: WowM2ParticleEmitter, private model: ModelData, public txac: number) {
     this.updateBuffer = new Float32Array(16);
@@ -640,7 +645,7 @@ export class ParticleEmitter {
     }
   }
 
-  private updateParams(dt: number, animationManager: WowM2AnimationManager) {
+  private updateParams(animationManager: WowM2AnimationManager) {
     animationManager.update_particle_emitter(this.index, this.updateBuffer);
     [
       this.enabled,
@@ -748,10 +753,27 @@ export class ParticleEmitter {
     return this.lifespan + this.emitter.lifespan_variance
   }
 
+  private shouldUpdate(): boolean {
+    const lodFactor = 1 << (ParticleEmitter.MAX_LOD - this.lod);
+    return this.framesSinceLastUpdate > lodFactor;
+  }
+
   public update(dtMilliseconds: number, animationManager: WowM2AnimationManager) {
+    this.msSinceLastUpdate += dtMilliseconds;
     // the particle system's units are seconds
-    const dtSeconds = dtMilliseconds / 1000;
-    this.updateParams(dtSeconds, animationManager);
+    const dtSeconds = this.msSinceLastUpdate / 1000;
+    this.framesSinceLastUpdate += 1;
+
+    if (!this.shouldUpdate()) {
+      this.needsRedraw = false;
+      return;
+    } else {
+      this.needsRedraw = true;
+    }
+
+    this.msSinceLastUpdate = 0;
+    this.framesSinceLastUpdate = 0;
+    this.updateParams(animationManager);
 
     if (this.enabled > 0.0) {
       this.particlesToEmit += this.getEmissionRate() * dtSeconds;
