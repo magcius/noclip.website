@@ -211,6 +211,11 @@ export class UberShaderInstanceBasic extends UberShaderInstance<DefinesMap> {
     }
 
     public setDefineString(name: string, v: string | null): boolean {
+        if (this.gfxProgram !== null) {
+            this.invalidate();
+            this.variantSettings = new Map<string, string>(this.variantSettings);
+        }
+
         if (v !== null) {
             if (this.variantSettings.get(name) === v)
                 return false;
@@ -221,7 +226,6 @@ export class UberShaderInstanceBasic extends UberShaderInstance<DefinesMap> {
             this.variantSettings.delete(name);
         }
 
-        this.invalidate();
         return true;
     }
 
