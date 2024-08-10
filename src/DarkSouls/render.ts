@@ -637,11 +637,11 @@ void main() {
     vec3 t_NormalWorld = MulNormalMatrix(u_WorldFromLocal[0], UNORM_TO_SNORM(a_Normal.xyz));
     v_TangentSpaceBasisZ = t_NormalWorld;
 
-    vec3 t_TangentWorld0 = MulNormalMatrix(u_WorldFromLocal[0], UNORM_TO_SNORM(a_Tangent0.xyz));
+    vec3 t_TangentWorld0 = normalize(Mul(_Mat4x4(u_WorldFromLocal[0]), vec4(UNORM_TO_SNORM(a_Tangent0.xyz), 0.0)).xyz);
     v_TangentSpaceBasisY0 = vec4(t_TangentWorld0, UNORM_TO_SNORM(a_Tangent0.w));
 
 #ifdef HAS_TANGENT1
-    vec3 t_TangentWorld1 = MulNormalMatrix(u_WorldFromLocal[0], UNORM_TO_SNORM(a_Tangent1.xyz));
+    vec3 t_TangentWorld1 = normalize(Mul(_Mat4x4(u_WorldFromLocal[0]), vec4(UNORM_TO_SNORM(a_Tangent1.xyz), 0.0)).xyz);
     v_TangentSpaceBasisY1 = vec4(t_TangentWorld1, UNORM_TO_SNORM(a_Tangent1.w));
 #endif
 
@@ -1113,7 +1113,7 @@ void main() {
     v_TexCoordProj.xyz = gl_Position.xyw;
 
     v_TangentSpaceBasisZ = MulNormalMatrix(u_WorldFromLocal[0], UNORM_TO_SNORM(a_Normal.xyz));
-    v_TangentSpaceBasisY = MulNormalMatrix(u_WorldFromLocal[0], UNORM_TO_SNORM(a_Tangent0.xyz));
+    v_TangentSpaceBasisY = normalize(Mul(_Mat4x4(u_WorldFromLocal[0]), vec4(UNORM_TO_SNORM(a_Tangent0.xyz), 0.0)).xyz);
     v_TangentSpaceBasisX = normalize(cross(v_TangentSpaceBasisZ, v_TangentSpaceBasisY) * UNORM_TO_SNORM(a_Tangent0.w));
 
     v_TexCoordProjX = Mul(u_ProjectionView, t_PositionWorld + vec4(v_TangentSpaceBasisX, 0.0)).xyw;

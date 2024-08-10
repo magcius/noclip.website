@@ -544,7 +544,7 @@ void main() {
     v_ColorB = clamp(lightNormalDot, 0.0, 1.0) * DiffuseColor;
 
 #ifdef NORMALMAP
-    vec3 tangent = MulNormalMatrix(u_ObjectWorldMat, a_Tangent);
+    vec3 tangent = normalize(Mul(_Mat4x4(u_ObjectWorldMat), vec4(a_Tangent, 0.0)).xyz);
     vec3 bitangent = cross(normal, tangent);
     v_LightDir = vec3(dot(SunDirection, tangent), dot(SunDirection, bitangent), lightNormalDot);
     v_CameraDir = vec3(dot(vecToEye, tangent), dot(vecToEye, bitangent), dot(vecToEye, normal));

@@ -678,7 +678,8 @@ void main() {
     gl_Position = Mul(u_Projection, t_ViewPosition);
 
     vec3 t_ModelNormal = MulNormalMatrix(t_BoneMatrix, a_Normal);
-    vec3 t_ViewTangent = normalize(Mul(_Mat4x4(u_ViewMatrix), vec4(MulNormalMatrix(t_BoneMatrix, a_Tangent), 0.0)).xyz);
+    vec3 t_ModelTangent = Mul(_Mat4x4(t_BoneMatrix), vec4(a_Tangent, 0.0)).xyz;
+    vec3 t_ViewTangent = normalize(Mul(_Mat4x4(u_ViewMatrix), vec4(t_ModelTangent, 0.0)).xyz);
     v_Normal = normalize(Mul(_Mat4x4(u_ViewMatrix), vec4(t_ModelNormal, 0.0)).xyz);
     v_QuatNormal = vec4(1.0, 0.0, 0.0, 0.0);
 
