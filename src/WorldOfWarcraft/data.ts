@@ -249,13 +249,9 @@ export class LiquidType {
 
   public async load(cache: WowCache): Promise<undefined> {
     if (this.animatedTextureIds) {
-      for (let blpId of this.animatedTextureIds) {
-        try {
-          this.blps.set(blpId, new BlpData(blpId, await cache.loadBlp(blpId)));
-        } catch(e) {
-          console.error(`failed to load BLP ${blpId}: ${e}`);
-        }
-      }
+      const blp = await Promise.all(this.animatedTextureIds.map((blpId) => cache.loadBlp(blpId)));
+      for (let i = 0; i < blp.length; i++)
+        this.blps.set(this.animatedTextureIds[i], new BlpData(this.animatedTextureIds[i], blp[i]));
     }
   }
 
