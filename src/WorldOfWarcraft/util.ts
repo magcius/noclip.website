@@ -25,8 +25,11 @@ export class Sheepfile {
     private sheepfile: WowSheepfileManager;
     private hardcodedFileIds: Map<string, number> = new Map();
 
-    public async load(dataFetcher: DataFetcher) {
-      const sheepfileData = await dataFetcher.fetchData(`${SHEEP_PATH}/index.shp`);
+    constructor(private dataFetcher: DataFetcher) {
+    }
+
+    public async load() {
+      const sheepfileData = await this.dataFetcher.fetchData(`${SHEEP_PATH}/index.shp`);
       this.sheepfile = rust.WowSheepfileManager.new(sheepfileData.createTypedArray(Uint8Array));
 
       // not sure why these don't hash correctly, hardcode them for now
@@ -34,33 +37,25 @@ export class Sheepfile {
       this.hardcodedFileIds.set("Environments\\Stars\\HellfireSkyBox.m2", 130525);
     }
 
-    async fetchDataRange(dataFetcher: DataFetcher, datafileName: string, start: number, size: number): Promise<NamedArrayBufferSlice> {
-      return await dataFetcher.fetchData(`${SHEEP_PATH}/${datafileName}`, {
+    async fetchDataRange(datafileName: string, start: number, size: number): Promise<NamedArrayBufferSlice> {
+      return await this.dataFetcher.fetchData(`${SHEEP_PATH}/${datafileName}`, {
         rangeStart: start,
         rangeSize: size,
       });
     }
 
-    public async loadEntry(dataFetcher: DataFetcher, entry: WowSheepfileEntry): Promise<Uint8Array> {
-      let data = await this.fetchDataRange(dataFetcher, entry.datafile_name, entry.start_bytes, entry.size_bytes);
+    private async loadEntry(entry: WowSheepfileEntry): Promise<Uint8Array> {
+      let data = await this.fetchDataRange(entry.datafile_name, entry.start_bytes, entry.size_bytes);
       entry.free();
       return data.createTypedArray(Uint8Array);
     }
 
-    public async loadFileId(dataFetcher: DataFetcher, fileId: number): Promise<Uint8Array | undefined> {
+    public async loadFileId(fileId: number): Promise<Uint8Array | undefined> {
       const entry = this.sheepfile.get_file_id(fileId);
       if (entry === undefined) {
         return undefined;
       }
-      return this.loadEntry(dataFetcher, entry);
-    }
-
-    public async loadFileName(dataFetcher: DataFetcher, fileName: string): Promise<Uint8Array | undefined> {
-      const entry = this.sheepfile.get_file_name(fileName);
-      if (entry === undefined) {
-        return undefined;
-      }
-      return this.loadEntry(dataFetcher, entry);
+      return this.loadEntry(entry);
     }
 
     public getFileDataId(fileName: string): number | undefined {

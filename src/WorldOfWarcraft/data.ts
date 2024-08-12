@@ -68,11 +68,11 @@ export class WowCache {
   private wmoDefinitionCache = new Map<string, WmoDefinition>(); // keys are WmoDefinitionKey.toString()
 
   constructor(public dataFetcher: DataFetcher, public db: Database) {
-    this.sheepfile = new Sheepfile();
+    this.sheepfile = new Sheepfile(this.dataFetcher);
   }
 
   public async load() {
-    await this.sheepfile.load(this.dataFetcher);
+    await this.sheepfile.load();
     await this.db.load(this);
   }
 
@@ -106,7 +106,7 @@ export class WowCache {
   }
   
   public async fetchDataByFileID(fileId: number): Promise<Uint8Array> {
-    const data = await this.sheepfile.loadFileId(this.dataFetcher, fileId);
+    const data = await this.sheepfile.loadFileId(fileId);
     if (!data) {
       throw new Error(`no data for fileId ${fileId}`);
     }
