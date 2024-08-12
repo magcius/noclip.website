@@ -45,7 +45,7 @@ export class Sheepfile {
     private sheepfile: WowSheepfileManager;
     private hardcodedFileIds: Map<string, number> = new Map();
     private userRequest: UserRequest[] = [];
-    private updateId: number | null = null;
+    private pumpScheduled: boolean = false;
 
     constructor(private dataFetcher: DataFetcher) {
         // not sure why these don't hash correctly, hardcode them for now
@@ -58,9 +58,22 @@ export class Sheepfile {
         this.sheepfile = rust.WowSheepfileManager.new(sheepfileData.createTypedArray(Uint8Array));
     }
 
-    private async makeRequests() {
-        // coalesce individual data file requests
+    private schedulePump(): void {
+        if (this.pumpScheduled)
+            return;
+
+        queueMicrotask(() => this.pump());
+        this.pumpScheduled = true;
+    }
+
+    private pump(): void {
         const userRequest = this.userRequest;
+        this.pumpScheduled = false;
+
+        if (userRequest.length === 0)
+            return;
+
+        // coalesce individual data file requests
         this.userRequest = [];
         const dataRequest: FileRequest[] = [];
         const origRequest: UserRequest[][] = [];
@@ -110,24 +123,11 @@ export class Sheepfile {
         }
     }
 
-    private sched(): void {
-        if (this.updateId === null)
-            this.updateId = requestAnimationFrame(() => this.pump());
-    }
-
-    private pump(): void {
-        if (this.userRequest.length !== 0)
-            this.makeRequests();
-
-        this.updateId = null;
-        this.sched();
-    }
-
     public async fetchDataRange(datafileName: string, start: number, size: number): Promise<ArrayBufferSlice> {
         const path = `${SHEEP_PATH}/${datafileName}`;
         const userRequest = new UserRequest(new FileRequest(path, start, start + size));
         this.userRequest.push(userRequest);
-        this.sched();
+        this.schedulePump();
         return userRequest.promise;
     }
 
