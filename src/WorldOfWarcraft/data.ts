@@ -1307,23 +1307,21 @@ export class WmoGroupData {
         const faces_start = node.faces_start, num_faces = node.num_faces;
         for (let i = faces_start; i < faces_start + num_faces; i++) {
           const faceIdx = this.bspIndices[i];
-          const index0 = this.indices[3 * faceIdx + 0];
+          const idx0 = this.indices[3 * faceIdx + 0], idx1 = this.indices[3 * faceIdx + 1], idx2 = this.indices[3 * faceIdx + 2];
           const vertex0 = vec3.set(WmoGroupData.scratchVec3c,
-              this.vertices[3 * index0 + 0],
-              this.vertices[3 * index0 + 1],
-              this.vertices[3 * index0 + 2],
+              this.vertices[3 * idx0 + 0],
+              this.vertices[3 * idx0 + 1],
+              this.vertices[3 * idx0 + 2],
           );
-          const index1 = this.indices[3 * faceIdx + 1];
           const vertex1 = vec3.set(WmoGroupData.scratchVec3d,
-              this.vertices[3 * index1 + 0],
-              this.vertices[3 * index1 + 1],
-              this.vertices[3 * index1 + 2],
+              this.vertices[3 * idx1 + 0],
+              this.vertices[3 * idx1 + 1],
+              this.vertices[3 * idx1 + 2],
           );
-          const index2 = this.indices[3 * faceIdx + 2];
           const vertex2 = vec3.set(WmoGroupData.scratchVec3e,
-              this.vertices[3 * index2 + 0],
-              this.vertices[3 * index2 + 1],
-              this.vertices[3 * index2 + 2],
+              this.vertices[3 * idx2 + 0],
+              this.vertices[3 * idx2 + 1],
+              this.vertices[3 * idx2 + 2],
           );
 
           // check that the ray will intersect in the xy plane
@@ -1331,23 +1329,26 @@ export class WmoGroupData {
           if (p[0] < minX || p[0] > maxX)
             continue;
           const minY = Math.min(vertex0[1], vertex1[1], vertex2[1]), maxY = Math.max(vertex0[1], vertex1[1], vertex2[1]);
-          if (p[1] < minY || p[2] > maxY)
+          if (p[1] < minY || p[1] > maxY)
             continue;
 
           // check that the ray is above on z
-          const maxZ = Math.max(vertex0[2], vertex1[2], vertex2[2]);
-          if (p[2] > maxZ)
+          const minZ = Math.min(vertex0[2], vertex1[2], vertex2[2]);
+          if (p[2] < minZ)
             continue; // ray starts below triangle
 
           const ab = WmoGroupData.scratchVec3f;
           const ac = WmoGroupData.scratchVec3g;
           const n = WmoGroupData.scratchVec3h;
-          const temp = WmoGroupData.scratchVec3i
+          const temp = WmoGroupData.scratchVec3i;
 
           // inlined rayTriangleIntersect, assuming that axis = negative z
           vec3.sub(ab, vertex1, vertex0);
           vec3.sub(ac, vertex2, vertex0);
           vec3.cross(n, ab, ac);
+
+          if (n[2] < 0.0001)
+            continue; // backfacing triangle
 
           vec3.sub(temp, p, vertex0);
           const t = vec3.dot(temp, n) / n[2];
@@ -1355,13 +1356,13 @@ export class WmoGroupData {
             continue;
 
           // inlined cross assuming dir = negative z
-          const ex = -temp[0], ey = temp[1];
+          const ex = -temp[1], ey = temp[0];
           const v = (ac[0]*ex + ac[1]*ey) / n[2];
           if (v < 0.0 || v > 1.0)
             continue;
 
-          const w = (ab[0]*ex + ac[1]*ey) / -n[2];
-          if (w < 0.0 || w > 1.0)
+          const w = (ab[0]*ex + ab[1]*ey) / -n[2];
+          if (w < 0.0 || v + w > 1.0)
             continue;
 
           minDist = t;
@@ -1378,11 +1379,11 @@ export class WmoGroupData {
     const w = WmoGroupData.scratchVec3b;
     const faceIdx = this.getClosestIntersectedTriangleNegZ(w, p);
     if (faceIdx >= 0) {
-      const idx0 = 4*this.bspIndices[3*faceIdx+0], idx1 = 4*this.bspIndices[3*faceIdx+1], idx2 = 4*this.bspIndices[3*faceIdx+2];
-      const r = (this.colors[idx0+0]*w[0] + this.colors[idx1+0]*w[1] + this.colors[idx2+0]*w[2]) / 255.0;
-      const g = (this.colors[idx0+1]*w[0] + this.colors[idx1+1]*w[1] + this.colors[idx2+1]*w[2]) / 255.0;
-      const b = (this.colors[idx0+2]*w[0] + this.colors[idx1+2]*w[1] + this.colors[idx2+2]*w[2]) / 255.0;
-      const a = (this.colors[idx0+3]*w[0] + this.colors[idx1+3]*w[1] + this.colors[idx2+3]*w[2]) / 255.0;
+      const idx0 = this.indices[3 * faceIdx + 0], idx1 = this.indices[3 * faceIdx + 1], idx2 = this.indices[3 * faceIdx + 2];
+      const r = (this.colors[4*idx0+0]*w[0] + this.colors[4*idx1+0]*w[1] + this.colors[4*idx2+0]*w[2]) / 255.0;
+      const g = (this.colors[4*idx0+1]*w[0] + this.colors[4*idx1+1]*w[1] + this.colors[4*idx2+1]*w[2]) / 255.0;
+      const b = (this.colors[4*idx0+2]*w[0] + this.colors[4*idx1+2]*w[1] + this.colors[4*idx2+2]*w[2]) / 255.0;
+      const a = (this.colors[4*idx0+3]*w[0] + this.colors[4*idx1+3]*w[1] + this.colors[4*idx2+3]*w[2]) / 255.0;
       return vec4.set(WmoGroupData.scratchVec4, r, g, b, a);
     }
     return undefined;
