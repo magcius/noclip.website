@@ -1,7 +1,7 @@
 import { mat4, vec3, vec4 } from 'gl-matrix';
 import { CameraController } from '../Camera.js';
 import { AABB, Frustum } from '../Geometry.js';
-import { getMatrixTranslation, lerp, projectionMatrixForFrustum } from "../MathHelpers.js";
+import { getMatrixTranslation, lerp, projectionMatrixForFrustum, saturate } from "../MathHelpers.js";
 import { SceneContext } from '../SceneBase.js';
 import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { GfxClipSpaceNearZ, GfxCullMode, GfxDevice } from '../gfx/platform/GfxPlatform.js';
@@ -11,7 +11,7 @@ import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
 import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
 import { rust } from '../rustlib.js';
 import * as Viewer from '../viewer.js';
-import { AdtCoord, AdtData, Database, DoodadData, LazyWorldData, ModelData, SkyboxData, WmoData, WmoDefinition, WorldData, WowCache } from './data.js';
+import { AdtCoord, AdtData, Database, DoodadData, LazyWorldData, ModelData, ParticleEmitter, SkyboxData, WmoData, WmoDefinition, WorldData, WowCache } from './data.js';
 import { BaseProgram, LoadingAdtProgram, ModelProgram, ParticleProgram, SkyboxProgram, TerrainProgram, WaterProgram, WmoProgram } from './program.js';
 import { LoadingAdtRenderer, ModelRenderer, SkyboxRenderer, TerrainRenderer, WaterRenderer, WmoRenderer } from './render.js';
 import { TextureCache } from './tex.js';
@@ -151,6 +151,16 @@ export class MapArray<K, V> {
     return result;
   }
 
+  public appendUnique(key: K, value: V): void {
+    if (this.map.has(key)) {
+      const L = this.map.get(key)!;
+      if (!L.includes(value))
+        L.push(value);
+    } else {
+      this.map.set(key, [value]);
+    }
+  }
+
   public append(key: K, value: V) {
     if (this.map.has(key)) {
       this.map.get(key)!.push(value);
@@ -214,6 +224,8 @@ export class WdtScene implements Viewer.SceneGfx {
   public loadingAdts: [number, number][] = [];
 
   public debug = false;
+  public enableFog = true;
+  public enableParticles = true;
   public cullingState = CullingState.Running;
   public cameraState = CameraState.Running;
   public frozenCamera = vec3.create();
@@ -247,9 +259,9 @@ export class WdtScene implements Viewer.SceneGfx {
   }
 
   public setupWmoDef(def: WmoDefinition) {
-    this.wmoIdToDefs.append(def.wmoId, def);
+    this.wmoIdToDefs.appendUnique(def.wmoId, def);
     for (let doodad of def.doodadIndexToDoodad.values()) {
-      this.modelIdToDoodads.append(doodad.modelId, doodad);
+      this.modelIdToDoodads.appendUnique(doodad.modelId, doodad);
     }
   }
 
@@ -371,6 +383,12 @@ export class WdtScene implements Viewer.SceneGfx {
       this.cullWmoDef(this.world.globalWmoDef!, this.world.globalWmo);
     } else {
       const [worldCamera, worldFrustum] = this.getCameraAndFrustum();
+
+      // start off with everything invisible
+      for (let adt of this.world.adts) {
+        adt.setVisible(false);
+      }
+
       // Do a first pass and get candidate WMOs the camera's inside of,
       // disable WMOs not in the frustum, and determine if any ADTs are
       // visible based on where the camera is
@@ -381,27 +399,17 @@ export class WdtScene implements Viewer.SceneGfx {
         adt.setLodLevel(distance < this.ADT_LOD0_DISTANCE ? 0 : 1);
         adt.setupWmoCandidates(worldCamera, worldFrustum);
 
-        if (adt.insideWmoCandidates.length > 0) {
-          for (let def of adt.insideWmoCandidates) {
-            const wmo = adt.wmos.get(def.wmoId)!;
-            const cullResult = this.cullWmoDef(def, wmo);
-            if (cullResult === CullWmoResult.CameraInside) {
-              exteriorVisible = false;
-            }
+        for (let def of adt.insideWmoCandidates) {
+          const wmo = adt.wmos.get(def.wmoId)!;
+          const cullResult = this.cullWmoDef(def, wmo);
+          if (cullResult === CullWmoResult.CameraInside) {
+            exteriorVisible = false;
           }
         }
       }
 
       for (let adt of this.world.adts) {
         if (exteriorVisible) {
-          if (adt.skyboxes.length > 0) {
-            let originalMinZ = adt.worldSpaceAABB.minZ;
-            let originalMaxZ = adt.worldSpaceAABB.maxZ;
-            adt.worldSpaceAABB.minZ = -Infinity;
-            adt.worldSpaceAABB.maxZ = Infinity;
-            adt.worldSpaceAABB.minZ = originalMinZ;
-            adt.worldSpaceAABB.maxZ = originalMaxZ;
-          }
           if (worldFrustum.contains(adt.worldSpaceAABB)) {
             adt.visible = true;
             for (let chunk of adt.chunkData) {
@@ -413,17 +421,10 @@ export class WdtScene implements Viewer.SceneGfx {
             for (let doodad of adt.lodDoodads()) {
               doodad.setVisible(worldFrustum.contains(doodad.worldAABB));
             }
-          } else {
-            adt.setVisible(false);
           }
           for (let def of adt.visibleWmoCandidates) {
             const wmo = adt.wmos.get(def.wmoId)!;
             this.cullWmoDef(def, wmo);
-          }
-        } else {
-          adt.setVisible(false);
-          for (let def of adt.visibleWmoCandidates) {
-            def.setVisible(false);
           }
         }
       }
@@ -432,10 +433,7 @@ export class WdtScene implements Viewer.SceneGfx {
 
   public cullWmoDef(def: WmoDefinition, wmo: WmoData): CullWmoResult {
     const [worldCamera, worldFrustum] = this.getCameraAndFrustum();
-    vec3.transformMat4(this.modelCamera, worldCamera, def.invPlacementMatrix);
-    this.modelFrustum.transform(worldFrustum, def.invPlacementMatrix);
 
-    // Start with everything invisible
     def.setVisible(false);
 
     // Check if we're looking at this particular world-space WMO, then do the
@@ -444,6 +442,9 @@ export class WdtScene implements Viewer.SceneGfx {
     if (!def.visible) {
       return CullWmoResult.CameraOutside;
     }
+
+    vec3.transformMat4(this.modelCamera, worldCamera, def.invPlacementMatrix);
+    this.modelFrustum.transform(worldFrustum, def.invPlacementMatrix);
 
     // Categorize groups by interior/exterior, and whether
     // the camera is present in them
@@ -563,25 +564,14 @@ export class WdtScene implements Viewer.SceneGfx {
       renderer.prepareToRenderTerrain(renderInstManager);
     }
 
-    let visibleWmoUniqueIds = new Set();
     template.setGfxProgram(this.wmoProgram);
     template.setBindingLayouts(WmoProgram.bindingLayouts);
     for (let [wmoId, renderer] of this.wmoRenderers.entries()) {
       const defs = this.wmoIdToDefs.get(wmoId)!
-        .filter(wmoDef => wmoDef.visible)
-        .filter(wmoDef => {
-          if (visibleWmoUniqueIds.has(wmoDef.uniqueId)) {
-            wmoDef.setVisible(false);
-            return false;
-          }
-          visibleWmoUniqueIds.add(wmoDef.uniqueId);
-          return true;
-        });
+        .filter(wmoDef => wmoDef.visible);
       renderer.prepareToRenderWmo(renderInstManager, defs);
     }
 
-    // reset so we can draw liquids
-    visibleWmoUniqueIds.clear();
     template.setGfxProgram(this.waterProgram);
     template.setBindingLayouts(WaterProgram.bindingLayouts);
     for (let renderer of this.adtWaterRenderers.values()) {
@@ -590,14 +580,7 @@ export class WdtScene implements Viewer.SceneGfx {
     }
     for (let [wmoId, renderer] of this.wmoWaterRenderers.entries()) {
       const defs = this.wmoIdToDefs.get(wmoId)!
-        .filter(wmoDef => wmoDef.visible)
-        .filter(wmoDef => {
-          if (visibleWmoUniqueIds.has(wmoDef.uniqueId)) {
-            return false;
-          }
-          visibleWmoUniqueIds.add(wmoDef.uniqueId);
-          return true;
-        });
+        .filter(wmoDef => wmoDef.visible);
       renderer.update(this.mainView);
       renderer.prepareToRenderWmoWater(renderInstManager, defs);
     }
@@ -622,8 +605,16 @@ export class WdtScene implements Viewer.SceneGfx {
     renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
 
     for (let [modelId, renderer] of this.modelRenderers.entries()) {
+      let minDistance = Infinity;
       const doodads = this.modelIdToDoodads.get(modelId)!
         .filter(doodad => doodad.visible)
+        .filter(doodad => {
+          const dist = this.mainView.cameraDistanceToWorldSpaceAABB(doodad.worldAABB);
+          if (dist < minDistance) {
+            minDistance = dist;
+          }
+          return dist < this.mainView.cullingFarPlane;
+        })
         .filter(doodad => {
           if (doodad.uniqueId === undefined)
             return true;
@@ -641,9 +632,21 @@ export class WdtScene implements Viewer.SceneGfx {
       renderer.update(this.mainView);
       renderer.prepareToRenderModel(renderInstManager, doodads);
 
-      template.setBindingLayouts(ParticleProgram.bindingLayouts);
-      template.setGfxProgram(this.particleProgram);
-      renderer.prepareToRenderParticles(renderInstManager, doodads);
+      if (this.enableParticles && renderer.model.particleEmitters.length > 0) {
+        template.setBindingLayouts(ParticleProgram.bindingLayouts);
+        template.setGfxProgram(this.particleProgram);
+
+        // LOD scales linearly w/ distance after 100 units
+        let lod = ParticleEmitter.MAX_LOD;
+        if (minDistance > 100.0) {
+          lod *= (1.0 - saturate(minDistance / this.mainView.cullingFarPlane));
+          lod = Math.floor(lod);
+        }
+        renderer.model.particleEmitters.forEach(emitter => {
+          emitter.lod = lod;
+        });
+        renderer.prepareToRenderParticles(renderInstManager, doodads);
+      }
     }
 
     renderInstManager.popTemplateRenderInst();
