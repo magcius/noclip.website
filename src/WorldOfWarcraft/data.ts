@@ -2639,9 +2639,9 @@ export class LazyWorldData {
         }
       }
     }
-    setTimeout(async () => {
+    queueMicrotask(async () => {
       this.loading = true;
-      for (let [x, y] of adtCoords) {
+      await Promise.all(adtCoords.map(async ([x, y]) => {
         let maybeAdt: AdtData | undefined;
         try {
           maybeAdt = await this.ensureAdtLoaded(x, y);
@@ -2652,9 +2652,9 @@ export class LazyWorldData {
           console.log('failed to load ADT: ', e);
         }
         callback([x, y], maybeAdt);
-      }
+      }));
       this.loading = false;
-    }, 0);
+    });
     return adtCoords;
   }
 
