@@ -233,6 +233,7 @@ export class WdtScene implements Viewer.SceneGfx {
   public frozenFrustum = new Frustum();
   private modelCamera = vec3.create();
   private modelFrustum = new Frustum();
+  public frame = 0;
 
   constructor(private device: GfxDevice, public world: WorldData | LazyWorldData, public renderHelper: GfxRenderHelper, private db: Database) {
     console.time('WdtScene construction');
@@ -550,6 +551,8 @@ export class WdtScene implements Viewer.SceneGfx {
   }
 
   private prepareToRender(): void {
+    this.frame++;
+
     const renderInstManager = this.renderHelper.renderInstManager;
 
     const template = this.renderHelper.pushTemplateRenderInst();

@@ -19,7 +19,7 @@ class UserRequest {
     public resolve: (buffer: ArrayBufferSlice) => void;
     public reject: (reason?: any) => void;
 
-    constructor(public fileRequest: FileRequest) {
+    constructor(public fileRequest: FileRequest, public debugStr: string) {
         this.promise = new Promise((resolve, reject) => { this.resolve = resolve; this.reject = reject; });
     }
 }
@@ -45,7 +45,7 @@ export class Sheepfile {
     private sheepfile: WowSheepfileManager;
     private hardcodedFileIds: Map<string, number> = new Map();
     private userRequest: UserRequest[] = [];
-    private pumpScheduled: boolean = false;
+    private scheduleCounter = -1;
 
     constructor(private dataFetcher: DataFetcher) {
         // not sure why these don't hash correctly, hardcode them for now
@@ -59,16 +59,20 @@ export class Sheepfile {
     }
 
     private schedulePump(): void {
-        if (this.pumpScheduled)
-            return;
+        // hack to only run at the end of the microtask queue as best we can
+        const counter = ++this.scheduleCounter;
+        queueMicrotask(() => {
+            if (this.scheduleCounter !== counter)
+                return;
 
-        queueMicrotask(() => this.pump());
-        this.pumpScheduled = true;
+            console.log(`schedulePump: run ${this.scheduleCounter}`);
+            this.pump();
+        });
     }
 
     private pump(): void {
         const userRequest = this.userRequest;
-        this.pumpScheduled = false;
+        this.scheduleCounter = -1;
 
         if (userRequest.length === 0)
             return;
@@ -104,6 +108,9 @@ export class Sheepfile {
             }
         }
 
+        console.log(`pump stats frame ${(window.main.scene as any)?.frame ?? -1}: ${userRequest.length} orig, ${dataRequest.length} coalesced`);
+        console.log(`  ${userRequest.map((g) => g.debugStr).join(', ')}`);
+
         for (let i = 0; i < dataRequest.length; i++) {
             const r = dataRequest[i];
             const rangeStart = r.start, rangeSize = r.end - r.start;
@@ -123,23 +130,23 @@ export class Sheepfile {
         }
     }
 
-    public async fetchDataRange(datafileName: string, start: number, size: number): Promise<ArrayBufferSlice> {
+    public async fetchDataRange(datafileName: string, start: number, size: number, debugStr: string): Promise<ArrayBufferSlice> {
         const path = `${SHEEP_PATH}/${datafileName}`;
-        const userRequest = new UserRequest(new FileRequest(path, start, start + size));
+        const userRequest = new UserRequest(new FileRequest(path, start, start + size), debugStr);
         this.userRequest.push(userRequest);
         this.schedulePump();
         return userRequest.promise;
     }
 
-    private async loadEntry(entry: WowSheepfileEntry): Promise<Uint8Array> {
-        let data = await this.fetchDataRange(entry.datafile_name, entry.start_bytes, entry.size_bytes);
+    private async loadEntry(entry: WowSheepfileEntry, debugStr: string): Promise<Uint8Array> {
+        let data = await this.fetchDataRange(entry.datafile_name, entry.start_bytes, entry.size_bytes, debugStr);
         entry.free();
         return data.createTypedArray(Uint8Array);
     }
 
-    public async loadFileId(fileId: number): Promise<Uint8Array | undefined> {
+    public async loadFileId(fileId: number, debugStr: string): Promise<Uint8Array | undefined> {
         const entry = this.sheepfile.get_file_id(fileId);
-        return entry !== undefined ? this.loadEntry(entry) : undefined;
+        return entry !== undefined ? this.loadEntry(entry, debugStr) : undefined;
     }
 
     public getFileDataId(fileName: string): number | undefined {
