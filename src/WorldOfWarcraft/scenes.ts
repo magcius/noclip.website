@@ -1,7 +1,7 @@
 import { mat4, vec3, vec4 } from 'gl-matrix';
 import { CameraController } from '../Camera.js';
 import { AABB, Frustum } from '../Geometry.js';
-import { getMatrixTranslation, lerp, projectionMatrixForFrustum, saturate } from "../MathHelpers.js";
+import { getMatrixTranslation, lerp, projectionMatrixForFrustum, saturate, transformVec3Mat4w0, transformVec3Mat4w1 } from "../MathHelpers.js";
 import { SceneContext } from '../SceneBase.js';
 import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { GfxClipSpaceNearZ, GfxCullMode, GfxDevice } from '../gfx/platform/GfxPlatform.js';
@@ -220,6 +220,7 @@ export class WdtScene implements Viewer.SceneGfx {
   public mainView = new View();
   private textureCache: TextureCache;
   public enableProgressiveLoading = false;
+  public startAdtCoords: [number, number] | null = null;
   public currentAdtCoords: [number, number] = [0, 0];
   public loadingAdts: [number, number][] = [];
 
@@ -262,6 +263,19 @@ export class WdtScene implements Viewer.SceneGfx {
     this.wmoIdToDefs.appendUnique(def.wmoId, def);
     for (let doodad of def.doodadIndexToDoodad.values()) {
       this.modelIdToDoodads.appendUnique(doodad.modelId, doodad);
+    }
+  }
+
+  public getDefaultWorldMatrix(dst: mat4): void {
+    if (this.startAdtCoords !== null) {
+      const [startX, startY] = this.startAdtCoords;
+      scratchVec3[0] = (32 - startY) * 533.33;
+      scratchVec3[1] = (32 - startX) * 533.33;
+      scratchVec3[2] = 0;
+      transformVec3Mat4w1(scratchVec3, noclipSpaceFromAdtSpace, scratchVec3);
+      mat4.fromTranslation(dst, scratchVec3);
+    } else {
+      mat4.identity(dst);
     }
   }
 
@@ -813,11 +827,10 @@ class ContinentSceneDesc implements Viewer.SceneDesc {
     });
     const renderHelper = new GfxRenderHelper(device);
     rust.init_panic_hook();
-    const wdt = new LazyWorldData(this.fileId, [this.startX, this.startY], this.adtRadius, cache, this.lightdbMapId);
-    console.time('loading wdt')
+    const wdt = new LazyWorldData(this.fileId, this.adtRadius, cache, this.lightdbMapId);
     await wdt.load();
-    console.timeEnd('loading wdt')
     const scene = new WdtScene(device, wdt, renderHelper, cache.db);
+    scene.startAdtCoords = [this.startX, this.startY];
     scene.enableProgressiveLoading = true;
     return scene;
   }
