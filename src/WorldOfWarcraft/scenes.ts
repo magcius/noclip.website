@@ -1,7 +1,7 @@
 import { mat4, vec3, vec4 } from 'gl-matrix';
 import { CameraController } from '../Camera.js';
 import { AABB, Frustum } from '../Geometry.js';
-import { getMatrixTranslation, lerp, projectionMatrixForFrustum, saturate } from "../MathHelpers.js";
+import { getMatrixTranslation, lerp, projectionMatrixForFrustum, saturate, transformVec3Mat4w1 } from "../MathHelpers.js";
 import { SceneContext } from '../SceneBase.js';
 import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { GfxClipSpaceNearZ, GfxCullMode, GfxDevice } from '../gfx/platform/GfxPlatform.js';
@@ -262,6 +262,26 @@ export class WdtScene implements Viewer.SceneGfx {
     this.wmoIdToDefs.appendUnique(def.wmoId, def);
     for (let doodad of def.doodadIndexToDoodad.values()) {
       this.modelIdToDoodads.appendUnique(doodad.modelId, doodad);
+    }
+  }
+
+  public getDefaultWorldMatrix(dst: mat4): void {
+    if ('startAdtCoords' in this.world) { // if we're in a continent scene
+      const [startX, startY] = this.world.startAdtCoords;
+      scratchVec3[0] = (32 - startY) * 533.33;
+      scratchVec3[1] = (32 - startX) * 533.33;
+      scratchVec3[2] = 0;
+      transformVec3Mat4w1(scratchVec3, noclipSpaceFromAdtSpace, scratchVec3);
+      mat4.fromTranslation(dst, scratchVec3);
+    } else if (this.world.globalWmoDef) {
+      mat4.getTranslation(scratchVec3, this.world.globalWmoDef!.modelMatrix);
+      transformVec3Mat4w1(scratchVec3, noclipSpaceFromAdtSpace, scratchVec3);
+      mat4.fromTranslation(dst, scratchVec3);
+    } else {
+      assert(this.world.adts.length > 0);
+      this.world.adts[this.world.adts.length - 1].worldSpaceAABB.centerPoint(scratchVec3);
+      transformVec3Mat4w1(scratchVec3, noclipSpaceFromAdtSpace, scratchVec3);
+      mat4.fromTranslation(dst, scratchVec3);
     }
   }
 
