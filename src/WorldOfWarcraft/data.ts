@@ -2612,9 +2612,11 @@ export class LazyWorldData {
   public hasBigAlpha: boolean;
   public hasHeightTexturing: boolean;
   public adtFileIds: WowMapFileDataIDs[] = [];
+  public initialAdtRadius = 1; // how many ADTs to load around the start point before showing the scene
+  public adtRadius = 2; // how many ADTs to stream around the user as they fly around
   public loading = false;
 
-  constructor(public fileId: number, public startAdtCoords: AdtCoord, public adtRadius = 2, public cache: WowCache, public lightdbMapId: number) {
+  constructor(public fileId: number, public startAdtCoords: AdtCoord, public cache: WowCache, public lightdbMapId: number) {
   }
 
   public async load() {
@@ -2623,8 +2625,8 @@ export class LazyWorldData {
     const [centerX, centerY] = this.startAdtCoords;
 
     const promises = [];
-    for (let x = centerX - this.adtRadius; x <= centerX + this.adtRadius; x++) {
-      for (let y = centerY - this.adtRadius; y <= centerY + this.adtRadius; y++) {
+    for (let x = centerX - this.initialAdtRadius; x <= centerX + this.initialAdtRadius; x++) {
+      for (let y = centerY - this.initialAdtRadius; y <= centerY + this.initialAdtRadius; y++) {
         promises.push(this.ensureAdtLoaded(x, y).then((adt) => {
           if (adt !== undefined)
             this.adts.push(adt);

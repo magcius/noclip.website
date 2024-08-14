@@ -819,7 +819,7 @@ class WdtSceneDesc implements Viewer.SceneDesc {
 class ContinentSceneDesc implements Viewer.SceneDesc {
   public id: string;
 
-  constructor(public name: string, public fileId: number, public startX: number, public startY: number, public lightdbMapId: number, public adtRadius = 2) {
+  constructor(public name: string, public fileId: number, public startX: number, public startY: number, public lightdbMapId: number) {
     this.id = `${name}-${fileId}`;
   }
 
@@ -833,7 +833,7 @@ class ContinentSceneDesc implements Viewer.SceneDesc {
     });
     const renderHelper = new GfxRenderHelper(device);
     rust.init_panic_hook();
-    const wdt = new LazyWorldData(this.fileId, [this.startX, this.startY], this.adtRadius, cache, this.lightdbMapId);
+    const wdt = new LazyWorldData(this.fileId, [this.startX, this.startY], cache, this.lightdbMapId);
     console.time('loading wdt')
     await wdt.load();
     console.timeEnd('loading wdt')
