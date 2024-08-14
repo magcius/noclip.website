@@ -1,7 +1,7 @@
 import { mat4, vec3, vec4 } from 'gl-matrix';
 import { CameraController } from '../Camera.js';
 import { AABB, Frustum } from '../Geometry.js';
-import { getMatrixTranslation, lerp, projectionMatrixForFrustum, saturate, transformVec3Mat4w0, transformVec3Mat4w1 } from "../MathHelpers.js";
+import { getMatrixTranslation, lerp, projectionMatrixForFrustum, saturate, transformVec3Mat4w1 } from "../MathHelpers.js";
 import { SceneContext } from '../SceneBase.js';
 import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { GfxClipSpaceNearZ, GfxCullMode, GfxDevice } from '../gfx/platform/GfxPlatform.js';
@@ -220,7 +220,6 @@ export class WdtScene implements Viewer.SceneGfx {
   public mainView = new View();
   private textureCache: TextureCache;
   public enableProgressiveLoading = false;
-  public startAdtCoords: [number, number] | null = null;
   public currentAdtCoords: [number, number] = [0, 0];
   public loadingAdts: [number, number][] = [];
 
@@ -267,15 +266,22 @@ export class WdtScene implements Viewer.SceneGfx {
   }
 
   public getDefaultWorldMatrix(dst: mat4): void {
-    if (this.startAdtCoords !== null) {
-      const [startX, startY] = this.startAdtCoords;
+    if ('startAdtCoords' in this.world) { // if we're in a continent scene
+      const [startX, startY] = this.world.startAdtCoords;
       scratchVec3[0] = (32 - startY) * 533.33;
       scratchVec3[1] = (32 - startX) * 533.33;
       scratchVec3[2] = 0;
       transformVec3Mat4w1(scratchVec3, noclipSpaceFromAdtSpace, scratchVec3);
       mat4.fromTranslation(dst, scratchVec3);
+    } else if (this.world.globalWmoDef) {
+      mat4.getTranslation(scratchVec3, this.world.globalWmoDef!.modelMatrix);
+      transformVec3Mat4w1(scratchVec3, noclipSpaceFromAdtSpace, scratchVec3);
+      mat4.fromTranslation(dst, scratchVec3);
     } else {
-      mat4.identity(dst);
+      assert(this.world.adts.length > 0);
+      this.world.adts[this.world.adts.length - 1].worldSpaceAABB.centerPoint(scratchVec3);
+      transformVec3Mat4w1(scratchVec3, noclipSpaceFromAdtSpace, scratchVec3);
+      mat4.fromTranslation(dst, scratchVec3);
     }
   }
 
@@ -813,7 +819,7 @@ class WdtSceneDesc implements Viewer.SceneDesc {
 class ContinentSceneDesc implements Viewer.SceneDesc {
   public id: string;
 
-  constructor(public name: string, public fileId: number, public startX: number, public startY: number, public lightdbMapId: number, public adtRadius = 2) {
+  constructor(public name: string, public fileId: number, public startX: number, public startY: number, public lightdbMapId: number) {
     this.id = `${name}-${fileId}`;
   }
 
@@ -827,10 +833,11 @@ class ContinentSceneDesc implements Viewer.SceneDesc {
     });
     const renderHelper = new GfxRenderHelper(device);
     rust.init_panic_hook();
-    const wdt = new LazyWorldData(this.fileId, this.adtRadius, cache, this.lightdbMapId);
+    const wdt = new LazyWorldData(this.fileId, [this.startX, this.startY], cache, this.lightdbMapId);
+    console.time('loading wdt')
     await wdt.load();
+    console.timeEnd('loading wdt')
     const scene = new WdtScene(device, wdt, renderHelper, cache.db);
-    scene.startAdtCoords = [this.startX, this.startY];
     scene.enableProgressiveLoading = true;
     return scene;
   }
