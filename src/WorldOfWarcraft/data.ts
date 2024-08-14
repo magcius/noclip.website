@@ -892,9 +892,9 @@ export class ModelData {
   constructor(public fileId: number) {
   }
 
-  private async loadTextures(cache: WowCache, m2: WowM2): Promise<void> {
+  private loadTextures(cache: WowCache, m2: WowM2): Promise<BlpData[]> {
     const textureEntries = m2.take_legacy_textures();
-    this.blps = await Promise.all(textureEntries.map(async (entry, i) => {
+    return Promise.all(textureEntries.map(async (entry, i) => {
       const flags = entry.flags;
       let fileID = m2.texture_ids[i];
       if (fileID === undefined)
@@ -918,10 +918,11 @@ export class ModelData {
     return null;
   }
 
-  private async loadSkins(cache: WowCache, m2: WowM2): Promise<void> {
-    this.skins = await Promise.all(Array.from(m2.skin_ids).map(async (fileId) => {
+  private loadSkins(cache: WowCache, m2: WowM2): Promise<SkinData[]> {
+    return Promise.all(Array.from(m2.skin_ids).map(async (fileId) => {
       const skin = await cache.fetchFileByID(fileId, rust.WowSkin.new);
-      return new SkinData(skin, this);
+      const skinData = new SkinData(skin, this);
+      return skinData;
     }));
   }
 
@@ -943,10 +944,8 @@ export class ModelData {
     });
     m2Materials.forEach(mat => mat.free());
 
-    await Promise.all([
-      this.loadTextures(cache, m2),
-      this.loadSkins(cache, m2),
-    ]);
+    this.blps = await this.loadTextures(cache, m2);
+    this.skins = await this.loadSkins(cache, m2);
 
     this.particleEmitters = m2.take_particle_emitters().map((emitter, i) => {
       let txac = m2.get_txac_value(i)
