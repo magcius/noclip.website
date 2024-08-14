@@ -17,6 +17,7 @@ import { loadingAdtIndices, loadingAdtVertices, skyboxIndices, skyboxVertices } 
 import { LoadingAdtProgram, MAX_BONE_TRANSFORMS, MAX_DOODAD_INSTANCES, ModelProgram, ParticleProgram, SkyboxProgram, TerrainProgram, WaterProgram, WmoProgram } from "./program.js";
 import { MAP_SIZE, MapArray, View, WdtScene } from "./scenes.js";
 import { TextureCache } from "./tex.js";
+import { invlerp, lerp } from "../MathHelpers.js";
 
 type TextureMappingArray = (TextureMapping | null)[];
 
@@ -313,6 +314,7 @@ export class WmoRenderer {
   public batches: WmoBatchData[][] = [];
   public visible: boolean = true;
   public groupBatchTextureMappings: TextureMappingArray[][] = [];
+  private dayNight: number;
 
   constructor(device: GfxDevice, private wmo: WmoData, private textureCache: TextureCache, renderHelper: GfxRenderHelper) {
     for (let group of this.wmo.groups) {
@@ -367,7 +369,7 @@ export class WmoRenderer {
           const batch = this.batches[i][j];
           if (!batch.visible) continue;
           const renderInst = renderInstManager.newRenderInst();
-          let offset = renderInst.allocateUniformBuffer(WmoProgram.ub_BatchParams, 5 * 4);
+          let offset = renderInst.allocateUniformBuffer(WmoProgram.ub_BatchParams, 6 * 4);
           const uniformBuf = renderInst.mapUniformBufferF32(WmoProgram.ub_BatchParams);
           offset += fillVec4(uniformBuf, offset,
             batch.vertexShader,
@@ -384,9 +386,10 @@ export class WmoRenderer {
           offset += fillVec4(uniformBuf, offset,
             batch.materialFlags.unfogged ? 1 : 0,
             batch.materialFlags.exterior_light ? 1 : 0,
-            batch.materialFlags.sidn ? 1 : 0,
+            batch.materialFlags.sidn ? this.getSIDN() : -1.0,
             batch.materialFlags.window ? 1 : 0,
           );
+          offset += fillVec4v(uniformBuf, offset, batch.sidnColor);
           offset += fillVec4v(uniformBuf, offset, ambientColor);
           offset += fillVec4v(uniformBuf, offset, [0, 0, 0, 0]);
           batch.setMegaStateFlags(renderInst);
@@ -397,6 +400,22 @@ export class WmoRenderer {
       }
       renderInstManager.popTemplateRenderInst();
     }
+  }
+
+  private getSIDN(): number {
+    const morningTransition = [0.25, 0.291667];
+    const eveningTransition = [0.854167, 0.895833];
+    if (this.dayNight >= morningTransition[0] && this.dayNight <= morningTransition[1]) {
+      return lerp(1.0, 0.0, invlerp(morningTransition[0], morningTransition[1], this.dayNight));
+    } else if (this.dayNight >= eveningTransition[0] && this.dayNight <= eveningTransition[1]) {
+      return lerp(0.0, 1.0, invlerp(eveningTransition[0], eveningTransition[1], this.dayNight));
+    } else {
+      return this.dayNight > morningTransition[1] && this.dayNight < eveningTransition[0] ? 0.0 : 1.0;
+    }
+  }
+
+  public update(view: View) {
+    this.dayNight = view.dayNight;
   }
 
   public destroy(device: GfxDevice) {

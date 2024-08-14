@@ -1092,6 +1092,7 @@ export class WmoBatchData {
   public pixelShader: WowWmoMaterialPixelShader;
   public textures: (BlpData | null)[] = [];
   public visible = true;
+  public sidnColor: vec4;
 
   constructor(batch: WowWmoMaterialBatch, wmo: WmoData) {
     this.indexStart = batch.start_index;
@@ -1109,6 +1110,14 @@ export class WmoBatchData {
         this.textures.push(wmo.blps.get(blpId)!);
       }
     }
+    const sidnColor = this.material.sidn_color;
+    this.sidnColor = vec4.fromValues(
+      sidnColor.r / 255.0,
+      sidnColor.g / 255.0,
+      sidnColor.b / 255.0,
+      sidnColor.a / 255.0,
+    );
+    sidnColor.free();
     this.materialFlags = rust.WowWmoMaterialFlags.new(this.material.flags);
     this.vertexShader = this.material.get_vertex_shader();
     this.pixelShader = this.material.get_pixel_shader();

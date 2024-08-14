@@ -262,6 +262,7 @@ layout(std140) uniform ub_BatchParams {
     vec4 shaderParams; // vertexShader, pixelShader, _, _
     vec4 materialParams; // blendMode, applyInteriorLight, applyExteriorLight, unlit
     vec4 moreMaterialParams; // unfogged, exterior_light, sidn, window
+    vec4 sidnColor;
     vec4 interiorAmbientColor; // rgb, _
     vec4 interiorDirectColor; // rgb, _
 };
@@ -515,7 +516,11 @@ void mainPS() {
     bool unlit = int(materialParams.w) > 0;
     bool unfogged = int(moreMaterialParams.r) > 0;
     bool exteriorLight = int(moreMaterialParams.g) > 0;
-    bool sidn = int(moreMaterialParams.b) > 0;
+    float sidn = moreMaterialParams.b;
+    vec3 accumLight = vec3(0.0);
+    if (sidn >= 0.0) {
+      accumLight = sidnColor.rgb * sidn;
+    }
     bool window = int(moreMaterialParams.a) > 0;
 
     if (!unlit) {
@@ -532,7 +537,7 @@ void mainPS() {
 
               applyInteriorLight,
               applyExteriorLight,
-              vec3(0.0) /*accumLight*/,
+              accumLight,
               v_Color0.rgb,
               spec,
               emissive,
