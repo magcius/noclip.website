@@ -2614,12 +2614,25 @@ export class LazyWorldData {
   public adtFileIds: WowMapFileDataIDs[] = [];
   public loading = false;
 
-  constructor(public fileId: number, public adtRadius = 2, public cache: WowCache, public lightdbMapId: number) {
+  constructor(public fileId: number, public startAdtCoords: AdtCoord, public adtRadius = 2, public cache: WowCache, public lightdbMapId: number) {
   }
 
   public async load() {
     const wdt = await this.cache.fetchFileByID(this.fileId, rust.WowWdt.new);
     this.adtFileIds = wdt.get_all_map_data();
+    const [centerX, centerY] = this.startAdtCoords;
+
+    const promises = [];
+    for (let x = centerX - this.adtRadius; x <= centerX + this.adtRadius; x++) {
+      for (let y = centerY - this.adtRadius; y <= centerY + this.adtRadius; y++) {
+        promises.push(this.ensureAdtLoaded(x, y).then((adt) => {
+          if (adt !== undefined)
+            this.adts.push(adt);
+        }));
+      }
+    }
+    await Promise.all(promises);
+
     this.hasBigAlpha = wdt.adt_has_big_alpha();
     this.hasHeightTexturing = wdt.adt_has_height_texturing();
     wdt.free();
