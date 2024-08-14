@@ -1,7 +1,7 @@
 import { mat4, vec3, vec4 } from 'gl-matrix';
 import { CameraController } from '../Camera.js';
 import { AABB, Frustum } from '../Geometry.js';
-import { getMatrixTranslation, lerp, projectionMatrixForFrustum, saturate, transformVec3Mat4w1 } from "../MathHelpers.js";
+import { getMatrixTranslation, invlerp, lerp, projectionMatrixForFrustum, saturate, transformVec3Mat4w1 } from "../MathHelpers.js";
 import { SceneContext } from '../SceneBase.js';
 import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { GfxClipSpaceNearZ, GfxCullMode, GfxDevice } from '../gfx/platform/GfxPlatform.js';
@@ -58,6 +58,7 @@ export class View {
     public clipSpaceNearZ: GfxClipSpaceNearZ;
     public cameraPos = vec3.create();
     public time: number;
+    public dayNight = 0;
     public deltaTime: number;
     public cullingNearPlane = 0.1;
     public cullingFarPlane = 1000;
@@ -76,12 +77,15 @@ export class View {
       const theta = 3.926991;
       const phiMin = 2.2165682;
       const phiMax = 1.9198623;
-      let timePct = (this.time % 1440.0) / 1440.0;
       let phi;
-      if (timePct < 0.5) {
-        phi = lerp(phiMax, phiMin, timePct / 0.5);
+      if (this.dayNight < 0.25) {
+        phi = lerp(phiMax, phiMin, invlerp(0.0, 0.25, this.dayNight));
+      } else if (this.dayNight < 0.5) {
+        phi = lerp(phiMin, phiMax, invlerp(0.25, 0.5, this.dayNight));
+      } else if (this.dayNight < 0.75) {
+        phi = lerp(phiMax, phiMin, invlerp(0.5, 0.75, this.dayNight));
       } else {
-        phi = lerp(phiMin, phiMax, (timePct - 0.5) / 0.5);
+        phi = lerp(phiMin, phiMax, invlerp(0.75, 1.0, this.dayNight));
       }
       const sinPhi = Math.sin(phi);
       const cosPhi = Math.cos(phi);
@@ -116,6 +120,7 @@ export class View {
       this.cullingFrustum.updateClipFrustum(clipFromWorldMatrixCull, GfxClipSpaceNearZ.NegativeOne);
 
       this.time = (viewerInput.time / this.secondsPerGameDay + this.timeOffset) % 2880;
+      this.dayNight = this.time / 2880.0;
       this.deltaTime = viewerInput.deltaTime;
       this.calculateSunDirection();
       this.finishSetup();
@@ -589,6 +594,7 @@ export class WdtScene implements Viewer.SceneGfx {
     for (let [wmoId, renderer] of this.wmoRenderers.entries()) {
       const defs = this.wmoIdToDefs.get(wmoId)!
         .filter(wmoDef => wmoDef.visible);
+      renderer.update(this.mainView);
       renderer.prepareToRenderWmo(renderInstManager, defs);
     }
 
