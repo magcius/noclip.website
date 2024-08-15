@@ -15,7 +15,6 @@ import { AdtCoord, AdtData, Database, DoodadData, LazyWorldData, ModelData, Part
 import { BaseProgram, LoadingAdtProgram, ModelProgram, ParticleProgram, SkyboxProgram, TerrainProgram, WaterProgram, WmoProgram } from './program.js';
 import { LoadingAdtRenderer, ModelRenderer, SkyboxRenderer, TerrainRenderer, WaterRenderer, WmoRenderer } from './render.js';
 import { TextureCache } from './tex.js';
-import { drawBspNodes } from './debug.js';
 import { assert } from '../util.js';
 
 export const MAP_SIZE = 17066;
@@ -494,7 +493,7 @@ export class WdtScene implements Viewer.SceneGfx {
     for (let [groupId, groupAABB] of wmo.groupDefAABBs.entries()) {
       const group = wmo.getGroup(groupId)!;
       if (groupAABB.containsPoint(this.modelCamera)) {
-        if (group.bspContainsModelSpacePoint(this.modelCamera)) {
+        if (group.bspContainsPoint(this.modelCamera)) {
           if (group.flags.show_skybox && wmo.skyboxModel) {
             this.activeWmoSkybox = wmo.skyboxModel.fileId;
           }
@@ -504,9 +503,6 @@ export class WdtScene implements Viewer.SceneGfx {
             exteriorMemberGroups.push(groupId);
           }
         }
-        if (this.debug) {
-          drawBspNodes(group, this.modelCamera, def.modelMatrix);
-        }
       }
       if (this.modelFrustum.contains(groupAABB) && group.flags.exterior) {
         exteriorGroupsInFrustum.push(groupId);
@@ -515,7 +511,7 @@ export class WdtScene implements Viewer.SceneGfx {
 
     let rootGroups: number[];
     if (interiorMemberGroups.length > 0) {
-      rootGroups = interiorMemberGroups;
+      rootGroups = interiorMemberGroups.concat(exteriorMemberGroups);
     } else if (exteriorMemberGroups.length > 0) {
       rootGroups = exteriorMemberGroups.concat(exteriorGroupsInFrustum);
     } else {
