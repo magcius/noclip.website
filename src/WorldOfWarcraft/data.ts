@@ -1479,6 +1479,7 @@ export class WmoData {
   public modelIds: Uint32Array;
   public liquidTypes: Map<number, LiquidType> = new Map();
   public liquids: LiquidInstance[] = [];
+  public skyboxModel: ModelData | null = null;
 
   constructor(public fileId: number) {
   }
@@ -1543,6 +1544,12 @@ export class WmoData {
   public async load(cache: WowCache): Promise<void> {
     this.wmo = await cache.fetchFileByID(this.fileId, rust.WowWmo.new);
     this.flags = this.wmo.header.get_flags();
+    if (this.wmo.skybox_file_id) {
+      this.skyboxModel = await cache.loadModel(this.wmo.skybox_file_id);
+    }
+    if (this.wmo.skybox_name) {
+      console.warn(`WMO skybox name ${this.wmo.skybox_name}`);
+    }
     assert(!this.flags.lod, "wmo with lod");
 
     this.materials = this.wmo.textures;
@@ -2318,7 +2325,6 @@ export class AdtData {
   public liquidTypes: Map<number, LiquidType> = new Map();
   public insideWmoCandidates: WmoDefinition[] = [];
   public visibleWmoCandidates: WmoDefinition[] = [];
-  public skyboxes: SkyboxData[] = [];
   private vertexBuffer: Float32Array;
   private indexBuffer: Uint16Array;
   private inner: WowAdt | null = null;
@@ -2426,13 +2432,6 @@ export class AdtData {
 
     let adtCenter = vec3.create();
     this.worldSpaceAABB.centerPoint(adtCenter);
-    
-    for (const metadata of cache.db.getAllSkyboxes(this.lightdbMapId)) {
-      const skybox = new SkyboxData(metadata.name, metadata.flags);
-      await skybox.load(cache)
-      this.skyboxes.push(skybox);
-      metadata.free();
-    }
 
     this.inner!.free();
     this.inner = null;
@@ -2606,6 +2605,7 @@ export type AdtCoord = [number, number];
 
 export class LazyWorldData {
   public adts: AdtData[] = [];
+  public skyboxes: SkyboxData[] = [];
   private loadedAdtCoords: AdtCoord[] = [];
   public globalWmo: WmoData | null = null;
   public globalWmoDef: WmoDefinition | null = null;
@@ -2633,6 +2633,7 @@ export class LazyWorldData {
         }));
       }
     }
+    promises.push(loadSkyboxes(this.cache, this.lightdbMapId).then(skyboxes => this.skyboxes = skyboxes));
     await Promise.all(promises);
 
     this.hasBigAlpha = wdt.adt_has_big_alpha();
@@ -2735,13 +2736,14 @@ interface WowMapFileDataIDsLike {
 
 export class WorldData {
   public adts: AdtData[] = [];
+  public skyboxes: SkyboxData[] = [];
   public globalWmo: WmoData | null = null;
   public globalWmoDef: WmoDefinition | null = null;
 
   constructor(public fileId: number, public cache: WowCache, public lightdbMapId: number) {
   }
 
-  public async load(dataFetcher: DataFetcher, cache: WowCache) {
+  public async load(cache: WowCache) {
     const wdt = await cache.fetchFileByID(this.fileId, rust.WowWdt.new);
     const hasBigAlpha = wdt.adt_has_big_alpha();
     const hasHeightTexturing = wdt.adt_has_height_texturing();
@@ -2753,7 +2755,6 @@ export class WorldData {
       const adtFileIDs = wdt.get_loaded_map_data();
       for (let fileIDs of adtFileIDs) {
         if (fileIDs.root_adt === 0) {
-          // throw new Error(`null ADTs in a non-global-WMO WDT`);
           continue;
         }
 
@@ -2764,7 +2765,17 @@ export class WorldData {
         this.adts.push(adt);
       }
     }
+    this.skyboxes = await loadSkyboxes(this.cache, this.lightdbMapId);
     wdt.free();
   }
 }
 
+async function loadSkyboxes(cache: WowCache, lightdbMapId: number): Promise<SkyboxData[]> {
+  const promises = [];
+  for (const metadata of cache.db.getAllSkyboxes(lightdbMapId)) {
+    const skybox = new SkyboxData(metadata.name, metadata.flags);
+    promises.push(skybox.load(cache).then(() => skybox));
+    metadata.free();
+  }
+  return Promise.all(promises);
+}
