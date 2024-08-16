@@ -575,6 +575,7 @@ export class ParticleEmitter {
   private msSinceLastUpdate = 0;
   private framesSinceLastUpdate = 0;
   public needsRedraw = true;
+  private pixelData: Float32Array;
 
   constructor(public index: number, public emitter: WowM2ParticleEmitter, private model: ModelData, public txac: number) {
     this.updateBuffer = new Float32Array(16);
@@ -611,6 +612,8 @@ export class ParticleEmitter {
     }
     this.fragShaderType = this.calculateShaderType();
     this.blendMode = emitter.get_blend_mode();
+    const bytesPerParticle = ParticleEmitter.TEXELS_PER_PARTICLE * 4;
+    this.pixelData = new Float32Array(ParticleEmitter.MAX_PARTICLES * bytesPerParticle);
   }
 
   private calculateParticleType(): number {
@@ -834,8 +837,6 @@ export class ParticleEmitter {
 
   public updateDataTex(device: GfxDevice): GfxTexture {
     this.ensureTexture(device);
-    const bytesPerParticle = ParticleEmitter.TEXELS_PER_PARTICLE * 4;
-    const pixels = new Float32Array(ParticleEmitter.MAX_PARTICLES * bytesPerParticle);
     const scratchVec3 = vec3.create();
     for (let i=0; i<this.particles.length; i++) {
       const particle = this.particles[i];
@@ -844,12 +845,12 @@ export class ParticleEmitter {
       if (this.emitter.translate_particle_with_bone()) {
         vec3.transformMat4(scratchVec3, scratchVec3, this.modelMatrix);
       }
-      offs += fillVec3v(pixels, offs, scratchVec3);
-      offs += fillVec4v(pixels, offs, particle.color);
-      offs += fillVec4(pixels, offs, particle.scale[0], particle.scale[1]);
-      offs += fillVec4(pixels, offs, particle.texCoordHead[0], particle.texCoordHead[1]);
+      offs += fillVec3v(this.pixelData, offs, scratchVec3);
+      offs += fillVec4v(this.pixelData, offs, particle.color);
+      offs += fillVec4(this.pixelData, offs, particle.scale[0], particle.scale[1]);
+      offs += fillVec4(this.pixelData, offs, particle.texCoordHead[0], particle.texCoordHead[1]);
     }
-    device.uploadTextureData(this.dataTexture!, 0, [pixels]);
+    device.uploadTextureData(this.dataTexture!, 0, [this.pixelData]);
     return this.dataTexture!;
   }
 }
