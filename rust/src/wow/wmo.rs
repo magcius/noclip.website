@@ -231,8 +231,7 @@ pub struct WmoGroup {
     uvs: Option<Vec<u8>>,
     colors: Option<Vec<u8>>,
     doodad_refs: Option<Vec<u16>>,
-    bsp_nodes: Option<Vec<BspNode>>,
-    bsp_indices: Option<Vec<u16>>,
+    bsp_tree: Option<BspTree>,
     pub num_vertices: usize,
     pub num_uv_bufs: usize,
     pub num_color_bufs: usize,
@@ -250,9 +249,9 @@ impl WmoGroup {
         assert_eq!(mver.magic_str(), "REVM");
         let (_, mhdr_data) = chunked_data.next().unwrap();
         let header: WmoGroupHeader = parse(mhdr_data)?;
-        let mut indices: Option<Vec<u16>> = None;
-        let mut vertices: Option<Vec<f32>> = None;
-        let mut normals: Option<Vec<u8>> = None;
+        let mut maybe_indices: Option<Vec<u16>> = None;
+        let mut maybe_vertices: Option<Vec<f32>> = None;
+        let mut maybe_normals: Option<Vec<u8>> = None;
         let mut uvs: Vec<u8> = Vec::new();
         let mut num_uv_bufs = 0;
         let mut liquids: Vec<WmoLiquid> = Vec::new();
@@ -268,16 +267,16 @@ impl WmoGroup {
         let mut chunked_data = ChunkedData::new(&data[0x58..]);
         for (chunk, chunk_data) in &mut chunked_data {
             match &chunk.magic {
-                b"IVOM" => indices = Some(parse_array(chunk_data, 2)?),
+                b"IVOM" => maybe_indices = Some(parse_array(chunk_data, 2)?),
                 b"LADM" => replacement_for_header_color = Some(parse(chunk_data)?),
                 b"QILM" => liquids.push(parse(chunk_data)?),
                 b"RBOM" => bsp_indices = parse_array(chunk_data, 2)?,
                 b"NBOM" => bsp_nodes = parse_array(chunk_data, 0x10)?,
                 b"TVOM" => {
                     num_vertices = chunk_data.len();
-                    vertices = Some(parse_array(chunk_data, 4)?);
+                    maybe_vertices = Some(parse_array(chunk_data, 4)?);
                 },
-                b"RNOM" => normals = Some(chunk_data.to_vec()),
+                b"RNOM" => maybe_normals = Some(chunk_data.to_vec()),
                 b"VTOM" => {
                     num_uv_bufs += 1;
                     uvs.extend(chunk_data.to_vec());
@@ -300,19 +299,28 @@ impl WmoGroup {
             maybe_liquids = Some(liquids);
         }
 
+        let vertices = maybe_vertices.ok_or("WMO group didn't have vertices")?;
+        let indices = maybe_indices.ok_or("WMO group didn't have indices")?;
+
+        let bsp_tree = BspTree {
+            nodes: bsp_nodes,
+            face_indices: bsp_indices,
+            vertex_indices: indices.clone(),
+            vertices: vertices.clone(),
+        };
+
         Ok(WmoGroup {
             header,
-            indices,
-            vertices: Some(vertices.ok_or("WMO group didn't have vertices")?),
+            indices: Some(indices),
+            vertices: Some(vertices),
             num_vertices,
-            normals: Some(normals.ok_or("WMO group didn't have normals")?),
+            normals: Some(maybe_normals.ok_or("WMO group didn't have normals")?),
             liquids: maybe_liquids,
             replacement_for_header_color,
             first_color_buf_len,
             uvs: Some(uvs),
             num_uv_bufs,
-            bsp_indices: Some(bsp_indices),
-            bsp_nodes: Some(bsp_nodes),
+            bsp_tree: Some(bsp_tree),
             colors: Some(colors),
             num_color_bufs,
             batches: batches.unwrap_or_default(),
@@ -321,18 +329,7 @@ impl WmoGroup {
     }
 
     pub fn take_bsp_tree(&mut self) -> BspTree {
-        BspTree {
-            nodes: self.take_bsp_nodes(),
-            face_indices: self.take_bsp_indices(),
-        }
-    }
-
-    pub fn take_bsp_nodes(&mut self) -> Vec<BspNode> {
-        self.bsp_nodes.take().expect("WmoGroup BSP nodes already taken")
-    }
-
-    pub fn take_bsp_indices(&mut self) -> Vec<u16> {
-        self.bsp_indices.take().expect("WmoGroup BSP indices already taken")
+        self.bsp_tree.take().expect("WmoGroup BSP tree already taken")
     }
 
     pub fn take_vertices(&mut self) -> Vec<f32> {
@@ -370,9 +367,12 @@ impl WmoGroup {
 }
 
 #[wasm_bindgen(js_name = "WowBspTree")]
+#[derive(Debug, Clone)]
 pub struct BspTree {
     nodes: Vec<BspNode>,
     face_indices: Vec<u16>,
+    vertex_indices: Vec<u16>,
+    vertices: Vec<f32>,
 }
 
 #[wasm_bindgen(js_name = "WowBspTreeResult")]
@@ -380,18 +380,18 @@ pub struct BspTreeResult {
     pub bary_x: f32,
     pub bary_y: f32,
     pub bary_z: f32,
-    pub vert_index_0: i32,
-    pub vert_index_1: i32,
-    pub vert_index_2: i32,
+    pub vert_index_0: usize,
+    pub vert_index_1: usize,
+    pub vert_index_2: usize,
 }
 
 #[wasm_bindgen(js_class = "WowBspTree")]
 impl BspTree {
-    pub fn contains_point(&self, vertex_indices: &Uint16Array, vertices: &Float32Array, x: f32, y: f32, z: f32) -> bool {
-        self.pick_closest_tri_neg_z(vertex_indices, vertices, x, y, z).is_some()
+    pub fn contains_point(&self, x: f32, y: f32, z: f32) -> bool {
+        self.pick_closest_tri_neg_z(x, y, z).is_some()
     }
 
-    pub fn pick_closest_tri_neg_z(&self, vertex_indices: &Uint16Array, vertices: &Float32Array, x: f32, y: f32, z: f32) -> Option<BspTreeResult> {
+    pub fn pick_closest_tri_neg_z(&self, x: f32, y: f32, z: f32) -> Option<BspTreeResult> {
         let mut min_dist = f32::INFINITY;
         let mut min_bsp_index: Option<usize> = None;
         let mut bary = vec3(0.0, 0.0, 0.0);
@@ -402,7 +402,7 @@ impl BspTree {
             let start = node.faces_start as usize;
             let end = start + node.num_faces as usize;
             for i in start..end {
-                let (vertex0, vertex1, vertex2) = self.get_face_vertices(vertex_indices, vertices, i);
+                let (vertex0, vertex1, vertex2) = self.get_face_vertices(i);
 
                 // check that the ray will intersect in the xy plane
                 let min_x = vertex0[0].min(vertex1[0]).min(vertex2[0]);
@@ -460,8 +460,8 @@ impl BspTree {
             }
         }
 
-        let face_index = self.face_indices[min_bsp_index?];
-        let indices = self.get_face_indices(vertex_indices, face_index);
+        let face_index = self.face_indices[min_bsp_index?] as usize;
+        let indices = self.get_face_indices(face_index);
         Some(BspTreeResult {
             bary_x: bary.x,
             bary_y: bary.y,
@@ -472,23 +472,23 @@ impl BspTree {
         })
     }
 
-    fn get_face_vertices(&self, vertex_indices: &Uint16Array, vertices: &Float32Array, bsp_face_index: usize) -> (nalgebra_glm::Vec3, nalgebra_glm::Vec3, nalgebra_glm::Vec3) {
-        let face_index = self.face_indices[bsp_face_index];
-        let (index0, index1, index2) = self.get_face_indices(vertex_indices, face_index);
+    fn get_face_vertices(&self, bsp_face_index: usize) -> (nalgebra_glm::Vec3, nalgebra_glm::Vec3, nalgebra_glm::Vec3) {
+        let face_index = self.face_indices[bsp_face_index] as usize;
+        let (index0, index1, index2) = self.get_face_indices(face_index);
         let vertex0 = vec3(
-            vertices.at(3 * index0 + 0).unwrap(),
-            vertices.at(3 * index0 + 1).unwrap(),
-            vertices.at(3 * index0 + 2).unwrap(),
+            self.vertices[3 * index0 + 0],
+            self.vertices[3 * index0 + 1],
+            self.vertices[3 * index0 + 2],
         );
         let vertex1 = vec3(
-            vertices.at(3 * index1 + 0).unwrap(),
-            vertices.at(3 * index1 + 1).unwrap(),
-            vertices.at(3 * index1 + 2).unwrap(),
+            self.vertices[3 * index1 + 0],
+            self.vertices[3 * index1 + 1],
+            self.vertices[3 * index1 + 2],
         );
         let vertex2 = vec3(
-            vertices.at(3 * index2 + 0).unwrap(),
-            vertices.at(3 * index2 + 1).unwrap(),
-            vertices.at(3 * index2 + 2).unwrap(),
+            self.vertices[3 * index2 + 0],
+            self.vertices[3 * index2 + 1],
+            self.vertices[3 * index2 + 2],
         );
         (vertex0, vertex1, vertex2)
     }
@@ -516,12 +516,11 @@ impl BspTree {
         }
     }
 
-    fn get_face_indices(&self, vertex_indices: &Uint16Array, face_index: u16) -> (i32, i32, i32) {
-        let i = face_index as i32;
+    fn get_face_indices(&self, face_index: usize) -> (usize, usize, usize) {
         (
-            vertex_indices.at(3 * i + 0).unwrap() as i32,
-            vertex_indices.at(3 * i + 1).unwrap() as i32,
-            vertex_indices.at(3 * i + 2).unwrap() as i32
+            self.vertex_indices[3 * face_index + 0] as usize,
+            self.vertex_indices[3 * face_index + 1] as usize,
+            self.vertex_indices[3 * face_index + 2] as usize,
         )
     }
 }

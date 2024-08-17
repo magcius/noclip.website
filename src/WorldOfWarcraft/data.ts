@@ -1267,7 +1267,7 @@ export class WmoGroupData {
   }
 
   public bspContainsPoint(modelSpacePoint: vec3): boolean {
-    return this.bsp.contains_point(this.indices, this.vertices, modelSpacePoint[0], modelSpacePoint[1], modelSpacePoint[2]);
+    return this.bsp.contains_point(modelSpacePoint[0], modelSpacePoint[1], modelSpacePoint[2]);
   }
 
   public getIndexBuffer(device: GfxDevice): GfxIndexBufferDescriptor {
@@ -1276,7 +1276,7 @@ export class WmoGroupData {
 
   public getVertexColorForModelSpacePoint(p: vec3): vec4 | undefined {
     // project a line downwards for an intersection test
-    const bspResult = this.bsp.pick_closest_tri_neg_z(this.indices, this.vertices, p[0], p[1], p[2]);
+    const bspResult = this.bsp.pick_closest_tri_neg_z(p[0], p[1], p[2]);
     if (bspResult) {
       const [idx0, idx1, idx2] = [bspResult.vert_index_0, bspResult.vert_index_1, bspResult.vert_index_2];
       const [x, y, z] = [bspResult.bary_x, bspResult.bary_y, bspResult.bary_z];
