@@ -431,7 +431,7 @@ export class WdtScene implements Viewer.SceneGfx {
       // Do a first pass and get candidate WMOs the camera's inside of,
       // disable WMOs not in the frustum, and determine if any ADTs are
       // visible based on where the camera is
-      let exteriorVisible = true;
+      const wmosToCull: Map<number, [WmoData, WmoDefinition]> = new Map();
       for (let adt of this.world.adts) {
         adt.worldSpaceAABB.centerPoint(scratchVec3);
         const distance = vec3.distance(worldCamera, scratchVec3);
@@ -440,13 +440,20 @@ export class WdtScene implements Viewer.SceneGfx {
 
         for (let def of adt.insideWmoCandidates) {
           const wmo = adt.wmos.get(def.wmoId)!;
-          const cullResult = this.cullWmoDef(def, wmo);
-          if (cullResult === CullWmoResult.CameraInside) {
-            exteriorVisible = false;
-          }
+          wmosToCull.set(def.uniqueId, [wmo, def]);
         }
       }
 
+      let exteriorVisible = true;
+      for (let [wmo, def] of wmosToCull.values()) {
+        const cullResult = this.cullWmoDef(def, wmo);
+        if (cullResult === CullWmoResult.CameraInside) {
+          exteriorVisible = false;
+        }
+      }
+
+      const wmosAlreadyCulled = Array.from(wmosToCull.keys());
+      wmosToCull.clear();
       for (let adt of this.world.adts) {
         if (exteriorVisible) {
           if (worldFrustum.contains(adt.worldSpaceAABB)) {
@@ -463,9 +470,15 @@ export class WdtScene implements Viewer.SceneGfx {
           }
           for (let def of adt.visibleWmoCandidates) {
             const wmo = adt.wmos.get(def.wmoId)!;
-            this.cullWmoDef(def, wmo);
+            if (!wmosAlreadyCulled.includes(def.uniqueId)) {
+              wmosToCull.set(def.uniqueId, [wmo, def]);
+            }
           }
         }
+      }
+
+      for (let [wmo, def] of wmosToCull.values()) {
+        this.cullWmoDef(def, wmo);
       }
     }
   }
