@@ -237,6 +237,8 @@ export class WdtScene implements Viewer.SceneGfx {
   public frozenFrustum = new Frustum();
   private modelCamera = vec3.create();
   private modelFrustum = new Frustum();
+  private activeWmoSkybox: number | null = null;
+  private wmoSkyboxRenderers: Map<number, ModelRenderer> = new Map();
 
   constructor(private device: GfxDevice, public world: WorldData | LazyWorldData, public renderHelper: GfxRenderHelper, private db: Database) {
     console.time('WdtScene construction');
@@ -249,6 +251,7 @@ export class WdtScene implements Viewer.SceneGfx {
     this.skyboxProgram = this.renderHelper.renderCache.createProgram(new SkyboxProgram());
     this.loadingAdtProgram = this.renderHelper.renderCache.createProgram(new LoadingAdtProgram());
 
+    this.setupSkyboxes();
     if (this.world.globalWmo) {
       this.setupWmoDef(this.world.globalWmoDef!);
       this.setupWmo(this.world.globalWmo);
@@ -290,6 +293,21 @@ export class WdtScene implements Viewer.SceneGfx {
     }
   }
 
+  public async setupSkyboxes() {
+    for (const skybox of this.world.skyboxes) {
+      assert(skybox.modelData !== undefined);
+      assert(skybox.modelFileId !== undefined);
+      if (!this.skyboxModelRenderers.has(skybox.filename)) {
+        this.skyboxModelRenderers.set(skybox.filename, new ModelRenderer(
+          this.device,
+          skybox.modelData,
+          this.renderHelper,
+          this.textureCache
+        ));
+      }
+    }
+  }
+
   public setupAdt(adt: AdtData) {
     if (this.terrainRenderers.has(adt.fileId)) {
       return;
@@ -321,18 +339,6 @@ export class WdtScene implements Viewer.SceneGfx {
         this.modelIdToDoodads.append(doodad.modelId, doodad);
       }
     }
-    for (const skybox of adt.skyboxes) {
-      assert(skybox.modelData !== undefined);
-      assert(skybox.modelFileId !== undefined);
-      if (!this.skyboxModelRenderers.has(skybox.filename)) {
-        this.skyboxModelRenderers.set(skybox.filename, new ModelRenderer(
-          this.device,
-          skybox.modelData,
-          this.renderHelper,
-          this.textureCache
-        ));
-      }
-    }
   }
 
   public setupWmo(wmo: WmoData) {
@@ -354,6 +360,14 @@ export class WdtScene implements Viewer.SceneGfx {
     ));
     for (let model of wmo.models.values()) {
       this.createModelRenderer(model);
+    }
+    if (wmo.skyboxModel) {
+      this.wmoSkyboxRenderers.set(wmo.skyboxModel.fileId, new ModelRenderer(
+        this.device,
+        wmo.skyboxModel,
+        this.renderHelper,
+        this.textureCache
+      ));
     }
   }
 
@@ -404,6 +418,7 @@ export class WdtScene implements Viewer.SceneGfx {
   }
 
   public cull() {
+    this.activeWmoSkybox = null;
     if (this.world.globalWmo) {
       this.cullWmoDef(this.world.globalWmoDef!, this.world.globalWmo);
     } else {
@@ -480,6 +495,9 @@ export class WdtScene implements Viewer.SceneGfx {
       const group = wmo.getGroup(groupId)!;
       if (groupAABB.containsPoint(this.modelCamera)) {
         if (group.bspContainsModelSpacePoint(this.modelCamera)) {
+          if (group.flags.show_skybox && wmo.skyboxModel) {
+            this.activeWmoSkybox = wmo.skyboxModel.fileId;
+          }
           if (!group.flags.exterior) {
             interiorMemberGroups.push(groupId);
           } else {
@@ -615,18 +633,28 @@ export class WdtScene implements Viewer.SceneGfx {
     template.setBindingLayouts(ModelProgram.bindingLayouts);
     template.setGfxProgram(this.modelProgram);
     renderInstManager.setCurrentRenderInstList(this.renderInstListSky);
-    const skyboxes = lightingData.get_skyboxes();
-    for (let skybox of skyboxes) {
-      const name = skybox.name;
-      const renderer = this.skyboxModelRenderers.get(name);
+    if (this.activeWmoSkybox !== null) {
+      const renderer = this.wmoSkyboxRenderers.get(this.activeWmoSkybox);
       if (!renderer) {
-        console.warn(`couldn't find skybox renderer for "${name}"`);
-        continue;
+        console.warn(`couldn't find WMO skybox renderer for ${this.activeWmoSkybox}`);
+      } else {
+        renderer.update(this.mainView);
+        renderer.prepareToRenderSkybox(renderInstManager, 0, 1.0);
       }
-      renderer.update(this.mainView);
-      renderer.prepareToRenderSkybox(renderInstManager, skybox.flags, skybox.weight);
+    } else {
+      const skyboxes = lightingData.get_skyboxes();
+      for (let skybox of skyboxes) {
+        const name = skybox.name;
+        const renderer = this.skyboxModelRenderers.get(name);
+        if (!renderer) {
+          console.warn(`couldn't find skybox renderer for "${name}"`);
+          continue;
+        }
+        renderer.update(this.mainView);
+        renderer.prepareToRenderSkybox(renderInstManager, skybox.flags, skybox.weight);
 
-      skybox.free();
+        skybox.free();
+      }
     }
     renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
 
@@ -816,7 +844,7 @@ class WdtSceneDesc implements Viewer.SceneDesc {
     rust.init_panic_hook();
     const wdt = new WorldData(this.fileId, cache, this.lightdbMapId);
     console.time('loading wdt');
-    await wdt.load(dataFetcher, cache);
+    await wdt.load(cache);
     console.timeEnd('loading wdt');
     return new WdtScene(device, wdt, renderHelper, cache.db);
   }

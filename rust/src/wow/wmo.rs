@@ -664,6 +664,7 @@ pub struct WmoGroupFlags {
     pub interior: bool,
     pub water_is_ocean: bool,
     pub antiportal: bool,
+    pub show_skybox: bool,
 }
 
 #[wasm_bindgen(js_class = "WowWmoGroupFlags")]
@@ -680,6 +681,7 @@ impl WmoGroupFlags {
             has_doodads: x & 0x800 > 0,
             has_water: x & 0x1000 > 0,
             interior: x & 0x2000 > 0,
+            show_skybox: x & 0x40000 > 0,
             water_is_ocean: x & 0x80000 > 0,
             antiportal: x & 0x4000000 > 0,
         }
