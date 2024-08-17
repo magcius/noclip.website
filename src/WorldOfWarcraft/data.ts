@@ -765,7 +765,7 @@ export class ParticleEmitter {
 
   private shouldUpdate(): boolean {
     const lodFactor = 1 << (ParticleEmitter.MAX_LOD - this.lod);
-    return this.framesSinceLastUpdate > lodFactor;
+    return this.framesSinceLastUpdate >= lodFactor;
   }
 
   public update(dtMilliseconds: number, animationManager: WowM2AnimationManager) {
