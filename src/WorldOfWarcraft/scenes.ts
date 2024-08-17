@@ -11,7 +11,7 @@ import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
 import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
 import { rust } from '../rustlib.js';
 import * as Viewer from '../viewer.js';
-import { AdtCoord, AdtData, Database, DoodadData, LazyWorldData, ModelData, ParticleEmitter, SkyboxData, WmoData, WmoDefinition, WorldData, WowCache } from './data.js';
+import { AdtCoord, AdtData, ChunkData, Database, DoodadData, LazyWorldData, LiquidInstance, ModelData, ParticleEmitter, SkyboxData, WmoData, WmoDefinition, WorldData, WowCache } from './data.js';
 import { BaseProgram, LoadingAdtProgram, ModelProgram, ParticleProgram, SkyboxProgram, TerrainProgram, WaterProgram, WmoProgram } from './program.js';
 import { LoadingAdtRenderer, ModelRenderer, SkyboxRenderer, TerrainRenderer, WaterRenderer, WmoRenderer } from './render.js';
 import { TextureCache } from './tex.js';
@@ -137,6 +137,70 @@ enum CameraState {
   Running,
 }
 
+// A set of all doodads, ADTs, WMOs, etc to render each frame
+export class FrameData {
+  public wmoDefGroups: MapArray<number, number> = new MapArray(); // WmoDefinition uniqueId => [WMO groupId]
+  public wmoDefs: MapArray<number, WmoDefinition> = new MapArray(); // WMO fileId => [WmoDefinition]
+  public doodads: MapArray<number, DoodadData> = new MapArray(); // Model fileId => [DoodadData]
+  public liquidIndices: number[] = []; // index into either WMO or ADT liquids array
+  public adtChunkIndices: MapArray<number, number> = new MapArray(); // ADT fileId => [chunk index]
+  public activeWmoSkybox: number | null = null;
+  public adtLiquids: MapArray<number, number> = new MapArray(); // ADT fileId => [liquidIndex]
+  public wmoLiquids: MapArray<number, number> = new MapArray(); // WmoDefinition uniqueId => [liquidIndex]
+
+  private wmoDefToDoodadIndices: MapArray<number, number> = new MapArray(); // WmoDefinition uniqueId => [doodad index]
+  private adtDoodadUniqueIds: Set<number> = new Set();
+
+  constructor() {
+  }
+
+  public addWmoDef(wmo: WmoData, def: WmoDefinition) {
+    this.wmoDefs.append(wmo.fileId, def);
+  }
+
+  public addWmoGroup(wmo: WmoData, def: WmoDefinition, groupId: number, justWmo = false) {
+    this.wmoDefGroups.append(def.uniqueId, groupId);
+    if (justWmo) return;
+    if (def.groupIdToDoodadIndices.has(groupId)) {
+      for (let index of def.groupIdToDoodadIndices.get(groupId)) {
+        this.addWmoDoodad(def, index);
+      }
+    }
+    if (def.groupIdToLiquidIndices.has(groupId)) {
+      for (let index of def.groupIdToLiquidIndices.get(groupId)) {
+        this.addWmoDefLiquid(def, index);
+      }
+    }
+  }
+
+  public addWmoDoodad(def: WmoDefinition, index: number) {
+    if (this.wmoDefToDoodadIndices.get(def.uniqueId).includes(index)) return;
+    const doodad = def.doodadIndexToDoodad.get(index)!;
+    this.wmoDefToDoodadIndices.append(def.uniqueId, index);
+    this.doodads.append(doodad.modelId, doodad);
+  }
+
+  public addAdtDoodad(doodad: DoodadData) {
+    const uniqueId = doodad.uniqueId!;
+    assert(uniqueId !== undefined);
+    if (this.adtDoodadUniqueIds.has(uniqueId)) return;
+    this.adtDoodadUniqueIds.add(uniqueId);
+    this.doodads.append(doodad.modelId, doodad);
+  }
+
+  public addWmoDefLiquid(def: WmoDefinition, liquidIndex: number) {
+    this.wmoLiquids.append(def.uniqueId, liquidIndex)
+  }
+
+  public addAdtLiquid(adt: AdtData, liquidIndex: number) {
+    this.adtLiquids.append(adt.fileId, liquidIndex);
+  }
+
+  public addAdtChunk(adt: AdtData, chunkIndex: number) {
+    this.adtChunkIndices.append(adt.fileId, chunkIndex);
+  }
+}
+
 export class MapArray<K, V> {
   public map: Map<K, V[]> = new Map();
 
@@ -153,6 +217,10 @@ export class MapArray<K, V> {
       return [];
     }
     return result;
+  }
+
+  public entries(): IterableIterator<[K, V[]]> {
+    return this.map.entries();
   }
 
   public appendUnique(key: K, value: V): void {
@@ -236,7 +304,6 @@ export class WdtScene implements Viewer.SceneGfx {
   public frozenFrustum = new Frustum();
   private modelCamera = vec3.create();
   private modelFrustum = new Frustum();
-  private activeWmoSkybox: number | null = null;
   private wmoSkyboxRenderers: Map<number, ModelRenderer> = new Map();
 
   constructor(private device: GfxDevice, public world: WorldData | LazyWorldData, public renderHelper: GfxRenderHelper, private db: Database) {
@@ -416,17 +483,11 @@ export class WdtScene implements Viewer.SceneGfx {
     this.cullingState = CullingState.OneShot;
   }
 
-  public cull() {
-    this.activeWmoSkybox = null;
+  public cull(frame: FrameData) {
     if (this.world.globalWmo) {
-      this.cullWmoDef(this.world.globalWmoDef!, this.world.globalWmo);
+      this.cullWmoDef(frame, this.world.globalWmoDef!, this.world.globalWmo);
     } else {
       const [worldCamera, worldFrustum] = this.getCameraAndFrustum();
-
-      // start off with everything invisible
-      for (let adt of this.world.adts) {
-        adt.setVisible(false);
-      }
 
       // Do a first pass and get candidate WMOs the camera's inside of,
       // disable WMOs not in the frustum, and determine if any ADTs are
@@ -446,7 +507,7 @@ export class WdtScene implements Viewer.SceneGfx {
 
       let exteriorVisible = true;
       for (let [wmo, def] of wmosToCull.values()) {
-        const cullResult = this.cullWmoDef(def, wmo);
+        const cullResult = this.cullWmoDef(frame, def, wmo);
         if (cullResult === CullWmoResult.CameraInside) {
           exteriorVisible = false;
         }
@@ -457,15 +518,22 @@ export class WdtScene implements Viewer.SceneGfx {
       for (let adt of this.world.adts) {
         if (exteriorVisible) {
           if (worldFrustum.contains(adt.worldSpaceAABB)) {
-            adt.visible = true;
-            for (let chunk of adt.chunkData) {
-              chunk.setVisible(worldFrustum.contains(chunk.worldSpaceAABB));
+            for (let i=0; i<adt.chunkData.length; i++) {
+              const chunk = adt.chunkData[i];
+              if (worldFrustum.contains(chunk.worldSpaceAABB)) {
+                frame.addAdtChunk(adt, i);
+              }
             }
-            for (let liquid of adt.liquids) {
-              liquid.setVisible(worldFrustum.contains(liquid.worldSpaceAABB));
+            for (let i=0; i<adt.liquids.length; i++) {
+              const liquid = adt.liquids[i];
+              if (worldFrustum.contains(liquid.worldSpaceAABB)) {
+                frame.addAdtLiquid(adt, i);
+              }
             }
             for (let doodad of adt.lodDoodads()) {
-              doodad.setVisible(worldFrustum.contains(doodad.worldAABB));
+              if (worldFrustum.contains(doodad.worldAABB)) {
+                frame.addAdtDoodad(doodad);
+              }
             }
           }
           for (let def of adt.visibleWmoCandidates) {
@@ -478,22 +546,21 @@ export class WdtScene implements Viewer.SceneGfx {
       }
 
       for (let [wmo, def] of wmosToCull.values()) {
-        this.cullWmoDef(def, wmo);
+        this.cullWmoDef(frame, def, wmo);
       }
     }
   }
 
-  public cullWmoDef(def: WmoDefinition, wmo: WmoData): CullWmoResult {
+  public cullWmoDef(frame: FrameData, def: WmoDefinition, wmo: WmoData): CullWmoResult {
     const [worldCamera, worldFrustum] = this.getCameraAndFrustum();
-
-    def.setVisible(false);
 
     // Check if we're looking at this particular world-space WMO, then do the
     // rest of culling in model space
-    def.visible = worldFrustum.contains(def.worldAABB);
-    if (!def.visible) {
+    if (!worldFrustum.contains(def.worldAABB)) {
       return CullWmoResult.CameraOutside;
     }
+
+    frame.addWmoDef(wmo, def);
 
     vec3.transformMat4(this.modelCamera, worldCamera, def.invPlacementMatrix);
     this.modelFrustum.transform(worldFrustum, def.invPlacementMatrix);
@@ -508,7 +575,7 @@ export class WdtScene implements Viewer.SceneGfx {
       if (groupAABB.containsPoint(this.modelCamera)) {
         if (group.bspContainsPoint(this.modelCamera)) {
           if (group.flags.show_skybox && wmo.skyboxModel) {
-            this.activeWmoSkybox = wmo.skyboxModel.fileId;
+            frame.activeWmoSkybox = wmo.skyboxModel.fileId;
           }
           if (!group.flags.exterior) {
             interiorMemberGroups.push(groupId);
@@ -532,26 +599,10 @@ export class WdtScene implements Viewer.SceneGfx {
     }
 
     // If we still don't have any groups, the user might be flying out of
-    // bounds, so just show the closest visible one. Or if we're in a global WMO
-    // map, just render everything
+    // bounds, just render the WMO geometry without doodads/liquids
     if (rootGroups.length === 0) {
-      if (this.world.globalWmo) {
-        def.setVisible(true);
-      } else {
-        let closestGroupId = undefined;
-        let closestDistance = Infinity;
-        for (let [groupId, groupAABB] of wmo.groupDefAABBs.entries()) {
-          if (this.modelFrustum.contains(groupAABB)) {
-            const dist = groupAABB.distanceVec3(this.modelCamera);
-            if (dist < closestDistance) {
-              closestDistance = dist;
-              closestGroupId = groupId;
-            }
-          }
-        }
-        if (closestGroupId !== undefined) {
-          def.setGroupVisible(closestGroupId, true);
-        }
+      for (let group of wmo.groups) {
+        frame.addWmoGroup(wmo, def, group.fileId, true);
       }
     }
 
@@ -567,12 +618,12 @@ export class WdtScene implements Viewer.SceneGfx {
       if (group.flags.exterior) {
         hasExternalGroup = true;
       }
-      def.setGroupVisible(groupId, true);
+      frame.addWmoGroup(wmo, def, groupId);
     }
 
     if (hasExternalGroup) {
       for (let groupId of exteriorGroupsInFrustum) {
-        def.setGroupVisible(groupId, true);
+        frame.addWmoGroup(wmo, def, groupId);
       }
     }
 
@@ -589,6 +640,8 @@ export class WdtScene implements Viewer.SceneGfx {
 
   private prepareToRender(): void {
     const renderInstManager = this.renderHelper.renderInstManager;
+
+    const frame = new FrameData();
 
     const template = this.renderHelper.pushTemplateRenderInst();
     template.setMegaStateFlags({ cullMode: GfxCullMode.Back });
@@ -607,48 +660,42 @@ export class WdtScene implements Viewer.SceneGfx {
     this.loadingAdtRenderer.prepareToRenderLoadingBox(renderInstManager, this.loadingAdts);
 
     if (this.shouldCull()) {
-      this.cull();
+      this.cull(frame);
     }
 
     template.setGfxProgram(this.terrainProgram);
     template.setBindingLayouts(TerrainProgram.bindingLayouts);
     for (let renderer of this.terrainRenderers.values()) {
-      renderer.prepareToRenderTerrain(renderInstManager);
+      renderer.prepareToRenderTerrain(renderInstManager, frame);
     }
 
     template.setGfxProgram(this.wmoProgram);
     template.setBindingLayouts(WmoProgram.bindingLayouts);
-    for (let [wmoId, renderer] of this.wmoRenderers.entries()) {
-      const defs = this.wmoIdToDefs.get(wmoId)!
-        .filter(wmoDef => wmoDef.visible);
-      renderer.update(this.mainView);
-      renderer.prepareToRenderWmo(renderInstManager, defs);
+    for (let renderer of this.wmoRenderers.values()) {
+      renderer.prepareToRenderWmo(renderInstManager, frame);
     }
 
     template.setGfxProgram(this.waterProgram);
     template.setBindingLayouts(WaterProgram.bindingLayouts);
-    for (let renderer of this.adtWaterRenderers.values()) {
+    for (let [adtFileId, renderer] of this.adtWaterRenderers.entries()) {
       renderer.update(this.mainView);
-      renderer.prepareToRenderAdtWater(renderInstManager);
+      renderer.prepareToRenderAdtWater(renderInstManager, frame, adtFileId);
     }
     for (let [wmoId, renderer] of this.wmoWaterRenderers.entries()) {
-      const defs = this.wmoIdToDefs.get(wmoId)!
-        .filter(wmoDef => wmoDef.visible);
       renderer.update(this.mainView);
-      renderer.prepareToRenderWmoWater(renderInstManager, defs);
+      renderer.prepareToRenderWmoWater(renderInstManager, frame, wmoId);
     }
 
-    const visibleDoodadUniqueIds = new Set();
     template.setBindingLayouts(ModelProgram.bindingLayouts);
     template.setGfxProgram(this.modelProgram);
     renderInstManager.setCurrentRenderInstList(this.renderInstListSky);
-    if (this.activeWmoSkybox !== null) {
-      const renderer = this.wmoSkyboxRenderers.get(this.activeWmoSkybox);
+    if (frame.activeWmoSkybox !== null) {
+      const renderer = this.wmoSkyboxRenderers.get(frame.activeWmoSkybox);
       if (!renderer) {
-        console.warn(`couldn't find WMO skybox renderer for ${this.activeWmoSkybox}`);
+        console.warn(`couldn't find WMO skybox renderer for ${frame.activeWmoSkybox}`);
       } else {
         renderer.update(this.mainView);
-        renderer.prepareToRenderSkybox(renderInstManager, 0, 1.0);
+        renderer.prepareToRenderSkybox(renderInstManager, 1.0);
       }
     } else {
       const skyboxes = lightingData.get_skyboxes();
@@ -660,7 +707,7 @@ export class WdtScene implements Viewer.SceneGfx {
           continue;
         }
         renderer.update(this.mainView);
-        renderer.prepareToRenderSkybox(renderInstManager, skybox.flags, skybox.weight);
+        renderer.prepareToRenderSkybox(renderInstManager, skybox.weight);
 
         skybox.free();
       }
@@ -669,7 +716,7 @@ export class WdtScene implements Viewer.SceneGfx {
 
     for (let [modelId, renderer] of this.modelRenderers.entries()) {
       let minDistance = Infinity;
-      const doodads = this.modelIdToDoodads.get(modelId)!
+      const doodads = frame.doodads.get(modelId)!
         .filter(doodad => doodad.visible)
         .filter(doodad => {
           const dist = this.mainView.cameraDistanceToWorldSpaceAABB(doodad.worldAABB);
@@ -677,16 +724,6 @@ export class WdtScene implements Viewer.SceneGfx {
             minDistance = dist;
           }
           return dist < this.mainView.cullingFarPlane;
-        })
-        .filter(doodad => {
-          if (doodad.uniqueId === undefined)
-            return true;
-
-          if (visibleDoodadUniqueIds.has(doodad.uniqueId)) {
-            return false;
-          }
-          visibleDoodadUniqueIds.add(doodad.uniqueId);
-          return true;
         })
       if (doodads.length === 0) continue;
 

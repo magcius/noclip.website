@@ -1908,13 +1908,6 @@ export class WmoDefinition {
 
   private scratchVec3 = vec3.create();
 
-  public setVisible(visible: boolean) {
-    this.visible = visible;
-    for (let groupId of this.groupIdToVisibility.keys()) {
-      this.setGroupVisible(groupId, visible);
-    }
-  }
-
   static fromAdtDefinition(def: WowAdtWmoDefinition, wmo: WmoData) {
     const scale = def.scale / 1024;
     const position = convertWowVec3(def.position);
@@ -2055,25 +2048,6 @@ export class WmoDefinition {
     this.worldAABB.transform(extents, adtSpaceFromPlacementSpace);
     this.visible = true;
   }
-
-  public isWmoGroupVisible(groupFileId: number): boolean {
-    return this.groupIdToVisibility.get(groupFileId)!;
-  }
-
-  public setGroupVisible(groupId: number, visible: boolean) {
-    this.groupIdToVisibility.set(groupId, visible);
-    if (this.groupIdToDoodadIndices.has(groupId)) {
-      for (let index of this.groupIdToDoodadIndices.get(groupId)) {
-        const doodad = this.doodadIndexToDoodad.get(index)!;
-        doodad.setVisible(visible);
-      }
-    }
-    if (this.groupIdToLiquidIndices.has(groupId)) {
-      for (let index of this.groupIdToLiquidIndices.get(groupId)) {
-        this.liquidVisibility[index] = visible;
-      }
-    }
-  }
 }
 
 export class AdtLodData {
@@ -2115,15 +2089,6 @@ export class AdtLodData {
       this.loadWMOs(cache, data, lodLevel),
     ]);
   }
-
-  public setVisible(visible: boolean) {
-    for (let def of this.wmoDefs) {
-      def.setVisible(false);
-    }
-    for (let doodad of this.doodads) {
-      doodad.setVisible(visible);
-    }
-  }
 }
 
 export class LiquidInstance {
@@ -2161,10 +2126,6 @@ export class LiquidInstance {
     };
   }
 
-  public setVisible(visible: boolean) {
-    this.visible = visible;
-  }
-
   public takeIndices(device: GfxDevice): GfxIndexBufferDescriptor {
     return {
       buffer: makeStaticDataBuffer(device, GfxBufferUsage.Index, this.indices!.buffer),
@@ -2196,26 +2157,10 @@ export class AdtData {
     this.inner = adt;
   }
 
-  public setVisible(visible: boolean) {
-    this.visible = visible;
-    this.lodData[this.lodLevel].setVisible(visible);
-    for (let chunk of this.chunkData) {
-      chunk.setVisible(visible);
-    }
-    for (let liquid of this.liquids) {
-      liquid.setVisible(visible);
-    }
-  }
-
   public setLodLevel(lodLevel: number) {
     assert(lodLevel === 0 || lodLevel === 1, "lodLevel must be 0 or 1");
     if (this.lodLevel === lodLevel) return;
     this.lodLevel = lodLevel;
-    const lodLevelToDisable = this.lodLevel === 0 ? 1 : 0;
-    this.lodData[lodLevelToDisable].setVisible(false);
-    for (let def of this.lodData[lodLevelToDisable].wmoDefs) {
-      def.setVisible(false);
-    }
   }
 
   private async loadTextures(cache: WowCache): Promise<unknown> {
@@ -2328,8 +2273,6 @@ export class AdtData {
         this.insideWmoCandidates.push(def);
       } else if (worldFrustum.contains(def.worldAABB)) {
         this.visibleWmoCandidates.push(def);
-      } else {
-        def.setVisible(false);
       }
     }
   }
@@ -2348,10 +2291,6 @@ export class ChunkData {
     this.indexCount = chunk.index_count;
     this.indexOffset = chunk.index_offset;
     chunk.free();
-  }
-
-  public setVisible(visible: boolean) {
-    this.visible = visible;
   }
 }
 
@@ -2378,10 +2317,6 @@ export class DoodadData {
     let doodad = new DoodadData(666, modelMatrix, null);
     doodad.isSkybox = true;
     return doodad;
-  }
-
-  public setVisible(visible: boolean) {
-    this.visible = visible;
   }
 
   static fromAdtDoodad(doodad: WowDoodad): DoodadData {

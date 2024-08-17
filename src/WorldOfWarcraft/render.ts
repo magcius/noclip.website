@@ -15,7 +15,7 @@ import { assert } from "../util.js";
 import { AdtData, BlpData, ChunkData, DoodadData, LiquidInstance, LiquidType, ModelData, ModelRenderPass, ParticleEmitter, SkinData, WmoBatchData, WmoData, WmoDefinition, WmoGroupData, getSkyboxDoodad } from "./data.js";
 import { loadingAdtIndices, loadingAdtVertices, skyboxIndices, skyboxVertices } from "./mesh.js";
 import { LoadingAdtProgram, MAX_BONE_TRANSFORMS, MAX_DOODAD_INSTANCES, ModelProgram, ParticleProgram, SkyboxProgram, TerrainProgram, WaterProgram, WmoProgram } from "./program.js";
-import { MAP_SIZE, MapArray, View, WdtScene } from "./scenes.js";
+import { FrameData, MAP_SIZE, MapArray, View, WdtScene } from "./scenes.js";
 import { TextureCache } from "./tex.js";
 import { invlerp, lerp } from "../MathHelpers.js";
 
@@ -238,7 +238,7 @@ export class ModelRenderer {
     }
   }
 
-  public prepareToRenderSkybox(renderInstManager: GfxRenderInstManager, flags: number, weight: number) {
+  public prepareToRenderSkybox(renderInstManager: GfxRenderInstManager, weight: number) {
     let doodad = getSkyboxDoodad();
     doodad.skyboxBlend = weight;
     this.prepareToRenderModel(renderInstManager, [doodad])
@@ -347,10 +347,8 @@ export class WmoRenderer {
     return mappings;
   }
 
-  public prepareToRenderWmo(renderInstManager: GfxRenderInstManager, defs: WmoDefinition[]) {
-    if (!this.visible) return;
-    for (let def of defs) {
-      if (!def.visible) continue;
+  public prepareToRenderWmo(renderInstManager: GfxRenderInstManager, frame: FrameData) {
+    for (let def of frame.wmoDefs.get(this.wmo.fileId)) {
       assert(def.wmoId === this.wmo.fileId, `WmoRenderer handed a WmoDefinition that doesn't belong to it (${def.wmoId} != ${this.wmo.fileId}`);
       const template = renderInstManager.pushTemplateRenderInst();
       let offs = template.allocateUniformBuffer(WmoProgram.ub_ModelParams, 2 * 16);
@@ -358,9 +356,10 @@ export class WmoRenderer {
       offs += fillMatrix4x4(mapped, offs, def.modelMatrix);
       offs += fillMatrix4x4(mapped, offs, def.normalMatrix);
 
+      const visibleGroups = frame.wmoDefGroups.get(def.uniqueId);
       for (let i=0; i<this.vertexBuffers.length; i++) {
         const group = this.groups[i];
-        if (!def.isWmoGroupVisible(group.fileId)) continue;
+        if (!visibleGroups.includes(group.fileId)) continue;
         const ambientColor = def.groupAmbientColors.get(group.fileId)!;
         const applyInteriorLight = group.flags.interior && !group.flags.exterior_lit;
         const applyExteriorLight = true;
@@ -486,18 +485,19 @@ export class TerrainRenderer {
     return mapping;
   }
 
-  public prepareToRenderTerrain(renderInstManager: GfxRenderInstManager) {
-    if (!this.adt.visible) return;
+  public prepareToRenderTerrain(renderInstManager: GfxRenderInstManager, frame: FrameData) {
+    const indices = frame.adtChunkIndices.get(this.adt.fileId);
+    if (indices.length === 0) return;
     const template = renderInstManager.pushTemplateRenderInst();
     template.setVertexInput(this.inputLayout, [this.vertexBuffer], this.indexBuffer);
-    this.adt.chunkData.forEach((chunk, i) => {
-      if (chunk.indexCount > 0 && chunk.visible) {
-        const renderInst = renderInstManager.newRenderInst();
-        renderInst.setSamplerBindingsFromTextureMappings(this.chunkTextureMappings[i]);
-        renderInst.setDrawCount(chunk.indexCount, chunk.indexOffset);
-        renderInstManager.submitRenderInst(renderInst);
-      }
-    })
+    for (let i of indices) {
+      const chunk = this.adt.chunkData[i];
+      if (chunk.indexCount === 0) continue;
+      const renderInst = renderInstManager.newRenderInst();
+      renderInst.setSamplerBindingsFromTextureMappings(this.chunkTextureMappings[i]);
+      renderInst.setDrawCount(chunk.indexCount, chunk.indexOffset);
+      renderInstManager.submitRenderInst(renderInst);
+    }
     renderInstManager.popTemplateRenderInst();
   }
 
@@ -622,27 +622,22 @@ export class WaterRenderer {
     this.time = view.time * this.timeScale;
   }
 
-  public prepareToRenderWmoWater(renderInstManager: GfxRenderInstManager, defs: WmoDefinition[]) {
-    for (let def of defs) {
-      this.prepareToRenderWaterInner(renderInstManager, def.modelMatrix, def.liquidVisibility);
+  public prepareToRenderWmoWater(renderInstManager: GfxRenderInstManager, frame: FrameData, wmoId: number) {
+    for (let def of frame.wmoDefs.get(wmoId)) {
+      const indices = frame.wmoLiquids.get(def.uniqueId);
+      this.prepareToRenderWaterInner(renderInstManager, def.modelMatrix, indices);
     }
   }
 
-  public prepareToRenderAdtWater(renderInstManager: GfxRenderInstManager) {
+  public prepareToRenderAdtWater(renderInstManager: GfxRenderInstManager, frame: FrameData, adtFileId: number) {
     mat4.identity(this.scratchMat4);
-    this.prepareToRenderWaterInner(renderInstManager, this.scratchMat4);
+    const indices = frame.adtLiquids.get(adtFileId);
+    this.prepareToRenderWaterInner(renderInstManager, this.scratchMat4, indices);
   }
 
-  private prepareToRenderWaterInner(renderInstManager: GfxRenderInstManager, modelMatrix: mat4, visibilityArray: boolean[] | undefined = undefined) {
-    if (visibilityArray) {
-      assert(visibilityArray.length === this.buffers.length, "visibilityArray must match buffers array");
-    }
-    for (let i in this.buffers) {
-      if (visibilityArray) {
-        if (!visibilityArray[i]) continue;
-      }
+  private prepareToRenderWaterInner(renderInstManager: GfxRenderInstManager, modelMatrix: mat4, indices: number[]) {
+    for (let i of indices) {
       const [indexBuffer, vertexBuffers, liquid, liquidType] = this.buffers[i];
-      if (!liquid.visible) continue;
       const renderInst = renderInstManager.newRenderInst();
 
       let offs = renderInst.allocateUniformBuffer(WaterProgram.ub_WaterParams, 16 + 4);
