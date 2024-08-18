@@ -1827,32 +1827,8 @@ export class PortalData {
     }
   }
 
-  public clone(): PortalData {
-    const clone = new PortalData();
-    for (let point of this.points) {
-      clone.points.push(vec3.clone(point));
-    }
-    clone.plane.copy(this.plane);
-    clone.vertexCount = this.vertexCount;
-    clone.vertexStart = this.vertexStart;
-    clone.aabb.copy(this.aabb);
-    return clone;
-  }
-
-  public transform(m: ReadonlyMat4) {
-    for (let point of this.points) {
-      vec3.transformMat4(point, point, m);
-    }
-    this.aabb.transform(this.aabb, m);
-    this.plane.transform(m);
-  }
-
   public inFrustum(frustum: Frustum): boolean {
     return frustum.contains(this.aabb);
-  }
-
-  public getPointsInFrustum(frustum: Frustum): vec3[] {
-    return this.points.filter(point => frustum.containsPoint(point));
   }
 
   public isPortalFacingUs(cameraPos: vec3, side: number) {
@@ -1898,12 +1874,10 @@ export class WmoDefinition {
   public worldAABB: AABB = new AABB();
 
   public visible = true;
-  public groupIdToVisibility: Map<number, boolean> = new Map();
   public groupIdToDoodadIndices: MapArray<number, number> = new MapArray();
   public groupAmbientColors: Map<number, vec4> = new Map();
   public groupIdToLiquidIndices: MapArray<number, number> = new MapArray();
   public liquidAABBs: AABB[] = [];
-  public liquidVisibility: boolean[] = [];
   public doodadIndexToGroupIds: MapArray<number, number> = new MapArray();
   public doodadIndexToDoodad: Map<number, DoodadData> = new Map();
 
@@ -1954,7 +1928,6 @@ export class WmoDefinition {
 
     for (let i=0; i<wmo.groups.length; i++) {
       const group = wmo.groups[i];
-      this.groupIdToVisibility.set(group.fileId, true);
 
       for (let i=group.liquidIndex; i<group.liquidIndex + group.numLiquids; i++) {
         this.groupIdToLiquidIndices.append(group.fileId, i);
@@ -1966,7 +1939,6 @@ export class WmoDefinition {
       const aabb = new AABB();
       aabb.transform(liquid.worldSpaceAABB, this.modelMatrix);
       this.liquidAABBs.push(aabb);
-      this.liquidVisibility.push(true);
     }
 
     // filter out doodads not present in the current doodadSet, and keep track
