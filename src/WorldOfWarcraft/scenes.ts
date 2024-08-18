@@ -65,6 +65,10 @@ export class View {
     public timeOffset = 1440;
     public secondsPerGameDay = 90;
     public fogEnabled = true;
+    public freezeTime = false;
+
+    constructor() {
+    }
 
     public finishSetup(): void {
       mat4.invert(this.worldFromViewMatrix, this.viewFromWorldMatrix);
@@ -118,7 +122,11 @@ export class View {
       mat4.mul(clipFromWorldMatrixCull, clipFromViewMatrixCull, this.viewFromWorldMatrix);
       this.cullingFrustum.updateClipFrustum(clipFromWorldMatrixCull, GfxClipSpaceNearZ.NegativeOne);
 
-      this.time = (viewerInput.time / this.secondsPerGameDay + this.timeOffset) % 2880;
+      if (this.freezeTime) {
+        this.time = 800;
+      } else {
+        this.time = (viewerInput.time / this.secondsPerGameDay + this.timeOffset) % 2880;
+      }
       this.dayNight = this.time / 2880.0;
       this.deltaTime = viewerInput.deltaTime;
       this.calculateSunDirection();
@@ -319,6 +327,7 @@ export class WdtScene implements Viewer.SceneGfx {
 
     this.setupSkyboxes();
     if (this.world.globalWmo) {
+      this.mainView.freezeTime = true;
       this.setupWmoDef(this.world.globalWmoDef!);
       this.setupWmo(this.world.globalWmo);
     } else {

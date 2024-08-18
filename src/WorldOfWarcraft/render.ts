@@ -518,7 +518,7 @@ export class LoadingAdtRenderer {
   private vertexBuffer: GfxVertexBufferDescriptor;
   private indexBuffer: GfxIndexBufferDescriptor;
   private scratchMat4 = mat4.create();
-  private time: number = 0;
+  private time: number = 0.0;
   public frequency = 0.1;
   public numIndices: number;
 
@@ -538,7 +538,7 @@ export class LoadingAdtRenderer {
   }
 
   public update(view: View) {
-    this.time = view.time;
+    this.time += view.deltaTime / 1000.0;
   }
 
   public prepareToRenderLoadingBox(renderInstManager: GfxRenderInstManager, loadingAdts: [number, number][]) {
@@ -572,9 +572,9 @@ export class WaterRenderer {
   public buffers: [GfxIndexBufferDescriptor, GfxVertexBufferDescriptor[], LiquidInstance, LiquidType][] = [];
   public liquidTexturesByType: MapArray<number, TextureMapping> = new MapArray();
   public megaStateFlags: Partial<GfxMegaStateDescriptor>;
-  public time: number = 0;
+  public deltaTime: number = 0;
   private scratchMat4 = mat4.identity(mat4.create());
-  public timeScale = 2.0;
+  public time = 0.0;
 
   constructor(device: GfxDevice, renderHelper: GfxRenderHelper, public liquids: LiquidInstance[], public liquidTypes: Map<number, LiquidType>, private textureCache: TextureCache) {
     const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
@@ -619,7 +619,7 @@ export class WaterRenderer {
   }
 
   public update(view: View) {
-    this.time = view.time * this.timeScale;
+    this.time += view.deltaTime / 50.0;
   }
 
   public prepareToRenderWmoWater(renderInstManager: GfxRenderInstManager, frame: FrameData, wmoId: number) {

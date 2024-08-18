@@ -1385,13 +1385,14 @@ export class WmoData {
       if (group.liquids) {
         group.liquidIndex = this.liquids.length;
 
-        for (let liquid of group.liquids) {
+        const liquids = group.liquids;
+        this.liquids.push(...liquids);
+        group.liquids = undefined;
+
+        for (let liquid of liquids) {
           liquid.liquidType = calculateWmoLiquidType(this.flags, group, liquid.liquidType);
           this.liquidTypes.set(liquid.liquidType, await cache.loadLiquidType(liquid.liquidType));
         }
-
-        this.liquids.push(...group.liquids);
-        group.liquids = undefined;
       }
 
       group.name = this.wmo.get_group_text(group.nameIndex);

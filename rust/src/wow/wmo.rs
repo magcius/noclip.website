@@ -1,5 +1,4 @@
 use deku::{prelude::*, ctx::ByteSize};
-use js_sys::{Float32Array, Uint16Array};
 use nalgebra_glm::vec3;
 use wasm_bindgen::prelude::*;
 
@@ -601,7 +600,7 @@ impl WmoLiquid {
                 vertex_prototypes.push([
                     pos_x, pos_y, pos_z,
                     x as f32, y as f32,
-                    1000.0, // default to deep, unsure if there's a better way
+                    0.0, // default to shallow
                 ]);
                 extents.update(pos_x, pos_y, pos_z);
             }
