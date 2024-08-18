@@ -1,5 +1,5 @@
 import { ReadonlyMat4, ReadonlyVec3, mat3, mat4, quat, vec2, vec3, vec4 } from "gl-matrix";
-import type { WowAABBox, WowAdt, WowAdtChunkDescriptor, WowAdtLiquidLayer, WowAdtWmoDefinition, WowBgra, WowBlp, WowDatabase, WowDoodad, WowDoodadDef, WowGlobalWmoDefinition, WowLightResult, WowLiquidResult, WowM2, WowM2AnimationManager, WowM2BlendingMode, WowM2BoneFlags, WowM2MaterialFlags, WowM2ParticleEmitter, WowM2ParticleShaderType, WowMapFileDataIDs, WowModelBatch, WowSkin, WowSkinSubmesh, WowSkyboxMetadata, WowVec3, WowWmo, WowWmoBspNode, WowWmoGroupFlags, WowWmoGroupInfo, WowWmoHeaderFlags, WowWmoLiquidResult, WowWmoMaterial, WowWmoMaterialBatch, WowWmoMaterialFlags, WowWmoMaterialPixelShader, WowWmoMaterialVertexShader, WowWmoPortal, WowWmoPortalRef } from "../../rust/pkg/index.js";
+import type { WowAABBox, WowAdt, WowAdtChunkDescriptor, WowAdtLiquidLayer, WowAdtWmoDefinition, WowBgra, WowBlp, WowBspTree, WowDatabase, WowDoodad, WowDoodadDef, WowGlobalWmoDefinition, WowLightResult, WowLiquidResult, WowM2, WowM2AnimationManager, WowM2BlendingMode, WowM2BoneFlags, WowM2MaterialFlags, WowM2ParticleEmitter, WowM2ParticleShaderType, WowMapFileDataIDs, WowModelBatch, WowSkin, WowSkinSubmesh, WowSkyboxMetadata, WowVec3, WowWmo, WowWmoBspNode, WowWmoGroupFlags, WowWmoGroupInfo, WowWmoHeaderFlags, WowWmoLiquidResult, WowWmoMaterial, WowWmoMaterialBatch, WowWmoMaterialFlags, WowWmoMaterialPixelShader, WowWmoMaterialVertexShader, WowWmoPortal, WowWmoPortalRef } from "../../rust/pkg/index.js";
 import { DataFetcher } from "../DataFetcher.js";
 import { AABB, Frustum, Plane } from "../Geometry.js";
 import { MathConstants, randomRange, saturate, setMatrixTranslation, transformVec3Mat4w0 } from "../MathHelpers.js";
@@ -575,6 +575,7 @@ export class ParticleEmitter {
   private msSinceLastUpdate = 0;
   private framesSinceLastUpdate = 0;
   public needsRedraw = true;
+  private pixelData: Float32Array;
 
   constructor(public index: number, public emitter: WowM2ParticleEmitter, private model: ModelData, public txac: number) {
     this.updateBuffer = new Float32Array(16);
@@ -611,6 +612,8 @@ export class ParticleEmitter {
     }
     this.fragShaderType = this.calculateShaderType();
     this.blendMode = emitter.get_blend_mode();
+    const bytesPerParticle = ParticleEmitter.TEXELS_PER_PARTICLE * 4;
+    this.pixelData = new Float32Array(ParticleEmitter.MAX_PARTICLES * bytesPerParticle);
   }
 
   private calculateParticleType(): number {
@@ -834,8 +837,6 @@ export class ParticleEmitter {
 
   public updateDataTex(device: GfxDevice): GfxTexture {
     this.ensureTexture(device);
-    const bytesPerParticle = ParticleEmitter.TEXELS_PER_PARTICLE * 4;
-    const pixels = new Float32Array(ParticleEmitter.MAX_PARTICLES * bytesPerParticle);
     const scratchVec3 = vec3.create();
     for (let i=0; i<this.particles.length; i++) {
       const particle = this.particles[i];
@@ -844,12 +845,12 @@ export class ParticleEmitter {
       if (this.emitter.translate_particle_with_bone()) {
         vec3.transformMat4(scratchVec3, scratchVec3, this.modelMatrix);
       }
-      offs += fillVec3v(pixels, offs, scratchVec3);
-      offs += fillVec4v(pixels, offs, particle.color);
-      offs += fillVec4(pixels, offs, particle.scale[0], particle.scale[1]);
-      offs += fillVec4(pixels, offs, particle.texCoordHead[0], particle.texCoordHead[1]);
+      offs += fillVec3v(this.pixelData, offs, scratchVec3);
+      offs += fillVec4v(this.pixelData, offs, particle.color);
+      offs += fillVec4(this.pixelData, offs, particle.scale[0], particle.scale[1]);
+      offs += fillVec4(this.pixelData, offs, particle.texCoordHead[0], particle.texCoordHead[1]);
     }
-    device.uploadTextureData(this.dataTexture!, 0, [pixels]);
+    device.uploadTextureData(this.dataTexture!, 0, [this.pixelData]);
     return this.dataTexture!;
   }
 }
@@ -1148,36 +1149,6 @@ export class BoneData {
   }
 }
 
-export class BspTree {
-  constructor(public nodes: WowWmoBspNode[]) {
-  }
-
-  public query(pos: ReadonlyVec3, nodes: WowWmoBspNode[], i = 0) {
-    if (i < 0 || this.nodes.length === 0) {
-      return undefined;
-    }
-    assert(i < this.nodes.length);
-    const node = this.nodes[i];
-    if (node.is_leaf()) {
-      nodes.push(node);
-      return;
-    }
-    const nodeDistance = node.plane_distance;
-    const axis = node.get_axis_type();
-    if (axis === rust.WowWmoBspAxisType.Z) {
-      this.query(pos, nodes, node.negative_child);
-      this.query(pos, nodes, node.positive_child);
-    } else {
-      const posComponent = pos[axis];
-      if (posComponent < nodeDistance) {
-        this.query(pos, nodes, node.negative_child);
-      } else {
-        this.query(pos, nodes, node.positive_child);
-      }
-    }
-  }
-}
-
 export class WmoGroupData {
   public innerBatches: WowWmoMaterialBatch[] = [];
   public flags: WowWmoGroupFlags;
@@ -1204,8 +1175,7 @@ export class WmoGroupData {
   public uvs: Uint8Array;
   public colors: Uint8Array;
   public portalRefs: WowWmoPortalRef[];
-  public bsp: BspTree;
-  public bspIndices: Uint16Array;
+  public bsp: WowBspTree;
 
   private static scratchAABB = new AABB();
   private static scratchVec4 = vec4.create();
@@ -1296,99 +1266,25 @@ export class WmoGroupData {
     });
   }
 
+  public bspContainsPoint(modelSpacePoint: vec3): boolean {
+    return this.bsp.contains_point(modelSpacePoint[0], modelSpacePoint[1], modelSpacePoint[2]);
+  }
+
   public getIndexBuffer(device: GfxDevice): GfxIndexBufferDescriptor {
     return { byteOffset: 0, buffer: makeStaticDataBuffer(device, GfxBufferUsage.Index, this.indices.buffer) }
   }
 
-  private getClosestIntersectedTriangleNegZ(barycentricOut: vec3, p: ReadonlyVec3): number {
-    const bspNodes: WowWmoBspNode[] = [];
-    let minDist = Infinity;
-    let minFaceIdx = -1;
-    // XXX(jstpierre): Select the closest BSP node? Why do we have more than one returned here?
-    this.bsp.query(p, bspNodes);
-    if (bspNodes.length !== 0) {
-      for (let nodeIndex=0; nodeIndex<bspNodes.length; nodeIndex++) {
-        const node = bspNodes[nodeIndex];
-        const faces_start = node.faces_start, num_faces = node.num_faces;
-        for (let i = faces_start; i < faces_start + num_faces; i++) {
-          const faceIdx = this.bspIndices[i];
-          const idx0 = this.indices[3 * faceIdx + 0], idx1 = this.indices[3 * faceIdx + 1], idx2 = this.indices[3 * faceIdx + 2];
-          const vertex0 = vec3.set(WmoGroupData.scratchVec3c,
-              this.vertices[3 * idx0 + 0],
-              this.vertices[3 * idx0 + 1],
-              this.vertices[3 * idx0 + 2],
-          );
-          const vertex1 = vec3.set(WmoGroupData.scratchVec3d,
-              this.vertices[3 * idx1 + 0],
-              this.vertices[3 * idx1 + 1],
-              this.vertices[3 * idx1 + 2],
-          );
-          const vertex2 = vec3.set(WmoGroupData.scratchVec3e,
-              this.vertices[3 * idx2 + 0],
-              this.vertices[3 * idx2 + 1],
-              this.vertices[3 * idx2 + 2],
-          );
-
-          // check that the ray will intersect in the xy plane
-          const minX = Math.min(vertex0[0], vertex1[0], vertex2[0]), maxX = Math.max(vertex0[0], vertex1[0], vertex2[0]);
-          if (p[0] < minX || p[0] > maxX)
-            continue;
-          const minY = Math.min(vertex0[1], vertex1[1], vertex2[1]), maxY = Math.max(vertex0[1], vertex1[1], vertex2[1]);
-          if (p[1] < minY || p[1] > maxY)
-            continue;
-
-          // check that the ray is above on z
-          const minZ = Math.min(vertex0[2], vertex1[2], vertex2[2]);
-          if (p[2] < minZ)
-            continue; // ray starts below triangle
-
-          const ab = WmoGroupData.scratchVec3f;
-          const ac = WmoGroupData.scratchVec3g;
-          const n = WmoGroupData.scratchVec3h;
-          const temp = WmoGroupData.scratchVec3i;
-
-          // inlined rayTriangleIntersect, assuming that axis = negative z
-          vec3.sub(ab, vertex1, vertex0);
-          vec3.sub(ac, vertex2, vertex0);
-          vec3.cross(n, ab, ac);
-
-          if (n[2] < 0.0001)
-            continue; // backfacing triangle
-
-          vec3.sub(temp, p, vertex0);
-          const t = vec3.dot(temp, n) / n[2];
-          if (t <= 0.0 || t >= minDist)
-            continue;
-
-          // inlined cross assuming dir = negative z
-          const ex = -temp[1], ey = temp[0];
-          const v = (ac[0]*ex + ac[1]*ey) / n[2];
-          if (v < 0.0 || v > 1.0)
-            continue;
-
-          const w = (ab[0]*ex + ab[1]*ey) / -n[2];
-          if (w < 0.0 || v + w > 1.0)
-            continue;
-
-          minDist = t;
-          minFaceIdx = faceIdx;
-          vec3.set(barycentricOut, v, w, 1.0 - v - w);
-        }
-      }
-    }
-    return minFaceIdx;
-  }
-
   public getVertexColorForModelSpacePoint(p: vec3): vec4 | undefined {
     // project a line downwards for an intersection test
-    const w = WmoGroupData.scratchVec3b;
-    const faceIdx = this.getClosestIntersectedTriangleNegZ(w, p);
-    if (faceIdx >= 0) {
-      const idx0 = this.indices[3 * faceIdx + 0], idx1 = this.indices[3 * faceIdx + 1], idx2 = this.indices[3 * faceIdx + 2];
-      const r = (this.colors[4*idx0+0]*w[0] + this.colors[4*idx1+0]*w[1] + this.colors[4*idx2+0]*w[2]) / 255.0;
-      const g = (this.colors[4*idx0+1]*w[0] + this.colors[4*idx1+1]*w[1] + this.colors[4*idx2+1]*w[2]) / 255.0;
-      const b = (this.colors[4*idx0+2]*w[0] + this.colors[4*idx1+2]*w[1] + this.colors[4*idx2+2]*w[2]) / 255.0;
-      const a = (this.colors[4*idx0+3]*w[0] + this.colors[4*idx1+3]*w[1] + this.colors[4*idx2+3]*w[2]) / 255.0;
+    const bspResult = this.bsp.pick_closest_tri_neg_z(p[0], p[1], p[2]);
+    if (bspResult) {
+      const [idx0, idx1, idx2] = [bspResult.vert_index_0, bspResult.vert_index_1, bspResult.vert_index_2];
+      const [x, y, z] = [bspResult.bary_x, bspResult.bary_y, bspResult.bary_z];
+      const r = (this.colors[4*idx0+0]*x + this.colors[4*idx1+0]*y + this.colors[4*idx2+0]*z) / 255.0;
+      const g = (this.colors[4*idx0+1]*x + this.colors[4*idx1+1]*y + this.colors[4*idx2+1]*z) / 255.0;
+      const b = (this.colors[4*idx0+2]*x + this.colors[4*idx1+2]*y + this.colors[4*idx2+2]*z) / 255.0;
+      const a = (this.colors[4*idx0+3]*x + this.colors[4*idx1+3]*y + this.colors[4*idx2+3]*z) / 255.0;
+      bspResult.free();
       return vec4.set(WmoGroupData.scratchVec4, r, g, b, a);
     }
     return undefined;
@@ -1410,8 +1306,7 @@ export class WmoGroupData {
     this.portalStart = group.header.portal_start;
     this.portalCount = group.header.portal_count;
     this.uvs = group.take_uvs();
-    this.bsp = new BspTree(group.take_bsp_nodes())
-    this.bspIndices = group.take_bsp_indices();
+    this.bsp = group.take_bsp_tree();
     this.indices = group.take_indices();
     this.flags = rust.WowWmoGroupFlags.new(group.header.flags);
     if (this.flags.antiportal) {
@@ -1430,45 +1325,6 @@ export class WmoGroupData {
     }
     group.free();
   }
-
-  public bspContainsModelSpacePoint(pos: vec3): boolean {
-    let nodes: WowWmoBspNode[] = [];
-    this.bsp.query(pos, nodes);
-    if (nodes.length === 0) {
-      return false;
-    }
-    const aabb = WmoGroupData.scratchAABB;
-    aabb.reset();
-    for (let node of nodes) {
-      for (let i = node.faces_start; i < node.faces_start + node.num_faces; i++) {
-        const index0 = this.indices[3 * this.bspIndices[i] + 0];
-        const vertex0 = vec3.set(WmoGroupData.scratchVec3a,
-          this.vertices[3 * index0 + 0],
-          this.vertices[3 * index0 + 1],
-          this.vertices[3 * index0 + 2],
-        );
-        aabb.unionPoint(vertex0);
-        const index1 = this.indices[3 * this.bspIndices[i] + 1];
-        const vertex1 = vec3.set(WmoGroupData.scratchVec3b,
-          this.vertices[3 * index1 + 0],
-          this.vertices[3 * index1 + 1],
-          this.vertices[3 * index1 + 2],
-        );
-        aabb.unionPoint(vertex1);
-        const index2 = this.indices[3 * this.bspIndices[i] + 2];
-        const vertex2 = vec3.set(WmoGroupData.scratchVec3c,
-          this.vertices[3 * index2 + 0],
-          this.vertices[3 * index2 + 1],
-          this.vertices[3 * index2 + 2],
-        );
-        aabb.unionPoint(vertex2);
-      }
-    }
-    // add a bit of headroom to AABBs, since WoW's AABBs are mostly built for
-    // ground-based transit
-    aabb.maxZ += 50;
-    return aabb.containsPoint(pos);
-  }
 }
 
 export class WmoData {
@@ -1482,7 +1338,6 @@ export class WmoData {
   public portalRefs: WowWmoPortalRef[] = [];
   public portalVertices: Float32Array;
   public blps: Map<number, BlpData> = new Map();
-  public groupBsps: Map<number, BspTree> = new Map();
   public materials: WowWmoMaterial[] = [];
   public models: Map<number, ModelData> = new Map();
   public modelIds: Uint32Array;
@@ -1530,18 +1385,18 @@ export class WmoData {
       if (group.liquids) {
         group.liquidIndex = this.liquids.length;
 
-        for (let liquid of group.liquids) {
+        const liquids = group.liquids;
+        this.liquids.push(...liquids);
+        group.liquids = undefined;
+
+        for (let liquid of liquids) {
           liquid.liquidType = calculateWmoLiquidType(this.flags, group, liquid.liquidType);
           this.liquidTypes.set(liquid.liquidType, await cache.loadLiquidType(liquid.liquidType));
         }
-
-        this.liquids.push(...group.liquids);
-        group.liquids = undefined;
       }
 
       group.name = this.wmo.get_group_text(group.nameIndex);
       group.description = this.wmo.get_group_text(group.descriptionIndex);
-      this.groupBsps.set(group.fileId, group.bsp);
       this.groupIdToIndex.set(group.fileId, i);
       this.groups[i] = group;
 
@@ -2054,13 +1909,6 @@ export class WmoDefinition {
 
   private scratchVec3 = vec3.create();
 
-  public setVisible(visible: boolean) {
-    this.visible = visible;
-    for (let groupId of this.groupIdToVisibility.keys()) {
-      this.setGroupVisible(groupId, visible);
-    }
-  }
-
   static fromAdtDefinition(def: WowAdtWmoDefinition, wmo: WmoData) {
     const scale = def.scale / 1024;
     const position = convertWowVec3(def.position);
@@ -2201,25 +2049,6 @@ export class WmoDefinition {
     this.worldAABB.transform(extents, adtSpaceFromPlacementSpace);
     this.visible = true;
   }
-
-  public isWmoGroupVisible(groupFileId: number): boolean {
-    return this.groupIdToVisibility.get(groupFileId)!;
-  }
-
-  public setGroupVisible(groupId: number, visible: boolean) {
-    this.groupIdToVisibility.set(groupId, visible);
-    if (this.groupIdToDoodadIndices.has(groupId)) {
-      for (let index of this.groupIdToDoodadIndices.get(groupId)) {
-        const doodad = this.doodadIndexToDoodad.get(index)!;
-        doodad.setVisible(visible);
-      }
-    }
-    if (this.groupIdToLiquidIndices.has(groupId)) {
-      for (let index of this.groupIdToLiquidIndices.get(groupId)) {
-        this.liquidVisibility[index] = visible;
-      }
-    }
-  }
 }
 
 export class AdtLodData {
@@ -2261,15 +2090,6 @@ export class AdtLodData {
       this.loadWMOs(cache, data, lodLevel),
     ]);
   }
-
-  public setVisible(visible: boolean) {
-    for (let def of this.wmoDefs) {
-      def.setVisible(false);
-    }
-    for (let doodad of this.doodads) {
-      doodad.setVisible(visible);
-    }
-  }
 }
 
 export class LiquidInstance {
@@ -2307,10 +2127,6 @@ export class LiquidInstance {
     };
   }
 
-  public setVisible(visible: boolean) {
-    this.visible = visible;
-  }
-
   public takeIndices(device: GfxDevice): GfxIndexBufferDescriptor {
     return {
       buffer: makeStaticDataBuffer(device, GfxBufferUsage.Index, this.indices!.buffer),
@@ -2342,26 +2158,10 @@ export class AdtData {
     this.inner = adt;
   }
 
-  public setVisible(visible: boolean) {
-    this.visible = visible;
-    this.lodData[this.lodLevel].setVisible(visible);
-    for (let chunk of this.chunkData) {
-      chunk.setVisible(visible);
-    }
-    for (let liquid of this.liquids) {
-      liquid.setVisible(visible);
-    }
-  }
-
   public setLodLevel(lodLevel: number) {
     assert(lodLevel === 0 || lodLevel === 1, "lodLevel must be 0 or 1");
     if (this.lodLevel === lodLevel) return;
     this.lodLevel = lodLevel;
-    const lodLevelToDisable = this.lodLevel === 0 ? 1 : 0;
-    this.lodData[lodLevelToDisable].setVisible(false);
-    for (let def of this.lodData[lodLevelToDisable].wmoDefs) {
-      def.setVisible(false);
-    }
   }
 
   private async loadTextures(cache: WowCache): Promise<unknown> {
@@ -2474,8 +2274,6 @@ export class AdtData {
         this.insideWmoCandidates.push(def);
       } else if (worldFrustum.contains(def.worldAABB)) {
         this.visibleWmoCandidates.push(def);
-      } else {
-        def.setVisible(false);
       }
     }
   }
@@ -2494,10 +2292,6 @@ export class ChunkData {
     this.indexCount = chunk.index_count;
     this.indexOffset = chunk.index_offset;
     chunk.free();
-  }
-
-  public setVisible(visible: boolean) {
-    this.visible = visible;
   }
 }
 
@@ -2524,10 +2318,6 @@ export class DoodadData {
     let doodad = new DoodadData(666, modelMatrix, null);
     doodad.isSkybox = true;
     return doodad;
-  }
-
-  public setVisible(visible: boolean) {
-    this.visible = visible;
   }
 
   static fromAdtDoodad(doodad: WowDoodad): DoodadData {
