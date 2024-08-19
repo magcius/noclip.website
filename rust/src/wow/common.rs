@@ -2,6 +2,8 @@ use deku::{bitvec::{BitSlice, BitVec}, ctx::ByteSize, prelude::*};
 use wasm_bindgen::prelude::*;
 use std::ops::{Mul, AddAssign};
 
+use crate::geometry::AABB;
+
 #[derive(DekuRead, Debug, Clone, Copy)]
 pub struct Fixedi16 {
     pub inner: i16,
@@ -177,6 +179,12 @@ impl Vec3 {
     }
 }
 
+impl From<Vec3> for nalgebra_glm::Vec3 {
+    fn from(value: Vec3) -> Self {
+        nalgebra_glm::vec3(value.x, value.y, value.z)
+    }
+}
+
 #[wasm_bindgen(js_name = "WowVec4")]
 #[derive(DekuRead, Debug, Clone, Copy)]
 pub struct Vec4 {
@@ -235,6 +243,15 @@ pub struct Plane {
     pub distance: f32,
 }
 
+impl From<&Plane> for crate::geometry::Plane {
+    fn from(value: &Plane) -> Self {
+        crate::geometry::Plane {
+            d: value.distance,
+            normal: value.normal.into(),
+        }
+    }
+}
+
 // Axis-aligned bounding box
 #[wasm_bindgen(js_name = "WowAABBox")]
 #[derive(DekuRead, Debug, Clone, Copy)]
@@ -249,6 +266,12 @@ impl Default for AABBox {
             min: Vec3 { x: f32::INFINITY, y: f32::INFINITY, z: f32::INFINITY },
             max: Vec3 { x: f32::NEG_INFINITY, y: f32::NEG_INFINITY, z: f32::NEG_INFINITY },
         }
+    }
+}
+
+impl From<AABBox> for AABB {
+    fn from(value: AABBox) -> Self {
+        AABB { min: value.min.into(), max: value.max.into() }
     }
 }
 

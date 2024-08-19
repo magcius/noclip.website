@@ -2,6 +2,7 @@
 import { vec3, ReadonlyVec3, ReadonlyMat4, vec4, ReadonlyVec4, mat4 } from "gl-matrix";
 import { GfxClipSpaceNearZ } from "./gfx/platform/GfxPlatform.js";
 import { assert, nArray } from "./util.js";
+import { ConvexHull } from "../rust/pkg/index.js";
 
 const scratchVec4 = vec4.create();
 const scratchMatrix = mat4.create();
@@ -423,6 +424,13 @@ export class Frustum {
         for (let i = 0; i < this.planes.length; i++) {
             this.planes[i].copy(src.planes[i]);
             this.planes[i].transform(m);
+        }
+    }
+
+    public copyToRust(dst: ConvexHull) {
+        dst.clear();
+        for (let plane of this.planes) {
+            dst.copy_js_plane(plane.n as Float32Array, plane.d);
         }
     }
 }

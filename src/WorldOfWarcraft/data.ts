@@ -1,5 +1,5 @@
 import { ReadonlyMat4, ReadonlyVec3, mat3, mat4, quat, vec2, vec3, vec4 } from "gl-matrix";
-import type { WowAABBox, WowAdt, WowAdtChunkDescriptor, WowAdtLiquidLayer, WowAdtWmoDefinition, WowBgra, WowBlp, WowBspTree, WowDatabase, WowDoodad, WowDoodadDef, WowGlobalWmoDefinition, WowLightResult, WowLiquidResult, WowM2, WowM2AnimationManager, WowM2BlendingMode, WowM2BoneFlags, WowM2MaterialFlags, WowM2ParticleEmitter, WowM2ParticleShaderType, WowMapFileDataIDs, WowModelBatch, WowSkin, WowSkinSubmesh, WowSkyboxMetadata, WowVec3, WowWmo, WowWmoBspNode, WowWmoGroupFlags, WowWmoGroupInfo, WowWmoHeaderFlags, WowWmoLiquidResult, WowWmoMaterial, WowWmoMaterialBatch, WowWmoMaterialFlags, WowWmoMaterialPixelShader, WowWmoMaterialVertexShader, WowWmoPortal, WowWmoPortalRef } from "../../rust/pkg/index.js";
+import type { WowAABBox, WowAdt, WowAdtChunkDescriptor, WowAdtLiquidLayer, WowAdtWmoDefinition, WowBgra, WowBlp, WowBspTree, WowDatabase, WowDoodad, WowDoodadDef, WowGlobalWmoDefinition, WowLightResult, WowLiquidResult, WowM2, WowM2AnimationManager, WowM2BlendingMode, WowM2BoneFlags, WowM2MaterialFlags, WowM2ParticleEmitter, WowM2ParticleShaderType, WowMapFileDataIDs, WowModelBatch, WowSkin, WowSkinSubmesh, WowSkyboxMetadata, WowVec3, WowWmo, WowWmoBspNode, WowWmoGroup, WowWmoGroupFlags, WowWmoGroupInfo, WowWmoHeaderFlags, WowWmoLiquidResult, WowWmoMaterial, WowWmoMaterialBatch, WowWmoMaterialFlags, WowWmoMaterialPixelShader, WowWmoMaterialVertexShader, WowWmoPortal, WowWmoPortalRef } from "../../rust/pkg/index.js";
 import { DataFetcher } from "../DataFetcher.js";
 import { AABB, Frustum, Plane } from "../Geometry.js";
 import { MathConstants, randomRange, saturate, setMatrixTranslation, transformVec3Mat4w0 } from "../MathHelpers.js";
@@ -1150,6 +1150,7 @@ export class BoneData {
 }
 
 export class WmoGroupData {
+  public group: WowWmoGroup;
   public innerBatches: WowWmoMaterialBatch[] = [];
   public flags: WowWmoGroupFlags;
   public name: string | undefined;
@@ -1267,7 +1268,7 @@ export class WmoGroupData {
   }
 
   public bspContainsPoint(modelSpacePoint: vec3): boolean {
-    return this.bsp.contains_point(modelSpacePoint[0], modelSpacePoint[1], modelSpacePoint[2]);
+    return this.bsp.contains_point_js(modelSpacePoint[0], modelSpacePoint[1], modelSpacePoint[2]);
   }
 
   public getIndexBuffer(device: GfxDevice): GfxIndexBufferDescriptor {
@@ -1276,7 +1277,7 @@ export class WmoGroupData {
 
   public getVertexColorForModelSpacePoint(p: vec3): vec4 | undefined {
     // project a line downwards for an intersection test
-    const bspResult = this.bsp.pick_closest_tri_neg_z(p[0], p[1], p[2]);
+    const bspResult = this.bsp.pick_closest_tri_neg_z_js(p[0], p[1], p[2]);
     if (bspResult) {
       const [idx0, idx1, idx2] = [bspResult.vert_index_0, bspResult.vert_index_1, bspResult.vert_index_2];
       const [x, y, z] = [bspResult.bary_x, bspResult.bary_y, bspResult.bary_z];
@@ -1323,7 +1324,7 @@ export class WmoGroupData {
         this.liquids.push(LiquidInstance.fromWmoLiquid(liquid));
       }
     }
-    group.free();
+    this.group = group;
   }
 }
 

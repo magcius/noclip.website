@@ -1,10 +1,12 @@
+use core::f32;
+
 use deku::{prelude::*, ctx::ByteSize};
-use nalgebra_glm::vec3;
+use nalgebra_glm::{make_vec3, vec2, vec3, Vec2, Vec3};
 use wasm_bindgen::prelude::*;
 
-use crate::wow::common::{parse, parse_array, ChunkedData};
+use crate::{geometry::{ConvexHull, Plane, AABB}, wow::common::{parse, parse_array, ChunkedData}};
 
-use super::{adt::UNIT_SIZE, common::{AABBox, Bgra, Plane, Quat, Rgba, Vec3}};
+use super::{adt::UNIT_SIZE, common::{AABBox, Bgra, Plane as WowPlane, Quat, Rgba, Vec3 as WowVec3}};
 
 #[wasm_bindgen(js_name = "WowWmoHeader")]
 #[derive(DekuRead, Debug, Copy, Clone)]
@@ -68,9 +70,9 @@ pub struct Wmo {
     group_text: Vec<String>,
     doodad_sets: Vec<DoodadSet>,
     global_ambient_volumes: Vec<AmbientVolume>,
-    portals: Option<Vec<Portal>>,
-    portal_refs: Option<Vec<PortalRef>>,
-    portal_vertices: Option<Vec<f32>>,
+    portals: Vec<Portal>,
+    portal_refs: Vec<PortalRef>,
+    portal_vertices: Vec<f32>,
     ambient_volumes: Vec<AmbientVolume>,
 }
 
@@ -91,10 +93,10 @@ impl Wmo {
         let mut gfid: Option<Vec<u32>> = None;
         let mut mavg: Vec<AmbientVolume> = Vec::new();
         let mut mavd: Vec<AmbientVolume> = Vec::new();
-        let mut portals: Option<Vec<Portal>> = None;
-        let mut portal_refs: Option<Vec<PortalRef>> = None;
+        let mut maybe_portals: Option<Vec<Portal>> = None;
+        let mut maybe_portal_refs: Option<Vec<PortalRef>> = None;
         let mut group_text = Vec::new();
-        let mut portal_vertices: Option<Vec<f32>> = None;
+        let mut maybe_portal_vertices: Option<Vec<f32>> = None;
         let mut skybox_name: Option<String> = None;
         let mut mods: Vec<DoodadSet> = Vec::new();
         let mut mosi: Option<Mosi> = None;
@@ -104,15 +106,15 @@ impl Wmo {
                 b"IGOM" => mogi = Some(parse_array(chunk_data, 0x20)?),
                 b"DDOM" => modd = Some(parse_array(chunk_data, 40)?),
                 b"GOFM" => mfog = Some(parse_array(chunk_data, 48)?),
-                b"VPOM" => portal_vertices = Some(parse_array(chunk_data, 4)?),
+                b"VPOM" => maybe_portal_vertices = Some(parse_array(chunk_data, 4)?),
                 b"NGOM" => {
                     for s in chunk_data.split(|n| *n == 0) {
                         group_text.push(String::from_utf8_lossy(s)
                             .to_string());
                     }
                 },
-                b"TPOM" => portals = Some(parse_array(chunk_data, 20)?),
-                b"RPOM" => portal_refs = Some(parse_array(chunk_data, 8)?),
+                b"TPOM" => maybe_portals = Some(parse_array(chunk_data, 20)?),
+                b"RPOM" => maybe_portal_refs = Some(parse_array(chunk_data, 8)?),
                 b"IDOM" => modi = Some(parse_array(chunk_data, 4)?),
                 b"DIFG" => {
                     let ids: Vec<u32> = parse_array(chunk_data, 4)?;
@@ -142,25 +144,69 @@ impl Wmo {
             skybox_file_id: mosi.map(|m| m.skybox_file_id),
             skybox_name,
             doodad_sets: mods,
-            portal_refs,
-            portal_vertices,
-            portals,
+            portal_refs: maybe_portal_refs.expect("WMO didn't have portal refs"),
+            portal_vertices: maybe_portal_vertices.expect("WMO didn't have portal refs"),
+            portals: maybe_portals.expect("WMO didn't have portals"),
             group_text,
             global_ambient_volumes: mavg,
             ambient_volumes: mavd,
         })
     }
 
+    pub fn group_contains_modelspace_point(&self, group: &WmoGroup, point_slice: &[f32]) -> bool {
+        let p = make_vec3(point_slice);
+        let aabb: AABB = group.header.bounding_box.into();
+        aabb.contains_point(&p) && (group.bsp_tree.contains_point(&p) || self.modelspace_point_above_group_portals(group, &p))
+    }
+
+    fn modelspace_point_above_group_portals(&self, group: &WmoGroup, p: &Vec3) -> bool {
+        let refs_start = group.header.portal_start as usize;
+        let refs_end = refs_start + group.header.portal_count as usize;
+        let neg_z = vec3(0.0, 0.0, -1.0);
+        for i in refs_start..refs_end {
+            let portal_ref = &self.portal_refs[i];
+            let portal = &self.portals[portal_ref.portal_index as usize];
+            let plane: Plane = (&portal.plane).into();
+            if plane.normal.z.abs() < 0.001 {
+                continue;
+            }
+            web_sys::console::log_1(&format!("p {:?}, normal {:?}, d {}", &p, &plane.normal, plane.d).into());
+            let test_point = plane.intersect_line(p, &neg_z);
+            let verts_start = 3 * portal.start_vertex as usize;
+            let verts_end = verts_start + 3 * portal.count as usize;
+            let verts = &self.portal_vertices[verts_start..verts_end];
+
+            let mut max_axis = f32::NEG_INFINITY;
+            let mut axis = 3;
+            for i in 0..3 {
+                if plane.normal[i].abs() > max_axis {
+                    max_axis = plane.normal[i].abs();
+                    axis = i;
+                }
+            }
+            assert!(axis != 3);
+            if point_inside_polygon(&test_point, verts, axis as u8) {
+                return true;
+            }
+        }
+        false
+    }
+
+    pub fn group_in_modelspace_frustum(&self, group: &WmoGroup, frustum: &ConvexHull) -> bool {
+        let aabb: AABB = group.header.bounding_box.into();
+        frustum.contains(&aabb)
+    }
+
     pub fn take_portals(&mut self) -> Vec<Portal>{
-        self.portals.take().expect("portals already taken")
+        self.portals.clone()
     }
 
     pub fn take_portal_refs(&mut self) -> Vec<PortalRef>{
-        self.portal_refs.take().expect("portals already taken")
+        self.portal_refs.clone()
     }
 
     pub fn take_portal_vertices(&mut self) -> Vec<f32>{
-        self.portal_vertices.take().expect("portals already taken")
+        self.portal_vertices.clone()
     }
 
     pub fn get_group_text(&self, index: usize) -> Option<String> {
@@ -198,12 +244,51 @@ impl Wmo {
     }
 }
 
+fn print(s: &str) {
+    web_sys::console::log_1(&s.into());
+}
+
+fn point_inside_polygon(point: &Vec3, verts: &[f32], axis_to_flatten: u8) -> bool {
+    let test_axis = match axis_to_flatten {
+        0 => [1, 2],
+        1 => [2, 0],
+        _ => [0, 1],
+    };
+    let test_point = vec2(point[test_axis[0]], point[test_axis[1]]);
+    let mut a = Vec2::default();
+    let mut b = Vec2::default();
+    let mut sign = None;
+    let num_verts = verts.len() / 3;
+    for i in 0..num_verts {
+        let a_slice = &verts[i * 3..(i + 1) * 3];
+        let b_slice = if i == num_verts - 1 {
+            &verts[0..3]
+        } else {
+            &verts[(i + 1) * 3..(i + 2) * 3]
+        };
+        a[0] = a_slice[test_axis[0]];
+        a[1] = a_slice[test_axis[1]];
+        b[0] = b_slice[test_axis[0]];
+        b[1] = b_slice[test_axis[1]];
+        let x = (b - a).perp(&(test_point - a));
+        match sign {
+            Some(is_positive) => {
+                if is_positive != x.is_sign_positive() {
+                    return false;
+                }
+            },
+            None => sign = Some(x.is_sign_positive()),
+        }
+    }
+    true
+}
+
 #[wasm_bindgen(js_name = "WowWmoPortal", getter_with_clone)]
 #[derive(DekuRead, Debug, Clone)]
 pub struct Portal {
     pub start_vertex: u16,
     pub count: u16,
-    pub plane: Plane,
+    pub plane: WowPlane,
 }
 
 #[wasm_bindgen(js_name = "WowWmoPortalRef")]
@@ -230,7 +315,7 @@ pub struct WmoGroup {
     uvs: Option<Vec<u8>>,
     colors: Option<Vec<u8>>,
     doodad_refs: Option<Vec<u16>>,
-    bsp_tree: Option<BspTree>,
+    bsp_tree: BspTree,
     pub num_vertices: usize,
     pub num_uv_bufs: usize,
     pub num_color_bufs: usize,
@@ -319,7 +404,7 @@ impl WmoGroup {
             first_color_buf_len,
             uvs: Some(uvs),
             num_uv_bufs,
-            bsp_tree: Some(bsp_tree),
+            bsp_tree: bsp_tree,
             colors: Some(colors),
             num_color_bufs,
             batches: batches.unwrap_or_default(),
@@ -328,7 +413,7 @@ impl WmoGroup {
     }
 
     pub fn take_bsp_tree(&mut self) -> BspTree {
-        self.bsp_tree.take().expect("WmoGroup BSP tree already taken")
+        self.bsp_tree.clone()
     }
 
     pub fn take_vertices(&mut self) -> Vec<f32> {
@@ -384,87 +469,91 @@ pub struct BspTreeResult {
     pub vert_index_2: usize,
 }
 
-#[wasm_bindgen(js_class = "WowBspTree")]
-impl BspTree {
-    pub fn contains_point(&self, x: f32, y: f32, z: f32) -> bool {
-        self.pick_closest_tri_neg_z(x, y, z).is_some()
+fn neg_z_line_intersection(p: &nalgebra_glm::Vec3, tri: (nalgebra_glm::Vec3, nalgebra_glm::Vec3, nalgebra_glm::Vec3)) -> Option<(f32, nalgebra_glm::Vec3)> {
+    let (vertex0, vertex1, vertex2) = tri;
+
+    // check that the ray will intersect in the xy plane
+    let min_x = vertex0[0].min(vertex1[0]).min(vertex2[0]);
+    let max_x = vertex0[0].max(vertex1[0]).max(vertex2[0]);
+    if p.x < min_x || p.x > max_x {
+        return None;
     }
 
-    pub fn pick_closest_tri_neg_z(&self, x: f32, y: f32, z: f32) -> Option<BspTreeResult> {
+    let min_y = vertex0[1].min(vertex1[1]).min(vertex2[1]);
+    let max_y = vertex0[1].max(vertex1[1]).max(vertex2[1]);
+    if p.y < min_y || p.y > max_y {
+        return None;
+    }
+
+    // check that the ray is above on z
+    let min_z = vertex0[2].min(vertex1[2]).min(vertex2[2]);
+    if p.z < min_z {
+        return None;
+    }
+
+    // inlined rayTriangleIntersect, assuming that axis = negative z
+    let ab = vertex1 - vertex0;
+    let ac = vertex2 - vertex0;
+    let n = ab.cross(&ac);
+
+    if n[2] < 0.0001 {
+        return None;
+    }
+
+    let temp = p - vertex0;
+    let t = temp.dot(&n) / n[2];
+    if t <= 0.0 {
+        return None;
+    }
+
+    // inlined cross assuming dir = negative z
+    let ex = -temp[1];
+    let ey = temp[0];
+    let v = (ac[0]*ex + ac[1]*ey) / n[2];
+    if v < 0.0 || v > 1.0 {
+        return None;
+    }
+
+    let w = (ab[0]*ex + ab[1]*ey) / -n[2];
+    if w < 0.0 || v + w > 1.0 {
+        return None;
+    }
+
+    Some((t, vec3(v, w, 1.0 - v - w)))
+}
+
+impl BspTree {
+    pub fn contains_point(&self, p: &Vec3) -> bool {
+        self.pick_closest_tri_neg_z(p).is_some()
+    }
+
+    pub fn pick_closest_tri_neg_z(&self, p: &Vec3) -> Option<BspTreeResult> {
         let mut min_dist = f32::INFINITY;
         let mut min_bsp_index: Option<usize> = None;
-        let mut bary = vec3(0.0, 0.0, 0.0);
+        let mut result_bary = vec3(0.0, 0.0, 0.0);
 
         let mut nodes = Vec::new();
-        self.query(x, y, z, &mut nodes, 0);
+        self.query(p, &mut nodes, 0);
         for node in nodes {
             let start = node.faces_start as usize;
             let end = start + node.num_faces as usize;
             for i in start..end {
-                let (vertex0, vertex1, vertex2) = self.get_face_vertices(i);
-
-                // check that the ray will intersect in the xy plane
-                let min_x = vertex0[0].min(vertex1[0]).min(vertex2[0]);
-                let max_x = vertex0[0].max(vertex1[0]).max(vertex2[0]);
-                if x < min_x || x > max_x {
-                    continue;
+                if let Some((t, bary)) = neg_z_line_intersection(p, self.get_face_vertices(i)) {
+                    if t < min_dist {
+                        min_dist = t;
+                        min_bsp_index = Some(i);
+                        result_bary = bary;
+                    }
                 }
-
-                let min_y = vertex0[1].min(vertex1[1]).min(vertex2[1]);
-                let max_y = vertex0[1].max(vertex1[1]).max(vertex2[1]);
-                if y < min_y || y > max_y {
-                    continue;
-                }
-
-                // check that the ray is above on z
-                let min_z = vertex0[2].min(vertex1[2]).min(vertex2[2]);
-                if z < min_z {
-                    continue; // ray starts below triangle
-                }
-
-                // inlined rayTriangleIntersect, assuming that axis = negative z
-                let ab = vertex1 - vertex0;
-                let ac = vertex2 - vertex0;
-                let n = ab.cross(&ac);
-
-                if n[2] < 0.0001 {
-                    continue; // backfacing triangle
-                }
-
-                let p = vec3(x, y, z);
-                let temp = p - vertex0;
-                let t = temp.dot(&n) / n[2];
-                if t <= 0.0 || t >= min_dist {
-                    continue;
-                }
-
-                // inlined cross assuming dir = negative z
-                let ex = -temp[1];
-                let ey = temp[0];
-                let v = (ac[0]*ex + ac[1]*ey) / n[2];
-                if v < 0.0 || v > 1.0 {
-                    continue;
-                }
-
-                let w = (ab[0]*ex + ab[1]*ey) / -n[2];
-                if w < 0.0 || v + w > 1.0 {
-                    continue;
-                }
-
-                min_dist = t;
-                min_bsp_index = Some(i);
-                bary.x = v;
-                bary.y = w;
-                bary.z = 1.0 - v - w;
             }
         }
 
         let face_index = self.face_indices[min_bsp_index?] as usize;
         let indices = self.get_face_indices(face_index);
         Some(BspTreeResult {
-            bary_x: bary.x,
-            bary_y: bary.y,
-            bary_z: bary.z,
+            bary_x: result_bary.x,
+            bary_y: result_bary.y,
+            bary_z: result_bary.z,
             vert_index_0: indices.0,
             vert_index_1: indices.1,
             vert_index_2: indices.2,
@@ -492,7 +581,7 @@ impl BspTree {
         (vertex0, vertex1, vertex2)
     }
 
-    fn query<'a>(&'a self, x: f32, y: f32, z: f32, nodes: &mut Vec<&'a BspNode>, i: i16) {
+    fn query<'a>(&'a self, p: &Vec3, nodes: &mut Vec<&'a BspNode>, i: i16) {
         if i < 0 || self.nodes.is_empty() {
             return;
         }
@@ -503,14 +592,14 @@ impl BspTree {
         }
         let axis = node.get_axis_type();
         if matches!(axis, BspAxisType::Z) {
-            self.query(x, y, z, nodes, node.negative_child);
-            self.query(x, y, z, nodes, node.positive_child);
+            self.query(p, nodes, node.negative_child);
+            self.query(p, nodes, node.positive_child);
         } else {
-            let component = if matches!(axis, BspAxisType::X) { x } else { y };
+            let component = if matches!(axis, BspAxisType::X) { p.x } else { p.y };
             if component < node.plane_distance {
-                self.query(x, y, z, nodes, node.negative_child);
+                self.query(p, nodes, node.negative_child);
             } else {
-                self.query(x, y, z, nodes, node.positive_child);
+                self.query(p, nodes, node.positive_child);
             }
         }
     }
@@ -521,6 +610,18 @@ impl BspTree {
             self.vertex_indices[3 * face_index + 1] as usize,
             self.vertex_indices[3 * face_index + 2] as usize,
         )
+    }
+
+}
+
+#[wasm_bindgen(js_class = "WowBspTree")]
+impl BspTree {
+    pub fn contains_point_js(&self, x: f32, y: f32, z: f32) -> bool {
+        self.contains_point(&Vec3::new(x, y, z))
+    }
+
+    pub fn pick_closest_tri_neg_z_js(&self, x: f32, y: f32, z: f32) -> Option<BspTreeResult> {
+        self.pick_closest_tri_neg_z(&Vec3::new(x, y, z))
     }
 }
 
@@ -576,7 +677,7 @@ pub struct WmoLiquid {
     pub height: u32,
     pub tile_width: u32,
     pub tile_height: u32,
-    pub position: Vec3,
+    pub position: WowVec3,
     pub material_id: u16,
     #[deku(count = "width * height")]
     vertices: Vec<LiquidVertex>,
@@ -691,7 +792,7 @@ impl BspNode {
 
 #[derive(DekuRead, Debug, Clone)]
 pub struct AmbientVolume {
-    pub position: Vec3,
+    pub position: WowVec3,
     pub start: f32,
     pub end: f32,
     pub color1: Bgra,
@@ -863,7 +964,7 @@ pub struct DoodadIds {
 #[derive(DekuRead, Debug, Clone)]
 pub struct Fog {
     pub flags: u32,
-    pub position: Vec3,
+    pub position: WowVec3,
     pub smaller_radius: f32,
     pub larger_radius: f32,
     pub fog_end: f32,
@@ -879,7 +980,7 @@ pub struct Fog {
 pub struct DoodadDef {
     pub name_index: i16,
     pub flags: u16,
-    pub position: Vec3,
+    pub position: WowVec3,
     pub orientation: Quat,
     pub scale: f32,
     pub color: Bgra,

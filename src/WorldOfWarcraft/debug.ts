@@ -68,3 +68,51 @@ export function drawDebugPortal(portal: PortalData, transformMat: mat4, color: C
   }
   drawWorldSpaceAABB(getDebugOverlayCanvas2D(), clipMat, portal.aabb, transformMat, color);
 }
+
+// const scratchVec3a = vec3.create();
+// const scratchVec3b = vec3.create();
+// const scratchVec3c = vec3.create();
+// export function drawBspNodes(group: WmoGroupData, pos: vec3, modelMatrix: ReadonlyMat4) {
+//     let nodes: WowWmoBspNode[] = [];
+//     const clipFromWorldMatrix = (window.main.scene as WdtScene).mainView.clipFromWorldMatrix;
+//     group.bsp.query(pos, nodes);
+//     if (nodes.length === 0) {
+//         return;
+//     }
+//     for (let nodeIndex=0; nodeIndex<nodes.length; nodeIndex++) {
+//       const node = nodes[nodeIndex];
+//       for (let i = node.faces_start; i < node.faces_start + node.num_faces; i++) {
+//         const index0 = group.indices[3 * group.bspIndices[i] + 0];
+//         const vertex0 = vec3.set(scratchVec3a,
+//           group.vertices[3 * index0 + 0],
+//           group.vertices[3 * index0 + 1],
+//           group.vertices[3 * index0 + 2],
+//         );
+//         const index1 = group.indices[3 * group.bspIndices[i] + 1];
+//         const vertex1 = vec3.set(scratchVec3b,
+//           group.vertices[3 * index1 + 0],
+//           group.vertices[3 * index1 + 1],
+//           group.vertices[3 * index1 + 2],
+//         );
+//         const index2 = group.indices[3 * group.bspIndices[i] + 2];
+//         const vertex2 = vec3.set(scratchVec3c,
+//           group.vertices[3 * index2 + 0],
+//           group.vertices[3 * index2 + 1],
+//           group.vertices[3 * index2 + 2],
+//         );
+//         vec3.transformMat4(vertex0, vertex0, modelMatrix);
+//         vec3.transformMat4(vertex1, vertex1, modelMatrix);
+//         vec3.transformMat4(vertex2, vertex2, modelMatrix);
+//         const centroid = vec3.fromValues(
+//           vertex0[0] + vertex1[0] + vertex2[0],
+//           vertex0[1] + vertex1[1] + vertex2[1],
+//           vertex0[2] + vertex1[2] + vertex2[2],
+//         );
+//         vec3.scale(centroid, centroid, 1/3);
+//         drawWorldSpaceLine(getDebugOverlayCanvas2D(), clipFromWorldMatrix, vertex0, vertex1);
+//         drawWorldSpaceLine(getDebugOverlayCanvas2D(), clipFromWorldMatrix, vertex1, vertex2);
+//         drawWorldSpaceLine(getDebugOverlayCanvas2D(), clipFromWorldMatrix, vertex2, vertex0);
+//         drawWorldSpaceText(getDebugOverlayCanvas2D(), clipFromWorldMatrix, centroid, '' + nodeIndex + ' ' + i + ' ' + [index0, index1, index2]);
+//       }
+//     }
+// }
