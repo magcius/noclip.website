@@ -9,6 +9,7 @@ import {
     vec4,
 } from "gl-matrix";
 import type {
+    ConvexHull,
     WowAABBox,
     WowAdt,
     WowAdtChunkDescriptor,
@@ -48,7 +49,7 @@ import type {
     WowWmoMaterialFlags,
     WowWmoMaterialPixelShader,
     WowWmoMaterialVertexShader,
-    WowWmoPortal,
+    WowWmoPortalData,
     WowWmoPortalRef,
 } from "../../rust/pkg/index.js";
 import { DataFetcher } from "../DataFetcher.js";
@@ -108,6 +109,8 @@ import {
     placementSpaceFromModelSpace,
 } from "./scenes.js";
 import { Sheepfile } from "./util.js";
+import { drawDebugFrustum, drawDebugPortal } from "./debug.js";
+import { Cyan, Green, Red } from "../Color.js";
 
 export class Database {
     private inner: WowDatabase;
@@ -594,10 +597,22 @@ class Particle {
 }
 
 const PARTICLE_COORDINATE_FIX: mat4 = mat4.fromValues(
-    0.0, 1.0, 0.0, 0.0,
-    -1.0, 0.0, 0.0, 0.0,
-    0.0, 0.0, 1.0, 0.0,
-    0.0, 0.0, 0.0, 1.0,
+    0.0,
+    1.0,
+    0.0,
+    0.0,
+    -1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
 );
 
 class BezierSpline {
@@ -1700,9 +1715,8 @@ export class WmoData {
     public groupInfos: WowWmoGroupInfo[] = [];
     public groupIdToIndex: Map<number, number> = new Map();
     public groupDefAABBs: Map<number, AABB> = new Map();
-    public portals: PortalData[] = [];
+    public portals: WowWmoPortalData[] = [];
     public portalRefs: WowWmoPortalRef[] = [];
-    public portalVertices: Float32Array;
     public blps: Map<number, BlpData> = new Map();
     public materials: WowWmoMaterial[] = [];
     public models: Map<number, ModelData> = new Map();
@@ -1804,14 +1818,8 @@ export class WmoData {
         this.materials = this.wmo.textures;
         this.modelIds = this.wmo.doodad_file_ids;
 
-        this.portalVertices = this.wmo.take_portal_vertices();
         this.portalRefs = this.wmo.take_portal_refs();
-        const portals = this.wmo.take_portals();
-        for (let portal of portals) {
-            this.portals.push(
-                PortalData.fromWowPortal(portal, this.portalVertices),
-            );
-        }
+        this.portals = this.wmo.take_portals();
 
         await Promise.all([
             this.loadTextures(cache),
@@ -1830,7 +1838,7 @@ export class WmoData {
 
     public portalCull(
         modelCamera: vec3,
-        modelFrustum: Frustum,
+        modelFrustum: ConvexHull,
         currentGroupId: number,
         visibleGroups: number[],
         visitedGroups: number[],
@@ -1843,17 +1851,23 @@ export class WmoData {
         for (let portalRef of group.portalRefs) {
             const portal = this.portals[portalRef.portal_index];
             const otherGroup = this.groups[portalRef.group_index];
-            if (!portal.isPortalFacingUs(modelCamera, portalRef.side)) {
+
+            if (
+                !portal.is_facing_us(
+                    modelCamera as Float32Array,
+                    portalRef.side,
+                )
+            ) {
                 continue;
             }
+
             if (
-                portal.inFrustum(modelFrustum) ||
-                portal.aabb.containsPoint(modelCamera)
+                portal.in_frustum(modelFrustum) ||
+                portal.aabb_contains_point(modelCamera as Float32Array)
             ) {
-                let portalFrustum = portal.clipFrustum(
-                    modelCamera,
+                let portalFrustum = portal.clip_frustum(
+                    modelCamera as Float32Array,
                     modelFrustum,
-                    portalRef.side,
                 );
                 this.portalCull(
                     modelCamera,
@@ -2192,142 +2206,6 @@ function setM2BlendModeMegaState(
             break;
     }
     renderInst.setMegaStateFlags(settings);
-}
-
-export class PortalData {
-    public points: vec3[] = [];
-    public plane = new Plane();
-    public aabbPoints: vec3[] = [
-        vec3.create(),
-        vec3.create(),
-        vec3.create(),
-        vec3.create(),
-    ];
-    public aabb = new AABB();
-    public vertexCount = 0;
-    public vertexStart = 0;
-    private scratchVec3A = vec3.create();
-    private scratchVec3B = vec3.create();
-    private scratchMat4 = mat4.create();
-
-    constructor() {}
-
-    static fromWowPortal(
-        wowPortal: WowWmoPortal,
-        vertices: Float32Array,
-    ): PortalData {
-        if (wowPortal.count < 3) {
-            throw new Error(`found a portal w/ ${wowPortal.count} vertices!`);
-        }
-        const result = new PortalData();
-        result.vertexStart = wowPortal.start_vertex;
-        result.vertexCount = wowPortal.count;
-        const start = result.vertexStart * 3;
-        const end = start + result.vertexCount * 3;
-        const verts = vertices.slice(start, end);
-        result.points = [];
-        for (let i = 0; i < wowPortal.count; i++) {
-            result.points.push([
-                verts[i * 3 + 0],
-                verts[i * 3 + 1],
-                verts[i * 3 + 2],
-            ]);
-        }
-        result.aabb.setFromPoints(result.points);
-        const wowPlane = wowPortal.plane;
-        const wowPlaneNorm = wowPlane.normal;
-        result.plane.n[0] = wowPlaneNorm.x;
-        result.plane.n[1] = wowPlaneNorm.y;
-        result.plane.n[2] = wowPlaneNorm.z;
-        vec3.normalize(result.plane.n, result.plane.n);
-        result.plane.d = wowPlane.distance;
-        result.updateAABBPoints();
-        wowPlaneNorm.free();
-        wowPlane.free();
-        wowPortal.free();
-        return result;
-    }
-
-    // Assuming planar portal points, rotate them to XY plane, calculate the
-    // bounding box, then rotate the box back to the plane
-    private updateAABBPoints() {
-        if (this.points.length === 4) {
-            this.aabbPoints = this.points;
-            return;
-        }
-        const xyPlane = vec3.set(this.scratchVec3A, 0, 0, 1);
-        const theta = Math.acos(vec3.dot(xyPlane, this.plane.n));
-        let rotationMat: mat4;
-        if (theta === 0 || theta === 180) {
-            rotationMat = mat4.identity(this.scratchMat4);
-        } else {
-            const rotationAxis = vec3.cross(
-                this.scratchVec3B,
-                xyPlane,
-                this.plane.n,
-            );
-            vec3.normalize(rotationAxis, rotationAxis);
-            rotationMat = mat4.fromRotation(
-                this.scratchMat4,
-                theta,
-                rotationAxis,
-            );
-        }
-        let minX = 0;
-        let minY = 0;
-        let maxX = 0;
-        let maxY = 0;
-        for (let p of this.points) {
-            vec3.transformMat4(p, p, rotationMat);
-            minX = Math.min(minX, p[0]);
-            maxX = Math.max(maxX, p[0]);
-            minY = Math.min(minY, p[1]);
-            maxY = Math.max(maxY, p[1]);
-        }
-        mat4.invert(rotationMat, rotationMat);
-        for (let p of this.points) {
-            vec3.transformMat4(p, p, rotationMat);
-        }
-    }
-
-    public inFrustum(frustum: Frustum): boolean {
-        return frustum.contains(this.aabb);
-    }
-
-    public isPortalFacingUs(cameraPos: vec3, side: number) {
-        const dist = this.plane.distanceVec3(cameraPos);
-        if (side < 0 && dist > -0.01) {
-            return false;
-        } else if (side > 0 && dist < 0.01) {
-            return false;
-        }
-        return true;
-    }
-
-    public clipFrustum(
-        cameraPoint: vec3,
-        currentFrustum: Frustum,
-        side: number,
-    ): Frustum {
-        const result = new Frustum(currentFrustum.planes.length);
-        result.copy(currentFrustum);
-        for (let i = 0; i < this.points.length; i++) {
-            let bIndex = i === this.points.length - 1 ? 0 : i + 1;
-            let testPointIndex = i === 0 ? this.points.length - 1 : i - 1;
-            let [a, b] = [this.points[i], this.points[bIndex]];
-            let testPoint = this.points[testPointIndex];
-
-            const plane = new Plane();
-            plane.setTri(cameraPoint, a, b);
-            let dist = plane.distanceVec3(testPoint);
-            if (dist > 0) {
-                plane.negate();
-            }
-            assert(plane.distanceVec3(testPoint) <= 0);
-            result.planes.push(plane);
-        }
-        return result;
-    }
 }
 
 export class WmoDefinition {

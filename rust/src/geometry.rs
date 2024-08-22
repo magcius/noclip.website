@@ -1,10 +1,9 @@
 use core::f32;
 
-use nalgebra_glm::{
-    make_mat4, make_vec3, make_vec4, triangle_normal, vec3, vec4, Mat4, Vec3, Vec4,
-};
+use nalgebra_glm::{make_mat4, make_vec3, triangle_normal, vec3, vec4, Mat4, Vec3};
 use wasm_bindgen::prelude::*;
 
+#[derive(Default, Debug, Clone)]
 pub struct Plane {
     pub d: f32,
     pub normal: Vec3,
@@ -18,7 +17,7 @@ impl Plane {
 
     pub fn set_tri(&mut self, p0: &Vec3, p1: &Vec3, p2: &Vec3) {
         self.normal = triangle_normal(p0, p1, p2);
-        self.d = self.normal.dot(&p0);
+        self.d = -self.normal.dot(&p0);
     }
 
     pub fn distance(&self, p: &Vec3) -> f32 {
@@ -40,6 +39,7 @@ impl Plane {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct AABB {
     pub min: Vec3,
     pub max: Vec3,
@@ -59,7 +59,7 @@ impl AABB {
         // Transforming Axis-Aligned Bounding Boxes from Graphics Gems.
         let min = self.min.clone();
         let max = self.max.clone();
-        
+
         // Translation can be applied directly
         self.min.x = mat[12];
         self.min.y = mat[13];
@@ -108,6 +108,7 @@ pub enum IntersectionState {
 
 // can be used as a Frustum
 #[wasm_bindgen(js_name = "ConvexHull")]
+#[derive(Debug, Clone)]
 pub struct ConvexHull {
     pub(crate) planes: Vec<Plane>,
 }
@@ -117,17 +118,41 @@ impl ConvexHull {
         let mut result = IntersectionState::Inside;
         for plane in &self.planes {
             let nearest = vec3(
-                if plane.normal.x >= 0.0 { aabb.min.x } else { aabb.max.x },
-                if plane.normal.y >= 0.0 { aabb.min.y } else { aabb.max.y },
-                if plane.normal.z >= 0.0 { aabb.min.z } else { aabb.max.z },
+                if plane.normal.x >= 0.0 {
+                    aabb.min.x
+                } else {
+                    aabb.max.x
+                },
+                if plane.normal.y >= 0.0 {
+                    aabb.min.y
+                } else {
+                    aabb.max.y
+                },
+                if plane.normal.z >= 0.0 {
+                    aabb.min.z
+                } else {
+                    aabb.max.z
+                },
             );
             if plane.distance(&nearest) > 0.0 {
                 return IntersectionState::Outside;
             }
             let farthest = vec3(
-                if plane.normal.x >= 0.0 { aabb.max.x } else { aabb.min.x },
-                if plane.normal.y >= 0.0 { aabb.max.y } else { aabb.min.y },
-                if plane.normal.z >= 0.0 { aabb.max.z } else { aabb.min.z },
+                if plane.normal.x >= 0.0 {
+                    aabb.max.x
+                } else {
+                    aabb.min.x
+                },
+                if plane.normal.y >= 0.0 {
+                    aabb.max.y
+                } else {
+                    aabb.min.y
+                },
+                if plane.normal.z >= 0.0 {
+                    aabb.max.z
+                } else {
+                    aabb.min.z
+                },
             );
             if plane.distance(&farthest) > 0.0 {
                 result = IntersectionState::Intersection;
@@ -145,7 +170,7 @@ impl ConvexHull {
 
     pub fn transform(&mut self, mat: &Mat4) {
         let mut inv_transpose_mat = mat.try_inverse().unwrap();
-                inv_transpose_mat.transpose_mut();
+        inv_transpose_mat.transpose_mut();
         for plane in &mut self.planes {
             plane.transform(&inv_transpose_mat);
         }
@@ -173,5 +198,9 @@ impl ConvexHull {
         assert_eq!(mat_slice.iter().count(), 16);
         let mat = make_mat4(mat_slice);
         self.transform(&mat);
+    }
+
+    pub fn debug_str(&self) -> String {
+        format!("{:?}", self)
     }
 }

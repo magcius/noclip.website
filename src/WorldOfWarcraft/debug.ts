@@ -1,5 +1,5 @@
-import { ReadonlyMat4, mat3, mat4, vec3 } from "gl-matrix";
-import { WowWmoBspNode } from "../../rust/pkg/index.js";
+import { mat3, mat4, vec3 } from "gl-matrix";
+import { WowWmoBspNode, WowWmoPortalData } from "../../rust/pkg/index.js";
 import { Color } from "../Color.js";
 import {
     drawWorldSpaceAABB,
@@ -9,7 +9,6 @@ import {
     getDebugOverlayCanvas2D,
 } from "../DebugJunk.js";
 import { Frustum, Plane } from "../Geometry.js";
-import { PortalData, WmoGroupData } from "./data.js";
 import { WdtScene } from "./scenes.js";
 
 let drawFrustumScratchVec3a = vec3.create();
@@ -71,37 +70,20 @@ function findIncidentPoint(dst: vec3, p1: Plane, p2: Plane, p3: Plane) {
     vec3.transformMat3(dst, incidentScratchVec3, incidentScratchMat);
 }
 
-export function drawDebugPortal(
-    portal: PortalData,
-    transformMat: mat4,
-    color: Color | undefined = undefined,
-    text: string | undefined = undefined,
-) {
-    const clipMat = (window.main.scene as WdtScene).mainView
-        .clipFromWorldMatrix;
-    for (let i in portal.points) {
-        const p = vec3.transformMat4(
-            vec3.create(),
-            portal.points[i],
-            transformMat,
-        );
-        if (text !== undefined && i === "0") {
-            drawWorldSpaceText(
-                getDebugOverlayCanvas2D(),
-                clipMat,
-                p,
-                text,
-                undefined,
-                color,
-            );
-        }
-        drawWorldSpacePoint(getDebugOverlayCanvas2D(), clipMat, p, color);
+export function drawDebugPortal(portal: WowWmoPortalData, mat: mat4, color: Color) {
+    let verts = portal.get_vertices();
+    let vecs = [];
+    for (let i = 0; i < verts.length/3; i++) {
+        vecs.push(vec3.fromValues(verts[3 * i], verts[3 * i + 1], verts[3 * i + 2]));
     }
-    drawWorldSpaceAABB(
-        getDebugOverlayCanvas2D(),
-        clipMat,
-        portal.aabb,
-        transformMat,
-        color,
-    );
+
+    const m2 = mat4.mul(mat4.create(), (window.main.scene as WdtScene).mainView.clipFromWorldMatrix, mat);
+    for (let i = 0; i < vecs.length; i++) {
+        drawWorldSpaceLine(
+            getDebugOverlayCanvas2D(),
+            m2,
+            vecs[i], vecs[(i + 1) % vecs.length],
+            color
+        );
+    }
 }

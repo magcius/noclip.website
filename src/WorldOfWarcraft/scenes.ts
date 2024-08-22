@@ -62,7 +62,11 @@ import {
 import { TextureCache } from "./tex.js";
 import { assert } from "../util.js";
 import { ConvexHull } from "../../rust/pkg/index.js";
-import { drawScreenSpaceText, drawWorldSpaceAABB, getDebugOverlayCanvas2D } from "../DebugJunk.js";
+import {
+    drawScreenSpaceText,
+    drawWorldSpaceAABB,
+    getDebugOverlayCanvas2D,
+} from "../DebugJunk.js";
 import { Green, Red, White } from "../Color.js";
 
 export const MAP_SIZE = 17066;
@@ -211,7 +215,9 @@ export class View {
         if (this.freezeTime) {
             this.time = 800;
         } else {
-            this.time = (viewerInput.time / this.secondsPerGameDay + this.timeOffset) % 2880;
+            this.time =
+                (viewerInput.time / this.secondsPerGameDay + this.timeOffset) %
+                2880;
         }
         this.dayNight = this.time / 2880.0;
         this.deltaTime = viewerInput.deltaTime;
@@ -359,6 +365,12 @@ enum CullWmoResult {
     CameraInsideAndExteriorVisible,
     CameraInside,
     CameraOutside,
+}
+
+let screenY = 0;
+function screenPrint(str: string): void {
+    drawScreenSpaceText(getDebugOverlayCanvas2D(), 100, 100 + screenY, str, White, { outline: 4, align: 'left' });
+    screenY += 64;
 }
 
 export class WdtScene implements Viewer.SceneGfx {
@@ -754,7 +766,12 @@ export class WdtScene implements Viewer.SceneGfx {
         let frustumGroups: number[] = [];
         let memberGroups: number[] = [];
         for (let group of wmo.groups) {
-            if (wmo.wmo.group_contains_modelspace_point(group.group, this.modelCamera as Float32Array)) {
+            if (
+                wmo.wmo.group_contains_modelspace_point(
+                    group.group,
+                    this.modelCamera as Float32Array,
+                )
+            ) {
                 if (group.flags.show_skybox && wmo.skyboxModel) {
                     frame.activeWmoSkybox = wmo.skyboxModel.fileId;
                 }
@@ -763,7 +780,13 @@ export class WdtScene implements Viewer.SceneGfx {
                 }
                 memberGroups.push(group.fileId);
             }
-            if (group.flags.exterior && wmo.wmo.group_in_modelspace_frustum(group.group, this.modelFrustumRust)) {
+            if (
+                group.flags.exterior &&
+                wmo.wmo.group_in_modelspace_frustum(
+                    group.group,
+                    this.modelFrustumRust,
+                )
+            ) {
                 frustumGroups.push(group.fileId);
             }
         }
@@ -793,7 +816,7 @@ export class WdtScene implements Viewer.SceneGfx {
         for (let groupId of rootGroups) {
             wmo.portalCull(
                 this.modelCamera,
-                this.modelFrustum,
+                this.modelFrustumRust,
                 groupId,
                 visibleGroups,
                 [],
@@ -1035,6 +1058,7 @@ export class WdtScene implements Viewer.SceneGfx {
     }
 
     render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
+        screenY = 0;
         viewerInput.camera.setClipPlanes(0.1);
         this.mainView.setupFromViewerInput(viewerInput);
         this.updateCurrentAdt();
@@ -1223,23 +1247,65 @@ const vanillaSceneDescs = [
     new ContinentSceneDesc("Stormwind, Elwynn Forest", 775971, 31, 48, 0),
     new ContinentSceneDesc("Undercity, Tirisfal Glades", 775971, 31, 28, 0),
     new ContinentSceneDesc("Lakeshire, Redridge Mountains", 775971, 36, 49, 0),
-    new ContinentSceneDesc("Blackrock Mountain, Burning Steppes", 775971, 34, 45, 0),
+    new ContinentSceneDesc(
+        "Blackrock Mountain, Burning Steppes",
+        775971,
+        34,
+        45,
+        0,
+    ),
     new ContinentSceneDesc("Booty Bay, Stranglethorn Vale", 775971, 31, 58, 0),
-    new ContinentSceneDesc("Light's Hope Chapel, Eastern Plaguelands", 775971, 41, 27, 0),
+    new ContinentSceneDesc(
+        "Light's Hope Chapel, Eastern Plaguelands",
+        775971,
+        41,
+        27,
+        0,
+    ),
     new ContinentSceneDesc("Aerie Peak, Hinterlands", 775971, 35, 31, 0),
-    new ContinentSceneDesc("Tarren Mill, Hillsbrad Foothills", 775971, 33, 32, 0),
+    new ContinentSceneDesc(
+        "Tarren Mill, Hillsbrad Foothills",
+        775971,
+        33,
+        32,
+        0,
+    ),
     new ContinentSceneDesc("Stonewrought Dam, Loch Modan", 775971, 38, 40, 0),
     new ContinentSceneDesc("Kargath, Badlands", 775971, 36, 44, 0),
     new ContinentSceneDesc("Thorium Point, Searing Gorge", 775971, 34, 44, 0),
     new ContinentSceneDesc("Stonard, Swamp of Sorrows", 775971, 38, 51, 0),
-    new ContinentSceneDesc("Nethergarde Keep, Blasted Lands", 775971, 38, 52, 0),
+    new ContinentSceneDesc(
+        "Nethergarde Keep, Blasted Lands",
+        775971,
+        38,
+        52,
+        0,
+    ),
     new ContinentSceneDesc("The Dark Portal, Blasted Lands", 775971, 38, 54, 0),
     new ContinentSceneDesc("Darkshire, Duskwood", 775971, 34, 51, 0),
-    new ContinentSceneDesc("Grom'gol Base Camp, Stranglethorn Vale", 775971, 31, 55, 0),
-    new ContinentSceneDesc("Gurubashi Arena, Stranglethorn Vale", 775971, 31, 56, 0),
+    new ContinentSceneDesc(
+        "Grom'gol Base Camp, Stranglethorn Vale",
+        775971,
+        31,
+        55,
+        0,
+    ),
+    new ContinentSceneDesc(
+        "Gurubashi Arena, Stranglethorn Vale",
+        775971,
+        31,
+        56,
+        0,
+    ),
     new ContinentSceneDesc("Sentinel Hill, Westfall", 775971, 30, 51, 0),
     new ContinentSceneDesc("Karazhan, Deadwind Pass", 775971, 35, 52, 0),
-    new ContinentSceneDesc("Southshore, Hillsbrad Foothills", 775971, 33, 33, 0),
+    new ContinentSceneDesc(
+        "Southshore, Hillsbrad Foothills",
+        775971,
+        33,
+        33,
+        0,
+    ),
 
     "Kalimdor",
     new ContinentSceneDesc("Thunder Bluff, Mulgore", 782779, 31, 34, 1),
@@ -1256,19 +1322,55 @@ const vanillaSceneDescs = [
     new ContinentSceneDesc("The Crossroads, Barrens", 782779, 36, 32, 1),
     new ContinentSceneDesc("Orgrimmar, Durotar", 782779, 40, 29, 1),
     new ContinentSceneDesc("Ratchet, Barrens", 782779, 39, 33, 1),
-    new ContinentSceneDesc("Sun Rock Retreat, Stonetalon Mountains", 782779, 30, 30, 1),
+    new ContinentSceneDesc(
+        "Sun Rock Retreat, Stonetalon Mountains",
+        782779,
+        30,
+        30,
+        1,
+    ),
     new ContinentSceneDesc("Nijel's Point, Desolace", 782779, 29, 31, 1),
     new ContinentSceneDesc("Shadowprey Village, Desolace", 782779, 25, 35, 1),
     new ContinentSceneDesc("Dire Maul Arena, Feralas", 782779, 29, 38, 1),
     new ContinentSceneDesc("Thalanaar, Feralas", 782779, 33, 40, 1),
     new ContinentSceneDesc("Camp Mojache, Feralas", 782779, 31, 40, 1),
-    new ContinentSceneDesc("Feathermoon Stronghold, Feralas", 782779, 25, 40, 1),
+    new ContinentSceneDesc(
+        "Feathermoon Stronghold, Feralas",
+        782779,
+        25,
+        40,
+        1,
+    ),
     new ContinentSceneDesc("Cenarion Hold, Silithus", 782779, 30, 44, 1),
-    new ContinentSceneDesc("Marshal's Refuge, Un'Goro Crater", 782779, 34, 43, 1),
+    new ContinentSceneDesc(
+        "Marshal's Refuge, Un'Goro Crater",
+        782779,
+        34,
+        43,
+        1,
+    ),
     new ContinentSceneDesc("Gadgetzan, Tanaris", 782779, 39, 45, 1),
-    new ContinentSceneDesc("Mirage Raceway, Thousand Needles", 782779, 39, 43, 1),
-    new ContinentSceneDesc("Freewind Post, Thousand Needles", 782779, 35, 41, 1),
-    new ContinentSceneDesc("Theramore Isle, Dustwallow Marsh", 782779, 40, 39, 1),
+    new ContinentSceneDesc(
+        "Mirage Raceway, Thousand Needles",
+        782779,
+        39,
+        43,
+        1,
+    ),
+    new ContinentSceneDesc(
+        "Freewind Post, Thousand Needles",
+        782779,
+        35,
+        41,
+        1,
+    ),
+    new ContinentSceneDesc(
+        "Theramore Isle, Dustwallow Marsh",
+        782779,
+        40,
+        39,
+        1,
+    ),
     new ContinentSceneDesc("Alcaz Island, Dustwallow Marsh", 782779, 41, 37, 1),
 
     "Instances",
@@ -1360,7 +1462,13 @@ const bcSceneDescs = [
     "Outland",
     new ContinentSceneDesc("The Dark Portal", 828395, 29, 32, 530),
     new ContinentSceneDesc("Shattrath", 828395, 22, 35, 530),
-    new ContinentSceneDesc("Silvermoon City, Eversong Woods", 828395, 45, 14, 530),
+    new ContinentSceneDesc(
+        "Silvermoon City, Eversong Woods",
+        828395,
+        45,
+        14,
+        530,
+    ),
     new ContinentSceneDesc("Exodar, Azuremist Isle", 828395, 54, 39, 530),
 ];
 
@@ -1402,7 +1510,13 @@ const wotlkSceneDescs = [
     "Northrend",
     new ContinentSceneDesc("Icecrown Citadel, Icecrown", 822688, 27, 20, 571),
     new ContinentSceneDesc("Dalaran, Crystalsong Forest", 822688, 30, 20, 571),
-    new ContinentSceneDesc("Wyrmrest Temple, Dragonblight", 822688, 31, 24, 571),
+    new ContinentSceneDesc(
+        "Wyrmrest Temple, Dragonblight",
+        822688,
+        31,
+        24,
+        571,
+    ),
 ];
 
 export const vanillaSceneGroup: Viewer.SceneGroup = {
