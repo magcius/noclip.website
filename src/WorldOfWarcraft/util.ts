@@ -1,6 +1,9 @@
-import { WowSheepfileEntry, WowSheepfileManager } from "../../rust/pkg/index.js";
+import {
+    WowSheepfileEntry,
+    WowSheepfileManager,
+} from "../../rust/pkg/index.js";
 import { DataFetcher, NamedArrayBufferSlice } from "../DataFetcher.js";
-import { rust } from '../rustlib.js';
+import { rust } from "../rustlib.js";
 
 const SHEEP_PATH = `WorldOfWarcraft/sheep0`;
 
@@ -17,7 +20,7 @@ const SHEEP_PATH = `WorldOfWarcraft/sheep0`;
  * case of duplicates. This gives us a kind of hybrid of the WOTLK Classic
  * state of the game plus some unreleased goodies still present in
  * Vanilla.
- * 
+ *
  * If at some point we want to ship the state of Eastern Kingdoms/Kalimdor
  * pre-WOTLK, we could make a separate sheepfile just from `wow_classic_era`.
  */
@@ -25,52 +28,72 @@ export class Sheepfile {
     private sheepfile: WowSheepfileManager;
     private hardcodedFileIds: Map<string, number> = new Map();
 
-    constructor(private dataFetcher: DataFetcher) {
-    }
+    constructor(private dataFetcher: DataFetcher) {}
 
     public async load() {
-      const sheepfileData = await this.dataFetcher.fetchData(`${SHEEP_PATH}/index.shp`);
-      this.sheepfile = rust.WowSheepfileManager.new(sheepfileData.createTypedArray(Uint8Array));
+        const sheepfileData = await this.dataFetcher.fetchData(
+            `${SHEEP_PATH}/index.shp`,
+        );
+        this.sheepfile = rust.WowSheepfileManager.new(
+            sheepfileData.createTypedArray(Uint8Array),
+        );
 
-      // not sure why these don't hash correctly, hardcode them for now
-      this.hardcodedFileIds.set('WORLD\\AZEROTH\\REDRIDGE\\PASSIVEDOODADS\\DOCKPIECES\\REDRIDGEDOCKPLANK02.BLP', 190086);
-      this.hardcodedFileIds.set("Environments\\Stars\\HellfireSkyBox.m2", 130525);
+        // not sure why these don't hash correctly, hardcode them for now
+        this.hardcodedFileIds.set(
+            "WORLD\\AZEROTH\\REDRIDGE\\PASSIVEDOODADS\\DOCKPIECES\\REDRIDGEDOCKPLANK02.BLP",
+            190086,
+        );
+        this.hardcodedFileIds.set(
+            "Environments\\Stars\\HellfireSkyBox.m2",
+            130525,
+        );
     }
 
-    async fetchDataRange(datafileName: string, start: number, size: number): Promise<NamedArrayBufferSlice> {
-      return await this.dataFetcher.fetchData(`${SHEEP_PATH}/${datafileName}`, {
-        rangeStart: start,
-        rangeSize: size,
-      });
+    async fetchDataRange(
+        datafileName: string,
+        start: number,
+        size: number,
+    ): Promise<NamedArrayBufferSlice> {
+        return await this.dataFetcher.fetchData(
+            `${SHEEP_PATH}/${datafileName}`,
+            {
+                rangeStart: start,
+                rangeSize: size,
+            },
+        );
     }
 
     private async loadEntry(entry: WowSheepfileEntry): Promise<Uint8Array> {
-      let data = await this.fetchDataRange(entry.datafile_name, entry.start_bytes, entry.size_bytes);
-      entry.free();
-      return data.createTypedArray(Uint8Array);
+        let data = await this.fetchDataRange(
+            entry.datafile_name,
+            entry.start_bytes,
+            entry.size_bytes,
+        );
+        entry.free();
+        return data.createTypedArray(Uint8Array);
     }
 
     public async loadFileId(fileId: number): Promise<Uint8Array | undefined> {
-      const entry = this.sheepfile.get_file_id(fileId);
-      if (entry === undefined) {
-        return undefined;
-      }
-      return this.loadEntry(entry);
+        const entry = this.sheepfile.get_file_id(fileId);
+        if (entry === undefined) {
+            return undefined;
+        }
+        return this.loadEntry(entry);
     }
 
     public getFileDataId(fileName: string): number | undefined {
-      const hardcodedResult = this.hardcodedFileIds.get(fileName);
-      if (hardcodedResult !== undefined) {
-        return hardcodedResult;
-      }
-      const entry = this.sheepfile.get_file_name(fileName);
-      if (entry === undefined) {
-        return undefined;
-      }
-      return entry.file_id;
+        const hardcodedResult = this.hardcodedFileIds.get(fileName);
+        if (hardcodedResult !== undefined) {
+            return hardcodedResult;
+        }
+        const entry = this.sheepfile.get_file_name(fileName);
+        if (entry === undefined) {
+            return undefined;
+        }
+        return entry.file_id;
     }
 
     public destroy(): void {
-      this.sheepfile.free();
+        this.sheepfile.free();
     }
 }

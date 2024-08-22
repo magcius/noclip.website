@@ -1,21 +1,29 @@
-import { WowLightResult, WowM2BlendingMode, WowVec3 } from "../../rust/pkg/index.js";
+import {
+    WowLightResult,
+    WowM2BlendingMode,
+    WowVec3,
+} from "../../rust/pkg/index.js";
 import { DeviceProgram } from "../Program.js";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
-import { fillMatrix4x4, fillVec4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers.js";
+import {
+    fillMatrix4x4,
+    fillVec4,
+    fillVec4v,
+} from "../gfx/helpers/UniformBufferHelpers.js";
 import { GfxBindingLayoutDescriptor } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderInst } from "../gfx/render/GfxRenderInstManager.js";
 import { rust } from "../rustlib.js";
 import { LiquidCategory, ParticleEmitter } from "./data.js";
-import { SkyboxColor } from './mesh.js';
+import { SkyboxColor } from "./mesh.js";
 import { View } from "./scenes.js";
 
 export class BaseProgram extends DeviceProgram {
-  public static numUniformBuffers = 1;
-  public static ub_SceneParams = 0;
+    public static numUniformBuffers = 1;
+    public static ub_SceneParams = 0;
 
-  public static numSamplers = 0;
+    public static numSamplers = 0;
 
-  public static utils = `
+    public static utils = `
 vec3 calcLight(
   vec3 diffuseColor,
   vec3 normal,
@@ -83,7 +91,7 @@ vec2 envmapTexCoord(const vec3 viewSpacePos, const vec3 viewSpaceNormal) {
 }
   `;
 
-  public static commonDeclarations = `
+    public static commonDeclarations = `
 precision mediump float;
 
 layout(std140) uniform ub_SceneParams {
@@ -122,79 +130,123 @@ ${GfxShaderLibrary.invlerp}
 ${BaseProgram.utils}
   `;
 
-  public static layoutUniformBufs(renderInst: GfxRenderInst, view: View, lightingData: WowLightResult) {
-    const numMat4s = 2;
-    const numVec4s = 24;
-    const totalSize = numMat4s * 16 + numVec4s * 4;
-    let offset = renderInst.allocateUniformBuffer(BaseProgram.ub_SceneParams, totalSize);
-    const uniformBuf = renderInst.mapUniformBufferF32(BaseProgram.ub_SceneParams);
+    public static layoutUniformBufs(
+        renderInst: GfxRenderInst,
+        view: View,
+        lightingData: WowLightResult,
+    ) {
+        const numMat4s = 2;
+        const numVec4s = 24;
+        const totalSize = numMat4s * 16 + numVec4s * 4;
+        let offset = renderInst.allocateUniformBuffer(
+            BaseProgram.ub_SceneParams,
+            totalSize,
+        );
+        const uniformBuf = renderInst.mapUniformBufferF32(
+            BaseProgram.ub_SceneParams,
+        );
 
-    offset += fillMatrix4x4(uniformBuf, offset, view.clipFromViewMatrix);
-    offset += fillMatrix4x4(uniformBuf, offset, view.viewFromWorldMatrix);
-    offset += fillVec4(uniformBuf, offset, view.cameraPos[0], view.cameraPos[1], view.cameraPos[2], 0.0);
+        offset += fillMatrix4x4(uniformBuf, offset, view.clipFromViewMatrix);
+        offset += fillMatrix4x4(uniformBuf, offset, view.viewFromWorldMatrix);
+        offset += fillVec4(
+            uniformBuf,
+            offset,
+            view.cameraPos[0],
+            view.cameraPos[1],
+            view.cameraPos[2],
+            0.0,
+        );
 
-    // lighting
-    offset += fillVec4v(uniformBuf, offset, view.interiorSunDirection);
-    offset += fillVec4v(uniformBuf, offset, view.exteriorDirectColorDirection);
-    offset += fillColor(uniformBuf, offset, lightingData.direct_color);
-    offset += fillColor(uniformBuf, offset, lightingData.ambient_color);
-    offset += fillColor(uniformBuf, offset, lightingData.sky_top_color);
-    offset += fillColor(uniformBuf, offset, lightingData.sky_middle_color);
-    offset += fillColor(uniformBuf, offset, lightingData.sky_band1_color);
-    offset += fillColor(uniformBuf, offset, lightingData.sky_band2_color);
-    offset += fillColor(uniformBuf, offset, lightingData.sky_fog_color, view.fogEnabled ? 1.0 : 0.0);
-    offset += fillColor(uniformBuf, offset, lightingData.sky_smog_color);
-    offset += fillColor(uniformBuf, offset, lightingData.sun_color);
-    offset += fillColor(uniformBuf, offset, lightingData.cloud_sun_color);
-    offset += fillColor(uniformBuf, offset, lightingData.cloud_emissive_color);
-    offset += fillColor(uniformBuf, offset, lightingData.cloud_layer1_ambient_color);
-    offset += fillColor(uniformBuf, offset, lightingData.cloud_layer2_ambient_color);
-    offset += fillColor(uniformBuf, offset, lightingData.ocean_close_color);
-    offset += fillColor(uniformBuf, offset, lightingData.ocean_far_color);
-    offset += fillColor(uniformBuf, offset, lightingData.river_close_color);
-    offset += fillColor(uniformBuf, offset, lightingData.river_far_color);
-    offset += fillColor(uniformBuf, offset, lightingData.shadow_opacity);
-    const fogEnd = view.cullingFarPlane;
-    const fogStart = Math.max(lightingData.fog_scaler * fogEnd, 0);
-    offset += fillVec4(uniformBuf, offset,
-      fogStart,
-      fogEnd,
-      0,
-      0
-    );
-    offset += fillVec4(uniformBuf, offset,
-      lightingData.water_shallow_alpha,
-      lightingData.water_deep_alpha,
-      lightingData.ocean_shallow_alpha,
-      lightingData.ocean_deep_alpha,
-    );
-    offset += fillVec4(uniformBuf, offset,
-      lightingData.glow,
-      lightingData.highlight_sky ? 1 : 0,
-      0,
-      0
-    );
-  }
+        // lighting
+        offset += fillVec4v(uniformBuf, offset, view.interiorSunDirection);
+        offset += fillVec4v(
+            uniformBuf,
+            offset,
+            view.exteriorDirectColorDirection,
+        );
+        offset += fillColor(uniformBuf, offset, lightingData.direct_color);
+        offset += fillColor(uniformBuf, offset, lightingData.ambient_color);
+        offset += fillColor(uniformBuf, offset, lightingData.sky_top_color);
+        offset += fillColor(uniformBuf, offset, lightingData.sky_middle_color);
+        offset += fillColor(uniformBuf, offset, lightingData.sky_band1_color);
+        offset += fillColor(uniformBuf, offset, lightingData.sky_band2_color);
+        offset += fillColor(
+            uniformBuf,
+            offset,
+            lightingData.sky_fog_color,
+            view.fogEnabled ? 1.0 : 0.0,
+        );
+        offset += fillColor(uniformBuf, offset, lightingData.sky_smog_color);
+        offset += fillColor(uniformBuf, offset, lightingData.sun_color);
+        offset += fillColor(uniformBuf, offset, lightingData.cloud_sun_color);
+        offset += fillColor(
+            uniformBuf,
+            offset,
+            lightingData.cloud_emissive_color,
+        );
+        offset += fillColor(
+            uniformBuf,
+            offset,
+            lightingData.cloud_layer1_ambient_color,
+        );
+        offset += fillColor(
+            uniformBuf,
+            offset,
+            lightingData.cloud_layer2_ambient_color,
+        );
+        offset += fillColor(uniformBuf, offset, lightingData.ocean_close_color);
+        offset += fillColor(uniformBuf, offset, lightingData.ocean_far_color);
+        offset += fillColor(uniformBuf, offset, lightingData.river_close_color);
+        offset += fillColor(uniformBuf, offset, lightingData.river_far_color);
+        offset += fillColor(uniformBuf, offset, lightingData.shadow_opacity);
+        const fogEnd = view.cullingFarPlane;
+        const fogStart = Math.max(lightingData.fog_scaler * fogEnd, 0);
+        offset += fillVec4(uniformBuf, offset, fogStart, fogEnd, 0, 0);
+        offset += fillVec4(
+            uniformBuf,
+            offset,
+            lightingData.water_shallow_alpha,
+            lightingData.water_deep_alpha,
+            lightingData.ocean_shallow_alpha,
+            lightingData.ocean_deep_alpha,
+        );
+        offset += fillVec4(
+            uniformBuf,
+            offset,
+            lightingData.glow,
+            lightingData.highlight_sky ? 1 : 0,
+            0,
+            0,
+        );
+    }
 }
 
-function fillColor(buf: Float32Array, offset: number, color: WowVec3, a: number = 1.0): number {
-  buf[offset + 0] = color.x;
-  buf[offset + 1] = color.y;
-  buf[offset + 2] = color.z;
-  buf[offset + 3] = a;
-  color.free();
-  return 4;
+function fillColor(
+    buf: Float32Array,
+    offset: number,
+    color: WowVec3,
+    a: number = 1.0,
+): number {
+    buf[offset + 0] = color.x;
+    buf[offset + 1] = color.y;
+    buf[offset + 2] = color.z;
+    buf[offset + 3] = a;
+    color.free();
+    return 4;
 }
 
 export class SkyboxProgram extends BaseProgram {
-  public static a_Position = 0;
-  public static a_ColorIndex = 1;
+    public static a_Position = 0;
+    public static a_ColorIndex = 1;
 
-  public static bindingLayouts: GfxBindingLayoutDescriptor[] = [
-    { numUniformBuffers: super.numUniformBuffers, numSamplers: super.numSamplers },
-  ];
+    public static bindingLayouts: GfxBindingLayoutDescriptor[] = [
+        {
+            numUniformBuffers: super.numUniformBuffers,
+            numSamplers: super.numSamplers,
+        },
+    ];
 
-  public override both = `
+    public override both = `
 ${BaseProgram.commonDeclarations}
 
 varying vec4 v_Color;
@@ -234,23 +286,26 @@ void mainPS() {
 }
 
 export class WmoProgram extends BaseProgram {
-  public static a_Position = 0;
-  public static a_Normal = 1;
-  public static a_Color0 = 2;
-  public static a_Color1 = 3;
-  public static a_TexCoord0 = 4;
-  public static a_TexCoord1 = 5;
-  public static a_TexCoord2 = 6;
-  public static a_TexCoord3 = 7;
+    public static a_Position = 0;
+    public static a_Normal = 1;
+    public static a_Color0 = 2;
+    public static a_Color1 = 3;
+    public static a_TexCoord0 = 4;
+    public static a_TexCoord1 = 5;
+    public static a_TexCoord2 = 6;
+    public static a_TexCoord3 = 7;
 
-  public static ub_ModelParams = 1;
-  public static ub_BatchParams = 2;
+    public static ub_ModelParams = 1;
+    public static ub_BatchParams = 2;
 
-  public static bindingLayouts: GfxBindingLayoutDescriptor[] = [
-    { numUniformBuffers: super.numUniformBuffers + 2, numSamplers: super.numSamplers + 4 },
-  ];
+    public static bindingLayouts: GfxBindingLayoutDescriptor[] = [
+        {
+            numUniformBuffers: super.numUniformBuffers + 2,
+            numSamplers: super.numSamplers + 4,
+        },
+    ];
 
-  public override both = `
+    public override both = `
 ${BaseProgram.commonDeclarations}
 
 layout(std140) uniform ub_ModelParams {
@@ -560,15 +615,18 @@ void mainPS() {
 }
 
 export class DebugWmoPortalProgram extends BaseProgram {
-  public static a_Position = 0;
+    public static a_Position = 0;
 
-  public static ub_ModelParams = 1;
+    public static ub_ModelParams = 1;
 
-  public static bindingLayouts: GfxBindingLayoutDescriptor[] = [
-      { numUniformBuffers: super.numUniformBuffers + 1, numSamplers: super.numSamplers },
-  ];
+    public static bindingLayouts: GfxBindingLayoutDescriptor[] = [
+        {
+            numUniformBuffers: super.numUniformBuffers + 1,
+            numSamplers: super.numSamplers,
+        },
+    ];
 
-  public override both = `
+    public override both = `
 ${BaseProgram.commonDeclarations}
 
 layout(std140) uniform ub_ModelParams {
@@ -592,15 +650,18 @@ void mainPS() {
 }
 
 export class LoadingAdtProgram extends BaseProgram {
-  public static a_Position = 0;
+    public static a_Position = 0;
 
-  public static ub_ModelParams = 1;
+    public static ub_ModelParams = 1;
 
-  public static bindingLayouts: GfxBindingLayoutDescriptor[] = [
-      { numUniformBuffers: super.numUniformBuffers + 1, numSamplers: super.numSamplers },
-  ];
+    public static bindingLayouts: GfxBindingLayoutDescriptor[] = [
+        {
+            numUniformBuffers: super.numUniformBuffers + 1,
+            numSamplers: super.numSamplers,
+        },
+    ];
 
-  public override both = `
+    public override both = `
 ${BaseProgram.commonDeclarations}
 
 varying vec4 v_Color;
@@ -630,17 +691,20 @@ void mainPS() {
 }
 
 export class WaterProgram extends BaseProgram {
-  public static a_Position = 0;
-  public static a_TexCoord = 1;
-  public static a_Depth = 2;
+    public static a_Position = 0;
+    public static a_TexCoord = 1;
+    public static a_Depth = 2;
 
-  public static ub_WaterParams = 1;
+    public static ub_WaterParams = 1;
 
-  public static bindingLayouts: GfxBindingLayoutDescriptor[] = [
-      { numUniformBuffers: super.numUniformBuffers + 1, numSamplers: super.numSamplers + 1 },
-  ];
+    public static bindingLayouts: GfxBindingLayoutDescriptor[] = [
+        {
+            numUniformBuffers: super.numUniformBuffers + 1,
+            numSamplers: super.numSamplers + 1,
+        },
+    ];
 
-  public override both = `
+    public override both = `
 ${BaseProgram.commonDeclarations}
 
 varying vec3 v_Color;
@@ -700,17 +764,20 @@ void mainPS() {
 }
 
 export class TerrainProgram extends BaseProgram {
-  public static a_Position = 0;
-  public static a_Normal = 1;
-  public static a_Color = 2;
-  public static a_ChunkIndex = 3;
-  public static a_Lighting = 4;
+    public static a_Position = 0;
+    public static a_Normal = 1;
+    public static a_Color = 2;
+    public static a_ChunkIndex = 3;
+    public static a_Lighting = 4;
 
-  public static bindingLayouts: GfxBindingLayoutDescriptor[] = [
-      { numUniformBuffers: super.numUniformBuffers, numSamplers: super.numSamplers + 6 },
-  ];
+    public static bindingLayouts: GfxBindingLayoutDescriptor[] = [
+        {
+            numUniformBuffers: super.numUniformBuffers,
+            numSamplers: super.numSamplers + 6,
+        },
+    ];
 
-  public override both = `
+    public override both = `
 ${BaseProgram.commonDeclarations}
 
 layout(binding = 0) uniform sampler2D u_Texture0;
@@ -800,43 +867,55 @@ export const MAX_DOODAD_INSTANCES = 32;
 export const MAX_BONE_TRANSFORMS = 300;
 
 export class ModelProgram extends BaseProgram {
-  public static a_Position = 0;
-  public static a_BoneWeights = 1;
-  public static a_BoneIndices = 2;
-  public static a_Normal = 3;
-  public static a_TexCoord0 = 4;
-  public static a_TexCoord1 = 5;
+    public static a_Position = 0;
+    public static a_BoneWeights = 1;
+    public static a_BoneIndices = 2;
+    public static a_Normal = 3;
+    public static a_TexCoord0 = 4;
+    public static a_TexCoord1 = 5;
 
-  public static ub_DoodadParams = 1;
-  public static ub_MaterialParams = 2;
+    public static ub_DoodadParams = 1;
+    public static ub_MaterialParams = 2;
 
-  public static bindingLayouts: GfxBindingLayoutDescriptor[] = [
-      { numUniformBuffers: super.numUniformBuffers + 2, numSamplers: super.numSamplers + 4 },
-  ];
+    public static bindingLayouts: GfxBindingLayoutDescriptor[] = [
+        {
+            numUniformBuffers: super.numUniformBuffers + 2,
+            numSamplers: super.numSamplers + 4,
+        },
+    ];
 
-  private static buildVertexShaderBlock(colorType: string, uvs: string[]): string {
-    const colorAssignment = colorType === 'diffuse' ? `v_DiffuseColor = vec4(combinedColorHalved.r, combinedColorHalved.g, combinedColorHalved.b, combinedColor.a);`
-      : colorType === 'color' ? `v_DiffuseColor = vec4(0.5, 0.5, 0.5, 1.0);`
-      : colorType === 'edgeFade' ? `v_DiffuseColor = vec4(combinedColorHalved.r, combinedColorHalved.g, combinedColorHalved.b, combinedColor.a * edgeScanVal);`
-      : `v_DiffuseColor = vec4(combinedColor.rgb * 0.5, combinedColor.a);`;
-    const uvAssignments = uvs.map((uv, uvIndex) => {
-      if (uv.startsWith('t')) {
-        let n = parseInt(uv[1]);
-        if (n < 2) {
-          return `    v_UV${uvIndex} = Mul(texMat${n - 1}, vec4(a_TexCoord${n - 1}, 0.0, 1.0)).xy;`;
-        } else {
-          return `    v_UV${uvIndex} = v_UV${n};`
-        }
-      } else if (uv === 'env') {
-        return `    v_UV${uvIndex} = envCoord;`;
-      } else {
-        throw `unrecognized uv ${uv}`;
-      }
-    }).join('\n');
-    return `${colorAssignment}\n${uvAssignments}`
-  }
+    private static buildVertexShaderBlock(
+        colorType: string,
+        uvs: string[],
+    ): string {
+        const colorAssignment =
+            colorType === "diffuse"
+                ? `v_DiffuseColor = vec4(combinedColorHalved.r, combinedColorHalved.g, combinedColorHalved.b, combinedColor.a);`
+                : colorType === "color"
+                  ? `v_DiffuseColor = vec4(0.5, 0.5, 0.5, 1.0);`
+                  : colorType === "edgeFade"
+                    ? `v_DiffuseColor = vec4(combinedColorHalved.r, combinedColorHalved.g, combinedColorHalved.b, combinedColor.a * edgeScanVal);`
+                    : `v_DiffuseColor = vec4(combinedColor.rgb * 0.5, combinedColor.a);`;
+        const uvAssignments = uvs
+            .map((uv, uvIndex) => {
+                if (uv.startsWith("t")) {
+                    let n = parseInt(uv[1]);
+                    if (n < 2) {
+                        return `    v_UV${uvIndex} = Mul(texMat${n - 1}, vec4(a_TexCoord${n - 1}, 0.0, 1.0)).xy;`;
+                    } else {
+                        return `    v_UV${uvIndex} = v_UV${n};`;
+                    }
+                } else if (uv === "env") {
+                    return `    v_UV${uvIndex} = envCoord;`;
+                } else {
+                    throw `unrecognized uv ${uv}`;
+                }
+            })
+            .join("\n");
+        return `${colorAssignment}\n${uvAssignments}`;
+    }
 
-  public override both = `
+    public override both = `
 ${BaseProgram.commonDeclarations}
 
 struct DoodadInstance {
@@ -986,43 +1065,43 @@ void mainVS() {
     v_UV3 = vec2(0.0);
 
     if (vertexShader == ${rust.WowVertexShader.DiffuseT1}) {
-      ${ModelProgram.buildVertexShaderBlock('diffuse', ['t1'])}
+      ${ModelProgram.buildVertexShaderBlock("diffuse", ["t1"])}
     } else if (vertexShader == ${rust.WowVertexShader.DiffuseEnv}) {
-      ${ModelProgram.buildVertexShaderBlock('diffuse', ['env'])}
+      ${ModelProgram.buildVertexShaderBlock("diffuse", ["env"])}
     } else if (vertexShader == ${rust.WowVertexShader.DiffuseT1T2}) {
-      ${ModelProgram.buildVertexShaderBlock('diffuse', ['t1', 't2'])}
+      ${ModelProgram.buildVertexShaderBlock("diffuse", ["t1", "t2"])}
     } else if (vertexShader == ${rust.WowVertexShader.DiffuseT1Env}) {
-      ${ModelProgram.buildVertexShaderBlock('diffuse', ['t1', 'env'])}
+      ${ModelProgram.buildVertexShaderBlock("diffuse", ["t1", "env"])}
     } else if (vertexShader == ${rust.WowVertexShader.DiffuseEnvT1}) {
-      ${ModelProgram.buildVertexShaderBlock('diffuse', ['env', 't1'])}
+      ${ModelProgram.buildVertexShaderBlock("diffuse", ["env", "t1"])}
     } else if (vertexShader == ${rust.WowVertexShader.DiffuseEnvEnv}) {
-      ${ModelProgram.buildVertexShaderBlock('diffuse', ['env', 'env'])}
+      ${ModelProgram.buildVertexShaderBlock("diffuse", ["env", "env"])}
     } else if (vertexShader == ${rust.WowVertexShader.DiffuseT1EnvT1}) {
-      ${ModelProgram.buildVertexShaderBlock('diffuse', ['t1', 'env', 't1'])}
+      ${ModelProgram.buildVertexShaderBlock("diffuse", ["t1", "env", "t1"])}
     } else if (vertexShader == ${rust.WowVertexShader.DiffuseT1T1}) {
-      ${ModelProgram.buildVertexShaderBlock('diffuse', ['t1', 't1'])}
+      ${ModelProgram.buildVertexShaderBlock("diffuse", ["t1", "t1"])}
     } else if (vertexShader == ${rust.WowVertexShader.DiffuseT1T1T1}) {
-      ${ModelProgram.buildVertexShaderBlock('diffuse', ['t1', 't1', 't1'])}
+      ${ModelProgram.buildVertexShaderBlock("diffuse", ["t1", "t1", "t1"])}
     } else if (vertexShader == ${rust.WowVertexShader.DiffuseEdgeFadeT1}) {
-      ${ModelProgram.buildVertexShaderBlock('edgeFade', ['t1', 't1', 't1'])}
+      ${ModelProgram.buildVertexShaderBlock("edgeFade", ["t1", "t1", "t1"])}
     } else if (vertexShader == ${rust.WowVertexShader.DiffuseT2}) {
-      ${ModelProgram.buildVertexShaderBlock('diffuse', ['t1'])}
+      ${ModelProgram.buildVertexShaderBlock("diffuse", ["t1"])}
     } else if (vertexShader == ${rust.WowVertexShader.DiffuseT1EnvT2}) {
-      ${ModelProgram.buildVertexShaderBlock('diffuse', ['t1', 'env', 't2'])}
+      ${ModelProgram.buildVertexShaderBlock("diffuse", ["t1", "env", "t2"])}
     } else if (vertexShader == ${rust.WowVertexShader.DiffuseEdgeFadeT1T2}) {
-      ${ModelProgram.buildVertexShaderBlock('edgeFade', ['t1', 't2'])}
+      ${ModelProgram.buildVertexShaderBlock("edgeFade", ["t1", "t2"])}
     } else if (vertexShader == ${rust.WowVertexShader.DiffuseEdgeFadeEnv}) {
-      ${ModelProgram.buildVertexShaderBlock('edgeFade', ['env'])}
+      ${ModelProgram.buildVertexShaderBlock("edgeFade", ["env"])}
     } else if (vertexShader == ${rust.WowVertexShader.DiffuseT1T2T1}) {
-      ${ModelProgram.buildVertexShaderBlock('edgeFade', ['t1', 't2', 't1'])}
+      ${ModelProgram.buildVertexShaderBlock("edgeFade", ["t1", "t2", "t1"])}
     } else if (vertexShader == ${rust.WowVertexShader.DiffuseT1T2T3}) {
-      ${ModelProgram.buildVertexShaderBlock('edgeFade', ['t1', 't2', 't3'])}
+      ${ModelProgram.buildVertexShaderBlock("edgeFade", ["t1", "t2", "t3"])}
     } else if (vertexShader == ${rust.WowVertexShader.ColorT1T2T3}) {
-      ${ModelProgram.buildVertexShaderBlock('color', ['t1', 't2', 't3'])}
+      ${ModelProgram.buildVertexShaderBlock("color", ["t1", "t2", "t3"])}
     } else if (vertexShader == ${rust.WowVertexShader.BWDiffuseT1}) {
-      ${ModelProgram.buildVertexShaderBlock('bw', ['t1'])}
+      ${ModelProgram.buildVertexShaderBlock("bw", ["t1"])}
     } else if (vertexShader == ${rust.WowVertexShader.BWDiffuseT1T2}) {
-      ${ModelProgram.buildVertexShaderBlock('bw', ['t1', 't2'])}
+      ${ModelProgram.buildVertexShaderBlock("bw", ["t1", "t2"])}
     }
 }
 #endif
@@ -1246,7 +1325,7 @@ void mainPS() {
     bool isAdditive = (blendMode == ${rust.WowM2BlendingMode.Add});
     finalColor.rgb = calcFog(finalColor.rgb, v_Position.xyz, isAdditive);
    }
-    
+
    gl_FragColor = finalColor;
 }
 #endif
@@ -1254,14 +1333,17 @@ void mainPS() {
 }
 
 export class ParticleProgram extends BaseProgram {
-  public static ub_EmitterParams = 1;
-  public static ub_DoodadParams = 2;
+    public static ub_EmitterParams = 1;
+    public static ub_DoodadParams = 2;
 
-  public static bindingLayouts: GfxBindingLayoutDescriptor[] = [
-      { numUniformBuffers: super.numUniformBuffers + 2, numSamplers: super.numSamplers + 4 },
-  ];
+    public static bindingLayouts: GfxBindingLayoutDescriptor[] = [
+        {
+            numUniformBuffers: super.numUniformBuffers + 2,
+            numSamplers: super.numSamplers + 4,
+        },
+    ];
 
-  public override both = `
+    public override both = `
 ${BaseProgram.commonDeclarations}
 
 struct DoodadInstance {
