@@ -1,73 +1,21 @@
 import { mat4, vec3, vec4 } from "gl-matrix";
 import { CameraController } from "../Camera.js";
 import { AABB, Frustum } from "../Geometry.js";
-import {
-    getMatrixTranslation,
-    invlerp,
-    lerp,
-    projectionMatrixForFrustum,
-    saturate,
-    transformVec3Mat4w1,
-} from "../MathHelpers.js";
+import { getMatrixTranslation, invlerp, lerp, projectionMatrixForFrustum, saturate, setMatrixTranslation, transformVec3Mat4w1 } from "../MathHelpers.js";
 import { SceneContext } from "../SceneBase.js";
-import {
-    makeBackbufferDescSimple,
-    standardFullClearRenderPassDescriptor,
-} from "../gfx/helpers/RenderGraphHelpers.js";
-import {
-    GfxClipSpaceNearZ,
-    GfxCullMode,
-    GfxDevice,
-} from "../gfx/platform/GfxPlatform.js";
+import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
+import { GfxClipSpaceNearZ, GfxCullMode, GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { GfxProgram } from "../gfx/platform/GfxPlatformImpl.js";
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
 import { GfxRenderInstList } from "../gfx/render/GfxRenderInstManager.js";
 import { rust } from "../rustlib.js";
 import * as Viewer from "../viewer.js";
-import {
-    AdtCoord,
-    AdtData,
-    ChunkData,
-    Database,
-    DoodadData,
-    LazyWorldData,
-    LiquidInstance,
-    ModelData,
-    ParticleEmitter,
-    SkyboxData,
-    WmoData,
-    WmoDefinition,
-    WorldData,
-    WowCache,
-} from "./data.js";
-import {
-    BaseProgram,
-    LoadingAdtProgram,
-    ModelProgram,
-    ParticleProgram,
-    SkyboxProgram,
-    TerrainProgram,
-    WaterProgram,
-    WmoProgram,
-} from "./program.js";
-import {
-    LoadingAdtRenderer,
-    ModelRenderer,
-    SkyboxRenderer,
-    TerrainRenderer,
-    WaterRenderer,
-    WmoRenderer,
-} from "./render.js";
+import { AdtCoord, AdtData, Database, DoodadData, LazyWorldData, ModelData, ParticleEmitter, WmoData, WmoDefinition, WorldData, WowCache } from "./data.js";
+import { BaseProgram, LoadingAdtProgram, ModelProgram, ParticleProgram, SkyboxProgram, TerrainProgram, WaterProgram, WmoProgram } from "./program.js";
+import { LoadingAdtRenderer, ModelRenderer, SkyboxRenderer, TerrainRenderer, WaterRenderer, WmoRenderer } from "./render.js";
 import { TextureCache } from "./tex.js";
 import { assert } from "../util.js";
-import { ConvexHull } from "../../rust/pkg/index.js";
-import {
-    drawScreenSpaceText,
-    drawWorldSpaceAABB,
-    getDebugOverlayCanvas2D,
-} from "../DebugJunk.js";
-import { Green, Red, White } from "../Color.js";
 
 export const MAP_SIZE = 17066;
 
@@ -87,29 +35,12 @@ export const noclipSpaceFromModelSpace = mat4.fromValues(
 );
 export const placementSpaceFromModelSpace: mat4 = noclipSpaceFromModelSpace;
 
-export const adtSpaceFromPlacementSpace: mat4 = mat4.invert(
-    mat4.create(),
-    noclipSpaceFromAdtSpace,
-);
+export const adtSpaceFromPlacementSpace: mat4 = mat4.invert(mat4.create(), noclipSpaceFromAdtSpace);
+export const adtSpaceFromModelSpace: mat4 = mat4.invert(mat4.create(), noclipSpaceFromAdtSpace);
+mat4.mul(adtSpaceFromModelSpace, adtSpaceFromModelSpace, noclipSpaceFromModelSpace);
 
-export const adtSpaceFromModelSpace: mat4 = mat4.invert(
-    mat4.create(),
-    noclipSpaceFromAdtSpace,
-);
-mat4.mul(
-    adtSpaceFromModelSpace,
-    adtSpaceFromModelSpace,
-    noclipSpaceFromModelSpace,
-);
-
-export const modelSpaceFromAdtSpace: mat4 = mat4.invert(
-    mat4.create(),
-    adtSpaceFromModelSpace,
-);
-export const modelSpaceFromPlacementSpace: mat4 = mat4.invert(
-    mat4.create(),
-    placementSpaceFromModelSpace,
-);
+export const modelSpaceFromAdtSpace: mat4 = mat4.invert(mat4.create(), adtSpaceFromModelSpace);
+export const modelSpaceFromPlacementSpace: mat4 = mat4.invert(mat4.create(), placementSpaceFromModelSpace);
 
 const scratchVec3 = vec3.create();
 export class View {
@@ -120,10 +51,8 @@ export class View {
     public clipFromWorldMatrix = mat4.create();
     // aka projectionMatrix
     public clipFromViewMatrix = mat4.create();
-    public interiorSunDirection: vec4 = [-0.30822, -0.30822, -0.89999998, 0];
-    public exteriorDirectColorDirection: vec4 = [
-        -0.30822, -0.30822, -0.89999998, 0,
-    ];
+    public interiorSunDirection = vec4.fromValues(-0.30822, -0.30822, -0.9, 0);
+    public exteriorDirectColorDirection = vec4.fromValues(-0.30822, -0.30822, -0.9, 0);
     public clipSpaceNearZ: GfxClipSpaceNearZ;
     public cameraPos = vec3.create();
     public time: number;
@@ -141,11 +70,7 @@ export class View {
 
     public finishSetup(): void {
         mat4.invert(this.worldFromViewMatrix, this.viewFromWorldMatrix);
-        mat4.mul(
-            this.clipFromWorldMatrix,
-            this.clipFromViewMatrix,
-            this.viewFromWorldMatrix,
-        );
+        mat4.mul(this.clipFromWorldMatrix, this.clipFromViewMatrix, this.viewFromWorldMatrix);
         getMatrixTranslation(this.cameraPos, this.worldFromViewMatrix);
     }
 
@@ -167,12 +92,7 @@ export class View {
         const cosPhi = Math.cos(phi);
         const sinTheta = Math.sin(theta);
         const cosTheta = Math.cos(theta);
-        this.exteriorDirectColorDirection = [
-            sinPhi * cosTheta,
-            sinPhi * sinTheta,
-            cosPhi,
-            0,
-        ];
+        vec4.set(this.exteriorDirectColorDirection, sinPhi * cosTheta, sinPhi * sinTheta, cosPhi, 0);
     }
 
     public cameraDistanceToWorldSpaceAABB(aabb: AABB): number {
@@ -183,11 +103,7 @@ export class View {
     public setupFromViewerInput(viewerInput: Viewer.ViewerRenderInput): void {
         this.cullingNearPlane = viewerInput.camera.near;
         this.clipSpaceNearZ = viewerInput.camera.clipSpaceNearZ;
-        mat4.mul(
-            this.viewFromWorldMatrix,
-            viewerInput.camera.viewMatrix,
-            noclipSpaceFromAdtSpace,
-        );
+        mat4.mul(this.viewFromWorldMatrix, viewerInput.camera.viewMatrix, noclipSpaceFromAdtSpace);
         mat4.copy(this.clipFromViewMatrix, viewerInput.camera.projectionMatrix);
 
         // Culling uses different near/far planes
@@ -202,22 +118,13 @@ export class View {
             this.cullingFarPlane,
         );
         const clipFromWorldMatrixCull = mat4.create();
-        mat4.mul(
-            clipFromWorldMatrixCull,
-            clipFromViewMatrixCull,
-            this.viewFromWorldMatrix,
-        );
-        this.cullingFrustum.updateClipFrustum(
-            clipFromWorldMatrixCull,
-            GfxClipSpaceNearZ.NegativeOne,
-        );
+        mat4.mul(clipFromWorldMatrixCull, clipFromViewMatrixCull, this.viewFromWorldMatrix);
+        this.cullingFrustum.updateClipFrustum(clipFromWorldMatrixCull, GfxClipSpaceNearZ.NegativeOne);
 
         if (this.freezeTime) {
             this.time = 800;
         } else {
-            this.time =
-                (viewerInput.time / this.secondsPerGameDay + this.timeOffset) %
-                2880;
+            this.time = (viewerInput.time / this.secondsPerGameDay + this.timeOffset) % 2880;
         }
         this.dayNight = this.time / 2880.0;
         this.deltaTime = viewerInput.deltaTime;
@@ -226,45 +133,39 @@ export class View {
     }
 }
 
-enum CullingState {
+const enum CullingState {
     Running,
     Paused,
     OneShot,
-}
+};
 
-enum CameraState {
+const enum CameraState {
     Frozen,
     Running,
-}
+};
 
 // A set of all doodads, ADTs, WMOs, etc to render each frame
 export class FrameData {
-    public wmoDefGroups: MapArray<number, number> = new MapArray(); // WmoDefinition uniqueId => [WMO groupId]
-    public wmoDefs: MapArray<number, WmoDefinition> = new MapArray(); // WMO fileId => [WmoDefinition]
-    public doodads: MapArray<number, DoodadData> = new MapArray(); // Model fileId => [DoodadData]
+    public wmoDefGroups = new MapArray<number, number>(); // WmoDefinition uniqueId => [WMO groupId]
+    public wmoDefs = new MapArray<number, WmoDefinition>(); // WMO fileId => [WmoDefinition]
+    public doodads = new MapArray<number, DoodadData>(); // Model fileId => [DoodadData]
     public liquidIndices: number[] = []; // index into either WMO or ADT liquids array
-    public adtChunkIndices: MapArray<number, number> = new MapArray(); // ADT fileId => [chunk index]
+    public adtChunkIndices = new MapArray<number, number>(); // ADT fileId => [chunk index]
     public activeWmoSkybox: number | null = null;
-    public adtLiquids: MapArray<number, number> = new MapArray(); // ADT fileId => [liquidIndex]
-    public wmoLiquids: MapArray<number, number> = new MapArray(); // WmoDefinition uniqueId => [liquidIndex]
+    public adtLiquids = new MapArray<number, number>(); // ADT fileId => [liquidIndex]
+    public wmoLiquids = new MapArray<number, number>(); // WmoDefinition uniqueId => [liquidIndex]
 
-    private wmoDefToDoodadIndices: MapArray<number, number> = new MapArray(); // WmoDefinition uniqueId => [doodad index]
-    private adtDoodadUniqueIds: Set<number> = new Set();
-
-    constructor() {}
+    private wmoDefToDoodadIndices = new MapArray<number, number>(); // WmoDefinition uniqueId => [doodad index]
+    private adtDoodadUniqueIds = new Set<number>();
 
     public addWmoDef(wmo: WmoData, def: WmoDefinition) {
         this.wmoDefs.append(wmo.fileId, def);
     }
 
-    public addWmoGroup(
-        wmo: WmoData,
-        def: WmoDefinition,
-        groupId: number,
-        justWmo = false,
-    ) {
+    public addWmoGroup(wmo: WmoData, def: WmoDefinition, groupId: number, justWmo = false) {
         this.wmoDefGroups.append(def.uniqueId, groupId);
-        if (justWmo) return;
+        if (justWmo)
+            return;
         if (def.groupIdToDoodadIndices.has(groupId)) {
             for (let index of def.groupIdToDoodadIndices.get(groupId)) {
                 this.addWmoDoodad(def, index);
@@ -288,7 +189,8 @@ export class FrameData {
     public addAdtDoodad(doodad: DoodadData) {
         const uniqueId = doodad.uniqueId!;
         assert(uniqueId !== undefined);
-        if (this.adtDoodadUniqueIds.has(uniqueId)) return;
+        if (this.adtDoodadUniqueIds.has(uniqueId))
+            return;
         this.adtDoodadUniqueIds.add(uniqueId);
         this.doodads.append(doodad.modelId, doodad);
     }
@@ -308,8 +210,6 @@ export class FrameData {
 
 export class MapArray<K, V> {
     public map: Map<K, V[]> = new Map();
-
-    constructor() {}
 
     public has(key: K): boolean {
         return this.map.has(key);
@@ -367,19 +267,14 @@ enum CullWmoResult {
     CameraOutside,
 }
 
-let screenY = 0;
-function screenPrint(str: string): void {
-    drawScreenSpaceText(getDebugOverlayCanvas2D(), 100, 100 + screenY, str, White, { outline: 4, align: 'left' });
-    screenY += 64;
-}
-
 export class WdtScene implements Viewer.SceneGfx {
-    private terrainRenderers: Map<number, TerrainRenderer> = new Map();
-    private adtWaterRenderers: Map<number, WaterRenderer> = new Map();
-    private wmoWaterRenderers: Map<number, WaterRenderer> = new Map();
-    private modelRenderers: Map<number, ModelRenderer> = new Map();
-    private skyboxModelRenderers: Map<string, ModelRenderer> = new Map();
-    private wmoRenderers: Map<number, WmoRenderer> = new Map();
+    private terrainRenderers = new Map<number, TerrainRenderer>();
+    private adtWaterRenderers = new Map<number, WaterRenderer>();
+    private wmoWaterRenderers = new Map<number, WaterRenderer>();
+    private modelRenderers = new Map<number, ModelRenderer>();
+    private skyboxModelRenderers = new Map<string, ModelRenderer>();
+    private wmoRenderers = new Map<number, WmoRenderer>();
+    private wmoSkyboxRenderers = new Map<number, ModelRenderer>();
     private skyboxRenderer: SkyboxRenderer;
     private loadingAdtRenderer: LoadingAdtRenderer;
     private renderInstListMain = new GfxRenderInstList();
@@ -395,8 +290,8 @@ export class WdtScene implements Viewer.SceneGfx {
     private loadingAdtProgram: GfxProgram;
     private particleProgram: GfxProgram;
 
-    private modelIdToDoodads: MapArray<number, DoodadData> = new MapArray();
-    private wmoIdToDefs: MapArray<number, WmoDefinition> = new MapArray();
+    private modelIdToDoodads = new MapArray<number, DoodadData>();
+    private wmoIdToDefs = new MapArray<number, WmoDefinition>();
 
     public mainView = new View();
     private textureCache: TextureCache;
@@ -414,37 +309,17 @@ export class WdtScene implements Viewer.SceneGfx {
     private modelCamera = vec3.create();
     private modelFrustum = new Frustum(); // TODO rip this out once portal culling is in rust
     private modelFrustumRust = new rust.ConvexHull();
-    private wmoSkyboxRenderers: Map<number, ModelRenderer> = new Map();
 
-    constructor(
-        private device: GfxDevice,
-        public world: WorldData | LazyWorldData,
-        public renderHelper: GfxRenderHelper,
-        private db: Database,
-    ) {
+    constructor(private device: GfxDevice, public world: WorldData | LazyWorldData, public renderHelper: GfxRenderHelper, private db: Database) {
         console.time("WdtScene construction");
         this.textureCache = new TextureCache(this.renderHelper.renderCache);
-        this.terrainProgram = this.renderHelper.renderCache.createProgram(
-            new TerrainProgram(),
-        );
-        this.waterProgram = this.renderHelper.renderCache.createProgram(
-            new WaterProgram(),
-        );
-        this.modelProgram = this.renderHelper.renderCache.createProgram(
-            new ModelProgram(),
-        );
-        this.particleProgram = this.renderHelper.renderCache.createProgram(
-            new ParticleProgram(),
-        );
-        this.wmoProgram = this.renderHelper.renderCache.createProgram(
-            new WmoProgram(),
-        );
-        this.skyboxProgram = this.renderHelper.renderCache.createProgram(
-            new SkyboxProgram(),
-        );
-        this.loadingAdtProgram = this.renderHelper.renderCache.createProgram(
-            new LoadingAdtProgram(),
-        );
+        this.terrainProgram = this.renderHelper.renderCache.createProgram(new TerrainProgram());
+        this.waterProgram = this.renderHelper.renderCache.createProgram(new WaterProgram());
+        this.modelProgram = this.renderHelper.renderCache.createProgram(new ModelProgram());
+        this.particleProgram = this.renderHelper.renderCache.createProgram(new ParticleProgram());
+        this.wmoProgram = this.renderHelper.renderCache.createProgram(new WmoProgram());
+        this.skyboxProgram = this.renderHelper.renderCache.createProgram(new SkyboxProgram());
+        this.loadingAdtProgram = this.renderHelper.renderCache.createProgram(new LoadingAdtProgram());
 
         this.setupSkyboxes();
         if (this.world.globalWmo) {
@@ -458,10 +333,7 @@ export class WdtScene implements Viewer.SceneGfx {
         }
 
         this.skyboxRenderer = new SkyboxRenderer(device, this.renderHelper);
-        this.loadingAdtRenderer = new LoadingAdtRenderer(
-            device,
-            this.renderHelper,
-        );
+        this.loadingAdtRenderer = new LoadingAdtRenderer(device, this.renderHelper);
         console.timeEnd("WdtScene construction");
     }
 
@@ -476,36 +348,17 @@ export class WdtScene implements Viewer.SceneGfx {
         if ("startAdtCoords" in this.world) {
             // if we're in a continent scene
             const [startX, startY] = this.world.startAdtCoords;
-            scratchVec3[0] = (32 - startY) * 533.33;
-            scratchVec3[1] = (32 - startX) * 533.33;
-            scratchVec3[2] = 0;
-            transformVec3Mat4w1(
-                scratchVec3,
-                noclipSpaceFromAdtSpace,
-                scratchVec3,
-            );
+            vec3.set(scratchVec3, (32 - startY) * 533.33, (32 - startX) * 533.33, 0);
+            transformVec3Mat4w1(scratchVec3, noclipSpaceFromAdtSpace, scratchVec3);
             mat4.fromTranslation(dst, scratchVec3);
         } else if (this.world.globalWmoDef) {
-            mat4.getTranslation(
-                scratchVec3,
-                this.world.globalWmoDef!.modelMatrix,
-            );
-            transformVec3Mat4w1(
-                scratchVec3,
-                noclipSpaceFromAdtSpace,
-                scratchVec3,
-            );
+            mat4.getTranslation(scratchVec3, this.world.globalWmoDef!.modelMatrix);
+            transformVec3Mat4w1(scratchVec3, noclipSpaceFromAdtSpace, scratchVec3);
             mat4.fromTranslation(dst, scratchVec3);
         } else {
             assert(this.world.adts.length > 0);
-            this.world.adts[
-                this.world.adts.length - 1
-            ].worldSpaceAABB.centerPoint(scratchVec3);
-            transformVec3Mat4w1(
-                scratchVec3,
-                noclipSpaceFromAdtSpace,
-                scratchVec3,
-            );
+            this.world.adts[this.world.adts.length - 1].worldSpaceAABB.centerPoint(scratchVec3);
+            transformVec3Mat4w1(scratchVec3, noclipSpaceFromAdtSpace, scratchVec3);
             mat4.fromTranslation(dst, scratchVec3);
         }
     }
@@ -515,43 +368,17 @@ export class WdtScene implements Viewer.SceneGfx {
             assert(skybox.modelData !== undefined);
             assert(skybox.modelFileId !== undefined);
             if (!this.skyboxModelRenderers.has(skybox.filename)) {
-                this.skyboxModelRenderers.set(
-                    skybox.filename,
-                    new ModelRenderer(
-                        this.device,
-                        skybox.modelData,
-                        this.renderHelper,
-                        this.textureCache,
-                    ),
-                );
+                this.skyboxModelRenderers.set(skybox.filename, new ModelRenderer(this.device, skybox.modelData, this.renderHelper, this.textureCache));
             }
         }
     }
 
     public setupAdt(adt: AdtData) {
-        if (this.terrainRenderers.has(adt.fileId)) {
+        if (this.terrainRenderers.has(adt.fileId))
             return;
-        }
 
-        this.terrainRenderers.set(
-            adt.fileId,
-            new TerrainRenderer(
-                this.device,
-                this.renderHelper,
-                adt,
-                this.textureCache,
-            ),
-        );
-        this.adtWaterRenderers.set(
-            adt.fileId,
-            new WaterRenderer(
-                this.device,
-                this.renderHelper,
-                adt.liquids,
-                adt.liquidTypes,
-                this.textureCache,
-            ),
-        );
+        this.terrainRenderers.set(adt.fileId, new TerrainRenderer(this.device, this.renderHelper, adt, this.textureCache));
+        this.adtWaterRenderers.set(adt.fileId, new WaterRenderer(this.device, this.renderHelper, adt.liquids, adt.liquidTypes, this.textureCache));
         for (let lodData of adt.lodData) {
             for (let modelId of lodData.modelIds) {
                 const model = adt.models.get(modelId)!;
@@ -568,57 +395,22 @@ export class WdtScene implements Viewer.SceneGfx {
     }
 
     public setupWmo(wmo: WmoData) {
-        if (this.wmoRenderers.has(wmo.fileId)) {
+        if (this.wmoRenderers.has(wmo.fileId))
             return;
-        }
 
-        this.wmoRenderers.set(
-            wmo.fileId,
-            new WmoRenderer(
-                this.device,
-                wmo,
-                this.textureCache,
-                this.renderHelper,
-            ),
-        );
-        this.wmoWaterRenderers.set(
-            wmo.fileId,
-            new WaterRenderer(
-                this.device,
-                this.renderHelper,
-                wmo.liquids,
-                wmo.liquidTypes,
-                this.textureCache,
-            ),
-        );
+        this.wmoRenderers.set(wmo.fileId, new WmoRenderer(this.device, wmo, this.textureCache, this.renderHelper));
+        this.wmoWaterRenderers.set(wmo.fileId, new WaterRenderer(this.device, this.renderHelper, wmo.liquids, wmo.liquidTypes, this.textureCache));
         for (let model of wmo.models.values()) {
             this.createModelRenderer(model);
         }
         if (wmo.skyboxModel) {
-            this.wmoSkyboxRenderers.set(
-                wmo.skyboxModel.fileId,
-                new ModelRenderer(
-                    this.device,
-                    wmo.skyboxModel,
-                    this.renderHelper,
-                    this.textureCache,
-                ),
-            );
+            this.wmoSkyboxRenderers.set(wmo.skyboxModel.fileId, new ModelRenderer(this.device, wmo.skyboxModel, this.renderHelper, this.textureCache));
         }
     }
 
     public createModelRenderer(model: ModelData) {
-        if (!this.modelRenderers.has(model.fileId)) {
-            this.modelRenderers.set(
-                model.fileId,
-                new ModelRenderer(
-                    this.device,
-                    model,
-                    this.renderHelper,
-                    this.textureCache,
-                ),
-            );
-        }
+        if (!this.modelRenderers.has(model.fileId))
+            this.modelRenderers.set(model.fileId, new ModelRenderer(this.device, model, this.renderHelper, this.textureCache));
     }
 
     private shouldCull(): boolean {
@@ -663,11 +455,7 @@ export class WdtScene implements Viewer.SceneGfx {
 
     public cull(frame: FrameData) {
         if (this.world.globalWmo) {
-            this.cullWmoDef(
-                frame,
-                this.world.globalWmoDef!,
-                this.world.globalWmo,
-            );
+            this.cullWmoDef(frame, this.world.globalWmoDef!, this.world.globalWmo);
         } else {
             const [worldCamera, worldFrustum] = this.getCameraAndFrustum();
 
@@ -733,11 +521,7 @@ export class WdtScene implements Viewer.SceneGfx {
         }
     }
 
-    public cullWmoDef(
-        frame: FrameData,
-        def: WmoDefinition,
-        wmo: WmoData,
-    ): CullWmoResult {
+    public cullWmoDef(frame: FrameData, def: WmoDefinition, wmo: WmoData): CullWmoResult {
         const [worldCamera, worldFrustum] = this.getCameraAndFrustum();
 
         // Check if we're looking at this particular world-space WMO, then do the
@@ -748,17 +532,11 @@ export class WdtScene implements Viewer.SceneGfx {
 
         frame.addWmoDef(wmo, def);
 
-        vec3.transformMat4(
-            this.modelCamera,
-            worldCamera,
-            def.invPlacementMatrix,
-        );
+        vec3.transformMat4(this.modelCamera, worldCamera, def.invPlacementMatrix);
         this.modelFrustum.transform(worldFrustum, def.invPlacementMatrix);
 
         worldFrustum.copyToRust(this.modelFrustumRust);
-        this.modelFrustumRust.transform_js(
-            def.invPlacementMatrix as Float32Array,
-        );
+        this.modelFrustumRust.transform_js(def.invPlacementMatrix as Float32Array);
 
         // Categorize groups by interior/exterior, and whether
         // the camera is present in them
@@ -766,12 +544,7 @@ export class WdtScene implements Viewer.SceneGfx {
         let frustumGroups: number[] = [];
         let memberGroups: number[] = [];
         for (let group of wmo.groups) {
-            if (
-                wmo.wmo.group_contains_modelspace_point(
-                    group.group,
-                    this.modelCamera as Float32Array,
-                )
-            ) {
+            if (wmo.wmo.group_contains_modelspace_point(group.group, this.modelCamera as Float32Array)) {
                 if (group.flags.show_skybox && wmo.skyboxModel) {
                     frame.activeWmoSkybox = wmo.skyboxModel.fileId;
                 }
@@ -780,13 +553,7 @@ export class WdtScene implements Viewer.SceneGfx {
                 }
                 memberGroups.push(group.fileId);
             }
-            if (
-                group.flags.exterior &&
-                wmo.wmo.group_in_modelspace_frustum(
-                    group.group,
-                    this.modelFrustumRust,
-                )
-            ) {
+            if (group.flags.exterior && wmo.wmo.group_in_modelspace_frustum(group.group, this.modelFrustumRust)) {
                 frustumGroups.push(group.fileId);
             }
         }
@@ -814,13 +581,7 @@ export class WdtScene implements Viewer.SceneGfx {
         // do portal culling on the root groups
         let visibleGroups: number[] = [];
         for (let groupId of rootGroups) {
-            wmo.portalCull(
-                this.modelCamera,
-                this.modelFrustumRust,
-                groupId,
-                visibleGroups,
-                [],
-            );
+            wmo.portalCull(this.modelCamera, this.modelFrustumRust, groupId, visibleGroups, []);
         }
 
         let hasExternalGroup = false;
@@ -859,11 +620,7 @@ export class WdtScene implements Viewer.SceneGfx {
         template.setGfxProgram(this.skyboxProgram);
         template.setBindingLayouts(SkyboxProgram.bindingLayouts);
 
-        const lightingData = this.db.getGlobalLightingData(
-            this.world.lightdbMapId,
-            this.mainView.cameraPos,
-            this.mainView.time,
-        );
+        const lightingData = this.db.getGlobalLightingData(this.world.lightdbMapId, this.mainView.cameraPos, this.mainView.time);
         BaseProgram.layoutUniformBufs(template, this.mainView, lightingData);
         renderInstManager.setCurrentRenderInstList(this.renderInstListSky);
         this.skyboxRenderer.prepareToRenderSkybox(renderInstManager);
@@ -872,10 +629,7 @@ export class WdtScene implements Viewer.SceneGfx {
         template.setBindingLayouts(LoadingAdtProgram.bindingLayouts);
         renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
         this.loadingAdtRenderer.update(this.mainView);
-        this.loadingAdtRenderer.prepareToRenderLoadingBox(
-            renderInstManager,
-            this.loadingAdts,
-        );
+        this.loadingAdtRenderer.prepareToRenderLoadingBox(renderInstManager, this.loadingAdts);
 
         if (this.shouldCull()) {
             this.cull(frame);
@@ -897,11 +651,7 @@ export class WdtScene implements Viewer.SceneGfx {
         template.setBindingLayouts(WaterProgram.bindingLayouts);
         for (let [adtFileId, renderer] of this.adtWaterRenderers.entries()) {
             renderer.update(this.mainView);
-            renderer.prepareToRenderAdtWater(
-                renderInstManager,
-                frame,
-                adtFileId,
-            );
+            renderer.prepareToRenderAdtWater(renderInstManager, frame, adtFileId);
         }
         for (let [wmoId, renderer] of this.wmoWaterRenderers.entries()) {
             renderer.update(this.mainView);
@@ -931,10 +681,7 @@ export class WdtScene implements Viewer.SceneGfx {
                     continue;
                 }
                 renderer.update(this.mainView);
-                renderer.prepareToRenderSkybox(
-                    renderInstManager,
-                    skybox.weight,
-                );
+                renderer.prepareToRenderSkybox(renderInstManager, skybox.weight);
 
                 skybox.free();
             }
@@ -947,9 +694,7 @@ export class WdtScene implements Viewer.SceneGfx {
                 .get(modelId)!
                 .filter((doodad) => doodad.visible)
                 .filter((doodad) => {
-                    const dist = this.mainView.cameraDistanceToWorldSpaceAABB(
-                        doodad.worldAABB,
-                    );
+                    const dist = this.mainView.cameraDistanceToWorldSpaceAABB(doodad.worldAABB);
                     if (dist < minDistance) {
                         minDistance = dist;
                     }
@@ -962,19 +707,14 @@ export class WdtScene implements Viewer.SceneGfx {
             renderer.update(this.mainView);
             renderer.prepareToRenderModel(renderInstManager, doodads);
 
-            if (
-                this.enableParticles &&
-                renderer.model.particleEmitters.length > 0
-            ) {
+            if (this.enableParticles && renderer.model.particleEmitters.length > 0) {
                 template.setBindingLayouts(ParticleProgram.bindingLayouts);
                 template.setGfxProgram(this.particleProgram);
 
                 // LOD scales linearly w/ distance after 100 units
                 let lod = ParticleEmitter.MAX_LOD;
                 if (minDistance > 100.0) {
-                    lod *=
-                        1.0 -
-                        saturate(minDistance / this.mainView.cullingFarPlane);
+                    lod *= 1.0 - saturate(minDistance / this.mainView.cullingFarPlane);
                     lod = Math.floor(lod);
                 }
                 renderer.model.particleEmitters.forEach((emitter) => {
@@ -993,21 +733,13 @@ export class WdtScene implements Viewer.SceneGfx {
     private updateCurrentAdt() {
         const adtCoords = this.getCurrentAdtCoords();
         if (adtCoords) {
-            if (
-                this.currentAdtCoords[0] !== adtCoords[0] ||
-                this.currentAdtCoords[1] !== adtCoords[1]
-            ) {
+            if (this.currentAdtCoords[0] !== adtCoords[0] || this.currentAdtCoords[1] !== adtCoords[1]) {
                 this.currentAdtCoords = adtCoords;
-                if (
-                    this.enableProgressiveLoading &&
-                    "onEnterAdt" in this.world
-                ) {
+                if (this.enableProgressiveLoading && "onEnterAdt" in this.world) {
                     const newCoords = this.world.onEnterAdt(
                         this.currentAdtCoords,
                         (coord: AdtCoord, maybeAdt: AdtData | undefined) => {
-                            this.loadingAdts = this.loadingAdts.filter(
-                                ([x, y]) => !(x === coord[0] && y === coord[1]),
-                            );
+                            this.loadingAdts = this.loadingAdts.filter(([x, y]) => !(x === coord[0] && y === coord[1]));
                             if (maybeAdt) {
                                 this.setupAdt(maybeAdt);
                             }
@@ -1039,9 +771,7 @@ export class WdtScene implements Viewer.SceneGfx {
     public dbgTeleportWorldSpaceCoord(pos: vec3) {
         vec3.transformMat4(pos, pos, noclipSpaceFromAdtSpace);
         const wmtx = window.main.viewer.camera.worldMatrix;
-        wmtx[12] = pos[0];
-        wmtx[13] = pos[1];
-        wmtx[14] = pos[2];
+        setMatrixTranslation(wmtx, pos);
         console.log(`Teleported to: ${pos}`);
     }
 
@@ -1050,88 +780,43 @@ export class WdtScene implements Viewer.SceneGfx {
         if (this.world.globalWmoDef) {
             this.world.globalWmoDef!.worldAABB.centerPoint(worldPos);
         } else {
-            this.world.adts[
-                this.world.adts.length - 1
-            ].worldSpaceAABB.centerPoint(worldPos);
+            this.world.adts[this.world.adts.length - 1].worldSpaceAABB.centerPoint(worldPos);
         }
         this.dbgTeleportWorldSpaceCoord(worldPos);
     }
 
-    render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
-        screenY = 0;
+    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
         viewerInput.camera.setClipPlanes(0.1);
         this.mainView.setupFromViewerInput(viewerInput);
         this.updateCurrentAdt();
 
-        const mainColorDesc = makeBackbufferDescSimple(
-            GfxrAttachmentSlot.Color0,
-            viewerInput,
-            standardFullClearRenderPassDescriptor,
-        );
-        const mainDepthDesc = makeBackbufferDescSimple(
-            GfxrAttachmentSlot.DepthStencil,
-            viewerInput,
-            standardFullClearRenderPassDescriptor,
-        );
+        const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, standardFullClearRenderPassDescriptor);
+        const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, standardFullClearRenderPassDescriptor);
 
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
-        const mainColorTargetID = builder.createRenderTargetID(
-            mainColorDesc,
-            "Main Color",
-        );
-        const mainDepthTargetID = builder.createRenderTargetID(
-            mainDepthDesc,
-            "Main Depth",
-        );
+        const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, "Main Color");
+        const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, "Main Depth");
         builder.pushPass((pass) => {
-            const skyDepthTargetID = builder.createRenderTargetID(
-                mainDepthDesc,
-                "Sky Depth",
-            );
+            const skyDepthTargetID = builder.createRenderTargetID(mainDepthDesc, "Sky Depth");
             pass.setDebugName("Sky");
-            pass.attachRenderTargetID(
-                GfxrAttachmentSlot.Color0,
-                mainColorTargetID,
-            );
-            pass.attachRenderTargetID(
-                GfxrAttachmentSlot.DepthStencil,
-                skyDepthTargetID,
-            );
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, skyDepthTargetID);
             pass.exec((passRenderer) => {
-                this.renderInstListSky.drawOnPassRenderer(
-                    this.renderHelper.renderCache,
-                    passRenderer,
-                );
+                this.renderInstListSky.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
 
         builder.pushPass((pass) => {
             pass.setDebugName("Main");
-            pass.attachRenderTargetID(
-                GfxrAttachmentSlot.Color0,
-                mainColorTargetID,
-            );
-            pass.attachRenderTargetID(
-                GfxrAttachmentSlot.DepthStencil,
-                mainDepthTargetID,
-            );
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                this.renderInstListMain.drawOnPassRenderer(
-                    this.renderHelper.renderCache,
-                    passRenderer,
-                );
+                this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
-        this.renderHelper.antialiasingSupport.pushPasses(
-            builder,
-            viewerInput,
-            mainColorTargetID,
-        );
-        builder.resolveRenderTargetToExternalTexture(
-            mainColorTargetID,
-            viewerInput.onscreenTexture,
-        );
+        this.renderHelper.antialiasingSupport.pushPasses(builder, viewerInput, mainColorTargetID);
+        builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender();
         this.renderHelper.renderGraph.execute(builder);
@@ -1139,7 +824,7 @@ export class WdtScene implements Viewer.SceneGfx {
         this.renderInstListSky.reset();
     }
 
-    destroy(device: GfxDevice): void {
+    public destroy(device: GfxDevice): void {
         for (let renderer of this.terrainRenderers.values()) {
             renderer.destroy(device);
         }
@@ -1165,18 +850,11 @@ export class WdtScene implements Viewer.SceneGfx {
 class WdtSceneDesc implements Viewer.SceneDesc {
     public id: string;
 
-    constructor(
-        public name: string,
-        public fileId: number,
-        public lightdbMapId: number,
-    ) {
+    constructor(public name: string, public fileId: number, public lightdbMapId: number) {
         this.id = `${name}-${fileId}`;
     }
 
-    public async createScene(
-        device: GfxDevice,
-        context: SceneContext,
-    ): Promise<Viewer.SceneGfx> {
+    public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const dataFetcher = context.dataFetcher;
         const cache = await context.dataShare.ensureObject(
             `${vanillaSceneGroup.id}/WowCache`,
@@ -1200,20 +878,11 @@ class WdtSceneDesc implements Viewer.SceneDesc {
 class ContinentSceneDesc implements Viewer.SceneDesc {
     public id: string;
 
-    constructor(
-        public name: string,
-        public fileId: number,
-        public startX: number,
-        public startY: number,
-        public lightdbMapId: number,
-    ) {
+    constructor(public name: string, public fileId: number, public startX: number, public startY: number, public lightdbMapId: number) {
         this.id = `${name}-${fileId}`;
     }
 
-    public async createScene(
-        device: GfxDevice,
-        context: SceneContext,
-    ): Promise<Viewer.SceneGfx> {
+    public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const dataFetcher = context.dataFetcher;
         const cache = await context.dataShare.ensureObject(
             `${vanillaSceneGroup.id}/WowCache`,
@@ -1226,12 +895,7 @@ class ContinentSceneDesc implements Viewer.SceneDesc {
         );
         const renderHelper = new GfxRenderHelper(device);
         rust.init_panic_hook();
-        const wdt = new LazyWorldData(
-            this.fileId,
-            [this.startX, this.startY],
-            cache,
-            this.lightdbMapId,
-        );
+        const wdt = new LazyWorldData(this.fileId, [this.startX, this.startY], cache, this.lightdbMapId);
         console.time("loading wdt");
         await wdt.load();
         console.timeEnd("loading wdt");
@@ -1247,65 +911,23 @@ const vanillaSceneDescs = [
     new ContinentSceneDesc("Stormwind, Elwynn Forest", 775971, 31, 48, 0),
     new ContinentSceneDesc("Undercity, Tirisfal Glades", 775971, 31, 28, 0),
     new ContinentSceneDesc("Lakeshire, Redridge Mountains", 775971, 36, 49, 0),
-    new ContinentSceneDesc(
-        "Blackrock Mountain, Burning Steppes",
-        775971,
-        34,
-        45,
-        0,
-    ),
+    new ContinentSceneDesc("Blackrock Mountain, Burning Steppes", 775971, 34, 45, 0),
     new ContinentSceneDesc("Booty Bay, Stranglethorn Vale", 775971, 31, 58, 0),
-    new ContinentSceneDesc(
-        "Light's Hope Chapel, Eastern Plaguelands",
-        775971,
-        41,
-        27,
-        0,
-    ),
+    new ContinentSceneDesc("Light's Hope Chapel, Eastern Plaguelands", 775971, 41, 27, 0),
     new ContinentSceneDesc("Aerie Peak, Hinterlands", 775971, 35, 31, 0),
-    new ContinentSceneDesc(
-        "Tarren Mill, Hillsbrad Foothills",
-        775971,
-        33,
-        32,
-        0,
-    ),
+    new ContinentSceneDesc("Tarren Mill, Hillsbrad Foothills", 775971, 33, 32, 0),
     new ContinentSceneDesc("Stonewrought Dam, Loch Modan", 775971, 38, 40, 0),
     new ContinentSceneDesc("Kargath, Badlands", 775971, 36, 44, 0),
     new ContinentSceneDesc("Thorium Point, Searing Gorge", 775971, 34, 44, 0),
     new ContinentSceneDesc("Stonard, Swamp of Sorrows", 775971, 38, 51, 0),
-    new ContinentSceneDesc(
-        "Nethergarde Keep, Blasted Lands",
-        775971,
-        38,
-        52,
-        0,
-    ),
+    new ContinentSceneDesc("Nethergarde Keep, Blasted Lands", 775971, 38, 52, 0),
     new ContinentSceneDesc("The Dark Portal, Blasted Lands", 775971, 38, 54, 0),
     new ContinentSceneDesc("Darkshire, Duskwood", 775971, 34, 51, 0),
-    new ContinentSceneDesc(
-        "Grom'gol Base Camp, Stranglethorn Vale",
-        775971,
-        31,
-        55,
-        0,
-    ),
-    new ContinentSceneDesc(
-        "Gurubashi Arena, Stranglethorn Vale",
-        775971,
-        31,
-        56,
-        0,
-    ),
+    new ContinentSceneDesc("Grom'gol Base Camp, Stranglethorn Vale", 775971, 31, 55, 0),
+    new ContinentSceneDesc("Gurubashi Arena, Stranglethorn Vale", 775971, 31, 56, 0),
     new ContinentSceneDesc("Sentinel Hill, Westfall", 775971, 30, 51, 0),
     new ContinentSceneDesc("Karazhan, Deadwind Pass", 775971, 35, 52, 0),
-    new ContinentSceneDesc(
-        "Southshore, Hillsbrad Foothills",
-        775971,
-        33,
-        33,
-        0,
-    ),
+    new ContinentSceneDesc("Southshore, Hillsbrad Foothills", 775971, 33, 33, 0),
 
     "Kalimdor",
     new ContinentSceneDesc("Thunder Bluff, Mulgore", 782779, 31, 34, 1),
@@ -1322,55 +944,19 @@ const vanillaSceneDescs = [
     new ContinentSceneDesc("The Crossroads, Barrens", 782779, 36, 32, 1),
     new ContinentSceneDesc("Orgrimmar, Durotar", 782779, 40, 29, 1),
     new ContinentSceneDesc("Ratchet, Barrens", 782779, 39, 33, 1),
-    new ContinentSceneDesc(
-        "Sun Rock Retreat, Stonetalon Mountains",
-        782779,
-        30,
-        30,
-        1,
-    ),
+    new ContinentSceneDesc("Sun Rock Retreat, Stonetalon Mountains", 782779, 30, 30, 1),
     new ContinentSceneDesc("Nijel's Point, Desolace", 782779, 29, 31, 1),
     new ContinentSceneDesc("Shadowprey Village, Desolace", 782779, 25, 35, 1),
     new ContinentSceneDesc("Dire Maul Arena, Feralas", 782779, 29, 38, 1),
     new ContinentSceneDesc("Thalanaar, Feralas", 782779, 33, 40, 1),
     new ContinentSceneDesc("Camp Mojache, Feralas", 782779, 31, 40, 1),
-    new ContinentSceneDesc(
-        "Feathermoon Stronghold, Feralas",
-        782779,
-        25,
-        40,
-        1,
-    ),
+    new ContinentSceneDesc("Feathermoon Stronghold, Feralas", 782779, 25, 40, 1),
     new ContinentSceneDesc("Cenarion Hold, Silithus", 782779, 30, 44, 1),
-    new ContinentSceneDesc(
-        "Marshal's Refuge, Un'Goro Crater",
-        782779,
-        34,
-        43,
-        1,
-    ),
+    new ContinentSceneDesc("Marshal's Refuge, Un'Goro Crater", 782779, 34, 43, 1),
     new ContinentSceneDesc("Gadgetzan, Tanaris", 782779, 39, 45, 1),
-    new ContinentSceneDesc(
-        "Mirage Raceway, Thousand Needles",
-        782779,
-        39,
-        43,
-        1,
-    ),
-    new ContinentSceneDesc(
-        "Freewind Post, Thousand Needles",
-        782779,
-        35,
-        41,
-        1,
-    ),
-    new ContinentSceneDesc(
-        "Theramore Isle, Dustwallow Marsh",
-        782779,
-        40,
-        39,
-        1,
-    ),
+    new ContinentSceneDesc("Mirage Raceway, Thousand Needles", 782779, 39, 43, 1),
+    new ContinentSceneDesc("Freewind Post, Thousand Needles", 782779, 35, 41, 1),
+    new ContinentSceneDesc("Theramore Isle, Dustwallow Marsh", 782779, 40, 39, 1),
     new ContinentSceneDesc("Alcaz Island, Dustwallow Marsh", 782779, 41, 37, 1),
 
     "Instances",
@@ -1462,13 +1048,7 @@ const bcSceneDescs = [
     "Outland",
     new ContinentSceneDesc("The Dark Portal", 828395, 29, 32, 530),
     new ContinentSceneDesc("Shattrath", 828395, 22, 35, 530),
-    new ContinentSceneDesc(
-        "Silvermoon City, Eversong Woods",
-        828395,
-        45,
-        14,
-        530,
-    ),
+    new ContinentSceneDesc("Silvermoon City, Eversong Woods", 828395, 45, 14, 530),
     new ContinentSceneDesc("Exodar, Azuremist Isle", 828395, 54, 39, 530),
 ];
 
@@ -1510,13 +1090,7 @@ const wotlkSceneDescs = [
     "Northrend",
     new ContinentSceneDesc("Icecrown Citadel, Icecrown", 822688, 27, 20, 571),
     new ContinentSceneDesc("Dalaran, Crystalsong Forest", 822688, 30, 20, 571),
-    new ContinentSceneDesc(
-        "Wyrmrest Temple, Dragonblight",
-        822688,
-        31,
-        24,
-        571,
-    ),
+    new ContinentSceneDesc("Wyrmrest Temple, Dragonblight", 822688, 31, 24, 571),
 ];
 
 export const vanillaSceneGroup: Viewer.SceneGroup = {
