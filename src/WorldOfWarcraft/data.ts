@@ -56,6 +56,7 @@ import {
     MathConstants,
     randomRange,
     saturate,
+    scaleMatrix,
     setMatrixTranslation,
     transformVec3Mat4w0,
 } from "../MathHelpers.js";
@@ -714,7 +715,6 @@ export class ParticleEmitter {
     public spline?: BezierSpline;
     public lod: number = ParticleEmitter.MAX_LOD;
     private msSinceLastUpdate = 0;
-    private framesSinceLastUpdate = 0;
     public needsRedraw = true;
     private pixelData: Float32Array;
 
@@ -757,6 +757,7 @@ export class ParticleEmitter {
         this.pixelData = new Float32Array(
             ParticleEmitter.MAX_PARTICLES * bytesPerParticle,
         );
+        this.msSinceLastUpdate = randomRange(0, 200);
     }
 
     private calculateParticleType(): number {
@@ -907,18 +908,15 @@ export class ParticleEmitter {
     }
 
     private shouldUpdate(): boolean {
-        const lodFactor = 1 << (ParticleEmitter.MAX_LOD - this.lod);
-        return this.framesSinceLastUpdate >= lodFactor;
+        const numFramesBeforeUpdate = 1 << (ParticleEmitter.MAX_LOD - this.lod);
+        const msBeforeUpdate = numFramesBeforeUpdate * (1000 / 60);
+        return this.msSinceLastUpdate >= msBeforeUpdate;
     }
 
-    public update(
-        dtMilliseconds: number,
-        animationManager: WowM2AnimationManager,
-    ) {
+    public update(dtMilliseconds: number, animationManager: WowM2AnimationManager) {
         this.msSinceLastUpdate += dtMilliseconds;
         // the particle system's units are seconds
         const dtSeconds = this.msSinceLastUpdate / 1000;
-        this.framesSinceLastUpdate += 1;
 
         if (!this.shouldUpdate()) {
             this.needsRedraw = false;
@@ -928,7 +926,6 @@ export class ParticleEmitter {
         }
 
         this.msSinceLastUpdate = 0;
-        this.framesSinceLastUpdate = 0;
         this.updateParams(animationManager);
 
         if (this.enabled > 0.0) {
@@ -2640,28 +2637,21 @@ export class DoodadData {
         wmoDefModelMatrix: mat4,
     ): DoodadData {
         const doodadPos = doodad.position;
-        let position: vec3 = [doodadPos.x, doodadPos.y, doodadPos.z];
+        const position = vec3.fromValues(doodadPos.x, doodadPos.y, doodadPos.z);
         doodadPos.free();
         const doodadRot = doodad.orientation;
-        let rotation: quat = [
-            doodadRot.x,
-            doodadRot.y,
-            doodadRot.z,
-            doodadRot.w,
-        ];
+        const rotation = quat.fromValues(doodadRot.x, doodadRot.y, doodadRot.z, doodadRot.w);
         doodadRot.free();
-        let scale = doodad.scale;
-        let modelId = modelIds[doodad.name_index];
+        const scale = doodad.scale;
+        const modelId = modelIds[doodad.name_index];
         if (modelId === undefined) {
-            throw new Error(
-                `WMO doodad with invalid name_index ${doodad.name_index} (only ${modelIds.length} models)`,
-            );
+            throw new Error(`WMO doodad with invalid name_index ${doodad.name_index} (only ${modelIds.length} models)`);
         }
-        let doodadMat = mat4.create();
+        const doodadMat = mat4.create();
         setMatrixTranslation(doodadMat, position);
-        const rotMat = mat4.fromQuat(mat4.create(), rotation as quat);
+        const rotMat = mat4.fromQuat(mat4.create(), rotation);
         mat4.mul(doodadMat, doodadMat, rotMat);
-        mat4.scale(doodadMat, doodadMat, [scale, scale, scale]);
+        scaleMatrix(doodadMat, doodadMat, scale);
         mat4.mul(doodadMat, wmoDefModelMatrix, doodadMat);
 
         const doodadColor = doodad.color;
