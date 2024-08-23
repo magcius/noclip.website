@@ -8,6 +8,7 @@ import {
     makeTriangleIndexBuffer,
 } from "../gfx/helpers/TopologyHelpers.js";
 import {
+    fillMatrix4x3,
     fillMatrix4x4,
     fillVec4,
     fillVec4v,
@@ -244,27 +245,24 @@ export class ModelRenderer {
         ];
     }
 
-    public prepareToRenderModel(
-        renderInstManager: GfxRenderInstManager,
-        doodads: DoodadData[],
-    ): void {
-        if (!this.isDrawable()) return;
+    public prepareToRenderModel(renderInstManager: GfxRenderInstManager, doodads: DoodadData[]) {
+        if (!this.isDrawable())
+            return;
 
         const visibleDoodads = doodads.filter((d) => d.visible);
 
         for (let doodadChunk of chunk(visibleDoodads, MAX_DOODAD_INSTANCES)) {
             const template = renderInstManager.pushTemplateRenderInst();
             template.setAllowSkippingIfPipelineNotReady(false);
-            const numMat4s = 2;
             const numVec4s = 3;
-            const instanceParamsSize = 16 * numMat4s + 4 * numVec4s;
+            const instanceParamsSize = 12 + 4 * numVec4s;
             const boneParamsSize = 16 * 2 + 4 * 1;
             const lightSize = 4 * 4;
             const baseOffs = template.allocateUniformBuffer(
                 ModelProgram.ub_DoodadParams,
                 lightSize * 4 +
-                    instanceParamsSize * MAX_DOODAD_INSTANCES +
-                    boneParamsSize * MAX_BONE_TRANSFORMS,
+                instanceParamsSize * MAX_DOODAD_INSTANCES +
+                boneParamsSize * MAX_BONE_TRANSFORMS,
             );
             let offs = baseOffs;
             const mapped = template.mapUniformBufferF32(
@@ -314,8 +312,7 @@ export class ModelRenderer {
             }
             offs = baseOffs + lightSize * 4;
             for (let doodad of doodadChunk) {
-                offs += fillMatrix4x4(mapped, offs, doodad.modelMatrix);
-                offs += fillMatrix4x4(mapped, offs, doodad.normalMatrix);
+                offs += fillMatrix4x3(mapped, offs, doodad.modelMatrix);
                 offs += fillVec4v(mapped, offs, doodad.ambientColor); // interiorAmbientColor
                 if (doodad.color !== null) {
                     offs += fillVec4(
@@ -406,19 +403,13 @@ export class ModelRenderer {
         }
     }
 
-    public prepareToRenderSkybox(
-        renderInstManager: GfxRenderInstManager,
-        weight: number,
-    ) {
+    public prepareToRenderSkybox(renderInstManager: GfxRenderInstManager, weight: number) {
         let doodad = getSkyboxDoodad();
         doodad.skyboxBlend = weight;
         this.prepareToRenderModel(renderInstManager, [doodad]);
     }
 
-    public prepareToRenderParticles(
-        renderInstManager: GfxRenderInstManager,
-        doodads: DoodadData[],
-    ): void {
+    public prepareToRenderParticles(renderInstManager: GfxRenderInstManager, doodads: DoodadData[]) {
         if (!this.isDrawable() || this.model.particleEmitters.length === 0)
             return;
 
@@ -428,13 +419,13 @@ export class ModelRenderer {
             const template = renderInstManager.pushTemplateRenderInst();
             let offs = template.allocateUniformBuffer(
                 ParticleProgram.ub_DoodadParams,
-                16 * MAX_DOODAD_INSTANCES,
+                12 * MAX_DOODAD_INSTANCES,
             );
             const mapped = template.mapUniformBufferF32(
                 ParticleProgram.ub_DoodadParams,
             );
             for (let doodad of doodadChunk) {
-                offs += fillMatrix4x4(mapped, offs, doodad.modelMatrix);
+                offs += fillMatrix4x3(mapped, offs, doodad.modelMatrix);
             }
 
             for (let i = 0; i < this.model.particleEmitters.length; i++) {
@@ -460,6 +451,7 @@ export class ModelRenderer {
                     offs,
                     emitter.alphaTest,
                     emitter.fragShaderType,
+                    emitter.blendMode,
                 );
                 offs += fillVec4(
                     mapped,
@@ -566,15 +558,9 @@ export class WmoRenderer {
                 `WmoRenderer handed a WmoDefinition that doesn't belong to it (${def.wmoId} != ${this.wmo.fileId}`,
             );
             const template = renderInstManager.pushTemplateRenderInst();
-            let offs = template.allocateUniformBuffer(
-                WmoProgram.ub_ModelParams,
-                2 * 16,
-            );
-            const mapped = template.mapUniformBufferF32(
-                WmoProgram.ub_ModelParams,
-            );
-            offs += fillMatrix4x4(mapped, offs, def.modelMatrix);
-            offs += fillMatrix4x4(mapped, offs, def.normalMatrix);
+            let offs = template.allocateUniformBuffer(WmoProgram.ub_ModelParams, 12);
+            const mapped = template.mapUniformBufferF32(WmoProgram.ub_ModelParams);
+            offs += fillMatrix4x3(mapped, offs, def.modelMatrix);
 
             const visibleGroups = frame.wmoDefGroups.get(def.uniqueId);
             for (let i = 0; i < this.vertexBuffers.length; i++) {

@@ -1,5 +1,4 @@
 import {
-    ReadonlyMat4,
     ReadonlyVec3,
     mat3,
     mat4,
@@ -38,7 +37,6 @@ import type {
     WowSkyboxMetadata,
     WowVec3,
     WowWmo,
-    WowWmoBspNode,
     WowWmoGroup,
     WowWmoGroupFlags,
     WowWmoGroupInfo,
@@ -84,11 +82,10 @@ import {
     GfxInputLayoutBufferDescriptor,
     GfxMegaStateDescriptor,
     GfxTexture,
-    GfxTextureDimension,
-    GfxTextureUsage,
     GfxVertexAttributeDescriptor,
     GfxVertexBufferDescriptor,
     GfxVertexBufferFrequency,
+    makeTextureDescriptor2D,
 } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import {
@@ -303,13 +300,13 @@ export class WowCache {
     }
 }
 
-export enum ProceduralTexture {
+export const enum ProceduralTexture {
     River = 0,
     Ocean = 0,
     Wmo = 0,
 }
 
-export enum LiquidCategory {
+export const enum LiquidCategory {
     Water = 0,
     Ocean = 1,
     Lava = 2,
@@ -325,11 +322,7 @@ export class LiquidType {
     public proceduralTexture: ProceduralTexture | undefined;
     public textureIds: (number | undefined)[] = [];
 
-    constructor(
-        cache: WowCache,
-        public type: number,
-        liquid: WowLiquidResult,
-    ) {
+    constructor(cache: WowCache, public type: number, liquid: WowLiquidResult) {
         this.flags = liquid.flags;
         this.name = liquid.name;
         if (this.name.includes("Slime")) {
@@ -431,10 +424,7 @@ export class SkyboxData {
     public modelFileId: number | undefined;
     public modelData: ModelData | undefined;
 
-    constructor(
-        public filename: string,
-        public flags: number,
-    ) {
+    constructor(public filename: string, public flags: number) {
         this.modelKey = filename;
         if (this.filename.endsWith(".mdx")) {
             this.modelKey = this.modelKey.replace(".mdx", ".m2");
@@ -589,30 +579,15 @@ class Particle {
         return new Particle(position, velocity, emitter.getLifespan());
     }
 
-    constructor(
-        public position: vec3,
-        public velocity: vec3,
-        public lifespan: number,
-    ) {}
+    constructor(public position: vec3, public velocity: vec3, public lifespan: number) {
+    }
 }
 
 const PARTICLE_COORDINATE_FIX: mat4 = mat4.fromValues(
-    0.0,
-    1.0,
-    0.0,
-    0.0,
-    -1.0,
-    0.0,
-    0.0,
-    0.0,
-    0.0,
-    0.0,
-    1.0,
-    0.0,
-    0.0,
-    0.0,
-    0.0,
-    1.0,
+    0, 1, 0, 0,
+    -1, 0, 0, 0,
+    0, 0, 1, 0,
+    0, 0, 0, 1,
 );
 
 class BezierSpline {
@@ -689,11 +664,7 @@ class BezierSpline {
             }
 
             let t = dt;
-            for (
-                let iteration = 0;
-                iteration < iterationsPerSegment;
-                iteration++
-            ) {
+            for (let i = 0; i < iterationsPerSegment; i++) {
                 this.evaluateSegment(currPos, segment, t);
                 length += vec3.dist(currPos, lastPos);
                 vec3.copy(lastPos, currPos);
@@ -747,12 +718,7 @@ export class ParticleEmitter {
     public needsRedraw = true;
     private pixelData: Float32Array;
 
-    constructor(
-        public index: number,
-        public emitter: WowM2ParticleEmitter,
-        private model: ModelData,
-        public txac: number,
-    ) {
+    constructor(public index: number, public emitter: WowM2ParticleEmitter, private model: ModelData, public txac: number) {
         this.updateBuffer = new Float32Array(16);
         this.wind = convertWowVec3(emitter.wind_vector);
         this.position = convertWowVec3(emitter.position);
@@ -774,9 +740,7 @@ export class ParticleEmitter {
             }
             this.spline = new BezierSpline(splinePoints);
         }
-        this.textureColBits = Math.ceil(
-            Math.log2(emitter.texture_dimensions_cols),
-        );
+        this.textureColBits = Math.ceil(Math.log2(emitter.texture_dimensions_cols));
         this.textureColMask = (1 << this.textureColBits) - 1;
         this.texScaleX = 1.0 / emitter.texture_dimension_rows;
         this.texScaleY = 1.0 / emitter.texture_dimensions_cols;
@@ -871,44 +835,28 @@ export class ParticleEmitter {
         mat4.translate(this.modelMatrix, this.modelMatrix, this.position);
         const bone = this.model.boneData[this.emitter.bone];
         mat4.mul(this.modelMatrix, bone.transform, this.modelMatrix);
-        mat4.mul(
-            this.modelMatrix,
-            bone.postBillboardTransform,
-            this.modelMatrix,
-        );
+        mat4.mul(this.modelMatrix, bone.postBillboardTransform, this.modelMatrix);
         mat4.mul(this.modelMatrix, this.modelMatrix, PARTICLE_COORDINATE_FIX);
     }
 
     public getEmissionRate(): number {
-        return (
-            this.emissionRate +
-            randomRange(-1, 1) * this.emitter.emission_rate_variance
-        );
+        return this.emissionRate + randomRange(this.emitter.emission_rate_variance);
     }
 
     public getEmissionSpeed(): number {
-        return (
-            this.emissionSpeed * (1 + randomRange(-1, 1) * this.speedVariation)
-        );
+        return this.emissionSpeed * (1 + randomRange(this.speedVariation));
     }
 
     public getLifespan(): number {
-        return (
-            this.lifespan + randomRange(-1, 1) * this.emitter.lifespan_variance
-        );
+        return this.lifespan + randomRange(this.emitter.lifespan_variance);
     }
 
     public getBaseSpin(): number {
-        return (
-            this.emitter.base_spin +
-            randomRange(-1, 1) * this.emitter.base_spin_variance
-        );
+        return this.emitter.base_spin + randomRange(this.emitter.base_spin_variance);
     }
 
     public getSpin(): number {
-        return (
-            this.emitter.spin + randomRange(-1, 1) * this.emitter.spin_variance
-        );
+        return this.emitter.spin + randomRange(this.emitter.spin_variance);
     }
 
     private createParticle(dt: number) {
@@ -929,16 +877,8 @@ export class ParticleEmitter {
         }
 
         if (!this.emitter.check_flag(0x10)) {
-            vec3.transformMat4(
-                particle.position,
-                particle.position,
-                this.modelMatrix,
-            );
-            transformVec3Mat4w0(
-                particle.velocity,
-                this.modelMatrix,
-                particle.velocity,
-            );
+            vec3.transformMat4(particle.position, particle.position, this.modelMatrix);
+            transformVec3Mat4w0(particle.velocity, this.modelMatrix, particle.velocity);
             if (this.emitter.check_flag(0x2000)) {
                 particle.position[2] = 0;
             }
@@ -953,27 +893,12 @@ export class ParticleEmitter {
     }
 
     public setMegaStateFlags(renderInst: GfxRenderInst) {
-        setM2BlendModeMegaState(
-            renderInst,
-            this.blendMode,
-            GfxCullMode.None,
-            this.emitter.blending_type <= 1,
-            GfxCompareMode.Greater,
-            makeSortKey(GfxRendererLayer.TRANSLUCENT + this.index),
-        );
+        setM2BlendModeMegaState(renderInst, this.blendMode, GfxCullMode.None, this.emitter.blending_type <= 1, GfxCompareMode.Greater, makeSortKey(GfxRendererLayer.TRANSLUCENT + this.index));
     }
 
     private ensureTexture(device: GfxDevice) {
         if (this.dataTexture === undefined) {
-            this.dataTexture = device.createTexture({
-                dimension: GfxTextureDimension.n2D,
-                pixelFormat: GfxFormat.F32_RGBA,
-                width: ParticleEmitter.TEXELS_PER_PARTICLE,
-                height: ParticleEmitter.MAX_PARTICLES,
-                numLevels: 1,
-                depthOrArrayLayers: 1,
-                usage: GfxTextureUsage.Sampled,
-            });
+            this.dataTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.F32_RGBA, ParticleEmitter.TEXELS_PER_PARTICLE, ParticleEmitter.MAX_PARTICLES, 1));
         }
     }
 
@@ -1042,25 +967,11 @@ export class ParticleEmitter {
                 const cellTail = this.updateBuffer[7];
                 this.extractTexCoords(particle.texCoordTail, cellTail);
 
-                vec3.scaleAndAdd(
-                    particle.velocity,
-                    particle.velocity,
-                    this.force,
-                    dtSeconds,
-                );
+                vec3.scaleAndAdd(particle.velocity, particle.velocity, this.force, dtSeconds);
                 if (this.emitter.drag > 0) {
-                    vec3.scale(
-                        particle.velocity,
-                        particle.velocity,
-                        (1.0 - this.emitter.drag) ** dtSeconds,
-                    );
+                    vec3.scale(particle.velocity, particle.velocity, (1.0 - this.emitter.drag) ** dtSeconds);
                 }
-                vec3.scaleAndAdd(
-                    particle.position,
-                    particle.position,
-                    particle.velocity,
-                    dtSeconds,
-                );
+                vec3.scaleAndAdd(particle.position, particle.position, particle.velocity, dtSeconds);
             }
         }
     }
@@ -1083,18 +994,8 @@ export class ParticleEmitter {
             }
             offs += fillVec3v(this.pixelData, offs, scratchVec3);
             offs += fillVec4v(this.pixelData, offs, particle.color);
-            offs += fillVec4(
-                this.pixelData,
-                offs,
-                particle.scale[0],
-                particle.scale[1],
-            );
-            offs += fillVec4(
-                this.pixelData,
-                offs,
-                particle.texCoordHead[0],
-                particle.texCoordHead[1],
-            );
+            offs += fillVec4(this.pixelData, offs, particle.scale[0], particle.scale[1]);
+            offs += fillVec4(this.pixelData, offs, particle.texCoordHead[0], particle.texCoordHead[1]);
         }
         device.uploadTextureData(this.dataTexture!, 0, [this.pixelData]);
         return this.dataTexture!;
@@ -1211,20 +1112,11 @@ export class ModelData {
             });
 
         this.animationManager = m2.take_animation_manager();
-        this.textureWeights = new Float32Array(
-            this.animationManager.get_num_texture_weights(),
-        );
-        this.numTextureTransformations =
-            this.animationManager.get_num_transformations();
-        this.textureTranslations = new Float32Array(
-            this.numTextureTransformations * 3,
-        );
-        this.textureRotations = new Float32Array(
-            this.numTextureTransformations * 4,
-        );
-        this.textureScalings = new Float32Array(
-            this.numTextureTransformations * 3,
-        );
+        this.textureWeights = new Float32Array(this.animationManager.get_num_texture_weights());
+        this.numTextureTransformations = this.animationManager.get_num_transformations();
+        this.textureTranslations = new Float32Array(this.numTextureTransformations * 3);
+        this.textureRotations = new Float32Array(this.numTextureTransformations * 4);
+        this.textureScalings = new Float32Array(this.numTextureTransformations * 3);
         this.numBones = this.animationManager.get_num_bones();
         this.boneTranslations = new Float32Array(this.numBones * 3);
         this.boneRotations = new Float32Array(this.numBones * 4);
@@ -1252,25 +1144,11 @@ export class ModelData {
         const bonePivots = this.animationManager.get_bone_pivots();
         for (let i = 0; i < this.numBones; i++) {
             const bonePivot = bonePivots[i];
-            const pivot = mat4.fromTranslation(mat4.create(), [
-                bonePivot.x,
-                bonePivot.y,
-                bonePivot.z,
-            ]);
-            const antiPivot = mat4.fromTranslation(mat4.create(), [
-                -bonePivot.x,
-                -bonePivot.y,
-                -bonePivot.z,
-            ]);
-            const bone = new BoneData(
-                pivot,
-                antiPivot,
-                boneFlags[i],
-                boneParents[i],
-            );
+            const pivot = mat4.fromTranslation(mat4.create(), [bonePivot.x, bonePivot.y, bonePivot.z]);
+            const antiPivot = mat4.fromTranslation(mat4.create(), [-bonePivot.x, -bonePivot.y, -bonePivot.z]);
+            const bone = new BoneData(pivot, antiPivot, boneFlags[i], boneParents[i]);
             if (bone.parentBoneId >= 0) {
-                bone.isSphericalBillboard ||=
-                    this.boneData[bone.parentBoneId].isSphericalBillboard;
+                bone.isSphericalBillboard ||= this.boneData[bone.parentBoneId].isSphericalBillboard;
             }
             this.boneData.push(bone);
 
@@ -1307,13 +1185,7 @@ export class ModelData {
             const trans = this.textureTranslations.slice(i * 3, (i + 1) * 3);
             const scale = this.textureScalings.slice(i * 3, (i + 1) * 3);
             const dst = this.textureTransforms[i];
-            mat4.fromRotationTranslationScaleOrigin(
-                dst,
-                rot,
-                trans,
-                scale,
-                [0.5, 0.5, 0],
-            );
+            mat4.fromRotationTranslationScaleOrigin(dst, rot, trans, scale, [0.5, 0.5, 0]);
         }
 
         const localBoneTransform = mat4.create();
@@ -1330,38 +1202,18 @@ export class ModelData {
             if (bone.parentBoneId >= 0) {
                 const parentBone = this.boneData[bone.parentBoneId];
                 if (bone.isSphericalBillboard) {
-                    mat4.mul(
-                        bone.transform,
-                        parentBone.transform,
-                        bone.antiPivot,
-                    );
-                    mat4.mul(
-                        bone.postBillboardTransform,
-                        parentBone.postBillboardTransform,
-                        localBoneTransform,
-                    );
+                    mat4.mul(bone.transform, parentBone.transform, bone.antiPivot);
+                    mat4.mul(bone.postBillboardTransform, parentBone.postBillboardTransform, localBoneTransform);
                 } else {
-                    mat4.mul(
-                        localBoneTransform,
-                        localBoneTransform,
-                        bone.antiPivot,
-                    );
-                    mat4.mul(
-                        bone.postBillboardTransform,
-                        parentBone.postBillboardTransform,
-                        localBoneTransform,
-                    );
+                    mat4.mul(localBoneTransform, localBoneTransform, bone.antiPivot);
+                    mat4.mul(bone.postBillboardTransform, parentBone.postBillboardTransform, localBoneTransform);
                 }
             } else {
                 if (bone.isSphericalBillboard) {
                     mat4.copy(bone.transform, bone.antiPivot);
                     mat4.copy(bone.postBillboardTransform, localBoneTransform);
                 } else {
-                    mat4.mul(
-                        localBoneTransform,
-                        localBoneTransform,
-                        bone.antiPivot,
-                    );
+                    mat4.mul(localBoneTransform, localBoneTransform, bone.antiPivot);
                     mat4.copy(bone.postBillboardTransform, localBoneTransform);
                 }
             }
@@ -1455,12 +1307,7 @@ export class BoneData {
     public postBillboardTransform = mat4.create();
     public isSphericalBillboard: boolean;
 
-    constructor(
-        public pivot: mat4,
-        public antiPivot: mat4,
-        public flags: WowM2BoneFlags,
-        public parentBoneId: number,
-    ) {
+    constructor(public pivot: mat4, public antiPivot: mat4, public flags: WowM2BoneFlags, public parentBoneId: number) {
         this.isSphericalBillboard = flags.spherical_billboard;
     }
 
@@ -1642,26 +1489,10 @@ export class WmoGroupData {
                 bspResult.bary_y,
                 bspResult.bary_z,
             ];
-            const r =
-                (this.colors[4 * idx0 + 0] * x +
-                    this.colors[4 * idx1 + 0] * y +
-                    this.colors[4 * idx2 + 0] * z) /
-                255.0;
-            const g =
-                (this.colors[4 * idx0 + 1] * x +
-                    this.colors[4 * idx1 + 1] * y +
-                    this.colors[4 * idx2 + 1] * z) /
-                255.0;
-            const b =
-                (this.colors[4 * idx0 + 2] * x +
-                    this.colors[4 * idx1 + 2] * y +
-                    this.colors[4 * idx2 + 2] * z) /
-                255.0;
-            const a =
-                (this.colors[4 * idx0 + 3] * x +
-                    this.colors[4 * idx1 + 3] * y +
-                    this.colors[4 * idx2 + 3] * z) /
-                255.0;
+            const r = (this.colors[4 * idx0 + 0] * x + this.colors[4 * idx1 + 0] * y + this.colors[4 * idx2 + 0] * z) / 255.0;
+            const g = (this.colors[4 * idx0 + 1] * x + this.colors[4 * idx1 + 1] * y + this.colors[4 * idx2 + 1] * z) / 255.0;
+            const b = (this.colors[4 * idx0 + 2] * x + this.colors[4 * idx1 + 2] * y + this.colors[4 * idx2 + 2] * z) / 255.0;
+            const a = (this.colors[4 * idx0 + 3] * x + this.colors[4 * idx1 + 3] * y + this.colors[4 * idx2 + 3] * z) / 255.0;
             bspResult.free();
             return vec4.set(WmoGroupData.scratchVec4, r, g, b, a);
         }
@@ -2213,7 +2044,6 @@ export class WmoDefinition {
     public placementMatrix: mat4 = mat4.create();
     public invPlacementMatrix: mat4 = mat4.create();
     public invModelMatrix: mat4 = mat4.create();
-    public normalMatrix: mat4 = mat4.create();
 
     public aabb: AABB = new AABB();
     public worldAABB: AABB = new AABB();
@@ -2325,14 +2155,6 @@ export class WmoDefinition {
             modelSpaceFromPlacementSpace,
             this.invPlacementMatrix,
         );
-
-        mat4.mul(
-            this.normalMatrix,
-            this.modelMatrix,
-            placementSpaceFromModelSpace,
-        );
-        mat4.invert(this.normalMatrix, this.normalMatrix);
-        mat4.transpose(this.normalMatrix, this.normalMatrix);
 
         for (let i = 0; i < wmo.groups.length; i++) {
             const group = wmo.groups[i];
@@ -2464,11 +2286,7 @@ export class AdtLodData {
     public wmos = new Map<number, WmoData>();
     public doodads: DoodadData[] = [];
 
-    private loadDoodads(
-        cache: WowCache,
-        data: WowAdt,
-        lodLevel: number,
-    ): Promise<unknown> {
+    private loadDoodads(cache: WowCache, data: WowAdt, lodLevel: number): Promise<unknown> {
         return Promise.all(
             data.get_doodads(lodLevel).map(async (adtDoodad) => {
                 const doodad = DoodadData.fromAdtDoodad(adtDoodad);
@@ -2480,11 +2298,7 @@ export class AdtLodData {
         );
     }
 
-    private loadModels(
-        cache: WowCache,
-        data: WowAdt,
-        lodLevel: number,
-    ): Promise<unknown> {
+    private loadModels(cache: WowCache, data: WowAdt, lodLevel: number): Promise<unknown> {
         return Promise.all(
             Array.from(data.get_model_file_ids(lodLevel)).map(
                 async (modelId) => {
@@ -2495,11 +2309,7 @@ export class AdtLodData {
         );
     }
 
-    private loadWMOs(
-        cache: WowCache,
-        data: WowAdt,
-        lodLevel: number,
-    ): Promise<unknown> {
+    private loadWMOs(cache: WowCache, data: WowAdt, lodLevel: number): Promise<unknown> {
         return Promise.all(
             data.get_wmo_defs(lodLevel).map(async (wmoDef) => {
                 const wmo = await cache.loadWmo(wmoDef.name_id);
@@ -2511,11 +2321,7 @@ export class AdtLodData {
         );
     }
 
-    public async load(
-        cache: WowCache,
-        data: WowAdt,
-        lodLevel: number,
-    ): Promise<unknown> {
+    public async load(cache: WowCache, data: WowAdt, lodLevel: number): Promise<unknown> {
         return Promise.all([
             this.loadDoodads(cache, data, lodLevel),
             this.loadModels(cache, data, lodLevel),
@@ -2525,19 +2331,15 @@ export class AdtLodData {
 }
 
 export class LiquidInstance {
-    private vertices: Float32Array | undefined;
-    private indices: Uint16Array | undefined;
     public visible: boolean = true;
 
     constructor(
-        vertices: Float32Array,
-        indices: Uint16Array,
+        public vertices: Float32Array,
+        public indices: Uint16Array,
         public indexCount: number,
         public liquidType: number,
         public worldSpaceAABB: AABB,
     ) {
-        this.vertices = vertices;
-        this.indices = indices;
     }
 
     static fromAdtLiquid(liquid: WowAdtLiquidLayer): LiquidInstance {
@@ -2612,17 +2414,14 @@ export class AdtData {
     private indexBuffer: Uint16Array;
     private inner: WowAdt | null = null;
 
-    constructor(
-        public fileId: number,
-        adt: WowAdt,
-        public lightdbMapId: number,
-    ) {
+    constructor(public fileId: number, adt: WowAdt, public lightdbMapId: number) {
         this.inner = adt;
     }
 
     public setLodLevel(lodLevel: number) {
         assert(lodLevel === 0 || lodLevel === 1, "lodLevel must be 0 or 1");
-        if (this.lodLevel === lodLevel) return;
+        if (this.lodLevel === lodLevel)
+            return;
         this.lodLevel = lodLevel;
     }
 
@@ -2658,22 +2457,20 @@ export class AdtData {
         this.setLodLevel(0);
 
         for (const lodData of this.lodData) {
-            for (const [k, v] of lodData.wmos) this.wmos.set(k, v);
-            for (const [k, v] of lodData.models) this.models.set(k, v);
+            for (const [k, v] of lodData.wmos)
+                this.wmos.set(k, v);
+            for (const [k, v] of lodData.models)
+                this.models.set(k, v);
         }
 
         const renderResult = this.inner!.get_render_result(
             this.hasBigAlpha,
             this.hasHeightTexturing,
         );
-        this.worldSpaceAABB.transform(
-            convertWowAABB(renderResult.extents),
-            noclipSpaceFromAdtSpace,
-        );
-        this.worldSpaceAABB.transform(
-            this.worldSpaceAABB,
-            adtSpaceFromPlacementSpace,
-        );
+
+        const scratchMatrix = mat4.create();
+        mat4.mul(scratchMatrix, adtSpaceFromPlacementSpace, noclipSpaceFromAdtSpace)
+        this.worldSpaceAABB.transform(convertWowAABB(renderResult.extents), scratchMatrix);
         this.vertexBuffer = renderResult.take_vertex_buffer();
         this.indexBuffer = renderResult.take_index_buffer();
         let i = 0;
@@ -2682,25 +2479,19 @@ export class AdtData {
             const x = 15 - Math.floor(i / 16);
             const y = 15 - (i % 16);
             const chunkWorldSpaceAABB = new AABB();
-            chunkWorldSpaceAABB.minX =
-                this.worldSpaceAABB.minX + x * worldSpaceChunkWidth;
-            chunkWorldSpaceAABB.minY =
-                this.worldSpaceAABB.minY + y * worldSpaceChunkWidth;
+            chunkWorldSpaceAABB.minX = this.worldSpaceAABB.minX + x * worldSpaceChunkWidth;
+            chunkWorldSpaceAABB.minY = this.worldSpaceAABB.minY + y * worldSpaceChunkWidth;
             chunkWorldSpaceAABB.minZ = this.worldSpaceAABB.minZ;
 
-            chunkWorldSpaceAABB.maxX =
-                this.worldSpaceAABB.minX + (x + 1) * worldSpaceChunkWidth;
-            chunkWorldSpaceAABB.maxY =
-                this.worldSpaceAABB.minY + (y + 1) * worldSpaceChunkWidth;
+            chunkWorldSpaceAABB.maxX = this.worldSpaceAABB.minX + (x + 1) * worldSpaceChunkWidth;
+            chunkWorldSpaceAABB.maxY = this.worldSpaceAABB.minY + (y + 1) * worldSpaceChunkWidth;
             chunkWorldSpaceAABB.maxZ = this.worldSpaceAABB.maxZ;
             const textures = [];
             for (let blpId of chunk.texture_layers) {
                 textures.push(this.blps.get(blpId)!);
             }
 
-            this.chunkData.push(
-                new ChunkData(chunk, textures, chunkWorldSpaceAABB),
-            );
+            this.chunkData.push(new ChunkData(chunk, textures, chunkWorldSpaceAABB));
             const liquidLayers = this.inner!.take_chunk_liquid_data(i);
             if (liquidLayers !== undefined) {
                 for (let layer of liquidLayers) {
@@ -2736,9 +2527,7 @@ export class AdtData {
         return this.lodData[this.lodLevel].wmoDefs;
     }
 
-    public getBufsAndChunks(
-        device: GfxDevice,
-    ): [GfxVertexBufferDescriptor, GfxIndexBufferDescriptor] {
+    public getBufsAndChunks(device: GfxDevice): [GfxVertexBufferDescriptor, GfxIndexBufferDescriptor] {
         const vertexBuffer = {
             buffer: makeStaticDataBuffer(
                 device,
@@ -2794,42 +2583,24 @@ export class ChunkData {
 export class DoodadData {
     public visible = true;
     public worldAABB = new AABB();
-    public normalMatrix = mat4.create();
     public ambientColor = vec4.create();
     public applyInteriorLighting = false;
     public applyExteriorLighting = false;
     public isSkybox = false;
     public skyboxBlend = 0;
 
-    constructor(
-        public modelId: number,
-        public modelMatrix: mat4,
-        public color: vec4 | null,
-        public uniqueId: number | undefined = undefined,
-    ) {
-        mat4.mul(
-            this.normalMatrix,
-            this.modelMatrix,
-            placementSpaceFromModelSpace,
-        );
-        mat4.mul(
-            this.normalMatrix,
-            adtSpaceFromPlacementSpace,
-            this.modelMatrix,
-        );
-        mat4.invert(this.normalMatrix, this.normalMatrix);
-        mat4.transpose(this.normalMatrix, this.normalMatrix);
+    constructor(public modelId: number, public modelMatrix: mat4, public color: vec4 | null, public uniqueId: number | undefined = undefined) {
     }
 
     // Make a fake doodad for skyboxes
-    static skyboxDoodad(): DoodadData {
+    public static skyboxDoodad(): DoodadData {
         let modelMatrix = mat4.identity(mat4.create());
         let doodad = new DoodadData(666, modelMatrix, null);
         doodad.isSkybox = true;
         return doodad;
     }
 
-    static fromAdtDoodad(doodad: WowDoodad): DoodadData {
+    public static fromAdtDoodad(doodad: WowDoodad): DoodadData {
         const doodadPos = doodad.position;
         let position: vec3 = [doodadPos.x, doodadPos.y, doodadPos.z];
         doodadPos.free();
