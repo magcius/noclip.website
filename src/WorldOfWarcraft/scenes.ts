@@ -10,12 +10,12 @@ import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
 import { GfxRenderInstList } from "../gfx/render/GfxRenderInstManager.js";
 import { rust } from "../rustlib.js";
+import { assert } from "../util.js";
 import * as Viewer from "../viewer.js";
 import { AdtCoord, AdtData, Database, DoodadData, LazyWorldData, ModelData, ParticleEmitter, WmoData, WmoDefinition, WorldData, WowCache } from "./data.js";
 import { BaseProgram, LoadingAdtProgram, ModelProgram, ParticleProgram, SkyboxProgram, TerrainProgram, WaterProgram, WmoProgram } from "./program.js";
 import { LoadingAdtRenderer, ModelRenderer, SkyboxRenderer, TerrainRenderer, WaterRenderer, WmoRenderer } from "./render.js";
 import { TextureCache } from "./tex.js";
-import { assert } from "../util.js";
 
 export const MAP_SIZE = 17066;
 
@@ -306,8 +306,8 @@ export class WdtScene implements Viewer.SceneGfx {
     public cameraState = CameraState.Running;
     public frozenCamera = vec3.create();
     public frozenFrustum = new Frustum();
+    private frozenFrameData: FrameData | null = null;
     private modelCamera = vec3.create();
-    private modelFrustum = new Frustum(); // TODO rip this out once portal culling is in rust
     private modelFrustumRust = new rust.ConvexHull();
 
     constructor(private device: GfxDevice, public world: WorldData | LazyWorldData, public renderHelper: GfxRenderHelper, private db: Database) {
@@ -413,10 +413,6 @@ export class WdtScene implements Viewer.SceneGfx {
             this.modelRenderers.set(model.fileId, new ModelRenderer(this.device, model, this.renderHelper, this.textureCache));
     }
 
-    private shouldCull(): boolean {
-        return this.cullingState !== CullingState.Paused;
-    }
-
     public freezeCamera() {
         this.cameraState = CameraState.Frozen;
         vec3.copy(this.frozenCamera, this.mainView.cameraPos);
@@ -435,25 +431,17 @@ export class WdtScene implements Viewer.SceneGfx {
         this.cameraState = CameraState.Running;
     }
 
-    private updateCullingState() {
-        if (this.cullingState === CullingState.OneShot) {
-            this.cullingState = CullingState.Paused;
-        }
+    public freezeCulling(oneShot = false) {
+        this.cullingState = oneShot ? CullingState.OneShot : CullingState.Paused;
     }
 
-    public resumeCulling() {
+    public unfreezeCulling() {
         this.cullingState = CullingState.Running;
+        this.frozenFrameData = null;
     }
 
-    public pauseCulling() {
-        this.cullingState = CullingState.Paused;
-    }
-
-    public cullOneShot() {
-        this.cullingState = CullingState.OneShot;
-    }
-
-    public cull(frame: FrameData) {
+    public cull() {
+        const frame = new FrameData();
         if (this.world.globalWmo) {
             this.cullWmoDef(frame, this.world.globalWmoDef!, this.world.globalWmo);
         } else {
@@ -519,6 +507,7 @@ export class WdtScene implements Viewer.SceneGfx {
                 this.cullWmoDef(frame, def, wmo);
             }
         }
+        return frame;
     }
 
     public cullWmoDef(frame: FrameData, def: WmoDefinition, wmo: WmoData): CullWmoResult {
@@ -533,8 +522,6 @@ export class WdtScene implements Viewer.SceneGfx {
         frame.addWmoDef(wmo, def);
 
         vec3.transformMat4(this.modelCamera, worldCamera, def.invPlacementMatrix);
-        this.modelFrustum.transform(worldFrustum, def.invPlacementMatrix);
-
         worldFrustum.copyToRust(this.modelFrustumRust);
         this.modelFrustumRust.transform_js(def.invPlacementMatrix as Float32Array);
 
@@ -613,8 +600,6 @@ export class WdtScene implements Viewer.SceneGfx {
     private prepareToRender(): void {
         const renderInstManager = this.renderHelper.renderInstManager;
 
-        const frame = new FrameData();
-
         const template = this.renderHelper.pushTemplateRenderInst();
         template.setMegaStateFlags({ cullMode: GfxCullMode.Back });
         template.setGfxProgram(this.skyboxProgram);
@@ -631,10 +616,8 @@ export class WdtScene implements Viewer.SceneGfx {
         this.loadingAdtRenderer.update(this.mainView);
         this.loadingAdtRenderer.prepareToRenderLoadingBox(renderInstManager, this.loadingAdts);
 
-        if (this.shouldCull()) {
-            this.cull(frame);
-        }
-
+        const frame = this.frozenFrameData !== null ? this.frozenFrameData : this.cull();
+            
         template.setGfxProgram(this.terrainProgram);
         template.setBindingLayouts(TerrainProgram.bindingLayouts);
         for (let renderer of this.terrainRenderers.values()) {
@@ -726,7 +709,15 @@ export class WdtScene implements Viewer.SceneGfx {
 
         renderInstManager.popTemplateRenderInst();
         this.renderHelper.prepareToRender();
-        this.updateCullingState();
+
+        if (this.cullingState === CullingState.OneShot) {
+            this.cullingState = CullingState.Paused;
+        }
+
+        if (this.cullingState === CullingState.Paused && this.frozenFrameData === null) {
+            this.frozenFrameData = frame;
+        }
+
         lightingData.free();
     }
 

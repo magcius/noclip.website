@@ -1,4 +1,5 @@
 import {
+    ReadonlyMat4,
     ReadonlyVec3,
     mat3,
     mat4,
@@ -51,9 +52,11 @@ import type {
     WowWmoPortalRef,
 } from "../../rust/pkg/index.js";
 import { DataFetcher } from "../DataFetcher.js";
-import { AABB, Frustum, Plane } from "../Geometry.js";
+import { AABB, Frustum } from "../Geometry.js";
 import {
+    Mat4Identity,
     MathConstants,
+    computeModelMatrixSRT,
     randomRange,
     saturate,
     scaleMatrix,
@@ -1685,19 +1688,10 @@ export class WmoData {
             const portal = this.portals[portalRef.portal_index];
             const otherGroup = this.groups[portalRef.group_index];
 
-            if (
-                !portal.is_facing_us(
-                    modelCamera as Float32Array,
-                    portalRef.side,
-                )
-            ) {
+            if (!portal.is_facing_us(modelCamera as Float32Array, portalRef.side))
                 continue;
-            }
 
-            if (
-                portal.in_frustum(modelFrustum) ||
-                portal.aabb_contains_point(modelCamera as Float32Array)
-            ) {
+            if (portal.in_frustum(modelFrustum) || portal.aabb_contains_point(modelCamera as Float32Array)) {
                 let portalFrustum = portal.clip_frustum(
                     modelCamera as Float32Array,
                     modelFrustum,
@@ -1760,24 +1754,17 @@ function calculateWmoLiquidType(
 
 export class SkinData {
     public submeshes: WowSkinSubmesh[];
-    public batches: WowModelBatch[];
     public indexBuffer: Uint16Array;
-    public renderPasses: ModelRenderPass[];
+    public batches: ModelBatch[];
 
-    constructor(
-        public skin: WowSkin,
-        model: ModelData,
-    ) {
+    constructor(public skin: WowSkin, model: ModelData) {
         this.submeshes = skin.submeshes;
-        this.batches = skin.batches;
-        this.renderPasses = this.batches.map(
-            (batch) => new ModelRenderPass(batch, this.skin, model),
-        );
+        this.batches = skin.batches.map((batch) => new ModelBatch(batch, this.skin, model));
         this.indexBuffer = skin.take_indices();
     }
 }
 
-export class ModelRenderPass {
+export class ModelBatch {
     public vertexShaderId: number;
     public fragmentShaderId: number;
     public blendMode: WowM2BlendingMode;
@@ -1788,7 +1775,6 @@ export class ModelRenderPass {
     public tex1: BlpData | null;
     public tex2: BlpData | null;
     public tex3: BlpData | null;
-    private scratchMat4 = mat4.identity(mat4.create());
     private sortKeyBase = 0;
 
     constructor(public batch: WowModelBatch, public skin: WowSkin, public model: ModelData) {
@@ -1826,27 +1812,19 @@ export class ModelRenderPass {
         return this.model.getVertexColor(this.batch.color_index);
     }
 
-    private getTextureTransform(texIndex: number): mat4 {
+    private getTextureTransform(texIndex: number): ReadonlyMat4 {
         const lookupIndex = this.batch.texture_transform_combo_index + texIndex;
-        const transformIndex =
-            this.model.textureTransformLookupTable[lookupIndex];
-        if (transformIndex !== undefined) {
-            if (transformIndex < this.model.textureTransforms.length) {
-                return this.model.textureTransforms[transformIndex];
-            }
-        }
-        return this.scratchMat4;
+        const transformIndex = this.model.textureTransformLookupTable[lookupIndex];
+        if (transformIndex !== undefined && transformIndex < this.model.textureTransforms.length)
+            return this.model.textureTransforms[transformIndex];
+        return Mat4Identity;
     }
 
     public getTextureWeight(texIndex: number): number {
         const lookupIndex = this.batch.texture_weight_combo_index + texIndex;
-        const transparencyIndex =
-            this.model.textureTransparencyLookupTable[lookupIndex];
-        if (transparencyIndex !== undefined) {
-            if (transparencyIndex < this.model.textureWeights.length) {
-                return this.model.textureWeights[transparencyIndex];
-            }
-        }
+        const transparencyIndex = this.model.textureTransparencyLookupTable[lookupIndex];
+        if (transparencyIndex !== undefined && transparencyIndex < this.model.textureWeights.length)
+            return this.model.textureWeights[transparencyIndex];
         return 1.0;
     }
 
@@ -1940,7 +1918,6 @@ function setM2BlendModeMegaState(renderInst: GfxRenderInst, blendMode: WowM2Blen
         ],
     };
 
-    // TODO setSortKeyDepth based on distance to transparent object
     switch (blendMode) {
         case rust.WowM2BlendingMode.Alpha: {
             settings.attachmentsState![0].rgbBlendState = {
@@ -2036,7 +2013,6 @@ export class WmoDefinition {
     public invPlacementMatrix: mat4 = mat4.create();
     public invModelMatrix: mat4 = mat4.create();
 
-    public aabb: AABB = new AABB();
     public worldAABB: AABB = new AABB();
 
     public visible = true;
@@ -2049,7 +2025,7 @@ export class WmoDefinition {
 
     private scratchVec3 = vec3.create();
 
-    static fromAdtDefinition(def: WowAdtWmoDefinition, wmo: WmoData) {
+    public static fromAdtDefinition(def: WowAdtWmoDefinition, wmo: WmoData) {
         const scale = def.scale / 1024;
         const position = convertWowVec3(def.position);
         const rotation = convertWowVec3(def.rotation);
@@ -2070,7 +2046,7 @@ export class WmoDefinition {
         );
     }
 
-    static fromGlobalDefinition(def: WowGlobalWmoDefinition, wmo: WmoData) {
+    public static fromGlobalDefinition(def: WowGlobalWmoDefinition, wmo: WmoData) {
         const scale = 1.0;
         const position = convertWowVec3(def.position);
         const rotation = convertWowVec3(def.rotation);
@@ -2098,63 +2074,32 @@ export class WmoDefinition {
         public uniqueId: number,
         public doodadSet: number,
         scale: number,
-        position: vec3,
-        rotation: vec3,
+        position: ReadonlyVec3,
+        rotation: ReadonlyVec3,
         extents: AABB,
     ) {
-        setMatrixTranslation(this.placementMatrix, position);
-        mat4.scale(this.placementMatrix, this.placementMatrix, [
-            scale,
-            scale,
-            scale,
-        ]);
-        mat4.rotateZ(
-            this.placementMatrix,
-            this.placementMatrix,
-            MathConstants.DEG_TO_RAD * rotation[2],
-        );
-        mat4.rotateY(
-            this.placementMatrix,
-            this.placementMatrix,
-            MathConstants.DEG_TO_RAD * rotation[1],
-        );
-        mat4.rotateX(
-            this.placementMatrix,
-            this.placementMatrix,
-            MathConstants.DEG_TO_RAD * rotation[0],
-        );
-        mat4.mul(
-            this.modelMatrix,
-            this.placementMatrix,
-            placementSpaceFromModelSpace,
-        );
-        mat4.mul(
-            this.modelMatrix,
-            adtSpaceFromPlacementSpace,
-            this.modelMatrix,
-        );
+        computeModelMatrixSRT(this.placementMatrix,
+            scale, scale, scale,
+            rotation[0] * MathConstants.DEG_TO_RAD,
+            rotation[1] * MathConstants.DEG_TO_RAD,
+            rotation[2] * MathConstants.DEG_TO_RAD,
+            position[0], position[1], position[2]);
+
+        mat4.mul(this.modelMatrix, this.placementMatrix, placementSpaceFromModelSpace);
+        mat4.mul(this.modelMatrix, adtSpaceFromPlacementSpace, this.modelMatrix);
 
         mat4.invert(this.invModelMatrix, this.modelMatrix);
         mat4.invert(this.invPlacementMatrix, this.placementMatrix);
-        mat4.mul(
-            this.invPlacementMatrix,
-            this.invPlacementMatrix,
-            placementSpaceFromAdtSpace,
-        );
-        mat4.mul(
-            this.invPlacementMatrix,
-            modelSpaceFromPlacementSpace,
-            this.invPlacementMatrix,
-        );
+        mat4.mul(this.invPlacementMatrix, this.invPlacementMatrix, placementSpaceFromAdtSpace);
+
+        mat4.mul(this.invPlacementMatrix, modelSpaceFromPlacementSpace, this.invPlacementMatrix);
+
+        this.worldAABB.transform(extents, adtSpaceFromPlacementSpace);
 
         for (let i = 0; i < wmo.groups.length; i++) {
             const group = wmo.groups[i];
 
-            for (
-                let i = group.liquidIndex;
-                i < group.liquidIndex + group.numLiquids;
-                i++
-            ) {
+            for (let i = group.liquidIndex; i < group.liquidIndex + group.numLiquids; i++) {
                 this.groupIdToLiquidIndices.append(group.fileId, i);
             }
             this.groupAmbientColors.set(
@@ -2262,11 +2207,6 @@ export class WmoDefinition {
                 this.doodadIndexToDoodad.set(ref, doodad);
             }
         }
-
-        this.aabb.transform(extents, this.invPlacementMatrix);
-        this.aabb.transform(extents, modelSpaceFromPlacementSpace);
-        this.worldAABB.transform(extents, adtSpaceFromPlacementSpace);
-        this.visible = true;
     }
 }
 

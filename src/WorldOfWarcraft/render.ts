@@ -1,4 +1,5 @@
 import { mat4 } from "gl-matrix";
+import { invlerp, lerp } from "../MathHelpers.js";
 import { TextureMapping } from "../TextureHolder.js";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
@@ -43,13 +44,12 @@ import {
     DoodadData,
     LiquidInstance,
     LiquidType,
+    ModelBatch,
     ModelData,
-    ModelRenderPass,
     ParticleEmitter,
     SkinData,
     WmoBatchData,
     WmoData,
-    WmoDefinition,
     WmoGroupData,
     getSkyboxDoodad,
 } from "./data.js";
@@ -70,9 +70,8 @@ import {
     WaterProgram,
     WmoProgram,
 } from "./program.js";
-import { FrameData, MAP_SIZE, MapArray, View, WdtScene } from "./scenes.js";
+import { FrameData, MAP_SIZE, MapArray, View } from "./scenes.js";
 import { TextureCache } from "./tex.js";
-import { invlerp, lerp } from "../MathHelpers.js";
 
 type TextureMappingArray = (TextureMapping | null)[];
 
@@ -80,7 +79,7 @@ export class ModelRenderer {
     private skinData: SkinData[] = [];
     private vertexBuffer: GfxVertexBufferDescriptor;
     private indexBuffers: GfxIndexBufferDescriptor[] = [];
-    private skinPassTextures: TextureMappingArray[][] = [];
+    private skinBatchTextures: TextureMappingArray[][] = [];
     private emitterTextures: TextureMappingArray[] = [];
     private particleQuadIndices: GfxIndexBufferDescriptor;
     private inputLayout: GfxInputLayout;
@@ -165,22 +164,16 @@ export class ModelRenderer {
                 byteOffset: 0,
             });
             this.skinData.push(skinData);
-            this.skinPassTextures[i] = [];
-            for (let renderPass of skinData.renderPasses) {
-                this.skinPassTextures[i].push(
-                    this.getRenderPassTextures(renderPass),
-                );
+            this.skinBatchTextures[i] = [];
+            for (let batch of skinData.batches) {
+                this.skinBatchTextures[i].push(this.getBatchTextures(batch));
             }
         }
 
         for (const emitter of this.model.particleEmitters) {
             this.emitterTextures.push(this.getEmitterTextures(device, emitter));
         }
-        const particleIndexBuf = makeTriangleIndexBuffer(
-            GfxTopology.Quads,
-            0,
-            ParticleEmitter.MAX_PARTICLES * 4,
-        );
+        const particleIndexBuf = makeTriangleIndexBuffer(GfxTopology.Quads, 0, ParticleEmitter.MAX_PARTICLES * 4);
         this.particleQuadIndices = {
             buffer: makeStaticDataBuffer(
                 device,
@@ -234,14 +227,12 @@ export class ModelRenderer {
         );
     }
 
-    private getRenderPassTextures(
-        renderPass: ModelRenderPass,
-    ): TextureMappingArray {
+    private getBatchTextures(batch: ModelBatch): TextureMappingArray {
         return [
-            this.getTextureMapping(renderPass.tex0),
-            this.getTextureMapping(renderPass.tex1),
-            this.getTextureMapping(renderPass.tex2),
-            this.getTextureMapping(renderPass.tex3),
+            this.getTextureMapping(batch.tex0),
+            this.getTextureMapping(batch.tex1),
+            this.getTextureMapping(batch.tex2),
+            this.getTextureMapping(batch.tex3),
         ];
     }
 
@@ -376,26 +367,19 @@ export class ModelRenderer {
             for (let i = 0; i < this.skinData.length; i++) {
                 const skinData = this.skinData[i];
                 const indexBuffer = this.indexBuffers[i];
-                for (let j = 0; j < skinData.renderPasses.length; j++) {
-                    const renderPass = skinData.renderPasses[j];
-                    if (renderPass.getTextureWeight(0) === 0) {
+                for (let j = 0; j < skinData.batches.length; j++) {
+                    const batch = skinData.batches[j];
+                    if (batch.getTextureWeight(0) === 0) {
                         continue;
                     }
-                    let renderInst = renderInstManager.newRenderInst();
-                    renderInst.setVertexInput(
-                        this.inputLayout,
-                        [this.vertexBuffer],
-                        indexBuffer,
-                    );
-                    renderPass.setMegaStateFlags(renderInst);
-                    renderInst.setDrawCount(
-                        renderPass.submesh.index_count,
-                        renderPass.submesh.index_start,
-                    );
+                    const renderInst = renderInstManager.newRenderInst();
+                    renderInst.setVertexInput(this.inputLayout, [this.vertexBuffer], indexBuffer);
+                    batch.setMegaStateFlags(renderInst);
+                    renderInst.setDrawCount(batch.submesh.index_count, batch.submesh.index_start);
                     renderInst.setInstanceCount(doodadChunk.length);
-                    const mappings = this.skinPassTextures[i][j];
+                    const mappings = this.skinBatchTextures[i][j];
                     renderInst.setSamplerBindingsFromTextureMappings(mappings);
-                    renderPass.setModelParams(renderInst);
+                    batch.setModelParams(renderInst);
                     renderInstManager.submitRenderInst(renderInst);
                 }
             }
@@ -548,10 +532,10 @@ export class WmoRenderer {
         return mappings;
     }
 
-    public prepareToRenderWmo(
-        renderInstManager: GfxRenderInstManager,
-        frame: FrameData,
-    ) {
+    public prepareToRenderWmo(renderInstManager: GfxRenderInstManager, frame: FrameData): void {
+        if (!this.visible)
+            return;
+
         for (let def of frame.wmoDefs.get(this.wmo.fileId)) {
             assert(
                 def.wmoId === this.wmo.fileId,
@@ -565,16 +549,12 @@ export class WmoRenderer {
             const visibleGroups = frame.wmoDefGroups.get(def.uniqueId);
             for (let i = 0; i < this.vertexBuffers.length; i++) {
                 const group = this.groups[i];
-                if (!visibleGroups.includes(group.fileId)) continue;
+                if (!visibleGroups.includes(group.fileId))
+                    continue;
                 const ambientColor = def.groupAmbientColors.get(group.fileId)!;
-                const applyInteriorLight =
-                    group.flags.interior && !group.flags.exterior_lit;
+                const applyInteriorLight = group.flags.interior && !group.flags.exterior_lit;
                 const applyExteriorLight = true;
-                template.setVertexInput(
-                    this.inputLayouts[i],
-                    this.vertexBuffers[i],
-                    this.indexBuffers[i],
-                );
+                template.setVertexInput(this.inputLayouts[i], this.vertexBuffers[i], this.indexBuffers[i]);
                 for (let j in this.batches[i]) {
                     const batch = this.batches[i][j];
                     if (!batch.visible) continue;
@@ -1143,10 +1123,7 @@ export class SkyboxRenderer {
                 skyboxVertices.buffer,
             ),
         };
-        const convertedIndices = convertToTriangleIndexBuffer(
-            GfxTopology.TriStrips,
-            skyboxIndices,
-        );
+        const convertedIndices = convertToTriangleIndexBuffer(GfxTopology.TriStrips, skyboxIndices);
         this.numIndices = convertedIndices.length;
         this.indexBuffer = {
             byteOffset: 0,
