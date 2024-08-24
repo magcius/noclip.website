@@ -38,7 +38,7 @@ import type {
     WowSkyboxMetadata,
     WowVec3,
     WowWmo,
-    WowWmoGroup,
+    WowWmoGroupDescriptor,
     WowWmoGroupFlags,
     WowWmoGroupInfo,
     WowWmoHeaderFlags,
@@ -48,8 +48,6 @@ import type {
     WowWmoMaterialFlags,
     WowWmoMaterialPixelShader,
     WowWmoMaterialVertexShader,
-    WowWmoPortalData,
-    WowWmoPortalRef,
 } from "../../rust/pkg/index.js";
 import { DataFetcher } from "../DataFetcher.js";
 import { AABB, Frustum } from "../Geometry.js";
@@ -75,6 +73,7 @@ import {
 import {
     GfxBlendFactor,
     GfxBlendMode,
+    GfxBuffer,
     GfxBufferUsage,
     GfxChannelWriteMask,
     GfxCompareMode,
@@ -260,14 +259,6 @@ export class WowCache {
     public async loadWmo(fileId: number): Promise<WmoData> {
         return this.getOrLoad(fileId, async (fileId: number) => {
             const d = new WmoData(fileId);
-            await d.load(this);
-            return d;
-        });
-    }
-
-    public async loadWmoGroup(fileId: number): Promise<WmoGroupData> {
-        return this.getOrLoad(fileId, async (fileId: number) => {
-            const d = new WmoGroupData(fileId);
             await d.load(this);
             return d;
         });
@@ -1320,238 +1311,12 @@ export class BoneData {
     }
 }
 
-export class WmoGroupData {
-    public group: WowWmoGroup;
-    public innerBatches: WowWmoMaterialBatch[] = [];
-    public flags: WowWmoGroupFlags;
-    public name: string | undefined;
-    public nameIndex: number;
-    public description: string | undefined;
-    public descriptionIndex: number;
-    public portalStart: number;
-    public portalCount: number;
-    public doodadRefs: Uint16Array;
-    public replacementForHeaderColor: WowBgra | undefined;
-    public numUVBufs: number;
-    public numVertices: number;
-    public numColorBufs: number;
-    public visible = true;
-    public groupLiquidType: number;
-    public liquids: LiquidInstance[] | undefined;
-    public liquidMaterials: number[] | undefined;
-    public numLiquids = 0;
-    public liquidIndex = 0;
-    public vertices: Float32Array;
-    public normals: Float32Array;
-    public indices: Uint16Array;
-    public uvs: Uint8Array;
-    public colors: Uint8Array;
-    public portalRefs: WowWmoPortalRef[];
-    public bsp: WowBspTree;
-
-    private static scratchVec4 = vec4.create();
-
-    constructor(public fileId: number) {}
-
-    public getBatches(wmo: WmoData): WmoBatchData[] {
-        const batches: WmoBatchData[] = [];
-        for (let batch of this.innerBatches) {
-            batches.push(new WmoBatchData(batch, wmo));
-        }
-        return batches;
-    }
-
-    public getAmbientColor(wmoData: WmoData, doodadSetId: number): vec4 {
-        if (!this.flags.exterior && !this.flags.exterior_lit) {
-            if (this.replacementForHeaderColor) {
-                return [
-                    this.replacementForHeaderColor.r / 255.0,
-                    this.replacementForHeaderColor.g / 255.0,
-                    this.replacementForHeaderColor.b / 255.0,
-                    1.0,
-                ];
-            } else {
-                const color = wmoData.wmo.get_ambient_color(doodadSetId);
-                return [color.r / 255.0, color.g / 255.0, color.b / 255.0, 1.0];
-            }
-        }
-        return [0, 0, 0, 0];
-    }
-
-    public getVertexBuffers(device: GfxDevice): GfxVertexBufferDescriptor[] {
-        return [
-            {
-                byteOffset: 0,
-                buffer: makeStaticDataBuffer(
-                    device,
-                    GfxBufferUsage.Vertex,
-                    this.vertices.buffer,
-                ),
-            },
-            {
-                byteOffset: 0,
-                buffer: makeStaticDataBuffer(
-                    device,
-                    GfxBufferUsage.Vertex,
-                    this.normals.buffer,
-                ),
-            },
-            {
-                byteOffset: 0,
-                buffer: makeStaticDataBuffer(
-                    device,
-                    GfxBufferUsage.Vertex,
-                    this.uvs.buffer,
-                ),
-            },
-            {
-                byteOffset: 0,
-                buffer: makeStaticDataBuffer(
-                    device,
-                    GfxBufferUsage.Vertex,
-                    this.colors.buffer,
-                ),
-            },
-        ];
-    }
-
-    public getInputLayout(renderCache: GfxRenderCache): GfxInputLayout {
-        const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: 12, frequency: GfxVertexBufferFrequency.PerVertex },
-            { byteStride: 12, frequency: GfxVertexBufferFrequency.PerVertex },
-            { byteStride: 8, frequency: GfxVertexBufferFrequency.PerVertex },
-            { byteStride: 4, frequency: GfxVertexBufferFrequency.PerVertex },
-        ];
-        const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
-            {
-                location: WmoProgram.a_Position,
-                bufferIndex: 0,
-                bufferByteOffset: 0,
-                format: GfxFormat.F32_RGB,
-            },
-            {
-                location: WmoProgram.a_Normal,
-                bufferIndex: 1,
-                bufferByteOffset: 0,
-                format: GfxFormat.F32_RGB,
-            },
-        ];
-        for (let i = 0; i < this.numUVBufs; i++) {
-            vertexAttributeDescriptors.push({
-                location: WmoProgram.a_TexCoord0 + i,
-                bufferIndex: 2,
-                bufferByteOffset: 8 * i * this.numVertices,
-                format: GfxFormat.F32_RG,
-            });
-        }
-        for (let i = 0; i < this.numColorBufs; i++) {
-            vertexAttributeDescriptors.push({
-                location: WmoProgram.a_Color0 + i,
-                bufferIndex: 3,
-                bufferByteOffset: 4 * i * this.numVertices,
-                format: GfxFormat.U8_RGBA,
-            });
-        }
-        const indexBufferFormat: GfxFormat = GfxFormat.U16_R;
-        return renderCache.createInputLayout({
-            vertexAttributeDescriptors,
-            vertexBufferDescriptors,
-            indexBufferFormat,
-        });
-    }
-
-    public bspContainsPoint(modelSpacePoint: vec3): boolean {
-        return this.bsp.contains_point_js(
-            modelSpacePoint[0],
-            modelSpacePoint[1],
-            modelSpacePoint[2],
-        );
-    }
-
-    public getIndexBuffer(device: GfxDevice): GfxIndexBufferDescriptor {
-        return {
-            byteOffset: 0,
-            buffer: makeStaticDataBuffer(
-                device,
-                GfxBufferUsage.Index,
-                this.indices.buffer,
-            ),
-        };
-    }
-
-    public getVertexColorForModelSpacePoint(p: vec3): vec4 | undefined {
-        // project a line downwards for an intersection test
-        const bspResult = this.bsp.pick_closest_tri_neg_z_js(p[0], p[1], p[2]);
-        if (bspResult) {
-            const [idx0, idx1, idx2] = [
-                bspResult.vert_index_0,
-                bspResult.vert_index_1,
-                bspResult.vert_index_2,
-            ];
-            const [x, y, z] = [
-                bspResult.bary_x,
-                bspResult.bary_y,
-                bspResult.bary_z,
-            ];
-            const r = (this.colors[4 * idx0 + 0] * x + this.colors[4 * idx1 + 0] * y + this.colors[4 * idx2 + 0] * z) / 255.0;
-            const g = (this.colors[4 * idx0 + 1] * x + this.colors[4 * idx1 + 1] * y + this.colors[4 * idx2 + 1] * z) / 255.0;
-            const b = (this.colors[4 * idx0 + 2] * x + this.colors[4 * idx1 + 2] * y + this.colors[4 * idx2 + 2] * z) / 255.0;
-            const a = (this.colors[4 * idx0 + 3] * x + this.colors[4 * idx1 + 3] * y + this.colors[4 * idx2 + 3] * z) / 255.0;
-            bspResult.free();
-            return vec4.set(WmoGroupData.scratchVec4, r, g, b, a);
-        }
-        return undefined;
-    }
-
-    public async load(cache: WowCache): Promise<undefined> {
-        const group = await cache.fetchFileByID(
-            this.fileId,
-            rust.WowWmoGroup.new,
-        );
-        this.groupLiquidType = group.header.group_liquid;
-        this.replacementForHeaderColor = group.replacement_for_header_color;
-        this.nameIndex = group.header.group_name;
-        this.descriptionIndex = group.header.descriptive_group_name;
-        this.numVertices = group.num_vertices;
-        this.numUVBufs = group.num_uv_bufs;
-        this.numColorBufs = group.num_color_bufs;
-        this.innerBatches = group.batches;
-        this.vertices = group.take_vertices();
-        this.normals = new Float32Array(group.take_normals().buffer);
-        this.colors = group.take_colors();
-        this.portalStart = group.header.portal_start;
-        this.portalCount = group.header.portal_count;
-        this.uvs = group.take_uvs();
-        this.bsp = group.take_bsp_tree();
-        this.indices = group.take_indices();
-        this.flags = rust.WowWmoGroupFlags.new(group.header.flags);
-        if (this.flags.antiportal) {
-            console.log(this);
-        }
-        this.doodadRefs = group.take_doodad_refs();
-        const liquids = group.take_liquid_data();
-        if (liquids) {
-            this.liquids = [];
-            this.liquidMaterials = [];
-            this.numLiquids = liquids.length;
-            for (let liquid of liquids) {
-                this.liquidMaterials.push(liquid.material_id);
-                this.liquids.push(LiquidInstance.fromWmoLiquid(liquid));
-            }
-        }
-        this.group = group;
-    }
-}
-
 export class WmoData {
     public wmo: WowWmo;
     public flags: WowWmoHeaderFlags;
-    public groups: WmoGroupData[] = [];
     public groupInfos: WowWmoGroupInfo[] = [];
     public groupIdToIndex: Map<number, number> = new Map();
     public groupDefAABBs: Map<number, AABB> = new Map();
-    public portals: WowWmoPortalData[] = [];
-    public portalRefs: WowWmoPortalRef[] = [];
     public blps: Map<number, BlpData> = new Map();
     public materials: WowWmoMaterial[] = [];
     public models: Map<number, ModelData> = new Map();
@@ -1559,6 +1324,13 @@ export class WmoData {
     public liquidTypes: Map<number, LiquidType> = new Map();
     public liquids: LiquidInstance[] = [];
     public skyboxModel: ModelData | null = null;
+    public groupIds: number[] = [];
+    public groupLiquids: MapArray<number, number> = new MapArray();
+    private vertexData: Uint8Array;
+    private gfxVertexBuffer: GfxBuffer;
+    private indices: Uint16Array;
+    private gfxIndexBuffer: GfxBuffer;
+    public groupDescriptors: WowWmoGroupDescriptor[] = [];
 
     constructor(public fileId: number) {}
 
@@ -1597,46 +1369,38 @@ export class WmoData {
         this.groupInfos = this.wmo.group_infos;
         return Promise.all(
             Array.from(this.wmo.group_file_ids).map(async (fileId, i) => {
-                const group = await cache.loadWmoGroup(fileId);
-                group.portalRefs = this.portalRefs.slice(
-                    group.portalStart,
-                    group.portalStart + group.portalCount,
-                );
-
-                if (group.liquids) {
-                    group.liquidIndex = this.liquids.length;
-
-                    const liquids = group.liquids;
-                    this.liquids.push(...liquids);
-                    group.liquids = undefined;
-
-                    for (let liquid of liquids) {
-                        liquid.liquidType = calculateWmoLiquidType(
-                            this.flags,
-                            group,
-                            liquid.liquidType,
-                        );
-                        this.liquidTypes.set(
-                            liquid.liquidType,
-                            await cache.loadLiquidType(liquid.liquidType),
-                        );
-                    }
-                }
-
-                group.name = this.wmo.get_group_text(group.nameIndex);
-                group.description = this.wmo.get_group_text(
-                    group.descriptionIndex,
-                );
-                this.groupIdToIndex.set(group.fileId, i);
-                this.groups[i] = group;
+                this.groupIds.push(fileId);
+                this.groupIdToIndex.set(fileId, i);
+                const groupData = await cache.fetchDataByFileID(fileId);
+                this.wmo.append_group(fileId, groupData);
 
                 const groupInfo = this.groupInfos[i];
                 this.groupDefAABBs.set(
-                    group.fileId,
+                    fileId,
                     convertWowAABB(groupInfo.bounding_box),
                 );
             }),
         );
+    }
+
+    private async loadLiquids(cache: WowCache) {
+        for (let groupId of this.groupIds) {
+            const liquids = this.wmo.take_liquid_data(groupId);
+            if (liquids) {
+                for (let liquid of liquids) {
+                    const instance = LiquidInstance.fromWmoLiquid(liquid);
+                    const index = this.liquids.length;
+                    this.liquids.push(instance);
+                    this.groupLiquids.append(groupId, index);
+                    if (!this.liquidTypes.has(instance.liquidType)) {
+                        this.liquidTypes.set(
+                            instance.liquidType,
+                            await cache.loadLiquidType(instance.liquidType),
+                        );
+                    }
+                }
+            }
+        }
     }
 
     public async load(cache: WowCache): Promise<void> {
@@ -1653,103 +1417,124 @@ export class WmoData {
         this.materials = this.wmo.textures;
         this.modelIds = this.wmo.doodad_file_ids;
 
-        this.portalRefs = this.wmo.take_portal_refs();
-        this.portals = this.wmo.take_portals();
-
         await Promise.all([
             this.loadTextures(cache),
             this.loadModels(cache),
             this.loadGroups(cache),
         ]);
+        await this.loadLiquids(cache);
+
+        this.indices = this.wmo.get_indices();
+        this.vertexData = this.wmo.get_vertex_data();
+        for (const fileId of this.wmo.group_file_ids) {
+            this.groupDescriptors.push(this.wmo.get_group_descriptor(fileId));
+        }
     }
 
-    public getGroup(groupId: number): WmoGroupData | undefined {
+    public getBatches(group: WowWmoGroupDescriptor): WmoBatchData[] {
+        let wowBatches = this.wmo.get_group_batches(group.group_id);
+        return wowBatches.map(batch => new WmoBatchData(batch, this));
+    }
+
+    public getGroup(groupId: number): WowWmoGroupDescriptor | undefined {
         const index = this.groupIdToIndex.get(groupId);
         if (index !== undefined) {
-            return this.groups[index];
+            return this.groupDescriptors[index];
         }
         return undefined;
     }
 
-    public portalCull(
-        modelCamera: vec3,
-        modelFrustum: ConvexHull,
-        currentGroupId: number,
-        visibleGroups: number[],
-        visitedGroups: number[],
-    ) {
-        if (visitedGroups.includes(currentGroupId)) return;
-        if (!visibleGroups.includes(currentGroupId)) {
-            visibleGroups.push(currentGroupId);
+    public getInputLayout(renderCache: GfxRenderCache): GfxInputLayout {
+        const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
+            { byteStride: 12, frequency: GfxVertexBufferFrequency.PerVertex },
+            { byteStride: 12, frequency: GfxVertexBufferFrequency.PerVertex },
+            { byteStride: 4, frequency: GfxVertexBufferFrequency.PerVertex },
+            { byteStride: 4, frequency: GfxVertexBufferFrequency.PerVertex },
+            { byteStride: 8, frequency: GfxVertexBufferFrequency.PerVertex },
+            { byteStride: 8, frequency: GfxVertexBufferFrequency.PerVertex },
+            { byteStride: 8, frequency: GfxVertexBufferFrequency.PerVertex },
+            { byteStride: 8, frequency: GfxVertexBufferFrequency.PerVertex },
+        ];
+        const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
+            {
+                location: WmoProgram.a_Position,
+                bufferIndex: 0,
+                bufferByteOffset: 0,
+                format: GfxFormat.F32_RGB,
+            },
+            {
+                location: WmoProgram.a_Normal,
+                bufferIndex: 1,
+                bufferByteOffset: 0,
+                format: GfxFormat.F32_RGB,
+            },
+        ];
+        for (let i = 0; i < 2; i++) {
+            vertexAttributeDescriptors.push({
+                location: WmoProgram.a_Color0 + i,
+                bufferIndex: 2 + i,
+                bufferByteOffset: 0,
+                format: GfxFormat.U8_RGBA,
+            });
         }
-        const group = this.getGroup(currentGroupId)!;
-        for (let portalRef of group.portalRefs) {
-            const portal = this.portals[portalRef.portal_index];
-            const otherGroup = this.groups[portalRef.group_index];
-
-            if (!portal.is_facing_us(modelCamera as Float32Array, portalRef.side))
-                continue;
-
-            if (portal.in_frustum(modelFrustum) || portal.aabb_contains_point(modelCamera as Float32Array)) {
-                let portalFrustum = portal.clip_frustum(
-                    modelCamera as Float32Array,
-                    modelFrustum,
-                );
-                this.portalCull(
-                    modelCamera,
-                    portalFrustum,
-                    otherGroup.fileId,
-                    visibleGroups,
-                    visitedGroups.concat([currentGroupId]),
-                );
-            }
+        for (let i = 0; i < 4; i++) {
+            vertexAttributeDescriptors.push({
+                location: WmoProgram.a_TexCoord0 + i,
+                bufferIndex: 4 + i,
+                bufferByteOffset: 0,
+                format: GfxFormat.F32_RG,
+            });
         }
+        const indexBufferFormat: GfxFormat = GfxFormat.U16_R;
+        return renderCache.createInputLayout({
+            vertexAttributeDescriptors,
+            vertexBufferDescriptors,
+            indexBufferFormat,
+        });
+    }
+
+    private ensureVertexData(device: GfxDevice) {
+        if (!this.gfxVertexBuffer) {
+            this.gfxVertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, this.vertexData.buffer);
+        }
+    }
+
+    private ensureIndices(device: GfxDevice) {
+        if (!this.gfxIndexBuffer) {
+            this.gfxIndexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, this.indices.buffer);
+        }
+    }
+
+    public getIndexBuffer(device: GfxDevice, group: WowWmoGroupDescriptor): GfxIndexBufferDescriptor {
+        this.ensureIndices(device);
+        return {
+            buffer: this.gfxIndexBuffer,
+            byteOffset: group.index_buffer_offset,
+        };
+    }
+
+    public getVertexBuffers(device: GfxDevice, group: WowWmoGroupDescriptor): GfxVertexBufferDescriptor[] {
+        this.ensureVertexData(device);
+        let offs = group.vertex_buffer_offset;
+        let buffers = [];
+        buffers.push({ buffer: this.gfxVertexBuffer, byteOffset: offs }); // positions
+        offs += group.num_vertices * 0x0C;
+        buffers.push({ buffer: this.gfxVertexBuffer, byteOffset: offs }); // normals
+        offs += group.num_vertices * 0x0C;
+        for (let i = 0; i < 2; i++) {
+            buffers.push({ buffer: this.gfxVertexBuffer, byteOffset: offs }); // colors
+            if (i < group.num_color_bufs)
+                offs += group.num_vertices * 0x04;
+        }
+        for (let i = 0; i < 4; i++) {
+            buffers.push({ buffer: this.gfxVertexBuffer, byteOffset: offs }); // uvs
+            if (i < group.num_uv_bufs)
+                offs += group.num_vertices * 0x08;
+        }
+        return buffers;
     }
 }
 
-function calculateWmoLiquidType(
-    wmoFlags: WowWmoHeaderFlags,
-    group: WmoGroupData,
-    type: number,
-): number {
-    const FIRST_NONBASIC_LIQUID_TYPE = 21;
-    const GREEN_LAVA = 15;
-    const MASKED_OCEAN = 1;
-    const MASKED_MAGMA = 2;
-    const MASKED_SLIME = 3;
-    const LIQUID_WMO_MAGMA = 19;
-    const LIQUID_WMO_OCEAN = 14;
-    const LIQUID_WMO_WATER = 13;
-    const LIQUID_WMO_SLIME = 20;
-    let liquidToConvert;
-    if (wmoFlags.use_liquid_type_dbc_id) {
-        if (group.groupLiquidType < FIRST_NONBASIC_LIQUID_TYPE) {
-            liquidToConvert = group.groupLiquidType - 1;
-        } else {
-            return group.groupLiquidType;
-        }
-    } else {
-        if (group.groupLiquidType === GREEN_LAVA) {
-            liquidToConvert = type;
-        } else if (group.groupLiquidType < FIRST_NONBASIC_LIQUID_TYPE) {
-            liquidToConvert = group.groupLiquidType;
-        } else {
-            return group.groupLiquidType + 1;
-        }
-    }
-    const maskedLiquid = liquidToConvert & 0x3;
-    if (maskedLiquid === MASKED_OCEAN) {
-        return LIQUID_WMO_OCEAN;
-    } else if (maskedLiquid === MASKED_MAGMA) {
-        return LIQUID_WMO_MAGMA;
-    } else if (maskedLiquid === MASKED_SLIME) {
-        return LIQUID_WMO_SLIME;
-    } else if (group.flags.water_is_ocean) {
-        return LIQUID_WMO_OCEAN;
-    } else {
-        return LIQUID_WMO_WATER;
-    }
-}
 
 export class SkinData {
     public submeshes: WowSkinSubmesh[];
@@ -2095,15 +1880,15 @@ export class WmoDefinition {
 
         this.worldAABB.transform(extents, adtSpaceFromPlacementSpace);
 
-        for (let i = 0; i < wmo.groups.length; i++) {
-            const group = wmo.groups[i];
-
-            for (let i = group.liquidIndex; i < group.liquidIndex + group.numLiquids; i++) {
-                this.groupIdToLiquidIndices.append(group.fileId, i);
+        for (let i = 0; i < wmo.groupDescriptors.length; i++) {
+            const group = wmo.groupDescriptors[i];
+            const liquidIndices = wmo.groupLiquids.get(group.group_id);
+            for (let i of liquidIndices) {
+                this.groupIdToLiquidIndices.append(group.group_id, i);
             }
             this.groupAmbientColors.set(
-                group.fileId,
-                group.getAmbientColor(wmo, doodadSet),
+                group.group_id,
+                wmo.wmo.get_group_ambient_color(group.group_id, doodadSet),
             );
         }
 
@@ -2116,11 +1901,11 @@ export class WmoDefinition {
         // filter out doodads not present in the current doodadSet, and keep track
         // of which doodads belong in which group
         const doodadSetRefs = wmo.wmo.get_doodad_set_refs(this.doodadSet);
-        for (let group of wmo.groups) {
-            for (let ref of group.doodadRefs) {
+        for (let group of wmo.groupDescriptors) {
+            for (let ref of wmo.wmo.get_doodad_refs(group.group_id)) {
                 if (doodadSetRefs.includes(ref)) {
-                    this.groupIdToDoodadIndices.append(group.fileId, ref);
-                    this.doodadIndexToGroupIds.append(ref, group.fileId);
+                    this.groupIdToDoodadIndices.append(group.group_id, ref);
+                    this.doodadIndexToGroupIds.append(ref, group.group_id);
                 }
             }
         }
@@ -2148,7 +1933,7 @@ export class WmoDefinition {
                 // that's the case, select the closest group (by AABB centerpoint) for
                 // lighting purposes
                 const groupIds = this.doodadIndexToGroupIds.get(ref)!;
-                let group: WmoGroupData;
+                let group: WowWmoGroupDescriptor;
                 if (groupIds.length > 1) {
                     let closestGroupId;
                     let closestDist = Infinity;
@@ -2166,11 +1951,11 @@ export class WmoDefinition {
                     group = wmo.getGroup(groupIds[0])!;
                 }
 
-                let bspAmbientColor = group.getVertexColorForModelSpacePoint(p);
+                let bspAmbientColor = wmo.wmo.get_vertex_color_for_modelspace_point(group.group_id, p as Float32Array);
 
                 if (group.flags.interior && !group.flags.exterior_lit) {
                     const groupAmbientColor = this.groupAmbientColors.get(
-                        group.fileId,
+                        group.group_id,
                     )!;
                     if (bspAmbientColor) {
                         vec4.scaleAndAdd(

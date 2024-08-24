@@ -50,7 +50,6 @@ import {
     SkinData,
     WmoBatchData,
     WmoData,
-    WmoGroupData,
     getSkyboxDoodad,
 } from "./data.js";
 import {
@@ -72,6 +71,7 @@ import {
 } from "./program.js";
 import { FrameData, MAP_SIZE, MapArray, View } from "./scenes.js";
 import { TextureCache } from "./tex.js";
+import { WowWmoGroupDescriptor } from "../../rust/pkg/index.js";
 
 type TextureMappingArray = (TextureMapping | null)[];
 
@@ -478,10 +478,10 @@ function chunk<T>(arr: T[], chunkSize: number): T[][] {
 }
 
 export class WmoRenderer {
-    private inputLayouts: GfxInputLayout[] = [];
+    private inputLayout: GfxInputLayout;
     private vertexBuffers: GfxVertexBufferDescriptor[][] = [];
     private indexBuffers: GfxIndexBufferDescriptor[] = [];
-    private groups: WmoGroupData[] = [];
+    private groups: WowWmoGroupDescriptor[] = [];
     public batches: WmoBatchData[][] = [];
     public visible: boolean = true;
     public groupBatchTextureMappings: TextureMappingArray[][] = [];
@@ -493,13 +493,11 @@ export class WmoRenderer {
         private textureCache: TextureCache,
         renderHelper: GfxRenderHelper,
     ) {
-        for (let group of this.wmo.groups) {
-            this.inputLayouts.push(
-                group.getInputLayout(renderHelper.renderCache),
-            );
-            this.vertexBuffers.push(group.getVertexBuffers(device));
-            this.indexBuffers.push(group.getIndexBuffer(device));
-            this.batches.push(group.getBatches(this.wmo));
+        for (let group of this.wmo.groupDescriptors) {
+            this.inputLayout = wmo.getInputLayout(renderHelper.renderCache);
+            this.vertexBuffers.push(wmo.getVertexBuffers(device, group));
+            this.indexBuffers.push(wmo.getIndexBuffer(device, group));
+            this.batches.push(wmo.getBatches(group));
             this.groups.push(group);
         }
         for (let i in this.batches) {
@@ -549,12 +547,12 @@ export class WmoRenderer {
             const visibleGroups = frame.wmoDefGroups.get(def.uniqueId);
             for (let i = 0; i < this.vertexBuffers.length; i++) {
                 const group = this.groups[i];
-                if (!visibleGroups.includes(group.fileId))
+                if (!visibleGroups.includes(group.group_id))
                     continue;
-                const ambientColor = def.groupAmbientColors.get(group.fileId)!;
+                const ambientColor = def.groupAmbientColors.get(group.group_id)!;
                 const applyInteriorLight = group.flags.interior && !group.flags.exterior_lit;
                 const applyExteriorLight = true;
-                template.setVertexInput(this.inputLayouts[i], this.vertexBuffers[i], this.indexBuffers[i]);
+                template.setVertexInput(this.inputLayout, this.vertexBuffers[i], this.indexBuffers[i]);
                 for (let j in this.batches[i]) {
                     const batch = this.batches[i][j];
                     if (!batch.visible) continue;
@@ -571,7 +569,7 @@ export class WmoRenderer {
                         offset,
                         batch.vertexShader,
                         batch.pixelShader,
-                        0,
+                        group.num_color_bufs,
                         0,
                     );
                     offset += fillVec4(
@@ -648,9 +646,8 @@ export class WmoRenderer {
 
     public destroy(device: GfxDevice) {
         for (let i = 0; i < this.vertexBuffers.length; i++) {
-            this.vertexBuffers[i].forEach((buf) =>
-                device.destroyBuffer(buf.buffer),
-            );
+            // all buffers in each entry of `vertexBuffer` are shared
+            device.destroyBuffer(this.vertexBuffers[i][0].buffer);
             device.destroyBuffer(this.indexBuffers[i].buffer);
         }
     }

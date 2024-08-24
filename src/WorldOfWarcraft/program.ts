@@ -303,7 +303,7 @@ layout(std140) uniform ub_ModelParams {
 };
 
 layout(std140) uniform ub_BatchParams {
-    vec4 shaderParams; // vertexShader, pixelShader, _, _
+    vec4 shaderParams; // vertexShader, pixelShader, numColorBufs, _
     vec4 materialParams; // blendMode, applyInteriorLight, applyExteriorLight, unlit
     vec4 moreMaterialParams; // unfogged, exterior_light, sidn, window
     vec4 sidnColor;
@@ -344,8 +344,10 @@ void mainVS() {
     vec3 viewPosition = Mul(_Mat4x4(u_View), vec4(v_Position, 1.0)).xyz;
     vec3 viewNormal = Mul(_Mat4x4(u_View), vec4(v_Normal, 0.0)).xyz;
     gl_Position = Mul(u_Projection, vec4(viewPosition, 1.0));
-    v_Color0 = a_Color0.bgra / 255.0;
-    v_Color1 = a_Color1.rgba / 255.0;
+
+    int numColorBuffers = int(shaderParams.z);
+    v_Color0 = numColorBuffers >= 1 ? a_Color0.bgra / 255.0 : vec4(0.0, 0.0, 0.0, 1.0);
+    v_Color1 = numColorBuffers >= 2 ? a_Color1.rgba / 255.0 : vec4(0.0, 0.0, 0.0, 1.0);
 
     int vertexShader = int(shaderParams.x);
     if (vertexShader == ${rust.WowWmoMaterialVertexShader.None}) {
@@ -575,7 +577,7 @@ void mainPS() {
 
                 // FIXME: this should be v_Color.a, but adding interior/exterior
                 // blending results in too-bright doorways
-                0.0,
+                v_Color0.a,
 
                 applyInteriorLight,
                 applyExteriorLight,

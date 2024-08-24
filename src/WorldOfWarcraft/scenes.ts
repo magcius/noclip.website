@@ -171,7 +171,7 @@ export class FrameData {
             }
         }
         if (def.groupIdToLiquidIndices.has(groupId)) {
-            for (let index of def.groupIdToLiquidIndices.get(groupId)) {
+            for (let index of wmo.groupLiquids.get(groupId)) {
                 this.addWmoDefLiquid(def, index);
             }
         }
@@ -307,7 +307,7 @@ export class WdtScene implements Viewer.SceneGfx {
     public frozenFrustum = new Frustum();
     private frozenFrameData: FrameData | null = null;
     private modelCamera = vec3.create();
-    private modelFrustumRust = new rust.ConvexHull();
+    private modelFrustum = new rust.ConvexHull();
 
     constructor(private device: GfxDevice, public world: WorldData | LazyWorldData, public renderHelper: GfxRenderHelper, private db: Database) {
         console.time("WdtScene construction");
@@ -521,29 +521,32 @@ export class WdtScene implements Viewer.SceneGfx {
         frame.addWmoDef(wmo, def);
 
         vec3.transformMat4(this.modelCamera, worldCamera, def.invPlacementMatrix);
-        worldFrustum.copyToRust(this.modelFrustumRust);
-        this.modelFrustumRust.transform_js(def.invPlacementMatrix as Float32Array);
+        worldFrustum.copyToRust(this.modelFrustum);
+        this.modelFrustum.transform_js(def.invPlacementMatrix as Float32Array);
 
-        // Categorize groups by interior/exterior, and whether
-        // the camera is present in them
+        // Find groups the camera's a member of (i.e. within), or
+        // if they're merely in the frustum. Also record if we started in an
+        // interiod group or not, and whether any member groups have a skybox
         let startedInInteriorGroup = false;
         let frustumGroups: number[] = [];
         let memberGroups: number[] = [];
-        for (let group of wmo.groups) {
-            if (wmo.wmo.group_contains_modelspace_point(group.group, this.modelCamera as Float32Array)) {
+        for (let group of wmo.groupDescriptors) {
+            if (wmo.wmo.group_contains_modelspace_point(group.group_id, this.modelCamera as Float32Array)) {
                 if (group.flags.show_skybox && wmo.skyboxModel) {
                     frame.activeWmoSkybox = wmo.skyboxModel.fileId;
                 }
                 if (!group.flags.exterior) {
                     startedInInteriorGroup = true;
                 }
-                memberGroups.push(group.fileId);
+                memberGroups.push(group.group_id);
             }
-            if (group.flags.exterior && wmo.wmo.group_in_modelspace_frustum(group.group, this.modelFrustumRust)) {
-                frustumGroups.push(group.fileId);
+            if (group.flags.exterior && wmo.wmo.group_in_modelspace_frustum(group.group_id, this.modelFrustum)) {
+                frustumGroups.push(group.group_id);
             }
         }
 
+        // if we're a member of any groups, either traverse from just those groups,
+        // or if we started in an exterior group, include the frustum groups as well.
         let rootGroups: number[];
         if (memberGroups.length > 0) {
             if (startedInInteriorGroup) {
@@ -558,18 +561,22 @@ export class WdtScene implements Viewer.SceneGfx {
         // If we still don't have any groups, the user might be flying out of
         // bounds, just render the WMO geometry without doodads/liquids
         if (rootGroups.length === 0) {
-            for (let group of wmo.groups) {
-                frame.addWmoGroup(wmo, def, group.fileId, true);
+            for (let group of wmo.groupDescriptors) {
+                frame.addWmoGroup(wmo, def, group.group_id, true);
             }
             return CullWmoResult.CameraOutside;
         }
 
-        // do portal culling on the root groups
-        let visibleGroups: number[] = [];
+        // do portal culling on the root groups to build our visible set
+        let visibleGroups: Set<number> = new Set();
         for (let groupId of rootGroups) {
-            wmo.portalCull(this.modelCamera, this.modelFrustumRust, groupId, visibleGroups, []);
+            let groups = wmo.wmo.find_visible_groups(groupId, this.modelCamera as Float32Array, this.modelFrustum);
+            for (let visibleGroup of groups) {
+                visibleGroups.add(visibleGroup);
+            }
         }
 
+        // determine if we have any exterior groups in the visible set...
         let hasExternalGroup = false;
         for (let groupId of visibleGroups) {
             const group = wmo.getGroup(groupId)!;
@@ -579,12 +586,15 @@ export class WdtScene implements Viewer.SceneGfx {
             frame.addWmoGroup(wmo, def, groupId);
         }
 
+        // ...and if we do, add in the frustum groups as well
         if (hasExternalGroup) {
             for (let groupId of frustumGroups) {
                 frame.addWmoGroup(wmo, def, groupId);
             }
         }
 
+        // finally, return a value describing the state of the camera w.r.t.
+        // these groups
         if (startedInInteriorGroup) {
             if (hasExternalGroup) {
                 return CullWmoResult.CameraInsideAndExteriorVisible;
@@ -616,7 +626,7 @@ export class WdtScene implements Viewer.SceneGfx {
         this.loadingAdtRenderer.prepareToRenderLoadingBox(renderInstManager, this.loadingAdts);
 
         const frame = this.frozenFrameData !== null ? this.frozenFrameData : this.cull();
-            
+
         template.setGfxProgram(this.terrainProgram);
         template.setBindingLayouts(TerrainProgram.bindingLayouts);
         for (let renderer of this.terrainRenderers.values()) {
