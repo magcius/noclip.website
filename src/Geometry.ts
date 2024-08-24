@@ -2,7 +2,7 @@
 import { vec3, ReadonlyVec3, ReadonlyMat4, vec4, ReadonlyVec4, mat4 } from "gl-matrix";
 import { GfxClipSpaceNearZ } from "./gfx/platform/GfxPlatform.js";
 import { assert, nArray } from "./util.js";
-import { ConvexHull } from "../rust/pkg/index.js";
+import type { ConvexHull } from "../rust/pkg/index.js";
 
 const scratchVec4 = vec4.create();
 const scratchMatrix = mat4.create();

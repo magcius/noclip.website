@@ -964,7 +964,7 @@ layout(location = ${ModelProgram.a_TexCoord0}) attribute vec2 a_TexCoord0;
 layout(location = ${ModelProgram.a_TexCoord1}) attribute vec2 a_TexCoord1;
 
 float edgeScan(vec3 position, vec3 normal){
-    float dotProductClamped = clamp(dot(-normalize(position),normal), 0.0, 1.0);
+    float dotProductClamped = clamp(dot(-normalize(position), normal), 0.0, 1.0);
     return clamp(2.7 * dotProductClamped * dotProductClamped - 0.4, 0.0, 1.0);
 }
 
@@ -1026,6 +1026,7 @@ void mainVS() {
     v_Normal = MulNormalMatrix(boneTransform, a_Normal);
 
     vec3 viewPosition = Mul(_Mat4x4(u_View), vec4(v_Position, 1.0)).xyz;
+    vec3 viewNormal = Mul(_Mat4x4(u_View), vec4(v_Normal, 0.0)).xyz;
 
     gl_Position = Mul(u_Projection, vec4(viewPosition, 1.0));
     v_InstanceID = float(gl_InstanceID); // FIXME: hack until we get flat variables working
@@ -1033,8 +1034,8 @@ void mainVS() {
     vec4 combinedColor = clamp(meshColor, 0.0, 1.0);
 
     vec4 combinedColorHalved = combinedColor * 0.5;
-    vec2 envCoord = envmapTexCoord(viewPosition, v_Normal);
-    float edgeScanVal = edgeScan(viewPosition, v_Normal);
+    vec2 envCoord = envmapTexCoord(viewPosition, viewNormal);
+    float edgeScanVal = edgeScan(viewPosition, viewNormal);
     int vertexShader = int(shaderTypes.g);
 
     v_UV0 = a_TexCoord0;

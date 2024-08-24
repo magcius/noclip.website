@@ -93,6 +93,8 @@ import {
     GfxRenderInst,
     GfxRendererLayer,
     makeSortKey,
+    makeSortKeyOpaque,
+    makeSortKeyTranslucent,
 } from "../gfx/render/GfxRenderInstManager.js";
 import { rust } from "../rustlib.js";
 import { assert } from "../util.js";
@@ -107,8 +109,6 @@ import {
     placementSpaceFromModelSpace,
 } from "./scenes.js";
 import { Sheepfile } from "./util.js";
-import { drawDebugFrustum, drawDebugPortal } from "./debug.js";
-import { Cyan, Green, Red } from "../Color.js";
 
 export class Database {
     private inner: WowDatabase;
@@ -717,6 +717,7 @@ export class ParticleEmitter {
     private msSinceLastUpdate = 0;
     public needsRedraw = true;
     private pixelData: Float32Array;
+    private sortKeyBase = 0;
 
     constructor(public index: number, public emitter: WowM2ParticleEmitter, private model: ModelData, public txac: number) {
         this.updateBuffer = new Float32Array(16);
@@ -758,6 +759,7 @@ export class ParticleEmitter {
             ParticleEmitter.MAX_PARTICLES * bytesPerParticle,
         );
         this.msSinceLastUpdate = randomRange(0, 200);
+        this.sortKeyBase = makeSortKey(GfxRendererLayer.TRANSLUCENT + this.index);
     }
 
     private calculateParticleType(): number {
@@ -894,7 +896,8 @@ export class ParticleEmitter {
     }
 
     public setMegaStateFlags(renderInst: GfxRenderInst) {
-        setM2BlendModeMegaState(renderInst, this.blendMode, GfxCullMode.None, this.emitter.blending_type <= 1, GfxCompareMode.Greater, makeSortKey(GfxRendererLayer.TRANSLUCENT + this.index));
+        setM2BlendModeMegaState(renderInst, this.blendMode, true);
+        renderInst.sortKey = this.sortKeyBase;
     }
 
     private ensureTexture(device: GfxDevice) {
@@ -1242,6 +1245,15 @@ export class BlpData {
     ) {}
 }
 
+function makeSortKeyBase(blendMode: WowM2BlendingMode, layer: number = 0): number {
+    if (blendMode === rust.WowM2BlendingMode.Opaque)
+        return makeSortKeyOpaque(GfxRendererLayer.OPAQUE, layer);
+    else if (blendMode === rust.WowM2BlendingMode.AlphaKey)
+        return makeSortKeyOpaque(GfxRendererLayer.ALPHA_TEST, layer);
+    else
+        return makeSortKeyTranslucent(GfxRendererLayer.TRANSLUCENT + layer);
+}
+
 export class WmoBatchData {
     public indexStart: number;
     public indexCount: number;
@@ -1253,6 +1265,7 @@ export class WmoBatchData {
     public textures: (BlpData | null)[] = [];
     public visible = true;
     public sidnColor: vec4;
+    public sortKeyBase = 0;
 
     constructor(batch: WowWmoMaterialBatch, wmo: WmoData) {
         this.indexStart = batch.start_index;
@@ -1263,11 +1276,7 @@ export class WmoBatchData {
             this.materialId = batch.material_id;
         }
         this.material = wmo.materials[this.materialId];
-        for (let blpId of [
-            this.material.texture_1,
-            this.material.texture_2,
-            this.material.texture_3,
-        ]) {
+        for (let blpId of [this.material.texture_1, this.material.texture_2, this.material.texture_3]) {
             if (blpId === 0) {
                 this.textures.push(null);
             } else {
@@ -1285,17 +1294,13 @@ export class WmoBatchData {
         this.materialFlags = rust.WowWmoMaterialFlags.new(this.material.flags);
         this.vertexShader = this.material.get_vertex_shader();
         this.pixelShader = this.material.get_pixel_shader();
+
+        this.sortKeyBase = makeSortKeyBase(this.material.blend_mode);
     }
 
     public setMegaStateFlags(renderInst: GfxRenderInst) {
-        setM2BlendModeMegaState(
-            renderInst,
-            this.material.blend_mode,
-            this.materialFlags.unculled ? GfxCullMode.None : GfxCullMode.Back,
-            this.material.blend_mode <= 1,
-            undefined,
-            makeSortKey(GfxRendererLayer.TRANSLUCENT),
-        );
+        setM2BlendModeMegaState(renderInst, this.material.blend_mode, this.materialFlags.unculled);
+        renderInst.sortKey = this.sortKeyBase;
     }
 }
 
@@ -1784,35 +1789,30 @@ export class ModelRenderPass {
     public tex2: BlpData | null;
     public tex3: BlpData | null;
     private scratchMat4 = mat4.identity(mat4.create());
+    private sortKeyBase = 0;
 
-    constructor(
-        public batch: WowModelBatch,
-        public skin: WowSkin,
-        public model: ModelData,
-    ) {
+    constructor(public batch: WowModelBatch, public skin: WowSkin, public model: ModelData) {
         this.fragmentShaderId = batch.get_pixel_shader();
         this.vertexShaderId = batch.get_vertex_shader();
         this.submesh = skin.submeshes[batch.skin_submesh_index];
-        [this.blendMode, this.materialFlags] =
-            model.materials[this.batch.material_index];
+        [this.blendMode, this.materialFlags] = model.materials[this.batch.material_index];
         this.layer = this.batch.material_layer;
         this.tex0 = this.getBlp(0)!;
         this.tex1 = this.getBlp(1);
         this.tex2 = this.getBlp(2);
         this.tex3 = this.getBlp(3);
+        this.sortKeyBase = makeSortKeyBase(this.blendMode, this.layer);
     }
 
     public setMegaStateFlags(renderInst: GfxRenderInst) {
         setM2BlendModeMegaState(
             renderInst,
             this.blendMode,
-            this.materialFlags.two_sided ? GfxCullMode.None : GfxCullMode.Back,
+            this.materialFlags.two_sided,
             this.materialFlags.depth_write,
-            this.materialFlags.depth_tested
-                ? reverseDepthForCompareMode(GfxCompareMode.LessEqual)
-                : GfxCompareMode.Always,
-            makeSortKey(GfxRendererLayer.TRANSLUCENT + this.layer),
+            this.materialFlags.depth_tested,
         );
+        renderInst.sortKey = this.sortKeyBase;
     }
 
     private getBlp(n: number): BlpData | null {
@@ -1913,19 +1913,20 @@ export class ModelRenderPass {
     }
 }
 
-function setM2BlendModeMegaState(
-    renderInst: GfxRenderInst,
-    blendMode: WowM2BlendingMode,
-    cullMode: GfxCullMode,
-    depthWrite: boolean,
-    depthCompare: GfxCompareMode | undefined,
-    sortKeyLayer: number,
-) {
+function setM2BlendModeMegaState(renderInst: GfxRenderInst, blendMode: WowM2BlendingMode, doubleSided: boolean = false, depthWrite?: boolean, depthTest = true) {
     const defaultBlendState = {
         blendMode: GfxBlendMode.Add,
         blendSrcFactor: GfxBlendFactor.One,
         blendDstFactor: GfxBlendFactor.Zero,
     };
+
+    if (depthWrite === undefined) {
+        depthWrite = (blendMode == rust.WowM2BlendingMode.Opaque || blendMode === rust.WowM2BlendingMode.AlphaKey);
+    }
+
+    const cullMode = doubleSided ? GfxCullMode.None : GfxCullMode.Back;
+    const depthCompare = depthTest ? reverseDepthForCompareMode(GfxCompareMode.Less) : GfxCompareMode.Always;
+
     let settings: Partial<GfxMegaStateDescriptor> = {
         cullMode,
         depthWrite,
@@ -1952,9 +1953,7 @@ function setM2BlendModeMegaState(
                 blendSrcFactor: GfxBlendFactor.One,
                 blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
             };
-            settings.attachmentsState![0].channelWriteMask =
-                GfxChannelWriteMask.AllChannels;
-            renderInst.sortKey = sortKeyLayer;
+            settings.attachmentsState![0].channelWriteMask = GfxChannelWriteMask.AllChannels;
             break;
         }
         case rust.WowM2BlendingMode.NoAlphaAdd: {
@@ -1968,7 +1967,6 @@ function setM2BlendModeMegaState(
                 blendSrcFactor: GfxBlendFactor.Zero,
                 blendDstFactor: GfxBlendFactor.One,
             };
-            renderInst.sortKey = sortKeyLayer;
             break;
         }
         case rust.WowM2BlendingMode.Add: {
@@ -1982,9 +1980,7 @@ function setM2BlendModeMegaState(
                 blendSrcFactor: GfxBlendFactor.Zero,
                 blendDstFactor: GfxBlendFactor.One,
             };
-            settings.attachmentsState![0].channelWriteMask =
-                GfxChannelWriteMask.AllChannels;
-            renderInst.sortKey = sortKeyLayer;
+            settings.attachmentsState![0].channelWriteMask = GfxChannelWriteMask.AllChannels;
             break;
         }
         case rust.WowM2BlendingMode.Mod: {
@@ -1998,7 +1994,6 @@ function setM2BlendModeMegaState(
                 blendSrcFactor: GfxBlendFactor.DstAlpha,
                 blendDstFactor: GfxBlendFactor.Zero,
             };
-            renderInst.sortKey = sortKeyLayer;
             break;
         }
         case rust.WowM2BlendingMode.Mod2x: {
@@ -2012,7 +2007,6 @@ function setM2BlendModeMegaState(
                 blendSrcFactor: GfxBlendFactor.DstAlpha,
                 blendDstFactor: GfxBlendFactor.SrcAlpha,
             };
-            renderInst.sortKey = sortKeyLayer;
             break;
         }
         case rust.WowM2BlendingMode.BlendAdd: {
@@ -2026,13 +2020,13 @@ function setM2BlendModeMegaState(
                 blendSrcFactor: GfxBlendFactor.One,
                 blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
             };
-            renderInst.sortKey = sortKeyLayer;
             break;
         }
         case rust.WowM2BlendingMode.Opaque:
         case rust.WowM2BlendingMode.AlphaKey:
             break;
     }
+
     renderInst.setMegaStateFlags(settings);
 }
 
