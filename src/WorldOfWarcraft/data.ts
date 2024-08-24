@@ -107,7 +107,6 @@ import {
     View,
     adtSpaceFromPlacementSpace,
     modelSpaceFromPlacementSpace,
-    noclipSpaceFromAdtSpace,
     placementSpaceFromAdtSpace,
     placementSpaceFromModelSpace,
 } from "./scenes.js";
@@ -2399,9 +2398,7 @@ export class AdtData {
             this.hasHeightTexturing,
         );
 
-        const scratchMatrix = mat4.create();
-        mat4.mul(scratchMatrix, adtSpaceFromPlacementSpace, noclipSpaceFromAdtSpace)
-        this.worldSpaceAABB.transform(convertWowAABB(renderResult.extents), scratchMatrix);
+        this.worldSpaceAABB.copy(convertWowAABB(renderResult.extents));
         this.vertexBuffer = renderResult.take_vertex_buffer();
         this.indexBuffer = renderResult.take_index_buffer();
         let i = 0;

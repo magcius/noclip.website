@@ -997,11 +997,7 @@ export class WaterRenderer {
         this.time += view.deltaTime / 50.0;
     }
 
-    public prepareToRenderWmoWater(
-        renderInstManager: GfxRenderInstManager,
-        frame: FrameData,
-        wmoId: number,
-    ) {
+    public prepareToRenderWmoWater(renderInstManager: GfxRenderInstManager, frame: FrameData, wmoId: number) {
         for (let def of frame.wmoDefs.get(wmoId)) {
             const indices = frame.wmoLiquids.get(def.uniqueId);
             this.prepareToRenderWaterInner(

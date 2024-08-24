@@ -1,4 +1,4 @@
-import { mat4, vec3, vec4 } from "gl-matrix";
+import { mat4, ReadonlyMat4, vec3, vec4 } from "gl-matrix";
 import { CameraController } from "../Camera.js";
 import { AABB, Frustum } from "../Geometry.js";
 import { getMatrixTranslation, invlerp, lerp, projectionMatrixForFrustum, saturate, setMatrixTranslation, transformVec3Mat4w1 } from "../MathHelpers.js";
@@ -19,28 +19,27 @@ import { TextureCache } from "./tex.js";
 
 export const MAP_SIZE = 17066;
 
-export const noclipSpaceFromAdtSpace = mat4.fromValues(
+export const placementSpaceFromAdtSpace: ReadonlyMat4 = mat4.fromValues(
     0, 0, -1, 0,
     -1, 0, 0, 0,
     0, 1, 0, 0,
     MAP_SIZE, 0, MAP_SIZE, 1,
 );
-export const placementSpaceFromAdtSpace = noclipSpaceFromAdtSpace;
+// noclip space is placement space
+const noclipSpaceFromAdtSpace = placementSpaceFromAdtSpace;
 
-export const noclipSpaceFromModelSpace = mat4.fromValues(
+export const placementSpaceFromModelSpace: ReadonlyMat4 = mat4.fromValues(
     0, 0, 1, 0,
     1, 0, 0, 0,
     0, 1, 0, 0,
     0, 0, 0, 1,
 );
-export const placementSpaceFromModelSpace: mat4 = noclipSpaceFromModelSpace;
 
-export const adtSpaceFromPlacementSpace: mat4 = mat4.invert(mat4.create(), noclipSpaceFromAdtSpace);
-export const adtSpaceFromModelSpace: mat4 = mat4.invert(mat4.create(), noclipSpaceFromAdtSpace);
-mat4.mul(adtSpaceFromModelSpace, adtSpaceFromModelSpace, noclipSpaceFromModelSpace);
+export const adtSpaceFromPlacementSpace: ReadonlyMat4 = mat4.invert(mat4.create(), placementSpaceFromAdtSpace);
+export const adtSpaceFromModelSpace: ReadonlyMat4 = mat4.mul(mat4.create(), adtSpaceFromPlacementSpace, placementSpaceFromModelSpace);
 
-export const modelSpaceFromAdtSpace: mat4 = mat4.invert(mat4.create(), adtSpaceFromModelSpace);
-export const modelSpaceFromPlacementSpace: mat4 = mat4.invert(mat4.create(), placementSpaceFromModelSpace);
+export const modelSpaceFromAdtSpace: ReadonlyMat4 = mat4.invert(mat4.create(), adtSpaceFromModelSpace);
+export const modelSpaceFromPlacementSpace: ReadonlyMat4 = mat4.invert(mat4.create(), placementSpaceFromModelSpace);
 
 const scratchVec3 = vec3.create();
 export class View {
