@@ -28,7 +28,7 @@ import {
     GfxVertexBufferFrequency,
 } from "../gfx/platform/GfxPlatform.js";
 import { GfxFormat } from "../gfx/platform/GfxPlatformFormat.js";
-import { GfxInputLayout } from "../gfx/platform/GfxPlatformImpl.js";
+import { GfxBuffer, GfxInputLayout } from "../gfx/platform/GfxPlatformImpl.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
 import {
     GfxRenderInstManager,
@@ -36,7 +36,7 @@ import {
     makeSortKey,
 } from "../gfx/render/GfxRenderInstManager.js";
 import { rust } from "../rustlib.js";
-import { assert } from "../util.js";
+import { assert, assertExists } from "../util.js";
 import {
     AdtData,
     BlpData,
@@ -482,24 +482,26 @@ export class WmoRenderer {
     private vertexBuffers: GfxVertexBufferDescriptor[][] = [];
     private indexBuffers: GfxIndexBufferDescriptor[] = [];
     private groups: WowWmoGroupDescriptor[] = [];
+    private gfxVertexBuffer: GfxBuffer;
+    private gfxIndexBuffer: GfxBuffer;
     public batches: WmoBatchData[][] = [];
     public visible: boolean = true;
     public groupBatchTextureMappings: TextureMappingArray[][] = [];
     private dayNight: number;
 
-    constructor(
-        device: GfxDevice,
-        private wmo: WmoData,
-        private textureCache: TextureCache,
-        renderHelper: GfxRenderHelper,
-    ) {
-        for (let group of this.wmo.groupDescriptors) {
+    constructor(device: GfxDevice, private wmo: WmoData, private textureCache: TextureCache, renderHelper: GfxRenderHelper) {
+        this.gfxVertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, this.wmo.wmo.get_vertex_data().buffer);
+        this.gfxIndexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, this.wmo.wmo.get_indices().buffer);
+
+        for (let fileID of this.wmo.wmo.group_file_ids) {
+            const groupDescriptor = this.wmo.wmo.get_group_descriptor(fileID);
             this.inputLayout = wmo.getInputLayout(renderHelper.renderCache);
-            this.vertexBuffers.push(wmo.getVertexBuffers(device, group));
-            this.indexBuffers.push(wmo.getIndexBuffer(device, group));
-            this.batches.push(wmo.getBatches(group));
-            this.groups.push(group);
+            this.vertexBuffers.push(this.getGroupVertexBuffers(groupDescriptor));
+            this.indexBuffers.push(this.getGroupIndexBuffer(groupDescriptor));
+            this.batches.push(wmo.getBatches(groupDescriptor));
+            this.groups.push(groupDescriptor);
         }
+
         for (let i in this.batches) {
             const batches = this.batches[i];
             this.groupBatchTextureMappings[i] = [];
@@ -511,6 +513,30 @@ export class WmoRenderer {
         }
     }
 
+    private getGroupIndexBuffer(group: WowWmoGroupDescriptor): GfxIndexBufferDescriptor {
+        return { buffer: this.gfxIndexBuffer, byteOffset: assertExists(group.index_buffer_offset) };
+    }
+
+    private getGroupVertexBuffers(group: WowWmoGroupDescriptor): GfxVertexBufferDescriptor[] {
+        let offs = assertExists(group.vertex_buffer_offset);
+        let buffers = [];
+        buffers.push({ buffer: this.gfxVertexBuffer, byteOffset: offs }); // positions
+        offs += group.num_vertices * 0x0C;
+        buffers.push({ buffer: this.gfxVertexBuffer, byteOffset: offs }); // normals
+        offs += group.num_vertices * 0x0C;
+        for (let i = 0; i < 2; i++) {
+            buffers.push({ buffer: this.gfxVertexBuffer, byteOffset: offs }); // colors
+            if (i < group.num_color_bufs)
+                offs += group.num_vertices * 0x04;
+        }
+        for (let i = 0; i < 4; i++) {
+            buffers.push({ buffer: this.gfxVertexBuffer, byteOffset: offs }); // uvs
+            if (i < group.num_uv_bufs)
+                offs += group.num_vertices * 0x08;
+        }
+        return buffers;
+    }
+    
     private getBatchTextureMapping(batch: WmoBatchData): TextureMappingArray {
         const mappings = [];
         for (let blp of batch.textures) {
@@ -645,11 +671,8 @@ export class WmoRenderer {
     }
 
     public destroy(device: GfxDevice) {
-        for (let i = 0; i < this.vertexBuffers.length; i++) {
-            // all buffers in each entry of `vertexBuffer` are shared
-            device.destroyBuffer(this.vertexBuffers[i][0].buffer);
-            device.destroyBuffer(this.indexBuffers[i].buffer);
-        }
+        device.destroyBuffer(this.gfxVertexBuffer);
+        device.destroyBuffer(this.gfxIndexBuffer);
     }
 }
 

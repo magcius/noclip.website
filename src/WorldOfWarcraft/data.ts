@@ -1326,10 +1326,6 @@ export class WmoData {
     public skyboxModel: ModelData | null = null;
     public groupIds: number[] = [];
     public groupLiquids: MapArray<number, number> = new MapArray();
-    private vertexData: Uint8Array;
-    private gfxVertexBuffer: GfxBuffer;
-    private indices: Uint16Array;
-    private gfxIndexBuffer: GfxBuffer;
     public groupDescriptors: WowWmoGroupDescriptor[] = [];
 
     constructor(public fileId: number) {}
@@ -1424,8 +1420,6 @@ export class WmoData {
         ]);
         await this.loadLiquids(cache);
 
-        this.indices = this.wmo.get_indices();
-        this.vertexData = this.wmo.get_vertex_data();
         for (const fileId of this.wmo.group_file_ids) {
             this.groupDescriptors.push(this.wmo.get_group_descriptor(fileId));
         }
@@ -1491,47 +1485,6 @@ export class WmoData {
             vertexBufferDescriptors,
             indexBufferFormat,
         });
-    }
-
-    private ensureVertexData(device: GfxDevice) {
-        if (!this.gfxVertexBuffer) {
-            this.gfxVertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, this.vertexData.buffer);
-        }
-    }
-
-    private ensureIndices(device: GfxDevice) {
-        if (!this.gfxIndexBuffer) {
-            this.gfxIndexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, this.indices.buffer);
-        }
-    }
-
-    public getIndexBuffer(device: GfxDevice, group: WowWmoGroupDescriptor): GfxIndexBufferDescriptor {
-        this.ensureIndices(device);
-        return {
-            buffer: this.gfxIndexBuffer,
-            byteOffset: group.index_buffer_offset,
-        };
-    }
-
-    public getVertexBuffers(device: GfxDevice, group: WowWmoGroupDescriptor): GfxVertexBufferDescriptor[] {
-        this.ensureVertexData(device);
-        let offs = group.vertex_buffer_offset;
-        let buffers = [];
-        buffers.push({ buffer: this.gfxVertexBuffer, byteOffset: offs }); // positions
-        offs += group.num_vertices * 0x0C;
-        buffers.push({ buffer: this.gfxVertexBuffer, byteOffset: offs }); // normals
-        offs += group.num_vertices * 0x0C;
-        for (let i = 0; i < 2; i++) {
-            buffers.push({ buffer: this.gfxVertexBuffer, byteOffset: offs }); // colors
-            if (i < group.num_color_bufs)
-                offs += group.num_vertices * 0x04;
-        }
-        for (let i = 0; i < 4; i++) {
-            buffers.push({ buffer: this.gfxVertexBuffer, byteOffset: offs }); // uvs
-            if (i < group.num_uv_bufs)
-                offs += group.num_vertices * 0x08;
-        }
-        return buffers;
     }
 }
 

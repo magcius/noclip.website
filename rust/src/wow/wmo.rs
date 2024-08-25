@@ -344,8 +344,8 @@ impl Wmo {
         WmoGroupDescriptor {
             group_id,
             flags: group.flags,
-            vertex_buffer_offset: group.vertex_buffer_offset.unwrap(),
-            index_buffer_offset: group.index_buffer_offset.unwrap(),
+            vertex_buffer_offset: group.vertex_buffer_offset,
+            index_buffer_offset: group.index_buffer_offset,
             num_vertices: group.num_vertices,
             num_uv_bufs: group.num_uv_bufs,
             num_color_bufs: group.num_color_bufs,
@@ -618,8 +618,8 @@ pub struct Mosi {
 pub struct WmoGroupDescriptor {
     pub group_id: u32,
     pub flags: WmoGroupFlags,
-    pub vertex_buffer_offset: usize,
-    pub index_buffer_offset: usize,
+    pub vertex_buffer_offset: Option<usize>,
+    pub index_buffer_offset: Option<usize>,
     pub num_vertices: usize,
     pub num_uv_bufs: usize,
     pub num_color_bufs: usize,
