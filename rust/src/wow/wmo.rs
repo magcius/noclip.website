@@ -281,7 +281,7 @@ impl Wmo {
         for i in 0..4 {
             components.push(vec3(
                 group.colors[4 * bsp_result.vert_index_0 + i] as f32 / 255.0,
-                group.colors[4 * bsp_result.vert_index_2 + i] as f32 / 255.0,
+                group.colors[4 * bsp_result.vert_index_1 + i] as f32 / 255.0,
                 group.colors[4 * bsp_result.vert_index_2 + i] as f32 / 255.0,
             ));
         }
@@ -302,14 +302,6 @@ impl Wmo {
         let group = self.get_group(group_id);
         let aabb: AABB = group.header.bounding_box.into();
         frustum.contains(&aabb)
-    }
-
-    pub fn take_portals(&mut self) -> Vec<PortalData> {
-        self.portals.clone()
-    }
-
-    pub fn take_portal_refs(&mut self) -> Vec<PortalRef> {
-        self.portal_refs.clone()
     }
 
     pub fn get_group_text(&self, index: usize) -> Option<String> {
@@ -452,7 +444,6 @@ fn point_inside_polygon(point: &Vec3, verts: &[Vec3], axis_to_flatten: u8) -> bo
     true
 }
 
-#[wasm_bindgen(js_name = "WowWmoPortal", getter_with_clone)]
 #[derive(DekuRead, Debug, Clone)]
 pub struct Portal {
     pub start_vertex: u16,
@@ -460,7 +451,6 @@ pub struct Portal {
     pub plane: WowPlane,
 }
 
-#[wasm_bindgen(js_name = "WowWmoPortalData", getter_with_clone)]
 #[derive(Debug, Clone)]
 pub struct PortalData {
     vertices: Vec<Vec3>,
@@ -493,16 +483,9 @@ impl PortalData {
     }
 }
 
-#[wasm_bindgen(js_class = "WowWmoPortalData")]
 impl PortalData {
     pub fn in_frustum(&self, frustum: &ConvexHull) -> bool {
         frustum.contains(&self.aabb)
-    }
-
-    pub fn clip_frustum_js(&self, camera_point_slice: &[f32], frustum: &ConvexHull) -> ConvexHull {
-        assert_eq!(camera_point_slice.len(), 3);
-        let camera_point = Vec3::from_column_slice(&camera_point_slice);
-        self.clip_frustum(&camera_point, frustum)
     }
 
     fn clip_frustum(&self, eye: &Vec3, frustum: &ConvexHull) -> ConvexHull {
@@ -531,18 +514,8 @@ impl PortalData {
         result
     }
 
-    pub fn aabb_contains_point_js(&self, pt_slice: &[f32]) -> bool {
-        let pt = Vec3::from_column_slice(pt_slice);
-        self.aabb_contains_point(&pt)
-    }
-
     fn aabb_contains_point(&self, p: &Vec3) -> bool {
         self.aabb.contains_point(p)
-    }
-
-    pub fn is_facing_us_js(&self, eye_slice: &[f32], side: i16) -> bool {
-        let eye = Vec3::from_column_slice(eye_slice);
-        self.is_facing_us(&eye, side)
     }
 
     fn is_facing_us(&self, eye: &Vec3, side: i16) -> bool {
@@ -554,19 +527,8 @@ impl PortalData {
         }
         return true;
     }
-
-    pub fn get_vertices(&self) -> Vec<f32> {
-        let mut verts = Vec::new();
-        for vert in &self.vertices {
-            verts.push(vert.x);
-            verts.push(vert.y);
-            verts.push(vert.z);
-        }
-        verts
-    }
 }
 
-#[wasm_bindgen(js_name = "WowWmoPortalRef")]
 #[derive(DekuRead, Debug, Clone)]
 pub struct PortalRef {
     pub portal_index: u16, // into MOPT
@@ -742,7 +704,6 @@ impl WmoGroup {
     }
 }
 
-#[wasm_bindgen(js_name = "WowBspTree")]
 #[derive(Debug, Clone)]
 pub struct BspTree {
     nodes: Vec<BspNode>,
@@ -751,7 +712,6 @@ pub struct BspTree {
     vertices: Vec<f32>,
 }
 
-#[wasm_bindgen(js_name = "WowBspTreeResult")]
 pub struct BspTreeResult {
     pub bary_x: f32,
     pub bary_y: f32,
@@ -912,17 +872,6 @@ impl BspTree {
             self.vertex_indices[3 * face_index + 1] as usize,
             self.vertex_indices[3 * face_index + 2] as usize,
         )
-    }
-}
-
-#[wasm_bindgen(js_class = "WowBspTree")]
-impl BspTree {
-    pub fn contains_point_js(&self, x: f32, y: f32, z: f32) -> bool {
-        self.contains_point(&Vec3::new(x, y, z))
-    }
-
-    pub fn pick_closest_tri_neg_z_js(&self, x: f32, y: f32, z: f32) -> Option<BspTreeResult> {
-        self.pick_closest_tri_neg_z(&Vec3::new(x, y, z))
     }
 }
 
@@ -1100,7 +1049,6 @@ pub struct DoodadSet {
     pub count: u32,
 }
 
-#[wasm_bindgen(js_name = "WowWmoBspNode")]
 #[derive(DekuRead, Debug, Clone)]
 pub struct BspNode {
     pub flags: u16,
@@ -1111,14 +1059,12 @@ pub struct BspNode {
     pub plane_distance: f32,
 }
 
-#[wasm_bindgen(js_name = "WowWmoBspAxisType")]
 pub enum BspAxisType {
     X,
     Y,
     Z,
 }
 
-#[wasm_bindgen(js_class = "WowWmoBspNode")]
 impl BspNode {
     pub fn get_axis_type(&self) -> BspAxisType {
         match self.flags & 0b111 {
@@ -1260,7 +1206,6 @@ pub struct MaterialBatch {
     pub material_id: u8,
 }
 
-#[wasm_bindgen(js_name = "WowWmoGroupHeader", getter_with_clone)]
 #[derive(DekuRead, Debug, Clone)]
 pub struct WmoGroupHeader {
     pub group_name: u32,             // offset to MOGN
@@ -1298,7 +1243,6 @@ pub struct WmoGroupFlags {
     pub show_skybox: bool,
 }
 
-#[wasm_bindgen(js_class = "WowWmoGroupFlags")]
 impl WmoGroupFlags {
     pub fn new(x: u32) -> Self {
         Self {
@@ -1317,13 +1261,6 @@ impl WmoGroupFlags {
             antiportal: x & 0x4000000 > 0,
         }
     }
-}
-
-#[derive(DekuRead, Debug)]
-#[deku(ctx = "ByteSize(size): ByteSize")]
-pub struct DoodadIds {
-    #[deku(count = "size / 4")]
-    pub file_ids: Vec<u32>,
 }
 
 #[wasm_bindgen(js_name = "WowWmoFog")]
