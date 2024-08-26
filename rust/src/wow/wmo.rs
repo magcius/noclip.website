@@ -385,7 +385,7 @@ impl Wmo {
         self.doodad_defs.clone()
     }
 
-    pub fn get_vertex_data(&mut self) -> Vec<u8> {
+    pub fn take_vertex_data(&mut self) -> Vec<u8> {
         let mut data = Vec::new();
         for group in self.groups.values_mut() {
             group.vertex_buffer_offset = Some(data.len());
@@ -399,7 +399,7 @@ impl Wmo {
         data
     }
 
-    pub fn get_indices(&mut self) -> Vec<u16> {
+    pub fn take_indices(&mut self) -> Vec<u16> {
         let mut indices = Vec::new();
         for group in self.groups.values_mut() {
             group.index_buffer_offset = Some(2 * indices.len()); // in bytes
