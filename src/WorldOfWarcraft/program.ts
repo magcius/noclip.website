@@ -1022,10 +1022,10 @@ void mainVS() {
     float w = isSkybox ? 0.0 : 1.0;
     Mat4x3 boneTransform = getCombinedBoneMat();
 
-    v_Position = Mul(_Mat4x4(boneTransform), vec4(a_Position, w)).xyz;
+    v_Position = Mul(_Mat4x4(boneTransform), vec4(a_Position, 1.0)).xyz;
     v_Normal = MulNormalMatrix(boneTransform, a_Normal);
 
-    vec3 viewPosition = Mul(_Mat4x4(u_View), vec4(v_Position, 1.0)).xyz;
+    vec3 viewPosition = Mul(_Mat4x4(u_View), vec4(v_Position, w)).xyz;
     vec3 viewNormal = Mul(_Mat4x4(u_View), vec4(v_Normal, 0.0)).xyz;
 
     gl_Position = Mul(u_Projection, vec4(viewPosition, 1.0));
