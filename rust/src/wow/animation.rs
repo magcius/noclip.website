@@ -128,6 +128,21 @@ impl<T> M2Track<T> {
     }
 }
 
+impl<T> M2Track<T> where T: PartialOrd + Copy {
+    pub fn max_value(&self, default: T) -> T {
+        let values = self.values();
+        let mut max = default;
+        for i in 0..values.len() {
+            for j in 0..values[i].len() {
+                if max < values[i][j] {
+                    max = values[i][j];
+                }
+            }
+        }
+        max
+    }
+}
+
 #[derive(DekuRead, Debug, Clone)]
 pub struct M2TextureTransform {
     pub translation: M2Track<Vec3>,
@@ -183,8 +198,6 @@ pub struct AnimationManager {
     colors: Vec<M2Color>,
     bones: Vec<M2CompBone>,
     lights: Vec<M2Light>,
-    particle_emitters: Vec<ParticleEmitter>,
-    has_exp2: bool,
 }
 
 #[wasm_bindgen(js_class = "WowM2AnimationManager")]
@@ -385,63 +398,6 @@ impl AnimationManager {
             texture_scalings.set_index(scaling_index + 2, scaling.z);
         }
     }
-
-    pub fn update_particle(&self, emitter_index: usize, age: f64, update_buffer: &Float32Array) {
-        let emitter = &self.particle_emitters[emitter_index];
-        let default_color = Vec3::default();
-        let default_alpha = Fixedi16::from(1.0);
-        let default_scale = Vec2 { x: 1.0, y: 1.0 };
-        let default_head_cell = 0;
-        let default_tail_cell = 0;
-        let color = self.get_particle_value(age, &emitter.color, default_color);
-        let alpha = self.get_particle_value(age, &emitter.alpha, default_alpha);
-        let scale = self.get_particle_value(age, &emitter.scale, default_scale);
-        let head_cell = self.get_particle_value(age, &emitter.head_cell, default_head_cell);
-        let tail_cell = self.get_particle_value(age, &emitter.tail_cell, default_tail_cell);
-        update_buffer.set_index(0, color.x);
-        update_buffer.set_index(1, color.y);
-        update_buffer.set_index(2, color.z);
-        update_buffer.set_index(3, alpha.into());
-        update_buffer.set_index(4, scale.x);
-        update_buffer.set_index(5, scale.y);
-        update_buffer.set_index(6, head_cell as f32);
-        update_buffer.set_index(7, tail_cell as f32);
-    }
-
-    pub fn update_particle_emitter(&self, emitter_index: u32, update_buffer: &Float32Array) {
-        let emitter = &self.particle_emitters[emitter_index as usize];
-        let mut enabled: u8 = 1;
-        if emitter.enabled.timestamps().len() > 0 {
-            enabled = self.get_current_value_with_blend(&emitter.enabled, 0);
-        }
-        update_buffer.set_index(0, enabled as f32);
-
-        if enabled > 0 {
-            update_buffer.set_index(1, self.get_current_value_with_blend(&emitter.emission_speed, 0.0));
-            update_buffer.set_index(2, self.get_current_value_with_blend(&emitter.speed_variation, 0.0));
-            update_buffer.set_index(3, self.get_current_value_with_blend(&emitter.vertical_range, 0.0));
-            update_buffer.set_index(4, self.get_current_value_with_blend(&emitter.horizontal_range, 0.0));
-            update_buffer.set_index(5, self.get_current_value_with_blend(&emitter.lifespan, 0.0));
-            update_buffer.set_index(6, self.get_current_value_with_blend(&emitter.emission_rate, 0.0));
-            update_buffer.set_index(7, self.get_current_value_with_blend(&emitter.emission_area_length, 0.0));
-            update_buffer.set_index(8, self.get_current_value_with_blend(&emitter.emission_area_width, 0.0));
-
-            if !self.has_exp2 {
-                update_buffer.set_index(9, self.get_current_value_with_blend(&emitter.z_source, 0.0));
-            } else {
-                update_buffer.set_index(9, 0.0);
-            }
-
-            if emitter.use_compressed_gravity() {
-                let gravity: Vec3 = self.get_current_value_with_blend(&emitter.gravity, Vec3::new(1.0));
-                update_buffer.set_index(10, gravity.x);
-                update_buffer.set_index(11, gravity.y);
-                update_buffer.set_index(12, gravity.z);
-            } else {
-                update_buffer.set_index(10, self.get_current_value_with_blend(&emitter.gravity, 0.0));
-            }
-        }
-    }
     
     pub fn get_sequence_ids(&self) -> Vec<u16> {
         self.sequences.iter().map(|seq| seq.id).collect()
@@ -513,8 +469,6 @@ impl AnimationManager {
         colors: Vec<M2Color>,
         bones: Vec<M2CompBone>,
         lights: Vec<M2Light>,
-        particle_emitters: Vec<ParticleEmitter>,
-        has_exp2: bool,
     ) -> Self {
         let global_sequence_times = vec![0.0; global_sequence_durations.len()];
         // pull out the "Stand" animation, which is the resting animation for all models
@@ -538,9 +492,7 @@ impl AnimationManager {
             bones,
             lights,
             global_sequence_times,
-            particle_emitters,
             rng,
-            has_exp2,
         }
     }
 
@@ -589,7 +541,7 @@ impl AnimationManager {
         }
     }
 
-    fn get_current_value_with_blend<U, V>(&self, animation: &M2Track<U>, default: V) -> V
+    pub fn get_current_value_with_blend<U, V>(&self, animation: &M2Track<U>, default: V) -> V
         where V: Clone + Lerp, U: Into<V> + Clone {
         let result = self.get_current_value(
             self.current_animation.animation_time,
@@ -614,7 +566,7 @@ impl AnimationManager {
         result
     }
 
-    fn get_particle_value<T>(&self, age: f64, animation: &M2TrackPartial<T>, default: T) -> T
+    pub fn get_particle_value<T>(&self, age: f64, animation: &M2TrackPartial<T>, default: T) -> T
         where T: Clone + Lerp {
             let num_timestamps = animation.timestamps().len();
             if num_timestamps == 0 {

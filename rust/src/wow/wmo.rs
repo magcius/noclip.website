@@ -1,4 +1,5 @@
 use core::f32;
+use std::collections::{HashMap, HashSet};
 
 use deku::{ctx::ByteSize, prelude::*};
 use nalgebra_glm::{make_vec3, vec2, vec3, Vec2, Vec3};
@@ -39,6 +40,7 @@ impl WmoHeader {
 }
 
 #[wasm_bindgen(js_name = "WowWmoHeaderFlags")]
+#[derive(Debug, Clone)]
 pub struct WmoHeaderFlags {
     pub attenuate_vertices_based_on_distance_to_portal: bool,
     pub skip_base_color: bool,
@@ -73,12 +75,14 @@ pub struct Wmo {
     pub fogs: Vec<Fog>,
     pub skybox_file_id: Option<u32>,
     pub skybox_name: Option<String>,
+    flags: WmoHeaderFlags,
     group_text: Vec<String>,
     doodad_sets: Vec<DoodadSet>,
     global_ambient_volumes: Vec<AmbientVolume>,
     portals: Vec<PortalData>,
     portal_refs: Vec<PortalRef>,
     ambient_volumes: Vec<AmbientVolume>,
+    groups: HashMap<u32, WmoGroup>, // maps file_id to group
 }
 
 #[wasm_bindgen(js_class = "WowWmo")]
@@ -146,6 +150,7 @@ impl Wmo {
             .map(|portal| PortalData::new(&portal, &portal_vertices))
             .collect();
         Ok(Wmo {
+            flags: WmoHeaderFlags::new(header.flags),
             header,
             textures: momt.ok_or("WMO file didn't have MOMT chunk")?,
             group_infos: mogi.ok_or("WMO file didn't have MOGI chunk")?,
@@ -161,22 +166,87 @@ impl Wmo {
             group_text,
             global_ambient_volumes: mavg,
             ambient_volumes: mavd,
+            groups: HashMap::new(),
         })
     }
 
-    pub fn group_contains_modelspace_point(&self, group: &WmoGroup, point_slice: &[f32]) -> bool {
+    pub fn append_group(&mut self, file_id: u32, data: &[u8]) -> Result<(), String> {
+        self.groups.insert(file_id, WmoGroup::new(data)?);
+        Ok(())
+    }
+
+    pub fn take_liquid_data(&mut self, group_id: u32) -> Vec<LiquidResult> {
+        let group = self.groups.get_mut(&group_id).unwrap();
+        if let Some(mut liquids) = group.take_liquid_data() {
+            for liquid in &mut liquids {
+                liquid.liquid_type = liquid.recalculate_liquid_type(&self.flags, group);
+            }
+            return liquids;
+        }
+        vec![]
+    }
+
+    pub fn find_closest_group_for_modelspace_point(&self, point_slice: &[f32]) -> u32 {
+        todo!()
+    }
+
+    pub fn find_visible_groups(&self, group_id: u32, point_slice: &[f32], frustum: &ConvexHull) -> Vec<u32> {
+        let eye = Vec3::from_column_slice(point_slice);
+        let mut visible_set = HashSet::new();
+        let mut visited_set = HashSet::new();
+        self.traverse_portals(&eye, frustum, group_id, &mut visible_set, &mut visited_set);
+        visible_set.into_iter().collect()
+    }
+
+    fn traverse_portals(
+        &self,
+        eye: &Vec3,
+        frustum: &ConvexHull,
+        group_id: u32,
+        visible_set: &mut HashSet<u32>,
+        visited_set: &mut HashSet<u32>,
+    ) {
+        if visited_set.contains(&group_id) {
+            return;
+        }
+        visible_set.insert(group_id);
+        let group = self.get_group(group_id);
+        for (portal_ref, portal) in self.group_portals(group) {
+            if !portal.is_facing_us(eye, portal_ref.side) {
+                continue;
+            }
+
+            if portal.in_frustum(frustum) || portal.aabb_contains_point(eye) {
+                let other_group_id = self.group_file_ids[portal_ref.group_index as usize];
+                let portal_frustum = portal.clip_frustum(eye, frustum);
+                // create a new visited_set just for this uniquely clipped frustum
+                let mut visited_local = visited_set.clone();
+                visited_local.insert(group_id);
+                self.traverse_portals(eye, &portal_frustum, other_group_id, visible_set, &mut visited_local);
+            }
+        }
+    }
+
+    fn get_group(&self, file_id: u32) -> &WmoGroup {
+        self.groups.get(&file_id).expect(&format!("couldn't find group with file_id {}", file_id))
+    }
+
+    pub fn group_contains_modelspace_point(&self, group_id: u32, point_slice: &[f32]) -> bool {
         let p = make_vec3(point_slice);
+        let group = self.get_group(group_id);
         let aabb: AABB = group.header.bounding_box.into();
-        aabb.contains_point(&p) && (group.bsp_tree.contains_point(&p) || self.modelspace_point_above_group_portals(group, &p))
+        aabb.contains_point(&p)
+            && (group.bsp_tree.contains_point(&p)
+                || self.modelspace_point_above_group_portals(group, &p))
+    }
+
+    fn group_portals(&self, group: &WmoGroup) -> PortalIter {
+        PortalIter::new(group, self)
     }
 
     fn modelspace_point_above_group_portals(&self, group: &WmoGroup, p: &Vec3) -> bool {
-        let refs_start = group.header.portal_start as usize;
-        let refs_end = refs_start + group.header.portal_count as usize;
         let neg_z = vec3(0.0, 0.0, -1.0);
-        for i in refs_start..refs_end {
-            let portal_ref = &self.portal_refs[i];
-            let portal = &self.portals[portal_ref.portal_index as usize];
+        for (_, portal) in self.group_portals(group) {
             if portal.plane.normal.z.abs() < 0.001 {
                 continue;
             }
@@ -198,25 +268,87 @@ impl Wmo {
         false
     }
 
-    pub fn group_in_modelspace_frustum(&self, group: &WmoGroup, frustum: &ConvexHull) -> bool {
+    pub fn get_vertex_color_for_modelspace_point(&self, group_id: u32, point_slice: &[f32]) -> Option<Vec<f32>> {
+        let p = Vec3::from_column_slice(point_slice);
+        let group = self.groups.get(&group_id).unwrap();
+        // apparently this happens?
+        if group.colors.len() == 0 {
+            return None;
+        }
+        let bsp_result = group.bsp_tree.pick_closest_tri_neg_z(&p)?;
+        let bary = vec3(bsp_result.bary_x, bsp_result.bary_y, bsp_result.bary_z);
+        let mut components = Vec::new();
+        for i in 0..4 {
+            components.push(vec3(
+                group.colors[4 * bsp_result.vert_index_0 + i] as f32 / 255.0,
+                group.colors[4 * bsp_result.vert_index_1 + i] as f32 / 255.0,
+                group.colors[4 * bsp_result.vert_index_2 + i] as f32 / 255.0,
+            ));
+        }
+        Some(vec![
+            components[0].dot(&bary),
+            components[1].dot(&bary),
+            components[2].dot(&bary),
+            components[3].dot(&bary),
+        ])
+    }
+
+    pub fn get_doodad_refs(&mut self, group_id: u32) -> Vec<u16> {
+        let group = self.get_group(group_id);
+        group.doodad_refs.clone()
+    }
+
+    pub fn group_in_modelspace_frustum(&self, group_id: u32, frustum: &ConvexHull) -> bool {
+        let group = self.get_group(group_id);
         let aabb: AABB = group.header.bounding_box.into();
         frustum.contains(&aabb)
-    }
-
-    pub fn take_portals(&mut self) -> Vec<PortalData> {
-        self.portals.clone()
-    }
-
-    pub fn take_portal_refs(&mut self) -> Vec<PortalRef> {
-        self.portal_refs.clone()
     }
 
     pub fn get_group_text(&self, index: usize) -> Option<String> {
         self.group_text.get(index).cloned()
     }
 
-    pub fn get_ambient_color(&self, doodad_set_id: u16) -> Bgra {
-        if self.global_ambient_volumes.len() > 0 {
+    pub fn get_group_ambient_color(&self, group_id: u32, doodad_set_id: u16) -> Vec<f32> {
+        let group = self.groups.get(&group_id).unwrap();
+        if false && !group.flags.exterior && !group.flags.exterior_lit {
+            if let Some(color) = group.replacement_for_header_color {
+                return vec![
+                    color.r as f32 / 255.0,
+                    color.g as f32 / 255.0,
+                    color.b as f32 / 255.0,
+                    1.0,
+                ];
+            }
+            let mut wmo_color = self.get_ambient_color(doodad_set_id);
+            wmo_color[3] = 1.0;
+            return wmo_color;
+        }
+        vec![0.0; 4]
+    }
+
+    pub fn get_group_batches(&self, group_id: u32) -> Vec<MaterialBatch> {
+        let group = self.get_group(group_id);
+        group.batches.clone()
+    }
+
+    pub fn get_group_descriptor(&self, group_id: u32) -> WmoGroupDescriptor {
+        let group = self.get_group(group_id);
+        WmoGroupDescriptor {
+            group_id,
+            interior: group.flags.interior,
+            exterior: group.flags.exterior,
+            exterior_lit: group.flags.exterior_lit,
+            show_skybox: group.flags.show_skybox,
+            vertex_buffer_offset: group.vertex_buffer_offset,
+            index_buffer_offset: group.index_buffer_offset,
+            num_vertices: group.num_vertices,
+            num_uv_bufs: group.num_uv_bufs,
+            num_color_bufs: group.num_color_bufs,
+        }
+    }
+
+    pub fn get_ambient_color(&self, doodad_set_id: u16) -> Vec<f32> {
+        let color = if self.global_ambient_volumes.len() > 0 {
             match self
                 .global_ambient_volumes
                 .iter()
@@ -229,7 +361,13 @@ impl Wmo {
             self.ambient_volumes[0].get_color()
         } else {
             self.header.ambient_color
-        }
+        };
+        vec![
+            color.r as f32 / 255.0,
+            color.g as f32 / 255.0,
+            color.b as f32 / 255.0,
+            color.a as f32 / 255.0,
+        ]
     }
 
     pub fn get_doodad_set_refs(&self, mut doodad_set_id: usize) -> Vec<u32> {
@@ -248,6 +386,29 @@ impl Wmo {
 
     pub fn get_doodad_defs(&self) -> Vec<DoodadDef> {
         self.doodad_defs.clone()
+    }
+
+    pub fn take_vertex_data(&mut self) -> Vec<u8> {
+        let mut data = Vec::new();
+        for group in self.groups.values_mut() {
+            group.vertex_buffer_offset = Some(data.len());
+            for v in group.vertices.drain(..) {
+                data.extend(v.to_le_bytes());
+            }
+            data.extend(group.normals.drain(..));
+            data.extend(&group.colors);
+            data.extend(group.uvs.drain(..));
+        }
+        data
+    }
+
+    pub fn take_indices(&mut self) -> Vec<u16> {
+        let mut indices = Vec::new();
+        for group in self.groups.values_mut() {
+            group.index_buffer_offset = Some(2 * indices.len()); // in bytes
+            indices.extend(group.indices.drain(..));
+        }
+        indices
     }
 }
 
@@ -286,7 +447,6 @@ fn point_inside_polygon(point: &Vec3, verts: &[Vec3], axis_to_flatten: u8) -> bo
     true
 }
 
-#[wasm_bindgen(js_name = "WowWmoPortal", getter_with_clone)]
 #[derive(DekuRead, Debug, Clone)]
 pub struct Portal {
     pub start_vertex: u16,
@@ -294,7 +454,6 @@ pub struct Portal {
     pub plane: WowPlane,
 }
 
-#[wasm_bindgen(js_name = "WowWmoPortalData", getter_with_clone)]
 #[derive(Debug, Clone)]
 pub struct PortalData {
     vertices: Vec<Vec3>,
@@ -327,16 +486,13 @@ impl PortalData {
     }
 }
 
-#[wasm_bindgen(js_class = "WowWmoPortalData")]
 impl PortalData {
     pub fn in_frustum(&self, frustum: &ConvexHull) -> bool {
         frustum.contains(&self.aabb)
     }
 
-    pub fn clip_frustum(&self, camera_point_slice: &[f32], frustum: &ConvexHull) -> ConvexHull {
-        assert_eq!(camera_point_slice.len(), 3);
+    fn clip_frustum(&self, eye: &Vec3, frustum: &ConvexHull) -> ConvexHull {
         let mut result = frustum.clone();
-        let camera_point = Vec3::from_column_slice(&camera_point_slice);
         for i in 0..self.vertices.len() {
             let a = &self.vertices[i];
             let b = if i == self.vertices.len() - 1 {
@@ -351,7 +507,7 @@ impl PortalData {
             };
 
             let mut plane = Plane::default();
-            plane.set_tri(&camera_point, &a, &b);
+            plane.set_tri(eye, &a, &b);
             if plane.distance(&test_point) > 0.0 {
                 plane.negate();
             }
@@ -361,14 +517,12 @@ impl PortalData {
         result
     }
 
-    pub fn aabb_contains_point(&self, pt_slice: &[f32]) -> bool {
-        let pt = Vec3::from_column_slice(pt_slice);
-        self.aabb.contains_point(&pt)
+    fn aabb_contains_point(&self, p: &Vec3) -> bool {
+        self.aabb.contains_point(p)
     }
 
-    pub fn is_facing_us(&self, eye_slice: &[f32], side: i8) -> bool {
-        let eye = Vec3::from_column_slice(eye_slice);
-        let dist = self.plane.distance(&eye);
+    fn is_facing_us(&self, eye: &Vec3, side: i16) -> bool {
+        let dist = self.plane.distance(eye);
         if side < 0 && dist > -0.01 {
             return false;
         } else if side > 0 && dist < 0.01 {
@@ -376,19 +530,8 @@ impl PortalData {
         }
         return true;
     }
-
-    pub fn get_vertices(&self) -> Vec<f32> {
-        let mut verts = Vec::new();
-        for vert in &self.vertices {
-            verts.push(vert.x);
-            verts.push(vert.y);
-            verts.push(vert.z);
-        }
-        verts
-    }
 }
 
-#[wasm_bindgen(js_name = "WowWmoPortalRef")]
 #[derive(DekuRead, Debug, Clone)]
 pub struct PortalRef {
     pub portal_index: u16, // into MOPT
@@ -397,32 +540,80 @@ pub struct PortalRef {
     pub side: i16,
 }
 
+struct PortalIter<'a> {
+    refs_end: usize,
+    i: usize,
+    portals: &'a [PortalData],
+    portal_refs: &'a [PortalRef],
+}
+
+impl<'a> PortalIter<'a> {
+    pub fn new(group: &WmoGroup, wmo: &'a Wmo) -> Self {
+        let refs_start = group.header.portal_start as usize;
+        let refs_end = refs_start + group.header.portal_count as usize;
+        PortalIter {
+            refs_end,
+            i: refs_start,
+            portals: wmo.portals.as_slice(),
+            portal_refs: &wmo.portal_refs.as_slice(),
+        }
+    }
+}
+
+impl<'a> Iterator for PortalIter<'a> {
+    type Item = (&'a PortalRef, &'a PortalData);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.i == self.refs_end {
+            return None;
+        }
+        let portal_ref = &self.portal_refs[self.i];
+        let portal = &self.portals[portal_ref.portal_index as usize];
+        self.i += 1;
+        Some((portal_ref, portal))
+    }
+}
+
 #[derive(DekuRead)]
 pub struct Mosi {
     pub skybox_file_id: u32,
 }
 
-#[wasm_bindgen(js_name = "WowWmoGroup", getter_with_clone)]
+#[wasm_bindgen(js_name = "WowWmoGroupDescriptor")]
+pub struct WmoGroupDescriptor {
+    pub group_id: u32,
+    pub interior: bool,
+    pub exterior: bool,
+    pub exterior_lit: bool,
+    pub show_skybox: bool,
+    pub vertex_buffer_offset: Option<usize>,
+    pub index_buffer_offset: Option<usize>,
+    pub num_vertices: usize,
+    pub num_uv_bufs: usize,
+    pub num_color_bufs: usize,
+}
+
 #[derive(Debug, Clone)]
 pub struct WmoGroup {
     pub header: WmoGroupHeader,
-    indices: Option<Vec<u16>>,
-    vertices: Option<Vec<f32>>,
-    normals: Option<Vec<u8>>,
-    uvs: Option<Vec<u8>>,
-    colors: Option<Vec<u8>>,
-    doodad_refs: Option<Vec<u16>>,
+    pub vertex_buffer_offset: Option<usize>,
+    pub index_buffer_offset: Option<usize>,
+    flags: WmoGroupFlags,
+    indices: Vec<u16>,
+    vertices: Vec<f32>,
+    normals: Vec<u8>,
+    uvs: Vec<u8>,
+    colors: Vec<u8>,
+    doodad_refs: Vec<u16>,
     bsp_tree: BspTree,
     pub num_vertices: usize,
     pub num_uv_bufs: usize,
     pub num_color_bufs: usize,
-    pub first_color_buf_len: Option<usize>,
     pub batches: Vec<MaterialBatch>,
     pub replacement_for_header_color: Option<Rgba>,
     liquids: Option<Vec<WmoLiquid>>,
 }
 
-#[wasm_bindgen(js_class = "WowWmoGroup")]
 impl WmoGroup {
     pub fn new(data: &[u8]) -> Result<WmoGroup, String> {
         let mut chunked_data = ChunkedData::new(data);
@@ -430,6 +621,7 @@ impl WmoGroup {
         assert_eq!(mver.magic_str(), "REVM");
         let (_, mhdr_data) = chunked_data.next().unwrap();
         let header: WmoGroupHeader = parse(mhdr_data)?;
+        let flags = WmoGroupFlags::new(header.flags);
         let mut maybe_indices: Option<Vec<u16>> = None;
         let mut maybe_vertices: Option<Vec<f32>> = None;
         let mut maybe_normals: Option<Vec<u8>> = None;
@@ -437,7 +629,6 @@ impl WmoGroup {
         let mut num_uv_bufs = 0;
         let mut liquids: Vec<WmoLiquid> = Vec::new();
         let mut colors: Vec<u8> = Vec::new();
-        let mut first_color_buf_len: Option<usize> = None;
         let mut num_vertices = 0;
         let mut num_color_bufs = 0;
         let mut bsp_indices: Vec<u16> = Vec::new();
@@ -454,8 +645,9 @@ impl WmoGroup {
                 b"RBOM" => bsp_indices = parse_array(chunk_data, 2)?,
                 b"NBOM" => bsp_nodes = parse_array(chunk_data, 0x10)?,
                 b"TVOM" => {
-                    num_vertices = chunk_data.len();
-                    maybe_vertices = Some(parse_array(chunk_data, 4)?);
+                    let vertices = parse_array(chunk_data, 4)?;
+                    num_vertices = vertices.len() / 3;
+                    maybe_vertices = Some(vertices);
                 }
                 b"RNOM" => maybe_normals = Some(chunk_data.to_vec()),
                 b"VTOM" => {
@@ -464,9 +656,6 @@ impl WmoGroup {
                 }
                 b"VCOM" => {
                     colors.extend(chunk_data.to_vec());
-                    if first_color_buf_len.is_none() {
-                        first_color_buf_len = Some(colors.len() / 4);
-                    }
                     num_color_bufs += 1;
                 }
                 b"ABOM" => batches = Some(parse_array(chunk_data, 24)?),
@@ -492,49 +681,23 @@ impl WmoGroup {
 
         Ok(WmoGroup {
             header,
-            indices: Some(indices),
-            vertices: Some(vertices),
+            flags,
+            vertex_buffer_offset: None,
+            index_buffer_offset: None,
+            indices,
+            vertices,
             num_vertices,
-            normals: Some(maybe_normals.ok_or("WMO group didn't have normals")?),
+            normals: maybe_normals.ok_or("WMO group didn't have normals")?,
             liquids: maybe_liquids,
             replacement_for_header_color,
-            first_color_buf_len,
-            uvs: Some(uvs),
+            uvs,
             num_uv_bufs,
-            bsp_tree: bsp_tree,
-            colors: Some(colors),
+            bsp_tree,
+            colors,
             num_color_bufs,
             batches: batches.unwrap_or_default(),
-            doodad_refs: Some(doodad_refs.unwrap_or_default()),
+            doodad_refs: doodad_refs.unwrap_or_default(),
         })
-    }
-
-    pub fn take_bsp_tree(&mut self) -> BspTree {
-        self.bsp_tree.clone()
-    }
-
-    pub fn take_vertices(&mut self) -> Vec<f32> {
-        self.vertices.take().expect("WmoGroup vertices already taken")
-    }
-
-    pub fn take_colors(&mut self) -> Vec<u8> {
-        self.colors.take().expect("WmoGroup vertices already taken")
-    }
-
-    pub fn take_uvs(&mut self) -> Vec<u8> {
-        self.uvs.take().expect("WmoGroup vertices already taken")
-    }
-
-    pub fn take_normals(&mut self) -> Vec<u8> {
-        self.normals.take().expect("WmoGroup vertices already taken")
-    }
-
-    pub fn take_indices(&mut self) -> Vec<u16> {
-        self.indices.take().expect("WmoGroup vertices already taken")
-    }
-
-    pub fn take_doodad_refs(&mut self) -> Vec<u16> {
-        self.doodad_refs.take().expect("WmoGroup doodad_refs already taken")
     }
 
     pub fn take_liquid_data(&mut self) -> Option<Vec<LiquidResult>> {
@@ -547,7 +710,6 @@ impl WmoGroup {
     }
 }
 
-#[wasm_bindgen(js_name = "WowBspTree")]
 #[derive(Debug, Clone)]
 pub struct BspTree {
     nodes: Vec<BspNode>,
@@ -556,7 +718,6 @@ pub struct BspTree {
     vertices: Vec<f32>,
 }
 
-#[wasm_bindgen(js_name = "WowBspTreeResult")]
 pub struct BspTreeResult {
     pub bary_x: f32,
     pub bary_y: f32,
@@ -566,7 +727,10 @@ pub struct BspTreeResult {
     pub vert_index_2: usize,
 }
 
-fn neg_z_line_intersection(p: &nalgebra_glm::Vec3, tri: (nalgebra_glm::Vec3, nalgebra_glm::Vec3, nalgebra_glm::Vec3)) -> Option<(f32, nalgebra_glm::Vec3)> {
+fn neg_z_line_intersection(
+    p: &nalgebra_glm::Vec3,
+    tri: (nalgebra_glm::Vec3, nalgebra_glm::Vec3, nalgebra_glm::Vec3),
+) -> Option<(f32, nalgebra_glm::Vec3)> {
     let (vertex0, vertex1, vertex2) = tri;
 
     // check that the ray will intersect in the xy plane
@@ -657,7 +821,10 @@ impl BspTree {
         })
     }
 
-    fn get_face_vertices(&self, bsp_face_index: usize) -> (nalgebra_glm::Vec3, nalgebra_glm::Vec3, nalgebra_glm::Vec3) {
+    fn get_face_vertices(
+        &self,
+        bsp_face_index: usize,
+    ) -> (nalgebra_glm::Vec3, nalgebra_glm::Vec3, nalgebra_glm::Vec3) {
         let face_index = self.face_indices[bsp_face_index] as usize;
         let (index0, index1, index2) = self.get_face_indices(face_index);
         let vertex0 = vec3(
@@ -714,17 +881,6 @@ impl BspTree {
     }
 }
 
-#[wasm_bindgen(js_class = "WowBspTree")]
-impl BspTree {
-    pub fn contains_point_js(&self, x: f32, y: f32, z: f32) -> bool {
-        self.contains_point(&Vec3::new(x, y, z))
-    }
-
-    pub fn pick_closest_tri_neg_z_js(&self, x: f32, y: f32, z: f32) -> Option<BspTreeResult> {
-        self.pick_closest_tri_neg_z(&Vec3::new(x, y, z))
-    }
-}
-
 #[wasm_bindgen(js_name = "WowWmoLiquidResult")]
 pub struct LiquidResult {
     vertices: Option<Vec<f32>>,
@@ -732,6 +888,49 @@ pub struct LiquidResult {
     pub material_id: u16,
     pub extents: AABBox,
     pub liquid_type: u32,
+}
+
+const FIRST_NONBASIC_LIQUID_TYPE: u32 = 21;
+const GREEN_LAVA: u32 = 15;
+const MASKED_OCEAN: u32 = 1;
+const MASKED_MAGMA: u32 = 2;
+const MASKED_SLIME: u32 = 3;
+const LIQUID_WMO_MAGMA: u32 = 19;
+const LIQUID_WMO_OCEAN: u32 = 14;
+const LIQUID_WMO_WATER: u32 = 13;
+const LIQUID_WMO_SLIME: u32 = 20;
+
+impl LiquidResult {
+    pub fn recalculate_liquid_type(&mut self, flags: &WmoHeaderFlags, group: &WmoGroup) -> u32 {
+        let liquid_to_convert;
+        if flags.use_liquid_type_dbc_id {
+            if group.header.group_liquid < FIRST_NONBASIC_LIQUID_TYPE {
+                liquid_to_convert = group.header.group_liquid - 1;
+            } else {
+                return group.header.group_liquid;
+            }
+        } else {
+            if group.header.group_liquid == GREEN_LAVA {
+                liquid_to_convert = self.liquid_type;
+            } else if group.header.group_liquid < FIRST_NONBASIC_LIQUID_TYPE {
+                liquid_to_convert = group.header.group_liquid;
+            } else {
+                return group.header.group_liquid + 1;
+            }
+        }
+        let masked_liquid = liquid_to_convert & 0x3;
+        if masked_liquid == MASKED_OCEAN {
+            return LIQUID_WMO_OCEAN;
+        } else if masked_liquid == MASKED_MAGMA {
+            return LIQUID_WMO_MAGMA;
+        } else if masked_liquid == MASKED_SLIME {
+            return LIQUID_WMO_SLIME;
+        } else if group.flags.water_is_ocean {
+            return LIQUID_WMO_OCEAN;
+        } else {
+            return LIQUID_WMO_WATER;
+        }
+    }
 }
 
 #[wasm_bindgen(js_class = "WowWmoLiquidResult")]
@@ -786,12 +985,14 @@ pub struct WmoLiquid {
 }
 
 impl WmoLiquid {
-    pub fn get_render_result(&self, _header: &WmoGroupHeader) -> LiquidResult {
+    pub fn get_render_result(&self, header: &WmoGroupHeader) -> LiquidResult {
         let width = self.tile_width as usize;
         let height = self.tile_height as usize;
         let mut vertex_prototypes = Vec::new();
         let mut indices = Vec::new();
         let mut extents = AABBox::default();
+        let flags = WmoGroupFlags::new(header.flags);
+        let depth = if flags.exterior { 1000.0 } else { 0.0 };
         for y in 0..height + 1 {
             for x in 0..width + 1 {
                 let vertex = &self.vertices[y * (width + 1) + x];
@@ -799,7 +1000,7 @@ impl WmoLiquid {
                 let pos_y = self.position.y + UNIT_SIZE * y as f32;
                 let pos_z = vertex.height;
                 vertex_prototypes.push([
-                    pos_x, pos_y, pos_z, x as f32, y as f32, 0.0, // default to shallow
+                    pos_x, pos_y, pos_z, x as f32, y as f32, depth,
                 ]);
                 extents.update(pos_x, pos_y, pos_z);
             }
@@ -854,7 +1055,6 @@ pub struct DoodadSet {
     pub count: u32,
 }
 
-#[wasm_bindgen(js_name = "WowWmoBspNode")]
 #[derive(DekuRead, Debug, Clone)]
 pub struct BspNode {
     pub flags: u16,
@@ -865,14 +1065,12 @@ pub struct BspNode {
     pub plane_distance: f32,
 }
 
-#[wasm_bindgen(js_name = "WowWmoBspAxisType")]
 pub enum BspAxisType {
     X,
     Y,
     Z,
 }
 
-#[wasm_bindgen(js_class = "WowWmoBspNode")]
 impl BspNode {
     pub fn get_axis_type(&self) -> BspAxisType {
         match self.flags & 0b111 {
@@ -1014,7 +1212,6 @@ pub struct MaterialBatch {
     pub material_id: u8,
 }
 
-#[wasm_bindgen(js_name = "WowWmoGroupHeader", getter_with_clone)]
 #[derive(DekuRead, Debug, Clone)]
 pub struct WmoGroupHeader {
     pub group_name: u32,             // offset to MOGN
@@ -1035,6 +1232,7 @@ pub struct WmoGroupHeader {
 }
 
 #[wasm_bindgen(js_name = "WowWmoGroupFlags")]
+#[derive(Debug, Clone, Copy)]
 pub struct WmoGroupFlags {
     pub has_bsp_tree: bool,
     pub has_light_map: bool,
@@ -1051,7 +1249,6 @@ pub struct WmoGroupFlags {
     pub show_skybox: bool,
 }
 
-#[wasm_bindgen(js_class = "WowWmoGroupFlags")]
 impl WmoGroupFlags {
     pub fn new(x: u32) -> Self {
         Self {
@@ -1070,13 +1267,6 @@ impl WmoGroupFlags {
             antiportal: x & 0x4000000 > 0,
         }
     }
-}
-
-#[derive(DekuRead, Debug)]
-#[deku(ctx = "ByteSize(size): ByteSize")]
-pub struct DoodadIds {
-    #[deku(count = "size / 4")]
-    pub file_ids: Vec<u32>,
 }
 
 #[wasm_bindgen(js_name = "WowWmoFog")]

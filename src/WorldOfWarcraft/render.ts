@@ -1,4 +1,4 @@
-import { mat4 } from "gl-matrix";
+import { mat4, vec3 } from "gl-matrix";
 import { invlerp, lerp } from "../MathHelpers.js";
 import { TextureMapping } from "../TextureHolder.js";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
@@ -28,7 +28,7 @@ import {
     GfxVertexBufferFrequency,
 } from "../gfx/platform/GfxPlatform.js";
 import { GfxFormat } from "../gfx/platform/GfxPlatformFormat.js";
-import { GfxInputLayout } from "../gfx/platform/GfxPlatformImpl.js";
+import { GfxBuffer, GfxInputLayout } from "../gfx/platform/GfxPlatformImpl.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
 import {
     GfxRenderInstManager,
@@ -36,7 +36,7 @@ import {
     makeSortKey,
 } from "../gfx/render/GfxRenderInstManager.js";
 import { rust } from "../rustlib.js";
-import { assert } from "../util.js";
+import { assert, assertExists } from "../util.js";
 import {
     AdtData,
     BlpData,
@@ -50,7 +50,6 @@ import {
     SkinData,
     WmoBatchData,
     WmoData,
-    WmoGroupData,
     getSkyboxDoodad,
 } from "./data.js";
 import {
@@ -70,8 +69,10 @@ import {
     WaterProgram,
     WmoProgram,
 } from "./program.js";
-import { FrameData, MAP_SIZE, MapArray, View } from "./scenes.js";
+import { FrameData, MAP_SIZE, MapArray, View, WdtScene } from "./scenes.js";
 import { TextureCache } from "./tex.js";
+import { WowWmoGroupDescriptor } from "../../rust/pkg/index.js";
+import { drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk.js";
 
 type TextureMappingArray = (TextureMapping | null)[];
 
@@ -170,10 +171,14 @@ export class ModelRenderer {
             }
         }
 
+        let maxParticles = 0;
         for (const emitter of this.model.particleEmitters) {
+            if (emitter.maxParticles() > maxParticles) {
+                maxParticles = emitter.maxParticles();
+            }
             this.emitterTextures.push(this.getEmitterTextures(device, emitter));
         }
-        const particleIndexBuf = makeTriangleIndexBuffer(GfxTopology.Quads, 0, ParticleEmitter.MAX_PARTICLES * 4);
+        const particleIndexBuf = makeTriangleIndexBuffer(GfxTopology.Quads, 0, maxParticles * 4);
         this.particleQuadIndices = {
             buffer: makeStaticDataBuffer(
                 device,
@@ -414,13 +419,11 @@ export class ModelRenderer {
 
             for (let i = 0; i < this.model.particleEmitters.length; i++) {
                 const emitter = this.model.particleEmitters[i];
-                if (emitter.particles.length === 0) {
+                if (emitter.numParticles() === 0) {
                     continue;
                 }
 
-                if (emitter.needsRedraw) {
-                    emitter.updateDataTex(this.device);
-                }
+                emitter.updateDataTex(this.device);
 
                 let renderInst = renderInstManager.newRenderInst();
                 let offs = renderInst.allocateUniformBuffer(
@@ -449,7 +452,7 @@ export class ModelRenderer {
                     null,
                     this.particleQuadIndices,
                 );
-                renderInst.setDrawCount(emitter.particles.length * 6, 0);
+                renderInst.setDrawCount(emitter.numParticles() * 6, 0);
                 emitter.setMegaStateFlags(renderInst);
                 renderInst.setInstanceCount(doodadChunk.length);
                 renderInst.setSamplerBindingsFromTextureMappings(
@@ -478,30 +481,30 @@ function chunk<T>(arr: T[], chunkSize: number): T[][] {
 }
 
 export class WmoRenderer {
-    private inputLayouts: GfxInputLayout[] = [];
+    private inputLayout: GfxInputLayout;
     private vertexBuffers: GfxVertexBufferDescriptor[][] = [];
     private indexBuffers: GfxIndexBufferDescriptor[] = [];
-    private groups: WmoGroupData[] = [];
+    private groups: WowWmoGroupDescriptor[] = [];
+    private gfxVertexBuffer: GfxBuffer;
+    private gfxIndexBuffer: GfxBuffer;
     public batches: WmoBatchData[][] = [];
     public visible: boolean = true;
     public groupBatchTextureMappings: TextureMappingArray[][] = [];
     private dayNight: number;
 
-    constructor(
-        device: GfxDevice,
-        private wmo: WmoData,
-        private textureCache: TextureCache,
-        renderHelper: GfxRenderHelper,
-    ) {
-        for (let group of this.wmo.groups) {
-            this.inputLayouts.push(
-                group.getInputLayout(renderHelper.renderCache),
-            );
-            this.vertexBuffers.push(group.getVertexBuffers(device));
-            this.indexBuffers.push(group.getIndexBuffer(device));
-            this.batches.push(group.getBatches(this.wmo));
-            this.groups.push(group);
+    constructor(device: GfxDevice, private wmo: WmoData, private textureCache: TextureCache, renderHelper: GfxRenderHelper) {
+        this.gfxVertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, this.wmo.vertex_buffer.buffer);
+        this.gfxIndexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, this.wmo.index_buffer.buffer);
+
+        for (let fileID of this.wmo.wmo.group_file_ids) {
+            const groupDescriptor = this.wmo.wmo.get_group_descriptor(fileID);
+            this.inputLayout = wmo.getInputLayout(renderHelper.renderCache);
+            this.vertexBuffers.push(this.getGroupVertexBuffers(groupDescriptor));
+            this.indexBuffers.push(this.getGroupIndexBuffer(groupDescriptor));
+            this.batches.push(wmo.getBatches(groupDescriptor));
+            this.groups.push(groupDescriptor);
         }
+
         for (let i in this.batches) {
             const batches = this.batches[i];
             this.groupBatchTextureMappings[i] = [];
@@ -513,6 +516,30 @@ export class WmoRenderer {
         }
     }
 
+    private getGroupIndexBuffer(group: WowWmoGroupDescriptor): GfxIndexBufferDescriptor {
+        return { buffer: this.gfxIndexBuffer, byteOffset: assertExists(group.index_buffer_offset) };
+    }
+
+    private getGroupVertexBuffers(group: WowWmoGroupDescriptor): GfxVertexBufferDescriptor[] {
+        let offs = assertExists(group.vertex_buffer_offset);
+        let buffers = [];
+        buffers.push({ buffer: this.gfxVertexBuffer, byteOffset: offs }); // positions
+        offs += group.num_vertices * 0x0C;
+        buffers.push({ buffer: this.gfxVertexBuffer, byteOffset: offs }); // normals
+        offs += group.num_vertices * 0x0C;
+        for (let i = 0; i < 2; i++) {
+            buffers.push({ buffer: this.gfxVertexBuffer, byteOffset: offs }); // colors
+            if (i < group.num_color_bufs)
+                offs += group.num_vertices * 0x04;
+        }
+        for (let i = 0; i < 4; i++) {
+            buffers.push({ buffer: this.gfxVertexBuffer, byteOffset: offs }); // uvs
+            if (i < group.num_uv_bufs)
+                offs += group.num_vertices * 0x08;
+        }
+        return buffers;
+    }
+    
     private getBatchTextureMapping(batch: WmoBatchData): TextureMappingArray {
         const mappings = [];
         for (let blp of batch.textures) {
@@ -549,12 +576,12 @@ export class WmoRenderer {
             const visibleGroups = frame.wmoDefGroups.get(def.uniqueId);
             for (let i = 0; i < this.vertexBuffers.length; i++) {
                 const group = this.groups[i];
-                if (!visibleGroups.includes(group.fileId))
+                if (!visibleGroups.includes(group.group_id))
                     continue;
-                const ambientColor = def.groupAmbientColors.get(group.fileId)!;
-                const applyInteriorLight = group.flags.interior && !group.flags.exterior_lit;
+                const ambientColor = def.groupAmbientColors.get(group.group_id)!;
+                const applyInteriorLight = group.interior && !group.exterior_lit;
                 const applyExteriorLight = true;
-                template.setVertexInput(this.inputLayouts[i], this.vertexBuffers[i], this.indexBuffers[i]);
+                template.setVertexInput(this.inputLayout, this.vertexBuffers[i], this.indexBuffers[i]);
                 for (let j in this.batches[i]) {
                     const batch = this.batches[i][j];
                     if (!batch.visible) continue;
@@ -571,7 +598,7 @@ export class WmoRenderer {
                         offset,
                         batch.vertexShader,
                         batch.pixelShader,
-                        0,
+                        group.num_color_bufs,
                         0,
                     );
                     offset += fillVec4(
@@ -647,12 +674,8 @@ export class WmoRenderer {
     }
 
     public destroy(device: GfxDevice) {
-        for (let i = 0; i < this.vertexBuffers.length; i++) {
-            this.vertexBuffers[i].forEach((buf) =>
-                device.destroyBuffer(buf.buffer),
-            );
-            device.destroyBuffer(this.indexBuffers[i].buffer);
-        }
+        device.destroyBuffer(this.gfxVertexBuffer);
+        device.destroyBuffer(this.gfxIndexBuffer);
     }
 }
 

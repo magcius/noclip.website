@@ -5,7 +5,7 @@ use deku::prelude::*;
 use deku::ctx::ByteSize;
 
 use wasm_bindgen::prelude::*;
-use crate::wow::{animation::*, common::parse};
+use crate::wow::{animation::*, common::parse, particles::Emitter};
 
 use super::common::{
     fixed_precision_6_9_to_f32, parse_array, AABBox, ChunkedData, Fixedi16, Quat, Vec2, Vec3, WowArray, WowCharArray
@@ -214,7 +214,7 @@ pub struct M2 {
     texture_transforms_lookup_table: Option<Vec<u16>>,
     transparency_lookup_table: Option<Vec<u16>>,
     animation_manager: Option<AnimationManager>,
-    particle_emitters: Option<Vec<ParticleEmitter>>,
+    particle_emitters: Option<Vec<Emitter>>,
 }
 
 #[wasm_bindgen(js_class = "WowM2")]
@@ -230,13 +230,13 @@ impl M2 {
         let mut txid: Option<Vec<u32>> = None;
         let mut sfid: Option<Vec<u32>> = None;
         let mut txac: Option<Vec<u16>> = None;
-        let mut maybe_exp2: Option<WowArray<Exp2Record>> = None;
+        let mut exp2_unallocated: Option<WowArray<Exp2Record>> = None;
         for (chunk, chunk_data) in &mut chunked_data {
             match &chunk.magic {
                 b"TXID" => txid = Some(parse_array(chunk_data, 4)?),
                 b"SFID" => sfid = Some(parse_array(chunk_data, 4)?),
                 b"TXAC" => txac = Some(parse_array(chunk_data, 2)?),
-                b"EXP2" => maybe_exp2 = Some(parse(chunk_data)?),
+                b"EXP2" => exp2_unallocated = Some(parse(chunk_data)?),
                 _ => {},
             }
         }
@@ -244,7 +244,24 @@ impl M2 {
         // M2 pointers are relative to the end of the MD21 block, which seems to
         // always be 16 bytes in
         let m2_data = &data[8..];
-        let particle_emitters = header.get_particle_emitters(m2_data)?;
+
+        let mut exp2_allocated = None;
+        if let Some(exp2_unallocated) = exp2_unallocated {
+            exp2_allocated = Some(exp2_unallocated.to_vec(m2_data)?);
+        }
+        let mut particle_emitters = Vec::new();
+        for (i, emitter) in header.get_particle_emitters(m2_data)?.drain(..).enumerate() {
+            let mut emitter_txac = 0;
+            if let Some(txac_values) = txac.as_ref() {
+                emitter_txac = txac_values[i];
+            }
+            let mut emitter_z_source = None;
+            if let Some(exp2) = exp2_allocated.as_ref() {
+                emitter_z_source = Some(exp2[i].z_source);
+            }
+            particle_emitters.push(Emitter::new(emitter, emitter_txac, emitter_z_source));
+        }
+
         let animation_manager = Some(AnimationManager::new(
             header.global_sequence_durations.to_vec(m2_data)?,
             header.sequences.to_vec(m2_data)?,
@@ -253,8 +270,6 @@ impl M2 {
             header.get_vertex_colors(m2_data)?,
             header.get_bones(m2_data)?,
             header.get_lights(m2_data)?,
-            particle_emitters.clone(),
-            maybe_exp2.is_some(),
         ));
 
         let mut legacy_textures = Vec::new();
@@ -317,8 +332,8 @@ impl M2 {
         self.transparency_lookup_table.take().expect("M2 transparency lookup table already taken")
     }
 
-    pub fn take_particle_emitters(&mut self) -> Vec<ParticleEmitter> {
-        self.particle_emitters.take().expect("particles have already been taken")
+    pub fn take_particle_emitters(&mut self) -> Vec<Emitter> {
+        self.particle_emitters.take().expect("particle emitters have already been taken")
     }
 
     pub fn get_vertex_stride() -> usize {
@@ -331,7 +346,7 @@ impl M2 {
     }
 }
 
-#[derive(DekuRead, Debug, Clone)]
+#[derive(DekuRead)]
 pub struct Exp2Record {
     pub z_source: f32,
     pub unk1: u32,
@@ -422,22 +437,6 @@ impl M2MaterialFlags {
     }
 }
 
-#[derive(Debug, DekuRead, Clone)]
-#[deku(ctx = "ByteSize(size): ByteSize")]
-pub struct Txid {
-    #[deku(count = "size / 4")]
-    pub file_data_ids: Vec<u32>,
-}
-
-#[derive(Debug, DekuRead)]
-pub struct M2Vertex {
-    pub position: Vec3,
-    pub bone_weights: [u8; 4],
-    pub bone_indices: [u8; 4],
-    pub normal: Vec3,
-    pub texture_coords: [Vec2; 2],
-}
-
 #[derive(Debug, Clone)]
 #[wasm_bindgen(js_name = "WowM2LegacyTexture", getter_with_clone)]
 pub struct LegacyTexture {
@@ -447,7 +446,7 @@ pub struct LegacyTexture {
 
 #[derive(Debug, DekuRead, Clone)]
 pub struct M2Texture {
-    pub type_: u32,
+    pub _type: u32,
     pub flags: u32,
     pub filename: WowCharArray,
 }
@@ -484,7 +483,6 @@ impl From<ParticleEmitterGravity> for Vec3 {
     }
 }
 
-#[wasm_bindgen(js_name = "WowM2ParticleEmitter", getter_with_clone)]
 #[derive(Debug, DekuRead, Clone)]
 pub struct ParticleEmitter {
     pub particle_id: i32, // maybe always -1
@@ -551,6 +549,7 @@ pub struct ParticleEmitter {
 }
 
 #[wasm_bindgen(js_name = "WowM2ParticleShaderType")]
+#[derive(Debug, Copy, Clone)]
 pub enum ParticleShaderType {
     Mod,
     TwoColorTexThreeAlphaTex,
@@ -559,7 +558,6 @@ pub enum ParticleShaderType {
     Refraction,
 }
 
-#[wasm_bindgen(js_class = "WowM2ParticleEmitter")]
 impl ParticleEmitter {
     pub fn check_flag(&self, mask: u32) -> bool {
         (self.flags & mask) > 0
@@ -625,6 +623,41 @@ impl ParticleEmitter {
 
     pub fn take_spline_points(&mut self) -> Vec<Vec3> {
         self.spline_points.take().expect("spline points already taken")
+    }
+
+    pub fn calculate_particle_type(&self) -> u32 {
+        if !self.check_flag(0x10100000) {
+            return 0;
+        } else if self.check_flag(0x1c) {
+                return 2;
+        } else {
+            return 3;
+        }
+    }
+
+    pub fn calculate_shader_type(&self, txac: u16) -> ParticleShaderType {
+        let particle_type = self.calculate_particle_type();
+        // some awful undocumented flag stuff
+        let mut material0x20 = false;
+        if self.check_flag(0x10000000) {
+            material0x20 = self.check_flag(0x40000000);
+        }
+
+        let multi_tex = self.check_flag(0x10000000);
+        if particle_type == 2 || (particle_type == 4 && multi_tex && txac != 0) {
+            assert!(material0x20);
+            return ParticleShaderType::ThreeColorTexThreeAlphaTexUV;
+        } else if  particle_type == 2 || (particle_type == 4 && multi_tex) {
+            if material0x20 {
+                return ParticleShaderType::ThreeColorTexThreeAlphaTex;
+            } else {
+                return ParticleShaderType::TwoColorTexThreeAlphaTex;
+            }
+        } else if particle_type == 3 {
+            return ParticleShaderType::Refraction;
+        } else {
+            return ParticleShaderType::Mod;
+        }
     }
 }
 
