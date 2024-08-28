@@ -207,6 +207,12 @@ pub struct Vec2 {
     pub y: f32,
 }
 
+impl From<Vec2> for nalgebra_glm::Vec2 {
+    fn from(value: Vec2) -> Self {
+        nalgebra_glm::vec2(value.x, value.y)
+    }
+}
+
 #[wasm_bindgen(js_name = "WowRgba")]
 #[derive(DekuRead, Debug, Clone, Copy)]
 pub struct Rgba {

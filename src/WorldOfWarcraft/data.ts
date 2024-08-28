@@ -8,7 +8,7 @@ import {
     vec3,
     vec4,
 } from "gl-matrix";
-import type {
+import {
     ConvexHull,
     WowAABBox,
     WowAdt,
@@ -434,456 +434,37 @@ export class SkyboxData {
     }
 }
 
-class Particle {
-    public age = 0;
-    public alive = true;
-    public color = vec4.create();
-    public scale = vec2.create();
-    public texCoordHead = vec2.create();
-    public texCoordTail = vec2.create();
-
-    static createSpline(emitter: ParticleEmitter, dt: number): Particle {
-        let t = saturate(emitter.emissionAreaLength);
-
-        assert(emitter.spline !== undefined);
-
-        let position: vec3;
-        if (t > 0) {
-            if (t < 1) {
-                position = emitter.spline.calculateParametricSpline(
-                    vec3.create(),
-                    t,
-                );
-            } else {
-                position =
-                    emitter.spline.points[emitter.spline.points.length - 1];
-            }
-        } else {
-            position = emitter.spline.points[0];
-        }
-
-        let velocity: vec3;
-        if (emitter.zSource > 0.001) {
-            const dz = position[2] - emitter.zSource;
-            velocity = vec3.clone(position);
-            velocity[2] = dz;
-            vec3.normalize(velocity, velocity);
-            vec3.scale(velocity, velocity, emitter.getEmissionSpeed());
-        } else if (emitter.verticalRange !== 0.0) {
-            // this is insane. treat the spline's derivative at t as a rotation vector, and the
-            // emitter's verticalRange parameter as a rotation (in degrees). then, set the velocity
-            // to the resulting rotation along just the Z axis. i guess.
-            const rotAxis = emitter.spline.calculateParametricSplineDerivative(
-                vec3.create(),
-                t,
-            );
-            vec3.normalize(rotAxis, rotAxis);
-            const rotRadians = emitter.verticalRange * MathConstants.DEG_TO_RAD;
-            const rotQuat = quat.setAxisAngle(
-                quat.create(),
-                rotAxis,
-                randomRange(-1, 1) * rotRadians,
-            );
-            const rotMat = mat3.fromQuat(mat3.create(), rotQuat);
-            velocity = vec3.set(rotAxis, rotMat[6], rotMat[7], rotMat[8]);
-            vec3.scale(velocity, velocity, emitter.getEmissionSpeed());
-            if (emitter.horizontalRange !== 0.0) {
-                const posOffset = randomRange(-1, 1) * emitter.horizontalRange;
-                position[0] += posOffset;
-                position[1] += posOffset;
-                position[2] += posOffset;
-            }
-        } else {
-            velocity = vec3.fromValues(0, 0, emitter.getEmissionSpeed());
-        }
-
-        return new Particle(position, velocity, emitter.getLifespan());
-    }
-
-    static createSpherical(emitter: ParticleEmitter, dt: number): Particle {
-        const emissionArea =
-            emitter.emissionAreaWidth - emitter.emissionAreaLength;
-        const radius =
-            emitter.emissionAreaLength + Math.random() * emissionArea;
-        const polar = randomRange(-1, 1) * emitter.verticalRange;
-        const azimuth = randomRange(-1, 1) * emitter.horizontalRange;
-        const cosPolar = Math.cos(polar);
-        const emissionDir = vec3.fromValues(
-            cosPolar * Math.cos(azimuth),
-            cosPolar * Math.sin(azimuth),
-            Math.sin(polar),
-        );
-        const position = vec3.scale(emissionDir, emissionDir, radius);
-
-        let velocity: vec3;
-        if (emitter.zSource < 0.001) {
-            const particlesGoUp = (emitter.emitter.flags & 0x100) > 0;
-            if (particlesGoUp) {
-                velocity = vec3.fromValues(0, 0, 1);
-            } else {
-                velocity = vec3.fromValues(
-                    cosPolar * Math.cos(azimuth),
-                    cosPolar * Math.sin(azimuth),
-                    Math.sin(polar),
-                );
-            }
-        } else {
-            velocity = vec3.fromValues(0, 0, emitter.zSource);
-            vec3.sub(velocity, position, velocity);
-            if (vec3.len(velocity) > 0.0001) {
-                vec3.normalize(velocity, velocity);
-            }
-        }
-        vec3.scale(velocity, velocity, emitter.getEmissionSpeed());
-
-        return new Particle(position, velocity, emitter.getLifespan());
-    }
-
-    static createPlanar(emitter: ParticleEmitter, dt: number): Particle {
-        const position = vec3.fromValues(
-            randomRange(-1, 1) * emitter.emissionAreaLength * 0.5,
-            randomRange(-1, 1) * emitter.emissionAreaWidth * 0.5,
-            0,
-        );
-        let velocity: vec3;
-        if (emitter.zSource < 0.001) {
-            const polar = emitter.verticalRange * randomRange(-1, 1);
-            const azimuth = emitter.horizontalRange * randomRange(-1, 1);
-            const sinPolar = Math.sin(polar);
-            const sinAzimuth = Math.sin(azimuth);
-            const cosPolar = Math.cos(polar);
-            const cosAzimuth = Math.cos(azimuth);
-            velocity = vec3.fromValues(
-                cosAzimuth * sinPolar,
-                sinAzimuth * sinPolar,
-                cosPolar,
-            );
-            vec3.scale(velocity, velocity, emitter.getEmissionSpeed());
-        } else {
-            velocity = vec3.fromValues(0, 0, emitter.zSource);
-            vec3.sub(velocity, position, velocity);
-            if (vec3.len(velocity) > 0.0001) {
-                vec3.normalize(velocity, velocity);
-                vec3.scale(velocity, velocity, emitter.getEmissionSpeed());
-            }
-        }
-
-        return new Particle(position, velocity, emitter.getLifespan());
-    }
-
-    constructor(public position: vec3, public velocity: vec3, public lifespan: number) {
-    }
-}
-
-const PARTICLE_COORDINATE_FIX: mat4 = mat4.fromValues(
-    0, 1, 0, 0,
-    -1, 0, 0, 0,
-    0, 0, 1, 0,
-    0, 0, 0, 1,
-);
-
-class BezierSpline {
-    public segmentLengths: number[];
-    public totalLength: number;
-
-    constructor(public points: vec3[]) {
-        this.calculateSplineArcLengths();
-    }
-
-    public calculateParametricSpline(out: vec3, t: number): vec3 {
-        assert(t >= 0 && t <= 1);
-        const [segment, segmentT] = this.findParametricSegment(t);
-        this.evaluateSegment(out, segment, segmentT);
-        return out;
-    }
-
-    public calculateParametricSplineDerivative(out: vec3, t: number): vec3 {
-        assert(t >= 0 && t <= 1);
-        const [segment, segmentT] = this.findParametricSegment(t);
-        this.evaluateDerivative(out, segment, segmentT);
-        return out;
-    }
-
-    private findParametricSegment(t: number): [number, number] {
-        const targetLength = t * this.totalLength;
-        let length = 0;
-        const numSegments = (this.points.length - 1) / 3;
-        for (let segment = 0; segment < numSegments; segment++) {
-            const segmentLength = this.segmentLengths[segment];
-            if (length + segmentLength < targetLength) {
-                length += segmentLength;
-            } else {
-                const segmentT = (targetLength - length) / segmentLength;
-                return [segment, segmentT];
-            }
-        }
-        throw new Error(`failed to find spline segment for parametric t=${t}`);
-    }
-
-    private evaluateSegment(out: vec3, segment: number, t: number) {
-        const p0 = this.points[segment * 3 + 0];
-        const p1 = this.points[segment * 3 + 1];
-        const p2 = this.points[segment * 3 + 2];
-        const p3 = this.points[segment * 3 + 3];
-        out[0] = getPointBezier(p0[0], p1[0], p2[0], p3[0], t);
-        out[1] = getPointBezier(p0[1], p1[1], p2[1], p3[1], t);
-        out[2] = getPointBezier(p0[2], p1[2], p2[2], p3[2], t);
-    }
-
-    private evaluateDerivative(out: vec3, segment: number, t: number) {
-        const p0 = this.points[segment * 3 + 0];
-        const p1 = this.points[segment * 3 + 1];
-        const p2 = this.points[segment * 3 + 2];
-        const p3 = this.points[segment * 3 + 3];
-        out[0] = getDerivativeBezier(p0[0], p1[0], p2[0], p3[0], t);
-        out[1] = getDerivativeBezier(p0[1], p1[1], p2[1], p3[1], t);
-        out[2] = getDerivativeBezier(p0[2], p1[2], p2[2], p3[2], t);
-    }
-
-    private calculateSplineArcLengths() {
-        this.segmentLengths = [];
-        this.totalLength = 0;
-        const numSegments = (this.points.length - 1) / 3;
-        const iterationsPerSegment = 20;
-        const dt = 1 / iterationsPerSegment;
-        const lastPos = vec3.create();
-        const currPos = vec3.create();
-
-        for (let segment = 0; segment < numSegments; segment++) {
-            let length = 0;
-            if (lastPos[0] === 0 && lastPos[1] === 0 && lastPos[2] === 0) {
-                this.evaluateSegment(lastPos, segment, 0);
-            }
-
-            let t = dt;
-            for (let i = 0; i < iterationsPerSegment; i++) {
-                this.evaluateSegment(currPos, segment, t);
-                length += vec3.dist(currPos, lastPos);
-                vec3.copy(lastPos, currPos);
-                t += dt;
-            }
-            this.segmentLengths.push(length);
-            this.totalLength += length;
-        }
-    }
-}
-
 export class ParticleEmitter {
-    static MAX_PARTICLES = 2000;
-    static TEXELS_PER_PARTICLE = 4; // pos, color, scale, texCoord
-    public static MAX_LOD = 4;
-
-    public enabled = 0;
-    private emissionSpeed = 0;
-    private speedVariation = 0;
-    public verticalRange = 0;
-    public horizontalRange = 0;
-    public gravity = vec3.create();
-    private lifespan = 0;
-    private emissionRate = 0;
-    public emissionAreaLength = 0;
-    public emissionAreaWidth = 0;
-    public zSource = 0;
-    public particles: Particle[] = [];
-    private baseSpin = 0;
-    private spin = 0;
-    public wind: vec3;
     public textures: (BlpData | null)[] = [];
-    public texScaleX: number;
-    public texScaleY: number;
-    public alphaTest: number;
     public fragShaderType: number;
     public blendMode: WowM2BlendingMode;
-    public position: vec3;
-    public modelMatrix = mat4.create();
-    private force = vec3.create();
-    private updateBuffer: Float32Array;
-    private particlesToEmit = 0.0;
-    private dataTexture: GfxTexture | undefined;
-    private textureColMask: number;
-    private textureColBits: number;
-    public particleType: number;
-    public spline?: BezierSpline;
-    public lod: number = ParticleEmitter.MAX_LOD;
-    private msSinceLastUpdate = 0;
-    public needsRedraw = true;
+    public texScaleY: number;
+    public texScaleX: number;
+    public alphaTest: number;
+    private texHeight: number;
+    private texWidth: number;
     private pixelData: Float32Array;
+    private dataTexture: GfxTexture | undefined;
     private sortKeyBase = 0;
 
-    constructor(public index: number, public emitter: WowM2ParticleEmitter, private model: ModelData, public txac: number) {
-        this.updateBuffer = new Float32Array(16);
-        this.wind = convertWowVec3(emitter.wind_vector);
-        this.position = convertWowVec3(emitter.position);
-        this.particleType = this.calculateParticleType();
-        if (emitter.has_multiple_textures()) {
-            this.textures.push(model.blps[emitter.texture_id & 0x1f]);
-            this.textures.push(model.blps[(emitter.texture_id >> 5) & 0x1f]);
-            this.textures.push(model.blps[(emitter.texture_id >> 10) & 0x1f]);
-        } else {
-            this.textures.push(model.blps[emitter.texture_id]);
-            this.textures.push(null);
-            this.textures.push(null);
-        }
-        const wowSplinePoints = this.emitter.take_spline_points();
-        if (wowSplinePoints !== undefined) {
-            const splinePoints = [];
-            for (const point of wowSplinePoints) {
-                splinePoints.push(convertWowVec3(point));
+    constructor(public index: number, public emitter: WowM2ParticleEmitter, private model: ModelData) {
+        let textureIds = emitter.get_texture_ids();
+        for (let i=0; i<3; i++) {
+            if (textureIds[i] !== undefined) {
+                this.textures.push(model.blps[textureIds[i]]);
+            } else {
+                this.textures.push(null);
             }
-            this.spline = new BezierSpline(splinePoints);
         }
-        this.textureColBits = Math.ceil(Math.log2(emitter.texture_dimensions_cols));
-        this.textureColMask = (1 << this.textureColBits) - 1;
-        this.texScaleX = 1.0 / emitter.texture_dimension_rows;
-        this.texScaleY = 1.0 / emitter.texture_dimensions_cols;
-        if (emitter.blending_type === 0) {
-            this.alphaTest = -1;
-        } else if (emitter.blending_type === 1) {
-            this.alphaTest = 0.501960814;
-        } else {
-            this.alphaTest = 0.0039215689;
-        }
-        this.fragShaderType = this.calculateShaderType();
-        this.blendMode = emitter.get_blend_mode();
-        const bytesPerParticle = ParticleEmitter.TEXELS_PER_PARTICLE * 4;
-        this.pixelData = new Float32Array(
-            ParticleEmitter.MAX_PARTICLES * bytesPerParticle,
-        );
-        this.msSinceLastUpdate = randomRange(0, 200);
+        this.fragShaderType = this.emitter.frag_shader_type;
+        this.blendMode = this.emitter.blend_mode;
+        this.alphaTest = this.emitter.alpha_test;
+        this.texScaleX = this.emitter.tex_scale_x;
+        this.texScaleY = this.emitter.tex_scale_y;
+        this.texHeight = rust.WowM2ParticleEmitter.get_max_particles();
+        this.texWidth = rust.WowM2ParticleEmitter.get_texels_per_particle();
+        this.pixelData = new Float32Array(this.texHeight * this.texWidth * 4);
         this.sortKeyBase = makeSortKey(GfxRendererLayer.TRANSLUCENT + this.index);
-    }
-
-    private calculateParticleType(): number {
-        if (!this.emitter.check_flag(0x10100000)) {
-            return 0;
-        } else {
-            if (this.emitter.check_flag(0x1c)) {
-                return 2;
-            } else {
-                return 3;
-            }
-        }
-    }
-
-    private calculateShaderType(): WowM2ParticleShaderType {
-        // some awful undocumented flag stuff
-        let material0x20 = false;
-        let material0x01 = true;
-        if (this.emitter.check_flag(0x10000000)) {
-            material0x01 = false;
-            material0x20 = this.emitter.check_flag(0x40000000);
-        } else if (this.emitter.check_flag(0x100000)) {
-            material0x01 = false;
-        } else {
-            material0x01 = !this.emitter.check_flag(0x1);
-        }
-
-        const multiTex = this.emitter.check_flag(0x10000000);
-        if (
-            this.particleType === 2 ||
-            (this.particleType === 4 && multiTex && this.txac !== 0)
-        ) {
-            assert(material0x20);
-            return rust.WowM2ParticleShaderType.ThreeColorTexThreeAlphaTexUV;
-        } else if (
-            this.particleType === 2 ||
-            (this.particleType === 4 && multiTex)
-        ) {
-            if (material0x20) {
-                return rust.WowM2ParticleShaderType.ThreeColorTexThreeAlphaTex;
-            } else {
-                return rust.WowM2ParticleShaderType.TwoColorTexThreeAlphaTex;
-            }
-        } else if (this.particleType === 3) {
-            return rust.WowM2ParticleShaderType.Refraction;
-        } else {
-            return rust.WowM2ParticleShaderType.Mod;
-        }
-    }
-
-    private updateParams(animationManager: WowM2AnimationManager) {
-        animationManager.update_particle_emitter(this.index, this.updateBuffer);
-        [
-            this.enabled,
-            this.emissionSpeed,
-            this.speedVariation,
-            this.verticalRange,
-            this.horizontalRange,
-            this.lifespan,
-            this.emissionRate,
-            this.emissionAreaLength,
-            this.emissionAreaWidth,
-            this.zSource,
-        ] = this.updateBuffer;
-        if (this.emitter.use_compressed_gravity()) {
-            this.gravity[0] = this.updateBuffer[10];
-            this.gravity[1] = this.updateBuffer[11];
-            this.gravity[2] = this.updateBuffer[12];
-        } else {
-            this.gravity[0] = 0;
-            this.gravity[1] = 0;
-            this.gravity[2] = this.updateBuffer[10];
-        }
-
-        mat4.identity(this.modelMatrix);
-        mat4.translate(this.modelMatrix, this.modelMatrix, this.position);
-        const bone = this.model.boneData[this.emitter.bone];
-        mat4.mul(this.modelMatrix, bone.transform, this.modelMatrix);
-        mat4.mul(this.modelMatrix, bone.postBillboardTransform, this.modelMatrix);
-        mat4.mul(this.modelMatrix, this.modelMatrix, PARTICLE_COORDINATE_FIX);
-    }
-
-    public getEmissionRate(): number {
-        return this.emissionRate + randomRange(this.emitter.emission_rate_variance);
-    }
-
-    public getEmissionSpeed(): number {
-        return this.emissionSpeed * (1 + randomRange(this.speedVariation));
-    }
-
-    public getLifespan(): number {
-        return this.lifespan + randomRange(this.emitter.lifespan_variance);
-    }
-
-    public getBaseSpin(): number {
-        return this.emitter.base_spin + randomRange(this.emitter.base_spin_variance);
-    }
-
-    public getSpin(): number {
-        return this.emitter.spin + randomRange(this.emitter.spin_variance);
-    }
-
-    private createParticle(dt: number) {
-        let particle: Particle;
-        if (this.emitter.emitter_type === 1) {
-            // Plane
-            particle = Particle.createPlanar(this, dt);
-        } else if (this.emitter.emitter_type === 2) {
-            // Sphere
-            particle = Particle.createSpherical(this, dt);
-        } else if (this.emitter.emitter_type === 3) {
-            // Spline
-            particle = Particle.createSpline(this, dt);
-        } else {
-            throw new Error(
-                `unknown particle emitter type ${this.emitter.emitter_type}`,
-            );
-        }
-
-        if (!this.emitter.check_flag(0x10)) {
-            vec3.transformMat4(particle.position, particle.position, this.modelMatrix);
-            transformVec3Mat4w0(particle.velocity, this.modelMatrix, particle.velocity);
-            if (this.emitter.check_flag(0x2000)) {
-                particle.position[2] = 0;
-            }
-        }
-        if (this.emitter.check_flag(0x40)) {
-            // TODO: add random burst value to velocity
-        }
-        if (this.emitter.check_flag(0x10000000)) {
-            // TODO: randomize particle texture stuff
-        }
-        this.particles.push(particle);
     }
 
     public setMegaStateFlags(renderInst: GfxRenderInst) {
@@ -893,103 +474,29 @@ export class ParticleEmitter {
 
     private ensureTexture(device: GfxDevice) {
         if (this.dataTexture === undefined) {
-            this.dataTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.F32_RGBA, ParticleEmitter.TEXELS_PER_PARTICLE, ParticleEmitter.MAX_PARTICLES, 1));
+            this.dataTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.F32_RGBA, this.texWidth, this.texHeight, 1));
         }
-    }
-
-    private maxLifespan(): number {
-        return this.lifespan + this.emitter.lifespan_variance;
-    }
-
-    private shouldUpdate(): boolean {
-        const numFramesBeforeUpdate = 1 << (ParticleEmitter.MAX_LOD - this.lod);
-        const msBeforeUpdate = numFramesBeforeUpdate * (1000 / 60);
-        return this.msSinceLastUpdate >= msBeforeUpdate;
     }
 
     public update(dtMilliseconds: number, animationManager: WowM2AnimationManager) {
-        this.msSinceLastUpdate += dtMilliseconds;
-        // the particle system's units are seconds
-        const dtSeconds = this.msSinceLastUpdate / 1000;
-
-        if (!this.shouldUpdate()) {
-            this.needsRedraw = false;
-            return;
-        } else {
-            this.needsRedraw = true;
-        }
-
-        this.msSinceLastUpdate = 0;
-        this.updateParams(animationManager);
-
-        if (this.enabled > 0.0) {
-            this.particlesToEmit += this.getEmissionRate() * dtSeconds;
-            while (this.particlesToEmit > 1.0) {
-                if (this.particles.length < ParticleEmitter.MAX_PARTICLES) {
-                    this.createParticle(dtSeconds);
-                }
-                this.particlesToEmit -= 1.0;
-            }
-        }
-
-        vec3.copy(this.force, this.wind);
-        vec3.sub(this.force, this.force, this.gravity);
-
-        for (let i = this.particles.length - 1; i >= 0; i--) {
-            const particle = this.particles[i];
-            particle.age += dtSeconds;
-            if (particle.age > this.lifespan) {
-                this.particles.splice(i, 1);
-            } else {
-                const agePercent = particle.age / this.maxLifespan();
-                animationManager.update_particle(
-                    this.index,
-                    agePercent,
-                    this.updateBuffer,
-                );
-                particle.color[0] = this.updateBuffer[0] / 255.0;
-                particle.color[1] = this.updateBuffer[1] / 255.0;
-                particle.color[2] = this.updateBuffer[2] / 255.0;
-                particle.color[3] = this.updateBuffer[3];
-                particle.scale[0] = this.updateBuffer[4];
-                particle.scale[1] = this.updateBuffer[5];
-                const cellHead = this.updateBuffer[6];
-                this.extractTexCoords(particle.texCoordHead, cellHead);
-                const cellTail = this.updateBuffer[7];
-                this.extractTexCoords(particle.texCoordTail, cellTail);
-
-                vec3.scaleAndAdd(particle.velocity, particle.velocity, this.force, dtSeconds);
-                if (this.emitter.drag > 0) {
-                    vec3.scale(particle.velocity, particle.velocity, (1.0 - this.emitter.drag) ** dtSeconds);
-                }
-                vec3.scaleAndAdd(particle.position, particle.position, particle.velocity, dtSeconds);
-            }
-        }
-    }
-
-    public extractTexCoords(out: vec2, cell: number) {
-        const xInt = cell & this.textureColMask;
-        const yInt = cell >> this.textureColBits;
-        vec2.set(out, xInt * this.texScaleX, yInt * this.texScaleY);
+        const bone = this.model.boneData[this.emitter.bone];
+        this.emitter.update(
+            dtMilliseconds,
+            animationManager,
+            bone.transform as Float32Array,
+            bone.postBillboardTransform as Float32Array,
+        );
     }
 
     public updateDataTex(device: GfxDevice): GfxTexture {
         this.ensureTexture(device);
-        const scratchVec3 = vec3.create();
-        for (let i = 0; i < this.particles.length; i++) {
-            const particle = this.particles[i];
-            let offs = ParticleEmitter.TEXELS_PER_PARTICLE * i * 4;
-            vec3.copy(scratchVec3, particle.position);
-            if (this.emitter.translate_particle_with_bone()) {
-                vec3.transformMat4(scratchVec3, scratchVec3, this.modelMatrix);
-            }
-            offs += fillVec3v(this.pixelData, offs, scratchVec3);
-            offs += fillVec4v(this.pixelData, offs, particle.color);
-            offs += fillVec4(this.pixelData, offs, particle.scale[0], particle.scale[1]);
-            offs += fillVec4(this.pixelData, offs, particle.texCoordHead[0], particle.texCoordHead[1]);
-        }
+        this.emitter.fill_texture(this.pixelData);
         device.uploadTextureData(this.dataTexture!, 0, [this.pixelData]);
         return this.dataTexture!;
+    }
+
+    public numParticles(): number {
+        return this.emitter.num_particles();
     }
 }
 
@@ -1095,11 +602,7 @@ export class ModelData {
         this.particleEmitters = m2
             .take_particle_emitters()
             .map((emitter, i) => {
-                let txac = m2.get_txac_value(i);
-                if (txac === undefined) {
-                    txac = 0;
-                }
-                return new ParticleEmitter(i, emitter, this, txac);
+                return new ParticleEmitter(i, emitter, this);
             });
 
         this.animationManager = m2.take_animation_manager();
@@ -1909,7 +1412,7 @@ export class WmoDefinition {
 
                 let bspAmbientColor = wmo.wmo.get_vertex_color_for_modelspace_point(group.group_id, p as Float32Array);
 
-                if (group.flags.interior && !group.flags.exterior_lit) {
+                if (group.interior && !group.exterior_lit) {
                     const groupAmbientColor = this.groupAmbientColors.get(
                         group.group_id,
                     )!;

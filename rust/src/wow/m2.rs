@@ -5,7 +5,7 @@ use deku::prelude::*;
 use deku::ctx::ByteSize;
 
 use wasm_bindgen::prelude::*;
-use crate::wow::{animation::*, common::parse};
+use crate::wow::{animation::*, common::parse, particles::Emitter};
 
 use super::common::{
     fixed_precision_6_9_to_f32, parse_array, AABBox, ChunkedData, Fixedi16, Quat, Vec2, Vec3, WowArray, WowCharArray
@@ -214,7 +214,7 @@ pub struct M2 {
     texture_transforms_lookup_table: Option<Vec<u16>>,
     transparency_lookup_table: Option<Vec<u16>>,
     animation_manager: Option<AnimationManager>,
-    particle_emitters: Option<Vec<ParticleEmitter>>,
+    particle_emitters: Option<Vec<Emitter>>,
 }
 
 #[wasm_bindgen(js_class = "WowM2")]
@@ -244,7 +244,16 @@ impl M2 {
         // M2 pointers are relative to the end of the MD21 block, which seems to
         // always be 16 bytes in
         let m2_data = &data[8..];
-        let particle_emitters = header.get_particle_emitters(m2_data)?;
+
+        let mut particle_emitters = Vec::new();
+        for (i, emitter) in header.get_particle_emitters(m2_data)?.drain(..).enumerate() {
+            let mut emitter_txac = 0;
+            if let Some(txac_values) = txac.as_ref() {
+                emitter_txac = txac_values[i];
+            }
+            particle_emitters.push(Emitter::new(emitter, emitter_txac));
+        }
+
         let animation_manager = Some(AnimationManager::new(
             header.global_sequence_durations.to_vec(m2_data)?,
             header.sequences.to_vec(m2_data)?,
@@ -253,7 +262,6 @@ impl M2 {
             header.get_vertex_colors(m2_data)?,
             header.get_bones(m2_data)?,
             header.get_lights(m2_data)?,
-            particle_emitters.clone(),
             maybe_exp2.is_some(),
         ));
 
@@ -317,8 +325,8 @@ impl M2 {
         self.transparency_lookup_table.take().expect("M2 transparency lookup table already taken")
     }
 
-    pub fn take_particle_emitters(&mut self) -> Vec<ParticleEmitter> {
-        self.particle_emitters.take().expect("particles have already been taken")
+    pub fn take_particle_emitters(&mut self) -> Vec<Emitter> {
+        self.particle_emitters.take().expect("particle emitters have already been taken")
     }
 
     pub fn get_vertex_stride() -> usize {
@@ -484,7 +492,6 @@ impl From<ParticleEmitterGravity> for Vec3 {
     }
 }
 
-#[wasm_bindgen(js_name = "WowM2ParticleEmitter", getter_with_clone)]
 #[derive(Debug, DekuRead, Clone)]
 pub struct ParticleEmitter {
     pub particle_id: i32, // maybe always -1
@@ -551,6 +558,7 @@ pub struct ParticleEmitter {
 }
 
 #[wasm_bindgen(js_name = "WowM2ParticleShaderType")]
+#[derive(Debug, Copy, Clone)]
 pub enum ParticleShaderType {
     Mod,
     TwoColorTexThreeAlphaTex,
@@ -559,7 +567,6 @@ pub enum ParticleShaderType {
     Refraction,
 }
 
-#[wasm_bindgen(js_class = "WowM2ParticleEmitter")]
 impl ParticleEmitter {
     pub fn check_flag(&self, mask: u32) -> bool {
         (self.flags & mask) > 0
@@ -625,6 +632,41 @@ impl ParticleEmitter {
 
     pub fn take_spline_points(&mut self) -> Vec<Vec3> {
         self.spline_points.take().expect("spline points already taken")
+    }
+
+    pub fn calculate_particle_type(&self) -> u32 {
+        if !self.check_flag(0x10100000) {
+            return 0;
+        } else if self.check_flag(0x1c) {
+                return 2;
+        } else {
+            return 3;
+        }
+    }
+
+    pub fn calculate_shader_type(&self, txac: u16) -> ParticleShaderType {
+        let particle_type = self.calculate_particle_type();
+        // some awful undocumented flag stuff
+        let mut material0x20 = false;
+        if self.check_flag(0x10000000) {
+            material0x20 = self.check_flag(0x40000000);
+        }
+
+        let multi_tex = self.check_flag(0x10000000);
+        if particle_type == 2 || (particle_type == 4 && multi_tex && txac != 0) {
+            assert!(material0x20);
+            return ParticleShaderType::ThreeColorTexThreeAlphaTexUV;
+        } else if  particle_type == 2 || (particle_type == 4 && multi_tex) {
+            if material0x20 {
+                return ParticleShaderType::ThreeColorTexThreeAlphaTex;
+            } else {
+                return ParticleShaderType::TwoColorTexThreeAlphaTex;
+            }
+        } else if particle_type == 3 {
+            return ParticleShaderType::Refraction;
+        } else {
+            return ParticleShaderType::Mod;
+        }
     }
 }
 

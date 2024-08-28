@@ -173,7 +173,7 @@ export class ModelRenderer {
         for (const emitter of this.model.particleEmitters) {
             this.emitterTextures.push(this.getEmitterTextures(device, emitter));
         }
-        const particleIndexBuf = makeTriangleIndexBuffer(GfxTopology.Quads, 0, ParticleEmitter.MAX_PARTICLES * 4);
+        const particleIndexBuf = makeTriangleIndexBuffer(GfxTopology.Quads, 0, rust.WowM2ParticleEmitter.get_max_particles() * 4);
         this.particleQuadIndices = {
             buffer: makeStaticDataBuffer(
                 device,
@@ -414,13 +414,12 @@ export class ModelRenderer {
 
             for (let i = 0; i < this.model.particleEmitters.length; i++) {
                 const emitter = this.model.particleEmitters[i];
-                if (emitter.particles.length === 0) {
+                if (emitter.numParticles() === 0) {
                     continue;
                 }
 
-                if (emitter.needsRedraw) {
-                    emitter.updateDataTex(this.device);
-                }
+                emitter.updateDataTex(this.device);
+                window.debug.push(emitter.numParticles());
 
                 let renderInst = renderInstManager.newRenderInst();
                 let offs = renderInst.allocateUniformBuffer(
@@ -449,7 +448,7 @@ export class ModelRenderer {
                     null,
                     this.particleQuadIndices,
                 );
-                renderInst.setDrawCount(emitter.particles.length * 6, 0);
+                renderInst.setDrawCount(emitter.numParticles() * 6, 0);
                 emitter.setMegaStateFlags(renderInst);
                 renderInst.setInstanceCount(doodadChunk.length);
                 renderInst.setSamplerBindingsFromTextureMappings(
@@ -576,7 +575,7 @@ export class WmoRenderer {
                 if (!visibleGroups.includes(group.group_id))
                     continue;
                 const ambientColor = def.groupAmbientColors.get(group.group_id)!;
-                const applyInteriorLight = group.flags.interior && !group.flags.exterior_lit;
+                const applyInteriorLight = group.interior && !group.exterior_lit;
                 const applyExteriorLight = true;
                 template.setVertexInput(this.inputLayout, this.vertexBuffers[i], this.indexBuffers[i]);
                 for (let j in this.batches[i]) {

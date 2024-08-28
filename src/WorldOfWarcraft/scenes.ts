@@ -532,15 +532,15 @@ export class WdtScene implements Viewer.SceneGfx {
         let memberGroups: number[] = [];
         for (let group of wmo.groupDescriptors) {
             if (wmo.wmo.group_contains_modelspace_point(group.group_id, this.modelCamera as Float32Array)) {
-                if (group.flags.show_skybox && wmo.skyboxModel) {
+                if (group.show_skybox && wmo.skyboxModel) {
                     frame.activeWmoSkybox = wmo.skyboxModel.fileId;
                 }
-                if (!group.flags.exterior) {
+                if (!group.exterior) {
                     startedInInteriorGroup = true;
                 }
                 memberGroups.push(group.group_id);
             }
-            if (group.flags.exterior && wmo.wmo.group_in_modelspace_frustum(group.group_id, this.modelFrustum)) {
+            if (group.exterior && wmo.wmo.group_in_modelspace_frustum(group.group_id, this.modelFrustum)) {
                 frustumGroups.push(group.group_id);
             }
         }
@@ -580,7 +580,7 @@ export class WdtScene implements Viewer.SceneGfx {
         let hasExternalGroup = false;
         for (let groupId of visibleGroups) {
             const group = wmo.getGroup(groupId)!;
-            if (group.flags.exterior) {
+            if (group.exterior) {
                 hasExternalGroup = true;
             }
             frame.addWmoGroup(wmo, def, groupId);
@@ -607,6 +607,7 @@ export class WdtScene implements Viewer.SceneGfx {
     }
 
     private prepareToRender(): void {
+        window.debug = [];
         const renderInstManager = this.renderHelper.renderInstManager;
 
         const template = this.renderHelper.pushTemplateRenderInst();
@@ -681,15 +682,11 @@ export class WdtScene implements Viewer.SceneGfx {
         renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
 
         for (let [modelId, renderer] of this.modelRenderers.entries()) {
-            let minDistance = Infinity;
             const doodads = frame.doodads
                 .get(modelId)!
                 .filter((doodad) => doodad.visible)
                 .filter((doodad) => {
                     const dist = this.mainView.cameraDistanceToWorldSpaceAABB(doodad.worldAABB);
-                    if (dist < minDistance) {
-                        minDistance = dist;
-                    }
                     return dist < this.mainView.cullingFarPlane;
                 });
             if (doodads.length === 0) continue;
@@ -702,16 +699,6 @@ export class WdtScene implements Viewer.SceneGfx {
             if (this.enableParticles && renderer.model.particleEmitters.length > 0) {
                 template.setBindingLayouts(ParticleProgram.bindingLayouts);
                 template.setGfxProgram(this.particleProgram);
-
-                // LOD scales linearly w/ distance after 100 units
-                let lod = ParticleEmitter.MAX_LOD;
-                if (minDistance > 100.0) {
-                    lod *= 1.0 - saturate(minDistance / this.mainView.cullingFarPlane);
-                    lod = Math.floor(lod);
-                }
-                renderer.model.particleEmitters.forEach((emitter) => {
-                    emitter.lod = lod;
-                });
                 renderer.prepareToRenderParticles(renderInstManager, doodads);
             }
         }

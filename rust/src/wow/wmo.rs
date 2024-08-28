@@ -335,7 +335,10 @@ impl Wmo {
         let group = self.get_group(group_id);
         WmoGroupDescriptor {
             group_id,
-            flags: group.flags,
+            interior: group.flags.interior,
+            exterior: group.flags.exterior,
+            exterior_lit: group.flags.exterior_lit,
+            show_skybox: group.flags.show_skybox,
             vertex_buffer_offset: group.vertex_buffer_offset,
             index_buffer_offset: group.index_buffer_offset,
             num_vertices: group.num_vertices,
@@ -579,7 +582,10 @@ pub struct Mosi {
 #[wasm_bindgen(js_name = "WowWmoGroupDescriptor")]
 pub struct WmoGroupDescriptor {
     pub group_id: u32,
-    pub flags: WmoGroupFlags,
+    pub interior: bool,
+    pub exterior: bool,
+    pub exterior_lit: bool,
+    pub show_skybox: bool,
     pub vertex_buffer_offset: Option<usize>,
     pub index_buffer_offset: Option<usize>,
     pub num_vertices: usize,

@@ -14,3 +14,4 @@ pub mod util;
 pub mod yaz0;
 pub mod wow;
 pub mod geometry;
+pub mod spline;
