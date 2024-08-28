@@ -230,13 +230,13 @@ impl M2 {
         let mut txid: Option<Vec<u32>> = None;
         let mut sfid: Option<Vec<u32>> = None;
         let mut txac: Option<Vec<u16>> = None;
-        let mut maybe_exp2: Option<WowArray<Exp2Record>> = None;
+        let mut exp2_unallocated: Option<WowArray<Exp2Record>> = None;
         for (chunk, chunk_data) in &mut chunked_data {
             match &chunk.magic {
                 b"TXID" => txid = Some(parse_array(chunk_data, 4)?),
                 b"SFID" => sfid = Some(parse_array(chunk_data, 4)?),
                 b"TXAC" => txac = Some(parse_array(chunk_data, 2)?),
-                b"EXP2" => maybe_exp2 = Some(parse(chunk_data)?),
+                b"EXP2" => exp2_unallocated = Some(parse(chunk_data)?),
                 _ => {},
             }
         }
@@ -245,13 +245,21 @@ impl M2 {
         // always be 16 bytes in
         let m2_data = &data[8..];
 
+        let mut exp2_allocated = None;
+        if let Some(exp2_unallocated) = exp2_unallocated {
+            exp2_allocated = Some(exp2_unallocated.to_vec(m2_data)?);
+        }
         let mut particle_emitters = Vec::new();
         for (i, emitter) in header.get_particle_emitters(m2_data)?.drain(..).enumerate() {
             let mut emitter_txac = 0;
             if let Some(txac_values) = txac.as_ref() {
                 emitter_txac = txac_values[i];
             }
-            particle_emitters.push(Emitter::new(emitter, emitter_txac));
+            let mut emitter_z_source = None;
+            if let Some(exp2) = exp2_allocated.as_ref() {
+                emitter_z_source = Some(exp2[i].z_source);
+            }
+            particle_emitters.push(Emitter::new(emitter, emitter_txac, emitter_z_source));
         }
 
         let animation_manager = Some(AnimationManager::new(
@@ -262,7 +270,6 @@ impl M2 {
             header.get_vertex_colors(m2_data)?,
             header.get_bones(m2_data)?,
             header.get_lights(m2_data)?,
-            maybe_exp2.is_some(),
         ));
 
         let mut legacy_textures = Vec::new();
@@ -339,7 +346,7 @@ impl M2 {
     }
 }
 
-#[derive(DekuRead, Debug, Clone)]
+#[derive(DekuRead)]
 pub struct Exp2Record {
     pub z_source: f32,
     pub unk1: u32,
@@ -430,22 +437,6 @@ impl M2MaterialFlags {
     }
 }
 
-#[derive(Debug, DekuRead, Clone)]
-#[deku(ctx = "ByteSize(size): ByteSize")]
-pub struct Txid {
-    #[deku(count = "size / 4")]
-    pub file_data_ids: Vec<u32>,
-}
-
-#[derive(Debug, DekuRead)]
-pub struct M2Vertex {
-    pub position: Vec3,
-    pub bone_weights: [u8; 4],
-    pub bone_indices: [u8; 4],
-    pub normal: Vec3,
-    pub texture_coords: [Vec2; 2],
-}
-
 #[derive(Debug, Clone)]
 #[wasm_bindgen(js_name = "WowM2LegacyTexture", getter_with_clone)]
 pub struct LegacyTexture {
@@ -455,7 +446,7 @@ pub struct LegacyTexture {
 
 #[derive(Debug, DekuRead, Clone)]
 pub struct M2Texture {
-    pub type_: u32,
+    pub _type: u32,
     pub flags: u32,
     pub filename: WowCharArray,
 }

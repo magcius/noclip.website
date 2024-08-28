@@ -461,10 +461,14 @@ export class ParticleEmitter {
         this.alphaTest = this.emitter.alpha_test;
         this.texScaleX = this.emitter.tex_scale_x;
         this.texScaleY = this.emitter.tex_scale_y;
-        this.texHeight = rust.WowM2ParticleEmitter.get_max_particles();
+        this.texHeight = this.maxParticles();
         this.texWidth = rust.WowM2ParticleEmitter.get_texels_per_particle();
         this.pixelData = new Float32Array(this.texHeight * this.texWidth * 4);
         this.sortKeyBase = makeSortKey(GfxRendererLayer.TRANSLUCENT + this.index);
+    }
+
+    public maxParticles(): number {
+        return this.emitter.max_particles;
     }
 
     public setMegaStateFlags(renderInst: GfxRenderInst) {

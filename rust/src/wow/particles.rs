@@ -11,7 +11,6 @@ use super::{
     m2::{M2BlendingMode, ParticleEmitter as M2ParticleEmitter, ParticleShaderType},
 };
 
-pub const MAX_PARTICLES: usize = 300;
 pub const TEXELS_PER_PARTICLE: usize = 4;
 const PARTICLE_COORDINATE_FIX_SLICE: &[f32] = &[
     0.0, 1.0, 0.0, 0.0,
@@ -65,7 +64,7 @@ impl Particle {
     
     fn create_spherical(emitter: &mut Emitter) -> Self {
         let emission_area = emitter.params.emission_area_width - emitter.params.emission_area_length;
-        let radius = emitter.params.emission_area_length + emitter.rng.gen::<f32>() * emission_area;
+        let radius = emitter.params.emission_area_length + emitter.rng.gen_range(0.0..1.0) * emission_area;
         let polar = emitter.random_range(1.0) * emitter.params.vertical_range;
         let azimuth = emitter.random_range(1.0) * emitter.params.horizontal_range;
         let emission_dir = vec3(
@@ -84,7 +83,7 @@ impl Particle {
                 velocity = vec3(
                     polar.cos() * azimuth.cos(),
                     polar.cos() * azimuth.sin(),
-                    polar.cos()
+                    polar.sin()
                 );
             }
         } else {
@@ -185,6 +184,8 @@ pub struct Emitter {
     spline: Option<BezierSpline>,
     tex_col_bits: u32,
     tex_col_mask: u32,
+    z_source: Option<f32>,
+    pub max_particles: usize,
     pub params: EmitterParams,
     pub tex_scale_x: f32,
     pub tex_scale_y: f32,
@@ -195,7 +196,7 @@ pub struct Emitter {
 }
 
 impl Emitter {
-    pub fn new(mut m2_emitter: M2ParticleEmitter, txac: u16) -> Self {
+    pub fn new(mut m2_emitter: M2ParticleEmitter, txac: u16, z_source: Option<f32>) -> Self {
         let model_mat = Mat4::identity();
         let wind = m2_emitter.wind_vector.into();
         let position = m2_emitter.position.into();
@@ -211,6 +212,7 @@ impl Emitter {
         let tex_col_mask = (1 << tex_col_bits) - 1;
         let tex_scale_x = 1.0 / m2_emitter.texture_dimension_rows as f32;
         let tex_scale_y = 1.0 / m2_emitter.texture_dimensions_cols as f32;
+        let max_particles = (m2_emitter.lifespan.max_value(0.0) * m2_emitter.emission_rate.max_value(0.0) * 1.5) as usize;
         let alpha_test = match m2_emitter.blending_type {
             0 => -1.0,
             1 => 0.501960814,
@@ -222,8 +224,9 @@ impl Emitter {
         Emitter {
             model_mat,
             rng: thread_rng(),
+            max_particles,
             particle_coordinate_fix: Mat4::from_column_slice(PARTICLE_COORDINATE_FIX_SLICE),
-            particles: Vec::with_capacity(MAX_PARTICLES),
+            particles: Vec::with_capacity(max_particles as usize),
             particles_to_emit: 0.0,
             params: EmitterParams::default(),
             wind,
@@ -237,6 +240,7 @@ impl Emitter {
             frag_shader_type,
             blend_mode,
             bone,
+            z_source,
             inner: m2_emitter,
         }
     }
@@ -266,10 +270,10 @@ impl Emitter {
             self.params.emission_area_length = animation_manager.get_current_value_with_blend(&self.inner.emission_area_length, 0.0);
             self.params.emission_area_width = animation_manager.get_current_value_with_blend(&self.inner.emission_area_width, 0.0);
 
-            if !animation_manager.has_exp2 {
-                self.params.z_source = animation_manager.get_current_value_with_blend(&self.inner.z_source, 0.0);
+            if let Some(z_source) = self.z_source {
+                self.params.z_source = z_source;
             } else {
-                self.params.z_source = 0.0;
+                self.params.z_source = animation_manager.get_current_value_with_blend(&self.inner.z_source, 0.0);
             }
 
             if self.inner.use_compressed_gravity() {
@@ -295,9 +299,7 @@ impl Emitter {
         };
 
         if !self.inner.check_flag(0x10) {
-            let mut pos = vec3_to_vec4(&particle.position);
-            pos[3] = 1.0;
-            particle.position = (self.model_mat * pos).xyz();
+            particle.position = transform(&particle.position, &self.model_mat);
             particle.velocity = mat4_to_mat3(&self.model_mat) * particle.velocity;
             if self.inner.check_flag(0x2000) {
                 particle.position[2] = 0.0;
@@ -356,7 +358,7 @@ impl Emitter {
         if self.params.enabled {
             self.particles_to_emit += self.emission_rate() * dt_secs;
             while self.particles_to_emit > 1.0 {
-                if self.particles.len() < MAX_PARTICLES {
+                if self.particles.len() < self.max_particles {
                     self.create_particle();
                 }
                 self.particles_to_emit -= 1.0;
@@ -422,12 +424,12 @@ impl Emitter {
     }
 
     pub fn fill_texture(&self, texture: &Float32Array) {
-        let mut data = vec![0.0; MAX_PARTICLES * TEXELS_PER_PARTICLE * 4];
+        let mut data = vec![0.0; self.max_particles * TEXELS_PER_PARTICLE * 4];
         for (i, particle) in self.particles.iter().enumerate() {
             let mut offs = TEXELS_PER_PARTICLE * i * 4;
             let mut pos = particle.position.clone();
             if self.inner.translate_particle_with_bone() {
-                pos = self.model_mat.transform_vector(&pos);
+                pos = transform(&particle.position, &self.model_mat);
             }
             let texel_slices = [
                 pos.as_slice(),
@@ -460,10 +462,6 @@ impl Emitter {
         }
     }
 
-    pub fn get_max_particles() -> usize {
-        MAX_PARTICLES
-    }
-
     pub fn get_texels_per_particle() -> usize {
         TEXELS_PER_PARTICLE
     }
@@ -471,4 +469,10 @@ impl Emitter {
     pub fn num_particles(&self) -> usize {
         self.particles.len()
     }
+}
+
+fn transform(p: &Vec3, m: &Mat4) -> Vec3 {
+    let mut p_hom = vec3_to_vec4(p);
+    p_hom[3] = 1.0;
+    (m * p_hom).xyz()
 }

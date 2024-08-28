@@ -607,7 +607,6 @@ export class WdtScene implements Viewer.SceneGfx {
     }
 
     private prepareToRender(): void {
-        window.debug = [];
         const renderInstManager = this.renderHelper.renderInstManager;
 
         const template = this.renderHelper.pushTemplateRenderInst();

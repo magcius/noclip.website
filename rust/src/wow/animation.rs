@@ -128,6 +128,21 @@ impl<T> M2Track<T> {
     }
 }
 
+impl<T> M2Track<T> where T: PartialOrd + Copy {
+    pub fn max_value(&self, default: T) -> T {
+        let values = self.values();
+        let mut max = default;
+        for i in 0..values.len() {
+            for j in 0..values[i].len() {
+                if max < values[i][j] {
+                    max = values[i][j];
+                }
+            }
+        }
+        max
+    }
+}
+
 #[derive(DekuRead, Debug, Clone)]
 pub struct M2TextureTransform {
     pub translation: M2Track<Vec3>,
@@ -183,7 +198,6 @@ pub struct AnimationManager {
     colors: Vec<M2Color>,
     bones: Vec<M2CompBone>,
     lights: Vec<M2Light>,
-    pub has_exp2: bool,
 }
 
 #[wasm_bindgen(js_class = "WowM2AnimationManager")]
@@ -455,7 +469,6 @@ impl AnimationManager {
         colors: Vec<M2Color>,
         bones: Vec<M2CompBone>,
         lights: Vec<M2Light>,
-        has_exp2: bool,
     ) -> Self {
         let global_sequence_times = vec![0.0; global_sequence_durations.len()];
         // pull out the "Stand" animation, which is the resting animation for all models
@@ -480,7 +493,6 @@ impl AnimationManager {
             lights,
             global_sequence_times,
             rng,
-            has_exp2,
         }
     }
 

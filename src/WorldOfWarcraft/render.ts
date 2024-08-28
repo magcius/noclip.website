@@ -1,4 +1,4 @@
-import { mat4 } from "gl-matrix";
+import { mat4, vec3 } from "gl-matrix";
 import { invlerp, lerp } from "../MathHelpers.js";
 import { TextureMapping } from "../TextureHolder.js";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
@@ -69,9 +69,10 @@ import {
     WaterProgram,
     WmoProgram,
 } from "./program.js";
-import { FrameData, MAP_SIZE, MapArray, View } from "./scenes.js";
+import { FrameData, MAP_SIZE, MapArray, View, WdtScene } from "./scenes.js";
 import { TextureCache } from "./tex.js";
 import { WowWmoGroupDescriptor } from "../../rust/pkg/index.js";
+import { drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk.js";
 
 type TextureMappingArray = (TextureMapping | null)[];
 
@@ -170,10 +171,14 @@ export class ModelRenderer {
             }
         }
 
+        let maxParticles = 0;
         for (const emitter of this.model.particleEmitters) {
+            if (emitter.maxParticles() > maxParticles) {
+                maxParticles = emitter.maxParticles();
+            }
             this.emitterTextures.push(this.getEmitterTextures(device, emitter));
         }
-        const particleIndexBuf = makeTriangleIndexBuffer(GfxTopology.Quads, 0, rust.WowM2ParticleEmitter.get_max_particles() * 4);
+        const particleIndexBuf = makeTriangleIndexBuffer(GfxTopology.Quads, 0, maxParticles * 4);
         this.particleQuadIndices = {
             buffer: makeStaticDataBuffer(
                 device,
@@ -419,7 +424,6 @@ export class ModelRenderer {
                 }
 
                 emitter.updateDataTex(this.device);
-                window.debug.push(emitter.numParticles());
 
                 let renderInst = renderInstManager.newRenderInst();
                 let offs = renderInst.allocateUniformBuffer(
