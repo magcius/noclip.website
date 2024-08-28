@@ -574,11 +574,7 @@ void mainPS() {
                 v_Normal,
                 interiorAmbientColor,
                 interiorDirectColor,
-
-                // FIXME: this should be v_Color.a, but adding interior/exterior
-                // blending results in too-bright doorways
                 v_Color0.a,
-
                 applyInteriorLight,
                 applyExteriorLight,
                 accumLight,
