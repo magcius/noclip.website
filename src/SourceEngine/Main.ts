@@ -1707,19 +1707,6 @@ export class SourceRenderer implements SceneGfx {
         this.reflectViewRenderer.reset();
     }
 
-    /*
-    public getDefaultWorldMatrix(dst: mat4): void {
-        mat4.identity(dst);
-
-        if (this.bspRenderers.length === 1) {
-            const player_start = this.bspRenderers[0].entitySystem.findEntityByType(info_player_start);
-            if (player_start !== null) {
-                mat4.mul(dst, noclipSpaceFromSourceEngineSpace, player_start.updateModelMatrix());
-            }
-        }
-    }
-    */
-
     public adjustCameraController(c: CameraController) {
         c.setSceneMoveSpeedMult(1/20);
     }

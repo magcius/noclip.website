@@ -301,7 +301,7 @@ impl Wmo {
     pub fn group_in_modelspace_frustum(&self, group_id: u32, frustum: &ConvexHull) -> bool {
         let group = self.get_group(group_id);
         let aabb: AABB = group.header.bounding_box.into();
-        frustum.contains(&aabb)
+        frustum.contains_aabb(&aabb)
     }
 
     pub fn get_group_text(&self, index: usize) -> Option<String> {
@@ -488,7 +488,7 @@ impl PortalData {
 
 impl PortalData {
     pub fn in_frustum(&self, frustum: &ConvexHull) -> bool {
-        frustum.contains(&self.aabb)
+        frustum.contains_aabb(&self.aabb)
     }
 
     fn clip_frustum(&self, eye: &Vec3, frustum: &ConvexHull) -> ConvexHull {

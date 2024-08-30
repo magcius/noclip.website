@@ -1,6 +1,6 @@
 use core::f32;
 
-use nalgebra_glm::{make_mat4, make_vec3, triangle_normal, vec3, vec4, Mat4, Vec3};
+use nalgebra_glm::{make_mat4, make_vec3, triangle_normal, vec3, vec4, Mat4, Vec2, Vec3};
 use wasm_bindgen::prelude::*;
 
 #[derive(Default, Debug, Clone)]
@@ -55,6 +55,21 @@ impl Default for AABB {
 }
 
 impl AABB {
+    pub fn from_f32(min_x: f32, min_y: f32, min_z: f32, max_x: f32, max_y: f32, max_z: f32) -> Self {
+        AABB {
+            min: Vec3::new(min_x, min_y, min_z),
+            max: Vec3::new(max_x, max_y, max_z),
+        }
+    }
+
+    pub fn from_slice(slice: &[f32]) -> Self {
+        assert_eq!(slice.iter().count(), 6);
+        AABB {
+            min: make_vec3(&slice[0..3]),
+            max: make_vec3(&slice[3..6]),
+        }
+    }
+
     pub fn transform(&mut self, mat: &Mat4) {
         // Transforming Axis-Aligned Bounding Boxes from Graphics Gems.
         let min = self.min.clone();
@@ -100,6 +115,7 @@ impl AABB {
     }
 }
 
+#[wasm_bindgen(js_name = "IntersectionState")]
 pub enum IntersectionState {
     Inside,
     Outside,
@@ -114,7 +130,16 @@ pub struct ConvexHull {
 }
 
 impl ConvexHull {
-    pub fn intersect(&self, aabb: &AABB) -> IntersectionState {
+    pub fn contains_point(&self, p: &Vec3) -> bool {
+        for plane in &self.planes {
+            if plane.distance(p) > 0.0 {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    pub fn intersect_aabb(&self, aabb: &AABB) -> IntersectionState {
         let mut result = IntersectionState::Inside;
         for plane in &self.planes {
             let nearest = vec3(
@@ -161,8 +186,28 @@ impl ConvexHull {
         result
     }
 
-    pub fn contains(&self, aabb: &AABB) -> bool {
-        match self.intersect(aabb) {
+    pub fn intersect_sphere(&self, center: &Vec3, radius: f32) -> IntersectionState {
+        let mut result = IntersectionState::Inside;
+        for plane in &self.planes {
+            let dist = plane.distance(center);
+            if (dist > radius) {
+                return IntersectionState::Outside;
+            } else if (dist > -radius) {
+                result = IntersectionState::Intersection;
+            }
+        }
+        return result;
+    }
+
+    pub fn contains_aabb(&self, aabb: &AABB) -> bool {
+        match self.intersect_aabb(aabb) {
+            IntersectionState::Outside => false,
+            _ => true,
+        }
+    }
+
+    pub fn contains_sphere(&self, center: &Vec3, radius: f32) -> bool {
+        match self.intersect_sphere(center, radius) {
             IntersectionState::Outside => false,
             _ => true,
         }
@@ -184,17 +229,46 @@ impl ConvexHull {
         ConvexHull { planes: Vec::new() }
     }
 
+    pub fn copy(&mut self) -> Self {
+        return self.clone()
+    }
+
     pub fn clear(&mut self) {
         self.planes.clear();
     }
 
-    pub fn copy_js_plane(&mut self, normal_slice: &[f32], d: f32) {
-        assert_eq!(normal_slice.len(), 3);
-        let normal = make_vec3(normal_slice);
+    pub fn push_plane(&mut self, x: f32, y: f32, z: f32, d: f32) {
+        let normal = Vec3::new(x, y, z);
         self.planes.push(Plane { normal, d });
     }
 
-    pub fn transform_js(&mut self, mat_slice: &[f32]) {
+    pub fn js_intersect_aabb(&mut self, min_x: f32, min_y: f32, min_z: f32, max_x: f32, max_y: f32, max_z: f32) -> IntersectionState {
+        let aabb = AABB::from_f32(min_x, min_y, min_z, max_x, max_y, max_z);
+        self.intersect_aabb(&aabb)
+    }
+
+    pub fn js_contains_aabb(&mut self, min_x: f32, min_y: f32, min_z: f32, max_x: f32, max_y: f32, max_z: f32) -> bool {
+        let aabb = AABB::from_f32(min_x, min_y, min_z, max_x, max_y, max_z);
+        self.contains_aabb(&aabb)
+    }
+
+    pub fn js_contains_point(&mut self, pt_slice: &[f32]) -> bool {
+        assert_eq!(pt_slice.iter().count(), 3);
+        let pt = make_vec3(pt_slice);
+        self.contains_point(&pt)
+    }
+
+    pub fn js_intersect_sphere(&mut self, x: f32, y: f32, z: f32, radius: f32) -> IntersectionState {
+        let center = Vec3::new(x, y, z);
+        self.intersect_sphere(&center, radius)
+    }
+
+    pub fn js_contains_sphere(&mut self, x: f32, y: f32, z: f32, radius: f32) -> bool {
+        let center = Vec3::new(x, y, z);
+        self.contains_sphere(&center, radius)
+    }
+
+    pub fn js_transform(&mut self, mat_slice: &[f32]) {
         assert_eq!(mat_slice.iter().count(), 16);
         let mat = make_mat4(mat_slice);
         self.transform(&mat);

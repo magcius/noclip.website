@@ -16,6 +16,7 @@ import { AdtCoord, AdtData, Database, DoodadData, LazyWorldData, ModelData, Part
 import { BaseProgram, LoadingAdtProgram, ModelProgram, ParticleProgram, SkyboxProgram, TerrainProgram, WaterProgram, WmoProgram } from "./program.js";
 import { LoadingAdtRenderer, ModelRenderer, SkyboxRenderer, TerrainRenderer, WaterRenderer, WmoRenderer } from "./render.js";
 import { TextureCache } from "./tex.js";
+import type { ConvexHull } from "../../rust/pkg/index.js";
 
 export const MAP_SIZE = 17066;
 
@@ -307,7 +308,7 @@ export class WdtScene implements Viewer.SceneGfx {
     public frozenFrustum = new Frustum();
     private frozenFrameData: FrameData | null = null;
     private modelCamera = vec3.create();
-    private modelFrustum = new rust.ConvexHull();
+    private modelFrustum: ConvexHull;
 
     constructor(private device: GfxDevice, public world: WorldData | LazyWorldData, public renderHelper: GfxRenderHelper, private db: Database) {
         console.time("WdtScene construction");
@@ -521,8 +522,8 @@ export class WdtScene implements Viewer.SceneGfx {
         frame.addWmoDef(wmo, def);
 
         vec3.transformMat4(this.modelCamera, worldCamera, def.invPlacementMatrix);
-        worldFrustum.copyToRust(this.modelFrustum);
-        this.modelFrustum.transform_js(def.invPlacementMatrix as Float32Array);
+        this.modelFrustum = worldFrustum.getRust().copy();
+        this.modelFrustum.js_transform(def.invPlacementMatrix as Float32Array);
 
         // Find groups the camera's a member of (i.e. within), or
         // if they're merely in the frustum. Also record if we started in an
