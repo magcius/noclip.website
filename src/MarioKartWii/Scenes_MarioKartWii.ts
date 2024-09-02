@@ -475,6 +475,9 @@ class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
         };
 
         const obj = renderer.commonCache.objFlow.objects[gobj.objectId];
+        if (obj === undefined)
+            return;
+
         const objName = obj.name;
 
         function animFrame(frame: number): AnimationController { const a = new AnimationController(); a.setTimeInFrames(frame); return a; }
