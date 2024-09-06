@@ -109,10 +109,10 @@ layout(std140) uniform ub_ObjectParams {
 // TODO(jstpierre): If we combine time and speed, I think we can lose a vec4 here...
 #define u_TreeSwaySpeedLerpStart       (u_TreeSwayParam[4].x)
 #define u_TreeSwaySpeedLerpEnd         (u_TreeSwayParam[4].y)
-
-vec4 u_TreeSwayParam[5];
+    vec4 u_TreeSwayParam[5];
 
 #endif
+
     vec4 u_ModulationColor;
 
 #define u_AlphaTestReference (u_Misc[0].x)
@@ -253,22 +253,15 @@ vec4 WorldLightCalcAllAttenuation(in vec3 t_PositionWorld) {
 }
 
 vec3 WorldLightCalcAllDiffuse(in DiffuseLightInput t_DiffuseLightInput) {
-#if defined DEBUG_FULLBRIGHT
-    return vec3(0.0);
-#else
     vec3 t_FinalLight = vec3(0.0);
     for (int i = 0; i < ${ShaderTemplate_Generic.MaxDynamicWorldLights}; i++)
         t_FinalLight += WorldLightCalcDiffuse(t_DiffuseLightInput.PositionWorld, t_DiffuseLightInput.NormalWorld, t_DiffuseLightInput.HalfLambert, t_DiffuseLightInput.LightAttenuation[i], u_WorldLights[i]);
     return t_FinalLight;
-#endif
 }
 #endif
 
 #if defined USE_AMBIENT_CUBE
 vec3 AmbientLight(in vec3 t_NormalWorld) {
-#if defined DEBUG_FULLBRIGHT
-    return vec3(1.0);
-#else
     vec3 t_Weight = t_NormalWorld * t_NormalWorld;
     bvec3 t_Negative = lessThan(t_NormalWorld, vec3(0.0));
     return (
@@ -276,13 +269,11 @@ vec3 AmbientLight(in vec3 t_NormalWorld) {
         t_Weight.y * u_AmbientCube[t_Negative.y ? 3 : 2].rgb +
         t_Weight.z * u_AmbientCube[t_Negative.z ? 5 : 4].rgb
     );
-#endif
 }
 #endif
 
 void CalcTreeSway(inout vec3 t_PositionLocal) {
 #if defined VERT && defined USE_TREE_SWAY
-
     Mat4x3 t_WorldFromLocalMatrix = CalcWorldFromLocalMatrix();
     float t_WindIntensity = length(u_TreeSwayWindDir);
     vec3 t_WindDirLocal = Mul(vec3(u_TreeSwayWindDir, 0.0), t_WorldFromLocalMatrix).xyz;
@@ -1032,10 +1023,8 @@ void mainPS() {
 
     t_FinalColor.rgb += t_FinalDiffuse;
 
-#if !defined DEBUG_DIFFUSEONLY
     t_FinalColor.rgb += t_SpecularLighting.rgb;
     t_FinalColor.rgb += t_SpecularLightingEnvMap.rgb;
-#endif
 
     t_FinalColor.a = t_Albedo.a;
     if (!use_base_alpha_envmap_mask)

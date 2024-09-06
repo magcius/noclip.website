@@ -1550,8 +1550,8 @@ export class BSPFile {
                     v.normal[1] = vertnormals[normIndex * 3 + 1];
                     v.normal[2] = vertnormals[normIndex * 3 + 2];
 
-                    // Alpha (Unused)
-                    v.alpha = 1.0;
+                    // Alpha
+                    v.alpha = 0.0;
 
                     // Texture Coordinates
                     calcTexCoord(v.uv, v.position, tex.textureMapping);
