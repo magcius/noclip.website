@@ -6,7 +6,7 @@ import { GfxRenderCache } from "../../gfx/render/GfxRenderCache.js";
 import { assert, nArray } from "../../util.js";
 import { LightmapPacker, LightmapPackerPage, FaceLightmapData } from "../BSPFile.js";
 import { SourceRenderContext } from "../Main.js";
-import { RGBM_SCALE } from "./MaterialBase.js";
+import { BaseMaterial, RGBM_SCALE } from "./MaterialBase.js";
 
 class LightmapPage {
     public gfxTexture: GfxTexture;
@@ -213,12 +213,22 @@ function lightmapPackRuntimeBumpmap(dstPage: LightmapPage, location: Readonly<Fa
 }
 
 
-export class FaceLightmap {
+export class FaceLightmapUpdater {
     // The styles that we built our lightmaps for.
-    public lightmapStyleIntensities: number[];
+    private lightmapStyleIntensities: number[];
+    private initialized: boolean = false;
+    private wantsLightmap: boolean = false;
+    private wantsBumpmap: boolean = false;
 
-    constructor(public lightmapData: FaceLightmapData, private wantsLightmap: boolean, private wantsBumpmap: boolean) {
+    constructor(public lightmapData: FaceLightmapData) {
         this.lightmapStyleIntensities = nArray(this.lightmapData.styles.length, () => -1);
+    }
+
+    public setMaterial(materialInstance: BaseMaterial): void {
+        assert(!this.initialized);
+        this.initialized = true;
+        this.wantsLightmap = materialInstance.wantsLightmap;
+        this.wantsBumpmap = materialInstance.wantsBumpmappedLightmap;
     }
 
     public checkDirty(renderContext: SourceRenderContext): boolean {
@@ -236,11 +246,14 @@ export class FaceLightmap {
         return false;
     }
 
-    public buildLightmap(renderContext: SourceRenderContext, managerPageIndex: number): void {
+    public buildLightmap(renderContext: SourceRenderContext, pageOffset: number): void {
+        if (!this.initialized)
+            return;
+
         const worldLightingState = renderContext.worldLightingState;
         const scratchpad = renderContext.lightmapManager.scratchpad;
 
-        const dstPage = renderContext.lightmapManager.getPage(managerPageIndex);
+        const dstPage = renderContext.lightmapManager.getPage(pageOffset + this.lightmapData.pageIndex);
         const hasLightmap = this.lightmapData.samples !== null;
         if (this.wantsLightmap && hasLightmap) {
             const texelCount = this.lightmapData.width * this.lightmapData.height;

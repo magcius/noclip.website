@@ -48,8 +48,9 @@ export interface BSPSurface {
 
     // Since our surfaces are merged together from multiple BSP surfaces, we can have multiple
     // surface lightmaps, but they're guaranteed to have been packed into the same lightmap page.
-    lightmapData: FaceLightmapData[];
     lightmapPackerPageIndex: number;
+
+    faceList: number[];
 
     bbox: AABB;
 }
@@ -351,7 +352,6 @@ class BSPFaceInfo {
     public surfaceIndex: number = -1;
     public startIndex: number = 0;
     public endIndex: number = 0;
-    public lightmapData: FaceLightmapData;
     public overlaySurfaces: number[] = [];
 }
 
@@ -370,13 +370,13 @@ class OverlayInfo {
 interface OverlaySurface {
     vertex: MeshVertex[];
     indices: number[];
-    lightmapData: FaceLightmapData;
+    lightmapPackerPageIndex: number;
     originFaceList: number[];
+    bbox: AABB;
 }
 
 interface OverlayResult {
     surfaces: OverlaySurface[];
-    bbox: AABB;
 }
 
 function buildOverlayPlane(dst: MeshVertex[], overlayInfo: OverlayInfo): void {
@@ -465,12 +465,10 @@ function calcBarycentricsFromTri(dst: vec2, p: ReadonlyVec3, p0: ReadonlyVec3, p
     dst[1] = calcWedgeArea2(p2, p0, p) / outerTriArea2;
 }
 
-function buildOverlay(overlayInfo: OverlayInfo, faceInfos: BSPFaceInfo[], indexData: Uint32Array, vertexData: Float32Array): OverlayResult {
+function buildOverlay(overlayInfo: OverlayInfo, faceInfos: BSPFaceInfo[], bspSurfaces: BSPSurface[], indexData: Uint32Array, vertexData: Float32Array): OverlayResult {
     const surfaces: OverlaySurface[] = [];
     const surfacePoints = nArray(3, () => new MeshVertex());
     const surfacePlane = new Plane();
-
-    const bbox = new AABB();
 
     for (let i = 0; i < overlayInfo.faces.length; i++) {
         const face = overlayInfo.faces[i];
@@ -479,6 +477,8 @@ function buildOverlay(overlayInfo: OverlayInfo, faceInfos: BSPFaceInfo[], indexD
         const vertex: MeshVertex[] = [];
         const indices: number[] = [];
         const originFaceList: number[] = [];
+
+        const bbox = new AABB();
 
         for (let index = faceInfo.startIndex; index < faceInfo.endIndex; index += 3) {
             const overlayPoints = nArray(4, () => new MeshVertex());
@@ -545,18 +545,18 @@ function buildOverlay(overlayInfo: OverlayInfo, faceInfos: BSPFaceInfo[], indexD
 
         originFaceList.push(face);
 
-        const lightmapData = faceInfo.lightmapData;
-        surfaces.push({ vertex, indices, lightmapData, originFaceList });
+        const lightmapPackerPageIndex = bspSurfaces[faceInfo.surfaceIndex].lightmapPackerPageIndex;
+        surfaces.push({ vertex, indices, lightmapPackerPageIndex, originFaceList, bbox });
     }
 
     // Sort surface and merge them together.
-    surfaces.sort((a, b) => b.lightmapData.pageIndex - a.lightmapData.pageIndex);
+    surfaces.sort((a, b) => b.lightmapPackerPageIndex - a.lightmapPackerPageIndex);
 
     for (let i = 1; i < surfaces.length; i++) {
         const i0 = i - 1, i1 = i;
         const s0 = surfaces[i0], s1 = surfaces[i1];
 
-        if (s0.lightmapData.pageIndex !== s1.lightmapData.pageIndex)
+        if (s0.lightmapPackerPageIndex !== s1.lightmapPackerPageIndex)
             continue;
 
         // Merge s1 into s0, then delete s0.
@@ -566,11 +566,12 @@ function buildOverlay(overlayInfo: OverlayInfo, faceInfos: BSPFaceInfo[], indexD
             s0.indices.push(baseVertex + s1.indices[j]);
         for (let j = 0; j < s1.originFaceList.length; j++)
             ensureInList(s0.originFaceList, s1.originFaceList[j]);
+        s0.bbox.union(s0.bbox, s1.bbox);
         surfaces.splice(i1, 1);
         i--;
     }
 
-    return { surfaces, bbox };
+    return { surfaces };
 }
 
 //#endregion
@@ -880,6 +881,7 @@ export class BSPFile {
     public detailObjects: DetailObjects | null = null;
     public staticObjects: StaticObjects | null = null;
     public visibility: BSPVisibility | null = null;
+    public lightmapData: FaceLightmapData[] = [];
     public lightmapPacker = new LightmapPacker();
 
     public indexData: ArrayBuffer;
@@ -1246,7 +1248,7 @@ export class BSPFile {
         }
         //#endregion
 
-        //#region MDOELS Parsing
+        //#region MODELS Parsing
         const models = getLumpData(LumpType.MODELS).createDataView();
         const faceToModelIdx: number[] = [];
         for (let idx = 0x00; idx < models.byteLength; idx += 0x30) {
@@ -1277,9 +1279,7 @@ export class BSPFile {
         interface Face {
             index: number;
             texinfo: number;
-            lightmapData: FaceLightmapData;
             vertnormalBase: number;
-            plane: ReadonlyVec3;
         }
 
         const faces: Face[] = [];
@@ -1290,7 +1290,6 @@ export class BSPFile {
 
         // Do some initial surface parsing, pack lightmaps.
         for (let i = 0, idx = 0x00; idx < facelist.byteLength; i++, idx += 0x38, numfaces++) {
-            const planenum = facelist.getUint16(idx + 0x00, true);
             const numedges = facelist.getUint16(idx + 0x08, true);
             const texinfo = facelist.getUint16(idx + 0x0A, true);
             const tex = texinfos[texinfo];
@@ -1332,9 +1331,9 @@ export class BSPFile {
 
             // Allocate ourselves a lightmap page.
             this.lightmapPacker.allocate(lightmapData);
+            this.lightmapData[i] = lightmapData;
 
-            const plane = readVec3(planes, planenum * 0x14);
-            faces.push({ index: i, texinfo, lightmapData, vertnormalBase, plane });
+            faces.push({ index: i, texinfo, vertnormalBase });
         }
 
         const [leafsLump, leafsVersion] = getLumpDataEx(LumpType.LEAFS);
@@ -1550,7 +1549,7 @@ export class BSPFile {
                     canMerge = false;
                 else if (texinfos[prevFace.texinfo].texName !== texName)
                     canMerge = false;
-                else if (prevFace.lightmapData.pageIndex !== face.lightmapData.pageIndex)
+                else if (this.lightmapData[prevFace.index].pageIndex !== this.lightmapData[face.index].pageIndex)
                     canMerge = false;
                 else if (faceToModelIdx[prevFace.index] !== faceToModelIdx[face.index])
                     canMerge = false;
@@ -1560,6 +1559,7 @@ export class BSPFile {
             }
 
             const idx = face.index * 0x38;
+            const planenum = facelist.getUint16(idx + 0x00, true);
             const side = facelist.getUint8(idx + 0x02);
             const onNode = !!facelist.getUint8(idx + 0x03);
             const firstedge = facelist.getUint32(idx + 0x04, true);
@@ -1584,10 +1584,12 @@ export class BSPFile {
 
             const scratchNormal = scratchTangentS; // reuse
             vec3.cross(scratchNormal, scratchTangentS, scratchTangentT);
-            // Detect if we need to flip tangents.
-            const tangentSSign = vec3.dot(face.plane, scratchNormal) > 0.0 ? -1.0 : 1.0;
 
-            const lightmapData = face.lightmapData;
+            // Detect if we need to flip tangents.
+            const plane = readVec3(planes, planenum * 0x14);
+            const tangentSSign = vec3.dot(plane, scratchNormal) > 0.0 ? -1.0 : 1.0;
+
+            const lightmapData = this.lightmapData[face.index];
             const lightmapPackerPageIndex = lightmapData.pageIndex;
             const lightmapPage = this.lightmapPacker.pages[lightmapData.pageIndex];
 
@@ -1660,10 +1662,8 @@ export class BSPFile {
                 assert(indexCount === ((disp.sideLength - 1) ** 2) * 6);
 
                 // TODO(jstpierre): Merge disps
-                surface = { texName, startIndex: dstOffsIndex, indexCount, center, wantsTexCoord0Scale, lightmapData: [], lightmapPackerPageIndex, bbox: result.bbox };
+                surface = { texName, startIndex: dstOffsIndex, indexCount, center, wantsTexCoord0Scale, lightmapPackerPageIndex, faceList: [], bbox: result.bbox };
                 this.surfaces.push(surface);
-
-                surface.lightmapData.push(lightmapData);
 
                 vertexCount = disp.vertexCount;
             } else {
@@ -1741,14 +1741,14 @@ export class BSPFile {
                 surface = mergeSurface;
 
                 if (surface === null) {
-                    surface = { texName, startIndex: dstOffsIndex, indexCount: 0, center, wantsTexCoord0Scale, lightmapData: [], lightmapPackerPageIndex, bbox };
+                    surface = { texName, startIndex: dstOffsIndex, indexCount: 0, center, wantsTexCoord0Scale, lightmapPackerPageIndex, faceList: [], bbox };
                     this.surfaces.push(surface);
                 } else {
                     surface.bbox.union(surface.bbox, bbox);
                 }
 
                 surface.indexCount += indexCount;
-                surface.lightmapData.push(lightmapData);
+                surface.faceList.push(face.index);
 
                 vertexCount = numedges;
             }
@@ -1756,7 +1756,6 @@ export class BSPFile {
             dstOffsIndex += indexCount;
             dstIndexBase += vertexCount;
 
-            faceInfo.lightmapData = lightmapData;
             faceInfo.endIndex = dstOffsIndex;
 
             // Associate surface with the right face and model.
@@ -1834,7 +1833,7 @@ export class BSPFile {
 
             const surfaceIndexes: number[] = [];
 
-            const overlayResult = buildOverlay(overlayInfo, this.faceInfos, indexBuffer.getAsUint32Array(), vertexBuffer.getAsFloat32Array());
+            const overlayResult = buildOverlay(overlayInfo, this.faceInfos, this.surfaces, indexBuffer.getAsUint32Array(), vertexBuffer.getAsFloat32Array());
             for (let j = 0; j < overlayResult.surfaces.length; j++) {
                 const overlaySurface = overlayResult.surfaces[j];
 
@@ -1853,7 +1852,7 @@ export class BSPFile {
                 dstIndexBase += vertexCount;
 
                 const texName = tex.texName;
-                const surface: BSPSurface = { texName, startIndex, indexCount, center, wantsTexCoord0Scale: false, lightmapData: [], lightmapPackerPageIndex: 0, bbox: overlayResult.bbox };
+                const surface: BSPSurface = { texName, startIndex, indexCount, center, wantsTexCoord0Scale: false, lightmapPackerPageIndex: 0, faceList: [], bbox: overlaySurface.bbox };
 
                 const surfaceIndex = this.surfaces.push(surface) - 1;
 
@@ -1863,7 +1862,7 @@ export class BSPFile {
 
                 for (let k = 0; k < overlaySurface.originFaceList.length; k++) {
                     const faceInfo = this.faceInfos[overlaySurface.originFaceList[k]];
-                    ensureInList(faceInfo.overlaySurfaces, surfaceIndex);
+                    faceInfo.overlaySurfaces.push(surfaceIndex);
                 }
             }
 

@@ -205,11 +205,6 @@ export class BaseEntity {
         if (!this.visible || !this.enabled || !this.alive || this.spawnState !== SpawnState.Spawned)
             return false;
 
-        if (this.modelStudio !== null)
-            return this.modelStudio.visible;
-        else if (this.modelBSP !== null)
-            return this.modelBSP.visible;
-
         return true;
     }
 

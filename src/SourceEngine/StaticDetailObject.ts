@@ -589,7 +589,7 @@ export class StaticPropRenderer {
             this.studioModelInstance.movement(renderContext);
     }
 
-    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, bsp: BSPFile): void {
+    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager): void {
         if (this.studioModelInstance === null)
             return;
 
@@ -599,6 +599,7 @@ export class StaticPropRenderer {
         // Test whether the prop is visible through the PVS.
 
         let visible = false;
+        const bsp = this.bspRenderer.bsp;
         const pvs = renderContext.currentView.pvs;
         for (let i = 0; i < this.staticProp.leafList.length; i++) {
             const leafidx = this.staticProp.leafList[i];
