@@ -5,7 +5,7 @@ import { drawWorldSpacePoint, getDebugOverlayCanvas2D, drawWorldSpaceLine } from
 import { Vec3NegX, Vec3NegY, Vec3NegZ, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero, invlerp, lerp } from "../../MathHelpers.js";
 import { fillVec4, fillVec3v, fillColor } from "../../gfx/helpers/UniformBufferHelpers.js";
 import { GfxrResolveTextureID } from "../../gfx/render/GfxRenderGraph.js";
-import { nArray, assert } from "../../util.js";
+import { nArray, assert, assertExists } from "../../util.js";
 import { BSPFile, Cubemap, WorldLight, WorldLightType, AmbientCube, BSPLeaf, WorldLightFlags } from "../BSPFile.js";
 import { BSPRenderer, SourceEngineView, SourceEngineViewType } from "../Main.js";
 import { VTF } from "../VTF.js";
@@ -259,7 +259,6 @@ export class ProjectedLight {
 
 const ambientCubeDirections = [ Vec3UnitX, Vec3NegX, Vec3UnitY, Vec3NegY, Vec3UnitZ, Vec3NegZ ] as const;
 export class LightCache {
-    private leaf: number = -1;
     public envCubemap: Cubemap | null;
 
     private worldLights: LightCacheWorldLight[] = nArray(4, () => new LightCacheWorldLight());
@@ -350,13 +349,12 @@ export class LightCache {
         const bspfile = bspRenderer.bsp;
 
         // Calculate leaf information.
-        this.leaf = bspfile.findLeafIdxForPoint(this.pos);
-        assert(this.leaf >= 0);
+        const leaf = assertExists(bspfile.queryPoint(this.pos));
 
         this.envCubemap = findEnvCubemapTexture(bspfile, this.pos);
 
         // Reset ambient cube to leaf lighting.
-        const hasAmbientLeafLighting = this.cacheAmbientLight(bspfile.leaflist[this.leaf]);
+        const hasAmbientLeafLighting = this.cacheAmbientLight(leaf);
 
         // Now go through and cache world lights.
         this.cacheWorldLights(bspfile.worldlights, hasAmbientLeafLighting);

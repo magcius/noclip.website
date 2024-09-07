@@ -617,7 +617,7 @@ export class SourceEngineView {
 
     public calcPVS(bsp: BSPFile, fallback: boolean, parentView: SourceEngineView | null = null): boolean {
         // Compute PVS from view.
-        const leaf = bsp.findLeafForPoint(this.cameraPos);
+        const leaf = bsp.queryPoint(this.cameraPos);
 
         const pvs = this.pvs;
         const numclusters = bsp.visibility !== null ? bsp.visibility.numclusters : this.pvs.words.length;
@@ -784,15 +784,23 @@ export class BSPRenderer {
         }
 
         if (!!(kinds & RenderObjectKind.Entities)) {
-            for (let i = 1; i < this.models.length; i++)
-                this.models[i].prepareToRenderModel(renderContext, renderInstManager);
-            for (let i = 0; i < this.entitySystem.entities.length; i++)
-                this.entitySystem.entities[i].prepareToRender(renderContext, renderInstManager);
+            for (let i = 1; i < this.models.length; i++) {
+                const bspModel = this.models[i];
+                bspModel.prepareToRenderModel(renderContext, renderInstManager);
+            }
+
+            for (let i = 0; i < this.entitySystem.entities.length; i++) {
+                const entity = this.entitySystem.entities[i];
+                // Checks visible flags, frustum and PVS
+                if (!entity.checkVisible(renderContext))
+                    continue;
+                entity.prepareToRender(renderContext, renderInstManager);
+            }
         }
 
         if (!!(kinds & RenderObjectKind.StaticProps))
             for (let i = 0; i < this.staticPropRenderers.length; i++)
-                this.staticPropRenderers[i].prepareToRender(renderContext, renderInstManager, this.bsp, renderContext.currentView.pvs);
+                this.staticPropRenderers[i].prepareToRender(renderContext, renderInstManager, this.bsp);
 
         renderInstManager.popTemplateRenderInst();
     }

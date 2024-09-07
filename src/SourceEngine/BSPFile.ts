@@ -856,6 +856,8 @@ export enum BSPFileVariant {
     Left4Dead2, // https://developer.valvesoftware.com/wiki/.bsp_(Source)/Game-Specific#Left_4_Dead_2_.2F_Contagion
 }
 
+type QueryLeafCallback = (leaf: BSPLeaf, leafIdx: number) => boolean; // Whether to continue
+
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
 const scratchVec3c = vec3.create();
@@ -1152,7 +1154,7 @@ export class BSPFile {
         }
         //#endregion
 
-        //#region PLANES Parsing
+        //#region NODES Parsing
         const planes = getLumpData(LumpType.PLANES).createDataView();
         for (let idx = 0x00; idx < nodes.byteLength; idx += 0x20) {
             const planenum = nodes.getUint32(idx + 0x00, true);
@@ -1767,13 +1769,10 @@ export class BSPFile {
             if (dispinfo >= 0) {
                 // Displacements don't come with surface leaf information.
                 // Use the bbox to mark ourselves in the proper leaves...
-                const leafSet = new Set<number>();
-                this.queryAABB(leafSet, surface.bbox);
-
-                for (const leafIdx of leafSet.values()) {
-                    const leaf = this.leaflist[leafIdx];
+                this.queryAABB(surface.bbox, (leaf) => {
                     ensureInList(leaf.faces, face.index);
-                }
+                    return true;
+                });
             }
         }
         //#endregion
@@ -1876,21 +1875,6 @@ export class BSPFile {
         this.indexData = indexBuffer.finalize();
     }
 
-    public findLeafIdxForPoint(p: ReadonlyVec3, nodeid: number = 0): number {
-        if (nodeid < 0) {
-            return -nodeid - 1;
-        } else {
-            const node = this.nodelist[nodeid];
-            const dot = node.plane.distance(p[0], p[1], p[2]);
-            return this.findLeafIdxForPoint(p, dot >= 0.0 ? node.child0 : node.child1);
-        }
-    }
-
-    public findLeafForPoint(p: ReadonlyVec3): BSPLeaf | null {
-        const leafidx = this.findLeafIdxForPoint(p);
-        return leafidx >= 0 ? this.leaflist[leafidx] : null;
-    }
-
     private findLeafWaterForPointR(p: ReadonlyVec3, liveLeafSet: Set<number>, nodeid: number): BSPLeafWaterData | null {
         if (nodeid < 0) {
             const leafidx = -nodeid - 1;
@@ -1925,15 +1909,25 @@ export class BSPFile {
         return this.findLeafWaterForPointR(p, liveLeafSet, 0);
     }
 
-    public queryAABB(dst: Set<number>, aabb: AABB, nodeid: number = 0): void {
+    public queryPoint(p: ReadonlyVec3, nodeid: number = 0): BSPLeaf | null {
+        if (nodeid < 0) {
+            return this.leaflist[-nodeid - 1];
+        } else {
+            const node = this.nodelist[nodeid];
+            const dot = node.plane.distance(p[0], p[1], p[2]);
+            return this.queryPoint(p, dot >= 0.0 ? node.child0 : node.child1);
+        }
+    }
+
+    public queryAABB(aabb: AABB, callback: QueryLeafCallback, nodeid = 0): boolean {
         if (nodeid < 0) {
             const leafidx = -nodeid - 1;
-            dst.add(leafidx);
+            return callback(this.leaflist[leafidx], leafidx);
         } else {
             const node = this.nodelist[nodeid];
 
             if (!AABB.intersect(node.bbox, aabb))
-                return;
+                return true;
 
             const plane = node.plane;
 
@@ -1950,14 +1944,13 @@ export class BSPFile {
 
             if (plane.distanceVec3(scratchVec3b) < 0) {
                 // Box is on the outside of child0; traverse child1.
-                this.queryAABB(dst, aabb, node.child1);
+                return this.queryAABB(aabb, callback, node.child1);
             } else if (plane.distanceVec3(scratchVec3a) > 0) {
                 // Box is on the outside of child1; traverse child0.
-                this.queryAABB(dst, aabb, node.child0);
+                return this.queryAABB(aabb, callback, node.child0);
             } else {
                 // Traverse both.
-                this.queryAABB(dst, aabb, node.child0);
-                this.queryAABB(dst, aabb, node.child1);
+                return this.queryAABB(aabb, callback, node.child0) && this.queryAABB(aabb, callback, node.child1);
             }
         }
     }

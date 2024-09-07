@@ -202,17 +202,57 @@ export class BaseEntity {
     }
 
     public shouldDraw(): boolean {
-        return this.visible && this.enabled && this.alive && this.spawnState === SpawnState.Spawned;
+        if (!this.visible || !this.enabled || !this.alive || this.spawnState !== SpawnState.Spawned)
+            return false;
+
+        if (this.modelStudio !== null)
+            return this.modelStudio.visible;
+        else if (this.modelBSP !== null)
+            return this.modelBSP.visible;
+
+        return true;
     }
 
-    public checkFrustum(renderContext: SourceRenderContext): boolean {
-        if (this.modelStudio !== null) {
-            return this.modelStudio.checkFrustum(renderContext);
-        } else if (this.modelBSP !== null) {
-            return this.modelBSP.checkFrustum(renderContext);
-        } else {
-            // TODO(jstpierre): Do what here?
+    public getLocalRenderBounds(): AABB | null {
+        if (this.modelStudio !== null)
+            return this.modelStudio.modelData.viewBB;
+        else if (this.modelBSP !== null)
+            return this.modelBSP.model.bbox;
+        return null;
+    }
+
+    public getRenderBounds(dst: AABB): boolean {
+        const bounds = this.getLocalRenderBounds();
+        if (bounds === null)
             return false;
+        dst.transform(bounds, this.modelMatrix);
+        return true;
+    }
+
+    protected checkFrustum(renderContext: SourceRenderContext): boolean {
+        this.getRenderBounds(scratchAABB);
+        return renderContext.currentView.frustum.contains(scratchAABB);
+    }
+
+    public checkVisible(renderContext: SourceRenderContext): boolean {
+        if (!this.shouldDraw() || !this.checkFrustum(renderContext))
+            return false;
+
+        if (this.getRenderBounds(scratchAABB)) {
+            const bsp = this.bspRenderer.bsp, pvs = renderContext.currentView.pvs;
+            let visible = false;
+            bsp.queryAABB(scratchAABB, (leaf) => {
+                if (pvs.getBit(leaf.cluster)) {
+                    visible = true;
+                    return false; // can stop here
+                }
+
+                return true; // keep going
+            });
+            return visible;
+        } else {
+            // Entity doesn't have render bounds, e.g. particle effects and such.
+            return true;
         }
     }
 
@@ -221,7 +261,8 @@ export class BaseEntity {
         return this.modelStudio!.modelData.seq.findIndex((seq) => seq.label === label);
     }
 
-    private playseqindex(index: number): void {
+    // TODO(jstpierre): Move all this to a baseanimation type class?
+    private playSequenceIndex(index: number): void {
         if (index < 0) {
             index = 0;
         }
@@ -232,7 +273,7 @@ export class BaseEntity {
     }
 
     public resetSequence(label: string): void {
-        this.playseqindex(this.findSequenceLabel(label));
+        this.playSequenceIndex(this.findSequenceLabel(label));
     }
 
     public spawn(entitySystem: EntitySystem): void {
@@ -241,7 +282,7 @@ export class BaseEntity {
 
         if (this.entity.defaultanim) {
             this.seqdefaultindex = this.findSequenceLabel(this.entity.defaultanim);
-            this.playseqindex(this.seqdefaultindex);
+            this.playSequenceIndex(this.seqdefaultindex);
         }
 
         this.spawnState = SpawnState.Spawned;
@@ -350,9 +391,6 @@ export class BaseEntity {
     }
 
     public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager): void {
-        if (!this.shouldDraw())
-            return;
-
         if (this.materialParams !== null)
             colorCopy(this.materialParams.blendColor, this.rendercolor, this.renderamt);
 
@@ -520,7 +558,7 @@ export class BaseEntity {
 
                 // Pass to default animation if we're through.
                 if (this.seqdefaultindex >= 0 && this.modelStudio.sequenceIsFinished(this.seqindex, this.seqtime) && !this.holdAnimation)
-                    this.playseqindex(this.seqdefaultindex);
+                    this.playSequenceIndex(this.seqdefaultindex);
 
                 // Handle events.
                 const seq = this.modelStudio.modelData.seq[this.seqindex];
@@ -642,7 +680,7 @@ export class BaseEntity {
         if (this.modelStudio === null)
             return;
 
-        this.playseqindex(this.findSequenceLabel(value));
+        this.playSequenceIndex(this.findSequenceLabel(value));
     }
 
     private input_setdefaultanimation(entitySystem: EntitySystem, activator: BaseEntity, value: string): void {
@@ -797,7 +835,7 @@ export class sky_camera extends BaseEntity {
 
     constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
         super(entitySystem, renderContext, bspRenderer, entity);
-        const leaf = assertExists(bspRenderer.bsp.findLeafForPoint(this.localOrigin));
+        const leaf = assertExists(bspRenderer.bsp.queryPoint(this.localOrigin));
         this.area = leaf.area;
         this.scale = Number(entity.scale);
         computeModelMatrixSRT(this.modelMatrix, this.scale, this.scale, this.scale, 0, 0, 0,
