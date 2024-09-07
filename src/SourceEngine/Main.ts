@@ -20,7 +20,7 @@ import { TextureMapping } from "../TextureHolder.js";
 import { arrayRemove, assert, assertExists, nArray } from "../util.js";
 import { SceneGfx, ViewerRenderInput } from "../viewer.js";
 import { ZipFile, decompressZipFileEntry, parseZipFile } from "../ZipFile.js";
-import { BSPFile, BSPFileVariant, Model, Surface } from "./BSPFile.js";
+import { BSPFile, BSPFileVariant, Model, BSPSurface } from "./BSPFile.js";
 import { BaseEntity, calcFrustumViewProjection, EntityFactoryRegistry, EntitySystem, env_projectedtexture, env_shake, point_camera, sky_camera, worldspawn } from "./EntitySystem.js";
 import { DetailPropLeafRenderer, StaticPropRenderer } from "./StaticDetailObject.js";
 import { StudioModelCache } from "./Studio.js";
@@ -33,7 +33,7 @@ import { LuminanceHistogram } from "./LuminanceHistogram.js";
 import { fillColor, fillVec4 } from "../gfx/helpers/UniformBufferHelpers.js";
 import { dfRange, dfShow } from "../DebugFloaters.js";
 import { GMA } from "./GMA.js";
-import { LightmapManager, SurfaceLightmap } from "./Materials/Lightmap.js";
+import { LightmapManager, FaceLightmap as FaceLightmapUpdater } from "./Materials/Lightmap.js";
 import { BaseMaterial, MaterialShaderTemplateBase, fillSceneParamsOnRenderInst, FogParams, ToneMapParams, LateBindingTexture } from "./Materials/MaterialBase.js";
 import { MaterialCache } from "./Materials/MaterialCache.js";
 import { MaterialProxySystem } from "./Materials/MaterialParameters.js";
@@ -370,10 +370,10 @@ export class SkyboxRenderer {
 export class BSPSurfaceRenderer {
     public visible = true;
     public materialInstance: BaseMaterial | null = null;
-    public lightmaps: SurfaceLightmap[] = [];
+    public lightmaps: FaceLightmapUpdater[] = [];
     private lightmapManagerPage: number;
 
-    constructor(public surface: Surface) {
+    constructor(public surface: BSPSurface) {
     }
 
     public bindMaterial(materialInstance: BaseMaterial, startLightmapPageIndex: number): void {
@@ -382,7 +382,7 @@ export class BSPSurfaceRenderer {
         this.lightmapManagerPage = startLightmapPageIndex + this.surface.lightmapPackerPageIndex;
         for (let i = 0; i < this.surface.lightmapData.length; i++) {
             const lightmapData = this.surface.lightmapData[i];
-            this.lightmaps.push(new SurfaceLightmap(lightmapData, this.materialInstance.wantsLightmap, this.materialInstance.wantsBumpmappedLightmap));
+            this.lightmaps.push(new FaceLightmapUpdater(lightmapData, this.materialInstance.wantsLightmap, this.materialInstance.wantsBumpmappedLightmap));
         }
     }
 
@@ -498,7 +498,7 @@ export class BSPModelRenderer {
             this.surfaces[i].movement(renderContext);
     }
 
-    public gatherLiveSets(liveSurfaceSet: Set<number> | null, liveFaceSet: Set<number> | null, liveLeafSet: Set<number> | null, view: SourceEngineView, nodeid: number = this.model.headnode): void {
+    public gatherLiveSets(liveFaceSet: Set<number> | null, liveLeafSet: Set<number> | null, view: SourceEngineView, nodeid: number = this.model.headnode): void {
         if (nodeid >= 0) {
             // node
             const node = this.bsp.nodelist[nodeid];
@@ -506,8 +506,8 @@ export class BSPModelRenderer {
             if (!view.frustum.contains(transformAABB(node.bbox, this.modelMatrix)))
                 return;
 
-            this.gatherLiveSets(liveSurfaceSet, liveFaceSet, liveLeafSet, view, node.child0);
-            this.gatherLiveSets(liveSurfaceSet, liveFaceSet, liveLeafSet, view, node.child1);
+            this.gatherLiveSets(liveFaceSet, liveLeafSet, view, node.child0);
+            this.gatherLiveSets(liveFaceSet, liveLeafSet, view, node.child1);
 
             // Node surfaces are func_detail meshes, but they appear to also be in leaves... we probably don't need them.
         } else {
@@ -520,10 +520,6 @@ export class BSPModelRenderer {
 
             if (!view.frustum.contains(transformAABB(leaf.bbox, this.modelMatrix)))
                 return;
-
-            if (liveSurfaceSet !== null)
-                for (let i = 0; i < leaf.surfaces.length; i++)
-                    liveSurfaceSet.add(leaf.surfaces[i]);
 
             if (liveFaceSet !== null)
                 for (let i = 0; i < leaf.faces.length; i++)
@@ -760,7 +756,17 @@ export class BSPRenderer {
 
             const worldModel = this.models[0];
             if (worldModel.checkFrustum(renderContext)) {
-                worldModel.gatherLiveSets(this.liveSurfaceSet, this.liveFaceSet, this.liveLeafSet, renderContext.currentView);
+                worldModel.gatherLiveSets(this.liveFaceSet, this.liveLeafSet, renderContext.currentView);
+
+                for (const faceIdx of this.liveFaceSet.values()) {
+                    // TODO(jstpierre): Do lightmap prep here instead of per-surface.
+                    const faceInfo = this.bsp.faceInfos[faceIdx];
+                    if (faceInfo.surfaceIndex >= 0)
+                        this.liveSurfaceSet.add(faceInfo.surfaceIndex);
+
+                    for (let i = 0; i < faceInfo.overlaySurfaces.length; i++)
+                        this.liveSurfaceSet.add(faceInfo.overlaySurfaces[i]);
+                }
 
                 for (const surfaceIdx of this.liveSurfaceSet.values())
                     worldModel.surfacesByIdx[surfaceIdx].prepareToRender(renderContext, renderInstManager, worldModel.modelMatrix, this.liveFaceSet);
@@ -1257,7 +1263,8 @@ export class SourceWorldViewRenderer {
                 if (!this.skyboxView.calcPVS(bspRenderer.bsp, false, parentViewRenderer !== null ? parentViewRenderer.skyboxView : null))
                     continue;
 
-                bspRenderer.prepareToRenderView(renderContext, renderInstManager, this.renderObjectMask & (RenderObjectKind.WorldSpawn | RenderObjectKind.StaticProps | RenderObjectKind.Entities));
+                // TODO(jstpierre): Re-enable entities inside the skybox once we know how to cull them.
+                bspRenderer.prepareToRenderView(renderContext, renderInstManager, this.renderObjectMask & (RenderObjectKind.WorldSpawn | RenderObjectKind.StaticProps));
             }
         }
 
@@ -1804,7 +1811,7 @@ export class SourceRenderer implements SceneGfx {
         // Reflection is only supported on the first BSP renderer (maybe we should just kill the concept of having multiple...)
         if (this.renderContext.enableExpensiveWater && this.mainViewRenderer.drawWorld) {
             const bspRenderer = this.bspRenderers[0], bsp = bspRenderer.bsp;
-            bspRenderer.models[0].gatherLiveSets(null, null, bspRenderer.liveLeafSet, this.mainViewRenderer.mainView);
+            bspRenderer.models[0].gatherLiveSets(null, bspRenderer.liveLeafSet, this.mainViewRenderer.mainView);
             const leafwater = bsp.findLeafWaterForPoint(this.mainViewRenderer.mainView.cameraPos, bspRenderer.liveLeafSet);
             if (leafwater !== null) {
                 const waterZ = leafwater.surfaceZ;

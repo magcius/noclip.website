@@ -4,7 +4,7 @@ import { TextureMapping } from "../../TextureHolder.js";
 import { GfxDevice, GfxFormat, GfxMipFilterMode, GfxSampler, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxWrapMode } from "../../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from "../../gfx/render/GfxRenderCache.js";
 import { assert, nArray } from "../../util.js";
-import { LightmapPacker, LightmapPackerPage, SurfaceLightmapData } from "../BSPFile.js";
+import { LightmapPacker, LightmapPackerPage, FaceLightmapData } from "../BSPFile.js";
 import { SourceRenderContext } from "../Main.js";
 import { RGBM_SCALE } from "./MaterialBase.js";
 
@@ -146,7 +146,7 @@ function packRGBM(dst: Uint8Array, dstOffs: number, r: number, g: number, b: num
     return 4;
 }
 
-function lightmapPackRuntime(dstPage: LightmapPage, location: Readonly<SurfaceLightmapData>, src: Float32Array, srcOffs: number): void {
+function lightmapPackRuntime(dstPage: LightmapPage, location: Readonly<FaceLightmapData>, src: Float32Array, srcOffs: number): void {
     const dst = dstPage.data;
     const dstWidth = dstPage.page.width;
 
@@ -159,7 +159,7 @@ function lightmapPackRuntime(dstPage: LightmapPage, location: Readonly<SurfaceLi
     }
 }
 
-function lightmapPackRuntimeWhite(dstPage: LightmapPage, location: Readonly<SurfaceLightmapData>): void {
+function lightmapPackRuntimeWhite(dstPage: LightmapPage, location: Readonly<FaceLightmapData>): void {
     const dst = dstPage.data;
     const dstWidth = dstPage.page.width;
 
@@ -171,7 +171,7 @@ function lightmapPackRuntimeWhite(dstPage: LightmapPage, location: Readonly<Surf
     }
 }
 
-function lightmapPackRuntimeBumpmap(dstPage: LightmapPage, location: Readonly<SurfaceLightmapData>, src: Float32Array, srcOffs: number): void {
+function lightmapPackRuntimeBumpmap(dstPage: LightmapPage, location: Readonly<FaceLightmapData>, src: Float32Array, srcOffs: number): void {
     const dst = dstPage.data;
     const srcTexelCount = location.width * location.height;
     const srcSize = srcTexelCount * 3;
@@ -213,11 +213,11 @@ function lightmapPackRuntimeBumpmap(dstPage: LightmapPage, location: Readonly<Su
 }
 
 
-export class SurfaceLightmap {
+export class FaceLightmap {
     // The styles that we built our lightmaps for.
     public lightmapStyleIntensities: number[];
 
-    constructor(public lightmapData: SurfaceLightmapData, private wantsLightmap: boolean, private wantsBumpmap: boolean) {
+    constructor(public lightmapData: FaceLightmapData, private wantsLightmap: boolean, private wantsBumpmap: boolean) {
         this.lightmapStyleIntensities = nArray(this.lightmapData.styles.length, () => -1);
     }
 

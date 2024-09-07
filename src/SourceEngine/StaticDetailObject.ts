@@ -447,7 +447,6 @@ export function deserializeGameLump_sprp(buffer: ArrayBufferSlice, version: numb
     const staticObjectCount = sprp.getUint32(idx, true);
     idx += 0x04;
     for (let i = 0; i < staticObjectCount; i++) {
-        let propStartIdx = idx;
         const posX = sprp.getFloat32(idx + 0x00, true);
         const posY = sprp.getFloat32(idx + 0x04, true);
         const posZ = sprp.getFloat32(idx + 0x08, true);

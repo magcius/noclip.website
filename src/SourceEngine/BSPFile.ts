@@ -14,10 +14,10 @@ import { Color, colorNewFromRGBA } from "../Color.js";
 import { unpackColorRGBExp32 } from "./Materials/Lightmap.js";
 import { lerp, saturate } from "../MathHelpers.js";
 import { pairs2obj, ValveKeyValueParser, VKFPair } from "./VMT.js";
+import { IS_DEVELOPMENT } from "../BuildVersion.js";
 
 //#region Data Structures
-
-export interface SurfaceLightmapData {
+export interface FaceLightmapData {
     faceIndex: number;
     // Size of a single lightmap.
     width: number;
@@ -31,11 +31,11 @@ export interface SurfaceLightmapData {
     pagePosY: number;
 }
 
-export interface Overlay {
+export interface BSPOverlay {
     surfaceIndexes: number[];
 }
 
-export interface Surface {
+export interface BSPSurface {
     texName: string;
     startIndex: number;
     indexCount: number;
@@ -48,7 +48,7 @@ export interface Surface {
 
     // Since our surfaces are merged together from multiple BSP surfaces, we can have multiple
     // surface lightmaps, but they're guaranteed to have been packed into the same lightmap page.
-    lightmapData: SurfaceLightmapData[];
+    lightmapData: FaceLightmapData[];
     lightmapPackerPageIndex: number;
 
     bbox: AABB;
@@ -105,7 +105,6 @@ export interface BSPLeaf {
     cluster: number;
     ambientLightSamples: BSPLeafAmbientSample[];
     faces: number[];
-    surfaces: number[];
     leafwaterdata: number;
     contents: BSPLeafContents;
 }
@@ -348,10 +347,12 @@ function fetchVertexFromBuffer(dst: MeshVertex, vertexData: Float32Array, i: num
 }
 
 // Stores information for each origin face to the final, packed surface data.
-class FaceToSurfaceInfo {
+class BSPFaceInfo {
+    public surfaceIndex: number = -1;
     public startIndex: number = 0;
-    public indexCount: number = 0;
-    public lightmapData: SurfaceLightmapData;
+    public endIndex: number = 0;
+    public lightmapData: FaceLightmapData;
+    public overlaySurfaces: number[] = [];
 }
 
 class OverlayInfo {
@@ -369,7 +370,7 @@ class OverlayInfo {
 interface OverlaySurface {
     vertex: MeshVertex[];
     indices: number[];
-    lightmapData: SurfaceLightmapData;
+    lightmapData: FaceLightmapData;
     originFaceList: number[];
 }
 
@@ -464,7 +465,7 @@ function calcBarycentricsFromTri(dst: vec2, p: ReadonlyVec3, p0: ReadonlyVec3, p
     dst[1] = calcWedgeArea2(p2, p0, p) / outerTriArea2;
 }
 
-function buildOverlay(overlayInfo: OverlayInfo, faceToSurfaceInfo: FaceToSurfaceInfo[], indexData: Uint32Array, vertexData: Float32Array): OverlayResult {
+function buildOverlay(overlayInfo: OverlayInfo, faceInfos: BSPFaceInfo[], indexData: Uint32Array, vertexData: Float32Array): OverlayResult {
     const surfaces: OverlaySurface[] = [];
     const surfacePoints = nArray(3, () => new MeshVertex());
     const surfacePlane = new Plane();
@@ -473,13 +474,13 @@ function buildOverlay(overlayInfo: OverlayInfo, faceToSurfaceInfo: FaceToSurface
 
     for (let i = 0; i < overlayInfo.faces.length; i++) {
         const face = overlayInfo.faces[i];
-        const surfaceInfo = faceToSurfaceInfo[face];
+        const faceInfo = faceInfos[face];
 
         const vertex: MeshVertex[] = [];
         const indices: number[] = [];
-        const originSurfaceList: number[] = [];
+        const originFaceList: number[] = [];
 
-        for (let index = surfaceInfo.startIndex; index < surfaceInfo.startIndex + surfaceInfo.indexCount; index += 3) {
+        for (let index = faceInfo.startIndex; index < faceInfo.endIndex; index += 3) {
             const overlayPoints = nArray(4, () => new MeshVertex());
             buildOverlayPlane(overlayPoints, overlayInfo);
 
@@ -542,10 +543,10 @@ function buildOverlay(overlayInfo: OverlayInfo, faceToSurfaceInfo: FaceToSurface
         if (vertex.length === 0)
             continue;
 
-        originSurfaceList.push(face);
+        originFaceList.push(face);
 
-        const lightmapData = surfaceInfo.lightmapData;
-        surfaces.push({ vertex, indices, lightmapData, originFaceList: originSurfaceList });
+        const lightmapData = faceInfo.lightmapData;
+        surfaces.push({ vertex, indices, lightmapData, originFaceList });
     }
 
     // Sort surface and merge them together.
@@ -625,7 +626,7 @@ class BSPVisibility {
 //#region Lightmap
 
 // Place into the lightmap page.
-function calcLightmapTexcoords(dst: vec2, uv: ReadonlyVec2, lightmapData: SurfaceLightmapData, lightmapPage: LightmapPackerPage): void {
+function calcLightmapTexcoords(dst: vec2, uv: ReadonlyVec2, lightmapData: FaceLightmapData, lightmapPage: LightmapPackerPage): void {
     dst[0] = (uv[0] + lightmapData.pagePosX) / lightmapPage.width;
     dst[1] = (uv[1] + lightmapData.pagePosY) / lightmapPage.height;
 }
@@ -696,27 +697,13 @@ export class LightmapPackerPage {
     }
 }
 
-function decompressLZMA(compressedData: ArrayBufferSlice, uncompressedSize: number): ArrayBufferSlice {
-    const compressedView = compressedData.createDataView();
-
-    // Parse Valve's lzma_header_t.
-    assert(readString(compressedData, 0x00, 0x04) === 'LZMA');
-    const actualSize = compressedView.getUint32(0x04, true);
-    assert(actualSize === uncompressedSize);
-    const lzmaSize = compressedView.getUint32(0x08, true);
-    assert(lzmaSize + 0x11 <= compressedData.byteLength);
-    const lzmaProperties = decodeLZMAProperties(compressedData.slice(0x0C));
-
-    return decompress(compressedData.slice(0x11), lzmaProperties, actualSize);
-}
-
 export class LightmapPacker {
     public pages: LightmapPackerPage[] = [];
 
     constructor(public pageWidth: number = 2048, public pageHeight: number = 2048) {
     }
 
-    public allocate(allocation: SurfaceLightmapData): void {
+    public allocate(allocation: FaceLightmapData): void {
         for (let i = 0; i < this.pages.length; i++) {
             if (this.pages[i].allocate(allocation)) {
                 allocation.pageIndex = i;
@@ -734,7 +721,7 @@ export class LightmapPacker {
 
 //#endregion
 
-//#region Parsing
+//#region Parsing and Misc. Utils
 
 const enum LumpType {
     ENTITIES                  = 0,
@@ -780,6 +767,20 @@ function magicint(S: string): number {
     const n2 = S.charCodeAt(2);
     const n3 = S.charCodeAt(3);
     return (n0 << 24) | (n1 << 16) | (n2 << 8) | n3;
+}
+
+function decompressLZMA(compressedData: ArrayBufferSlice, uncompressedSize: number): ArrayBufferSlice {
+    const compressedView = compressedData.createDataView();
+
+    // Parse Valve's lzma_header_t.
+    assert(readString(compressedData, 0x00, 0x04) === 'LZMA');
+    const actualSize = compressedView.getUint32(0x04, true);
+    assert(actualSize === uncompressedSize);
+    const lzmaSize = compressedView.getUint32(0x08, true);
+    assert(lzmaSize + 0x11 <= compressedData.byteLength);
+    const lzmaProperties = decodeLZMAProperties(compressedData.slice(0x0C));
+
+    return decompress(compressedData.slice(0x11), lzmaProperties, actualSize);
 }
 
 class ResizableArrayBuffer {
@@ -864,8 +865,9 @@ export class BSPFile {
 
     private entitiesStr: string; // For debugging.
     public entities: BSPEntity[] = [];
-    public surfaces: Surface[] = [];
-    public overlays: Overlay[] = [];
+    public surfaces: BSPSurface[] = [];
+    public faceInfos: BSPFaceInfo[];
+    public overlays: BSPOverlay[] = [];
     public models: Model[] = [];
     public pakfile: ZipFile | null = null;
     public nodelist: BSPNode[] = [];
@@ -953,8 +955,10 @@ export class BSPFile {
         if (visibilityData.byteLength > 0)
             this.visibility = new BSPVisibility(visibilityData);
 
-        this.entitiesStr = decodeString(getLumpData(LumpType.ENTITIES));
-        this.entities = parseEntitiesLump(this.entitiesStr);
+        const entitiesStr = decodeString(getLumpData(LumpType.ENTITIES));
+        this.entities = parseEntitiesLump(entitiesStr);
+        if (IS_DEVELOPMENT)
+            this.entitiesStr = entitiesStr;
 
         const pakfileData = getLumpData(LumpType.PAKFILE);
         this.pakfile = parseZipFile(pakfileData);
@@ -1271,19 +1275,10 @@ export class BSPFile {
         interface Face {
             index: number;
             texinfo: number;
-            lightmapData: SurfaceLightmapData;
+            lightmapData: FaceLightmapData;
             vertnormalBase: number;
             plane: ReadonlyVec3;
         }
-
-        const addSurfaceToLeaves = (faceleaflist: number[], faceIndex: number | null, surfaceIndex: number) => {
-            for (let j = 0; j < faceleaflist.length; j++) {
-                const leaf = this.leaflist[faceleaflist[j]];
-                ensureInList(leaf.surfaces, surfaceIndex);
-                if (faceIndex !== null)
-                    ensureInList(leaf.faces, faceIndex);
-            }
-        };
 
         const faces: Face[] = [];
         let numfaces = 0;
@@ -1327,7 +1322,7 @@ export class BSPFile {
             if (lightofs !== -1)
                 samples = lighting.subarray(lightofs, srcLightmapSize).createTypedArray(Uint8Array);
 
-            const lightmapData: SurfaceLightmapData = {
+            const lightmapData: FaceLightmapData = {
                 faceIndex: i,
                 width, height, styles, samples, hasBumpmapSamples,
                 pageIndex: -1, pagePosX: -1, pagePosY: -1,
@@ -1358,7 +1353,6 @@ export class BSPFile {
         const leafambientlighting = leafambientlightingLump.createDataView();
 
         const leaffacelist = getLumpData(LumpType.LEAFFACES).createTypedArray(Uint16Array);
-        const faceToLeafIdx: number[][] = nArray(numfaces, () => []);
         for (let i = 0, idx = 0x00; idx < leafs.byteLength; i++) {
             const contents = leafs.getUint32(idx + 0x00, true);
             const cluster = leafs.getUint16(idx + 0x04, true);
@@ -1470,19 +1464,15 @@ export class BSPFile {
             const leafFaces = leaffacelist.subarray(firstleafface, firstleafface + numleaffaces);
             this.leaflist.push({
                 bbox, cluster, area, ambientLightSamples,
-                faces: Array.from(leafFaces), surfaces: [],
+                faces: Array.from(leafFaces),
                 leafwaterdata, contents,
             });
-
-            const leafidx = this.leaflist.length - 1;
-            for (let i = 0; i < numleaffaces; i++)
-                faceToLeafIdx[leafFaces[i]].push(leafidx);
         }
 
         // Sort faces by texinfo to prepare for splitting into surfaces.
         faces.sort((a, b) => texinfos[a.texinfo].texName.localeCompare(texinfos[b.texinfo].texName));
 
-        const faceToSurfaceInfo: FaceToSurfaceInfo[] = nArray(numfaces, () => new FaceToSurfaceInfo());
+        this.faceInfos = nArray(numfaces, () => new BSPFaceInfo());
 
         const vertexBuffer = new ResizableArrayBuffer();
         const indexBuffer = new ResizableArrayBuffer();
@@ -1548,7 +1538,7 @@ export class BSPFile {
             const center = isTranslucent ? vec3.create() : null;
 
             // Determine if we can merge with the previous surface for output.
-            let mergeSurface: Surface | null = null;
+            let mergeSurface: BSPSurface | null = null;
             if (i > 0) {
                 const prevFace = faces[i - 1];
                 let canMerge = true;
@@ -1604,12 +1594,12 @@ export class BSPFile {
             // World surfaces always want the texcoord0 scale.
             const wantsTexCoord0Scale = true;
 
-            const unmergedFaceInfo = faceToSurfaceInfo[face.index];
-            unmergedFaceInfo.startIndex = dstOffsIndex;
+            const faceInfo = this.faceInfos[face.index];
+            faceInfo.startIndex = dstOffsIndex;
 
             let indexCount = 0;
             let vertexCount = 0;
-            let surface: Surface | null = null;
+            let surface: BSPSurface | null = null;
 
             // vertex data
             if (dispinfo >= 0) {
@@ -1761,27 +1751,30 @@ export class BSPFile {
                 vertexCount = numedges;
             }
 
-            unmergedFaceInfo.lightmapData = lightmapData;
-            unmergedFaceInfo.indexCount = indexCount;
-
             dstOffsIndex += indexCount;
             dstIndexBase += vertexCount;
 
-            // Mark surfaces as part of the right model.
+            faceInfo.lightmapData = lightmapData;
+            faceInfo.endIndex = dstOffsIndex;
+
+            // Associate surface with the right face and model.
             const surfaceIndex = this.surfaces.length - 1;
+            faceInfo.surfaceIndex = surfaceIndex;
 
             const model = this.models[faceToModelIdx[face.index]];
             ensureInList(model.surfaces, surfaceIndex);
 
-            const faceleaflist: number[] = faceToLeafIdx[face.index];
             if (dispinfo >= 0) {
                 // Displacements don't come with surface leaf information.
                 // Use the bbox to mark ourselves in the proper leaves...
-                assert(faceleaflist.length === 0);
-                this.markLeafSet(faceleaflist, surface.bbox);
-            }
+                const leafSet = new Set<number>();
+                this.queryAABB(leafSet, surface.bbox);
 
-            addSurfaceToLeaves(faceleaflist, face.index, surfaceIndex);
+                for (const leafIdx of leafSet.values()) {
+                    const leaf = this.leaflist[leafIdx];
+                    ensureInList(leaf.faces, face.index);
+                }
+            }
         }
         //#endregion
 
@@ -1842,7 +1835,7 @@ export class BSPFile {
 
             const surfaceIndexes: number[] = [];
 
-            const overlayResult = buildOverlay(overlayInfo, faceToSurfaceInfo, indexBuffer.getAsUint32Array(), vertexBuffer.getAsFloat32Array());
+            const overlayResult = buildOverlay(overlayInfo, this.faceInfos, indexBuffer.getAsUint32Array(), vertexBuffer.getAsFloat32Array());
             for (let j = 0; j < overlayResult.surfaces.length; j++) {
                 const overlaySurface = overlayResult.surfaces[j];
 
@@ -1861,18 +1854,17 @@ export class BSPFile {
                 dstIndexBase += vertexCount;
 
                 const texName = tex.texName;
-                const surface: Surface = { texName, startIndex, indexCount, center, wantsTexCoord0Scale: false, lightmapData: [], lightmapPackerPageIndex: 0, bbox: overlayResult.bbox };
+                const surface: BSPSurface = { texName, startIndex, indexCount, center, wantsTexCoord0Scale: false, lightmapData: [], lightmapPackerPageIndex: 0, bbox: overlayResult.bbox };
 
                 const surfaceIndex = this.surfaces.push(surface) - 1;
-                // Currently, overlays are part of the first model. We need to track origin surfaces / models if this differs...
+
+                // Currently, overlays are part of the world model. We need to track origin surfaces / models if this differs...
                 this.models[0].surfaces.push(surfaceIndex);
                 surfaceIndexes.push(surfaceIndex);
 
-                // For each overlay surface, push it to the right leaf.
-                for (let n = 0; n < overlaySurface.originFaceList.length; n++) {
-                    const surfleaflist = faceToLeafIdx[overlaySurface.originFaceList[n]];
-                    assert(surfleaflist.length > 0);
-                    addSurfaceToLeaves(surfleaflist, null, surfaceIndex);
+                for (let k = 0; k < overlaySurface.originFaceList.length; k++) {
+                    const faceInfo = this.faceInfos[overlaySurface.originFaceList[k]];
+                    ensureInList(faceInfo.overlaySurfaces, surfaceIndex);
                 }
             }
 
@@ -1933,25 +1925,38 @@ export class BSPFile {
         return this.findLeafWaterForPointR(p, liveLeafSet, 0);
     }
 
-    private markLeafSet(dst: number[], aabb: AABB, nodeid: number = 0): void {
+    public queryAABB(dst: Set<number>, aabb: AABB, nodeid: number = 0): void {
         if (nodeid < 0) {
             const leafidx = -nodeid - 1;
-            ensureInList(dst, leafidx);
+            dst.add(leafidx);
         } else {
             const node = this.nodelist[nodeid];
-            let signs = 0;
 
-            // This can be done more effectively...
-            for (let i = 0; i < 8; i++) {
-                aabb.cornerPoint(scratchVec3a, i);
-                const dot = node.plane.distance(scratchVec3a[0], scratchVec3a[1], scratchVec3a[2]);
-                signs |= (dot >= 0 ? 1 : 2);
+            if (!AABB.intersect(node.bbox, aabb))
+                return;
+
+            const plane = node.plane;
+
+            // Find min and max corners.
+            scratchVec3a[0] = plane.n[0] >= 0 ? aabb.minX : aabb.maxX;
+            scratchVec3a[1] = plane.n[1] >= 0 ? aabb.minY : aabb.maxY;
+            scratchVec3a[2] = plane.n[2] >= 0 ? aabb.minZ : aabb.maxZ;
+
+            scratchVec3b[0] = plane.n[0] >= 0 ? aabb.maxX : aabb.minX;
+            scratchVec3b[1] = plane.n[1] >= 0 ? aabb.maxY : aabb.minY;
+            scratchVec3b[2] = plane.n[2] >= 0 ? aabb.maxZ : aabb.minZ;
+
+            if (plane.distanceVec3(scratchVec3b) < 0) {
+                // Box is on the outside of child0; traverse child1.
+                this.queryAABB(dst, aabb, node.child1);
+            } else if (plane.distanceVec3(scratchVec3a) > 0) {
+                // Box is on the outside of child1; traverse child0.
+                this.queryAABB(dst, aabb, node.child0);
+            } else {
+                // Traverse both.
+                this.queryAABB(dst, aabb, node.child0);
+                this.queryAABB(dst, aabb, node.child1);
             }
-
-            if (!!(signs & 1))
-                this.markLeafSet(dst, aabb, node.child0);
-            if (!!(signs & 2))
-                this.markLeafSet(dst, aabb, node.child1);
         }
     }
 
