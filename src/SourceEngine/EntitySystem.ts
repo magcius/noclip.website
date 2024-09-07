@@ -2641,7 +2641,7 @@ class material_modify_control extends BaseEntity {
 class info_overlay_accessor extends BaseEntity {
     public static classname = `info_overlay_accessor`;
     private overlaySurfaces: BSPSurfaceRenderer[];
-    private needsMaterialInit: (BSPSurfaceRenderer | null)[] | null = null;
+    private needsMaterialInit: BSPSurfaceRenderer[] | null = null;
 
     constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
         super(entitySystem, renderContext, bspRenderer, entity);
@@ -4173,7 +4173,7 @@ export class EntityFactoryRegistry {
         this.registerFactory(func_monitor);
         this.registerFactory(info_camera_link);
         this.registerFactory(info_player_start);
-        this.registerFactory(info_particle_system);
+        // this.registerFactory(info_particle_system);
         this.registerFactory(path_track);
     }
 

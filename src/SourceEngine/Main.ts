@@ -442,8 +442,6 @@ export class BSPModelRenderer {
     public entity: BaseEntity | null = null;
     public surfaces: BSPSurfaceRenderer[] = [];
     public surfacesByIdx: BSPSurfaceRenderer[] = [];
-    private liveSurfaceSet = new Set<number>();
-    private liveFaceSet = new Set<number>();
 
     constructor(renderContext: SourceRenderContext, public model: Model, public bsp: BSPFile, startLightmapPageIndex: number) {
         for (let i = 0; i < model.surfaces.length; i++) {
@@ -555,19 +553,6 @@ export class BSPModelRenderer {
         // Submodels don't use the BSP tree, they simply render all surfaces back to back in a batch.
         for (let i = 0; i < this.model.surfaces.length; i++)
             this.surfacesByIdx[this.model.surfaces[i]].prepareToRender(renderContext, renderInstManager, this.modelMatrix, null);
-    }
-
-    public prepareToRenderWorld(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager): void {
-        if (!this.checkFrustum(renderContext))
-            return;
-
-        // Gather all BSP surfaces, and cull based on that.
-        this.liveSurfaceSet.clear();
-        this.liveFaceSet.clear();
-        this.gatherLiveSets(this.liveSurfaceSet, this.liveFaceSet, null, renderContext.currentView);
-
-        for (const surfaceIdx of this.liveSurfaceSet.values())
-            this.surfacesByIdx[surfaceIdx].prepareToRender(renderContext, renderInstManager, this.modelMatrix, this.liveFaceSet);
     }
 }
 
@@ -688,6 +673,8 @@ export class BSPRenderer {
     public models: BSPModelRenderer[] = [];
     public detailPropLeafRenderers: DetailPropLeafRenderer[] = [];
     public staticPropRenderers: StaticPropRenderer[] = [];
+    public liveSurfaceSet = new Set<number>();
+    public liveFaceSet = new Set<number>();
     public liveLeafSet = new Set<number>();
     private startLightmapPageIndex: number = 0;
 
@@ -766,8 +753,29 @@ export class BSPRenderer {
         fillSceneParamsOnRenderInst(template, renderContext.currentView, renderContext.toneMapParams);
 
         // Render the world-spawn model.
-        if (!!(kinds & RenderObjectKind.WorldSpawn))
-            this.models[0].prepareToRenderWorld(renderContext, renderInstManager);
+        if (!!(kinds & RenderObjectKind.WorldSpawn)) {
+            this.liveSurfaceSet.clear();
+            this.liveFaceSet.clear();
+            this.liveLeafSet.clear();
+
+            const worldModel = this.models[0];
+            if (worldModel.checkFrustum(renderContext)) {
+                worldModel.gatherLiveSets(this.liveSurfaceSet, this.liveFaceSet, this.liveLeafSet, renderContext.currentView);
+
+                for (const surfaceIdx of this.liveSurfaceSet.values())
+                    worldModel.surfacesByIdx[surfaceIdx].prepareToRender(renderContext, renderInstManager, worldModel.modelMatrix, this.liveFaceSet);
+
+                // Detail props.
+                if (!!(kinds & RenderObjectKind.DetailProps)) {
+                    for (let i = 0; i < this.detailPropLeafRenderers.length; i++) {
+                        const detailPropLeafRenderer = this.detailPropLeafRenderers[i];
+                        if (!this.liveLeafSet.has(detailPropLeafRenderer.leaf))
+                            continue;
+                        detailPropLeafRenderer.prepareToRender(renderContext, renderInstManager);
+                    }
+                }
+            }
+        }
 
         if (!!(kinds & RenderObjectKind.Entities)) {
             for (let i = 1; i < this.models.length; i++)
@@ -776,30 +784,9 @@ export class BSPRenderer {
                 this.entitySystem.entities[i].prepareToRender(renderContext, renderInstManager);
         }
 
-        // Static props.
         if (!!(kinds & RenderObjectKind.StaticProps))
             for (let i = 0; i < this.staticPropRenderers.length; i++)
                 this.staticPropRenderers[i].prepareToRender(renderContext, renderInstManager, this.bsp, renderContext.currentView.pvs);
-
-        // Detail props.
-        if (!!(kinds & RenderObjectKind.DetailProps)) {
-            this.liveLeafSet.clear();
-            this.models[0].gatherLiveSets(null, null, this.liveLeafSet, renderContext.currentView);
-
-            for (let i = 0; i < this.detailPropLeafRenderers.length; i++) {
-                const detailPropLeafRenderer = this.detailPropLeafRenderers[i];
-                if (!this.liveLeafSet.has(detailPropLeafRenderer.leaf))
-                    continue;
-                detailPropLeafRenderer.prepareToRender(renderContext, renderInstManager);
-            }
-        }
-
-        /*
-        for (let i = 0; i < this.bsp.worldlights.length; i++) {
-            drawWorldSpaceText(getDebugOverlayCanvas2D(), view.clipFromWorldMatrix, this.bsp.worldlights[i].pos, '' + i);
-            drawWorldSpacePoint(getDebugOverlayCanvas2D(), view.clipFromWorldMatrix, this.bsp.worldlights[i].pos);
-        }
-        */
 
         renderInstManager.popTemplateRenderInst();
     }

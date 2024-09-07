@@ -1705,8 +1705,13 @@ export class ParticleSystemInstance {
 
     public getControlPointTransform(dst: mat4, i: number, time: number): void {
         const point = this.controller.controlPoints[i];
-        // TODO(jstpierre): time lerp
-        mat4.copy(dst, point.transform);
+        if (point !== undefined) {
+            // TODO(jstpierre): time lerp
+            mat4.copy(dst, point.transform);
+        } else {
+            // Missing control point.
+            mat4.identity(dst);
+        }
     }
 
     public randF32(): number {
