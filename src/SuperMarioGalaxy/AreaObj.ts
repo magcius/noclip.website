@@ -51,16 +51,16 @@ class AreaFormCube implements AreaFormBase {
         makeWorldMtxFromPlacement(this.worldMatrix, sceneObjHolder, infoIter);
 
         getJMapInfoScale(scratchVec3a, infoIter);
-        this.aabb.minX = -0.5 * scratchVec3a[0] * 1000;
-        this.aabb.minY = -0.5 * scratchVec3a[1] * 1000;
-        this.aabb.minZ = -0.5 * scratchVec3a[2] * 1000;
-        this.aabb.maxX =  0.5 * scratchVec3a[0] * 1000;
-        this.aabb.maxY =  0.5 * scratchVec3a[1] * 1000;
-        this.aabb.maxZ =  0.5 * scratchVec3a[2] * 1000;
+        this.aabb.min[0] = -0.5 * scratchVec3a[0] * 1000;
+        this.aabb.min[1] = -0.5 * scratchVec3a[1] * 1000;
+        this.aabb.min[2] = -0.5 * scratchVec3a[2] * 1000;
+        this.aabb.max[0] =  0.5 * scratchVec3a[0] * 1000;
+        this.aabb.max[1] =  0.5 * scratchVec3a[1] * 1000;
+        this.aabb.max[2] =  0.5 * scratchVec3a[2] * 1000;
 
         if (type === AreaFormType.BaseOriginCube) {
-            this.aabb.minY += 0.5 * scratchVec3a[1] * 1000;
-            this.aabb.maxY += 0.5 * scratchVec3a[1] * 1000;
+            this.aabb.min[1] += 0.5 * scratchVec3a[1] * 1000;
+            this.aabb.max[1] += 0.5 * scratchVec3a[1] * 1000;
         }
     }
 

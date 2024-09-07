@@ -138,17 +138,17 @@ export function drawWorldSpaceLocator(ctx: CanvasRenderingContext2D, clipFromWor
 }
 
 export function drawWorldSpaceAABB(ctx: CanvasRenderingContext2D, clipFromWorldMatrix: ReadonlyMat4, aabb: AABB, m: ReadonlyMat4 | null = null, color: Color = Magenta): void {
-    vec4.set(p[0], aabb.minX, aabb.minY, aabb.minZ, 1.0);
-    vec4.set(p[1], aabb.maxX, aabb.minY, aabb.minZ, 1.0);
-    vec4.set(p[2], aabb.minX, aabb.maxY, aabb.minZ, 1.0);
-    vec4.set(p[3], aabb.maxX, aabb.maxY, aabb.minZ, 1.0);
-    vec4.set(p[4], aabb.minX, aabb.minY, aabb.maxZ, 1.0);
-    vec4.set(p[5], aabb.maxX, aabb.minY, aabb.maxZ, 1.0);
-    vec4.set(p[6], aabb.minX, aabb.maxY, aabb.maxZ, 1.0);
-    vec4.set(p[7], aabb.maxX, aabb.maxY, aabb.maxZ, 1.0);
+    vec4.set(p[0], aabb.min[0], aabb.min[1], aabb.min[2], 1.0);
+    vec4.set(p[1], aabb.max[0], aabb.min[1], aabb.min[2], 1.0);
+    vec4.set(p[2], aabb.min[0], aabb.max[1], aabb.min[2], 1.0);
+    vec4.set(p[3], aabb.max[0], aabb.max[1], aabb.min[2], 1.0);
+    vec4.set(p[4], aabb.min[0], aabb.min[1], aabb.max[2], 1.0);
+    vec4.set(p[5], aabb.max[0], aabb.min[1], aabb.max[2], 1.0);
+    vec4.set(p[6], aabb.min[0], aabb.max[1], aabb.max[2], 1.0);
+    vec4.set(p[7], aabb.max[0], aabb.max[1], aabb.max[2], 1.0);
     if (m !== null)
-        for (let i = 0; i < 8; i++) 
-            vec4.transformMat4(p[i], p[i], m);
+        for (let i = 0; i < 8; i++)
+        vec4.transformMat4(p[i], p[i], m);
     transformToClipSpace(clipFromWorldMatrix, p, 8);
 
     ctx.beginPath();

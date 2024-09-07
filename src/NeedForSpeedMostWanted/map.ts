@@ -299,7 +299,7 @@ function toBaseRegionId(id: number) {
 function pointInRegion(r: NfsRegion, p: vec2): boolean {
     if(r.boundingBox === undefined)
         return false;
-    if(p[0] < r.boundingBox!.minX || p[1] < r.boundingBox!.minY || p[0] > r.boundingBox!.maxX || p[1] > r.boundingBox!.maxY)
+    if(p[0] < r.boundingBox!.min[0] || p[1] < r.boundingBox!.min[1] || p[0] > r.boundingBox!.max[0] || p[1] > r.boundingBox!.max[1])
         return false;
 
     return pointInPolygon(r.areaVertices!, p);
@@ -361,29 +361,29 @@ export function isCloseToRegion(r: NfsRegion, p: vec2, distance: number): boolea
 export function distanceToRegionBoundingBox(aabb: AABB, p: vec2) {
     if(aabb === undefined)
         return Infinity;
-    if(p[0] > aabb.minX && p[1] > aabb.minY && p[0] < aabb.maxX && p[1] < aabb.maxY)
+    if(p[0] > aabb.min[0] && p[1] > aabb.min[1] && p[0] < aabb.max[0] && p[1] < aabb.max[1])
         return 0;
-    if(p[0] < aabb.minX) {
-        if(p[1] < aabb.minY)
-            return vec2.dist(p, [aabb.minX, aabb.minY]);
-        else if(p[1] > aabb.maxY)
-            return vec2.dist(p, [aabb.minX, aabb.maxY]);
+    if(p[0] < aabb.min[0]) {
+        if(p[1] < aabb.min[1])
+            return vec2.dist(p, [aabb.min[0], aabb.min[1]]);
+        else if(p[1] > aabb.max[1])
+            return vec2.dist(p, [aabb.min[0], aabb.max[1]]);
         else
-            return aabb.minX - p[0];
+            return aabb.min[0] - p[0];
     }
-    else if(p[0] > aabb.maxX) {
-        if(p[1] < aabb.minY)
-            return vec2.dist(p, [aabb.maxX, aabb.minY]);
-        else if(p[1] > aabb.maxY)
-            return vec2.dist(p, [aabb.maxX, aabb.maxY]);
+    else if(p[0] > aabb.max[0]) {
+        if(p[1] < aabb.min[1])
+            return vec2.dist(p, [aabb.max[0], aabb.min[1]]);
+        else if(p[1] > aabb.max[1])
+            return vec2.dist(p, [aabb.max[0], aabb.max[1]]);
         else
-            return p[0] - aabb.maxX;
+            return p[0] - aabb.max[0];
     }
-    else if(p[1] < aabb.minY) {
-        return aabb.minY - p[1];
+    else if(p[1] < aabb.min[1]) {
+        return aabb.min[1] - p[1];
     }
     else {
-        return p[1] - aabb.maxY;
+        return p[1] - aabb.max[1];
     }
 }
 

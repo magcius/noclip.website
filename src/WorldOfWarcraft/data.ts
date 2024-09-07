@@ -1655,13 +1655,13 @@ export class AdtData {
             const x = 15 - Math.floor(i / 16);
             const y = 15 - (i % 16);
             const chunkWorldSpaceAABB = new AABB();
-            chunkWorldSpaceAABB.minX = this.worldSpaceAABB.minX + x * worldSpaceChunkWidth;
-            chunkWorldSpaceAABB.minY = this.worldSpaceAABB.minY + y * worldSpaceChunkWidth;
-            chunkWorldSpaceAABB.minZ = this.worldSpaceAABB.minZ;
+            chunkWorldSpaceAABB.min[0] = this.worldSpaceAABB.min[0] + x * worldSpaceChunkWidth;
+            chunkWorldSpaceAABB.min[1] = this.worldSpaceAABB.min[1] + y * worldSpaceChunkWidth;
+            chunkWorldSpaceAABB.min[2] = this.worldSpaceAABB.min[2];
 
-            chunkWorldSpaceAABB.maxX = this.worldSpaceAABB.minX + (x + 1) * worldSpaceChunkWidth;
-            chunkWorldSpaceAABB.maxY = this.worldSpaceAABB.minY + (y + 1) * worldSpaceChunkWidth;
-            chunkWorldSpaceAABB.maxZ = this.worldSpaceAABB.maxZ;
+            chunkWorldSpaceAABB.max[0] = this.worldSpaceAABB.min[0] + (x + 1) * worldSpaceChunkWidth;
+            chunkWorldSpaceAABB.max[1] = this.worldSpaceAABB.min[1] + (y + 1) * worldSpaceChunkWidth;
+            chunkWorldSpaceAABB.max[2] = this.worldSpaceAABB.max[2];
             const textures = [];
             for (let blpId of chunk.texture_layers) {
                 textures.push(this.blps.get(blpId)!);

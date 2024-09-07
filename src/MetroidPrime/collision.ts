@@ -63,12 +63,12 @@ export interface AreaCollision {
 
 function readAABB(stream: InputStream): AABB {
     const out = new AABB;
-    out.minX = stream.readFloat32();
-    out.minY = stream.readFloat32();
-    out.minZ = stream.readFloat32();
-    out.maxX = stream.readFloat32();
-    out.maxY = stream.readFloat32();
-    out.maxZ = stream.readFloat32();
+    out.min[0] = stream.readFloat32();
+    out.min[1] = stream.readFloat32();
+    out.min[2] = stream.readFloat32();
+    out.max[0] = stream.readFloat32();
+    out.max[1] = stream.readFloat32();
+    out.max[2] = stream.readFloat32();
     return out;
 }
 
@@ -220,10 +220,10 @@ const scratchVec3d = vec3.create();
 function aabbLineCheck(p0: ReadonlyVec3, dir: ReadonlyVec3, aabb: AABB): boolean {
     // Box center-point
     const c = scratchVec3a;
-    vec3.set(c, (aabb.minX + aabb.maxX)/2, (aabb.minY + aabb.maxY)/2, (aabb.minZ + aabb.maxZ)/2);
+    vec3.set(c, (aabb.min[0] + aabb.max[0])/2, (aabb.min[1] + aabb.max[1])/2, (aabb.min[2] + aabb.max[2])/2);
     // Box halflength extents
     const e = scratchVec3b;
-    vec3.set(e, aabb.maxX - c[0], aabb.maxY - c[1], aabb.maxZ - c[2]);
+    vec3.set(e, aabb.max[0] - c[0], aabb.max[1] - c[1], aabb.max[2] - c[2]);
     // Segment midpoint
     const m = scratchVec3c;
     vec3.scaleAndAdd(m, p0, dir, 0.5);
@@ -262,19 +262,19 @@ function octreeNodeLineCheck(p0: ReadonlyVec3, dir: ReadonlyVec3, node: Collisio
 
     if (node.type === CollisionOctreeNodeType.Branch) {
         const branch = node as CollisionOctreeBranch;
-        const minX = bounds.minX;   const minY = bounds.minY;   const minZ = bounds.minZ;
-        const maxX = bounds.maxX;   const maxY = bounds.maxY;   const maxZ = bounds.maxZ;
+        const minX = bounds.min[0];   const minY = bounds.min[1];   const minZ = bounds.min[2];
+        const maxX = bounds.max[0];   const maxY = bounds.max[1];   const maxZ = bounds.max[2];
         const midX = (minX+maxX)/2; const midY = (minY+maxY)/2; const midZ = (minZ+maxZ)/2;
 
         for (let i = 0; i < 8; i++) {
             // build child AABB
             const bb = scratchAABB;
-            bb.minX = (i & 1) ? midX : minX;
-            bb.maxX = (i & 1) ? maxX : midX;
-            bb.minY = (i & 2) ? midY : minY;
-            bb.maxY = (i & 2) ? maxY : midY;
-            bb.minZ = (i & 4) ? midZ : minZ;
-            bb.maxZ = (i & 4) ? maxZ : midZ;
+            bb.min[0] = (i & 1) ? midX : minX;
+            bb.max[0] = (i & 1) ? maxX : midX;
+            bb.min[1] = (i & 2) ? midY : minY;
+            bb.max[1] = (i & 2) ? maxY : midY;
+            bb.min[2] = (i & 4) ? midZ : minZ;
+            bb.max[2] = (i & 4) ? maxZ : midZ;
 
             if (octreeNodeLineCheck(p0, dir, branch.children[i], bb, collision)) {
                 return true;

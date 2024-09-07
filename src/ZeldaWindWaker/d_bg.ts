@@ -494,19 +494,19 @@ class cBgW {
                 dst.unionPoint(this.vtx[tri.vtxIdx2]);
             }
 
-            dst.minX -= 1.0;
-            dst.minY -= 1.0;
-            dst.minZ -= 1.0;
-            dst.maxX += 1.0;
-            dst.maxY += 1.0;
-            dst.maxZ += 1.0;
+            dst.min[0] -= 1.0;
+            dst.min[1] -= 1.0;
+            dst.min[2] -= 1.0;
+            dst.max[0] += 1.0;
+            dst.max[1] += 1.0;
+            dst.max[2] += 1.0;
         } else {
-            dst.minX += this.translationDelta[0];
-            dst.minY += this.translationDelta[1];
-            dst.minZ += this.translationDelta[2];
-            dst.maxX += this.translationDelta[0];
-            dst.maxY += this.translationDelta[1];
-            dst.maxZ += this.translationDelta[2];
+            dst.min[0] += this.translationDelta[0];
+            dst.min[1] += this.translationDelta[1];
+            dst.min[2] += this.translationDelta[2];
+            dst.max[0] += this.translationDelta[0];
+            dst.max[1] += this.translationDelta[1];
+            dst.max[2] += this.translationDelta[2];
         }
     }
 
@@ -517,11 +517,11 @@ class cBgW {
         const grp = this.grp[grpIdx];
 
         // Check whether we're inside the AABB.
-        if (chk.pos[0] <= grp.aabb.minX || chk.pos[0] > grp.aabb.maxX)
+        if (chk.pos[0] <= grp.aabb.min[0] || chk.pos[0] > grp.aabb.max[0])
             return false;
-        if (chk.pos[1] <= grp.aabb.minY || chk.retY > grp.aabb.maxY)
+        if (chk.pos[1] <= grp.aabb.min[1] || chk.retY > grp.aabb.max[1])
             return false;
-        if (chk.pos[2] <= grp.aabb.minZ || chk.pos[2] > grp.aabb.maxZ)
+        if (chk.pos[2] <= grp.aabb.min[2] || chk.pos[2] > grp.aabb.max[2])
             return false;
 
         let ret = false;
@@ -564,11 +564,11 @@ class cBgW {
 
                 const tre = this.tre[treIdx];
 
-                if (chk.pos[0] < tre.aabb.minX || chk.pos[0] > tre.aabb.maxX)
+                if (chk.pos[0] < tre.aabb.min[0] || chk.pos[0] > tre.aabb.max[0])
                     continue;
-                if (chk.pos[1] < tre.aabb.minY || chk.retY > tre.aabb.maxY)
+                if (chk.pos[1] < tre.aabb.min[1] || chk.retY > tre.aabb.max[1])
                     continue;
-                if (chk.pos[2] < tre.aabb.minZ || chk.pos[2] > tre.aabb.maxZ)
+                if (chk.pos[2] < tre.aabb.min[2] || chk.pos[2] > tre.aabb.max[2])
                     continue;
 
                 if (this.GroundCrossRp(chk, treIdx))

@@ -228,7 +228,7 @@ export class ObjectRenderer {
         const pos = vec3.create();
         mat4.getTranslation(pos, objectSpawn.modelMatrix);
         const isTall = motion.motionID === MotionID.PathRoll && this.modelInstances.length > 0 &&
-            (this.partBBox.maxY > this.partBBox.maxX);
+            (this.partBBox.max[1] > this.partBBox.max[0]);
         this.motionState = {
             parameters: motion,
             useAltMotion: false,
@@ -629,15 +629,15 @@ const landingScratch = vec3.create();
 function landOnObject(object: ObjectRenderer, newPos: vec3, target: ObjectRenderer, depthMultiplier = 1): boolean {
     computeMatrixWithoutTranslation(scratchMatrix, object.modelMatrix);
     landingAABB.transform(object.bbox, scratchMatrix);
-    const objectBottom = landingAABB.maxY;
+    const objectBottom = landingAABB.max[1];
 
     // this should be a bug - the transformation of the target isn't considered
     // however, the one case where it would matter so far (knives on rocks in the beginning of MAS3) isn't affected
-    if (target.prevPosition[1] + target.bbox.minY >= object.prevPosition[1] && target.prevPosition[1] + target.bbox.minY < newPos[1] + depthMultiplier * objectBottom) {
+    if (target.prevPosition[1] + target.bbox.min[1] >= object.prevPosition[1] && target.prevPosition[1] + target.bbox.min[1] < newPos[1] + depthMultiplier * objectBottom) {
         vec3.sub(landingScratch, object.prevPosition, target.prevPosition);
-        landingScratch[1] = target.bbox.minY;
+        landingScratch[1] = target.bbox.min[1];
         if (target.bbox.containsPoint(landingScratch)) {
-            newPos[1] = target.prevPosition[1] + target.bbox.minY - objectBottom;
+            newPos[1] = target.prevPosition[1] + target.bbox.min[1] - objectBottom;
             return true;
         }
     }
@@ -656,7 +656,7 @@ function motion_alignToGround(object: ObjectRenderer, motion: MotionState, colli
     landingScratch[1] += object.bbox.maxCornerRadius();
     if (findGround(collision, scratchTri, motion.pos, landingScratch)) {
         // seems like this shouldn't have the absolute value, but it probably never matters
-        vec3.scaleAndAdd(motion.pos, scratchTri.contactOffset, scratchTri.normal, Math.abs(object.partBBox.maxY));
+        vec3.scaleAndAdd(motion.pos, scratchTri.contactOffset, scratchTri.normal, Math.abs(object.partBBox.max[1]));
         motion_alignmentTransform(object.baseMatrix, scratchTri.normal);
     }
     return false;
@@ -950,8 +950,8 @@ function animFunc_KAKASHI_D(object: ObjectRenderer, deltaTimeFrames: number): vo
     object.euler[0] = phase * object.baseMatrix[0];
     vec3.rotateX(animScratch[0], Vec3NegY, Vec3Zero, phase);
     getMatrixTranslation(animScratch[1], object.objectSpawn.modelMatrix);
-    vec3.scaleAndAdd(object.prevPosition, animScratch[1], animScratch[0], object.partBBox.maxY);
-    object.prevPosition[1] += object.partBBox.maxY;
+    vec3.scaleAndAdd(object.prevPosition, animScratch[1], animScratch[0], object.partBBox.max[1]);
+    object.prevPosition[1] += object.partBBox.max[1];
 }
 
 function animFunc_TRAFFICMAN_D(object: ObjectRenderer, deltaTimeFrames: number): void {
@@ -1543,7 +1543,7 @@ function motionPathAdvancePoint(motion: MotionState, bbox: AABB): void {
     if (motion.pathIndex * 4 === motion.parameters.pathPoints.length)
         motion.pathIndex = 0;
     pathGetPoint(motion.target, motion.parameters.pathPoints, motion.pathIndex);
-    motion.target[1] -= motion.isTall ? bbox.maxX : bbox.maxY;
+    motion.target[1] -= motion.isTall ? bbox.max[0] : bbox.max[1];
 }
 
 function motion_PathSetup_update(object: ObjectRenderer, motion: MotionState): void {
@@ -1551,7 +1551,7 @@ function motion_PathSetup_update(object: ObjectRenderer, motion: MotionState): v
     const id = motion.parameters.motionID;
     if (id === MotionID.BackAndForth || id === MotionID.BackAndForthNoYaw) {
         pathGetPoint(motion.target, motion.parameters.pathPoints, 0);
-        motion.target[1] -= object.bbox.maxY; // maybe doesn't happen in game?
+        motion.target[1] -= object.bbox.max[1]; // maybe doesn't happen in game?
     } else
         motion_SlopingPath_init(object, motion);
     // no guarantee velocity is adjusted after this?
@@ -1664,11 +1664,11 @@ function motion_SlopingPath_init(object: ObjectRenderer, motion: MotionState): v
     // snapping to the first point only happens for COLLISION_PATH, but it fixes some weirdness with starting simple paths
     // which might not be visible in game
     pathGetPoint(motion.pos, motion.parameters.pathPoints, motion.pathIndex);
-    motion.pos[1] -= object.bbox.maxY;
+    motion.pos[1] -= object.bbox.max[1];
     motion.pathIndex++;
 
     pathGetPoint(motion.target, motion.parameters.pathPoints, motion.pathIndex);
-    motion.target[1] -= object.bbox.maxY; // adjust target to object center height, kind of weird because of the coordinate system
+    motion.target[1] -= object.bbox.max[1]; // adjust target to object center height, kind of weird because of the coordinate system
     object.euler[1] = Math.PI + Math.atan2(motion.target[0] - motion.pos[0], motion.target[2] - motion.pos[2]);
     vec3.sub(motion.velocity, motion.target, motion.pos);
     normToLength(motion.velocity, motion.speed);
@@ -1741,7 +1741,7 @@ function motion_MiscBob_Update(object: ObjectRenderer, deltaTimeFrames: number, 
         motion.timer = Math.random() * 60;
     if (motion.timer < deltaTimeFrames) {
         motion.angle += deltaTimeFrames * Math.PI / 45;
-        motion.pos[1] = object.objectSpawn.modelMatrix[13] + object.bbox.maxY * .15 * Math.sin(motion.angle);
+        motion.pos[1] = object.objectSpawn.modelMatrix[13] + object.bbox.max[1] * .15 * Math.sin(motion.angle);
     } else {
         motion.timer -= deltaTimeFrames;
     }
@@ -1812,7 +1812,7 @@ function motion_MiscSway_Update(object: ObjectRenderer, deltaTimeFrames: number,
     if (object.objectSpawn.objectId !== ObjectId.BALANCEDOLL01_C) {
         vec3.set(swayScratch, Math.sin(object.euler[2]), -Math.cos(object.euler[2]), 0);
         transformVec3Mat4w0(swayScratch, object.modelMatrix, swayScratch);
-        const bottomOffset = object.partBBox.maxY;
+        const bottomOffset = object.partBBox.max[1];
         vec3.scale(swayScratch, swayScratch, bottomOffset);
         motion.pos[0] = object.objectSpawn.modelMatrix[12] + swayScratch[0];
         motion.pos[1] = object.objectSpawn.modelMatrix[13] + swayScratch[1] + bottomOffset;
@@ -1833,7 +1833,7 @@ function motion_MiscWhackAMole_Update(object: ObjectRenderer, deltaTimeFrames: n
             motion.angle = 0;
             motion.timer = -1;
         }
-        const buriedDepth = object.partBBox.maxY + (object.partBBox.maxY - object.partBBox.minY);
+        const buriedDepth = object.partBBox.max[1] + (object.partBBox.max[1] - object.partBBox.min[1]);
         motion.pos[1] = object.objectSpawn.modelMatrix[13] + buriedDepth * (motion.state === 0 ? (1 - Math.sin(motion.angle)) : Math.sin(motion.angle));
     } else {
         motion.timer -= deltaTimeFrames;
@@ -2024,8 +2024,8 @@ function motion_landedOnGround(object: ObjectRenderer, motion: MotionState, coll
     vec3.add(hopEndScratch, hopEndScratch, motion.pos);
 
     const landed = findGround(collision, scratchTri, object.prevPosition, hopEndScratch);
-    if (landed && scratchTri.contactOffset[1] <= motion.pos[1] + object.partBBox.maxY) {
-        motion.pos[1] = scratchTri.contactOffset[1] - object.partBBox.maxY;
+    if (landed && scratchTri.contactOffset[1] <= motion.pos[1] + object.partBBox.max[1]) {
+        motion.pos[1] = scratchTri.contactOffset[1] - object.partBBox.max[1];
         return true;
     }
     return false;
@@ -2103,7 +2103,7 @@ function motion_forwardStep_alignToGround(object: ObjectRenderer, motion: Motion
     vec3.copy(landingScratch, motion.pos);
     landingScratch[1] += 7 * object.bbox.maxCornerRadius();
     if (findGround(collision, scratchTri, motion.pos, landingScratch)) {
-        motion.pos[1] = scratchTri.contactOffset[1] + Math.abs(object.partBBox.maxY) * scratchTri.normal[1];
+        motion.pos[1] = scratchTri.contactOffset[1] + Math.abs(object.partBBox.max[1]) * scratchTri.normal[1];
         motion_alignmentTransform(alignScratch, scratchTri.normal);
         transformVec3Mat4w0(newVel, alignScratch, motion.velocity);
         if (motion.adjustPitch)
@@ -2127,14 +2127,14 @@ function motion_attemptForwardStep(object: ObjectRenderer, deltaTimeFrames: numb
     else if (currZone < 0) {
         // we passed through the ground, so try to find the intersection point
         vec3.sub(forwardScratch, motion.pos, object.prevPosition);
-        normToLength(forwardScratch, object.partBBox.maxZ);
+        normToLength(forwardScratch, object.partBBox.max[2]);
         vec3.add(forwardScratch, forwardScratch, motion.pos);
-        forwardScratch[1] += object.partBBox.maxY;
+        forwardScratch[1] += object.partBBox.max[1];
         validPosition = findGround(collision, scratchTri, object.prevPosition, forwardScratch);
     }
 
     if (validPosition)
-        vec3.scaleAndAdd(motion.pos, scratchTri.contactOffset, Vec3NegY, object.partBBox.maxY);
+        vec3.scaleAndAdd(motion.pos, scratchTri.contactOffset, Vec3NegY, object.partBBox.max[1]);
     else {
         vec3.copy(motion.pos, object.prevPosition);
         return true;
@@ -2287,7 +2287,7 @@ function motion_SimplePath_update(object: ObjectRenderer, motion: MotionState, d
         mat4.identity(object.baseMatrix);
         motion.pathIndex = pathFindStartIndex(motion.pos, motion.parameters.pathPoints);
         pathGetPoint(motion.target, motion.parameters.pathPoints, motion.pathIndex);
-        motion.target[1] -= object.bbox.maxY;
+        motion.target[1] -= object.bbox.max[1];
         vec3.sub(motion.velocity, motion.target, motion.pos);
         normToLength(motion.velocity, motion.speed);
         object.setAnimation(AnimationType.MOVING);
@@ -2304,7 +2304,7 @@ function motion_ZonePathSetup_update(object: ObjectRenderer, motion: MotionState
             return;
         }
         pathGetPoint(motion.pos, motion.parameters.pathPoints, 0);
-        motion.pos[1] -= object.partBBox.maxY;
+        motion.pos[1] -= object.partBBox.max[1];
         const pathLength = motion.parameters.pathPoints.length >> 2;
         pathGetPoint(zonePathScratch, motion.parameters.pathPoints, pathLength - 1);
         motion.zone = getZone(zonePathScratch, gameState.zones, 100);
@@ -2326,7 +2326,7 @@ function motion_ZonePathSetup_update(object: ObjectRenderer, motion: MotionState
         // reset door position if we go to an earlier area
         // could run path backwards instead?
         pathGetPoint(motion.pos, motion.parameters.pathPoints, 0);
-        motion.pos[1] -= object.partBBox.maxY;
+        motion.pos[1] -= object.partBBox.max[1];
     }
 }
 
@@ -2349,7 +2349,7 @@ function motion_tryAdvancePoint(object: ObjectRenderer, motion: MotionState): bo
     }
     motion.pathIndex = nextPoint;
     pathGetPoint(motion.target, motion.parameters.pathPoints, nextPoint);
-    motion.target[1] -= object.bbox.maxY;
+    motion.target[1] -= object.bbox.max[1];
     return true;
 }
 
@@ -2368,7 +2368,7 @@ function motion_noRotationPath_follow(object: ObjectRenderer, motion: MotionStat
 function motion_setInitialPathVelocity(object: ObjectRenderer, motion: MotionState): void {
     motion.pathIndex = 1;
     pathGetPoint(motion.target, motion.parameters.pathPoints, 1);
-    motion.target[1] -= object.bbox.maxY;
+    motion.target[1] -= object.bbox.max[1];
     vec3.sub(motion.velocity, motion.target, motion.pos);
     normToLength(motion.velocity, motion.speed);
     object.setAnimation(AnimationType.MOVING);

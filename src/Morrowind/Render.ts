@@ -244,8 +244,8 @@ class CellTerrain {
         const vertexSizeInFloats = 7; // height, normal, color
         const vertexData = new Float32Array(vertexCount * vertexSizeInFloats);
 
-        this.aabb.minX = this.aabb.minY = -4096;
-        this.aabb.maxX = this.aabb.maxY = 4096;
+        this.aabb.min[0] = this.aabb.min[1] = -4096;
+        this.aabb.max[0] = this.aabb.max[1] = 4096;
 
         let rowStart = land.heightOffset;
         for (let y = 0; y < land.sideLen; y++) {
@@ -258,8 +258,8 @@ class CellTerrain {
 
                 vertexData[idx*7 + 0] = height;
 
-                this.aabb.minZ = Math.min(this.aabb.minZ, height);
-                this.aabb.maxZ = Math.max(this.aabb.maxZ, height);
+                this.aabb.min[2] = Math.min(this.aabb.min[2], height);
+                this.aabb.max[2] = Math.max(this.aabb.max[2], height);
 
                 let nx = 0, ny = 0, nz = 1;
                 if (land.heightNormalData !== null) {

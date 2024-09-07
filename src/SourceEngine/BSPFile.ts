@@ -1938,13 +1938,15 @@ export class BSPFile {
             const plane = node.plane;
 
             // Find min and max corners.
-            scratchVec3a[0] = plane.n[0] >= 0 ? aabb.minX : aabb.maxX;
-            scratchVec3a[1] = plane.n[1] >= 0 ? aabb.minY : aabb.maxY;
-            scratchVec3a[2] = plane.n[2] >= 0 ? aabb.minZ : aabb.maxZ;
-
-            scratchVec3b[0] = plane.n[0] >= 0 ? aabb.maxX : aabb.minX;
-            scratchVec3b[1] = plane.n[1] >= 0 ? aabb.maxY : aabb.minY;
-            scratchVec3b[2] = plane.n[2] >= 0 ? aabb.maxZ : aabb.minZ;
+            for (let i = 0; i < 3; i++) {
+                if (plane.n[i] >= 0) {
+                    scratchVec3a[i] = aabb.min[i];
+                    scratchVec3b[i] = aabb.max[i];
+                } else {
+                    scratchVec3a[i] = aabb.max[i];
+                    scratchVec3b[i] = aabb.min[i];
+                }
+            }
 
             if (plane.distanceVec3(scratchVec3b) < 0) {
                 // Box is on the outside of child0; traverse child1.

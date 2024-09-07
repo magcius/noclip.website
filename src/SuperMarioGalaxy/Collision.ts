@@ -435,9 +435,9 @@ class CollisionZone {
 
         parts.getTrans(scratchVec3a);
         const r = parts.boundingSphereRadius;
-        if (!isInRange(scratchVec3a[0], this.boundingAABB.minX + r, this.boundingAABB.maxX - r) ||
-            !isInRange(scratchVec3a[1], this.boundingAABB.minY + r, this.boundingAABB.maxY - r) ||
-            !isInRange(scratchVec3a[2], this.boundingAABB.minZ + r, this.boundingAABB.maxZ - r))
+        if (!isInRange(scratchVec3a[0], this.boundingAABB.min[0] + r, this.boundingAABB.max[0] - r) ||
+            !isInRange(scratchVec3a[1], this.boundingAABB.min[1] + r, this.boundingAABB.max[1] - r) ||
+            !isInRange(scratchVec3a[2], this.boundingAABB.min[2] + r, this.boundingAABB.max[2] - r))
             this.calcMinMaxAndRadius();
     }
 

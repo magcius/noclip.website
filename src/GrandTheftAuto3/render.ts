@@ -542,7 +542,7 @@ export class SceneRenderer extends BaseRenderer {
             renderLayer = GfxRendererLayer.TRANSLUCENT;
         if (this.params.water) {
             this.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT + 1);
-        } else if (renderLayer === GfxRendererLayer.TRANSLUCENT && this.bbox.minY >= sealevel) {
+        } else if (renderLayer === GfxRendererLayer.TRANSLUCENT && this.bbox.min[1] >= sealevel) {
             this.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT + 2);
         } else {
             this.sortKey = makeSortKey(renderLayer);

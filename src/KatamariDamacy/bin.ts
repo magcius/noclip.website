@@ -1488,7 +1488,7 @@ export function parseMissionSetupBIN(buffers: ArrayBufferSlice[], defs: ArrayBuf
             // there's an alternative path that I don't understand yet, just the simple stuff for now
             if (u8LocPosType !== 0) {
                 scratchObjectAABB.transform(objectModels[modelIndex].bbox, modelMatrix);
-                modelMatrix[13] -= scratchObjectAABB.maxY - modelMatrix[13];
+                modelMatrix[13] -= scratchObjectAABB.max[1] - modelMatrix[13];
             }
 
             const dispOnAreaNo = Math.max(i, firstArea);

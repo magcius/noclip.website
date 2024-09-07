@@ -2555,7 +2555,7 @@ class d_a_obj_item extends daItemBase {
     private setBaseMtx_1(): void {
         MtxTrans(this.pos, false);
 
-        const y = this.model.modelData.bmd.jnt1.joints[0].bbox.maxY * 0.5 * this.scale[1];
+        const y = this.model.modelData.bmd.jnt1.joints[0].bbox.max[1] * 0.5 * this.scale[1];
         MtxTrans(vec3.set(scratchVec3a, 0.0, y, 0.0), true);
         
         mDoMtx_ZXYrotM(calc_mtx, this.rot);
@@ -2908,8 +2908,8 @@ class d_a_obj_onsen extends fopAc_ac_c {
         this.cullMtx = this.model.modelMatrix;
 
         const bbox = this.model.modelData.bmd.jnt1.joints[0].bbox;
-        this.setCullSizeBox(this.scale[0] * bbox.minX, this.scale[1] * bbox.minY, this.scale[2] * bbox.minZ,
-                            this.scale[0] * bbox.maxX, this.scale[1] * bbox.maxY, this.scale[2] * bbox.maxZ);
+        this.setCullSizeBox(this.scale[0] * bbox.min[0], this.scale[1] * bbox.min[1], this.scale[2] * bbox.min[2],
+                            this.scale[0] * bbox.max[0], this.scale[1] * bbox.max[1], this.scale[2] * bbox.max[2]);
 
         return cPhs__Status.Next;
     }
@@ -3015,8 +3015,8 @@ class d_a_obj_magLiftRot extends fopAc_ac_c {
         this.cullMtx = this.model.modelMatrix;
 
         const bbox = this.model.modelData.bmd.jnt1.joints[0].bbox;
-        this.setCullSizeBox(this.scale[0] * bbox.minX, this.scale[1] * bbox.minY, this.scale[2] * bbox.minZ,
-                            this.scale[0] * bbox.maxX, this.scale[1] * bbox.maxY, this.scale[2] * bbox.maxZ);
+        this.setCullSizeBox(this.scale[0] * bbox.min[0], this.scale[1] * bbox.min[1], this.scale[2] * bbox.min[2],
+                            this.scale[0] * bbox.max[0], this.scale[1] * bbox.max[1], this.scale[2] * bbox.max[2]);
 
         if ((this.parameters & 0xFF) === 0)
             this.rot[1] += -0x8000;
