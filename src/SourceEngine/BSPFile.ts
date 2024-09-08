@@ -193,7 +193,7 @@ interface DisplacementResult {
 
 function buildDisplacement(disp: DispInfo, corners: ReadonlyVec3[], disp_verts: Float32Array, texMapping: TexinfoMapping): DisplacementResult {
     const vertex = nArray(disp.vertexCount, () => new MeshVertex());
-    const aabb = new AABB();
+    const bbox = new AABB();
 
     const v0 = vec3.create(), v1 = vec3.create();
 
@@ -226,7 +226,7 @@ function buildDisplacement(disp: DispInfo, corners: ReadonlyVec3[], disp_verts: 
             v.lightmapUV[0] = tx;
             v.lightmapUV[1] = ty;
             v.alpha = saturate(dvalpha / 0xFF);
-            aabb.unionPoint(v.position);
+            bbox.unionPoint(v.position);
         }
     }
 
@@ -312,7 +312,7 @@ function buildDisplacement(disp: DispInfo, corners: ReadonlyVec3[], disp_verts: 
         }
     }
 
-    return { vertex, bbox: aabb };
+    return { vertex, bbox };
 }
 
 //#endregion
@@ -1603,7 +1603,7 @@ export class BSPFile {
 
             let indexCount = 0;
             let vertexCount = 0;
-            let surface: BSPSurface | null = null;
+            let bbox: AABB;
 
             // vertex data
             if (dispinfo >= 0) {
@@ -1633,6 +1633,7 @@ export class BSPFile {
                     corners = corners.slice(startCorner).concat(corners.slice(0, startCorner));
 
                 const result = buildDisplacement(disp, corners, disp_verts, tex.textureMapping);
+                bbox = result.bbox;
 
                 for (let j = 0; j < result.vertex.length; j++) {
                     const v = result.vertex[j];
@@ -1661,13 +1662,9 @@ export class BSPFile {
                 }
                 assert(indexCount === ((disp.sideLength - 1) ** 2) * 6);
 
-                // TODO(jstpierre): Merge disps
-                surface = { texName, startIndex: dstOffsIndex, indexCount, center, wantsTexCoord0Scale, lightmapPackerPageIndex, faceList: [], bbox: result.bbox };
-                this.surfaces.push(surface);
-
                 vertexCount = disp.vertexCount;
             } else {
-                const bbox = new AABB();
+                bbox = new AABB();
 
                 const vertex = nArray(numedges, () => new MeshVertex());
                 for (let j = 0; j < numedges; j++) {
@@ -1738,20 +1735,20 @@ export class BSPFile {
                     convertToTrianglesRange(indexData, dstOffsIndex, GfxTopology.TriFans, dstIndexBase, numedges);
                 }
 
-                surface = mergeSurface;
-
-                if (surface === null) {
-                    surface = { texName, startIndex: dstOffsIndex, indexCount: 0, center, wantsTexCoord0Scale, lightmapPackerPageIndex, faceList: [], bbox };
-                    this.surfaces.push(surface);
-                } else {
-                    surface.bbox.union(surface.bbox, bbox);
-                }
-
-                surface.indexCount += indexCount;
-                surface.faceList.push(face.index);
-
                 vertexCount = numedges;
             }
+
+            let surface = mergeSurface;
+
+            if (surface === null) {
+                surface = { texName, startIndex: dstOffsIndex, indexCount: 0, center, wantsTexCoord0Scale, lightmapPackerPageIndex, faceList: [], bbox };
+                this.surfaces.push(surface);
+            } else {
+                surface.bbox.union(surface.bbox, bbox);
+            }
+
+            surface.indexCount += indexCount;
+            surface.faceList.push(face.index);
 
             dstOffsIndex += indexCount;
             dstIndexBase += vertexCount;
