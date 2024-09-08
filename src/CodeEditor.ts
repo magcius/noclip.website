@@ -336,11 +336,11 @@ export default class CodeEditor {
     private _mouseX: number | undefined;
     private _mouseY: number | undefined;
     private _mouseIdx: number | undefined;
-    private _dragging: string | undefined;
+    private _dragging = false;
     private _dragStartIdx: number;
     private _draggingNumber: { start: number; end: number; value: number; } | null = null;
 
-    constructor(private _document: HTMLDocument) {
+    constructor(private _document: Document) {
         this.onvaluechanged = null;
 
         this._prefix = '';
@@ -376,7 +376,7 @@ export default class CodeEditor {
         this._textarea.style.position = 'absolute';
         this._textarea.style.left = '-99999px';
         this._textarea.style.overflow = 'hidden';
-        this._canvas.style.position = 'absolute';
+        this._canvas.style.position = 'fixed';
 
         this._cursorOverride = new CursorOverride(this._document);
         this._numberDragger = new NumberDragger(this._document, this._cursorOverride);
@@ -553,7 +553,6 @@ export default class CodeEditor {
         const newHeight = Math.ceil(Math.max(this._minHeight, this._rowHeight * (numRows + this._paddingTop + this._paddingBottom)));
         if (newHeight !== this._height) {
             this._height = newHeight;
-            this._canvas.style.height = `${this._height}px`;
             this._toplevel.style.height = `${this._height}px`;
             // Resize the textarea so the window doesn't scroll back in when we click on it...
             this._textarea.style.height = (this._height - this._rowHeight) + 'px';
@@ -621,7 +620,10 @@ export default class CodeEditor {
 
     private _onMouseDown = (e: MouseEvent) => {
         e.preventDefault();
-        const { row, col } = this._xyToRowCol(e.offsetX, e.offsetY);
+        const defaultView = this._document.defaultView!;
+        const mouseX = e.offsetX + defaultView.scrollX;
+        const mouseY = e.offsetY + defaultView.scrollY;
+        const { row, col } = this._xyToRowCol(mouseX, mouseY);
         const { line } = this._rowColToLineIdx(row, 0, true);
         if (this._isLineLocked(line)) {
             this._textarea.blur();
@@ -630,7 +632,6 @@ export default class CodeEditor {
             this._textarea.focus();
         } else {
             const { idx } = this._rowColToLineIdx(row, col, true);
-            this._textarea.focus();
 
             const { idx: exactIdx } = this._rowColToLineIdx(row, col, false);
             const draggableNumber = this._findDraggableNumber(exactIdx);
@@ -656,16 +657,18 @@ export default class CodeEditor {
                     this._setCursor(this._dragStartIdx);
                 }
 
-                this._dragging = 'selection';
+                this._dragging = true;
 
                 this._document.documentElement.addEventListener('mousemove', this._onMouseMove, { capture: true });
                 this._document.documentElement.addEventListener('mouseup', this._onMouseUp);
             }
+
+            this._textarea.focus();
         }
     };
 
     private _onMouseUp = (e: MouseEvent) => {
-        this._dragging = undefined;
+        this._dragging = false;
 
         this._document.documentElement.removeEventListener('mousemove', this._onMouseMove, { capture: true });
         this._document.documentElement.removeEventListener('mouseup', this._onMouseUp);
@@ -674,24 +677,25 @@ export default class CodeEditor {
     private _onMouseMove = (e: MouseEvent) => {
         e.stopPropagation();
 
-        this._mouseX = e.offsetX;
-        this._mouseY = e.offsetY;
+        const defaultView = this._document.defaultView!;
+        this._mouseX = e.offsetX + defaultView.scrollX;
+        this._mouseY = e.offsetY + defaultView.scrollY;
         this._recalculateMouseIdx();
 
         const { row, col } = this._xyToRowCol(this._mouseX, this._mouseY);
         const { line, idx } = this._rowColToLineIdx(row, col, true);
 
-        if (this._dragging === 'selection') {
+        if (this._dragging) {
             this._setSelection(this._dragStartIdx, this._idxToTextarea(idx));
             this._textarea.focus();
         }
 
-        const { line: exactLine, idx: exactIdx } = this._rowColToLineIdx(row, col, false);
+        const { idx: exactIdx } = this._rowColToLineIdx(row, col, false);
         const isLineLocked = this._isLineLocked(line);
 
         // Dragging takes priority.
         let cursor;
-        if (this._dragging === 'selection') {
+        if (this._dragging) {
             cursor = 'text';
         } else if (col === -1 || isLineLocked) {
             cursor = 'default';
@@ -902,12 +906,17 @@ export default class CodeEditor {
             return;
 
         this._recalculate();
-        const canvasRect = this._canvas.getBoundingClientRect();
 
         const defaultView = this._document.defaultView!;
+        const viewportWidth = defaultView.innerWidth;
+        const viewportHeight = defaultView.innerHeight;
+
+        const scrollX = defaultView.scrollX;
+        const scrollY = defaultView.scrollY;
+
         const ratio = defaultView.devicePixelRatio;
-        const canvasWidth = this._width * ratio;
-        const canvasHeight = this._height * ratio;
+        const canvasWidth = viewportWidth * ratio;
+        const canvasHeight = viewportHeight * ratio;
         let sizeChanged = false;
 
         if (this._canvas.width !== canvasWidth || this._canvas.height !== canvasHeight) {
@@ -917,17 +926,13 @@ export default class CodeEditor {
         }
 
         // Clip to viewport.
-        const scissorX1 = Math.max(0, canvasRect.left);
-        const scissorY1 = Math.max(0, canvasRect.top);
-        const viewportWidth = defaultView.innerWidth;
-        const viewportHeight = defaultView.innerHeight;
-        const scissorX2 = Math.min(viewportWidth, canvasRect.right);
-        const scissorY2 = Math.min(viewportHeight, canvasRect.bottom);
-        // Put in canvas space.
-        const clipRectX = scissorX1 - canvasRect.left;
-        const clipRectY = scissorY1 - canvasRect.top;
-        const clipRectW = scissorX2 - scissorX1;
-        const clipRectH = scissorY2 - scissorY1;
+        const scissorX1 = Math.max(0, scrollX);
+        const scissorY1 = Math.max(0, scrollY);
+
+        const clipRectX = scissorX1;
+        const clipRectY = scissorY1;
+        const clipRectW = viewportWidth;
+        const clipRectH = viewportHeight;
 
         // Determine the first and last visible row...
         const vizRow0 = Math.floor(clipRectY / this._rowHeight - this._paddingTop);
@@ -936,7 +941,7 @@ export default class CodeEditor {
             return row >= vizRow0 && row <= vizRow1;
         };
         const getRowY = (row: number) => {
-            return (this._paddingTop + row) * this._rowHeight;
+            return (this._paddingTop + row) * this._rowHeight - clipRectY;
         };
 
         const ctx = this._canvas.getContext('2d')!;
