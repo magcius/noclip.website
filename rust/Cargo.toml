@@ -21,7 +21,7 @@ deku = { version = "0.16.0", features = ["logging"] }
 env_logger = "0.10.1"
 inflate = "0.4.5"
 js-sys = "0.3.60"
-polymorph = { git = "https://github.com/wgreenberg/polymorph", features = ["sheepfile-reader"], optional-dependencies = false, default-features = false }
+polymorph = { git = "https://github.com/wgreenberg/polymorph", features = ["sheepfile-reader"], default-features = false }
 log = "0.4.21"
 lz4_flex = { version = "0.10.0", default-features = false, features = ["safe-decode", "checked-decode"] }
 lzma-rs = { version = "0.3.0", features = ["raw_decoder"] }
