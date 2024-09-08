@@ -658,41 +658,41 @@ pub struct LiquidType {
     #[deku(reader = "db2.read_field(deku::input_bits, deku::bit_offset, 2)")]
     pub flags: u16,
     #[deku(reader = "db2.read_field(deku::input_bits, deku::bit_offset, 3)")]
-    pub sound_bank: u8,
+    pub _sound_bank: u8,
     #[deku(reader = "db2.read_field(deku::input_bits, deku::bit_offset, 4)")]
-    pub sound_id: u32,
+    pub _sound_id: u32,
     #[deku(reader = "db2.read_field(deku::input_bits, deku::bit_offset, 5)")]
-    pub f6: u32,
+    pub _f6: u32,
     #[deku(reader = "db2.read_field(deku::input_bits, deku::bit_offset, 6)")]
-    pub max_darken_depth: f32,
+    pub _max_darken_depth: f32,
     #[deku(reader = "db2.read_field(deku::input_bits, deku::bit_offset, 7)")]
-    pub fog_darken_intensity: f32,
+    pub _fog_darken_intensity: f32,
     #[deku(reader = "db2.read_field(deku::input_bits, deku::bit_offset, 8)")]
-    pub ambient_darken_intensity: f32,
+    pub _ambient_darken_intensity: f32,
     #[deku(reader = "db2.read_field(deku::input_bits, deku::bit_offset, 9)")]
-    pub dir_darken_intensity: f32,
+    pub _dir_darken_intensity: f32,
     #[deku(reader = "db2.read_field(deku::input_bits, deku::bit_offset, 10)")]
-    pub light_id: u32,
+    pub _light_id: u32,
     #[deku(reader = "db2.read_field(deku::input_bits, deku::bit_offset, 11)")]
-    pub particle_scale: f32,
+    pub _particle_scale: f32,
     #[deku(reader = "db2.read_field(deku::input_bits, deku::bit_offset, 12)")]
-    pub particle_movement: u32,
+    pub _particle_movement: u32,
     #[deku(reader = "db2.read_field(deku::input_bits, deku::bit_offset, 13)")]
-    pub particle_tex_slots: u32,
+    pub _particle_tex_slots: u32,
     #[deku(reader = "db2.read_field(deku::input_bits, deku::bit_offset, 14)")]
-    pub particle_material_id: u32,
+    pub _particle_material_id: u32,
     #[deku(reader = "db2.read_field(deku::input_bits, deku::bit_offset, 15)")]
-    pub minimap_colors: u32,
+    pub _minimap_colors: u32,
     #[deku(reader = "db2.read_vec(deku::input_bits, deku::bit_offset, 16)")]
-    pub unknown_colors: Vec<u32>,
+    pub _unknown_colors: Vec<u32>,
     #[deku(reader = "db2.read_vec(deku::input_bits, deku::bit_offset, 17)")]
-    pub shader_color: Vec<u32>,
+    pub _shader_color: Vec<u32>,
     #[deku(reader = "db2.read_vec(deku::input_bits, deku::bit_offset, 18)")]
-    pub shader_f32_params: Vec<f32>,
+    pub _shader_f32_params: Vec<f32>,
     #[deku(reader = "db2.read_vec(deku::input_bits, deku::bit_offset, 19)")]
-    pub shader_int_params: Vec<u32>,
+    pub _shader_int_params: Vec<u32>,
     #[deku(reader = "db2.read_vec(deku::input_bits, deku::bit_offset, 20)", pad_bits_after = "5")]
-    pub coeffecients: Vec<u32>,
+    pub _coeffecients: Vec<u32>,
 }
 
 #[derive(DekuRead, Clone, Debug)]
@@ -703,25 +703,25 @@ pub struct LightSkyboxRecord {
     #[deku(reader = "db2.read_field(deku::input_bits, deku::bit_offset, 1)")]
     pub flags: u16,
     #[deku(reader = "db2.read_field(deku::input_bits, deku::bit_offset, 2)")]
-    pub skybox_file_data_id: u32,
+    pub _skybox_file_data_id: u32,
     #[deku(reader = "db2.read_field(deku::input_bits, deku::bit_offset, 3)", pad_bits_after = "26")]
-    pub celestial_skybox_file_data_id: u32,
+    pub _celestial_skybox_file_data_id: u32,
 }
 
 #[derive(DekuRead, Clone, Debug)]
 #[deku(ctx = "_: Wdc4Db2File")]
 pub struct LiquidObject {
-    pub flow_direction: f32,
-    pub flow_speed: f32,
-    pub liquid_type_id: u32,
+    pub _flow_direction: f32,
+    pub _flow_speed: f32,
+    pub _liquid_type_id: u32,
 }
 
 #[derive(DekuRead, Clone, Debug)]
 #[deku(ctx = "_: Wdc4Db2File")]
 pub struct LiquidTexture {
-    pub file_data_id: u32,
-    pub order_index: u32,
-    pub liquid_type_id: u32,
+    pub _file_data_id: u32,
+    pub _order_index: u32,
+    pub _liquid_type_id: u32,
 }
 
 #[wasm_bindgen(js_name = "WowLiquidResult", getter_with_clone)]

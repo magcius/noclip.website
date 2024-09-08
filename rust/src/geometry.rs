@@ -1,6 +1,6 @@
 use core::f32;
 
-use nalgebra_glm::{make_mat4, make_vec3, triangle_normal, vec3, vec4, Mat4, Vec2, Vec3};
+use nalgebra_glm::{make_mat4, make_vec3, triangle_normal, vec3, vec4, Mat4, Vec3};
 use wasm_bindgen::prelude::*;
 
 #[derive(Default, Debug, Clone)]
@@ -190,9 +190,9 @@ impl ConvexHull {
         let mut result = IntersectionState::Inside;
         for plane in &self.planes {
             let dist = plane.distance(center);
-            if (dist > radius) {
+            if dist > radius {
                 return IntersectionState::Outside;
-            } else if (dist > -radius) {
+            } else if dist > -radius {
                 result = IntersectionState::Intersection;
             }
         }

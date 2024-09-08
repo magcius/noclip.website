@@ -40,7 +40,7 @@ pub struct SkinProfile {
     _bones: WowArray<[u8; 4]>,
     submeshes: WowArray<SkinSubmesh>,
     batches: WowArray<ModelBatch>,
-    pub bone_count_max: u32,
+    pub _bone_count_max: u32,
 }
 
 #[wasm_bindgen(js_name = "WowSkin", getter_with_clone)]

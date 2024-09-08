@@ -1,7 +1,7 @@
 use core::f32;
 use std::collections::{HashMap, HashSet};
 
-use deku::{ctx::ByteSize, prelude::*};
+use deku::prelude::*;
 use nalgebra_glm::{make_vec3, vec2, vec3, Vec2, Vec3};
 use wasm_bindgen::prelude::*;
 
@@ -186,7 +186,7 @@ impl Wmo {
         vec![]
     }
 
-    pub fn find_closest_group_for_modelspace_point(&self, point_slice: &[f32]) -> u32 {
+    pub fn find_closest_group_for_modelspace_point(&self, _point_slice: &[f32]) -> u32 {
         todo!()
     }
 
@@ -946,16 +946,16 @@ impl LiquidResult {
 
 #[derive(DekuRead, Debug, Clone)]
 pub struct LiquidVertex {
-    pub data: u32,
+    pub _data: u32,
     pub height: f32,
 }
 
 #[derive(DekuRead, Debug, Clone)]
 pub struct LiquidTile {
     #[deku(bits = 1)]
-    pub fishable: u8,
+    pub _fishable: u8,
     #[deku(bits = 1)]
-    pub shared: u8,
+    pub _shared: u8,
     #[deku(bits = 1)]
     pub _unknown_1: u8,
     #[deku(bits = 1)]
@@ -971,11 +971,12 @@ impl LiquidTile {
 }
 
 #[derive(DekuRead, Debug, Clone)]
+#[allow(dead_code)] // width and height are used as part of the deku(count) but for some reason Rust still complaints they're unused
 pub struct WmoLiquid {
-    pub width: u32,
-    pub height: u32,
-    pub tile_width: u32,
-    pub tile_height: u32,
+    width: u32,
+    height: u32,
+    tile_width: u32,
+    tile_height: u32,
     pub position: WowVec3,
     pub material_id: u16,
     #[deku(count = "width * height")]
@@ -1049,7 +1050,7 @@ impl WmoLiquid {
 
 #[derive(DekuRead, Debug, Clone)]
 pub struct DoodadSet {
-    pub name: [u8; 0x14],
+    _name: [u8; 0x14],
     pub start_index: u32,
     #[deku(pad_bytes_after = "4")]
     pub count: u32,
@@ -1088,11 +1089,11 @@ impl BspNode {
 
 #[derive(DekuRead, Debug, Clone)]
 pub struct AmbientVolume {
-    pub position: WowVec3,
-    pub start: f32,
-    pub end: f32,
+    _position: WowVec3,
+    _start: f32,
+    _end: f32,
     pub color1: Bgra,
-    pub color2: Bgra,
+    _color2: Bgra,
     pub color3: Bgra,
     pub flags: u32,
     #[deku(pad_bytes_after = "10")]

@@ -2,7 +2,6 @@
 use std::marker::PhantomData;
 
 use deku::prelude::*;
-use deku::ctx::ByteSize;
 
 use wasm_bindgen::prelude::*;
 use crate::wow::{animation::*, common::parse, particles::Emitter};
@@ -14,13 +13,13 @@ use super::common::{
 // if it's an MD21 chunk, all pointers are relative to the end of that chunk
 #[derive(Debug, DekuRead)]
 pub struct M2HeaderBlock {
-    pub header: M2Header,
+    pub _header: M2Header,
 }
 
 #[derive(Debug, DekuRead, Clone)]
 #[deku(magic = b"MD20")]
 pub struct M2Header {
-    pub version: u32,
+    pub _version: u32,
     name: WowCharArray,
     pub flags: u32,
     global_sequence_durations: WowArray<u32>,
@@ -29,7 +28,7 @@ pub struct M2Header {
     bones: WowArray<M2CompBone>,
     _key_bone_lookup: WowArray<u16>,
     vertices: WowArray<()>,
-    pub num_skin_profiles: u32,
+    pub _num_skin_profiles: u32,
     colors: WowArray<M2Color>,
     textures: WowArray<M2Texture>,
     texture_weights: WowArray<M2Track<Fixedi16>>,
@@ -42,9 +41,9 @@ pub struct M2Header {
     transparency_lookup_table: WowArray<u16>,
     texture_transforms_lookup_table: WowArray<u16>,
     pub bounding_box: AABBox,
-    pub bounding_sphere_radius: f32,
-    pub collision_box: AABBox,
-    pub collision_sphere_radius: f32,
+    pub _bounding_sphere_radius: f32,
+    pub _collision_box: AABBox,
+    pub _collision_sphere_radius: f32,
     _collision_triangles: WowArray<u16>,
     _collision_vertices: WowArray<Vec3>,
     _collision_normals: WowArray<Vec3>,
@@ -349,9 +348,9 @@ impl M2 {
 #[derive(DekuRead)]
 pub struct Exp2Record {
     pub z_source: f32,
-    pub unk1: u32,
-    pub unk2: u32,
-    pub unk3: M2TrackPartial<Fixedi16>,
+    pub _unk1: u32,
+    pub _unk2: u32,
+    pub _unk3: M2TrackPartial<Fixedi16>,
 }
 
 #[derive(DekuRead, Debug, Clone)]
@@ -670,6 +669,6 @@ mod tests {
     fn test() {
         let sheep_path = "../data/WorldOfWarcraft/sheep0";
         let campfire = SheepfileManager::load_file_id_data(sheep_path, 202050).unwrap();
-        let m2 = M2::new(&campfire).unwrap();
+        let _m2 = M2::new(&campfire).unwrap();
     }
 }

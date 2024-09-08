@@ -421,46 +421,46 @@ pub struct AdtVBOInfo {
 
 #[derive(DekuRead, Debug, Clone)]
 pub struct MapChunkFlags {
-    #[deku(bits = 1)] pub has_mcsh: bool,
-    #[deku(bits = 1)] pub impass: bool,
-    #[deku(bits = 1)] pub lq_river: bool,
-    #[deku(bits = 1)] pub lq_ocean: bool,
-    #[deku(bits = 1)] pub lq_magma: bool,
-    #[deku(bits = 1)] pub lq_slime: bool,
-    #[deku(bits = 1)] pub has_mccv: bool,
-    #[deku(bits = 1, pad_bits_after = "7")] pub unknown: bool,
-    #[deku(bits = 1)] pub do_not_fix_alpha_map: bool,
-    #[deku(bits = 1, pad_bits_after = "15")] pub high_res_holes: bool,
+    #[deku(bits = 1)] pub _has_mcsh: bool,
+    #[deku(bits = 1)] pub _impass: bool,
+    #[deku(bits = 1)] pub _lq_river: bool,
+    #[deku(bits = 1)] pub _lq_ocean: bool,
+    #[deku(bits = 1)] pub _lq_magma: bool,
+    #[deku(bits = 1)] pub _lq_slime: bool,
+    #[deku(bits = 1)] pub _has_mccv: bool,
+    #[deku(bits = 1, pad_bits_after = "7")] pub _unknown: bool,
+    #[deku(bits = 1)] pub _do_not_fix_alpha_map: bool,
+    #[deku(bits = 1, pad_bits_after = "15")] pub _high_res_holes: bool,
 }
 
 #[derive(DekuRead, Debug, Clone)]
 pub struct MapChunkHeader {
     pub flags: u32,
-    pub index_x: u32,
-    pub index_y: u32,
-    pub n_layers: u32,
-    pub n_doodad_refs: u32,
+    pub _index_x: u32,
+    pub _index_y: u32,
+    pub _n_layers: u32,
+    pub _n_doodad_refs: u32,
     pub holes_high_res: u64,
-    pub ofs_layer: u32,
-    pub ofs_refs: u32,
-    pub ofs_alpha: u32,
-    pub size_alpha: u32,
-    pub ofs_shadow: u32,
-    pub size_shadow: u32,
-    pub area_id: u32,
-    pub n_map_obj_refs: u32,
+    pub _ofs_layer: u32,
+    pub _ofs_refs: u32,
+    pub _ofs_alpha: u32,
+    pub _size_alpha: u32,
+    pub _ofs_shadow: u32,
+    pub _size_shadow: u32,
+    pub _area_id: u32,
+    pub _n_map_obj_refs: u32,
     pub holes_low_res: u16,
-    pub unknown_but_used: u16,
-    pub low_quality_texture_map: [u16; 8],
-    pub no_effect_doodad: [u8; 8],
-    pub ofs_snd_emitters: u32,
-    pub n_snd_emitters: u32,
-    pub ofs_liquid: u32,
-    pub size_liquid: u32,
+    pub _unknown_but_used: u16,
+    pub _low_quality_texture_map: [u16; 8],
+    pub _no_effect_doodad: [u8; 8],
+    pub _ofs_snd_emitters: u32,
+    pub _n_snd_emitters: u32,
+    pub _ofs_liquid: u32,
+    pub _size_liquid: u32,
     pub position: Vec3,
-    pub mccv_offset: u32,
-    pub mclv_offset: u32,
-    pub unused: u32,
+    pub _mccv_offset: u32,
+    pub _mclv_offset: u32,
+    pub _unused: u32,
 }
 
 impl MapChunkHeader {
@@ -951,8 +951,8 @@ pub struct LiquidChunkHeader {
 #[derive(DekuRead, Debug, Clone)]
 pub struct LiquidChunkAttributes {
     // These are both 8x8 bitmasks
-    pub fishable: [u8; 8],
-    pub deep: [u8; 8],
+    pub _fishable: [u8; 8],
+    pub _deep: [u8; 8],
 }
 
 #[derive(DekuRead, Debug, Clone)]
@@ -960,7 +960,7 @@ pub struct LiquidInstance {
     pub liquid_type: u16,
     pub liquid_object_or_lvf: u16,
     pub min_height_level: f32,
-    pub max_height_level: f32,
+    pub _max_height_level: f32,
     pub x_offset: u8,
     pub y_offset: u8,
     pub width: u8,
@@ -984,7 +984,7 @@ pub struct LodWmoDefinition {
 #[derive(Debug, DekuRead, Clone)]
 pub struct LodExtent {
     pub extents: AABBox,
-    pub radius: f32,
+    pub _radius: f32,
 }
 
 #[derive(DekuRead, Debug, Clone)]
@@ -1012,6 +1012,6 @@ mod tests {
     #[test]
     fn test() {
         let data = SheepfileManager::load_file_id_data("../data/WorldOfWarcraft/sheep1", 778432).unwrap();
-        let adt = Adt::new(&data).unwrap();
+        let _adt = Adt::new(&data).unwrap();
     }
 }
