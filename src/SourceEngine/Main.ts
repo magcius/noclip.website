@@ -791,6 +791,18 @@ export class BSPRenderer {
         if (!!(kinds & RenderObjectKind.Entities)) {
             for (let i = 1; i < this.models.length; i++) {
                 const bspModel = this.models[i];
+
+                for (let j = 0; j < bspModel.surfaces.length; j++) {
+                    const surface = bspModel.surfaces[j];
+                    for (let k = 0; k < surface.surface.faceList.length; k++) {
+                        const faceIdx = surface.surface.faceList[k];
+                        
+                        const lightmapUpdater = this.lightmapUpdaters[faceIdx];
+                        if (lightmapUpdater !== null && lightmapUpdater.checkDirty(renderContext))
+                            lightmapUpdater.buildLightmap(renderContext, this.startLightmapPageIndex);
+                    }
+                }
+
                 bspModel.prepareToRenderModel(renderContext, renderInstManager);
             }
 
