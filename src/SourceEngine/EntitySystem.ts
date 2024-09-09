@@ -208,32 +208,51 @@ export class BaseEntity {
         return true;
     }
 
-    public getLocalRenderBounds(): AABB | null {
-        if (this.modelStudio !== null)
-            return this.modelStudio.modelData.viewBB;
-        else if (this.modelBSP !== null)
-            return this.modelBSP.model.bbox;
-        return null;
+    public getLocalRenderBounds(dst: AABB): boolean {
+        if (this.modelStudio !== null) {
+            if (this.seqindex !== -1) {
+                const seq = this.modelStudio.modelData.seq[this.seqindex];
+                if (seq !== undefined)
+                    dst.union(this.modelStudio.modelData.viewBB, seq.viewBB);
+            } else {
+                dst.copy(this.modelStudio.modelData.viewBB);
+            }
+            return true;
+        } else if (this.modelBSP !== null) {
+            dst.copy(this.modelBSP.model.bbox);
+            return true;
+        } else {
+            return false;
+        }
     }
 
     public getRenderBounds(dst: AABB): boolean {
-        const bounds = this.getLocalRenderBounds();
-        if (bounds === null)
+        if (this.getLocalRenderBounds(dst)) {
+            dst.transform(dst, this.modelMatrix);
+            return true;
+        } else {
             return false;
-        dst.transform(bounds, this.modelMatrix);
-        return true;
+        }
     }
 
     protected checkFrustum(renderContext: SourceRenderContext): boolean {
-        this.getRenderBounds(scratchAABB);
-        return renderContext.currentView.frustum.contains(scratchAABB);
+        if (this.getRenderBounds(scratchAABB)) {
+            return renderContext.currentView.frustum.contains(scratchAABB);
+        } else {
+            // No render bounds, don't bother.
+            assert(false);
+            return true;
+        }
     }
 
     public checkVisible(renderContext: SourceRenderContext): boolean {
-        if (!this.shouldDraw() || !this.checkFrustum(renderContext))
+        if (!this.shouldDraw())
             return false;
 
         if (this.getRenderBounds(scratchAABB)) {
+            if (!renderContext.currentView.frustum.contains(scratchAABB))
+                return false;
+
             const bsp = this.bspRenderer.bsp, pvs = renderContext.currentView.pvs;
             let visible = false;
             bsp.queryAABB(scratchAABB, (leaf) => {
@@ -571,15 +590,8 @@ export class BaseEntity {
         }
 
         if ((this as any).debugDraw) {
-            let aabb: AABB | null = null;
-            if (this.modelBSP !== null)
-                aabb = this.modelBSP.model.bbox;
-            else if (this.modelStudio !== null)
-                aabb = this.modelStudio.modelData.viewBB;
-
-            if (aabb !== null) {
-                drawWorldSpaceAABB(getDebugOverlayCanvas2D(), renderContext.currentView.clipFromWorldMatrix, aabb, this.modelMatrix);
-            }
+            if (this.getLocalRenderBounds(scratchAABB))
+                drawWorldSpaceAABB(getDebugOverlayCanvas2D(), renderContext.currentView.clipFromWorldMatrix, scratchAABB, this.modelMatrix);
 
             this.getAbsOrigin(scratchVec3a);
             drawWorldSpaceLocator(getDebugOverlayCanvas2D(), renderContext.currentView.clipFromWorldMatrix, scratchVec3a);

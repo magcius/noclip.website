@@ -4,7 +4,7 @@ import { GfxClipSpaceNearZ } from "./gfx/platform/GfxPlatform.js";
 import { nArray } from "./util.js";
 import type { ConvexHull } from "../rust/pkg/index.js";
 import { rust } from "./rustlib.js";
-import { vec3SetAll } from "./MathHelpers.js";
+import { getMatrixTranslation, vec3SetAll } from "./MathHelpers.js";
 
 const scratchVec4 = vec4.create();
 const scratchMatrix = mat4.create();
@@ -110,16 +110,18 @@ export class AABB {
         // Transforming Axis-Aligned Bounding Boxes from Graphics Gems.
 
         // Translation can be applied directly.
-        vec3.set(this.min, m[12], m[13], m[14]);
-        vec3.set(this.max, m[12], m[13], m[14]);
+        getMatrixTranslation(scratchVec3a, m);
+        getMatrixTranslation(scratchVec3b, m);
         for (let i = 0; i < 3; i++) {
             for (let j = 0; j < 3; j++) {
                 const a = m[i*4 + j] * src.min[i];
                 const b = m[i*4 + j] * src.max[i];
-                this.min[j] += Math.min(a, b);
-                this.max[j] += Math.max(a, b);
+                scratchVec3a[j] += Math.min(a, b);
+                scratchVec3b[j] += Math.max(a, b);
             }
         }
+        vec3.copy(this.min, scratchVec3a);
+        vec3.copy(this.max, scratchVec3b);
     }
 
     public offset(src: AABB, offset: ReadonlyVec3): void {
