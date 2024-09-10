@@ -110,13 +110,13 @@ class JetSetRadioRenderer implements SceneGfx {
         offs += fillMatrix4x4(sceneParamsMapped, offs, viewerInput.camera.projectionMatrix);
         offs += fillMatrix4x3(sceneParamsMapped, offs, this.lightDirection);
 
-        this.renderHelper.renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
+        this.renderHelper.renderInstManager.setCurrentList(this.renderInstListMain);
         for (let i = 0; i < this.actions.length; i++) {
             // this.actions[i].update(mat4.create(), 0);
             this.actions[i].prepareToRender(this.renderHelper.renderInstManager, viewerInput);
         }
 
-        this.renderHelper.renderInstManager.popTemplateRenderInst();
+        this.renderHelper.renderInstManager.popTemplate();
         this.renderHelper.prepareToRender();
     }
 

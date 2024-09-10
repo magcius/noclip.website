@@ -1367,7 +1367,7 @@ export class GeometryRenderer {
         this.calcModelPoints();
         this.calcSelectorState();
 
-        const template = renderInstManager.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplate();
         template.setBindingLayouts(bindingLayouts);
         template.setVertexInput(this.geometryData.renderData.inputLayout, this.vertexBufferDescriptors, this.geometryData.renderData.indexBufferDescriptor);
         template.setMegaStateFlags(this.megaStateFlags);
@@ -1431,7 +1431,7 @@ export class GeometryRenderer {
         xluSortScratch.mask = 0x800;
         this.rootNodeRenderer.prepareToRender(device, renderInstManager, viewerInput, this.isSkybox, this.selectorState, xluSortScratch);
 
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
     }
 }
 

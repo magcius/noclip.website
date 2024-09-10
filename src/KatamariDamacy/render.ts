@@ -344,7 +344,7 @@ export class BINModelInstance {
         if (!viewerInput.camera.frustum.contains(scratchAABB))
             return;
 
-        const template = renderInstManager.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplate();
         template.setVertexInput(this.binModelData.inputLayout, this.binModelData.vertexBufferDescriptors, this.binModelData.indexBufferDescriptor);
         template.setMegaStateFlags(cullModeFlags);
         template.sortKey = makeSortKey(this.layer)
@@ -359,7 +359,7 @@ export class BINModelInstance {
         for (let i = 0; i < this.modelParts.length; i++)
             this.modelParts[i].prepareToRender(renderInstManager, scratchModelViews, scratchModelMatrices, this.textureMatrix, currentPalette);
 
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
     }
 
     public setAlphaMultiplier(alpha: number): void {

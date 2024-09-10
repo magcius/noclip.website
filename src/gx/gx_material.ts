@@ -8,7 +8,7 @@ import { GfxFormat } from '../gfx/platform/GfxPlatformFormat.js';
 import { vec3, mat4, ReadonlyVec3 } from 'gl-matrix';
 import { Camera } from '../Camera.js';
 import { assert } from '../util.js';
-import { IS_DEPTH_REVERSED } from '../gfx/helpers/ReversedDepthHelpers.js';
+import { IsDepthReversed } from '../gfx/helpers/ReversedDepthHelpers.js';
 import { MathConstants, transformVec3Mat4w1, transformVec3Mat4w0 } from '../MathHelpers.js';
 import { DisplayListRegisters, VertexAttributeInput } from './gx_displaylist.js';
 import { DeviceProgram } from '../Program.js';
@@ -1238,7 +1238,7 @@ ${this.generateLightAttnFn(chan, lightName)}
     }
 
     private generateFogZCoord() {
-        const isDepthReversed = IS_DEPTH_REVERSED;
+        const isDepthReversed = IsDepthReversed;
         if (isDepthReversed)
             return `(1.0 - gl_FragCoord.z)`;
         else

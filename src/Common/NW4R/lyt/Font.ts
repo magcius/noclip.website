@@ -423,7 +423,7 @@ export class CharWriter {
             if (textureChanged)
                 this.textureMapping[0].gfxTexture = gfxTexture;
             if (this.materialChanged) {
-                this.makeMaterialUBO(this.renderInstManager.getTemplateRenderInst());
+                this.makeMaterialUBO(this.renderInstManager.getCurrentTemplate());
                 this.materialChanged = false;
             }
         }
@@ -447,7 +447,7 @@ export class CharWriter {
         this.renderInstManager = renderInstManager;
         this.ddraw = ddraw;
 
-        const template = renderInstManager.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplate();
         this.font.materialHelper.setOnRenderInst(cache, template);
         this.makeMaterialUBO(template);
         this.textureMapping[0].gfxTexture = null;
@@ -471,7 +471,7 @@ export class CharWriter {
         }
 
         this.drawStringFlush(renderInstManager, ddraw);
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
 
         this.renderInstManager = null!;
         this.ddraw = null!;

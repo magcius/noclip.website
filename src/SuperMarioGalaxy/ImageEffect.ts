@@ -18,7 +18,7 @@ import { fullscreenMegaState, makeMegaState, setAttachmentStateSimple } from "..
 import { MathConstants } from "../MathHelpers.js";
 import { GfxrAttachmentSlot, GfxrRenderTargetDescription, GfxrGraphBuilder, GfxrRenderTargetID } from "../gfx/render/GfxRenderGraph.js";
 import { GfxShaderLibrary, glslGenerateFloat } from "../gfx/helpers/GfxShaderLibrary.js";
-import { IS_DEPTH_REVERSED } from "../gfx/helpers/ReversedDepthHelpers.js";
+import { IsDepthReversed } from "../gfx/helpers/ReversedDepthHelpers.js";
 import { GXShaderLibrary } from "../gx/gx_material.js";
 
 const scratchVec3 = vec3.create();
@@ -660,7 +660,7 @@ export class DepthOfFieldBlur extends ImageEffectBase {
         const intensity = this.intensity * this.strength;
         const blurMaxDist = fallback(this.blurMaxDist, 0xF8) / 0xFF;
         const blurMinDist = fallback(this.blurMinDist, 0xF2) / 0xFF;
-        offs += fillVec4(d, offs, intensity, blurMaxDist, blurMinDist, IS_DEPTH_REVERSED ? 1.0 : 0.0);
+        offs += fillVec4(d, offs, intensity, blurMaxDist, blurMinDist, IsDepthReversed ? 1.0 : 0.0);
     }
 
     public override pushPasses(sceneObjHolder: SceneObjHolder, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, mainColorTargetID: GfxrRenderTargetID, mainDepthTargetID: GfxrRenderTargetID, resultBlendTargetID: GfxrRenderTargetID): void {

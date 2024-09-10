@@ -1308,11 +1308,11 @@ export class LayoutPicture extends LayoutPane {
         drawQuad(ddraw, baseX, baseY, baseZ, this.width, -this.height, vertexColors, alpha, this.texCoords);
         ddraw.end();
 
-        const template = renderInstManager.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplate();
         this.setOnRenderInst(template);
         const renderInst = ddraw.makeRenderInst(renderInstManager);
         drawSubmitRenderInst(renderInstManager, renderInst, material, alpha);
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
     }
 }
 
@@ -1442,7 +1442,7 @@ export class LayoutTextbox extends LayoutPane {
         if (this.str.length === 0)
             return;
 
-        const template = renderInstManager.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplate();
         this.setOnRenderInst(template);
 
         this.getTextDrawRect(scratchVec4, layout);
@@ -1462,7 +1462,7 @@ export class LayoutTextbox extends LayoutPane {
         vec3.copy(charWriter.cursor, charWriter.origin);
         charWriter.drawString(renderInstManager, renderInstManager.gfxRenderCache, ddraw, this.str, this.tagProcessor);
 
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
     }
 }
 
@@ -1643,7 +1643,7 @@ export class LayoutWindow extends LayoutPane {
     }
 
     protected override drawSelf(device: GfxDevice, renderInstManager: GfxRenderInstManager, layout: Layout, ddraw: TDDraw, alpha: number): void {
-        const template = renderInstManager.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplate();
         this.setOnRenderInst(template);
 
         this.drawContent(device, renderInstManager, layout, ddraw, alpha);
@@ -1656,7 +1656,7 @@ export class LayoutWindow extends LayoutPane {
             throw "whoops";
         }
 
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
     }
 }
 

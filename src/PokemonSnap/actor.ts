@@ -279,7 +279,7 @@ export class LevelGlobals {
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
+        renderInstManager.setCurrentList(this.renderInstListMain);
         this.particles.prepareToRender(device, renderInstManager, viewerInput);
 
         this.zeroOne.prepareToRender(device, renderInstManager, viewerInput, this);

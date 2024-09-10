@@ -530,7 +530,7 @@ export class GloverActorRenderer implements Shadows.Collidable, Shadows.ShadowCa
             }
         }
 
-        const template = renderInstManager.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplate();
         template.setBindingLayouts(Render.bindingLayouts);
         template.setMegaStateFlags(this.megaStateFlags);
 
@@ -574,7 +574,7 @@ export class GloverActorRenderer implements Shadows.Collidable, Shadows.ShadowCa
 
         this.rootMesh.prepareToRender(device, renderInstManager, viewerInput, this.currentAnimTime, this.modelMatrix);
 
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
     }
 
     public destroy(device: GfxDevice): void {
@@ -1034,7 +1034,7 @@ export class GloverBlurRenderer {
             this.lastFrameAdvance = 0;
         }
 
-        const template = renderInstManager.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplate();
         template.setBindingLayouts(Render.bindingLayouts);
         template.setMegaStateFlags(this.megaStateFlags);
 
@@ -1050,7 +1050,7 @@ export class GloverBlurRenderer {
 
         this.drawCallInstance.prepareToRender(device, renderInstManager, viewerInput, this.drawMatrix);
 
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
 
     }
 
@@ -1299,7 +1299,7 @@ export class GloverElectricityRenderer implements Render.GenericRenderable {
             this.lastFrameAdvance = 0;
         }
 
-        const template = renderInstManager.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplate();
         template.setBindingLayouts(Render.bindingLayouts);
         template.setMegaStateFlags(this.megaStateFlags);
 
@@ -1315,7 +1315,7 @@ export class GloverElectricityRenderer implements Render.GenericRenderable {
 
         this.drawCallInstance.prepareToRender(device, renderInstManager, viewerInput, this.drawMatrix);
 
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
 
     }
 

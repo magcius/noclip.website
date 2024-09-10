@@ -3965,7 +3965,7 @@ class WarpPodPathDrawer {
         this.testColor.fillTextureMapping(materialParams.m_TextureMapping[0]);
         colorCopy(materialParams.u_Color[ColorKind.C0], this.color);
 
-        const template = renderInstManager.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplate();
 
         this.materialHelper.allocateMaterialParamsDataOnInst(template, materialParams);
         template.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
@@ -3980,7 +3980,7 @@ class WarpPodPathDrawer {
         const renderInst = this.ddraw.endDrawAndMakeRenderInst(renderInstManager);
         renderInstManager.submitRenderInst(renderInst);
 
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
     }
 
     public destroy(device: GfxDevice): void {
@@ -6430,7 +6430,7 @@ export class ElectricRailHolder extends NameObj {
             if (modelObj === null)
                 continue;
 
-            const template = renderInstManager.pushTemplateRenderInst();
+            const template = renderInstManager.pushTemplate();
 
             const modelInstance = modelObj.modelInstance!;
             mat4.copy(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
@@ -6448,13 +6448,13 @@ export class ElectricRailHolder extends NameObj {
                     continue;
 
                 materialInstance.fillOnMaterialParams(materialParams, modelInstance.materialInstanceState, viewerInput.camera, modelInstance.modelMatrix, drawParams);
-                const railTemplate = renderInstManager.pushTemplateRenderInst();
+                const railTemplate = renderInstManager.pushTemplate();
                 railTemplate.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
                 rail.drawRail(sceneObjHolder, renderInstManager, materialInstance.materialHelper, materialParams);
-                renderInstManager.popTemplateRenderInst();
+                renderInstManager.popTemplate();
             }
 
-            renderInstManager.popTemplateRenderInst();
+            renderInstManager.popTemplate();
         }
     }
 

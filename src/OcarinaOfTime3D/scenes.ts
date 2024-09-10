@@ -73,16 +73,16 @@ export class MultiCmbScene implements Viewer.SceneGfx {
         fillSceneParamsDataOnTemplate(template, viewerInput.camera);
 
         if (this.skyRenderers.length > 0) {
-            renderInstManager.setCurrentRenderInstList(this.renderInstListSky);
+            renderInstManager.setCurrentList(this.renderInstListSky);
             for (let i = 0; i < this.skyRenderers.length; i++)
                 this.skyRenderers[i].prepareToRender(device, renderInstManager, viewerInput);
         }
 
-        renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
+        renderInstManager.setCurrentList(this.renderInstListMain);
         for (let i = 0; i < this.cmbRenderers.length; i++)
             this.cmbRenderers[i].prepareToRender(device, renderInstManager, viewerInput);
 
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
         this.renderHelper.prepareToRender();
     }
 
@@ -205,13 +205,13 @@ class ArchiveCmbScene implements Viewer.SceneGfx {
         template.setBindingLayouts(bindingLayouts);
         fillSceneParamsDataOnTemplate(template, viewerInput.camera);
 
-        this.renderHelper.renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
+        this.renderHelper.renderInstManager.setCurrentList(this.renderInstListMain);
         for (let i = 0; i < this.cmbRenderers.length; i++) {
             this.cmbRenderers[i].setRenderFog(false)
             this.cmbRenderers[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
         }
 
-        this.renderHelper.renderInstManager.popTemplateRenderInst();
+        this.renderHelper.renderInstManager.popTemplate();
         this.renderHelper.prepareToRender();
     }
 

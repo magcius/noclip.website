@@ -579,7 +579,7 @@ class SceneRenderer {
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput) {
-        const template = renderInstManager.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplate();
         template.setBindingLayouts(bindingLayouts);
         template.setMegaStateFlags(this.megaStateFlags);
 
@@ -592,7 +592,7 @@ class SceneRenderer {
             instance.prepareToRender(device, renderInstManager, this.worldTransform, viewerInput);
         }
 
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
     }
 
     public setVertexColorsEnabled(v: boolean): void {
@@ -644,10 +644,10 @@ export class KingdomHeartsIIRenderer implements Viewer.SceneGfx {
         this.renderHelper.pushTemplateRenderInst();
 
         const renderInstManager = this.renderHelper.renderInstManager;
-        renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
+        renderInstManager.setCurrentList(this.renderInstListMain);
         this.mapRenderer.prepareToRender(device, renderInstManager, viewerInput);
 
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
         this.renderHelper.prepareToRender();
     }
 

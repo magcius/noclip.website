@@ -239,7 +239,7 @@ class FakeWaterModelInstance {
         this.modelInstance.calcAnim();
         this.modelInstance.calcView(viewerInput.camera, viewerInput.camera.viewMatrix);
 
-        const template = renderInstManager.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplate();
 
         // Calc our draw params.
         mat4.copy(drawParams.u_PosMtx[0], this.modelInstance.shapeInstanceState.drawViewMatrixArray[0]);
@@ -250,7 +250,7 @@ class FakeWaterModelInstance {
         this.materialInstance.fillMaterialParams(template, this.modelInstance.materialInstanceState, this.modelInstance.shapeInstanceState.worldToViewMatrix, this.modelInstance.modelMatrix, viewerInput.camera, drawParams);
         this.plane.prepareToRender(renderInstManager);
 
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
     }
 
     public destroy(device: GfxDevice) {
@@ -288,7 +288,7 @@ class SlimySpringWaterRenderer implements SceneGfx {
         this.flowerBox.visible = this.showFlowerBox;
 
         const renderInstManager = this.renderHelper.renderInstManager;
-        renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
+        renderInstManager.setCurrentList(this.renderInstListMain);
 
         const template = this.renderHelper.pushTemplateRenderInst();
         fillSceneParamsDataOnTemplate(template, viewerInput);
@@ -298,7 +298,7 @@ class SlimySpringWaterRenderer implements SceneGfx {
         template.allocateUniformBuffer(GX_Material.GX_Program.ub_SceneParams, ub_SceneParamsBufferSize);
         fillSceneParamsDataOnTemplate(template, viewerInput, customLODBias);
         this.waterModel.prepareToRender(device, renderInstManager, viewerInput);
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
 
         this.renderHelper.prepareToRender();
     }

@@ -1545,7 +1545,7 @@ class dDlst_2DNumber_c extends dDlst_2DBase_c {
 
     public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         const device = globals.modelCache.device;
-        const template = renderInstManager.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplate();
 
         globals.quadStatic.setOnRenderInst(template);
 
@@ -1576,7 +1576,7 @@ class dDlst_2DNumber_c extends dDlst_2DBase_c {
                 break;
         }
 
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
     }
 }
 
@@ -1987,7 +1987,7 @@ class d_a_mgameboard extends fopAc_ac_c {
             }
         }
 
-        renderInstManager.setCurrentRenderInstList(globals.dlst.ui[1]);
+        renderInstManager.setCurrentList(globals.dlst.ui[1]);
         for (let i = 0; i < this.bullet.length; i++)
             this.bullet[i].draw(globals, renderInstManager, viewerInput);
         for (let i = 0; i < this.squid.length; i++)
@@ -2284,7 +2284,7 @@ class dCloth_packet_c {
         }
         */
 
-        const template = renderInstManager.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplate();
 
         dKy_setLight__OnMaterialParams(globals.g_env_light, materialParams, viewerInput.camera);
         this.flagTex.fillTextureMapping(materialParams.m_TextureMapping[0]);
@@ -2304,7 +2304,7 @@ class dCloth_packet_c {
         this.drawSide(renderInstManager, ddraw, false);
         ddraw.endDraw(renderInstManager);
 
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
     }
 
     public setGlobalWind(v: vec3): void {
@@ -2772,7 +2772,7 @@ class d_a_majuu_flag extends fopAc_ac_c {
             settingTevStruct(globals, LightType.Actor, this.pos, this.tevStr);
         }
 
-        const template = renderInstManager.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplate();
 
         dKy_setLight__OnMaterialParams(globals.g_env_light, materialParams, viewerInput.camera);
         this.flagTex.fillTextureMapping(materialParams.m_TextureMapping[0]);
@@ -2792,7 +2792,7 @@ class d_a_majuu_flag extends fopAc_ac_c {
         this.drawSide(renderInstManager, ddraw, false);
         ddraw.endDraw(renderInstManager);
 
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
     }
 
     private isPointFixed(idx: number): boolean {

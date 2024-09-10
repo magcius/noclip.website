@@ -246,7 +246,7 @@ export class MDTSubmeshInstance {
         const jPalette = mdt.jointPalette;
         const jointPerVertCount = mdt.jointPerVertCount;
 
-        const materialTemplate = renderInstManager.pushTemplateRenderInst();
+        const materialTemplate = renderInstManager.pushTemplate();
         materialTemplate.setGfxProgram(this.mdtData.program);
         materialTemplate.setVertexInput(this.mdtData.inputLayout, this.mdtData.vertexBufferDescriptors, this.mdtData.indexBufferDescriptor);
         for (let i = 0; i < this.mdtData.mdt.submeshes.length; i++) {
@@ -336,7 +336,7 @@ export class MDTSubmeshInstance {
             renderInstManager.submitRenderInst(renderInst);
         }
 
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
     }
 
     public destroy(device: GfxDevice): void {
@@ -621,7 +621,7 @@ export class CHRRenderer {
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         if (!this.bIsVisible)
             return;
-        const templateRenderInst = renderInstManager.pushTemplateRenderInst();
+        const templateRenderInst = renderInstManager.pushTemplate();
         {
             if (viewerInput.time > this.lastTick + this.tickRateMs) {
                 this.lastTick = viewerInput.time;
@@ -636,7 +636,7 @@ export class CHRRenderer {
                 this.MDSRenderers[i].prepareToRender(device, renderInstManager, viewerInput);
             }
         }
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
     }
 
     public destroy(device: GfxDevice): void {
@@ -681,10 +681,10 @@ export class MAPRenderer {
         if (!this.bIsVisible)
             return;
 
-        const templateRenderInst = renderInstManager.pushTemplateRenderInst();
+        const templateRenderInst = renderInstManager.pushTemplate();
         for (let i = 0; i < this.MDSRenderers.length; i++)
             this.MDSRenderers[i].prepareToRender(device, renderInstManager, viewerInput);
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
     }
 
     public destroy(device: GfxDevice): void {

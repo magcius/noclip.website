@@ -397,7 +397,7 @@ class ModelTreeLeafInstance {
         if (this.gfxProgram === null)
             this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(this.program);
 
-        const template = renderInstManager.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplate();
         template.setGfxProgram(this.gfxProgram);
         template.setVertexInput(this.n64Data.inputLayout, this.n64Data.vertexBufferDescriptors, this.n64Data.indexBufferDescriptor);
         template.setSamplerBindingsFromTextureMappings(this.textureMapping);
@@ -431,7 +431,7 @@ class ModelTreeLeafInstance {
             renderInstManager.submitRenderInst(renderInst);
         }
 
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
     }
 
     public setVisible(v: boolean): void {
@@ -563,7 +563,7 @@ export class PaperMario64ModelTreeRenderer {
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
-        const template = renderInstManager.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplate();
         template.setBindingLayouts(bindingLayouts);
         let offs = template.allocateUniformBuffer(PaperMario64Program.ub_SceneParams, 16 + 4);
         const mappedF32 = template.mapUniformBufferF32(PaperMario64Program.ub_SceneParams);
@@ -574,7 +574,7 @@ export class PaperMario64ModelTreeRenderer {
 
         this.modelTreeRootInstance.prepareToRender(device, renderInstManager, this.texAnimGroup, this.modelMatrix, viewerInput);
 
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
     }
 
     public findModelLeafInstance(modelId: number): ModelTreeLeafInstance {

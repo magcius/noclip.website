@@ -358,7 +358,7 @@ class InstanceData {
             rw.renderInstList.submitRenderInst(renderInst);
         }
 
-        rw.renderHelper.renderInstManager.popTemplateRenderInst();
+        rw.renderHelper.renderInstManager.popTemplate();
     }
 }
 

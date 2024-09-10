@@ -74,7 +74,7 @@ class MeshRenderer {
             return;
         }
 
-        const template = renderInstManager.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplate();
 
         let offs = template.allocateUniformBuffer(ChunkProgram.ub_ShapeParams, 16);
         const mapped = template.mapUniformBufferF32(ChunkProgram.ub_ShapeParams);
@@ -84,7 +84,7 @@ class MeshRenderer {
         renderInst.setVertexInput(this.mesh.inputLayout, this.mesh.vertexBufferDescriptors, this.mesh.indexBufferDescriptor);
         renderInst.setDrawCount(this.mesh.numIndices);
         renderInstManager.submitRenderInst(renderInst);
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
     }
 
     public destroy(device: GfxDevice) {
@@ -131,11 +131,11 @@ class SubnauticaRenderer implements Viewer.SceneGfx {
         offs += fillMatrix4x4(mapped, offs, viewerInput.camera.projectionMatrix);
         offs += fillMatrix4x4(mapped, offs, viewerInput.camera.viewMatrix);
 
-        this.renderHelper.renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
+        this.renderHelper.renderInstManager.setCurrentList(this.renderInstListMain);
         for (let i = 0; i < this.meshRenderers.length; i++)
             this.meshRenderers[i].prepareToRender(this.renderHelper.renderInstManager, viewerInput);
 
-        this.renderHelper.renderInstManager.popTemplateRenderInst();
+        this.renderHelper.renderInstManager.popTemplate();
         this.renderHelper.prepareToRender();
     }
 

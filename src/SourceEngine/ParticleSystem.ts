@@ -1307,7 +1307,7 @@ class Renderer_AnimatedSprites extends ModuleBase {
         const view = renderContext.currentView;
         const staticQuad = renderContext.materialCache.staticResources.staticQuad;
 
-        const template = renderInstManager.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplate();
         staticQuad.setQuadOnRenderInst(template);
 
         if (this.orientationType === 2) {
@@ -1471,7 +1471,7 @@ class Renderer_AnimatedSprites extends ModuleBase {
             materialInstance.getRenderInstListForView(view).submitRenderInst(renderInst);
         }
 
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
     }
 }
 

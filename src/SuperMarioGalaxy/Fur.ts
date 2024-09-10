@@ -473,7 +473,7 @@ class FurCtrl {
 
         const shapeInstanceState = this.actor.modelInstance!.shapeInstanceState;
         for (let i = 0; i < this.furDrawer.numLayers; i++) {
-            const template = renderInstManager.pushTemplateRenderInst();
+            const template = renderInstManager.pushTemplate();
             template.setVertexInput(this.shapeData.inputLayout, this.vertexBufferDescriptors[i], this.shapeData.indexBufferDescriptor);
             this.furDrawer.setupLayerMaterial(materialParams, i);
             this.furDrawer.setOnRenderInst(cache, template, materialParams);
@@ -490,7 +490,7 @@ class FurCtrl {
                 renderInstManager.submitRenderInst(renderInst);
             }
 
-            renderInstManager.popTemplateRenderInst();
+            renderInstManager.popTemplate();
         }
     }
 

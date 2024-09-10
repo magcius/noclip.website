@@ -355,7 +355,7 @@ class StaticModel {
             return;
 
         // Gather all visible instances.
-        const template = renderInstManager.getTemplateRenderInst();
+        const template = renderInstManager.getCurrentTemplate();
         const uniformBuffer = template.getUniformBuffer();
         const maxInstances = this.nifData.getMaxInstances();
         const triShapes = this.nifData.getTriShapes();
@@ -376,7 +376,7 @@ class StaticModel {
         const submitDrawInstanced = () => {
             if (numInstances === 0)
                 return;
-            renderInstManager.setCurrentRenderInstList(globals.view.renderInstListOpa);
+            renderInstManager.setCurrentList(globals.view.renderInstListOpa);
             template.setBindingLayouts(bindingLayoutsNifInstanced);
             template.setUniformBufferOffset(2, baseOffs, maxInstances * 16);
             template.setInstanceCount(numInstances);
@@ -395,7 +395,7 @@ class StaticModel {
             if (!isInRangeXY(x, y, globals.view.cameraPos, globals.view.nifCullFarXluSq))
                 return;
 
-            renderInstManager.setCurrentRenderInstList(globals.view.renderInstListXlu);
+            renderInstManager.setCurrentList(globals.view.renderInstListXlu);
             template.setBindingLayouts(bindingLayoutsNifSingle);
             template.setInstanceCount(1);
             for (let i = 0; i < triShapes.length; i++) {
@@ -652,7 +652,7 @@ class WorldManager {
     }
 
     private prepareToRenderTerrain(globals: Globals, renderInstManager: GfxRenderInstManager): void {
-        const template = renderInstManager.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplate();
         template.setGfxProgram(this.terrainProgram);
         template.setMegaStateFlags({ cullMode: GfxCullMode.Back });
 
@@ -689,7 +689,7 @@ class WorldManager {
 
             renderInstManager.submitRenderInst(renderInst);
         }
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
     }
 
     private prepareToRenderStatic(globals: Globals, renderInstManager: GfxRenderInstManager): void {
@@ -727,7 +727,7 @@ class SkyManager {
             colorCopy(v.emissiveColor, globals.weatherManager.current.skyColor);
         });
 
-        renderInstManager.setCurrentRenderInstList(globals.view.renderInstListSky);
+        renderInstManager.setCurrentList(globals.view.renderInstListSky);
 
         mat4.fromTranslation(scratchMatrix, globals.view.cameraPos);
 
@@ -1003,10 +1003,10 @@ export class MorrowindRenderer implements SceneGfx {
         const renderInstManager = this.renderHelper.renderInstManager;
         this.skyManager.prepareToRender(globals, renderInstManager);
 
-        this.renderHelper.renderInstManager.setCurrentRenderInstList(globals.view.renderInstListOpa);
+        this.renderHelper.renderInstManager.setCurrentList(globals.view.renderInstListOpa);
         this.worldManager.prepareToRender(globals, renderInstManager);
 
-        this.renderHelper.renderInstManager.popTemplateRenderInst();
+        this.renderHelper.renderInstManager.popTemplate();
         this.renderHelper.prepareToRender();
     }
 

@@ -207,7 +207,7 @@ export class DkrSprites {
         if (layerInstances.length === 0)
             return;
 
-        const template = renderInstManager.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplate();
         template.setBindingLayouts([{ numUniformBuffers: 3, numSamplers: 1, },]);
         template.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor);
 
@@ -272,6 +272,6 @@ export class DkrSprites {
         renderInst.setInstanceCount(layerInstances.length);
 
         renderInstManager.submitRenderInst(renderInst);
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
     }
 }

@@ -341,7 +341,7 @@ export class NjsMeshInstance {
         if (!this.visible)
             return;
 
-        const template = renderInstManager.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplate();
         template.setVertexInput(this.data.inputLayout, this.data.vertexBufferDescriptors, this.data.indexBufferDescriptor);
         template.sortKey = makeSortKey(this.layer);
         /*if (this.depthSort) {
@@ -370,7 +370,7 @@ export class NjsMeshInstance {
         renderInstManager.submitRenderInst(renderInst);
 
         //
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
     }
 }
 

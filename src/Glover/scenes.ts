@@ -1252,7 +1252,7 @@ class GloverRenderer implements Viewer.SceneGfx {
     public prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
         this.renderHelper.pushTemplateRenderInst();
 
-        this.renderHelper.renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
+        this.renderHelper.renderInstManager.setCurrentList(this.renderInstListMain);
 
         this.textureHolder.animatePalettes(viewerInput);
 
@@ -1290,7 +1290,7 @@ class GloverRenderer implements Viewer.SceneGfx {
             this.weather.prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
         }
 
-        this.renderHelper.renderInstManager.popTemplateRenderInst();
+        this.renderHelper.renderInstManager.popTemplate();
         this.renderHelper.prepareToRender();
     }
 

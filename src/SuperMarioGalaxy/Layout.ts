@@ -519,10 +519,10 @@ export class LayoutActor<TNerve extends number = number> extends NameObj {
         if (this.isScreenHidden)
             return;
 
-        const template = renderInstManager.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplate();
         template.setUniformBufferOffset(GX_Program.ub_SceneParams, sceneObjHolder.renderParams.sceneParamsOffs2D, ub_SceneParamsBufferSize);
         this.drawLayout(sceneObjHolder, renderInstManager, scratchDrawInfo);
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
     }
 
     public startAnim(animName: string, index: number = 0): void {

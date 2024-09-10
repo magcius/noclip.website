@@ -101,14 +101,14 @@ class BKRenderer implements Viewer.SceneGfx {
     public prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
         this.renderHelper.pushTemplateRenderInst();
         for (let i = 0; i < this.geoRenderers.length; i++) {
-            this.renderHelper.renderInstManager.setCurrentRenderInstList(this.geoRenderers[i].isSkybox ? this.renderInstListSky : this.renderInstListMain);
+            this.renderHelper.renderInstManager.setCurrentList(this.geoRenderers[i].isSkybox ? this.renderInstListSky : this.renderInstListMain);
             this.geoRenderers[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
         }
-        this.renderHelper.renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
+        this.renderHelper.renderInstManager.setCurrentList(this.renderInstListMain);
         for (let i = 0; i < this.flipbookRenderers.length; i++)
             this.flipbookRenderers[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
         this.sceneEmitters.prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
-        this.renderHelper.renderInstManager.popTemplateRenderInst();
+        this.renderHelper.renderInstManager.popTemplate();
         this.renderHelper.prepareToRender();
     }
 

@@ -486,10 +486,10 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
 
         const dlst = this.globals.dlst;
 
-        renderInstManager.setCurrentRenderInstList(dlst.alphaModel);
+        renderInstManager.setCurrentList(dlst.alphaModel);
         dlst.alphaModel0.draw(this.globals, renderInstManager, viewerInput);
 
-        renderInstManager.setCurrentRenderInstList(dlst.bg[0]);
+        renderInstManager.setCurrentList(dlst.bg[0]);
         {
             this.globals.particleCtrl.calc(viewerInput);
 
@@ -502,12 +502,12 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
                 }
 
                 this.globals.particleCtrl.setDrawInfo(viewerInput.camera.viewMatrix, viewerInput.camera.projectionMatrix, texPrjMtx, viewerInput.camera.frustum);
-                renderInstManager.setCurrentRenderInstList(dlst.effect[group]);
+                renderInstManager.setCurrentList(dlst.effect[group]);
                 this.globals.particleCtrl.draw(device, this.renderHelper.renderInstManager, group);
             }
         }
 
-        this.renderHelper.renderInstManager.popTemplateRenderInst();
+        this.renderHelper.renderInstManager.popTemplate();
         this.globals.renderHacks.renderHacksChanged = false;
     }
 

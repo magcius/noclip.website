@@ -224,7 +224,7 @@ export interface GfxBindingsDescriptor2 {
     entries: (GfxBufferBinding | GfxSamplerBinding)[];
 }
 
-export interface GfxGraphicsProgramDescriptor {
+export interface GfxRenderProgramDescriptor {
     preprocessedVert: string;
     preprocessedFrag: string | null;
 }
@@ -435,7 +435,7 @@ export interface GfxDevice {
     createSampler(descriptor: GfxSamplerDescriptor): GfxSampler;
     createRenderTarget(descriptor: GfxRenderTargetDescriptor): GfxRenderTarget;
     createRenderTargetFromTexture(texture: GfxTexture): GfxRenderTarget;
-    createProgram(descriptor: GfxGraphicsProgramDescriptor): GfxProgram;
+    createProgram(descriptor: GfxRenderProgramDescriptor): GfxProgram;
     createComputeProgram(descriptor: GfxComputeProgramDescriptor): GfxProgram;
     createBindings(bindingsDescriptor: GfxBindingsDescriptor): GfxBindings;
     createInputLayout(inputLayoutDescriptor: GfxInputLayoutDescriptor): GfxInputLayout;
@@ -506,7 +506,7 @@ export interface GfxDevice {
     setResourceName(o: GfxResource, s: string): void;
     setResourceLeakCheck(o: GfxResource, v: boolean): void;
     checkForLeaks(): void;
-    programPatched(o: GfxProgram, descriptor: GfxGraphicsProgramDescriptor): void;
+    programPatched(o: GfxProgram, descriptor: GfxRenderProgramDescriptor): void;
     pushStatisticsGroup(statisticsGroup: GfxStatisticsGroup): void;
     popStatisticsGroup(): void;
 }

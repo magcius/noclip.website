@@ -1,6 +1,6 @@
 
 import * as Viewer from '../viewer.js';
-import { GfxDevice, GfxBindingLayoutDescriptor, GfxMegaStateDescriptor, GfxCullMode, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxGraphicsProgramDescriptor } from "../gfx/platform/GfxPlatform.js";
+import { GfxDevice, GfxBindingLayoutDescriptor, GfxMegaStateDescriptor, GfxCullMode, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxRenderProgramDescriptor } from "../gfx/platform/GfxPlatform.js";
 import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
 import { GfxRenderInstList, GfxRenderInstManager, GfxRendererLayer, makeSortKeyOpaque } from "../gfx/render/GfxRenderInstManager.js";
@@ -109,7 +109,7 @@ class FezLevelRenderData {
 }
 
 export class FezRenderer implements Viewer.SceneGfx {
-    private program: GfxGraphicsProgramDescriptor;
+    private program: GfxRenderProgramDescriptor;
     private renderHelper: GfxRenderHelper;
     private renderInstListMain = new GfxRenderInstList();
     private modelMatrix: mat4 = mat4.create();
@@ -204,7 +204,7 @@ export class FezRenderer implements Viewer.SceneGfx {
         const d = template.mapUniformBufferF32(FezProgram.ub_SceneParams);
         offs += fillMatrix4x4(d, offs, viewerInput.camera.projectionMatrix);
 
-        this.renderHelper.renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
+        this.renderHelper.renderInstManager.setCurrentList(this.renderInstListMain);
 
         this.skyRenderer.prepareToRender(renderInstManager, viewerInput);
         vec4.transformMat4(this.levelRenderData.lightDirection, this.lightDirection, viewerInput.camera.viewMatrix);
@@ -221,7 +221,7 @@ export class FezRenderer implements Viewer.SceneGfx {
         for (let i = 0; i < this.backgroundPlaneRenderers.length; i++)
             this.backgroundPlaneRenderers[i].prepareToRender(this.levelRenderData, renderInstManager, viewerInput);
 
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
 
         this.renderHelper.prepareToRender();
     }

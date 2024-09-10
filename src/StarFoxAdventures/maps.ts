@@ -236,7 +236,7 @@ class MapSceneRenderer extends SFARenderer {
     }
 
     protected override addWorldRenderInsts(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, sceneCtx: SceneRenderContext) {
-        const template = renderInstManager.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplate();
         fillSceneParamsDataOnTemplate(template, sceneCtx.viewerInput);
 
         const modelCtx: ModelRenderContext = {
@@ -249,7 +249,7 @@ class MapSceneRenderer extends SFARenderer {
 
         this.map.addRenderInsts(device, renderInstManager, renderLists, modelCtx);
 
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
     }
 }
 

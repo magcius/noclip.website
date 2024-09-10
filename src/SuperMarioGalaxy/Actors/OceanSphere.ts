@@ -457,7 +457,7 @@ export class OceanSphere extends LiveActor<OceanSphereNrv> {
         if (!isValidDraw(this))
             return;
 
-        const template = renderInstManager.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplate();
         mat4.copy(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
         this.materialHelperEnvBack.allocateDrawParamsDataOnInst(template, drawParams);
 
@@ -519,7 +519,7 @@ export class OceanSphere extends LiveActor<OceanSphereNrv> {
             renderInstManager.submitRenderInst(renderInstFrontFaces);
         }
 
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
     }
 
     private updatePoints(): void {

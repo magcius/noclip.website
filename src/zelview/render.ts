@@ -401,7 +401,7 @@ export class RootMeshRenderer {
 
         const renderData = this.geometryData.renderData;
 
-        const template = renderInstManager.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplate();
         template.setBindingLayouts(bindingLayouts);
         template.setVertexInput(renderData.inputLayout, renderData.vertexBufferDescriptors, renderData.indexBufferDescriptor);
         template.setMegaStateFlags(this.megaStateFlags);
@@ -426,7 +426,7 @@ export class RootMeshRenderer {
 
         this.rootNodeRenderer.prepareToRender(device, renderInstManager, viewerInput, this.isSkybox);
 
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
     }
 
     public destroy(device: GfxDevice): void {

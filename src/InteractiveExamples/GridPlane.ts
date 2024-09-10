@@ -4,7 +4,7 @@ import { White, colorNewCopy } from "../Color.js";
 import { DeviceProgram } from "../Program.js";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
-import { IS_DEPTH_REVERSED } from "../gfx/helpers/ReversedDepthHelpers.js";
+import { IsDepthReversed } from "../gfx/helpers/ReversedDepthHelpers.js";
 import { fillColor, fillMatrix4x4, fillVec4 } from "../gfx/helpers/UniformBufferHelpers.js";
 import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxDevice, GfxProgram } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
@@ -61,7 +61,7 @@ vec3 IntersectPlane(in vec2 t_ClipXY, out float t_RayT, out vec3 t_Near, out vec
     float t_ClipNearZ = GFX_CLIPSPACE_NEAR_Z();
     float t_ClipFarZ = 1.0;
 
-    if (${IS_DEPTH_REVERSED}) {
+    if (${IsDepthReversed}) {
         t_ClipFarZ = t_ClipNearZ;
         t_ClipNearZ = 1.0;
     }

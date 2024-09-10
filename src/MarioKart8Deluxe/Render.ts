@@ -1509,7 +1509,7 @@ class FSHPInstance {
             return;
 
         // TODO(jstpierre): Joints.
-        const template = renderInstManager.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplate();
         this.fmatInstance.setOnRenderInst(globals, template, modelMatrix);
 
         for (let i = 0; i < this.lodMeshInstances.length; i++) {
@@ -1520,7 +1520,7 @@ class FSHPInstance {
             this.lodMeshInstances[i].prepareToRender(renderInstManager, viewerInput);
         }
 
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
     }
 }
 
@@ -1698,11 +1698,11 @@ export class TurboRenderer {
         getMatrixTranslation(scratchVec3, viewerInput.camera.worldMatrix);
         offs += fillVec3v(d, offs, scratchVec3);
 
-        this.renderHelper.renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
+        this.renderHelper.renderInstManager.setCurrentList(this.renderInstListMain);
 
         for (let i = 0; i < this.fmdlRenderers.length; i++)
             this.fmdlRenderers[i].prepareToRender(this.globals, renderInstManager, viewerInput);
-        this.renderHelper.renderInstManager.popTemplateRenderInst();
+        this.renderHelper.renderInstManager.popTemplate();
 
         this.renderHelper.prepareToRender();
     }

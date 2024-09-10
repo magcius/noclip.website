@@ -1120,7 +1120,7 @@ class HSD_DObj_Instance {
         if (!this.visible)
             return;
 
-        const template = renderInstManager.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplate();
         this.mobj.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
 
         for (let i = 0; i < this.data.dobj.pobj.length; i++) {
@@ -1192,7 +1192,7 @@ class HSD_DObj_Instance {
             renderInstManager.submitRenderInst(renderInst);
         }
 
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
     }
 }
 

@@ -316,7 +316,7 @@ class NodeInstance {
         scratchAABB.transform(this.node.bbox, scratchMatrix);
         const depth = computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera.viewMatrix, scratchAABB);
 
-        const template = renderInstManager.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplate();
         template.sortKey = setSortKeyDepth(template.sortKey, depth);
         template.setMegaStateFlags(this.megaStateFlags);
 
@@ -357,7 +357,7 @@ class NodeInstance {
         for (let i = 0; i < this.children.length; i++)
             this.children[i].prepareToRender(device, renderInstManager, viewerInput, textureHolder);
 
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
     }
 
     private createCollisionMaterialInstance(device: GfxDevice, cache: GfxRenderCache): void {
@@ -619,7 +619,7 @@ export class WorldRenderer extends BasicGXRendererHelper {
         for (let i = 0; i < this.mobj.length; i++)
             this.mobj[i].prepareToRender(device, renderInstManager, viewerInput);
 
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
         this.renderHelper.prepareToRender();
     }
 

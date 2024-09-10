@@ -460,7 +460,7 @@ export class ParticleManager {
             this.particlePool[i].update(dt, this);
         }
 
-        const template = renderInstManager.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplate();
         template.setBindingLayouts(bindingLayouts);
         template.setVertexInput(this.spriteData.inputLayout, this.spriteData.vertexBufferDescriptors, this.spriteData.indexBufferDescriptor);
         template.setMegaStateFlags(this.megaStateFlags);
@@ -476,7 +476,7 @@ export class ParticleManager {
                 continue;
             this.particlePool[i].prepareToRender(device, renderInstManager, viewerInput);
         }
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
     }
 
     public destroy(device: GfxDevice): void {

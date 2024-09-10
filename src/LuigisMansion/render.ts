@@ -192,7 +192,7 @@ export class LuigisMansionRenderer extends BasicGXRendererHelper {
         for (let i = 0; i < this.binCommands.length; i++)
             this.binCommands[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
 
-        this.renderHelper.renderInstManager.popTemplateRenderInst();
+        this.renderHelper.renderInstManager.popTemplate();
         this.renderHelper.prepareToRender();
     }
 

@@ -88,7 +88,7 @@ export class Renderer implements Viewer.SceneGfx {
         };
         this.world.prepareToRender(renderCtx);
         this.renderHelper.prepareToRender();
-        this.renderHelper.renderInstManager.popTemplateRenderInst();
+        this.renderHelper.renderInstManager.popTemplate();
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {

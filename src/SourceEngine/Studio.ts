@@ -1792,7 +1792,7 @@ class StudioModelMeshInstance {
 
         this.materialInstance.calcProjectedLight(renderContext, bbox);
 
-        const template = renderInstManager.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplate();
         this.materialInstance.setOnRenderInst(renderContext, template);
         this.materialInstance.setOnRenderInstModelMatrix(template, modelMatrix);
 
@@ -1812,7 +1812,7 @@ class StudioModelMeshInstance {
             }
         }
 
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
     }
 
     public destroy(device: GfxDevice): void {

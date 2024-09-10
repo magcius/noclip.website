@@ -428,7 +428,7 @@ export class d_a_sea extends fopAc_ac_c {
     }
 
     public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        renderInstManager.setCurrentRenderInstList(globals.dlst.sea);
+        renderInstManager.setCurrentList(globals.dlst.sea);
 
         this.ddraw.beginDraw(globals.modelCache.cache);
 

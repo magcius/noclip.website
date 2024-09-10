@@ -145,7 +145,7 @@ export class ShapeInstance {
 
         drawParams.clear();
 
-        const template = renderInstManager.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplate();
         template.sortKey = materialInstance.sortKey;
         template.sortKey = setSortKeyDepth(template.sortKey, depth);
         template.sortKey = setSortKeyBias(template.sortKey, this.shapeData.sortKeyBias);
@@ -170,7 +170,7 @@ export class ShapeInstance {
             renderInstManager.submitRenderInst(renderInst);
         }
 
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
     }
 }
 

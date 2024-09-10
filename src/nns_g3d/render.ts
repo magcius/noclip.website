@@ -365,14 +365,14 @@ export class MDL0Renderer {
         for (let i = 0; i < this.nodes.length; i++)
             this.nodes[i].calcMatrix(this.modelMatrix);
 
-        const template = renderInstManager.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplate();
         template.setBindingLayouts(nnsG3dBindingLayouts);
         template.setGfxProgram(this.gfxProgram);
 
         for (let i = 0; i < this.shapeInstances.length; i++)
             this.shapeInstances[i].prepareToRender(renderInstManager, viewerInput, this.isSkybox);
 
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
     }
 
     public destroy(device: GfxDevice): void {

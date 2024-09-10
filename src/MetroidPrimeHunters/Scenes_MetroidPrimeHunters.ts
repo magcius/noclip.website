@@ -89,11 +89,11 @@ export class MPHSceneRenderer implements Viewer.SceneGfx {
     private prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
         this.renderHelper.pushTemplateRenderInst();
         const renderInstManager = this.renderHelper.renderInstManager;
-        renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
+        renderInstManager.setCurrentList(this.renderInstListMain);
         this.stageRenderer.prepareToRender(renderInstManager, viewerInput);
         for (let i = 0; i < this.objectRenderers.length; i++)
             this.objectRenderers[i].prepareToRender(renderInstManager, viewerInput);
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
 
         this.renderHelper.prepareToRender();
     }

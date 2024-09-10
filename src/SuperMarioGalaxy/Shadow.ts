@@ -363,7 +363,7 @@ class ShadowSurfaceCircle extends ShadowSurfaceDrawer {
 
         const cache = sceneObjHolder.modelCache.cache;
 
-        const template = renderInstManager.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplate();
         this.material.setOnRenderInst(cache, template);
 
         materialParams.u_Color[ColorKind.C0].r = 0x40 / 0xFF;
@@ -377,7 +377,7 @@ class ShadowSurfaceCircle extends ShadowSurfaceDrawer {
         drawCircle(this.ddraw, this.controller.getProjectionPos(), scratchVec3a, this.radius, 20);
         const renderInst = this.ddraw.endDrawAndMakeRenderInst(renderInstManager);
         renderInstManager.submitRenderInst(renderInst);
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
     }
 
     public override destroy(device: GfxDevice): void {
@@ -437,7 +437,7 @@ abstract class ShadowVolumeDrawer extends ShadowDrawer {
 
         super.draw(sceneObjHolder, renderInstManager, viewerInput);
 
-        const template = renderInstManager.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplate();
         materialParams.u_Color[ColorKind.C0].r = 0x40 / 0xFF;
         this.materialFront.allocateMaterialParamsDataOnInst(template, materialParams);
 
@@ -445,7 +445,7 @@ abstract class ShadowVolumeDrawer extends ShadowDrawer {
         this.materialFront.allocateDrawParamsDataOnInst(template, drawParams);
 
         this.drawShapes(sceneObjHolder, renderInstManager);
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
     }
 
     protected calcBaseDropLength(controller: ShadowController = this.controller): number {
@@ -473,7 +473,7 @@ abstract class ShadowVolumeModel extends ShadowVolumeDrawer {
     }
 
     protected drawShapes(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager): void {
-        const template = renderInstManager.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplate();
 
         this.materialFront.setOnRenderInst(renderInstManager.gfxRenderCache, template);
         drawSimpleModel(renderInstManager, this.modelData!);
@@ -481,7 +481,7 @@ abstract class ShadowVolumeModel extends ShadowVolumeDrawer {
         this.materialBack.setOnRenderInst(renderInstManager.gfxRenderCache, template);
         drawSimpleModel(renderInstManager, this.modelData!);
 
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
     }
 }
 

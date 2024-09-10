@@ -190,7 +190,7 @@ export class SkyRenderer {
     }
 
     public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        const template = renderInstManager.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplate();
         template.setDrawCount(3);
         template.setVertexInput(null, null, null);
         template.setBindingLayouts(backgroundBindingLayouts);
@@ -223,7 +223,7 @@ export class SkyRenderer {
         }
 
         renderInstManager.submitRenderInst(renderInst);
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
     }
 }
 

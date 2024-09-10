@@ -197,7 +197,7 @@ export class SFARenderer implements Viewer.SceneGfx {
         scratchDrawParams.clear();
         setGXMaterialOnRenderInst(renderInstManager, renderInst, this.heatShimmerMaterial!.getGXMaterialHelper(), scratchMaterialParams, scratchDrawParams);
 
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
 
         const resampledDepthTargetID = this.depthResampler.render(device, builder, renderInstManager, sourceDepthTargetID);
 
@@ -345,7 +345,7 @@ export class SFARenderer implements Viewer.SceneGfx {
         });
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, this.temporalTexture.getTextureForResolving());
 
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
 
         this.renderHelper.prepareToRender();
         this.renderHelper.renderGraph.execute(builder);

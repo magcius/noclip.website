@@ -91,16 +91,16 @@ export class MKDSRenderer implements Viewer.SceneGfx {
         offs += fillMatrix4x4(sceneParamsMapped, offs, viewerInput.camera.projectionMatrix);
 
         if (this.skyboxRenderer !== null) {
-            renderInstManager.setCurrentRenderInstList(this.renderInstListSky);
+            renderInstManager.setCurrentList(this.renderInstListSky);
             this.skyboxRenderer.prepareToRender(renderInstManager, viewerInput);
         }
 
-        renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
+        renderInstManager.setCurrentList(this.renderInstListMain);
         this.courseRenderer.prepareToRender(renderInstManager, viewerInput);
         for (let i = 0; i < this.objectRenderers.length; i++)
             this.objectRenderers[i].prepareToRender(renderInstManager, viewerInput);
 
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
         this.renderHelper.prepareToRender();
     }
 

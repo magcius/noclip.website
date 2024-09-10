@@ -157,7 +157,7 @@ export class IVRenderer {
         if (!this.visible)
             return;
 
-        const templateRenderInst = renderInstManager.pushTemplateRenderInst();
+        const templateRenderInst = renderInstManager.pushTemplate();
 
         let offs = templateRenderInst.allocateUniformBuffer(IVProgram.ub_ObjectParams, 4);
         const d = templateRenderInst.mapUniformBufferF32(IVProgram.ub_ObjectParams);
@@ -166,7 +166,7 @@ export class IVRenderer {
         for (let i = 0; i < this.chunks.length; i++)
             this.chunks[i].prepareToRender(renderInstManager);
 
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
     }
 
     public destroy(device: GfxDevice): void {
@@ -221,12 +221,12 @@ export class Scene implements Viewer.SceneGfx {
         offs += fillMatrix4x4(mapped, offs, viewerInput.camera.projectionMatrix);
         offs += fillMatrix4x4(mapped, offs, viewerInput.camera.viewMatrix);
 
-        this.renderHelper.renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
+        this.renderHelper.renderInstManager.setCurrentList(this.renderInstListMain);
 
         for (let i = 0; i < this.ivRenderers.length; i++)
             this.ivRenderers[i].prepareToRender(this.renderHelper.renderInstManager);
 
-        this.renderHelper.renderInstManager.popTemplateRenderInst();
+        this.renderHelper.renderInstManager.popTemplate();
         this.renderHelper.prepareToRender();
     }
 

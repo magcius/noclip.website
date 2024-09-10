@@ -7,7 +7,7 @@ import { fullscreenMegaState, setAttachmentStateSimple } from "../gfx/helpers/Gf
 import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
 import { fillColor, fillMatrix4x3, fillMatrix4x4, fillVec3v, fillVec4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers.js";
-import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxCullMode, GfxDevice, GfxFormat, GfxGraphicsProgramDescriptor, GfxMegaStateDescriptor, GfxMipFilterMode, GfxTexFilterMode, GfxWrapMode } from "../gfx/platform/GfxPlatform.js";
+import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxCullMode, GfxDevice, GfxFormat, GfxRenderProgramDescriptor, GfxMegaStateDescriptor, GfxMipFilterMode, GfxTexFilterMode, GfxWrapMode } from "../gfx/platform/GfxPlatform.js";
 import { GfxProgram, GfxSampler } from "../gfx/platform/GfxPlatformImpl.js";
 import { GfxrAttachmentSlot, GfxrRenderTargetDescription } from "../gfx/render/GfxRenderGraph.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
@@ -61,7 +61,7 @@ class TheWitnessShaderTemplate extends UberShaderTemplate<Render_Material> {
         this.cache = new HashMap<Render_Material, GfxProgram>(shader_equals, shader_hash);
     }
 
-    protected override createGfxProgramDescriptor(cache: GfxRenderCache, variantSettings: Render_Material, shaderTextOverride?: string): GfxGraphicsProgramDescriptor {
+    protected override createGfxProgramDescriptor(cache: GfxRenderCache, variantSettings: Render_Material, shaderTextOverride?: string): GfxRenderProgramDescriptor {
         const programString = shaderTextOverride ?? this.generateProgramString(variantSettings);
         const preprocessedVert = preprocessShader_GLSL(cache.device.queryVendorInfo(), 'vert', programString);
         const preprocessedFrag = preprocessShader_GLSL(cache.device.queryVendorInfo(), 'frag', programString);
@@ -923,7 +923,7 @@ export class TheWitnessRenderer implements SceneGfx {
         const viewpoint = globals.viewpoint;
         const misc = globals.all_variables.misc;
 
-        this.renderHelper.renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
+        this.renderHelper.renderInstManager.setCurrentList(this.renderInstListMain);
 
         viewpoint.setupFromCamera(viewerInput.camera);
         let offs = template.allocateUniformBuffer(TheWitnessShaderTemplate.ub_SceneParams, 44);
@@ -949,7 +949,7 @@ export class TheWitnessRenderer implements SceneGfx {
 
         this.skydome.prepareToRender(globals, this.renderHelper.renderInstManager);
 
-        this.renderHelper.renderInstManager.popTemplateRenderInst();
+        this.renderHelper.renderInstManager.popTemplate();
         this.renderHelper.prepareToRender();
     }
 

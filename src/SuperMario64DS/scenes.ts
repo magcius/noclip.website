@@ -499,16 +499,16 @@ class SM64DSRenderer implements Viewer.SceneGfx {
         const sceneParamsMapped = template.mapUniformBufferF32(NITRO_Program.ub_SceneParams);
         offs += fillMatrix4x4(sceneParamsMapped, offs, viewerInput.camera.projectionMatrix);
 
-        renderInstManager.setCurrentRenderInstList(this.renderInstListSky);
+        renderInstManager.setCurrentList(this.renderInstListSky);
         for (let i = 0; i < this.skyRenderers.length; i++)
             this.skyRenderers[i].prepareToRender(device, renderInstManager, viewerInput);
-        renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
+        renderInstManager.setCurrentList(this.renderInstListMain);
         for (let i = 0; i < this.bmdRenderers.length; i++)
             this.bmdRenderers[i].prepareToRender(device, renderInstManager, viewerInput);
         for (let i = 0; i < this.objectRenderers.length; i++)
             this.objectRenderers[i].prepareToRender(device, renderInstManager, viewerInput);
 
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
 
         this.renderHelper.prepareToRender();
     }

@@ -394,7 +394,7 @@ export class GalaxyMapController extends LayoutActor<GalaxyMapControllerNrv> {
         this.galaxyMap.setModeCapture(sceneObjHolder);
         this.galaxyMap.movement(sceneObjHolder);
 
-        const template = renderInstManager.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplate();
 
         let offs = template.allocateUniformBuffer(GX_Program.ub_SceneParams, ub_SceneParamsBufferSize);
         const d = template.mapUniformBufferF32(GX_Program.ub_SceneParams);
@@ -413,7 +413,7 @@ export class GalaxyMapController extends LayoutActor<GalaxyMapControllerNrv> {
         this.galaxyMapBackground.drawLayout(sceneObjHolder, renderInstManager, scratchDrawInfo);
         this.galaxyMap.drawForCapture(sceneObjHolder, renderInstManager, scratchDrawInfo);
 
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
     }
 
     public pushPasses(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager): GfxrRenderTargetID {
@@ -428,7 +428,7 @@ export class GalaxyMapController extends LayoutActor<GalaxyMapControllerNrv> {
             pass.setDebugName('Galaxy Map Layout');
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, layoutTargetID);
 
-            renderInstManager.setCurrentRenderInstList(this.renderInstList);
+            renderInstManager.setCurrentList(this.renderInstList);
             this.drawForCapture(sceneObjHolder, renderInstManager, layoutTargetDesc);
 
             pass.exec((passRenderer) => {

@@ -425,7 +425,7 @@ export class ModelRenderer {
         if (this.hidden)
             return;
 
-        const template = renderInstManager.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplate();
         template.setBindingLayouts(bindingLayouts);
         template.setVertexInput(this.renderData.inputLayout, this.renderData.vertexBufferDescriptors, this.renderData.indexBufferDescriptor);
 
@@ -440,10 +440,10 @@ export class ModelRenderer {
         offs += fillVec4(mappedF32, offs, modelViewScratch[0], modelViewScratch[4], modelViewScratch[8]);
         offs += fillVec4(mappedF32, offs, modelViewScratch[1], modelViewScratch[5], modelViewScratch[9]);
 
-        renderInstManager.setCurrentRenderInstList(this.isSkybox ? globals.renderInstListSky : globals.renderInstListMain);
+        renderInstManager.setCurrentList(this.isSkybox ? globals.renderInstListSky : globals.renderInstListMain);
         this.renderers[0].prepareToRender(device, renderInstManager, viewerInput);
 
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
     }
 }
 

@@ -479,8 +479,8 @@ export class TwilightPrincessRenderer implements Viewer.SceneGfx {
 
         fpcM_Management(this.globals.frameworkGlobals, this.globals, renderInstManager, viewerInput);
 
-        renderInstManager.setCurrentRenderInstList(dlst.alphaModel);
-        renderInstManager.setCurrentRenderInstList(dlst.bg[0]);
+        renderInstManager.setCurrentList(dlst.alphaModel);
+        renderInstManager.setCurrentList(dlst.bg[0]);
         {
             this.globals.particleCtrl.calc(viewerInput);
 
@@ -493,11 +493,11 @@ export class TwilightPrincessRenderer implements Viewer.SceneGfx {
                 }
 
                 this.globals.particleCtrl.setDrawInfo(viewerInput.camera.viewMatrix, viewerInput.camera.projectionMatrix, texPrjMtx, viewerInput.camera.frustum);
-                renderInstManager.setCurrentRenderInstList(dlst.effect[group]);
+                renderInstManager.setCurrentList(dlst.effect[group]);
                 this.globals.particleCtrl.draw(device, this.renderHelper.renderInstManager, group);
             }
 
-            renderInstManager.setCurrentRenderInstList(dlst.indirect[0]);
+            renderInstManager.setCurrentList(dlst.indirect[0]);
         }
 
         this.globals.renderHacks.renderHacksChanged = false;
@@ -567,7 +567,7 @@ export class TwilightPrincessRenderer implements Viewer.SceneGfx {
         this.renderHelper.antialiasingSupport.pushPasses(builder, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
-        this.renderHelper.renderInstManager.popTemplateRenderInst();
+        this.renderHelper.renderInstManager.popTemplate();
 
         this.renderHelper.prepareToRender();
         this.renderHelper.renderGraph.execute(builder);

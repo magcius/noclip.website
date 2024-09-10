@@ -65,7 +65,7 @@ export class MeleeRenderer extends BasicGXRendererHelper {
             root.draw(device, this.renderHelper.renderInstManager, viewerInput);
         }
 
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
         this.renderHelper.prepareToRender();
     }
 

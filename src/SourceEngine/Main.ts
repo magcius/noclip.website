@@ -341,7 +341,7 @@ export class SkyboxRenderer {
             if (!this.materialInstances[i].isMaterialLoaded())
                 return;
 
-        const template = renderInstManager.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplate();
         template.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor);
         fillSceneParamsOnRenderInst(template, view, renderContext.toneMapParams);
 
@@ -358,7 +358,7 @@ export class SkyboxRenderer {
             materialInstance.getRenderInstListForView(view).submitRenderInst(renderInst);
         }
 
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
     }
 
     public destroy(device: GfxDevice): void {
@@ -743,7 +743,7 @@ export class BSPRenderer {
     }
 
     public prepareToRenderView(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, kinds: RenderObjectKind = RenderObjectKind.WorldSpawn | RenderObjectKind.StaticProps | RenderObjectKind.DetailProps | RenderObjectKind.Entities): void {
-        const template = renderInstManager.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplate();
         template.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor);
 
         fillSceneParamsOnRenderInst(template, renderContext.currentView, renderContext.toneMapParams);
@@ -819,7 +819,7 @@ export class BSPRenderer {
             for (let i = 0; i < this.staticPropRenderers.length; i++)
                 this.staticPropRenderers[i].prepareToRender(renderContext, renderInstManager);
 
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
     }
 
     public destroy(device: GfxDevice): void {
@@ -1876,7 +1876,7 @@ export class SourceRenderer implements SceneGfx {
         }
 
         this.mainViewRenderer.mainView.useExpensiveWater = this.reflectViewRenderer.enabled;
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
 
         // Update our lightmaps right before rendering.
         renderContext.lightmapManager.prepareToRender(device);
@@ -2005,7 +2005,7 @@ export class SourceRenderer implements SceneGfx {
         }
 
         const bloomColorTargetID = this.pushBloomPasses(builder, mainColorTargetID);
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
 
         const mainColorGammaDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
         mainColorGammaDesc.copyDimensions(mainColorDesc);

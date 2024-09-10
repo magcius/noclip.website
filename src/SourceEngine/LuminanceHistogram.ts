@@ -504,7 +504,7 @@ class ImplCompute {
             this.calcViewport(desc);
 
             const dynamicByteOffsets: number[] = [0];
-            const uniformBuffer = renderInstManager.getTemplateRenderInst().getUniformBuffer();
+            const uniformBuffer = renderInstManager.getCurrentTemplate().getUniformBuffer();
             let uniformBufferOffs = uniformBuffer.allocateChunk(8);
             dynamicByteOffsets[0] = uniformBufferOffs << 2;
 

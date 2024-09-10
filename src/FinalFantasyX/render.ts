@@ -384,7 +384,7 @@ export class LevelModelInstance {
 
         mat4.mul(scratchMatrix, viewerInput.camera.viewMatrix, scratchMatrix);
 
-        const template = renderInstManager.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplate();
         template.setVertexInput(this.data.inputLayout, this.data.vertexBufferDescriptors, this.data.indexBufferDescriptor);
         template.sortKey = makeSortKey(this.layer);
         if (this.depthSort) {
@@ -395,7 +395,7 @@ export class LevelModelInstance {
         for (let i = 0; i < this.drawCalls.length; i++)
             this.drawCalls[i].prepareToRender(renderInstManager, scratchMatrix, params, textureRemaps);
 
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
     }
 }
 

@@ -297,7 +297,7 @@ export class MPHRenderer {
         for (let i = 0; i < this.nodes.length; i++)
             this.nodes[i].calcMatrix(this.modelMatrix);
 
-        const template = renderInstManager.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplate();
         template.setBindingLayouts(bindingLayouts);
         template.setGfxProgram(this.gfxProgram);
 
@@ -308,7 +308,7 @@ export class MPHRenderer {
         for (let i = 0; i < this.shapeInstances.length; i++)
             this.shapeInstances[i].prepareToRender(renderInstManager, viewerInput);
 
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
     }
 
     public destroy(device: GfxDevice): void {

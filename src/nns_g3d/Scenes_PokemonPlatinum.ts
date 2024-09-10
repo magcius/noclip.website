@@ -332,10 +332,10 @@ export class PlatinumMapRenderer implements Viewer.SceneGfx {
         for (let i = 0; i < 4; i++)
             offs += fillColor(d, offs, this.lightSetting.lightColor[i]);
 
-        renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
+        renderInstManager.setCurrentList(this.renderInstListMain);
         for (let i = 0; i < this.objectRenderers.length; i++)
             this.objectRenderers[i].prepareToRender(renderInstManager, viewerInput);
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
 
         this.renderHelper.prepareToRender();
     }

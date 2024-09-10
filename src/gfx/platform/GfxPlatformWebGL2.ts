@@ -1,5 +1,5 @@
 
-import { GfxAttachmentState, GfxBindingLayoutDescriptor, GfxBindingsDescriptor, GfxBlendFactor, GfxBlendMode, GfxBufferBinding, GfxBufferFrequencyHint, GfxBufferUsage, GfxChannelBlendState, GfxChannelWriteMask, GfxClipSpaceNearZ, GfxCompareMode, GfxComputePass, GfxComputePipelineDescriptor, GfxComputeProgramDescriptor, GfxCullMode, GfxStatisticsGroup, GfxDevice, GfxDeviceLimits, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxInputLayoutDescriptor, GfxMegaStateDescriptor, GfxMipFilterMode, GfxPass, GfxPlatformFramebuffer, GfxPrimitiveTopology, GfxGraphicsProgramDescriptor, GfxQueryPoolType, GfxRenderPass, GfxRenderPassDescriptor, GfxRenderPipelineDescriptor, GfxRenderTargetDescriptor, GfxSamplerBinding, GfxSamplerDescriptor, GfxSamplerFormatKind, GfxSwapChain, GfxTexFilterMode, GfxTextureDescriptor, GfxTextureDimension, GfxTextureUsage, GfxVendorInfo, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxViewportOrigin, GfxWrapMode, GfxRenderAttachmentView, GfxRenderPassAttachmentColor, GfxRenderPassAttachment, GfxRenderPassAttachmentDepthStencil } from './GfxPlatform.js';
+import { GfxAttachmentState, GfxBindingLayoutDescriptor, GfxBindingsDescriptor, GfxBlendFactor, GfxBlendMode, GfxBufferBinding, GfxBufferFrequencyHint, GfxBufferUsage, GfxChannelBlendState, GfxChannelWriteMask, GfxClipSpaceNearZ, GfxCompareMode, GfxComputePass, GfxComputePipelineDescriptor, GfxComputeProgramDescriptor, GfxCullMode, GfxStatisticsGroup, GfxDevice, GfxDeviceLimits, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxInputLayoutDescriptor, GfxMegaStateDescriptor, GfxMipFilterMode, GfxPass, GfxPlatformFramebuffer, GfxPrimitiveTopology, GfxRenderProgramDescriptor, GfxQueryPoolType, GfxRenderPass, GfxRenderPassDescriptor, GfxRenderPipelineDescriptor, GfxRenderTargetDescriptor, GfxSamplerBinding, GfxSamplerDescriptor, GfxSamplerFormatKind, GfxSwapChain, GfxTexFilterMode, GfxTextureDescriptor, GfxTextureDimension, GfxTextureUsage, GfxVendorInfo, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxViewportOrigin, GfxWrapMode, GfxRenderAttachmentView, GfxRenderPassAttachmentColor, GfxRenderPassAttachment, GfxRenderPassAttachmentDepthStencil } from './GfxPlatform.js';
 import { FormatCompFlags, FormatFlags, FormatTypeFlags, GfxFormat, getFormatByteSize, getFormatCompByteSize, getFormatCompFlags, getFormatFlags, getFormatSamplerKind, getFormatTypeFlags } from "./GfxPlatformFormat.js";
 import { GfxBindings, GfxBuffer, GfxComputePipeline, GfxInputLayout, GfxProgram, GfxQueryPool, GfxReadback, GfxRenderPipeline, GfxRenderTarget, GfxResource, GfxSampler, GfxTexture, GfxTextureImpl, _T, defaultBindingLayoutSamplerDescriptor } from "./GfxPlatformImpl.js";
 
@@ -51,7 +51,7 @@ interface GfxProgramP_GL extends GfxProgram {
     gl_shader_vert: WebGLShader | null;
     gl_shader_frag: WebGLShader | null;
     compileState: GfxProgramCompileStateP_GL;
-    descriptor: GfxGraphicsProgramDescriptor;
+    descriptor: GfxRenderProgramDescriptor;
 }
 
 interface GfxBindingsP_GL extends GfxBindings {
@@ -1002,7 +1002,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         return renderTarget;
     }
 
-    private _createProgram(descriptor: GfxGraphicsProgramDescriptor): GfxProgramP_GL {
+    private _createProgram(descriptor: GfxRenderProgramDescriptor): GfxProgramP_GL {
         const gl = this.gl;
         const gl_program: WebGLProgram = this.ensureResourceExists(gl.createProgram());
         const gl_shader_vert: WebGLShader | null = null;
@@ -1017,7 +1017,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         throw "whoops";
     }
 
-    public createProgram(descriptor: GfxGraphicsProgramDescriptor): GfxProgramP_GL {
+    public createProgram(descriptor: GfxRenderProgramDescriptor): GfxProgramP_GL {
         const program = this._createProgram(descriptor);
         if (this._resourceCreationTracker !== null)
             this._resourceCreationTracker.trackResourceCreated(program);
@@ -1593,7 +1593,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         this._statisticsGroupStack.pop();
     }
 
-    public programPatched(o: GfxProgram, descriptor: GfxGraphicsProgramDescriptor): void {
+    public programPatched(o: GfxProgram, descriptor: GfxRenderProgramDescriptor): void {
         assert(this._shaderDebug);
 
         const program = o as GfxProgramP_GL;
@@ -1660,7 +1660,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
         const prog = program.gl_program!;
         if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
-            const descriptor = program.descriptor as GfxGraphicsProgramDescriptor;
+            const descriptor = program.descriptor as GfxRenderProgramDescriptor;
 
             if (!this._reportShaderError(program.gl_shader_vert!, descriptor.preprocessedVert))
                 return;

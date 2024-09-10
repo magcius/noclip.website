@@ -1,21 +1,21 @@
 
 import { hashCodeNumberFinish, hashCodeNumberUpdate, HashMap, nullHashFunc } from "../../HashMap.js";
-import { GfxAttachmentState, GfxBindingLayoutDescriptor, GfxBindings, GfxBindingsDescriptor, GfxChannelBlendState, GfxColor, GfxDevice, GfxInputLayout, GfxInputLayoutDescriptor, GfxMegaStateDescriptor, GfxProgram, GfxGraphicsProgramDescriptor, GfxRenderPipeline, GfxRenderPipelineDescriptor, GfxSampler, GfxSamplerDescriptor, GfxVendorInfo } from "../platform/GfxPlatform.js";
+import { GfxAttachmentState, GfxBindingLayoutDescriptor, GfxBindings, GfxBindingsDescriptor, GfxChannelBlendState, GfxColor, GfxDevice, GfxInputLayout, GfxInputLayoutDescriptor, GfxMegaStateDescriptor, GfxProgram, GfxRenderProgramDescriptor, GfxRenderPipeline, GfxRenderPipelineDescriptor, GfxSampler, GfxSamplerDescriptor, GfxVendorInfo } from "../platform/GfxPlatform.js";
 import { gfxBindingsDescriptorCopy, gfxBindingsDescriptorEquals, gfxInputLayoutDescriptorCopy, gfxInputLayoutDescriptorEquals, gfxRenderPipelineDescriptorCopy, gfxRenderPipelineDescriptorEquals, gfxSamplerDescriptorEquals } from '../platform/GfxPlatformObjUtil.js';
 import { assert } from "../platform/GfxPlatformUtil.js";
 
-interface GfxProgramDescriptorPreproc extends GfxGraphicsProgramDescriptor {
+interface GfxProgramDescriptorPreproc extends GfxRenderProgramDescriptor {
     ensurePreprocessed(vendorInfo: GfxVendorInfo): void;
     associate(device: GfxDevice, program: GfxProgram): void;
 }
 
-function gfxProgramDescriptorEquals(a: GfxGraphicsProgramDescriptor, b: GfxGraphicsProgramDescriptor): boolean {
+function gfxProgramDescriptorEquals(a: GfxRenderProgramDescriptor, b: GfxRenderProgramDescriptor): boolean {
     assert(a.preprocessedVert !== '' && b.preprocessedVert !== '');
     assert(a.preprocessedFrag !== '' && b.preprocessedFrag !== '');
     return a.preprocessedVert === b.preprocessedVert && a.preprocessedFrag === b.preprocessedFrag;
 }
 
-function gfxProgramDescriptorCopy(a: GfxGraphicsProgramDescriptor): GfxGraphicsProgramDescriptor {
+function gfxProgramDescriptorCopy(a: GfxRenderProgramDescriptor): GfxRenderProgramDescriptor {
     const preprocessedVert = a.preprocessedVert;
     const preprocessedFrag = a.preprocessedFrag;
     return { preprocessedVert, preprocessedFrag };
@@ -103,7 +103,7 @@ export class GfxRenderCache {
     private gfxBindingsCache = new HashMap<GfxBindingsDescriptor, ExpiryBindings>(gfxBindingsDescriptorEquals, gfxBindingsDescriptorHash);
     private gfxRenderPipelinesCache = new HashMap<GfxRenderPipelineDescriptor, GfxRenderPipeline>(gfxRenderPipelineDescriptorEquals, gfxRenderPipelineDescriptorHash);
     private gfxInputLayoutsCache = new HashMap<GfxInputLayoutDescriptor, GfxInputLayout>(gfxInputLayoutDescriptorEquals, nullHashFunc);
-    private gfxProgramCache = new HashMap<GfxGraphicsProgramDescriptor, GfxProgram>(gfxProgramDescriptorEquals, nullHashFunc);
+    private gfxProgramCache = new HashMap<GfxRenderProgramDescriptor, GfxProgram>(gfxProgramDescriptorEquals, nullHashFunc);
     private gfxSamplerCache = new HashMap<GfxSamplerDescriptor, GfxSampler>(gfxSamplerDescriptorEquals, nullHashFunc);
 
     constructor(public device: GfxDevice) {
@@ -140,7 +140,7 @@ export class GfxRenderCache {
         return inputLayout;
     }
 
-    public createProgramSimple(descriptor: GfxGraphicsProgramDescriptor): GfxProgram {
+    public createProgramSimple(descriptor: GfxRenderProgramDescriptor): GfxProgram {
         let program = this.gfxProgramCache.get(descriptor);
         if (program === null) {
             const descriptorCopy = gfxProgramDescriptorCopy(descriptor);
@@ -158,7 +158,7 @@ export class GfxRenderCache {
         return program;
     }
 
-    public createProgram(descriptor: GfxGraphicsProgramDescriptor): GfxProgram {
+    public createProgram(descriptor: GfxRenderProgramDescriptor): GfxProgram {
         // TODO(jstpierre): Remove the ensurePreprocessed here... this should be done by higher-level code.
         const p = descriptor as GfxProgramDescriptorPreproc;
         p.ensurePreprocessed(this.device.queryVendorInfo());

@@ -316,13 +316,13 @@ export class OkamiRenderer implements Viewer.SceneGfx {
         this.animationController.setTimeInMilliseconds(viewerInput.time);
 
         fillSceneParamsDataOnTemplate(template, viewerInput);
-        this.renderHelper.renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
+        this.renderHelper.renderInstManager.setCurrentList(this.renderInstListMain);
         for (let i = 0; i < this.mapPartInstances.length; i++)
             this.mapPartInstances[i].prepareToRender(device, this.renderHelper, viewerInput);
         for (let i = 0; i < this.objectInstances.length; i++)
             this.objectInstances[i].prepareToRender(device, this.renderHelper, viewerInput);
         this.renderHelper.prepareToRender();
-        this.renderHelper.renderInstManager.popTemplateRenderInst();
+        this.renderHelper.renderInstManager.popTemplate();
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {

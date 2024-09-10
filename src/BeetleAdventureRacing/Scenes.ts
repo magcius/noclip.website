@@ -249,7 +249,7 @@ class BARRenderer implements SceneGfx {
         topTemplate.setBindingLayouts(bindingLayouts);
 
         const renderInstManager = this.renderHelper.renderInstManager;
-        renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
+        renderInstManager.setCurrentList(this.renderInstListMain);
 
         // Prep rendering of level and environment
         this.uvtrRenderer.prepareToRender(device, renderInstManager, viewerInput);
@@ -260,7 +260,7 @@ class BARRenderer implements SceneGfx {
             this.trackDataRenderer.prepareToRender(device, renderInstManager, viewerInput);
 
         // Not sure if this is strictly necessary but it can't hurt
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
 
         // Upload uniform data to the GPU
         this.renderHelper.prepareToRender();

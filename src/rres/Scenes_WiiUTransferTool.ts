@@ -50,11 +50,11 @@ class BgStage {
             this.scn0Animator.calcCameraProjection(viewerInput.camera, 0);
         }
 
-        const template = renderInstManager.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplate();
         template.allocateUniformBuffer(GX_Program.ub_SceneParams, ub_SceneParamsBufferSize);
         fillSceneParamsDataOnTemplate(template, viewerInput);
         this.modelInstance.prepareToRender(device, renderInstManager, viewerInput);
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
 
         return (this.scn0AnimationController.getTimeInFrames() >= this.duration);
     }
@@ -127,7 +127,7 @@ class WiiUTransferToolRenderer extends BasicGXRendererHelper implements SceneGfx
             this.stages[this.currentStage].isStarting = true;
         }
 
-        this.renderHelper.renderInstManager.popTemplateRenderInst();
+        this.renderHelper.renderInstManager.popTemplate();
         this.renderHelper.prepareToRender();
     }
 }

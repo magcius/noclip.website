@@ -1,5 +1,5 @@
 
-import { GfxVendorInfo, GfxDevice, GfxViewportOrigin, GfxClipSpaceNearZ, GfxGraphicsProgramDescriptor } from "../platform/GfxPlatform.js";
+import { GfxVendorInfo, GfxDevice, GfxViewportOrigin, GfxClipSpaceNearZ, GfxRenderProgramDescriptor } from "../platform/GfxPlatform.js";
 import { assert } from "../platform/GfxPlatformUtil.js";
 import { GfxShaderLibrary, glslGenerateFloat } from "../helpers/GfxShaderLibrary.js";
 
@@ -167,7 +167,7 @@ ${rest}
 `.trim();
 }
 
-interface GfxProgramDescriptorWithOrig extends GfxGraphicsProgramDescriptor {
+interface GfxProgramDescriptorWithOrig extends GfxRenderProgramDescriptor {
     vert: string;
     frag: string;
 }

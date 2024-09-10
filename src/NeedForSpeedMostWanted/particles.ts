@@ -129,7 +129,7 @@ export class NfsParticleEmitter {
             return;
         const deltaTime = viewerInput.deltaTime / 1000;
         this.update(deltaTime);
-        const template = renderInstManager.getTemplateRenderInst();
+        const template = renderInstManager.getCurrentTemplate();
         template.setSamplerBindingsFromTextureMappings([this.texture]);
         if(props.additiveBlend)
             template.setMegaStateFlags({attachmentsState: attachmentStatesAdditive});

@@ -51,7 +51,7 @@ class KlonoaRenderer implements Viewer.SceneGfx {
 
     private preparePass(device: GfxDevice, list: GfxRenderInstList, passMask: number, viewerInput: Viewer.ViewerRenderInput): void {
         const renderInstManager = this.renderHelper.renderInstManager;
-        renderInstManager.setCurrentRenderInstList(list);
+        renderInstManager.setCurrentList(list);
         for (let i = 0; i < this.modelInstances.length; i++) {
             const m = this.modelInstances[i];
             if (!(m.passMask & passMask))
@@ -70,7 +70,7 @@ class KlonoaRenderer implements Viewer.SceneGfx {
         this.preparePass(device, this.renderInstListSky, KlonoaPass.SKYBOX, viewerInput);
         this.preparePass(device, this.renderInstListMain, KlonoaPass.MAIN, viewerInput);
         this.preparePass(device, this.renderInstListInd, KlonoaPass.INDIRECT, viewerInput);
-        this.renderHelper.renderInstManager.popTemplateRenderInst();
+        this.renderHelper.renderInstManager.popTemplate();
 
         const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, standardFullClearRenderPassDescriptor);
         const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, standardFullClearRenderPassDescriptor);

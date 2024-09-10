@@ -200,7 +200,7 @@ class SunshineWaterModel {
 
         this.plane.prepareToRender(renderHelper);
 
-        renderHelper.renderInstManager.popTemplateRenderInst();
+        renderHelper.renderInstManager.popTemplate();
     }
 
     public destroy(device: GfxDevice) {
@@ -218,9 +218,9 @@ class SeaRenderer extends SunshineRenderer {
 
     protected override prepareToRender(device: GfxDevice, viewerInput: ViewerRenderInput): void {
         this.renderHelper.pushTemplateRenderInst();
-        this.renderHelper.renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
+        this.renderHelper.renderInstManager.setCurrentList(this.renderInstListMain);
         this.sunshineWaterModel.prepareToRender(device, this.renderHelper, viewerInput);
-        this.renderHelper.renderInstManager.popTemplateRenderInst();
+        this.renderHelper.renderInstManager.popTemplate();
         super.prepareToRender(device, viewerInput);
     }
 }

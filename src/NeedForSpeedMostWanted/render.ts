@@ -106,7 +106,7 @@ export class NfsRenderer implements SceneGfx {
 
     private prepareToRenderShadows(viewerInput: ViewerRenderInput, cameraPos: vec3, instancesToRender: NfsInstance[]) {
         const renderInstManager = this.renderHelper.renderInstManager;
-        const template = renderInstManager.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplate();
 
         this.fillSceneUniformBuffer(template, viewerInput, cameraPos);
 
@@ -137,12 +137,12 @@ export class NfsRenderer implements SceneGfx {
             });
         });
 
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
     }
 
     private prepareToRender(viewerInput: ViewerRenderInput, cameraPos: vec3, instancesToRender: NfsInstance[]): void {
         const renderInstManager = this.renderHelper.renderInstManager;
-        const template = renderInstManager.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplate();
 
         this.fillSceneUniformBuffer(template, viewerInput, cameraPos);
 
@@ -235,11 +235,11 @@ export class NfsRenderer implements SceneGfx {
             });
         });
 
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
     }
 
     private prepareToRenderParticles(viewerInput: ViewerRenderInput, renderInstManager: GfxRenderInstManager, activeEmitters: NfsParticleEmitterGroup[]) {
-        const template = renderInstManager.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplate();
         template.setGfxProgram(this.particleGfxProgram);
         template.setMegaStateFlags({attachmentsState: attachmentStatesTranslucent, depthWrite: false, cullMode: GfxCullMode.None});
         template.setVertexInput(NfsParticleEmitter.inputLayout, NfsParticleEmitter.vertexBufferDescriptors, NfsParticleEmitter.indexBufferDescriptor);
@@ -251,7 +251,7 @@ export class NfsRenderer implements SceneGfx {
 
         activeEmitters.forEach(e => e.prepareToRender(renderInstManager, this.renderInstListMain, viewerInput));
 
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
     }
 
     public render(device: GfxDevice, viewerInput: ViewerRenderInput) {
@@ -348,7 +348,7 @@ export class NfsRenderer implements SceneGfx {
         this.prepareToRender(viewerInput, cameraPos, instancesToRender);
         if(this.enableParticles)
             this.prepareToRenderParticles(viewerInput, renderInstManager, regionsToRender.flatMap(r => r.region.emitterGroups));
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
 
         this.renderHelper.prepareToRender();
 

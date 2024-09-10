@@ -493,13 +493,13 @@ export class GXMaterialHelperGfx {
     }
 
     public fillMaterialParamsData(renderInstManager: GfxRenderInstManager, offs: number, materialParams: MaterialParams): void {
-        const uniformBuffer = renderInstManager.getTemplateRenderInst().getUniformBuffer();
+        const uniformBuffer = renderInstManager.getCurrentTemplate().getUniformBuffer();
         const d = uniformBuffer.mapBufferF32();
         fillMaterialParamsDataWithOptimizations(this.material, d, offs, materialParams);
     }
 
     public allocateMaterialParamsBlock(renderInstManager: GfxRenderInstManager): number {
-        const uniformBuffer = renderInstManager.getTemplateRenderInst().getUniformBuffer();
+        const uniformBuffer = renderInstManager.getCurrentTemplate().getUniformBuffer();
         return uniformBuffer.allocateChunk(this.materialParamsBufferSize);
     }
 
@@ -642,7 +642,7 @@ export abstract class BasicGXRendererHelper implements Viewer.SceneGfx {
         this.renderHelper.antialiasingSupport.pushPasses(builder, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
-        this.renderHelper.renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
+        this.renderHelper.renderInstManager.setCurrentList(this.renderInstListMain);
         this.prepareToRender(device, viewerInput);
         this.renderHelper.renderGraph.execute(builder);
         this.renderInstListMain.reset();

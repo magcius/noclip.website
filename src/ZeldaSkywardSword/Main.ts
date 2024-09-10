@@ -401,7 +401,7 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
 
     private preparePass(device: GfxDevice, list: GfxRenderInstList, passMask: number, viewerInput: Viewer.ViewerRenderInput): void {
         const renderInstManager = this.renderHelper.renderInstManager;
-        renderInstManager.setCurrentRenderInstList(list);
+        renderInstManager.setCurrentList(list);
         for (let i = 0; i < this.modelInstances.length; i++) {
             const m = this.modelInstances[i];
             if (!(m.passMask & passMask))
@@ -427,7 +427,7 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
         this.preparePass(device, this.renderInstListSky, ZSSPass.SKYBOX, viewerInput);
         this.preparePass(device, this.renderInstListMain, ZSSPass.MAIN, viewerInput);
         this.preparePass(device, this.renderInstListInd, ZSSPass.INDIRECT, viewerInput);
-        this.renderHelper.renderInstManager.popTemplateRenderInst();
+        this.renderHelper.renderInstManager.popTemplate();
 
         const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, standardFullClearRenderPassDescriptor);
         const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, standardFullClearRenderPassDescriptor);

@@ -20,7 +20,7 @@ import {
     GfxDevice,
     GfxFormat,
     GfxFrontFaceMode,
-    GfxGraphicsProgramDescriptor,
+    GfxRenderProgramDescriptor,
     GfxIndexBufferDescriptor,
     GfxInputLayoutBufferDescriptor,
     GfxMegaStateDescriptor,
@@ -523,7 +523,7 @@ class RenderHackState {
 }
 
 export class ROTFDRenderer implements Viewer.SceneGfx {
-    private program: GfxGraphicsProgramDescriptor;
+    private program: GfxRenderProgramDescriptor;
     private gfxProgram: GfxProgram;
     public renderHelper: GfxRenderHelper;
     private renderInstListMain = new GfxRenderInstList();
@@ -666,11 +666,11 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
         let offs = template.allocateUniformBuffer(RotfdProgram.ub_SceneParams, RotfdProgram.SCENEPARAM_SIZE);
         const d = template.mapUniformBufferF32(RotfdProgram.ub_SceneParams);
         offs += fillMatrix4x4(d, offs, viewerInput.camera.projectionMatrix);
-        renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
+        renderInstManager.setCurrentList(this.renderInstListMain);
         for (const instance of this.meshRenderers) {
             instance.prepareToRender(renderInstManager, viewerInput, this);
         }
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
 
         this.renderHelper.prepareToRender();
     }

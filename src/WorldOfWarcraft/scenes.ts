@@ -617,12 +617,12 @@ export class WdtScene implements Viewer.SceneGfx {
 
         const lightingData = this.db.getGlobalLightingData(this.world.lightdbMapId, this.mainView.cameraPos, this.mainView.time);
         BaseProgram.layoutUniformBufs(template, this.mainView, lightingData);
-        renderInstManager.setCurrentRenderInstList(this.renderInstListSky);
+        renderInstManager.setCurrentList(this.renderInstListSky);
         this.skyboxRenderer.prepareToRenderSkybox(renderInstManager);
 
         template.setGfxProgram(this.loadingAdtProgram);
         template.setBindingLayouts(LoadingAdtProgram.bindingLayouts);
-        renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
+        renderInstManager.setCurrentList(this.renderInstListMain);
         this.loadingAdtRenderer.update(this.mainView);
         this.loadingAdtRenderer.prepareToRenderLoadingBox(renderInstManager, this.loadingAdts);
 
@@ -653,7 +653,7 @@ export class WdtScene implements Viewer.SceneGfx {
 
         template.setBindingLayouts(ModelProgram.bindingLayouts);
         template.setGfxProgram(this.modelProgram);
-        renderInstManager.setCurrentRenderInstList(this.renderInstListSky);
+        renderInstManager.setCurrentList(this.renderInstListSky);
         if (frame.activeWmoSkybox !== null) {
             const renderer = this.wmoSkyboxRenderers.get(frame.activeWmoSkybox);
             if (!renderer) {
@@ -679,7 +679,7 @@ export class WdtScene implements Viewer.SceneGfx {
                 skybox.free();
             }
         }
-        renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
+        renderInstManager.setCurrentList(this.renderInstListMain);
 
         for (let [modelId, renderer] of this.modelRenderers.entries()) {
             const doodads = frame.doodads
@@ -703,7 +703,7 @@ export class WdtScene implements Viewer.SceneGfx {
             }
         }
 
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
         this.renderHelper.prepareToRender();
 
         if (this.cullingState === CullingState.OneShot) {

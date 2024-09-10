@@ -139,7 +139,7 @@ class FFXRenderer implements Viewer.SceneGfx {
         offs += fillMatrix4x4(sceneParamsMapped, offs, viewerInput.camera.projectionMatrix);
         fillMatrix4x3(sceneParamsMapped, offs, this.lightDirection);
 
-        this.renderHelper.renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
+        this.renderHelper.renderInstManager.setCurrentList(this.renderInstListMain);
 
         for (let i = 0; i < this.levelObjects.activeEffects.length; i++) {
             const effect = this.levelObjects.activeEffects[i];
@@ -245,7 +245,7 @@ class FFXRenderer implements Viewer.SceneGfx {
             }
         }
 
-        this.renderHelper.renderInstManager.popTemplateRenderInst();
+        this.renderHelper.renderInstManager.popTemplate();
         this.renderHelper.prepareToRender();
     }
 

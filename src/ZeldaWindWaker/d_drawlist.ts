@@ -128,7 +128,7 @@ class dDlst_alphaModel_c {
         for (let i = 0; i < this.datas.length; i++) {
             const data = this.datas[i];
 
-            const template = renderInstManager.pushTemplateRenderInst();
+            const template = renderInstManager.pushTemplate();
 
             if (data.type === dDlst_alphaModel__Type.Bonbori) {
                 this.bonboriShape.setOnRenderInst(template);
@@ -149,7 +149,7 @@ class dDlst_alphaModel_c {
                 renderInstManager.submitRenderInst(front);
             }
 
-            renderInstManager.popTemplateRenderInst();
+            renderInstManager.popTemplate();
         }
 
         // Blend onto main screen.

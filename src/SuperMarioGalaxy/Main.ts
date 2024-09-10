@@ -277,8 +277,8 @@ export class SMGRenderer implements Viewer.SceneGfx {
         const renderInstManager = this.renderHelper.renderInstManager;
 
         for (let drawType = DrawType.EffectDraw3D; drawType <= DrawType.EffectDrawAfterImageEffect; drawType++) {
-            renderInstManager.setCurrentRenderInstList(this.sceneObjHolder.sceneNameObjListExecutor.ensureRenderInstListExecute(drawType));
-            const template = this.renderHelper.renderInstManager.pushTemplateRenderInst();
+            renderInstManager.setCurrentList(this.sceneObjHolder.sceneNameObjListExecutor.ensureRenderInstListExecute(drawType));
+            const template = this.renderHelper.renderInstManager.pushTemplate();
             template.setUniformBufferOffset(GX_Program.ub_SceneParams, this.sceneObjHolder.renderParams.sceneParamsOffs3D, ub_SceneParamsBufferSize);
 
             let texPrjMtx: mat4 | null = null;
@@ -290,7 +290,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
             effectSystem.setDrawInfo(viewerInput.camera.viewMatrix, viewerInput.camera.projectionMatrix, texPrjMtx, viewerInput.camera.frustum);
             effectSystem.drawEmitters(this.sceneObjHolder.modelCache.device, this.renderHelper.renderInstManager, drawType);
 
-            this.renderHelper.renderInstManager.popTemplateRenderInst();
+            this.renderHelper.renderInstManager.popTemplate();
         }
     }
 
@@ -462,7 +462,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
         sceneObjHolder.debugDraw.beginFrame(viewerInput.camera.projectionMatrix, viewerInput.camera.viewMatrix, viewerInput.backbufferHeight, viewerInput.backbufferHeight);
 
         // Draw our render insts.
-        const template = renderInstManager.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplate();
         if (sceneObjHolder.renderParams.wireframe)
             template.setMegaStateFlags({ wireframe: true });
 
@@ -473,7 +473,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
         executor.drawAllBuffers(sceneObjHolder.modelCache.device, renderInstManager, camera, DrawCameraType.DrawCameraType_3D);
         template.setUniformBufferOffset(GX_Program.ub_SceneParams, sceneParamsOffs2D, ub_SceneParamsBufferSize);
         executor.drawAllBuffers(sceneObjHolder.modelCache.device, renderInstManager, camera, DrawCameraType.DrawCameraType_2D);
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
 
         setBackbufferDescSimple(this.mainColorDesc, viewerInput);
         this.mainColorDesc.clearColor = TransparentBlack;
@@ -812,7 +812,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
 
         sceneObjHolder.drawSyncManager.endFrame(renderInstManager, builder, mainDepthTargetID);
 
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
 
         this.renderHelper.prepareToRender();
 

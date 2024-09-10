@@ -100,7 +100,7 @@ export class Sky {
         drawParams.clear();
         setGXMaterialOnRenderInst(renderInstManager, renderInst, this.materialHelperSky, materialParams, drawParams);
 
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
         
         builder.pushPass((pass) => {
             pass.setDebugName('Atmosphere');
@@ -114,9 +114,9 @@ export class Sky {
     public addSkyRenderInsts(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, sceneCtx: SceneRenderContext) {
         // Draw skyscape
         if (this.world.envfxMan.skyscape.objects.length !== 0) {
-            renderInstManager.setCurrentRenderInstList(renderLists.skyscape);
+            renderInstManager.setCurrentList(renderLists.skyscape);
 
-            const template = renderInstManager.pushTemplateRenderInst();
+            const template = renderInstManager.pushTemplate();
             fillSceneParamsDataOnTemplate(template, sceneCtx.viewerInput);
 
             const objectCtx: ObjectRenderContext = {
@@ -133,7 +133,7 @@ export class Sky {
                 obj.addRenderInsts(device, renderInstManager, null, objectCtx);
             }
 
-            renderInstManager.popTemplateRenderInst();
+            renderInstManager.popTemplate();
         }
     }
 

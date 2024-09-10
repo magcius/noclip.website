@@ -34,7 +34,6 @@ function copyAttachmentsState(dst: GfxAttachmentState[], src: GfxAttachmentState
 
 export function setMegaStateFlags(dst: GfxMegaStateDescriptor, src: Partial<GfxMegaStateDescriptor>): void {
     // attachmentsState replaces wholesale; it does not merge.
-    // TODO(jstpierre): Should it merge?
     if (src.attachmentsState !== undefined)
         copyAttachmentsState(dst.attachmentsState, src.attachmentsState);
 

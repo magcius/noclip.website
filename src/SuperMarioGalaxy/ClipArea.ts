@@ -55,12 +55,12 @@ abstract class ClipAreaShape {
     }
 
     public drawVolumeShape(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, mtx: ReadonlyMat4, scale: ReadonlyVec3, camera: Camera): void {
-        const template = renderInstManager.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplate();
         this.calcVolumeMatrix(drawParams.u_PosMtx[0], mtx, scale);
         mat4.mul(drawParams.u_PosMtx[0], camera.viewMatrix, drawParams.u_PosMtx[0]);
         sceneObjHolder.clipAreaHolder!.materialFront.allocateDrawParamsDataOnInst(template, drawParams);
         drawSimpleModel(renderInstManager, this.modelData!);
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
     }
 }
 
@@ -127,7 +127,7 @@ abstract class ClipArea<TNerve extends number = number> extends LiveActor<TNerve
         const clipAreaHolder = sceneObjHolder.clipAreaHolder!;
         const cache = renderInstManager.gfxRenderCache;
 
-        const template = renderInstManager.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplate();
 
         colorFromRGBA8(materialParams.u_Color[ColorKind.C0], 0x00000004);
         clipAreaHolder.materialFront.allocateMaterialParamsDataOnInst(template, materialParams);
@@ -138,7 +138,7 @@ abstract class ClipArea<TNerve extends number = number> extends LiveActor<TNerve
         clipAreaHolder.materialBack.setOnRenderInst(cache, template);
         this.shape.drawVolumeShape(sceneObjHolder, renderInstManager, this.baseMtx, this.scale, viewerInput.camera);
 
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
     }
 }
 

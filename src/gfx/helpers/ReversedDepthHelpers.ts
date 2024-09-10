@@ -4,7 +4,7 @@
 import { mat4 } from "gl-matrix";
 import { GfxCompareMode } from "../platform/GfxPlatform.js";
 
-export const IS_DEPTH_REVERSED = true;
+export const IsDepthReversed = true;
 
 // This is designed for an OpenGL-style clip space, because we apply the clip space transform after...
 const reverseDepthMatrix = mat4.fromValues(
@@ -14,12 +14,12 @@ const reverseDepthMatrix = mat4.fromValues(
     0, 0, 0, 1,
 );
 
-export function projectionMatrixReverseDepth(m: mat4, isDepthReversed = IS_DEPTH_REVERSED): void {
+export function projectionMatrixReverseDepth(m: mat4, isDepthReversed = IsDepthReversed): void {
     if (isDepthReversed)
         mat4.mul(m, reverseDepthMatrix, m);
 }
 
-export function reverseDepthForCompareMode(compareMode: GfxCompareMode, isDepthReversed = IS_DEPTH_REVERSED): GfxCompareMode {
+export function reverseDepthForCompareMode(compareMode: GfxCompareMode, isDepthReversed = IsDepthReversed): GfxCompareMode {
     if (isDepthReversed) {
         switch (compareMode) {
         case GfxCompareMode.Less:    return GfxCompareMode.Greater;
@@ -33,7 +33,7 @@ export function reverseDepthForCompareMode(compareMode: GfxCompareMode, isDepthR
     }
 }
 
-export function reverseDepthForClearValue(n: number, isDepthReversed = IS_DEPTH_REVERSED): number {
+export function reverseDepthForClearValue(n: number, isDepthReversed = IsDepthReversed): number {
     if (isDepthReversed) {
         return 1.0 - n;
     } else {
@@ -41,7 +41,7 @@ export function reverseDepthForClearValue(n: number, isDepthReversed = IS_DEPTH_
     }
 }
 
-export function reverseDepthForDepthOffset(n: number, isDepthReversed = IS_DEPTH_REVERSED): number {
+export function reverseDepthForDepthOffset(n: number, isDepthReversed = IsDepthReversed): number {
     if (isDepthReversed) {
         return -n;
     } else {
@@ -49,7 +49,7 @@ export function reverseDepthForDepthOffset(n: number, isDepthReversed = IS_DEPTH
     }
 }
 
-export function compareDepthValues(a: number, b: number, op: GfxCompareMode, isDepthReversed = IS_DEPTH_REVERSED): boolean {
+export function compareDepthValues(a: number, b: number, op: GfxCompareMode, isDepthReversed = IsDepthReversed): boolean {
     op = reverseDepthForCompareMode(op, isDepthReversed);
     if (op === GfxCompareMode.Less)
         return a < b;

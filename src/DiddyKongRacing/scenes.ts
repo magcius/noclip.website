@@ -47,13 +47,13 @@ class DKRRenderer implements Viewer.SceneGfx {
         template.setBindingLayouts(bindingLayouts);
 
         const renderInstManager = this.renderHelper.renderInstManager;
-        renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
+        renderInstManager.setCurrentList(this.renderInstListMain);
 
         if(!!this.level) {
             this.level.prepareToRender(device, renderInstManager, viewerInput);
         }
 
-        this.renderHelper.renderInstManager.popTemplateRenderInst();
+        this.renderHelper.renderInstManager.popTemplate();
         this.renderHelper.prepareToRender();
     }
 

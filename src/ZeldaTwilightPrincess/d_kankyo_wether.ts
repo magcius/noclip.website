@@ -442,7 +442,7 @@ export class dKankyo_sun_Packet {
 
         const camPitch = vecPitch(globals.cameraFwd);
 
-        renderInstManager.setCurrentRenderInstList(globals.dlst.sky[1]);
+        renderInstManager.setCurrentList(globals.dlst.sky[1]);
 
         if (drawMoon) {
             let dayOfWeek = dKy_get_dayofweek(envLight);
@@ -531,9 +531,9 @@ export class dKankyo_sun_Packet {
         computeMatrixWithoutTranslation(scratchMatrix, viewerInput.camera.worldMatrix);
 
         if (this.drawLenzInSky)
-            renderInstManager.setCurrentRenderInstList(globals.dlst.sky[1]);
+            renderInstManager.setCurrentList(globals.dlst.sky[1]);
         else
-            renderInstManager.setCurrentRenderInstList(globals.dlst.wetherEffect);
+            renderInstManager.setCurrentList(globals.dlst.wetherEffect);
 
         const invDist = 1.0 - this.distFalloff;
         const flareViz = (0.6 + (0.4 * this.visibility * invDist ** 2));
@@ -748,7 +748,7 @@ export class dKankyo_vrkumo_Packet {
         const domeRadius = /* globals.dStage_dt.stag.farPlane -  */10000.0;
         const ddraw = this.ddraw;
 
-        renderInstManager.setCurrentRenderInstList(globals.dlst.sky[1]);
+        renderInstManager.setCurrentList(globals.dlst.sky[1]);
 
         ddraw.beginDraw(globals.modelCache.cache);
         ddraw.allocPrimitives(GX.Command.DRAW_QUADS, 4*3*100);
@@ -979,7 +979,7 @@ export class dKankyo_housi_Packet {
         const ddraw = this.ddraw;
         computeMatrixWithoutTranslation(scratchMatrix, viewerInput.camera.worldMatrix);
 
-        renderInstManager.setCurrentRenderInstList(globals.dlst.wetherEffect);
+        renderInstManager.setCurrentList(globals.dlst.wetherEffect);
 
         ddraw.beginDraw(globals.modelCache.cache);
         ddraw.begin(GX.Command.DRAW_QUADS, 4 * this.count);
@@ -1109,7 +1109,7 @@ export class dKankyo_rain_Packet {
 
         computeMatrixWithoutTranslation(scratchMatrix, viewerInput.camera.worldMatrix);
 
-        renderInstManager.setCurrentRenderInstList(globals.dlst.wetherEffect);
+        renderInstManager.setCurrentList(globals.dlst.wetherEffect);
 
         colorFromRGBA8(materialParams.u_Color[ColorKind.C1], 0x8080800A);
         // envLight.wetherCommonTextures.snowTexture.fillTextureMapping(materialParams.m_TextureMapping[0]);
@@ -1207,7 +1207,7 @@ export class dKankyo_rain_Packet {
             return;
 
         const ddraw = this.ddraw;
-        renderInstManager.setCurrentRenderInstList(globals.dlst.wetherEffect);
+        renderInstManager.setCurrentList(globals.dlst.wetherEffect);
 
         colorFromRGBA8(materialParams.u_Color[ColorKind.C0], 0xB4C8C800);
         materialParams.u_Color[ColorKind.C0].a = finalAlpha;
@@ -1346,9 +1346,9 @@ export class dKankyo_star_Packet {
         const ddraw = this.ddraw;
 
         if (this.renderInMain)
-            renderInstManager.setCurrentRenderInstList(globals.dlst.bg[1]);
+            renderInstManager.setCurrentList(globals.dlst.bg[1]);
         else
-            renderInstManager.setCurrentRenderInstList(globals.dlst.sky[1]);
+            renderInstManager.setCurrentList(globals.dlst.sky[1]);
 
         ddraw.beginDraw(globals.modelCache.cache);
         ddraw.begin(GX.Command.DRAW_TRIANGLES, 6 * envLight.starCount);

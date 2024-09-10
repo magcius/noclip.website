@@ -421,13 +421,13 @@ export class SceneNameObjListExecutor {
             if (executeInfo.drawType === DrawType.None)
                 continue;
 
-            renderInstManager.setCurrentRenderInstList(this.ensureRenderInstListExecute(executeInfo.drawType));
+            renderInstManager.setCurrentList(this.ensureRenderInstListExecute(executeInfo.drawType));
 
-            const template = renderInstManager.pushTemplateRenderInst();
+            const template = renderInstManager.pushTemplate();
             // HACK(jstpierre): By default, the execute scene params are 3D. We should replace executeDrawAll with GfxRenderInstList eventually...
             template.setUniformBufferOffset(GX_Program.ub_SceneParams, sceneObjHolder.renderParams.sceneParamsOffs3D, ub_SceneParamsBufferSize);
             nameObj.draw(sceneObjHolder, renderInstManager, viewerInput);
-            renderInstManager.popTemplateRenderInst();
+            renderInstManager.popTemplate();
         }
     }
 

@@ -36,7 +36,7 @@ class GfxRenderHelperBase {
     }
 
     public pushTemplateRenderInst(): GfxRenderInst {
-        const template = this.renderInstManager.pushTemplateRenderInst();
+        const template = this.renderInstManager.pushTemplate();
         template.setUniformBuffer(this.uniformBuffer);
         return template;
     }

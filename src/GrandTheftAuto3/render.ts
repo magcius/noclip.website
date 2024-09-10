@@ -653,11 +653,11 @@ export class GTA3Renderer implements Viewer.SceneGfx {
         mapped[offs++] = this.waterOrigin[3];
         mapped[offs++] = viewerInput.time / 1e3;
 
-        this.renderHelper.renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
+        this.renderHelper.renderInstManager.setCurrentList(this.renderInstListMain);
         for (let i = 0; i < this.renderers.length; i++)
             this.renderers[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
 
-        this.renderHelper.renderInstManager.popTemplateRenderInst();
+        this.renderHelper.renderInstManager.popTemplate();
         this.renderHelper.prepareToRender();
     }
 

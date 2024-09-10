@@ -199,11 +199,11 @@ class MarioKartWiiRenderer {
         fillSceneParamsDataOnTemplate(template, viewerInput);
         if (this.wireframe)
             template.setMegaStateFlags({ wireframe: true });
-        this.renderHelper.renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
+        this.renderHelper.renderInstManager.setCurrentList(this.renderInstListMain);
         for (let i = 0; i < this.baseObjects.length; i++)
             this.baseObjects[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
         this.renderHelper.prepareToRender();
-        this.renderHelper.renderInstManager.popTemplateRenderInst();
+        this.renderHelper.renderInstManager.popTemplate();
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
@@ -241,7 +241,7 @@ class MarioKartWiiRenderer {
         this.renderHelper.antialiasingSupport.pushPasses(builder, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
 
         this.prepareToRender(device, viewerInput);
         this.renderHelper.renderGraph.execute(builder);

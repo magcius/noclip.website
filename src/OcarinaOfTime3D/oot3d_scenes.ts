@@ -64,16 +64,16 @@ export class OoT3DRenderer implements Viewer.SceneGfx {
 
         const renderInstManager = this.renderHelper.renderInstManager;
         if (this.skyRenderers.length > 0) {
-            renderInstManager.setCurrentRenderInstList(this.renderInstListSky);
+            renderInstManager.setCurrentList(this.renderInstListSky);
             for (let i = 0; i < this.skyRenderers.length; i++)
                 this.skyRenderers[i].prepareToRender(device, renderInstManager, viewerInput);
         }
 
-        renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
+        renderInstManager.setCurrentList(this.renderInstListMain);
         for (let i = 0; i < this.roomRenderers.length; i++)
             this.roomRenderers[i].prepareToRender(device, renderInstManager, viewerInput);
 
-        this.renderHelper.renderInstManager.popTemplateRenderInst();
+        this.renderHelper.renderInstManager.popTemplate();
         this.renderHelper.prepareToRender();
     }
 

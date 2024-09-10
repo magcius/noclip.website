@@ -321,7 +321,7 @@ class WorldRenderer extends SFARenderer {
     }
 
     protected override addWorldRenderInsts(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, sceneCtx: SceneRenderContext) {
-        const template = renderInstManager.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplate();
         fillSceneParamsDataOnTemplate(template, sceneCtx.viewerInput);
 
         this.world.envfxMan.getAmbientColor(scratchColor0, 0); // Always use ambience #0 when rendering map (FIXME: really?)
@@ -362,7 +362,7 @@ class WorldRenderer extends SFARenderer {
         if (this.world.mapInstance !== null)
             this.world.mapInstance.addRenderInsts(device, renderInstManager, renderLists, modelCtx);
 
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
     }
 
     protected override addWorldRenderPassesInner(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext) {

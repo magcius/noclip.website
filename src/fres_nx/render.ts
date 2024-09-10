@@ -746,7 +746,7 @@ class FSHPInstance {
             return;
 
         // TODO(jstpierre): Joints.
-        const template = renderInstManager.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplate();
         let offs = template.allocateUniformBuffer(AglProgram.ub_ShapeParams, 16+12);
         const d = template.mapUniformBufferF32(AglProgram.ub_ShapeParams);
         offs += fillMatrix4x4(d, offs, viewerInput.camera.projectionMatrix);
@@ -761,7 +761,7 @@ class FSHPInstance {
             this.lodMeshInstances[i].prepareToRender(device, renderInstManager, viewerInput);
         }
 
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
     }
 }
 
@@ -798,13 +798,13 @@ export class FMDLRenderer {
         if (!this.visible)
             return;
 
-        const template = renderInstManager.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplate();
         template.setBindingLayouts(bindingLayouts);
 
         for (let i = 0; i < this.fshpInst.length; i++)
             this.fshpInst[i].prepareToRender(device, renderInstManager, this.modelMatrix, viewerInput);
 
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
     }
 
     public destroy(device: GfxDevice): void {
@@ -831,12 +831,12 @@ export class BasicFRESRenderer {
     private prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
         const renderInstManager = this.renderHelper.renderInstManager;
 
-        this.renderHelper.renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
+        this.renderHelper.renderInstManager.setCurrentList(this.renderInstListMain);
 
         this.renderHelper.pushTemplateRenderInst();
         for (let i = 0; i < this.fmdlRenderers.length; i++)
             this.fmdlRenderers[i].prepareToRender(device, renderInstManager, viewerInput);
-        this.renderHelper.renderInstManager.popTemplateRenderInst();
+        this.renderHelper.renderInstManager.popTemplate();
 
         this.renderHelper.prepareToRender();
     }

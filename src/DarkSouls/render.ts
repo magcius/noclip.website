@@ -1382,7 +1382,7 @@ class BatchInstance {
         if (!this.visible)
             return;
 
-        const template = renderInstManager.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplate();
         this.materialInstance.setOnRenderInst(renderContext, modelMatrix, materialDrawConfig, template);
 
         for (let i = 0; i < this.batchData.batch.primitiveIndexes.length; i++) {
@@ -1399,7 +1399,7 @@ class BatchInstance {
             this.materialInstance.submitRenderInst(renderContext, renderInstManager, renderInst);
         }
 
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
     }
 }
 
@@ -1931,7 +1931,7 @@ export class MSBRenderer {
     }
 
     public prepareToRender(renderInstManager: GfxRenderInstManager, renderContext: RenderContext): void {
-        const template = renderInstManager.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplate();
         template.setBindingLayouts(bindingLayouts);
 
         let offs = template.allocateUniformBuffer(MaterialProgram_Phn.ub_SceneParams, 16+4);
@@ -1945,7 +1945,7 @@ export class MSBRenderer {
         for (let i = 0; i < this.flverInstances.length; i++)
             this.flverInstances[i].prepareToRender(renderInstManager, renderContext);
 
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
     }
 
     public destroy(device: GfxDevice): void {
@@ -2840,7 +2840,7 @@ export class DarkSoulsRenderer implements Viewer.SceneGfx {
         const renderInstManager = this.renderHelper.renderInstManager;
         for (let i = 0; i < this.msbRenderers.length; i++)
             this.msbRenderers[i].prepareToRender(renderInstManager, this.renderContext);
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
 
         this.renderHelper.prepareToRender();
     }
@@ -2928,7 +2928,7 @@ export class DarkSoulsRenderer implements Viewer.SceneGfx {
         this.renderHelper.antialiasingSupport.pushPasses(builder, viewerInput, mainColorGammaTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorGammaTargetID, viewerInput.onscreenTexture);
 
-        this.renderHelper.renderInstManager.popTemplateRenderInst();
+        this.renderHelper.renderInstManager.popTemplate();
 
         this.prepareToRender(viewerInput);
         this.renderHelper.renderGraph.execute(builder);

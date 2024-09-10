@@ -661,7 +661,7 @@ class AnimGroupInstance_Shape {
         if (!this.visible)
             return;
 
-        const template = renderInstManager.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplate();
 
         getMatrixTranslation(scratchVec3a, modelMatrix);
         const depth = computeViewSpaceDepthFromWorldSpacePoint(viewerInput.camera.viewMatrix, scratchVec3a);
@@ -704,7 +704,7 @@ class AnimGroupInstance_Shape {
             renderInstManager.submitRenderInst(renderInst);
         }
 
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
     }
 
     public destroy(device: GfxDevice): void {

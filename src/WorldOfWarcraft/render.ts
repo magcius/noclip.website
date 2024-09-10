@@ -248,7 +248,7 @@ export class ModelRenderer {
         const visibleDoodads = doodads.filter((d) => d.visible);
 
         for (let doodadChunk of chunk(visibleDoodads, MAX_DOODAD_INSTANCES)) {
-            const template = renderInstManager.pushTemplateRenderInst();
+            const template = renderInstManager.pushTemplate();
             template.setAllowSkippingIfPipelineNotReady(false);
             const numVec4s = 3;
             const instanceParamsSize = 12 + 4 * numVec4s;
@@ -388,7 +388,7 @@ export class ModelRenderer {
                     renderInstManager.submitRenderInst(renderInst);
                 }
             }
-            renderInstManager.popTemplateRenderInst();
+            renderInstManager.popTemplate();
         }
     }
 
@@ -405,7 +405,7 @@ export class ModelRenderer {
         const visibleDoodads = doodads.filter((d) => d.visible);
 
         for (let doodadChunk of chunk(visibleDoodads, MAX_DOODAD_INSTANCES)) {
-            const template = renderInstManager.pushTemplateRenderInst();
+            const template = renderInstManager.pushTemplate();
             let offs = template.allocateUniformBuffer(
                 ParticleProgram.ub_DoodadParams,
                 12 * MAX_DOODAD_INSTANCES,
@@ -460,7 +460,7 @@ export class ModelRenderer {
                 );
                 renderInstManager.submitRenderInst(renderInst);
             }
-            renderInstManager.popTemplateRenderInst();
+            renderInstManager.popTemplate();
         }
     }
 
@@ -568,7 +568,7 @@ export class WmoRenderer {
                 def.wmoId === this.wmo.fileId,
                 `WmoRenderer handed a WmoDefinition that doesn't belong to it (${def.wmoId} != ${this.wmo.fileId}`,
             );
-            const template = renderInstManager.pushTemplateRenderInst();
+            const template = renderInstManager.pushTemplate();
             let offs = template.allocateUniformBuffer(WmoProgram.ub_ModelParams, 12);
             const mapped = template.mapUniformBufferF32(WmoProgram.ub_ModelParams);
             offs += fillMatrix4x3(mapped, offs, def.modelMatrix);
@@ -628,7 +628,7 @@ export class WmoRenderer {
                     renderInstManager.submitRenderInst(renderInst);
                 }
             }
-            renderInstManager.popTemplateRenderInst();
+            renderInstManager.popTemplate();
         }
     }
 
@@ -796,7 +796,7 @@ export class TerrainRenderer {
     ) {
         const indices = frame.adtChunkIndices.get(this.adt.fileId);
         if (indices.length === 0) return;
-        const template = renderInstManager.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplate();
         template.setVertexInput(
             this.inputLayout,
             [this.vertexBuffer],
@@ -812,7 +812,7 @@ export class TerrainRenderer {
             renderInst.setDrawCount(chunk.indexCount, chunk.indexOffset);
             renderInstManager.submitRenderInst(renderInst);
         }
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
     }
 
     public destroy(device: GfxDevice) {

@@ -176,7 +176,7 @@ class GloverBaseSpriteRenderer {
             return;
         }
 
-        const template = renderInstManager.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplate();
         template.setBindingLayouts(Render.bindingLayouts);
         template.setMegaStateFlags(this.megaStateFlags);
 
@@ -214,7 +214,7 @@ class GloverBaseSpriteRenderer {
         this.drawCallInstance.reloadTextureMappings();
         this.drawCallInstance.prepareToRender(device, renderInstManager, viewerInput, drawMatrix, this.isOrtho, this.isBillboard);
 
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
     }
 
     public destroy(device: GfxDevice): void {

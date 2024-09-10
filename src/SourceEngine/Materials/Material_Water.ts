@@ -1,6 +1,6 @@
 
 import { mat4 } from "gl-matrix";
-import { IS_DEPTH_REVERSED } from "../../gfx/helpers/ReversedDepthHelpers.js";
+import { IsDepthReversed } from "../../gfx/helpers/ReversedDepthHelpers.js";
 import { fillMatrix4x4, fillVec4 } from "../../gfx/helpers/UniformBufferHelpers.js";
 import { GfxMegaStateDescriptor } from "../../gfx/platform/GfxPlatform.js";
 import { GfxProgram } from "../../gfx/platform/GfxPlatformImpl.js";
@@ -141,7 +141,7 @@ float SampleFramebufferDepth(vec2 t_ProjTexCoord) {
 }
 
 bool IsSomethingInFront(float t_DepthSample) {
-    if (t_DepthSample ${IS_DEPTH_REVERSED ? `>` : `<`} gl_FragCoord.z)
+    if (t_DepthSample ${IsDepthReversed ? `>` : `<`} gl_FragCoord.z)
         return true;
 
     return false;

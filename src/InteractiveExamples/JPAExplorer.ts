@@ -415,7 +415,7 @@ export class Explorer implements SceneGfx {
 
         const template = this.renderHelper.pushTemplateRenderInst();
 
-        renderInstManager.setCurrentRenderInstList(this.mainList);
+        renderInstManager.setCurrentList(this.mainList);
 
         if (this.gridVisible)
             this.gridPlane.prepareToRender(device, renderInstManager, viewerInput);
@@ -455,20 +455,20 @@ export class Explorer implements SceneGfx {
         fillSceneParamsDataOnTemplate(template, viewerInput);
 
         {
-            renderInstManager.setCurrentRenderInstList(this.mainList);
+            renderInstManager.setCurrentList(this.mainList);
             this.effectSystem.setDrawInfo(viewerInput.camera.viewMatrix, viewerInput.camera.projectionMatrix, null);
             this.effectSystem.draw(device, this.renderHelper.renderInstManager, EfGroup.Main);
         }
 
         {
-            renderInstManager.setCurrentRenderInstList(this.indirectList);
+            renderInstManager.setCurrentList(this.indirectList);
             const texPrjMtx = scratchMatrix;
             texProjCameraSceneTex(texPrjMtx, viewerInput.camera, 1);
             this.effectSystem.setDrawInfo(viewerInput.camera.viewMatrix, viewerInput.camera.projectionMatrix, texPrjMtx);
             this.effectSystem.draw(device, this.renderHelper.renderInstManager, EfGroup.Indirect);
         }
 
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
 
         this.renderHelper.prepareToRender();
     }

@@ -93,18 +93,18 @@ export class Occlusion_Manager {
 
     public prepareToRender(globals: TheWitnessGlobals, renderInstManager: GfxRenderInstManager): void {
         // Go through the world's clusters, and push them to the render inst list...
-        const oldRenderList = renderInstManager.currentRenderInstList;
+        const oldRenderList = renderInstManager.currentList;
 
         for (let i = 0; i < this.clusters.length; i++) {
             const cluster = this.clusters[i], entity = cluster.entity;
             if (!entity.visible || !entity.layer_active)
                 continue;
             cluster.depth = computeViewSpaceDepthFromWorldSpacePoint(globals.viewpoint.viewFromWorldMatrix, entity.bounding_center_world);
-            renderInstManager.currentRenderInstList = cluster.renderInstList;
+            renderInstManager.currentList = cluster.renderInstList;
             entity.cluster_mesh_instance!.prepareToRender(globals, renderInstManager, entity, cluster.depth);
         }
 
-        renderInstManager.currentRenderInstList = oldRenderList;
+        renderInstManager.currentList = oldRenderList;
 
         // Sort the clusters by depth so that the most opaque clusters go first.
         this.clusters.sort((a, b) => {

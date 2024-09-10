@@ -13,11 +13,10 @@ import { GfxTopology, convertToTrianglesRange } from "./TopologyHelpers.js";
 import { setAttachmentStateSimple } from "./GfxMegaStateDescriptorHelpers.js";
 import { branchlessONB } from "../../DebugJunk.js";
 import { MathConstants, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation } from "../../MathHelpers.js";
-import { IS_DEPTH_REVERSED } from "./ReversedDepthHelpers.js";
+import { IsDepthReversed } from "./ReversedDepthHelpers.js";
 import { assert } from "../platform/GfxPlatformUtil.js";
 
 // TODO(jstpierre):
-//  - Instantiate in GfxRenderHelper, like we do for thumbnails/text?
 //  - Integrate text renderer?
 //  - More primitive types
 //  - Support view-space and screen-space primitives
@@ -78,7 +77,7 @@ flat in uint v_Flags;
 layout(location = 0) uniform sampler2D u_TextureFramebufferDepth;
 
 bool IsSomethingInFront(float t_DepthSample) {
-    if (t_DepthSample ${IS_DEPTH_REVERSED ? `>` : `<`} gl_FragCoord.z)
+    if (t_DepthSample ${IsDepthReversed ? `>` : `<`} gl_FragCoord.z)
         return true;
 
     return false;

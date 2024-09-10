@@ -1158,7 +1158,7 @@ class ShapeInstance {
 
         const sepd = this.sepdData.sepd;
 
-        const materialTemplate = renderInstManager.pushTemplateRenderInst();
+        const materialTemplate = renderInstManager.pushTemplate();
         materialTemplate.setVertexInput(this.sepdData.inputLayout, this.sepdData.vertexBufferDescriptors, this.sepdData.indexBufferDescriptor);
         this.materialInstance.setOnRenderInst(renderInstManager.gfxRenderCache, materialTemplate, textureHolder, viewMatrix);
 
@@ -1194,7 +1194,7 @@ class ShapeInstance {
             renderInstManager.submitRenderInst(renderInst);
         }
 
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
     }
 
     public destroy(device: GfxDevice): void {

@@ -6,7 +6,7 @@
 // and support for a wider variety of variants.
 
 import CodeEditor from "../CodeEditor.js";
-import { GfxDevice, GfxGraphicsProgramDescriptor } from "../gfx/platform/GfxPlatform.js";
+import { GfxDevice, GfxRenderProgramDescriptor } from "../gfx/platform/GfxPlatform.js";
 import { GfxProgram } from "../gfx/platform/GfxPlatformImpl.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { preprocessShader_GLSL } from "../gfx/shaderc/GfxShaderCompiler.js";
@@ -85,7 +85,7 @@ export abstract class UberShaderTemplate<T> {
         cache.device.programPatched(program, descriptor);
     }
 
-    protected abstract createGfxProgramDescriptor(cache: GfxRenderCache, variantSettings: T, shaderTextOverride?: string): GfxGraphicsProgramDescriptor;
+    protected abstract createGfxProgramDescriptor(cache: GfxRenderCache, variantSettings: T, shaderTextOverride?: string): GfxRenderProgramDescriptor;
 
     public abstract generateProgramString(variantSettings: T): string | null;
 
@@ -145,7 +145,7 @@ export class UberShaderTemplateBasic extends UberShaderTemplate<DefinesMap> {
         return -1;
     }
 
-    protected createGfxProgramDescriptor(cache: GfxRenderCache, variantSettings: DefinesMap, shaderTextOverride?: string): GfxGraphicsProgramDescriptor {
+    protected createGfxProgramDescriptor(cache: GfxRenderCache, variantSettings: DefinesMap, shaderTextOverride?: string): GfxRenderProgramDescriptor {
         const maxSamplerBinding = this.getMaxSamplerBinding();
         const vendorInfo = cache.device.queryVendorInfo();
         const programString = shaderTextOverride ?? this.generateProgramString(variantSettings);

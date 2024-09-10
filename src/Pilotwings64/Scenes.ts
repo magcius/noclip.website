@@ -1563,7 +1563,7 @@ class ObjectRenderer {
         if (!this.visible)
             return;
 
-        const template = renderInstManager.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplate();
         template.sortKey = this.sortKeyBase;
 
         const jointMatrixScratch = ObjectRenderer.jointMatrixScratch;
@@ -1572,7 +1572,7 @@ class ObjectRenderer {
         for (let i = 0; i < this.partRenderers.length; i++)
             this.partRenderers[i].prepareToRender(device, renderInstManager, viewerInput, jointMatrixScratch[i]);
 
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
     }
 }
 
@@ -1590,13 +1590,13 @@ class MeshRenderer {
         if (!this.visible)
             return;
 
-        const template = renderInstManager.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplate();
         template.setVertexInput(this.meshData.inputLayout, this.meshData.vertexBufferDescriptors, this.meshData.indexBufferDescriptor);
         // compute common model view matrix
         mat4.mul(MeshRenderer.scratchMatrix, viewerInput.camera.viewMatrix, jointMatrix);
         for (let i = 0; i < this.materials.length; i++)
             this.materials[i].prepareToRender(device, renderInstManager, viewerInput, MeshRenderer.scratchMatrix);
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
     }
 }
 interface DecodeMaterialResult {
@@ -2601,11 +2601,11 @@ class UVTRRenderer {
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        const template = renderInstManager.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplate();
         template.sortKey = makeSortKey(GfxRendererLayer.OPAQUE);
         for (let i = 0; i < this.uvctRenderers.length; i++)
             this.uvctRenderers[i].prepareToRender(device, renderInstManager, viewerInput, this.modelMatrix);
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
     }
 }
 
@@ -2855,7 +2855,7 @@ class Pilotwings64Renderer implements SceneGfx {
         offs += fillMatrix4x4(d, offs, viewerInput.camera.projectionMatrix);
 
         const renderInstManager = this.renderHelper.renderInstManager;
-        renderInstManager.setCurrentRenderInstList(this.renderInstListSky);
+        renderInstManager.setCurrentList(this.renderInstListSky);
         const skyMatrix = Pilotwings64Renderer.scratchMatrix;
         mat4.copy(skyMatrix, toNoclipSpace);
         skyMatrix[12] = viewerInput.camera.worldMatrix[12];
@@ -2864,16 +2864,16 @@ class Pilotwings64Renderer implements SceneGfx {
         for (let i = 0; i < this.skyRenderers.length; i++)
             this.skyRenderers[i].prepareToRender(device, renderInstManager, viewerInput, skyMatrix);
 
-        renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
+        renderInstManager.setCurrentList(this.renderInstListMain);
         for (let i = 0; i < this.uvtrRenderers.length; i++)
             this.uvtrRenderers[i].prepareToRender(device, renderInstManager, viewerInput);
         for (let i = 0; i < this.dobjRenderers.length; i++)
             this.dobjRenderers[i].prepareToRender(device, renderInstManager, viewerInput, toNoclipSpace);
-        renderInstManager.setCurrentRenderInstList(this.renderInstListPost);
+        renderInstManager.setCurrentList(this.renderInstListPost);
         if (this.snowRenderer !== null)
             this.snowRenderer.prepareToRender(device, renderInstManager, viewerInput);
 
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
         this.renderHelper.prepareToRender();
     }
 

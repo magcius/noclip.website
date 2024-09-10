@@ -281,7 +281,7 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
         const sceneParamsMapped = template.mapUniformBufferF32(KatamariDamacyProgram.ub_SceneParams);
         fillSceneParamsData(sceneParamsMapped, viewerInput.camera, this.levelParams.lightingIndex, offs);
 
-        this.renderHelper.renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
+        this.renderHelper.renderInstManager.setCurrentList(this.renderInstListMain);
 
         updateCameraGameState(this.cameraGameState, this.currentAreaNo, this.missionSetupBin.activeStageAreas, this.missionSetupBin.zones, this.areaCollision, viewerInput);
         if (this.isTutorial)
@@ -293,7 +293,7 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
             this.objectRenderers[i].prepareToRender(this.renderHelper.renderInstManager, viewerInput, katamariWorldSpaceToNoclipSpace,
                 this.currentPalette, this.cameraGameState);
 
-        this.renderHelper.renderInstManager.popTemplateRenderInst();
+        this.renderHelper.renderInstManager.popTemplate();
         this.renderHelper.prepareToRender();
     }
 

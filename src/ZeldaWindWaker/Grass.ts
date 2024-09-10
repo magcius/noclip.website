@@ -370,7 +370,7 @@ export class FlowerPacket {
 
         getMatrixTranslation(scratchVec3a, camera.worldMatrix);
 
-        const template = renderInstManager.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplate();
         template.setSamplerBindingsFromTextureMappings(model.textureMapping);
         setColorFromRoomNo(globals, materialParams, roomIdx);
         dKy_GxFog_set(globals.g_env_light, materialParams.u_FogBlock, viewerInput.camera);
@@ -393,7 +393,7 @@ export class FlowerPacket {
             renderInstManager.submitRenderInst(renderInst);
         }
 
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
     }
 
     private drawRoom(globals: dGlobals, roomIdx: number, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
@@ -732,7 +732,7 @@ export class TreePacket {
         // Draw shadows
         {
             // Set transparent
-            const template = renderInstManager.pushTemplateRenderInst();
+            const template = renderInstManager.pushTemplate();
             template.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT);
             setColorFromRoomNo(globals, materialParams, roomIdx);
             dKy_GxFog_set(globals.g_env_light, materialParams.u_FogBlock, viewerInput.camera);
@@ -753,12 +753,12 @@ export class TreePacket {
                 this.treeModel.shadow.materialHelper.allocateDrawParamsDataOnInst(shadowRenderInst, drawParams);
                 renderInstManager.submitRenderInst(shadowRenderInst);
             }
-            renderInstManager.popTemplateRenderInst();
+            renderInstManager.popTemplate();
         }
 
         // Draw tree trunks
         {
-            const template = renderInstManager.pushTemplateRenderInst();
+            const template = renderInstManager.pushTemplate();
             setColorFromRoomNo(globals, materialParams, roomIdx);
             dKy_GxFog_set(globals.g_env_light, materialParams.u_FogBlock, viewerInput.camera);
             // Set the tree alpha. This fades after the tree is cut. This is multiplied with the texture alpha at the end of TEV stage 1.
@@ -787,7 +787,7 @@ export class TreePacket {
                 this.treeModel.main.materialHelper.allocateDrawParamsDataOnInst(topRenderInst, drawParams);
                 renderInstManager.submitRenderInst(topRenderInst);
             }
-            renderInstManager.popTemplateRenderInst();
+            renderInstManager.popTemplate();
         }
     }
 
@@ -1027,7 +1027,7 @@ export class GrassPacket {
         const worldToView = viewerInput.camera.viewMatrix;
         const worldCamPos = mat4.getTranslation(scratchVec3b, viewerInput.camera.worldMatrix);
 
-        const template = renderInstManager.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplate();
         template.setSamplerBindingsFromTextureMappings(this.grassModel.textureMapping);
         setColorFromRoomNo(globals, materialParams, roomIdx);
         dKy_GxFog_set(globals.g_env_light, materialParams.u_FogBlock, viewerInput.camera);
@@ -1049,7 +1049,7 @@ export class GrassPacket {
             renderInstManager.submitRenderInst(renderInst);
         }
 
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
     }
 
     public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {

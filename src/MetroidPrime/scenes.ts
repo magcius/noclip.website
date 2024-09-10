@@ -74,12 +74,12 @@ export class RetroSceneRenderer implements Viewer.SceneGfx {
         const template = this.renderHelper.pushTemplateRenderInst();
         viewerInput.camera.setClipPlanes(0.2);
         fillSceneParamsDataOnTemplate(template, viewerInput, 0);
-        this.renderHelper.renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
+        this.renderHelper.renderInstManager.setCurrentList(this.renderInstListMain);
         for (let i = 0; i < this.areaRenderers.length; i++)
             this.areaRenderers[i].prepareToRender(this, viewerInput);
         this.prepareToRenderSkybox(viewerInput);
         this.renderHelper.prepareToRender();
-        this.renderHelper.renderInstManager.popTemplateRenderInst();
+        this.renderHelper.renderInstManager.popTemplate();
     }
 
     private prepareToRenderSkybox(viewerInput: Viewer.ViewerRenderInput): void {
@@ -97,7 +97,7 @@ export class RetroSceneRenderer implements Viewer.SceneGfx {
         }
 
         if (skybox !== null) {
-            this.renderHelper.renderInstManager.setCurrentRenderInstList(this.renderInstListSky);
+            this.renderHelper.renderInstManager.setCurrentList(this.renderInstListSky);
             skybox.prepareToRender(this, viewerInput);
         }
     }

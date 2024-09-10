@@ -43,7 +43,7 @@ class PaperMario64Renderer implements Viewer.SceneGfx {
     public prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
         this.renderHelper.pushTemplateRenderInst();
 
-        this.renderHelper.renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
+        this.renderHelper.renderInstManager.setCurrentList(this.renderInstListMain);
         if (this.evtmgr !== null)
             this.evtmgr.update(viewerInput.deltaTime);
         if (this.bgTextureRenderer !== null)
@@ -51,7 +51,7 @@ class PaperMario64Renderer implements Viewer.SceneGfx {
         for (let i = 0; i < this.modelTreeRenderers.length; i++)
             this.modelTreeRenderers[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
 
-        this.renderHelper.renderInstManager.popTemplateRenderInst();
+        this.renderHelper.renderInstManager.popTemplate();
         this.renderHelper.prepareToRender();
     }
 

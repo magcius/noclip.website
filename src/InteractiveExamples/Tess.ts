@@ -1005,7 +1005,7 @@ class TessSphere {
         for (let i = 0; i < this.waveParam.length; i++)
             this.waveParam[i].update(viewerInput);
 
-        const template = renderInstManager.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplate();
         template.setBindingLayouts(bindingLayouts);
 
         template.setGfxProgram(this.gfxProgram);
@@ -1023,7 +1023,7 @@ class TessSphere {
             patch.prepareToRender(renderInstManager, patchLibrary, this);
         }
 
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
     }
 }
 
@@ -1044,10 +1044,10 @@ class TessRenderer implements SceneGfx {
         this.renderHelper.pushTemplateRenderInst();
 
         const renderInstManager = this.renderHelper.renderInstManager;
-        renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
+        renderInstManager.setCurrentList(this.renderInstListMain);
         for (let i = 0; i < this.objects.length; i++)
             this.objects[i].prepareToRender(renderInstManager, this.patchLibrary, viewerInput);
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
         this.renderHelper.prepareToRender();
     }
 

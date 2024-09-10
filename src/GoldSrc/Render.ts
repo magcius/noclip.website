@@ -347,7 +347,7 @@ export class BSPRenderer {
     public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         this.lightmapManager.prepareToRender(renderInstManager.gfxRenderCache.device);
 
-        const template = renderInstManager.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplate();
         template.setGfxProgram(this.gfxProgram);
         template.setBindingLayouts([{ numSamplers: 2, numUniformBuffers: 1 }]);
         template.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor);
@@ -362,7 +362,7 @@ export class BSPRenderer {
         for (let i = 0; i < this.surfaceRenderers.length; i++)
             this.surfaceRenderers[i].prepareToRender(renderInstManager, this.lightmapManager);
 
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
     }
 
     public destroy(device: GfxDevice): void {
@@ -390,12 +390,12 @@ export class GoldSrcRenderer implements SceneGfx {
     private prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         this.renderHelper.pushTemplateRenderInst();
 
-        this.renderHelper.renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
+        this.renderHelper.renderInstManager.setCurrentList(this.renderInstListMain);
 
         for (let i = 0; i < this.bspRenderers.length; i++)
             this.bspRenderers[i].prepareToRender(renderInstManager, viewerInput);
 
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
         this.renderHelper.prepareToRender();
     }
 

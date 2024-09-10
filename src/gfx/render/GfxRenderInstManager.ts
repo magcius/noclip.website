@@ -9,38 +9,35 @@ import { defaultMegaState, copyMegaState, setMegaStateFlags } from "../helpers/G
 import { GfxRenderCache } from "./GfxRenderCache.js";
 import { GfxRenderDynamicUniformBuffer } from "./GfxRenderDynamicUniformBuffer.js";
 
-// The "Render" subsystem provides high-level scene graph utiltiies, built on top of gfx/platform and gfx/helpers. A
-// rough overview of the design:
-//
-// A GfxRenderInst is basically equivalent to one draw call. It contains everything that should be necessary to submit
-// it to the pass. It is also a transient structure that will not persist past "one frame" of the renderer. The
-// intention is to build up a large collection of GfxRenderInst's during scene graph traversal, and then dispatch them
-// in whatever order you want. This allows efficient pass management.
-//
-// The GfxRenderInst also lets you build your scene out of building independent building blocks like the mega state, the
-// shader program, and the resource bindings. This means that one does not have to worry about building
-// GfxRenderPipeline objects; it is taken care of you behind the scenes. A cache is used to share common pipelines.
-//
-// To provide different sets of draw calls for different passes, one should use multiple GfxRenderInstList objects. Each
-// object is a list of GfxRenderInst's, where the sort function and sort order can be chosen.
-//
-// For integration with the GfxRenderGraph, most passes should simply consist of calls to
-// GfxRenderInstList::drawOnPassRenderer to dispatch pre-built lists of render lists.
-//
-// All GfxRenderInsts are owned by the GfxRenderInstManager, which stores a pool of them together to cut down on GC
-// allocation costs. At the end of a frame, call GfxRenderInstManager::reset() to reset all allocated GfxRenderInsts.
-//
-// As a convenience for creation, a stack-based template system can be used which allows one to set up multiple
-// parameters. Templates are just like regular GfxRenderInsts, but they are not added to draw lists automatically,
-// instead, they are only added to the template stack. Regular render insts will copy their initial values from the top
-// of the template stack.
+/**
+ * The "Render" subsystem provides high-level scene graph utiltiies, built on top of gfx/platform and gfx/helpers. A
+ * rough overview of the design:
+ *
+ * A {@see GfxRenderInst} is basically equivalent to one draw call. It contains everything that should be necessary to submit
+ * it to the pass. It is also a transient structure that will not persist past "one frame" of the renderer. The
+ * intention is to build up a large collection of {@see GfxRenderInst}s during scene graph traversal, and then dispatch them
+ * in whatever order you want. This allows efficient pass management.
+ *
+ * The {@see GfxRenderInst} also lets you build your scene out of building independent building blocks like the mega state, the
+ * shader program, and the resource bindings. This means that one does not have to worry about building {@see GfxRenderPipeline}
+ * objects; it is taken care of you behind the scenes. A cache is used to share common pipelines.
+ *
+ * To provide different sets of draw calls for different passes, one should use multiple GfxRenderInstList objects. Each
+ * object is a list of GfxRenderInst's, where the sort function and sort order can be chosen.
+ *
+ * For integration with the {@see GfxRenderGraph}, most passes should simply consist of calls to
+ * {@see GfxRenderInstList.drawOnPassRenderer} to dispatch pre-built lists of render lists.
+ *
+ * All GfxRenderInsts are owned by the {@see GfxRenderInstManager}, which stores a pool of them together to cut down on GC
+ * allocation costs. At the end of a frame, call {@see GfxRenderInstManager.reset} to reset all allocated GfxRenderInsts.
+ *
+ * As a convenience for creation, a stack-based template system can be used which allows one to set up multiple
+ * parameters. Templates are just like regular {@see GfxRenderInst}s, but they are not added to draw lists automatically,
+ * instead, they are only added to the template stack. Regular render insts will copy their initial values from the top
+ * of the template stack.
+ */
 
 // TODO(jstpierre): Possible future investigations
-//
-//   - Remove the high-level PSO concept from the platform layer, and just provide a drawRenderInst() on GfxRenderPass
-//     which does the caching / applies state internally. Maybe provide some extra hooks for cache management? Because
-//     we still need asynchronous pipeline creation for WebGPU... basically, the "backpressure gets harder the further
-//     down the hole you stuff this stuff" problem.
 //
 //   - Actually remove more of the globals, and possibly clean up the template system from a global stack. Templates
 //     will behave poorly for rendering. Perhaps move a lot of the simpler, legacy systems to a subclass or a sub-mode
@@ -617,7 +614,7 @@ export class GfxRenderInstList {
 //#region GfxRenderInstManager
 export class GfxRenderInstManager {
     public templateStack: GfxRenderInst[] = [];
-    public currentRenderInstList: GfxRenderInstList = null!;
+    public currentList: GfxRenderInstList = null!;
 
     constructor(public gfxRenderCache: GfxRenderCache) {
     }
@@ -630,7 +627,7 @@ export class GfxRenderInstManager {
     public newRenderInst(): GfxRenderInst {
         const renderInst = new GfxRenderInst();
         if (this.templateStack.length > 0)
-            renderInst.copyFrom(this.getTemplateRenderInst());
+            renderInst.copyFrom(this.getCurrentTemplate());
         return renderInst;
     }
 
@@ -640,7 +637,7 @@ export class GfxRenderInstManager {
      * after submitting it.
      */
     public submitRenderInst(renderInst: GfxRenderInst): void {
-        this.currentRenderInstList.submitRenderInst(renderInst);
+        this.currentList.submitRenderInst(renderInst);
     }
 
     /**
@@ -650,8 +647,8 @@ export class GfxRenderInstManager {
      * you pass the manager, you can also call {@see submitRenderInst} directly
      * on the provided list.
      */
-    public setCurrentRenderInstList(list: GfxRenderInstList): void {
-        this.currentRenderInstList = list;
+    public setCurrentList(list: GfxRenderInstList): void {
+        this.currentList = list;
     }
 
     /**
@@ -660,22 +657,22 @@ export class GfxRenderInstManager {
      * for any future render insts created. Once done with a template, call
      * {@see popTemplateRenderInst} to pop it off the template stack.
      */
-    public pushTemplateRenderInst(): GfxRenderInst {
+    public pushTemplate(): GfxRenderInst {
         const newTemplate = new GfxRenderInst();
         if (this.templateStack.length > 0)
-            newTemplate.copyFrom(this.getTemplateRenderInst());
+            newTemplate.copyFrom(this.getCurrentTemplate());
         this.templateStack.push(newTemplate);
         return newTemplate;
     }
 
-    public popTemplateRenderInst(): void {
+    public popTemplate(): void {
         this.templateStack.pop();
     }
 
     /**
      * Retrieves the current template render inst on the top of the template stack.
      */
-    public getTemplateRenderInst(): GfxRenderInst {
+    public getCurrentTemplate(): GfxRenderInst {
         return this.templateStack[this.templateStack.length - 1];
     }
 }

@@ -74,7 +74,7 @@ class BannerBinRenderer extends BasicGXRendererHelper {
         const template = this.renderHelper.pushTemplateRenderInst();
         fillSceneParamsDataOnTemplate(template, viewerInput);
         this.layout.draw(device, this.renderHelper.renderInstManager, this.drawInfo);
-        this.renderHelper.renderInstManager.popTemplateRenderInst();
+        this.renderHelper.renderInstManager.popTemplate();
 
         this.renderHelper.prepareToRender();
     }

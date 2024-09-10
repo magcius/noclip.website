@@ -4862,7 +4862,7 @@ class VolumeModelDrawer {
     }
 
     public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, camera: Camera): void {
-        const template = renderInstManager.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplate();
         mat4.mul(drawParams.u_PosMtx[0], camera.viewMatrix, this.baseMtxPtr);
 
         colorCopy(materialParams.u_Color[ColorKind.C0], this.color);
@@ -4881,7 +4881,7 @@ class VolumeModelDrawer {
         this.materialBlend.setOnRenderInst(sceneObjHolder.modelCache.cache, template);
         drawSimpleModel(renderInstManager, this.modelData!);
 
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
     }
 }
 

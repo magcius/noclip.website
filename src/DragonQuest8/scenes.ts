@@ -53,7 +53,7 @@ export class DQ8Renderer implements Viewer.SceneGfx {
         if(SINFO.gDQ8SINFO.bWireframe)
             template.setMegaStateFlags({ wireframe: true });
 
-        this.renderHelper.renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
+        this.renderHelper.renderInstManager.setCurrentList(this.renderInstListMain);
 
         //Renderers
         for (let i = 0; i < this.MAPRenderers.length; i++)
@@ -63,7 +63,7 @@ export class DQ8Renderer implements Viewer.SceneGfx {
         for (let i = 0; i < this.MDSRenderers.length; i++)
             this.MDSRenderers[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
 
-        this.renderHelper.renderInstManager.popTemplateRenderInst();
+        this.renderHelper.renderInstManager.popTemplate();
         this.renderHelper.prepareToRender();
     }
 

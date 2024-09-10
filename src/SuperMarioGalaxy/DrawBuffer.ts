@@ -172,13 +172,13 @@ export class DrawBufferGroup {
     }
 
     public drawOpa(device: GfxDevice, renderInstManager: GfxRenderInstManager, camera: Camera): void {
-        renderInstManager.setCurrentRenderInstList(this.renderInstListOpa);
+        renderInstManager.setCurrentList(this.renderInstListOpa);
         for (let i = 0; i < this.drawBufferExecuters.length; i++)
             this.drawBufferExecuters[i].drawOpa(device, renderInstManager, camera);
     }
 
     public drawXlu(device: GfxDevice, renderInstManager: GfxRenderInstManager, camera: Camera): void {
-        renderInstManager.setCurrentRenderInstList(this.renderInstListXlu);
+        renderInstManager.setCurrentList(this.renderInstListXlu);
         for (let i = 0; i < this.drawBufferExecuters.length; i++)
             this.drawBufferExecuters[i].drawXlu(device, renderInstManager, camera);
     }

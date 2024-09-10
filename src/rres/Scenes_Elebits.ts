@@ -73,7 +73,7 @@ class ElebitsRenderer extends BasicGXRendererHelper {
         for (let i = 0; i < this.modelInstances.length; i++)
             this.modelInstances[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
         this.renderHelper.prepareToRender();
-        this.renderHelper.renderInstManager.popTemplateRenderInst();
+        this.renderHelper.renderInstManager.popTemplate();
     }
 
     public override destroy(device: GfxDevice): void {

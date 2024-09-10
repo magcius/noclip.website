@@ -976,7 +976,7 @@ class MaterialRender_TransparencyWater {
 
     public pushPasses(cache: GfxRenderCache, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, view: View): void {
         // Build normal map
-        const template = renderInstManager.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplate();
         template.setBindingLayouts([{ numUniformBuffers: 1, numSamplers: 4 }]);
         template.setVertexInput(null, null, null);
         template.setGfxProgram(this.rippleCompositeProgram);
@@ -1006,7 +1006,7 @@ class MaterialRender_TransparencyWater {
             });
         }
 
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
     }
 
     public prepareToRender(renderInstManager: GfxRenderInstManager, view: View, baseMapTransform: ReadonlyMat4 | null): void {
@@ -1506,13 +1506,13 @@ class LightmapRenderer {
             if (!materialRenderer.visible)
                 return;
 
-            const template = renderInstManager.pushTemplateRenderInst();
+            const template = renderInstManager.pushTemplate();
             template.sortKey = materialRenderer.sortKeyBase;
 
             this.modelData[i].setOnRenderInst(template);
             materialRenderer.prepareToRender(renderInstManager, mainView, null);
 
-            renderInstManager.popTemplateRenderInst();
+            renderInstManager.popTemplate();
         });
     }
 
@@ -1622,7 +1622,7 @@ class ModelRenderer {
         if (!this.visible)
             return;
 
-        const template = renderInstManager.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplate();
 
         let offs = template.allocateUniformBuffer(BaseProgram.ub_ModelParams, 16);
         let mapped = template.mapUniformBufferF32(BaseProgram.ub_ModelParams);
@@ -1639,7 +1639,7 @@ class ModelRenderer {
             if (!materialRenderer.visible)
                 return;
 
-            const template = renderInstManager.pushTemplateRenderInst();
+            const template = renderInstManager.pushTemplate();
             part.setOnRenderInst(template);
 
             // TODO: Part AABB?
@@ -1655,10 +1655,10 @@ class ModelRenderer {
             template.sortKey = setSortKeyDepth(template.sortKey, depth);
             materialRenderer.prepareToRender(renderInstManager, mainView, this.baseMapTransform);
 
-            renderInstManager.popTemplateRenderInst();
+            renderInstManager.popTemplate();
         });
 
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
     }
 
     public destroy(device: GfxDevice) {
@@ -1970,7 +1970,7 @@ class HaloScene implements Viewer.SceneGfx {
         offs += fillVec4v(mapped, offs, this.fogColor);
         offs += fillVec4v(mapped, offs, this.fogDistances);
 
-        this.renderHelper.renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
+        this.renderHelper.renderInstManager.setCurrentList(this.renderInstListMain);
 
         this.bspRenderers.forEach((r, i) => {
             r.prepareToRender(this.renderHelper.renderInstManager, this.mainView);
@@ -1981,7 +1981,7 @@ class HaloScene implements Viewer.SceneGfx {
             this.skyboxRenderer.prepareToRender(this.renderHelper.renderInstManager, this.mainView)
         }
 
-        this.renderHelper.renderInstManager.popTemplateRenderInst();
+        this.renderHelper.renderInstManager.popTemplate();
         this.renderHelper.prepareToRender();
     }
 
@@ -2002,7 +2002,7 @@ class HaloScene implements Viewer.SceneGfx {
             this.sceneryRenderers[i].pushPasses(cache, builder, renderInstManager, this.mainView);
         if (this.skyboxRenderer)
             this.skyboxRenderer.pushPasses(cache, builder, renderInstManager, this.mainView);
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
 
         const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
         const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');

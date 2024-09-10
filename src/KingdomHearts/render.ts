@@ -492,7 +492,7 @@ export class SceneRenderer {
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
-        const template = renderInstManager.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplate();
         template.setBindingLayouts(bindingLayouts);
         template.setMegaStateFlags(this.megaStateFlags);
 
@@ -506,7 +506,7 @@ export class SceneRenderer {
         for (let i = 0; i < this.drawCallInstances.length; i++)
             this.drawCallInstances[i].prepareToRender(device, renderInstManager, this.isSkybox, this.worldTransform, viewerInput);
 
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
     }
 
     public setVertexColorsEnabled(v: boolean): void {
@@ -563,11 +563,11 @@ export class KingdomHeartsRenderer implements Viewer.SceneGfx {
     protected prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
         this.renderHelper.pushTemplateRenderInst();
         const renderInstManager = this.renderHelper.renderInstManager;
-        renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
+        renderInstManager.setCurrentList(this.renderInstListMain);
         this.mapRenderer.prepareToRender(device, renderInstManager, viewerInput);
-        renderInstManager.setCurrentRenderInstList(this.renderInstListSky);
+        renderInstManager.setCurrentList(this.renderInstListSky);
         this.skyRenderer.prepareToRender(device, renderInstManager, viewerInput);
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
 
         this.renderHelper.prepareToRender();
     }

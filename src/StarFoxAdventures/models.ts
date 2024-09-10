@@ -106,7 +106,7 @@ export class ModelShapes {
         for (let i = 0; i < 3; i++) {
             if (this.shapes[i] !== undefined) {
                 if (renderLists !== null)
-                    renderInstManager.setCurrentRenderInstList(renderLists.world[i]);
+                    renderInstManager.setCurrentList(renderLists.world[i]);
                 for (let j = 0; j < this.shapes[i].length; j++) {
                     const shape = this.shapes[i][j];
                     if (shape.isDevGeometry && !modelCtx.showDevGeometry)
@@ -128,7 +128,7 @@ export class ModelShapes {
         }
         
         if (renderLists !== null)
-            renderInstManager.setCurrentRenderInstList(renderLists.waters);
+            renderInstManager.setCurrentList(renderLists.waters);
         for (let i = 0; i < this.waters.length; i++) {
             mat4.copy(scratchMtx0, matrix);
             mat4PostTranslate(scratchMtx0, this.model.modelTranslate);
@@ -136,7 +136,7 @@ export class ModelShapes {
         }
         
         if (renderLists !== null)
-            renderInstManager.setCurrentRenderInstList(renderLists.furs);
+            renderInstManager.setCurrentList(renderLists.furs);
         for (let i = 0; i < this.furs.length; i++) {
             const fur = this.furs[i];
             for (let j = 0; j < fur.numLayers; j++) {

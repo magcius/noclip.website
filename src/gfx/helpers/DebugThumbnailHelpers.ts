@@ -173,10 +173,10 @@ void main() {
         const prepareText = (textDrawer: TextDrawer, i: number, anim: ReturnType<typeof prepareAnim>) => {
             const renderInstList = new GfxRenderInstList(null);
 
-            const oldRenderInstList = renderInstManager.currentRenderInstList;
-            renderInstManager.currentRenderInstList = renderInstList;
+            const oldRenderInstList = renderInstManager.currentList;
+            renderInstManager.currentList = renderInstList;
 
-            const template = renderInstManager.pushTemplateRenderInst();
+            const template = renderInstManager.pushTemplate();
             template.setUniformBuffer(this.uniformBuffer);
 
             const { t, vw, vh } = anim;
@@ -188,8 +188,8 @@ void main() {
                 textDrawer.drawString(renderInstManager, vw, vh, thumbnailDebugLabels[i], vw / 2, vh - y);
             }
 
-            renderInstManager.popTemplateRenderInst();
-            renderInstManager.currentRenderInstList = oldRenderInstList;
+            renderInstManager.popTemplate();
+            renderInstManager.currentList = oldRenderInstList;
             return renderInstList;
         };
 
