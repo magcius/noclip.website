@@ -224,14 +224,9 @@ export interface GfxBindingsDescriptor2 {
     entries: (GfxBufferBinding | GfxSamplerBinding)[];
 }
 
-export interface GfxProgramDescriptorSimple {
+export interface GfxGraphicsProgramDescriptor {
     preprocessedVert: string;
     preprocessedFrag: string | null;
-}
-
-export interface GfxProgramDescriptor extends GfxProgramDescriptorSimple {
-    ensurePreprocessed(vendorInfo: GfxVendorInfo): void;
-    associate(device: GfxDevice, program: GfxProgram): void;
 }
 
 export const enum GfxShadingLanguage {
@@ -440,7 +435,7 @@ export interface GfxDevice {
     createSampler(descriptor: GfxSamplerDescriptor): GfxSampler;
     createRenderTarget(descriptor: GfxRenderTargetDescriptor): GfxRenderTarget;
     createRenderTargetFromTexture(texture: GfxTexture): GfxRenderTarget;
-    createProgramSimple(descriptor: GfxProgramDescriptorSimple): GfxProgram;
+    createProgram(descriptor: GfxGraphicsProgramDescriptor): GfxProgram;
     createComputeProgram(descriptor: GfxComputeProgramDescriptor): GfxProgram;
     createBindings(bindingsDescriptor: GfxBindingsDescriptor): GfxBindings;
     createInputLayout(inputLayoutDescriptor: GfxInputLayoutDescriptor): GfxInputLayout;
@@ -511,7 +506,7 @@ export interface GfxDevice {
     setResourceName(o: GfxResource, s: string): void;
     setResourceLeakCheck(o: GfxResource, v: boolean): void;
     checkForLeaks(): void;
-    programPatched(o: GfxProgram, descriptor: GfxProgramDescriptorSimple): void;
+    programPatched(o: GfxProgram, descriptor: GfxGraphicsProgramDescriptor): void;
     pushStatisticsGroup(statisticsGroup: GfxStatisticsGroup): void;
     popStatisticsGroup(): void;
 }

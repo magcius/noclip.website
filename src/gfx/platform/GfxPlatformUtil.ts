@@ -54,7 +54,9 @@ export function alignNonPowerOfTwo(n: number, multiple: number): number {
 
 export function fallbackUndefined<T>(v: T | null | undefined, fallback: T): T {
     return (v !== null && v !== undefined) ? v : fallback;
-}export function gfxColorEqual(c0: Readonly<GfxColor>, c1: Readonly<GfxColor>): boolean {
+}
+
+export function gfxColorEqual(c0: Readonly<GfxColor>, c1: Readonly<GfxColor>): boolean {
     return c0.r === c1.r && c0.g === c1.g && c0.b === c1.b && c0.a === c1.a;
 }
 

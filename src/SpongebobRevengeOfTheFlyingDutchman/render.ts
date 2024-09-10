@@ -1,6 +1,6 @@
 // @ts-ignore
 import program_glsl from './program.glsl';
-import { mat3, mat4, vec2, vec3, vec4 } from "gl-matrix";
+import { mat3, mat4, vec2, vec3 } from "gl-matrix";
 import { CameraController, computeViewMatrix, computeViewSpaceDepthFromWorldSpaceAABB } from "../Camera.js";
 import { colorCopy, colorLerp, colorNewCopy, White } from "../Color.js";
 import { AABB } from "../Geometry.js";
@@ -20,11 +20,11 @@ import {
     GfxDevice,
     GfxFormat,
     GfxFrontFaceMode,
+    GfxGraphicsProgramDescriptor,
     GfxIndexBufferDescriptor,
     GfxInputLayoutBufferDescriptor,
     GfxMegaStateDescriptor,
     GfxMipFilterMode,
-    GfxProgramDescriptorSimple,
     GfxTexFilterMode,
     GfxVertexAttributeDescriptor,
     GfxVertexBufferDescriptor,
@@ -523,7 +523,7 @@ class RenderHackState {
 }
 
 export class ROTFDRenderer implements Viewer.SceneGfx {
-    private program: GfxProgramDescriptorSimple;
+    private program: GfxGraphicsProgramDescriptor;
     private gfxProgram: GfxProgram;
     public renderHelper: GfxRenderHelper;
     private renderInstListMain = new GfxRenderInstList();

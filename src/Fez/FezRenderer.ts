@@ -1,6 +1,6 @@
 
 import * as Viewer from '../viewer.js';
-import { GfxDevice, GfxBindingLayoutDescriptor, GfxMegaStateDescriptor, GfxCullMode, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxProgramDescriptorSimple } from "../gfx/platform/GfxPlatform.js";
+import { GfxDevice, GfxBindingLayoutDescriptor, GfxMegaStateDescriptor, GfxCullMode, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxGraphicsProgramDescriptor } from "../gfx/platform/GfxPlatform.js";
 import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
 import { GfxRenderInstList, GfxRenderInstManager, GfxRendererLayer, makeSortKeyOpaque } from "../gfx/render/GfxRenderInstManager.js";
@@ -109,7 +109,7 @@ class FezLevelRenderData {
 }
 
 export class FezRenderer implements Viewer.SceneGfx {
-    private program: GfxProgramDescriptorSimple;
+    private program: GfxGraphicsProgramDescriptor;
     private renderHelper: GfxRenderHelper;
     private renderInstListMain = new GfxRenderInstList();
     private modelMatrix: mat4 = mat4.create();

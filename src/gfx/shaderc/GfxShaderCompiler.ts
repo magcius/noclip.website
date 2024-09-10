@@ -1,5 +1,5 @@
 
-import { GfxVendorInfo, GfxProgramDescriptorSimple, GfxDevice, GfxViewportOrigin, GfxClipSpaceNearZ } from "../platform/GfxPlatform.js";
+import { GfxVendorInfo, GfxDevice, GfxViewportOrigin, GfxClipSpaceNearZ, GfxGraphicsProgramDescriptor } from "../platform/GfxPlatform.js";
 import { assert } from "../platform/GfxPlatformUtil.js";
 import { GfxShaderLibrary, glslGenerateFloat } from "../helpers/GfxShaderLibrary.js";
 
@@ -167,12 +167,12 @@ ${rest}
 `.trim();
 }
 
-interface GfxProgramDescriptorSimpleWithOrig extends GfxProgramDescriptorSimple {
+interface GfxProgramDescriptorWithOrig extends GfxGraphicsProgramDescriptor {
     vert: string;
     frag: string;
 }
 
-export function preprocessProgram_GLSL(vendorInfo: GfxVendorInfo, vert: string, frag: string, defines: DefineMap | null = null): GfxProgramDescriptorSimpleWithOrig {
+export function preprocessProgram_GLSL(vendorInfo: GfxVendorInfo, vert: string, frag: string, defines: DefineMap | null = null): GfxProgramDescriptorWithOrig {
     const preprocessedVert = preprocessShader_GLSL(vendorInfo, 'vert', vert, defines);
     const preprocessedFrag = preprocessShader_GLSL(vendorInfo, 'frag', frag, defines);
     return { vert, frag, preprocessedVert, preprocessedFrag };
@@ -185,7 +185,7 @@ export interface GfxProgramObjBag {
     defines?: DefineMap;
 }
 
-export function preprocessProgramObj_GLSL(device: GfxDevice, obj: GfxProgramObjBag): GfxProgramDescriptorSimpleWithOrig {
+export function preprocessProgramObj_GLSL(device: GfxDevice, obj: GfxProgramObjBag): GfxProgramDescriptorWithOrig {
     const defines = obj.defines !== undefined ? obj.defines : null;
     const vert = obj.both !== undefined ? obj.both + obj.vert : obj.vert;
     const frag = obj.both !== undefined ? obj.both + obj.frag : obj.frag;

@@ -7,7 +7,7 @@ import { fullscreenMegaState, setAttachmentStateSimple } from "../gfx/helpers/Gf
 import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
 import { fillColor, fillMatrix4x3, fillMatrix4x4, fillVec3v, fillVec4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers.js";
-import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxCullMode, GfxDevice, GfxFormat, GfxMegaStateDescriptor, GfxMipFilterMode, GfxProgramDescriptorSimple, GfxTexFilterMode, GfxWrapMode } from "../gfx/platform/GfxPlatform.js";
+import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxCullMode, GfxDevice, GfxFormat, GfxGraphicsProgramDescriptor, GfxMegaStateDescriptor, GfxMipFilterMode, GfxTexFilterMode, GfxWrapMode } from "../gfx/platform/GfxPlatform.js";
 import { GfxProgram, GfxSampler } from "../gfx/platform/GfxPlatformImpl.js";
 import { GfxrAttachmentSlot, GfxrRenderTargetDescription } from "../gfx/render/GfxRenderGraph.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
@@ -61,7 +61,7 @@ class TheWitnessShaderTemplate extends UberShaderTemplate<Render_Material> {
         this.cache = new HashMap<Render_Material, GfxProgram>(shader_equals, shader_hash);
     }
 
-    protected override createGfxProgramDescriptor(cache: GfxRenderCache, variantSettings: Render_Material, shaderTextOverride?: string): GfxProgramDescriptorSimple {
+    protected override createGfxProgramDescriptor(cache: GfxRenderCache, variantSettings: Render_Material, shaderTextOverride?: string): GfxGraphicsProgramDescriptor {
         const programString = shaderTextOverride ?? this.generateProgramString(variantSettings);
         const preprocessedVert = preprocessShader_GLSL(cache.device.queryVendorInfo(), 'vert', programString);
         const preprocessedFrag = preprocessShader_GLSL(cache.device.queryVendorInfo(), 'frag', programString);
@@ -70,7 +70,7 @@ class TheWitnessShaderTemplate extends UberShaderTemplate<Render_Material> {
 
     protected override createGfxProgram(cache: GfxRenderCache, variantSettings: Render_Material): GfxProgram {
         // We do our own caching here; no need to use the render cache for this.
-        return cache.device.createProgramSimple(this.createGfxProgramDescriptor(cache, variantSettings));
+        return cache.device.createProgram(this.createGfxProgramDescriptor(cache, variantSettings));
     }
 
     public generateProgramString(m: Render_Material): string {

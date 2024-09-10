@@ -8,9 +8,6 @@ importers:
 
   .:
     dependencies:
-      '@types/webxr':
-        specifier: ^0.5.16
-        version: 0.5.16
       crc-32:
         specifier: ^1.2.2
         version: 1.2.2
@@ -25,20 +22,20 @@ importers:
         version: 0.1.14
     devDependencies:
       '@types/node':
-        specifier: ^11.15.54
-        version: 11.15.54
+        specifier: ^22.5.4
+        version: 22.5.4
       '@types/pngjs':
         specifier: ^3.4.2
         version: 3.4.2
-      '@types/puppeteer':
-        specifier: ^1.20.10
-        version: 1.20.10
+      '@types/webxr':
+        specifier: ^0.5.20
+        version: 0.5.20
       '@wasm-tool/wasm-pack-plugin':
         specifier: ^1.7.0
         version: 1.7.0
       '@webgpu/types':
-        specifier: ^0.1.40
-        version: 0.1.40
+        specifier: ^0.1.44
+        version: 0.1.44
       '@xmldom/xmldom':
         specifier: ^0.8.10
         version: 0.8.10
@@ -53,7 +50,7 @@ importers:
         version: 7.0.0(webpack@5.91.0(webpack-cli@4.10.0))
       fork-ts-checker-webpack-plugin:
         specifier: ^6.5.3
-        version: 6.5.3(typescript@5.4.5)(webpack@5.91.0(webpack-cli@4.10.0))
+        version: 6.5.3(typescript@5.6.2)(webpack@5.91.0(webpack-cli@4.10.0))
       git-revision-webpack-plugin:
         specifier: ^3.0.6
         version: 3.0.6
@@ -71,13 +68,13 @@ importers:
         version: 3.0.4(webpack@5.91.0(webpack-cli@4.10.0))
       ts-loader:
         specifier: ^9.5.1
-        version: 9.5.1(typescript@5.4.5)(webpack@5.91.0(webpack-cli@4.10.0))
+        version: 9.5.1(typescript@5.6.2)(webpack@5.91.0(webpack-cli@4.10.0))
       tsx:
         specifier: ^4.7.0
         version: 4.11.0
       typescript:
-        specifier: ^5.3.3
-        version: 5.4.5
+        specifier: ^5.6.2
+        version: 5.6.2
       wasm-pack:
         specifier: ^0.12.1
         version: 0.12.1
@@ -343,17 +340,14 @@ packages:
   '@types/node-forge@1.3.11':
     resolution: {integrity: sha512-FQx220y22OKNTqaByeBGqHWYz4cl94tpcxeFdvBo3wjG6XPBuZ0BNgNZRV5J5TFmmcsJ4IzsLkmGRiQbnYsBEQ==}
 
-  '@types/node@11.15.54':
-    resolution: {integrity: sha512-1RWYiq+5UfozGsU6MwJyFX6BtktcT10XRjvcAQmskCtMcW3tPske88lM/nHv7BQG1w9KBXI1zPGuu5PnNCX14g==}
+  '@types/node@22.5.4':
+    resolution: {integrity: sha512-FDuKUJQm/ju9fT/SeX/6+gBzoPzlVCzfzmGkwKvRHQVxi4BntVbyIwf6a4Xn62mrvndLiml6z/UBXIdEVjQLXg==}
 
   '@types/parse-json@4.0.2':
     resolution: {integrity: sha512-dISoDXWWQwUquiKsyZ4Ng+HX2KsPL7LyHKHQwgGFEA3IaKac4Obd+h2a/a6waisAoepJlBcx9paWqjA8/HVjCw==}
 
   '@types/pngjs@3.4.2':
     resolution: {integrity: sha512-LJVPDraJ5YFEnMHnzxTN4psdWz1M61MtaAAWPn3qnDk5fvs7BAmmQ9pd3KPlrdrvozMyne4ktanD4pg0L7x1Pw==}
-
-  '@types/puppeteer@1.20.10':
-    resolution: {integrity: sha512-3tlzJ9+z8rMvBDzHPv4Q4LCgBwDRvuoMxThkr+BqcbbNjsBkL/enFf6m+MDJke7vJT4i22ojB8yb3UpibiuBWg==}
 
   '@types/qs@6.9.15':
     resolution: {integrity: sha512-uXHQKES6DQKKCLh441Xv/dwxOq1TVS3JPUMlEqoEglvlhR6Mxnlew/Xq/LRVHpLyk7iK3zODe1qYHIMltO7XGg==}
@@ -391,8 +385,8 @@ packages:
   '@types/webpack@4.41.38':
     resolution: {integrity: sha512-oOW7E931XJU1mVfCnxCVgv8GLFL768pDO5u2Gzk82i8yTIgX6i7cntyZOkZYb/JtYM8252SN9bQp9tgkVDSsRw==}
 
-  '@types/webxr@0.5.16':
-    resolution: {integrity: sha512-0E0Cl84FECtzrB4qG19TNTqpunw0F1YF0QZZnFMF6pDw1kNKJtrlTKlVB34stGIsHbZsYQ7H0tNjPfZftkHHoA==}
+  '@types/webxr@0.5.20':
+    resolution: {integrity: sha512-JGpU6qiIJQKUuVSKx1GtQnHJGxRjtfGIhzO2ilq43VZZS//f1h1Sgexbdk+Lq+7569a6EYhOWrUpIruR/1Enmg==}
 
   '@types/wicg-file-system-access@2020.9.8':
     resolution: {integrity: sha512-ggMz8nOygG7d/stpH40WVaNvBwuyYLnrg5Mbyf6bmsj/8+gb6Ei4ZZ9/4PNpcPNTT8th9Q8sM8wYmWGjMWLX/A==}
@@ -448,8 +442,8 @@ packages:
   '@webassemblyjs/wast-printer@1.12.1':
     resolution: {integrity: sha512-+X4WAlOisVWQMikjbcvY2e0rwPsKQ9F688lksZhBcPycBBuii3O7m8FACbDMWDojpAqvjIncrG8J0XHKyQfVeA==}
 
-  '@webgpu/types@0.1.40':
-    resolution: {integrity: sha512-/BBkHLS6/eQjyWhY2H7Dx5DHcVrS2ICj9owvSRdgtQT6KcafLZA86tPze0xAOsd4FbsYKCUBUQyNi87q7gV7kw==}
+  '@webgpu/types@0.1.44':
+    resolution: {integrity: sha512-JDpYJN5E/asw84LTYhKyvPpxGnD+bAKPtpW9Ilurf7cZpxaTbxkQcGwOd7jgB9BPBrTYQ+32ufo4HiuomTjHNQ==}
 
   '@webpack-cli/configtest@1.2.0':
     resolution: {integrity: sha512-4FB8Tj6xyVkyqjj1OaTqCjXYULB9FMkqQ8yGrZjRDrYh0nOE+7Lhs45WioWQQMV+ceFlE368Ukhe6xdvJM9Egg==}
@@ -1866,10 +1860,13 @@ packages:
     resolution: {integrity: sha512-TkRKr9sUTxEH8MdfuCSP7VizJyzRNMjj2J2do2Jr3Kym598JVdEksuzPQCnlFPW4ky9Q+iA+ma9BGm06XQBy8g==}
     engines: {node: '>= 0.6'}
 
-  typescript@5.4.5:
-    resolution: {integrity: sha512-vcI4UpRgg81oIRUFwR0WSIHKt11nJ7SAVlYNIu+QpqeyXP+gpQJy/Z4+F0aGxSE4MqwjyXvW/TzgkLAx2AGHwQ==}
+  typescript@5.6.2:
+    resolution: {integrity: sha512-NW8ByodCSNCwZeghjN3o+JX5OFH0Ojg6sadjEKY4huZ52TqbJTJnDo5+Tw98lSy63NZvi4n+ez5m2u5d4PkZyw==}
     engines: {node: '>=14.17'}
     hasBin: true
+
+  undici-types@6.19.8:
+    resolution: {integrity: sha512-ve2KP6f/JnbPBFyobGHuerC9g1FYGn/F8n1LWTwNxCEzd6IfqTwUQcNXgEtmmQ6DlRrC1hrSrBnCZPokRrDHjw==}
 
   universalify@2.0.1:
     resolution: {integrity: sha512-gptHNQghINnc/vTGIk0SOFGFNXw7JVrlRUtConJRlvaw6DuX0wO5Jeko9sWrMBhh+PsYAZ7oXAiOnf/UKogyiw==}
@@ -2145,20 +2142,20 @@ snapshots:
   '@types/body-parser@1.19.5':
     dependencies:
       '@types/connect': 3.4.38
-      '@types/node': 11.15.54
+      '@types/node': 22.5.4
 
   '@types/bonjour@3.5.13':
     dependencies:
-      '@types/node': 11.15.54
+      '@types/node': 22.5.4
 
   '@types/connect-history-api-fallback@1.5.4':
     dependencies:
       '@types/express-serve-static-core': 4.19.1
-      '@types/node': 11.15.54
+      '@types/node': 22.5.4
 
   '@types/connect@3.4.38':
     dependencies:
-      '@types/node': 11.15.54
+      '@types/node': 22.5.4
 
   '@types/dom-webcodecs@0.1.11': {}
 
@@ -2176,7 +2173,7 @@ snapshots:
 
   '@types/express-serve-static-core@4.19.1':
     dependencies:
-      '@types/node': 11.15.54
+      '@types/node': 22.5.4
       '@types/qs': 6.9.15
       '@types/range-parser': 1.2.7
       '@types/send': 0.17.4
@@ -2191,7 +2188,7 @@ snapshots:
   '@types/glob@7.2.0':
     dependencies:
       '@types/minimatch': 5.1.2
-      '@types/node': 11.15.54
+      '@types/node': 22.5.4
 
   '@types/html-minifier-terser@6.1.0': {}
 
@@ -2199,7 +2196,7 @@ snapshots:
 
   '@types/http-proxy@1.17.14':
     dependencies:
-      '@types/node': 11.15.54
+      '@types/node': 22.5.4
 
   '@types/json-schema@7.0.15': {}
 
@@ -2209,19 +2206,17 @@ snapshots:
 
   '@types/node-forge@1.3.11':
     dependencies:
-      '@types/node': 11.15.54
+      '@types/node': 22.5.4
 
-  '@types/node@11.15.54': {}
+  '@types/node@22.5.4':
+    dependencies:
+      undici-types: 6.19.8
 
   '@types/parse-json@4.0.2': {}
 
   '@types/pngjs@3.4.2':
     dependencies:
-      '@types/node': 11.15.54
-
-  '@types/puppeteer@1.20.10':
-    dependencies:
-      '@types/node': 11.15.54
+      '@types/node': 22.5.4
 
   '@types/qs@6.9.15': {}
 
@@ -2232,7 +2227,7 @@ snapshots:
   '@types/send@0.17.4':
     dependencies:
       '@types/mime': 1.3.5
-      '@types/node': 11.15.54
+      '@types/node': 22.5.4
 
   '@types/serve-index@1.9.4':
     dependencies:
@@ -2241,12 +2236,12 @@ snapshots:
   '@types/serve-static@1.15.7':
     dependencies:
       '@types/http-errors': 2.0.4
-      '@types/node': 11.15.54
+      '@types/node': 22.5.4
       '@types/send': 0.17.4
 
   '@types/sockjs@0.3.36':
     dependencies:
-      '@types/node': 11.15.54
+      '@types/node': 22.5.4
 
   '@types/source-list-map@0.1.6': {}
 
@@ -2258,26 +2253,26 @@ snapshots:
 
   '@types/webpack-sources@3.2.3':
     dependencies:
-      '@types/node': 11.15.54
+      '@types/node': 22.5.4
       '@types/source-list-map': 0.1.6
       source-map: 0.7.4
 
   '@types/webpack@4.41.38':
     dependencies:
-      '@types/node': 11.15.54
+      '@types/node': 22.5.4
       '@types/tapable': 1.0.12
       '@types/uglify-js': 3.17.5
       '@types/webpack-sources': 3.2.3
       anymatch: 3.1.3
       source-map: 0.6.1
 
-  '@types/webxr@0.5.16': {}
+  '@types/webxr@0.5.20': {}
 
   '@types/wicg-file-system-access@2020.9.8': {}
 
   '@types/ws@8.5.10':
     dependencies:
-      '@types/node': 11.15.54
+      '@types/node': 22.5.4
 
   '@wasm-tool/wasm-pack-plugin@1.7.0':
     dependencies:
@@ -2362,7 +2357,7 @@ snapshots:
       '@webassemblyjs/ast': 1.12.1
       '@xtuc/long': 4.2.2
 
-  '@webgpu/types@0.1.40': {}
+  '@webgpu/types@0.1.44': {}
 
   '@webpack-cli/configtest@1.2.0(webpack-cli@4.10.0(webpack-dev-server@4.15.2)(webpack@5.91.0))(webpack@5.91.0(webpack-cli@4.10.0))':
     dependencies:
@@ -2930,7 +2925,7 @@ snapshots:
 
   follow-redirects@1.15.6: {}
 
-  fork-ts-checker-webpack-plugin@6.5.3(typescript@5.4.5)(webpack@5.91.0(webpack-cli@4.10.0)):
+  fork-ts-checker-webpack-plugin@6.5.3(typescript@5.6.2)(webpack@5.91.0(webpack-cli@4.10.0)):
     dependencies:
       '@babel/code-frame': 7.24.6
       '@types/json-schema': 7.0.15
@@ -2945,7 +2940,7 @@ snapshots:
       schema-utils: 2.7.0
       semver: 7.6.2
       tapable: 1.1.3
-      typescript: 5.4.5
+      typescript: 5.6.2
       webpack: 5.91.0(webpack-cli@4.10.0)
 
   forwarded@0.2.0: {}
@@ -3210,7 +3205,7 @@ snapshots:
 
   jest-worker@27.5.1:
     dependencies:
-      '@types/node': 11.15.54
+      '@types/node': 22.5.4
       merge-stream: 2.0.0
       supports-color: 8.1.1
 
@@ -3783,14 +3778,14 @@ snapshots:
 
   toidentifier@1.0.1: {}
 
-  ts-loader@9.5.1(typescript@5.4.5)(webpack@5.91.0(webpack-cli@4.10.0)):
+  ts-loader@9.5.1(typescript@5.6.2)(webpack@5.91.0(webpack-cli@4.10.0)):
     dependencies:
       chalk: 4.1.2
       enhanced-resolve: 5.16.1
       micromatch: 4.0.7
       semver: 7.6.2
       source-map: 0.7.4
-      typescript: 5.4.5
+      typescript: 5.6.2
       webpack: 5.91.0(webpack-cli@4.10.0)
 
   tslib@2.6.2: {}
@@ -3807,7 +3802,9 @@ snapshots:
       media-typer: 0.3.0
       mime-types: 2.1.35
 
-  typescript@5.4.5: {}
+  typescript@5.6.2: {}
+
+  undici-types@6.19.8: {}
 
   universalify@2.0.1: {}
 

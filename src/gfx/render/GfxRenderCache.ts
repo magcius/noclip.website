@@ -1,16 +1,21 @@
 
-import { GfxBindingsDescriptor, GfxBindings, GfxDevice, GfxRenderPipelineDescriptor, GfxRenderPipeline, GfxProgram, GfxInputLayoutDescriptor, GfxInputLayout, GfxSamplerDescriptor, GfxSampler, GfxProgramDescriptor, GfxProgramDescriptorSimple, GfxBindingLayoutDescriptor, GfxMegaStateDescriptor, GfxColor, GfxAttachmentState, GfxChannelBlendState, GfxComputeProgramDescriptor } from "../platform/GfxPlatform.js";
-import { gfxBindingsDescriptorCopy, gfxRenderPipelineDescriptorCopy, gfxBindingsDescriptorEquals, gfxRenderPipelineDescriptorEquals, gfxInputLayoutDescriptorEquals, gfxSamplerDescriptorEquals, gfxInputLayoutDescriptorCopy } from '../platform/GfxPlatformObjUtil.js';
-import { HashMap, nullHashFunc, hashCodeNumberFinish, hashCodeNumberUpdate } from "../../HashMap.js";
+import { hashCodeNumberFinish, hashCodeNumberUpdate, HashMap, nullHashFunc } from "../../HashMap.js";
+import { GfxAttachmentState, GfxBindingLayoutDescriptor, GfxBindings, GfxBindingsDescriptor, GfxChannelBlendState, GfxColor, GfxDevice, GfxInputLayout, GfxInputLayoutDescriptor, GfxMegaStateDescriptor, GfxProgram, GfxGraphicsProgramDescriptor, GfxRenderPipeline, GfxRenderPipelineDescriptor, GfxSampler, GfxSamplerDescriptor, GfxVendorInfo } from "../platform/GfxPlatform.js";
+import { gfxBindingsDescriptorCopy, gfxBindingsDescriptorEquals, gfxInputLayoutDescriptorCopy, gfxInputLayoutDescriptorEquals, gfxRenderPipelineDescriptorCopy, gfxRenderPipelineDescriptorEquals, gfxSamplerDescriptorEquals } from '../platform/GfxPlatformObjUtil.js';
 import { assert } from "../platform/GfxPlatformUtil.js";
 
-function gfxProgramDescriptorSimpleEquals(a: GfxProgramDescriptorSimple, b: GfxProgramDescriptorSimple): boolean {
+interface GfxProgramDescriptorPreproc extends GfxGraphicsProgramDescriptor {
+    ensurePreprocessed(vendorInfo: GfxVendorInfo): void;
+    associate(device: GfxDevice, program: GfxProgram): void;
+}
+
+function gfxProgramDescriptorEquals(a: GfxGraphicsProgramDescriptor, b: GfxGraphicsProgramDescriptor): boolean {
     assert(a.preprocessedVert !== '' && b.preprocessedVert !== '');
     assert(a.preprocessedFrag !== '' && b.preprocessedFrag !== '');
     return a.preprocessedVert === b.preprocessedVert && a.preprocessedFrag === b.preprocessedFrag;
 }
 
-function gfxProgramDescriptorSimpleCopy(a: GfxProgramDescriptorSimple): GfxProgramDescriptorSimple {
+function gfxProgramDescriptorCopy(a: GfxGraphicsProgramDescriptor): GfxGraphicsProgramDescriptor {
     const preprocessedVert = a.preprocessedVert;
     const preprocessedFrag = a.preprocessedFrag;
     return { preprocessedVert, preprocessedFrag };
@@ -98,7 +103,7 @@ export class GfxRenderCache {
     private gfxBindingsCache = new HashMap<GfxBindingsDescriptor, ExpiryBindings>(gfxBindingsDescriptorEquals, gfxBindingsDescriptorHash);
     private gfxRenderPipelinesCache = new HashMap<GfxRenderPipelineDescriptor, GfxRenderPipeline>(gfxRenderPipelineDescriptorEquals, gfxRenderPipelineDescriptorHash);
     private gfxInputLayoutsCache = new HashMap<GfxInputLayoutDescriptor, GfxInputLayout>(gfxInputLayoutDescriptorEquals, nullHashFunc);
-    private gfxProgramCache = new HashMap<GfxProgramDescriptorSimple, GfxProgram>(gfxProgramDescriptorSimpleEquals, nullHashFunc);
+    private gfxProgramCache = new HashMap<GfxGraphicsProgramDescriptor, GfxProgram>(gfxProgramDescriptorEquals, nullHashFunc);
     private gfxSamplerCache = new HashMap<GfxSamplerDescriptor, GfxSampler>(gfxSamplerDescriptorEquals, nullHashFunc);
 
     constructor(public device: GfxDevice) {
@@ -135,28 +140,29 @@ export class GfxRenderCache {
         return inputLayout;
     }
 
-    public createProgramSimple(gfxProgramDescriptorSimple: GfxProgramDescriptorSimple): GfxProgram {
-        let program = this.gfxProgramCache.get(gfxProgramDescriptorSimple);
+    public createProgramSimple(descriptor: GfxGraphicsProgramDescriptor): GfxProgram {
+        let program = this.gfxProgramCache.get(descriptor);
         if (program === null) {
-            const descriptorCopy = gfxProgramDescriptorSimpleCopy(gfxProgramDescriptorSimple);
-            program = this.device.createProgramSimple(descriptorCopy);
+            const descriptorCopy = gfxProgramDescriptorCopy(descriptor);
+            program = this.device.createProgram(descriptorCopy);
             this.gfxProgramCache.add(descriptorCopy, program);
 
             // TODO(jstpierre): Ugliness
-            if ('associate' in (gfxProgramDescriptorSimple as any)) {
-                const gfxProgramDescriptor = gfxProgramDescriptorSimple as GfxProgramDescriptor;
-                gfxProgramDescriptor.associate(this.device, program);
-                (descriptorCopy as any).orig = gfxProgramDescriptor;
+            if ('associate' in (descriptor as any)) {
+                const p = descriptor as GfxProgramDescriptorPreproc;
+                p.associate(this.device, program);
+                (descriptorCopy as any).orig = p;
             }
         }
 
         return program;
     }
 
-    public createProgram(gfxProgramDescriptor: GfxProgramDescriptor): GfxProgram {
+    public createProgram(descriptor: GfxGraphicsProgramDescriptor): GfxProgram {
         // TODO(jstpierre): Remove the ensurePreprocessed here... this should be done by higher-level code.
-        gfxProgramDescriptor.ensurePreprocessed(this.device.queryVendorInfo());
-        return this.createProgramSimple(gfxProgramDescriptor);
+        const p = descriptor as GfxProgramDescriptorPreproc;
+        p.ensurePreprocessed(this.device.queryVendorInfo());
+        return this.createProgramSimple(descriptor);
     }
 
     public createSampler(descriptor: GfxSamplerDescriptor): GfxSampler {
