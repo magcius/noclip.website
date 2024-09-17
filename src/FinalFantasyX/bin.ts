@@ -342,6 +342,8 @@ function decodeTexture(gsMap: GSMemoryMap, textures: Texture[], tex0: GSRegister
     return textures.length - 1;
 }
 
+const LEVEL_MODEL_SCALE = 10;
+
 function parseLevelModel(view: DataView, offs: number, gsMap: GSMemoryMap, textures: Texture[]): LevelModel {
     const flags = view.getUint16(offs + 0x00, true);
     const isTranslucent = view.getUint16(offs + 0x04, true) === 1;
@@ -350,6 +352,8 @@ function parseLevelModel(view: DataView, offs: number, gsMap: GSMemoryMap, textu
     const center = vec3FromView(view, offs + 0x10, true);
     const bboxMin = vec3FromView(view, offs + 0x20, true);
     const bboxMax = vec3FromView(view, offs + 0x30, true);
+    vec3.scale(bboxMin, bboxMin, LEVEL_MODEL_SCALE);
+    vec3.scale(bboxMax, bboxMax, LEVEL_MODEL_SCALE);
     const radius = view.getFloat32(offs + 0x3C, true);
     const bbox = new AABB(bboxMin[0], bboxMin[1], bboxMin[2], bboxMax[0], bboxMax[1], bboxMax[2]);
 
@@ -662,12 +666,12 @@ function parseLevelModel(view: DataView, offs: number, gsMap: GSMemoryMap, textu
             };
             drawCalls.push(currentDrawCall);
         }
-
+        const extraScale = vertexRun.effectType === LevelEffectType.POSITIONS ? LEVEL_MODEL_SCALE : 1;
         for (let k = 0; k < vertexRunData.length; k += VERTEX_STRIDE) {
             // Position.
-            vertexData[vertexDataDst++] = vertexRunData[k + 0];
-            vertexData[vertexDataDst++] = vertexRunData[k + 1];
-            vertexData[vertexDataDst++] = vertexRunData[k + 2];
+            vertexData[vertexDataDst++] = vertexRunData[k + 0] * LEVEL_MODEL_SCALE;
+            vertexData[vertexDataDst++] = vertexRunData[k + 1] * LEVEL_MODEL_SCALE;
+            vertexData[vertexDataDst++] = vertexRunData[k + 2] * LEVEL_MODEL_SCALE;
             // Color.
             vertexData[vertexDataDst++] = vertexRunData[k + 3]
             vertexData[vertexDataDst++] = vertexRunData[k + 4];
@@ -677,10 +681,10 @@ function parseLevelModel(view: DataView, offs: number, gsMap: GSMemoryMap, textu
             vertexData[vertexDataDst++] = vertexRunData[k + 7];
             vertexData[vertexDataDst++] = vertexRunData[k + 8];
             // Extra data
-            vertexData[vertexDataDst++] = vertexRunData[k + 9]
-            vertexData[vertexDataDst++] = vertexRunData[k + 10];
-            vertexData[vertexDataDst++] = vertexRunData[k + 11];
-            vertexData[vertexDataDst++] = vertexRunData[k + 12];
+            vertexData[vertexDataDst++] = vertexRunData[k + 9] * extraScale;
+            vertexData[vertexDataDst++] = vertexRunData[k + 10] * extraScale;
+            vertexData[vertexDataDst++] = vertexRunData[k + 11] * extraScale;
+            vertexData[vertexDataDst++] = vertexRunData[k + 12] * extraScale;
         }
 
         const indexRunData = vertexRun.indexRunData;
@@ -695,10 +699,8 @@ function parseLevelModel(view: DataView, offs: number, gsMap: GSMemoryMap, textu
 }
 
 export interface MapTri {
-    indices: number[];
-    edgeAB: number;
-    edgeBC: number;
-    edgeCA: number;
+    vertices: number[];
+    edges: number[];
     location: number;
     surfaceType: number;
     passability: number;
@@ -725,7 +727,7 @@ export function parseLevelGeometry(buffer: ArrayBufferSlice, textureData: LevelT
     let map: HeightMap | undefined;
     if (heightmapOffs !== 0) {
         const vertexCount = view.getUint16(heightmapOffs + 0xA, true);
-        const scale = view.getFloat32(heightmapOffs + 0xC, true);
+        const scale = view.getFloat32(heightmapOffs + 0xC, true) / LEVEL_MODEL_SCALE;
         const vertexOffs = view.getUint32(heightmapOffs + 0x18, true) + heightmapOffs;
         const triOffs = view.getUint32(heightmapOffs + 0x1C, true) + heightmapOffs;
         const triCount = view.getUint16(triOffs + 0x8, true);
@@ -735,16 +737,22 @@ export function parseLevelGeometry(buffer: ArrayBufferSlice, textureData: LevelT
         let hasBattle = false;
         for (let i = 0; i < triCount; i++) {
             const data = view.getUint32(offs + 0xC, true);
-            const indices: number[] = [
-                view.getUint16(offs + 0x0, true),
-                view.getUint16(offs + 0x2, true),
-                view.getUint16(offs + 0x4, true),
+            const light = [
+                (data >>> 0x11) & 0x1F,
+                (data >>> 0x16) & 0x1F,
+                (data >>> 0x1B) & 0x1F,
             ];
             const t = {
-                indices,
-                edgeAB: view.getInt16(offs + 0x6, true),
-                edgeBC: view.getInt16(offs + 0x8, true),
-                edgeCA: view.getInt16(offs + 0xA, true),
+                vertices: [
+                    view.getUint16(offs + 0x0, true),
+                    view.getUint16(offs + 0x2, true),
+                    view.getUint16(offs + 0x4, true),
+                ],
+                edges: [
+                    view.getInt16(offs + 0x6, true),
+                    view.getInt16(offs + 0x8, true),
+                    view.getInt16(offs + 0xA, true),
+                ],
                 data,
                 passability: data & 0x7F,
                 encounter: (data >>> 7) & 3,
@@ -752,7 +760,7 @@ export function parseLevelGeometry(buffer: ArrayBufferSlice, textureData: LevelT
                 location: (data >>> 0xB) & 3,
                 // 13 ??
                 surfaceType: (data >>> 0xF) & 3,
-                // upper bytes?
+                light,
             };
             if (t.passability)
                 hasCollision = true;

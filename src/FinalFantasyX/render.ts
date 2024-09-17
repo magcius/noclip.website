@@ -463,7 +463,6 @@ export function applyEffect(dst: mat4, params: vec3, basePos: vec3, frame: numbe
 
     switch (effect.type) {
         case BIN.EffectType.MOTION: {
-            vec3.scale(scratchVec, scratchVec, 0.1)
             setMatrixTranslation(dst, scratchVec);
         } break;
         case BIN.EffectType.ROTATION: {
@@ -480,8 +479,6 @@ export function applyEffect(dst: mat4, params: vec3, basePos: vec3, frame: numbe
         case BIN.EffectType.COMBINED: {
             computeRotationMatrix(dst, key.data[0], eulerOrder);
             vec3.add(scratchVec, basePos, key.data[1]);
-            vec3.scale(scratchVec, scratchVec, 0.1)
-
             setMatrixTranslation(dst, scratchVec);
         } break;
         default: return;

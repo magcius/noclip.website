@@ -94,12 +94,11 @@ class FFXRenderer implements Viewer.SceneGfx {
     }
 
     public adjustCameraController(c: CameraController) {
-        c.setSceneMoveSpeedMult(.003);
+        c.setSceneMoveSpeedMult(.03);
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
         const renderInstManager = this.renderHelper.renderInstManager;
-        viewerInput.camera.setClipPlanes(.1, 1000);
         this.renderHelper.debugDraw.beginFrame(viewerInput.camera.projectionMatrix, viewerInput.camera.viewMatrix, viewerInput.backbufferHeight, viewerInput.backbufferHeight);
 
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
@@ -182,19 +181,18 @@ class FFXRenderer implements Viewer.SceneGfx {
             for (let i = 0; i < tt.length; i++) {
                 const tri = tt[i];
                 for (let j = 0; j < 3; j++) {
-                    vec3.set(mapScratch[j], vv[4*tri.indices[j] + 0], -vv[4*tri.indices[j] + 1], -vv[4*tri.indices[j] + 2]);
+                    vec3.set(mapScratch[j], vv[4*tri.vertices[j] + 0], -vv[4*tri.vertices[j] + 1], -vv[4*tri.vertices[j] + 2]);
                     vec3.scale(mapScratch[j], mapScratch[j], 1 / this.levelObjects.map.scale);
                     mapScratch[j][1] += .05; // poor man's polygon offset
                 }
 
                 // carefully draw every edge once
                 mapColor(col, this.collisionMode, tri);
-                if (tri.edgeAB < 0 || tri.indices[0] < tri.indices[1])
-                    this.renderHelper.debugDraw.drawLine(mapScratch[0], mapScratch[1], col, col, opts);
-                if (tri.edgeBC < 0 || tri.indices[1] < tri.indices[2])
-                    this.renderHelper.debugDraw.drawLine(mapScratch[1], mapScratch[2], col, col, opts);
-                if (tri.edgeCA < 0 || tri.indices[2] < tri.indices[0])
-                    this.renderHelper.debugDraw.drawLine(mapScratch[2], mapScratch[0], col, col, opts);
+                for (let j = 0; j < 3; j++) {
+                    const k = (j + 1) % 3;
+                    if (tri.edges[j] < 0 || tri.vertices[j] < tri.vertices[k])
+                        this.renderHelper.debugDraw.drawLine(mapScratch[j], mapScratch[k], col, col, opts);
+                }
             }
             this.renderHelper.debugDraw.endBatch();
             col.a = .5;
@@ -202,7 +200,7 @@ class FFXRenderer implements Viewer.SceneGfx {
                 const tri = tt[i];
                 if (mapColor(col, this.collisionMode, tri)) {
                     for (let j = 0; j < 3; j++) {
-                        vec3.set(mapScratch[j], vv[4*tri.indices[j] + 0], -vv[4*tri.indices[j] + 1], -vv[4*tri.indices[j] + 2]);
+                        vec3.set(mapScratch[j], vv[4*tri.vertices[j] + 0], -vv[4*tri.vertices[j] + 1], -vv[4*tri.vertices[j] + 2]);
                         vec3.scale(mapScratch[j], mapScratch[j], 1/this.levelObjects.map.scale);
                         mapScratch[j][1] += .05; // poor man's polygon offset
                     }
@@ -214,13 +212,13 @@ class FFXRenderer implements Viewer.SceneGfx {
         if (this.script && (this.showTriggers || this.debug)) {
             for (let i = 0; i < this.script.controllers.length; i++) {
                 const c = this.script.controllers[i];
-                vec3.scale(mapScratch[0], c.position.pos, .1);
+                vec3.copy(mapScratch[0], c.position.pos);
                 mapScratch[0][1] *= -1;
                 mapScratch[0][2] *= -1;
                 switch (c.spec.type) {
                     case BIN.ControllerType.EDGE:
                     case BIN.ControllerType.PLAYER_EDGE:
-                        vec3.scale(mapScratch[1], c.position.miscVec, .1);
+                        vec3.copy(mapScratch[1], c.position.miscVec);
                         mapScratch[1][1] *= -1;
                         mapScratch[1][2] *= -1;
                         this.renderHelper.debugDraw.drawLine(mapScratch[0], mapScratch[1], Magenta);
@@ -233,11 +231,11 @@ class FFXRenderer implements Viewer.SceneGfx {
                     case BIN.ControllerType.ZONE:
                     case BIN.ControllerType.PLAYER_ZONE:
                         this.renderHelper.debugDraw.drawRectLineRU(mapScratch[0], Vec3UnitX, Vec3UnitZ,
-                            c.position.miscVec[0]/10, c.position.miscVec[2]/10, Cyan);
+                            c.position.miscVec[0], c.position.miscVec[2], Cyan);
                         if (this.debug) {
                             const ctx = getDebugOverlayCanvas2D();
-                            mapScratch[0][0] += c.position.miscVec[0]/10;
-                            mapScratch[0][2] += c.position.miscVec[2]/10;
+                            mapScratch[0][0] += c.position.miscVec[0];
+                            mapScratch[0][2] += c.position.miscVec[2];
                             drawWorldSpaceText(ctx, viewerInput.camera.clipFromWorldMatrix, mapScratch[0], `w${hexzero(i, 2)}`, 0, Cyan);
                         }
                         break;
@@ -295,8 +293,6 @@ class FFXRenderer implements Viewer.SceneGfx {
     }
 }
 
-
-
 class FFXLevelSceneDesc implements Viewer.SceneDesc {
     public id: string;
     constructor(private index: number, public name: string, private events: number[]) {
@@ -314,20 +310,9 @@ class FFXLevelSceneDesc implements Viewer.SceneDesc {
         const textures = BIN.parseLevelTextures(textureData);
         const level = BIN.parseLevelGeometry(geometryData, textures);
 
-        const levelData: LevelObjectHolder = {
-            parts: [],
-            activeEffects: nArray<BIN.ActiveEffect>(64, () => ({
-                active: false,
-                runOnce: false,
-                startFrame: 0,
-                partIndex: -1,
-                effectIndex: -1,
-            })),
-            effectData: level.effects,
-            map: level.map,
-        };
+        const objects = new LevelObjectHolder(this.index, this.events[0], device, context, level);
 
-        const renderer = new FFXRenderer(device, levelData);
+        const renderer = new FFXRenderer(device, objects);
         const cache = renderer.renderHelper.renderCache;
         renderer.clearPass = makeAttachmentClearDescriptor(level.clearColor);
         mat4.copy(renderer.lightDirection, level.lightDirection);
@@ -348,13 +333,13 @@ class FFXLevelSceneDesc implements Viewer.SceneDesc {
             }
             const partRenderer = new LevelPartInstance(device, cache, p, modelData, renderer.textureData);
             for (let index of p.effectIndices)
-                activateEffect(levelData, levelData.parts.length, index, false);
-            levelData.parts.push(partRenderer);
+                activateEffect(objects, objects.parts.length, index, false);
+            objects.parts.push(partRenderer);
         }
 
         if (eventData) {
             const script = BIN.parseEvent(eventData);
-            renderer.script = new EventScript(script, levelData);
+            renderer.script = new EventScript(script, objects);
             renderer.script.update(0); // run controller init code
         }
 

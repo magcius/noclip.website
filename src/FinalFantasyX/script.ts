@@ -1,8 +1,8 @@
 import { mat4, ReadonlyVec3, vec3 } from "gl-matrix";
-import { CompType } from "../gx/gx_enum.js";
 import { angleDist, clamp, MathConstants, setMatrixTranslation } from "../MathHelpers.js";
 import { assert, assertExists, hexzero, nArray } from "../util.js";
-
+import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
+import { SceneContext } from "../SceneBase.js";
 import * as BIN from "./bin.js";
 import { LevelPartInstance } from "./render.js";
 
@@ -756,13 +756,92 @@ function compareSignals(a: Signal, b: Signal): number {
     return b.thread - a.thread;
 }
 
+const triScratch = nArray(3, () => vec3.create());
 
+function fillMapTri(dst: vec3[], map: BIN.HeightMap, index: number): void {
+    const tri = map.tris[index];
+    for (let j = 0; j < 3; j++) {
+        vec3.set(dst[j], map.vertices[4*tri.vertices[j] + 0], map.vertices[4*tri.vertices[j] + 1], map.vertices[4*tri.vertices[j] + 2]);
+        vec3.scale(dst[j], dst[j], 1/map.scale);
+    }
+}
 
-export interface LevelObjectHolder {
-    parts: LevelPartInstance[];
-    activeEffects: BIN.ActiveEffect[];
-    effectData: BIN.PartEffect[];
-    map?: BIN.HeightMap;
+function pointsAreClockwise(a: ReadonlyVec3, b: ReadonlyVec3, c: ReadonlyVec3): boolean {
+    const x0 = b[0] - a[0];
+    const z0 = b[2] - a[2];
+    const x1 = c[0] - b[0];
+    const z1 = c[2] - b[2];
+    return x0*z1 > z0*x1;
+}
+
+function triEdgeCrossedFlags(pos: ReadonlyVec3, verts: ReadonlyVec3[]): number {
+    let out = 0;
+    for (let i = 0; i < 3; i++) {
+        const j = (i + 1) % 3;
+        if (pointsAreClockwise(verts[i], verts[j], pos))
+            out |= 1 << i;
+    }
+    return out;
+}
+
+const normScratch = vec3.create();
+const normScratch2 = vec3.create();
+function triHeight(pos: ReadonlyVec3, verts: ReadonlyVec3[]): number {
+    vec3.sub(normScratch, verts[1], verts[0]);
+    vec3.sub(normScratch2, verts[2], verts[0]);
+    vec3.cross(normScratch, normScratch, normScratch2);
+    vec3.normalize(normScratch, normScratch);
+    const base = vec3.dot(normScratch, verts[0]);
+    const hDot = normScratch[0] * pos[0] + normScratch[2] * pos[2];
+    return (base - hDot)/normScratch[1];
+}
+
+export class LevelObjectHolder {
+    public effectData: BIN.PartEffect[];
+    public animatedTextures: BIN.AnimatedTexture[];
+    public map?: BIN.HeightMap;
+
+    public parts: LevelPartInstance[] = [];
+    public activeEffects = nArray<BIN.ActiveEffect>(64, () => ({
+        active: false,
+        runOnce: false,
+        startFrame: 0,
+        partIndex: -1,
+        effectIndex: -1,
+    }));
+    public activeMagic = -1;
+    public playerActive = true;
+    public inBattle = false;
+    public lightDirs = mat4.create();
+    public lightColors = mat4.create();
+    public cameraPos = vec3.create();
+    public t = 0;
+    private loadedMotionGroups: Set<number> = new Set();
+
+    constructor(public mapID: number, public eventID: number, public device: GfxDevice, public context: SceneContext, level: BIN.LevelData) {
+        this.effectData = level.effects;
+        this.animatedTextures = level.animatedTextures;
+        this.map = level.map;
+    }
+
+    public snapToGround(pos: vec3): number {
+        if (!this.map)
+            return -1;
+        const startY = pos[1];
+        let groundTri = -1;
+        for (let i = 0; i < this.map.tris.length; i++) {
+            fillMapTri(triScratch, this.map, i);
+            if (triEdgeCrossedFlags(pos, triScratch) !== 0) {
+                continue;
+            }
+            const newY = triHeight(pos, triScratch);
+            if (groundTri < 0 || (newY < pos[1] && newY > startY)) { // y positive is *down*
+                groundTri = i;
+                pos[1] = newY;
+            }
+        }
+        return groundTri;
+    }
 }
 
 function deactivateEffect(level: LevelObjectHolder, partIndex: number, effectType: number): void {
@@ -1409,7 +1488,6 @@ export class EventScript {
                 const y = c.stack.pop();
                 const x = c.stack.pop();
                 vec3.set(c.position.pos, x, y, z);
-                vec3.scale(c.position.pos, c.position.pos, 1 / 10);
                 // more logic for characters
                 if ((c.flags & ControllerFlags.DONE) === 0)
                     vec3.copy(c.position.prevPos, c.position.pos);
@@ -1701,7 +1779,6 @@ export class EventScript {
                 const y = c.stack.pop();
                 const x = c.stack.pop();
                 vec3.set(c.position.pos, x, y, z);
-                vec3.scale(c.position.pos, c.position.pos, 1 / 10);
                 // more logic for characters
                 vec3.copy(c.position.prevPos, c.position.pos);
             } break;
