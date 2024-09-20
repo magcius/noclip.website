@@ -34,6 +34,7 @@ precision mediump float;
 layout(std140) uniform ub_SceneParams {
     Mat4x4 u_Projection;
     Mat4x3 u_LightDirection;
+    float  u_RenderHacks;
 };
 
 layout(std140) uniform ub_ModelParams {
@@ -55,6 +56,7 @@ layout(location = 2) in vec2 a_TexCoord;
 layout(location = 3) in vec4 a_Extra;
 
 void main() {
+    int hackFlags = int(u_RenderHacks);
 #if EFFECT == 1
     gl_Position = vec4(mix(a_Position, a_Extra.xyz, u_Params.x), 1.0);
 #else
@@ -67,6 +69,9 @@ void main() {
 #else
     v_Color = a_Color;
 #endif
+
+    if ((hackFlags & 1) == 0)
+        v_Color = vec4(1.);
 
 #if EFFECT == 6
     vec4 t_viewNormal = Mul(_Mat4x4(u_BoneMatrix), vec4(a_Extra.xyz, 0.0));
@@ -128,10 +133,12 @@ void main() {
 
         return `
 void main() {
+    int hackFlags = int(u_RenderHacks);
     vec4 t_Color = v_Color;
 
 #ifdef TEXTURE
-    t_Color *= texture(SAMPLER_2D(u_Texture), v_TexCoord);
+    if ((hackFlags & 2) != 0)
+        t_Color *= texture(SAMPLER_2D(u_Texture), v_TexCoord);
 #endif
 
 ${this.generateAlphaTest(ate, atst, aref, afail)}

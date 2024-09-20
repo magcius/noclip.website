@@ -796,12 +796,23 @@ function triHeight(pos: ReadonlyVec3, verts: ReadonlyVec3[]): number {
     return (base - hDot)/normScratch[1];
 }
 
+export interface RenderHacks {
+    wireframe: boolean;
+    textures: boolean;
+    vertexColors: boolean;
+}
+
 export class LevelObjectHolder {
     public effectData: BIN.PartEffect[];
     public animatedTextures: BIN.AnimatedTexture[];
     public map?: BIN.HeightMap;
 
     public parts: LevelPartInstance[] = [];
+    public renderHacks: RenderHacks = {
+        wireframe: false,
+        textures: true,
+        vertexColors: true,
+    };
     public activeEffects = nArray<BIN.ActiveEffect>(64, () => ({
         active: false,
         runOnce: false,

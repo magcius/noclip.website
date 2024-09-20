@@ -2,7 +2,7 @@ import * as BIN from "./bin.js";
 import * as Viewer from '../viewer.js';
 import * as UI from '../ui.js';
 import { makeBackbufferDescSimple, makeAttachmentClearDescriptor, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
-import { fillMatrix4x3, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers.js';
+import { fillMatrix4x3, fillMatrix4x4, fillVec3v, fillVec4 } from '../gfx/helpers/UniformBufferHelpers.js';
 import { GfxBindingLayoutDescriptor, GfxDevice, GfxTexture } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
 import { SceneContext } from '../SceneBase.js';
@@ -132,11 +132,19 @@ class FFXRenderer implements Viewer.SceneGfx {
             this.script.update(viewerInput.deltaTime * 60 / 1000);
 
         const template = this.renderHelper.pushTemplateRenderInst();
+        if (this.levelObjects.renderHacks.wireframe)
+            template.setMegaStateFlags({wireframe: true});
         template.setBindingLayouts(bindingLayouts);
-        let offs = template.allocateUniformBuffer(FFXProgram.ub_SceneParams, 16 + 12);
+        let offs = template.allocateUniformBuffer(FFXProgram.ub_SceneParams, 16 + 12 + 4);
         const sceneParamsMapped = template.mapUniformBufferF32(FFXProgram.ub_SceneParams);
         offs += fillMatrix4x4(sceneParamsMapped, offs, viewerInput.camera.projectionMatrix);
-        fillMatrix4x3(sceneParamsMapped, offs, this.lightDirection);
+        offs += fillMatrix4x3(sceneParamsMapped, offs, this.lightDirection);
+        let hackFlags = 0;
+        if (this.levelObjects.renderHacks.vertexColors)
+            hackFlags |= 1;
+        if (this.levelObjects.renderHacks.textures)
+            hackFlags |= 2;
+        offs += fillVec4(sceneParamsMapped, offs, hackFlags);
 
         this.renderHelper.renderInstManager.setCurrentList(this.renderInstListMain);
 
@@ -247,7 +255,42 @@ class FFXRenderer implements Viewer.SceneGfx {
         this.renderHelper.prepareToRender();
     }
 
+    private createRenderHacksPanel(): UI.Panel {
+        const renderHacksPanel = new UI.Panel();
+        renderHacksPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
+        renderHacksPanel.setTitle(UI.RENDER_HACKS_ICON, 'Render Hacks');
+
+        const vertexColors = new UI.Checkbox('Vertex Colors', true);
+        vertexColors.onchanged = () => {
+            const v = vertexColors.checked;
+            this.levelObjects.renderHacks.vertexColors = v;
+        };
+        renderHacksPanel.contents.appendChild(vertexColors.elem);
+        const textures = new UI.Checkbox('Textures', true);
+        textures.onchanged = () => {
+            const v = textures.checked;
+            this.levelObjects.renderHacks.textures = v;
+        };
+        renderHacksPanel.contents.appendChild(textures.elem);
+        if (this.renderHelper.device.queryLimits().wireframeSupported) {
+            const wireframe = new UI.Checkbox('Wireframe', false);
+            wireframe.onchanged = () => {
+                const v = wireframe.checked;
+                this.levelObjects.renderHacks.wireframe = v;
+            };
+            renderHacksPanel.contents.appendChild(wireframe.elem);
+        }
+        return renderHacksPanel;
+    }
+
     public createPanels(): UI.Panel[] {
+        const panels: UI.Panel[] = [];
+        panels.push(this.createLayerPanel());
+        panels.push(this.createRenderHacksPanel());
+        return panels;
+    }
+
+    private createLayerPanel(): UI.Panel {
         const layersPanel = new UI.Panel();
         layersPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
         layersPanel.setTitle(UI.LAYER_ICON, 'Collision');
@@ -280,7 +323,7 @@ class FFXRenderer implements Viewer.SceneGfx {
             };
             layersPanel.contents.appendChild(triggerCheckbox.elem);
         }
-        return [layersPanel];
+        return layersPanel;
     }
 
     public destroy(device: GfxDevice): void {
