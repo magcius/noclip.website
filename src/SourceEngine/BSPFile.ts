@@ -1302,7 +1302,7 @@ export class BSPFile {
                 continue;
 
             const lightofs = facelist.getInt32(idx + 0x14, true);
-            const m_LightmapTextureSizeInLuxels = nArray(2, (i) => facelist.getUint32(idx + 0x24 + i * 4, true));
+            const m_LightmapTextureSizeInLuxels = nArray(2, (i) => facelist!.getUint32(idx + 0x24 + i * 4, true));
 
             // Lighting styles
             const styles: number[] = [];
@@ -1568,8 +1568,8 @@ export class BSPFile {
             const surfaceFogVolumeID = facelist.getUint16(idx + 0x0E, true);
 
             const area = facelist.getFloat32(idx + 0x18, true);
-            const m_LightmapTextureMinsInLuxels = nArray(2, (i) => facelist.getInt32(idx + 0x1C + i * 4, true));
-            const m_LightmapTextureSizeInLuxels = nArray(2, (i) => facelist.getUint32(idx + 0x24 + i * 4, true));
+            const m_LightmapTextureMinsInLuxels = nArray(2, (i) => facelist!.getInt32(idx + 0x1C + i * 4, true));
+            const m_LightmapTextureSizeInLuxels = nArray(2, (i) => facelist!.getUint32(idx + 0x24 + i * 4, true));
             const origFace = facelist.getUint32(idx + 0x2C, true);
             const m_NumPrimsRaw = facelist.getUint16(idx + 0x30, true);
             const m_NumPrims = m_NumPrimsRaw & 0x7FFF;
@@ -1824,7 +1824,7 @@ export class BSPFile {
             vec2.set(overlayInfo.planePoints[1], vecUVPoint1X, vecUVPoint1Y);
             vec2.set(overlayInfo.planePoints[2], vecUVPoint2X, vecUVPoint2Y);
             vec2.set(overlayInfo.planePoints[3], vecUVPoint3X, vecUVPoint3Y);
- 
+
             const center = vec3.create();
             const tex = texinfos[nTexinfo];
 
