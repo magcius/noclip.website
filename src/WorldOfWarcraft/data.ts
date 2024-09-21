@@ -505,6 +505,7 @@ export class ParticleEmitter {
 }
 
 export class ModelData {
+    private scratchMat4 = mat4.create();
     public skins: SkinData[] = [];
     public blps: BlpData[] = [];
     public vertexBuffer: Uint8Array;
@@ -686,7 +687,7 @@ export class ModelData {
             mat4.fromRotationTranslationScaleOrigin(dst, rot, trans, scale, [0.5, 0.5, 0]);
         }
 
-        const localBoneTransform = mat4.create();
+        const localBoneTransform = this.scratchMat4;
         for (let i = 0; i < this.numBones; i++) {
             const bone = this.boneData[i];
             assert(bone.parentBoneId < i, "bone parent > bone");
@@ -929,6 +930,9 @@ export class WmoData {
 
         for (const fileId of this.wmo.group_file_ids) {
             this.groupDescriptors.push(this.wmo.get_group_descriptor(fileId));
+            if (this.groupDescriptors[this.groupDescriptors.length - 1].antiportal) {
+                console.log('antiportal detected!!!', fileId);
+            }
         }
 
         this.vertex_buffer = this.wmo.take_vertex_data();
@@ -1687,9 +1691,6 @@ export class AdtData {
             i += 1;
         }
         renderResult.free();
-
-        let adtCenter = vec3.create();
-        this.worldSpaceAABB.centerPoint(adtCenter);
 
         this.inner!.free();
         this.inner = null;

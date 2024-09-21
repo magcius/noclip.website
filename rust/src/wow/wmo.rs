@@ -2,11 +2,12 @@ use core::f32;
 use std::collections::{HashMap, HashSet};
 
 use deku::prelude::*;
+use js_sys::Array;
 use nalgebra_glm::{make_vec3, vec2, vec3, Vec2, Vec3};
 use wasm_bindgen::prelude::*;
 
 use crate::{
-    geometry::{ConvexHull, Plane, AABB},
+    geometry::{project_vec3_to_vec2, point_inside_polygon, Axis, ConvexHull, Plane, AABB},
     wow::common::{parse, parse_array, ChunkedData},
 };
 
@@ -186,15 +187,15 @@ impl Wmo {
         vec![]
     }
 
-    pub fn find_closest_group_for_modelspace_point(&self, _point_slice: &[f32]) -> u32 {
-        todo!()
-    }
-
-    pub fn find_visible_groups(&self, group_id: u32, point_slice: &[f32], frustum: &ConvexHull) -> Vec<u32> {
+    pub fn find_visible_groups(&self, group_id: u32, point_slice: &[f32], frustum: &ConvexHull, exterior_frustums_js: &Array) -> Vec<u32> {
         let eye = Vec3::from_column_slice(point_slice);
         let mut visible_set = HashSet::new();
         let mut visited_set = HashSet::new();
-        self.traverse_portals(&eye, frustum, group_id, &mut visible_set, &mut visited_set);
+        let mut exterior_frustums = Vec::new();
+        self.traverse_portals(&eye, frustum, group_id, &mut visible_set, &mut visited_set, &mut exterior_frustums);
+        for frustum in exterior_frustums {
+            exterior_frustums_js.push(&frustum.into());
+        }
         visible_set.into_iter().collect()
     }
 
@@ -205,6 +206,7 @@ impl Wmo {
         group_id: u32,
         visible_set: &mut HashSet<u32>,
         visited_set: &mut HashSet<u32>,
+        exterior_frustums: &mut Vec<ConvexHull>,
     ) {
         if visited_set.contains(&group_id) {
             return;
@@ -212,17 +214,22 @@ impl Wmo {
         visible_set.insert(group_id);
         let group = self.get_group(group_id);
         for (portal_ref, portal) in self.group_portals(group) {
+            let other_group_id = self.group_file_ids[portal_ref.group_index as usize];
             if !portal.is_facing_us(eye, portal_ref.side) {
                 continue;
             }
 
             if portal.in_frustum(frustum) || portal.aabb_contains_point(eye) {
-                let other_group_id = self.group_file_ids[portal_ref.group_index as usize];
                 let portal_frustum = portal.clip_frustum(eye, frustum);
+                let other_group = self.get_group(other_group_id);
+                // if this portal causes us to look outside, save its frustum for culling the outdoors
+                if !group.flags.exterior && other_group.flags.exterior {
+                    exterior_frustums.push(portal_frustum.clone());
+                }
                 // create a new visited_set just for this uniquely clipped frustum
                 let mut visited_local = visited_set.clone();
                 visited_local.insert(group_id);
-                self.traverse_portals(eye, &portal_frustum, other_group_id, visible_set, &mut visited_local);
+                self.traverse_portals(eye, &portal_frustum, other_group_id, visible_set, &mut visited_local, exterior_frustums);
             }
         }
     }
@@ -231,41 +238,73 @@ impl Wmo {
         self.groups.get(&file_id).expect(&format!("couldn't find group with file_id {}", file_id))
     }
 
-    pub fn group_contains_modelspace_point(&self, group_id: u32, point_slice: &[f32]) -> bool {
+    pub fn find_group_for_modelspace_point(&self, point_slice: &[f32]) -> Option<u32> {
         let p = make_vec3(point_slice);
-        let group = self.get_group(group_id);
-        let aabb: AABB = group.header.bounding_box.into();
-        aabb.contains_point(&p)
-            && (group.bsp_tree.contains_point(&p)
-                || self.modelspace_point_above_group_portals(group, &p))
+        let mut closest_group_id = None;
+        let mut min_dist = f32::INFINITY;
+        for (group_id, group) in &self.groups {
+            if group.flags.unreachable || group.flags.antiportal || group.flags.unk_skip_membership_check {
+                continue;
+            }
+            let aabb: AABB = group.header.bounding_box.into();
+            if group.flags.exterior {
+                if !aabb.contains_point_ignore_max_z(&p) {
+                    continue;
+                }
+            } else {
+                if !aabb.contains_point(&p) {
+                    continue;
+                }
+            }
+
+            let mut nodes = vec![];
+            group.bsp_tree.query(&p, &mut nodes, 0);
+            if group.bsp_tree.bounding_box_for_nodes(&nodes).contains_point(&p) {
+                if let Some(bsp_result) = group.bsp_tree.pick_closest_tri_neg_z(&p, &nodes) {
+                    if bsp_result.distance < min_dist {
+                        min_dist = bsp_result.distance;
+                        closest_group_id = Some(*group_id);
+                    }
+                }
+            }
+
+            if let Some(t) = self.modelspace_point_above_group_portals(group, &p) {
+                if t < min_dist {
+                    min_dist = t;
+                    closest_group_id = Some(*group_id);
+                }
+            }
+        }
+        closest_group_id
     }
 
     fn group_portals(&self, group: &WmoGroup) -> PortalIter {
         PortalIter::new(group, self)
     }
 
-    fn modelspace_point_above_group_portals(&self, group: &WmoGroup, p: &Vec3) -> bool {
+    fn modelspace_point_above_group_portals(&self, group: &WmoGroup, p: &Vec3) -> Option<f32> {
         let neg_z = vec3(0.0, 0.0, -1.0);
-        for (_, portal) in self.group_portals(group) {
+        for (portal_ref, portal) in self.group_portals(group) {
             if portal.plane.normal.z.abs() < 0.001 {
                 continue;
             }
-            let test_point = portal.plane.intersect_line(p, &neg_z);
-
-            let mut max_axis = f32::NEG_INFINITY;
-            let mut axis = 3;
-            for i in 0..3 {
-                if portal.plane.normal[i].abs() > max_axis {
-                    max_axis = portal.plane.normal[i].abs();
-                    axis = i;
-                }
+            if !portal.is_facing_us(p, portal_ref.side) {
+                continue;
             }
-            assert!(axis != 3);
-            if point_inside_polygon(&test_point, &portal.vertices, axis as u8) {
-                return true;
+
+            let t = portal.plane.intersect_line(p, &neg_z);
+            if t < 0.0 {
+                continue;
+            }
+
+            let test_point = p + t * neg_z;
+            let (projected_verts, axis) = portal.project_vertices_to_2d();
+            let projected_test_point = project_vec3_to_vec2(&test_point, axis);
+            if point_inside_polygon(&projected_test_point, &projected_verts) {
+                return Some(t);
             }
         }
-        false
+        None
     }
 
     pub fn get_vertex_color_for_modelspace_point(&self, group_id: u32, point_slice: &[f32]) -> Option<Vec<f32>> {
@@ -275,7 +314,9 @@ impl Wmo {
         if group.colors.len() == 0 {
             return None;
         }
-        let bsp_result = group.bsp_tree.pick_closest_tri_neg_z(&p)?;
+        let mut nodes = vec![];
+        group.bsp_tree.query(&p, &mut nodes, 0);
+        let bsp_result = group.bsp_tree.pick_closest_tri_neg_z(&p, &nodes)?;
         let bary = vec3(bsp_result.bary_x, bsp_result.bary_y, bsp_result.bary_z);
         let mut components = Vec::new();
         for i in 0..4 {
@@ -308,6 +349,17 @@ impl Wmo {
         self.group_text.get(index).cloned()
     }
 
+    pub fn dbg_get_portal_verts(&self, group_id: u32) -> Vec<f32> {
+        let mut result = vec![];
+        for (_, portal) in self.group_portals(self.get_group(group_id)) {
+            result.push(portal.vertices.len() as f32);
+            for v in &portal.vertices {
+                result.extend(v);
+            }
+        }
+        result
+    }
+
     pub fn get_group_ambient_color(&self, group_id: u32, doodad_set_id: u16) -> Vec<f32> {
         let group = self.groups.get(&group_id).unwrap();
         if false && !group.flags.exterior && !group.flags.exterior_lit {
@@ -337,6 +389,8 @@ impl Wmo {
             group_id,
             interior: group.flags.interior,
             exterior: group.flags.exterior,
+            antiportal: group.flags.antiportal,
+            always_draw: group.flags.always_draw,
             exterior_lit: group.flags.exterior_lit,
             show_skybox: group.flags.show_skybox,
             vertex_buffer_offset: group.vertex_buffer_offset,
@@ -412,41 +466,6 @@ impl Wmo {
     }
 }
 
-fn point_inside_polygon(point: &Vec3, verts: &[Vec3], axis_to_flatten: u8) -> bool {
-    let test_axis = match axis_to_flatten {
-        0 => [1, 2],
-        1 => [2, 0],
-        _ => [0, 1],
-    };
-    let test_point = vec2(point[test_axis[0]], point[test_axis[1]]);
-    let mut a = Vec2::default();
-    let mut b = Vec2::default();
-    let mut sign = None;
-    let num_verts = verts.len();
-    for i in 0..num_verts {
-        let a_slice = &verts[i];
-        let b_slice = if i == num_verts - 1 {
-            &verts[0]
-        } else {
-            &verts[i + 1]
-        };
-        a[0] = a_slice[test_axis[0]];
-        a[1] = a_slice[test_axis[1]];
-        b[0] = b_slice[test_axis[0]];
-        b[1] = b_slice[test_axis[1]];
-        let x = (b - a).perp(&(test_point - a));
-        match sign {
-            Some(is_positive) => {
-                if is_positive != x.is_sign_positive() {
-                    return false;
-                }
-            }
-            None => sign = Some(x.is_sign_positive()),
-        }
-    }
-    true
-}
-
 #[derive(DekuRead, Debug, Clone)]
 pub struct Portal {
     pub start_vertex: u16,
@@ -463,30 +482,56 @@ pub struct PortalData {
 
 impl PortalData {
     pub fn new(portal: &Portal, portal_vertices: &[f32]) -> PortalData {
+        let plane: Plane = (&portal.plane).into();
+
         let verts_start = 3 * portal.start_vertex as usize;
         let verts_end = verts_start + 3 * portal.count as usize;
         let verts = &portal_vertices[verts_start..verts_end];
         let mut vertices = Vec::new();
-
         for i in 0..verts.len() / 3 {
             let v = Vec3::from_column_slice(&verts[i * 3..i * 3 + 3]);
+            // Some portals have duplicate vertices???
+            if vertices.iter().any(|existing: &Vec3| existing.eq(&v)) {
+                continue;
+            }
             vertices.push(v);
         }
+
+        // make sure vertices are in a consistent order around the planar polygon
+        let major_axis = plane.major_axis();
+        let mut centroid: Vec3 = vertices.iter().sum();
+        centroid /= vertices.len() as f32;
+        let centroid_proj = project_vec3_to_vec2(&centroid, major_axis);
+        vertices.sort_by(|a, b| {
+            let a_proj = project_vec3_to_vec2(a, major_axis) - centroid_proj;
+            let b_proj = project_vec3_to_vec2(b, major_axis) - centroid_proj;
+            let a_angle = f32::atan2(a_proj.y, a_proj.x);
+            let b_angle = f32::atan2(b_proj.y, b_proj.x);
+            a_angle.partial_cmp(&b_angle).unwrap()
+        });
 
         let mut aabb = AABB::default();
         aabb.set_from_points(&vertices);
 
-        let plane = (&portal.plane).into();
-
-        return PortalData {
+        PortalData {
             vertices,
             aabb,
             plane,
-        };
+        }
     }
-}
 
-impl PortalData {
+    // projects the portal vertices onto a 2D plane determined by the portal's plane. returns
+    // a tuple of the projected points, as well as which axis the points were projected along
+    fn project_vertices_to_2d(&self) -> (Vec<Vec2>, Axis) {
+        let mut result = Vec::with_capacity(self.vertices.len());
+        let major_axis = self.plane.major_axis();
+        for v in &self.vertices {
+            result.push(project_vec3_to_vec2(v, major_axis));
+        }
+
+        (result, major_axis)
+    }
+
     pub fn in_frustum(&self, frustum: &ConvexHull) -> bool {
         frustum.contains_aabb(&self.aabb)
     }
@@ -523,9 +568,9 @@ impl PortalData {
 
     fn is_facing_us(&self, eye: &Vec3, side: i16) -> bool {
         let dist = self.plane.distance(eye);
-        if side < 0 && dist > -0.01 {
+        if side < 0 && dist.is_sign_positive() {
             return false;
-        } else if side > 0 && dist < 0.01 {
+        } else if side > 0 && dist.is_sign_negative() {
             return false;
         }
         return true;
@@ -584,6 +629,8 @@ pub struct WmoGroupDescriptor {
     pub group_id: u32,
     pub interior: bool,
     pub exterior: bool,
+    pub antiportal: bool,
+    pub always_draw: bool,
     pub exterior_lit: bool,
     pub show_skybox: bool,
     pub vertex_buffer_offset: Option<usize>,
@@ -719,6 +766,7 @@ pub struct BspTree {
 }
 
 pub struct BspTreeResult {
+    pub distance: f32,
     pub bary_x: f32,
     pub bary_y: f32,
     pub bary_z: f32,
@@ -729,10 +777,8 @@ pub struct BspTreeResult {
 
 fn neg_z_line_intersection(
     p: &nalgebra_glm::Vec3,
-    tri: (nalgebra_glm::Vec3, nalgebra_glm::Vec3, nalgebra_glm::Vec3),
+    (vertex0, vertex1, vertex2): (nalgebra_glm::Vec3, nalgebra_glm::Vec3, nalgebra_glm::Vec3),
 ) -> Option<(f32, nalgebra_glm::Vec3)> {
-    let (vertex0, vertex1, vertex2) = tri;
-
     // check that the ray will intersect in the xy plane
     let min_x = vertex0[0].min(vertex1[0]).min(vertex2[0]);
     let max_x = vertex0[0].max(vertex1[0]).max(vertex2[0]);
@@ -784,17 +830,11 @@ fn neg_z_line_intersection(
 }
 
 impl BspTree {
-    pub fn contains_point(&self, p: &Vec3) -> bool {
-        self.pick_closest_tri_neg_z(p).is_some()
-    }
-
-    pub fn pick_closest_tri_neg_z(&self, p: &Vec3) -> Option<BspTreeResult> {
+    pub fn pick_closest_tri_neg_z(&self, p: &Vec3, nodes: &[&BspNode]) -> Option<BspTreeResult> {
         let mut min_dist = f32::INFINITY;
         let mut min_bsp_index: Option<usize> = None;
         let mut result_bary = vec3(0.0, 0.0, 0.0);
 
-        let mut nodes = Vec::new();
-        self.query(p, &mut nodes, 0);
         for node in nodes {
             let start = node.faces_start as usize;
             let end = start + node.num_faces as usize;
@@ -812,6 +852,7 @@ impl BspTree {
         let face_index = self.face_indices[min_bsp_index?] as usize;
         let indices = self.get_face_indices(face_index);
         Some(BspTreeResult {
+            distance: min_dist,
             bary_x: result_bary.x,
             bary_y: result_bary.y,
             bary_z: result_bary.z,
@@ -843,6 +884,21 @@ impl BspTree {
             self.vertices[3 * index2 + 2],
         );
         (vertex0, vertex1, vertex2)
+    }
+
+    fn bounding_box_for_nodes(&self, nodes: &[&BspNode]) -> AABB {
+        let mut aabb = AABB::default();
+        for node in nodes {
+            let start = node.faces_start as usize;
+            let end = start + node.num_faces as usize;
+            for i in start..end {
+                let (v0, v1, v2) = self.get_face_vertices(i);
+                aabb.union_point(&v0);
+                aabb.union_point(&v1);
+                aabb.union_point(&v2);
+            }
+        }
+        aabb
     }
 
     fn query<'a>(&'a self, p: &Vec3, nodes: &mut Vec<&'a BspNode>, i: i16) {
@@ -1248,6 +1304,9 @@ pub struct WmoGroupFlags {
     pub water_is_ocean: bool,
     pub antiportal: bool,
     pub show_skybox: bool,
+    pub always_draw: bool,
+    pub unreachable: bool,
+    pub unk_skip_membership_check: bool,
 }
 
 impl WmoGroupFlags {
@@ -1258,12 +1317,15 @@ impl WmoGroupFlags {
             has_vertex_colors: x & 0x4 > 0,
             exterior: x & 0x8 > 0,
             exterior_lit: x & 0x40 > 0,
+            unreachable: x & 0x80 > 0,
             show_exterior_sky: x & 0x100 > 0,
             has_lights: x & 0x200 > 0,
             has_doodads: x & 0x800 > 0,
             has_water: x & 0x1000 > 0,
             interior: x & 0x2000 > 0,
+            always_draw: x & 0x10000 > 0,
             show_skybox: x & 0x40000 > 0,
+            unk_skip_membership_check: x & 0x400000 > 0,
             water_is_ocean: x & 0x80000 > 0,
             antiportal: x & 0x4000000 > 0,
         }

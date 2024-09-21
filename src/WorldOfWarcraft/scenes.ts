@@ -12,7 +12,7 @@ import { GfxRenderInstList } from "../gfx/render/GfxRenderInstManager.js";
 import { rust } from "../rustlib.js";
 import { assert } from "../util.js";
 import * as Viewer from "../viewer.js";
-import { AdtCoord, AdtData, Database, DoodadData, LazyWorldData, ModelData, ParticleEmitter, WmoData, WmoDefinition, WorldData, WowCache } from "./data.js";
+import { AdtCoord, AdtData, Database, DoodadData, LazyWorldData, ModelData, WmoData, WmoDefinition, WorldData, WowCache } from "./data.js";
 import { BaseProgram, LoadingAdtProgram, ModelProgram, ParticleProgram, SkyboxProgram, TerrainProgram, WaterProgram, WmoProgram } from "./program.js";
 import { LoadingAdtRenderer, ModelRenderer, SkyboxRenderer, TerrainRenderer, WaterRenderer, WmoRenderer } from "./render.js";
 import { TextureCache } from "./tex.js";
@@ -261,7 +261,12 @@ export class MapArray<K, V> {
     }
 }
 
-enum CullWmoResult {
+interface CullWmoResult {
+    cameraState: CullCameraState,
+    frustums?: ConvexHull[],
+}
+
+enum CullCameraState {
     CameraInsideAndExteriorVisible,
     CameraInside,
     CameraOutside,
@@ -444,68 +449,94 @@ export class WdtScene implements Viewer.SceneGfx {
         const frame = new FrameData();
         if (this.world.globalWmo) {
             this.cullWmoDef(frame, this.world.globalWmoDef!, this.world.globalWmo);
-        } else {
-            const [worldCamera, worldFrustum] = this.getCameraAndFrustum();
+            return frame;
+        }
 
-            // Do a first pass and get candidate WMOs the camera's inside of,
-            // disable WMOs not in the frustum, and determine if any ADTs are
-            // visible based on where the camera is
-            const wmosToCull: Map<number, [WmoData, WmoDefinition]> = new Map();
-            for (let adt of this.world.adts) {
-                adt.worldSpaceAABB.centerPoint(scratchVec3);
-                const distance = vec3.distance(worldCamera, scratchVec3);
-                adt.setLodLevel(distance < this.ADT_LOD0_DISTANCE ? 0 : 1);
-                adt.setupWmoCandidates(worldCamera, worldFrustum);
+        const [worldCamera, worldFrustum] = this.getCameraAndFrustum();
 
-                for (let def of adt.insideWmoCandidates) {
+        // Do a first pass and get candidate WMOs the camera's inside of,
+        // disable WMOs not in the frustum, and determine if any ADTs are
+        // visible based on where the camera is
+        const wmosToCull: Map<number, [WmoData, WmoDefinition]> = new Map();
+        for (let adt of this.world.adts) {
+            adt.worldSpaceAABB.centerPoint(scratchVec3);
+            const distance = vec3.distance(worldCamera, scratchVec3);
+            adt.setLodLevel(distance < this.ADT_LOD0_DISTANCE ? 0 : 1);
+            adt.setupWmoCandidates(worldCamera, worldFrustum);
+
+            for (let def of adt.insideWmoCandidates) {
+                const wmo = adt.wmos.get(def.wmoId)!;
+                wmosToCull.set(def.uniqueId, [wmo, def]);
+            }
+        }
+
+        let exteriorVisible = true;
+        let exteriorFrustums: ConvexHull[] = [];
+        for (let [wmo, def] of wmosToCull.values()) {
+            const result = this.cullWmoDef(frame, def, wmo);
+            if (result.cameraState === CullCameraState.CameraInside) {
+                exteriorVisible = false;
+            } else if (result.cameraState === CullCameraState.CameraInsideAndExteriorVisible) {
+                for (let frustum of result.frustums!) {
+                    frustum.js_transform(def.modelMatrix as Float32Array);
+                    exteriorFrustums.push(frustum);
+                }
+            }
+        }
+
+        function aabbIsVisible(aabb: AABB): boolean {
+            if (exteriorFrustums.length > 0) {
+                return exteriorFrustums.some(frustum => frustum.js_contains_aabb(
+                    aabb.min[0],
+                    aabb.min[1],
+                    aabb.min[2],
+                    aabb.max[0],
+                    aabb.max[1],
+                    aabb.max[2],
+                ));
+            } else {
+                return worldFrustum.contains(aabb);
+            }
+        }
+
+        const wmosAlreadyCulled = Array.from(wmosToCull.keys());
+        wmosToCull.clear();
+        for (let adt of this.world.adts) {
+            if (exteriorVisible) {
+                if (aabbIsVisible(adt.worldSpaceAABB)) {
+                    for (let i = 0; i < adt.chunkData.length; i++) {
+                        const chunk = adt.chunkData[i];
+                        if (aabbIsVisible(chunk.worldSpaceAABB)) {
+                            frame.addAdtChunk(adt, i);
+                        }
+                    }
+                    for (let i = 0; i < adt.liquids.length; i++) {
+                        const liquid = adt.liquids[i];
+                        if (aabbIsVisible(liquid.worldSpaceAABB)) {
+                            frame.addAdtLiquid(adt, i);
+                        }
+                    }
+                    for (let doodad of adt.lodDoodads()) {
+                        if (aabbIsVisible(doodad.worldAABB)) {
+                            frame.addAdtDoodad(doodad);
+                        }
+                    }
+                }
+                for (let def of adt.visibleWmoCandidates) {
                     const wmo = adt.wmos.get(def.wmoId)!;
-                    wmosToCull.set(def.uniqueId, [wmo, def]);
-                }
-            }
-
-            let exteriorVisible = true;
-            for (let [wmo, def] of wmosToCull.values()) {
-                const cullResult = this.cullWmoDef(frame, def, wmo);
-                if (cullResult === CullWmoResult.CameraInside) {
-                    exteriorVisible = false;
-                }
-            }
-
-            const wmosAlreadyCulled = Array.from(wmosToCull.keys());
-            wmosToCull.clear();
-            for (let adt of this.world.adts) {
-                if (exteriorVisible) {
-                    if (worldFrustum.contains(adt.worldSpaceAABB)) {
-                        for (let i = 0; i < adt.chunkData.length; i++) {
-                            const chunk = adt.chunkData[i];
-                            if (worldFrustum.contains(chunk.worldSpaceAABB)) {
-                                frame.addAdtChunk(adt, i);
-                            }
-                        }
-                        for (let i = 0; i < adt.liquids.length; i++) {
-                            const liquid = adt.liquids[i];
-                            if (worldFrustum.contains(liquid.worldSpaceAABB)) {
-                                frame.addAdtLiquid(adt, i);
-                            }
-                        }
-                        for (let doodad of adt.lodDoodads()) {
-                            if (worldFrustum.contains(doodad.worldAABB)) {
-                                frame.addAdtDoodad(doodad);
-                            }
-                        }
-                    }
-                    for (let def of adt.visibleWmoCandidates) {
-                        const wmo = adt.wmos.get(def.wmoId)!;
-                        if (!wmosAlreadyCulled.includes(def.uniqueId)) {
-                            wmosToCull.set(def.uniqueId, [wmo, def]);
-                        }
+                    if (aabbIsVisible(def.worldAABB) && !wmosAlreadyCulled.includes(def.uniqueId)) {
+                        wmosToCull.set(def.uniqueId, [wmo, def]);
                     }
                 }
             }
+        }
 
-            for (let [wmo, def] of wmosToCull.values()) {
-                this.cullWmoDef(frame, def, wmo);
-            }
+        for (let [wmo, def] of wmosToCull.values()) {
+            this.cullWmoDef(frame, def, wmo);
+        }
+
+        for (let frustum of exteriorFrustums) {
+            frustum.free();
         }
         return frame;
     }
@@ -516,7 +547,7 @@ export class WdtScene implements Viewer.SceneGfx {
         // Check if we're looking at this particular world-space WMO, then do the
         // rest of culling in model space
         if (!worldFrustum.contains(def.worldAABB)) {
-            return CullWmoResult.CameraOutside;
+            return { cameraState: CullCameraState.CameraOutside };
         }
 
         frame.addWmoDef(wmo, def);
@@ -531,18 +562,23 @@ export class WdtScene implements Viewer.SceneGfx {
         let startedInInteriorGroup = false;
         let frustumGroups: number[] = [];
         let memberGroups: number[] = [];
-        for (let group of wmo.groupDescriptors) {
-            if (wmo.wmo.group_contains_modelspace_point(group.group_id, this.modelCamera as Float32Array)) {
-                if (group.show_skybox && wmo.skyboxModel) {
-                    frame.activeWmoSkybox = wmo.skyboxModel.fileId;
-                }
-                if (!group.exterior) {
-                    startedInInteriorGroup = true;
-                }
-                memberGroups.push(group.group_id);
+        const memberGroupId = wmo.wmo.find_group_for_modelspace_point(this.modelCamera as Float32Array);
+        if (memberGroupId !== undefined) {
+            const group = wmo.groupDescriptors[wmo.groupIdToIndex.get(memberGroupId)!];
+            if (group.show_skybox && wmo.skyboxModel) {
+                frame.activeWmoSkybox = wmo.skyboxModel.fileId;
             }
+            if (!group.exterior) {
+                startedInInteriorGroup = true;
+            }
+            memberGroups.push(group.group_id);
+        }
+        for (let group of wmo.groupDescriptors) {
             if (group.exterior && wmo.wmo.group_in_modelspace_frustum(group.group_id, this.modelFrustum)) {
                 frustumGroups.push(group.group_id);
+            }
+            if (group.always_draw) {
+                frame.addWmoGroup(wmo, def, group.group_id);
             }
         }
 
@@ -565,13 +601,19 @@ export class WdtScene implements Viewer.SceneGfx {
             for (let group of wmo.groupDescriptors) {
                 frame.addWmoGroup(wmo, def, group.group_id, true);
             }
-            return CullWmoResult.CameraOutside;
+            return { cameraState: CullCameraState.CameraOutside };
         }
 
         // do portal culling on the root groups to build our visible set
         let visibleGroups: Set<number> = new Set();
+        let exteriorFrustums: ConvexHull[] = [];
         for (let groupId of rootGroups) {
-            let groups = wmo.wmo.find_visible_groups(groupId, this.modelCamera as Float32Array, this.modelFrustum);
+            let groups = wmo.wmo.find_visible_groups(
+                groupId,
+                this.modelCamera as Float32Array,
+                this.modelFrustum,
+                exteriorFrustums
+            );
             for (let visibleGroup of groups) {
                 visibleGroups.add(visibleGroup);
             }
@@ -598,12 +640,12 @@ export class WdtScene implements Viewer.SceneGfx {
         // these groups
         if (startedInInteriorGroup) {
             if (hasExternalGroup) {
-                return CullWmoResult.CameraInsideAndExteriorVisible;
+                return { cameraState: CullCameraState.CameraInsideAndExteriorVisible, frustums: exteriorFrustums };
             } else {
-                return CullWmoResult.CameraInside;
+                return { cameraState: CullCameraState.CameraInside };
             }
         } else {
-            return CullWmoResult.CameraOutside;
+            return { cameraState: CullCameraState.CameraOutside };
         }
     }
 

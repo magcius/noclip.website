@@ -1,3 +1,4 @@
+use wasm_bindgen::prelude::*;
 
 // http://www.mindcontrol.org/~hplus/graphics/expand-bits.html
 pub fn expand_n_to_8(v: u8, n: u8) -> u8 {
@@ -87,4 +88,12 @@ pub fn get_uint24_be(src: &[u8], offs: usize) -> u32 {
 
 pub fn get_uint32_be(src: &[u8], offs: usize) -> u32 {
     ((src[offs] as u32) << 24) | ((src[offs+1] as u32) << 16) | ((src[offs+1] as u32) << 8) | (src[offs+1] as u32)
+}
+
+#[wasm_bindgen]
+extern "C" {
+    // Use `js_namespace` here to bind `console.log(..)` instead of just
+    // `log(..)`
+    #[wasm_bindgen(js_namespace = console)]
+    pub fn log(s: &str);
 }

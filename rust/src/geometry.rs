@@ -1,6 +1,6 @@
 use core::f32;
 
-use nalgebra_glm::{make_mat4, make_vec3, triangle_normal, vec3, vec4, Mat4, Vec3};
+use nalgebra_glm::{make_mat4, make_vec3, triangle_normal, vec2, vec3, vec4, Mat4, Vec3, Vec2};
 use wasm_bindgen::prelude::*;
 
 #[derive(Default, Debug, Clone)]
@@ -24,9 +24,8 @@ impl Plane {
         self.normal.dot(p) + self.d
     }
 
-    pub fn intersect_line(&self, p: &Vec3, dir: &Vec3) -> Vec3 {
-        let t = -(self.normal.dot(p) + self.d) / self.normal.dot(dir);
-        p + t * dir
+    pub fn intersect_line(&self, p: &Vec3, dir: &Vec3) -> f32 {
+        -(self.normal.dot(p) + self.d) / self.normal.dot(dir)
     }
 
     pub fn transform(&mut self, inv_transpose_mat: &Mat4) {
@@ -36,6 +35,23 @@ impl Plane {
         self.normal.y = transformed.y;
         self.normal.z = transformed.z;
         self.d = transformed.w;
+    }
+
+    pub fn major_axis(&self) -> Axis {
+        let mut max_axis = f32::NEG_INFINITY;
+        let mut axis = 3;
+        for i in 0..3 {
+            if self.normal[i].abs() > max_axis {
+                max_axis = self.normal[i].abs();
+                axis = i as u8;
+            }
+        }
+        match axis {
+            0 => Axis::X,
+            1 => Axis::Y,
+            2 => Axis::Z,
+            _ => unreachable!(),
+        }
     }
 }
 
@@ -91,17 +107,21 @@ impl AABB {
         }
     }
 
+    pub fn union_point(&mut self, p: &Vec3) {
+        self.min.x = self.min.x.min(p.x);
+        self.min.y = self.min.y.min(p.y);
+        self.min.z = self.min.z.min(p.z);
+        self.max.x = self.max.x.max(p.x);
+        self.max.y = self.max.y.max(p.y);
+        self.max.z = self.max.z.max(p.z);
+    }
+
     pub fn set_from_points(&mut self, points: &[Vec3]) {
         self.min = Vec3::from_element(f32::INFINITY);
         self.max = Vec3::from_element(f32::NEG_INFINITY);
 
         for p in points {
-            self.min.x = self.min.x.min(p.x);
-            self.min.y = self.min.y.min(p.y);
-            self.min.z = self.min.z.min(p.z);
-            self.max.x = self.max.x.max(p.x);
-            self.max.y = self.max.y.max(p.y);
-            self.max.z = self.max.z.max(p.z);
+            self.union_point(&p);
         }
     }
 
@@ -112,6 +132,14 @@ impl AABB {
             || p.y > self.max.y
             || p.z < self.min.z
             || p.z > self.max.z)
+    }
+
+    pub fn contains_point_ignore_max_z(&self, p: &Vec3) -> bool {
+        !(p.x < self.min.x
+            || p.x > self.max.x
+            || p.y < self.min.y
+            || p.y > self.max.y
+            || p.z < self.min.z)
     }
 }
 
@@ -277,4 +305,38 @@ impl ConvexHull {
     pub fn debug_str(&self) -> String {
         format!("{:?}", self)
     }
+}
+
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum Axis {
+    X,
+    Y,
+    Z,
+}
+
+pub fn project_vec3_to_vec2(v: &Vec3, axis: Axis) -> Vec2 {
+    match axis {
+        Axis::X => vec2(v[1], v[2]),
+        Axis::Y => vec2(v[2], v[0]),
+        Axis::Z => vec2(v[0], v[1]),
+    }
+}
+
+pub fn point_inside_polygon(point: &Vec2, polygon_vertices: &[Vec2]) -> bool {
+    let mut sign = None;
+    let num_verts = polygon_vertices.len();
+    for i in 0..num_verts {
+        let a = &polygon_vertices[i];
+        let b = &polygon_vertices[(i + 1) % num_verts];
+        let x = (b - a).perp(&(point - a));
+        match sign {
+            Some(is_positive) => {
+                if is_positive != x.is_sign_positive() {
+                    return false;
+                }
+            }
+            None => sign = Some(x.is_sign_positive()),
+        }
+    }
+    true
 }
