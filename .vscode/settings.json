@@ -3,5 +3,6 @@
     "files.exclude": {
         "**/*.js.map": true
     },
-    "npm.packageManager": "yarn"
+    "npm.packageManager": "pnpm",
+    "typescript.tsdk": "node_modules\\typescript\\lib"
 }
