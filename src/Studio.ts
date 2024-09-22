@@ -2342,8 +2342,9 @@ export class StudioPanel extends FloatingPanel {
         this.loadStudioSettings();
     }
 
-    private record(): void {
-        if (VideoRecorder.isSupported()) {
+    private async record() {
+        const isSupported = await VideoRecorder.isSupported();
+        if (isSupported) {
             this.recordVideo();
         } else {
             this.playAnimation(true);
@@ -3895,6 +3896,7 @@ class VideoRecorder {
     private encoder: VideoEncoder;
     private target: ArrayBufferTarget;
     private muxer: Muxer<ArrayBufferTarget>;
+    private static codec = 'vp09.00.10.08';
     private framerate = 60;
     private bitrate = 4e7;
 
@@ -3919,7 +3921,7 @@ class VideoRecorder {
         });
 
         this.encoder.configure({
-            codec: 'vp09.00.10.08',
+            codec: VideoRecorder.codec,
             width, height,
             bitrate: this.bitrate,
             framerate: this.framerate,
@@ -3982,10 +3984,15 @@ class VideoRecorder {
         })
     }
 
-    public static isSupported(): boolean {
+    public static async isSupported(): Promise<boolean> {
         if (typeof VideoEncoder === "undefined")
             return false;
 
-        return true;
+        // hopefully 1024x1024 is enough for our purposes
+        const ret = await VideoEncoder.isConfigSupported({
+            codec: this.codec,
+            width: 1024, height: 1024,
+        });
+        return !!ret.supported;
     }
 }
