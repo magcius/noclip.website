@@ -951,55 +951,6 @@ export class WmoData {
         }
         return undefined;
     }
-
-    public getInputLayout(renderCache: GfxRenderCache): GfxInputLayout {
-        const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: 12, frequency: GfxVertexBufferFrequency.PerVertex },
-            { byteStride: 12, frequency: GfxVertexBufferFrequency.PerVertex },
-            { byteStride: 4, frequency: GfxVertexBufferFrequency.PerVertex },
-            { byteStride: 4, frequency: GfxVertexBufferFrequency.PerVertex },
-            { byteStride: 8, frequency: GfxVertexBufferFrequency.PerVertex },
-            { byteStride: 8, frequency: GfxVertexBufferFrequency.PerVertex },
-            { byteStride: 8, frequency: GfxVertexBufferFrequency.PerVertex },
-            { byteStride: 8, frequency: GfxVertexBufferFrequency.PerVertex },
-        ];
-        const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
-            {
-                location: WmoProgram.a_Position,
-                bufferIndex: 0,
-                bufferByteOffset: 0,
-                format: GfxFormat.F32_RGB,
-            },
-            {
-                location: WmoProgram.a_Normal,
-                bufferIndex: 1,
-                bufferByteOffset: 0,
-                format: GfxFormat.F32_RGB,
-            },
-        ];
-        for (let i = 0; i < 2; i++) {
-            vertexAttributeDescriptors.push({
-                location: WmoProgram.a_Color0 + i,
-                bufferIndex: 2 + i,
-                bufferByteOffset: 0,
-                format: GfxFormat.U8_RGBA,
-            });
-        }
-        for (let i = 0; i < 4; i++) {
-            vertexAttributeDescriptors.push({
-                location: WmoProgram.a_TexCoord0 + i,
-                bufferIndex: 4 + i,
-                bufferByteOffset: 0,
-                format: GfxFormat.F32_RG,
-            });
-        }
-        const indexBufferFormat: GfxFormat = GfxFormat.U16_R;
-        return renderCache.createInputLayout({
-            vertexAttributeDescriptors,
-            vertexBufferDescriptors,
-            indexBufferFormat,
-        });
-    }
 }
 
 

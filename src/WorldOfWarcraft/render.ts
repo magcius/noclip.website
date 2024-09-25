@@ -73,6 +73,7 @@ import { FrameData, MAP_SIZE, MapArray, View, WdtScene } from "./scenes.js";
 import { TextureCache } from "./tex.js";
 import { WowWmoGroupDescriptor } from "../../rust/pkg/index.js";
 import { drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk.js";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 
 type TextureMappingArray = (TextureMapping | null)[];
 
@@ -493,12 +494,12 @@ export class WmoRenderer {
     private dayNight: number;
 
     constructor(device: GfxDevice, private wmo: WmoData, private textureCache: TextureCache, renderHelper: GfxRenderHelper) {
+        this.inputLayout = this.getInputLayout(renderHelper.renderCache);
         this.gfxVertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, this.wmo.vertex_buffer.buffer);
         this.gfxIndexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, this.wmo.index_buffer.buffer);
 
         for (let fileID of this.wmo.wmo.group_file_ids) {
             const groupDescriptor = this.wmo.wmo.get_group_descriptor(fileID);
-            this.inputLayout = wmo.getInputLayout(renderHelper.renderCache);
             this.vertexBuffers.push(this.getGroupVertexBuffers(groupDescriptor));
             this.indexBuffers.push(this.getGroupIndexBuffer(groupDescriptor));
             this.batches.push(wmo.getBatches(groupDescriptor));
@@ -514,6 +515,55 @@ export class WmoRenderer {
                 );
             }
         }
+    }
+
+    private getInputLayout(renderCache: GfxRenderCache): GfxInputLayout {
+        const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
+            { byteStride: 12, frequency: GfxVertexBufferFrequency.PerVertex },
+            { byteStride: 12, frequency: GfxVertexBufferFrequency.PerVertex },
+            { byteStride: 4, frequency: GfxVertexBufferFrequency.PerVertex },
+            { byteStride: 4, frequency: GfxVertexBufferFrequency.PerVertex },
+            { byteStride: 8, frequency: GfxVertexBufferFrequency.PerVertex },
+            { byteStride: 8, frequency: GfxVertexBufferFrequency.PerVertex },
+            { byteStride: 8, frequency: GfxVertexBufferFrequency.PerVertex },
+            { byteStride: 8, frequency: GfxVertexBufferFrequency.PerVertex },
+        ];
+        const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
+            {
+                location: WmoProgram.a_Position,
+                bufferIndex: 0,
+                bufferByteOffset: 0,
+                format: GfxFormat.F32_RGB,
+            },
+            {
+                location: WmoProgram.a_Normal,
+                bufferIndex: 1,
+                bufferByteOffset: 0,
+                format: GfxFormat.F32_RGB,
+            },
+        ];
+        for (let i = 0; i < 2; i++) {
+            vertexAttributeDescriptors.push({
+                location: WmoProgram.a_Color0 + i,
+                bufferIndex: 2 + i,
+                bufferByteOffset: 0,
+                format: GfxFormat.U8_RGBA,
+            });
+        }
+        for (let i = 0; i < 4; i++) {
+            vertexAttributeDescriptors.push({
+                location: WmoProgram.a_TexCoord0 + i,
+                bufferIndex: 4 + i,
+                bufferByteOffset: 0,
+                format: GfxFormat.F32_RG,
+            });
+        }
+        const indexBufferFormat: GfxFormat = GfxFormat.U16_R;
+        return renderCache.createInputLayout({
+            vertexAttributeDescriptors,
+            vertexBufferDescriptors,
+            indexBufferFormat,
+        });
     }
 
     private getGroupIndexBuffer(group: WowWmoGroupDescriptor): GfxIndexBufferDescriptor {
