@@ -1038,6 +1038,7 @@ export interface ControllerSpec {
 }
 
 export interface ScriptData {
+    name: string;
     intConsts: Int32Array;
     floatConsts: Float32Array;
     code: DataView;
@@ -1110,6 +1111,7 @@ export function parseEvent(buffer: ArrayBufferSlice): ScriptData {
 
     const mapStart = view.getUint32(scriptStart + 0x04, true);
     const mapEnd = view.getUint32(scriptStart + 0x08, true);
+    const nameStart = view.getUint32(scriptStart + 0x0C, true);
 
     // numbers indicating which controllers are of which sizes?
 
@@ -1135,6 +1137,7 @@ export function parseEvent(buffer: ArrayBufferSlice): ScriptData {
         mapPoints.push({ entrypoint, heading, pos: vec3.fromValues(x, y, z) });
     }
 
+    const name = readString(buffer, scriptStart + nameStart);
 
     let arrayDescriptionStart = -1;
     let arrayDescriptionCount = -1;
@@ -1224,5 +1227,5 @@ export function parseEvent(buffer: ArrayBufferSlice): ScriptData {
         arrays.push(arr);
     }
 
-    return { mapPoints, intConsts, floatConsts, code, shared, controllers, arrays };
+    return { mapPoints, intConsts, floatConsts, code, shared, controllers, name, arrays };
 }
