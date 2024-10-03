@@ -346,8 +346,8 @@ void mainVS() {
     gl_Position = Mul(u_Projection, vec4(viewPosition, 1.0));
 
     int numColorBuffers = int(shaderParams.z);
-    v_Color0 = numColorBuffers >= 1 ? a_Color0.bgra / 255.0 : vec4(0.0, 0.0, 0.0, 1.0);
-    v_Color1 = numColorBuffers >= 2 ? a_Color1.rgba / 255.0 : vec4(0.0, 0.0, 0.0, 1.0);
+    v_Color0 = numColorBuffers >= 1 ? a_Color0.bgra : vec4(0.0, 0.0, 0.0, 1.0);
+    v_Color1 = numColorBuffers >= 2 ? a_Color1.rgba : vec4(0.0, 0.0, 0.0, 1.0);
 
     int vertexShader = int(shaderParams.x);
     if (vertexShader == ${rust.WowWmoMaterialVertexShader.None}) {
@@ -813,7 +813,7 @@ void mainPS() {
     vec4 tex0 = texture(SAMPLER_2D(u_Texture0), v_ChunkCoords);
     vec4 tex1 = texture(SAMPLER_2D(u_Texture1), v_ChunkCoords);
     vec4 tex2 = texture(SAMPLER_2D(u_Texture2), v_ChunkCoords);
-    vec4 tex3 = texture(SAMPLER_3D(u_Texture3), v_ChunkCoords);
+    vec4 tex3 = texture(SAMPLER_2D(u_Texture3), v_ChunkCoords);
     vec4 tex = mix(mix(mix(tex0, tex1, alphaBlend.g), tex2, alphaBlend.b), tex3, alphaBlend.a);
     vec4 diffuse = 2.0 * tex * v_Color;
 
@@ -941,8 +941,8 @@ layout(std140) uniform ub_MaterialParams {
 
 layout(binding = 0) uniform sampler2D u_Texture0;
 layout(binding = 1) uniform sampler2D u_Texture1;
-layout(binding = 1) uniform sampler2D u_Texture2;
-layout(binding = 1) uniform sampler2D u_Texture3;
+layout(binding = 2) uniform sampler2D u_Texture2;
+layout(binding = 3) uniform sampler2D u_Texture3;
 
 varying vec2 v_UV0;
 varying vec2 v_UV1;
@@ -956,7 +956,7 @@ varying float v_InstanceID;
 #ifdef VERT
 layout(location = ${ModelProgram.a_Position}) attribute vec3 a_Position;
 layout(location = ${ModelProgram.a_BoneWeights}) attribute vec4 a_BoneWeights;
-layout(location = ${ModelProgram.a_BoneIndices}) attribute vec4 a_BoneIndices;
+layout(location = ${ModelProgram.a_BoneIndices}) attribute uvec4 a_BoneIndices;
 layout(location = ${ModelProgram.a_Normal}) attribute vec3 a_Normal;
 layout(location = ${ModelProgram.a_TexCoord0}) attribute vec2 a_TexCoord0;
 layout(location = ${ModelProgram.a_TexCoord1}) attribute vec2 a_TexCoord1;
@@ -988,12 +988,12 @@ void calcBillboardMat(inout mat4 m) {
     vec3 forwardVec = normalize(u_CameraPos.xyz - m[3].xyz);
     vec3 leftVec = normalize(cross(upVec, forwardVec));
     upVec = normalize(cross(forwardVec, leftVec));
-    m[0].xyz = forwardVec;
-    m[1].xyz = leftVec;
-    m[2].xyz = upVec;
+    m[0] = vec4(forwardVec, 0.0);
+    m[1] = vec4(leftVec, 0.0);
+    m[2] = vec4(upVec, 0.0);
 }
 
-Mat4x3 getBoneMatrix(int index) {
+Mat4x3 getBoneMatrix(uint index) {
     BoneParams bone = bones[index];
     DoodadInstance params = instances[gl_InstanceID];
     mat4 modelMatrix = convertMat4x4(params.transform);
@@ -1007,10 +1007,10 @@ Mat4x3 getBoneMatrix(int index) {
 
 Mat4x3 getCombinedBoneMat() {
     Mat4x3 result = _Mat4x3(0.0);
-    Fma(result, getBoneMatrix(int(a_BoneIndices.x)), a_BoneWeights.x);
-    Fma(result, getBoneMatrix(int(a_BoneIndices.y)), a_BoneWeights.y);
-    Fma(result, getBoneMatrix(int(a_BoneIndices.z)), a_BoneWeights.z);
-    Fma(result, getBoneMatrix(int(a_BoneIndices.w)), a_BoneWeights.w);
+    Fma(result, getBoneMatrix(a_BoneIndices.x), a_BoneWeights.x);
+    Fma(result, getBoneMatrix(a_BoneIndices.y), a_BoneWeights.y);
+    Fma(result, getBoneMatrix(a_BoneIndices.z), a_BoneWeights.z);
+    Fma(result, getBoneMatrix(a_BoneIndices.w), a_BoneWeights.w);
     return result;
 }
 
@@ -1351,12 +1351,12 @@ varying vec2 v_UV2;
 #ifdef VERT
 void mainVS() {
     DoodadInstance doodad = instances[gl_InstanceID];
-    int vertNum = gl_VertexID % 4;
-    int texelY = gl_VertexID / 4;
-    vec3 pos = texelFetch(SAMPLER_2D(u_DataTex), ivec2(0, texelY), 0).xyz;
-    v_Color = texelFetch(SAMPLER_2D(u_DataTex), ivec2(1, texelY), 0);
-    vec2 scale = texelFetch(SAMPLER_2D(u_DataTex), ivec2(2, texelY), 0).xy;
-    vec2 texPos = texelFetch(SAMPLER_2D(u_DataTex), ivec2(3, texelY), 0).xy;
+    int vertNum = int(gl_VertexID) % 4;
+    int texelY = int(gl_VertexID) / 4;
+    vec3 pos = texelFetch(TEXTURE(u_DataTex), ivec2(0, texelY), 0).xyz;
+    v_Color = texelFetch(TEXTURE(u_DataTex), ivec2(1, texelY), 0);
+    vec2 scale = texelFetch(TEXTURE(u_DataTex), ivec2(2, texelY), 0).xy;
+    vec2 texPos = texelFetch(TEXTURE(u_DataTex), ivec2(3, texelY), 0).xy;
     v_Position = Mul(_Mat4x4(doodad.transform), vec4(pos, 1.0)).xyz;
     vec4 viewSpacePos = Mul(_Mat4x4(u_View), vec4(v_Position, 1.0));
     vec2 texScale = ub_texScale.xy;

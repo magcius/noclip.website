@@ -68,9 +68,9 @@ export function preprocessShader_GLSL(vendorInfo: GfxVendorInfo, type: 'vert' | 
             maxSamplerBinding = Math.max(maxSamplerBinding, binding);
 
             const [textureType, samplerType] = getSeparateSamplerTypes(combinedSamplerType);
-            return type === 'frag' ? `
+            return `
 layout(set = ${set}, binding = ${(binding * 2) + 0}) uniform texture${textureType} T_${samplerName};
-layout(set = ${set}, binding = ${(binding * 2) + 1}) uniform sampler${samplerType} S_${samplerName};`.trim() : '';
+layout(set = ${set}, binding = ${(binding * 2) + 1}) uniform sampler${samplerType} S_${samplerName};`.trim();
         });
 
         let bufferBinding = maxSamplerBinding * 2 + 2;
@@ -79,7 +79,7 @@ layout(set = ${set}, binding = ${(binding * 2) + 1}) uniform sampler${samplerTyp
             return `layout(${layout2}set = ${set}, binding = ${bufferBinding++}) uniform ${rest}`;
         });
 
-        rest = rest.replace(type === 'frag' ? /^\b(varying|in)\b/gm : /^\b(varying|out)\b/gm, (substr, tok) => {
+        rest = rest.replace(type === 'frag' ? /^\b(flat\W+)?(varying|in)\b/gm : /^\b(flat\W+)?(varying|out)\b/gm, (tok) => {
             return `layout(location = ${location++}) ${tok}`;
         });
 

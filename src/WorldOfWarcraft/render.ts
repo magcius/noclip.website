@@ -547,7 +547,7 @@ export class WmoRenderer {
                 location: WmoProgram.a_Color0 + i,
                 bufferIndex: 2 + i,
                 bufferByteOffset: 0,
-                format: GfxFormat.U8_RGBA,
+                format: GfxFormat.U8_RGBA_NORM,
             });
         }
         for (let i = 0; i < 4; i++) {

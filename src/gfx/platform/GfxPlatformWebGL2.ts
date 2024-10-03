@@ -1009,7 +1009,6 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         const gl_shader_frag: WebGLShader | null = null;
         const compileState = GfxProgramCompileStateP_GL.NeedsCompile;
         const program: GfxProgramP_GL = { _T: _T.Program, ResourceUniqueId: this.getNextUniqueId(), descriptor, compileState, gl_program, gl_shader_vert, gl_shader_frag };
-        this._tryCompileProgram(program);
         return program;
     }
 
@@ -1063,7 +1062,10 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             const format = translateVertexFormat(attr.format);
             vertexBufferFormats.push(format);
 
-            gl.vertexAttribPointer(attr.location, format.size, format.type, format.normalized, 0, 0);
+            if (isFormatSizedInteger(attr.format))
+                gl.vertexAttribIPointer(attr.location, format.size, format.type, 0, 0);
+            else
+                gl.vertexAttribPointer(attr.location, format.size, format.type, format.normalized, 0, 0);
 
             if (inputLayoutBuffer.frequency === GfxVertexBufferFrequency.PerInstance) {
                 gl.vertexAttribDivisor(attr.location, 1);
@@ -1088,6 +1090,16 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         const drawMode = translatePrimitiveTopology(descriptor.topology);
         const program = descriptor.program as GfxProgramP_GL;
         const inputLayout = descriptor.inputLayout as GfxInputLayoutP_GL | null;
+
+        if (program.compileState === GfxProgramCompileStateP_GL.NeedsCompile) {
+            if (inputLayout !== null) {
+                this._setVAO(inputLayout.vao);
+                this._tryCompileProgram(program);
+                this._setVAO(null);
+            } else {
+                this._tryCompileProgram(program);
+            }
+        }
 
         const megaState = descriptor.megaStateDescriptor;
         const colorAttachmentFormats = descriptor.colorAttachmentFormats.slice();
@@ -2268,7 +2280,10 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
                 const format = inputLayout.vertexBufferFormats[i];
 
                 const inputLayoutBuffer = inputLayout.vertexBufferDescriptors[attr.bufferIndex]!;
-                gl.vertexAttribPointer(attr.location, format.size, format.type, format.normalized, inputLayoutBuffer.byteStride, bufferOffset);
+                if (isFormatSizedInteger(attr.format))
+                    gl.vertexAttribIPointer(attr.location, format.size, format.type, inputLayoutBuffer.byteStride, bufferOffset);
+                else
+                    gl.vertexAttribPointer(attr.location, format.size, format.type, format.normalized, inputLayoutBuffer.byteStride, bufferOffset);
             }
 
             assert((indexBuffer !== null) === (inputLayout.indexBufferFormat !== null));

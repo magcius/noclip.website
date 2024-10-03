@@ -7,6 +7,7 @@ import { FormatFlags, FormatTypeFlags, getFormatByteSize, getFormatFlags, getFor
 import { GfxComputePipeline, GfxQueryPool, GfxReadback, GfxResource, GfxTextureImpl, _T, defaultBindingLayoutSamplerDescriptor } from "./GfxPlatformImpl.js";
 import { align, assert, assertExists } from "./GfxPlatformUtil.js";
 import { gfxBindingLayoutDescriptorEqual } from './GfxPlatformObjUtil.js';
+import { IS_DEVELOPMENT } from "../../BuildVersion.js";
 
 interface GfxBufferP_WebGPU extends GfxBuffer {
     gpuBuffer: GPUBuffer;
@@ -661,11 +662,13 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
         if (indexBuffer !== null)
             this.gpuRenderPassEncoder!.setIndexBuffer(getPlatformBuffer(indexBuffer.buffer), assertExists(inputLayout.indexFormat), indexBuffer.byteOffset);
 
-        for (let i = 0; i < vertexBuffers!.length; i++) {
-            const b = vertexBuffers![i];
-            if (b === null)
-                continue;
-            this.gpuRenderPassEncoder!.setVertexBuffer(i, getPlatformBuffer(b.buffer), b.byteOffset);
+        if (vertexBuffers !== null) {
+            for (let i = 0; i < vertexBuffers.length; i++) {
+                const b = vertexBuffers![i];
+                if (b === null)
+                    continue;
+                this.gpuRenderPassEncoder!.setVertexBuffer(i, getPlatformBuffer(b.buffer), b.byteOffset);
+            }
         }
     }
 
@@ -1097,21 +1100,13 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             throw "whoops";
         }
 
-        // Workaround for https://github.com/gfx-rs/naga/issues/1355
-        for (const depthTextureName of ['u_TextureFramebufferDepth']) {
-            if (!code.includes(depthTextureName)) continue;
-
-            code = code.replace(`var T_${depthTextureName}: texture_2d<f32>;`, `var T_${depthTextureName}: texture_depth_2d;`);
-            code = code.replace(new RegExp(`textureSample\\\(T_${depthTextureName}(.*)\\\);$`, 'gm'), (sub, cap) => {
-                return `vec4<f32>(textureSample(T_${depthTextureName}${cap}), 0.0, 0.0, 0.0);`
-            });
-        }
-
-        // Workaround for unreported Naga bug
-        code = code.replace('<i32> = textureDimensions(', '<u32> = textureDimensions(');
-
         const shaderModule = this.device.createShaderModule({ code });
-        return { module: shaderModule, entryPoint: 'main' };
+        const stage = { module: shaderModule, entryPoint: 'main' };
+        if (IS_DEVELOPMENT) {
+            (stage as any).sourceText = sourceText;
+            (stage as any).code = code;
+        }
+        return stage;
     }
 
     private _createShaderStage(sourceText: string, shaderStage: 'vertex' | 'fragment' | 'compute', shadingLanguage: GfxShadingLanguage): GPUProgrammableStage {
