@@ -1,33 +1,33 @@
 
-import * as CMB from './cmb.js';
 import * as CMAB from './cmab.js';
+import * as CMB from './cmb.js';
 import * as CSAB from './csab.js';
 import * as ZSI from './zsi.js';
 
 import * as Viewer from '../viewer.js';
 
-import { DeviceProgram } from '../Program.js';
-import AnimationController from '../AnimationController.js';
 import { mat4, vec3, vec4 } from 'gl-matrix';
-import { GfxBuffer, GfxBufferUsage, GfxFormat, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxSampler, GfxDevice, GfxVertexBufferDescriptor, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxInputLayout, GfxCompareMode, GfxProgram, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D, GfxIndexBufferDescriptor, GfxTexture, GfxTextureDescriptor, GfxTextureUsage, GfxTextureDimension } from '../gfx/platform/GfxPlatform.js';
-import { fillMatrix4x4, fillVec4, fillColor, fillMatrix4x3, fillVec4v } from '../gfx/helpers/UniformBufferHelpers.js';
-import { colorNewFromRGBA, Color, colorNewCopy, colorCopy, TransparentBlack, colorMult, colorAdd, colorClamp, OpaqueBlack } from '../Color.js';
-import { getTextureFormatName } from './pica_texture.js';
-import { TextureHolder, LoadedTexture, TextureMapping } from '../TextureHolder.js';
-import { nArray, assert, align } from '../util.js';
-import { GfxRenderInstManager, GfxRenderInst, GfxRendererLayer, makeSortKey } from '../gfx/render/GfxRenderInstManager.js';
-import { makeFormat, FormatFlags, FormatTypeFlags, FormatCompFlags, getFormatByteSize } from '../gfx/platform/GfxPlatformFormat.js';
-import { Camera, computeViewMatrixSkybox, computeViewMatrix } from '../Camera.js';
-import { makeStaticDataBuffer, makeStaticDataBufferFromSlice } from '../gfx/helpers/BufferHelpers.js';
-import { getDebugOverlayCanvas2D, drawWorldSpaceLine } from '../DebugJunk.js';
-import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
-import { reverseDepthForDepthOffset } from '../gfx/helpers/ReversedDepthHelpers.js';
+import AnimationController from '../AnimationController.js';
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
-import { convertToCanvas } from '../gfx/helpers/TextureConversionHelpers.js';
+import { Camera, computeViewMatrix, computeViewMatrixSkybox } from '../Camera.js';
+import { Color, colorAdd, colorClamp, colorCopy, colorMult, colorNewCopy, colorNewFromRGBA, OpaqueBlack, TransparentBlack } from '../Color.js';
+import { drawWorldSpaceLine, getDebugOverlayCanvas2D } from '../DebugJunk.js';
+import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers.js';
 import { GfxShaderLibrary } from '../gfx/helpers/GfxShaderLibrary.js';
+import { reverseDepthForDepthOffset } from '../gfx/helpers/ReversedDepthHelpers.js';
+import { convertToCanvas } from '../gfx/helpers/TextureConversionHelpers.js';
+import { fillColor, fillMatrix4x3, fillMatrix4x4, fillVec4, fillVec4v } from '../gfx/helpers/UniformBufferHelpers.js';
+import { GfxBuffer, GfxBufferUsage, GfxCompareMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxMipFilterMode, GfxProgram, GfxSampler, GfxTexFilterMode, GfxTexture, GfxTextureDescriptor, GfxTextureDimension, GfxTextureUsage, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxWrapMode, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform.js';
+import { getFormatByteSize, setFormatCompFlags } from '../gfx/platform/GfxPlatformFormat.js';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
+import { GfxRendererLayer, GfxRenderInst, GfxRenderInstManager, makeSortKey } from '../gfx/render/GfxRenderInstManager.js';
 import { transformVec3Mat4w0 } from '../MathHelpers.js';
-import { BumpMode, FresnelSelector, LightingConfig, LutInput, TexCoordConfig } from './cmb.js';
+import { DeviceProgram } from '../Program.js';
+import { LoadedTexture, TextureHolder, TextureMapping } from '../TextureHolder.js';
+import { assert, nArray } from '../util.js';
 import { ColorAnimType } from './cmab.js';
+import { BumpMode, FresnelSelector, LightingConfig, LutInput, TexCoordConfig } from './cmb.js';
+import { getTextureFormatName } from './pica_texture.js';
 
 function surfaceToCanvas(textureLevel: CMB.TextureLevel): HTMLCanvasElement {
     const canvas = convertToCanvas(ArrayBufferSlice.fromView(textureLevel.pixels), textureLevel.width, textureLevel.height);
@@ -138,17 +138,12 @@ layout(std140) uniform ub_MaterialParams {
 layout(std140) uniform ub_PrmParams {
     Mat4x3 u_BoneMatrix[16];
     Mat4x3 u_ViewMatrix;
-    vec4 u_PrmMisc[2];
+    vec4 u_PrmMisc[1];
 };
 
-#define u_PosScale        (u_PrmMisc[0].x)
-#define u_TexCoord0Scale  (u_PrmMisc[0].y)
-#define u_TexCoord1Scale  (u_PrmMisc[0].z)
-#define u_TexCoord2Scale  (u_PrmMisc[0].w)
-#define u_BoneWeightScale (u_PrmMisc[1].x)
-#define u_BoneDimension   (u_PrmMisc[1].y)
-#define u_UseVertexColor  (u_PrmMisc[1].z)
-#define u_HasTangent      (u_PrmMisc[1].w)
+#define u_BoneDimension   (u_PrmMisc[0].x)
+#define u_UseVertexColor  (u_PrmMisc[0].y)
+#define u_HasTangent      (u_PrmMisc[0].z)
 
 uniform sampler2D u_Texture0;
 uniform sampler2D u_Texture1;
@@ -595,11 +590,11 @@ ivec4 UnpackParams(float t_Param) {
 
 vec2 CalcTextureSrc(in int t_TexSrcIdx) {
     if (t_TexSrcIdx == 0)
-        return a_TexCoord0 * u_TexCoord0Scale;
+        return a_TexCoord0;
     else if (t_TexSrcIdx == 1)
-        return a_TexCoord1 * u_TexCoord1Scale;
+        return a_TexCoord1;
     else if (t_TexSrcIdx == 2)
-        return a_TexCoord2 * u_TexCoord2Scale;
+        return a_TexCoord2;
     else
         // Should not be possible.
         return vec2(0.0, 0.0);
@@ -647,7 +642,7 @@ void main() {
     // Compute our matrix.
     Mat4x3 t_BoneMatrix;
 
-    vec4 t_BoneWeights = a_BoneWeights * u_BoneWeightScale;
+    vec4 t_BoneWeights = a_BoneWeights;
 
     // Mask off bone dimension.
     if (u_BoneDimension < 4.0)
@@ -672,7 +667,7 @@ void main() {
         t_BoneMatrix = u_BoneMatrix[int(a_BoneIndices.x)];
     }
 
-    vec4 t_LocalPosition = vec4(a_Position * u_PosScale, 1.0);
+    vec4 t_LocalPosition = vec4(a_Position, 1.0);
     vec4 t_ModelPosition = Mul(_Mat4x4(t_BoneMatrix), t_LocalPosition);
     vec4 t_ViewPosition = Mul(_Mat4x4(u_ViewMatrix), t_ModelPosition);
     gl_Position = Mul(u_Projection, t_ViewPosition);
@@ -686,7 +681,7 @@ void main() {
     v_Depth = gl_Position.w;
     v_View = -t_ViewPosition;
     
-    if(u_IsFragLighting > 0.0) {
+    if (u_IsFragLighting > 0.0) {
         v_QuatNormal = u_HasTangent > 0.0 ? CalcQuatFromTangent(t_ViewTangent) : CalcQuatFromNormal(v_Normal);
     }
 
@@ -1028,32 +1023,13 @@ class MaterialInstance {
     }
 }
 
-function translateDataType(dataType: CMB.DataType, size: number, normalized: boolean): GfxFormat {
-    function translateDataTypeFlags(dataType: CMB.DataType) {
-        switch (dataType) {
-        case CMB.DataType.UByte: return FormatTypeFlags.U8;
-        case CMB.DataType.UShort: return FormatTypeFlags.U16;
-        case CMB.DataType.UInt: return FormatTypeFlags.U32;
-        case CMB.DataType.Byte: return FormatTypeFlags.S8;
-        case CMB.DataType.Short: return FormatTypeFlags.S16;
-        case CMB.DataType.Int: return FormatTypeFlags.S32;
-        case CMB.DataType.Float: return FormatTypeFlags.F32;
-        }
-    }
-
-    const formatTypeFlags = translateDataTypeFlags(dataType);
-    const formatCompFlags = size as FormatCompFlags;
-    const formatFlags = (formatTypeFlags !== FormatTypeFlags.F32 && normalized) ? FormatFlags.Normalized : FormatFlags.None;
-    return makeFormat(formatTypeFlags, formatCompFlags, formatFlags);
-}
-
 class PrmsData {
     constructor(public prms: CMB.Prms, public indexBufferOffset: number) {
     }
 }
 
 class SepdData {
-    private perInstanceBuffer: GfxBuffer | null = null;
+    private buffers: GfxBuffer[] = [];
     public vertexBufferDescriptors: GfxVertexBufferDescriptor[] = [];
     public indexBufferDescriptor: GfxIndexBufferDescriptor;
     public inputLayout: GfxInputLayout;
@@ -1061,55 +1037,67 @@ class SepdData {
     public indexBuffer: GfxBuffer;
     public prmsData: PrmsData[] = [];
 
-    constructor(cache: GfxRenderCache, vertexBuffer: GfxBuffer, indexDataSlice: ArrayBufferSlice, vatr: CMB.VatrChunk, public sepd: CMB.Sepd) {
+    constructor(cache: GfxRenderCache, indexDataSlice: ArrayBufferSlice, vatr: CMB.VatrChunk, public sepd: CMB.Sepd) {
         const device = cache.device;
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [];
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [];
-        let bufferNum = 0;
-        let perInstanceBufferIndex = -1;
-
-        const constantBufferData = new Float32Array(32);
-        let constantBufferWordOffset = 0;
         this.useVertexColor = sepd.hasVertexColors;
 
-        const bindVertexAttrib = (location: number, size: number, normalized: boolean, bufferOffs: number, vertexAttrib: CMB.SepdVertexAttrib) => {
-            const format = translateDataType(vertexAttrib.dataType, size, normalized);
-            if (vertexAttrib.mode === CMB.SepdVertexAttribMode.ARRAY && bufferOffs >= 0) {
-                const bufferIndex = bufferNum++;
-                this.vertexBufferDescriptors[bufferIndex] = { buffer: vertexBuffer, byteOffset: vertexAttrib.start + bufferOffs };
-                vertexBufferDescriptors[bufferIndex] = { byteStride: getFormatByteSize(format), frequency: GfxVertexBufferFrequency.PerVertex, };
-                vertexAttributeDescriptors.push({ location, format, bufferIndex, bufferByteOffset: 0 });
+        const transformVertexData = (buffer: ArrayBufferSlice, dataType: CMB.DataType, scale: number) => {
+            if (dataType === CMB.DataType.Float) {
+                return buffer.createTypedArray(Float32Array);
+            } else if (dataType === CMB.DataType.Byte) {
+                return Float32Array.from(buffer.createTypedArray(Int8Array), (v) => v * scale);
+            } else if (dataType === CMB.DataType.UByte) {
+                return Float32Array.from(buffer.createTypedArray(Uint8Array), (v) => v * scale);
+            } else if (dataType === CMB.DataType.Short) {
+                return Float32Array.from(buffer.createTypedArray(Int16Array), (v) => v * scale);
+            } else if (dataType === CMB.DataType.UShort) {
+                return Float32Array.from(buffer.createTypedArray(Uint16Array), (v) => v * scale);
+            } else if (dataType === CMB.DataType.Int) {
+                return Float32Array.from(buffer.createTypedArray(Int32Array), (v) => v * scale);
+            } else if (dataType === CMB.DataType.UInt) {
+                return Float32Array.from(buffer.createTypedArray(Uint32Array), (v) => v * scale);
             } else {
-                if (perInstanceBufferIndex === -1)
-                    perInstanceBufferIndex = bufferNum++;
-                this.vertexBufferDescriptors[perInstanceBufferIndex] = { buffer: null!, byteOffset: 0 };
-                vertexBufferDescriptors[perInstanceBufferIndex] = { byteStride: 0, frequency: GfxVertexBufferFrequency.Constant, };
-                vertexAttributeDescriptors.push({ location, format, bufferIndex: perInstanceBufferIndex, bufferByteOffset: constantBufferWordOffset * 0x04 });
-                constantBufferData.set(vertexAttrib.constant, constantBufferWordOffset);
-                constantBufferWordOffset += 0x04;
+                throw "whoops";
             }
         };
 
-        bindVertexAttrib(DMPProgram.a_Position,    3, false, vatr.positionByteOffset,  sepd.position);
-        bindVertexAttrib(DMPProgram.a_Normal,      3, true,  vatr.normalByteOffset,    sepd.normal);
-        if(sepd.tangent !== null && sepd.hasTangents)
-            bindVertexAttrib(DMPProgram.a_Tangent, 3, true,  vatr.tangentByteOffset,   sepd.tangent);
+        // Transform everything into floats.
+        const loadVertexAttrib = (location: number, format: GfxFormat, data: ArrayBufferSlice | null, vertexAttrib: CMB.SepdVertexAttrib | null) => {
+            let buffer: GfxBuffer;
+            let frequency = GfxVertexBufferFrequency.PerVertex;
+            if (vertexAttrib === null || data === null || data.byteLength === 0 || vertexAttrib.mode === CMB.SepdVertexAttribMode.CONSTANT) {
+                const constantData = new Float32Array(4);
+                if (vertexAttrib !== null)
+                    constantData.set(vertexAttrib.constant);
+                buffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, constantData.buffer);
+                frequency = GfxVertexBufferFrequency.Constant;
+            } else {
+                const newData = transformVertexData(data.slice(vertexAttrib.start), vertexAttrib.dataType, vertexAttrib.scale);
+                buffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, newData.buffer, newData.byteOffset, newData.byteLength);
+            }
 
-        bindVertexAttrib(DMPProgram.a_Color,       4, true,  vatr.colorByteOffset,     sepd.color);
-        bindVertexAttrib(DMPProgram.a_TexCoord0,   2, false, vatr.texCoord0ByteOffset, sepd.texCoord0);
-        bindVertexAttrib(DMPProgram.a_TexCoord1,   2, false, vatr.texCoord1ByteOffset, sepd.texCoord1);
-        bindVertexAttrib(DMPProgram.a_TexCoord2,   2, false, vatr.texCoord2ByteOffset, sepd.texCoord2);
+            const bufferIndex = this.vertexBufferDescriptors.length;
+            this.buffers.push(buffer);
+            this.vertexBufferDescriptors.push({ buffer, byteOffset: 0 });
+            vertexBufferDescriptors.push({ byteStride: getFormatByteSize(format), frequency });
+            vertexAttributeDescriptors.push({ location, format, bufferIndex, bufferByteOffset: 0 });
+        };
+
+        loadVertexAttrib(DMPProgram.a_Position,  GfxFormat.F32_RGB, vatr.position,  sepd.position);
+        loadVertexAttrib(DMPProgram.a_Normal,    GfxFormat.F32_RGB, vatr.normal,    sepd.normal);
+        loadVertexAttrib(DMPProgram.a_Tangent,   GfxFormat.F32_RGB, sepd.hasTangents ? vatr.tangent : null, sepd.tangent);
+        loadVertexAttrib(DMPProgram.a_Color,     GfxFormat.F32_RGBA, vatr.color,     sepd.color);
+        loadVertexAttrib(DMPProgram.a_TexCoord0, GfxFormat.F32_RG, vatr.texCoord0, sepd.texCoord0);
+        loadVertexAttrib(DMPProgram.a_TexCoord1, GfxFormat.F32_RG, vatr.texCoord1, sepd.texCoord1);
+        loadVertexAttrib(DMPProgram.a_TexCoord2, GfxFormat.F32_RG, vatr.texCoord2, sepd.texCoord2);
 
         const hasBoneIndices = sepd.prms[0].skinningMode !== CMB.SkinningMode.SINGLE_BONE && sepd.boneIndices.dataType === CMB.DataType.UByte;
-        bindVertexAttrib(DMPProgram.a_BoneIndices, sepd.boneDimension, false, hasBoneIndices ? vatr.boneIndicesByteOffset : -1, sepd.boneIndices);
+        loadVertexAttrib(DMPProgram.a_BoneIndices, setFormatCompFlags(GfxFormat.F32_R, sepd.boneDimension), hasBoneIndices ? vatr.boneIndices : null, sepd.boneIndices);
         const hasBoneWeights = sepd.prms[0].skinningMode === CMB.SkinningMode.SMOOTH_SKINNING;
-        bindVertexAttrib(DMPProgram.a_BoneWeights, sepd.boneDimension, false, hasBoneWeights ? vatr.boneWeightsByteOffset : -1, sepd.boneWeights);
-
-        if (perInstanceBufferIndex !== -1) {
-            this.perInstanceBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, new Uint8Array(constantBufferData.buffer).buffer);
-            this.vertexBufferDescriptors[perInstanceBufferIndex]!.buffer = this.perInstanceBuffer;
-        }
+        loadVertexAttrib(DMPProgram.a_BoneWeights, setFormatCompFlags(GfxFormat.F32_R, sepd.boneDimension), hasBoneWeights ? vatr.boneWeights : null, sepd.boneWeights);
 
         let indexBufferCount = 0;
         for (let i = 0; i < this.sepd.prms.length; i++) {
@@ -1141,8 +1129,8 @@ class SepdData {
 
     public destroy(device: GfxDevice): void {
         device.destroyBuffer(this.indexBuffer);
-        if (this.perInstanceBuffer !== null)
-            device.destroyBuffer(this.perInstanceBuffer);
+        for (let i = 0; i < this.buffers.length; i++)
+            device.destroyBuffer(this.buffers[i]);
     }
 }
 
@@ -1168,7 +1156,7 @@ class ShapeInstance {
             const renderInst = renderInstManager.newRenderInst();
             renderInst.setDrawCount(prms.prm.count, prmsData.indexBufferOffset);
 
-            let offs = renderInst.allocateUniformBuffer(DMPProgram.ub_PrmParams, 12*16+12 +4*2);
+            let offs = renderInst.allocateUniformBuffer(DMPProgram.ub_PrmParams, 12*16+12 + 4);
             const prmParamsMapped = renderInst.mapUniformBufferF32(DMPProgram.ub_PrmParams);
 
             for (let i = 0; i < 16; i++) {
@@ -1188,8 +1176,7 @@ class ShapeInstance {
 
             offs += fillMatrix4x3(prmParamsMapped, offs, viewMatrix);
 
-            offs += fillVec4(prmParamsMapped, offs, sepd.position.scale, sepd.texCoord0.scale, sepd.texCoord1.scale, sepd.texCoord2.scale);
-            offs += fillVec4(prmParamsMapped, offs, sepd.boneWeights.scale, sepd.boneDimension, this.sepdData.useVertexColor ? 1:0, this.sepdData.sepd.hasTangents ? 1:0);
+            offs += fillVec4(prmParamsMapped, offs, sepd.boneDimension, this.sepdData.useVertexColor ? 1 : 0, this.sepdData.sepd.hasTangents ? 1 : 0);
 
             renderInstManager.submitRenderInst(renderInst);
         }
@@ -1206,16 +1193,11 @@ export class CmbData {
     public sepdData: SepdData[] = [];
     public inverseBindPoseMatrices: mat4[] = [];
 
-    private vertexBuffer: GfxBuffer;
-
     constructor(cache: GfxRenderCache, public cmb: CMB.CMB) {
-        const device = cache.device;
-        this.vertexBuffer = makeStaticDataBufferFromSlice(device, GfxBufferUsage.Vertex, cmb.vatrChunk.dataBuffer);
-
         const vatrChunk = cmb.vatrChunk;
 
         for (let i = 0; i < this.cmb.sepds.length; i++)
-            this.sepdData[i] = new SepdData(cache, this.vertexBuffer, cmb.indexBuffer, vatrChunk, this.cmb.sepds[i]);
+            this.sepdData[i] = new SepdData(cache, cmb.indexBuffer, vatrChunk, this.cmb.sepds[i]);
 
         const tempBones = nArray(cmb.bones.length, () => mat4.create());
         for (let i = 0; i < cmb.bones.length; i++) {
@@ -1233,7 +1215,6 @@ export class CmbData {
     public destroy(device: GfxDevice): void {
         for (let i = 0; i < this.sepdData.length; i++)
             this.sepdData[i].destroy(device);
-        device.destroyBuffer(this.vertexBuffer);
     }
 }
 

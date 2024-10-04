@@ -1,7 +1,7 @@
 
 import { assert, readString } from '../util.js';
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
-import { mat4, vec4 } from 'gl-matrix';
+import { mat4, ReadonlyVec4, vec4 } from 'gl-matrix';
 import { TextureFormat, decodeTexture, computeTextureByteSize, getTextureFormatFromGLFormat } from './pica_texture.js';
 import { GfxCullMode, GfxBlendMode, GfxBlendFactor, GfxMegaStateDescriptor, GfxCompareMode, GfxChannelWriteMask, GfxChannelBlendState, GfxTextureDimension } from '../gfx/platform/GfxPlatform.js';
 import { makeMegaState } from '../gfx/helpers/GfxMegaStateDescriptorHelpers.js';
@@ -11,16 +11,15 @@ import { AnimationKeyframeHermite, sampleAnimationTrack,} from './csab.js';
 import { clamp } from '../MathHelpers.js';
 
 export interface VatrChunk {
-    dataBuffer: ArrayBufferSlice;
-    positionByteOffset: number;
-    colorByteOffset: number;
-    normalByteOffset: number;
-    tangentByteOffset: number;
-    texCoord0ByteOffset: number;
-    texCoord1ByteOffset: number;
-    texCoord2ByteOffset: number;
-    boneIndicesByteOffset: number;
-    boneWeightsByteOffset: number;
+    position: ArrayBufferSlice;
+    color: ArrayBufferSlice;
+    normal: ArrayBufferSlice;
+    tangent: ArrayBufferSlice | null;
+    texCoord0: ArrayBufferSlice;
+    texCoord1: ArrayBufferSlice;
+    texCoord2: ArrayBufferSlice;
+    boneIndices: ArrayBufferSlice;
+    boneWeights: ArrayBufferSlice;
 }
 
 export const enum Version {
@@ -804,48 +803,40 @@ function readVatrChunk(cmb: CMB, buffer: ArrayBufferSlice): void {
     assert(readString(buffer, 0x00, 0x04) === 'vatr');
     const fullBufferSize = view.getUint32(0x04, true);
 
-    let idx = 0x0C;
-
-    function readSlice(baseOffs: number = 0): number {
+    function readSlice(): ArrayBufferSlice {
         const size = view.getUint32(idx + 0x00, true);
         const offs = view.getUint32(idx + 0x04, true);
         idx += 0x08;
 
-        if (size === 0)
-            return -1;
-        else
-            return offs - baseOffs;
+        return buffer.subarray(offs, size);
     }
 
-    const baseOffs = readSlice();
-    const dataBuffer = buffer.slice(baseOffs, fullBufferSize);
+    let idx = 0x0C;
+    const position = readSlice();
+    const normal = readSlice();
 
-    const positionByteOffset = 0;
-    const normalByteOffset = readSlice(baseOffs);
-
-    let tangentByteOffset = 0;
+    let tangent: ArrayBufferSlice | null = null;
     if (cmb.version > Version.Ocarina)
-        tangentByteOffset = readSlice(baseOffs);
+        tangent = readSlice();
 
-    const colorByteOffset = readSlice(baseOffs);
-    const texCoord0ByteOffset = readSlice(baseOffs);
-    const texCoord1ByteOffset = readSlice(baseOffs);
-    const texCoord2ByteOffset = readSlice(baseOffs);
+    const color = readSlice();
+    const texCoord0 = readSlice();
+    const texCoord1 = readSlice();
+    const texCoord2 = readSlice();
 
-    const boneIndicesByteOffset = readSlice(baseOffs);
-    const boneWeightsByteOffset = readSlice(baseOffs);
+    const boneIndices = readSlice();
+    const boneWeights = readSlice();
 
     cmb.vatrChunk = {
-        dataBuffer,
-        positionByteOffset,
-        normalByteOffset,
-        tangentByteOffset,
-        colorByteOffset,
-        texCoord0ByteOffset,
-        texCoord1ByteOffset,
-        texCoord2ByteOffset,
-        boneIndicesByteOffset,
-        boneWeightsByteOffset,
+        position,
+        normal,
+        tangent,
+        color,
+        texCoord0,
+        texCoord1,
+        texCoord2,
+        boneIndices,
+        boneWeights,
     };
 }
 
@@ -964,21 +955,21 @@ export interface SepdVertexAttrib {
     start: number;
     scale: number;
     dataType: DataType;
-    constant: vec4;
+    constant: ReadonlyVec4;
 }
 
 export class Sepd {
     public prms: Prms[] = [];
 
-    public position!: SepdVertexAttrib;
-    public normal!: SepdVertexAttrib;
+    public position: SepdVertexAttrib;
+    public normal: SepdVertexAttrib;
     public tangent: SepdVertexAttrib | null = null;
-    public color!: SepdVertexAttrib;
-    public texCoord0!: SepdVertexAttrib;
-    public texCoord1!: SepdVertexAttrib;
-    public texCoord2!: SepdVertexAttrib;
-    public boneIndices!: SepdVertexAttrib;
-    public boneWeights!: SepdVertexAttrib;
+    public color: SepdVertexAttrib;
+    public texCoord0: SepdVertexAttrib;
+    public texCoord1: SepdVertexAttrib;
+    public texCoord2: SepdVertexAttrib;
+    public boneIndices: SepdVertexAttrib;
+    public boneWeights: SepdVertexAttrib;
 
     public boneDimension: number;
     public hasVertexColors: boolean;
@@ -1047,8 +1038,6 @@ function readSepdChunk(cmb: CMB, buffer: ArrayBufferSlice): Sepd {
     sepd.texCoord2 = readVertexAttrib();
     sepd.boneIndices = readVertexAttrib();
     sepd.boneWeights = readVertexAttrib();
-
-    // take you to the next dimension, the
     sepd.boneDimension = view.getUint16(sepdArrIdx + 0x00, true);
 
     sepdArrIdx += 0x04;
