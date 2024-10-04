@@ -207,7 +207,9 @@ export function getFormatSamplerKind(fmt: GfxFormat): GfxSamplerFormatKind {
     if (!!(flags & FormatFlags.Normalized))
         return GfxSamplerFormatKind.Float;
     const typeFlags = getFormatTypeFlags(fmt);
-    if (typeFlags === FormatTypeFlags.F16 || typeFlags === FormatTypeFlags.F32)
+    if (typeFlags === FormatTypeFlags.F32)
+        return GfxSamplerFormatKind.UnfilterableFloat;
+    else if (typeFlags === FormatTypeFlags.F16)
         return GfxSamplerFormatKind.Float;
     else if (typeFlags === FormatTypeFlags.U8 || typeFlags === FormatTypeFlags.U16 || typeFlags === FormatTypeFlags.U32)
         return GfxSamplerFormatKind.Uint;

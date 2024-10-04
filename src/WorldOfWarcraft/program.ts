@@ -10,7 +10,7 @@ import {
     fillVec4,
     fillVec4v,
 } from "../gfx/helpers/UniformBufferHelpers.js";
-import { GfxBindingLayoutDescriptor } from "../gfx/platform/GfxPlatform.js";
+import { GfxBindingLayoutDescriptor, GfxSamplerFormatKind, GfxTextureDimension } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderInst } from "../gfx/render/GfxRenderInstManager.js";
 import { rust } from "../rustlib.js";
 import { LiquidCategory } from "./data.js";
@@ -1317,6 +1317,12 @@ export class ParticleProgram extends BaseProgram {
         {
             numUniformBuffers: super.numUniformBuffers + 2,
             numSamplers: super.numSamplers + 4,
+            samplerEntries: [
+                { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float },
+                { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float },
+                { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float },
+                { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.UnfilterableFloat },
+            ],
         },
     ];
 
@@ -1336,10 +1342,10 @@ layout(std140) uniform ub_DoodadParams {
     DoodadInstance instances[${MAX_DOODAD_INSTANCES}];
 };
 
-layout(binding = 0) uniform sampler2D u_DataTex;
-layout(binding = 1) uniform sampler2D u_Tex0;
-layout(binding = 2) uniform sampler2D u_Tex1;
-layout(binding = 3) uniform sampler2D u_Tex2;
+layout(binding = 0) uniform sampler2D u_Tex0;
+layout(binding = 1) uniform sampler2D u_Tex1;
+layout(binding = 2) uniform sampler2D u_Tex2;
+layout(binding = 3) uniform sampler2D u_DataTex;
 
 varying float v_InstanceID;
 varying vec4 v_Color;

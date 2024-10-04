@@ -214,10 +214,10 @@ export class ModelRenderer {
         const dataMapping = new TextureMapping();
         dataMapping.gfxTexture = emitter.updateDataTex(device);
         return [
-            dataMapping,
             this.getTextureMapping(emitter.textures[0]),
             this.getTextureMapping(emitter.textures[1]),
             this.getTextureMapping(emitter.textures[2]),
+            dataMapping,
         ];
     }
 

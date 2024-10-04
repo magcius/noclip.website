@@ -455,6 +455,8 @@ function translateQueryPoolType(type: GfxQueryPoolType): GPUQueryType {
 function translateSampleType(type: GfxSamplerFormatKind): GPUTextureSampleType {
     if (type === GfxSamplerFormatKind.Float)
         return 'float';
+    else if (type === GfxSamplerFormatKind.UnfilterableFloat)
+        return 'unfilterable-float';
     else if (type === GfxSamplerFormatKind.Depth)
         return 'depth';
     else
