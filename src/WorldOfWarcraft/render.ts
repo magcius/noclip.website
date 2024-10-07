@@ -580,13 +580,15 @@ export class WmoRenderer {
         buffers.push({ buffer: this.gfxVertexBuffer, byteOffset: offs }); // normals
         offs += group.num_vertices * 0x0C;
         for (let i = 0; i < 2; i++) {
-            buffers.push({ buffer: this.gfxVertexBuffer, byteOffset: offs }); // colors
-            if (i < group.num_color_bufs)
+            const hasBuffer = i < group.num_color_bufs;
+            buffers.push({ buffer: this.gfxVertexBuffer, byteOffset: hasBuffer ? offs : 0 }); // colors
+            if (hasBuffer)
                 offs += group.num_vertices * 0x04;
         }
         for (let i = 0; i < 4; i++) {
-            buffers.push({ buffer: this.gfxVertexBuffer, byteOffset: offs }); // uvs
-            if (i < group.num_uv_bufs)
+            const hasBuffer = i < group.num_uv_bufs;
+            buffers.push({ buffer: this.gfxVertexBuffer, byteOffset: hasBuffer ? offs : 0 }); // uvs
+            if (hasBuffer)
                 offs += group.num_vertices * 0x08;
         }
         return buffers;
