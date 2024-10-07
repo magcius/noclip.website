@@ -434,6 +434,7 @@ export class ModelRenderer {
             device.destroyBuffer(indexBuffer.buffer);
         }
         device.destroyBuffer(this.particleQuadIndices.buffer);
+        this.boneTexture.destroy(device);
     }
 }
 
