@@ -865,7 +865,14 @@ export class ModelProgram extends BaseProgram {
     public static bindingLayouts: GfxBindingLayoutDescriptor[] = [
         {
             numUniformBuffers: super.numUniformBuffers + 2,
-            numSamplers: super.numSamplers + 4,
+            numSamplers: super.numSamplers + 5,
+            samplerEntries: [
+                { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float },
+                { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float },
+                { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float },
+                { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float },
+                { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.UnfilterableFloat },
+            ],
         },
     ];
 
@@ -927,7 +934,6 @@ struct BoneParams {
 layout(std140) uniform ub_DoodadParams {
     M2Light modelLights[4];
     DoodadInstance instances[${MAX_DOODAD_INSTANCES}];
-    BoneParams bones[${MAX_BONE_TRANSFORMS}];
 };
 
 layout(std140) uniform ub_MaterialParams {
@@ -943,6 +949,7 @@ layout(binding = 0) uniform sampler2D u_Texture0;
 layout(binding = 1) uniform sampler2D u_Texture1;
 layout(binding = 2) uniform sampler2D u_Texture2;
 layout(binding = 3) uniform sampler2D u_Texture3;
+layout(binding = 4) uniform sampler2D u_TextureBoneMatrix;
 
 varying vec2 v_UV0;
 varying vec2 v_UV1;
@@ -993,15 +1000,33 @@ void calcBillboardMat(inout mat4 m) {
     m[2] = vec4(upVec, 0.0);
 }
 
+mat4 getBoneTransform(uint boneIndex) {
+    vec4 mx = texelFetch(u_TextureBoneMatrix, ivec2(1, boneIndex), 0);
+    vec4 my = texelFetch(u_TextureBoneMatrix, ivec2(2, boneIndex), 0);
+    vec4 mz = texelFetch(u_TextureBoneMatrix, ivec2(3, boneIndex), 0);
+    return transpose(mat4(mx, my, mz, vec4(0, 0, 0, 1)));
+}
+
+mat4 getPostBillboardTransform(uint boneIndex) {
+    vec4 mx = texelFetch(u_TextureBoneMatrix, ivec2(4, boneIndex), 0);
+    vec4 my = texelFetch(u_TextureBoneMatrix, ivec2(5, boneIndex), 0);
+    vec4 mz = texelFetch(u_TextureBoneMatrix, ivec2(6, boneIndex), 0);
+    return transpose(mat4(mx, my, mz, vec4(0, 0, 0, 1)));
+}
+
+vec4 getBoneParams(uint boneIndex) {
+    return texelFetch(u_TextureBoneMatrix, ivec2(0, boneIndex), 0);
+}
+
 Mat4x3 getBoneMatrix(uint index) {
-    BoneParams bone = bones[index];
     DoodadInstance params = instances[gl_InstanceID];
+    vec4 boneParams = getBoneParams(index);
     mat4 modelMatrix = convertMat4x4(params.transform);
-    mat4 transform = modelMatrix * convertMat4x4(bone.postBillboardTransform);
-    if (bone.params.x > 0.0) {
+    mat4 transform = modelMatrix * getPostBillboardTransform(index);
+    if (boneParams.x > 0.0) {
         calcBillboardMat(transform);
     }
-    transform = transform * convertMat4x4(bone.transform);
+    transform = transform * getBoneTransform(index);
     return convertMat4(transform);
 }
 

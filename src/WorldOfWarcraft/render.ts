@@ -1,4 +1,4 @@
-import { mat4, vec3 } from "gl-matrix";
+import { mat4, ReadonlyMat4, vec3 } from "gl-matrix";
 import { invlerp, lerp } from "../MathHelpers.js";
 import { TextureMapping } from "../TextureHolder.js";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
@@ -26,9 +26,10 @@ import {
     GfxVertexAttributeDescriptor,
     GfxVertexBufferDescriptor,
     GfxVertexBufferFrequency,
+    makeTextureDescriptor2D,
 } from "../gfx/platform/GfxPlatform.js";
 import { GfxFormat } from "../gfx/platform/GfxPlatformFormat.js";
-import { GfxBuffer, GfxInputLayout } from "../gfx/platform/GfxPlatformImpl.js";
+import { GfxBuffer, GfxInputLayout, GfxTexture } from "../gfx/platform/GfxPlatformImpl.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
 import {
     GfxRenderInstManager,
@@ -40,6 +41,7 @@ import { assert, assertExists } from "../util.js";
 import {
     AdtData,
     BlpData,
+    BoneData,
     ChunkData,
     DoodadData,
     LiquidInstance,
@@ -86,8 +88,8 @@ export class ModelRenderer {
     private particleQuadIndices: GfxIndexBufferDescriptor;
     private inputLayout: GfxInputLayout;
     private particleInputLayout: GfxInputLayout;
+    private boneTexture: BoneTexture;
     public visible = true;
-    private scratchMat4 = mat4.create();
 
     constructor(
         private device: GfxDevice,
@@ -145,6 +147,7 @@ export class ModelRenderer {
             vertexBufferDescriptors,
             indexBufferFormat,
         });
+        this.boneTexture = new BoneTexture(device, this.model.boneData.length);
 
         this.vertexBuffer = {
             buffer: makeStaticDataBuffer(
@@ -248,18 +251,20 @@ export class ModelRenderer {
 
         const visibleDoodads = doodads.filter((d) => d.visible);
 
+        const device = renderInstManager.gfxRenderCache.device;
+        // currently all instances share the same bones, but eventually it'd be
+        // nice to animate them independently
+        this.boneTexture.uploadMatrices(device, this.model.boneData);
+
         for (let doodadChunk of chunk(visibleDoodads, MAX_DOODAD_INSTANCES)) {
             const template = renderInstManager.pushTemplate();
             template.setAllowSkippingIfPipelineNotReady(false);
             const numVec4s = 3;
             const instanceParamsSize = 12 + 4 * numVec4s;
-            const boneParamsSize = 16 * 2 + 4 * 1;
             const lightSize = 4 * 4;
             const baseOffs = template.allocateUniformBuffer(
                 ModelProgram.ub_DoodadParams,
-                lightSize * 4 +
-                instanceParamsSize * MAX_DOODAD_INSTANCES +
-                boneParamsSize * MAX_BONE_TRANSFORMS,
+                lightSize * 4 + instanceParamsSize * MAX_DOODAD_INSTANCES,
             );
             let offs = baseOffs;
             const mapped = template.mapUniformBufferF32(
@@ -312,62 +317,19 @@ export class ModelRenderer {
                 offs += fillMatrix4x3(mapped, offs, doodad.modelMatrix);
                 offs += fillVec4v(mapped, offs, doodad.ambientColor); // interiorAmbientColor
                 if (doodad.color !== null) {
-                    offs += fillVec4(
-                        mapped,
-                        offs, // interiorDirectColor
-                        doodad.color[0],
-                        doodad.color[1],
-                        doodad.color[2],
-                        doodad.color[3],
-                    );
+                    // interiorDirectColor
+                    offs += fillVec4v(mapped, offs, doodad.color);
                 } else {
                     offs += fillVec4(mapped, offs, 0);
-                }
-                let intExtBlendOrSkyboxBlend;
-                if (doodad.isSkybox) {
-                    intExtBlendOrSkyboxBlend = doodad.skyboxBlend;
-                } else {
-                    intExtBlendOrSkyboxBlend = doodad.applyInteriorLighting
-                        ? 1.0
-                        : 0.0;
                 }
                 offs += fillVec4(
                     mapped,
                     offs,
                     doodad.applyInteriorLighting ? 1.0 : 0.0,
                     doodad.applyExteriorLighting ? 1.0 : 0.0,
-                    intExtBlendOrSkyboxBlend,
+                    doodad.isSkybox ? doodad.skyboxBlend : doodad.applyInteriorLighting ? 1.0 : 0.0,
                     doodad.isSkybox ? 1.0 : 0.0,
                 );
-            }
-            offs =
-                baseOffs +
-                lightSize * 4 +
-                instanceParamsSize * MAX_DOODAD_INSTANCES;
-            assert(
-                this.model.boneData.length < MAX_BONE_TRANSFORMS,
-                `model got too many bones (${this.model.boneData.length})`,
-            );
-            mat4.identity(this.scratchMat4);
-            for (let i = 0; i < MAX_BONE_TRANSFORMS; i++) {
-                if (i < this.model.boneData.length) {
-                    const bone = this.model.boneData[i];
-                    offs += fillMatrix4x4(mapped, offs, bone.transform);
-                    offs += fillMatrix4x4(
-                        mapped,
-                        offs,
-                        bone.postBillboardTransform,
-                    );
-                    offs += fillVec4(
-                        mapped,
-                        offs,
-                        bone.isSphericalBillboard ? 1 : 0,
-                    );
-                } else {
-                    offs += fillMatrix4x4(mapped, offs, this.scratchMat4);
-                    offs += fillMatrix4x4(mapped, offs, this.scratchMat4);
-                    offs += fillVec4(mapped, offs, 0);
-                }
             }
 
             for (let i = 0; i < this.skinData.length; i++) {
@@ -384,6 +346,7 @@ export class ModelRenderer {
                     renderInst.setDrawCount(batch.submesh.index_count, batch.submesh.index_start);
                     renderInst.setInstanceCount(doodadChunk.length);
                     const mappings = this.skinBatchTextures[i][j];
+                    mappings[4] = this.boneTexture.getTextureMapping();
                     renderInst.setSamplerBindingsFromTextureMappings(mappings);
                     batch.setModelParams(renderInst);
                     renderInstManager.submitRenderInst(renderInst);
@@ -479,6 +442,45 @@ function chunk<T>(arr: T[], chunkSize: number): T[][] {
     for (let i = 0; i < arr.length; i += chunkSize)
         ret.push(arr.slice(i, i + chunkSize));
     return ret;
+}
+
+class BoneTexture {
+    static RGBA_WIDTH: number = 3 + 3 + 1; // two 4x3 mats, one vec4 of params
+
+    private texture: GfxTexture;
+    private textureMapping = new TextureMapping();
+
+    constructor(device: GfxDevice, private maxBones: number) {
+        this.texture = device.createTexture(makeTextureDescriptor2D(
+            GfxFormat.F32_RGBA,
+            BoneTexture.RGBA_WIDTH,
+            maxBones,
+            1,
+        ));
+        this.textureMapping.gfxTexture = this.texture;
+    }
+
+    public uploadMatrices(device: GfxDevice, bones: BoneData[]) {
+        const textureData = new Float32Array(bones.length * BoneTexture.RGBA_WIDTH * 4);
+        for (let i = 0; i < bones.length; i++) {
+            const bone = bones[i];
+            let dstOffs = i * BoneTexture.RGBA_WIDTH * 4;
+            dstOffs += fillVec4(textureData, dstOffs,
+                bone.isSphericalBillboard ? 1.0 : 0.0,
+            );
+            dstOffs += fillMatrix4x3(textureData, dstOffs, bone.transform);
+            dstOffs += fillMatrix4x3(textureData, dstOffs, bone.postBillboardTransform);
+        }
+        device.uploadTextureData(this.texture, 0, [textureData]);
+    }
+
+    public getTextureMapping(): TextureMapping {
+        return this.textureMapping;
+    }
+
+    public destroy(device: GfxDevice): void {
+        device.destroyTexture(this.texture);
+    }
 }
 
 export class WmoRenderer {
@@ -589,7 +591,7 @@ export class WmoRenderer {
         }
         return buffers;
     }
-    
+
     private getBatchTextureMapping(batch: WmoBatchData): TextureMappingArray {
         const mappings = [];
         for (let blp of batch.textures) {
