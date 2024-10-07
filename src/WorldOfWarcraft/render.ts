@@ -497,8 +497,8 @@ export class WmoRenderer {
 
     constructor(device: GfxDevice, private wmo: WmoData, private textureCache: TextureCache, renderHelper: GfxRenderHelper) {
         this.inputLayout = this.getInputLayout(renderHelper.renderCache);
-        this.gfxVertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, this.wmo.vertex_buffer.buffer);
-        this.gfxIndexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, this.wmo.index_buffer.buffer);
+        this.gfxVertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, this.wmo.vertexBuffer.buffer);
+        this.gfxIndexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, this.wmo.indexBuffer.buffer);
 
         for (let fileID of this.wmo.wmo.group_file_ids) {
             const groupDescriptor = this.wmo.wmo.get_group_descriptor(fileID);

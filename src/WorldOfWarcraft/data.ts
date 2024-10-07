@@ -833,8 +833,8 @@ export class WmoData {
     public groupIds: number[] = [];
     public groupLiquids: MapArray<number, number> = new MapArray();
     public groupDescriptors: WowWmoGroupDescriptor[] = [];
-    public vertex_buffer: Uint8Array;
-    public index_buffer: Uint16Array;
+    public vertexBuffer: Uint8Array;
+    public indexBuffer: Uint16Array;
 
     constructor(public fileId: number) {}
 
@@ -935,8 +935,8 @@ export class WmoData {
             }
         }
 
-        this.vertex_buffer = this.wmo.take_vertex_data();
-        this.index_buffer = this.wmo.take_indices();
+        this.vertexBuffer = this.wmo.take_vertex_data();
+        this.indexBuffer = this.wmo.take_indices();
     }
 
     public getBatches(group: WowWmoGroupDescriptor): WmoBatchData[] {
