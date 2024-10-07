@@ -1001,7 +1001,7 @@ void calcBillboardMat(inout mat4 m) {
 }
 
 mat4 getBoneTransform(uint boneIndex) {
-    vec4 mx = texelFetch(u_TextureBoneMatrix, ivec2(1, boneIndex), 0);
+    vec4 mx = texelFetch(TEXTURE(u_TextureBoneMatrix), ivec2(1, boneIndex), 0);
     vec4 my = texelFetch(u_TextureBoneMatrix, ivec2(2, boneIndex), 0);
     vec4 mz = texelFetch(u_TextureBoneMatrix, ivec2(3, boneIndex), 0);
     return transpose(mat4(mx, my, mz, vec4(0, 0, 0, 1)));
