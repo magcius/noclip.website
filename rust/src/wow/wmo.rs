@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 
 use deku::prelude::*;
 use js_sys::Array;
-use nalgebra_glm::{make_vec3, vec2, vec3, Vec2, Vec3};
+use nalgebra_glm::{make_vec3, vec3, Vec2, Vec3};
 use wasm_bindgen::prelude::*;
 
 use crate::{
