@@ -1,11 +1,14 @@
-name: Build
+name: Build and deploy
 
 on:
   push:
+    paths-ignore:
+      - '**.md'
   pull_request:
 
 jobs:
   build:
+    name: Build and deploy
     runs-on: ubuntu-latest
 
     steps:
