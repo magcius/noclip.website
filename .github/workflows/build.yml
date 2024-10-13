@@ -1,0 +1,43 @@
+name: Build
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v2
+
+    - name: Cache Node dependencies
+      uses: actions/setup-node@v4
+      with:
+        cache: pnpm
+
+    - name: Cache Rust workspace
+      uses: Swatinem/rust-cache@v2
+      with:
+        workspaces: rust
+
+    - name: Install Node dependencies
+      run: pnpm install
+
+    - name: Run build
+      run: pnpm run build
+
+    - name: Deploy
+      if: github.ref == 'refs/heads/master'
+      uses: burnett01/rsync-deployments@7.0.1
+      with:
+        switches: -va --delete-after --exclude=data/ --exclude=priv/ --exclude=.well-known/
+        path: dist/
+        remote_path: noclip.website/
+        remote_host: iad1-shared-e1-29.dreamhost.com
+        remote_user: gznoclip
+        remote_key: ${{ secrets.DEPLOY_KEY }}
