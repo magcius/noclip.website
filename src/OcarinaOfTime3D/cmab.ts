@@ -7,10 +7,9 @@ import { Color, colorFromRGBA } from "../Color.js";
 import { Texture, TextureLevel, Version, calcTexMtx } from "./cmb.js";
 import { decodeTexture, computeTextureByteSize, getTextureFormatFromGLFormat } from "./pica_texture.js";
 import { getPointHermite } from "../Spline.js";
-import { TextureMapping } from "../TextureHolder.js";
-import { CtrTextureHolder } from "./render.js";
+import { CmabData } from "./render.js";
 import { lerp } from "../MathHelpers.js";
-import { GfxTextureDimension } from "../gfx/platform/GfxPlatform.js";
+import { GfxTexture, GfxTextureDimension } from "../gfx/platform/GfxPlatform.js";
 
 // CMAB (CTR Material Animation Binary)
 // Seems to be inspired by the .cmata file format. Perhaps an earlier version of NW4C used it?
@@ -493,13 +492,17 @@ export class ColorAnimator {
 }
 
 export class TexturePaletteAnimator {
-    constructor(public animationController: AnimationController, public cmab: CMAB, public animEntry: AnimationEntry) {
+    constructor(public animationController: AnimationController, public cmabData: CmabData, public animEntry: AnimationEntry) {
         assert(animEntry.animationType === AnimationType.TexturePalette);
     }
 
-    public fillTextureMapping(textureHolder: CtrTextureHolder, textureMapping: TextureMapping): void {
-        const animFrame = getAnimFrame(this.cmab, this.animationController.getTimeInFrames());
-        const textureIndex = sampleAnimationTrack(this.animEntry.tracks[0], animFrame);
-        textureHolder.fillTextureMapping(textureMapping, this.cmab.textures[textureIndex].name);
+    private getTextureIndex(): number {
+        const animFrame = getAnimFrame(this.cmabData.cmab, this.animationController.getTimeInFrames());
+        return sampleAnimationTrack(this.animEntry.tracks[0], animFrame);
+    }
+
+    public getTexture(): GfxTexture {
+        const textureIdx = this.getTextureIndex();
+        return this.cmabData.textureData[textureIdx].gfxTexture;
     }
 }
