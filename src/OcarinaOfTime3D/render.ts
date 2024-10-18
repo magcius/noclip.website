@@ -6,7 +6,7 @@ import * as ZSI from './zsi.js';
 
 import * as Viewer from '../viewer.js';
 
-import { mat4, vec3, vec4 } from 'gl-matrix';
+import { mat4, ReadonlyMat4, vec3, vec4 } from 'gl-matrix';
 import AnimationController from '../AnimationController.js';
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import { Camera, computeViewMatrix, computeViewMatrixSkybox } from '../Camera.js';
@@ -15,7 +15,6 @@ import { drawWorldSpaceLine, getDebugOverlayCanvas2D } from '../DebugJunk.js';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers.js';
 import { GfxShaderLibrary } from '../gfx/helpers/GfxShaderLibrary.js';
 import { reverseDepthForDepthOffset } from '../gfx/helpers/ReversedDepthHelpers.js';
-import { convertToCanvas } from '../gfx/helpers/TextureConversionHelpers.js';
 import { fillColor, fillMatrix4x3, fillMatrix4x4, fillVec4, fillVec4v } from '../gfx/helpers/UniformBufferHelpers.js';
 import { GfxBuffer, GfxBufferUsage, GfxCompareMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxMipFilterMode, GfxProgram, GfxSampler, GfxTexFilterMode, GfxTexture, GfxTextureDescriptor, GfxTextureDimension, GfxTextureUsage, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxWrapMode, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform.js';
 import { getFormatByteSize, setFormatCompFlags } from '../gfx/platform/GfxPlatformFormat.js';
@@ -23,47 +22,10 @@ import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { GfxRendererLayer, GfxRenderInst, GfxRenderInstManager, makeSortKey } from '../gfx/render/GfxRenderInstManager.js';
 import { transformVec3Mat4w0 } from '../MathHelpers.js';
 import { DeviceProgram } from '../Program.js';
-import { LoadedTexture, TextureHolder, TextureMapping } from '../TextureHolder.js';
+import { TextureMapping } from '../TextureHolder.js';
 import { assert, nArray } from '../util.js';
 import { ColorAnimType } from './cmab.js';
 import { BumpMode, FresnelSelector, LightingConfig, LutInput, TexCoordConfig } from './cmb.js';
-import { getTextureFormatName } from './pica_texture.js';
-
-function surfaceToCanvas(textureLevel: CMB.TextureLevel): HTMLCanvasElement {
-    const canvas = convertToCanvas(ArrayBufferSlice.fromView(textureLevel.pixels), textureLevel.width, textureLevel.height);
-    canvas.title = textureLevel.name;
-    return canvas;
-}
-
-function textureToCanvas(texture: CMB.Texture): Viewer.Texture {
-    const surfaces = texture.dimension ? [] : texture.levels.map((textureLevel) => surfaceToCanvas(textureLevel));
-
-    const extraInfo = new Map<string, string>();
-    extraInfo.set('Format', getTextureFormatName(texture.format));
-
-    return { name: texture.name, surfaces, extraInfo };
-}
-
-export class CtrTextureHolder extends TextureHolder<CMB.Texture> {
-    public loadTexture(device: GfxDevice, texture: CMB.Texture): LoadedTexture {
-
-        const descriptor: GfxTextureDescriptor = {
-            width: texture.width,
-            height: texture.height,
-            pixelFormat: GfxFormat.U8_RGBA_NORM,
-            dimension: texture.dimension,
-            depthOrArrayLayers: texture.dimension === GfxTextureDimension.Cube ? 6 : 1,
-            numLevels: texture.levels.length,
-            usage: GfxTextureUsage.Sampled,
-        };
-
-        const gfxTexture = device.createTexture(descriptor);
-        device.setResourceName(gfxTexture, texture.name);
-        device.uploadTextureData(gfxTexture, 0, texture.levels.map((level) => level.pixels));
-        const viewerTexture = textureToCanvas(texture);
-        return { gfxTexture, viewerTexture };
-    }
-}
 
 interface DMPMaterialHacks {
     texturesEnabled: boolean;
@@ -301,7 +263,7 @@ uniform samplerCube u_Cubemap;
         const material = this.material;
         if(!material.isFragmentLightingEnabled)
             return ``;
-        
+
         let S = `
     vec3 t_LightVector = vec3(0.0);
     vec3 t_ReflValue = vec3(1.0);
@@ -313,7 +275,7 @@ uniform samplerCube u_Cubemap;
         S += `
     vec3 t_SurfNormal = ${material.bumpMode === BumpMode.AsBump ? bumpColor : `vec3(0.0, 0.0, 1.0);`}
     vec3 t_SurfTangent = ${material.bumpMode === BumpMode.AsTangent ? bumpColor : `vec3(1.0, 0.0, 0.0);`}
-    
+
     bool isBumpRenormEnabled = ${material.isBumpRenormEnabled};
     if (isBumpRenormEnabled) {
         t_SurfNormal.z = sqrt(max(1.0 - dot(t_SurfNormal.xy, t_SurfNormal.xy), 0.0));
@@ -340,21 +302,21 @@ uniform samplerCube u_Cubemap;
         const dist_atten = "1.0";
         let d0_lut_value = "1.0";
         let d1_lut_value = "1.0";
-    
+
         if(material.isGeoFactorEnabled){
             S += `
         t_GeoFactor = dot(t_HalfVector, t_HalfVector);
         t_GeoFactor = t_GeoFactor == 0.0 ? 0.0 : min(t_DotProduct / t_GeoFactor, 1.0);
         `;
         }
-    
+
         if(material.isDist0Enabled && this.IsLUTSupported(MatLutType.Distribution0))
             d0_lut_value = this.getLutInput(material.lutDist0);
-    
+
         let specular_0 = `(${d0_lut_value} * u_SceneLights[i].Specular0.xyz)`;
         if(material.isGeo0Enabled)
             specular_0 = `(${specular_0} * t_GeoFactor)`;
-    
+
         if(material.isReflectionEnabled){
             if(this.IsLUTSupported(MatLutType.ReflectR))
                 S+= `
@@ -363,14 +325,14 @@ uniform samplerCube u_Cubemap;
         t_ReflValue.b = ${this.IsLUTSupported(MatLutType.ReflectB) ? this.getLutInput(material.lutReflecB) : `t_ReflValue.r`};
         `;
         }
-    
+
         if(material.isDist1Enabled && this.IsLUTSupported(MatLutType.Distribution1))
             d1_lut_value = this.getLutInput(material.lutDist1);
-    
+
         let specular_1 = `(${d1_lut_value} * t_ReflValue * u_SceneLights[i].Specular1.xyz)`;
         if(material.isGeo1Enabled)
             specular_1 = `(${specular_1} * t_GeoFactor)`;
-    
+
         if (material.fresnelSelector !== FresnelSelector.No && this.IsLUTSupported(MatLutType.Fresnel)) {
             const value = this.getLutInput(material.lutFesnel);
 
@@ -383,7 +345,7 @@ uniform samplerCube u_Cubemap;
             }
             S+=`\t\t}\n`;
         }
-    
+
         S += `
         t_FragPriColor.rgb += ((u_SceneLights[i].Diffuse.xyz * t_DotProduct) + u_SceneLights[i].Ambient.xyz) * ${dist_atten} * ${spot_atten};
         t_FragSecColor.rgb += (${specular_0} + ${specular_1}) * t_ClampHighlights * ${dist_atten} * ${spot_atten};
@@ -472,7 +434,7 @@ void main() {
     #ifdef USE_UV
         t_ResultColor.rgba = vec4(v_TexCoord0.xy, 1.0, 1.0);
     #endif
-    
+
     if(u_IsFogEnabled > 0.0 && u_RenderFog > 0.0)
     {
         //(M-1): Hack for now
@@ -558,7 +520,7 @@ vec4 FullQuatCalcFallback(in vec4 t_temp0, in vec4 t_Normal, in vec4 t_temp1) {
 }
 
 vec4 CalcQuatFromTangent(in vec3 t_Tangent) {
-    
+
     vec4 t_temp0 = vec4(normalize(cross(v_Normal, t_Tangent)), 0.0);
     vec4 t_temp1 = vec4(cross(t_temp0.xyz, v_Normal.xyz), t_temp0.z);
     vec4 t_Normal = vec4(v_Normal.xyz, t_temp0.x);
@@ -615,7 +577,7 @@ vec3 CalcTextureCoordRaw(in int t_Idx) {
         // Cube env mapping.
         //vec3 t_Incident = normalize(vec3(t_Position.xy, -t_Position.z) - vec3(u_CameraPos.xy, -u_CameraPos.z));
         //vec3 t_TexSrc = reflect(-t_Incident, v_Normal);
-        
+
         return vec3(0.0);
     } else if (t_MappingMode == 3) {
         // Sphere env mapping.
@@ -680,7 +642,7 @@ void main() {
 
     v_Depth = gl_Position.w;
     v_View = -t_ViewPosition;
-    
+
     if (u_IsFragLighting > 0.0) {
         v_QuatNormal = u_HasTangent > 0.0 ? CalcQuatFromTangent(t_ViewTangent) : CalcQuatFromNormal(v_Normal);
     }
@@ -752,7 +714,7 @@ class MaterialInstance {
 
     public environmentSettings = new ZSI.ZSIEnvironmentSettings;
 
-    constructor(cache: GfxRenderCache, lutTexure: GfxTexture | null, public cmb: CMB.CMB, public material: CMB.Material) {
+    constructor(cache: GfxRenderCache, lutTexure: GfxTexture | null, public cmbData: CmbData, public material: CMB.Material) {
         this.diffuseColor = colorNewCopy(this.material.diffuseColor);
         this.ambientColor = colorNewCopy(this.material.ambientColor);
         this.specular0Color = colorNewCopy(this.material.specular0Color);
@@ -781,7 +743,8 @@ class MaterialInstance {
             });
             this.gfxSamplers.push(gfxSampler);
 
-            if(i == 0 && cmb.textures[binding.textureIdx].dimension === GfxTextureDimension.Cube)
+            const cmb = this.cmbData.cmb;
+            if (i == 0 && cmb.textures[binding.textureIdx].dimension === GfxTextureDimension.Cube)
                 this.textureMappings[4].gfxSampler = gfxSampler;
             else
                 this.textureMappings[i].gfxSampler = gfxSampler;
@@ -869,7 +832,7 @@ class MaterialInstance {
         return (textureCoordinator.mappingMethod << 12) | (textureCoordinator.sourceCoordinate << 8);
     }
 
-    public setOnRenderInst(cache: GfxRenderCache, template: GfxRenderInst, textureHolder: CtrTextureHolder, viewMatrix: mat4): void {
+    public setOnRenderInst(cache: GfxRenderCache, template: GfxRenderInst, viewMatrix: ReadonlyMat4): void {
         let offs = template.allocateUniformBuffer(DMPProgram.ub_MaterialParams, 4*4 + 4*5*3 + 4*2 + 4*6 + 4*3*3 + 4);
         const layer = this.material.isTransparent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
         template.sortKey = makeSortKey(layer + this.material.renderLayer);
@@ -896,14 +859,14 @@ class MaterialInstance {
         colorClamp(scratchColor, scratchColor, 0, 1);
         offs += fillColor(mapped, offs, scratchColor);
 
-        
-        if(this.material.isFragmentLightingEnabled) {
+
+        if (this.material.isFragmentLightingEnabled) {
             for (let i = 0; i < 3; i++) {
                 const light = this.environmentSettings.lights[i];
-                
+
                 colorMult(scratchColor, light.ambient, this.ambientColor);
                 offs += fillColor(mapped, offs, scratchColor);
-                
+
                 colorMult(scratchColor, light.diffuse, this.diffuseColor);
                 offs += fillColor(mapped, offs, scratchColor);
 
@@ -941,13 +904,16 @@ class MaterialInstance {
         for (let i = 0; i < 3; i++) {
             const binding = this.material.textureBindings[i];
             if (binding.textureIdx >= 0) {
+                const texture = this.cmbData.cmb.textures[binding.textureIdx];
+                const dst = this.textureMappings[texture.dimension === GfxTextureDimension.Cube ? 4 : i];
+
                 if (this.texturePaletteAnimators[i]) {
-                    this.texturePaletteAnimators[i].fillTextureMapping(textureHolder, this.textureMappings[i]);
+                    dst.gfxTexture = this.texturePaletteAnimators[i].getTexture();
                 } else {
-                    const texture = this.cmb.textures[binding.textureIdx];
-                    textureHolder.fillTextureMapping(this.textureMappings[texture.dimension === GfxTextureDimension.Cube ? 4 : i], texture.name);
+                    dst.gfxTexture = this.cmbData.textureData[binding.textureIdx].gfxTexture;
                 }
 
+                assert(dst.gfxTexture !== undefined);
                 scratchVec4[i] = this.packTexCoordParams(this.material.textureCoordinators[i]);
                 this.calcTexMtx(scratchMatrix, i, this.material.textureCoordinators[i]);
             } else {
@@ -966,7 +932,8 @@ class MaterialInstance {
         template.setSamplerBindingsFromTextureMappings(this.textureMappings);
     }
 
-    public bindCMAB(cmab: CMAB.CMAB, animationController: AnimationController): void {
+    public bindCMAB(cmabData: CmabData, animationController: AnimationController): void {
+        const cmab = cmabData.cmab;
         for (let i = 0; i < cmab.animEntries.length; i++) {
             const animEntry = cmab.animEntries[i];
             if (animEntry.materialIndex !== this.material.index)
@@ -979,7 +946,7 @@ class MaterialInstance {
                        animEntry.animationType === CMAB.AnimationType.EmissionColor || animEntry.animationType === CMAB.AnimationType.AmbientColor) {
                 this.colorAnimators[animEntry.channelIndex] = new CMAB.ColorAnimator(animationController, cmab, animEntry);
             } else if (animEntry.animationType === CMAB.AnimationType.TexturePalette) {
-                this.texturePaletteAnimators[animEntry.channelIndex] = new CMAB.TexturePaletteAnimator(animationController, cmab, animEntry);
+                this.texturePaletteAnimators[animEntry.channelIndex] = new CMAB.TexturePaletteAnimator(animationController, cmabData, animEntry);
             }
         }
     }
@@ -1086,10 +1053,10 @@ class SepdData {
             vertexAttributeDescriptors.push({ location, format, bufferIndex, bufferByteOffset: 0 });
         };
 
-        loadVertexAttrib(DMPProgram.a_Position,  GfxFormat.F32_RGB, vatr.position,  sepd.position);
-        loadVertexAttrib(DMPProgram.a_Normal,    GfxFormat.F32_RGB, vatr.normal,    sepd.normal);
+        loadVertexAttrib(DMPProgram.a_Position,  GfxFormat.F32_RGB, vatr.position, sepd.position);
+        loadVertexAttrib(DMPProgram.a_Normal,    GfxFormat.F32_RGB, vatr.normal, sepd.normal);
         loadVertexAttrib(DMPProgram.a_Tangent,   GfxFormat.F32_RGB, sepd.hasTangents ? vatr.tangent : null, sepd.tangent);
-        loadVertexAttrib(DMPProgram.a_Color,     GfxFormat.F32_RGBA, vatr.color,     sepd.color);
+        loadVertexAttrib(DMPProgram.a_Color,     GfxFormat.F32_RGBA, vatr.color, sepd.color);
         loadVertexAttrib(DMPProgram.a_TexCoord0, GfxFormat.F32_RG, vatr.texCoord0, sepd.texCoord0);
         loadVertexAttrib(DMPProgram.a_TexCoord1, GfxFormat.F32_RG, vatr.texCoord1, sepd.texCoord1);
         loadVertexAttrib(DMPProgram.a_TexCoord2, GfxFormat.F32_RG, vatr.texCoord2, sepd.texCoord2);
@@ -1140,7 +1107,7 @@ class ShapeInstance {
     constructor(private sepdData: SepdData, private materialInstance: MaterialInstance) {
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, textureHolder: CtrTextureHolder, boneMatrices: mat4[], viewMatrix: mat4, inverseBindPoseMatrices: mat4[]): void {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, boneMatrices: ReadonlyMat4[], viewMatrix: ReadonlyMat4, inverseBindPoseMatrices: ReadonlyMat4[]): void {
         if (!this.visible || !this.materialInstance.visible)
             return;
 
@@ -1148,7 +1115,7 @@ class ShapeInstance {
 
         const materialTemplate = renderInstManager.pushTemplate();
         materialTemplate.setVertexInput(this.sepdData.inputLayout, this.sepdData.vertexBufferDescriptors, this.sepdData.indexBufferDescriptor);
-        this.materialInstance.setOnRenderInst(renderInstManager.gfxRenderCache, materialTemplate, textureHolder, viewMatrix);
+        this.materialInstance.setOnRenderInst(renderInstManager.gfxRenderCache, materialTemplate, viewMatrix);
 
         for (let i = 0; i < this.sepdData.sepd.prms.length; i++) {
             const prmsData = this.sepdData.prmsData[i];
@@ -1189,15 +1156,60 @@ class ShapeInstance {
     }
 }
 
+class TextureData {
+    public gfxTexture: GfxTexture;
+
+    constructor(cache: GfxRenderCache, texture: CMB.Texture) {
+        assert(texture.levels.length > 0);
+        const device = cache.device;
+
+        const descriptor: GfxTextureDescriptor = {
+            width: texture.width,
+            height: texture.height,
+            pixelFormat: GfxFormat.U8_RGBA_NORM,
+            dimension: texture.dimension,
+            depthOrArrayLayers: texture.dimension === GfxTextureDimension.Cube ? 6 : 1,
+            numLevels: texture.levels.length,
+            usage: GfxTextureUsage.Sampled,
+        };
+
+        this.gfxTexture = device.createTexture(descriptor);
+        device.setResourceName(this.gfxTexture, texture.name);
+        device.uploadTextureData(this.gfxTexture, 0, texture.levels.map((level) => level.pixels));
+    }
+
+    public destroy(device: GfxDevice): void {
+        device.destroyTexture(this.gfxTexture);
+    }
+}
+
+export class CmabData {
+    public textureData: TextureData[] = [];
+
+    constructor(cache: GfxRenderCache, public cmab: CMAB.CMAB) {
+        for (let i = 0; i < this.cmab.textures.length; i++)
+            this.textureData.push(new TextureData(cache, this.cmab.textures[i]));
+    }
+
+    public destroy(device: GfxDevice): void {
+        for (let i = 0; i < this.textureData.length; i++)
+            this.textureData[i].destroy(device);
+    }
+}
+
 export class CmbData {
+    public textureData: TextureData[] = [];
     public sepdData: SepdData[] = [];
     public inverseBindPoseMatrices: mat4[] = [];
 
     constructor(cache: GfxRenderCache, public cmb: CMB.CMB) {
         const vatrChunk = cmb.vatrChunk;
 
+        for (let i = 0; i < this.cmb.textures.length; i++)
+            this.textureData.push(new TextureData(cache, this.cmb.textures[i]));
+
         for (let i = 0; i < this.cmb.sepds.length; i++)
-            this.sepdData[i] = new SepdData(cache, cmb.indexBuffer, vatrChunk, this.cmb.sepds[i]);
+            this.sepdData.push(new SepdData(cache, cmb.indexBuffer, vatrChunk, this.cmb.sepds[i]));
 
         const tempBones = nArray(cmb.bones.length, () => mat4.create());
         for (let i = 0; i < cmb.bones.length; i++) {
@@ -1213,6 +1225,8 @@ export class CmbData {
     }
 
     public destroy(device: GfxDevice): void {
+        for (let i = 0; i < this.textureData.length; i++)
+            this.textureData[i].destroy(device);
         for (let i = 0; i < this.sepdData.length; i++)
             this.sepdData[i].destroy(device);
     }
@@ -1226,7 +1240,7 @@ export class CmbInstance {
     public visible: boolean = true;
     public materialInstances: MaterialInstance[] = [];
     public shapeInstances: ShapeInstance[] = [];
-    private gfxLutTexture: GfxTexture | null = null;
+    private lutTexture: GfxTexture | null = null;
 
     public csab: CSAB.CSAB | null = null;
     public debugBones: boolean = false;
@@ -1235,16 +1249,16 @@ export class CmbInstance {
     public isSkybox = false;
     public passMask: number = 1;
 
-    constructor(cache: GfxRenderCache, public textureHolder: CtrTextureHolder, public cmbData: CmbData, public name: string = '') {
-        if(this.cmbData.cmb.lutTexture) {
+    constructor(cache: GfxRenderCache, public cmbData: CmbData, public name: string = '') {
+        if (this.cmbData.cmb.lutTexture) {
             const texture = this.cmbData.cmb.lutTexture;
-            this.gfxLutTexture = cache.device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_R_NORM, texture.width, texture.height, 1));
-            cache.device.uploadTextureData(this.gfxLutTexture, 0, texture.levels.map((level) => level.pixels));
+            this.lutTexture = cache.device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_R_NORM, texture.width, texture.height, 1));
+            cache.device.uploadTextureData(this.lutTexture, 0, texture.levels.map((level) => level.pixels));
         }
-        
+
         for (let i = 0; i < this.cmbData.cmb.materials.length; i++)
-            this.materialInstances.push(new MaterialInstance(cache, this.gfxLutTexture, this.cmbData.cmb, this.cmbData.cmb.materials[i]));
-        
+            this.materialInstances.push(new MaterialInstance(cache, this.lutTexture, this.cmbData, this.cmbData.cmb.materials[i]));
+
         for (let i = 0; i < this.cmbData.cmb.meshs.length; i++) {
             const mesh = this.cmbData.cmb.meshs[i];
             this.shapeInstances.push(new ShapeInstance(this.cmbData.sepdData[mesh.sepdIdx], this.materialInstances[mesh.matsIdx]));
@@ -1342,7 +1356,7 @@ export class CmbInstance {
         }
 
         for (let i = 0; i < this.shapeInstances.length; i++)
-            this.shapeInstances[i].prepareToRender(device, renderInstManager, this.textureHolder, this.boneMatrices, scratchViewMatrix, this.cmbData.inverseBindPoseMatrices);
+            this.shapeInstances[i].prepareToRender(device, renderInstManager, this.boneMatrices, scratchViewMatrix, this.cmbData.inverseBindPoseMatrices);
     }
 
     public setVisible(visible: boolean): void {
@@ -1350,8 +1364,8 @@ export class CmbInstance {
     }
 
     public destroy(device: GfxDevice): void {
-        if(this.gfxLutTexture)
-            device.destroyTexture(this.gfxLutTexture);
+        if(this.lutTexture)
+            device.destroyTexture(this.lutTexture);
 
         for (let i = 0; i < this.materialInstances.length; i++)
             this.materialInstances[i].destroy(device);
@@ -1363,7 +1377,7 @@ export class CmbInstance {
         this.csab = csab;
     }
 
-    public bindCMAB(cmab: CMAB.CMAB, animationController = this.animationController): void {
+    public bindCMAB(cmab: CmabData, animationController = this.animationController): void {
         for (let i = 0; i < this.materialInstances.length; i++)
             this.materialInstances[i].bindCMAB(cmab, animationController);
     }
@@ -1378,27 +1392,25 @@ export class RoomRenderer {
     public objectRenderers: CmbInstance[] = [];
     public roomSetups: ZSI.ZSIRoomSetup[] = [];
 
-    constructor(cache: GfxRenderCache, public version: ZSI.Version, public textureHolder: CtrTextureHolder, public mesh: ZSI.Mesh, public name: string) {
+    constructor(cache: GfxRenderCache, public version: ZSI.Version, public mesh: ZSI.Mesh, public name: string) {
         const device = cache.device;
 
         if (mesh.opaque !== null) {
-            textureHolder.addTextures(device, mesh.opaque.textures);
             this.opaqueData = new CmbData(cache, mesh.opaque);
-            this.opaqueMesh = new CmbInstance(cache, textureHolder, this.opaqueData, `${name} Opaque`);
+            this.opaqueMesh = new CmbInstance(cache, this.opaqueData, `${name} Opaque`);
             this.opaqueMesh.animationController.fps = 20;
             this.opaqueMesh.setConstantColor(1, TransparentBlack);
         }
 
         if (mesh.transparent !== null) {
-            textureHolder.addTextures(device, mesh.transparent.textures);
             this.transparentData = new CmbData(cache, mesh.transparent);
-            this.transparentMesh = new CmbInstance(cache, textureHolder, this.transparentData, `${name} Transparent`);
+            this.transparentMesh = new CmbInstance(cache, this.transparentData, `${name} Transparent`);
             this.transparentMesh.animationController.fps = 20;
             this.transparentMesh.setConstantColor(1, TransparentBlack);
         }
     }
 
-    public bindCMAB(cmab: CMAB.CMAB): void {
+    public bindCMAB(cmab: CmabData): void {
         if (this.opaqueMesh !== null)
             this.opaqueMesh.bindCMAB(cmab);
         if (this.transparentMesh !== null)
@@ -1460,8 +1472,7 @@ export class RoomRenderer {
     }
 
     public setEnvironmentSettings(environmentSettings: ZSI.ZSIEnvironmentSettings): void {
-
-        //(M-1): Temporay hack until I get kankyo implemented
+        //(M-1): Temporary hack until I get kankyo implemented
         const envSettingsRoom = new ZSI.ZSIEnvironmentSettings();
         envSettingsRoom.copy(environmentSettings);
 

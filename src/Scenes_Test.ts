@@ -5,7 +5,6 @@ import { SceneContext } from "./SceneBase.js";
 
 import { createBasicRRESRendererFromBRRES } from "./rres/scenes.js";
 import * as H3D from "./Common/CTR_H3D/H3D.js";
-import { CtrTextureHolder } from "./OcarinaOfTime3D/render.js";
 import * as NARC from "./nns_g3d/narc.js";
 import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from "./gfx/helpers/RenderGraphHelpers.js";
 import { GfxRenderHelper } from "./gfx/render/GfxRenderHelper.js";
@@ -68,23 +67,6 @@ class BasicRRESSceneDesc implements Viewer.SceneDesc {
     }
 }
 
-class H3DScene extends EmptyScene {
-    public textureHolder = new CtrTextureHolder();
-}
-
-class H3DSceneDesc implements Viewer.SceneDesc {
-    constructor(public dataPath: string, public id: string = dataPath, public name: string = dataPath) {}
-
-    public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
-        const dataFetcher = context.dataFetcher;
-        const data = await dataFetcher.fetchData(this.dataPath);
-        const h3d = H3D.parse(data);
-        const renderer = new H3DScene();
-        renderer.textureHolder.addTextures(device, h3d.textures);
-        return renderer;
-    }
-}
-
 class NARCSceneDesc implements Viewer.SceneDesc {
     constructor(public dataPath: string, public id: string = dataPath, public name: string = dataPath) {}
 
@@ -100,7 +82,6 @@ class NARCSceneDesc implements Viewer.SceneDesc {
 const sceneDescs = [
     new EmptyClearSceneDesc('EmptyClearScene'),
     new BasicRRESSceneDesc('test/dthro_cmn1.brres'),
-    new H3DSceneDesc('test/cave_Common.bch'),
     new NARCSceneDesc('test/land_data.narc'),
 ];
 

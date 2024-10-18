@@ -10,12 +10,12 @@ import * as CTXB from './ctxb.js';
 
 import * as Viewer from '../viewer.js';
 
-import { CmbInstance, CmbData } from './render.js';
+import { CmbInstance, CmbData, CmabData } from './render.js';
 import { SceneGroup } from '../viewer.js';
-import { leftPad, assertExists, nArray, assert } from '../util.js';
+import { leftPad, assertExists, assert } from '../util.js';
 import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
-import { GrezzoTextureHolder, MultiCmbScene } from './scenes.js';
-import { computeModelMatrixSRT, scaleMatrix } from '../MathHelpers.js';
+import { MultiCmbScene } from './scenes.js';
+import { computeModelMatrixSRT } from '../MathHelpers.js';
 import { SceneContext } from '../SceneBase.js';
 import { ZSIEnvironmentSettings } from './zsi.js';
 import { colorFromRGBA } from '../Color.js';
@@ -32,7 +32,7 @@ function bcsvHashLM(str: string): number {
         const r0 = ((((hash - r6) / 2) + r6) >> 24);
         hash -= (r0 * 33554393);
     }
-    
+
     return hash;
 }
 
@@ -63,7 +63,6 @@ class SceneDesc implements Viewer.SceneDesc {
         const path_gar = `${pathBase}/map/map${leftPad(''+this.mapNumber, 2, '0')}.gar`;
         const models_path = `${pathBase}/mapmdl/map${this.mapNumber}`;
 
-        const textureHolder = new GrezzoTextureHolder();
         const dataFetcher = context.dataFetcher;
 
         const spawnVrbox = (renderer: MultiCmbScene, cache: GfxRenderCache, garName: string) => {
@@ -71,13 +70,12 @@ class SceneDesc implements Viewer.SceneDesc {
 
                 const vrGar = ZAR.parse(garBuffer);
                 const firstCMB = assertExists(vrGar.files.find((file) => file.name.endsWith('.cmb')));
-                
+
                 const cmb = CMB.parse(firstCMB.buffer);
                 const cmbData = new CmbData(cache, cmb);
-                textureHolder.addCMB(device, cmb);
                 renderer.cmbData.push(cmbData);
 
-                const cmbRenderer = new CmbInstance(cache, textureHolder, cmbData, cmb.name);
+                const cmbRenderer = new CmbInstance(cache, cmbData, cmb.name);
                 cmbRenderer.isSkybox = true;
                 renderer.skyRenderers.push(cmbRenderer);
 
@@ -86,12 +84,13 @@ class SceneDesc implements Viewer.SceneDesc {
 
                 for (let i = 0; i < cmabFiles.length; i++) {
                     const cmab = CMAB.parse(CMB.Version.LuigisMansion, cmabFiles[i].buffer);
-                    textureHolder.addTextures(device, cmab.textures);
-                    cmbRenderer.bindCMAB(cmab);
+                    const cmabData = new CmabData(cache, cmab);
+                    
+                    cmbRenderer.bindCMAB(cmabData);
                 }
 
                 const csabFile = vrGar.files.find((file) => file.name === `${cmbBasename}.csab`);
-                if (csabFile){
+                if (csabFile !== undefined) {
                     cmbRenderer.bindCSAB(CSAB.parse(CMB.Version.LuigisMansion, csabFile.buffer));
                 }
             });
@@ -113,7 +112,7 @@ class SceneDesc implements Viewer.SceneDesc {
 
             const modelCache = new Map<string, CmbData>();
 
-            const renderer = new MultiCmbScene(device, textureHolder);
+            const renderer = new MultiCmbScene(device);
             const cache = renderer.getRenderCache();
             const promises: Promise<void>[] = [];
             const envSettingsMap: Map<number, ZSIEnvironmentSettings> = new Map<number, ZSIEnvironmentSettings>();
@@ -127,7 +126,6 @@ class SceneDesc implements Viewer.SceneDesc {
                 default: spawnVrbox(renderer, cache, "vrball_m.gar"); break;
             }
 
-            
             //TODO(M-1): This isn't right but it works for now
             for (let i = 0; i < lightInfo.records.length; i++) {
                 const record = lightInfo.records[i];
@@ -143,7 +141,7 @@ class SceneDesc implements Viewer.SceneDesc {
                 let envSettings = envSettingsMap.get(roomNum) as ZSIEnvironmentSettings;
 
                 const light = envSettings.lights[index];
-                
+
                 const diffuseR = assertExists(getField<number>(lightInfo, record, "diffuse_x")) / 0xFF;
                 const diffuseG = assertExists(getField<number>(lightInfo, record, "diffuse_y")) / 0xFF;
                 const diffuseB = assertExists(getField<number>(lightInfo, record, "diffuse_z")) / 0xFF;
@@ -187,18 +185,26 @@ class SceneDesc implements Viewer.SceneDesc {
                     //const skyboxType = assertExists(getField<number>(roomInfo, roomInfo.records[i], "VRboxType"));
                     //assert(skyboxType === 0);
 
-                    // TODO(jstpierre): How does the engine know which CMB file to spawn?
                     const firstCMB = assertExists(roomGar.files.find((file) => file.name.endsWith('.cmb')));
                     const cmb = CMB.parse(firstCMB.buffer);
                     const ctxbFiles = roomGar.files.filter((file) => file.name.endsWith('.ctxb'));
 
+                    // Patch textures into in CMB file.
                     for (let i = 0; i < ctxbFiles.length; i++) {
                         const ctxb = CTXB.parse(ctxbFiles[i].buffer);
-                        textureHolder.addCTXB(device, ctxb);
+                        for (let j = 0; j < ctxb.textures.length; j++) {
+                            const texture = ctxb.textures[j];
+
+                            const cmbTexture = cmb.textures.find((tex) => tex.name === texture.name);
+                            if (cmbTexture === undefined)
+                                continue;
+
+                            assert(cmbTexture.levels.length === 0);
+                            cmbTexture.levels = texture.levels;
+                        }
                     }
 
                     const cmbData = new CmbData(cache, cmb);
-                    textureHolder.addCMB(device, cmb);
                     renderer.cmbData.push(cmbData);
 
                     let envSettings = envSettingsMap.get(i) as ZSIEnvironmentSettings;
@@ -206,8 +212,8 @@ class SceneDesc implements Viewer.SceneDesc {
                     if(envSettings === undefined){
                         envSettings = envSettingsMap.get(0) as ZSIEnvironmentSettings;
                     }
-                    
-                    const cmbRenderer = new CmbInstance(cache, textureHolder, cmbData, cmb.name);
+
+                    const cmbRenderer = new CmbInstance(cache, cmbData, cmb.name);
                     cmbRenderer.setEnvironmentSettings(envSettings);
                     renderer.cmbRenderers.push(cmbRenderer);
 
@@ -215,8 +221,8 @@ class SceneDesc implements Viewer.SceneDesc {
                     const cmabFile = roomGar.files.find((file) => file.name === `${cmbBasename}.cmab`);
                     if (cmabFile) {
                         const cmab = CMAB.parse(CMB.Version.LuigisMansion, cmabFile.buffer);
-                        textureHolder.addTextures(device, cmab.textures);
-                        cmbRenderer.bindCMAB(cmab);
+                        const cmabData = new CmabData(cache, cmab);
+                        cmbRenderer.bindCMAB(cmabData);
                     }
 
                     const roomFurnitureEntries: BCSV.Bcsv = getEntriesWithField(furnitureInfo, "room_no", i);
@@ -234,12 +240,11 @@ class SceneDesc implements Viewer.SceneDesc {
                         if (cmbData === undefined) {
                             const cmb = CMB.parse(cmbFile.buffer);
                             cmbData = new CmbData(cache, cmb);
-                            textureHolder.addTextures(device, cmb.textures);
                             renderer.cmbData.push(cmbData);
                             modelCache.set(cmbFilename, cmbData);
                         }
 
-                        const cmbRenderer = new CmbInstance(cache, textureHolder, cmbData, cmb.name);
+                        const cmbRenderer = new CmbInstance(cache, cmbData, cmb.name);
                         cmbRenderer.setEnvironmentSettings(envSettings);
 
                         const rotationX = assertExists(getField<number>(roomFurnitureEntries, record, "dir_x")) / 180 * Math.PI;

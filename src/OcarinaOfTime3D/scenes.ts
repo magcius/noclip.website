@@ -1,7 +1,6 @@
 
 import * as CMAB from './cmab.js';
 import * as CSAB from './csab.js';
-import * as CTXB from './ctxb.js';
 import * as CMB from './cmb.js';
 import * as ZAR from './zar.js';
 import * as LzS from './LzS.js';
@@ -9,7 +8,7 @@ import * as LzS from './LzS.js';
 import * as Viewer from '../viewer.js';
 import * as UI from '../ui.js';
 
-import { CtrTextureHolder, CmbInstance, CmbData, fillSceneParamsDataOnTemplate } from "./render.js";
+import { CmbInstance, CmbData, fillSceneParamsDataOnTemplate, CmabData } from "./render.js";
 import { GfxDevice} from "../gfx/platform/GfxPlatform.js";
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
@@ -22,43 +21,18 @@ import { bindingLayouts } from './oot3d_scenes.js';
 import { ZSIEnvironmentSettings } from './zsi.js';
 import { vec3 } from 'gl-matrix';
 
-export class GrezzoTextureHolder extends CtrTextureHolder {
-    public override findTextureEntryIndex(name: string): number {
-        let i: number = -1;
-
-        i = this.searchTextureEntryIndex(name);
-        if (i >= 0) return i;
-
-        i = this.searchTextureEntryIndex(`${name.split('/')[2]}.ctxb`);
-        if (i >= 0) return i;
-
-        return i;
-    }
-
-    public addCMB(device: GfxDevice, cmb: CMB.CMB): void {
-        this.addTextures(device, cmb.textures.filter((tex) => tex.levels.length > 0));
-    }
-
-    public addCTXB(device: GfxDevice, ctxb: CTXB.CTXB): void {
-        this.addTextures(device, ctxb.textures.map((texture) => {
-            const basename = texture.name.split('/')[2];
-            const name = `${basename}.ctxb`;
-            return { ...texture, name };
-        }));
-    }
-}
-
 export class MultiCmbScene implements Viewer.SceneGfx {
     private renderHelper: GfxRenderHelper;
     private renderInstListMain = new GfxRenderInstList();
     private renderInstListSky = new GfxRenderInstList();
     public cmbData: CmbData[] = [];
+    public cmabData: CmabData[] = [];
     public cmbRenderers: CmbInstance[] = [];
     public skyRenderers: CmbInstance[] = [];
     public cmab: CMAB.CMAB[] = [];
     public csab: CSAB.CSAB[] = [];
 
-    constructor(device: GfxDevice, public textureHolder: CtrTextureHolder) {
+    constructor(device: GfxDevice) {
         this.renderHelper = new GfxRenderHelper(device);
     }
 
@@ -125,11 +99,12 @@ export class MultiCmbScene implements Viewer.SceneGfx {
     public destroy(device: GfxDevice): void {
         this.renderHelper.destroy();
 
-        this.textureHolder.destroy(device);
         for (let i = 0; i < this.cmbRenderers.length; i++)
             this.cmbRenderers[i].destroy(device);
         for (let i = 0; i < this.cmbData.length; i++)
             this.cmbData[i].destroy(device);
+        for (let i = 0; i < this.cmabData.length; i++)
+            this.cmabData[i].destroy(device);
     }
 
     public createPanels(): UI.Panel[] {
@@ -192,8 +167,8 @@ class SometimesMultiSelect extends UI.ScrollSelect {
 class ArchiveCmbScene implements Viewer.SceneGfx {
     private renderHelper: GfxRenderHelper;
     private renderInstListMain = new GfxRenderInstList();
-    public textureHolder = new GrezzoTextureHolder();
     public cmbData: CmbData[] = [];
+    public cmabData: CmabData[] = [];
     public cmbRenderers: CmbInstance[] = [];
 
     constructor(private device: GfxDevice, private archive: ZAR.ZAR) {
@@ -243,7 +218,6 @@ class ArchiveCmbScene implements Viewer.SceneGfx {
     public destroy(device: GfxDevice): void {
         this.renderHelper.destroy();
 
-        this.textureHolder.destroy(device);
         for (let i = 0; i < this.cmbRenderers.length; i++)
             this.cmbRenderers[i].destroy(device);
         for (let i = 0; i < this.cmbData.length; i++)
@@ -261,17 +235,18 @@ class ArchiveCmbScene implements Viewer.SceneGfx {
             this.cmbRenderers[i].destroy(device);
         for (let i = 0; i < this.cmbData.length; i++)
             this.cmbData[i].destroy(device);
+        for (let i = 0; i < this.cmabData.length; i++)
+            this.cmabData[i].destroy(device);
 
         this.cmbRenderers = [];
         this.cmbData = [];
+        this.cmabData = [];
 
         const cache = this.renderHelper.renderCache;
         const cmb = CMB.parse(file.buffer);
         const cmbData = new CmbData(cache, cmb);
-        this.textureHolder.destroy(device);
-        this.textureHolder.addTextures(device, cmb.textures);
         this.cmbData.push(cmbData);
-        const cmbRenderer = new CmbInstance(cache, this.textureHolder, cmbData, file.name);
+        const cmbRenderer = new CmbInstance(cache, cmbData, file.name);
 
         if (cmbData.cmb.version === CMB.Version.Ocarina) {
             const envSettings = new ZSIEnvironmentSettings();
@@ -324,11 +299,10 @@ class ArchiveCmbScene implements Viewer.SceneGfx {
                     return false;
 
                 const cmab = CMAB.parse(this.archive.version, file.buffer);
-                this.textureHolder.addTextures(this.device, cmab.textures);
+                const cmabData = new CmabData(this.renderHelper.renderCache, cmab);
 
-                for (let i = 0; i < this.cmbRenderers.length; i++){
-                    this.cmbRenderers[i].bindCMAB(cmab);
-                }
+                for (let i = 0; i < this.cmbRenderers.length; i++)
+                    this.cmbRenderers[i].bindCMAB(cmabData);
 
                 // Deselect all other CMAB files except ours.
                 for (let j = 0; j < this.archive.files.length; j++)
