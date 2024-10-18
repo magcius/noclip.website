@@ -643,7 +643,7 @@ export interface Texture {
     levels: TextureLevel[];
 }
 
-export function parseTexChunk(buffer: ArrayBufferSlice, texData: ArrayBufferSlice | null, cmbName: string = ''): Texture[] {
+export function parseTexChunk(buffer: ArrayBufferSlice, texData: ArrayBufferSlice | null): Texture[] {
     const view = buffer.createDataView();
 
     assert(readString(buffer, 0x00, 0x04) === 'tex ');
@@ -663,9 +663,7 @@ export function parseTexChunk(buffer: ArrayBufferSlice, texData: ArrayBufferSlic
         const glFormat = view.getUint32(offs + 0x0C, true);
         let dataOffs = view.getUint32(offs + 0x10, true);
         let dataEnd = dataOffs + size;
-        const texName = readString(buffer, offs + 0x14, 0x10);
-        // TODO(jstpierre): Maybe find another way to dedupe? Name seems inconsistent.
-        const name = `${cmbName}/${i}/${texName}`;
+        const name = readString(buffer, offs + 0x14, 0x10);
         offs += 0x24;
 
         const levels: TextureLevel[] = [];
@@ -722,7 +720,7 @@ export function parseTexChunk(buffer: ArrayBufferSlice, texData: ArrayBufferSlic
 }
 
 function readTexChunk(cmb: CMB, buffer: ArrayBufferSlice, texData: ArrayBufferSlice | null): void {
-    cmb.textures = parseTexChunk(buffer, texData, cmb.name);
+    cmb.textures = parseTexChunk(buffer, texData);
 }
 
 function readLutsChunk(cmb: CMB, buffer: ArrayBufferSlice): void {

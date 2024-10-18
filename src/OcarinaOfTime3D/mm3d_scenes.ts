@@ -7,12 +7,12 @@ import * as ZSI from './zsi.js';
 
 import * as Viewer from '../viewer.js';
 
-import { RoomRenderer, CtrTextureHolder, CmbInstance } from './render.js';
+import { RoomRenderer, CmbInstance, CmabData } from './render.js';
 import { SceneGroup } from '../viewer.js';
 import { assert, assertExists, hexzero } from '../util.js';
 import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
-import { OoT3DRenderer, ModelCache } from './oot3d_scenes.js';
-import { TransparentBlack, colorFromRGBA, colorNewFromRGBA } from '../Color.js';
+import { OoT3DRenderer, ModelCache, DataHolder } from './oot3d_scenes.js';
+import { TransparentBlack } from '../Color.js';
 import { mat4 } from 'gl-matrix';
 import AnimationController from '../AnimationController.js';
 import { SceneContext } from '../SceneBase.js';
@@ -601,16 +601,14 @@ class SceneDesc implements Viewer.SceneDesc {
         this.id = id;
     }
 
-    private async spawnActorForRoom(renderer: OoT3DRenderer, roomRenderer: RoomRenderer, actor: ZSI.Actor, j: number): Promise<void> {
-        const device = renderer.getRenderCache().device;
-
+    private async spawnActorForRoom(renderer: OoT3DRenderer, dataHolder: DataHolder, roomRenderer: RoomRenderer, actor: ZSI.Actor, j: number): Promise<void> {
         function fetchArchive(archivePath: string): Promise<ZAR.ZAR> { 
-            return renderer.modelCache.fetchArchive(`${pathBase}/actors/${archivePath}`);
+            return dataHolder.modelCache.fetchArchive(`${pathBase}/actors/${archivePath}`);
         }
 
         function buildModel(gar: ZAR.ZAR, modelPath: string, scale: number = 0.01): CmbInstance {
-            const cmbData = renderer.modelCache.getModel(renderer, gar, modelPath);
-            const cmbRenderer = new CmbInstance(renderer.getRenderCache(), renderer.textureHolder, cmbData);
+            const cmbData = dataHolder.modelCache.getModel(renderer, gar, modelPath);
+            const cmbRenderer = new CmbInstance(renderer.getRenderCache(), cmbData);
             cmbRenderer.animationController.fps = 20;
             cmbRenderer.setConstantColor(1, TransparentBlack);
             cmbRenderer.name = `${hexzero(actor.actorId, 4)} / ${hexzero(actor.variable, 4)} / ${modelPath}`;
@@ -625,8 +623,9 @@ class SceneDesc implements Viewer.SceneDesc {
 
         function parseCMAB(gar: ZAR.ZAR, filename: string) {
             const cmab = CMAB.parse(CMB.Version.Majora, assertExists(ZAR.findFileData(gar, filename)));
-            renderer.textureHolder.addTextures(device, cmab.textures);
-            return cmab;
+            const cmabData = new CmabData(renderer.getRenderCache(), cmab);
+            dataHolder.cmabData.push(cmabData);
+            return cmabData;
         }
 
         function animFrame(frame: number): AnimationController {
@@ -882,11 +881,10 @@ class SceneDesc implements Viewer.SceneDesc {
             dataFetcher.fetchData(path_info_zsi),
         ]);
 
-        const textureHolder = new CtrTextureHolder();
-        context.destroyablePool.push(textureHolder);
-
         const modelCache = new ModelCache(device, dataFetcher);
-        context.destroyablePool.push(modelCache);
+
+        const dataHolder = new DataHolder(modelCache);
+        context.destroyablePool.push(dataHolder);
 
         const gar = ZAR.parse(maybeDecompress(zarBuffer));
 
@@ -897,7 +895,7 @@ class SceneDesc implements Viewer.SceneDesc {
             zsi.environmentSettings.push(new ZSIEnvironmentSettings());
         }
 
-        const renderer = new OoT3DRenderer(device, textureHolder, zsi, modelCache);
+        const renderer = new OoT3DRenderer(device, zsi);
         const cache = renderer.getRenderCache();
         context.destroyablePool.push(renderer);
 
@@ -917,21 +915,22 @@ class SceneDesc implements Viewer.SceneDesc {
 
                 assert(roomSetup.mesh !== null);
                 const filename = roomZSINames[i].split('/').pop()!;
-                const roomRenderer = new RoomRenderer(cache, ZSI.Version.Majora, textureHolder, roomSetup.mesh, filename);
+                const roomRenderer = new RoomRenderer(cache, ZSI.Version.Majora, roomSetup.mesh, filename);
                 roomRenderer.roomSetups = roomSetups;
                 if (gar !== null) {
                     const cmabFile = gar.files.find((file) => file.name.startsWith(`ROOM${i}/`) && file.name.endsWith('.cmab') && !file.name.endsWith('_t.cmab'));
                     if (cmabFile) {
-                        const cmab = CMAB.parse(CMB.Version.Majora, cmabFile.buffer);
-                        textureHolder.addTextures(device, cmab.textures);
-                        roomRenderer.bindCMAB(cmab);
+                        const cmab = CMAB.parse(CMB.Version.Ocarina, cmabFile.buffer);
+                        const cmabData = new CmabData(cache, cmab);
+                        dataHolder.cmabData.push(cmabData);
+                        roomRenderer.bindCMAB(cmabData);
                     }
                 }
 
                 renderer.roomRenderers.push(roomRenderer);
 
                 for (let j = 0; j < roomSetup.actors.length; j++)
-                    this.spawnActorForRoom(renderer, roomRenderer, roomSetup.actors[j], j);
+                    this.spawnActorForRoom(renderer, dataHolder, roomRenderer, roomSetup.actors[j], j);
 
                 if (this.disabledRooms.includes(i))
                     roomRenderer.setVisible(false);
