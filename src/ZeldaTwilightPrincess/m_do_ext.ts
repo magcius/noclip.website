@@ -157,6 +157,11 @@ export function mDoExt_modelEntryDL(globals: dGlobals, modelInstance: J3DModelIn
     if (drawListSet === null)
         drawListSet = globals.dlst.bg;
 
+    if (globals.renderHacks.renderHacksChanged) {
+        modelInstance.setVertexColorsEnabled(globals.renderHacks.vertexColorsEnabled);
+        modelInstance.setTexturesEnabled(globals.renderHacks.texturesEnabled);
+    }
+
     modelInstance.calcView(viewerInput.camera, viewerInput.camera.viewMatrix);
 
     renderInstManager.setCurrentList(drawListSet[0]);
