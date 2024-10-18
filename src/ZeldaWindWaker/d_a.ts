@@ -4116,6 +4116,16 @@ class d_a_oship extends fopAc_ac_c implements ModeFuncExec<d_a_oship_mode> {
     }
 }
 
+class d_a_obj_wood extends fopAc_ac_c {
+    public static PROCESS_NAME = fpc__ProcessName.d_a_obj_wood;
+
+    public override subload(globals: dGlobals): cPhs__Status {
+        globals.scnPlay.woodPacket.put_unit(this.pos, this.roomNo);
+        // globals.scnPlay.treePacket.newData(this.pos, 0, this.roomNo);
+        return cPhs__Status.Next;
+    }
+}
+
 const enum d_a_obj_flame_mode { wait, wait2, l_before, l_u, u, u_l, l_after }
 const enum d_a_obj_em_state { Off, TurnOn, On, TurnOff }
 class d_a_obj_flame extends fopAc_ac_c {
@@ -4711,6 +4721,7 @@ export function d_a__RegisterConstructors(globals: fGlobals): void {
     }
 
     R(d_a_grass);
+    R(d_a_obj_wood);
     R(d_a_ep);
     R(d_a_bg);
     R(d_a_vrbox);
