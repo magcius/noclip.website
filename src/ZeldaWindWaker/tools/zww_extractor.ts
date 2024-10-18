@@ -3,7 +3,7 @@ import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import * as BYML from "../../byml.js";
 import * as Yaz0 from '../../Common/Compression/Yaz0.js';
 import * as JKRArchive from "../../Common/JSYSTEM/JKRArchive.js";
-import { openSync, readSync, closeSync, readFileSync, writeFileSync, readdirSync, mkdirSync } from "fs";
+import { openSync, readSync, closeSync, readFileSync, writeFileSync, readdirSync, mkdirSync, cpSync } from "fs";
 import { assertExists, hexzero, assert, readString } from "../../util.js";
 import { Endianness } from "../../endian.js";
 import { loadRustLib } from "../../rustlib.js";
@@ -334,6 +334,7 @@ function extractExtra(binaries: Binary[]) {
     const data = BYML.write(crg1, BYML.FileType.CRG1);
     mkdirSync(pathBaseOut, { recursive: true });
     writeFileSync(`${pathBaseOut}/extra.crg1_arc`, Buffer.from(data));
+    cpSync(`${pathBaseIn}/res`, pathBaseOut, {recursive: true})
 }
 
 async function loadBinaries(): Promise<Binary[]> {
