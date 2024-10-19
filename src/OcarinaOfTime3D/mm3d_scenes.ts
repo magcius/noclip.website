@@ -920,7 +920,7 @@ class SceneDesc implements Viewer.SceneDesc {
                 if (gar !== null) {
                     const cmabFile = gar.files.find((file) => file.name.startsWith(`ROOM${i}/`) && file.name.endsWith('.cmab') && !file.name.endsWith('_t.cmab'));
                     if (cmabFile) {
-                        const cmab = CMAB.parse(CMB.Version.LuigisMansion, cmabFile.buffer);
+                        const cmab = CMAB.parse(CMB.Version.Majora, cmabFile.buffer);
                         const cmabData = new CmabData(cache, cmab);
                         dataHolder.cmabData.push(cmabData);
                         roomRenderer.bindCMAB(cmabData);
