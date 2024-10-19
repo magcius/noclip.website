@@ -9,7 +9,7 @@ import { BTIData, BTI_Texture } from "../Common/JSYSTEM/JUTTexture.js";
 import { dfRange, dfShow } from "../DebugFloaters.js";
 import { MathConstants, clamp, computeMatrixWithoutTranslation, computeModelMatrixR, invlerp, saturate, vec3SetAll } from "../MathHelpers.js";
 import { TDDraw } from "../SuperMarioGalaxy/DDraw.js";
-import { compareDepthValues } from "../gfx/helpers/ReversedDepthHelpers.js";
+import { compareDepthValues, reverseDepthForClearValue } from "../gfx/helpers/ReversedDepthHelpers.js";
 import { GfxClipSpaceNearZ, GfxCompareMode, GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder.js";
@@ -1578,18 +1578,8 @@ function dKyr_sun_move__PeekZ(dst: PeekZResult, peekZ: PeekZManager, v: Readonly
     if (dst.value === null)
         return SunPeekZResult.Obscured;
 
-    // Test if the depth buffer is less than our projected Z coordinate.
-    // Depth buffer readback should result in 0.0 for the near plane, and 1.0 for the far plane.
-    // Put projected coordinate in 0-1 normalized space.
-    let projectedZ = v[2];
-
-    if (clipSpaceNearZ === GfxClipSpaceNearZ.NegativeOne)
-        projectedZ = projectedZ * 0.5 + 0.5;
-
-    // Point is visible if our projected Z is in front of the depth buffer.
-    const visible = compareDepthValues(projectedZ, dst.value, GfxCompareMode.Less);
-
-    return visible ? SunPeekZResult.Visible : SunPeekZResult.Obscured;
+    const obscured = compareDepthValues(dst.value, reverseDepthForClearValue(1.0), GfxCompareMode.Less);
+    return obscured ? SunPeekZResult.Obscured : SunPeekZResult.Visible;
 }
 
 function dKyr_sun_move(globals: dGlobals): void {

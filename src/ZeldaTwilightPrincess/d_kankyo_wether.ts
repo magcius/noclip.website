@@ -16,7 +16,7 @@ import { mDoLib_project, mDoLib_projectFB } from "../ZeldaWindWaker/m_do_ext.js"
 import { MtxTrans, calc_mtx, mDoMtx_XrotM, mDoMtx_ZrotM } from "../ZeldaWindWaker/m_do_mtx.js";
 import { fullscreenMegaState, setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
-import { compareDepthValues } from "../gfx/helpers/ReversedDepthHelpers.js";
+import { compareDepthValues, reverseDepthForClearValue } from "../gfx/helpers/ReversedDepthHelpers.js";
 import { fillColor, fillVec4 } from "../gfx/helpers/UniformBufferHelpers.js";
 import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxClipSpaceNearZ, GfxCompareMode, GfxDevice, GfxFormat, GfxMipFilterMode, GfxTexFilterMode, GfxWrapMode } from "../gfx/platform/GfxPlatform.js";
 import { GfxProgram } from "../gfx/platform/GfxPlatformImpl.js";
@@ -1481,18 +1481,8 @@ function dKyr_sun_move__PeekZ(dst: PeekZResult, peekZ: PeekZManager, v: Readonly
     if (dst.value === null)
         return SunPeekZResult.Obscured;
 
-    // Test if the depth buffer is less than our projected Z coordinate.
-    // Depth buffer readback should result in 0.0 for the near plane, and 1.0 for the far plane.
-    // Put projected coordinate in 0-1 normalized space.
-    let projectedZ = v[2];
-
-    if (clipSpaceNearZ === GfxClipSpaceNearZ.NegativeOne)
-        projectedZ = projectedZ * 0.5 + 0.5;
-
-    // Point is visible if our projected Z is in front of the depth buffer.
-    const visible = compareDepthValues(projectedZ, dst.value, GfxCompareMode.Less);
-
-    return visible ? SunPeekZResult.Visible : SunPeekZResult.Obscured;
+    const obscured = compareDepthValues(dst.value, reverseDepthForClearValue(1.0), GfxCompareMode.Less);
+    return obscured ? SunPeekZResult.Obscured : SunPeekZResult.Visible;
 }
 
 function dKyr_sun_move(globals: dGlobals, deltaTimeFrames: number): void {
