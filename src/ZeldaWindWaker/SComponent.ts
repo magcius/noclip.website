@@ -129,6 +129,24 @@ export function cM__Deg2Short(v: number): number {
     return cM__Rad2Short(v * MathConstants.DEG_TO_RAD);
 }
 
+// Move `value` closer to `target` by the amount specified in `step`. 
+// If `value` would cross `target`, it is set to `target`. Returns 1 if value has reached the target, 0 otherwise.
+export function cLib_chaseS(value: { x: number }, target: number, step: number): number {
+    if (step) {
+        if (value.x > target) {
+            step = -step;
+        }
+        value.x += step;
+        if (step * (value.x - target) >= 0) {
+            value.x = target;
+            return 1;
+        }
+    } else if (value.x == target) {
+        return 1;
+    }
+    return 0;
+}
+
 export function cLib_targetAngleX(p0: ReadonlyVec3, p1: ReadonlyVec3): number {
     const dy = p1[1] - p0[1];
     const dist = cLib_distanceXZ(p0, p1);
