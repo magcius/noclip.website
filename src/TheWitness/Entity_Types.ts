@@ -1041,6 +1041,7 @@ class Entity_Type_Inanimate extends Portable_Type {
         m.add_string('render_material');
         const color_override = m.add_integer('color_override', { minimum_revision_number: 0x50, flags: Metadata_Item_Flags.ADJUSTABLE_WITHOUT_RECREATE, integer_info: make_boolean_integer_info() });
         m.add_color4('color', { predicated_upon: color_override, minimum_revision_number: 0x50, flags: Metadata_Item_Flags.ADJUSTABLE_WITHOUT_RECREATE | Metadata_Item_Flags.LINEAR_COLOR });
+        m.add_integer('platforms_omitted_from', { minimum_revision_number: 0x7e, integer_info: make_enum_integer_info(['None', 'iOS/Android', 'PC/Console'], false) });
     }
 
     public override construct_new_obj(portable_id: number, revision_number: number): Entity {
@@ -1056,6 +1057,7 @@ class Entity_Type_Issued_Sound extends Portable_Type {
         const m = this.metadata;
         make_entity_metadata(m);
         m.add_string('sound_name');
+        m.add_integer('sound_category', { minimum_revision_number: 0x7d, integer_info: make_ranged_integer_info(0, 0xFF) });
         m.add_float('duration_total');
         m.add_float('my_time');
         m.add_float('pre_play_silence', { minimum_revision_number: 0x24 });
