@@ -61,6 +61,8 @@ const kUnitCount = 200;
 const kRoomCount = 64;
 const kAnimCount = 72;
 
+const kAlphaCutoff = 0x80 / 0xFF;
+
 let sAnimInitNum = 0;
 let sAnmNormNum = 0;
 
@@ -278,7 +280,16 @@ class WoodModel {
         // Bush material
         displayListRegistersInitGX(matRegisters);
         displayListRegistersRun(matRegisters, l_matDL);
-        this.bushMaterial = new GXMaterialHelperGfx(parseMaterial(matRegisters, 'd_tree::l_matDL'));
+
+        const material = parseMaterial(matRegisters, 'd_tree::l_matDL');
+        material.alphaTest.op = GX.AlphaOp.OR;
+        material.alphaTest.compareA = GX.CompareType.GREATER;
+        material.alphaTest.compareB = GX.CompareType.GREATER;
+        material.alphaTest.referenceA = kAlphaCutoff;
+        material.alphaTest.referenceB = kAlphaCutoff;
+        material.hasDynamicAlphaTest = true;
+        this.bushMaterial = new GXMaterialHelperGfx(material);
+
         const bushTexture = createTexture(matRegisters, l_Txa_swood_bTEX, 'l_Txa_swood_bTEX');
         this.bushTextureData = new BTIData(device, cache, bushTexture);
         this.bushTextureData.fillTextureMapping(this.bushTextureMapping);
@@ -358,7 +369,7 @@ class Anm_c {
 
     /* 0x88 */ mNextAnimIdx: number; // Corresponds to the index in Packet_c::mAnm;
 
-    /* 0x8A */ mAlphaScale: number = 0xFF;
+    /* 0x8A */ mAlpha: number = 0xFF;
 
     public play(packet: Packet_c): void {
         switch (this.mMode) {
@@ -393,7 +404,7 @@ class Anm_c {
         this.mVelY = 18.0;
         this.mPosOffsetY = 0.0;
         this.mPosOffsetZ = 0.0;
-        this.mAlphaScale = 0xff;
+        this.mAlpha = 0xff;
         this.mCountdown = 20;
         this.mMode = AnimMode_e.Cut;
     }
@@ -416,11 +427,11 @@ class Anm_c {
 
         // Fade out the bush as it falls
         if (this.mCountdown < 20) {
-            let alphaScale = this.mAlphaScale - 14;
+            let alphaScale = this.mAlpha - 14;
             if (alphaScale < 0) {
                 alphaScale = 0;
             }
-            this.mAlphaScale = alphaScale;
+            this.mAlpha = alphaScale;
         }
 
         if (this.mCountdown > 0) {
@@ -465,7 +476,7 @@ class Anm_c {
             this.mUnkArr3[i] = l_animAttrs[0][i].unkShort3;
         }
 
-        this.mAlphaScale = 0xff;
+        this.mAlpha = 0xff;
 
         sAnimInitNum = (sAnimInitNum + 1) % 8;
     }
@@ -783,6 +794,9 @@ export class Packet_c implements J3DPacket {
         const worldToView = viewerInput.camera.viewMatrix;
         const worldCamPos = mat4.getTranslation(scratchVec3b, viewerInput.camera.worldMatrix);
 
+        // Render to the XLU BG display list (after the bg terrain). We want to render late since we are alpha tested.
+        renderInstManager.setCurrentList(globals.dlst.bg[1]);
+
         // Draw drop shadows
         let template = renderInstManager.pushTemplate();
         {
@@ -813,12 +827,13 @@ export class Packet_c implements J3DPacket {
         // Draw bushes
         template = renderInstManager.pushTemplate();
         {
+            // Enable alpha testing at 50%
+            materialParams.u_DynamicAlphaRefA = kAlphaCutoff;
+            materialParams.u_DynamicAlphaRefB = kAlphaCutoff;
+
             template.setSamplerBindingsFromTextureMappings([this._mModel.bushTextureMapping]);
             const materialParamsOffs = this._mModel.bushMaterial.allocateMaterialParamsDataOnInst(template, materialParams);
             this._mModel.bushMaterial.setOnRenderInst(renderInstManager.gfxRenderCache, template);
-
-            // @TODO: 
-            // GFSetAlphaCompare(GX_GREATER, 0x80, GX_AOP_OR, GX_GREATER, 0x80);
 
             // Set alpha color
             colorFromRGBA(materialParams.u_Color[ColorKind.C2], 1, 1, 1, 1);
@@ -835,15 +850,16 @@ export class Packet_c implements J3DPacket {
                         continue;
 
                     // If this bush is not chopped down, draw the main body
-                    if (unit.mFlags & ~UnitFlags.IsCut) {
-                        // TODO: Enable alpha when the bush is fading after being cut down
-                        //     u32 alphaScale = this->mAnm[pUnit->mAnmIdx].mAlphaScale;
-                        //     alphaColor.a = alphaScale;
+                    if ((unit.mFlags & UnitFlags.IsCut) == 0) {
+                        // The cut animation reduces alpha over time
+                        const cutAlpha = this.mAnm[unit.mAnmIdx].mAlpha;
+                        colorFromRGBA(materialParams.u_Color[ColorKind.C2], 1, 1, 1, cutAlpha / 0xFF);
 
-                        //     if ((alphaScale & 0xff) != 0xff) {
-                        //       GFSetAlphaCompare(GX_GREATER, 0, GX_AOP_OR, GX_GREATER,
-                        //                         0); // Disable Alpha Test
-                        //     }
+                        // If this bush is fading out, disable alpha testing
+                        if (cutAlpha != 0xff) {
+                            materialParams.u_DynamicAlphaRefA = 0;
+                            materialParams.u_DynamicAlphaRefB = 0;
+                        }
 
                         const renderInst = renderInstManager.newRenderInst();
                         this._mModel.shapeMain.setOnRenderInst(renderInst);
@@ -851,12 +867,11 @@ export class Packet_c implements J3DPacket {
                         this._mModel.bushMaterial.allocateDrawParamsDataOnInst(renderInst, drawParams);
                         renderInstManager.submitRenderInst(renderInst);
 
-                        //     if ((alphaScale & 0xff) != 0xff) {
-                        //       GFSetAlphaCompare(GX_GREATER, L_Alpha_Cutoff, GX_AOP_OR, GX_GREATER,
-                        //                         L_Alpha_Cutoff); // Alpha Test < 50%
-                        //     }
-                        //     alphaColor.a = 0xff;
-                        //     GFSetTevColor(GX_TEVREG2, alphaColor);
+                        // Return alpha test to normal (50%)
+                        if (cutAlpha != 0xff) {
+                            materialParams.u_DynamicAlphaRefA = kAlphaCutoff;
+                            materialParams.u_DynamicAlphaRefB = kAlphaCutoff;
+                        }
                     }
 
                     // Always draw the trunk
