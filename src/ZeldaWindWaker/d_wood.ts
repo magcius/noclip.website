@@ -17,6 +17,32 @@ import { parseMaterial } from '../gx/gx_material.js';
 import { Endianness } from '../endian.js';
 import * as GX from '../gx/gx_enum.js';
 import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
+import { dKyw_get_wind_pow, dKyw_get_wind_vec } from './d_kankyo_wether.js';
+import { cLib_chaseS, cM__Short2Rad, cM_atan2s } from './SComponent.js';
+import { dStage_roomStatus_c } from './d_stage.js';
+import { mDoMtx_copy, mDoMtx_XrotM, mDoMtx_YrotM, mDoMtx_YrotS, MtxTrans } from './m_do_mtx.js';
+import { assert } from '../util.js';
+
+//-----------------------------------------
+// Types
+//-----------------------------------------
+const enum UnitFlags {
+    Inactive = 0,
+    Active = 1 << 0,
+    IsFrustumCulled = 1 << 1,
+    IsCut = 1 << 2,
+}
+
+enum AnimMode_e {
+    Cut = 0,      // Chopping down
+    PushInto = 1, // Attacked or collided with, but not chopped
+    PushBack = 2, // Second half of PushInto, returning to normal
+    Fan = 3,      // When hit with fan (does nothing)
+    Norm = 4,     // Idle animation
+    ToNorm = 5,   // Blend back to the normal animation
+
+    _Max
+};
 
 //-----------------------------------------
 // Globals
@@ -30,6 +56,74 @@ const scratchVec3d = vec3.create();
 const scratchMat4a = mat4.create();
 const materialParams = new MaterialParams();
 const drawParams = new DrawParams();
+
+const kUnitCount = 200;
+const kRoomCount = 64;
+const kAnimCount = 72;
+
+let sAnimInitNum = 0;
+let sAnmNormNum = 0;
+
+//-----------------------------------------
+// Extracted Data
+//-----------------------------------------
+const l_animAttrs: {
+    /* 0x0 */ unkUShort0: number;
+    /* 0x2 */ unkShort1: number;
+    /* 0x4 */ unkShort2: number;
+    /* 0x6 */ unkShort3: number;
+    /* 0x8 */ unkFloat: number;
+}[][] = [
+        [{
+            unkUShort0: 0,
+            unkShort1: 0x50,
+            unkShort2: 0x5DC,
+            unkShort3: 0x32,
+            unkFloat: 0.6
+        }, {
+            unkUShort0: 0,
+            unkShort1: 0x1E,
+            unkShort2: 0xC80,
+            unkShort3: 0xA,
+            unkFloat: 0.2,
+        }], [{
+            unkUShort0: 1,
+            unkShort1: 0x96,
+            unkShort2: 0x4B0,
+            unkShort3: 0x96,
+            unkFloat: 0.6,
+        }, {
+            unkUShort0: 2,
+            unkShort1: 0x32,
+            unkShort2: 0x898,
+            unkShort3: 0x1E,
+            unkFloat: 0.2,
+        }], [{
+            unkUShort0: 2,
+            unkShort1: 0xC8,
+            unkShort2: 0x898,
+            unkShort3: 0x12C,
+            unkFloat: 0.6,
+        }, {
+            unkUShort0: 1,
+            unkShort1: 0x1E,
+            unkShort2: 0xFA0,
+            unkShort3: 0x32,
+            unkFloat: 0.2,
+        }], [{
+            unkUShort0: 2,
+            unkShort1: 0xC8,
+            unkShort2: 0x1838,
+            unkShort3: 0x1F4,
+            unkFloat: 0.6,
+        }, {
+            unkUShort0: 1,
+            unkShort1: 0x1E,
+            unkShort2: 0x3E8,
+            unkShort3: 0x32,
+            unkFloat: 0.2,
+        }]
+    ];
 
 //-----------------------------------------
 // Helpers
@@ -128,6 +222,7 @@ class WoodModel {
     public bushMaterial: GXMaterialHelperGfx;
 
     public shapeMain: GXShapeHelperGfx;
+    public shapeTrunk: GXShapeHelperGfx;
     public shapeShadow: GXShapeHelperGfx;
 
     public bufferCoalescer: GfxBufferCoalescerCombo;
@@ -203,14 +298,15 @@ class WoodModel {
         const vtx_l_Oba_swood_b_cutDL = vtxLoader.runVertices(vtxArrays, l_Oba_swood_b_cutDL);
 
         // Coalesce all VBs and IBs into single buffers and upload to the GPU
-        this.bufferCoalescer = loadedDataCoalescerComboGfx(device, [vtx_l_Oba_swood_bDL, vtx_l_shadowDL]);
+        this.bufferCoalescer = loadedDataCoalescerComboGfx(device, [vtx_l_Oba_swood_bDL, vtx_l_Oba_swood_b_cutDL, vtx_l_shadowDL]);
 
         // Build an input layout and input state from the vertex layout and data
         const b = this.bufferCoalescer.coalescedBuffers;
 
         // Build an input layout and input state from the vertex layout and data
         this.shapeMain = new GXShapeHelperGfx(device, cache, b[0].vertexBuffers, b[0].indexBuffer, vtxLoader.loadedVertexLayout, vtx_l_Oba_swood_bDL);
-        this.shapeShadow = new GXShapeHelperGfx(device, cache, b[1].vertexBuffers, b[1].indexBuffer, shadowVtxLoader.loadedVertexLayout, vtx_l_shadowDL);
+        this.shapeTrunk = new GXShapeHelperGfx(device, cache, b[1].vertexBuffers, b[1].indexBuffer, vtxLoader.loadedVertexLayout, vtx_l_Oba_swood_b_cutDL);
+        this.shapeShadow = new GXShapeHelperGfx(device, cache, b[2].vertexBuffers, b[2].indexBuffer, shadowVtxLoader.loadedVertexLayout, vtx_l_shadowDL);
     }
 
     public destroy(device: GfxDevice): void {
@@ -219,32 +315,222 @@ class WoodModel {
 }
 
 //-----------------------------------------
-// Types
+// Classes
 //-----------------------------------------
-const enum UnitFlags {
-    Active = 1 << 0,
-    FrustumCulled = 1 << 1,
-    Cut = 1 << 2,
-}
-
+/**
+ * A linked list of Units, so that they can be traversed room by room
+ */
 class Room_c {
-    mpUnits: Unit_c[] = [];
+    mRootUnit: Unit_c;
+
+    entry_unit(unit: Unit_c): void {
+        unit.mNextUnit = this.mRootUnit;
+        this.mRootUnit = unit;
+        return;
+    }
+
+    delete_all_unit() {
+        while (this.mRootUnit) {
+            let unit = this.mRootUnit;
+            this.mRootUnit = unit.mNextUnit!;
+            unit.clear();
+        }
+    }
 }
 
 class Anm_c {
+    /* 0x00 */ mModelMtx: mat4 = mat4.create();
+    /* 0x30 */ mTrunkModelMtx: mat4 = mat4.create();
 
+    /* 0x60 */ mMode: AnimMode_e = AnimMode_e._Max;
+
+    /* 0x64 */ mCountdown: number;
+    /* 0x66 */ mWindDir: number;   // The direction towards the actor who instigated this animation
+    /* 0x68 */ mWindPow: number;   // 0.0 - 1.0
+    /* 0x6c */ mPosOffsetY: number;
+    /* 0x70 */ mPosOffsetZ: number;
+    /* 0x74 */ mVelY: number;
+
+    /* 0x78 */ mRotY: number[] = [0, 0];
+    /* 0x7c */ mRotX: number[] = [0, 0];
+    /* 0x80 */ mUnkArr2: number[] = [0, 0];
+    /* 0x84 */ mUnkArr3: number[] = [0, 0];
+
+    /* 0x88 */ mNextAnimIdx: number; // Corresponds to the index in Packet_c::mAnm;
+
+    /* 0x8A */ mAlphaScale: number = 0xFF;
+
+    public play(packet: Packet_c): void {
+        switch (this.mMode) {
+            case AnimMode_e.Cut: return this.mode_cut(packet);
+            case AnimMode_e.PushInto: return this.mode_push_into(packet);
+            case AnimMode_e.PushBack: return this.mode_push_back(packet);
+            case AnimMode_e.Fan: return this.mode_fan(packet);
+            case AnimMode_e.Norm: return this.mode_norm(packet);
+            case AnimMode_e.ToNorm: return this.mode_to_norm(packet);
+            default: return;
+        }
+    }
+
+    public copy_angamp(anm: Anm_c): void {
+
+    }
+
+    // Animations are assigned from the Packet to specific Wood instances (Bushes) when a new animation starts
+    // Each animation mode has an mode_*_init() function which is called when the animation is started
+    // The mode_*() function is called to update the animation each frame, until finished
+
+    // Animate when cut with a weapon 
+    public mode_cut_init(anm: Anm_c, targetAngle: number): void {
+        for (let i = 0; i < 2; i++) {
+            this.mRotY[i] = 0;
+            this.mRotX[i] = 0;
+            this.mUnkArr2[i] = 0;
+            this.mUnkArr3[i] = 0;
+        }
+
+        this.mWindDir = targetAngle;
+        this.mVelY = 18.0;
+        this.mPosOffsetY = 0.0;
+        this.mPosOffsetZ = 0.0;
+        this.mAlphaScale = 0xff;
+        this.mCountdown = 20;
+        this.mMode = AnimMode_e.Cut;
+    }
+
+    public mode_cut(packet: Packet_c): void {
+        this.mVelY = this.mVelY - 3.0;
+        if (this.mVelY < -40.0) {
+            this.mVelY = -40.0;
+        }
+
+        this.mPosOffsetY = this.mPosOffsetY + this.mVelY;
+        this.mPosOffsetZ = this.mPosOffsetZ + 2.5;
+        this.mRotX[0] = this.mRotX[0] - 200;
+
+        mDoMtx_YrotS(scratchMat4a, this.mWindDir);
+        MtxTrans([0.0, this.mPosOffsetY, this.mPosOffsetZ], true, scratchMat4a);
+        mDoMtx_XrotM(scratchMat4a, this.mRotX[0]);
+        mDoMtx_YrotM(scratchMat4a, -this.mWindDir);
+        mDoMtx_copy(scratchMat4a, this.mModelMtx);
+
+        // Fade out the bush as it falls
+        if (this.mCountdown < 20) {
+            let alphaScale = this.mAlphaScale - 14;
+            if (alphaScale < 0) {
+                alphaScale = 0;
+            }
+            this.mAlphaScale = alphaScale;
+        }
+
+        if (this.mCountdown > 0) {
+            this.mCountdown = this.mCountdown + -1;
+        }
+    }
+
+    // Animate when pushed into
+    public mode_push_into_init(anm: Anm_c, targetAngle: number): void {
+
+    }
+
+    public mode_push_into(packet: Packet_c): void {
+
+    }
+
+
+    // Animate when pushed back
+    public mode_push_back_init(): void {
+
+    }
+
+    public mode_push_back(packet: Packet_c): void {
+
+    }
+
+
+    // Animate when hit with the fan item (does nothing)
+    public mode_fan(packet: Packet_c): void {
+
+    }
+
+
+    // Animate normally (not interacting with character)
+    public mode_norm_init(): void {
+        this.mMode = AnimMode_e.Norm;
+
+        for (let i = 0; i < 2; i++) {
+            this.mRotY[i] = (sAnimInitNum << 0xd);
+            this.mRotX[i] = (sAnimInitNum << 0xd);
+            this.mUnkArr2[i] = l_animAttrs[0][i].unkShort1;
+            this.mUnkArr3[i] = l_animAttrs[0][i].unkShort3;
+        }
+
+        this.mAlphaScale = 0xff;
+
+        sAnimInitNum = (sAnimInitNum + 1) % 8;
+    }
+
+    public mode_norm(packet: Packet_c): void {
+        let phase;
+        if (this.mWindPow < 0.33) {
+            phase = 0;
+        } else {
+            if (this.mWindPow < 0.66) {
+                phase = 1;
+            } else {
+                phase = 2;
+            }
+        }
+
+        let fVar1 = 0.0;
+        let fVar6 = fVar1;
+        for (let i = 0; i < 2; i++) {
+            const animAttr = l_animAttrs[phase][i];
+            const unk2 = animAttr.unkShort2;
+            const unk1 = animAttr.unkShort1;
+            const unk3 = animAttr.unkShort3;
+            const unk4 = animAttr.unkFloat;
+
+            this.mRotY[i] += animAttr.unkUShort0;
+            this.mRotX[i] += unk2;
+            cLib_chaseS({ x: this.mUnkArr2[i] }, unk1, 2);
+            cLib_chaseS({ x: this.mUnkArr2[i] }, unk3, 2);
+
+            fVar1 += this.mUnkArr2[i] * Math.cos(cM__Short2Rad((this.mRotY[i])));
+            fVar6 += this.mUnkArr3[i] * (unk4 + Math.cos(cM__Short2Rad((this.mRotX[i]))));
+        }
+
+        mDoMtx_YrotS(this.mModelMtx, fVar1 + this.mWindDir);
+        mDoMtx_XrotM(this.mModelMtx, fVar6);
+        mDoMtx_YrotM(this.mModelMtx, -this.mWindDir);
+    }
+
+    public mode_norm_set_wind(pow: number, dir: number): void {
+        this.mWindDir = dir;
+        this.mWindPow = pow;
+    }
+
+
+    // Unsure?
+    public mode_to_norm_init(anmIdx: number): void {
+
+    }
+
+    public mode_to_norm(packet: Packet_c): void {
+
+    }
 }
 
 class Unit_c {
     mPos = vec3.create();
-    mFlags: UnitFlags;
-    // int mAnmIdx;
-    // Mtx field_0x018;
-    mShadowMtx: mat4 = mat4.create();
-    mModelMtx: mat4 = mat4.create();
-    // Mtx field_0x0a8;
-    // Unit_c* mpNext;
-    // u8 field_0xdc[0x18C - 0xDC];
+    mFlags: UnitFlags = 0;
+    mAnmIdx: number = 0;
+    mModelViewMtx: mat4 = mat4.create();
+    mTrunkModelViewMtx: mat4 = mat4.create();
+    mShadowModelMtx: mat4 = mat4.create();
+    mShadowModelViewMtx: mat4 = mat4.create();
+
+    mNextUnit: Unit_c | null = null; // The next unit in the same room (a linked list)
 
     public set_ground(): number {
         // @TODO: This is copied from d_tree. Should actually implement the d_wood version.
@@ -269,33 +555,49 @@ class Unit_c {
         vec3.cross(right, normal, forward);
 
         // Get the normal from the raycast, rotate shadow to match surface
-        this.mShadowMtx[0] = right[0];
-        this.mShadowMtx[1] = right[1];
-        this.mShadowMtx[2] = right[2];
-        this.mShadowMtx[3] = this.mPos[0];
+        this.mShadowModelMtx[0] = right[0];
+        this.mShadowModelMtx[1] = right[1];
+        this.mShadowModelMtx[2] = right[2];
+        this.mShadowModelMtx[3] = this.mPos[0];
 
-        this.mShadowMtx[4] = normal[0];
-        this.mShadowMtx[5] = normal[1];
-        this.mShadowMtx[6] = normal[2];
-        this.mShadowMtx[7] = 1.0 + y;
+        this.mShadowModelMtx[4] = normal[0];
+        this.mShadowModelMtx[5] = normal[1];
+        this.mShadowModelMtx[6] = normal[2];
+        this.mShadowModelMtx[7] = 1.0 + y;
 
-        this.mShadowMtx[8] = forward[0];
-        this.mShadowMtx[9] = forward[1];
-        this.mShadowMtx[10] = forward[2];
-        this.mShadowMtx[11] = this.mPos[2];
+        this.mShadowModelMtx[8] = forward[0];
+        this.mShadowModelMtx[9] = forward[1];
+        this.mShadowModelMtx[10] = forward[2];
+        this.mShadowModelMtx[11] = this.mPos[2];
 
-        mat4.transpose(this.mShadowMtx, this.mShadowMtx);
+        mat4.transpose(this.mShadowModelMtx, this.mShadowModelMtx);
 
         return y;
     }
 
-    public set_mtx(anim: Anm_c): void {
-        // @TODO: Set main and show mtxs
-        mat4.mul(this.mModelMtx, mat4.fromTranslation(scratchMat4a, this.mPos), mat4.create());
+    /**
+     * Compute modelView matrices for the body, trunk, and drop shadow
+     * @param anim 
+     */
+    public set_mtx(anims: Anm_c[]): void {
+        mDoMtx_copy(anims[this.mAnmIdx].mModelMtx, scratchMat4a);
+        scratchMat4a[12] += this.mPos[0];
+        scratchMat4a[13] += this.mPos[1];
+        scratchMat4a[14] += this.mPos[2];
+        mat4.mul(this.mModelViewMtx, globals.camera.viewMatrix, scratchMat4a);
+
+        mDoMtx_copy(anims[this.mAnmIdx].mTrunkModelMtx, scratchMat4a);
+        scratchMat4a[12] += this.mPos[0];
+        scratchMat4a[13] += this.mPos[1];
+        scratchMat4a[14] += this.mPos[2];
+        mat4.mul(this.mTrunkModelViewMtx, globals.camera.viewMatrix, scratchMat4a);
+
+        mat4.mul(this.mShadowModelViewMtx, globals.camera.viewMatrix, this.mShadowModelMtx);
     }
 
     public clear(): void {
-
+        this.mFlags = UnitFlags.Inactive;
+        this.mNextUnit = null;
     }
 
     public cc_hit_before_cut(packet: Packet_c): void {
@@ -303,51 +605,165 @@ class Unit_c {
     }
 
     public cc_hit_after_cut(packet: Packet_c): void {
-
+        // Does nothing
     }
 
     public proc(packet: Packet_c): void {
-
+        // If this unit is active, and performing a non-normal animation...
+        if (this.mFlags & UnitFlags.Active) {
+            if (this.mAnmIdx >= 8) {
+                const anim = packet.get_anm(this.mAnmIdx);
+                if (anim.mMode == AnimMode_e.ToNorm) {
+                    if (anim.mCountdown <= 0) {
+                        this.mAnmIdx = anim.mNextAnimIdx;
+                        anim.mMode = AnimMode_e._Max;
+                    }
+                } else if (anim.mMode == AnimMode_e.Cut) {
+                    if (anim.mCountdown <= 0) {
+                        const newAnimIdx = packet.search_anm(AnimMode_e.Norm);
+                        this.mAnmIdx = newAnimIdx;
+                        anim.mMode = AnimMode_e._Max;
+                        this.mFlags |= UnitFlags.IsCut;
+                    }
+                } else if (anim.mMode == AnimMode_e._Max) {
+                    this.mAnmIdx = packet.search_anm(AnimMode_e.Norm);
+                }
+            }
+        }
     }
 }
 
 export class Packet_c implements J3DPacket {
-    private mUnit: Unit_c[] = [];
-    private mRoom: Room_c[] = nArray(64, () => new Room_c());
-    private mAnm: Anm_c[] = nArray(72, () => new Anm_c());
+    private mUnit: Unit_c[] = nArray(kUnitCount, () => new Unit_c());
+    private mRoom: Room_c[] = nArray(kRoomCount, () => new Room_c());
+    private mAnm: Anm_c[] = nArray(kAnimCount, () => new Anm_c());
 
     private _mModel: WoodModel;
 
     // void delete_room(s32 room_no);
-    // void calc_cc();
-    // void update();
-    // s32 search_empty_UnitID() const;
-    // s32 search_anm(Anm_c::Mode_e mode);
 
     constructor(lGlobals: dGlobals) {
         globals = lGlobals;
         this._mModel = new WoodModel(lGlobals);
+
+        for (let i = 0; i < 8; i++) {
+            this.mAnm[i].mode_norm_init();
+        }
     }
 
     destroy(device: GfxDevice) {
         this._mModel.destroy(device);
     }
 
-    put_unit(pos: vec3, room_no: number): number {
-        const unit = new Unit_c();
-        unit.mFlags = UnitFlags.Active;
-        vec3.copy(unit.mPos, pos);
-        // TODO: assign anm
-        const groundY = unit.set_ground();
-        if (groundY) {
-            this.mRoom[room_no].mpUnits.push(unit);
-            return this.mUnit.push(unit);
+    get_anm(idx: number): Anm_c {
+        return this.mAnm[idx];
+    }
+
+    search_anm(i_mode: AnimMode_e): number {
+        let animIdx: number;
+
+        assert((i_mode >= 0) && (i_mode < AnimMode_e._Max));
+
+        if (i_mode == AnimMode_e.Norm) {
+            animIdx = sAnmNormNum++;
+            sAnmNormNum = sAnmNormNum % 8;
+        } else {
+            // Return the first anim slot which has an unset mode
+            animIdx = 8;
+            for (let i = 0; i < 64; i++) {
+                if (this.mAnm[animIdx].mMode == AnimMode_e._Max) {
+                    return animIdx;
+                }
+                animIdx++;
+            }
+
+            // If none are available, return the first one which has a higher mode
+            animIdx = 8;
+            for (let i = 0; i < 64; i++) {
+                if (i_mode < this.mAnm[animIdx].mMode) {
+                    return animIdx;
+                }
+                animIdx++;
+            }
+
+            // If no available anim slot is found, return -1
+            animIdx = -1;
         }
-        return -1;
+
+        return animIdx;
+    }
+
+    search_empty_UnitID(): number {
+        for (let i = 0; i < kUnitCount; i++) {
+            if (this.mUnit[i].mFlags == 0) {
+                return i;
+            }
+        }
+
+        return kUnitCount;
+    }
+
+    put_unit(pos: vec3, room_no: number): number {
+        const unitIdx = this.search_empty_UnitID();
+        if (unitIdx != kUnitCount) {
+            const unit = this.mUnit[unitIdx];
+            unit.mFlags = UnitFlags.Active;
+
+            vec3.copy(unit.mPos, pos);
+
+            unit.mAnmIdx = this.search_anm(AnimMode_e.Norm);
+
+            const groundY = unit.set_ground();
+            if (groundY) {
+                this.mRoom[room_no].entry_unit(unit);
+            } else {
+                unit.clear();
+            }
+        }
+        return unitIdx;
+    }
+
+    // Calculate collisions
+    public calc_cc() {
+        const roomIdx = globals.mStayNo;
+
+        if ((roomIdx >= 0) && (roomIdx < kRoomCount)) {
+            //     dComIfG_Ccsp() -> SetMassAttr(L_attr.kCollisionRad1, L_attr.kCollisionHeight1, (u8)0x13, 1);
+
+            const room = this.mRoom[roomIdx];
+            for (let unit = room.mRootUnit; unit != null; unit = unit.mNextUnit!) {
+                if ((unit.mFlags & UnitFlags.IsCut) == 0) {
+                    unit.cc_hit_before_cut(this);
+                }
+            }
+
+            //     dComIfG_Ccsp() -> SetMassAttr(L_attr.kCollisionRad2, L_attr.kCollisionHeight2, (u8)0x12, 1);
+            for (let unit = room.mRootUnit; unit != null; unit = unit.mNextUnit!) {
+                if ((unit.mFlags & UnitFlags.IsCut) != 0) {
+                    unit.cc_hit_after_cut(this);
+                }
+            }
+        }
     }
 
     public calc(frameCount: number) {
+        this.calc_cc();
 
+        const windVec = dKyw_get_wind_vec(globals.g_env_light);
+        const windPow = dKyw_get_wind_pow(globals.g_env_light);
+        const windAngle = cM_atan2s(windVec[0], windVec[2]);
+
+        for (let i = 0; i < 8; i++) {
+            this.mAnm[i].mode_norm_set_wind(0.2, windAngle);
+        }
+
+        for (let i = 0; i < kAnimCount; i++) {
+            this.mAnm[i].play(this);
+        }
+
+        for (let i = 0; i < kUnitCount; i++) {
+            this.mUnit[i].proc(this);
+        }
     }
 
     public update() {
@@ -355,7 +771,7 @@ export class Packet_c implements J3DPacket {
             const unit = this.mUnit[i];
             if (unit.mFlags & UnitFlags.Active) {
                 // TODO: Frustum Culling
-                // unit.mFlags |= UnitFlags.FrustumCulled;
+                // unit.mFlags |= UnitFlags.IsFrustumCulled;
                 unit.set_mtx(this.mAnm);
             }
         }
@@ -364,46 +780,29 @@ export class Packet_c implements J3DPacket {
     }
 
     public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        // for (s32 i = 0; i < (s32)ARRAY_SIZE(mRoom); room++, i++) {
-        //     for (Unit_c *data = room->mpUnit; data != NULL; data = data->mpNext) {
-        //       if ((pUnit->mFlags & 2) == 0) {
-        //         GFLoadPosMtxImm(pUnit->field_0x0a8, 0);
-        //         GXCallDisplayList(dl, dlSize);
-        //       }
-        //     }
-        //   }
-
         const worldToView = viewerInput.camera.viewMatrix;
         const worldCamPos = mat4.getTranslation(scratchVec3b, viewerInput.camera.worldMatrix);
 
-        // Draw shadows
+        // Draw drop shadows
         let template = renderInstManager.pushTemplate();
         {
             template.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT);
-            dKy_GxFog_set(globals.g_env_light, materialParams.u_FogBlock, viewerInput.camera);
             // Set the shadow color. Pulled from d_tree::l_shadowColor$4656
             colorFromRGBA(materialParams.u_Color[ColorKind.C0], 0, 0, 0, 0x64 / 0xFF);
             this._mModel.shadowMaterial.allocateMaterialParamsDataOnInst(template, materialParams);
             this._mModel.shadowMaterial.setOnRenderInst(renderInstManager.gfxRenderCache, template);
             template.setSamplerBindingsFromTextureMappings(this._mModel.shadowTextureMapping);
 
-
             for (let r = 0; r < this.mRoom.length; r++) {
-                const units = this.mRoom[r].mpUnits;
-                for (let i = 0; i < units.length; i++) {
-                    const unit = units[i];
-
-                    if (unit.mFlags & UnitFlags.FrustumCulled)
+                for (let unit = this.mRoom[r].mRootUnit; unit != null; unit = unit.mNextUnit!) {
+                    if (unit.mFlags & UnitFlags.IsFrustumCulled)
                         continue;
                     if (distanceCull(worldCamPos, unit.mPos))
                         continue;
 
-                    // @TODO: Fix this
-                    setColorFromRoomNo(globals, materialParams, r);
-
                     const shadowRenderInst = renderInstManager.newRenderInst();
                     this._mModel.shapeShadow.setOnRenderInst(shadowRenderInst);
-                    mat4.mul(drawParams.u_PosMtx[0], worldToView, unit.mShadowMtx);
+                    mat4.copy(drawParams.u_PosMtx[0], unit.mShadowModelViewMtx);
                     this._mModel.shadowMaterial.allocateDrawParamsDataOnInst(shadowRenderInst, drawParams);
                     renderInstManager.submitRenderInst(shadowRenderInst);
                 }
@@ -418,24 +817,52 @@ export class Packet_c implements J3DPacket {
             const materialParamsOffs = this._mModel.bushMaterial.allocateMaterialParamsDataOnInst(template, materialParams);
             this._mModel.bushMaterial.setOnRenderInst(renderInstManager.gfxRenderCache, template);
 
+            // @TODO: 
+            // GFSetAlphaCompare(GX_GREATER, 0x80, GX_AOP_OR, GX_GREATER, 0x80);
+
+            // Set alpha color
             colorFromRGBA(materialParams.u_Color[ColorKind.C2], 1, 1, 1, 1);
 
             for (let r = 0; r < this.mRoom.length; r++) {
-                const units = this.mRoom[r].mpUnits;
-                for (let i = 0; i < units.length; i++) {
-                    const unit = units[i];
+                // Set the room color and fog params
+                setColorFromRoomNo(globals, materialParams, r);
+                dKy_GxFog_set(globals.g_env_light, materialParams.u_FogBlock, viewerInput.camera);
 
-                    if (unit.mFlags & UnitFlags.FrustumCulled)
+                for (let unit = this.mRoom[r].mRootUnit; unit != null; unit = unit.mNextUnit!) {
+                    if (unit.mFlags & UnitFlags.IsFrustumCulled)
                         continue;
                     if (distanceCull(worldCamPos, unit.mPos))
                         continue;
 
-                    // @TODO: Fix this
-                    setColorFromRoomNo(globals, materialParams, r);
+                    // If this bush is not chopped down, draw the main body
+                    if (unit.mFlags & ~UnitFlags.IsCut) {
+                        // TODO: Enable alpha when the bush is fading after being cut down
+                        //     u32 alphaScale = this->mAnm[pUnit->mAnmIdx].mAlphaScale;
+                        //     alphaColor.a = alphaScale;
 
+                        //     if ((alphaScale & 0xff) != 0xff) {
+                        //       GFSetAlphaCompare(GX_GREATER, 0, GX_AOP_OR, GX_GREATER,
+                        //                         0); // Disable Alpha Test
+                        //     }
+
+                        const renderInst = renderInstManager.newRenderInst();
+                        this._mModel.shapeMain.setOnRenderInst(renderInst);
+                        mat4.copy(drawParams.u_PosMtx[0], unit.mModelViewMtx);
+                        this._mModel.bushMaterial.allocateDrawParamsDataOnInst(renderInst, drawParams);
+                        renderInstManager.submitRenderInst(renderInst);
+
+                        //     if ((alphaScale & 0xff) != 0xff) {
+                        //       GFSetAlphaCompare(GX_GREATER, L_Alpha_Cutoff, GX_AOP_OR, GX_GREATER,
+                        //                         L_Alpha_Cutoff); // Alpha Test < 50%
+                        //     }
+                        //     alphaColor.a = 0xff;
+                        //     GFSetTevColor(GX_TEVREG2, alphaColor);
+                    }
+
+                    // Always draw the trunk
                     const renderInst = renderInstManager.newRenderInst();
-                    this._mModel.shapeMain.setOnRenderInst(renderInst);
-                    mat4.mul(drawParams.u_PosMtx[0], worldToView, unit.mModelMtx);
+                    this._mModel.shapeTrunk.setOnRenderInst(renderInst);
+                    mat4.copy(drawParams.u_PosMtx[0], unit.mTrunkModelViewMtx);
                     this._mModel.bushMaterial.allocateDrawParamsDataOnInst(renderInst, drawParams);
                     renderInstManager.submitRenderInst(renderInst);
                 }
