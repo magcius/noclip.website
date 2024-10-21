@@ -1,5 +1,5 @@
 
-import { ReadonlyVec3, mat4, quat, vec3 } from "gl-matrix";
+import { ReadonlyMat4, ReadonlyVec3, mat4, quat, vec3 } from "gl-matrix";
 import { computeModelMatrixR, transformVec3Mat4w1 } from "../MathHelpers.js";
 import { cM__Short2Rad } from "./SComponent.js";
 
@@ -37,6 +37,10 @@ export function mDoMtx_XYZrotM(dst: mat4, v: vec3): void {
     mat4.rotateZ(dst, dst, cM__Short2Rad(v[2]));
     mat4.rotateY(dst, dst, cM__Short2Rad(v[1]));
     mat4.rotateX(dst, dst, cM__Short2Rad(v[0]));
+}
+
+export function mDoMtx_copy(src: ReadonlyMat4, dst: mat4): void {
+    mat4.copy(dst, src);
 }
 
 export const calc_mtx = mat4.create();
