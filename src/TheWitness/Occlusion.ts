@@ -1,7 +1,7 @@
 
 import { computeViewSpaceDepthFromWorldSpacePoint } from "../Camera.js";
 import { Color, colorNewCopy, Cyan, Green, Magenta, OpaqueBlack, Red, White } from "../Color.js";
-import { drawScreenSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk.js";
+import { drawScreenSpaceText, drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk.js";
 import { standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
 import { GfxDevice, GfxFormat, GfxQueryPoolType } from "../gfx/platform/GfxPlatform.js";
 import { GfxQueryPool } from "../gfx/platform/GfxPlatformImpl.js";
@@ -13,7 +13,6 @@ import { TheWitnessGlobals } from "./Globals.js";
 class Occlusion_Cluster {
     public renderInstList = new GfxRenderInstList(gfxRenderInstCompareNone);
     public depth: number = -1;
-    public visible: boolean = false;
 
     constructor(public entity: Entity_Cluster) {
     }
@@ -41,7 +40,7 @@ class Occlusion_Frame {
 
     public mark_clusters_visible(device: GfxDevice): void {
         for (let i = 0; i < this.clusters.length; i++)
-            this.clusters[i].visible = device.queryPoolResultOcclusion(this.pool, i)!;
+            this.clusters[i].entity.occlusion_visible = device.queryPoolResultOcclusion(this.pool, i)!;
     }
 
     public reset(): void {
@@ -82,15 +81,6 @@ export class Occlusion_Manager {
             return new Occlusion_Frame(device);
     }
 
-    public clusterIsVisible(portable_id: number | undefined): boolean {
-        if (portable_id === undefined)
-            return true;
-        for (let i = 0; i < this.clusters.length; i++)
-            if (this.clusters[i].entity.portable_id === portable_id)
-                return this.clusters[i].visible;
-        return true;
-    }
-
     public prepareToRender(globals: TheWitnessGlobals, renderInstManager: GfxRenderInstManager): void {
         // Go through the world's clusters, and push them to the render inst list...
         const oldRenderList = renderInstManager.currentList;
@@ -117,7 +107,7 @@ export class Occlusion_Manager {
             const frame = this.submittedFrames[i];
             if (frame.is_ready(device)) {
                 for (let i = 0; i < this.clusters.length; i++)
-                    this.clusters[i].visible = false;
+                    this.clusters[i].entity.occlusion_visible = false;
 
                 frame.mark_clusters_visible(device);
 

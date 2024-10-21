@@ -16,7 +16,11 @@ class TheWitnessSceneDesc implements SceneDesc {
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
         const asset_manager = new Asset_Manager(device);
         const zip = ZipFile.parseZipFile(await context.dataFetcher.fetchData(`${pathBase}/data-pc.zip`));
-        asset_manager.add_bundle(zip);
+        asset_manager.load_root_bundle(zip);
+        asset_manager.load_package('globals');
+
+        asset_manager.load_package('save_common');
+        asset_manager.load_package('save_shared');
 
         const globals = new TheWitnessGlobals(device, asset_manager);
         globals.entity_manager.load_world(globals);

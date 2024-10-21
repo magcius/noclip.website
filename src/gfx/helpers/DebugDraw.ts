@@ -12,7 +12,7 @@ import { preprocessProgram_GLSL } from "../shaderc/GfxShaderCompiler.js";
 import { GfxTopology, convertToTrianglesRange } from "./TopologyHelpers.js";
 import { setAttachmentStateSimple } from "./GfxMegaStateDescriptorHelpers.js";
 import { branchlessONB } from "../../DebugJunk.js";
-import { MathConstants, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation } from "../../MathHelpers.js";
+import { MathConstants, Vec3UnitX, Vec3UnitY, Vec3UnitZ, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation } from "../../MathHelpers.js";
 import { IsDepthReversed } from "./ReversedDepthHelpers.js";
 import { assert } from "../platform/GfxPlatformUtil.js";
 
@@ -343,6 +343,12 @@ export class DebugDraw {
             page.index(baseVertex + i);
             page.index(baseVertex + ((i === sides - 1) ? 0 : i + 1));
         }
+    }
+
+    public drawSphereLine(center: ReadonlyVec3, r: number, color: Color, sides = 32, options: DebugDrawOptions = { flags: DebugDrawFlags.Default }) {
+        this.drawDiscLineRU(center, Vec3UnitX, Vec3UnitY, r, color, sides, options);
+        this.drawDiscLineRU(center, Vec3UnitX, Vec3UnitZ, r, color, sides, options);
+        this.drawDiscLineRU(center, Vec3UnitY, Vec3UnitZ, r, color, sides, options);
     }
 
     public drawDiscSolidN(center: ReadonlyVec3, n: ReadonlyVec3, r: number, color: Color, sides = 32, options: DebugDrawOptions = { flags: DebugDrawFlags.Default }): void {

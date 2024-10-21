@@ -266,8 +266,10 @@ impl ConvexHull {
     }
 
     pub fn push_plane(&mut self, x: f32, y: f32, z: f32, d: f32) {
-        let normal = Vec3::new(x, y, z);
-        self.planes.push(Plane { normal, d });
+        // Normalize the plane equation so that sphere tests work.
+        let mut normal = Vec3::new(x, y, z);
+        let mag = normal.normalize_mut();
+        self.planes.push(Plane { normal, d: d / mag });
     }
 
     pub fn js_intersect_aabb(&mut self, min_x: f32, min_y: f32, min_z: f32, max_x: f32, max_y: f32, max_z: f32) -> IntersectionState {

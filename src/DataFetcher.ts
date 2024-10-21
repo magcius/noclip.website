@@ -306,6 +306,13 @@ export class DataFetcher {
         }
     }
 
+    public async clearCache() {
+        if (this.cache !== null) {
+            for (const key of await this.cache.keys())
+                this.cache.delete(key);
+        }
+    }
+
     public async mount() {
         let directory: FileSystemDirectoryHandle;
 

@@ -45,6 +45,7 @@
     "build:zelview": "cd src/zelview/tools && tsx extractor.ts",
     "build:JetSetRadio": "cd src/JetSetRadio/tools && tsx extractor.ts",
     "build:BanjoKazooie": "cd src/BanjoKazooie/tools && tsx extractor.ts",
+    "build:TheWitness": "cd src/TheWitness/tools && tsx extractor.ts",
     "test:DeBlob2": "cd src/DeBlob2/tools && tsx systest.ts",
     "typecheck": "tsc -w --noEmit"
   },
@@ -52,7 +53,6 @@
     "nc-bcsvtool": "./src/tools/bcsvtool.ts",
     "nc-rarctool": "./src/tools/rarctool.ts",
     "nc-crg1tool": "./src/tools/crg1tool.ts",
-    "nc-witnessassettool": "./src/tools/witnessassettool.ts",
     "nc-bnd3tool": "./src/DarkSouls/tools/bnd3tool.ts"
   },
   "type": "module",

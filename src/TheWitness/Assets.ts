@@ -1,8 +1,8 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import * as LZ4 from "../Common/Compression/LZ4.js";
-import { assert, nArray, nullify } from "../util.js";
-import { ZipFile, parseZipFile, decompressZipFileEntry } from "../ZipFile.js";
+import { assert, assertExists, nArray } from "../util.js";
+import { ZipFile, parseZipFile, decompressZipFileEntry, ZipFileEntry } from "../ZipFile.js";
 import { GfxDevice, GfxTexture, GfxTextureDimension, GfxFormat, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxIndexBufferDescriptor, GfxTextureUsage, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { Color } from "../Color.js";
@@ -731,38 +731,56 @@ export class Asset_Manager {
     public cache: GfxRenderCache;
     private destroyables: Destroyable[] = [];
     private asset_cache = new Map<string, any>();
-    private data_cache = new Map<string, ArrayBufferSlice>();
+    private entry_cache = new Map<string, ZipFileEntry>();
 
     constructor(public device: GfxDevice) {
         this.cache = new GfxRenderCache(device);
     }
 
-    public add_bundle(bundle: ZipFile, filename?: string) {
+    private add_bundle(bundle: ZipFile, filename?: string) {
         if (filename)
             (bundle as any).filename = filename;
 
         // XXX(jstpierre): This is a hack to load all assets. Eventually go through and implement the cluster system.
         for (let i = 0; i < bundle.length; i++) {
             const entry = bundle[i];
-            const data = decompressZipFileEntry(entry);
-
-            if (entry.filename.endsWith('.pkg')) {
-                this.add_bundle(parseZipFile(data), entry.filename);
-            } else {
-                this.data_cache.set(entry.filename, data);
-            }
+            this.entry_cache.set(entry.filename, entry);
         }
     }
 
-    private find_asset_data(processed_filename: string): ArrayBufferSlice | null {
-        return nullify(this.data_cache.get(processed_filename));
+    public load_root_bundle(bundle: ZipFile): void {
+        this.add_bundle(bundle);
+    }
+
+    public load_bundle(bundle_filename: string): void {
+        const bundle_zip_entry = assertExists(this.entry_cache.get(bundle_filename));
+        const bundle_zip_data = decompressZipFileEntry(bundle_zip_entry);
+        const bundle_zip = parseZipFile(bundle_zip_data);
+        this.add_bundle(bundle_zip, bundle_filename);
+    }
+
+    public load_package(package_name: string): void {
+        for (let i = 0; ; i++) {
+            const bundle_filename = `${package_name}_${i}.pkg`;
+            if (!this.entry_cache.has(bundle_filename))
+                break;
+
+            this.load_bundle(bundle_filename);
+        }
+    }
+
+    private load_asset_data(processed_filename: string): ArrayBufferSlice | null {
+        const entry = this.entry_cache.get(processed_filename);
+        if (entry === undefined)
+            return null;
+        return decompressZipFileEntry(entry);
     }
 
     public load_asset<T extends Asset_Type>(type: T, source_name: string, options_hash: number = 0): AssetT<T> | null {
         const processed_filename = get_processed_filename(type, source_name, options_hash);
         if (this.asset_cache.has(processed_filename))
             return this.asset_cache.get(processed_filename) as AssetT<T>;
-        const asset_data = this.find_asset_data(processed_filename);
+        const asset_data = this.load_asset_data(processed_filename);
         if (asset_data === null)
             return null;
         const asset = load_asset(this.device, this.cache, type, asset_data, source_name);

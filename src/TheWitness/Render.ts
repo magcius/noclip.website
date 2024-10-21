@@ -1,7 +1,7 @@
 
 import { mat4, ReadonlyMat4, vec3 } from "gl-matrix";
 import { CameraController } from "../Camera.js";
-import { Color, colorCopy, colorNewCopy, colorNewFromRGBA, White } from "../Color.js";
+import { Color, colorCopy, colorNewCopy, colorNewFromRGBA, Magenta, White } from "../Color.js";
 import { AABB } from "../Geometry.js";
 import { fullscreenMegaState, setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
 import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
@@ -908,6 +908,8 @@ export class TheWitnessRenderer implements SceneGfx {
 
         const world = this.globals.entity_manager.flat_entity_list.find((e) => e instanceof Entity_World) as Entity_World;
         // this.cached_shadow_map = new Cached_Shadow_Map(globals, world);
+
+        globals.debug_draw = this.renderHelper.debugDraw;
     }
 
     public adjustCameraController(c: CameraController): void {
@@ -943,9 +945,25 @@ export class TheWitnessRenderer implements SceneGfx {
 
         globals.occlusion_manager.prepareToRender(globals, this.renderHelper.renderInstManager);
 
-        // Go through each entity and render them.
-        for (let i = 0; i < globals.entity_manager.flat_entity_list.length; i++)
-            globals.entity_manager.flat_entity_list[i].prepareToRender(globals, this.renderHelper.renderInstManager);
+        // Go through each entity cluster.
+        for (let i = 0; i < globals.entity_render_list.clusters.length; i++) {
+            const cluster = globals.entity_render_list.clusters[i];
+            if (!cluster.occlusion_visible)
+                continue;
+
+            if (!viewpoint.frustum.containsSphere(cluster.bounding_center_world, cluster.bounding_radius_world))
+                continue;
+
+            for (let j = 0; j < cluster.elements.length; j++) {
+                const entity = globals.entity_manager.entity_list[cluster.elements[j]];
+                entity.prepareToRender(globals, this.renderHelper.renderInstManager);
+            }
+        }
+
+        for (let i = 0; i < globals.entity_render_list.unclustered_entities.length; i++) {
+            const entity = globals.entity_render_list.unclustered_entities[i];
+            entity.prepareToRender(globals, this.renderHelper.renderInstManager);
+        }
 
         this.skydome.prepareToRender(globals, this.renderHelper.renderInstManager);
 
@@ -957,6 +975,8 @@ export class TheWitnessRenderer implements SceneGfx {
         const globals = this.globals;
 
         viewerInput.camera.setClipPlanes(0.1);
+
+        this.renderHelper.debugDraw.beginFrame(globals.viewpoint.clipFromViewMatrix, globals.viewpoint.viewFromWorldMatrix, viewerInput.backbufferHeight, viewerInput.backbufferHeight);
 
         const renderInstManager = this.renderHelper.renderInstManager;
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
@@ -1006,6 +1026,7 @@ export class TheWitnessRenderer implements SceneGfx {
                 this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
+        this.renderHelper.debugDraw.pushPasses(builder, mainColorTargetID, mainDepthTargetID);
         this.renderHelper.antialiasingSupport.pushPasses(builder, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 

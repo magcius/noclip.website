@@ -1,5 +1,5 @@
 
-import { Entity_Manager } from "./Entity.js";
+import { Entity_Manager, Entity_Render_List } from "./Entity.js";
 import { Asset_Manager, Asset_Type } from "./Assets.js";
 import { GfxClipSpaceNearZ, GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { mat4, vec3 } from "gl-matrix";
@@ -11,6 +11,7 @@ import { assert, decodeString } from "../util.js";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { Occlusion_Manager } from "./Occlusion.js";
 import { Render_Material_Cache as Device_Material_Cache } from "./Render.js";
+import { DebugDraw } from "../gfx/helpers/DebugDraw.js";
 
 const noclipSpaceFromTheWitnessSpace = mat4.fromValues(
     1, 0,  0, 0,
@@ -75,7 +76,7 @@ function parse_variables(contents: ArrayBufferSlice): Variables {
                 dst[categoryName] = {};
             currentCategory = dst[categoryName];
         } else {
-            const [name, tok] = line.split(' ');
+            let [name, tok] = line.split(' ');
             let value: typeof currentCategory[string];
 
             if (tok.startsWith('"')) {
@@ -84,6 +85,8 @@ function parse_variables(contents: ArrayBufferSlice): Variables {
             } else if (tok === 'false' || tok === 'true') {
                 value = tok === 'true';
             } else {
+                if (tok.endsWith('f'))
+                    tok = tok.slice(0, -1);
                 value = Number(tok);
                 assert(!Number.isNaN(value));
             }
@@ -108,8 +111,10 @@ class Render_Settings {
 
 export class TheWitnessGlobals {
     public entity_manager = new Entity_Manager();
+    public entity_render_list = new Entity_Render_List();
     public viewpoint = new Viewpoint();
     public cache: GfxRenderCache;
+    public debug_draw: DebugDraw;
     public all_variables: Variables;
     public sky_variables: Variables;
     public occlusion_manager: Occlusion_Manager;

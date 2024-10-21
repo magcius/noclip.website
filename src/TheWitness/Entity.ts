@@ -2,9 +2,8 @@
 import { mat4, quat, vec3 } from "gl-matrix";
 import { computeViewSpaceDepthFromWorldSpacePoint } from "../Camera.js";
 import { Color, colorNewCopy, Magenta } from "../Color.js";
-import { drawWorldSpaceAABB, drawWorldSpaceCircle, drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk.js";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
-import { scaleMatrix, Vec3UnitY } from "../MathHelpers.js";
+import { scaleMatrix } from "../MathHelpers.js";
 import { leftPad } from "../util.js";
 import { Asset_Type, Lightmap_Asset, Mesh_Asset } from "./Assets.js";
 import { TheWitnessGlobals } from "./Globals.js";
@@ -41,6 +40,22 @@ export class Entity_Manager {
             this.flat_entity_list[i].transport_create_hook(globals);
 
         globals.occlusion_manager.init(globals);
+        globals.entity_render_list.init(globals);
+    }
+}
+
+export class Entity_Render_List {
+    public clusters: Entity_Cluster[] = [];
+    public unclustered_entities: Entity[] = [];
+
+    public init(globals: TheWitnessGlobals): void {
+        for (let i = 0; i < globals.entity_manager.flat_entity_list.length; i++) {
+            const entity = globals.entity_manager.flat_entity_list[i];
+            if (entity instanceof Entity_Cluster)
+                this.clusters.push(entity);
+            else if (entity.cluster_id === undefined)
+                this.unclustered_entities.push(entity);
+        }
     }
 }
 
@@ -214,9 +229,6 @@ export class Entity implements Portable {
         if (this.mesh_instance === null)
             return;
 
-        if (this.cluster_id !== undefined && !globals.occlusion_manager.clusterIsVisible(this.cluster_id))
-            return;
-
         const squared_distance = vec3.squaredDistance(globals.viewpoint.cameraPos, this.bounding_center_world);
         if (globals.render_settings.cull_distance_enabled && squared_distance >= this.cull_distance_squared)
             return;
@@ -253,6 +265,7 @@ export class Entity_Cluster extends Entity {
     public override bounding_radius: number;
     public override bounding_center: vec3;
     public cluster_flags: number;
+    public occlusion_visible: boolean = true;
 
     public cluster_mesh_data: Mesh_Asset | null = null;
     public cluster_mesh_instance: Mesh_Instance | null = null;

@@ -2,7 +2,7 @@
 // Quick hack to make a zipfile from scratch.
 // https://pkware.cachefly.net/webdocs/casestudies/APPNOTE.TXT
 
-import * as CRC32 from 'crc-32';
+import CRC32 from 'crc-32';
 import ArrayBufferSlice from './ArrayBufferSlice.js';
 import { readString, assert } from './util.js';
 import * as Deflate from './Common/Compression/Deflate.js';
@@ -51,7 +51,7 @@ function makeLocalFileHeader(fileEntry: ZipFileEntry, crc32: number): ArrayBuffe
 
     writeString(buf, 0x00, 'PK\x03\x04');
     view.setUint16(0x04, 0x14, true);
-    assert(fileEntry.compressionMethod === undefined);
+    assert(fileEntry.compressionMethod === undefined || fileEntry.compressionMethod === ZipCompressionMethod.None);
     // no flags, no compression, no mod time/date
     view.setUint32(0x0E, crc32, true);
     view.setUint32(0x12, dataSize, true);
