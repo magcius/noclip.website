@@ -67,6 +67,7 @@ import * as Scenes_HalfLife2DM from './SourceEngine/Scenes_HalfLife2DM.js';
 import * as Scenes_HalfLife2LostCoast from './SourceEngine/Scenes_HalfLife2LostCoast.js';
 import * as Scenes_HalfLife2Ep1 from './SourceEngine/Scenes_HalfLife2Ep1.js';
 import * as Scenes_HalfLife2Ep2 from './SourceEngine/Scenes_HalfLife2Ep2.js';
+import * as Scenes_EstrangedActI from './SourceEngine/Scenes_EstrangedActI.js';
 import * as Scenes_NfsMostWanted from './NeedForSpeedMostWanted/scenes.js';
 import * as Scenes_TeamFortress2 from './SourceEngine/Scenes_TeamFortress2.js';
 import * as Scenes_Left4Dead2 from './SourceEngine/Scenes_Left4Dead2.js';
@@ -182,6 +183,7 @@ const sceneGroups: (string | SceneGroup)[] = [
     Scenes_Portal.sceneGroup,
     Scenes_Portal2.sceneGroup,
     Scenes_WorldOfWarcraft.vanillaSceneGroup,
+    Scenes_EstrangedActI.sceneGroup,
     "Experimental",
     Scenes_DonkeyKong64.sceneGroup,
     Scenes_DonkeyKongCountryReturns.sceneGroup,
