@@ -46,7 +46,8 @@ export class ValveKeyValueParser {
     }
 
     private skipcomment2(): boolean {
-        if (this.chew() === '/') {
+        let tok = this.chew();
+        if (tok === '/') {
             const ch = this.chew(true);
             if (ch === '/') {
                 while (this.chew(true) !== '\n')
@@ -58,6 +59,11 @@ export class ValveKeyValueParser {
             } else {
                 throw "whoops";
             }
+        }
+        else if (tok === '#') {
+            while (this.chew(true) !== '\n')
+                ;
+            return false;
         } else {
             this.spit();
             return false;

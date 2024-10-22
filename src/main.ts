@@ -91,6 +91,7 @@ import * as Scenes_HalfLife from './GoldSrc/Scenes_HalfLife.js';
 import * as Scenes_SuperMonkeyBall from './SuperMonkeyBall/Scenes_SuperMonkeyBall.js';
 import * as Scenes_DragonQuest8 from './DragonQuest8/scenes.js';
 import * as Scenes_Morrowind from './Morrowind/Scenes.js';
+import * as Scenes_EstrangedActI from './SourceEngine/Scenes_EstrangedActI.js';
 
 import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_FileDrops.js';
 
@@ -218,6 +219,7 @@ const sceneGroups: (string | SceneGroup)[] = [
     Scenes_Left4Dead2.sceneGroup,
     Scenes_NeoTokyo.sceneGroup,
     Scenes_Morrowind.sceneGroup,
+    Scenes_EstrangedActI.sceneGroup,
 ];
 
 function convertCanvasToPNG(canvas: HTMLCanvasElement): Promise<Blob> {
