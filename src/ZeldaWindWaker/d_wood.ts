@@ -62,6 +62,8 @@ const kRoomCount = 64;
 const kAnimCount = 72;
 
 const kAlphaCutoff = 0x80 / 0xFF;
+const kClipCenterYOffset = 40.0;
+const kClipRadius = 100.0;
 
 let sAnimInitNum = 0;
 let sAnmNormNum = 0;
@@ -130,11 +132,6 @@ const l_animAttrs: {
 //-----------------------------------------
 // Helpers
 //-----------------------------------------
-function distanceCull(camPos: ReadonlyVec3, objPos: ReadonlyVec3, maxDist = 20000) {
-    const distSq = vec3.squaredDistance(camPos, objPos);
-    return distSq >= maxDist ** 2;
-}
-
 function setColorFromRoomNo(globals: dGlobals, materialParams: MaterialParams, roomNo: number): void {
     colorCopy(materialParams.u_Color[ColorKind.C0], globals.roomStatus[roomNo].tevStr.colorC0);
     colorCopy(materialParams.u_Color[ColorKind.C1], globals.roomStatus[roomNo].tevStr.colorK0);
@@ -781,9 +778,18 @@ export class Packet_c implements J3DPacket {
         for (let i = 0; i < this.mUnit.length; i++) {
             const unit = this.mUnit[i];
             if (unit.mFlags & UnitFlags.Active) {
-                // TODO: Frustum Culling
-                // unit.mFlags |= UnitFlags.IsFrustumCulled;
-                unit.set_mtx(this.mAnm);
+                // Frustum culling
+                const clipPos = vec3.set(scratchVec3a, unit.mPos[0], unit.mPos[1] + kClipCenterYOffset, unit.mPos[2]);
+
+                // s32 res = mDoLib_clipper::clip(j3dSys.getViewMtx(), clipPos, kClipRadius);
+                const culled = !globals.camera.frustum.containsSphere(clipPos, kClipRadius);
+
+                if( culled ) {
+                    unit.mFlags |= UnitFlags.IsFrustumCulled;
+                } else {
+                    unit.mFlags &= ~UnitFlags.IsFrustumCulled;
+                    unit.set_mtx(this.mAnm);
+                }
             }
         }
 
@@ -810,8 +816,6 @@ export class Packet_c implements J3DPacket {
             for (let r = 0; r < this.mRoom.length; r++) {
                 for (let unit = this.mRoom[r].mRootUnit; unit != null; unit = unit.mNextUnit!) {
                     if (unit.mFlags & UnitFlags.IsFrustumCulled)
-                        continue;
-                    if (distanceCull(worldCamPos, unit.mPos))
                         continue;
 
                     const shadowRenderInst = renderInstManager.newRenderInst();
@@ -845,8 +849,6 @@ export class Packet_c implements J3DPacket {
 
                 for (let unit = this.mRoom[r].mRootUnit; unit != null; unit = unit.mNextUnit!) {
                     if (unit.mFlags & UnitFlags.IsFrustumCulled)
-                        continue;
-                    if (distanceCull(worldCamPos, unit.mPos))
                         continue;
 
                     // If this bush is not chopped down, draw the main body
