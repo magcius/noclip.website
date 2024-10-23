@@ -4120,7 +4120,7 @@ class d_a_obj_wood extends fopAc_ac_c {
     public static PROCESS_NAME = fpc__ProcessName.d_a_obj_wood;
 
     public override subload(globals: dGlobals): cPhs__Status {
-        globals.scnPlay.woodPacket.put_unit(this.pos, this.roomNo);
+        globals.scnPlay.woodPacket.put_unit(globals, this.pos, this.roomNo);
         // globals.scnPlay.treePacket.newData(this.pos, 0, this.roomNo);
         return cPhs__Status.Next;
     }

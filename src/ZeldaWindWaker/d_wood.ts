@@ -54,8 +54,6 @@ enum AttrSway_e {
 //-----------------------------------------
 // Globals
 //-----------------------------------------
-let globals: dGlobals;
-
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
 const scratchVec3c = vec3.create();
@@ -138,11 +136,6 @@ const kSwayAttrs: {
 //-----------------------------------------
 // Helpers
 //-----------------------------------------
-function setColorFromRoomNo(globals: dGlobals, materialParams: MaterialParams, roomNo: number): void {
-    colorCopy(materialParams.u_Color[ColorKind.C0], globals.roomStatus[roomNo].tevStr.colorC0);
-    colorCopy(materialParams.u_Color[ColorKind.C1], globals.roomStatus[roomNo].tevStr.colorK0);
-}
-
 interface J3DPacket {
     draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void;
 }
@@ -538,7 +531,7 @@ class Unit_c {
 
     mNextUnit: Unit_c | null = null; // The next unit in the same room (a linked list)
 
-    public set_ground(): number {
+    public set_ground(globals: dGlobals): number {
         // @TODO: This is copied from d_tree. Should actually implement the d_wood version.
 
         const chk = new dBgS_GndChk();
@@ -585,7 +578,7 @@ class Unit_c {
      * Compute modelView matrices for the body, trunk, and drop shadow
      * @param anim 
      */
-    public set_mtx(anims: Anm_c[]): void {
+    public set_mtx(globals: dGlobals, anims: Anm_c[]): void {
         mDoMtx_copy(anims[this.mAnmIdx].mModelMtx, scratchMat4a);
         scratchMat4a[12] += this.mPos[0];
         scratchMat4a[13] += this.mPos[1];
@@ -649,7 +642,6 @@ export class Packet_c implements J3DPacket {
     // void delete_room(s32 room_no);
 
     constructor(lGlobals: dGlobals) {
-        globals = lGlobals;
         this._mModel = new WoodModel(lGlobals);
 
         for (let i = 0; i < 8; i++) {
@@ -709,7 +701,7 @@ export class Packet_c implements J3DPacket {
         return kUnitCount;
     }
 
-    public put_unit(pos: vec3, room_no: number): number {
+    public put_unit(globals: dGlobals, pos: vec3, room_no: number): number {
         const unitIdx = this.search_empty_UnitID();
         if (unitIdx != kUnitCount) {
             const unit = this.mUnit[unitIdx];
@@ -719,7 +711,7 @@ export class Packet_c implements J3DPacket {
 
             unit.mAnmIdx = this.search_anm(AnimMode_e.Norm);
 
-            const groundY = unit.set_ground();
+            const groundY = unit.set_ground(globals);
             if (groundY) {
                 this.mRoom[room_no].entry_unit(unit);
             } else {
@@ -730,7 +722,7 @@ export class Packet_c implements J3DPacket {
     }
 
     // Calculate collisions
-    public calc_cc() {
+    public calc_cc(globals: dGlobals) {
         const roomIdx = globals.mStayNo;
 
         if ((roomIdx >= 0) && (roomIdx < kRoomCount)) {
@@ -752,8 +744,8 @@ export class Packet_c implements J3DPacket {
         }
     }
 
-    public calc(frameCount: number) {
-        this.calc_cc();
+    public calc(globals: dGlobals, frameCount: number) {
+        this.calc_cc(globals);
 
         const windVec = dKyw_get_wind_vec(globals.g_env_light);
         const windPow = dKyw_get_wind_pow(globals.g_env_light);
@@ -772,7 +764,7 @@ export class Packet_c implements J3DPacket {
         }
     }
 
-    public update() {
+    public update(globals: dGlobals) {
         for (let i = 0; i < this.mUnit.length; i++) {
             const unit = this.mUnit[i];
             if (unit.mFlags & UnitState_e.Active) {
@@ -786,7 +778,7 @@ export class Packet_c implements J3DPacket {
                     unit.mFlags |= UnitState_e.IsFrustumCulled;
                 } else {
                     unit.mFlags &= ~UnitState_e.IsFrustumCulled;
-                    unit.set_mtx(this.mAnm);
+                    unit.set_mtx(globals, this.mAnm);
                 }
             }
         }
@@ -842,7 +834,8 @@ export class Packet_c implements J3DPacket {
 
             for (let r = 0; r < this.mRoom.length; r++) {
                 // Set the room color and fog params
-                setColorFromRoomNo(globals, materialParams, r);
+                colorCopy(materialParams.u_Color[ColorKind.C0], globals.roomStatus[r].tevStr.colorC0);
+                colorCopy(materialParams.u_Color[ColorKind.C1], globals.roomStatus[r].tevStr.colorK0);
                 dKy_GxFog_set(globals.g_env_light, materialParams.u_FogBlock, viewerInput.camera);
 
                 for (let unit = this.mRoom[r].mRootUnit; unit != null; unit = unit.mNextUnit!) {

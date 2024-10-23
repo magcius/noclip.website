@@ -766,12 +766,12 @@ class d_s_play extends fopScn {
         this.flowerPacket.calc(frameCount);
         this.treePacket.calc(frameCount);
         this.grassPacket.calc(frameCount);
-        this.woodPacket.calc(frameCount);
+        this.woodPacket.calc(globals, frameCount);
 
         this.flowerPacket.update(globals);
         this.treePacket.update(globals);
         this.grassPacket.update(globals);
-        this.woodPacket.update();
+        this.woodPacket.update(globals);
 
         fopDw_Draw(globals.frameworkGlobals, globals, renderInstManager, viewerInput);
 
