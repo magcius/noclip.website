@@ -26,14 +26,14 @@ import { assert } from '../util.js';
 //-----------------------------------------
 // Types
 //-----------------------------------------
-const enum UnitFlags {
+const enum UnitState_e {
     Inactive = 0,
     Active = 1 << 0,
     IsFrustumCulled = 1 << 1,
     IsCut = 1 << 2,
 }
 
-enum AnimMode_e {
+const enum AnimMode_e {
     Cut = 0,      // Chopping down
     PushInto = 1, // Attacked or collided with, but not chopped
     PushBack = 2, // Second half of PushInto, returning to normal
@@ -531,7 +531,7 @@ class Anm_c {
 
 class Unit_c {
     mPos = vec3.create();
-    mFlags: UnitFlags = 0;
+    mFlags: UnitState_e = 0;
     mAnmIdx: number = 0;
     mModelViewMtx: mat4 = mat4.create();
     mTrunkModelViewMtx: mat4 = mat4.create();
@@ -604,7 +604,7 @@ class Unit_c {
     }
 
     public clear(): void {
-        this.mFlags = UnitFlags.Inactive;
+        this.mFlags = UnitState_e.Inactive;
         this.mNextUnit = null;
     }
 
@@ -618,7 +618,7 @@ class Unit_c {
 
     public proc(packet: Packet_c): void {
         // If this unit is active, and performing a non-normal animation...
-        if (this.mFlags & UnitFlags.Active) {
+        if (this.mFlags & UnitState_e.Active) {
             if (this.mAnmIdx >= 8) {
                 const anim = packet.get_anm(this.mAnmIdx);
                 if (anim.mMode == AnimMode_e.ToNorm) {
@@ -631,7 +631,7 @@ class Unit_c {
                         const newAnimIdx = packet.search_anm(AnimMode_e.Norm);
                         this.mAnmIdx = newAnimIdx;
                         anim.mMode = AnimMode_e._Max;
-                        this.mFlags |= UnitFlags.IsCut;
+                        this.mFlags |= UnitState_e.IsCut;
                     }
                 } else if (anim.mMode == AnimMode_e._Max) {
                     this.mAnmIdx = packet.search_anm(AnimMode_e.Norm);
@@ -715,7 +715,7 @@ export class Packet_c implements J3DPacket {
         const unitIdx = this.search_empty_UnitID();
         if (unitIdx != kUnitCount) {
             const unit = this.mUnit[unitIdx];
-            unit.mFlags = UnitFlags.Active;
+            unit.mFlags = UnitState_e.Active;
 
             vec3.copy(unit.mPos, pos);
 
@@ -740,14 +740,14 @@ export class Packet_c implements J3DPacket {
 
             const room = this.mRoom[roomIdx];
             for (let unit = room.mRootUnit; unit != null; unit = unit.mNextUnit!) {
-                if ((unit.mFlags & UnitFlags.IsCut) == 0) {
+                if ((unit.mFlags & UnitState_e.IsCut) == 0) {
                     unit.cc_hit_before_cut(this);
                 }
             }
 
             //     dComIfG_Ccsp() -> SetMassAttr(L_attr.kCollisionRad2, L_attr.kCollisionHeight2, (u8)0x12, 1);
             for (let unit = room.mRootUnit; unit != null; unit = unit.mNextUnit!) {
-                if ((unit.mFlags & UnitFlags.IsCut) != 0) {
+                if ((unit.mFlags & UnitState_e.IsCut) != 0) {
                     unit.cc_hit_after_cut(this);
                 }
             }
@@ -777,7 +777,7 @@ export class Packet_c implements J3DPacket {
     public update() {
         for (let i = 0; i < this.mUnit.length; i++) {
             const unit = this.mUnit[i];
-            if (unit.mFlags & UnitFlags.Active) {
+            if (unit.mFlags & UnitState_e.Active) {
                 // Frustum culling
                 const clipPos = vec3.set(scratchVec3a, unit.mPos[0], unit.mPos[1] + kClipCenterYOffset, unit.mPos[2]);
 
@@ -785,9 +785,9 @@ export class Packet_c implements J3DPacket {
                 const culled = !globals.camera.frustum.containsSphere(clipPos, kClipRadius);
 
                 if( culled ) {
-                    unit.mFlags |= UnitFlags.IsFrustumCulled;
+                    unit.mFlags |= UnitState_e.IsFrustumCulled;
                 } else {
-                    unit.mFlags &= ~UnitFlags.IsFrustumCulled;
+                    unit.mFlags &= ~UnitState_e.IsFrustumCulled;
                     unit.set_mtx(this.mAnm);
                 }
             }
@@ -815,7 +815,7 @@ export class Packet_c implements J3DPacket {
 
             for (let r = 0; r < this.mRoom.length; r++) {
                 for (let unit = this.mRoom[r].mRootUnit; unit != null; unit = unit.mNextUnit!) {
-                    if (unit.mFlags & UnitFlags.IsFrustumCulled)
+                    if (unit.mFlags & UnitState_e.IsFrustumCulled)
                         continue;
 
                     const shadowRenderInst = renderInstManager.newRenderInst();
@@ -848,11 +848,11 @@ export class Packet_c implements J3DPacket {
                 dKy_GxFog_set(globals.g_env_light, materialParams.u_FogBlock, viewerInput.camera);
 
                 for (let unit = this.mRoom[r].mRootUnit; unit != null; unit = unit.mNextUnit!) {
-                    if (unit.mFlags & UnitFlags.IsFrustumCulled)
+                    if (unit.mFlags & UnitState_e.IsFrustumCulled)
                         continue;
 
                     // If this bush is not chopped down, draw the main body
-                    if ((unit.mFlags & UnitFlags.IsCut) == 0) {
+                    if ((unit.mFlags & UnitState_e.IsCut) == 0) {
                         // The cut animation reduces alpha over time
                         const cutAlpha = this.mAnm[unit.mAnmIdx].mAlpha;
                         colorFromRGBA(materialParams.u_Color[ColorKind.C2], 1, 1, 1, cutAlpha / 0xFF);
