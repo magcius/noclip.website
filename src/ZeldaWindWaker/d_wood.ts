@@ -337,13 +337,13 @@ class WoodModel {
 class Room_c {
     mRootUnit: Unit_c;
 
-    entry_unit(unit: Unit_c): void {
+    public entry_unit(unit: Unit_c): void {
         unit.mNextUnit = this.mRootUnit;
         this.mRootUnit = unit;
         return;
     }
 
-    delete_all_unit() {
+    public delete_all_unit() {
         while (this.mRootUnit) {
             let unit = this.mRootUnit;
             this.mRootUnit = unit.mNextUnit!;
@@ -394,7 +394,6 @@ class Anm_c {
     // Each animation mode has an mode_*_init() function which is called when the animation is started
     // The mode_*() function is called to update the animation each frame, until finished
 
-    // Animate when cut with a weapon 
     public mode_cut_init(anm: Anm_c, targetAngle: number): void {
         for (let i = 0; i < 2; i++) {
             this.mPhaseY[i] = 0;
@@ -412,6 +411,7 @@ class Anm_c {
         this.mMode = AnimMode_e.Cut;
     }
 
+    // Animate when cut with a weapon 
     public mode_cut(packet: Packet_c): void {
         this.mVelY = this.mVelY - 3.0;
         if (this.mVelY < -40.0) {
@@ -442,21 +442,20 @@ class Anm_c {
         }
     }
 
-    // Animate when pushed into
     public mode_push_into_init(anm: Anm_c, targetAngle: number): void {
 
     }
 
+    // Animate when pushed into
     public mode_push_into(packet: Packet_c): void {
 
     }
 
-
-    // Animate when pushed back
     public mode_push_back_init(): void {
 
     }
 
+    // Second half of the push into animation
     public mode_push_back(packet: Packet_c): void {
 
     }
@@ -467,8 +466,6 @@ class Anm_c {
 
     }
 
-
-    // Animate normally (not interacting with character)
     public mode_norm_init(): void {
         this.mMode = AnimMode_e.Norm;
 
@@ -484,6 +481,7 @@ class Anm_c {
         sAnimInitNum = (sAnimInitNum + 1) % 8;
     }
 
+    // Animate normally (not interacting with character)
     public mode_norm(packet: Packet_c): void {
         let phase;
         if (this.mWindPow < 0.33) {
@@ -519,12 +517,11 @@ class Anm_c {
         this.mWindPow = pow;
     }
 
-
-    // Unsure?
     public mode_to_norm_init(anmIdx: number): void {
 
     }
 
+    // Blend back to the normal animation
     public mode_to_norm(packet: Packet_c): void {
 
     }
@@ -660,15 +657,15 @@ export class Packet_c implements J3DPacket {
         }
     }
 
-    destroy(device: GfxDevice) {
+    public destroy(device: GfxDevice) {
         this._mModel.destroy(device);
     }
 
-    get_anm(idx: number): Anm_c {
+    public get_anm(idx: number): Anm_c {
         return this.mAnm[idx];
     }
 
-    search_anm(i_mode: AnimMode_e): number {
+    public search_anm(i_mode: AnimMode_e): number {
         let animIdx: number;
 
         assert((i_mode >= 0) && (i_mode < AnimMode_e._Max));
@@ -702,7 +699,7 @@ export class Packet_c implements J3DPacket {
         return animIdx;
     }
 
-    search_empty_UnitID(): number {
+    public search_empty_UnitID(): number {
         for (let i = 0; i < kUnitCount; i++) {
             if (this.mUnit[i].mFlags == 0) {
                 return i;
@@ -712,7 +709,7 @@ export class Packet_c implements J3DPacket {
         return kUnitCount;
     }
 
-    put_unit(pos: vec3, room_no: number): number {
+    public put_unit(pos: vec3, room_no: number): number {
         const unitIdx = this.search_empty_UnitID();
         if (unitIdx != kUnitCount) {
             const unit = this.mUnit[unitIdx];
