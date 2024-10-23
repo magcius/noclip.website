@@ -44,6 +44,13 @@ const enum AnimMode_e {
     _Max
 };
 
+enum AttrSway_e {
+    Light,
+    Medium,
+    Strong,
+    Extreme,
+};
+
 //-----------------------------------------
 // Globals
 //-----------------------------------------
@@ -71,63 +78,62 @@ let sAnmNormNum = 0;
 //-----------------------------------------
 // Extracted Data
 //-----------------------------------------
-const l_animAttrs: {
-    /* 0x0 */ unkUShort0: number;
-    /* 0x2 */ unkShort1: number;
-    /* 0x4 */ unkShort2: number;
-    /* 0x6 */ unkShort3: number;
-    /* 0x8 */ unkFloat: number;
-}[][] = [
-        [{
-            unkUShort0: 0,
-            unkShort1: 0x50,
-            unkShort2: 0x5DC,
-            unkShort3: 0x32,
-            unkFloat: 0.6
-        }, {
-            unkUShort0: 0,
-            unkShort1: 0x1E,
-            unkShort2: 0xC80,
-            unkShort3: 0xA,
-            unkFloat: 0.2,
-        }], [{
-            unkUShort0: 1,
-            unkShort1: 0x96,
-            unkShort2: 0x4B0,
-            unkShort3: 0x96,
-            unkFloat: 0.6,
-        }, {
-            unkUShort0: 2,
-            unkShort1: 0x32,
-            unkShort2: 0x898,
-            unkShort3: 0x1E,
-            unkFloat: 0.2,
-        }], [{
-            unkUShort0: 2,
-            unkShort1: 0xC8,
-            unkShort2: 0x898,
-            unkShort3: 0x12C,
-            unkFloat: 0.6,
-        }, {
-            unkUShort0: 1,
-            unkShort1: 0x1E,
-            unkShort2: 0xFA0,
-            unkShort3: 0x32,
-            unkFloat: 0.2,
-        }], [{
-            unkUShort0: 2,
-            unkShort1: 0xC8,
-            unkShort2: 0x1838,
-            unkShort3: 0x1F4,
-            unkFloat: 0.6,
-        }, {
-            unkUShort0: 1,
-            unkShort1: 0x1E,
-            unkShort2: 0x3E8,
-            unkShort3: 0x32,
-            unkFloat: 0.2,
-        }]
-    ];
+const kSwayAttrs: {
+    phaseVelY: number;
+    ampY: number;
+    phaseVelX: number;
+    ampX: number;
+    phaseBiasX: number;
+}[][] =
+    [[{
+        phaseVelY: 0x00C8,
+        ampY: 0x50,
+        phaseVelX: 0x5DC,
+        ampX: 0x32,
+        phaseBiasX: 0.6
+    }, {
+        phaseVelY: 0x00B4,
+        ampY: 0x1E,
+        phaseVelX: 0xC80,
+        ampX: 0xA,
+        phaseBiasX: 0.2,
+    }], [{
+        phaseVelY: 0x01f4,
+        ampY: 0x96,
+        phaseVelX: 0x4B0,
+        ampX: 0x96,
+        phaseBiasX: 0.6,
+    }, {
+        phaseVelY: 0x02BC,
+        ampY: 0x32,
+        phaseVelX: 0x898,
+        ampX: 0x1E,
+        phaseBiasX: 0.2,
+    }], [{
+        phaseVelY: 0x0258,
+        ampY: 0xC8,
+        phaseVelX: 0x898,
+        ampX: 0x12C,
+        phaseBiasX: 0.6,
+    }, {
+        phaseVelY: 0x01BC,
+        ampY: 0x1E,
+        phaseVelX: 0xFA0,
+        ampX: 0x32,
+        phaseBiasX: 0.2,
+    }], [{
+        phaseVelY: 0x0258,
+        ampY: 0xC8,
+        phaseVelX: 0x1838,
+        ampX: 0x1F4,
+        phaseBiasX: 0.6,
+    }, {
+        phaseVelY: 0x01BC,
+        ampY: 0x1E,
+        phaseVelX: 0x3E8,
+        ampX: 0x32,
+        phaseBiasX: 0.2,
+    }]]
 
 //-----------------------------------------
 // Helpers
@@ -359,10 +365,10 @@ class Anm_c {
     /* 0x70 */ mPosOffsetZ: number;
     /* 0x74 */ mVelY: number;
 
-    /* 0x78 */ mRotY: number[] = [0, 0];
-    /* 0x7c */ mRotX: number[] = [0, 0];
-    /* 0x80 */ mUnkArr2: number[] = [0, 0];
-    /* 0x84 */ mUnkArr3: number[] = [0, 0];
+    /* 0x78 */ mPhaseY: number[] = [0, 0];
+    /* 0x7c */ mPhaseX: number[] = [0, 0];
+    /* 0x80 */ mAmpY: number[] = [0, 0];
+    /* 0x84 */ mAmpX: number[] = [0, 0];
 
     /* 0x88 */ mNextAnimIdx: number; // Corresponds to the index in Packet_c::mAnm;
 
@@ -391,10 +397,10 @@ class Anm_c {
     // Animate when cut with a weapon 
     public mode_cut_init(anm: Anm_c, targetAngle: number): void {
         for (let i = 0; i < 2; i++) {
-            this.mRotY[i] = 0;
-            this.mRotX[i] = 0;
-            this.mUnkArr2[i] = 0;
-            this.mUnkArr3[i] = 0;
+            this.mPhaseY[i] = 0;
+            this.mPhaseX[i] = 0;
+            this.mAmpY[i] = 0;
+            this.mAmpX[i] = 0;
         }
 
         this.mWindDir = targetAngle;
@@ -414,11 +420,11 @@ class Anm_c {
 
         this.mPosOffsetY = this.mPosOffsetY + this.mVelY;
         this.mPosOffsetZ = this.mPosOffsetZ + 2.5;
-        this.mRotX[0] = this.mRotX[0] - 200;
+        this.mPhaseX[0] = this.mPhaseX[0] - 200;
 
         mDoMtx_YrotS(scratchMat4a, this.mWindDir);
         MtxTrans([0.0, this.mPosOffsetY, this.mPosOffsetZ], true, scratchMat4a);
-        mDoMtx_XrotM(scratchMat4a, this.mRotX[0]);
+        mDoMtx_XrotM(scratchMat4a, this.mPhaseX[0]);
         mDoMtx_YrotM(scratchMat4a, -this.mWindDir);
         mDoMtx_copy(scratchMat4a, this.mModelMtx);
 
@@ -467,10 +473,10 @@ class Anm_c {
         this.mMode = AnimMode_e.Norm;
 
         for (let i = 0; i < 2; i++) {
-            this.mRotY[i] = (sAnimInitNum << 0xd);
-            this.mRotX[i] = (sAnimInitNum << 0xd);
-            this.mUnkArr2[i] = l_animAttrs[0][i].unkShort1;
-            this.mUnkArr3[i] = l_animAttrs[0][i].unkShort3;
+            this.mPhaseY[i] = (sAnimInitNum << 0xd);
+            this.mPhaseX[i] = (sAnimInitNum << 0xd);
+            this.mAmpY[i] = kSwayAttrs[0][i].ampY;
+            this.mAmpX[i] = kSwayAttrs[0][i].ampX;
         }
 
         this.mAlpha = 0xff;
@@ -481,31 +487,26 @@ class Anm_c {
     public mode_norm(packet: Packet_c): void {
         let phase;
         if (this.mWindPow < 0.33) {
-            phase = 0;
+            phase = AttrSway_e.Light;
         } else {
             if (this.mWindPow < 0.66) {
-                phase = 1;
+                phase = AttrSway_e.Medium;
             } else {
-                phase = 2;
+                phase = AttrSway_e.Strong;
             }
         }
 
         let fVar1 = 0.0;
         let fVar6 = fVar1;
         for (let i = 0; i < 2; i++) {
-            const animAttr = l_animAttrs[phase][i];
-            const unk2 = animAttr.unkShort2;
-            const unk1 = animAttr.unkShort1;
-            const unk3 = animAttr.unkShort3;
-            const unk4 = animAttr.unkFloat;
+            const swayAttr = kSwayAttrs[phase][i];
+            this.mPhaseY[i] += swayAttr.phaseVelY;
+            this.mPhaseX[i] += swayAttr.phaseVelX;
+            cLib_chaseS({ x: this.mAmpY[i] }, swayAttr.ampY, 2);
+            cLib_chaseS({ x: this.mAmpX[i] }, swayAttr.ampX, 2);
 
-            this.mRotY[i] += animAttr.unkUShort0;
-            this.mRotX[i] += unk2;
-            cLib_chaseS({ x: this.mUnkArr2[i] }, unk1, 2);
-            cLib_chaseS({ x: this.mUnkArr2[i] }, unk3, 2);
-
-            fVar1 += this.mUnkArr2[i] * Math.cos(cM__Short2Rad((this.mRotY[i])));
-            fVar6 += this.mUnkArr3[i] * (unk4 + Math.cos(cM__Short2Rad((this.mRotX[i]))));
+            fVar1 += this.mAmpY[i] * Math.cos(cM__Short2Rad((this.mPhaseY[i])));
+            fVar6 += this.mAmpX[i] * (swayAttr.phaseBiasX + Math.cos(cM__Short2Rad((this.mPhaseX[i]))));
         }
 
         mDoMtx_YrotS(this.mModelMtx, fVar1 + this.mWindDir);
@@ -784,7 +785,7 @@ export class Packet_c implements J3DPacket {
                 // s32 res = mDoLib_clipper::clip(j3dSys.getViewMtx(), clipPos, kClipRadius);
                 const culled = !globals.camera.frustum.containsSphere(clipPos, kClipRadius);
 
-                if( culled ) {
+                if (culled) {
                     unit.mFlags |= UnitState_e.IsFrustumCulled;
                 } else {
                     unit.mFlags &= ~UnitState_e.IsFrustumCulled;
