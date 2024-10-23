@@ -18,7 +18,7 @@ import { Endianness } from '../endian.js';
 import * as GX from '../gx/gx_enum.js';
 import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
 import { dKyw_get_wind_pow, dKyw_get_wind_vec } from './d_kankyo_wether.js';
-import { cLib_chaseS, cM__Short2Rad, cM_atan2s } from './SComponent.js';
+import { cLib_chaseF, cM__Short2Rad, cM_atan2s } from './SComponent.js';
 import { dStage_roomStatus_c } from './d_stage.js';
 import { mDoMtx_copy, mDoMtx_XrotM, mDoMtx_YrotM, mDoMtx_YrotS, MtxTrans } from './m_do_mtx.js';
 import { assert } from '../util.js';
@@ -502,8 +502,8 @@ class Anm_c {
             const swayAttr = kSwayAttrs[phase][i];
             this.mPhaseY[i] += swayAttr.phaseVelY;
             this.mPhaseX[i] += swayAttr.phaseVelX;
-            cLib_chaseS({ x: this.mAmpY[i] }, swayAttr.ampY, 2);
-            cLib_chaseS({ x: this.mAmpX[i] }, swayAttr.ampX, 2);
+            this.mAmpY[i] = cLib_chaseF(this.mAmpY[i], swayAttr.ampY, 2);
+            this.mAmpX[i] = cLib_chaseF(this.mAmpX[i], swayAttr.ampX, 2);
 
             fVar1 += this.mAmpY[i] * Math.cos(cM__Short2Rad((this.mPhaseY[i])));
             fVar6 += this.mAmpX[i] * (swayAttr.phaseBiasX + Math.cos(cM__Short2Rad((this.mPhaseX[i]))));
