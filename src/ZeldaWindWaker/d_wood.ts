@@ -323,26 +323,26 @@ class WoodModel {
 // Classes
 //-----------------------------------------
 class Anm_c {
-    /* 0x00 */ mModelMtx: mat4 = mat4.create();
-    /* 0x30 */ mTrunkModelMtx: mat4 = mat4.create();
+    mModelMtx: mat4 = mat4.create();
+    mTrunkModelMtx: mat4 = mat4.create();
 
-    /* 0x60 */ mMode: AnimMode_e = AnimMode_e._Max;
+    mMode: AnimMode_e = AnimMode_e._Max;
 
-    /* 0x64 */ mCountdown: number;
-    /* 0x66 */ mWindDir: number;   // The direction towards the actor who instigated this animation
-    /* 0x68 */ mWindPow: number;   // 0.0 - 1.0
-    /* 0x6c */ mPosOffsetY: number;
-    /* 0x70 */ mPosOffsetZ: number;
-    /* 0x74 */ mVelY: number;
+    mCountdown: number;
+    mWindDir: number;   // The direction towards the actor who instigated this animation
+    mWindPow: number;   // 0.0 - 1.0
+    mPosOffsetY: number;
+    mPosOffsetZ: number;
+    mVelY: number;
 
-    /* 0x78 */ mPhaseY: number[] = [0, 0];
-    /* 0x7c */ mPhaseX: number[] = [0, 0];
-    /* 0x80 */ mAmpY: number[] = [0, 0];
-    /* 0x84 */ mAmpX: number[] = [0, 0];
+    mPhaseY: number[] = [0, 0];
+    mPhaseX: number[] = [0, 0];
+    mAmpY: number[] = [0, 0];
+    mAmpX: number[] = [0, 0];
 
-    /* 0x88 */ mNextAnimIdx: number; // Corresponds to the index in Packet_c::mAnm;
+    mNextAnimIdx: number; // Corresponds to the index in Packet_c::mAnm;
 
-    /* 0x8A */ mAlpha: number = 0xFF;
+    mAlpha: number = 0xFF;
 
     public play(packet: Packet_c): void {
         switch (this.mMode) {
