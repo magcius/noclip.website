@@ -232,9 +232,9 @@ class WoodModel {
         // Wood re-uses data from d_tree
         const l_shadowPos = globals.findExtraSymbolData('d_tree.o', 'g_dTree_shadowPos');
         const l_shadowMatDL = globals.findExtraSymbolData('d_tree.o', 'g_dTree_shadowMatDL');
-
         const g_dTree_Oba_kage_32DL = globals.findExtraSymbolData('d_tree.o', 'g_dTree_Oba_kage_32DL');
         const l_Txa_kage_32TEX = globals.findExtraSymbolData('d_tree.o', 'l_Txa_kage_32TEX');
+        const g_dTree_shadowTexCoord = globals.findExtraSymbolData('d_tree.o', 'g_dTree_shadowTexCoord');
 
         const l_matDL = globals.findExtraSymbolData('d_wood.o', 'l_matDL__Q25dWood20@unnamed@d_wood_cpp@');
         const l_Oba_swood_b_cutDL = globals.findExtraSymbolData('d_wood.o', 'l_Oba_swood_b_cutDL__Q25dWood20@unnamed@d_wood_cpp@');
@@ -247,9 +247,6 @@ class WoodModel {
         const l_shadowVtxAttrFmtList = globals.findExtraSymbolData('d_wood.o', 'l_shadowVtxAttrFmtList$5140');
         const l_vtxDescList = globals.findExtraSymbolData('d_wood.o', 'l_vtxDescList$5156');
         const l_vtxAttrFmtList = globals.findExtraSymbolData('d_wood.o', 'l_vtxAttrFmtList$5157');
-
-        // @HACK: The tex coord array is being read as all zero. Hardcode it.
-        const l_shadowTexCoord = new ArrayBufferSlice(new Uint8Array([0, 0, 1, 0, 1, 1, 0, 1]).buffer);
 
         const matRegisters = new DisplayListRegisters();
 
@@ -271,7 +268,7 @@ class WoodModel {
         // Shadow verts
         const shadowVtxArrays: GX_Array[] = [];
         shadowVtxArrays[GX.Attr.POS] = { buffer: l_shadowPos, offs: 0, stride: getAttributeByteSize(shadowVatFormat, GX.Attr.POS) };
-        shadowVtxArrays[GX.Attr.TEX0] = { buffer: l_shadowTexCoord, offs: 0, stride: getAttributeByteSize(shadowVatFormat, GX.Attr.TEX0) };
+        shadowVtxArrays[GX.Attr.TEX0] = { buffer: g_dTree_shadowTexCoord, offs: 0, stride: getAttributeByteSize(shadowVatFormat, GX.Attr.TEX0) };
         const vtx_l_shadowDL = shadowVtxLoader.runVertices(shadowVtxArrays, g_dTree_Oba_kage_32DL);
 
         // Bush material
