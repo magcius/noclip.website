@@ -553,7 +553,6 @@ class Unit_c {
 
         // Get the normal from the raycast, rotate shadow to match surface
         setMatrixAxis(this.mShadowModelMtx, right, normal, forward);
-        mat4.transpose(this.mShadowModelMtx, this.mShadowModelMtx);
         setMatrixTranslation(this.mShadowModelMtx, [this.mPos[0], y + 1.0, this.mPos[2]]);
         scaleMatrix(this.mShadowModelMtx, this.mShadowModelMtx, 1.5, 1.0, 1.5);
 
