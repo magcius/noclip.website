@@ -55,6 +55,7 @@ const config: rspack.Configuration = {
     new rspack.DefinePlugin({
       '__COMMIT_HASH': JSON.stringify(gitRevision.commithash()),
     }),
+    new rspack.EnvironmentPlugin(['NODE_ENV']),
     new rspack.IgnorePlugin({
       // Workaround for broken libraries
       resourceRegExp: /^(fs|path)$/,
