@@ -32,8 +32,8 @@
     "reflect-metadata": "^0.2.2"
   },
   "scripts": {
-    "start": "npm run build:rust && cross-env NODE_ENV=development rspack dev --config rspack.config.ts",
-    "build": "npm run build:rust && cross-env NODE_ENV=production rspack build --config rspack.config.ts",
+    "start": "npm run build:rust && cross-env NODE_ENV=development rspack dev",
+    "build": "npm run build:rust && cross-env NODE_ENV=production rspack build",
     "build:rust": "wasm-pack build -t web rust",
     "build:ZeldaWindWaker": "cd src/ZeldaWindWaker/tools && tsx --experimental-wasm-modules zww_extractor.ts",
     "build:ztp": "cd src/ZeldaTwilightPrincess/tools && tsx ztp_extractor.ts",
