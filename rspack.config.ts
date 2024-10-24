@@ -1,11 +1,11 @@
 import * as rspack from '@rspack/core';
+import * as fs from 'node:fs';
 import HtmlWebpackPlugin from 'html-webpack-plugin';
 import { GitRevisionPlugin } from 'git-revision-webpack-plugin';
 import { CleanWebpackPlugin } from 'clean-webpack-plugin';
 import ForkTsCheckerWebpackPlugin from 'fork-ts-checker-webpack-plugin';
 
-// Target browsers, see: https://github.com/browserslist/browserslist
-const targets = ["chrome >= 87", "edge >= 88", "firefox >= 78", "safari >= 14"];
+const targets = JSON.parse(fs.readFileSync(__dirname + '/package.json', 'utf8')).browserslist;
 const gitRevision = new GitRevisionPlugin();
 
 const config: rspack.Configuration = {
@@ -17,7 +17,6 @@ const config: rspack.Configuration = {
     path: __dirname + '/dist',
     filename: '[name]-[contenthash].js',
   },
-  target: 'web',
   // Disable asset size limit warnings
   performance: false,
   resolve: {
@@ -99,9 +98,6 @@ const config: rspack.Configuration = {
   optimization: {
     minimizer: [
       new rspack.SwcJsMinimizerRspackPlugin(),
-      new rspack.LightningCssMinimizerRspackPlugin({
-        minimizerOptions: { targets },
-      })
     ]
   },
 };
