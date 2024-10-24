@@ -590,7 +590,7 @@ class EnumValue {
     public name: string;
     public value: number;
 
-    constructor(context: NifXML, node: Element) {
+    constructor(context: NifXML, node: dom.Element) {
         this.name = node.getAttribute("name")!;
         if (node.hasAttribute("value"))
             this.value = parseInt(node.getAttribute("value")!);
@@ -604,13 +604,13 @@ class Enum implements Type {
     public storage: Type;
     public value: EnumValue[] = [];
 
-    constructor(context: NifXML, node: Element) {
+    constructor(context: NifXML, node: dom.Element) {
         this.name = node.getAttribute("name")!;
         this.storage = context.getType(node.getAttribute("storage")!);
 
         for (let p = node.firstChild; p !== null; p = p.nextSibling)
             if (p.nodeType === p.ELEMENT_NODE && p.nodeName === "option")
-                this.value.push(new EnumValue(context, p as Element));
+                this.value.push(new EnumValue(context, p as dom.Element));
     }
 
     public generateBody(): string {
@@ -639,7 +639,7 @@ class BitfieldMember {
 
     public memberName: string;
 
-    constructor(context: NifXML, node: Element) {
+    constructor(context: NifXML, node: dom.Element) {
         this.name = node.getAttribute("name")!;
         this.pos = parseInt(node.getAttribute("pos")!);
         this.width = parseInt(node.getAttribute("width")!);
@@ -655,7 +655,7 @@ class Bitfield extends ClassType {
     public storage: Type;
     public member: BitfieldMember[] = [];
 
-    constructor(context: NifXML, node: Element) {
+    constructor(context: NifXML, node: dom.Element) {
         super();
 
         this.name = node.getAttribute("name")!;
@@ -663,7 +663,7 @@ class Bitfield extends ClassType {
 
         for (let p = node.firstChild; p !== null; p = p.nextSibling)
             if (p.nodeType === p.ELEMENT_NODE && p.nodeName === "member")
-                this.member.push(new BitfieldMember(context, p as Element));
+                this.member.push(new BitfieldMember(context, p as dom.Element));
     }
 
     public generateBody(context: NifXML): string {
@@ -731,7 +731,7 @@ class StructField {
     public runtimeCheckCond = false;
     public runtimeCheckVerCond = false;
 
-    constructor(context: NifXML, node: Element, public parentStruct: Struct) {
+    constructor(context: NifXML, node: dom.Element, public parentStruct: Struct) {
         this.rawName = assertExists(node.getAttribute('name'));
         this.rawType = assertExists(node.getAttribute('type'));
         this.rawDefault = fixEmpty(node.getAttribute('default'));
@@ -892,7 +892,7 @@ class Struct extends ClassType {
     public fields: StructField[] = [];
     public isNiObject = false;
 
-    constructor(private context: NifXML, private node: Element) {
+    constructor(private context: NifXML, private node: dom.Element) {
         super();
 
         this.name = assertExists(node.getAttribute(`name`));
@@ -900,9 +900,9 @@ class Struct extends ClassType {
         this.generic = node.getAttribute("generic") === "true";
         this.isNiObject = node.nodeName === "niobject";
 
-        for (let p: Node | null = node.firstChild; p !== null; p = p.nextSibling)
+        for (let p: dom.Node | null = node.firstChild; p !== null; p = p.nextSibling)
             if (p.nodeName === "field")
-                this.fields.push(new StructField(context, p as Element, this));
+                this.fields.push(new StructField(context, p as dom.Element, this));
     }
 
     public resolve(context: NifXML): void {
@@ -1044,7 +1044,7 @@ class NifXML {
 
         const str = readFileSync(filePath, { encoding: 'utf8' });
         const parser = new dom.DOMParser();
-        const doc = parser.parseFromString(str);
+        const doc = parser.parseFromString(str, 'application/xml');
         this.parseXML(doc);
 
         this.resolve();
@@ -1091,7 +1091,7 @@ class NifXML {
         return type;
     }
 
-    private parseElem(p: Element): void {
+    private parseElem(p: dom.Element): void {
         if (p.nodeName === "enum" || p.nodeName === "bitflags") {
             const type = new Enum(this, p);
             this.registerType(type.name, type);
@@ -1106,7 +1106,7 @@ class NifXML {
         }
     }
 
-    private parseToken(elem: Element): void {
+    private parseToken(elem: dom.Element): void {
         const name = assertExists(elem.getAttribute("name"));
         const attrs = assertExists(elem.getAttribute("attrs")).split(' ');
 
@@ -1127,7 +1127,7 @@ class NifXML {
             if (p.nodeType !== p.ELEMENT_NODE)
                 continue;
 
-            const c = p as Element;
+            const c = p as dom.Element;
             if (c.nodeName === name) {
                 const token = assertExists(c.getAttribute("token"));
                 const string = assertExists(c.getAttribute("string"));
@@ -1141,12 +1141,12 @@ class NifXML {
         return assertExists(this.macroRegistry.get(attr));
     }
 
-    public parseXML(doc: Document): void {
-        for (let p = doc.documentElement.firstChild; p !== null; p = p.nextSibling) {
+    public parseXML(doc: dom.Document): void {
+        for (let p = doc.documentElement!.firstChild; p !== null; p = p.nextSibling) {
             if (p.nodeType !== p.ELEMENT_NODE)
                 continue;
 
-            this.parseElem(p as Element);
+            this.parseElem(p as dom.Element);
         }
     }
 
