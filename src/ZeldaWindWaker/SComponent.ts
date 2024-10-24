@@ -168,6 +168,8 @@ export function cLib_chasePosXZ(dst: vec3, target: ReadonlyVec3, maxVel: number)
     }
 }
 
+// Move `value` closer to `target` by the amount specified in `step`. 
+// If `value` would cross `target`, it is set to `target`. Returns 1 if value has reached the target, 0 otherwise.
 export function cLib_chaseF(dst: number, target: number, step: number): number {
     if (step !== 0) {
         if (dst > target) {

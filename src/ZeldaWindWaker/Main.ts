@@ -27,6 +27,7 @@ import { GfxrAttachmentSlot, GfxrRenderTargetDescription } from '../gfx/render/G
 import { GfxRenderInstList, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
 import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render.js';
 import { FlowerPacket, GrassPacket, TreePacket } from './Grass.js';
+import { Packet_c as WoodPacket } from './d_wood.js';
 import { LegacyActor__RegisterFallbackConstructor } from './LegacyActor.js';
 import { dDlst_2DStatic_c, d_a__RegisterConstructors } from './d_a.js';
 import { d_a_sea } from './d_a_sea.js';
@@ -739,6 +740,7 @@ class d_s_play extends fopScn {
     public flowerPacket: FlowerPacket;
     public treePacket: TreePacket;
     public grassPacket: GrassPacket;
+    public woodPacket: WoodPacket;
 
     public vrboxLoaded: boolean = false;
 
@@ -748,6 +750,7 @@ class d_s_play extends fopScn {
         this.treePacket = new TreePacket(globals);
         this.flowerPacket = new FlowerPacket(globals);
         this.grassPacket = new GrassPacket(globals);
+        this.woodPacket = new WoodPacket(globals);
 
         globals.scnPlay = this;
 
@@ -757,22 +760,25 @@ class d_s_play extends fopScn {
     public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         super.draw(globals, renderInstManager, viewerInput);
 
-        // Grass/Flowers/Trees
+        // Magma/Grass/Trees/Bushes/Flowers
         const frameCount = viewerInput.time / 1000.0 * 30;
 
         this.flowerPacket.calc(frameCount);
         this.treePacket.calc(frameCount);
         this.grassPacket.calc(frameCount);
+        this.woodPacket.calc(globals, frameCount);
 
         this.flowerPacket.update(globals);
         this.treePacket.update(globals);
         this.grassPacket.update(globals);
+        this.woodPacket.update(globals);
 
         fopDw_Draw(globals.frameworkGlobals, globals, renderInstManager, viewerInput);
 
         this.flowerPacket.draw(globals, renderInstManager, viewerInput);
         this.treePacket.draw(globals, renderInstManager, viewerInput);
         this.grassPacket.draw(globals, renderInstManager, viewerInput);
+        this.woodPacket.draw(globals, renderInstManager, viewerInput);
     }
 
     public override delete(globals: dGlobals): void {
@@ -782,6 +788,7 @@ class d_s_play extends fopScn {
         this.flowerPacket.destroy(device);
         this.treePacket.destroy(device);
         this.grassPacket.destroy(device);
+        this.woodPacket.destroy(device);
     }
 }
 
