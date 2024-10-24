@@ -73,7 +73,7 @@ import {
 } from "./program.js";
 import { FrameData, MAP_SIZE, MapArray, View, WdtScene } from "./scenes.js";
 import { TextureCache } from "./tex.js";
-import { WowWmoGroupDescriptor } from "../../rust/pkg/index.js";
+import { WowWmoGroupDescriptor } from "../../rust/pkg/noclip_support";
 import { drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 

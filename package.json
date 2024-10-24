@@ -3,40 +3,39 @@
   "private": true,
   "license": "MIT",
   "devDependencies": {
-    "@types/node": "^22.5.4",
-    "@types/pngjs": "^3.4.2",
+    "@rspack/cli": "^1.0.14",
+    "@rspack/core": "^1.0.14",
+    "@rspack/dev-server": "^1.0.9",
+    "@swc/helpers": "^0.5.13",
+    "@swc/register": "^0.1.10",
+    "@types/node": "^22.7.9",
+    "@types/pngjs": "^6.0.5",
     "@types/webxr": "^0.5.20",
-    "@wasm-tool/wasm-pack-plugin": "^1.7.0",
-    "@webgpu/types": "^0.1.44",
-    "@xmldom/xmldom": "^0.8.10",
+    "@webgpu/types": "^0.1.49",
+    "@xmldom/xmldom": "^0.9.4",
     "buffer": "^6.0.3",
-    "clean-webpack-plugin": "^3.0.0",
-    "copy-webpack-plugin": "^7.0.0",
-    "fork-ts-checker-webpack-plugin": "^6.5.3",
-    "git-revision-webpack-plugin": "^3.0.6",
-    "html-webpack-plugin": "^5.6.0",
-    "ignore-loader": "^0.1.2",
-    "pngjs": "^3.4.0",
-    "thread-loader": "^3.0.4",
-    "ts-loader": "^9.5.1",
-    "tsx": "^4.7.0",
-    "typescript": "^5.6.2",
-    "wasm-pack": "^0.12.1",
-    "webm-muxer": "^3.1.3",
-    "webpack": "^5.89.0",
-    "webpack-cli": "^4.10.0",
-    "webpack-dev-server": "^4.15.1",
-    "webpack-merge": "^5.10.0"
+    "clean-webpack-plugin": "^4.0.0",
+    "cross-env": "^7.0.3",
+    "fork-ts-checker-webpack-plugin": "^9.0.2",
+    "git-revision-webpack-plugin": "^5.0.0",
+    "html-webpack-plugin": "^5.6.3",
+    "onchange": "^7.1.0",
+    "pngjs": "^7.0.0",
+    "tsx": "^4.19.1",
+    "typescript": "^5.6.3",
+    "wasm-pack": "^0.13.0",
+    "webm-muxer": "^5.0.2"
   },
   "dependencies": {
     "crc-32": "^1.2.2",
     "gl-matrix": "^3.4.3",
     "librw": "^0.4.0",
-    "reflect-metadata": "^0.1.14"
+    "reflect-metadata": "^0.2.2"
   },
   "scripts": {
-    "start": "webpack serve --config webpack.dev.cjs",
-    "build": "webpack --config webpack.prod.cjs",
+    "start": "npm run build:rust && cross-env NODE_ENV=development rspack dev",
+    "build": "npm run build:rust && cross-env NODE_ENV=production rspack build",
+    "build:rust": "wasm-pack build -t web rust",
     "build:ZeldaWindWaker": "cd src/ZeldaWindWaker/tools && tsx --experimental-wasm-modules zww_extractor.ts",
     "build:ztp": "cd src/ZeldaTwilightPrincess/tools && tsx ztp_extractor.ts",
     "build:dk64": "cd src/DonkeyKong64/tools && tsx extractor.ts",
@@ -47,7 +46,8 @@
     "build:BanjoKazooie": "cd src/BanjoKazooie/tools && tsx extractor.ts",
     "build:TheWitness": "cd src/TheWitness/tools && tsx extractor.ts",
     "test:DeBlob2": "cd src/DeBlob2/tools && tsx systest.ts",
-    "typecheck": "tsc -w --noEmit"
+    "typecheck": "tsc -w --noEmit",
+    "watch:rust": "onchange rust/**/*.rs -- npm run build:rust"
   },
   "bin": {
     "nc-bcsvtool": "./src/tools/bcsvtool.ts",
@@ -55,7 +55,6 @@
     "nc-crg1tool": "./src/tools/crg1tool.ts",
     "nc-bnd3tool": "./src/DarkSouls/tools/bnd3tool.ts"
   },
-  "type": "module",
   "browserslist": [
     "last 2 Chrome versions"
   ],

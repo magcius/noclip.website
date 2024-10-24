@@ -640,11 +640,16 @@ class GlobalMIDIControls {
         if (navigator.requestMIDIAccess === undefined)
             return;
 
-        this.midiAccess = await navigator.requestMIDIAccess({ sysex: false });
-        this.midiAccess.onstatechange = () => {
+        try {
+            this.midiAccess = await navigator.requestMIDIAccess({ sysex: false });
+            this.midiAccess.onstatechange = () => {
+                this.scanDevices();
+            }
             this.scanDevices();
+        } catch (e) {
+            // MIDI not available or permission denied.
+            console.error(e);
         }
-        this.scanDevices();
     }
 
     public isInitialized(): boolean {

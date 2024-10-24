@@ -2,7 +2,7 @@
 import { makeStaticDataBuffer } from '../../gfx/helpers/BufferHelpers.js';
 import { SceneContext } from '../../SceneBase.js';
 import { downloadBlob } from '../../DownloadUtils.js';
-import { AssetInfo, Mesh, AABB as UnityAABB, VertexFormat, StreamingInfo, ChannelInfo } from '../../../rust/pkg/index.js';
+import { AssetInfo, Mesh, AABB as UnityAABB, VertexFormat, StreamingInfo, ChannelInfo } from '../../../rust/pkg/noclip_support';
 import { GfxDevice, GfxBuffer, GfxBufferUsage, GfxFormat, GfxInputLayout, GfxVertexBufferFrequency, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from '../../gfx/platform/GfxPlatform.js';
 import { FormatCompFlags, setFormatCompFlags } from '../../gfx/platform/GfxPlatformFormat.js';
 import { assert } from '../../util.js';

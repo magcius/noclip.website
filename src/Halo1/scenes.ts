@@ -1,6 +1,6 @@
 
 import { mat4, ReadonlyMat4, vec3, vec4 } from 'gl-matrix';
-import { AnimationFunction, FramebufferBlendFunction, FunctionSource, HaloBitmapReader, HaloBSP, HaloLightmap, HaloMaterial, HaloModel, HaloModelPart, HaloSceneManager, HaloScenery, HaloSceneryInstance, HaloShaderEnvironment, HaloShaderModel, HaloShaderTransparencyChicago, HaloShaderTransparencyGeneric, HaloShaderTransparentChicagoMap, HaloShaderTransparentGenericMap, HaloShaderTransparentWater, HaloShaderTransparentWaterRipple, HaloSky, ShaderAlphaInput, ShaderInput, ShaderMapping, ShaderOutput, ShaderOutputFunction, ShaderOutputMapping, ShaderTransparentChicagoColorFunction } from '../../rust/pkg/index.js';
+import { AnimationFunction, FramebufferBlendFunction, FunctionSource, HaloBitmapReader, HaloBSP, HaloLightmap, HaloMaterial, HaloModel, HaloModelPart, HaloSceneManager, HaloScenery, HaloSceneryInstance, HaloShaderEnvironment, HaloShaderModel, HaloShaderTransparencyChicago, HaloShaderTransparencyGeneric, HaloShaderTransparentChicagoMap, HaloShaderTransparentGenericMap, HaloShaderTransparentWater, HaloShaderTransparentWaterRipple, HaloSky, ShaderAlphaInput, ShaderInput, ShaderMapping, ShaderOutput, ShaderOutputFunction, ShaderOutputMapping, ShaderTransparentChicagoColorFunction } from '../../rust/pkg/noclip_support';
 import { CameraController, computeViewSpaceDepthFromWorldSpacePoint } from '../Camera.js';
 import { Color, colorCopy, colorNewCopy, White } from '../Color.js';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers.js';
