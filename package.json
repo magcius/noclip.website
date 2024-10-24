@@ -19,6 +19,7 @@
     "fork-ts-checker-webpack-plugin": "^9.0.2",
     "git-revision-webpack-plugin": "^5.0.0",
     "html-webpack-plugin": "^5.6.3",
+    "onchange": "^7.1.0",
     "pngjs": "^7.0.0",
     "tsx": "^4.19.1",
     "typescript": "^5.6.3",
@@ -45,7 +46,8 @@
     "build:BanjoKazooie": "cd src/BanjoKazooie/tools && tsx extractor.ts",
     "build:TheWitness": "cd src/TheWitness/tools && tsx extractor.ts",
     "test:DeBlob2": "cd src/DeBlob2/tools && tsx systest.ts",
-    "typecheck": "tsc -w --noEmit"
+    "typecheck": "tsc -w --noEmit",
+    "watch:rust": "onchange rust/**/*.rs -- npm run build:rust"
   },
   "bin": {
     "nc-bcsvtool": "./src/tools/bcsvtool.ts",
