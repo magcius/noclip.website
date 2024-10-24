@@ -322,27 +322,6 @@ class WoodModel {
 //-----------------------------------------
 // Classes
 //-----------------------------------------
-/**
- * A linked list of Units, so that they can be traversed room by room
- */
-class Room_c {
-    mRootUnit: Unit_c;
-
-    public entry_unit(unit: Unit_c): void {
-        unit.mNextUnit = this.mRootUnit;
-        this.mRootUnit = unit;
-        return;
-    }
-
-    public delete_all_unit() {
-        while (this.mRootUnit) {
-            let unit = this.mRootUnit;
-            this.mRootUnit = unit.mNextUnit!;
-            unit.clear();
-        }
-    }
-}
-
 class Anm_c {
     /* 0x00 */ mModelMtx: mat4 = mat4.create();
     /* 0x30 */ mTrunkModelMtx: mat4 = mat4.create();
@@ -527,8 +506,6 @@ class Unit_c {
     mShadowModelMtx: mat4 = mat4.create();
     mShadowModelViewMtx: mat4 = mat4.create();
 
-    mNextUnit: Unit_c | null = null; // The next unit in the same room (a linked list)
-
     public set_ground(globals: dGlobals): number {
         // @TODO: This is copied from d_tree. Should actually implement the d_wood version.
 
@@ -581,7 +558,6 @@ class Unit_c {
 
     public clear(): void {
         this.mFlags = UnitState_e.Inactive;
-        this.mNextUnit = null;
     }
 
     public cc_hit_before_cut(packet: Packet_c): void {
@@ -618,8 +594,7 @@ class Unit_c {
 }
 
 export class Packet_c implements J3DPacket {
-    private mUnit: Unit_c[] = nArray(kUnitCount, () => new Unit_c());
-    private mRoom: Room_c[] = nArray(kRoomCount, () => new Room_c());
+    private mUnit: Unit_c[][] = nArray(kRoomCount, () => []);
     private mAnm: Anm_c[] = nArray(kAnimCount, () => new Anm_c());
 
     private _mModel: WoodModel;
@@ -676,34 +651,20 @@ export class Packet_c implements J3DPacket {
         return animIdx;
     }
 
-    public search_empty_UnitID(): number {
-        for (let i = 0; i < kUnitCount; i++) {
-            if (this.mUnit[i].mFlags == 0) {
-                return i;
-            }
+    public put_unit(globals: dGlobals, pos: vec3, room_no: number) {
+        const unit = new Unit_c();
+        unit.mFlags = UnitState_e.Active;
+
+        vec3.copy(unit.mPos, pos);
+
+        unit.mAnmIdx = this.search_anm(AnimMode_e.Norm);
+
+        const groundY = unit.set_ground(globals);
+        if (groundY) {
+            this.mUnit[room_no].push(unit);
+        } else {
+            unit.clear();
         }
-
-        return kUnitCount;
-    }
-
-    public put_unit(globals: dGlobals, pos: vec3, room_no: number): number {
-        const unitIdx = this.search_empty_UnitID();
-        if (unitIdx != kUnitCount) {
-            const unit = this.mUnit[unitIdx];
-            unit.mFlags = UnitState_e.Active;
-
-            vec3.copy(unit.mPos, pos);
-
-            unit.mAnmIdx = this.search_anm(AnimMode_e.Norm);
-
-            const groundY = unit.set_ground(globals);
-            if (groundY) {
-                this.mRoom[room_no].entry_unit(unit);
-            } else {
-                unit.clear();
-            }
-        }
-        return unitIdx;
     }
 
     // Calculate collisions
@@ -712,16 +673,14 @@ export class Packet_c implements J3DPacket {
 
         if ((roomIdx >= 0) && (roomIdx < kRoomCount)) {
             //     dComIfG_Ccsp() -> SetMassAttr(L_attr.kCollisionRad1, L_attr.kCollisionHeight1, (u8)0x13, 1);
-
-            const room = this.mRoom[roomIdx];
-            for (let unit = room.mRootUnit; unit != null; unit = unit.mNextUnit!) {
+            for (let unit of this.mUnit[roomIdx]) {
                 if ((unit.mFlags & UnitState_e.IsCut) == 0) {
                     unit.cc_hit_before_cut(this);
                 }
             }
 
             //     dComIfG_Ccsp() -> SetMassAttr(L_attr.kCollisionRad2, L_attr.kCollisionHeight2, (u8)0x12, 1);
-            for (let unit = room.mRootUnit; unit != null; unit = unit.mNextUnit!) {
+            for (let unit of this.mUnit[roomIdx]) {
                 if ((unit.mFlags & UnitState_e.IsCut) != 0) {
                     unit.cc_hit_after_cut(this);
                 }
@@ -744,30 +703,32 @@ export class Packet_c implements J3DPacket {
             this.mAnm[i].play(this);
         }
 
-        for (let i = 0; i < kUnitCount; i++) {
-            this.mUnit[i].proc(this);
+        for (let i = 0; i < kRoomCount; i++) {
+            for (let unit of this.mUnit[i]) {
+                unit.proc(this);
+            }
         }
     }
 
     public update(globals: dGlobals) {
-        for (let i = 0; i < this.mUnit.length; i++) {
-            const unit = this.mUnit[i];
-            if (unit.mFlags & UnitState_e.Active) {
-                // Frustum culling
-                const clipPos = vec3.set(scratchVec3a, unit.mPos[0], unit.mPos[1] + kClipCenterYOffset, unit.mPos[2]);
+        for (let i = 0; i < kRoomCount; i++) {
+            for (let unit of this.mUnit[i]) {
+                if (unit.mFlags & UnitState_e.Active) {
+                    // Frustum culling
+                    const clipPos = vec3.set(scratchVec3a, unit.mPos[0], unit.mPos[1] + kClipCenterYOffset, unit.mPos[2]);
 
-                // s32 res = mDoLib_clipper::clip(j3dSys.getViewMtx(), clipPos, kClipRadius);
-                const culled = !globals.camera.frustum.containsSphere(clipPos, kClipRadius);
+                    // s32 res = mDoLib_clipper::clip(j3dSys.getViewMtx(), clipPos, kClipRadius);
+                    const culled = !globals.camera.frustum.containsSphere(clipPos, kClipRadius);
 
-                if (culled) {
-                    unit.mFlags |= UnitState_e.IsFrustumCulled;
-                } else {
-                    unit.mFlags &= ~UnitState_e.IsFrustumCulled;
-                    unit.set_mtx(globals, this.mAnm);
+                    if (culled) {
+                        unit.mFlags |= UnitState_e.IsFrustumCulled;
+                    } else {
+                        unit.mFlags &= ~UnitState_e.IsFrustumCulled;
+                        unit.set_mtx(globals, this.mAnm);
+                    }
                 }
             }
         }
-
         // TODO: Add to the Render List
     }
 
@@ -788,8 +749,8 @@ export class Packet_c implements J3DPacket {
             this._mModel.shadowMaterial.setOnRenderInst(renderInstManager.gfxRenderCache, template);
             template.setSamplerBindingsFromTextureMappings(this._mModel.shadowTextureMapping);
 
-            for (let r = 0; r < this.mRoom.length; r++) {
-                for (let unit = this.mRoom[r].mRootUnit; unit != null; unit = unit.mNextUnit!) {
+            for (let i = 0; i < kRoomCount; i++) {
+                for (let unit of this.mUnit[i]) {
                     if (unit.mFlags & UnitState_e.IsFrustumCulled)
                         continue;
 
@@ -817,13 +778,13 @@ export class Packet_c implements J3DPacket {
             // Set alpha color
             colorFromRGBA(materialParams.u_Color[ColorKind.C2], 1, 1, 1, 1);
 
-            for (let r = 0; r < this.mRoom.length; r++) {
+            for (let r = 0; r < kRoomCount; r++) {
                 // Set the room color and fog params
                 colorCopy(materialParams.u_Color[ColorKind.C0], globals.roomStatus[r].tevStr.colorC0);
                 colorCopy(materialParams.u_Color[ColorKind.C1], globals.roomStatus[r].tevStr.colorK0);
                 dKy_GxFog_set(globals.g_env_light, materialParams.u_FogBlock, viewerInput.camera);
 
-                for (let unit = this.mRoom[r].mRootUnit; unit != null; unit = unit.mNextUnit!) {
+                for (let unit of this.mUnit[r]) {
                     if (unit.mFlags & UnitState_e.IsFrustumCulled)
                         continue;
 
