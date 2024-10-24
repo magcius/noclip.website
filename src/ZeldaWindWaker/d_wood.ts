@@ -63,7 +63,6 @@ const scratchMat4a = mat4.create();
 const materialParams = new MaterialParams();
 const drawParams = new DrawParams();
 
-const kUnitCount = 200;
 const kRoomCount = 64;
 const kAnimCount = 72;
 
@@ -364,7 +363,7 @@ class Anm_c {
     // Each animation mode has an mode_*_init() function which is called when the animation is started
     // The mode_*() function is called to update the animation each frame, until finished
 
-    public mode_cut_init(anm: Anm_c, targetAngle: number): void {
+    public mode_cut_init(targetAngle: number): void {
         for (let i = 0; i < 2; i++) {
             this.mPhaseY[i] = 0;
             this.mPhaseX[i] = 0;
@@ -382,7 +381,7 @@ class Anm_c {
     }
 
     // Animate when cut with a weapon 
-    public mode_cut(packet: Packet_c): void {
+    public mode_cut(): void {
         this.mVelY = this.mVelY - 3.0;
         if (this.mVelY < -40.0) {
             this.mVelY = -40.0;
@@ -452,7 +451,7 @@ class Anm_c {
     }
 
     // Animate normally (not interacting with character)
-    public mode_norm(packet: Packet_c): void {
+    public mode_norm(): void {
         let phase;
         if (this.mWindPow < 0.33) {
             phase = AttrSway_e.Light;
