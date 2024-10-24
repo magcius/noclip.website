@@ -381,7 +381,7 @@ class Anm_c {
     }
 
     // Animate when cut with a weapon 
-    public mode_cut(): void {
+    public mode_cut(packet: Packet_c): void {
         this.mVelY = this.mVelY - 3.0;
         if (this.mVelY < -40.0) {
             this.mVelY = -40.0;
@@ -451,7 +451,7 @@ class Anm_c {
     }
 
     // Animate normally (not interacting with character)
-    public mode_norm(): void {
+    public mode_norm(packet: Packet_c): void {
         let phase;
         if (this.mWindPow < 0.33) {
             phase = AttrSway_e.Light;
