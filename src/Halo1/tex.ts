@@ -1,5 +1,5 @@
 
-import { BitmapFormat, HaloSceneManager, HaloBitmap, HaloBitmapReader } from "../../rust/pkg/index.js";
+import { BitmapFormat, HaloSceneManager, HaloBitmap, HaloBitmapReader } from "../../rust/pkg/noclip_support";
 import { TextureMapping } from "../TextureHolder.js";
 import { makeSolidColorTexture2D } from "../gfx/helpers/TextureHelpers.js";
 import { GfxDevice, GfxMipFilterMode, GfxTexFilterMode, GfxTextureDescriptor, GfxTextureDimension, GfxTextureUsage, GfxWrapMode } from "../gfx/platform/GfxPlatform.js";

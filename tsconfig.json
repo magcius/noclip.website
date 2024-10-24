@@ -22,8 +22,8 @@
             "dom"
         ],
         "sourceMap": true,
-        "moduleResolution": "NodeNext",
-        "module": "NodeNext",
+        "moduleResolution": "Bundler",
+        "module": "ESNext",
         "types": [
             "gl-matrix",
             "webxr"

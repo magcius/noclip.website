@@ -1,5 +1,5 @@
 
-import * as defaultSaveStateData from './DefaultSaveStates.json';
+import defaultSaveStateData from './DefaultSaveStates.json';
 
 export type SettingCallback = (saveManager: SaveManager, key: string) => void;
 
@@ -111,7 +111,7 @@ export class SaveManager {
             return window.sessionStorage.getItem(key);
 
         if (location === SaveStateLocation.Defaults && key in defaultSaveStateData)
-            return (defaultSaveStateData.default as SaveStateMap)[key] || null;
+            return (defaultSaveStateData as SaveStateMap)[key] || null;
 
         return null;
     }
@@ -129,7 +129,7 @@ export class SaveManager {
             return state;
 
         // Look up in default save state data.
-        state = (defaultSaveStateData.default as SaveStateMap)[key];
+        state = (defaultSaveStateData as SaveStateMap)[key];
         if (state)
             return state;
 

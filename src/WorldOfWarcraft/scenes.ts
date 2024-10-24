@@ -16,7 +16,7 @@ import { AdtCoord, AdtData, Database, DoodadData, LazyWorldData, ModelData, WmoD
 import { BaseProgram, LoadingAdtProgram, ModelProgram, ParticleProgram, SkyboxProgram, TerrainProgram, WaterProgram, WmoProgram } from "./program.js";
 import { LoadingAdtRenderer, ModelRenderer, SkyboxRenderer, TerrainRenderer, WaterRenderer, WmoRenderer } from "./render.js";
 import { TextureCache } from "./tex.js";
-import type { ConvexHull } from "../../rust/pkg/index.js";
+import type { ConvexHull } from "../../rust/pkg/noclip_support";
 
 export const MAP_SIZE = 17066;
 

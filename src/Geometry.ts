@@ -2,7 +2,7 @@
 import { vec3, ReadonlyVec3, ReadonlyMat4, vec4, ReadonlyVec4, mat4 } from "gl-matrix";
 import { GfxClipSpaceNearZ } from "./gfx/platform/GfxPlatform.js";
 import { nArray } from "./util.js";
-import type { ConvexHull } from "../rust/pkg/index.js";
+import type { ConvexHull } from "../rust/pkg/noclip_support";
 import { rust } from "./rustlib.js";
 import { getMatrixTranslation, vec3SetAll } from "./MathHelpers.js";
 

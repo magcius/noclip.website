@@ -1,8 +1,8 @@
 
-export let rust: typeof import('../rust/pkg/index.js') = null!;
+import init, * as rust from '../rust/pkg/noclip_support';
+
+export { rust };
 
 export async function loadRustLib() {
-    if (rust === null) {
-        rust = await import('../rust/pkg/index.js');
-    }
+    await init();
 }
