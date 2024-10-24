@@ -288,6 +288,8 @@ export class Entity_Cluster extends Entity {
             const entity = globals.entity_manager.entity_list[this.elements[i]];
             entity.cluster_id = this.portable_id;
         }
+
+        globals.asset_manager.load_package(`${globals.entity_manager.universe_name}_${this.portable_id}`);
     }
 }
 
