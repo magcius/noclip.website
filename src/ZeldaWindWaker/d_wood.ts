@@ -22,6 +22,7 @@ import { cLib_chaseF, cM__Short2Rad, cM_atan2s } from './SComponent.js';
 import { dStage_roomStatus_c } from './d_stage.js';
 import { mDoMtx_copy, mDoMtx_XrotM, mDoMtx_YrotM, mDoMtx_YrotS, MtxTrans } from './m_do_mtx.js';
 import { assert } from '../util.js';
+import { scaleMatrix, setMatrixAxis, setMatrixTranslation } from '../MathHelpers.js';
 
 //-----------------------------------------
 // Types
@@ -554,22 +555,10 @@ class Unit_c {
         vec3.cross(right, normal, forward);
 
         // Get the normal from the raycast, rotate shadow to match surface
-        this.mShadowModelMtx[0] = right[0];
-        this.mShadowModelMtx[1] = right[1];
-        this.mShadowModelMtx[2] = right[2];
-        this.mShadowModelMtx[3] = this.mPos[0];
-
-        this.mShadowModelMtx[4] = normal[0];
-        this.mShadowModelMtx[5] = normal[1];
-        this.mShadowModelMtx[6] = normal[2];
-        this.mShadowModelMtx[7] = 1.0 + y;
-
-        this.mShadowModelMtx[8] = forward[0];
-        this.mShadowModelMtx[9] = forward[1];
-        this.mShadowModelMtx[10] = forward[2];
-        this.mShadowModelMtx[11] = this.mPos[2];
-
+        setMatrixAxis(this.mShadowModelMtx, right, normal, forward);
         mat4.transpose(this.mShadowModelMtx, this.mShadowModelMtx);
+        setMatrixTranslation(this.mShadowModelMtx, [this.mPos[0], y + 1.0, this.mPos[2]]);
+        scaleMatrix(this.mShadowModelMtx, this.mShadowModelMtx, 1.5, 1.0, 1.5);
 
         return y;
     }
