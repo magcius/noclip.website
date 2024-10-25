@@ -1117,13 +1117,13 @@ export class Material_Generic extends BaseMaterial {
         super.initParameters();
 
         const shaderTypeStr = this.vmt._Root.toLowerCase();
-        if (shaderTypeStr === 'lightmappedgeneric')
+        if (shaderTypeStr === 'lightmappedgeneric' || shaderTypeStr === 'sdk_lightmappedgeneric')
             this.shaderType = GenericShaderType.LightmappedGeneric;
         else if (shaderTypeStr === 'vertexlitgeneric')
             this.shaderType = GenericShaderType.VertexLitGeneric;
         else if (shaderTypeStr === 'unlitgeneric')
             this.shaderType = GenericShaderType.UnlitGeneric;
-        else if (shaderTypeStr === 'worldvertextransition')
+        else if (shaderTypeStr === 'worldvertextransition' || shaderTypeStr === 'sdk_worldvertextransition')
             this.shaderType = GenericShaderType.WorldVertexTransition;
         else if (shaderTypeStr === 'black')
             this.shaderType = GenericShaderType.Black;

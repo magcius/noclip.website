@@ -212,11 +212,16 @@ function lightmapPackRuntimeBumpmap(dstPage: LightmapPage, location: Readonly<Fa
     }
 }
 
+const enum FaceLightmapUpdaterState {
+    NotReady,
+    NeedsUpload,
+    Idle,
+}
 
 export class FaceLightmapUpdater {
     // The styles that we built our lightmaps for.
     private lightmapStyleIntensities: number[];
-    private initialized: boolean = false;
+    private state = FaceLightmapUpdaterState.NotReady;
     private wantsLightmap: boolean = false;
     private wantsBumpmap: boolean = false;
 
@@ -225,13 +230,13 @@ export class FaceLightmapUpdater {
     }
 
     public setMaterial(materialInstance: BaseMaterial): void {
-        assert(!this.initialized);
-        this.initialized = true;
+        assert(this.state === FaceLightmapUpdaterState.NotReady);
+        this.state = FaceLightmapUpdaterState.NeedsUpload;
         this.wantsLightmap = materialInstance.wantsLightmap;
         this.wantsBumpmap = materialInstance.wantsBumpmappedLightmap;
     }
 
-    public checkDirty(renderContext: SourceRenderContext): boolean {
+    private checkDirty(renderContext: SourceRenderContext): boolean {
         const worldLightingState = renderContext.worldLightingState;
 
         if (!this.wantsLightmap)
@@ -246,8 +251,13 @@ export class FaceLightmapUpdater {
         return false;
     }
 
+    public update(renderContext: SourceRenderContext): void {
+        if (this.state === FaceLightmapUpdaterState.Idle && this.checkDirty(renderContext))
+            this.state = FaceLightmapUpdaterState.NeedsUpload;
+    }
+
     public buildLightmap(renderContext: SourceRenderContext, pageOffset: number): void {
-        if (!this.initialized)
+        if (this.state !== FaceLightmapUpdaterState.NeedsUpload)
             return;
 
         const worldLightingState = renderContext.worldLightingState;
@@ -293,5 +303,6 @@ export class FaceLightmapUpdater {
 
         dstPage.uploadDirty = true;
         renderContext.debugStatistics.lightmapsBuilt++;
+        this.state = FaceLightmapUpdaterState.Idle;
     }
 }

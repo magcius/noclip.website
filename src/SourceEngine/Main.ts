@@ -762,8 +762,10 @@ export class BSPRenderer {
 
                 for (const faceIdx of this.liveFaceSet.values()) {
                     const lightmapUpdater = this.lightmapUpdaters[faceIdx];
-                    if (lightmapUpdater !== null && lightmapUpdater.checkDirty(renderContext))
+                    if (lightmapUpdater !== null) {
+                        lightmapUpdater.update(renderContext);
                         lightmapUpdater.buildLightmap(renderContext, this.startLightmapPageIndex);
+                    }
 
                     const faceInfo = this.bsp.faceInfos[faceIdx];
                     if (faceInfo.surfaceIndex >= 0)
@@ -798,8 +800,10 @@ export class BSPRenderer {
                         const faceIdx = surface.surface.faceList[k];
                         
                         const lightmapUpdater = this.lightmapUpdaters[faceIdx];
-                        if (lightmapUpdater !== null && lightmapUpdater.checkDirty(renderContext))
+                        if (lightmapUpdater !== null) {
+                            lightmapUpdater.update(renderContext);
                             lightmapUpdater.buildLightmap(renderContext, this.startLightmapPageIndex);
+                        }
                     }
                 }
 
