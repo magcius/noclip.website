@@ -39,4 +39,4 @@ const sceneDescs = [
     new EstrangedActISceneDesc("sp10thewarehouse"),
 ];
 
-export const sceneGroup: SceneGroup = { id, name, sceneDescs };
+export const sceneGroup: SceneGroup = { id, name, sceneDescs, hidden: true };
