@@ -44,6 +44,9 @@ const config: rspack.Configuration = {
               syntax: 'typescript',
               decorators: true,
             },
+            transform: {
+              useDefineForClassFields: false,
+            },
             externalHelpers: true,
           },
           env: { targets },

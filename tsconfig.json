@@ -13,6 +13,7 @@
         "strictFunctionTypes": true,
         "strictNullChecks": true,
         "useUnknownInCatchVariables": true,
+        "useDefineForClassFields": false,
         "resolveJsonModule": true,
         "lib": [
             "es2017",
