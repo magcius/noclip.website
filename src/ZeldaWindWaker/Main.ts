@@ -27,7 +27,7 @@ import { GfxrAttachmentSlot, GfxrRenderTargetDescription } from '../gfx/render/G
 import { GfxRenderInstList, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
 import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render.js';
 import { FlowerPacket, GrassPacket, TreePacket } from './Grass.js';
-import { Packet_c as WoodPacket } from './d_wood.js';
+import { WoodPacket } from './d_wood.js';
 import { LegacyActor__RegisterFallbackConstructor } from './LegacyActor.js';
 import { dDlst_2DStatic_c, d_a__RegisterConstructors } from './d_a.js';
 import { d_a_sea } from './d_a_sea.js';

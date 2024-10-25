@@ -1,28 +1,27 @@
 
-import { dGlobals } from './Main.js';
-import { GfxRendererLayer, GfxRenderInstManager, makeSortKey } from '../gfx/render/GfxRenderInstManager.js';
-import { ViewerRenderInput } from '../viewer.js';
-import { mat4, ReadonlyVec3, vec3 } from 'gl-matrix';
-import { dBgS_GndChk } from './d_bg.js';
-import { nArray } from '../gfx/platform/GfxPlatformUtil.js';
-import { dKy_GxFog_set } from './d_kankyo.js';
-import { colorCopy, colorFromRGBA } from '../Color.js';
-import { ColorKind, DrawParams, GXMaterialHelperGfx, GXShapeHelperGfx, loadedDataCoalescerComboGfx, MaterialParams } from '../gx/gx_render.js';
-import { BTI_Texture, BTIData } from '../Common/JSYSTEM/JUTTexture.js';
-import { TextureMapping } from '../TextureHolder.js';
-import { GfxBufferCoalescerCombo } from '../gfx/helpers/BufferHelpers.js';
+import { mat4, vec3 } from 'gl-matrix';
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
-import { compileVtxLoader, DisplayListRegisters, displayListRegistersInitGX, displayListRegistersRun, getAttributeByteSize, GX_Array, GX_VtxAttrFmt, GX_VtxDesc } from '../gx/gx_displaylist.js';
-import { parseMaterial } from '../gx/gx_material.js';
-import { Endianness } from '../endian.js';
-import * as GX from '../gx/gx_enum.js';
-import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
-import { dKyw_get_wind_pow, dKyw_get_wind_vec } from './d_kankyo_wether.js';
-import { cLib_chaseF, cM__Short2Rad, cM_atan2s } from './SComponent.js';
-import { dStage_roomStatus_c } from './d_stage.js';
-import { mDoMtx_copy, mDoMtx_XrotM, mDoMtx_YrotM, mDoMtx_YrotS, MtxTrans } from './m_do_mtx.js';
-import { assert } from '../util.js';
+import { colorCopy, colorFromRGBA } from '../Color.js';
+import { BTI_Texture, BTIData } from '../Common/JSYSTEM/JUTTexture.js';
 import { scaleMatrix, setMatrixAxis, setMatrixTranslation } from '../MathHelpers.js';
+import { TextureMapping } from '../TextureHolder.js';
+import { Endianness } from '../endian.js';
+import { GfxBufferCoalescerCombo } from '../gfx/helpers/BufferHelpers.js';
+import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
+import { nArray } from '../gfx/platform/GfxPlatformUtil.js';
+import { GfxRendererLayer, GfxRenderInstManager, makeSortKey } from '../gfx/render/GfxRenderInstManager.js';
+import { compileVtxLoader, DisplayListRegisters, displayListRegistersInitGX, displayListRegistersRun, getAttributeByteSize, GX_Array, GX_VtxAttrFmt, GX_VtxDesc } from '../gx/gx_displaylist.js';
+import * as GX from '../gx/gx_enum.js';
+import { parseMaterial } from '../gx/gx_material.js';
+import { ColorKind, DrawParams, GXMaterialHelperGfx, GXShapeHelperGfx, loadedDataCoalescerComboGfx, MaterialParams } from '../gx/gx_render.js';
+import { assert } from '../util.js';
+import { ViewerRenderInput } from '../viewer.js';
+import { dGlobals } from './Main.js';
+import { cLib_chaseF, cM__Short2Rad, cM_atan2s } from './SComponent.js';
+import { dBgS_GndChk } from './d_bg.js';
+import { dKy_GxFog_set } from './d_kankyo.js';
+import { dKyw_get_wind_pow, dKyw_get_wind_vec } from './d_kankyo_wether.js';
+import { mDoMtx_XrotM, mDoMtx_YrotM, mDoMtx_YrotS, MtxTrans } from './m_do_mtx.js';
 
 //-----------------------------------------
 // Types
@@ -45,7 +44,7 @@ const enum AnimMode_e {
     _Max
 };
 
-enum AttrSway_e {
+const enum AttrSway_e {
     Light,
     Medium,
     Strong,
@@ -58,7 +57,6 @@ enum AttrSway_e {
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
 const scratchVec3c = vec3.create();
-const scratchVec3d = vec3.create();
 const scratchMat4a = mat4.create();
 const materialParams = new MaterialParams();
 const drawParams = new DrawParams();
@@ -322,29 +320,27 @@ class WoodModel {
 // Classes
 //-----------------------------------------
 class Anm_c {
-    mModelMtx: mat4 = mat4.create();
-    mTrunkModelMtx: mat4 = mat4.create();
+    public modelMtx: mat4 = mat4.create();
+    public trunkModelMtx: mat4 = mat4.create();
 
-    mMode: AnimMode_e = AnimMode_e._Max;
+    public mode: AnimMode_e = AnimMode_e._Max;
 
-    mCountdown: number;
-    mWindDir: number;   // The direction towards the actor who instigated this animation
-    mWindPow: number;   // 0.0 - 1.0
-    mPosOffsetY: number;
-    mPosOffsetZ: number;
-    mVelY: number;
+    public timer: number;
+    public windDir: number;   // The direction towards the actor who instigated this animation
+    public windPow: number;   // 0.0 - 1.0
+    public posOffsetY: number;
+    public posOffsetZ: number;
+    public velY: number;
 
-    mPhaseY: number[] = [0, 0];
-    mPhaseX: number[] = [0, 0];
-    mAmpY: number[] = [0, 0];
-    mAmpX: number[] = [0, 0];
+    public phaseY: number[] = [0, 0];
+    public phaseX: number[] = [0, 0];
+    public ampY: number[] = [0, 0];
+    public ampX: number[] = [0, 0];
+    public nextAnimIdx: number; // Corresponds to the index in Packet_c::mAnm;
+    public alpha: number = 0xFF;
 
-    mNextAnimIdx: number; // Corresponds to the index in Packet_c::mAnm;
-
-    mAlpha: number = 0xFF;
-
-    public play(packet: Packet_c): void {
-        switch (this.mMode) {
+    public play(packet: WoodPacket): void {
+        switch (this.mode) {
             case AnimMode_e.Cut: return this.mode_cut(packet);
             case AnimMode_e.PushInto: return this.mode_push_into(packet);
             case AnimMode_e.PushBack: return this.mode_push_back(packet);
@@ -365,172 +361,163 @@ class Anm_c {
 
     public mode_cut_init(targetAngle: number): void {
         for (let i = 0; i < 2; i++) {
-            this.mPhaseY[i] = 0;
-            this.mPhaseX[i] = 0;
-            this.mAmpY[i] = 0;
-            this.mAmpX[i] = 0;
+            this.phaseY[i] = 0;
+            this.phaseX[i] = 0;
+            this.ampY[i] = 0;
+            this.ampX[i] = 0;
         }
 
-        this.mWindDir = targetAngle;
-        this.mVelY = 18.0;
-        this.mPosOffsetY = 0.0;
-        this.mPosOffsetZ = 0.0;
-        this.mAlpha = 0xff;
-        this.mCountdown = 20;
-        this.mMode = AnimMode_e.Cut;
+        this.windDir = targetAngle;
+        this.velY = 18.0;
+        this.posOffsetY = 0.0;
+        this.posOffsetZ = 0.0;
+        this.alpha = 0xff;
+        this.timer = 20;
+        this.mode = AnimMode_e.Cut;
     }
 
     // Animate when cut with a weapon 
-    public mode_cut(packet: Packet_c): void {
-        this.mVelY = this.mVelY - 3.0;
-        if (this.mVelY < -40.0) {
-            this.mVelY = -40.0;
+    public mode_cut(packet: WoodPacket): void {
+        this.velY = this.velY - 3.0;
+        if (this.velY < -40.0) {
+            this.velY = -40.0;
         }
 
-        this.mPosOffsetY = this.mPosOffsetY + this.mVelY;
-        this.mPosOffsetZ = this.mPosOffsetZ + 2.5;
-        this.mPhaseX[0] = this.mPhaseX[0] - 200;
+        this.posOffsetY = this.posOffsetY + this.velY;
+        this.posOffsetZ = this.posOffsetZ + 2.5;
+        this.phaseX[0] = this.phaseX[0] - 200;
 
-        mDoMtx_YrotS(scratchMat4a, this.mWindDir);
-        MtxTrans([0.0, this.mPosOffsetY, this.mPosOffsetZ], true, scratchMat4a);
-        mDoMtx_XrotM(scratchMat4a, this.mPhaseX[0]);
-        mDoMtx_YrotM(scratchMat4a, -this.mWindDir);
-        mDoMtx_copy(scratchMat4a, this.mModelMtx);
+        mDoMtx_YrotS(scratchMat4a, this.windDir);
+        MtxTrans([0.0, this.posOffsetY, this.posOffsetZ], true, scratchMat4a);
+        mDoMtx_XrotM(scratchMat4a, this.phaseX[0]);
+        mDoMtx_YrotM(scratchMat4a, -this.windDir);
+        mat4.copy(this.modelMtx, scratchMat4a);
 
         // Fade out the bush as it falls
-        if (this.mCountdown < 20) {
-            let alphaScale = this.mAlpha - 14;
+        if (this.timer < 20) {
+            let alphaScale = this.alpha - 14;
             if (alphaScale < 0) {
                 alphaScale = 0;
             }
-            this.mAlpha = alphaScale;
+            this.alpha = alphaScale;
         }
 
-        if (this.mCountdown > 0) {
-            this.mCountdown = this.mCountdown + -1;
+        if (this.timer > 0) {
+            this.timer = this.timer + -1;
         }
     }
 
     public mode_push_into_init(anm: Anm_c, targetAngle: number): void {
-
     }
 
     // Animate when pushed into
-    public mode_push_into(packet: Packet_c): void {
-
+    public mode_push_into(packet: WoodPacket): void {
     }
 
     public mode_push_back_init(): void {
-
     }
 
     // Second half of the push into animation
-    public mode_push_back(packet: Packet_c): void {
-
+    public mode_push_back(packet: WoodPacket): void {
     }
 
-
     // Animate when hit with the fan item (does nothing)
-    public mode_fan(packet: Packet_c): void {
-
+    public mode_fan(packet: WoodPacket): void {
     }
 
     public mode_norm_init(): void {
-        this.mMode = AnimMode_e.Norm;
+        this.mode = AnimMode_e.Norm;
 
         for (let i = 0; i < 2; i++) {
-            this.mPhaseY[i] = (sAnimInitNum << 0xd);
-            this.mPhaseX[i] = (sAnimInitNum << 0xd);
-            this.mAmpY[i] = kSwayAttrs[0][i].ampY;
-            this.mAmpX[i] = kSwayAttrs[0][i].ampX;
+            this.phaseY[i] = (sAnimInitNum << 0xd);
+            this.phaseX[i] = (sAnimInitNum << 0xd);
+            this.ampY[i] = kSwayAttrs[0][i].ampY;
+            this.ampX[i] = kSwayAttrs[0][i].ampX;
         }
 
-        this.mAlpha = 0xff;
+        this.alpha = 0xff;
 
         sAnimInitNum = (sAnimInitNum + 1) % 8;
     }
 
     // Animate normally (not interacting with character)
-    public mode_norm(packet: Packet_c): void {
+    public mode_norm(packet: WoodPacket): void {
         let phase;
-        if (this.mWindPow < 0.33) {
+        if (this.windPow < 0.33) {
             phase = AttrSway_e.Light;
         } else {
-            if (this.mWindPow < 0.66) {
+            if (this.windPow < 0.66) {
                 phase = AttrSway_e.Medium;
             } else {
                 phase = AttrSway_e.Strong;
             }
         }
 
-        let fVar1 = 0.0;
-        let fVar6 = fVar1;
+        let rotY = 0.0;
+        let rotX = rotY;
         for (let i = 0; i < 2; i++) {
             const swayAttr = kSwayAttrs[phase][i];
-            this.mPhaseY[i] += swayAttr.phaseVelY;
-            this.mPhaseX[i] += swayAttr.phaseVelX;
-            this.mAmpY[i] = cLib_chaseF(this.mAmpY[i], swayAttr.ampY, 2);
-            this.mAmpX[i] = cLib_chaseF(this.mAmpX[i], swayAttr.ampX, 2);
+            this.phaseY[i] += swayAttr.phaseVelY;
+            this.phaseX[i] += swayAttr.phaseVelX;
+            this.ampY[i] = cLib_chaseF(this.ampY[i], swayAttr.ampY, 2);
+            this.ampX[i] = cLib_chaseF(this.ampX[i], swayAttr.ampX, 2);
 
-            fVar1 += this.mAmpY[i] * Math.cos(cM__Short2Rad((this.mPhaseY[i])));
-            fVar6 += this.mAmpX[i] * (swayAttr.phaseBiasX + Math.cos(cM__Short2Rad((this.mPhaseX[i]))));
+            rotY += this.ampY[i] * Math.cos(cM__Short2Rad((this.phaseY[i])));
+            rotX += this.ampX[i] * (swayAttr.phaseBiasX + Math.cos(cM__Short2Rad((this.phaseX[i]))));
         }
 
-        mDoMtx_YrotS(this.mModelMtx, fVar1 + this.mWindDir);
-        mDoMtx_XrotM(this.mModelMtx, fVar6);
-        mDoMtx_YrotM(this.mModelMtx, -this.mWindDir);
+        mDoMtx_YrotS(this.modelMtx, rotY + this.windDir);
+        mDoMtx_XrotM(this.modelMtx, rotX);
+        mDoMtx_YrotM(this.modelMtx, -this.windDir);
     }
 
     public mode_norm_set_wind(pow: number, dir: number): void {
-        this.mWindDir = dir;
-        this.mWindPow = pow;
+        this.windDir = dir;
+        this.windPow = pow;
     }
 
     public mode_to_norm_init(anmIdx: number): void {
-
     }
 
     // Blend back to the normal animation
-    public mode_to_norm(packet: Packet_c): void {
-
+    public mode_to_norm(packet: WoodPacket): void {
     }
 }
 
 class Unit_c {
-    mPos = vec3.create();
-    mFlags: UnitState_e = 0;
-    mAnmIdx: number = 0;
-    mModelViewMtx: mat4 = mat4.create();
-    mTrunkModelViewMtx: mat4 = mat4.create();
-    mShadowModelMtx: mat4 = mat4.create();
-    mShadowModelViewMtx: mat4 = mat4.create();
+    public pos = vec3.create();
+    public flags: UnitState_e = 0;
+    public animIdx: number = 0;
+    public modelMtx: mat4 = mat4.create();
+    public trunkModelMtx: mat4 = mat4.create();
+    public shadowModelMtx: mat4 = mat4.create();
 
     public set_ground(globals: dGlobals): number {
         // @TODO: This is copied from d_tree. Should actually implement the d_wood version.
 
         const chk = new dBgS_GndChk();
-        vec3.copy(chk.pos, this.mPos);
+        vec3.copy(chk.pos, this.pos);
         chk.pos[1] += 50;
 
         const y = globals.scnPlay.bgS.GroundCross(chk);
         if (y > -Infinity) {
-            this.mPos[1] = y;
+            this.pos[1] = y;
             const pla = globals.scnPlay.bgS.GetTriPla(chk.polyInfo.bgIdx, chk.polyInfo.triIdx)
             vec3.copy(scratchVec3a, pla.n);
         } else {
-            this.mPos[1] = y;
+            this.pos[1] = y;
             vec3.set(scratchVec3a, 0, 1, 0);
         }
 
         const normal = scratchVec3a;
-        const right = vec3.set(scratchVec3c, 1, 0, 0);
-        const forward = vec3.cross(scratchVec3d, normal, right);
+        const right = vec3.set(scratchVec3b, 1, 0, 0);
+        const forward = vec3.cross(scratchVec3c, normal, right);
         vec3.cross(right, normal, forward);
 
         // Get the normal from the raycast, rotate shadow to match surface
-        setMatrixAxis(this.mShadowModelMtx, right, normal, forward);
-        setMatrixTranslation(this.mShadowModelMtx, [this.mPos[0], y + 1.0, this.mPos[2]]);
-        scaleMatrix(this.mShadowModelMtx, this.mShadowModelMtx, 1.5, 1.0, 1.5);
+        setMatrixAxis(this.shadowModelMtx, right, normal, forward);
+        setMatrixTranslation(this.shadowModelMtx, [this.pos[0], y + 1.0, this.pos[2]]);
+        scaleMatrix(this.shadowModelMtx, this.shadowModelMtx, 1.5, 1.0, 1.5);
 
         return y;
     }
@@ -540,80 +527,73 @@ class Unit_c {
      * @param anim 
      */
     public set_mtx(globals: dGlobals, anims: Anm_c[]): void {
-        mDoMtx_copy(anims[this.mAnmIdx].mModelMtx, scratchMat4a);
-        scratchMat4a[12] += this.mPos[0];
-        scratchMat4a[13] += this.mPos[1];
-        scratchMat4a[14] += this.mPos[2];
-        mat4.mul(this.mModelViewMtx, globals.camera.viewMatrix, scratchMat4a);
+        mat4.copy(this.modelMtx, anims[this.animIdx].modelMtx);
+        this.modelMtx[12] += this.pos[0];
+        this.modelMtx[13] += this.pos[1];
+        this.modelMtx[14] += this.pos[2];
 
-        mDoMtx_copy(anims[this.mAnmIdx].mTrunkModelMtx, scratchMat4a);
-        scratchMat4a[12] += this.mPos[0];
-        scratchMat4a[13] += this.mPos[1];
-        scratchMat4a[14] += this.mPos[2];
-        mat4.mul(this.mTrunkModelViewMtx, globals.camera.viewMatrix, scratchMat4a);
-
-        mat4.mul(this.mShadowModelViewMtx, globals.camera.viewMatrix, this.mShadowModelMtx);
+        mat4.copy(this.trunkModelMtx, anims[this.animIdx].trunkModelMtx);
+        this.trunkModelMtx[12] += this.pos[0];
+        this.trunkModelMtx[13] += this.pos[1];
+        this.trunkModelMtx[14] += this.pos[2];
     }
 
     public clear(): void {
-        this.mFlags = UnitState_e.Inactive;
+        this.flags = UnitState_e.Inactive;
     }
 
-    public cc_hit_before_cut(packet: Packet_c): void {
-
+    public cc_hit_before_cut(packet: WoodPacket): void {
     }
 
-    public cc_hit_after_cut(packet: Packet_c): void {
+    public cc_hit_after_cut(packet: WoodPacket): void {
         // Does nothing
     }
 
-    public proc(packet: Packet_c): void {
+    public proc(packet: WoodPacket): void {
         // If this unit is active, and performing a non-normal animation...
-        if (this.mFlags & UnitState_e.Active) {
-            if (this.mAnmIdx >= 8) {
-                const anim = packet.get_anm(this.mAnmIdx);
-                if (anim.mMode == AnimMode_e.ToNorm) {
-                    if (anim.mCountdown <= 0) {
-                        this.mAnmIdx = anim.mNextAnimIdx;
-                        anim.mMode = AnimMode_e._Max;
+        if (this.flags & UnitState_e.Active) {
+            if (this.animIdx >= 8) {
+                const anim = packet.get_anm(this.animIdx);
+                if (anim.mode == AnimMode_e.ToNorm) {
+                    if (anim.timer <= 0) {
+                        this.animIdx = anim.nextAnimIdx;
+                        anim.mode = AnimMode_e._Max;
                     }
-                } else if (anim.mMode == AnimMode_e.Cut) {
-                    if (anim.mCountdown <= 0) {
+                } else if (anim.mode == AnimMode_e.Cut) {
+                    if (anim.timer <= 0) {
                         const newAnimIdx = packet.search_anm(AnimMode_e.Norm);
-                        this.mAnmIdx = newAnimIdx;
-                        anim.mMode = AnimMode_e._Max;
-                        this.mFlags |= UnitState_e.IsCut;
+                        this.animIdx = newAnimIdx;
+                        anim.mode = AnimMode_e._Max;
+                        this.flags |= UnitState_e.IsCut;
                     }
-                } else if (anim.mMode == AnimMode_e._Max) {
-                    this.mAnmIdx = packet.search_anm(AnimMode_e.Norm);
+                } else if (anim.mode == AnimMode_e._Max) {
+                    this.animIdx = packet.search_anm(AnimMode_e.Norm);
                 }
             }
         }
     }
 }
 
-export class Packet_c implements J3DPacket {
-    private mUnit: Unit_c[][] = nArray(kRoomCount, () => []);
-    private mAnm: Anm_c[] = nArray(kAnimCount, () => new Anm_c());
+export class WoodPacket implements J3DPacket {
+    private unit: Unit_c[][] = nArray(kRoomCount, () => []);
+    private anm: Anm_c[] = nArray(kAnimCount, () => new Anm_c());
 
-    private _mModel: WoodModel;
-
-    // void delete_room(s32 room_no);
+    private model: WoodModel;
 
     constructor(lGlobals: dGlobals) {
-        this._mModel = new WoodModel(lGlobals);
+        this.model = new WoodModel(lGlobals);
 
         for (let i = 0; i < 8; i++) {
-            this.mAnm[i].mode_norm_init();
+            this.anm[i].mode_norm_init();
         }
     }
 
     public destroy(device: GfxDevice) {
-        this._mModel.destroy(device);
+        this.model.destroy(device);
     }
 
     public get_anm(idx: number): Anm_c {
-        return this.mAnm[idx];
+        return this.anm[idx];
     }
 
     public search_anm(i_mode: AnimMode_e): number {
@@ -628,7 +608,7 @@ export class Packet_c implements J3DPacket {
             // Return the first anim slot which has an unset mode
             animIdx = 8;
             for (let i = 0; i < 64; i++) {
-                if (this.mAnm[animIdx].mMode == AnimMode_e._Max) {
+                if (this.anm[animIdx].mode == AnimMode_e._Max) {
                     return animIdx;
                 }
                 animIdx++;
@@ -637,7 +617,7 @@ export class Packet_c implements J3DPacket {
             // If none are available, return the first one which has a higher mode
             animIdx = 8;
             for (let i = 0; i < 64; i++) {
-                if (i_mode < this.mAnm[animIdx].mMode) {
+                if (i_mode < this.anm[animIdx].mode) {
                     return animIdx;
                 }
                 animIdx++;
@@ -652,15 +632,15 @@ export class Packet_c implements J3DPacket {
 
     public put_unit(globals: dGlobals, pos: vec3, room_no: number) {
         const unit = new Unit_c();
-        unit.mFlags = UnitState_e.Active;
+        unit.flags = UnitState_e.Active;
 
-        vec3.copy(unit.mPos, pos);
+        vec3.copy(unit.pos, pos);
 
-        unit.mAnmIdx = this.search_anm(AnimMode_e.Norm);
+        unit.animIdx = this.search_anm(AnimMode_e.Norm);
 
         const groundY = unit.set_ground(globals);
         if (groundY) {
-            this.mUnit[room_no].push(unit);
+            this.unit[room_no].push(unit);
         } else {
             unit.clear();
         }
@@ -672,15 +652,15 @@ export class Packet_c implements J3DPacket {
 
         if ((roomIdx >= 0) && (roomIdx < kRoomCount)) {
             //     dComIfG_Ccsp() -> SetMassAttr(L_attr.kCollisionRad1, L_attr.kCollisionHeight1, (u8)0x13, 1);
-            for (let unit of this.mUnit[roomIdx]) {
-                if ((unit.mFlags & UnitState_e.IsCut) == 0) {
+            for (let unit of this.unit[roomIdx]) {
+                if ((unit.flags & UnitState_e.IsCut) == 0) {
                     unit.cc_hit_before_cut(this);
                 }
             }
 
             //     dComIfG_Ccsp() -> SetMassAttr(L_attr.kCollisionRad2, L_attr.kCollisionHeight2, (u8)0x12, 1);
-            for (let unit of this.mUnit[roomIdx]) {
-                if ((unit.mFlags & UnitState_e.IsCut) != 0) {
+            for (let unit of this.unit[roomIdx]) {
+                if ((unit.flags & UnitState_e.IsCut) != 0) {
                     unit.cc_hit_after_cut(this);
                 }
             }
@@ -695,15 +675,15 @@ export class Packet_c implements J3DPacket {
         const windAngle = cM_atan2s(windVec[0], windVec[2]);
 
         for (let i = 0; i < 8; i++) {
-            this.mAnm[i].mode_norm_set_wind(0.2, windAngle);
+            this.anm[i].mode_norm_set_wind(0.2, windAngle);
         }
 
         for (let i = 0; i < kAnimCount; i++) {
-            this.mAnm[i].play(this);
+            this.anm[i].play(this);
         }
 
         for (let i = 0; i < kRoomCount; i++) {
-            for (let unit of this.mUnit[i]) {
+            for (let unit of this.unit[i]) {
                 unit.proc(this);
             }
         }
@@ -711,19 +691,19 @@ export class Packet_c implements J3DPacket {
 
     public update(globals: dGlobals) {
         for (let i = 0; i < kRoomCount; i++) {
-            for (let unit of this.mUnit[i]) {
-                if (unit.mFlags & UnitState_e.Active) {
+            for (let unit of this.unit[i]) {
+                if (unit.flags & UnitState_e.Active) {
                     // Frustum culling
-                    const clipPos = vec3.set(scratchVec3a, unit.mPos[0], unit.mPos[1] + kClipCenterYOffset, unit.mPos[2]);
+                    const clipPos = vec3.set(scratchVec3a, unit.pos[0], unit.pos[1] + kClipCenterYOffset, unit.pos[2]);
 
                     // s32 res = mDoLib_clipper::clip(j3dSys.getViewMtx(), clipPos, kClipRadius);
                     const culled = !globals.camera.frustum.containsSphere(clipPos, kClipRadius);
 
                     if (culled) {
-                        unit.mFlags |= UnitState_e.IsFrustumCulled;
+                        unit.flags |= UnitState_e.IsFrustumCulled;
                     } else {
-                        unit.mFlags &= ~UnitState_e.IsFrustumCulled;
-                        unit.set_mtx(globals, this.mAnm);
+                        unit.flags &= ~UnitState_e.IsFrustumCulled;
+                        unit.set_mtx(globals, this.anm);
                     }
                 }
             }
@@ -732,9 +712,6 @@ export class Packet_c implements J3DPacket {
     }
 
     public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        const worldToView = viewerInput.camera.viewMatrix;
-        const worldCamPos = mat4.getTranslation(scratchVec3b, viewerInput.camera.worldMatrix);
-
         // Render to the XLU BG display list (after the bg terrain). We want to render late since we are alpha tested.
         renderInstManager.setCurrentList(globals.dlst.bg[1]);
 
@@ -744,19 +721,19 @@ export class Packet_c implements J3DPacket {
             template.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT);
             // Set the shadow color. Pulled from d_tree::l_shadowColor$4656
             colorFromRGBA(materialParams.u_Color[ColorKind.C0], 0, 0, 0, 0x64 / 0xFF);
-            this._mModel.shadowMaterial.allocateMaterialParamsDataOnInst(template, materialParams);
-            this._mModel.shadowMaterial.setOnRenderInst(renderInstManager.gfxRenderCache, template);
-            template.setSamplerBindingsFromTextureMappings(this._mModel.shadowTextureMapping);
+            this.model.shadowMaterial.allocateMaterialParamsDataOnInst(template, materialParams);
+            this.model.shadowMaterial.setOnRenderInst(renderInstManager.gfxRenderCache, template);
+            template.setSamplerBindingsFromTextureMappings(this.model.shadowTextureMapping);
 
             for (let i = 0; i < kRoomCount; i++) {
-                for (let unit of this.mUnit[i]) {
-                    if (unit.mFlags & UnitState_e.IsFrustumCulled)
+                for (let unit of this.unit[i]) {
+                    if (unit.flags & UnitState_e.IsFrustumCulled)
                         continue;
 
                     const shadowRenderInst = renderInstManager.newRenderInst();
-                    this._mModel.shapeShadow.setOnRenderInst(shadowRenderInst);
-                    mat4.copy(drawParams.u_PosMtx[0], unit.mShadowModelViewMtx);
-                    this._mModel.shadowMaterial.allocateDrawParamsDataOnInst(shadowRenderInst, drawParams);
+                    this.model.shapeShadow.setOnRenderInst(shadowRenderInst);
+                    mat4.mul(drawParams.u_PosMtx[0], globals.camera.viewMatrix, unit.shadowModelMtx);
+                    this.model.shadowMaterial.allocateDrawParamsDataOnInst(shadowRenderInst, drawParams);
                     renderInstManager.submitRenderInst(shadowRenderInst);
                 }
             }
@@ -770,9 +747,9 @@ export class Packet_c implements J3DPacket {
             materialParams.u_DynamicAlphaRefA = kAlphaCutoff;
             materialParams.u_DynamicAlphaRefB = kAlphaCutoff;
 
-            template.setSamplerBindingsFromTextureMappings([this._mModel.bushTextureMapping]);
-            const materialParamsOffs = this._mModel.bushMaterial.allocateMaterialParamsDataOnInst(template, materialParams);
-            this._mModel.bushMaterial.setOnRenderInst(renderInstManager.gfxRenderCache, template);
+            template.setSamplerBindingsFromTextureMappings([this.model.bushTextureMapping]);
+            this.model.bushMaterial.allocateMaterialParamsDataOnInst(template, materialParams);
+            this.model.bushMaterial.setOnRenderInst(renderInstManager.gfxRenderCache, template);
 
             // Set alpha color
             colorFromRGBA(materialParams.u_Color[ColorKind.C2], 1, 1, 1, 1);
@@ -783,14 +760,14 @@ export class Packet_c implements J3DPacket {
                 colorCopy(materialParams.u_Color[ColorKind.C1], globals.roomStatus[r].tevStr.colorK0);
                 dKy_GxFog_set(globals.g_env_light, materialParams.u_FogBlock, viewerInput.camera);
 
-                for (let unit of this.mUnit[r]) {
-                    if (unit.mFlags & UnitState_e.IsFrustumCulled)
+                for (let unit of this.unit[r]) {
+                    if (unit.flags & UnitState_e.IsFrustumCulled)
                         continue;
 
                     // If this bush is not chopped down, draw the main body
-                    if ((unit.mFlags & UnitState_e.IsCut) == 0) {
+                    if ((unit.flags & UnitState_e.IsCut) == 0) {
                         // The cut animation reduces alpha over time
-                        const cutAlpha = this.mAnm[unit.mAnmIdx].mAlpha;
+                        const cutAlpha = this.anm[unit.animIdx].alpha;
                         colorFromRGBA(materialParams.u_Color[ColorKind.C2], 1, 1, 1, cutAlpha / 0xFF);
 
                         // If this bush is fading out, disable alpha testing
@@ -800,9 +777,9 @@ export class Packet_c implements J3DPacket {
                         }
 
                         const renderInst = renderInstManager.newRenderInst();
-                        this._mModel.shapeMain.setOnRenderInst(renderInst);
-                        mat4.copy(drawParams.u_PosMtx[0], unit.mModelViewMtx);
-                        this._mModel.bushMaterial.allocateDrawParamsDataOnInst(renderInst, drawParams);
+                        this.model.shapeMain.setOnRenderInst(renderInst);
+                        mat4.mul(drawParams.u_PosMtx[0], globals.camera.viewMatrix, unit.modelMtx);
+                        this.model.bushMaterial.allocateDrawParamsDataOnInst(renderInst, drawParams);
                         renderInstManager.submitRenderInst(renderInst);
 
                         // Return alpha test to normal (50%)
@@ -814,9 +791,9 @@ export class Packet_c implements J3DPacket {
 
                     // Always draw the trunk
                     const renderInst = renderInstManager.newRenderInst();
-                    this._mModel.shapeTrunk.setOnRenderInst(renderInst);
-                    mat4.copy(drawParams.u_PosMtx[0], unit.mTrunkModelViewMtx);
-                    this._mModel.bushMaterial.allocateDrawParamsDataOnInst(renderInst, drawParams);
+                    this.model.shapeTrunk.setOnRenderInst(renderInst);
+                    mat4.mul(drawParams.u_PosMtx[0], globals.camera.viewMatrix, unit.trunkModelMtx);
+                    this.model.bushMaterial.allocateDrawParamsDataOnInst(renderInst, drawParams);
                     renderInstManager.submitRenderInst(renderInst);
                 }
             }

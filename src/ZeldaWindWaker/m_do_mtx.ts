@@ -39,13 +39,9 @@ export function mDoMtx_XYZrotM(dst: mat4, v: vec3): void {
     mat4.rotateX(dst, dst, cM__Short2Rad(v[0]));
 }
 
-export function mDoMtx_copy(src: ReadonlyMat4, dst: mat4): void {
-    mat4.copy(dst, src);
-}
-
 export const calc_mtx = mat4.create();
 
-export function MtxTrans(pos: vec3, concat: boolean, m: mat4 = calc_mtx): void {
+export function MtxTrans(pos: ReadonlyVec3, concat: boolean, m: mat4 = calc_mtx): void {
     if (concat) {
         mat4.translate(m, m, pos);
     } else {
