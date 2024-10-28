@@ -72,7 +72,7 @@ export class HIPlatform extends HIEnt {
     constructor(stream: RwStream, scene: HIScene) {
         super(stream, scene);
         this.platformAsset = new HIPlatformAsset(stream);
-        this.motionAsset = new HIEntMotionAsset(stream);
+        this.motionAsset = new HIEntMotionAsset(stream, scene.game);
         this.readLinks(stream);
         this.parseModelInfo(this.entAsset.modelInfoID, scene);
     }

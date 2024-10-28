@@ -1,6 +1,6 @@
 import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase.js";
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
-import { HIScene } from "./HIScene.js";
+import { HIGame, HIScene } from "./HIScene.js";
 
 const dataPath = 'SpongeBobBattleForBikiniBottom/v2';
 
@@ -18,7 +18,7 @@ class BFBBSceneDesc implements SceneDesc {
             `${dataPath}/${this.id.substring(0, 2)}/${this.id}.HIP`,
         ];
 
-        const scene = new HIScene(device, context);
+        const scene = new HIScene(this.beta ? HIGame.BFBBBeta : HIGame.BFBB, device, context);
         await scene.load(context.dataFetcher, paths);
 
         return scene;

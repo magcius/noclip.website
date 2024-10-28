@@ -1,6 +1,6 @@
 import { mat4, vec3 } from "gl-matrix";
 import { HIBase, HIBaseFlags } from "./HIBase.js";
-import { HIScene } from "./HIScene.js";
+import { HIGame, HIScene } from "./HIScene.js";
 import { HIModelAssetInfo, HIModelInstance } from "./HIModel.js";
 import { RwEngine, RwStream } from "./rw/rwcore.js";
 import { HILightKit } from "./HILightKit.js";
@@ -27,12 +27,14 @@ export class HIEntAsset {
     public modelInfoID: number;
     public animListID: number;
 
-    constructor(stream: RwStream) {
+    constructor(stream: RwStream, game: HIGame) {
         this.flags = stream.readUint8();
         this.subtype = stream.readUint8();
         this.pflags = stream.readUint8();
         this.moreFlags = stream.readUint8();
-        stream.pos += 4; // padding
+        if (game === HIGame.BFBB) {
+            stream.pos += 4; // padding
+        }
         this.surfaceID = stream.readUint32();
         this.ang = stream.readVec3();
         this.pos = stream.readVec3();
@@ -57,7 +59,7 @@ export abstract class HIEnt extends HIBase {
 
     constructor(stream: RwStream, scene: HIScene) {
         super(stream, scene);
-        this.entAsset = new HIEntAsset(stream);
+        this.entAsset = new HIEntAsset(stream, scene.game);
 
         this.flags = this.entAsset.flags;
         this.moreFlags = this.entAsset.moreFlags;
@@ -78,6 +80,8 @@ export abstract class HIEnt extends HIBase {
     }
 
     public parseModelInfo(assetID: number, scene: HIScene) {
+        if (assetID === 0) return;
+        
         if (scene.models.has(assetID)) {
             this.loadModel(scene.models.get(assetID)!, scene);
         } else if (scene.modelInfos.has(assetID)) {

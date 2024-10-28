@@ -20,7 +20,7 @@ export class RpMaterial {
         const flags = stream.readInt32();
         material.color = stream.readRGBA();
         const unused = stream.readInt32();
-        const textured = stream.readBool();
+        const textured = stream.readBool32();
         material.ambient = stream.readFloat();
         material.specular = stream.readFloat();
         material.diffuse = stream.readFloat();
@@ -182,8 +182,8 @@ export class RpGeometry {
             for (let i = 0; i < numMorphTargets; i++) {
                 const mt = new RpMorphTarget();
                 mt.boundingSphere = stream.readVec4();
-                const pointsPresent = stream.readBool();
-                const normalsPresent = stream.readBool();
+                const pointsPresent = stream.readBool32();
+                const normalsPresent = stream.readBool32();
                 if (pointsPresent) {
                     mt.verts = stream.readArray(Float32Array, numVertices * 3);
                 }

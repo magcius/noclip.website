@@ -1,3 +1,4 @@
+import { decompressBC } from "../../Common/bc_texture.js";
 import { RwEngine, RwRaster, RwRasterFormat, RwStream, RwTexture } from "./rwcore.js";
 
 function RGBAToBGRA(pixels: Uint8Array) {
@@ -57,6 +58,14 @@ function unswizzle(dst: Uint8Array, src: Uint8Array, width: number, height: numb
     }
 }
 
+const enum DXTFormat {
+    DXT1 = 12,
+    DXT2 = 13,
+    DXT3 = 14,
+    DXT4 = 16,
+    DXT5 = 15,
+}
+
 export function readXboxTexture(stream: RwStream, rw: RwEngine): RwTexture | null {
     // Texture
     const filterAndAddress = stream.readUint32();
@@ -74,9 +83,13 @@ export function readXboxTexture(stream: RwStream, rw: RwEngine): RwTexture | nul
     const type = stream.readUint8();
     const dxtFormat = stream.readUint8();
     const unknown = stream.readUint32();
-    
-    if (dxtFormat !== 0) {
-        console.error("DXT compression currently unsupported");
+
+    switch (dxtFormat) {
+    case DXTFormat.DXT2:
+        console.error("DXT2 compression currently unsupported");
+        return null;
+    case DXTFormat.DXT4:
+        console.error("DXT4 compression currently unsupported");
         return null;
     }
 
@@ -84,19 +97,15 @@ export function readXboxTexture(stream: RwStream, rw: RwEngine): RwTexture | nul
     
     const pixels = raster.lock(rw);
     const numPixels = width * height;
-    const pixSize = 4 * numPixels;
 
     if (format & (RwRasterFormat.PAL4 | RwRasterFormat.PAL8)) {
         const palSize = 4 * ((format & RwRasterFormat.PAL4) ? 32 : 256);
         const palette = stream.readArray(Uint8Array, palSize);
 
-        RGBAToBGRA(palette);
-
         const indSize = width * height;
         const indices = stream.readArray(Uint8Array, indSize);
 
-        const swizzledPixels = new Uint8Array(pixSize);
-
+        const swizzledPixels = new Uint8Array(4 * numPixels);
         for (let i = 0; i < numPixels; i++) {
             swizzledPixels[i*4+0] = palette[indices[i]*4+0];
             swizzledPixels[i*4+1] = palette[indices[i]*4+1];
@@ -104,9 +113,32 @@ export function readXboxTexture(stream: RwStream, rw: RwEngine): RwTexture | nul
             swizzledPixels[i*4+3] = palette[indices[i]*4+3];
         }
 
+        RGBAToBGRA(swizzledPixels);
         unswizzle(pixels, swizzledPixels, width, height);
+    } else if (dxtFormat !== 0) {
+        switch (dxtFormat) {
+        case DXTFormat.DXT1:
+        {
+            const data = stream.readArray(Uint8Array, numPixels / 2);
+            pixels.set(decompressBC({ width: width, height: height, depth: 1, pixels: data, type: 'BC1', flag: 'SRGB' }).pixels);
+            break;
+        }
+        case DXTFormat.DXT3:
+        {
+            const data = stream.readArray(Uint8Array, numPixels);
+            pixels.set(decompressBC({ width: width, height: height, depth: 1, pixels: data, type: 'BC2', flag: 'SRGB' }).pixels);
+            break;
+        }
+        // Untested
+        case DXTFormat.DXT5:
+        {
+            const data = stream.readArray(Uint8Array, numPixels);
+            pixels.set(decompressBC({ width: width, height: height, depth: 1, pixels: data, type: 'BC3', flag: 'SRGB' }).pixels);
+            break;
+        }
+        }
     } else {
-        const swizzledPixels = stream.readArray(Uint8Array, pixSize);
+        const swizzledPixels = stream.readArray(Uint8Array, 4 * numPixels);
         RGBAToBGRA(swizzledPixels);
         unswizzle(pixels, swizzledPixels, width, height);
     }

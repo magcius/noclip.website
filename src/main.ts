@@ -51,6 +51,7 @@ import * as Scenes_StarFoxAdventures from './StarFoxAdventures/scenes.js';
 import * as Scenes_SuperMarioOdyssey from './fres_nx/smo_scenes.js';
 import * as Scenes_GTA from './GrandTheftAuto3/scenes.js';
 import * as Scenes_SpongeBobBFBB from './HeavyIron/Scenes_BFBB.js';
+import * as Scenes_SpongeBobTSSM from './HeavyIron/Scenes_TSSM.js';
 import * as Scenes_SuperSmashBrosMelee from './SuperSmashBrosMelee/Scenes_SuperSmashBrosMelee.js';
 import * as Scenes_PokemonSnap from './PokemonSnap/scenes.js';
 import * as Scenes_MetroidPrimeHunters from './MetroidPrimeHunters/Scenes_MetroidPrimeHunters.js';
@@ -170,6 +171,7 @@ const sceneGroups: (string | SceneGroup)[] = [
     Scenes_KingdomHeartsIIFinalMix.sceneGroup,
     "Xbox",
     Scenes_SpongeBobBFBB.sceneGroup,
+    Scenes_SpongeBobTSSM.sceneGroup,
     "PC",
     Scenes_DarkSouls.sceneGroup,
     Scenes_DarkSoulsCollision.sceneGroup,

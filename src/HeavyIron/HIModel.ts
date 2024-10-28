@@ -1,6 +1,6 @@
 import { mat4, vec3 } from "gl-matrix";
 import { HIModelBucket } from "./HIModelBucket.js";
-import { HIScene } from "./HIScene.js";
+import { HIGame, HIScene } from "./HIScene.js";
 import { HILightKit } from "./HILightKit.js";
 import { RwEngine, RwStream } from "./rw/rwcore.js";
 import { RpAtomic, RpGeometryFlag } from "./rw/rpworld.js";
@@ -32,22 +32,40 @@ export const enum HIPipeFlags {
     ALPHADISCARD_MASK         = (255<<ALPHADISCARD_SHIFT)
 }
 
+export interface HIPipe {
+    flags: number;
+    layer: number;
+    alphaDiscard: number;
+}
+
 export interface HIPipeInfo {
     modelHashID: number;
     subObjectBits: number;
-    pipeFlags: number;
+    pipe: HIPipe;
 }
 
 export class HIPipeInfoTable {
     public data: HIPipeInfo[] = [];
 
-    constructor(stream: RwStream) {
+    constructor(stream: RwStream, game: HIGame) {
         const count = stream.readInt32();
-        for (let i = 0; i < count; i++) {
-            const modelHashID = stream.readUint32();
-            const subObjectBits = stream.readUint32();
-            const pipeFlags = stream.readUint32();
-            this.data.push({ modelHashID, subObjectBits, pipeFlags });
+        if (game >= HIGame.TSSM) {
+            for (let i = 0; i < count; i++) {
+                const modelHashID = stream.readUint32();
+                const subObjectBits = stream.readUint32();
+                const pipeFlags = stream.readUint32();
+                const pipeLayer = stream.readUint8();
+                const pipeAlphaDiscard = stream.readUint8();
+                stream.pos += 2; // padding
+                this.data.push({ modelHashID, subObjectBits, pipe: { flags: pipeFlags, layer: pipeLayer, alphaDiscard: pipeAlphaDiscard } });
+            }
+        } else {
+            for (let i = 0; i < count; i++) {
+                const modelHashID = stream.readUint32();
+                const subObjectBits = stream.readUint32();
+                const pipeFlags = stream.readUint32();
+                this.data.push({ modelHashID, subObjectBits, pipe: { flags: pipeFlags, layer: 0, alphaDiscard: 0 } });
+            }
         }
     }
 }

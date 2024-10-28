@@ -1,5 +1,6 @@
 import { vec3 } from "gl-matrix";
 import { RwStream } from "./rw/rwcore.js";
+import { HIGame } from "./HIScene.js";
 
 export const enum HIEntMotionType {
     ER,
@@ -27,6 +28,12 @@ export interface HIEntMotionOrbitData {
     period: number;
 }
 
+export interface HIEntMotionSplineData {
+    spline_id: number;
+    speed: number;
+    lean_modifier: number;
+}
+
 export interface HIEntMotionMPData {
     flags: number;
     mp_id: number;
@@ -51,6 +58,7 @@ export interface HIEntMotionMechData {
     flags: number;
     sld_axis: number;
     rot_axis: number;
+    scale_axis: number;
     sld_dist: number;
     sld_tm: number;
     sld_acc_tm: number;
@@ -61,6 +69,8 @@ export interface HIEntMotionMechData {
     rot_dec_tm: number;
     ret_delay: number;
     post_ret_delay: number;
+    scale_amount: number;
+    scale_duration: number;
 }
 
 export interface HIEntMotionPenData {
@@ -83,12 +93,13 @@ export class HIEntMotionAsset {
     public flags: number;
     public er: HIEntMotionERData;
     public orb: HIEntMotionOrbitData;
+    public spl: HIEntMotionSplineData;
     public mp: HIEntMotionMPData;
     public mech: HIEntMotionMechData;
     public pen: HIEntMotionPenData;
 
-    constructor(stream: RwStream) {
-        const end = stream.pos + 0x30;
+    constructor(stream: RwStream, game: HIGame) {
+        const end = stream.pos + ((game >= HIGame.TSSM) ? 0x3C : 0x30);
 
         this.type = stream.readUint8();
         this.use_banking = stream.readUint8();
@@ -113,6 +124,15 @@ export class HIEntMotionAsset {
                 period: stream.readFloat()
             };
             break;
+        case HIEntMotionType.Spline:
+            if (game >= HIGame.TSSM) {
+                this.spl = {
+                    spline_id: stream.readUint32(),
+                    speed: stream.readFloat(),
+                    lean_modifier: stream.readFloat()
+                };
+            }
+            break;
         case HIEntMotionType.MP:
             this.mp = {
                 flags: stream.readUint32(),
@@ -121,11 +141,14 @@ export class HIEntMotionAsset {
             };
             break;
         case HIEntMotionType.Mech:
+        {
+            let temp;
             this.mech = {
                 type: stream.readUint8(),
                 flags: stream.readUint8(),
                 sld_axis: stream.readUint8(),
                 rot_axis: stream.readUint8(),
+                scale_axis: (game >= HIGame.TSSM) ? (temp = stream.readUint8(), stream.pos += 3, temp) : 0,
                 sld_dist: stream.readFloat(),
                 sld_tm: stream.readFloat(),
                 sld_acc_tm: stream.readFloat(),
@@ -135,9 +158,12 @@ export class HIEntMotionAsset {
                 rot_acc_tm: stream.readFloat(),
                 rot_dec_tm: stream.readFloat(),
                 ret_delay: stream.readFloat(),
-                post_ret_delay: stream.readFloat()
+                post_ret_delay: stream.readFloat(),
+                scale_amount: (game >= HIGame.TSSM) ? stream.readFloat() : 0,
+                scale_duration: (game >= HIGame.TSSM) ? stream.readFloat() : 0
             };
             break;
+        }
         case HIEntMotionType.Pend:
             this.pen = {
                 flags: stream.readUint8(),

@@ -115,6 +115,10 @@ export class RwStream {
     }
 
     public readBool(): boolean {
+        return this.readUint8() !== 0;
+    }
+
+    public readBool32(): boolean {
         return this.readInt32() !== 0;
     }
 
@@ -230,6 +234,16 @@ export const enum RwRasterFormat {
     MASK = 0xFF00
 }
 
+function convertRasterFormat(format: RwRasterFormat): GfxFormat {
+    switch (format & RwRasterFormat.PIXELFORMATMASK) {
+    case RwRasterFormat._8888:
+    case RwRasterFormat._888:
+        return GfxFormat.U8_RGBA_NORM;
+    default: // TODO
+        return GfxFormat.U8_RGBA_NORM;
+    }
+}
+
 export class RwRaster {
     private pixels: Uint8Array;
     
@@ -252,7 +266,9 @@ export class RwRaster {
     }
 
     public unlock(rw: RwEngine) {
-        this.gfxTexture = rw.renderHelper.device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, this.width, this.height, 1));
+        const gfxFormat = convertRasterFormat(this.format);
+
+        this.gfxTexture = rw.renderHelper.device.createTexture(makeTextureDescriptor2D(gfxFormat, this.width, this.height, 1));
         
         rw.renderHelper.device.uploadTextureData(this.gfxTexture, 0, [this.pixels]);
 

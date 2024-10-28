@@ -1,13 +1,14 @@
 import { vec3 } from "gl-matrix";
 import { HIModelFlags, HIModelInstance } from "./HIModel.js";
 import { HIModelBucket } from "./HIModelBucket.js";
-import { HIAssetType, HIScene } from "./HIScene.js";
+import { HIAssetType, HIGame, HIScene } from "./HIScene.js";
 import { RwEngine, RwStream } from "./rw/rwcore.js";
 import { getMatrixAxisX, getMatrixTranslation } from "../MathHelpers.js";
 
 interface HILODTable {
     baseBucket: HIModelBucket | null;
     noRenderDist: number;
+    flags: number;
     lodBucket: (HIModelBucket | null)[];
     lodDist: number[];
 }
@@ -36,6 +37,7 @@ export class HILOD {
                         for (let i = 0; i < count; i++) {
                             const baseBucketID = stream.readUint32();
                             const noRenderDist = stream.readFloat();
+                            const flags = (scene.game >= HIGame.TSSM) ? stream.readUint32() : 0;
                             const lodBucketID = [ stream.readUint32(), stream.readUint32(), stream.readUint32() ];
                             const lodDist = [ stream.readFloat(), stream.readFloat(), stream.readFloat() ];
 
@@ -57,7 +59,7 @@ export class HILOD {
                                 lodDist[i] *= lodDist[i];
                             }
 
-                            this.tableList.push({ baseBucket, noRenderDist, lodBucket, lodDist });
+                            this.tableList.push({ baseBucket, noRenderDist, flags, lodBucket, lodDist });
                         }
                     }
                 }

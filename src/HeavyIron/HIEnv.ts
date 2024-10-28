@@ -42,7 +42,7 @@ export class HIEnvAsset {
 export class HIEnv extends HIBase {
     public envAsset: HIEnvAsset;
     
-    constructor(stream: RwStream, scene: HIScene, public jsp: JSP) {
+    constructor(stream: RwStream, scene: HIScene, public jsps: JSP[]) {
         super(stream, scene);
         this.envAsset = new HIEnvAsset(stream);
         this.readLinks(stream);
@@ -52,6 +52,8 @@ export class HIEnv extends HIBase {
         rw.renderState.srcBlend = RwBlendFunction.SRCALPHA;
         rw.renderState.destBlend = RwBlendFunction.INVSRCALPHA;
         
-        this.jsp.render(scene, rw);
+        for (const jsp of this.jsps) {
+            jsp.render(scene, rw);
+        }
     }
 }
