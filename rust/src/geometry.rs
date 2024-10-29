@@ -10,9 +10,13 @@ pub struct Plane {
 }
 
 impl Plane {
+    pub fn new(normal: Vec3, d: f32) -> Plane {
+        Plane { normal, d }
+    }
+
     pub fn normalized(&self) -> Plane {
         let mag = self.normal.magnitude();
-        Plane { normal: self.normal / mag, d: self.d / mag }
+        Plane::new(self.normal / mag, self.d / mag)
     }
 
     pub fn negate(&mut self) {
@@ -199,9 +203,9 @@ impl ConvexHull {
         let mut result = IntersectionState::Inside;
         for plane in &self.planes {
             let dist = plane.distance(center);
-            if dist < radius {
+            if dist < -radius {
                 return IntersectionState::Outside;
-            } else if dist < -radius {
+            } else if dist < radius {
                 result = IntersectionState::Intersection;
             }
         }
@@ -248,9 +252,8 @@ impl ConvexHull {
 
     pub fn push_plane(&mut self, x: f32, y: f32, z: f32, d: f32) {
         // Normalize the plane equation so that sphere tests work.
-        let mut normal = Vec3::new(x, y, z);
-        let mag = normal.normalize_mut();
-        self.planes.push(Plane { normal, d: d / mag });
+        let plane = Plane::new(Vec3::new(x, y, z), d);
+        self.planes.push(plane.normalized());
     }
 
     pub fn js_intersect_aabb(&mut self, min_x: f32, min_y: f32, min_z: f32, max_x: f32, max_y: f32, max_z: f32) -> IntersectionState {

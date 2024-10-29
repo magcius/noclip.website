@@ -16,10 +16,6 @@ import { SFAAnimationController } from './animation.js';
 import { SFATextureFetcher } from './textures.js';
 import { ModelRenderContext, ModelInstance } from './models.js';
 import { World } from './world.js';
-import { AABB } from '../Geometry.js';
-import { LightType } from './WorldLights.js';
-import { computeViewMatrix } from '../Camera.js';
-import { drawWorldSpacePoint, getDebugOverlayCanvas2D } from '../DebugJunk.js';
 
 export interface BlockInfo {
     mod: number;
