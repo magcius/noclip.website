@@ -799,6 +799,7 @@ export class RwGfx {
         this.alphaRef = ref;
     }
 
+    // 0 to 1
     public getAlphaRef() {
         return this.alphaRef;
     }

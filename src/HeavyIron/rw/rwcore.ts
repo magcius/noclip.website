@@ -638,10 +638,12 @@ export class RwRenderState {
         this.gfx.setAlphaFunc(alphaTest);
     }
 
+    // 0 to 255
     public getAlphaTestFunctionRef(): number {
         return this.gfx.getAlphaRef() * 255.0;
     }
 
+    // 0 to 255
     public setAlphaTestFunctionRef(ref: number) {
         this.gfx.setAlphaRef(ref / 255.0);
     }

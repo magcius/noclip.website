@@ -1,4 +1,3 @@
-import { vec3 } from "gl-matrix";
 import { White } from "../../../Color.js";
 import { RpAtomic, RpAtomicPipeline, RpGeometryFlag, RpMaterial } from "../rpworld.js";
 import { RwEngine } from "../rwcore.js";
@@ -15,8 +14,6 @@ interface InstanceData {
 }
 
 export class AtomicAllInOnePipeline implements RpAtomicPipeline {
-    private static lightDirection = vec3.create();
-
     public instance(atomic: RpAtomic, rw: RwEngine) {
         if (atomic.geometry.instanceData) {
             this.destroy(atomic, rw);
