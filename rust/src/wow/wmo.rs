@@ -553,10 +553,10 @@ impl PortalData {
 
             let mut plane = Plane::default();
             plane.set_tri(eye, &a, &b);
-            if plane.distance(&test_point) > 0.0 {
+            if plane.distance(&test_point) < 0.0 {
                 plane.negate();
             }
-            assert!(plane.distance(&test_point) <= 0.0);
+            assert!(plane.distance(&test_point) >= 0.0);
             result.planes.push(plane);
         }
         result

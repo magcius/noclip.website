@@ -315,22 +315,21 @@ export class Frustum {
 
     public updateClipFrustum(m: ReadonlyMat4, clipSpaceNearZ: GfxClipSpaceNearZ): void {
         // http://www8.cs.umu.se/kurser/5DV051/HT12/lab/plane_extraction.pdf
-        // Note that we look down the -Z axis, rather than the +Z axis, so we have to invert all of our planes...
 
         const h = this.convexHull;
         h.clear();
-        h.push_plane(-(m[3] + m[0]), -(m[7] + m[4]), -(m[11] + m[8]) , -(m[15] + m[12])); // Left
-        h.push_plane(-(m[3] + m[1]), -(m[7] + m[5]), -(m[11] + m[9]) , -(m[15] + m[13])); // Top
-        h.push_plane(-(m[3] - m[0]), -(m[7] - m[4]), -(m[11] - m[8]) , -(m[15] - m[12])); // Right
-        h.push_plane(-(m[3] - m[1]), -(m[7] - m[5]), -(m[11] - m[9]) , -(m[15] - m[13])); // Bottom
+        h.push_plane(m[3] + m[0], m[7] + m[4], m[11] + m[8], m[15] + m[12]); // Left
+        h.push_plane(m[3] + m[1], m[7] + m[5], m[11] + m[9], m[15] + m[13]); // Top
+        h.push_plane(m[3] - m[0], m[7] - m[4], m[11] - m[8], m[15] - m[12]); // Right
+        h.push_plane(m[3] - m[1], m[7] - m[5], m[11] - m[9], m[15] - m[13]); // Bottom
 
         if (clipSpaceNearZ === GfxClipSpaceNearZ.NegativeOne) {
-            h.push_plane(-(m[3] + m[2]), -(m[7] + m[6]), -(m[11] + m[10]), -(m[15] + m[14])); // Near
+            h.push_plane(m[3] + m[2], m[7] + m[6], m[11] + m[10], m[15] + m[14]); // Near
         } else if (clipSpaceNearZ === GfxClipSpaceNearZ.Zero) {
-            h.push_plane(-(m[2]), -(m[6]), -(m[10]), -(m[14])); // Near
+            h.push_plane(m[2], m[6], m[10], m[14]); // Near
         }
 
-        h.push_plane(-(m[3] - m[2]), -(m[7] - m[6]), -(m[11] - m[10]), -(m[15] - m[14])); // Far
+        h.push_plane(m[3] - m[2], m[7] - m[6], m[11] - m[10], m[15] - m[14]); // Far
     }
 
     public copy(o: Frustum): void {
