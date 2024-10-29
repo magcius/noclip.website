@@ -840,8 +840,9 @@ export class RwGfx {
     }
 
     public drawElements(vertexBuffer: RwGfxVertexBuffer, indexBuffer: RwGfxIndexBuffer) {
-        const renderInst = this.renderHelper.pushTemplateRenderInst();
+        const renderInst = this.renderHelper.renderInstManager.newRenderInst();
 
+        renderInst.setUniformBuffer(this.renderHelper.uniformBuffer);
         renderInst.setVertexInput(this.inputLayout, vertexBuffer.descriptors, indexBuffer.descriptor);
         renderInst.setDrawCount(indexBuffer.indexCount);
         renderInst.setMegaStateFlags(this.megaState);
@@ -855,8 +856,6 @@ export class RwGfx {
         this.bindTexture(renderInst);
 
         this.renderInstList.submitRenderInst(renderInst);
-
-        this.renderHelper.renderInstManager.popTemplate();
     }
 
     private getProgramInfo(): RwGfxProgramInfo {
