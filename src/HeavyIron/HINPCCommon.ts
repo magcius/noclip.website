@@ -83,9 +83,9 @@ export class HINPCCommon extends HIEnt {
             break;
         case 0xBD640B63: // robot_9a_bind.MINF
             models[1].alpha = 100/255;
-            models[1].pipeFlags |= (RwBlendFunction.SRCALPHA << HIPipeFlags.SRCBLEND_SHIFT);
-            models[1].pipeFlags |= (RwBlendFunction.INVSRCALPHA << HIPipeFlags.DESTBLEND_SHIFT);
-            models[1].pipeFlags |= HIPipeFlags.CULL_FRONTONLY;
+            models[1].pipe.flags |= (RwBlendFunction.SRCALPHA << HIPipeFlags.SRCBLEND_SHIFT);
+            models[1].pipe.flags |= (RwBlendFunction.INVSRCALPHA << HIPipeFlags.DESTBLEND_SHIFT);
+            models[1].pipe.flags |= HIPipeFlags.CULL_FRONTONLY;
             models[2].hide();
             models[3].hide();
             break;
@@ -93,8 +93,8 @@ export class HINPCCommon extends HIEnt {
             models[1].hide();
             break;
         case 0xD9F1A3AA: // boss_sb_body_bind.MINF
-            models[3].pipeFlags |= (RwBlendFunction.SRCALPHA << HIPipeFlags.SRCBLEND_SHIFT);
-            models[3].pipeFlags |= (RwBlendFunction.INVSRCALPHA << HIPipeFlags.DESTBLEND_SHIFT);
+            models[3].pipe.flags |= (RwBlendFunction.SRCALPHA << HIPipeFlags.SRCBLEND_SHIFT);
+            models[3].pipe.flags |= (RwBlendFunction.INVSRCALPHA << HIPipeFlags.DESTBLEND_SHIFT);
             break;
         }
     }

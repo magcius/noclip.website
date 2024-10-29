@@ -19,7 +19,7 @@ import { HIPAsset, HIPFile } from "./HIP.js";
 import { HIPlatform } from "./HIPlatform.js";
 import { HISkyDomeManager } from "./HISkyDome.js";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
-import { strHash } from "./Util.js";
+import { strHash, strHashCat } from "./Util.js";
 import { JSP } from "./JSP.js";
 import { HIRenderState, HIRenderStateManager } from "./HIRenderState.js";
 import { HIDebug } from "./HIDebug.js";
@@ -162,7 +162,7 @@ export class HIScene implements SceneGfx {
     public renderStateManager = new HIRenderStateManager();
     public lightKitManager = new HILightKitManager();
     public modelManager = new HIModelManager();
-    public modelBucketManager = new HIModelBucketManager();
+    public modelBucketManager = new HIModelBucketManager(this.game < HIGame.TSSM ? 256 : 512);
     public skydomeManager = new HISkyDomeManager();
     public pickupManager = new HIEntPickupManager();
     public buttonManager = new HIEntButtonManager();
@@ -422,13 +422,13 @@ export class HIScene implements SceneGfx {
             let remainSubObjBits = (1 << model.atomics.length) - 1;
             for (const pipt of pipeTables) {
                 for (const pipe of pipt.data) {
-                    if (pipe.modelHashID === id) {
+                    if (pipe.modelHashID === id || strHashCat(pipe.modelHashID, ".dff") === id) {
                         const subObjBits = pipe.subObjectBits & remainSubObjBits;
                         if (subObjBits) {
                             let currSubObjBits = subObjBits;
                             for (let i = model.atomics.length-1; i >= 0; i--) {
                                 if (currSubObjBits & 0x1) {
-                                    this.modelBucketManager.insertBucket(model.atomics[i], pipe.pipe.flags);
+                                    this.modelBucketManager.insertBucket(model.atomics[i], pipe.pipe);
                                 }
                                 currSubObjBits >>>= 1;
                             }
@@ -446,7 +446,7 @@ export class HIScene implements SceneGfx {
             if (remainSubObjBits) {
                 for (let i = model.atomics.length-1; i >= 0; i--) {
                     if (remainSubObjBits & 0x1) {
-                        this.modelBucketManager.insertBucket(model.atomics[i], 0);
+                        this.modelBucketManager.insertBucket(model.atomics[i], { flags: 0, layer: 0, alphaDiscard: 0 });
                     }
                     remainSubObjBits >>>= 1;
                 }
