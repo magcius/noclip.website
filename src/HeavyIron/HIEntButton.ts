@@ -40,7 +40,7 @@ export class HIEntButton extends HIEnt {
     
     public override render(scene: HIScene, rw: RwEngine): void {
         if (this.model) {
-            if (scene.game < HIGame.TSSM && this.buttonAsset.actMethod === HIEntButtonActMethod.Button) {
+            if (this.buttonAsset.actMethod === HIEntButtonActMethod.Button) {
                 this.model.redMultiplier = scene.buttonManager.redMultiplier;
                 this.model.greenMultiplier = scene.buttonManager.greenMultiplier;
                 this.model.blueMultiplier = scene.buttonManager.blueMultiplier;
@@ -59,19 +59,17 @@ export class HIEntButtonManager {
     public colorMultiplierSign = 1;
 
     public update(scene: HIScene, dt: number) {
-        if (scene.game < HIGame.TSSM) {
-            this.colorMultiplier += dt * this.colorMultiplierSign * 2.5;
-            if (this.colorMultiplier > 1.0) {
-                this.colorMultiplierSign *= -1;
-                this.colorMultiplier = 1.0;
-            }
-            if (this.colorMultiplier < 0.0) {
-                this.colorMultiplierSign *= -1;
-                this.colorMultiplier = 0.0;
-            }
-            this.redMultiplier = 0.6 + 0.4 * this.colorMultiplier;
-            this.greenMultiplier = 0.6 + 0.4 * this.colorMultiplier;
-            this.blueMultiplier = 0.6 + 0.4 * this.colorMultiplier;
+        this.colorMultiplier += dt * this.colorMultiplierSign * 2.5;
+        if (this.colorMultiplier > 1.0) {
+            this.colorMultiplierSign *= -1;
+            this.colorMultiplier = 1.0;
         }
+        if (this.colorMultiplier < 0.0) {
+            this.colorMultiplierSign *= -1;
+            this.colorMultiplier = 0.0;
+        }
+        this.redMultiplier = 0.6 + 0.4 * this.colorMultiplier;
+        this.greenMultiplier = 0.6 + 0.4 * this.colorMultiplier;
+        this.blueMultiplier = 0.6 + 0.4 * this.colorMultiplier;
     }
 }
