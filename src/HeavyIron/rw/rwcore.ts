@@ -1,6 +1,6 @@
 import { mat4, ReadonlyVec3, vec2, vec3, vec4 } from "gl-matrix";
 import { Color, OpaqueBlack } from "../../Color.js";
-import { GfxDevice, GfxFormat, GfxMipFilterMode, GfxTexFilterMode, GfxWrapMode } from "../../gfx/platform/GfxPlatform.js";
+import { GfxDevice } from "../../gfx/platform/GfxPlatform.js";
 import { SceneContext } from "../../SceneBase.js";
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { readXboxTexture } from "./xbox.js";
@@ -278,40 +278,6 @@ export const enum RwTextureAddressMode {
 export const enum RwTextureStreamFlags {
     NATEXTURESTREAMFLAG = 0x00,
     USERMIPMAPS = 0x01
-}
-
-function convertRwTextureFilterMode(filter: RwTextureFilterMode): GfxTexFilterMode {
-    switch (filter) {
-    case RwTextureFilterMode.NEAREST:          return GfxTexFilterMode.Point;
-    case RwTextureFilterMode.LINEAR:           return GfxTexFilterMode.Bilinear;
-    case RwTextureFilterMode.MIPNEAREST:       return GfxTexFilterMode.Point;
-    case RwTextureFilterMode.MIPLINEAR:        return GfxTexFilterMode.Bilinear;
-    case RwTextureFilterMode.LINEARMIPNEAREST: return GfxTexFilterMode.Point;
-    case RwTextureFilterMode.LINEARMIPLINEAR:  return GfxTexFilterMode.Bilinear;
-    default:                                   return GfxTexFilterMode.Point;
-    }
-}
-
-function convertRwTextureFilterModeMip(filter: RwTextureFilterMode): GfxMipFilterMode {
-    switch (filter) {
-    case RwTextureFilterMode.NEAREST:          return GfxMipFilterMode.NoMip;
-    case RwTextureFilterMode.LINEAR:           return GfxMipFilterMode.NoMip;
-    case RwTextureFilterMode.MIPNEAREST:       return GfxMipFilterMode.Nearest;
-    case RwTextureFilterMode.MIPLINEAR:        return GfxMipFilterMode.Nearest;
-    case RwTextureFilterMode.LINEARMIPNEAREST: return GfxMipFilterMode.Linear;
-    case RwTextureFilterMode.LINEARMIPLINEAR:  return GfxMipFilterMode.Linear;
-    default:                                   return GfxMipFilterMode.NoMip;
-    }
-}
-
-function convertRwTextureAddressMode(address: RwTextureAddressMode): GfxWrapMode {
-    switch (address) {
-    case RwTextureAddressMode.WRAP:             return GfxWrapMode.Repeat;
-    case RwTextureAddressMode.MIRROR:           return GfxWrapMode.Mirror;
-    case RwTextureAddressMode.CLAMP:            return GfxWrapMode.Clamp;
-    case RwTextureAddressMode.BORDER:           return GfxWrapMode.Clamp; // unsupported
-    default:                                    return GfxWrapMode.Repeat;
-    }
 }
 
 export class RwTexture {
