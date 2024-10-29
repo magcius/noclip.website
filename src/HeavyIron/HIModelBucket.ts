@@ -42,6 +42,9 @@ export class HIModelBucketManager {
     }
 
     public insertBucket(data: RpAtomic, pipe: HIPipe) {
+        if (pipe.alphaDiscard !== 0) {
+            console.log(pipe.alphaDiscard);
+        }
         this.bucketList.push({ data, pipe, list: null });
     }
 
@@ -129,7 +132,7 @@ export class HIModelBucketManager {
                     cull = RwCullMode.BACK;
                 }
 
-                rw.renderState.cullMode = cull;
+                rw.renderState.setCullMode(cull);
 
                 scene.camera.fog = (minst.pipe.flags & HIPipeFlags.FOG_DISABLE) ? undefined : fog;
                 scene.camera.setFogRenderStates(rw);
@@ -204,24 +207,24 @@ export class HIModelBucketManager {
                 cull = RwCullMode.BACK;
             }
 
-            rw.renderState.srcBlend = srcBlend;
-            rw.renderState.destBlend = dstBlend;
-            rw.renderState.zWriteEnable = zwrite;
-            rw.renderState.cullMode = cull;
+            rw.renderState.setSrcBlend(srcBlend);
+            rw.renderState.setDstBlend(dstBlend);
+            rw.renderState.setZWriteEnabled(zwrite);
+            rw.renderState.setCullMode(cull);
 
             scene.camera.fog = (minst.pipe.flags & HIPipeFlags.FOG_DISABLE) ? undefined : fog;
             scene.camera.setFogRenderStates(rw);
 
             if ((minst.pipe.flags & HIPipeFlags.CULL_MASK) === HIPipeFlags.CULL_BACKTHENFRONT) {
-                rw.renderState.cullMode = RwCullMode.FRONT;
+                rw.renderState.setCullMode(RwCullMode.FRONT);
                 minst.renderSingle(scene, rw);
-                rw.renderState.cullMode = RwCullMode.BACK;
+                rw.renderState.setCullMode(RwCullMode.BACK);
                 minst.renderSingle(scene, rw);
             } else if ((minst.pipe.flags & HIPipeFlags.ZBUFFER_MASK) === HIPipeFlags.ZBUFFER_ZFIRST) {
                 // RenderWare has no API to set the color mask, so the game sets it using platform-specific code
-                rw.renderState.channelWriteMask = GfxChannelWriteMask.None;
+                rw.gfx.setChannelWriteMask(GfxChannelWriteMask.None);
                 minst.renderSingle(scene, rw);
-                rw.renderState.channelWriteMask = GfxChannelWriteMask.AllChannels;
+                rw.gfx.setChannelWriteMask(GfxChannelWriteMask.AllChannels);
                 minst.renderSingle(scene, rw);
             } else {
                 minst.renderSingle(scene, rw);

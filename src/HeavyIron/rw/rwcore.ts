@@ -1,18 +1,12 @@
-import { mat4, vec2, vec3, vec4 } from "gl-matrix";
+import { mat4, ReadonlyVec3, vec2, vec3, vec4 } from "gl-matrix";
 import { Color, OpaqueBlack } from "../../Color.js";
-import { makeBackbufferDescSimple, makeAttachmentClearDescriptor, opaqueBlackFullClearRenderPassDescriptor } from "../../gfx/helpers/RenderGraphHelpers.js";
-import { GfxChannelWriteMask, GfxDevice, GfxFormat, GfxMipFilterMode, GfxSampler, GfxTexFilterMode, GfxTexture, GfxWrapMode, makeTextureDescriptor2D } from "../../gfx/platform/GfxPlatform.js";
-import { GfxrAttachmentSlot } from "../../gfx/render/GfxRenderGraph.js";
-import { GfxRenderHelper } from "../../gfx/render/GfxRenderHelper.js";
-import { GfxRenderInst, GfxRenderInstList } from "../../gfx/render/GfxRenderInstManager.js";
+import { GfxDevice, GfxFormat, GfxMipFilterMode, GfxTexFilterMode, GfxWrapMode } from "../../gfx/platform/GfxPlatform.js";
 import { SceneContext } from "../../SceneBase.js";
-import { ViewerRenderInput } from "../../viewer.js";
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
-import { TextureMapping } from "../../TextureHolder.js";
-import { nArray } from "../../util.js";
 import { readXboxTexture } from "./xbox.js";
 import { RpWorld } from "./rpworld.js";
 import { AtomicAllInOnePipeline } from "./pipelines/AtomicAllInOne.js";
+import { RwGfx, RwGfxRaster } from "./rwgfx.js";
 
 export const enum RwPlatformID {
     NAPLATFORM = 0,
@@ -248,51 +242,24 @@ export class RwRaster {
     private pixels: Uint8Array;
     
     public texture?: RwTexture;
-    
-    public gfxTexture: GfxTexture | null = null;
-    public textureMapping = nArray(1, () => new TextureMapping());
+    public gfxRaster: RwGfxRaster;
 
-    constructor(public width: number, public height: number, public depth: number, public format: RwRasterFormat) {
+    constructor(rw: RwEngine, public width: number, public height: number, public depth: number, public format: RwRasterFormat) {
+        this.gfxRaster = rw.gfx.createRaster(width, height, format);
         this.pixels = new Uint8Array(4 * width * height);
     }
 
     public lock(rw: RwEngine) {
-        if (this.gfxTexture) {
-            rw.renderHelper.device.destroyTexture(this.gfxTexture);
-            this.gfxTexture = null;
-        }
-
+        rw.gfx.lockRaster(this.gfxRaster);
         return this.pixels;
     }
 
     public unlock(rw: RwEngine) {
-        const gfxFormat = convertRasterFormat(this.format);
-
-        this.gfxTexture = rw.renderHelper.device.createTexture(makeTextureDescriptor2D(gfxFormat, this.width, this.height, 1));
-        
-        rw.renderHelper.device.uploadTextureData(this.gfxTexture, 0, [this.pixels]);
-
-        const mapping = this.textureMapping[0];
-        mapping.width = this.width;
-        mapping.height = this.height;
-        mapping.flipY = false;
-        mapping.gfxTexture = this.gfxTexture;
+        rw.gfx.unlockRaster(this.gfxRaster, this.pixels);
     }
 
     public destroy(rw: RwEngine) {
-        if (this.gfxTexture) {
-            rw.renderHelper.device.destroyTexture(this.gfxTexture);
-            this.gfxTexture = null;
-        }
-    }
-
-    public bind(renderInst: GfxRenderInst, gfxSampler: GfxSampler) {
-        if (this.gfxTexture) {
-            const mapping = this.textureMapping[0];
-            mapping.gfxSampler = gfxSampler;
-
-            renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
-        }
+        rw.gfx.destroyRaster(this.gfxRaster);
     }
 }
 
@@ -364,27 +331,6 @@ export class RwTexture {
     public filter = RwTextureFilterMode.NEAREST;
     public addressingU = RwTextureAddressMode.WRAP;
     public addressingV = RwTextureAddressMode.WRAP;
-
-    private gfxSampler: GfxSampler | null = null;
-
-    public getGfxSampler(rw: RwEngine) {
-        if (!this.gfxSampler) {
-            const texFilter = convertRwTextureFilterMode(this.filter);
-            const mipFilter = convertRwTextureFilterModeMip(this.filter);
-            const wrapS = convertRwTextureAddressMode(this.addressingU);
-            const wrapT = convertRwTextureAddressMode(this.addressingV);
-            
-            this.gfxSampler = rw.renderHelper.renderCache.createSampler({
-                magFilter: texFilter,
-                minFilter: texFilter,
-                mipFilter: mipFilter,
-                wrapS: wrapS,
-                wrapT: wrapT,
-            });
-        }
-
-        return this.gfxSampler;
-    }
 
     public destroy(rw: RwEngine) {
         this.raster.destroy(rw);
@@ -498,11 +444,15 @@ export class RwCamera {
     public clearColor = OpaqueBlack;
 
     public begin(rw: RwEngine) {
-        mat4.copy(this.viewMatrix, rw.viewerInput.camera.viewMatrix);
-        mat4.copy(this.worldMatrix, rw.viewerInput.camera.worldMatrix);
+        rw.gfx.cameraBegin(this);
     }
 
     public end(rw: RwEngine) {
+        rw.gfx.cameraEnd(this);
+    }
+
+    public frustumContainsSphere(center: ReadonlyVec3, radius: number, rw: RwEngine) {
+        return rw.gfx.cameraFrustumContainsSphere(center, radius);
     }
 }
 
@@ -544,70 +494,179 @@ export const enum RwAlphaTestFunction {
 }
 
 export class RwRenderState {
-    public textureRaster: RwRaster | null = null;
-    public textureFilter = RwTextureFilterMode.LINEAR;
-    public textureAddressU = RwTextureAddressMode.WRAP;
-    public textureAddressV = RwTextureAddressMode.WRAP;
-    public zTestEnable = true;
-    public zWriteEnable = true;
-    public shadeMode = RwShadeMode.GOURAUD;
-    public srcBlend = RwBlendFunction.SRCALPHA;
-    public destBlend = RwBlendFunction.INVSRCALPHA;
-    public vertexAlphaEnable = false; // currently unsupported
-    public fogEnable = false;
-    public fogColor = OpaqueBlack;
-    public cullMode = RwCullMode.BACK;
-    public alphaTestFunction = RwAlphaTestFunction.GREATER; // currently only GREATER is supported
-    public alphaTestFunctionRef = 0;
+    private textureRaster: RwRaster | null = null;
+    private textureFilter = RwTextureFilterMode.LINEAR;
+    private textureAddressU = RwTextureAddressMode.WRAP;
+    private textureAddressV = RwTextureAddressMode.WRAP;
+    private shadeMode = RwShadeMode.GOURAUD;
+    private vertexAlphaEnable = false; // currently unsupported
 
-    // platform specific, just shoving this in here for now
-    public channelWriteMask = GfxChannelWriteMask.AllChannels;
+    constructor(private gfx: RwGfx) {
+        gfx.enableDepthTest();
+        gfx.enableDepthWrite();
+        gfx.setSrcBlend(RwBlendFunction.SRCALPHA);
+        gfx.setDstBlend(RwBlendFunction.INVSRCALPHA);
+        gfx.disableFog();
+        gfx.setFogColor(OpaqueBlack);
+        gfx.setCullMode(RwCullMode.BACK);
+        gfx.enableAlphaTest();
+        gfx.setAlphaFunc(RwAlphaTestFunction.GREATER);
+        gfx.setAlphaRef(0);
+    }
+
+    public getTextureRaster(): RwRaster | null {
+        return this.textureRaster;
+    }
+
+    public setTextureRaster(raster: RwRaster | null) {
+        this.textureRaster = raster;
+    }
+
+    public getTextureFilter(): RwTextureFilterMode {
+        return this.textureFilter;
+    }
+
+    public setTextureFilter(filter: RwTextureFilterMode) {
+        this.textureFilter = filter;
+    }
+
+    public getTextureAddressU(): RwTextureAddressMode {
+        return this.textureAddressU;
+    }
+
+    public setTextureAddressU(address: RwTextureAddressMode) {
+        this.textureAddressU = address;
+    }
+
+    public getTextureAddressV(): RwTextureAddressMode {
+        return this.textureAddressV;
+    }
+
+    public setTextureAddressV(address: RwTextureAddressMode) {
+        this.textureAddressV = address;
+    }
+
+    public isZTestEnabled(): boolean {
+        return this.gfx.getDepthTest();
+    }
+
+    public setZTestEnabled(enabled: boolean) {
+        if (enabled) {
+            this.gfx.enableDepthTest();
+        } else {
+            this.gfx.disableDepthTest();
+        }
+    }
+
+    public isZWriteEnabled(): boolean {
+        return this.gfx.getDepthWrite();
+    }
+
+    public setZWriteEnabled(enabled: boolean) {
+        if (enabled) {
+            this.gfx.enableDepthWrite();
+        } else {
+            this.gfx.disableDepthWrite();
+        }
+    }
+
+    public getShadeMode(): RwShadeMode {
+        return this.shadeMode;
+    }
+
+    public setShadeMode(shade: RwShadeMode) {
+        this.shadeMode = shade;
+    }
+
+    public getSrcBlend(): RwBlendFunction {
+        return this.gfx.getSrcBlend();
+    }
+
+    public setSrcBlend(blend: RwBlendFunction) {
+        this.gfx.setSrcBlend(blend);
+    }
+
+    public getDstBlend(): RwBlendFunction {
+        return this.gfx.getDstBlend();
+    }
+
+    public setDstBlend(blend: RwBlendFunction) {
+        this.gfx.setDstBlend(blend);
+    }
+
+    public getVertexAlphaEnabled(): boolean {
+        return this.vertexAlphaEnable;
+    }
+
+    public setVertexAlphaEnabled(enabled: boolean) {
+        this.vertexAlphaEnable = enabled;
+    }
+
+    public isFogEnabled(): boolean {
+        return this.gfx.isFogEnabled();
+    }
+
+    public setFogEnabled(enabled: boolean) {
+        if (enabled) {
+            this.gfx.enableFog();
+        } else {
+            this.gfx.disableFog();
+        }
+    }
+
+    public getFogColor(): Color {
+        return this.gfx.getFogColor();
+    }
+
+    public setFogColor(color: Color) {
+        this.gfx.setFogColor(color);
+    }
+
+    public getCullMode(): RwCullMode {
+        return this.gfx.getCullMode();
+    }
+
+    public setCullMode(cull: RwCullMode) {
+        this.gfx.setCullMode(cull);
+    }
+
+    public getAlphaTestFunction(): RwAlphaTestFunction {
+        return this.gfx.getAlphaFunc();
+    }
+
+    public setAlphaTestFunction(alphaTest: RwAlphaTestFunction) {
+        this.gfx.setAlphaFunc(alphaTest);
+    }
+
+    public getAlphaTestFunctionRef(): number {
+        return this.gfx.getAlphaRef() * 255.0;
+    }
+
+    public setAlphaTestFunctionRef(ref: number) {
+        this.gfx.setAlphaRef(ref / 255.0);
+    }
 }
 
 export class RwEngine {
+    public gfx: RwGfx;
+
     public textureFindCallback?: (name: string, maskName: string) => RwTexture | null = () => null;
 
     public world = new RpWorld();
     public camera = new RwCamera();
-    public renderState = new RwRenderState();
+    public renderState: RwRenderState;
     public defaultAtomicPipeline = new AtomicAllInOnePipeline();
 
-    public renderHelper: GfxRenderHelper;
-    public viewerInput: ViewerRenderInput;
-    public renderInstList = new GfxRenderInstList();
-
     constructor(device: GfxDevice, context: SceneContext) {
-        this.renderHelper = new GfxRenderHelper(device, context);
-        this.viewerInput = context.viewerInput;
+        this.gfx = new RwGfx(device, context);
+        this.renderState = new RwRenderState(this.gfx);
     }
 
     public destroy() {
-        this.renderHelper.destroy();
+        this.gfx.destroy();
     }
 
     public render() {
-        const builder = this.renderHelper.renderGraph.newGraphBuilder();
-
-        const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, this.viewerInput, makeAttachmentClearDescriptor(this.camera.clearColor));
-        const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, this.viewerInput, opaqueBlackFullClearRenderPassDescriptor);
-        
-        const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
-        const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
-        builder.pushPass((pass) => {
-            pass.setDebugName('Main');
-            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
-            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
-            pass.exec((passRenderer) => {
-                this.renderInstList.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
-            });
-        });
-        this.renderHelper.antialiasingSupport.pushPasses(builder, this.viewerInput, mainColorTargetID);
-
-        builder.resolveRenderTargetToExternalTexture(mainColorTargetID, this.viewerInput.onscreenTexture);
-        
-        this.renderHelper.prepareToRender();
-        this.renderHelper.renderGraph.execute(builder);
-
-        this.renderInstList.reset();
+        this.gfx.render(this.camera);
     }
 }

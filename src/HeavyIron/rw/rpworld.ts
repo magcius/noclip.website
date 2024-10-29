@@ -7,7 +7,7 @@ export class RpMaterial {
     public ambient: number;
     public specular: number;
     public diffuse: number;
-    public texture?: RwTexture;
+    public texture: RwTexture | null;
 
     public static streamRead(stream: RwStream, rw: RwEngine): RpMaterial | null {
         const material = new RpMaterial();
@@ -266,32 +266,37 @@ export class RpAtomic {
     public frame: RwFrame;
     public geometry: RpGeometry;
 
-    private _pipeline: RpAtomicPipeline;
+    private pipeline: RpAtomicPipeline;
 
     constructor(rw: RwEngine) {
-        this._pipeline = rw.defaultAtomicPipeline;
+        this.pipeline = rw.defaultAtomicPipeline;
     }
 
     public getPipeline() {
-        return this._pipeline;
+        return this.pipeline;
     }
 
     public setPipeline(p: RpAtomicPipeline | null, rw: RwEngine) {
-        this._pipeline.destroy(this, rw);
-        this._pipeline = p || rw.defaultAtomicPipeline;
+        this.pipeline.destroy(this, rw);
+        this.pipeline = p || rw.defaultAtomicPipeline;
+    }
+
+    public instance(rw: RwEngine) {
+        this.pipeline.instance(this, rw);
     }
 
     public render(rw: RwEngine) {
-        this._pipeline.instance(this, rw);
+        this.pipeline.render(this, rw);
     }
 
     public destroy(rw: RwEngine) {
-        this._pipeline.destroy(this, rw);
+        this.pipeline.destroy(this, rw);
     }
 }
 
 export interface RpAtomicPipeline {
     instance(atomic: RpAtomic, rw: RwEngine): void;
+    render(atomic: RpAtomic, rw: RwEngine): void;
     destroy(atomic: RpAtomic, rw: RwEngine): void;
 }
 

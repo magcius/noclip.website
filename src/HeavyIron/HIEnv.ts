@@ -49,8 +49,8 @@ export class HIEnv extends HIBase {
     }
 
     public render(scene: HIScene, rw: RwEngine) {
-        rw.renderState.srcBlend = RwBlendFunction.SRCALPHA;
-        rw.renderState.destBlend = RwBlendFunction.INVSRCALPHA;
+        rw.renderState.setSrcBlend(RwBlendFunction.SRCALPHA);
+        rw.renderState.setDstBlend(RwBlendFunction.INVSRCALPHA);
         
         for (const jsp of this.jsps) {
             jsp.render(scene, rw);

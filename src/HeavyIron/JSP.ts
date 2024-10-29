@@ -16,6 +16,8 @@ interface JSPNode {
     sortOrder: number; // version 5+
 }
 
+let once = false;
+
 export class JSP {
     public clumps: RpClump[] = [];
     public nodeList: JSPNode[] = [];
@@ -31,8 +33,8 @@ export class JSP {
                     node.atomic.geometry.flags &= ~(RpGeometryFlag.PRELIT | RpGeometryFlag.LIGHT);
                 }
 
-                rw.renderState.cullMode = (node.nodeFlags & JSPNodeFlags.DISABLECULL) ? RwCullMode.NONE : RwCullMode.BACK;
-                rw.renderState.zWriteEnable = (node.nodeFlags & JSPNodeFlags.DISABLEZWRITE) === 0;
+                rw.renderState.setCullMode((node.nodeFlags & JSPNodeFlags.DISABLECULL) ? RwCullMode.NONE : RwCullMode.BACK);
+                rw.renderState.setZWriteEnabled((node.nodeFlags & JSPNodeFlags.DISABLEZWRITE) === 0);
 
                 node.atomic.render(rw);
 

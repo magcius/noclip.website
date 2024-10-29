@@ -93,7 +93,7 @@ export function readXboxTexture(stream: RwStream, rw: RwEngine): RwTexture | nul
         return null;
     }
 
-    const raster = new RwRaster(width, height, depth, format);
+    const raster = new RwRaster(rw, width, height, depth, format);
     
     const pixels = raster.lock(rw);
     const numPixels = width * height;
