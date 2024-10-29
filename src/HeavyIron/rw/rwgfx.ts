@@ -21,7 +21,7 @@ import { RpLightFlag, RpLightType, RpWorld } from "./rpworld.js";
 import { getMatrixAxisZ } from "../../MathHelpers.js";
 import { IS_DEVELOPMENT } from "../../BuildVersion.js";
 
-interface RwGfxProgramDescriptor {
+interface RwGfxProgramDefines {
     useNormalArray: boolean;
     useColorArray: boolean;
     useTextureCoordArray: boolean;
@@ -57,23 +57,23 @@ class RwGfxProgram extends DeviceProgram {
         { byteStride: 12*0x04, frequency: GfxVertexBufferFrequency.PerVertex },
     ];
 
-    constructor(descriptor: RwGfxProgramDescriptor) {
+    constructor(d: RwGfxProgramDefines) {
         super();
 
-        this.defines.set('USE_NORMAL_ARRAY', descriptor.useNormalArray ? '1' : '0');
-        this.defines.set('USE_COLOR_ARRAY', descriptor.useColorArray ? '1' : '0');
-        this.defines.set('USE_TEXTURE_COORD_ARRAY', descriptor.useTextureCoordArray ? '1' : '0');
-        this.defines.set('USE_TEXTURE', descriptor.useTexture ? '1' : '0');
-        this.defines.set('USE_FOG', descriptor.useFog ? '1' : '0');
-        this.defines.set('USE_LIGHTING', descriptor.useLighting ? '1' : '0');
-        this.defines.set('USE_ALPHA_TEST', descriptor.useAlphaTest ? '1' : '0');
-        this.defines.set('ALPHA_TEST_FUNCTION', descriptor.alphaTestFunction.toString());
+        this.defines.set('USE_NORMAL_ARRAY', d.useNormalArray ? '1' : '0');
+        this.defines.set('USE_COLOR_ARRAY', d.useColorArray ? '1' : '0');
+        this.defines.set('USE_TEXTURE_COORD_ARRAY', d.useTextureCoordArray ? '1' : '0');
+        this.defines.set('USE_TEXTURE', d.useTexture ? '1' : '0');
+        this.defines.set('USE_FOG', d.useFog ? '1' : '0');
+        this.defines.set('USE_LIGHTING', d.useLighting ? '1' : '0');
+        this.defines.set('USE_ALPHA_TEST', d.useAlphaTest ? '1' : '0');
+        this.defines.set('ALPHA_TEST_FUNCTION', d.alphaTestFunction.toString());
 
         this.ub_SceneParamsSIZE = 16*3 + 4*3;
-        if (descriptor.useLighting) {
+        if (d.useLighting) {
             this.ub_SceneParamsSIZE += 12*RwGfx.MAX_LIGHTS;
         }
-        if (descriptor.useFog) {
+        if (d.useFog) {
             this.ub_SceneParamsSIZE += 4;
         }
     }
