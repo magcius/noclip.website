@@ -625,6 +625,7 @@ export class RwEngine {
     }
 
     public render() {
-        this.gfx.render(this.camera);
+        this.gfx.setClearColor(this.camera.clearColor);
+        this.gfx.render();
     }
 }
