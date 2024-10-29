@@ -351,8 +351,6 @@ export class RwGfx {
     private programs = new Map<number, RwGfxProgramInfo>();
     private inputLayout: GfxInputLayout;
 
-    private clearColor = colorNewCopy(TransparentBlack);
-
     private modelMatrix = mat4.create();
 
     private normalArrayEnabled = false;
@@ -610,14 +608,6 @@ export class RwGfx {
         if (nearPlane !== this.viewerInput.camera.near || farPlane !== this.viewerInput.camera.far) {
             this.viewerInput.camera.setClipPlanes(nearPlane, farPlane);
         }
-    }
-
-    public setClearColor(clearColor: Color) {
-        colorCopy(this.clearColor, clearColor);
-    }
-
-    public getClearColor() {
-        return this.clearColor;
     }
 
     public setModelMatrix(mat: mat4) {
