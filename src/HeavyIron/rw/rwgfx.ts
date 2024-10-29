@@ -215,9 +215,6 @@ interface RwGfxProgramInfo {
 export interface RwGfxVertexBuffer {
     buffer: GfxBuffer;
     descriptors: GfxVertexBufferDescriptor[];
-    hasNormals: boolean;
-    hasColors: boolean;
-    hasTexCoords: boolean;
 }
 
 export interface RwGfxIndexBuffer {
@@ -489,11 +486,8 @@ export class RwGfx {
 
         const buffer = makeStaticDataBuffer(this.device, GfxBufferUsage.Vertex, data.buffer);
         const descriptors = [{ buffer, byteOffset: 0 }];
-        const hasNormals = (normals !== undefined);
-        const hasColors = (colors !== undefined);
-        const hasTexCoords = (texCoords !== undefined);
 
-        return { buffer, descriptors, hasNormals, hasColors, hasTexCoords };
+        return { buffer, descriptors };
     }
 
     public destroyVertexBuffer(buffer: RwGfxVertexBuffer) {

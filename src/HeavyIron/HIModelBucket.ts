@@ -42,9 +42,6 @@ export class HIModelBucketManager {
     }
 
     public insertBucket(data: RpAtomic, pipe: HIPipe) {
-        if (pipe.alphaDiscard !== 0) {
-            console.log(pipe.alphaDiscard);
-        }
         this.bucketList.push({ data, pipe, list: null });
     }
 

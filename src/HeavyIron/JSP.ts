@@ -16,8 +16,6 @@ interface JSPNode {
     sortOrder: number; // version 5+
 }
 
-let once = false;
-
 export class JSP {
     public clumps: RpClump[] = [];
     public nodeList: JSPNode[] = [];

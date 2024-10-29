@@ -228,16 +228,6 @@ export const enum RwRasterFormat {
     MASK = 0xFF00
 }
 
-function convertRasterFormat(format: RwRasterFormat): GfxFormat {
-    switch (format & RwRasterFormat.PIXELFORMATMASK) {
-    case RwRasterFormat._8888:
-    case RwRasterFormat._888:
-        return GfxFormat.U8_RGBA_NORM;
-    default: // TODO
-        return GfxFormat.U8_RGBA_NORM;
-    }
-}
-
 export class RwRaster {
     private pixels: Uint8Array;
     
