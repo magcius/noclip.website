@@ -212,6 +212,12 @@ export class HIModelBucketManager {
             scene.camera.fog = (minst.pipe.flags & HIPipeFlags.FOG_DISABLE) ? undefined : fog;
             scene.camera.setFogRenderStates(rw);
 
+            if (minst.pipe.alphaDiscard !== 0) {
+                rw.renderState.setAlphaTestFunctionRef(minst.pipe.alphaDiscard);
+            } else {
+                rw.renderState.setAlphaTestFunctionRef(0);
+            }
+
             if ((minst.pipe.flags & HIPipeFlags.CULL_MASK) === HIPipeFlags.CULL_BACKTHENFRONT) {
                 rw.renderState.setCullMode(RwCullMode.FRONT);
                 minst.renderSingle(scene, rw);
