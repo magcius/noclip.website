@@ -438,6 +438,11 @@ export class RwGfx {
         mat4.copy(camera.worldMatrix, this.viewerInput.camera.worldMatrix);
 
         mat4.copy(this.viewMatrix, this.viewerInput.camera.viewMatrix);
+
+        if (camera.nearPlane !== this.viewerInput.camera.near || camera.farPlane !== this.viewerInput.camera.far) {
+            this.viewerInput.camera.setClipPlanes(camera.nearPlane, camera.farPlane);
+        }
+
         mat4.copy(this.projectionMatrix, this.viewerInput.camera.projectionMatrix);
     }
 
@@ -630,12 +635,6 @@ export class RwGfx {
 
     public getChannelWriteMask() {
         return this.megaState.attachmentsState![0].channelWriteMask;
-    }
-
-    public setClipPlanes(nearPlane: number, farPlane: number) {
-        if (nearPlane !== this.viewerInput.camera.near || farPlane !== this.viewerInput.camera.far) {
-            this.viewerInput.camera.setClipPlanes(nearPlane, farPlane);
-        }
     }
 
     public setClearColor(clearColor: Color) {

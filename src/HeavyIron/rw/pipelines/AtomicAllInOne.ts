@@ -44,7 +44,6 @@ export class AtomicAllInOnePipeline implements RpAtomicPipeline {
 
         const instData = atomic.geometry.instanceData as InstanceData;
 
-        rw.gfx.setClipPlanes(rw.camera.nearPlane, rw.camera.farPlane);
         rw.gfx.setFogStart(rw.camera.fogPlane);
         rw.gfx.setFogEnd(rw.camera.farPlane);
 
