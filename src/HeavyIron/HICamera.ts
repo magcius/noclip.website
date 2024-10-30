@@ -41,7 +41,10 @@ export class HICamera {
             rw.camera.farPlane = this.fog.stop;
         } else {
             rw.renderState.setFogEnabled(false);
-            rw.camera.farPlane = DEFAULT_FAR_CLIP;
+            // Let's not reset the far plane for now,
+            // seeing some weird warping when the far clip is changed mid-frame.
+            // Everything will use the fog stop value (if any) as the far clip, for now.
+            //rw.camera.farPlane = DEFAULT_FAR_CLIP;
         }
     }
 
