@@ -1,14 +1,14 @@
 import { mat4, ReadonlyVec3, vec3 } from "gl-matrix";
 import { makeBackbufferDescSimple, makeAttachmentClearDescriptor, opaqueBlackFullClearRenderPassDescriptor } from "../../gfx/helpers/RenderGraphHelpers.js";
-import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxChannelWriteMask, GfxCompareMode, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxMegaStateDescriptor, GfxMipFilterMode, GfxProgram, GfxSamplerDescriptor, GfxTexFilterMode, GfxTexture, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxWrapMode, makeTextureDescriptor2D } from "../../gfx/platform/GfxPlatform.js";
+import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxChannelWriteMask, GfxCompareMode, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxMegaStateDescriptor, GfxMipFilterMode, GfxPrimitiveTopology, GfxProgram, GfxSamplerDescriptor, GfxTexFilterMode, GfxTexture, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxWrapMode, makeTextureDescriptor2D } from "../../gfx/platform/GfxPlatform.js";
 import { GfxrAttachmentSlot } from "../../gfx/render/GfxRenderGraph.js";
 import { GfxRenderHelper } from "../../gfx/render/GfxRenderHelper.js";
 import { GfxRenderInst, GfxRenderInstList } from "../../gfx/render/GfxRenderInstManager.js";
 import { SceneContext } from "../../SceneBase.js";
 import { ViewerRenderInput } from "../../viewer.js";
-import { RwAlphaTestFunction, RwBlendFunction, RwCamera, RwCullMode, RwRaster, RwRasterFormat, RwTextureAddressMode, RwTextureFilterMode } from "./rwcore.js";
+import { RwAlphaTestFunction, RwBlendFunction, RwCamera, RwCullMode, RwPrimitiveType, RwRaster, RwRasterFormat, RwTextureAddressMode, RwTextureFilterMode } from "./rwcore.js";
 import { makeStaticDataBuffer } from "../../gfx/helpers/BufferHelpers.js";
-import { convertToTriangleIndexBuffer, filterDegenerateTriangleIndexBuffer, GfxTopology } from "../../gfx/helpers/TopologyHelpers.js";
+import { convertToTriangleIndexBuffer, convertToTriangles, filterDegenerateTriangleIndexBuffer, GfxTopology } from "../../gfx/helpers/TopologyHelpers.js";
 import { makeMegaState } from "../../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
 import { reverseDepthForCompareMode } from "../../gfx/helpers/ReversedDepthHelpers.js";
 import { fillColor, fillMatrix4x4, fillVec3v, fillVec4 } from "../../gfx/helpers/UniformBufferHelpers.js";
@@ -592,6 +592,19 @@ export class RwGfx {
         return { buffer, data, descriptor, indexCount };
     }
 
+    public createDynamicIndexBuffer(indexCount: number): RwGfxIndexBuffer {
+        const wordCount = (indexCount + 1) / 2;
+        const buffer = this.device.createBuffer(wordCount, GfxBufferUsage.Index, GfxBufferFrequencyHint.Dynamic);
+        const data = new Uint16Array(wordCount);
+        const descriptor = { buffer, byteOffset: 0 };
+
+        return { buffer, data, descriptor, indexCount };
+    }
+
+    public uploadIndexBuffer(buffer: RwGfxIndexBuffer) {
+        this.device.uploadBufferData(buffer.buffer, 0, new Uint8Array(buffer.data.buffer), 0, buffer.indexCount * 2);
+    }
+
     public destroyBuffer(buffer: RwGfxVertexBuffer | RwGfxIndexBuffer) {
         this.device.destroyBuffer(buffer.buffer);
     }
@@ -966,13 +979,14 @@ export class RwGfx {
         }
     }
 
-    public drawArrays(vertexBuffer: RwGfxVertexBuffer) {
+    public drawArrays(vertexBuffer: RwGfxVertexBuffer, lines: boolean = false) {
         const renderInst = this.renderHelper.renderInstManager.newRenderInst();
 
         renderInst.setUniformBuffer(this.renderHelper.uniformBuffer);
         renderInst.setVertexInput(this.inputLayoutNoIndex, vertexBuffer.descriptors, null);
         renderInst.setDrawCount(vertexBuffer.vertexCount);
         renderInst.setMegaStateFlags(this.megaState);
+        renderInst.setPrimitiveTopology(lines ? GfxPrimitiveTopology.Lines : GfxPrimitiveTopology.Triangles);
 
         const programInfo = this.getProgramInfo();
         renderInst.setGfxProgram(programInfo.gfxProgram);
@@ -985,13 +999,14 @@ export class RwGfx {
         this.renderInstList.submitRenderInst(renderInst);
     }
 
-    public drawElements(vertexBuffer: RwGfxVertexBuffer, indexBuffer: RwGfxIndexBuffer) {
+    public drawElements(vertexBuffer: RwGfxVertexBuffer, indexBuffer: RwGfxIndexBuffer, lines: boolean = false) {
         const renderInst = this.renderHelper.renderInstManager.newRenderInst();
 
         renderInst.setUniformBuffer(this.renderHelper.uniformBuffer);
         renderInst.setVertexInput(this.inputLayoutIndexed, vertexBuffer.descriptors, indexBuffer.descriptor);
         renderInst.setDrawCount(indexBuffer.indexCount);
         renderInst.setMegaStateFlags(this.megaState);
+        renderInst.setPrimitiveTopology(lines ? GfxPrimitiveTopology.Lines : GfxPrimitiveTopology.Triangles);
 
         const programInfo = this.getProgramInfo();
         renderInst.setGfxProgram(programInfo.gfxProgram);

@@ -622,7 +622,6 @@ export const enum RwIm3DTransformFlags {
     VERTEXRGBA = 0x10,
 }
 
-// Only tristrip supported atm
 export const enum RwPrimitiveType {
     NAPRIMTYPE = 0,
     LINELIST,
@@ -630,14 +629,15 @@ export const enum RwPrimitiveType {
     TRILIST,
     TRISTRIP,
     TRIFAN,
-    POINTLIST,
+    //POINTLIST, // Not supported
 }
 
 export interface RwIm3DPipeline {
     init(rw: RwEngine): void;
     destroy(rw: RwEngine): void;
-    transform(rw: RwEngine, verts: RwIm3DVertex[], ltm: mat4 | null, flags: RwIm3DTransformFlags): boolean;
+    transform(rw: RwEngine, verts: RwIm3DVertex[], numVerts: number, ltm: mat4 | null, flags: RwIm3DTransformFlags): boolean;
     renderPrimitive(rw: RwEngine, primType: RwPrimitiveType): void;
+    renderIndexedPrimitive(rw: RwEngine, primType: RwPrimitiveType, indices: Uint16Array, numIndices: number): void;
     end(rw: RwEngine): void;
 }
 
@@ -652,12 +652,16 @@ export class RwIm3D {
         this.pipeline.destroy(rw);
     }
 
-    public transform(rw: RwEngine, verts: RwIm3DVertex[], ltm: mat4 | null, flags: RwIm3DTransformFlags = RwIm3DTransformFlags.VERTEXXYZ | RwIm3DTransformFlags.VERTEXRGBA) {
-        return this.pipeline.transform(rw, verts, ltm, flags);
+    public transform(rw: RwEngine, verts: RwIm3DVertex[], numVerts: number, ltm: mat4 | null, flags: RwIm3DTransformFlags = RwIm3DTransformFlags.VERTEXXYZ | RwIm3DTransformFlags.VERTEXRGBA) {
+        return this.pipeline.transform(rw, verts, numVerts, ltm, flags);
     }
 
     public renderPrimitive(rw: RwEngine, primType: RwPrimitiveType) {
         this.pipeline.renderPrimitive(rw, primType);
+    }
+
+    public renderIndexedPrimitive(rw: RwEngine, primType: RwPrimitiveType, indices: Uint16Array, numIndices: number) {
+        this.pipeline.renderIndexedPrimitive(rw, primType, indices, numIndices);
     }
 
     public end(rw: RwEngine) {
