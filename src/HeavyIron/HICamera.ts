@@ -24,8 +24,14 @@ export class HICamera {
         if (this.fog) {
             rw.camera.clearColor = this.fog.bgcolor;
         }
+
         rw.camera.nearPlane = DEFAULT_NEAR_CLIP;
-        rw.camera.farPlane = DEFAULT_FAR_CLIP;
+        if (this.fog && !this.disableFogHack) {
+            rw.camera.farPlane = this.fog.stop;
+        } else {
+            rw.camera.farPlane = DEFAULT_FAR_CLIP;
+        }
+
         rw.camera.begin(rw);
     }
 
