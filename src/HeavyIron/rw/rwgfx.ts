@@ -13,7 +13,7 @@ import { makeMegaState } from "../../gfx/helpers/GfxMegaStateDescriptorHelpers.j
 import { reverseDepthForCompareMode } from "../../gfx/helpers/ReversedDepthHelpers.js";
 import { fillColor, fillMatrix4x4, fillVec3v, fillVec4 } from "../../gfx/helpers/UniformBufferHelpers.js";
 import { Color, colorCopy, colorNewCopy, OpaqueBlack, TransparentBlack, White } from "../../Color.js";
-import { nArray } from "../../util.js";
+import { assert, nArray } from "../../util.js";
 import { TextureMapping } from "../../TextureHolder.js";
 import { DeviceProgram } from "../../Program.js";
 import { GfxShaderLibrary } from "../../gfx/helpers/GfxShaderLibrary.js";
@@ -226,6 +226,8 @@ export interface RwGfxIndexBuffer {
 export interface RwGfxRaster {
     width: number;
     height: number;
+    levels: Uint8Array[];
+    lockedMipLevel: number;
     gfxTexture: GfxTexture | null;
     gfxFormat: GfxFormat;
     textureMapping: TextureMapping[];
@@ -509,11 +511,13 @@ export class RwGfx {
     }
 
     public createRaster(width: number, height: number, format: RwRasterFormat): RwGfxRaster {
+        const levels: Uint8Array[] = [];
+        const lockedMipLevel = -1;
         const gfxTexture = null;
         const gfxFormat = convertRwRasterFormat(format);
         const textureMapping = nArray(1, () => new TextureMapping());
 
-        return { width, height, gfxTexture, gfxFormat, textureMapping };
+        return { width, height, levels, lockedMipLevel, gfxTexture, gfxFormat, textureMapping };
     }
 
     public destroyRaster(raster: RwGfxRaster) {
@@ -521,19 +525,36 @@ export class RwGfx {
             this.device.destroyTexture(raster.gfxTexture);
             raster.gfxTexture = null;
         }
+
+        raster.levels.length = 0;
+        raster.lockedMipLevel = -1;
     }
 
-    public lockRaster(raster: RwGfxRaster) {
+    public lockRaster(raster: RwGfxRaster, mipLevel: number) {
+        assert(mipLevel >= 0);
+
         if (raster.gfxTexture) {
             this.device.destroyTexture(raster.gfxTexture);
             raster.gfxTexture = null;
         }
+
+        for (let i = raster.levels.length; i <= mipLevel; i++) {
+            const mipWidth = (raster.width >>> i);
+            const mipHeight = (raster.height >>> i);
+            raster.levels[i] = new Uint8Array(4 * mipWidth * mipHeight);
+        }
+        
+        raster.lockedMipLevel = mipLevel;
+
+        return raster.levels[mipLevel];
     }
 
-    public unlockRaster(raster: RwGfxRaster, pixels: Uint8Array) {
-        raster.gfxTexture = this.device.createTexture(makeTextureDescriptor2D(raster.gfxFormat, raster.width, raster.height, 1));
+    public unlockRaster(raster: RwGfxRaster) {
+        assert(raster.lockedMipLevel >= 0);
 
-        this.device.uploadTextureData(raster.gfxTexture, 0, [pixels]);
+        raster.gfxTexture = this.device.createTexture(makeTextureDescriptor2D(raster.gfxFormat, raster.width, raster.height, raster.levels.length));
+
+        this.device.uploadTextureData(raster.gfxTexture, 0, raster.levels);
 
         const mapping = raster.textureMapping[0];
         mapping.width = raster.width;

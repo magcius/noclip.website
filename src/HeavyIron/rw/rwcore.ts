@@ -229,23 +229,19 @@ export const enum RwRasterFormat {
 }
 
 export class RwRaster {
-    private pixels: Uint8Array;
-    
     public texture?: RwTexture;
     public gfxRaster: RwGfxRaster;
 
     constructor(rw: RwEngine, public width: number, public height: number, public depth: number, public format: RwRasterFormat) {
         this.gfxRaster = rw.gfx.createRaster(width, height, format);
-        this.pixels = new Uint8Array(4 * width * height);
     }
 
-    public lock(rw: RwEngine) {
-        rw.gfx.lockRaster(this.gfxRaster);
-        return this.pixels;
+    public lock(rw: RwEngine, mipLevel: number) {
+        return rw.gfx.lockRaster(this.gfxRaster, mipLevel);
     }
 
     public unlock(rw: RwEngine) {
-        rw.gfx.unlockRaster(this.gfxRaster, this.pixels);
+        rw.gfx.unlockRaster(this.gfxRaster);
     }
 
     public destroy(rw: RwEngine) {
