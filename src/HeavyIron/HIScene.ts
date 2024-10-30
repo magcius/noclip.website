@@ -478,6 +478,8 @@ export class HIScene implements SceneGfx {
                 this.player.lightKit = lkit;
             }
         }
+
+        this.pickupManager.setup(this);
     }
 
     private reset() {

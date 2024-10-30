@@ -1,8 +1,10 @@
 import { mat4 } from "gl-matrix";
 import { HIEnt } from "./HIEnt.js";
 import { HIModelInstance } from "./HIModel.js";
-import { HIScene } from "./HIScene.js";
+import { HIGame, HIScene } from "./HIScene.js";
 import { RwEngine, RwStream } from "./rw/rwcore.js";
+import { HILightKit } from "./HILightKit.js";
+import { strHash } from "./Util.js";
 
 export interface HIAssetPickup {
     pickupHash: number;
@@ -74,6 +76,15 @@ export class HIEntPickupManager {
     private pickups: HIEntPickup[] = [];
     private pickupOrientation = mat4.create();
 
+    // TSSM
+    private pickupLightKit: HILightKit | null = null;
+
+    public setup(scene: HIScene) {
+        if (scene.game >= HIGame.TSSM) {
+            this.pickupLightKit = scene.lightKits.get(strHash("hud_lightkit")) ?? null;
+        }
+    }
+
     public add(pkup: HIEntPickup) {
         this.pickups.push(pkup);
     }
@@ -83,7 +94,11 @@ export class HIEntPickupManager {
     }
     
     public render(scene: HIScene, rw: RwEngine) {
-        scene.lightKitManager.enable(null, scene);
+        if (scene.game >= HIGame.TSSM) {
+            scene.lightKitManager.enable(this.pickupLightKit, scene);
+        } else {
+            scene.lightKitManager.enable(null, scene);
+        }
 
         const src = this.pickupOrientation;
         for (const pkup of this.pickups) {
@@ -99,6 +114,10 @@ export class HIEntPickupManager {
                      dst[12], dst[13], dst[14], dst[15]);
 
             pkup.model.renderSingle(scene, rw);
+        }
+
+        if (scene.game >= HIGame.TSSM) {
+            scene.lightKitManager.enable(null, scene);
         }
     }
 }

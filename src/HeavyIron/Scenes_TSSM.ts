@@ -15,7 +15,7 @@ class TSSMSceneDesc implements SceneDesc {
             //`${dataPath}/boot_US.HIP`,
             //`${dataPath}/mn/mnuc.HIP`,
             //`${dataPath}/mn/mnuc_US.HIP`,
-            //`${dataPath}/mn/mnui.HIP`,
+            `${dataPath}/mn/mnui.HIP`,
             //`${dataPath}/mn/mnui_US.HIP`,
             `${dataPath}/${this.id.substring(0, 2)}/${this.id}.HOP`,
             `${dataPath}/${this.id.substring(0, 2)}/${this.id}.HIP`,
