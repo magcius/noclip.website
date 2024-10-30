@@ -52,7 +52,7 @@ export class HICamera {
     
         const scale = scratchVec3;
         mat4.getScaling(scale, mat);
-        const radius = sph[3] * Math.sqrt(Math.max(scale[0], scale[1], scale[2]));
+        const radius = sph[3] * Math.max(scale[0], scale[1], scale[2]);
     
         const center = scratchVec3;
         vec3.set(center, sph[0], sph[1], sph[2]);
