@@ -238,6 +238,8 @@ export class HIModelBucketManager {
             minst.data = oldData;
         }
 
+        rw.renderState.setAlphaTestFunctionRef(0);
+
         scene.camera.fog = fog;
         scene.camera.setFogRenderStates(rw);
         
