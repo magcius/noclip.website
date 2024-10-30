@@ -355,6 +355,8 @@ export class RwGfx {
 
     private clearColor = colorNewCopy(TransparentBlack);
 
+    private viewMatrix = mat4.create();
+    private projectionMatrix = mat4.create();
     private modelMatrix = mat4.create();
 
     private normalArrayEnabled = false;
@@ -434,6 +436,9 @@ export class RwGfx {
     public cameraBegin(camera: RwCamera) {
         mat4.copy(camera.viewMatrix, this.viewerInput.camera.viewMatrix);
         mat4.copy(camera.worldMatrix, this.viewerInput.camera.worldMatrix);
+
+        mat4.copy(this.viewMatrix, this.viewerInput.camera.viewMatrix);
+        mat4.copy(this.projectionMatrix, this.viewerInput.camera.projectionMatrix);
     }
 
     public cameraEnd(camera: RwCamera) {
@@ -923,10 +928,10 @@ export class RwGfx {
         const mapped = renderInst.mapUniformBufferF32(RwGfxProgram.ub_SceneParams);
 
         // u_Projection
-        offs += fillMatrix4x4(mapped, offs, this.viewerInput.camera.projectionMatrix);
+        offs += fillMatrix4x4(mapped, offs, this.projectionMatrix);
 
         // u_ViewMatrix
-        offs += fillMatrix4x4(mapped, offs, this.viewerInput.camera.viewMatrix);
+        offs += fillMatrix4x4(mapped, offs, this.viewMatrix);
 
         // u_ModelMatrix
         offs += fillMatrix4x4(mapped, offs, this.modelMatrix);
