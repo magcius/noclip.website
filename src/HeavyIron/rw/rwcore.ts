@@ -7,6 +7,7 @@ import { readXboxTexture } from "./xbox.js";
 import { RpWorld } from "./rpworld.js";
 import { AtomicAllInOnePipeline } from "./pipelines/AtomicAllInOne.js";
 import { RwGfx, RwGfxRaster } from "./rwgfx.js";
+import { Im3DPipeline } from "./pipelines/Im3D.js";
 
 export const enum RwPlatformID {
     NAPLATFORM = 0,
@@ -601,6 +602,69 @@ export class RwRenderState {
     }
 }
 
+export class RwIm3DVertex {
+    public x = 0;
+    public y = 0;
+    public z = 0;
+    public r = 0;
+    public g = 0;
+    public b = 0;
+    public a = 0;
+    public u = 0;
+    public v = 0;
+}
+
+export const enum RwIm3DTransformFlags {
+    VERTEXUV = 0x1,
+    ALLOPAQUE = 0x2,
+    NOCLIP = 0x4,
+    VERTEXXYZ = 0x8,
+    VERTEXRGBA = 0x10,
+}
+
+// Only tristrip supported atm
+export const enum RwPrimitiveType {
+    NAPRIMTYPE = 0,
+    LINELIST,
+    POLYLINE,
+    TRILIST,
+    TRISTRIP,
+    TRIFAN,
+    POINTLIST,
+}
+
+export interface RwIm3DPipeline {
+    init(rw: RwEngine): void;
+    destroy(rw: RwEngine): void;
+    transform(rw: RwEngine, verts: RwIm3DVertex[], ltm: mat4 | null, flags: RwIm3DTransformFlags): boolean;
+    renderPrimitive(rw: RwEngine, primType: RwPrimitiveType): void;
+    end(rw: RwEngine): void;
+}
+
+export class RwIm3D {
+    public pipeline: RwIm3DPipeline = new Im3DPipeline();
+
+    public init(rw: RwEngine) {
+        this.pipeline.init(rw);
+    }
+
+    public destroy(rw: RwEngine) {
+        this.pipeline.destroy(rw);
+    }
+
+    public transform(rw: RwEngine, verts: RwIm3DVertex[], ltm: mat4 | null, flags: RwIm3DTransformFlags = RwIm3DTransformFlags.VERTEXXYZ | RwIm3DTransformFlags.VERTEXRGBA) {
+        return this.pipeline.transform(rw, verts, ltm, flags);
+    }
+
+    public renderPrimitive(rw: RwEngine, primType: RwPrimitiveType) {
+        this.pipeline.renderPrimitive(rw, primType);
+    }
+
+    public end(rw: RwEngine) {
+        this.pipeline.end(rw);
+    }
+}
+
 export class RwEngine {
     public gfx: RwGfx;
 
@@ -609,14 +673,17 @@ export class RwEngine {
     public world = new RpWorld();
     public camera = new RwCamera();
     public renderState: RwRenderState;
+    public im3D = new RwIm3D();
     public defaultAtomicPipeline = new AtomicAllInOnePipeline();
 
     constructor(device: GfxDevice, context: SceneContext) {
         this.gfx = new RwGfx(device, context);
         this.renderState = new RwRenderState(this.gfx);
+        this.im3D.init(this);
     }
 
     public destroy() {
+        this.im3D.destroy(this);
         this.gfx.destroy();
     }
 

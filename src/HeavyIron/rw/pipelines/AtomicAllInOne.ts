@@ -84,7 +84,14 @@ export class AtomicAllInOnePipeline implements RpAtomicPipeline {
             rw.gfx.setMaterialAmbient(mesh.material.ambient);
             rw.gfx.setMaterialDiffuse(mesh.material.diffuse);
 
-            rw.gfx.setTexture(mesh.material.texture);
+            if (mesh.material.texture) {
+                rw.gfx.setTextureRaster(mesh.material.texture.raster);
+                rw.gfx.setTextureFilter(mesh.material.texture.filter);
+                rw.gfx.setTextureAddressU(mesh.material.texture.addressingU);
+                rw.gfx.setTextureAddressV(mesh.material.texture.addressingV);
+            } else {
+                rw.gfx.setTextureRaster(null);
+            }
 
             rw.gfx.drawElements(instData.vertexBuffer, mesh.indexBuffer);
         }
@@ -98,10 +105,10 @@ export class AtomicAllInOnePipeline implements RpAtomicPipeline {
         const instData = atomic.geometry.instanceData as InstanceData;
 
         for (const mesh of instData.meshes) {
-            rw.gfx.destroyIndexBuffer(mesh.indexBuffer);
+            rw.gfx.destroyBuffer(mesh.indexBuffer);
         }
 
-        rw.gfx.destroyVertexBuffer(instData.vertexBuffer);
+        rw.gfx.destroyBuffer(instData.vertexBuffer);
 
         atomic.geometry.instanceData = undefined;
     }

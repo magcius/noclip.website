@@ -1,12 +1,12 @@
 import { mat4, ReadonlyVec3, vec3 } from "gl-matrix";
 import { makeBackbufferDescSimple, makeAttachmentClearDescriptor, opaqueBlackFullClearRenderPassDescriptor } from "../../gfx/helpers/RenderGraphHelpers.js";
-import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBuffer, GfxBufferUsage, GfxChannelWriteMask, GfxCompareMode, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxMegaStateDescriptor, GfxMipFilterMode, GfxProgram, GfxTexFilterMode, GfxTexture, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxWrapMode, makeTextureDescriptor2D } from "../../gfx/platform/GfxPlatform.js";
+import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxChannelWriteMask, GfxCompareMode, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxMegaStateDescriptor, GfxMipFilterMode, GfxProgram, GfxSamplerDescriptor, GfxTexFilterMode, GfxTexture, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxWrapMode, makeTextureDescriptor2D } from "../../gfx/platform/GfxPlatform.js";
 import { GfxrAttachmentSlot } from "../../gfx/render/GfxRenderGraph.js";
 import { GfxRenderHelper } from "../../gfx/render/GfxRenderHelper.js";
 import { GfxRenderInst, GfxRenderInstList } from "../../gfx/render/GfxRenderInstManager.js";
 import { SceneContext } from "../../SceneBase.js";
 import { ViewerRenderInput } from "../../viewer.js";
-import { RwAlphaTestFunction, RwBlendFunction, RwCamera, RwCullMode, RwRasterFormat, RwTexture, RwTextureAddressMode, RwTextureFilterMode } from "./rwcore.js";
+import { RwAlphaTestFunction, RwBlendFunction, RwCamera, RwCullMode, RwRaster, RwRasterFormat, RwTextureAddressMode, RwTextureFilterMode } from "./rwcore.js";
 import { makeStaticDataBuffer } from "../../gfx/helpers/BufferHelpers.js";
 import { convertToTriangleIndexBuffer, filterDegenerateTriangleIndexBuffer, GfxTopology } from "../../gfx/helpers/TopologyHelpers.js";
 import { makeMegaState } from "../../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
@@ -214,13 +214,16 @@ interface RwGfxProgramInfo {
 
 export interface RwGfxVertexBuffer {
     buffer: GfxBuffer;
+    data: Float32Array;
+    vertexCount: number;
     descriptors: GfxVertexBufferDescriptor[];
 }
 
 export interface RwGfxIndexBuffer {
     buffer: GfxBuffer;
-    descriptor: GfxIndexBufferDescriptor;
+    data: Uint16Array;
     indexCount: number;
+    descriptor: GfxIndexBufferDescriptor;
 }
 
 export interface RwGfxRaster {
@@ -267,13 +270,34 @@ function convertRwTextureFilterModeMip(filter: RwTextureFilterMode): GfxMipFilte
     }
 }
 
+function convertGfxFilterModes(texFilter: GfxTexFilterMode, mipFilter: GfxMipFilterMode): RwTextureFilterMode {
+    switch (texFilter | (mipFilter << 8)) {
+    case (GfxTexFilterMode.Point | (GfxMipFilterMode.NoMip << 8)):      return RwTextureFilterMode.NEAREST;
+    case (GfxTexFilterMode.Bilinear | (GfxMipFilterMode.NoMip << 8)):   return RwTextureFilterMode.LINEAR;
+    case (GfxTexFilterMode.Point | (GfxMipFilterMode.Nearest << 8)):    return RwTextureFilterMode.MIPNEAREST;
+    case (GfxTexFilterMode.Bilinear | (GfxMipFilterMode.Nearest << 8)): return RwTextureFilterMode.MIPLINEAR;
+    case (GfxTexFilterMode.Point | (GfxMipFilterMode.Linear << 8)):     return RwTextureFilterMode.LINEARMIPNEAREST;
+    case (GfxTexFilterMode.Bilinear | (GfxMipFilterMode.Linear << 8)):  return RwTextureFilterMode.LINEARMIPLINEAR;
+    default:                                                            return RwTextureFilterMode.NEAREST;
+    }
+}
+
 function convertRwTextureAddressMode(address: RwTextureAddressMode): GfxWrapMode {
     switch (address) {
-    case RwTextureAddressMode.WRAP:             return GfxWrapMode.Repeat;
-    case RwTextureAddressMode.MIRROR:           return GfxWrapMode.Mirror;
-    case RwTextureAddressMode.CLAMP:            return GfxWrapMode.Clamp;
-    case RwTextureAddressMode.BORDER:           return GfxWrapMode.Clamp; // unsupported
-    default:                                    return GfxWrapMode.Repeat;
+    case RwTextureAddressMode.WRAP:   return GfxWrapMode.Repeat;
+    case RwTextureAddressMode.MIRROR: return GfxWrapMode.Mirror;
+    case RwTextureAddressMode.CLAMP:  return GfxWrapMode.Clamp;
+    case RwTextureAddressMode.BORDER: return GfxWrapMode.Clamp; // unsupported
+    default:                          return GfxWrapMode.Repeat;
+    }
+}
+
+function convertGfxWrapMode(wrap: GfxWrapMode): RwTextureAddressMode {
+    switch (wrap) {
+    case GfxWrapMode.Repeat: return RwTextureAddressMode.WRAP;
+    case GfxWrapMode.Mirror: return RwTextureAddressMode.MIRROR;
+    case GfxWrapMode.Clamp:  return RwTextureAddressMode.CLAMP;
+    default:                 return RwTextureAddressMode.WRAP;
     }
 }
 
@@ -351,7 +375,8 @@ export class RwGfx {
     private renderInstList = new GfxRenderInstList();
     private megaState: Partial<GfxMegaStateDescriptor> = makeMegaState();
     private programs = new Map<number, RwGfxProgramInfo>();
-    private inputLayout: GfxInputLayout;
+    private inputLayoutNoIndex: GfxInputLayout;
+    private inputLayoutIndexed: GfxInputLayout;
 
     private clearColor = colorNewCopy(TransparentBlack);
 
@@ -363,8 +388,16 @@ export class RwGfx {
     private texCoordArrayEnabled = false;
     private colorArrayEnabled = false;
 
-    private texture: RwTexture | null = null;
+    private textureRaster: RwRaster | null = null;
     private textureMapping = nArray(1, () => new TextureMapping());
+
+    private samplerDescriptor: GfxSamplerDescriptor = {
+        magFilter: GfxTexFilterMode.Point,
+        minFilter: GfxTexFilterMode.Point,
+        mipFilter: GfxMipFilterMode.NoMip,
+        wrapS: GfxWrapMode.Repeat,
+        wrapT: GfxWrapMode.Repeat,
+    };
 
     private fogEnabled = false;
     private fogStart = 0;
@@ -386,7 +419,13 @@ export class RwGfx {
         this.renderHelper = new GfxRenderHelper(device, context);
         this.viewerInput = context.viewerInput;
 
-        this.inputLayout = this.renderHelper.renderCache.createInputLayout({
+        this.inputLayoutNoIndex = this.renderHelper.renderCache.createInputLayout({
+            indexBufferFormat: null,
+            vertexAttributeDescriptors: RwGfxProgram.vertexAttributeDescriptors,
+            vertexBufferDescriptors: RwGfxProgram.vertexBufferDescriptors
+        });
+
+        this.inputLayoutIndexed = this.renderHelper.renderCache.createInputLayout({
             indexBufferFormat: GfxFormat.U16_R,
             vertexAttributeDescriptors: RwGfxProgram.vertexAttributeDescriptors,
             vertexBufferDescriptors: RwGfxProgram.vertexBufferDescriptors
@@ -454,13 +493,13 @@ export class RwGfx {
     }
 
     public createVertexBuffer(vertices: Float32Array, normals?: Float32Array, colors?: Float32Array, texCoords?: Float32Array): RwGfxVertexBuffer {
-        const numVerts = vertices.length / 3;
+        const vertexCount = vertices.length / 3;
 
         const attrCount = 3 + 3 + 4 + 2; // Position + Normal + Color + TexCoord
-        const data = new Float32Array(attrCount * numVerts);
+        const data = new Float32Array(attrCount * vertexCount);
 
         let offs = 0, voff = 0, noff = 0, coff = 0, toff = 0;
-        for (let i = 0; i < numVerts; i++) {
+        for (let i = 0; i < vertexCount; i++) {
             data[offs++] = vertices[voff++];
             data[offs++] = vertices[voff++];
             data[offs++] = vertices[voff++];
@@ -499,11 +538,48 @@ export class RwGfx {
         const buffer = makeStaticDataBuffer(this.device, GfxBufferUsage.Vertex, data.buffer);
         const descriptors = [{ buffer, byteOffset: 0 }];
 
-        return { buffer, descriptors };
+        return { buffer, data, vertexCount, descriptors };
     }
 
-    public destroyVertexBuffer(buffer: RwGfxVertexBuffer) {
-        this.device.destroyBuffer(buffer.buffer);
+    public createDynamicVertexBuffer(vertexCount: number): RwGfxVertexBuffer {
+        const wordCount = vertexCount * 12;
+        const buffer = this.device.createBuffer(wordCount, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Dynamic);
+        const data = new Float32Array(wordCount);
+        const descriptors = [{ buffer, byteOffset: 0 }];
+
+        return { buffer, data, vertexCount, descriptors };
+    }
+
+    public uploadVertexBuffer(buffer: RwGfxVertexBuffer) {
+        this.device.uploadBufferData(buffer.buffer, 0, new Uint8Array(buffer.data.buffer), 0, buffer.vertexCount * 12*4);
+    }
+
+    public fillVertexPosition(buffer: RwGfxVertexBuffer, index: number, x: number, y: number, z: number) {
+        const offs = index * 12;
+        buffer.data[offs+0] = x;
+        buffer.data[offs+1] = y;
+        buffer.data[offs+2] = z;
+    }
+
+    public fillVertexNormal(buffer: RwGfxVertexBuffer, index: number, x: number, y: number, z: number) {
+        const offs = index * 12;
+        buffer.data[offs+3] = x;
+        buffer.data[offs+4] = y;
+        buffer.data[offs+5] = z;
+    }
+
+    public fillVertexColor(buffer: RwGfxVertexBuffer, index: number, r: number, g: number, b: number, a: number) {
+        const offs = index * 12;
+        buffer.data[offs+6] = r;
+        buffer.data[offs+7] = g;
+        buffer.data[offs+8] = b;
+        buffer.data[offs+9] = a;
+    }
+
+    public fillVertexTexCoord(buffer: RwGfxVertexBuffer, index: number, u: number, v: number) {
+        const offs = index * 12;
+        buffer.data[offs+10] = u;
+        buffer.data[offs+11] = v;
     }
 
     public createIndexBuffer(indices: Uint16Array): RwGfxIndexBuffer {
@@ -513,10 +589,10 @@ export class RwGfx {
         const descriptor = { buffer, byteOffset: 0 };
         const indexCount = data.length;
 
-        return { buffer, descriptor, indexCount };
+        return { buffer, data, descriptor, indexCount };
     }
 
-    public destroyIndexBuffer(buffer: RwGfxIndexBuffer) {
+    public destroyBuffer(buffer: RwGfxVertexBuffer | RwGfxIndexBuffer) {
         this.device.destroyBuffer(buffer.buffer);
     }
 
@@ -689,12 +765,38 @@ export class RwGfx {
         return this.colorArrayEnabled;
     }
 
-    public setTexture(texture: RwTexture | null) {
-        this.texture = texture;
+    public setTextureRaster(raster: RwRaster | null) {
+        this.textureRaster = raster;
     }
 
-    public getTexture(): RwTexture | null {
-        return this.texture;
+    public getTextureRaster(): RwRaster | null {
+        return this.textureRaster;
+    }
+
+    public setTextureFilter(filter: RwTextureFilterMode) {
+        this.samplerDescriptor.magFilter = convertRwTextureFilterMode(filter);
+        this.samplerDescriptor.minFilter = this.samplerDescriptor.magFilter;
+        this.samplerDescriptor.mipFilter = convertRwTextureFilterModeMip(filter);
+    }
+
+    public getTextureFilter() {
+        return convertGfxFilterModes(this.samplerDescriptor.magFilter, this.samplerDescriptor.mipFilter);
+    }
+
+    public setTextureAddressU(address: RwTextureAddressMode) {
+        this.samplerDescriptor.wrapS = convertRwTextureAddressMode(address);
+    }
+
+    public getTextureAddressU() {
+        return convertGfxWrapMode(this.samplerDescriptor.wrapS);
+    }
+
+    public setTextureAddressV(address: RwTextureAddressMode) {
+        this.samplerDescriptor.wrapT = convertRwTextureAddressMode(address);
+    }
+
+    public getTextureAddressV() {
+        return convertGfxWrapMode(this.samplerDescriptor.wrapT);
     }
 
     public enableFog() {
@@ -864,11 +966,30 @@ export class RwGfx {
         }
     }
 
+    public drawArrays(vertexBuffer: RwGfxVertexBuffer) {
+        const renderInst = this.renderHelper.renderInstManager.newRenderInst();
+
+        renderInst.setUniformBuffer(this.renderHelper.uniformBuffer);
+        renderInst.setVertexInput(this.inputLayoutNoIndex, vertexBuffer.descriptors, null);
+        renderInst.setDrawCount(vertexBuffer.vertexCount);
+        renderInst.setMegaStateFlags(this.megaState);
+
+        const programInfo = this.getProgramInfo();
+        renderInst.setGfxProgram(programInfo.gfxProgram);
+        renderInst.setBindingLayouts(RwGfxProgram.bindingLayouts);
+
+        this.fillUniformBuffer(renderInst, programInfo.program.ub_SceneParamsSIZE);
+
+        this.bindTexture(renderInst);
+
+        this.renderInstList.submitRenderInst(renderInst);
+    }
+
     public drawElements(vertexBuffer: RwGfxVertexBuffer, indexBuffer: RwGfxIndexBuffer) {
         const renderInst = this.renderHelper.renderInstManager.newRenderInst();
 
         renderInst.setUniformBuffer(this.renderHelper.uniformBuffer);
-        renderInst.setVertexInput(this.inputLayout, vertexBuffer.descriptors, indexBuffer.descriptor);
+        renderInst.setVertexInput(this.inputLayoutIndexed, vertexBuffer.descriptors, indexBuffer.descriptor);
         renderInst.setDrawCount(indexBuffer.indexCount);
         renderInst.setMegaStateFlags(this.megaState);
 
@@ -888,7 +1009,7 @@ export class RwGfx {
         if (this.normalArrayEnabled) stateMask |= 0x1;
         if (this.texCoordArrayEnabled) stateMask |= 0x2;
         if (this.colorArrayEnabled) stateMask |= 0x4;
-        if (this.texture) stateMask |= 0x8;
+        if (this.textureRaster) stateMask |= 0x8;
         if (this.fogEnabled) stateMask |= 0x10;
         if (this.lightingEnabled) stateMask |= 0x20;
         if (this.alphaTestEnabled) stateMask |= 0x40;
@@ -906,7 +1027,7 @@ export class RwGfx {
             useNormalArray: this.normalArrayEnabled,
             useColorArray: this.colorArrayEnabled,
             useTextureCoordArray: this.texCoordArrayEnabled,
-            useTexture: (this.texture != null),
+            useTexture: (this.textureRaster != null),
             useFog: this.fogEnabled,
             useLighting: this.lightingEnabled,
             useAlphaTest: this.alphaTestEnabled,
@@ -960,25 +1081,13 @@ export class RwGfx {
     }
 
     private bindTexture(renderInst: GfxRenderInst) {
-        if (this.texture && this.texture.raster && this.texture.raster.gfxRaster.gfxTexture) {
+        if (this.textureRaster && this.textureRaster.gfxRaster.gfxTexture) {
             const mapping = this.textureMapping[0];
-            mapping.width = this.texture.raster.width;
-            mapping.height = this.texture.raster.height;
+            mapping.width = this.textureRaster.width;
+            mapping.height = this.textureRaster.height;
             mapping.flipY = false;
-            mapping.gfxTexture = this.texture.raster.gfxRaster.gfxTexture;
-
-            const texFilter = convertRwTextureFilterMode(this.texture.filter);
-            const mipFilter = convertRwTextureFilterModeMip(this.texture.filter);
-            const wrapS = convertRwTextureAddressMode(this.texture.addressingU);
-            const wrapT = convertRwTextureAddressMode(this.texture.addressingV);
-
-            mapping.gfxSampler = this.renderHelper.renderCache.createSampler({
-                magFilter: texFilter,
-                minFilter: texFilter,
-                mipFilter: mipFilter,
-                wrapS: wrapS,
-                wrapT: wrapT,
-            });
+            mapping.gfxTexture = this.textureRaster.gfxRaster.gfxTexture;
+            mapping.gfxSampler = this.renderHelper.renderCache.createSampler(this.samplerDescriptor);
 
             renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
         }
