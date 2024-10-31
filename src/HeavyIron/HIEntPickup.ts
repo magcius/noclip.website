@@ -1,5 +1,5 @@
 import { mat4 } from "gl-matrix";
-import { HIEnt } from "./HIEnt.js";
+import { HIEnt, HIEntAsset } from "./HIEnt.js";
 import { HIModelInstance } from "./HIModel.js";
 import { HIGame, HIScene } from "./HIScene.js";
 import { RwEngine, RwStream } from "./rw/rwcore.js";
@@ -52,7 +52,7 @@ export class HIEntPickup extends HIEnt {
     public pickupAsset: HIEntPickupAsset;
 
     constructor(stream: RwStream, scene: HIScene) {
-        super(stream, scene);
+        super(new HIEntAsset(stream, scene.game), scene);
         this.pickupAsset = new HIEntPickupAsset(stream);
         this.readLinks(stream);
 

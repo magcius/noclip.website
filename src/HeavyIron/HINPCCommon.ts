@@ -1,5 +1,5 @@
 import { colorFromRGBA } from "../Color.js";
-import { HIEnt } from "./HIEnt.js";
+import { HIEnt, HIEntAsset } from "./HIEnt.js";
 import { HIModelInstance, HIPipeFlags } from "./HIModel.js";
 import { HIScene } from "./HIScene.js";
 import { RwBlendFunction, RwStream } from "./rw/rwcore.js";
@@ -26,7 +26,7 @@ export class HINPCCommon extends HIEnt {
     public npcAsset: HIEntNPCAsset;
 
     constructor(stream: RwStream, scene: HIScene) {
-        super(stream, scene);
+        super(new HIEntAsset(stream, scene.game), scene);
         this.npcAsset = new HIEntNPCAsset(stream);
         this.readLinks(stream);
         this.parseModelInfo(this.entAsset.modelInfoID, scene);

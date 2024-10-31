@@ -1,4 +1,4 @@
-import { HIEnt } from "./HIEnt.js";
+import { HIEnt, HIEntAsset } from "./HIEnt.js";
 import { HIEntMotionAsset } from "./HIEntMotion.js";
 import { HIEvent } from "./HIEvent.js";
 import { HIScene } from "./HIScene.js";
@@ -70,7 +70,7 @@ export class HIPlatform extends HIEnt {
     public motionAsset: HIEntMotionAsset;
 
     constructor(stream: RwStream, scene: HIScene) {
-        super(stream, scene);
+        super(new HIEntAsset(stream, scene.game), scene);
         this.platformAsset = new HIPlatformAsset(stream);
         this.motionAsset = new HIEntMotionAsset(stream, scene.game);
         this.readLinks(stream);

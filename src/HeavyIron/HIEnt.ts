@@ -1,5 +1,5 @@
 import { mat4, vec3 } from "gl-matrix";
-import { HIBase, HIBaseFlags } from "./HIBase.js";
+import { HIBase, HIBaseAsset, HIBaseFlags } from "./HIBase.js";
 import { HIGame, HIScene } from "./HIScene.js";
 import { HIModelAssetInfo, HIModelInstance } from "./HIModel.js";
 import { RwEngine, RwStream } from "./rw/rwcore.js";
@@ -10,7 +10,15 @@ export const enum HIEntFlags {
     Visible = 0x1
 }
 
-export class HIEntAsset {
+export const enum HIEntMoreFlags {
+    PreciseColl = 0x2,
+    Throwable = 0x8,
+    Hittable = 0x10,
+    AnimColl = 0x20,
+    LedgeGrab = 0x80
+}
+
+export class HIEntAsset extends HIBaseAsset {
     public flags: number;
     public subtype: number;
     public pflags: number;
@@ -27,39 +35,41 @@ export class HIEntAsset {
     public modelInfoID: number;
     public animListID: number;
 
-    constructor(stream: RwStream, game: HIGame) {
-        this.flags = stream.readUint8();
-        this.subtype = stream.readUint8();
-        this.pflags = stream.readUint8();
-        this.moreFlags = stream.readUint8();
-        if (game === HIGame.BFBB) {
-            stream.pos += 4; // padding
+    constructor(stream?: RwStream, game?: HIGame) {
+        super(stream);
+
+        if (stream) {
+            this.flags = stream.readUint8();
+            this.subtype = stream.readUint8();
+            this.pflags = stream.readUint8();
+            this.moreFlags = stream.readUint8();
+            if (game === HIGame.BFBB) {
+                stream.pos += 4; // padding
+            }
+            this.surfaceID = stream.readUint32();
+            this.ang = stream.readVec3();
+            this.pos = stream.readVec3();
+            this.scale = stream.readVec3();
+            this.redMult = stream.readFloat();
+            this.greenMult = stream.readFloat();
+            this.blueMult = stream.readFloat();
+            this.seeThru = stream.readFloat();
+            this.seeThruSpeed = stream.readFloat();
+            this.modelInfoID = stream.readUint32();
+            this.animListID = stream.readUint32();
         }
-        this.surfaceID = stream.readUint32();
-        this.ang = stream.readVec3();
-        this.pos = stream.readVec3();
-        this.scale = stream.readVec3();
-        this.redMult = stream.readFloat();
-        this.greenMult = stream.readFloat();
-        this.blueMult = stream.readFloat();
-        this.seeThru = stream.readFloat();
-        this.seeThruSpeed = stream.readFloat();
-        this.modelInfoID = stream.readUint32();
-        this.animListID = stream.readUint32();
     }
 }
 
 export abstract class HIEnt extends HIBase {
-    public entAsset: HIEntAsset;
     public flags: number;
     public moreFlags: number;
     public subType: number;
     public model: HIModelInstance | null = null;
     public lightKit: HILightKit | null = null;
 
-    constructor(stream: RwStream, scene: HIScene) {
-        super(stream, scene);
-        this.entAsset = new HIEntAsset(stream, scene.game);
+    constructor(public entAsset: HIEntAsset, scene: HIScene) {
+        super(entAsset, scene);
 
         this.flags = this.entAsset.flags;
         this.moreFlags = this.entAsset.moreFlags;

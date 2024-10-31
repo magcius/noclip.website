@@ -1,4 +1,4 @@
-import { HIEnt } from "./HIEnt.js";
+import { HIEnt, HIEntAsset } from "./HIEnt.js";
 import { HIEntMotionAsset } from "./HIEntMotion.js";
 import { HIGame, HIScene } from "./HIScene.js";
 import { RwEngine, RwStream } from "./rw/rwcore.js";
@@ -31,7 +31,7 @@ export class HIEntButton extends HIEnt {
     public motionAsset: HIEntMotionAsset;
 
     constructor(stream: RwStream, scene: HIScene) {
-        super(stream, scene);
+        super(new HIEntAsset(stream, scene.game), scene);
         this.buttonAsset = new HIEntButtonAsset(stream);
         this.motionAsset = new HIEntMotionAsset(stream, scene.game);
         this.readLinks(stream);

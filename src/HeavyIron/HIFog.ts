@@ -1,5 +1,5 @@
 import { Color } from "../Color.js";
-import { HIBase } from "./HIBase.js";
+import { HIBase, HIBaseAsset } from "./HIBase.js";
 import { HIEvent } from "./HIEvent.js";
 import { HIScene } from "./HIScene.js";
 import { RwStream } from "./rw/rwcore.js";
@@ -29,7 +29,7 @@ export class HIFog extends HIBase {
     public fogAsset: HIFogAsset;
 
     constructor(stream: RwStream, scene: HIScene) {
-        super(stream, scene);
+        super(new HIBaseAsset(stream), scene);
         this.fogAsset = new HIFogAsset(stream);
         this.readLinks(stream);
     }

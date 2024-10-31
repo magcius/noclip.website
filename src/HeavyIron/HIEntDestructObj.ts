@@ -1,4 +1,4 @@
-import { HIEnt } from "./HIEnt.js";
+import { HIEnt, HIEntAsset } from "./HIEnt.js";
 import { HIScene } from "./HIScene.js";
 import { RwStream } from "./rw/rwcore.js";
 
@@ -43,7 +43,7 @@ export class HIEntDestructObj extends HIEnt {
     public destructAsset: HIEntDestructObjAsset;
 
     constructor(stream: RwStream, scene: HIScene) {
-        super(stream, scene);
+        super(new HIEntAsset(stream, scene.game), scene);
         this.destructAsset = new HIEntDestructObjAsset(stream);
         this.readLinks(stream);
         this.parseModelInfo(this.entAsset.modelInfoID, scene);

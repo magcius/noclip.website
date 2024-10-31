@@ -31,6 +31,9 @@ import { HINPCCommon } from "./HINPCCommon.js";
 import { HIEntPlayer, HIEntPlayerBFBB, HIEntPlayerTSSM } from "./HIEntPlayer.js";
 import { HIAssetPickupTable, HIEntPickup, HIEntPickupManager } from "./HIEntPickup.js";
 import { HILOD } from "./HILOD.js";
+import { HIMarkerAsset } from "./HIMarkerAsset.js";
+import { HIDynAsset } from "./HIDynAsset.js";
+import { HIEntTeleportBox } from "./HIEntTeleportBox.js";
 
 export const enum HIGame {
     BFBBBeta,
@@ -155,6 +158,7 @@ export class HIScene implements SceneGfx {
     public models = new Map<number, RpClump>();
     public modelInfos = new Map<number, HIModelAssetInfo>();
     public lightKits = new Map<number, HILightKit>();
+    public markers = new Map<number, HIMarkerAsset>();
     public env: HIEnv;
     public camera: HICamera;
     public player: HIEntPlayer;
@@ -297,6 +301,9 @@ export class HIScene implements SceneGfx {
                             jsp = new JSP();
                         }
                         break;
+                    case HIAssetType.MRKR:
+                        this.markers.set(asset.id, new HIMarkerAsset(new RwStream(asset.data)));
+                        break;
                     case HIAssetType.MINF:
                         this.modelInfos.set(asset.id, new HIModelAssetInfo(new RwStream(asset.data)));
                         break;
@@ -332,6 +339,17 @@ export class HIScene implements SceneGfx {
                     case HIAssetType.DSTR:
                         this.addEnt(new HIEntDestructObj(new RwStream(asset.data), this));
                         break;
+                    case HIAssetType.DYNA:
+                    {
+                        const stream = new RwStream(asset.data);
+                        const dynAsset = new HIDynAsset(stream);
+                        switch (dynAsset.type) {
+                        case strHash("game_object:Teleport"):
+                            this.addEnt(new HIEntTeleportBox(dynAsset, stream, this));
+                            break;
+                        }
+                        break;
+                    }
                     case HIAssetType.ENV:
                         this.env = new HIEnv(new RwStream(asset.data), this, jsps);
                         this.addBase(this.env);

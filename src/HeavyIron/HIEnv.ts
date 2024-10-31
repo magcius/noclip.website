@@ -1,4 +1,4 @@
-import { HIBase } from "./HIBase.js";
+import { HIBase, HIBaseAsset } from "./HIBase.js";
 import { HIScene } from "./HIScene.js";
 import { JSP } from "./JSP.js";
 import { RwBlendFunction, RwEngine, RwStream } from "./rw/rwcore.js";
@@ -43,7 +43,7 @@ export class HIEnv extends HIBase {
     public envAsset: HIEnvAsset;
     
     constructor(stream: RwStream, scene: HIScene, public jsps: JSP[]) {
-        super(stream, scene);
+        super(new HIBaseAsset(stream), scene);
         this.envAsset = new HIEnvAsset(stream);
         this.readLinks(stream);
     }
