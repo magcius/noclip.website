@@ -1102,6 +1102,18 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             throw "whoops";
         }
 
+        // Workaround for https://github.com/gfx-rs/naga/issues/1355
+        for (const depthTextureName of ['u_TextureFramebufferDepth']) {
+            if (!code.includes(depthTextureName)) continue;
+            code = code.replace(`var T_${depthTextureName}: texture_2d<f32>;`, `var T_${depthTextureName}: texture_depth_2d;`);
+            code = code.replace(new RegExp(`textureSample\\\(T_${depthTextureName}(.*)\\\);$`, 'gm'), (sub, cap) => {
+                return `vec4<f32>(textureSample(T_${depthTextureName}${cap}), 0.0, 0.0, 0.0);`
+            });
+            code = code.replace(new RegExp(`textureLoad\\\(T_${depthTextureName}(.*)\\\);$`, 'gm'), (sub, cap) => {
+                return `vec4<f32>(textureLoad(T_${depthTextureName}${cap}), 0.0, 0.0, 0.0);`
+            });
+        }
+
         const shaderModule = this.device.createShaderModule({ code });
         const stage = { module: shaderModule, entryPoint: 'main' };
         if (IS_DEVELOPMENT) {
