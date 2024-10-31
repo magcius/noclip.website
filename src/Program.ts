@@ -5,7 +5,7 @@ import { GfxVendorInfo, GfxProgram, GfxDevice } from "./gfx/platform/GfxPlatform
 import { preprocessShader_GLSL } from "./gfx/shaderc/GfxShaderCompiler.js";
 
 export class DeviceProgram {
-    public name: string = '(unnamed)';
+    public name: string = '(unnamed DeviceProgram)';
 
     // Compiled program.
     public preprocessedVert: string = '';
@@ -63,6 +63,10 @@ export class DeviceProgram {
     public associate(device: GfxDevice, program: GfxProgram): void {
         this._gfxDevice = device;
         this._gfxProgram = program;
+
+        if (this.name === '(unnamed DeviceProgram)')
+            this.name = this.constructor.name;
+        this._gfxDevice.setResourceName(program, this.name);
     }
 
     private _editShader(n: 'vert' | 'frag' | 'both') {
