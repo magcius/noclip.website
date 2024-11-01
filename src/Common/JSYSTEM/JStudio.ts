@@ -1,9 +1,11 @@
 // Nintendo's cutscene framework. Seems very over-engineered.
 
-import { ReadonlyVec3, vec3 } from "gl-matrix";
+import { mat4, ReadonlyVec3, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../../ArrayBufferSlice";
 import { align, assert, nArray, readString } from "../../util.js";
 import { JSystemFileReaderHelper } from "./J3D/J3DLoader.js";
+import { GfxColor } from "../../gfx/platform/GfxPlatform";
+import { clamp } from "../../MathHelpers.js";
 
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
@@ -25,9 +27,25 @@ export namespace JStage {
         LIGHT = 0x5,
         FOG = 0x6,
     };
-    
-    export class TObject {
 
+    export abstract class TObject {
+        JSGFDisableFlag(flag: number): void { this.JSGSetFlag(this.JSGGetFlag() & ~flag); }
+        JSGFEnableFlag(flag: number): void { this.JSGSetFlag(this.JSGGetFlag() | flag); }
+
+        abstract JSGFGetType(): number;
+        JSGGetName(): boolean { return false; } // TODO: What's the point of this?
+        JSGGetFlag(): number { return 0; }
+        JSGSetFlag(flag: number): void { }
+        JSGGetData(unk0: number, data: Object, unk1: number): boolean { return false; }
+        JSGSetData(unk0: number, data: Object, unk1: number): void { }
+        JSGGetParent(parentDst: JStage.TObject, unk: { x: number }): void { }
+        JSGSetParent(parent: JStage.TObject, unk: number): void { }
+        JSGSetRelation(related: boolean, obj: JStage.TObject, unk: number): void { }
+        JSGFindNodeID(id: string): number { return -1; }
+        JSGGetNodeTransformation(unk: number, mtx: mat4): number {
+            mat4.identity(mtx);
+            return 0;
+        }
     }
 }
 
@@ -41,9 +59,16 @@ export interface TSystem {
 }
 
 //----------------------------------------------------------------------------------------------------------------------
+// Function Values
+//----------------------------------------------------------------------------------------------------------------------
+class TFunctionValue {
+    //@TODO
+}
+
+//----------------------------------------------------------------------------------------------------------------------
 // TVariableValue
 // Manages a single float, which will be updated each frame. This float can be updated using a variety of operations: 
-// - Immediate(x): Set to single value. On Update(y), set the value to a single number.  
+// - Immediate(x): Set to single value. On Update(y), set the value to a single number then do nothing on future frames.  
 // - Time(x): Increase over time. On Update(y), set the value to x * y * mAge.  
 // - FuncVal(x): Set to the output of a functor. See FVB for details.
 //
@@ -51,8 +76,77 @@ export interface TSystem {
 // functor will be called during update(). 
 //----------------------------------------------------------------------------------------------------------------------
 class TVariableValue {
-    public mValue: number;
-    public mAge: number; // In frames
+    private mValue: number;
+    private mAge: number; // In frames
+    private mUpdateFunc?: (varval: TVariableValue, x: number) => void;
+    private mUpdateParam: number | TFunctionValue;
+    // @TODO: TOutput
+
+    getValue() { return this.mValue; }
+    getValueU8() { return clamp(this.mValue, 0, 255); }
+
+    forward(frameCount: number) {
+        if (Number.MAX_VALUE - this.mAge <= frameCount) {
+            this.mAge = Number.MAX_VALUE;
+        } else {
+            this.mAge += frameCount;
+        }
+    }
+
+    update(secondsPerFrame: number, adaptor: TAdaptor): void {
+        if (this.mUpdateFunc) {
+            this.mUpdateFunc(this, secondsPerFrame);
+            // (* pOutput_)(mValue, param_1); // @TODO: Output
+        }
+    }
+
+    //--------------------
+    // Update functions
+    // Each frame, one of these (or nothing) will be called to update the value of each TVariableValue.
+    //--------------------
+    private static update_immediate(varval: TVariableValue, secondsPerFrame: number): void {
+        varval.mValue = (varval.mUpdateParam as number);
+        varval.mUpdateFunc = undefined;
+    }
+
+    private static update_time(varval: TVariableValue, secondsPerFrame: number): void {
+        varval.mValue = (varval.mUpdateParam as number) * (varval.mAge * secondsPerFrame);
+    }
+
+    private static update_functionValue(varval: TVariableValue, secondsPerFrame: number): void {
+        // @TODO:
+        debugger;
+    }
+
+    //--------------------
+    // Set Update functions
+    // Modify the function that will be called each Update()
+    //--------------------
+    public setValue_none() {
+        this.mUpdateFunc = undefined;
+    }
+
+    // Value will be set only on next update 
+    setValue_immediate(v: number): void {
+        this.mUpdateFunc = TVariableValue.update_immediate;
+        this.mAge = 0;
+        this.mUpdateParam = v;
+    }
+
+    // Value will be set to (mAge * v * x) each frame
+    setValue_time(v: number): void {
+        this.mUpdateFunc = TVariableValue.update_time;
+        this.mAge = 0;
+        this.mUpdateParam = v;
+    }
+
+    // Value will be the result of a Function Value each frame
+    setValue_functionValue(v: TFunctionValue): void {
+        this.mUpdateFunc = TVariableValue.update_functionValue;
+        this.mAge = 0;
+        this.mUpdateParam = v;
+    }
+
 
     // struct TOutput {
     //     virtual void operator()(f32, JStudio::TAdaptor*) const = 0;
@@ -64,37 +158,11 @@ class TVariableValue {
     //     void operator()(f32, JStudio::TAdaptor*) const;
     // };
 
-    // void update(f64, JStudio::TAdaptor*);
-    // static void update_immediate_(JStudio::TVariableValue*, f64);
-    // static void update_time_(JStudio::TVariableValue*, f64);
-    // static void update_functionValue_(JStudio::TVariableValue*, f64);
     // TVariableValue()
     //     : field_0x4(0)
     //     , field_0x8(NULL)
     //     , pOutput_(&soOutput_none_)
     // {
-    // }
-
-    // void setValue_immediate(f32 value) {
-    //     field_0x8 = &update_immediate_;
-    //     field_0x4 = 0;
-    //     field_0xc.val = value;
-    // }
-
-    //  void setValue_none() {
-    //     field_0x8 = NULL;
-    // }
-
-    // void setValue_time(f32 value) {
-    //     field_0x8 = &update_time_;
-    //     field_0x4 = 0;
-    //     field_0xc.val = value;
-    // }
-    
-    // void setValue_functionValue(TFunctionValue* value) {
-    //     field_0x8 = &update_functionValue_;
-    //     field_0x4 = 0;
-    //     field_0xc.fv = value;
     // }
 
     // f32 getValue() const { return mValue; }
@@ -151,30 +219,71 @@ const enum TEOperationData {
 abstract class TAdaptor {
     constructor(
         protected mCount: number,
-        protected mVariableValues = nArray(mCount, i => new TVariableValue() ),
+        protected mVariableValues = nArray(mCount, i => new TVariableValue()),
     ) { }
 
     abstract adaptor_do_prepare(): void;
     abstract adaptor_do_begin(): void;
     abstract adaptor_do_end(): void;
     abstract adaptor_do_update(frameCount: number): void;
+    abstract adaptor_do_data(unk0: Object, unk1: number, unk2: Object, unk3: number): void;
 
-    adaptor_setVariableValue(obj: STBObject, trackIdx: number, dataOp: TEOperationData, data: number, dataSize: number) {
-        const varval = this.mVariableValues[trackIdx];
+    // Set a single VariableValue update function, with the option of using FuncVals 
+    adaptor_setVariableValue(obj: STBObject, keyIdx: number, dataOp: TEOperationData, data: number | string) {
+        const varval = this.mVariableValues[keyIdx];
         const control = obj.mControl;
 
         switch (dataOp) {
-            // case TEOperationData.VOID: varval.setValue_none();
-            // case TEOperationData.IMMEDIATE: varval.setValue_immediate(data);
-            // case TEOperationData.TIME: varval.setValue_time(data);
-            // case TEOperationData.FUNCVALUE_NAME: varval.setValue_functionValue(control.getFunctionValue(data, dataSize)) //@TODO: Not support ATM because we're passing in data as a number instead of DataView (this is a string)
+            case TEOperationData.VOID: varval.setValue_none();
+            case TEOperationData.IMMEDIATE: varval.setValue_immediate(data as number);
+            case TEOperationData.TIME: varval.setValue_time(data as number);
+            // case TEOperationData.FUNCVALUE_NAME: varval.setValue_functionValue(control.getFunctionValue(data, dataSize))
             // case TEOperationData.FUNCVALUE_INDEX: varval.setValue_functionValue(control.getFunctionValue_index(data));
             default:
                 console.debug('Unsupported dataOp: ', dataOp);
+                debugger;
                 return;
         }
     }
 
+    // Immediately set 3 consecutive VariableValue update functions from a single vec3
+    adaptor_setVariableValue_Vec(startKeyIdx: number, data: vec3) {
+        this.mVariableValues[startKeyIdx + 0].setValue_immediate(data[0]);
+        this.mVariableValues[startKeyIdx + 1].setValue_immediate(data[1]);
+        this.mVariableValues[startKeyIdx + 2].setValue_immediate(data[2]);
+    }
+
+    // Get the current value of 3 consecutive VariableValues, as a vector. E.g. Camera position.
+    adaptor_getVariableValue_Vec(dst: vec3, startKeyIdx: number) {
+        dst[0] = this.mVariableValues[startKeyIdx + 0].getValue();
+        dst[1] = this.mVariableValues[startKeyIdx + 1].getValue();
+        dst[2] = this.mVariableValues[startKeyIdx + 2].getValue();
+    }
+
+    // Immediately set 4 consecutive VariableValue update functions from a single GXColor (4 bytes)
+    adaptor_setVariableValue_GXColor(startKeyIdx: number, data: GfxColor) {
+        debugger; // @TODO: Confirm that all uses of this always have consecutive keyIdxs. JStudio remaps them.
+        this.mVariableValues[startKeyIdx + 0].setValue_immediate(data.r);
+        this.mVariableValues[startKeyIdx + 1].setValue_immediate(data.g);
+        this.mVariableValues[startKeyIdx + 2].setValue_immediate(data.b);
+        this.mVariableValues[startKeyIdx + 4].setValue_immediate(data.a);
+    }
+
+    // Get the current value of 4 consecutive VariableValues, as a GXColor. E.g. Fog color.
+    adaptor_getVariableValue_GXColor(dst: GfxColor, startKeyIdx: number) {
+        dst.r = this.mVariableValues[startKeyIdx + 0].getValue();
+        dst.g = this.mVariableValues[startKeyIdx + 1].getValue();
+        dst.b = this.mVariableValues[startKeyIdx + 2].getValue();
+        dst.a = this.mVariableValues[startKeyIdx + 2].getValue();
+    }
+
+    adaptor_updateVariableValue(obj: STBObject, frameCount: number) {
+        const control = obj.mControl;
+        for (let vv of this.mVariableValues) {
+            vv.forward(frameCount);
+            vv.update(control.mSecondsPerFrame, this);
+        }
+    }
 }
 
 //     struct TSetVariableValue_immediate {
@@ -188,20 +297,6 @@ abstract class TAdaptor {
 //         f32 field_0x4;
 //     };
 //     typedef void (*setVarFunc)(JStudio::TAdaptor*, JStudio::TObject*, u32, void const*, u32);
-//     virtual ~TAdaptor() = 0;
-//     virtual void adaptor_do_prepare(const JStudio::TObject*);
-//     virtual void adaptor_do_begin(const JStudio::TObject*);
-//     virtual void adaptor_do_end(const JStudio::TObject*);
-//     virtual void adaptor_do_update(const JStudio::TObject*, u32);
-//     virtual void adaptor_do_data(const JStudio::TObject*, void const*, u32, void const*, u32);
-
-//     void adaptor_setVariableValue_n(JStudio::TObject*, u32 const*, u32, JStudio::data::TEOperationData, void const*, u32);
-//     void adaptor_setVariableValue_immediate(JStudio::TAdaptor::TSetVariableValue_immediate const*);
-//     void adaptor_setVariableValue_Vec(u32 const*, Vec const&);
-//     void adaptor_getVariableValue_Vec(Vec*, u32 const*) const;
-//     void adaptor_setVariableValue_GXColor(u32 const*, GXColor const&);
-//     void adaptor_getVariableValue_GXColor(GXColor*, u32 const*) const;
-//     void adaptor_updateVariableValue(JStudio::TObject*, u32);
 
 
 //     TVariableValue* adaptor_referVariableValue(u32 param_0) {
@@ -238,7 +333,7 @@ abstract class STBObject {
 
     constructor(control: TControl, blockObj: TBlockObject, adaptor: TAdaptor) {
         this.mControl = control;
-        this.mAdaptor = adaptor; 
+        this.mAdaptor = adaptor;
 
         this.mId = blockObj.id;
         this.mType = blockObj.type;
@@ -249,14 +344,14 @@ abstract class STBObject {
     }
 
     // These are intended to be overridden by subclasses 
-    abstract do_paragraph(view: DataView, dataSize: number, dataOffset: number, param: number): void;
+    abstract do_paragraph(file: Reader, dataSize: number, dataOffset: number, param: number): void;
     do_begin() { }
     do_end() { }
 
-    // Done updating this frame. Compute our variable data (i.e. interpolate) and forward to the game object.
-    do_wait(flags: number) {
-        // adaptor->adaptor_updateVariableValue(this, param_0); // @TODO:
-        this.mAdaptor.adaptor_do_update(flags);
+    // Done updating this frame. Compute our variable data (i.e. interpolate) and send to the game object.
+    do_wait(frameCount: number) {
+        this.mAdaptor.adaptor_updateVariableValue(this, frameCount);
+        this.mAdaptor.adaptor_do_update(frameCount);
     }
     // do_data(void const*, u32, void const*, u32) {}
 
@@ -372,11 +467,11 @@ abstract class STBObject {
                 byteIdx += 4;
                 while (byteIdx < this.pSequence_next) {
                     const para = parseParagraph(view, byteIdx);
-                    if (para.dataSize <= 0xff) {
-                        console.debug('Unsupported paragraph feature: ', para.params);
+                    if (para.type <= 0xff) {
+                        console.debug('Unsupported paragraph feature: ', para.type);
                         // process_paragraph_reserved_(para.type, para.content, para.param);
                     } else {
-                        this.do_paragraph(view, para.dataSize, para.dataOffset, para.params);
+                        this.do_paragraph(this.mData, para.dataSize, para.dataOffset, para.type);
                     }
                     byteIdx = para.nextOffset;
                 }
@@ -403,8 +498,8 @@ const enum Camera_Cmd {
     SET_TARGET_Y_POS = 0x001A,
     SET_TARGET_Z_POS = 0x001B,
     SET_TARGET_POS = 0x001C,
-    SET_UNK_0026 = 0x0026,
-    SET_UNK_0027 = 0x0027,
+    SET_PROJ_FOVY = 0x0026,
+    SET_VIEW_ROLL = 0x0027,
     SET_DIST_NEAR = 0x0028,
     SET_DIST_FAR = 0x0029,
     SET_DIST_NEAR_FAR = 0x002A,
@@ -417,8 +512,8 @@ const enum Camera_Track {
     TARGET_X_POS = 0x03,
     TARGET_Y_POS = 0x04,
     TARGET_Z_POS = 0x05,
-    UNK_0026 = 0x06,
-    UNK_0027 = 0x07,
+    PROJ_FOVY = 0x06,
+    VIEW_ROLL = 0x07,
     DIST_NEAR = 0x08,
     DIST_FAR = 0x09,
     CAMERA_TRACKS_MAX = 0x0A,
@@ -456,93 +551,99 @@ class TCameraAdaptor extends TAdaptor {
     ) { super(11); }
 
     adaptor_do_prepare(): void {
-
+        // @TODO: Setup output functions
     }
 
     adaptor_do_begin(): void {
-
+        // @TODO:
     }
 
     adaptor_do_end(): void {
-
+        this.mStageCam.JSGFDisableFlag(1);
     }
 
     adaptor_do_update(frameCount: number): void {
+        // @TODO:
+    }
 
+    adaptor_do_data(unk0: Object, unk1: number, unk2: Object, unk3: number): void {
+        // This is not used by TWW. Untested.
+        debugger;
+    }
+
+    // Custom adaptor functions. These can be called from within TCameraObject::do_paragraph()
+
+    adaptor_do_PARENT(dataOp: TEOperationData, data: number | string, unk0: number): void {
+        debugger;
+    }
+
+    adaptor_do_PARENT_NODE(dataOp: TEOperationData, data: number | string, unk0: number): void {
+        debugger;
+    }
+
+    adaptor_do_PARENT_ENABLE(dataOp: TEOperationData, data: number | string, unk0: number): void {
+        debugger;
     }
 }
 
 class TCameraObject extends STBObject {
     constructor(
-        control: TControl, 
-        blockObj: TBlockObject, 
+        control: TControl,
+        blockObj: TBlockObject,
         stageObj: JStage.TObject,
     ) { super(control, blockObj, new TCameraAdaptor(stageObj as TCamera)) }
 
-    override do_paragraph(view: DataView, dataSize: number, dataOffset: number, param: number): void {
-        const updateType = param & 0x1F;
+    override do_paragraph(file: Reader, dataSize: number, dataOffset: number, param: number): void {
+        const dataOp = (param & 0x1F) as TEOperationData;
         const cmdType = param >> 5;
 
-        const data = updateType == TEOperationData.FUNCVALUE_INDEX ?
-            view.getUint32(dataOffset) : view.getFloat32(dataOffset);
+        let keyCount = 1;
+        let keyIdx;
+        let data;
 
-        //     switch (cmdType) {
-        //         // Eye position
-        //         case Camera_Cmd.SET_EYE_X_POS:
-        //             mTracks[Camera_Track.EYE_X_POS].AddKey(data, curFrame, updateType);
-        //             break;
-        //         case Camera_Cmd.SET_EYE_Y_POS:
-        //             mTracks[Camera_Track.EYE_Y_POS].AddKey(data, curFrame, updateType);
-        //             break;
-        //         case Camera_Cmd.SET_EYE_Z_POS:
-        //             mTracks[Camera_Track.EYE_Z_POS].AddKey(data, curFrame, updateType);
-        //             break;
-        //         case Camera_Cmd.SET_EYE_POS:
-        //             mTracks[Camera_Track.EYE_X_POS].AddKey(data, curFrame, updateType);
-        //             mTracks[Camera_Track.EYE_Y_POS].AddKey(data, curFrame, updateType);
-        //             mTracks[Camera_Track.EYE_Z_POS].AddKey(data, curFrame, updateType);
-        //             break;
+        // Parse the data here instead of deferring to adaptor_setVariableValue, so we don't have to pass along `file`.
+        switch (dataOp) {
+            case TEOperationData.FUNCVALUE_INDEX: data = file.view.getUint32(dataOffset); break;
+            case TEOperationData.FUNCVALUE_NAME:
+                data = readString(file.buffer, dataOffset, dataSize);
+                console.warn('FUNCVALUE_NAME found! Remove this comment after testing');
+                debugger;
+                break;
+            default: data = file.view.getFloat32(dataOffset);
+        }
 
-        //         // Target position
-        //         case Camera_Cmd.SET_TARGET_X_POS:
-        //             mTracks[Camera_Track.TARGET_X_POS].AddKey(data, curFrame, updateType);
-        //             break;
-        //         case Camera_Cmd.Camera_Cmd.SET_TARGET_Y_POS:
-        //             mTracks[Camera_Track.TARGET_Y_POS].AddKey(data, curFrame, updateType);
-        //             break;
-        //         case Camera_Cmd.SET_TARGET_Z_POS:
-        //             mTracks[Camera_Track.TARGET_Z_POS].AddKey(data, curFrame, updateType);
-        //             break;
-        //         case Camera_Cmd.SET_TARGET_POS:
-        //             mTracks[Camera_Track.TARGET_X_POS].AddKey(data, curFrame, updateType);
-        //             mTracks[Camera_Track.TARGET_Y_POS].AddKey(data, curFrame, updateType);
-        //             mTracks[Camera_Track.TARGET_Z_POS].AddKey(data, curFrame, updateType);
-        //             break;
+        switch (cmdType) {
+            // Eye position
+            case Camera_Cmd.SET_EYE_X_POS: keyIdx = Camera_Track.EYE_X_POS; break;
+            case Camera_Cmd.SET_EYE_Z_POS: keyIdx = Camera_Track.EYE_Y_POS; break;
+            case Camera_Cmd.SET_EYE_Y_POS: keyIdx = Camera_Track.EYE_Z_POS; break;
+            case Camera_Cmd.SET_EYE_POS: keyCount = 3; keyIdx = Camera_Track.EYE_X_POS; break;
+                break;
 
-        //         // ?
-        //         case Camera_Cmd.SET_UNK_0026:
-        //             mTracks[Camera_Track.UNK_0026].AddKey(data, curFrame, updateType);
-        //             break;
-        //         case Camera_Cmd.SET_UNK_0027:
-        //             mTracks[Camera_Track.UNK_0027].AddKey(data, curFrame, updateType);
-        //             break;
+            // Target position
+            case Camera_Cmd.SET_TARGET_X_POS: keyIdx = Camera_Track.TARGET_X_POS; break;
+            case Camera_Cmd.SET_TARGET_Y_POS: keyIdx = Camera_Track.TARGET_Y_POS; break;
+            case Camera_Cmd.SET_TARGET_Z_POS: keyIdx = Camera_Track.TARGET_Z_POS; break;
+            case Camera_Cmd.SET_EYE_POS: keyCount = 3; keyIdx = Camera_Track.TARGET_X_POS; break;
 
-        //         // Near/far distance
-        //         case Camera_Cmd.SET_DIST_NEAR:
-        //             mTracks[Camera_Track.DIST_NEAR].AddKey(data, curFrame, updateType);
-        //             break;
-        //         case Camera_Cmd.SET_DIST_FAR:
-        //             mTracks[Camera_Track.DIST_FAR].AddKey(data, curFrame, updateType);
-        //             break;
-        //         case Camera_Cmd.SET_DIST_NEAR_FAR:
-        //             mTracks[Camera_Track.DIST_NEAR].AddKey(data, curFrame, updateType);
-        //             mTracks[Camera_Track.DIST_FAR].AddKey(data, curFrame, updateType);
-        //             break;
+            // Camera params
+            case Camera_Cmd.SET_PROJ_FOVY: keyIdx = Camera_Track.PROJ_FOVY; break;
+            case Camera_Cmd.SET_VIEW_ROLL: keyIdx = Camera_Track.VIEW_ROLL; break;
 
-        //         default:
-        //             console.debug('Unsupported TCamera update: ', cmdType, ' ', updateType);
-        //             break;
-        //     }
+            // Near/far distance
+            case Camera_Cmd.SET_DIST_NEAR: keyIdx = Camera_Track.DIST_NEAR; break;
+            case Camera_Cmd.SET_DIST_FAR: keyIdx = Camera_Track.DIST_FAR; break;
+            case Camera_Cmd.SET_EYE_POS: keyCount = 2; keyIdx = Camera_Track.DIST_NEAR; break;
+
+            default:
+                console.debug('Unsupported TCamera update: ', cmdType, ' ', dataOp);
+                debugger;
+                return;
+        }
+
+        for (let i = 0; i < keyCount; i++) {
+            this.mAdaptor.adaptor_setVariableValue(this, keyIdx + i, dataOp, data);
+        }
     }
 }
 
@@ -578,15 +679,9 @@ export abstract class TBlockObject {
     /* 0xC + align(id_size, 4) */ data: Reader;
 }
 
-// The "loader" which manages a key-value store of parameters for each object. Each frame these value are interpolated
-// and written to a corresponding TObject, where they can be read by the game.
-class TAdapter {
-
-}
-
 class TParagraph {
+    type: number;
     dataSize: number;
-    params: number;
     dataOffset: number;
     nextOffset: number;
 }
@@ -594,24 +689,24 @@ class TParagraph {
 function parseParagraph(view: DataView, byteIdx: number): TParagraph {
     // The top bit of the paragraph determines if the type and size are 16 bit (if set), or 32 (if not set)
     let dataSize = view.getUint16(byteIdx);
-    let params;
+    let type;
     let offset;
 
     if ((dataSize & 0x8000) == 0) {
         // 16 bit data
-        params = view.getUint16(byteIdx + 2);
+        type = view.getUint16(byteIdx + 2);
         offset = 4;
     } else {
         // 32 bit data
         dataSize = view.getUint32(byteIdx + 0) & ~0x80000000;
-        params = view.getUint32(byteIdx + 4);
+        type = view.getUint32(byteIdx + 4);
         offset = 8;
     }
 
     if (dataSize == 0) {
-        return { dataSize, params, dataOffset: 0, nextOffset: byteIdx + offset };
+        return { dataSize, type, dataOffset: 0, nextOffset: byteIdx + offset };
     } else {
-        return { dataSize, params, dataOffset: byteIdx + offset, nextOffset: byteIdx + offset + align(dataSize, 4) };
+        return { dataSize, type, dataOffset: byteIdx + offset, nextOffset: byteIdx + offset + align(dataSize, 4) };
     }
 }
 
@@ -630,10 +725,12 @@ class Reader {
 export class TControl {
     private mSystem: TSystem;
     private mObjects: STBObject[] = [];
+    public mSecondsPerFrame: number;
     public mIsSuspended = false;
 
     constructor(system: TSystem) {
         this.mSystem = system;
+        this.mSecondsPerFrame = 1 / 30.0; // @TODO: Allow the game to change this?
     }
 
     public forward(flags: number): number {
