@@ -75,7 +75,7 @@ class TVariableValue {
     private mAge: number; // In frames
     private mUpdateFunc?: (varval: TVariableValue, x: number) => void;
     private mUpdateParam: number | FVB.TFunctionValue | undefined;
-    // @TODO: TOutput
+    private mOutputFunc?: (val: number, adaptor: TAdaptor) => void;
 
     getValue() { return this.mValue; }
     getValueU8() { return clamp(this.mValue, 0, 255); }
@@ -91,7 +91,7 @@ class TVariableValue {
     update(secondsPerFrame: number, adaptor: TAdaptor): void {
         if (this.mUpdateFunc) {
             this.mUpdateFunc(this, secondsPerFrame);
-            // (* pOutput_)(mValue, param_1); // @TODO: Output
+            if (this.mOutputFunc) this.mOutputFunc(this.mValue, adaptor);
         }
     }
 
@@ -143,61 +143,14 @@ class TVariableValue {
         this.mUpdateParam = v;
     }
 
-
-    // struct TOutput {
-    //     virtual void operator()(f32, JStudio::TAdaptor*) const = 0;
-    //     virtual ~TOutput() = 0;
-    // };  // Size: 0x04
-
-    // struct TOutput_none_ : public TOutput {
-    //     ~TOutput_none_();
-    //     void operator()(f32, JStudio::TAdaptor*) const;
-    // };
-
-    // TVariableValue()
-    //     : field_0x4(0)
-    //     , field_0x8(NULL)
-    //     , pOutput_(&soOutput_none_)
-    // {
-    // }
-
-    // f32 getValue() const { return mValue; }
-
-    // template<typename T>
-    // T getValue_clamp() const {
-    //     f32 val = mValue;
-    //     if (val <= std::numeric_limits<T>::min()) {
-    //         return std::numeric_limits<T>::min();
-    //     } else if (val >= std::numeric_limits<T>::max()) {
-    //         return std::numeric_limits<T>::max();
-    //     }
-    //     return val;
-    // }
-    // u8 getValue_uint8() const { return getValue_clamp<u8>(); }
-
-    // void forward(u32 param_0) {
-    //     if (std::numeric_limits<u32>::max() - field_0x4 <= param_0) {
-    //         field_0x4 = std::numeric_limits<u32>::max();
-    //     } else {
-    //         field_0x4 += param_0;
-    //     }
-    // }
-
-    // inline void setOutput(const TOutput* output) {
-    //     pOutput_ = (output != NULL ? (TOutput*)output : (TOutput*)&soOutput_none_);
-    // }
-
-    // static TOutput_none_ soOutput_none_;
-
-    // /* 0x00 */ f32 mValue;
-    // /* 0x04 */ u32 field_0x4;
-    // /* 0x08 */ void (*field_0x8)(TVariableValue*, double);
-    // /* 0x0C */ union {
-    //     TFunctionValue* fv;
-    //     f32 val;
-    // } field_0xc;
-    // /* 0x10 */ TOutput* pOutput_;
+    //--------------------
+    // Set Output
+    //--------------------
+    setOutput(outputFunc?: (val: number, adaptor: TAdaptor) => void) {
+        this.mOutputFunc = outputFunc;
+    }
 }
+
 
 //----------------------------------------------------------------------------------------------------------------------
 // TAdaptor
@@ -485,6 +438,7 @@ abstract class STBObject {
 //----------------------------------------------------------------------------------------------------------------------
 // Camera
 //----------------------------------------------------------------------------------------------------------------------
+// TODO: Rename these Enums
 const enum Camera_Cmd {
     SET_EYE_X_POS = 0x0015,
     SET_EYE_Y_POS = 0x0016,
@@ -547,11 +501,26 @@ class TCameraAdaptor extends TAdaptor {
     ) { super(11); }
 
     adaptor_do_prepare(): void {
-        // @TODO: Setup output functions
+        this.mVariableValues[6].setOutput(this.mStageCam.JSGSetProjectionFovy);
+        this.mVariableValues[7].setOutput(this.mStageCam.JSGSetViewRoll);
+        this.mVariableValues[8].setOutput(this.mStageCam.JSGSetProjectionNear);
+        this.mVariableValues[9].setOutput(this.mStageCam.JSGSetProjectionFar);
     }
 
     adaptor_do_begin(): void {
-        // @TODO:
+        const camPos = scratchVec3a;
+        const targetPos = scratchVec3a;
+        this.mStageCam.JSGGetViewPosition(camPos);
+        this.mStageCam.JSGGetViewTargetPosition(targetPos);
+
+        // @TODO: Transform positions
+
+        this.adaptor_setVariableValue_Vec(Camera_Track.EYE_X_POS, camPos);
+        this.adaptor_setVariableValue_Vec(Camera_Track.TARGET_X_POS, targetPos);
+        this.mVariableValues[6].setValue_immediate(this.mStageCam.JSGGetProjectionFovy());
+        this.mVariableValues[7].setValue_immediate(this.mStageCam.JSGGetViewRoll());
+        this.mVariableValues[8].setValue_immediate(this.mStageCam.JSGGetProjectionNear());
+        this.mVariableValues[9].setValue_immediate(this.mStageCam.JSGGetProjectionFar());
     }
 
     adaptor_do_end(): void {
@@ -559,7 +528,16 @@ class TCameraAdaptor extends TAdaptor {
     }
 
     adaptor_do_update(frameCount: number): void {
-        // @TODO:
+        const camPos = scratchVec3a;
+        const targetPos = scratchVec3a;
+
+        this.adaptor_getVariableValue_Vec(camPos, Camera_Track.EYE_X_POS);
+        this.adaptor_getVariableValue_Vec(targetPos, Camera_Track.TARGET_X_POS);
+
+        // @TODO: Transform
+
+        this.mStageCam.JSGSetViewPosition(camPos);
+        this.mStageCam.JSGSetViewTargetPosition(targetPos);
     }
 
     adaptor_do_data(unk0: Object, unk1: number, unk2: Object, unk3: number): void {
@@ -638,7 +616,7 @@ class TCameraObject extends STBObject {
         }
 
         for (let i = 0; i < keyCount; i++) {
-            this.mAdaptor.adaptor_setVariableValue(this, keyIdx + i, dataOp, data);
+            this.mAdaptor.adaptor_setVariableValue(this, keyIdx + i, dataOp, (data as number) + i);
         }
     }
 }
@@ -1023,74 +1001,75 @@ namespace FVB {
             return this.interpFunc(t);
         }
 
+        // @TODO: Better way of accessing 2-word keys
         interpolateBSpline(t: number): number {
             const controlPoints = new Float64Array(4);
             const knotVector = new Float64Array(6);
-            controlPoints[1] = this.keys[this.curKeyIdx - 1];
-            controlPoints[2] = this.keys[this.curKeyIdx + 1];
-            knotVector[2] = this.keys[this.curKeyIdx + -2];
-            knotVector[3] = this.keys[this.curKeyIdx + 0];
+            controlPoints[1] = this.keys[this.curKeyIdx * 2 - 1];
+            controlPoints[2] = this.keys[this.curKeyIdx * 2 + 1];
+            knotVector[2] = this.keys[this.curKeyIdx * 2 + -2];
+            knotVector[3] = this.keys[this.curKeyIdx * 2 + 0];
 
             const keysBefore = this.curKeyIdx;
             const keysAfter = this.keyCount - this.curKeyIdx;
 
             switch (keysBefore) {
-                case 2:
+                case 1:
                     controlPoints[0] = 2.0 * controlPoints[1] - controlPoints[2];
-                    controlPoints[3] = this.keys[this.curKeyIdx + 3];
-                    knotVector[4] = this.keys[this.curKeyIdx + 2];
+                    controlPoints[3] = this.keys[this.curKeyIdx * 2 + 3];
+                    knotVector[4] = this.keys[this.curKeyIdx * 2 + 2];
                     knotVector[1] = 2.0 * knotVector[2] - knotVector[3];
                     knotVector[0] = 2.0 * knotVector[2] - knotVector[4];
                     switch (keysAfter) {
+                        case 1:
                         case 2:
-                        case 4:
                             knotVector[5] = 2.0 * knotVector[4] - knotVector[3];
                             break;
                         default:
-                            knotVector[5] = this.keys[this.curKeyIdx + 4];
+                            knotVector[5] = this.keys[this.curKeyIdx * 2 + 4];
                             break;
                     }
                     break;
-                case 4:
-                    controlPoints[0] = this.keys[this.curKeyIdx + -3];
-                    knotVector[1] = this.keys[this.curKeyIdx + -4];
+                case 2:
+                    controlPoints[0] = this.keys[this.curKeyIdx * 2 + -3];
+                    knotVector[1] = this.keys[this.curKeyIdx * 2 + -4];
                     knotVector[0] = 2.0 * knotVector[1] - knotVector[2];
                     switch (keysAfter) {
-                        case 2:
+                        case 1:
                             controlPoints[3] = 2.0 * controlPoints[2] - controlPoints[1];
                             knotVector[4] = 2.0 * knotVector[3] - knotVector[2];
                             knotVector[5] = 2.0 * knotVector[3] - knotVector[1];
                             break;
-                        case 4:
-                            controlPoints[3] = this.keys[this.curKeyIdx + 3];
-                            knotVector[4] = this.keys[this.curKeyIdx + 2];
+                        case 2:
+                            controlPoints[3] = this.keys[this.curKeyIdx * 2 + 3];
+                            knotVector[4] = this.keys[this.curKeyIdx * 2 + 2];
                             knotVector[5] = 2.0 * knotVector[4] - knotVector[3];
                             break;
                         default:
-                            controlPoints[3] = this.keys[this.curKeyIdx + 3];
-                            knotVector[4] = this.keys[this.curKeyIdx + 2];
-                            knotVector[5] = this.keys[this.curKeyIdx + 4];
+                            controlPoints[3] = this.keys[this.curKeyIdx * 2 + 3];
+                            knotVector[4] = this.keys[this.curKeyIdx * 2 + 2];
+                            knotVector[5] = this.keys[this.curKeyIdx * 2 + 4];
                     }
                     break;
                 default:
-                    controlPoints[0] = this.keys[this.curKeyIdx + -3];
-                    knotVector[1] = this.keys[this.curKeyIdx + -4];
-                    knotVector[0] = this.keys[this.curKeyIdx + -6];
+                    controlPoints[0] = this.keys[this.curKeyIdx * 2 + -3];
+                    knotVector[1] = this.keys[this.curKeyIdx * 2 + -4];
+                    knotVector[0] = this.keys[this.curKeyIdx * 2 + -6];
                     switch (keysAfter) {
-                        case 2:
+                        case 1:
                             controlPoints[3] = 2.0 * controlPoints[2] - controlPoints[1];
                             knotVector[4] = 2.0 * knotVector[3] - knotVector[2];
                             knotVector[5] = 2.0 * knotVector[3] - knotVector[1];
                             break;
-                        case 4:
-                            controlPoints[3] = this.keys[this.curKeyIdx + 3];
-                            knotVector[4] = this.keys[this.curKeyIdx + 2];
+                        case 2:
+                            controlPoints[3] = this.keys[this.curKeyIdx * 2 + 3];
+                            knotVector[4] = this.keys[this.curKeyIdx * 2 + 2];
                             knotVector[5] = 2.0 * knotVector[4] - knotVector[3];
                             break;
                         default:
-                            controlPoints[3] = this.keys[this.curKeyIdx + 3];
-                            knotVector[4] = this.keys[this.curKeyIdx + 2];
-                            knotVector[5] = this.keys[this.curKeyIdx + 4];
+                            controlPoints[3] = this.keys[this.curKeyIdx * 2 + 3];
+                            knotVector[4] = this.keys[this.curKeyIdx * 2 + 2];
+                            knotVector[5] = this.keys[this.curKeyIdx * 2 + 4];
                             break;
                     }
                     break;
@@ -1202,6 +1181,7 @@ export class TControl {
         }
 
         const obj = new objConstructor(this, blockObj, stageObj);
+        obj.mAdaptor.adaptor_do_prepare();
         this.mObjects.push(obj);
         return obj;
     }
