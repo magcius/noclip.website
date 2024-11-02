@@ -1159,6 +1159,9 @@ function envcolor_init(globals: dGlobals): void {
 
     envLight.timeAdv = 0.02;
 
+    envLight.curTime = 180;
+    envLight.timeAdv = 0;
+
     colorFromRGBA(envLight.lightStatus[0].Color, 1.0, 0.0, 0.0, 0.0);
     colorFromRGBA(envLight.lightStatus[1].Color, 0.0, 0.0, 0.0, 0.0);
 

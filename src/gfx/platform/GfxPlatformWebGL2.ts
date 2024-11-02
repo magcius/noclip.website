@@ -1,7 +1,7 @@
 
 import { GfxAttachmentState, GfxBindingLayoutDescriptor, GfxBindingsDescriptor, GfxBlendFactor, GfxBlendMode, GfxBufferBinding, GfxBufferFrequencyHint, GfxBufferUsage, GfxChannelBlendState, GfxChannelWriteMask, GfxClipSpaceNearZ, GfxCompareMode, GfxComputePass, GfxComputePipelineDescriptor, GfxComputeProgramDescriptor, GfxCullMode, GfxStatisticsGroup, GfxDevice, GfxDeviceLimits, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxInputLayoutDescriptor, GfxMegaStateDescriptor, GfxMipFilterMode, GfxPass, GfxPlatformFramebuffer, GfxPrimitiveTopology, GfxRenderProgramDescriptor, GfxQueryPoolType, GfxRenderPass, GfxRenderPassDescriptor, GfxRenderPipelineDescriptor, GfxRenderTargetDescriptor, GfxSamplerBinding, GfxSamplerDescriptor, GfxSamplerFormatKind, GfxSwapChain, GfxTexFilterMode, GfxTextureDescriptor, GfxTextureDimension, GfxTextureUsage, GfxVendorInfo, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxViewportOrigin, GfxWrapMode, GfxRenderAttachmentView, GfxRenderPassAttachmentColor, GfxRenderPassAttachment, GfxRenderPassAttachmentDepthStencil } from './GfxPlatform.js';
 import { FormatCompFlags, FormatFlags, FormatTypeFlags, GfxFormat, getFormatByteSize, getFormatCompByteSize, getFormatCompFlags, getFormatFlags, getFormatSamplerKind, getFormatTypeFlags } from "./GfxPlatformFormat.js";
-import { GfxBindings, GfxBuffer, GfxComputePipeline, GfxInputLayout, GfxProgram, GfxQueryPool, GfxReadback, GfxRenderPipeline, GfxRenderTarget, GfxResource, GfxSampler, GfxTexture, GfxTextureImpl, _T, defaultBindingLayoutSamplerDescriptor } from "./GfxPlatformImpl.js";
+import { GfxBindings, GfxBuffer, GfxComputePipeline, GfxInputLayout, GfxProgram, GfxQueryPool, GfxReadback, GfxRenderPipeline, GfxRenderTarget, GfxResource, GfxSampler, GfxTexture, GfxTextureImpl, _T, defaultBindingLayoutSamplerDescriptor, isFormatSamplerKindCompatible } from "./GfxPlatformImpl.js";
 
 import { copyAttachmentState, copyMegaState, defaultMegaState } from '../helpers/GfxMegaStateDescriptorHelpers.js';
 import { assert, assertExists, leftPad, nArray, nullify } from './GfxPlatformUtil.js';
@@ -1992,7 +1992,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
                     // Validate sampler entry.
 
                     assert(samplerEntry.gl_target === gl_target);
-                    assert(samplerEntry.formatKind === formatKind);
+                    assert(isFormatSamplerKindCompatible(samplerEntry.formatKind, formatKind));
                 } else {
                     gl.bindTexture(samplerEntry.gl_target, this._getFallbackTexture(samplerEntry));
                 }

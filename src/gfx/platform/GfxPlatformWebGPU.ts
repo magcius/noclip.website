@@ -4,7 +4,7 @@ import { HashMap, nullHashFunc } from "../../HashMap.js";
 import { rust } from "../../rustlib.js";
 import { GfxAttachmentState, GfxBindingLayoutDescriptor, GfxBindingLayoutSamplerDescriptor, GfxBindings, GfxBindingsDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxChannelBlendState, GfxClipSpaceNearZ, GfxCompareMode, GfxComputePass, GfxComputePipelineDescriptor, GfxComputeProgramDescriptor, GfxCullMode, GfxStatisticsGroup, GfxDevice, GfxDeviceLimits, GfxFormat, GfxFrontFaceMode, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutDescriptor, GfxMegaStateDescriptor, GfxMipFilterMode, GfxPass, GfxPrimitiveTopology, GfxProgram, GfxQueryPoolType, GfxRenderPass, GfxRenderPassDescriptor, GfxRenderPipeline, GfxRenderPipelineDescriptor, GfxRenderTarget, GfxRenderTargetDescriptor, GfxSampler, GfxSamplerDescriptor, GfxSamplerFormatKind, GfxShadingLanguage, GfxSwapChain, GfxTexFilterMode, GfxTexture, GfxTextureDescriptor, GfxTextureDimension, GfxTextureUsage, GfxVendorInfo, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxViewportOrigin, GfxWrapMode, GfxRenderAttachmentView, GfxRenderProgramDescriptor } from "./GfxPlatform.js";
 import { FormatFlags, FormatTypeFlags, getFormatByteSize, getFormatFlags, getFormatSamplerKind, getFormatTypeFlags } from "./GfxPlatformFormat.js";
-import { GfxComputePipeline, GfxQueryPool, GfxReadback, GfxResource, GfxTextureImpl, _T, defaultBindingLayoutSamplerDescriptor } from "./GfxPlatformImpl.js";
+import { GfxComputePipeline, GfxQueryPool, GfxReadback, GfxResource, GfxTextureImpl, _T, defaultBindingLayoutSamplerDescriptor, isFormatSamplerKindCompatible } from "./GfxPlatformImpl.js";
 import { align, assert, assertExists } from "./GfxPlatformUtil.js";
 import { gfxBindingLayoutDescriptorEqual } from './GfxPlatformObjUtil.js';
 import { IS_DEVELOPMENT } from "../../BuildVersion.js";
@@ -1102,18 +1102,6 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             throw "whoops";
         }
 
-        // Workaround for https://github.com/gfx-rs/naga/issues/1355
-        for (const depthTextureName of ['u_TextureFramebufferDepth']) {
-            if (!code.includes(depthTextureName)) continue;
-            code = code.replace(`var T_${depthTextureName}: texture_2d<f32>;`, `var T_${depthTextureName}: texture_depth_2d;`);
-            code = code.replace(new RegExp(`textureSample\\\(T_${depthTextureName}(.*)\\\);$`, 'gm'), (sub, cap) => {
-                return `vec4<f32>(textureSample(T_${depthTextureName}${cap}), 0.0, 0.0, 0.0);`
-            });
-            code = code.replace(new RegExp(`textureLoad\\\(T_${depthTextureName}(.*)\\\);$`, 'gm'), (sub, cap) => {
-                return `vec4<f32>(textureLoad(T_${depthTextureName}${cap}), 0.0, 0.0, 0.0);`
-            });
-        }
-
         const shaderModule = this.device.createShaderModule({ code });
         const stage = { module: shaderModule, entryPoint: 'main' };
         if (IS_DEVELOPMENT) {
@@ -1206,7 +1194,8 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             const gfxBinding = bindingsDescriptor.samplerBindings[i];
             const gfxTexture = (gfxBinding.gfxTexture !== null ? gfxBinding.gfxTexture : this._getFallbackTexture(samplerEntry)) as GfxTextureP_WebGPU;
             assert(samplerEntry.dimension === gfxTexture.dimension);
-            assert(samplerEntry.formatKind === getFormatSamplerKind(gfxTexture.pixelFormat));
+            const formatKind = getFormatSamplerKind(gfxTexture.pixelFormat);
+            assert(isFormatSamplerKindCompatible(samplerEntry.formatKind, formatKind));
             const gpuTextureView = (gfxTexture as GfxTextureP_WebGPU).gpuTextureView;
             gpuBindGroupEntries.push({ binding: numBindings++, resource: gpuTextureView });
 

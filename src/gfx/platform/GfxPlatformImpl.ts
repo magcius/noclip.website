@@ -28,3 +28,13 @@ export const defaultBindingLayoutSamplerDescriptor: GfxBindingLayoutSamplerDescr
     formatKind: GfxSamplerFormatKind.Float,
     dimension: GfxTextureDimension.n2D,
 };
+
+export function isFormatSamplerKindCompatible(samplerKind: GfxSamplerFormatKind, textureKind: GfxSamplerFormatKind): boolean {
+    if (textureKind === samplerKind)
+        return true;
+    // Depth textures can either be bound as depth, or as unfilterable float textures.
+    else if (textureKind === GfxSamplerFormatKind.Depth && samplerKind === GfxSamplerFormatKind.UnfilterableFloat)
+        return true;
+
+    return false;
+}
