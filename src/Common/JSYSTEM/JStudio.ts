@@ -6,6 +6,8 @@ import { align, assert, nArray, readString } from "../../util.js";
 import { JSystemFileReaderHelper } from "./J3D/J3DLoader.js";
 import { GfxColor } from "../../gfx/platform/GfxPlatform";
 import { clamp } from "../../MathHelpers.js";
+import { Endianness } from "../../endian.js";
+import { ArtObjectData } from "../../Fez/ArtObjectData";
 
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
@@ -59,13 +61,6 @@ export interface TSystem {
 }
 
 //----------------------------------------------------------------------------------------------------------------------
-// Function Values
-//----------------------------------------------------------------------------------------------------------------------
-class TFunctionValue {
-    //@TODO
-}
-
-//----------------------------------------------------------------------------------------------------------------------
 // TVariableValue
 // Manages a single float, which will be updated each frame. This float can be updated using a variety of operations: 
 // - Immediate(x): Set to single value. On Update(y), set the value to a single number then do nothing on future frames.  
@@ -79,7 +74,7 @@ class TVariableValue {
     private mValue: number;
     private mAge: number; // In frames
     private mUpdateFunc?: (varval: TVariableValue, x: number) => void;
-    private mUpdateParam: number | TFunctionValue;
+    private mUpdateParam: number | FVB.TFunctionValue | undefined;
     // @TODO: TOutput
 
     getValue() { return this.mValue; }
@@ -114,14 +109,15 @@ class TVariableValue {
     }
 
     private static update_functionValue(varval: TVariableValue, secondsPerFrame: number): void {
-        // @TODO:
-        debugger;
+        const t = varval.mAge * secondsPerFrame;
+        varval.mValue = (varval.mUpdateParam as FVB.TFunctionValue).getValue(t);
     }
 
     //--------------------
     // Set Update functions
     // Modify the function that will be called each Update()
     //--------------------
+    // @TODO: Shorten these names
     public setValue_none() {
         this.mUpdateFunc = undefined;
     }
@@ -141,7 +137,7 @@ class TVariableValue {
     }
 
     // Value will be the result of a Function Value each frame
-    setValue_functionValue(v: TFunctionValue): void {
+    setValue_functionValue(v?: FVB.TFunctionValue): void {
         this.mUpdateFunc = TVariableValue.update_functionValue;
         this.mAge = 0;
         this.mUpdateParam = v;
@@ -234,11 +230,11 @@ abstract class TAdaptor {
         const control = obj.mControl;
 
         switch (dataOp) {
-            case TEOperationData.VOID: varval.setValue_none();
-            case TEOperationData.IMMEDIATE: varval.setValue_immediate(data as number);
-            case TEOperationData.TIME: varval.setValue_time(data as number);
-            // case TEOperationData.FUNCVALUE_NAME: varval.setValue_functionValue(control.getFunctionValue(data, dataSize))
-            // case TEOperationData.FUNCVALUE_INDEX: varval.setValue_functionValue(control.getFunctionValue_index(data));
+            case TEOperationData.VOID: varval.setValue_none(); break;
+            case TEOperationData.IMMEDIATE: varval.setValue_immediate(data as number); break;
+            case TEOperationData.TIME: varval.setValue_time(data as number); break;
+            case TEOperationData.FUNCVALUE_NAME: varval.setValue_functionValue(control.getFunctionValueByName(data as string)); break;
+            case TEOperationData.FUNCVALUE_INDEX: varval.setValue_functionValue(control.getFunctionValueByIdx(data as number)); break;
             default:
                 console.debug('Unsupported dataOp: ', dataOp);
                 debugger;
@@ -466,7 +462,7 @@ abstract class STBObject {
             case ESequenceCmd.Paragraph:
                 byteIdx += 4;
                 while (byteIdx < this.pSequence_next) {
-                    const para = parseParagraph(view, byteIdx);
+                    const para = TParagraph.parse(view, byteIdx);
                     if (para.type <= 0xff) {
                         console.debug('Unsupported paragraph feature: ', para.type);
                         // process_paragraph_reserved_(para.type, para.content, para.param);
@@ -624,7 +620,7 @@ class TCameraObject extends STBObject {
             case Camera_Cmd.SET_TARGET_X_POS: keyIdx = Camera_Track.TARGET_X_POS; break;
             case Camera_Cmd.SET_TARGET_Y_POS: keyIdx = Camera_Track.TARGET_Y_POS; break;
             case Camera_Cmd.SET_TARGET_Z_POS: keyIdx = Camera_Track.TARGET_Z_POS; break;
-            case Camera_Cmd.SET_EYE_POS: keyCount = 3; keyIdx = Camera_Track.TARGET_X_POS; break;
+            case Camera_Cmd.SET_TARGET_POS: keyCount = 3; keyIdx = Camera_Track.TARGET_X_POS; break;
 
             // Camera params
             case Camera_Cmd.SET_PROJ_FOVY: keyIdx = Camera_Track.PROJ_FOVY; break;
@@ -643,6 +639,486 @@ class TCameraObject extends STBObject {
 
         for (let i = 0; i < keyCount; i++) {
             this.mAdaptor.adaptor_setVariableValue(this, keyIdx + i, dataOp, data);
+        }
+    }
+}
+
+
+//----------------------------------------------------------------------------------------------------------------------
+// Parsing helpers
+//----------------------------------------------------------------------------------------------------------------------
+// @TODO: Rename
+class Reader {
+    buffer: ArrayBufferSlice;
+    view: DataView;
+    offset: number;
+
+    constructor(buffer: ArrayBufferSlice, offset: number) {
+        this.buffer = buffer.subarray(offset);
+        this.view = this.buffer.createDataView();
+        this.offset = 0;
+    }
+}
+
+class TParagraph {
+    type: number;
+    dataSize: number;
+    dataOffset: number;
+    nextOffset: number;
+
+    static parse(view: DataView, byteIdx: number): TParagraph {
+        // The top bit of the paragraph determines if the type and size are 16 bit (if set), or 32 (if not set)
+        let dataSize = view.getUint16(byteIdx);
+        let type;
+        let offset;
+
+        if ((dataSize & 0x8000) == 0) {
+            // 16 bit data
+            type = view.getUint16(byteIdx + 2);
+            offset = 4;
+        } else {
+            // 32 bit data
+            dataSize = view.getUint32(byteIdx + 0) & ~0x80000000;
+            type = view.getUint32(byteIdx + 4);
+            offset = 8;
+        }
+
+        if (dataSize == 0) {
+            return { dataSize, type, dataOffset: 0, nextOffset: byteIdx + offset };
+        } else {
+            return { dataSize, type, dataOffset: byteIdx + offset, nextOffset: byteIdx + offset + align(dataSize, 4) };
+        }
+    }
+}
+
+//----------------------------------------------------------------------------------------------------------------------
+// FVB (Function Value Binary) Parsing
+// Although embedded in the STB file, the FVB section is treated and parsed like a separate file
+//----------------------------------------------------------------------------------------------------------------------
+namespace FVB {
+    enum EFuncValType {
+        None = 0,
+        Composite = 1,
+        Constant = 2,
+        Transition = 3,
+        List = 4,
+        ListParameter = 5,
+        Hermite = 6,
+    };
+
+    enum EPrepareOp {
+        None = 0x00,
+        Data = 0x01,
+        ObjSetByName = 0x10,
+        ObjSetByIdx = 0x11,
+        RangeSet = 0x12,
+        RangeProgress = 0x13,
+        RangeAdjust = 0x14,
+        RangeOutside = 0x15,
+        InterpSet = 0x16,
+    };
+
+    class TBlock {
+        size: number;
+        type: number;
+        id: string;
+        dataOffset: number;
+    };
+
+    export abstract class TFunctionValue {
+        protected range?: Attribute.Range;
+        protected refer?: Attribute.Refer;
+        protected interpolate?: Attribute.Interpolate;
+
+        abstract getType(): EFuncValType;
+        abstract prepare(): void;
+        abstract getValue(arg: number): number;
+
+        getAttrRange() { return this.range; }
+        getAttrRefer() { return this.refer; }
+        getAttrInterpolate() { return this.interpolate; }
+
+        // static ExtrapolateParameter toFunction_outside(int);
+
+        // static ExtrapolateParameter toFunction(TFunctionValue::TEOutside outside) {
+        //     return toFunction_outside(outside);
+        // }
+    }
+
+    export abstract class TObject {
+        public funcVal: TFunctionValue;
+        public id: string;
+
+        constructor(block: TBlock) {
+            this.id = block.id;
+        }
+
+        abstract prepare_data(para: TParagraph, control: TControl, file: Reader): void;
+
+        prepare(block: TBlock, mControl: TControl, file: Reader) {
+            const blockNext = file.offset + block.size;
+            file.offset = blockNext;
+
+            let pOffset = block.dataOffset;
+            while (pOffset < blockNext) {
+                const para = TParagraph.parse(file.view, pOffset);
+                switch (para.type) {
+                    case EPrepareOp.None:
+                        this.funcVal.prepare();
+                        assert(para.nextOffset == blockNext);
+                        return;
+
+                    case EPrepareOp.Data:
+                        this.prepare_data(para, mControl, file);
+                        break;
+
+                    case EPrepareOp.RangeSet:
+                        assert(para.dataSize == 8);
+                        const range = this.funcVal.getAttrRange();
+                        assert(!!range, 'FVB Paragraph assumes TObject has range attribute, but it does not');
+                        const begin = file.view.getFloat32(para.dataOffset + 0);
+                        const end = file.view.getFloat32(para.dataOffset + 4);
+                        range.set(begin, end);
+                        break;
+
+                    case EPrepareOp.InterpSet:
+                        assert(para.dataSize == 4);
+                        const interp = this.funcVal.getAttrInterpolate();
+                        assert(!!interp, 'FVB Paragraph assumes TObject has interpolate attribute, but it does not');
+                        const interpType = file.view.getUint32(para.dataOffset + 0);
+                        interp.set(interpType);
+                        break;
+
+                    case EPrepareOp.ObjSetByName:
+                    case EPrepareOp.ObjSetByIdx:
+
+                    case EPrepareOp.RangeProgress:
+                    case EPrepareOp.RangeAdjust:
+                    case EPrepareOp.RangeOutside:
+
+                    default:
+                        console.warn('Unhandled FVB PrepareOp: ', para.type);
+                        debugger;
+                }
+                pOffset = para.nextOffset;
+            }
+
+            assert(pOffset == blockNext);
+            this.funcVal.prepare();
+        }
+    }
+
+    export class TControl {
+        public mObjects: TObject[] = [];
+
+        // Really this is a fvb::TFactory method
+        public createObject(block: TBlock): TObject | undefined {
+            switch (block.type) {
+                // case EFuncValType.Composite:
+                //     return new TObject_composite(block);
+                // case EFuncValType.Constant:
+                //     return new TObject_constant(block);
+                // case EFuncValType.Transition:
+                //     return new TObject_transition(block);
+                // case EFuncValType.List:
+                //     return new TObject_list(block);
+                case EFuncValType.ListParameter:
+                    return new TObject_ListParameter(block);
+                // case EFuncValType.Hermite:
+                //     return new TObject_hermite(block);
+                default:
+                    console.warn('Unknown FVB type: ', block.type);
+                    return undefined;
+            }
+        }
+
+        public destroyObject_all() {
+            this.mObjects = [];
+        }
+    }
+
+    export class TParse {
+        constructor(
+            private mControl: TControl
+        ) { }
+
+        private parseBlock(file: Reader, flags: number): boolean {
+            const idLen = file.view.getUint16(file.offset + 6);
+            const block: TBlock = {
+                size: file.view.getUint32(file.offset + 0),
+                type: file.view.getUint16(file.offset + 4),
+                id: readString(file.buffer, file.offset + 8, idLen),
+                dataOffset: file.offset + align(8 + idLen, 4),
+            }
+
+            console.log('Parsing Block:', block.id, block.size, block.type);
+
+            const obj = this.mControl.createObject(block);
+            if (!obj) { return false; }
+
+            obj.prepare(block, this.mControl, file);
+            this.mControl.mObjects.push(obj);
+
+            return true;
+        }
+
+        public parse(data: ArrayBufferSlice, flags: number) {
+            const view = data.createDataView();
+            let fourCC = readString(data, 0, 4);
+            let byteOrder = view.getUint16(0x04);
+            let version = view.getUint16(0x06);
+            let blockCount = view.getUint32(0x0C);
+            assert(fourCC === 'FVB');
+            assert(byteOrder == 0xFEFF);
+            assert(version >= 2 && version <= 256); // As of Wind Waker
+
+            const blockReader = new Reader(data, 16);
+            for (let i = 0; i < blockCount; i++) {
+                this.parseBlock(blockReader, flags);
+            }
+        }
+    }
+
+    //----------------------------------------------------------------------------------------------------------------------
+    // FV Attributes
+    //----------------------------------------------------------------------------------------------------------------------
+    enum EInterpolateType {
+        None = 0,
+        Linear = 1,
+        Plateau = 2,
+        BSpline = 3
+    }
+    namespace Attribute {
+        export class Range {
+            private begin: number = 0;
+            private end: number = 0;
+            private diff: number = 0;
+
+            private progress: number = 0;
+            private adjust: number = 0;
+
+            prepare() {
+                // Progress updated here
+            }
+
+            set(begin: number, end: number) {
+                this.begin = begin;
+                this.end = end;
+                this.diff = end - begin;
+                assert(this.diff >= 0);
+            }
+
+            getParameter(time: number, startTime: number, endTime: number): number {
+                // @NOTE: Does not currently support, Progress, Adjust, or Outside modifications. These can only be set
+                //        in an FVB paragraph, so attempt to set them will be caught in FVB.TObject.prepare().
+                return time;
+            }
+        }
+
+        export class Refer {
+        }
+
+        export class Interpolate {
+            private type = EInterpolateType.None;
+            prepare() { }
+            set(type: EInterpolateType) { this.type = type; }
+            get() { return this.type; }
+
+            static Linear(t: number, t0: number, v0: number, t1: number, v1: number) {
+                return v0 + ((v1 - v0) * (t - t0)) / (t1 - t0);
+            }
+
+            static BSpline_Nonuniform(t: number, controlPoints: Float64Array, knotVector: Float64Array) {
+                const knot0 = knotVector[0];
+                const knot1 = knotVector[1];
+                const knot2 = knotVector[2];
+                const knot3 = knotVector[3];
+                const knot4 = knotVector[4];
+                const knot5 = knotVector[5];
+                const diff0 = t - knot0;
+                const diff1 = t - knot1;
+                const diff2 = t - knot2;
+                const diff3 = knot3 - t;
+                const diff4 = knot4 - t;
+                const diff5 = knot5 - t;
+                const inverseDeltaKnot32 = 1 / (knot3 - knot2);
+                const blendFactor3 = (diff3 * inverseDeltaKnot32) / (knot3 - knot1);
+                const blendFactor2 = (diff2 * inverseDeltaKnot32) / (knot4 - knot2);
+                const blendFactor1 = (diff3 * blendFactor3) / (knot3 - knot0);
+                const blendFactor4 = ((diff1 * blendFactor3) + (diff4 * blendFactor2)) / (knot4 - knot1);
+                const blendFactor5 = (diff2 * blendFactor2) / (knot5 - knot2);
+                const term1 = diff3 * blendFactor1;
+                const term2 = (diff0 * blendFactor1) + (diff4 * blendFactor4);
+                const term3 = (diff1 * blendFactor4) + (diff5 * blendFactor5);
+                const term4 = diff2 * blendFactor5;
+
+                return (term1 * controlPoints[0]) + (term2 * controlPoints[1]) + (term3 * controlPoints[2]) + (term4 * controlPoints[3]);
+            }
+        }
+    }
+
+    //----------------------------------------------------------------------------------------------------------------------
+    // FunctionValues
+    //----------------------------------------------------------------------------------------------------------------------
+    class FunctionValue_ListParameter extends TFunctionValue {
+        protected override range = new Attribute.Range();
+        protected override interpolate = new Attribute.Interpolate();
+
+        // Each key contains 2 floats, a time and value
+        private keyCount: number = 0;
+        private keys: Float32Array;
+        private curKeyIdx: number;
+        private interpFunc: (t: number) => number;
+
+        prepare(): void {
+            this.range.prepare();
+            this.interpolate.prepare();
+
+            const interp = this.interpolate.get();
+            switch (interp) {
+                case EInterpolateType.None:
+                    debugger; break; // Untested. Remove after confirmed working.
+                case EInterpolateType.Linear:
+                    debugger; break; // Untested. Remove after confirmed working.
+                case EInterpolateType.Plateau:
+                    debugger; break; // Untested. Remove after confirmed working.
+                case EInterpolateType.BSpline:
+                    if (this.keyCount > 2) { this.interpFunc = this.interpolateBSpline; }
+                    else {
+                        this.interpFunc = this.interpolateLinear;
+                        debugger; // Untested. Remove after confirmed working.
+                    }
+                    break;
+
+                default:
+                    console.warn('Invalid EInterp value', interp);
+            }
+        }
+
+        set_data(values: Float32Array) {
+            this.keys = values;
+            this.keyCount = values.length / 2;
+            this.curKeyIdx = 0;
+        }
+
+        getType() { return EFuncValType.ListParameter; }
+        getStartTime() { return this.keys[0]; }
+        getEndTime(): number { return this.keys[this.keys.length - 2]; }
+
+        // Interpolate between our keyframes, given the current time
+        getValue(timeSec: number): number {
+            // Remap (if requested) the time to our range
+            const t = this.range.getParameter(timeSec, this.getStartTime(), this.getEndTime());
+
+            // Update our current key. If the current time is between keys, select the later one.
+            this.curKeyIdx = this.keys.findIndex((k, i) => (i % 2) == 0 && k >= t) / 2;
+
+            if (this.curKeyIdx == 0) { // Time is at or before the start, return the first key
+                return this.keys[this.curKeyIdx * 2 + 1];
+            } else if (this.curKeyIdx == -1) { // Time is at or after the end, return the last key
+                this.curKeyIdx = this.keyCount - 1;
+                return this.keys[this.curKeyIdx * 2 + 1];
+            }
+
+            return this.interpFunc(t);
+        }
+
+        interpolateBSpline(t: number): number {
+            const controlPoints = new Float64Array(4);
+            const knotVector = new Float64Array(6);
+            controlPoints[1] = this.keys[this.curKeyIdx - 1];
+            controlPoints[2] = this.keys[this.curKeyIdx + 1];
+            knotVector[2] = this.keys[this.curKeyIdx + -2];
+            knotVector[3] = this.keys[this.curKeyIdx + 0];
+
+            const keysBefore = this.curKeyIdx;
+            const keysAfter = this.keyCount - this.curKeyIdx;
+
+            switch (keysBefore) {
+                case 2:
+                    controlPoints[0] = 2.0 * controlPoints[1] - controlPoints[2];
+                    controlPoints[3] = this.keys[this.curKeyIdx + 3];
+                    knotVector[4] = this.keys[this.curKeyIdx + 2];
+                    knotVector[1] = 2.0 * knotVector[2] - knotVector[3];
+                    knotVector[0] = 2.0 * knotVector[2] - knotVector[4];
+                    switch (keysAfter) {
+                        case 2:
+                        case 4:
+                            knotVector[5] = 2.0 * knotVector[4] - knotVector[3];
+                            break;
+                        default:
+                            knotVector[5] = this.keys[this.curKeyIdx + 4];
+                            break;
+                    }
+                    break;
+                case 4:
+                    controlPoints[0] = this.keys[this.curKeyIdx + -3];
+                    knotVector[1] = this.keys[this.curKeyIdx + -4];
+                    knotVector[0] = 2.0 * knotVector[1] - knotVector[2];
+                    switch (keysAfter) {
+                        case 2:
+                            controlPoints[3] = 2.0 * controlPoints[2] - controlPoints[1];
+                            knotVector[4] = 2.0 * knotVector[3] - knotVector[2];
+                            knotVector[5] = 2.0 * knotVector[3] - knotVector[1];
+                            break;
+                        case 4:
+                            controlPoints[3] = this.keys[this.curKeyIdx + 3];
+                            knotVector[4] = this.keys[this.curKeyIdx + 2];
+                            knotVector[5] = 2.0 * knotVector[4] - knotVector[3];
+                            break;
+                        default:
+                            controlPoints[3] = this.keys[this.curKeyIdx + 3];
+                            knotVector[4] = this.keys[this.curKeyIdx + 2];
+                            knotVector[5] = this.keys[this.curKeyIdx + 4];
+                    }
+                    break;
+                default:
+                    controlPoints[0] = this.keys[this.curKeyIdx + -3];
+                    knotVector[1] = this.keys[this.curKeyIdx + -4];
+                    knotVector[0] = this.keys[this.curKeyIdx + -6];
+                    switch (keysAfter) {
+                        case 2:
+                            controlPoints[3] = 2.0 * controlPoints[2] - controlPoints[1];
+                            knotVector[4] = 2.0 * knotVector[3] - knotVector[2];
+                            knotVector[5] = 2.0 * knotVector[3] - knotVector[1];
+                            break;
+                        case 4:
+                            controlPoints[3] = this.keys[this.curKeyIdx + 3];
+                            knotVector[4] = this.keys[this.curKeyIdx + 2];
+                            knotVector[5] = 2.0 * knotVector[4] - knotVector[3];
+                            break;
+                        default:
+                            controlPoints[3] = this.keys[this.curKeyIdx + 3];
+                            knotVector[4] = this.keys[this.curKeyIdx + 2];
+                            knotVector[5] = this.keys[this.curKeyIdx + 4];
+                            break;
+                    }
+                    break;
+            }
+
+            return Attribute.Interpolate.BSpline_Nonuniform(t, controlPoints, knotVector);
+        }
+
+        interpolateLinear(t: number) {
+            const ks = this.keys;
+            const c = this.curKeyIdx;
+            return Attribute.Interpolate.Linear(t, ks[c - 2], ks[c - 1], ks[c + 0], ks[c + 1]);
+        }
+    }
+
+    //----------------------------------------------------------------------------------------------------------------------
+    // FVB Objects
+    // Manages a FunctionValue.  
+    //----------------------------------------------------------------------------------------------------------------------
+    class TObject_ListParameter extends FVB.TObject {
+        override funcVal = new FunctionValue_ListParameter;
+
+        override prepare_data(para: TParagraph, control: TControl, file: Reader): void {
+            assert(para.dataSize >= 8);
+            // Each Key contains 2 floats, a time and value
+            const keyCount = file.view.getUint32(para.dataOffset + 0);
+            const keys = file.buffer.createTypedArray(Float32Array, para.dataOffset + 4, keyCount * 2, Endianness.BIG_ENDIAN);
+            this.funcVal.set_data(keys);
         }
     }
 }
@@ -679,54 +1155,14 @@ export abstract class TBlockObject {
     /* 0xC + align(id_size, 4) */ data: Reader;
 }
 
-class TParagraph {
-    type: number;
-    dataSize: number;
-    dataOffset: number;
-    nextOffset: number;
-}
-
-function parseParagraph(view: DataView, byteIdx: number): TParagraph {
-    // The top bit of the paragraph determines if the type and size are 16 bit (if set), or 32 (if not set)
-    let dataSize = view.getUint16(byteIdx);
-    let type;
-    let offset;
-
-    if ((dataSize & 0x8000) == 0) {
-        // 16 bit data
-        type = view.getUint16(byteIdx + 2);
-        offset = 4;
-    } else {
-        // 32 bit data
-        dataSize = view.getUint32(byteIdx + 0) & ~0x80000000;
-        type = view.getUint32(byteIdx + 4);
-        offset = 8;
-    }
-
-    if (dataSize == 0) {
-        return { dataSize, type, dataOffset: 0, nextOffset: byteIdx + offset };
-    } else {
-        return { dataSize, type, dataOffset: byteIdx + offset, nextOffset: byteIdx + offset + align(dataSize, 4) };
-    }
-}
-
-class Reader {
-    buffer: ArrayBufferSlice;
-    view: DataView;
-    offset: number;
-
-    constructor(buffer: ArrayBufferSlice, offset: number) {
-        this.buffer = buffer.subarray(offset);
-        this.view = this.buffer.createDataView();
-        this.offset = 0;
-    }
-}
-
+// This combines JStudio::TControl and JStudio::stb::TControl into a single class, for simplicity.
 export class TControl {
     private mSystem: TSystem;
-    private mObjects: STBObject[] = [];
+    public mFvbControl = new FVB.TControl();
     public mSecondsPerFrame: number;
     public mIsSuspended = false;
+
+    private mObjects: STBObject[] = [];
 
     constructor(system: TSystem) {
         this.mSystem = system;
@@ -743,7 +1179,10 @@ export class TControl {
         return 1;
     }
 
-    // Really this is a Factory method
+    public getFunctionValueByIdx(idx: number) { return this.mFvbControl.mObjects[idx]?.funcVal; }
+    public getFunctionValueByName(name: string) { return this.mFvbControl.mObjects.find(v => v.id == name)?.funcVal; }
+
+    // Really this is a stb::TFactory method
     public createObject(blockObj: TBlockObject): STBObject | undefined {
         let objConstructor;
         let objType: JStage.TEObject;
@@ -769,17 +1208,15 @@ export class TControl {
 
     public destroyObject_all() {
         this.mObjects = [];
+        this.mFvbControl.destroyObject_all();
     }
 }
 
 export class TParse {
     constructor(
-        private mControl: TControl
+        private mControl: TControl,
+        private mFvbParse = new FVB.TParse(mControl.mFvbControl)
     ) { }
-
-    private parseFVB(data: ArrayBufferSlice) {
-
-    }
 
     // Parse an entire scene's worth of object sequences at once
     private parseBlockObject(file: Reader, flags: number) {
@@ -806,7 +1243,6 @@ export class TParse {
             return true;
         }
 
-        // Create the object, using overloaded functions from the game
         const obj = this.mControl.createObject(blockObj);
         if (!obj) {
             if (flags & 0x40) {
@@ -835,15 +1271,12 @@ export class TParse {
         assert(byteOrder == 0xFEFF);
 
         let byteIdx = file.offs;
-        let blockCount = file.view.getUint32(12);
-
-        for (let i = 0; i < blockCount; i++) {
+        for (let i = 0; i < file.numChunks; i++) {
             const blockSize = file.view.getUint32(byteIdx + 0);
             const blockType = readString(file.buffer, byteIdx + 4, 4);
-            const blockData = data.slice(byteIdx + 8, byteIdx + blockSize);
 
             if (blockType == 'JFVB') {
-                this.parseFVB(blockData)
+                this.mFvbParse.parse(file.buffer.subarray(byteIdx + 8, blockSize - 8), flags)
             } else {
                 this.parseBlockObject(new Reader(file.buffer, byteIdx), flags);
             }
