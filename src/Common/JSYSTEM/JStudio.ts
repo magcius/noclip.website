@@ -733,6 +733,8 @@ export class TControl {
         this.mSecondsPerFrame = 1 / 30.0; // @TODO: Allow the game to change this?
     }
 
+    public isSuspended() { return this.mIsSuspended; }
+
     public forward(flags: number): number {
         for (let obj of this.mObjects) {
             const res = obj.forward(flags);
@@ -763,6 +765,10 @@ export class TControl {
         const obj = new objConstructor(this, blockObj, stageObj);
         this.mObjects.push(obj);
         return obj;
+    }
+
+    public destroyObject_all() {
+        this.mObjects = [];
     }
 }
 

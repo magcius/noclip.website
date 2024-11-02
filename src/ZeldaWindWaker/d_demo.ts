@@ -5,15 +5,15 @@ import { getMatrixAxisY } from "../MathHelpers.js";
 import { dGlobals } from "./Main";
 
 class dDemo_camera_c extends TCamera {
-    mFlags: number;
-    mProjNear: number;
-    mProjFar: number;
-    mFovy: number;
-    mAspect: number;
-    mViewPosition: vec3;
-    mUpVector: vec3;
-    mTargetPosition: vec3;
-    mRoll: number;
+    mFlags: number = 0;
+    mProjNear: number = 0;
+    mProjFar: number = 0;
+    mFovy: number = 0;
+    mAspect: number = 0;
+    mViewPosition: vec3 = vec3.create();
+    mUpVector: vec3 = vec3.create();
+    mTargetPosition: vec3 = vec3.create();
+    mRoll: number = 0;
 
     globals: dGlobals;
 
@@ -126,7 +126,7 @@ class dDemo_camera_c extends TCamera {
 }
 
 class dDemo_system_c implements TSystem {
-    private mpActiveCamera: dDemo_camera_c;
+    private mpActiveCamera?: dDemo_camera_c;
     // private mpActors: dDemo_actor_c[];
     // private mpAmbient: dDemo_ambient_c;
     // private mpLight: dDemo_light_c[];
@@ -136,8 +136,7 @@ class dDemo_system_c implements TSystem {
         switch (objType) {
             case JStage.TEObject.CAMERA:
                 if (this.mpActiveCamera) return this.mpActiveCamera;
-                else return new dDemo_camera_c();
-
+                else return this.mpActiveCamera = new dDemo_camera_c();
             case JStage.TEObject.ACTOR:
             case JStage.TEObject.ACTOR_UNK:
             case JStage.TEObject.AMBIENT:
@@ -148,13 +147,17 @@ class dDemo_system_c implements TSystem {
                 return undefined;
         }
     }
+
+    public remove() {
+        this.mpActiveCamera = undefined;
+    }
 }
 
 export class dDemo_manager_c {
     private mFrame: number;
     private mFrameNoMsg: number;
     private mMode: number;
-    private mCurFile: ArrayBufferSlice;
+    private mCurFile?: ArrayBufferSlice;
 
     private mParser: TParse;
     private mSystem = new dDemo_system_c();
@@ -169,6 +172,7 @@ export class dDemo_manager_c {
         }
 
         this.mControl.forward(0);
+        // @TODO:
         // if (originPos == NULL) {
         //     mControl->transform_enable(false);
         // } else {
@@ -185,24 +189,24 @@ export class dDemo_manager_c {
     }
 
     public remove() {
-        // mControl->destroyObject_all();
-        // mDemoObj.remove();
-        // this.mCurFile = NULL;
-        // this.mMode = 0;
+        this.mControl.destroyObject_all();
+        this.mSystem.remove();
+        this.mCurFile = undefined;
+        this.mMode = 0;
     }
 
     public update(): boolean {
-        // if (!this.mCurFile) {
-        //     return false;
-        // }
-        // if (this.mControl->forward(1)) {
-        //     this.mFrame++;
-        //     if (!this.mControl->isSuspended()) {
-        //         this.mFrameNoMsg++;
-        //     }
-        // } else {
-        //     this.mMode = 2;
-        // }
+        if (!this.mCurFile) {
+            return false;
+        }
+        if (this.mControl.forward(1)) {
+            this.mFrame++;
+            if (!this.mControl.isSuspended()) {
+                this.mFrameNoMsg++;
+            }
+        } else {
+            this.mMode = 2;
+        }
         return true;
     }
 }
