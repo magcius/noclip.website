@@ -171,11 +171,11 @@ abstract class TAdaptor {
         protected mVariableValues = nArray(mCount, i => new TVariableValue()),
     ) { }
 
-    abstract adaptor_do_prepare(): void;
-    abstract adaptor_do_begin(): void;
-    abstract adaptor_do_end(): void;
-    abstract adaptor_do_update(frameCount: number): void;
-    abstract adaptor_do_data(unk0: Object, unk1: number, unk2: Object, unk3: number): void;
+    abstract adaptor_do_prepare(obj: STBObject): void;
+    abstract adaptor_do_begin(obj: STBObject): void;
+    abstract adaptor_do_end(obj: STBObject): void;
+    abstract adaptor_do_update(obj: STBObject, frameCount: number): void;
+    abstract adaptor_do_data(obj: STBObject, unk0: Object, unk1: number, unk2: Object, unk3: number): void;
 
     // Set a single VariableValue update function, with the option of using FuncVals 
     adaptor_setVariableValue(obj: STBObject, keyIdx: number, dataOp: TEOperationData, data: number | string) {
@@ -294,13 +294,13 @@ abstract class STBObject {
 
     // These are intended to be overridden by subclasses 
     abstract do_paragraph(file: Reader, dataSize: number, dataOffset: number, param: number): void;
-    do_begin() { }
-    do_end() { }
+    do_begin() { this.mAdaptor.adaptor_do_begin(this); }
+    do_end() { this.mAdaptor.adaptor_do_end(this); }
 
     // Done updating this frame. Compute our variable data (i.e. interpolate) and send to the game object.
     do_wait(frameCount: number) {
         this.mAdaptor.adaptor_updateVariableValue(this, frameCount);
-        this.mAdaptor.adaptor_do_update(frameCount);
+        this.mAdaptor.adaptor_do_update(this, frameCount);
     }
     // do_data(void const*, u32, void const*, u32) {}
 
@@ -500,20 +500,21 @@ class TCameraAdaptor extends TAdaptor {
         private mStageCam: TCamera
     ) { super(11); }
 
-    adaptor_do_prepare(): void {
+    adaptor_do_prepare(obj: STBObject): void {
         this.mVariableValues[6].setOutput(this.mStageCam.JSGSetProjectionFovy);
         this.mVariableValues[7].setOutput(this.mStageCam.JSGSetViewRoll);
         this.mVariableValues[8].setOutput(this.mStageCam.JSGSetProjectionNear);
         this.mVariableValues[9].setOutput(this.mStageCam.JSGSetProjectionFar);
     }
 
-    adaptor_do_begin(): void {
+    adaptor_do_begin(obj: STBObject): void {
         const camPos = scratchVec3a;
-        const targetPos = scratchVec3a;
+        const targetPos = scratchVec3b;
         this.mStageCam.JSGGetViewPosition(camPos);
         this.mStageCam.JSGGetViewTargetPosition(targetPos);
 
-        // @TODO: Transform positions
+        vec3.transformMat4(camPos, camPos, obj.mControl.getTransformOnGet());
+        vec3.transformMat4(targetPos, targetPos, obj.mControl.getTransformOnGet());
 
         this.adaptor_setVariableValue_Vec(Camera_Track.EYE_X_POS, camPos);
         this.adaptor_setVariableValue_Vec(Camera_Track.TARGET_X_POS, targetPos);
@@ -523,18 +524,19 @@ class TCameraAdaptor extends TAdaptor {
         this.mVariableValues[9].setValue_immediate(this.mStageCam.JSGGetProjectionFar());
     }
 
-    adaptor_do_end(): void {
+    adaptor_do_end(obj: STBObject): void {
         this.mStageCam.JSGFDisableFlag(1);
     }
 
-    adaptor_do_update(frameCount: number): void {
+    adaptor_do_update(obj: STBObject, frameCount: number): void {
         const camPos = scratchVec3a;
-        const targetPos = scratchVec3a;
+        const targetPos = scratchVec3b;
 
         this.adaptor_getVariableValue_Vec(camPos, Camera_Track.EYE_X_POS);
         this.adaptor_getVariableValue_Vec(targetPos, Camera_Track.TARGET_X_POS);
 
-        // @TODO: Transform
+        vec3.transformMat4(camPos, camPos, obj.mControl.getTransformOnSet());
+        vec3.transformMat4(targetPos, targetPos, obj.mControl.getTransformOnSet());
 
         this.mStageCam.JSGSetViewPosition(camPos);
         this.mStageCam.JSGSetViewTargetPosition(targetPos);
@@ -1141,6 +1143,11 @@ export class TControl {
     public mSecondsPerFrame: number;
     public mIsSuspended = false;
 
+    private mTransformOrigin?: vec3;
+    private mTransformRotY?: number;
+    private mTransformOnGetMtx = mat4.create();
+    private mTransformOnSetMtx = mat4.create();
+
     private mObjects: STBObject[] = [];
 
     constructor(system: TSystem) {
@@ -1149,6 +1156,22 @@ export class TControl {
     }
 
     public isSuspended() { return this.mIsSuspended; }
+
+    public isTransformEnabled() { return !!this.mTransformOrigin; }
+    public getTransformOnSet() { return this.mTransformOnSetMtx; }
+    public getTransformOnGet() { return this.mTransformOnGetMtx; }
+    public transformSetOrigin(originPos: vec3, rotY: number) { 
+        this.mTransformOrigin = originPos; 
+        this.mTransformRotY = rotY;
+
+        // The "OnGet" matrix transforms from world space into demo space
+        mat4.fromYRotation(this.mTransformOnGetMtx, -rotY);
+        mat4.translate(this.mTransformOnGetMtx, this.mTransformOnGetMtx, vec3.negate(scratchVec3a, originPos));
+
+        // The "OnSet" matrix is the inverse 
+        mat4.fromTranslation(this.mTransformOnSetMtx, originPos);
+        mat4.rotateY(this.mTransformOnSetMtx, this.mTransformOnSetMtx, rotY);
+    }
 
     public forward(flags: number): number {
         for (let obj of this.mObjects) {
@@ -1181,7 +1204,7 @@ export class TControl {
         }
 
         const obj = new objConstructor(this, blockObj, stageObj);
-        obj.mAdaptor.adaptor_do_prepare();
+        obj.mAdaptor.adaptor_do_prepare(obj);
         this.mObjects.push(obj);
         return obj;
     }

@@ -15,7 +15,9 @@ class dDemo_camera_c extends TCamera {
     mTargetPosition: vec3 = vec3.create();
     mRoll: number = 0;
 
-    globals: dGlobals;
+    constructor(
+        private globals: dGlobals
+    ) { super() }
 
     override JSGGetProjectionNear(): number {
         const camera = this.globals.camera;
@@ -126,17 +128,21 @@ class dDemo_camera_c extends TCamera {
 }
 
 class dDemo_system_c implements TSystem {
-    private mpActiveCamera?: dDemo_camera_c;
+    public mpActiveCamera?: dDemo_camera_c;
     // private mpActors: dDemo_actor_c[];
     // private mpAmbient: dDemo_ambient_c;
     // private mpLight: dDemo_light_c[];
     // private mpFog: dDemo_fog_c;
 
+    constructor(
+        private globals: dGlobals
+    ) {}
+
     public JSGFindObject(objId: string, objType: JStage.TEObject): JStage.TObject | undefined {
         switch (objType) {
             case JStage.TEObject.CAMERA:
                 if (this.mpActiveCamera) return this.mpActiveCamera;
-                else return this.mpActiveCamera = new dDemo_camera_c();
+                else return this.mpActiveCamera = new dDemo_camera_c(this.globals);
             case JStage.TEObject.ACTOR:
             case JStage.TEObject.ACTOR_UNK:
             case JStage.TEObject.AMBIENT:
@@ -160,10 +166,14 @@ export class dDemo_manager_c {
     private mCurFile?: ArrayBufferSlice;
 
     private mParser: TParse;
-    private mSystem = new dDemo_system_c();
+    private mSystem = new dDemo_system_c(this.globals);
     private mControl: TControl = new TControl(this.mSystem);
 
-    public create(data: ArrayBufferSlice, originPos: vec3, rotY: number): boolean {
+    constructor(
+        private globals: dGlobals
+    ) {}
+
+    public create(data: ArrayBufferSlice, originPos?: vec3, rotY?: number): boolean {
         this.mParser = new TParse(this.mControl);
 
         if(!this.mParser.parse(data, 0)) {
@@ -172,13 +182,9 @@ export class dDemo_manager_c {
         }
 
         this.mControl.forward(0);
-        // @TODO:
-        // if (originPos == NULL) {
-        //     mControl->transform_enable(false);
-        // } else {
-        //     mControl->transform_enable(true);
-        //     mControl->transform_setOrigin(*originPos, rotY);
-        // }
+        if (originPos) {
+            this.mControl.transformSetOrigin(originPos, rotY || 0);
+        }
 
         this.mFrame = 0;
         this.mFrameNoMsg = 0;
