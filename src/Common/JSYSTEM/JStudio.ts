@@ -1,4 +1,4 @@
-// Nintendo's cutscene framework. Seems very over-engineered.
+// Nintendo's cutscene framework. Seems very over-engineered. Data is stored in a STB (Studio Binary) file.
 
 import { mat4, ReadonlyVec3, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../../ArrayBufferSlice";
@@ -7,12 +7,9 @@ import { JSystemFileReaderHelper } from "./J3D/J3DLoader.js";
 import { GfxColor } from "../../gfx/platform/GfxPlatform";
 import { clamp } from "../../MathHelpers.js";
 import { Endianness } from "../../endian.js";
-import { ArtObjectData } from "../../Fez/ArtObjectData";
 
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
-const scratchVec3c = vec3.create();
-const scratchVec3d = vec3.create();
 
 //----------------------------------------------------------------------------------------------------------------------
 // Stage Objects
