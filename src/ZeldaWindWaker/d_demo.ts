@@ -205,7 +205,10 @@ export class dDemo_manager_c {
         if (!this.mCurFile) {
             return false;
         }
-        if (this.mControl.forward(1)) {
+        
+        const dtFrames = this.globals.context.viewerInput.deltaTime / 1000.0 * 30;
+
+        if (this.mControl.forward(dtFrames)) {
             this.mFrame++;
             if (!this.mControl.isSuspended()) {
                 this.mFrameNoMsg++;
