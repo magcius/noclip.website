@@ -558,6 +558,8 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         this._currentMegaState.depthCompare = GfxCompareMode.Less;
         this._currentMegaState.depthWrite = false;
         this._currentMegaState.attachmentsState[0].channelWriteMask = GfxChannelWriteMask.AllChannels;
+        for (let i = 1; i < 4; i++)
+            this._currentMegaState.attachmentsState[i] = copyAttachmentState(undefined, this._currentMegaState.attachmentsState[0]);
 
         // We always have depth & stencil test enabled.
         gl.enable(gl.DEPTH_TEST);
@@ -1297,8 +1299,14 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
         // TODO(jstpierre): Remove this eventually?
         if (this._currentMegaState.attachmentsState[0].channelWriteMask !== GfxChannelWriteMask.Alpha) {
-            gl.colorMask(false, false, false, true);
-            this._currentMegaState.attachmentsState[0].channelWriteMask = GfxChannelWriteMask.Alpha;
+            if (this._OES_draw_buffers_indexed !== null) {
+                this._OES_draw_buffers_indexed.colorMaskiOES(0, false, false, false, true);
+                this._currentMegaState.attachmentsState[0].channelWriteMask = GfxChannelWriteMask.Alpha;
+            } else {
+                gl.colorMask(false, false, false, true);
+                for (let i = 0; i < this._currentMegaState.attachmentsState.length; i++)
+                    this._currentMegaState.attachmentsState[0].channelWriteMask = GfxChannelWriteMask.Alpha;
+            }
         }
 
         gl.clearBufferfv(gl.COLOR, 0, [0.0, 0.0, 0.0, 1.0]);
@@ -1808,9 +1816,6 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             this._currentColorAttachment[i] = null;
         }
         this._currentColorAttachment.length = numColorAttachments;
-
-        for (let i = this._currentMegaState.attachmentsState.length; i < numColorAttachments; i++)
-            this._currentMegaState.attachmentsState[i] = copyAttachmentState(undefined, defaultMegaState.attachmentsState[0]);
     }
 
     private _setRenderPassParametersColor(i: number, passAttachment: GfxRenderPassAttachmentColor | null): void {
