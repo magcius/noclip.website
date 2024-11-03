@@ -39,6 +39,7 @@ import { dPa_control_c } from './d_particle.js';
 import { ResType, dRes_control_c } from './d_resorce.js';
 import { dStage_dt_c_roomLoader, dStage_dt_c_roomReLoader, dStage_dt_c_stageInitLoader, dStage_dt_c_stageLoader, dStage_roomStatus_c, dStage_stageDt_c } from './d_stage.js';
 import { cPhs__Status, fGlobals, fopAcM_create, fopAc_ac_c, fopDw_Draw, fopScn, fpcCt_Handler, fpcLy_SetCurrentLayer, fpcM_Management, fpcPf__Register, fpcSCtRq_Request, fpc__ProcessName, fpc_pc__ProfileList } from './framework.js';
+import { dDemo_manager_c, EDemoMode } from './d_demo.js';
 
 type SymbolData = { Filename: string, SymbolName: string, Data: ArrayBufferSlice };
 type SymbolMapData = { SymbolData: SymbolData[] };
@@ -736,6 +737,7 @@ export const pathBase = `ZeldaWindWaker`;
 
 class d_s_play extends fopScn {
     public bgS = new dBgS();
+    public demo: dDemo_manager_c;
 
     public flowerPacket: FlowerPacket;
     public treePacket: TreePacket;
@@ -747,6 +749,8 @@ class d_s_play extends fopScn {
     public override load(globals: dGlobals, userData: any): cPhs__Status {
         super.load(globals, userData);
 
+        this.demo = new dDemo_manager_c(globals);
+
         this.treePacket = new TreePacket(globals);
         this.flowerPacket = new FlowerPacket(globals);
         this.grassPacket = new GrassPacket(globals);
@@ -755,6 +759,20 @@ class d_s_play extends fopScn {
         globals.scnPlay = this;
 
         return cPhs__Status.Complete;
+    }
+
+    public override execute(globals: dGlobals, deltaTimeFrames: number): void {
+        this.demo.update();
+
+        // @TODO: Determine the correct place for this
+        if (this.demo.getMode() == EDemoMode.Playing) {
+            const viewPos = this.demo.getSystem().mpActiveCamera?.mViewPosition;
+            const targetPos = this.demo.getSystem().mpActiveCamera?.mTargetPosition;
+            if (viewPos) {
+                mat4.targetTo(globals.camera.worldMatrix, viewPos, targetPos, [0, 1, 0]);
+                globals.camera.worldMatrixUpdated();
+            }
+        }
     }
 
     public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {

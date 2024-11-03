@@ -4,6 +4,12 @@ import { TParse, JStage, TSystem, TControl, TCamera } from "../Common/JSYSTEM/JS
 import { getMatrixAxisY } from "../MathHelpers.js";
 import { dGlobals } from "./Main";
 
+export enum EDemoMode {
+    None, 
+    Playing,
+    Ended
+}
+
 class dDemo_camera_c extends TCamera {
     mFlags: number = 0;
     mProjNear: number = 0;
@@ -162,7 +168,7 @@ class dDemo_system_c implements TSystem {
 export class dDemo_manager_c {
     private mFrame: number;
     private mFrameNoMsg: number;
-    private mMode: number;
+    private mMode = EDemoMode.None;
     private mCurFile?: ArrayBufferSlice;
 
     private mParser: TParse;
@@ -172,6 +178,11 @@ export class dDemo_manager_c {
     constructor(
         private globals: dGlobals
     ) {}
+
+    getFrame() { return this.mFrame; }
+    getFrameNoMsg() { return this.mFrameNoMsg; }
+    getMode() { return this.mMode; }
+    getSystem() { return this.mSystem; }
 
     public create(data: ArrayBufferSlice, originPos?: vec3, rotY?: number): boolean {
         this.mParser = new TParse(this.mControl);
@@ -189,7 +200,7 @@ export class dDemo_manager_c {
         this.mFrame = 0;
         this.mFrameNoMsg = 0;
         this.mCurFile = data;
-        this.mMode = 1;
+        this.mMode = EDemoMode.Playing;
 
         return true;
     }
@@ -214,7 +225,7 @@ export class dDemo_manager_c {
                 this.mFrameNoMsg++;
             }
         } else {
-            this.mMode = 2;
+            this.mMode = EDemoMode.Ended;
         }
         return true;
     }
