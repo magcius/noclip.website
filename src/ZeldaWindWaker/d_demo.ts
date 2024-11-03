@@ -10,6 +10,17 @@ export enum EDemoMode {
     Ended
 }
 
+export enum EDemoCamFlags {
+    HasNearZ = 1 << 0,
+    HasFarZ = 1 << 1,
+    HasFovY = 1 << 2,
+    HasAspect = 1 << 3,
+    HasEyePos = 1 << 4,
+    HasUpVec = 1 << 5,
+    HasTargetPos = 1 << 6,
+    HasRoll = 1 << 7,
+}
+
 class dDemo_camera_c extends TCamera {
     mFlags: number = 0;
     mProjNear: number = 0;
@@ -34,7 +45,7 @@ class dDemo_camera_c extends TCamera {
 
     override JSGSetProjectionNear(v: number) {
         this.mProjNear = v;
-        this.mFlags |= 0x01;
+        this.mFlags |= EDemoCamFlags.HasNearZ;
     }
 
     override JSGGetProjectionFar(): number {
@@ -47,7 +58,7 @@ class dDemo_camera_c extends TCamera {
 
     override JSGSetProjectionFar(v: number): void {
         this.mProjFar = v;
-        this.mFlags |= 0x02;
+        this.mFlags |= EDemoCamFlags.HasFarZ;
     }
 
 
@@ -61,7 +72,7 @@ class dDemo_camera_c extends TCamera {
 
     override JSGSetProjectionFovy(v: number): void {
         this.mFovy = v;
-        this.mFlags |= 0x04;
+        this.mFlags |= EDemoCamFlags.HasFovY;
     }
 
 
@@ -75,7 +86,7 @@ class dDemo_camera_c extends TCamera {
 
     override JSGSetProjectionAspect(v: number) {
         this.mAspect = v;
-        this.mFlags |= 0x08;
+        this.mFlags |= EDemoCamFlags.HasAspect;
     }
 
 
@@ -86,7 +97,7 @@ class dDemo_camera_c extends TCamera {
 
     override JSGSetViewPosition(v: ReadonlyVec3) {
         vec3.copy(this.mViewPosition, v);
-        this.mFlags |= 0x10;
+        this.mFlags |= EDemoCamFlags.HasEyePos;
     }
 
 
@@ -100,7 +111,7 @@ class dDemo_camera_c extends TCamera {
 
     override JSGSetViewUpVector(v: ReadonlyVec3) {
         vec3.copy(this.mUpVector, v);
-        this.mFlags |= 0x20;
+        this.mFlags |= EDemoCamFlags.HasUpVec;
     }
 
 
@@ -115,7 +126,7 @@ class dDemo_camera_c extends TCamera {
 
     override JSGSetViewTargetPosition(v: ReadonlyVec3) {
         vec3.copy(this.mTargetPosition, v);
-        this.mFlags |= 0x40;
+        this.mFlags |= EDemoCamFlags.HasTargetPos;
     }
 
 
@@ -129,7 +140,7 @@ class dDemo_camera_c extends TCamera {
 
     override JSGSetViewRoll(v: number) {
         this.mRoll = v;
-        this.mFlags |= 0x80;
+        this.mFlags |= EDemoCamFlags.HasRoll;
     }
 }
 

@@ -17,7 +17,7 @@ import { J3DModelInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase.js';
 import * as JPA from '../Common/JSYSTEM/JPA.js';
 import { BTIData } from '../Common/JSYSTEM/JUTTexture.js';
 import { dfRange } from '../DebugFloaters.js';
-import { getMatrixAxisZ, range } from '../MathHelpers.js';
+import { getMatrixAxisY, getMatrixAxisZ, range } from '../MathHelpers.js';
 import { SceneContext } from '../SceneBase.js';
 import { TextureMapping } from '../TextureHolder.js';
 import { setBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
@@ -39,7 +39,7 @@ import { dPa_control_c } from './d_particle.js';
 import { ResType, dRes_control_c } from './d_resorce.js';
 import { dStage_dt_c_roomLoader, dStage_dt_c_roomReLoader, dStage_dt_c_stageInitLoader, dStage_dt_c_stageLoader, dStage_roomStatus_c, dStage_stageDt_c } from './d_stage.js';
 import { cPhs__Status, fGlobals, fopAcM_create, fopAc_ac_c, fopDw_Draw, fopScn, fpcCt_Handler, fpcLy_SetCurrentLayer, fpcM_Management, fpcPf__Register, fpcSCtRq_Request, fpc__ProcessName, fpc_pc__ProfileList } from './framework.js';
-import { dDemo_manager_c, EDemoMode } from './d_demo.js';
+import { dDemo_manager_c, EDemoCamFlags, EDemoMode } from './d_demo.js';
 
 type SymbolData = { Filename: string, SymbolName: string, Data: ArrayBufferSlice };
 type SymbolMapData = { SymbolData: SymbolData[] };
@@ -318,6 +318,8 @@ const enum EffectDrawGroup {
 }
 
 const scratchMatrix = mat4.create();
+const scratchVec3a = vec3.create();
+const scratchVec3b = vec3.create();
 export class WindWakerRenderer implements Viewer.SceneGfx {
     private mainColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
     private mainDepthDesc = new GfxrRenderTargetDescription(GfxFormat.D32F);
@@ -764,19 +766,34 @@ class d_s_play extends fopScn {
     public override execute(globals: dGlobals, deltaTimeFrames: number): void {
         this.demo.update();
 
-        // noclip modification: if we're paused, allow noclip camera
+        // From executeEvtManager() -> SpecialProcPackage()
+        if (globals.scnPlay.demo.getMode() == EDemoMode.Ended) {
+            globals.scnPlay.demo.remove();
+        }
+
+        // noclip modification: if we're paused, allow noclip camera control
         const isPaused = globals.context.viewerInput.deltaTime === 0;
 
         // TODO: Determine the correct place for this
         // dCamera_c::Store() sets the camera params if the demo camera is active
-        if (this.demo.getMode() == EDemoMode.Playing && !isPaused) {
+        const demoCam = this.demo.getSystem().mpActiveCamera;
+        if (demoCam && !isPaused) {
+            let viewPos = globals.cameraPosition;
+            let targetPos = vec3.add(scratchVec3a, globals.cameraPosition, globals.cameraFwd);
+            let upVec = vec3.set(scratchVec3b, 0, 1, 0);
 
-            const viewPos = this.demo.getSystem().mpActiveCamera?.mViewPosition;
-            const targetPos = this.demo.getSystem().mpActiveCamera?.mTargetPosition;
-            if (viewPos) {
-                mat4.targetTo(globals.camera.worldMatrix, viewPos, targetPos, [0, 1, 0]);
-                globals.camera.worldMatrixUpdated();
-            }
+            if(demoCam.mFlags & EDemoCamFlags.HasTargetPos) { targetPos = demoCam.mTargetPosition; }
+            if(demoCam.mFlags & EDemoCamFlags.HasEyePos) { viewPos = demoCam.mViewPosition; }
+            if(demoCam.mFlags & EDemoCamFlags.HasUpVec) { upVec = demoCam.mUpVector; }
+            mat4.targetTo(globals.camera.worldMatrix, viewPos, targetPos, upVec);
+            
+            if(demoCam.mFlags & EDemoCamFlags.HasFovY) { globals.camera.fovY = demoCam.mFovy; }
+            if(demoCam.mFlags & EDemoCamFlags.HasRoll) { debugger; /* Untested. Remove once confirmed working */ }
+            if(demoCam.mFlags & EDemoCamFlags.HasAspect) { debugger; /* Untested. Remove once confirmed working */ }
+            if(demoCam.mFlags & EDemoCamFlags.HasNearZ) { globals.camera.near = demoCam.mProjNear; debugger; /* Untested. Remove once confirmed working */ }
+            if(demoCam.mFlags & EDemoCamFlags.HasFarZ) { globals.camera.far = demoCam.mProjFar; debugger; /* Untested. Remove once confirmed working */ }
+
+            globals.camera.worldMatrixUpdated();
         }
     }
 
