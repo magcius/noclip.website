@@ -764,7 +764,8 @@ class d_s_play extends fopScn {
     public override execute(globals: dGlobals, deltaTimeFrames: number): void {
         this.demo.update();
 
-        // @TODO: Determine the correct place for this
+        // TODO: Determine the correct place for this
+        // dCamera_c::Store() sets the camera params if the demo camera is active
         if (this.demo.getMode() == EDemoMode.Playing) {
             const viewPos = this.demo.getSystem().mpActiveCamera?.mViewPosition;
             const targetPos = this.demo.getSystem().mpActiveCamera?.mTargetPosition;
@@ -813,7 +814,7 @@ class d_s_play extends fopScn {
 class SceneDesc {
     public id: string;
 
-    public constructor(public stageDir: string, public name: string, public roomList: number[] = [0], public cutscene?: string) {
+    public constructor(public stageDir: string, public name: string, public roomList: number[] = [0], public demo?: DemoDesc) {
         this.id = stageDir;
 
         // Garbage hack.
@@ -933,17 +934,31 @@ class SceneDesc {
             dStage_dt_c_roomReLoader(globals, globals.roomStatus[roomNo], dzr);
         }
 
-        // @TODO: Improve and move to the correct place
-        if (this.cutscene) {
-            modelCache.fetchObjectData(this.cutscene);
-            await modelCache.waitForLoad();
-            const stbData = modelCache.resCtrl.getObjectRes(ResType.Stb, this.cutscene, 0x3);
-            globals.scnPlay.demo.create(stbData, [-220000, 0, 320000], Math.PI);
-            console.log(stbData);
-        }
+        // TODO: Improve and move to the correct place
+        if( this.demo)
+            this.demo.load(globals, modelCache);
 
         return renderer;
     }
+}
+
+class DemoDesc {
+    public id: string;
+
+    public constructor(public arcName: string, public name: string, private stbIndex: number, private originPos?: vec3, private rotY?: number ) {
+        this.id = arcName;
+    }
+
+    async load(globals: dGlobals, modelCache: ModelCache) {
+        modelCache.fetchObjectData(this.arcName);
+        await modelCache.waitForLoad();
+        const stbData = modelCache.resCtrl.getObjectRes(ResType.Stb, this.arcName, this.stbIndex);
+        globals.scnPlay.demo.create(stbData, this.originPos, this.rotY);
+    }
+}
+
+const demoDescs = {
+    Demo51: new DemoDesc("Demo51", "Start Screen", 0x03, [-220000, 0, 320000], Math.PI),
 }
 
 // Location names taken from CryZe's Debug Menu.
@@ -969,7 +984,7 @@ const sceneDescs = [
     new SceneDesc("Obshop", "Beedle's Shop", [1]),
 
     "Outset Island",
-    new SceneDesc("sea", "Opening Cutscene", [44], 'Demo51'),
+    new SceneDesc("sea", "Opening Cutscene", [44], demoDescs.Demo51),
     new SceneDesc("sea", "Outset Island", [44]),
     new SceneDesc("LinkRM", "Link's House"),
     new SceneDesc("LinkUG", "Under Link's House"),
