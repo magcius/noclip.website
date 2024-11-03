@@ -813,7 +813,7 @@ class d_s_play extends fopScn {
 class SceneDesc {
     public id: string;
 
-    public constructor(public stageDir: string, public name: string, public roomList: number[] = [0]) {
+    public constructor(public stageDir: string, public name: string, public roomList: number[] = [0], public cutscene?: string) {
         this.id = stageDir;
 
         // Garbage hack.
@@ -933,6 +933,15 @@ class SceneDesc {
             dStage_dt_c_roomReLoader(globals, globals.roomStatus[roomNo], dzr);
         }
 
+        // @TODO: Improve and move to the correct place
+        if (this.cutscene) {
+            modelCache.fetchObjectData(this.cutscene);
+            await modelCache.waitForLoad();
+            const stbData = modelCache.resCtrl.getObjectRes(ResType.Stb, this.cutscene, 0x3);
+            globals.scnPlay.demo.create(stbData, [-220000, 0, 320000], Math.PI);
+            console.log(stbData);
+        }
+
         return renderer;
     }
 }
@@ -960,6 +969,7 @@ const sceneDescs = [
     new SceneDesc("Obshop", "Beedle's Shop", [1]),
 
     "Outset Island",
+    new SceneDesc("sea", "Opening Cutscene", [44], 'Demo51'),
     new SceneDesc("sea", "Outset Island", [44]),
     new SceneDesc("LinkRM", "Link's House"),
     new SceneDesc("LinkUG", "Under Link's House"),
