@@ -764,9 +764,13 @@ class d_s_play extends fopScn {
     public override execute(globals: dGlobals, deltaTimeFrames: number): void {
         this.demo.update();
 
+        // noclip modification: if we're paused, allow noclip camera
+        const isPaused = globals.context.viewerInput.deltaTime === 0;
+
         // TODO: Determine the correct place for this
         // dCamera_c::Store() sets the camera params if the demo camera is active
-        if (this.demo.getMode() == EDemoMode.Playing) {
+        if (this.demo.getMode() == EDemoMode.Playing && !isPaused) {
+
             const viewPos = this.demo.getSystem().mpActiveCamera?.mViewPosition;
             const targetPos = this.demo.getSystem().mpActiveCamera?.mTargetPosition;
             if (viewPos) {
