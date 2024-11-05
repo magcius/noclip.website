@@ -926,6 +926,8 @@ class SceneDesc {
         // dStage_dt_c_stageLoader()
         // dMap_c::create()
 
+        globals.roomCtrl.demoArcName = undefined;
+
         const vrbox = resCtrl.getStageResByName(ResType.Model, `Stage`, `vr_sky.bdl`);
         if (vrbox !== null) {
             fpcSCtRq_Request(framework, null, fpc__ProcessName.d_a_vrbox, null);
@@ -947,6 +949,29 @@ class SceneDesc {
 
             const dzr = assertExists(resCtrl.getStageResByName(ResType.Dzs, `Room${roomNo}`, `room.dzr`));
             dStage_dt_c_roomLoader(globals, globals.roomCtrl.status[roomNo].data, dzr);
+
+            if (!globals.roomCtrl.demoArcName) {
+                const lbnk = globals.roomCtrl.status[roomNo].data.lbnk;
+                if (lbnk) {
+                    // This system can load a different demo file based on the active layer when the room is loaded.
+                    // It should use dComIfG_play_c::getLayerNo(roomNo) to select the current layer.
+                    // For now, just use layer 0
+                    if(lbnk[1] != 0xFF) console.warn('Stage contains a demo in non-zero layer. May be worth investigating.');
+                    const layerNo = 0;
+
+                    const bank = lbnk[layerNo];
+                    if (bank != 0xFF) {
+                        assert(bank >= 0 && bank < 100);
+                        globals.roomCtrl.demoArcName = `Demo${bank.toString().padStart(2, '0')}`;
+                        console.debug(`Loading stage demo file: ${globals.roomCtrl.demoArcName}`);
+                        modelCache.fetchObjectData(globals.roomCtrl.demoArcName).catch(e => {
+                            // @TODO: Better error handling. This does not prevent a debugger break.
+                            console.log(`Failed to load stage demo file: ${globals.roomCtrl.demoArcName}`, e);
+                        })
+                    }
+                }
+            }
+
             dStage_dt_c_roomReLoader(globals, globals.roomCtrl.status[roomNo].data, dzr);
         }
 
