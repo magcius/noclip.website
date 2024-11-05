@@ -44,7 +44,12 @@ class DataFetcherRequest {
 
         if (this.options.rangeStart !== undefined && this.options.rangeSize !== undefined) {
             const rangeStart = this.options.rangeStart;
-            const rangeEnd = rangeStart + this.options.rangeSize - 1; // Range header is inclusive.
+            let rangeEnd;
+            if (typeof rangeStart === 'bigint') {
+                rangeEnd = rangeStart + BigInt(this.options.rangeSize - 1);
+            } else {
+                rangeEnd = rangeStart + this.options.rangeSize - 1;
+            }
             this.request.headers.set('range', `bytes=${rangeStart}-${rangeEnd}`);
 
             // Partial responses are unsupported with Cache, for some lovely reason.

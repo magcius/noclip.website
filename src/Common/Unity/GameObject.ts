@@ -1,7 +1,7 @@
 
 import { mat4, quat, vec3 } from "gl-matrix";
-import type * as wasm from '../../../rust/pkg/index';
-import type { UnityObject } from "../../../rust/pkg/index";
+import type * as wasm from '../../../rust/pkg/noclip_support';
+import type { UnityObject } from "../../../rust/pkg/noclip_support";
 import { DeviceProgram } from "../../Program.js";
 import { SceneContext } from "../../SceneBase.js";
 import { GfxShaderLibrary } from "../../gfx/helpers/GfxShaderLibrary.js";
@@ -219,7 +219,7 @@ export class MeshRenderer extends UnityComponent {
             mat4.copy(this.modelMatrix, transform.modelMatrix);
         }
 
-        const template = renderInstManager.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplate();
 
         let offs = template.allocateUniformBuffer(UnityShaderProgramBase.ub_ShapeParams, 12);
         const mapped = template.mapUniformBufferF32(UnityShaderProgramBase.ub_ShapeParams);
@@ -242,12 +242,12 @@ export class MeshRenderer extends UnityComponent {
             const renderInst = renderInstManager.newRenderInst();
             material.prepareToRender(renderInst);
             const firstIndex = submesh.first_byte / meshData.indexBufferStride;
-            renderInst.drawIndexes(submesh.index_count, firstIndex);
+            renderInst.setDrawCount(submesh.index_count, firstIndex);
             renderInst.setMegaStateFlags({ cullMode: GfxCullMode.Back, frontFace: GfxFrontFaceMode.CW });
             renderInstManager.submitRenderInst(renderInst);
         }
 
-        renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplate();
     }
 
     public override destroy(device: GfxDevice): void {

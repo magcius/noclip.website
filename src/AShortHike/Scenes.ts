@@ -3,7 +3,7 @@ import * as Viewer from '../viewer.js';
 import { SceneContext } from '../SceneBase.js';
 import { fillMatrix4x4, fillVec4 } from '../gfx/helpers/UniformBufferHelpers.js';
 import { GfxDevice, GfxProgram } from '../gfx/platform/GfxPlatform.js';
-import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
+import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
 import { UnityRuntime, MeshRenderer as UnityMeshRenderer, UnityMaterialFactory, UnityMaterialInstance, createUnityRuntime, UnityShaderProgramBase } from '../Common/Unity/GameObject.js';
@@ -240,7 +240,7 @@ class UnityRenderer implements Viewer.SceneGfx {
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
-        const renderInstManager = this.renderHelper.renderInstManager;
+        const renderInstList = this.renderHelper.renderInstManager.currentList;
 
         const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, standardFullClearRenderPassDescriptor);
         const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, standardFullClearRenderPassDescriptor);
@@ -254,15 +254,14 @@ class UnityRenderer implements Viewer.SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                renderInstManager.drawOnPassRenderer(passRenderer);
+                renderInstList.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
-        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender(device, viewerInput);
         this.renderHelper.renderGraph.execute(builder);
-        renderInstManager.resetRenderInsts();
+        renderInstList.reset();
     }
 
     public destroy(device: GfxDevice) {

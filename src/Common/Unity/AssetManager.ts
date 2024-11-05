@@ -1,10 +1,9 @@
 
+import { vec3, vec4 } from 'gl-matrix';
+import { AssetInfo, ChannelInfo, Mesh, PPtr, SubMesh, SubMeshArray, AABB as UnityAABB, UnityClassID, UnityColorSpace, UnityMaterial, UnityObject, UnityShader, UnityStreamingInfo, UnityTexture2D, UnityTextureFormat, UnityTextureSettings, VertexFormat } from '../../../rust/pkg/noclip_support';
 import ArrayBufferSlice from '../../ArrayBufferSlice.js';
 import { Color, TransparentBlack, colorNewFromRGBA } from '../../Color.js';
 import { DataFetcher } from '../../DataFetcher.js';
-import { AssetInfo, Mesh, AABB as UnityAABB, VertexFormat, StreamingInfo, ChannelInfo } from '../../../rust/pkg/noclip_support';
-import { SceneContext } from '../../SceneBase.js';
-import { vec3, vec4 } from 'gl-matrix';
 import { downloadBlob } from '../../DownloadUtils.js';
 import * as Geometry from '../../Geometry.js';
 import { Destroyable, SceneContext } from '../../SceneBase.js';
@@ -14,8 +13,8 @@ import { fillColor, fillVec4, fillVec4v } from '../../gfx/helpers/UniformBufferH
 import { GfxBufferUsage, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxMipFilterMode, GfxSampler, GfxSamplerDescriptor, GfxTexFilterMode, GfxTexture, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxWrapMode, makeTextureDescriptor2D } from '../../gfx/platform/GfxPlatform.js';
 import { FormatCompFlags, getFormatCompByteSize, setFormatCompFlags } from '../../gfx/platform/GfxPlatformFormat.js';
 import { GfxRenderCache } from '../../gfx/render/GfxRenderCache.js';
-import { assert, assertExists, fallbackUndefined } from '../../util.js';
 import { rust } from '../../rustlib.js';
+import { assert, assertExists, fallbackUndefined } from '../../util.js';
 
 interface WasmBindgenArray<T> {
     length: number;
