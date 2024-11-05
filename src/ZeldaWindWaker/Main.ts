@@ -323,6 +323,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
     public renderHelper: GXRenderHelperGfx;
 
     public rooms: WindWakerRoom[] = [];
+    public demos: DemoDesc[] = []
     public extraTextures: ZWWExtraTextures;
     public renderCache: GfxRenderCache;
 
@@ -366,6 +367,16 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         roomsPanel.setTitle(UI.LAYER_ICON, 'Rooms');
         roomsPanel.setLayers(this.rooms);
 
+            const demosPanel = new UI.Panel();
+            demosPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
+            demosPanel.setTitle(UI.LAYER_ICON, 'Cutscenes');
+            const demoSelect = new UI.SingleSelect();
+            demoSelect.setStrings(this.demos.map(d => d.name));
+            demoSelect.onselectionchange = (idx: number) => {
+                this.demos[idx].load(this.globals)
+            };
+            demosPanel.contents.appendChild(demoSelect.elem);
+
         const renderHacksPanel = new UI.Panel();
         renderHacksPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
         renderHacksPanel.setTitle(UI.RENDER_HACKS_ICON, 'Render Hacks');
@@ -396,7 +407,9 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
             renderHacksPanel.contents.appendChild(wireframe.elem);
         }
 
-        return [roomsPanel, scenarioPanel, renderHacksPanel];
+        const panels = [roomsPanel, scenarioPanel, renderHacksPanel];
+        if( this.demos.length > 0 ) { panels.push(demosPanel); }
+        return panels;
     }
 
     // For people to play around with.
@@ -969,16 +982,14 @@ class SceneDesc {
                             // @TODO: Better error handling. This does not prevent a debugger break.
                             console.log(`Failed to load stage demo file: ${globals.roomCtrl.demoArcName}`, e);
                         })
+
+                        globals.renderer.demos = demoDescs.filter(d => d.stage == globals.stageName);
                     }
                 }
             }
 
             dStage_dt_c_roomReLoader(globals, globals.roomCtrl.status[roomNo].data, dzr);
         }
-
-        // TODO: Improve and move to the correct place
-        if( this.demo)
-            this.demo.load(globals, modelCache);
 
         return renderer;
     }
@@ -997,10 +1008,11 @@ class DemoDesc {
         public eventFlags?: number,
     ) {}
 
-    async load(globals: dGlobals, modelCache: ModelCache) {
-        await modelCache.waitForLoad();
+    async load(globals: dGlobals) {
+        await globals.modelCache.waitForLoad();
         if(globals.roomCtrl.demoArcName) {
-            const stbData = modelCache.resCtrl.getObjectResByName(ResType.Stb, globals.roomCtrl.demoArcName!, this.stbFilename);
+            const stbData = globals.modelCache.resCtrl.getObjectResByName(ResType.Stb, globals.roomCtrl.demoArcName!, this.stbFilename);
+            // @TODO: Search the stage arc as well. See dEvDtStaff_c::specialProcPackage()
             if( stbData ) { globals.scnPlay.demo.create(stbData, this.offsetPos, this.rotY); }
         }
     }
