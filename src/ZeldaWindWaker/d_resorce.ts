@@ -89,6 +89,10 @@ export class dRes_control_c {
         return this.getResByIndex(resType, arcName, resIndex, this.resObj);
     }
 
+    public getObjectResByName<T extends ResType>(resType: T, arcName: string, resName: string): ResAssetType<T> | null {
+        return this.getResByName(resType, arcName, resName, this.resObj);
+    }
+
     public getResByName<T extends ResType>(resType: T, arcName: string, resName: string, resList: dRes_info_c[]): ResAssetType<T> | null {
         const resInfo = assertExists(this.findResInfo(arcName, resList));
         return resInfo.getResByName(resType, resName);
