@@ -986,20 +986,21 @@ class SceneDesc {
 class DemoDesc {
     public id: string;
 
-    public constructor(public arcName: string, public name: string, private stbIndex: number, private originPos?: vec3, private rotY?: number ) {
-        this.id = arcName;
+    public constructor(public filename: string, public name: string, private stbIndex: number, private originPos?: vec3, private rotY?: number ) {
+        this.id = filename;
     }
 
     async load(globals: dGlobals, modelCache: ModelCache) {
-        modelCache.fetchObjectData(this.arcName);
         await modelCache.waitForLoad();
-        const stbData = modelCache.resCtrl.getObjectRes(ResType.Stb, this.arcName, this.stbIndex);
-        globals.scnPlay.demo.create(stbData, this.originPos, this.rotY);
+        if(globals.roomCtrl.demoArcName) {
+            const stbData = modelCache.resCtrl.getObjectResByName(ResType.Stb, globals.roomCtrl.demoArcName!, this.filename);
+            if( stbData ) { globals.scnPlay.demo.create(stbData, this.originPos, this.rotY); }
+        }
     }
 }
 
 const demoDescs = {
-    Demo51: new DemoDesc("Demo51", "Start Screen", 0x03, [-220000, 0, 320000], Math.PI),
+    Demo51: new DemoDesc("title.stb", "Start Screen", 0x03, [-220000, 0, 320000], Math.PI),
 }
 
 // Location names taken from CryZe's Debug Menu.
@@ -1025,7 +1026,7 @@ const sceneDescs = [
     new SceneDesc("Obshop", "Beedle's Shop", [1]),
 
     "Outset Island",
-    new SceneDesc("sea", "Opening Cutscene", [44], demoDescs.Demo51),
+    new SceneDesc("sea_T", "Opening Cutscene", [44], demoDescs.Demo51),
     new SceneDesc("sea", "Outset Island", [44]),
     new SceneDesc("LinkRM", "Link's House"),
     new SceneDesc("LinkUG", "Under Link's House"),
