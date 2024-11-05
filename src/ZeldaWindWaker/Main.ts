@@ -33,11 +33,11 @@ import { dDlst_2DStatic_c, d_a__RegisterConstructors } from './d_a.js';
 import { d_a_sea } from './d_a_sea.js';
 import { dBgS } from './d_bg.js';
 import { dDlst_list_Set, dDlst_list_c } from './d_drawlist.js';
-import { dKankyo_create, dKy__RegisterConstructors, dKy_setLight, dKy_tevstr_init, dScnKy_env_light_c } from './d_kankyo.js';
+import { dKankyo_create, dKy__RegisterConstructors, dKy_setLight, dScnKy_env_light_c } from './d_kankyo.js';
 import { dKyw__RegisterConstructors } from './d_kankyo_wether.js';
 import { dPa_control_c } from './d_particle.js';
 import { ResType, dRes_control_c } from './d_resorce.js';
-import { dStage_dt_c_roomLoader, dStage_dt_c_roomReLoader, dStage_dt_c_stageInitLoader, dStage_dt_c_stageLoader, dStage_roomStatus_c, dStage_stageDt_c } from './d_stage.js';
+import { dStage_dt_c_roomLoader, dStage_dt_c_roomReLoader, dStage_dt_c_stageInitLoader, dStage_dt_c_stageLoader, dStage_roomControl_c, dStage_roomStatus_c, dStage_stageDt_c } from './d_stage.js';
 import { cPhs__Status, fGlobals, fopAcM_create, fopAc_ac_c, fopDw_Draw, fopScn, fpcCt_Handler, fpcLy_SetCurrentLayer, fpcM_Management, fpcPf__Register, fpcSCtRq_Request, fpc__ProcessName, fpc_pc__ProfileList } from './framework.js';
 import { dDemo_manager_c, EDemoCamFlags, EDemoMode } from './d_demo.js';
 
@@ -126,7 +126,7 @@ export class dGlobals {
     // This is tucked away somewhere in dComInfoPlay
     public stageName: string;
     public dStage_dt = new dStage_stageDt_c();
-    public roomStatus: dStage_roomStatus_c[] = nArray(64, () => new dStage_roomStatus_c());
+    public roomCtrl = new dStage_roomControl_c();
     public particleCtrl: dPa_control_c;
 
     public scnPlay: d_s_play;
@@ -159,11 +159,6 @@ export class dGlobals {
 
         this.relNameTable = createRelNameTable(extraSymbolData);
         this.objectNameTable = createActorTable(extraSymbolData);
-
-        for (let i = 0; i < this.roomStatus.length; i++) {
-            this.roomStatus[i].roomNo = i;
-            dKy_tevstr_init(this.roomStatus[i].tevStr, i);
-        }
 
         this.quadStatic = new dDlst_2DStatic_c(modelCache.device, modelCache.cache);
 
@@ -411,7 +406,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         if (ac.roomNo === -1)
             return null;
 
-        return this.globals.roomStatus[ac.roomNo];
+        return this.globals.roomCtrl.status[ac.roomNo];
     }
 
     private getSingleRoomVisible(): number {
@@ -941,7 +936,7 @@ class SceneDesc {
             const roomNo = Math.abs(this.roomList[i]);
 
             const visible = this.roomList[i] >= 0;
-            const roomStatus = globals.roomStatus[i];
+            const roomStatus = globals.roomCtrl.status[i];
             roomStatus.visible = visible;
             renderer.rooms.push(new WindWakerRoom(roomNo, roomStatus));
 
@@ -951,8 +946,8 @@ class SceneDesc {
             fopAcM_create(framework, fpc__ProcessName.d_a_bg, roomNo, null, roomNo, null, null, 0xFF, -1);
 
             const dzr = assertExists(resCtrl.getStageResByName(ResType.Dzs, `Room${roomNo}`, `room.dzr`));
-            dStage_dt_c_roomLoader(globals, globals.roomStatus[roomNo], dzr);
-            dStage_dt_c_roomReLoader(globals, globals.roomStatus[roomNo], dzr);
+            dStage_dt_c_roomLoader(globals, globals.roomCtrl.status[roomNo].data, dzr);
+            dStage_dt_c_roomReLoader(globals, globals.roomCtrl.status[roomNo].data, dzr);
         }
 
         // TODO: Improve and move to the correct place

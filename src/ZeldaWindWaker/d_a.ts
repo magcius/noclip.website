@@ -475,7 +475,7 @@ class d_a_bg extends fopAc_ac_c {
                     mat4.copy(this.bgModel[i]!.modelMatrix, calc_mtx);
         }
 
-        dKy_tevstr_init(globals.roomStatus[roomNo].tevStr, roomNo, -1);
+        dKy_tevstr_init(globals.roomCtrl.status[roomNo].tevStr, roomNo, -1);
 
         return cPhs__Status.Next;
     }
@@ -507,7 +507,7 @@ class d_a_bg extends fopAc_ac_c {
         }
 
         const roomNo = this.parameters;
-        settingTevStruct(globals, LightType.BG0, null, globals.roomStatus[roomNo].tevStr);
+        settingTevStruct(globals, LightType.BG0, null, globals.roomCtrl.status[roomNo].tevStr);
     }
 
     public override delete(globals: dGlobals): void {
@@ -608,7 +608,7 @@ class d_a_vrbox extends fopAc_ac_c {
             return;
 
         let skyboxOffsY = 0;
-        const fili = globals.roomStatus[globals.mStayNo].fili;
+        const fili = globals.roomCtrl.status[globals.mStayNo].data.fili;
         if (fili !== null)
             skyboxOffsY = fili.skyboxY;
 
@@ -725,7 +725,7 @@ class d_a_vrbox2 extends fopAc_ac_c {
             return;
 
         let skyboxOffsY = 0;
-        const fili = globals.roomStatus[globals.mStayNo].fili;
+        const fili = globals.roomCtrl.status[globals.mStayNo].data.fili;
         if (fili !== null)
             skyboxOffsY = fili.skyboxY;
 

@@ -756,8 +756,8 @@ export class WoodPacket implements J3DPacket {
 
             for (let r = 0; r < kRoomCount; r++) {
                 // Set the room color and fog params
-                colorCopy(materialParams.u_Color[ColorKind.C0], globals.roomStatus[r].tevStr.colorC0);
-                colorCopy(materialParams.u_Color[ColorKind.C1], globals.roomStatus[r].tevStr.colorK0);
+                colorCopy(materialParams.u_Color[ColorKind.C0], globals.roomCtrl.status[r].tevStr.colorC0);
+                colorCopy(materialParams.u_Color[ColorKind.C1], globals.roomCtrl.status[r].tevStr.colorK0);
                 dKy_GxFog_set(globals.g_env_light, materialParams.u_FogBlock, viewerInput.camera);
 
                 for (let unit of this.unit[r]) {

@@ -650,7 +650,7 @@ export function setLightTevColorType(globals: dGlobals, modelInstance: J3DModelI
 function SetBaseLight(globals: dGlobals): void {
     const envLight = globals.g_env_light;
 
-    const lgtv = globals.roomStatus[globals.mStayNo].lgtv;
+    const lgtv = globals.roomCtrl.status[globals.mStayNo].data.lgtv;
     if (lgtv !== null) {
         vec3.copy(envLight.baseLight.pos, lgtv.pos);
         colorFromRGBA(envLight.baseLight.color, 0.0, 0.0, 0.0, 0.0);

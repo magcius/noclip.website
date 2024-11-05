@@ -3,7 +3,7 @@ import { Color, White, colorNewCopy, colorFromRGBA8, colorNewFromRGBA8 } from ".
 import { DZS } from "./d_resorce.js";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { nArray, assert, readString } from "../util.js";
-import { dKy_tevstr_c } from "./d_kankyo.js";
+import { dKy_tevstr_c, dKy_tevstr_init } from "./d_kankyo.js";
 import { vec3 } from "gl-matrix";
 import { Endianness } from "../endian.js";
 import { dGlobals } from "./Main.js";
@@ -520,9 +520,21 @@ export class dStage_roomDt_c extends dStage_dt {
     public lgtv: stage_lightvec_info_class | null = null;
 }
 
-export class dStage_roomStatus_c extends dStage_roomDt_c {
+export class dStage_roomStatus_c {
+    public data = new dStage_roomDt_c(); 
     public tevStr = new dKy_tevstr_c();
     public visible = true;
+}
+
+export class dStage_roomControl_c {
+    public status: dStage_roomStatus_c[] = nArray(64, () => new dStage_roomStatus_c());
+
+    constructor() {
+        for (let i = 0; i < this.status.length; i++) {
+            this.status[i].data.roomNo = i;
+            dKy_tevstr_init(this.status[i].tevStr, i);
+        }
+    }
 }
 
 function dStage_filiInfoInit(globals: dGlobals, dt: dStage_roomDt_c, buffer: ArrayBufferSlice, count: number): void {
@@ -581,5 +593,5 @@ export function dStage_dt_c_roomReLoader(globals: dGlobals, dt: dStage_roomDt_c,
 //#endregion
 
 export function dPath_GetRoomPath(globals: dGlobals, idx: number, roomNo: number): dPath {
-    return globals.roomStatus[roomNo].rpat[idx];
+    return globals.roomCtrl.status[roomNo].data.rpat[idx];
 }

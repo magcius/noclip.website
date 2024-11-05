@@ -2001,7 +2001,7 @@ function wether_move_windline(globals: dGlobals, deltaTimeFrames: number): void 
     const envLight = globals.g_env_light;
 
     let windlineCount = 0;
-    const fili = globals.roomStatus[globals.mStayNo].fili;
+    const fili = globals.roomCtrl.status[globals.mStayNo].data.fili;
     if (fili !== null && !!(fili.param & 0x100000) && globals.stageName !== 'GTower') {
         windlineCount = (10.0 * dKyw_get_wind_pow(envLight)) | 0;
     }
@@ -2397,7 +2397,7 @@ function wether_move_wave(globals: dGlobals, deltaTimeFrames: number): void {
         // TODO(jstpierre): #TACT_WIND. Overwrite with tact wind. LinkRM / Orichh / Ojhous2 / Omasao / Onobuta
     }
 
-    const fili = globals.roomStatus[globals.mStayNo].fili;
+    const fili = globals.roomCtrl.status[globals.mStayNo].data.fili;
     let skyboxY = 0.0;
     if (fili !== null)
         skyboxY = fili.skyboxY;
@@ -2524,7 +2524,7 @@ function vrkumo_move(globals: dGlobals, deltaTimeFrames: number): void {
     }
 
     {
-        const fili = globals.roomStatus[globals.mStayNo].fili;
+        const fili = globals.roomCtrl.status[globals.mStayNo].data.fili;
         let skyboxY = 0.0;
         if (fili !== null)
             skyboxY = fili.skyboxY;
@@ -2697,7 +2697,7 @@ export function dKyw_wind_set(globals: dGlobals): void {
         targetWindPower = envLight.customWindPower;
     } else {
         let windPowerFlag = 0;
-        const fili = globals.roomStatus[globals.mStayNo].fili;
+        const fili = globals.roomCtrl.status[globals.mStayNo].data.fili;
         if (fili !== null)
             windPowerFlag = dStage_FileList_dt_GlobalWindLevel(fili);
 
