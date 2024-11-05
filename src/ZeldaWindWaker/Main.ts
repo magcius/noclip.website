@@ -1001,7 +1001,7 @@ class DemoDesc {
         public name: string,
         public stbFilename: string, 
         public offsetPos?:vec3, 
-        public rotY?: number,
+        public rotY: number = 0,
         public roomNo?: number,
         public layer?: number,
         public startCode?: number,
@@ -1013,7 +1013,7 @@ class DemoDesc {
         if(globals.roomCtrl.demoArcName) {
             const stbData = globals.modelCache.resCtrl.getObjectResByName(ResType.Stb, globals.roomCtrl.demoArcName!, this.stbFilename);
             // @TODO: Search the stage arc as well. See dEvDtStaff_c::specialProcPackage()
-            if( stbData ) { globals.scnPlay.demo.create(stbData, this.offsetPos, this.rotY); }
+            if( stbData ) { globals.scnPlay.demo.create(stbData, this.offsetPos, this.rotY / 180.0 * Math.PI); }
         }
     }
 }
