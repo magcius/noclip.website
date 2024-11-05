@@ -956,6 +956,7 @@ class SceneDesc {
                     // This system can load a different demo file based on the active layer when the room is loaded.
                     // It should use dComIfG_play_c::getLayerNo(roomNo) to select the current layer.
                     // For now, just use layer 0
+                    // TODO: Use the first set layer
                     if(lbnk[1] != 0xFF) console.warn('Stage contains a demo in non-zero layer. May be worth investigating.');
                     const layerNo = 0;
 
@@ -984,24 +985,87 @@ class SceneDesc {
 }
 
 class DemoDesc {
-    public id: string;
-
-    public constructor(public filename: string, public name: string, private stbIndex: number, private originPos?: vec3, private rotY?: number ) {
-        this.id = filename;
-    }
+    public constructor(
+        public stage: string, 
+        public name: string,
+        public stbFilename: string, 
+        public offsetPos?:vec3, 
+        public rotY?: number,
+        public roomNo?: number,
+        public layer?: number,
+        public startCode?: number,
+        public eventFlags?: number,
+    ) {}
 
     async load(globals: dGlobals, modelCache: ModelCache) {
         await modelCache.waitForLoad();
         if(globals.roomCtrl.demoArcName) {
-            const stbData = modelCache.resCtrl.getObjectResByName(ResType.Stb, globals.roomCtrl.demoArcName!, this.filename);
-            if( stbData ) { globals.scnPlay.demo.create(stbData, this.originPos, this.rotY); }
+            const stbData = modelCache.resCtrl.getObjectResByName(ResType.Stb, globals.roomCtrl.demoArcName!, this.stbFilename);
+            if( stbData ) { globals.scnPlay.demo.create(stbData, this.offsetPos, this.rotY); }
         }
     }
 }
 
-const demoDescs = {
-    Demo51: new DemoDesc("title.stb", "Start Screen", 0x03, [-220000, 0, 320000], Math.PI),
-}
+const demoDescs = [
+    new DemoDesc("ADMumi", "warp_in", "warp_in.stb", [0.0, 0.0, 0.0], 0.0, 0, 8, 200, 0),
+    new DemoDesc("ADMumi", "warphole", "warphole.stb", [0.0, 0.0, 0.0], 0.0, 0, -1, 219, 0),
+    new DemoDesc("ADMumi", "runaway_majuto", "runaway_majuto.stb", [0, 0, 0], 0, 0, -1, 0, 0),
+    new DemoDesc("ADMumi", "towerd", "towerd.stb", [-50179.0, -1000.0, 7070.0], 90.0, 26, -1, 0, 0),
+    new DemoDesc("ADMumi", "towerf", "towerf.stb", [-50179.0, -1000.0, 7070.0], 90.0, 26, -1, 0, 0),
+    new DemoDesc("ADMumi", "towern", "towern.stb", [-50179.0, -1000.0, 7070.0], 90.0, 26, -1, 0, 0),
+    new DemoDesc("A_mori", "MEET_TETORA", "meet_tetra.stb", [0, 0, 0], 0, 0, 0, 0, 0),
+    new DemoDesc("A_nami", "COUNTER_DEMO", "counter.stb", [0, 0, 0], 0, 0, 0, 0, 0),
+    new DemoDesc("Adanmae", "demo41", "howling.stb", [0.0, 0.0, 0.0], 0.0, 0, 0, 0, 0),
+    new DemoDesc("Atorizk", "demo10", "dragontale.stb", [0, 0, 0], 0, 0, 0, 0, 0),
+    new DemoDesc("DmSpot0", "SARAWARE", "kaizoku_zelda_fly.stb", [0, 0, 0], 0, 0, 0, 0, 0),
+    new DemoDesc("E3ROOP", "VOYAGE", "voyage.stb", [0, 0, 0], 0, 0, 0, 0, 0),
+    new DemoDesc("E3ROOP", "COUNTER_DEMO", "counter.stb", [0, 0, 0], 0, 0, 0, 0, 0),
+    new DemoDesc("ENDumi", "ending", "ending.stb", [0.0, 0.0, 0.0], 0.0, 0, 0, 0, 0),
+    new DemoDesc("Edaichi", "dance_zola", "dance_zola.stb", [0.0, 0.0, 0.0], 0, 0, -1, 226, 0),
+    new DemoDesc("Ekaze", "dance_kokiri", "dance_kokiri.stb", [0.0, 0.0, 0.0], 0, 0, -1, 229, 0),
+    new DemoDesc("GTower", "g2before", "g2before.stb", [0.0, 0.0, 0.0], 0.0, 0, 1, 0, 0),
+    new DemoDesc("GTower", "endhr", "endhr.stb", [0.0, 0.0, 0.0], 0.0, 0, -1, 0, 0),
+    new DemoDesc("GanonK", "kugutu_ganon", "kugutu_ganon.stb", [0.0, 0.0, 0.0], 0.0, 0, 0, 0, 0),
+    new DemoDesc("GanonK", "to_roof", "to_roof.stb", [0.0, 0.0, 0.0], 0.0, 0, -1, 4, 0),
+    new DemoDesc("Hyroom", "rebirth_hyral", "rebirth_hyral.stb", [0.0, -2100.0, 3910.0], 0.0, 0, 10, 249, 0),
+    new DemoDesc("Hyrule", "warp_out", "warp_out.stb", [0, 0, 0], 0, 0, 0, 201, 0),
+    new DemoDesc("Hyrule", "seal", "seal.stb", [0.0, 0.0, 0.0], 0, 0, 0, 0, 0),
+    new DemoDesc("LinkRM", "TALE_DEMO", "tale.stb", [0, 0, 0], 0, 0, 0, 0, 0),
+    new DemoDesc("LinkRM", "TALE_DEMO2", "tale_2.stb", [0, 0, 0], 0, 0, 0, 0, 0),
+    new DemoDesc("LinkRM", "get_shield", "get_shield.stb", [0, 0, 0], 0, 0, 9, 201, 0),
+    new DemoDesc("LinkRM", "tale_2", "tale_2.stb", [0, 0, 0], 0, 0, 0, 0, 0),
+    new DemoDesc("M2ganon", "attack_ganon", "attack_ganon.stb", [2000.0, 11780.0, -8000.0], 0.0, 0, 11, 244, 0),
+    new DemoDesc("M2tower", "rescue", "rescue.stb", [3214.0, 3939.0, -3011.0], 57.5, 0, 3, 20, 0),
+    new DemoDesc("M_DaiB", "pray_zola", "pray_zola.stb", [0, 0, 0], 0, 45, -1, 229, 0),
+    new DemoDesc("MajyuE", "majyuu_shinnyuu", "maju_shinnyu.stb", [0, 0, 0], 0, 0, 0, 0, 0),
+    new DemoDesc("Mjtower", "FIND_SISTER", "find_sister.stb", [4889.0, 0.0, -2635.0], 57.5, 0, 0, 0, 0),
+    new DemoDesc("Obombh", "bombshop", "bombshop.stb", [0.0, 0.0, 0.0], 0.0, 0, 0, 200, 0),
+    new DemoDesc("Ocean", "COUNTER_DEMO", "counter.stb", [0, 0, 0], 0, 0, 0, 0, 0),
+    new DemoDesc("Omori", "getperl_deku", "getperl_deku.stb", [0, 0, 0], 0, 0, -1, 214, 0),
+    new DemoDesc("Omori", "meet_deku", "meet_deku.stb", [0, 0, 0], 0, 0, -1, 213, 0),
+    new DemoDesc("Otkura", "awake_kokiri", "awake_kokiri.stb", [0, 0, 0], 0, 0, 0, 0, 0),
+    new DemoDesc("Pjavdou", "getperl_jab", "getperl_jab.stb", [0.0, 0.0, 0.0], 0.0, 0, 0, 0, 0),
+    new DemoDesc("VrTest", "COUNTER_DEMO", "counter.stb", [0, 0, 0], 0, 0, 0, 0, 0),
+    new DemoDesc("kazeB", "pray_kokiri", "pray_kokiri.stb", [0.0, 300.0, 0.0], 0.0, 4, -1, 232, 0),
+    new DemoDesc("kenroom", "awake_zelda", "awake_zelda.stb", [0.0, 0.0, 0.0], 0.0, 0, -1, 2, 0),
+    new DemoDesc("kenroom", "master_sword", "master_sword.stb", [-124.0, -3223.0, -7823.0], 180.0, 0, 8, 248, 0),
+    new DemoDesc("kenroom", "swing_sword", "swing_sword.stb", [-124.0, -3223.0, -7823.0], 180.0, 0, 6, 249, 0),
+    new DemoDesc("sea", "awake", "awake.stb", [-220000.0, 0.0, 320000.0], 0.0, 0, 0, 0, 0),
+    new DemoDesc("sea", "departure_DEMO", "departure.stb", [-200000.0, 0.0, 320000.0], 0.0, 0, -1, 204, 0),
+    new DemoDesc("sea", "fairy", "fairy.stb", [-180000.0, 740.0, -199937.0], 25.0, 9, -1, 2, 0),
+    new DemoDesc("sea", "fairy_flag_on", "fairy_flag_on.stb", [-180000.0, 740.0, -199937.0], 25.0, 9, -1, 2, 0),
+    new DemoDesc("sea", "awake_zola", "awake_zola.stb", [200000.0, 0.0, -200000.0], 0, 13, -1, 227, 0),
+    new DemoDesc("sea", "getperl_komori", "getperl_komori.stb", [200000.0, 0.0, -200000.0], 0, 0, 0, 0, 0),
+    new DemoDesc("sea", "MEETSHISHIOH", "meetshishioh.stb", [0.0, 0.0, -200000.0], 0, 11, 0, 128, 0),
+    new DemoDesc("sea", "STOLENSISTER", "stolensister.stb", [0.0, 0.0, 20000.0], 0, 0, 0, 0, 0),
+    new DemoDesc("sea", "zelda_fly", "kaizoku_zelda_fly.stb", [-200000.0, 0.0, 320000.0], 180.0, 0, 0, 0, 0),
+    new DemoDesc("sea_E", "awake", "awake.stb", [-220000.0, 0.0, 320000.0], 0.0, 0, 0, 0, 0),
+    new DemoDesc("sea_E", "epilogue", "epilogue.stb", [-200000.0, 0.0, 320000.0], 0.0, 44, -1, 0, 0),
+    new DemoDesc("sea_T", "awake", "awake.stb", [-220000.0, 0.0, 320000.0], 0.0, 0, 0, 0, 0),
+    new DemoDesc("sea_T", "title", "title.stb", [-220000.0, 0.0, 320000.0], 180.0, 44, -1, 0, 0),
+    new DemoDesc("sea_T", "fly_demo", "kaizoku_zelda_fly.stb", [-200000.0, 0.0, 320000.0], 180.0, 0, 0, 0, 0),
+    new DemoDesc("sea_T", "departure_DEMO", "departure.stb", [-200000.0, 0.0, 320000.0], 0.0, 0, 0, 0, 0),
+]
 
 // Location names taken from CryZe's Debug Menu.
 // https://github.com/CryZe/WindWakerDebugMenu/blob/master/src/warp_menu/consts.rs
@@ -1026,7 +1090,6 @@ const sceneDescs = [
     new SceneDesc("Obshop", "Beedle's Shop", [1]),
 
     "Outset Island",
-    new SceneDesc("sea_T", "Opening Cutscene", [44], demoDescs.Demo51),
     new SceneDesc("sea", "Outset Island", [44]),
     new SceneDesc("LinkRM", "Link's House"),
     new SceneDesc("LinkUG", "Under Link's House"),
