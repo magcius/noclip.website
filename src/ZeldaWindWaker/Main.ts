@@ -1102,6 +1102,7 @@ const sceneDescs = [
     new SceneDesc("Obshop", "Beedle's Shop", [1]),
 
     "Outset Island",
+    new SceneDesc("sea_T", "Title Screen", [44]),
     new SceneDesc("sea", "Outset Island", [44]),
     new SceneDesc("LinkRM", "Link's House"),
     new SceneDesc("LinkUG", "Under Link's House"),
