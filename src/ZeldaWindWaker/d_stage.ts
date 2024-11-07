@@ -518,7 +518,7 @@ export function dStage_dt_c_stageLoader(globals: dGlobals, dt: dStage_stageDt_c,
 export class dStage_roomDt_c extends dStage_dt {
     public fili: dStage_FileList_dt_c | null = null;
     public lgtv: stage_lightvec_info_class | null = null;
-    public lbnk: Uint8Array;
+    public lbnk: Uint8Array | null = null;
 }
 
 export class dStage_roomStatus_c {
