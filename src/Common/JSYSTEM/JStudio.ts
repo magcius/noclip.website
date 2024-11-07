@@ -277,33 +277,44 @@ abstract class STBObject {
     private pSequence_next: number;
     private mWait: number = 0;
 
-    constructor(control: TControl, blockObj: TBlockObject, adaptor: TAdaptor) {
+    constructor(control: TControl, blockObj?: TBlockObject, adaptor?: TAdaptor) {
         this.mControl = control;
-        this.mAdaptor = adaptor;
 
-        this.mId = blockObj.id;
-        this.mType = blockObj.type;
-        this.mFlags = blockObj.flag;
-        this.mData = blockObj.data;
-        this.pSequence = 0;
-        this.pSequence_next = 0xC + align(blockObj.id.length + 1, 4);
+        if (blockObj && adaptor) {
+            this.mAdaptor = adaptor;
+
+            this.mId = blockObj.id;
+            this.mType = blockObj.type;
+            this.mFlags = blockObj.flag;
+            this.mData = blockObj.data;
+            this.pSequence = 0;
+            this.pSequence_next = 0xC + align(blockObj.id.length + 1, 4);
+        }
     }
 
     // These are intended to be overridden by subclasses 
     abstract do_paragraph(file: Reader, dataSize: number, dataOffset: number, param: number): void;
-    do_begin() { this.mAdaptor.adaptor_do_begin(this); }
-    do_end() { this.mAdaptor.adaptor_do_end(this); }
+    do_begin() { if (this.mAdaptor) this.mAdaptor.adaptor_do_begin(this); }
+    do_end() { if (this.mAdaptor) this.mAdaptor.adaptor_do_end(this); }
 
     // Done updating this frame. Compute our variable data (i.e. interpolate) and send to the game object.
     do_wait(frameCount: number) {
-        this.mAdaptor.adaptor_updateVariableValue(this, frameCount);
-        this.mAdaptor.adaptor_do_update(this, frameCount);
+        if (this.mAdaptor) this.mAdaptor.adaptor_updateVariableValue(this, frameCount);
+        if (this.mAdaptor) this.mAdaptor.adaptor_do_update(this, frameCount);
     }
     // do_data(void const*, u32, void const*, u32) {}
 
     getStatus() { return this.mStatus; }
-    isSuspended(): boolean {
-        return this.mSuspendFrames > 0;
+    getSuspendFrames(): number { return this.mSuspendFrames; }
+    isSuspended(): boolean { return this.mSuspendFrames > 0; }
+    setSuspend(frameCount: number) { this.mSuspendFrames = frameCount; }
+
+    reset(blockObj: TBlockObject) {
+        this.pSequence = 0;
+        this.mStatus = TEStatus.STILL;
+        this.pSequence_next = 0xC + align(blockObj.id.length + 1, 4);
+        this.mData = blockObj.data;
+        this.mWait = 0;
     }
 
     forward(frameCount: number): boolean {
@@ -326,7 +337,7 @@ abstract class STBObject {
                 this.mStatus = TEStatus.WAIT;
             }
 
-            if ((this.mControl && this.mControl.mIsSuspended) || this.isSuspended()) {
+            if ((this.mControl && this.mControl.isSuspended()) || this.isSuspended()) {
                 if (this.mIsSequence) {
                     assert((this.mStatus == TEStatus.WAIT) || (this.mStatus == TEStatus.SUSPEND));
                     this.mStatus = TEStatus.SUSPEND;
@@ -405,9 +416,21 @@ abstract class STBObject {
         switch (cmd) {
             case ESequenceCmd.End:
                 break;
+            
+            case ESequenceCmd.SetFlag:
+                debugger; // Untested. Remove after confirmed working.
+                break;
 
             case ESequenceCmd.Wait:
                 this.mWait = param;
+                break;
+
+            case ESequenceCmd.Skip:
+                debugger; // Untested. Remove after confirmed working.
+                break;
+
+            case ESequenceCmd.Suspend:
+                this.mSuspendFrames += param;
                 break;
 
             case ESequenceCmd.Paragraph:
@@ -416,6 +439,7 @@ abstract class STBObject {
                     const para = TParagraph.parse(view, byteIdx);
                     if (para.type <= 0xff) {
                         console.debug('Unsupported paragraph feature: ', para.type);
+                        debugger;
                         // process_paragraph_reserved_(para.type, para.content, para.param);
                     } else {
                         this.do_paragraph(this.mData, para.dataSize, para.dataOffset, para.type);
@@ -426,11 +450,20 @@ abstract class STBObject {
                 break;
 
             default:
-                console.debug('Unhandled sequence cmd: ', cmd);
+                console.debug('Unsupported sequence cmd: ', cmd);
+                debugger;
                 byteIdx += 4;
                 break;
         }
     }
+}
+
+class TControlObject extends STBObject {
+    constructor(control: TControl) {
+        super(control)
+    }
+
+    override do_paragraph(file: Reader, dataSize: number, dataOffset: number, param: number): void { }
 }
 
 //----------------------------------------------------------------------------------------------------------------------
@@ -957,7 +990,8 @@ namespace FVB {
                 case EInterpolateType.None:
                     debugger; break; // Untested. Remove after confirmed working.
                 case EInterpolateType.Linear:
-                    debugger; break; // Untested. Remove after confirmed working.
+                    this.interpFunc = this.interpolateLinear;
+                    debugger; break; // Untested. Remove after confirmed working.                    
                 case EInterpolateType.Plateau:
                     debugger; break; // Untested. Remove after confirmed working.
                 case EInterpolateType.BSpline:
@@ -1111,6 +1145,8 @@ namespace FVB {
 //----------------------------------------------------------------------------------------------------------------------
 // STB Parsing
 //----------------------------------------------------------------------------------------------------------------------
+const BLOCK_TYPE_CONTROL = "ÿÿÿÿ"; // -1 represented as a fourcc  
+
 enum ESequenceCmd {
     End = 0,
     SetFlag = 1,
@@ -1145,7 +1181,7 @@ export class TControl {
     private mSystem: TSystem;
     public mFvbControl = new FVB.TControl();
     public mSecondsPerFrame: number;
-    public mIsSuspended = false;
+    private mSuspendFrames: number;
 
     private mTransformOrigin?: vec3;
     private mTransformRotY?: number;
@@ -1155,12 +1191,16 @@ export class TControl {
     private mStatus: TEStatus = TEStatus.STILL;
     private mObjects: STBObject[] = [];
 
+    // A special object that the STB file can use to suspend the demo (such as while waiting for player input)
+    private mControlObject = new TControlObject(this);
+
     constructor(system: TSystem) {
         this.mSystem = system;
         this.mSecondsPerFrame = 1 / 30.0; // @TODO: Allow the game to change this?
     }
 
-    public isSuspended() { return this.mIsSuspended; }
+    public isSuspended() { return this.mSuspendFrames > 0; }
+    public setSuspend(frameCount: number) { return this.mControlObject.setSuspend( frameCount ); }
 
     public isTransformEnabled() { return !!this.mTransformOrigin; }
     public getTransformOnSet() { return this.mTransformOnSetMtx; }
@@ -1178,13 +1218,20 @@ export class TControl {
         mat4.rotateY(this.mTransformOnSetMtx, this.mTransformOnSetMtx, rotY);
     }
 
-    public forward(flags: number): boolean {
-        let shouldContinue = false;
+    public setControlObject(obj: TBlockObject) {
+        this.mControlObject.reset(obj);
+    }
+
+    public forward(frameCount: number): boolean {
+        ;
         let andStatus = 0xFF;
         let orStatus = 0;
 
+        this.mSuspendFrames = this.mControlObject.getSuspendFrames();
+        let shouldContinue = this.mControlObject.forward(frameCount);
+
         for (let obj of this.mObjects) {
-            const res = obj.forward(flags);
+            const res = obj.forward(frameCount);
             shouldContinue ||= res;
 
             const objStatus = obj.getStatus();
@@ -1246,10 +1293,9 @@ export class TParse {
             data: file
         }
 
-        const blockTypeNum = file.view.getInt32(4);
-        if (blockTypeNum == -1) {
-            console.debug('Unhandled STB block type: -1');
-            debugger; // Remove after implementing and testing
+        if (blockObj.type == BLOCK_TYPE_CONTROL) {
+            this.mControl.setControlObject(blockObj);
+            return true;
         }
 
         if (flags & 0x10) {

@@ -5,7 +5,7 @@ import { getMatrixAxisY } from "../MathHelpers.js";
 import { dGlobals } from "./Main";
 
 export enum EDemoMode {
-    None, 
+    None,
     Playing,
     Ended
 }
@@ -153,7 +153,7 @@ class dDemo_system_c implements TSystem {
 
     constructor(
         private globals: dGlobals
-    ) {}
+    ) { }
 
     public JSGFindObject(objId: string, objType: JStage.TEObject): JStage.TObject | undefined {
         switch (objType) {
@@ -188,7 +188,7 @@ export class dDemo_manager_c {
 
     constructor(
         private globals: dGlobals
-    ) {}
+    ) { }
 
     getFrame() { return this.mFrame; }
     getFrameNoMsg() { return this.mFrameNoMsg; }
@@ -198,7 +198,7 @@ export class dDemo_manager_c {
     public create(data: ArrayBufferSlice, originPos?: vec3, rotY?: number): boolean {
         this.mParser = new TParse(this.mControl);
 
-        if(!this.mParser.parse(data, 0)) {
+        if (!this.mParser.parse(data, 0)) {
             console.error('Failed to parse demo data');
             return false;
         }
@@ -227,8 +227,11 @@ export class dDemo_manager_c {
         if (!this.mCurFile) {
             return false;
         }
-        
+
         const dtFrames = this.globals.context.viewerInput.deltaTime / 1000.0 * 30;
+
+        // noclip modification: If a demo is suspended (waiting for the user to interact with a message), just resume
+        if (this.mControl.isSuspended()) { this.mControl.setSuspend(0); }
 
         if (this.mControl.forward(dtFrames)) {
             this.mFrame++;
