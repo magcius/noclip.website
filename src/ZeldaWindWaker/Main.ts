@@ -987,6 +987,8 @@ class DemoDesc {
     ) {}
 
     async load(globals: dGlobals) {
+        globals.scnPlay.demo.remove();
+
         // noclip modification: This normally happens on room load. Do it here instead so that we don't waste time 
         //                      loading .arcs for cutscenes that aren't going to be played
         const lbnk = globals.roomCtrl.status[this.roomNo]?.data.lbnk;
@@ -1001,13 +1003,12 @@ class DemoDesc {
                     // @TODO: Better error handling. This does not prevent a debugger break.
                     console.log(`Failed to load stage demo file: ${globals.roomCtrl.demoArcName}`, e);
                 })
+
+                await globals.modelCache.waitForLoad();
             }
         }
 
-        await globals.modelCache.waitForLoad();
-
         // @TODO: Set noclip layer visiblity based on this.layer
-        // @TODO: Fix switching cutscenes while one is playing
 
         let demoData;
         if(globals.roomCtrl.demoArcName)
