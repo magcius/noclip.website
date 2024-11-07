@@ -1004,19 +1004,19 @@ class DemoDesc {
             }
         }
 
-        if(globals.roomCtrl.demoArcName) {
-            await globals.modelCache.waitForLoad();
+        await globals.modelCache.waitForLoad();
 
-            // @TODO: Set noclip layer visiblity based on this.layer
-            // @TODO: Test counter.stb
-            // @TODO: Fix switching cutscenes while one is playing
+        // @TODO: Set noclip layer visiblity based on this.layer
+        // @TODO: Fix switching cutscenes while one is playing
 
-            let demoData = globals.modelCache.resCtrl.getObjectResByName(ResType.Stb, globals.roomCtrl.demoArcName, this.stbFilename);
-            if (demoData == null)
-                demoData = globals.modelCache.resCtrl.getStageResByName(ResType.Stb, "Stage", this.stbFilename);
-            if( demoData ) { globals.scnPlay.demo.create(demoData, this.offsetPos, this.rotY / 180.0 * Math.PI); }
-            else { console.warn('Failed to load demo data:', this.stbFilename); }
-        }
+        let demoData;
+        if(globals.roomCtrl.demoArcName)
+            demoData = globals.modelCache.resCtrl.getObjectResByName(ResType.Stb, globals.roomCtrl.demoArcName, this.stbFilename);
+        if (!demoData)
+            demoData = globals.modelCache.resCtrl.getStageResByName(ResType.Stb, "Stage", this.stbFilename);
+        
+        if( demoData ) { globals.scnPlay.demo.create(demoData, this.offsetPos, this.rotY / 180.0 * Math.PI); }
+        else { console.warn('Failed to load demo data:', this.stbFilename); }
     }
 }
 
@@ -1050,7 +1050,6 @@ const demoDescs = [
     new DemoDesc("MajyuE", "maju_shinnyu.stb", "maju_shinnyu.stb", 0, 0, [0, 0, 0], 0, 0, 0),
     new DemoDesc("Mjtower", "find_sister.stb", "find_sister.stb", 0, 0, [4889.0, 0.0, -2635.0], 57.5, 0, 0),
     new DemoDesc("Obombh", "bombshop.stb", "bombshop.stb", 0, 0, [0.0, 0.0, 0.0], 0.0, 200, 0),
-    new DemoDesc("Ocean", "counter.stb", "counter.stb", -1, 0, [0, 0, 0], 0, 0, 0),
     new DemoDesc("Omori", "getperl_deku.stb", "getperl_deku.stb", 0, 9, [0, 0, 0], 0, 214, 0),
     new DemoDesc("Omori", "meet_deku.stb", "meet_deku.stb", 0, 8, [0, 0, 0], 0, 213, 0),
     new DemoDesc("Otkura", "awake_kokiri.stb", "awake_kokiri.stb", 0, 8, [0, 0, 0], 0, 0, 0),
@@ -1068,10 +1067,15 @@ const demoDescs = [
     new DemoDesc("sea", "meetshishioh.stb", "meetshishioh.stb", 11, 8, [0.0, 0.0, -200000.0], 0, 128, 0),
     new DemoDesc("sea", "stolensister.stb", "stolensister.stb", 44, 9, [0.0, 0.0, 20000.0], 0, 0, 0),
     new DemoDesc("sea", "kaizoku_zelda_fly.stb", "kaizoku_zelda_fly.stb", 44, 0, [-200000.0, 0.0, 320000.0], 180.0, 0, 0),
-    new DemoDesc("sea_T", "awake.stb", "awake.stb", 255, 0, [-220000.0, 0.0, 320000.0], 0.0, 0, 0),
     new DemoDesc("sea_T", "title.stb", "title.stb", 44, 0, [-220000.0, 0.0, 320000.0], 180.0, 0, 0),
+
+    // These are present in the sea_T event_list.dat, but not in the room's lbnk. They are only playable from "sea".
+    new DemoDesc("sea_T", "awake.stb", "awake.stb", 255, 0, [-220000.0, 0.0, 320000.0], 0.0, 0, 0),
     new DemoDesc("sea_T", "kaizoku_zelda_fly.stb", "kaizoku_zelda_fly.stb", 255, 0, [-200000.0, 0.0, 320000.0], 180.0, 0, 0),
     new DemoDesc("sea_T", "departure.stb", "departure.stb", 255, 0, [-200000.0, 0.0, 320000.0], 0.0, 0, 0),
+
+    // The game expects this STB file to be in Stage/Ocean/Stage.arc, but it is not. Must be a leftover. 
+    new DemoDesc("Ocean", "counter.stb", "counter.stb", -1, 0, [0, 0, 0], 0, 0, 0),
 ]
 
 // Location names taken from CryZe's Debug Menu.
