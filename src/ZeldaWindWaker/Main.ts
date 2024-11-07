@@ -962,34 +962,12 @@ class SceneDesc {
 
             const dzr = assertExists(resCtrl.getStageResByName(ResType.Dzs, `Room${roomNo}`, `room.dzr`));
             dStage_dt_c_roomLoader(globals, globals.roomCtrl.status[roomNo].data, dzr);
-
-            if (!globals.roomCtrl.demoArcName) {
-                const lbnk = globals.roomCtrl.status[roomNo].data.lbnk;
-                if (lbnk) {
-                    // This system can load a different demo file based on the active layer when the room is loaded.
-                    // It should use dComIfG_play_c::getLayerNo(roomNo) to select the current layer.
-                    // For now, just use layer 0
-                    // TODO: Use the first set layer
-                    if(lbnk[1] != 0xFF) console.warn('Stage contains a demo in non-zero layer. May be worth investigating.');
-                    const layerNo = 0;
-
-                    const bank = lbnk[layerNo];
-                    if (bank != 0xFF) {
-                        assert(bank >= 0 && bank < 100);
-                        globals.roomCtrl.demoArcName = `Demo${bank.toString().padStart(2, '0')}`;
-                        console.debug(`Loading stage demo file: ${globals.roomCtrl.demoArcName}`);
-                        modelCache.fetchObjectData(globals.roomCtrl.demoArcName).catch(e => {
-                            // @TODO: Better error handling. This does not prevent a debugger break.
-                            console.log(`Failed to load stage demo file: ${globals.roomCtrl.demoArcName}`, e);
-                        })
-
-                        globals.renderer.demos = demoDescs.filter(d => d.stage == globals.stageName);
-                    }
-                }
-            }
-
             dStage_dt_c_roomReLoader(globals, globals.roomCtrl.status[roomNo].data, dzr);
         }
+
+        // Build a list of all the demos (cutscenes) that are playable in this scene
+        globals.renderer.demos = demoDescs.filter(d => 
+            d.stage == globals.stageName && (d.roomNo == -1 || this.roomList.includes(d.roomNo)));
 
         return renderer;
     }
@@ -1009,20 +987,39 @@ class DemoDesc {
     ) {}
 
     async load(globals: dGlobals) {
-        await globals.modelCache.waitForLoad();
+        // noclip modification: This normally happens on room load. Do it here instead so that we don't waste time 
+        //                      loading .arcs for cutscenes that aren't going to be played
+        const lbnk = globals.roomCtrl.status[this.roomNo]?.data.lbnk;
+        if (lbnk) {
+            const bank = lbnk[this.layer];
+            if (bank != 0xFF) {
+                assert(bank >= 0 && bank < 100);
+                globals.roomCtrl.demoArcName = `Demo${bank.toString().padStart(2, '0')}`;
+                console.debug(`Loading stage demo file: ${globals.roomCtrl.demoArcName}`);
+
+                globals.modelCache.fetchObjectData(globals.roomCtrl.demoArcName).catch(e => {
+                    // @TODO: Better error handling. This does not prevent a debugger break.
+                    console.log(`Failed to load stage demo file: ${globals.roomCtrl.demoArcName}`, e);
+                })
+            }
+        }
+
         if(globals.roomCtrl.demoArcName) {
-            const stbData = globals.modelCache.resCtrl.getObjectResByName(ResType.Stb, globals.roomCtrl.demoArcName!, this.stbFilename);
-            // @TODO: Search the stage arc as well. See dEvDtStaff_c::specialProcPackage()
-            if( stbData ) { globals.scnPlay.demo.create(stbData, this.offsetPos, this.rotY / 180.0 * Math.PI); }
+            await globals.modelCache.waitForLoad();
+
+            // @TODO: Set noclip layer visiblity based on this.layer
+            // @TODO: Test counter.stb
+            // @TODO: Fix switching cutscenes while one is playing
+
+            let demoData = globals.modelCache.resCtrl.getObjectResByName(ResType.Stb, globals.roomCtrl.demoArcName, this.stbFilename);
+            if (demoData == null)
+                demoData = globals.modelCache.resCtrl.getStageResByName(ResType.Stb, "Stage", this.stbFilename);
+            if( demoData ) { globals.scnPlay.demo.create(demoData, this.offsetPos, this.rotY / 180.0 * Math.PI); }
+            else { console.warn('Failed to load demo data:', this.stbFilename); }
         }
     }
 }
 
-// Extracted from the game using a modified version of the excellent wwrando/wwlib/stage_searcher.py script from LagoLunatic
-// Most of this data comes from the PLAY action of the PACKAGE actor in an event from a Stage's event_list.dat. This
-// action has properties for the room and layer that these cutscenes are designed for. HOWEVER, this data is often missing.
-// It has been reconstructed by cross-referencing each Room's lbnk section (which points to a Demo*.arc file for each layer),
-// the .stb files contained in each of those Objects/Demo*.arc files, and the FileName attribute from the event action.   
 const demoDescs = [
     new DemoDesc("ADMumi", "warp_in.stb", "warp_in.stb", 0, 9, [0.0, 0.0, 0.0], 0.0, 200, 0),
     new DemoDesc("ADMumi", "warphole.stb", "warphole.stb", 0, 10, [0.0, 0.0, 0.0], 0.0, 219, 0),
