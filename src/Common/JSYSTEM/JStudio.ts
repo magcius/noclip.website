@@ -416,7 +416,7 @@ abstract class STBObject {
         switch (cmd) {
             case ESequenceCmd.End:
                 break;
-            
+
             case ESequenceCmd.SetFlag:
                 debugger; // Untested. Remove after confirmed working.
                 break;
@@ -975,12 +975,12 @@ namespace FVB {
         private value: number = 0;
 
         getType() { return EFuncValType.Constant; }
-        prepare() {}
+        prepare() { }
         setData(value: number) { this.value = value; }
-        getValue(timeSec: number) { 
+        getValue(timeSec: number) {
             debugger; // Untested. Remove once confirmed working
-            return this.value; 
-        } 
+            return this.value;
+        }
     }
 
     class FunctionValue_ListParameter extends TFunctionValue {
@@ -999,19 +999,12 @@ namespace FVB {
 
             const interp = this.interpolate.get();
             switch (interp) {
-                case EInterpolateType.None:
-                    debugger; break; // Untested. Remove after confirmed working.
-                case EInterpolateType.Linear:
-                    this.interpFunc = this.interpolateLinear;
-                    debugger; break; // Untested. Remove after confirmed working.                    
-                case EInterpolateType.Plateau:
-                    debugger; break; // Untested. Remove after confirmed working.
+                case EInterpolateType.None: this.interpFunc = this.interpolateNone;
+                case EInterpolateType.Linear: this.interpFunc = this.interpolateLinear;
+                case EInterpolateType.Plateau: this.interpFunc = this.interpolatePlateau;
                 case EInterpolateType.BSpline:
                     if (this.keyCount > 2) { this.interpFunc = this.interpolateBSpline; }
-                    else {
-                        this.interpFunc = this.interpolateLinear;
-                        debugger; // Untested. Remove after confirmed working.
-                    }
+                    else { this.interpFunc = this.interpolateLinear; }
                     break;
 
                 default:
@@ -1130,10 +1123,21 @@ namespace FVB {
             return Attribute.Interpolate.BSpline_Nonuniform(t, controlPoints, knotVector);
         }
 
+        interpolateNone(t: number) {
+            debugger; // Untested. Remove after confirmed working.
+            return this.keys[this.curKeyIdx];
+        }
+
         interpolateLinear(t: number) {
             const ks = this.keys;
             const c = this.curKeyIdx;
             return Attribute.Interpolate.Linear(t, ks[c - 2], ks[c - 1], ks[c + 0], ks[c + 1]);
+        }
+
+        interpolatePlateau(t: number) {
+            console.error('Plateau interpolation not yet implemented')
+            debugger; // Untested. Remove after confirmed working.
+            return this.interpolateNone(t);
         }
     }
 
@@ -1150,7 +1154,7 @@ namespace FVB {
             this.funcVal.setData(value);
         }
     }
-    
+
     class TObject_ListParameter extends FVB.TObject {
         override funcVal = new FunctionValue_ListParameter;
 
@@ -1222,7 +1226,7 @@ export class TControl {
     }
 
     public isSuspended() { return this.mSuspendFrames > 0; }
-    public setSuspend(frameCount: number) { return this.mControlObject.setSuspend( frameCount ); }
+    public setSuspend(frameCount: number) { return this.mControlObject.setSuspend(frameCount); }
 
     public isTransformEnabled() { return !!this.mTransformOrigin; }
     public getTransformOnSet() { return this.mTransformOnSetMtx; }
