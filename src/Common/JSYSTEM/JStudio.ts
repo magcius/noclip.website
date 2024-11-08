@@ -827,8 +827,8 @@ namespace FVB {
             switch (block.type) {
                 // case EFuncValType.Composite:
                 //     return new TObject_composite(block);
-                // case EFuncValType.Constant:
-                //     return new TObject_constant(block);
+                case EFuncValType.Constant:
+                    return new TObject_Constant(block);
                 // case EFuncValType.Transition:
                 //     return new TObject_transition(block);
                 // case EFuncValType.List:
@@ -971,6 +971,18 @@ namespace FVB {
     //----------------------------------------------------------------------------------------------------------------------
     // FunctionValues
     //----------------------------------------------------------------------------------------------------------------------
+    class FunctionValue_Constant extends TFunctionValue {
+        private value: number = 0;
+
+        getType() { return EFuncValType.Constant; }
+        prepare() {}
+        setData(value: number) { this.value = value; }
+        getValue(timeSec: number) { 
+            debugger; // Untested. Remove once confirmed working
+            return this.value; 
+        } 
+    }
+
     class FunctionValue_ListParameter extends TFunctionValue {
         protected override range = new Attribute.Range();
         protected override interpolate = new Attribute.Interpolate();
@@ -1007,7 +1019,7 @@ namespace FVB {
             }
         }
 
-        set_data(values: Float32Array) {
+        setData(values: Float32Array) {
             this.keys = values;
             this.keyCount = values.length / 2;
             this.curKeyIdx = 0;
@@ -1129,6 +1141,16 @@ namespace FVB {
     // FVB Objects
     // Manages a FunctionValue.  
     //----------------------------------------------------------------------------------------------------------------------
+    class TObject_Constant extends FVB.TObject {
+        override funcVal = new FunctionValue_Constant;
+
+        override prepare_data(para: TParagraph, control: TControl, file: Reader): void {
+            assert(para.dataSize == 4);
+            const value = file.view.getFloat32(para.dataOffset);
+            this.funcVal.setData(value);
+        }
+    }
+    
     class TObject_ListParameter extends FVB.TObject {
         override funcVal = new FunctionValue_ListParameter;
 
@@ -1137,7 +1159,7 @@ namespace FVB {
             // Each Key contains 2 floats, a time and value
             const keyCount = file.view.getUint32(para.dataOffset + 0);
             const keys = file.buffer.createTypedArray(Float32Array, para.dataOffset + 4, keyCount * 2, Endianness.BIG_ENDIAN);
-            this.funcVal.set_data(keys);
+            this.funcVal.setData(keys);
         }
     }
 }
