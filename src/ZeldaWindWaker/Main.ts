@@ -1022,12 +1022,19 @@ class DemoDesc {
 }
 
 const demoDescs = [
+    new DemoDesc("sea", "Awaken", "awake.stb", 44, 0, [-220000.0, 0.0, 320000.0], 0.0, 0, 0),
+    new DemoDesc("sea", "Stolen Sister", "stolensister.stb", 44, 9, [0.0, 0.0, 20000.0], 0, 0, 0),
+    new DemoDesc("sea", "Departure", "departure.stb", 44, 10, [-200000.0, 0.0, 320000.0], 0.0, 204, 0),
+    new DemoDesc("sea", "Pirate Zelda Fly", "kaizoku_zelda_fly.stb", 44, 0, [-200000.0, 0.0, 320000.0], 180.0, 0, 0),
+    new DemoDesc("sea_T", "Title Screen", "title.stb", 44, 0, [-220000.0, 0.0, 320000.0], 180.0, 0, 0),
+
     new DemoDesc("ADMumi", "warp_in.stb", "warp_in.stb", 0, 9, [0.0, 0.0, 0.0], 0.0, 200, 0),
     new DemoDesc("ADMumi", "warphole.stb", "warphole.stb", 0, 10, [0.0, 0.0, 0.0], 0.0, 219, 0),
     new DemoDesc("ADMumi", "runaway_majuto.stb", "runaway_majuto.stb", 0, 11, [0, 0, 0], 0, 0, 0),
     new DemoDesc("ADMumi", "towerd.stb", "towerd.stb", 0, 8, [-50179.0, -1000.0, 7070.0], 90.0, 0, 0),
     new DemoDesc("ADMumi", "towerf.stb", "towerf.stb", 0, 8, [-50179.0, -1000.0, 7070.0], 90.0, 0, 0),
     new DemoDesc("ADMumi", "towern.stb", "towern.stb", 0, 8, [-50179.0, -1000.0, 7070.0], 90.0, 0, 0),
+
     new DemoDesc("A_mori", "meet_tetra.stb", "meet_tetra.stb", 0, 0, [0, 0, 0], 0, 0, 0),
     new DemoDesc("Adanmae", "howling.stb", "howling.stb", 0, 8, [0.0, 0.0, 0.0], 0.0, 0, 0),
     new DemoDesc("Atorizk", "dragontale.stb", "dragontale.stb", 0, 0, [0, 0, 0], 0, 0, 0),
@@ -1056,24 +1063,23 @@ const demoDescs = [
     new DemoDesc("Otkura", "awake_kokiri.stb", "awake_kokiri.stb", 0, 8, [0, 0, 0], 0, 0, 0),
     new DemoDesc("Pjavdou", "getperl_jab.stb", "getperl_jab.stb", 0, 8, [0.0, 0.0, 0.0], 0.0, 0, 0),
     new DemoDesc("kazeB", "pray_kokiri.stb", "pray_kokiri.stb", 0, 8, [0.0, 300.0, 0.0], 0.0, 232, 0),
+
     new DemoDesc("kenroom", "awake_zelda.stb", "awake_zelda.stb", 0, 9, [0.0, 0.0, 0.0], 0.0, 2, 0),
     new DemoDesc("kenroom", "master_sword.stb", "master_sword.stb", 0, 0, [-124.0, -3223.0, -7823.0], 180.0, 248, 0),
     new DemoDesc("kenroom", "swing_sword.stb", "swing_sword.stb", 0, 10, [-124.0, -3223.0, -7823.0], 180.0, 249, 0),
-    new DemoDesc("sea", "awake.stb", "awake.stb", 44, 0, [-220000.0, 0.0, 320000.0], 0.0, 0, 0),
-    new DemoDesc("sea", "departure.stb", "departure.stb", 44, 10, [-200000.0, 0.0, 320000.0], 0.0, 204, 0),
-    new DemoDesc("sea", "fairy.stb", "fairy.stb", 9, 8, [-180000.0, 740.0, -199937.0], 25.0, 2, 0),
-    new DemoDesc("sea", "fairy_flag_on.stb", "fairy_flag_on.stb", 9, 8, [-180000.0, 740.0, -199937.0], 25.0, 2, 0),
-    new DemoDesc("sea", "awake_zola.stb", "awake_zola.stb", 13, 8, [200000.0, 0.0, -200000.0], 0, 227, 0),
-    new DemoDesc("sea", "getperl_komori.stb", "getperl_komori.stb", 13, 9, [200000.0, 0.0, -200000.0], 0, 0, 0),
-    new DemoDesc("sea", "meetshishioh.stb", "meetshishioh.stb", 11, 8, [0.0, 0.0, -200000.0], 0, 128, 0),
-    new DemoDesc("sea", "stolensister.stb", "stolensister.stb", 44, 9, [0.0, 0.0, 20000.0], 0, 0, 0),
-    new DemoDesc("sea", "kaizoku_zelda_fly.stb", "kaizoku_zelda_fly.stb", 44, 0, [-200000.0, 0.0, 320000.0], 180.0, 0, 0),
-    new DemoDesc("sea_T", "title.stb", "title.stb", 44, 0, [-220000.0, 0.0, 320000.0], 180.0, 0, 0),
 
+    new DemoDesc("sea", "Fairy", "fairy.stb", 9, 8, [-180000.0, 740.0, -199937.0], 25.0, 2, 0),
+    new DemoDesc("sea", "fairy_flag_on.stb", "fairy_flag_on.stb", 9, 8, [-180000.0, 740.0, -199937.0], 25.0, 2, 0),
+    
+    new DemoDesc("sea", "Zola Awakens", "awake_zola.stb", 13, 8, [200000.0, 0.0, -200000.0], 0, 227, 0),
+    new DemoDesc("sea", "Get Komori Pearl", "getperl_komori.stb", 13, 9, [200000.0, 0.0, -200000.0], 0, 0, 0),
+    
+    new DemoDesc("sea", "meetshishioh.stb", "meetshishioh.stb", 11, 8, [0.0, 0.0, -200000.0], 0, 128, 0),
+    
     // These are present in the sea_T event_list.dat, but not in the room's lbnk. They are only playable from "sea".
-    new DemoDesc("sea_T", "awake.stb", "awake.stb", 255, 0, [-220000.0, 0.0, 320000.0], 0.0, 0, 0),
-    new DemoDesc("sea_T", "kaizoku_zelda_fly.stb", "kaizoku_zelda_fly.stb", 255, 0, [-200000.0, 0.0, 320000.0], 180.0, 0, 0),
-    new DemoDesc("sea_T", "departure.stb", "departure.stb", 255, 0, [-200000.0, 0.0, 320000.0], 0.0, 0, 0),
+    new DemoDesc("sea_T", "Awaken", "awake.stb", 255, 0, [-220000.0, 0.0, 320000.0], 0.0, 0, 0),
+    new DemoDesc("sea_T", "Departure", "departure.stb", 255, 0, [-200000.0, 0.0, 320000.0], 0.0, 0, 0),
+    new DemoDesc("sea_T", "PirateZeldaFly", "kaizoku_zelda_fly.stb", 255, 0, [-200000.0, 0.0, 320000.0], 180.0, 0, 0),
 
     // The game expects this STB file to be in Stage/Ocean/Stage.arc, but it is not. Must be a leftover. 
     new DemoDesc("Ocean", "counter.stb", "counter.stb", -1, 0, [0, 0, 0], 0, 0, 0),
