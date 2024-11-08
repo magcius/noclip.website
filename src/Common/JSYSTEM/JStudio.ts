@@ -792,6 +792,36 @@ namespace FVB {
                         range.set(begin, end);
                         break;
 
+                    case EPrepareOp.ObjSetByName: {
+                        debugger; // Untested. Remove after confirmed working.
+                        assert(para.dataSize >= 4);
+                        const refer = this.funcVal.getAttrRefer();
+                        assert(!!refer, 'FVB Paragraph assumes FuncVal has refer attribute, but it does not');
+                        const objCount = file.view.getUint32(para.dataOffset + 0);
+                        for (let i = 0; i < objCount; i++) {
+                            const idSize = file.view.getUint32(para.dataOffset + 4 + i * 8 + 0);
+                            const id = readString(file.buffer, para.dataOffset + 4 + i * 8 + 4, idSize);
+                            const obj = pControl.mObjects.find(o => o.id == id);
+                            assert(!!obj);
+                            refer.fvs.push(obj.funcVal);
+                        }
+                        break;
+                    }
+
+                    case EPrepareOp.ObjSetByIdx: {
+                        assert(para.dataSize >= 4);
+                        const refer = this.funcVal.getAttrRefer();
+                        assert(!!refer, 'FVB Paragraph assumes FuncVal has refer attribute, but it does not');
+                        const objCount = file.view.getUint32(para.dataOffset + 0);
+                        for (let i = 0; i < objCount; i++) {
+                            const idx = file.view.getUint32(para.dataOffset + 4 + i * 4);
+                            const obj = pControl.mObjects[idx];
+                            assert(!!obj);
+                            refer.fvs.push(obj.funcVal);
+                        }
+                        break;
+                    }
+
                     case EPrepareOp.InterpSet:
                         assert(para.dataSize == 4);
                         const interp = this.funcVal.getAttrInterpolate();
@@ -799,9 +829,6 @@ namespace FVB {
                         const interpType = file.view.getUint32(para.dataOffset + 0);
                         interp.set(interpType);
                         break;
-
-                    case EPrepareOp.ObjSetByName:
-                    case EPrepareOp.ObjSetByIdx:
 
                     case EPrepareOp.RangeProgress:
                     case EPrepareOp.RangeAdjust:
