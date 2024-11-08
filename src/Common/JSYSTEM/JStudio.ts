@@ -766,7 +766,7 @@ namespace FVB {
 
         abstract prepare_data(para: TParagraph, control: TControl, file: Reader): void;
 
-        prepare(block: TBlock, mControl: TControl, file: Reader) {
+        prepare(block: TBlock, pControl: TControl, file: Reader) {
             const blockNext = file.offset + block.size;
             file.offset = blockNext;
 
@@ -780,13 +780,13 @@ namespace FVB {
                         return;
 
                     case EPrepareOp.Data:
-                        this.prepare_data(para, mControl, file);
+                        this.prepare_data(para, pControl, file);
                         break;
 
                     case EPrepareOp.RangeSet:
                         assert(para.dataSize == 8);
                         const range = this.funcVal.getAttrRange();
-                        assert(!!range, 'FVB Paragraph assumes TObject has range attribute, but it does not');
+                        assert(!!range, 'FVB Paragraph assumes FuncVal has range attribute, but it does not');
                         const begin = file.view.getFloat32(para.dataOffset + 0);
                         const end = file.view.getFloat32(para.dataOffset + 4);
                         range.set(begin, end);
@@ -795,7 +795,7 @@ namespace FVB {
                     case EPrepareOp.InterpSet:
                         assert(para.dataSize == 4);
                         const interp = this.funcVal.getAttrInterpolate();
-                        assert(!!interp, 'FVB Paragraph assumes TObject has interpolate attribute, but it does not');
+                        assert(!!interp, 'FVB Paragraph assumes FuncVal has interpolate attribute, but it does not');
                         const interpType = file.view.getUint32(para.dataOffset + 0);
                         interp.set(interpType);
                         break;
@@ -825,8 +825,8 @@ namespace FVB {
         // Really this is a fvb::TFactory method
         public createObject(block: TBlock): TObject | undefined {
             switch (block.type) {
-                // case EFuncValType.Composite:
-                //     return new TObject_composite(block);
+                case EFuncValType.Composite:
+                    return new TObject_Composite(block);
                 case EFuncValType.Constant:
                     return new TObject_Constant(block);
                 // case EFuncValType.Transition:
@@ -839,6 +839,7 @@ namespace FVB {
                 //     return new TObject_hermite(block);
                 default:
                     console.warn('Unknown FVB type: ', block.type);
+                    debugger;
                     return undefined;
             }
         }
@@ -927,6 +928,7 @@ namespace FVB {
         }
 
         export class Refer {
+            public fvs: TFunctionValue[] = [];
         }
 
         export class Interpolate {
@@ -1009,6 +1011,7 @@ namespace FVB {
 
                 default:
                     console.warn('Invalid EInterp value', interp);
+                    debugger;
             }
         }
 
@@ -1141,6 +1144,73 @@ namespace FVB {
         }
     }
 
+    class FunctionValue_Composite extends TFunctionValue {
+        protected override refer = new Attribute.Refer();
+
+        override prepare(): void { }
+        override getType(): EFuncValType { return EFuncValType.Composite; }
+        setData(func: (ref: TFunctionValue[], dataVal: number, t: number) => number, dataVal: number) {
+            this.func = func;
+            this.dataVal = dataVal;
+        }
+
+        getValue(timeSec: number): number {
+            return this.func(this.refer.fvs, this.dataVal, timeSec);
+        }
+
+        public static composite_raw(fvs: TFunctionValue[], dataVal: number, timeSec: number): number {
+            debugger; // Untested. Remove once confirmed working
+            if (fvs.length == 0) { return 0.0; }
+            return fvs[dataVal].getValue(timeSec);
+        }
+
+        public static composite_index(fvs: TFunctionValue[], dataVal: number, timeSec: number): number {
+            debugger; // Untested. Remove once confirmed working
+            return 0.0;
+        }
+
+        public static composite_parameter(fvs: TFunctionValue[], dataVal: number, timeSec: number): number {
+            debugger; // Untested. Remove once confirmed working
+            let val = timeSec - dataVal;
+            for (let fv of fvs) { val = fv.getValue(timeSec); }
+            return val;
+        }
+
+        public static composite_add(fvs: TFunctionValue[], dataVal: number, timeSec: number): number {
+            debugger; // Untested. Remove once confirmed working
+            let val = dataVal;
+            for (let fv of fvs) { val += fv.getValue(timeSec); }
+            return val;
+        }
+
+        public static composite_subtract(fvs: TFunctionValue[], dataVal: number, timeSec: number): number {
+            debugger; // Untested. Remove once confirmed working
+            if (fvs.length == 0) { return 0.0; }
+            let val = fvs[0].getValue(timeSec);
+            for (let fv of fvs.slice(1)) { val -= fv.getValue(timeSec); }
+            return val - dataVal;
+        }
+
+        public static composite_multiply(fvs: TFunctionValue[], dataVal: number, timeSec: number): number {
+            debugger; // Untested. Remove once confirmed working
+            let val = dataVal;
+            for (let fv of fvs) { val *= fv.getValue(timeSec); }
+            return val;
+        }
+
+        public static composite_divide(fvs: TFunctionValue[], dataVal: number, timeSec: number): number {
+            debugger; // Untested. Remove once confirmed working
+            if (fvs.length == 0) { return 0.0; }
+            let val = fvs[0].getValue(timeSec);
+            for (let fv of fvs.slice(1)) { val /= fv.getValue(timeSec); }
+            return val / dataVal;
+        }
+
+
+        private func: (ref: TFunctionValue[], dataVal: number, t: number) => number;
+        private dataVal: number;
+    }
+
     //----------------------------------------------------------------------------------------------------------------------
     // FVB Objects
     // Manages a FunctionValue.  
@@ -1164,6 +1234,47 @@ namespace FVB {
             const keyCount = file.view.getUint32(para.dataOffset + 0);
             const keys = file.buffer.createTypedArray(Float32Array, para.dataOffset + 4, keyCount * 2, Endianness.BIG_ENDIAN);
             this.funcVal.setData(keys);
+        }
+    }
+
+    enum TECompositeOp {
+        NONE,
+        RAW,
+        IDX,
+        PARAM,
+        ADD,
+        SUB,
+        MUL,
+        DIV,
+        ENUM_SIZE,
+    }
+
+    class TObject_Composite extends FVB.TObject {
+        override funcVal = new FunctionValue_Composite;
+
+        override prepare_data(para: TParagraph, control: TControl, file: Reader): void {
+            assert(para.dataSize >= 8);
+
+            const compositeOp = file.view.getUint32(para.dataOffset + 0);
+            const floatData = file.view.getFloat32(para.dataOffset + 4);
+            const uintData = file.view.getUint32(para.dataOffset + 4);
+
+            let fvData: number;
+            let fvFunc: (ref: TFunctionValue[], data: number, t: number) => number;
+            switch (compositeOp) {
+                case TECompositeOp.RAW: fvData = uintData; fvFunc = FunctionValue_Composite.composite_raw; break;
+                case TECompositeOp.IDX: fvData = uintData; fvFunc = FunctionValue_Composite.composite_index; break;
+                case TECompositeOp.PARAM: fvData = floatData; fvFunc = FunctionValue_Composite.composite_parameter; break;
+                case TECompositeOp.ADD: fvData = floatData; fvFunc = FunctionValue_Composite.composite_add; break;
+                case TECompositeOp.SUB: fvData = floatData; fvFunc = FunctionValue_Composite.composite_subtract; break;
+                case TECompositeOp.MUL: fvData = floatData; fvFunc = FunctionValue_Composite.composite_multiply; break;
+                case TECompositeOp.DIV: fvData = floatData; fvFunc = FunctionValue_Composite.composite_divide; break;
+                default:
+                    console.warn('Unsupported CompositeOp:', compositeOp);
+                    return;
+            }
+
+            this.funcVal.setData(fvFunc, fvData)
         }
     }
 }
