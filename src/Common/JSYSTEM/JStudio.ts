@@ -998,8 +998,19 @@ namespace FVB {
     }
 
     //----------------------------------------------------------------------------------------------------------------------
-    // FunctionValues
+    // FunctionValue: Constant
+    // Simply return a constant value every frame
     //----------------------------------------------------------------------------------------------------------------------
+    class TObject_Constant extends FVB.TObject {
+        override funcVal = new FunctionValue_Constant;
+
+        override prepare_data(para: TParagraph, control: TControl, file: Reader): void {
+            assert(para.dataSize == 4);
+            const value = file.view.getFloat32(para.dataOffset);
+            this.funcVal.setData(value);
+        }
+    }
+
     class FunctionValue_Constant extends TFunctionValue {
         private value: number = 0;
 
@@ -1012,6 +1023,21 @@ namespace FVB {
         }
     }
 
+    //----------------------------------------------------------------------------------------------------------------------
+    // FunctionValue: ListParameter
+    // Interpolate between a list of values using a specific interpolation function [None, Linear, Plateau, BSpline]
+    //----------------------------------------------------------------------------------------------------------------------
+    class TObject_ListParameter extends FVB.TObject {
+        override funcVal = new FunctionValue_ListParameter;
+
+        override prepare_data(para: TParagraph, control: TControl, file: Reader): void {
+            assert(para.dataSize >= 8);
+            // Each Key contains 2 floats, a time and value
+            const keyCount = file.view.getUint32(para.dataOffset + 0);
+            const keys = file.buffer.createTypedArray(Float32Array, para.dataOffset + 4, keyCount * 2, Endianness.BIG_ENDIAN);
+            this.funcVal.setData(keys);
+        }
+    }
     class FunctionValue_ListParameter extends TFunctionValue {
         protected override range = new Attribute.Range();
         protected override interpolate = new Attribute.Interpolate();
@@ -1171,6 +1197,52 @@ namespace FVB {
         }
     }
 
+    //----------------------------------------------------------------------------------------------------------------------
+    // FunctionValue: Composite
+    // Perform a simple operation to combine some number of other FunctionValues, returning the result. 
+    // For example, we can using the ADD ECompositeOp we can return the sum of two ListParameter FunctionValues.
+    //----------------------------------------------------------------------------------------------------------------------
+    enum TECompositeOp {
+        NONE,
+        RAW,
+        IDX,
+        PARAM,
+        ADD,
+        SUB,
+        MUL,
+        DIV,
+        ENUM_SIZE,
+    }
+
+    class TObject_Composite extends FVB.TObject {
+        override funcVal = new FunctionValue_Composite;
+
+        override prepare_data(para: TParagraph, control: TControl, file: Reader): void {
+            assert(para.dataSize >= 8);
+
+            const compositeOp = file.view.getUint32(para.dataOffset + 0);
+            const floatData = file.view.getFloat32(para.dataOffset + 4);
+            const uintData = file.view.getUint32(para.dataOffset + 4);
+
+            let fvData: number;
+            let fvFunc: (ref: TFunctionValue[], data: number, t: number) => number;
+            switch (compositeOp) {
+                case TECompositeOp.RAW: fvData = uintData; fvFunc = FunctionValue_Composite.composite_raw; break;
+                case TECompositeOp.IDX: fvData = uintData; fvFunc = FunctionValue_Composite.composite_index; break;
+                case TECompositeOp.PARAM: fvData = floatData; fvFunc = FunctionValue_Composite.composite_parameter; break;
+                case TECompositeOp.ADD: fvData = floatData; fvFunc = FunctionValue_Composite.composite_add; break;
+                case TECompositeOp.SUB: fvData = floatData; fvFunc = FunctionValue_Composite.composite_subtract; break;
+                case TECompositeOp.MUL: fvData = floatData; fvFunc = FunctionValue_Composite.composite_multiply; break;
+                case TECompositeOp.DIV: fvData = floatData; fvFunc = FunctionValue_Composite.composite_divide; break;
+                default:
+                    console.warn('Unsupported CompositeOp:', compositeOp);
+                    return;
+            }
+
+            this.funcVal.setData(fvFunc, fvData)
+        }
+    }
+
     class FunctionValue_Composite extends TFunctionValue {
         protected override refer = new Attribute.Refer();
 
@@ -1236,73 +1308,6 @@ namespace FVB {
 
         private func: (ref: TFunctionValue[], dataVal: number, t: number) => number;
         private dataVal: number;
-    }
-
-    //----------------------------------------------------------------------------------------------------------------------
-    // FVB Objects
-    // Manages a FunctionValue.  
-    //----------------------------------------------------------------------------------------------------------------------
-    class TObject_Constant extends FVB.TObject {
-        override funcVal = new FunctionValue_Constant;
-
-        override prepare_data(para: TParagraph, control: TControl, file: Reader): void {
-            assert(para.dataSize == 4);
-            const value = file.view.getFloat32(para.dataOffset);
-            this.funcVal.setData(value);
-        }
-    }
-
-    class TObject_ListParameter extends FVB.TObject {
-        override funcVal = new FunctionValue_ListParameter;
-
-        override prepare_data(para: TParagraph, control: TControl, file: Reader): void {
-            assert(para.dataSize >= 8);
-            // Each Key contains 2 floats, a time and value
-            const keyCount = file.view.getUint32(para.dataOffset + 0);
-            const keys = file.buffer.createTypedArray(Float32Array, para.dataOffset + 4, keyCount * 2, Endianness.BIG_ENDIAN);
-            this.funcVal.setData(keys);
-        }
-    }
-
-    enum TECompositeOp {
-        NONE,
-        RAW,
-        IDX,
-        PARAM,
-        ADD,
-        SUB,
-        MUL,
-        DIV,
-        ENUM_SIZE,
-    }
-
-    class TObject_Composite extends FVB.TObject {
-        override funcVal = new FunctionValue_Composite;
-
-        override prepare_data(para: TParagraph, control: TControl, file: Reader): void {
-            assert(para.dataSize >= 8);
-
-            const compositeOp = file.view.getUint32(para.dataOffset + 0);
-            const floatData = file.view.getFloat32(para.dataOffset + 4);
-            const uintData = file.view.getUint32(para.dataOffset + 4);
-
-            let fvData: number;
-            let fvFunc: (ref: TFunctionValue[], data: number, t: number) => number;
-            switch (compositeOp) {
-                case TECompositeOp.RAW: fvData = uintData; fvFunc = FunctionValue_Composite.composite_raw; break;
-                case TECompositeOp.IDX: fvData = uintData; fvFunc = FunctionValue_Composite.composite_index; break;
-                case TECompositeOp.PARAM: fvData = floatData; fvFunc = FunctionValue_Composite.composite_parameter; break;
-                case TECompositeOp.ADD: fvData = floatData; fvFunc = FunctionValue_Composite.composite_add; break;
-                case TECompositeOp.SUB: fvData = floatData; fvFunc = FunctionValue_Composite.composite_subtract; break;
-                case TECompositeOp.MUL: fvData = floatData; fvFunc = FunctionValue_Composite.composite_multiply; break;
-                case TECompositeOp.DIV: fvData = floatData; fvFunc = FunctionValue_Composite.composite_divide; break;
-                default:
-                    console.warn('Unsupported CompositeOp:', compositeOp);
-                    return;
-            }
-
-            this.funcVal.setData(fvFunc, fvData)
-        }
     }
 }
 
