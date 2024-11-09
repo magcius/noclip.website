@@ -232,31 +232,6 @@ abstract class TAdaptor {
     }
 }
 
-//     struct TSetVariableValue_immediate {
-//         inline TSetVariableValue_immediate(u32 p1, f32 p2)
-//             : field_0x0(p1)
-//             , field_0x4(p2)
-//         {
-//         }
-
-//         u32 field_0x0;
-//         f32 field_0x4;
-//     };
-//     typedef void (*setVarFunc)(JStudio::TAdaptor*, JStudio::TObject*, u32, void const*, u32);
-
-
-//     TVariableValue* adaptor_referVariableValue(u32 param_0) {
-//         return &mVariableValues[param_0];
-//     }
-
-//     void adaptor_setVariableValue_immediate(u32 param_0, f32 param_1) {
-//         adaptor_referVariableValue(param_0)->setValue_immediate(param_1);
-//     }
-
-//      const TVariableValue* adaptor_getVariableValue(u32 param_0) const {
-//         return &mVariableValues[param_0];
-//     }
-
 //----------------------------------------------------------------------------------------------------------------------
 // STB Objects
 // Created at parse time, and controlled by Sequences from the STB file. Connects to Game objects via an Adaptor. 
@@ -465,6 +440,81 @@ class TControlObject extends STBObject {
 
     override do_paragraph(file: Reader, dataSize: number, dataOffset: number, param: number): void { }
 }
+
+
+//----------------------------------------------------------------------------------------------------------------------
+// Actor
+//----------------------------------------------------------------------------------------------------------------------
+export abstract class TActor extends JStage.TObject {
+    JSGFGetType() { return JStage.TEObject.ACTOR; }
+    JSGGetTranslation(dst: vec3) { }
+    JSGSetTranslation(src: ReadonlyVec3) { }
+    JSGGetScaling(dst: vec3) { }
+    JSGSetScaling(src: ReadonlyVec3) { }
+    JSGGetRotation(dst: vec3) { }
+    JSGSetRotation(src: ReadonlyVec3) { }
+    JSGGetShape(): number { return -1; }
+    JSGSetShape(x: number): void { }
+    JSGGetAnimation(): number { return -1; }
+    JSGSetAnimation(x: number): void { }
+    JSGGetAnimationFrame(): number { return 0.0; }
+    JSGSetAnimationFrame(x: number): void { }
+    JSGGetAnimationFrameMax(): number { return 0.0; }
+    JSGGetAnimationTransition(): number { return 0.0; }
+    JSGSetAnimationTransition(x: number): void { }
+    JSGGetTextureAnimation(): number { return -1; }
+    JSGSetTextureAnimation(x: number): void { }
+    JSGGetTextureAnimationFrame(): number { return 0.0; }
+    JSGSetTextureAnimationFrame(x: number): void { }
+    JSGGetTextureAnimationFrameMax(): number { return 0.0; }
+}
+
+class TActorAdaptor extends TAdaptor {
+    // /* 0x12C */ JStage::TObject* m12C;
+    // /* 0x130 */ u32 m130;
+    // /* 0x134 */ JStage::TObject* m134;
+    // /* 0x138 */ u32 m138;
+    // /* 0x13C */ u32 m13C;
+    // /* 0x140 */ u32 m140;
+
+    constructor(
+        private mObject: TActor,
+    ) { super(14); }
+
+    adaptor_do_prepare(obj: STBObject): void { debugger; }
+    adaptor_do_begin(obj: STBObject): void { debugger; }
+    adaptor_do_end(obj: STBObject): void { debugger; }
+    adaptor_do_update(obj: STBObject, frameCount: number): void { debugger; }
+    adaptor_do_data(unk0: Object, unk1: number, unk2: Object, unk3: number): void { debugger; }
+    adaptor_do_PARENT(dataOp: TEOperationData, data: number | string, unk0: number): void { debugger; }
+    adaptor_do_PARENT_NODE(dataOp: TEOperationData, data: number | string, unk0: number): void { debugger; }
+    adaptor_do_PARENT_ENABLE(dataOp: TEOperationData, data: number | string, unk0: number): void { debugger; }
+    adaptor_do_RELATION(dataOp: TEOperationData, data: number | string, unk0: number): void { debugger; }
+    adaptor_do_RELATION_NODE(dataOp: TEOperationData, data: number | string, unk0: number): void { debugger; }
+    adaptor_do_RELATION_ENABLE(dataOp: TEOperationData, data: number | string, unk0: number): void { debugger; }
+    adaptor_do_SHAPE(dataOp: TEOperationData, data: number | string, unk0: number): void { debugger; }
+    adaptor_do_ANIMATION(dataOp: TEOperationData, data: number | string, unk0: number): void { debugger; }
+    adaptor_do_ANIMATION_MODE(dataOp: TEOperationData, data: number | string, unk0: number): void { debugger; }
+    adaptor_do_TEXTURE_ANIMATION(dataOp: TEOperationData, data: number | string, unk0: number): void { debugger; }
+    adaptor_do_TEXTURE_ANIMATION_MODE(dataOp: TEOperationData, data: number | string, unk0: number): void { debugger; }
+
+    setJSG_ID_(actorFunc: (x: number) => void, dataOp: TEOperationData, data: number) {
+        debugger;
+    };
+}
+
+class TActorObject extends STBObject {
+    constructor(
+        control: TControl,
+        blockObj: TBlockObject,
+        stageObj: JStage.TObject,
+    ) { super(control, blockObj, new TActorAdaptor(stageObj as TActor)) }
+
+    override do_paragraph(file: Reader, dataSize: number, dataOffset: number, param: number): void {
+        debugger;
+    }
+}
+
 
 //----------------------------------------------------------------------------------------------------------------------
 // Camera
@@ -1511,7 +1561,7 @@ export class TControl {
         let objType: JStage.TEObject;
         switch (blockObj.type) {
             case 'JCMR': objConstructor = TCameraObject; objType = JStage.TEObject.CAMERA; break;
-            case 'JACT':
+            case 'JACT': objConstructor = TActorObject; objType = JStage.TEObject.ACTOR; break;
             case 'JABL':
             case 'JLIT':
             case 'JFOG':
