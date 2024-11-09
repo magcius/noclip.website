@@ -160,9 +160,8 @@ class dDemo_actor_c extends TActor {
     mTexAnimationFrame: number;
     mTexAnimationFrameMax: number;
     mModel: J3DModelInstance;
-    stbDataSize: number;
+    stbDataId: number;
     stbData: DataView;
-    stbDataUnk: number;
     mActorPcId: number;
     mBckId: number;
     mBtpId: number;
@@ -186,10 +185,10 @@ class dDemo_actor_c extends TActor {
     override JSGGetScaling(dst: vec3) { vec3.copy( dst, this.mScaling ); }
     override JSGGetRotation(dst: vec3) { debugger; vec3.scale(dst, this.mRotation, MathConstants.RAD_TO_DEG); }
 
-    override JSGSetData(dataSize: number, data: DataView, unk1: number): void {
-        this.stbDataSize = dataSize;
+    override JSGSetData(id: number, data: DataView): void {
+        debugger;
+        this.stbDataId = id;
         this.stbData = data;
-        this.stbDataUnk = unk1;
         this.mFlags |= 0x01;
     }
 

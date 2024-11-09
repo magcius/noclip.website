@@ -37,12 +37,12 @@ export namespace JStage {
         JSGGetFlag(): number { return 0; }
         JSGSetFlag(flag: number): void { }
         JSGGetData(unk0: number, data: Object, unk1: number): boolean { return false; }
-        JSGSetData(dataSize: number, data: DataView, unk1: number): void { }
+        JSGSetData(id: number, data: DataView): void { }
         JSGGetParent(parentDst: JStage.TObject, unk: { x: number }): void { }
         JSGSetParent(parent: JStage.TObject | null, unk: number): void { }
         JSGSetRelation(related: boolean, obj: JStage.TObject, unk: number): void { }
         JSGFindNodeID(id: string): number { return -1; }
-        JSGGetNodeTransformation(unk: number, mtx: mat4): number {
+        JSGGetNodeTransformation(nodeId: number, mtx: mat4): number {
             mat4.identity(mtx);
             return 0;
         }
@@ -171,15 +171,15 @@ function readData(dataOp: TEOperationData, dataOffset: number, dataSize: number,
     switch (dataOp) {
         case TEOperationData.IMMEDIATE:
         case TEOperationData.TIME:
-        case TEOperationData.FUNCVALUE_INDEX: 
-        case TEOperationData.OBJECT_INDEX:         
+        case TEOperationData.FUNCVALUE_INDEX:
+        case TEOperationData.OBJECT_INDEX:
             return file.view.getUint32(dataOffset);
 
-        case TEOperationData.FUNCVALUE_NAME: 
-        case TEOperationData.OBJECT_NAME: 
+        case TEOperationData.FUNCVALUE_NAME:
+        case TEOperationData.OBJECT_NAME:
             return readString(file.buffer, dataOffset, dataSize);
 
-        default: 
+        default:
             assert(false, 'Unsupported data operation');
     }
 }
@@ -194,7 +194,7 @@ abstract class TAdaptor {
     abstract adaptor_do_begin(obj: STBObject): void;
     abstract adaptor_do_end(obj: STBObject): void;
     abstract adaptor_do_update(obj: STBObject, frameCount: number): void;
-    abstract adaptor_do_data(obj: STBObject, unk0: Object, unk1: number, unk2: Object, unk3: number): void;
+    abstract adaptor_do_data(obj: STBObject, id: number, data: DataView): void;
 
     // Set a single VariableValue update function, with the option of using FuncVals 
     adaptor_setVariableValue(obj: STBObject, keyIdx: number, dataOp: TEOperationData, data: number | string) {
@@ -299,7 +299,7 @@ abstract class STBObject {
         if (this.mAdaptor) this.mAdaptor.adaptor_updateVariableValue(this, frameCount);
         if (this.mAdaptor) this.mAdaptor.adaptor_do_update(this, frameCount);
     }
-    // do_data(void const*, u32, void const*, u32) {}
+    do_data(id: number, data: DataView) { if (this.mAdaptor) this.mAdaptor.adaptor_do_data(this, id, data); }
 
     getStatus() { return this.mStatus; }
     getSuspendFrames(): number { return this.mSuspendFrames; }
@@ -435,9 +435,7 @@ abstract class STBObject {
                 while (byteIdx < this.pSequence_next) {
                     const para = TParagraph.parse(view, byteIdx);
                     if (para.type <= 0xff) {
-                        console.debug('Unsupported paragraph feature: ', para.type);
-                        debugger;
-                        // process_paragraph_reserved_(para.type, para.content, para.param);
+                        this.process_paragraph_reserved_(this.mData, para.dataSize, para.dataOffset, para.type);
                     } else {
                         this.do_paragraph(this.mData, para.dataSize, para.dataOffset, para.type);
                     }
@@ -450,6 +448,28 @@ abstract class STBObject {
                 console.debug('Unsupported sequence cmd: ', cmd);
                 debugger;
                 byteIdx += 4;
+                break;
+        }
+    }
+
+    private process_paragraph_reserved_(file: Reader, dataSize: number, dataOffset: number, param: number): void {
+        switch (param) {
+            case 0x1: debugger; break;
+            case 0x2: debugger; break;
+            case 0x3: debugger; break;
+            case 0x80: debugger; break;
+            case 0x81:
+                debugger;
+                const idSize = file.view.getUint16(dataOffset + 2);
+                assert( idSize == 4 );
+                const id = file.view.getUint32(dataOffset + 4);
+                const contentOffset = dataOffset + 4 + align(idSize, 4);
+                const contentSize = dataSize - (contentOffset - dataOffset);
+                const content = file.buffer.createDataView(contentOffset, contentSize);
+                this.do_data(id, content);
+                break;
+
+            case 0x82:
                 break;
         }
     }
@@ -569,8 +589,8 @@ class TActorAdaptor extends TAdaptor {
         debugger;
     }
 
-    adaptor_do_data(unk0: Object, unk1: number, unk2: Object, unk3: number): void {
-        debugger;
+    adaptor_do_data(obj: STBObject, id: number, data: DataView): void {
+        this.mObject.JSGSetData(id, data);
     }
 
     adaptor_do_PARENT(dataOp: TEOperationData, data: number | string, dataSize: number): void {
@@ -843,7 +863,7 @@ class TCameraAdaptor extends TAdaptor {
         this.mStageCam.JSGSetViewTargetPosition(targetPos);
     }
 
-    adaptor_do_data(unk0: Object, unk1: number, unk2: Object, unk3: number): void {
+    adaptor_do_data(obj: STBObject, id: number, data: DataView): void {
         // This is not used by TWW. Untested.
         debugger;
     }
