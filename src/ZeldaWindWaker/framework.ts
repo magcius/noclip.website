@@ -489,6 +489,7 @@ export class fopAc_ac_c extends leafdraw_class {
     public subtype: number = 0xFF;
     public roomNo: number = -1;
     public tevStr = new dKy_tevstr_c();
+    public demoActorID: number = -1;
     protected cullSizeBox: AABB | null = null;
     protected cullSizeSphere: vec4 | null = null;
     protected cullMtx: mat4 | null = null;

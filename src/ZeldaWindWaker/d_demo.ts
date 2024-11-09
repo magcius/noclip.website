@@ -3,6 +3,7 @@ import ArrayBufferSlice from "../ArrayBufferSlice";
 import { TParse, JStage, TSystem, TControl, TCamera } from "../Common/JSYSTEM/JStudio.js";
 import { getMatrixAxisY } from "../MathHelpers.js";
 import { dGlobals } from "./Main";
+import { fopAc_ac_c, fopAcM_searchFromName } from "./framework.js";
 
 export enum EDemoMode {
     None,
@@ -144,9 +145,15 @@ class dDemo_camera_c extends TCamera {
     }
 }
 
+class dDemo_actor_c extends TCamera {
+    constructor(actor: fopAc_ac_c) {
+        super();
+    }
+}
+
 class dDemo_system_c implements TSystem {
-    public mpActiveCamera?: dDemo_camera_c;
-    // private mpActors: dDemo_actor_c[];
+    private mpActiveCamera?: dDemo_camera_c;
+    private mpActors: dDemo_actor_c[] = [];
     // private mpAmbient: dDemo_ambient_c;
     // private mpLight: dDemo_light_c[];
     // private mpFog: dDemo_fog_c;
@@ -155,13 +162,30 @@ class dDemo_system_c implements TSystem {
         private globals: dGlobals
     ) { }
 
-    public JSGFindObject(objId: string, objType: JStage.TEObject): JStage.TObject | undefined {
+    public JSGFindObject(objName: string, objType: JStage.TEObject): JStage.TObject | undefined {
         switch (objType) {
             case JStage.TEObject.CAMERA:
                 if (this.mpActiveCamera) return this.mpActiveCamera;
                 else return this.mpActiveCamera = new dDemo_camera_c(this.globals);
+
             case JStage.TEObject.ACTOR:
             case JStage.TEObject.ACTOR_UNK:
+                debugger;
+                let actor = fopAcM_searchFromName(this.globals, objName, 0, 0);
+                if (!actor) {
+                    if (objType == JStage.TEObject.ACTOR && objName == "d_act") {
+                        debugger; // Untested. Unimplemented
+                        actor = {} as fopAc_ac_c;
+                    } else {
+                        return undefined;
+                    }
+                }
+                if (!this.mpActors[actor.demoActorID]) {
+                    actor.demoActorID = this.mpActors.length;
+                    this.mpActors[actor.demoActorID] = new dDemo_actor_c(actor);
+                };
+                return this.mpActors[actor.demoActorID];
+
             case JStage.TEObject.AMBIENT:
             case JStage.TEObject.LIGHT:
             case JStage.TEObject.FOG:
@@ -171,8 +195,12 @@ class dDemo_system_c implements TSystem {
         }
     }
 
+    public getCamera() { return this.mpActiveCamera; }
+    public getActor(actorID: number) { return this.mpActors[actorID]; }
+
     public remove() {
         this.mpActiveCamera = undefined;
+        this.mpActors = [];
     }
 }
 

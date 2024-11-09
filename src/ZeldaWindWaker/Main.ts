@@ -784,7 +784,7 @@ class d_s_play extends fopScn {
 
         // TODO: Determine the correct place for this
         // dCamera_c::Store() sets the camera params if the demo camera is active
-        const demoCam = this.demo.getSystem().mpActiveCamera;
+        const demoCam = this.demo.getSystem().getCamera();
         if (demoCam && !isPaused) {
             let viewPos = globals.cameraPosition;
             let targetPos = vec3.add(scratchVec3a, globals.cameraPosition, globals.cameraFwd);
