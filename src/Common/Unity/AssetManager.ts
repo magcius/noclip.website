@@ -1,6 +1,6 @@
 
 import { vec3, vec4 } from 'gl-matrix';
-import { AssetInfo, ChannelInfo, Mesh, PPtr, SubMesh, SubMeshArray, AABB as UnityAABB, UnityClassID, UnityColorSpace, UnityMaterial, UnityObject, UnityShader, UnityStreamingInfo, UnityTexture2D, UnityTextureFormat, UnityTextureSettings, VertexFormat } from '../../../rust/pkg/noclip_support';
+import { UnityVersion, UnityAssetFile, UnityAssetFileObject, UnityClassID, UnityGameObject, UnityPPtr, UnityStreamingInfo, UnityMesh, UnityMeshCompression, UnityVertexFormat, UnitySubMesh, UnityAABB } from '../../../rust/pkg/noclip_support';
 import ArrayBufferSlice from '../../ArrayBufferSlice.js';
 import { Color, TransparentBlack, colorNewFromRGBA } from '../../Color.js';
 import { DataFetcher } from '../../DataFetcher.js';
@@ -112,13 +112,13 @@ class FileDataFetcher {
 
 export class AssetLocation {
     file: AssetFile;
-    pathID: number;
+    pathID: BigInt;
 }
 
 export interface AssetObjectData {
     location: AssetLocation;
     classID: UnityClassID;
-    assetInfo: AssetInfo;
+    assetFile: UnityAssetFile;
     data: Uint8Array;
 }
 
@@ -141,24 +141,24 @@ type ResType<T extends UnityAssetResourceType> =
 type CreateFunc<T> = (assetSystem: UnityAssetSystem, objData: AssetObjectData) => Promise<T | null>;
 
 export class AssetFile {
-    public unityObject: UnityObject[] = [];
-    public unityObjectByPathID = new Map<number, UnityObject>();
-    public assetInfo: AssetInfo;
+    public unityObjects: UnityAssetFileObject[] = [];
+    public unityObjectByFileID = new Map<BigInt, UnityAssetFileObject>();
+    public assetFile: UnityAssetFile;
     public fetcher: FileDataFetcher | null = null;
     public fullData: ArrayBufferSlice | null;
 
     private waitForHeaderPromise: Promise<void> | null;
-    private dataCache = new Map<number, Destroyable | null>();
-    private promiseCache = new Map<number, Promise<Destroyable | null>>();
+    private dataCache = new Map<BigInt, Destroyable | null>();
+    private promiseCache = new Map<BigInt, Promise<Destroyable | null>>();
 
     constructor(private path: string) {
     }
 
     private doneLoadingHeader(buffer: Uint8Array): void {
-        this.assetInfo = rust.AssetInfo.deserialize(buffer);
-        this.unityObject = loadWasmBindgenArray(this.assetInfo.get_objects());
-        for (let i = 0; i < this.unityObject.length; i++)
-            this.unityObjectByPathID.set(this.unityObject[i].path_id, this.unityObject[i]);
+        this.assetFile.append_metadata_chunk(buffer);
+        this.unityObjects = this.assetFile.get_objects();
+        for (let i = 0; i < this.unityObjects.length; i++)
+            this.unityObjectByFileID.set(this.unityObjects[i].file_id, this.unityObjects[i]);
         this.waitForHeaderPromise = null;
     }
 
@@ -182,17 +182,17 @@ export class AssetFile {
             rangeSize: MAX_HEADER_LENGTH,
         })).createTypedArray(Uint8Array);
 
-        const assetHeader = rust.AssetHeader.deserialize(headerBytes);
-        if (assetHeader.data_offset > headerBytes.byteLength) {
+        this.assetFile = rust.UnityAssetFile.initialize_with_header_chunk(headerBytes);
+        const dataOffset = this.assetFile.get_data_offset();
+        if (dataOffset > headerBytes.byteLength) {
             // Oops, need to fetch extra bytes...
             const extraBytes = (await dataFetcher.fetchData(this.path, {
                 rangeStart: headerBytes.byteLength,
-                rangeSize: assetHeader.data_offset - headerBytes.byteLength,
+                rangeSize: dataOffset - BigInt(headerBytes.byteLength),
             })).createTypedArray(Uint8Array);
             headerBytes = concatBufs(headerBytes, extraBytes);
         }
 
-        assetHeader.free();
         this.fetcher = new FileDataFetcher();
         this.doneLoadingHeader(headerBytes);
     }
@@ -213,15 +213,15 @@ export class AssetFile {
         return this.fetcher.fetch(dataFetcher, this.path);
     }
 
-    private createLocation(pathID: number): AssetLocation {
+    private createLocation(pathID: BigInt): AssetLocation {
         return { file: this, pathID };
     }
 
-    public async fetchObject(pathID: number): Promise<AssetObjectData> {
+    public async fetchObject(pathID: BigInt): Promise<AssetObjectData> {
         if (this.waitForHeaderPromise !== null)
             await this.waitForHeaderPromise;
 
-        const obj = assertExists(this.unityObjectByPathID.get(pathID));
+        const obj = assertExists(this.unityObjectByFileID.get(pathID));
 
         let buffer: ArrayBufferSlice;
         if (this.fetcher !== null)
@@ -233,29 +233,29 @@ export class AssetFile {
 
         const location = this.createLocation(pathID);
         const classID = obj.class_id;
-        const assetInfo = this.assetInfo;
         const data = buffer.createTypedArray(Uint8Array);
-        return { location, classID, assetInfo, data };
+        return { location, classID, assetFile: this.assetFile, data };
     }
 
-    public getPPtrFile(assetSystem: UnityAssetSystem, pptr: PPtr): AssetFile {
+    public getPPtrFile(assetSystem: UnityAssetSystem, pptr: UnityPPtr): AssetFile {
         if (pptr.file_index === 0) {
             return this;
         } else {
-            const externalFilename = assertExists(this.assetInfo.get_external_path(pptr.file_index));
+            const externalFilename = assertExists(this.assetFile.get_external_path(pptr));
             return assetSystem.fetchAssetFile(externalFilename, true);
         }
     }
 
     private createMeshData = async (assetSystem: UnityAssetSystem, objData: AssetObjectData): Promise<UnityMeshData> => {
-        const mesh = rust.Mesh.from_bytes(objData.data, objData.assetInfo);
-        const streamingInfo: UnityStreamingInfo | undefined = mesh.get_streaming_info();
-        if (streamingInfo !== undefined) {
-            const vertexData = await assetSystem.fetchStreamingInfo(streamingInfo);
-            mesh.set_vertex_data(vertexData.createTypedArray(Uint8Array));
+        const mesh = rust.UnityMesh.create(UnityVersion.V2019_4_39f1, objData.data);
+        const streamingInfo: UnityStreamingInfo = mesh.stream_data;
+        if (streamingInfo.path.length !== 0) {
+            const buf = await assetSystem.fetchStreamingInfo(streamingInfo);
+            const vertexData = rust.UnityVertexData.create(UnityVersion.V2019_4_39f1, buf.createTypedArray(Uint8Array));
+            mesh.set_vertex_data(vertexData);
         }
 
-        if (mesh.is_compressed()) {
+        if (mesh.mesh_compression !== UnityMeshCompression.Off) {
             return loadCompressedMesh(assetSystem.device, mesh);
         } else {
             return loadMesh(assetSystem.device, mesh);
@@ -266,7 +266,7 @@ export class AssetFile {
         if (objData.classID !== rust.UnityClassID.Texture2D)
             return null;
 
-        const header = rust.UnityTexture2D.from_bytes(objData.data, objData.assetInfo);
+        const header = rust.UnityTexture2D.from_bytes(objData.data, objData.assetFile);
         let data = header.image_data;
         if (data.length === 0) {
             const streaming_info = header.streaming_info;
@@ -278,18 +278,18 @@ export class AssetFile {
     };
 
     private createMaterialData = async (assetSystem: UnityAssetSystem, objData: AssetObjectData): Promise<UnityMaterialData> => {
-        const header = rust.UnityMaterial.from_bytes(objData.data, objData.assetInfo);
+        const header = rust.UnityMaterial.from_bytes(objData.data, objData.assetFile);
         const materialData = new UnityMaterialData(objData.location, header);
         await materialData.load(assetSystem);
         return materialData;
     };
 
     private createShaderData = async (assetSystem: UnityAssetSystem, objData: AssetObjectData): Promise<UnityShaderData> => {
-        const header = rust.UnityShader.from_bytes(objData.data, objData.assetInfo);
+        const header = rust.UnityShader.from_bytes(objData.data, objData.assetFile);
         return new UnityShaderData(objData.location, header);
     };
 
-    private fetchFromCache<T extends Destroyable>(assetSystem: UnityAssetSystem, pathID: number, createFunc: CreateFunc<T>): Promise<T | null> {
+    private fetchFromCache<T extends Destroyable>(assetSystem: UnityAssetSystem, pathID: BigInt, createFunc: CreateFunc<T>): Promise<T | null> {
         if (this.promiseCache.has(pathID))
             return this.promiseCache.get(pathID)! as Promise<T>;
 
@@ -320,10 +320,10 @@ export class AssetFile {
     }
 
     public destroy(device: GfxDevice): void {
-        if (this.assetInfo !== null)
-            this.assetInfo.free();
-        for (let i = 0; i < this.unityObject.length; i++)
-            this.unityObject[i].free();
+        if (this.assetFile !== null)
+            this.assetFile.free();
+        for (let i = 0; i < this.unityObjects.length; i++)
+            this.unityObjects[i].free();
         for (const v of this.dataCache.values())
             if (v !== null)
                 v.destroy(device);
@@ -365,12 +365,12 @@ export class UnityAssetSystem {
         return assetFile;
     }
 
-    public async fetchPPtr(location: AssetLocation, pptr: PPtr): Promise<AssetObjectData> {
+    public async fetchPPtr(location: AssetLocation, pptr: UnityPPtr): Promise<AssetObjectData> {
         const assetFile = location.file.getPPtrFile(this, pptr);
         return assetFile.fetchObject(pptr.path_id);
     }
 
-    public async fetchResource<T extends UnityAssetResourceType>(type: T, location: AssetLocation, pptr: PPtr): Promise<ResType<T> | null> {
+    public async fetchResource<T extends UnityAssetResourceType>(type: T, location: AssetLocation, pptr: UnityPPtr): Promise<ResType<T> | null> {
         const assetFile = location.file.getPPtrFile(this, pptr);
         return assetFile.fetchResource(this, type, pptr.path_id);
     }
@@ -428,14 +428,14 @@ export enum UnityChannel {
 
 export class UnityMeshData {
     public bbox = new Geometry.AABB();
-    public submeshes: SubMesh[];
+    public submeshes: UnitySubMesh[];
     public indexBufferStride: number;
 
-    constructor(public inputLayout: GfxInputLayout, public vertexBuffers: GfxVertexBufferDescriptor[], public indexBuffer: GfxIndexBufferDescriptor, bbox: UnityAABB, submeshes: SubMeshArray, public indexBufferFormat: GfxFormat) {
+    constructor(public inputLayout: GfxInputLayout, public vertexBuffers: GfxVertexBufferDescriptor[], public indexBuffer: GfxIndexBufferDescriptor, bbox: UnityAABB, submeshes: UnitySubMesh[], public indexBufferFormat: GfxFormat) {
         const center = vec3.fromValues(bbox.center.x, bbox.center.y, bbox.center.z);
         const extent = vec3.fromValues(bbox.extent.x, bbox.extent.y, bbox.extent.z);
         this.bbox.setFromCenterAndExtents(center, extent);
-        this.submeshes = loadWasmBindgenArray(submeshes);
+        this.submeshes = submeshes;
         this.indexBufferStride = getFormatCompByteSize(this.indexBufferFormat);
     }
 
@@ -446,7 +446,7 @@ export class UnityMeshData {
     }
 }
 
-function loadCompressedMesh(device: GfxDevice, mesh: Mesh): UnityMeshData {
+function loadCompressedMesh(device: GfxDevice, mesh: UnityMesh): UnityMeshData {
     let vertices = mesh.unpack_vertices()!;
     let normals = mesh.unpack_normals()!;
     let indices = mesh.unpack_indices()!;
@@ -463,23 +463,23 @@ function loadCompressedMesh(device: GfxDevice, mesh: Mesh): UnityMeshData {
     const indexData = makeStaticDataBuffer(device, GfxBufferUsage.Index, indices.buffer);
     const vertexBuffers = coalesceBuffer(device, GfxBufferUsage.Vertex, [new ArrayBufferSlice(vertices.buffer), new ArrayBufferSlice(normals.buffer)]);
     const indexBuffer = { buffer: indexData, byteOffset: 0 };
-    return new UnityMeshData(layout, vertexBuffers, indexBuffer, mesh.local_aabb, mesh.get_submeshes(), indexBufferFormat);
+    return new UnityMeshData(layout, vertexBuffers, indexBuffer, mesh.local_aabb, mesh.submeshes, indexBufferFormat);
 }
 
-function vertexFormatToGfxFormatBase(vertexFormat: VertexFormat): GfxFormat {
+function vertexFormatToGfxFormatBase(vertexFormat: UnityVertexFormat): GfxFormat {
     switch (vertexFormat) {
-        case rust.VertexFormat.Float: return GfxFormat.F32_R;
-        case rust.VertexFormat.Float16: return GfxFormat.F16_R;
-        case rust.VertexFormat.UNorm8: return GfxFormat.U8_R_NORM;
-        case rust.VertexFormat.SNorm8: return GfxFormat.S8_R_NORM;
-        case rust.VertexFormat.UNorm16: return GfxFormat.U16_R_NORM;
-        case rust.VertexFormat.SNorm16: return GfxFormat.S16_R_NORM;
-        case rust.VertexFormat.UInt8: return GfxFormat.U8_R;
-        case rust.VertexFormat.SInt8: return GfxFormat.S8_R;
-        case rust.VertexFormat.UInt16: return GfxFormat.U16_R;
-        case rust.VertexFormat.SInt16: return GfxFormat.S16_R;
-        case rust.VertexFormat.UInt32: return GfxFormat.U32_R;
-        case rust.VertexFormat.SInt32: return GfxFormat.S32_R;
+        case rust.UnityVertexFormat.Float: return GfxFormat.F32_R;
+        case rust.UnityVertexFormat.Float16: return GfxFormat.F16_R;
+        case rust.UnityVertexFormat.UNorm8: return GfxFormat.U8_R_NORM;
+        case rust.UnityVertexFormat.SNorm8: return GfxFormat.S8_R_NORM;
+        case rust.UnityVertexFormat.UNorm16: return GfxFormat.U16_R_NORM;
+        case rust.UnityVertexFormat.SNorm16: return GfxFormat.S16_R_NORM;
+        case rust.UnityVertexFormat.UInt8: return GfxFormat.U8_R;
+        case rust.UnityVertexFormat.SInt8: return GfxFormat.S8_R;
+        case rust.UnityVertexFormat.UInt16: return GfxFormat.U16_R;
+        case rust.UnityVertexFormat.SInt16: return GfxFormat.S16_R;
+        case rust.UnityVertexFormat.UInt32: return GfxFormat.U32_R;
+        case rust.UnityVertexFormat.SInt32: return GfxFormat.S32_R;
         default:
             throw new Error(`didn't recognize format ${vertexFormat}`);
     }

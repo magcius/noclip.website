@@ -330,7 +330,7 @@ class UnityLevel {
     }
 
     private loadOneComponent<CompT extends UnityComponent, WasmT>(obj: AssetObjectData, gameObject: GameObject, fromBytes: WasmFromBytes<WasmT>, constructor: ComponentConstructor<CompT, WasmT>): Promise<void> {
-        const wasmObj = fromBytes.from_bytes(obj.data, obj.assetInfo);
+        const wasmObj = fromBytes.from_bytes(obj.data, obj.assetFile);
         const comp = new constructor(this, gameObject, wasmObj);
         gameObject.components.push(comp);
         this.components.set(obj.location.pathID, comp);
@@ -359,7 +359,7 @@ class UnityLevel {
         const loadGameObject = async (unityObject: UnityObject) => {
             const pathID = unityObject.path_id;
             const objData = await assetFile.fetchObject(pathID);
-            const wasmGameObject = rust.GameObject.from_bytes(objData.data, assetFile.assetInfo);
+            const wasmGameObject = rust.GameObject.from_bytes(objData.data, assetFile.assetFile);
             const gameObject = new GameObject(objData.location, wasmGameObject);
             gameObject.isActive = wasmGameObject.is_active;
             gameObject.layer = wasmGameObject.layer;
@@ -368,8 +368,8 @@ class UnityLevel {
         };
 
         const promises = [];
-        for (let i = 0; i < assetFile.unityObject.length; i++) {
-            const unityObject = assetFile.unityObject[i];
+        for (let i = 0; i < assetFile.unityObjects.length; i++) {
+            const unityObject = assetFile.unityObjects[i];
             if (unityObject.class_id !== rust.UnityClassID.GameObject)
                 continue;
 
