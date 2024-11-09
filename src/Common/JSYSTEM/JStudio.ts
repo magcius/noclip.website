@@ -10,6 +10,7 @@ import { Endianness } from "../../endian.js";
 
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
+const scratchVec3c = vec3.create();
 
 //----------------------------------------------------------------------------------------------------------------------
 // Stage Objects
@@ -445,6 +446,22 @@ class TControlObject extends STBObject {
 //----------------------------------------------------------------------------------------------------------------------
 // Actor
 //----------------------------------------------------------------------------------------------------------------------
+const enum Actor_ValueIdx {
+    ANIM_FRAME = 0,
+    ANIM_TRANSITION = 1,
+    ANIM_TEX_FRAME = 2,
+
+    POS_X,
+    POS_Y,
+    POS_Z,
+    ROT_X,
+    ROT_Y,
+    ROT_Z,
+    SCALE_X,
+    SCALE_Y,
+    SCALE_Z,
+}
+
 export abstract class TActor extends JStage.TObject {
     JSGFGetType() { return JStage.TEObject.ACTOR; }
     JSGGetTranslation(dst: vec3) { }
@@ -481,9 +498,46 @@ class TActorAdaptor extends TAdaptor {
         private mObject: TActor,
     ) { super(14); }
 
-    adaptor_do_prepare(obj: STBObject): void { debugger; }
-    adaptor_do_begin(obj: STBObject): void { debugger; }
-    adaptor_do_end(obj: STBObject): void { debugger; }
+    adaptor_do_prepare(obj: STBObject): void {
+        this.mVariableValues[1].setOutput(this.mObject.JSGSetAnimationTransition);
+
+        // @TODO:
+        // TVVOutput_ANIMATION_FRAME_(0, 317, &JStage::TActor::JSGSetAnimationFrame, &JStage::TActor::JSGGetAnimationFrame, &JStage::TActor::JSGGetAnimationFrameMax),
+        // TVVOutput_ANIMATION_FRAME_(2, 321, &JStage::TActor::JSGSetTextureAnimationFrame, &JStage::TActor::JSGGetTextureAnimationFrame, &JStage::TActor::JSGGetTextureAnimationFrameMax),
+    }
+
+    adaptor_do_begin(obj: STBObject): void {
+        this.mObject.JSGFEnableFlag(1);
+    
+        const pos = scratchVec3a;
+        const rot = scratchVec3b;
+        const scale = scratchVec3c;
+        this.mObject.JSGGetTranslation(pos);
+        this.mObject.JSGGetRotation(rot);
+        this.mObject.JSGGetScaling(scale);
+
+        if (obj.mControl.isTransformEnabled()) {
+            vec3.transformMat4(pos, pos, obj.mControl.getTransformOnGet());
+            rot[1] -= obj.mControl.mTransformRotY!; // @TODO: Check this shouldn't be negated
+        }
+        
+        this.adaptor_setVariableValue_Vec(Actor_ValueIdx.POS_X, pos);
+        this.adaptor_setVariableValue_Vec(Actor_ValueIdx.ROT_X, rot);
+        this.adaptor_setVariableValue_Vec(Actor_ValueIdx.SCALE_X, scale);
+        
+        // @TODO:
+        // for (const TVVOutputObject* output = saoVVOutput_; output->mValueIndex != -1; output++) {
+        //     mVariableValues[output->mValueIndex].setValue_immediate((this.mObject.*(output->mGetter))());
+        // }
+        // for (const TVVOutput_ANIMATION_FRAME_* output = saoVVOutput_ANIMATION_FRAME_; output->mValueIndex != -1; output++) {
+        //     mVariableValues[output->mValueIndex].setValue_immediate((this.mObject.*(output->mGetter))());
+        // }
+    }
+
+    adaptor_do_end(obj: STBObject): void { 
+        this.mObject.JSGFDisableFlag(1);
+    }
+
     adaptor_do_update(obj: STBObject, frameCount: number): void { debugger; }
     adaptor_do_data(unk0: Object, unk1: number, unk2: Object, unk3: number): void { debugger; }
     adaptor_do_PARENT(dataOp: TEOperationData, data: number | string, unk0: number): void { debugger; }
@@ -1492,8 +1546,8 @@ export class TControl {
     public mSecondsPerFrame: number;
     private mSuspendFrames: number;
 
-    private mTransformOrigin?: vec3;
-    private mTransformRotY?: number;
+    public mTransformOrigin?: vec3;
+    public mTransformRotY?: number;
     private mTransformOnGetMtx = mat4.create();
     private mTransformOnSetMtx = mat4.create();
 

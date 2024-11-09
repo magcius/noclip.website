@@ -1,6 +1,6 @@
 import { ReadonlyVec3, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { TParse, JStage, TSystem, TControl, TCamera } from "../Common/JSYSTEM/JStudio.js";
+import { TParse, JStage, TSystem, TControl, TCamera, TActor } from "../Common/JSYSTEM/JStudio.js";
 import { getMatrixAxisY } from "../MathHelpers.js";
 import { dGlobals } from "./Main";
 import { fopAc_ac_c, fopAcM_searchFromName } from "./framework.js";
@@ -145,7 +145,7 @@ class dDemo_camera_c extends TCamera {
     }
 }
 
-class dDemo_actor_c extends TCamera {
+class dDemo_actor_c extends TActor {
     constructor(actor: fopAc_ac_c) {
         super();
     }
@@ -170,7 +170,6 @@ class dDemo_system_c implements TSystem {
 
             case JStage.TEObject.ACTOR:
             case JStage.TEObject.ACTOR_UNK:
-                debugger;
                 let actor = fopAcM_searchFromName(this.globals, objName, 0, 0);
                 if (!actor) {
                     if (objType == JStage.TEObject.ACTOR && objName == "d_act") {
