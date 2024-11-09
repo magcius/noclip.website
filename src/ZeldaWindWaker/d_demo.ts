@@ -169,7 +169,7 @@ class dDemo_system_c implements TSystem {
                 else return this.mpActiveCamera = new dDemo_camera_c(this.globals);
 
             case JStage.TEObject.ACTOR:
-            case JStage.TEObject.ACTOR_UNK:
+            case JStage.TEObject.PREEXISTING_ACTOR:
                 let actor = fopAcM_searchFromName(this.globals, objName, 0, 0);
                 if (!actor) {
                     if (objType == JStage.TEObject.ACTOR && objName == "d_act") {

@@ -19,7 +19,7 @@ const scratchVec3c = vec3.create();
 //----------------------------------------------------------------------------------------------------------------------
 export namespace JStage {
     export enum TEObject {
-        ACTOR_UNK = 0x0,
+        PREEXISTING_ACTOR = 0x0,
         UNK1 = 0x1,
         ACTOR = 0x2,
         CAMERA = 0x3,
@@ -39,7 +39,7 @@ export namespace JStage {
         JSGGetData(unk0: number, data: Object, unk1: number): boolean { return false; }
         JSGSetData(unk0: number, data: Object, unk1: number): void { }
         JSGGetParent(parentDst: JStage.TObject, unk: { x: number }): void { }
-        JSGSetParent(parent: JStage.TObject, unk: number): void { }
+        JSGSetParent(parent: JStage.TObject | null, unk: number): void { }
         JSGSetRelation(related: boolean, obj: JStage.TObject, unk: number): void { }
         JSGFindNodeID(id: string): number { return -1; }
         JSGGetNodeTransformation(unk: number, mtx: mat4): number {
@@ -154,19 +154,22 @@ class TVariableValue {
 // TAdaptor
 // Connects the STBObject to a Game Object. Manages tracks of TVariableValues, updates their values on the Game object.
 //----------------------------------------------------------------------------------------------------------------------
+// @TODO: Cleanup enum names
 const enum TEOperationData {
     NONE = 0,
     VOID = 1, // Disable updates for this track.
     IMMEDIATE = 2, // Set the value on this track with an immediate value.
     TIME = 3, // Ramp the track's value based by a given velocity, starting at 0.
     FUNCVALUE_NAME = 0x10, // Unused?
-    FUNCVALUE_INDEX = 0x12 // Make the track use a function value object for the value.
+    FUNCVALUE_INDEX = 0x12, // Make the track use a function value object for the value.
+    OBJECT_NAME = 0x18, // TODO
+    OBJECT_INDEX = 0x19, // Set the value directly on the JStage object (e.g. an actor), don't store in the adaptor 
 };
 
 abstract class TAdaptor {
     constructor(
-        protected mCount: number,
-        protected mVariableValues = nArray(mCount, i => new TVariableValue()),
+        public mCount: number,
+        public mVariableValues = nArray(mCount, i => new TVariableValue()),
     ) { }
 
     abstract adaptor_do_prepare(obj: STBObject): void;
@@ -446,20 +449,23 @@ class TControlObject extends STBObject {
 //----------------------------------------------------------------------------------------------------------------------
 // Actor
 //----------------------------------------------------------------------------------------------------------------------
-const enum Actor_ValueIdx {
+const enum Actor_ValIdx {
     ANIM_FRAME = 0,
     ANIM_TRANSITION = 1,
     ANIM_TEX_FRAME = 2,
 
-    POS_X,
-    POS_Y,
-    POS_Z,
-    ROT_X,
-    ROT_Y,
-    ROT_Z,
-    SCALE_X,
-    SCALE_Y,
-    SCALE_Z,
+    POS_X = 3,
+    POS_Y = 4,
+    POS_Z = 5,
+    ROT_X = 6,
+    ROT_Y = 7,
+    ROT_Z = 8,
+    SCALE_X = 9,
+    SCALE_Y = 10,
+    SCALE_Z = 11,
+
+    PARENT = 12,
+    RELATION = 13,
 }
 
 export abstract class TActor extends JStage.TObject {
@@ -487,28 +493,29 @@ export abstract class TActor extends JStage.TObject {
 }
 
 class TActorAdaptor extends TAdaptor {
-    // /* 0x12C */ JStage::TObject* m12C;
-    // /* 0x130 */ u32 m130;
-    // /* 0x134 */ JStage::TObject* m134;
-    // /* 0x138 */ u32 m138;
-    // /* 0x13C */ u32 m13C;
-    // /* 0x140 */ u32 m140;
+    public parent?: JStage.TObject;
+    public parentNodeID: number;
+    public relation?: JStage.TObject;
+    public relationNodeID: number;
+    public animMode: number; // @TODO: Enum
+    public animTexMode: number; // @TODO: Enum
 
     constructor(
-        private mObject: TActor,
+        private mSystem: TSystem,
+        public mObject: TActor,
     ) { super(14); }
 
     adaptor_do_prepare(obj: STBObject): void {
-        this.mVariableValues[1].setOutput(this.mObject.JSGSetAnimationTransition);
+        this.mVariableValues[Actor_ValIdx.ANIM_TRANSITION].setOutput(this.mObject.JSGSetAnimationTransition);
 
         // @TODO:
-        // TVVOutput_ANIMATION_FRAME_(0, 317, &JStage::TActor::JSGSetAnimationFrame, &JStage::TActor::JSGGetAnimationFrame, &JStage::TActor::JSGGetAnimationFrameMax),
-        // TVVOutput_ANIMATION_FRAME_(2, 321, &JStage::TActor::JSGSetTextureAnimationFrame, &JStage::TActor::JSGGetTextureAnimationFrame, &JStage::TActor::JSGGetTextureAnimationFrameMax),
+        // TVVOutput_ANIMATION_FRAME_(Actor_ValIdx.ANIM_FRAME, 317, &JStage::TActor::JSGSetAnimationFrame, &JStage::TActor::JSGGetAnimationFrame, &JStage::TActor::JSGGetAnimationFrameMax),
+        // TVVOutput_ANIMATION_FRAME_(Actor_ValIdx.ANIM_TEX_FRAME, 321, &JStage::TActor::JSGSetTextureAnimationFrame, &JStage::TActor::JSGGetTextureAnimationFrame, &JStage::TActor::JSGGetTextureAnimationFrameMax),
     }
 
     adaptor_do_begin(obj: STBObject): void {
         this.mObject.JSGFEnableFlag(1);
-    
+
         const pos = scratchVec3a;
         const rot = scratchVec3b;
         const scale = scratchVec3c;
@@ -520,11 +527,13 @@ class TActorAdaptor extends TAdaptor {
             vec3.transformMat4(pos, pos, obj.mControl.getTransformOnGet());
             rot[1] -= obj.mControl.mTransformRotY!; // @TODO: Check this shouldn't be negated
         }
-        
-        this.adaptor_setVariableValue_Vec(Actor_ValueIdx.POS_X, pos);
-        this.adaptor_setVariableValue_Vec(Actor_ValueIdx.ROT_X, rot);
-        this.adaptor_setVariableValue_Vec(Actor_ValueIdx.SCALE_X, scale);
-        
+
+        this.adaptor_setVariableValue_Vec(Actor_ValIdx.POS_X, pos);
+        this.adaptor_setVariableValue_Vec(Actor_ValIdx.ROT_X, rot);
+        this.adaptor_setVariableValue_Vec(Actor_ValIdx.SCALE_X, scale);
+
+        this.mVariableValues[Actor_ValIdx.ANIM_TRANSITION].setValue_immediate(this.mObject.JSGGetAnimationTransition());
+
         // @TODO:
         // for (const TVVOutputObject* output = saoVVOutput_; output->mValueIndex != -1; output++) {
         //     mVariableValues[output->mValueIndex].setValue_immediate((this.mObject.*(output->mGetter))());
@@ -534,38 +543,188 @@ class TActorAdaptor extends TAdaptor {
         // }
     }
 
-    adaptor_do_end(obj: STBObject): void { 
+    adaptor_do_end(obj: STBObject): void {
         this.mObject.JSGFDisableFlag(1);
     }
 
-    adaptor_do_update(obj: STBObject, frameCount: number): void { debugger; }
-    adaptor_do_data(unk0: Object, unk1: number, unk2: Object, unk3: number): void { debugger; }
-    adaptor_do_PARENT(dataOp: TEOperationData, data: number | string, unk0: number): void { debugger; }
-    adaptor_do_PARENT_NODE(dataOp: TEOperationData, data: number | string, unk0: number): void { debugger; }
-    adaptor_do_PARENT_ENABLE(dataOp: TEOperationData, data: number | string, unk0: number): void { debugger; }
-    adaptor_do_RELATION(dataOp: TEOperationData, data: number | string, unk0: number): void { debugger; }
-    adaptor_do_RELATION_NODE(dataOp: TEOperationData, data: number | string, unk0: number): void { debugger; }
-    adaptor_do_RELATION_ENABLE(dataOp: TEOperationData, data: number | string, unk0: number): void { debugger; }
-    adaptor_do_SHAPE(dataOp: TEOperationData, data: number | string, unk0: number): void { debugger; }
-    adaptor_do_ANIMATION(dataOp: TEOperationData, data: number | string, unk0: number): void { debugger; }
-    adaptor_do_ANIMATION_MODE(dataOp: TEOperationData, data: number | string, unk0: number): void { debugger; }
-    adaptor_do_TEXTURE_ANIMATION(dataOp: TEOperationData, data: number | string, unk0: number): void { debugger; }
-    adaptor_do_TEXTURE_ANIMATION_MODE(dataOp: TEOperationData, data: number | string, unk0: number): void { debugger; }
-
-    setJSG_ID_(actorFunc: (x: number) => void, dataOp: TEOperationData, data: number) {
+    adaptor_do_update(obj: STBObject, frameCount: number): void {
         debugger;
-    };
+    }
+
+    adaptor_do_data(unk0: Object, unk1: number, unk2: Object, unk3: number): void {
+        debugger;
+    }
+
+    adaptor_do_PARENT(dataOp: TEOperationData, data: number | string, dataSize: number): void {
+        assert(dataOp == TEOperationData.OBJECT_NAME);
+        this.parent = this.mSystem.JSGFindObject(data as string, JStage.TEObject.PREEXISTING_ACTOR);
+    }
+
+    adaptor_do_PARENT_NODE(dataOp: TEOperationData, data: number | string, dataSize: number): void {
+        debugger;
+        switch (dataOp) {
+            case TEOperationData.OBJECT_NAME:
+                if (this.parent)
+                    this.parentNodeID = this.parent.JSGFindNodeID(data as string);
+                break;
+            case TEOperationData.OBJECT_INDEX:
+                this.parentNodeID = data as number;
+                break;
+            default: assert(false);
+        }
+    }
+
+    adaptor_do_PARENT_ENABLE(dataOp: TEOperationData, data: number | string, dataSize: number): void {
+        assert(dataOp == TEOperationData.IMMEDIATE);
+        if (!!data) { this.mObject.JSGSetParent(this.parent!, this.parentNodeID); }
+        else { this.mObject.JSGSetParent(null, 0xFFFFFFFF); }
+    }
+
+    adaptor_do_RELATION(dataOp: TEOperationData, data: number | string, dataSize: number): void {
+        assert(dataOp == TEOperationData.OBJECT_NAME);
+        this.relation = this.mSystem.JSGFindObject(data as string, JStage.TEObject.PREEXISTING_ACTOR);
+    }
+
+    adaptor_do_RELATION_NODE(dataOp: TEOperationData, data: number | string, dataSize: number): void {
+        debugger;
+        switch (dataOp) {
+            case TEOperationData.OBJECT_NAME:
+                if (this.relation)
+                    this.relationNodeID = this.relation.JSGFindNodeID(data as string);
+                break;
+            case TEOperationData.OBJECT_INDEX:
+                this.relationNodeID = data as number;
+                break;
+            default: assert(false);
+        }
+    }
+
+    adaptor_do_RELATION_ENABLE(dataOp: TEOperationData, data: number | string, dataSize: number): void {
+        assert(dataOp == TEOperationData.IMMEDIATE);
+        this.mObject.JSGSetRelation(!!data, this.relation!, this.relationNodeID);
+    }
+
+    adaptor_do_SHAPE(dataOp: TEOperationData, data: number | string, dataSize: number): void {
+        assert(dataOp == TEOperationData.OBJECT_INDEX);
+        this.mObject.JSGSetShape(data as number);
+    }
+
+    adaptor_do_ANIMATION(dataOp: TEOperationData, data: number | string, dataSize: number): void {
+        assert(dataOp == TEOperationData.OBJECT_INDEX);
+        this.mObject.JSGSetAnimation(data as number);
+    }
+
+    adaptor_do_ANIMATION_MODE(dataOp: TEOperationData, data: number | string, dataSize: number): void {
+        assert(dataOp == TEOperationData.IMMEDIATE);
+        this.animMode = data as number;
+    }
+
+    adaptor_do_TEXTURE_ANIMATION(dataOp: TEOperationData, data: number | string, dataSize: number): void {
+        assert(dataOp == TEOperationData.OBJECT_INDEX);
+        this.mObject.JSGSetTextureAnimation(data as number);
+    }
+
+    adaptor_do_TEXTURE_ANIMATION_MODE(dataOp: TEOperationData, data: number | string, dataSize: number): void {
+        assert(dataOp == TEOperationData.IMMEDIATE);
+        this.animTexMode = data as number;
+    }
 }
 
 class TActorObject extends STBObject {
+    override mAdaptor: TActorAdaptor;
+
     constructor(
         control: TControl,
         blockObj: TBlockObject,
         stageObj: JStage.TObject,
-    ) { super(control, blockObj, new TActorAdaptor(stageObj as TActor)) }
+    ) { super(control, blockObj, new TActorAdaptor(control.mSystem, stageObj as TActor)) }
 
     override do_paragraph(file: Reader, dataSize: number, dataOffset: number, param: number): void {
-        debugger;
+        const dataOp = (param & 0x1F) as TEOperationData;
+        const cmdType = param >> 5;
+
+        let keyCount = 1;
+        let keyIdx;
+        let data;
+
+        // Parse the data here instead of deferring to adaptor_setVariableValue, so we don't have to pass along `file`.
+        switch (dataOp) {
+            case TEOperationData.FUNCVALUE_INDEX: data = file.view.getUint32(dataOffset); break;
+            case TEOperationData.FUNCVALUE_NAME:
+                data = readString(file.buffer, dataOffset, dataSize);
+                console.warn('FUNCVALUE_NAME found! Remove this comment after testing');
+                debugger;
+                break;
+            default: data = file.view.getFloat32(dataOffset);
+        }
+
+        switch (cmdType) {
+            // Pos
+            case 0x09: keyIdx = Actor_ValIdx.POS_X; break;
+            case 0x0a: keyIdx = Actor_ValIdx.POS_Y; break;
+            case 0x0b: keyIdx = Actor_ValIdx.POS_Z; break;
+            case 0x0c: keyCount = 3; keyIdx = Actor_ValIdx.POS_X; break;
+
+            // Rot
+            case 0x0d: keyIdx = Actor_ValIdx.ROT_X; break;
+            case 0x0e: keyIdx = Actor_ValIdx.ROT_Y; break;
+            case 0x0f: keyIdx = Actor_ValIdx.ROT_Z; break;
+            case 0x10: keyCount = 3; keyIdx = Actor_ValIdx.ROT_X; break;
+
+            // Scale
+            case 0x11: keyIdx = Actor_ValIdx.SCALE_X; break;
+            case 0x12: keyIdx = Actor_ValIdx.SCALE_Y; break;
+            case 0x13: keyIdx = Actor_ValIdx.SCALE_Z; break;
+            case 0x14: keyCount = 3; keyIdx = Actor_ValIdx.SCALE_X; break;
+
+            case 0x3b: keyIdx = Actor_ValIdx.ANIM_FRAME; break;
+            case 0x4b: keyIdx = Actor_ValIdx.ANIM_TRANSITION; break;
+
+            case 0x39: debugger; this.mAdaptor.adaptor_do_SHAPE(dataOp, data, dataSize); return;
+            case 0x3a: debugger; this.mAdaptor.adaptor_do_ANIMATION(dataOp, data, dataSize); return;
+            case 0x43: debugger; this.mAdaptor.adaptor_do_ANIMATION_MODE(dataOp, data, dataSize); return;
+            case 0x4c: debugger; this.mAdaptor.adaptor_do_TEXTURE_ANIMATION(dataOp, data, dataSize); return;
+            case 0x4e: debugger; this.mAdaptor.adaptor_do_TEXTURE_ANIMATION_MODE(dataOp, data, dataSize); return;
+
+            case 0x30: debugger; this.mAdaptor.adaptor_do_PARENT(dataOp, data, dataSize); return;
+            case 0x31: debugger; this.mAdaptor.adaptor_do_PARENT_NODE(dataOp, data, dataSize); return;
+            case 0x32:
+                debugger;
+                keyIdx = Actor_ValIdx.PARENT;
+                if ((dataOp < 0x13) && (dataOp > 0x0F)) {
+                    debugger;
+                    this.mAdaptor.adaptor_setVariableValue(this, keyIdx, dataOp, data);
+                    this.mAdaptor.mVariableValues[keyIdx].setOutput((enabled, adaptor) => {
+                        (adaptor as TActorAdaptor).adaptor_do_PARENT_ENABLE(dataOp, enabled, dataSize)
+                    });
+                }
+                this.mAdaptor.adaptor_do_PARENT_ENABLE(dataOp, data, dataSize);
+                break;
+
+            case 0x33: debugger; this.mAdaptor.adaptor_do_RELATION(dataOp, data, dataSize); return;
+            case 0x34: debugger; this.mAdaptor.adaptor_do_RELATION_NODE(dataOp, data, dataSize); return;
+            case 0x35:
+                debugger;
+                keyIdx = Actor_ValIdx.RELATION;
+                if ((dataOp < 0x13) && (dataOp > 0x0F)) {
+                    debugger;
+                    this.mAdaptor.adaptor_setVariableValue(this, keyIdx, dataOp, data);
+                    this.mAdaptor.mVariableValues[keyIdx].setOutput((enabled, adaptor) => {
+                        (adaptor as TActorAdaptor).adaptor_do_RELATION_ENABLE(dataOp, enabled, dataSize)
+                    });
+                }
+                this.mAdaptor.adaptor_do_RELATION_ENABLE(dataOp, data, dataSize);
+                break;
+
+            default:
+                console.debug('Unsupported TActor update: ', cmdType, ' ', dataOp);
+                debugger;
+                return;
+        }
+
+        for (let i = 0; i < keyCount; i++) {
+            this.mAdaptor.adaptor_setVariableValue(this, keyIdx + i, dataOp, (data as number) + i);
+        }
     }
 }
 
@@ -1541,7 +1700,7 @@ export abstract class TBlockObject {
 
 // This combines JStudio::TControl and JStudio::stb::TControl into a single class, for simplicity.
 export class TControl {
-    private mSystem: TSystem;
+    public mSystem: TSystem;
     public mFvbControl = new FVB.TControl();
     public mSecondsPerFrame: number;
     private mSuspendFrames: number;
