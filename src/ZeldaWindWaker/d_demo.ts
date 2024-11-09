@@ -1,9 +1,10 @@
-import { ReadonlyVec3, vec3 } from "gl-matrix";
+import { mat4, ReadonlyVec3, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { TParse, JStage, TSystem, TControl, TCamera, TActor } from "../Common/JSYSTEM/JStudio.js";
-import { getMatrixAxisY } from "../MathHelpers.js";
+import { getMatrixAxisY, MathConstants } from "../MathHelpers.js";
 import { dGlobals } from "./Main";
 import { fopAc_ac_c, fopAcM_searchFromName } from "./framework.js";
+import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase";
 
 export enum EDemoMode {
     None,
@@ -146,8 +147,96 @@ class dDemo_camera_c extends TCamera {
 }
 
 class dDemo_actor_c extends TActor {
+    mFlags: number;
+    mTranslation = vec3.create();
+    mScaling = vec3.create();
+    mRotation = vec3.create();
+    mShapeId: number;
+    mNextBckId: number;
+    mAnimationFrame: number;
+    mAnimationTransition: number;
+    mAnimationFrameMax: number;
+    mTexAnimation: number;
+    mTexAnimationFrame: number;
+    mTexAnimationFrameMax: number;
+    mModel: J3DModelInstance;
+    stbDataSize: number;
+    stbData: DataView;
+    stbDataUnk: number;
+    mActorPcId: number;
+    mBckId: number;
+    mBtpId: number;
+    mBtkId: number;
+    mBrkId: number;
+
     constructor(actor: fopAc_ac_c) {
         super();
+    }
+    
+    override JSGGetNodeTransformation(nodeId: number, mtx: mat4): number {
+        debugger; // I think this may be one of the shapeInstanceState matrices instead
+        mat4.copy( mtx, this.mModel.modelMatrix);
+        return 1;
+    }
+
+    override JSGGetAnimationFrameMax() { return this.mAnimationFrameMax; }
+    override JSGGetTextureAnimationFrameMax() { return this.mTexAnimationFrameMax; }
+
+    override JSGGetTranslation(dst: vec3) { vec3.copy( dst, this.mTranslation); }
+    override JSGGetScaling(dst: vec3) { vec3.copy( dst, this.mScaling ); }
+    override JSGGetRotation(dst: vec3) { debugger; vec3.scale(dst, this.mRotation, MathConstants.RAD_TO_DEG); }
+
+    override JSGSetData(dataSize: number, data: DataView, unk1: number): void {
+        this.stbDataSize = dataSize;
+        this.stbData = data;
+        this.stbDataUnk = unk1;
+        this.mFlags |= 0x01;
+    }
+
+    override JSGSetTranslation(src: ReadonlyVec3) {
+        vec3.copy(this.mTranslation, src);
+        this.mFlags |= 0x02;
+    }
+
+    override JSGSetScaling(src: ReadonlyVec3) {
+        vec3.copy(this.mScaling, src);
+        this.mFlags |= 0x04;
+    }
+
+    override JSGSetRotation(src: ReadonlyVec3) {
+        vec3.scale(this.mRotation, src, MathConstants.DEG_TO_RAD);
+        this.mFlags |= 0x08;
+    }
+
+    override JSGSetShape(id: number): void {
+        this.mShapeId = id;
+        this.mFlags |= 0x10;
+    }
+
+    override JSGSetAnimation(id: number): void {
+        this.mNextBckId = id;
+        this.mAnimationFrameMax = 3.402823e+38;
+        this.mFlags |= 0x20;
+    }
+
+    override JSGSetAnimationFrame(x: number): void {
+        this.mAnimationFrame = x;
+        this.mFlags |= 0x40;
+    }
+
+    override JSGSetAnimationTransition(x: number): void {
+        this.mAnimationTransition = x;
+        this.mFlags |= 0x40;
+    }
+
+    override JSGSetTextureAnimation(id: number): void {
+        this.mTexAnimation = id;
+        this.mFlags |= 0x80;
+    }
+
+    override JSGSetTextureAnimationFrame(x: number): void {
+        this.mTexAnimationFrame = x;
+        this.mFlags |= 0x100;
     }
 }
 

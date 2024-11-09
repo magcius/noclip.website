@@ -37,7 +37,7 @@ export namespace JStage {
         JSGGetFlag(): number { return 0; }
         JSGSetFlag(flag: number): void { }
         JSGGetData(unk0: number, data: Object, unk1: number): boolean { return false; }
-        JSGSetData(unk0: number, data: Object, unk1: number): void { }
+        JSGSetData(dataSize: number, data: DataView, unk1: number): void { }
         JSGGetParent(parentDst: JStage.TObject, unk: { x: number }): void { }
         JSGSetParent(parent: JStage.TObject | null, unk: number): void { }
         JSGSetRelation(related: boolean, obj: JStage.TObject, unk: number): void { }
@@ -165,6 +165,24 @@ const enum TEOperationData {
     OBJECT_NAME = 0x18, // TODO
     OBJECT_INDEX = 0x19, // Set the value directly on the JStage object (e.g. an actor), don't store in the adaptor 
 };
+
+// Parse data from a DataView as either a number or a string, based on the dataOp
+function readData(dataOp: TEOperationData, dataOffset: number, dataSize: number, file: Reader): number | string {
+    switch (dataOp) {
+        case TEOperationData.IMMEDIATE:
+        case TEOperationData.TIME:
+        case TEOperationData.FUNCVALUE_INDEX: 
+        case TEOperationData.OBJECT_INDEX:         
+            return file.view.getUint32(dataOffset);
+
+        case TEOperationData.FUNCVALUE_NAME: 
+        case TEOperationData.OBJECT_NAME: 
+            return readString(file.buffer, dataOffset, dataSize);
+
+        default: 
+            assert(false, 'Unsupported data operation');
+    }
+}
 
 abstract class TAdaptor {
     constructor(
@@ -645,18 +663,7 @@ class TActorObject extends STBObject {
 
         let keyCount = 1;
         let keyIdx;
-        let data;
-
-        // Parse the data here instead of deferring to adaptor_setVariableValue, so we don't have to pass along `file`.
-        switch (dataOp) {
-            case TEOperationData.FUNCVALUE_INDEX: data = file.view.getUint32(dataOffset); break;
-            case TEOperationData.FUNCVALUE_NAME:
-                data = readString(file.buffer, dataOffset, dataSize);
-                console.warn('FUNCVALUE_NAME found! Remove this comment after testing');
-                debugger;
-                break;
-            default: data = file.view.getFloat32(dataOffset);
-        }
+        let data = readData(dataOp, dataOffset, dataSize, file);
 
         switch (cmdType) {
             // Pos
@@ -680,9 +687,9 @@ class TActorObject extends STBObject {
             case 0x3b: keyIdx = Actor_ValIdx.ANIM_FRAME; break;
             case 0x4b: keyIdx = Actor_ValIdx.ANIM_TRANSITION; break;
 
-            case 0x39: debugger; this.mAdaptor.adaptor_do_SHAPE(dataOp, data, dataSize); return;
+            case 0x39: this.mAdaptor.adaptor_do_SHAPE(dataOp, data, dataSize); return;
             case 0x3a: debugger; this.mAdaptor.adaptor_do_ANIMATION(dataOp, data, dataSize); return;
-            case 0x43: debugger; this.mAdaptor.adaptor_do_ANIMATION_MODE(dataOp, data, dataSize); return;
+            case 0x43: this.mAdaptor.adaptor_do_ANIMATION_MODE(dataOp, data, dataSize); return;
             case 0x4c: debugger; this.mAdaptor.adaptor_do_TEXTURE_ANIMATION(dataOp, data, dataSize); return;
             case 0x4e: debugger; this.mAdaptor.adaptor_do_TEXTURE_ANIMATION_MODE(dataOp, data, dataSize); return;
 
@@ -869,18 +876,7 @@ class TCameraObject extends STBObject {
 
         let keyCount = 1;
         let keyIdx;
-        let data;
-
-        // Parse the data here instead of deferring to adaptor_setVariableValue, so we don't have to pass along `file`.
-        switch (dataOp) {
-            case TEOperationData.FUNCVALUE_INDEX: data = file.view.getUint32(dataOffset); break;
-            case TEOperationData.FUNCVALUE_NAME:
-                data = readString(file.buffer, dataOffset, dataSize);
-                console.warn('FUNCVALUE_NAME found! Remove this comment after testing');
-                debugger;
-                break;
-            default: data = file.view.getFloat32(dataOffset);
-        }
+        let data = readData(dataOp, dataOffset, dataSize, file);
 
         switch (cmdType) {
             // Eye position
