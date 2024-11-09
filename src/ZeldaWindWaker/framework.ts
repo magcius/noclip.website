@@ -8,6 +8,7 @@ import { dKy_tevstr_c, dKy_tevstr_init } from "./d_kankyo.js";
 import { AABB } from "../Geometry.js";
 import { Camera, computeScreenSpaceProjectionFromWorldSpaceAABB, computeScreenSpaceProjectionFromWorldSpaceSphere, ScreenSpaceProjection } from "../Camera.js";
 import { transformVec3Mat4w1 } from "../MathHelpers.js";
+import { dGlobals } from "./Main.js";
 
 export const enum fpc__ProcessName {
     d_s_play            = 0x0007,
@@ -155,7 +156,7 @@ function fpcDt_Delete(globals: fGlobals, pc: base_process_class): void {
 //#region cPhs, fpcCt, fpcSCtRq
 
 export interface fpc_bs__Constructor {
-    new(globalUserData: fGlobals, pcId: number, profile: DataView): base_process_class;
+    new(globalUserData: fGlobals, pcName: number, pcId: number, profile: DataView): base_process_class;
 }
 
 class standard_create_request_class<T = any> {
@@ -167,7 +168,7 @@ class standard_create_request_class<T = any> {
     ]);
     public process: base_process_class | null = null;
 
-    constructor(public layer: layer_class, public pcId: number, public konstructor: fpc_bs__Constructor, public profileBinary: ArrayBufferSlice, public userData: T) {
+    constructor(public layer: layer_class, public pcName: number, public pcId: number, public konstructor: fpc_bs__Constructor, public profileBinary: ArrayBufferSlice, public userData: T) {
     }
 
     // fpcSCtRq_Handler
@@ -181,7 +182,7 @@ class standard_create_request_class<T = any> {
 
     private CreateProcess(globals: fGlobals, globalUserData: GlobalUserData, userData: this): cPhs__Status {
         const self = userData;
-        self.process = new self.konstructor(globals, self.pcId, self.profileBinary.createDataView());
+        self.process = new self.konstructor(globals, self.pcName, self.pcId, self.profileBinary.createDataView());
         return cPhs__Status.Next;
     }
 
@@ -251,7 +252,7 @@ export function fpcSCtRq_Request<G>(globals: fGlobals, ly: layer_class | null, p
 
     const binary = fpcPf_Get__ProfileBinary(globals, pcName);
     const pcId = fpcBs_MakeOfId(globals);
-    const rq = new standard_create_request_class(ly, pcId, constructor, binary, userData);
+    const rq = new standard_create_request_class(ly, pcName, pcId, constructor, binary, userData);
     fpcCtRq_ToCreateQ(globals, rq);
     return pcId;
 }
@@ -338,13 +339,16 @@ export class base_process_class {
     public ly: layer_class;
     public pi = new process_priority_class();
 
-    constructor(globals: fGlobals, public processId: number, profile: DataView) {
+    constructor(globals: fGlobals, public profName: number, public processId: number, profile: DataView) {
         // fpcBs_Create
         this.pi.layerID = profile.getUint32(0x00);
         this.pi.listID = profile.getUint16(0x04);
         this.pi.listIndex = profile.getUint16(0x06);
         this.processName = profile.getUint16(0x08);
         this.parameters = profile.getUint32(0x18);
+
+        // The game stores these separately, and frequently accesses both. Lets see if they ever differ.
+        assert(profName == this.processName);
     }
 
     // In the original game, construction is inside "create". Here, we split it into construction and "load".
@@ -392,8 +396,8 @@ class process_node_class extends base_process_class {
     public visible: boolean = true;
     public roomVisible: boolean = true;
 
-    constructor(globals: fGlobals, pcId: number, profile: DataView) {
-        super(globals, pcId, profile);
+    constructor(globals: fGlobals, pcName: number, pcId: number, profile: DataView) {
+        super(globals, pcName, pcId, profile);
 
         this.layer = new layer_class(globals.lyNextID++);
     }
@@ -409,8 +413,8 @@ class leafdraw_class extends base_process_class {
     public visible: boolean = true;
     public roomVisible: boolean = true;
 
-    constructor(globals: fGlobals, pcId: number, profile: DataView) {
-        super(globals, pcId, profile);
+    constructor(globals: fGlobals, pcName: number, pcId: number, profile: DataView) {
+        super(globals, pcName, pcId, profile);
         this.drawPriority = profile.getUint16(0x20);
     }
 
@@ -494,8 +498,8 @@ export class fopAc_ac_c extends leafdraw_class {
 
     private loadInit: boolean = false;
 
-    constructor(globals: fGlobals, pcId: number, profile: DataView) {
-        super(globals, pcId, profile);
+    constructor(globals: fGlobals, pcName: number, pcId: number, profile: DataView) {
+        super(globals, pcName, pcId, profile);
 
         // Initialize our culling information from the profile...
         const cullType = profile.getUint8(0x2D);
@@ -646,6 +650,22 @@ export function fopAcIt_JudgeByID<T extends base_process_class>(globals: fGlobal
         if (globals.lnQueue[i].processId === pcId)
             return globals.lnQueue[i] as unknown as T;
     }
+    return null;
+}
+
+export function fopAcM_searchFromName(globals: dGlobals, procName: string, paramMask: number, param: number): fopAc_ac_c | null {
+    const objName = globals.dStage_searchName(procName);
+    if (!objName) { return null; }
+
+    for (let i = 0; i < globals.frameworkGlobals.lnQueue.length; i++) {
+        const act = globals.frameworkGlobals.lnQueue[i] as fopAc_ac_c;
+        if (act.profName == objName.pcName
+            && objName.subtype == act.subtype
+            && (paramMask == 0 || param == (act.parameters & paramMask))
+        )
+            return act;
+    }
+
     return null;
 }
 //#endregion
