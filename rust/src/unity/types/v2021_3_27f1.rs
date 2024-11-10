@@ -5,6 +5,7 @@ use deku::prelude::*;
 
 use crate::unity::common::{PPtr, UnityArray, Vec4};
 
+// hack: just re-export all older types until we need to override one w/ changes
 pub use super::v2019_4_39f1::*;
 
 #[derive(DekuRead, Clone, Debug)]

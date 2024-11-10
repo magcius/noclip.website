@@ -101,14 +101,19 @@ pub struct Mesh {
     pub is_readable: u8,
     pub keep_vertices: u8,
     pub keep_indices: u8,
+    #[deku(count = "(4 - deku::byte_offset % 4) % 4")] _alignment: Vec<u8>,
     pub index_format: IndexFormat,
     pub index_buffer: UnityArray<u8>,
+    #[deku(count = "(4 - deku::byte_offset % 4) % 4")] _alignment2: Vec<u8>,
     pub vertex_data: VertexData,
+    #[deku(count = "(4 - deku::byte_offset % 4) % 4")] _alignment3: Vec<u8>,
     pub compressed_mesh: CompressedMesh,
     pub local_aabb: AABB,
     pub mesh_usage_flags: i32,
     pub baked_convex_collision_mesh: UnityArray<u8>,
+    #[deku(count = "(4 - deku::byte_offset % 4) % 4")] _alignment4: Vec<u8>,
     pub baked_triangle_collision_mesh: UnityArray<u8>,
+    #[deku(count = "(4 - deku::byte_offset % 4) % 4")] _alignment5: Vec<u8>,
     pub mesh_metrics: [f32; 2],
     pub streaming_info: StreamingInfo,
 }
@@ -151,6 +156,7 @@ pub struct SubMesh {
 pub struct VertexData {
     pub vertex_count: u32,
     pub channels: UnityArray<ChannelInfo>,
+    #[deku(count = "(4 - deku::byte_offset % 4) % 4")] _alignment: Vec<u8>,
     pub data: UnityArray<u8>,
 }
 

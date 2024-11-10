@@ -254,18 +254,24 @@ export class AssetFile {
     }
 
     private createMeshData = async (assetSystem: UnityAssetSystem, objData: AssetObjectData): Promise<UnityMeshData> => {
-        const mesh = rust.UnityMesh.create(UnityVersion.V2019_4_39f1, objData.data);
-        const streamingInfo: UnityStreamingInfo = mesh.streaming_info;
-        if (streamingInfo.path.length !== 0) {
-            const buf = await assetSystem.fetchStreamingInfo(streamingInfo);
-            const vertexData = rust.UnityVertexData.create(UnityVersion.V2019_4_39f1, buf.createTypedArray(Uint8Array));
-            mesh.set_vertex_data(vertexData);
-        }
+        try {
+            console.log("f")
+            const mesh = rust.UnityMesh.create(assetSystem.version, objData.data);
+            const streamingInfo: UnityStreamingInfo = mesh.streaming_info;
+            if (streamingInfo.path.length !== 0) {
+                const buf = await assetSystem.fetchStreamingInfo(streamingInfo);
+                const vertexData = rust.UnityVertexData.create(assetSystem.version, buf.createTypedArray(Uint8Array));
+                mesh.set_vertex_data(vertexData);
+            }
 
-        if (mesh.mesh_compression !== UnityMeshCompression.Off) {
-            return loadCompressedMesh(assetSystem.device, mesh);
-        } else {
-            return loadMesh(assetSystem.device, mesh);
+            if (mesh.mesh_compression !== UnityMeshCompression.Off) {
+                return loadCompressedMesh(assetSystem.device, mesh);
+            } else {
+                return loadMesh(assetSystem.device, mesh);
+            }
+        } catch (e) {
+            console.error(objData);
+            throw e;
         }
     };
 
@@ -273,7 +279,7 @@ export class AssetFile {
         if (objData.classID !== rust.UnityClassID.Texture2D)
             return null;
 
-        const header = rust.UnityTexture2D.create(UnityVersion.V2019_4_39f1, objData.data);
+        const header = rust.UnityTexture2D.create(assetSystem.version, objData.data);
         let data = header.data;
         if (data.length === 0) {
             const streaming_info = header.streaming_info;
@@ -285,7 +291,7 @@ export class AssetFile {
     };
 
     private createMaterialData = async (assetSystem: UnityAssetSystem, objData: AssetObjectData): Promise<UnityMaterialData> => {
-        const header = rust.UnityMaterial.create(UnityVersion.V2019_4_39f1, objData.data);
+        const header = rust.UnityMaterial.create(assetSystem.version, objData.data);
         const materialData = new UnityMaterialData(objData.location, header);
         await materialData.load(assetSystem);
         return materialData;
@@ -296,10 +302,13 @@ export class AssetFile {
             return this.promiseCache.get(pathID)! as Promise<T>;
 
         const promise = this.fetchObject(pathID).then((objData) => {
-            return createFunc(assetSystem, objData).then((v) => {
-                this.dataCache.set(pathID, v);
-                return v;
-            });
+                return createFunc(assetSystem, objData).then((v) => {
+                    this.dataCache.set(pathID, v);
+                    return v;
+                }).catch(e => {
+                    console.error(`fufckcf to fetch ${pathID}`);
+                    throw e;
+                });
         });
         this.promiseCache.set(pathID, promise);
         return promise;
