@@ -255,8 +255,10 @@ export class AssetFile {
 
     private createMeshData = async (assetSystem: UnityAssetSystem, objData: AssetObjectData): Promise<UnityMeshData> => {
         try {
-            console.log("f")
+            debugger;
             const mesh = rust.UnityMesh.create(assetSystem.version, objData.data);
+            debugger;
+
             const streamingInfo: UnityStreamingInfo = mesh.streaming_info;
             if (streamingInfo.path.length !== 0) {
                 const buf = await assetSystem.fetchStreamingInfo(streamingInfo);

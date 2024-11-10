@@ -87,6 +87,8 @@ pub struct CharArray {
     count: u32,
     #[deku(count = "*count")]
     bytes: Vec<u8>,
+    // align to the nearest 4 byte boundary
+    #[deku(count = "(4 - deku::byte_offset % 4) % 4")] _alignment: Vec<u8>,
 }
 
 impl From<CharArray> for String {
@@ -142,6 +144,7 @@ pub struct Vec4 {
     pub x: f32,
     pub y: f32,
     pub z: f32,
+    pub w: f32,
 }
 
 #[wasm_bindgen(js_name = "UnityVec3")]
@@ -245,9 +248,12 @@ impl<'a> DekuRead<'a> for Packedf32Vec {
     where
         Self: Sized {
             let (mut rest, num_items) = u32::read(input, ctx)?;
+            // dbg!("JJJ AAA", num_items);
             let (new_rest, scale) = f32::read(rest, ctx)?;
+            // dbg!("JJJ AAA", scale);
             rest = new_rest;
             let (new_rest, start) = f32::read(rest, ctx)?;
+            // dbg!("JJJ AAA", start);
             rest = new_rest;
             let (last_rest, bit_size) = u8::read(&rest[4 * num_items as usize..], ctx)?;
             let max = ((1 << bit_size) as f32) - 1.0;

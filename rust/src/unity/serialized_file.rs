@@ -241,7 +241,7 @@ struct FileIdentifier {
 mod tests {
     use std::collections::HashMap;
 
-    use crate::unity::types::object::{GameObject, MeshFilter, MeshRenderer, Transform, UnityVersion};
+    use crate::unity::types::object::{GameObject, Mesh, MeshFilter, MeshRenderer, Transform, UnityVersion};
     use crate::unity::class_id::ClassID;
 
     use super::*;
@@ -250,8 +250,8 @@ mod tests {
 
     #[test]
     fn test() {
-        let data = std::fs::read("C:\\Users\\ifnsp\\dev\\noclip.website\\data\\AShortHike\\level2").unwrap();
-        let version = UnityVersion::V2021_3_27f1;
+        let data = std::fs::read("M:\\Development\\NITRO_BMD\\data\\AShortHike\\level2").unwrap();
+        let version = UnityVersion::V2019_4_39f1;
         let mut asset_file = AssetFile::initialize_with_header_chunk(&data).unwrap();
         dbg!(&asset_file.header);
         asset_file.append_metadata_chunk(&data).unwrap();
@@ -281,20 +281,35 @@ mod tests {
                     dbg!(component_ptr);
                     continue;
                 }
-                let obj = object_infos.get(&component_ptr.path_id).unwrap();
+                let obj: &&ObjectInfo = object_infos.get(&component_ptr.path_id).unwrap();
                 let obj_type = &metadata.type_tree[obj.serialized_type_index as usize];
                 let byte_start = asset_file.get_data_offset() as usize + match obj.small_file_byte_start {
                     Some(start) => start as usize,
                     None => obj.large_file_byte_start.unwrap() as usize,
                 };
                 let byte_size = obj.byte_size as usize;
+                let bigdata = &data;
                 let data = &data[byte_start..byte_start + byte_size];
+
                 match obj_type.header.raw_type_id {
                     ClassID::Transform => {Transform::create(version, data).unwrap();},
                     ClassID::RectTransform => {Transform::create(version, data).unwrap();},
-                    ClassID::MeshFilter => {MeshFilter::create(version, data).unwrap();},
+                    ClassID::MeshFilter => {
+                        let filter = MeshFilter::create(version, data).unwrap();
+                        let obj = object_infos.get(&filter.mesh.path_id).unwrap();
+                        let byte_start = asset_file.get_data_offset() as usize + match obj.small_file_byte_start {
+                            Some(start) => start as usize,
+                            None => obj.large_file_byte_start.unwrap() as usize,
+                        };
+                        let byte_size = obj.byte_size as usize;
+                        let data = &bigdata[byte_start..byte_start + byte_size];
+
+                        if (filter.mesh.path_id == 42) {
+                            let _mesh = Mesh::create(version, data).unwrap();
+                        }
+                    },
                     ClassID::MeshRenderer => {MeshRenderer::create(version, data).unwrap();},
-                    s => println!("skipping {:?}", s),
+                    s => {},
                 }
             }
         }
