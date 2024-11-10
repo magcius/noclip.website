@@ -8,7 +8,7 @@ import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
 import { UnityRuntime, MeshRenderer as UnityMeshRenderer, UnityMaterialFactory, UnityMaterialInstance, createUnityRuntime, UnityShaderProgramBase } from '../Common/Unity/GameObject.js';
 import { UnityMaterialData } from '../Common/Unity/AssetManager.js';
-import { GfxRenderInst } from '../gfx/render/GfxRenderInstManager.js';
+import { GfxRenderInst, GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
 import { fallback, nArray } from '../util.js';
 import { TextureMapping } from '../TextureHolder.js';
 import { UnityVersion } from '../../rust/pkg/noclip_support.js';
@@ -217,6 +217,7 @@ const bindingLayouts = [
 
 class UnityRenderer implements Viewer.SceneGfx {
     private renderHelper: GfxRenderHelper;
+    private renderInstListMain = new GfxRenderInstList();
 
     constructor(private runtime: UnityRuntime) {
         this.renderHelper = new GfxRenderHelper(this.runtime.context.device, this.runtime.context);
@@ -232,6 +233,8 @@ class UnityRenderer implements Viewer.SceneGfx {
         const mapped = template.mapUniformBufferF32(0);
         offs += fillMatrix4x4(mapped, offs, viewerInput.camera.clipFromWorldMatrix);
 
+        this.renderHelper.renderInstManager.setCurrentList(this.renderInstListMain);
+
         const meshRenderers = this.runtime.getComponents(UnityMeshRenderer);
         for (let i = 0; i < meshRenderers.length; i++)
             meshRenderers[i].prepareToRender(this.renderHelper.renderInstManager, viewerInput);
@@ -241,8 +244,6 @@ class UnityRenderer implements Viewer.SceneGfx {
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
-        const renderInstList = this.renderHelper.renderInstManager.currentList;
-
         const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, standardFullClearRenderPassDescriptor);
         const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, standardFullClearRenderPassDescriptor);
 
@@ -255,14 +256,14 @@ class UnityRenderer implements Viewer.SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                renderInstList.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
+                this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender(device, viewerInput);
         this.renderHelper.renderGraph.execute(builder);
-        renderInstList.reset();
+        this.renderInstListMain.reset();
     }
 
     public destroy(device: GfxDevice) {
@@ -276,7 +277,7 @@ class AShortHikeSceneDesc implements Viewer.SceneDesc {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
-        const runtime = await createUnityRuntime(context, `AShortHike`, UnityVersion.V2021_3_27f1);
+        const runtime = await createUnityRuntime(context, `AShortHike`, UnityVersion.V2019_4_39f1);
         runtime.materialFactory = new AShortHikeMaterialFactory();
         await runtime.loadLevel(this.id);
 
