@@ -1414,12 +1414,14 @@ namespace FVB {
 
         // @TODO: Better way of accessing 2-word keys
         interpolateBSpline(t: number): number {
+            const c = this.curKeyIdx * 2;
+
             const controlPoints = new Float64Array(4);
             const knotVector = new Float64Array(6);
-            controlPoints[1] = this.keys[this.curKeyIdx * 2 - 1];
-            controlPoints[2] = this.keys[this.curKeyIdx * 2 + 1];
-            knotVector[2] = this.keys[this.curKeyIdx * 2 + -2];
-            knotVector[3] = this.keys[this.curKeyIdx * 2 + 0];
+            controlPoints[1] = this.keys[c - 1];
+            controlPoints[2] = this.keys[c + 1];
+            knotVector[2] = this.keys[c + -2];
+            knotVector[3] = this.keys[c + 0];
 
             const keysBefore = this.curKeyIdx;
             const keysAfter = this.keyCount - this.curKeyIdx;
@@ -1427,8 +1429,8 @@ namespace FVB {
             switch (keysBefore) {
                 case 1:
                     controlPoints[0] = 2.0 * controlPoints[1] - controlPoints[2];
-                    controlPoints[3] = this.keys[this.curKeyIdx * 2 + 3];
-                    knotVector[4] = this.keys[this.curKeyIdx * 2 + 2];
+                    controlPoints[3] = this.keys[c + 3];
+                    knotVector[4] = this.keys[c + 2];
                     knotVector[1] = 2.0 * knotVector[2] - knotVector[3];
                     knotVector[0] = 2.0 * knotVector[2] - knotVector[4];
                     switch (keysAfter) {
@@ -1437,13 +1439,13 @@ namespace FVB {
                             knotVector[5] = 2.0 * knotVector[4] - knotVector[3];
                             break;
                         default:
-                            knotVector[5] = this.keys[this.curKeyIdx * 2 + 4];
+                            knotVector[5] = this.keys[c + 4];
                             break;
                     }
                     break;
                 case 2:
-                    controlPoints[0] = this.keys[this.curKeyIdx * 2 + -3];
-                    knotVector[1] = this.keys[this.curKeyIdx * 2 + -4];
+                    controlPoints[0] = this.keys[c + -3];
+                    knotVector[1] = this.keys[c + -4];
                     knotVector[0] = 2.0 * knotVector[1] - knotVector[2];
                     switch (keysAfter) {
                         case 1:
@@ -1452,20 +1454,20 @@ namespace FVB {
                             knotVector[5] = 2.0 * knotVector[3] - knotVector[1];
                             break;
                         case 2:
-                            controlPoints[3] = this.keys[this.curKeyIdx * 2 + 3];
-                            knotVector[4] = this.keys[this.curKeyIdx * 2 + 2];
+                            controlPoints[3] = this.keys[c + 3];
+                            knotVector[4] = this.keys[c + 2];
                             knotVector[5] = 2.0 * knotVector[4] - knotVector[3];
                             break;
                         default:
-                            controlPoints[3] = this.keys[this.curKeyIdx * 2 + 3];
-                            knotVector[4] = this.keys[this.curKeyIdx * 2 + 2];
-                            knotVector[5] = this.keys[this.curKeyIdx * 2 + 4];
+                            controlPoints[3] = this.keys[c + 3];
+                            knotVector[4] = this.keys[c + 2];
+                            knotVector[5] = this.keys[c + 4];
                     }
                     break;
                 default:
-                    controlPoints[0] = this.keys[this.curKeyIdx * 2 + -3];
-                    knotVector[1] = this.keys[this.curKeyIdx * 2 + -4];
-                    knotVector[0] = this.keys[this.curKeyIdx * 2 + -6];
+                    controlPoints[0] = this.keys[c + -3];
+                    knotVector[1] = this.keys[c + -4];
+                    knotVector[0] = this.keys[c + -6];
                     switch (keysAfter) {
                         case 1:
                             controlPoints[3] = 2.0 * controlPoints[2] - controlPoints[1];
@@ -1473,14 +1475,14 @@ namespace FVB {
                             knotVector[5] = 2.0 * knotVector[3] - knotVector[1];
                             break;
                         case 2:
-                            controlPoints[3] = this.keys[this.curKeyIdx * 2 + 3];
-                            knotVector[4] = this.keys[this.curKeyIdx * 2 + 2];
+                            controlPoints[3] = this.keys[c + 3];
+                            knotVector[4] = this.keys[c + 2];
                             knotVector[5] = 2.0 * knotVector[4] - knotVector[3];
                             break;
                         default:
-                            controlPoints[3] = this.keys[this.curKeyIdx * 2 + 3];
-                            knotVector[4] = this.keys[this.curKeyIdx * 2 + 2];
-                            knotVector[5] = this.keys[this.curKeyIdx * 2 + 4];
+                            controlPoints[3] = this.keys[c + 3];
+                            knotVector[4] = this.keys[c + 2];
+                            knotVector[5] = this.keys[c + 4];
                             break;
                     }
                     break;
@@ -1496,7 +1498,7 @@ namespace FVB {
 
         interpolateLinear(t: number) {
             const ks = this.keys;
-            const c = this.curKeyIdx;
+            const c = this.curKeyIdx * 2;
             return Attribute.Interpolate.Linear(t, ks[c - 2], ks[c - 1], ks[c + 0], ks[c + 1]);
         }
 
