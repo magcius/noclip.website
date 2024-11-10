@@ -304,8 +304,11 @@ mod tests {
                         let byte_size = obj.byte_size as usize;
                         let data = &bigdata[byte_start..byte_start + byte_size];
 
-                        if (filter.mesh.path_id == 42) {
-                            let _mesh = Mesh::create(version, data).unwrap();
+                        if filter.mesh.path_id == 42 {
+                            let mut mesh = Mesh::create(version, data).unwrap();
+                            mesh.submeshes.clear();
+                            mesh.index_buffer.clear();
+                            dbg!("JJJ BBB", mesh);
                         }
                     },
                     ClassID::MeshRenderer => {MeshRenderer::create(version, data).unwrap();},

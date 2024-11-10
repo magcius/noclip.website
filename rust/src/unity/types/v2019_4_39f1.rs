@@ -91,7 +91,7 @@ pub struct MeshRenderer {
 pub struct Mesh {
     pub name: CharArray,
     pub submeshes: UnityArray<SubMesh>,
-    pub shapes: UnityArray<BlendShapeData>,
+    pub shapes: BlendShapeData,
     pub bind_pose: UnityArray<Matrix4x4>,
     pub bone_name_hashes: UnityArray<u32>,
     pub root_bone_name_hash: u32,
@@ -101,7 +101,6 @@ pub struct Mesh {
     pub is_readable: u8,
     pub keep_vertices: u8,
     pub keep_indices: u8,
-    #[deku(count = "(4 - deku::byte_offset % 4) % 4")] _alignment: Vec<u8>,
     pub index_format: IndexFormat,
     pub index_buffer: UnityArray<u8>,
     #[deku(count = "(4 - deku::byte_offset % 4) % 4")] _alignment2: Vec<u8>,
@@ -141,12 +140,6 @@ pub struct StreamingInfo {
     pub path: CharArray,
 }
 
-fn read_dbg<'a>(input: &'a BitSlice<u8, Msb0>, _bit_offset: usize) -> Result<(&'a BitSlice<u8, Msb0>, i32), DekuError> {
-    let r = i32::read(input, ())?;
-    dbg!("JJJ AAA", r.1);
-    return Ok(r);
-}
-
 #[derive(DekuRead, Clone, Debug)]
 pub struct SubMesh {
     pub first_byte: u32,
@@ -169,27 +162,16 @@ pub struct VertexData {
 #[derive(DekuRead, Clone, Debug)]
 pub struct CompressedMesh {
     pub vertices: Packedf32Vec,
-    #[deku(count = "(4 - deku::byte_offset % 4) % 4")] _alignment1: Vec<u8>,
     pub uv: Packedf32Vec,
-    #[deku(count = "(4 - deku::byte_offset % 4) % 4")] _alignment2: Vec<u8>,
     pub normals: Packedf32Vec,
-    #[deku(count = "(4 - deku::byte_offset % 4) % 4")] _alignment3: Vec<u8>,
     pub tangents: Packedf32Vec,
-    #[deku(count = "(4 - deku::byte_offset % 4) % 4")] _alignment4: Vec<u8>,
     pub weights: Packedi32Vec,
-    #[deku(count = "(4 - deku::byte_offset % 4) % 4")] _alignment5: Vec<u8>,
     pub normal_signs: Packedi32Vec,
-    #[deku(count = "(4 - deku::byte_offset % 4) % 4")] _alignment6: Vec<u8>,
     pub tangent_signs: Packedi32Vec,
-    #[deku(count = "(4 - deku::byte_offset % 4) % 4")] _alignment7: Vec<u8>,
     pub float_colors: Packedf32Vec,
-    #[deku(count = "(4 - deku::byte_offset % 4) % 4")] _alignment8: Vec<u8>,
     pub bone_indices: Packedi32Vec,
-    #[deku(count = "(4 - deku::byte_offset % 4) % 4")] _alignment9: Vec<u8>,
     pub triangles: Packedi32Vec,
-    #[deku(count = "(4 - deku::byte_offset % 4) % 4")] _alignment10: Vec<u8>,
     pub uv_info: u32,
-    #[deku(count = "(4 - deku::byte_offset % 4) % 4")] _alignment11: Vec<u8>,
 }
 
 #[derive(DekuRead, Clone, Debug)]

@@ -222,8 +222,12 @@ impl<'a> DekuRead<'a> for Packedi32Vec {
     fn read(input: &'a BitSlice<u8, Msb0>, ctx: ()) -> Result<(&'a BitSlice<u8, Msb0>, Self), DekuError>
     where
         Self: Sized {
-            let (rest, num_items) = u32::read(input, ctx)?;
-            let (last_rest, bit_size) = u8::read(&rest[4 * num_items as usize..], ctx)?;
+            let (mut rest, num_items) = u32::read(input, ctx)?;
+            let (new_rest, byte_array_count) = u32::read(rest, ctx)?;
+            rest = new_rest;
+            let (new_rest, bit_size) = u8::read(&rest[8 * byte_array_count as usize..], ctx)?;
+            // align
+            let last_rest = &new_rest[3*8..];
             let (_, data) = unpack_i32s(rest, num_items as usize, bit_size as usize)?;
 
             Ok((last_rest, Packedi32Vec {
@@ -248,14 +252,16 @@ impl<'a> DekuRead<'a> for Packedf32Vec {
     where
         Self: Sized {
             let (mut rest, num_items) = u32::read(input, ctx)?;
-            // dbg!("JJJ AAA", num_items);
             let (new_rest, scale) = f32::read(rest, ctx)?;
-            // dbg!("JJJ AAA", scale);
             rest = new_rest;
             let (new_rest, start) = f32::read(rest, ctx)?;
-            // dbg!("JJJ AAA", start);
             rest = new_rest;
-            let (last_rest, bit_size) = u8::read(&rest[4 * num_items as usize..], ctx)?;
+            let (new_rest, byte_array_count) = u32::read(rest, ctx)?;
+            rest = new_rest;
+            let (new_rest, bit_size) = u8::read(&rest[8 * byte_array_count as usize..], ctx)?;
+            // align
+            let last_rest = &new_rest[3*8..];
+
             let max = ((1 << bit_size) as f32) - 1.0;
             let (_, ints) = unpack_i32s(rest, num_items as usize, bit_size as usize)?;
             let mut result = Vec::with_capacity(num_items as usize);
