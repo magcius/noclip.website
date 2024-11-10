@@ -47,7 +47,7 @@
     "build:TheWitness": "cd src/TheWitness/tools && tsx extractor.ts",
     "test:DeBlob2": "cd src/DeBlob2/tools && tsx systest.ts",
     "typecheck": "tsc -w --noEmit",
-    "watch:rust": "onchange rust/**/*.rs -- pnpm run build:rust"
+    "watch:rust": "pnpm run build:rust && onchange rust/**/*.rs -- pnpm run build:rust"
   },
   "bin": {
     "nc-bcsvtool": "./src/tools/bcsvtool.ts",
