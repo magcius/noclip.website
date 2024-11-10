@@ -93,6 +93,11 @@ export class dRes_control_c {
         return this.getResByName(resType, arcName, resName, this.resObj);
     }
 
+    public getObjectIDRes<T extends ResType>(resType: T, arcName: string, resID: number): ResAssetType<T> {
+        resID &= 0x0000FFFF; // Consider resID as a short
+        return this.getResByID(resType, arcName, resID, this.resObj);
+    }
+
     public getResByName<T extends ResType>(resType: T, arcName: string, resName: string, resList: dRes_info_c[]): ResAssetType<T> | null {
         const resInfo = assertExists(this.findResInfo(arcName, resList));
         return resInfo.getResByName(resType, resName);
@@ -102,6 +107,11 @@ export class dRes_control_c {
         const resInfo = assertExists(this.findResInfo(arcName, resList));
         return resInfo.getResByIndex(resType, resIndex);
     }
+
+    public getResByID<T extends ResType>(resType: T, arcName: string, resID: number, resList: dRes_info_c[]): ResAssetType<T> {
+        const resInfo = assertExists(this.findResInfo(arcName, resList));
+        return resInfo.getResByID(resType, resID);
+    }    
 
     public mountRes(device: GfxDevice, cache: GfxRenderCache, arcName: string, archive: JKRArchive, resList: dRes_info_c[]): void {
         if (this.findResInfo(arcName, resList) !== null)
