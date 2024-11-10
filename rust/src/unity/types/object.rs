@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 
-use crate::unity::common::{ColorRGBA, Matrix4x4, PPtr, Quaternion, Vec2, Vec3, AABB};
+use crate::unity::common::{ColorRGBA, Matrix4x4, PPtr, Quaternion, Vec2, Vec3, Vec4, AABB};
+use noclip_macros::{FromStructPerField, FromEnumPerVariant, from};
 
-use super::v2019_4_39f1;
+use super::{v2019_4_39f1, v2020_3_16f1, v2021_3_27f1};
 use wasm_bindgen::prelude::*;
 use deku::DekuContainerRead;
 
@@ -17,7 +18,19 @@ macro_rules! define_create {
                             Ok((_, value)) => Ok(value.into()),
                             Err(err) => return Err(format!("{:?}", err)),
                         }
-                    }
+                    },
+                    UnityVersion::V2020_3_16f1 => {
+                        match v2020_3_16f1::$t::from_bytes((data, 0)) {
+                            Ok((_, value)) => Ok(value.into()),
+                            Err(err) => return Err(format!("{:?}", err)),
+                        }
+                    },
+                    UnityVersion::V2021_3_27f1 => {
+                        match v2021_3_27f1::$t::from_bytes((data, 0)) {
+                            Ok((_, value)) => Ok(value.into()),
+                            Err(err) => return Err(format!("{:?}", err)),
+                        }
+                    },
                 }
             }
         }
@@ -25,8 +38,11 @@ macro_rules! define_create {
 }
 
 #[wasm_bindgen(js_name = "UnityVersion")]
+#[derive(Debug, Clone, Copy)]
 pub enum UnityVersion {
     V2019_4_39f1,
+    V2020_3_16f1,
+    V2021_3_27f1,
 }
 
 #[wasm_bindgen(js_name = "UnityPPtr")]
@@ -46,42 +62,28 @@ impl<T> From<PPtr<T>> for WasmFriendlyPPtr {
 }
 
 #[wasm_bindgen(js_name = "UnityComponent")]
+#[derive(FromStructPerField)]
+#[from(v2019_4_39f1::Component)]
 pub struct Component {
     pub game_object: WasmFriendlyPPtr,
 }
 
-impl From<v2019_4_39f1::Component> for Component {
-    fn from(value: v2019_4_39f1::Component) -> Self {
-        Self {
-            game_object: value.game_object.into(),
-        }
-    }
-}
-
-#[wasm_bindgen(js_name = "UnityGameObject")]
+#[wasm_bindgen(js_name = "UnityGameObject", getter_with_clone)]
+#[derive(Debug, FromStructPerField)]
+#[from(v2019_4_39f1::GameObject)]
 pub struct GameObject {
-    components: Vec<WasmFriendlyPPtr>,
-    layer: u32,
-    name: String,
-    tag: u16,
-    is_active: bool,
-}
-
-impl From<v2019_4_39f1::GameObject> for GameObject {
-    fn from(value: v2019_4_39f1::GameObject) -> Self {
-        Self {
-            components: value.components.into(),
-            layer: value.layer,
-            name: value.name.into(),
-            tag: value.tag,
-            is_active: value.is_active > 0,
-        }
-    }
+    pub components: Vec<WasmFriendlyPPtr>,
+    pub layer: u32,
+    pub name: String,
+    pub tag: u16,
+    pub is_active: u8,
 }
 
 #[wasm_bindgen(js_name = "UnityTransform", getter_with_clone)]
+#[derive(FromStructPerField, Debug)]
+#[from(v2019_4_39f1::Transform)]
 pub struct Transform {
-    pub game_object_ptr: WasmFriendlyPPtr,
+    pub game_object: WasmFriendlyPPtr,
     pub local_rotation: Quaternion,
     pub local_position: Vec3,
     pub local_scale: Vec3,
@@ -89,27 +91,16 @@ pub struct Transform {
     pub parent: WasmFriendlyPPtr,
 }
 
-impl From<v2019_4_39f1::Transform> for Transform {
-    fn from(value: v2019_4_39f1::Transform) -> Self {
-        Self {
-            game_object_ptr: value.game_object.into(),
-            local_rotation: value.local_rotation,
-            local_position: value.local_position,
-            local_scale: value.local_scale,
-            children: value.children.into(),
-            parent: value.parent.into(),
-        }
-    }
-}
-
 #[wasm_bindgen(js_name = "UnityMaterial", getter_with_clone)]
+#[derive(FromStructPerField)]
+#[from(v2019_4_39f1::Material)]
 pub struct Material {
     pub name: String,
     pub shader: WasmFriendlyPPtr,
     pub shader_keywords: String,
     pub lightmap_flags: u32,
-    pub enable_instancing_variants: bool,
-    pub double_sided_gi: bool,
+    pub enable_instancing_variants: u8,
+    pub double_sided_gi: u8,
     pub custom_render_queue: u32,
     string_tag_map: HashMap<String, String>,
     pub disabled_shader_passes: Vec<String>,
@@ -118,44 +109,45 @@ pub struct Material {
     colors: HashMap<String, ColorRGBA>,
 }
 
-impl From<v2019_4_39f1::Material> for Material {
-    fn from(value: v2019_4_39f1::Material) -> Self {
-        Self {
-            name: value.name.into(),
-            shader: value.shader.into(),
-            shader_keywords: value.shader_keywords.into(),
-            lightmap_flags: value.lightmap_flags,
-            enable_instancing_variants: value.enable_instancing_variants > 0,
-            double_sided_gi: value.double_sided_gi > 0,
-            custom_render_queue: value.custom_render_queue,
-            string_tag_map: value.string_tag_map.into(),
-            disabled_shader_passes: value.disabled_shader_passes.into(),
-            tex_envs: value.tex_envs.into(),
-            floats: value.floats.into(),
-            colors: value.colors.into(),
-        }
+#[wasm_bindgen(js_class = "UnityMaterial")]
+impl Material {
+    pub fn get_tex_env_keys(&self) -> Vec<String> {
+        self.tex_envs.keys().cloned().collect()
+    }
+
+    pub fn get_tex_env_by_key(&self, key: &str) -> Option<TexEnv> {
+        self.tex_envs.get(key).cloned()
+    }
+
+    pub fn get_float_keys(&self) -> Vec<String> {
+        self.floats.keys().cloned().collect()
+    }
+
+    pub fn get_float_by_key(&self, key: &str) -> Option<f32> {
+        self.floats.get(key).cloned()
+    }
+
+    pub fn get_color_keys(&self) -> Vec<String> {
+        self.colors.keys().cloned().collect()
+    }
+
+    pub fn get_color_by_key(&self, key: &str) -> Option<ColorRGBA> {
+        self.colors.get(key).cloned()
     }
 }
 
 #[wasm_bindgen(js_name = "UnityTexEnv")]
+#[derive(FromStructPerField, Debug, Clone)]
+#[from(v2019_4_39f1::TexEnv)]
 pub struct TexEnv {
     pub texture: WasmFriendlyPPtr,
     pub scale: Vec2,
     pub offset: Vec2,
 }
 
-impl From<v2019_4_39f1::TexEnv> for TexEnv {
-    fn from(value: v2019_4_39f1::TexEnv) -> Self {
-        Self {
-            texture: value.texture.into(),
-            scale: value.scale,
-            offset: value.offset,
-        }
-    }
-}
-
 #[wasm_bindgen(js_name = "UnityMesh", getter_with_clone)]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, FromStructPerField)]
+#[from(v2019_4_39f1::Mesh)]
 pub struct Mesh {
     pub name: String,
     pub submeshes: Vec<SubMesh>,
@@ -166,10 +158,10 @@ pub struct Mesh {
     pub bones_aabb: Vec<AABB>,
     pub variable_bone_count_weights: Vec<u32>,
     pub mesh_compression: MeshCompression,
-    pub is_readable: bool,
-    pub keep_vertices: bool,
-    pub keep_indices: bool,
-    pub index_format: i32,
+    pub is_readable: u8,
+    pub keep_vertices: u8,
+    pub keep_indices: u8,
+    pub index_format: IndexFormat,
     pub index_buffer: Vec<u8>,
     pub vertex_data: VertexData,
     pub compressed_mesh: CompressedMesh,
@@ -177,7 +169,7 @@ pub struct Mesh {
     pub mesh_usage_flags: i32,
     pub baked_convex_collision_mesh: Vec<u8>,
     pub baked_triangle_collision_mesh: Vec<u8>,
-    pub stream_data: StreamingInfo,
+    pub streaming_info: StreamingInfo,
 }
 
 #[wasm_bindgen(js_class = "UnityMesh")]
@@ -186,49 +178,59 @@ impl Mesh {
         self.vertex_data = data;
     }
 
-    pub fn unpack_vertices(&self) -> Vec<u8> {
-        todo!();
+    pub fn unpack_vertices(&self) -> Option<Vec<f32>> {
+        match self.mesh_compression {
+            MeshCompression::Off => None,
+            _ => Some(self.compressed_mesh.vertices.clone())
+        }
     }
 
-    pub fn unpack_normals(&self) -> Vec<u8> {
-        todo!();
+    pub fn unpack_normals(&self) -> Option<Vec<f32>> {
+        match self.mesh_compression {
+            MeshCompression::Off => None,
+            _ => Some(self.compressed_mesh.unpack_normals())
+        }
     }
 
-    pub fn unpack_indices(&self) -> Vec<u8> {
-        todo!();
+    pub fn unpack_indices(&self) -> Option<Vec<i32>> {
+        match self.mesh_compression {
+            MeshCompression::Off => None,
+            _ => Some(self.compressed_mesh.triangles.clone())
+        }
+    }
+
+    pub fn get_vertex_data(&self) -> Vec<u8> {
+        self.vertex_data.data.clone()
+    }
+
+    pub fn get_index_data(&self) -> Vec<u8> {
+        self.index_buffer.clone()
+    }
+
+    pub fn get_channel_count(&self) -> usize {
+        self.vertex_data.channels.len()
+    }
+
+    pub fn get_channels(&self) -> Vec<ChannelInfo> {
+        self.vertex_data.channels.clone()
+    }
+
+    pub fn get_streams(&self) -> Vec<VertexStreamInfo> {
+        VertexStreamInfo::from_channels(&self.vertex_data.channels, self.vertex_data.vertex_count as usize)
     }
 }
 
-impl From<v2019_4_39f1::Mesh> for Mesh {
-    fn from(value: v2019_4_39f1::Mesh) -> Self {
-        Self {
-            name: value.name.into(),
-            submeshes: value.submeshes.into(),
-            bind_pose: value.bind_pose.into(),
-            bone_name_hashes: value.bone_name_hashes.into(),
-            root_bone_name_hash: value.root_bone_name_hash.into(),
-            bones_aabb: value.bones_aabb.into(),
-            variable_bone_count_weights: value.variable_bone_count_weights.into(),
-            mesh_compression: value.mesh_compression.into(),
-            is_readable: value.is_readable > 0,
-            keep_vertices: value.keep_vertices > 0,
-            keep_indices: value.keep_indices > 0,
-            index_format: value.index_format,
-            index_buffer: value.index_buffer.into(),
-            vertex_data: value.vertex_data.into(),
-            compressed_mesh: value.compressed_mesh.into(),
-            local_aabb: value.local_aabb,
-            mesh_usage_flags: value.mesh_usage_flags,
-            baked_convex_collision_mesh: value.baked_convex_collision_mesh.into(),
-            baked_triangle_collision_mesh: value.baked_triangle_collision_mesh.into(),
-            stream_data: value.stream_data.into(),
-
-        }
-    }
+#[wasm_bindgen(js_name = "UnityIndexFormat")]
+#[derive(FromEnumPerVariant, Debug, Clone, Copy)]
+#[from(v2019_4_39f1::IndexFormat)]
+pub enum IndexFormat {
+    UInt16,
+    UInt32,
 }
 
 #[wasm_bindgen(js_name = "UnityMeshCompression")]
-#[derive(Debug, Clone, Copy)]
+#[derive(FromEnumPerVariant, Debug, Clone, Copy)]
+#[from(v2019_4_39f1::MeshCompression)]
 pub enum MeshCompression {
     Off = 0,
     Low = 1,
@@ -236,19 +238,9 @@ pub enum MeshCompression {
     High = 3,
 }
 
-impl From<v2019_4_39f1::MeshCompression> for MeshCompression {
-    fn from(value: v2019_4_39f1::MeshCompression) -> Self {
-        match value {
-            v2019_4_39f1::MeshCompression::Off => MeshCompression::Off,
-            v2019_4_39f1::MeshCompression::Low => MeshCompression::Low,
-            v2019_4_39f1::MeshCompression::Medium => MeshCompression::Medium,
-            v2019_4_39f1::MeshCompression::High => MeshCompression::High,
-        }
-    }
-}
-
 #[wasm_bindgen(js_name = "UnityCompressedMesh", getter_with_clone)]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, FromStructPerField)]
+#[from(v2019_4_39f1::CompressedMesh)]
 pub struct CompressedMesh {
     pub vertices: Vec<f32>,
     pub uv: Vec<f32>,
@@ -263,44 +255,90 @@ pub struct CompressedMesh {
     pub uv_info: u32,
 }
 
-impl From<v2019_4_39f1::CompressedMesh> for CompressedMesh {
-    fn from(value: v2019_4_39f1::CompressedMesh) -> Self {
-        Self {
-            vertices: value.vertices.data.into(),
-            uv: value.uv.data.into(),
-            normals: value.normals.data.into(),
-            tangents: value.tangents.data.into(),
-            weights: value.weights.data.into(),
-            normal_signs: value.normal_signs.data.into(),
-            tangent_signs: value.tangent_signs.data.into(),
-            float_colors: value.float_colors.data.into(),
-            bone_indices: value.bone_indices.data.into(),
-            triangles: value.triangles.data.into(),
-            uv_info: value.uv_info,
+impl CompressedMesh {
+    pub fn unpack_normals(&self) -> Vec<f32> {
+        let n = self.normals.len() / 2;
+        let mut result = vec![0.0; 3 * n];
+        for i in 0..n {
+            let x = self.normals[2*i];
+            let y = self.normals[2*i + 1];
+            result[3*i + 0] = x;
+            result[3*i + 1] = y;
+            let zsqr = 1.0 - x*x - y*y;
+            if zsqr >= 0.0 {
+                result[3*i + 2] = zsqr.sqrt();
+            } else {
+                result[3*i + 2] = 0.0;
+            }
+
+            if self.normal_signs.len() > 0 && self.normal_signs[i] == 0 {
+                result[3*i + 2] *= -1.0;
+            }
         }
+        result
     }
 }
 
 #[wasm_bindgen(js_name = "UnityVertexData", getter_with_clone)]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, FromStructPerField)]
+#[from(v2019_4_39f1::VertexData)]
 pub struct VertexData {
     pub vertex_count: u32,
     pub channels: Vec<ChannelInfo>,
     pub data: Vec<u8>,
 }
 
-impl From<v2019_4_39f1::VertexData> for VertexData {
-    fn from(value: v2019_4_39f1::VertexData) -> Self {
-        Self {
-            vertex_count: value.vertex_count,
-            channels: value.channels.into(),
-            data: value.data.into(),
+#[wasm_bindgen]
+#[derive(Debug, Clone)]
+pub struct VertexStreamInfo {
+    pub channel_mask: u32,
+    pub offset: u32,
+    pub stride: u32,
+    pub divider_op: u8,
+    pub frequency: u32,
+}
+
+impl VertexStreamInfo {
+    pub fn from_channels(channels: &[ChannelInfo], vertex_count: usize) -> Vec<VertexStreamInfo> {
+        let mut n_streams = 0;
+        for c in channels {
+            if c.stream > n_streams {
+                n_streams = c.stream;
+            }
         }
+        n_streams += 1;
+        let mut result = Vec::with_capacity(n_streams as usize);
+        let mut offset = 0;
+        for s in 0..n_streams {
+            let mut channel_mask = 0;
+            let mut stride = 0;
+            for chn in 0..channels.len() {
+                let channel = &channels[chn];
+                if channel.stream == s {
+                    if channel.dimension > 0 {
+                        channel_mask |= 1 << chn;
+                        stride += channel.dimension as usize * channel.get_format_size();
+                    }
+                }
+            }
+
+            result.push(VertexStreamInfo {
+                channel_mask,
+                offset,
+                stride: stride as u32,
+                divider_op: 0,
+                frequency: 0,
+            });
+            offset += (vertex_count * stride) as u32;
+            offset = (offset + 0x0F) & !0x0F;
+        }
+        return result;
     }
 }
 
 #[wasm_bindgen(js_name = "UnityChannelInfo")]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, FromStructPerField)]
+#[from(v2019_4_39f1::ChannelInfo)]
 pub struct ChannelInfo {
     pub stream: u8,
     pub offset: u8,
@@ -308,19 +346,30 @@ pub struct ChannelInfo {
     pub dimension: u8,
 }
 
-impl From<v2019_4_39f1::ChannelInfo> for ChannelInfo {
-    fn from(value: v2019_4_39f1::ChannelInfo) -> Self {
-        Self {
-            stream: value.stream,
-            offset: value.offset,
-            format: value.format.into(),
-            dimension: value.dimension,
+impl ChannelInfo {
+    pub fn get_format_size(&self) -> usize {
+        match self.format {
+            VertexFormat::Float |
+            VertexFormat::UInt32 |
+            VertexFormat::SInt32 => 4,
+
+            VertexFormat::Float16 |
+            VertexFormat::UNorm16 |
+            VertexFormat::SNorm16 |
+            VertexFormat::UInt16 |
+            VertexFormat::SInt16 => 2,
+
+            VertexFormat::UNorm8 |
+            VertexFormat::SNorm8 |
+            VertexFormat::UInt8 |
+            VertexFormat::SInt8 => 1,
         }
     }
 }
 
 #[wasm_bindgen(js_name = "UnityVertexFormat")]
-#[derive(Debug, Clone, Copy)]
+#[derive(FromEnumPerVariant, Debug, Clone, Copy)]
+#[from(v2019_4_39f1::VertexFormat)]
 pub enum VertexFormat {
     Float,
     Float16,
@@ -336,27 +385,9 @@ pub enum VertexFormat {
     SInt32,
 }
 
-impl From<v2019_4_39f1::VertexFormat> for VertexFormat {
-    fn from(value: v2019_4_39f1::VertexFormat) -> Self {
-        match value {
-            v2019_4_39f1::VertexFormat::Float => VertexFormat::Float,
-            v2019_4_39f1::VertexFormat::Float16 => VertexFormat::Float16,
-            v2019_4_39f1::VertexFormat::UNorm8 => VertexFormat::UNorm8,
-            v2019_4_39f1::VertexFormat::SNorm8 => VertexFormat::SNorm8,
-            v2019_4_39f1::VertexFormat::UNorm16 => VertexFormat::UNorm16,
-            v2019_4_39f1::VertexFormat::SNorm16 => VertexFormat::SNorm16,
-            v2019_4_39f1::VertexFormat::UInt8 => VertexFormat::UInt8,
-            v2019_4_39f1::VertexFormat::SInt8 => VertexFormat::SInt8,
-            v2019_4_39f1::VertexFormat::UInt16 => VertexFormat::UInt16,
-            v2019_4_39f1::VertexFormat::SInt16 => VertexFormat::SInt16,
-            v2019_4_39f1::VertexFormat::UInt32 => VertexFormat::UInt32,
-            v2019_4_39f1::VertexFormat::SInt32 => VertexFormat::SInt32,
-        }
-    }
-}
-
 #[wasm_bindgen(js_name = "UnitySubMesh")]
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug, FromStructPerField)]
+#[from(v2019_4_39f1::SubMesh)]
 pub struct SubMesh {
     pub first_byte: u32,
     pub index_count: u32,
@@ -367,40 +398,18 @@ pub struct SubMesh {
     pub local_aabb: AABB,
 }
 
-impl From<v2019_4_39f1::SubMesh> for SubMesh {
-    fn from(value: v2019_4_39f1::SubMesh) -> Self {
-        Self {
-            first_byte: value.first_byte,
-            index_count: value.index_count,
-            topology: value.topology,
-            base_vertex: value.base_vertex,
-            first_vertex: value.first_vertex,
-            vertex_count: value.vertex_count,
-            local_aabb: value.local_aabb.into(),
-        }
-    }
-}
-
 #[wasm_bindgen(js_name = "UnityStreamingInfo", getter_with_clone)]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, FromStructPerField)]
+#[from(v2019_4_39f1::StreamingInfo)]
 pub struct StreamingInfo {
     pub offset: u32,
     pub size: u32,
     pub path: String,
 }
 
-impl From<v2019_4_39f1::StreamingInfo> for StreamingInfo {
-    fn from(value: v2019_4_39f1::StreamingInfo) -> Self {
-        Self {
-            offset: value.offset,
-            size: value.size,
-            path: value.path.into(),
-        }
-    }
-}
-
 #[wasm_bindgen(js_name = "UnityTexture2D", getter_with_clone)]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, FromStructPerField)]
+#[from(v2019_4_39f1::Texture2D)]
 pub struct Texture2D {
     pub name: String,
     pub forced_fallback_format: i32,
@@ -421,11 +430,12 @@ pub struct Texture2D {
     pub lightmap_format: i32,
     pub color_space: ColorSpace,
     pub data: Vec<u8>,
-    pub stream_data: StreamingInfo,
+    pub streaming_info: StreamingInfo,
 }
 
 #[wasm_bindgen(js_name = "UnityGLTextureSettings", getter_with_clone)]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, FromStructPerField)]
+#[from(v2019_4_39f1::GLTextureSettings)]
 pub struct GLTextureSettings {
     pub filter_mode: TextureFilterMode,
     pub aniso: i32,
@@ -436,7 +446,8 @@ pub struct GLTextureSettings {
 }
 
 #[wasm_bindgen(js_name = "UnityTextureFilterMode")]
-#[derive(Clone, Copy, Debug)]
+#[derive(FromEnumPerVariant, Clone, Copy, Debug)]
+#[from(v2019_4_39f1::TextureFilterMode)]
 pub enum TextureFilterMode {
     Nearest = 0,
     Bilinear = 1,
@@ -444,7 +455,8 @@ pub enum TextureFilterMode {
 }
 
 #[wasm_bindgen(js_name = "UnityTextureWrapMode")]
-#[derive(Copy, Clone, Debug)]
+#[derive(FromEnumPerVariant, Clone, Copy, Debug)]
+#[from(v2019_4_39f1::TextureWrapMode)]
 pub enum TextureWrapMode {
     Repeat = 0,
     Clamp = 1,
@@ -453,7 +465,8 @@ pub enum TextureWrapMode {
 }
 
 #[wasm_bindgen(js_name = "UnityTextureFormat")]
-#[derive(Copy, Clone, Debug)]
+#[derive(FromEnumPerVariant, Clone, Copy, Debug)]
+#[from(v2019_4_39f1::TextureFormat)]
 pub enum TextureFormat {
     Alpha8       = 0x01,
     RGB24        = 0x03,
@@ -469,10 +482,58 @@ pub enum TextureFormat {
 }
 
 #[wasm_bindgen(js_name = "UnityTextureColorSpace")]
-#[derive(Copy, Clone, Debug)]
+#[derive(FromEnumPerVariant, Clone, Copy, Debug)]
+#[from(v2019_4_39f1::ColorSpace)]
 pub enum ColorSpace {
     Linear = 0x00,
     SRGB   = 0x01,
+}
+
+#[wasm_bindgen(js_name = "UnityMeshFilter", getter_with_clone)]
+#[derive(Clone, Debug, FromStructPerField)]
+#[from(v2019_4_39f1::MeshFilter)]
+pub struct MeshFilter {
+    pub game_object: WasmFriendlyPPtr,
+    pub mesh: WasmFriendlyPPtr,
+}
+
+#[wasm_bindgen(js_name = "UnityMeshRenderer", getter_with_clone)]
+#[derive(Clone, Debug, FromStructPerField)]
+#[from(v2019_4_39f1::MeshRenderer)]
+#[from(v2021_3_27f1::MeshRenderer)]
+pub struct MeshRenderer {
+    pub game_object: WasmFriendlyPPtr,
+    pub enabled: u8,
+    pub cast_shadows: u8,
+    pub receive_shadows: u8,
+    pub dynamic_occludee: u8,
+    pub motion_vectors: u8,
+    pub light_probe_usage: u8,
+    pub reflection_probe_usage: u8,
+    pub ray_tracing_mode: u8,
+    pub rendering_layer_mask: u32,
+    pub renderer_priority: i32,
+    pub lightmap_index: u16,
+    pub lightmap_index_dynamic: u16,
+    pub lightmap_tiling_offset: Vec4,
+    pub lightmap_tiling_offset_dynamic: Vec4,
+    pub materials: Vec<WasmFriendlyPPtr>,
+    pub static_batch_info: StaticBatchInfo,
+    pub static_batch_root: WasmFriendlyPPtr,
+    pub probe_anchor: WasmFriendlyPPtr,
+    pub light_probe_volume_override: WasmFriendlyPPtr,
+    pub sorting_layer_id: i32,
+    pub sorting_layer: i16,
+    pub sorting_order: i16,
+    pub additional_vertex_streams: WasmFriendlyPPtr,
+}
+
+#[wasm_bindgen(js_name = "UnityStaticBatchInfo", getter_with_clone)]
+#[derive(Clone, Debug, FromStructPerField)]
+#[from(v2019_4_39f1::StaticBatchInfo)]
+pub struct StaticBatchInfo {
+    pub first_submesh: u16,
+    pub submesh_count: u16,
 }
 
 define_create!(GameObject, "UnityGameObject");
@@ -481,3 +542,5 @@ define_create!(Material, "UnityMaterial");
 define_create!(Mesh, "UnityMesh");
 define_create!(VertexData, "UnityVertexData");
 define_create!(Texture2D, "UnityTexture2D");
+define_create!(MeshFilter, "UnityMeshFilter");
+define_create!(MeshRenderer, "UnityMeshRenderer");

@@ -209,6 +209,12 @@ pub struct Packedi32Vec {
     pub data: Vec<i32>,
 }
 
+impl From<Packedi32Vec> for Vec<i32> {
+    fn from(value: Packedi32Vec) -> Self {
+        value.data
+    }
+}
+
 impl<'a> DekuRead<'a> for Packedi32Vec {
     fn read(input: &'a BitSlice<u8, Msb0>, ctx: ()) -> Result<(&'a BitSlice<u8, Msb0>, Self), DekuError>
     where
@@ -226,6 +232,12 @@ impl<'a> DekuRead<'a> for Packedi32Vec {
 #[derive(Clone, Debug)]
 pub struct Packedf32Vec {
     pub data: Vec<f32>,
+}
+
+impl From<Packedf32Vec> for Vec<f32> {
+    fn from(value: Packedf32Vec) -> Self {
+        value.data
+    }
 }
 
 impl<'a> DekuRead<'a> for Packedf32Vec {

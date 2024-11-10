@@ -1,6 +1,7 @@
 use deku::prelude::*;
 
-// based on https://github.com/AssetRipper/TypeTreeDumps/blob/main/StructsDump/release/2019.4.39f1.dump
+// https://github.com/AssetRipper/TypeTreeDumps/blob/main/StructsDump/release/2019.4.39f1.dump
+// e.g. Outer Wilds
 
 use crate::unity::common::{CharArray, ColorRGBA, Map, Matrix4x4, PPtr, Packedf32Vec, Packedi32Vec, Quaternion, UnityArray, Vec2, Vec3, Vec4, AABB};
 
@@ -100,7 +101,7 @@ pub struct Mesh {
     pub is_readable: u8,
     pub keep_vertices: u8,
     pub keep_indices: u8,
-    pub index_format: i32,
+    pub index_format: IndexFormat,
     pub index_buffer: UnityArray<u8>,
     pub vertex_data: VertexData,
     pub compressed_mesh: CompressedMesh,
@@ -109,7 +110,14 @@ pub struct Mesh {
     pub baked_convex_collision_mesh: UnityArray<u8>,
     pub baked_triangle_collision_mesh: UnityArray<u8>,
     pub mesh_metrics: [f32; 2],
-    pub stream_data: StreamingInfo,
+    pub streaming_info: StreamingInfo,
+}
+
+#[derive(DekuRead, Clone, Copy, Debug)]
+#[deku(type = "i32")]
+pub enum IndexFormat {
+    UInt16 = 0,
+    UInt32 = 1,
 }
 
 #[derive(DekuRead, Clone, Copy, Debug)]
@@ -245,7 +253,7 @@ pub struct Texture2D {
     pub lightmap_format: i32,
     pub color_space: ColorSpace,
     pub data: UnityArray<u8>,
-    pub stream_data: StreamingInfo,
+    pub streaming_info: StreamingInfo,
 }
 
 #[derive(DekuRead, Clone, Debug)]
@@ -296,4 +304,10 @@ pub enum TextureFormat {
 pub enum ColorSpace {
     Linear = 0x00,
     SRGB   = 0x01,
+}
+
+#[derive(DekuRead, Clone, Debug)]
+pub struct MeshFilter {
+    pub game_object: PPtr<GameObject>,
+    pub mesh: PPtr<Mesh>,
 }

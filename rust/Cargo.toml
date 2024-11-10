@@ -1,3 +1,6 @@
+[workspace]
+members = ["noclip-macros"]
+
 [package]
 name = "noclip-support"
 version = "0.0.0"
@@ -35,4 +38,4 @@ web-sys = { version = "0.3.48", features = ["console"] }
 nalgebra-glm = "0.19.0"
 rand = "0.8.5"
 getrandom = { version = "0.2.15", features = ["js"] }
-
+noclip-macros = { version = "*", path = "./noclip-macros" }

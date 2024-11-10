@@ -12,6 +12,7 @@ import { GfxRenderInst } from '../gfx/render/GfxRenderInstManager.js';
 import { nArray } from '../util.js';
 import { TextureMapping } from '../TextureHolder.js';
 import { CameraController } from '../Camera.js';
+import { UnityVersion } from '../../rust/pkg/noclip_support.js';
 
 class TempMaterialProgram extends UnityShaderProgramBase {
     public static ub_MaterialParams = 2;
@@ -171,7 +172,7 @@ class NeonWhiteSceneDesc implements Viewer.SceneDesc {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
-        const runtime = await createUnityRuntime(context, `NeonWhite`);
+        const runtime = await createUnityRuntime(context, `NeonWhite`, UnityVersion.V2020_3_16f1);
         runtime.materialFactory = new NeonWhiteMaterialFactory();
         await runtime.loadLevel(this.id);
 

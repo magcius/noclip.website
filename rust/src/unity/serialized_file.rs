@@ -9,6 +9,7 @@ use super::{class_id::ClassID, common::UnityArray};
 #[wasm_bindgen(js_name = "UnityAssetFile")]
 pub struct AssetFile {
     header: SerializedFileHeader,
+    metadata_offset: usize,
     metadata: Option<SerializedFileMetadata>,
 }
 
@@ -16,10 +17,12 @@ pub struct AssetFile {
 impl AssetFile {
     pub fn initialize_with_header_chunk(data: &[u8]) -> Result<AssetFile, String> {
         match SerializedFileHeader::from_bytes((data, 0)) {
-            Ok((_, header)) => {
+            Ok(((rest, _), header)) => {
+                let header_size = data.len() - rest.len();
                 assert_eq!(header.endianness, 0); // we're always expecting little endian files
                 Ok(Self {
                     header,
+                    metadata_offset: header_size,
                     metadata: None,
                 })
             },
@@ -73,7 +76,7 @@ impl AssetFile {
         result
     }
 
-    pub fn get_external_path(&self, pptr: WasmFriendlyPPtr) -> Option<String> {
+    pub fn get_external_path(&self, pptr: &WasmFriendlyPPtr) -> Option<String> {
         let idx = pptr.file_index as usize - 1;
         let metadata = self.get_metadata();
         metadata.externals.values
@@ -236,20 +239,64 @@ struct FileIdentifier {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
+    use crate::unity::types::object::{GameObject, MeshFilter, MeshRenderer, Transform, UnityVersion};
+    use crate::unity::class_id::ClassID;
+
     use super::*;
     use env_logger;
     use deku::bitvec::BitVec;
 
     #[test]
     fn test() {
-        let data = std::fs::read("E:\\SteamLibrary\\steamapps\\common\\Outer Wilds\\OuterWilds_Data\\level1").unwrap();
-        let ((rest, _), header) = SerializedFileHeader::from_bytes((&data, 0)).unwrap();
-        let header_len = data.len() - rest.len();
-        dbg!(&header);
-        let bitvec = BitVec::from_slice(&rest[0..header.metadata_size as usize]);
-        let bit_len = header_len * 8 + bitvec.len();
-        let (slice, metadata) = SerializedFileMetadata::read(bitvec.as_bitslice(), header.version).unwrap();
-        let bit_diff = bit_len - slice.len();
-        dbg!(bit_diff / 8);
+        let data = std::fs::read("C:\\Users\\ifnsp\\dev\\noclip.website\\data\\AShortHike\\level2").unwrap();
+        let version = UnityVersion::V2021_3_27f1;
+        let mut asset_file = AssetFile::initialize_with_header_chunk(&data).unwrap();
+        dbg!(&asset_file.header);
+        asset_file.append_metadata_chunk(&data).unwrap();
+        let metadata = asset_file.metadata.as_ref().unwrap();
+
+        let mut objects = HashMap::new();
+        let mut object_infos = HashMap::new();
+        for obj in &metadata.objects {
+            object_infos.insert(obj.file_id, obj);
+            let obj_type = &metadata.type_tree[obj.serialized_type_index as usize];
+            if !matches!(obj_type.header.raw_type_id, ClassID::GameObject) {
+                continue;
+            }
+            let byte_start = asset_file.get_data_offset() as usize + match obj.small_file_byte_start {
+                Some(start) => start as usize,
+                None => obj.large_file_byte_start.unwrap() as usize,
+            };
+            let byte_size = obj.byte_size as usize;
+            let data = &data[byte_start..byte_start + byte_size];
+            let game_object = GameObject::create(version, data).unwrap();
+            objects.insert(obj.file_id, game_object);
+        }
+
+        for obj in objects.values() {
+            for component_ptr in &obj.components {
+                if component_ptr.file_index != 0 {
+                    dbg!(component_ptr);
+                    continue;
+                }
+                let obj = object_infos.get(&component_ptr.path_id).unwrap();
+                let obj_type = &metadata.type_tree[obj.serialized_type_index as usize];
+                let byte_start = asset_file.get_data_offset() as usize + match obj.small_file_byte_start {
+                    Some(start) => start as usize,
+                    None => obj.large_file_byte_start.unwrap() as usize,
+                };
+                let byte_size = obj.byte_size as usize;
+                let data = &data[byte_start..byte_start + byte_size];
+                match obj_type.header.raw_type_id {
+                    ClassID::Transform => {Transform::create(version, data).unwrap();},
+                    ClassID::RectTransform => {Transform::create(version, data).unwrap();},
+                    ClassID::MeshFilter => {MeshFilter::create(version, data).unwrap();},
+                    ClassID::MeshRenderer => {MeshRenderer::create(version, data).unwrap();},
+                    s => println!("skipping {:?}", s),
+                }
+            }
+        }
     }
 }

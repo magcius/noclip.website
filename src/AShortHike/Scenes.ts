@@ -11,6 +11,7 @@ import { UnityMaterialData } from '../Common/Unity/AssetManager.js';
 import { GfxRenderInst } from '../gfx/render/GfxRenderInstManager.js';
 import { fallback, nArray } from '../util.js';
 import { TextureMapping } from '../TextureHolder.js';
+import { UnityVersion } from '../../rust/pkg/noclip_support.js';
 
 class TempMaterialProgram extends UnityShaderProgramBase {
     public static ub_MaterialParams = 2;
@@ -203,7 +204,7 @@ class AShortHikeMaterialFactory extends UnityMaterialFactory {
     public createMaterialInstance(runtime: UnityRuntime, materialData: UnityMaterialData): UnityMaterialInstance {
         debugger;
         // TODO(jstpierre): Pull out serialized shader data
-        if (materialData.texEnvName.includes('_Splat3'))
+        if (materialData.name.includes('_Splat3'))
             return new TerrainMaterial(runtime, materialData);
         else
             return new TempMaterial(runtime, materialData);
@@ -275,7 +276,7 @@ class AShortHikeSceneDesc implements Viewer.SceneDesc {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
-        const runtime = await createUnityRuntime(context, `AShortHike`);
+        const runtime = await createUnityRuntime(context, `AShortHike`, UnityVersion.V2021_3_27f1);
         runtime.materialFactory = new AShortHikeMaterialFactory();
         await runtime.loadLevel(this.id);
 

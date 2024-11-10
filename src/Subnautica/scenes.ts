@@ -13,6 +13,7 @@ import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
 import { GfxRenderInstList, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
 import * as Viewer from '../viewer.js';
 import { DeviceProgram } from '../Program.js';
+import { UnityVersion } from '../../rust/pkg/noclip_support.js';
 
 class ChunkProgram extends DeviceProgram {
     public static ub_SceneParams = 0;
@@ -145,7 +146,7 @@ class SubnauticaSceneDesc implements Viewer.SceneDesc {
             renderer.addMesh(tree.meshes[node.meshPathID!], node);
         }*/
 
-        const runtime = await createUnityRuntime(context, `AShortHike`);
+        const runtime = await createUnityRuntime(context, `AShortHike`, UnityVersion.V2021_3_27f1);
         await runtime.loadLevel(`level2`);
 
         const renderer = new UnityRenderer(runtime);
