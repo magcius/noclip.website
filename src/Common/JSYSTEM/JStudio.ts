@@ -586,7 +586,21 @@ class TActorAdaptor extends TAdaptor {
     }
 
     adaptor_do_update(obj: STBObject, frameCount: number): void {
-        debugger;
+        const pos = scratchVec3a;
+        const rot = scratchVec3b;
+        const scale = scratchVec3c;
+        this.adaptor_getVariableValue_Vec(pos, Actor_ValIdx.POS_X);
+        this.adaptor_getVariableValue_Vec(rot, Actor_ValIdx.ROT_X);
+        this.adaptor_getVariableValue_Vec(scale, Actor_ValIdx.SCALE_X);
+
+        if( obj.mControl.isTransformEnabled()) {
+            vec3.transformMat4(pos, pos, obj.mControl.getTransformOnSet());
+            rot[1] += obj.mControl.mTransformRotY!; // @TODO: Check this shouldn't be negated
+        }
+
+        this.mObject.JSGSetTranslation(pos);
+        this.mObject.JSGSetRotation(rot);
+        this.mObject.JSGSetScaling(scale);
     }
 
     adaptor_do_data(obj: STBObject, id: number, data: DataView): void {
