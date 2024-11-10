@@ -401,8 +401,9 @@ pub struct SubMesh {
 #[wasm_bindgen(js_name = "UnityStreamingInfo", getter_with_clone)]
 #[derive(Clone, Debug, FromStructPerField)]
 #[from(v2019_4_39f1::StreamingInfo)]
+#[from(v2021_3_27f1::StreamingInfo)]
 pub struct StreamingInfo {
-    pub offset: u32,
+    pub offset: u64,
     pub size: u32,
     pub path: String,
 }
