@@ -826,7 +826,18 @@ class TActorObject extends STBObject {
         }
 
         if (this.mAdaptor.enableLog) {
-            console.debug(`Set${keyToString(keyIdx, keyCount)}: ${dataOpToString(dataOp)} [${keyData}]`);
+            const vals = keyData.map(d => {
+                switch (dataOp) {
+                    case TEOperationData.FUNCVALUE_INDEX:
+                    case TEOperationData.OBJECT_INDEX:
+                        return d.asInt;
+                    case TEOperationData.FUNCVALUE_NAME:
+                    case TEOperationData.OBJECT_NAME:
+                        return d.asStr;
+                    default: 
+                        return d.asFloat;
+                }} );
+            console.debug(`Set${keyToString(keyIdx, keyCount)}: ${dataOpToString(dataOp)} [${vals}]`);
         }
     }
 }
