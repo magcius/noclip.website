@@ -149,6 +149,7 @@ export class AssetFile {
     private waitForHeaderPromise: Promise<void> | null;
     private dataCache = new Map<BigInt, Destroyable | null>();
     private promiseCache = new Map<BigInt, Promise<Destroyable | null>>();
+    public dataOffset: bigint = BigInt(0);
 
     constructor(private path: string, public version: UnityVersion) {
     }
@@ -189,12 +190,12 @@ export class AssetFile {
         })).createTypedArray(Uint8Array);
 
         this.ensureAssetFile(headerBytes);
-        const dataOffset = this.assetFile.get_data_offset();
-        if (dataOffset > headerBytes.byteLength) {
+        this.dataOffset = this.assetFile.get_data_offset();
+        if (this.dataOffset > headerBytes.byteLength) {
             // Oops, need to fetch extra bytes...
             const extraBytes = (await dataFetcher.fetchData(this.path, {
                 rangeStart: headerBytes.byteLength,
-                rangeSize: dataOffset - BigInt(headerBytes.byteLength),
+                rangeSize: this.dataOffset - BigInt(headerBytes.byteLength),
             })).createTypedArray(Uint8Array);
             headerBytes = concatBufs(headerBytes, extraBytes);
         }
@@ -228,7 +229,7 @@ export class AssetFile {
             await this.waitForHeaderPromise;
 
         const obj = assertExists(this.unityObjectByFileID.get(pathID));
-        const byteStart = this.assetFile.get_data_offset() + obj.byte_start;
+        const byteStart = this.dataOffset + obj.byte_start;
 
         let buffer: ArrayBufferSlice;
         if (this.fetcher !== null)
@@ -248,16 +249,17 @@ export class AssetFile {
         if (pptr.file_index === 0) {
             return this;
         } else {
-            const externalFilename = assertExists(this.assetFile.get_external_path(pptr));
+            let externalFilename = assertExists(this.assetFile.get_external_path(pptr));
+            if (externalFilename.startsWith("Library/")) {
+                externalFilename = externalFilename.replace("Library/", "Resources/");
+            }
             return assetSystem.fetchAssetFile(externalFilename, true);
         }
     }
 
     private createMeshData = async (assetSystem: UnityAssetSystem, objData: AssetObjectData): Promise<UnityMeshData> => {
         try {
-            debugger;
             const mesh = rust.UnityMesh.create(assetSystem.version, objData.data);
-            debugger;
 
             const streamingInfo: UnityStreamingInfo = mesh.streaming_info;
             if (streamingInfo.path.length !== 0) {
@@ -355,8 +357,9 @@ export class UnityAssetSystem {
 
     public async fetchStreamingInfo(streamingInfo: UnityStreamingInfo): Promise<ArrayBufferSlice> {
         assert(streamingInfo.size !== 0);
+        const assetFile = assertExists(this.assetFiles.get(streamingInfo.path));
         return await this.fetchBytes(streamingInfo.path, {
-            rangeStart: streamingInfo.offset,
+            rangeStart: assetFile.dataOffset + streamingInfo.offset,
             rangeSize: streamingInfo.size,
         });
     }

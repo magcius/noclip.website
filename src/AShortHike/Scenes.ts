@@ -277,7 +277,7 @@ class AShortHikeSceneDesc implements Viewer.SceneDesc {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
-        const runtime = await createUnityRuntime(context, `AShortHike`, UnityVersion.V2019_4_39f1);
+        const runtime = await createUnityRuntime(context, `AShortHike`, UnityVersion.V2021_3_27f1);
         runtime.materialFactory = new AShortHikeMaterialFactory();
         await runtime.loadLevel(this.id);
 
@@ -291,6 +291,7 @@ const id = 'AShortHike';
 const name = 'A Short Hike';
 
 const sceneDescs = [
+    new AShortHikeSceneDesc(`level0`, "Main Menu"),
     new AShortHikeSceneDesc(`level2`, "The Island"),
 ];
 

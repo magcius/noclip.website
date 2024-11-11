@@ -3,9 +3,10 @@ use deku::{bitvec::{BitSlice, Msb0}, prelude::*};
 // https://github.com/AssetRipper/TypeTreeDumps/blob/main/StructsDump/release/2019.4.39f1.dump
 // e.g. Outer Wilds
 
-use crate::unity::common::{CharArray, ColorRGBA, Map, Matrix4x4, PPtr, Packedf32Vec, Packedi32Vec, Quaternion, UnityArray, Vec2, Vec3, Vec4, AABB};
+use super::common::{CharArray, ColorRGBA, Map, Matrix4x4, PPtr, Packedf32Vec, Packedi32Vec, Quaternion, UnityArray, Vec2, Vec3, Vec4, AABB, UnityVersion};
 
 #[derive(DekuRead, Clone, Debug)]
+#[deku(ctx = "_version: UnityVersion")]
 pub struct GameObject {
     pub components: UnityArray<PPtr<Component>>,
     pub layer: u32,
@@ -20,6 +21,7 @@ pub struct Component {
 }
 
 #[derive(DekuRead, Clone, Debug)]
+#[deku(ctx = "_version: UnityVersion")]
 pub struct Transform {
     pub game_object: PPtr<GameObject>,
     pub local_rotation: Quaternion,
@@ -30,6 +32,7 @@ pub struct Transform {
 }
 
 #[derive(DekuRead, Clone, Debug)]
+#[deku(ctx = "_version: UnityVersion")]
 pub struct Material {
     pub name: CharArray,
     pub shader: PPtr<()>,
@@ -60,16 +63,22 @@ pub struct Texture {
 }
 
 #[derive(DekuRead, Clone, Debug)]
+#[deku(ctx = "version: UnityVersion")]
 pub struct MeshRenderer {
     pub game_object: PPtr<GameObject>,
     pub enabled: u8,
     pub cast_shadows: u8,
     pub receive_shadows: u8,
     pub dynamic_occludee: u8,
+    #[deku(cond = "version > UnityVersion::V2021_3_27f1")]
+    pub static_shadow_caster: Option<u8>,
     pub motion_vectors: u8,
     pub light_probe_usage: u8,
     pub reflection_probe_usage: u8,
     pub ray_tracing_mode: u8,
+    #[deku(cond = "version > UnityVersion::V2021_3_27f1")]
+    pub ray_trace_procedural: Option<u8>,
+    #[deku(count = "(4 - deku::byte_offset % 4) % 4")] _alignment: Vec<u8>,
     pub rendering_layer_mask: u32,
     pub renderer_priority: i32,
     pub lightmap_index: u16,
@@ -85,9 +94,12 @@ pub struct MeshRenderer {
     pub sorting_layer: i16,
     pub sorting_order: i16,
     pub additional_vertex_streams: PPtr<Mesh>,
+    #[deku(cond = "version > UnityVersion::V2021_3_27f1")]
+    pub enlighten_vertex_streams: Option<PPtr<Mesh>>,
 }
 
 #[derive(DekuRead, Clone, Debug)]
+#[deku(ctx = "version: UnityVersion")]
 pub struct Mesh {
     pub name: CharArray,
     pub submeshes: UnityArray<SubMesh>,
@@ -104,6 +116,7 @@ pub struct Mesh {
     pub index_format: IndexFormat,
     pub index_buffer: UnityArray<u8>,
     #[deku(count = "(4 - deku::byte_offset % 4) % 4")] _alignment2: Vec<u8>,
+    #[deku(ctx = "version")]
     pub vertex_data: VertexData,
     #[deku(count = "(4 - deku::byte_offset % 4) % 4")] _alignment3: Vec<u8>,
     pub compressed_mesh: CompressedMesh,
@@ -114,6 +127,7 @@ pub struct Mesh {
     pub baked_triangle_collision_mesh: UnityArray<u8>,
     #[deku(count = "(4 - deku::byte_offset % 4) % 4")] _alignment5: Vec<u8>,
     pub mesh_metrics: [f32; 2],
+    #[deku(ctx = "version")]
     pub streaming_info: StreamingInfo,
 }
 
@@ -134,10 +148,30 @@ pub enum MeshCompression {
 }
 
 #[derive(DekuRead, Clone, Debug)]
+#[deku(ctx = "version: UnityVersion")]
 pub struct StreamingInfo {
-    pub offset: u32,
+    #[deku(ctx = "version")]
+    pub offset: StreamingInfoOffset,
     pub size: u32,
     pub path: CharArray,
+}
+
+#[derive(DekuRead, Clone, Debug)]
+#[deku(ctx = "version: UnityVersion", id = "version")]
+pub enum StreamingInfoOffset {
+    #[deku(id_pat = "UnityVersion::V2019_4_39f1")]
+    Small(u32),
+    #[deku(id_pat = "_")]
+    Big(u64),
+}
+
+impl From<StreamingInfoOffset> for u64 {
+    fn from(value: StreamingInfoOffset) -> Self {
+        match value {
+            StreamingInfoOffset::Small(v) => v as u64,
+            StreamingInfoOffset::Big(v) => v,
+        }
+    }
 }
 
 #[derive(DekuRead, Clone, Debug)]
@@ -152,6 +186,7 @@ pub struct SubMesh {
 }
 
 #[derive(DekuRead, Clone, Debug)]
+#[deku(ctx = "_version: UnityVersion")]
 pub struct VertexData {
     pub vertex_count: u32,
     pub channels: UnityArray<ChannelInfo>,
@@ -239,6 +274,7 @@ pub struct StaticBatchInfo {
 }
 
 #[derive(DekuRead, Clone, Debug)]
+#[deku(ctx = "version: UnityVersion")]
 pub struct Texture2D {
     pub name: CharArray,
     pub forced_fallback_format: i32,
@@ -259,6 +295,7 @@ pub struct Texture2D {
     pub lightmap_format: i32,
     pub color_space: ColorSpace,
     pub data: UnityArray<u8>,
+    #[deku(ctx = "version")]
     pub streaming_info: StreamingInfo,
 }
 
@@ -313,6 +350,7 @@ pub enum ColorSpace {
 }
 
 #[derive(DekuRead, Clone, Debug)]
+#[deku(ctx = "_version: UnityVersion")]
 pub struct MeshFilter {
     pub game_object: PPtr<GameObject>,
     pub mesh: PPtr<Mesh>,

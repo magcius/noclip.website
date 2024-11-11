@@ -3,9 +3,39 @@ use std::{collections::HashMap, fmt::Debug, hash::Hash, marker::PhantomData};
 use wasm_bindgen::prelude::*;
 use deku::{bitvec::{BitSlice, Msb0}, ctx::BitSize, prelude::*};
 
+// Important: these must be ordered by chronological release date, so
+// PartialOrd can correctly compare them.
+#[wasm_bindgen(js_name = "UnityVersion")]
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+pub enum UnityVersion {
+    V2019_4_39f1,
+    V2020_3_16f1,
+    V2021_3_27f1,
+}
+
 #[derive(Clone, Debug)]
 pub struct UnityArray<T> {
     pub values: Vec<T>,
+}
+
+impl<'a, T> DekuRead<'a, UnityVersion> for UnityArray<T> where T: DekuRead<'a, UnityVersion> {
+    fn read(
+        input: &'a deku::bitvec::BitSlice<u8, deku::bitvec::Msb0>,
+        version: UnityVersion,
+    ) -> Result<(&'a deku::bitvec::BitSlice<u8, deku::bitvec::Msb0>, Self), DekuError>
+    where
+        Self: Sized {
+            let (mut rest, count) = i32::read(input, ())?;
+            let mut values = Vec::new();
+            for _ in 0..count {
+                let (new_rest, value) = T::read(rest, version)?;
+                rest = new_rest;
+                values.push(value);
+            }
+            Ok((rest, UnityArray {
+                values,
+            }))
+    }
 }
 
 impl<'a, T> DekuRead<'a> for UnityArray<T> where T: DekuRead<'a> {
@@ -16,7 +46,7 @@ impl<'a, T> DekuRead<'a> for UnityArray<T> where T: DekuRead<'a> {
     where
         Self: Sized {
             let (mut rest, count) = i32::read(input, ctx)?;
-            let mut values = Vec::with_capacity(count as usize);
+            let mut values = Vec::new();
             for _ in 0..count {
                 let (new_rest, value) = T::read(rest, ctx)?;
                 rest = new_rest;
@@ -50,12 +80,39 @@ impl<'a, K, V> DekuRead<'a> for Map<K, V>
     where
         Self: Sized {
             let (mut rest, count) = i32::read(input, ctx)?;
-            let mut keys = Vec::with_capacity(count as usize);
-            let mut values = Vec::with_capacity(count as usize);
+            let mut keys = Vec::new();
+            let mut values = Vec::new();
             for _ in 0..count {
                 let (new_rest, key) = K::read(rest, ctx)?;
                 rest = new_rest;
                 let (new_rest, value) = V::read(rest, ctx)?;
+                rest = new_rest;
+                keys.push(key);
+                values.push(value);
+            }
+            Ok((rest, Map {
+                keys,
+                values,
+            }))
+    }
+}
+
+impl<'a, K, V> DekuRead<'a, UnityVersion> for Map<K, V>
+    where K: DekuRead<'a>, V: DekuRead<'a, UnityVersion>
+{
+    fn read(
+        input: &'a deku::bitvec::BitSlice<u8, deku::bitvec::Msb0>,
+        version: UnityVersion,
+    ) -> Result<(&'a deku::bitvec::BitSlice<u8, deku::bitvec::Msb0>, Self), DekuError>
+    where
+        Self: Sized {
+            let (mut rest, count) = i32::read(input, ())?;
+            let mut keys = Vec::new();
+            let mut values = Vec::new();
+            for _ in 0..count {
+                let (new_rest, key) = K::read(rest, ())?;
+                rest = new_rest;
+                let (new_rest, value) = V::read(rest, version)?;
                 rest = new_rest;
                 keys.push(key);
                 values.push(value);
@@ -87,7 +144,6 @@ pub struct CharArray {
     count: u32,
     #[deku(count = "*count")]
     bytes: Vec<u8>,
-    // align to the nearest 4 byte boundary
     #[deku(count = "(4 - deku::byte_offset % 4) % 4")] _alignment: Vec<u8>,
 }
 
@@ -197,7 +253,7 @@ pub struct Matrix4x4 {
 }
 
 fn unpack_i32s(input: &BitSlice<u8, Msb0>, num_items: usize, bit_size: usize) -> Result<(&BitSlice<u8, Msb0>, Vec<i32>), DekuError> {
-    let mut result = Vec::with_capacity(num_items);
+    let mut result = Vec::new();
     let mut rest = input;
     for _ in 0..num_items {
         let (new_rest, value) = i32::read(rest, BitSize(bit_size))?;
@@ -264,7 +320,7 @@ impl<'a> DekuRead<'a> for Packedf32Vec {
 
             let max = ((1 << bit_size) as f32) - 1.0;
             let (_, ints) = unpack_i32s(rest, num_items as usize, bit_size as usize)?;
-            let mut result = Vec::with_capacity(num_items as usize);
+            let mut result = Vec::new();
             for v in ints {
                 result.push(start + (v as f32) * scale / max);
             }

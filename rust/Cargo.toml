@@ -15,6 +15,8 @@ wasm-opt = ['-O', '--enable-bulk-memory']
 
 [package.metadata.wasm-pack.profile.profiling]
 wasm-opt = ['-Os', '--debuginfo']
+demangle-name-section = true
+dwarf-debug-info = true
 
 [profile.release]
 lto = true

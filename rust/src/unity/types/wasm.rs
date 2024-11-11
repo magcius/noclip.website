@@ -1,48 +1,25 @@
 use std::collections::HashMap;
 
-use crate::unity::common::{ColorRGBA, Matrix4x4, PPtr, Quaternion, Vec2, Vec3, Vec4, AABB};
 use noclip_macros::{FromStructPerField, FromEnumPerVariant, from};
-
-use super::{v2019_4_39f1, v2020_3_16f1, v2021_3_27f1};
 use wasm_bindgen::prelude::*;
-use deku::DekuContainerRead;
+use deku::{DekuRead, bitvec::BitSlice};
+
+use super::common::{ColorRGBA, Matrix4x4, PPtr, Quaternion, Vec2, Vec3, Vec4, AABB, UnityVersion};
+use super::binary;
 
 macro_rules! define_create {
     ($t:ident, $u:expr) => {
         #[wasm_bindgen(js_class = $u)]
         impl $t {
             pub fn create(version: UnityVersion, data: &[u8]) -> Result<$t, String> {
-                match version {
-                    UnityVersion::V2019_4_39f1 => {
-                        match v2019_4_39f1::$t::from_bytes((data, 0)) {
-                            Ok((_, value)) => Ok(value.into()),
-                            Err(err) => return Err(format!("{:?}", err)),
-                        }
-                    },
-                    UnityVersion::V2020_3_16f1 => {
-                        match v2020_3_16f1::$t::from_bytes((data, 0)) {
-                            Ok((_, value)) => Ok(value.into()),
-                            Err(err) => return Err(format!("{:?}", err)),
-                        }
-                    },
-                    UnityVersion::V2021_3_27f1 => {
-                        match v2021_3_27f1::$t::from_bytes((data, 0)) {
-                            Ok((_, value)) => Ok(value.into()),
-                            Err(err) => return Err(format!("{:?}", err)),
-                        }
-                    },
+                let bitslice = BitSlice::from_slice(data);
+                match binary::$t::read(&bitslice, version) {
+                    Ok((_, value)) => Ok(value.into()),
+                    Err(err) => return Err(format!("{:?}", err)),
                 }
             }
         }
     };
-}
-
-#[wasm_bindgen(js_name = "UnityVersion")]
-#[derive(Debug, Clone, Copy)]
-pub enum UnityVersion {
-    V2019_4_39f1,
-    V2020_3_16f1,
-    V2021_3_27f1,
 }
 
 #[wasm_bindgen(js_name = "UnityPPtr")]
@@ -63,14 +40,14 @@ impl<T> From<PPtr<T>> for WasmFriendlyPPtr {
 
 #[wasm_bindgen(js_name = "UnityComponent")]
 #[derive(FromStructPerField)]
-#[from(v2019_4_39f1::Component)]
+#[from(binary::Component)]
 pub struct Component {
     pub game_object: WasmFriendlyPPtr,
 }
 
 #[wasm_bindgen(js_name = "UnityGameObject", getter_with_clone)]
 #[derive(Debug, FromStructPerField)]
-#[from(v2019_4_39f1::GameObject)]
+#[from(binary::GameObject)]
 pub struct GameObject {
     pub components: Vec<WasmFriendlyPPtr>,
     pub layer: u32,
@@ -81,7 +58,7 @@ pub struct GameObject {
 
 #[wasm_bindgen(js_name = "UnityTransform", getter_with_clone)]
 #[derive(FromStructPerField, Debug)]
-#[from(v2019_4_39f1::Transform)]
+#[from(binary::Transform)]
 pub struct Transform {
     pub game_object: WasmFriendlyPPtr,
     pub local_rotation: Quaternion,
@@ -93,7 +70,7 @@ pub struct Transform {
 
 #[wasm_bindgen(js_name = "UnityMaterial", getter_with_clone)]
 #[derive(FromStructPerField)]
-#[from(v2019_4_39f1::Material)]
+#[from(binary::Material)]
 pub struct Material {
     pub name: String,
     pub shader: WasmFriendlyPPtr,
@@ -138,7 +115,7 @@ impl Material {
 
 #[wasm_bindgen(js_name = "UnityTexEnv")]
 #[derive(FromStructPerField, Debug, Clone)]
-#[from(v2019_4_39f1::TexEnv)]
+#[from(binary::TexEnv)]
 pub struct TexEnv {
     pub texture: WasmFriendlyPPtr,
     pub scale: Vec2,
@@ -147,7 +124,7 @@ pub struct TexEnv {
 
 #[wasm_bindgen(js_name = "UnityMesh", getter_with_clone)]
 #[derive(Debug, Clone, FromStructPerField)]
-#[from(v2019_4_39f1::Mesh)]
+#[from(binary::Mesh)]
 pub struct Mesh {
     pub name: String,
     pub submeshes: Vec<SubMesh>,
@@ -222,7 +199,7 @@ impl Mesh {
 
 #[wasm_bindgen(js_name = "UnityIndexFormat")]
 #[derive(FromEnumPerVariant, Debug, Clone, Copy)]
-#[from(v2019_4_39f1::IndexFormat)]
+#[from(binary::IndexFormat)]
 pub enum IndexFormat {
     UInt16,
     UInt32,
@@ -230,7 +207,7 @@ pub enum IndexFormat {
 
 #[wasm_bindgen(js_name = "UnityMeshCompression")]
 #[derive(FromEnumPerVariant, Debug, Clone, Copy)]
-#[from(v2019_4_39f1::MeshCompression)]
+#[from(binary::MeshCompression)]
 pub enum MeshCompression {
     Off = 0,
     Low = 1,
@@ -240,7 +217,7 @@ pub enum MeshCompression {
 
 #[wasm_bindgen(js_name = "UnityCompressedMesh", getter_with_clone)]
 #[derive(Clone, Debug, FromStructPerField)]
-#[from(v2019_4_39f1::CompressedMesh)]
+#[from(binary::CompressedMesh)]
 pub struct CompressedMesh {
     pub vertices: Vec<f32>,
     pub uv: Vec<f32>,
@@ -281,7 +258,7 @@ impl CompressedMesh {
 
 #[wasm_bindgen(js_name = "UnityVertexData", getter_with_clone)]
 #[derive(Clone, Debug, FromStructPerField)]
-#[from(v2019_4_39f1::VertexData)]
+#[from(binary::VertexData)]
 pub struct VertexData {
     pub vertex_count: u32,
     pub channels: Vec<ChannelInfo>,
@@ -338,7 +315,7 @@ impl VertexStreamInfo {
 
 #[wasm_bindgen(js_name = "UnityChannelInfo")]
 #[derive(Clone, Debug, FromStructPerField)]
-#[from(v2019_4_39f1::ChannelInfo)]
+#[from(binary::ChannelInfo)]
 pub struct ChannelInfo {
     pub stream: u8,
     pub offset: u8,
@@ -369,7 +346,7 @@ impl ChannelInfo {
 
 #[wasm_bindgen(js_name = "UnityVertexFormat")]
 #[derive(FromEnumPerVariant, Debug, Clone, Copy)]
-#[from(v2019_4_39f1::VertexFormat)]
+#[from(binary::VertexFormat)]
 pub enum VertexFormat {
     Float,
     Float16,
@@ -387,7 +364,7 @@ pub enum VertexFormat {
 
 #[wasm_bindgen(js_name = "UnitySubMesh")]
 #[derive(Clone, Debug, FromStructPerField)]
-#[from(v2019_4_39f1::SubMesh)]
+#[from(binary::SubMesh)]
 pub struct SubMesh {
     pub first_byte: u32,
     pub index_count: u32,
@@ -400,8 +377,7 @@ pub struct SubMesh {
 
 #[wasm_bindgen(js_name = "UnityStreamingInfo", getter_with_clone)]
 #[derive(Clone, Debug, FromStructPerField)]
-#[from(v2019_4_39f1::StreamingInfo)]
-#[from(v2021_3_27f1::StreamingInfo)]
+#[from(binary::StreamingInfo)]
 pub struct StreamingInfo {
     pub offset: u64,
     pub size: u32,
@@ -410,7 +386,7 @@ pub struct StreamingInfo {
 
 #[wasm_bindgen(js_name = "UnityTexture2D", getter_with_clone)]
 #[derive(Clone, Debug, FromStructPerField)]
-#[from(v2019_4_39f1::Texture2D)]
+#[from(binary::Texture2D)]
 pub struct Texture2D {
     pub name: String,
     pub forced_fallback_format: i32,
@@ -436,7 +412,7 @@ pub struct Texture2D {
 
 #[wasm_bindgen(js_name = "UnityGLTextureSettings", getter_with_clone)]
 #[derive(Clone, Debug, FromStructPerField)]
-#[from(v2019_4_39f1::GLTextureSettings)]
+#[from(binary::GLTextureSettings)]
 pub struct GLTextureSettings {
     pub filter_mode: TextureFilterMode,
     pub aniso: i32,
@@ -448,7 +424,7 @@ pub struct GLTextureSettings {
 
 #[wasm_bindgen(js_name = "UnityTextureFilterMode")]
 #[derive(FromEnumPerVariant, Clone, Copy, Debug)]
-#[from(v2019_4_39f1::TextureFilterMode)]
+#[from(binary::TextureFilterMode)]
 pub enum TextureFilterMode {
     Nearest = 0,
     Bilinear = 1,
@@ -457,7 +433,7 @@ pub enum TextureFilterMode {
 
 #[wasm_bindgen(js_name = "UnityTextureWrapMode")]
 #[derive(FromEnumPerVariant, Clone, Copy, Debug)]
-#[from(v2019_4_39f1::TextureWrapMode)]
+#[from(binary::TextureWrapMode)]
 pub enum TextureWrapMode {
     Repeat = 0,
     Clamp = 1,
@@ -467,7 +443,7 @@ pub enum TextureWrapMode {
 
 #[wasm_bindgen(js_name = "UnityTextureFormat")]
 #[derive(FromEnumPerVariant, Clone, Copy, Debug)]
-#[from(v2019_4_39f1::TextureFormat)]
+#[from(binary::TextureFormat)]
 pub enum TextureFormat {
     Alpha8       = 0x01,
     RGB24        = 0x03,
@@ -484,7 +460,7 @@ pub enum TextureFormat {
 
 #[wasm_bindgen(js_name = "UnityTextureColorSpace")]
 #[derive(FromEnumPerVariant, Clone, Copy, Debug)]
-#[from(v2019_4_39f1::ColorSpace)]
+#[from(binary::ColorSpace)]
 pub enum ColorSpace {
     Linear = 0x00,
     SRGB   = 0x01,
@@ -492,7 +468,7 @@ pub enum ColorSpace {
 
 #[wasm_bindgen(js_name = "UnityMeshFilter", getter_with_clone)]
 #[derive(Clone, Debug, FromStructPerField)]
-#[from(v2019_4_39f1::MeshFilter)]
+#[from(binary::MeshFilter)]
 pub struct MeshFilter {
     pub game_object: WasmFriendlyPPtr,
     pub mesh: WasmFriendlyPPtr,
@@ -500,8 +476,7 @@ pub struct MeshFilter {
 
 #[wasm_bindgen(js_name = "UnityMeshRenderer", getter_with_clone)]
 #[derive(Clone, Debug, FromStructPerField)]
-#[from(v2019_4_39f1::MeshRenderer)]
-#[from(v2021_3_27f1::MeshRenderer)]
+#[from(binary::MeshRenderer)]
 pub struct MeshRenderer {
     pub game_object: WasmFriendlyPPtr,
     pub enabled: u8,
@@ -531,7 +506,7 @@ pub struct MeshRenderer {
 
 #[wasm_bindgen(js_name = "UnityStaticBatchInfo", getter_with_clone)]
 #[derive(Clone, Debug, FromStructPerField)]
-#[from(v2019_4_39f1::StaticBatchInfo)]
+#[from(binary::StaticBatchInfo)]
 pub struct StaticBatchInfo {
     pub first_submesh: u16,
     pub submesh_count: u16,

@@ -1,10 +1,10 @@
 use deku::{bitvec::{BitSlice, BitVec}, prelude::*};
 use wasm_bindgen::prelude::*;
 
-use crate::unity::common::NullTerminatedAsciiString;
-use super::types::object::WasmFriendlyPPtr;
+use crate::unity::types::common::{NullTerminatedAsciiString, UnityArray};
+use super::types::wasm::WasmFriendlyPPtr;
 
-use super::{class_id::ClassID, common::UnityArray};
+use crate::unity::types::class_id::ClassID;
 
 #[wasm_bindgen(js_name = "UnityAssetFile")]
 pub struct AssetFile {
@@ -60,12 +60,18 @@ impl AssetFile {
         let metadata = self.get_metadata();
         let mut result = Vec::new();
         for obj in &metadata.objects {
-            let byte_start = match obj.small_file_byte_start {
-                Some(start) => start as u64,
-                None => obj.large_file_byte_start.unwrap() as u64,
+            let byte_start = obj.get_byte_start();
+            let class_id = if obj.serialized_type_index >= 0 {
+                match metadata.type_tree.get(obj.serialized_type_index as usize) {
+                    Some(obj_type) => obj_type.header.raw_type_id,
+                    None => {
+                        println!("bogus type: index {}, len {}", obj.serialized_type_index, metadata.type_tree.len());
+                        ClassID::UnknownType
+                    }
+                }
+            } else {
+                ClassID::MonoBehavior
             };
-            let obj_type = &metadata.type_tree[obj.serialized_type_index as usize];
-            let class_id = obj_type.header.raw_type_id;
             result.push(AssetFileObject {
                 file_id:obj.file_id,
                 byte_start,
@@ -81,14 +87,14 @@ impl AssetFile {
         let metadata = self.get_metadata();
         metadata.externals.values
             .get(idx)
-            .map(|external_file| (&external_file.asset_path_ascii).into())
+            .map(|external_file| (&external_file.path_name_ascii).into())
     }
 }
 
 #[wasm_bindgen(js_name = "UnityAssetFileObject")]
 pub struct AssetFileObject {
     pub file_id: i64,
-    pub byte_start: u64,
+    pub byte_start: i64,
     pub byte_size: usize,
     pub class_id: ClassID,
 }
@@ -148,6 +154,15 @@ struct ObjectInfo {
     pub large_file_byte_start: Option<i64>,
     pub byte_size: i32,
     pub serialized_type_index: i32,
+}
+
+impl ObjectInfo {
+    pub fn get_byte_start(&self) -> i64 {
+        match self.small_file_byte_start {
+            Some(v) => v as i64,
+            None => self.large_file_byte_start.unwrap(),
+        }
+    }
 }
 
 #[derive(DekuRead, Clone, Debug)]
@@ -240,9 +255,11 @@ struct FileIdentifier {
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
+    use std::path::PathBuf;
+    use std::str::FromStr;
 
-    use crate::unity::types::object::{GameObject, Mesh, MeshFilter, MeshRenderer, Transform, UnityVersion};
-    use crate::unity::class_id::ClassID;
+    use crate::unity::types::common::UnityVersion;
+    use crate::unity::types::wasm::{GameObject, Mesh, MeshFilter, MeshRenderer, Transform};
 
     use super::*;
     use env_logger;
@@ -250,12 +267,29 @@ mod tests {
 
     #[test]
     fn test() {
-        let data = std::fs::read("M:\\Development\\NITRO_BMD\\data\\AShortHike\\level2").unwrap();
-        let version = UnityVersion::V2019_4_39f1;
+        let mut base_path = PathBuf::from_str("C:\\Users\\ifnsp\\dev\\noclip.website\\data\\AShortHike").unwrap();
+        let data = std::fs::read(&base_path.join("level2")).unwrap();
+        let version = UnityVersion::V2021_3_27f1;
         let mut asset_file = AssetFile::initialize_with_header_chunk(&data).unwrap();
         dbg!(&asset_file.header);
         asset_file.append_metadata_chunk(&data).unwrap();
         let metadata = asset_file.metadata.as_ref().unwrap();
+
+        let mut ext_files = Vec::new();
+        for ext in &metadata.externals.values {
+            let ext_name: String = ext.path_name_ascii.clone().into();
+            let ext_path = base_path.join(&ext_name);
+            let Ok(ext_data) = std::fs::read(&ext_path) else {
+                println!("couldn't read {:?}", ext_path);
+                continue;
+            };
+            let mut ext_file = AssetFile::initialize_with_header_chunk(&ext_data).unwrap();
+            ext_file.append_metadata_chunk(&ext_data).unwrap();
+            println!("{:?}: v{}", ext_path, ext_file.header.version);
+            ext_file.get_objects();
+            println!("successfully read {:?}", ext_path);
+            ext_files.push(ext_file);
+        }
 
         let mut objects = HashMap::new();
         let mut object_infos = HashMap::new();
@@ -265,10 +299,7 @@ mod tests {
             if !matches!(obj_type.header.raw_type_id, ClassID::GameObject) {
                 continue;
             }
-            let byte_start = asset_file.get_data_offset() as usize + match obj.small_file_byte_start {
-                Some(start) => start as usize,
-                None => obj.large_file_byte_start.unwrap() as usize,
-            };
+            let byte_start = asset_file.get_data_offset() as usize + obj.get_byte_start() as usize;
             let byte_size = obj.byte_size as usize;
             let data = &data[byte_start..byte_start + byte_size];
             let game_object = GameObject::create(version, data).unwrap();
@@ -283,10 +314,7 @@ mod tests {
                 }
                 let obj: &&ObjectInfo = object_infos.get(&component_ptr.path_id).unwrap();
                 let obj_type = &metadata.type_tree[obj.serialized_type_index as usize];
-                let byte_start = asset_file.get_data_offset() as usize + match obj.small_file_byte_start {
-                    Some(start) => start as usize,
-                    None => obj.large_file_byte_start.unwrap() as usize,
-                };
+                let byte_start = asset_file.get_data_offset() as usize + obj.get_byte_start() as usize;
                 let byte_size = obj.byte_size as usize;
                 let bigdata = &data;
                 let data = &data[byte_start..byte_start + byte_size];
@@ -296,20 +324,18 @@ mod tests {
                     ClassID::RectTransform => {Transform::create(version, data).unwrap();},
                     ClassID::MeshFilter => {
                         let filter = MeshFilter::create(version, data).unwrap();
+                        if filter.mesh.path_id == 0 || filter.mesh.file_index != 0 {
+                            continue;
+                        }
                         let obj = object_infos.get(&filter.mesh.path_id).unwrap();
-                        let byte_start = asset_file.get_data_offset() as usize + match obj.small_file_byte_start {
-                            Some(start) => start as usize,
-                            None => obj.large_file_byte_start.unwrap() as usize,
-                        };
+                        let byte_start = asset_file.get_data_offset() as usize + obj.get_byte_start() as usize;
                         let byte_size = obj.byte_size as usize;
                         let data = &bigdata[byte_start..byte_start + byte_size];
 
-                        if filter.mesh.path_id == 42 {
-                            let mut mesh = Mesh::create(version, data).unwrap();
-                            mesh.submeshes.clear();
-                            mesh.index_buffer.clear();
-                            dbg!("JJJ BBB", mesh);
-                        }
+                        println!("reading mesh {}", obj.file_id);
+                        let mut mesh = Mesh::create(version, data).unwrap();
+                        mesh.submeshes.clear();
+                        mesh.index_buffer.clear();
                     },
                     ClassID::MeshRenderer => {MeshRenderer::create(version, data).unwrap();},
                     s => {},
