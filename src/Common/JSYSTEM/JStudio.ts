@@ -459,7 +459,6 @@ abstract class STBObject {
             case 0x3: debugger; break;
             case 0x80: debugger; break;
             case 0x81:
-                debugger;
                 const idSize = file.view.getUint16(dataOffset + 2);
                 assert( idSize == 4 );
                 const id = file.view.getUint32(dataOffset + 4);
@@ -722,7 +721,7 @@ class TActorObject extends STBObject {
             case 0x4b: keyIdx = Actor_ValIdx.ANIM_TRANSITION; break;
 
             case 0x39: this.mAdaptor.adaptor_do_SHAPE(dataOp, data, dataSize); return;
-            case 0x3a: debugger; this.mAdaptor.adaptor_do_ANIMATION(dataOp, data, dataSize); return;
+            case 0x3a: this.mAdaptor.adaptor_do_ANIMATION(dataOp, data, dataSize); return;
             case 0x43: this.mAdaptor.adaptor_do_ANIMATION_MODE(dataOp, data, dataSize); return;
             case 0x4c: debugger; this.mAdaptor.adaptor_do_TEXTURE_ANIMATION(dataOp, data, dataSize); return;
             case 0x4e: debugger; this.mAdaptor.adaptor_do_TEXTURE_ANIMATION_MODE(dataOp, data, dataSize); return;
