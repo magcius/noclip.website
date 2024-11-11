@@ -375,9 +375,9 @@ export class dDemo_manager_c {
         if (this.mControl.isSuspended()) { this.mControl.setSuspend(0); }
 
         if (this.mControl.forward(dtFrames)) {
-            this.mFrame++;
+            this.mFrame += dtFrames;
             if (!this.mControl.isSuspended()) {
-                this.mFrameNoMsg++;
+                this.mFrameNoMsg += dtFrames;
             }
         } else {
             this.mMode = EDemoMode.Ended;
