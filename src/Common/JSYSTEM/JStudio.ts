@@ -184,6 +184,8 @@ function readData(dataOp: TEOperationData, dataOffset: number, dataSize: number,
     switch (dataOp) {
         case TEOperationData.IMMEDIATE:
         case TEOperationData.TIME:
+            return file.view.getFloat32(dataOffset);
+
         case TEOperationData.FUNCVALUE_INDEX:
         case TEOperationData.OBJECT_INDEX:
             return file.view.getUint32(dataOffset);
