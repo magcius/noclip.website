@@ -17,7 +17,7 @@ import { J3DModelInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase.js';
 import * as JPA from '../Common/JSYSTEM/JPA.js';
 import { BTIData } from '../Common/JSYSTEM/JUTTexture.js';
 import { dfRange } from '../DebugFloaters.js';
-import { getMatrixAxisY, getMatrixAxisZ, range } from '../MathHelpers.js';
+import { getMatrixAxisY, getMatrixAxisZ, MathConstants, range } from '../MathHelpers.js';
 import { SceneContext } from '../SceneBase.js';
 import { TextureMapping } from '../TextureHolder.js';
 import { setBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
@@ -481,6 +481,32 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
 
         viewerInput.camera.setClipPlanes(nearPlane, farPlane);
 
+        // noclip modification: if we're paused, allow noclip camera control during demos
+        const isPaused = viewerInput.deltaTime === 0;
+
+        // TODO: Determine the correct place for this
+        // dCamera_c::Store() sets the camera params if the demo camera is active
+        const demoCam = this.globals.scnPlay.demo.getSystem().getCamera();
+        if (demoCam && !isPaused) {
+            let viewPos = this.globals.cameraPosition;
+            let targetPos = vec3.add(scratchVec3a, this.globals.cameraPosition, this.globals.cameraFwd);
+            let upVec = vec3.set(scratchVec3b, 0, 1, 0);
+
+            if(demoCam.mFlags & EDemoCamFlags.HasTargetPos) { targetPos = demoCam.mTargetPosition; }
+            if(demoCam.mFlags & EDemoCamFlags.HasEyePos) { viewPos = demoCam.mViewPosition; }
+            if(demoCam.mFlags & EDemoCamFlags.HasUpVec) { upVec = demoCam.mUpVector; }
+            mat4.targetTo(viewerInput.camera.worldMatrix, viewPos, targetPos, upVec);
+            
+            if(demoCam.mFlags & EDemoCamFlags.HasFovY) { viewerInput.camera.fovY = demoCam.mFovy * MathConstants.DEG_TO_RAD; }
+            if(demoCam.mFlags & EDemoCamFlags.HasRoll) { if(demoCam.mRoll > 0) debugger; /* Untested. Remove once confirmed working */ }
+            if(demoCam.mFlags & EDemoCamFlags.HasAspect) { debugger; /* Untested. Remove once confirmed working */ }
+            if(demoCam.mFlags & EDemoCamFlags.HasNearZ) { viewerInput.camera.near = demoCam.mProjNear; }
+            if(demoCam.mFlags & EDemoCamFlags.HasFarZ) { viewerInput.camera.far = demoCam.mProjFar; }
+
+            viewerInput.camera.setClipPlanes(viewerInput.camera.near, viewerInput.camera.far);
+            viewerInput.camera.worldMatrixUpdated();
+        }
+
         this.globals.camera = viewerInput.camera;
 
         // Not sure exactly where this is ordered...
@@ -777,31 +803,6 @@ class d_s_play extends fopScn {
         // From executeEvtManager() -> SpecialProcPackage()
         if (globals.scnPlay.demo.getMode() == EDemoMode.Ended) {
             globals.scnPlay.demo.remove();
-        }
-
-        // noclip modification: if we're paused, allow noclip camera control
-        const isPaused = globals.context.viewerInput.deltaTime === 0;
-
-        // TODO: Determine the correct place for this
-        // dCamera_c::Store() sets the camera params if the demo camera is active
-        const demoCam = this.demo.getSystem().getCamera();
-        if (demoCam && !isPaused) {
-            let viewPos = globals.cameraPosition;
-            let targetPos = vec3.add(scratchVec3a, globals.cameraPosition, globals.cameraFwd);
-            let upVec = vec3.set(scratchVec3b, 0, 1, 0);
-
-            if(demoCam.mFlags & EDemoCamFlags.HasTargetPos) { targetPos = demoCam.mTargetPosition; }
-            if(demoCam.mFlags & EDemoCamFlags.HasEyePos) { viewPos = demoCam.mViewPosition; }
-            if(demoCam.mFlags & EDemoCamFlags.HasUpVec) { upVec = demoCam.mUpVector; }
-            mat4.targetTo(globals.camera.worldMatrix, viewPos, targetPos, upVec);
-            
-            if(demoCam.mFlags & EDemoCamFlags.HasFovY) { globals.camera.fovY = demoCam.mFovy; }
-            if(demoCam.mFlags & EDemoCamFlags.HasRoll) { debugger; /* Untested. Remove once confirmed working */ }
-            if(demoCam.mFlags & EDemoCamFlags.HasAspect) { debugger; /* Untested. Remove once confirmed working */ }
-            if(demoCam.mFlags & EDemoCamFlags.HasNearZ) { globals.camera.near = demoCam.mProjNear; debugger; /* Untested. Remove once confirmed working */ }
-            if(demoCam.mFlags & EDemoCamFlags.HasFarZ) { globals.camera.far = demoCam.mProjFar; debugger; /* Untested. Remove once confirmed working */ }
-
-            globals.camera.worldMatrixUpdated();
         }
     }
 
