@@ -984,6 +984,7 @@ class DemoDesc {
         public rotY: number = 0,
         public startCode?: number,
         public eventFlags?: number,
+        public startFrame?: number, // noclip modification for easier debugging
     ) {}
 
     async load(globals: dGlobals) {
@@ -1016,13 +1017,13 @@ class DemoDesc {
         if (!demoData)
             demoData = globals.modelCache.resCtrl.getStageResByName(ResType.Stb, "Stage", this.stbFilename);
         
-        if( demoData ) { globals.scnPlay.demo.create(demoData, this.offsetPos, this.rotY / 180.0 * Math.PI); }
+        if( demoData ) { globals.scnPlay.demo.create(demoData, this.offsetPos, this.rotY / 180.0 * Math.PI, this.startFrame); }
         else { console.warn('Failed to load demo data:', this.stbFilename); }
     }
 }
 
 const demoDescs = [
-    new DemoDesc("sea", "Awaken", "awake.stb", 44, 0, [-220000.0, 0.0, 320000.0], 0.0, 0, 0),
+    new DemoDesc("sea", "Awaken", "awake.stb", 44, 0, [-220000.0, 0.0, 320000.0], 0.0, 0, 0, 525),
     new DemoDesc("sea", "Stolen Sister", "stolensister.stb", 44, 9, [0.0, 0.0, 20000.0], 0, 0, 0),
     new DemoDesc("sea", "Departure", "departure.stb", 44, 10, [-200000.0, 0.0, 320000.0], 0.0, 204, 0),
     new DemoDesc("sea", "Pirate Zelda Fly", "kaizoku_zelda_fly.stb", 44, 0, [-200000.0, 0.0, 320000.0], 180.0, 0, 0),
