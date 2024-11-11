@@ -188,6 +188,21 @@ function dataOpToString(enumValue: TEOperationData) {
     }
 }
 
+function logKeyAction(keyData: DataVal[], dataOp: number ) {
+    const vals = keyData.map(d => {
+        switch (dataOp) {
+            case TEOperationData.FUNCVALUE_INDEX:
+            case TEOperationData.OBJECT_INDEX:
+                return d.asInt;
+            case TEOperationData.FUNCVALUE_NAME:
+            case TEOperationData.OBJECT_NAME:
+                return d.asStr;
+            default: 
+                return d.asFloat;
+        }} );
+    return vals;
+}
+
 // Parse data from a DataView as either a number or a string, based on the dataOp
 function readData(dataOp: TEOperationData, dataOffset: number, dataSize: number, file: Reader): DataVal {
     switch (dataOp) {
@@ -825,23 +840,11 @@ class TActorObject extends STBObject {
             this.mAdaptor.adaptor_setVariableValue(this, keyIdx + i, dataOp, keyData[i]);
         }
 
-        if (this.mAdaptor.enableLog) {
-            const vals = keyData.map(d => {
-                switch (dataOp) {
-                    case TEOperationData.FUNCVALUE_INDEX:
-                    case TEOperationData.OBJECT_INDEX:
-                        return d.asInt;
-                    case TEOperationData.FUNCVALUE_NAME:
-                    case TEOperationData.OBJECT_NAME:
-                        return d.asStr;
-                    default: 
-                        return d.asFloat;
-                }} );
-            console.debug(`Set${keyToString(keyIdx, keyCount)}: ${dataOpToString(dataOp)} [${vals}]`);
+        if (this.mAdaptor.enableLog) { 
+            console.debug(`[Act] Set${keyToString(keyIdx, keyCount)}: ${dataOpToString(dataOp)} [${logKeyAction(keyData, dataOp )}]`); 
         }
     }
 }
-
 
 //----------------------------------------------------------------------------------------------------------------------
 // Camera
@@ -856,8 +859,8 @@ const enum Camera_Cmd {
     SET_TARGET_Y_POS = 0x001A,
     SET_TARGET_Z_POS = 0x001B,
     SET_TARGET_POS = 0x001C,
-    SET_PROJ_FOVY = 0x0026,
-    SET_VIEW_ROLL = 0x0027,
+    SET_PROJ_FOVY = 0x0027,
+    SET_VIEW_ROLL = 0x0026,
     SET_DIST_NEAR = 0x0028,
     SET_DIST_FAR = 0x0029,
     SET_DIST_NEAR_FAR = 0x002A,
@@ -875,6 +878,22 @@ const enum Camera_Track {
     DIST_NEAR = 0x08,
     DIST_FAR = 0x09,
     CAMERA_TRACKS_MAX = 0x0A,
+}
+
+function camKeyToString(enumValue: Camera_Track, count: number) {
+    switch (enumValue) {
+        case Camera_Track.EYE_X_POS: return "EYE_X_POS";
+        case Camera_Track.EYE_Y_POS: return "EYE_Y_POS";
+        case Camera_Track.EYE_Z_POS: return "EYE_Z_POS";
+        case Camera_Track.TARGET_X_POS: return "TARGET_X_POS";
+        case Camera_Track.TARGET_Y_POS: return "TARGET_Y_POS";
+        case Camera_Track.TARGET_Z_POS: return "TARGET_Z_POS";
+        case Camera_Track.PROJ_FOVY: return "PROJ_FOVY";
+        case Camera_Track.VIEW_ROLL: return "VIEW_ROLL";
+        case Camera_Track.DIST_NEAR: return "DIST_NEAR";
+        case Camera_Track.DIST_FAR: return "DIST_FAR";
+        case Camera_Track.CAMERA_TRACKS_MAX: return "CAMERA_TRACKS_MAX";
+    }
 }
 
 export abstract class TCamera extends JStage.TObject {
@@ -909,10 +928,10 @@ class TCameraAdaptor extends TAdaptor {
     ) { super(11); }
 
     adaptor_do_prepare(obj: STBObject): void {
-        this.mVariableValues[6].setOutput(this.mStageCam.JSGSetProjectionFovy);
-        this.mVariableValues[7].setOutput(this.mStageCam.JSGSetViewRoll);
-        this.mVariableValues[8].setOutput(this.mStageCam.JSGSetProjectionNear);
-        this.mVariableValues[9].setOutput(this.mStageCam.JSGSetProjectionFar);
+        this.mVariableValues[Camera_Track.PROJ_FOVY].setOutput(this.mStageCam.JSGSetProjectionFovy.bind(this.mStageCam));
+        this.mVariableValues[Camera_Track.VIEW_ROLL].setOutput(this.mStageCam.JSGSetViewRoll.bind(this.mStageCam));
+        this.mVariableValues[Camera_Track.DIST_NEAR].setOutput(this.mStageCam.JSGSetProjectionNear.bind(this.mStageCam));
+        this.mVariableValues[Camera_Track.DIST_FAR].setOutput(this.mStageCam.JSGSetProjectionFar.bind(this.mStageCam));
     }
 
     adaptor_do_begin(obj: STBObject): void {
@@ -926,10 +945,10 @@ class TCameraAdaptor extends TAdaptor {
 
         this.adaptor_setVariableValue_Vec(Camera_Track.EYE_X_POS, camPos);
         this.adaptor_setVariableValue_Vec(Camera_Track.TARGET_X_POS, targetPos);
-        this.mVariableValues[6].setValue_immediate(this.mStageCam.JSGGetProjectionFovy());
-        this.mVariableValues[7].setValue_immediate(this.mStageCam.JSGGetViewRoll());
-        this.mVariableValues[8].setValue_immediate(this.mStageCam.JSGGetProjectionNear());
-        this.mVariableValues[9].setValue_immediate(this.mStageCam.JSGGetProjectionFar());
+        this.mVariableValues[Camera_Track.PROJ_FOVY].setValue_immediate(this.mStageCam.JSGGetProjectionFovy());
+        this.mVariableValues[Camera_Track.VIEW_ROLL].setValue_immediate(this.mStageCam.JSGGetViewRoll());
+        this.mVariableValues[Camera_Track.DIST_NEAR].setValue_immediate(this.mStageCam.JSGGetProjectionNear());
+        this.mVariableValues[Camera_Track.DIST_FAR].setValue_immediate(this.mStageCam.JSGGetProjectionFar());
     }
 
     adaptor_do_end(obj: STBObject): void {
@@ -956,7 +975,6 @@ class TCameraAdaptor extends TAdaptor {
     }
 
     // Custom adaptor functions. These can be called from within TCameraObject::do_paragraph()
-
     adaptor_do_PARENT(dataOp: TEOperationData, data: number | string, unk0: number): void {
         debugger;
     }
@@ -971,6 +989,8 @@ class TCameraAdaptor extends TAdaptor {
 }
 
 class TCameraObject extends STBObject {
+    private enableLog = true;
+
     constructor(
         control: TControl,
         blockObj: TBlockObject,
@@ -1018,6 +1038,10 @@ class TCameraObject extends STBObject {
         for (let i = 0; i < keyCount; i++) {
             keyData[i] = readData(dataOp, dataOffset + i * 4, dataSize, file);
             this.mAdaptor.adaptor_setVariableValue(this, keyIdx + i, dataOp, keyData[i]);
+        }
+        
+        if (this.enableLog) { 
+            console.debug(`[Cam] Set${camKeyToString(keyIdx, keyCount)}: ${dataOpToString(dataOp)} [${logKeyAction(keyData, dataOp )}]`); 
         }
     }
 }
