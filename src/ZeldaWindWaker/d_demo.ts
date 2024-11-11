@@ -187,7 +187,7 @@ class dDemo_actor_c extends TActor {
             if ((this.mFlags & 1) == 0) {
                 return 0.0;
             } else {
-                switch(this.stbDataId) {
+                switch (this.stbDataId) {
                     // @TODO: Double check this, somehow
                     case 6: return this.stbData.getInt8(15);
                     case 5: return this.stbData.getInt8(11);
@@ -419,7 +419,7 @@ export function dDemo_setDemoData(globals: dGlobals, dtFrames: number, actor: fo
 
     demoActor.mModel = morf.model;
 
-    if ((enable & 0x20)) {
+    if ((enable & 0x20) && (demoActor.mNextBckId != demoActor.mBckId)) {
         const bckID = demoActor.mNextBckId;
         if (bckID & 0x10000)
             arcName = globals.roomCtrl.demoArcName;
@@ -432,19 +432,18 @@ export function dDemo_setDemoData(globals: dGlobals, dtFrames: number, actor: fo
         // void* i_sound = dDemo_getJaiPointer(a_name, bck, soundCount, soundIdxs);
         morf.setAnm(i_key, -1 as LoopMode, demoActor.getMorfParam(), 1.0, 0.0, -1.0);
         demoActor.mAnimationFrameMax = morf.frameCtrl.endFrame;
+    }
 
-        if (enable & 0x40) {
-            debugger;
-            if (demoActor.mAnimationFrame > 1.0) {
-                morf.frameCtrl.setFrame(demoActor.mAnimationFrame - 1.0);
-                morf.play(dtFrames);
-            } else {
-                morf.frameCtrl.setFrame(demoActor.mAnimationFrame);
-            }
-        } else {
+    if (enable & 0x40) {
+        debugger;
+        if (demoActor.mAnimationFrame > 1.0) {
+            morf.frameCtrl.setFrame(demoActor.mAnimationFrame - 1.0);
             morf.play(dtFrames);
-            console.log(morf.frameCtrl.currentTimeInFrames);
+        } else {
+            morf.frameCtrl.setFrame(demoActor.mAnimationFrame);
         }
+    } else {
+        morf.play(dtFrames);
     }
 
     return true;
