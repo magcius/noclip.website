@@ -122,6 +122,7 @@ class TVariableValue {
 
     // Value will be set only on next update 
     setValue_immediate(v: number): void {
+        assert(v !== undefined);
         this.mUpdateFunc = TVariableValue.update_immediate;
         this.mAge = 0;
         this.mUpdateParam = v;
@@ -129,6 +130,7 @@ class TVariableValue {
 
     // Value will be set to (mAge * v * x) each frame
     setValue_time(v: number): void {
+        assert(v !== undefined);
         this.mUpdateFunc = TVariableValue.update_time;
         this.mAge = 0;
         this.mUpdateParam = v;
@@ -136,6 +138,7 @@ class TVariableValue {
 
     // Value will be the result of a Function Value each frame
     setValue_functionValue(v?: FVB.TFunctionValue): void {
+        assert(v !== undefined);
         this.mUpdateFunc = TVariableValue.update_functionValue;
         this.mAge = 0;
         this.mUpdateParam = v;
@@ -166,6 +169,12 @@ const enum TEOperationData {
     OBJECT_INDEX = 0x19, // Set the value directly on the JStage object (e.g. an actor), don't store in the adaptor 
 };
 
+class DataVal {
+    asInt?: number;
+    asFloat?: number;
+    asStr?: string;
+}
+
 function dataOpToString(enumValue: TEOperationData) {
     switch (enumValue) {
         case TEOperationData.NONE: return "None"
@@ -180,19 +189,19 @@ function dataOpToString(enumValue: TEOperationData) {
 }
 
 // Parse data from a DataView as either a number or a string, based on the dataOp
-function readData(dataOp: TEOperationData, dataOffset: number, dataSize: number, file: Reader): number | string {
+function readData(dataOp: TEOperationData, dataOffset: number, dataSize: number, file: Reader): DataVal {
     switch (dataOp) {
         case TEOperationData.IMMEDIATE:
         case TEOperationData.TIME:
-            return file.view.getFloat32(dataOffset);
+            return { asInt: file.view.getUint32(dataOffset), asFloat: file.view.getFloat32(dataOffset) };
 
         case TEOperationData.FUNCVALUE_INDEX:
         case TEOperationData.OBJECT_INDEX:
-            return file.view.getUint32(dataOffset);
+            return { asInt: file.view.getUint32(dataOffset) };
 
         case TEOperationData.FUNCVALUE_NAME:
         case TEOperationData.OBJECT_NAME:
-            return readString(file.buffer, dataOffset, dataSize);
+            return { asStr: readString(file.buffer, dataOffset, dataSize) };
 
         default:
             assert(false, 'Unsupported data operation');
@@ -212,16 +221,16 @@ abstract class TAdaptor {
     abstract adaptor_do_data(obj: STBObject, id: number, data: DataView): void;
 
     // Set a single VariableValue update function, with the option of using FuncVals 
-    adaptor_setVariableValue(obj: STBObject, keyIdx: number, dataOp: TEOperationData, data: number | string) {
+    adaptor_setVariableValue(obj: STBObject, keyIdx: number, dataOp: TEOperationData, data: DataVal) {
         const varval = this.mVariableValues[keyIdx];
         const control = obj.mControl;
 
         switch (dataOp) {
             case TEOperationData.VOID: varval.setValue_none(); break;
-            case TEOperationData.IMMEDIATE: varval.setValue_immediate(data as number); break;
-            case TEOperationData.TIME: varval.setValue_time(data as number); break;
-            case TEOperationData.FUNCVALUE_NAME: varval.setValue_functionValue(control.getFunctionValueByName(data as string)); break;
-            case TEOperationData.FUNCVALUE_INDEX: varval.setValue_functionValue(control.getFunctionValueByIdx(data as number)); break;
+            case TEOperationData.IMMEDIATE: varval.setValue_immediate(data.asFloat!); break;
+            case TEOperationData.TIME: varval.setValue_time(data.asFloat!); break;
+            case TEOperationData.FUNCVALUE_NAME: varval.setValue_functionValue(control.getFunctionValueByName(data.asStr!)); break;
+            case TEOperationData.FUNCVALUE_INDEX: varval.setValue_functionValue(control.getFunctionValueByIdx(data.asInt!)); break;
             default:
                 console.debug('Unsupported dataOp: ', dataOp);
                 debugger;
@@ -643,89 +652,89 @@ class TActorAdaptor extends TAdaptor {
         this.mObject.JSGSetData(id, data);
     }
 
-    adaptor_do_PARENT(dataOp: TEOperationData, data: number | string, dataSize: number): void {
+    adaptor_do_PARENT(dataOp: TEOperationData, data: DataVal, dataSize: number): void {
         assert(dataOp == TEOperationData.OBJECT_NAME);
-        if (this.enableLog) console.debug('SetParent:', data);
-        this.parent = this.mSystem.JSGFindObject(data as string, JStage.TEObject.PREEXISTING_ACTOR);
+        if (this.enableLog) console.debug('SetParent:', data.asStr);
+        this.parent = this.mSystem.JSGFindObject(data.asStr!, JStage.TEObject.PREEXISTING_ACTOR);
     }
 
-    adaptor_do_PARENT_NODE(dataOp: TEOperationData, data: number | string, dataSize: number): void {
+    adaptor_do_PARENT_NODE(dataOp: TEOperationData, data: DataVal, dataSize: number): void {
         debugger;
         if (this.enableLog) console.debug('SetParentNode:', data);
         switch (dataOp) {
             case TEOperationData.OBJECT_NAME:
                 if (this.parent)
-                    this.parentNodeID = this.parent.JSGFindNodeID(data as string);
+                    this.parentNodeID = this.parent.JSGFindNodeID(data.asStr!);
                 break;
             case TEOperationData.OBJECT_INDEX:
-                this.parentNodeID = data as number;
+                this.parentNodeID = data.asInt!;
                 break;
             default: assert(false);
         }
     }
 
-    adaptor_do_PARENT_ENABLE(dataOp: TEOperationData, data: number | string, dataSize: number): void {
+    adaptor_do_PARENT_ENABLE(dataOp: TEOperationData, data: number, dataSize: number): void {
         assert(dataOp == TEOperationData.IMMEDIATE);
         if (this.enableLog) console.debug('SetParentEnable:', data);
-        if (!!data) { this.mObject.JSGSetParent(this.parent!, this.parentNodeID); }
+        if (data) { this.mObject.JSGSetParent(this.parent!, this.parentNodeID); }
         else { this.mObject.JSGSetParent(null, 0xFFFFFFFF); }
     }
 
-    adaptor_do_RELATION(dataOp: TEOperationData, data: number | string, dataSize: number): void {
+    adaptor_do_RELATION(dataOp: TEOperationData, data: DataVal, dataSize: number): void {
         assert(dataOp == TEOperationData.OBJECT_NAME);
-        if (this.enableLog) console.debug('SetRelation:', data);
-        this.relation = this.mSystem.JSGFindObject(data as string, JStage.TEObject.PREEXISTING_ACTOR);
+        if (this.enableLog) console.debug('SetRelation:', data.asStr!);
+        this.relation = this.mSystem.JSGFindObject(data.asStr!, JStage.TEObject.PREEXISTING_ACTOR);
     }
 
-    adaptor_do_RELATION_NODE(dataOp: TEOperationData, data: number | string, dataSize: number): void {
+    adaptor_do_RELATION_NODE(dataOp: TEOperationData, data: DataVal, dataSize: number): void {
         debugger;
         if (this.enableLog) console.debug('SetRelationNode:', data);
         switch (dataOp) {
             case TEOperationData.OBJECT_NAME:
                 if (this.relation)
-                    this.relationNodeID = this.relation.JSGFindNodeID(data as string);
+                    this.relationNodeID = this.relation.JSGFindNodeID(data.asStr!);
                 break;
             case TEOperationData.OBJECT_INDEX:
-                this.relationNodeID = data as number;
+                this.relationNodeID = data.asInt!;
                 break;
             default: assert(false);
         }
     }
 
-    adaptor_do_RELATION_ENABLE(dataOp: TEOperationData, data: number | string, dataSize: number): void {
+    adaptor_do_RELATION_ENABLE(dataOp: TEOperationData, data: number, dataSize: number): void {
         assert(dataOp == TEOperationData.IMMEDIATE);
         if (this.enableLog) console.debug('SetRelationEnable:', data);
         this.mObject.JSGSetRelation(!!data, this.relation!, this.relationNodeID);
     }
 
-    adaptor_do_SHAPE(dataOp: TEOperationData, data: number | string, dataSize: number): void {
+    adaptor_do_SHAPE(dataOp: TEOperationData, data: DataVal, dataSize: number): void {
         assert(dataOp == TEOperationData.OBJECT_INDEX);
-        if (this.enableLog) console.debug('SetShape: ', data as number);
-        this.mObject.JSGSetShape(data as number);
+        if (this.enableLog) console.debug('SetShape: ', data.asInt!);
+        this.mObject.JSGSetShape(data.asInt!);
     }
 
-    adaptor_do_ANIMATION(dataOp: TEOperationData, data: number | string, dataSize: number): void {
+    adaptor_do_ANIMATION(dataOp: TEOperationData, data: DataVal, dataSize: number): void {
         assert(dataOp == TEOperationData.OBJECT_INDEX);
-        if (this.enableLog) console.debug(`SetAnimation: ${(data as number) & 0xFFFF} (${(data as number) >> 4 & 0x01})`);
-        this.mObject.JSGSetAnimation(data as number);
+        if (this.enableLog) console.debug(`SetAnimation: ${(data.asInt!) & 0xFFFF} (${(data.asInt!) >> 4 & 0x01})`);
+        this.mObject.JSGSetAnimation(data.asInt!);
     }
 
-    adaptor_do_ANIMATION_MODE(dataOp: TEOperationData, data: number | string, dataSize: number): void {
+    adaptor_do_ANIMATION_MODE(dataOp: TEOperationData, data: DataVal, dataSize: number): void {
         assert(dataOp == TEOperationData.IMMEDIATE);
-        if (this.enableLog) console.debug('SetAnimationMode: ', data as number);
-        this.animMode = data as number;
+        if (this.enableLog) console.debug('SetAnimationMode: ', data.asInt!);
+        this.animMode = data.asInt!;
     }
 
-    adaptor_do_TEXTURE_ANIMATION(dataOp: TEOperationData, data: number | string, dataSize: number): void {
+    adaptor_do_TEXTURE_ANIMATION(dataOp: TEOperationData, data: DataVal, dataSize: number): void {
         assert(dataOp == TEOperationData.OBJECT_INDEX);
         if (this.enableLog) console.debug('SetTexAnim:', data);
-        this.mObject.JSGSetTextureAnimation(data as number);
+        this.mObject.JSGSetTextureAnimation(data.asInt!);
     }
 
-    adaptor_do_TEXTURE_ANIMATION_MODE(dataOp: TEOperationData, data: number | string, dataSize: number): void {
+    adaptor_do_TEXTURE_ANIMATION_MODE(dataOp: TEOperationData, data: DataVal, dataSize: number): void {
         assert(dataOp == TEOperationData.IMMEDIATE);
         if (this.enableLog) console.debug('SetTexAnimMode:', data);
-        this.animTexMode = data as number;
+        this.animTexMode = data.asInt!;
     }
 }
 
@@ -786,7 +795,7 @@ class TActorObject extends STBObject {
                         (adaptor as TActorAdaptor).adaptor_do_PARENT_ENABLE(dataOp, enabled, dataSize)
                     });
                 }
-                this.mAdaptor.adaptor_do_PARENT_ENABLE(dataOp, data, dataSize);
+                this.mAdaptor.adaptor_do_PARENT_ENABLE(dataOp, data.asInt!, dataSize);
                 break;
 
             case 0x33: debugger; this.mAdaptor.adaptor_do_RELATION(dataOp, data, dataSize); return;
@@ -801,7 +810,7 @@ class TActorObject extends STBObject {
                         (adaptor as TActorAdaptor).adaptor_do_RELATION_ENABLE(dataOp, enabled, dataSize)
                     });
                 }
-                this.mAdaptor.adaptor_do_RELATION_ENABLE(dataOp, data, dataSize);
+                this.mAdaptor.adaptor_do_RELATION_ENABLE(dataOp, data.asInt!, dataSize);
                 break;
 
             default:
@@ -994,8 +1003,10 @@ class TCameraObject extends STBObject {
                 return;
         }
 
+        let keyData = []
         for (let i = 0; i < keyCount; i++) {
-            this.mAdaptor.adaptor_setVariableValue(this, keyIdx + i, dataOp, (data as number) + i);
+            keyData[i] = readData(dataOp, dataOffset + i * 4, dataSize, file);
+            this.mAdaptor.adaptor_setVariableValue(this, keyIdx + i, dataOp, keyData[i]);
         }
     }
 }
