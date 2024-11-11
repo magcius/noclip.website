@@ -166,6 +166,19 @@ const enum TEOperationData {
     OBJECT_INDEX = 0x19, // Set the value directly on the JStage object (e.g. an actor), don't store in the adaptor 
 };
 
+function dataOpToString(enumValue: TEOperationData) {
+    switch (enumValue) {
+        case TEOperationData.NONE: return "None"
+        case TEOperationData.VOID: return "Void"
+        case TEOperationData.IMMEDIATE: return "Immediate"
+        case TEOperationData.TIME: return "Time"
+        case TEOperationData.FUNCVALUE_NAME: return "FuncVal"
+        case TEOperationData.FUNCVALUE_INDEX: return "FuncVal"
+        case TEOperationData.OBJECT_NAME: return "Obj"
+        case TEOperationData.OBJECT_INDEX: return "Obj"
+    }
+}
+
 // Parse data from a DataView as either a number or a string, based on the dataOp
 function readData(dataOp: TEOperationData, dataOffset: number, dataSize: number, file: Reader): number | string {
     switch (dataOp) {
@@ -460,7 +473,7 @@ abstract class STBObject {
             case 0x80: debugger; break;
             case 0x81:
                 const idSize = file.view.getUint16(dataOffset + 2);
-                assert( idSize == 4 );
+                assert(idSize == 4);
                 const id = file.view.getUint32(dataOffset + 4);
                 const contentOffset = dataOffset + 4 + align(idSize, 4);
                 const contentSize = dataSize - (contentOffset - dataOffset);
@@ -505,6 +518,25 @@ const enum Actor_ValIdx {
     RELATION = 13,
 }
 
+function keyToString(enumValue: Actor_ValIdx, count: number) {
+    switch (enumValue) {
+        case Actor_ValIdx.ANIM_FRAME: return "ANIM_FRAME"
+        case Actor_ValIdx.ANIM_TRANSITION: return "ANIM_TRANSITION"
+        case Actor_ValIdx.ANIM_TEX_FRAME: return "ANIM_TEX_FRAME"
+        case Actor_ValIdx.POS_X: return count == 3 ? 'POS' : 'POS_X';
+        case Actor_ValIdx.POS_Y: return "POS_Y"
+        case Actor_ValIdx.POS_Z: return "POS_Z"
+        case Actor_ValIdx.ROT_X: return count == 3 ? 'ROT' : 'ROT_X';
+        case Actor_ValIdx.ROT_Y: return "ROT_Y"
+        case Actor_ValIdx.ROT_Z: return "ROT_Z"
+        case Actor_ValIdx.SCALE_X: return count == 3 ? 'SCALE' : 'SCALE_X';
+        case Actor_ValIdx.SCALE_Y: return "SCALE_Y"
+        case Actor_ValIdx.SCALE_Z: return "SCALE_Z"
+        case Actor_ValIdx.PARENT: return "PARENT"
+        case Actor_ValIdx.RELATION: return "RELATION"
+    }
+}
+
 export abstract class TActor extends JStage.TObject {
     JSGFGetType() { return JStage.TEObject.ACTOR; }
     JSGGetTranslation(dst: vec3) { }
@@ -536,6 +568,8 @@ class TActorAdaptor extends TAdaptor {
     public relationNodeID: number;
     public animMode: number; // @TODO: Enum
     public animTexMode: number; // @TODO: Enum
+
+    public enableLog = true;
 
     constructor(
         private mSystem: TSystem,
@@ -592,7 +626,7 @@ class TActorAdaptor extends TAdaptor {
         this.adaptor_getVariableValue_Vec(rot, Actor_ValIdx.ROT_X);
         this.adaptor_getVariableValue_Vec(scale, Actor_ValIdx.SCALE_X);
 
-        if( obj.mControl.isTransformEnabled()) {
+        if (obj.mControl.isTransformEnabled()) {
             vec3.transformMat4(pos, pos, obj.mControl.getTransformOnSet());
             rot[1] += obj.mControl.mTransformRotY!; // @TODO: Check this shouldn't be negated
         }
@@ -603,16 +637,19 @@ class TActorAdaptor extends TAdaptor {
     }
 
     adaptor_do_data(obj: STBObject, id: number, data: DataView): void {
+        if (this.enableLog) console.debug('SetData: (id)', id);
         this.mObject.JSGSetData(id, data);
     }
 
     adaptor_do_PARENT(dataOp: TEOperationData, data: number | string, dataSize: number): void {
         assert(dataOp == TEOperationData.OBJECT_NAME);
+        if (this.enableLog) console.debug('SetParent:', data);
         this.parent = this.mSystem.JSGFindObject(data as string, JStage.TEObject.PREEXISTING_ACTOR);
     }
 
     adaptor_do_PARENT_NODE(dataOp: TEOperationData, data: number | string, dataSize: number): void {
         debugger;
+        if (this.enableLog) console.debug('SetParentNode:', data);
         switch (dataOp) {
             case TEOperationData.OBJECT_NAME:
                 if (this.parent)
@@ -627,17 +664,20 @@ class TActorAdaptor extends TAdaptor {
 
     adaptor_do_PARENT_ENABLE(dataOp: TEOperationData, data: number | string, dataSize: number): void {
         assert(dataOp == TEOperationData.IMMEDIATE);
+        if (this.enableLog) console.debug('SetParentEnable:', data);
         if (!!data) { this.mObject.JSGSetParent(this.parent!, this.parentNodeID); }
         else { this.mObject.JSGSetParent(null, 0xFFFFFFFF); }
     }
 
     adaptor_do_RELATION(dataOp: TEOperationData, data: number | string, dataSize: number): void {
         assert(dataOp == TEOperationData.OBJECT_NAME);
+        if (this.enableLog) console.debug('SetRelation:', data);
         this.relation = this.mSystem.JSGFindObject(data as string, JStage.TEObject.PREEXISTING_ACTOR);
     }
 
     adaptor_do_RELATION_NODE(dataOp: TEOperationData, data: number | string, dataSize: number): void {
         debugger;
+        if (this.enableLog) console.debug('SetRelationNode:', data);
         switch (dataOp) {
             case TEOperationData.OBJECT_NAME:
                 if (this.relation)
@@ -652,31 +692,37 @@ class TActorAdaptor extends TAdaptor {
 
     adaptor_do_RELATION_ENABLE(dataOp: TEOperationData, data: number | string, dataSize: number): void {
         assert(dataOp == TEOperationData.IMMEDIATE);
+        if (this.enableLog) console.debug('SetRelationEnable:', data);
         this.mObject.JSGSetRelation(!!data, this.relation!, this.relationNodeID);
     }
 
     adaptor_do_SHAPE(dataOp: TEOperationData, data: number | string, dataSize: number): void {
         assert(dataOp == TEOperationData.OBJECT_INDEX);
+        if (this.enableLog) console.debug('SetShape: ', data as number);
         this.mObject.JSGSetShape(data as number);
     }
 
     adaptor_do_ANIMATION(dataOp: TEOperationData, data: number | string, dataSize: number): void {
         assert(dataOp == TEOperationData.OBJECT_INDEX);
+        if (this.enableLog) console.debug(`SetAnimation: ${(data as number) & 0xFFFF} (${(data as number) >> 4 & 0x01})`);
         this.mObject.JSGSetAnimation(data as number);
     }
 
     adaptor_do_ANIMATION_MODE(dataOp: TEOperationData, data: number | string, dataSize: number): void {
         assert(dataOp == TEOperationData.IMMEDIATE);
+        if (this.enableLog) console.debug('SetAnimationMode: ', data as number);
         this.animMode = data as number;
     }
 
     adaptor_do_TEXTURE_ANIMATION(dataOp: TEOperationData, data: number | string, dataSize: number): void {
         assert(dataOp == TEOperationData.OBJECT_INDEX);
+        if (this.enableLog) console.debug('SetTexAnim:', data);
         this.mObject.JSGSetTextureAnimation(data as number);
     }
 
     adaptor_do_TEXTURE_ANIMATION_MODE(dataOp: TEOperationData, data: number | string, dataSize: number): void {
         assert(dataOp == TEOperationData.IMMEDIATE);
+        if (this.enableLog) console.debug('SetTexAnimMode:', data);
         this.animTexMode = data as number;
     }
 }
@@ -762,8 +808,14 @@ class TActorObject extends STBObject {
                 return;
         }
 
+        let keyData = [];
         for (let i = 0; i < keyCount; i++) {
-            this.mAdaptor.adaptor_setVariableValue(this, keyIdx + i, dataOp, (data as number) + i);
+            keyData[i] = readData(dataOp, dataOffset + i * 4, dataSize, file);
+            this.mAdaptor.adaptor_setVariableValue(this, keyIdx + i, dataOp, keyData[i]);
+        }
+
+        if (this.mAdaptor.enableLog) {
+            console.debug(`Set${keyToString(keyIdx, keyCount)}: ${dataOpToString(dataOp)} [${keyData}]`);
         }
     }
 }
@@ -1181,8 +1233,6 @@ namespace FVB {
                 id: readString(file.buffer, file.offset + 8, idLen),
                 dataOffset: file.offset + align(8 + idLen, 4),
             }
-
-            console.log('Parsing Block:', block.id, block.size, block.type);
 
             const obj = this.mControl.createObject(block);
             if (!obj) { return false; }
