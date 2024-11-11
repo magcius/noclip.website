@@ -5,6 +5,10 @@ import { getMatrixAxisY, MathConstants } from "../MathHelpers.js";
 import { dGlobals } from "./Main";
 import { fopAc_ac_c, fopAcM_searchFromName } from "./framework.js";
 import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase";
+import { mDoExt_McaMorf } from "./m_do_ext";
+import { assert } from "../util.js";
+import { ResType } from "./d_resorce.js";
+import { LoopMode } from "../Common/JSYSTEM/J3D/J3DLoader";
 
 export enum EDemoMode {
     None,
@@ -384,4 +388,64 @@ export class dDemo_manager_c {
         }
         return true;
     }
+}
+
+/**
+ * Called by Actor update functions to update their data from the demo version of the actor. 
+ */
+export function dDemo_setDemoData(globals: dGlobals, dtFrames: number, actor: fopAc_ac_c, flagMask: number,
+    morf?: mDoExt_McaMorf, arcName?: string, soundCount?: number, soundIdxs?: number[], soundMaterialID?: number, reverb?: number) {
+    const demoActor = globals.scnPlay.demo.getSystem().getActor(actor.demoActorID);
+    if (!demoActor)
+        return false;
+
+    const enable = demoActor.checkEnable(flagMask);
+    if (enable & 2) {
+        // actor.current.pos = demoActor.mTranslation;
+        // actor.old.pos = actor.current.pos;
+        vec3.copy(actor.pos, demoActor.mTranslation);
+    }
+    if (enable & 8) {
+        // actor.shape_angle = demoActor.mRotation;
+        // actor.current.angle = actor.shape_angle;
+        vec3.copy(actor.rot, demoActor.mRotation);
+    }
+    if (enable & 4) {
+        actor.scale = demoActor.mScaling;
+    }
+
+    if (!morf)
+        return true;
+
+    demoActor.mModel = morf.model;
+
+    if ((enable & 0x20)) {
+        const bckID = demoActor.mNextBckId;
+        if (bckID & 0x10000)
+            arcName = globals.roomCtrl.demoArcName;
+        assert(!!arcName);
+        demoActor.mBckId = bckID;
+
+        const i_key = globals.resCtrl.getObjectIDRes(ResType.Bck, arcName, bckID);
+        assert(!!i_key);
+
+        // void* i_sound = dDemo_getJaiPointer(a_name, bck, soundCount, soundIdxs);
+        morf.setAnm(i_key, -1 as LoopMode, demoActor.getMorfParam(), 1.0, 0.0, -1.0);
+        demoActor.mAnimationFrameMax = morf.frameCtrl.endFrame;
+
+        if (enable & 0x40) {
+            debugger;
+            if (demoActor.mAnimationFrame > 1.0) {
+                morf.frameCtrl.setFrame(demoActor.mAnimationFrame - 1.0);
+                morf.play(dtFrames);
+            } else {
+                morf.frameCtrl.setFrame(demoActor.mAnimationFrame);
+            }
+        } else {
+            morf.play(dtFrames);
+            console.log(morf.frameCtrl.currentTimeInFrames);
+        }
+    }
+
+    return true;
 }
