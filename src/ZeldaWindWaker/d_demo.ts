@@ -171,7 +171,33 @@ class dDemo_actor_c extends TActor {
     constructor(actor: fopAc_ac_c) {
         super();
     }
-    
+
+    checkEnable(mask: number) {
+        return this.mFlags & mask;
+    }
+
+    getMorfParam() {
+        // Doesn't have anim properties
+        if ((this.mFlags & 0x40) == 0) {
+            // Has STB data
+            if ((this.mFlags & 1) == 0) {
+                return 0.0;
+            } else {
+                switch(this.stbDataId) {
+                    // @TODO: Double check this, somehow
+                    case 6: return this.stbData.getInt8(15);
+                    case 5: return this.stbData.getInt8(11);
+                    case 4: return this.stbData.getInt8(6);
+                    case 2: return this.stbData.getInt8(7);
+                    case 1: return this.stbData.getInt8(2);
+                    default: return 0.0;
+                }
+            }
+        } else {
+            return this.mAnimationTransition;
+        }
+    }
+
     override JSGGetNodeTransformation(nodeId: number, mtx: mat4): number {
         debugger; // I think this may be one of the shapeInstanceState matrices instead
         mat4.copy(mtx, this.mModel.modelMatrix);
