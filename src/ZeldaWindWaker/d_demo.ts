@@ -174,21 +174,20 @@ class dDemo_actor_c extends TActor {
     
     override JSGGetNodeTransformation(nodeId: number, mtx: mat4): number {
         debugger; // I think this may be one of the shapeInstanceState matrices instead
-        mat4.copy( mtx, this.mModel.modelMatrix);
+        mat4.copy(mtx, this.mModel.modelMatrix);
         return 1;
     }
 
     override JSGGetAnimationFrameMax() { return this.mAnimationFrameMax; }
     override JSGGetTextureAnimationFrameMax() { return this.mTexAnimationFrameMax; }
 
-    override JSGGetTranslation(dst: vec3) { vec3.copy( dst, this.mTranslation); }
-    override JSGGetScaling(dst: vec3) { vec3.copy( dst, this.mScaling ); }
-    override JSGGetRotation(dst: vec3) { debugger; vec3.scale(dst, this.mRotation, MathConstants.RAD_TO_DEG); }
+    override JSGGetTranslation(dst: vec3) { vec3.copy(dst, this.mTranslation); }
+    override JSGGetScaling(dst: vec3) { vec3.copy(dst, this.mScaling); }
+    override JSGGetRotation(dst: vec3) { vec3.scale(dst, this.mRotation, MathConstants.RAD_TO_DEG); }
 
     override JSGSetData(id: number, data: DataView): void {
-        debugger;
         this.stbDataId = id;
-        this.stbData = data;
+        this.stbData = data; // @TODO: Check that data makes sense
         this.mFlags |= 0x01;
     }
 
@@ -264,6 +263,7 @@ class dDemo_system_c implements TSystem {
                         debugger; // Untested. Unimplemented
                         actor = {} as fopAc_ac_c;
                     } else {
+                        console.warn('Demo failed to find actor', objName);
                         return undefined;
                     }
                 }
@@ -310,7 +310,7 @@ export class dDemo_manager_c {
     getMode() { return this.mMode; }
     getSystem() { return this.mSystem; }
 
-    public create(data: ArrayBufferSlice, originPos?: vec3, rotY?: number): boolean {
+    public create(data: ArrayBufferSlice, originPos?: vec3, rotY?: number, startFrame?: number): boolean {
         this.mParser = new TParse(this.mControl);
 
         if (!this.mParser.parse(data, 0)) {
@@ -318,7 +318,7 @@ export class dDemo_manager_c {
             return false;
         }
 
-        this.mControl.forward(0);
+        this.mControl.forward(startFrame || 0);
         if (originPos) {
             this.mControl.transformSetOrigin(originPos, rotY || 0);
         }
