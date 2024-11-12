@@ -127,8 +127,7 @@ class dDemo_camera_c extends TCamera {
         const camera = this.globals.camera;
         if (!camera)
             vec3.set(dst, 0, 0, 0);
-        console.debug('JSGGetViewTargetPosition called. This is not yet working');
-        vec3.set(dst, 0, 0, 0);
+        vec3.add(dst, this.globals.cameraPosition, this.globals.cameraFwd);
     }
 
 
