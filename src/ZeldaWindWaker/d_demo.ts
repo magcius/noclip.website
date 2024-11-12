@@ -435,9 +435,8 @@ export function dDemo_setDemoData(globals: dGlobals, dtFrames: number, actor: fo
     }
 
     if (enable & 0x40) {
-        debugger;
-        if (demoActor.mAnimationFrame > 1.0) {
-            morf.frameCtrl.setFrame(demoActor.mAnimationFrame - 1.0);
+        if (demoActor.mAnimationFrame > dtFrames) {
+            morf.frameCtrl.setFrame(demoActor.mAnimationFrame - dtFrames);
             morf.play(dtFrames);
         } else {
             morf.frameCtrl.setFrame(demoActor.mAnimationFrame);
