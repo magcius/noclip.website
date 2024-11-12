@@ -151,6 +151,7 @@ class dDemo_camera_c extends TCamera {
 }
 
 class dDemo_actor_c extends TActor {
+    mName: string;
     mFlags: number;
     mTranslation = vec3.create();
     mScaling = vec3.create();
@@ -202,6 +203,8 @@ class dDemo_actor_c extends TActor {
         }
     }
 
+    override JSGGetName() { return this.mName; }
+    
     override JSGGetNodeTransformation(nodeId: number, mtx: mat4): number {
         debugger; // I think this may be one of the shapeInstanceState matrices instead
         mat4.copy(mtx, this.mModel.modelMatrix);
@@ -300,6 +303,7 @@ class dDemo_system_c implements TSystem {
                 if (!this.mpActors[actor.demoActorID]) {
                     actor.demoActorID = this.mpActors.length;
                     this.mpActors[actor.demoActorID] = new dDemo_actor_c(actor);
+                    this.mpActors[actor.demoActorID].mName = objName;
                 };
                 return this.mpActors[actor.demoActorID];
 

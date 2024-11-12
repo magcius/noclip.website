@@ -33,7 +33,7 @@ export namespace JStage {
         JSGFEnableFlag(flag: number): void { this.JSGSetFlag(this.JSGGetFlag() | flag); }
 
         abstract JSGFGetType(): number;
-        JSGGetName(): boolean { return false; }
+        JSGGetName(): string | undefined { return undefined; }
         JSGGetFlag(): number { return 0; }
         JSGSetFlag(flag: number): void { }
         JSGGetData(unk0: number, data: Object, unk1: number): boolean { return false; }
@@ -851,7 +851,7 @@ class TActorObject extends STBObject {
         }
 
         if (this.mAdaptor.enableLog) { 
-            console.debug(`[Act] Set${keyToString(keyIdx, keyCount)}: ${dataOpToString(dataOp)} [${logKeyAction(keyData, dataOp )}]`); 
+            console.debug(`[${this.mAdaptor.mObject.JSGGetName()}] Set${keyToString(keyIdx, keyCount)}: ${dataOpToString(dataOp)} [${logKeyAction(keyData, dataOp )}]`); 
         }
     }
 }
