@@ -33,7 +33,7 @@ export namespace JStage {
         JSGFEnableFlag(flag: number): void { this.JSGSetFlag(this.JSGGetFlag() | flag); }
 
         abstract JSGFGetType(): number;
-        JSGGetName(): boolean { return false; } // TODO: What's the point of this?
+        JSGGetName(): boolean { return false; }
         JSGGetFlag(): number { return 0; }
         JSGSetFlag(flag: number): void { }
         JSGGetData(unk0: number, data: Object, unk1: number): boolean { return false; }
@@ -592,8 +592,8 @@ class TActorAdaptor extends TAdaptor {
     public parentNodeID: number;
     public relation?: JStage.TObject;
     public relationNodeID: number;
-    public animMode: number; // @TODO: Enum
-    public animTexMode: number; // @TODO: Enum
+    public animMode: number; // See computeAnimFrame()
+    public animTexMode: number; // See computeAnimFrame()
 
     public enableLog = true;
 
@@ -602,12 +602,30 @@ class TActorAdaptor extends TAdaptor {
         public mObject: TActor,
     ) { super(14); }
 
-    adaptor_do_prepare(obj: STBObject): void {
-        this.mVariableValues[Actor_ValIdx.ANIM_TRANSITION].setOutput(this.mObject.JSGSetAnimationTransition);
+    private static computeAnimFrame(animMode: number, maxFrame: number, frame: number) {
+        const outsideType  = animMode;
+        const reverse = animMode >> 8;
 
-        // @TODO:
-        // TVVOutput_ANIMATION_FRAME_(Actor_ValIdx.ANIM_FRAME, 317, &JStage::TActor::JSGSetAnimationFrame, &JStage::TActor::JSGGetAnimationFrame, &JStage::TActor::JSGGetAnimationFrameMax),
-        // TVVOutput_ANIMATION_FRAME_(Actor_ValIdx.ANIM_TEX_FRAME, 321, &JStage::TActor::JSGSetTextureAnimationFrame, &JStage::TActor::JSGGetTextureAnimationFrame, &JStage::TActor::JSGGetTextureAnimationFrameMax),
+        if( reverse ) { frame = maxFrame - frame; }
+        if (maxFrame > 0.0) {
+            const func = FVB.TFunctionValue.toFunction_outside(outsideType);
+            frame = func(frame, maxFrame);
+        }
+        return frame;
+    }
+
+    adaptor_do_prepare(obj: STBObject): void {
+        this.mVariableValues[Actor_ValIdx.ANIM_TRANSITION].setOutput(this.mObject.JSGSetAnimationTransition.bind(this.mObject));
+
+        this.mVariableValues[Actor_ValIdx.ANIM_FRAME].setOutput((frame: number, adaptor: TAdaptor) => {
+            frame = TActorAdaptor.computeAnimFrame(this.animMode, this.mObject.JSGGetAnimationFrameMax(), frame);
+            this.mObject.JSGSetAnimationFrame(frame);
+        });
+
+        this.mVariableValues[Actor_ValIdx.ANIM_TEX_FRAME].setOutput((frame: number, adaptor: TAdaptor) => {
+            frame = TActorAdaptor.computeAnimFrame(this.animTexMode, this.mObject.JSGGetTextureAnimationFrameMax(), frame);
+            this.mObject.JSGSetTextureAnimationFrame(frame);
+        });
     }
 
     adaptor_do_begin(obj: STBObject): void {
@@ -622,7 +640,7 @@ class TActorAdaptor extends TAdaptor {
 
         if (obj.mControl.isTransformEnabled()) {
             vec3.transformMat4(pos, pos, obj.mControl.getTransformOnGet());
-            rot[1] -= obj.mControl.mTransformRotY!; // @TODO: Check this shouldn't be negated
+            rot[1] -= obj.mControl.mTransformRotY!;
         }
 
         this.adaptor_setVariableValue_Vec(Actor_ValIdx.POS_X, pos);
@@ -630,14 +648,8 @@ class TActorAdaptor extends TAdaptor {
         this.adaptor_setVariableValue_Vec(Actor_ValIdx.SCALE_X, scale);
 
         this.mVariableValues[Actor_ValIdx.ANIM_TRANSITION].setValue_immediate(this.mObject.JSGGetAnimationTransition());
-
-        // @TODO:
-        // for (const TVVOutputObject* output = saoVVOutput_; output->mValueIndex != -1; output++) {
-        //     mVariableValues[output->mValueIndex].setValue_immediate((this.mObject.*(output->mGetter))());
-        // }
-        // for (const TVVOutput_ANIMATION_FRAME_* output = saoVVOutput_ANIMATION_FRAME_; output->mValueIndex != -1; output++) {
-        //     mVariableValues[output->mValueIndex].setValue_immediate((this.mObject.*(output->mGetter))());
-        // }
+        this.mVariableValues[Actor_ValIdx.ANIM_FRAME].setValue_immediate(this.mObject.JSGGetAnimationFrame());
+        this.mVariableValues[Actor_ValIdx.ANIM_FRAME].setValue_immediate(this.mObject.JSGGetTextureAnimationFrame());
     }
 
     adaptor_do_end(obj: STBObject): void {
@@ -654,7 +666,7 @@ class TActorAdaptor extends TAdaptor {
 
         if (obj.mControl.isTransformEnabled()) {
             vec3.transformMat4(pos, pos, obj.mControl.getTransformOnSet());
-            rot[1] += obj.mControl.mTransformRotY!; // @TODO: Check this shouldn't be negated
+            rot[1] += obj.mControl.mTransformRotY!;
         }
 
         this.mObject.JSGSetTranslation(pos);
@@ -1121,6 +1133,13 @@ namespace FVB {
         InterpSet = 0x16,
     };
 
+    enum EExtrapolationType {
+        Raw,
+        Repeat,
+        Turn,
+        Clamp
+    }
+
     class TBlock {
         size: number;
         type: number;
@@ -1141,7 +1160,14 @@ namespace FVB {
         getAttrRefer() { return this.refer; }
         getAttrInterpolate() { return this.interpolate; }
 
-        // static ExtrapolateParameter toFunction_outside(int);
+        static toFunction_outside(type: EExtrapolationType): (frame: number, maxFrame: number ) => number {
+            switch(type ) {
+                case EExtrapolationType.Raw: return (f, m) => f;
+                case EExtrapolationType.Repeat: return (f, m) => { f = f % m; return f < 0 ? f + m : f; }
+                case EExtrapolationType.Turn: return (f, m) => { f %= (2*m); if (f < 0) f += m; return f > m ? 2*m - f : f };
+                case EExtrapolationType.Clamp: return (f, m) => clamp(f, 0.0, m);
+            }
+        }
 
         // static ExtrapolateParameter toFunction(TFunctionValue::TEOutside outside) {
         //     return toFunction_outside(outside);
