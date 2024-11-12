@@ -304,6 +304,7 @@ pub struct Texture2D {
     #[deku(count = "(4 - deku::byte_offset % 4) % 4")] _alignment0: Vec<u8>,
     pub forced_fallback_format: i32,
     pub downscale_fallback: u8,
+    #[deku(cond = "version >= UnityVersion::V2020_3_16f1")]
     pub is_alpha_channel_optional: u8,
     #[deku(count = "(4 - deku::byte_offset % 4) % 4")] _alignment1: Vec<u8>,
     pub width: i32,
