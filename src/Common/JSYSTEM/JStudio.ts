@@ -186,7 +186,7 @@ function dataOpToString(enumValue: EDataOp) {
     }
 }
 
-function logKeyAction(keyData: DataVal[], dataOp: number ) {
+function dataToValue(keyData: DataVal[], dataOp: number ) {
     const vals = keyData.map(d => {
         switch (dataOp) {
             case EDataOp.FUNCVALUE_INDEX:
@@ -855,7 +855,7 @@ class TActorObject extends STBObject {
             this.mAdaptor.adaptor_setVariableValue(this, keyIdx + i, dataOp, keyData[i]);
         }
 
-        this.mAdaptor.log(`Set${keyToString(keyIdx, keyCount)}: ${dataOpToString(dataOp)} [${logKeyAction(keyData, dataOp )}]`); 
+        this.mAdaptor.log(`Set${keyToString(keyIdx, keyCount)}: ${dataOpToString(dataOp)} [${dataToValue(keyData, dataOp )}]`); 
     }
 }
 
@@ -1014,7 +1014,6 @@ class TCameraObject extends STBObject {
 
         let keyCount = 1;
         let keyIdx;
-        let data = readData(dataOp, dataOffset, dataSize, file);
 
         switch (cmdType) {
             // Eye position
@@ -1051,7 +1050,7 @@ class TCameraObject extends STBObject {
             this.mAdaptor.adaptor_setVariableValue(this, keyIdx + i, dataOp, keyData[i]);
         }
         
-        this.mAdaptor.log(`Set${camKeyToString(keyIdx, keyCount)}: ${dataOpToString(dataOp)} [${logKeyAction(keyData, dataOp )}]`); 
+        this.mAdaptor.log(`Set${camKeyToString(keyIdx, keyCount)}: ${dataOpToString(dataOp)} [${dataToValue(keyData, dataOp )}]`); 
     }
 }
 
