@@ -291,7 +291,7 @@ const id = 'AShortHike';
 const name = 'A Short Hike';
 
 const sceneDescs = [
-    new AShortHikeSceneDesc(`level0`, "Main Menu"),
+    new AShortHikeSceneDesc(`level1`, "Main Menu"),
     new AShortHikeSceneDesc(`level2`, "The Island"),
 ];
 

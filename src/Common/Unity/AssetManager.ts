@@ -490,7 +490,11 @@ function vertexFormatToGfxFormatBase(vertexFormat: UnityVertexFormat): GfxFormat
 
 function vertexFormatToGfxFormat(vertexFormat: UnityVertexFormat, dimension: number): GfxFormat {
     const baseFormat = vertexFormatToGfxFormatBase(vertexFormat);
-    const compFlags = dimension as FormatCompFlags;
+    let maskedDimension = dimension & 0x0F;
+    if (![1, 2, 3, 4].includes(maskedDimension)) {
+        throw new Error(`invalid dimension ${maskedDimension}`);
+    }
+    const compFlags = maskedDimension as FormatCompFlags;
     return setFormatCompFlags(baseFormat, compFlags);
 }
 

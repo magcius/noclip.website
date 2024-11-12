@@ -214,7 +214,10 @@ pub struct ChannelInfo {
     pub stream: u8,
     pub offset: u8,
     pub format: VertexFormat,
+    #[deku(bits = "3")]
     pub dimension: u8,
+    #[deku(bits = "1", pad_bits_after = "4")]
+    pub instance_data: u8,
 }
 
 #[derive(DekuRead, Clone, Debug)]
