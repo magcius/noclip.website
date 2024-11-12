@@ -18,14 +18,14 @@ const scratchVec3c = vec3.create();
 // The STB objects are manipulated by Sequences from the STB file each frame, and update the Stage Object via Adaptor.
 //----------------------------------------------------------------------------------------------------------------------
 export namespace JStage {
-    export enum TEObject {
-        PREEXISTING_ACTOR = 0x0,
-        UNK1 = 0x1,
-        ACTOR = 0x2,
-        CAMERA = 0x3,
-        AMBIENT = 0x4,
-        LIGHT = 0x5,
-        FOG = 0x6,
+    export enum EObject {
+        PreExistingActor = 0x0,
+        Unk1 = 0x1,
+        Actor = 0x2,
+        Camera = 0x3,
+        Ambient = 0x4,
+        Light = 0x5,
+        Fog = 0x6,
     };
 
     export abstract class TObject {
@@ -55,7 +55,7 @@ export namespace JStage {
 // modified by a cutscene. Each game should override JSGFindObject() to supply or create objects for manipulation. 
 //----------------------------------------------------------------------------------------------------------------------
 export interface TSystem {
-    JSGFindObject(objId: string, objType: JStage.TEObject): JStage.TObject | undefined;
+    JSGFindObject(objId: string, objType: JStage.EObject): JStage.TObject | undefined;
 }
 
 //----------------------------------------------------------------------------------------------------------------------
@@ -157,14 +157,14 @@ class TVariableValue {
 // Connects the STBObject to a Game Object. Manages tracks of TVariableValues, updates their values on the Game object.
 //----------------------------------------------------------------------------------------------------------------------
 const enum EDataOp {
-    NONE = 0,
-    VOID = 1, // Disable updates for this track.
-    IMMEDIATE = 2, // Set the value on this track to an immediate value.
-    TIME = 3, // The value increases each frame by a given velocity, starting at 0.
-    FUNCVALUE_NAME = 0x10, // Evaluate a FunctionValue each frame and use the result
-    FUNCVALUE_INDEX = 0x12, // Same as FUNCVALUE_NAME but by FunctionValue index
-    OBJECT_NAME = 0x18, // Set the value directly on the JStage object (e.g. an actor), don't store in the adaptor 
-    OBJECT_INDEX = 0x19, // Same as OBJECT_NAME, but by object index
+    None = 0,
+    Void = 1,           // Disable updates for this track.
+    Immediate = 2,      // Set the value on this track to an immediate value.
+    Time = 3,           // The value increases each frame by a given velocity, starting at 0.
+    FuncValName = 0x10, // Evaluate a FunctionValue each frame and use the result
+    FuncValIdx = 0x12,  // Same as FuncValName but by FunctionValue index
+    ObjectName = 0x18,  // Set the value directly on the JStage object (e.g. an actor), don't store in the adaptor 
+    ObjectIdx = 0x19,   // Same as ObjectName, but by object index
 };
 
 class DataVal {
@@ -175,45 +175,46 @@ class DataVal {
 
 function dataOpToString(enumValue: EDataOp) {
     switch (enumValue) {
-        case EDataOp.NONE: return "None"
-        case EDataOp.VOID: return "Void"
-        case EDataOp.IMMEDIATE: return "Immediate"
-        case EDataOp.TIME: return "Time"
-        case EDataOp.FUNCVALUE_NAME: return "FuncVal"
-        case EDataOp.FUNCVALUE_INDEX: return "FuncVal"
-        case EDataOp.OBJECT_NAME: return "Obj"
-        case EDataOp.OBJECT_INDEX: return "Obj"
+        case EDataOp.None: return "None"
+        case EDataOp.Void: return "Void"
+        case EDataOp.Immediate: return "Immediate"
+        case EDataOp.Time: return "Time"
+        case EDataOp.FuncValName: return "FuncVal"
+        case EDataOp.FuncValIdx: return "FuncVal"
+        case EDataOp.ObjectName: return "Obj"
+        case EDataOp.ObjectIdx: return "Obj"
     }
 }
 
-function dataToValue(keyData: DataVal[], dataOp: number ) {
+function dataToValue(keyData: DataVal[], dataOp: number) {
     const vals = keyData.map(d => {
         switch (dataOp) {
-            case EDataOp.FUNCVALUE_INDEX:
-            case EDataOp.OBJECT_INDEX:
+            case EDataOp.FuncValIdx:
+            case EDataOp.ObjectIdx:
                 return d.asInt;
-            case EDataOp.FUNCVALUE_NAME:
-            case EDataOp.OBJECT_NAME:
+            case EDataOp.FuncValName:
+            case EDataOp.ObjectName:
                 return d.asStr;
-            default: 
+            default:
                 return d.asFloat;
-        }} );
+        }
+    });
     return vals;
 }
 
 // Parse data from a DataView as either a number or a string, based on the dataOp
 function readData(dataOp: EDataOp, dataOffset: number, dataSize: number, file: Reader): DataVal {
     switch (dataOp) {
-        case EDataOp.IMMEDIATE:
-        case EDataOp.TIME:
+        case EDataOp.Immediate:
+        case EDataOp.Time:
             return { asInt: file.view.getUint32(dataOffset), asFloat: file.view.getFloat32(dataOffset) };
 
-        case EDataOp.FUNCVALUE_INDEX:
-        case EDataOp.OBJECT_INDEX:
+        case EDataOp.FuncValIdx:
+        case EDataOp.ObjectIdx:
             return { asInt: file.view.getUint32(dataOffset) };
 
-        case EDataOp.FUNCVALUE_NAME:
-        case EDataOp.OBJECT_NAME:
+        case EDataOp.FuncValName:
+        case EDataOp.ObjectName:
             return { asStr: readString(file.buffer, dataOffset, dataSize) };
 
         default:
@@ -242,11 +243,11 @@ abstract class TAdaptor {
         const control = obj.mControl;
 
         switch (dataOp) {
-            case EDataOp.VOID: varval.setValue_none(); break;
-            case EDataOp.IMMEDIATE: varval.setValue_immediate(data.asFloat!); break;
-            case EDataOp.TIME: varval.setValue_time(data.asFloat!); break;
-            case EDataOp.FUNCVALUE_NAME: varval.setValue_functionValue(control.getFunctionValueByName(data.asStr!)); break;
-            case EDataOp.FUNCVALUE_INDEX: varval.setValue_functionValue(control.getFunctionValueByIdx(data.asInt!)); break;
+            case EDataOp.Void: varval.setValue_none(); break;
+            case EDataOp.Immediate: varval.setValue_immediate(data.asFloat!); break;
+            case EDataOp.Time: varval.setValue_time(data.asFloat!); break;
+            case EDataOp.FuncValName: varval.setValue_functionValue(control.getFunctionValueByName(data.asStr!)); break;
+            case EDataOp.FuncValIdx: varval.setValue_functionValue(control.getFunctionValueByIdx(data.asInt!)); break;
             default:
                 console.debug('Unsupported dataOp: ', dataOp);
                 debugger;
@@ -294,7 +295,7 @@ abstract class TAdaptor {
     }
 
     log(msg: string) {
-        if( this.mEnableLogging ) { console.debug(`[${this.mObject.JSGGetName()}] ${msg}`); } 
+        if (this.mEnableLogging) { console.debug(`[${this.mObject.JSGGetName()}] ${msg}`); }
     }
 }
 
@@ -310,7 +311,7 @@ abstract class STBObject {
     private mId: string;
     private mType: string;
     private mFlags: number;
-    private mStatus: TEStatus = TEStatus.STILL;
+    private mStatus: EStatus = EStatus.Still;
     private mIsSequence: boolean = false;
     private mSuspendFrames: number = 0;
     private mData: Reader;
@@ -352,7 +353,7 @@ abstract class STBObject {
 
     reset(blockObj: TBlockObject) {
         this.pSequence = 0;
-        this.mStatus = TEStatus.STILL;
+        this.mStatus = EStatus.Still;
         this.pSequence_next = 0xC + align(blockObj.id.length + 1, 4);
         this.mData = blockObj.data;
         this.mWait = 0;
@@ -363,8 +364,8 @@ abstract class STBObject {
         while (true) {
             // Top bit of mFlags makes this object immediately inactive, restarting any existing sequence
             if (this.mFlags & 0x8000) {
-                if (this.mStatus != TEStatus.INACTIVE) {
-                    this.mStatus = TEStatus.INACTIVE;
+                if (this.mStatus != EStatus.Inactive) {
+                    this.mStatus = EStatus.Inactive;
                     if (this.mIsSequence) {
                         this.do_end();
                     }
@@ -372,16 +373,16 @@ abstract class STBObject {
                 return true;
             }
 
-            if (this.mStatus == TEStatus.INACTIVE) {
+            if (this.mStatus == EStatus.Inactive) {
                 assert(this.mIsSequence);
                 this.do_begin();
-                this.mStatus = TEStatus.WAIT;
+                this.mStatus = EStatus.Wait;
             }
 
             if ((this.mControl && this.mControl.isSuspended()) || this.isSuspended()) {
                 if (this.mIsSequence) {
-                    assert((this.mStatus == TEStatus.WAIT) || (this.mStatus == TEStatus.SUSPEND));
-                    this.mStatus = TEStatus.SUSPEND;
+                    assert((this.mStatus == EStatus.Wait) || (this.mStatus == EStatus.Suspend));
+                    this.mStatus = EStatus.Suspend;
                     this.do_wait(frameCount);
                 }
                 return true;
@@ -393,12 +394,12 @@ abstract class STBObject {
                 // If there is nothing left in the sequence, end it
                 if (!this.pSequence) {
                     if (this.mIsSequence) {
-                        assert(this.mStatus != TEStatus.STILL);
+                        assert(this.mStatus != EStatus.Still);
                         if (!hasWaited) {
                             this.do_wait(0);
                         }
                         this.mIsSequence = false;
-                        this.mStatus = TEStatus.END;
+                        this.mStatus = EStatus.End;
                         this.do_end();
                     }
                     return false;
@@ -406,12 +407,12 @@ abstract class STBObject {
 
                 // If we're not currently running a sequence, start it
                 if (!this.mIsSequence) {
-                    assert(this.mStatus == TEStatus.STILL);
+                    assert(this.mStatus == EStatus.Still);
                     this.mIsSequence = true;
                     this.do_begin();
                 }
 
-                this.mStatus = TEStatus.WAIT;
+                this.mStatus = EStatus.Wait;
 
                 if (this.mWait == 0) {
                     this.process_sequence();
@@ -530,46 +531,46 @@ class TControlObject extends STBObject {
 //----------------------------------------------------------------------------------------------------------------------
 // Actor
 //----------------------------------------------------------------------------------------------------------------------
-const enum Actor_ValIdx {
-    ANIM_FRAME = 0,
-    ANIM_TRANSITION = 1,
-    ANIM_TEX_FRAME = 2,
+const enum EActorTrack {
+    AnimFrame = 0,
+    AnimTransition = 1,
+    TexAnimFrame = 2,
 
-    POS_X = 3,
-    POS_Y = 4,
-    POS_Z = 5,
-    ROT_X = 6,
-    ROT_Y = 7,
-    ROT_Z = 8,
-    SCALE_X = 9,
-    SCALE_Y = 10,
-    SCALE_Z = 11,
+    PosX = 3,
+    PosY = 4,
+    PosZ = 5,
+    RotX = 6,
+    RotY = 7,
+    RotZ = 8,
+    ScaleX = 9,
+    ScaleY = 10,
+    ScaleZ = 11,
 
-    PARENT = 12,
-    RELATION = 13,
+    Parent = 12,
+    Relation = 13,
 }
 
-function keyToString(enumValue: Actor_ValIdx, count: number) {
+function keyToString(enumValue: EActorTrack, count: number) {
     switch (enumValue) {
-        case Actor_ValIdx.ANIM_FRAME: return "ANIM_FRAME"
-        case Actor_ValIdx.ANIM_TRANSITION: return "ANIM_TRANSITION"
-        case Actor_ValIdx.ANIM_TEX_FRAME: return "ANIM_TEX_FRAME"
-        case Actor_ValIdx.POS_X: return count == 3 ? 'POS' : 'POS_X';
-        case Actor_ValIdx.POS_Y: return "POS_Y"
-        case Actor_ValIdx.POS_Z: return "POS_Z"
-        case Actor_ValIdx.ROT_X: return count == 3 ? 'ROT' : 'ROT_X';
-        case Actor_ValIdx.ROT_Y: return "ROT_Y"
-        case Actor_ValIdx.ROT_Z: return "ROT_Z"
-        case Actor_ValIdx.SCALE_X: return count == 3 ? 'SCALE' : 'SCALE_X';
-        case Actor_ValIdx.SCALE_Y: return "SCALE_Y"
-        case Actor_ValIdx.SCALE_Z: return "SCALE_Z"
-        case Actor_ValIdx.PARENT: return "PARENT"
-        case Actor_ValIdx.RELATION: return "RELATION"
+        case EActorTrack.AnimFrame: return "AnimFrame"
+        case EActorTrack.AnimTransition: return "AnimTransition"
+        case EActorTrack.TexAnimFrame: return "TexAnimFrame"
+        case EActorTrack.PosX: return count == 3 ? 'POS' : 'PosX';
+        case EActorTrack.PosY: return "PosY"
+        case EActorTrack.PosZ: return "PosZ"
+        case EActorTrack.RotX: return count == 3 ? 'ROT' : 'RotX';
+        case EActorTrack.RotY: return "RotY"
+        case EActorTrack.RotZ: return "RotZ"
+        case EActorTrack.ScaleX: return count == 3 ? 'SCALE' : 'ScaleX';
+        case EActorTrack.ScaleY: return "ScaleY"
+        case EActorTrack.ScaleZ: return "ScaleZ"
+        case EActorTrack.Parent: return "Parent"
+        case EActorTrack.Relation: return "Relation"
     }
 }
 
 export abstract class TActor extends JStage.TObject {
-    JSGFGetType() { return JStage.TEObject.ACTOR; }
+    JSGFGetType() { return JStage.EObject.Actor; }
     JSGGetTranslation(dst: vec3) { }
     JSGSetTranslation(src: ReadonlyVec3) { }
     JSGGetScaling(dst: vec3) { }
@@ -606,10 +607,10 @@ class TActorAdaptor extends TAdaptor {
     ) { super(14); }
 
     private static computeAnimFrame(animMode: number, maxFrame: number, frame: number) {
-        const outsideType  = animMode;
+        const outsideType = animMode;
         const reverse = animMode >> 8;
 
-        if( reverse ) { frame = maxFrame - frame; }
+        if (reverse) { frame = maxFrame - frame; }
         if (maxFrame > 0.0) {
             const func = FVB.TFunctionValue.toFunction_outside(outsideType);
             frame = func(frame, maxFrame);
@@ -618,14 +619,14 @@ class TActorAdaptor extends TAdaptor {
     }
 
     adaptor_do_prepare(obj: STBObject): void {
-        this.mVariableValues[Actor_ValIdx.ANIM_TRANSITION].setOutput(this.mObject.JSGSetAnimationTransition.bind(this.mObject));
+        this.mVariableValues[EActorTrack.AnimTransition].setOutput(this.mObject.JSGSetAnimationTransition.bind(this.mObject));
 
-        this.mVariableValues[Actor_ValIdx.ANIM_FRAME].setOutput((frame: number, adaptor: TAdaptor) => {
+        this.mVariableValues[EActorTrack.AnimFrame].setOutput((frame: number, adaptor: TAdaptor) => {
             frame = TActorAdaptor.computeAnimFrame(this.animMode, this.mObject.JSGGetAnimationFrameMax(), frame);
             this.mObject.JSGSetAnimationFrame(frame);
         });
 
-        this.mVariableValues[Actor_ValIdx.ANIM_TEX_FRAME].setOutput((frame: number, adaptor: TAdaptor) => {
+        this.mVariableValues[EActorTrack.TexAnimFrame].setOutput((frame: number, adaptor: TAdaptor) => {
             frame = TActorAdaptor.computeAnimFrame(this.animTexMode, this.mObject.JSGGetTextureAnimationFrameMax(), frame);
             this.mObject.JSGSetTextureAnimationFrame(frame);
         });
@@ -646,13 +647,13 @@ class TActorAdaptor extends TAdaptor {
             rot[1] -= obj.mControl.mTransformRotY!;
         }
 
-        this.adaptor_setVariableValue_Vec(Actor_ValIdx.POS_X, pos);
-        this.adaptor_setVariableValue_Vec(Actor_ValIdx.ROT_X, rot);
-        this.adaptor_setVariableValue_Vec(Actor_ValIdx.SCALE_X, scale);
+        this.adaptor_setVariableValue_Vec(EActorTrack.PosX, pos);
+        this.adaptor_setVariableValue_Vec(EActorTrack.RotX, rot);
+        this.adaptor_setVariableValue_Vec(EActorTrack.ScaleX, scale);
 
-        this.mVariableValues[Actor_ValIdx.ANIM_TRANSITION].setValue_immediate(this.mObject.JSGGetAnimationTransition());
-        this.mVariableValues[Actor_ValIdx.ANIM_FRAME].setValue_immediate(this.mObject.JSGGetAnimationFrame());
-        this.mVariableValues[Actor_ValIdx.ANIM_FRAME].setValue_immediate(this.mObject.JSGGetTextureAnimationFrame());
+        this.mVariableValues[EActorTrack.AnimTransition].setValue_immediate(this.mObject.JSGGetAnimationTransition());
+        this.mVariableValues[EActorTrack.AnimFrame].setValue_immediate(this.mObject.JSGGetAnimationFrame());
+        this.mVariableValues[EActorTrack.AnimFrame].setValue_immediate(this.mObject.JSGGetTextureAnimationFrame());
     }
 
     adaptor_do_end(obj: STBObject): void {
@@ -663,9 +664,9 @@ class TActorAdaptor extends TAdaptor {
         const pos = scratchVec3a;
         const rot = scratchVec3b;
         const scale = scratchVec3c;
-        this.adaptor_getVariableValue_Vec(pos, Actor_ValIdx.POS_X);
-        this.adaptor_getVariableValue_Vec(rot, Actor_ValIdx.ROT_X);
-        this.adaptor_getVariableValue_Vec(scale, Actor_ValIdx.SCALE_X);
+        this.adaptor_getVariableValue_Vec(pos, EActorTrack.PosX);
+        this.adaptor_getVariableValue_Vec(rot, EActorTrack.RotX);
+        this.adaptor_getVariableValue_Vec(scale, EActorTrack.ScaleX);
 
         if (obj.mControl.isTransformEnabled()) {
             vec3.transformMat4(pos, pos, obj.mControl.getTransformOnSet());
@@ -683,20 +684,20 @@ class TActorAdaptor extends TAdaptor {
     }
 
     adaptor_do_PARENT(dataOp: EDataOp, data: DataVal, dataSize: number): void {
-        assert(dataOp == EDataOp.OBJECT_NAME);
+        assert(dataOp == EDataOp.ObjectName);
         this.log(`SetParent: ${data.asStr}`);
-        this.parent = this.mSystem.JSGFindObject(data.asStr!, JStage.TEObject.PREEXISTING_ACTOR);
+        this.parent = this.mSystem.JSGFindObject(data.asStr!, JStage.EObject.PreExistingActor);
     }
 
     adaptor_do_PARENT_NODE(dataOp: EDataOp, data: DataVal, dataSize: number): void {
         debugger;
         this.log(`SetParentNode: ${data}`);
         switch (dataOp) {
-            case EDataOp.OBJECT_NAME:
+            case EDataOp.ObjectName:
                 if (this.parent)
                     this.parentNodeID = this.parent.JSGFindNodeID(data.asStr!);
                 break;
-            case EDataOp.OBJECT_INDEX:
+            case EDataOp.ObjectIdx:
                 this.parentNodeID = data.asInt!;
                 break;
             default: assert(false);
@@ -704,27 +705,27 @@ class TActorAdaptor extends TAdaptor {
     }
 
     adaptor_do_PARENT_ENABLE(dataOp: EDataOp, data: number, dataSize: number): void {
-        assert(dataOp == EDataOp.IMMEDIATE);
+        assert(dataOp == EDataOp.Immediate);
         this.log(`SetParentEnable: ${data}`);
         if (data) { this.mObject.JSGSetParent(this.parent!, this.parentNodeID); }
         else { this.mObject.JSGSetParent(null, 0xFFFFFFFF); }
     }
 
     adaptor_do_RELATION(dataOp: EDataOp, data: DataVal, dataSize: number): void {
-        assert(dataOp == EDataOp.OBJECT_NAME);
+        assert(dataOp == EDataOp.ObjectName);
         this.log(`SetRelation: ${data.asStr!}`);
-        this.relation = this.mSystem.JSGFindObject(data.asStr!, JStage.TEObject.PREEXISTING_ACTOR);
+        this.relation = this.mSystem.JSGFindObject(data.asStr!, JStage.EObject.PreExistingActor);
     }
 
     adaptor_do_RELATION_NODE(dataOp: EDataOp, data: DataVal, dataSize: number): void {
         debugger;
         this.log(`SetRelationNode: ${data}`);
         switch (dataOp) {
-            case EDataOp.OBJECT_NAME:
+            case EDataOp.ObjectName:
                 if (this.relation)
                     this.relationNodeID = this.relation.JSGFindNodeID(data.asStr!);
                 break;
-            case EDataOp.OBJECT_INDEX:
+            case EDataOp.ObjectIdx:
                 this.relationNodeID = data.asInt!;
                 break;
             default: assert(false);
@@ -732,37 +733,37 @@ class TActorAdaptor extends TAdaptor {
     }
 
     adaptor_do_RELATION_ENABLE(dataOp: EDataOp, data: number, dataSize: number): void {
-        assert(dataOp == EDataOp.IMMEDIATE);
+        assert(dataOp == EDataOp.Immediate);
         this.log(`SetRelationEnable: ${data}`);
         this.mObject.JSGSetRelation(!!data, this.relation!, this.relationNodeID);
     }
 
     adaptor_do_SHAPE(dataOp: EDataOp, data: DataVal, dataSize: number): void {
-        assert(dataOp == EDataOp.OBJECT_INDEX);
+        assert(dataOp == EDataOp.ObjectIdx);
         this.log(`SetShape: ${data.asInt!}`);
         this.mObject.JSGSetShape(data.asInt!);
     }
 
     adaptor_do_ANIMATION(dataOp: EDataOp, data: DataVal, dataSize: number): void {
-        assert(dataOp == EDataOp.OBJECT_INDEX);
+        assert(dataOp == EDataOp.ObjectIdx);
         this.log(`SetAnimation: ${(data.asInt!) & 0xFFFF} (${(data.asInt!) >> 4 & 0x01})`);
         this.mObject.JSGSetAnimation(data.asInt!);
     }
 
     adaptor_do_ANIMATION_MODE(dataOp: EDataOp, data: DataVal, dataSize: number): void {
-        assert(dataOp == EDataOp.IMMEDIATE);
+        assert(dataOp == EDataOp.Immediate);
         this.log(`SetAnimationMode: ${data.asInt!}`);
         this.animMode = data.asInt!;
     }
 
     adaptor_do_TEXTURE_ANIMATION(dataOp: EDataOp, data: DataVal, dataSize: number): void {
-        assert(dataOp == EDataOp.OBJECT_INDEX);
+        assert(dataOp == EDataOp.ObjectIdx);
         this.log(`SetTexAnim: ${data}`);
         this.mObject.JSGSetTextureAnimation(data.asInt!);
     }
 
     adaptor_do_TEXTURE_ANIMATION_MODE(dataOp: EDataOp, data: DataVal, dataSize: number): void {
-        assert(dataOp == EDataOp.IMMEDIATE);
+        assert(dataOp == EDataOp.Immediate);
         this.log(`SetTexAnimMode: ${data}`);
         this.animTexMode = data.asInt!;
     }
@@ -787,25 +788,25 @@ class TActorObject extends STBObject {
 
         switch (cmdType) {
             // Pos
-            case 0x09: keyIdx = Actor_ValIdx.POS_X; break;
-            case 0x0a: keyIdx = Actor_ValIdx.POS_Y; break;
-            case 0x0b: keyIdx = Actor_ValIdx.POS_Z; break;
-            case 0x0c: keyCount = 3; keyIdx = Actor_ValIdx.POS_X; break;
+            case 0x09: keyIdx = EActorTrack.PosX; break;
+            case 0x0a: keyIdx = EActorTrack.PosY; break;
+            case 0x0b: keyIdx = EActorTrack.PosZ; break;
+            case 0x0c: keyCount = 3; keyIdx = EActorTrack.PosX; break;
 
             // Rot
-            case 0x0d: keyIdx = Actor_ValIdx.ROT_X; break;
-            case 0x0e: keyIdx = Actor_ValIdx.ROT_Y; break;
-            case 0x0f: keyIdx = Actor_ValIdx.ROT_Z; break;
-            case 0x10: keyCount = 3; keyIdx = Actor_ValIdx.ROT_X; break;
+            case 0x0d: keyIdx = EActorTrack.RotX; break;
+            case 0x0e: keyIdx = EActorTrack.RotY; break;
+            case 0x0f: keyIdx = EActorTrack.RotZ; break;
+            case 0x10: keyCount = 3; keyIdx = EActorTrack.RotX; break;
 
             // Scale
-            case 0x11: keyIdx = Actor_ValIdx.SCALE_X; break;
-            case 0x12: keyIdx = Actor_ValIdx.SCALE_Y; break;
-            case 0x13: keyIdx = Actor_ValIdx.SCALE_Z; break;
-            case 0x14: keyCount = 3; keyIdx = Actor_ValIdx.SCALE_X; break;
+            case 0x11: keyIdx = EActorTrack.ScaleX; break;
+            case 0x12: keyIdx = EActorTrack.ScaleY; break;
+            case 0x13: keyIdx = EActorTrack.ScaleZ; break;
+            case 0x14: keyCount = 3; keyIdx = EActorTrack.ScaleX; break;
 
-            case 0x3b: keyIdx = Actor_ValIdx.ANIM_FRAME; break;
-            case 0x4b: keyIdx = Actor_ValIdx.ANIM_TRANSITION; break;
+            case 0x3b: keyIdx = EActorTrack.AnimFrame; break;
+            case 0x4b: keyIdx = EActorTrack.AnimTransition; break;
 
             case 0x39: this.mAdaptor.adaptor_do_SHAPE(dataOp, data, dataSize); return;
             case 0x3a: this.mAdaptor.adaptor_do_ANIMATION(dataOp, data, dataSize); return;
@@ -817,7 +818,7 @@ class TActorObject extends STBObject {
             case 0x31: debugger; this.mAdaptor.adaptor_do_PARENT_NODE(dataOp, data, dataSize); return;
             case 0x32:
                 debugger;
-                keyIdx = Actor_ValIdx.PARENT;
+                keyIdx = EActorTrack.Parent;
                 if ((dataOp < 0x13) && (dataOp > 0x0F)) {
                     debugger;
                     this.mAdaptor.adaptor_setVariableValue(this, keyIdx, dataOp, data);
@@ -832,7 +833,7 @@ class TActorObject extends STBObject {
             case 0x34: debugger; this.mAdaptor.adaptor_do_RELATION_NODE(dataOp, data, dataSize); return;
             case 0x35:
                 debugger;
-                keyIdx = Actor_ValIdx.RELATION;
+                keyIdx = EActorTrack.Relation;
                 if ((dataOp < 0x13) && (dataOp > 0x0F)) {
                     debugger;
                     this.mAdaptor.adaptor_setVariableValue(this, keyIdx, dataOp, data);
@@ -855,64 +856,45 @@ class TActorObject extends STBObject {
             this.mAdaptor.adaptor_setVariableValue(this, keyIdx + i, dataOp, keyData[i]);
         }
 
-        this.mAdaptor.log(`Set${keyToString(keyIdx, keyCount)}: ${dataOpToString(dataOp)} [${dataToValue(keyData, dataOp )}]`); 
+        this.mAdaptor.log(`Set${keyToString(keyIdx, keyCount)}: ${dataOpToString(dataOp)} [${dataToValue(keyData, dataOp)}]`);
     }
 }
 
 //----------------------------------------------------------------------------------------------------------------------
 // Camera
 //----------------------------------------------------------------------------------------------------------------------
-// TODO: Rename these Enums
-const enum Camera_Cmd {
-    SET_EYE_X_POS = 0x0015,
-    SET_EYE_Y_POS = 0x0016,
-    SET_EYE_Z_POS = 0x0017,
-    SET_EYE_POS = 0x0018,
-    SET_TARGET_X_POS = 0x0019,
-    SET_TARGET_Y_POS = 0x001A,
-    SET_TARGET_Z_POS = 0x001B,
-    SET_TARGET_POS = 0x001C,
-    SET_PROJ_FOVY = 0x0027,
-    SET_VIEW_ROLL = 0x0026,
-    SET_DIST_NEAR = 0x0028,
-    SET_DIST_FAR = 0x0029,
-    SET_DIST_NEAR_FAR = 0x002A,
+const enum ECameraTrack {
+    PosX = 0x00,
+    PosY = 0x01,
+    PosZ = 0x02,
+    TargetX = 0x03,
+    TargetY = 0x04,
+    TargetZ = 0x05,
+    FovY = 0x06,
+    Roll = 0x07,
+    DistNear = 0x08,
+    DistFar = 0x09,
 }
 
-const enum Camera_Track {
-    EYE_X_POS = 0x00,
-    EYE_Y_POS = 0x01,
-    EYE_Z_POS = 0x02,
-    TARGET_X_POS = 0x03,
-    TARGET_Y_POS = 0x04,
-    TARGET_Z_POS = 0x05,
-    PROJ_FOVY = 0x06,
-    VIEW_ROLL = 0x07,
-    DIST_NEAR = 0x08,
-    DIST_FAR = 0x09,
-    CAMERA_TRACKS_MAX = 0x0A,
-}
-
-function camKeyToString(enumValue: Camera_Track, count: number) {
+function camKeyToString(enumValue: ECameraTrack, count: number) {
     switch (enumValue) {
-        case Camera_Track.EYE_X_POS: return "EYE_X_POS";
-        case Camera_Track.EYE_Y_POS: return "EYE_Y_POS";
-        case Camera_Track.EYE_Z_POS: return "EYE_Z_POS";
-        case Camera_Track.TARGET_X_POS: return "TARGET_X_POS";
-        case Camera_Track.TARGET_Y_POS: return "TARGET_Y_POS";
-        case Camera_Track.TARGET_Z_POS: return "TARGET_Z_POS";
-        case Camera_Track.PROJ_FOVY: return "PROJ_FOVY";
-        case Camera_Track.VIEW_ROLL: return "VIEW_ROLL";
-        case Camera_Track.DIST_NEAR: return "DIST_NEAR";
-        case Camera_Track.DIST_FAR: return "DIST_FAR";
-        case Camera_Track.CAMERA_TRACKS_MAX: return "CAMERA_TRACKS_MAX";
+        case ECameraTrack.PosX: return "PosX";
+        case ECameraTrack.PosY: return "PosY";
+        case ECameraTrack.PosZ: return "PosZ";
+        case ECameraTrack.TargetX: return "TargetX";
+        case ECameraTrack.TargetY: return "TargetY";
+        case ECameraTrack.TargetZ: return "TargetZ";
+        case ECameraTrack.FovY: return "FovY";
+        case ECameraTrack.Roll: return "Roll";
+        case ECameraTrack.DistNear: return "DistNear";
+        case ECameraTrack.DistFar: return "DistFar";
     }
 }
 
 export abstract class TCamera extends JStage.TObject {
-    JSGFGetType() { return JStage.TEObject.CAMERA; }
-    // JSGGetProjectionType() { return true; }
-    // JSGSetProjectionType(JStage:: TECameraProjection) { }
+    JSGFGetType() { return JStage.EObject.Camera; }
+    JSGGetProjectionType() { return true; }
+    JSGSetProjectionType(type: number) { }
     JSGGetProjectionNear() { return 0.0; }
     JSGSetProjectionNear(near: number) { }
     JSGGetProjectionFar() { return Number.MAX_VALUE; }
@@ -923,8 +905,8 @@ export abstract class TCamera extends JStage.TObject {
     JSGSetProjectionAspect(aspect: number) { };
     JSGGetProjectionField() { return 0.0 };
     JSGSetProjectionField(field: number) { };
-    // JSGGetViewType() { return true; };
-    // JSGSetViewType(JStage:: TECameraView) { }
+    JSGGetViewType() { return true; };
+    JSGSetViewType(type: number) { }
     JSGGetViewPosition(dst: vec3) { vec3.zero(dst); }
     JSGSetViewPosition(v: ReadonlyVec3) { }
     JSGGetViewUpVector(dst: vec3) { vec3.zero(dst); }
@@ -941,10 +923,10 @@ class TCameraAdaptor extends TAdaptor {
     ) { super(11); }
 
     adaptor_do_prepare(obj: STBObject): void {
-        this.mVariableValues[Camera_Track.PROJ_FOVY].setOutput(this.mObject.JSGSetProjectionFovy.bind(this.mObject));
-        this.mVariableValues[Camera_Track.VIEW_ROLL].setOutput(this.mObject.JSGSetViewRoll.bind(this.mObject));
-        this.mVariableValues[Camera_Track.DIST_NEAR].setOutput(this.mObject.JSGSetProjectionNear.bind(this.mObject));
-        this.mVariableValues[Camera_Track.DIST_FAR].setOutput(this.mObject.JSGSetProjectionFar.bind(this.mObject));
+        this.mVariableValues[ECameraTrack.FovY].setOutput(this.mObject.JSGSetProjectionFovy.bind(this.mObject));
+        this.mVariableValues[ECameraTrack.Roll].setOutput(this.mObject.JSGSetViewRoll.bind(this.mObject));
+        this.mVariableValues[ECameraTrack.DistNear].setOutput(this.mObject.JSGSetProjectionNear.bind(this.mObject));
+        this.mVariableValues[ECameraTrack.DistFar].setOutput(this.mObject.JSGSetProjectionFar.bind(this.mObject));
     }
 
     adaptor_do_begin(obj: STBObject): void {
@@ -956,12 +938,12 @@ class TCameraAdaptor extends TAdaptor {
         vec3.transformMat4(camPos, camPos, obj.mControl.getTransformOnGet());
         vec3.transformMat4(targetPos, targetPos, obj.mControl.getTransformOnGet());
 
-        this.adaptor_setVariableValue_Vec(Camera_Track.EYE_X_POS, camPos);
-        this.adaptor_setVariableValue_Vec(Camera_Track.TARGET_X_POS, targetPos);
-        this.mVariableValues[Camera_Track.PROJ_FOVY].setValue_immediate(this.mObject.JSGGetProjectionFovy());
-        this.mVariableValues[Camera_Track.VIEW_ROLL].setValue_immediate(this.mObject.JSGGetViewRoll());
-        this.mVariableValues[Camera_Track.DIST_NEAR].setValue_immediate(this.mObject.JSGGetProjectionNear());
-        this.mVariableValues[Camera_Track.DIST_FAR].setValue_immediate(this.mObject.JSGGetProjectionFar());
+        this.adaptor_setVariableValue_Vec(ECameraTrack.PosX, camPos);
+        this.adaptor_setVariableValue_Vec(ECameraTrack.TargetX, targetPos);
+        this.mVariableValues[ECameraTrack.FovY].setValue_immediate(this.mObject.JSGGetProjectionFovy());
+        this.mVariableValues[ECameraTrack.Roll].setValue_immediate(this.mObject.JSGGetViewRoll());
+        this.mVariableValues[ECameraTrack.DistNear].setValue_immediate(this.mObject.JSGGetProjectionNear());
+        this.mVariableValues[ECameraTrack.DistFar].setValue_immediate(this.mObject.JSGGetProjectionFar());
     }
 
     adaptor_do_end(obj: STBObject): void {
@@ -972,8 +954,8 @@ class TCameraAdaptor extends TAdaptor {
         const camPos = scratchVec3a;
         const targetPos = scratchVec3b;
 
-        this.adaptor_getVariableValue_Vec(camPos, Camera_Track.EYE_X_POS);
-        this.adaptor_getVariableValue_Vec(targetPos, Camera_Track.TARGET_X_POS);
+        this.adaptor_getVariableValue_Vec(camPos, ECameraTrack.PosX);
+        this.adaptor_getVariableValue_Vec(targetPos, ECameraTrack.TargetX);
 
         vec3.transformMat4(camPos, camPos, obj.mControl.getTransformOnSet());
         vec3.transformMat4(targetPos, targetPos, obj.mControl.getTransformOnSet());
@@ -1017,26 +999,26 @@ class TCameraObject extends STBObject {
 
         switch (cmdType) {
             // Eye position
-            case Camera_Cmd.SET_EYE_X_POS: keyIdx = Camera_Track.EYE_X_POS; break;
-            case Camera_Cmd.SET_EYE_Z_POS: keyIdx = Camera_Track.EYE_Y_POS; break;
-            case Camera_Cmd.SET_EYE_Y_POS: keyIdx = Camera_Track.EYE_Z_POS; break;
-            case Camera_Cmd.SET_EYE_POS: keyCount = 3; keyIdx = Camera_Track.EYE_X_POS; break;
+            case 0x15: keyIdx = ECameraTrack.PosX; break;
+            case 0x16: keyIdx = ECameraTrack.PosY; break;
+            case 0x17: keyIdx = ECameraTrack.PosZ; break;
+            case 0x18: keyCount = 3; keyIdx = ECameraTrack.PosX; break;
                 break;
 
             // Target position
-            case Camera_Cmd.SET_TARGET_X_POS: keyIdx = Camera_Track.TARGET_X_POS; break;
-            case Camera_Cmd.SET_TARGET_Y_POS: keyIdx = Camera_Track.TARGET_Y_POS; break;
-            case Camera_Cmd.SET_TARGET_Z_POS: keyIdx = Camera_Track.TARGET_Z_POS; break;
-            case Camera_Cmd.SET_TARGET_POS: keyCount = 3; keyIdx = Camera_Track.TARGET_X_POS; break;
+            case 0x19: keyIdx = ECameraTrack.TargetX; break;
+            case 0x1A: keyIdx = ECameraTrack.TargetY; break;
+            case 0x1B: keyIdx = ECameraTrack.TargetZ; break;
+            case 0x1C: keyCount = 3; keyIdx = ECameraTrack.TargetX; break;
 
             // Camera params
-            case Camera_Cmd.SET_PROJ_FOVY: keyIdx = Camera_Track.PROJ_FOVY; break;
-            case Camera_Cmd.SET_VIEW_ROLL: keyIdx = Camera_Track.VIEW_ROLL; break;
+            case 0x26: keyIdx = ECameraTrack.Roll; break;
+            case 0x27: keyIdx = ECameraTrack.FovY; break;
 
             // Near/far distance
-            case Camera_Cmd.SET_DIST_NEAR: keyIdx = Camera_Track.DIST_NEAR; break;
-            case Camera_Cmd.SET_DIST_FAR: keyIdx = Camera_Track.DIST_FAR; break;
-            case Camera_Cmd.SET_EYE_POS: keyCount = 2; keyIdx = Camera_Track.DIST_NEAR; break;
+            case 0x28: keyIdx = ECameraTrack.DistNear; break;
+            case 0x29: keyIdx = ECameraTrack.DistFar; break;
+            case 0x2A: keyCount = 2; keyIdx = ECameraTrack.DistNear; break;
 
             default:
                 console.debug('Unsupported TCamera update: ', cmdType, ' ', dataOp);
@@ -1049,8 +1031,8 @@ class TCameraObject extends STBObject {
             keyData[i] = readData(dataOp, dataOffset + i * 4, dataSize, file);
             this.mAdaptor.adaptor_setVariableValue(this, keyIdx + i, dataOp, keyData[i]);
         }
-        
-        this.mAdaptor.log(`Set${camKeyToString(keyIdx, keyCount)}: ${dataOpToString(dataOp)} [${dataToValue(keyData, dataOp )}]`); 
+
+        this.mAdaptor.log(`Set${camKeyToString(keyIdx, keyCount)}: ${dataOpToString(dataOp)} [${dataToValue(keyData, dataOp)}]`);
     }
 }
 
@@ -1156,11 +1138,11 @@ namespace FVB {
         getAttrRefer() { return this.refer; }
         getAttrInterpolate() { return this.interpolate; }
 
-        static toFunction_outside(type: EExtrapolationType): (frame: number, maxFrame: number ) => number {
-            switch(type ) {
+        static toFunction_outside(type: EExtrapolationType): (frame: number, maxFrame: number) => number {
+            switch (type) {
                 case EExtrapolationType.Raw: return (f, m) => f;
                 case EExtrapolationType.Repeat: return (f, m) => { f = f % m; return f < 0 ? f + m : f; }
-                case EExtrapolationType.Turn: return (f, m) => { f %= (2*m); if (f < 0) f += m; return f > m ? 2*m - f : f };
+                case EExtrapolationType.Turn: return (f, m) => { f %= (2 * m); if (f < 0) f += m; return f > m ? 2 * m - f : f };
                 case EExtrapolationType.Clamp: return (f, m) => clamp(f, 0.0, m);
             }
         }
@@ -1633,16 +1615,15 @@ namespace FVB {
     // Perform a simple operation to combine some number of other FunctionValues, returning the result. 
     // For example, we can using the ADD ECompositeOp we can return the sum of two ListParameter FunctionValues.
     //----------------------------------------------------------------------------------------------------------------------
-    enum TECompositeOp {
-        NONE,
-        RAW,
-        IDX,
-        PARAM,
-        ADD,
-        SUB,
-        MUL,
-        DIV,
-        ENUM_SIZE,
+    enum ECompositeOp {
+        None,
+        Raw,
+        Idx,
+        Parm,
+        Add,
+        Sub,
+        Mul,
+        Div,
     }
 
     class TObject_Composite extends FVB.TObject {
@@ -1658,13 +1639,13 @@ namespace FVB {
             let fvData: number;
             let fvFunc: (ref: TFunctionValue[], data: number, t: number) => number;
             switch (compositeOp) {
-                case TECompositeOp.RAW: fvData = uintData; fvFunc = FunctionValue_Composite.composite_raw; break;
-                case TECompositeOp.IDX: fvData = uintData; fvFunc = FunctionValue_Composite.composite_index; break;
-                case TECompositeOp.PARAM: fvData = floatData; fvFunc = FunctionValue_Composite.composite_parameter; break;
-                case TECompositeOp.ADD: fvData = floatData; fvFunc = FunctionValue_Composite.composite_add; break;
-                case TECompositeOp.SUB: fvData = floatData; fvFunc = FunctionValue_Composite.composite_subtract; break;
-                case TECompositeOp.MUL: fvData = floatData; fvFunc = FunctionValue_Composite.composite_multiply; break;
-                case TECompositeOp.DIV: fvData = floatData; fvFunc = FunctionValue_Composite.composite_divide; break;
+                case ECompositeOp.Raw: fvData = uintData; fvFunc = FunctionValue_Composite.composite_raw; break;
+                case ECompositeOp.Idx: fvData = uintData; fvFunc = FunctionValue_Composite.composite_index; break;
+                case ECompositeOp.Parm: fvData = floatData; fvFunc = FunctionValue_Composite.composite_parameter; break;
+                case ECompositeOp.Add: fvData = floatData; fvFunc = FunctionValue_Composite.composite_add; break;
+                case ECompositeOp.Sub: fvData = floatData; fvFunc = FunctionValue_Composite.composite_subtract; break;
+                case ECompositeOp.Mul: fvData = floatData; fvFunc = FunctionValue_Composite.composite_multiply; break;
+                case ECompositeOp.Div: fvData = floatData; fvFunc = FunctionValue_Composite.composite_divide; break;
                 default:
                     console.warn('Unsupported CompositeOp:', compositeOp);
                     return;
@@ -1829,12 +1810,12 @@ enum ESequenceCmd {
     Paragraph = 0x80,
 }
 
-enum TEStatus {
-    STILL = 0,
-    END = 1 << 0,
-    WAIT = 1 << 1,
-    SUSPEND = 1 << 2,
-    INACTIVE = 1 << 3,
+enum EStatus {
+    Still = 0,
+    End = 1 << 0,
+    Wait = 1 << 1,
+    Suspend = 1 << 2,
+    Inactive = 1 << 3,
 }
 
 // The runtime object that stores interpolated data each frame. Written to by a TAdapter. By default, the base object
@@ -1861,7 +1842,7 @@ export class TControl {
     private mTransformOnGetMtx = mat4.create();
     private mTransformOnSetMtx = mat4.create();
 
-    private mStatus: TEStatus = TEStatus.STILL;
+    private mStatus: EStatus = EStatus.Still;
     private mObjects: STBObject[] = [];
 
     // A special object that the STB file can use to suspend the demo (such as while waiting for player input)
@@ -1922,10 +1903,10 @@ export class TControl {
     // Really this is a stb::TFactory method
     public createObject(blockObj: TBlockObject): STBObject | undefined {
         let objConstructor;
-        let objType: JStage.TEObject;
+        let objType: JStage.EObject;
         switch (blockObj.type) {
-            case 'JCMR': objConstructor = TCameraObject; objType = JStage.TEObject.CAMERA; break;
-            case 'JACT': objConstructor = TActorObject; objType = JStage.TEObject.ACTOR; break;
+            case 'JCMR': objConstructor = TCameraObject; objType = JStage.EObject.Camera; break;
+            case 'JACT': objConstructor = TActorObject; objType = JStage.EObject.Actor; break;
             case 'JABL':
             case 'JLIT':
             case 'JFOG':

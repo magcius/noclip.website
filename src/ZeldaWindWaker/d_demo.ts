@@ -284,17 +284,17 @@ class dDemo_system_c implements TSystem {
         private globals: dGlobals
     ) { }
 
-    public JSGFindObject(objName: string, objType: JStage.TEObject): JStage.TObject | undefined {
+    public JSGFindObject(objName: string, objType: JStage.EObject): JStage.TObject | undefined {
         switch (objType) {
-            case JStage.TEObject.CAMERA:
+            case JStage.EObject.Camera:
                 if (this.mpActiveCamera) return this.mpActiveCamera;
                 else return this.mpActiveCamera = new dDemo_camera_c(this.globals);
 
-            case JStage.TEObject.ACTOR:
-            case JStage.TEObject.PREEXISTING_ACTOR:
+            case JStage.EObject.Actor:
+            case JStage.EObject.PreExistingActor:
                 let actor = fopAcM_searchFromName(this.globals, objName, 0, 0);
                 if (!actor) {
-                    if (objType == JStage.TEObject.ACTOR && objName == "d_act") {
+                    if (objType == JStage.EObject.Actor && objName == "d_act") {
                         debugger; // Untested. Unimplemented
                         actor = {} as fopAc_ac_c;
                     } else {
@@ -309,9 +309,9 @@ class dDemo_system_c implements TSystem {
                 };
                 return this.mpActors[actor.demoActorID];
 
-            case JStage.TEObject.AMBIENT:
-            case JStage.TEObject.LIGHT:
-            case JStage.TEObject.FOG:
+            case JStage.EObject.Ambient:
+            case JStage.EObject.Light:
+            case JStage.EObject.Fog:
             default:
                 console.debug('[JSGFindObject] Unhandled type: ', objType);
                 return undefined;
