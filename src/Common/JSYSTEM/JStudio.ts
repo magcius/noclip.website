@@ -1040,7 +1040,6 @@ class TCameraObject extends STBObject {
 //----------------------------------------------------------------------------------------------------------------------
 // Parsing helpers
 //----------------------------------------------------------------------------------------------------------------------
-// @TODO: Rename
 class Reader {
     buffer: ArrayBufferSlice;
     view: DataView;
@@ -1229,7 +1228,6 @@ namespace FVB {
                     case EPrepareOp.RangeProgress:
                     case EPrepareOp.RangeAdjust:
                     case EPrepareOp.RangeOutside:
-
                     default:
                         console.warn('Unhandled FVB PrepareOp: ', para.type);
                         debugger;
@@ -1513,7 +1511,6 @@ namespace FVB {
             return value;
         }
 
-        // @TODO: Better way of accessing 2-word keys
         interpolateBSpline(t: number): number {
             const c = this.curKeyIdx * 2;
 
@@ -1834,7 +1831,7 @@ export abstract class TBlockObject {
 export class TControl {
     public mSystem: TSystem;
     public mFvbControl = new FVB.TControl();
-    public mSecondsPerFrame: number;
+    public mSecondsPerFrame: number = 1 / 30.0;
     private mSuspendFrames: number;
 
     public mTransformOrigin?: vec3;
@@ -1850,7 +1847,6 @@ export class TControl {
 
     constructor(system: TSystem) {
         this.mSystem = system;
-        this.mSecondsPerFrame = 1 / 30.0; // @TODO: Allow the game to change this?
     }
 
     public isSuspended() { return this.mSuspendFrames > 0; }
