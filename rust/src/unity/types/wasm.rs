@@ -69,12 +69,13 @@ pub struct Transform {
 }
 
 #[wasm_bindgen(js_name = "UnityMaterial", getter_with_clone)]
-#[derive(FromStructPerField)]
-#[from(binary::Material)]
+#[derive(Debug, Clone)]
 pub struct Material {
     pub name: String,
     pub shader: WasmFriendlyPPtr,
-    pub shader_keywords: String,
+    pub shader_keywords: Option<String>,
+    pub valid_keywords: Option<Vec<String>>,
+    pub invalid_keywords: Option<Vec<String>>,
     pub lightmap_flags: u32,
     pub enable_instancing_variants: u8,
     pub double_sided_gi: u8,
@@ -84,6 +85,36 @@ pub struct Material {
     tex_envs: HashMap<String, TexEnv>,
     floats: HashMap<String, f32>,
     colors: HashMap<String, ColorRGBA>,
+}
+
+impl From<binary::Material> for Material {
+    fn from(value: binary::Material) -> Self {
+        Self {
+            name: value.name.into(),
+            shader: value.shader.into(),
+            shader_keywords: match value.shader_keywords {
+                Some(v) => Some(v.into()),
+                None => None,
+            },
+            valid_keywords: match value.valid_keywords {
+                Some(v) => Some(v.into()),
+                None => None,
+            },
+            invalid_keywords: match value.invalid_keywords {
+                Some(v) => Some(v.into()),
+                None => None,
+            },
+            lightmap_flags: value.lightmap_flags.into(),
+            enable_instancing_variants: value.enable_instancing_variants.into(),
+            double_sided_gi: value.double_sided_gi.into(),
+            custom_render_queue: value.custom_render_queue.into(),
+            string_tag_map: value.string_tag_map.into(),
+            disabled_shader_passes: value.disabled_shader_passes.into(),
+            tex_envs: value.tex_envs.into(),
+            floats: value.floats.into(),
+            colors: value.colors.into(),
+        }
+    }
 }
 
 #[wasm_bindgen(js_class = "UnityMaterial")]
@@ -385,15 +416,13 @@ pub struct StreamingInfo {
 }
 
 #[wasm_bindgen(js_name = "UnityTexture2D", getter_with_clone)]
-#[derive(Clone, Debug, FromStructPerField)]
-#[from(binary::Texture2D)]
 pub struct Texture2D {
     pub name: String,
     pub forced_fallback_format: i32,
     pub downscale_fallback: u8,
     pub width: i32,
     pub height: i32,
-    pub complete_image_size: i32,
+    pub complete_image_size: u32,
     pub texture_format: TextureFormat,
     pub mip_count: i32,
     pub is_readable: u8,
@@ -408,6 +437,41 @@ pub struct Texture2D {
     pub color_space: ColorSpace,
     pub data: Vec<u8>,
     pub streaming_info: StreamingInfo,
+}
+
+impl From<binary::Texture2D> for Texture2D {
+    fn from(value: binary::Texture2D) -> Self {
+        let s = value.settings;
+        let (is_readable,
+            ignore_master_texture_limit,
+            is_preprocessed,
+            streaming_mipmaps) = match s {
+                binary::TextureBooleanSettings::V2019 { is_readable: a, ignore_master_texture_limit: b, is_preprocessed: c, streaming_mipmaps: d } => (a, b, c, d),
+                binary::TextureBooleanSettings::V2020 { is_readable: a, ignore_master_texture_limit: b, is_preprocessed: c, streaming_mipmaps: d } => (a, b, c, d),
+            };
+        Self {
+            name: value.name.into(),
+            forced_fallback_format: value.forced_fallback_format.into(),
+            downscale_fallback: value.downscale_fallback.into(),
+            width: value.width.into(),
+            height: value.height.into(),
+            complete_image_size: value.complete_image_size.into(),
+            texture_format: value.texture_format.into(),
+            mip_count: value.mip_count.into(),
+            is_readable,
+            ignore_master_texture_limit,
+            is_preprocessed,
+            streaming_mipmaps,
+            streaming_mipmaps_priority: value.streaming_mipmaps_priority.into(),
+            image_count: value.image_count.into(),
+            texture_dimension: value.texture_dimension.into(),
+            texture_settings: value.texture_settings.into(),
+            lightmap_format: value.lightmap_format.into(),
+            color_space: value.color_space.into(),
+            data: value.data.into(),
+            streaming_info: value.streaming_info.into(),
+        }
+    }
 }
 
 #[wasm_bindgen(js_name = "UnityGLTextureSettings", getter_with_clone)]

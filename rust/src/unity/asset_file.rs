@@ -111,7 +111,7 @@ mod tests {
     use std::str::FromStr;
 
     use crate::unity::types::common::UnityVersion;
-    use crate::unity::types::wasm::{GameObject, Mesh, MeshFilter, MeshRenderer, Transform};
+    use crate::unity::types::wasm::{GameObject, Texture2D, Mesh, MeshFilter, MeshRenderer, Transform, Material};
     use crate::unity::types::serialized_file::ObjectInfo;
 
     use super::*;
@@ -121,7 +121,7 @@ mod tests {
     #[test]
     fn test() {
         let mut base_path = PathBuf::from_str("C:\\Users\\ifnsp\\dev\\noclip.website\\data\\AShortHike").unwrap();
-        let data = std::fs::read(&base_path.join("level2")).unwrap();
+        let data = std::fs::read(&base_path.join("resources.assets")).unwrap();
         let version = UnityVersion::V2021_3_27f1;
         let mut asset_file = AssetFile::initialize_with_header_chunk(&data).unwrap();
         dbg!(&asset_file.header);
@@ -144,54 +144,32 @@ mod tests {
             ext_files.push(ext_file);
         }
 
-        let mut objects = HashMap::new();
-        let mut object_infos = HashMap::new();
         for obj in asset_file.get_objects() {
-            if !matches!(obj.class_id, ClassID::GameObject) {
-                object_infos.insert(obj.file_id, obj);
-                continue;
-            }
             let data = &data[obj.byte_start as usize..obj.byte_start as usize + obj.byte_size];
-            let game_object = GameObject::create(version, data).unwrap();
-            objects.insert(obj.file_id, game_object);
-            object_infos.insert(obj.file_id, obj);
-        }
-
-        let mut successes = HashSet::new();
-        for obj in objects.values() {
-            for component_ptr in &obj.components {
-                if component_ptr.file_index != 0 {
-                    dbg!(component_ptr);
-                    continue;
-                }
-                let obj = object_infos.get(&component_ptr.path_id).unwrap();
-                if successes.contains(&obj.file_id) {
-                    continue;
-                }
-                let bigdata = &data;
-                let data = &data[obj.byte_start as usize..obj.byte_start as usize + obj.byte_size];
-
-                match obj.class_id {
-                    ClassID::Transform => {Transform::create(version, data).unwrap();},
-                    ClassID::RectTransform => {Transform::create(version, data).unwrap();},
-                    ClassID::MeshFilter => {
-                        let filter = MeshFilter::create(version, data).unwrap();
-                        if filter.mesh.path_id == 0 || filter.mesh.file_index != 0 || successes.contains(&filter.mesh.path_id) {
-                            continue;
-                        }
-                        let obj = object_infos.get(&filter.mesh.path_id).unwrap();
-                        let data = &bigdata[obj.byte_start as usize..obj.byte_start as usize + obj.byte_size];
-
-                        println!("reading mesh {}", obj.file_id);
-                        let mut mesh = Mesh::create(version, data).unwrap();
-                        successes.insert(obj.file_id);
-                        mesh.submeshes.clear();
-                        mesh.index_buffer.clear();
-                    },
-                    ClassID::MeshRenderer => {MeshRenderer::create(version, data).unwrap();},
-                    _ => {},
-                }
-                successes.insert(obj.file_id);
+            match obj.class_id {
+                ClassID::Transform => {
+                    Transform::create(version, data).unwrap();
+                },
+                ClassID::RectTransform => {
+                    Transform::create(version, data).unwrap();
+                },
+                ClassID::MeshFilter => {
+                    MeshFilter::create(version, data).unwrap();
+                },
+                ClassID::Mesh => {
+                    Mesh::create(version, data).unwrap();
+                },
+                ClassID::MeshRenderer => {
+                    MeshRenderer::create(version, data).unwrap();
+                },
+                ClassID::Material => {
+                    Material::create(version, data).unwrap();
+                },
+                ClassID::Texture2D => {
+                    println!("parsing Texture2D {}", obj.file_id);
+                    Texture2D::create(version, data).unwrap();
+                },
+                _ => {},
             }
         }
     }

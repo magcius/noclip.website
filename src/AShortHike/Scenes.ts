@@ -202,7 +202,6 @@ class TerrainMaterial extends UnityMaterialInstance {
 
 class AShortHikeMaterialFactory extends UnityMaterialFactory {
     public createMaterialInstance(runtime: UnityRuntime, materialData: UnityMaterialData): UnityMaterialInstance {
-        debugger;
         // TODO(jstpierre): Pull out serialized shader data
         if (materialData.name.includes('_Splat3'))
             return new TerrainMaterial(runtime, materialData);
@@ -229,7 +228,7 @@ class UnityRenderer implements Viewer.SceneGfx {
         const template = this.renderHelper.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
 
-        let offs = template.allocateUniformBuffer(0, 32);
+        let offs = template.allocateUniformBuffer(0, 16);
         const mapped = template.mapUniformBufferF32(0);
         offs += fillMatrix4x4(mapped, offs, viewerInput.camera.clipFromWorldMatrix);
 

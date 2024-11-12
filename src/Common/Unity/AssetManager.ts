@@ -300,7 +300,7 @@ export class AssetFile {
                     this.dataCache.set(pathID, v);
                     return v;
                 }).catch(e => {
-                    console.error(`failed to fetch ${pathID}, ${e}`);
+                    console.error(`failed to fetch ${this.path}: ${pathID}, ${e}`);
                     throw e;
                 });
         });
@@ -739,7 +739,7 @@ export class UnityMaterialData {
     public fillTexEnvScaleBias(d: Float32Array, offs: number, name: string): number {
         const texture = this.texturesByName.get(name);
         if (texture !== undefined) {
-            return fillVec4(d, texture.scale[0], texture.scale[1], texture.offset[0], texture.offset[1]);
+            return fillVec4(d, offs, texture.scale[0], texture.scale[1], texture.offset[0], texture.offset[1]);
         } else {
             return fillVec4(d, offs, 1, 1, 0, 0);
         }

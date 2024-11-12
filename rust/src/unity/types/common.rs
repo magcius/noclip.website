@@ -14,7 +14,7 @@ pub enum UnityVersion {
     V2021_3_27f1,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct UnityArray<T> {
     pub values: Vec<T>,
 }
@@ -100,7 +100,7 @@ impl<PreK, PreV, ResK, ResV> From<Map<PreK, PreV>> for HashMap<ResK, ResV>
     }
 }
 
-#[derive(DekuRead, Clone)]
+#[derive(DekuRead, Clone, Default)]
 pub struct CharArray {
     count: u32,
     #[deku(count = "*count")]

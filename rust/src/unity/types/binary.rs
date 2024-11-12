@@ -32,20 +32,41 @@ pub struct Transform {
 }
 
 #[derive(DekuRead, Clone, Debug)]
-#[deku(ctx = "_version: UnityVersion")]
+#[deku(ctx = "version: UnityVersion")]
 pub struct Material {
     pub name: CharArray,
+    #[deku(count = "(4 - deku::byte_offset % 4) % 4")] _alignment0: Vec<u8>,
     pub shader: PPtr<()>,
-    pub shader_keywords: CharArray,
+    #[deku(cond = "version < UnityVersion::V2021_3_27f1")]
+    pub shader_keywords: Option<CharArray>,
+    #[deku(count = "(4 - deku::byte_offset % 4) % 4")] _alignment1: Vec<u8>,
+    #[deku(cond = "version >= UnityVersion::V2021_3_27f1")]
+    pub valid_keywords: Option<UnityArray<CharArray>>,
+    #[deku(count = "(4 - deku::byte_offset % 4) % 4")] _alignment2: Vec<u8>,
+    #[deku(cond = "version >= UnityVersion::V2021_3_27f1")]
+    pub invalid_keywords: Option<UnityArray<CharArray>>,
+    #[deku(count = "(4 - deku::byte_offset % 4) % 4")] _alignment3: Vec<u8>,
     pub lightmap_flags: u32,
     pub enable_instancing_variants: u8,
     pub double_sided_gi: u8,
+    #[deku(count = "(4 - deku::byte_offset % 4) % 4")] _alignment4: Vec<u8>,
     pub custom_render_queue: u32,
     pub string_tag_map: Map<CharArray, CharArray>,
     pub disabled_shader_passes: UnityArray<CharArray>,
+    #[deku(count = "(4 - deku::byte_offset % 4) % 4")] _alignment5: Vec<u8>,
     pub tex_envs: Map<CharArray, TexEnv>,
+    #[deku(cond = "version >= UnityVersion::V2021_3_27f1")]
+    pub ints: Option<Map<CharArray, i32>>,
     pub floats: Map<CharArray, f32>,
     pub colors: Map<CharArray, ColorRGBA>,
+    #[deku(cond = "version >= UnityVersion::V2020_3_16f1")]
+    pub build_texture_stacks: Option<UnityArray<BuildTextureStackReference>>,
+}
+
+#[derive(DekuRead, Clone, Debug)]
+pub struct BuildTextureStackReference {
+    pub group_name: CharArray,
+    pub item_name: CharArray,
 }
 
 #[derive(DekuRead, Clone, Debug)]
@@ -70,13 +91,13 @@ pub struct MeshRenderer {
     pub cast_shadows: u8,
     pub receive_shadows: u8,
     pub dynamic_occludee: u8,
-    #[deku(cond = "version > UnityVersion::V2021_3_27f1")]
+    #[deku(cond = "version >= UnityVersion::V2021_3_27f1")]
     pub static_shadow_caster: Option<u8>,
     pub motion_vectors: u8,
     pub light_probe_usage: u8,
     pub reflection_probe_usage: u8,
     pub ray_tracing_mode: u8,
-    #[deku(cond = "version > UnityVersion::V2021_3_27f1")]
+    #[deku(cond = "version >= UnityVersion::V2020_3_16f1")]
     pub ray_trace_procedural: Option<u8>,
     #[deku(count = "(4 - deku::byte_offset % 4) % 4")] _alignment: Vec<u8>,
     pub rendering_layer_mask: u32,
@@ -94,7 +115,7 @@ pub struct MeshRenderer {
     pub sorting_layer: i16,
     pub sorting_order: i16,
     pub additional_vertex_streams: PPtr<Mesh>,
-    #[deku(cond = "version > UnityVersion::V2021_3_27f1")]
+    #[deku(cond = "version >= UnityVersion::V2021_3_27f1")]
     pub enlighten_vertex_streams: Option<PPtr<Mesh>>,
 }
 
@@ -214,10 +235,10 @@ pub struct ChannelInfo {
     pub stream: u8,
     pub offset: u8,
     pub format: VertexFormat,
-    #[deku(bits = "3")]
-    pub dimension: u8,
     #[deku(bits = "1", pad_bits_after = "4")]
     pub instance_data: u8,
+    #[deku(bits = "3")]
+    pub dimension: u8,
 }
 
 #[derive(DekuRead, Clone, Debug)]
@@ -280,26 +301,52 @@ pub struct StaticBatchInfo {
 #[deku(ctx = "version: UnityVersion")]
 pub struct Texture2D {
     pub name: CharArray,
+    #[deku(count = "(4 - deku::byte_offset % 4) % 4")] _alignment0: Vec<u8>,
     pub forced_fallback_format: i32,
     pub downscale_fallback: u8,
+    pub is_alpha_channel_optional: u8,
+    #[deku(count = "(4 - deku::byte_offset % 4) % 4")] _alignment1: Vec<u8>,
     pub width: i32,
     pub height: i32,
-    pub complete_image_size: i32,
+    pub complete_image_size: u32,
+    #[deku(cond = "version >= UnityVersion::V2020_3_16f1")]
+    pub mips_stripped: Option<i32>,
     pub texture_format: TextureFormat,
     pub mip_count: i32,
-    pub is_readable: u8,
-    pub ignore_master_texture_limit: u8,
-    pub is_preprocessed: u8,
-    pub streaming_mipmaps: u8,
+    #[deku(ctx = "version")]
+    pub settings: TextureBooleanSettings,
     pub streaming_mipmaps_priority: i32,
     pub image_count: i32,
     pub texture_dimension: i32,
     pub texture_settings: GLTextureSettings,
     pub lightmap_format: i32,
     pub color_space: ColorSpace,
+    #[deku(cond = "version >= UnityVersion::V2020_3_16f1")]
+    pub platform_blob: UnityArray<u8>,
+    #[deku(count = "(4 - deku::byte_offset % 4) % 4")] _alignment2: Vec<u8>,
     pub data: UnityArray<u8>,
+    #[deku(count = "(4 - deku::byte_offset % 4) % 4")] _alignment3: Vec<u8>,
     #[deku(ctx = "version")]
     pub streaming_info: StreamingInfo,
+}
+
+#[derive(DekuRead, Debug, Clone)]
+#[deku(ctx = "version: UnityVersion", id = "version")]
+pub enum TextureBooleanSettings {
+    #[deku(id_pat = "UnityVersion::V2019_4_39f1")]
+    V2019 {
+        is_readable: u8,
+        ignore_master_texture_limit: u8,
+        is_preprocessed: u8,
+        streaming_mipmaps: u8,
+    },
+    #[deku(id_pat = "_")]
+    V2020 {
+        is_readable: u8,
+        is_preprocessed: u8,
+        ignore_master_texture_limit: u8,
+        streaming_mipmaps: u8,
+    }
 }
 
 #[derive(DekuRead, Clone, Debug)]

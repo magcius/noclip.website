@@ -909,7 +909,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
         if (initialData !== undefined)
             this.uploadBufferData(buffer, 0, initialData);
-    
+
         return buffer;
     }
 
