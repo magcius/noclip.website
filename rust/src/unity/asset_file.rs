@@ -2,9 +2,9 @@ use deku::{bitvec::{BitSlice, BitVec}, prelude::*};
 use wasm_bindgen::prelude::*;
 
 use crate::unity::types::common::{NullTerminatedAsciiString, UnityArray};
-use super::types::wasm::WasmFriendlyPPtr;
-
+use crate::unity::types::wasm::WasmFriendlyPPtr;
 use crate::unity::types::class_id::ClassID;
+use crate::unity::types::serialized_file::{SerializedFileHeader, SerializedFileMetadata};
 
 #[wasm_bindgen(js_name = "UnityAssetFile")]
 pub struct AssetFile {
@@ -41,6 +41,7 @@ impl AssetFile {
         // data will be the file from bytes 0..data_offset, so skip to where the metadata starts
         let bitslice = BitSlice::from_slice(data);
         let (rest, _) = SerializedFileHeader::read(&bitslice, ()).unwrap();
+        let header_len = data.len() - rest.len() / 8;
         match SerializedFileMetadata::read(rest, self.header.version) {
             Ok((_, metadata)) => self.metadata = Some(metadata),
             Err(err) => return Err(format!("failed to parse metadata: {:?}", err)),
@@ -60,16 +61,20 @@ impl AssetFile {
         let metadata = self.get_metadata();
         let mut result = Vec::new();
         for obj in &metadata.objects {
-            let byte_start = obj.get_byte_start();
+            let byte_start = self.get_data_offset() as i64 + obj.get_byte_start();
             let class_id = if obj.serialized_type_index >= 0 {
                 match metadata.type_tree.get(obj.serialized_type_index as usize) {
-                    Some(obj_type) => obj_type.header.raw_type_id,
+                    Some(obj_type) => {
+                        // println!("{}: got actual type {:?}", obj.file_id, obj_type.header.raw_type_id);
+                        obj_type.header.raw_type_id
+                    },
                     None => {
-                        println!("bogus type: index {}, len {}", obj.serialized_type_index, metadata.type_tree.len());
+                        println!("{}: bogus type: index {}, len {}", obj.file_id, obj.serialized_type_index, metadata.type_tree.len());
                         ClassID::UnknownType
                     }
                 }
             } else {
+                println!("{}: type defaulting to MonoBehavior", obj.file_id);
                 ClassID::MonoBehavior
             };
             result.push(AssetFileObject {
@@ -99,167 +104,15 @@ pub struct AssetFileObject {
     pub class_id: ClassID,
 }
 
-// Supports v21, v22, and above
-
-#[derive(DekuRead, Clone, Debug)]
-#[deku(endian = "big")]
-struct SerializedFileHeader {
-    pub metadata_size: i32,
-    pub file_size: u32,
-    pub version: i32,
-    pub data_offset: u32,
-    #[deku(pad_bytes_after = "3")]
-    pub endianness: u8,
-    #[deku(cond = "*version >= 22")]
-    pub large_files_metadata_size: Option<u32>,
-    #[deku(cond = "*version >= 22")]
-    pub large_files_file_size: Option<i64>,
-    #[deku(cond = "*version >= 22")]
-    pub large_files_data_offset: Option<i64>,
-    #[deku(cond = "*version >= 22")]
-    _unk0: Option<i64>,
-}
-
-#[derive(DekuRead, Clone, Debug)]
-#[deku(ctx = "version: i32")]
-struct SerializedFileMetadata {
-    pub version_ascii: NullTerminatedAsciiString,
-    pub target_platform: u32,
-    pub enable_type_tree: u8,
-    type_tree_count: i32,
-    #[deku(count = "*type_tree_count", ctx = "*enable_type_tree > 0")]
-    pub type_tree: Vec<SerializedType>,
-    object_count: i32,
-    #[deku(ctx = "version", count = "*object_count")]
-    pub objects: Vec<ObjectInfo>,
-
-    // align to the nearest 4 byte boundary
-    #[deku(count = "(4 - deku::byte_offset % 4) % 4")] _alignment: Vec<u8>,
-
-    pub script_types: UnityArray<LocalSerializedObjectIdentifier>,
-    pub externals: UnityArray<FileIdentifier>,
-    ref_types_count: i32,
-    #[deku(count = "*ref_types_count", ctx = "*enable_type_tree > 0")]
-    pub ref_types: Vec<SerializedTypeReference>,
-    pub user_information: NullTerminatedAsciiString,
-}
-
-#[derive(DekuRead, Clone, Debug)]
-#[deku(ctx = "version: i32")]
-struct ObjectInfo {
-    pub file_id: i64,
-    #[deku(cond = "version <= 21")]
-    pub small_file_byte_start: Option<u32>,
-    #[deku(cond = "version >= 22")]
-    pub large_file_byte_start: Option<i64>,
-    pub byte_size: i32,
-    pub serialized_type_index: i32,
-}
-
-impl ObjectInfo {
-    pub fn get_byte_start(&self) -> i64 {
-        match self.small_file_byte_start {
-            Some(v) => v as i64,
-            None => self.large_file_byte_start.unwrap(),
-        }
-    }
-}
-
-#[derive(DekuRead, Clone, Debug)]
-struct LocalSerializedObjectIdentifier {
-    pub local_serialized_file_index: i32,
-    pub local_identifier_in_file: i64,
-}
-
-#[derive(DekuRead, Clone, Debug)]
-#[deku(ctx = "has_type_tree: bool")]
-struct SerializedTypeHeader {
-    pub raw_type_id: ClassID,
-    pub is_stripped_type: u8,
-    pub script_type_index: i16,
-    #[deku(cond = "*raw_type_id == ClassID::MonoBehavior")]
-    pub script_id: Option<[u8; 16]>,
-    pub old_type_hash: [u8; 16],
-    #[deku(cond = "has_type_tree")]
-    pub old_type: Option<OldSerializedType>,
-}
-
-#[derive(DekuRead, Clone, Debug)]
-#[deku(ctx = "has_type_tree: bool")]
-struct SerializedType {
-    #[deku(ctx = "has_type_tree")]
-    pub header: SerializedTypeHeader,
-    #[deku(cond = "has_type_tree", default = "0")]
-    type_dependencies_count: i32,
-    #[deku(count = "*type_dependencies_count")]
-    pub type_dependencies: Vec<i32>,
-}
-
-#[derive(DekuRead, Clone, Debug)]
-#[deku(ctx = "has_type_tree: bool")]
-struct SerializedTypeReference {
-    #[deku(ctx = "has_type_tree")]
-    pub header: SerializedTypeHeader,
-    #[deku(cond = "has_type_tree", default = "0")]
-    type_dependencies_count: i32,
-    #[deku(count = "*type_dependencies_count")]
-    pub type_dependencies: Vec<i32>,
-}
-
-#[derive(DekuRead, Clone, Debug)]
-struct SerializedTypeReferenceDependency {
-    pub class_name: NullTerminatedAsciiString,
-    pub namespace: NullTerminatedAsciiString,
-    pub asm_name: NullTerminatedAsciiString,
-}
-
-#[derive(DekuRead, Clone, Debug)]
-struct OldSerializedType {
-    nodes_count: i32,
-    string_buffer_size: i32,
-    #[deku(count = "*nodes_count")]
-    nodes: Vec<TreeTypeNode>,
-    #[deku(count = "*string_buffer_size")]
-    string_buffer: Vec<u8>,
-}
-
-#[derive(DekuRead, Clone, Debug)]
-struct TreeTypeNode {
-    version: u16,
-    level: u8,
-    type_flags: u8,
-    type_string_offset: u32,
-    name_string_offset: u32,
-    byte_size: i32,
-    index: i32,
-    meta_flags: u32,
-    ref_type_hash: u64,
-}
-
-#[derive(DekuRead, Clone, Debug)]
-struct Guid {
-    pub data0: u32,
-    pub data1: u32,
-    pub data2: u32,
-    pub data3: u32,
-}
-
-#[derive(DekuRead, Clone, Debug)]
-struct FileIdentifier {
-    pub asset_path_ascii: NullTerminatedAsciiString,
-    pub guid: Guid,
-    pub file_type: i32,
-    pub path_name_ascii: NullTerminatedAsciiString,
-}
-
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
+    use std::collections::{HashMap, HashSet};
     use std::path::PathBuf;
     use std::str::FromStr;
 
     use crate::unity::types::common::UnityVersion;
     use crate::unity::types::wasm::{GameObject, Mesh, MeshFilter, MeshRenderer, Transform};
+    use crate::unity::types::serialized_file::ObjectInfo;
 
     use super::*;
     use env_logger;
@@ -293,53 +146,52 @@ mod tests {
 
         let mut objects = HashMap::new();
         let mut object_infos = HashMap::new();
-        for obj in &metadata.objects {
-            object_infos.insert(obj.file_id, obj);
-            let obj_type = &metadata.type_tree[obj.serialized_type_index as usize];
-            if !matches!(obj_type.header.raw_type_id, ClassID::GameObject) {
+        for obj in asset_file.get_objects() {
+            if !matches!(obj.class_id, ClassID::GameObject) {
+                object_infos.insert(obj.file_id, obj);
                 continue;
             }
-            let byte_start = asset_file.get_data_offset() as usize + obj.get_byte_start() as usize;
-            let byte_size = obj.byte_size as usize;
-            let data = &data[byte_start..byte_start + byte_size];
+            let data = &data[obj.byte_start as usize..obj.byte_start as usize + obj.byte_size];
             let game_object = GameObject::create(version, data).unwrap();
             objects.insert(obj.file_id, game_object);
+            object_infos.insert(obj.file_id, obj);
         }
 
+        let mut successes = HashSet::new();
         for obj in objects.values() {
             for component_ptr in &obj.components {
                 if component_ptr.file_index != 0 {
                     dbg!(component_ptr);
                     continue;
                 }
-                let obj: &&ObjectInfo = object_infos.get(&component_ptr.path_id).unwrap();
-                let obj_type = &metadata.type_tree[obj.serialized_type_index as usize];
-                let byte_start = asset_file.get_data_offset() as usize + obj.get_byte_start() as usize;
-                let byte_size = obj.byte_size as usize;
+                let obj = object_infos.get(&component_ptr.path_id).unwrap();
+                if successes.contains(&obj.file_id) {
+                    continue;
+                }
                 let bigdata = &data;
-                let data = &data[byte_start..byte_start + byte_size];
+                let data = &data[obj.byte_start as usize..obj.byte_start as usize + obj.byte_size];
 
-                match obj_type.header.raw_type_id {
+                match obj.class_id {
                     ClassID::Transform => {Transform::create(version, data).unwrap();},
                     ClassID::RectTransform => {Transform::create(version, data).unwrap();},
                     ClassID::MeshFilter => {
                         let filter = MeshFilter::create(version, data).unwrap();
-                        if filter.mesh.path_id == 0 || filter.mesh.file_index != 0 {
+                        if filter.mesh.path_id == 0 || filter.mesh.file_index != 0 || successes.contains(&filter.mesh.path_id) {
                             continue;
                         }
                         let obj = object_infos.get(&filter.mesh.path_id).unwrap();
-                        let byte_start = asset_file.get_data_offset() as usize + obj.get_byte_start() as usize;
-                        let byte_size = obj.byte_size as usize;
-                        let data = &bigdata[byte_start..byte_start + byte_size];
+                        let data = &bigdata[obj.byte_start as usize..obj.byte_start as usize + obj.byte_size];
 
                         println!("reading mesh {}", obj.file_id);
                         let mut mesh = Mesh::create(version, data).unwrap();
+                        successes.insert(obj.file_id);
                         mesh.submeshes.clear();
                         mesh.index_buffer.clear();
                     },
                     ClassID::MeshRenderer => {MeshRenderer::create(version, data).unwrap();},
-                    s => {},
+                    _ => {},
                 }
+                successes.insert(obj.file_id);
             }
         }
     }

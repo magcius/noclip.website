@@ -343,12 +343,18 @@ class UnityLevel {
         const loadGameObject = async (unityObject: UnityAssetFileObject) => {
             const pathID = unityObject.file_id;
             const objData = await assetFile.fetchObject(pathID);
-            const wasmGameObject = rust.UnityGameObject.create(this.runtime.version, objData.data);
-            const gameObject = new GameObject(objData.location, wasmGameObject);
-            gameObject.isActive = wasmGameObject.is_active > 0;
-            gameObject.layer = wasmGameObject.layer;
-            this.gameObjects.push(gameObject);
-            await gameObject.load(this);
+            try {
+                const wasmGameObject = rust.UnityGameObject.create(this.runtime.version, objData.data);
+                const gameObject = new GameObject(objData.location, wasmGameObject);
+                gameObject.isActive = wasmGameObject.is_active > 0;
+                gameObject.layer = wasmGameObject.layer;
+                this.gameObjects.push(gameObject);
+                await gameObject.load(this);
+            } catch (e) {
+                console.error(`failed to load gameobj: ${e}`);
+                console.error(unityObject);
+                throw e;
+            }
         };
 
         const promises = [];

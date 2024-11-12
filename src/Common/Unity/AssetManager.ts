@@ -16,20 +16,6 @@ import { GfxRenderCache } from '../../gfx/render/GfxRenderCache.js';
 import { rust } from '../../rustlib.js';
 import { assert, assertExists, fallbackUndefined } from '../../util.js';
 
-interface WasmBindgenArray<T> {
-    length: number;
-    get(i: number): T;
-    free(): void;
-}
-
-function loadWasmBindgenArray<T>(wasmArr: WasmBindgenArray<T>): T[] {
-    const jsArr: T[] = Array<T>(wasmArr.length);
-    for (let i = 0; i < wasmArr.length; i++)
-        jsArr[i] = wasmArr.get(i);
-    wasmArr.free();
-    return jsArr;
-}
-
 function concatBufs(a: Uint8Array, b: Uint8Array): Uint8Array {
     let result = new Uint8Array(a.byteLength + b.byteLength);
     result.set(a);
@@ -228,21 +214,26 @@ export class AssetFile {
         if (this.waitForHeaderPromise !== null)
             await this.waitForHeaderPromise;
 
-        const obj = assertExists(this.unityObjectByFileID.get(pathID));
-        const byteStart = this.dataOffset + obj.byte_start;
 
-        let buffer: ArrayBufferSlice;
-        if (this.fetcher !== null)
-            buffer = await this.fetcher.addRequest(byteStart.valueOf(), obj.byte_size);
-        else if (this.fullData !== null)
-            buffer = this.fullData.subarray(Number(byteStart), obj.byte_size);
-        else
-            throw "whoops";
+        try {
+            const obj = assertExists(this.unityObjectByFileID.get(pathID));
 
-        const location = this.createLocation(pathID);
-        const classID = obj.class_id;
-        const data = buffer.createTypedArray(Uint8Array);
-        return { location, classID, assetFile: this.assetFile, data };
+            let buffer: ArrayBufferSlice;
+            if (this.fetcher !== null)
+                buffer = await this.fetcher.addRequest(obj.byte_start.valueOf(), obj.byte_size);
+            else if (this.fullData !== null)
+                buffer = this.fullData.subarray(Number(obj.byte_start), obj.byte_size);
+            else
+                throw "whoops";
+
+            const location = this.createLocation(pathID);
+            const classID = obj.class_id;
+            const data = buffer.createTypedArray(Uint8Array);
+            return { location, classID, assetFile: this.assetFile, data };
+        } catch (e) {
+            debugger;
+            throw e;
+        }
     }
 
     public getPPtrFile(assetSystem: UnityAssetSystem, pptr: UnityPPtr): AssetFile {
@@ -264,8 +255,7 @@ export class AssetFile {
             const streamingInfo: UnityStreamingInfo = mesh.streaming_info;
             if (streamingInfo.path.length !== 0) {
                 const buf = await assetSystem.fetchStreamingInfo(streamingInfo);
-                const vertexData = rust.UnityVertexData.create(assetSystem.version, buf.createTypedArray(Uint8Array));
-                mesh.set_vertex_data(vertexData);
+                mesh.set_vertex_data(buf.createTypedArray(Uint8Array));
             }
 
             if (mesh.mesh_compression !== UnityMeshCompression.Off) {
@@ -310,7 +300,7 @@ export class AssetFile {
                     this.dataCache.set(pathID, v);
                     return v;
                 }).catch(e => {
-                    console.error(`fufckcf to fetch ${pathID}`);
+                    console.error(`failed to fetch ${pathID}, ${e}`);
                     throw e;
                 });
         });
@@ -357,9 +347,8 @@ export class UnityAssetSystem {
 
     public async fetchStreamingInfo(streamingInfo: UnityStreamingInfo): Promise<ArrayBufferSlice> {
         assert(streamingInfo.size !== 0);
-        const assetFile = assertExists(this.assetFiles.get(streamingInfo.path));
         return await this.fetchBytes(streamingInfo.path, {
-            rangeStart: assetFile.dataOffset + streamingInfo.offset,
+            rangeStart: streamingInfo.offset,
             rangeSize: streamingInfo.size,
         });
     }

@@ -15,7 +15,7 @@ macro_rules! define_create {
                 let bitslice = BitSlice::from_slice(data);
                 match binary::$t::read(&bitslice, version) {
                     Ok((_, value)) => Ok(value.into()),
-                    Err(err) => return Err(format!("{:?}", err)),
+                    Err(err) => return Err(format!("Couldn't create {}: {:?}", $u, err)),
                 }
             }
         }
@@ -151,8 +151,8 @@ pub struct Mesh {
 
 #[wasm_bindgen(js_class = "UnityMesh")]
 impl Mesh {
-    pub fn set_vertex_data(&mut self, data: VertexData) {
-        self.vertex_data = data;
+    pub fn set_vertex_data(&mut self, data: Vec<u8>) {
+        self.vertex_data.data = data;
     }
 
     pub fn unpack_vertices(&self) -> Option<Vec<f32>> {

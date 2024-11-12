@@ -1,4 +1,5 @@
 use std::{collections::HashMap, fmt::Debug, hash::Hash, marker::PhantomData};
+use std::clone::Clone;
 
 use wasm_bindgen::prelude::*;
 use deku::{bitvec::{BitSlice, Msb0}, ctx::BitSize, prelude::*};
@@ -18,37 +19,24 @@ pub struct UnityArray<T> {
     pub values: Vec<T>,
 }
 
-impl<'a, T> DekuRead<'a, UnityVersion> for UnityArray<T> where T: DekuRead<'a, UnityVersion> {
+fn check_count(count: usize, limit: usize) -> Result<(), DekuError> {
+    if count > limit {
+        return Err(DekuError::Assertion(format!("Got unreasonably large count: {} > {}", count, limit)));
+    }
+    Ok(())
+}
+
+impl<'a, T, Ctx> DekuRead<'a, Ctx> for UnityArray<T> where T: DekuRead<'a, Ctx>, Ctx: Clone {
     fn read(
         input: &'a deku::bitvec::BitSlice<u8, deku::bitvec::Msb0>,
-        version: UnityVersion,
+        ctx: Ctx,
     ) -> Result<(&'a deku::bitvec::BitSlice<u8, deku::bitvec::Msb0>, Self), DekuError>
     where
         Self: Sized {
             let (mut rest, count) = i32::read(input, ())?;
             let mut values = Vec::new();
             for _ in 0..count {
-                let (new_rest, value) = T::read(rest, version)?;
-                rest = new_rest;
-                values.push(value);
-            }
-            Ok((rest, UnityArray {
-                values,
-            }))
-    }
-}
-
-impl<'a, T> DekuRead<'a> for UnityArray<T> where T: DekuRead<'a> {
-    fn read(
-        input: &'a deku::bitvec::BitSlice<u8, deku::bitvec::Msb0>,
-        ctx: (),
-    ) -> Result<(&'a deku::bitvec::BitSlice<u8, deku::bitvec::Msb0>, Self), DekuError>
-    where
-        Self: Sized {
-            let (mut rest, count) = i32::read(input, ctx)?;
-            let mut values = Vec::new();
-            for _ in 0..count {
-                let (new_rest, value) = T::read(rest, ctx)?;
+                let (new_rest, value) = T::read(rest, ctx.clone())?;
                 rest = new_rest;
                 values.push(value);
             }
@@ -70,39 +58,12 @@ pub struct Map<K, V> {
     pub values: Vec<V>,
 }
 
-impl<'a, K, V> DekuRead<'a> for Map<K, V>
-    where K: DekuRead<'a>, V: DekuRead<'a>
+impl<'a, K, V, Ctx> DekuRead<'a, Ctx> for Map<K, V>
+    where K: DekuRead<'a, Ctx>, V: DekuRead<'a, Ctx>, Ctx: Clone
 {
     fn read(
         input: &'a deku::bitvec::BitSlice<u8, deku::bitvec::Msb0>,
-        ctx: (),
-    ) -> Result<(&'a deku::bitvec::BitSlice<u8, deku::bitvec::Msb0>, Self), DekuError>
-    where
-        Self: Sized {
-            let (mut rest, count) = i32::read(input, ctx)?;
-            let mut keys = Vec::new();
-            let mut values = Vec::new();
-            for _ in 0..count {
-                let (new_rest, key) = K::read(rest, ctx)?;
-                rest = new_rest;
-                let (new_rest, value) = V::read(rest, ctx)?;
-                rest = new_rest;
-                keys.push(key);
-                values.push(value);
-            }
-            Ok((rest, Map {
-                keys,
-                values,
-            }))
-    }
-}
-
-impl<'a, K, V> DekuRead<'a, UnityVersion> for Map<K, V>
-    where K: DekuRead<'a>, V: DekuRead<'a, UnityVersion>
-{
-    fn read(
-        input: &'a deku::bitvec::BitSlice<u8, deku::bitvec::Msb0>,
-        version: UnityVersion,
+        ctx: Ctx,
     ) -> Result<(&'a deku::bitvec::BitSlice<u8, deku::bitvec::Msb0>, Self), DekuError>
     where
         Self: Sized {
@@ -110,9 +71,9 @@ impl<'a, K, V> DekuRead<'a, UnityVersion> for Map<K, V>
             let mut keys = Vec::new();
             let mut values = Vec::new();
             for _ in 0..count {
-                let (new_rest, key) = K::read(rest, ())?;
+                let (new_rest, key) = K::read(rest, ctx.clone())?;
                 rest = new_rest;
-                let (new_rest, value) = V::read(rest, version)?;
+                let (new_rest, value) = V::read(rest, ctx.clone())?;
                 rest = new_rest;
                 keys.push(key);
                 values.push(value);
