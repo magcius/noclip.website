@@ -42,6 +42,8 @@ class dDemo_camera_c extends TCamera {
         private globals: dGlobals
     ) { super() }
 
+    override JSGGetName() { return 'Cam'; }
+
     override JSGGetProjectionNear(): number {
         const camera = this.globals.camera;
         if (!camera)
@@ -204,7 +206,7 @@ class dDemo_actor_c extends TActor {
     }
 
     override JSGGetName() { return this.mName; }
-    
+
     override JSGGetNodeTransformation(nodeId: number, mtx: mat4): number {
         debugger; // I think this may be one of the shapeInstanceState matrices instead
         mat4.copy(mtx, this.mModel.modelMatrix);

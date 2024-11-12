@@ -222,9 +222,12 @@ function readData(dataOp: EDataOp, dataOffset: number, dataSize: number, file: R
 }
 
 abstract class TAdaptor {
+    public mObject: JStage.TObject;
+
     constructor(
         public mCount: number,
         public mVariableValues = nArray(mCount, i => new TVariableValue()),
+        public mEnableLogging = true,
     ) { }
 
     abstract adaptor_do_prepare(obj: STBObject): void;
@@ -288,6 +291,10 @@ abstract class TAdaptor {
             vv.forward(frameCount);
             vv.update(control.mSecondsPerFrame, this);
         }
+    }
+
+    log(msg: string) {
+        if( this.mEnableLogging ) { console.debug(`[${this.mObject.JSGGetName()}] ${msg}`); } 
     }
 }
 
@@ -593,11 +600,9 @@ class TActorAdaptor extends TAdaptor {
     public animMode: number; // See computeAnimFrame()
     public animTexMode: number; // See computeAnimFrame()
 
-    public enableLog = true;
-
     constructor(
         private mSystem: TSystem,
-        public mObject: TActor,
+        public override mObject: TActor,
     ) { super(14); }
 
     private static computeAnimFrame(animMode: number, maxFrame: number, frame: number) {
@@ -673,19 +678,19 @@ class TActorAdaptor extends TAdaptor {
     }
 
     adaptor_do_data(obj: STBObject, id: number, data: DataView): void {
-        if (this.enableLog) console.debug('SetData: (id)', id);
+        this.log(`SetData: ${id}`);
         this.mObject.JSGSetData(id, data);
     }
 
     adaptor_do_PARENT(dataOp: EDataOp, data: DataVal, dataSize: number): void {
         assert(dataOp == EDataOp.OBJECT_NAME);
-        if (this.enableLog) console.debug('SetParent:', data.asStr);
+        this.log(`SetParent: ${data.asStr}`);
         this.parent = this.mSystem.JSGFindObject(data.asStr!, JStage.TEObject.PREEXISTING_ACTOR);
     }
 
     adaptor_do_PARENT_NODE(dataOp: EDataOp, data: DataVal, dataSize: number): void {
         debugger;
-        if (this.enableLog) console.debug('SetParentNode:', data);
+        this.log(`SetParentNode: ${data}`);
         switch (dataOp) {
             case EDataOp.OBJECT_NAME:
                 if (this.parent)
@@ -700,20 +705,20 @@ class TActorAdaptor extends TAdaptor {
 
     adaptor_do_PARENT_ENABLE(dataOp: EDataOp, data: number, dataSize: number): void {
         assert(dataOp == EDataOp.IMMEDIATE);
-        if (this.enableLog) console.debug('SetParentEnable:', data);
+        this.log(`SetParentEnable: ${data}`);
         if (data) { this.mObject.JSGSetParent(this.parent!, this.parentNodeID); }
         else { this.mObject.JSGSetParent(null, 0xFFFFFFFF); }
     }
 
     adaptor_do_RELATION(dataOp: EDataOp, data: DataVal, dataSize: number): void {
         assert(dataOp == EDataOp.OBJECT_NAME);
-        if (this.enableLog) console.debug('SetRelation:', data.asStr!);
+        this.log(`SetRelation: ${data.asStr!}`);
         this.relation = this.mSystem.JSGFindObject(data.asStr!, JStage.TEObject.PREEXISTING_ACTOR);
     }
 
     adaptor_do_RELATION_NODE(dataOp: EDataOp, data: DataVal, dataSize: number): void {
         debugger;
-        if (this.enableLog) console.debug('SetRelationNode:', data);
+        this.log(`SetRelationNode: ${data}`);
         switch (dataOp) {
             case EDataOp.OBJECT_NAME:
                 if (this.relation)
@@ -728,37 +733,37 @@ class TActorAdaptor extends TAdaptor {
 
     adaptor_do_RELATION_ENABLE(dataOp: EDataOp, data: number, dataSize: number): void {
         assert(dataOp == EDataOp.IMMEDIATE);
-        if (this.enableLog) console.debug('SetRelationEnable:', data);
+        this.log(`SetRelationEnable: ${data}`);
         this.mObject.JSGSetRelation(!!data, this.relation!, this.relationNodeID);
     }
 
     adaptor_do_SHAPE(dataOp: EDataOp, data: DataVal, dataSize: number): void {
         assert(dataOp == EDataOp.OBJECT_INDEX);
-        if (this.enableLog) console.debug('SetShape: ', data.asInt!);
+        this.log(`SetShape: ${data.asInt!}`);
         this.mObject.JSGSetShape(data.asInt!);
     }
 
     adaptor_do_ANIMATION(dataOp: EDataOp, data: DataVal, dataSize: number): void {
         assert(dataOp == EDataOp.OBJECT_INDEX);
-        if (this.enableLog) console.debug(`SetAnimation: ${(data.asInt!) & 0xFFFF} (${(data.asInt!) >> 4 & 0x01})`);
+        this.log(`SetAnimation: ${(data.asInt!) & 0xFFFF} (${(data.asInt!) >> 4 & 0x01})`);
         this.mObject.JSGSetAnimation(data.asInt!);
     }
 
     adaptor_do_ANIMATION_MODE(dataOp: EDataOp, data: DataVal, dataSize: number): void {
         assert(dataOp == EDataOp.IMMEDIATE);
-        if (this.enableLog) console.debug('SetAnimationMode: ', data.asInt!);
+        this.log(`SetAnimationMode: ${data.asInt!}`);
         this.animMode = data.asInt!;
     }
 
     adaptor_do_TEXTURE_ANIMATION(dataOp: EDataOp, data: DataVal, dataSize: number): void {
         assert(dataOp == EDataOp.OBJECT_INDEX);
-        if (this.enableLog) console.debug('SetTexAnim:', data);
+        this.log(`SetTexAnim: ${data}`);
         this.mObject.JSGSetTextureAnimation(data.asInt!);
     }
 
     adaptor_do_TEXTURE_ANIMATION_MODE(dataOp: EDataOp, data: DataVal, dataSize: number): void {
         assert(dataOp == EDataOp.IMMEDIATE);
-        if (this.enableLog) console.debug('SetTexAnimMode:', data);
+        this.log(`SetTexAnimMode: ${data}`);
         this.animTexMode = data.asInt!;
     }
 }
@@ -850,9 +855,7 @@ class TActorObject extends STBObject {
             this.mAdaptor.adaptor_setVariableValue(this, keyIdx + i, dataOp, keyData[i]);
         }
 
-        if (this.mAdaptor.enableLog) { 
-            console.debug(`[${this.mAdaptor.mObject.JSGGetName()}] Set${keyToString(keyIdx, keyCount)}: ${dataOpToString(dataOp)} [${logKeyAction(keyData, dataOp )}]`); 
-        }
+        this.mAdaptor.log(`Set${keyToString(keyIdx, keyCount)}: ${dataOpToString(dataOp)} [${logKeyAction(keyData, dataOp )}]`); 
     }
 }
 
@@ -934,35 +937,35 @@ export abstract class TCamera extends JStage.TObject {
 
 class TCameraAdaptor extends TAdaptor {
     constructor(
-        private mStageCam: TCamera
+        override mObject: TCamera
     ) { super(11); }
 
     adaptor_do_prepare(obj: STBObject): void {
-        this.mVariableValues[Camera_Track.PROJ_FOVY].setOutput(this.mStageCam.JSGSetProjectionFovy.bind(this.mStageCam));
-        this.mVariableValues[Camera_Track.VIEW_ROLL].setOutput(this.mStageCam.JSGSetViewRoll.bind(this.mStageCam));
-        this.mVariableValues[Camera_Track.DIST_NEAR].setOutput(this.mStageCam.JSGSetProjectionNear.bind(this.mStageCam));
-        this.mVariableValues[Camera_Track.DIST_FAR].setOutput(this.mStageCam.JSGSetProjectionFar.bind(this.mStageCam));
+        this.mVariableValues[Camera_Track.PROJ_FOVY].setOutput(this.mObject.JSGSetProjectionFovy.bind(this.mObject));
+        this.mVariableValues[Camera_Track.VIEW_ROLL].setOutput(this.mObject.JSGSetViewRoll.bind(this.mObject));
+        this.mVariableValues[Camera_Track.DIST_NEAR].setOutput(this.mObject.JSGSetProjectionNear.bind(this.mObject));
+        this.mVariableValues[Camera_Track.DIST_FAR].setOutput(this.mObject.JSGSetProjectionFar.bind(this.mObject));
     }
 
     adaptor_do_begin(obj: STBObject): void {
         const camPos = scratchVec3a;
         const targetPos = scratchVec3b;
-        this.mStageCam.JSGGetViewPosition(camPos);
-        this.mStageCam.JSGGetViewTargetPosition(targetPos);
+        this.mObject.JSGGetViewPosition(camPos);
+        this.mObject.JSGGetViewTargetPosition(targetPos);
 
         vec3.transformMat4(camPos, camPos, obj.mControl.getTransformOnGet());
         vec3.transformMat4(targetPos, targetPos, obj.mControl.getTransformOnGet());
 
         this.adaptor_setVariableValue_Vec(Camera_Track.EYE_X_POS, camPos);
         this.adaptor_setVariableValue_Vec(Camera_Track.TARGET_X_POS, targetPos);
-        this.mVariableValues[Camera_Track.PROJ_FOVY].setValue_immediate(this.mStageCam.JSGGetProjectionFovy());
-        this.mVariableValues[Camera_Track.VIEW_ROLL].setValue_immediate(this.mStageCam.JSGGetViewRoll());
-        this.mVariableValues[Camera_Track.DIST_NEAR].setValue_immediate(this.mStageCam.JSGGetProjectionNear());
-        this.mVariableValues[Camera_Track.DIST_FAR].setValue_immediate(this.mStageCam.JSGGetProjectionFar());
+        this.mVariableValues[Camera_Track.PROJ_FOVY].setValue_immediate(this.mObject.JSGGetProjectionFovy());
+        this.mVariableValues[Camera_Track.VIEW_ROLL].setValue_immediate(this.mObject.JSGGetViewRoll());
+        this.mVariableValues[Camera_Track.DIST_NEAR].setValue_immediate(this.mObject.JSGGetProjectionNear());
+        this.mVariableValues[Camera_Track.DIST_FAR].setValue_immediate(this.mObject.JSGGetProjectionFar());
     }
 
     adaptor_do_end(obj: STBObject): void {
-        this.mStageCam.JSGFDisableFlag(1);
+        this.mObject.JSGFDisableFlag(1);
     }
 
     adaptor_do_update(obj: STBObject, frameCount: number): void {
@@ -975,8 +978,8 @@ class TCameraAdaptor extends TAdaptor {
         vec3.transformMat4(camPos, camPos, obj.mControl.getTransformOnSet());
         vec3.transformMat4(targetPos, targetPos, obj.mControl.getTransformOnSet());
 
-        this.mStageCam.JSGSetViewPosition(camPos);
-        this.mStageCam.JSGSetViewTargetPosition(targetPos);
+        this.mObject.JSGSetViewPosition(camPos);
+        this.mObject.JSGSetViewTargetPosition(targetPos);
     }
 
     adaptor_do_data(obj: STBObject, id: number, data: DataView): void {
@@ -999,8 +1002,6 @@ class TCameraAdaptor extends TAdaptor {
 }
 
 class TCameraObject extends STBObject {
-    private enableLog = true;
-
     constructor(
         control: TControl,
         blockObj: TBlockObject,
@@ -1050,9 +1051,7 @@ class TCameraObject extends STBObject {
             this.mAdaptor.adaptor_setVariableValue(this, keyIdx + i, dataOp, keyData[i]);
         }
         
-        if (this.enableLog) { 
-            console.debug(`[Cam] Set${camKeyToString(keyIdx, keyCount)}: ${dataOpToString(dataOp)} [${logKeyAction(keyData, dataOp )}]`); 
-        }
+        this.mAdaptor.log(`Set${camKeyToString(keyIdx, keyCount)}: ${dataOpToString(dataOp)} [${logKeyAction(keyData, dataOp )}]`); 
     }
 }
 
