@@ -598,8 +598,8 @@ class TActorAdaptor extends TAdaptor {
     public parentNodeID: number;
     public relation?: JStage.TObject;
     public relationNodeID: number;
-    public animMode: number; // See computeAnimFrame()
-    public animTexMode: number; // See computeAnimFrame()
+    public animMode: number = 0; // See computeAnimFrame()
+    public animTexMode: number = 0; // See computeAnimFrame()
 
     constructor(
         private mSystem: TSystem,
@@ -607,7 +607,7 @@ class TActorAdaptor extends TAdaptor {
     ) { super(14); }
 
     private static computeAnimFrame(animMode: number, maxFrame: number, frame: number) {
-        const outsideType = animMode;
+        const outsideType = animMode & 0xFF;
         const reverse = animMode >> 8;
 
         if (reverse) { frame = maxFrame - frame; }
