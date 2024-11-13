@@ -62,7 +62,7 @@ export interface TSystem {
 // TVariableValue
 // Manages a single float, which will be updated each frame. This float can be updated using a variety of operations: 
 // - Immediate(x): Set to single value. On Update(y), set the value to a single number then do nothing on future frames.  
-// - Time(x): Increase over time. On Update(y), set the value to x * y * mAge.  
+// - Time(x): Increase over time, mValue is the velocity. On Update(y), set the value to mValue * dt * mAge.  
 // - FuncVal(x): Set to the output of a functor. See FVB for details.
 //
 // Normally, after update() the value can be retrieved from mValue(). Alternatively, if setOutput() is called that 
@@ -1815,16 +1815,12 @@ enum EStatus {
     Inactive = 1 << 3,
 }
 
-// The runtime object that stores interpolated data each frame. Written to by a TAdapter. By default, the base object
-// is empty and can get or set no data. JSystem expects each game to provide implementations of the TObject interface
-// which are provided by a JStage:TSystem override
 export abstract class TBlockObject {
-    /* 0x0 */ size: number;
-    /* 0x4 */ type: string; // char[4] JMSG, JSND, JACT, ...
-    /* 0x8 */ flag: number;
-    /* 0xA    id_size: number*
-    /* 0xC */ id: string;
-    /* 0xC + align(id_size, 4) */ data: Reader;
+    size: number;
+    type: string; // char[4] JMSG, JSND, JACT, ...
+    flag: number;
+    id: string;
+    data: Reader;
 }
 
 // This combines JStudio::TControl and JStudio::stb::TControl into a single class, for simplicity.
