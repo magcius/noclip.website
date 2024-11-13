@@ -4715,13 +4715,31 @@ export class d_a_ff extends fopAc_ac_c {
 class fopNpc_npc_c extends fopAc_ac_c {
     protected morf: mDoExt_McaMorf;
 };
+class anm_prm_c {
+    anmIdx: number;
+    nextPrmIdx: number;
+    morf: number;
+    playSpeed: number;
+    loopMode: number;
+};
+
+function dNpc_setAnmIDRes(globals: dGlobals, pMorf: mDoExt_McaMorf, loopMode: number, morf: number, speed: number, animResId: number, arcName: string): boolean {
+    if (pMorf) {
+        const pAnimRes = globals.resCtrl.getObjectIDRes(ResType.Bck, arcName, animResId);
+        pMorf.setAnm(pAnimRes, loopMode, morf, speed, 0.0, -1.0);
+        return true;
+    }
+    return false;
+}
 
 class d_a_npc_ls1 extends fopNpc_npc_c {
     public static PROCESS_NAME = fpc__ProcessName.d_a_npc_ls1;
     private type: number;
     private state = 0;
+    private animIdx = -1;
     private animStopped: boolean;
     private animTime: number;
+    private idleCountdown: number;
     private arcName = 'Ls';
 
     private itemPosType: number = 1;
@@ -4735,6 +4753,14 @@ class d_a_npc_ls1 extends fopNpc_npc_c {
     private btpAnim = new mDoExt_btpAnm();
     private btkFrame: number;
     private btpFrame: number;
+
+    private static bckIdxTable = [5, 6, 7, 8, 9, 10, 11, 2, 4, 3, 1, 1, 1, 0]
+    private static animParamsTable: anm_prm_c[] = [
+        { anmIdx: 0xFF, nextPrmIdx: 0xFF, morf: 0.0, playSpeed: 0.0, loopMode: 0xFFFFFFFF, },
+        { anmIdx: 0, nextPrmIdx: 1, morf: 8.0, playSpeed: 1.0, loopMode: 2, },
+        { anmIdx: 5, nextPrmIdx: 1, morf: 8.0, playSpeed: 1.0, loopMode: 2, },
+        { anmIdx: 10, nextPrmIdx: 2, morf: 8.0, playSpeed: 1.0, loopMode: 2, },
+        { anmIdx: 5, nextPrmIdx: 1, morf: 8.0, playSpeed: 1.0, loopMode: 2, }];
 
     private actionFunc: () => void;
 
@@ -4756,7 +4782,7 @@ class d_a_npc_ls1 extends fopNpc_npc_c {
         this.cullMtx = this.morf.model.modelMatrix;
         this.setCullSizeBox(-50.0, -20.0, -50.0, 50.0, 140.0, 50.0);
 
-        this.createInit();
+        this.createInit(globals);
 
         return cPhs__Status.Next;
     }
@@ -4788,15 +4814,16 @@ class d_a_npc_ls1 extends fopNpc_npc_c {
     }
 
     public override execute(globals: dGlobals, deltaTimeFrames: number): void {
-        if (this.demoActorID >= 0) {
+        if (true || this.demoActorID >= 0) {
             //   partner_search(this);
             //   checkOrder(this);
 
-            this.demo(globals, deltaTimeFrames);
-
+            const isDemo = this.demo(globals, deltaTimeFrames);
+            if (!isDemo) {
+                this.actionFunc();
+                this.play_animation(deltaTimeFrames);
+            }
         }
-
-        // TODO: Idle animation
 
         // TODO: Shadowing based on the triangle that the NPC is standing on
         // this.tevStr.roomNo = this.roomNo;
@@ -4825,14 +4852,13 @@ class d_a_npc_ls1 extends fopNpc_npc_c {
         return this.type != 0xFF;
     }
 
-    private createInit() {
+    private createInit(globals: dGlobals) {
         switch (this.type) {
-            case 0: this.actionFunc = this.waitAction1.bind(this); break;
-            // (this->parent).parent.actor_status = (this->parent).parent.actor_status & ~DoNotExecuteIfDidNotDraw;
-            case 1: this.actionFunc = this.demoAction1.bind(this); break;
-            case 2: this.actionFunc = this.demoAction1.bind(this); break;
-            case 3: this.actionFunc = this.waitAction1.bind(this); break;
-            case 4: this.actionFunc = this.demoAction1.bind(this); break;
+            case 0: this.actionFunc = this.waitAction1.bind(this, globals); break;
+            case 1: this.actionFunc = this.demoAction1.bind(this, globals); break;
+            case 2: this.actionFunc = this.demoAction1.bind(this, globals); break;
+            case 3: this.actionFunc = this.waitAction1.bind(this, globals); break;
+            case 4: this.actionFunc = this.demoAction1.bind(this, globals); break;
         }
 
         this.play_animation(1.0 / 30.0);
@@ -4881,13 +4907,80 @@ class d_a_npc_ls1 extends fopNpc_npc_c {
         this.itemModel = new J3DModelInstance(modelData);
     }
 
-    private waitAction1(): void {
+    private wait1(globals: dGlobals) {
+        // char cVar3;
+        // short sVar1;
+        // s16 sVar2;
+        // cXyz local_18;
+
+        // if ((char)this->field_0x850 < '\x03') {
+        //   this->field_0x850 = 0;
+        //   local_18.x = (this->parent).parent.current.pos.x;
+        //   local_18.y = (this->parent).parent.current.pos.y;
+        //   local_18.z = (this->parent).parent.current.pos.z;
+        //   cVar3 = chk_areaIN(this,DAT_8076d39c,100.0,0x7fff,&local_18);
+        //   if (cVar3 != '\0') {
+        //     this->field_0x850 = 4;
+        //   }
+        // }
+
+        // this->field_0x853 = 0;
+
+        if (this.animIdx == 0) {
+            const idleCountdown = Math.max(--this.idleCountdown, 0);
+            if (idleCountdown == 0) {
+                this.setAnm_NUM(globals, 1, true);
+            }
+        }
+        else if (this.animStopped) {
+            this.idleCountdown = Math.random() * 30 + 60;
+            this.setAnm_NUM(globals, 0, true);
+        }
+        return 1;
+    }
+
+    private waitAction1(globals: dGlobals): void {
+        const isEventBit0x2A80Set = false;
+
         switch (this.state) {
             case 0: {
-                // @TODO
+                // get_playerEvnPos((daNpc_Ls1_c *)&local_1c,(int)this);
+                // *(uint *)&this->field_0x7cc = local_1c;
+                // this->mPcProfile = local_18;
+                // this->mCreateRequest = local_14;
+                // get_playerEvnPos((daNpc_Ls1_c *)&local_28,(int)this);
+                // *(uint *)&this->field_0x7d8 = local_28;
+                // *(uint *)&this->field_0x7dc = local_24;
+                // *(short *)&this->field_0x7e0 = local_20;
+                // this->field_0x7e2 = bStack_1e;
+                // this->field_0x7e3 = bStack_1d;
+                this.state += 1;
+                // iVar1 = dSv_event_c::isEventBit
+                //                   (&d_com_inf_game::g_dComIfG_gameInfo.info.mSavedata.mEvent,0x2a80);
+                if (!isEventBit0x2A80Set) {
+                    this.setStt(globals, 4);
+                }
+                else {
+                    //   iVar1 = dSv_event_c::isEventBit(&d_com_inf_game::g_dComIfG_gameInfo.info.mSavedata.mEvent,1)
+                    //   ;
+                    //   if (iVar1 == 0) {
+                    //     bVar3 = d_com_inf_game::dComIfGs_checkGetItem(Telescope);
+                    //     if (bVar3) {
+                    //       this->mRotY = (this->parent).parent.current.angle.y;
+                    //       setStt(this,'\x02');
+                    //     }
+                    //     else {
+                    //       setStt(this,'\x01');
+                    //     }
+                    //   }
+                    //   else {
+                    //     setStt(this,'\x03');
+                    //   }
+                }
             } break;
 
-            case 1:
+            case 1: this.wait1(globals); break;
+
             case 2:
             case 3:
             case 4:
@@ -4897,8 +4990,45 @@ class d_a_npc_ls1 extends fopNpc_npc_c {
         }
     }
 
-    private demoAction1(): void {
+    private demoAction1(globals: dGlobals): void {
 
+    }
+
+    private setAnim(globals: dGlobals, param: anm_prm_c) {
+        if (param.anmIdx > -1 && this.animIdx != param.anmIdx) {
+            const bckID = d_a_npc_ls1.bckIdxTable[param.anmIdx];
+            dNpc_setAnmIDRes(globals, this.morf, param.loopMode, param.morf, param.playSpeed, bckID, this.arcName);
+            this.animIdx = param.anmIdx;
+            this.animStopped = false;
+            this.animTime = 0;
+        }
+    }
+
+    private setAnm_NUM(globals: dGlobals, animIdx: number, hasTexAnim: boolean) {
+        if (hasTexAnim) {
+            // TODO: Facial texture animations
+        }
+        this.setAnim(globals, d_a_npc_ls1.animParamsTable[animIdx + 1]);
+    }
+
+    private setStt(globals: dGlobals, animIdx: number) {
+        this.animIdx = animIdx;
+        switch (animIdx) {
+            case 1:
+                this.idleCountdown = 60 + Math.random() * 30;
+                break;
+
+            case 4:
+                this.itemScale = 1.0;
+                break;
+
+            case 2:
+            case 3:
+            case 5:
+            default:
+                console.warn('Unsupport Ls1 animIdx');
+        }
+        this.setAnim(globals, d_a_npc_ls1.animParamsTable[this.animIdx]);
     }
 
     private play_animation(deltaTimeFrames: number) {
@@ -4921,13 +5051,13 @@ class d_a_npc_ls1 extends fopNpc_npc_c {
 
         this.handModel.calcAnim();
 
-        if(this.itemModel) {
+        if (this.itemModel) {
             mat4.copy(calc_mtx, this.jointMtxHandR);
             if (this.itemPosType == 0) {
                 MtxTrans([5.5, -3.0, -2.0], true);
             }
             else {
-                MtxTrans([5.7,-17.5,-1.0], true);
+                MtxTrans([5.7, -17.5, -1.0], true);
             }
             scaleMatrix(calc_mtx, calc_mtx, this.itemScale, this.itemScale, this.itemScale);
             mDoMtx_XYZrotM(calc_mtx, [-0x1d27, 0x3b05, -0x5c71]);
@@ -4941,9 +5071,11 @@ class d_a_npc_ls1 extends fopNpc_npc_c {
     }
 
     private demo(globals: dGlobals, deltaTimeFrames: number) {
+        if (this.demoActorID < 0) { return false; }
+
         // TODO: Lots happening here
         dDemo_setDemoData(globals, deltaTimeFrames, this, 0x6a, this.morf, this.arcName);
-        return 1;
+        return true;
     }
 }
 
