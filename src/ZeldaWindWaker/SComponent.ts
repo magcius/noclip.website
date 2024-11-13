@@ -113,6 +113,14 @@ export function cM_rndFX(max: number): number {
     return 2.0 * (max * (Math.random() - 0.5));
 }
 
+export function cM_deg2s(deg: number): number {
+    return deg * 182.04445;
+}
+
+export function cM_sht2d(rad: number) {
+    return rad * 0.005493164;
+}
+
 export function cM_atan2s(y: number, x: number): number {
     return cM__Rad2Short(Math.atan2(y, x));
 }

@@ -9,6 +9,7 @@ import { mDoExt_McaMorf } from "./m_do_ext";
 import { assert } from "../util.js";
 import { ResType } from "./d_resorce.js";
 import { LoopMode } from "../Common/JSYSTEM/J3D/J3DLoader";
+import { cM_deg2s, cM_sht2d } from "./SComponent.js";
 
 export enum EDemoMode {
     None,
@@ -217,7 +218,11 @@ class dDemo_actor_c extends TActor {
 
     override JSGGetTranslation(dst: vec3) { vec3.copy(dst, this.mTranslation); }
     override JSGGetScaling(dst: vec3) { vec3.copy(dst, this.mScaling); }
-    override JSGGetRotation(dst: vec3) { vec3.scale(dst, this.mRotation, MathConstants.RAD_TO_DEG); }
+    override JSGGetRotation(dst: vec3) { 
+        dst[0] = cM_sht2d(this.mRotation[0]);
+        dst[1] = cM_sht2d(this.mRotation[1]);
+        dst[2] = cM_sht2d(this.mRotation[2]);
+    }
 
     override JSGSetData(id: number, data: DataView): void {
         this.stbDataId = id;
@@ -236,7 +241,9 @@ class dDemo_actor_c extends TActor {
     }
 
     override JSGSetRotation(src: ReadonlyVec3) {
-        vec3.scale(this.mRotation, src, MathConstants.DEG_TO_RAD);
+        this.mRotation[0] = cM_deg2s(src[0]);
+        this.mRotation[1] = cM_deg2s(src[1]);
+        this.mRotation[2] = cM_deg2s(src[2]);
         this.mFlags |= 0x08;
     }
 
