@@ -4762,8 +4762,6 @@ class d_a_npc_ls1 extends fopNpc_npc_c {
         { anmIdx: 10, nextPrmIdx: 2, morf: 8.0, playSpeed: 1.0, loopMode: 2, },
         { anmIdx: 5, nextPrmIdx: 1, morf: 8.0, playSpeed: 1.0, loopMode: 2, }];
 
-    private actionFunc: () => void;
-
     public override subload(globals: dGlobals): cPhs__Status {
         const success = this.decideType(this.parameters);
         if (!success) { return cPhs__Status.Error; }
@@ -4815,12 +4813,8 @@ class d_a_npc_ls1 extends fopNpc_npc_c {
 
     public override execute(globals: dGlobals, deltaTimeFrames: number): void {
         if (true || this.demoActorID >= 0) {
-            //   partner_search(this);
-            //   checkOrder(this);
-
             const isDemo = this.demo(globals, deltaTimeFrames);
             if (!isDemo) {
-                this.actionFunc();
                 this.play_animation(deltaTimeFrames);
             }
         }
@@ -4853,14 +4847,7 @@ class d_a_npc_ls1 extends fopNpc_npc_c {
     }
 
     private createInit(globals: dGlobals) {
-        switch (this.type) {
-            case 0: this.actionFunc = this.waitAction1.bind(this, globals); break;
-            case 1: this.actionFunc = this.demoAction1.bind(this, globals); break;
-            case 2: this.actionFunc = this.demoAction1.bind(this, globals); break;
-            case 3: this.actionFunc = this.waitAction1.bind(this, globals); break;
-            case 4: this.actionFunc = this.demoAction1.bind(this, globals); break;
-        }
-
+        this.setAnim(globals, 2, false);
         this.play_animation(1.0 / 30.0);
 
         this.tevStr.roomNo = this.roomNo
@@ -4907,128 +4894,20 @@ class d_a_npc_ls1 extends fopNpc_npc_c {
         this.itemModel = new J3DModelInstance(modelData);
     }
 
-    private wait1(globals: dGlobals) {
-        // char cVar3;
-        // short sVar1;
-        // s16 sVar2;
-        // cXyz local_18;
-
-        // if ((char)this->field_0x850 < '\x03') {
-        //   this->field_0x850 = 0;
-        //   local_18.x = (this->parent).parent.current.pos.x;
-        //   local_18.y = (this->parent).parent.current.pos.y;
-        //   local_18.z = (this->parent).parent.current.pos.z;
-        //   cVar3 = chk_areaIN(this,DAT_8076d39c,100.0,0x7fff,&local_18);
-        //   if (cVar3 != '\0') {
-        //     this->field_0x850 = 4;
-        //   }
-        // }
-
-        // this->field_0x853 = 0;
-
-        if (this.animIdx == 0) {
-            const idleCountdown = Math.max(--this.idleCountdown, 0);
-            if (idleCountdown == 0) {
-                this.setAnm_NUM(globals, 1, true);
-            }
-        }
-        else if (this.animStopped) {
-            this.idleCountdown = Math.random() * 30 + 60;
-            this.setAnm_NUM(globals, 0, true);
-        }
-        return 1;
-    }
-
-    private waitAction1(globals: dGlobals): void {
-        const isEventBit0x2A80Set = false;
-
-        switch (this.state) {
-            case 0: {
-                // get_playerEvnPos((daNpc_Ls1_c *)&local_1c,(int)this);
-                // *(uint *)&this->field_0x7cc = local_1c;
-                // this->mPcProfile = local_18;
-                // this->mCreateRequest = local_14;
-                // get_playerEvnPos((daNpc_Ls1_c *)&local_28,(int)this);
-                // *(uint *)&this->field_0x7d8 = local_28;
-                // *(uint *)&this->field_0x7dc = local_24;
-                // *(short *)&this->field_0x7e0 = local_20;
-                // this->field_0x7e2 = bStack_1e;
-                // this->field_0x7e3 = bStack_1d;
-                this.state += 1;
-                // iVar1 = dSv_event_c::isEventBit
-                //                   (&d_com_inf_game::g_dComIfG_gameInfo.info.mSavedata.mEvent,0x2a80);
-                if (!isEventBit0x2A80Set) {
-                    this.setStt(globals, 4);
-                }
-                else {
-                    //   iVar1 = dSv_event_c::isEventBit(&d_com_inf_game::g_dComIfG_gameInfo.info.mSavedata.mEvent,1)
-                    //   ;
-                    //   if (iVar1 == 0) {
-                    //     bVar3 = d_com_inf_game::dComIfGs_checkGetItem(Telescope);
-                    //     if (bVar3) {
-                    //       this->mRotY = (this->parent).parent.current.angle.y;
-                    //       setStt(this,'\x02');
-                    //     }
-                    //     else {
-                    //       setStt(this,'\x01');
-                    //     }
-                    //   }
-                    //   else {
-                    //     setStt(this,'\x03');
-                    //   }
-                }
-            } break;
-
-            case 1: this.wait1(globals); break;
-
-            case 2:
-            case 3:
-            case 4:
-            case 5:
-            default:
-                assert(false, `Unhandled Ls1 state: ${this.state}`);
-        }
-    }
-
-    private demoAction1(globals: dGlobals): void {
-
-    }
-
-    private setAnim(globals: dGlobals, param: anm_prm_c) {
-        if (param.anmIdx > -1 && this.animIdx != param.anmIdx) {
-            const bckID = d_a_npc_ls1.bckIdxTable[param.anmIdx];
-            dNpc_setAnmIDRes(globals, this.morf, param.loopMode, param.morf, param.playSpeed, bckID, this.arcName);
-            this.animIdx = param.anmIdx;
-            this.animStopped = false;
-            this.animTime = 0;
-        }
-    }
-
-    private setAnm_NUM(globals: dGlobals, animIdx: number, hasTexAnim: boolean) {
+    private setAnim(globals: dGlobals, animIdx: number, hasTexAnim: boolean) {
         if (hasTexAnim) {
             // TODO: Facial texture animations
         }
-        this.setAnim(globals, d_a_npc_ls1.animParamsTable[animIdx + 1]);
-    }
 
-    private setStt(globals: dGlobals, animIdx: number) {
-        this.animIdx = animIdx;
-        switch (animIdx) {
-            case 1:
-                this.idleCountdown = 60 + Math.random() * 30;
-                break;
+        const params = d_a_npc_ls1.animParamsTable[animIdx];
 
-            case 4:
-                this.itemScale = 1.0;
-                break;
-
-            case 2:
-            case 3:
-            case 5:
-            default:
-                console.warn('Unsupport Ls1 animIdx');
+        if (params.anmIdx > -1 && this.animIdx != params.anmIdx) {
+            const bckID = d_a_npc_ls1.bckIdxTable[params.anmIdx];
+            dNpc_setAnmIDRes(globals, this.morf, params.loopMode, params.morf, params.playSpeed, bckID, this.arcName);
+            this.animIdx = params.anmIdx;
+            this.animStopped = false;
+            this.animTime = 0;
         }
-        this.setAnim(globals, d_a_npc_ls1.animParamsTable[this.animIdx]);
     }
 
     private play_animation(deltaTimeFrames: number) {
