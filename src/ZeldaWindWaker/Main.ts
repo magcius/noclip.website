@@ -1024,7 +1024,7 @@ class DemoDesc {
 }
 
 const demoDescs = [
-    new DemoDesc("sea", "Awaken", "awake.stb", 44, 0, [-220000.0, 0.0, 320000.0], 0.0, 0, 0, 525),
+    new DemoDesc("sea", "Awaken", "awake.stb", 44, 0, [-220000.0, 0.0, 320000.0], 0.0, 0, 0),
     new DemoDesc("sea", "Stolen Sister", "stolensister.stb", 44, 9, [0.0, 0.0, 20000.0], 0, 0, 0),
     new DemoDesc("sea", "Departure", "departure.stb", 44, 10, [-200000.0, 0.0, 320000.0], 0.0, 204, 0),
     new DemoDesc("sea", "Pirate Zelda Fly", "kaizoku_zelda_fly.stb", 44, 0, [-200000.0, 0.0, 320000.0], 180.0, 0, 0),
