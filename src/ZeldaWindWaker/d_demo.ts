@@ -169,15 +169,12 @@ class dDemo_actor_c extends TActor {
     mModel: J3DModelInstance;
     stbDataId: number;
     stbData: DataView;
-    mActorPcId: number;
     mBckId: number;
     mBtpId: number;
     mBtkId: number;
     mBrkId: number;
 
-    constructor(actor: fopAc_ac_c) {
-        super();
-    }
+    constructor(public mActor: fopAc_ac_c) { super(); }
 
     checkEnable(mask: number) {
         return this.mFlags & mask;
@@ -218,7 +215,7 @@ class dDemo_actor_c extends TActor {
 
     override JSGGetTranslation(dst: vec3) { vec3.copy(dst, this.mTranslation); }
     override JSGGetScaling(dst: vec3) { vec3.copy(dst, this.mScaling); }
-    override JSGGetRotation(dst: vec3) { 
+    override JSGGetRotation(dst: vec3) {
         dst[0] = cM_sht2d(this.mRotation[0]);
         dst[1] = cM_sht2d(this.mRotation[1]);
         dst[2] = cM_sht2d(this.mRotation[2]);
@@ -329,6 +326,8 @@ class dDemo_system_c implements TSystem {
 
     public remove() {
         this.mpActiveCamera = undefined;
+
+        for (let demoActor of this.mpActors) { demoActor.mActor.demoActorID = -1; }
         this.mpActors = [];
     }
 }
