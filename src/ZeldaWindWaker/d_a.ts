@@ -4724,9 +4724,13 @@ class d_a_npc_ls1 extends fopNpc_npc_c {
     private animTime: number;
     private arcName = 'Ls';
 
+    private itemPosType: number = 1;
+    private itemScale: number = 1.0;
+    private itemModel: J3DModelInstance;
     private handModel: J3DModelInstance;
     private jointMtxHandL: ReadonlyMat4;
     private jointMtxHandR: ReadonlyMat4;
+
     private btkAnim = new mDoExt_btkAnm();
     private btpAnim = new mDoExt_btpAnm();
     private btkFrame: number;
@@ -4738,7 +4742,12 @@ class d_a_npc_ls1 extends fopNpc_npc_c {
         const success = this.decideType(this.parameters);
         if (!success) { return cPhs__Status.Error; }
 
-        const status = dComIfG_resLoad(globals, this.arcName);
+        let status = dComIfG_resLoad(globals, this.arcName);
+        if (status !== cPhs__Status.Complete)
+            return status;
+
+        // noclip modification: Aryll's telescope comes from the Link arc. Load it now
+        status = dComIfG_resLoad(globals, "Link");
         if (status !== cPhs__Status.Complete)
             return status;
 
@@ -4770,11 +4779,10 @@ class d_a_npc_ls1 extends fopNpc_npc_c {
 
         mDoExt_modelEntryDL(globals, this.handModel, renderInstManager, viewerInput);
 
-        //     if (this->mItemModel != (J3DModel *)0x0) {
-        //     dScnKy_env_light_c::setLightTevColorType
-        //                 (&d_kankyo::g_env_light,this->mItemModel,&(this->parent).parent.tevStr);
-        //     m_Do_ext::mDoExt_modelEntryDL(this->mItemModel);
-        //     }
+        if (this.itemModel) {
+            setLightTevColorType(globals, this.itemModel, this.tevStr, viewerInput.camera);
+            mDoExt_modelEntryDL(globals, this.itemModel, renderInstManager, viewerInput);
+        }
 
         this.drawShadow();
     }
@@ -4869,22 +4877,8 @@ class d_a_npc_ls1 extends fopNpc_npc_c {
     }
 
     private createItem(globals: dGlobals) {
-        // J3DModelData *pModel;
-        // ulong uVar1;
-        // J3DModel *pJVar2;
-
-        // this->mItemModel = (J3DModel *)0x0;
-        // pModel = (J3DModelData *)
-        //         dRes_control_c::getRes
-        //                     ("Link",0x2f,d_com_inf_game::g_dComIfG_gameInfo.res_control.mObjectInfo,0x40);
-        // if (pModel == (J3DModelData *)0x0) {
-        //     uVar1 = JUTAssertion::getSDevice();
-        //     JUTAssertion::showAssert(uVar1,"d_a_npc_ls1.cpp",0xc43,"a_mdl_dat != 0");
-        //     m_Do_printf::OSPanic("d_a_npc_ls1.cpp",0xc43,&DAT_8076cc31);
-        // }
-        // pJVar2 = m_Do_ext::mDoExt_J3DModel__create(pModel,0x80000,0x11000022);
-        // this->mItemModel = pJVar2;
-        // return this->mItemModel != (J3DModel *)0x0;
+        const modelData = globals.resCtrl.getObjectIDRes(ResType.Model, "Link", 0x2f);
+        this.itemModel = new J3DModelInstance(modelData);
     }
 
     private waitAction1(): void {
@@ -4927,24 +4921,19 @@ class d_a_npc_ls1 extends fopNpc_npc_c {
 
         this.handModel.calcAnim();
 
-        // TODO:
-        // if( this.itemModel ) {
-        // this.jointMtxHandR;
-        // if (this->mItemPosType == '\0') {
-        //     mDoMtx_stack_c::transM(5.5,-3.0,-2.0);
-        //     fVar1 = *(float *)&this->mItemScale;
-        //     mDoMtx_stack_c::scaleM(fVar1,fVar1,fVar1);
-        //     m_Do_mtx::mDoMtx_XYZrotM(&mDoMtx_stack_c::now,-0x1d27,0x3b05,-0x5c71);
-        //   }
-        //   else {
-        //     mDoMtx_stack_c::transM(5.7,-17.5,-1.0);
-        //     fVar1 = *(float *)&this->mItemScale;
-        //     mDoMtx_stack_c::scaleM(fVar1,fVar1,fVar1);
-        //     m_Do_mtx::mDoMtx_XYZrotM(&mDoMtx_stack_c::now,-0x1d27,0x3b05,-0x5c71);
-        //   }
-        //   mtx::PSMTXCopy(&mDoMtx_stack_c::now,&this->mItemModel->mBaseMtx);
-        //   (*(code *)this->mItemModel->vtbl->calc)();
-        // }
+        if(this.itemModel) {
+            mat4.copy(calc_mtx, this.jointMtxHandR);
+            if (this.itemPosType == 0) {
+                MtxTrans([5.5, -3.0, -2.0], true);
+            }
+            else {
+                MtxTrans([5.7,-17.5,-1.0], true);
+            }
+            scaleMatrix(calc_mtx, calc_mtx, this.itemScale, this.itemScale, this.itemScale);
+            mDoMtx_XYZrotM(calc_mtx, [-0x1d27, 0x3b05, -0x5c71]);
+            mat4.copy(this.itemModel.modelMatrix, calc_mtx);
+            this.itemModel.calcAnim();
+        }
     }
 
     private drawShadow() {
