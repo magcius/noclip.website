@@ -1427,7 +1427,6 @@ namespace FVB {
         prepare() { }
         setData(value: number) { this.value = value; }
         getValue(timeSec: number) {
-            debugger; // Untested. Remove once confirmed working
             return this.value;
         }
     }
@@ -1751,10 +1750,10 @@ namespace FVB {
 
         setData(values: Float32Array, stride: number) {
             assert(stride == 3 || stride == 4);
-            this.keys = values;
-            this.keyCount = values.length / this.stride;
-            this.curKeyIdx = 0;
             this.stride = stride
+            this.keys = values;
+            this.keyCount = values.length / stride;
+            this.curKeyIdx = 0;
         }
 
         getType() { return EFuncValType.ListParameter; }
@@ -1762,7 +1761,7 @@ namespace FVB {
         getEndTime(): number { return this.keys[(this.keyCount - 1) * this.stride]; }
 
         getValue(timeSec: number): number {
-            debugger; // Untested. Remove after confirmed working.
+            // @TODO: Support range parameters like Outside
 
             // Remap (if requested) the time to our range
             const t = this.range.getParameter(timeSec, this.getStartTime(), this.getEndTime());
@@ -1778,7 +1777,7 @@ namespace FVB {
             }
 
             const ks = this.keys;
-            const c = this.curKeyIdx;
+            const c = this.curKeyIdx * this.stride;
             const l = c - this.stride;
             const value = Attribute.Interpolate.Hermite(
                 t, ks[l + 0], ks[l + 1], ks[l + this.stride - 1], ks[c + 0], ks[c + 1], ks[c + 2]);
