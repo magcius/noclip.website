@@ -1,5 +1,5 @@
 
-import { ReadonlyVec3, mat4, quat, vec2, vec3 } from "gl-matrix";
+import { ReadonlyMat4, ReadonlyVec3, mat4, quat, vec2, vec3 } from "gl-matrix";
 import { TransparentBlack, colorCopy, colorFromRGBA8, colorNewCopy, colorNewFromRGBA8 } from "../Color.js";
 import { J3DModelData, J3DModelInstance, buildEnvMtx } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
 import { LoopMode, TRK1, TTK1 } from "../Common/JSYSTEM/J3D/J3DLoader.js";
@@ -4725,6 +4725,8 @@ class d_a_npc_ls1 extends fopNpc_npc_c {
     private arcName = 'Ls';
 
     private handModel: J3DModelInstance;
+    private jointMtxHandL: ReadonlyMat4;
+    private jointMtxHandR: ReadonlyMat4;
     private btkAnim = new mDoExt_btkAnm();
     private btpAnim = new mDoExt_btpAnm();
     private btkFrame: number;
@@ -4766,7 +4768,7 @@ class d_a_npc_ls1 extends fopNpc_npc_c {
         // removeTexMtxAnimator(this.morf.model, this.btkAnim.anm);
         // removeTexNoAnimator(this.morf.model, this.btpAnim.anm);
 
-        // mDoExt_modelEntryDL(globals, this.handModel, renderInstManager, viewerInput);
+        mDoExt_modelEntryDL(globals, this.handModel, renderInstManager, viewerInput);
 
         //     if (this->mItemModel != (J3DModel *)0x0) {
         //     dScnKy_env_light_c::setLightTevColorType
@@ -4778,10 +4780,6 @@ class d_a_npc_ls1 extends fopNpc_npc_c {
     }
 
     public override execute(globals: dGlobals, deltaTimeFrames: number): void {
-        // char cVar1;
-        // byte bVar2;
-        // int iVar3;
-
         if (this.demoActorID >= 0) {
             //   partner_search(this);
             //   checkOrder(this);
@@ -4851,14 +4849,23 @@ class d_a_npc_ls1 extends fopNpc_npc_c {
 
         this.morf = new mDoExt_McaMorf(modelData, null, null, null, LoopMode.Once, 1.0, 0, -1);
 
-        // TODO: Find and assign joint idxs (Head, hands, etc)
+        const jointIdxHandL = modelData.bmd.jnt1.joints.findIndex(j => j.name == 'handL');
+        const jointIdxHandR = modelData.bmd.jnt1.joints.findIndex(j => j.name == 'handR');
+        this.jointMtxHandL = this.morf.model.shapeInstanceState.jointToWorldMatrixArray[jointIdxHandL];
+        this.jointMtxHandR = this.morf.model.shapeInstanceState.jointToWorldMatrixArray[jointIdxHandR];
     }
 
     private createHand(globals: dGlobals) {
         const modelData = globals.resCtrl.getObjectIDRes(ResType.Model, this.arcName, 0xc);
         this.handModel = new J3DModelInstance(modelData);
 
-        // TODO: Find and assign joint idxs
+        const handJointIdxL = modelData.bmd.jnt1.joints.findIndex(j => j.name == 'ls_handL');
+        const handJointIdxR = modelData.bmd.jnt1.joints.findIndex(j => j.name == 'ls_handR');
+
+        this.handModel.jointMatrixCalcCallback = (dst: mat4, modelData: J3DModelData, i: number): void => {
+            if (i == handJointIdxL) { mat4.copy(dst, this.jointMtxHandL); }
+            else if (i == handJointIdxR) { mat4.copy(dst, this.jointMtxHandR); }
+        }
     }
 
     private createItem(globals: dGlobals) {
@@ -4918,7 +4925,26 @@ class d_a_npc_ls1 extends fopNpc_npc_c {
         mat4.copy(this.morf.model.modelMatrix, calc_mtx);
         this.morf.calc();
 
-        // TODO: Item handling
+        this.handModel.calcAnim();
+
+        // TODO:
+        // if( this.itemModel ) {
+        // this.jointMtxHandR;
+        // if (this->mItemPosType == '\0') {
+        //     mDoMtx_stack_c::transM(5.5,-3.0,-2.0);
+        //     fVar1 = *(float *)&this->mItemScale;
+        //     mDoMtx_stack_c::scaleM(fVar1,fVar1,fVar1);
+        //     m_Do_mtx::mDoMtx_XYZrotM(&mDoMtx_stack_c::now,-0x1d27,0x3b05,-0x5c71);
+        //   }
+        //   else {
+        //     mDoMtx_stack_c::transM(5.7,-17.5,-1.0);
+        //     fVar1 = *(float *)&this->mItemScale;
+        //     mDoMtx_stack_c::scaleM(fVar1,fVar1,fVar1);
+        //     m_Do_mtx::mDoMtx_XYZrotM(&mDoMtx_stack_c::now,-0x1d27,0x3b05,-0x5c71);
+        //   }
+        //   mtx::PSMTXCopy(&mDoMtx_stack_c::now,&this->mItemModel->mBaseMtx);
+        //   (*(code *)this->mItemModel->vtbl->calc)();
+        // }
     }
 
     private drawShadow() {

@@ -262,6 +262,13 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         m.bindTTK1(parseBTK(rarc, `btk/gmjwp00.btk`));
     });
     // NPCs
+    // Aryll
+    else if (actorName === 'Ls' || actorName === 'Ls1') fetchArchive(`Ls`).then((rarc) => {
+        const m = buildModel(rarc, `bdlm/ls.bdl`);
+        buildChildModel(rarc, `bdl/lshand.bdl`).setParentJoint(m, `handL`);
+        buildChildModel(rarc, `bdl/lshand.bdl`).setParentJoint(m, `handR`);
+        m.bindANK1(parseBCK(rarc, `bcks/ls_wait01.bck`));
+    });
     // Beedle
     else if (actorName === 'Bs1') fetchArchive(`Bs`).then((rarc) => {
         const m = buildModel(rarc, `bdlm/bs.bdl`);
