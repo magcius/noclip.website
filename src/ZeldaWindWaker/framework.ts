@@ -30,6 +30,7 @@ export const enum fpc__ProcessName {
     d_a_obj_wood        = 0x010C,
     d_a_obj_flame       = 0x010D,
     d_a_tbox            = 0x0126,
+    d_a_npc_ls1         = 0x0143,
     d_a_kytag00         = 0x0181,
     d_a_kytag01         = 0x0182,
     d_a_obj_zouK        = 0x018F,
