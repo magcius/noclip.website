@@ -369,7 +369,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
 
             const demosPanel = new UI.Panel();
             demosPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
-            demosPanel.setTitle(UI.LAYER_ICON, 'Cutscenes');
+            demosPanel.setTitle(UI.CUTSCENE_ICON, 'Cutscenes');
             const demoSelect = new UI.SingleSelect();
             demoSelect.setStrings(this.demos.map(d => d.name));
             demoSelect.onselectionchange = (idx: number) => {
