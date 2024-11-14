@@ -228,7 +228,7 @@ abstract class TAdaptor {
     constructor(
         public mCount: number,
         public mVariableValues = nArray(mCount, i => new TVariableValue()),
-        public mEnableLogging = true,
+        public mEnableLogging = false,
     ) { }
 
     abstract adaptor_do_prepare(obj: STBObject): void;
