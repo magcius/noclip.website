@@ -491,18 +491,19 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
             let viewPos = this.globals.cameraPosition;
             let targetPos = vec3.add(scratchVec3a, this.globals.cameraPosition, this.globals.cameraFwd);
             let upVec = vec3.set(scratchVec3b, 0, 1, 0);
+            let roll = 0.0;
 
             if(demoCam.mFlags & EDemoCamFlags.HasTargetPos) { targetPos = demoCam.mTargetPosition; }
             if(demoCam.mFlags & EDemoCamFlags.HasEyePos) { viewPos = demoCam.mViewPosition; }
             if(demoCam.mFlags & EDemoCamFlags.HasUpVec) { upVec = demoCam.mUpVector; }
-            mat4.targetTo(viewerInput.camera.worldMatrix, viewPos, targetPos, upVec);
-            
             if(demoCam.mFlags & EDemoCamFlags.HasFovY) { viewerInput.camera.fovY = demoCam.mFovy * MathConstants.DEG_TO_RAD; }
-            if(demoCam.mFlags & EDemoCamFlags.HasRoll) { if(demoCam.mRoll > 0) debugger; /* Untested. Remove once confirmed working */ }
+            if(demoCam.mFlags & EDemoCamFlags.HasRoll) { roll = demoCam.mRoll * MathConstants.DEG_TO_RAD; }
             if(demoCam.mFlags & EDemoCamFlags.HasAspect) { debugger; /* Untested. Remove once confirmed working */ }
             if(demoCam.mFlags & EDemoCamFlags.HasNearZ) { viewerInput.camera.near = demoCam.mProjNear; }
             if(demoCam.mFlags & EDemoCamFlags.HasFarZ) { viewerInput.camera.far = demoCam.mProjFar; }
 
+            mat4.targetTo(viewerInput.camera.worldMatrix, viewPos, targetPos, upVec);
+            mat4.rotateZ(viewerInput.camera.worldMatrix, viewerInput.camera.worldMatrix, roll);
             viewerInput.camera.setClipPlanes(viewerInput.camera.near, viewerInput.camera.far);
             viewerInput.camera.worldMatrixUpdated();
         }

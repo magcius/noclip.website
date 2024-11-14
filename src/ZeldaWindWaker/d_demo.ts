@@ -142,7 +142,7 @@ class dDemo_camera_c extends TCamera {
         const camera = this.globals.camera;
         if (!camera)
             return 0.0;
-        return 0.0; // @TODO
+        return this.mRoll; // HACK: Instead of actually computing roll (complicated), just assume no one else is modifying it
     }
 
 
