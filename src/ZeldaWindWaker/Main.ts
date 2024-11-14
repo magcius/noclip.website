@@ -845,7 +845,7 @@ class d_s_play extends fopScn {
 class SceneDesc {
     public id: string;
 
-    public constructor(public stageDir: string, public name: string, public roomList: number[] = [0], public demo?: DemoDesc) {
+    public constructor(public stageDir: string, public name: string, public roomList: number[] = [0], public autoplayDemo?: DemoDesc) {
         this.id = stageDir;
 
         // Garbage hack.
@@ -971,6 +971,9 @@ class SceneDesc {
         globals.renderer.demos = demoDescs.filter(d => 
             d.stage == globals.stageName && (d.roomNo == -1 || this.roomList.includes(d.roomNo)));
 
+        // If requested, automatically start playing a demo
+        if(this.autoplayDemo) { this.autoplayDemo.load(globals); }
+
         return renderer;
     }
 }
@@ -1011,8 +1014,15 @@ class DemoDesc {
             }
         }
 
+        // noclip modification: ensure all the actors are created before we load the cutscene (in case we're auto-playing)
+        await new Promise(resolve => { (function waitForActors(){
+            if (globals.frameworkGlobals.ctQueue.length == 0) return resolve(null);
+            setTimeout(waitForActors, 30);
+        })(); });
+
         // @TODO: Set noclip layer visiblity based on this.layer
 
+        // From dEvDtStaff_c::specialProcPackage()
         let demoData;
         if(globals.roomCtrl.demoArcName)
             demoData = globals.modelCache.resCtrl.getObjectResByName(ResType.Stb, globals.roomCtrl.demoArcName, this.stbFilename);
