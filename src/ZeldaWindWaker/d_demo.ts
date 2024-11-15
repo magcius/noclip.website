@@ -152,7 +152,19 @@ class dDemo_camera_c extends TCamera {
     }
 }
 
-class dDemo_actor_c extends TActor {
+export const enum EDemoActorFlags {
+    HasData = 1 << 0,
+    HasPos = 1 << 1,
+    HasScale = 1 << 2,
+    HasRot = 1 << 3,
+    HasShape = 1 << 4,
+    HasAnim = 1 << 5,
+    HasFrame = 1 << 6,
+    HasTexAnim = 1 << 7,
+    HasTexFrame = 1 << 8,
+} 
+
+export class dDemo_actor_c extends TActor {
     mName: string;
     mFlags: number;
     mTranslation = vec3.create();
@@ -224,55 +236,55 @@ class dDemo_actor_c extends TActor {
     override JSGSetData(id: number, data: DataView): void {
         this.stbDataId = id;
         this.stbData = data; // @TODO: Check that data makes sense
-        this.mFlags |= 0x01;
+        this.mFlags |= EDemoActorFlags.HasData;
     }
 
     override JSGSetTranslation(src: ReadonlyVec3) {
         vec3.copy(this.mTranslation, src);
-        this.mFlags |= 0x02;
+        this.mFlags |= EDemoActorFlags.HasPos;
     }
 
     override JSGSetScaling(src: ReadonlyVec3) {
         vec3.copy(this.mScaling, src);
-        this.mFlags |= 0x04;
+        this.mFlags |= EDemoActorFlags.HasScale;
     }
 
     override JSGSetRotation(src: ReadonlyVec3) {
         this.mRotation[0] = cM_deg2s(src[0]);
         this.mRotation[1] = cM_deg2s(src[1]);
         this.mRotation[2] = cM_deg2s(src[2]);
-        this.mFlags |= 0x08;
+        this.mFlags |= EDemoActorFlags.HasRot;
     }
 
     override JSGSetShape(id: number): void {
         this.mShapeId = id;
-        this.mFlags |= 0x10;
+        this.mFlags |= EDemoActorFlags.HasShape
     }
 
     override JSGSetAnimation(id: number): void {
         this.mNextBckId = id;
         this.mAnimationFrameMax = 3.402823e+38;
-        this.mFlags |= 0x20;
+        this.mFlags |= EDemoActorFlags.HasAnim;
     }
 
     override JSGSetAnimationFrame(x: number): void {
         this.mAnimationFrame = x;
-        this.mFlags |= 0x40;
+        this.mFlags |= EDemoActorFlags.HasFrame;
     }
 
     override JSGSetAnimationTransition(x: number): void {
         this.mAnimationTransition = x;
-        this.mFlags |= 0x40;
+        this.mFlags |= EDemoActorFlags.HasFrame;
     }
 
     override JSGSetTextureAnimation(id: number): void {
         this.mTexAnimation = id;
-        this.mFlags |= 0x80;
+        this.mFlags |= EDemoActorFlags.HasTexAnim;
     }
 
     override JSGSetTextureAnimationFrame(x: number): void {
         this.mTexAnimationFrame = x;
-        this.mFlags |= 0x100;
+        this.mFlags |= EDemoActorFlags.HasTexFrame;
     }
 }
 
