@@ -4956,17 +4956,49 @@ class d_a_npc_ls1 extends fopNpc_npc_c {
 }
 class d_a_py_lk extends fopAc_ac_c {
     public static PROCESS_NAME = fpc__ProcessName.d_a_py_lk;
+    private static ARC_NAME = "Link";
+    private static LINK_BDL_CL = 0x18;
+    private static LINK_BDL_HANDS = 0x1D;
+
+    private modelBody: J3DModelInstance;
+    private modelHands: J3DModelInstance;
 
     protected override subload(globals: dGlobals, prm: fopAcM_prm_class | null): cPhs__Status {
+        this.playerInit(globals);
         return cPhs__Status.Next;
     }
 
     override execute(globals: dGlobals, deltaTimeFrames: number): void {
-        
+        dDemo_setDemoData(globals, deltaTimeFrames, this, 0xFFFF);
+
+        // Line 3647
+        this.modelBody.calcAnim();
+
+        // setWorldMatrix()
+        MtxTrans(this.pos, false, this.modelBody.modelMatrix);
+        mDoMtx_ZXYrotM(this.modelBody.modelMatrix, this.rot);
     }
 
     override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        
+        settingTevStruct(globals, LightType.Player, this.pos, this.tevStr);
+        setLightTevColorType(globals, this.modelBody, this.tevStr, viewerInput.camera);
+
+        mDoExt_modelEntryDL(globals, this.modelBody, renderInstManager, viewerInput);
+    }
+
+    private playerInit(globals: dGlobals) {
+        // createHeap()
+        this.modelBody = this.initModel(globals, d_a_py_lk.LINK_BDL_CL);
+        this.modelHands = this.initModel(globals, d_a_py_lk.LINK_BDL_HANDS);
+
+        this.cullMtx = this.modelBody.modelMatrix;
+    }
+
+    private initModel(globals: dGlobals, fileIdx: number): J3DModelInstance {
+        const modelData = globals.resCtrl.getObjectRes(ResType.Model, d_a_py_lk.ARC_NAME, fileIdx);
+        const model = new J3DModelInstance(modelData);
+        assert(!!model);
+        return model;
     }
 }
 
