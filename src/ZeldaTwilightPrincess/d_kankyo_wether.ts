@@ -10,7 +10,7 @@ import { MathConstants, computeMatrixWithoutTranslation, invlerp, saturate } fro
 import { DeviceProgram } from "../Program.js";
 import { TDDraw } from "../SuperMarioGalaxy/DDraw.js";
 import { TextureMapping } from "../TextureHolder.js";
-import { cLib_addCalc, cM__Short2Rad, cM_rndF, cM_rndFX } from "../ZeldaWindWaker/SComponent.js";
+import { cLib_addCalc, cM_s2rad, cM_rndF, cM_rndFX } from "../ZeldaWindWaker/SComponent.js";
 import { PeekZManager, PeekZResult } from "../ZeldaWindWaker/d_dlst_peekZ.js";
 import { mDoLib_project, mDoLib_projectFB } from "../ZeldaWindWaker/m_do_ext.js";
 import { MtxTrans, calc_mtx, mDoMtx_XrotM, mDoMtx_ZrotM } from "../ZeldaWindWaker/m_do_mtx.js";
@@ -520,9 +520,9 @@ export class dKankyo_sun_Packet {
 
     private lensflareBaseSize: number = 160.0;
     private lensflareCount: number = 16.0;
-    private lensflareAngleSteps: number[] = [cM__Short2Rad(0x1000), cM__Short2Rad(0x1C71)];
+    private lensflareAngleSteps: number[] = [cM_s2rad(0x1000), cM_s2rad(0x1C71)];
     private lensflareSizes: number[] = [0.1, 1.1, 0.2, 0.4];
-    private lensflareWidth: number = cM__Short2Rad(1000.0);
+    private lensflareWidth: number = cM_s2rad(1000.0);
 
     private drawLenzflare(globals: dGlobals, ddraw: TDDraw, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         if (this.visibility <= 0.1)
@@ -607,8 +607,8 @@ export class dKankyo_sun_Packet {
             submitScratchRenderInst(renderInstManager, materialHelper, renderInst, viewerInput);
         }
 
-        let angle0 = cM__Short2Rad(globals.counter *  0x00 - 0x07F6);
-        let angle1 = cM__Short2Rad(globals.counter * -0x0E + 0x416B);
+        let angle0 = cM_s2rad(globals.counter *  0x00 - 0x07F6);
+        let angle1 = cM_s2rad(globals.counter * -0x0E + 0x416B);
         for (let i = 0; i < this.lensflareCount; i++) {
             ddraw.begin(GX.Command.DRAW_TRIANGLES);
 
@@ -1393,7 +1393,7 @@ export class dKankyo_star_Packet {
                 scratchVec3a[2] = radiusXZ * 300.0 * Math.cos(angle);
 
                 angle += angleIncr;
-                angleIncr += cM__Short2Rad(0x09C4);
+                angleIncr += cM_s2rad(0x09C4);
 
                 radius += (1.0 + 3.0 * (radius / 200.0 ** 3.0));
                 if (radius > 200.0)
@@ -2076,7 +2076,7 @@ function wether_move_vrkumo(globals: dGlobals, deltaTimeFrames: number): void {
         windPower = 0.3;
 
     const windDir = dKyw_get_wind_vec(envLight);
-    const windPitch = vecPitch(windDir), windAngle = vecAngle(windDir) + cM__Short2Rad(24575.0);
+    const windPitch = vecPitch(windDir), windAngle = vecAngle(windDir) + cM_s2rad(24575.0);
     const cosPitch = Math.cos(windPitch);
     const sinAngle = Math.sin(windAngle), cosAngle = Math.cos(windAngle);
     pkt.cloudScrollX = (pkt.cloudScrollX + cosPitch * sinAngle * windPower * 0.0014 * deltaTimeFrames) % 1.0;
@@ -2115,11 +2115,11 @@ export function dKyw_wind_set(globals: dGlobals): void {
 
     let windAngleXZ = 0, windAngleY = 0;
     if (windDirFlag === 2)
-        windAngleXZ = cM__Short2Rad(-0x4000);
+        windAngleXZ = cM_s2rad(-0x4000);
     else if (windDirFlag === 4)
-        windAngleXZ = cM__Short2Rad(0x4000);
+        windAngleXZ = cM_s2rad(0x4000);
     else if (windDirFlag === 5)
-        windAngleXZ = cM__Short2Rad(0x7FFF);
+        windAngleXZ = cM_s2rad(0x7FFF);
 
     const targetWindVecX = Math.sin(windAngleXZ) * Math.cos(windAngleY);
     const targetWindVecY = Math.sin(windAngleY);

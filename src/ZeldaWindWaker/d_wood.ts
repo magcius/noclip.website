@@ -17,7 +17,7 @@ import { ColorKind, DrawParams, GXMaterialHelperGfx, GXShapeHelperGfx, loadedDat
 import { assert } from '../util.js';
 import { ViewerRenderInput } from '../viewer.js';
 import { dGlobals } from './Main.js';
-import { cLib_chaseF, cM__Short2Rad, cM_atan2s } from './SComponent.js';
+import { cLib_chaseF, cM_s2rad, cM_atan2s } from './SComponent.js';
 import { dBgS_GndChk } from './d_bg.js';
 import { dKy_GxFog_set } from './d_kankyo.js';
 import { dKyw_get_wind_pow, dKyw_get_wind_vec } from './d_kankyo_wether.js';
@@ -462,8 +462,8 @@ class Anm_c {
             this.ampY[i] = cLib_chaseF(this.ampY[i], swayAttr.ampY, 2);
             this.ampX[i] = cLib_chaseF(this.ampX[i], swayAttr.ampX, 2);
 
-            rotY += this.ampY[i] * Math.cos(cM__Short2Rad((this.phaseY[i])));
-            rotX += this.ampX[i] * (swayAttr.phaseBiasX + Math.cos(cM__Short2Rad((this.phaseX[i]))));
+            rotY += this.ampY[i] * Math.cos(cM_s2rad((this.phaseY[i])));
+            rotX += this.ampX[i] * (swayAttr.phaseBiasX + Math.cos(cM_s2rad((this.phaseX[i]))));
         }
 
         mDoMtx_YrotS(this.modelMtx, rotY + this.windDir);

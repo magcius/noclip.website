@@ -13,7 +13,7 @@ import { TDDraw } from "../SuperMarioGalaxy/DDraw.js";
 import { TextureMapping } from "../TextureHolder.js";
 import { nArray } from "../util.js";
 import { ViewerRenderInput } from "../viewer.js";
-import { cLib_addCalc2, cM__Short2Rad } from "../ZeldaWindWaker/SComponent.js";
+import { cLib_addCalc2, cM_s2rad } from "../ZeldaWindWaker/SComponent.js";
 import { dGlobals } from "./Main.js";
 import * as GX from '../gx/gx_enum.js';
 import { ColorKind } from "../gx/gx_render.js";
@@ -142,7 +142,7 @@ export class dPa_control_c {
         if (pos !== null)
             vec3.copy(baseEmitter.globalTranslation, pos);
         if (rot !== null)
-            computeModelMatrixR(baseEmitter.globalRotation, cM__Short2Rad(rot[0]), cM__Short2Rad(rot[1]), cM__Short2Rad(rot[2]));
+            computeModelMatrixR(baseEmitter.globalRotation, cM_s2rad(rot[0]), cM_s2rad(rot[1]), cM_s2rad(rot[2]));
         if (scale !== null)
             baseEmitter.setGlobalScale(scale);
 

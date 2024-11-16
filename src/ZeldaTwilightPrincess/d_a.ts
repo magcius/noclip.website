@@ -8,7 +8,7 @@ import { JPABaseEmitter } from "../Common/JSYSTEM/JPA.js";
 import { BTIData } from "../Common/JSYSTEM/JUTTexture.js";
 import { MathConstants, Vec3UnitY, invlerp, saturate, scaleMatrix } from "../MathHelpers.js";
 import { TSDraw } from "../SuperMarioGalaxy/DDraw.js";
-import { cLib_addCalc, cLib_addCalc2, cLib_addCalcAngleS2, cLib_addCalcAngleS_, cLib_chaseF, cLib_targetAngleX, cLib_targetAngleY, cM__Short2Rad, cM__Deg2Short, cM_atan2s } from "../ZeldaWindWaker/SComponent.js";
+import { cLib_addCalc, cLib_addCalc2, cLib_addCalcAngleS2, cLib_addCalcAngleS_, cLib_chaseF, cLib_targetAngleX, cLib_targetAngleY, cM_s2rad, cM_deg2s, cM_atan2s } from "../ZeldaWindWaker/SComponent.js";
 import { dBgW } from "../ZeldaWindWaker/d_bg.js";
 import { MtxPosition, MtxTrans, calc_mtx, mDoMtx_XrotM, mDoMtx_YrotM, mDoMtx_YrotS, mDoMtx_ZXYrotM, mDoMtx_ZrotM } from "../ZeldaWindWaker/m_do_mtx.js";
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
@@ -3100,7 +3100,7 @@ class d_a_obj_magLiftRot extends fopAc_ac_c {
     private modeMove(deltaTimeFrames: number): void {
         this.speedF = cLib_chaseF(this.speedF, 8.0, 0.05 * deltaTimeFrames);
 
-        const speed = cM__Deg2Short(this.speedF);
+        const speed = cM_deg2s(this.speedF);
         this.rot[2] = cLib_addCalcAngleS_(this.rot[2], this.rotTarget, 1, speed * deltaTimeFrames, 1);
 
         if ((this.rotTarget - this.rot[2]) === 0) {
@@ -3213,7 +3213,7 @@ class d_a_e_hp extends fopAc_ac_c {
     public override execute(globals: dGlobals, deltaTimeFrames: number): void {
         super.execute(globals, deltaTimeFrames);
 
-        this.height = 170.0 + Math.sin(cM__Short2Rad(this.counter * 1000)) * 20;
+        this.height = 170.0 + Math.sin(cM_s2rad(this.counter * 1000)) * 20;
 
         this.mtx_set();
 
@@ -3290,8 +3290,8 @@ class d_a_e_hp extends fopAc_ac_c {
             swing = 6000.0
 
         this.swingRate = cLib_addCalc2(this.swingRate, swing, 0.1, swing * 0.1);
-        this.swingAngle[0] = cLib_addCalcAngleS2(this.swingAngle[0], this.swingRate * Math.sin(cM__Short2Rad(this.counter * 2000)), 8, 0x400);
-        this.swingAngle[2] = this.swingRate * Math.sin(cM__Short2Rad(this.counter * 2500.0));
+        this.swingAngle[0] = cLib_addCalcAngleS2(this.swingAngle[0], this.swingRate * Math.sin(cM_s2rad(this.counter * 2000)), 8, 0x400);
+        this.swingAngle[2] = this.swingRate * Math.sin(cM_s2rad(this.counter * 2500.0));
     }
 }
 

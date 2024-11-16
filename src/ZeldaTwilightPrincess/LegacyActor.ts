@@ -22,7 +22,7 @@ import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
 import { ColorKind } from '../gx/gx_render.js';
 import { colorNewFromRGBA8 } from '../Color.js';
 import { calc_mtx, MtxTrans, mDoMtx_ZXYrotM, mDoMtx_YrotM } from '../ZeldaWindWaker/m_do_mtx.js';
-import { cM__Short2Rad } from '../ZeldaWindWaker/SComponent.js';
+import { cM_s2rad } from '../ZeldaWindWaker/SComponent.js';
 
 const scratchVec3a = vec3.create();
 
@@ -886,7 +886,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         } else if (type >= 2) {
             const child = buildChildModel(rarc, `bmdr/rd_bow.bmd`);
             child.setParentJoint(m, `yubiL`);
-            mat4.rotateX(child.modelMatrix, child.modelMatrix, cM__Short2Rad(0x4000));
+            mat4.rotateX(child.modelMatrix, child.modelMatrix, cM_s2rad(0x4000));
         }
 
         m.bindANK1(parseBCK(rarc, `bck/rd_wait01.bck`));

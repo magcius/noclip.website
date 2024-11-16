@@ -114,19 +114,23 @@ export function cM_rndFX(max: number): number {
 }
 
 export function cM_atan2s(y: number, x: number): number {
-    return cM__Rad2Short(Math.atan2(y, x));
+    return cM_rad2s(Math.atan2(y, x));
 }
 
-export function cM__Short2Rad(v: number): number {
-    return v * (Math.PI / 0x8000);
-}
-
-export function cM__Rad2Short(v: number): number {
+export function cM_rad2s(v: number): number {
     return v * (0x8000 / Math.PI);
 }
 
-export function cM__Deg2Short(v: number): number {
-    return cM__Rad2Short(v * MathConstants.DEG_TO_RAD);
+export function cM_deg2s(v: number): number {
+    return cM_rad2s(v * MathConstants.DEG_TO_RAD);
+}
+
+export function cM_s2rad(v: number): number {
+    return v * (Math.PI / 0x8000);
+}
+
+export function cM_sht2d(v: number): number {
+    return cM_s2rad(v) * MathConstants.RAD_TO_DEG;
 }
 
 export function cLib_targetAngleX(p0: ReadonlyVec3, p1: ReadonlyVec3): number {
