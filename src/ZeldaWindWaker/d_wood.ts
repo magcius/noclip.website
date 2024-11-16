@@ -313,6 +313,8 @@ class WoodModel {
 
     public destroy(device: GfxDevice): void {
         this.bufferCoalescer.destroy(device);
+        this.shadowTextureData.destroy(device);
+        this.bushTextureData.destroy(device);
     }
 }
 

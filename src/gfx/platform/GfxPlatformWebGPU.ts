@@ -1742,8 +1742,7 @@ export async function createSwapChainForWebGPU(canvas: HTMLCanvasElement | Offsc
     if (device === null)
         return null;
 
-    const context = canvas.getContext('webgpu') as any as GPUCanvasContext;
-
+    const context = canvas.getContext('webgpu');
     if (!context)
         return null;
 

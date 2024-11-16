@@ -319,7 +319,6 @@ export class Viewer {
             this.render();
         }
 
-        // TODO(jstpierre): Move this to main
         this.inputManager.afterFrame();
 
         // Reset the delta for next frame.
