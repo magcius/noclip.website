@@ -31,7 +31,6 @@ import { LegacyActor__RegisterFallbackConstructor } from './LegacyActor.js';
 import { dDlst_2DStatic_c, d_a__RegisterConstructors } from './d_a.js';
 import { d_a_sea } from './d_a_sea.js';
 import { dBgS } from './d_bg.js';
-import { EDemoCamFlags, EDemoMode, dDemo_manager_c } from './d_demo.js';
 import { dDlst_list_Set, dDlst_list_c } from './d_drawlist.js';
 import { dKankyo_create, dKy__RegisterConstructors, dKy_setLight, dScnKy_env_light_c } from './d_kankyo.js';
 import { dKyw__RegisterConstructors } from './d_kankyo_wether.js';
@@ -40,8 +39,9 @@ import { dProcName_e } from './d_procname.js';
 import { ResType, dRes_control_c } from './d_resorce.js';
 import { dStage_dt_c_roomLoader, dStage_dt_c_roomReLoader, dStage_dt_c_stageInitLoader, dStage_dt_c_stageLoader, dStage_roomControl_c, dStage_roomStatus_c, dStage_stageDt_c } from './d_stage.js';
 import { WoodPacket } from './d_wood.js';
-import { fopAcM_create, fopAc_ac_c } from './f_op_actor.js';
+import { fopAcM_create, fopAcM_searchFromName, fopAc_ac_c } from './f_op_actor.js';
 import { cPhs__Status, fGlobals, fopDw_Draw, fopScn, fpcCt_Handler, fpcLy_SetCurrentLayer, fpcM_Management, fpcPf__Register, fpcSCtRq_Request, fpc_pc__ProfileList } from './framework.js';
+import { dDemo_manager_c, EDemoCamFlags, EDemoMode } from './d_demo.js';
 
 type SymbolData = { Filename: string, SymbolName: string, Data: ArrayBufferSlice };
 type SymbolMapData = { SymbolData: SymbolData[] };
@@ -999,6 +999,11 @@ class DemoDesc extends SceneDesc implements Viewer.SceneDesc {
         globals.scnPlay.demo.remove();
 
         // TODO: Don't render until the camera has been placed for this demo. The cuts are jarring.
+        
+        // noclip modification: Most cutscenes expect the Link actor to be loaded 
+        if(!fopAcM_searchFromName(globals, 'Link', 0, 0)) {
+            fopAcM_create(globals.frameworkGlobals, dProcName_e.d_a_py_lk, 0, null, globals.mStayNo, null, null, 0xFF, -1);
+        }
 
         // noclip modification: This normally happens on room load. Do it here instead so that we don't waste time 
         //                      loading .arcs for cutscenes that aren't going to be played
