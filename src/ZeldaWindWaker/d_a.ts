@@ -4954,6 +4954,21 @@ class d_a_npc_ls1 extends fopNpc_npc_c {
         return true;
     }
 }
+class d_a_py_lk extends fopAc_ac_c {
+    public static PROCESS_NAME = fpc__ProcessName.d_a_py_lk;
+
+    protected override subload(globals: dGlobals, prm: fopAcM_prm_class | null): cPhs__Status {
+        return cPhs__Status.Next;
+    }
+
+    override execute(globals: dGlobals, deltaTimeFrames: number): void {
+        
+    }
+
+    override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        
+    }
+}
 
 interface constructor extends fpc_bs__Constructor {
     PROCESS_NAME: dProcName_e;
@@ -4987,4 +5002,5 @@ export function d_a__RegisterConstructors(globals: fGlobals): void {
     R(d_a_obj_flame);
     R(d_a_ff);
     R(d_a_npc_ls1);
+    R(d_a_py_lk);
 }
