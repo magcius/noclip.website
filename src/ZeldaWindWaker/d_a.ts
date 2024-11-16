@@ -12,7 +12,7 @@ import { Endianness } from "../endian.js";
 import { compareDepthValues } from "../gfx/helpers/ReversedDepthHelpers.js";
 import { GfxClipSpaceNearZ, GfxCompareMode, GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
-import { GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
+import { GfxRendererLayer, GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder.js";
 import * as GX from '../gx/gx_enum.js';
 import { TevDefaultSwapTables } from "../gx/gx_material.js";
@@ -4960,38 +4960,69 @@ class d_a_py_lk extends fopAc_ac_c {
     private static LINK_BDL_CL = 0x18;
     private static LINK_BDL_HANDS = 0x1D;
 
-    private modelBody: J3DModelInstance;
+    private model: J3DModelInstance;
     private modelHands: J3DModelInstance;
 
     protected override subload(globals: dGlobals, prm: fopAcM_prm_class | null): cPhs__Status {
         this.playerInit(globals);
+
+        // noclip modification: The game manually draws the eye/eyebrow filter before the body. Let's do that with sorting.
+        this.model.setSortKeyLayer(GfxRendererLayer.OPAQUE + 5, false);
+        this.setupDam('eyeL');
+        this.setupDam('eyeR');
+        this.setupDam('mayuL');
+        this.setupDam('mayuR'); 
+
         return cPhs__Status.Next;
     }
 
     override execute(globals: dGlobals, deltaTimeFrames: number): void {
         dDemo_setDemoData(globals, deltaTimeFrames, this, 0xFFFF);
 
-        // Line 3647
-        this.modelBody.calcAnim();
+        this.model.calcAnim();
 
         // setWorldMatrix()
-        MtxTrans(this.pos, false, this.modelBody.modelMatrix);
-        mDoMtx_ZXYrotM(this.modelBody.modelMatrix, this.rot);
+        MtxTrans(this.pos, false, this.model.modelMatrix);
+        mDoMtx_ZXYrotM(this.model.modelMatrix, this.rot);
     }
 
     override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         settingTevStruct(globals, LightType.Player, this.pos, this.tevStr);
-        setLightTevColorType(globals, this.modelBody, this.tevStr, viewerInput.camera);
+        setLightTevColorType(globals, this.model, this.tevStr, viewerInput.camera);
 
-        mDoExt_modelEntryDL(globals, this.modelBody, renderInstManager, viewerInput);
+        mDoExt_modelEntryDL(globals, this.model, renderInstManager, viewerInput);
     }
 
     private playerInit(globals: dGlobals) {
         // createHeap()
-        this.modelBody = this.initModel(globals, d_a_py_lk.LINK_BDL_CL);
+        this.model = this.initModel(globals, d_a_py_lk.LINK_BDL_CL);
         this.modelHands = this.initModel(globals, d_a_py_lk.LINK_BDL_HANDS);
 
-        this.cullMtx = this.modelBody.modelMatrix;
+        globals.renderer.extraTextures.fillExtraTextures(this.model);
+
+        this.cullMtx = this.model.modelMatrix;
+    }
+
+    private setupDam(pref: string): void {
+        const matInstA = this.model.materialInstances.find((m) => m.name === `${pref}damA`)!;
+        const matInstB = this.model.materialInstances.find((m) => m.name === `${pref}damB`)!;
+        
+        // Render an alpha mask in the shape of the eyes. Needs to render before Link so that it can depth test against
+        // the scene but not against his hair. The eyes will then draw with depth testing enabled, but will mask against
+        // this alpha tex. 
+        matInstA.setSortKeyLayer(GfxRendererLayer.BACKGROUND + 4, false);
+        matInstA.setColorWriteEnabled(false);
+        matInstA.setAlphaWriteEnabled(true);
+
+        // @TODO: This material is marked as translucent in the original BMD. Noclip draws translucent shapes after all
+        //        opaque shapes, meaning that this renders AFTER Link, which defeats the purpose of modifying the sort
+        //        layer. Is there something wrong with noclip's translucency handling?
+        matInstA.materialData.material.translucent = false;
+
+        // Clear the alpha mask written by the *damA materials so it doesn't interfere with other translucent objects
+        matInstB.setSortKeyLayer(GfxRendererLayer.OPAQUE + 6, false);
+        matInstB.setColorWriteEnabled(false);
+        matInstB.setAlphaWriteEnabled(true);
     }
 
     private initModel(globals: dGlobals, fileIdx: number): J3DModelInstance {
