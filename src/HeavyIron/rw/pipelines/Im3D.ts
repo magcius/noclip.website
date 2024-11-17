@@ -25,6 +25,7 @@ export class Im3DPipeline implements RwIm3DPipeline {
 
     public destroy(rw: RwEngine) {
         rw.gfx.destroyBuffer(this.vertexBuffer);
+        rw.gfx.destroyBuffer(this.indexBuffer);
     }
 
     public transform(rw: RwEngine, verts: RwIm3DVertex[], numVerts: number, ltm: mat4 | null, flags: RwIm3DTransformFlags) {

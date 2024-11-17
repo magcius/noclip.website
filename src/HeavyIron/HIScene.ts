@@ -202,7 +202,7 @@ export class HIScene implements SceneGfx {
             texture.destroy(this.rw);
         }
 
-        this.env.jsp.destroy(this.rw);
+        this.env.destroy(this.rw);
 
         this.rw.destroy();
     }
