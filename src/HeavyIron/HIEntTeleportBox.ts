@@ -15,7 +15,7 @@ export class HIEntTeleportBoxAsset {
     constructor(stream: RwStream, game: HIGame) {
         this.marker = stream.readUint32();
         this.opened = stream.readUint32();
-        if (game < HIGame.TSSM) {
+        if (game === HIGame.BFBB) {
             this.launchAngle = stream.readUint32();
         }
         this.camAngle = stream.readUint32();
