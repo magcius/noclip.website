@@ -51,10 +51,9 @@ class DMPProgram extends DeviceProgram {
     public static a_Tangent = 2;
     public static a_Color = 3;
     public static a_TexCoord0 = 4;
-    public static a_TexCoord1 = 5;
-    public static a_TexCoord2 = 6;
-    public static a_BoneIndices = 7;
-    public static a_BoneWeights = 8;
+    public static a_TexCoord12 = 5;
+    public static a_BoneIndices = 6;
+    public static a_BoneWeights = 7;
 
     public static BindingsDefinition = `
 
@@ -435,9 +434,8 @@ void main() {
         t_ResultColor.rgba = vec4(v_TexCoord0.xy, 1.0, 1.0);
     #endif
 
-    if(u_IsFogEnabled > 0.0 && u_RenderFog > 0.0)
-    {
-        //(M-1): Hack for now
+    if (u_IsFogEnabled > 0.0 && u_RenderFog > 0.0) {
+        // TODO(M-1): Implement true fog
         float t_FogFactor = smoothstep(u_FogStart - v_Depth, u_FogEnd + v_Depth, v_Depth);
         t_ResultColor.rgb = mix(t_ResultColor.rgb, u_FogColor.rgb, t_FogFactor);
     }
@@ -464,8 +462,7 @@ layout(location = ${DMPProgram.a_Normal}) in vec3 a_Normal;
 layout(location = ${DMPProgram.a_Tangent}) in vec3 a_Tangent;
 layout(location = ${DMPProgram.a_Color}) in vec4 a_Color;
 layout(location = ${DMPProgram.a_TexCoord0}) in vec2 a_TexCoord0;
-layout(location = ${DMPProgram.a_TexCoord1}) in vec2 a_TexCoord1;
-layout(location = ${DMPProgram.a_TexCoord2}) in vec2 a_TexCoord2;
+layout(location = ${DMPProgram.a_TexCoord12}) in vec4 a_TexCoord12;
 layout(location = ${DMPProgram.a_BoneIndices}) in vec4 a_BoneIndices;
 layout(location = ${DMPProgram.a_BoneWeights}) in vec4 a_BoneWeights;
 
@@ -554,9 +551,9 @@ vec2 CalcTextureSrc(in int t_TexSrcIdx) {
     if (t_TexSrcIdx == 0)
         return a_TexCoord0;
     else if (t_TexSrcIdx == 1)
-        return a_TexCoord1;
+        return a_TexCoord12.xy;
     else if (t_TexSrcIdx == 2)
-        return a_TexCoord2;
+        return a_TexCoord12.zw;
     else
         // Should not be possible.
         return vec2(0.0, 0.0);
@@ -1031,21 +1028,12 @@ class SepdData {
             }
         };
 
-        // Transform everything into floats.
-        const loadVertexAttrib = (location: number, format: GfxFormat, data: ArrayBufferSlice | null, vertexAttrib: CMB.SepdVertexAttrib | null) => {
-            let buffer: GfxBuffer;
-            let frequency = GfxVertexBufferFrequency.PerVertex;
-            if (vertexAttrib === null || data === null || data.byteLength === 0 || vertexAttrib.mode === CMB.SepdVertexAttribMode.CONSTANT) {
-                const constantData = new Float32Array(4);
-                if (vertexAttrib !== null)
-                    constantData.set(vertexAttrib.constant);
-                buffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, constantData.buffer);
-                frequency = GfxVertexBufferFrequency.Constant;
-            } else {
-                const newData = transformVertexData(data.slice(vertexAttrib.start), vertexAttrib.dataType, vertexAttrib.scale);
-                buffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, newData.buffer, newData.byteOffset, newData.byteLength);
-            }
+        const hasVertexAttib = (data: ArrayBufferSlice | null, vertexAttrib: CMB.SepdVertexAttrib | null) => {
+            return vertexAttrib !== null && data !== null && data.byteLength !== 0 && vertexAttrib.mode !== CMB.SepdVertexAttribMode.CONSTANT;
+        };
 
+        const pushBuffer = (location: number, format: GfxFormat, data: Float32Array, frequency: GfxVertexBufferFrequency) => {
+            const buffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, data.buffer, data.byteOffset, data.byteLength);
             const bufferIndex = this.vertexBufferDescriptors.length;
             this.buffers.push(buffer);
             this.vertexBufferDescriptors.push({ buffer, byteOffset: 0 });
@@ -1053,17 +1041,66 @@ class SepdData {
             vertexAttributeDescriptors.push({ location, format, bufferIndex, bufferByteOffset: 0 });
         };
 
+        const getConstantData = (vertexAttrib: CMB.SepdVertexAttrib | null) => {
+            const constantData = new Float32Array(4);
+            if (vertexAttrib !== null)
+                constantData.set(vertexAttrib.constant);
+            return constantData;
+        };
+
+        // Transform everything into floats.
+        const loadVertexAttrib = (location: number, format: GfxFormat, data: ArrayBufferSlice | null, vertexAttrib: CMB.SepdVertexAttrib | null) => {
+            if (hasVertexAttib(data, vertexAttrib)) {
+                const newData = transformVertexData(data!.slice(vertexAttrib!.start), vertexAttrib!.dataType, vertexAttrib!.scale);
+                pushBuffer(location, format, newData, GfxVertexBufferFrequency.PerVertex);
+            } else {
+                const constantData = getConstantData(vertexAttrib);
+                pushBuffer(location, format, constantData, GfxVertexBufferFrequency.Constant);
+            }
+        };
+
         loadVertexAttrib(DMPProgram.a_Position,  GfxFormat.F32_RGB, vatr.position, sepd.position);
         loadVertexAttrib(DMPProgram.a_Normal,    GfxFormat.F32_RGB, vatr.normal, sepd.normal);
         loadVertexAttrib(DMPProgram.a_Tangent,   GfxFormat.F32_RGB, sepd.hasTangents ? vatr.tangent : null, sepd.tangent);
         loadVertexAttrib(DMPProgram.a_Color,     GfxFormat.F32_RGBA, vatr.color, sepd.color);
         loadVertexAttrib(DMPProgram.a_TexCoord0, GfxFormat.F32_RG, vatr.texCoord0, sepd.texCoord0);
-        loadVertexAttrib(DMPProgram.a_TexCoord1, GfxFormat.F32_RG, vatr.texCoord1, sepd.texCoord1);
-        loadVertexAttrib(DMPProgram.a_TexCoord2, GfxFormat.F32_RG, vatr.texCoord2, sepd.texCoord2);
 
-        const hasBoneIndices = sepd.prms[0].skinningMode !== CMB.SkinningMode.SINGLE_BONE && sepd.boneIndices.dataType === CMB.DataType.UByte;
+        // We special case a_TexCoord12 here since we need to staple it together from texCoord0 and texCoord1.
+        // loadVertexAttrib(DMPProgram.a_TexCoord1, GfxFormat.F32_RG, vatr.texCoord1, sepd.texCoord1);
+        // loadVertexAttrib(DMPProgram.a_TexCoord2, GfxFormat.F32_RG, vatr.texCoord2, sepd.texCoord2);
+
+        const hasTexCoord1 = hasVertexAttib(vatr.texCoord1, sepd.texCoord1);
+        const hasTexCoord2 = hasVertexAttib(vatr.texCoord2, sepd.texCoord2);
+        if (hasTexCoord1 || hasTexCoord2) {
+            const data1 = hasTexCoord1 ? transformVertexData(vatr.texCoord1!.slice(sepd.texCoord1!.start), sepd.texCoord1!.dataType, sepd.texCoord1!.scale) : getConstantData(sepd.texCoord1);
+            const data1Stride = hasTexCoord1 ? 2 : 0;
+
+            const data2 = hasTexCoord2 ? transformVertexData(vatr.texCoord2!.slice(sepd.texCoord2!.start), sepd.texCoord2!.dataType, sepd.texCoord2!.scale) : getConstantData(sepd.texCoord1);
+            const data2Stride = hasTexCoord2 ? 2 : 0;
+
+            const vertexCount = data1.length / 2;
+            const newData = new Float32Array(vertexCount * 4);
+
+            for (let i = 0; i < vertexCount; i++) {
+                newData[i*4+0] = data1[i*data1Stride+0];
+                newData[i*4+1] = data1[i*data1Stride+1];
+                newData[i*4+2] = data2[i*data2Stride+0];
+                newData[i*4+3] = data2[i*data2Stride+1];
+            }
+
+            pushBuffer(DMPProgram.a_TexCoord12, GfxFormat.F32_RGBA, newData, GfxVertexBufferFrequency.PerVertex);
+        } else {
+            const constantData = new Float32Array(4);
+            if (sepd.texCoord0 !== null)
+                constantData.set(sepd.texCoord0.constant.slice(0, 2), 0);
+            if (sepd.texCoord1 !== null)
+                constantData.set(sepd.texCoord1.constant.slice(0, 2), 2);
+            pushBuffer(DMPProgram.a_TexCoord12, GfxFormat.F32_RGBA, constantData, GfxVertexBufferFrequency.Constant);
+        }
+
+        const hasBoneIndices = sepd.prms[0].skinningMode !== CMB.SkinningMode.SingleBone && sepd.boneIndices.dataType === CMB.DataType.UByte;
         loadVertexAttrib(DMPProgram.a_BoneIndices, setFormatCompFlags(GfxFormat.F32_R, sepd.boneDimension), hasBoneIndices ? vatr.boneIndices : null, sepd.boneIndices);
-        const hasBoneWeights = sepd.prms[0].skinningMode === CMB.SkinningMode.SMOOTH_SKINNING;
+        const hasBoneWeights = sepd.prms[0].skinningMode === CMB.SkinningMode.SmoothSkinning;
         loadVertexAttrib(DMPProgram.a_BoneWeights, setFormatCompFlags(GfxFormat.F32_R, sepd.boneDimension), hasBoneWeights ? vatr.boneWeights : null, sepd.boneWeights);
 
         let indexBufferCount = 0;
@@ -1129,7 +1166,7 @@ class ShapeInstance {
             for (let i = 0; i < 16; i++) {
                 if (i < prms.boneTable.length) {
                     const boneId = prms.boneTable[i];
-                    if (prms.skinningMode === CMB.SkinningMode.SMOOTH_SKINNING) {
+                    if (prms.skinningMode === CMB.SkinningMode.SmoothSkinning) {
                         mat4.mul(scratchMatrix, boneMatrices[boneId], inverseBindPoseMatrices[boneId]);
                     } else {
                         mat4.copy(scratchMatrix, boneMatrices[boneId]);
