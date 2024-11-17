@@ -4954,6 +4954,86 @@ class d_a_npc_ls1 extends fopNpc_npc_c {
         return true;
     }
 }
+
+enum LinkDemoMode {
+    None = 0x00,
+    Unk1 = 0x01,
+    ChaseSlow = 0x02,
+    ChaseFast = 0x03,
+    Move = 0x04,
+    WaitTurn = 0x05,
+    // UNK6 = 0x06,
+    Damage = 0x07,
+    // NULL = 0x08,
+    // NULL = 0x09,
+    OpenTreasure = 0x0A,
+    GetItem = 0x0B,
+    Unequip = 0x0C,
+    Holdup = 0x0D,
+    NULL = 0x0E,
+    LookAround = 0x0F,
+    // NULL = 0x10,
+    // NULL = 0x11,
+    // NULL = 0x12,
+    Salute = 0x13,
+    LookAround2 = 0x14,
+    TalismanPickup = 0x15,
+    TalismanWait = 0x16,
+    // NULL = 0x17,
+    Surprised = 0x18,
+    TurnBack = 0x19,
+    LookUp = 0x1A,
+    // NULL = 0x1B,
+    QuakeWait = 0x1C,
+    Dance = 0x1D,
+    Caught = 0x1E,
+    // NULL = 0x1F,
+    PushPullWait = 0x20,
+    PushMove = 0x21,
+    // NULL = 0x22,
+    DoorOpen = 0x23,
+    Nod = 0x24,
+    Present = 0x25,
+    WindChange = 0x26,
+    ShipPaddle = 0x27,
+    StandItemPut = 0x28,
+    // NULL = 0x29,
+    // NULL = 0x2A,
+    // NULL = 0x2B,
+    // NULL = 0x2C,
+    TactPlayOriginal = 0x2D,
+    PowerUp = 0x2E,
+    VorcanoFail = 0x2F,
+    BossWarp = 0x30,
+    SlightSurprised = 0x31,
+    Smile = 0x32,
+    // NULL = 0x33,
+    AgbUse = 0x34,
+    LookTurn = 0x35,
+    LetterOpen = 0x36,
+    LetterRead = 0x37,
+    // daPy_lk_c::procGrabPut = 0x38,
+    RedeadStop = 0x39,
+    RedeadCatch = 0x3A,
+    GetDance = 0x3B,
+    BottleOpenFairy = 0x3C,
+    // NULL = 0x3D,
+    WarpShort = 0x3E,
+    OpenSalvageTreasure = 0x3F,
+    // NULL = 0x40,
+    FoodSet = 0x41,
+    SurprisedWait = 0x42,
+    PowerUpWait = 0x43,
+    ShipBow = 0x44,
+    ShipSit = 0x45,
+    LastCombo = 0x46,
+    ShipGetOff = 0x47,
+    HandUp = 0x48,
+    FoodThrow = 0x49,
+    IceSlip = 0x4A,
+
+    Data = 0x200,
+};
 class d_a_py_lk extends fopAc_ac_c {
     public static PROCESS_NAME = dProcName_e.d_a_py_lk;
     private static ARC_NAME = "Link";
@@ -4972,13 +5052,16 @@ class d_a_py_lk extends fopAc_ac_c {
         this.setupDam('eyeL');
         this.setupDam('eyeR');
         this.setupDam('mayuL');
-        this.setupDam('mayuR'); 
+        this.setupDam('mayuR');
 
         return cPhs__Status.Next;
     }
 
     override execute(globals: dGlobals, deltaTimeFrames: number): void {
         this.setDemoData(globals);
+        if (this.demoMode != 5) {
+            // this.changeDemoProc();
+        }
 
         this.model.calcAnim();
 
@@ -5008,7 +5091,7 @@ class d_a_py_lk extends fopAc_ac_c {
     private setupDam(pref: string): void {
         const matInstA = this.model.materialInstances.find((m) => m.name === `${pref}damA`)!;
         const matInstB = this.model.materialInstances.find((m) => m.name === `${pref}damB`)!;
-        
+
         // Render an alpha mask in the shape of the eyes. Needs to render before Link so that it can depth test against
         // the scene but not against his hair. The eyes will then draw with depth testing enabled, but will mask against
         // this alpha tex. 
@@ -5039,34 +5122,43 @@ class d_a_py_lk extends fopAc_ac_c {
         if (!demoActor)
             return false;
 
+        demoActor.actor = this;
+        demoActor.model = this.model;
+        demoActor.debugGetAnimName = (idx: number) => LinkDemoMode[idx].toString(); 
+
         const enable = demoActor.checkEnable(0xFF);
         if (enable & EDemoActorFlags.HasPos) { vec3.copy(this.pos, demoActor.translation); }
         if (enable & EDemoActorFlags.HasRot) { this.rot[1] = demoActor.rotation[1]; }
-        if (enable & EDemoActorFlags.HasAnim) { this.demoMode = demoActor.nextBckId; }
+
+        // The demo mode determines which 'Proc' action function will be called. It maps into the DemoProc*FuncTables.
+        // These functions can start anims (by indexing into AnmDataTable), play sounds, etc.
+        if (enable & EDemoActorFlags.HasAnim) { 
+            this.demoMode = demoActor.nextBckId; 
+        }
 
         if (enable & EDemoActorFlags.HasShape) {
             // TODO: 0 is casual clothes, 1 is hero clothes
         }
 
-        // Line 3387
-        switch(this.demoMode) {
+        // Limit actor modifications based on the current mode. E.g. Mode 0x18 only allows rotation
+        switch (this.demoMode) {
             case 4:
             case 0x2C:
                 debugger;
                 // Snap to target position
                 // Maybe equip an item
                 break;
-            
+
             case 0x2B:
                 debugger;
                 break;
-            
+
             case 2:
             case 3:
-                // Transition to target position (2 is slower)
+                // Transition to target position/rotation (2 is slower)
                 debugger;
                 break;
-            
+
             case 5:
             case 0x18:
                 // Rotate only

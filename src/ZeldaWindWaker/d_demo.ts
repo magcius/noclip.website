@@ -187,6 +187,8 @@ export class dDemo_actor_c extends TActor {
     public btkId: number;
     public brkId: number;
 
+    debugGetAnimName?: (idx: number) => string;
+
     constructor(public actor: fopAc_ac_c) { super(); }
 
     public checkEnable(mask: number) {
@@ -286,6 +288,11 @@ export class dDemo_actor_c extends TActor {
     public override JSGSetTextureAnimationFrame(x: number): void {
         this.texAnimFrame = x;
         this.flags |= EDemoActorFlags.HasTexFrame;
+    }
+
+    override JSGDebugGetAnimationName(x: number): string | null {
+        if( this.debugGetAnimName ) { return this.debugGetAnimName(x); }
+        else return null;
     }
 }
 
