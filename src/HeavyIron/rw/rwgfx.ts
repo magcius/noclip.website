@@ -230,7 +230,6 @@ export interface RwGfxRaster {
     width: number;
     height: number;
     levels: Uint8Array[];
-    lockedMipLevel: number;
     gfxTexture: GfxTexture | null;
     gfxFormat: GfxFormat;
     textureMapping: TextureMapping[];
@@ -611,12 +610,11 @@ export class RwGfx {
 
     public createRaster(width: number, height: number, format: RwRasterFormat): RwGfxRaster {
         const levels: Uint8Array[] = [];
-        const lockedMipLevel = -1;
         const gfxTexture = null;
         const gfxFormat = convertRwRasterFormat(format);
         const textureMapping = nArray(1, () => new TextureMapping());
 
-        return { width, height, levels, lockedMipLevel, gfxTexture, gfxFormat, textureMapping };
+        return { width, height, levels, gfxTexture, gfxFormat, textureMapping };
     }
 
     public destroyRaster(raster: RwGfxRaster) {
@@ -626,31 +624,25 @@ export class RwGfx {
         }
 
         raster.levels.length = 0;
-        raster.lockedMipLevel = -1;
     }
 
-    public lockRaster(raster: RwGfxRaster, mipLevel: number) {
-        assert(mipLevel >= 0);
-
+    public lockRaster(raster: RwGfxRaster, numLevels: number) {
         if (raster.gfxTexture) {
             this.device.destroyTexture(raster.gfxTexture);
             raster.gfxTexture = null;
         }
 
-        for (let i = raster.levels.length; i <= mipLevel; i++) {
+        raster.levels.length = numLevels;
+        for (let i = 0; i < numLevels; i++) {
             const mipWidth = (raster.width >>> i);
             const mipHeight = (raster.height >>> i);
             raster.levels[i] = new Uint8Array(4 * mipWidth * mipHeight);
         }
-        
-        raster.lockedMipLevel = mipLevel;
 
-        return raster.levels[mipLevel];
+        return raster.levels;
     }
 
     public unlockRaster(raster: RwGfxRaster) {
-        assert(raster.lockedMipLevel >= 0);
-
         raster.gfxTexture = this.device.createTexture(makeTextureDescriptor2D(raster.gfxFormat, raster.width, raster.height, raster.levels.length));
 
         this.device.uploadTextureData(raster.gfxTexture, 0, raster.levels);

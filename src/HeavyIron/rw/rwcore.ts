@@ -237,10 +237,12 @@ export class RwRaster {
         this.gfxRaster = rw.gfx.createRaster(width, height, format);
     }
 
-    public lock(rw: RwEngine, mipLevel: number) {
-        return rw.gfx.lockRaster(this.gfxRaster, mipLevel);
+    // This is different from OG RwRasterLock which locks a single mip level at a time, this locks all mip levels
+    public lock(rw: RwEngine, numLevels: number): Uint8Array[] {
+        return rw.gfx.lockRaster(this.gfxRaster, numLevels);
     }
 
+    // Uploads all mip levels at once
     public unlock(rw: RwEngine) {
         rw.gfx.unlockRaster(this.gfxRaster);
     }

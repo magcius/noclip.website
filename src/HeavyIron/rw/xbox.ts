@@ -80,7 +80,7 @@ export function readXboxTexture(stream: RwStream, rw: RwEngine): RwTexture | nul
     const width = stream.readUint16();
     const height = stream.readUint16();
     const depth = stream.readUint8();
-    const numMipLevels = stream.readUint8();
+    let numMipLevels = stream.readUint8();
     const type = stream.readUint8();
     const dxtFormat = stream.readUint8();
     const unknown = stream.readUint32();
@@ -94,6 +94,16 @@ export function readXboxTexture(stream: RwStream, rw: RwEngine): RwTexture | nul
         return null;
     }
 
+    // Fix loaded numMipLevels value - don't read 0-sized mips
+    for (let i = 0; i < numMipLevels; i++) {
+        let mipWidth = (width >>> i);
+        let mipHeight = (height >>> i);
+        if (mipWidth * mipHeight === 0) {
+            numMipLevels = i;
+            break;
+        }
+    }
+
     const raster = new RwRaster(rw, width, height, depth, format);
 
     let palette: Uint8Array | null = null;
@@ -101,6 +111,8 @@ export function readXboxTexture(stream: RwStream, rw: RwEngine): RwTexture | nul
         const palSize = 4 * ((format & RwRasterFormat.PAL4) ? 32 : 256);
         palette = stream.readArray(Uint8Array, palSize);
     }
+
+    const levels = raster.lock(rw, numMipLevels);
 
     for (let i = 0; i < numMipLevels; i++) {
         let mipWidth = (width >>> i);
@@ -111,11 +123,7 @@ export function readXboxTexture(stream: RwStream, rw: RwEngine): RwTexture | nul
         }
 
         const numPixels = mipWidth * mipHeight;
-        if (numPixels === 0) {
-            continue;
-        }
-
-        const pixels = raster.lock(rw, i);
+        const pixels = levels[i];
 
         if (palette) {
             const indSize = mipWidth * mipHeight;
@@ -158,9 +166,9 @@ export function readXboxTexture(stream: RwStream, rw: RwEngine): RwTexture | nul
             RGBAToBGRA(swizzledPixels);
             unswizzle(pixels, swizzledPixels, mipWidth, mipHeight);
         }
-
-        raster.unlock(rw);
     }
+
+    raster.unlock(rw);
 
     const texture = new RwTexture();
     texture.name = name;
