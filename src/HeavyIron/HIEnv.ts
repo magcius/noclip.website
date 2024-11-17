@@ -56,10 +56,4 @@ export class HIEnv extends HIBase {
             jsp.render(scene, rw);
         }
     }
-
-    public destroy(rw: RwEngine) {
-        for (const jsp of this.jsps) {
-            jsp.destroy(rw);
-        }
-    }
 }

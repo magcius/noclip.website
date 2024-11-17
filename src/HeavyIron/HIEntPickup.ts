@@ -5,6 +5,7 @@ import { HIGame, HIScene } from "./HIScene.js";
 import { RwEngine, RwStream } from "./rw/rwcore.js";
 import { HILightKit } from "./HILightKit.js";
 import { strHash } from "./Util.js";
+import { RpClump } from "./rw/rpworld.js";
 
 export interface HIAssetPickup {
     pickupHash: number;
@@ -63,7 +64,7 @@ export class HIEntPickup extends HIEnt {
                 break;
             }
         }
-        const clump = scene.models.get(pickupEntry.modelID);
+        const clump = scene.assetManager.findAsset(pickupEntry.modelID)?.runtimeData as RpClump;
         if (clump) {
             this.model = new HIModelInstance(clump.atomics[0], scene);
         }
@@ -81,7 +82,7 @@ export class HIEntPickupManager {
 
     public setup(scene: HIScene) {
         if (scene.game >= HIGame.TSSM) {
-            this.pickupLightKit = scene.lightKits.get(strHash("hud_lightkit")) ?? null;
+            this.pickupLightKit = (scene.assetManager.findAsset(strHash("hud_lightkit"))?.runtimeData as HILightKit) ?? null;
         }
     }
 

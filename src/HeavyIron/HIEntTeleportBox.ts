@@ -4,6 +4,7 @@ import { HIGame, HIScene } from "./HIScene.js";
 import { RwStream } from "./rw/rwcore.js";
 import { strHash } from "./Util.js";
 import { HIDynAsset } from "./HIDynAsset.js";
+import { HIMarkerAsset } from "./HIMarkerAsset.js";
 
 export class HIEntTeleportBoxAsset {
     public marker: number;
@@ -54,7 +55,7 @@ export class HIEntTeleportBox extends HIEnt {
         this.readLinks(stream);
         this.tasset = tasset;
 
-        const marker = scene.markers.get(this.tasset.marker);
+        const marker = scene.assetManager.findAsset(this.tasset.marker)?.runtimeData as HIMarkerAsset;
         if (marker) {
             vec3.copy(this.entAsset.pos, marker.pos);
         }

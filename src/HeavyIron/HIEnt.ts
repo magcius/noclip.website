@@ -5,6 +5,7 @@ import { HIModelAssetInfo, HIModelInstance } from "./HIModel.js";
 import { RwEngine, RwStream } from "./rw/rwcore.js";
 import { HILightKit } from "./HILightKit.js";
 import { RpClump } from "./rw/rpworld.js";
+import { HIAssetType } from "./HIAssetTypes.js";
 
 export const enum HIEntFlags {
     Visible = 0x1
@@ -92,10 +93,11 @@ export abstract class HIEnt extends HIBase {
     public parseModelInfo(assetID: number, scene: HIScene) {
         if (assetID === 0) return;
         
-        if (scene.models.has(assetID)) {
-            this.loadModel(scene.models.get(assetID)!, scene);
-        } else if (scene.modelInfos.has(assetID)) {
-            this.model = this.recurseModelInfo(scene.modelInfos.get(assetID)!, scene);
+        const modelAsset = scene.assetManager.findAsset(assetID);
+        if (modelAsset && modelAsset.type === HIAssetType.MODL) {
+            this.loadModel(modelAsset.runtimeData as RpClump, scene);
+        } else if (modelAsset && modelAsset.type === HIAssetType.MINF) {
+            this.model = this.recurseModelInfo(modelAsset.runtimeData as HIModelAssetInfo, scene);
         } else {
             console.warn(`Model info ID not found: 0x${assetID}`);
         }
@@ -114,8 +116,9 @@ export abstract class HIEnt extends HIBase {
 
         for (let i = 0; i < info.modelInst.length; i++) {
             const inst = info.modelInst[i];
-            if (scene.models.has(inst.modelID)) {
-                const clump = scene.models.get(inst.modelID)!;
+            const modelAsset = scene.assetManager.findAsset(inst.modelID);
+            if (modelAsset && modelAsset.type === HIAssetType.MODL) {
+                const clump = modelAsset.runtimeData as RpClump;
                 if (i === 0) {
                     tempInst[i] = new HIModelInstance(clump.atomics[0], scene);
                     for (let j = 1; j < clump.atomics.length; j++) {
@@ -128,8 +131,8 @@ export abstract class HIEnt extends HIBase {
                         tempInst[i].attach(new HIModelInstance(clump.atomics[j], scene));
                     }
                 }
-            } else if (scene.modelInfos.has(inst.modelID)) {
-                const info = scene.modelInfos.get(inst.modelID)!;
+            } else if (modelAsset && modelAsset.type === HIAssetType.MINF) {
+                const info = modelAsset.runtimeData as HIModelAssetInfo;
                 const minst = this.recurseModelInfo(info, scene);
                 if (!minst) return null;
 
