@@ -186,7 +186,7 @@ export class dDemo_actor_c extends TActor {
     btkId: number;
     brkId: number;
 
-    constructor(public mActor: fopAc_ac_c) { super(); }
+    constructor(public actor: fopAc_ac_c) { super(); }
 
     checkEnable(mask: number) {
         return this.flags & mask;
@@ -339,7 +339,7 @@ class dDemo_system_c implements TSystem {
     public remove() {
         this.activeCamera = undefined;
 
-        for (let demoActor of this.actors) { demoActor.mActor.demoActorID = -1; }
+        for (let demoActor of this.actors) { demoActor.actor.demoActorID = -1; }
         this.actors = [];
     }
 }
