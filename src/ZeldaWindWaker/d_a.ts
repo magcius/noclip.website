@@ -33,7 +33,7 @@ import { mDoExt_McaMorf, mDoExt_bckAnm, mDoExt_brkAnm, mDoExt_btkAnm, mDoExt_btp
 import { MtxPosition, MtxTrans, calc_mtx, mDoMtx_XYZrotM, mDoMtx_XrotM, mDoMtx_YrotM, mDoMtx_YrotS, mDoMtx_ZXYrotM, mDoMtx_ZrotM, mDoMtx_ZrotS, quatM } from "./m_do_mtx.js";
 import { dGlobals } from "./Main.js";
 import { dDlst_alphaModel__Type } from "./d_drawlist.js";
-import { dDemo_setDemoData } from "./d_demo.js";
+import { dDemo_setDemoData, EDemoActorFlags } from "./d_demo.js";
 import { fopAc_ac_c, fopAcIt_JudgeByID, fopAcM_create, fopAcM_prm_class } from "./f_op_actor.js";
 import { dProcName_e } from "./d_procname.js";
 
@@ -4955,13 +4955,14 @@ class d_a_npc_ls1 extends fopNpc_npc_c {
     }
 }
 class d_a_py_lk extends fopAc_ac_c {
-    public static PROCESS_NAME = fpc__ProcessName.d_a_py_lk;
+    public static PROCESS_NAME = dProcName_e.d_a_py_lk;
     private static ARC_NAME = "Link";
     private static LINK_BDL_CL = 0x18;
     private static LINK_BDL_HANDS = 0x1D;
 
     private model: J3DModelInstance;
     private modelHands: J3DModelInstance;
+    private demoMode: number;
 
     protected override subload(globals: dGlobals, prm: fopAcM_prm_class | null): cPhs__Status {
         this.playerInit(globals);
@@ -4977,7 +4978,7 @@ class d_a_py_lk extends fopAc_ac_c {
     }
 
     override execute(globals: dGlobals, deltaTimeFrames: number): void {
-        dDemo_setDemoData(globals, deltaTimeFrames, this, 0xFFFF);
+        this.setDemoData(globals);
 
         this.model.calcAnim();
 
@@ -4987,7 +4988,8 @@ class d_a_py_lk extends fopAc_ac_c {
     }
 
     override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        settingTevStruct(globals, LightType.Player, this.pos, this.tevStr);
+        // @TODO: This should use LightType.Player, but it's not yet implemented
+        settingTevStruct(globals, LightType.Actor, this.pos, this.tevStr);
         setLightTevColorType(globals, this.model, this.tevStr, viewerInput.camera);
 
         mDoExt_modelEntryDL(globals, this.model, renderInstManager, viewerInput);
@@ -4996,7 +4998,7 @@ class d_a_py_lk extends fopAc_ac_c {
     private playerInit(globals: dGlobals) {
         // createHeap()
         this.model = this.initModel(globals, d_a_py_lk.LINK_BDL_CL);
-        this.modelHands = this.initModel(globals, d_a_py_lk.LINK_BDL_HANDS);
+        // this.modelHands = this.initModel(globals, d_a_py_lk.LINK_BDL_HANDS);
 
         globals.renderer.extraTextures.fillExtraTextures(this.model);
 
@@ -5030,6 +5032,49 @@ class d_a_py_lk extends fopAc_ac_c {
         const model = new J3DModelInstance(modelData);
         assert(!!model);
         return model;
+    }
+
+    private setDemoData(globals: dGlobals) {
+        const demoActor = globals.scnPlay.demo.getSystem().getActor(this.demoActorID);
+        if (!demoActor)
+            return false;
+
+        const enable = demoActor.checkEnable(0xFF);
+        if (enable & EDemoActorFlags.HasPos) { vec3.copy(this.pos, demoActor.translation); }
+        if (enable & EDemoActorFlags.HasRot) { this.rot[1] = demoActor.rotation[1]; }
+        if (enable & EDemoActorFlags.HasAnim) { this.demoMode = demoActor.nextBckId; }
+
+        if (enable & EDemoActorFlags.HasShape) {
+            // TODO: 0 is casual clothes, 1 is hero clothes
+        }
+
+        // Line 3387
+        switch(this.demoMode) {
+            case 4:
+            case 0x2C:
+                debugger;
+                // Snap to target position
+                // Maybe equip an item
+                break;
+            
+            case 0x2B:
+                debugger;
+                break;
+            
+            case 2:
+            case 3:
+                // Transition to target position (2 is slower)
+                debugger;
+                break;
+            
+            case 5:
+            case 0x18:
+                // Rotate only
+                debugger;
+                break;
+        }
+
+        return true;
     }
 }
 
