@@ -260,12 +260,12 @@ export function loadRawTexture(globals: dGlobals, data: ArrayBufferSlice, width:
 const materialParams = new MaterialParams();
 const drawParams = new DrawParams();
 
-function submitScratchRenderInst(renderInstManager: GfxRenderInstManager, materialHelper: GXMaterialHelperGfx, renderInst: GfxRenderInst, viewerInput: ViewerRenderInput, materialParams_ = materialParams, drawParams_ = drawParams): void {
+function submitScratchRenderInst(renderInstManager: GfxRenderInstManager, materialHelper: GXMaterialHelperGfx, renderInst: GfxRenderInst, viewerInput: ViewerRenderInput): void {
     materialHelper.setOnRenderInst(renderInstManager.gfxRenderCache, renderInst);
-    renderInst.setSamplerBindingsFromTextureMappings(materialParams_.m_TextureMapping);
-    materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams_);
-    mat4.copy(drawParams_.u_PosMtx[0], viewerInput.camera.viewMatrix);
-    materialHelper.allocateDrawParamsDataOnInst(renderInst, drawParams_);
+    renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
+    materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
+    mat4.copy(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
+    materialHelper.allocateDrawParamsDataOnInst(renderInst, drawParams);
     renderInstManager.submitRenderInst(renderInst);
 }
 
@@ -444,6 +444,8 @@ export class dKankyo_sun_Packet {
 
         renderInstManager.setCurrentList(globals.dlst.sky[1]);
 
+        materialParams.clear();
+
         if (drawMoon) {
             let dayOfWeek = dKy_get_dayofweek(envLight);
             if (envLight.curTime < 180)
@@ -534,6 +536,8 @@ export class dKankyo_sun_Packet {
             renderInstManager.setCurrentList(globals.dlst.sky[1]);
         else
             renderInstManager.setCurrentList(globals.dlst.wetherEffect);
+
+        materialParams.clear();
 
         const invDist = 1.0 - this.distFalloff;
         const flareViz = (0.6 + (0.4 * this.visibility * invDist ** 2));
@@ -754,6 +758,8 @@ export class dKankyo_vrkumo_Packet {
         ddraw.allocPrimitives(GX.Command.DRAW_QUADS, 4*3*100);
 
         colorFromRGBA(materialParams.u_Color[ColorKind.C1], 0, 0, 0, 0);
+
+        materialParams.clear();
 
         for (let textureIdx = 2; textureIdx >= 0; textureIdx--) {
             this.textures[textureIdx].fillTextureMapping(materialParams.m_TextureMapping[0]);
@@ -981,6 +987,8 @@ export class dKankyo_housi_Packet {
 
         renderInstManager.setCurrentList(globals.dlst.wetherEffect);
 
+        materialParams.clear();
+
         ddraw.beginDraw(globals.modelCache.cache);
         ddraw.begin(GX.Command.DRAW_QUADS, 4 * this.count);
 
@@ -1206,6 +1214,8 @@ export class dKankyo_rain_Packet {
         if (finalAlpha <= 0.001)
             return;
 
+        materialParams.clear();
+
         const ddraw = this.ddraw;
         renderInstManager.setCurrentList(globals.dlst.wetherEffect);
 
@@ -1349,6 +1359,8 @@ export class dKankyo_star_Packet {
             renderInstManager.setCurrentList(globals.dlst.bg[1]);
         else
             renderInstManager.setCurrentList(globals.dlst.sky[1]);
+
+        materialParams.clear();
 
         ddraw.beginDraw(globals.modelCache.cache);
         ddraw.begin(GX.Command.DRAW_TRIANGLES, 6 * envLight.starCount);
