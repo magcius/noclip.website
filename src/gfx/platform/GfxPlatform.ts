@@ -201,32 +201,6 @@ export interface GfxBindingsDescriptor {
     samplerBindings: GfxSamplerBinding[];
 }
 
-export const enum GfxBindingLayoutEntryType {
-    UniformBuffer,
-    Sampler,
-    StorageBuffer,
-    StorageTexture,
-}
-
-interface GfxBindingLayoutEntrySampler extends GfxBindingLayoutSamplerDescriptor {
-    type: GfxBindingLayoutEntryType.Sampler;
-}
-
-interface GfxBindingLayoutEntryBase {
-    type: GfxBindingLayoutEntryType;
-}
-
-type GfxBindingLayoutEntry = GfxBindingLayoutEntryBase | GfxBindingLayoutEntrySampler;
-
-export interface GfxBindingLayoutDescriptor2 {
-    entries: GfxBindingLayoutEntry[];
-}
-
-export interface GfxBindingsDescriptor2 {
-    bindingLayout: GfxBindingLayoutDescriptor2;
-    entries: (GfxBufferBinding | GfxSamplerBinding)[];
-}
-
 export interface GfxRenderProgramDescriptor {
     preprocessedVert: string;
     preprocessedFrag: string | null;
