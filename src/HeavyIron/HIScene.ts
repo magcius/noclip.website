@@ -423,6 +423,10 @@ export class HIScene implements SceneGfx {
 
     private loadTexture(asset: HIPAsset): boolean {
         if (asset.data.byteLength === 0) return true;
+
+        // Don't load duplicate textures, temporary hack to prevent memory leaks
+        // TODO: Have each asset keep track of their own runtime data like in the OG game
+        if (this.textures.has(asset.id)) return true;
         
         const stream = new RwStream(asset.data);
         if (!stream.findChunk(RwPluginID.TEXDICTIONARY)) {
@@ -438,11 +442,6 @@ export class HIScene implements SceneGfx {
         texDict.removeTexture(texture);
         
         texDict.destroy(this.rw);
-
-        // Destroy duplicate textures (some boot.HIP/font.HIP textures are also present in level .HOPs)
-        if (this.textures.has(asset.id)) {
-            this.textures.get(asset.id)!.destroy(this.rw);
-        }
         
         this.textures.set(asset.id, texture);
         return true;
