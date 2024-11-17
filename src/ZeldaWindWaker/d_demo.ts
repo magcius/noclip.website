@@ -29,15 +29,15 @@ export enum EDemoCamFlags {
 }
 
 class dDemo_camera_c extends TCamera {
-    mFlags: number = 0;
-    mProjNear: number = 0;
-    mProjFar: number = 0;
-    mFovy: number = 0;
-    mAspect: number = 0;
-    mViewPosition: vec3 = vec3.create();
-    mUpVector: vec3 = vec3.create();
-    mTargetPosition: vec3 = vec3.create();
-    mRoll: number = 0;
+    flags: number = 0;
+    projNear: number = 0;
+    projFar: number = 0;
+    fovY: number = 0;
+    aspect: number = 0;
+    viewPosition: vec3 = vec3.create();
+    upVector: vec3 = vec3.create();
+    targetPosition: vec3 = vec3.create();
+    roll: number = 0;
 
     constructor(
         private globals: dGlobals
@@ -53,8 +53,8 @@ class dDemo_camera_c extends TCamera {
     }
 
     override JSGSetProjectionNear(v: number) {
-        this.mProjNear = v;
-        this.mFlags |= EDemoCamFlags.HasNearZ;
+        this.projNear = v;
+        this.flags |= EDemoCamFlags.HasNearZ;
     }
 
     override JSGGetProjectionFar(): number {
@@ -66,8 +66,8 @@ class dDemo_camera_c extends TCamera {
 
 
     override JSGSetProjectionFar(v: number): void {
-        this.mProjFar = v;
-        this.mFlags |= EDemoCamFlags.HasFarZ;
+        this.projFar = v;
+        this.flags |= EDemoCamFlags.HasFarZ;
     }
 
 
@@ -80,8 +80,8 @@ class dDemo_camera_c extends TCamera {
 
 
     override JSGSetProjectionFovy(v: number): void {
-        this.mFovy = v;
-        this.mFlags |= EDemoCamFlags.HasFovY;
+        this.fovY = v;
+        this.flags |= EDemoCamFlags.HasFovY;
     }
 
 
@@ -94,8 +94,8 @@ class dDemo_camera_c extends TCamera {
 
 
     override JSGSetProjectionAspect(v: number) {
-        this.mAspect = v;
-        this.mFlags |= EDemoCamFlags.HasAspect;
+        this.aspect = v;
+        this.flags |= EDemoCamFlags.HasAspect;
     }
 
 
@@ -105,8 +105,8 @@ class dDemo_camera_c extends TCamera {
 
 
     override JSGSetViewPosition(v: ReadonlyVec3) {
-        vec3.copy(this.mViewPosition, v);
-        this.mFlags |= EDemoCamFlags.HasEyePos;
+        vec3.copy(this.viewPosition, v);
+        this.flags |= EDemoCamFlags.HasEyePos;
     }
 
 
@@ -119,8 +119,8 @@ class dDemo_camera_c extends TCamera {
 
 
     override JSGSetViewUpVector(v: ReadonlyVec3) {
-        vec3.copy(this.mUpVector, v);
-        this.mFlags |= EDemoCamFlags.HasUpVec;
+        vec3.copy(this.upVector, v);
+        this.flags |= EDemoCamFlags.HasUpVec;
     }
 
 
@@ -133,8 +133,8 @@ class dDemo_camera_c extends TCamera {
 
 
     override JSGSetViewTargetPosition(v: ReadonlyVec3) {
-        vec3.copy(this.mTargetPosition, v);
-        this.mFlags |= EDemoCamFlags.HasTargetPos;
+        vec3.copy(this.targetPosition, v);
+        this.flags |= EDemoCamFlags.HasTargetPos;
     }
 
 
@@ -142,13 +142,13 @@ class dDemo_camera_c extends TCamera {
         const camera = this.globals.camera;
         if (!camera)
             return 0.0;
-        return this.mRoll; // HACK: Instead of actually computing roll (complicated), just assume no one else is modifying it
+        return this.roll; // HACK: Instead of actually computing roll (complicated), just assume no one else is modifying it
     }
 
 
     override JSGSetViewRoll(v: number) {
-        this.mRoll = v;
-        this.mFlags |= EDemoCamFlags.HasRoll;
+        this.roll = v;
+        this.flags |= EDemoCamFlags.HasRoll;
     }
 }
 
@@ -165,38 +165,38 @@ export const enum EDemoActorFlags {
 } 
 
 export class dDemo_actor_c extends TActor {
-    mName: string;
-    mFlags: number;
-    mTranslation = vec3.create();
-    mScaling = vec3.create();
-    mRotation = vec3.create();
-    mShapeId: number;
-    mNextBckId: number;
-    mAnimationFrame: number;
-    mAnimationTransition: number;
-    mAnimationFrameMax: number;
-    mTexAnimation: number;
-    mTexAnimationFrame: number;
-    mTexAnimationFrameMax: number;
-    mModel: J3DModelInstance;
+    name: string;
+    flags: number;
+    translation = vec3.create();
+    scaling = vec3.create();
+    rotation = vec3.create();
+    shapeId: number;
+    nextBckId: number;
+    animFrame: number;
+    animTransition: number;
+    animFrameMax: number;
+    texAnim: number;
+    texAnimFrame: number;
+    textAnimFrameMax: number;
+    model: J3DModelInstance;
     stbDataId: number;
     stbData: DataView;
-    mBckId: number;
-    mBtpId: number;
-    mBtkId: number;
-    mBrkId: number;
+    bckId: number;
+    btpId: number;
+    btkId: number;
+    brkId: number;
 
     constructor(public mActor: fopAc_ac_c) { super(); }
 
     checkEnable(mask: number) {
-        return this.mFlags & mask;
+        return this.flags & mask;
     }
 
     getMorfParam() {
         // Doesn't have anim properties
-        if ((this.mFlags & 0x40) == 0) {
+        if ((this.flags & 0x40) == 0) {
             // Has STB data
-            if ((this.mFlags & 1) == 0) {
+            if ((this.flags & 1) == 0) {
                 return 0.0;
             } else {
                 switch (this.stbDataId) {
@@ -210,90 +210,90 @@ export class dDemo_actor_c extends TActor {
                 }
             }
         } else {
-            return this.mAnimationTransition;
+            return this.animTransition;
         }
     }
 
-    override JSGGetName() { return this.mName; }
+    override JSGGetName() { return this.name; }
 
     override JSGGetNodeTransformation(nodeId: number, mtx: mat4): number {
         debugger; // I think this may be one of the shapeInstanceState matrices instead
-        mat4.copy(mtx, this.mModel.modelMatrix);
+        mat4.copy(mtx, this.model.modelMatrix);
         return 1;
     }
 
-    override JSGGetAnimationFrameMax() { return this.mAnimationFrameMax; }
-    override JSGGetTextureAnimationFrameMax() { return this.mTexAnimationFrameMax; }
+    override JSGGetAnimationFrameMax() { return this.animFrameMax; }
+    override JSGGetTextureAnimationFrameMax() { return this.textAnimFrameMax; }
 
-    override JSGGetTranslation(dst: vec3) { vec3.copy(dst, this.mTranslation); }
-    override JSGGetScaling(dst: vec3) { vec3.copy(dst, this.mScaling); }
+    override JSGGetTranslation(dst: vec3) { vec3.copy(dst, this.translation); }
+    override JSGGetScaling(dst: vec3) { vec3.copy(dst, this.scaling); }
     override JSGGetRotation(dst: vec3) {
-        dst[0] = cM_sht2d(this.mRotation[0]);
-        dst[1] = cM_sht2d(this.mRotation[1]);
-        dst[2] = cM_sht2d(this.mRotation[2]);
+        dst[0] = cM_sht2d(this.rotation[0]);
+        dst[1] = cM_sht2d(this.rotation[1]);
+        dst[2] = cM_sht2d(this.rotation[2]);
     }
 
     override JSGSetData(id: number, data: DataView): void {
         this.stbDataId = id;
         this.stbData = data; // @TODO: Check that data makes sense
-        this.mFlags |= EDemoActorFlags.HasData;
+        this.flags |= EDemoActorFlags.HasData;
     }
 
     override JSGSetTranslation(src: ReadonlyVec3) {
-        vec3.copy(this.mTranslation, src);
-        this.mFlags |= EDemoActorFlags.HasPos;
+        vec3.copy(this.translation, src);
+        this.flags |= EDemoActorFlags.HasPos;
     }
 
     override JSGSetScaling(src: ReadonlyVec3) {
-        vec3.copy(this.mScaling, src);
-        this.mFlags |= EDemoActorFlags.HasScale;
+        vec3.copy(this.scaling, src);
+        this.flags |= EDemoActorFlags.HasScale;
     }
 
     override JSGSetRotation(src: ReadonlyVec3) {
-        this.mRotation[0] = cM_deg2s(src[0]);
-        this.mRotation[1] = cM_deg2s(src[1]);
-        this.mRotation[2] = cM_deg2s(src[2]);
-        this.mFlags |= EDemoActorFlags.HasRot;
+        this.rotation[0] = cM_deg2s(src[0]);
+        this.rotation[1] = cM_deg2s(src[1]);
+        this.rotation[2] = cM_deg2s(src[2]);
+        this.flags |= EDemoActorFlags.HasRot;
     }
 
     override JSGSetShape(id: number): void {
-        this.mShapeId = id;
-        this.mFlags |= EDemoActorFlags.HasShape
+        this.shapeId = id;
+        this.flags |= EDemoActorFlags.HasShape
     }
 
     override JSGSetAnimation(id: number): void {
-        this.mNextBckId = id;
-        this.mAnimationFrameMax = 3.402823e+38;
-        this.mFlags |= EDemoActorFlags.HasAnim;
+        this.nextBckId = id;
+        this.animFrameMax = 3.402823e+38;
+        this.flags |= EDemoActorFlags.HasAnim;
     }
 
     override JSGSetAnimationFrame(x: number): void {
-        this.mAnimationFrame = x;
-        this.mFlags |= EDemoActorFlags.HasFrame;
+        this.animFrame = x;
+        this.flags |= EDemoActorFlags.HasFrame;
     }
 
     override JSGSetAnimationTransition(x: number): void {
-        this.mAnimationTransition = x;
-        this.mFlags |= EDemoActorFlags.HasFrame;
+        this.animTransition = x;
+        this.flags |= EDemoActorFlags.HasFrame;
     }
 
     override JSGSetTextureAnimation(id: number): void {
-        this.mTexAnimation = id;
-        this.mFlags |= EDemoActorFlags.HasTexAnim;
+        this.texAnim = id;
+        this.flags |= EDemoActorFlags.HasTexAnim;
     }
 
     override JSGSetTextureAnimationFrame(x: number): void {
-        this.mTexAnimationFrame = x;
-        this.mFlags |= EDemoActorFlags.HasTexFrame;
+        this.texAnimFrame = x;
+        this.flags |= EDemoActorFlags.HasTexFrame;
     }
 }
 
 class dDemo_system_c implements TSystem {
-    private mpActiveCamera?: dDemo_camera_c;
-    private mpActors: dDemo_actor_c[] = [];
-    // private mpAmbient: dDemo_ambient_c;
-    // private mpLight: dDemo_light_c[];
-    // private mpFog: dDemo_fog_c;
+    private activeCamera?: dDemo_camera_c;
+    private actors: dDemo_actor_c[] = [];
+    // private ambient: dDemo_ambient_c;
+    // private lights: dDemo_light_c[];
+    // private fog: dDemo_fog_c;
 
     constructor(
         private globals: dGlobals
@@ -302,8 +302,8 @@ class dDemo_system_c implements TSystem {
     public JSGFindObject(objName: string, objType: JStage.EObject): JStage.TObject | undefined {
         switch (objType) {
             case JStage.EObject.Camera:
-                if (this.mpActiveCamera) return this.mpActiveCamera;
-                else return this.mpActiveCamera = new dDemo_camera_c(this.globals);
+                if (this.activeCamera) return this.activeCamera;
+                else return this.activeCamera = new dDemo_camera_c(this.globals);
 
             case JStage.EObject.Actor:
             case JStage.EObject.PreExistingActor:
@@ -317,12 +317,12 @@ class dDemo_system_c implements TSystem {
                         return undefined;
                     }
                 }
-                if (!this.mpActors[actor.demoActorID]) {
-                    actor.demoActorID = this.mpActors.length;
-                    this.mpActors[actor.demoActorID] = new dDemo_actor_c(actor);
-                    this.mpActors[actor.demoActorID].mName = objName;
+                if (!this.actors[actor.demoActorID]) {
+                    actor.demoActorID = this.actors.length;
+                    this.actors[actor.demoActorID] = new dDemo_actor_c(actor);
+                    this.actors[actor.demoActorID].name = objName;
                 };
-                return this.mpActors[actor.demoActorID];
+                return this.actors[actor.demoActorID];
 
             case JStage.EObject.Ambient:
             case JStage.EObject.Light:
@@ -333,81 +333,81 @@ class dDemo_system_c implements TSystem {
         }
     }
 
-    public getCamera() { return this.mpActiveCamera; }
-    public getActor(actorID: number) { return this.mpActors[actorID]; }
+    public getCamera() { return this.activeCamera; }
+    public getActor(actorID: number) { return this.actors[actorID]; }
 
     public remove() {
-        this.mpActiveCamera = undefined;
+        this.activeCamera = undefined;
 
-        for (let demoActor of this.mpActors) { demoActor.mActor.demoActorID = -1; }
-        this.mpActors = [];
+        for (let demoActor of this.actors) { demoActor.mActor.demoActorID = -1; }
+        this.actors = [];
     }
 }
 
 export class dDemo_manager_c {
-    private mFrame: number;
-    private mFrameNoMsg: number;
-    private mMode = EDemoMode.None;
-    private mCurFile?: ArrayBufferSlice;
+    private frame: number;
+    private frameNoMsg: number;
+    private mode = EDemoMode.None;
+    private curFile?: ArrayBufferSlice;
 
-    private mParser: TParse;
-    private mSystem = new dDemo_system_c(this.globals);
-    private mControl: TControl = new TControl(this.mSystem);
+    private parser: TParse;
+    private system = new dDemo_system_c(this.globals);
+    private control: TControl = new TControl(this.system);
 
     constructor(
         private globals: dGlobals
     ) { }
 
-    getFrame() { return this.mFrame; }
-    getFrameNoMsg() { return this.mFrameNoMsg; }
-    getMode() { return this.mMode; }
-    getSystem() { return this.mSystem; }
+    getFrame() { return this.frame; }
+    getFrameNoMsg() { return this.frameNoMsg; }
+    getMode() { return this.mode; }
+    getSystem() { return this.system; }
 
     public create(data: ArrayBufferSlice, originPos?: vec3, rotY?: number, startFrame?: number): boolean {
-        this.mParser = new TParse(this.mControl);
+        this.parser = new TParse(this.control);
 
-        if (!this.mParser.parse(data, 0)) {
+        if (!this.parser.parse(data, 0)) {
             console.error('Failed to parse demo data');
             return false;
         }
 
-        this.mControl.forward(startFrame || 0);
+        this.control.forward(startFrame || 0);
         if (originPos) {
-            this.mControl.transformSetOrigin(originPos, rotY || 0);
+            this.control.transformSetOrigin(originPos, rotY || 0);
         }
 
-        this.mFrame = 0;
-        this.mFrameNoMsg = 0;
-        this.mCurFile = data;
-        this.mMode = EDemoMode.Playing;
+        this.frame = 0;
+        this.frameNoMsg = 0;
+        this.curFile = data;
+        this.mode = EDemoMode.Playing;
 
         return true;
     }
 
     public remove() {
-        this.mControl.destroyObject_all();
-        this.mSystem.remove();
-        this.mCurFile = undefined;
-        this.mMode = 0;
+        this.control.destroyObject_all();
+        this.system.remove();
+        this.curFile = undefined;
+        this.mode = 0;
     }
 
     public update(): boolean {
-        if (!this.mCurFile) {
+        if (!this.curFile) {
             return false;
         }
 
         const dtFrames = this.globals.context.viewerInput.deltaTime / 1000.0 * 30;
 
         // noclip modification: If a demo is suspended (waiting for the user to interact with a message), just resume
-        if (this.mControl.isSuspended()) { this.mControl.setSuspend(0); }
+        if (this.control.isSuspended()) { this.control.setSuspend(0); }
 
-        if (this.mControl.forward(dtFrames)) {
-            this.mFrame += dtFrames;
-            if (!this.mControl.isSuspended()) {
-                this.mFrameNoMsg += dtFrames;
+        if (this.control.forward(dtFrames)) {
+            this.frame += dtFrames;
+            if (!this.control.isSuspended()) {
+                this.frameNoMsg += dtFrames;
             }
         } else {
-            this.mMode = EDemoMode.Ended;
+            this.mode = EDemoMode.Ended;
         }
         return true;
     }
@@ -426,43 +426,43 @@ export function dDemo_setDemoData(globals: dGlobals, dtFrames: number, actor: fo
     if (enable & 2) {
         // actor.current.pos = demoActor.mTranslation;
         // actor.old.pos = actor.current.pos;
-        vec3.copy(actor.pos, demoActor.mTranslation);
+        vec3.copy(actor.pos, demoActor.translation);
     }
     if (enable & 8) {
         // actor.shape_angle = demoActor.mRotation;
         // actor.current.angle = actor.shape_angle;
-        vec3.copy(actor.rot, demoActor.mRotation);
+        vec3.copy(actor.rot, demoActor.rotation);
     }
     if (enable & 4) {
-        actor.scale = demoActor.mScaling;
+        actor.scale = demoActor.scaling;
     }
 
     if (!morf)
         return true;
 
-    demoActor.mModel = morf.model;
+    demoActor.model = morf.model;
 
-    if ((enable & 0x20) && (demoActor.mNextBckId != demoActor.mBckId)) {
-        const bckID = demoActor.mNextBckId;
+    if ((enable & 0x20) && (demoActor.nextBckId != demoActor.bckId)) {
+        const bckID = demoActor.nextBckId;
         if (bckID & 0x10000)
             arcName = globals.roomCtrl.demoArcName;
         assert(!!arcName);
-        demoActor.mBckId = bckID;
+        demoActor.bckId = bckID;
 
         const i_key = globals.resCtrl.getObjectIDRes(ResType.Bck, arcName, bckID);
         assert(!!i_key);
 
         // void* i_sound = dDemo_getJaiPointer(a_name, bck, soundCount, soundIdxs);
         morf.setAnm(i_key, -1 as LoopMode, demoActor.getMorfParam(), 1.0, 0.0, -1.0);
-        demoActor.mAnimationFrameMax = morf.frameCtrl.endFrame;
+        demoActor.animFrameMax = morf.frameCtrl.endFrame;
     }
 
     if (enable & 0x40) {
-        if (demoActor.mAnimationFrame > dtFrames) {
-            morf.frameCtrl.setFrame(demoActor.mAnimationFrame - dtFrames);
+        if (demoActor.animFrame > dtFrames) {
+            morf.frameCtrl.setFrame(demoActor.animFrame - dtFrames);
             morf.play(dtFrames);
         } else {
-            morf.frameCtrl.setFrame(demoActor.mAnimationFrame);
+            morf.frameCtrl.setFrame(demoActor.animFrame);
         }
     } else {
         morf.play(dtFrames);
