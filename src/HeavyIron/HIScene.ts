@@ -191,6 +191,8 @@ export class HIScene implements SceneGfx {
             texture.destroy(this.rw);
         }
 
+        this.env.jsp.destroy(this.rw);
+
         this.rw.destroy();
     }
 
@@ -379,6 +381,10 @@ export class HIScene implements SceneGfx {
 
     private loadTexture(asset: HIPAsset): boolean {
         if (asset.data.byteLength === 0) return true;
+
+        // Don't load duplicate textures, temporary hack to prevent memory leaks
+        // TODO: Have each asset keep track of their own runtime data like in the OG game
+        if (this.textures.has(asset.id)) return true;
         
         const stream = new RwStream(asset.data);
         if (!stream.findChunk(RwPluginID.TEXDICTIONARY)) {
@@ -388,8 +394,14 @@ export class HIScene implements SceneGfx {
     
         const texDict = RwTexDictionary.streamRead(stream, this.rw);
         if (!texDict) return false;
+
+        // We only use the first texture
+        const texture = texDict.textures[0];
+        texDict.removeTexture(texture);
         
-        this.textures.set(asset.id, texDict.textures[0]);
+        texDict.destroy(this.rw);
+        
+        this.textures.set(asset.id, texture);
         return true;
     }
 
