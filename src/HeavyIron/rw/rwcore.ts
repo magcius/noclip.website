@@ -381,6 +381,19 @@ export class RwTexDictionary {
 
         return texDict;
     }
+
+    public destroy(rw: RwEngine) {
+        for (const texture of this.textures) {
+            texture.destroy(rw);
+        }
+    }
+
+    public removeTexture(texture: RwTexture) {
+        const index = this.textures.indexOf(texture);
+        if (index !== -1) {
+            this.textures.splice(index);
+        }
+    }
 }
 
 export class RwFrame {

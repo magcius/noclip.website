@@ -111,4 +111,10 @@ export class JSP {
             stream.pos = header.end;
         }
     }
+
+    public destroy(rw: RwEngine) {
+        for (const node of this.nodeList) {
+            node.atomic.destroy(rw);
+        }
+    }
 }
