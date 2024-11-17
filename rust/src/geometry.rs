@@ -1,6 +1,6 @@
 use core::f32;
 
-use nalgebra_glm::{make_mat4, make_vec3, triangle_normal, vec2, vec3, vec4, Mat4, Vec3, Vec2};
+use nalgebra_glm::{make_mat4, make_vec3, triangle_normal, vec2, vec4, Mat4, Vec3, Vec2};
 use wasm_bindgen::prelude::*;
 
 #[derive(Default, Debug, Clone)]
@@ -10,6 +10,15 @@ pub struct Plane {
 }
 
 impl Plane {
+    pub fn new(normal: Vec3, d: f32) -> Plane {
+        Plane { normal, d }
+    }
+
+    pub fn normalized(&self) -> Plane {
+        let mag = self.normal.magnitude();
+        Plane::new(self.normal / mag, self.d / mag)
+    }
+
     pub fn negate(&mut self) {
         self.normal.neg_mut();
         self.d *= -1.0;
@@ -86,6 +95,13 @@ impl AABB {
         }
     }
 
+    pub fn get_closest_point_along_direction(&self, dir: &Vec3) -> Vec3 {
+        let x = if dir.x >= 0.0 { self.max.x } else { self.min.x };
+        let y = if dir.y >= 0.0 { self.max.y } else { self.min.y };
+        let z = if dir.z >= 0.0 { self.max.z } else { self.min.z };
+        Vec3::new(x, y, z)
+    }
+
     pub fn transform(&mut self, mat: &Mat4) {
         // Transforming Axis-Aligned Bounding Boxes from Graphics Gems.
         let min = self.min.clone();
@@ -160,7 +176,7 @@ pub struct ConvexHull {
 impl ConvexHull {
     pub fn contains_point(&self, p: &Vec3) -> bool {
         for plane in &self.planes {
-            if plane.distance(p) > 0.0 {
+            if plane.distance(p) < 0.0 {
                 return false;
             }
         }
@@ -170,44 +186,13 @@ impl ConvexHull {
     pub fn intersect_aabb(&self, aabb: &AABB) -> IntersectionState {
         let mut result = IntersectionState::Inside;
         for plane in &self.planes {
-            let nearest = vec3(
-                if plane.normal.x >= 0.0 {
-                    aabb.min.x
-                } else {
-                    aabb.max.x
-                },
-                if plane.normal.y >= 0.0 {
-                    aabb.min.y
-                } else {
-                    aabb.max.y
-                },
-                if plane.normal.z >= 0.0 {
-                    aabb.min.z
-                } else {
-                    aabb.max.z
-                },
-            );
-            if plane.distance(&nearest) > 0.0 {
+            let nearest = aabb.get_closest_point_along_direction(&plane.normal);
+            if plane.distance(&nearest) < 0.0 {
                 return IntersectionState::Outside;
             }
-            let farthest = vec3(
-                if plane.normal.x >= 0.0 {
-                    aabb.max.x
-                } else {
-                    aabb.min.x
-                },
-                if plane.normal.y >= 0.0 {
-                    aabb.max.y
-                } else {
-                    aabb.min.y
-                },
-                if plane.normal.z >= 0.0 {
-                    aabb.max.z
-                } else {
-                    aabb.min.z
-                },
-            );
-            if plane.distance(&farthest) > 0.0 {
+
+            let farthest = aabb.get_closest_point_along_direction(&-plane.normal);
+            if plane.distance(&farthest) < 0.0 {
                 result = IntersectionState::Intersection;
             }
         }
@@ -218,9 +203,9 @@ impl ConvexHull {
         let mut result = IntersectionState::Inside;
         for plane in &self.planes {
             let dist = plane.distance(center);
-            if dist > radius {
+            if dist < -radius {
                 return IntersectionState::Outside;
-            } else if dist > -radius {
+            } else if dist < radius {
                 result = IntersectionState::Intersection;
             }
         }
@@ -267,9 +252,8 @@ impl ConvexHull {
 
     pub fn push_plane(&mut self, x: f32, y: f32, z: f32, d: f32) {
         // Normalize the plane equation so that sphere tests work.
-        let mut normal = Vec3::new(x, y, z);
-        let mag = normal.normalize_mut();
-        self.planes.push(Plane { normal, d: d / mag });
+        let plane = Plane::new(Vec3::new(x, y, z), d);
+        self.planes.push(plane.normalized());
     }
 
     pub fn js_intersect_aabb(&mut self, min_x: f32, min_y: f32, min_z: f32, max_x: f32, max_y: f32, max_z: f32) -> IntersectionState {

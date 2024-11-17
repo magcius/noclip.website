@@ -4,7 +4,7 @@ import { HashMap, nullHashFunc } from "../../HashMap.js";
 import { rust } from "../../rustlib.js";
 import { GfxAttachmentState, GfxBindingLayoutDescriptor, GfxBindingLayoutSamplerDescriptor, GfxBindings, GfxBindingsDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxChannelBlendState, GfxClipSpaceNearZ, GfxCompareMode, GfxComputePass, GfxComputePipelineDescriptor, GfxComputeProgramDescriptor, GfxCullMode, GfxStatisticsGroup, GfxDevice, GfxDeviceLimits, GfxFormat, GfxFrontFaceMode, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutDescriptor, GfxMegaStateDescriptor, GfxMipFilterMode, GfxPass, GfxPrimitiveTopology, GfxProgram, GfxQueryPoolType, GfxRenderPass, GfxRenderPassDescriptor, GfxRenderPipeline, GfxRenderPipelineDescriptor, GfxRenderTarget, GfxRenderTargetDescriptor, GfxSampler, GfxSamplerDescriptor, GfxSamplerFormatKind, GfxShadingLanguage, GfxSwapChain, GfxTexFilterMode, GfxTexture, GfxTextureDescriptor, GfxTextureDimension, GfxTextureUsage, GfxVendorInfo, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxViewportOrigin, GfxWrapMode, GfxRenderAttachmentView, GfxRenderProgramDescriptor } from "./GfxPlatform.js";
 import { FormatFlags, FormatTypeFlags, getFormatByteSize, getFormatFlags, getFormatSamplerKind, getFormatTypeFlags } from "./GfxPlatformFormat.js";
-import { GfxComputePipeline, GfxQueryPool, GfxReadback, GfxResource, GfxTextureImpl, _T, defaultBindingLayoutSamplerDescriptor } from "./GfxPlatformImpl.js";
+import { GfxComputePipeline, GfxQueryPool, GfxReadback, GfxResource, GfxTextureImpl, _T, defaultBindingLayoutSamplerDescriptor, isFormatSamplerKindCompatible } from "./GfxPlatformImpl.js";
 import { align, assert, assertExists } from "./GfxPlatformUtil.js";
 import { gfxBindingLayoutDescriptorEqual } from './GfxPlatformObjUtil.js';
 import { IS_DEVELOPMENT } from "../../BuildVersion.js";
@@ -1194,7 +1194,8 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             const gfxBinding = bindingsDescriptor.samplerBindings[i];
             const gfxTexture = (gfxBinding.gfxTexture !== null ? gfxBinding.gfxTexture : this._getFallbackTexture(samplerEntry)) as GfxTextureP_WebGPU;
             assert(samplerEntry.dimension === gfxTexture.dimension);
-            assert(samplerEntry.formatKind === getFormatSamplerKind(gfxTexture.pixelFormat));
+            const formatKind = getFormatSamplerKind(gfxTexture.pixelFormat);
+            assert(isFormatSamplerKindCompatible(samplerEntry.formatKind, formatKind));
             const gpuTextureView = (gfxTexture as GfxTextureP_WebGPU).gpuTextureView;
             gpuBindGroupEntries.push({ binding: numBindings++, resource: gpuTextureView });
 
@@ -1741,8 +1742,7 @@ export async function createSwapChainForWebGPU(canvas: HTMLCanvasElement | Offsc
     if (device === null)
         return null;
 
-    const context = canvas.getContext('webgpu') as any as GPUCanvasContext;
-
+    const context = canvas.getContext('webgpu');
     if (!context)
         return null;
 

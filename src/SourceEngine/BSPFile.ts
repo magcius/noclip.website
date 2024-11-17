@@ -1820,6 +1820,9 @@ export class BSPFile {
             vec3.set(overlayInfo.basis[0], vecUVPoint0Z, vecUVPoint1Z, vecUVPoint2Z);
             vec3.cross(overlayInfo.basis[1], overlayInfo.normal, overlayInfo.basis[0]);
 
+            if (vecUVPoint3Z == 1.0)
+                vec3.negate(overlayInfo.basis[1], overlayInfo.basis[1]);
+
             vec2.set(overlayInfo.planePoints[0], vecUVPoint0X, vecUVPoint0Y);
             vec2.set(overlayInfo.planePoints[1], vecUVPoint1X, vecUVPoint1Y);
             vec2.set(overlayInfo.planePoints[2], vecUVPoint2X, vecUVPoint2Y);

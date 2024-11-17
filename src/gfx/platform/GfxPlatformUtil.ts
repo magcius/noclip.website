@@ -71,4 +71,3 @@ export function gfxColorNewCopy(src: Readonly<GfxColor>): GfxColor {
     const { r, g, b, a } = src;
     return { r, g, b, a };
 }
-

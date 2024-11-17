@@ -1,4 +1,4 @@
-use std::{io::{Cursor, Seek, SeekFrom}};
+use std::io::{Cursor, Seek, SeekFrom};
 use byteorder::{ReadBytesExt, LittleEndian};
 use num_enum::{TryFromPrimitive, TryFromPrimitiveError};
 use wasm_bindgen::prelude::*;

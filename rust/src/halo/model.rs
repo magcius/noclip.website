@@ -1,4 +1,4 @@
-use std::{io::{Cursor, Seek, SeekFrom}};
+use std::io::{Cursor, Seek, SeekFrom};
 use byteorder::{ReadBytesExt, LittleEndian};
 use crate::halo::common::*;
 use crate::halo::tag::*;

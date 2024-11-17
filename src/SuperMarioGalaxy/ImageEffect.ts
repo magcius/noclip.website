@@ -104,6 +104,7 @@ const bindingLayouts: GfxBindingLayoutDescriptor[] = [
 class BloomPassBaseProgram extends DeviceProgram {
     public static BindingsDefinition = `
 uniform sampler2D u_Texture;
+uniform sampler2D u_Texture2;
 
 layout(std140) uniform ub_Params {
     vec4 u_Misc[1];
@@ -387,6 +388,7 @@ const BloomSimplePSCommon = `
 ${ImageEffectShaderLib}
 
 uniform sampler2D u_Texture;
+uniform sampler2D u_Texture2;
 in vec2 v_TexCoord;
 
 layout(std140) uniform ub_Params {

@@ -1,5 +1,5 @@
-use std::{io::{Cursor, Seek, SeekFrom, Read}, convert::{TryFrom}};
-use num_enum::{TryFromPrimitive};
+use std::{io::{Cursor, Seek, SeekFrom, Read}, convert::TryFrom};
+use num_enum::TryFromPrimitive;
 
 use crate::halo::common::*;
 use crate::halo::util::*;
