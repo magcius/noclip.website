@@ -191,6 +191,8 @@ export class HIScene implements SceneGfx {
             texture.destroy(this.rw);
         }
 
+        this.env.jsp.destroy(this.rw);
+
         this.rw.destroy();
     }
 
@@ -388,8 +390,19 @@ export class HIScene implements SceneGfx {
     
         const texDict = RwTexDictionary.streamRead(stream, this.rw);
         if (!texDict) return false;
+
+        // We only use the first texture
+        const texture = texDict.textures[0];
+        texDict.removeTexture(texture);
         
-        this.textures.set(asset.id, texDict.textures[0]);
+        texDict.destroy(this.rw);
+
+        // Destroy duplicate textures (some boot.HIP/font.HIP textures are also present in level .HOPs)
+        if (this.textures.has(asset.id)) {
+            this.textures.get(asset.id)!.destroy(this.rw);
+        }
+        
+        this.textures.set(asset.id, texture);
         return true;
     }
 
