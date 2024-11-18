@@ -167,42 +167,27 @@ enum EDataOp {
     ObjectIdx = 0x19,   // Same as ObjectName, but by object index
 };
 
-class DataVal {
-    asInt?: number;
-    asFloat?: number;
-    asStr?: string;
-}
-
-function dataToValue(keyData: DataVal[], dataOp: number) {
-    const vals = keyData.map(d => {
-        switch (dataOp) {
-            case EDataOp.FuncValIdx:
-            case EDataOp.ObjectIdx:
-                return d.asInt;
-            case EDataOp.FuncValName:
-            case EDataOp.ObjectName:
-                return d.asStr;
-            default:
-                return d.asFloat;
-        }
-    });
-    return vals;
-}
+type ParagraphData = (
+    { dataOp: EDataOp.Void | EDataOp.None; value: null; } |
+    { dataOp: EDataOp.FuncValName | EDataOp.ObjectName; value: string; } |
+    { dataOp: EDataOp.FuncValIdx | EDataOp.ObjectIdx; value: number; } |
+    { dataOp: EDataOp.Immediate | EDataOp.Time; value: number; valueInt: number }
+);
 
 // Parse data from a DataView as either a number or a string, based on the dataOp
-function readData(dataOp: EDataOp, dataOffset: number, dataSize: number, file: Reader): DataVal {
+function readData(dataOp: EDataOp, dataOffset: number, dataSize: number, file: Reader): ParagraphData {
     switch (dataOp) {
         case EDataOp.Immediate:
         case EDataOp.Time:
-            return { asInt: file.view.getUint32(dataOffset), asFloat: file.view.getFloat32(dataOffset) };
+            return { dataOp, value: file.view.getFloat32(dataOffset), valueInt: file.view.getUint32(dataOffset) };
 
         case EDataOp.FuncValIdx:
         case EDataOp.ObjectIdx:
-            return { asInt: file.view.getUint32(dataOffset) };
+            return { dataOp, value: file.view.getUint32(dataOffset) };
 
         case EDataOp.FuncValName:
         case EDataOp.ObjectName:
-            return { asStr: readString(file.buffer, dataOffset, dataSize) };
+            return { dataOp, value: readString(file.buffer, dataOffset, dataSize) };
 
         default:
             assert(false, 'Unsupported data operation');
@@ -225,18 +210,18 @@ abstract class TAdaptor {
     public abstract adaptor_do_data(obj: STBObject, id: number, data: DataView): void;
 
     // Set a single VariableValue update function, with the option of using FuncVals 
-    public adaptor_setVariableValue(obj: STBObject, keyIdx: number, dataOp: EDataOp, data: DataVal) {
+    public adaptor_setVariableValue(obj: STBObject, keyIdx: number, data: ParagraphData) {
         const varval = this.variableValues[keyIdx];
         const control = obj.control;
 
-        switch (dataOp) {
+        switch (data.dataOp) {
             case EDataOp.Void: varval.setValue_none(); break;
-            case EDataOp.Immediate: varval.setValue_immediate(data.asFloat!); break;
-            case EDataOp.Time: varval.setValue_time(data.asFloat!); break;
-            case EDataOp.FuncValName: varval.setValue_functionValue(control.getFunctionValueByName(data.asStr!)); break;
-            case EDataOp.FuncValIdx: varval.setValue_functionValue(control.getFunctionValueByIdx(data.asInt!)); break;
+            case EDataOp.Immediate: varval.setValue_immediate(data.value); break;
+            case EDataOp.Time: varval.setValue_time(data.value); break;
+            case EDataOp.FuncValName: varval.setValue_functionValue(control.getFunctionValueByName(data.value)); break;
+            case EDataOp.FuncValIdx: varval.setValue_functionValue(control.getFunctionValueByIdx(data.value)); break;
             default:
-                console.debug('Unsupported dataOp: ', dataOp);
+                console.debug('Unsupported dataOp: ', data.dataOp);
                 debugger;
                 return;
         }
@@ -651,89 +636,89 @@ class TActorAdaptor extends TAdaptor {
         this.object.JSGSetData(id, data);
     }
 
-    public adaptor_do_PARENT(dataOp: EDataOp, data: DataVal, dataSize: number): void {
-        assert(dataOp == EDataOp.ObjectName);
-        this.log(`SetParent: ${data.asStr}`);
-        this.parent = this.system.JSGFindObject(data.asStr!, JStage.EObject.PreExistingActor);
+    public adaptor_do_PARENT(data: ParagraphData): void {
+        assert(data.dataOp == EDataOp.ObjectName);
+        this.log(`SetParent: ${data.value}`);
+        this.parent = this.system.JSGFindObject(data.value, JStage.EObject.PreExistingActor);
     }
 
-    public adaptor_do_PARENT_NODE(dataOp: EDataOp, data: DataVal, dataSize: number): void {
+    public adaptor_do_PARENT_NODE(data: ParagraphData): void {
         debugger;
-        this.log(`SetParentNode: ${data}`);
-        switch (dataOp) {
+        this.log(`SetParentNode: ${data.value}`);
+        switch (data.dataOp) {
             case EDataOp.ObjectName:
                 if (this.parent)
-                    this.parentNodeID = this.parent.JSGFindNodeID(data.asStr!);
+                    this.parentNodeID = this.parent.JSGFindNodeID(data.value);
                 break;
             case EDataOp.ObjectIdx:
-                this.parentNodeID = data.asInt!;
+                this.parentNodeID = data.value;
                 break;
             default: assert(false);
         }
     }
 
-    public adaptor_do_PARENT_ENABLE(dataOp: EDataOp, data: number, dataSize: number): void {
-        assert(dataOp == EDataOp.Immediate);
-        this.log(`SetParentEnable: ${data}`);
-        if (data) { this.object.JSGSetParent(this.parent!, this.parentNodeID); }
+    public adaptor_do_PARENT_ENABLE(data: ParagraphData): void {
+        assert(data.dataOp == EDataOp.Immediate);
+        this.log(`SetParentEnable: ${data.valueInt}`);
+        if (data.valueInt) { this.object.JSGSetParent(this.parent!, this.parentNodeID); }
         else { this.object.JSGSetParent(null, 0xFFFFFFFF); }
     }
 
-    public adaptor_do_RELATION(dataOp: EDataOp, data: DataVal, dataSize: number): void {
-        assert(dataOp == EDataOp.ObjectName);
-        this.log(`SetRelation: ${data.asStr!}`);
-        this.relation = this.system.JSGFindObject(data.asStr!, JStage.EObject.PreExistingActor);
+    public adaptor_do_RELATION(data: ParagraphData): void {
+        assert(data.dataOp == EDataOp.ObjectName);
+        this.log(`SetRelation: ${data.value}`);
+        this.relation = this.system.JSGFindObject(data.value, JStage.EObject.PreExistingActor);
     }
 
-    public adaptor_do_RELATION_NODE(dataOp: EDataOp, data: DataVal, dataSize: number): void {
+    public adaptor_do_RELATION_NODE(data: ParagraphData): void {
         debugger;
-        this.log(`SetRelationNode: ${data}`);
-        switch (dataOp) {
+        this.log(`SetRelationNode: ${data.value}`);
+        switch (data.dataOp) {
             case EDataOp.ObjectName:
                 if (this.relation)
-                    this.relationNodeID = this.relation.JSGFindNodeID(data.asStr!);
+                    this.relationNodeID = this.relation.JSGFindNodeID(data.value);
                 break;
             case EDataOp.ObjectIdx:
-                this.relationNodeID = data.asInt!;
+                this.relationNodeID = data.value;
                 break;
             default: assert(false);
         }
     }
 
-    public adaptor_do_RELATION_ENABLE(dataOp: EDataOp, data: number, dataSize: number): void {
-        assert(dataOp == EDataOp.Immediate);
-        this.log(`SetRelationEnable: ${data}`);
-        this.object.JSGSetRelation(!!data, this.relation!, this.relationNodeID);
+    public adaptor_do_RELATION_ENABLE(data: ParagraphData): void {
+        assert(data.dataOp == EDataOp.Immediate);
+        this.log(`SetRelationEnable: ${data.valueInt}`);
+        this.object.JSGSetRelation(!!data.valueInt, this.relation!, this.relationNodeID);
     }
 
-    public adaptor_do_SHAPE(dataOp: EDataOp, data: DataVal, dataSize: number): void {
-        assert(dataOp == EDataOp.ObjectIdx);
-        this.log(`SetShape: ${data.asInt!}`);
-        this.object.JSGSetShape(data.asInt!);
+    public adaptor_do_SHAPE(data: ParagraphData): void {
+        assert(data.dataOp == EDataOp.ObjectIdx);
+        this.log(`SetShape: ${data.value}`);
+        this.object.JSGSetShape(data.value);
     }
 
-    public adaptor_do_ANIMATION(dataOp: EDataOp, data: DataVal, dataSize: number): void {
-        assert(dataOp == EDataOp.ObjectIdx);
-        this.log(`SetAnimation: ${(data.asInt!) & 0xFFFF} (${(data.asInt!) >> 4 & 0x01})`);
-        this.object.JSGSetAnimation(data.asInt!);
+    public adaptor_do_ANIMATION(data: ParagraphData): void {
+        assert(data.dataOp == EDataOp.ObjectIdx);
+        this.log(`SetAnimation: ${(data.value) & 0xFFFF} (${(data.value) >> 4 & 0x01})`);
+        this.object.JSGSetAnimation(data.value);
     }
 
-    public adaptor_do_ANIMATION_MODE(dataOp: EDataOp, data: DataVal, dataSize: number): void {
-        assert(dataOp == EDataOp.Immediate);
-        this.log(`SetAnimationMode: ${data.asInt!}`);
-        this.animMode = data.asInt!;
+    public adaptor_do_ANIMATION_MODE(data: ParagraphData): void {
+        assert(data.dataOp == EDataOp.Immediate);
+        this.log(`SetAnimationMode: ${data.valueInt}`);
+        this.animMode = data.valueInt;
     }
 
-    public adaptor_do_TEXTURE_ANIMATION(dataOp: EDataOp, data: DataVal, dataSize: number): void {
-        assert(dataOp == EDataOp.ObjectIdx);
-        this.log(`SetTexAnim: ${data}`);
-        this.object.JSGSetTextureAnimation(data.asInt!);
+    public adaptor_do_TEXTURE_ANIMATION(data: ParagraphData): void {
+        assert(data.dataOp == EDataOp.ObjectIdx);
+        this.log(`SetTexAnim: ${data.value}`);
+        this.object.JSGSetTextureAnimation(data.value);
     }
 
-    public adaptor_do_TEXTURE_ANIMATION_MODE(dataOp: EDataOp, data: DataVal, dataSize: number): void {
-        assert(dataOp == EDataOp.Immediate);
-        this.log(`SetTexAnimMode: ${data}`);
-        this.animTexMode = data.asInt!;
+    public adaptor_do_TEXTURE_ANIMATION_MODE(data: ParagraphData): void {
+        assert(data.dataOp == EDataOp.Immediate);
+        this.log(`SetTexAnimMode: ${data.valueInt}`);
+        this.animTexMode = data.valueInt;
     }
 }
 
@@ -776,40 +761,41 @@ class TActorObject extends STBObject {
             case 0x3b: keyIdx = EActorTrack.AnimFrame; break;
             case 0x4b: keyIdx = EActorTrack.AnimTransition; break;
 
-            case 0x39: this.adaptor.adaptor_do_SHAPE(dataOp, data, dataSize); return;
-            case 0x3a: this.adaptor.adaptor_do_ANIMATION(dataOp, data, dataSize); return;
-            case 0x43: this.adaptor.adaptor_do_ANIMATION_MODE(dataOp, data, dataSize); return;
-            case 0x4c: debugger; this.adaptor.adaptor_do_TEXTURE_ANIMATION(dataOp, data, dataSize); return;
-            case 0x4e: debugger; this.adaptor.adaptor_do_TEXTURE_ANIMATION_MODE(dataOp, data, dataSize); return;
+            case 0x39: this.adaptor.adaptor_do_SHAPE(data); return;
+            case 0x3a: this.adaptor.adaptor_do_ANIMATION(data); return;
+            case 0x43: this.adaptor.adaptor_do_ANIMATION_MODE(data); return;
+            case 0x4c: debugger; this.adaptor.adaptor_do_TEXTURE_ANIMATION(data); return;
+            case 0x4e: debugger; this.adaptor.adaptor_do_TEXTURE_ANIMATION_MODE(data); return;
 
-            case 0x30: debugger; this.adaptor.adaptor_do_PARENT(dataOp, data, dataSize); return;
-            case 0x31: debugger; this.adaptor.adaptor_do_PARENT_NODE(dataOp, data, dataSize); return;
+            case 0x30: debugger; this.adaptor.adaptor_do_PARENT(data); return;
+            case 0x31: debugger; this.adaptor.adaptor_do_PARENT_NODE(data); return;
             case 0x32:
                 debugger;
                 keyIdx = EActorTrack.Parent;
-                if ((dataOp < 0x13) && (dataOp > 0x0F)) {
+                if (dataOp == EDataOp.FuncValIdx || dataOp == EDataOp.FuncValName) {
                     debugger;
-                    this.adaptor.adaptor_setVariableValue(this, keyIdx, dataOp, data);
+                    this.adaptor.adaptor_setVariableValue(this, keyIdx, data);
                     this.adaptor.variableValues[keyIdx].setOutput((enabled, adaptor) => {
-                        (adaptor as TActorAdaptor).adaptor_do_PARENT_ENABLE(dataOp, enabled, dataSize)
+                        (adaptor as TActorAdaptor).adaptor_do_PARENT_ENABLE({ dataOp:EDataOp.Immediate, value: enabled, valueInt: enabled });
                     });
+                } else {
+                    this.adaptor.adaptor_do_PARENT_ENABLE(data);
                 }
-                this.adaptor.adaptor_do_PARENT_ENABLE(dataOp, data.asInt!, dataSize);
                 break;
 
-            case 0x33: debugger; this.adaptor.adaptor_do_RELATION(dataOp, data, dataSize); return;
-            case 0x34: debugger; this.adaptor.adaptor_do_RELATION_NODE(dataOp, data, dataSize); return;
+            case 0x33: debugger; this.adaptor.adaptor_do_RELATION(data); return;
+            case 0x34: debugger; this.adaptor.adaptor_do_RELATION_NODE(data); return;
             case 0x35:
                 debugger;
                 keyIdx = EActorTrack.Relation;
                 if ((dataOp < 0x13) && (dataOp > 0x0F)) {
                     debugger;
-                    this.adaptor.adaptor_setVariableValue(this, keyIdx, dataOp, data);
+                    this.adaptor.adaptor_setVariableValue(this, keyIdx, data);
                     this.adaptor.variableValues[keyIdx].setOutput((enabled, adaptor) => {
-                        (adaptor as TActorAdaptor).adaptor_do_RELATION_ENABLE(dataOp, enabled, dataSize)
+                        (adaptor as TActorAdaptor).adaptor_do_RELATION_ENABLE({ dataOp:EDataOp.Immediate, value: enabled, valueInt: enabled });
                     });
                 }
-                this.adaptor.adaptor_do_RELATION_ENABLE(dataOp, data.asInt!, dataSize);
+                this.adaptor.adaptor_do_RELATION_ENABLE(data);
                 break;
 
             default:
@@ -821,11 +807,11 @@ class TActorObject extends STBObject {
         let keyData = [];
         for (let i = 0; i < keyCount; i++) {
             keyData[i] = readData(dataOp, dataOffset + i * 4, dataSize, file);
-            this.adaptor.adaptor_setVariableValue(this, keyIdx + i, dataOp, keyData[i]);
+            this.adaptor.adaptor_setVariableValue(this, keyIdx + i, keyData[i]);
         }
-    
+
         const keyName = EActorTrack[keyIdx].slice(0, keyCount > 0 ? -1 : undefined);
-        this.adaptor.log(`Set${keyName}: ${EDataOp[dataOp]} [${dataToValue(keyData, dataOp)}]`);
+        this.adaptor.log(`Set${keyName}: ${EDataOp[dataOp]} [${keyData.map(k => k.value)}]`);
     }
 }
 
@@ -983,11 +969,11 @@ class TCameraObject extends STBObject {
         let keyData = []
         for (let i = 0; i < keyCount; i++) {
             keyData[i] = readData(dataOp, dataOffset + i * 4, dataSize, file);
-            this.adaptor.adaptor_setVariableValue(this, keyIdx + i, dataOp, keyData[i]);
+            this.adaptor.adaptor_setVariableValue(this, keyIdx + i, keyData[i]);
         }
 
         const keyName = ECameraTrack[keyIdx].slice(0, keyCount > 0 ? -1 : undefined);
-        this.adaptor.log(`Set${keyName}: ${EDataOp[dataOp]} [${dataToValue(keyData, dataOp)}]`);
+        this.adaptor.log(`Set${keyName}: ${EDataOp[dataOp]} [${keyData.map(k => k.value)}]`);
     }
 }
 
