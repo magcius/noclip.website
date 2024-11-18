@@ -113,8 +113,8 @@ export function cM_rndFX(max: number): number {
     return 2.0 * (max * (Math.random() - 0.5));
 }
 
-export function cM_deg2s(deg: number): number {
-    return deg * 182.04445;
+export function cM_deg2s(v: number): number {
+    return cM__Rad2Short(v * MathConstants.DEG_TO_RAD);
 }
 
 export function cM_sht2d(rad: number) {
@@ -131,10 +131,6 @@ export function cM__Short2Rad(v: number): number {
 
 export function cM__Rad2Short(v: number): number {
     return v * (0x8000 / Math.PI);
-}
-
-export function cM__Deg2Short(v: number): number {
-    return cM__Rad2Short(v * MathConstants.DEG_TO_RAD);
 }
 
 export function cLib_targetAngleX(p0: ReadonlyVec3, p1: ReadonlyVec3): number {

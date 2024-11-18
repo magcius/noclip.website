@@ -8,7 +8,7 @@ import { JPABaseEmitter } from "../Common/JSYSTEM/JPA.js";
 import { BTIData } from "../Common/JSYSTEM/JUTTexture.js";
 import { MathConstants, Vec3UnitY, invlerp, saturate, scaleMatrix } from "../MathHelpers.js";
 import { TSDraw } from "../SuperMarioGalaxy/DDraw.js";
-import { cLib_addCalc, cLib_addCalc2, cLib_addCalcAngleS2, cLib_addCalcAngleS_, cLib_chaseF, cLib_targetAngleX, cLib_targetAngleY, cM__Short2Rad, cM__Deg2Short, cM_atan2s } from "../ZeldaWindWaker/SComponent.js";
+import { cLib_addCalc, cLib_addCalc2, cLib_addCalcAngleS2, cLib_addCalcAngleS_, cLib_chaseF, cLib_targetAngleX, cLib_targetAngleY, cM__Short2Rad, cM_deg2s, cM_atan2s } from "../ZeldaWindWaker/SComponent.js";
 import { dBgW } from "../ZeldaWindWaker/d_bg.js";
 import { MtxPosition, MtxTrans, calc_mtx, mDoMtx_XrotM, mDoMtx_YrotM, mDoMtx_YrotS, mDoMtx_ZXYrotM, mDoMtx_ZrotM } from "../ZeldaWindWaker/m_do_mtx.js";
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
@@ -3100,7 +3100,7 @@ class d_a_obj_magLiftRot extends fopAc_ac_c {
     private modeMove(deltaTimeFrames: number): void {
         this.speedF = cLib_chaseF(this.speedF, 8.0, 0.05 * deltaTimeFrames);
 
-        const speed = cM__Deg2Short(this.speedF);
+        const speed = cM_deg2s(this.speedF);
         this.rot[2] = cLib_addCalcAngleS_(this.rot[2], this.rotTarget, 1, speed * deltaTimeFrames, 1);
 
         if ((this.rotTarget - this.rot[2]) === 0) {
