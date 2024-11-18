@@ -1,10 +1,10 @@
 import { mat4, vec3 } from "gl-matrix";
-import { CameraController, computeViewMatrix } from "../Camera.js";
+import { CameraController, computeViewMatrix, computeViewSpaceDepthFromWorldSpacePoint } from "../Camera.js";
 import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
 import { GfxAttachmentState, GfxBlendFactor, GfxBlendMode, GfxChannelWriteMask, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxProgram, GfxSamplerBinding, GfxVertexBufferDescriptor } from "../gfx/platform/GfxPlatform.js";
 import { GfxrAttachmentSlot, GfxrRenderTargetID, GfxrResolveTextureID} from "../gfx/render/GfxRenderGraph.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
-import { GfxRendererLayer, GfxRenderInst, GfxRenderInstList, GfxRenderInstManager, makeSortKey } from "../gfx/render/GfxRenderInstManager.js";
+import { GfxRendererLayer, GfxRenderInst, GfxRenderInstList, GfxRenderInstManager, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager.js";
 import { DeviceProgram } from "../Program.js";
 import { SceneGfx, ViewerRenderInput } from "../viewer.js";
 import { InstanceType, NfsInstance, NfsRegion,  NfsTexture, RegionType } from "./region.js";
@@ -53,24 +53,23 @@ export class NfsRenderer implements SceneGfx {
     private renderInstListMain = new GfxRenderInstList();
     private renderInstListShadows = new GfxRenderInstList();
     private closestPathVertex: PathVertex;
+    private aabbCenter: vec3 = vec3.create();
     private devicePrograms: DeviceProgram[] = [];
     private particleProgram: DeviceProgram;
     private particleGfxProgram: GfxProgram;
     private gfxPrograms: GfxProgram[];
     private sortKeyAlpha: number;
     private sortKeyTranslucent: number;
+    private sortKeyShadow: number;
     private sortKeySky: number;
-    private shadowPassTexture: TextureMapping = new TextureMapping();
     private postProcessing: NfsPostProcessing;
     private streamingFreezed: boolean = false;
     private showPanoramas: boolean = true;
-    private showShadows: boolean = true;
     private showTrackBarriers: boolean = false;
     private showHidden: boolean = false;
     private enableParticles: boolean = true;
-    private fogIntensity: number = 4.0;
+    private fogIntensity: number = 1.0;
     private usePostProcessing: boolean = true;
-    private shadowsSupported: boolean;
 
     constructor(map: NfsMap, device: GfxDevice, renderHelper: GfxRenderHelper) {
         this.map = map;
@@ -83,9 +82,6 @@ export class NfsRenderer implements SceneGfx {
         this.devicePrograms[3].defines.set("NORMALMAP", "1");
         this.devicePrograms[4].defines.set("GLOSSYWINDOW", "1");
         this.devicePrograms[5].defines.set("SKY", "1");
-
-        this.shadowsSupported = device.queryTextureFormatSupported(GfxFormat.U16_RG_NORM, 0, 0);
-        this.showShadows = this.shadowsSupported;
 
         this.postProcessing = new NfsPostProcessing(map, renderHelper);
 
@@ -151,8 +147,6 @@ export class NfsRenderer implements SceneGfx {
 
         template.setGfxProgram(this.gfxPrograms[0]);
         instancesToRender.forEach(instance => {
-            if(instance.type == InstanceType.Shadow)        // shadows get handled in separate pass
-                return;
             if(instance.worldMatrix === undefined)
                 return;
             if(instance.type == InstanceType.TrackBarrier && !this.showTrackBarriers)
@@ -190,7 +184,15 @@ export class NfsRenderer implements SceneGfx {
                     renderInst.sortKey = this.sortKeySky;
                 }
                 else if(diffuseTexture.transparencyType > 0) {
-                    renderInst.sortKey = this.sortKeyTranslucent;
+                    if(instance.type != InstanceType.Shadow) {
+                        renderInst.sortKey = this.sortKeyTranslucent;
+                        instance.boundingBox.centerPoint(this.aabbCenter);
+                        const depth = computeViewSpaceDepthFromWorldSpacePoint(viewerInput.camera.viewMatrix, this.aabbCenter);
+                        renderInst.sortKey = setSortKeyDepth(this.sortKeyTranslucent, depth);
+                    }
+                    else {
+                        renderInst.sortKey = this.sortKeyTranslucent;
+                    }
                     if(diffuseTexture.transparencyType == 1) {
                          renderInst.setMegaStateFlags({attachmentsState: attachmentStatesTranslucent, depthWrite: false});
                     }
@@ -222,7 +224,6 @@ export class NfsRenderer implements SceneGfx {
                 else {
                     fillVec4v(d, offs, [0, 0, fog, 0]);
                 }
-                texMappings[3] = { lateBinding: 'shadow-map', gfxTexture: null, gfxSampler: null };
 
                 // Use the diffuse sampler state for all textures
                 for(let i = 1; i < texMappings.length; i++) {
@@ -243,8 +244,9 @@ export class NfsRenderer implements SceneGfx {
         template.setGfxProgram(this.particleGfxProgram);
         template.setMegaStateFlags({attachmentsState: attachmentStatesTranslucent, depthWrite: false, cullMode: GfxCullMode.None});
         template.setVertexInput(NfsParticleEmitter.inputLayout, NfsParticleEmitter.vertexBufferDescriptors, NfsParticleEmitter.indexBufferDescriptor);
+        template.setBindingLayouts([{ numUniformBuffers: 2, numSamplers: 1 }]);
         template.setDrawCount(6);
-        template.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT + 1);
+        template.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT);
         let offs = template.allocateUniformBuffer(NfsParticleProgram.ub_SceneParams, 16);
         const d = template.mapUniformBufferF32(NfsParticleProgram.ub_SceneParams);
         offs += fillMatrix4x4(d, offs, viewerInput.camera.projectionMatrix);
@@ -265,37 +267,11 @@ export class NfsRenderer implements SceneGfx {
         const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
         const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
 
-        let shadowTargetID: GfxrRenderTargetID;
-        if(this.showShadows) {
-            const shadowPassDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, opaqueBlackFullClearRenderPassDescriptor);
-            shadowPassDesc.pixelFormat = GfxFormat.U16_RG_NORM;
-            const shadowPassDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, opaqueBlackFullClearRenderPassDescriptor);
-            shadowTargetID = builder.createRenderTargetID(shadowPassDesc, 'Shadows');
-            const shadowDepthTargetID = builder.createRenderTargetID(shadowPassDepthDesc, 'Shadows Depth');
-
-            builder.pushPass((pass) => {
-                pass.setDebugName("Shadows");
-                pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, shadowTargetID);
-                pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, shadowDepthTargetID);
-                pass.exec((passRenderer) => {
-                    this.renderInstListShadows.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
-                });
-            });
-            builder.pushDebugThumbnail(shadowTargetID);
-        }
-
         builder.pushPass((pass) => {
             pass.setDebugName('Main');
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
-            let shadowTexId: GfxrResolveTextureID;
-            if(this.showShadows) {
-                shadowTexId = builder.resolveRenderTarget(shadowTargetID);
-                pass.attachResolveTexture(shadowTexId);
-            }
             pass.exec((passRenderer, scope) => {
-                this.shadowPassTexture.gfxTexture = this.showShadows ? scope.getResolveTextureForID(shadowTexId) : null;
-                this.renderInstListMain.resolveLateSamplerBinding('shadow-map', this.shadowPassTexture);
                 this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
@@ -343,7 +319,7 @@ export class NfsRenderer implements SceneGfx {
         this.sortKeyTranslucent = makeSortKey(GfxRendererLayer.TRANSLUCENT);
         this.sortKeySky = makeSortKey(GfxRendererLayer.BACKGROUND);
 
-        template.setBindingLayouts([{ numUniformBuffers: 2, numSamplers: 4 }]);
+        template.setBindingLayouts([{ numUniformBuffers: 2, numSamplers: 3 }]);
         this.prepareToRenderShadows(viewerInput, cameraPos, instancesToRender);
         this.prepareToRender(viewerInput, cameraPos, instancesToRender);
         if(this.enableParticles)
@@ -398,14 +374,6 @@ export class NfsRenderer implements SceneGfx {
         };
         renderHacksPanel.contents.appendChild(showHidden.elem);
 
-        if(this.shadowsSupported) {
-            const showShadows = new UI.Checkbox('Enable shadows', this.showShadows);
-            showShadows.onchanged = () => {
-                this.showShadows = !this.showShadows;
-            };
-            renderHacksPanel.contents.appendChild(showShadows.elem);
-        }
-
         const enableParticles = new UI.Checkbox('Enable particle effects', this.enableParticles);
         enableParticles.onchanged = () => {
             this.enableParticles = !this.enableParticles;
@@ -428,7 +396,7 @@ export class NfsRenderer implements SceneGfx {
         renderHacksPanel.contents.appendChild(tintSlider.elem);
 
         const fogSlider = new UI.Slider();
-        fogSlider.setRange(0, 4, 0.1);
+        fogSlider.setRange(0, 1, 0.1);
         fogSlider.setLabel("Fog Intensity");
         fogSlider.onvalue = () => {
             this.fogIntensity = fogSlider.getValue();
@@ -443,7 +411,7 @@ export class NfsRenderer implements SceneGfx {
     public destroy(device: GfxDevice): void {
         this.renderHelper.destroy();
         this.map.destroy(device);
-        NfsParticleEmitter.destroy(device);        
+        NfsParticleEmitter.destroy(device);
     }
 }
 
@@ -473,23 +441,52 @@ layout(std140) uniform ub_ObjectParams {
     float u_FogIntensity;
 };
 
-uniform sampler2D u_Diffuse;
-uniform sampler2D u_Normal;
-uniform sampler2D u_Specular;
-uniform sampler2D u_Shadow;
+layout(binding=0) uniform sampler2D u_Diffuse;
+layout(binding=1) uniform sampler2D u_Normal;
+layout(binding=2) uniform sampler2D u_Specular;
 
+#define FogSunFalloff 0.0
+#define FogInLightScatter 10.0
+#define FogSkyColor vec3(0.27, 0.46, 1.0)
+#define FogSkyColorScale 1.0
+#define FogHazeColor vec3(0.18, 0.24, 0.37)
+#define FogHazeColorScale 0.1
 #define AmbientColor vec4(0.19, 0.24, 0.32, 4.0)
 #define DiffuseColor vec4(1.0, 0.8, 0.3, 1.0)
 #define SpecularColor vec3(0.32, 0.28, 0.22)
+#define FogDistanceScale 4.0
+#define SunDirection normalize(-vec3(0.565, -0.324, 0.7588))
+#define CloudIntensity 0.33
 #define SpecularPower 11.0
-#define SunDirection normalize(vec3(-0.665, 0.6, -0.445))
-#define SunHighlightBase vec3(0.213570565038984, 0.17809287890625, 0.135189822656088)
-#define SunHighlightFactor vec3(0.436663384570152, 0.46304148515625, 0.495696016405656)
-#define Fog_Br_Plus_Bm vec3(0.00007351, 0.00011792, 0.00023966)
 
 #define ShadowRange 2000.0
 #define ShadowBias 0.001
-#define CloudIntensity 0.33
+
+#define PI 3.14159265
+#define FOUR_PI (4.0 * PI)
+#define THREE_OVER_16_PI (3.0 / (16.0 * PI))
+
+${GfxShaderLibrary.MulNormalMatrix}
+${GfxShaderLibrary.saturate}
+
+vec3 toGameWorldSpace(vec3 v) {
+    vec3 c = v.xzy;
+    c.x = -c.x;
+    return c;
+}
+
+vec3 toTangentSpace(vec3 v, vec3 tangent, vec3 bitangent, vec3 normal) {
+    return vec3(dot(tangent, v), dot(bitangent, v),  dot(normal, v));
+}
+
+vec3 calcScatterCoefficient(vec3 vecToEye, vec3 Br, vec3 Bm, vec3 extinction) {
+    float cosTheta = dot(normalize(-SunDirection), normalize(vecToEye));
+    float g = FogSunFalloff;
+    float hazeScattering = pow(1.0 - g, 2.0) / (FOUR_PI * pow(1.0 + g * g - 2.0 * g * cosTheta, 1.5));
+    float airScattering = THREE_OVER_16_PI * (1.0 + cosTheta * cosTheta);
+    vec3 scatterCoeff = (Br * airScattering + Bm * hazeScattering) / (Br + Bm);
+    return saturate(scatterCoeff * (1.0 - extinction) * FogInLightScatter);
+}
 `;
 
     public override vert = `
@@ -497,156 +494,140 @@ layout(location = ${NfsProgram.a_Position}) in vec3 a_Position;
 layout(location = ${NfsProgram.a_UV}) in vec2 a_UV;
 layout(location = ${NfsProgram.a_Color}) in vec4 a_Color;
 layout(location = ${NfsProgram.a_Normal}) in vec3 a_Normal;
+#ifdef NORMALMAP
 layout(location = ${NfsProgram.a_Tangent}) in vec3 a_Tangent;
-
-out vec2 v_TexCoord;
-out vec2 v_TexCoord2;
-out vec3 v_Fog;
-out vec4 v_ColorA;
-out vec4 v_ColorB;
-out vec3 v_LightDir;
-out vec3 v_CameraDir;
-out vec3 v_AdditionalFog;
-out vec3 v_Specular;
-
-${GfxShaderLibrary.MulNormalMatrix}
-
-void main() {
-    vec4 worldPos = vec4(Mul(u_ObjectWorldMat, vec4(a_Position, 1.0)), 1.0);
-    gl_Position = Mul(u_WorldProjMat, worldPos);
-    vec3 position = worldPos.xyz / worldPos.w;
-    vec3 normal = MulNormalMatrix(u_ObjectWorldMat, a_Normal);
-    v_TexCoord = a_UV + u_uvOffset.xy;
-
-#ifdef SHADOW
-    v_ColorA = a_Color.bgra;
-    return;
 #endif
 
-    vec3 vecToEye = normalize(u_CameraPos.xyz - position);
-    float lightNormalDot = dot(normal, SunDirection);
-    float lightAmount = dot(SunDirection, vecToEye);
-    lightAmount = 1.0 + lightAmount * lightAmount;
+out vec2 v_UV0;
+out vec2 v_UV1;
+out vec3 v_Ambient;
+out vec3 v_Diffuse;
+out vec3 v_Scatter;
+out vec3 v_Extinction;
+out vec3 v_TangentLightVec;
+out vec3 v_TangentEyeVec;
+out float v_Gloss;
+out float v_Alpha;
 
-    vec3 sunHighlight = lightAmount * SunHighlightFactor + SunHighlightBase;
+void main() {
+    vec3 worldPos = Mul(u_ObjectWorldMat, vec4(a_Position, 1.0));
+    gl_Position = Mul(u_WorldProjMat, vec4(worldPos, 1.0));
+    vec3 worldPosGame = toGameWorldSpace(worldPos);
+
+    vec3 cameraPosWorld = toGameWorldSpace(u_CameraPos.xyz);
+    vec3 vecToEye = cameraPosWorld - worldPosGame;
+    vec3 normal = toGameWorldSpace(MulNormalMatrix(u_ObjectWorldMat, a_Normal));
+#ifdef NORMALMAP
+    vec3 tangent = toGameWorldSpace(MulNormalMatrix(u_ObjectWorldMat, a_Tangent));
+    vec3 bitangent = normalize(cross(normal, tangent));
+
+    vec3 tangentLightVec = toTangentSpace(-SunDirection, tangent, bitangent, normal);
+    v_TangentLightVec = normalize(tangentLightVec);
+
+    vec3 tangentEyeVec = toTangentSpace(vecToEye, tangent, bitangent, normal);
+    v_TangentEyeVec = normalize(tangentEyeVec);
+#endif
+
+#ifdef SKY
+    v_UV0 = a_UV;
+    v_UV0.x -= 0.4 * u_uvOffset.x;
+    v_UV1 = a_UV;
+    v_UV1.x -= 0.2 * u_uvOffset.x + 0.3;
+#else
+    v_UV0 = a_UV.xy + u_uvOffset;       // no offset for GLOSSY
+#endif
+
+#ifdef GLOSSYWINDOW
+    vec3 reflectedVec = reflect(-SunDirection, normal);
+    v_Gloss = pow(saturate(dot(-reflectedVec, normalize(vecToEye))), 10.0);
+#endif
+
+    vec3 BetaRayleigh = FogSkyColor * 0.0001 * (1.0 + 0.99 * FogSkyColorScale);
+    vec3 BetaMie = FogHazeColor * 0.0001 * (1.0 + 0.99 * FogHazeColorScale);
 
 #ifdef SKY
     float fogValue = 15000.0;
 #else
-    float distanceToEye = distance(u_CameraPos.xyz, position);
-    float fogValue = clamp(distanceToEye * u_FogIntensity, 0.0, 2500.0);
-#endif
-    vec3 fog = exp(-fogValue * Fog_Br_Plus_Bm);
-    v_Fog = clamp(sunHighlight * (1.0 - fog), 0.0, 1.0);
-
-    v_ColorA = vec4(AmbientColor.a * AmbientColor.rgb * a_Color.bgr, a_Color.a);
-
-    v_ColorB = clamp(lightNormalDot, 0.0, 1.0) * DiffuseColor;
-
-#ifdef NORMALMAP
-    vec3 tangent = normalize(Mul(_Mat4x4(u_ObjectWorldMat), vec4(a_Tangent, 0.0)).xyz);
-    vec3 bitangent = cross(normal, tangent);
-    v_LightDir = vec3(dot(SunDirection, tangent), dot(SunDirection, bitangent), lightNormalDot);
-    v_CameraDir = vec3(dot(vecToEye, tangent), dot(vecToEye, bitangent), dot(vecToEye, normal));
-    v_AdditionalFog = min(fog, 1.0);
-#else
-
-v_ColorA.xyz *= min(fog, 1.0);
-
+    float fogValue = length(vecToEye) * FogDistanceScale;
+    fogValue = clamp(fogValue, 0.0, 2500.0) * u_FogIntensity;
 #endif
 
-#ifdef GLOSSYWINDOW
-    v_ColorA.a = 1.0;
-
-    v_TexCoord2 = 0.5 * vec2(a_UV.x, a_UV.y);
-
-    vec3 lightDir = 2.0 * lightNormalDot * normal - SunDirection;
-    float glossiness = clamp(dot(lightDir, vecToEye), 0.0, 1.0);
-    v_Specular = vec3(pow(glossiness, 10.0));
-#endif
-
-#ifdef SKY
-    v_TexCoord = vec2(a_UV.x - 0.4 * u_uvOffset.x, a_UV.y);
-    v_TexCoord2 = vec2(a_UV.x - 0.2 * u_uvOffset.x - 0.3, a_UV.y);
-#endif
+    vec3 extinction = exp(fogValue * -(BetaRayleigh + BetaMie));
+    v_Scatter = calcScatterCoefficient(vecToEye, BetaRayleigh, BetaMie, extinction);
+    v_Extinction = min(extinction, 1.0);
+    v_Ambient = AmbientColor.a * AmbientColor.rgb * a_Color.bgr;
+    float lightAmount = saturate(dot(-SunDirection, normal));
+    v_Diffuse = lightAmount * DiffuseColor.rgb;
+    v_Alpha = a_Color.a;
 }
 `;
     public override frag = `
-in vec2 v_TexCoord;
-in vec2 v_TexCoord2;
-in vec3 v_Fog;
-in vec4 v_ColorA;
-in vec4 v_ColorB;
-in vec3 v_LightDir;
-in vec3 v_CameraDir;
-in vec3 v_AdditionalFog;
-in vec3 v_Specular;
+in vec2 v_UV0;
+in vec2 v_UV1;
+in vec3 v_Ambient;
+in vec3 v_Diffuse;
+in vec3 v_Scatter;
+in vec3 v_Extinction;
+in vec3 v_TangentLightVec;
+in vec3 v_TangentEyeVec;
+in float v_Gloss;
+in float v_Alpha;
 
 void main() {
+    vec3 finalColor = vec3(0.0);
+    vec4 diffuseTexVal = texture(SAMPLER_2D(u_Diffuse), v_UV0);
 
 #ifdef SKY
-    float cloudsA = texture(SAMPLER_2D(u_Diffuse), v_TexCoord).r;
-    float cloudsB = texture(SAMPLER_2D(u_Diffuse), v_TexCoord2).r;
+    float diffuseTexValA = diffuseTexVal.r;
+    float diffuseTexValC = texture(SAMPLER_2D(u_Diffuse), v_UV1).r;
 
-    float clouds = 2.0 * CloudIntensity * cloudsA * cloudsB;
-    gl_FragColor = vec4(clouds + (1.0 - clouds) * v_Fog, 1.0);
+    float diffAlphaA = diffuseTexValA;
+    float diffAlphaC = diffuseTexValC;
+
+    float cloudStrength = diffAlphaA * diffAlphaC * CloudIntensity * 2.0;
+    float clouds = (1.0 + diffuseTexValA) / 2.0;
+    gl_FragColor.rgb = cloudStrength * clouds + (1.0 - cloudStrength) * v_Scatter;
+    gl_FragColor.a = 1.0;
     return;
 #endif
-
-    vec4 diffuseTex = texture(SAMPLER_2D(u_Diffuse), v_TexCoord);
-
-#ifdef SHADOW
-    float linearDepth = 1.0 - (2.0 * gl_FragCoord.z - 1.0) / (1.0 - ShadowRange) / gl_FragCoord.w;
-    gl_FragColor.xy = vec2(linearDepth, 1.0 - (diffuseTex.a * v_ColorA.a * 0.7 * clamp(linearDepth * 10.0, 0.0, 1.0)));
-    return;
-#endif
-
-    // Shadow stuff
-    vec3 devCoords = gl_FragCoord.xyz / vec3(u_ViewportSize.x, -u_ViewportSize.y, 1.0) * vec3(1.0, -1.0, 1.0);
-    vec4 shadowTex = texture(SAMPLER_2D(u_Shadow), devCoords.xy);
-    float depth = (2.0 * gl_FragCoord.w - 1.0) / (1.0 - ShadowRange);
-    depth = 1.0 - depth / gl_FragCoord.w;
-    float shadowFactor = 1.0;
-    if(depth <= shadowTex.x + ShadowBias && shadowTex.x > 0.0) {
-        gl_FragColor.rgb = vec3(shadowTex.yyy);
-        shadowFactor = shadowTex.y;
-    }
-
-#ifdef ALPHA_TEST
-    if(diffuseTex.a <= 0.375)
-        discard;
-#endif
-    vec3 colorA = diffuseTex.rgb * v_ColorA.rgb;
 
 #ifdef NORMALMAP
-    vec4 normalTex = texture(SAMPLER_2D(u_Normal), v_TexCoord);
-    vec4 specularTex = texture(SAMPLER_2D(u_Specular), v_TexCoord);
+    vec3 normalTexVal = texture(SAMPLER_2D(u_Normal), v_UV0).rgb;
+    normalTexVal = normalize(2.0 * normalTexVal - 1.0);
+    vec3 specularTexVal = 2.0 * texture(SAMPLER_2D(u_Specular), v_UV0).rgb;
+    vec3 tangentLightVec = normalize(v_TangentLightVec);
+    vec3 tangentEyeVec = normalize(v_TangentEyeVec);
 
-    vec3 normal = normalize(2.0 * normalTex.rgb - 1.0);
+    vec3 reflectedLightVec = reflect(-tangentLightVec, normalTexVal);
+    float specularity = saturate(dot(reflectedLightVec, tangentEyeVec));
+    vec3 specular = pow(specularity, SpecularPower) * SpecularColor.rgb * specularTexVal;
+    finalColor += specular * v_Extinction.xyz;
 
-    vec3 lightDir = normalize(v_LightDir.xyz);
-    float lightAmount = dot(normal, lightDir);
-    lightDir = 2.0 * lightAmount * normal - lightDir;
-
-    vec3 camDir = normalize(v_CameraDir.xyz);
-    float specularAmount = clamp(dot(lightDir, camDir), 0.0, 1.0) * shadowFactor;
-    vec3 specularHighlight = pow(specularAmount, SpecularPower) * SpecularColor * specularTex.rgb;
-
-    vec3 colorB = max(lightAmount, 0.0) * diffuseTex.rgb * DiffuseColor.rgb + specularHighlight;
-    colorB = 2.0 * (colorA + colorB) * shadowFactor;
-    colorB *= v_AdditionalFog;
+    float lightAmount = saturate(dot(normalTexVal, tangentLightVec));
+    vec3 diffuse = lightAmount * DiffuseColor.rgb;
+    diffuse *= v_Extinction.xyz;
 #else
-    vec3 colorB = diffuseTex.rgb * v_ColorB.rgb;
-    colorB = 2.0 * (colorA + colorB) * shadowFactor;
+    vec3 diffuse = v_Diffuse;
 #endif
+
+    float alpha = diffuseTexVal.a * v_Alpha;
+#ifdef ALPHA_TEST
+    if(alpha <= 0.375)
+        discard;
+#endif
+
+    finalColor += diffuseTexVal.rgb * (v_Ambient * v_Extinction + diffuse);
+    finalColor *= 2.0;
+    finalColor += v_Scatter;
 
 #ifdef GLOSSYWINDOW
-    vec4 reflectionTexColor = texture(SAMPLER_2D(u_Normal), v_TexCoord2);
-    colorB = diffuseTex.a * (reflectionTexColor.rgb + 4.0 * v_Specular);
-    colorB += 2.0 * (colorA + diffuseTex.rgb * v_ColorB.rgb);
+    vec4 reflectedTexVal = texture(SAMPLER_2D(u_Normal), v_UV0 + 0.5);
+    finalColor += diffuseTexVal.a * (4.0 * v_Gloss + reflectedTexVal.rgb);
+    alpha = diffuseTexVal.a;
 #endif
 
-    gl_FragColor = vec4(colorB + v_Fog, diffuseTex.a * v_ColorA.a);
+    gl_FragColor.rgb = finalColor;
+    gl_FragColor.a = alpha;
 }
 `;
 }
