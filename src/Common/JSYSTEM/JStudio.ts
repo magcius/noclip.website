@@ -29,20 +29,20 @@ export namespace JStage {
     };
 
     export abstract class TObject {
-        JSGFDisableFlag(flag: number): void { this.JSGSetFlag(this.JSGGetFlag() & ~flag); }
-        JSGFEnableFlag(flag: number): void { this.JSGSetFlag(this.JSGGetFlag() | flag); }
+        public JSGFDisableFlag(flag: number): void { this.JSGSetFlag(this.JSGGetFlag() & ~flag); }
+        public JSGFEnableFlag(flag: number): void { this.JSGSetFlag(this.JSGGetFlag() | flag); }
 
-        abstract JSGFGetType(): number;
-        JSGGetName(): string | undefined { return undefined; }
-        JSGGetFlag(): number { return 0; }
-        JSGSetFlag(flag: number): void { }
-        JSGGetData(unk0: number, data: Object, unk1: number): boolean { return false; }
-        JSGSetData(id: number, data: DataView): void { }
-        JSGGetParent(parentDst: JStage.TObject, unk: { x: number }): void { }
-        JSGSetParent(parent: JStage.TObject | null, unk: number): void { }
-        JSGSetRelation(related: boolean, obj: JStage.TObject, unk: number): void { }
-        JSGFindNodeID(id: string): number { return -1; }
-        JSGGetNodeTransformation(nodeId: number, mtx: mat4): number {
+        public abstract JSGFGetType(): number;
+        public JSGGetName(): string | undefined { return undefined; }
+        public JSGGetFlag(): number { return 0; }
+        public JSGSetFlag(flag: number): void { }
+        public JSGGetData(unk0: number, data: Object, unk1: number): boolean { return false; }
+        public JSGSetData(id: number, data: DataView): void { }
+        public JSGGetParent(parentDst: JStage.TObject, unk: { x: number }): void { }
+        public JSGSetParent(parent: JStage.TObject | null, unk: number): void { }
+        public JSGSetRelation(related: boolean, obj: JStage.TObject, unk: number): void { }
+        public JSGFindNodeID(id: string): number { return -1; }
+        public JSGGetNodeTransformation(nodeId: number, mtx: mat4): number {
             mat4.identity(mtx);
             return 0;
         }
@@ -75,10 +75,10 @@ class TVariableValue {
     private updateParam: number | FVB.TFunctionValue | undefined;
     private outputFunc?: (val: number, adaptor: TAdaptor) => void;
 
-    getValue() { return this.value; }
-    getValueU8() { return clamp(this.value, 0, 255); }
+    public getValue() { return this.value; }
+    public getValueU8() { return clamp(this.value, 0, 255); }
 
-    forward(frameCount: number) {
+    public forward(frameCount: number) {
         if (Number.MAX_VALUE - this.age <= frameCount) {
             this.age = Number.MAX_VALUE;
         } else {
@@ -86,7 +86,7 @@ class TVariableValue {
         }
     }
 
-    update(secondsPerFrame: number, adaptor: TAdaptor): void {
+    public update(secondsPerFrame: number, adaptor: TAdaptor): void {
         if (this.updateFunc) {
             this.updateFunc(this, secondsPerFrame);
             if (this.outputFunc) this.outputFunc(this.value, adaptor);
@@ -120,7 +120,7 @@ class TVariableValue {
     }
 
     // Value will be set only on next update 
-    setValue_immediate(v: number): void {
+    public setValue_immediate(v: number): void {
         assert(v !== undefined);
         this.updateFunc = TVariableValue.update_immediate;
         this.age = 0;
@@ -128,7 +128,7 @@ class TVariableValue {
     }
 
     // Value will be set to (mAge * v * x) each frame
-    setValue_time(v: number): void {
+    public setValue_time(v: number): void {
         assert(v !== undefined);
         this.updateFunc = TVariableValue.update_time;
         this.age = 0;
@@ -136,7 +136,7 @@ class TVariableValue {
     }
 
     // Value will be the result of a Function Value each frame
-    setValue_functionValue(v?: FVB.TFunctionValue): void {
+    public setValue_functionValue(v?: FVB.TFunctionValue): void {
         assert(v !== undefined);
         this.updateFunc = TVariableValue.update_functionValue;
         this.age = 0;
@@ -146,7 +146,7 @@ class TVariableValue {
     //--------------------
     // Set Output
     //--------------------
-    setOutput(outputFunc?: (val: number, adaptor: TAdaptor) => void) {
+    public setOutput(outputFunc?: (val: number, adaptor: TAdaptor) => void) {
         this.outputFunc = outputFunc;
     }
 }
@@ -231,14 +231,14 @@ abstract class TAdaptor {
         public enableLogging = true,
     ) { }
 
-    abstract adaptor_do_prepare(obj: STBObject): void;
-    abstract adaptor_do_begin(obj: STBObject): void;
-    abstract adaptor_do_end(obj: STBObject): void;
-    abstract adaptor_do_update(obj: STBObject, frameCount: number): void;
-    abstract adaptor_do_data(obj: STBObject, id: number, data: DataView): void;
+    public abstract adaptor_do_prepare(obj: STBObject): void;
+    public abstract adaptor_do_begin(obj: STBObject): void;
+    public abstract adaptor_do_end(obj: STBObject): void;
+    public abstract adaptor_do_update(obj: STBObject, frameCount: number): void;
+    public abstract adaptor_do_data(obj: STBObject, id: number, data: DataView): void;
 
     // Set a single VariableValue update function, with the option of using FuncVals 
-    adaptor_setVariableValue(obj: STBObject, keyIdx: number, dataOp: EDataOp, data: DataVal) {
+    public adaptor_setVariableValue(obj: STBObject, keyIdx: number, dataOp: EDataOp, data: DataVal) {
         const varval = this.variableValues[keyIdx];
         const control = obj.control;
 
@@ -256,21 +256,21 @@ abstract class TAdaptor {
     }
 
     // Immediately set 3 consecutive VariableValue update functions from a single vec3
-    adaptor_setVariableValue_Vec(startKeyIdx: number, data: vec3) {
+    public adaptor_setVariableValue_Vec(startKeyIdx: number, data: vec3) {
         this.variableValues[startKeyIdx + 0].setValue_immediate(data[0]);
         this.variableValues[startKeyIdx + 1].setValue_immediate(data[1]);
         this.variableValues[startKeyIdx + 2].setValue_immediate(data[2]);
     }
 
     // Get the current value of 3 consecutive VariableValues, as a vector. E.g. Camera position.
-    adaptor_getVariableValue_Vec(dst: vec3, startKeyIdx: number) {
+    public adaptor_getVariableValue_Vec(dst: vec3, startKeyIdx: number) {
         dst[0] = this.variableValues[startKeyIdx + 0].getValue();
         dst[1] = this.variableValues[startKeyIdx + 1].getValue();
         dst[2] = this.variableValues[startKeyIdx + 2].getValue();
     }
 
     // Immediately set 4 consecutive VariableValue update functions from a single GXColor (4 bytes)
-    adaptor_setVariableValue_GXColor(startKeyIdx: number, data: GfxColor) {
+    public adaptor_setVariableValue_GXColor(startKeyIdx: number, data: GfxColor) {
         debugger; // @TODO: Confirm that all uses of this always have consecutive keyIdxs. JStudio remaps them.
         this.variableValues[startKeyIdx + 0].setValue_immediate(data.r);
         this.variableValues[startKeyIdx + 1].setValue_immediate(data.g);
@@ -279,14 +279,14 @@ abstract class TAdaptor {
     }
 
     // Get the current value of 4 consecutive VariableValues, as a GXColor. E.g. Fog color.
-    adaptor_getVariableValue_GXColor(dst: GfxColor, startKeyIdx: number) {
+    public adaptor_getVariableValue_GXColor(dst: GfxColor, startKeyIdx: number) {
         dst.r = this.variableValues[startKeyIdx + 0].getValue();
         dst.g = this.variableValues[startKeyIdx + 1].getValue();
         dst.b = this.variableValues[startKeyIdx + 2].getValue();
         dst.a = this.variableValues[startKeyIdx + 2].getValue();
     }
 
-    adaptor_updateVariableValue(obj: STBObject, frameCount: number) {
+    public adaptor_updateVariableValue(obj: STBObject, frameCount: number) {
         const control = obj.control;
         for (let vv of this.variableValues) {
             vv.forward(frameCount);
@@ -294,7 +294,7 @@ abstract class TAdaptor {
         }
     }
 
-    log(msg: string) {
+    public log(msg: string) {
         if (this.enableLogging) { console.debug(`[${this.object.JSGGetName()}] ${msg}`); }
     }
 }
@@ -335,23 +335,23 @@ abstract class STBObject {
     }
 
     // These are intended to be overridden by subclasses 
-    abstract do_paragraph(file: Reader, dataSize: number, dataOffset: number, param: number): void;
-    do_begin() { if (this.adaptor) this.adaptor.adaptor_do_begin(this); }
-    do_end() { if (this.adaptor) this.adaptor.adaptor_do_end(this); }
+    public abstract do_paragraph(file: Reader, dataSize: number, dataOffset: number, param: number): void;
+    public do_begin() { if (this.adaptor) this.adaptor.adaptor_do_begin(this); }
+    public do_end() { if (this.adaptor) this.adaptor.adaptor_do_end(this); }
 
     // Done updating this frame. Compute our variable data (i.e. interpolate) and send to the game object.
-    do_wait(frameCount: number) {
+    public do_wait(frameCount: number) {
         if (this.adaptor) this.adaptor.adaptor_updateVariableValue(this, frameCount);
         if (this.adaptor) this.adaptor.adaptor_do_update(this, frameCount);
     }
-    do_data(id: number, data: DataView) { if (this.adaptor) this.adaptor.adaptor_do_data(this, id, data); }
+    public do_data(id: number, data: DataView) { if (this.adaptor) this.adaptor.adaptor_do_data(this, id, data); }
 
-    getStatus() { return this.status; }
-    getSuspendFrames(): number { return this.suspendFrames; }
-    isSuspended(): boolean { return this.suspendFrames > 0; }
-    setSuspend(frameCount: number) { this.suspendFrames = frameCount; }
+    public getStatus() { return this.status; }
+    public getSuspendFrames(): number { return this.suspendFrames; }
+    public isSuspended(): boolean { return this.suspendFrames > 0; }
+    public setSuspend(frameCount: number) { this.suspendFrames = frameCount; }
 
-    reset(blockObj: TBlockObject) {
+    public reset(blockObj: TBlockObject) {
         this.sequence = 0;
         this.status = EStatus.Still;
         this.sequenceNext = 0xC + align(blockObj.id.length + 1, 4);
@@ -359,7 +359,7 @@ abstract class STBObject {
         this.wait = 0;
     }
 
-    forward(frameCount: number): boolean {
+    public forward(frameCount: number): boolean {
         let hasWaited = false;
         while (true) {
             // Top bit of mFlags makes this object immediately inactive, restarting any existing sequence
@@ -524,7 +524,7 @@ class TControlObject extends STBObject {
         super(control)
     }
 
-    override do_paragraph(file: Reader, dataSize: number, dataOffset: number, param: number): void { }
+    public override do_paragraph(file: Reader, dataSize: number, dataOffset: number, param: number): void { }
 }
 
 
@@ -570,27 +570,27 @@ function keyToString(enumValue: EActorTrack, count: number) {
 }
 
 export abstract class TActor extends JStage.TObject {
-    JSGFGetType() { return JStage.EObject.Actor; }
-    JSGGetTranslation(dst: vec3) { }
-    JSGSetTranslation(src: ReadonlyVec3) { }
-    JSGGetScaling(dst: vec3) { }
-    JSGSetScaling(src: ReadonlyVec3) { }
-    JSGGetRotation(dst: vec3) { }
-    JSGSetRotation(src: ReadonlyVec3) { }
-    JSGGetShape(): number { return -1; }
-    JSGSetShape(x: number): void { }
-    JSGGetAnimation(): number { return -1; }
-    JSGSetAnimation(x: number): void { }
-    JSGGetAnimationFrame(): number { return 0.0; }
-    JSGSetAnimationFrame(x: number): void { }
-    JSGGetAnimationFrameMax(): number { return 0.0; }
-    JSGGetAnimationTransition(): number { return 0.0; }
-    JSGSetAnimationTransition(x: number): void { }
-    JSGGetTextureAnimation(): number { return -1; }
-    JSGSetTextureAnimation(x: number): void { }
-    JSGGetTextureAnimationFrame(): number { return 0.0; }
-    JSGSetTextureAnimationFrame(x: number): void { }
-    JSGGetTextureAnimationFrameMax(): number { return 0.0; }
+    public JSGFGetType() { return JStage.EObject.Actor; }
+    public JSGGetTranslation(dst: vec3) { }
+    public JSGSetTranslation(src: ReadonlyVec3) { }
+    public JSGGetScaling(dst: vec3) { }
+    public JSGSetScaling(src: ReadonlyVec3) { }
+    public JSGGetRotation(dst: vec3) { }
+    public JSGSetRotation(src: ReadonlyVec3) { }
+    public JSGGetShape(): number { return -1; }
+    public JSGSetShape(x: number): void { }
+    public JSGGetAnimation(): number { return -1; }
+    public JSGSetAnimation(x: number): void { }
+    public JSGGetAnimationFrame(): number { return 0.0; }
+    public JSGSetAnimationFrame(x: number): void { }
+    public JSGGetAnimationFrameMax(): number { return 0.0; }
+    public JSGGetAnimationTransition(): number { return 0.0; }
+    public JSGSetAnimationTransition(x: number): void { }
+    public JSGGetTextureAnimation(): number { return -1; }
+    public JSGSetTextureAnimation(x: number): void { }
+    public JSGGetTextureAnimationFrame(): number { return 0.0; }
+    public JSGSetTextureAnimationFrame(x: number): void { }
+    public JSGGetTextureAnimationFrameMax(): number { return 0.0; }
 }
 
 class TActorAdaptor extends TAdaptor {
@@ -618,7 +618,7 @@ class TActorAdaptor extends TAdaptor {
         return frame;
     }
 
-    adaptor_do_prepare(obj: STBObject): void {
+    public adaptor_do_prepare(obj: STBObject): void {
         this.variableValues[EActorTrack.AnimTransition].setOutput(this.object.JSGSetAnimationTransition.bind(this.object));
 
         this.variableValues[EActorTrack.AnimFrame].setOutput((frame: number, adaptor: TAdaptor) => {
@@ -632,7 +632,7 @@ class TActorAdaptor extends TAdaptor {
         });
     }
 
-    adaptor_do_begin(obj: STBObject): void {
+    public adaptor_do_begin(obj: STBObject): void {
         this.object.JSGFEnableFlag(1);
 
         const pos = scratchVec3a;
@@ -656,11 +656,11 @@ class TActorAdaptor extends TAdaptor {
         this.variableValues[EActorTrack.AnimFrame].setValue_immediate(this.object.JSGGetTextureAnimationFrame());
     }
 
-    adaptor_do_end(obj: STBObject): void {
+    public adaptor_do_end(obj: STBObject): void {
         this.object.JSGFDisableFlag(1);
     }
 
-    adaptor_do_update(obj: STBObject, frameCount: number): void {
+    public adaptor_do_update(obj: STBObject, frameCount: number): void {
         const pos = scratchVec3a;
         const rot = scratchVec3b;
         const scale = scratchVec3c;
@@ -678,18 +678,18 @@ class TActorAdaptor extends TAdaptor {
         this.object.JSGSetScaling(scale);
     }
 
-    adaptor_do_data(obj: STBObject, id: number, data: DataView): void {
+    public adaptor_do_data(obj: STBObject, id: number, data: DataView): void {
         this.log(`SetData: ${id}`);
         this.object.JSGSetData(id, data);
     }
 
-    adaptor_do_PARENT(dataOp: EDataOp, data: DataVal, dataSize: number): void {
+    public adaptor_do_PARENT(dataOp: EDataOp, data: DataVal, dataSize: number): void {
         assert(dataOp == EDataOp.ObjectName);
         this.log(`SetParent: ${data.asStr}`);
         this.parent = this.system.JSGFindObject(data.asStr!, JStage.EObject.PreExistingActor);
     }
 
-    adaptor_do_PARENT_NODE(dataOp: EDataOp, data: DataVal, dataSize: number): void {
+    public adaptor_do_PARENT_NODE(dataOp: EDataOp, data: DataVal, dataSize: number): void {
         debugger;
         this.log(`SetParentNode: ${data}`);
         switch (dataOp) {
@@ -704,20 +704,20 @@ class TActorAdaptor extends TAdaptor {
         }
     }
 
-    adaptor_do_PARENT_ENABLE(dataOp: EDataOp, data: number, dataSize: number): void {
+    public adaptor_do_PARENT_ENABLE(dataOp: EDataOp, data: number, dataSize: number): void {
         assert(dataOp == EDataOp.Immediate);
         this.log(`SetParentEnable: ${data}`);
         if (data) { this.object.JSGSetParent(this.parent!, this.parentNodeID); }
         else { this.object.JSGSetParent(null, 0xFFFFFFFF); }
     }
 
-    adaptor_do_RELATION(dataOp: EDataOp, data: DataVal, dataSize: number): void {
+    public adaptor_do_RELATION(dataOp: EDataOp, data: DataVal, dataSize: number): void {
         assert(dataOp == EDataOp.ObjectName);
         this.log(`SetRelation: ${data.asStr!}`);
         this.relation = this.system.JSGFindObject(data.asStr!, JStage.EObject.PreExistingActor);
     }
 
-    adaptor_do_RELATION_NODE(dataOp: EDataOp, data: DataVal, dataSize: number): void {
+    public adaptor_do_RELATION_NODE(dataOp: EDataOp, data: DataVal, dataSize: number): void {
         debugger;
         this.log(`SetRelationNode: ${data}`);
         switch (dataOp) {
@@ -732,37 +732,37 @@ class TActorAdaptor extends TAdaptor {
         }
     }
 
-    adaptor_do_RELATION_ENABLE(dataOp: EDataOp, data: number, dataSize: number): void {
+    public adaptor_do_RELATION_ENABLE(dataOp: EDataOp, data: number, dataSize: number): void {
         assert(dataOp == EDataOp.Immediate);
         this.log(`SetRelationEnable: ${data}`);
         this.object.JSGSetRelation(!!data, this.relation!, this.relationNodeID);
     }
 
-    adaptor_do_SHAPE(dataOp: EDataOp, data: DataVal, dataSize: number): void {
+    public adaptor_do_SHAPE(dataOp: EDataOp, data: DataVal, dataSize: number): void {
         assert(dataOp == EDataOp.ObjectIdx);
         this.log(`SetShape: ${data.asInt!}`);
         this.object.JSGSetShape(data.asInt!);
     }
 
-    adaptor_do_ANIMATION(dataOp: EDataOp, data: DataVal, dataSize: number): void {
+    public adaptor_do_ANIMATION(dataOp: EDataOp, data: DataVal, dataSize: number): void {
         assert(dataOp == EDataOp.ObjectIdx);
         this.log(`SetAnimation: ${(data.asInt!) & 0xFFFF} (${(data.asInt!) >> 4 & 0x01})`);
         this.object.JSGSetAnimation(data.asInt!);
     }
 
-    adaptor_do_ANIMATION_MODE(dataOp: EDataOp, data: DataVal, dataSize: number): void {
+    public adaptor_do_ANIMATION_MODE(dataOp: EDataOp, data: DataVal, dataSize: number): void {
         assert(dataOp == EDataOp.Immediate);
         this.log(`SetAnimationMode: ${data.asInt!}`);
         this.animMode = data.asInt!;
     }
 
-    adaptor_do_TEXTURE_ANIMATION(dataOp: EDataOp, data: DataVal, dataSize: number): void {
+    public adaptor_do_TEXTURE_ANIMATION(dataOp: EDataOp, data: DataVal, dataSize: number): void {
         assert(dataOp == EDataOp.ObjectIdx);
         this.log(`SetTexAnim: ${data}`);
         this.object.JSGSetTextureAnimation(data.asInt!);
     }
 
-    adaptor_do_TEXTURE_ANIMATION_MODE(dataOp: EDataOp, data: DataVal, dataSize: number): void {
+    public adaptor_do_TEXTURE_ANIMATION_MODE(dataOp: EDataOp, data: DataVal, dataSize: number): void {
         assert(dataOp == EDataOp.Immediate);
         this.log(`SetTexAnimMode: ${data}`);
         this.animTexMode = data.asInt!;
@@ -778,7 +778,7 @@ class TActorObject extends STBObject {
         stageObj: JStage.TObject,
     ) { super(control, blockObj, new TActorAdaptor(control.system, stageObj as TActor)) }
 
-    override do_paragraph(file: Reader, dataSize: number, dataOffset: number, param: number): void {
+    public override do_paragraph(file: Reader, dataSize: number, dataOffset: number, param: number): void {
         const dataOp = (param & 0x1F) as EDataOp;
         const cmdType = param >> 5;
 
@@ -892,29 +892,29 @@ function camKeyToString(enumValue: ECameraTrack, count: number) {
 }
 
 export abstract class TCamera extends JStage.TObject {
-    JSGFGetType() { return JStage.EObject.Camera; }
-    JSGGetProjectionType() { return true; }
-    JSGSetProjectionType(type: number) { }
-    JSGGetProjectionNear() { return 0.0; }
-    JSGSetProjectionNear(near: number) { }
-    JSGGetProjectionFar() { return Number.MAX_VALUE; }
-    JSGSetProjectionFar(far: number) { }
-    JSGGetProjectionFovy() { return 0.0 };
-    JSGSetProjectionFovy(fovy: number) { };
-    JSGGetProjectionAspect() { return 0.0 };
-    JSGSetProjectionAspect(aspect: number) { };
-    JSGGetProjectionField() { return 0.0 };
-    JSGSetProjectionField(field: number) { };
-    JSGGetViewType() { return true; };
-    JSGSetViewType(type: number) { }
-    JSGGetViewPosition(dst: vec3) { vec3.zero(dst); }
-    JSGSetViewPosition(v: ReadonlyVec3) { }
-    JSGGetViewUpVector(dst: vec3) { vec3.zero(dst); }
-    JSGSetViewUpVector(v: ReadonlyVec3) { }
-    JSGGetViewTargetPosition(dst: vec3) { vec3.zero(dst); }
-    JSGSetViewTargetPosition(v: ReadonlyVec3) { }
-    JSGGetViewRoll() { return 0.0 };
-    JSGSetViewRoll(roll: number) { };
+    public JSGFGetType() { return JStage.EObject.Camera; }
+    public JSGGetProjectionType() { return true; }
+    public JSGSetProjectionType(type: number) { }
+    public JSGGetProjectionNear() { return 0.0; }
+    public JSGSetProjectionNear(near: number) { }
+    public JSGGetProjectionFar() { return Number.MAX_VALUE; }
+    public JSGSetProjectionFar(far: number) { }
+    public JSGGetProjectionFovy() { return 0.0 };
+    public JSGSetProjectionFovy(fovy: number) { };
+    public JSGGetProjectionAspect() { return 0.0 };
+    public JSGSetProjectionAspect(aspect: number) { };
+    public JSGGetProjectionField() { return 0.0 };
+    public JSGSetProjectionField(field: number) { };
+    public JSGGetViewType() { return true; };
+    public JSGSetViewType(type: number) { }
+    public JSGGetViewPosition(dst: vec3) { vec3.zero(dst); }
+    public JSGSetViewPosition(v: ReadonlyVec3) { }
+    public JSGGetViewUpVector(dst: vec3) { vec3.zero(dst); }
+    public JSGSetViewUpVector(v: ReadonlyVec3) { }
+    public JSGGetViewTargetPosition(dst: vec3) { vec3.zero(dst); }
+    public JSGSetViewTargetPosition(v: ReadonlyVec3) { }
+    public JSGGetViewRoll() { return 0.0 };
+    public JSGSetViewRoll(roll: number) { };
 }
 
 class TCameraAdaptor extends TAdaptor {
@@ -922,14 +922,14 @@ class TCameraAdaptor extends TAdaptor {
         override object: TCamera
     ) { super(11); }
 
-    adaptor_do_prepare(obj: STBObject): void {
+    public adaptor_do_prepare(obj: STBObject): void {
         this.variableValues[ECameraTrack.FovY].setOutput(this.object.JSGSetProjectionFovy.bind(this.object));
         this.variableValues[ECameraTrack.Roll].setOutput(this.object.JSGSetViewRoll.bind(this.object));
         this.variableValues[ECameraTrack.DistNear].setOutput(this.object.JSGSetProjectionNear.bind(this.object));
         this.variableValues[ECameraTrack.DistFar].setOutput(this.object.JSGSetProjectionFar.bind(this.object));
     }
 
-    adaptor_do_begin(obj: STBObject): void {
+    public adaptor_do_begin(obj: STBObject): void {
         const camPos = scratchVec3a;
         const targetPos = scratchVec3b;
         this.object.JSGGetViewPosition(camPos);
@@ -946,11 +946,11 @@ class TCameraAdaptor extends TAdaptor {
         this.variableValues[ECameraTrack.DistFar].setValue_immediate(this.object.JSGGetProjectionFar());
     }
 
-    adaptor_do_end(obj: STBObject): void {
+    public adaptor_do_end(obj: STBObject): void {
         this.object.JSGFDisableFlag(1);
     }
 
-    adaptor_do_update(obj: STBObject, frameCount: number): void {
+    public adaptor_do_update(obj: STBObject, frameCount: number): void {
         const camPos = scratchVec3a;
         const targetPos = scratchVec3b;
 
@@ -964,21 +964,21 @@ class TCameraAdaptor extends TAdaptor {
         this.object.JSGSetViewTargetPosition(targetPos);
     }
 
-    adaptor_do_data(obj: STBObject, id: number, data: DataView): void {
+    public adaptor_do_data(obj: STBObject, id: number, data: DataView): void {
         // This is not used by TWW. Untested.
         debugger;
     }
 
     // Custom adaptor functions. These can be called from within TCameraObject::do_paragraph()
-    adaptor_do_PARENT(dataOp: EDataOp, data: number | string, unk0: number): void {
+    public adaptor_do_PARENT(dataOp: EDataOp, data: number | string, unk0: number): void {
         debugger;
     }
 
-    adaptor_do_PARENT_NODE(dataOp: EDataOp, data: number | string, unk0: number): void {
+    public adaptor_do_PARENT_NODE(dataOp: EDataOp, data: number | string, unk0: number): void {
         debugger;
     }
 
-    adaptor_do_PARENT_ENABLE(dataOp: EDataOp, data: number | string, unk0: number): void {
+    public adaptor_do_PARENT_ENABLE(dataOp: EDataOp, data: number | string, unk0: number): void {
         debugger;
     }
 }
@@ -990,7 +990,7 @@ class TCameraObject extends STBObject {
         stageObj: JStage.TObject,
     ) { super(control, blockObj, new TCameraAdaptor(stageObj as TCamera)) }
 
-    override do_paragraph(file: Reader, dataSize: number, dataOffset: number, param: number): void {
+    public override do_paragraph(file: Reader, dataSize: number, dataOffset: number, param: number): void {
         const dataOp = (param & 0x1F) as EDataOp;
         const cmdType = param >> 5;
 
@@ -1058,7 +1058,7 @@ class TParagraph {
     dataOffset: number;
     nextOffset: number;
 
-    static parse(view: DataView, byteIdx: number): TParagraph {
+    public static parse(view: DataView, byteIdx: number): TParagraph {
         // The top bit of the paragraph determines if the type and size are 16 bit (if set), or 32 (if not set)
         let dataSize = view.getUint16(byteIdx);
         let type;
@@ -1129,15 +1129,15 @@ namespace FVB {
         protected refer?: Attribute.Refer;
         protected interpolate?: Attribute.Interpolate;
 
-        abstract getType(): EFuncValType;
-        abstract prepare(): void;
-        abstract getValue(arg: number): number;
+        public abstract getType(): EFuncValType;
+        public abstract prepare(): void;
+        public abstract getValue(arg: number): number;
 
-        getAttrRange() { return this.range; }
-        getAttrRefer() { return this.refer; }
-        getAttrInterpolate() { return this.interpolate; }
+        public getAttrRange() { return this.range; }
+        public getAttrRefer() { return this.refer; }
+        public getAttrInterpolate() { return this.interpolate; }
 
-        static toFunction_outside(type: EExtrapolationType): (frame: number, maxFrame: number) => number {
+        public static toFunction_outside(type: EExtrapolationType): (frame: number, maxFrame: number) => number {
             switch (type) {
                 case EExtrapolationType.Raw: return (f, m) => f;
                 case EExtrapolationType.Repeat: return (f, m) => { f = f % m; return f < 0 ? f + m : f; }
@@ -1159,9 +1159,9 @@ namespace FVB {
             this.id = block.id;
         }
 
-        abstract prepare_data(para: TParagraph, control: TControl, file: Reader): void;
+        public abstract prepare_data(para: TParagraph, control: TControl, file: Reader): void;
 
-        prepare(block: TBlock, pControl: TControl, file: Reader) {
+        public prepare(block: TBlock, pControl: TControl, file: Reader) {
             const blockNext = file.offset + block.size;
             file.offset = blockNext;
 
@@ -1328,18 +1328,18 @@ namespace FVB {
             private progress: number = 0;
             private adjust: number = 0;
 
-            prepare() {
+            public prepare() {
                 // Progress updated here
             }
 
-            set(begin: number, end: number) {
+            public set(begin: number, end: number) {
                 this.begin = begin;
                 this.end = end;
                 this.diff = end - begin;
                 assert(this.diff >= 0);
             }
 
-            getParameter(time: number, startTime: number, endTime: number): number {
+            public getParameter(time: number, startTime: number, endTime: number): number {
                 // @NOTE: Does not currently support, Progress, Adjust, or Outside modifications. These can only be set
                 //        in an FVB paragraph, so attempt to set them will be caught in FVB.TObject.prepare().
                 return time;
@@ -1352,15 +1352,15 @@ namespace FVB {
 
         export class Interpolate {
             private type = EInterpolateType.None;
-            prepare() { }
-            set(type: EInterpolateType) { this.type = type; }
-            get() { return this.type; }
+            public prepare() { }
+            public set(type: EInterpolateType) { this.type = type; }
+            public get() { return this.type; }
 
-            static Linear(t: number, t0: number, v0: number, t1: number, v1: number) {
+            public static Linear(t: number, t0: number, v0: number, t1: number, v1: number) {
                 return v0 + ((v1 - v0) * (t - t0)) / (t1 - t0);
             }
 
-            static BSpline_Nonuniform(t: number, controlPoints: Float64Array, knotVector: Float64Array) {
+            public static BSpline_Nonuniform(t: number, controlPoints: Float64Array, knotVector: Float64Array) {
                 const knot0 = knotVector[0];
                 const knot1 = knotVector[1];
                 const knot2 = knotVector[2];
@@ -1387,7 +1387,7 @@ namespace FVB {
                 return (term1 * controlPoints[0]) + (term2 * controlPoints[1]) + (term3 * controlPoints[2]) + (term4 * controlPoints[3]);
             }
 
-            static Hermite(c0: number, c1: number, x: number, c2: number, x2: number, c3: number, x3: number) {
+            public static Hermite(c0: number, c1: number, x: number, c2: number, x2: number, c3: number, x3: number) {
                 let a: number;
                 let b: number;
                 let c: number;
@@ -1413,7 +1413,7 @@ namespace FVB {
     class TObject_Constant extends FVB.TObject {
         override funcVal = new FunctionValue_Constant;
 
-        override prepare_data(para: TParagraph, control: TControl, file: Reader): void {
+        public override prepare_data(para: TParagraph, control: TControl, file: Reader): void {
             assert(para.dataSize == 4);
             const value = file.view.getFloat32(para.dataOffset);
             this.funcVal.setData(value);
@@ -1423,10 +1423,10 @@ namespace FVB {
     class FunctionValue_Constant extends TFunctionValue {
         private value: number = 0;
 
-        getType() { return EFuncValType.Constant; }
-        prepare() { }
-        setData(value: number) { this.value = value; }
-        getValue(timeSec: number) {
+        public getType() { return EFuncValType.Constant; }
+        public prepare() { }
+        public setData(value: number) { this.value = value; }
+        public getValue(timeSec: number) {
             return this.value;
         }
     }
@@ -1438,7 +1438,7 @@ namespace FVB {
     class TObject_ListParameter extends FVB.TObject {
         override funcVal = new FunctionValue_ListParameter;
 
-        override prepare_data(para: TParagraph, control: TControl, file: Reader): void {
+        public override prepare_data(para: TParagraph, control: TControl, file: Reader): void {
             assert(para.dataSize >= 8);
             // Each Key contains 2 floats, a time and value
             const keyCount = file.view.getUint32(para.dataOffset + 0);
@@ -1456,7 +1456,7 @@ namespace FVB {
         private curKeyIdx: number;
         private interpFunc: (t: number) => number;
 
-        prepare(): void {
+        public prepare(): void {
             this.range.prepare();
             this.interpolate.prepare();
 
@@ -1476,18 +1476,18 @@ namespace FVB {
             }
         }
 
-        setData(values: Float32Array) {
+        public setData(values: Float32Array) {
             this.keys = values;
             this.keyCount = values.length / 2;
             this.curKeyIdx = 0;
         }
 
-        getType() { return EFuncValType.ListParameter; }
-        getStartTime() { return this.keys[0]; }
-        getEndTime(): number { return this.keys[this.keys.length - 2]; }
+        public getType() { return EFuncValType.ListParameter; }
+        public getStartTime() { return this.keys[0]; }
+        public getEndTime(): number { return this.keys[this.keys.length - 2]; }
 
         // Interpolate between our keyframes, given the current time
-        getValue(timeSec: number): number {
+        public getValue(timeSec: number): number {
             // Remap (if requested) the time to our range
             const t = this.range.getParameter(timeSec, this.getStartTime(), this.getEndTime());
 
@@ -1510,7 +1510,7 @@ namespace FVB {
             return value;
         }
 
-        interpolateBSpline(t: number): number {
+        public interpolateBSpline(t: number): number {
             const c = this.curKeyIdx * 2;
 
             const controlPoints = new Float64Array(4);
@@ -1588,18 +1588,18 @@ namespace FVB {
             return Attribute.Interpolate.BSpline_Nonuniform(t, controlPoints, knotVector);
         }
 
-        interpolateNone(t: number) {
+        public interpolateNone(t: number) {
             debugger; // Untested. Remove after confirmed working.
             return this.keys[this.curKeyIdx];
         }
 
-        interpolateLinear(t: number) {
+        public interpolateLinear(t: number) {
             const ks = this.keys;
             const c = this.curKeyIdx * 2;
             return Attribute.Interpolate.Linear(t, ks[c - 2], ks[c - 1], ks[c + 0], ks[c + 1]);
         }
 
-        interpolatePlateau(t: number) {
+        public interpolatePlateau(t: number) {
             console.error('Plateau interpolation not yet implemented')
             debugger; // Untested. Remove after confirmed working.
             return this.interpolateNone(t);
@@ -1625,7 +1625,7 @@ namespace FVB {
     class TObject_Composite extends FVB.TObject {
         override funcVal = new FunctionValue_Composite;
 
-        override prepare_data(para: TParagraph, control: TControl, file: Reader): void {
+        public override prepare_data(para: TParagraph, control: TControl, file: Reader): void {
             assert(para.dataSize >= 8);
 
             const compositeOp = file.view.getUint32(para.dataOffset + 0);
@@ -1654,14 +1654,14 @@ namespace FVB {
     class FunctionValue_Composite extends TFunctionValue {
         protected override refer = new Attribute.Refer();
 
-        override prepare(): void { }
-        override getType(): EFuncValType { return EFuncValType.Composite; }
-        setData(func: (ref: TFunctionValue[], dataVal: number, t: number) => number, dataVal: number) {
+        public override prepare(): void { }
+        public override getType(): EFuncValType { return EFuncValType.Composite; }
+        public setData(func: (ref: TFunctionValue[], dataVal: number, t: number) => number, dataVal: number) {
             this.func = func;
             this.dataVal = dataVal;
         }
 
-        getValue(timeSec: number): number {
+        public getValue(timeSec: number): number {
             return this.func(this.refer.fvs, this.dataVal, timeSec);
         }
 
@@ -1713,7 +1713,6 @@ namespace FVB {
             return val / dataVal;
         }
 
-
         private func: (ref: TFunctionValue[], dataVal: number, t: number) => number;
         private dataVal: number;
     }
@@ -1723,9 +1722,9 @@ namespace FVB {
     // Use hermite interpolation to compute a value from a list
     //----------------------------------------------------------------------------------------------------------------------
     class TObject_Hermite extends FVB.TObject {
-        override funcVal = new FunctionValue_Hermite;
+        public override funcVal = new FunctionValue_Hermite;
 
-        override prepare_data(para: TParagraph, control: TControl, file: Reader): void {
+        public override prepare_data(para: TParagraph, control: TControl, file: Reader): void {
             assert(para.dataSize >= 8);
 
             const keyCount = file.view.getUint32(para.dataOffset + 0) & 0xFFFFFFF;
@@ -1746,9 +1745,9 @@ namespace FVB {
         private curKeyIdx: number;
         private stride: number;
 
-        prepare(): void { this.range.prepare(); }
+        public prepare(): void { this.range.prepare(); }
 
-        setData(values: Float32Array, stride: number) {
+        public setData(values: Float32Array, stride: number) {
             assert(stride == 3 || stride == 4);
             this.stride = stride
             this.keys = values;
@@ -1756,11 +1755,11 @@ namespace FVB {
             this.curKeyIdx = 0;
         }
 
-        getType() { return EFuncValType.ListParameter; }
-        getStartTime() { return this.keys[0]; }
-        getEndTime(): number { return this.keys[(this.keyCount - 1) * this.stride]; }
+        public getType() { return EFuncValType.ListParameter; }
+        public getStartTime() { return this.keys[0]; }
+        public getEndTime(): number { return this.keys[(this.keyCount - 1) * this.stride]; }
 
-        getValue(timeSec: number): number {
+        public getValue(timeSec: number): number {
             // @TODO: Support range parameters like Outside
 
             // Remap (if requested) the time to our range
