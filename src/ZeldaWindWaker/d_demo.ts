@@ -43,21 +43,21 @@ class dDemo_camera_c extends TCamera {
         private globals: dGlobals
     ) { super() }
 
-    override JSGGetName() { return 'Cam'; }
+    public override JSGGetName() { return 'Cam'; }
 
-    override JSGGetProjectionNear(): number {
+    public override JSGGetProjectionNear(): number {
         const camera = this.globals.camera;
         if (!camera)
             return 0.0;
         return camera.near;
     }
 
-    override JSGSetProjectionNear(v: number) {
+    public override JSGSetProjectionNear(v: number) {
         this.projNear = v;
         this.flags |= EDemoCamFlags.HasNearZ;
     }
 
-    override JSGGetProjectionFar(): number {
+    public override JSGGetProjectionFar(): number {
         const camera = this.globals.camera;
         if (!camera)
             return 1.0;
@@ -65,13 +65,13 @@ class dDemo_camera_c extends TCamera {
     }
 
 
-    override JSGSetProjectionFar(v: number): void {
+    public override JSGSetProjectionFar(v: number): void {
         this.projFar = v;
         this.flags |= EDemoCamFlags.HasFarZ;
     }
 
 
-    override JSGGetProjectionFovy(): number {
+    public override JSGGetProjectionFovy(): number {
         const camera = this.globals.camera;
         if (!camera)
             return 60.0;
@@ -79,13 +79,13 @@ class dDemo_camera_c extends TCamera {
     }
 
 
-    override JSGSetProjectionFovy(v: number): void {
+    public override JSGSetProjectionFovy(v: number): void {
         this.fovY = v;
         this.flags |= EDemoCamFlags.HasFovY;
     }
 
 
-    override JSGGetProjectionAspect() {
+    public override JSGGetProjectionAspect() {
         const camera = this.globals.camera;
         if (!camera)
             return 1.3333;
@@ -93,24 +93,24 @@ class dDemo_camera_c extends TCamera {
     }
 
 
-    override JSGSetProjectionAspect(v: number) {
+    public override JSGSetProjectionAspect(v: number) {
         this.aspect = v;
         this.flags |= EDemoCamFlags.HasAspect;
     }
 
 
-    override JSGGetViewPosition(dst: vec3) {
+    public override JSGGetViewPosition(dst: vec3) {
         vec3.copy(dst, this.globals.cameraPosition);
     }
 
 
-    override JSGSetViewPosition(v: ReadonlyVec3) {
+    public override JSGSetViewPosition(v: ReadonlyVec3) {
         vec3.copy(this.viewPosition, v);
         this.flags |= EDemoCamFlags.HasEyePos;
     }
 
 
-    override JSGGetViewUpVector(dst: vec3) {
+    public override JSGGetViewUpVector(dst: vec3) {
         const camera = this.globals.camera;
         if (!camera)
             vec3.set(dst, 0, 1, 0);
@@ -118,13 +118,13 @@ class dDemo_camera_c extends TCamera {
     }
 
 
-    override JSGSetViewUpVector(v: ReadonlyVec3) {
+    public override JSGSetViewUpVector(v: ReadonlyVec3) {
         vec3.copy(this.upVector, v);
         this.flags |= EDemoCamFlags.HasUpVec;
     }
 
 
-    override JSGGetViewTargetPosition(dst: vec3) {
+    public override JSGGetViewTargetPosition(dst: vec3) {
         const camera = this.globals.camera;
         if (!camera)
             vec3.set(dst, 0, 0, 0);
@@ -132,13 +132,13 @@ class dDemo_camera_c extends TCamera {
     }
 
 
-    override JSGSetViewTargetPosition(v: ReadonlyVec3) {
+    public override JSGSetViewTargetPosition(v: ReadonlyVec3) {
         vec3.copy(this.targetPosition, v);
         this.flags |= EDemoCamFlags.HasTargetPos;
     }
 
 
-    override JSGGetViewRoll() {
+    public override JSGGetViewRoll() {
         const camera = this.globals.camera;
         if (!camera)
             return 0.0;
@@ -146,7 +146,7 @@ class dDemo_camera_c extends TCamera {
     }
 
 
-    override JSGSetViewRoll(v: number) {
+    public override JSGSetViewRoll(v: number) {
         this.roll = v;
         this.flags |= EDemoCamFlags.HasRoll;
     }
@@ -188,11 +188,11 @@ export class dDemo_actor_c extends TActor {
 
     constructor(public actor: fopAc_ac_c) { super(); }
 
-    checkEnable(mask: number) {
+    public checkEnable(mask: number) {
         return this.flags & mask;
     }
 
-    getMorfParam() {
+    public getMorfParam() {
         // Doesn't have anim properties
         if ((this.flags & 0x40) == 0) {
             // Has STB data
@@ -214,75 +214,75 @@ export class dDemo_actor_c extends TActor {
         }
     }
 
-    override JSGGetName() { return this.name; }
+    public override JSGGetName() { return this.name; }
 
-    override JSGGetNodeTransformation(nodeId: number, mtx: mat4): number {
+    public override JSGGetNodeTransformation(nodeId: number, mtx: mat4): number {
         debugger; // I think this may be one of the shapeInstanceState matrices instead
         mat4.copy(mtx, this.model.modelMatrix);
         return 1;
     }
 
-    override JSGGetAnimationFrameMax() { return this.animFrameMax; }
-    override JSGGetTextureAnimationFrameMax() { return this.textAnimFrameMax; }
+    public override JSGGetAnimationFrameMax() { return this.animFrameMax; }
+    public override JSGGetTextureAnimationFrameMax() { return this.textAnimFrameMax; }
 
-    override JSGGetTranslation(dst: vec3) { vec3.copy(dst, this.translation); }
-    override JSGGetScaling(dst: vec3) { vec3.copy(dst, this.scaling); }
-    override JSGGetRotation(dst: vec3) {
+    public override JSGGetTranslation(dst: vec3) { vec3.copy(dst, this.translation); }
+    public override JSGGetScaling(dst: vec3) { vec3.copy(dst, this.scaling); }
+    public override JSGGetRotation(dst: vec3) {
         dst[0] = cM_sht2d(this.rotation[0]);
         dst[1] = cM_sht2d(this.rotation[1]);
         dst[2] = cM_sht2d(this.rotation[2]);
     }
 
-    override JSGSetData(id: number, data: DataView): void {
+    public override JSGSetData(id: number, data: DataView): void {
         this.stbDataId = id;
         this.stbData = data; // @TODO: Check that data makes sense
         this.flags |= EDemoActorFlags.HasData;
     }
 
-    override JSGSetTranslation(src: ReadonlyVec3) {
+    public override JSGSetTranslation(src: ReadonlyVec3) {
         vec3.copy(this.translation, src);
         this.flags |= EDemoActorFlags.HasPos;
     }
 
-    override JSGSetScaling(src: ReadonlyVec3) {
+    public override JSGSetScaling(src: ReadonlyVec3) {
         vec3.copy(this.scaling, src);
         this.flags |= EDemoActorFlags.HasScale;
     }
 
-    override JSGSetRotation(src: ReadonlyVec3) {
+    public override JSGSetRotation(src: ReadonlyVec3) {
         this.rotation[0] = cM_deg2s(src[0]);
         this.rotation[1] = cM_deg2s(src[1]);
         this.rotation[2] = cM_deg2s(src[2]);
         this.flags |= EDemoActorFlags.HasRot;
     }
 
-    override JSGSetShape(id: number): void {
+    public override JSGSetShape(id: number): void {
         this.shapeId = id;
         this.flags |= EDemoActorFlags.HasShape
     }
 
-    override JSGSetAnimation(id: number): void {
+    public override JSGSetAnimation(id: number): void {
         this.nextBckId = id;
         this.animFrameMax = 3.402823e+38;
         this.flags |= EDemoActorFlags.HasAnim;
     }
 
-    override JSGSetAnimationFrame(x: number): void {
+    public override JSGSetAnimationFrame(x: number): void {
         this.animFrame = x;
         this.flags |= EDemoActorFlags.HasFrame;
     }
 
-    override JSGSetAnimationTransition(x: number): void {
+    public override JSGSetAnimationTransition(x: number): void {
         this.animTransition = x;
         this.flags |= EDemoActorFlags.HasFrame;
     }
 
-    override JSGSetTextureAnimation(id: number): void {
+    public override JSGSetTextureAnimation(id: number): void {
         this.texAnim = id;
         this.flags |= EDemoActorFlags.HasTexAnim;
     }
 
-    override JSGSetTextureAnimationFrame(x: number): void {
+    public override JSGSetTextureAnimationFrame(x: number): void {
         this.texAnimFrame = x;
         this.flags |= EDemoActorFlags.HasTexFrame;
     }
@@ -358,10 +358,10 @@ export class dDemo_manager_c {
         private globals: dGlobals
     ) { }
 
-    getFrame() { return this.frame; }
-    getFrameNoMsg() { return this.frameNoMsg; }
-    getMode() { return this.mode; }
-    getSystem() { return this.system; }
+    public getFrame() { return this.frame; }
+    public getFrameNoMsg() { return this.frameNoMsg; }
+    public getMode() { return this.mode; }
+    public getSystem() { return this.system; }
 
     public create(data: ArrayBufferSlice, originPos?: vec3, rotY?: number, startFrame?: number): boolean {
         this.parser = new TParse(this.control);
