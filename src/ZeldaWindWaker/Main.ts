@@ -373,7 +373,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
             const demoSelect = new UI.SingleSelect();
             demoSelect.setStrings(this.demos.map(d => d.name));
             demoSelect.onselectionchange = (idx: number) => {
-                this.demos[idx].load(this.globals)
+                this.demos[idx].playDemo(this.globals)
             };
             demosPanel.contents.appendChild(demoSelect.elem);
 
@@ -844,8 +844,9 @@ class d_s_play extends fopScn {
 
 class SceneDesc {
     public id: string;
+    protected globals: dGlobals;
 
-    public constructor(public stageDir: string, public name: string, public roomList: number[] = [0], public autoplayDemo?: DemoDesc) {
+    public constructor(public stageDir: string, public name: string, public roomList: number[] = [0]) {
         this.id = stageDir;
 
         // Garbage hack.
@@ -894,6 +895,7 @@ class SceneDesc {
 
         const symbolMap = new SymbolMap(modelCache.getFileData(`extra.crg1_arc`));
         const globals = new dGlobals(context, modelCache, symbolMap, framework);
+        this.globals = globals;
         globals.stageName = this.stageDir;
 
         const renderer = new WindWakerRenderer(device, globals);
@@ -967,37 +969,41 @@ class SceneDesc {
             dStage_dt_c_roomReLoader(globals, globals.roomCtrl.status[roomNo].data, dzr);
         }
 
-        // Build a list of all the demos (cutscenes) that are playable in this scene
-        globals.renderer.demos = demoDescs.filter(d => 
-            d.stage == globals.stageName && (d.roomNo == -1 || this.roomList.includes(d.roomNo)));
-
-        // If requested, automatically start playing a demo
-        if(this.autoplayDemo) { this.autoplayDemo.load(globals); }
-
         return renderer;
     }
 }
 
-class DemoDesc {
+class DemoDesc extends SceneDesc {
+    private scene: SceneDesc;
+
     public constructor(
-        public stage: string, 
-        public name: string,
+        public override stageDir: string,
+        public override name: string,
+        public override roomList: number[],
         public stbFilename: string, 
-        public roomNo: number,
         public layer: number,
         public offsetPos?:vec3, 
         public rotY: number = 0,
         public startCode?: number,
         public eventFlags?: number,
         public startFrame?: number, // noclip modification for easier debugging
-    ) {}
+    ) {
+        super(stageDir, name, roomList);
+        assert(this.roomList.length === 1);
+    }
 
-    async load(globals: dGlobals) {
+    public override async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
+        const res = await super.createScene(device, context);
+        this.playDemo(this.globals);
+        return res;
+    }
+
+    async playDemo(globals: dGlobals) {
         globals.scnPlay.demo.remove();
 
         // noclip modification: This normally happens on room load. Do it here instead so that we don't waste time 
         //                      loading .arcs for cutscenes that aren't going to be played
-        const lbnk = globals.roomCtrl.status[this.roomNo]?.data.lbnk;
+        const lbnk = globals.roomCtrl.status[this.roomList[0]]?.data.lbnk;
         if (lbnk) {
             const bank = lbnk[this.layer];
             if (bank != 0xFF) {
@@ -1014,7 +1020,7 @@ class DemoDesc {
             }
         }
 
-        // noclip modification: ensure all the actors are created before we load the cutscene (in case we're auto-playing)
+        // noclip modification: ensure all the actors are created before we load the cutscene
         await new Promise(resolve => { (function waitForActors(){
             if (globals.frameworkGlobals.ctQueue.length == 0) return resolve(null);
             setTimeout(waitForActors, 30);
@@ -1031,72 +1037,10 @@ class DemoDesc {
         
         if( demoData ) { globals.scnPlay.demo.create(demoData, this.offsetPos, this.rotY / 180.0 * Math.PI, this.startFrame); }
         else { console.warn('Failed to load demo data:', this.stbFilename); }
+
+        return this.globals.renderer;
     }
 }
-
-const demoDescs = [
-    new DemoDesc("sea", "Awaken", "awake.stb", 44, 0, [-220000.0, 0.0, 320000.0], 0.0, 0, 0),
-    new DemoDesc("sea", "Stolen Sister", "stolensister.stb", 44, 9, [0.0, 0.0, 20000.0], 0, 0, 0),
-    new DemoDesc("sea", "Departure", "departure.stb", 44, 10, [-200000.0, 0.0, 320000.0], 0.0, 204, 0),
-    new DemoDesc("sea", "Pirate Zelda Fly", "kaizoku_zelda_fly.stb", 44, 0, [-200000.0, 0.0, 320000.0], 180.0, 0, 0),
-    new DemoDesc("sea_T", "Title Screen", "title.stb", 44, 0, [-220000.0, 0.0, 320000.0], 180.0, 0, 0),
-
-    new DemoDesc("ADMumi", "warp_in.stb", "warp_in.stb", 0, 9, [0.0, 0.0, 0.0], 0.0, 200, 0),
-    new DemoDesc("ADMumi", "warphole.stb", "warphole.stb", 0, 10, [0.0, 0.0, 0.0], 0.0, 219, 0),
-    new DemoDesc("ADMumi", "runaway_majuto.stb", "runaway_majuto.stb", 0, 11, [0, 0, 0], 0, 0, 0),
-    new DemoDesc("ADMumi", "towerd.stb", "towerd.stb", 0, 8, [-50179.0, -1000.0, 7070.0], 90.0, 0, 0),
-    new DemoDesc("ADMumi", "towerf.stb", "towerf.stb", 0, 8, [-50179.0, -1000.0, 7070.0], 90.0, 0, 0),
-    new DemoDesc("ADMumi", "towern.stb", "towern.stb", 0, 8, [-50179.0, -1000.0, 7070.0], 90.0, 0, 0),
-
-    new DemoDesc("A_mori", "meet_tetra.stb", "meet_tetra.stb", 0, 0, [0, 0, 0], 0, 0, 0),
-    new DemoDesc("Adanmae", "howling.stb", "howling.stb", 0, 8, [0.0, 0.0, 0.0], 0.0, 0, 0),
-    new DemoDesc("Atorizk", "dragontale.stb", "dragontale.stb", 0, 0, [0, 0, 0], 0, 0, 0),
-    new DemoDesc("ENDumi", "ending.stb", "ending.stb", 0, 8, [0.0, 0.0, 0.0], 0.0, 0, 0),
-    new DemoDesc("Edaichi", "dance_zola.stb", "dance_zola.stb", 0, 8, [0.0, 0.0, 0.0], 0, 226, 0),
-    new DemoDesc("Ekaze", "dance_kokiri.stb", "dance_kokiri.stb", 0, 8, [0.0, 0.0, 0.0], 0, 229, 0),
-    new DemoDesc("GTower", "g2before.stb", "g2before.stb", 0, 8, [0.0, 0.0, 0.0], 0.0, 0, 0),
-    new DemoDesc("GTower", "endhr.stb", "endhr.stb", 0, 9, [0.0, 0.0, 0.0], 0.0, 0, 0),
-    new DemoDesc("GanonK", "kugutu_ganon.stb", "kugutu_ganon.stb", 0, 8, [0.0, 0.0, 0.0], 0.0, 0, 0),
-    new DemoDesc("GanonK", "to_roof.stb", "to_roof.stb", 0, 9, [0.0, 0.0, 0.0], 0.0, 4, 0),
-    new DemoDesc("Hyroom", "rebirth_hyral.stb", "rebirth_hyral.stb", 0, 8, [0.0, -2100.0, 3910.0], 0.0, 249, 0),
-    new DemoDesc("Hyrule", "warp_out.stb", "warp_out.stb", 0, 8, [0, 0, 0], 0, 201, 0),
-    new DemoDesc("Hyrule", "seal.stb", "seal.stb", 0, 4, [0.0, 0.0, 0.0], 0, 0, 0),
-    new DemoDesc("LinkRM", "tale.stb", "tale.stb", 0, 8, [0, 0, 0], 0, 0, 0),
-    new DemoDesc("LinkRM", "tale_2.stb", "tale_2.stb", 0, 8, [0, 0, 0], 0, 0, 0),
-    new DemoDesc("LinkRM", "get_shield.stb", "get_shield.stb", 0, 9, [0, 0, 0], 0, 201, 0),
-    new DemoDesc("LinkRM", "tale_2.stb", "tale_2.stb", 0, 8, [0, 0, 0], 0, 0, 0),
-    new DemoDesc("M2ganon", "attack_ganon.stb", "attack_ganon.stb", 0, 1, [2000.0, 11780.0, -8000.0], 0.0, 244, 0),
-    new DemoDesc("M2tower", "rescue.stb", "rescue.stb", 0, 1, [3214.0, 3939.0, -3011.0], 57.5, 20, 0),
-    new DemoDesc("M_DaiB", "pray_zola.stb", "pray_zola.stb", 0, 8, [0, 0, 0], 0, 229, 0),
-    new DemoDesc("MajyuE", "maju_shinnyu.stb", "maju_shinnyu.stb", 0, 0, [0, 0, 0], 0, 0, 0),
-    new DemoDesc("Mjtower", "find_sister.stb", "find_sister.stb", 0, 0, [4889.0, 0.0, -2635.0], 57.5, 0, 0),
-    new DemoDesc("Obombh", "bombshop.stb", "bombshop.stb", 0, 0, [0.0, 0.0, 0.0], 0.0, 200, 0),
-    new DemoDesc("Omori", "getperl_deku.stb", "getperl_deku.stb", 0, 9, [0, 0, 0], 0, 214, 0),
-    new DemoDesc("Omori", "meet_deku.stb", "meet_deku.stb", 0, 8, [0, 0, 0], 0, 213, 0),
-    new DemoDesc("Otkura", "awake_kokiri.stb", "awake_kokiri.stb", 0, 8, [0, 0, 0], 0, 0, 0),
-    new DemoDesc("Pjavdou", "getperl_jab.stb", "getperl_jab.stb", 0, 8, [0.0, 0.0, 0.0], 0.0, 0, 0),
-    new DemoDesc("kazeB", "pray_kokiri.stb", "pray_kokiri.stb", 0, 8, [0.0, 300.0, 0.0], 0.0, 232, 0),
-
-    new DemoDesc("kenroom", "awake_zelda.stb", "awake_zelda.stb", 0, 9, [0.0, 0.0, 0.0], 0.0, 2, 0),
-    new DemoDesc("kenroom", "master_sword.stb", "master_sword.stb", 0, 0, [-124.0, -3223.0, -7823.0], 180.0, 248, 0),
-    new DemoDesc("kenroom", "swing_sword.stb", "swing_sword.stb", 0, 10, [-124.0, -3223.0, -7823.0], 180.0, 249, 0),
-
-    new DemoDesc("sea", "Fairy", "fairy.stb", 9, 8, [-180000.0, 740.0, -199937.0], 25.0, 2, 0),
-    new DemoDesc("sea", "fairy_flag_on.stb", "fairy_flag_on.stb", 9, 8, [-180000.0, 740.0, -199937.0], 25.0, 2, 0),
-    
-    new DemoDesc("sea", "Zola Awakens", "awake_zola.stb", 13, 8, [200000.0, 0.0, -200000.0], 0, 227, 0),
-    new DemoDesc("sea", "Get Komori Pearl", "getperl_komori.stb", 13, 9, [200000.0, 0.0, -200000.0], 0, 0, 0),
-    
-    new DemoDesc("sea", "meetshishioh.stb", "meetshishioh.stb", 11, 8, [0.0, 0.0, -200000.0], 0, 128, 0),
-    
-    // These are present in the sea_T event_list.dat, but not in the room's lbnk. They are only playable from "sea".
-    new DemoDesc("sea_T", "Awaken", "awake.stb", 255, 0, [-220000.0, 0.0, 320000.0], 0.0, 0, 0),
-    new DemoDesc("sea_T", "Departure", "departure.stb", 255, 0, [-200000.0, 0.0, 320000.0], 0.0, 0, 0),
-    new DemoDesc("sea_T", "PirateZeldaFly", "kaizoku_zelda_fly.stb", 255, 0, [-200000.0, 0.0, 320000.0], 180.0, 0, 0),
-
-    // The game expects this STB file to be in Stage/Ocean/Stage.arc, but it is not. Must be a leftover. 
-    new DemoDesc("Ocean", "counter.stb", "counter.stb", -1, 0, [0, 0, 0], 0, 0, 0),
-]
 
 // Location names taken from CryZe's Debug Menu.
 // https://github.com/CryZe/WindWakerDebugMenu/blob/master/src/warp_menu/consts.rs
@@ -1119,6 +1063,63 @@ const sceneDescs = [
     new SceneDesc("ShipD", "Islet of Steel"),
     new SceneDesc("PShip", "Ghost Ship"),
     new SceneDesc("Obshop", "Beedle's Shop", [1]),
+
+    "Cutscenes",
+    new DemoDesc("sea_T", "Title Screen", [44], "title.stb", 0, [-220000.0, 0.0, 320000.0], 180.0, 0, 0),
+    new DemoDesc("sea", "Awaken", [44], "awake.stb", 0, [-220000.0, 0.0, 320000.0], 0.0, 0, 0),
+    new DemoDesc("sea", "Stolen Sister", [44], "stolensister.stb", 9, [0.0, 0.0, 20000.0], 0, 0, 0),
+    new DemoDesc("sea", "Departure", [44], "departure.stb", 10, [-200000.0, 0.0, 320000.0], 0.0, 204, 0),
+    new DemoDesc("sea", "Pirate Zelda Fly", [44], "kaizoku_zelda_fly.stb", 0, [-200000.0, 0.0, 320000.0], 180.0, 0, 0),
+    new DemoDesc("sea", "Zola Awakens", [13], "awake_zola.stb", 8, [200000.0, 0.0, -200000.0], 0, 227, 0),
+    new DemoDesc("sea", "Get Komori Pearl", [13], "getperl_komori.stb", 9, [200000.0, 0.0, -200000.0], 0, 0, 0),
+    new DemoDesc("sea", "Meet the King of Red Lions", [11], "meetshishioh.stb", 8, [0.0, 0.0, -200000.0], 0, 128, 0),
+    new DemoDesc("sea", "Fairy", [9], "fairy.stb", 8, [-180000.0, 740.0, -199937.0], 25.0, 2, 0),
+    new DemoDesc("sea", "fairy_flag_on.stb", [9], "fairy_flag_on.stb", 8, [-180000.0, 740.0, -199937.0], 25.0, 2, 0),
+    new DemoDesc("ADMumi", "warp_in.stb", [0], "warp_in.stb", 9, [0.0, 0.0, 0.0], 0.0, 200, 0),
+    new DemoDesc("ADMumi", "warphole.stb", [0], "warphole.stb", 10, [0.0, 0.0, 0.0], 0.0, 219, 0),
+    new DemoDesc("ADMumi", "runaway_majuto.stb", [0], "runaway_majuto.stb", 11, [0, 0, 0], 0, 0, 0),
+    new DemoDesc("ADMumi", "towerd.stb", [0], "towerd.stb", 8, [-50179.0, -1000.0, 7070.0], 90.0, 0, 0),
+    new DemoDesc("ADMumi", "towerf.stb", [0], "towerf.stb", 8, [-50179.0, -1000.0, 7070.0], 90.0, 0, 0),
+    new DemoDesc("ADMumi", "towern.stb", [0], "towern.stb", 8, [-50179.0, -1000.0, 7070.0], 90.0, 0, 0),
+    new DemoDesc("A_mori", "meet_tetra.stb", [0], "meet_tetra.stb", 0, [0, 0, 0], 0, 0, 0),
+    new DemoDesc("Adanmae", "howling.stb", [0], "howling.stb", 8, [0.0, 0.0, 0.0], 0.0, 0, 0),
+    new DemoDesc("Atorizk", "dragontale.stb", [0], "dragontale.stb", 0, [0, 0, 0], 0, 0, 0),
+    new DemoDesc("ENDumi", "ending.stb", [0], "ending.stb", 8, [0.0, 0.0, 0.0], 0.0, 0, 0),
+    new DemoDesc("Edaichi", "dance_zola.stb", [0], "dance_zola.stb", 8, [0.0, 0.0, 0.0], 0, 226, 0),
+    new DemoDesc("Ekaze", "dance_kokiri.stb", [0], "dance_kokiri.stb", 8, [0.0, 0.0, 0.0], 0, 229, 0),
+    new DemoDesc("GTower", "g2before.stb", [0], "g2before.stb", 8, [0.0, 0.0, 0.0], 0.0, 0, 0),
+    new DemoDesc("GTower", "endhr.stb", [0], "endhr.stb", 9, [0.0, 0.0, 0.0], 0.0, 0, 0),
+    new DemoDesc("GanonK", "kugutu_ganon.stb", [0], "kugutu_ganon.stb", 8, [0.0, 0.0, 0.0], 0.0, 0, 0),
+    new DemoDesc("GanonK", "to_roof.stb", [0], "to_roof.stb", 9, [0.0, 0.0, 0.0], 0.0, 4, 0),
+    new DemoDesc("Hyroom", "rebirth_hyral.stb", [0], "rebirth_hyral.stb", 8, [0.0, -2100.0, 3910.0], 0.0, 249, 0),
+    new DemoDesc("Hyrule", "warp_out.stb", [0], "warp_out.stb", 8, [0, 0, 0], 0, 201, 0),
+    new DemoDesc("Hyrule", "seal.stb", [0], "seal.stb", 4, [0.0, 0.0, 0.0], 0, 0, 0),
+    new DemoDesc("LinkRM", "tale.stb", [0], "tale.stb", 8, [0, 0, 0], 0, 0, 0),
+    new DemoDesc("LinkRM", "tale_2.stb", [0], "tale_2.stb", 8, [0, 0, 0], 0, 0, 0),
+    new DemoDesc("LinkRM", "get_shield.stb", [0], "get_shield.stb", 9, [0, 0, 0], 0, 201, 0),
+    new DemoDesc("LinkRM", "tale_2.stb", [0], "tale_2.stb", 8, [0, 0, 0], 0, 0, 0),
+    new DemoDesc("M2ganon", "attack_ganon.stb", [0], "attack_ganon.stb", 1, [2000.0, 11780.0, -8000.0], 0.0, 244, 0),
+    new DemoDesc("M2tower", "rescue.stb", [0], "rescue.stb", 1, [3214.0, 3939.0, -3011.0], 57.5, 20, 0),
+    new DemoDesc("M_DaiB", "pray_zola.stb", [0], "pray_zola.stb", 8, [0, 0, 0], 0, 229, 0),
+    new DemoDesc("MajyuE", "maju_shinnyu.stb", [0], "maju_shinnyu.stb", 0, [0, 0, 0], 0, 0, 0),
+    new DemoDesc("Mjtower", "find_sister.stb", [0], "find_sister.stb", 0, [4889.0, 0.0, -2635.0], 57.5, 0, 0),
+    new DemoDesc("Obombh", "bombshop.stb", [0], "bombshop.stb", 0, [0.0, 0.0, 0.0], 0.0, 200, 0),
+    new DemoDesc("Omori", "getperl_deku.stb", [0], "getperl_deku.stb", 9, [0, 0, 0], 0, 214, 0),
+    new DemoDesc("Omori", "meet_deku.stb", [0], "meet_deku.stb", 8, [0, 0, 0], 0, 213, 0),
+    new DemoDesc("Otkura", "awake_kokiri.stb", [0], "awake_kokiri.stb", 8, [0, 0, 0], 0, 0, 0),
+    new DemoDesc("Pjavdou", "getperl_jab.stb", [0], "getperl_jab.stb", 8, [0.0, 0.0, 0.0], 0.0, 0, 0),
+    new DemoDesc("kazeB", "pray_kokiri.stb", [0], "pray_kokiri.stb", 8, [0.0, 300.0, 0.0], 0.0, 232, 0),
+    new DemoDesc("kenroom", "awake_zelda.stb", [0], "awake_zelda.stb", 9, [0.0, 0.0, 0.0], 0.0, 2, 0),
+    new DemoDesc("kenroom", "master_sword.stb", [0], "master_sword.stb", 0, [-124.0, -3223.0, -7823.0], 180.0, 248, 0),
+    new DemoDesc("kenroom", "swing_sword.stb", [0], "swing_sword.stb", 10, [-124.0, -3223.0, -7823.0], 180.0, 249, 0),
+
+    // These are present in the sea_T event_list.dat, but not in the room's lbnk. They are only playable from "sea".
+    // new DemoDesc("sea_T",   "Awaken", "awake.stb", 255, 0, [-220000.0, 0.0, 320000.0], 0.0, 0, 0),
+    // new DemoDesc("sea_T",   "Departure", "departure.stb", 255, 0, [-200000.0, 0.0, 320000.0], 0.0, 0, 0),
+    // new DemoDesc("sea_T",   "PirateZeldaFly", "kaizoku_zelda_fly.stb", 255, 0, [-200000.0, 0.0, 320000.0], 180.0, 0, 0),
+
+    // The game expects this STB file to be in Stage/Ocean/Stage.arc, but it is not. Must be a leftover. 
+    // new DemoDesc("Ocean", "counter.stb", "counter.stb", -1, 0, [0, 0, 0], 0, 0, 0),
 
     "Outset Island",
     new SceneDesc("sea_T", "Title Screen", [44]),
