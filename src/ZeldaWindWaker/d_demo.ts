@@ -162,7 +162,7 @@ export const enum EDemoActorFlags {
     HasFrame = 1 << 6,
     HasTexAnim = 1 << 7,
     HasTexFrame = 1 << 8,
-} 
+}
 
 export class dDemo_actor_c extends TActor {
     name: string;
@@ -289,7 +289,7 @@ export class dDemo_actor_c extends TActor {
 }
 
 class dDemo_system_c implements TSystem {
-    private activeCamera?: dDemo_camera_c;
+    private activeCamera: dDemo_camera_c | null;
     private actors: dDemo_actor_c[] = [];
     // private ambient: dDemo_ambient_c;
     // private lights: dDemo_light_c[];
@@ -299,7 +299,7 @@ class dDemo_system_c implements TSystem {
         private globals: dGlobals
     ) { }
 
-    public JSGFindObject(objName: string, objType: JStage.EObject): JStage.TObject | undefined {
+    public JSGFindObject(objName: string, objType: JStage.EObject): JStage.TObject | null {
         switch (objType) {
             case JStage.EObject.Camera:
                 if (this.activeCamera) return this.activeCamera;
@@ -314,7 +314,7 @@ class dDemo_system_c implements TSystem {
                         actor = {} as fopAc_ac_c;
                     } else {
                         console.warn('Demo failed to find actor', objName);
-                        return undefined;
+                        return null;
                     }
                 }
                 if (!this.actors[actor.demoActorID]) {
@@ -329,7 +329,7 @@ class dDemo_system_c implements TSystem {
             case JStage.EObject.Fog:
             default:
                 console.debug('[JSGFindObject] Unhandled type: ', objType);
-                return undefined;
+                return null;
         }
     }
 
@@ -337,7 +337,7 @@ class dDemo_system_c implements TSystem {
     public getActor(actorID: number) { return this.actors[actorID]; }
 
     public remove() {
-        this.activeCamera = undefined;
+        this.activeCamera = null;
 
         for (let demoActor of this.actors) { demoActor.actor.demoActorID = -1; }
         this.actors = [];
@@ -348,7 +348,7 @@ export class dDemo_manager_c {
     private frame: number;
     private frameNoMsg: number;
     private mode = EDemoMode.None;
-    private curFile?: ArrayBufferSlice;
+    private curFile: ArrayBufferSlice | null;
 
     private parser: TParse;
     private system = new dDemo_system_c(this.globals);
@@ -387,7 +387,7 @@ export class dDemo_manager_c {
     public remove() {
         this.control.destroyObject_all();
         this.system.remove();
-        this.curFile = undefined;
+        this.curFile = null;
         this.mode = 0;
     }
 
@@ -417,7 +417,7 @@ export class dDemo_manager_c {
  * Called by Actor update functions to update their data from the demo version of the actor. 
  */
 export function dDemo_setDemoData(globals: dGlobals, dtFrames: number, actor: fopAc_ac_c, flagMask: number,
-    morf?: mDoExt_McaMorf, arcName?: string, soundCount?: number, soundIdxs?: number[], soundMaterialID?: number, reverb?: number) {
+    morf: mDoExt_McaMorf | null = null, arcName: string | null = null) {
     const demoActor = globals.scnPlay.demo.getSystem().getActor(actor.demoActorID);
     if (!demoActor)
         return false;

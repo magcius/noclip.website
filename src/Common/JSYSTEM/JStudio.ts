@@ -33,7 +33,7 @@ export namespace JStage {
         public JSGFEnableFlag(flag: number): void { this.JSGSetFlag(this.JSGGetFlag() | flag); }
 
         public abstract JSGFGetType(): number;
-        public JSGGetName(): string | undefined { return undefined; }
+        public JSGGetName(): string | null { return null; }
         public JSGGetFlag(): number { return 0; }
         public JSGSetFlag(flag: number): void { }
         public JSGGetData(unk0: number, data: Object, unk1: number): boolean { return false; }
@@ -55,7 +55,7 @@ export namespace JStage {
 // modified by a cutscene. Each game should override JSGFindObject() to supply or create objects for manipulation. 
 //----------------------------------------------------------------------------------------------------------------------
 export interface TSystem {
-    JSGFindObject(objId: string, objType: JStage.EObject): JStage.TObject | undefined;
+    JSGFindObject(objId: string, objType: JStage.EObject): JStage.TObject | null;
 }
 
 //----------------------------------------------------------------------------------------------------------------------
@@ -71,9 +71,9 @@ export interface TSystem {
 class TVariableValue {
     private value: number;
     private age: number; // In frames
-    private updateFunc?: (varval: TVariableValue, x: number) => void;
-    private updateParam: number | FVB.TFunctionValue | undefined;
-    private outputFunc?: (val: number, adaptor: TAdaptor) => void;
+    private updateFunc: ((varval: TVariableValue, x: number) => void) | null = null;
+    private updateParam: number | FVB.TFunctionValue | null;
+    private outputFunc: ((val: number, adaptor: TAdaptor) => void) | null = null;
 
     public getValue() { return this.value; }
     public getValueU8() { return clamp(this.value, 0, 255); }
@@ -99,7 +99,7 @@ class TVariableValue {
     //--------------------
     private static update_immediate(varval: TVariableValue, secondsPerFrame: number): void {
         varval.value = (varval.updateParam as number);
-        varval.updateFunc = undefined;
+        varval.updateFunc = null;
     }
 
     private static update_time(varval: TVariableValue, secondsPerFrame: number): void {
@@ -116,7 +116,7 @@ class TVariableValue {
     // Modify the function that will be called each Update()
     //--------------------
     public setValue_none() {
-        this.updateFunc = undefined;
+        this.updateFunc = null;
     }
 
     // Value will be set only on next update 
@@ -136,7 +136,7 @@ class TVariableValue {
     }
 
     // Value will be the result of a Function Value each frame
-    public setValue_functionValue(v?: FVB.TFunctionValue): void {
+    public setValue_functionValue(v: FVB.TFunctionValue | null = null): void {
         assert(v !== undefined);
         this.updateFunc = TVariableValue.update_functionValue;
         this.age = 0;
@@ -146,7 +146,7 @@ class TVariableValue {
     //--------------------
     // Set Output
     //--------------------
-    public setOutput(outputFunc?: (val: number, adaptor: TAdaptor) => void) {
+    public setOutput(outputFunc: ((val: number, adaptor: TAdaptor) => void) | null = null) {
         this.outputFunc = outputFunc;
     }
 }
@@ -319,7 +319,7 @@ abstract class STBObject {
     private sequenceNext: number;
     private wait: number = 0;
 
-    constructor(control: TControl, blockObj?: TBlockObject, adaptor?: TAdaptor) {
+    constructor(control: TControl, blockObj: TBlockObject | null = null, adaptor: TAdaptor | null = null) {
         this.control = control;
 
         if (blockObj && adaptor) {
@@ -594,9 +594,9 @@ export abstract class TActor extends JStage.TObject {
 }
 
 class TActorAdaptor extends TAdaptor {
-    public parent?: JStage.TObject;
+    public parent: JStage.TObject | null = null;
     public parentNodeID: number;
-    public relation?: JStage.TObject;
+    public relation: JStage.TObject | null = null;
     public relationNodeID: number;
     public animMode: number = 0; // See computeAnimFrame()
     public animTexMode: number = 0; // See computeAnimFrame()
@@ -1125,9 +1125,9 @@ namespace FVB {
     };
 
     export abstract class TFunctionValue {
-        protected range?: Attribute.Range;
-        protected refer?: Attribute.Refer;
-        protected interpolate?: Attribute.Interpolate;
+        protected range: Attribute.Range | null = null;
+        protected refer: Attribute.Refer | null = null;
+        protected interpolate: Attribute.Interpolate | null = null;
 
         public abstract getType(): EFuncValType;
         public abstract prepare(): void;
@@ -1244,7 +1244,7 @@ namespace FVB {
         public objects: TObject[] = [];
 
         // Really this is a fvb::TFactory method
-        public createObject(block: TBlock): TObject | undefined {
+        public createObject(block: TBlock): TObject | null {
             switch (block.type) {
                 case EFuncValType.Composite:
                     return new TObject_Composite(block);
@@ -1261,7 +1261,7 @@ namespace FVB {
                 default:
                     console.warn('Unknown FVB type: ', block.type);
                     debugger;
-                    return undefined;
+                    return null;
             }
         }
 
@@ -1828,8 +1828,8 @@ export class TControl {
     public secondsPerFrame: number = 1 / 30.0;
     private suspendFrames: number;
 
-    public transformOrigin?: vec3;
-    public transformRotY?: number;
+    public transformOrigin: vec3 | null = null;
+    public transformRotY: number | null = null;
     private transformOnGetMtx = mat4.create();
     private transformOnSetMtx = mat4.create();
 
@@ -1887,11 +1887,11 @@ export class TControl {
         return shouldContinue;
     }
 
-    public getFunctionValueByIdx(idx: number) { return this.fvbControl.objects[idx]?.funcVal; }
+    public getFunctionValueByIdx(idx: number) { return this.fvbControl.objects[idx].funcVal; }
     public getFunctionValueByName(name: string) { return this.fvbControl.objects.find(v => v.id == name)?.funcVal; }
 
     // Really this is a stb::TFactory method
-    public createObject(blockObj: TBlockObject): STBObject | undefined {
+    public createObject(blockObj: TBlockObject): STBObject | null {
         let objConstructor;
         let objType: JStage.EObject;
         switch (blockObj.type) {
@@ -1901,12 +1901,12 @@ export class TControl {
             case 'JLIT':
             case 'JFOG':
             default:
-                return undefined;
+                return null;
         }
 
         const stageObj = this.system.JSGFindObject(blockObj.id, objType);
         if (!stageObj) {
-            return undefined;
+            return null;
         }
 
         const obj = new objConstructor(this, blockObj, stageObj);

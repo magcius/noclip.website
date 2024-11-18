@@ -529,7 +529,7 @@ export class dStage_roomStatus_c {
 
 export class dStage_roomControl_c {
     public status: dStage_roomStatus_c[] = nArray(64, () => new dStage_roomStatus_c());
-    public demoArcName?: string;
+    public demoArcName: string | null = null;
 
     constructor() {
         for (let i = 0; i < this.status.length; i++) {

@@ -941,7 +941,7 @@ class SceneDesc {
         // dStage_dt_c_stageLoader()
         // dMap_c::create()
 
-        globals.roomCtrl.demoArcName = undefined;
+        globals.roomCtrl.demoArcName = null;
 
         const vrbox = resCtrl.getStageResByName(ResType.Model, `Stage`, `vr_sky.bdl`);
         if (vrbox !== null) {
