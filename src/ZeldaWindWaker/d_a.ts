@@ -4715,7 +4715,7 @@ export class d_a_ff extends fopAc_ac_c {
 class fopNpc_npc_c extends fopAc_ac_c {
     protected morf: mDoExt_McaMorf;
 };
-class anm_prm_c {
+interface anm_prm_c {
     anmIdx: number;
     nextPrmIdx: number;
     morf: number;
