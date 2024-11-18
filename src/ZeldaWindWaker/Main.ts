@@ -988,9 +988,11 @@ class DemoDesc extends SceneDesc {
     async playDemo(globals: dGlobals) {
         globals.scnPlay.demo.remove();
 
+        // TODO: Don't render until the camera has been placed for this demo. The cuts are jarring.
+
         // noclip modification: This normally happens on room load. Do it here instead so that we don't waste time 
         //                      loading .arcs for cutscenes that aren't going to be played
-        const lbnk = globals.roomCtrl.status[this.roomList[0]]?.data.lbnk;
+        const lbnk = globals.roomCtrl.status[this.roomList[0]].data.lbnk;
         if (lbnk) {
             const bank = lbnk[this.layer];
             if (bank != 0xFF) {
