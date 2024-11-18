@@ -4797,10 +4797,6 @@ class d_a_npc_ls1 extends fopNpc_npc_c {
 
         this.morf.entryDL(globals, renderInstManager, viewerInput);
 
-        // TODO: What are these doing?
-        // removeTexMtxAnimator(this.morf.model, this.btkAnim.anm);
-        // removeTexNoAnimator(this.morf.model, this.btpAnim.anm);
-
         mDoExt_modelEntryDL(globals, this.handModel, renderInstManager, viewerInput);
 
         if (this.itemModel) {
