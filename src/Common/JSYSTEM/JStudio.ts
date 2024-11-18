@@ -156,7 +156,7 @@ class TVariableValue {
 // TAdaptor
 // Connects the STBObject to a Game Object. Manages tracks of TVariableValues, updates their values on the Game object.
 //----------------------------------------------------------------------------------------------------------------------
-const enum EDataOp {
+enum EDataOp {
     None = 0,
     Void = 1,           // Disable updates for this track.
     Immediate = 2,      // Set the value on this track to an immediate value.
@@ -171,19 +171,6 @@ class DataVal {
     asInt?: number;
     asFloat?: number;
     asStr?: string;
-}
-
-function dataOpToString(enumValue: EDataOp) {
-    switch (enumValue) {
-        case EDataOp.None: return "None"
-        case EDataOp.Void: return "Void"
-        case EDataOp.Immediate: return "Immediate"
-        case EDataOp.Time: return "Time"
-        case EDataOp.FuncValName: return "FuncVal"
-        case EDataOp.FuncValIdx: return "FuncVal"
-        case EDataOp.ObjectName: return "Obj"
-        case EDataOp.ObjectIdx: return "Obj"
-    }
 }
 
 function dataToValue(keyData: DataVal[], dataOp: number) {
@@ -531,7 +518,7 @@ class TControlObject extends STBObject {
 //----------------------------------------------------------------------------------------------------------------------
 // Actor
 //----------------------------------------------------------------------------------------------------------------------
-const enum EActorTrack {
+enum EActorTrack {
     AnimFrame = 0,
     AnimTransition = 1,
     TexAnimFrame = 2,
@@ -548,25 +535,6 @@ const enum EActorTrack {
 
     Parent = 12,
     Relation = 13,
-}
-
-function keyToString(enumValue: EActorTrack, count: number) {
-    switch (enumValue) {
-        case EActorTrack.AnimFrame: return "AnimFrame"
-        case EActorTrack.AnimTransition: return "AnimTransition"
-        case EActorTrack.TexAnimFrame: return "TexAnimFrame"
-        case EActorTrack.PosX: return count == 3 ? 'POS' : 'PosX';
-        case EActorTrack.PosY: return "PosY"
-        case EActorTrack.PosZ: return "PosZ"
-        case EActorTrack.RotX: return count == 3 ? 'ROT' : 'RotX';
-        case EActorTrack.RotY: return "RotY"
-        case EActorTrack.RotZ: return "RotZ"
-        case EActorTrack.ScaleX: return count == 3 ? 'SCALE' : 'ScaleX';
-        case EActorTrack.ScaleY: return "ScaleY"
-        case EActorTrack.ScaleZ: return "ScaleZ"
-        case EActorTrack.Parent: return "Parent"
-        case EActorTrack.Relation: return "Relation"
-    }
 }
 
 export abstract class TActor extends JStage.TObject {
@@ -855,15 +823,16 @@ class TActorObject extends STBObject {
             keyData[i] = readData(dataOp, dataOffset + i * 4, dataSize, file);
             this.adaptor.adaptor_setVariableValue(this, keyIdx + i, dataOp, keyData[i]);
         }
-
-        this.adaptor.log(`Set${keyToString(keyIdx, keyCount)}: ${dataOpToString(dataOp)} [${dataToValue(keyData, dataOp)}]`);
+    
+        const keyName = EActorTrack[keyIdx].slice(0, keyCount > 0 ? -1 : undefined);
+        this.adaptor.log(`Set${keyName}: ${EDataOp[dataOp]} [${dataToValue(keyData, dataOp)}]`);
     }
 }
 
 //----------------------------------------------------------------------------------------------------------------------
 // Camera
 //----------------------------------------------------------------------------------------------------------------------
-const enum ECameraTrack {
+enum ECameraTrack {
     PosX = 0x00,
     PosY = 0x01,
     PosZ = 0x02,
@@ -874,21 +843,6 @@ const enum ECameraTrack {
     Roll = 0x07,
     DistNear = 0x08,
     DistFar = 0x09,
-}
-
-function camKeyToString(enumValue: ECameraTrack, count: number) {
-    switch (enumValue) {
-        case ECameraTrack.PosX: return "PosX";
-        case ECameraTrack.PosY: return "PosY";
-        case ECameraTrack.PosZ: return "PosZ";
-        case ECameraTrack.TargetX: return "TargetX";
-        case ECameraTrack.TargetY: return "TargetY";
-        case ECameraTrack.TargetZ: return "TargetZ";
-        case ECameraTrack.FovY: return "FovY";
-        case ECameraTrack.Roll: return "Roll";
-        case ECameraTrack.DistNear: return "DistNear";
-        case ECameraTrack.DistFar: return "DistFar";
-    }
 }
 
 export abstract class TCamera extends JStage.TObject {
@@ -1032,7 +986,8 @@ class TCameraObject extends STBObject {
             this.adaptor.adaptor_setVariableValue(this, keyIdx + i, dataOp, keyData[i]);
         }
 
-        this.adaptor.log(`Set${camKeyToString(keyIdx, keyCount)}: ${dataOpToString(dataOp)} [${dataToValue(keyData, dataOp)}]`);
+        const keyName = ECameraTrack[keyIdx].slice(0, keyCount > 0 ? -1 : undefined);
+        this.adaptor.log(`Set${keyName}: ${EDataOp[dataOp]} [${dataToValue(keyData, dataOp)}]`);
     }
 }
 
