@@ -78,7 +78,7 @@ export class NfsPostProcessing {
         renderInst.setDrawCount(3);
 
         builder.pushPass((pass) => {
-            pass.setDebugName('Downsample');
+            pass.setDebugName('Downsample Luminance');
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, downsampleColorID);
             const resolvedTexId = builder.resolveRenderTarget(mainColorTargetID);
             pass.attachResolveTexture(resolvedTexId),
@@ -154,7 +154,7 @@ layout(std140) uniform ub_PostProcParams {
 };
 
 uniform sampler2D u_MainColor;
-uniform sampler2D u_Blur;
+uniform sampler2D u_BlurredLuminance;
 uniform sampler2D u_Vignette;
 `;
 
@@ -170,16 +170,30 @@ uniform sampler2D u_Vignette;
 
 in vec2 v_TexCoord;
 
+float getSpline(float p0, float p1, float p2, float p3, float t) {
+    float t2 = t * t;
+    float t3 = t2 * t;
+    float invT = 1.0 - t;
+    float invT2 = invT * invT;
+    float invT3 = invT2 * invT;
+    return p0 * invT3 + 3.0 * p1 * invT2 * t + 3.0 * p2 * invT * t2 + p3 * t3;
+}
+
 void main() {
+    vec3 mainCol = texture(SAMPLER_2D(u_MainColor), v_TexCoord).rgb;
+    vec3 tintedColor = mainCol * mix(ColourBloomTintWhite, ColourBloomTint, ub_TintIntensity);
+
+    float luminance = dot(mainCol, LuminanceVector);
+    vec3 desatured = Desaturation * luminance + (1.0 - Desaturation) * mainCol;
+
+    float blurredLuminance = texture(SAMPLER_2D(u_BlurredLuminance), v_TexCoord).r;
+    float blackBloom = BlackBloomIntensity.y + BlackBloomIntensity.x * getSpline(0.0, 0.1724138, 1.12069, 1.0, blurredLuminance);
+    float colorBloom = ColourBloomIntensity * getSpline(0.2, 0.5, 0.5862069, 0.4655172, blurredLuminance);
+
+    vec3 finalColor = tintedColor * colorBloom + desatured * blackBloom;
     float vignette = texture(SAMPLER_2D(u_Vignette), vec2(v_TexCoord.x, 1.0 - v_TexCoord.y)).r;
-    vec4 mainCol = texture(SAMPLER_2D(u_MainColor), v_TexCoord);
-    vec3 desatured = Desaturation * (mainCol.rgb + dot(mainCol.rgb, LuminanceVector));
-    float blurLuminance = texture(SAMPLER_2D(u_Blur), v_TexCoord).x;
-    float blackBloom = blurLuminance * BlackBloomIntensity.x + BlackBloomIntensity.y;
-    vec3 tint = mix(ColourBloomTintWhite, ColourBloomTint, ub_TintIntensity);
-    vec3 colorBloom = mix(0.2, 0.4625, blurLuminance) * ColourBloomIntensity * tint;
-    vec3 finalColor = mainCol.rgb * colorBloom + desatured * blackBloom;
-    gl_FragColor = vec4(finalColor * vignette, 1.0);
+    gl_FragColor.rgb = finalColor * vignette;
+    gl_FragColor.a = 1.0;
 }
     `;
 }
