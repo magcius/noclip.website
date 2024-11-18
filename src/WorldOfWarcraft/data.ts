@@ -166,9 +166,10 @@ type WmoDefinitionKey = [number, number, number];
 
 export class WowCache {
     private sheepfile: Sheepfile;
-    private promiseCache = new Map<number, Promise<unknown>>();
+    private promiseCache = new Map<number, Promise<any>>();
     private promiseCacheLiquidTypes = new Map<number, Promise<LiquidType>>(); // liquid types aren't fileIDs
     private wmoDefinitionCache = new Map<string, WmoDefinition>(); // keys are WmoDefinitionKey.toString()
+    private models: ModelData[] = [];
 
     constructor(
         public dataFetcher: DataFetcher,
@@ -250,6 +251,7 @@ export class WowCache {
         return this.getOrLoad(fileId, async (fileId: number) => {
             const d = new ModelData(fileId);
             await d.load(this);
+            this.models.push(d);
             return d;
         });
     }
@@ -286,8 +288,9 @@ export class WowCache {
         );
     }
 
-    public destroy(): void {
+    public destroy(device: GfxDevice): void {
         this.sheepfile.destroy();
+        this.models.forEach(model => model.destroy(device));
         this.clear();
     }
 }
@@ -501,6 +504,11 @@ export class ParticleEmitter {
 
     public numParticles(): number {
         return this.emitter.num_particles();
+    }
+
+    public destroy(device: GfxDevice) {
+        if (this.dataTexture)
+            device.destroyTexture(this.dataTexture);
     }
 }
 
@@ -730,9 +738,8 @@ export class ModelData {
         return [1, 1, 1, 1];
     }
 
-    public destroy() {
-        this.animationManager.free();
-        this.boneData.forEach((bone) => bone.destroy());
+    public destroy(device: GfxDevice) {
+        this.particleEmitters.forEach(emitter => emitter.destroy(device));
     }
 }
 
@@ -810,10 +817,6 @@ export class BoneData {
 
     constructor(public pivot: mat4, public antiPivot: mat4, public flags: WowM2BoneFlags, public parentBoneId: number) {
         this.isSphericalBillboard = flags.spherical_billboard;
-    }
-
-    public destroy() {
-        this.flags.free();
     }
 }
 
