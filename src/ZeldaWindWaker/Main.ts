@@ -323,7 +323,6 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
     public renderHelper: GXRenderHelperGfx;
 
     public rooms: WindWakerRoom[] = [];
-    public demos: DemoDesc[] = []
     public extraTextures: ZWWExtraTextures;
     public renderCache: GfxRenderCache;
 
@@ -367,16 +366,6 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         roomsPanel.setTitle(UI.LAYER_ICON, 'Rooms');
         roomsPanel.setLayers(this.rooms);
 
-            const demosPanel = new UI.Panel();
-            demosPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
-            demosPanel.setTitle(UI.CUTSCENE_ICON, 'Cutscenes');
-            const demoSelect = new UI.SingleSelect();
-            demoSelect.setStrings(this.demos.map(d => d.name));
-            demoSelect.onselectionchange = (idx: number) => {
-                this.demos[idx].playDemo(this.globals)
-            };
-            demosPanel.contents.appendChild(demoSelect.elem);
-
         const renderHacksPanel = new UI.Panel();
         renderHacksPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
         renderHacksPanel.setTitle(UI.RENDER_HACKS_ICON, 'Render Hacks');
@@ -407,9 +396,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
             renderHacksPanel.contents.appendChild(wireframe.elem);
         }
 
-        const panels = [roomsPanel, scenarioPanel, renderHacksPanel];
-        if( this.demos.length > 0 ) { panels.push(demosPanel); }
-        return panels;
+        return [roomsPanel, scenarioPanel, renderHacksPanel];
     }
 
     // For people to play around with.
