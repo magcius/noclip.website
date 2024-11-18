@@ -960,7 +960,7 @@ class SceneDesc {
     }
 }
 
-class DemoDesc extends SceneDesc {
+class DemoDesc extends SceneDesc implements Viewer.SceneDesc {
     private scene: SceneDesc;
 
     public constructor(
@@ -1031,31 +1031,13 @@ class DemoDesc extends SceneDesc {
     }
 }
 
-// Location names taken from CryZe's Debug Menu.
-// https://github.com/CryZe/WindWakerDebugMenu/blob/master/src/warp_menu/consts.rs
-const sceneDescs = [
-    "The Great Sea",
-    new SceneDesc("sea", "The Great Sea", [
-        1,  2,  3,  4,  5,  6,  7,
-        8,  9, 10, 11, 12, 13, 14,
-       15, 16, 17, 18, 19, 20, 21,
-       22, 23, 24, 25, 26, 27, 28,
-       29, 30, 31, 32, 33, 34, 35,
-       36, 37, 38, 39, 40, 41, 42,
-       43, 44, 45, 46, 47, 48, 49,
-    ]),
-
-    new SceneDesc("Asoko", "Tetra's Ship"),
-    new SceneDesc("Abship", "Submarine"),
-    new SceneDesc("Abesso", "Cabana"),
-    new SceneDesc("Ocean", "Boating Course"),
-    new SceneDesc("ShipD", "Islet of Steel"),
-    new SceneDesc("PShip", "Ghost Ship"),
-    new SceneDesc("Obshop", "Beedle's Shop", [1]),
-
-    "Cutscenes",
-    new DemoDesc("sea_T", "Title Screen", [44], "title.stb", 0, [-220000.0, 0.0, 320000.0], 180.0, 0, 0),
-    new DemoDesc("sea", "Awaken", [44], "awake.stb", 0, [-220000.0, 0.0, 320000.0], 0.0, 0, 0),
+// Move these into sceneDescs once they are complete enough to be worth viewing.
+// Extracted from the game using a modified version of the excellent wwrando/wwlib/stage_searcher.py script from LagoLunatic
+// Most of this data comes from the PLAY action of the PACKAGE actor in an event from a Stage's event_list.dat. This
+// action has properties for the room and layer that these cutscenes are designed for. HOWEVER, this data is often missing.
+// It has been reconstructed by cross-referencing each Room's lbnk section (which points to a Demo*.arc file for each layer),
+// the .stb files contained in each of those Objects/Demo*.arc files, and the FileName attribute from the event action.   
+const demoDescs = [
     new DemoDesc("sea", "Stolen Sister", [44], "stolensister.stb", 9, [0.0, 0.0, 20000.0], 0, 0, 0),
     new DemoDesc("sea", "Departure", [44], "departure.stb", 10, [-200000.0, 0.0, 320000.0], 0.0, 204, 0),
     new DemoDesc("sea", "Pirate Zelda Fly", [44], "kaizoku_zelda_fly.stb", 0, [-200000.0, 0.0, 320000.0], 180.0, 0, 0),
@@ -1103,12 +1085,39 @@ const sceneDescs = [
     new DemoDesc("kenroom", "swing_sword.stb", [0], "swing_sword.stb", 10, [-124.0, -3223.0, -7823.0], 180.0, 249, 0),
 
     // These are present in the sea_T event_list.dat, but not in the room's lbnk. They are only playable from "sea".
-    // new DemoDesc("sea_T",   "Awaken", "awake.stb", 255, 0, [-220000.0, 0.0, 320000.0], 0.0, 0, 0),
-    // new DemoDesc("sea_T",   "Departure", "departure.stb", 255, 0, [-200000.0, 0.0, 320000.0], 0.0, 0, 0),
-    // new DemoDesc("sea_T",   "PirateZeldaFly", "kaizoku_zelda_fly.stb", 255, 0, [-200000.0, 0.0, 320000.0], 180.0, 0, 0),
+    new DemoDesc("sea_T", "Awaken", [0xFF], "awake.stb", 0, [-220000.0, 0.0, 320000.0], 0.0, 0, 0),
+    new DemoDesc("sea_T", "Departure", [0xFF], "departure.stb", 0, [-200000.0, 0.0, 320000.0], 0.0, 0, 0),
+    new DemoDesc("sea_T", "PirateZeldaFly", [0xFF], "kaizoku_zelda_fly.stb", 0, [-200000.0, 0.0, 320000.0], 180.0, 0, 0),
 
     // The game expects this STB file to be in Stage/Ocean/Stage.arc, but it is not. Must be a leftover. 
-    // new DemoDesc("Ocean", "counter.stb", "counter.stb", -1, 0, [0, 0, 0], 0, 0, 0),
+    new DemoDesc("Ocean", "counter.stb", [-1], "counter.stb", 0, [0, 0, 0], 0, 0, 0),
+]
+
+// Location names taken from CryZe's Debug Menu.
+// https://github.com/CryZe/WindWakerDebugMenu/blob/master/src/warp_menu/consts.rs
+const sceneDescs = [
+    "The Great Sea",
+    new SceneDesc("sea", "The Great Sea", [
+        1,  2,  3,  4,  5,  6,  7,
+        8,  9, 10, 11, 12, 13, 14,
+       15, 16, 17, 18, 19, 20, 21,
+       22, 23, 24, 25, 26, 27, 28,
+       29, 30, 31, 32, 33, 34, 35,
+       36, 37, 38, 39, 40, 41, 42,
+       43, 44, 45, 46, 47, 48, 49,
+    ]),
+
+    new SceneDesc("Asoko", "Tetra's Ship"),
+    new SceneDesc("Abship", "Submarine"),
+    new SceneDesc("Abesso", "Cabana"),
+    new SceneDesc("Ocean", "Boating Course"),
+    new SceneDesc("ShipD", "Islet of Steel"),
+    new SceneDesc("PShip", "Ghost Ship"),
+    new SceneDesc("Obshop", "Beedle's Shop", [1]),
+
+    "Cutscenes",
+    new DemoDesc("sea_T", "Title Screen", [44], "title.stb", 0, [-220000.0, 0.0, 320000.0], 180.0, 0, 0),
+    new DemoDesc("sea", "Awaken", [44], "awake.stb", 0, [-220000.0, 0.0, 320000.0], 0.0, 0, 0),
 
     "Outset Island",
     new SceneDesc("sea_T", "Title Screen", [44]),
