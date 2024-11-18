@@ -17,7 +17,7 @@ import { dKy_get_seacolor, dKy_GxFog_sea_set } from './d_kankyo.js';
 import { colorLerp, OpaqueBlack } from '../Color.js';
 import { dKy_usonami_set } from './d_kankyo_wether.js';
 import { Plane } from '../Geometry.js';
-import { cLib_addCalcAngleS2, cM_atan2s, cM_rndF, cM__Short2Rad } from './SComponent.js';
+import { cLib_addCalcAngleS2, cM_atan2s, cM_rndF, cM_s2rad } from './SComponent.js';
 import { dStage_stagInfo_GetSTType } from './d_stage.js';
 
 const scratchVec2a = vec2.create();
@@ -741,6 +741,6 @@ export function dLib_waveRot(globals: dGlobals, wave: dLib_wave_c, pos: Readonly
     wave.animX += 400 * deltaTimeFrames;
     wave.animZ += 430 * deltaTimeFrames;
     const swayAmountFull = 130.0 + swayAmount;
-    wave.rotX = wave.angleX + swayAmountFull * Math.sin(cM__Short2Rad(wave.animX));
-    wave.rotZ = wave.angleZ + swayAmountFull * Math.cos(cM__Short2Rad(wave.animZ));
+    wave.rotX = wave.angleX + swayAmountFull * Math.sin(cM_s2rad(wave.animX));
+    wave.rotZ = wave.angleZ + swayAmountFull * Math.cos(cM_s2rad(wave.animZ));
 }

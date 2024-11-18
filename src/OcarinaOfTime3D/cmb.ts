@@ -195,13 +195,13 @@ export const enum LutInput {
     CosPhi         = 0x62A5
 }
 
-export const enum TextureTransformType{
+export const enum TextureTransformType {
     DccMaya,
     DccSoftImage,
     Dcc3dsMax
 }
 
-export const enum TexCoordConfig{
+export const enum TexCoordConfig {
     Config0120,
     Config0110,
     Config0111,
@@ -423,7 +423,6 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
         let coordinatorsOffs = offs + 0x58;
         const textureCoordinators: TextureCoordinator[] = [];
         for (let j = 0; j < 3; j++) {
-            // TODO(jstpierre): Unsure about how these are packed...
             const sourceCoordinate = view.getUint8(coordinatorsOffs + 0x00);
             const referenceCamera = view.getUint8(coordinatorsOffs + 0x01);
             const mappingMethod: TextureCoordinatorMappingMethod = view.getUint8(coordinatorsOffs + 0x02);
@@ -578,7 +577,7 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
             blendDstFactor: blendDstFactorRGB,
             blendSrcFactor: blendSrcFactorRGB,
         };
-        // TODO(jstpierre): What is at 0x142? Logic op?
+        // TODO(jstpierre): What is at 0x142? More logic op things?
         const blendSrcFactorAlpha: GfxBlendFactor = blendEnabled ? view.getUint16(offs + 0x144, true) : GfxBlendFactor.One;
         const blendDstFactorAlpha: GfxBlendFactor = blendEnabled ? view.getUint16(offs + 0x146, true) : GfxBlendFactor.Zero;
         const blendFunctionAlpha: GfxBlendMode = blendEnabled ? view.getUint16(offs + 0x148, true) : GfxBlendMode.Add;
@@ -587,11 +586,42 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
             blendDstFactor: blendDstFactorAlpha,
             blendSrcFactor: blendSrcFactorAlpha,
         };
+
+        const factorUsesBlendConstantAlpha = (v: GLenum) => {
+            return v === WebGL2RenderingContext.CONSTANT_ALPHA || v === WebGL2RenderingContext.ONE_MINUS_CONSTANT_ALPHA;
+        };
+
+        const factorUsesBlendConstantColor = (v: GLenum) => {
+            return v === WebGL2RenderingContext.CONSTANT_COLOR || v === WebGL2RenderingContext.ONE_MINUS_CONSTANT_COLOR;
+        };
+
+        const translateBlendFactor = (v: GLenum): GfxBlendFactor => {
+            if (v === WebGL2RenderingContext.CONSTANT_ALPHA)
+                return GfxBlendFactor.ConstantColor;
+            else if (v === WebGL2RenderingContext.ONE_MINUS_CONSTANT_ALPHA)
+                return GfxBlendFactor.OneMinusConstantColor;
+            else
+                return v as GfxBlendFactor;
+        };
+
+        // Ensure we're not using blend constants in two different contexts.
+        const usesBlendConstantAlpha = factorUsesBlendConstantAlpha(blendSrcFactorRGB) || factorUsesBlendConstantAlpha(blendDstFactorRGB) || factorUsesBlendConstantAlpha(blendSrcFactorAlpha) || factorUsesBlendConstantAlpha(blendDstFactorAlpha);
+        const usesBlendConstantColor = factorUsesBlendConstantColor(blendSrcFactorRGB) || factorUsesBlendConstantColor(blendDstFactorRGB) || factorUsesBlendConstantColor(blendSrcFactorAlpha) || factorUsesBlendConstantColor(blendDstFactorAlpha);
+
         const blendColorR = view.getFloat32(offs + 0x14C, true);
         const blendColorG = view.getFloat32(offs + 0x150, true);
         const blendColorB = view.getFloat32(offs + 0x154, true);
         const blendColorA = view.getFloat32(offs + 0x158, true);
         const blendConstant = colorNewFromRGBA(blendColorR, blendColorG, blendColorB, blendColorA);
+
+        if (usesBlendConstantAlpha) {
+            assert(!usesBlendConstantColor);
+            blendConstant.r = blendConstant.g = blendConstant.b = blendConstant.a;
+            rgbBlendState.blendSrcFactor = translateBlendFactor(rgbBlendState.blendSrcFactor);
+            rgbBlendState.blendDstFactor = translateBlendFactor(rgbBlendState.blendDstFactor);
+            alphaBlendState.blendSrcFactor = translateBlendFactor(alphaBlendState.blendSrcFactor);
+            alphaBlendState.blendDstFactor = translateBlendFactor(alphaBlendState.blendDstFactor);
+        }
 
         const isTransparent = blendEnabled;
         const renderFlags = makeMegaState({
@@ -902,9 +932,9 @@ function readPrmChunk(cmb: CMB, buffer: ArrayBufferSlice): Prm {
 }
 
 export const enum SkinningMode {
-    SINGLE_BONE = 0x00,
-    RIGID_SKINNING = 0x01,
-    SMOOTH_SKINNING = 0x02,
+    SingleBone = 0x00,
+    RigidSkinning = 0x01,
+    SmoothSkinning = 0x02,
 }
 
 // "Primitive Set"

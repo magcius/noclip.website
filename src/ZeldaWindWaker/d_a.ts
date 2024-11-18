@@ -19,7 +19,7 @@ import { TevDefaultSwapTables } from "../gx/gx_material.js";
 import { ColorKind, DrawParams, GXMaterialHelperGfx, MaterialParams } from "../gx/gx_render.js";
 import { arrayRemove, assert, assertExists, nArray } from "../util.js";
 import { ViewerRenderInput } from "../viewer.js";
-import { cLib_addCalc, cLib_addCalc2, cLib_addCalcAngleRad2, cLib_addCalcAngleS, cLib_addCalcAngleS2, cLib_addCalcPosXZ2, cLib_chasePosXZ, cLib_distanceSqXZ, cLib_distanceXZ, cLib_targetAngleX, cLib_targetAngleY, cM__Rad2Short, cM__Short2Rad, cM_atan2s, cM_rndF, cM_rndFX } from "./SComponent.js";
+import { cLib_addCalc, cLib_addCalc2, cLib_addCalcAngleRad2, cLib_addCalcAngleS, cLib_addCalcAngleS2, cLib_addCalcPosXZ2, cLib_chasePosXZ, cLib_distanceSqXZ, cLib_distanceXZ, cLib_targetAngleX, cLib_targetAngleY, cM_s2rad, cM_atan2s, cM_rndF, cM_rndFX } from "./SComponent.js";
 import { dLib_getWaterY, dLib_waveInit, dLib_waveRot, dLib_wave_c, d_a_sea } from "./d_a_sea.js";
 import { cBgW_Flags, dBgS_GndChk, dBgW } from "./d_bg.js";
 import { PeekZResult } from "./d_dlst_peekZ.js";
@@ -1140,7 +1140,7 @@ class d_a_obj_lpalm extends fopAc_ac_c {
 
         if (vec3.length(scratchVec3b) >= 0.00000001) {
             vec3.normalize(scratchVec3b, scratchVec3b);
-            quat.setAxisAngle(this.baseQuatTarget, scratchVec3b, windPow * cM__Short2Rad(0x600));
+            quat.setAxisAngle(this.baseQuatTarget, scratchVec3b, windPow * cM_s2rad(0x600));
         } else {
             quat.identity(this.baseQuatTarget);
         }
@@ -1149,10 +1149,10 @@ class d_a_obj_lpalm extends fopAc_ac_c {
 
         for (let i = 0; i < 2; i++) {
             const animDirTarget = Math.min(windPow * 0x180, 0x100);
-            this.animDir[i] = cLib_addCalcAngleRad2(this.animDir[i], cM__Short2Rad(animDirTarget), cM__Short2Rad(0x04), cM__Short2Rad(0x20));
+            this.animDir[i] = cLib_addCalcAngleRad2(this.animDir[i], cM_s2rad(animDirTarget), cM_s2rad(0x04), cM_s2rad(0x20));
 
             // Rock back and forth.
-            this.animWave[i] += cM__Short2Rad((windPow * 0x800) + cM_rndFX(0x80)) * deltaTimeFrames;
+            this.animWave[i] += cM_s2rad((windPow * 0x800) + cM_rndFX(0x80)) *deltaTimeFrames;
             const wave = Math.sin(this.animWave[i]);
 
             vec3.set(scratchVec3a, wave, 0, wave);
@@ -2163,7 +2163,7 @@ class dCloth_packet_c {
 
                 vec3.normalize(dst, dst);
 
-                const theta = cM__Short2Rad(this.rotateY) * Math.sin(cM__Short2Rad((this.wave + this.ripple * (fly + hoist))));
+                const theta = cM_s2rad(this.rotateY) * Math.sin(cM_s2rad((this.wave + this.ripple * (fly + hoist))));
                 computeModelMatrixR(scratchMat4a, 0, theta, 0);
                 transformVec3Mat4w0(dst, scratchMat4a, dst);
             }
@@ -2209,7 +2209,7 @@ class dCloth_packet_c {
 
     public cloth_move(deltaTimeFrames: number): void {
         // Compute global wind vector.
-        vec3.scale(scratchVec3a, this.globalWind, this.windSpeed + this.windSpeedWave * Math.sin(cM__Short2Rad(this.wave)));
+        vec3.scale(scratchVec3a, this.globalWind, this.windSpeed + this.windSpeedWave * Math.sin(cM_s2rad(this.wave)));
 
         const distFly = (this.flyLength / (this.flyGridSize - 1)) * this.flyFlex;
         const distHoist = (this.hoistLength / (this.hoistGridSize - 1)) * this.hoistFlex;
@@ -2873,8 +2873,7 @@ class d_a_majuu_flag extends fopAc_ac_c {
 
     private majuu_flag_move(globals: dGlobals, deltaTimeFrames: number): void {
         this.wave += this.waveSpeed * deltaTimeFrames;
-        const windSpeed = lerp(this.windSpeed1, this.windSpeed2, Math.sin(cM__Short2Rad(this.wave)) * 0.5 + 0.5);
-
+        const windSpeed = lerp(this.windSpeed1, this.windSpeed2,  Math.sin(cM_s2rad(this.wave)) * 0.5 + 0.5);
         const windpow = dKyw_get_wind_pow(globals.g_env_light);
         vec3.set(scratchVec3a, 0, 0, windSpeed * windpow * 2.0);
         mDoMtx_ZrotS(calc_mtx, -this.rot[2]);
@@ -3366,12 +3365,12 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
         dLib_waveRot(globals, this.wave, this.pos, 0.0, deltaTimeFrames);
         vec3.copy(this.model.baseScale, this.scale);
 
-        const waveAnim1 = Math.sin(cM__Short2Rad(this.waveAnim1Timer));
+        const waveAnim1 = Math.sin(cM_s2rad(this.waveAnim1Timer));
         const waveAnim1X = 0xC8 * waveAnim1;
         const waveAnim1Z = 0x3C * waveAnim1;
 
         const rockAnimAmpl = Math.sin(this.linkRideRockTimer) * this.linkRideRockAmpl;
-        const rockAnimTheta = Math.cos(cM__Short2Rad(this.rot[1]));
+        const rockAnimTheta = Math.cos(cM_s2rad(this.rot[1]));
         const rockAnimX = rockAnimAmpl * Math.cos(rockAnimTheta);
         const rockAnimZ = rockAnimAmpl * Math.sin(rockAnimTheta);
 
@@ -3497,7 +3496,7 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
 
         const rotTargetY = cM_atan2s(scratchVec3a[0], scratchVec3a[2]);
         this.pathRotY = cLib_addCalcAngleS(this.pathRotY, rotTargetY, 8, 0x200 * deltaTimeFrames, 8);
-        const fwdSpeed = this.velocityFwd * deltaTimeFrames * Math.cos(cM__Short2Rad(rotTargetY - this.pathRotY));
+        const fwdSpeed = this.velocityFwd * deltaTimeFrames * Math.cos(cM_s2rad(rotTargetY - this.pathRotY));
         cLib_chasePosXZ(dst, this.curPathP1, fwdSpeed);
 
         return cLib_distanceSqXZ(dst, this.curPathP1) < fwdSpeed ** 2.0;
@@ -3778,7 +3777,7 @@ class d_a_oship extends fopAc_ac_c implements ModeFuncExec<d_a_oship_mode> {
 
         const rotTargetY = cM_atan2s(scratchVec3a[0], scratchVec3a[2]);
         this.pathRotY = cLib_addCalcAngleS(this.pathRotY, rotTargetY, 8, 0x200 * deltaTimeFrames, 8);
-        const fwdSpeed = this.velocityFwd * deltaTimeFrames * Math.cos(cM__Short2Rad(rotTargetY - this.pathRotY));
+        const fwdSpeed = this.velocityFwd * deltaTimeFrames * Math.cos(cM_s2rad(rotTargetY - this.pathRotY));
         cLib_chasePosXZ(dst, this.curPathP1, fwdSpeed);
 
         return cLib_distanceSqXZ(dst, this.curPathP1) < fwdSpeed ** 2.0;
@@ -3984,7 +3983,7 @@ class d_a_oship extends fopAc_ac_c implements ModeFuncExec<d_a_oship_mode> {
         dLib_waveRot(globals, this.wave, this.pos, this.attackSwayAmount, deltaTimeFrames);
 
         const angleY = this.rot[1] + cLib_targetAngleY(this.pos, globals.cameraPosition);
-        const swayAmount = Math.sin(cM__Short2Rad(this.attackSwayTimer)) * (this.attackSwayAmount * 10);
+        const swayAmount = Math.sin(cM_s2rad(this.attackSwayTimer)) * (this.attackSwayAmount * 10);
 
         if (this.curMode !== d_a_oship_mode.delete) {
             this.rot[0] = this.wave.rotX + Math.cos(angleY) * swayAmount;
@@ -4607,7 +4606,7 @@ export class d_a_ff extends fopAc_ac_c {
             this.flickerTimerTimer = 200.0 + cM_rndF(100.0);
         }
 
-        const scaleTarget = (this.flickerTimer <= 0.0) ? Math.sin(cM__Short2Rad(this.liveTimer * 1000)) * 0.15 * 0.25 + 0.225 : 0.0;
+        const scaleTarget = (this.flickerTimer <= 0.0) ? Math.sin(cM_s2rad(this.liveTimer * 1000)) * 0.15 * 0.25 + 0.225 : 0.0;
         this.flyScale = cLib_addCalc2(this.flyScale, scaleTarget, 0.1 * deltaTimeFrames, 0.05);
 
         let motion = false;

@@ -21,7 +21,7 @@ import { colorCopy, colorFromRGBA } from '../Color.js';
 import { dKy_GxFog_set } from './d_kankyo.js';
 import { dBgS_GndChk } from './d_bg.js';
 import { getMatrixTranslation } from '../MathHelpers.js';
-import { cM__Short2Rad } from './SComponent.js';
+import { cM_s2rad } from './SComponent.js';
 
 function createMaterialHelper(material: GXMaterial): GXMaterialHelperGfx {
     // Patch material.
@@ -326,8 +326,8 @@ export class FlowerPacket {
     public calc(frameCount: number): void {
         // Idle animation updates
         for (let i = 0; i < 8; i++) {
-            const theta = Math.cos(cM__Short2Rad(1000.0 * (frameCount + 0xfa * i)));
-            this.anims[i].rotationX = cM__Short2Rad(1000.0 + 1000.0 * theta);
+            const theta = Math.cos(cM_s2rad(1000.0 * (frameCount + 0xfa * i)));
+            this.anims[i].rotationX = cM_s2rad(1000.0 + 1000.0 * theta);
         }
 
         // @TODO: Hit checks
@@ -643,11 +643,11 @@ export class TreePacket {
     public calc(frameCount: number): void {
         // Idle animation updates
         for (let i = 0; i < 8; i++) {
-            let theta = Math.cos(cM__Short2Rad(4000.0 * (frameCount + 0xfa * i)));
-            this.anims[i].topRotationY = cM__Short2Rad(100.0 + this.anims[i].initialRotationShort + 100.0 * theta);
+            let theta = Math.cos(cM_s2rad(4000.0 * (frameCount + 0xfa * i)));
+            this.anims[i].topRotationY = cM_s2rad(100.0 + this.anims[i].initialRotationShort + 100.0 * theta);
 
-            theta = Math.cos(cM__Short2Rad(1000.0 * (frameCount + 0xfa * i)));
-            this.anims[i].topRotationX = cM__Short2Rad(100 + 100 * theta);
+            theta = Math.cos(cM_s2rad(1000.0 * (frameCount + 0xfa * i)));
+            this.anims[i].topRotationX = cM_s2rad(100 + 100 * theta);
         }
 
         // @TODO: Hit checks
@@ -700,7 +700,7 @@ export class TreePacket {
 
             mat4.fromYRotation(anim.trunkMtx, anim.trunkFallYaw);
             mat4.rotateX(anim.trunkMtx, anim.trunkMtx, anim.trunkRotationX);
-            mat4.rotateY(anim.trunkMtx, anim.trunkMtx, cM__Short2Rad(anim.initialRotationShort) - anim.trunkFallYaw);
+            mat4.rotateY(anim.trunkMtx, anim.trunkMtx, cM_s2rad(anim.initialRotationShort) - anim.trunkFallYaw);
         }
 
         // Update grass packets
@@ -919,7 +919,7 @@ export class GrassPacket {
         for (let i = 0; i < 8; i++) {
             this.anims[i] = {
                 active: true,
-                rotationY: cM__Short2Rad(0x2000 * i),
+                rotationY: cM_s2rad(0x2000 * i),
                 rotationX: 0,
                 modelMtx: mat4.create(),
             }
@@ -951,8 +951,8 @@ export class GrassPacket {
 
         // Idle animation updates
         for (let i = 0; i < 8; i++) {
-            let theta = Math.cos(cM__Short2Rad(windPower * (frameCount + 0xfa * i)));
-            this.anims[i].rotationX = cM__Short2Rad(windPower + windPower * theta);
+            let theta = Math.cos(cM_s2rad(windPower * (frameCount + 0xfa * i)));
+            this.anims[i].rotationX = cM_s2rad(windPower + windPower * theta);
         }
 
         // @TODO: Hit checks

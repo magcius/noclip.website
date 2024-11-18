@@ -1,5 +1,5 @@
 
-import { GfxDevice, GfxFormat, GfxSamplerBinding, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxTextureDimension, GfxSamplerFormatKind, GfxClipSpaceNearZ } from "../gfx/platform/GfxPlatform.js";
+import { GfxDevice, GfxFormat, GfxSamplerBinding, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxTextureDimension, GfxSamplerFormatKind, GfxClipSpaceNearZ, GfxViewportOrigin } from "../gfx/platform/GfxPlatform.js";
 import { GfxReadback, GfxProgram, GfxSampler, GfxTexture } from "../gfx/platform/GfxPlatformImpl.js";
 import { preprocessProgram_GLSL } from "../gfx/shaderc/GfxShaderCompiler.js";
 import { fullscreenMegaState } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
@@ -9,7 +9,6 @@ import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 
-// TODO(jstpierre): Port the PeekZ system to occlusion queries?
 export class PeekZResult {
     public triviallyCulled: boolean = false;
     public value: number | null = null;
@@ -150,10 +149,13 @@ void main() {
 
     private submitFramePost(device: GfxDevice, frame: PeekZFrame, depthColorTexture: GfxTexture, width: number, height: number): void {
         // Now go through and start submitting readbacks on our texture.
+        const yScale = (device.queryVendorInfo().viewportOrigin === GfxViewportOrigin.UpperLeft) ? -1 : 1;
+
         for (let i = 0; i < frame.results.length; i++) {
-            // User specifies coordinates in -1 to 1 normalized space. Convert to attachment space.
+            // User specifies coordinates in -1 to 1 normalized space (with -1, -1 being the bottom left).
+            // Convert to attachment space.
             const attachmentX = (((frame.entryX[i] * 0.5) + 0.5) * width) | 0;
-            const attachmentY = (((frame.entryY[i] * 0.5) + 0.5) * height) | 0;
+            const attachmentY = (((frame.entryY[i] * yScale * 0.5) + 0.5) * height) | 0;
             device.readPixelFromTexture(frame.readback, i, depthColorTexture, attachmentX, attachmentY);
         }
 
@@ -189,7 +191,7 @@ void main() {
                 renderInst.setBindingLayouts([{
                     numUniformBuffers: 0,
                     numSamplers: 1,
-                    samplerEntries: [{ dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Depth, }],
+                    samplerEntries: [{ dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.UnfilterableFloat, }],
                 }]);
                 renderInst.setDrawCount(3);
 

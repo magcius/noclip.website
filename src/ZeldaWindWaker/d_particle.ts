@@ -14,7 +14,7 @@ import { TextureMapping } from "../TextureHolder.js";
 import { nArray } from "../util.js";
 import { ViewerRenderInput } from "../viewer.js";
 import { dKy_get_seacolor } from "./d_kankyo.js";
-import { cLib_addCalc2, cM__Short2Rad } from "./SComponent.js";
+import { cLib_addCalc2, cM_s2rad } from "./SComponent.js";
 import { dGlobals } from "./Main.js";
 import * as GX from '../gx/gx_enum.js';
 import { ColorKind } from "../gx/gx_render.js";
@@ -144,7 +144,7 @@ export class dPa_control_c {
         if (pos !== null)
             vec3.copy(baseEmitter.globalTranslation, pos);
         if (rot !== null)
-            computeModelMatrixR(baseEmitter.globalRotation, cM__Short2Rad(rot[0]), cM__Short2Rad(rot[1]), cM__Short2Rad(rot[2]));
+            computeModelMatrixR(baseEmitter.globalRotation, cM_s2rad(rot[0]), cM_s2rad(rot[1]), cM_s2rad(rot[2]));
         if (scale !== null) {
             vec3.copy(baseEmitter.globalDynamicsScale, scale);
             vec2.set(baseEmitter.globalParticleScale, scale[0], scale[1]);
@@ -217,7 +217,7 @@ export class dPa_splashEcallBack extends dPa_levelEcallBack {
             vec3.set(emitter.globalDynamicsScale, scale, scale, scale);
             vec2.set(emitter.globalParticleScale, scale, scale);
             emitter.directionalSpeed = 15.0 * scale;
-            computeModelMatrixR(emitter.globalRotation, 0.0, cM__Short2Rad(this.rot[1]), 0.0);
+            computeModelMatrixR(emitter.globalRotation, 0.0, cM_s2rad(this.rot[1]), 0.0);
         } else {
             const scale = emitter.globalParticleScale[0] - (0.2 * deltaTimeFrames);
             if (scale <= 0.0) {
@@ -319,7 +319,7 @@ export class dPa_waveEcallBack extends dPa_levelEcallBack {
             return;
 
         if (this.state === 0) {
-            computeModelMatrixR(emitter.globalRotation, 0.0, cM__Short2Rad(this.rot[1]), 0.0);
+            computeModelMatrixR(emitter.globalRotation, 0.0, cM_s2rad(this.rot[1]), 0.0);
 
             const vel = Math.min(vec3.distance(emitter.globalTranslation, this.pos) / workData.deltaTime, this.maxParticleVelocity);
             let velTarget = vel * this.velFade1 * this.velFade2;
@@ -455,7 +455,7 @@ export class dPa_trackEcallBack extends dPa_levelEcallBack {
 
         if (this.state === 0) {
             vec3.copy(emitter.globalTranslation, this.pos);
-            computeModelMatrixR(emitter.globalRotation, 0.0, cM__Short2Rad(this.rot[1]) * Math.sign(this.vel), 0.0);
+            computeModelMatrixR(emitter.globalRotation, 0.0, cM_s2rad(this.rot[1]) * Math.sign(this.vel), 0.0);
 
             const fadingOut = Math.abs(this.vel) <= this.minVel;
             const incr = fadingOut ? -5 : 5;

@@ -188,7 +188,7 @@ export class dScnKy_env_light_c {
     // Time
     public curTime: number = 0.0;
     public nextTime: number = 0.0;
-    public timeSpeed: number = 0.012;
+    public timeAdv: number = 0.012;
     public darkTime: number = 0.0;
     public calendarDay: number = 0.0;
 
@@ -1701,7 +1701,7 @@ function setDaytime(globals: dGlobals, envLight: dScnKy_env_light_c, deltaTimeFr
     }
 
     if (dKy_darkworld_check(globals)) {
-        envLight.darkTime += envLight.timeSpeed * deltaTimeFrames;
+        envLight.darkTime += envLight.timeAdv * deltaTimeFrames;
         if (envLight.darkTime >= 360.0) {
             envLight.darkTime = 0.0;
         }
@@ -1713,14 +1713,14 @@ function setDaytime(globals: dGlobals, envLight: dScnKy_env_light_c, deltaTimeFr
         if (globals.stageName === "F_SP127" || globals.stageName === "R_SP127") {
             if (envLight.curTime >= 300 || envLight.curTime <= 60) {
                 // increase the time multiple times on these stages
-                envLight.curTime += envLight.timeSpeed * deltaTimeFrames;
-                envLight.curTime += envLight.timeSpeed * deltaTimeFrames;
+                envLight.curTime += envLight.timeAdv * deltaTimeFrames;
+                envLight.curTime += envLight.timeAdv * deltaTimeFrames;
             } else if (envLight.curTime >= 150 && envLight.curTime <= 195) {
-                envLight.curTime += envLight.timeSpeed * deltaTimeFrames;
+                envLight.curTime += envLight.timeAdv * deltaTimeFrames;
             }
         }
 
-        envLight.curTime += envLight.timeSpeed * deltaTimeFrames;
+        envLight.curTime += envLight.timeAdv * deltaTimeFrames;
         if (envLight.curTime >= 360.0) {
             envLight.curTime = 0.0;
             envLight.calendarDay += 1;
@@ -2113,7 +2113,7 @@ function envcolor_init(globals: dGlobals): void {
     envLight.calendarDay = today.getDay();
     envLight.curTime = 15 * today.getHours();
 
-    envLight.timeSpeed = 0.012;
+    envLight.timeAdv = 0.012;
 
     colorFromRGBA(envLight.lightStatus[0].Color, 1.0, 0.0, 0.0, 0.0);
     colorFromRGBA(envLight.lightStatus[1].Color, 0.0, 0.0, 0.0, 0.0);

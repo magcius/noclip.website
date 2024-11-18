@@ -1,7 +1,7 @@
 
 import { GfxAttachmentState, GfxBindingLayoutDescriptor, GfxBindingsDescriptor, GfxBlendFactor, GfxBlendMode, GfxBufferBinding, GfxBufferFrequencyHint, GfxBufferUsage, GfxChannelBlendState, GfxChannelWriteMask, GfxClipSpaceNearZ, GfxCompareMode, GfxComputePass, GfxComputePipelineDescriptor, GfxComputeProgramDescriptor, GfxCullMode, GfxStatisticsGroup, GfxDevice, GfxDeviceLimits, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxInputLayoutDescriptor, GfxMegaStateDescriptor, GfxMipFilterMode, GfxPass, GfxPlatformFramebuffer, GfxPrimitiveTopology, GfxRenderProgramDescriptor, GfxQueryPoolType, GfxRenderPass, GfxRenderPassDescriptor, GfxRenderPipelineDescriptor, GfxRenderTargetDescriptor, GfxSamplerBinding, GfxSamplerDescriptor, GfxSamplerFormatKind, GfxSwapChain, GfxTexFilterMode, GfxTextureDescriptor, GfxTextureDimension, GfxTextureUsage, GfxVendorInfo, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxViewportOrigin, GfxWrapMode, GfxRenderAttachmentView, GfxRenderPassAttachmentColor, GfxRenderPassAttachment, GfxRenderPassAttachmentDepthStencil } from './GfxPlatform.js';
 import { FormatCompFlags, FormatFlags, FormatTypeFlags, GfxFormat, getFormatByteSize, getFormatCompByteSize, getFormatCompFlags, getFormatFlags, getFormatSamplerKind, getFormatTypeFlags } from "./GfxPlatformFormat.js";
-import { GfxBindings, GfxBuffer, GfxComputePipeline, GfxInputLayout, GfxProgram, GfxQueryPool, GfxReadback, GfxRenderPipeline, GfxRenderTarget, GfxResource, GfxSampler, GfxTexture, GfxTextureImpl, _T, defaultBindingLayoutSamplerDescriptor } from "./GfxPlatformImpl.js";
+import { GfxBindings, GfxBuffer, GfxComputePipeline, GfxInputLayout, GfxProgram, GfxQueryPool, GfxReadback, GfxRenderPipeline, GfxRenderTarget, GfxResource, GfxSampler, GfxTexture, GfxTextureImpl, _T, defaultBindingLayoutSamplerDescriptor, isFormatSamplerKindCompatible } from "./GfxPlatformImpl.js";
 
 import { copyAttachmentState, copyMegaState, defaultMegaState } from '../helpers/GfxMegaStateDescriptorHelpers.js';
 import { assert, assertExists, leftPad, nArray, nullify } from './GfxPlatformUtil.js';
@@ -558,6 +558,8 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         this._currentMegaState.depthCompare = GfxCompareMode.Less;
         this._currentMegaState.depthWrite = false;
         this._currentMegaState.attachmentsState[0].channelWriteMask = GfxChannelWriteMask.AllChannels;
+        for (let i = 1; i < 4; i++)
+            this._currentMegaState.attachmentsState[i] = copyAttachmentState(undefined, this._currentMegaState.attachmentsState[0]);
 
         // We always have depth & stencil test enabled.
         gl.enable(gl.DEPTH_TEST);
@@ -1297,8 +1299,14 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
         // TODO(jstpierre): Remove this eventually?
         if (this._currentMegaState.attachmentsState[0].channelWriteMask !== GfxChannelWriteMask.Alpha) {
-            gl.colorMask(false, false, false, true);
-            this._currentMegaState.attachmentsState[0].channelWriteMask = GfxChannelWriteMask.Alpha;
+            if (this._OES_draw_buffers_indexed !== null) {
+                this._OES_draw_buffers_indexed.colorMaskiOES(0, false, false, false, true);
+                this._currentMegaState.attachmentsState[0].channelWriteMask = GfxChannelWriteMask.Alpha;
+            } else {
+                gl.colorMask(false, false, false, true);
+                for (let i = 0; i < this._currentMegaState.attachmentsState.length; i++)
+                    this._currentMegaState.attachmentsState[0].channelWriteMask = GfxChannelWriteMask.Alpha;
+            }
         }
 
         gl.clearBufferfv(gl.COLOR, 0, [0.0, 0.0, 0.0, 1.0]);
@@ -1808,9 +1816,6 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             this._currentColorAttachment[i] = null;
         }
         this._currentColorAttachment.length = numColorAttachments;
-
-        for (let i = this._currentMegaState.attachmentsState.length; i < numColorAttachments; i++)
-            this._currentMegaState.attachmentsState[i] = copyAttachmentState(undefined, defaultMegaState.attachmentsState[0]);
     }
 
     private _setRenderPassParametersColor(i: number, passAttachment: GfxRenderPassAttachmentColor | null): void {
@@ -1992,7 +1997,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
                     // Validate sampler entry.
 
                     assert(samplerEntry.gl_target === gl_target);
-                    assert(samplerEntry.formatKind === formatKind);
+                    assert(isFormatSamplerKindCompatible(samplerEntry.formatKind, formatKind));
                 } else {
                     gl.bindTexture(samplerEntry.gl_target, this._getFallbackTexture(samplerEntry));
                 }

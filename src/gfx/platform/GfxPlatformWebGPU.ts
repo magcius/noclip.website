@@ -2,9 +2,9 @@
 import type { glsl_compile as glsl_compile_ } from "../../../rust/pkg/noclip_support";
 import { HashMap, nullHashFunc } from "../../HashMap.js";
 import { rust } from "../../rustlib.js";
-import { GfxAttachmentState, GfxBindingLayoutDescriptor, GfxBindingLayoutSamplerDescriptor, GfxBindings, GfxBindingsDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxChannelBlendState, GfxClipSpaceNearZ, GfxCompareMode, GfxComputePass, GfxComputePipelineDescriptor, GfxComputeProgramDescriptor, GfxCullMode, GfxStatisticsGroup, GfxDevice, GfxDeviceLimits, GfxFormat, GfxFrontFaceMode, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutDescriptor, GfxMegaStateDescriptor, GfxMipFilterMode, GfxPass, GfxPrimitiveTopology, GfxProgram, GfxQueryPoolType, GfxRenderPass, GfxRenderPassDescriptor, GfxRenderPipeline, GfxRenderPipelineDescriptor, GfxRenderTarget, GfxRenderTargetDescriptor, GfxSampler, GfxSamplerDescriptor, GfxSamplerFormatKind, GfxShadingLanguage, GfxSwapChain, GfxTexFilterMode, GfxTexture, GfxTextureDescriptor, GfxTextureDimension, GfxTextureUsage, GfxVendorInfo, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxViewportOrigin, GfxWrapMode, GfxRenderAttachmentView, GfxRenderProgramDescriptor } from "./GfxPlatform.js";
+import { GfxAttachmentState, GfxBindingLayoutDescriptor, GfxBindingLayoutSamplerDescriptor, GfxBindings, GfxBindingsDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxChannelBlendState, GfxClipSpaceNearZ, GfxCompareMode, GfxComputePass, GfxComputePipelineDescriptor, GfxComputeProgramDescriptor, GfxCullMode, GfxStatisticsGroup, GfxDevice, GfxDeviceLimits, GfxFormat, GfxFrontFaceMode, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutDescriptor, GfxMegaStateDescriptor, GfxMipFilterMode, GfxPass, GfxPrimitiveTopology, GfxProgram, GfxQueryPoolType, GfxRenderPass, GfxRenderPassDescriptor, GfxRenderPipeline, GfxRenderPipelineDescriptor, GfxRenderTarget, GfxRenderTargetDescriptor, GfxSampler, GfxSamplerDescriptor, GfxSamplerFormatKind, GfxShadingLanguage, GfxSwapChain, GfxTexFilterMode, GfxTexture, GfxTextureDescriptor, GfxTextureDimension, GfxTextureUsage, GfxVendorInfo, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxViewportOrigin, GfxWrapMode, GfxRenderAttachmentView, GfxRenderProgramDescriptor, GfxColor } from "./GfxPlatform.js";
 import { FormatFlags, FormatTypeFlags, getFormatByteSize, getFormatFlags, getFormatSamplerKind, getFormatTypeFlags } from "./GfxPlatformFormat.js";
-import { GfxComputePipeline, GfxQueryPool, GfxReadback, GfxResource, GfxTextureImpl, _T, defaultBindingLayoutSamplerDescriptor } from "./GfxPlatformImpl.js";
+import { GfxComputePipeline, GfxQueryPool, GfxReadback, GfxResource, GfxTextureImpl, _T, defaultBindingLayoutSamplerDescriptor, isFormatSamplerKindCompatible } from "./GfxPlatformImpl.js";
 import { align, assert, assertExists } from "./GfxPlatformUtil.js";
 import { gfxBindingLayoutDescriptorEqual } from './GfxPlatformObjUtil.js';
 import { IS_DEVELOPMENT } from "../../BuildVersion.js";
@@ -59,6 +59,7 @@ interface GfxInputLayoutP_WebGPU extends GfxInputLayout {
 interface GfxRenderPipelineP_WebGPU extends GfxRenderPipeline {
     descriptor: GfxRenderPipelineDescriptor;
     gpuRenderPipeline: GPURenderPipeline | null;
+    blendConstant: GfxColor | null;
     isCreatingAsync: boolean;
 }
 
@@ -293,6 +294,10 @@ function translateBlendFactor(factor: GfxBlendFactor): GPUBlendFactor {
         return 'dst-alpha';
     else if (factor === GfxBlendFactor.OneMinusDstAlpha)
         return 'one-minus-dst-alpha';
+    else if (factor === GfxBlendFactor.ConstantColor)
+        return 'constant';
+    else if (factor === GfxBlendFactor.OneMinusConstantColor)
+        return 'one-minus-constant';
     else
         throw "whoops";
 }
@@ -479,6 +484,20 @@ function translateBindGroupSamplerBinding(sampler: GfxBindingLayoutSamplerDescri
         return { type: "non-filtering" };
 }
 
+function factorUsesBlendConstant(v: GfxBlendFactor): boolean {
+    return v === GfxBlendFactor.ConstantColor || v === GfxBlendFactor.OneMinusConstantColor;
+}
+
+function extractBlendConstant(pipeline: GfxRenderPipelineDescriptor): GfxColor | null {
+    for (let i = 0; i < pipeline.megaStateDescriptor.attachmentsState.length; i++) {
+        const at = pipeline.megaStateDescriptor.attachmentsState[i];
+        if (factorUsesBlendConstant(at.rgbBlendState.blendSrcFactor) || factorUsesBlendConstant(at.rgbBlendState.blendDstFactor) || factorUsesBlendConstant(at.alphaBlendState.blendSrcFactor) || factorUsesBlendConstant(at.alphaBlendState.blendDstFactor))
+            return pipeline.megaStateDescriptor.blendConstant;
+    }
+
+    return null;
+}
+
 class GfxRenderPassP_WebGPU implements GfxRenderPass {
     public descriptor!: GfxRenderPassDescriptor;
     public occlusionQueryPool: GfxQueryPoolP_WebGPU | null = null;
@@ -654,6 +673,9 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
         const pipeline = pipeline_ as GfxRenderPipelineP_WebGPU;
         const gpuRenderPipeline = assertExists(pipeline.gpuRenderPipeline);
         this.gpuRenderPassEncoder!.setPipeline(gpuRenderPipeline);
+
+        if (pipeline.blendConstant !== null)
+            this.gpuRenderPassEncoder!.setBlendConstant(pipeline.blendConstant);
     }
 
     public setVertexInput(inputLayout_: GfxInputLayout | null, vertexBuffers: (GfxVertexBufferDescriptor | null)[] | null, indexBuffer: GfxIndexBufferDescriptor | null): void {
@@ -1194,7 +1216,8 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             const gfxBinding = bindingsDescriptor.samplerBindings[i];
             const gfxTexture = (gfxBinding.gfxTexture !== null ? gfxBinding.gfxTexture : this._getFallbackTexture(samplerEntry)) as GfxTextureP_WebGPU;
             assert(samplerEntry.dimension === gfxTexture.dimension);
-            assert(samplerEntry.formatKind === getFormatSamplerKind(gfxTexture.pixelFormat));
+            const formatKind = getFormatSamplerKind(gfxTexture.pixelFormat);
+            assert(isFormatSamplerKindCompatible(samplerEntry.formatKind, formatKind));
             const gpuTextureView = (gfxTexture as GfxTextureP_WebGPU).gpuTextureView;
             gpuBindGroupEntries.push({ binding: numBindings++, resource: gpuTextureView });
 
@@ -1256,9 +1279,10 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     public createRenderPipeline(descriptor: GfxRenderPipelineDescriptor): GfxRenderPipeline {
         const gpuRenderPipeline: GPURenderPipeline | null = null;
         const isCreatingAsync = false;
+        const blendConstant = extractBlendConstant(descriptor);
         const renderPipeline: GfxRenderPipelineP_WebGPU = {
             _T: _T.RenderPipeline, ResourceUniqueId: this.getNextUniqueId(),
-            descriptor, isCreatingAsync, gpuRenderPipeline,
+            descriptor, isCreatingAsync, gpuRenderPipeline, blendConstant,
         };
         this._createRenderPipeline(renderPipeline, true);
         return renderPipeline;
@@ -1741,8 +1765,7 @@ export async function createSwapChainForWebGPU(canvas: HTMLCanvasElement | Offsc
     if (device === null)
         return null;
 
-    const context = canvas.getContext('webgpu') as any as GPUCanvasContext;
-
+    const context = canvas.getContext('webgpu');
     if (!context)
         return null;
 

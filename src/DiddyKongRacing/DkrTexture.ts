@@ -29,7 +29,7 @@ export class DkrTexture {
 
     private hasBeenDestroyed = false;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, private pixels: Uint8ClampedArray, headerData: Uint8Array) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, private pixels: Uint8ClampedArray, headerData: Uint8Array, private debugName: string) {
         const view = new DataView(headerData.buffer);
         this.width = view.getUint8(0x00);
         this.height = view.getUint8(0x01);
@@ -70,6 +70,7 @@ export class DkrTexture {
 
             const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, this.width, this.height, 1));
             device.uploadTextureData(gfxTexture, 0, [this.pixels.slice(frameStart, frameEnd)]);
+            device.setResourceName(gfxTexture, `${debugName} / ${i}`);
 
             this.textureMappingsArray[i][0].gfxSampler = sampler;
             this.textureMappingsArray[i][0].gfxTexture = gfxTexture;
@@ -77,10 +78,9 @@ export class DkrTexture {
     }
 
     public destroy(device: GfxDevice): void {
-        if(!this.hasBeenDestroyed) {
-            for(const textureMapping of this.textureMappingsArray) {
+        if (!this.hasBeenDestroyed) {
+            for (const textureMapping of this.textureMappingsArray)
                 device.destroyTexture(textureMapping[0].gfxTexture!);
-            }
             this.hasBeenDestroyed = true;
         }
     }
