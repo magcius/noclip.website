@@ -2111,7 +2111,7 @@ void main() {
 const postBindingLayouts: GfxBindingLayoutDescriptor[] = [
     { numUniformBuffers: 1, numSamplers: 2, samplerEntries: [
         { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float, },
-        { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Depth, },
+        { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.UnfilterableFloat, },
     ] },
 ];
 

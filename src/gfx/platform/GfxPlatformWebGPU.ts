@@ -921,11 +921,11 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     ];
 
     constructor(public adapter: GPUAdapter, public device: GPUDevice, private canvas: HTMLCanvasElement | OffscreenCanvas, private canvasContext: GPUCanvasContext, private glsl_compile: typeof glsl_compile_) {
-        this._fallbackTexture2D = this.createFallbackTexture(GfxTextureDimension.n2D, GfxSamplerFormatKind.Float);
-        this._fallbackTexture2DDepth = this.createFallbackTexture(GfxTextureDimension.n2D, GfxSamplerFormatKind.Depth);
-        this._fallbackTexture2DArray = this.createFallbackTexture(GfxTextureDimension.n2DArray, GfxSamplerFormatKind.Float);
-        this._fallbackTexture3D = this.createFallbackTexture(GfxTextureDimension.n3D, GfxSamplerFormatKind.Float);
-        this._fallbackTextureCube = this.createFallbackTexture(GfxTextureDimension.Cube, GfxSamplerFormatKind.Float);
+        this._fallbackTexture2D = this.createFallbackTexture(GfxTextureDimension.n2D, GfxSamplerFormatKind.Float, 'GfxTexture Fallback 2D');
+        this._fallbackTexture2DDepth = this.createFallbackTexture(GfxTextureDimension.n2D, GfxSamplerFormatKind.Depth, 'GfxTexture Fallback 2D Depth');
+        this._fallbackTexture2DArray = this.createFallbackTexture(GfxTextureDimension.n2DArray, GfxSamplerFormatKind.Float, 'GfxTexture Fallback 2D Array');
+        this._fallbackTexture3D = this.createFallbackTexture(GfxTextureDimension.n3D, GfxSamplerFormatKind.Float, 'GfxTexture Fallback 3D');
+        this._fallbackTextureCube = this.createFallbackTexture(GfxTextureDimension.Cube, GfxSamplerFormatKind.Float, 'GfxTexture Fallback Cube');
 
         this._fallbackSamplerFiltering = this.createSampler({
             wrapS: GfxWrapMode.Repeat,
@@ -958,13 +958,15 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         this.canvasContext.configure({ device: this.device, format: this._swapChainFormat, usage: this._swapChainTextureUsage, alphaMode: 'opaque' });
     }
 
-    private createFallbackTexture(dimension: GfxTextureDimension, formatKind: GfxSamplerFormatKind): GfxTextureP_WebGPU {
+    private createFallbackTexture(dimension: GfxTextureDimension, formatKind: GfxSamplerFormatKind, str: string): GfxTextureP_WebGPU {
         const depth = dimension === GfxTextureDimension.Cube ? 6 : 1;
         const pixelFormat = formatKind === GfxSamplerFormatKind.Float ? GfxFormat.U8_RGBA_NORM : GfxFormat.D24;
-        return this.createTexture({
+        const texture = this.createTexture({
             dimension, pixelFormat, usage: GfxTextureUsage.Sampled,
             width: 1, height: 1, depthOrArrayLayers: depth, numLevels: 1,
         }) as GfxTextureP_WebGPU;
+        texture.gpuTexture.label = str;
+        return texture;
     }
 
     // GfxSwapChain
