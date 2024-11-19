@@ -4955,6 +4955,243 @@ class d_a_npc_ls1 extends fopNpc_npc_c {
     }
 }
 
+enum LkAnim {
+    WAITS = 0x00,
+    WALK = 0x01,
+    DASH = 0x02,
+    DASHKAZE = 0x03,
+    WALKHBOOTS = 0x04,
+    WALKHBOOTSKAZE = 0x05,
+    WALKSLOPE = 0x06,
+    ATNLS = 0x07,
+    ATNRS = 0x08,
+    ATNWLS = 0x09,
+    ATNWRS = 0x0A,
+    ATNDLS = 0x0B,
+    ATNDRS = 0x0C,
+    JMPEDS = 0x0D,
+    ATNWB = 0x0E,
+    ATNDB = 0x0F,
+    ATNJL = 0x10,
+    ATNJR = 0x11,
+    ATNJLLAND = 0x12,
+    ATNJRLAND = 0x13,
+    ROT = 0x14,
+    CUTREL = 0x15,
+    DIFENCE = 0x16,
+    DIFENCEA = 0x17,
+    CUTTURNP = 0x18,
+    CUTTURNPWFB = 0x19,
+    CUTTURNPWLR = 0x1A,
+    TALKA = 0x1B,
+    WAITB = 0x1C,
+    WAITATOB = 0x1D,
+    CUTA = 0x1E,
+    CUTF = 0x1F,
+    CUTR = 0x20,
+    CUTL = 0x21,
+    CUTEA = 0x22,
+    CUTEB = 0x23,
+    EXCA1 = 0x24,
+    EXCB1 = 0x25,
+    CUTBOKO = 0x26,
+    CUTRER = 0x27,
+    CUTTURN = 0x28,
+    CUTTURNC = 0x29,
+    CUTTURNB = 0x2A,
+    JATTACK = 0x2B,
+    JATTCKP = 0x2C,
+    JATTCKCUT = 0x2D,
+    JATTCKCUTHAM = 0x2E,
+    JATTACKLAND = 0x2F,
+    LANDDAMA = 0x30,
+    LANDDAMAST = 0x31,
+    ROLLF = 0x32,
+    ROLLFMIS = 0x33,
+    SLIP = 0x34,
+    SLIDEF = 0x35,
+    SLIDEFLAND = 0x36,
+    SLIDEB = 0x37,
+    SLIDEBLAND = 0x38,
+    ATNGAL = 0x39,
+    ATNGAR = 0x3A,
+    ATNGAHAM = 0x3B,
+    JMPST = 0x3C,
+    ROLLB = 0x3D,
+    ROLLBLAND = 0x3E,
+    CROUCH = 0x3F,
+    LIE = 0x40,
+    LIEFORWARD = 0x41,
+    WALL = 0x42,
+    WALLDW = 0x43,
+    WALLWL = 0x44,
+    WALLWR = 0x45,
+    WALLWLDW = 0x46,
+    WALLWRDW = 0x47,
+    WALLPL = 0x48,
+    WALLPR = 0x49,
+    WALLPLDW = 0x4A,
+    WALLPRDW = 0x4B,
+    VJMP = 0x4C,
+    VJMPCHA = 0x4D,
+    VJMPCHB = 0x4E,
+    VJMPCL = 0x4F,
+    HANGING = 0x50,
+    HANGUP = 0x51,
+    HANGMOVEL = 0x52,
+    HANGMOVER = 0x53,
+    DAM = 0x54,
+    DAML = 0x55,
+    DAMR = 0x56,
+    DAMF = 0x57,
+    DAMB = 0x58,
+    DAMFL = 0x59,
+    DAMFR = 0x5A,
+    DAMFF = 0x5B,
+    DAMFB = 0x5C,
+    DAMFLUP = 0x5D,
+    DAMFRUP = 0x5E,
+    DAMFFUP = 0x5F,
+    DAMFBUP = 0x60,
+    LAVADAM = 0x61,
+    DIELONG = 0x62,
+    SHIPDIE = 0x63,
+    SWIMDIE = 0x64,
+    GRABP = 0x65,
+    GRABUP = 0x66,
+    GRABNG = 0x67,
+    GRABWAIT = 0x68,
+    GRABWAITB = 0x69,
+    GRABTHROW = 0x6A,
+    GRABRE = 0x6B,
+    MJMP = 0x6C,
+    MJMPC = 0x6D,
+    MROLLL = 0x6E,
+    MROLLR = 0x6F,
+    MROLLLC = 0x70,
+    MROLLRC = 0x71,
+    MSTEPOVER = 0x72,
+    MSTEPOVERA = 0x73,
+    MSTEPOVERLAND = 0x74,
+    ROPECATCH = 0x75,
+    ROPESWINGF = 0x76,
+    ROPESWINGB = 0x77,
+    ROPEWAIT = 0x78,
+    ROPECLIMB = 0x79,
+    ROPEDOWN = 0x7A,
+    ROPETHROWCATCH = 0x7B,
+    BOOMCATCH = 0x7C,
+    VOYAGE1 = 0x7D,
+    WAITPUSHPULL = 0x7E,
+    WALKPUSH = 0x7F,
+    WALKPULL = 0x80,
+    SWIMP = 0x81,
+    SWIMWAIT = 0x82,
+    SWIMING = 0x83,
+    LADDERUPST = 0x84,
+    LADDERUPEDR = 0x85,
+    LADDERUPEDL = 0x86,
+    LADDERDWST = 0x87,
+    LADDERDWEDR = 0x88,
+    LADDERDWEDL = 0x89,
+    LADDERRTOL = 0x8A,
+    LADDERLTOR = 0x8B,
+    FCLIMBSLIDELUP = 0x8C,
+    FCLIMBSLIDERUP = 0x8D,
+    BOXOPENLINK = 0x8E,
+    BOXOPENSHORTLINK = 0x8F,
+    ITEMGET = 0x90,
+    HOLDUP = 0x91,
+    WALLHOLDUP = 0x92,
+    WALLHOLDUPDW = 0x93,
+    COMEOUT = 0x94,
+    WALKBARREL = 0x95,
+    SALTATION = 0x96,
+    WHO = 0x97,
+    PICKUP = 0x98,
+    WAITPICKUP = 0x99,
+    SURPRISED = 0x9A,
+    TURNBACK = 0x9B,
+    LOOKUP = 0x9C,
+    WAITQ = 0x9D,
+    GLAD = 0x9E,
+    SHIP_JUMP1 = 0x9F,
+    SHIP_JUMP2 = 0xA0,
+    USEFANA = 0xA1,
+    USEFANB = 0xA2,
+    USEFANB2 = 0xA3,
+    MOGAKU1 = 0xA4,
+    FM_BATA = 0xA5,
+    HOOKSHOTJMP = 0xA6,
+    VOMITJMP = 0xA7,
+    WAITTAKT = 0xA8,
+    SLIPICE = 0xA9,
+    HAMSWINGA = 0xAA,
+    HAMSWINGBPRE = 0xAB,
+    HAMSWINGBHIT = 0xAC,
+    HAMSWINGBEND = 0xAD,
+    SETBOOTS = 0xAE,
+    DOOROPENALINK = 0xAF,
+    DOOROPENBLINK = 0xB0,
+    SEYYES = 0xB1,
+    PRESENTATIONA = 0xB2,
+    WINDL = 0xB3,
+    WINDR = 0xB4,
+    PRESENTATIONB = 0xB5,
+    BINDRINKPRE = 0xB6,
+    BINDRINKING = 0xB7,
+    BINDRINKAFTER = 0xB8,
+    BINOPENPRE = 0xB9,
+    BINOPENA = 0xBA,
+    BINOPENB = 0xBB,
+    BINSWINGS = 0xBC,
+    BINSWINGU = 0xBD,
+    BINGET = 0xBE,
+    SURPRISEDB = 0xBF,
+    RISE = 0xC0,
+    USETCEIVER = 0xC1,
+    YOBU = 0xC2,
+    NENRIKI = 0xC3,
+    ESAMAKI = 0xC4,
+    SETHYOINOMI = 0xC5,
+    GETLETTER = 0xC6,
+    WAITLETTER = 0xC7,
+    LINK_FREEZ = 0xC8,
+    LINK_MOGAKI = 0xC9,
+    TAKTDGE = 0xCA,
+    DAMBIRI = 0xCB,
+    SALVLR = 0xCC,
+    SALVRWAIT = 0xCD,
+    SALVLWAIT = 0xCE,
+    SALVRBAD = 0xCF,
+    SALVLBAD = 0xD0,
+    SALVRGOOD = 0xD1,
+    SALVLGOOD = 0xD2,
+    MSTEPOVER_JMPED = 0xD3,
+    BOXOPENSLINK = 0xD4,
+    SEARESET = 0xD5,
+    WARPIN = 0xD6,
+    WARPOUT = 0xD7,
+    SURPRISEDWAIT = 0xD8,
+    PRESENTATIONAWAIT = 0xD9,
+    POWUPWAIT = 0xDA,
+    POWUP = 0xDB,
+    KOSHIKAKE = 0xDC,
+    COMBO_LINK = 0xDD,
+    CUTKESA = 0xDE,
+    WARPOUTFIRST = 0xDF,
+    WAITAUCTION = 0xE0,
+    FREEA = 0xE1,
+    FREEB = 0xE2,
+    FREED = 0xE3,
+    TAKTKAZE = 0xE4,
+    TAKTSIPPU = 0xE5,
+    TAKTCHUYA = 0xE6,
+    TAKTFUJIN = 0xE7,
+    TAKTAYATSURI = 0xE8,
+    TAKTCHISIN = 0xE9,
+};
+
 enum LinkDemoMode {
     None = 0x00,
     Unk1 = 0x01,
@@ -4962,24 +5199,24 @@ enum LinkDemoMode {
     ChaseFast = 0x03,
     Move = 0x04,
     WaitTurn = 0x05,
-    // UNK6 = 0x06,
+    UNK6 = 0x06,
     Damage = 0x07,
-    // NULL = 0x08,
-    // NULL = 0x09,
+    Unk8 = 0x08,
+    Unk9 = 0x09,
     OpenTreasure = 0x0A,
     GetItem = 0x0B,
     Unequip = 0x0C,
     Holdup = 0x0D,
     NULL = 0x0E,
     LookAround = 0x0F,
-    // NULL = 0x10,
-    // NULL = 0x11,
-    // NULL = 0x12,
+    Unk10 = 0x10,
+    Unk11 = 0x11,
+    Unk12 = 0x12,
     Salute = 0x13,
     LookAround2 = 0x14,
     TalismanPickup = 0x15,
     TalismanWait = 0x16,
-    // NULL = 0x17,
+    Unk17 = 0x17,
     Surprised = 0x18,
     TurnBack = 0x19,
     LookUp = 0x1A,
@@ -4997,10 +5234,10 @@ enum LinkDemoMode {
     WindChange = 0x26,
     ShipPaddle = 0x27,
     StandItemPut = 0x28,
-    // NULL = 0x29,
-    // NULL = 0x2A,
-    // NULL = 0x2B,
-    // NULL = 0x2C,
+    Unk29 = 0x29,
+    Unk2A = 0x2A,
+    Unk2B = 0x2B,
+    Unk2C = 0x2C,
     TactPlayOriginal = 0x2D,
     PowerUp = 0x2E,
     VorcanoFail = 0x2F,
@@ -5020,7 +5257,7 @@ enum LinkDemoMode {
     // NULL = 0x3D,
     WarpShort = 0x3E,
     OpenSalvageTreasure = 0x3F,
-    // NULL = 0x40,
+    Unk40 = 0x40,
     FoodSet = 0x41,
     SurprisedWait = 0x42,
     PowerUpWait = 0x43,
@@ -5031,20 +5268,36 @@ enum LinkDemoMode {
     HandUp = 0x48,
     FoodThrow = 0x49,
     IceSlip = 0x4A,
+    MAX = 0x4B,
 
-    Data = 0x200,
+    NewAnm0 = 0x200,
 };
+
+interface LkAnimData {
+    underBckIdx: number;
+    upperBckIdx: number;
+    leftHandIdx: number;
+    rightHandIdx: number;
+    texAnmIdx: number;
+}
 class d_a_py_lk extends fopAc_ac_c {
     public static PROCESS_NAME = dProcName_e.d_a_py_lk;
     private static ARC_NAME = "Link";
     private static LINK_BDL_CL = 0x18;
     private static LINK_BDL_HANDS = 0x1D;
 
+    private demoProcInitFuncTable = new Map<LinkDemoMode, () => boolean>();
+
     private model: J3DModelInstance;
     private modelHands: J3DModelInstance;
-    private demoMode: number;
+    private demoMode: number = LinkDemoMode.None;
+
+    private anmDataTable: LkAnimData[] = [];
+    private anm = new mDoExt_bckAnm();
 
     protected override subload(globals: dGlobals, prm: fopAcM_prm_class | null): cPhs__Status {
+        this.loadAnmTable(globals);
+        
         this.playerInit(globals);
 
         // noclip modification: The game manually draws the eye/eyebrow filter before the body. Let's do that with sorting.
@@ -5054,15 +5307,19 @@ class d_a_py_lk extends fopAc_ac_c {
         this.setupDam('mayuL');
         this.setupDam('mayuR');
 
+        // noclip modification:
+        this.setSingleMoveAnime(globals, LkAnim.WAITS, 0.6, 0.0, 0xc, 6.0);
+
         return cPhs__Status.Next;
     }
 
     override execute(globals: dGlobals, deltaTimeFrames: number): void {
         this.setDemoData(globals);
         if (this.demoMode != 5) {
-            // this.changeDemoProc();
+            this.changeDemoProc(globals);
         }
 
+        this.anm.play(deltaTimeFrames);
         this.model.calcAnim();
 
         // setWorldMatrix()
@@ -5075,6 +5332,7 @@ class d_a_py_lk extends fopAc_ac_c {
         settingTevStruct(globals, LightType.Actor, this.pos, this.tevStr);
         setLightTevColorType(globals, this.model, this.tevStr, viewerInput.camera);
 
+        this.anm.entry(this.model);
         mDoExt_modelEntryDL(globals, this.model, renderInstManager, viewerInput);
     }
 
@@ -5082,8 +5340,6 @@ class d_a_py_lk extends fopAc_ac_c {
         // createHeap()
         this.model = this.initModel(globals, d_a_py_lk.LINK_BDL_CL);
         // this.modelHands = this.initModel(globals, d_a_py_lk.LINK_BDL_HANDS);
-
-        globals.renderer.extraTextures.fillExtraTextures(this.model);
 
         this.cullMtx = this.model.modelMatrix;
     }
@@ -5124,7 +5380,7 @@ class d_a_py_lk extends fopAc_ac_c {
 
         demoActor.actor = this;
         demoActor.model = this.model;
-        demoActor.debugGetAnimName = (idx: number) => LinkDemoMode[idx].toString(); 
+        demoActor.debugGetAnimName = (idx: number) => LinkDemoMode[idx].toString();
 
         const enable = demoActor.checkEnable(0xFF);
         if (enable & EDemoActorFlags.HasPos) { vec3.copy(this.pos, demoActor.translation); }
@@ -5132,8 +5388,8 @@ class d_a_py_lk extends fopAc_ac_c {
 
         // The demo mode determines which 'Proc' action function will be called. It maps into the DemoProc*FuncTables.
         // These functions can start anims (by indexing into AnmDataTable), play sounds, etc.
-        if (enable & EDemoActorFlags.HasAnim) { 
-            this.demoMode = demoActor.nextBckId; 
+        if (enable & EDemoActorFlags.HasAnim) {
+            this.demoMode = demoActor.nextBckId;
         }
 
         if (enable & EDemoActorFlags.HasShape) {
@@ -5142,31 +5398,93 @@ class d_a_py_lk extends fopAc_ac_c {
 
         // Limit actor modifications based on the current mode. E.g. Mode 0x18 only allows rotation
         switch (this.demoMode) {
-            case 4:
-            case 0x2C:
+            case LinkDemoMode.Move:
+            case LinkDemoMode.Unk2C:
                 debugger;
                 // Snap to target position
                 // Maybe equip an item
                 break;
 
-            case 0x2B:
+            case LinkDemoMode.Unk2B:
                 debugger;
                 break;
 
-            case 2:
-            case 3:
+            case LinkDemoMode.ChaseSlow:
+            case LinkDemoMode.ChaseFast:
                 // Transition to target position/rotation (2 is slower)
                 debugger;
                 break;
 
-            case 5:
-            case 0x18:
+            case LinkDemoMode.WaitTurn:
+            case LinkDemoMode.Surprised:
                 // Rotate only
                 debugger;
                 break;
         }
 
         return true;
+    }
+
+    private changeDemoProc(globals: dGlobals): boolean {
+        assert(this.demoMode < LinkDemoMode.MAX || this.demoMode == LinkDemoMode.NewAnm0)
+
+        const pred = true;
+
+        if (pred) {
+            switch(this.demoMode) {
+                case LinkDemoMode.None: return false;
+
+                // case LinkDemoMode.NewAnm0: break; // TODO: dProcTool_init();
+                case LinkDemoMode.Move:
+                    // TODO: setBlendMoveAnime 
+                    this.procWait_init(globals); 
+                    break;
+
+                default:
+                    const initFunc = this.demoProcInitFuncTable.get(this.demoMode);
+                    if( initFunc ) {
+                        initFunc();
+                    } else {
+                        console.warn('Not yet implemented demoMode', LinkDemoMode[this.demoMode]);
+                        debugger;
+                    }
+                    break;
+            }
+            return true;
+        }
+
+        return false;
+    }
+
+    private getAnmData(anmIdx: number): LkAnimData {
+        // @TODO: Different table if sword is drawn
+        return this.anmDataTable[anmIdx];
+    }
+
+    private setSingleMoveAnime(globals: dGlobals, anmIdx: number, rate: number, start: number, end: number, param_5: number) {
+        const anmData = this.getAnmData(anmIdx);
+
+        const bck = globals.resCtrl.getObjectRes(ResType.Bck, "LkAnm", anmData.upperBckIdx);
+        this.anm.init(this.model.modelData, bck, true, LoopMode.Repeat, rate, start, end);
+    }
+
+    private procWait_init(globals: dGlobals) {
+        this.setSingleMoveAnime(globals, LkAnim.WAITATOB, 0.6, 0.0, 0xc, 6.0);
+    }
+
+    private loadAnmTable(globals: dGlobals) {
+        const anmDataView = globals.findExtraSymbolData(`d_a_player_main.o`, `mAnmDataTable__9daPy_lk_c`).createDataView();
+        let offset = 0;
+        while( offset < anmDataView.byteLength) {
+            this.anmDataTable.push({
+                underBckIdx: anmDataView.getUint16(offset + 0),
+                upperBckIdx: anmDataView.getUint16(offset + 2),
+                leftHandIdx: anmDataView.getUint8(offset + 4),
+                rightHandIdx: anmDataView.getUint8(offset + 5),
+                texAnmIdx: anmDataView.getUint16(offset + 6),
+            })
+            offset += 8;
+        }        
     }
 }
 
