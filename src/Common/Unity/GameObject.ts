@@ -226,6 +226,7 @@ export class MeshRenderer extends UnityComponent {
             const renderInst = renderInstManager.newRenderInst();
             material.prepareToRender(renderInst);
             const firstIndex = submesh.first_byte / meshData.indexBufferStride;
+            if (submesh.index_count === 0) continue;
             renderInst.setDrawCount(submesh.index_count, firstIndex);
             renderInst.setMegaStateFlags({ cullMode: GfxCullMode.Back, frontFace: GfxFrontFaceMode.CW });
             renderInstManager.submitRenderInst(renderInst);
