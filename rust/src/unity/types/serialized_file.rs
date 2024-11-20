@@ -34,7 +34,6 @@ pub struct SerializedFileMetadata {
     type_tree_count: i32,
     #[deku(count = "*type_tree_count", ctx = "*enable_type_tree > 0")]
     pub type_tree: Vec<SerializedType>,
-    #[deku(reader = r#"crate::unity::util::deku_peek(deku::rest, deku::byte_offset, "object_count")"#)]
     object_count: i32,
     #[deku(count = "(4 - deku::byte_offset % 4) % 4")] _alignment: Vec<u8>,
     #[deku(ctx = "version", count = "*object_count")]
