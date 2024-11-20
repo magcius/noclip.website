@@ -3841,8 +3841,8 @@ class d_a_oship extends fopAc_ac_c implements ModeFuncExec<d_a_oship_mode> {
 
         const angleY = cLib_targetAngleY(this.pos, this.targetPos);
         // TODO(jstpierre): Figure out the bad aim system.
-        // this.targetPos[0] -= badAimRadius * Math.sin(cM__Short2Rad(angleY));
-        // this.targetPos[2] -= badAimRadius * Math.cos(cM__Short2Rad(angleY));
+        // this.targetPos[0] -= badAimRadius * Math.sin(cM_s2rad(angleY));
+        // this.targetPos[2] -= badAimRadius * Math.cos(cM_s2rad(angleY));
     }
 
     private attackCannon(globals: dGlobals): boolean {
