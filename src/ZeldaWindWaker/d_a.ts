@@ -5287,6 +5287,7 @@ class d_a_py_lk extends fopAc_ac_c {
     private static LINK_BDL_HANDS = 0x1D;
 
     private demoProcInitFuncTable = new Map<LinkDemoMode, () => boolean>();
+    private proc: (globals: dGlobals) => void; 
 
     private model: J3DModelInstance;
     private modelHands: J3DModelInstance;
@@ -5294,6 +5295,7 @@ class d_a_py_lk extends fopAc_ac_c {
 
     private anmDataTable: LkAnimData[] = [];
     private anm = new mDoExt_bckAnm();
+    private anmResID: number;
 
     protected override subload(globals: dGlobals, prm: fopAcM_prm_class | null): cPhs__Status {
         this.loadAnmTable(globals);
@@ -5318,6 +5320,8 @@ class d_a_py_lk extends fopAc_ac_c {
         if (this.demoMode != 5) {
             this.changeDemoProc(globals);
         }
+
+        if( this.proc ) this.proc(globals);
 
         this.anm.play(deltaTimeFrames);
         this.model.calcAnim();
@@ -5434,7 +5438,10 @@ class d_a_py_lk extends fopAc_ac_c {
             switch(this.demoMode) {
                 case LinkDemoMode.None: return false;
 
-                // case LinkDemoMode.NewAnm0: break; // TODO: dProcTool_init();
+                case LinkDemoMode.NewAnm0: 
+                    this.proc = this.procTool;
+                    break;
+
                 case LinkDemoMode.Move:
                     // TODO: setBlendMoveAnime 
                     this.procWait_init(globals); 
@@ -5466,6 +5473,56 @@ class d_a_py_lk extends fopAc_ac_c {
 
         const bck = globals.resCtrl.getObjectRes(ResType.Bck, "LkAnm", anmData.upperBckIdx);
         this.anm.init(this.model.modelData, bck, true, LoopMode.Repeat, rate, start, end);
+    }
+
+    private procTool(globals: dGlobals) {
+        const demoActor = globals.scnPlay.demo.getSystem().getActor(this.demoActorID);
+        if (!demoActor)
+            return;
+
+        let anmFrame = 0.0;
+        let anmResId = 0xFFFF;
+
+        if (demoActor.flags & EDemoActorFlags.HasPos) { vec3.copy(this.pos, demoActor.translation); }
+        if (demoActor.flags & EDemoActorFlags.HasRot) { this.rot[1] = demoActor.rotation[1]; }
+        if (demoActor.flags & EDemoActorFlags.HasFrame) { anmFrame = demoActor.animFrame; }
+
+        if (demoActor.flags & EDemoActorFlags.HasData) {
+            const status = demoActor.stbData.getUint8(0);
+            switch( demoActor.stbDataId ) {
+                case 1:
+                case 3:
+                case 5:
+                    const count = demoActor.stbData.getUint8(1);
+                    assert(count == 3)
+                    anmResId = demoActor.stbData.getUint16(2);
+                    const btpId = demoActor.stbData.getUint16(4); // @TODO: Handle texture animations
+                    const btkUnkId = demoActor.stbData.getUint16(6); // @TODO: What is this for?
+                    break;
+
+                case 0:
+                case 2:
+                case 4:
+                    anmResId = demoActor.stbData.getUint16(1);
+                    break;
+
+                default: 
+                    debugger;
+            }        
+        }
+
+        if( anmResId == 0xFFFF || this.anmResID == anmResId) {
+            if (demoActor.flags & EDemoActorFlags.HasFrame) {
+                this.anm.entry(this.model, anmFrame);
+                demoActor.animFrameMax = this.anm.frameCtrl.endFrame;
+            }
+        } else {
+            // TODO: Load from LkD00 arc
+            const bck = globals.resCtrl.getObjectIDRes(ResType.Bck, 'LkD00', anmResId);
+            this.anm.init(this.model.modelData, bck, true, bck.loopMode, 1.0, 0, bck.duration );
+            this.anm.entry(this.model, anmFrame);
+            this.anmResID = anmResId;
+        }
     }
 
     private procWait_init(globals: dGlobals) {
