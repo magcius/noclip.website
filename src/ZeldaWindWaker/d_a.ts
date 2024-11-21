@@ -10,7 +10,7 @@ import { GlobalSaveManager } from "../SaveManager.js";
 import { TDDraw, TSDraw } from "../SuperMarioGalaxy/DDraw.js";
 import { Endianness } from "../endian.js";
 import { compareDepthValues } from "../gfx/helpers/ReversedDepthHelpers.js";
-import { GfxClipSpaceNearZ, GfxCompareMode, GfxDevice } from "../gfx/platform/GfxPlatform.js";
+import { GfxClipSpaceNearZ, GfxCompareMode, GfxDevice, GfxTexture } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { GfxRendererLayer, GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder.js";
@@ -36,6 +36,7 @@ import { dDlst_alphaModel__Type } from "./d_drawlist.js";
 import { dDemo_setDemoData, EDemoActorFlags } from "./d_demo.js";
 import { fopAc_ac_c, fopAcIt_JudgeByID, fopAcM_create, fopAcM_prm_class } from "./f_op_actor.js";
 import { dProcName_e } from "./d_procname.js";
+import { TextureMapping } from "../TextureHolder.js";
 
 // Framework'd actors
 
@@ -5285,6 +5286,8 @@ class d_a_py_lk extends fopAc_ac_c {
     private static ARC_NAME = "Link";
     private static LINK_BDL_CL = 0x18;
     private static LINK_BDL_HANDS = 0x1D;
+    private static LINK_BTI_LINKTEXBCI4 = 0x71;
+    private static LINK_CLOTHES_TEX_IDX = 0x22;
 
     private demoProcInitFuncTable = new Map<LinkDemoMode, () => boolean>();
     private proc: (globals: dGlobals) => void; 
@@ -5292,6 +5295,10 @@ class d_a_py_lk extends fopAc_ac_c {
     private model: J3DModelInstance;
     private modelHands: J3DModelInstance;
     private demoMode: number = LinkDemoMode.None;
+
+    private texMappingClothes: TextureMapping;
+    private texMappingCasualClothes: TextureMapping = new TextureMapping();
+    private texMappingHeroClothes: TextureMapping = new TextureMapping();
 
     private anmDataTable: LkAnimData[] = [];
     private anmBck = new mDoExt_bckAnm();
@@ -5348,6 +5355,15 @@ class d_a_py_lk extends fopAc_ac_c {
         this.model = this.initModel(globals, d_a_py_lk.LINK_BDL_CL);
         // this.modelHands = this.initModel(globals, d_a_py_lk.LINK_BDL_HANDS);
 
+        // Fetch the casual clothes and the hero texture. They'll be be selected by the ShapeID set by a demo.
+        const casualTexData = globals.resCtrl.getObjectRes(ResType.Bti, d_a_py_lk.ARC_NAME, d_a_py_lk.LINK_BTI_LINKTEXBCI4);
+        casualTexData.fillTextureMapping(this.texMappingCasualClothes);
+
+        // Find the texture mapping for link's clothes in the model. There are two, the first has alpha enabled and is never
+        // used with the casual clothes. We want the second.
+        this.texMappingClothes = this.model.materialInstanceState.textureMappings[d_a_py_lk.LINK_CLOTHES_TEX_IDX];
+        this.texMappingHeroClothes.copy(this.texMappingClothes);
+
         this.cullMtx = this.model.modelMatrix;
     }
 
@@ -5400,7 +5416,11 @@ class d_a_py_lk extends fopAc_ac_c {
         }
 
         if (enable & EDemoActorFlags.HasShape) {
-            // TODO: 0 is casual clothes, 1 is hero clothes
+            // ShapeID 1 is casual clothes, 0 is hero clothes
+            if( demoActor.shapeId == 1 )
+                this.texMappingClothes.copy(this.texMappingCasualClothes);
+            else 
+                this.texMappingClothes.copy(this.texMappingHeroClothes);
         }
 
         // Limit actor modifications based on the current mode. E.g. Mode 0x18 only allows rotation
