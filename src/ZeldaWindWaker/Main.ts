@@ -793,8 +793,8 @@ class d_s_play extends fopScn {
         this.demo.update();
 
         // From executeEvtManager() -> SpecialProcPackage()
-        if (globals.scnPlay.demo.getMode() == EDemoMode.Ended) {
-            globals.scnPlay.demo.remove();
+        if (this.demo.getMode() == EDemoMode.Ended) {
+            this.demo.remove();
         }
     }
 
