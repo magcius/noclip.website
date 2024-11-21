@@ -493,6 +493,10 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
             mat4.rotateZ(viewerInput.camera.worldMatrix, viewerInput.camera.worldMatrix, roll);
             viewerInput.camera.setClipPlanes(viewerInput.camera.near, viewerInput.camera.far);
             viewerInput.camera.worldMatrixUpdated();
+
+            this.globals.context.inputManager.isMouseEnabled = false;
+        } else {
+            this.globals.context.inputManager.isMouseEnabled = true;
         }
 
         this.globals.camera = viewerInput.camera;
