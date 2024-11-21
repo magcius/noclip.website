@@ -188,7 +188,7 @@ export class mDoExt_McaMorf implements JointMatrixCalc {
     }
 
     public setMorf(morfFrames: number): void {
-        if (this.prevMorf < 0.0 || morfFrames < 0.0) {
+        if (this.prevMorf < 0.0 || morfFrames <= 0.0) {
             this.curMorf = 1.0;
         } else {
             this.curMorf = 0.0;

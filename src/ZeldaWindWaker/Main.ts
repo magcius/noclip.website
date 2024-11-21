@@ -17,7 +17,7 @@ import { J3DModelInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase.js';
 import * as JPA from '../Common/JSYSTEM/JPA.js';
 import { BTIData } from '../Common/JSYSTEM/JUTTexture.js';
 import { dfRange } from '../DebugFloaters.js';
-import { getMatrixAxisZ, range } from '../MathHelpers.js';
+import { getMatrixAxisY, getMatrixAxisZ, MathConstants, range } from '../MathHelpers.js';
 import { SceneContext } from '../SceneBase.js';
 import { TextureMapping } from '../TextureHolder.js';
 import { setBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
@@ -33,12 +33,13 @@ import { dDlst_2DStatic_c, d_a__RegisterConstructors } from './d_a.js';
 import { d_a_sea } from './d_a_sea.js';
 import { dBgS } from './d_bg.js';
 import { dDlst_list_Set, dDlst_list_c } from './d_drawlist.js';
-import { dKankyo_create, dKy__RegisterConstructors, dKy_setLight, dKy_tevstr_init, dScnKy_env_light_c } from './d_kankyo.js';
+import { dKankyo_create, dKy__RegisterConstructors, dKy_setLight, dScnKy_env_light_c } from './d_kankyo.js';
 import { dKyw__RegisterConstructors } from './d_kankyo_wether.js';
 import { dPa_control_c } from './d_particle.js';
 import { ResType, dRes_control_c } from './d_resorce.js';
-import { dStage_dt_c_roomLoader, dStage_dt_c_roomReLoader, dStage_dt_c_stageInitLoader, dStage_dt_c_stageLoader, dStage_roomStatus_c, dStage_stageDt_c } from './d_stage.js';
+import { dStage_dt_c_roomLoader, dStage_dt_c_roomReLoader, dStage_dt_c_stageInitLoader, dStage_dt_c_stageLoader, dStage_roomControl_c, dStage_roomStatus_c, dStage_stageDt_c } from './d_stage.js';
 import { cPhs__Status, fGlobals, fopAcM_create, fopAc_ac_c, fopDw_Draw, fopScn, fpcCt_Handler, fpcLy_SetCurrentLayer, fpcM_Management, fpcPf__Register, fpcSCtRq_Request, fpc__ProcessName, fpc_pc__ProfileList } from './framework.js';
+import { dDemo_manager_c, EDemoCamFlags, EDemoMode } from './d_demo.js';
 
 type SymbolData = { Filename: string, SymbolName: string, Data: ArrayBufferSlice };
 type SymbolMapData = { SymbolData: SymbolData[] };
@@ -125,7 +126,7 @@ export class dGlobals {
     // This is tucked away somewhere in dComInfoPlay
     public stageName: string;
     public dStage_dt = new dStage_stageDt_c();
-    public roomStatus: dStage_roomStatus_c[] = nArray(64, () => new dStage_roomStatus_c());
+    public roomCtrl = new dStage_roomControl_c();
     public particleCtrl: dPa_control_c;
 
     public scnPlay: d_s_play;
@@ -158,11 +159,6 @@ export class dGlobals {
 
         this.relNameTable = createRelNameTable(extraSymbolData);
         this.objectNameTable = createActorTable(extraSymbolData);
-
-        for (let i = 0; i < this.roomStatus.length; i++) {
-            this.roomStatus[i].roomNo = i;
-            dKy_tevstr_init(this.roomStatus[i].tevStr, i);
-        }
 
         this.quadStatic = new dDlst_2DStatic_c(modelCache.device, modelCache.cache);
 
@@ -317,6 +313,8 @@ const enum EffectDrawGroup {
 }
 
 const scratchMatrix = mat4.create();
+const scratchVec3a = vec3.create();
+const scratchVec3b = vec3.create();
 export class WindWakerRenderer implements Viewer.SceneGfx {
     private mainColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
     private mainDepthDesc = new GfxrRenderTargetDescription(GfxFormat.D32F);
@@ -408,7 +406,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         if (ac.roomNo === -1)
             return null;
 
-        return this.globals.roomStatus[ac.roomNo];
+        return this.globals.roomCtrl.status[ac.roomNo];
     }
 
     private getSingleRoomVisible(): number {
@@ -469,6 +467,37 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
             farPlane *= 2;
 
         viewerInput.camera.setClipPlanes(nearPlane, farPlane);
+
+        // noclip modification: if we're paused, allow noclip camera control during demos
+        const isPaused = viewerInput.deltaTime === 0;
+
+        // TODO: Determine the correct place for this
+        // dCamera_c::Store() sets the camera params if the demo camera is active
+        const demoCam = this.globals.scnPlay.demo.getSystem().getCamera();
+        if (demoCam && !isPaused) {
+            let viewPos = this.globals.cameraPosition;
+            let targetPos = vec3.add(scratchVec3a, this.globals.cameraPosition, this.globals.cameraFwd);
+            let upVec = vec3.set(scratchVec3b, 0, 1, 0);
+            let roll = 0.0;
+
+            if(demoCam.flags & EDemoCamFlags.HasTargetPos) { targetPos = demoCam.targetPosition; }
+            if(demoCam.flags & EDemoCamFlags.HasEyePos) { viewPos = demoCam.viewPosition; }
+            if(demoCam.flags & EDemoCamFlags.HasUpVec) { upVec = demoCam.upVector; }
+            if(demoCam.flags & EDemoCamFlags.HasFovY) { viewerInput.camera.fovY = demoCam.fovY * MathConstants.DEG_TO_RAD; }
+            if(demoCam.flags & EDemoCamFlags.HasRoll) { roll = demoCam.roll * MathConstants.DEG_TO_RAD; }
+            if(demoCam.flags & EDemoCamFlags.HasAspect) { debugger; /* Untested. Remove once confirmed working */ }
+            if(demoCam.flags & EDemoCamFlags.HasNearZ) { viewerInput.camera.near = demoCam.projNear; }
+            if(demoCam.flags & EDemoCamFlags.HasFarZ) { viewerInput.camera.far = demoCam.projFar; }
+
+            mat4.targetTo(viewerInput.camera.worldMatrix, viewPos, targetPos, upVec);
+            mat4.rotateZ(viewerInput.camera.worldMatrix, viewerInput.camera.worldMatrix, roll);
+            viewerInput.camera.setClipPlanes(viewerInput.camera.near, viewerInput.camera.far);
+            viewerInput.camera.worldMatrixUpdated();
+
+            this.globals.context.inputManager.isMouseEnabled = false;
+        } else {
+            this.globals.context.inputManager.isMouseEnabled = true;
+        }
 
         this.globals.camera = viewerInput.camera;
 
@@ -736,6 +765,7 @@ export const pathBase = `ZeldaWindWaker`;
 
 class d_s_play extends fopScn {
     public bgS = new dBgS();
+    public demo: dDemo_manager_c;
 
     public flowerPacket: FlowerPacket;
     public treePacket: TreePacket;
@@ -747,6 +777,8 @@ class d_s_play extends fopScn {
     public override load(globals: dGlobals, userData: any): cPhs__Status {
         super.load(globals, userData);
 
+        this.demo = new dDemo_manager_c(globals);
+
         this.treePacket = new TreePacket(globals);
         this.flowerPacket = new FlowerPacket(globals);
         this.grassPacket = new GrassPacket(globals);
@@ -755,6 +787,15 @@ class d_s_play extends fopScn {
         globals.scnPlay = this;
 
         return cPhs__Status.Complete;
+    }
+
+    public override execute(globals: dGlobals, deltaTimeFrames: number): void {
+        this.demo.update();
+
+        // From executeEvtManager() -> SpecialProcPackage()
+        if (this.demo.getMode() == EDemoMode.Ended) {
+            this.demo.remove();
+        }
     }
 
     public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
@@ -794,6 +835,7 @@ class d_s_play extends fopScn {
 
 class SceneDesc {
     public id: string;
+    protected globals: dGlobals;
 
     public constructor(public stageDir: string, public name: string, public roomList: number[] = [0]) {
         this.id = stageDir;
@@ -844,6 +886,7 @@ class SceneDesc {
 
         const symbolMap = new SymbolMap(modelCache.getFileData(`extra.crg1_arc`));
         const globals = new dGlobals(context, modelCache, symbolMap, framework);
+        this.globals = globals;
         globals.stageName = this.stageDir;
 
         const renderer = new WindWakerRenderer(device, globals);
@@ -891,6 +934,8 @@ class SceneDesc {
         // dStage_dt_c_stageLoader()
         // dMap_c::create()
 
+        globals.roomCtrl.demoArcName = null;
+
         const vrbox = resCtrl.getStageResByName(ResType.Model, `Stage`, `vr_sky.bdl`);
         if (vrbox !== null) {
             fpcSCtRq_Request(framework, null, fpc__ProcessName.d_a_vrbox, null);
@@ -901,7 +946,7 @@ class SceneDesc {
             const roomNo = Math.abs(this.roomList[i]);
 
             const visible = this.roomList[i] >= 0;
-            const roomStatus = globals.roomStatus[i];
+            const roomStatus = globals.roomCtrl.status[i];
             roomStatus.visible = visible;
             renderer.rooms.push(new WindWakerRoom(roomNo, roomStatus));
 
@@ -911,13 +956,146 @@ class SceneDesc {
             fopAcM_create(framework, fpc__ProcessName.d_a_bg, roomNo, null, roomNo, null, null, 0xFF, -1);
 
             const dzr = assertExists(resCtrl.getStageResByName(ResType.Dzs, `Room${roomNo}`, `room.dzr`));
-            dStage_dt_c_roomLoader(globals, globals.roomStatus[roomNo], dzr);
-            dStage_dt_c_roomReLoader(globals, globals.roomStatus[roomNo], dzr);
+            dStage_dt_c_roomLoader(globals, globals.roomCtrl.status[roomNo].data, dzr);
+            dStage_dt_c_roomReLoader(globals, globals.roomCtrl.status[roomNo].data, dzr);
         }
 
         return renderer;
     }
 }
+
+class DemoDesc extends SceneDesc implements Viewer.SceneDesc {
+    private scene: SceneDesc;
+
+    public constructor(
+        public override stageDir: string,
+        public override name: string,
+        public override roomList: number[],
+        public stbFilename: string, 
+        public layer: number,
+        public offsetPos?:vec3, 
+        public rotY: number = 0,
+        public startCode?: number,
+        public eventFlags?: number,
+        public startFrame?: number, // noclip modification for easier debugging
+    ) {
+        super(stageDir, name, roomList);
+        assert(this.roomList.length === 1);
+    }
+
+    public override async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
+        const res = await super.createScene(device, context);
+        this.playDemo(this.globals);
+        return res;
+    }
+
+    async playDemo(globals: dGlobals) {
+        globals.scnPlay.demo.remove();
+
+        // TODO: Don't render until the camera has been placed for this demo. The cuts are jarring.
+
+        // noclip modification: This normally happens on room load. Do it here instead so that we don't waste time 
+        //                      loading .arcs for cutscenes that aren't going to be played
+        const lbnk = globals.roomCtrl.status[this.roomList[0]].data.lbnk;
+        if (lbnk) {
+            const bank = lbnk[this.layer];
+            if (bank != 0xFF) {
+                assert(bank >= 0 && bank < 100);
+                globals.roomCtrl.demoArcName = `Demo${bank.toString().padStart(2, '0')}`;
+                console.debug(`Loading stage demo file: ${globals.roomCtrl.demoArcName}`);
+
+                globals.modelCache.fetchObjectData(globals.roomCtrl.demoArcName).catch(e => {
+                    // @TODO: Better error handling. This does not prevent a debugger break.
+                    console.log(`Failed to load stage demo file: ${globals.roomCtrl.demoArcName}`, e);
+                })
+
+                await globals.modelCache.waitForLoad();
+            }
+        }
+
+        // noclip modification: ensure all the actors are created before we load the cutscene
+        await new Promise(resolve => { (function waitForActors(){
+            if (globals.frameworkGlobals.ctQueue.length == 0) return resolve(null);
+            setTimeout(waitForActors, 30);
+        })(); });
+
+        // @TODO: Set noclip layer visiblity based on this.layer
+
+        // From dEvDtStaff_c::specialProcPackage()
+        let demoData;
+        if(globals.roomCtrl.demoArcName)
+            demoData = globals.modelCache.resCtrl.getObjectResByName(ResType.Stb, globals.roomCtrl.demoArcName, this.stbFilename);
+        if (!demoData)
+            demoData = globals.modelCache.resCtrl.getStageResByName(ResType.Stb, "Stage", this.stbFilename);
+        
+        if( demoData ) { globals.scnPlay.demo.create(demoData, this.offsetPos, this.rotY / 180.0 * Math.PI, this.startFrame); }
+        else { console.warn('Failed to load demo data:', this.stbFilename); }
+
+        return this.globals.renderer;
+    }
+}
+
+// Move these into sceneDescs once they are complete enough to be worth viewing.
+// Extracted from the game using a modified version of the excellent wwrando/wwlib/stage_searcher.py script from LagoLunatic
+// Most of this data comes from the PLAY action of the PACKAGE actor in an event from a Stage's event_list.dat. This
+// action has properties for the room and layer that these cutscenes are designed for. HOWEVER, this data is often missing.
+// It has been reconstructed by cross-referencing each Room's lbnk section (which points to a Demo*.arc file for each layer),
+// the .stb files contained in each of those Objects/Demo*.arc files, and the FileName attribute from the event action.   
+const demoDescs = [
+    new DemoDesc("sea", "Stolen Sister", [44], "stolensister.stb", 9, [0.0, 0.0, 20000.0], 0, 0, 0),
+    new DemoDesc("sea", "Departure", [44], "departure.stb", 10, [-200000.0, 0.0, 320000.0], 0.0, 204, 0),
+    new DemoDesc("sea", "Pirate Zelda Fly", [44], "kaizoku_zelda_fly.stb", 0, [-200000.0, 0.0, 320000.0], 180.0, 0, 0),
+    new DemoDesc("sea", "Zola Awakens", [13], "awake_zola.stb", 8, [200000.0, 0.0, -200000.0], 0, 227, 0),
+    new DemoDesc("sea", "Get Komori Pearl", [13], "getperl_komori.stb", 9, [200000.0, 0.0, -200000.0], 0, 0, 0),
+    new DemoDesc("sea", "Meet the King of Red Lions", [11], "meetshishioh.stb", 8, [0.0, 0.0, -200000.0], 0, 128, 0),
+    new DemoDesc("sea", "Fairy", [9], "fairy.stb", 8, [-180000.0, 740.0, -199937.0], 25.0, 2, 0),
+    new DemoDesc("sea", "fairy_flag_on.stb", [9], "fairy_flag_on.stb", 8, [-180000.0, 740.0, -199937.0], 25.0, 2, 0),
+    new DemoDesc("ADMumi", "warp_in.stb", [0], "warp_in.stb", 9, [0.0, 0.0, 0.0], 0.0, 200, 0),
+    new DemoDesc("ADMumi", "warphole.stb", [0], "warphole.stb", 10, [0.0, 0.0, 0.0], 0.0, 219, 0),
+    new DemoDesc("ADMumi", "runaway_majuto.stb", [0], "runaway_majuto.stb", 11, [0, 0, 0], 0, 0, 0),
+    new DemoDesc("ADMumi", "towerd.stb", [0], "towerd.stb", 8, [-50179.0, -1000.0, 7070.0], 90.0, 0, 0),
+    new DemoDesc("ADMumi", "towerf.stb", [0], "towerf.stb", 8, [-50179.0, -1000.0, 7070.0], 90.0, 0, 0),
+    new DemoDesc("ADMumi", "towern.stb", [0], "towern.stb", 8, [-50179.0, -1000.0, 7070.0], 90.0, 0, 0),
+    new DemoDesc("A_mori", "meet_tetra.stb", [0], "meet_tetra.stb", 0, [0, 0, 0], 0, 0, 0),
+    new DemoDesc("Adanmae", "howling.stb", [0], "howling.stb", 8, [0.0, 0.0, 0.0], 0.0, 0, 0),
+    new DemoDesc("Atorizk", "dragontale.stb", [0], "dragontale.stb", 0, [0, 0, 0], 0, 0, 0),
+    new DemoDesc("ENDumi", "ending.stb", [0], "ending.stb", 8, [0.0, 0.0, 0.0], 0.0, 0, 0),
+    new DemoDesc("Edaichi", "dance_zola.stb", [0], "dance_zola.stb", 8, [0.0, 0.0, 0.0], 0, 226, 0),
+    new DemoDesc("Ekaze", "dance_kokiri.stb", [0], "dance_kokiri.stb", 8, [0.0, 0.0, 0.0], 0, 229, 0),
+    new DemoDesc("GTower", "g2before.stb", [0], "g2before.stb", 8, [0.0, 0.0, 0.0], 0.0, 0, 0),
+    new DemoDesc("GTower", "endhr.stb", [0], "endhr.stb", 9, [0.0, 0.0, 0.0], 0.0, 0, 0),
+    new DemoDesc("GanonK", "kugutu_ganon.stb", [0], "kugutu_ganon.stb", 8, [0.0, 0.0, 0.0], 0.0, 0, 0),
+    new DemoDesc("GanonK", "to_roof.stb", [0], "to_roof.stb", 9, [0.0, 0.0, 0.0], 0.0, 4, 0),
+    new DemoDesc("Hyroom", "rebirth_hyral.stb", [0], "rebirth_hyral.stb", 8, [0.0, -2100.0, 3910.0], 0.0, 249, 0),
+    new DemoDesc("Hyrule", "warp_out.stb", [0], "warp_out.stb", 8, [0, 0, 0], 0, 201, 0),
+    new DemoDesc("Hyrule", "seal.stb", [0], "seal.stb", 4, [0.0, 0.0, 0.0], 0, 0, 0),
+    new DemoDesc("LinkRM", "tale.stb", [0], "tale.stb", 8, [0, 0, 0], 0, 0, 0),
+    new DemoDesc("LinkRM", "tale_2.stb", [0], "tale_2.stb", 8, [0, 0, 0], 0, 0, 0),
+    new DemoDesc("LinkRM", "get_shield.stb", [0], "get_shield.stb", 9, [0, 0, 0], 0, 201, 0),
+    new DemoDesc("LinkRM", "tale_2.stb", [0], "tale_2.stb", 8, [0, 0, 0], 0, 0, 0),
+    new DemoDesc("M2ganon", "attack_ganon.stb", [0], "attack_ganon.stb", 1, [2000.0, 11780.0, -8000.0], 0.0, 244, 0),
+    new DemoDesc("M2tower", "rescue.stb", [0], "rescue.stb", 1, [3214.0, 3939.0, -3011.0], 57.5, 20, 0),
+    new DemoDesc("M_DaiB", "pray_zola.stb", [0], "pray_zola.stb", 8, [0, 0, 0], 0, 229, 0),
+    new DemoDesc("MajyuE", "maju_shinnyu.stb", [0], "maju_shinnyu.stb", 0, [0, 0, 0], 0, 0, 0),
+    new DemoDesc("Mjtower", "find_sister.stb", [0], "find_sister.stb", 0, [4889.0, 0.0, -2635.0], 57.5, 0, 0),
+    new DemoDesc("Obombh", "bombshop.stb", [0], "bombshop.stb", 0, [0.0, 0.0, 0.0], 0.0, 200, 0),
+    new DemoDesc("Omori", "getperl_deku.stb", [0], "getperl_deku.stb", 9, [0, 0, 0], 0, 214, 0),
+    new DemoDesc("Omori", "meet_deku.stb", [0], "meet_deku.stb", 8, [0, 0, 0], 0, 213, 0),
+    new DemoDesc("Otkura", "awake_kokiri.stb", [0], "awake_kokiri.stb", 8, [0, 0, 0], 0, 0, 0),
+    new DemoDesc("Pjavdou", "getperl_jab.stb", [0], "getperl_jab.stb", 8, [0.0, 0.0, 0.0], 0.0, 0, 0),
+    new DemoDesc("kazeB", "pray_kokiri.stb", [0], "pray_kokiri.stb", 8, [0.0, 300.0, 0.0], 0.0, 232, 0),
+    new DemoDesc("kenroom", "awake_zelda.stb", [0], "awake_zelda.stb", 9, [0.0, 0.0, 0.0], 0.0, 2, 0),
+    new DemoDesc("kenroom", "master_sword.stb", [0], "master_sword.stb", 0, [-124.0, -3223.0, -7823.0], 180.0, 248, 0),
+    new DemoDesc("kenroom", "swing_sword.stb", [0], "swing_sword.stb", 10, [-124.0, -3223.0, -7823.0], 180.0, 249, 0),
+
+    // These are present in the sea_T event_list.dat, but not in the room's lbnk. They are only playable from "sea".
+    new DemoDesc("sea_T", "Awaken", [0xFF], "awake.stb", 0, [-220000.0, 0.0, 320000.0], 0.0, 0, 0),
+    new DemoDesc("sea_T", "Departure", [0xFF], "departure.stb", 0, [-200000.0, 0.0, 320000.0], 0.0, 0, 0),
+    new DemoDesc("sea_T", "PirateZeldaFly", [0xFF], "kaizoku_zelda_fly.stb", 0, [-200000.0, 0.0, 320000.0], 180.0, 0, 0),
+
+    // The game expects this STB file to be in Stage/Ocean/Stage.arc, but it is not. Must be a leftover. 
+    new DemoDesc("Ocean", "counter.stb", [-1], "counter.stb", 0, [0, 0, 0], 0, 0, 0),
+]
 
 // Location names taken from CryZe's Debug Menu.
 // https://github.com/CryZe/WindWakerDebugMenu/blob/master/src/warp_menu/consts.rs
@@ -941,7 +1119,12 @@ const sceneDescs = [
     new SceneDesc("PShip", "Ghost Ship"),
     new SceneDesc("Obshop", "Beedle's Shop", [1]),
 
+    "Cutscenes",
+    new DemoDesc("sea_T", "Title Screen", [44], "title.stb", 0, [-220000.0, 0.0, 320000.0], 180.0, 0, 0),
+    new DemoDesc("sea", "Awaken", [44], "awake.stb", 0, [-220000.0, 0.0, 320000.0], 0.0, 0, 0),
+
     "Outset Island",
+    new SceneDesc("sea_T", "Title Screen", [44]),
     new SceneDesc("sea", "Outset Island", [44]),
     new SceneDesc("LinkRM", "Link's House"),
     new SceneDesc("LinkUG", "Under Link's House"),

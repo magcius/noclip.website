@@ -123,8 +123,8 @@ function checkGroundY(globals: dGlobals, roomIdx: number, pos: vec3) {
 }
 
 function setColorFromRoomNo(globals: dGlobals, materialParams: MaterialParams, roomNo: number): void {
-    colorCopy(materialParams.u_Color[ColorKind.C0], globals.roomStatus[roomNo].tevStr.colorC0);
-    colorCopy(materialParams.u_Color[ColorKind.C1], globals.roomStatus[roomNo].tevStr.colorK0);
+    colorCopy(materialParams.u_Color[ColorKind.C0], globals.roomCtrl.status[roomNo].tevStr.colorC0);
+    colorCopy(materialParams.u_Color[ColorKind.C1], globals.roomCtrl.status[roomNo].tevStr.colorK0);
 }
 
 function distanceCull(camPos: ReadonlyVec3, objPos: ReadonlyVec3, maxDist = 20000) {
@@ -397,7 +397,7 @@ export class FlowerPacket {
     }
 
     private drawRoom(globals: dGlobals, roomIdx: number, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        if (!globals.roomStatus[roomIdx].visible)
+        if (!globals.roomCtrl.status[roomIdx].visible)
             return;
 
         if (this.rooms[roomIdx].length === 0)
@@ -719,7 +719,7 @@ export class TreePacket {
     }
 
     private drawRoom(globals: dGlobals, roomIdx: number, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, device: GfxDevice) {
-        if (!globals.roomStatus[roomIdx].visible)
+        if (!globals.roomCtrl.status[roomIdx].visible)
             return;
 
         const room = this.rooms[roomIdx];
@@ -1016,7 +1016,7 @@ export class GrassPacket {
     }
 
     private drawRoom(globals: dGlobals, roomIdx: number, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        if (!globals.roomStatus[roomIdx].visible)
+        if (!globals.roomCtrl.status[roomIdx].visible)
             return;
 
         const room = this.rooms[roomIdx];
