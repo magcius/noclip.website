@@ -5294,8 +5294,9 @@ class d_a_py_lk extends fopAc_ac_c {
     private demoMode: number = LinkDemoMode.None;
 
     private anmDataTable: LkAnimData[] = [];
-    private anm = new mDoExt_bckAnm();
-    private anmResID: number;
+    private anmBck = new mDoExt_bckAnm();
+    private anmBtp = new mDoExt_btpAnm();
+    private anmBckId: number;
 
     protected override subload(globals: dGlobals, prm: fopAcM_prm_class | null): cPhs__Status {
         this.loadAnmTable(globals);
@@ -5323,7 +5324,8 @@ class d_a_py_lk extends fopAc_ac_c {
 
         if( this.proc ) this.proc(globals);
 
-        this.anm.play(deltaTimeFrames);
+        this.anmBck.play(deltaTimeFrames);
+        this.anmBtp.play(deltaTimeFrames);
         this.model.calcAnim();
 
         // setWorldMatrix()
@@ -5336,7 +5338,8 @@ class d_a_py_lk extends fopAc_ac_c {
         settingTevStruct(globals, LightType.Actor, this.pos, this.tevStr);
         setLightTevColorType(globals, this.model, this.tevStr, viewerInput.camera);
 
-        this.anm.entry(this.model);
+        this.anmBck.entry(this.model);
+        if( this.anmBtp.anm ) this.anmBtp.entry(this.model);
         mDoExt_modelEntryDL(globals, this.model, renderInstManager, viewerInput);
     }
 
@@ -5472,7 +5475,7 @@ class d_a_py_lk extends fopAc_ac_c {
         const anmData = this.getAnmData(anmIdx);
 
         const bck = globals.resCtrl.getObjectRes(ResType.Bck, "LkAnm", anmData.upperBckIdx);
-        this.anm.init(this.model.modelData, bck, true, LoopMode.Repeat, rate, start, end);
+        this.anmBck.init(this.model.modelData, bck, true, LoopMode.Repeat, rate, start, end);
     }
 
     private procTool(globals: dGlobals) {
@@ -5481,7 +5484,8 @@ class d_a_py_lk extends fopAc_ac_c {
             return;
 
         let anmFrame = 0.0;
-        let anmResId = 0xFFFF;
+        let anmBckId = 0xFFFF;
+        let anmBtpId = 0xFFFF;
 
         if (demoActor.flags & EDemoActorFlags.HasPos) { vec3.copy(this.pos, demoActor.translation); }
         if (demoActor.flags & EDemoActorFlags.HasRot) { this.rot[1] = demoActor.rotation[1]; }
@@ -5495,15 +5499,15 @@ class d_a_py_lk extends fopAc_ac_c {
                 case 5:
                     const count = demoActor.stbData.getUint8(1);
                     assert(count == 3)
-                    anmResId = demoActor.stbData.getUint16(2);
-                    const btpId = demoActor.stbData.getUint16(4); // @TODO: Handle texture animations
-                    const btkUnkId = demoActor.stbData.getUint16(6); // @TODO: What is this for?
+                    anmBckId = demoActor.stbData.getUint16(2);
+                    anmBtpId = demoActor.stbData.getUint16(4);
+                    const btkScrollId = demoActor.stbData.getUint16(6); // TODO: Scrolling texture resource
                     break;
 
                 case 0:
                 case 2:
                 case 4:
-                    anmResId = demoActor.stbData.getUint16(1);
+                    anmBckId = demoActor.stbData.getUint16(1);
                     break;
 
                 default: 
@@ -5511,17 +5515,23 @@ class d_a_py_lk extends fopAc_ac_c {
             }        
         }
 
-        if( anmResId == 0xFFFF || this.anmResID == anmResId) {
+        if( anmBckId == 0xFFFF || this.anmBckId == anmBckId) {
             if (demoActor.flags & EDemoActorFlags.HasFrame) {
-                this.anm.entry(this.model, anmFrame);
-                demoActor.animFrameMax = this.anm.frameCtrl.endFrame;
+                this.anmBck.frameCtrl.currentTimeInFrames = anmFrame;
+                this.anmBtp.frameCtrl.currentTimeInFrames = anmFrame;
+                demoActor.animFrameMax = this.anmBck.frameCtrl.endFrame;
             }
         } else {
-            // TODO: Load from LkD00 arc
-            const bck = globals.resCtrl.getObjectIDRes(ResType.Bck, 'LkD00', anmResId);
-            this.anm.init(this.model.modelData, bck, true, bck.loopMode, 1.0, 0, bck.duration );
-            this.anm.entry(this.model, anmFrame);
-            this.anmResID = anmResId;
+            // TODO: How should LkD00 arc be loaded?
+            const bck = globals.resCtrl.getObjectIDRes(ResType.Bck, 'LkD00', anmBckId);
+            this.anmBck.init(this.model.modelData, bck, true, bck.loopMode, 1.0, 0, bck.duration );
+            this.anmBck.frameCtrl.currentTimeInFrames = anmFrame;
+            this.anmBckId = anmBckId;
+
+            if(anmBtpId != 0xFFFF) {
+                const btp = globals.resCtrl.getObjectIDRes(ResType.Btp, 'LkD00', anmBtpId);
+                this.anmBtp.init(this.model.modelData, btp, true, btp.loopMode, 1.0, 0, btp.duration);
+            }
         }
     }
 
