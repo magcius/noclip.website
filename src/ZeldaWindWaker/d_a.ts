@@ -5358,7 +5358,7 @@ class d_a_py_lk extends fopAc_ac_c {
         // Render an alpha mask in the shape of the eyes. Needs to render before Link so that it can depth test against
         // the scene but not against his hair. The eyes will then draw with depth testing enabled, but will mask against
         // this alpha tex. 
-        matInstA.setSortKeyLayer(GfxRendererLayer.BACKGROUND + 4, false);
+        matInstA.setSortKeyLayer(GfxRendererLayer.OPAQUE + 4, false);
         matInstA.setColorWriteEnabled(false);
         matInstA.setAlphaWriteEnabled(true);
 
