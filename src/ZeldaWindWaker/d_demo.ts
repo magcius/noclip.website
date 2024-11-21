@@ -29,15 +29,15 @@ export enum EDemoCamFlags {
 }
 
 class dDemo_camera_c extends TCamera {
-    flags: number = 0;
-    projNear: number = 0;
-    projFar: number = 0;
-    fovY: number = 0;
-    aspect: number = 0;
-    viewPosition: vec3 = vec3.create();
-    upVector: vec3 = vec3.create();
-    targetPosition: vec3 = vec3.create();
-    roll: number = 0;
+    public flags = 0;
+    public projNear = 0;
+    public projFar = 0;
+    public fovY = 0;
+    public aspect = 0;
+    public viewPosition = vec3.create();
+    public upVector = vec3.create();
+    public targetPosition = vec3.create();
+    public roll = 0;
 
     constructor(
         private globals: dGlobals
@@ -127,7 +127,7 @@ class dDemo_camera_c extends TCamera {
     public override JSGGetViewTargetPosition(dst: vec3) {
         const camera = this.globals.camera;
         if (!camera)
-            vec3.set(dst, 0, 0, 0);
+            vec3.zero(dst);
         vec3.add(dst, this.globals.cameraPosition, this.globals.cameraFwd);
     }
 
@@ -165,26 +165,26 @@ export const enum EDemoActorFlags {
 }
 
 export class dDemo_actor_c extends TActor {
-    name: string;
-    flags: number;
-    translation = vec3.create();
-    scaling = vec3.create();
-    rotation = vec3.create();
-    shapeId: number;
-    nextBckId: number;
-    animFrame: number;
-    animTransition: number;
-    animFrameMax: number;
-    texAnim: number;
-    texAnimFrame: number;
-    textAnimFrameMax: number;
-    model: J3DModelInstance;
-    stbDataId: number;
-    stbData: DataView;
-    bckId: number;
-    btpId: number;
-    btkId: number;
-    brkId: number;
+    public name: string;
+    public flags: number;
+    public translation = vec3.create();
+    public scaling = vec3.create();
+    public rotation = vec3.create();
+    public shapeId: number;
+    public nextBckId: number;
+    public animFrame: number;
+    public animTransition: number;
+    public animFrameMax: number;
+    public texAnim: number;
+    public texAnimFrame: number;
+    public textAnimFrameMax: number;
+    public model: J3DModelInstance;
+    public stbDataId: number;
+    public stbData: DataView;
+    public bckId: number;
+    public btpIed: number;
+    public btkId: number;
+    public brkId: number;
 
     constructor(public actor: fopAc_ac_c) { super(); }
 
