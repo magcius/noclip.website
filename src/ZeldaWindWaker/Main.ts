@@ -331,6 +331,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
     public roomLayerMask: number = 0;
 
     public onstatechanged!: () => void;
+    public togglePlayPause!: (shouldBePlaying?: boolean) => void;
 
     constructor(public device: GfxDevice, public globals: dGlobals) {
         this.renderHelper = new GXRenderHelperGfx(device);
@@ -639,6 +640,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         const view = new DataView(src);
         this.isPaused = !!view.getUint8(offs++);
         this.globals.scnPlay.demo.setFrame(view.getUint16(offs));
+        this.togglePlayPause(!this.isPaused);
         return offs + 2;
     }
 
