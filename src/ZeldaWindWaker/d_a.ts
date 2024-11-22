@@ -5386,6 +5386,7 @@ class d_a_py_lk extends fopAc_ac_c {
     }
 
     private setupDam(pref: string): void {
+        const matInst = this.model.materialInstances.find((m) => m.name === `${pref}`)!;
         const matInstA = this.model.materialInstances.find((m) => m.name === `${pref}damA`)!;
         const matInstB = this.model.materialInstances.find((m) => m.name === `${pref}damB`)!;
 
@@ -5405,6 +5406,10 @@ class d_a_py_lk extends fopAc_ac_c {
         matInstB.setSortKeyLayer(GfxRendererLayer.OPAQUE + 6, false);
         matInstB.setColorWriteEnabled(false);
         matInstB.setAlphaWriteEnabled(true);
+
+        // Ensure that any texture animations applied to `eyeL` or `eyeR` also apply to these two damA/B masks
+        matInstA.texNoCalc = matInst.texNoCalc;
+        matInstB.texNoCalc = matInst.texNoCalc;
     }
 
     private initModel(globals: dGlobals, fileIdx: number): J3DModelInstance {
