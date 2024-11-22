@@ -345,8 +345,8 @@ class dDemo_system_c implements TSystem {
 }
 
 export class dDemo_manager_c {
-    private frame: number;
-    private frameNoMsg: number;
+    private frame: number = 0;
+    private frameNoMsg: number = 0;
     private mode = EDemoMode.None;
     private curFile: ArrayBufferSlice | null;
 
@@ -358,12 +358,12 @@ export class dDemo_manager_c {
         private globals: dGlobals
     ) { }
 
-    public getFrame() { return this.frame; }
-    public getFrameNoMsg() { return this.frameNoMsg; }
+    public getFrame() { return this.frameNoMsg; }
+    public setFrame(frame: number) { this.frame = frame; this.frameNoMsg = frame; }
     public getMode() { return this.mode; }
     public getSystem() { return this.system; }
 
-    public create(data: ArrayBufferSlice, originPos?: vec3, rotY?: number, startFrame?: number): boolean {
+    public create(data: ArrayBufferSlice, originPos?: vec3, rotY?: number): boolean {
         this.parser = new TParse(this.control);
 
         if (!this.parser.parse(data, 0)) {
@@ -371,13 +371,11 @@ export class dDemo_manager_c {
             return false;
         }
 
-        this.control.forward(startFrame || 0);
+        this.control.forward(this.frame || 0);
         if (originPos) {
             this.control.transformSetOrigin(originPos, rotY || 0);
         }
 
-        this.frame = 0;
-        this.frameNoMsg = 0;
         this.curFile = data;
         this.mode = EDemoMode.Playing;
 
@@ -396,7 +394,7 @@ export class dDemo_manager_c {
             return false;
         }
 
-        const dtFrames = this.globals.context.viewerInput.deltaTime / 1000.0 * 30;
+        let dtFrames = this.globals.context.viewerInput.deltaTime / 1000.0 * 30;
 
         // noclip modification: If a demo is suspended (waiting for the user to interact with a message), just resume
         if (this.control.isSuspended()) { this.control.setSuspend(0); }
