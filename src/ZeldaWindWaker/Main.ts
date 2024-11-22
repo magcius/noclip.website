@@ -631,15 +631,16 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
 
     public serializeSaveState(dst: ArrayBuffer, offs: number): number {
         const view = new DataView(dst);
-        view.setUint8(offs++, this.isPaused ? 1 : 0);
-        view.setUint16(offs, this.globals.scnPlay.demo.getFrame());
+        const isDemo = this.globals.scnPlay.demo.getMode() == EDemoMode.Playing;
+        view.setUint8(offs++, (isDemo && this.isPaused) ? 1 : 0);
+        view.setUint16(offs, isDemo ? this.globals.scnPlay.demo.getFrame() : 0);
         return offs + 2;
     }
 
     public deserializeSaveState(src: ArrayBuffer, offs: number, byteLength: number): number {
         const view = new DataView(src);
         this.isPaused = !!view.getUint8(offs++);
-        this.globals.scnPlay.demo.setFrame(view.getUint16(offs));
+        this.globals.scnPlay.demo.setFrame(view.getUint16(offs)); // @TODO: This won't work when loading without re-creating the scene
         this.togglePlayPause(!this.isPaused);
         return offs + 2;
     }
