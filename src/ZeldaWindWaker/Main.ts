@@ -981,6 +981,10 @@ class DemoDesc extends SceneDesc implements Viewer.SceneDesc {
     ) {
         super(stageDir, name, roomList);
         assert(this.roomList.length === 1);
+
+        // Use a distinct ID for demos so that we don't conflict with the non-demo version of this stage. 
+        // Without this, going to a scene like Outset Island and reloading will select the first Outset Island demo.  
+        this.id = this.stbFilename.slice(0, -4);
     }
 
     public override async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
