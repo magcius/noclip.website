@@ -5296,7 +5296,9 @@ class d_a_py_lk extends fopAc_ac_c {
     private model: J3DModelInstance;
     private modelHands: J3DModelInstance
     private modelKatsura: J3DModelInstance; // Wig. To replace the hat when wearing casual clothes.
+    
     private demoMode: number = LinkDemoMode.None;
+    private gdnChk = new dBgS_GndChk()
 
     private isWearingCasualClothes = false;
     private texMappingClothes: TextureMapping;
@@ -5333,6 +5335,11 @@ class d_a_py_lk extends fopAc_ac_c {
         }
 
         if (this.proc) this.proc(globals);
+
+        // Clamp Link's position to the ground. // @TODO: Acch
+        this.gdnChk.Reset();
+        vec3.scaleAndAdd(this.gdnChk.pos, this.pos, Vec3UnitY, 125.0);
+        this.pos[1] = globals.scnPlay.bgS.GroundCross(this.gdnChk); 
 
         this.anmBck.play(deltaTimeFrames);
         this.anmBtp.play(deltaTimeFrames);
