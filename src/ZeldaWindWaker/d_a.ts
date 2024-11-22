@@ -1155,7 +1155,7 @@ class d_a_obj_lpalm extends fopAc_ac_c {
             this.animDir[i] = cLib_addCalcAngleRad2(this.animDir[i], cM_s2rad(animDirTarget), cM_s2rad(0x04), cM_s2rad(0x20));
 
             // Rock back and forth.
-            this.animWave[i] += cM_s2rad((windPow * 0x800) + cM_rndFX(0x80)) *deltaTimeFrames;
+            this.animWave[i] += cM_s2rad((windPow * 0x800) + cM_rndFX(0x80)) * deltaTimeFrames;
             const wave = Math.sin(this.animWave[i]);
 
             vec3.set(scratchVec3a, wave, 0, wave);
@@ -2876,7 +2876,7 @@ class d_a_majuu_flag extends fopAc_ac_c {
 
     private majuu_flag_move(globals: dGlobals, deltaTimeFrames: number): void {
         this.wave += this.waveSpeed * deltaTimeFrames;
-        const windSpeed = lerp(this.windSpeed1, this.windSpeed2,  Math.sin(cM_s2rad(this.wave)) * 0.5 + 0.5);
+        const windSpeed = lerp(this.windSpeed1, this.windSpeed2, Math.sin(cM_s2rad(this.wave)) * 0.5 + 0.5);
         const windpow = dKyw_get_wind_pow(globals.g_env_light);
         vec3.set(scratchVec3a, 0, 0, windSpeed * windpow * 2.0);
         mDoMtx_ZrotS(calc_mtx, -this.rot[2]);
@@ -5288,14 +5288,17 @@ class d_a_py_lk extends fopAc_ac_c {
     private static LINK_BDL_HANDS = 0x1D;
     private static LINK_BTI_LINKTEXBCI4 = 0x71;
     private static LINK_CLOTHES_TEX_IDX = 0x22;
+    private static LINK_BDL_KATSURA = 0x20;
 
     private demoProcInitFuncTable = new Map<LinkDemoMode, () => boolean>();
-    private proc: (globals: dGlobals) => void; 
+    private proc: (globals: dGlobals) => void;
 
     private model: J3DModelInstance;
-    private modelHands: J3DModelInstance;
+    private modelHands: J3DModelInstance
+    private modelKatsura: J3DModelInstance; // Wig. To replace the hat when wearing casual clothes.
     private demoMode: number = LinkDemoMode.None;
 
+    private isWearingCasualClothes = false;
     private texMappingClothes: TextureMapping;
     private texMappingCasualClothes: TextureMapping = new TextureMapping();
     private texMappingHeroClothes: TextureMapping = new TextureMapping();
@@ -5307,7 +5310,7 @@ class d_a_py_lk extends fopAc_ac_c {
 
     protected override subload(globals: dGlobals, prm: fopAcM_prm_class | null): cPhs__Status {
         this.loadAnmTable(globals);
-        
+
         this.playerInit(globals);
 
         // noclip modification: The game manually draws the eye/eyebrow filter before the body. Let's do that with sorting.
@@ -5329,11 +5332,15 @@ class d_a_py_lk extends fopAc_ac_c {
             this.changeDemoProc(globals);
         }
 
-        if( this.proc ) this.proc(globals);
+        if (this.proc) this.proc(globals);
 
         this.anmBck.play(deltaTimeFrames);
         this.anmBtp.play(deltaTimeFrames);
+
         this.model.calcAnim();
+
+        mat4.copy(this.modelKatsura.modelMatrix, this.model.shapeInstanceState.jointToWorldMatrixArray[0x0F]);
+        this.modelKatsura.calcAnim();
 
         // setWorldMatrix()
         MtxTrans(this.pos, false, this.model.modelMatrix);
@@ -5343,16 +5350,27 @@ class d_a_py_lk extends fopAc_ac_c {
     override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         // @TODO: This should use LightType.Player, but it's not yet implemented
         settingTevStruct(globals, LightType.Actor, this.pos, this.tevStr);
-        setLightTevColorType(globals, this.model, this.tevStr, viewerInput.camera);
+
+        if (this.isWearingCasualClothes) {
+            this.model.setShapeVisible(5, false);  // Hat
+            this.model.setShapeVisible(22, false); // Sword scabbard
+            this.model.setShapeVisible(23, false); // Belt buckle
+
+            setLightTevColorType(globals, this.modelKatsura, this.tevStr, viewerInput.camera);
+            mDoExt_modelEntryDL(globals, this.modelKatsura, renderInstManager, viewerInput);
+        }
 
         this.anmBck.entry(this.model);
-        if( this.anmBtp.anm ) this.anmBtp.entry(this.model);
+        if (this.anmBtp.anm) this.anmBtp.entry(this.model);
+
+        setLightTevColorType(globals, this.model, this.tevStr, viewerInput.camera);
         mDoExt_modelEntryDL(globals, this.model, renderInstManager, viewerInput);
     }
 
     private playerInit(globals: dGlobals) {
         // createHeap()
         this.model = this.initModel(globals, d_a_py_lk.LINK_BDL_CL);
+        this.modelKatsura = this.initModel(globals, d_a_py_lk.LINK_BDL_KATSURA);
         // this.modelHands = this.initModel(globals, d_a_py_lk.LINK_BDL_HANDS);
 
         // Fetch the casual clothes and the hero texture. They'll be be selected by the ShapeID set by a demo.
@@ -5416,10 +5434,10 @@ class d_a_py_lk extends fopAc_ac_c {
         }
 
         if (enable & EDemoActorFlags.HasShape) {
-            // ShapeID 1 is casual clothes, 0 is hero clothes
-            if( demoActor.shapeId == 1 )
+            this.isWearingCasualClothes = (demoActor.shapeId == 1);
+            if (this.isWearingCasualClothes) 
                 this.texMappingClothes.copy(this.texMappingCasualClothes);
-            else 
+            else
                 this.texMappingClothes.copy(this.texMappingHeroClothes);
         }
 
@@ -5458,21 +5476,21 @@ class d_a_py_lk extends fopAc_ac_c {
         const pred = true;
 
         if (pred) {
-            switch(this.demoMode) {
+            switch (this.demoMode) {
                 case LinkDemoMode.None: return false;
 
-                case LinkDemoMode.NewAnm0: 
+                case LinkDemoMode.NewAnm0:
                     this.proc = this.procTool;
                     break;
 
                 case LinkDemoMode.Move:
                     // TODO: setBlendMoveAnime 
-                    this.procWait_init(globals); 
+                    this.procWait_init(globals);
                     break;
 
                 default:
                     const initFunc = this.demoProcInitFuncTable.get(this.demoMode);
-                    if( initFunc ) {
+                    if (initFunc) {
                         initFunc();
                     } else {
                         console.warn('Not yet implemented demoMode', LinkDemoMode[this.demoMode]);
@@ -5513,7 +5531,7 @@ class d_a_py_lk extends fopAc_ac_c {
 
         if (demoActor.flags & EDemoActorFlags.HasData) {
             const status = demoActor.stbData.getUint8(0);
-            switch( demoActor.stbDataId ) {
+            switch (demoActor.stbDataId) {
                 case 1:
                 case 3:
                 case 5:
@@ -5530,12 +5548,12 @@ class d_a_py_lk extends fopAc_ac_c {
                     anmBckId = demoActor.stbData.getUint16(1);
                     break;
 
-                default: 
+                default:
                     debugger;
-            }        
+            }
         }
 
-        if( anmBckId == 0xFFFF || this.anmBckId == anmBckId) {
+        if (anmBckId == 0xFFFF || this.anmBckId == anmBckId) {
             if (demoActor.flags & EDemoActorFlags.HasFrame) {
                 this.anmBck.frameCtrl.currentTimeInFrames = anmFrame;
                 this.anmBtp.frameCtrl.currentTimeInFrames = anmFrame;
@@ -5544,11 +5562,11 @@ class d_a_py_lk extends fopAc_ac_c {
         } else {
             // TODO: How should LkD00 arc be loaded?
             const bck = globals.resCtrl.getObjectIDRes(ResType.Bck, 'LkD00', anmBckId);
-            this.anmBck.init(this.model.modelData, bck, true, bck.loopMode, 1.0, 0, bck.duration );
+            this.anmBck.init(this.model.modelData, bck, true, bck.loopMode, 1.0, 0, bck.duration);
             this.anmBck.frameCtrl.currentTimeInFrames = anmFrame;
             this.anmBckId = anmBckId;
 
-            if(anmBtpId != 0xFFFF) {
+            if (anmBtpId != 0xFFFF) {
                 const btp = globals.resCtrl.getObjectIDRes(ResType.Btp, 'LkD00', anmBtpId);
                 this.anmBtp.init(this.model.modelData, btp, true, btp.loopMode, 1.0, 0, btp.duration);
             }
@@ -5562,7 +5580,7 @@ class d_a_py_lk extends fopAc_ac_c {
     private loadAnmTable(globals: dGlobals) {
         const anmDataView = globals.findExtraSymbolData(`d_a_player_main.o`, `mAnmDataTable__9daPy_lk_c`).createDataView();
         let offset = 0;
-        while( offset < anmDataView.byteLength) {
+        while (offset < anmDataView.byteLength) {
             this.anmDataTable.push({
                 underBckIdx: anmDataView.getUint16(offset + 0),
                 upperBckIdx: anmDataView.getUint16(offset + 2),
@@ -5571,7 +5589,7 @@ class d_a_py_lk extends fopAc_ac_c {
                 texAnmIdx: anmDataView.getUint16(offset + 6),
             })
             offset += 8;
-        }        
+        }
     }
 }
 
