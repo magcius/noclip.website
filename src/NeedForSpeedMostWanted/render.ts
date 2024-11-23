@@ -1,20 +1,20 @@
+
 import { mat4, vec3 } from "gl-matrix";
 import { CameraController, computeViewMatrix, computeViewSpaceDepthFromWorldSpacePoint } from "../Camera.js";
-import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
-import { GfxAttachmentState, GfxBlendFactor, GfxBlendMode, GfxChannelWriteMask, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxProgram, GfxSamplerBinding, GfxVertexBufferDescriptor } from "../gfx/platform/GfxPlatform.js";
-import { GfxrAttachmentSlot, GfxrRenderTargetID, GfxrResolveTextureID} from "../gfx/render/GfxRenderGraph.js";
+import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
+import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
+import { fillMatrix4x3, fillMatrix4x4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers.js";
+import { GfxAttachmentState, GfxBlendFactor, GfxBlendMode, GfxChannelWriteMask, GfxCullMode, GfxDevice, GfxIndexBufferDescriptor, GfxInputLayout, GfxProgram, GfxSamplerBinding, GfxVertexBufferDescriptor } from "../gfx/platform/GfxPlatform.js";
+import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
 import { GfxRendererLayer, GfxRenderInst, GfxRenderInstList, GfxRenderInstManager, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager.js";
 import { DeviceProgram } from "../Program.js";
-import { SceneGfx, ViewerRenderInput } from "../viewer.js";
-import { InstanceType, NfsInstance, NfsRegion,  NfsTexture, RegionType } from "./region.js";
-import { fillMatrix4x3, fillMatrix4x4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers.js";
 import * as UI from '../ui.js';
+import { SceneGfx, ViewerRenderInput } from "../viewer.js";
 import { NfsMap, PathVertex } from "./map.js";
-import { TextureMapping } from "../TextureHolder.js";
+import { NfsParticleEmitter, NfsParticleEmitterGroup, NfsParticleProgram } from "./particles.js";
 import { NfsPostProcessing } from "./postprocess.js";
-import { NfsParticleProgram as NfsParticleProgram, NfsParticleEmitter, NfsParticleEmitterGroup } from "./particles.js";
-import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
+import { InstanceType, NfsInstance, NfsRegion, NfsTexture, RegionType } from "./region.js";
 
 export interface VertexInfo {
     inputLayout: GfxInputLayout;
@@ -51,7 +51,6 @@ export class NfsRenderer implements SceneGfx {
     private activeRegion: NfsRegion;
     private renderHelper: GfxRenderHelper;
     private renderInstListMain = new GfxRenderInstList();
-    private renderInstListShadows = new GfxRenderInstList();
     private closestPathVertex: PathVertex;
     private aabbCenter: vec3 = vec3.create();
     private devicePrograms: DeviceProgram[] = [];
@@ -60,7 +59,6 @@ export class NfsRenderer implements SceneGfx {
     private gfxPrograms: GfxProgram[];
     private sortKeyAlpha: number;
     private sortKeyTranslucent: number;
-    private sortKeyShadow: number;
     private sortKeySky: number;
     private postProcessing: NfsPostProcessing;
     private streamingFreezed: boolean = false;
@@ -100,46 +98,12 @@ export class NfsRenderer implements SceneGfx {
         offs += fillVec4v(sceneParamsMapped, offs, [viewerInput.backbufferWidth, viewerInput.backbufferHeight, 0, 0]);
     }
 
-    private prepareToRenderShadows(viewerInput: ViewerRenderInput, cameraPos: vec3, instancesToRender: NfsInstance[]) {
-        const renderInstManager = this.renderHelper.renderInstManager;
-        const template = renderInstManager.pushTemplate();
-
-        this.fillSceneUniformBuffer(template, viewerInput, cameraPos);
-
-        template.setGfxProgram(this.gfxPrograms[2]);
-        template.setMegaStateFlags({depthWrite: true, cullMode: GfxCullMode.Back});
-        const layer = GfxRendererLayer.OPAQUE;
-        template.sortKey = makeSortKey(layer);
-
-        instancesToRender.forEach(instance => {
-            if(instance.type != InstanceType.Shadow)
-                return;
-            if(instance.worldMatrix === undefined)
-                return;
-            const model = instance.model;
-            if(model === undefined)
-                return;
-            model.vertInfos.forEach(vInfo => {
-                template.setVertexInput(vInfo.inputLayout, vInfo.vertexBufferDescriptors, vInfo.indexBufferDescriptor);
-                let offs = template.allocateUniformBuffer(NfsProgram.ub_ObjectParams, 16);
-                const d = template.mapUniformBufferF32(NfsProgram.ub_ObjectParams);
-                const renderInst = renderInstManager.newRenderInst();
-                const texMappings: GfxSamplerBinding[] = vInfo.textureMappings.slice();
-                offs += fillMatrix4x3(d, offs, instance.worldMatrix);
-                fillVec4v(d, offs, [0, 0, 0, 0]);
-                renderInst.setSamplerBindingsFromTextureMappings(texMappings);
-                renderInst.setDrawCount(vInfo.drawCall.indexCount, vInfo.drawCall.indexOffset);
-                this.renderInstListShadows.submitRenderInst(renderInst);
-            });
-        });
-
-        renderInstManager.popTemplate();
-    }
-
     private prepareToRender(viewerInput: ViewerRenderInput, cameraPos: vec3, instancesToRender: NfsInstance[]): void {
         const renderInstManager = this.renderHelper.renderInstManager;
         const template = renderInstManager.pushTemplate();
 
+        // TODO(jstpierre): Why do I need to do this twice?
+        this.fillSceneUniformBuffer(template, viewerInput, cameraPos);
         this.fillSceneUniformBuffer(template, viewerInput, cameraPos);
 
         const layer = GfxRendererLayer.OPAQUE;
@@ -320,9 +284,8 @@ export class NfsRenderer implements SceneGfx {
         this.sortKeySky = makeSortKey(GfxRendererLayer.BACKGROUND);
 
         template.setBindingLayouts([{ numUniformBuffers: 2, numSamplers: 3 }]);
-        this.prepareToRenderShadows(viewerInput, cameraPos, instancesToRender);
         this.prepareToRender(viewerInput, cameraPos, instancesToRender);
-        if(this.enableParticles)
+        if (this.enableParticles)
             this.prepareToRenderParticles(viewerInput, renderInstManager, regionsToRender.flatMap(r => r.region.emitterGroups));
         renderInstManager.popTemplate();
 
@@ -330,7 +293,6 @@ export class NfsRenderer implements SceneGfx {
 
         this.renderHelper.renderGraph.execute(builder);
         this.renderInstListMain.reset();
-        this.renderInstListShadows.reset();
 
         viewerInput.debugConsole.addInfoLine(`Region ID: ${this.activeRegion.id}`);
     }
