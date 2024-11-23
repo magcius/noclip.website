@@ -209,7 +209,7 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
         // }
 
         const flipY = gfxDeviceNeedsFlipY(device);
-        this.textureHolder.setTextureOverride('DummyWater', { gfxTexture: null, lateBinding: 'opaque-scene-texture', width: EFB_WIDTH, height: EFB_HEIGHT, flipY })
+        this.textureHolder.setTextureOverride('DummyWater', { gfxTexture: null, lateBinding: 'opaque-scene-texture', width: EFB_WIDTH, height: EFB_HEIGHT, flipY });
         // Override the "Add" textures with a black texture to prevent things from being overly bright.
         this.blackTexture = makeSolidColorTexture2D(device, TransparentBlack);
         this.whiteTexture = makeSolidColorTexture2D(device, TransparentWhite);

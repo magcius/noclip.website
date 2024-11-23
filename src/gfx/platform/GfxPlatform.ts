@@ -26,7 +26,6 @@ export const enum GfxCullMode {
     None,
     Front,
     Back,
-    FrontAndBack,
 }
 
 export enum GfxBlendFactor {

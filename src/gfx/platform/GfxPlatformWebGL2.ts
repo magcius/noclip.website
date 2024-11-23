@@ -2192,8 +2192,6 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
                 gl.cullFace(gl.BACK);
             else if (newMegaState.cullMode === GfxCullMode.Front)
                 gl.cullFace(gl.FRONT);
-            else if (newMegaState.cullMode === GfxCullMode.FrontAndBack)
-                gl.cullFace(gl.FRONT_AND_BACK);
             currentMegaState.cullMode = newMegaState.cullMode;
         }
 
