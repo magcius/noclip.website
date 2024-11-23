@@ -3938,7 +3938,7 @@ export class point_camera extends BaseEntity {
         super(entitySystem, renderContext, bspRenderer, entity);
 
         this.fovY = Number(this.entity.fov);
-        this.useScreenAspectRatio = fallbackUndefined(this.entity.usescreenaspectratio, '1') !== '0';
+        this.useScreenAspectRatio = fallbackUndefined(this.entity.usescreenaspectratio, '0') !== '0';
 
         this.viewRenderer.pvsFallback = false;
         this.viewRenderer.renderObjectMask &= ~(RenderObjectKind.DetailProps);

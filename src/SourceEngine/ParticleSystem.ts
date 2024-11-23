@@ -1363,10 +1363,7 @@ class Renderer_AnimatedSprites extends ModuleBase {
                 p[2].value = data[colorOffs + 2];
                 colorOffs += stride;
             } else {
-                const p = (materialInstance.param['$color'] as any).internal;
-                p[0].value = system.constColor.r;
-                p[1].value = system.constColor.g;
-                p[2].value = system.constColor.b;
+                materialInstance.paramSetColor('$color', system.constColor);
             }
 
             if (alphaOffs !== null) {

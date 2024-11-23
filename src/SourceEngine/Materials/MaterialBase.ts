@@ -1,6 +1,6 @@
 
 import { ReadonlyMat4, vec3, vec2, mat4 } from "gl-matrix";
-import { Color, TransparentBlack, White, colorCopy, colorNewCopy, colorNewFromRGBA } from "../../Color.js";
+import { Color, TransparentBlack, White, colorCopy, colorNewCopy, colorNewFromRGBA, colorScale } from "../../Color.js";
 import { dfShow, dfRange } from "../../DebugFloaters.js";
 import { AABB } from "../../Geometry.js";
 import { scaleMatrix } from "../../MathHelpers.js";
@@ -543,6 +543,14 @@ export abstract class BaseMaterial {
         return fillGammaColor(d, offs, MaterialUtil.scratchColor);
     }
 
+    protected paramFillModulationColor(d: Float32Array, offs: number, gamma = true, scale = 1.0): number {
+        this.calcModulationColor(MaterialUtil.scratchColor, scale);
+        if (gamma)
+            return fillGammaColor(d, offs, MaterialUtil.scratchColor);
+        else
+            return fillColor(d, offs, MaterialUtil.scratchColor);
+    }
+
     protected paramFillColor(d: Float32Array, offs: number, name: string, alpha: number = 1.0): number {
         this.paramGetVector(name).fillColor(MaterialUtil.scratchColor, alpha);
         return fillColor(d, offs, MaterialUtil.scratchColor);
@@ -683,6 +691,7 @@ export abstract class BaseMaterial {
         p['$frame']                        = new P.ParameterNumber(0);
         p['$color']                        = new P.ParameterColor(1, 1, 1);
         p['$color2']                       = new P.ParameterColor(1, 1, 1);
+        p['$srgbtint']                     = new P.ParameterColor(1, 1, 1);
         p['$alpha']                        = new P.ParameterNumber(1);
 
         // Data passed from entity system.
@@ -754,6 +763,14 @@ export abstract class BaseMaterial {
         }
 
         vec2.set(this.texCoord0Scale, 1 / w, 1 / h);
+    }
+
+    protected calcModulationColor(dst: Color, scale: number): void {
+        this.paramGetVector('$color').fillColor(dst, 1.0);
+        this.paramGetVector('$color2').mulColor(dst);
+        this.paramGetVector('$srgbtint').mulColor(dst);
+        dst.a = this.paramGetNumber('$alpha');
+        colorScale(dst, dst, scale)
     }
 
     protected initStatic(materialCache: MaterialCache) {

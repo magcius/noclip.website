@@ -110,7 +110,7 @@ export class Material_UnlitTwoTexture extends BaseMaterial {
         const d = renderInst.mapUniformBufferF32(ShaderTemplate_UnlitTwoTexture.ub_ObjectParams);
         offs += this.paramFillTextureMatrix(d, offs, '$basetexturetransform', this.paramGetFlipY(renderContext, '$basetexture'));
         offs += this.paramFillTextureMatrix(d, offs, '$texture2transform');
-        offs += this.paramFillColor(d, offs, '$color', this.paramGetNumber('$alpha'));
+        offs += this.paramFillModulationColor(d, offs);
 
         renderInst.setSamplerBindingsFromTextureMappings(MaterialUtil.textureMappings);
         renderInst.setGfxProgram(this.gfxProgram);
