@@ -728,8 +728,6 @@ void mainPS() {
 
     // Lightmap Diffuse
     if (use_lightmap) {
-        vec3 t_LightmapColor0 = SampleLightmapTexture(texture(SAMPLER_2DArray(u_TextureLightmap), vec3(v_TexCoord1.xy, 0.0)));
-
         if (use_diffuse_bumpmap) {
             vec3 t_LightmapColor1 = SampleLightmapTexture(texture(SAMPLER_2DArray(u_TextureLightmap), vec3(v_TexCoord1.xy, 1.0)));
             vec3 t_LightmapColor2 = SampleLightmapTexture(texture(SAMPLER_2DArray(u_TextureLightmap), vec3(v_TexCoord1.xy, 2.0)));
@@ -737,7 +735,7 @@ void mainPS() {
 
             vec3 t_Influence;
 
-            bool t_NormalizeInfluence = true;
+            bool t_NormalizeInfluence = false;
 
             if (use_ssbump) {
                 // SSBUMP precomputes the elements of t_Influence (calculated below) offline.
@@ -771,6 +769,7 @@ void mainPS() {
             t_DiffuseLighting += t_LightmapColor2 * t_Influence.y;
             t_DiffuseLighting += t_LightmapColor3 * t_Influence.z;
         } else {
+            vec3 t_LightmapColor0 = SampleLightmapTexture(texture(SAMPLER_2DArray(u_TextureLightmap), vec3(v_TexCoord1.xy, 0.0)));
             t_DiffuseLighting.rgb = t_LightmapColor0;
         }
     } else {
@@ -779,7 +778,7 @@ void mainPS() {
 #if defined USE_STATIC_VERTEX_LIGHTING_3
             vec3 t_Influence;
 
-            if (false && use_bumpmap) {
+            if (use_bumpmap) {
                 t_Influence.x = clamp(dot(t_BumpmapNormal, g_RNBasis0), 0.0, 1.0);
                 t_Influence.y = clamp(dot(t_BumpmapNormal, g_RNBasis1), 0.0, 1.0);
                 t_Influence.z = clamp(dot(t_BumpmapNormal, g_RNBasis2), 0.0, 1.0);
