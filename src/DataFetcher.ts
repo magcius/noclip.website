@@ -364,7 +364,8 @@ export class DataFetcher {
             this.debugDisplay.style.textShadow = '1px 1px 2px black';
             this.debugDisplay.style.font = '12pt monospace';
             this.debugDisplay.style.whiteSpace = `pre`;
-            this.debugDisplay.style.textAlign = 'right';
+            this.debugDisplay.style.textAlign = `right`;
+            this.debugDisplay.style.pointerEvents = `none`;
             window.main.ui.elem.appendChild(this.debugDisplay);
         }
 

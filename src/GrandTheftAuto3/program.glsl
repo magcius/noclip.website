@@ -61,15 +61,18 @@ void main() {
 
     float t = (u_WaterOrigin.y - cameraPos.y) / cameraRay.y;
     vec3 oceanPlane = cameraPos + t * cameraRay;
+
+    vec2 uv = (oceanPlane.zx - u_WaterOrigin.zx) / 32.0;
+    vec4 oceanSample = texture(SAMPLER_2DArray(u_Texture), vec3(uv, 0));
+
     if (t > 0.0 && (abs(oceanPlane.z - u_WaterOrigin.z) >= u_WaterOrigin.w - 32.0 ||
                     abs(oceanPlane.x - u_WaterOrigin.x) >= u_WaterOrigin.w - 32.0)) {
-        vec2 uv = (oceanPlane.zx - u_WaterOrigin.zx) / 32.0;
         vec4 t_Color = u_WaterColor;
-        t_Color *= texture(SAMPLER_2D(u_Texture), vec3(uv, 0));
+        t_Color *= oceanSample;
         gl_FragColor = mix(gl_FragColor, t_Color, t_Color.a);
 
         // slightly overlap water tiles to avoid seam
-        vec4 clipOffset = 0.01 * vec4(0,0,1,0);
+        vec4 clipOffset = 0.01 * vec4(0, 0, 1, 0);
         vec4 clipSpacePos = Mul(u_Projection, Mul(_Mat4x4(u_ViewMatrix), vec4(oceanPlane, 1.0)) + clipOffset);
         float depthNDC = clipSpacePos.z / clipSpacePos.w;
         gl_FragDepth = 0.5 + 0.5 * depthNDC;
@@ -84,12 +87,14 @@ void main() {
     t_Color.rgb += u_AmbientColor.rgb;
 #endif
 
-    if (v_TexCoord.z >= 0.0) {
-        vec3 uv = v_TexCoord;
-        if (v_TexScroll.z > 0.0)
-            uv.xy += v_TexScroll.xy * fract(u_Time / v_TexScroll.z);
-        t_Color *= texture(SAMPLER_2D(u_Texture), uv);
-    }
+    vec3 uv = v_TexCoord;
+    if (v_TexScroll.z > 0.0)
+        uv.xy += v_TexScroll.xy * fract(u_Time / v_TexScroll.z);
+    // Work around naga bug https://github.com/gfx-rs/wgpu/issues/6596
+    uv.z = round(uv.z);
+    vec4 tex = texture(SAMPLER_2DArray(u_Texture), uv);
+    if (v_TexCoord.z >= 0.0)
+        t_Color *= tex;
 
 #ifdef ALPHA_TEST
     if (t_Color.a ALPHA_TEST) discard;
