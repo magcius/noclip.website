@@ -46,7 +46,7 @@ impl BezierSpline {
     }
 
     fn calculate_segment_lengths(&mut self) {
-        let mut segment_lengths = Vec::new(); 
+        let mut segment_lengths = Vec::new();
         let mut total_length = 0.0;
         let num_segments = (self.points.len() - 1) / 3;
         let iterations_per_segment = 20;
@@ -71,13 +71,13 @@ impl BezierSpline {
         self.segment_lengths = Some(segment_lengths);
         self.total_length = Some(total_length);
     }
-    
+
     pub fn calculate_paramateric_spline(&self, t: f32) -> Vec3 {
         assert!(t >= 0.0 && t <= 1.0);
         let (segment, segment_t) = self.find_parametric_segment(t);
         self.evaluate_segment(segment, segment_t)
     }
-    
+
     pub fn calculate_parametric_spline_derivative(&self, t: f32) -> Vec3 {
         assert!(t >= 0.0 && t <= 1.0);
         let (segment, segment_t) = self.find_parametric_segment(t);
@@ -87,7 +87,7 @@ impl BezierSpline {
     fn segment_len(&self, i: usize) -> f32 {
         self.segment_lengths.as_ref().expect("spline uninitialized")[i]
     }
-    
+
     fn find_parametric_segment(&self, t: f32) -> (usize, f32) {
         let target_length = t * self.total_length.expect("spline uninitialized");
         let mut length = 0.0;
@@ -103,7 +103,7 @@ impl BezierSpline {
         }
         panic!("failed to find spline segment for parametric t={}", t);
     }
-    
+
     fn evaluate_derivative(&self, segment: usize, t: f32) -> Vec3 {
         let p0 = self.points[segment * 3 + 0];
         let p1 = self.points[segment * 3 + 1];
@@ -115,7 +115,7 @@ impl BezierSpline {
             get_derivative_bezier(p0[2], p1[2], p2[2], p3[2], t),
         )
     }
-    
+
     fn evaluate_segment(&self, segment: usize, t: f32) -> Vec3 {
         let p0 = self.points[segment * 3 + 0];
         let p1 = self.points[segment * 3 + 1];
