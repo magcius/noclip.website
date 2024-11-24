@@ -31,9 +31,10 @@ import { ViewerRenderInput } from "../viewer.js";
 import { dKy_actor_addcol_amb_set, dKy_addcol_fog_set, dKy_bg1_addcol_amb_set, dKy_bg_addcol_amb_set, dKy_darkworld_check, dKy_daynight_check, dKy_efplight_cut, dKy_efplight_set, dKy_get_dayofweek, dKy_set_actcol_ratio, dKy_set_bgcol_ratio, dKy_set_fogcol_ratio, dKy_set_vrboxcol_ratio, dKy_undwater_filter_draw, dKy_vrbox_addcol_kasumi_set, dKy_vrbox_addcol_sky0_set, dScnKy_env_light_c } from "./d_kankyo.js";
 import { ResType } from "./d_resorce.js";
 import { dStage_FileList_dt_c, dStage_stagInfo_GetArg0, dStage_stagInfo_GetSTType } from "./d_stage.js";
-import { cPhs__Status, fGlobals, fopKyM_Delete, fopKyM_create, fpcPf__Register, fpc__ProcessName, fpc_bs__Constructor, kankyo_class } from "./framework.js";
 import { mDoExt_brkAnm, mDoExt_modelUpdateDL } from "./m_do_ext.js";
 import { dGlobals } from "./Main.js";
+import { cPhs__Status, fGlobals, fopKyM_create, fopKyM_Delete, fpc_bs__Constructor, fpcPf__Register, kankyo_class } from "../ZeldaWindWaker/framework.js";
+import { dProcName_e } from "./d_a.js";
 
 export function dKyw_wether_init(globals: dGlobals): void {
     const envLight = globals.g_env_light;
@@ -183,7 +184,7 @@ function dKyr_thunder_move(globals: dGlobals, envLight: dScnKy_env_light_c, came
 
         if (cM_rndF(1.0) < 0.18) {
             // Spawn lighting bolt
-            fopKyM_create(globals.frameworkGlobals, fpc__ProcessName.d_thunder, -1, null, null);
+            fopKyM_create(globals.frameworkGlobals, dProcName_e.d_thunder, -1, null, null);
         }
     } else if (envLight.thunderState === ThunderState.FadeNear || envLight.thunderState === ThunderState.FadeFar) {
         envLight.thunderFlashTimer = cLib_addCalc(envLight.thunderFlashTimer, 0.0, 0.1, 0.05, 0.001);
@@ -2178,7 +2179,7 @@ export function dKyw_get_AllWind_vecpow(dst: vec3, envLight: dScnKy_env_light_c,
 }
 
 export class d_thunder extends kankyo_class {
-    public static PROCESS_NAME = fpc__ProcessName.d_thunder;
+    public static PROCESS_NAME = dProcName_e.d_thunder;
     private model: J3DModelInstance;
     private brkAnm = new mDoExt_brkAnm();
     private rotation: number = 0.0;
@@ -2481,7 +2482,7 @@ export class mDoGph_bloom_c {
 }
 
 interface constructor extends fpc_bs__Constructor {
-    PROCESS_NAME: fpc__ProcessName;
+    PROCESS_NAME: dProcName_e;
 }
 
 export function dKyw__RegisterConstructors(globals: fGlobals): void {

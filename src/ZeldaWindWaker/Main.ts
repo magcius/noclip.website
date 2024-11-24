@@ -17,7 +17,7 @@ import { J3DModelInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase.js';
 import * as JPA from '../Common/JSYSTEM/JPA.js';
 import { BTIData } from '../Common/JSYSTEM/JUTTexture.js';
 import { dfRange } from '../DebugFloaters.js';
-import { getMatrixAxisY, getMatrixAxisZ, MathConstants, range } from '../MathHelpers.js';
+import { MathConstants, getMatrixAxisZ, range } from '../MathHelpers.js';
 import { SceneContext } from '../SceneBase.js';
 import { TextureMapping } from '../TextureHolder.js';
 import { setBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
@@ -27,19 +27,21 @@ import { GfxrAttachmentSlot, GfxrRenderTargetDescription } from '../gfx/render/G
 import { GfxRenderInstList, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
 import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render.js';
 import { FlowerPacket, GrassPacket, TreePacket } from './Grass.js';
-import { WoodPacket } from './d_wood.js';
 import { LegacyActor__RegisterFallbackConstructor } from './LegacyActor.js';
 import { dDlst_2DStatic_c, d_a__RegisterConstructors } from './d_a.js';
 import { d_a_sea } from './d_a_sea.js';
 import { dBgS } from './d_bg.js';
+import { EDemoCamFlags, EDemoMode, dDemo_manager_c } from './d_demo.js';
 import { dDlst_list_Set, dDlst_list_c } from './d_drawlist.js';
 import { dKankyo_create, dKy__RegisterConstructors, dKy_setLight, dScnKy_env_light_c } from './d_kankyo.js';
 import { dKyw__RegisterConstructors } from './d_kankyo_wether.js';
 import { dPa_control_c } from './d_particle.js';
+import { dProcName_e } from './d_procname.js';
 import { ResType, dRes_control_c } from './d_resorce.js';
 import { dStage_dt_c_roomLoader, dStage_dt_c_roomReLoader, dStage_dt_c_stageInitLoader, dStage_dt_c_stageLoader, dStage_roomControl_c, dStage_roomStatus_c, dStage_stageDt_c } from './d_stage.js';
-import { cPhs__Status, fGlobals, fopAcM_create, fopAc_ac_c, fopDw_Draw, fopScn, fpcCt_Handler, fpcLy_SetCurrentLayer, fpcM_Management, fpcPf__Register, fpcSCtRq_Request, fpc__ProcessName, fpc_pc__ProfileList } from './framework.js';
-import { dDemo_manager_c, EDemoCamFlags, EDemoMode } from './d_demo.js';
+import { WoodPacket } from './d_wood.js';
+import { fopAcM_create, fopAc_ac_c } from './f_op_actor.js';
+import { cPhs__Status, fGlobals, fopDw_Draw, fopScn, fpcCt_Handler, fpcLy_SetCurrentLayer, fpcM_Management, fpcPf__Register, fpcSCtRq_Request, fpc_pc__ProfileList } from './framework.js';
 
 type SymbolData = { Filename: string, SymbolName: string, Data: ArrayBufferSlice };
 type SymbolMapData = { SymbolData: SymbolData[] };
@@ -173,7 +175,7 @@ export class dGlobals {
             return null;
     }
 
-    public dStage__searchNameRev(processName: fpc__ProcessName, subtype: number): string | null {
+    public dStage__searchNameRev(processName: dProcName_e, subtype: number): string | null {
         for (const name in this.objectNameTable) {
             const entry = this.objectNameTable[name];
             if (entry.pcName === processName && entry.subtype === subtype)
@@ -281,8 +283,8 @@ export class ZWWExtraTextures {
     }
 }
 
-function fpcIsObject(n: fpc__ProcessName): boolean {
-    if (n === fpc__ProcessName.d_a_bg)
+function fpcIsObject(n: dProcName_e): boolean {
+    if (n === dProcName_e.d_a_bg)
         return false;
 
     return true;
@@ -878,7 +880,7 @@ class SceneDesc {
         const f_pc_profiles = BYML.parse<fpc_pc__ProfileList>(modelCache.getFileData(`f_pc_profiles.crg1_arc`), BYML.FileType.CRG1);
         const framework = new fGlobals(f_pc_profiles);
 
-        fpcPf__Register(framework, fpc__ProcessName.d_s_play, d_s_play);
+        fpcPf__Register(framework, dProcName_e.d_s_play, d_s_play);
         dKy__RegisterConstructors(framework);
         dKyw__RegisterConstructors(framework);
         d_a__RegisterConstructors(framework);
@@ -893,7 +895,7 @@ class SceneDesc {
         context.destroyablePool.push(renderer);
         globals.renderer = renderer;
 
-        const pcId = fpcSCtRq_Request(framework, null, fpc__ProcessName.d_s_play, null);
+        const pcId = fpcSCtRq_Request(framework, null, dProcName_e.d_s_play, null);
         assert(pcId !== null);
 
         fpcCt_Handler(globals.frameworkGlobals, globals);
@@ -938,8 +940,8 @@ class SceneDesc {
 
         const vrbox = resCtrl.getStageResByName(ResType.Model, `Stage`, `vr_sky.bdl`);
         if (vrbox !== null) {
-            fpcSCtRq_Request(framework, null, fpc__ProcessName.d_a_vrbox, null);
-            fpcSCtRq_Request(framework, null, fpc__ProcessName.d_a_vrbox2, null);
+            fpcSCtRq_Request(framework, null, dProcName_e.d_a_vrbox, null);
+            fpcSCtRq_Request(framework, null, dProcName_e.d_a_vrbox2, null);
         }
 
         for (let i = 0; i < this.roomList.length; i++) {
@@ -953,7 +955,7 @@ class SceneDesc {
             // objectSetCheck
 
             // noclip modification: We pass in roomNo so it's attached to the room.
-            fopAcM_create(framework, fpc__ProcessName.d_a_bg, roomNo, null, roomNo, null, null, 0xFF, -1);
+            fopAcM_create(framework, dProcName_e.d_a_bg, roomNo, null, roomNo, null, null, 0xFF, -1);
 
             const dzr = assertExists(resCtrl.getStageResByName(ResType.Dzs, `Room${roomNo}`, `room.dzr`));
             dStage_dt_c_roomLoader(globals, globals.roomCtrl.status[roomNo].data, dzr);

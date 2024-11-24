@@ -14,8 +14,9 @@ import { ViewerRenderInput } from "../viewer.js";
 import { cLib_addCalc, cLib_addCalc2, cM_rndF } from "./SComponent.js";
 import { ThunderMode, ThunderState, dKankyo__CommonTextures, dKankyo__Windline, dKankyo_housi_Packet, dKankyo_moya_Packet, dKankyo_rain_Packet, dKankyo_star_Packet, dKankyo_sun_Packet, dKankyo_vrkumo_Packet, dKankyo_wave_Packet, dKy_wave_chan_init, dKyr__sun_arrival_check, dKyw_rain_set, dKyw_wether_draw, dKyw_wether_draw2, dKyw_wether_move, dKyw_wether_move_draw, dKyw_wether_move_draw2, dKyw_wind_set } from "./d_kankyo_wether.js";
 import { dStage_stagInfo_GetSTType, stage_envr_info_class, stage_palet_info_class, stage_palet_info_class__DifAmb, stage_pselect_info_class, stage_vrbox_info_class } from "./d_stage.js";
-import { cPhs__Status, fGlobals, fopKyM_Create, fpcPf__Register, fpc__ProcessName, fpc_bs__Constructor, kankyo_class } from "./framework.js";
+import { cPhs__Status, fGlobals, fopKyM_Create, fpcPf__Register, fpc_bs__Constructor, kankyo_class } from "./framework.js";
 import { dGlobals } from "./Main.js";
+import { dProcName_e } from "./d_procname.js";
 
 export const enum LightType {
     Actor = 0,
@@ -1294,7 +1295,7 @@ export function dKy_get_dayofweek(envLight: dScnKy_env_light_c): number {
 }
 
 class d_kankyo extends kankyo_class {
-    public static PROCESS_NAME = fpc__ProcessName.d_kankyo;
+    public static PROCESS_NAME = dProcName_e.d_kankyo;
 
     public override subload(globals: dGlobals): cPhs__Status {
         envcolor_init(globals);
@@ -1320,7 +1321,7 @@ class d_kankyo extends kankyo_class {
 }
 
 class d_kyeff extends kankyo_class {
-    public static PROCESS_NAME = fpc__ProcessName.d_kyeff;
+    public static PROCESS_NAME = dProcName_e.d_kyeff;
 
     public override subload(globals: dGlobals): cPhs__Status {
         const envLight = globals.g_env_light;
@@ -1391,7 +1392,7 @@ class d_kyeff extends kankyo_class {
 }
 
 class d_kyeff2 extends kankyo_class {
-    public static PROCESS_NAME = fpc__ProcessName.d_kyeff2;
+    public static PROCESS_NAME = dProcName_e.d_kyeff2;
 
     public override subload(globals: dGlobals): cPhs__Status {
         // dKyw_wether_init2(globals);
@@ -1416,14 +1417,14 @@ class d_kyeff2 extends kankyo_class {
 }
 
 export function dKankyo_create(globals: dGlobals): void {
-    fopKyM_Create(globals.frameworkGlobals, fpc__ProcessName.d_kankyo, null);
-    fopKyM_Create(globals.frameworkGlobals, fpc__ProcessName.d_kyeff, null);
-    fopKyM_Create(globals.frameworkGlobals, fpc__ProcessName.d_kyeff2, null);
-    // fopKyM_Create(globals.frameworkGlobals, fpc__ProcessName.d_envse, null);
+    fopKyM_Create(globals.frameworkGlobals, dProcName_e.d_kankyo, null);
+    fopKyM_Create(globals.frameworkGlobals, dProcName_e.d_kyeff, null);
+    fopKyM_Create(globals.frameworkGlobals, dProcName_e.d_kyeff2, null);
+    // fopKyM_Create(globals.frameworkGlobals, dProcName_e.d_envse, null);
 }
 
 interface constructor extends fpc_bs__Constructor {
-    PROCESS_NAME: fpc__ProcessName;
+    PROCESS_NAME: dProcName_e;
 }
 
 export function dKy__RegisterConstructors(globals: fGlobals): void {

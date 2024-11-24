@@ -1,15 +1,16 @@
+
 import { mat4, ReadonlyVec3, vec3 } from "gl-matrix";
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { TParse, JStage, TSystem, TControl, TCamera, TActor } from "../Common/JSYSTEM/JStudio.js";
-import { getMatrixAxisY, MathConstants } from "../MathHelpers.js";
-import { dGlobals } from "./Main";
-import { fopAc_ac_c, fopAcM_searchFromName } from "./framework.js";
-import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase";
-import { mDoExt_McaMorf } from "./m_do_ext";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
+import { LoopMode } from "../Common/JSYSTEM/J3D/J3DLoader.js";
+import { JStage, TActor, TCamera, TControl, TParse, TSystem } from "../Common/JSYSTEM/JStudio.js";
+import { getMatrixAxisY } from "../MathHelpers.js";
 import { assert } from "../util.js";
 import { ResType } from "./d_resorce.js";
-import { LoopMode } from "../Common/JSYSTEM/J3D/J3DLoader";
+import { mDoExt_McaMorf } from "./m_do_ext.js";
+import { dGlobals } from "./Main.js";
 import { cM_deg2s, cM_sht2d } from "./SComponent.js";
+import { fopAc_ac_c, fopAcM_searchFromName } from "./f_op_actor.js";
 
 export enum EDemoMode {
     None,

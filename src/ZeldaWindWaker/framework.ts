@@ -1,48 +1,9 @@
 
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
-import { ViewerRenderInput } from "../viewer.js";
-import { ReadonlyVec3, mat4, vec3, vec4 } from "gl-matrix";
+import { vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
-import { assertExists, nArray, arrayRemove, assert } from "../util.js";
-import { dKy_tevstr_c, dKy_tevstr_init } from "./d_kankyo.js";
-import { AABB } from "../Geometry.js";
-import { Camera, computeScreenSpaceProjectionFromWorldSpaceAABB, computeScreenSpaceProjectionFromWorldSpaceSphere, ScreenSpaceProjection } from "../Camera.js";
-import { transformVec3Mat4w1 } from "../MathHelpers.js";
-import { dGlobals } from "./Main.js";
-
-export const enum fpc__ProcessName {
-    d_s_play            = 0x0007,
-    d_kankyo            = 0x0015,
-    d_envse             = 0x0017,
-    d_a_sea             = 0x0028,
-    d_a_mgameboard      = 0x0040,
-    d_a_obj_ikada       = 0x0046,
-    d_a_obj_lpalm       = 0x004B,
-    d_a_obj_Ygush00     = 0x0099,
-    d_a_py_lk           = 0x00A9,
-    d_a_majuu_flag      = 0x00AF,
-    d_a_tori_flag       = 0x00B0,
-    d_a_sie_flag        = 0x00B1,
-    d_a_oship           = 0x00B4,
-    d_a_ep              = 0x00BA,
-    d_a_ff              = 0x00BC,
-    d_a_kamome          = 0x00C3,
-    d_a_obj_wood        = 0x010C,
-    d_a_obj_flame       = 0x010D,
-    d_a_tbox            = 0x0126,
-    d_a_npc_ls1         = 0x0143,
-    d_a_kytag00         = 0x0181,
-    d_a_kytag01         = 0x0182,
-    d_a_obj_zouK        = 0x018F,
-    d_a_grass           = 0x01B8,
-    d_thunder           = 0x01B9,
-    d_a_vrbox           = 0x01BA,
-    d_a_vrbox2          = 0x01BB,
-    d_a_bg              = 0x01BC,
-    d_a_swhit0          = 0x01C9,
-    d_kyeff             = 0x01E4,
-    d_kyeff2            = 0x01E5,
-};
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
+import { arrayRemove, assert, assertExists, nArray } from "../util.js";
+import { ViewerRenderInput } from "../viewer.js";
 
 export type fpc_pc__ProfileList = { Profiles: ArrayBufferSlice[] };
 
@@ -243,7 +204,7 @@ function fpcBs_MakeOfId(globals: fGlobals): number {
     return globals.process_id++;
 }
 
-export function fpcSCtRq_Request<G>(globals: fGlobals, ly: layer_class | null, pcName: fpc__ProcessName, userData: G): number | null {
+export function fpcSCtRq_Request<G>(globals: fGlobals, ly: layer_class | null, pcName: number, userData: G): number | null {
     const constructor = fpcPf_Get__Constructor(globals, pcName);
     if (constructor === null)
         return null;
@@ -364,11 +325,11 @@ export class base_process_class {
     }
 }
 
-function fpcPf_Get__ProfileBinary(globals: fGlobals, pcName: fpc__ProcessName): ArrayBufferSlice {
+function fpcPf_Get__ProfileBinary(globals: fGlobals, pcName: number): ArrayBufferSlice {
     return assertExists(globals.f_pc_profiles.Profiles[pcName]);
 }
 
-function fpcPf_Get__Constructor(globals: fGlobals, pcName: fpc__ProcessName): fpc_bs__Constructor | null {
+function fpcPf_Get__Constructor(globals: fGlobals, pcName: number): fpc_bs__Constructor | null {
     const pf = globals.f_pc_constructors[pcName];
     if (pf !== undefined)
         return pf;
@@ -376,7 +337,7 @@ function fpcPf_Get__Constructor(globals: fGlobals, pcName: fpc__ProcessName): fp
         return globals.f_pc_fallbackConstructor;
 }
 
-export function fpcPf__Register(globals: fGlobals, pcName: fpc__ProcessName, constructor: fpc_bs__Constructor): void {
+export function fpcPf__Register(globals: fGlobals, pcName: number, constructor: fpc_bs__Constructor): void {
     assert(globals.f_pc_constructors[pcName] === undefined);
     globals.f_pc_constructors[pcName] = constructor;
 }
@@ -409,7 +370,7 @@ class process_node_class extends base_process_class {
     }
 }
 
-class leafdraw_class extends base_process_class {
+export class leafdraw_class extends base_process_class {
     public drawPriority: number;
     public visible: boolean = true;
     public roomVisible: boolean = true;
@@ -464,211 +425,17 @@ export function fopDw_Draw(globals: fGlobals, globalUserData: GlobalUserData, re
     }
 }
 
-function fopDwTg_ToDrawQ(globals: fGlobals, dw: leafdraw_class, priority: number): void {
+export function fopDwTg_ToDrawQ(globals: fGlobals, dw: leafdraw_class, priority: number): void {
     globals.dwQueue[priority].push(dw);
 }
 
-function fopDwTg_DrawQTo(globals: fGlobals, dw: leafdraw_class, priority: number): void {
+export function fopDwTg_DrawQTo(globals: fGlobals, dw: leafdraw_class, priority: number): void {
     arrayRemove(globals.dwQueue[priority], dw);
 }
 //#endregion
 
 //#region fopScn
 export class fopScn extends process_node_class {
-}
-//#endregion
-
-//#region fopAc
-const scratchVec3a = vec3.create();
-const scratchAABB = new AABB();
-const scratchScreenSpaceProjection = new ScreenSpaceProjection();
-export class fopAc_ac_c extends leafdraw_class {
-    public pos = vec3.create();
-    public rot = vec3.create();
-    public scale = vec3.fromValues(1, 1, 1);
-    public parentPcId: number = 0xFFFFFFFF;
-    public subtype: number = 0xFF;
-    public roomNo: number = -1;
-    public tevStr = new dKy_tevstr_c();
-    public demoActorID: number = -1;
-    protected cullSizeBox: AABB | null = null;
-    protected cullSizeSphere: vec4 | null = null;
-    protected cullMtx: mat4 | null = null;
-    protected cullFarDistanceRatio: number = 0.5;
-    // noclip addition
-    public roomLayer: number = -1;
-
-    private loadInit: boolean = false;
-
-    constructor(globals: fGlobals, pcName: number, pcId: number, profile: DataView) {
-        super(globals, pcName, pcId, profile);
-
-        // Initialize our culling information from the profile...
-        const cullType = profile.getUint8(0x2D);
-        if (cullType < 0x0E) {
-            this.cullSizeBox = Object.freeze(fopAc_ac_c.cullSizeBox[cullType]);
-        } else if (cullType === 0x0E) {
-            this.cullSizeBox = new AABB();
-        } else if (cullType < 0x17) {
-            // this.cullSizeSphere = this.cullSizeSphere[cullType - 0x0F];
-        } else if (cullType === 0x17) {
-            this.cullSizeSphere = vec4.create();
-        }
-    }
-
-    public override load(globals: GlobalUserData, prm: fopAcM_prm_class | null): cPhs__Status {
-        if (!this.loadInit) {
-            this.loadInit = true;
-
-            if (prm !== null) {
-                if (prm.pos !== null)
-                    vec3.copy(this.pos, prm.pos);
-                if (prm.rot !== null)
-                    vec3.copy(this.rot, prm.rot);
-                if (prm.scale !== null)
-                    vec3.copy(this.scale, prm.scale);
-                this.subtype = prm.subtype;
-                this.parentPcId = prm.parentPcId;
-                this.parameters = prm.parameters;
-                this.roomNo = prm.roomNo;
-                this.roomLayer = prm.layer;
-            }
-
-            dKy_tevstr_init(this.tevStr, this.roomNo);
-        }
-
-        const status = this.subload(globals, prm);
-        assert(status !== cPhs__Status.Complete);
-        if (status === cPhs__Status.Next)
-            fopDwTg_ToDrawQ(globals.frameworkGlobals, this, this.drawPriority);
-        return status;
-    }
-
-    private static cullSizeBox: AABB[] = [
-        new AABB(-40.0,    0.0, -40.0,     40.0, 125.0,  40.0), // 0x00
-        new AABB(-25.0,    0.0, -25.0,     25.0,  50.0,  25.0), // 0x01
-        new AABB(-50.0,    0.0, -50.0,     50.0, 100.0,  50.0), // 0x02
-        new AABB(-75.0,    0.0, -75.0,     75.0, 150.0,  75.0), // 0x03
-        new AABB(-100.0,   0.0, -100.0,   100.0, 800.0, 100.0), // 0x04
-        new AABB(-125.0,   0.0, -125.0,   125.0, 250.0, 125.0), // 0x05
-        new AABB(-150.0,   0.0, -150.0,   150.0, 300.0, 150.0), // 0x06
-        new AABB(-200.0,   0.0, -200.0,   200.0, 400.0, 200.0), // 0x07
-        new AABB(-600.0,   0.0, -600.0,   600.0, 900.0, 600.0), // 0x08
-        new AABB(-250.0,   0.0, -50.0,    250.0, 900.0,  50.0), // 0x09
-        new AABB(-60.0,    0.0, -20.0,     40.0, 130.0, 150.0), // 0x0A
-        new AABB(-75.0,    0.0, -75.0,     75.0, 210.0,  75.0), // 0x0B
-        new AABB(-70.0, -100.0, -80.0,     70.0, 240.0, 100.0), // 0x0C
-        new AABB(-60.0,  -20.0, -60.0,     60.0, 160.0,  60.0), // 0x0D
-    ];
-
-    protected setCullSizeBox(minX: number, minY: number, minZ: number, maxX: number, maxY: number, maxZ: number): void {
-        assert(this.cullSizeBox !== null && !Object.isFrozen(this.cullSizeBox));
-        this.cullSizeBox.set(minX, minY, minZ, maxX, maxY, maxZ);
-    }
-
-    protected setCullSizeSphere(x: number, y: number, z: number, r: number): void {
-        assert(this.cullSizeSphere !== null && !Object.isFrozen(this.cullSizeSphere));
-        vec4.set(this.cullSizeSphere, x, y, z, r);
-    }
-
-    protected cullingCheck(camera: Camera): boolean {
-        if (!fpcPc__IsVisible(this))
-            return false;
-
-        // Make sure that all culling matrices are filled in, before I forget...
-        if (this.cullMtx === null)
-            throw "whoops";
-
-        const frustum = camera.frustum;
-
-        if (this.cullSizeBox !== null) {
-            // If the box is empty, that means I forgot to fill it in for a certain actor.
-            // Sound the alarms so that I fill it in!
-            if (this.cullSizeBox.isEmpty())
-                debugger;
-
-            scratchAABB.transform(this.cullSizeBox, this.cullMtx);
-
-            if (!frustum.contains(scratchAABB))
-                return false;
-
-            computeScreenSpaceProjectionFromWorldSpaceAABB(scratchScreenSpaceProjection, camera, scratchAABB);
-            if (scratchScreenSpaceProjection.getScreenArea() <= 0.0002)
-                return false;
-        } else if (this.cullSizeSphere !== null) {
-            vec3.set(scratchVec3a, this.cullSizeSphere[0], this.cullSizeSphere[1], this.cullSizeSphere[2]);
-            transformVec3Mat4w1(scratchVec3a, this.cullMtx, scratchVec3a);
-            const radius = this.cullSizeSphere[3];
-
-            if (!frustum.containsSphere(scratchVec3a, radius))
-                return false;
-
-            computeScreenSpaceProjectionFromWorldSpaceSphere(scratchScreenSpaceProjection, camera, scratchVec3a, radius);
-            if (scratchScreenSpaceProjection.getScreenArea() <= 0.0002)
-                return false;
-        }
-
-        return true;
-    }
-
-    public override delete(globals: GlobalUserData): void {
-        fopDwTg_DrawQTo(globals.frameworkGlobals, this, this.drawPriority);
-    }
-
-    protected subload(globals: GlobalUserData, prm: fopAcM_prm_class | null): cPhs__Status {
-        return cPhs__Status.Next;
-    }
-}
-
-export interface fopAcM_prm_class {
-    parameters: number;
-    pos: ReadonlyVec3 | null;
-    rot: ReadonlyVec3 | null;
-    enemyNo: number;
-    scale: ReadonlyVec3 | null;
-    gbaName: number;
-    parentPcId: number;
-    subtype: number;
-    roomNo: number;
-    // NOTE(jstpierre): This isn't part of the original struct, it simply doesn't
-    // load inactive layers...
-    layer: number;
-}
-
-export function fopAcM_create(globals: fGlobals, pcName: fpc__ProcessName, parameters: number, pos: ReadonlyVec3 | null, roomNo: number, rot: ReadonlyVec3 | null, scale: ReadonlyVec3 | null, subtype: number, parentPcId: number): number | null {
-    // Create on current layer.
-    const prm: fopAcM_prm_class = {
-        parameters, pos, roomNo, rot, scale, subtype, parentPcId,
-        enemyNo: -1, gbaName: 0x00, layer: -1,
-    };
-
-    return fpcSCtRq_Request(globals, null, pcName, prm);
-}
-
-export function fopAcIt_JudgeByID<T extends base_process_class>(globals: fGlobals, pcId: number | null): T | null {
-    if (pcId === null)
-        return null;
-    for (let i = 0; i < globals.lnQueue.length; i++) {
-        if (globals.lnQueue[i].processId === pcId)
-            return globals.lnQueue[i] as unknown as T;
-    }
-    return null;
-}
-
-export function fopAcM_searchFromName(globals: dGlobals, procName: string, paramMask: number, param: number): fopAc_ac_c | null {
-    const objName = globals.dStage_searchName(procName);
-    if (!objName) { return null; }
-
-    for (let i = 0; i < globals.frameworkGlobals.lnQueue.length; i++) {
-        const act = globals.frameworkGlobals.lnQueue[i] as fopAc_ac_c;
-        if (act.profName == objName.pcName
-            && objName.subtype == act.subtype
-            && (paramMask == 0 || param == (act.parameters & paramMask))
-        )
-            return act;
-    }
-
-    return null;
 }
 //#endregion
 
@@ -713,11 +480,11 @@ export interface fopKyM_prm_class {
     scale: vec3 | null;
 }
 
-export function fopKyM_Create(globals: fGlobals, pcName: fpc__ProcessName, prm: fopKyM_prm_class | null): number | null {
+export function fopKyM_Create(globals: fGlobals, pcName: number, prm: fopKyM_prm_class | null): number | null {
     return fpcSCtRq_Request(globals, null, pcName, prm);
 }
 
-export function fopKyM_create(globals: fGlobals, pcName: fpc__ProcessName, parameters: number, pos: vec3 | null, scale: vec3 | null): number | null {
+export function fopKyM_create(globals: fGlobals, pcName: number, parameters: number, pos: vec3 | null, scale: vec3 | null): number | null {
     return fopKyM_Create(globals, pcName, { parameters, pos, scale });
 }
 
