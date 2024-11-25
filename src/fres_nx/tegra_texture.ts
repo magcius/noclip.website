@@ -115,7 +115,7 @@ export interface SwizzledSurface {
     blockHeightLog2: number; // The block height of mip0.
 }
 
-export async function deswizzle(swizzledSurface: SwizzledSurface): Promise<Uint8Array> {
+export async function deswizzle(swizzledSurface: SwizzledSurface): Promise<Uint8Array<ArrayBuffer>> {
     const { buffer, channelFormat, width, height, blockHeightLog2 } = swizzledSurface;
     const compressionType =
         channelFormat === ChannelFormat.Bc1 ? rust.CompressionType.Bc1 :
@@ -124,10 +124,10 @@ export async function deswizzle(swizzledSurface: SwizzledSurface): Promise<Uint8
         channelFormat === ChannelFormat.Bc4 ? rust.CompressionType.Bc4 :
         channelFormat === ChannelFormat.Bc5 ? rust.CompressionType.Bc5 :
         undefined!;
-    return rust.tegra_deswizzle(buffer.createTypedArray(Uint8Array), compressionType, width, height, blockHeightLog2);
+    return rust.tegra_deswizzle(buffer.createTypedArray(Uint8Array), compressionType, width, height, blockHeightLog2) as Uint8Array<ArrayBuffer>;
 }
 
-export function decompress(textureEntry: BRTI, pixels: Uint8Array): DecodedSurfaceSW {
+export function decompress(textureEntry: BRTI, pixels: Uint8Array<ArrayBuffer>): DecodedSurfaceSW {
     const channelFormat = getChannelFormat(textureEntry.imageFormat);
     const typeFormat = getTypeFormat(textureEntry.imageFormat);
 

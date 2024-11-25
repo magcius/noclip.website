@@ -250,7 +250,7 @@ export class GTA3SceneDesc implements SceneDesc {
                             type: transparent ? 'BC3' : 'BC1',
                             pixels: dst,
                             flag: 'UNORM',
-                        }).pixels as Uint8Array;
+                        }).pixels as Uint8Array<ArrayBuffer>;
                         levels.push(dst);
                     }
                     cb({ name, width, height, levels, pixelFormat, transparent });

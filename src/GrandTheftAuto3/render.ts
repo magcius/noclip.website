@@ -76,7 +76,7 @@ export function rwTexture(texture: rw.Texture, txdName: string, useDXT = true): 
     return { name, width, height, levels, pixelFormat, transparent };
 }
 
-function halve(pixels: Uint8Array, width: number, height: number, bpp: number): Uint8Array {
+function halve(pixels: Uint8Array, width: number, height: number, bpp: number): Uint8Array<ArrayBuffer> {
     const w = Math.max((width / 2) | 0, 1);
     const h = Math.max((height / 2) | 0, 1);
     const UNPACK_ALIGNMENT = 4;

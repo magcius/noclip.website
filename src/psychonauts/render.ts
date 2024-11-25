@@ -21,7 +21,7 @@ import { AABB } from '../Geometry.js';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers.js';
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 
-function decodeTextureData(format: TextureFormat, width: number, height: number, pixels: Uint8Array): DecodedSurfaceSW {
+function decodeTextureData(format: TextureFormat, width: number, height: number, pixels: Uint8Array<ArrayBuffer>): DecodedSurfaceSW {
     switch (format) {
     case TextureFormat.B8G8R8A8:
         return { type: 'RGBA', flag: 'SRGB', width, height, depth: 1, pixels };

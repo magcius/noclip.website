@@ -135,7 +135,7 @@ export function parse(buffer: ArrayBufferSlice, name: string, isSRGB: boolean): 
     return { name, width, height, format, levels, isCubemap, isSRGB };
 }
 
-function decodeRGB(level: Level): Uint8Array {
+function decodeRGB(level: Level): Uint8Array<ArrayBuffer> {
     const src = level.data.createTypedArray(Uint8Array);
     const dst = new Uint8Array(src.length * 4 / 3);
     let srcOffs = 0;
@@ -149,7 +149,7 @@ function decodeRGB(level: Level): Uint8Array {
     return dst;
 }
 
-function decodeRGBA(level: Level): Uint8Array {
+function decodeRGBA(level: Level): Uint8Array<ArrayBuffer> {
     const src = level.data.createTypedArray(Uint8Array);
     const dst = new Uint8Array(src.length);
     let srcOffs = 0;
@@ -193,7 +193,7 @@ export function createTexture(device: GfxDevice, dds: DDS): GfxTexture {
     if (!device.queryTextureFormatSupported(pixelFormat, dds.width, dds.height))
         pixelFormat = dds.isSRGB ? GfxFormat.U8_RGBA_SRGB : GfxFormat.U8_RGBA_NORM;
 
-    const levelDatas: Uint8Array[] = [];
+    const levelDatas: Uint8Array<ArrayBuffer>[] = [];
     for (let i = 0; i < dds.levels.length; i++) {
         const level = dds.levels[i];
 
@@ -205,8 +205,8 @@ export function createTexture(device: GfxDevice, dds: DDS): GfxTexture {
             levelDatas.push(level.data.createTypedArray(Uint8Array));
         } else {
             const decodedSurface = decompressDDSLevel(dds, level);
-            levelDatas.push(decodedSurface.pixels as Uint8Array);
-            decodedSurface.pixels = null as unknown as Uint8Array;
+            levelDatas.push(decodedSurface.pixels as Uint8Array<ArrayBuffer>);
+            decodedSurface.pixels = null as unknown as Uint8Array<ArrayBuffer>;
         }
 
         // Delete expensive data
