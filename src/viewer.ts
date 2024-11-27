@@ -58,7 +58,6 @@ export interface SceneGfx {
     serializeSaveState?(dst: ArrayBuffer, offs: number): number;
     deserializeSaveState?(src: ArrayBuffer, offs: number, byteLength: number): number;
     onstatechanged?: () => void;
-    togglePlayPause?: (shouldBePlaying?: boolean) => void;
     render(device: GfxDevice, renderInput: ViewerRenderInput): void;
     destroy(device: GfxDevice): void;
 }

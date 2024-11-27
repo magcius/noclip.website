@@ -331,7 +331,6 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
     public roomLayerMask: number = 0;
 
     public onstatechanged!: () => void;
-    public togglePlayPause!: (shouldBePlaying?: boolean) => void;
 
     constructor(public device: GfxDevice, public globals: dGlobals) {
         this.renderHelper = new GXRenderHelperGfx(device);
@@ -640,8 +639,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
     public deserializeSaveState(src: ArrayBuffer, offs: number, byteLength: number): number {
         const view = new DataView(src);
         this.isPaused = !!view.getUint8(offs++);
-        this.globals.scnPlay.demo.setFrame(view.getUint16(offs)); // @TODO: This won't work when loading without re-creating the scene
-        this.togglePlayPause(!this.isPaused);
+        this.globals.scnPlay.demo.setFrame(view.getUint16(offs));
         return offs + 2;
     }
 

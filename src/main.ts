@@ -684,7 +684,6 @@ class Main {
         scene.onstatechanged = () => {
             this._saveStateAndUpdateURL();
         };
-        scene.togglePlayPause = this.ui.togglePlayPause.bind(this.ui);
 
         let scenePanels: Panel[] = [];
         if (scene.createPanels)
