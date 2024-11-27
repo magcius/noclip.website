@@ -1,6 +1,6 @@
 
 import { GfxDevice } from "./gfx/platform/GfxPlatform.js";
-import { SceneGfx, ViewerRenderInput } from "./viewer.js";
+import { SceneGfx, SceneTime, ViewerRenderInput } from "./viewer.js";
 import { DataFetcher } from "./DataFetcher.js";
 import { DataShare } from "./DataShare.js";
 import { GfxRenderInstManager } from "./gfx/render/GfxRenderInstManager.js";
@@ -27,6 +27,7 @@ export interface SceneContext {
     destroyablePool: Destroyable[];
     inputManager: InputManager;
     viewerInput: ViewerRenderInput;
+    sceneTime: SceneTime;
 }
 
 export interface SceneDesc {

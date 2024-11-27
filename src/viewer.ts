@@ -49,6 +49,10 @@ export interface ViewerRenderInput {
     debugConsole: DebugConsole;
 }
 
+export interface SceneTime {
+    togglePlayPause(shouldBePlaying: boolean): void;
+}
+
 export interface SceneGfx {
     textureHolder?: UI.TextureListHolder;
     createPanels?(): UI.Panel[];

@@ -778,8 +778,9 @@ class Main {
         const inputManager = this.viewer.inputManager;
         inputManager.reset();
         const viewerInput = this.viewer.viewerRenderInput;
+        const sceneTime = { togglePlayPause: this.ui.togglePlayPause.bind(this.ui) };
         const context: SceneContext = {
-            device, dataFetcher, dataShare, uiContainer, destroyablePool, inputManager, viewerInput,
+            device, dataFetcher, dataShare, uiContainer, destroyablePool, inputManager, viewerInput, sceneTime
         };
 
         // The age delta on pruneOldObjects determines whether any resources will be shared at all.
