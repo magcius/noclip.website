@@ -2611,23 +2611,17 @@ class FullscreenButton extends SingleIconButton {
 }
 
 class PlayPauseButton extends SingleIconButton {
-    public onplaypause: ((shouldBePlaying: boolean) => void) | null = null;
-    public isPlaying: boolean;
+    public sceneTime: Viewer.SceneTime;
 
     public override syncStyle(): void {
         super.syncStyle();
-        setFontelloIcon(this.icon, this.isPlaying ? FontelloIcon.pause : FontelloIcon.play);
-        this.tooltipElem.textContent = this.isPlaying ? 'Pause' : 'Play';
-    }
-
-    public setIsPlaying(isPlaying: boolean): void {
-        this.isPlaying = isPlaying;
-        this.syncStyle();
+        setFontelloIcon(this.icon, this.sceneTime.isPlaying ? FontelloIcon.pause : FontelloIcon.play);
+        this.tooltipElem.textContent = this.sceneTime.isPlaying ? 'Pause' : 'Play';
     }
 
     public onClick() {
-        if (this.onplaypause !== null)
-            this.onplaypause(!this.isPlaying);
+        this.sceneTime.togglePlayPause();
+        this.syncStyle();
     }
 }
 
@@ -2691,8 +2685,6 @@ export class UI {
 
     private isDragging: boolean = false;
     private lastMouseActiveTime: number = -1;
-
-    public isPlaying: boolean = true;
 
     public isEmbedMode: boolean = false;
     public isVisible: boolean = true;
@@ -2769,10 +2761,7 @@ export class UI {
         this.studioPanel = new StudioPanel(this, viewer);
         this.toplevel.appendChild(this.studioPanel.elem);
 
-        this.playPauseButton.onplaypause = (shouldBePlaying) => {
-            this.togglePlayPause(shouldBePlaying);
-        };
-        this.playPauseButton.setIsPlaying(this.isPlaying);
+        this.playPauseButton.sceneTime = viewer.sceneTime;
 
         this.about.onfaq = () => {
             this.faqPanel.elem.style.display = 'block';
@@ -2788,11 +2777,6 @@ export class UI {
         this.elem = this.toplevel;
     }
 
-    public togglePlayPause(shouldBePlaying: boolean = !this.isPlaying): void {
-        this.isPlaying = shouldBePlaying;
-        this.playPauseButton.setIsPlaying(this.isPlaying);
-    }
-
     public toggleWebXRCheckbox(shouldBeChecked: boolean = !this.xrSettings.enableXRCheckBox.checked) {
         this.xrSettings.enableXRCheckBox.setChecked(shouldBeChecked);
     }
@@ -2803,6 +2787,7 @@ export class UI {
 
     public update(): void {
         this.syncVisibilityState();
+        this.playPauseButton.syncStyle();
     }
 
     public setSaveState(saveState: string) {

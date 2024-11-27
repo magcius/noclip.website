@@ -28,7 +28,7 @@ export async function captureSceneToZip(viewer: Viewer, options: CaptureOptions)
     const fileEntries: ZipFileEntry[] = [];
 
     // This is some ugliness to take over the main code... in an ideal world we'd do this offscreen...
-    viewer.sceneTime = 0;
+    viewer.sceneTime.time = 0;
     viewer.rafTime = 0;
     for (let i = 0; i < options.frameCount; i++) {
         const t = i / (options.frameCount - 1);

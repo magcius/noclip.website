@@ -49,10 +49,6 @@ export interface ViewerRenderInput {
     debugConsole: DebugConsole;
 }
 
-export interface SceneTime {
-    togglePlayPause(shouldBePlaying: boolean): void;
-}
-
 export interface SceneGfx {
     textureHolder?: UI.TextureListHolder;
     createPanels?(): UI.Panel[];
@@ -87,6 +83,18 @@ export function resizeCanvas(canvas: HTMLCanvasElement, width: number, height: n
     canvas.height = nh;
 }
 
+export class SceneTime {
+    public time: number = 0;
+    public timeScale: number = 1.0;
+    public isPlaying: boolean = false;
+
+    public togglePlayPause(shouldBePlaying = !this.isPlaying): void { this.isPlaying = shouldBePlaying; }
+
+    public updateDT(dt: number) {
+        this.time += dt * this.timeScale;
+    }
+}
+
 export class Viewer {
     public inputManager: InputManager;
     public cameraController: CameraController | null = null;
@@ -97,10 +105,9 @@ export class Viewer {
     static readonly FOV_Y_DEFAULT: number = MathConstants.TAU / 6;
     public fovY: number = Viewer.FOV_Y_DEFAULT;
     // Scene time. Can be paused / scaled / rewound / whatever.
-    public sceneTime: number = 0;
+    public sceneTime = new SceneTime();
     // requestAnimationFrame time. Used to calculate dt from the new time.
     public rafTime: number = 0;
-    public sceneTimeScale: number = 1;
     public externalControl: boolean = false;
 
     public gfxDevice: GfxDevice;
@@ -123,7 +130,7 @@ export class Viewer {
         this.gfxDevice = this.gfxSwapChain.getDevice();
         this.viewerRenderInput = {
             camera: this.camera,
-            time: this.sceneTime,
+            time: this.sceneTime.time,
             deltaTime: 0,
             backbufferWidth: 0,
             backbufferHeight: 0,
@@ -162,7 +169,7 @@ export class Viewer {
 
     private render(): void {
         this.viewerRenderInput.camera = this.camera;
-        this.viewerRenderInput.time = this.sceneTime;
+        this.viewerRenderInput.time = this.sceneTime.time;
         this.viewerRenderInput.backbufferWidth = this.canvas.width;
         this.viewerRenderInput.backbufferHeight = this.canvas.height;
         this.gfxSwapChain.configureSwapChain(this.canvas.width, this.canvas.height);
@@ -209,7 +216,7 @@ export class Viewer {
         if (baseLayer === undefined)
             return;
 
-        this.viewerRenderInput.time = this.sceneTime;
+        this.viewerRenderInput.time = this.sceneTime.time;
         this.gfxSwapChain.configureSwapChain(baseLayer.framebufferWidth, baseLayer.framebufferHeight, baseLayer.framebuffer);
         const swapChainTex = this.gfxSwapChain.getOnscreenTexture();
 
@@ -307,14 +314,13 @@ export class Viewer {
         camera.setClipPlanes(5);
 
         if (this.cameraController) {
-            const result = this.cameraController.update(this.inputManager, dt, this.sceneTimeScale);
+            const result = this.cameraController.update(this.inputManager, dt, this.sceneTime.timeScale);
             if (result !== CameraUpdateResult.Unchanged)
                 this.oncamerachanged(result === CameraUpdateResult.ImportantChange);
         }
 
-        const deltaTime = dt * this.sceneTimeScale;
-        this.viewerRenderInput.deltaTime += deltaTime;
-        this.sceneTime += deltaTime;
+        this.sceneTime.updateDT(dt);
+        this.viewerRenderInput.deltaTime += dt * this.sceneTime.timeScale;
 
         if (updateInfo.webXRContext !== null && updateInfo.webXRContext.views && updateInfo.webXRContext.xrSession) {
             this.xrCameraController.update(updateInfo.webXRContext);

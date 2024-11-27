@@ -431,9 +431,9 @@ class Main {
         if (inputManager.isKeyDownEventTriggered('Numpad3'))
             this._exportSaveData();
         if (inputManager.isKeyDownEventTriggered('Period'))
-            this.ui.togglePlayPause();
+            this.viewer.sceneTime.togglePlayPause();
         if (inputManager.isKeyDown('Comma')) {
-            this.ui.togglePlayPause(false);
+            this.viewer.sceneTime.togglePlayPause(false);
             this.isFrameStep = true;
         }
         if (inputManager.isKeyDownEventTriggered('F9'))
@@ -472,7 +472,7 @@ class Main {
         const shouldTakeScreenshot = this.viewer.inputManager.isKeyDownEventTriggered('Numpad7') || this.viewer.inputManager.isKeyDownEventTriggered('BracketRight');
 
         let sceneTimeScale = this.sceneTimeScale;
-        if (!this.ui.isPlaying) {
+        if (!this.viewer.sceneTime.isPlaying) {
             if (this.isFrameStep) {
                 sceneTimeScale /= 4.0;
                 this.isFrameStep = false;
@@ -482,7 +482,7 @@ class Main {
         }
 
         if (!this.viewer.externalControl) {
-            this.viewer.sceneTimeScale = sceneTimeScale;
+            this.viewer.sceneTime.timeScale = sceneTimeScale;
             this.viewer.update(updateInfo);
         }
 
@@ -545,7 +545,7 @@ class Main {
         const byteLength = atob(this._saveStateTmp, 0, state);
 
         let byteOffs = 0;
-        this.viewer.sceneTime = this._saveStateView.getFloat32(byteOffs + 0x00, true);
+        this.viewer.sceneTime.time = this._saveStateView.getFloat32(byteOffs + 0x00, true);
         byteOffs += 0x04;
         byteOffs += deserializeCamera(this.viewer.camera, this._saveStateView, byteOffs);
         if (this.viewer.scene !== null && this.viewer.scene.deserializeSaveState)
@@ -690,7 +690,7 @@ class Main {
             scenePanels = scene.createPanels();
         this.ui.setScenePanels(scenePanels);
         // Force time to play when loading a map.
-        this.ui.togglePlayPause(true);
+        this.viewer.sceneTime.togglePlayPause(true);
 
         const sceneDescId = this._getCurrentSceneDescId()!;
         this.saveManager.setCurrentSceneDescId(sceneDescId);
@@ -778,7 +778,7 @@ class Main {
         const inputManager = this.viewer.inputManager;
         inputManager.reset();
         const viewerInput = this.viewer.viewerRenderInput;
-        const sceneTime = { togglePlayPause: this.ui.togglePlayPause.bind(this.ui) };
+        const sceneTime = this.viewer.sceneTime;
         const context: SceneContext = {
             device, dataFetcher, dataShare, uiContainer, destroyablePool, inputManager, viewerInput, sceneTime
         };
