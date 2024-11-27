@@ -319,7 +319,6 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
     private mainColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
     private mainDepthDesc = new GfxrRenderTargetDescription(GfxFormat.D32F);
     private opaqueSceneTextureMapping = new TextureMapping();
-    private isPaused = false;
 
     public renderHelper: GXRenderHelperGfx;
 
@@ -500,11 +499,6 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
             this.globals.context.inputManager.isMouseEnabled = true;
         }
 
-        if(isPaused != this.isPaused) {
-            this.isPaused = isPaused;
-            this.onstatechanged();
-        }
-
         this.globals.camera = viewerInput.camera;
 
         // Not sure exactly where this is ordered...
@@ -626,21 +620,6 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
 
         this.renderHelper.prepareToRender();
         this.renderHelper.renderGraph.execute(builder);
-    }
-
-    public serializeSaveState(dst: ArrayBuffer, offs: number): number {
-        const view = new DataView(dst);
-        const isDemo = this.globals.scnPlay.demo.getMode() == EDemoMode.Playing;
-        view.setUint8(offs++, (isDemo && this.isPaused) ? 1 : 0);
-        view.setUint16(offs, isDemo ? this.globals.scnPlay.demo.getFrame() : 0);
-        return offs + 2;
-    }
-
-    public deserializeSaveState(src: ArrayBuffer, offs: number, byteLength: number): number {
-        const view = new DataView(src);
-        this.isPaused = !!view.getUint8(offs++);
-        this.globals.scnPlay.demo.setFrame(view.getUint16(offs));
-        return offs + 2;
     }
 
     public destroy(device: GfxDevice): void {
@@ -1052,11 +1031,8 @@ class DemoDesc extends SceneDesc implements Viewer.SceneDesc {
             demoData = globals.modelCache.resCtrl.getObjectResByName(ResType.Stb, globals.roomCtrl.demoArcName, this.stbFilename);
         if (!demoData)
             demoData = globals.modelCache.resCtrl.getStageResByName(ResType.Stb, "Stage", this.stbFilename);
-    
-        if( demoData ) { 
-            if( globals.scnPlay.demo.getFrame() == 0 ) globals.scnPlay.demo.setFrame(this.startFrame || 0);
-            globals.scnPlay.demo.create(demoData, this.offsetPos, this.rotY / 180.0 * Math.PI); 
-        }
+        
+        if( demoData ) { globals.scnPlay.demo.create(demoData, this.offsetPos, this.rotY / 180.0 * Math.PI, this.startFrame); }
         else { console.warn('Failed to load demo data:', this.stbFilename); }
 
         return this.globals.renderer;
