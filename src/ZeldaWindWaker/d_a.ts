@@ -5321,6 +5321,7 @@ class d_a_py_lk extends fopAc_ac_c {
     private anmBtp = new mDoExt_btpAnm();
     private anmBckId: number;
 
+    private rawPos = vec3.create(); // The position before it is manipulated by anim root/foot motion
     private vel = vec3.create(); // TODO: This should be part of fopAc_ac_c
 
     private frontFoot: number = 2;
@@ -5346,32 +5347,44 @@ class d_a_py_lk extends fopAc_ac_c {
     }
 
     override execute(globals: dGlobals, deltaTimeFrames: number): void {
+        // Collect ground info. TODO: Acch
+        this.gdnChk.Reset();
+        vec3.scaleAndAdd(this.gdnChk.pos, this.pos, Vec3UnitY, 125.0);
+        const groundHeight = globals.scnPlay.bgS.GroundCross(this.gdnChk);
+
+        // Update the current proc based on demo data
         this.setDemoData(globals);
         if (this.demoMode != 5) {
             this.changeDemoProc(globals);
         }
 
-        if (this.proc) this.proc(globals);
-
-        // Clamp Link's position to the ground. // @TODO: Acch
-        this.gdnChk.Reset();
-        vec3.scaleAndAdd(this.gdnChk.pos, this.pos, Vec3UnitY, 125.0);
-        this.pos[1] = globals.scnPlay.bgS.GroundCross(this.gdnChk);
-        if (this.pos[1] === -Infinity) this.pos[1] = 0;
-
+        // Step our animations forward
         this.anmBck.play(deltaTimeFrames);
         this.anmBtp.play(deltaTimeFrames);
 
-        this.model.calcAnim();
+        // Run the current custom update process (Walk, Idle, Swim, etc)
+        if (this.proc) this.proc(globals);
 
-        mat4.copy(this.modelKatsura.modelMatrix, this.model.shapeInstanceState.jointToWorldMatrixArray[0x0F]);
-        this.modelKatsura.calcAnim();
-
+        // Apply root motion from the animation, and adjust position based on foot movement
+        const rawPos = vec3.copy(this.rawPos, this.pos); 
         this.posMove(globals);
+
+        // If we're pulling position directly from the demo, clamp to ground and ignore animation root motion
+        if (this.proc == this.procTool) {
+            vec3.copy(this.pos, rawPos);
+            if (groundHeight != -Infinity) {
+                this.pos[1] = groundHeight;
+            }
+        }
 
         // setWorldMatrix()
         MtxTrans(this.pos, false, this.model.modelMatrix);
         mDoMtx_ZXYrotM(this.model.modelMatrix, this.rot);
+
+        // Update joints based on the currently playing animation
+        this.model.calcAnim();
+        mat4.copy(this.modelKatsura.modelMatrix, this.model.shapeInstanceState.jointToWorldMatrixArray[0x0F]);
+        this.modelKatsura.calcAnim();
     }
 
     override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
@@ -5409,6 +5422,8 @@ class d_a_py_lk extends fopAc_ac_c {
         this.texMappingClothes = this.model.materialInstanceState.textureMappings[d_a_py_lk.LINK_CLOTHES_TEX_IDX];
         this.texMappingHeroClothes.copy(this.texMappingClothes);
 
+        MtxTrans(this.pos, false, this.model.modelMatrix);
+        mDoMtx_ZXYrotM(this.model.modelMatrix, this.rot);
         this.cullMtx = this.model.modelMatrix;
     }
 
@@ -5596,6 +5611,16 @@ class d_a_py_lk extends fopAc_ac_c {
     }
 
     private posMoveFromFootPos(globals: dGlobals) {
+        if (this.frontFoot == 2) {
+            vec3.zero(this.vel);
+            vec3.set(this.footData[0].toePos, -14.05, 0.0, 5.02);
+            vec3.set(this.footData[0].heelPos, -10.85, 0.0, -6.52);
+            vec3.set(this.footData[1].toePos, 14.05, 0.0, 5.02);
+            vec3.set(this.footData[1].heelPos, 10.85, 0.0, -6.52);
+            this.frontFoot = 0;
+            return;
+        }
+
         const footLJointIdx = this.model.modelData.bmd.jnt1.joints.findIndex(j => j.name == 'Lfoot_jnt')
         const footRJointIdx = this.model.modelData.bmd.jnt1.joints.findIndex(j => j.name == 'Rfoot_jnt')
         const waistJointIdx = this.model.modelData.bmd.jnt1.joints.findIndex(j => j.name == 'waist_jnt')
