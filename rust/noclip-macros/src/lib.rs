@@ -1,4 +1,4 @@
-use syn::{Attribute, Data, Path};
+use syn::Data;
 use quote::quote;
 
 #[proc_macro_derive(FromStructPerField, attributes(from))]

@@ -1,7 +1,7 @@
-use deku::{bitvec::{BitSlice, BitVec}, prelude::*};
+use deku::bitvec::BitSlice;
+use deku::{DekuContainerRead, DekuRead};
 use wasm_bindgen::prelude::*;
 
-use crate::unity::types::common::{NullTerminatedAsciiString, UnityArray};
 use crate::unity::types::wasm::WasmFriendlyPPtr;
 use crate::unity::types::class_id::ClassID;
 use crate::unity::types::serialized_file::{SerializedFileHeader, SerializedFileMetadata};
@@ -41,7 +41,6 @@ impl AssetFile {
         // data will be the file from bytes 0..data_offset, so skip to where the metadata starts
         let bitslice = BitSlice::from_slice(data);
         let (rest, _) = SerializedFileHeader::read(&bitslice, ()).unwrap();
-        let header_len = data.len() - rest.len() / 8;
         match SerializedFileMetadata::read(rest, self.header.version) {
             Ok((_, metadata)) => self.metadata = Some(metadata),
             Err(err) => return Err(format!("failed to parse metadata: {:?}", err)),
@@ -106,21 +105,17 @@ pub struct AssetFileObject {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::{HashMap, HashSet};
     use std::path::PathBuf;
     use std::str::FromStr;
 
     use crate::unity::types::common::UnityVersion;
-    use crate::unity::types::wasm::{GameObject, Texture2D, Mesh, MeshFilter, MeshRenderer, Transform, Material};
-    use crate::unity::types::serialized_file::ObjectInfo;
+    use crate::unity::types::wasm::{Texture2D, Mesh, MeshFilter, MeshRenderer, Transform, Material};
 
     use super::*;
-    use env_logger;
-    use deku::bitvec::BitVec;
 
     #[test]
     fn test() {
-        let mut base_path = PathBuf::from_str("C:\\Users\\ifnsp\\dev\\noclip.website\\data\\AShortHike").unwrap();
+        let base_path = PathBuf::from_str("C:\\Users\\ifnsp\\dev\\noclip.website\\data\\AShortHike").unwrap();
         let data = std::fs::read(&base_path.join("resources.assets")).unwrap();
         let version = UnityVersion::V2021_3_27f1;
         let mut asset_file = AssetFile::initialize_with_header_chunk(&data).unwrap();
