@@ -2,7 +2,7 @@
 import { ReadonlyMat4, ReadonlyVec3, mat4, quat, vec2, vec3 } from "gl-matrix";
 import { TransparentBlack, colorCopy, colorFromRGBA8, colorNewCopy, colorNewFromRGBA8 } from "../Color.js";
 import { J3DModelData, J3DModelInstance, buildEnvMtx } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
-import { LoopMode, TRK1, TTK1 } from "../Common/JSYSTEM/J3D/J3DLoader.js";
+import { JointTransformInfo, LoopMode, TRK1, TTK1 } from "../Common/JSYSTEM/J3D/J3DLoader.js";
 import { JPABaseEmitter, JPASetRMtxSTVecFromMtx } from "../Common/JSYSTEM/JPA.js";
 import { BTIData } from "../Common/JSYSTEM/JUTTexture.js";
 import { Vec3One, Vec3UnitY, Vec3UnitZ, Vec3Zero, clamp, computeMatrixWithoutTranslation, computeModelMatrixR, computeModelMatrixS, lerp, saturate, scaleMatrix, transformVec3Mat4w0, transformVec3Mat4w1 } from "../MathHelpers.js";
@@ -37,6 +37,7 @@ import { dDemo_setDemoData, EDemoActorFlags } from "./d_demo.js";
 import { fopAc_ac_c, fopAcIt_JudgeByID, fopAcM_create, fopAcM_prm_class } from "./f_op_actor.js";
 import { dProcName_e } from "./d_procname.js";
 import { TextureMapping } from "../TextureHolder.js";
+import { calcANK1JointAnimationTransform } from "../Common/JSYSTEM/J3D/J3DGraphAnimator.js";
 
 // Framework'd actors
 
@@ -5289,6 +5290,7 @@ class d_a_py_lk extends fopAc_ac_c {
     private static LINK_BTI_LINKTEXBCI4 = 0x71;
     private static LINK_CLOTHES_TEX_IDX = 0x22;
     private static LINK_BDL_KATSURA = 0x20;
+    private static MaxNormalSpeed = 17.0; // Extracted from daPy_HIO_move_c1
 
     private demoProcInitFuncTable = new Map<LinkDemoMode, () => boolean>();
     private proc: (globals: dGlobals) => void;
@@ -5309,6 +5311,7 @@ class d_a_py_lk extends fopAc_ac_c {
     private anmBck = new mDoExt_bckAnm();
     private anmBtp = new mDoExt_btpAnm();
     private anmBckId: number;
+    private anmTranslation = vec3.create();
 
     protected override subload(globals: dGlobals, prm: fopAcM_prm_class | null): cPhs__Status {
         this.loadAnmTable(globals);
@@ -5335,6 +5338,8 @@ class d_a_py_lk extends fopAc_ac_c {
         }
 
         if (this.proc) this.proc(globals);
+
+        this.posMove(deltaTimeFrames);
 
         // Clamp Link's position to the ground. // @TODO: Acch
         this.gdnChk.Reset();
@@ -5435,9 +5440,12 @@ class d_a_py_lk extends fopAc_ac_c {
         demoActor.model = this.model;
         demoActor.debugGetAnimName = (idx: number) => LinkDemoMode[idx].toString();
 
+        let targetPos: ReadonlyVec3 = this.pos;
+        let targetRot: number = this.rot[1];
+
         const enable = demoActor.checkEnable(0xFF);
-        if (enable & EDemoActorFlags.HasPos) { vec3.copy(this.pos, demoActor.translation); }
-        if (enable & EDemoActorFlags.HasRot) { this.rot[1] = demoActor.rotation[1]; }
+        if (enable & EDemoActorFlags.HasPos) { targetPos = demoActor.translation; }
+        if (enable & EDemoActorFlags.HasRot) { targetRot = demoActor.rotation[1]; }
 
         // The demo mode determines which 'Proc' action function will be called. It maps into the DemoProc*FuncTables.
         // These functions can start anims (by indexing into AnmDataTable), play sounds, etc.
@@ -5457,20 +5465,52 @@ class d_a_py_lk extends fopAc_ac_c {
         switch (this.demoMode) {
             case LinkDemoMode.SetPosRotEquip:
             case LinkDemoMode.SetPosRot:
+                vec3.copy(this.pos, targetPos);
+                this.rot[1] = targetRot;
+                break;
+
+            case LinkDemoMode.SetRot: {
                 debugger;
+                const moveVec = vec3.sub(scratchVec3a, targetPos, this.pos);
+                const oldRot = this.rot[1];
+                const newRot = cM_atan2s(moveVec[0], moveVec[2]);
+                this.rot[1] = newRot;
+                // this->mRotUnk = this->mRotUnk - (sNewRot - sOldRot);
+                break;
+            }
+
+            case LinkDemoMode.Walk:
+            case LinkDemoMode.Dash: {
+                const moveVec = vec3.sub(scratchVec3a, targetPos, this.pos);
+                const newRot = cM_atan2s(moveVec[0], moveVec[2]);
+                this.rot[1] = newRot;
+                this.setSingleMoveAnime(globals, (this.demoMode == LinkDemoMode.Walk) ? LkAnim.WALK : LkAnim.DASH)
+
+                // Transition to target position/rotation (2 is slower)
+                // const dist = vec3.sub(scratchVec3a, targetPos, this.pos);
+                // local_6c = local_90.x;
+                // local_68 = local_90.y;
+                // local_64 = local_90.z;
+                // if (abs(this->mVelocity) / mMaxNormalSpeed < 0.5) {
+                //   demo_mode = 2;
+                // }
+                // local_a8.x = local_90.x;
+                // local_a8.y = 0.0;
+                // local_a8.z = local_90.z;
+                // fVar6 = VECSquareMag(&local_a8);
+                // if ((fVar6 < 100.0) || (fVar6 < 2500.0 && (abs(this->mVelocity) < 0.001))) {
+                //   demo_mode = 1;
+                //   this->mVelocity = 0.0;
+                // }
+                // else if (((demo_mode == 2) && (fVar6 < 400.0)) || (fVar6 < 2500.0)) {
+                //   mDemo.setStick(0.0);
+                // }
+                // iVar8 = cM_atan2s(local_6c,local_64);
+                // mDemo.setMoveAngle(iVar8);
                 // Snap to target position
                 // Maybe equip an item
                 break;
-
-            case LinkDemoMode.SetRot:
-                debugger;
-                break;
-
-            case LinkDemoMode.Walk:
-            case LinkDemoMode.Dash:
-                // Transition to target position/rotation (2 is slower)
-                debugger;
-                break;
+            }
 
             case LinkDemoMode.WaitTurn:
             case LinkDemoMode.Surprised:
@@ -5505,8 +5545,8 @@ class d_a_py_lk extends fopAc_ac_c {
                     if (initFunc) {
                         initFunc();
                     } else {
-                        console.warn('Not yet implemented demoMode', LinkDemoMode[this.demoMode]);
-                        debugger;
+                        // console.warn('Not yet implemented demoMode', LinkDemoMode[this.demoMode]);
+                        // debugger;
                     }
                     break;
             }
@@ -5516,18 +5556,46 @@ class d_a_py_lk extends fopAc_ac_c {
         return false;
     }
 
+    private posMove(deltaTimeFrames: number) {
+        if( this.anmBck ) {
+            // Apply the root motion from the current animation (swaying)
+            const rootTransform = new JointTransformInfo(); 
+            calcANK1JointAnimationTransform(rootTransform, this.anmBck.anm.jointAnimationEntries[0], this.anmBck.frameCtrl.getFrame(), this.anmBck.frameCtrl.applyLoopMode(this.anmBck.frameCtrl.getFrame() + 1));
+
+            const prevTranslation = vec3.copy(scratchVec3a, this.anmTranslation);
+            vec3.scale(this.anmTranslation, rootTransform.translation, deltaTimeFrames);
+
+            // Determine the speed from the movement of the feet
+
+            const frameTranslation = this.anmTranslation;//vec3.sub(scratchVec3b, prevTranslation, this.anmTranslation);
+            console.log(frameTranslation[0], frameTranslation[1], frameTranslation[2]);
+
+            const sinTheta = Math.sin(cM_s2rad(this.rot[1]));
+            const cosTheta = Math.cos(cM_s2rad(this.rot[1]));
+            const worldTransX = frameTranslation[2] * sinTheta + frameTranslation[0] * cosTheta;
+            const worldTransZ = frameTranslation[2] * cosTheta - frameTranslation[0] * sinTheta; 
+
+            this.pos[0] += worldTransX;
+            this.pos[2] += worldTransZ;
+        }
+    }
+
     private getAnmData(anmIdx: number): LkAnimData {
         // @TODO: Different table if sword is drawn
         return this.anmDataTable[anmIdx];
     }
 
-    private setSingleMoveAnime(globals: dGlobals, anmIdx: number, rate: number, start: number, end: number, param_5: number) {
+    private setSingleMoveAnime(globals: dGlobals, anmIdx: number, rate?: number, start?: number, end?: number, morf: number = 0.0) {
         const anmData = this.getAnmData(anmIdx);
 
         const bck = globals.resCtrl.getObjectRes(ResType.Bck, "LkAnm", anmData.upperBckIdx);
-        this.anmBck.init(this.model.modelData, bck, true, LoopMode.Repeat, rate, start, end);
+
+        if(this.anmBck.anm != bck) {
+            this.anmBck.init(this.model.modelData, bck, true, LoopMode.Repeat, rate, start, end);
+        }
     }
 
+    // Process used while a demo is telling Link to play a direct animation
     private procTool(globals: dGlobals) {
         const demoActor = globals.scnPlay.demo.getSystem().getActor(this.demoActorID);
         if (!demoActor)
