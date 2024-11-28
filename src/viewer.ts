@@ -89,6 +89,20 @@ export class SceneTime {
     public isPlaying: boolean = false;
 
     public togglePlayPause(shouldBePlaying = !this.isPlaying): void { this.isPlaying = shouldBePlaying; }
+
+    public saveState(key: string) {
+        GlobalSaveManager.saveTime(key, this.isPlaying ? this.time : -this.time);
+    }
+
+    public loadState(key: string) {
+        const res = GlobalSaveManager.loadTime(key);
+        this.time = Math.abs(res || 0);
+        this.isPlaying = (res === null || res >= 0) ? true : false;
+    }
+
+    public deleteState(key: string) {
+        GlobalSaveManager.deleteTime(key);
+    }
 }
 
 export class Viewer {

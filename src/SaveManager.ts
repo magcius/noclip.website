@@ -58,6 +58,19 @@ export class SaveManager {
                 this.settingListeners[i].callback(this, key);
     }
 
+    public loadTime(key: string): number | null {
+        const timeStr = window.localStorage.getItem(`SceneTime_${key}`);
+        return timeStr ? parseInt(timeStr) : null;
+    }
+
+    public saveTime(key: string, time: number) {
+        window.localStorage.setItem(`SceneTime_${key}`, Math.round(time).toString());
+    }
+
+    public deleteTime(key: string) {
+        window.localStorage.removeItem(`SceneTime_${key}`);
+    }
+
     public addSettingListener(key: string, callback: SettingCallback, triggerNow: boolean = true): void {
         this.settingListeners.push({ callback, key });
         if (triggerNow)
