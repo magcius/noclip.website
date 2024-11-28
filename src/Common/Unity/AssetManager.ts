@@ -16,7 +16,7 @@ import { GfxRenderCache } from '../../gfx/render/GfxRenderCache.js';
 import { rust } from '../../rustlib.js';
 import { assert, assertExists, fallbackUndefined } from '../../util.js';
 
-function concatBufs(a: Uint8Array, b: Uint8Array): Uint8Array {
+function concatBufs(a: Uint8Array, b: Uint8Array): Uint8Array<ArrayBuffer> {
     let result = new Uint8Array(a.byteLength + b.byteLength);
     result.set(a);
     result.set(b, a.byteLength);
