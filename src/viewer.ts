@@ -89,10 +89,6 @@ export class SceneTime {
     public isPlaying: boolean = false;
 
     public togglePlayPause(shouldBePlaying = !this.isPlaying): void { this.isPlaying = shouldBePlaying; }
-
-    public updateDT(dt: number) {
-        this.time += dt * this.timeScale;
-    }
 }
 
 export class Viewer {
@@ -319,8 +315,9 @@ export class Viewer {
                 this.oncamerachanged(result === CameraUpdateResult.ImportantChange);
         }
 
-        this.sceneTime.updateDT(dt);
-        this.viewerRenderInput.deltaTime += dt * this.sceneTime.timeScale;
+        const deltaTime = dt * this.sceneTime.timeScale;
+        this.viewerRenderInput.deltaTime += deltaTime;
+        this.sceneTime.time += deltaTime;
 
         if (updateInfo.webXRContext !== null && updateInfo.webXRContext.views && updateInfo.webXRContext.xrSession) {
             this.xrCameraController.update(updateInfo.webXRContext);
