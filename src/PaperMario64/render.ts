@@ -173,7 +173,7 @@ function translateCullMode(m: number): GfxCullMode {
     const cullFront = !!(m & 0x200);
     const cullBack = !!(m & 0x400);
     if (cullFront && cullBack)
-        return GfxCullMode.FrontAndBack;
+        throw "whoops";
     else if (cullFront)
         return GfxCullMode.Front;
     else if (cullBack)

@@ -334,7 +334,7 @@ export function autoOptimizeMaterial(material: GX_Material.GXMaterial): void {
 export function translateCullMode(cullMode: GX.CullMode): GfxCullMode {
     switch (cullMode) {
     case GX.CullMode.ALL:
-        return GfxCullMode.FrontAndBack;
+        throw "whoops";
     case GX.CullMode.FRONT:
         return GfxCullMode.Front;
     case GX.CullMode.BACK:
@@ -454,6 +454,7 @@ export class GXMaterialHelperGfx {
     private materialHacks: GX_Material.GXMaterialHacks = {};
     private program!: GX_Material.GX_Program;
     private gfxProgram: GfxProgram | null = null;
+    public valid = true;
 
     constructor(public material: GX_Material.GXMaterial, materialHacks?: GX_Material.GXMaterialHacks) {
         if (materialHacks)
@@ -467,12 +468,23 @@ export class GXMaterialHelperGfx {
         this.materialInvalidated();
     }
 
+    private checkValid(): boolean {
+        if (this.material.cullMode === GX.CullMode.ALL)
+            return false;
+
+        return true;
+    }
+
     public materialInvalidated(): void {
+        this.valid = this.checkValid();
+        if (!this.valid)
+            return;
+
+        this.megaStateFlags = translateGfxMegaState(this.material);
+
         this.materialParamsBufferSize = GX_Material.getMaterialParamsBlockSize(this.material);
         this.drawParamsBufferSize = GX_Material.getDrawParamsBlockSize(this.material);
         this.createProgram();
-
-        this.megaStateFlags = translateGfxMegaState(this.material);
     }
 
     public cacheProgram(cache: GfxRenderCache): void {
@@ -516,6 +528,8 @@ export class GXMaterialHelperGfx {
     }
 
     public setOnRenderInst(cache: GfxRenderCache, renderInst: GfxRenderInst): void {
+        assert(this.valid);
+
         this.cacheProgram(cache);
         renderInst.setMegaStateFlags(this.megaStateFlags);
         renderInst.setGfxProgram(this.gfxProgram!);

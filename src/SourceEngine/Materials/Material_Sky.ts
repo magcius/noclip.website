@@ -11,6 +11,7 @@ import { MaterialShaderTemplateBase, BaseMaterial, AlphaBlendMode, MaterialUtil 
 import { UberShaderInstanceBasic } from "../UberShader.js";
 import * as P from "./MaterialParameters.js";
 import { MaterialCache } from "./MaterialCache.js";
+import { colorScale } from "../../Color.js";
 
 //#region Sky
 export class ShaderTemplate_Sky extends MaterialShaderTemplateBase {
@@ -193,9 +194,7 @@ export class Material_Sky extends BaseMaterial {
             offs += fillVec4v(d, offs, this.textureSizeInfo!);
 
             this.paramGetVector('$color').fillColor(MaterialUtil.scratchColor, 1.0);
-            MaterialUtil.scratchColor.r *= 8.0;
-            MaterialUtil.scratchColor.g *= 8.0;
-            MaterialUtil.scratchColor.b *= 8.0;
+            colorScale(MaterialUtil.scratchColor, MaterialUtil.scratchColor, 8.0);
 
             offs += fillColor(d, offs, MaterialUtil.scratchColor);
         } else if (this.type === Material_Sky_Type.Sky) {

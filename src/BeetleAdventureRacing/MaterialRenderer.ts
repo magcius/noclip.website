@@ -289,13 +289,13 @@ export class MaterialRenderer {
             //stateFlags.depthWrite = false;
         }
 
-        if (renderOpts & RenderOptionsFlags.ENABLE_BACKFACE_CULLING) {
-            if (renderOpts & RenderOptionsFlags.ENABLE_FRONTFACE_CULLING) {
-                stateFlags.cullMode = GfxCullMode.FrontAndBack;
-            } else {
-                stateFlags.cullMode = GfxCullMode.Back;
-            }
-        } else if (renderOpts & RenderOptionsFlags.ENABLE_FRONTFACE_CULLING) {
+        const cullBack = !!(renderOpts & RenderOptionsFlags.ENABLE_BACKFACE_CULLING);
+        const cullFront = !!(renderOpts & RenderOptionsFlags.ENABLE_FRONTFACE_CULLING);
+        if (cullBack && cullFront) {
+            throw "whoops";
+        } else if (cullBack) {
+            stateFlags.cullMode = GfxCullMode.Back;
+        } else if (cullFront) {
             stateFlags.cullMode = GfxCullMode.Front;
         } else {
             stateFlags.cullMode = GfxCullMode.None;

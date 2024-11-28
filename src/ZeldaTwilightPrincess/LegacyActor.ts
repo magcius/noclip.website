@@ -15,7 +15,7 @@ import { AABB } from '../Geometry.js';
 import { computeModelMatrixSRT, scaleMatrix } from '../MathHelpers.js';
 import { LightType, dKy_tevstr_init, dKy_tevstr_c, settingTevStruct, setLightTevColorType_MAJI } from './d_kankyo.js';
 import { JPABaseEmitter } from '../Common/JSYSTEM/JPA.js';
-import { fpc__ProcessName, fopAcM_prm_class, fopAc_ac_c, cPhs__Status, fGlobals, fpcPf__RegisterFallback, fopAcM_GetParamBit } from './framework.js';
+import { cPhs__Status, fGlobals, fpcPf__RegisterFallback } from '../ZeldaWindWaker/framework.js'
 import { ScreenSpaceProjection, computeScreenSpaceProjectionFromWorldSpaceAABB } from '../Camera.js';
 import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
@@ -23,6 +23,8 @@ import { ColorKind } from '../gx/gx_render.js';
 import { colorNewFromRGBA8 } from '../Color.js';
 import { calc_mtx, MtxTrans, mDoMtx_ZXYrotM, mDoMtx_YrotM } from '../ZeldaWindWaker/m_do_mtx.js';
 import { cM_s2rad } from '../ZeldaWindWaker/SComponent.js';
+import { fopAc_ac_c, fopAcM_GetParamBit, fopAcM_prm_class } from './f_op_actor.js';
+import { dProcName_e } from './d_a.js';
 
 const scratchVec3a = vec3.create();
 
@@ -195,7 +197,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     const pcName = objName.pcName;
 
     // Treasure Chest
-    if (pcName === fpc__ProcessName.d_a_tbox || pcName === fpc__ProcessName.d_a_tbox2) {
+    if (pcName === dProcName_e.d_a_tbox || pcName === dProcName_e.d_a_tbox2) {
         const model_type = ((actor.parameters >> 0x14) & 0xF);
 
         // Small Chest

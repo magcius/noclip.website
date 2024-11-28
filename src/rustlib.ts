@@ -6,20 +6,22 @@ export { rust };
 declare const process: unknown;
 
 export async function loadRustLib() {
-    if (typeof process !== 'undefined') {
-        // XXX(jstpierre): This terrible set of workarounds is required on node because fetch doesn't support file URLs.
-        // We can't use normal require() because rspack is "smart" and will try to bundle it for web, when I really only
-        // want this code to run in tools mode on node.js.
-        // https://github.com/nodejs/undici/issues/2751
+    // Work around node.js not supporting fetch on file URIs
+    // https://github.com/nodejs/undici/issues/2751
+    //
+    // TODO(jstpierre): Find a way to make this work where rspack strips it out automatically.
+    // For now, we require someone to manually undo this to make the offline tools work.
 
-        const requireX: any = (globalThis as any)['require']; 
-        const fs = requireX('fs');
-        const path = requireX('path');
-        const url = requireX('url');
+/*
+    if (typeof process !== 'undefined') {
+        const fs = await import('fs');
+        const path = await import('path');
+        const url = await import('url');
         const wasmPath = path.join(path.dirname(url.fileURLToPath(import.meta.url)), '../rust/pkg/noclip_support_bg.wasm');
         const wasm = fs.readFileSync(wasmPath);
         rust.initSync(wasm);
     }
+*/
 
     await init();
 }

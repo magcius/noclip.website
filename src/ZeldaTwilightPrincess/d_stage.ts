@@ -7,8 +7,9 @@ import { dKy_lightdir_set, dKy_tevstr_c } from "./d_kankyo.js";
 import { vec3 } from "gl-matrix";
 import { Endianness } from "../endian.js";
 import { dGlobals } from "./Main.js";
-import { fopAcM_prm_class, fpcLy_CurrentLayer, fpcSCtRq_Request } from "./framework.js";
 import * as GX from "../gx/gx_enum.js";
+import { fopAcM_prm_class } from "./f_op_actor.js";
+import { fpcLy_CurrentLayer, fpcSCtRq_Request } from "../ZeldaWindWaker/framework.js";
 
 export class dPath__Point {
     public arg0: number;

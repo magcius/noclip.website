@@ -15,11 +15,13 @@ import { AABB } from '../Geometry.js';
 import { computeModelMatrixSRT, scaleMatrix } from '../MathHelpers.js';
 import { LightType, dKy_tevstr_init, dKy_tevstr_c, settingTevStruct, setLightTevColorType } from './d_kankyo.js';
 import { JPABaseEmitter } from '../Common/JSYSTEM/JPA.js';
-import { fpc__ProcessName, fopAcM_prm_class, fopAc_ac_c, cPhs__Status, fGlobals, fpcPf__RegisterFallback } from './framework.js';
+import { cPhs__Status, fGlobals, fpcPf__RegisterFallback } from './framework.js';
 import { ScreenSpaceProjection, computeScreenSpaceProjectionFromWorldSpaceAABB } from '../Camera.js';
 import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
 import { dBgS_GndChk } from './d_bg.js';
+import { fopAc_ac_c, fopAcM_prm_class } from './f_op_actor.js';
+import { dProcName_e } from './d_procname.js';
 
 const scratchMat4a = mat4.create();
 const scratchVec3a = vec3.create();
@@ -182,7 +184,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     // Tremendous special thanks to LordNed, Sage-of-Mirrors & LagoLunatic for their work on actor mapping
     // Heavily based on https://github.com/LordNed/Winditor/blob/master/Editor/resources/ActorDatabase.json
 
-    if (pcName === fpc__ProcessName.d_a_tbox) fetchArchive(`Dalways`).then(() => {
+    if (pcName === dProcName_e.d_a_tbox) fetchArchive(`Dalways`).then(() => {
         const type = (actor.parameters >>> 20) & 0x0F;
         if (type === 0) {
             // Light Wood

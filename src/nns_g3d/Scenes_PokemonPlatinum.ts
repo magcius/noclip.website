@@ -528,10 +528,10 @@ class PokemonPlatinumSceneDesc implements Viewer.SceneDesc {
 }
 
 const id = 'pkmnpl';
-const name = 'Pokemon Platinum';
+const name = 'Pokémon Platinum';
 const sceneDescs = [
     new PokemonPlatinumSceneDesc("0", "Sinnoh Region"),
     new PokemonPlatinumSceneDesc("2", "Underground"),
 ];
 
-export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs };
+export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs, altName: "Pokemon Platinum" };

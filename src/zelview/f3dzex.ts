@@ -119,13 +119,13 @@ function translateZMode(zmode: ZMode): GfxCompareMode {
 }
 
 export function translateCullMode(geoMode: number): GfxCullMode {
-    if (geoMode & RSP_Geometry.G_CULL_BACK) {
-        if (geoMode & RSP_Geometry.G_CULL_FRONT) {
-            return GfxCullMode.FrontAndBack;
-        } else {
-            return GfxCullMode.Back;
-        }
-    } else if (geoMode & RSP_Geometry.G_CULL_FRONT) {
+    const cullBack = !!(geoMode & RSP_Geometry.G_CULL_BACK);
+    const cullFront = !!(geoMode & RSP_Geometry.G_CULL_FRONT);
+    if (cullBack && cullFront) {
+        throw "whoops";
+    } else if (cullBack) {
+        return GfxCullMode.Back;
+    } else if (cullFront) {
         return GfxCullMode.Front;
     } else {
         return GfxCullMode.None;

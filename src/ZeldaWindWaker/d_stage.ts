@@ -7,7 +7,8 @@ import { dKy_tevstr_c, dKy_tevstr_init } from "./d_kankyo.js";
 import { vec3 } from "gl-matrix";
 import { Endianness } from "../endian.js";
 import { dGlobals } from "./Main.js";
-import { fopAcM_prm_class, fpcLy_CurrentLayer, fpcSCtRq_Request } from "./framework.js";
+import { fpcLy_CurrentLayer, fpcSCtRq_Request } from "./framework.js";
+import { fopAcM_prm_class } from "./f_op_actor.js";
 
 export class dPath__Point {
     public arg0: number;

@@ -341,7 +341,7 @@ function translateBumpTexture(bumpTexture: number): number {
 function translateCullModeFlags(cullModeFlags: number): GfxCullMode {
     switch (cullModeFlags) {
     case 0x00:
-        return GfxCullMode.FrontAndBack;
+        throw "whoops";
     case 0x01:
         return GfxCullMode.Back;
     case 0x02:

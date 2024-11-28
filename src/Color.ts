@@ -95,7 +95,7 @@ export function colorScale(dst: Color, a: Color, v: number) {
     dst.r = a.r * v;
     dst.g = a.g * v;
     dst.b = a.b * v;
-    dst.a = a.a * v;
+    dst.a = a.a;
 }
 
 export function colorMult(dst: Color, a: Color, b: Color): void {

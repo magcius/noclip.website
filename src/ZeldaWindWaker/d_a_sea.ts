@@ -6,7 +6,6 @@ import { MathConstants, computeModelMatrixSRT, computeModelMatrixS, invlerp, ler
 import { dGlobals } from "./Main.js";
 import { nArray, assert } from "../util.js";
 import { vec2, vec3, mat4, ReadonlyVec3, ReadonlyVec2 } from "gl-matrix";
-import { fopAc_ac_c, fpc__ProcessName, cPhs__Status } from "./framework.js";
 import { ResType } from "./d_resorce.js";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import { ViewerRenderInput } from "../viewer.js";
@@ -19,6 +18,9 @@ import { dKy_usonami_set } from './d_kankyo_wether.js';
 import { Plane } from '../Geometry.js';
 import { cLib_addCalcAngleS2, cM_atan2s, cM_rndF, cM_s2rad } from './SComponent.js';
 import { dStage_stagInfo_GetSTType } from './d_stage.js';
+import { fopAc_ac_c } from './f_op_actor.js';
+import { dProcName_e } from './d_procname.js';
+import { cPhs__Status } from './framework.js';
 
 const scratchVec2a = vec2.create();
 const scratchVec2b = vec2.create();
@@ -188,7 +190,7 @@ const materialParams = new MaterialParams();
 const drawParams = new DrawParams();
 
 export class d_a_sea extends fopAc_ac_c {
-    public static PROCESS_NAME = fpc__ProcessName.d_a_sea;
+    public static PROCESS_NAME = dProcName_e.d_a_sea;
     private texSeaBTI: BTIData;
     private texWyurayura: BTIData;
     private waveInfo: daSea_WaveInfo;

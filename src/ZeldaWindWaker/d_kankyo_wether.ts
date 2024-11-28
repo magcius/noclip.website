@@ -22,10 +22,11 @@ import { PeekZManager, PeekZResult } from "./d_dlst_peekZ.js";
 import { dKy_GxFog_sea_set, dKy_actor_addcol_amb_set, dKy_actor_addcol_dif_set, dKy_addcol_fog_set, dKy_bg1_addcol_amb_set, dKy_bg1_addcol_dif_set, dKy_bg_addcol_amb_set, dKy_bg_addcol_dif_set, dKy_checkEventNightStop, dKy_efplight_cut, dKy_efplight_set, dKy_get_dayofweek, dKy_get_seacolor, dKy_set_actcol_ratio, dKy_set_bgcol_ratio, dKy_set_fogcol_ratio, dKy_set_vrboxcol_ratio, dKy_vrbox_addcol_kasumi_set, dKy_vrbox_addcol_sky0_set, dScnKy_env_light_c } from "./d_kankyo.js";
 import { ResType } from "./d_resorce.js";
 import { dStage_FileList_dt_c, dStage_stagInfo_GetSTType } from "./d_stage.js";
-import { cPhs__Status, fGlobals, fopKyM_Delete, fopKyM_create, fpcPf__Register, fpc__ProcessName, fpc_bs__Constructor, kankyo_class } from "./framework.js";
+import { cPhs__Status, fGlobals, fopKyM_Delete, fopKyM_create, fpcPf__Register, fpc_bs__Constructor, kankyo_class } from "./framework.js";
 import { mDoExt_brkAnm, mDoExt_btkAnm, mDoExt_modelUpdateDL, mDoLib_project, mDoLib_projectFB } from "./m_do_ext.js";
 import { MtxTrans, calc_mtx, mDoMtx_XrotM, mDoMtx_ZrotM } from "./m_do_mtx.js";
 import { dGlobals } from "./Main.js";
+import { dProcName_e } from "./d_procname.js";
 
 export function dKyr__sun_arrival_check(envLight: dScnKy_env_light_c): boolean {
     return envLight.curTime > 97.5 && envLight.curTime < 292.5;
@@ -84,7 +85,7 @@ function dKyr_thunder_move(globals: dGlobals, envLight: dScnKy_env_light_c, came
 
         if (cM_rndF(1.0) < 0.18) {
             // Spawn lighting bolt
-            fopKyM_create(globals.frameworkGlobals, fpc__ProcessName.d_thunder, -1, null, null);
+            fopKyM_create(globals.frameworkGlobals, dProcName_e.d_thunder, -1, null, null);
         }
     } else if (envLight.thunderState === ThunderState.FadeNear || envLight.thunderState === ThunderState.FadeFar) {
         envLight.thunderFlashTimer = cLib_addCalc(envLight.thunderFlashTimer, 0.0, 0.1, 0.05, 0.001);
@@ -2761,7 +2762,7 @@ export function dKy_usonami_set(globals: dGlobals, waveFlatInter: number): void 
 }
 
 export class d_thunder extends kankyo_class {
-    public static PROCESS_NAME = fpc__ProcessName.d_thunder;
+    public static PROCESS_NAME = dProcName_e.d_thunder;
     private model: J3DModelInstance;
     private btkAnm = new mDoExt_btkAnm();
     private btkTime = 0.0;
@@ -2823,7 +2824,7 @@ export class d_thunder extends kankyo_class {
 }
 
 interface constructor extends fpc_bs__Constructor {
-    PROCESS_NAME: fpc__ProcessName;
+    PROCESS_NAME: dProcName_e;
 }
 
 export function dKyw__RegisterConstructors(globals: fGlobals): void {

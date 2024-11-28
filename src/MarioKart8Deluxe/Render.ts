@@ -280,7 +280,7 @@ void main() {
         if (v !== undefined) {
             return v;
         } else {
-            return glslGenerateFloat(fallback);
+            return '' + fallback;
         }
     }
 
@@ -810,7 +810,7 @@ void main() {
         vec3 t_Transmission = u_TransmissionColorAndIntensity.rgb * u_TransmissionColorAndIntensity.a;
         if (enable_opa_trans_tex) {
             vec2 t_TransTexCoord = SelectTexCoord(${this.shaderOptionInt('texcoord_select_transmitt')});
-            t_Transmission *= texture(u_TextureTransmission, t_TransTexCoord).rgb;
+            t_Transmission *= texture(SAMPLER_2D(u_TextureTransmission), t_TransTexCoord).rgb;
         }
 
         if (enable_opa_trans_albedo)

@@ -28,12 +28,14 @@ import { ThunderMode, dKyr_get_vectle_calc, dKyw_get_AllWind_vecpow, dKyw_get_wi
 import { dPa_splashEcallBack, dPa_trackEcallBack, dPa_waveEcallBack } from "./d_particle.js";
 import { ResType, dComIfG_resLoad } from "./d_resorce.js";
 import { dPath, dPath_GetRoomPath, dPath__Point, dStage_Multi_c, dStage_stagInfo_GetSTType } from "./d_stage.js";
-import { cPhs__Status, fGlobals, fopAcIt_JudgeByID, fopAcM_create, fopAcM_prm_class, fopAc_ac_c, fpcPf__Register, fpcSCtRq_Request, fpc__ProcessName, fpc_bs__Constructor } from "./framework.js";
+import { cPhs__Status, fGlobals, fpcPf__Register, fpcSCtRq_Request, fpc_bs__Constructor } from "./framework.js";
 import { mDoExt_McaMorf, mDoExt_bckAnm, mDoExt_brkAnm, mDoExt_btkAnm, mDoExt_btpAnm, mDoExt_modelEntryDL, mDoExt_modelUpdateDL, mDoLib_project } from "./m_do_ext.js";
 import { MtxPosition, MtxTrans, calc_mtx, mDoMtx_XYZrotM, mDoMtx_XrotM, mDoMtx_YrotM, mDoMtx_YrotS, mDoMtx_ZXYrotM, mDoMtx_ZrotM, mDoMtx_ZrotS, quatM } from "./m_do_mtx.js";
 import { dGlobals } from "./Main.js";
 import { dDlst_alphaModel__Type } from "./d_drawlist.js";
 import { dDemo_setDemoData } from "./d_demo.js";
+import { fopAc_ac_c, fopAcIt_JudgeByID, fopAcM_create, fopAcM_prm_class } from "./f_op_actor.js";
+import { dProcName_e } from "./d_procname.js";
 
 // Framework'd actors
 
@@ -43,7 +45,7 @@ const scratchVec3b = vec3.create();
 const scratchVec3c = vec3.create();
 
 class d_a_grass extends fopAc_ac_c {
-    public static PROCESS_NAME = fpc__ProcessName.d_a_grass;
+    public static PROCESS_NAME = dProcName_e.d_a_grass;
 
     static kSpawnPatterns = [
         { group: 0, count: 1 },
@@ -196,7 +198,7 @@ class d_a_grass extends fopAc_ac_c {
 }
 
 class d_a_ep extends fopAc_ac_c {
-    public static PROCESS_NAME = fpc__ProcessName.d_a_ep;
+    public static PROCESS_NAME = dProcName_e.d_a_ep;
 
     private type: number;
     private hasGa: boolean;
@@ -412,7 +414,7 @@ class daBg_brkAnm_c {
 }
 
 class d_a_bg extends fopAc_ac_c {
-    public static PROCESS_NAME = fpc__ProcessName.d_a_bg;
+    public static PROCESS_NAME = dProcName_e.d_a_bg;
 
     private numBg = 4;
     private bgModel: (J3DModelInstance | null)[] = nArray(this.numBg, () => null);
@@ -517,7 +519,7 @@ class d_a_bg extends fopAc_ac_c {
 }
 
 class d_a_vrbox extends fopAc_ac_c {
-    public static PROCESS_NAME = fpc__ProcessName.d_a_vrbox;
+    public static PROCESS_NAME = dProcName_e.d_a_vrbox;
     private model: J3DModelInstance;
 
     public override subload(globals: dGlobals): cPhs__Status {
@@ -623,7 +625,7 @@ class d_a_vrbox extends fopAc_ac_c {
 }
 
 class d_a_vrbox2 extends fopAc_ac_c {
-    public static PROCESS_NAME = fpc__ProcessName.d_a_vrbox2;
+    public static PROCESS_NAME = dProcName_e.d_a_vrbox2;
     private backCloud: J3DModelInstance;
     private kasumiMae: J3DModelInstance | null = null;
     private kasumiMaeC0 = colorNewCopy(TransparentBlack);
@@ -765,7 +767,7 @@ const enum Kytag00EffectMode {
 };
 
 class d_a_kytag00 extends fopAc_ac_c {
-    public static PROCESS_NAME = fpc__ProcessName.d_a_kytag00;
+    public static PROCESS_NAME = dProcName_e.d_a_kytag00;
 
     private colpat = 0;
     private effectMode = Kytag00EffectMode.None;
@@ -971,7 +973,7 @@ class d_a_kytag00 extends fopAc_ac_c {
 }
 
 class d_a_kytag01 extends fopAc_ac_c {
-    public static PROCESS_NAME = fpc__ProcessName.d_a_kytag01;
+    public static PROCESS_NAME = dProcName_e.d_a_kytag01;
 
     private info = new WAVE_INFO();
 
@@ -1024,7 +1026,7 @@ class d_a_kytag01 extends fopAc_ac_c {
 }
 
 class d_a_obj_Ygush00 extends fopAc_ac_c {
-    public static PROCESS_NAME = fpc__ProcessName.d_a_obj_Ygush00;
+    public static PROCESS_NAME = dProcName_e.d_a_obj_Ygush00;
 
     private type: number;
     private model: J3DModelInstance;
@@ -1083,7 +1085,7 @@ class d_a_obj_Ygush00 extends fopAc_ac_c {
 }
 
 class d_a_obj_lpalm extends fopAc_ac_c {
-    public static PROCESS_NAME = fpc__ProcessName.d_a_obj_lpalm;
+    public static PROCESS_NAME = dProcName_e.d_a_obj_lpalm;
 
     private model: J3DModelInstance;
 
@@ -1201,7 +1203,7 @@ function dDlst_texSpecmapST(dst: mat4, globals: dGlobals, pos: ReadonlyVec3, tev
 }
 
 class d_a_obj_zouK extends fopAc_ac_c {
-    public static PROCESS_NAME = fpc__ProcessName.d_a_obj_zouK;
+    public static PROCESS_NAME = dProcName_e.d_a_obj_zouK;
 
     private model: J3DModelInstance;
     private bckAnm = new mDoExt_bckAnm();
@@ -1257,7 +1259,7 @@ class d_a_obj_zouK extends fopAc_ac_c {
 }
 
 class d_a_swhit0 extends fopAc_ac_c {
-    public static PROCESS_NAME = fpc__ProcessName.d_a_swhit0;
+    public static PROCESS_NAME = dProcName_e.d_a_swhit0;
 
     private model: J3DModelInstance;
     private bckAnm = new mDoExt_bckAnm();
@@ -1637,7 +1639,7 @@ class mgameboard_seres {
 }
 
 class d_a_mgameboard extends fopAc_ac_c {
-    public static PROCESS_NAME = fpc__ProcessName.d_a_mgameboard;
+    public static PROCESS_NAME = dProcName_e.d_a_mgameboard;
 
     private boardModel: J3DModelInstance;
     private cursorX = 0;
@@ -2328,7 +2330,7 @@ class dCloth_packet_c {
 }
 
 class d_a_sie_flag extends fopAc_ac_c {
-    public static PROCESS_NAME = fpc__ProcessName.d_a_sie_flag;
+    public static PROCESS_NAME = dProcName_e.d_a_sie_flag;
 
     private model: J3DModelInstance;
     private cloth: dCloth_packet_c;
@@ -2414,7 +2416,7 @@ class d_a_sie_flag extends fopAc_ac_c {
 }
 
 class d_a_tori_flag extends fopAc_ac_c {
-    public static PROCESS_NAME = fpc__ProcessName.d_a_tori_flag;
+    public static PROCESS_NAME = dProcName_e.d_a_tori_flag;
 
     private model: J3DModelInstance;
     private cloth: dCloth_packet_c;
@@ -2501,7 +2503,7 @@ class d_a_tori_flag extends fopAc_ac_c {
 }
 
 class d_a_majuu_flag extends fopAc_ac_c {
-    public static PROCESS_NAME = fpc__ProcessName.d_a_majuu_flag;
+    public static PROCESS_NAME = dProcName_e.d_a_majuu_flag;
 
     // Public data.
     public parentMtx: mat4 | null = null;
@@ -2946,7 +2948,7 @@ class d_a_majuu_flag extends fopAc_ac_c {
 }
 
 class d_a_kamome extends fopAc_ac_c {
-    public static PROCESS_NAME = fpc__ProcessName.d_a_kamome;
+    public static PROCESS_NAME = dProcName_e.d_a_kamome;
 
     private type: number;
     private ko_count: number;
@@ -3245,7 +3247,7 @@ function dLib_pathMove(dst: vec3, pointIdxCurr: number, path: dPath, speed: numb
 
 const enum d_a_obj_ikada_mode { wait, stopTerry, pathMoveTerry }
 class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mode> {
-    public static PROCESS_NAME = fpc__ProcessName.d_a_obj_ikada;
+    public static PROCESS_NAME = dProcName_e.d_a_obj_ikada;
 
     private type: number;
     private path_id: number;
@@ -3336,7 +3338,7 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
 
         if (this.type === 0 || this.type === 4) {
             const flagParam = this.type === 0 ? 0x00000004 : 0x02000000;
-            this.flagPcId = fopAcM_create(globals.frameworkGlobals, fpc__ProcessName.d_a_majuu_flag, flagParam, this.pos, this.roomNo, this.rot, null, 0xFF, this.processId);
+            this.flagPcId = fopAcM_create(globals.frameworkGlobals, dProcName_e.d_a_majuu_flag, flagParam, this.pos, this.roomNo, this.rot, null, 0xFF, this.processId);
         }
 
         dLib_waveInit(globals, this.wave, this.pos);
@@ -3650,7 +3652,7 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
 
 const enum d_a_oship_mode { wait, attack, damage, delete, rangeA, rangeB, rangeC, rangeD }
 class d_a_oship extends fopAc_ac_c implements ModeFuncExec<d_a_oship_mode> {
-    public static PROCESS_NAME = fpc__ProcessName.d_a_oship;
+    public static PROCESS_NAME = dProcName_e.d_a_oship;
 
     private subMode: number;
     private model: J3DModelInstance;
@@ -3715,7 +3717,7 @@ class d_a_oship extends fopAc_ac_c implements ModeFuncExec<d_a_oship_mode> {
             this.model.materialInstances[i].effectMtx = this.effectMtx;
 
         if (modelType === 0xFF)
-            this.flagPcId = fopAcM_create(globals.frameworkGlobals, fpc__ProcessName.d_a_majuu_flag, 0x04, this.pos, this.roomNo, this.rot, null, 0xFF, this.processId);
+            this.flagPcId = fopAcM_create(globals.frameworkGlobals, dProcName_e.d_a_majuu_flag, 0x04, this.pos, this.roomNo, this.rot, null, 0xFF, this.processId);
 
         if (pathId !== 0xFF)
             this.path = assertExists(dPath_GetRoomPath(globals, pathId, this.roomNo));
@@ -4117,7 +4119,7 @@ class d_a_oship extends fopAc_ac_c implements ModeFuncExec<d_a_oship_mode> {
 }
 
 class d_a_obj_wood extends fopAc_ac_c {
-    public static PROCESS_NAME = fpc__ProcessName.d_a_obj_wood;
+    public static PROCESS_NAME = dProcName_e.d_a_obj_wood;
 
     public override subload(globals: dGlobals): cPhs__Status {
         globals.scnPlay.woodPacket.put_unit(globals, this.pos, this.roomNo);
@@ -4129,7 +4131,7 @@ class d_a_obj_wood extends fopAc_ac_c {
 const enum d_a_obj_flame_mode { wait, wait2, l_before, l_u, u, u_l, l_after }
 const enum d_a_obj_em_state { Off, TurnOn, On, TurnOff }
 class d_a_obj_flame extends fopAc_ac_c {
-    public static PROCESS_NAME = fpc__ProcessName.d_a_obj_flame;
+    public static PROCESS_NAME = dProcName_e.d_a_obj_flame;
 
     private type: number;
     private model: J3DModelInstance;
@@ -4488,7 +4490,7 @@ class d_a_obj_flame extends fopAc_ac_c {
 }
 
 export class d_a_ff extends fopAc_ac_c {
-    public static PROCESS_NAME = fpc__ProcessName.d_a_ff;
+    public static PROCESS_NAME = dProcName_e.d_a_ff;
     private model: J3DModelInstance[] = [];
     private brkAnm: mDoExt_brkAnm[] = [];
     private peekZResult = new PeekZResult();
@@ -4551,7 +4553,7 @@ export class d_a_ff extends fopAc_ac_c {
                 layer: this.roomLayer,
             };
 
-            fpcSCtRq_Request(globals.frameworkGlobals, null, fpc__ProcessName.d_a_ff, prm);
+            fpcSCtRq_Request(globals.frameworkGlobals, null, dProcName_e.d_a_ff, prm);
         }
 
         this.noFollowGround = !!((this.parameters >>> 8) & 0xFF);
@@ -4732,7 +4734,7 @@ function dNpc_setAnmIDRes(globals: dGlobals, pMorf: mDoExt_McaMorf, loopMode: nu
 }
 
 class d_a_npc_ls1 extends fopNpc_npc_c {
-    public static PROCESS_NAME = fpc__ProcessName.d_a_npc_ls1;
+    public static PROCESS_NAME = dProcName_e.d_a_npc_ls1;
     private type: number;
     private state = 0;
     private animIdx = -1;
@@ -4954,7 +4956,7 @@ class d_a_npc_ls1 extends fopNpc_npc_c {
 }
 
 interface constructor extends fpc_bs__Constructor {
-    PROCESS_NAME: fpc__ProcessName;
+    PROCESS_NAME: dProcName_e;
 }
 
 export function d_a__RegisterConstructors(globals: fGlobals): void {

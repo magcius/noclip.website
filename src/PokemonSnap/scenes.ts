@@ -276,7 +276,7 @@ class SceneDesc implements Viewer.SceneDesc {
 }
 
 const id = `snap`;
-const name = "Pokemon Snap";
+const name = "Pokémon Snap";
 const sceneDescs = [
     new SceneDesc(`10`, "Beach"),
     new SceneDesc(`12`, "Tunnel"),
@@ -287,4 +287,4 @@ const sceneDescs = [
     new SceneDesc(`1C`, "Rainbow Cloud"),
 ];
 
-export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs };
+export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs, altName: "Pokemon Snap" };

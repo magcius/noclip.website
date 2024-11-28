@@ -238,7 +238,7 @@ export class Material_SpriteCard extends BaseMaterial {
         offs += this.paramFillVector4(d, offs, '_b10');
         offs += this.paramFillVector4(d, offs, '_b11');
         offs += this.paramFillVector4(d, offs, '_b2');
-        offs += this.paramFillGammaColor(d, offs, '$color', this.paramGetNumber('$alpha'));
+        offs += this.paramFillModulationColor(d, offs);
         offs += fillVec4(d, offs, this.paramGetNumber('_blend0'), this.paramGetNumber('_blend1'), this.paramGetNumber(`$addbasetexture2`));
 
         renderInst.setSamplerBindingsFromTextureMappings(MaterialUtil.textureMappings);
