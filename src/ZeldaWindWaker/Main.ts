@@ -40,6 +40,7 @@ import { ResType, dRes_control_c } from './d_resorce.js';
 import { dStage_dt_c_roomLoader, dStage_dt_c_roomReLoader, dStage_dt_c_stageInitLoader, dStage_dt_c_stageLoader, dStage_roomControl_c, dStage_roomStatus_c, dStage_stageDt_c } from './d_stage.js';
 import { cPhs__Status, fGlobals, fopAcM_create, fopAc_ac_c, fopDw_Draw, fopScn, fpcCt_Handler, fpcLy_SetCurrentLayer, fpcM_Management, fpcPf__Register, fpcSCtRq_Request, fpc__ProcessName, fpc_pc__ProfileList } from './framework.js';
 import { dDemo_manager_c, EDemoCamFlags, EDemoMode } from './d_demo.js';
+import { IS_DEVELOPMENT } from '../BuildVersion.js';
 
 type SymbolData = { Filename: string, SymbolName: string, Data: ArrayBufferSlice };
 type SymbolMapData = { SymbolData: SymbolData[] };
@@ -327,11 +328,12 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
     public renderCache: GfxRenderCache;
 
     public time: number; // In milliseconds, affected by pause and time scaling
+    public isPlaying: boolean = false;
     public roomLayerMask: number = 0;
 
     public onstatechanged!: () => void;
 
-    constructor(public device: GfxDevice, public globals: dGlobals) {
+    constructor(public sceneId: string, public device: GfxDevice, public globals: dGlobals) {
         this.renderHelper = new GXRenderHelperGfx(device);
 
         this.renderCache = this.renderHelper.renderInstManager.gfxRenderCache;
@@ -471,7 +473,6 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         // noclip modification: if we're paused, allow noclip camera control during demos
         const isPaused = viewerInput.deltaTime === 0;
 
-        // TODO: Determine the correct place for this
         // dCamera_c::Store() sets the camera params if the demo camera is active
         const demoCam = this.globals.scnPlay.demo.getSystem().getCamera();
         if (demoCam && !isPaused) {
@@ -497,6 +498,19 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
             this.globals.context.inputManager.isMouseEnabled = false;
         } else {
             this.globals.context.inputManager.isMouseEnabled = true;
+        }
+
+        // Save the camera state when play/pause is toggled
+        if( this.globals.context.sceneTime.isPlaying != this.isPlaying ) {
+            this.isPlaying = this.globals.context.sceneTime.isPlaying;
+            this.onstatechanged();
+
+            if(IS_DEVELOPMENT) {
+                // If pausing, save the time and pause state. If we reload, the demo will be paused at the same spot
+                // If resuming, clear the time and pause state. Reloading will restart the demo. 
+                if (this.isPlaying) { this.globals.context.sceneTime.deleteState(this.sceneId); }
+                else { this.globals.context.sceneTime.saveState(this.sceneId); }
+            }
         }
 
         this.globals.camera = viewerInput.camera;
@@ -627,6 +641,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         this.extraTextures.destroy(device);
         this.globals.destroy(device);
         this.globals.frameworkGlobals.delete(this.globals);
+        if(IS_DEVELOPMENT) { this.globals.context.sceneTime.deleteState(this.sceneId); }
     }
 }
 
@@ -889,7 +904,7 @@ class SceneDesc {
         this.globals = globals;
         globals.stageName = this.stageDir;
 
-        const renderer = new WindWakerRenderer(device, globals);
+        const renderer = new WindWakerRenderer(this.id, device, globals);
         context.destroyablePool.push(renderer);
         globals.renderer = renderer;
 
@@ -975,9 +990,9 @@ class DemoDesc extends SceneDesc implements Viewer.SceneDesc {
         public layer: number,
         public offsetPos?:vec3, 
         public rotY: number = 0,
-        public startCode?: number,
-        public eventFlags?: number,
-        public startFrame?: number, // noclip modification for easier debugging
+        public startCode: number = 0,
+        public eventFlags: number = 0,
+        public startFrame: number = 0, // noclip modification for easier debugging
     ) {
         super(stageDir, name, roomList);
         assert(this.roomList.length === 1);
@@ -988,6 +1003,8 @@ class DemoDesc extends SceneDesc implements Viewer.SceneDesc {
     }
 
     public override async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
+        context.sceneTime.togglePlayPause(false);
+
         const res = await super.createScene(device, context);
         this.playDemo(this.globals);
         return res;
@@ -1025,6 +1042,11 @@ class DemoDesc extends SceneDesc implements Viewer.SceneDesc {
 
         // @TODO: Set noclip layer visiblity based on this.layer
 
+        if(IS_DEVELOPMENT) {
+            // Load the current scene time and play/pause state, if saved
+            globals.context.sceneTime.loadState(this.id);
+        }
+
         // From dEvDtStaff_c::specialProcPackage()
         let demoData;
         if(globals.roomCtrl.demoArcName)
@@ -1032,8 +1054,10 @@ class DemoDesc extends SceneDesc implements Viewer.SceneDesc {
         if (!demoData)
             demoData = globals.modelCache.resCtrl.getStageResByName(ResType.Stb, "Stage", this.stbFilename);
         
-        if( demoData ) { globals.scnPlay.demo.create(demoData, this.offsetPos, this.rotY / 180.0 * Math.PI, this.startFrame); }
-        else { console.warn('Failed to load demo data:', this.stbFilename); }
+        if( demoData ) { 
+            globals.scnPlay.demo.setFrame(this.startFrame + globals.context.sceneTime.time / 1000.0 * 30.0);
+            globals.scnPlay.demo.create(demoData, this.offsetPos, this.rotY / 180.0 * Math.PI); 
+        } else { console.warn('Failed to load demo data:', this.stbFilename); }
 
         return this.globals.renderer;
     }
