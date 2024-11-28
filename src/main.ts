@@ -689,8 +689,6 @@ class Main {
         if (scene.createPanels)
             scenePanels = scene.createPanels();
         this.ui.setScenePanels(scenePanels);
-        // Force time to play when loading a map.
-        this.viewer.sceneTime.togglePlayPause(true);
 
         const sceneDescId = this._getCurrentSceneDescId()!;
         this.saveManager.setCurrentSceneDescId(sceneDescId);
@@ -758,6 +756,9 @@ class Main {
         for (let i = 0; i < this.destroyablePool.length; i++)
             this.destroyablePool[i].destroy(device);
         this.destroyablePool.length = 0;
+
+        // Force time to play when loading a map (but allow createScene() to override this).
+        this.viewer.sceneTime.togglePlayPause(true);
 
         // Unhide any hidden scene groups upon being loaded.
         if (sceneGroup.hidden)
