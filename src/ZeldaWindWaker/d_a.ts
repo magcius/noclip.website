@@ -5195,23 +5195,23 @@ enum LkAnim {
 
 enum LinkDemoMode {
     None = 0x00,
-    Unk1 = 0x01,
-    ChaseSlow = 0x02,
-    ChaseFast = 0x03,
-    Move = 0x04,
+    Wait = 0x01,
+    Walk = 0x02,
+    Dash = 0x03,
+    SetPosRotEquip = 0x04,
     WaitTurn = 0x05,
-    UNK6 = 0x06,
+    PartnerInteractA = 0x06,
     Damage = 0x07,
-    Unk8 = 0x08,
-    Unk9 = 0x09,
+    PartnerInteractB = 0x08,
+    LargeDamage = 0x09,
     OpenTreasure = 0x0A,
     GetItem = 0x0B,
     Unequip = 0x0C,
     Holdup = 0x0D,
     NULL = 0x0E,
     LookAround = 0x0F,
-    Unk10 = 0x10,
-    Unk11 = 0x11,
+    BackJump = 0x10,
+    Fall = 0x11,
     Unk12 = 0x12,
     Salute = 0x13,
     LookAround2 = 0x14,
@@ -5221,14 +5221,14 @@ enum LinkDemoMode {
     Surprised = 0x18,
     TurnBack = 0x19,
     LookUp = 0x1A,
-    // NULL = 0x1B,
+    LargeDamageUp = 0x1B,
     QuakeWait = 0x1C,
     Dance = 0x1D,
     Caught = 0x1E,
-    // NULL = 0x1F,
+    Throw = 0x1F,
     PushPullWait = 0x20,
     PushMove = 0x21,
-    // NULL = 0x22,
+    TactWait = 0x22,
     DoorOpen = 0x23,
     Nod = 0x24,
     Present = 0x25,
@@ -5237,28 +5237,28 @@ enum LinkDemoMode {
     StandItemPut = 0x28,
     Unk29 = 0x29,
     Unk2A = 0x2A,
-    Unk2B = 0x2B,
-    Unk2C = 0x2C,
+    SetRot = 0x2B,
+    SetPosRot = 0x2C,
     TactPlayOriginal = 0x2D,
     PowerUp = 0x2E,
     VorcanoFail = 0x2F,
     BossWarp = 0x30,
     SlightSurprised = 0x31,
     Smile = 0x32,
-    // NULL = 0x33,
+    PartnerCarry = 0x33,
     AgbUse = 0x34,
     LookTurn = 0x35,
     LetterOpen = 0x36,
     LetterRead = 0x37,
-    // daPy_lk_c::procGrabPut = 0x38,
+    GrabPut = 0x38,
     RedeadStop = 0x39,
     RedeadCatch = 0x3A,
     GetDance = 0x3B,
     BottleOpenFairy = 0x3C,
-    // NULL = 0x3D,
+    BottleOpen = 0x3D,
     WarpShort = 0x3E,
     OpenSalvageTreasure = 0x3F,
-    Unk40 = 0x40,
+    SlowFall = 0x40,
     FoodSet = 0x41,
     SurprisedWait = 0x42,
     PowerUpWait = 0x43,
@@ -5455,19 +5455,19 @@ class d_a_py_lk extends fopAc_ac_c {
 
         // Limit actor modifications based on the current mode. E.g. Mode 0x18 only allows rotation
         switch (this.demoMode) {
-            case LinkDemoMode.Move:
-            case LinkDemoMode.Unk2C:
+            case LinkDemoMode.SetPosRotEquip:
+            case LinkDemoMode.SetPosRot:
                 debugger;
                 // Snap to target position
                 // Maybe equip an item
                 break;
 
-            case LinkDemoMode.Unk2B:
+            case LinkDemoMode.SetRot:
                 debugger;
                 break;
 
-            case LinkDemoMode.ChaseSlow:
-            case LinkDemoMode.ChaseFast:
+            case LinkDemoMode.Walk:
+            case LinkDemoMode.Dash:
                 // Transition to target position/rotation (2 is slower)
                 debugger;
                 break;
@@ -5495,7 +5495,7 @@ class d_a_py_lk extends fopAc_ac_c {
                     this.proc = this.procTool;
                     break;
 
-                case LinkDemoMode.Move:
+                case LinkDemoMode.SetPosRotEquip:
                     // TODO: setBlendMoveAnime 
                     this.procWait_init(globals);
                     break;
