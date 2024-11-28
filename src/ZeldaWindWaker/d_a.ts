@@ -42,9 +42,13 @@ import { calcANK1JointAnimationTransform } from "../Common/JSYSTEM/J3D/J3DGraphA
 // Framework'd actors
 
 const scratchMat4a = mat4.create();
+const scratchMat4b = mat4.create();
+const scratchMat4c = mat4.create();
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
 const scratchVec3c = vec3.create();
+const scratchVec3d = vec3.create();
+const scratchVec3e = vec3.create();
 
 class d_a_grass extends fopAc_ac_c {
     public static PROCESS_NAME = dProcName_e.d_a_grass;
@@ -5282,15 +5286,20 @@ interface LkAnimData {
     rightHandIdx: number;
     texAnmIdx: number;
 }
+
+interface LkFootData {
+    toePos: vec3,
+    heelPos: vec3,
+}
 class d_a_py_lk extends fopAc_ac_c {
     public static PROCESS_NAME = dProcName_e.d_a_py_lk;
     private static ARC_NAME = "Link";
     private static LINK_BDL_CL = 0x18;
-    private static LINK_BDL_HANDS = 0x1D;
     private static LINK_BTI_LINKTEXBCI4 = 0x71;
     private static LINK_CLOTHES_TEX_IDX = 0x22;
     private static LINK_BDL_KATSURA = 0x20;
-    private static MaxNormalSpeed = 17.0; // Extracted from daPy_HIO_move_c1
+    private static TOE_POS = vec3.fromValues(6.0, 3.25, 0.0);
+    private static HEEL_POS = vec3.fromValues(-6.0, 3.25, 0.0);
 
     private demoProcInitFuncTable = new Map<LinkDemoMode, () => boolean>();
     private proc: (globals: dGlobals) => void;
@@ -5298,7 +5307,7 @@ class d_a_py_lk extends fopAc_ac_c {
     private model: J3DModelInstance;
     private modelHands: J3DModelInstance
     private modelKatsura: J3DModelInstance; // Wig. To replace the hat when wearing casual clothes.
-    
+
     private demoMode: number = LinkDemoMode.None;
     private gdnChk = new dBgS_GndChk()
 
@@ -5311,6 +5320,11 @@ class d_a_py_lk extends fopAc_ac_c {
     private anmBck = new mDoExt_bckAnm();
     private anmBtp = new mDoExt_btpAnm();
     private anmBckId: number;
+
+    private vel = vec3.create(); // TODO: This should be part of fopAc_ac_c
+
+    private frontFoot: number = 2;
+    private footData: LkFootData[] = nArray(2, i => ({ toePos: vec3.create(), heelPos: vec3.create() }));
     private anmTranslation = vec3.create();
 
     protected override subload(globals: dGlobals, prm: fopAcM_prm_class | null): cPhs__Status {
@@ -5339,12 +5353,11 @@ class d_a_py_lk extends fopAc_ac_c {
 
         if (this.proc) this.proc(globals);
 
-        this.posMove(deltaTimeFrames);
-
         // Clamp Link's position to the ground. // @TODO: Acch
         this.gdnChk.Reset();
         vec3.scaleAndAdd(this.gdnChk.pos, this.pos, Vec3UnitY, 125.0);
-        this.pos[1] = globals.scnPlay.bgS.GroundCross(this.gdnChk); 
+        this.pos[1] = globals.scnPlay.bgS.GroundCross(this.gdnChk);
+        if (this.pos[1] === -Infinity) this.pos[1] = 0;
 
         this.anmBck.play(deltaTimeFrames);
         this.anmBtp.play(deltaTimeFrames);
@@ -5353,6 +5366,8 @@ class d_a_py_lk extends fopAc_ac_c {
 
         mat4.copy(this.modelKatsura.modelMatrix, this.model.shapeInstanceState.jointToWorldMatrixArray[0x0F]);
         this.modelKatsura.calcAnim();
+
+        this.posMove();
 
         // setWorldMatrix()
         MtxTrans(this.pos, false, this.model.modelMatrix);
@@ -5455,7 +5470,7 @@ class d_a_py_lk extends fopAc_ac_c {
 
         if (enable & EDemoActorFlags.HasShape) {
             this.isWearingCasualClothes = (demoActor.shapeId == 1);
-            if (this.isWearingCasualClothes) 
+            if (this.isWearingCasualClothes)
                 this.texMappingClothes.copy(this.texMappingCasualClothes);
             else
                 this.texMappingClothes.copy(this.texMappingHeroClothes);
@@ -5556,27 +5571,73 @@ class d_a_py_lk extends fopAc_ac_c {
         return false;
     }
 
-    private posMove(deltaTimeFrames: number) {
-        if( this.anmBck ) {
+    private posMove() {
+        if (this.anmBck) {
             // Apply the root motion from the current animation (swaying)
-            const rootTransform = new JointTransformInfo(); 
+            const rootTransform = new JointTransformInfo();
             calcANK1JointAnimationTransform(rootTransform, this.anmBck.anm.jointAnimationEntries[0], this.anmBck.frameCtrl.getFrame(), this.anmBck.frameCtrl.applyLoopMode(this.anmBck.frameCtrl.getFrame() + 1));
 
             const prevTranslation = vec3.copy(scratchVec3a, this.anmTranslation);
-            vec3.scale(this.anmTranslation, rootTransform.translation, deltaTimeFrames);
+            vec3.scale(this.anmTranslation, rootTransform.translation, 1.0);
 
-            // Determine the speed from the movement of the feet
-
-            const frameTranslation = this.anmTranslation;//vec3.sub(scratchVec3b, prevTranslation, this.anmTranslation);
-            console.log(frameTranslation[0], frameTranslation[1], frameTranslation[2]);
+            const frameTranslation = vec3.sub(scratchVec3b, prevTranslation, this.anmTranslation);
 
             const sinTheta = Math.sin(cM_s2rad(this.rot[1]));
             const cosTheta = Math.cos(cM_s2rad(this.rot[1]));
             const worldTransX = frameTranslation[2] * sinTheta + frameTranslation[0] * cosTheta;
-            const worldTransZ = frameTranslation[2] * cosTheta - frameTranslation[0] * sinTheta; 
+            const worldTransZ = frameTranslation[2] * cosTheta - frameTranslation[0] * sinTheta;
 
             this.pos[0] += worldTransX;
             this.pos[2] += worldTransZ;
+
+            // Apply motion based on the movement of the feet
+            this.posMoveFromFootPos();
+        }
+    }
+
+    private posMoveFromFootPos() {
+        const footLJointIdx = this.model.modelData.bmd.jnt1.joints.findIndex(j => j.name == 'Lfoot_jnt')
+        const footRJointIdx = this.model.modelData.bmd.jnt1.joints.findIndex(j => j.name == 'Rfoot_jnt')
+        const waistJointIdx = this.model.modelData.bmd.jnt1.joints.findIndex(j => j.name == 'waist_jnt')
+
+        // Compute local -> model transforms for foot and waist joints
+        const invModelMtx = mat4.invert(calc_mtx, this.model.modelMatrix);
+        const footLMtx = mat4.mul(scratchMat4a, invModelMtx, this.model.shapeInstanceState.jointToWorldMatrixArray[footLJointIdx]);
+        const footRMtx = mat4.mul(scratchMat4b, invModelMtx, this.model.shapeInstanceState.jointToWorldMatrixArray[footRJointIdx]);
+        const waistMtx = mat4.mul(scratchMat4c, invModelMtx, this.model.shapeInstanceState.jointToWorldMatrixArray[waistJointIdx]);
+        
+        // Compute model space positions of the feet
+        const toePos = [];
+        const heelPos = [];
+        toePos[0] = vec3.transformMat4(scratchVec3a, d_a_py_lk.TOE_POS, footRMtx);
+        toePos[1] = vec3.transformMat4(scratchVec3b, d_a_py_lk.TOE_POS, footLMtx);
+        heelPos[0] = vec3.transformMat4(scratchVec3c, d_a_py_lk.HEEL_POS, footRMtx);
+        heelPos[1] = vec3.transformMat4(scratchVec3d, d_a_py_lk.HEEL_POS, footLMtx);
+
+        // Compare the model space positions of the feet to determine which is in front
+        const footZPos = []
+        for (let i = 0; i < 2; i++) {
+            const footCenter = vec3.scale(scratchVec3e, vec3.add(scratchVec3e, toePos[i], heelPos[i]), 0.5);
+            footZPos[i] = footCenter[2];
+        }
+        if (footZPos[1] > footZPos[0]) { this.frontFoot = 1 }
+        else { this.frontFoot = 0; }
+
+        // Compute the horizontal distance moved by the front foot since last frame
+        const moveVec = vec3.sub(scratchVec3e, toePos[this.frontFoot], this.footData[this.frontFoot].toePos);
+        moveVec[1] = 0;
+        const moveVel = vec3.length(moveVec);
+
+        // @TODO: Adjust speed when on slopes
+
+        // Update actor vel and position
+        this.vel[0] = moveVel * Math.sin(cM_s2rad(this.rot[1]));
+        this.vel[1] = moveVel * Math.cos(cM_s2rad(this.rot[1]));
+        vec3.add(this.pos, this.pos, this.vel);
+
+        for (let i = 0; i < 2; i++) {
+            vec3.copy(this.footData[i].toePos, toePos[i]);
+            vec3.copy(this.footData[i].heelPos, heelPos[i]);
         }
     }
 
@@ -5619,7 +5680,7 @@ class d_a_py_lk extends fopAc_ac_c {
                     assert(count == 3)
                     anmBckId = demoActor.stbData.getUint16(2);
                     anmBtpId = demoActor.stbData.getUint16(4);
-                    const btkScrollId = demoActor.stbData.getUint16(6); // TODO: Scrolling texture resource
+                    const btkScrollId = demoActor.stbData.getUint16(6); // TODO: Scrolling texture resource. Could this control pupil size?
                     break;
 
                 case 0:
