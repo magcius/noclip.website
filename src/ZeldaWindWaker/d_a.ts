@@ -5367,7 +5367,7 @@ class d_a_py_lk extends fopAc_ac_c {
         mat4.copy(this.modelKatsura.modelMatrix, this.model.shapeInstanceState.jointToWorldMatrixArray[0x0F]);
         this.modelKatsura.calcAnim();
 
-        this.posMove();
+        this.posMove(globals);
 
         // setWorldMatrix()
         MtxTrans(this.pos, false, this.model.modelMatrix);
@@ -5571,7 +5571,7 @@ class d_a_py_lk extends fopAc_ac_c {
         return false;
     }
 
-    private posMove() {
+    private posMove(globals: dGlobals) {
         if (this.anmBck) {
             // Apply the root motion from the current animation (swaying)
             const rootTransform = new JointTransformInfo();
@@ -5591,11 +5591,11 @@ class d_a_py_lk extends fopAc_ac_c {
             this.pos[2] += worldTransZ;
 
             // Apply motion based on the movement of the feet
-            this.posMoveFromFootPos();
+            this.posMoveFromFootPos(globals);
         }
     }
 
-    private posMoveFromFootPos() {
+    private posMoveFromFootPos(globals: dGlobals) {
         const footLJointIdx = this.model.modelData.bmd.jnt1.joints.findIndex(j => j.name == 'Lfoot_jnt')
         const footRJointIdx = this.model.modelData.bmd.jnt1.joints.findIndex(j => j.name == 'Rfoot_jnt')
         const waistJointIdx = this.model.modelData.bmd.jnt1.joints.findIndex(j => j.name == 'waist_jnt')
@@ -5626,9 +5626,19 @@ class d_a_py_lk extends fopAc_ac_c {
         // Compute the horizontal distance moved by the front foot since last frame
         const moveVec = vec3.sub(scratchVec3e, toePos[this.frontFoot], this.footData[this.frontFoot].toePos);
         moveVec[1] = 0;
-        const moveVel = vec3.length(moveVec);
+        let moveVel = vec3.length(moveVec);
 
-        // @TODO: Adjust speed when on slopes
+        // Adjust speed when on slopes
+        let groundAngle = 0;
+        if( this.gdnChk.polyInfo.bgIdx >= 0 && this.gdnChk.polyInfo.triIdx >= 0) { // @TODO: Should be in cBgS::ChkPolySafe()
+            groundAngle = this.getGroundAngle(globals, this.rot[1]);
+        }
+        moveVel *= Math.cos(cM_s2rad(groundAngle));        
+
+        // ... Reduce velocity even more for ascending slopes
+        if (groundAngle < 0) {
+            moveVel = moveVel * 0.85;
+        }
 
         // Update actor vel and position
         this.vel[0] = moveVel * Math.sin(cM_s2rad(this.rot[1]));
@@ -5639,6 +5649,22 @@ class d_a_py_lk extends fopAc_ac_c {
             vec3.copy(this.footData[i].toePos, toePos[i]);
             vec3.copy(this.footData[i].heelPos, heelPos[i]);
         }
+    }
+
+    /**
+     * Get the angle of the ground based when facing a specific direction
+     * @param dir the s16 angle which the actor is facing
+     */
+    private getGroundAngle(globals: dGlobals, dir: number) {
+        const gndPlane = globals.scnPlay.bgS.GetTriPla(this.gdnChk.polyInfo.bgIdx, this.gdnChk.polyInfo.triIdx);
+        const norm = gndPlane.n;
+    
+        if (gndPlane && norm[1] >= 0.5) {
+            const slopeDir = cM_atan2s(norm[0], norm[2]);
+            const slopeGrade = Math.sqrt(norm[0] * norm[0] + norm[2] * norm[2]);
+            return cM_atan2s(slopeGrade * Math.cos(cM_s2rad(slopeDir - dir)), norm[1]);
+        }
+        return 0;
     }
 
     private getAnmData(anmIdx: number): LkAnimData {
