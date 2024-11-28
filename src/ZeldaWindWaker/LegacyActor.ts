@@ -22,6 +22,9 @@ import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
 import { dBgS_GndChk } from './d_bg.js';
 import { fopAc_ac_c, fopAcM_prm_class } from './f_op_actor.js';
 import { dProcName_e } from './d_procname.js';
+import { mDoExt_McaMorf } from './m_do_ext.js';
+import { dDemo_setDemoData } from './d_demo.js';
+import { calc_mtx, mDoMtx_ZXYrotM, MtxTrans } from './m_do_mtx.js';
 
 const scratchMat4a = mat4.create();
 const scratchVec3a = vec3.create();
@@ -45,6 +48,7 @@ const chk = new dBgS_GndChk();
 // "Legacy actor" for noclip
 class d_a_noclip_legacy extends fopAc_ac_c {
     private phase = cPhs__Status.Started;
+    public morf: mDoExt_McaMorf;
     public objectRenderers: BMDObjectRenderer[] = [];
 
     public override subload(globals: dGlobals, prm: fopAcM_prm_class): cPhs__Status {
@@ -61,10 +65,18 @@ class d_a_noclip_legacy extends fopAc_ac_c {
 
     public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         const device = globals.modelCache.device;
+        const dtFrames = Math.min(viewerInput.deltaTime / 1000 * 30, 5);
+
+        const isDemoActor = dDemo_setDemoData(globals, dtFrames, this, 0x6A, this.morf);
+        if( isDemoActor ) {
+            MtxTrans(this.pos, false);
+            mDoMtx_ZXYrotM(calc_mtx, this.rot);
+            mat4.copy(this.objectRenderers[0].modelMatrix, calc_mtx);
+        }
 
         renderInstManager.setCurrentList(globals.dlst.bg[0]);
         for (let i = 0; i < this.objectRenderers.length; i++)
-            this.objectRenderers[i].prepareToRender(globals, device, renderInstManager, viewerInput);
+            this.objectRenderers[i].prepareToRender(globals, isDemoActor ? this.morf : null, device, renderInstManager, viewerInput);
     }
 
     public override delete(globals: dGlobals): void {
@@ -113,8 +125,15 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     }
 
     function buildChildModel(rarc: RARC.JKRArchive, modelPath: string): BMDObjectRenderer {
-        const model = getResData(ResType.Model, rarc, modelPath);
-        return buildChildModelRes(model);
+        const modelData = getResData(ResType.Model, rarc, modelPath);
+        const model = buildChildModelRes(modelData);
+
+        if(!legacy.morf) {
+            legacy.morf = new mDoExt_McaMorf(modelData, null, null, null, LoopMode.Repeat);
+            legacy.morf.model = model.modelInstance;
+        }
+
+        return model;
     }
 
     function setModelMatrix(m: mat4): void {
@@ -1827,7 +1846,7 @@ export class BMDObjectRenderer {
             this.childObjects[i].setExtraTextures(extraTextures);
     }
 
-    public prepareToRender(globals: dGlobals, device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+    public prepareToRender(globals: dGlobals, morf: mDoExt_McaMorf | null, device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         if (!this.visible)
             return;
 
@@ -1853,10 +1872,16 @@ export class BMDObjectRenderer {
         settingTevStruct(globals, this.lightTevColorType, scratchVec3a, this.tevstr);
         setLightTevColorType(globals, this.modelInstance, this.tevstr, viewerInput.camera);
 
-        this.setExtraTextures(globals.renderer.extraTextures);
-        this.modelInstance.prepareToRender(device, renderInstManager, viewerInput);
+        if( morf ) {
+            morf.calc();
+            morf.entryDL(globals, renderInstManager, viewerInput);
+        } else {
+            this.setExtraTextures(globals.renderer.extraTextures);
+            this.modelInstance.prepareToRender(device, renderInstManager, viewerInput);
+        }
+        
         for (let i = 0; i < this.childObjects.length; i++)
-            this.childObjects[i].prepareToRender(globals, device, renderInstManager, viewerInput);
+            this.childObjects[i].prepareToRender(globals, null, device, renderInstManager, viewerInput);
     }
 
     public destroy(device: GfxDevice): void {
