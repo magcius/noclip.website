@@ -5309,6 +5309,7 @@ class d_a_py_lk extends fopAc_ac_c {
     private modelKatsura: J3DModelInstance; // Wig. To replace the hat when wearing casual clothes.
 
     private demoMode: number = LinkDemoMode.None;
+    private demoClampToGround = true;
     private gdnChk = new dBgS_GndChk()
 
     private isWearingCasualClothes = false;
@@ -5347,11 +5348,6 @@ class d_a_py_lk extends fopAc_ac_c {
     }
 
     override execute(globals: dGlobals, deltaTimeFrames: number): void {
-        // Collect ground info. TODO: Acch
-        this.gdnChk.Reset();
-        vec3.scaleAndAdd(this.gdnChk.pos, this.pos, Vec3UnitY, 125.0);
-        const groundHeight = globals.scnPlay.bgS.GroundCross(this.gdnChk);
-
         // Update the current proc based on demo data
         this.setDemoData(globals);
         if (this.demoMode != 5) {
@@ -5369,10 +5365,16 @@ class d_a_py_lk extends fopAc_ac_c {
         const rawPos = vec3.copy(this.rawPos, this.pos); 
         this.posMove(globals);
 
-        // If we're pulling position directly from the demo, clamp to ground and ignore animation root motion
+        // Evaluate for collisions, clamp to ground
+        this.gdnChk.Reset();
+        vec3.scaleAndAdd(this.gdnChk.pos, this.pos, Vec3UnitY, 30.1);
+        const groundHeight = globals.scnPlay.bgS.GroundCross(this.gdnChk);
+        this.autoGroundHit();
+
+        // If we're pulling position directly from the JStudio tool, ignore collisions and animation root motion
         if (this.proc == this.procTool) {
             vec3.copy(this.pos, rawPos);
-            if (groundHeight != -Infinity) {
+            if (this.demoClampToGround && groundHeight != -Infinity) {
                 this.pos[1] = groundHeight;
             }
         }
@@ -5402,6 +5404,8 @@ class d_a_py_lk extends fopAc_ac_c {
 
         this.anmBck.entry(this.model);
         if (this.anmBtp.anm) this.anmBtp.entry(this.model);
+
+        console.log(mat4.getTranslation(scratchVec3a, this.model.modelMatrix)[1]);
 
         setLightTevColorType(globals, this.model, this.tevStr, viewerInput.camera);
         mDoExt_modelEntryDL(globals, this.model, renderInstManager, viewerInput);
@@ -5586,6 +5590,28 @@ class d_a_py_lk extends fopAc_ac_c {
         return false;
     }
 
+    private autoGroundHit() {
+        const groundHeight = this.gdnChk.retY;
+        if(groundHeight == -Infinity) {
+            return;
+        }
+
+        const groundDiff = this.pos[1] - groundHeight;
+
+        // Our feet are near the ground, clamp to ground
+        if(groundDiff > 0.0) {
+            if(groundDiff <= 30.1) {
+                this.pos[1] = groundHeight;
+                this.vel[1] = 0.0;
+                return;
+            }
+        }
+
+        // TODO: Our feet are below the ground, use last frame's height
+        this.pos[1] = groundHeight;
+        this.vel[1] = 0.0;
+    }
+
     private posMove(globals: dGlobals) {
         if (this.anmBck) {
             // Apply the root motion from the current animation (swaying)
@@ -5713,6 +5739,8 @@ class d_a_py_lk extends fopAc_ac_c {
         if (!demoActor)
             return;
 
+        this.demoClampToGround = false;
+
         let anmFrame = 0.0;
         let anmBckId = 0xFFFF;
         let anmBtpId = 0xFFFF;
@@ -5724,8 +5752,10 @@ class d_a_py_lk extends fopAc_ac_c {
         if (demoActor.flags & EDemoActorFlags.HasData) {
             const status = demoActor.stbData.getUint8(0);
             switch (demoActor.stbDataId) {
-                case 1:
                 case 3:
+                    this.demoClampToGround = true;
+                    // Fall through
+                case 1:
                 case 5:
                     const count = demoActor.stbData.getUint8(1);
                     assert(count == 3)
@@ -5734,8 +5764,10 @@ class d_a_py_lk extends fopAc_ac_c {
                     const btkScrollId = demoActor.stbData.getUint16(6); // TODO: Scrolling texture resource. Could this control pupil size?
                     break;
 
-                case 0:
                 case 2:
+                    this.demoClampToGround = true;
+                    // Fall through
+                case 0:
                 case 4:
                     anmBckId = demoActor.stbData.getUint16(1);
                     break;
