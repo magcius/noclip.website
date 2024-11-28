@@ -999,12 +999,13 @@ class DemoDesc extends SceneDesc implements Viewer.SceneDesc {
         globals.scnPlay.demo.remove();
 
         // TODO: Don't render until the camera has been placed for this demo. The cuts are jarring.
-        
-        // noclip modification: Most cutscenes expect the Link actor to be loaded 
-        if(!fopAcM_searchFromName(globals, 'Link', 0, 0)) {
-            fopAcM_create(globals.frameworkGlobals, dProcName_e.d_a_py_lk, 0, null, globals.mStayNo, null, null, 0xFF, -1);
-        }
 
+        // Most cutscenes expect the Link actor to be loaded
+        this.globals.modelCache.fetchObjectData('Link');
+        this.globals.modelCache.fetchObjectData('LkD00');
+        this.globals.modelCache.fetchObjectData('LkD01');
+        this.globals.modelCache.fetchObjectData('LkAnm');
+    
         // noclip modification: This normally happens on room load. Do it here instead so that we don't waste time 
         //                      loading .arcs for cutscenes that aren't going to be played
         const lbnk = globals.roomCtrl.status[this.roomList[0]].data.lbnk;
@@ -1019,9 +1020,13 @@ class DemoDesc extends SceneDesc implements Viewer.SceneDesc {
                     // @TODO: Better error handling. This does not prevent a debugger break.
                     console.log(`Failed to load stage demo file: ${globals.roomCtrl.demoArcName}`, e);
                 })
-
-                await globals.modelCache.waitForLoad();
             }
+        }
+
+        await globals.modelCache.waitForLoad();
+        
+        if(!fopAcM_searchFromName(globals, 'Link', 0, 0)) {
+            fopAcM_create(globals.frameworkGlobals, dProcName_e.d_a_py_lk, 0, [-25414,3501,219], globals.mStayNo, null, null, 0xFF, -1);
         }
 
         // noclip modification: ensure all the actors are created before we load the cutscene
