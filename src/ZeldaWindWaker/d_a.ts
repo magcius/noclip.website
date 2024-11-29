@@ -5088,6 +5088,7 @@ class d_a_py_lk extends fopAc_ac_c {
         mDoMtx_ZXYrotM(this.model.modelMatrix, this.rot);
 
         // Update joints based on the currently playing animation
+        this.anmBck.entry(this.model);
         this.model.calcAnim();
         mat4.copy(this.modelKatsura.modelMatrix, this.model.shapeInstanceState.jointToWorldMatrixArray[0x0F]);
         this.modelKatsura.calcAnim();
@@ -5106,7 +5107,6 @@ class d_a_py_lk extends fopAc_ac_c {
             mDoExt_modelEntryDL(globals, this.modelKatsura, renderInstManager, viewerInput);
         }
 
-        this.anmBck.entry(this.model);
         if (this.anmBtp.anm) this.anmBtp.entry(this.model);
 
         setLightTevColorType(globals, this.model, this.tevStr, viewerInput.camera);
