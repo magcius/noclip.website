@@ -5127,6 +5127,10 @@ class d_a_py_lk extends fopAc_ac_c {
         this.texMappingClothes = this.model.materialInstanceState.textureMappings[d_a_py_lk.LINK_CLOTHES_TEX_IDX];
         this.texMappingHeroClothes.copy(this.texMappingClothes);
 
+        // Set the default state based on EventBit 0x2A80, except we can't, so just hardcode to use casual clothes on the title screen
+        this.isWearingCasualClothes = (globals.stageName == 'sea_T' ); // dComIfGs_isEventBit(0x2A80)
+        if(this.isWearingCasualClothes) { this.texMappingClothes.copy(this.texMappingCasualClothes); }
+
         MtxTrans(this.pos, false, this.model.modelMatrix);
         mDoMtx_ZXYrotM(this.model.modelMatrix, this.rot);
         this.cullMtx = this.model.modelMatrix;
