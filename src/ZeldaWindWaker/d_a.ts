@@ -5024,6 +5024,7 @@ class d_a_py_lk extends fopAc_ac_c {
     private anmDataTable: LkAnimData[] = [];
     private anmBck = new mDoExt_bckAnm();
     private anmBtp = new mDoExt_btpAnm();
+    private anmBtk = new mDoExt_btkAnm();
     private anmBckId: number;
 
     private rawPos = vec3.create(); // The position before it is manipulated by anim root/foot motion
@@ -5061,6 +5062,7 @@ class d_a_py_lk extends fopAc_ac_c {
         // Step our animations forward
         this.anmBck.play(deltaTimeFrames);
         this.anmBtp.play(deltaTimeFrames);
+        this.anmBtk.play(deltaTimeFrames);
 
         // Run the current custom update process (Walk, Idle, Swim, etc)
         if (this.proc) this.proc(globals);
@@ -5108,6 +5110,7 @@ class d_a_py_lk extends fopAc_ac_c {
         }
 
         if (this.anmBtp.anm) this.anmBtp.entry(this.model);
+        if (this.anmBtk.anm) this.anmBtk.entry(this.model);
 
         setLightTevColorType(globals, this.model, this.tevStr, viewerInput.camera);
         mDoExt_modelEntryDL(globals, this.model, renderInstManager, viewerInput);
@@ -5416,6 +5419,7 @@ class d_a_py_lk extends fopAc_ac_c {
         let anmFrame = 0.0;
         let anmBckId = 0xFFFF;
         let anmBtpId = 0xFFFF;
+        let anmBtkId = 0xFFFF;
 
         if (demoActor.flags & EDemoActorFlags.HasPos) { vec3.copy(this.pos, demoActor.translation); }
         if (demoActor.flags & EDemoActorFlags.HasRot) { this.rot[1] = demoActor.rotation[1]; }
@@ -5433,7 +5437,7 @@ class d_a_py_lk extends fopAc_ac_c {
                     assert(count == 3)
                     anmBckId = demoActor.stbData.getUint16(2);
                     anmBtpId = demoActor.stbData.getUint16(4);
-                    const btkScrollId = demoActor.stbData.getUint16(6); // TODO: Scrolling texture resource. Could this control pupil size?
+                    anmBtkId = demoActor.stbData.getUint16(6);
                     break;
 
                 case 2:
@@ -5465,6 +5469,11 @@ class d_a_py_lk extends fopAc_ac_c {
             if (anmBtpId != 0xFFFF) {
                 const btp = globals.resCtrl.getObjectIDRes(ResType.Btp, 'LkD00', anmBtpId);
                 this.anmBtp.init(this.model.modelData, btp, true, btp.loopMode, 1.0, 0, btp.duration);
+            }
+
+            if (anmBtkId != 0xFFFF) {
+                const btk = globals.resCtrl.getObjectIDRes(ResType.Btk, 'LkD00', anmBtkId);
+                this.anmBtk.init(this.model.modelData, btk, true, btk.loopMode, 1.0, 0, btk.duration);
             }
         }
     }
