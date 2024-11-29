@@ -4996,6 +4996,27 @@ interface LkFootData {
     toePos: vec3,
     heelPos: vec3,
 }
+
+const enum ItemNo {
+    HerosSword = 0x38,
+    MasterSwordPowerless = 0x39,
+    MasterSwordHalfPower = 0x3A,
+    MasterSwordFullPower = 0x3E,
+    InvalidItem = 0xFF,
+}
+
+const enum LkEquipItem {
+    None = 0x100,
+    Sword = 0x103,
+}
+
+const enum LkHandStyle {
+    Idle = 0,
+    HoldSword = 3,
+    HoldWindWaker = 5,
+    HoldShield = 8,
+}
+
 class d_a_py_lk extends fopAc_ac_c {
     public static PROCESS_NAME = dProcName_e.d_a_py_lk;
     private static ARC_NAME = "Link";
@@ -5003,6 +5024,8 @@ class d_a_py_lk extends fopAc_ac_c {
     private static LINK_BTI_LINKTEXBCI4 = 0x71;
     private static LINK_CLOTHES_TEX_IDX = 0x22;
     private static LINK_BDL_KATSURA = 0x20;
+    private static LINK_BDL_SWA = 0x25; // Hero's sword blade
+    private static LINK_BDL_SWGRIPA=0x26 // Hero's sword hilt
     private static TOE_POS = vec3.fromValues(6.0, 3.25, 0.0);
     private static HEEL_POS = vec3.fromValues(-6.0, 3.25, 0.0);
 
@@ -5010,6 +5033,7 @@ class d_a_py_lk extends fopAc_ac_c {
     private proc: (globals: dGlobals) => void;
 
     private model: J3DModelInstance;
+    private modelSwordHilt: J3DModelInstance;
     private modelKatsura: J3DModelInstance; // Wig. To replace the hat when wearing casual clothes.
 
     private demoMode: number = LinkDemoMode.None;
@@ -5022,9 +5046,9 @@ class d_a_py_lk extends fopAc_ac_c {
     private texMappingHeroClothes: TextureMapping = new TextureMapping();
 
     private anmDataTable: LkAnimData[] = [];
-    private anmBck = new mDoExt_bckAnm();
-    private anmBtp = new mDoExt_btpAnm();
-    private anmBtk = new mDoExt_btkAnm();
+    private anmBck = new mDoExt_bckAnm(); // Joint animation
+    private anmBtp = new mDoExt_btpAnm(); // Texture flipbook animation (e.g. facial expressions)
+    private anmBtk = new mDoExt_btkAnm(); // UV animation (e.g. eyes get small when surprised)
     private anmBckId: number;
 
     private rawPos = vec3.create(); // The position before it is manipulated by anim root/foot motion
@@ -5033,6 +5057,11 @@ class d_a_py_lk extends fopAc_ac_c {
     private frontFoot: number = 2;
     private footData: LkFootData[] = nArray(2, i => ({ toePos: vec3.create(), heelPos: vec3.create() }));
     private anmTranslation = vec3.create();
+
+    private handStyleLeft: LkHandStyle;
+    private handStyleRight: LkHandStyle;
+    private equippedItem: LkEquipItem;
+    private equippedItemModel: J3DModelInstance | null = null;
 
     protected override subload(globals: dGlobals, prm: fopAcM_prm_class | null): cPhs__Status {
         this.loadAnmTable(globals);
@@ -5094,6 +5123,9 @@ class d_a_py_lk extends fopAc_ac_c {
         this.model.calcAnim();
         mat4.copy(this.modelKatsura.modelMatrix, this.model.shapeInstanceState.jointToWorldMatrixArray[0x0F]);
         this.modelKatsura.calcAnim();
+
+        // Update item transform and animations
+        this.setItemModel();
     }
 
     override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
@@ -5109,6 +5141,22 @@ class d_a_py_lk extends fopAc_ac_c {
             mDoExt_modelEntryDL(globals, this.modelKatsura, renderInstManager, viewerInput);
         }
 
+        if (this.equippedItem == LkEquipItem.Sword) {
+            setLightTevColorType(globals, this.equippedItemModel!, this.tevStr, viewerInput.camera);
+            mDoExt_modelEntryDL(globals, this.equippedItemModel!, renderInstManager, viewerInput);
+
+            setLightTevColorType(globals, this.modelSwordHilt, this.tevStr, viewerInput.camera);
+            mDoExt_modelEntryDL(globals, this.modelSwordHilt, renderInstManager, viewerInput);
+        }
+
+        // TODO:
+        // if (!checkNormalSwordEquip() && dStage_stagInfo_GetSTType(dComIfGp_getStageStagInfo()) != dStageType_FF1_e ||
+        //     checkCaughtShapeHide() || checkDemoShieldNoDraw()) {
+        //     mpCLModelData->getJointNodePointer(0x0D)->getMesh()->getShape()->hide(); // cl_podA joint
+        // } else {
+        //     mpCLModelData->getJointNodePointer(0x0D)->getMesh()->getShape()->show(); // cl_podA joint
+        // }
+
         if (this.anmBtp.anm) this.anmBtp.entry(this.model);
         if (this.anmBtk.anm) this.anmBtk.entry(this.model);
 
@@ -5120,6 +5168,7 @@ class d_a_py_lk extends fopAc_ac_c {
         // createHeap()
         this.model = this.initModel(globals, d_a_py_lk.LINK_BDL_CL);
         this.modelKatsura = this.initModel(globals, d_a_py_lk.LINK_BDL_KATSURA);
+        this.modelSwordHilt = this.initModel(globals, d_a_py_lk.LINK_BDL_SWGRIPA);
 
         // Fetch the casual clothes and the hero texture. They'll be be selected by the ShapeID set by a demo.
         const casualTexData = globals.resCtrl.getObjectRes(ResType.Bti, d_a_py_lk.ARC_NAME, d_a_py_lk.LINK_BTI_LINKTEXBCI4);
@@ -5427,6 +5476,9 @@ class d_a_py_lk extends fopAc_ac_c {
 
         if (demoActor.flags & EDemoActorFlags.HasData) {
             const status = demoActor.stbData.getUint8(0);
+            let handIdxRight;
+            let handIdxLeft;
+
             switch (demoActor.stbDataId) {
                 case 3:
                     this.demoClampToGround = true;
@@ -5438,6 +5490,9 @@ class d_a_py_lk extends fopAc_ac_c {
                     anmBckId = demoActor.stbData.getUint16(2);
                     anmBtpId = demoActor.stbData.getUint16(4);
                     anmBtkId = demoActor.stbData.getUint16(6);
+
+                    handIdxRight = demoActor.stbData.getUint8(9);
+                    handIdxLeft = demoActor.stbData.getUint8(10);
                     break;
 
                 case 2:
@@ -5450,6 +5505,42 @@ class d_a_py_lk extends fopAc_ac_c {
 
                 default:
                     debugger;
+            }
+
+            // Set the hand model and/or equipped item based on the demo data
+            let item = ItemNo.InvalidItem;
+            if(handIdxLeft == 0xC8) { item = ItemNo.HerosSword; }
+            else if(handIdxLeft == 0xC9) { item = ItemNo.MasterSwordPowerless; }
+            else if(handIdxLeft == 0xCA) { item = ItemNo.MasterSwordHalfPower; }
+            else if(handIdxLeft == 0xCB) { item = ItemNo.MasterSwordFullPower; }
+
+            if(item == ItemNo.InvalidItem) {
+                if(handIdxLeft == 0xCC) {
+                    this.handStyleLeft = LkHandStyle.HoldWindWaker;
+                    // Set the Wind Waker as the equipped item
+                } else if (this.equippedItem != LkEquipItem.None) {
+                    this.deleteEquipItem();
+                    this.handStyleLeft = handIdxLeft as LkHandStyle;
+                }
+            } else {
+                this.handStyleLeft = LkHandStyle.HoldSword;
+                if (this.equippedItem != LkEquipItem.Sword) {
+                    // d_com_inf_game::dComIfGs_setSelectEquip(0, item);
+                    this.deleteEquipItem();
+                    this.setSwordModel(globals);
+                }
+            }
+
+            if(handIdxRight == 0xC8 || handIdxRight == 0xC9) {
+                this.handStyleRight = LkHandStyle.HoldShield;
+                if (handIdxRight == 0xC8) { /* equip HerosShield */ }
+                else { /* equip MirrorShield */ }
+            } else {
+                if(handIdxRight != 0) {
+                    this.handStyleRight = (handIdxRight as LkHandStyle) + 6;
+                } else {
+                    this.handStyleRight = LkHandStyle.Idle;
+                }
             }
         }
 
@@ -5475,6 +5566,33 @@ class d_a_py_lk extends fopAc_ac_c {
                 const btk = globals.resCtrl.getObjectIDRes(ResType.Btk, 'LkD00', anmBtkId);
                 this.anmBtk.init(this.model.modelData, btk, true, btk.loopMode, 1.0, 0, btk.duration);
             }
+        }
+    }
+
+    private setSwordModel(globals: dGlobals) {
+        this.equippedItem = LkEquipItem.Sword;
+        this.equippedItemModel = this.initModel(globals, d_a_py_lk.LINK_BDL_SWA);
+    }
+
+    private deleteEquipItem() {
+        this.equippedItem = LkEquipItem.None;
+        this.equippedItemModel = null;
+    }
+
+    private setItemModel() {
+        if(!this.equippedItemModel) {
+            return;
+        }
+
+        const handLJointMtx = this.model.shapeInstanceState.jointToWorldMatrixArray[0x08];
+        const handRJointMtx = this.model.shapeInstanceState.jointToWorldMatrixArray[0x0D];
+        
+        mat4.copy(this.equippedItemModel.modelMatrix, handLJointMtx);
+        this.equippedItemModel?.calcAnim();
+
+        if(this.equippedItem == LkEquipItem.Sword) {
+            mat4.copy(this.modelSwordHilt.modelMatrix, handLJointMtx);
+            this.modelSwordHilt.calcAnim();
         }
     }
 
