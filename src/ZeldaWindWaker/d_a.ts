@@ -5046,7 +5046,7 @@ class d_a_py_lk extends fopAc_ac_c {
         this.setupDam('mayuR');
 
         // noclip modification:
-        this.setSingleMoveAnime(globals, LkAnim.WAITS, 0.6, 0.0, 0xc, 6.0);
+        this.setSingleMoveAnime(globals, LkAnim.WAITS);
 
         return cPhs__Status.Next;
     }
