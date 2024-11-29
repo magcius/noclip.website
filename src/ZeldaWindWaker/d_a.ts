@@ -5305,7 +5305,6 @@ class d_a_py_lk extends fopAc_ac_c {
     private proc: (globals: dGlobals) => void;
 
     private model: J3DModelInstance;
-    private modelHands: J3DModelInstance
     private modelKatsura: J3DModelInstance; // Wig. To replace the hat when wearing casual clothes.
 
     private demoMode: number = LinkDemoMode.None;
@@ -5405,8 +5404,6 @@ class d_a_py_lk extends fopAc_ac_c {
         this.anmBck.entry(this.model);
         if (this.anmBtp.anm) this.anmBtp.entry(this.model);
 
-        console.log(mat4.getTranslation(scratchVec3a, this.model.modelMatrix)[1]);
-
         setLightTevColorType(globals, this.model, this.tevStr, viewerInput.camera);
         mDoExt_modelEntryDL(globals, this.model, renderInstManager, viewerInput);
     }
@@ -5415,7 +5412,6 @@ class d_a_py_lk extends fopAc_ac_c {
         // createHeap()
         this.model = this.initModel(globals, d_a_py_lk.LINK_BDL_CL);
         this.modelKatsura = this.initModel(globals, d_a_py_lk.LINK_BDL_KATSURA);
-        // this.modelHands = this.initModel(globals, d_a_py_lk.LINK_BDL_HANDS);
 
         // Fetch the casual clothes and the hero texture. They'll be be selected by the ShapeID set by a demo.
         const casualTexData = globals.resCtrl.getObjectRes(ResType.Bti, d_a_py_lk.ARC_NAME, d_a_py_lk.LINK_BTI_LINKTEXBCI4);
@@ -5519,30 +5515,6 @@ class d_a_py_lk extends fopAc_ac_c {
                 const newRot = cM_atan2s(moveVec[0], moveVec[2]);
                 this.rot[1] = newRot;
                 this.setSingleMoveAnime(globals, (this.demoMode == LinkDemoMode.Walk) ? LkAnim.WALK : LkAnim.DASH)
-
-                // Transition to target position/rotation (2 is slower)
-                // const dist = vec3.sub(scratchVec3a, targetPos, this.pos);
-                // local_6c = local_90.x;
-                // local_68 = local_90.y;
-                // local_64 = local_90.z;
-                // if (abs(this->mVelocity) / mMaxNormalSpeed < 0.5) {
-                //   demo_mode = 2;
-                // }
-                // local_a8.x = local_90.x;
-                // local_a8.y = 0.0;
-                // local_a8.z = local_90.z;
-                // fVar6 = VECSquareMag(&local_a8);
-                // if ((fVar6 < 100.0) || (fVar6 < 2500.0 && (abs(this->mVelocity) < 0.001))) {
-                //   demo_mode = 1;
-                //   this->mVelocity = 0.0;
-                // }
-                // else if (((demo_mode == 2) && (fVar6 < 400.0)) || (fVar6 < 2500.0)) {
-                //   mDemo.setStick(0.0);
-                // }
-                // iVar8 = cM_atan2s(local_6c,local_64);
-                // mDemo.setMoveAngle(iVar8);
-                // Snap to target position
-                // Maybe equip an item
                 break;
             }
 
@@ -5570,7 +5542,6 @@ class d_a_py_lk extends fopAc_ac_c {
                     break;
 
                 case LinkDemoMode.SetPosRotEquip:
-                    // TODO: setBlendMoveAnime 
                     this.procWait_init(globals);
                     break;
 
