@@ -116,6 +116,7 @@ import { DataShare } from './DataShare.js';
 import InputManager from './InputManager.js';
 import { WebXRContext } from './WebXR.js';
 import { debugJunk } from './DebugJunk.js';
+import { IS_DEVELOPMENT } from './BuildVersion.js';
 
 const sceneGroups: (string | SceneGroup)[] = [
     "Wii",
@@ -268,6 +269,8 @@ function getSceneDescs(sceneGroup: SceneGroup): SceneDesc[] {
     return sceneGroup.sceneDescs.filter((g) => typeof g !== 'string') as SceneDesc[];
 }
 
+type TimeState = { isPlaying: boolean, sceneTimeScale: number, sceneTime: number };
+
 class Main {
     public toplevel: HTMLElement;
     public canvas: HTMLCanvasElement;
@@ -352,7 +355,7 @@ class Main {
             this.ui.statisticsPanel.addRenderStatistics(statistics);
         };
         this.viewer.oncamerachanged = (force: boolean) => {
-            this._saveState(force);
+            this._autoSaveState(force);
         };
         this.viewer.inputManager.ondraggingmodechanged = () => {
             this.ui.setDraggingMode(this.viewer.inputManager.getDraggingMode());
@@ -374,18 +377,7 @@ class Main {
         window.onhashchange = this._onHashChange.bind(this);
 
         if (this.currentSceneDesc === null)
-            this._onHashChange();
-
-        if (this.currentSceneDesc === null) {
-            // Load the state from session storage.
-            const currentDescId = this.saveManager.getCurrentSceneDescId();
-            if (currentDescId !== null) {
-                // Load save slot 0.
-                const key = this.saveManager.getSaveStateSlotKey(currentDescId, 0);
-                const sceneState = this.saveManager.loadState(key);
-                this._loadSceneDescById(currentDescId, sceneState);
-            }
-        }
+            this._loadInitialStateFromHash();
 
         if (this.currentSceneDesc === null) {
             // Make the user choose a scene if there's nothing loaded by default...
@@ -395,10 +387,44 @@ class Main {
         this._onRequestAnimationFrameCanvas();
     }
 
-    private _onHashChange(): void {
+    private _decodeHashString(hashString: string): [string, string] {
+        let sceneDescId: string = '', sceneSaveState: string = '';
+        const firstSemicolon = hashString.indexOf(';');
+        if (firstSemicolon >= 0) {
+            sceneDescId = hashString.slice(0, firstSemicolon);
+            sceneSaveState = hashString.slice(firstSemicolon + 1);
+        } else {
+            sceneDescId = hashString;
+        }
+
+        return [sceneDescId, sceneSaveState];
+    }
+
+    private _decodeHash(): [string, string] {
         const hash = window.location.hash;
-        if (hash.startsWith('#'))
-            this._loadState(decodeURIComponent(hash.slice(1)));
+        if (hash.startsWith('#')) {
+            return this._decodeHashString(decodeURIComponent(hash.slice(1)));
+        } else {
+            return ['', ''];
+        }
+    }
+
+    private _onHashChange(): void {
+        const [sceneDescId, sceneSaveState] = this._decodeHash();
+        return this._loadSceneDescById(sceneDescId, sceneSaveState);
+    }
+
+    private _loadInitialStateFromHash(): void {
+        const [sceneDescId, sceneSaveState] = this._decodeHash();
+        const descGroup = this._findSceneDescById(sceneDescId);
+        if (descGroup !== null) {
+            const [group, desc] = descGroup;
+            // Load save slot 0 from session storage.
+            const sceneDescId = `${group.id}/${desc.id}`;
+            const key = this.saveManager.getSaveStateSlotKey(sceneDescId, 0);
+            const sceneState = this.saveManager.loadState(key) ?? sceneSaveState;
+            this._loadSceneDesc(group, desc, sceneState);
+        }
     }
 
     private _exportSaveData() {
@@ -407,7 +433,7 @@ class Main {
         downloadBlob(`noclip_export_${date.toISOString()}.nclsp`, new Blob([saveData]));
     }
 
-    private pickSaveStatesAction(inputManager: InputManager): SaveStatesAction {
+    private _pickSaveStatesAction(inputManager: InputManager): SaveStatesAction {
         if (inputManager.isKeyDown('ShiftLeft'))
             return SaveStatesAction.Save;
         else if (inputManager.isKeyDown('AltLeft'))
@@ -416,7 +442,7 @@ class Main {
             return SaveStatesAction.Load;
     }
 
-    private checkKeyShortcuts() {
+    private _checkKeyShortcuts() {
         const inputManager = this.viewer.inputManager;
         if (inputManager.isKeyDownEventTriggered('KeyZ'))
             this._toggleUI();
@@ -426,7 +452,7 @@ class Main {
             if (inputManager.isKeyDownEventTriggered('Digit'+i)) {
                 if (this.currentSceneDesc) {
                     const key = this._getSaveStateSlotKey(i);
-                    const action = this.pickSaveStatesAction(inputManager);
+                    const action = this._pickSaveStatesAction(inputManager);
                     this.doSaveStatesAction(action, key);
                 }
             }
@@ -468,7 +494,7 @@ class Main {
     }
 
     private _onPostAnimFrameUpdate = (updateInfo: ViewerUpdateInfo): void => {
-        this.checkKeyShortcuts();
+        this._checkKeyShortcuts();
 
         prepareFrameDebugOverlayCanvas2D();
 
@@ -607,57 +633,80 @@ class Main {
         }
     }
 
-    private _loadSceneDescById(id: string, sceneState: string | null): void {
+    private _findSceneDescById(id: string): [SceneGroup, SceneDesc] | null {
+        if (id === '')
+            return null;
+
         const [groupId, ...sceneRest] = id.split('/');
         let sceneId = decodeURIComponent(sceneRest.join('/'));
 
         const group = this.groups.find((g) => typeof g !== 'string' && g.id === groupId) as SceneGroup;
         if (!group)
-            return;
+            return null;
 
         if (group.sceneIdMap !== undefined && group.sceneIdMap.has(sceneId))
             sceneId = group.sceneIdMap.get(sceneId)!;
 
         const desc = getSceneDescs(group).find((d) => d.id === sceneId);
         if (!desc)
+            return null;
+
+        return [group, desc];
+    }
+
+    private _loadSceneDescById(id: string, sceneState: string | null): void {
+        const sceneDesc = this._findSceneDescById(id);
+        if (sceneDesc === null)
             return;
 
+        const [group, desc] = sceneDesc;
         this._loadSceneDesc(group, desc, sceneState);
     }
 
-    private _loadState(state: string) {
-        let sceneDescId: string = '', sceneSaveState: string = '';
-        const firstSemicolon = state.indexOf(';');
-        if (firstSemicolon >= 0) {
-            sceneDescId = state.slice(0, firstSemicolon);
-            sceneSaveState = state.slice(firstSemicolon + 1);
-        } else {
-            sceneDescId = state;
-        }
-
-        return this._loadSceneDescById(sceneDescId, sceneSaveState);
+    private _getSceneDescId(group: SceneGroup, desc: SceneDesc): string {
+        return `${group.id}/${desc.id}`;
     }
 
     private _getCurrentSceneDescId() {
         if (this.currentSceneGroup === null || this.currentSceneDesc === null)
             return null;
 
-        const groupId = this.currentSceneGroup.id;
-        const sceneId = this.currentSceneDesc.id;
-        return `${groupId}/${sceneId}`;
+        return this._getSceneDescId(this.currentSceneGroup, this.currentSceneDesc);
     }
 
-    private _saveState(forceUpdateURL: boolean = false) {
+    private _loadTimeState(sceneDescId: string): void {
+        const timeStateKey = `TimeState/${sceneDescId}`;
+        const timeStateStr = this.saveManager.loadState(timeStateKey);
+        if (!timeStateStr)
+            return;
+
+        const timeState = JSON.parse(timeStateStr) as TimeState;
+        this.ui.togglePlayPause(timeState.isPlaying);
+        this.sceneTimeScale = timeState.sceneTimeScale;
+        this.viewer.sceneTime = timeState.sceneTime;
+    }
+
+    private _saveCurrentTimeState(sceneDescId: string): void {
+        const timeState: TimeState = { isPlaying: this.ui.isPlaying, sceneTimeScale: this.sceneTimeScale, sceneTime: this.viewer.sceneTime };
+        const timeStateStr = JSON.stringify(timeState);
+        const timeStateKey = `TimeState/${sceneDescId}`;
+        this.saveManager.saveTemporaryState(timeStateKey, timeStateStr);
+    }
+
+    private _autoSaveState(forceUpdateURL: boolean = false) {
         if (this.currentSceneGroup === null || this.currentSceneDesc === null)
             return;
 
         const sceneStateStr = this._getSceneSaveState();
-        const currentDescId = this._getCurrentSceneDescId()!;
-        const key = this.saveManager.getSaveStateSlotKey(currentDescId, 0);
+        const currentSceneDescId = this._getCurrentSceneDescId()!;
+        const key = this.saveManager.getSaveStateSlotKey(currentSceneDescId, 0);
         this.saveManager.saveTemporaryState(key, sceneStateStr);
 
-        const saveState = `${currentDescId};${sceneStateStr}`;
-        this.ui.setSaveState(saveState);
+        if (IS_DEVELOPMENT)
+            this._saveCurrentTimeState(currentSceneDescId);
+
+        const saveState = `${currentSceneDescId};${sceneStateStr}`;
+        this.ui.setShareSaveState(saveState);
 
         let shouldUpdateURL = forceUpdateURL;
         if (!shouldUpdateURL) {
@@ -677,7 +726,7 @@ class Main {
     }
 
     private _saveStateAndUpdateURL(): void {
-        this._saveState(true);
+        this._autoSaveState(true);
     }
 
     private _getSaveStateSlotKey(slotIndex: number): string {
@@ -698,12 +747,14 @@ class Main {
 
         const sceneDescId = this._getCurrentSceneDescId()!;
         this.saveManager.setCurrentSceneDescId(sceneDescId);
-        this._saveStateAndUpdateURL();
 
         if (scene.createCameraController !== undefined)
             this.viewer.setCameraController(scene.createCameraController());
         if (this.viewer.cameraController === null)
             this.viewer.setCameraController(new FPSCameraController());
+
+        if (IS_DEVELOPMENT)
+            this._loadTimeState(this._getCurrentSceneDescId()!);
 
         if (!this._loadSceneSaveState(sceneStateStr)) {
             const camera = this.viewer.camera;
@@ -721,6 +772,7 @@ class Main {
             mat4.getTranslation(this.viewer.xrCameraController.offset, camera.worldMatrix);
         }
 
+        this._saveStateAndUpdateURL();
         this.ui.sceneChanged();
     }
 
@@ -746,7 +798,7 @@ class Main {
 
     private _loadSceneDesc(sceneGroup: SceneGroup, sceneDesc: SceneDesc, sceneStateStr: string | null = null, force: boolean = false): void {
         if (this.currentSceneDesc === sceneDesc && !force) {
-            this._loadSceneSaveState(sceneStateStr)
+            this._loadSceneSaveState(sceneStateStr);
             return;
         }
 

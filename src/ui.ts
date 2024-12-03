@@ -2805,7 +2805,7 @@ export class UI {
         this.syncVisibilityState();
     }
 
-    public setSaveState(saveState: string) {
+    public setShareSaveState(saveState: string) {
         const shareURL = buildShareURL(saveState);
         this.shareButton.setShareURL(shareURL);
     }
