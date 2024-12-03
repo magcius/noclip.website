@@ -265,8 +265,59 @@ class AnimationLoop implements ViewerUpdateInfo {
     };
 }
 
-function getSceneDescs(sceneGroup: SceneGroup): SceneDesc[] {
-    return sceneGroup.sceneDescs.filter((g) => typeof g !== 'string') as SceneDesc[];
+class SceneDatabase {
+    private sceneDescToGroup = new Map<SceneDesc, SceneGroup>();
+    private sceneDescToId = new Map<SceneDesc, string>();
+    private idToSceneDesc = new Map<string, SceneDesc>();
+
+    public onchanged: (() => void) | null = null;
+
+    constructor(public sceneGroups: (SceneGroup | string)[]) {
+        for (const sceneGroup of sceneGroups) {
+            if (typeof sceneGroup !== "object")
+                continue;
+
+            for (const sceneDesc of sceneGroup.sceneDescs)
+                if (typeof sceneDesc === "object")
+                    this.addSceneDesc(sceneGroup, sceneDesc);
+
+            if (sceneGroup.sceneIdMap !== undefined) {
+                for (const [altSceneId, sceneId] of sceneGroup.sceneIdMap) {
+                    const altSceneDescId = `${sceneGroup.id}/${altSceneId}`;
+                    const sceneDescId = `${sceneGroup.id}/${sceneId}`;
+                    const sceneDesc = assertExists(this.idToSceneDesc.get(sceneDescId));
+                    this.idToSceneDesc.set(altSceneDescId, sceneDesc);
+                }
+            }
+        }
+    }
+
+    private _makeSceneDescId(sceneGroup: SceneGroup, sceneDesc: SceneDesc): string {
+        return `${sceneGroup.id}/${sceneDesc.id}`;
+    }
+
+    public getSceneDescId(sceneDesc: SceneDesc): string {
+        return this.sceneDescToId.get(sceneDesc)!;
+    }
+
+    public getSceneDescGroup(sceneDesc: SceneDesc): SceneGroup {
+        return this.sceneDescToGroup.get(sceneDesc)!;
+    }
+
+    public getSceneDescForId(sceneDescId: string): SceneDesc | null {
+        return this.idToSceneDesc.get(sceneDescId) ?? null;
+    }
+
+    public addSceneDesc(sceneGroup: SceneGroup, sceneDesc: SceneDesc): void {
+        assert(sceneGroup.sceneDescs.includes(sceneDesc));
+        const id = this._makeSceneDescId(sceneGroup, sceneDesc);
+        this.sceneDescToGroup.set(sceneDesc, sceneGroup);
+        this.sceneDescToId.set(sceneDesc, id);
+        this.idToSceneDesc.set(id, sceneDesc);
+
+        if (this.onchanged !== null)
+            this.onchanged();
+    }
 }
 
 type TimeState = { isPlaying: boolean, sceneTimeScale: number, sceneTime: number };
@@ -275,13 +326,12 @@ class Main {
     public toplevel: HTMLElement;
     public canvas: HTMLCanvasElement;
     public viewer: Viewer;
-    public groups: (string | SceneGroup)[];
     public ui: UI;
     public saveManager = GlobalSaveManager;
 
     private droppedFileGroup: SceneGroup;
+    private sceneDatabase = new SceneDatabase(sceneGroups);
 
-    private currentSceneGroup: SceneGroup | null = null;
     private currentSceneDesc: SceneDesc | null = null;
 
     private loadingSceneDesc: SceneDesc | null = null;
@@ -366,13 +416,11 @@ class Main {
         this.dataFetcher = new DataFetcher(this.ui.sceneSelect);
         await this.dataFetcher.init();
 
-        this.groups = sceneGroups;
-
         this.droppedFileGroup = { id: "drops", name: "Dropped Files", sceneDescs: [] };
-        this.groups.push('Other');
-        this.groups.push(this.droppedFileGroup);
+        sceneGroups.push('Other');
+        sceneGroups.push(this.droppedFileGroup);
 
-        this._loadSceneGroups();
+        this.ui.sceneSelect.setSceneDatabase(this.sceneDatabase);
 
         window.onhashchange = this._onHashChange.bind(this);
 
@@ -416,14 +464,12 @@ class Main {
 
     private _loadInitialStateFromHash(): void {
         const [sceneDescId, sceneSaveState] = this._decodeHash();
-        const descGroup = this._findSceneDescById(sceneDescId);
-        if (descGroup !== null) {
-            const [group, desc] = descGroup;
+        const sceneDesc = this._findSceneDescById(sceneDescId);
+        if (sceneDesc !== null) {
             // Load save slot 0 from session storage.
-            const sceneDescId = `${group.id}/${desc.id}`;
             const key = this.saveManager.getSaveStateSlotKey(sceneDescId, 0);
             const sceneState = this.saveManager.loadState(key) ?? sceneSaveState;
-            this._loadSceneDesc(group, desc, sceneState);
+            this._loadSceneDesc(sceneDesc, sceneState);
         }
     }
 
@@ -467,7 +513,7 @@ class Main {
             this.isFrameStep = true;
         }
         if (inputManager.isKeyDownEventTriggered('F9'))
-            this._loadSceneDesc(this.currentSceneGroup!, this.currentSceneDesc!, this._getSceneSaveState(), true);
+            this._loadSceneDesc(this.currentSceneDesc!, this._getSceneSaveState(), true);
     }
 
     private async _onWebXRStateRequested(state: boolean) {
@@ -543,8 +589,8 @@ class Main {
         const files = await traverseFileSystemDataTransfer(transfer);
         const sceneDesc = new DroppedFileSceneDesc(files);
         this.droppedFileGroup.sceneDescs.push(sceneDesc);
-        this._loadSceneGroups();
-        this._loadSceneDesc(this.droppedFileGroup, sceneDesc);
+        this.sceneDatabase.addSceneDesc(this.droppedFileGroup, sceneDesc);
+        this._loadSceneDesc(sceneDesc);
     }
 
     private _onResize() {
@@ -633,25 +679,11 @@ class Main {
         }
     }
 
-    private _findSceneDescById(id: string): [SceneGroup, SceneDesc] | null {
+    private _findSceneDescById(id: string): SceneDesc | null {
         if (id === '')
             return null;
 
-        const [groupId, ...sceneRest] = id.split('/');
-        let sceneId = decodeURIComponent(sceneRest.join('/'));
-
-        const group = this.groups.find((g) => typeof g !== 'string' && g.id === groupId) as SceneGroup;
-        if (!group)
-            return null;
-
-        if (group.sceneIdMap !== undefined && group.sceneIdMap.has(sceneId))
-            sceneId = group.sceneIdMap.get(sceneId)!;
-
-        const desc = getSceneDescs(group).find((d) => d.id === sceneId);
-        if (!desc)
-            return null;
-
-        return [group, desc];
+        return this.sceneDatabase.getSceneDescForId(id);
     }
 
     private _loadSceneDescById(id: string, sceneState: string | null): void {
@@ -659,19 +691,14 @@ class Main {
         if (sceneDesc === null)
             return;
 
-        const [group, desc] = sceneDesc;
-        this._loadSceneDesc(group, desc, sceneState);
-    }
-
-    private _getSceneDescId(group: SceneGroup, desc: SceneDesc): string {
-        return `${group.id}/${desc.id}`;
+        this._loadSceneDesc(sceneDesc, sceneState);
     }
 
     private _getCurrentSceneDescId() {
-        if (this.currentSceneGroup === null || this.currentSceneDesc === null)
+        if (this.currentSceneDesc === null)
             return null;
 
-        return this._getSceneDescId(this.currentSceneGroup, this.currentSceneDesc);
+        return this.sceneDatabase.getSceneDescId(this.currentSceneDesc);
     }
 
     private _loadTimeState(sceneDescId: string): void {
@@ -694,7 +721,7 @@ class Main {
     }
 
     private _autoSaveState(forceUpdateURL: boolean = false) {
-        if (this.currentSceneGroup === null || this.currentSceneDesc === null)
+        if (this.currentSceneDesc === null)
             return;
 
         const sceneStateStr = this._getSceneSaveState();
@@ -776,8 +803,8 @@ class Main {
         this.ui.sceneChanged();
     }
 
-    private _onSceneDescSelected(sceneGroup: SceneGroup, sceneDesc: SceneDesc) {
-        this._loadSceneDesc(sceneGroup, sceneDesc);
+    private _onSceneDescSelected(sceneDesc: SceneDesc) {
+        this._loadSceneDesc(sceneDesc);
     }
 
     private doSaveStatesAction(action: SaveStatesAction, key: string): void {
@@ -796,7 +823,7 @@ class Main {
 
     private loadSceneDelta = 1;
 
-    private _loadSceneDesc(sceneGroup: SceneGroup, sceneDesc: SceneDesc, sceneStateStr: string | null = null, force: boolean = false): void {
+    private _loadSceneDesc(sceneDesc: SceneDesc, sceneStateStr: string | null = null, force: boolean = false): void {
         if (this.currentSceneDesc === sceneDesc && !force) {
             this._loadSceneSaveState(sceneStateStr);
             return;
@@ -815,13 +842,14 @@ class Main {
             this.destroyablePool[i].destroy(device);
         this.destroyablePool.length = 0;
 
+        const sceneGroup = this.sceneDatabase.getSceneDescGroup(sceneDesc);
+
         // Unhide any hidden scene groups upon being loaded.
         if (sceneGroup.hidden)
             sceneGroup.hidden = false;
 
-        this.currentSceneGroup = sceneGroup;
         this.currentSceneDesc = sceneDesc;
-        this.ui.sceneSelect.setCurrentDesc(this.currentSceneGroup, this.currentSceneDesc);
+        this.ui.sceneSelect.setCurrentDesc(sceneGroup, this.currentSceneDesc);
 
         this.ui.sceneSelect.setProgress(0);
 
@@ -871,10 +899,6 @@ class Main {
         document.title = `${sceneDesc.name} - ${sceneGroup.name} - noclip`;
     }
 
-    private _loadSceneGroups() {
-        this.ui.sceneSelect.setSceneGroups(this.groups);
-    }
-
     private _makeUI() {
         this.ui = new UI(this.viewer);
         this.ui.setEmbedMode(this.isEmbedMode);
@@ -897,10 +921,10 @@ class Main {
     }
 
     private _getSceneDownloadPrefix() {
-        const groupId = this.currentSceneGroup!.id;
+        const sceneGroup = this.sceneDatabase.getSceneDescGroup(this.currentSceneDesc!);
         const sceneId = this.currentSceneDesc!.id;
         const date = new Date();
-        return `${groupId}_${sceneId}_${date.toISOString()}`;
+        return `${sceneGroup.id}_${sceneId}_${date.toISOString()}`;
     }
 
     private _takeScreenshot(opaque: boolean = true) {
