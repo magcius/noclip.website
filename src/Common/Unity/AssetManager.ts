@@ -437,7 +437,7 @@ export class UnityMeshData {
     constructor(public inputLayout: GfxInputLayout, public vertexBuffers: GfxVertexBufferDescriptor[], public indexBuffer: GfxIndexBufferDescriptor, bbox: UnityAABB, submeshes: UnitySubMesh[], public indexBufferFormat: GfxFormat) {
         const center = vec3.fromValues(bbox.center.x, bbox.center.y, bbox.center.z);
         const extent = vec3.fromValues(bbox.extent.x, bbox.extent.y, bbox.extent.z);
-        this.bbox.setFromCenterAndExtents(center, extent);
+        this.bbox.setFromCenterAndHalfExtents(center, extent);
         this.submeshes = submeshes;
         this.indexBufferStride = getFormatCompByteSize(this.indexBufferFormat);
     }

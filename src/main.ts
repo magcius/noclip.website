@@ -459,12 +459,14 @@ class Main {
 
     private _onHashChange(): void {
         const [sceneDescId, sceneSaveState] = this._decodeHash();
-        return this._loadSceneDescById(sceneDescId, sceneSaveState);
+        const sceneDesc = this.sceneDatabase.getSceneDescForId(sceneDescId);
+        if (sceneDesc !== null)
+            this._loadSceneDesc(sceneDesc, sceneSaveState);
     }
 
     private _loadInitialStateFromHash(): void {
         const [sceneDescId, sceneSaveState] = this._decodeHash();
-        const sceneDesc = this._findSceneDescById(sceneDescId);
+        const sceneDesc = this.sceneDatabase.getSceneDescForId(sceneDescId);
         if (sceneDesc !== null) {
             // Load save slot 0 from session storage.
             const key = this.saveManager.getSaveStateSlotKey(sceneDescId, 0);
@@ -679,21 +681,6 @@ class Main {
         }
     }
 
-    private _findSceneDescById(id: string): SceneDesc | null {
-        if (id === '')
-            return null;
-
-        return this.sceneDatabase.getSceneDescForId(id);
-    }
-
-    private _loadSceneDescById(id: string, sceneState: string | null): void {
-        const sceneDesc = this._findSceneDescById(id);
-        if (sceneDesc === null)
-            return;
-
-        this._loadSceneDesc(sceneDesc, sceneState);
-    }
-
     private _getCurrentSceneDescId() {
         if (this.currentSceneDesc === null)
             return null;
@@ -866,7 +853,7 @@ class Main {
             device, dataFetcher, dataShare, uiContainer, destroyablePool, inputManager, viewerInput,
         };
 
-        // The age delta on pruneOldObjects determines whether any resources will be shared at all.
+        // The age delta on pruneOldObjects determines whether any resources willf be shared at all.
         // delta = 0 means that we destroy the set of resources used by the previous scene, before
         // we increment the age below fore the "new" scene, which is the only proper way to do leak
         // checking. Typically, we allow one old scene's worth of contents.

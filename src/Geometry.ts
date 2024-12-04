@@ -229,10 +229,10 @@ export class AABB {
             pZ < this.min[2] - rad || pZ > this.max[2] + rad);
     }
 
-    public extents(v: vec3): void {
-        v[0] = Math.max((this.max[0] - this.min[0]) / 2, 0);
-        v[1] = Math.max((this.max[1] - this.min[1]) / 2, 0);
-        v[2] = Math.max((this.max[2] - this.min[2]) / 2, 0);
+    public getHalfExtents(v: vec3): void {
+        v[0] = Math.max((this.max[0] - this.min[0]) * 0.5, 0);
+        v[1] = Math.max((this.max[1] - this.min[1]) * 0.5, 0);
+        v[2] = Math.max((this.max[2] - this.min[2]) * 0.5, 0);
     }
 
     public diagonalLengthSquared(): number {
@@ -248,9 +248,9 @@ export class AABB {
         v[2] = (this.min[2] + this.max[2]) / 2;
     }
 
-    public setFromCenterAndExtents(center: ReadonlyVec3, extents: ReadonlyVec3): void {
-        vec3.sub(this.min, center, extents);
-        vec3.add(this.max, center, extents);
+    public setFromCenterAndHalfExtents(center: ReadonlyVec3, halfExtents: ReadonlyVec3): void {
+        vec3.sub(this.min, center, halfExtents);
+        vec3.add(this.max, center, halfExtents);
     }
 
     public cornerPoint(dst: vec3, i: number): void {
@@ -290,7 +290,7 @@ export class AABB {
     }
 
     public isEmpty(): boolean {
-        this.extents(scratchVec3a);
+        this.getHalfExtents(scratchVec3a);
         return scratchVec3a[0] === 0 && scratchVec3a[1] === 0 && scratchVec3a[2] === 0;
     }
 

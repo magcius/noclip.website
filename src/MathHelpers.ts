@@ -528,7 +528,7 @@ export function float32AsBits(x: number): number {
 }
 
 /**
- * Reflects a given vector
+ * Reflects a given vector {@param src} around {@param normal}.
  */
 export function reflectVec3(dst: vec3, source: ReadonlyVec3, normal: ReadonlyVec3): void {
     const dot = -2.0 * vec3.dot(source, normal);
@@ -537,6 +537,18 @@ export function reflectVec3(dst: vec3, source: ReadonlyVec3, normal: ReadonlyVec
 
 export function vec3SetAll(dst: vec3, v: number): void {
     vec3.set(dst, v, v, v);
+}
+
+export function vec3FromBasis2(dst: vec3, pt: ReadonlyVec3, b0: ReadonlyVec3, s0: number, b1: ReadonlyVec3, s1: number): void {
+    dst[0] = pt[0] + b0[0] * s0 + b1[0] * s1;
+    dst[1] = pt[1] + b0[1] * s0 + b1[1] * s1;
+    dst[2] = pt[2] + b0[2] * s0 + b1[2] * s1;
+}
+
+export function vec3FromBasis3(dst: vec3, pt: ReadonlyVec3, b0: ReadonlyVec3, s0: number, b1: ReadonlyVec3, s1: number, b2: ReadonlyVec3, s2: number): void {
+    dst[0] = pt[0] + b0[0] * s0 + b1[0] * s1 + b2[0] * s2;
+    dst[1] = pt[1] + b0[1] * s0 + b1[1] * s1 + b2[1] * s2;
+    dst[2] = pt[2] + b0[2] * s0 + b1[2] * s1 + b2[2] * s2;
 }
 
 export const enum CalcBillboardFlags {

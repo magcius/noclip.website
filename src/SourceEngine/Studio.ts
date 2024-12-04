@@ -1851,7 +1851,10 @@ class StudioModelMeshInstance {
         if (this.meshData.eyeballIndex === null || this.materialInstance === null)
             return;
 
-        const irisTransform = assertExists(this.materialInstance.paramGetMatrix('$iristransform'));
+        if (!this.materialInstance.paramExists('$iristransform'))
+            return;
+
+        const irisTransform = this.materialInstance.paramGetMatrix('$iristransform');
 
         const eyeball = assertExists(this.submodelData.eyeball[this.meshData.eyeballIndex]);
         transformVec3Mat4w1(scratchVec3a, modelInstance.worldFromBoneMatrix[eyeball.bone], eyeball.origin);
