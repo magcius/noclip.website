@@ -414,8 +414,6 @@ interface DecalResult {
     vertexData: ArrayBuffer;
     indexData: ArrayBuffer;
     surfaces: DecalSurface[];
-    faces: number[];
-    overlayResult: OverlayResult;
 }
 
 interface OverlaySurface {
@@ -650,8 +648,6 @@ function buildDecal(pt: ReadonlyVec3, halfWidth: number, halfHeight: number, que
     const surfacePlane = new Plane();
     const textureSpaceBasis = nArray(3, () => vec3.create());
     const dpt = vec3.create();
-
-    const renderer = window.main.scene as SourceRenderer;
 
     for (const face of faces) {
         const faceInfo = faceInfos[face];
@@ -2168,27 +2164,7 @@ export class BSPFile {
             surfaces.push({ startIndex, indexCount, lightmapPackerPageIndex, bbox });
         }
 
-        return { vertexData: vertexDataArray.finalize(), indexData: indexDataArray.finalize(), surfaces, faces: [... faces], overlayResult };
-    }
-
-    public debugDrawFace(clipFromWorldMatrix: ReadonlyMat4, idx: number): void {
-        const faceInfo = this.faceInfos[idx];
-        const p = nArray(3, () => new MeshVertex());
-        const vertexData = new Float32Array(this.vertexData);
-        const indexData = new Uint32Array(this.indexData);
-        for (let i = faceInfo.startIndex; i < faceInfo.endIndex; i += 3) {
-            for (let j = 0; j < 3; j++)
-                fetchVertexFromBuffer(p[j], vertexData, indexData[i+j]);
-
-            const c = vec3.create();
-            for (let j = 0; j < 3; j++) {
-                const p0 = p[j], p1 = p[(j + 1) % 3];
-                vec3.scaleAndAdd(c, c, p0.position, 1/3);
-                drawWorldSpaceLine(getDebugOverlayCanvas2D(), clipFromWorldMatrix, p0.position, p1.position);
-            }
-
-            drawWorldSpaceText(getDebugOverlayCanvas2D(), clipFromWorldMatrix, c, `${idx}/${i-faceInfo.startIndex}`);
-        }
+        return { vertexData: vertexDataArray.finalize(), indexData: indexDataArray.finalize(), surfaces };
     }
 
     public destroy(): void {
