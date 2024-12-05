@@ -5058,7 +5058,7 @@ class d_a_py_lk extends fopAc_ac_c {
     private footData: LkFootData[] = nArray(2, i => ({ toePos: vec3.create(), heelPos: vec3.create() }));
     private anmTranslation = vec3.create();
 
-    private handStyleLeft: LkHandStyle; // @TODO: Handle non-standard hand rendering
+    private handStyleLeft: LkHandStyle; // @TODO: Handle non-standard hand rendering. See setDrawHandModel().
     private handStyleRight: LkHandStyle;
     private equippedItem: LkEquipItem;
     private equippedItemModel: J3DModelInstance | null = null;
@@ -5200,9 +5200,10 @@ class d_a_py_lk extends fopAc_ac_c {
         matInstA.setColorWriteEnabled(false);
         matInstA.setAlphaWriteEnabled(true);
 
-        // @TODO: This material is marked as translucent in the original BMD. Noclip draws translucent shapes after all
-        //        opaque shapes, meaning that this renders AFTER Link, which defeats the purpose of modifying the sort
-        //        layer. Is there something wrong with noclip's translucency handling?
+        // @NOTE: This material is marked as translucent in the original BMD. It is manually drawn after Link's head but 
+        //        before his body. Since we don't actually need any translucent behavior, mark it as opaque so that it can 
+        //        be drawn before his body.
+        // @TODO: We need to have a separate sort key for head vs body, as the eyes will currently render on top of Link's arms.
         matInstA.materialData.material.translucent = false;
 
         // Clear the alpha mask written by the *damA materials so it doesn't interfere with other translucent objects
