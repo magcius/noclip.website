@@ -5058,7 +5058,7 @@ class d_a_py_lk extends fopAc_ac_c {
     private footData: LkFootData[] = nArray(2, i => ({ toePos: vec3.create(), heelPos: vec3.create() }));
     private anmTranslation = vec3.create();
 
-    private handStyleLeft: LkHandStyle;
+    private handStyleLeft: LkHandStyle; // @TODO: Handle non-standard hand rendering
     private handStyleRight: LkHandStyle;
     private equippedItem: LkEquipItem;
     private equippedItemModel: J3DModelInstance | null = null;
