@@ -4159,6 +4159,8 @@ class infodecal extends BaseEntity {
     private indexBuffer: GfxBuffer | null = null;
     private surfaces: DecalSurface[] = [];
     private bbox = new AABB();
+    private faces: number[] = [];
+    private originFaces: number[][] = [];
 
     constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
         super(entitySystem, renderContext, bspRenderer, entity);
@@ -4173,7 +4175,13 @@ class infodecal extends BaseEntity {
         materialInstance.hasVertexColorInput = false;
         await materialInstance.init(renderContext);
         this.materialInstance = materialInstance;
+
         this.spawnDecal(renderContext);
+
+        // if (this.entity.origin === "4142.88 -1932.05 -3822.63") {
+        //     this.spawnDecal(renderContext);
+        //     (this as any).debug = true;
+        // }
     }
 
     private spawnDecal(renderContext: SourceRenderContext): void {
@@ -4185,12 +4193,21 @@ class infodecal extends BaseEntity {
 
         this.getAbsOrigin(scratchVec3a);
         const decalResult = this.bspRenderer.bsp.buildDecal(scratchVec3a, halfWidth, halfHeight);
+
+        this.faces = decalResult.faces;
+
         const device = renderContext.renderCache.device;
         this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, decalResult.vertexData);
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, decalResult.indexData);
         this.surfaces = decalResult.surfaces;
+
         for (let i = 0; i < this.surfaces.length; i++)
             this.bbox.union(this.bbox, this.surfaces[i].bbox);
+
+        for (let i = 0; i < decalResult.overlayResult.surfaces.length; i++) {
+            const s = decalResult.overlayResult.surfaces[i];
+            this.originFaces.push(s.originFaceList);
+        }
     }
 
     public override getLocalRenderBounds(dst: AABB): boolean {
@@ -4221,6 +4238,48 @@ class infodecal extends BaseEntity {
             renderInst.setDrawCount(surface.indexCount, surface.startIndex);
             this.materialInstance.getRenderInstListForView(renderContext.currentView).submitRenderInst(renderInst);
         }
+
+        if ((this as any).debug) {
+            this.getAbsOrigin(scratchVec3a);
+            drawWorldSpacePoint(getDebugOverlayCanvas2D(), renderContext.currentView.clipFromWorldMatrix, scratchVec3a);
+            drawWorldSpaceText(getDebugOverlayCanvas2D(), renderContext.currentView.clipFromWorldMatrix, scratchVec3a, '' + this.entity['texture']);
+    
+            const bsp = this.bspRenderer.bsp;
+            const drawFaces = false, drawResultFaces = false, drawNode = false, drawQueryAABB = false;
+            const rebuild = true;
+
+            if (drawFaces)
+            for (let i = 0; i < this.faces.length; i++)
+                bsp.debugDrawFace(renderContext.currentView.clipFromWorldMatrix, this.faces[i]);
+
+            if (drawResultFaces)
+            for (let i = 0; i < this.originFaces.length; i++) {
+                for (let j = 0; j < this.originFaces[i].length; j++)
+                    bsp.debugDrawFace(renderContext.currentView.clipFromWorldMatrix, this.originFaces[i][j]);
+            }
+
+            this.getAbsOrigin(scratchVec3a);
+            vec3SetAll(scratchVec3b, 10);
+            const aabb = new AABB();
+            aabb.setFromCenterAndHalfExtents(scratchVec3a, scratchVec3b);
+
+            if (drawNode)
+            bsp.queryAABB(aabb, (leaf) => {
+                drawWorldSpaceAABB(getDebugOverlayCanvas2D(), renderContext.currentView.clipFromWorldMatrix, leaf.bbox, null, Cyan);
+                return true;
+            });
+    
+            if (drawQueryAABB)
+            drawWorldSpaceAABB(getDebugOverlayCanvas2D(), renderContext.currentView.clipFromWorldMatrix, aabb, null, Yellow);
+
+            if (rebuild) {
+                assert(this.materialInstance !== null);
+                const tex = assertExists(this.materialInstance.representativeTexture);
+                const size = tex.width * this.materialInstance.paramGetNumber('$decalscale');
+                const decalResult = this.bspRenderer.bsp.buildDecal(scratchVec3a, size, size);
+            }
+        }
+
         renderInstManager.popTemplate();
     }
 

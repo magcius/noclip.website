@@ -65,6 +65,10 @@ export class Plane {
         this.d = -vec3.dot(this.n, p0);
     }
 
+    public projectToPlane(dst: vec3, pt: ReadonlyVec3): void {
+        vec3.scaleAndAdd(dst, pt, this.n, -this.distanceVec3(pt));
+    }
+
     public intersectLine(dst: vec3, p0: ReadonlyVec3, dir: ReadonlyVec3): void {
         const t = -(vec3.dot(this.n, p0) + this.d) / vec3.dot(this.n, dir);
         vec3.scaleAndAdd(dst, p0, dir, t);
@@ -88,8 +92,6 @@ export class Plane {
 
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
-const scratchVec3c = vec3.create();
-const scratchVec3d = vec3.create();
 export class AABB {
     public min = vec3.create();
     public max = vec3.create();

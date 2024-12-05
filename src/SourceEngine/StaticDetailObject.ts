@@ -1,24 +1,23 @@
 
+import { mat4, ReadonlyVec3, vec3, vec4 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
-import { assert, readString } from "../util.js";
-import { vec4, vec3, mat4, ReadonlyVec3 } from "gl-matrix";
-import { Color, colorClampLDR, colorCopy, colorFromRGBA8, colorNewCopy, colorNewFromRGBA, colorNewFromRGBA8, White } from "../Color.js";
-import { SourceRenderContext, BSPRenderer } from "./Main.js";
-import { GfxInputLayout, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxFormat, GfxVertexBufferFrequency, GfxDevice, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform.js";
-import { computeModelMatrixSRT, transformVec3Mat4w1, MathConstants, getMatrixTranslation, scaleMatrix } from "../MathHelpers.js";
-import { GfxRenderInstManager, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager.js";
 import { computeViewSpaceDepthFromWorldSpacePoint } from "../Camera.js";
+import { Color, colorClampLDR, colorCopy, colorFromRGBA8, colorNewCopy, colorNewFromRGBA, White } from "../Color.js";
 import { Endianness } from "../endian.js";
-import { fillColor } from "../gfx/helpers/UniformBufferHelpers.js";
-import { StudioModelInstance, HardwareVertData, computeModelMatrixPosQAngle } from "./Studio.js";
-import BitMap from "../BitMap.js";
-import { BSPFile } from "./BSPFile.js";
 import { AABB } from "../Geometry.js";
-import { GfxTopology, makeTriangleIndexBuffer } from "../gfx/helpers/TopologyHelpers.js";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
+import { GfxTopology, makeTriangleIndexBuffer } from "../gfx/helpers/TopologyHelpers.js";
+import { fillColor } from "../gfx/helpers/UniformBufferHelpers.js";
+import { GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform.js";
+import { GfxRenderInstManager, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager.js";
+import { computeModelMatrixSRT, getMatrixTranslation, MathConstants, scaleMatrix, transformVec3Mat4w1 } from "../MathHelpers.js";
+import { assert, readString } from "../util.js";
+import { BSPFile } from "./BSPFile.js";
+import { BSPRenderer, SourceRenderContext } from "./Main.js";
 import { unpackColorRGBExp32 } from "./Materials/Lightmap.js";
-import { BaseMaterial, MaterialShaderTemplateBase, EntityMaterialParameters } from "./Materials/MaterialBase.js";
+import { BaseMaterial, EntityMaterialParameters, MaterialShaderTemplateBase } from "./Materials/MaterialBase.js";
 import { LightCache } from "./Materials/WorldLight.js";
+import { computeModelMatrixPosQAngle, HardwareVertData, StudioModelInstance } from "./Studio.js";
 
 //#region Detail Models
 const enum DetailPropOrientation { NORMAL, SCREEN_ALIGNED, SCREEN_ALIGNED_VERTICAL, }
@@ -156,20 +155,6 @@ export function computeMatrixForForwardDir(dst: mat4, fwd: ReadonlyVec3, pos: Re
     computeModelMatrixSRT(dst, 1, 1, 1, 0, pitch, yaw, pos[0], pos[1], pos[2]);
 }
 
-function linearToTexGamma(v: number): number {
-    const texGamma = 2.2;
-    return Math.pow(v, 1.0 / texGamma);
-}
-
-function colorLinearToTexGamma(c: Color): Color {
-    const r = linearToTexGamma(c.r);
-    const g = linearToTexGamma(c.g);
-    const b = linearToTexGamma(c.b);
-    const ret = colorNewFromRGBA(r, g, b, c.a);
-    colorClampLDR(ret, ret);
-    return ret;
-}
-
 const scratchVec3 = vec3.create();
 const scratchMatrix = mat4.create();
 export class DetailPropLeafRenderer {
@@ -225,7 +210,7 @@ export class DetailPropLeafRenderer {
                 entry.origin[2] -= entry.height * 0.5;
                 entry.pos = detailModel.pos;
                 entry.texcoord = desc.texcoord;
-                entry.color = colorLinearToTexGamma(detailModel.lighting);
+                entry.color = detailModel.lighting;
 
                 vec3.add(this.centerPoint, this.centerPoint, entry.pos);
                 this.spriteEntries.push(entry);

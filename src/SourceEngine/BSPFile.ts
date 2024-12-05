@@ -1,7 +1,7 @@
 
 // Source Engine BSP.
 
-import { ReadonlyVec2, ReadonlyVec3, ReadonlyVec4, vec2, vec3, vec4 } from "gl-matrix";
+import { ReadonlyMat4, ReadonlyVec2, ReadonlyVec3, ReadonlyVec4, vec2, vec3, vec4 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import BitMap from "../BitMap.js";
 import { IS_DEVELOPMENT } from "../BuildVersion.js";
@@ -15,6 +15,8 @@ import { parseZipFile, ZipFile } from "../ZipFile.js";
 import { unpackColorRGBExp32 } from "./Materials/Lightmap.js";
 import { deserializeGameLump_dprp, deserializeGameLump_sprp, DetailObjects, StaticObjects } from "./StaticDetailObject.js";
 import { pairs2obj, ValveKeyValueParser, VKFPair } from "./VMT.js";
+import { drawWorldSpaceLine, drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk.js";
+import { SourceRenderer } from "./Main.js";
 
 //#region Data Structures
 export interface FaceLightmapData {
@@ -385,6 +387,8 @@ class BSPFaceInfo {
     public surfaceIndex: number = -1;
     public startIndex: number = 0;
     public endIndex: number = 0;
+    public plane: Readonly<Plane>;
+    public bbox: AABB | null = null; // If null, it's a displacement surface and has a resulting bbox.
     public overlaySurfaces: number[] = [];
 }
 
@@ -398,6 +402,20 @@ class OverlayInfo {
     public u1 = 0.0;
     public v0 = 0.0;
     public v1 = 0.0;
+}
+
+export interface DecalSurface {
+    startIndex: number;
+    indexCount: number;
+    lightmapPackerPageIndex: number;
+}
+
+interface DecalResult {
+    vertexData: ArrayBuffer;
+    indexData: ArrayBuffer;
+    surfaces: DecalSurface[];
+    faces: number[];
+    overlayResult: OverlayResult;
 }
 
 interface OverlaySurface {
@@ -627,14 +645,25 @@ function buildOverlay(overlayInfo: OverlayInfo, faceInfos: BSPFaceInfo[], bspSur
     return { surfaces };
 }
 
-function buildDecal(pt: ReadonlyVec3, halfWidth: number, halfHeight: number, faces: number[], faceInfos: BSPFaceInfo[], bspSurfaces: BSPSurface[], indexData: Uint32Array, vertexData: Float32Array): OverlayResult {
+function buildDecal(pt: ReadonlyVec3, halfWidth: number, halfHeight: number, queryAABB: Readonly<AABB>, faces: Iterable<number>, faceInfos: BSPFaceInfo[], bspSurfaces: BSPSurface[], indexData: Uint32Array, vertexData: Float32Array): OverlayResult {
     const surfaces: OverlaySurface[] = [];
     const surfacePlane = new Plane();
     const textureSpaceBasis = nArray(3, () => vec3.create());
+    const dpt = vec3.create();
 
-    for (let i = 0; i < faces.length; i++) {
-        const face = faces[i];
+    const renderer = window.main.scene as SourceRenderer;
+
+    for (const face of faces) {
         const faceInfo = faceInfos[face];
+
+        if (faceInfo.bbox !== null) {
+            if (!AABB.intersect(faceInfo.bbox, queryAABB))
+                continue;
+        } else {
+            const maxDecalDistance = 4;
+            if (Math.abs(faceInfo.plane.distanceVec3(pt)) >= maxDecalDistance)
+                continue;
+        }
 
         const vertex: MeshVertex[] = [];
         const indices: number[] = [];
@@ -649,10 +678,6 @@ function buildDecal(pt: ReadonlyVec3, halfWidth: number, halfHeight: number, fac
 
             // Build the surface plane.
             surfacePlane.setTri(surfacePoints[0].position, surfacePoints[2].position, surfacePoints[1].position);
-
-            const maxDecalDistance = 4;
-            if (Math.abs(surfacePlane.distanceVec3(pt)) >= maxDecalDistance)
-                continue;
 
             vec3.copy(textureSpaceBasis[2], surfacePlane.n);
 
@@ -670,13 +695,16 @@ function buildDecal(pt: ReadonlyVec3, halfWidth: number, halfHeight: number, fac
             normToLength(textureSpaceBasis[0], halfWidth);
             normToLength(textureSpaceBasis[1], halfHeight);
 
+            // Project our origin point down to the plane.
+            surfacePlane.projectToPlane(dpt, pt);
+
             // Compute the four corners of the decal.
             const overlayPoints = nArray(4, () => new MeshVertex());
             for (let i = 0; i < 4; i++) {
                 const p = overlayPoints[i];
                 const sx = (0b0110 >>> i) & 1;
                 const sy = (0b1100 >>> i) & 1;
-                vec3FromBasis2(p.position, pt, textureSpaceBasis[0], sx * 2 - 1, textureSpaceBasis[1], sy * 2 - 1);
+                vec3FromBasis2(p.position, dpt, textureSpaceBasis[0], sx * 2 - 1, textureSpaceBasis[1], sy * 2 - 1);
                 vec2.set(p.uv, sx, sy);
             }
 
@@ -1003,6 +1031,14 @@ function readVec4(view: DataView, offs: number): vec4 {
     const z = view.getFloat32(offs + 0x08, true);
     const w = view.getFloat32(offs + 0x0C, true);
     return vec4.fromValues(x, y, z, w);
+}
+
+function readPlane(view: DataView, offs: number): Plane {
+    const x = view.getFloat32(offs + 0x00, true);
+    const y = view.getFloat32(offs + 0x04, true);
+    const z = view.getFloat32(offs + 0x08, true);
+    const d = view.getFloat32(offs + 0x0C, true);
+    return new Plane(x, y, z, -d);
 }
 
 //#endregion
@@ -1715,8 +1751,8 @@ export class BSPFile {
             vec3.cross(scratchNormal, scratchTangentS, scratchTangentT);
 
             // Detect if we need to flip tangents.
-            const plane = readVec3(planes, planenum * 0x14);
-            const tangentSSign = vec3.dot(plane, scratchNormal) > 0.0 ? -1.0 : 1.0;
+            const plane = readPlane(planes, planenum * 0x14);
+            const tangentSSign = vec3.dot(plane.n, scratchNormal) > 0.0 ? -1.0 : 1.0;
 
             const lightmapData = this.lightmapData[face.index];
             const lightmapPackerPageIndex = lightmapData.pageIndex;
@@ -1730,6 +1766,7 @@ export class BSPFile {
             const faceInfo = this.faceInfos[face.index];
             faceInfo.texinfo = texinfos[face.texinfo];
             faceInfo.startIndex = dstOffsIndex;
+            faceInfo.plane = plane;
 
             let indexCount = 0;
             let vertexCount = 0;
@@ -1764,6 +1801,7 @@ export class BSPFile {
 
                 const result = buildDisplacement(disp, corners, disp_verts, tex.textureMapping);
                 bbox = result.bbox;
+                faceInfo.bbox = result.bbox;
 
                 for (let j = 0; j < result.vertex.length; j++) {
                     const v = result.vertex[j];
@@ -2092,19 +2130,19 @@ export class BSPFile {
         vec3SetAll(scratchVec3a, size);
         aabb.setFromCenterAndHalfExtents(pt, scratchVec3a);
 
-        const faces: number[] = [];
+        const faces = new Set<number>();
         this.queryAABB(aabb, (leaf) => {
             for (let i = 0; i < leaf.faces.length; i++) {
                 const face = leaf.faces[i];
                 const faceInfo = this.faceInfos[face];
                 if (faceInfo.texinfo === null || faceInfo.texinfo.flags & TexinfoFlags.NODECALS)
                     continue;
-                faces.push(face);
+                faces.add(face);
             }
             return true;
         });
 
-        const overlayResult = buildDecal(pt, halfWidth, halfHeight, faces, this.faceInfos, this.surfaces, new Uint32Array(this.indexData), new Float32Array(this.vertexData));
+        const overlayResult = buildDecal(pt, halfWidth, halfHeight, aabb, faces, this.faceInfos, this.surfaces, new Uint32Array(this.indexData), new Float32Array(this.vertexData));
 
         const vertexDataArray = new ResizableArrayBuffer();
         const indexDataArray = new ResizableArrayBuffer();
@@ -2130,7 +2168,27 @@ export class BSPFile {
             surfaces.push({ startIndex, indexCount, lightmapPackerPageIndex, bbox });
         }
 
-        return { vertexData: vertexDataArray.finalize(), indexData: indexDataArray.finalize(), surfaces };
+        return { vertexData: vertexDataArray.finalize(), indexData: indexDataArray.finalize(), surfaces, faces: [... faces], overlayResult };
+    }
+
+    public debugDrawFace(clipFromWorldMatrix: ReadonlyMat4, idx: number): void {
+        const faceInfo = this.faceInfos[idx];
+        const p = nArray(3, () => new MeshVertex());
+        const vertexData = new Float32Array(this.vertexData);
+        const indexData = new Uint32Array(this.indexData);
+        for (let i = faceInfo.startIndex; i < faceInfo.endIndex; i += 3) {
+            for (let j = 0; j < 3; j++)
+                fetchVertexFromBuffer(p[j], vertexData, indexData[i+j]);
+
+            const c = vec3.create();
+            for (let j = 0; j < 3; j++) {
+                const p0 = p[j], p1 = p[(j + 1) % 3];
+                vec3.scaleAndAdd(c, c, p0.position, 1/3);
+                drawWorldSpaceLine(getDebugOverlayCanvas2D(), clipFromWorldMatrix, p0.position, p1.position);
+            }
+
+            drawWorldSpaceText(getDebugOverlayCanvas2D(), clipFromWorldMatrix, c, `${idx}/${i-faceInfo.startIndex}`);
+        }
     }
 
     public destroy(): void {
