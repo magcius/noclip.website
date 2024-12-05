@@ -5038,7 +5038,7 @@ class d_a_py_lk extends fopAc_ac_c {
 
     private demoMode: number = LinkDemoMode.None;
     private demoClampToGround = true;
-    private gdnChk = new dBgS_GndChk()
+    private gndChk = new dBgS_GndChk()
 
     private isWearingCasualClothes = false;
     private texMappingClothes: TextureMapping;
@@ -5101,9 +5101,9 @@ class d_a_py_lk extends fopAc_ac_c {
         this.posMove(globals);
 
         // Evaluate for collisions, clamp to ground
-        this.gdnChk.Reset();
-        vec3.scaleAndAdd(this.gdnChk.pos, this.pos, Vec3UnitY, 30.1);
-        const groundHeight = globals.scnPlay.bgS.GroundCross(this.gdnChk);
+        this.gndChk.Reset();
+        vec3.scaleAndAdd(this.gndChk.pos, this.pos, Vec3UnitY, 30.1);
+        const groundHeight = globals.scnPlay.bgS.GroundCross(this.gndChk);
         this.autoGroundHit();
 
         // If we're pulling position directly from the JStudio tool, ignore collisions and animation root motion
@@ -5315,7 +5315,7 @@ class d_a_py_lk extends fopAc_ac_c {
     }
 
     private autoGroundHit() {
-        const groundHeight = this.gdnChk.retY;
+        const groundHeight = this.gndChk.retY;
         if(groundHeight == -Infinity) {
             return;
         }
@@ -5405,7 +5405,7 @@ class d_a_py_lk extends fopAc_ac_c {
 
         // Adjust speed when on slopes
         let groundAngle = 0;
-        if( this.gdnChk.polyInfo.bgIdx >= 0 && this.gdnChk.polyInfo.triIdx >= 0) { // @TODO: Should be in cBgS::ChkPolySafe()
+        if( this.gndChk.polyInfo.bgIdx >= 0 && this.gndChk.polyInfo.triIdx >= 0) { // @TODO: Should be in cBgS::ChkPolySafe()
             groundAngle = this.getGroundAngle(globals, this.rot[1]);
         }
         moveVel *= Math.cos(cM_s2rad(groundAngle));        
@@ -5431,7 +5431,7 @@ class d_a_py_lk extends fopAc_ac_c {
      * @param dir the s16 angle which the actor is facing
      */
     private getGroundAngle(globals: dGlobals, dir: number) {
-        const gndPlane = globals.scnPlay.bgS.GetTriPla(this.gdnChk.polyInfo.bgIdx, this.gdnChk.polyInfo.triIdx);
+        const gndPlane = globals.scnPlay.bgS.GetTriPla(this.gndChk.polyInfo.bgIdx, this.gndChk.polyInfo.triIdx);
         const norm = gndPlane.n;
     
         if (gndPlane && norm[1] >= 0.5) {
