@@ -5017,7 +5017,8 @@ const enum LkHandStyle {
     HoldShield = 8,
 }
 
-class d_a_py_lk extends fopAc_ac_c {
+const enum d_a_py_lk_mode { wait, tool }
+class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
     public static PROCESS_NAME = dProcName_e.d_a_py_lk;
     private static ARC_NAME = "Link";
     private static LINK_BDL_CL = 0x18;
@@ -5029,8 +5030,7 @@ class d_a_py_lk extends fopAc_ac_c {
     private static TOE_POS = vec3.fromValues(6.0, 3.25, 0.0);
     private static HEEL_POS = vec3.fromValues(-6.0, 3.25, 0.0);
 
-    private demoProcInitFuncTable = new Map<LinkDemoMode, () => boolean>();
-    private proc: (globals: dGlobals) => void;
+    public curMode = d_a_py_lk_mode.wait;
 
     private model: J3DModelInstance;
     private modelSwordHilt: J3DModelInstance;
@@ -5062,6 +5062,11 @@ class d_a_py_lk extends fopAc_ac_c {
     private handStyleRight: LkHandStyle;
     private equippedItem: LkEquipItem;
     private equippedItemModel: J3DModelInstance | null = null;
+    
+    private mode_tbl = [
+        this.procWaitInit, this.procWait,
+        this.procToolInit, this.procTool,
+    ];
 
     protected override subload(globals: dGlobals, prm: fopAcM_prm_class | null): cPhs__Status {
         this.loadAnmTable(globals);
@@ -5094,7 +5099,7 @@ class d_a_py_lk extends fopAc_ac_c {
         this.anmBtk.play(deltaTimeFrames);
 
         // Run the current custom update process (Walk, Idle, Swim, etc)
-        if (this.proc) this.proc(globals);
+        modeProcExec(globals, this, this.mode_tbl, deltaTimeFrames);
 
         // Apply root motion from the animation, and adjust position based on foot movement
         const rawPos = vec3.copy(this.rawPos, this.pos); 
@@ -5107,7 +5112,7 @@ class d_a_py_lk extends fopAc_ac_c {
         this.autoGroundHit();
 
         // If we're pulling position directly from the JStudio tool, ignore collisions and animation root motion
-        if (this.proc == this.procTool) {
+        if (this.curMode == d_a_py_lk_mode.tool) {
             vec3.copy(this.pos, rawPos);
             if (this.demoClampToGround && groundHeight != -Infinity) {
                 this.pos[1] = groundHeight;
@@ -5290,23 +5295,12 @@ class d_a_py_lk extends fopAc_ac_c {
         if (pred) {
             switch (this.demoMode) {
                 case LinkDemoMode.None: return false;
-
-                case LinkDemoMode.Tool:
-                    this.proc = this.procTool;
-                    break;
-
-                case LinkDemoMode.SetPosRotEquip:
-                    this.procWait_init(globals);
-                    break;
+                case LinkDemoMode.Tool: modeProcInit(globals, this, this.mode_tbl, d_a_py_lk_mode.tool); break;
+                case LinkDemoMode.SetPosRotEquip: modeProcInit(globals, this, this.mode_tbl, d_a_py_lk_mode.wait); break;
 
                 default:
-                    const initFunc = this.demoProcInitFuncTable.get(this.demoMode);
-                    if (initFunc) {
-                        initFunc();
-                    } else {
-                        // console.warn('Not yet implemented demoMode', LinkDemoMode[this.demoMode]);
-                        // debugger;
-                    }
+                    // console.warn('Not yet implemented demoMode', LinkDemoMode[this.demoMode]);
+                    // debugger;
                     break;
             }
             return true;
@@ -5459,6 +5453,10 @@ class d_a_py_lk extends fopAc_ac_c {
     }
 
     // Process used while a demo is telling Link to play a direct animation
+    private procToolInit() {
+        
+    }
+
     private procTool(globals: dGlobals) {
         const demoActor = globals.scnPlay.demo.getSystem().getActor(this.demoActorID);
         if (!demoActor)
@@ -5570,6 +5568,16 @@ class d_a_py_lk extends fopAc_ac_c {
         }
     }
 
+    private procWaitInit(globals: dGlobals ) {
+        if( this.curMode != d_a_py_lk_mode.wait ) {
+            this.setSingleMoveAnime(globals, LkAnim.WAITS);
+        }
+    }
+
+    private procWait() {
+
+    }
+
     private setSwordModel(globals: dGlobals) {
         this.equippedItem = LkEquipItem.Sword;
         this.equippedItemModel = this.initModel(globals, d_a_py_lk.LINK_BDL_SWA);
@@ -5595,10 +5603,6 @@ class d_a_py_lk extends fopAc_ac_c {
             mat4.copy(this.modelSwordHilt.modelMatrix, handLJointMtx);
             this.modelSwordHilt.calcAnim();
         }
-    }
-
-    private procWait_init(globals: dGlobals) {
-        this.setSingleMoveAnime(globals, LkAnim.WAITS);
     }
 
     private loadAnmTable(globals: dGlobals) {
