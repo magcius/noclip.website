@@ -279,6 +279,9 @@ class WoodModel {
         material.alphaTest.referenceA = kAlphaCutoff;
         material.alphaTest.referenceB = kAlphaCutoff;
         material.hasDynamicAlphaTest = true;
+        material.ropInfo.fogType = GX.FogType.PERSP_LIN;
+        material.ropInfo.fogAdjEnabled = true;
+        material.hasFogBlock = true;
         this.bushMaterial = new GXMaterialHelperGfx(material);
 
         const bushTexture = createTexture(matRegisters, l_Txa_swood_bTEX, 'l_Txa_swood_bTEX');
