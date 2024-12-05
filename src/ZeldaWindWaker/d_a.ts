@@ -5017,7 +5017,7 @@ const enum LkHandStyle {
     HoldShield = 8,
 }
 
-const enum d_a_py_lk_mode { wait, tool }
+const enum d_a_py_lk_mode { unk, wait, tool }
 class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
     public static PROCESS_NAME = dProcName_e.d_a_py_lk;
     private static ARC_NAME = "Link";
@@ -5031,6 +5031,7 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
     private static HEEL_POS = vec3.fromValues(-6.0, 3.25, 0.0);
 
     public curMode = d_a_py_lk_mode.wait;
+    public prevMode = d_a_py_lk_mode.wait;
 
     private model: J3DModelInstance;
     private modelSwordHilt: J3DModelInstance;
@@ -5064,6 +5065,7 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
     private equippedItemModel: J3DModelInstance | null = null;
     
     private mode_tbl = [
+        this.procUnkInit, this.procUnk,
         this.procWaitInit, this.procWait,
         this.procToolInit, this.procTool,
     ];
@@ -5290,23 +5292,21 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
     private changeDemoProc(globals: dGlobals): boolean {
         assert(this.demoMode < LinkDemoMode.MAX || this.demoMode == LinkDemoMode.Tool)
 
-        const pred = true;
-
-        if (pred) {
-            switch (this.demoMode) {
-                case LinkDemoMode.None: return false;
-                case LinkDemoMode.Tool: modeProcInit(globals, this, this.mode_tbl, d_a_py_lk_mode.tool); break;
-                case LinkDemoMode.SetPosRotEquip: modeProcInit(globals, this, this.mode_tbl, d_a_py_lk_mode.wait); break;
-
-                default:
-                    // console.warn('Not yet implemented demoMode', LinkDemoMode[this.demoMode]);
-                    // debugger;
-                    break;
-            }
-            return true;
+        switch (this.demoMode) {
+            case LinkDemoMode.None: return false;
+            case LinkDemoMode.Tool: modeProcInit(globals, this, this.mode_tbl, d_a_py_lk_mode.tool); break;
+            case LinkDemoMode.SetPosRotEquip: modeProcInit(globals, this, this.mode_tbl, d_a_py_lk_mode.wait); break;
+            
+            default: 
+                if( this.prevMode != d_a_py_lk_mode.unk ) {
+                    console.warn('Unsupported demo mode:', this.demoMode );
+                    modeProcInit(globals, this, this.mode_tbl, d_a_py_lk_mode.unk); 
+                }
+                break;
         }
 
-        return false;
+        this.prevMode = this.curMode;
+        return true;
     }
 
     private autoGroundHit() {
@@ -5568,8 +5568,15 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
         }
     }
 
+    private procUnkInit(globals: dGlobals ) {
+    }
+
+    private procUnk(globals: dGlobals ) {
+
+    }
+
     private procWaitInit(globals: dGlobals ) {
-        if( this.curMode != d_a_py_lk_mode.wait ) {
+        if(this.prevMode != d_a_py_lk_mode.wait ) {
             this.setSingleMoveAnime(globals, LkAnim.WAITS);
         }
     }
