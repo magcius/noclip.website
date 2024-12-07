@@ -5422,7 +5422,7 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
 
         // Update actor vel and position
         this.vel[0] = moveVel * Math.sin(cM_s2rad(this.rot[1]));
-        this.vel[1] = moveVel * Math.cos(cM_s2rad(this.rot[1]));
+        this.vel[2] = moveVel * Math.cos(cM_s2rad(this.rot[1]));
         vec3.add(this.pos, this.pos, this.vel);
 
         for (let i = 0; i < 2; i++) {
