@@ -5017,6 +5017,15 @@ const enum LkHandStyle {
     HoldShield = 8,
 }
 
+const enum LkJoint {
+    HandL = 0x08,
+    HandR = 0x0D,
+    Head = 0x0F,
+    Waist = 0x1E,
+    FootL = 0x22,
+    FootR = 0x27,
+}
+
 const enum d_a_py_lk_mode { unk, wait, tool }
 class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
     public static PROCESS_NAME = dProcName_e.d_a_py_lk;
@@ -5138,7 +5147,7 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
         // Update joints based on the currently playing animation
         this.anmBck.entry(this.model);
         this.model.calcAnim();
-        mat4.copy(this.modelKatsura.modelMatrix, this.model.shapeInstanceState.jointToWorldMatrixArray[0x0F]);
+        mat4.copy(this.modelKatsura.modelMatrix, this.model.shapeInstanceState.jointToWorldMatrixArray[LkJoint.Head]);
         this.modelKatsura.calcAnim();
 
         // Update item transform and animations
@@ -5376,15 +5385,11 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
             return;
         }
 
-        const footLJointIdx = this.model.modelData.bmd.jnt1.joints.findIndex(j => j.name == 'Lfoot_jnt')
-        const footRJointIdx = this.model.modelData.bmd.jnt1.joints.findIndex(j => j.name == 'Rfoot_jnt')
-        const waistJointIdx = this.model.modelData.bmd.jnt1.joints.findIndex(j => j.name == 'waist_jnt')
-
         // Compute local -> model transforms for foot and waist joints
         const invModelMtx = mat4.invert(calc_mtx, this.model.modelMatrix);
-        const footLMtx = mat4.mul(scratchMat4a, invModelMtx, this.model.shapeInstanceState.jointToWorldMatrixArray[footLJointIdx]);
-        const footRMtx = mat4.mul(scratchMat4b, invModelMtx, this.model.shapeInstanceState.jointToWorldMatrixArray[footRJointIdx]);
-        const waistMtx = mat4.mul(scratchMat4c, invModelMtx, this.model.shapeInstanceState.jointToWorldMatrixArray[waistJointIdx]);
+        const footLMtx = mat4.mul(scratchMat4a, invModelMtx, this.model.shapeInstanceState.jointToWorldMatrixArray[LkJoint.FootL]);
+        const footRMtx = mat4.mul(scratchMat4b, invModelMtx, this.model.shapeInstanceState.jointToWorldMatrixArray[LkJoint.FootR]);
+        const waistMtx = mat4.mul(scratchMat4c, invModelMtx, this.model.shapeInstanceState.jointToWorldMatrixArray[LkJoint.Waist]);
         
         // Compute model space positions of the feet
         const toePos = [];
@@ -5610,8 +5615,8 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
             return;
         }
 
-        const handLJointMtx = this.model.shapeInstanceState.jointToWorldMatrixArray[0x08];
-        const handRJointMtx = this.model.shapeInstanceState.jointToWorldMatrixArray[0x0D];
+        const handLJointMtx = this.model.shapeInstanceState.jointToWorldMatrixArray[LkJoint.HandL];
+        const handRJointMtx = this.model.shapeInstanceState.jointToWorldMatrixArray[LkJoint.HandR];
         
         mat4.copy(this.equippedItemModel.modelMatrix, handLJointMtx);
         this.equippedItemModel?.calcAnim();
