@@ -4961,7 +4961,7 @@ class d_a_npc_ls1 extends fopNpc_npc_c {
     }
 }
 
-enum LkAnim {
+const enum LkAnim {
     WAITS = 0x00,
     WALK = 0x01,
     DASH = 0x02,
