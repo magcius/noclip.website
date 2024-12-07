@@ -5441,7 +5441,7 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
     
         if (gndPlane && norm[1] >= 0.5) {
             const slopeDir = cM_atan2s(norm[0], norm[2]);
-            const slopeGrade = Math.sqrt(norm[0] * norm[0] + norm[2] * norm[2]);
+            const slopeGrade = Math.hypot(norm[0], norm[2]);
             return cM_atan2s(slopeGrade * Math.cos(cM_s2rad(slopeDir - dir)), norm[1]);
         }
         return 0;
