@@ -106,7 +106,7 @@ export class ValveKeyValueParser {
         let val = "";
         while (this.hastok()) {
             const tok = this.chew(true);
-            if (tok == delim)
+            if (tok === delim)
                 return val;
             else
                 val += tok;

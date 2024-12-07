@@ -1698,7 +1698,7 @@ class StateParser extends MIPS.NaiveInterpreter {
                     this.valid = false;
                     break;
                 }
-                let index = this.animationAddresses.findIndex((a) => a == a1.value);
+                let index = this.animationAddresses.findIndex((a) => a === a1.value);
                 if (index === -1) {
                     index = this.animationAddresses.length;
                     this.animationAddresses.push(a1.value);

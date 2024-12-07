@@ -356,7 +356,7 @@ export class DataFetcher {
             return;
         }
 
-        if (this.debugDisplay == null) {
+        if (this.debugDisplay === null) {
             this.debugDisplay = document.createElement('div');
             this.debugDisplay.style.position = 'absolute';
             this.debugDisplay.style.bottom = '16px';

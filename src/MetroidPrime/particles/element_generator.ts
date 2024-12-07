@@ -59,7 +59,7 @@ export class SpawnSystemKeyframeInfo {
     constructor(stream: InputStream, resourceSystem: ResourceSystem) {
         const partId = stream.readAssetID();
         const partFourCC = stream.readFourCC();
-        if (partFourCC === 'PART' || partFourCC == '\x00\x00\x00\x00') {
+        if (partFourCC === 'PART' || partFourCC === '\x00\x00\x00\x00') {
             this.description = assertExists(resourceSystem.loadAssetByID<PART>(partId, 'PART')).description;
         } else if (partFourCC === 'SWHC') {
             this.description = assertExists(resourceSystem.loadAssetByID<SWHC>(partId, 'SWHC')).description;
@@ -927,7 +927,7 @@ export class ElementGenerator extends BaseGenerator {
 
             if (particle.endFrame.value < this.curFrame) {
                 //--g_ParticleAliveCount;
-                if (i + 1 == this.particles.length) {
+                if (i + 1 === this.particles.length) {
                     this.particles.pop();
                     break;
                 } else {

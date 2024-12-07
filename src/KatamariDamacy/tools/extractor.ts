@@ -39,7 +39,7 @@ function iso9660GetDataFilename(isoFilename: string, filename: string): ArrayBuf
     let offs = 0x00;
     while (true) {
         const recordLen = rootDirectoryView.getUint8(offs + 0x00);
-        if (recordLen == 0)
+        if (recordLen === 0)
             break;
         const lba = rootDirectoryView.getUint32(offs + 0x02, true);
         const byteLength = rootDirectoryView.getUint32(offs + 0x0A, true);

@@ -795,7 +795,7 @@ class d_s_play extends fopScn {
         this.demo.update();
 
         // From executeEvtManager() -> SpecialProcPackage()
-        if (this.demo.getMode() == EDemoMode.Ended) {
+        if (this.demo.getMode() === EDemoMode.Ended) {
             this.demo.remove();
         }
     }
@@ -1005,7 +1005,7 @@ class DemoDesc extends SceneDesc implements Viewer.SceneDesc {
         const lbnk = globals.roomCtrl.status[this.roomList[0]].data.lbnk;
         if (lbnk) {
             const bank = lbnk[this.layer];
-            if (bank != 0xFF) {
+            if (bank !== 0xFF) {
                 assert(bank >= 0 && bank < 100);
                 globals.roomCtrl.demoArcName = `Demo${bank.toString().padStart(2, '0')}`;
                 console.debug(`Loading stage demo file: ${globals.roomCtrl.demoArcName}`);
@@ -1021,7 +1021,7 @@ class DemoDesc extends SceneDesc implements Viewer.SceneDesc {
 
         // noclip modification: ensure all the actors are created before we load the cutscene
         await new Promise(resolve => { (function waitForActors(){
-            if (globals.frameworkGlobals.ctQueue.length == 0) return resolve(null);
+            if (globals.frameworkGlobals.ctQueue.length === 0) return resolve(null);
             setTimeout(waitForActors, 30);
         })(); });
 

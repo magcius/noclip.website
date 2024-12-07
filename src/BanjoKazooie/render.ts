@@ -181,9 +181,9 @@ void main() {
         let alphaThreshold = 0;
         if (alphaCompare === 0x01) {
             alphaThreshold = this.blendAlpha;
-        } else if (alphaCompare != 0x00) {
+        } else if (alphaCompare !== 0x00) {
             alphaThreshold = .0125; // should be dither
-        } else if (cvgXAlpha != 0x00) {
+        } else if (cvgXAlpha !== 0x00) {
             // this line is taken from GlideN64, but here's some rationale:
             // With this bit set, the pixel coverage value is multiplied by alpha
             // before being sent to the blender. While coverage mostly matters for

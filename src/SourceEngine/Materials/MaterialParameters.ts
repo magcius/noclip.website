@@ -730,7 +730,7 @@ class MaterialProxy_PlayerProximity {
     }
 
     public update(map: ParameterMap, renderContext: SourceRenderContext, entityParams: EntityMaterialParameters | null): void {
-        if (entityParams == null)
+        if (entityParams === null)
             return;
 
         const scale = paramGetNum(map, this.scale);
@@ -904,7 +904,7 @@ class MaterialProxy_EntityRandom {
     }
 
     public update(map: ParameterMap, renderContext: SourceRenderContext, entityParams: EntityMaterialParameters | null): void {
-        if (entityParams == null)
+        if (entityParams === null)
             return;
 
         const scale = paramGetNum(map, this.scale);

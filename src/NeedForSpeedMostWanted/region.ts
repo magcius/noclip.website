@@ -72,8 +72,8 @@ export class NfsRegion {
             case LoadStatus.Loaded:
                 return true;
             case LoadStatus.ReadyToParse:
-                if(this.regionType == RegionType.Regular) {
-                    const depNotLoaded = this.dependencies!.filter(d => d.loadStatus == LoadStatus.NotLoaded);
+                if(this.regionType === RegionType.Regular) {
+                    const depNotLoaded = this.dependencies!.filter(d => d.loadStatus === LoadStatus.NotLoaded);
                     if (depNotLoaded.length > 0) {
                         depNotLoaded.forEach(d => {
                             d.loadStatus = LoadStatus.Loading;
@@ -82,9 +82,9 @@ export class NfsRegion {
                             });
                         return false;
                     }
-                    if (this.dependencies!.filter(d => d.loadStatus == LoadStatus.Loading).length > 0)
+                    if (this.dependencies!.filter(d => d.loadStatus === LoadStatus.Loading).length > 0)
                         return false;
-                    const depsToParse = this.dependencies!.filter(d => d.loadStatus == LoadStatus.ReadyToParse);
+                    const depsToParse = this.dependencies!.filter(d => d.loadStatus === LoadStatus.ReadyToParse);
                     depsToParse.forEach(d => d.parseTextures(device, renderHelper, map));
                     depsToParse.forEach(d => {
                         d.parseModels(device, renderHelper.renderCache, map);
@@ -111,32 +111,32 @@ export class NfsRegion {
     }
 
     public isLoaded() {
-        return this.loadStatus == LoadStatus.Loaded;
+        return this.loadStatus === LoadStatus.Loaded;
     }
 
     public async load(map: NfsMap) {
         assert(this.dataSections.length > 0);
         for(let i = 0; i < this.dataSections.length; i++) {
-            if(this.dataSections[i].node != undefined)
+            if(this.dataSections[i].node !== undefined)
                 continue;
             const dataBuffer = await map.dataFetcher.fetchData(map.streamingFilePath, { rangeStart: this.dataSections[i].offset, rangeSize: this.dataSections[i].length });
-            assert(dataBuffer != undefined);
+            assert(dataBuffer !== undefined);
             this.dataSections[i].node = new NfsNode(dataBuffer);
             this.dataSections[i].node!.parseChildren();
         }
     }
 
     public parseTextures(device: GfxDevice, renderHelper: GfxRenderHelper, map: NfsMap) {
-        assert(this.dataSections.filter(s => s.node === undefined).length == 0);
-        const textureCollections = this.dataSections.flatMap(s => s.node!.children.filter(node => node.type == NodeType.TextureCollection));
+        assert(this.dataSections.filter(s => s.node === undefined).length === 0);
+        const textureCollections = this.dataSections.flatMap(s => s.node!.children.filter(node => node.type === NodeType.TextureCollection));
         textureCollections.forEach(node => this.parseTextureCollection(device, renderHelper.renderCache, node, map));
-        const textureAnimations = this.dataSections.flatMap(s => s.node!.children.filter(node => node.type == NodeType.TextureAnimation));
+        const textureAnimations = this.dataSections.flatMap(s => s.node!.children.filter(node => node.type === NodeType.TextureAnimation));
         textureAnimations.forEach(node => this.parseTextureCycleAnimation(node, map));
     }
 
     public parseModels(device: GfxDevice, cache: GfxRenderCache, map: NfsMap) {
-        assert(this.dataSections.filter(s => s.node === undefined).length == 0);
-        const modelCollections = this.dataSections.flatMap(s => s.node!.children.filter(node => node.type == NodeType.ModelCollection));
+        assert(this.dataSections.filter(s => s.node === undefined).length === 0);
+        const modelCollections = this.dataSections.flatMap(s => s.node!.children.filter(node => node.type === NodeType.ModelCollection));
         const modelNodes = modelCollections.flatMap(collNode => collNode.children.slice(1));
         modelNodes.forEach(node => {
             const id = node.children[0].dataView.getUint32(0x10, true);
@@ -147,12 +147,12 @@ export class NfsRegion {
     }
 
     public parseInstances(map: NfsMap) {
-        assert(this.dataSections.filter(s => s.node === undefined).length == 0);
+        assert(this.dataSections.filter(s => s.node === undefined).length === 0);
         const rootBoundingVolumes = [];
         for(let i = 0; i < this.dataSections.length; i++) {
-            if(i == 1)
+            if(i === 1)
                 this.upperPartOffset = rootBoundingVolumes.length;
-            const instanceListNodes = this.dataSections[i].node!.children.filter(node => node.type == NodeType.InstanceList);
+            const instanceListNodes = this.dataSections[i].node!.children.filter(node => node.type === NodeType.InstanceList);
             rootBoundingVolumes.push(...instanceListNodes.flatMap(node => this.parseInstanceList(node, map)));
         }
         this.rootBoundingVolumes = rootBoundingVolumes;
@@ -172,25 +172,25 @@ export class NfsRegion {
             instances.push(newInstance);
 
             // Do not use the old PS2 sky
-            if(this.id == 2600 && (i == 1 || i == 2))
+            if(this.id === 2600 && (i === 1 || i === 2))
                 continue;
 
             // A bit messy but I haven't found a better way to determine object type
             const flags = dataView.getUint32(i * 0x40 + 0x18, true);
-            newInstance.invertedFaces = (flags & 0x400000) != 0;
-            if(this.id == 2600 && i == 0)
+            newInstance.invertedFaces = (flags & 0x400000) !== 0;
+            if(this.id === 2600 && i === 0)
                 newInstance.type = InstanceType.Sky;
-            else if(((flags >> 16) & 0xff) == 4) {
-                if(((flags >> 8) & 0xff) != 0x80)
+            else if(((flags >> 16) & 0xff) === 4) {
+                if(((flags >> 8) & 0xff) !== 0x80)
                     newInstance.type = InstanceType.Shadow;
                 else
                     newInstance.type = InstanceType.Hidden;
             }
-            else if((flags & 0xff0fffff) == 0x2008070)
+            else if((flags & 0xff0fffff) === 0x2008070)
                 newInstance.type = InstanceType.TrackBarrier;
-            else if((flags & 0xf) == 0x2)
+            else if((flags & 0xf) === 0x2)
                 newInstance.type = InstanceType.Hidden;
-            else if((flags & 0x10) == 0x10 && NfsRegion.hiddenAnimObjectRegions.includes(this.id))
+            else if((flags & 0x10) === 0x10 && NfsRegion.hiddenAnimObjectRegions.includes(this.id))
                 newInstance.type = InstanceType.Hidden;
 
             const worldMat: mat4 = mat4.create();
@@ -208,11 +208,11 @@ export class NfsRegion {
             const modelIndex = dataView.getUint16(offset, true);
             newInstance.model = models[modelIndex];
 
-            if(newInstance.model !== undefined && (flags & 0x100010) != 0 && newInstance.model.isHiddenModel)
+            if(newInstance.model !== undefined && (flags & 0x100010) !== 0 && newInstance.model.isHiddenModel)
                 newInstance.type = InstanceType.Hidden;
         }
 
-        return this.parseBvhTree(instanceNode.children.filter(n => n.type == NodeType.InstanceListBvh)[0], instances);
+        return this.parseBvhTree(instanceNode.children.filter(n => n.type === NodeType.InstanceListBvh)[0], instances);
     }
 
     private parseBvhTree(bvhTreeNode: NfsNode, instances: NfsInstance[]): NfsBoundingVolume {
@@ -259,7 +259,7 @@ export class NfsRegion {
             const mipMapCount = textureInfoDataView.getUint8(offset + 0x4E);
             const wrapMode = textureInfoDataView.getUint8(offset + 0x4F);
             const transparencyInfo = textureInfoDataView.getUint16(offset + 0x55, true);
-            const alphaTest = (transparencyInfo & 0xFF) == 1 || ((transparencyInfo & 0xFF) == 2 && transparencyInfo != 2);
+            const alphaTest = (transparencyInfo & 0xFF) === 1 || ((transparencyInfo & 0xFF) === 2 && transparencyInfo !== 2);
             const transparencyType = transparencyInfo >> 8;
             const cullMode = textureInfoDataView.getUint8(offset + 0x57);
             const scrollAnimationType = textureInfoDataView.getUint16(offset + 0x52, true);
@@ -299,9 +299,9 @@ export class NfsRegion {
             texture.alphaTest = alphaTest;
             texture.transparencyType = transparencyType;
             texture.faceCulling = cullMode < 2 && !alphaTest;
-            if(scrollAnimationType != 0) {
+            if(scrollAnimationType !== 0) {
                 texture.scrollAnimation = {
-                    interval: scrollAnimationType == 2 ? textureInfoDataView.getInt16(offset + 0x58, true) / 256 : -1,
+                    interval: scrollAnimationType === 2 ? textureInfoDataView.getInt16(offset + 0x58, true) / 256 : -1,
                     scrollSpeed: [
                         textureInfoDataView.getInt16(offset + 0x5a, true) / 1024,
                         textureInfoDataView.getInt16(offset + 0x5c, true) / 1024,
@@ -360,21 +360,21 @@ export class NfsRegion {
     private parseTextureCycleAnimation(node: NfsNode, map: NfsMap) {
         const texId = node.children[1].dataView.getUint32(0x18, true);
         const texture = map.textureCache[texId];
-        assert(texture != undefined);
+        assert(texture !== undefined);
         const frameCount = node.children[1].dataView.getUint32(0x1c, true);
         const frequency = node.children[1].dataView.getUint32(0x20, true);
         const frames = [];
         for(let i = 0; i < frameCount; i++) {
             const frameTexId = node.children[2].dataView.getUint32(0x10 * i, true);
             const frame = map.textureCache[frameTexId];
-            assert(frame != undefined);
+            assert(frame !== undefined);
             frames.push(frame);
         }
         texture.cycleAnimation = { frequency, frames };
     }
 
     private parseParticleEmitterGroups(map: NfsMap) {
-        const emitterCollections = this.dataSections.flatMap(s => s.node!.children.filter(node => node.type == NodeType.ParticleEmitter));
+        const emitterCollections = this.dataSections.flatMap(s => s.node!.children.filter(node => node.type === NodeType.ParticleEmitter));
         emitterCollections.forEach(n => this.parseParticleEmitterGroup(n, map));
     }
 
@@ -383,7 +383,7 @@ export class NfsRegion {
         const count = dataView.getUint32(0x8, true);
         let offset = 0x10;
         for(let i = 0; i < count; i++) {
-            while(dataView.getUint32(offset + 0x8, true) == 0) {
+            while(dataView.getUint32(offset + 0x8, true) === 0) {
                 offset += 0x30;
             }
             const type = dataView.getUint32(offset, true);
@@ -423,9 +423,9 @@ export class NfsBoundingVolumeGroup {
     public collectInstancesToRender(collection: NfsInstance[], frustum: Frustum, fullyInside: boolean) {
         if (!fullyInside) {
             const state = frustum.intersect(this.boundingBox);
-            if (state == IntersectionState.Outside)
+            if (state === IntersectionState.Outside)
                 return;
-            fullyInside = state == IntersectionState.Inside;
+            fullyInside = state === IntersectionState.Inside;
         }
 
         this.children.forEach(c => c.collectInstancesToRender(collection, frustum, fullyInside));
@@ -441,7 +441,7 @@ export class NfsInstance {
     public invertedFaces: boolean;
 
     public collectInstancesToRender(collection: NfsInstance[], frustum: Frustum, fullyInside: boolean) {
-        if(!fullyInside && frustum.intersect(this.boundingBox) == IntersectionState.Outside)
+        if(!fullyInside && frustum.intersect(this.boundingBox) === IntersectionState.Outside)
             return;
 
         collection.push(this);
@@ -457,9 +457,9 @@ export class NfsModel {
 
     constructor(device: GfxDevice, cache: GfxRenderCache, map: NfsMap, modelNode: NfsNode) {
         this.vertInfos = [];
-        assert(modelNode.type == NodeType.Model);
+        assert(modelNode.type === NodeType.Model);
 
-        const meshDataNode = modelNode.children.filter((node) => node.type == NodeType.Mesh)[0];
+        const meshDataNode = modelNode.children.filter((node) => node.type === NodeType.Mesh)[0];
         const meshHeaderNode = meshDataNode.children[0];
         const dataView = meshHeaderNode.dataView;
         const submeshCount = dataView.getInt32(0x10, true);
@@ -467,7 +467,7 @@ export class NfsModel {
 
         const nameStartBytes = modelNode.children[0].dataBuffer.subarray(0xA0, 6).createTypedArray(Uint8Array);
         const nameStart = NfsModel.textDecoder.decode(nameStartBytes).toUpperCase();
-        this.isHiddenModel = nameStart == "SHADOW" || nameStart.startsWith("ANM");
+        this.isHiddenModel = nameStart === "SHADOW" || nameStart.startsWith("ANM");
 
         this.indexBuffer = makeStaticDataBufferFromSlice(device, GfxBufferUsage.Index, meshDataNode.children[2].dataBuffer.slice(0, indexCount * 2));
 
@@ -487,7 +487,7 @@ export class NfsModel {
             const vertexCount = submeshDataView.getInt32(submeshBaseOffset + 0x24, true);
             const indexCount = 3 * submeshDataView.getInt32(submeshBaseOffset + 0x28, true);
             const indexOffset = submeshDataView.getInt32(submeshBaseOffset + 0x2C, true);
-            const byteStride = shaderType == 0 || shaderType == 6 || shaderType == 5 ? 0x24 : shaderType == 19 ? 0x2c : 0x3c;
+            const byteStride = shaderType === 0 || shaderType === 6 || shaderType === 5 ? 0x24 : shaderType === 19 ? 0x2c : 0x3c;
             const diffuseTexture = textureList[submeshDataView.getUint8(submeshBaseOffset)];
             const normalMap = textureList[submeshDataView.getUint8(submeshBaseOffset + 1)];
             const specularMap = textureList[submeshDataView.getUint8(submeshBaseOffset + 3)];
@@ -495,7 +495,7 @@ export class NfsModel {
 
             const vertexOffset = currentVertexOffset;
             const vertexListIndex = currentVertexListIndex;
-            if((vertexOffset + vertexCount) * byteStride == meshDataNode.children[3 + currentVertexListIndex].dataBuffer.byteLength) {
+            if((vertexOffset + vertexCount) * byteStride === meshDataNode.children[3 + currentVertexListIndex].dataBuffer.byteLength) {
                 // Reached end of vertex list
                 currentVertexOffset = 0;
                 currentVertexListIndex++;
@@ -504,12 +504,12 @@ export class NfsModel {
                 currentVertexOffset += vertexCount;
             }
 
-            if(this.vertexBuffers.length == vertexListIndex) {
+            if(this.vertexBuffers.length === vertexListIndex) {
                 // create new buffer if the current vertex list doesn't have one yet
                 this.vertexBuffers.push(makeStaticDataBufferFromSlice(device, GfxBufferUsage.Vertex, meshDataNode.children[3 + vertexListIndex].dataBuffer));
             }
 
-            if(diffuseTexture == undefined)
+            if(diffuseTexture === undefined)
                 continue;
             const textureMappings: NfsTexture[] = [diffuseTexture];
 

@@ -328,8 +328,8 @@ function findall(haystack: string, needle: RegExp): RegExpExecArray[] {
 
 function isBlendStateNone(blendState: GfxChannelBlendState): boolean {
     return (
-        blendState.blendMode == GfxBlendMode.Add &&
-        blendState.blendSrcFactor == GfxBlendFactor.One &&
+        blendState.blendMode === GfxBlendMode.Add &&
+        blendState.blendSrcFactor === GfxBlendFactor.One &&
         blendState.blendDstFactor === GfxBlendFactor.Zero
     );
 }

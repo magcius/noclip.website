@@ -38,7 +38,7 @@ export function getBlockInfo(mapsBin: DataView, mapInfo: MapInfo, x: number, y: 
     const blockInfo = mapsBin.getUint32(mapInfo.blockTableOffset + 4 * blockIndex);
     const sub = (blockInfo >>> 17) & 0x3F;
     const mod = (blockInfo >>> 23);
-    if (mod == 0xff)
+    if (mod === 0xff)
         return null;
     return {mod, sub};
 }
@@ -161,7 +161,7 @@ export class MapInstance {
             this.blocks.push(row);
             for (let x = 0; x < this.numCols; x++) {
                 const blockInfo = this.blockInfoTable[z][x];
-                if (blockInfo == null) {
+                if (blockInfo === null) {
                     row.push(null);
                     continue;
                 }
@@ -335,7 +335,7 @@ export class AncientMapSceneDesc implements Viewer.SceneDesc {
         for (let row = 0; row < numRows; row++) {
             for (let col = 0; col < numCols; col++) {
                 const b = map.blocks[row][col];
-                if (b == null) {
+                if (b === null) {
                     blockTable[row][col] = null;
                 } else {
                     const newValue = b.split('.', 2);

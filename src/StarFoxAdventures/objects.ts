@@ -69,7 +69,7 @@ export class ObjectType {
         this.name = '';
         let offs = isEarlyObject ? 0x58 : 0x91;
         let c;
-        while ((c = this.data.getUint8(offs)) != 0) {
+        while ((c = this.data.getUint8(offs)) !== 0) {
             this.name += String.fromCharCode(c);
             offs++;
         }

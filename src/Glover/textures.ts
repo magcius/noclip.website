@@ -33,7 +33,7 @@ export interface Image {
 }
 
 function blur_ci8(data: Uint8Array, width: number, height: number): void {
-    if (width == 0) {
+    if (width === 0) {
         return;
     }
     let idx = 0;
@@ -85,20 +85,20 @@ export class GloverTextureHolder extends TextureHolder<Image> {
             this.idToBank.set(texture.id, this.banks.length - 1);
             this.idToTexture.set(texture.id, texture);
 
-            if ((texture.flags & 0x4) != 0) {
+            if ((texture.flags & 0x4) !== 0) {
                 this.animatedTextures.push(texture);
             }
 
             // Hard-coded blur for animated portal texture
-            if (texture.id == 0x0fe4919b) {
+            if (texture.id === 0x0fe4919b) {
                 for (let i = 0; i < 50; i++) {
                     blur_ci8(texture.data, texture.width, texture.height);
                 }
             }
 
             var colorFormat = texture.colorFormat as number as ImageFormat;
-            if (texture.compressionFormat == GloverTexbank.TextureCompressionFormat.CI4 || 
-                texture.compressionFormat == GloverTexbank.TextureCompressionFormat.CI8)
+            if (texture.compressionFormat === GloverTexbank.TextureCompressionFormat.CI4 || 
+                texture.compressionFormat === GloverTexbank.TextureCompressionFormat.CI8)
             {
                 colorFormat = ImageFormat.G_IM_FMT_CI;
             }                
@@ -233,7 +233,7 @@ export class GloverTextureHolder extends TextureHolder<Image> {
         const bank = this.idToBank.get(id);
         const texture = this.idToTexture.get(id);
         if (bank !== undefined && texture !== undefined) {
-            return (texture.flags & 4) != 0;
+            return (texture.flags & 4) !== 0;
         } else {
             return false;
         }

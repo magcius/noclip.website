@@ -369,7 +369,7 @@ class StaticModel {
 
             const d = uniformBuffer.mapBufferF32();
             offs += fillMatrix4x3(d, offs, instance.modelMatrix);
-            if (++numInstances == maxInstances)
+            if (++numInstances === maxInstances)
                 submitDrawInstanced();
         };
 

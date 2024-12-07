@@ -541,7 +541,7 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
         }
 
         // const transIsPresent = blockDv.getUint32(0xa4);
-        // if (transIsPresent != 0) {
+        // if (transIsPresent !== 0) {
         //     console.log(`transIsPresent was 0x${transIsPresent.toString(16)} in this model`);
         //     model.modelTranslate = readVec3(blockDv, 0x44);
         //     console.log(`trans: ${this.modelTranslate}`);
@@ -556,7 +556,7 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
             if (joint.boneNum !== i)
                 throw Error(`wtf? joint's bone number doesn't match its index!`);
 
-            model.skeleton.addJoint(joint.parent != 0xff ? joint.parent : undefined, joint.translation);
+            model.skeleton.addJoint(joint.parent !== 0xff ? joint.parent : undefined, joint.translation);
             vec3.negate(model.invBindTranslations[i], joint.bindTranslation);
         }
     }

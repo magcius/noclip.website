@@ -2990,7 +2990,7 @@ export class JPABaseParticle {
 
         this.time = this.age / this.lifeTime;
 
-        if (this.age != 0) {
+        if (this.age !== 0) {
             if (!!(this.status & JPAParticleStatus.FOLLOW_EMITTER))
                 vec3.copy(this.offsetPosition, workData.emitterGlobalCenterPos);
 

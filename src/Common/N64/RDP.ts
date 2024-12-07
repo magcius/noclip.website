@@ -198,14 +198,14 @@ export function decodeCombineParams(w0: number, w1: number): CombineParams {
 }
 
 function colorCombinePassUsesT0(ccp: ColorCombinePass) {
-    return (ccp.a == CCMUX.TEXEL0) || (ccp.a == CCMUX.TEXEL0_A) ||
-        (ccp.b == CCMUX.TEXEL0) || (ccp.b == CCMUX.TEXEL0_A) ||
-        (ccp.c == CCMUX.TEXEL0) || (ccp.c == CCMUX.TEXEL0_A) ||
-        (ccp.d == CCMUX.TEXEL0) || (ccp.d == CCMUX.TEXEL0_A);
+    return (ccp.a === CCMUX.TEXEL0) || (ccp.a === CCMUX.TEXEL0_A) ||
+        (ccp.b === CCMUX.TEXEL0) || (ccp.b === CCMUX.TEXEL0_A) ||
+        (ccp.c === CCMUX.TEXEL0) || (ccp.c === CCMUX.TEXEL0_A) ||
+        (ccp.d === CCMUX.TEXEL0) || (ccp.d === CCMUX.TEXEL0_A);
 }
 
 function alphaCombinePassUsesT0(acp: AlphaCombinePass) {
-    return (acp.a == ACMUX.TEXEL0 || acp.b == ACMUX.TEXEL0 || acp.c == ACMUX.TEXEL0 || acp.d == ACMUX.TEXEL0);
+    return (acp.a === ACMUX.TEXEL0 || acp.b === ACMUX.TEXEL0 || acp.c === ACMUX.TEXEL0 || acp.d === ACMUX.TEXEL0);
 }
 
 export function combineParamsUsesT0(cp: CombineParams) {
@@ -214,14 +214,14 @@ export function combineParamsUsesT0(cp: CombineParams) {
 }
 
 function colorCombinePassUsesT1(ccp: ColorCombinePass) {
-    return (ccp.a == CCMUX.TEXEL1) || (ccp.a == CCMUX.TEXEL1_A) ||
-        (ccp.b == CCMUX.TEXEL1) || (ccp.b == CCMUX.TEXEL1_A) ||
-        (ccp.c == CCMUX.TEXEL1) || (ccp.c == CCMUX.TEXEL1_A) ||
-        (ccp.d == CCMUX.TEXEL1) || (ccp.d == CCMUX.TEXEL1_A);
+    return (ccp.a === CCMUX.TEXEL1) || (ccp.a === CCMUX.TEXEL1_A) ||
+        (ccp.b === CCMUX.TEXEL1) || (ccp.b === CCMUX.TEXEL1_A) ||
+        (ccp.c === CCMUX.TEXEL1) || (ccp.c === CCMUX.TEXEL1_A) ||
+        (ccp.d === CCMUX.TEXEL1) || (ccp.d === CCMUX.TEXEL1_A);
 }
 
 function alphaCombinePassUsesT1(acp: AlphaCombinePass) {
-    return (acp.a == ACMUX.TEXEL1 || acp.b == ACMUX.TEXEL1 || acp.c == ACMUX.TEXEL1 || acp.d == ACMUX.TEXEL1);
+    return (acp.a === ACMUX.TEXEL1 || acp.b === ACMUX.TEXEL1 || acp.c === ACMUX.TEXEL1 || acp.d === ACMUX.TEXEL1);
 }
 
 export function combineParamsUsesT1(cp: CombineParams) {
@@ -233,7 +233,7 @@ export function combineParamsUsesT1(cp: CombineParams) {
 export function combineParamsUseTexelsInSecondCycle(comb: CombineParams): boolean {
     for(let param of [comb.a1.a, comb.a1.b, comb.a1.c, comb.a1.d, comb.c1.a, comb.c1.b, comb.c1.c, comb.c1.d]) {
         // note that I'm using the CCMUX enum even though we're comparing against color and alpha
-        // (b/c in this case CCMUX.TEXEL0 == ACMUX.TEXEL0 and same for TEXEL1)
+        // (b/c in this case CCMUX.TEXEL0 === ACMUX.TEXEL0 and same for TEXEL1)
         // same principle applies to other methods
         if(param === CCMUX.TEXEL0 || param === CCMUX.TEXEL1)
             return true;

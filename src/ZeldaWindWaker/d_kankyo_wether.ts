@@ -1736,7 +1736,7 @@ function dKyr_kamome_move(globals: dGlobals, deltaTimeFrames: number): void {
     const pkt = envLight.windline!;
 
     let spawnBirds = false;
-    if (globals.stageName === 'sea' && !((envLight.colpatCurr == 1 && envLight.colpatBlend > 0.0) || (envLight.colpatPrev == 1 && envLight.colpatBlend < 1.0) || (envLight.colpatCurr == 2 && envLight.colpatBlend > 0.0) || (envLight.colpatPrev == 2 && envLight.colpatBlend < 1.0)))
+    if (globals.stageName === 'sea' && !((envLight.colpatCurr === 1 && envLight.colpatBlend > 0.0) || (envLight.colpatPrev === 1 && envLight.colpatBlend < 1.0) || (envLight.colpatCurr === 2 && envLight.colpatBlend > 0.0) || (envLight.colpatPrev === 2 && envLight.colpatBlend < 1.0)))
         spawnBirds = true;
 
     for (let i = 0; i < pkt.kamomeEff.length; i++) {

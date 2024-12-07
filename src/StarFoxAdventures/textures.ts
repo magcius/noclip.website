@@ -118,7 +118,7 @@ function loadTexture(cache: GfxRenderCache, texData: ArrayBufferSlice, isBeta: b
 }
 
 function isValidTextureTabValue(tabValue: number) {
-    return tabValue != 0xFFFFFFFF && (tabValue & 0x80000000) != 0;
+    return tabValue !== 0xFFFFFFFF && (tabValue & 0x80000000) !== 0;
 }
 
 function loadFirstValidTexture(cache: GfxRenderCache, tab: DataView, bin: ArrayBufferSlice, isBeta: boolean): SFATextureArray | null {
@@ -126,7 +126,7 @@ function loadFirstValidTexture(cache: GfxRenderCache, tab: DataView, bin: ArrayB
     let found = false;
     for (let i = 0; i < tab.byteLength; i += 4) {
         const tabValue = tab.getUint32(i);
-        if (tabValue == 0xFFFFFFFF) {
+        if (tabValue === 0xFFFFFFFF) {
             console.log(`no valid id found`);
             break;
         }
@@ -420,7 +420,7 @@ export class SFATextureFetcher extends TextureFetcher {
         let texNum = texId;
         if (!useTex1) {
             const textableValue = this.textableBin.getUint16(texId * 2);
-            if (texId < 3000 || textableValue == 0) {
+            if (texId < 3000 || textableValue === 0) {
                 texNum = textableValue;
             } else {
                 texNum = textableValue + 1;

@@ -401,7 +401,7 @@ function extractObjectLoadFromAssembly(map: RAMMapper, entryAddress: number): Ob
                 break;
             case MIPSOpcode.JAL:
                 const funcAddr = instr & 0x00ffffff;
-                assert(funcAddr == appendEntry || funcAddr == conditionalAppendEntry, "unknown function found");
+                assert(funcAddr === appendEntry || funcAddr === conditionalAppendEntry, "unknown function found");
                 delay = true;
                 break;
             case MIPSOpcode.ADDIU:

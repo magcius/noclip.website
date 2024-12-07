@@ -115,7 +115,7 @@ export function gfxBindingsDescriptorEquals(a: Readonly<GfxBindingsDescriptor>, 
     return true;
 }
 function gfxChannelBlendStateEquals(a: Readonly<GfxChannelBlendState>, b: Readonly<GfxChannelBlendState>): boolean {
-    return a.blendMode == b.blendMode && a.blendSrcFactor === b.blendSrcFactor && a.blendDstFactor === b.blendDstFactor;
+    return a.blendMode === b.blendMode && a.blendSrcFactor === b.blendSrcFactor && a.blendDstFactor === b.blendDstFactor;
 }
 function gfxAttachmentStateEquals(a: Readonly<GfxAttachmentState>, b: Readonly<GfxAttachmentState>): boolean {
     if (!gfxChannelBlendStateEquals(a.rgbBlendState, b.rgbBlendState)) return false;

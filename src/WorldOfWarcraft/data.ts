@@ -1104,7 +1104,7 @@ function setM2BlendModeMegaState(renderInst: GfxRenderInst, blendMode: WowM2Blen
     };
 
     if (depthWrite === undefined) {
-        depthWrite = (blendMode == rust.WowM2BlendingMode.Opaque || blendMode === rust.WowM2BlendingMode.AlphaKey);
+        depthWrite = (blendMode === rust.WowM2BlendingMode.Opaque || blendMode === rust.WowM2BlendingMode.AlphaKey);
     }
 
     const cullMode = doubleSided ? GfxCullMode.None : GfxCullMode.Back;

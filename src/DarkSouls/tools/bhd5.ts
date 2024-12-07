@@ -14,9 +14,9 @@ export interface BHD5 {
 
 export function parse(buffer: ArrayBufferSlice): BHD5 {
     const view = buffer.createDataView();
-    assert(readString(buffer, 0x00, 0x04) == 'BHD5');
-    assert(view.getUint32(0x04, true) == 0x000000FF);
-    assert(view.getUint32(0x08, true) == 0x00000001);
+    assert(readString(buffer, 0x00, 0x04) === 'BHD5');
+    assert(view.getUint32(0x04, true) === 0x000000FF);
+    assert(view.getUint32(0x08, true) === 0x00000001);
 
     const unk1 = view.getUint32(0x0C, true); // Seems related to fize size?
     const groupTableCount  = view.getUint32(0x10, true);
@@ -43,7 +43,7 @@ export function parse(buffer: ArrayBufferSlice): BHD5 {
             recordTableIdx += 0x04;
             const byteOffset = view.getUint32(recordTableIdx, true);
             recordTableIdx += 0x04;
-            assert (view.getUint32(recordTableIdx, true) == 0x00000000);
+            assert (view.getUint32(recordTableIdx, true) === 0x00000000);
             recordTableIdx += 0x04;
 
             const fileRecord: FileRecord = { nameHash, byteOffset, byteSize };

@@ -1130,7 +1130,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
 
         let model: BMDObjectRenderer;
 
-        if (actor.parameters == 0xFFFFFFFF) {
+        if (actor.parameters === 0xFFFFFFFF) {
             model = buildModelBMT(rarc, bdlmPaths[1], 'bmt/pg_pink.bmt');
         } else {
             model = buildModelBMT(rarc, bdlmPaths[0], bmtPaths[color]);
@@ -1192,14 +1192,14 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         let lastModel = mainModel;
         for (let i = 0; i < 20; i++) {
             let tailModel;
-            if (i == 19) {
+            if (i === 19) {
                 tailModel = buildChildModel(rarc, `bdlm/bwd_shippob.bdl`);
                 tailModel.bindTRK1(parseBRK(rarc, `brk/bwd_shippob.brk`), animFrame(0));
             } else {
                 tailModel = buildChildModel(rarc, `bdlm/bwd_shippoa.bdl`);
                 tailModel.bindTRK1(parseBRK(rarc, `brk/bwd_shippoa.brk`), animFrame(0));
             }
-            if (i == 0) {
+            if (i === 0) {
                 tailModel.setParentJoint(lastModel, `hara`);
                 mat4.rotateY(tailModel.modelMatrix, tailModel.modelMatrix, Math.PI * 1.5);
             } else {
@@ -1216,7 +1216,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     else if (actorName === 'Rdead1' || actorName === 'Rdead2') fetchArchive(`Rd`).then((rarc) => {
         const m = buildModel(rarc, `bdlm/rd.bdl`);
         const idleAnimType = (actor.parameters & 0x00000001);
-        if (idleAnimType == 0) {
+        if (idleAnimType === 0) {
             m.bindANK1(parseBCK(rarc, `bcks/tachip.bck`));
         } else {
             m.bindANK1(parseBCK(rarc, `bcks/suwarip.bck`));
@@ -1259,7 +1259,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
 
         const bubbleType = (actor.parameters & 0x000000FF);
         
-        if (bubbleType == 0x80) {
+        if (bubbleType === 0x80) {
             m.bindTTK1(parseBTK(rarc, 'btk/off.btk'));
         } else {
             m.bindANK1(parseBCK(rarc, 'bck/fly.bck'));
@@ -1313,7 +1313,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         mainModel.bindANK1(mainAnim);
 
         let helmetModel;
-        if (equipmentType == 1 || equipmentType == 3 || equipmentType >= 5) { // Has full face helmet
+        if (equipmentType === 1 || equipmentType === 3 || equipmentType >= 5) { // Has full face helmet
             helmetModel = buildChildModel(rarc, `bmdm/tn_kabuto2.bmd`);
             helmetModel.bindTRK1(parseBRK(rarc, `brk/tn_kabuto2.brk`), animFrame(armorColor));
         } else {
@@ -1362,7 +1362,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     // Peahats and Seahats
     else if (actorName === 'p_hat') {
         const type = (actor.parameters & 0x000000FF);
-        if (type == 1) {
+        if (type === 1) {
             fetchArchive(`Sh`).then((rarc) => {
                 const mainModel = buildModel(rarc, `bmdm/shb.bmd`);
                 mainModel.bindANK1(parseBCK(rarc, 'bck/bfly.bck'));
@@ -1511,7 +1511,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
             shapeType = 0;
         const m = buildModel(rarc, models[shapeType]);
         m.bindANK1(parseBCK(rarc, `bck/dooropenbdoor.bck`), animFrame(0));
-        m.lightTevColorType = shapeType == 5 ? LightType.Actor : LightType.BG0;
+        m.lightTevColorType = shapeType === 5 ? LightType.Actor : LightType.BG0;
     });
     else if (actorName === 'MKoppu') fetchArchive(`Mshokki`).then((rarc) => buildModel(rarc, `bdl/koppu.bdl`));
     else if (actorName === 'MOsara') fetchArchive(`Mshokki`).then((rarc) => buildModel(rarc, `bdl/osara.bdl`));

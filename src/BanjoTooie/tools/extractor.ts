@@ -323,7 +323,7 @@ function dumpNames(fs: FS, rom: ArrayBufferSlice): Map<number, string> {
         for (let j = 0; j < nameCount; j++) {
             const x = txtView.getUint8(txtOffs + 0x00) & 0x7F;
             const length = txtView.getUint8(txtOffs + 0x01);
-            if (x == index) {
+            if (x === index) {
                 names.set(level, readString(table, txtOffs + 2, length - 1));
                 break;
             } else {

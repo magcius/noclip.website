@@ -480,7 +480,7 @@ export class GfxRenderInst {
             if (sampleCount === -1)
                 sampleCount = depthStencilAttachmentDescriptor.sampleCount;
             else
-                assert(sampleCount == depthStencilAttachmentDescriptor.sampleCount);
+                assert(sampleCount === depthStencilAttachmentDescriptor.sampleCount);
         }
 
         assert(sampleCount > 0);

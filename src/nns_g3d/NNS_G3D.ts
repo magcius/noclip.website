@@ -26,7 +26,7 @@ interface ResDictEntry<T> {
 export function parseResDictGeneric<T>(buffer: ArrayBufferSlice, tableOffs: number, parseT: (view: DataView, entryTableIdx: number) => T): ResDictEntry<T>[] {
     const view = buffer.createDataView();
     // Revision
-    assert(view.getUint8(tableOffs + 0x00) == 0x00);
+    assert(view.getUint8(tableOffs + 0x00) === 0x00);
     const numEntries = view.getUint8(tableOffs + 0x01);
     const size = view.getUint16(tableOffs + 0x02, true);
     const entryOffs = tableOffs + view.getUint16(tableOffs + 0x06, true);
@@ -872,7 +872,7 @@ export interface TEX0 {
 export function parseTex0Block(buffer: ArrayBufferSlice): TEX0 {
     const view = buffer.createDataView();
 
-    assert(readString(buffer, 0x00, 0x04) == 'TEX0');
+    assert(readString(buffer, 0x00, 0x04) === 'TEX0');
     const size = view.getUint32(0x04, true);
 
     const textureSize = view.getUint16(0x0C, true);

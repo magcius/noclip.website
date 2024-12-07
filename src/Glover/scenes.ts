@@ -266,7 +266,7 @@ class GloverVent implements GenericRenderable {
                     }
                     const bullet = this.bullets.spawn(finalPos);
                     vec3.copy(bullet.velocity, this.velocity);
-                    if (this.bullets.bulletType != 0x12) {
+                    if (this.bullets.bulletType !== 0x12) {
                         bullet.velocity[0] += (Math.floor(Math.random()*11) - 5) / 20.0;
                         bullet.velocity[1] += (Math.floor(Math.random()*11) - 5) / 20.0;
                         bullet.velocity[2] += (Math.floor(Math.random()*11) - 5) / 20.0;
@@ -512,7 +512,7 @@ export class GloverPlatform implements Shadows.ShadowCaster {
 
     public initExitSparkle(): ParticlePool {
         assert(this.actor !== null);
-        assert(this.exitSparkle == false);
+        assert(this.exitSparkle === false);
         this.exitSparkle = true;
         this.exitSparkleParticles = new ParticlePool(
             this.actor.device, this.actor.cache, this.actor.textures, 0x15);
@@ -521,7 +521,7 @@ export class GloverPlatform implements Shadows.ShadowCaster {
 
     public pushPathPoint(point: PlatformPathPoint) {
         this.path.push(point);
-        if (this.path.length == 1) {
+        if (this.path.length === 1) {
             this.setPosition(point.pos[0], point.pos[1], point.pos[2]);
             vec3.copy(this.lastPosition, this.position);
             vec3.copy(this.nextPosition, this.position);
@@ -575,7 +575,7 @@ export class GloverPlatform implements Shadows.ShadowCaster {
     }
 
     public setSpinFlip(theta: number, cooldownTimer: number) {
-        if (cooldownTimer == 0) {
+        if (cooldownTimer === 0) {
             cooldownTimer = 5;
         }
         this.spinFlip = true;
@@ -677,10 +677,10 @@ export class GloverPlatform implements Shadows.ShadowCaster {
             vec3.sub(this.scratchVec3, this.position, this.orbitPt);
             let dist = 0;
             let theta = 0;
-            if (axis == 0) {
+            if (axis === 0) {
                 theta = Math.atan2(this.scratchVec3[1],this.scratchVec3[2]);
                 dist = Math.sqrt(Math.pow(this.scratchVec3[1],2) + Math.pow(this.scratchVec3[2],2));
-            } else if (axis == 1) {
+            } else if (axis === 1) {
                 theta = Math.atan2(this.scratchVec3[0],this.scratchVec3[2]);
                 dist = Math.sqrt(Math.pow(this.scratchVec3[0],2) + Math.pow(this.scratchVec3[2],2));
             } else {
@@ -720,10 +720,10 @@ export class GloverPlatform implements Shadows.ShadowCaster {
                 theta -= this.orbitSpeed * deltaTime;
                 const x = Math.cos(theta) * dist;
                 const y = Math.sin(theta) * dist;
-                if (axis == 0) {
+                if (axis === 0) {
                     this.position[1] = this.orbitPt[1] + y;
                     this.position[2] = this.orbitPt[2] + x;
-                } else if (axis == 1) {
+                } else if (axis === 1) {
                     this.position[0] = this.orbitPt[0] + y;
                     this.position[2] = this.orbitPt[2] + x;
                 } else {
@@ -771,7 +771,7 @@ export class GloverPlatform implements Shadows.ShadowCaster {
     }
 
     public advanceFrame(deltaTime : number, viewerInput : Viewer.ViewerRenderInput | null = null): void {
-        if (deltaTime == 0) {
+        if (deltaTime === 0) {
             return;
         }
         deltaTime = Math.min(deltaTime, SRC_FRAME_TO_MS);
@@ -842,7 +842,7 @@ export class GloverPlatform implements Shadows.ShadowCaster {
                     }
 
                     if (distRemaining < curSpeed + 0.01) {
-                        if (this.pathTimeLeft == 0) {
+                        if (this.pathTimeLeft === 0) {
                             this.pathCurPt = (this.pathCurPt + this.pathDirection) % this.path.length;
                             this.pathTimeLeft = this.path[this.pathCurPt].duration;
                             this.pathPaused = this.path[this.pathCurPt].duration < 0;
@@ -997,7 +997,7 @@ export class GloverWind implements GenericRenderable {
                 const jitter = this.turbulence * (Math.floor(Math.random()*10)/4 + 12);
                 let lifetime = 0;
                 for (let axis = 0; axis < 3; axis++) {
-                    if (this.scratchVelocity[axis] == 0) {
+                    if (this.scratchVelocity[axis] === 0) {
                         this.scratchOrigin[axis] = Math.floor(Math.random() * this.whd[axis]);
                     } else {
                         lifetime = Math.max(lifetime, this.whd[axis] / jitter);
@@ -1074,12 +1074,12 @@ export class GloverMrTip implements Shadows.ShadowCaster {
             this.lastFrameAdvance = 0;
             this.frameCount += 1;
             const blink = Math.floor(Math.random() * 0x14);
-            if (blink == 1) {
+            if (blink === 1) {
                 this.curFrame = 1;
             } else {
                 this.curFrame = 0;
             }
-            if ((this.frameCount & 1) != 0) {
+            if ((this.frameCount & 1) !== 0) {
                 const particleOrigin = [
                     this.position[0] + Math.floor(Math.random()*7) - 3,
                     this.position[1] + 5,
@@ -1651,9 +1651,9 @@ class SceneDesc implements Viewer.SceneDesc {
 
         const landscape = new GloverLevel(new KaitaiStream(raw_landscape.arrayBuffer));
         const object_banks = raw_object_banks.map(
-            (raw) => { return raw == null ? null : new GloverObjbank(new KaitaiStream(decompress(raw).arrayBuffer))})
+            (raw) => { return raw === null ? null : new GloverObjbank(new KaitaiStream(decompress(raw).arrayBuffer))})
         const texture_banks = raw_texture_banks.map(
-            (raw) => { return raw == null ? null : new GloverTexbank(new KaitaiStream(decompress(raw).arrayBuffer))})
+            (raw) => { return raw === null ? null : new GloverTexbank(new KaitaiStream(decompress(raw).arrayBuffer))})
 
         const textureHolder = new GloverTextureHolder();
         const sceneRenderer = new GloverRenderer(device, textureHolder);
@@ -1856,7 +1856,7 @@ class SceneDesc implements Viewer.SceneDesc {
                     sceneRenderer.actors.push(ballActor)
                     mat4.fromTranslation(ballActor.modelMatrix, [cmd.params.x, cmd.params.y, cmd.params.z]);
                     mat4.scale(ballActor.modelMatrix, ballActor.modelMatrix, [0.05, 0.05, 0.05]);
-                    if (cmd.params.type != 1) {
+                    if (cmd.params.type !== 1) {
                         ballActor.shadowSize = 5;
                         shadowCasters.push([ballActor, false]);
                         ballActors.push(ballActor);
@@ -1885,7 +1885,7 @@ class SceneDesc implements Viewer.SceneDesc {
                         cmd.params.type,
                         null,
                         sceneRenderer.waterVolumes);
-                    if (cmd.params.parentTag != 0) {
+                    if (cmd.params.parentTag !== 0) {
                         ventParents.push([currentVent, cmd.params.parentTag]);
                     }
                     currentObject = currentVent;
@@ -1904,7 +1904,7 @@ class SceneDesc implements Viewer.SceneDesc {
                     sceneRenderer.actors.push(currentPlatform.actor!)
 
                     currentObject = currentPlatform;
-                    if (cmd.params.objectId == 0x7FDADB91) {
+                    if (cmd.params.objectId === 0x7FDADB91) {
                         // special case exitpost.ndo
                         currentPlatform.setScale(1.5, 2.0, 1.5);
                         currentPlatform.actor!.playSkeletalAnimation(0, true, false);
@@ -1983,7 +1983,7 @@ class SceneDesc implements Viewer.SceneDesc {
                     if (currentPlatform === null) {
                         throw `No active platform for ${cmd.params.__type}!`;
                     }
-                    const duration = (cmd.params.duration == 0) ? 1 : cmd.params.duration;
+                    const duration = (cmd.params.duration === 0) ? 1 : cmd.params.duration;
                     currentPlatform.pushPathPoint(new PlatformPathPoint(
                         vec3.fromValues(cmd.params.x, cmd.params.y, cmd.params.z), duration))
                     break;
@@ -2068,7 +2068,7 @@ class SceneDesc implements Viewer.SceneDesc {
                     if (currentPlatform === null) {
                         throw `No active platform for ${cmd.params.__type}!`;
                     }
-                    if (cmd.params.type == 1 || cmd.params.type == 3 || this.id == "09") {
+                    if (cmd.params.type === 1 || cmd.params.type === 3 || this.id === "09") {
                         const emitter = currentPlatform.initExitSparkle();
                         sceneRenderer.miscRenderers.push(emitter);
                     }
@@ -2089,13 +2089,13 @@ class SceneDesc implements Viewer.SceneDesc {
                         throw `Unrecognized collectible type!`;
                     }
                     const flipbook = new GloverFlipbookRenderer(device, cache, textureHolder, flipbookMetadata)
-                    flipbook.isGarib = cmd.params.type == 0;
+                    flipbook.isGarib = cmd.params.type === 0;
                     const pos = vec3.fromValues(cmd.params.x, cmd.params.y, cmd.params.z);
                     mat4.fromTranslation(flipbook.drawMatrix, pos);
                     sceneRenderer.flipbooks.push(flipbook);
                     shadowCasters.push([flipbook, cmd.params.dynamicShadow !== 0]);
                     flipbook.visible = (currentGaribState !== 0);
-                    if (cmd.params.type == 2) {
+                    if (cmd.params.type === 2) {
                         // Extra lives are sparkly
                         const emitter = new CollectibleSparkle(device, cache, textureHolder, pos, CollectibleSparkleType.ExtraLife);
                         sceneRenderer.miscRenderers.push(emitter);
@@ -2104,7 +2104,7 @@ class SceneDesc implements Viewer.SceneDesc {
                     break;
                 }
                 case 'Powerup': {
-                    if (cmd.params.type != 7 && cmd.params.type != 9) {
+                    if (cmd.params.type !== 7 && cmd.params.type !== 9) {
                         const actor = loadActor(powerup_objects[cmd.params.type]);
                         sceneRenderer.actors.push(actor)
                         const pos = vec3.fromValues(cmd.params.x, cmd.params.y, cmd.params.z);
@@ -2184,7 +2184,7 @@ class SceneDesc implements Viewer.SceneDesc {
             const ballPos = ballActor.getPosition();
             ballPos[1] += radius;
             let collision = Shadows.projectOntoTerrain(ballPos, ballActor, shadowTerrain);
-            if (collision != null) {
+            if (collision !== null) {
                 const dist = collision.position[1] - (ballPos[1] - 2*radius);
                 ballActor.modelMatrix[13] += dist;
             }

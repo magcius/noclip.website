@@ -60,7 +60,7 @@ export class UVCT {
             for (let j = 0; j < matrixCount; j++) {
                 const mtx = mat4.create();
                 curPos += RDP.readMatrixRDP(mtx, view, curPos);
-                if (j == 0) { // [PW64] TODO: figure out what other matrices are for
+                if (j === 0) { // [PW64] TODO: figure out what other matrices are for
                     placement = mtx;
                 }
                 assert(mtx[15] === 1.0);

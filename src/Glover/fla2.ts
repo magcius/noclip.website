@@ -21,7 +21,7 @@ export var decompress = function (buffer: ArrayBufferSlice, srcOffs: number = 0)
         for (let i = 0; i < 8; i++) {
             const cmd = cmd_chunk & (0x80 >> i);
 
-            if (cmd == 0) {
+            if (cmd === 0) {
                 // New data
                 uncompressed_data[bytes_written] = data[data_cursor];
                 window[window_cursor] = data[data_cursor];
@@ -32,8 +32,8 @@ export var decompress = function (buffer: ArrayBufferSlice, srcOffs: number = 0)
             } else {
                 // Backreference
 
-                if (data[data_cursor] == 0 && data[data_cursor + 1] == 0) {
-                    assert(uncompressed_length == bytes_written);
+                if (data[data_cursor] === 0 && data[data_cursor + 1] === 0) {
+                    assert(uncompressed_length === bytes_written);
                     return new ArrayBufferSlice(uncompressed_data.buffer);
                 }
 
@@ -60,7 +60,7 @@ export var decompress = function (buffer: ArrayBufferSlice, srcOffs: number = 0)
         }
     }
 
-    assert(uncompressed_length == bytes_written);
+    assert(uncompressed_length === bytes_written);
     return new ArrayBufferSlice(uncompressed_data.buffer)
 }
 

@@ -618,7 +618,7 @@ function parseLevelModel(view: DataView, offs: number, gsMap: GSMemoryMap, textu
         } else if (cmd === 0x00 || cmd === 0x10 || cmd === 0x11) {
             // NOP and FLUSH commands can be ignored
         } else if (cmd === 0x01) { // CYCLE
-            assert(imm == 0x0101); // equal CL and WL, can ignore
+            assert(imm === 0x0101); // equal CL and WL, can ignore
         } else if (cmd === 0x05) { // STMOD
             assert(imm === 0); // normal, no addition
         } else if (cmd === 0x30) { // STROW

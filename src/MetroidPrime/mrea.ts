@@ -428,7 +428,7 @@ function parseMaterialSet_MP1_MP2(stream: InputStream, resourceSystem: ResourceS
         const isWhiteAmb = false;
 
         // Alpha-blending is biased so that additive blending always appears on top
-        const sortBias = blendSrcFactor == GX.BlendFactor.SRCALPHA && blendDstFactor == GX.BlendFactor.INVSRCALPHA ? 0 : 1;
+        const sortBias = blendSrcFactor === GX.BlendFactor.SRCALPHA && blendDstFactor === GX.BlendFactor.INVSRCALPHA ? 0 : 1;
 
         materials.push({
             isOccluder,
@@ -877,7 +877,7 @@ export function parseLightLayer(stream: InputStream, version: number): AreaLight
         stream.skip(0x4);
         if (version >= AreaVersion.MP3) stream.skip(0x14); // unknown data
 
-        if (lightType == AreaLightType.LocalAmbient) {
+        if (lightType === AreaLightType.LocalAmbient) {
             ambientColor.r = Math.min(lightColorR * brightness, 1);
             ambientColor.g = Math.min(lightColorG * brightness, 1);
             ambientColor.b = Math.min(lightColorB * brightness, 1);
@@ -895,17 +895,17 @@ export function parseLightLayer(stream: InputStream, version: number): AreaLight
             vec3.normalize(light.gxLight.Direction, light.gxLight.Direction);
             vec3.negate(light.gxLight.Direction, light.gxLight.Direction);
 
-            if (lightType == AreaLightType.Directional) {
+            if (lightType === AreaLightType.Directional) {
                 vec3.set(light.gxLight.DistAtten, 1, 0, 0);
                 vec3.set(light.gxLight.CosAtten, 1, 0, 0);
             }
             else {
-                const distAttenA = (falloffType == 0) ? (2.0 / brightness) : 0;
-                const distAttenB = (falloffType == 1) ? (250.0 / brightness) : 0;
-                const distAttenC = (falloffType == 2) ? (25000.0 / brightness) : 0;
+                const distAttenA = (falloffType === 0) ? (2.0 / brightness) : 0;
+                const distAttenB = (falloffType === 1) ? (250.0 / brightness) : 0;
+                const distAttenC = (falloffType === 2) ? (25000.0 / brightness) : 0;
                 vec3.set(light.gxLight.DistAtten, distAttenA, distAttenB, distAttenC);
 
-                if (lightType == AreaLightType.Spot) {
+                if (lightType === AreaLightType.Spot) {
 
                     // Calculate angle atten
                     if (spotCutoff < 0 || spotCutoff > 90) {
@@ -1153,8 +1153,8 @@ export function parse(stream: InputStream, resourceSystem: ResourceSystem): MREA
             const sclyMagic = stream.readFourCC();
             stream.skip(1);
             const sclyIndex = stream.readUint32();
-            assert(sclyMagic == 'SCLY');
-            assert(sclyIndex == i);
+            assert(sclyMagic === 'SCLY');
+            assert(sclyIndex === i);
 
             const layer = Script.parseScriptLayer_MP2(stream, version, resourceSystem);
             scriptLayers.push(layer);

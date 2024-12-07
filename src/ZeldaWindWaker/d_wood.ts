@@ -559,19 +559,19 @@ class Unit_c {
         if (this.flags & UnitState_e.Active) {
             if (this.animIdx >= 8) {
                 const anim = packet.get_anm(this.animIdx);
-                if (anim.mode == AnimMode_e.ToNorm) {
+                if (anim.mode === AnimMode_e.ToNorm) {
                     if (anim.timer <= 0) {
                         this.animIdx = anim.nextAnimIdx;
                         anim.mode = AnimMode_e._Max;
                     }
-                } else if (anim.mode == AnimMode_e.Cut) {
+                } else if (anim.mode === AnimMode_e.Cut) {
                     if (anim.timer <= 0) {
                         const newAnimIdx = packet.search_anm(AnimMode_e.Norm);
                         this.animIdx = newAnimIdx;
                         anim.mode = AnimMode_e._Max;
                         this.flags |= UnitState_e.IsCut;
                     }
-                } else if (anim.mode == AnimMode_e._Max) {
+                } else if (anim.mode === AnimMode_e._Max) {
                     this.animIdx = packet.search_anm(AnimMode_e.Norm);
                 }
             }
@@ -606,14 +606,14 @@ export class WoodPacket implements J3DPacket {
 
         assert((i_mode >= 0) && (i_mode < AnimMode_e._Max));
 
-        if (i_mode == AnimMode_e.Norm) {
+        if (i_mode === AnimMode_e.Norm) {
             animIdx = sAnmNormNum++;
             sAnmNormNum = sAnmNormNum % 8;
         } else {
             // Return the first anim slot which has an unset mode
             animIdx = 8;
             for (let i = 0; i < 64; i++) {
-                if (this.anm[animIdx].mode == AnimMode_e._Max) {
+                if (this.anm[animIdx].mode === AnimMode_e._Max) {
                     return animIdx;
                 }
                 animIdx++;
@@ -658,14 +658,14 @@ export class WoodPacket implements J3DPacket {
         if ((roomIdx >= 0) && (roomIdx < kRoomCount)) {
             //     dComIfG_Ccsp() -> SetMassAttr(L_attr.kCollisionRad1, L_attr.kCollisionHeight1, (u8)0x13, 1);
             for (let unit of this.unit[roomIdx]) {
-                if ((unit.flags & UnitState_e.IsCut) == 0) {
+                if ((unit.flags & UnitState_e.IsCut) === 0) {
                     unit.cc_hit_before_cut(this);
                 }
             }
 
             //     dComIfG_Ccsp() -> SetMassAttr(L_attr.kCollisionRad2, L_attr.kCollisionHeight2, (u8)0x12, 1);
             for (let unit of this.unit[roomIdx]) {
-                if ((unit.flags & UnitState_e.IsCut) != 0) {
+                if ((unit.flags & UnitState_e.IsCut) !== 0) {
                     unit.cc_hit_after_cut(this);
                 }
             }
@@ -770,13 +770,13 @@ export class WoodPacket implements J3DPacket {
                         continue;
 
                     // If this bush is not chopped down, draw the main body
-                    if ((unit.flags & UnitState_e.IsCut) == 0) {
+                    if ((unit.flags & UnitState_e.IsCut) === 0) {
                         // The cut animation reduces alpha over time
                         const cutAlpha = this.anm[unit.animIdx].alpha;
                         colorFromRGBA(materialParams.u_Color[ColorKind.C2], 1, 1, 1, cutAlpha / 0xFF);
 
                         // If this bush is fading out, disable alpha testing
-                        if (cutAlpha != 0xff) {
+                        if (cutAlpha !== 0xff) {
                             materialParams.u_DynamicAlphaRefA = 0;
                             materialParams.u_DynamicAlphaRefB = 0;
                         }
@@ -788,7 +788,7 @@ export class WoodPacket implements J3DPacket {
                         renderInstManager.submitRenderInst(renderInst);
 
                         // Return alpha test to normal (50%)
-                        if (cutAlpha != 0xff) {
+                        if (cutAlpha !== 0xff) {
                             materialParams.u_DynamicAlphaRefA = kAlphaCutoff;
                             materialParams.u_DynamicAlphaRefB = kAlphaCutoff;
                         }

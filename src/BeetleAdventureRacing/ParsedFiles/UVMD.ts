@@ -121,7 +121,7 @@ export class UVMD {
                     let material: Material;
                     ({ material, curPos } = parseMaterial(view, curPos, filesystem));
 
-                    if ((material.renderOptions & RenderOptionsFlags.ENABLE_TEX_GEN_SPHERICAL) != 0) {
+                    if ((material.renderOptions & RenderOptionsFlags.ENABLE_TEX_GEN_SPHERICAL) !== 0) {
                         unknownBool = true;
                     }
 

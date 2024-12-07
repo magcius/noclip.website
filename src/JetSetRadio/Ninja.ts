@@ -310,9 +310,9 @@ function parseChunkList(buffer: ArrayBufferSlice, offs: number, callback: (type:
         let extra = undefined;
         let data: ArrayBufferSlice | undefined;
 
-        if (header == 0x00) {
+        if (header === 0x00) {
             type = CNK_TYPE.CNK_NULL;
-        } else if (header == 0xFF) {
+        } else if (header === 0xFF) {
             type = CNK_TYPE.CNK_END;
         }
 
@@ -355,7 +355,7 @@ function parseNjsVlist(buffer: ArrayBufferSlice, offset: number): NJS_VERTS {
     const specular:  Color[] = [];
 
     const processVlistChunks = (type: CNK_TYPE, header: number, flags: number, extra: number | undefined, data: ArrayBufferSlice | undefined): void => {
-        if (type != CNK_TYPE.CNK_VERT || data === undefined)
+        if (type !== CNK_TYPE.CNK_VERT || data === undefined)
             return;
 
         const view = data.createDataView();

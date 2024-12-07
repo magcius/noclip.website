@@ -7,7 +7,7 @@ function visibleRAF(elem: HTMLElement, func: (t: number) => void) {
 
     let isRunning: boolean = false;
     function setRunning(running: boolean) {
-        if (isRunning == running)
+        if (isRunning === running)
             return;
 
         isRunning = running;

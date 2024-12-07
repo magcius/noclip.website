@@ -292,7 +292,7 @@ class d_a_ep extends fopAc_ac_c {
         }
 
         if (this.timers[1] === 0) {
-            if (true /* field_0x7d4 == 0 */) {
+            if (true /* field_0x7d4 === 0 */) {
                 this.timers[1] = 3.0 + cM_rndF(6.0);
                 this.alphaModelScaleTarget = 0.75 + cM_rndF(0.075);
             } else {
@@ -4840,7 +4840,7 @@ class d_a_npc_ls1 extends fopNpc_npc_c {
             case 4: this.type = 4; break;
         }
 
-        return this.type != 0xFF;
+        return this.type !== 0xFF;
     }
 
     private createInit(globals: dGlobals) {
@@ -4867,8 +4867,8 @@ class d_a_npc_ls1 extends fopNpc_npc_c {
 
         this.morf = new mDoExt_McaMorf(modelData, null, null, null, LoopMode.Once, 1.0, 0, -1);
 
-        const jointIdxHandL = modelData.bmd.jnt1.joints.findIndex(j => j.name == 'handL');
-        const jointIdxHandR = modelData.bmd.jnt1.joints.findIndex(j => j.name == 'handR');
+        const jointIdxHandL = modelData.bmd.jnt1.joints.findIndex(j => j.name === 'handL');
+        const jointIdxHandR = modelData.bmd.jnt1.joints.findIndex(j => j.name === 'handR');
         this.jointMtxHandL = this.morf.model.shapeInstanceState.jointToWorldMatrixArray[jointIdxHandL];
         this.jointMtxHandR = this.morf.model.shapeInstanceState.jointToWorldMatrixArray[jointIdxHandR];
     }
@@ -4877,12 +4877,12 @@ class d_a_npc_ls1 extends fopNpc_npc_c {
         const modelData = globals.resCtrl.getObjectIDRes(ResType.Model, this.arcName, 0xc);
         this.handModel = new J3DModelInstance(modelData);
 
-        const handJointIdxL = modelData.bmd.jnt1.joints.findIndex(j => j.name == 'ls_handL');
-        const handJointIdxR = modelData.bmd.jnt1.joints.findIndex(j => j.name == 'ls_handR');
+        const handJointIdxL = modelData.bmd.jnt1.joints.findIndex(j => j.name === 'ls_handL');
+        const handJointIdxR = modelData.bmd.jnt1.joints.findIndex(j => j.name === 'ls_handR');
 
         this.handModel.jointMatrixCalcCallback = (dst: mat4, modelData: J3DModelData, i: number): void => {
-            if (i == handJointIdxL) { mat4.copy(dst, this.jointMtxHandL); }
-            else if (i == handJointIdxR) { mat4.copy(dst, this.jointMtxHandR); }
+            if (i === handJointIdxL) { mat4.copy(dst, this.jointMtxHandL); }
+            else if (i === handJointIdxR) { mat4.copy(dst, this.jointMtxHandR); }
         }
     }
 
@@ -4898,7 +4898,7 @@ class d_a_npc_ls1 extends fopNpc_npc_c {
 
         const params = d_a_npc_ls1.animParamsTable[animIdx];
 
-        if (params.anmIdx > -1 && this.animIdx != params.anmIdx) {
+        if (params.anmIdx > -1 && this.animIdx !== params.anmIdx) {
             const bckID = d_a_npc_ls1.bckIdxTable[params.anmIdx];
             dNpc_setAnmIDRes(globals, this.morf, params.loopMode, params.morf, params.playSpeed, bckID, this.arcName);
             this.animIdx = params.anmIdx;
@@ -4929,7 +4929,7 @@ class d_a_npc_ls1 extends fopNpc_npc_c {
 
         if (this.itemModel) {
             mat4.copy(calc_mtx, this.jointMtxHandR);
-            if (this.itemPosType == 0) {
+            if (this.itemPosType === 0) {
                 MtxTrans([5.5, -3.0, -2.0], true);
             }
             else {

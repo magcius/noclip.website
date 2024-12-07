@@ -36,7 +36,7 @@ function loadZLB(compData: ArrayBufferSlice): ArrayBufferLike {
     const dv = compData.createDataView();
     const header = new ZLBHeader(dv);
 
-    if (header.magic != stringToFourCC('ZLB\0')) {
+    if (header.magic !== stringToFourCC('ZLB\0')) {
         throw Error(`Invalid magic identifier 0x${hexzero(header.magic, 8)}`);
     }
 

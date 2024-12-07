@@ -94,7 +94,7 @@ export interface FLVER {
 
 export function parse(buffer: ArrayBufferSlice): FLVER {
     const view = buffer.createDataView();
-    assert(readString(buffer, 0x0, 0x06, false) == 'FLVER\0');
+    assert(readString(buffer, 0x0, 0x06, false) === 'FLVER\0');
 
     const endianMarker = readString(buffer, 0x06, 0x02, false);
     assert(endianMarker === 'B\0' || endianMarker === 'L\0');

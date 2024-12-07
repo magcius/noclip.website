@@ -195,9 +195,9 @@ export class dDemo_actor_c extends TActor {
 
     public getMorfParam() {
         // Doesn't have anim properties
-        if ((this.flags & 0x40) == 0) {
+        if ((this.flags & 0x40) === 0) {
             // Has STB data
-            if ((this.flags & 1) == 0) {
+            if ((this.flags & 1) === 0) {
                 return 0.0;
             } else {
                 switch (this.stbDataId) {
@@ -310,7 +310,7 @@ class dDemo_system_c implements TSystem {
             case JStage.EObject.PreExistingActor:
                 let actor = fopAcM_searchFromName(this.globals, objName, 0, 0);
                 if (!actor) {
-                    if (objType == JStage.EObject.Actor && objName == "d_act") {
+                    if (objType === JStage.EObject.Actor && objName === "d_act") {
                         debugger; // Untested. Unimplemented
                         actor = {} as fopAc_ac_c;
                     } else {
@@ -443,7 +443,7 @@ export function dDemo_setDemoData(globals: dGlobals, dtFrames: number, actor: fo
 
     demoActor.model = morf.model;
 
-    if ((enable & 0x20) && (demoActor.nextBckId != demoActor.bckId)) {
+    if ((enable & 0x20) && (demoActor.nextBckId !== demoActor.bckId)) {
         const bckID = demoActor.nextBckId;
         if (bckID & 0x10000)
             arcName = globals.roomCtrl.demoArcName;

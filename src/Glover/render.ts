@@ -272,18 +272,18 @@ export class GloverRSPState implements F3DEX.RSPStateInterface {
     public gSPModifyVertex(vtx: number, where: number, val: number): void {
         assert(vtx < this.vertexCache.length);
         const vertex = this.vertexCache[vtx];
-        if (where == F3DEX.MODIFYVTX_Locations.G_MWO_POINT_RGBA) {
+        if (where === F3DEX.MODIFYVTX_Locations.G_MWO_POINT_RGBA) {
             vertex.c0 = ((val >>> 24) & 0xFF) / 0xFF;
             vertex.c1 = ((val >>> 16) & 0xFF) / 0xFF;
             vertex.c2 = ((val >>>  8) & 0xFF) / 0xFF;
             vertex.a =  ((val >>>  0) & 0xFF) / 0xFF;
-        } else if (where == F3DEX.MODIFYVTX_Locations.G_MWO_POINT_ST) {
+        } else if (where === F3DEX.MODIFYVTX_Locations.G_MWO_POINT_ST) {
             vertex.tx = ((val >>> 16) & 0xFFFF) / 2**5;
             vertex.ty = ((val >>>  0) & 0xFFFF) / 2**5;
-        } else if (where == F3DEX.MODIFYVTX_Locations.G_MWO_POINT_XYSCREEN) {
+        } else if (where === F3DEX.MODIFYVTX_Locations.G_MWO_POINT_XYSCREEN) {
             vertex.x = (val >>> 16) & 0xFFFF;
             vertex.y = (val >>>  0) & 0xFFFF;
-        } else if (where == F3DEX.MODIFYVTX_Locations.G_MWO_POINT_ZSCREEN) {
+        } else if (where === F3DEX.MODIFYVTX_Locations.G_MWO_POINT_ZSCREEN) {
             vertex.z = (val >>> 16) & 0xFFFF;
         } else {
             console.error(`Unknown gSPModifyVertex location: ${where.toString(16)}`);
@@ -340,7 +340,7 @@ export class GloverRSPState implements F3DEX.RSPStateInterface {
             }
             dc.textureIndices.push(this._translateTileTexture(this.SP_TextureState.tile));
 
-            if (this.SP_TextureState.level == 0 && RDP.combineParamsUsesT1(dc.DP_Combine)) {
+            if (this.SP_TextureState.level === 0 && RDP.combineParamsUsesT1(dc.DP_Combine)) {
                 // if tex1 is used, and it isn't a mipmap, load it
                 // In 2CYCLE mode, it uses tile and tile + 1.
                 dc.textureIndices.push(this._translateTileTexture(this.SP_TextureState.tile + 1));
@@ -697,11 +697,11 @@ export function f3dexFromGeometry(geo: GloverObjbank.Geometry, faceIdx: number, 
     f3dexVertex.y = Math.floor(geoVert.y);
     f3dexVertex.z = Math.floor(geoVert.z);
 
-    f3dexVertex.tx = (faceVertIdx == 0) ? geo.uvs[faceIdx].u1.raw :
-                            (faceVertIdx == 1) ? geo.uvs[faceIdx].u2.raw :
+    f3dexVertex.tx = (faceVertIdx === 0) ? geo.uvs[faceIdx].u1.raw :
+                            (faceVertIdx === 1) ? geo.uvs[faceIdx].u2.raw :
                                 geo.uvs[faceIdx].u3.raw;
-    f3dexVertex.ty = (faceVertIdx == 0) ? geo.uvs[faceIdx].v1.raw :
-                            (faceVertIdx == 1) ? geo.uvs[faceIdx].v2.raw :
+    f3dexVertex.ty = (faceVertIdx === 0) ? geo.uvs[faceIdx].v1.raw :
+                            (faceVertIdx === 1) ? geo.uvs[faceIdx].v2.raw :
                                 geo.uvs[faceIdx].v3.raw;
 
     const colorsNorms = geo.colorsNorms[vertIdx];
@@ -740,12 +740,12 @@ export function loadRspTexture(rspState: GloverRSPState, textureHolder: Textures
 
         rspState.gDPSetTile(
             texFile.colorFormat,
-            texFile.compressionFormat == 0 ? ImageSize.G_IM_SIZ_4b : ImageSize.G_IM_SIZ_8b,
+            texFile.compressionFormat === 0 ? ImageSize.G_IM_SIZ_4b : ImageSize.G_IM_SIZ_8b,
             0, 0x0100, G_TX_LOADTILE, 0,
             cmT, 0, 0,
             cmS, 0, 0);
 
-        rspState.gDPLoadTLUT(G_TX_LOADTILE, texFile.compressionFormat == 0 ? 15 : 255);
+        rspState.gDPLoadTLUT(G_TX_LOADTILE, texFile.compressionFormat === 0 ? 15 : 255);
 
         rspState.gDPSetTextureImage(texFile.colorFormat, ImageSize.G_IM_SIZ_16b, 1, textureId);
         
@@ -761,7 +761,7 @@ export function loadRspTexture(rspState: GloverRSPState, textureHolder: Textures
 
         rspState.gDPSetTile(
             texFile.colorFormat,
-            texFile.compressionFormat == 0 ? ImageSize.G_IM_SIZ_4b : ImageSize.G_IM_SIZ_8b,
+            texFile.compressionFormat === 0 ? ImageSize.G_IM_SIZ_4b : ImageSize.G_IM_SIZ_8b,
             0, 0x0000, G_TX_RENDERTILE, 0,
             cmT, texFile.maskt, G_TX_NOLOD,
             cmS, texFile.masks, G_TX_NOLOD)
@@ -774,7 +774,7 @@ export function loadRspTexture(rspState: GloverRSPState, textureHolder: Textures
     } else {
         rspState.gDPSetOtherModeH(0x0E, 0x02, 0x0000); // gsDPSetTextureLUT(G_TT_NONE)
 
-        const siz = texFile.compressionFormat == 2 ? ImageSize.G_IM_SIZ_16b : ImageSize.G_IM_SIZ_32b;
+        const siz = texFile.compressionFormat === 2 ? ImageSize.G_IM_SIZ_16b : ImageSize.G_IM_SIZ_32b;
         rspState.gDPSetTextureImage(texFile.colorFormat, siz, 1, textureId);
         
         rspState.gDPSetTile(

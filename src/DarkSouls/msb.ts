@@ -75,8 +75,8 @@ export function parse(buffer: ArrayBufferSlice, mapID: string): MSB {
 
     let paramTableIdx = 0x00;
 
-    assert(view.getUint32(paramTableIdx + 0x00, true) == 0);
-    assert(readString(buffer, view.getUint32(paramTableIdx + 0x04, true), -1, true) == 'MODEL_PARAM_ST');
+    assert(view.getUint32(paramTableIdx + 0x00, true) === 0);
+    assert(readString(buffer, view.getUint32(paramTableIdx + 0x04, true), -1, true) === 'MODEL_PARAM_ST');
     const modelTableCount = view.getUint32(paramTableIdx + 0x08, true) - 1;
 
     const areaID = mapID.slice(0, 3); // "m10"
@@ -109,8 +109,8 @@ export function parse(buffer: ArrayBufferSlice, mapID: string): MSB {
     // Chain to next chunk
     paramTableIdx = view.getUint32(modelTableIdx + 0x00, true);
 
-    assert(view.getUint32(paramTableIdx + 0x00, true) == 0);
-    assert(readString(buffer, view.getUint32(paramTableIdx + 0x04, true), -1, true) == 'EVENT_PARAM_ST');
+    assert(view.getUint32(paramTableIdx + 0x00, true) === 0);
+    assert(readString(buffer, view.getUint32(paramTableIdx + 0x04, true), -1, true) === 'EVENT_PARAM_ST');
     const eventTableCount = view.getUint32(paramTableIdx + 0x08, true) - 1;
 
     let eventTableIdx = paramTableIdx + 0x0C;
@@ -122,8 +122,8 @@ export function parse(buffer: ArrayBufferSlice, mapID: string): MSB {
     // Chain to next chunk.
     paramTableIdx = view.getUint32(eventTableIdx + 0x00, true);
 
-    assert(view.getUint32(paramTableIdx + 0x00, true) == 0);
-    assert(readString(buffer, view.getUint32(paramTableIdx + 0x04, true), -1, true) == 'POINT_PARAM_ST');
+    assert(view.getUint32(paramTableIdx + 0x00, true) === 0);
+    assert(readString(buffer, view.getUint32(paramTableIdx + 0x04, true), -1, true) === 'POINT_PARAM_ST');
     const pointTableCount = view.getUint32(paramTableIdx + 0x08, true) - 1;
 
     let pointTableIdx = paramTableIdx + 0x0C;
@@ -135,8 +135,8 @@ export function parse(buffer: ArrayBufferSlice, mapID: string): MSB {
     // Chain to next chunk.
     paramTableIdx = view.getUint32(pointTableIdx + 0x00, true);
 
-    assert(view.getUint32(paramTableIdx + 0x00, true) == 0);
-    assert(readString(buffer, view.getUint32(paramTableIdx + 0x04, true), -1, true) == 'PARTS_PARAM_ST');
+    assert(view.getUint32(paramTableIdx + 0x00, true) === 0);
+    assert(readString(buffer, view.getUint32(paramTableIdx + 0x04, true), -1, true) === 'PARTS_PARAM_ST');
     const partsTableCount = view.getUint32(paramTableIdx + 0x08, true) - 1;
 
     function readPart(offs: number): Part {

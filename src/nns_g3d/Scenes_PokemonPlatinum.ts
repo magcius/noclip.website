@@ -425,8 +425,8 @@ class PokemonPlatinumSceneDesc implements Viewer.SceneDesc {
         const mapMatrixData = assertExists(modelCache.getFileData(`map_matrix/${matrixIndex}.bin`)).createDataView();
         const width = mapMatrixData.getUint8(0x00);
         const height = mapMatrixData.getUint8(0x01);
-        const hasHeightLayer = mapMatrixData.getUint8(0x02) == 1;
-        const hasHeaderLayer = mapMatrixData.getUint8(0x03) == 1;
+        const hasHeightLayer = mapMatrixData.getUint8(0x02) === 1;
+        const hasHeaderLayer = mapMatrixData.getUint8(0x03) === 1;
         
         //Read header or file layer and set default height, if the header layer is included this is header, if its not its file
         let currentMatrixOffset = 0x05 + mapMatrixData.getUint8(0x04);

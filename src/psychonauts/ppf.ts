@@ -213,7 +213,7 @@ function EGameTextureManager_ReadPackFile(stream: DataStream): PPAK_Texture[] {
         marker = stream.readUint16();
     }
 
-    assert(marker != 0xFFFF);
+    assert(marker !== 0xFFFF);
     const textureCount = marker;
     EGameTextureManager_ReadPackFileTextures(stream, textures, textureCount);
     return textures;

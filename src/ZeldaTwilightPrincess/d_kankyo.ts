@@ -461,7 +461,7 @@ function dKy_light_influence_id(globals: dGlobals, pos: ReadonlyVec3, which: num
                     }
                 }
 
-                if (light.index < 0 && var_r25 != 99) {
+                if (light.index < 0 && var_r25 !== 99) {
                     if (i === 0)
                         bestIdx1 = j;
 
@@ -791,7 +791,7 @@ function setLight_actor(globals: dGlobals, envLight: dScnKy_env_light_c, tevStr:
             tevStr.ambCol.b = 0;
         }
     } else {
-        if (tevStr.lightType == LightType.UNK_10 || tevStr.lightType == LightType.UNK_9 || tevStr.unk_378 != 0) {
+        if (tevStr.lightType === LightType.UNK_10 || tevStr.lightType === LightType.UNK_9 || tevStr.unk_378 !== 0) {
             dKy_calc_color_set(envLight, tevStr.ambCol, ret.palePrevA.actorAmbCol, ret.palePrevB.actorAmbCol, ret.paleCurrA.actorAmbCol, ret.paleCurrB.actorAmbCol, ret.blendPaleAB, tevStr.colpatBlend, envLight.actorAddAmb, tevStr.lightInfluence * envLight.actAmbColRatio * envLight.actAmbColRatio);
         } else {
             dKy_calc_color_set(envLight, tevStr.ambCol, ret.palePrevA.actorAmbCol, ret.palePrevB.actorAmbCol, ret.paleCurrA.actorAmbCol, ret.paleCurrB.actorAmbCol, ret.blendPaleAB, tevStr.colpatBlend, envLight.actorAddAmb, tevStr.lightInfluence * envLight.unk_1210 * envLight.actAmbColRatio * envLight.actAmbColRatio);
@@ -1662,7 +1662,7 @@ export function dKy_event_proc(globals: dGlobals, deltaTimeFrames: number): void
             break;
         }
 
-        if (envLight.colpatWeather != colpat) {
+        if (envLight.colpatWeather !== colpat) {
             envLight.colpatWeather = colpat;
             envLight.colpatCurrGather = colpat;
         }
@@ -2250,7 +2250,7 @@ export function dKy_SunMoon_Light_Check(globals: dGlobals): boolean {
 }
 
 export function dKy_Indoor_check(globals: dGlobals): boolean {
-    if (dStage_stagInfo_GetSTType(globals.dStage_dt.stag) != 0) {
+    if (dStage_stagInfo_GetSTType(globals.dStage_dt.stag) !== 0) {
         return true;
     }
 

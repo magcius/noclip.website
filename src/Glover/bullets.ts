@@ -265,8 +265,8 @@ export class Bullet {
             }
 
             if ((params.actorFlags & 1) !== 0) {
-                const gravAccel = (params.actorFlags & 0x40) == 0 ? 1.2 : 0.6;
-                const terminalVelocity = (params.actorFlags & 0x1000000) == 0 ? -15 : -100000;
+                const gravAccel = (params.actorFlags & 0x40) === 0 ? 1.2 : 0.6;
+                const terminalVelocity = (params.actorFlags & 0x1000000) === 0 ? -15 : -100000;
                 this.velocity[1] = Math.max(this.velocity[1] - gravAccel, terminalVelocity);
             }
 
@@ -279,7 +279,7 @@ export class Bullet {
             //   (trailParticle->billboard).color.r = (&DAT_801f19c4)[((char)bullet->idx_0x162 + 1) * 8];
             //   (trailParticle->billboard).color.g = (&DAT_801f19c5)[((char)bullet->idx_0x162 + 1) * 8];
             //   (trailParticle->billboard).color.b = (&DAT_801f19c6)[((char)bullet->idx_0x162 + 1) * 8];
-            //   if (bullet->bulletType == '\x1a') {
+            //   if (bullet->bulletType === '\x1a') {
             //     sVar3 = (trailParticle->billboard).width;
             //     sVar4 = (trailParticle->billboard).height;
             //     (trailParticle->billboard).width = (short)((int)sVar3 << 2) + sVar3;
@@ -288,7 +288,7 @@ export class Bullet {
             //     (trailParticle->billboard).startSize = (trailParticle->billboard).startSize * 5;
             //   }
             // }
-            // if (bullet->bulletType == '\x02') {
+            // if (bullet->bulletType === '\x02') {
             //  aPStack104[0].z = 0.0;
             //  aPStack104[0].y = 0.0;
             //  aPStack104[0].x = DAT_8010b510;
@@ -301,7 +301,7 @@ export class Bullet {
         vec3.lerp(this.position, this.lastPosition, this.nextPosition, Math.min(1.0, this.lastFrameAdvance/(SRC_FRAME_TO_MS*1.1)));
 
 
-        if (this.lifetime == 0 && this.flipbooks.every((flipbook)=>!flipbook.playing)) {
+        if (this.lifetime === 0 && this.flipbooks.every((flipbook)=>!flipbook.playing)) {
             this.destruct();
             this.active = false;
         }

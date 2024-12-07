@@ -630,7 +630,7 @@ function handleVifUnpackVertexData(view: DataView, offs: number, vuState: VUStat
             view.getFloat32(offs + vuState.ind[i] * 0xC + 0x4, true),    // vy
             view.getFloat32(offs + vuState.ind[i] * 0xC + 0x8, true)));  // vz
         const f = vuState.flg[i] & 0x30;
-        if (f != 0x10) {
+        if (f !== 0x10) {
             if (f === 0x20 || f === 0x0) {
                 mesh.ind.push(indStart + i - 2);  // t0
                 mesh.ind.push(indStart + i - 1);  // t1

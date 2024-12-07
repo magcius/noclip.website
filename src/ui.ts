@@ -1065,7 +1065,7 @@ class SceneSelect extends Panel {
 
                 if (!explicitlyInvisible) {
                     // If header matches, then we are explicitly visible.
-                    if (!visible == lastGroupHeaderVisible)
+                    if (!visible === lastGroupHeaderVisible)
                         visible = true;
 
                     // If name matches, then we are explicitly visible.

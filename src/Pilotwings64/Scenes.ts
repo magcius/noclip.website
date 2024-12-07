@@ -124,7 +124,7 @@ function parseUVCT_Chunk(chunk: Pilotwings64FSFileChunk): UVCT_Chunk {
         for (let j = 0; j < matrixCount; j++) {
             const mtx = mat4.create();
             offs += RDP.readMatrixRDP(mtx, view, offs);
-            if (j == 0) { // TODO: figure out what other matrices are for
+            if (j === 0) { // TODO: figure out what other matrices are for
                 placement = mtx;
             }
             assert(mtx[15] === 1.0);
@@ -541,7 +541,7 @@ function parseUVTX_Chunk(chunk: Pilotwings64FSFileChunk, name: string): UVTX {
         const tile = tiles[i];
 
         if (tile.lrs === 0 && tile.lrt === 0) { // technically a 1x1 texture
-            assert(scaleS != 0 || scaleT != 0 || combineScaleS != 0 || combineScaleT != 0)
+            assert(scaleS !== 0 || scaleT !== 0 || combineScaleS !== 0 || combineScaleT !== 0)
             // convert stored dimensions to fixed point
             tile.lrs = view.getUint16(dlEnd + 0x00) * 4 - 4;
             tile.lrt = view.getUint16(dlEnd + 0x02) * 4 - 4;
@@ -568,7 +568,7 @@ function parseUVTX_Chunk(chunk: Pilotwings64FSFileChunk, name: string): UVTX {
         levels.push({ width: tileW, height: tileH, pixels: dst, shiftS: tile.shifts, shiftT: tile.shiftt, usesPaired });
 
         // For now, use only one LOD.
-        if (pairedIndex == 0xfff)
+        if (pairedIndex === 0xfff)
             break;
     }
 
@@ -680,7 +680,7 @@ interface UVMD {
 }
 
 function parseUVMD(file: Pilotwings64FSFile): UVMD {
-    assert(file.chunks.length == 1);
+    assert(file.chunks.length === 1);
     const view = file.chunks[0].buffer.createDataView();
     const vertCount = view.getUint16(0x0);
     const lodCount = view.getUint8(0x02);
@@ -743,7 +743,7 @@ function parseUVMD(file: Pilotwings64FSFile): UVMD {
                             vertBuffer[write] = (index & 0x3FFF) + read;
                     }
                 }
-                assert(indexData.length - indexOffset == 3 * triCount);
+                assert(indexData.length - indexOffset === 3 * triCount);
                 materials.push({ rspModeInfo, textureIndex, indexOffset, triCount });
             }
             parts.push({ indexData: new Uint16Array(indexData), materials, attachmentLevel });
@@ -833,7 +833,7 @@ function parseSPTH(file: Pilotwings64FSFile): SPTH {
         } else if (tag === 'SCPR') {
             currTrack = rTrack;
         } else {
-            assert(tag === 'SCP#' && i == file.chunks.length - 1);
+            assert(tag === 'SCP#' && i === file.chunks.length - 1);
             break;
         }
 
@@ -1138,7 +1138,7 @@ function parseUPWT(file: Pilotwings64FSFile): UPWT {
                 // this is read from a table
                 let modelIndex = 0xd9 + special + 2 * other + 4 * size;
                 if (special > 1) {
-                    // goal ring, game skips if special != 3
+                    // goal ring, game skips if special !== 3
                     modelIndex = 0xf1;
                 }
                 rings.push({ position, angles, axis, modelIndex });
@@ -1293,7 +1293,7 @@ function parseUVEN_Chunk(chunk: Pilotwings64FSFileChunk): UVEN {
     let oceanModel: number | undefined;
     let oceanFlags: number | undefined;
     let offs = 0x01;
-    if (modelCount == 2) {
+    if (modelCount === 2) {
         skyboxModel = view.getUint16(offs + 0x00);
         skyboxFlags = view.getUint8(offs + 0x02);
         offs += 0x03;

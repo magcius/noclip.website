@@ -310,7 +310,7 @@ export class base_process_class {
         this.parameters = profile.getUint32(0x18);
 
         // The game stores these separately, and frequently accesses both. Lets see if they ever differ.
-        assert(profName == this.processName);
+        assert(profName === this.processName);
     }
 
     // In the original game, construction is inside "create". Here, we split it into construction and "load".

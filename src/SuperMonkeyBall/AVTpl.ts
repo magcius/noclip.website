@@ -14,7 +14,7 @@ function parseAVTplHeader(
 ): TextureInputGX {
     let view = texHeaderBuffer.createDataView();
 
-    assert(view.getUint16(0x0e) == 0x1234);
+    assert(view.getUint16(0x0e) === 0x1234);
     const name = `${tplName}_${leftPad(idx.toString(), 3, "0")}`;
     const format: GX.TexFormat = view.getUint32(0x00);
     const offs = view.getUint32(0x04);

@@ -155,7 +155,7 @@ uniform samplerCube u_Cubemap;
         case 1: // Texture 1 has TexCoord 1
             return `texture(SAMPLER_2D(u_Texture1), v_TexCoord1.xy)`;
         case 2: // Texture 2 has either TexCoord 1 or 2 as input
-            if (this.material.texCoordConfig == TexCoordConfig.Config0110 || this.material.texCoordConfig == TexCoordConfig.Config0111 || this.material.texCoordConfig == TexCoordConfig.Config0112)
+            if (this.material.texCoordConfig === TexCoordConfig.Config0110 || this.material.texCoordConfig === TexCoordConfig.Config0111 || this.material.texCoordConfig === TexCoordConfig.Config0112)
                 return `texture(SAMPLER_2D(u_Texture2), v_TexCoord1.xy)`;
             else
                 return `texture(SAMPLER_2D(u_Texture2), v_TexCoord2.xy)`;
@@ -361,12 +361,12 @@ uniform samplerCube u_Cubemap;
     private IsLUTSupported(lutType: MatLutType): boolean {
         const config = this.material.lightingConfig;
         switch(lutType){
-            case MatLutType.Distribution0: return config != LightingConfig.Config1;
-            case MatLutType.Distribution1: return config != LightingConfig.Config0 && config != LightingConfig.Config1 && config != LightingConfig.Config5;
+            case MatLutType.Distribution0: return config !== LightingConfig.Config1;
+            case MatLutType.Distribution1: return config !== LightingConfig.Config0 && config !== LightingConfig.Config1 && config !== LightingConfig.Config5;
             case MatLutType.Fresnel: return config !== LightingConfig.Config0 && config !== LightingConfig.Config2 && config !== LightingConfig.Config4;
-            case MatLutType.ReflectR: return config != LightingConfig.Config3;
+            case MatLutType.ReflectR: return config !== LightingConfig.Config3;
             case MatLutType.ReflectG:
-            case MatLutType.ReflectB: return config == LightingConfig.Config4 || config == LightingConfig.Config5 || config == LightingConfig.Config7;
+            case MatLutType.ReflectB: return config === LightingConfig.Config4 || config === LightingConfig.Config5 || config === LightingConfig.Config7;
         }
     }
 
@@ -741,7 +741,7 @@ class MaterialInstance {
             this.gfxSamplers.push(gfxSampler);
 
             const cmb = this.cmbData.cmb;
-            if (i == 0 && cmb.textures[binding.textureIdx].dimension === GfxTextureDimension.Cube)
+            if (i === 0 && cmb.textures[binding.textureIdx].dimension === GfxTextureDimension.Cube)
                 this.textureMappings[4].gfxSampler = gfxSampler;
             else
                 this.textureMappings[i].gfxSampler = gfxSampler;

@@ -789,7 +789,7 @@ export class MDL0ModelInstance {
         let depth = -1;
         if (modelVisibility !== IntersectionState.Outside) {
             const rootJoint = mdl0.nodes[0];
-            if (rootJoint.bbox != null) {
+            if (rootJoint.bbox !== null) {
                 bboxScratch.transform(rootJoint.bbox, this.modelMatrix);
                 depth = Math.max(computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera.viewMatrix, bboxScratch), 0);
             } else {

@@ -100,7 +100,7 @@ export class DkrObjectAnimation {
         case 1:
             {
                 if(timeProgress >= this.duration) {
-                    if((Math.floor(timeProgress / this.duration) % 2) == 1) {
+                    if((Math.floor(timeProgress / this.duration) % 2) === 1) {
                         timeProgress %= this.duration;
                         timeProgress = this.duration - timeProgress;
                     } else {

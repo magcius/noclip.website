@@ -237,7 +237,7 @@ function dKy_bg_MAxx_proc(globals: dGlobals, modelInstance: J3DModelInstance): d
                     c1.b = 180 / 255;
                     c1.a = 255 / 255;
 
-                    if (globals.renderer.currentLayer == 1)
+                    if (globals.renderer.currentLayer === 1)
                         c1.a = 0.0;
 
                     materialInstance.setColorOverride(ColorKind.C1, c1);
@@ -879,10 +879,10 @@ class daBgObj_Spec {
             const name = readString(buffer, offset);
             offset += name.length + 1;
 
-            if (view.getUint8(offset) != 0) {
+            if (view.getUint8(offset) !== 0) {
                 const name = readString(buffer, offset);
                 offset += name.length + 1;
-            } else if (view.getUint8(offset) == 0 && view.getUint8(offset + 1) == 1) {
+            } else if (view.getUint8(offset) === 0 && view.getUint8(offset + 1) === 1) {
                 offset += 2;
             }
         }
@@ -2171,7 +2171,7 @@ class kytag06_class extends fopAc_ac_c {
         case 2:
             colpat_weather = 1;
             
-            if ((deltaTimeFrames & 3) == 0) {
+            if ((deltaTimeFrames & 3) === 0) {
                 if (envLight.rainCount < 40) {
                     envLight.rainCount++;
                     dKyw_rain_set(envLight, envLight.rainCount);
@@ -2220,7 +2220,7 @@ class kytag06_class extends fopAc_ac_c {
             colpat_weather = 1;
             
             if (envLight.snowCount < 125) {
-                if ((deltaTimeFrames & 3) == 0) {
+                if ((deltaTimeFrames & 3) === 0) {
                     envLight.snowCount++;
                 }
             } else {
@@ -2235,7 +2235,7 @@ class kytag06_class extends fopAc_ac_c {
             break;
         }
 
-        if (envLight.colpatWeather != colpat_weather && !envLight.cameraInWater) {
+        if (envLight.colpatWeather !== colpat_weather && !envLight.cameraInWater) {
             envLight.colpatWeather = colpat_weather;
             dKy_change_colpat(envLight, colpat_weather);
         }
@@ -2334,7 +2334,7 @@ class kytag06_class extends fopAc_ac_c {
             break;
         }
 
-        if (envLight.colpatWeather != colpat_weather && !envLight.cameraInWater) {
+        if (envLight.colpatWeather !== colpat_weather && !envLight.cameraInWater) {
             envLight.colpatWeather = colpat_weather;
             dKy_change_colpat(envLight, colpat_weather);
         }
@@ -2448,7 +2448,7 @@ class daItemBase extends fopAc_ac_c {
 
         if (brkID > 0) {
             const brk_anm = resCtrl.getObjectRes(ResType.Brk, arcName, brkID);
-            const play_anm = globals.item_resource[this.itemNo].tevFrm == 0xFF ? true : false;
+            const play_anm = globals.item_resource[this.itemNo].tevFrm === 0xFF ? true : false;
             this.brk = new mDoExt_brkAnm();
             this.brk.init(mdl_data, brk_anm, play_anm, LoopMode.Repeat);
         }
@@ -2465,7 +2465,7 @@ class daItemBase extends fopAc_ac_c {
             const tevFrm = globals.item_resource[this.itemNo].tevFrm;
 
             if (this.brk !== null) {
-                if (tevFrm != 0xFF)
+                if (tevFrm !== 0xFF)
                     this.brk.entry(this.model, tevFrm);
                 else
                     this.brk.entry(this.model);
@@ -2539,7 +2539,7 @@ class d_a_obj_item extends daItemBase {
             break;
         case 6:
         default:
-            if (this.switchNo != 0xFF)
+            if (this.switchNo !== 0xFF)
                 this.hide();
             break;
         }
@@ -2623,7 +2623,7 @@ class d_a_obj_item extends daItemBase {
                 break;
             case 6:
             default:
-                if (this.switchNo != 0xFF)
+                if (this.switchNo !== 0xFF)
                     this.hide();
                 break;
             }
@@ -3219,7 +3219,7 @@ class d_a_e_hp extends fopAc_ac_c {
         if (status !== cPhs__Status.Complete)
             return status;
 
-        this.alwaysOn = (this.rot[2] & 1) == 0 ? true : false;
+        this.alwaysOn = (this.rot[2] & 1) === 0 ? true : false;
 
         this.rot[2] = 0;
         this.rot[0] = 0;

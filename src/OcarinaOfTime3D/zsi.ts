@@ -369,7 +369,7 @@ function readSceneHeaders(version: Version, name: string, buffer: ArrayBufferSli
 
         const cmdType = cmd1 >>> 24;
 
-        if (cmdType == HeaderCommands.End)
+        if (cmdType === HeaderCommands.End)
             break;
 
         switch (cmdType) {
@@ -421,7 +421,7 @@ function readRoomHeaders(version: Version, buffer: ArrayBufferSlice, offs: numbe
 
         const cmdType = cmd1 >>> 24;
 
-        if (cmdType == HeaderCommands.End)
+        if (cmdType === HeaderCommands.End)
             break;
 
         switch (cmdType) {

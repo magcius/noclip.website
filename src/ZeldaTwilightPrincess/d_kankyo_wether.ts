@@ -878,7 +878,7 @@ export class dKankyo_vrkumo_Packet {
                 ddraw.texCoord2f32(GX.Attr.TEX0, 0, 1);
 
                 const stageName = globals.stageName;
-                if (stageName == "F_SP127" || stageName == "D_MN07" || stageName == "D_MN08" || stageName == "D_MN07A" || (stageName == "F_SP103" && globals.mStayNo === 0)) {
+                if (stageName === "F_SP127" || stageName === "D_MN07" || stageName === "D_MN08" || stageName === "D_MN07A" || (stageName === "F_SP103" && globals.mStayNo === 0)) {
                     x = Math.cos(polarY0) * Math.sin(azimuthal + azimuthalOffsY0);
                     y = Math.sin(polarY0);
                     z = Math.cos(polarY0) * Math.cos(azimuthal + azimuthalOffsY0);
@@ -1972,7 +1972,7 @@ function vrkumo_move(globals: dGlobals, deltaTimeFrames: number): void {
                 }
 
                 let x = Math.sin(rnd_0);
-                if (Math.abs(rnd_1 * x) != 0.0) {
+                if (Math.abs(rnd_1 * x) !== 0.0) {
                     if (x <= 0.0) {
                         x -= 5000;
                     } else {
@@ -1981,7 +1981,7 @@ function vrkumo_move(globals: dGlobals, deltaTimeFrames: number): void {
                 }
 
                 let z = Math.cos(rnd_0);
-                if (Math.abs(rnd_1 * z) != 0.0) {
+                if (Math.abs(rnd_1 * z) !== 0.0) {
                     if (z <= 0.0) {
                         z -= 5000;
                     } else {
