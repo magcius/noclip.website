@@ -5101,7 +5101,7 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
     override execute(globals: dGlobals, deltaTimeFrames: number): void {
         // Update the current proc based on demo data
         this.setDemoData(globals);
-        if (this.demoMode != 5) {
+        if (this.demoMode != LinkDemoMode.WaitTurn) {
             this.changeDemoProc(globals);
         }
 
