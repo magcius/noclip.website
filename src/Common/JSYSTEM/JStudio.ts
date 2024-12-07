@@ -544,6 +544,8 @@ export abstract class TActor extends JStage.TObject {
     public JSGGetTextureAnimationFrame(): number { return 0.0; }
     public JSGSetTextureAnimationFrame(x: number): void { }
     public JSGGetTextureAnimationFrameMax(): number { return 0.0; }
+    
+    public JSGDebugGetAnimationName(x: number): string | null { return null; }
 }
 
 class TActorAdaptor extends TAdaptor {
@@ -699,7 +701,11 @@ class TActorAdaptor extends TAdaptor {
 
     public adaptor_do_ANIMATION(data: ParagraphData): void {
         assert(data.dataOp === EDataOp.ObjectIdx);
-        this.log(`SetAnimation: ${(data.value) & 0xFFFF} (${(data.value) >> 4 & 0x01})`);
+        const animName = this.object.JSGDebugGetAnimationName(data.value);
+        if( animName )
+            this.log(`SetAnimation: ${animName}`);
+        else 
+            this.log(`SetAnimation: ${(data.value) & 0xFFFF} (${(data.value) >> 4 & 0x01})`);
         this.object.JSGSetAnimation(data.value);
     }
 

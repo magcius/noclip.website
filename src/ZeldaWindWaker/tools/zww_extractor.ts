@@ -341,6 +341,9 @@ function extractExtra(binaries: Binary[]) {
     extractSymbol(datas, framework, `d_drawlist.o`, `l_frontZMat`);
     extractSymbol(datas, framework, `d_drawlist.o`, `l_frontNoZSubMat`);
 
+    // main.dol : d_a_player_main.o 
+    extractSymbol(datas, framework, `d_a_player_main.o`, `mAnmDataTable__9daPy_lk_c`);
+
     const crg1 = {
         SymbolData: datas,
     };

@@ -2,7 +2,7 @@
 import { ReadonlyMat4, ReadonlyVec3, mat4, quat, vec2, vec3 } from "gl-matrix";
 import { TransparentBlack, colorCopy, colorFromRGBA8, colorNewCopy, colorNewFromRGBA8 } from "../Color.js";
 import { J3DModelData, J3DModelInstance, buildEnvMtx } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
-import { LoopMode, TRK1, TTK1 } from "../Common/JSYSTEM/J3D/J3DLoader.js";
+import { JointTransformInfo, LoopMode, TRK1, TTK1 } from "../Common/JSYSTEM/J3D/J3DLoader.js";
 import { JPABaseEmitter, JPASetRMtxSTVecFromMtx } from "../Common/JSYSTEM/JPA.js";
 import { BTIData } from "../Common/JSYSTEM/JUTTexture.js";
 import { Vec3One, Vec3UnitY, Vec3UnitZ, Vec3Zero, clamp, computeMatrixWithoutTranslation, computeModelMatrixR, computeModelMatrixS, lerp, saturate, scaleMatrix, transformVec3Mat4w0, transformVec3Mat4w1 } from "../MathHelpers.js";
@@ -10,9 +10,9 @@ import { GlobalSaveManager } from "../SaveManager.js";
 import { TDDraw, TSDraw } from "../SuperMarioGalaxy/DDraw.js";
 import { Endianness } from "../endian.js";
 import { compareDepthValues } from "../gfx/helpers/ReversedDepthHelpers.js";
-import { GfxClipSpaceNearZ, GfxCompareMode, GfxDevice } from "../gfx/platform/GfxPlatform.js";
+import { GfxClipSpaceNearZ, GfxCompareMode, GfxDevice, GfxTexture } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
-import { GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
+import { GfxRendererLayer, GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder.js";
 import * as GX from '../gx/gx_enum.js';
 import { TevDefaultSwapTables } from "../gx/gx_material.js";
@@ -33,16 +33,22 @@ import { mDoExt_McaMorf, mDoExt_bckAnm, mDoExt_brkAnm, mDoExt_btkAnm, mDoExt_btp
 import { MtxPosition, MtxTrans, calc_mtx, mDoMtx_XYZrotM, mDoMtx_XrotM, mDoMtx_YrotM, mDoMtx_YrotS, mDoMtx_ZXYrotM, mDoMtx_ZrotM, mDoMtx_ZrotS, quatM } from "./m_do_mtx.js";
 import { dGlobals } from "./Main.js";
 import { dDlst_alphaModel__Type } from "./d_drawlist.js";
-import { dDemo_setDemoData } from "./d_demo.js";
+import { dDemo_setDemoData, EDemoActorFlags } from "./d_demo.js";
 import { fopAc_ac_c, fopAcIt_JudgeByID, fopAcM_create, fopAcM_prm_class } from "./f_op_actor.js";
 import { dProcName_e } from "./d_procname.js";
+import { TextureMapping } from "../TextureHolder.js";
+import { calcANK1JointAnimationTransform } from "../Common/JSYSTEM/J3D/J3DGraphAnimator.js";
 
 // Framework'd actors
 
 const scratchMat4a = mat4.create();
+const scratchMat4b = mat4.create();
+const scratchMat4c = mat4.create();
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
 const scratchVec3c = vec3.create();
+const scratchVec3d = vec3.create();
+const scratchVec3e = vec3.create();
 
 class d_a_grass extends fopAc_ac_c {
     public static PROCESS_NAME = dProcName_e.d_a_grass;
@@ -1154,7 +1160,7 @@ class d_a_obj_lpalm extends fopAc_ac_c {
             this.animDir[i] = cLib_addCalcAngleRad2(this.animDir[i], cM_s2rad(animDirTarget), cM_s2rad(0x04), cM_s2rad(0x20));
 
             // Rock back and forth.
-            this.animWave[i] += cM_s2rad((windPow * 0x800) + cM_rndFX(0x80)) *deltaTimeFrames;
+            this.animWave[i] += cM_s2rad((windPow * 0x800) + cM_rndFX(0x80)) * deltaTimeFrames;
             const wave = Math.sin(this.animWave[i]);
 
             vec3.set(scratchVec3a, wave, 0, wave);
@@ -2875,7 +2881,7 @@ class d_a_majuu_flag extends fopAc_ac_c {
 
     private majuu_flag_move(globals: dGlobals, deltaTimeFrames: number): void {
         this.wave += this.waveSpeed * deltaTimeFrames;
-        const windSpeed = lerp(this.windSpeed1, this.windSpeed2,  Math.sin(cM_s2rad(this.wave)) * 0.5 + 0.5);
+        const windSpeed = lerp(this.windSpeed1, this.windSpeed2, Math.sin(cM_s2rad(this.wave)) * 0.5 + 0.5);
         const windpow = dKyw_get_wind_pow(globals.g_env_light);
         vec3.set(scratchVec3a, 0, 0, windSpeed * windpow * 2.0);
         mDoMtx_ZrotS(calc_mtx, -this.rot[2]);
@@ -4912,10 +4918,10 @@ class d_a_npc_ls1 extends fopNpc_npc_c {
         // play_btk_anm(this);
 
         this.animStopped = this.morf.play(deltaTimeFrames);
-        if (this.morf.frameCtrl.currentTimeInFrames < this.animTime) {
+        if (this.morf.frameCtrl.getFrame() < this.animTime) {
             this.animStopped = true;
         }
-        this.animTime = this.morf.frameCtrl.currentTimeInFrames;
+        this.animTime = this.morf.frameCtrl.getFrame();
     }
 
     private setMtx(param: boolean) {
@@ -4955,6 +4961,688 @@ class d_a_npc_ls1 extends fopNpc_npc_c {
     }
 }
 
+const enum LkAnim {
+    WAITS = 0x00,
+    WALK = 0x01,
+    DASH = 0x02,
+    WAITB = 0x1C,
+    WAITATOB = 0x1D,
+    WAITQ = 0x9D,
+};
+
+enum LinkDemoMode {
+    None = 0x00,
+    Wait = 0x01,
+    Walk = 0x02,
+    Dash = 0x03,
+    SetPosRotEquip = 0x04,
+    WaitTurn = 0x05,
+    SetRot = 0x2B,
+    SetPosRot = 0x2C,
+    MAX = 0x4B,
+    
+    Tool = 0x200,
+};
+
+interface LkAnimData {
+    underBckIdx: number;
+    upperBckIdx: number;
+    leftHandIdx: number;
+    rightHandIdx: number;
+    texAnmIdx: number;
+}
+
+interface LkFootData {
+    toePos: vec3,
+    heelPos: vec3,
+}
+
+const enum ItemNo {
+    HerosSword = 0x38,
+    MasterSwordPowerless = 0x39,
+    MasterSwordHalfPower = 0x3A,
+    MasterSwordFullPower = 0x3E,
+    InvalidItem = 0xFF,
+}
+
+const enum LkEquipItem {
+    None = 0x100,
+    Sword = 0x103,
+}
+
+const enum LkHandStyle {
+    Idle = 0,
+    HoldSword = 3,
+    HoldWindWaker = 5,
+    HoldShield = 8,
+}
+
+const enum LkJoint {
+    HandL = 0x08,
+    HandR = 0x0D,
+    Head = 0x0F,
+    Waist = 0x1E,
+    FootL = 0x22,
+    FootR = 0x27,
+}
+
+const enum d_a_py_lk_mode { unk, wait, tool }
+class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
+    public static PROCESS_NAME = dProcName_e.d_a_py_lk;
+    private static ARC_NAME = "Link";
+    private static LINK_BDL_CL = 0x18;
+    private static LINK_BTI_LINKTEXBCI4 = 0x71;
+    private static LINK_CLOTHES_TEX_IDX = 0x22;
+    private static LINK_BDL_KATSURA = 0x20;
+    private static LINK_BDL_SWA = 0x25; // Hero's sword blade
+    private static LINK_BDL_SWGRIPA=0x26 // Hero's sword hilt
+    private static TOE_POS = vec3.fromValues(6.0, 3.25, 0.0);
+    private static HEEL_POS = vec3.fromValues(-6.0, 3.25, 0.0);
+
+    public curMode = d_a_py_lk_mode.wait;
+    public prevMode = d_a_py_lk_mode.wait;
+
+    private model: J3DModelInstance;
+    private modelSwordHilt: J3DModelInstance;
+    private modelKatsura: J3DModelInstance; // Wig. To replace the hat when wearing casual clothes.
+
+    private demoMode: number = LinkDemoMode.None;
+    private demoClampToGround = true;
+    private gndChk = new dBgS_GndChk()
+
+    private isWearingCasualClothes = false;
+    private texMappingClothes: TextureMapping;
+    private texMappingCasualClothes: TextureMapping = new TextureMapping();
+    private texMappingHeroClothes: TextureMapping = new TextureMapping();
+
+    private anmDataTable: LkAnimData[] = [];
+    private anmBck = new mDoExt_bckAnm(); // Joint animation
+    private anmBtp = new mDoExt_btpAnm(); // Texture flipbook animation (e.g. facial expressions)
+    private anmBtk = new mDoExt_btkAnm(); // UV animation (e.g. eyes get small when surprised)
+    private anmBckId: number;
+
+    private rawPos = vec3.create(); // The position before it is manipulated by anim root/foot motion
+    private vel = vec3.create(); // TODO: This should be part of fopAc_ac_c
+
+    private frontFoot: number = 2;
+    private footData: LkFootData[] = nArray(2, i => ({ toePos: vec3.create(), heelPos: vec3.create() }));
+    private anmTranslation = vec3.create();
+
+    private handStyleLeft: LkHandStyle; // @TODO: Handle non-standard hand rendering. See setDrawHandModel().
+    private handStyleRight: LkHandStyle;
+    private equippedItem: LkEquipItem;
+    private equippedItemModel: J3DModelInstance | null = null;
+    
+    private mode_tbl = [
+        this.procUnkInit, this.procUnk,
+        this.procWaitInit, this.procWait,
+        this.procToolInit, this.procTool,
+    ];
+
+    protected override subload(globals: dGlobals, prm: fopAcM_prm_class | null): cPhs__Status {
+        const statusA = dComIfG_resLoad(globals, 'Link');
+        const statusB = dComIfG_resLoad(globals, 'LkD00');
+        const statusC = dComIfG_resLoad(globals, 'LkD01');
+        const statusD = dComIfG_resLoad(globals, 'LkAnm');
+        
+        if (statusA !== cPhs__Status.Complete) return statusA;
+        if (statusB !== cPhs__Status.Complete) return statusB;
+        if (statusC !== cPhs__Status.Complete) return statusC;
+        if (statusD !== cPhs__Status.Complete) return statusD;
+
+        this.loadAnmTable(globals);
+
+        this.playerInit(globals);
+
+        // noclip modification: The game manually draws the eye/eyebrow filter before the body. Let's do that with sorting.
+        this.model.setSortKeyLayer(GfxRendererLayer.OPAQUE + 5, false);
+        this.setupDam('eyeL');
+        this.setupDam('eyeR');
+        this.setupDam('mayuL');
+        this.setupDam('mayuR');
+
+        // noclip modification:
+        this.setSingleMoveAnime(globals, LkAnim.WAITS);
+
+        return cPhs__Status.Next;
+    }
+
+    override execute(globals: dGlobals, deltaTimeFrames: number): void {
+        // Update the current proc based on demo data
+        this.setDemoData(globals);
+        if (this.demoMode !== LinkDemoMode.WaitTurn) {
+            this.changeDemoProc(globals);
+        }
+
+        // Step our animations forward
+        this.anmBck.play(deltaTimeFrames);
+        this.anmBtp.play(deltaTimeFrames);
+        this.anmBtk.play(deltaTimeFrames);
+
+        // Run the current custom update process (Walk, Idle, Swim, etc)
+        modeProcExec(globals, this, this.mode_tbl, deltaTimeFrames);
+
+        // Apply root motion from the animation, and adjust position based on foot movement
+        const rawPos = vec3.copy(this.rawPos, this.pos); 
+        this.posMove(globals);
+
+        // Evaluate for collisions, clamp to ground
+        this.gndChk.Reset();
+        vec3.scaleAndAdd(this.gndChk.pos, this.pos, Vec3UnitY, 30.1);
+        const groundHeight = globals.scnPlay.bgS.GroundCross(this.gndChk);
+        this.autoGroundHit();
+
+        // If we're pulling position directly from the JStudio tool, ignore collisions and animation root motion
+        if (this.curMode === d_a_py_lk_mode.tool) {
+            vec3.copy(this.pos, rawPos);
+            if (this.demoClampToGround && groundHeight !== -Infinity) {
+                this.pos[1] = groundHeight;
+            }
+        }
+
+        // setWorldMatrix()
+        MtxTrans(this.pos, false, this.model.modelMatrix);
+        mDoMtx_ZXYrotM(this.model.modelMatrix, this.rot);
+
+        // Update joints based on the currently playing animation
+        this.anmBck.entry(this.model);
+        this.model.calcAnim();
+        mat4.copy(this.modelKatsura.modelMatrix, this.model.shapeInstanceState.jointToWorldMatrixArray[LkJoint.Head]);
+        this.modelKatsura.calcAnim();
+
+        // Update item transform and animations
+        this.setItemModel();
+    }
+
+    override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        // @TODO: This should use LightType.Player, but it's not yet implemented
+        settingTevStruct(globals, LightType.Actor, this.pos, this.tevStr);
+
+        if (this.isWearingCasualClothes) {
+            this.model.setShapeVisible(5, false);  // Hat
+            this.model.setShapeVisible(22, false); // Sword scabbard
+            this.model.setShapeVisible(23, false); // Belt buckle
+
+            setLightTevColorType(globals, this.modelKatsura, this.tevStr, viewerInput.camera);
+            mDoExt_modelEntryDL(globals, this.modelKatsura, renderInstManager, viewerInput);
+        }
+
+        if (this.equippedItem === LkEquipItem.Sword) {
+            setLightTevColorType(globals, this.equippedItemModel!, this.tevStr, viewerInput.camera);
+            mDoExt_modelEntryDL(globals, this.equippedItemModel!, renderInstManager, viewerInput);
+
+            setLightTevColorType(globals, this.modelSwordHilt, this.tevStr, viewerInput.camera);
+            mDoExt_modelEntryDL(globals, this.modelSwordHilt, renderInstManager, viewerInput);
+        }
+
+        // TODO:
+        // if (!checkNormalSwordEquip() && dStage_stagInfo_GetSTType(dComIfGp_getStageStagInfo()) != dStageType_FF1_e ||
+        //     checkCaughtShapeHide() || checkDemoShieldNoDraw()) {
+        //     mpCLModelData->getJointNodePointer(0x0D)->getMesh()->getShape()->hide(); // cl_podA joint
+        // } else {
+        //     mpCLModelData->getJointNodePointer(0x0D)->getMesh()->getShape()->show(); // cl_podA joint
+        // }
+
+        if (this.anmBtp.anm) this.anmBtp.entry(this.model);
+        if (this.anmBtk.anm) this.anmBtk.entry(this.model);
+
+        setLightTevColorType(globals, this.model, this.tevStr, viewerInput.camera);
+        mDoExt_modelEntryDL(globals, this.model, renderInstManager, viewerInput);
+    }
+
+    private playerInit(globals: dGlobals) {
+        // createHeap()
+        this.model = this.initModel(globals, d_a_py_lk.LINK_BDL_CL);
+        this.modelKatsura = this.initModel(globals, d_a_py_lk.LINK_BDL_KATSURA);
+        this.modelSwordHilt = this.initModel(globals, d_a_py_lk.LINK_BDL_SWGRIPA);
+
+        // Fetch the casual clothes and the hero texture. They'll be be selected by the ShapeID set by a demo.
+        const casualTexData = globals.resCtrl.getObjectRes(ResType.Bti, d_a_py_lk.ARC_NAME, d_a_py_lk.LINK_BTI_LINKTEXBCI4);
+        casualTexData.fillTextureMapping(this.texMappingCasualClothes);
+
+        // Find the texture mapping for link's clothes in the model. There are two, the first has alpha enabled and is never
+        // used with the casual clothes. We want the second.
+        this.texMappingClothes = this.model.materialInstanceState.textureMappings[d_a_py_lk.LINK_CLOTHES_TEX_IDX];
+        this.texMappingHeroClothes.copy(this.texMappingClothes);
+
+        // Set the default state based on EventBit 0x2A80, except we can't, so just hardcode to use casual clothes on the title screen
+        this.isWearingCasualClothes = (globals.stageName === 'sea_T' ); // dComIfGs_isEventBit(0x2A80)
+        if(this.isWearingCasualClothes) { this.texMappingClothes.copy(this.texMappingCasualClothes); }
+
+        MtxTrans(this.pos, false, this.model.modelMatrix);
+        mDoMtx_ZXYrotM(this.model.modelMatrix, this.rot);
+        this.cullMtx = this.model.modelMatrix;
+    }
+
+    private setupDam(pref: string): void {
+        const matInst = this.model.materialInstances.find((m) => m.name === `${pref}`)!;
+        const matInstA = this.model.materialInstances.find((m) => m.name === `${pref}damA`)!;
+        const matInstB = this.model.materialInstances.find((m) => m.name === `${pref}damB`)!;
+
+        // Render an alpha mask in the shape of the eyes. Needs to render before Link so that it can depth test against
+        // the scene but not against his hair. The eyes will then draw with depth testing enabled, but will mask against
+        // this alpha tex. 
+        matInstA.setSortKeyLayer(GfxRendererLayer.OPAQUE + 4, false);
+        matInstA.setColorWriteEnabled(false);
+        matInstA.setAlphaWriteEnabled(true);
+
+        // @NOTE: This material is marked as translucent in the original BMD. It is manually drawn after Link's head but 
+        //        before his body. Since we don't actually need any translucent behavior, mark it as opaque so that it can 
+        //        be drawn before his body.
+        // @TODO: We need to have a separate sort key for head vs body, as the eyes will currently render on top of Link's arms.
+        matInstA.materialData.material.translucent = false;
+
+        // Clear the alpha mask written by the *damA materials so it doesn't interfere with other translucent objects
+        matInstB.setSortKeyLayer(GfxRendererLayer.OPAQUE + 6, false);
+        matInstB.setColorWriteEnabled(false);
+        matInstB.setAlphaWriteEnabled(true);
+
+        // Ensure that any texture animations applied to `eyeL` or `eyeR` also apply to these two damA/B masks
+        matInstA.texNoCalc = matInst.texNoCalc;
+        matInstB.texNoCalc = matInst.texNoCalc;
+    }
+
+    private initModel(globals: dGlobals, fileIdx: number): J3DModelInstance {
+        const modelData = globals.resCtrl.getObjectRes(ResType.Model, d_a_py_lk.ARC_NAME, fileIdx);
+        const model = new J3DModelInstance(modelData);
+        assert(!!model);
+        return model;
+    }
+
+    private setDemoData(globals: dGlobals) {
+        const demoActor = globals.scnPlay.demo.getSystem().getActor(this.demoActorID);
+        if (!demoActor)
+            return false;
+
+        demoActor.actor = this;
+        demoActor.model = this.model;
+        demoActor.debugGetAnimName = (idx: number) => LinkDemoMode[idx].toString();
+
+        let targetPos: ReadonlyVec3 = this.pos;
+        let targetRot: number = this.rot[1];
+
+        const enable = demoActor.checkEnable(0xFF);
+        if (enable & EDemoActorFlags.HasPos) { targetPos = demoActor.translation; }
+        if (enable & EDemoActorFlags.HasRot) { targetRot = demoActor.rotation[1]; }
+
+        // The demo mode determines which 'Proc' action function will be called. It maps into the DemoProc*FuncTables.
+        // These functions can start anims (by indexing into AnmDataTable), play sounds, etc.
+        if (enable & EDemoActorFlags.HasAnim) {
+            this.demoMode = demoActor.nextBckId;
+        }
+
+        if (enable & EDemoActorFlags.HasShape) {
+            this.isWearingCasualClothes = (demoActor.shapeId === 1);
+            if (this.isWearingCasualClothes)
+                this.texMappingClothes.copy(this.texMappingCasualClothes);
+            else
+                this.texMappingClothes.copy(this.texMappingHeroClothes);
+        }
+
+        // Limit actor modifications based on the current mode. E.g. Mode 0x18 only allows rotation
+        switch (this.demoMode) {
+            case LinkDemoMode.SetPosRotEquip:
+            case LinkDemoMode.SetPosRot:
+                vec3.copy(this.pos, targetPos);
+                this.rot[1] = targetRot;
+                break;
+
+            case LinkDemoMode.SetRot: {
+                debugger;
+                const moveVec = vec3.sub(scratchVec3a, targetPos, this.pos);
+                const newRot = cM_atan2s(moveVec[0], moveVec[2]);
+                this.rot[1] = newRot;
+                break;
+            }
+
+            case LinkDemoMode.Walk:
+            case LinkDemoMode.Dash: {
+                const moveVec = vec3.sub(scratchVec3a, targetPos, this.pos);
+                const newRot = cM_atan2s(moveVec[0], moveVec[2]);
+                this.rot[1] = newRot;
+                this.setSingleMoveAnime(globals, (this.demoMode === LinkDemoMode.Walk) ? LkAnim.WALK : LkAnim.DASH)
+                break;
+            }
+        }
+
+        return true;
+    }
+
+    private changeDemoProc(globals: dGlobals): boolean {
+        assert(this.demoMode < LinkDemoMode.MAX || this.demoMode === LinkDemoMode.Tool)
+
+        switch (this.demoMode) {
+            case LinkDemoMode.None: return false;
+            case LinkDemoMode.Tool: modeProcInit(globals, this, this.mode_tbl, d_a_py_lk_mode.tool); break;
+            case LinkDemoMode.SetPosRotEquip: modeProcInit(globals, this, this.mode_tbl, d_a_py_lk_mode.wait); break;
+            
+            default: 
+                if( this.prevMode !== d_a_py_lk_mode.unk ) {
+                    console.warn('Unsupported demo mode:', this.demoMode );
+                    modeProcInit(globals, this, this.mode_tbl, d_a_py_lk_mode.unk); 
+                }
+                break;
+        }
+
+        this.prevMode = this.curMode;
+        return true;
+    }
+
+    private autoGroundHit() {
+        const groundHeight = this.gndChk.retY;
+        if(groundHeight === -Infinity) {
+            return;
+        }
+
+        const groundDiff = this.pos[1] - groundHeight;
+
+        // Our feet are near the ground, clamp to ground
+        if(groundDiff > 0.0) {
+            if(groundDiff <= 30.1) {
+                this.pos[1] = groundHeight;
+                this.vel[1] = 0.0;
+                return;
+            }
+        }
+
+        // TODO: Our feet are below the ground, use last frame's height
+        this.pos[1] = groundHeight;
+        this.vel[1] = 0.0;
+    }
+
+    private posMove(globals: dGlobals) {
+        if (this.anmBck) {
+            // Apply the root motion from the current animation (swaying)
+            const rootTransform = new JointTransformInfo();
+            calcANK1JointAnimationTransform(rootTransform, this.anmBck.anm.jointAnimationEntries[0], this.anmBck.frameCtrl.getFrame(), this.anmBck.frameCtrl.applyLoopMode(this.anmBck.frameCtrl.getFrame() + 1));
+
+            const prevTranslation = vec3.copy(scratchVec3a, this.anmTranslation);
+            vec3.scale(this.anmTranslation, rootTransform.translation, 1.0);
+
+            const frameTranslation = vec3.sub(scratchVec3b, prevTranslation, this.anmTranslation);
+
+            const sinTheta = Math.sin(cM_s2rad(this.rot[1]));
+            const cosTheta = Math.cos(cM_s2rad(this.rot[1]));
+            const worldTransX = frameTranslation[2] * sinTheta + frameTranslation[0] * cosTheta;
+            const worldTransZ = frameTranslation[2] * cosTheta - frameTranslation[0] * sinTheta;
+
+            this.pos[0] += worldTransX;
+            this.pos[2] += worldTransZ;
+
+            // Apply motion based on the movement of the feet
+            this.posMoveFromFootPos(globals);
+        }
+    }
+
+    private posMoveFromFootPos(globals: dGlobals) {
+        if (this.frontFoot === 2) {
+            vec3.zero(this.vel);
+            vec3.set(this.footData[0].toePos, -14.05, 0.0, 5.02);
+            vec3.set(this.footData[0].heelPos, -10.85, 0.0, -6.52);
+            vec3.set(this.footData[1].toePos, 14.05, 0.0, 5.02);
+            vec3.set(this.footData[1].heelPos, 10.85, 0.0, -6.52);
+            this.frontFoot = 0;
+            return;
+        }
+
+        // Compute local -> model transforms for foot and waist joints
+        const invModelMtx = mat4.invert(calc_mtx, this.model.modelMatrix);
+        const footLMtx = mat4.mul(scratchMat4a, invModelMtx, this.model.shapeInstanceState.jointToWorldMatrixArray[LkJoint.FootL]);
+        const footRMtx = mat4.mul(scratchMat4b, invModelMtx, this.model.shapeInstanceState.jointToWorldMatrixArray[LkJoint.FootR]);
+        const waistMtx = mat4.mul(scratchMat4c, invModelMtx, this.model.shapeInstanceState.jointToWorldMatrixArray[LkJoint.Waist]);
+        
+        // Compute model space positions of the feet
+        const toePos = [];
+        const heelPos = [];
+        toePos[0] = vec3.transformMat4(scratchVec3a, d_a_py_lk.TOE_POS, footRMtx);
+        toePos[1] = vec3.transformMat4(scratchVec3b, d_a_py_lk.TOE_POS, footLMtx);
+        heelPos[0] = vec3.transformMat4(scratchVec3c, d_a_py_lk.HEEL_POS, footRMtx);
+        heelPos[1] = vec3.transformMat4(scratchVec3d, d_a_py_lk.HEEL_POS, footLMtx);
+
+        // Compare the model space positions of the feet to determine which is in front
+        const footZPos = []
+        for (let i = 0; i < 2; i++) {
+            const footCenter = vec3.scale(scratchVec3e, vec3.add(scratchVec3e, toePos[i], heelPos[i]), 0.5);
+            footZPos[i] = footCenter[2];
+        }
+        if (footZPos[1] > footZPos[0]) { this.frontFoot = 1 }
+        else { this.frontFoot = 0; }
+
+        // Compute the horizontal distance moved by the front foot since last frame
+        const moveVec = vec3.sub(scratchVec3e, toePos[this.frontFoot], this.footData[this.frontFoot].toePos);
+        moveVec[1] = 0;
+        let moveVel = vec3.length(moveVec);
+
+        // Adjust speed when on slopes
+        let groundAngle = 0;
+        if( this.gndChk.polyInfo.bgIdx >= 0 && this.gndChk.polyInfo.triIdx >= 0) { // @TODO: Should be in cBgS::ChkPolySafe()
+            groundAngle = this.getGroundAngle(globals, this.rot[1]);
+        }
+        moveVel *= Math.cos(cM_s2rad(groundAngle));        
+
+        // ... Reduce velocity even more for ascending slopes
+        if (groundAngle < 0) {
+            moveVel = moveVel * 0.85;
+        }
+
+        // Update actor vel and position
+        this.vel[0] = moveVel * Math.sin(cM_s2rad(this.rot[1]));
+        this.vel[2] = moveVel * Math.cos(cM_s2rad(this.rot[1]));
+        vec3.add(this.pos, this.pos, this.vel);
+
+        for (let i = 0; i < 2; i++) {
+            vec3.copy(this.footData[i].toePos, toePos[i]);
+            vec3.copy(this.footData[i].heelPos, heelPos[i]);
+        }
+    }
+
+    /**
+     * Get the angle of the ground based when facing a specific direction
+     * @param dir the s16 angle which the actor is facing
+     */
+    private getGroundAngle(globals: dGlobals, dir: number) {
+        const gndPlane = globals.scnPlay.bgS.GetTriPla(this.gndChk.polyInfo.bgIdx, this.gndChk.polyInfo.triIdx);
+        const norm = gndPlane.n;
+    
+        if (gndPlane && norm[1] >= 0.5) {
+            const slopeDir = cM_atan2s(norm[0], norm[2]);
+            const slopeGrade = Math.hypot(norm[0], norm[2]);
+            return cM_atan2s(slopeGrade * Math.cos(cM_s2rad(slopeDir - dir)), norm[1]);
+        }
+        return 0;
+    }
+
+    private getAnmData(anmIdx: number): LkAnimData {
+        // @TODO: Different table if sword is drawn
+        return this.anmDataTable[anmIdx];
+    }
+
+    private setSingleMoveAnime(globals: dGlobals, anmIdx: number, rate?: number, start?: number, end?: number, morf: number = 0.0) {
+        const anmData = this.getAnmData(anmIdx);
+
+        const bck = globals.resCtrl.getObjectRes(ResType.Bck, "LkAnm", anmData.upperBckIdx);
+
+        if(this.anmBck.anm !== bck) {
+            this.anmBck.init(this.model.modelData, bck, true, LoopMode.Repeat, rate, start, end);
+        }
+    }
+
+    // Process used while a demo is telling Link to play a direct animation
+    private procToolInit() {
+        
+    }
+
+    private procTool(globals: dGlobals) {
+        const demoActor = globals.scnPlay.demo.getSystem().getActor(this.demoActorID);
+        if (!demoActor)
+            return;
+
+        this.demoClampToGround = false;
+
+        let anmFrame = 0.0;
+        let anmBckId = 0xFFFF;
+        let anmBtpId = 0xFFFF;
+        let anmBtkId = 0xFFFF;
+
+        if (demoActor.flags & EDemoActorFlags.HasPos) { vec3.copy(this.pos, demoActor.translation); }
+        if (demoActor.flags & EDemoActorFlags.HasRot) { this.rot[1] = demoActor.rotation[1]; }
+        if (demoActor.flags & EDemoActorFlags.HasFrame) { anmFrame = demoActor.animFrame; }
+
+        if (demoActor.flags & EDemoActorFlags.HasData) {
+            const status = demoActor.stbData.getUint8(0);
+            let handIdxRight;
+            let handIdxLeft;
+
+            switch (demoActor.stbDataId) {
+                case 3:
+                    this.demoClampToGround = true;
+                    // Fall through
+                case 1:
+                case 5:
+                    const count = demoActor.stbData.getUint8(1);
+                    assert(count === 3)
+                    anmBckId = demoActor.stbData.getUint16(2);
+                    anmBtpId = demoActor.stbData.getUint16(4);
+                    anmBtkId = demoActor.stbData.getUint16(6);
+
+                    handIdxRight = demoActor.stbData.getUint8(9);
+                    handIdxLeft = demoActor.stbData.getUint8(10);
+                    break;
+
+                case 2:
+                    this.demoClampToGround = true;
+                    // Fall through
+                case 0:
+                case 4:
+                    anmBckId = demoActor.stbData.getUint16(1);
+                    break;
+
+                default:
+                    debugger;
+            }
+
+            // Set the hand model and/or equipped item based on the demo data
+            let item = ItemNo.InvalidItem;
+            if(handIdxLeft === 0xC8) { item = ItemNo.HerosSword; }
+            else if(handIdxLeft === 0xC9) { item = ItemNo.MasterSwordPowerless; }
+            else if(handIdxLeft === 0xCA) { item = ItemNo.MasterSwordHalfPower; }
+            else if(handIdxLeft === 0xCB) { item = ItemNo.MasterSwordFullPower; }
+
+            if(item === ItemNo.InvalidItem) {
+                if(handIdxLeft === 0xCC) {
+                    this.handStyleLeft = LkHandStyle.HoldWindWaker;
+                    // Set the Wind Waker as the equipped item
+                } else if (this.equippedItem !== LkEquipItem.None) {
+                    this.deleteEquipItem();
+                    this.handStyleLeft = handIdxLeft as LkHandStyle;
+                }
+            } else {
+                this.handStyleLeft = LkHandStyle.HoldSword;
+                if (this.equippedItem !== LkEquipItem.Sword) {
+                    // d_com_inf_game::dComIfGs_setSelectEquip(0, item);
+                    this.deleteEquipItem();
+                    this.setSwordModel(globals);
+                }
+            }
+
+            if(handIdxRight === 0xC8 || handIdxRight === 0xC9) {
+                this.handStyleRight = LkHandStyle.HoldShield;
+                if (handIdxRight === 0xC8) { /* equip HerosShield */ }
+                else { /* equip MirrorShield */ }
+            } else {
+                if(handIdxRight !== 0) {
+                    this.handStyleRight = (handIdxRight as LkHandStyle) + 6;
+                } else {
+                    this.handStyleRight = LkHandStyle.Idle;
+                }
+            }
+        }
+
+        if (anmBckId === 0xFFFF || this.anmBckId === anmBckId) {
+            if (demoActor.flags & EDemoActorFlags.HasFrame) {
+                this.anmBck.frameCtrl.setFrame(anmFrame);
+                this.anmBtp.frameCtrl.setFrame(anmFrame);
+                demoActor.animFrameMax = this.anmBck.frameCtrl.endFrame;
+            }
+        } else {
+            // TODO: How should LkD00 arc be loaded?
+            const bck = globals.resCtrl.getObjectIDRes(ResType.Bck, 'LkD00', anmBckId);
+            this.anmBck.init(this.model.modelData, bck, true, bck.loopMode, 1.0, 0, bck.duration);
+            this.anmBck.frameCtrl.setFrame(anmFrame);
+            this.anmBckId = anmBckId;
+
+            if (anmBtpId !== 0xFFFF) {
+                const btp = globals.resCtrl.getObjectIDRes(ResType.Btp, 'LkD00', anmBtpId);
+                this.anmBtp.init(this.model.modelData, btp, true, btp.loopMode, 1.0, 0, btp.duration);
+            }
+
+            if (anmBtkId !== 0xFFFF) {
+                const btk = globals.resCtrl.getObjectIDRes(ResType.Btk, 'LkD00', anmBtkId);
+                this.anmBtk.init(this.model.modelData, btk, true, btk.loopMode, 1.0, 0, btk.duration);
+            }
+        }
+    }
+
+    private procUnkInit(globals: dGlobals ) {
+    }
+
+    private procUnk(globals: dGlobals ) {
+
+    }
+
+    private procWaitInit(globals: dGlobals ) {
+        if(this.prevMode !== d_a_py_lk_mode.wait ) {
+            this.setSingleMoveAnime(globals, LkAnim.WAITS);
+        }
+    }
+
+    private procWait() {
+
+    }
+
+    private setSwordModel(globals: dGlobals) {
+        this.equippedItem = LkEquipItem.Sword;
+        this.equippedItemModel = this.initModel(globals, d_a_py_lk.LINK_BDL_SWA);
+    }
+
+    private deleteEquipItem() {
+        this.equippedItem = LkEquipItem.None;
+        this.equippedItemModel = null;
+    }
+
+    private setItemModel() {
+        if(!this.equippedItemModel) {
+            return;
+        }
+
+        const handLJointMtx = this.model.shapeInstanceState.jointToWorldMatrixArray[LkJoint.HandL];
+        const handRJointMtx = this.model.shapeInstanceState.jointToWorldMatrixArray[LkJoint.HandR];
+        
+        mat4.copy(this.equippedItemModel.modelMatrix, handLJointMtx);
+        this.equippedItemModel?.calcAnim();
+
+        if(this.equippedItem === LkEquipItem.Sword) {
+            mat4.copy(this.modelSwordHilt.modelMatrix, handLJointMtx);
+            this.modelSwordHilt.calcAnim();
+        }
+    }
+
+    private loadAnmTable(globals: dGlobals) {
+        const anmDataView = globals.findExtraSymbolData(`d_a_player_main.o`, `mAnmDataTable__9daPy_lk_c`).createDataView();
+        let offset = 0;
+        while (offset < anmDataView.byteLength) {
+            this.anmDataTable.push({
+                underBckIdx: anmDataView.getUint16(offset + 0),
+                upperBckIdx: anmDataView.getUint16(offset + 2),
+                leftHandIdx: anmDataView.getUint8(offset + 4),
+                rightHandIdx: anmDataView.getUint8(offset + 5),
+                texAnmIdx: anmDataView.getUint16(offset + 6),
+            })
+            offset += 8;
+        }
+    }
+}
+
 interface constructor extends fpc_bs__Constructor {
     PROCESS_NAME: dProcName_e;
 }
@@ -4987,4 +5675,5 @@ export function d_a__RegisterConstructors(globals: fGlobals): void {
     R(d_a_obj_flame);
     R(d_a_ff);
     R(d_a_npc_ls1);
+    R(d_a_py_lk);
 }
