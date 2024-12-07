@@ -1349,7 +1349,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     });
     // Lakebed gates
     else if (actorName === 'bsGate') fetchArchive(`S_Zgate`).then((rarc) => {
-        if (((actor.parameters >> 8) & 0xFF) == 1) {
+        if (((actor.parameters >> 8) & 0xFF) === 1) {
             actor.rot![1] -= 0x8000;
         }
 

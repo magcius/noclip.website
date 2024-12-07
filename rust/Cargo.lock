@@ -494,6 +494,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "noclip-macros"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.89",
+]
+
+[[package]]
 name = "noclip-support"
 version = "0.0.0"
 dependencies = [
@@ -509,6 +518,7 @@ dependencies = [
  "lzma-rs",
  "naga",
  "nalgebra-glm",
+ "noclip-macros",
  "num_enum",
  "polymorph",
  "rand",

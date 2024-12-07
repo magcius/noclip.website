@@ -91,7 +91,7 @@ export class HIModelBucketManager {
         }
 
         if ((minst.pipeFlags & (HIPipeFlags.SRCBLEND_MASK | HIPipeFlags.DESTBLEND_MASK)) ||
-            alphaFade != 1.0 || minst.alpha != 1.0) {
+            alphaFade !== 1.0 || minst.alpha !== 1.0) {
             if (this.alphaCurr < this.alphaList.length) {
                 this.alphaList[this.alphaCurr].data = minst.bucket.data;
                 this.alphaList[this.alphaCurr].minst = minst;

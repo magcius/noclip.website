@@ -39,17 +39,17 @@ export class NfsMap {
             region.parseTextures(device, renderHelper, this);
             region.parseModels(device, renderHelper.renderCache, this);
         });
-        const regionDefNode = baseFileNode.children.filter(node => node.type == NodeType.RegionDefinitions)[0];
-        const dataSectionDefNode = baseFileNode.children.filter(node => node.type == NodeType.DataSectionDefinitions)[0];
+        const regionDefNode = baseFileNode.children.filter(node => node.type === NodeType.RegionDefinitions)[0];
+        const dataSectionDefNode = baseFileNode.children.filter(node => node.type === NodeType.DataSectionDefinitions)[0];
         this.regions = this.parseRegions(regionDefNode, dataSectionDefNode);
-        const pathNode = baseFileNode.children.filter(node => node.type == NodeType.AiPaths)[0];
+        const pathNode = baseFileNode.children.filter(node => node.type === NodeType.AiPaths)[0];
         this.pathVertices = this.parsePathVertices(pathNode);
 
         // Load global data sections immediately
         await this.regions[2500].load(this);
         const globalRegions = [];
         for(let id in this.regions) {
-            if(this.regions[id].regionType == RegionType.Global)
+            if(this.regions[id].regionType === RegionType.Global)
                 globalRegions.push(this.regions[id]);
         }
         let coll = globalRegions.map(async region => {
@@ -115,7 +115,7 @@ export class NfsMap {
         const rdnDataView = regionDefNode.children[3].dataView;
         while(offset < rdnDataView.byteLength - 0x10) {
             // Skip useless data at start of entry
-            while(rdnDataView.getInt16(offset) == 0) {
+            while(rdnDataView.getInt16(offset) === 0) {
                 offset += 2;
             }
             offset += 0xC;
@@ -137,11 +137,11 @@ export class NfsMap {
                 const baseRegion = regionMap[baseRegionId];
                 if(baseRegion === undefined)
                     continue;
-                if(baseRegion.regionType == RegionType.Dependency) {
+                if(baseRegion.regionType === RegionType.Dependency) {
                     dependencies.push(baseRegion);
                     continue;
                 }
-                if(baseRegionId == depRegionId) {
+                if(baseRegionId === depRegionId) {
                     connections.push({region: baseRegion, upperPartOnly: false});
                 }
                 else if(!dependentRegions.includes(baseRegionId)) {
@@ -168,7 +168,7 @@ export class NfsMap {
         activeRegion.connections!.forEach((r => this.regionsToRender.add(r.region)));
         for(const regionId in this.regions) {
             const r = this.regions[regionId];
-            if (r.regionType == RegionType.Regular && isCloseToRegion(r, pos, this.viewDistance))
+            if (r.regionType === RegionType.Regular && isCloseToRegion(r, pos, this.viewDistance))
                 this.regionsToRender.add(r);
         }
 
@@ -234,7 +234,7 @@ export class NfsMap {
             // Then check if we're in any of the neighboring regions
             for(let i = 0; i < lastRegion.connections!.length; i++) {
             const r = lastRegion.connections![i];
-            if(r.region.regionType == RegionType.Regular && pointInRegion(r.region, pos))
+            if(r.region.regionType === RegionType.Regular && pointInRegion(r.region, pos))
                 return r.region;
             }
         }
@@ -242,7 +242,7 @@ export class NfsMap {
         // Otherwise check in all regions
         for(let id in this.regions) {
             const r = this.regions[id];
-            if(r.regionType == RegionType.Regular && pointInRegion(r, pos))
+            if(r.regionType === RegionType.Regular && pointInRegion(r, pos))
                 return r;
         }
         throw 'Path vertex not in any region';
@@ -312,14 +312,14 @@ function pointInPolygon(vertices: vec2[], p: vec2): boolean {
     do {
         const next = (i + 1) % vertices.length;
         if(linesIntersect(vertices[i], vertices[next], p, infPoint)) {
-            if(orientation(vertices[i], p, vertices[next]) == 0) {
+            if(orientation(vertices[i], p, vertices[next]) === 0) {
                 return onSegment(vertices[i], p, vertices[next]);
             }
             count++;
         }
         i = next;
-    } while(i != 0);
-    return (count % 2) == 1;
+    } while(i !== 0);
+    return (count % 2) === 1;
 }
 
 function linesIntersect(a1: vec2, b1: vec2, a2: vec2, b2: vec2) {
@@ -328,18 +328,18 @@ function linesIntersect(a1: vec2, b1: vec2, a2: vec2, b2: vec2) {
     const o3 = orientation(a2, b2, a1);
     const o4 = orientation(a2, b2, b1);
 
-    if(o1 != o2 && o3 != o4)
+    if(o1 !== o2 && o3 !== o4)
         return true;
 
-    return o1 == 0 && onSegment(a1, b1, a2)
-        || o2 == 0 && onSegment(a1, b1, b2)
-        || o3 == 0 && onSegment(a2, b2, a1)
-        || o4 == 0 && onSegment(a2, b2, b1);
+    return o1 === 0 && onSegment(a1, b1, a2)
+        || o2 === 0 && onSegment(a1, b1, b2)
+        || o3 === 0 && onSegment(a2, b2, a1)
+        || o4 === 0 && onSegment(a2, b2, b1);
 }
 
 function orientation(a: vec2, b: vec2, c: vec2) {
     const val = (b[1] - a[1]) * (c[0] - b[0]) - (b[0] - a[0]) * (c[1] - b[1]);
-    if(val == 0)
+    if(val === 0)
         return 0;
     return (val > 0) ? 1 : 2;
 }
@@ -401,7 +401,7 @@ function distanceToRegionPolygon(poly: vec2[], p: vec2): number {
         if(d < minDist)
             minDist = d;
         i = next
-    } while(i != 0);
+    } while(i !== 0);
     return minDist;
 }
 

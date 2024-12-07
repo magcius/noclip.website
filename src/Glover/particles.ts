@@ -646,8 +646,8 @@ export class Particle {
             vec3.scale(this.velocity, this.velocity, params.friction);
 
             if ((params.actorFlags & 1) !== 0) {
-                const gravAccel = (params.actorFlags & 0x40) == 0 ? 1.2 : 0.6;
-                const terminalVelocity = (params.actorFlags & 0x1000000) == 0 ? -15 : -100000;
+                const gravAccel = (params.actorFlags & 0x40) === 0 ? 1.2 : 0.6;
+                const terminalVelocity = (params.actorFlags & 0x1000000) === 0 ? -15 : -100000;
                 this.velocity[1] = Math.max(this.velocity[1] - gravAccel, terminalVelocity);
             }
 
@@ -784,7 +784,7 @@ export class MeshSparkle implements GenericRenderable {
                 this.frameCount = 0;
                 const face = this.geo.faces[Math.floor(Math.random()*this.geo.numFaces)];
                 const vertRnd = Math.floor(Math.random()*3);
-                const vertIdx = vertRnd == 0 ? face.v0 : vertRnd == 1 ? face.v1 : face.v2;
+                const vertIdx = vertRnd === 0 ? face.v0 : vertRnd === 1 ? face.v1 : face.v2;
                 const vert = this.geo.vertices[vertIdx];
                 
                 const origin = MeshSparkle.positionScratch1;

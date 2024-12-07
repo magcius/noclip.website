@@ -63,7 +63,7 @@ export class DkrDrawCall {
     }
 
     public addTriangleBatch(triBatch: DkrTriangleBatch): void {
-        if(this.flags == undefined || this.flags == null) {
+        if(this.flags === undefined || this.flags === null) {
             this.flags = triBatch.getFlags();
         }
         this.vertices = this.vertices.concat(triBatch.getVertices());
@@ -183,7 +183,7 @@ export class DkrDrawCall {
                     } else {
                         texLayer = GfxRendererLayer.TRANSLUCENT;
                     }
-                    if(texLayer == GfxRendererLayer.ALPHA_TEST) {
+                    if(texLayer === GfxRendererLayer.ALPHA_TEST) {
                         texLayer = GfxRendererLayer.TRANSLUCENT;
                         renderInst.setMegaStateFlags(setAttachmentStateSimple({
                             depthWrite: true
@@ -192,7 +192,7 @@ export class DkrDrawCall {
                             blendSrcFactor: GfxBlendFactor.SrcAlpha,
                             blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
                         }));
-                    } else if(texLayer == GfxRendererLayer.TRANSLUCENT) {
+                    } else if(texLayer === GfxRendererLayer.TRANSLUCENT) {
                         renderInst.setMegaStateFlags(setAttachmentStateSimple({
                             depthWrite: !!(this.flags & FLAG_ENABLE_DEPTH_WRITE),
                         }, {

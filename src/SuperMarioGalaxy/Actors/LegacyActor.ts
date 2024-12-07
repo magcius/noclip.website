@@ -498,7 +498,7 @@ export class NoclipLegacyActorSpawner {
                 assertExists(infoIter.getValueNumber('PointPosZ')),
             );
 
-            const isPink = infoIter.getValueString('ColorChange') == 'o';
+            const isPink = infoIter.getValueString('ColorChange') === 'o';
             const isSmall = true;
             const pointInfo: WorldmapPointInfo = {
                 position, isPink, isSmall,

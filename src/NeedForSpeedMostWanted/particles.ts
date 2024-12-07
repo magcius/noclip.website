@@ -183,7 +183,7 @@ export class NfsParticleEmitter {
 
     public emitParticle() {
         let particle;
-        if(this.minFreeParticle == this.particlePool.length) {
+        if(this.minFreeParticle === this.particlePool.length) {
             particle = new NfsParticle();
             this.particlePool.push(particle);
         }

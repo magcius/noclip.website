@@ -128,11 +128,11 @@ function parse_MP3(stream: InputStream): STRG {
 }
 
 export function parse(stream: InputStream, resourceSystem: ResourceSystem, assetID: string): STRG {
-    assert(stream.readUint32() == 0x87654321);
+    assert(stream.readUint32() === 0x87654321);
     const version = stream.readUint32();
     stream.skip(-8);
 
-    if (version === 0x00 || version == 0x01)
+    if (version === 0x00 || version === 0x01)
         return parse_MP1(stream);
 
     if (version === 0x03)

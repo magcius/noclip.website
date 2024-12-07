@@ -478,9 +478,9 @@ function parseStagedefUncompressed(buffer: ArrayBufferSlice): Stage {
         const rot = parseVec3s(view, goalOffs + 0xc);
         const typeStr = readString(buffer, goalOffs + 0x12, 1, false);
         let type: GoalType;
-        if (typeStr == "B") type = GoalType.Blue;
-        else if (typeStr == "G") type = GoalType.Green;
-        else if (typeStr == "R") type = GoalType.Red;
+        if (typeStr === "B") type = GoalType.Blue;
+        else if (typeStr === "G") type = GoalType.Green;
+        else if (typeStr === "R") type = GoalType.Red;
         else throw new Error(`Unknown goal type '${typeStr}'`);
         goals.push({ pos, rot, type });
     }
@@ -647,10 +647,10 @@ function parseStagedefUncompressed(buffer: ArrayBufferSlice): Stage {
                 // we just use empty lists
                 const triIdxListOffs = view.getUint32(coliTriIdxsOffs + gridIdx * 4);
                 const triIdxList: number[] = [];
-                if (triIdxListOffs != 0) {
+                if (triIdxListOffs !== 0) {
                     for (let triIdxIdx = 0; ; triIdxIdx++) {
                         const triIdx = view.getInt16(triIdxListOffs + triIdxIdx * 2);
-                        if (triIdx != -1) {
+                        if (triIdx !== -1) {
                             triIdxList.push(triIdx);
                         } else {
                             break;

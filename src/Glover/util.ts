@@ -156,11 +156,11 @@ export function pushAlongLookatVector(dst: vec3, src: vec3, dist: number, viewer
 
 let rng_reg = 0x6151f;
 export function random(max: number): number {
-  if (max == 0) {
+  if (max === 0) {
     return 0;
   } else {
     rng_reg ^= rng_reg << 1;
-    if ((rng_reg & 0x80000000) != 0) {
+    if ((rng_reg & 0x80000000) !== 0) {
         if (rng_reg === 0x80000000) {
             rng_reg = 0;
         }

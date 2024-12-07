@@ -47,7 +47,7 @@ export function sampleAnimationData(track: AnimationTrack, frame: number): numbe
 }
 
 function sampleANF1AnimationData(frames: number[], animFrame: number): number {
-    if (frames.length == 1) {
+    if (frames.length === 1) {
         return frames[0];
     }
 

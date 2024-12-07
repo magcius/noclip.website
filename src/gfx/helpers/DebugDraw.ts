@@ -12,7 +12,7 @@ import { preprocessProgram_GLSL } from "../shaderc/GfxShaderCompiler.js";
 import { GfxTopology, convertToTrianglesRange } from "./TopologyHelpers.js";
 import { setAttachmentStateSimple } from "./GfxMegaStateDescriptorHelpers.js";
 import { branchlessONB } from "../../DebugJunk.js";
-import { MathConstants, Vec3UnitX, Vec3UnitY, Vec3UnitZ, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation } from "../../MathHelpers.js";
+import { MathConstants, Vec3UnitX, Vec3UnitY, Vec3UnitZ, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, vec3FromBasis2 } from "../../MathHelpers.js";
 import { IsDepthReversed } from "./ReversedDepthHelpers.js";
 import { assert } from "../platform/GfxPlatformUtil.js";
 
@@ -402,8 +402,7 @@ export class DebugDraw {
             const signX = i & 1 ? -1 : 1;
             const signY = i & 2 ? -1 : 1;
             const s = dst[i];
-            vec3.scaleAndAdd(s, center, right, signX * rightMag);
-            vec3.scaleAndAdd(s, s, up, signY * upMag);
+            vec3FromBasis2(s, center, right, signX * rightMag, up, signY * upMag);
         }
     }
 

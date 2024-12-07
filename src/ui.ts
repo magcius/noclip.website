@@ -915,6 +915,11 @@ function randomChoice<T>(L: T[]): T {
     return assertExists(L[idx]);
 }
 
+interface SceneDatabase {
+    sceneGroups: (string | SceneGroup)[];
+    onchanged: (() => void) | null;
+}
+
 class SceneSelect extends Panel {
     private sceneGroups: (string | SceneGroup)[] = [];
     private sceneDescs: (string | SceneDesc)[] = [];
@@ -932,7 +937,7 @@ class SceneSelect extends Panel {
     private currentSearchTokens: RegExp[] = [];
 
     public loadProgress: number;
-    public onscenedescselected: (sceneGroup: SceneGroup, sceneDesc: SceneDesc) => void;
+    public onscenedescselected: (sceneDesc: SceneDesc) => void;
 
     constructor(public viewer: Viewer.Viewer) {
         super();
@@ -1060,7 +1065,7 @@ class SceneSelect extends Panel {
 
                 if (!explicitlyInvisible) {
                     // If header matches, then we are explicitly visible.
-                    if (!visible == lastGroupHeaderVisible)
+                    if (!visible === lastGroupHeaderVisible)
                         visible = true;
 
                     // If name matches, then we are explicitly visible.
@@ -1105,7 +1110,7 @@ class SceneSelect extends Panel {
         this.sceneDescList.setHighlighted(this.sceneDescs.indexOf(this.currentSceneDesc));
     }
 
-    public setSceneGroups(sceneGroups: (string | SceneGroup)[]) {
+    private setSceneGroups(sceneGroups: (string | SceneGroup)[]) {
         this.sceneGroups = sceneGroups;
         this.sceneGroupList.setItems(sceneGroups.map((g): ScrollSelectItem => {
             if (typeof g === 'string')
@@ -1116,6 +1121,13 @@ class SceneSelect extends Panel {
         this.syncSceneDescs();
     }
 
+    public setSceneDatabase(sceneDatabase: SceneDatabase): void {
+        this.setSceneGroups(sceneDatabase.sceneGroups);
+        sceneDatabase.onchanged = () => {
+            this.setSceneGroups(sceneDatabase.sceneGroups);
+        };
+    }
+
     public setProgress(pct: number): void {
         this.loadProgress = pct;
         this.syncFlairs();
@@ -1123,7 +1135,7 @@ class SceneSelect extends Panel {
     }
 
     private selectSceneDesc(sceneDesc: SceneDesc) {
-        this.onscenedescselected(this.selectedSceneGroup, sceneDesc);
+        this.onscenedescselected(sceneDesc);
     }
 
     private selectSceneDescIndex(i: number) {
@@ -2805,7 +2817,7 @@ export class UI {
         this.syncVisibilityState();
     }
 
-    public setSaveState(saveState: string) {
+    public setShareSaveState(saveState: string) {
         const shareURL = buildShareURL(saveState);
         this.shareButton.setShareURL(shareURL);
     }

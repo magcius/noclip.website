@@ -113,9 +113,9 @@ export class NfsRenderer implements SceneGfx {
         instancesToRender.forEach(instance => {
             if(instance.worldMatrix === undefined)
                 return;
-            if(instance.type == InstanceType.TrackBarrier && !this.showTrackBarriers)
+            if(instance.type === InstanceType.TrackBarrier && !this.showTrackBarriers)
                 return;
-            if(instance.type == InstanceType.Hidden && !this.showHidden)
+            if(instance.type === InstanceType.Hidden && !this.showHidden)
                 return;
             const model = instance.model;
             if(model === undefined)
@@ -128,7 +128,7 @@ export class NfsRenderer implements SceneGfx {
                 offs += fillMatrix4x3(d, offs, instance.worldMatrix);
 
                 let cullMode = GfxCullMode.Back;
-                if(vInfo.shaderType == 5 || vInfo.shaderType == 6 || !vInfo.textureMappings[0].faceCulling)
+                if(vInfo.shaderType === 5 || vInfo.shaderType === 6 || !vInfo.textureMappings[0].faceCulling)
                     cullMode = GfxCullMode.None;
                 else if(instance.invertedFaces)
                     cullMode = GfxCullMode.Front;
@@ -142,13 +142,13 @@ export class NfsRenderer implements SceneGfx {
                     const frameNumber = Math.floor(viewerInput.time * anim.frequency / 1000) % anim.frames.length;
                     texMappings[0] = anim.frames[frameNumber];
                 }
-                if(instance.type == InstanceType.Sky) {
+                if(instance.type === InstanceType.Sky) {
                     renderInst.setMegaStateFlags({attachmentsState: attachmentStatesTranslucent, depthWrite: false});
                     renderInst.setGfxProgram(this.gfxPrograms[5]);
                     renderInst.sortKey = this.sortKeySky;
                 }
                 else if(diffuseTexture.transparencyType > 0) {
-                    if(instance.type != InstanceType.Shadow) {
+                    if(instance.type !== InstanceType.Shadow) {
                         renderInst.sortKey = this.sortKeyTranslucent;
                         instance.boundingBox.centerPoint(this.aabbCenter);
                         const depth = computeViewSpaceDepthFromWorldSpacePoint(viewerInput.camera.viewMatrix, this.aabbCenter);
@@ -157,14 +157,14 @@ export class NfsRenderer implements SceneGfx {
                     else {
                         renderInst.sortKey = this.sortKeyTranslucent;
                     }
-                    if(diffuseTexture.transparencyType == 1) {
+                    if(diffuseTexture.transparencyType === 1) {
                          renderInst.setMegaStateFlags({attachmentsState: attachmentStatesTranslucent, depthWrite: false});
                     }
-                    if(diffuseTexture.transparencyType == 2) {
+                    if(diffuseTexture.transparencyType === 2) {
                         renderInst.setMegaStateFlags({attachmentsState: attachmentStatesAdditive, depthWrite: false});
                         fog = 0;
                     }
-                    else if(diffuseTexture.transparencyType == 3) {
+                    else if(diffuseTexture.transparencyType === 3) {
                         renderInst.setMegaStateFlags({attachmentsState: attachmentStatesSubtractive, depthWrite: false});
                     }
                 }
@@ -172,17 +172,17 @@ export class NfsRenderer implements SceneGfx {
                     renderInst.setGfxProgram(this.gfxPrograms[1]);
                     renderInst.sortKey = this.sortKeyAlpha;
                 }
-                else if(vInfo.shaderType == 1 || vInfo.shaderType == 3)
+                else if(vInfo.shaderType === 1 || vInfo.shaderType === 3)
                     renderInst.setGfxProgram(this.gfxPrograms[3]);
-                else if(vInfo.shaderType == 5)
+                else if(vInfo.shaderType === 5)
                     renderInst.setGfxProgram(this.gfxPrograms[4]);
 
                 if(diffuseTexture.scrollAnimation !== undefined) {
                     const anim = diffuseTexture.scrollAnimation;
-                    const animFactor = anim.interval == -1 ? viewerInput.time / 1000 : Math.floor(viewerInput.time / anim.interval / 1000);
+                    const animFactor = anim.interval === -1 ? viewerInput.time / 1000 : Math.floor(viewerInput.time / anim.interval / 1000);
                     fillVec4v(d, offs, [(anim.scrollSpeed[0] * animFactor) % 1, (anim.scrollSpeed[1] * animFactor) % 1, fog, 0]);
                 }
-                else if(instance.type == InstanceType.Sky) {
+                else if(instance.type === InstanceType.Sky) {
                     fillVec4v(d, offs, [(viewerInput.time / 70000) % 5.0, 0, 0, 0]);
                 }
                 else {
@@ -252,7 +252,7 @@ export class NfsRenderer implements SceneGfx {
 
         const cameraPos: vec3 = [viewerInput.camera.worldMatrix[12], viewerInput.camera.worldMatrix[13], viewerInput.camera.worldMatrix[14]];
 
-        if(!this.streamingFreezed || this.closestPathVertex == null) {
+        if(!this.streamingFreezed || this.closestPathVertex === null) {
             this.closestPathVertex = this.map.getClosestPathVertex([-cameraPos[0], cameraPos[2]]);
             this.activeRegion = this.closestPathVertex.region;
         }
@@ -265,11 +265,11 @@ export class NfsRenderer implements SceneGfx {
         this.map.regions[2600].rootBoundingVolumes[0].collectInstancesToRender(instancesToRender, frustum, false);
         regionsToRender.forEach(regionRenderCommand => {
             const region = regionRenderCommand.region;
-            if(region.regionType == RegionType.Panorama && !this.activeRegion.ensureReady(device, this.renderHelper, this.map))
+            if(region.regionType === RegionType.Panorama && !this.activeRegion.ensureReady(device, this.renderHelper, this.map))
                 return;
             if(!region.ensureReady(device, this.renderHelper, this.map))
                 return;
-            if(!this.showPanoramas && region.regionType == RegionType.Panorama)
+            if(!this.showPanoramas && region.regionType === RegionType.Panorama)
                 return;
 
             for(let i = regionRenderCommand.upperPartOnly ? region.upperPartOffset : 0; i < region.rootBoundingVolumes.length; i++) {

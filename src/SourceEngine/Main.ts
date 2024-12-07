@@ -624,7 +624,7 @@ export const enum RenderObjectKind {
 export class BSPRenderer {
     private vertexBuffer: GfxBuffer;
     private indexBuffer: GfxBuffer;
-    private inputLayout: GfxInputLayout;
+    public inputLayout: GfxInputLayout;
     private vertexBufferDescriptors: GfxVertexBufferDescriptor[];
     private indexBufferDescriptor: GfxIndexBufferDescriptor;
     public entitySystem: EntitySystem;

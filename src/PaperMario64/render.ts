@@ -270,7 +270,7 @@ class ModelTreeLeafInstance {
 
         if (this.renderModeProperty === 0x01 || this.renderModeProperty === 0x04) {
             this.renderMode = RenderMode.OPA;
-        } else if (this.renderModeProperty == 0x05 || this.renderModeProperty === 0x07 || this.renderModeProperty === 0x0D || this.renderModeProperty === 0x10) {
+        } else if (this.renderModeProperty === 0x05 || this.renderModeProperty === 0x07 || this.renderModeProperty === 0x0D || this.renderModeProperty === 0x10) {
             this.renderMode = RenderMode.DEC;
         } else {
             this.renderMode = RenderMode.XLU;

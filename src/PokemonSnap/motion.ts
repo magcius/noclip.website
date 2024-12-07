@@ -290,7 +290,7 @@ export class MotionParser extends MIPS.NaiveInterpreter {
                     console.warn("bad animation address in motion", hexzero(a1.value, 8));
                     break;
                 }
-                let index = this.animations.findIndex((a) => a == a1.value);
+                let index = this.animations.findIndex((a) => a === a1.value);
                 if (index === -1) {
                     index = this.animations.length;
                     this.animations.push(a1.value);

@@ -99,7 +99,7 @@ class ActorLights {
 
                 if (sqDist < (light.radius ** 2)) {
                     // Shadow cast logic
-                    if (light.castShadows && lightParams.options != WorldLightingOptions.NoShadowCast) {
+                    if (light.castShadows && lightParams.options !== WorldLightingOptions.NoShadowCast) {
                         actorBounds.centerPoint(scratchVec3);
                         vec3.sub(scratchVec3, scratchVec3, light.gxLight.Position);
 

@@ -192,9 +192,9 @@ export function fopAcM_searchFromName(globals: dGlobals, procName: string, param
 
     for (let i = 0; i < globals.frameworkGlobals.lnQueue.length; i++) {
         const act = globals.frameworkGlobals.lnQueue[i] as fopAc_ac_c;
-        if (act.profName == objName.pcName
-            && objName.subtype == act.subtype
-            && (paramMask == 0 || param == (act.parameters & paramMask))
+        if (act.profName === objName.pcName
+            && objName.subtype === act.subtype
+            && (paramMask === 0 || param === (act.parameters & paramMask))
         )
             return act;
     }

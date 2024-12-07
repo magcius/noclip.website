@@ -197,19 +197,19 @@ class NewSuperMarioBrosDSSceneDesc implements Viewer.SceneDesc {
 
             for (let i = 0; i < objects.length; i++) {
                 const element = objects[i];
-                if (element.type == WorldMapObjType.ROUTE_POINT) {
+                if (element.type === WorldMapObjType.ROUTE_POINT) {
                     const obj = this.createRendererFromData(cache, mapPointObjData!, element.position);
                     obj.bindPAT0(device, assertExists(mapPointObjData!.btp).pat0[3]);
                     renderer.objectRenderers.push(obj);
-                } else if (element.type == WorldMapObjType.START_POINT) {
+                } else if (element.type === WorldMapObjType.START_POINT) {
                     const obj = this.createRendererFromData(cache, mapPointObjData!, element.position);
                     obj.bindPAT0(device, assertExists(mapPointObjData!.btp).pat0[2]);
                     renderer.objectRenderers.push(obj);
-                } else if (element.type == WorldMapObjType.TOWER) {
+                } else if (element.type === WorldMapObjType.TOWER) {
                     renderer.objectRenderers.push(this.createRendererFromData(cache, towerObjData!, element.position));
-                } else if (element.type == WorldMapObjType.CASTLE) {
+                } else if (element.type === WorldMapObjType.CASTLE) {
                     renderer.objectRenderers.push(this.createRendererFromData(cache, castleObjData!, element.position));
-                } else if (element.type == WorldMapObjType.BIG_CASTLE) {
+                } else if (element.type === WorldMapObjType.BIG_CASTLE) {
                     renderer.objectRenderers.push(this.createRendererFromData(cache, bigCastleObjData!, element.position));
                 }
             }

@@ -225,14 +225,14 @@ export default class InputManager {
     private _onTouchChange = (e: TouchEvent) => { // start, end or cancel a touch
         if (!this.isMouseEnabled)
             return;
-        if (e.touches.length == 1) {
+        if (e.touches.length === 1) {
             const scaledTouches = this._getScaledTouches(e.touches);
             this.touchGesture = TouchGesture.Scroll;
             this.prevTouchX = scaledTouches[0].x;
             this.prevTouchY = scaledTouches[0].y;
             this.dTouchX = 0;
             this.dTouchY = 0;
-        } else if (e.touches.length == 2) {
+        } else if (e.touches.length === 2) {
             const pinchValues = this._getPinchValues(e.touches);
             this.touchGesture = TouchGesture.Pinch;
             this.prevTouchX = pinchValues.x;
@@ -249,7 +249,7 @@ export default class InputManager {
     private _onTouchMove = (e: TouchEvent) => {
         if (!this.isMouseEnabled)
             return;
-        if (e.touches.length == 1) {
+        if (e.touches.length === 1) {
             const scaledTouches = this._getScaledTouches(e.touches);
             this.touchGesture = TouchGesture.Scroll;
             this.dTouchX = scaledTouches[0].x - this.prevTouchX;
@@ -257,7 +257,7 @@ export default class InputManager {
             this.onMotion(this.dTouchX, this.dTouchY);
             this.prevTouchX = scaledTouches[0].x;
             this.prevTouchY = scaledTouches[0].y;
-        } else if (e.touches.length == 2) {
+        } else if (e.touches.length === 2) {
             const pinchValues = this._getPinchValues(e.touches);
             this.touchGesture = TouchGesture.Pinch;
             this.dTouchX = pinchValues.x - this.prevTouchX;

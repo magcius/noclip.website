@@ -1,4 +1,4 @@
-import { vec2, vec3 } from "gl-matrix";
+import { ReadonlyVec3, vec2, vec3 } from "gl-matrix";
 import { nArray } from "../../util.js";
 import { DataStream, readTHeader } from "../util.js";
 
@@ -41,7 +41,7 @@ export type TotemSurfaceObject = ReturnType<typeof readSurface>;
 export type TotemSurface = TotemSurfaceObject["surfaces"][0];
 export type TotemCurve = TotemSurfaceObject["curves"][0];
 
-export function eval_bezier_vec3(out: vec3, points: vec3[], t: number) {
+export function eval_bezier_vec3(out: vec3, points: ReadonlyVec3[], t: number) {
     let b0 = (1.0 - t) * (1.0 - t) * (1.0 - t);
     let b1 = 3.0 * t * (1.0 - t) * (1.0 - t);
     let b2 = 3.0 * t * t * (1.0 - t);

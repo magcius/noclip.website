@@ -497,6 +497,10 @@ export abstract class BaseMaterial {
         return (this.param[name] as P.ParameterMatrix).matrix;
     }
 
+    public paramExists(name: string): boolean {
+        return this.param[name] !== undefined;
+    }
+
     protected paramGetFlipY(renderContext: SourceRenderContext, name: string): boolean {
         if (!renderContext.materialCache.deviceNeedsFlipY)
             return false;
@@ -683,6 +687,7 @@ export abstract class BaseMaterial {
         p['$nocull']                       = new P.ParameterBoolean(false, false);
         p['$nofog']                        = new P.ParameterBoolean(false, false);
         p['$decal']                        = new P.ParameterBoolean(false, false);
+        p['$decalscale']                   = new P.ParameterNumber(1);
         p['$model']                        = new P.ParameterBoolean(false, false);
 
         // Base parameters

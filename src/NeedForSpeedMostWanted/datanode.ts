@@ -23,9 +23,9 @@ export class NfsNode {
             const nodeType = this.dataView.getUint32(offset, true);
             const nodeLength = this.dataView.getUint32(offset + 4, true);
             offset += 8;
-            if(nodeType != 0) {
+            if(nodeType !== 0) {
                 let paddingLength = 0;
-                while(paddingLength < nodeLength && this.dataView.getUint32(offset + paddingLength) == 0x11111111) {
+                while(paddingLength < nodeLength && this.dataView.getUint32(offset + paddingLength) === 0x11111111) {
                     paddingLength += 4;
                 }
                 const child = new NfsNode(this.dataBuffer.slice(offset + paddingLength, offset + nodeLength), nodeType);
@@ -89,5 +89,5 @@ export enum NodeType {
 
 function isDirectory(type: number) {
     // Checks if highest bit is set to 1
-    return (type & 0x80000000) != 0;
+    return (type & 0x80000000) !== 0;
 }

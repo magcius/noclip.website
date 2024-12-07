@@ -19,7 +19,7 @@ import { VertexAttributeInput } from '../../gx/gx_displaylist.js';
 import * as GX from '../../gx/gx_enum.js';
 import { getVertexInputLocation } from '../../gx/gx_material.js';
 import { ColorKind, GXMaterialHelperGfx, MaterialParams, DrawParams } from '../../gx/gx_render.js';
-import { clamp, clampRange, computeEulerAngleRotationFromSRTMatrix, computeModelMatrixR, computeModelMatrixS, computeModelMatrixSRT, computeNormalMatrix, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, isNearZero, isNearZeroVec3, lerp, MathConstants, normToLength, quatFromEulerRadians, saturate, scaleMatrix, setMatrixTranslation, transformVec3Mat4w0, transformVec3Mat4w1, Vec3NegY, vec3SetAll, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from '../../MathHelpers.js';
+import { clamp, clampRange, computeEulerAngleRotationFromSRTMatrix, computeModelMatrixR, computeModelMatrixS, computeModelMatrixSRT, computeNormalMatrix, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, isNearZero, isNearZeroVec3, lerp, MathConstants, normToLength, quatFromEulerRadians, saturate, scaleMatrix, setMatrixTranslation, transformVec3Mat4w0, transformVec3Mat4w1, vec3FromBasis2, vec3FromBasis3, Vec3NegY, vec3SetAll, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from '../../MathHelpers.js';
 import { TextureMapping } from '../../TextureHolder.js';
 import { assert, assertExists, fallback, leftPad, mod, nArray } from '../../util.js';
 import * as Viewer from '../../viewer.js';
@@ -6671,13 +6671,11 @@ export class ElectricRail extends LiveActor implements ElectricRailBase {
                 vec3.scaleAndAdd(scratchVec3, separator.position, separator.up, y);
                 const tx = 0.5 * j;
 
-                vec3.scaleAndAdd(scratchVec3a, scratchVec3, separator.right, x0);
-                vec3.scaleAndAdd(scratchVec3a, scratchVec3a, separator.up, y0);
+                vec3FromBasis2(scratchVec3a, scratchVec3, separator.right, x0, separator.up, y0);
                 ddraw.position3vec3(scratchVec3a);
                 ddraw.texCoord2f32(GX.Attr.TEX0, tx, 0.0);
 
-                vec3.scaleAndAdd(scratchVec3a, scratchVec3, separator.right, x1);
-                vec3.scaleAndAdd(scratchVec3a, scratchVec3a, separator.up, y1);
+                vec3FromBasis2(scratchVec3a, scratchVec3, separator.right, x1, separator.up, y1);
                 ddraw.position3vec3(scratchVec3a);
                 ddraw.texCoord2f32(GX.Attr.TEX0, tx, 1.0);
             }
@@ -6924,13 +6922,11 @@ export class ElectricRailMoving extends LiveActor implements ElectricRailBase {
                     makeAxisCrossPlane(scratchVec3c, scratchVec3b, scratchVec3a);
                 }
 
-                vec3.scaleAndAdd(scratchVec3a, scratchVec3, scratchVec3c, x0);
-                vec3.scaleAndAdd(scratchVec3a, scratchVec3a, scratchVec3b, y0);
+                vec3FromBasis2(scratchVec3a, scratchVec3, scratchVec3c, x0, scratchVec3b, y0);
                 ddraw.position3vec3(scratchVec3a);
                 ddraw.texCoord2f32(GX.Attr.TEX0, tx, 0.0);
 
-                vec3.scaleAndAdd(scratchVec3a, scratchVec3, scratchVec3c, x1);
-                vec3.scaleAndAdd(scratchVec3a, scratchVec3a, scratchVec3b, y1);
+                vec3FromBasis2(scratchVec3a, scratchVec3, scratchVec3c, x1, scratchVec3b, y1);
                 ddraw.position3vec3(scratchVec3a);
                 ddraw.texCoord2f32(GX.Attr.TEX0, tx, 1.0);
             }
@@ -7323,11 +7319,11 @@ export class PlantGroup extends LiveActor {
             makeAxisCrossPlane(scratchVec3a, scratchVec3b, gravity);
 
             // Right
-            vec3.scaleAndAdd(scratchVec3a, this.translation, scratchVec3a, Math.cos(angle) * radius);
-            // Up
-            vec3.scaleAndAdd(scratchVec3a, scratchVec3a, scratchVec3b, Math.sin(angle) * radius);
-
-            vec3.scaleAndAdd(scratchVec3a, scratchVec3a, gravity, -100.0);
+            vec3FromBasis3(scratchVec3a, this.translation,
+                scratchVec3a, Math.cos(angle) * radius, // Right
+                scratchVec3b, Math.sin(angle) * radius, // Forward
+                gravity, -100.0, // Up
+            );
             vec3.scale(scratchVec3b, gravity, 1000.0);
 
             getFirstPolyOnLineToMap(sceneObjHolder, member.translation, null, scratchVec3a, scratchVec3b);
@@ -9012,16 +9008,14 @@ export class WhirlPoolAccelerator extends LiveActor {
             const point = this.points[i];
 
             vec3.add(scratchVec3a, point.position, scratchVec3);
-            vec3.scaleAndAdd(scratchVec3a, scratchVec3a, point.axisX, point.radius * x0);
-            vec3.scaleAndAdd(scratchVec3a, scratchVec3a, point.axisZ, point.radius * z0);
+            vec3FromBasis2(scratchVec3a, scratchVec3a, point.axisX, point.radius * x0, point.axisZ, z0);
 
             ddraw.position3vec3(scratchVec3a);
             ddraw.color4rgba8(GX.Attr.CLR0, 0xFF, 0xFF, 0xFF, point.alpha);
             ddraw.texCoord2f32(GX.Attr.TEX0, point.texCoordS + texCoordS0, texCoordT);
 
             vec3.add(scratchVec3a, point.position, scratchVec3);
-            vec3.scaleAndAdd(scratchVec3a, scratchVec3a, point.axisX, point.radius * x1);
-            vec3.scaleAndAdd(scratchVec3a, scratchVec3a, point.axisZ, point.radius * z1);
+            vec3FromBasis2(scratchVec3a, scratchVec3a, point.axisX, point.radius * x1, point.axisZ, z1);
 
             ddraw.position3vec3(scratchVec3a);
             ddraw.color4rgba8(GX.Attr.CLR0, 0xFF, 0xFF, 0xFF, point.alpha);

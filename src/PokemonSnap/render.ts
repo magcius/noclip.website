@@ -380,7 +380,7 @@ export class ModelRenderer {
             this.renderers[i].animator.setTrack(newAnim.tracks[i]);
             this.renderers[i].setTransfromFromNode();
 
-            if (newAnim.materialTracks.length == 0 || newAnim.materialTracks[i].length === 0)
+            if (newAnim.materialTracks.length === 0 || newAnim.materialTracks[i].length === 0)
                 for (let j = 0; j < this.renderers[i].materials.length; j++)
                     this.renderers[i].materials[j].setTrack(null);
             else

@@ -69,7 +69,7 @@ function processTriangleStrips(view: DataView, offs: number, submeshOut: Submesh
         ));
         const w = view.getFloat32(offs + 0xC, true);
         if (i > 0 && Math.abs(w) > 1e-6) {
-            const doubleSided = view.getUint8(offs + 0xC) == 0x2;
+            const doubleSided = view.getUint8(offs + 0xC) === 0x2;
             if (w < 0 || doubleSided) {
                 submeshOut.ind.push(i);
                 submeshOut.ind.push(i - 1);
@@ -126,7 +126,7 @@ function processUVs(view: DataView, offs: number, submeshOut: Submesh): number {
 }
 
 function processTextureTag(view: DataView, offs: number, mesh: Mesh, submeshOut: Submesh, textureBlocksOut: BinTex.TextureBlock[]): number {
-    if (view.getUint8(offs) == 0x5) {
+    if (view.getUint8(offs) === 0x5) {
         // Indexed data and color table are unpacked directly, not from a texture bank.
         return processTextureUnpack(view, offs, mesh, submeshOut, textureBlocksOut);
     }
@@ -139,12 +139,12 @@ function processTextureTag(view: DataView, offs: number, mesh: Mesh, submeshOut:
     }
     const bank = (view.getUint8(propertiesOffs + 0x2) & 0x80) > 0 ? 1 : 0;
     const dataOffsBase = view.getUint16(propertiesOffs, true) * 0x100;
-    const dataOffs = (bank == 0) ? dataOffsBase - 0x260000 : dataOffsBase / 4;
+    const dataOffs = (bank === 0) ? dataOffsBase - 0x260000 : dataOffsBase / 4;
     const colorTableOffs = ((view.getUint16(propertiesOffs + 0x4, true) & 0x3FF0) >> 4) * 0x80;
 
     let textureBlock: BinTex.TextureBlock | null = null;
     for (let i = 0; i < textureBlocksOut.length; i++) {
-        if (textureBlocksOut[i].bank == bank && textureBlocksOut[i].dataOffs == dataOffs) {
+        if (textureBlocksOut[i].bank === bank && textureBlocksOut[i].dataOffs === dataOffs) {
             textureBlock = textureBlocksOut[i];
             break;
         }
@@ -152,17 +152,17 @@ function processTextureTag(view: DataView, offs: number, mesh: Mesh, submeshOut:
     if (!textureBlock) {
         const bitDepth = (view.getUint8(propertiesOffs + 0x2) & 0x40) > 0 ? 4 : 8;
         const deswizzle = bank === 0 && dataOffs >= 0x100000;
-        textureBlock = new BinTex.TextureBlock(/*width=*/bitDepth == 8 ? 256 : 512, /*height=*/256, bitDepth, bank, dataOffs, deswizzle);
+        textureBlock = new BinTex.TextureBlock(/*width=*/bitDepth === 8 ? 256 : 512, /*height=*/256, bitDepth, bank, dataOffs, deswizzle);
         textureBlocksOut.push(textureBlock);
     }
     let textureIndex = 0;
     for (let i = 0; i < textureBlock.textures.length; i++) {
-        if (textureBlock.textures[i].colorTableOffs == colorTableOffs) {
+        if (textureBlock.textures[i].colorTableOffs === colorTableOffs) {
             break;
         }
         textureIndex++;
     }
-    if (textureIndex == textureBlock.textures.length) {
+    if (textureIndex === textureBlock.textures.length) {
         const texture = new BinTex.Texture(textureIndex, textureBlock, colorTableOffs, mesh.translucent);
         parseTextureBounds(view, boundsOffs, texture);
         textureBlock.textures.push(texture);
@@ -197,7 +197,7 @@ function processTextureUnpack(view: DataView, offs: number, mesh: Mesh, submeshO
             }
             const dataSize = (view.getUint16(offs + 0x54, true) & 0xFFFE) * 0x10;
             offs += dataSize + 0x68;
-        } else if (blockId == 0x4) {
+        } else if (blockId === 0x4) {
             let propertiesOffs = offs + 0x24;
             let boundsOffs = offs + 0x34;
             // Quick hack to handle cases where these two blocks are occasionally stored out of order.
@@ -206,7 +206,7 @@ function processTextureUnpack(view: DataView, offs: number, mesh: Mesh, submeshO
                 boundsOffs = offs + 0x24;
             }
             texBitDepth = (view.getUint8(propertiesOffs + 0x2) & 0x40) > 0 ? 4 : 8;
-            const texHeight = Math.floor(texSize / texWidth) * (texBitDepth == 4 ? 2 : 1);
+            const texHeight = Math.floor(texSize / texWidth) * (texBitDepth === 4 ? 2 : 1);
 
             const textureBlock = new BinTex.TextureBlock(texWidth, texHeight, texBitDepth, /*bank=*/-1, texDataOffs, deswizzle);
             textureBlocksOut.push(textureBlock);
@@ -224,8 +224,8 @@ function processTextureUnpack(view: DataView, offs: number, mesh: Mesh, submeshO
 }
 
 function parseTextureBounds(view: DataView, offs: number, textureOut: BinTex.Texture) {
-    textureOut.tiledU = (view.getUint8(offs) & 0xF0) == 0xF0;
-    textureOut.tiledV = (view.getUint8(offs + 0x3) & 0xF) == 0xF;
+    textureOut.tiledU = (view.getUint8(offs) & 0xF0) === 0xF0;
+    textureOut.tiledV = (view.getUint8(offs + 0x3) & 0xF) === 0xF;
     if (textureOut.tiledU) {
         textureOut.clipRight = ((view.getUint8(offs + 0x1) & 0xF) + 1) * 0x10 - 1;
     } else {
@@ -303,19 +303,19 @@ function parseGeometrySector(view: DataView, geomSectorOffs: number, isSkybox: b
     for (let i = 0; i < vifTableCount; i++) {
         const index = i >= columnCount ? (i - columnCount) * 2 + 1 : i * 2;
         const size = (view.getUint32(vifTableOffs + index * 8, true) & 0xFFFFFFF) * 0x10;
-        if (size == 0) {
+        if (size === 0) {
             continue;
         }
         const offs = geomSectorOffs + view.getUint32(vifTableOffs + index * 8 + 0x4, true);
         const endOffs = offs + size;
 
         const mesh = new Mesh;
-        mesh.translucent = (index % 2) == 1;
+        mesh.translucent = (index % 2) === 1;
         if (index > 1) {
             const boundingBoxOffs = boundingBoxTableOffs + (Math.floor(index / 2) - 1) * 0x80;
             initMesh(view, boundingBoxOffs, mesh);
         }
-        parseVifPackets(view, offs, endOffs, /*first=*/index == 0, mesh, textureBlocksOut);
+        parseVifPackets(view, offs, endOffs, /*first=*/index === 0, mesh, textureBlocksOut);
         meshesOut.push(mesh);
     }
 }
@@ -366,7 +366,7 @@ function parseUVAnimSectors(view: DataView, mapTextureBlocks: BinTex.TextureBloc
     for (let i = 0; i < spriteCount; ++i) {
         const offs = uvSpriteSectorOffs + i * 0xA0;
         const numFrames = Math.min(0x20, view.getUint32(offs, true));
-        if (numFrames == 0) {
+        if (numFrames === 0) {
             continue;
         }
         const spriteLeft = view.getUint16(offs + 0x4, true);
@@ -374,17 +374,17 @@ function parseUVAnimSectors(view: DataView, mapTextureBlocks: BinTex.TextureBloc
         const dataOffsetU = view.getUint16(offs + 0x10, true);
         const dataWidthU = view.getUint16(offs + 0x12, true);
         const bank = (dataWidthU & 0x800) > 0 ? 1 : 0;
-        const texDataOffs = bank == 0 ? dataOffsetU * 0x100 - 0x260000 : dataOffsetU * 0x100 / 4;
+        const texDataOffs = bank === 0 ? dataOffsetU * 0x100 - 0x260000 : dataOffsetU * 0x100 / 4;
         // Locate texture for this sprite sheet.
         let textureBlock = null;
         let texture = null;
         for (let j = 0; j < mapTextureBlocks.length && !texture; j++) {
-            if (mapTextureBlocks[j].bank != bank || mapTextureBlocks[j].dataOffs != texDataOffs) {
+            if (mapTextureBlocks[j].bank !== bank || mapTextureBlocks[j].dataOffs !== texDataOffs) {
                 continue;
             }
             for (let k = 0; k < mapTextureBlocks[j].textures.length; k++) {
                 const curTex = mapTextureBlocks[j].textures[k];
-                if (curTex.clipLeft == spriteLeft && curTex.clipTop == spriteTop) {
+                if (curTex.clipLeft === spriteLeft && curTex.clipTop === spriteTop) {
                     textureBlock = mapTextureBlocks[j];
                     texture = curTex;
                     break;

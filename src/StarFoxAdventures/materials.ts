@@ -223,7 +223,7 @@ export abstract class StandardMaterial extends MaterialBase {
     protected rebuildInternal() {
         this.rebuildSpecialized();
 
-        this.mb.setCullMode((this.shader.flags & ShaderFlags.CullBackface) != 0 ? GX.CullMode.BACK : GX.CullMode.NONE);
+        this.mb.setCullMode((this.shader.flags & ShaderFlags.CullBackface) !== 0 ? GX.CullMode.BACK : GX.CullMode.NONE);
 
         if (this.blendOverride !== undefined) {
             this.blendOverride(this.mb);
@@ -1154,7 +1154,7 @@ class StandardObjectMaterial extends StandardMaterial {
     private setupShaderLayers(preProbe: boolean, fooFlag: boolean /* TODO: better name */) {
         for (let i = 0; i < this.shader.layers.length; i++) {
             const layer = this.shader.layers[i];
-            if (!!(layer.tevMode & 0x80) == preProbe) {
+            if (!!(layer.tevMode & 0x80) === preProbe) {
                 if (layer.texId !== null) {
                     const texMap = this.mb.genTexMap(makeMaterialTexture(this.texFetcher.getTexture(this.cache, layer.texId, true)));
                     // TODO: support scrollable textures (e.g. eyeballs)

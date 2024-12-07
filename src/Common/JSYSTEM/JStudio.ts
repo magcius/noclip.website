@@ -336,7 +336,7 @@ abstract class STBObject {
         while (true) {
             // Top bit of mFlags makes this object immediately inactive, restarting any existing sequence
             if (this.flags & 0x8000) {
-                if (this.status != EStatus.Inactive) {
+                if (this.status !== EStatus.Inactive) {
                     this.status = EStatus.Inactive;
                     if (this.isSequence) {
                         this.do_end();
@@ -345,7 +345,7 @@ abstract class STBObject {
                 return true;
             }
 
-            if (this.status == EStatus.Inactive) {
+            if (this.status === EStatus.Inactive) {
                 assert(this.isSequence);
                 this.do_begin();
                 this.status = EStatus.Wait;
@@ -353,7 +353,7 @@ abstract class STBObject {
 
             if ((this.control && this.control.isSuspended()) || this.isSuspended()) {
                 if (this.isSequence) {
-                    assert((this.status == EStatus.Wait) || (this.status == EStatus.Suspend));
+                    assert((this.status === EStatus.Wait) || (this.status === EStatus.Suspend));
                     this.status = EStatus.Suspend;
                     this.do_wait(frameCount);
                 }
@@ -366,7 +366,7 @@ abstract class STBObject {
                 // If there is nothing left in the sequence, end it
                 if (!this.sequence) {
                     if (this.isSequence) {
-                        assert(this.status != EStatus.Still);
+                        assert(this.status !== EStatus.Still);
                         if (!hasWaited) {
                             this.do_wait(0);
                         }
@@ -379,16 +379,16 @@ abstract class STBObject {
 
                 // If we're not currently running a sequence, start it
                 if (!this.isSequence) {
-                    assert(this.status == EStatus.Still);
+                    assert(this.status === EStatus.Still);
                     this.isSequence = true;
                     this.do_begin();
                 }
 
                 this.status = EStatus.Wait;
 
-                if (this.wait == 0) {
+                if (this.wait === 0) {
                     this.process_sequence();
-                    if (this.wait == 0) {
+                    if (this.wait === 0) {
                         break;
                     }
                 }
@@ -417,7 +417,7 @@ abstract class STBObject {
         let param = view.getUint32(byteIdx) & 0xFFFFFF;
 
         let next = 0;
-        if (cmd != 0) {
+        if (cmd !== 0) {
             if (cmd <= 0x7f) {
                 next = byteIdx + 4;
             } else {
@@ -477,7 +477,7 @@ abstract class STBObject {
             case 0x80: debugger; break;
             case 0x81:
                 const idSize = file.view.getUint16(dataOffset + 2);
-                assert(idSize == 4);
+                assert(idSize === 4);
                 const id = file.view.getUint32(dataOffset + 4);
                 const contentOffset = dataOffset + 4 + align(idSize, 4);
                 const contentSize = dataSize - (contentOffset - dataOffset);
@@ -639,7 +639,7 @@ class TActorAdaptor extends TAdaptor {
     }
 
     public adaptor_do_PARENT(data: ParagraphData): void {
-        assert(data.dataOp == EDataOp.ObjectName);
+        assert(data.dataOp === EDataOp.ObjectName);
         this.log(`SetParent: ${data.value}`);
         this.parent = this.system.JSGFindObject(data.value, JStage.EObject.PreExistingActor);
     }
@@ -660,14 +660,14 @@ class TActorAdaptor extends TAdaptor {
     }
 
     public adaptor_do_PARENT_ENABLE(data: ParagraphData): void {
-        assert(data.dataOp == EDataOp.Immediate);
+        assert(data.dataOp === EDataOp.Immediate);
         this.log(`SetParentEnable: ${data.valueInt}`);
         if (data.valueInt) { this.object.JSGSetParent(this.parent!, this.parentNodeID); }
         else { this.object.JSGSetParent(null, 0xFFFFFFFF); }
     }
 
     public adaptor_do_RELATION(data: ParagraphData): void {
-        assert(data.dataOp == EDataOp.ObjectName);
+        assert(data.dataOp === EDataOp.ObjectName);
         this.log(`SetRelation: ${data.value}`);
         this.relation = this.system.JSGFindObject(data.value, JStage.EObject.PreExistingActor);
     }
@@ -688,19 +688,19 @@ class TActorAdaptor extends TAdaptor {
     }
 
     public adaptor_do_RELATION_ENABLE(data: ParagraphData): void {
-        assert(data.dataOp == EDataOp.Immediate);
+        assert(data.dataOp === EDataOp.Immediate);
         this.log(`SetRelationEnable: ${data.valueInt}`);
         this.object.JSGSetRelation(!!data.valueInt, this.relation!, this.relationNodeID);
     }
 
     public adaptor_do_SHAPE(data: ParagraphData): void {
-        assert(data.dataOp == EDataOp.ObjectIdx);
+        assert(data.dataOp === EDataOp.ObjectIdx);
         this.log(`SetShape: ${data.value}`);
         this.object.JSGSetShape(data.value);
     }
 
     public adaptor_do_ANIMATION(data: ParagraphData): void {
-        assert(data.dataOp == EDataOp.ObjectIdx);
+        assert(data.dataOp === EDataOp.ObjectIdx);
         const animName = this.object.JSGDebugGetAnimationName(data.value);
         if( animName )
             this.log(`SetAnimation: ${animName}`);
@@ -710,19 +710,19 @@ class TActorAdaptor extends TAdaptor {
     }
 
     public adaptor_do_ANIMATION_MODE(data: ParagraphData): void {
-        assert(data.dataOp == EDataOp.Immediate);
+        assert(data.dataOp === EDataOp.Immediate);
         this.log(`SetAnimationMode: ${data.valueInt}`);
         this.animMode = data.valueInt;
     }
 
     public adaptor_do_TEXTURE_ANIMATION(data: ParagraphData): void {
-        assert(data.dataOp == EDataOp.ObjectIdx);
+        assert(data.dataOp === EDataOp.ObjectIdx);
         this.log(`SetTexAnim: ${data.value}`);
         this.object.JSGSetTextureAnimation(data.value);
     }
 
     public adaptor_do_TEXTURE_ANIMATION_MODE(data: ParagraphData): void {
-        assert(data.dataOp == EDataOp.Immediate);
+        assert(data.dataOp === EDataOp.Immediate);
         this.log(`SetTexAnimMode: ${data.valueInt}`);
         this.animTexMode = data.valueInt;
     }
@@ -778,7 +778,7 @@ class TActorObject extends STBObject {
             case 0x32:
                 debugger;
                 keyIdx = EActorTrack.Parent;
-                if (dataOp == EDataOp.FuncValIdx || dataOp == EDataOp.FuncValName) {
+                if (dataOp === EDataOp.FuncValIdx || dataOp === EDataOp.FuncValName) {
                     debugger;
                     this.adaptor.adaptor_setVariableValue(this, keyIdx, data);
                     this.adaptor.variableValues[keyIdx].setOutput((enabled, adaptor) => {
@@ -1011,7 +1011,7 @@ class TParagraph {
         let type;
         let offset;
 
-        if ((dataSize & 0x8000) == 0) {
+        if ((dataSize & 0x8000) === 0) {
             // 16 bit data
             type = view.getUint16(byteIdx + 2);
             offset = 4;
@@ -1022,7 +1022,7 @@ class TParagraph {
             offset = 8;
         }
 
-        if (dataSize == 0) {
+        if (dataSize === 0) {
             return { dataSize, type, dataOffset: 0, nextOffset: byteIdx + offset };
         } else {
             return { dataSize, type, dataOffset: byteIdx + offset, nextOffset: byteIdx + offset + align(dataSize, 4) };
@@ -1118,7 +1118,7 @@ namespace FVB {
                 switch (para.type) {
                     case EPrepareOp.None:
                         this.funcVal.prepare();
-                        assert(para.nextOffset == blockNext);
+                        assert(para.nextOffset === blockNext);
                         return;
 
                     case EPrepareOp.Data:
@@ -1126,7 +1126,7 @@ namespace FVB {
                         break;
 
                     case EPrepareOp.RangeSet:
-                        assert(para.dataSize == 8);
+                        assert(para.dataSize === 8);
                         const range = this.funcVal.getAttrRange();
                         assert(!!range, 'FVB Paragraph assumes FuncVal has range attribute, but it does not');
                         const begin = file.view.getFloat32(para.dataOffset + 0);
@@ -1143,7 +1143,7 @@ namespace FVB {
                         for (let i = 0; i < objCount; i++) {
                             const idSize = file.view.getUint32(para.dataOffset + 4 + i * 8 + 0);
                             const id = readString(file.buffer, para.dataOffset + 4 + i * 8 + 4, idSize);
-                            const obj = pControl.objects.find(o => o.id == id);
+                            const obj = pControl.objects.find(o => o.id === id);
                             assert(!!obj);
                             refer.fvs.push(obj.funcVal);
                         }
@@ -1165,7 +1165,7 @@ namespace FVB {
                     }
 
                     case EPrepareOp.InterpSet:
-                        assert(para.dataSize == 4);
+                        assert(para.dataSize === 4);
                         const interp = this.funcVal.getAttrInterpolate();
                         assert(!!interp, 'FVB Paragraph assumes FuncVal has interpolate attribute, but it does not');
                         const interpType = file.view.getUint32(para.dataOffset + 0);
@@ -1182,7 +1182,7 @@ namespace FVB {
                 pOffset = para.nextOffset;
             }
 
-            assert(pOffset == blockNext);
+            assert(pOffset === blockNext);
             this.funcVal.prepare();
         }
     }
@@ -1247,7 +1247,7 @@ namespace FVB {
             let version = view.getUint16(0x06);
             let blockCount = view.getUint32(0x0C);
             assert(fourCC === 'FVB');
-            assert(byteOrder == 0xFEFF);
+            assert(byteOrder === 0xFEFF);
             assert(version >= 2 && version <= 256); // As of Wind Waker
 
             const blockReader = new Reader(data, 16);
@@ -1361,7 +1361,7 @@ namespace FVB {
         override funcVal = new FunctionValue_Constant;
 
         public override prepare_data(para: TParagraph, control: TControl, file: Reader): void {
-            assert(para.dataSize == 4);
+            assert(para.dataSize === 4);
             const value = file.view.getFloat32(para.dataOffset);
             this.funcVal.setData(value);
         }
@@ -1439,9 +1439,9 @@ namespace FVB {
             const t = this.range.getParameter(timeSec, this.getStartTime(), this.getEndTime());
 
             // Update our current key. If the current time is between keys, select the later one.
-            this.curKeyIdx = this.keys.findIndex((k, i) => (i % 2) == 0 && k >= t) / 2;
+            this.curKeyIdx = this.keys.findIndex((k, i) => (i % 2) === 0 && k >= t) / 2;
 
-            if (this.curKeyIdx == 0) { // Time is at or before the start, return the first key
+            if (this.curKeyIdx === 0) { // Time is at or before the start, return the first key
                 return this.keys[this.curKeyIdx * 2 + 1];
             } else if (this.curKeyIdx < 0) { // Time is at or after the end, return the last key
                 this.curKeyIdx = this.keyCount - 1;
@@ -1614,7 +1614,7 @@ namespace FVB {
 
         public static composite_raw(fvs: TFunctionValue[], dataVal: number, timeSec: number): number {
             debugger; // Untested. Remove once confirmed working
-            if (fvs.length == 0) { return 0.0; }
+            if (fvs.length === 0) { return 0.0; }
             return fvs[dataVal].getValue(timeSec);
         }
 
@@ -1639,7 +1639,7 @@ namespace FVB {
 
         public static composite_subtract(fvs: TFunctionValue[], dataVal: number, timeSec: number): number {
             debugger; // Untested. Remove once confirmed working
-            if (fvs.length == 0) { return 0.0; }
+            if (fvs.length === 0) { return 0.0; }
             let val = fvs[0].getValue(timeSec);
             for (let fv of fvs.slice(1)) { val -= fv.getValue(timeSec); }
             return val - dataVal;
@@ -1654,7 +1654,7 @@ namespace FVB {
 
         public static composite_divide(fvs: TFunctionValue[], dataVal: number, timeSec: number): number {
             debugger; // Untested. Remove once confirmed working
-            if (fvs.length == 0) { return 0.0; }
+            if (fvs.length === 0) { return 0.0; }
             let val = fvs[0].getValue(timeSec);
             for (let fv of fvs.slice(1)) { val /= fv.getValue(timeSec); }
             return val / dataVal;
@@ -1695,7 +1695,7 @@ namespace FVB {
         public prepare(): void { this.range.prepare(); }
 
         public setData(values: Float32Array, stride: number) {
-            assert(stride == 3 || stride == 4);
+            assert(stride === 3 || stride === 4);
             this.stride = stride
             this.keys = values;
             this.keyCount = values.length / stride;
@@ -1713,9 +1713,9 @@ namespace FVB {
             const t = this.range.getParameter(timeSec, this.getStartTime(), this.getEndTime());
 
             // Update our current key. If the current time is between keys, select the later one.
-            this.curKeyIdx = this.keys.findIndex((k, i) => (i % this.stride) == 0 && k >= t) / this.stride;
+            this.curKeyIdx = this.keys.findIndex((k, i) => (i % this.stride) === 0 && k >= t) / this.stride;
 
-            if (this.curKeyIdx == 0) { // Time is at or before the start, return the first key
+            if (this.curKeyIdx === 0) { // Time is at or before the start, return the first key
                 return this.keys[this.curKeyIdx * this.stride + 1];
             } else if (this.curKeyIdx < 0) { // Time is at or after the end, return the last key
                 this.curKeyIdx = this.keyCount - 1;
@@ -1835,7 +1835,7 @@ export class TControl {
     }
 
     public getFunctionValueByIdx(idx: number) { return this.fvbControl.objects[idx].funcVal; }
-    public getFunctionValueByName(name: string) { return this.fvbControl.objects.find(v => v.id == name)?.funcVal; }
+    public getFunctionValueByName(name: string) { return this.fvbControl.objects.find(v => v.id === name)?.funcVal; }
 
     // Really this is a stb::TFactory method
     public createObject(blockObj: TBlockObject): STBObject | null {
@@ -1884,7 +1884,7 @@ export class TParse {
             data: file
         }
 
-        if (blockObj.type == BLOCK_TYPE_CONTROL) {
+        if (blockObj.type === BLOCK_TYPE_CONTROL) {
             this.control.setControlObject(blockObj);
             return true;
         }
@@ -1924,14 +1924,14 @@ export class TParse {
         assert(file.magic === 'STB');
         assert(version >= 1 && version <= 3); // As of Wind Waker, only versions 1-3 supported. TP seems to support <7, but untested.
         assert(targetVersion >= 2 && targetVersion <= 3); // As of Wind Waker, only version 2-3 is supported
-        assert(byteOrder == 0xFEFF);
+        assert(byteOrder === 0xFEFF);
 
         let byteIdx = file.offs;
         for (let i = 0; i < file.numChunks; i++) {
             const blockSize = file.view.getUint32(byteIdx + 0);
             const blockType = readString(file.buffer, byteIdx + 4, 4);
 
-            if (blockType == 'JFVB') {
+            if (blockType === 'JFVB') {
                 this.fvbParse.parse(file.buffer.subarray(byteIdx + 8, blockSize - 8), flags)
             } else {
                 this.parseBlockObject(new Reader(file.buffer, byteIdx), flags);

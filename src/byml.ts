@@ -180,7 +180,7 @@ function parseComplexNode(context: ParseContext, buffer: ArrayBufferSlice, offs:
     case NodeType.PathTable:
         return parsePathTable(context, buffer, offs);
     case NodeType.BinaryData:
-        if (numValues == 0x00FFFFFF) {
+        if (numValues === 0x00FFFFFF) {
             const numValues2 = view.getUint32(offs + 0x04, context.littleEndian);
             return buffer.subarray(offs + 0x08, numValues + numValues2);
         } else {
@@ -253,7 +253,7 @@ export function parse<T>(buffer: ArrayBufferSlice, fileType: FileType = FileType
     assert(magics.includes(magic));
     const view = buffer.createDataView();
 
-    const littleEndian = magic.slice(0, 2) == 'YB';
+    const littleEndian = magic.slice(0, 2) === 'YB';
     const endianness: Endianness = littleEndian ? Endianness.LITTLE_ENDIAN : Endianness.BIG_ENDIAN;
     const context: ParseContext = new ParseContext(fileType, endianness);
 
@@ -585,9 +585,9 @@ function gatherStrings(v: Node, keyStrings: Set<string>, valueStrings: Set<strin
 }
 
 function bymlStrCompare(a: string, b: string): number {
-    if (a == '')
+    if (a === '')
         return 1;
-    else if (b == '')
+    else if (b === '')
         return -1;
     else
         return a.localeCompare(b);
@@ -626,7 +626,7 @@ export function write<T extends {}>(v: T, fileType: FileType = FileType.CRG1, ma
         magic = magics[magics.length - 1];
     assert(magic.length === 0x04);
 
-    const littleEndian = magic.slice(0, 2) == 'YB';
+    const littleEndian = magic.slice(0, 2) === 'YB';
     const endianness: Endianness = littleEndian ? Endianness.LITTLE_ENDIAN : Endianness.BIG_ENDIAN;
 
     const keyStringSet = new Set<string>(['']);

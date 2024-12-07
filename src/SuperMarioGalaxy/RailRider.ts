@@ -3,7 +3,7 @@ import { JMapInfoIter } from "./JMapInfo.js";
 import { ReadonlyVec3, vec3 } from "gl-matrix";
 import { SceneObjHolder } from "./Main.js";
 import { assertExists, assert, fallback } from "../util.js";
-import { clamp, isNearZero, isNearZeroVec3 } from "../MathHelpers.js";
+import { clamp, isNearZero, isNearZeroVec3, vec3FromBasis3 } from "../MathHelpers.js";
 import { drawWorldSpacePoint, getDebugOverlayCanvas2D, drawWorldSpaceLine } from "../DebugJunk.js";
 import { Camera } from "../Camera.js";
 import { Magenta, Yellow, Cyan } from "../Color.js";

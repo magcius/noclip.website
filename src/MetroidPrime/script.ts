@@ -140,7 +140,7 @@ export class Entity {
                 if (model !== null) {
                     if (animID !== -1) {
                         const animName = character.animNames[animID];
-                        const anim = ancs.animationSet.animations.find(v => v.name == animName);
+                        const anim = ancs.animationSet.animations.find(v => v.name === animName);
                         const metaAnim = anim?.animation;
                         const mp2Evnt = anim?.mp2Evnt;
                         const aabb = character.aabbAnimMap.get(animName);
@@ -296,7 +296,7 @@ function readLightParameters(buffer: ArrayBufferSlice, offs: number, ent: Entity
     const view = buffer.createDataView();
 
     const numProperties = view.getUint32(offs + 0x00);
-    assert(numProperties == 14);
+    assert(numProperties === 14);
 
     const castsShadow = view.getUint8(offs + 0x04);
     const shadowScale = view.getFloat32(offs + 0x05);
@@ -341,7 +341,7 @@ function readActorParameters(buffer: ArrayBufferSlice, offs: number, ent: Entity
     const originalOffs = offs;
 
     const numProperties = view.getUint32(offs);
-    assert(numProperties == 14);
+    assert(numProperties === 14);
     offs += 4;
 
     offs += readLightParameters(buffer, offs, ent);
@@ -726,7 +726,7 @@ export function parseScriptLayer_MP1(buffer: ArrayBufferSlice, layerOffset: numb
 
         case MP1EntityType.AreaAttributes: {
             const entity = new AreaAttributes(entityType, entityId);
-            entity.active = (view.getUint32(entityTableIdx) == 1);
+            entity.active = (view.getUint32(entityTableIdx) === 1);
             entity.needSky = !!(view.getUint8(entityTableIdx + 0x04));
             entity.overrideSky = readAssetID(buffer, entityTableIdx + 0x19, 4, 'CMDL', resourceSystem);
             entities.push(entity);

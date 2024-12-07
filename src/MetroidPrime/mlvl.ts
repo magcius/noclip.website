@@ -25,12 +25,12 @@ enum WorldVersion {
 }
 
 export function parse(stream: InputStream, resourceSystem: ResourceSystem, assetID: string): MLVL {
-    assert(stream.readUint32() == 0xDEAFBABE);
+    assert(stream.readUint32() === 0xDEAFBABE);
     const version: WorldVersion = stream.readUint32();
 
     const worldNameID = stream.readAssetID();
 
-    if (version == WorldVersion.MP2) {
+    if (version === WorldVersion.MP2) {
         const darkWorldNameID = stream.readAssetID();
     }
 
@@ -38,7 +38,7 @@ export function parse(stream: InputStream, resourceSystem: ResourceSystem, asset
         const templeKeyWorldIndex = stream.readInt32();
     }
 
-    if (version == WorldVersion.DKCR) {
+    if (version === WorldVersion.DKCR) {
         const hasTimeAttack = stream.readBool();
 
         if (hasTimeAttack) {
@@ -54,7 +54,7 @@ export function parse(stream: InputStream, resourceSystem: ResourceSystem, asset
     const defaultSkyboxID = stream.readAssetID();
 
     // Memory Relay junk.
-    if (version == WorldVersion.MP1) {
+    if (version === WorldVersion.MP1) {
         const memoryRelayTableCount = stream.readUint32();
         stream.skip(memoryRelayTableCount * 0xB);
     }
@@ -62,8 +62,8 @@ export function parse(stream: InputStream, resourceSystem: ResourceSystem, asset
     // Areas
     const areaCount = stream.readUint32();
 
-    if (version == WorldVersion.MP1)
-        assert(stream.readInt32() == 1);
+    if (version === WorldVersion.MP1)
+        assert(stream.readInt32() === 1);
 
     const areaTable: Area[] = [];
     for (let i = 0; i < areaCount; i++) {
@@ -101,7 +101,7 @@ export function parse(stream: InputStream, resourceSystem: ResourceSystem, asset
             }
         }
 
-        if (version == WorldVersion.MP2) {
+        if (version === WorldVersion.MP2) {
             const numModules = stream.readUint32();
 
             for (let j = 0; j < numModules; j++)
@@ -111,7 +111,7 @@ export function parse(stream: InputStream, resourceSystem: ResourceSystem, asset
             stream.skip(numOffsets*4);
         }
 
-        if (version == WorldVersion.DKCR) {
+        if (version === WorldVersion.DKCR) {
             stream.skip(4);
         }
 

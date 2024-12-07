@@ -1,20 +1,22 @@
 
 // Source Engine BSP.
 
+import { ReadonlyMat4, ReadonlyVec2, ReadonlyVec3, ReadonlyVec4, vec2, vec3, vec4 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
-import { readString, assert, nArray, decodeString, ensureInList } from "../util.js";
-import { vec4, vec3, vec2, ReadonlyVec3, ReadonlyVec4, ReadonlyVec2 } from "gl-matrix";
-import { getTriangleIndexCountForTopologyIndexCount, GfxTopology, convertToTrianglesRange } from "../gfx/helpers/TopologyHelpers.js";
-import { parseZipFile, ZipFile } from "../ZipFile.js";
-import { Plane, AABB } from "../Geometry.js";
-import { deserializeGameLump_dprp, DetailObjects, deserializeGameLump_sprp, StaticObjects } from "./StaticDetailObject.js";
 import BitMap from "../BitMap.js";
-import { decompress, decodeLZMAProperties } from '../Common/Compression/LZMA.js';
-import { Color, colorNewFromRGBA } from "../Color.js";
-import { unpackColorRGBExp32 } from "./Materials/Lightmap.js";
-import { lerp, saturate } from "../MathHelpers.js";
-import { pairs2obj, ValveKeyValueParser, VKFPair } from "./VMT.js";
 import { IS_DEVELOPMENT } from "../BuildVersion.js";
+import { Color, colorNewFromRGBA } from "../Color.js";
+import { decodeLZMAProperties, decompress } from '../Common/Compression/LZMA.js';
+import { AABB, Plane } from "../Geometry.js";
+import { convertToTrianglesRange, getTriangleIndexCountForTopologyIndexCount, GfxTopology } from "../gfx/helpers/TopologyHelpers.js";
+import { lerp, MathConstants, normToLength, saturate, vec3FromBasis2, Vec3NegZ, vec3SetAll, Vec3UnitX } from "../MathHelpers.js";
+import { assert, decodeString, ensureInList, nArray, readString } from "../util.js";
+import { parseZipFile, ZipFile } from "../ZipFile.js";
+import { unpackColorRGBExp32 } from "./Materials/Lightmap.js";
+import { deserializeGameLump_dprp, deserializeGameLump_sprp, DetailObjects, StaticObjects } from "./StaticDetailObject.js";
+import { pairs2obj, ValveKeyValueParser, VKFPair } from "./VMT.js";
+import { drawWorldSpaceLine, drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk.js";
+import { SourceRenderer } from "./Main.js";
 
 //#region Data Structures
 export interface FaceLightmapData {
@@ -62,6 +64,7 @@ const enum TexinfoFlags {
     NODRAW    = 0x0080,
     NOLIGHT   = 0x0400,
     BUMPLIGHT = 0x0800,
+    NODECALS  = 0x2000,
 }
 
 interface Texinfo {
@@ -172,6 +175,65 @@ class MeshVertex {
 function calcTexCoord(dst: vec2, v: ReadonlyVec3, m: TexinfoMapping): void {
     dst[0] = v[0]*m.s[0] + v[1]*m.s[1] + v[2]*m.s[2] + m.s[3];
     dst[1] = v[0]*m.t[0] + v[1]*m.t[1] + v[2]*m.t[2] + m.t[3];
+}
+
+function packVertexInBuffer(dst: Float32Array, dstOffsVertex: number, v: MeshVertex, tangentT: ReadonlyVec3, tangentW: number): number {
+    // Position
+    dst[dstOffsVertex++] = v.position[0];
+    dst[dstOffsVertex++] = v.position[1];
+    dst[dstOffsVertex++] = v.position[2];
+
+    // Normal
+    dst[dstOffsVertex++] = v.normal[0];
+    dst[dstOffsVertex++] = v.normal[1];
+    dst[dstOffsVertex++] = v.normal[2];
+    dst[dstOffsVertex++] = v.alpha;
+
+    // Tangent
+    vec3.cross(scratchVec3a, v.normal, tangentT);
+    vec3.normalize(scratchVec3a, scratchVec3a);
+    dst[dstOffsVertex++] = scratchVec3a[0];
+    dst[dstOffsVertex++] = scratchVec3a[1];
+    dst[dstOffsVertex++] = scratchVec3a[2];
+    // Tangent Sign
+    dst[dstOffsVertex++] = tangentW;
+
+    // Texture UV
+    dst[dstOffsVertex++] = v.uv[0];
+    dst[dstOffsVertex++] = v.uv[1];
+
+    dst[dstOffsVertex++] = v.lightmapUV[0];
+    dst[dstOffsVertex++] = v.lightmapUV[1];
+
+    return VERTEX_SIZE;
+}
+
+function fetchVertexFromBuffer(dst: MeshVertex, vertexData: Float32Array, i: number): void {
+    let offsVertex = i * VERTEX_SIZE;
+
+    // Position
+    dst.position[0] = vertexData[offsVertex++];
+    dst.position[1] = vertexData[offsVertex++];
+    dst.position[2] = vertexData[offsVertex++];
+
+    // Normal
+    dst.normal[0] = vertexData[offsVertex++];
+    dst.normal[1] = vertexData[offsVertex++];
+    dst.normal[2] = vertexData[offsVertex++];
+    dst.alpha = vertexData[offsVertex++];
+
+    // Tangent
+    offsVertex += 3;
+    // Tangent Sign
+    offsVertex++;
+
+    // Texture UV
+    dst.uv[0] = vertexData[offsVertex++];
+    dst.uv[1] = vertexData[offsVertex++];
+
+    // Lightmap UV
+    dst.lightmapUV[0] = vertexData[offsVertex++];
+    dst.lightmapUV[1] = vertexData[offsVertex++];
 }
 
 //#endregion
@@ -319,39 +381,14 @@ function buildDisplacement(disp: DispInfo, corners: ReadonlyVec3[], disp_verts: 
 
 //#region Overlays/Decals
 
-function fetchVertexFromBuffer(dst: MeshVertex, vertexData: Float32Array, i: number): void {
-    let offsVertex = i * VERTEX_SIZE;
-
-    // Position
-    dst.position[0] = vertexData[offsVertex++];
-    dst.position[1] = vertexData[offsVertex++];
-    dst.position[2] = vertexData[offsVertex++];
-
-    // Normal
-    dst.normal[0] = vertexData[offsVertex++];
-    dst.normal[1] = vertexData[offsVertex++];
-    dst.normal[2] = vertexData[offsVertex++];
-    dst.alpha = vertexData[offsVertex++];
-
-    // Tangent
-    offsVertex += 3;
-    // Tangent Sign and Lightmap Offset
-    offsVertex++;
-
-    // Texture UV
-    dst.uv[0] = vertexData[offsVertex++];
-    dst.uv[1] = vertexData[offsVertex++];
-
-    // Lightmap UV
-    dst.lightmapUV[0] = vertexData[offsVertex++];
-    dst.lightmapUV[1] = vertexData[offsVertex++];
-}
-
 // Stores information for each origin face to the final, packed surface data.
 class BSPFaceInfo {
+    public texinfo: Texinfo | null = null;
     public surfaceIndex: number = -1;
     public startIndex: number = 0;
     public endIndex: number = 0;
+    public plane: Readonly<Plane>;
+    public bbox: AABB | null = null; // If null, it's a displacement surface and has a resulting bbox.
     public overlaySurfaces: number[] = [];
 }
 
@@ -367,6 +404,18 @@ class OverlayInfo {
     public v1 = 0.0;
 }
 
+export interface DecalSurface {
+    startIndex: number;
+    indexCount: number;
+    lightmapPackerPageIndex: number;
+}
+
+interface DecalResult {
+    vertexData: ArrayBuffer;
+    indexData: ArrayBuffer;
+    surfaces: DecalSurface[];
+}
+
 interface OverlaySurface {
     vertex: MeshVertex[];
     indices: number[];
@@ -379,7 +428,20 @@ interface OverlayResult {
     surfaces: OverlaySurface[];
 }
 
-function buildOverlayPlane(dst: MeshVertex[], overlayInfo: OverlayInfo): void {
+export interface DecalSurface {
+    startIndex: number;
+    indexCount: number;
+    lightmapPackerPageIndex: number;
+    bbox: AABB;
+}
+
+interface DecalResult {
+    vertexData: ArrayBuffer;
+    indexData: ArrayBuffer;
+    surfaces: DecalSurface[];
+}
+
+function buildOverlayPoints(dst: MeshVertex[], overlayInfo: OverlayInfo): void {
     assert(dst.length === 4);
 
     vec2.set(dst[0].uv, overlayInfo.u0, overlayInfo.v0);
@@ -389,12 +451,12 @@ function buildOverlayPlane(dst: MeshVertex[], overlayInfo: OverlayInfo): void {
 
     for (let i = 0; i < dst.length; i++) {
         const v = dst[i];
-        vec3.scaleAndAdd(v.position, overlayInfo.origin, overlayInfo.basis[0], overlayInfo.planePoints[i][0]);
-        vec3.scaleAndAdd(v.position, v.position,         overlayInfo.basis[1], overlayInfo.planePoints[i][1]);
+        const p = overlayInfo.planePoints[i];
+        vec3FromBasis2(v.position, overlayInfo.origin, overlayInfo.basis[0], p[0], overlayInfo.basis[1], p[1]);
     }
 }
 
-function buildSurfacePlane(dst: MeshVertex[], overlayInfo: OverlayInfo): void {
+function projectToOverlayPlane(dst: MeshVertex[], overlayInfo: OverlayInfo): void {
     assert(dst.length === 3);
 
     for (let i = 0; i < dst.length; i++) {
@@ -407,12 +469,12 @@ function buildSurfacePlane(dst: MeshVertex[], overlayInfo: OverlayInfo): void {
     }
 }
 
-function clipOverlayPlane(dst: MeshVertex[], overlayInfo: OverlayInfo, p0: MeshVertex, p1: MeshVertex, p2: MeshVertex): void {
+function clipOverlayPlane(dst: MeshVertex[], surfaceNormal: ReadonlyVec3, p0: MeshVertex, p1: MeshVertex, p2: MeshVertex): void {
     const plane = new Plane();
     // First compute our clip plane.
     vec3.sub(p0.normal, p1.position, p0.position);
     vec3.normalize(p0.normal, p0.normal);
-    vec3.cross(p0.normal, overlayInfo.normal, p0.normal);
+    vec3.cross(p0.normal, surfaceNormal, p0.normal);
     plane.set(p0.normal, -vec3.dot(p0.normal, p0.position));
 
     if (plane.distanceVec3(p2.position) > 0.0)
@@ -429,7 +491,7 @@ function clipOverlayPlane(dst: MeshVertex[], overlayInfo: OverlayInfo, p0: MeshV
     }
 
     for (let i = 0; i < vertex.length; i++) {
-        const i0 = i, i1 = (i + 1) % distance.length;
+        const i0 = i, i1 = (i + 1) % vertex.length;
         const d0 = distance[i0], d1 = distance[i1];
         const v0 = vertex[i0], v1 = vertex[i1];
 
@@ -465,6 +527,39 @@ function calcBarycentricsFromTri(dst: vec2, p: ReadonlyVec3, p0: ReadonlyVec3, p
     dst[1] = calcWedgeArea2(p2, p0, p) / outerTriArea2;
 }
 
+function calcLightmapUVFromBarycentrics(v: MeshVertex, surfacePoints: MeshVertex[], surfaceTriArea2: number): void {
+    // Assign lightmapUV from triangle barycentrics.
+    calcBarycentricsFromTri(v.lightmapUV, v.position, surfacePoints[0].position, surfacePoints[1].position, surfacePoints[2].position, surfaceTriArea2);
+    const baryU = v.lightmapUV[0], baryV = v.lightmapUV[1], baryW = (1 - baryU - baryV);
+    vec2.scale(v.lightmapUV, surfacePoints[0].lightmapUV, baryU);
+    vec2.scaleAndAdd(v.lightmapUV, v.lightmapUV, surfacePoints[1].lightmapUV, baryV);
+    vec2.scaleAndAdd(v.lightmapUV, v.lightmapUV, surfacePoints[2].lightmapUV, baryW);
+}
+
+function mergeOverlaySurfaces(surfaces: OverlaySurface[]): void {
+    // Sort surface and merge them together.
+    surfaces.sort((a, b) => b.lightmapPackerPageIndex - a.lightmapPackerPageIndex);
+
+    for (let i = 1; i < surfaces.length; i++) {
+        const i0 = i - 1, i1 = i;
+        const s0 = surfaces[i0], s1 = surfaces[i1];
+
+        if (s0.lightmapPackerPageIndex !== s1.lightmapPackerPageIndex)
+            continue;
+
+        // Merge s1 into s0, then delete s0.
+        let baseVertex = s0.vertex.length;
+        s0.vertex.push(...s1.vertex);
+        for (let j = 0; j < s1.indices.length; j++)
+            s0.indices.push(baseVertex + s1.indices[j]);
+        for (let j = 0; j < s1.originFaceList.length; j++)
+            ensureInList(s0.originFaceList, s1.originFaceList[j]);
+        s0.bbox.union(s0.bbox, s1.bbox);
+        surfaces.splice(i1, 1);
+        i--;
+    }
+}
+
 function buildOverlay(overlayInfo: OverlayInfo, faceInfos: BSPFaceInfo[], bspSurfaces: BSPSurface[], indexData: Uint32Array, vertexData: Float32Array): OverlayResult {
     const surfaces: OverlaySurface[] = [];
     const surfacePoints = nArray(3, () => new MeshVertex());
@@ -482,18 +577,17 @@ function buildOverlay(overlayInfo: OverlayInfo, faceInfos: BSPFaceInfo[], bspSur
 
         for (let index = faceInfo.startIndex; index < faceInfo.endIndex; index += 3) {
             const overlayPoints = nArray(4, () => new MeshVertex());
-            buildOverlayPlane(overlayPoints, overlayInfo);
+            buildOverlayPoints(overlayPoints, overlayInfo);
 
             fetchVertexFromBuffer(surfacePoints[0], vertexData, indexData[index + 0]);
             fetchVertexFromBuffer(surfacePoints[1], vertexData, indexData[index + 1]);
             fetchVertexFromBuffer(surfacePoints[2], vertexData, indexData[index + 2]);
 
             // Store our surface plane for later, so we can re-project back to it...
-            // XXX(jstpierre): Not the cleanest way to compute the surface normal... seems to work though?
             surfacePlane.setTri(surfacePoints[0].position, surfacePoints[2].position, surfacePoints[1].position);
 
             // Project surface down to the overlay plane.
-            buildSurfacePlane(surfacePoints, overlayInfo);
+            projectToOverlayPlane(surfacePoints, overlayInfo);
 
             const surfaceTriArea2 = calcWedgeArea2(surfacePoints[0].position, surfacePoints[1].position, surfacePoints[2].position);
 
@@ -501,7 +595,7 @@ function buildOverlay(overlayInfo: OverlayInfo, faceInfos: BSPFaceInfo[], bspSur
             for (let j0 = 0; j0 < surfacePoints.length; j0++) {
                 const j1 = (j0 + 1) % surfacePoints.length, j2 = (j0 + 2) % surfacePoints.length;
                 const p0 = surfacePoints[j0], p1 = surfacePoints[j1], p2 = surfacePoints[j2];
-                clipOverlayPlane(overlayPoints, overlayInfo, p0, p1, p2);
+                clipOverlayPlane(overlayPoints, overlayInfo.normal, p0, p1, p2);
             }
 
             if (overlayPoints.length < 3) {
@@ -512,15 +606,10 @@ function buildOverlay(overlayInfo: OverlayInfo, faceInfos: BSPFaceInfo[], bspSur
             for (let j = 0; j < overlayPoints.length; j++) {
                 const v = overlayPoints[j];
 
-                // Assign lightmapUV from triangle barycentrics.
-                calcBarycentricsFromTri(v.lightmapUV, v.position, surfacePoints[0].position, surfacePoints[1].position, surfacePoints[2].position, surfaceTriArea2);
-                const baryU = v.lightmapUV[0], baryV = v.lightmapUV[1], baryW = (1 - baryU - baryV);
-                vec2.scale(v.lightmapUV, surfacePoints[0].lightmapUV, baryU);
-                vec2.scaleAndAdd(v.lightmapUV, v.lightmapUV, surfacePoints[1].lightmapUV, baryV);
-                vec2.scaleAndAdd(v.lightmapUV, v.lightmapUV, surfacePoints[2].lightmapUV, baryW);
-
                 // Set the decal's normal to be the face normal...
                 vec3.copy(v.normal, surfacePlane.n);
+
+                calcLightmapUVFromBarycentrics(v, surfacePoints, surfaceTriArea2);
 
                 // Project back down to the surface plane.
                 const distance = surfacePlane.distanceVec3(v.position);
@@ -549,27 +638,117 @@ function buildOverlay(overlayInfo: OverlayInfo, faceInfos: BSPFaceInfo[], bspSur
         surfaces.push({ vertex, indices, lightmapPackerPageIndex, originFaceList, bbox });
     }
 
-    // Sort surface and merge them together.
-    surfaces.sort((a, b) => b.lightmapPackerPageIndex - a.lightmapPackerPageIndex);
+    mergeOverlaySurfaces(surfaces);
 
-    for (let i = 1; i < surfaces.length; i++) {
-        const i0 = i - 1, i1 = i;
-        const s0 = surfaces[i0], s1 = surfaces[i1];
+    return { surfaces };
+}
 
-        if (s0.lightmapPackerPageIndex !== s1.lightmapPackerPageIndex)
+function buildDecal(pt: ReadonlyVec3, halfWidth: number, halfHeight: number, queryAABB: Readonly<AABB>, faces: Iterable<number>, faceInfos: BSPFaceInfo[], bspSurfaces: BSPSurface[], indexData: Uint32Array, vertexData: Float32Array): OverlayResult {
+    const surfaces: OverlaySurface[] = [];
+    const surfacePlane = new Plane();
+    const textureSpaceBasis = nArray(3, () => vec3.create());
+    const dpt = vec3.create();
+
+    for (const face of faces) {
+        const faceInfo = faceInfos[face];
+
+        if (faceInfo.bbox !== null) {
+            if (!AABB.intersect(faceInfo.bbox, queryAABB))
+                continue;
+        } else {
+            const maxDecalDistance = 4;
+            if (Math.abs(faceInfo.plane.distanceVec3(pt)) >= maxDecalDistance)
+                continue;
+        }
+
+        const vertex: MeshVertex[] = [];
+        const indices: number[] = [];
+        const originFaceList: number[] = [];
+
+        const bbox = new AABB();
+
+        for (let index = faceInfo.startIndex; index < faceInfo.endIndex; index += 3) {
+            const surfacePoints = nArray(3, () => new MeshVertex());
+            for (let i = 0; i < 3; i++)
+                fetchVertexFromBuffer(surfacePoints[i], vertexData, indexData[index + i]);
+
+            // Build the surface plane.
+            surfacePlane.setTri(surfacePoints[0].position, surfacePoints[2].position, surfacePoints[1].position);
+
+            vec3.copy(textureSpaceBasis[2], surfacePlane.n);
+
+            if (Math.abs(surfacePlane.n[2]) >= Math.sin(MathConstants.TAU * 0.25)) {
+                // Floor/Ceiling
+                vec3.copy(textureSpaceBasis[0], Vec3UnitX);
+                vec3.cross(textureSpaceBasis[1], textureSpaceBasis[0], textureSpaceBasis[2]);
+                vec3.cross(textureSpaceBasis[0], textureSpaceBasis[2], textureSpaceBasis[1]);
+            } else {
+                // Wall
+                vec3.copy(textureSpaceBasis[1], Vec3NegZ);
+                vec3.cross(textureSpaceBasis[0], textureSpaceBasis[2], textureSpaceBasis[1]);
+                vec3.cross(textureSpaceBasis[1], textureSpaceBasis[0], textureSpaceBasis[2]);
+            }
+            normToLength(textureSpaceBasis[0], halfWidth);
+            normToLength(textureSpaceBasis[1], halfHeight);
+
+            // Project our origin point down to the plane.
+            surfacePlane.projectToPlane(dpt, pt);
+
+            // Compute the four corners of the decal.
+            const overlayPoints = nArray(4, () => new MeshVertex());
+            for (let i = 0; i < 4; i++) {
+                const p = overlayPoints[i];
+                const sx = (0b0110 >>> i) & 1;
+                const sy = (0b1100 >>> i) & 1;
+                vec3FromBasis2(p.position, dpt, textureSpaceBasis[0], sx * 2 - 1, textureSpaceBasis[1], sy * 2 - 1);
+                vec2.set(p.uv, sx, sy);
+            }
+
+            const surfaceTriArea2 = calcWedgeArea2(surfacePoints[0].position, surfacePoints[1].position, surfacePoints[2].position);
+
+            // Clip the overlay plane to the surface.
+            for (let j0 = 0; j0 < surfacePoints.length; j0++) {
+                const j1 = (j0 + 1) % surfacePoints.length, j2 = (j0 + 2) % surfacePoints.length;
+                const p0 = surfacePoints[j0], p1 = surfacePoints[j1], p2 = surfacePoints[j2];
+                clipOverlayPlane(overlayPoints, surfacePlane.n, p0, p1, p2);
+            }
+
+            if (overlayPoints.length < 3) {
+                // Not enough to make a triangle. Just skip.
+                continue;
+            }
+
+            for (let j = 0; j < overlayPoints.length; j++) {
+                const v = overlayPoints[j];
+
+                calcLightmapUVFromBarycentrics(v, surfacePoints, surfaceTriArea2);
+
+                // Set the decal's normal to be the face normal...
+                vec3.copy(v.normal, surfacePlane.n);
+
+                // Offset the normal just a smidgen...
+                vec3.scaleAndAdd(v.position, v.position, v.normal, 0.1);
+                bbox.unionPoint(v.position);
+            }
+
+            // We're done! Append the overlay plane to the list.
+            const baseVertex = vertex.length;
+            vertex.push(...overlayPoints);
+            const dstIndexOffs = indices.length;
+            indices.length = indices.length + getTriangleIndexCountForTopologyIndexCount(GfxTopology.TriFans, overlayPoints.length);
+            convertToTrianglesRange(indices, dstIndexOffs, GfxTopology.TriFans, baseVertex, overlayPoints.length);
+        }
+
+        if (vertex.length === 0)
             continue;
 
-        // Merge s1 into s0, then delete s0.
-        let baseVertex = s0.vertex.length;
-        s0.vertex.push(...s1.vertex);
-        for (let j = 0; j < s1.indices.length; j++)
-            s0.indices.push(baseVertex + s1.indices[j]);
-        for (let j = 0; j < s1.originFaceList.length; j++)
-            ensureInList(s0.originFaceList, s1.originFaceList[j]);
-        s0.bbox.union(s0.bbox, s1.bbox);
-        surfaces.splice(i1, 1);
-        i--;
+        originFaceList.push(face);
+
+        const lightmapPackerPageIndex = bspSurfaces[faceInfo.surfaceIndex].lightmapPackerPageIndex;
+        surfaces.push({ vertex, indices, lightmapPackerPageIndex, originFaceList, bbox });
     }
+
+    mergeOverlaySurfaces(surfaces);
 
     return { surfaces };
 }
@@ -848,6 +1027,14 @@ function readVec4(view: DataView, offs: number): vec4 {
     const z = view.getFloat32(offs + 0x08, true);
     const w = view.getFloat32(offs + 0x0C, true);
     return vec4.fromValues(x, y, z, w);
+}
+
+function readPlane(view: DataView, offs: number): Plane {
+    const x = view.getFloat32(offs + 0x00, true);
+    const y = view.getFloat32(offs + 0x04, true);
+    const z = view.getFloat32(offs + 0x08, true);
+    const d = view.getFloat32(offs + 0x0C, true);
+    return new Plane(x, y, z, -d);
 }
 
 //#endregion
@@ -1488,41 +1675,15 @@ export class BSPFile {
             for (let j = 0; j < vertex.length; j++) {
                 const v = vertex[j];
 
-                // Position
-                vertexData[dstOffsVertex++] = v.position[0];
-                vertexData[dstOffsVertex++] = v.position[1];
-                vertexData[dstOffsVertex++] = v.position[2];
-
                 if (center !== null)
                     vec3.scaleAndAdd(center, center, v.position, 1 / vertex.length);
 
-                // Normal
-                vertexData[dstOffsVertex++] = v.normal[0];
-                vertexData[dstOffsVertex++] = v.normal[1];
-                vertexData[dstOffsVertex++] = v.normal[2];
-                vertexData[dstOffsVertex++] = v.alpha;
-
-                // Tangent
-                vec3.cross(scratchTangentS, v.normal, scratchTangentT);
-                vec3.normalize(scratchTangentS, scratchTangentS);
-                vertexData[dstOffsVertex++] = scratchTangentS[0];
-                vertexData[dstOffsVertex++] = scratchTangentS[1];
-                vertexData[dstOffsVertex++] = scratchTangentS[2];
-                // Tangent Sign
-                vertexData[dstOffsVertex++] = tangentW;
-
-                // Texture UV
-                vertexData[dstOffsVertex++] = v.uv[0];
-                vertexData[dstOffsVertex++] = v.uv[1];
-
-                // Lightmap UV
                 if (!!(tex.flags & TexinfoFlags.NOLIGHT)) {
-                    vertexData[dstOffsVertex++] = 0.5;
-                    vertexData[dstOffsVertex++] = 0.5;
-                } else {
-                    vertexData[dstOffsVertex++] = v.lightmapUV[0];
-                    vertexData[dstOffsVertex++] = v.lightmapUV[1];
+                    v.lightmapUV[0] = 0.5;
+                    v.lightmapUV[1] = 0.5;
                 }
+
+                dstOffsVertex += packVertexInBuffer(vertexData, dstOffsVertex, v, scratchTangentT, tangentW);
             }
         };
 
@@ -1586,8 +1747,8 @@ export class BSPFile {
             vec3.cross(scratchNormal, scratchTangentS, scratchTangentT);
 
             // Detect if we need to flip tangents.
-            const plane = readVec3(planes, planenum * 0x14);
-            const tangentSSign = vec3.dot(plane, scratchNormal) > 0.0 ? -1.0 : 1.0;
+            const plane = readPlane(planes, planenum * 0x14);
+            const tangentSSign = vec3.dot(plane.n, scratchNormal) > 0.0 ? -1.0 : 1.0;
 
             const lightmapData = this.lightmapData[face.index];
             const lightmapPackerPageIndex = lightmapData.pageIndex;
@@ -1599,7 +1760,9 @@ export class BSPFile {
             const wantsTexCoord0Scale = true;
 
             const faceInfo = this.faceInfos[face.index];
+            faceInfo.texinfo = texinfos[face.texinfo];
             faceInfo.startIndex = dstOffsIndex;
+            faceInfo.plane = plane;
 
             let indexCount = 0;
             let vertexCount = 0;
@@ -1634,6 +1797,7 @@ export class BSPFile {
 
                 const result = buildDisplacement(disp, corners, disp_verts, tex.textureMapping);
                 bbox = result.bbox;
+                faceInfo.bbox = result.bbox;
 
                 for (let j = 0; j < result.vertex.length; j++) {
                     const v = result.vertex[j];
@@ -1820,7 +1984,7 @@ export class BSPFile {
             vec3.set(overlayInfo.basis[0], vecUVPoint0Z, vecUVPoint1Z, vecUVPoint2Z);
             vec3.cross(overlayInfo.basis[1], overlayInfo.normal, overlayInfo.basis[0]);
 
-            if (vecUVPoint3Z == 1.0)
+            if (vecUVPoint3Z === 1.0)
                 vec3.negate(overlayInfo.basis[1], overlayInfo.basis[1]);
 
             vec2.set(overlayInfo.planePoints[0], vecUVPoint0X, vecUVPoint0Y);
@@ -1886,7 +2050,7 @@ export class BSPFile {
         }
 
         const node = this.nodelist[nodeid];
-        const dot = node.plane.distance(p[0], p[1], p[2]);
+        const dot = node.plane.distanceVec3(p);
 
         const check1 = dot >= 0.0 ? node.child0 : node.child1;
         const check2 = dot >= 0.0 ? node.child1 : node.child0;
@@ -1913,7 +2077,7 @@ export class BSPFile {
             return this.leaflist[-nodeid - 1];
         } else {
             const node = this.nodelist[nodeid];
-            const dot = node.plane.distance(p[0], p[1], p[2]);
+            const dot = node.plane.distanceVec3(p);
             return this.queryPoint(p, dot >= 0.0 ? node.child0 : node.child1);
         }
     }
@@ -1931,20 +2095,22 @@ export class BSPFile {
             const plane = node.plane;
 
             // Find min and max corners.
+            const aabbMin = scratchVec3a;
+            const aabbMax = scratchVec3b;
             for (let i = 0; i < 3; i++) {
                 if (plane.n[i] >= 0) {
-                    scratchVec3a[i] = aabb.min[i];
-                    scratchVec3b[i] = aabb.max[i];
+                    aabbMin[i] = aabb.min[i];
+                    aabbMax[i] = aabb.max[i];
                 } else {
-                    scratchVec3a[i] = aabb.max[i];
-                    scratchVec3b[i] = aabb.min[i];
+                    aabbMin[i] = aabb.max[i];
+                    aabbMax[i] = aabb.min[i];
                 }
             }
 
-            if (plane.distanceVec3(scratchVec3b) < 0) {
+            if (plane.distanceVec3(aabbMax) < 0) { // if (aabbMax[plane.type] <= plane.d)
                 // Box is on the outside of child0; traverse child1.
                 return this.queryAABB(aabb, callback, node.child1);
-            } else if (plane.distanceVec3(scratchVec3a) > 0) {
+            } else if (plane.distanceVec3(aabbMin) > 0) { // if (aabbMin[plane.type] >= plane.d)
                 // Box is on the outside of child1; traverse child0.
                 return this.queryAABB(aabb, callback, node.child0);
             } else {
@@ -1952,6 +2118,53 @@ export class BSPFile {
                 return this.queryAABB(aabb, callback, node.child0) && this.queryAABB(aabb, callback, node.child1);
             }
         }
+    }
+
+    public buildDecal(pt: ReadonlyVec3, halfWidth: number, halfHeight: number): DecalResult {
+        const aabb = new AABB();
+        const size = Math.max(halfWidth, halfHeight);
+        vec3SetAll(scratchVec3a, size);
+        aabb.setFromCenterAndHalfExtents(pt, scratchVec3a);
+
+        const faces = new Set<number>();
+        this.queryAABB(aabb, (leaf) => {
+            for (let i = 0; i < leaf.faces.length; i++) {
+                const face = leaf.faces[i];
+                const faceInfo = this.faceInfos[face];
+                if (faceInfo.texinfo === null || faceInfo.texinfo.flags & TexinfoFlags.NODECALS)
+                    continue;
+                faces.add(face);
+            }
+            return true;
+        });
+
+        const overlayResult = buildDecal(pt, halfWidth, halfHeight, aabb, faces, this.faceInfos, this.surfaces, new Uint32Array(this.indexData), new Float32Array(this.vertexData));
+
+        const vertexDataArray = new ResizableArrayBuffer();
+        const indexDataArray = new ResizableArrayBuffer();
+
+        const surfaces: DecalSurface[] = [];
+
+        let dstOffsIndex = 0;
+        for (let i = 0; i < overlayResult.surfaces.length; i++) {
+            const surface = overlayResult.surfaces[i];
+
+            const dstVertex = vertexDataArray.addFloat32(surface.vertex.length * VERTEX_SIZE);
+            let dstOffsVertex = 0;
+            for (let j = 0; j < surface.vertex.length; j++)
+                dstOffsVertex += packVertexInBuffer(dstVertex, dstOffsVertex, surface.vertex[j], Vec3UnitX, 1.0);
+
+            const startIndex = dstOffsIndex, indexCount = surface.indices.length;
+            const lightmapPackerPageIndex = surface.lightmapPackerPageIndex;
+            const bbox = surface.bbox;
+            const dstIndex = indexDataArray.addUint32(indexCount);
+            dstIndex.set(surface.indices, dstOffsIndex);
+            dstOffsIndex += indexCount;
+
+            surfaces.push({ startIndex, indexCount, lightmapPackerPageIndex, bbox });
+        }
+
+        return { vertexData: vertexDataArray.finalize(), indexData: indexDataArray.finalize(), surfaces };
     }
 
     public destroy(): void {

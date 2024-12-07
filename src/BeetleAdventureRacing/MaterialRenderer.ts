@@ -172,24 +172,24 @@ export class MaterialRenderer {
         let otherModeLRenderMode = 0;
         if (renderOpts & RenderOptionsFlags.UNK_18) {
             let m = (renderOpts & (RenderOptionsFlags.UNK_17 | RenderOptionsFlags.UNK_16));
-            if (m == 0)
+            if (m === 0)
                 otherModeLRenderMode = 0x00112e10;
-            if (m == 0x400000)
+            if (m === 0x400000)
                 otherModeLRenderMode = 0x00112d58;
-            if (m == 0x800000)
+            if (m === 0x800000)
                 otherModeLRenderMode = 0x00104e50;
-            if (m == 0xc00000)
+            if (m === 0xc00000)
                 otherModeLRenderMode = 0x00104dd8;
         } else if (renderOpts & RenderOptionsFlags.UNK_17) {
             let m = (renderOpts & (RenderOptionsFlags.UNK_16 | RenderOptionsFlags.ENABLE_DEPTH_CALCULATIONS));
 
-            if (m == 0) {
+            if (m === 0) {
                 if (!this.isTextured)
                     otherModeLRenderMode = 0x00104340;
                 else
                     otherModeLRenderMode = 0x00104240;
             }
-            if (m == 0x200000) {
+            if (m === 0x200000) {
                 if (!this.isTextured)
                     otherModeLRenderMode = 0x00104b50;
                 else if (this.uvtx.usesAlphaBlending)
@@ -197,7 +197,7 @@ export class MaterialRenderer {
                 else
                     otherModeLRenderMode = 0x00104a50;
             }
-            if (m == 0x400000) {
+            if (m === 0x400000) {
                 if (!this.isTextured)
                     otherModeLRenderMode = 0x001041c8;
                 else if (/* TODO: complicated flag checks */ false)
@@ -205,7 +205,7 @@ export class MaterialRenderer {
                 else
                     otherModeLRenderMode = 0x001041c8;
             }
-            if (m == 0x600000) {
+            if (m === 0x600000) {
                 if (!this.isTextured)
                     otherModeLRenderMode = 0x001045d8;
                 else if (this.uvtx.usesAlphaBlending)
@@ -217,13 +217,13 @@ export class MaterialRenderer {
             }
         } else {
             let m = (renderOpts & (RenderOptionsFlags.UNK_16 | RenderOptionsFlags.ENABLE_DEPTH_CALCULATIONS));
-            if (m == 0)
+            if (m === 0)
                 otherModeLRenderMode = 0x03024000;
-            if (m == 0x200000)
+            if (m === 0x200000)
                 otherModeLRenderMode = 0x00112230;
-            if (m == 0x400000)
+            if (m === 0x400000)
                 otherModeLRenderMode = 0x00102048;
-            if (m == 0x600000)
+            if (m === 0x600000)
                 otherModeLRenderMode = 0x00102078;
         }
 

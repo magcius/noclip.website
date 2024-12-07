@@ -298,7 +298,7 @@ class d_a_ep extends fopAc_ac_c {
         }
 
         if (this.timers[1] === 0) {
-            if (true /* field_0x7d4 == 0 */) {
+            if (true /* field_0x7d4 === 0 */) {
                 this.timers[1] = 3.0 + cM_rndF(6.0);
                 this.alphaModelScaleTarget = 0.75 + cM_rndF(0.075);
             } else {

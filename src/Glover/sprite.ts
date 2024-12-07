@@ -280,7 +280,7 @@ export class GloverBackdropRenderer extends GloverBaseSpriteRenderer {
         rect.ulS = rect.sW * 32;
         rect.ulT = rect.sH * 32;
 
-        if (this.backdropObject.flipY != 0) {
+        if (this.backdropObject.flipY !== 0) {
             [rect.ulT, rect.lrT] = [rect.lrT, rect.ulT];
         } 
 
@@ -397,7 +397,7 @@ export class GloverFlipbookRenderer implements Shadows.ShadowCaster {
         if (GloverFlipbookRenderer.renderCache.has(key)) {
             this.spriteRenderer = GloverFlipbookRenderer.renderCache.get(key)!;
         } else {
-            const xlu = (flipbookMetadata.startAlpha != flipbookMetadata.endAlpha) || (flipbookMetadata.flags & 0x10000) != 0;
+            const xlu = (flipbookMetadata.startAlpha !== flipbookMetadata.endAlpha) || (flipbookMetadata.flags & 0x10000) !== 0;
             this.spriteRenderer = new GloverSpriteRenderer(this.device, this.cache, this.textures, flipbookMetadata.frameset, xlu);
             GloverFlipbookRenderer.renderCache.set(key, this.spriteRenderer);
         }        
@@ -464,7 +464,7 @@ export class GloverFlipbookRenderer implements Shadows.ShadowCaster {
         }
 
         let alpha = this.endAlpha;
-        if (this.startAlpha != this.endAlpha) {
+        if (this.startAlpha !== this.endAlpha) {
             alpha = this.startAlpha;
             if (this.lifetime < 0) {
                 const nFrames = this.flipbookMetadata.frameset.length;
@@ -476,7 +476,7 @@ export class GloverFlipbookRenderer implements Shadows.ShadowCaster {
         this.primColor.a = alpha / 255;
 
         let size = this.startSize;
-        if (this.startSize != this.endSize) {
+        if (this.startSize !== this.endSize) {
             if (this.lifetime < 0) {
                 const nFrames = this.flipbookMetadata.frameset.length;
                 size += (this.endSize - this.startSize) * (nFrames - this.curFrame - 1) / (nFrames - 1);
@@ -691,9 +691,9 @@ export class GloverWeatherRenderer {
                     }
                     singleDebris.vel = [this.params.velocity[0], this.params.velocity[1]];
                     singleDebris.countdownToFadeout = 0xf;
-                    if (this.curParticleCycle == 0) {
+                    if (this.curParticleCycle === 0) {
                         singleDebris.curParallaxEffect = 0x400;
-                    } else if (this.curParticleCycle == 1) {
+                    } else if (this.curParticleCycle === 1) {
                         singleDebris.curParallaxEffect = 0x300;
                         singleDebris.vel[0] *= 0.75;
                         singleDebris.vel[1] *= 0.75;
@@ -733,7 +733,7 @@ export class GloverWeatherRenderer {
 
         if (this.lightningFrame > 0) {
             this.lightningFrame -= 1;
-            if ((this.lightningFrame & 1) == 0) {
+            if ((this.lightningFrame & 1) === 0) {
                 if ((Math.floor(Math.random()*10) & 1)==0) {
                     this.lightningColor.r = 0;
                     this.lightningColor.g = 0;
@@ -930,7 +930,7 @@ export class GloverFootprintRenderer extends GloverSpriteRenderer {
         this.lastFrameAdvance += viewerInput.deltaTime;
         this.lifetime -= viewerInput.deltaTime;
 
-        if (this.lifetime <= 0 || (this.dstAlpha == 0 && this.alpha == 0)) {
+        if (this.lifetime <= 0 || (this.dstAlpha === 0 && this.alpha === 0)) {
             this.active = false;
             return;
         }

@@ -447,7 +447,7 @@ function readSHP1Chunk(buffer: ArrayBufferSlice, bmd: BMD): SHP1 {
     let shapeInitDataIdx = shapeInitDataOffs;
     for (let i = 0; i < shapeCount; i++) {
         const shapeMtxType = view.getUint8(shapeInitDataIdx + 0x00);
-        assert(view.getUint8(shapeInitDataIdx + 0x01) == 0xFF);
+        assert(view.getUint8(shapeInitDataIdx + 0x01) === 0xFF);
         const mtxGroupCount = view.getUint16(shapeInitDataIdx + 0x02);
         const vtxDeclListIndex = view.getUint16(shapeInitDataIdx + 0x04);
         const shapeMtxInitDataIndex = view.getUint16(shapeInitDataIdx + 0x06);

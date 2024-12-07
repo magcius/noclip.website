@@ -36,6 +36,7 @@
     "start": "pnpm run build:rust && cross-env NODE_ENV=development rspack dev",
     "build": "pnpm run build:rust && cross-env NODE_ENV=production rspack build",
     "build:rust": "wasm-pack build -t web rust",
+    "build:rust-dev": "wasm-pack build --dev -t web rust",
     "build:ZeldaWindWaker": "cd src/ZeldaWindWaker/tools && tsx --experimental-wasm-modules zww_extractor.ts",
     "build:ztp": "cd src/ZeldaTwilightPrincess/tools && tsx ztp_extractor.ts",
     "build:dk64": "cd src/DonkeyKong64/tools && tsx extractor.ts",
@@ -47,7 +48,7 @@
     "build:TheWitness": "cd src/TheWitness/tools && tsx extractor.ts",
     "test:DeBlob2": "cd src/DeBlob2/tools && tsx systest.ts",
     "typecheck": "tsc -w --noEmit",
-    "watch:rust": "onchange rust/**/*.rs -- pnpm run build:rust"
+    "watch:rust": "pnpm run build:rust-dev && onchange rust/src/**/*.rs rust/noclip-macros/src/**/*.rs -- pnpm run build:rust-dev"
   },
   "bin": {
     "nc-bcsvtool": "./src/tools/bcsvtool.ts",

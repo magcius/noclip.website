@@ -621,7 +621,7 @@ export class WmoRenderer {
         for (let def of frame.wmoDefs.get(this.wmo.fileId)) {
             assert(
                 def.wmoId === this.wmo.fileId,
-                `WmoRenderer handed a WmoDefinition that doesn't belong to it (${def.wmoId} != ${this.wmo.fileId}`,
+                `WmoRenderer handed a WmoDefinition that doesn't belong to it (${def.wmoId} !== ${this.wmo.fileId}`,
             );
             const template = renderInstManager.pushTemplate();
             let offs = template.allocateUniformBuffer(WmoProgram.ub_ModelParams, 12);

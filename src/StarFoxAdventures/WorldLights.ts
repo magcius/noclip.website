@@ -127,7 +127,7 @@ export class WorldLights {
             if (!(light.type & typeMask))
                 continue;
 
-            if (light.type == LightType.DIRECTIONAL)
+            if (light.type === LightType.DIRECTIONAL)
                 // Sun and moon get massive influence
                 light.probedInfluence = 1000.0;
             else {

@@ -566,8 +566,8 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
         const blendEnabled = blendMode !== 0;
 
         // Making a guess that this is LogicOpEnabled / LogicOp.
-        assert(view.getUint8(offs + 0x139) == 0);
-        assert(view.getUint16(offs + 0x13A, true) == 0);
+        assert(view.getUint8(offs + 0x139) === 0);
+        assert(view.getUint16(offs + 0x13A, true) === 0);
 
         const blendSrcFactorRGB: GfxBlendFactor = blendEnabled ? view.getUint16(offs + 0x13C, true) : GfxBlendFactor.One;
         const blendDstFactorRGB: GfxBlendFactor = blendEnabled ? view.getUint16(offs + 0x13E, true) : GfxBlendFactor.Zero;

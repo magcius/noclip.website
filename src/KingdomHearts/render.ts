@@ -150,7 +150,7 @@ export class MapData {
         let iBufIndex = 0;
         let n = 0;
         submeshes.forEach(function (submesh) {
-            if (submesh.textureBlock == null) {
+            if (submesh.textureBlock === null) {
                 return;
             }
             for (let i = 0; i < submesh.vtx.length; i++) {
@@ -254,7 +254,7 @@ export class MapData {
             }
             for (let j = 0; j < meshes[i].submeshes.length; j++) {
                 const submesh = meshes[i].submeshes[j];
-                if (submesh.textureBlock == null) {
+                if (submesh.textureBlock === null) {
                     continue;
                 }
                 let spriteAnimIndex = -1;
@@ -280,7 +280,7 @@ export class MapData {
                         opaqueSubmeshMap.set(batchKeyStr, []);
                     }
                     opaqueSubmeshMap.get(batchKeyStr)!.push(submesh);
-                } else if (lastIndex >= 0 && translucentSubmeshes[lastIndex][0] == batchKeyStr) {
+                } else if (lastIndex >= 0 && translucentSubmeshes[lastIndex][0] === batchKeyStr) {
                     translucentSubmeshes[lastIndex][1].push(submesh);
                 } else {
                     translucentSubmeshes.push([batchKeyStr, [submesh]]);

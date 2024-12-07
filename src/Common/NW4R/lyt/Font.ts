@@ -181,7 +181,7 @@ export function parseBRFNT(buffer: NamedArrayBufferSlice): RFNT {
                 const offset = view.getUint16(blockContentsOffs + 0x0C);
                 for (let i = codeStart; i <= codeEnd; i++)
                     cmap[i] = i - codeStart + offset;
-            } else if (kind == RFNTCMAPKind.Array) {
+            } else if (kind === RFNTCMAPKind.Array) {
                 let tableIdx = blockContentsOffs + 0x0C;
                 for (let i = codeStart; i <= codeEnd; i++, tableIdx += 0x02)
                     cmap[i] = view.getUint16(tableIdx + 0x00);

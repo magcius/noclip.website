@@ -426,14 +426,6 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
     private executeDrawAll(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
         this.time = viewerInput.time;
 
-        if (!this.cameraFrozen) {
-            mat4.getTranslation(this.globals.cameraPosition, viewerInput.camera.worldMatrix);
-            getMatrixAxisZ(this.globals.cameraFwd, viewerInput.camera.worldMatrix);
-            vec3.negate(this.globals.cameraFwd, this.globals.cameraFwd);
-            // Update the "player position" from the camera.
-            vec3.copy(this.globals.playerPosition, this.globals.cameraPosition);
-        }
-
         // noclip hack: if only one room is visible, make it the mStayNo
         const singleRoomVisibleNo = this.getSingleRoomVisible();
         if (singleRoomVisibleNo !== -1)
@@ -482,14 +474,14 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
             let upVec = vec3.set(scratchVec3b, 0, 1, 0);
             let roll = 0.0;
 
-            if(demoCam.flags & EDemoCamFlags.HasTargetPos) { targetPos = demoCam.targetPosition; }
-            if(demoCam.flags & EDemoCamFlags.HasEyePos) { viewPos = demoCam.viewPosition; }
-            if(demoCam.flags & EDemoCamFlags.HasUpVec) { upVec = demoCam.upVector; }
-            if(demoCam.flags & EDemoCamFlags.HasFovY) { viewerInput.camera.fovY = demoCam.fovY * MathConstants.DEG_TO_RAD; }
-            if(demoCam.flags & EDemoCamFlags.HasRoll) { roll = demoCam.roll * MathConstants.DEG_TO_RAD; }
-            if(demoCam.flags & EDemoCamFlags.HasAspect) { debugger; /* Untested. Remove once confirmed working */ }
-            if(demoCam.flags & EDemoCamFlags.HasNearZ) { viewerInput.camera.near = demoCam.projNear; }
-            if(demoCam.flags & EDemoCamFlags.HasFarZ) { viewerInput.camera.far = demoCam.projFar; }
+            if (demoCam.flags & EDemoCamFlags.HasTargetPos) { targetPos = demoCam.targetPosition; }
+            if (demoCam.flags & EDemoCamFlags.HasEyePos) { viewPos = demoCam.viewPosition; }
+            if (demoCam.flags & EDemoCamFlags.HasUpVec) { upVec = demoCam.upVector; }
+            if (demoCam.flags & EDemoCamFlags.HasFovY) { viewerInput.camera.fovY = demoCam.fovY * MathConstants.DEG_TO_RAD; }
+            if (demoCam.flags & EDemoCamFlags.HasRoll) { roll = demoCam.roll * MathConstants.DEG_TO_RAD; }
+            if (demoCam.flags & EDemoCamFlags.HasAspect) { debugger; /* Untested. Remove once confirmed working */ }
+            if (demoCam.flags & EDemoCamFlags.HasNearZ) { viewerInput.camera.near = demoCam.projNear; }
+            if (demoCam.flags & EDemoCamFlags.HasFarZ) { viewerInput.camera.far = demoCam.projFar; }
 
             mat4.targetTo(viewerInput.camera.worldMatrix, viewPos, targetPos, upVec);
             mat4.rotateZ(viewerInput.camera.worldMatrix, viewerInput.camera.worldMatrix, roll);
@@ -499,6 +491,14 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
             this.globals.context.inputManager.isMouseEnabled = false;
         } else {
             this.globals.context.inputManager.isMouseEnabled = true;
+        }
+
+        if (!this.cameraFrozen) {
+            mat4.getTranslation(this.globals.cameraPosition, viewerInput.camera.worldMatrix);
+            getMatrixAxisZ(this.globals.cameraFwd, viewerInput.camera.worldMatrix);
+            vec3.negate(this.globals.cameraFwd, this.globals.cameraFwd);
+            // Update the "player position" from the camera.
+            vec3.copy(this.globals.playerPosition, this.globals.cameraPosition);
         }
 
         this.globals.camera = viewerInput.camera;
@@ -795,7 +795,7 @@ class d_s_play extends fopScn {
         this.demo.update();
 
         // From executeEvtManager() -> SpecialProcPackage()
-        if (this.demo.getMode() == EDemoMode.Ended) {
+        if (this.demo.getMode() === EDemoMode.Ended) {
             this.demo.remove();
         }
     }
@@ -1005,7 +1005,7 @@ class DemoDesc extends SceneDesc implements Viewer.SceneDesc {
         const lbnk = globals.roomCtrl.status[this.roomList[0]].data.lbnk;
         if (lbnk) {
             const bank = lbnk[this.layer];
-            if (bank != 0xFF) {
+            if (bank !== 0xFF) {
                 assert(bank >= 0 && bank < 100);
                 globals.roomCtrl.demoArcName = `Demo${bank.toString().padStart(2, '0')}`;
                 console.debug(`Loading stage demo file: ${globals.roomCtrl.demoArcName}`);
@@ -1026,7 +1026,7 @@ class DemoDesc extends SceneDesc implements Viewer.SceneDesc {
 
         // noclip modification: ensure all the actors are created before we load the cutscene
         await new Promise(resolve => { (function waitForActors(){
-            if (globals.frameworkGlobals.ctQueue.length == 0) return resolve(null);
+            if (globals.frameworkGlobals.ctQueue.length === 0) return resolve(null);
             setTimeout(waitForActors, 30);
         })(); });
 

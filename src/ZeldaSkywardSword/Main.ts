@@ -250,7 +250,7 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
 
                     this.textureHolder.addRRESTextures(device, roomRRES);
 
-                    for (let i = 0; i < roomRRES.mdl0.length && this.currentLayer == 0; i++) {
+                    for (let i = 0; i < roomRRES.mdl0.length && this.currentLayer === 0; i++) {
                         const mdl0 = roomRRES.mdl0[i];
 
                         const model = this.modelCache.getModel(device, this.renderHelper, mdl0, materialHacks);
@@ -343,7 +343,7 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
         const layerNames : string[] = [];
         if (this.layerModels.length > 1){
             for (let i = 0; i < this.layerModels.length; i++) {
-                if (this.layerModels[i].length != 0){
+                if (this.layerModels[i].length !== 0){
                     layerIndecies.push(i);
                     layerNames.push('Layer '+i);
                 }
@@ -359,7 +359,7 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
                 // Set current layer visible
                 // set other layers non-visible
                 for (let i = 0; i < this.layerModels.length; i++){
-                    if (this.layerModels[i].length != 0)
+                    if (this.layerModels[i].length !== 0)
                         this.layerModels[i].forEach((mdl)=>mdl.setVisible((i === layerIndecies[index] ) || (i===0)));
                 }
                 modelsPanel.syncLayerVisibility();
@@ -581,9 +581,9 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
             // Scan add for non-zero nodes
             // if non-zero -> merge into main using the same name
             chrAdd.nodeAnimations.forEach( animNode => {
-                if (animNode.scaleX == undefined) {
-                    const mainAnimNode = chrMain.nodeAnimations.findIndex((node) => node.nodeName == animNode.nodeName);
-                    if (mainAnimNode != -1)
+                if (animNode.scaleX === undefined) {
+                    const mainAnimNode = chrMain.nodeAnimations.findIndex((node) => node.nodeName === animNode.nodeName);
+                    if (mainAnimNode !== -1)
                         chrMain.nodeAnimations[mainAnimNode] = animNode;
                     else
                         console.log('Unable to find Chr Common Node');
@@ -621,7 +621,7 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
             const insideType  =  (params1 >>> 16) & 0xF;
             // Outside Model
             spawnModelFromNames('Tansu', 'Tansu' + ['A','B','C','D','A'][outsideType]);
-            if (insideType != 0xF)
+            if (insideType !== 0xF)
                 spawnModelFromNames('TansuInside', 'TansuInside' + ['A','B','C','D','A'][outsideType]);
         }
         //
@@ -676,34 +676,34 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
                 }
             }
             // Small Key
-            else if (itemId == 1) {
+            else if (itemId === 1) {
                 const keyModel = spawnOArcModel('PutKeySmall');
                 mat4.scale(keyModel.modelMatrix, keyModel.modelMatrix, [1.1, 1.1, 1.1]);
             }
              // stamina fruit
-            else if (itemId == 42) {
+            else if (itemId === 42) {
                 const gutsRRES = getOArcRRES('PutGuts');
                 const gutsMdl = spawnModel(gutsRRES, 'PutGuts');
                 spawnModel(gutsRRES, 'PutGutsLeaf');
                 gutsMdl.bindSRT0(this.animationController, findSRT0(gutsRRES, 'GutsLight'));
             }
              // Babies Rattle
-            else if (itemId == 160) {
+            else if (itemId === 160) {
                 spawnOArcModel('PutGaragara');
             }
             // heart piece
-            else if (itemId == 94) {
+            else if (itemId === 94) {
                 const m = spawnOArcModel('PutHeartKakera');
                 scaleModelConstant(m, 1.375);
             }
             // Gratitude Crystal
-            else if (itemId == 48) {
+            else if (itemId === 48) {
                 const m = spawnOArcModel('GetGenki');
                 scaleModelConstant(m, 1.7);
                 translateModel(m, [0,30,0]);
             }
             // Normal Heart Item
-            else if (itemId == 6) {
+            else if (itemId === 6) {
                 const m = spawnOArcModel('PutHeart');
             }
             else {
@@ -763,20 +763,20 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
         else if (name === 'IvyRope'){
             // Ropes
             const ropeSubtype = params1 & 0xF;
-            if (ropeSubtype < 3 || ropeSubtype == 4){
+            if (ropeSubtype < 3 || ropeSubtype === 4){
                 // RopeA Bti for a length
-            } else if (ropeSubtype == 6) {
+            } else if (ropeSubtype === 6) {
                 // RopeSpider bti
-            } else if (ropeSubtype == 3) {
+            } else if (ropeSubtype === 3) {
                 // Coil
-            } else if (ropeSubtype == 7) {
+            } else if (ropeSubtype === 7) {
                 // RopeTerry
             } else {
                 // Common Dummy bti
             }
-            if (ropeSubtype == 7){
+            if (ropeSubtype === 7){
                 spawnOArcModel('RopeTerry');
-            } else if (ropeSubtype == 4) {
+            } else if (ropeSubtype === 4) {
                 spawnModelFromNames('GrassCoil', 'GrassCoilCut'); // Can be switched to cut variant
             }
         }
@@ -820,17 +820,17 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
         // Dungeon Doors
         else if (name === 'TstShtr'){
             const doorType = (params1 >>> 4) & 0x3f;
-            let isLocked  = ((rotx & 0x00FF) != 0xFF);
-            let isLocked2 = ((rotx & 0xFF00) != 0xFF);
+            let isLocked  = ((rotx & 0x00FF) !== 0xFF);
+            let isLocked2 = ((rotx & 0xFF00) !== 0xFF);
             const isLockedWithKey = (params1&0xF);
             const doorModelArcName   = 'ShutterFenced0' + [doorType];
             let   doorModelName      = 'ShutterFenced0' + [doorType];
             let   lockedModelName  = 'ShutterFencedFence0' + [doorType];
             const doorRRES = getOArcRRES(doorModelArcName);
-           if (doorType == 2){ // Time Variants
+           if (doorType === 2){ // Time Variants
                 spawnModel(doorRRES, doorModelName+'N');
                 spawnModel(doorRRES, doorModelName+'T');
-                if ((isLocked || isLocked2) && isLockedWithKey != 2) {
+                if ((isLocked || isLocked2) && isLockedWithKey !== 2) {
                     spawnModel(doorRRES, lockedModelName+'N');
                     spawnModel(doorRRES, lockedModelName+'T');
                 }
@@ -858,7 +858,7 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
             const bossDoorAnim = spawnOArcModel('DoorBoss');
             bossDoorAnim.bindRRESAnimations(this.animationController, getOArcRRES("DoorBoss"), "DoorBoss_Open");
             // Spawn Keyhole
-            if (dungeonNum != 3) // Ancient Cistern
+            if (dungeonNum !== 3) // Ancient Cistern
             {
                 let doorL, doorR, lockL, lockR, holeL, holeR : MDL0ModelInstance;
                 // Spawn Door
@@ -882,7 +882,7 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
                 spawnModelFromNames('BossLockD101', 'BossLockD101');
 
             }
-            if (dungeonNum == 2) { // LMF present doors....
+            if (dungeonNum === 2) { // LMF present doors....
                 let doorL, doorR, lockL, lockR, holeL, holeR : MDL0ModelInstance;
                 // Spawn Door
                 doorL = spawnModelFromNames(bossDoorModel, bossDoorModel+'NL');
@@ -945,17 +945,17 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
             scaleModelConstant(mdl, 1.1);
             let weaponIdx = -1;
             // Weapon
-            if (bokoConfig == 9) {
+            if (bokoConfig === 9) {
                 // Bow
-                const bowMdl = spawnModel(bcRRES, color == 0 ? 'BocoburinGBow' : 'bow');
+                const bowMdl = spawnModel(bcRRES, color === 0 ? 'BocoburinGBow' : 'bow');
                 this.modelBinds.push({model: bowMdl, modelToBindTo: mdl, nodeName: 'hand_L'})
-            } else if (color == 0) {
+            } else if (color === 0) {
                 weaponIdx = 4;
-            } else if (color == 2) {
+            } else if (color === 2) {
                 weaponIdx = 3;
-            } else if (bokoConfig == 2 || bokoConfig == 8) {
+            } else if (bokoConfig === 2 || bokoConfig === 8) {
                 weaponIdx = 2;
-            } else if (bokoConfig != 4) {
+            } else if (bokoConfig !== 4) {
                 weaponIdx = 1;
             }
             else {
@@ -963,21 +963,21 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
                 this.modelBinds.push({model: weaponMdl, modelToBindTo: mdl, nodeName: 'hand_R'})
                 mdl.bindCHR0(this.animationController, findCHR0(bcRRES, 'Rwait'));
             }
-            if (weaponIdx != -1)
+            if (weaponIdx !== -1)
             {
                 const weaponName = `Bocoburin${['SwordA', 'Stick', 'BSword','GSword'][weaponIdx-1]}`;
                 const weaponMdl = spawnModel(bcRRES, weaponName);
                 this.modelBinds.push({model: weaponMdl, modelToBindTo: mdl, nodeName: 'hand_R'})
             }
             // Headpiece
-            if (variant != 0 && color != 0)
+            if (variant !== 0 && color !== 0)
             {
                 const headcloth = spawnModel(bcRRES, `Bocoburin${['M','M','B'][color]}Headcloth`);
                 this.modelBinds.push({model: headcloth, modelToBindTo: mdl, nodeName: 'head'})
             }
             // Belt item
             const beltItem = ["None", 'Horn', 'Key'][(params1 >>> 2) & 3];
-            if (beltItem != "None")
+            if (beltItem !== "None")
             {
                 if (beltItem === 'Key') {
                     const keyMdl = spawnModel(bcRRES, "KeySmall");
@@ -1024,10 +1024,10 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
             const arc = ['None','TreeLong00', 'KanbanTree', 'TreeLongBamboo','TreeLong01', 'TreeLongSky'][type];
             const model1 = ['None', 'TreeLong00', 'None', 'None', 'TreeLong01', 'TreeLongSky'][type];
             const model2 = ['None', 'TreeLong00Cutmark', 'None', 'None', 'TreeLong01Cutmark', 'TreeLongSkyCutmark'][type];
-            // if (arc != 'None')
+            // if (arc !== 'None')
             // {
             //     const rres = getOArcRRES(arc);
-            //     if (model1 != 'None')
+            //     if (model1 !== 'None')
             //     {
             //         const m = spawnModel(rres, model1);
             //         translateModel(m, [0, 100, 0]);
@@ -1272,7 +1272,7 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
             const type = params1 & 0xF;
             const typeName = 'IslTre'+['A','B','C','D','E','F','G','H'][type];
             spawnOArcModel(typeName);
-            if (type == 2){
+            if (type === 2){
                 spawnModelFromNames(typeName, typeName+'Water00');
                 spawnModelFromNames(typeName, typeName+'Water01');
             }
@@ -1469,7 +1469,7 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
         // Beedles Shop
         else if (name === 'Tshop') {
             const rres = getOArcRRES('TerryShop');
-            if (this.stageId == 'F020') // turns it off at night
+            if (this.stageId === 'F020') // turns it off at night
                 rres.chr0 = [];
             const m  = spawnModel(rres, 'TerryShop');
             spawnModel(rres, 'TerryBell');
@@ -1554,7 +1554,7 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
         // Fire TODO -> put fire effect in when JPA is implemented
         else if (name === 'Fire') {
             const type = params1 & 0xF;
-            if (type != 1){
+            if (type !== 1){
                 const arcName = 'Candle0'+['0','0','1','2'][type];
                 const modelName = 'Candle'+['','','01','02'][type];
                 spawnModelFromNames(arcName, modelName);
@@ -1768,7 +1768,7 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
         // Waterfalls in Ancient Cistern
         else if (name === 'wfall') {
             const type = (params1 >>> 28) & 0xF
-            if (type != 0){
+            if (type !== 0){
                 const rres = getOArcRRES('WaterfallD101');
                 spawnModel(rres, 'WaterfallD101'+['A','B','C'][type-1]);
             }
@@ -1811,7 +1811,7 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
         else if (name === 'LogWtr') {
             const type = params1 & 1;
             const m = spawnOArcModel(['LogFloat','LogStep'][type]);
-            if (type == 1)
+            if (type === 1)
                 translateModel(m, [0,500,0]);
         }
         // Cistern Boss Door
@@ -1842,7 +1842,7 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
             const rres = 'Water'+['D100_r02','D100_r03','D100_r04','D100_r06','F103','F100_b','F104A','F104B','F104C','F104D'][type];
             const m  = spawnModelFromNames(rres, 'model0');
             const m1 = spawnModelFromNames(rres, 'model1');
-            if (this.stageId == 'D100'){
+            if (this.stageId === 'D100'){
                 translateModel(m , [0,500,0]);
                 translateModel(m1, [0,500,0]);
             }
@@ -1895,7 +1895,7 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
             const arcName = ['RockCarrySmall','RockCarryMiddle','RockCarryMiddle','Syako_egg'][type];
             const mdlName = ['RockSmall','RockMiddle','RockMiddle','SyakoEgg'][type];
             const m = spawnModelFromNames(arcName, mdlName);
-            if (type == 1 || type == 2)
+            if (type === 1 || type === 2)
                 translateModel(m, [0,75,0]);
         }
         // Little spikey balls
@@ -2027,7 +2027,7 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
         // Raise And Lowerable floors (magma rocks?)
         else if (name === 'SnkFlrF') {
             const type = params1 & 0xF;
-            const arcName = (type != 3) ? 'SinkRock' : 'FWRockA';
+            const arcName = (type !== 3) ? 'SinkRock' : 'FWRockA';
             const mdlName = ['SinkRockC', 'SinkRockB', 'SinkRockA', 'FWRockA'][type];
             spawnModelFromNames(arcName, mdlName);
         }
@@ -2040,7 +2040,7 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
             spawnModel(rres, 'TowerBomb00'); // Little Legs
             const  m = spawnModel(rres, mdlName); // Main Tower
             const chr = findCHR0(rres, 'Falldown');
-            if ((params1&0xFF) == 0xFF)
+            if ((params1&0xFF) === 0xFF)
                 m.bindCHR0(this.animationController, chr);
             if (type === 1){
                 const m2 = spawnModel(rres, 'FX_TowerLight');
@@ -2054,7 +2054,7 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
         }
         // Pyrup Shells
         else if (name === 'EHidoS') {
-            const type = ((params1&0xF) != 0x0) ? 'BoneA' : 'BoneB';
+            const type = ((params1&0xF) !== 0x0) ? 'BoneA' : 'BoneB';
             spawnModelFromNames('HidokariS', type);
 
         }
@@ -2062,7 +2062,7 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
         else if (name === 'RolRock') {
             const decideType = (params1 >>> 12) & 0xF;
             let type = decideType;
-            if (decideType == 0xb) type = 6;
+            if (decideType === 0xb) type = 6;
             if ([9,10].includes(type)) type = 4;
             if ([0,4].includes(type)) spawnOArcModel('RockRollA');
             else spawnOArcModel('RockRollB');
@@ -2091,8 +2091,8 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
         else if (name === 'NpcMoN') {
             const type = ((params1&0xF) > 6) ? 0 : params1&0xF;
             let val = 2;
-            if (type == 0 || type == 4 || type == 6) val = 0;
-            else if (type == 1 || type == 3) val = 1;
+            if (type === 0 || type === 4 || type === 6) val = 0;
+            else if (type === 1 || type === 3) val = 1;
             const rres = getOArcRRES('Moguma');
             const m = spawnModel(rres, 'Moguma');
             const chr = mergeCHR0(rres, 'Moguma_wait', 'Moguma_F_wait');
@@ -2259,19 +2259,19 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
 
             if(['ESm'].includes(obj.name)){
                 let rotationZ = 0;
-                if (scaleX == 4) {
+                if (scaleX === 4) {
                     scaleX = 1.2;
                     scaleY = 1.2;
                     scaleZ = 1.2;
-                } else if (scaleX == 3) {
+                } else if (scaleX === 3) {
                     scaleX = 0.25;
                     scaleY = 0.25;
                     scaleZ = 0.25;
-                } else if (scaleX == 2) {
+                } else if (scaleX === 2) {
                     scaleX = 0.4;
                     scaleY = 0.4;
                     scaleZ = 0.4;
-                } else if (scaleX == 1) {
+                } else if (scaleX === 1) {
                     scaleX = 0.8;
                     scaleY = 0.8;
                     scaleZ = 0.8;
