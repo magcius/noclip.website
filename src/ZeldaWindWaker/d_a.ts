@@ -4918,10 +4918,10 @@ class d_a_npc_ls1 extends fopNpc_npc_c {
         // play_btk_anm(this);
 
         this.animStopped = this.morf.play(deltaTimeFrames);
-        if (this.morf.frameCtrl.currentTimeInFrames < this.animTime) {
+        if (this.morf.frameCtrl.getFrame() < this.animTime) {
             this.animStopped = true;
         }
-        this.animTime = this.morf.frameCtrl.currentTimeInFrames;
+        this.animTime = this.morf.frameCtrl.getFrame();
     }
 
     private setMtx(param: boolean) {
@@ -5555,15 +5555,15 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
 
         if (anmBckId == 0xFFFF || this.anmBckId == anmBckId) {
             if (demoActor.flags & EDemoActorFlags.HasFrame) {
-                this.anmBck.frameCtrl.currentTimeInFrames = anmFrame;
-                this.anmBtp.frameCtrl.currentTimeInFrames = anmFrame;
+                this.anmBck.frameCtrl.setFrame(anmFrame);
+                this.anmBtp.frameCtrl.setFrame(anmFrame);
                 demoActor.animFrameMax = this.anmBck.frameCtrl.endFrame;
             }
         } else {
             // TODO: How should LkD00 arc be loaded?
             const bck = globals.resCtrl.getObjectIDRes(ResType.Bck, 'LkD00', anmBckId);
             this.anmBck.init(this.model.modelData, bck, true, bck.loopMode, 1.0, 0, bck.duration);
-            this.anmBck.frameCtrl.currentTimeInFrames = anmFrame;
+            this.anmBck.frameCtrl.setFrame(anmFrame);
             this.anmBckId = anmBckId;
 
             if (anmBtpId != 0xFFFF) {
