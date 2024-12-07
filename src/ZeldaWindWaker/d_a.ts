@@ -4846,7 +4846,7 @@ class d_a_npc_ls1 extends fopNpc_npc_c {
             case 4: this.type = 4; break;
         }
 
-        return this.type != 0xFF;
+        return this.type !== 0xFF;
     }
 
     private createInit(globals: dGlobals) {
@@ -4873,8 +4873,8 @@ class d_a_npc_ls1 extends fopNpc_npc_c {
 
         this.morf = new mDoExt_McaMorf(modelData, null, null, null, LoopMode.Once, 1.0, 0, -1);
 
-        const jointIdxHandL = modelData.bmd.jnt1.joints.findIndex(j => j.name == 'handL');
-        const jointIdxHandR = modelData.bmd.jnt1.joints.findIndex(j => j.name == 'handR');
+        const jointIdxHandL = modelData.bmd.jnt1.joints.findIndex(j => j.name === 'handL');
+        const jointIdxHandR = modelData.bmd.jnt1.joints.findIndex(j => j.name === 'handR');
         this.jointMtxHandL = this.morf.model.shapeInstanceState.jointToWorldMatrixArray[jointIdxHandL];
         this.jointMtxHandR = this.morf.model.shapeInstanceState.jointToWorldMatrixArray[jointIdxHandR];
     }
@@ -4883,12 +4883,12 @@ class d_a_npc_ls1 extends fopNpc_npc_c {
         const modelData = globals.resCtrl.getObjectIDRes(ResType.Model, this.arcName, 0xc);
         this.handModel = new J3DModelInstance(modelData);
 
-        const handJointIdxL = modelData.bmd.jnt1.joints.findIndex(j => j.name == 'ls_handL');
-        const handJointIdxR = modelData.bmd.jnt1.joints.findIndex(j => j.name == 'ls_handR');
+        const handJointIdxL = modelData.bmd.jnt1.joints.findIndex(j => j.name === 'ls_handL');
+        const handJointIdxR = modelData.bmd.jnt1.joints.findIndex(j => j.name === 'ls_handR');
 
         this.handModel.jointMatrixCalcCallback = (dst: mat4, modelData: J3DModelData, i: number): void => {
-            if (i == handJointIdxL) { mat4.copy(dst, this.jointMtxHandL); }
-            else if (i == handJointIdxR) { mat4.copy(dst, this.jointMtxHandR); }
+            if (i === handJointIdxL) { mat4.copy(dst, this.jointMtxHandL); }
+            else if (i === handJointIdxR) { mat4.copy(dst, this.jointMtxHandR); }
         }
     }
 
@@ -4904,7 +4904,7 @@ class d_a_npc_ls1 extends fopNpc_npc_c {
 
         const params = d_a_npc_ls1.animParamsTable[animIdx];
 
-        if (params.anmIdx > -1 && this.animIdx != params.anmIdx) {
+        if (params.anmIdx > -1 && this.animIdx !== params.anmIdx) {
             const bckID = d_a_npc_ls1.bckIdxTable[params.anmIdx];
             dNpc_setAnmIDRes(globals, this.morf, params.loopMode, params.morf, params.playSpeed, bckID, this.arcName);
             this.animIdx = params.anmIdx;
@@ -4935,7 +4935,7 @@ class d_a_npc_ls1 extends fopNpc_npc_c {
 
         if (this.itemModel) {
             mat4.copy(calc_mtx, this.jointMtxHandR);
-            if (this.itemPosType == 0) {
+            if (this.itemPosType === 0) {
                 MtxTrans([5.5, -3.0, -2.0], true);
             }
             else {
@@ -5110,7 +5110,7 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
     override execute(globals: dGlobals, deltaTimeFrames: number): void {
         // Update the current proc based on demo data
         this.setDemoData(globals);
-        if (this.demoMode != LinkDemoMode.WaitTurn) {
+        if (this.demoMode !== LinkDemoMode.WaitTurn) {
             this.changeDemoProc(globals);
         }
 
@@ -5133,9 +5133,9 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
         this.autoGroundHit();
 
         // If we're pulling position directly from the JStudio tool, ignore collisions and animation root motion
-        if (this.curMode == d_a_py_lk_mode.tool) {
+        if (this.curMode === d_a_py_lk_mode.tool) {
             vec3.copy(this.pos, rawPos);
-            if (this.demoClampToGround && groundHeight != -Infinity) {
+            if (this.demoClampToGround && groundHeight !== -Infinity) {
                 this.pos[1] = groundHeight;
             }
         }
@@ -5167,7 +5167,7 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
             mDoExt_modelEntryDL(globals, this.modelKatsura, renderInstManager, viewerInput);
         }
 
-        if (this.equippedItem == LkEquipItem.Sword) {
+        if (this.equippedItem === LkEquipItem.Sword) {
             setLightTevColorType(globals, this.equippedItemModel!, this.tevStr, viewerInput.camera);
             mDoExt_modelEntryDL(globals, this.equippedItemModel!, renderInstManager, viewerInput);
 
@@ -5206,7 +5206,7 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
         this.texMappingHeroClothes.copy(this.texMappingClothes);
 
         // Set the default state based on EventBit 0x2A80, except we can't, so just hardcode to use casual clothes on the title screen
-        this.isWearingCasualClothes = (globals.stageName == 'sea_T' ); // dComIfGs_isEventBit(0x2A80)
+        this.isWearingCasualClothes = (globals.stageName === 'sea_T' ); // dComIfGs_isEventBit(0x2A80)
         if(this.isWearingCasualClothes) { this.texMappingClothes.copy(this.texMappingCasualClothes); }
 
         MtxTrans(this.pos, false, this.model.modelMatrix);
@@ -5272,7 +5272,7 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
         }
 
         if (enable & EDemoActorFlags.HasShape) {
-            this.isWearingCasualClothes = (demoActor.shapeId == 1);
+            this.isWearingCasualClothes = (demoActor.shapeId === 1);
             if (this.isWearingCasualClothes)
                 this.texMappingClothes.copy(this.texMappingCasualClothes);
             else
@@ -5300,7 +5300,7 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
                 const moveVec = vec3.sub(scratchVec3a, targetPos, this.pos);
                 const newRot = cM_atan2s(moveVec[0], moveVec[2]);
                 this.rot[1] = newRot;
-                this.setSingleMoveAnime(globals, (this.demoMode == LinkDemoMode.Walk) ? LkAnim.WALK : LkAnim.DASH)
+                this.setSingleMoveAnime(globals, (this.demoMode === LinkDemoMode.Walk) ? LkAnim.WALK : LkAnim.DASH)
                 break;
             }
         }
@@ -5309,7 +5309,7 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
     }
 
     private changeDemoProc(globals: dGlobals): boolean {
-        assert(this.demoMode < LinkDemoMode.MAX || this.demoMode == LinkDemoMode.Tool)
+        assert(this.demoMode < LinkDemoMode.MAX || this.demoMode === LinkDemoMode.Tool)
 
         switch (this.demoMode) {
             case LinkDemoMode.None: return false;
@@ -5317,7 +5317,7 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
             case LinkDemoMode.SetPosRotEquip: modeProcInit(globals, this, this.mode_tbl, d_a_py_lk_mode.wait); break;
             
             default: 
-                if( this.prevMode != d_a_py_lk_mode.unk ) {
+                if( this.prevMode !== d_a_py_lk_mode.unk ) {
                     console.warn('Unsupported demo mode:', this.demoMode );
                     modeProcInit(globals, this, this.mode_tbl, d_a_py_lk_mode.unk); 
                 }
@@ -5330,7 +5330,7 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
 
     private autoGroundHit() {
         const groundHeight = this.gndChk.retY;
-        if(groundHeight == -Infinity) {
+        if(groundHeight === -Infinity) {
             return;
         }
 
@@ -5375,7 +5375,7 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
     }
 
     private posMoveFromFootPos(globals: dGlobals) {
-        if (this.frontFoot == 2) {
+        if (this.frontFoot === 2) {
             vec3.zero(this.vel);
             vec3.set(this.footData[0].toePos, -14.05, 0.0, 5.02);
             vec3.set(this.footData[0].heelPos, -10.85, 0.0, -6.52);
@@ -5462,7 +5462,7 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
 
         const bck = globals.resCtrl.getObjectRes(ResType.Bck, "LkAnm", anmData.upperBckIdx);
 
-        if(this.anmBck.anm != bck) {
+        if(this.anmBck.anm !== bck) {
             this.anmBck.init(this.model.modelData, bck, true, LoopMode.Repeat, rate, start, end);
         }
     }
@@ -5500,7 +5500,7 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
                 case 1:
                 case 5:
                     const count = demoActor.stbData.getUint8(1);
-                    assert(count == 3)
+                    assert(count === 3)
                     anmBckId = demoActor.stbData.getUint16(2);
                     anmBtpId = demoActor.stbData.getUint16(4);
                     anmBtkId = demoActor.stbData.getUint16(6);
@@ -5523,34 +5523,34 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
 
             // Set the hand model and/or equipped item based on the demo data
             let item = ItemNo.InvalidItem;
-            if(handIdxLeft == 0xC8) { item = ItemNo.HerosSword; }
-            else if(handIdxLeft == 0xC9) { item = ItemNo.MasterSwordPowerless; }
-            else if(handIdxLeft == 0xCA) { item = ItemNo.MasterSwordHalfPower; }
-            else if(handIdxLeft == 0xCB) { item = ItemNo.MasterSwordFullPower; }
+            if(handIdxLeft === 0xC8) { item = ItemNo.HerosSword; }
+            else if(handIdxLeft === 0xC9) { item = ItemNo.MasterSwordPowerless; }
+            else if(handIdxLeft === 0xCA) { item = ItemNo.MasterSwordHalfPower; }
+            else if(handIdxLeft === 0xCB) { item = ItemNo.MasterSwordFullPower; }
 
-            if(item == ItemNo.InvalidItem) {
-                if(handIdxLeft == 0xCC) {
+            if(item === ItemNo.InvalidItem) {
+                if(handIdxLeft === 0xCC) {
                     this.handStyleLeft = LkHandStyle.HoldWindWaker;
                     // Set the Wind Waker as the equipped item
-                } else if (this.equippedItem != LkEquipItem.None) {
+                } else if (this.equippedItem !== LkEquipItem.None) {
                     this.deleteEquipItem();
                     this.handStyleLeft = handIdxLeft as LkHandStyle;
                 }
             } else {
                 this.handStyleLeft = LkHandStyle.HoldSword;
-                if (this.equippedItem != LkEquipItem.Sword) {
+                if (this.equippedItem !== LkEquipItem.Sword) {
                     // d_com_inf_game::dComIfGs_setSelectEquip(0, item);
                     this.deleteEquipItem();
                     this.setSwordModel(globals);
                 }
             }
 
-            if(handIdxRight == 0xC8 || handIdxRight == 0xC9) {
+            if(handIdxRight === 0xC8 || handIdxRight === 0xC9) {
                 this.handStyleRight = LkHandStyle.HoldShield;
-                if (handIdxRight == 0xC8) { /* equip HerosShield */ }
+                if (handIdxRight === 0xC8) { /* equip HerosShield */ }
                 else { /* equip MirrorShield */ }
             } else {
-                if(handIdxRight != 0) {
+                if(handIdxRight !== 0) {
                     this.handStyleRight = (handIdxRight as LkHandStyle) + 6;
                 } else {
                     this.handStyleRight = LkHandStyle.Idle;
@@ -5558,7 +5558,7 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
             }
         }
 
-        if (anmBckId == 0xFFFF || this.anmBckId == anmBckId) {
+        if (anmBckId === 0xFFFF || this.anmBckId === anmBckId) {
             if (demoActor.flags & EDemoActorFlags.HasFrame) {
                 this.anmBck.frameCtrl.setFrame(anmFrame);
                 this.anmBtp.frameCtrl.setFrame(anmFrame);
@@ -5571,12 +5571,12 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
             this.anmBck.frameCtrl.setFrame(anmFrame);
             this.anmBckId = anmBckId;
 
-            if (anmBtpId != 0xFFFF) {
+            if (anmBtpId !== 0xFFFF) {
                 const btp = globals.resCtrl.getObjectIDRes(ResType.Btp, 'LkD00', anmBtpId);
                 this.anmBtp.init(this.model.modelData, btp, true, btp.loopMode, 1.0, 0, btp.duration);
             }
 
-            if (anmBtkId != 0xFFFF) {
+            if (anmBtkId !== 0xFFFF) {
                 const btk = globals.resCtrl.getObjectIDRes(ResType.Btk, 'LkD00', anmBtkId);
                 this.anmBtk.init(this.model.modelData, btk, true, btk.loopMode, 1.0, 0, btk.duration);
             }
@@ -5591,7 +5591,7 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
     }
 
     private procWaitInit(globals: dGlobals ) {
-        if(this.prevMode != d_a_py_lk_mode.wait ) {
+        if(this.prevMode !== d_a_py_lk_mode.wait ) {
             this.setSingleMoveAnime(globals, LkAnim.WAITS);
         }
     }
@@ -5621,7 +5621,7 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
         mat4.copy(this.equippedItemModel.modelMatrix, handLJointMtx);
         this.equippedItemModel?.calcAnim();
 
-        if(this.equippedItem == LkEquipItem.Sword) {
+        if(this.equippedItem === LkEquipItem.Sword) {
             mat4.copy(this.modelSwordHilt.modelMatrix, handLJointMtx);
             this.modelSwordHilt.calcAnim();
         }
