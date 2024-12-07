@@ -5071,6 +5071,16 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
     ];
 
     protected override subload(globals: dGlobals, prm: fopAcM_prm_class | null): cPhs__Status {
+        const statusA = dComIfG_resLoad(globals, 'Link');
+        const statusB = dComIfG_resLoad(globals, 'LkD00');
+        const statusC = dComIfG_resLoad(globals, 'LkD01');
+        const statusD = dComIfG_resLoad(globals, 'LkAnm');
+        
+        if (statusA !== cPhs__Status.Complete) return statusA;
+        if (statusB !== cPhs__Status.Complete) return statusB;
+        if (statusC !== cPhs__Status.Complete) return statusC;
+        if (statusD !== cPhs__Status.Complete) return statusD;
+
         this.loadAnmTable(globals);
 
         this.playerInit(globals);

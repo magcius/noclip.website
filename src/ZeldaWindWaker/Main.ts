@@ -999,12 +999,6 @@ class DemoDesc extends SceneDesc implements Viewer.SceneDesc {
         globals.scnPlay.demo.remove();
 
         // TODO: Don't render until the camera has been placed for this demo. The cuts are jarring.
-
-        // Most cutscenes expect the Link actor to be loaded
-        this.globals.modelCache.fetchObjectData('Link');
-        this.globals.modelCache.fetchObjectData('LkD00');
-        this.globals.modelCache.fetchObjectData('LkD01');
-        this.globals.modelCache.fetchObjectData('LkAnm');
     
         // noclip modification: This normally happens on room load. Do it here instead so that we don't waste time 
         //                      loading .arcs for cutscenes that aren't going to be played
@@ -1024,7 +1018,8 @@ class DemoDesc extends SceneDesc implements Viewer.SceneDesc {
         }
 
         await globals.modelCache.waitForLoad();
-        
+
+        // Most cutscenes expect the Link actor to be loaded
         if(!fopAcM_searchFromName(globals, 'Link', 0, 0)) {
             fopAcM_create(globals.frameworkGlobals, dProcName_e.d_a_py_lk, 0, null, globals.mStayNo, null, null, 0xFF, -1);
         }
