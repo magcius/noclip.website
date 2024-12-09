@@ -5026,6 +5026,33 @@ const enum LkJoint {
     FootR = 0x27,
 }
 
+const enum LkModelShape {
+    Chest = 0,
+    Arms = 1,
+    Face = 2,
+    Mouth = 3,
+    Hair = 4,
+    Hat = 5,
+    Legs = 6,
+    HandL = 7,
+    HandR = 8,
+    EyeL = 9,
+    EyeR = 10,
+    EyeDamAL = 11,
+    EyeDamAR = 12,
+    EyeDamBL = 13,
+    EyeDamBR = 14,
+    Nose = 15,
+    EyebrowL = 16,
+    EyebrowR = 17,
+    EyebrowDamAL = 18,
+    EyebrowDamAR = 19,
+    EyebrowDamBL = 20,
+    EyebrowDamBR = 21,
+    Scabbard = 22,
+    Buckle = 23,
+}
+
 const enum d_a_py_lk_mode { unk, wait, tool }
 class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
     public static PROCESS_NAME = dProcName_e.d_a_py_lk;
@@ -5095,7 +5122,14 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
         this.playerInit(globals);
 
         // noclip modification: The game manually draws the eye/eyebrow filter before the body. Let's do that with sorting.
+        // Layer 5: Body
+        // Layer 6: Eye mask
+        // Layer 7: Hair
+        // Layer 8: Eyes/Eyebrows
+        // Layer 9: Eye Mask clear
         this.model.setSortKeyLayer(GfxRendererLayer.OPAQUE + 5, false);
+        const HairMaterial = this.model.modelData.shapeData[LkModelShape.Hair].shape.materialIndex; // Name is mislabeled
+        this.model.materialInstances[HairMaterial].setSortKeyLayer(GfxRendererLayer.OPAQUE + 7, false);
         this.setupDam('eyeL');
         this.setupDam('eyeR');
         this.setupDam('mayuL');
@@ -5159,9 +5193,9 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
         settingTevStruct(globals, LightType.Actor, this.pos, this.tevStr);
 
         if (this.isWearingCasualClothes) {
-            this.model.setShapeVisible(5, false);  // Hat
-            this.model.setShapeVisible(22, false); // Sword scabbard
-            this.model.setShapeVisible(23, false); // Belt buckle
+            this.model.setShapeVisible(LkModelShape.Hat, false);
+            this.model.setShapeVisible(LkModelShape.Scabbard, false);
+            this.model.setShapeVisible(LkModelShape.Buckle, false);
 
             setLightTevColorType(globals, this.modelKatsura, this.tevStr, viewerInput.camera);
             mDoExt_modelEntryDL(globals, this.modelKatsura, renderInstManager, viewerInput);
@@ -5219,21 +5253,23 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
         const matInstA = this.model.materialInstances.find((m) => m.name === `${pref}damA`)!;
         const matInstB = this.model.materialInstances.find((m) => m.name === `${pref}damB`)!;
 
-        // Render an alpha mask in the shape of the eyes. Needs to render before Link so that it can depth test against
-        // the scene but not against his hair. The eyes will then draw with depth testing enabled, but will mask against
-        // this alpha tex. 
-        matInstA.setSortKeyLayer(GfxRendererLayer.OPAQUE + 4, false);
+        // Render an alpha mask in the shape of the eyes. Needs to render after the body but before the hair so that it 
+        // can depth test against the scene but not against the hair. The eyes will then draw with depth testing enabled, 
+        // but will mask against this alpha tex. 
+        matInstA.setSortKeyLayer(GfxRendererLayer.OPAQUE + 6, false);
         matInstA.setColorWriteEnabled(false);
         matInstA.setAlphaWriteEnabled(true);
 
         // @NOTE: This material is marked as translucent in the original BMD. It is manually drawn after Link's head but 
         //        before his body. Since we don't actually need any translucent behavior, mark it as opaque so that it can 
         //        be drawn before his body.
-        // @TODO: We need to have a separate sort key for head vs body, as the eyes will currently render on top of Link's arms.
         matInstA.materialData.material.translucent = false;
 
+        // Next, draw the eyes, testing against the alpha mask
+        matInst.setSortKeyLayer(GfxRendererLayer.OPAQUE + 8, false);
+
         // Clear the alpha mask written by the *damA materials so it doesn't interfere with other translucent objects
-        matInstB.setSortKeyLayer(GfxRendererLayer.OPAQUE + 6, false);
+        matInstB.setSortKeyLayer(GfxRendererLayer.OPAQUE + 9, false);
         matInstB.setColorWriteEnabled(false);
         matInstB.setAlphaWriteEnabled(true);
 
