@@ -5560,8 +5560,8 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
 
         if (anmBckId === 0xFFFF || this.anmBckId === anmBckId) {
             if (demoActor.flags & EDemoActorFlags.HasFrame) {
-                this.anmBck.frameCtrl.setFrame(anmFrame);
-                this.anmBtp.frameCtrl.setFrame(anmFrame);
+                this.anmBck.frameCtrl.setFrame(this.anmBck.frameCtrl.applyLoopMode(anmFrame));
+                this.anmBtp.frameCtrl.setFrame(this.anmBtp.frameCtrl.applyLoopMode(anmFrame));
                 demoActor.animFrameMax = this.anmBck.frameCtrl.endFrame;
             }
         } else {
