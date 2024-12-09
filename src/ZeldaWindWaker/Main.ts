@@ -1053,7 +1053,6 @@ class DemoDesc extends SceneDesc implements Viewer.SceneDesc {
 // It has been reconstructed by cross-referencing each Room's lbnk section (which points to a Demo*.arc file for each layer),
 // the .stb files contained in each of those Objects/Demo*.arc files, and the FileName attribute from the event action.   
 const demoDescs = [
-    new DemoDesc("sea", "Departure", [44], "departure.stb", 10, [-200000.0, 0.0, 320000.0], 0.0, 204, 0),
     new DemoDesc("sea", "Pirate Zelda Fly", [44], "kaizoku_zelda_fly.stb", 0, [-200000.0, 0.0, 320000.0], 180.0, 0, 0),
     new DemoDesc("sea", "Zola Awakens", [13], "awake_zola.stb", 8, [200000.0, 0.0, -200000.0], 0, 227, 0),
     new DemoDesc("sea", "Get Komori Pearl", [13], "getperl_komori.stb", 9, [200000.0, 0.0, -200000.0], 0, 0, 0),
@@ -1133,6 +1132,7 @@ const sceneDescs = [
     new DemoDesc("sea_T", "Title Screen", [44], "title.stb", 0, [-220000.0, 0.0, 320000.0], 180.0, 0, 0),
     new DemoDesc("sea", "Awaken", [44], "awake.stb", 0, [-220000.0, 0.0, 320000.0], 0.0, 0, 0),
     new DemoDesc("sea", "Stolen Sister", [44], "stolensister.stb", 9, [0.0, 0.0, 20000.0], 0, 0, 0),
+    new DemoDesc("sea", "Departure", [44], "departure.stb", 10, [-200000.0, 0.0, 320000.0], 0.0, 204, 0),
 
     "Outset Island",
     new SceneDesc("sea_T", "Title Screen", [44]),
