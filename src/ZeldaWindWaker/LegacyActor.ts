@@ -519,19 +519,6 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         buildChildModel(rarc, `bdlm/ywhead01.bdl`).setParentJoint(m, `head`);
         m.bindANK1(parseBCK(rarc, `bcks/wait01.bck`));
     });
-    // Tetra
-    else if (actorName === 'Zl1') fetchArchive(`Zl`).then((rarc) => {
-        const m = buildModel(rarc, `bdlm/zl.bdl`);
-        m.setMaterialColorWriteEnabled("eyeLdamA", false);
-        m.setMaterialColorWriteEnabled("eyeLdamB", false);
-        m.setMaterialColorWriteEnabled("mayuLdamA", false);
-        m.setMaterialColorWriteEnabled("mayuLdamB", false);
-        m.setMaterialColorWriteEnabled("eyeRdamA", false);
-        m.setMaterialColorWriteEnabled("eyeRdamB", false);
-        m.setMaterialColorWriteEnabled("mayuRdamA", false);
-        m.setMaterialColorWriteEnabled("mayuRdamB", false);
-        m.bindANK1(parseBCK(rarc, `bcks/wait.bck`));
-    });
     // Gonzo
     else if (actorName === 'P1a') fetchArchive(`P1`).then((rarc) => {
         const m = buildModel(rarc, `bdl/p1.bdl`);

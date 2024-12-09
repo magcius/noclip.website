@@ -2,7 +2,7 @@
 import { mat4, ReadonlyVec3, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
-import { LoopMode } from "../Common/JSYSTEM/J3D/J3DLoader.js";
+import { LoopMode, TPT1, TTK1 } from "../Common/JSYSTEM/J3D/J3DLoader.js";
 import { JStage, TActor, TCamera, TControl, TParse, TSystem } from "../Common/JSYSTEM/JStudio.js";
 import { getMatrixAxisY } from "../MathHelpers.js";
 import { assert } from "../util.js";
@@ -183,7 +183,7 @@ export class dDemo_actor_c extends TActor {
     public stbDataId: number;
     public stbData: DataView;
     public bckId: number;
-    public btpIed: number;
+    public btpId: number;
     public btkId: number;
     public brkId: number;
 
@@ -215,6 +215,73 @@ export class dDemo_actor_c extends TActor {
         } else {
             return this.animTransition;
         }
+    }
+
+    public getBtpData(globals: dGlobals, arcName: string): TPT1 | null {
+        let btpId = 0;
+
+        if (this.flags & EDemoActorFlags.HasTexAnim) {
+            btpId = this.texAnim;
+            debugger;
+            arcName = ""; // @TODO: How does this work?
+        } else {
+            if (!(this.flags & EDemoActorFlags.HasData)) {
+                return null;
+            }
+
+            switch(this.stbDataId) {
+                case 1: btpId = this.stbData.getInt16(1); break;
+                case 2: btpId = this.stbData.getInt16(2); break;
+                case 4: btpId = this.stbData.getInt32(1); break;
+                case 5: btpId = this.stbData.getInt32(2); break;
+                case 6: btpId = this.stbData.getInt32(2); break;
+                default: 
+                    return null;
+            }
+        }
+
+        if (btpId == this.btpId) {
+            return null;
+        } else {
+            this.btpId = btpId;
+            if ((btpId & 0x10000) != 0) {
+                arcName = globals.roomCtrl.demoArcName!;
+            }
+            
+            const btp = globals.resCtrl.getObjectIDRes(ResType.Btp, arcName, btpId);
+            this.textAnimFrameMax = this.stbData.getInt16(6);
+            return btp;
+        }
+    }
+
+    public getBrkData(globals: dGlobals, arcName: string) {
+        debugger;
+    }
+
+    public getBtkData(globals: dGlobals, arcName: string): TTK1 | null {
+            if (!(this.flags & EDemoActorFlags.HasData)) {
+                return null;
+            }
+            
+            let btkId;
+            switch(this.stbDataId) {
+                case 2: btkId = this.stbData.getInt16(4); break;
+                case 5: btkId = this.stbData.getInt32(6); break;
+                case 6: btkId = this.stbData.getInt32(6); break;
+                default: 
+                    return null;
+            }
+        
+            if (btkId == this.btkId) {
+                return null;
+            }
+        
+            this.btkId = btkId;
+            if ((btkId & 0x10000) != 0) {
+                arcName = globals.roomCtrl.demoArcName!;
+            }
+            
+            return globals.resCtrl.getObjectIDRes(ResType.Btk, arcName, btkId);
     }
 
     public override JSGGetName() { return this.name; }
