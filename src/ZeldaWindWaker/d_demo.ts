@@ -424,6 +424,7 @@ export class dDemo_manager_c {
     private frameNoMsg: number;
     private mode = EDemoMode.None;
     private curFile: ArrayBufferSlice | null;
+    private name: string | null = null;
 
     private parser: TParse;
     private system = new dDemo_system_c(this.globals);
@@ -433,12 +434,14 @@ export class dDemo_manager_c {
         private globals: dGlobals
     ) { }
 
+    public getName() { return this.name; }
     public getFrame() { return this.frame; }
     public getFrameNoMsg() { return this.frameNoMsg; }
     public getMode() { return this.mode; }
     public getSystem() { return this.system; }
 
-    public create(data: ArrayBufferSlice, originPos?: vec3, rotY?: number, startFrame?: number): boolean {
+    public create(name: string, data: ArrayBufferSlice, originPos?: vec3, rotY?: number, startFrame?: number): boolean {
+        this.name = name;
         this.parser = new TParse(this.control);
 
         if (!this.parser.parse(data, 0)) {
@@ -463,6 +466,7 @@ export class dDemo_manager_c {
         this.control.destroyObject_all();
         this.system.remove();
         this.curFile = null;
+        this.name = null;
         this.mode = 0;
     }
 

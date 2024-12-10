@@ -1039,7 +1039,7 @@ class DemoDesc extends SceneDesc implements Viewer.SceneDesc {
         if (!demoData)
             demoData = globals.modelCache.resCtrl.getStageResByName(ResType.Stb, "Stage", this.stbFilename);
         
-        if( demoData ) { globals.scnPlay.demo.create(demoData, this.offsetPos, this.rotY / 180.0 * Math.PI, this.startFrame); }
+        if( demoData ) { globals.scnPlay.demo.create(this.id, demoData, this.offsetPos, this.rotY / 180.0 * Math.PI, this.startFrame); }
         else { console.warn('Failed to load demo data:', this.stbFilename); }
 
         return this.globals.renderer;
