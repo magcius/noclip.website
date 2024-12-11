@@ -3,7 +3,7 @@ import { mat4, ReadonlyVec3, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
 import { LoopMode, TPT1, TTK1 } from "../Common/JSYSTEM/J3D/J3DLoader.js";
-import { JStage, TActor, TCamera, TControl, TParse, TSystem } from "../Common/JSYSTEM/JStudio.js";
+import { JMessage, JStage, TActor, TCamera, TControl, TParse, TSystem } from "../Common/JSYSTEM/JStudio.js";
 import { getMatrixAxisY } from "../MathHelpers.js";
 import { assert } from "../util.js";
 import { ResType } from "./d_resorce.js";
@@ -427,7 +427,8 @@ export class dDemo_manager_c {
 
     private parser: TParse;
     private system = new dDemo_system_c(this.globals);
-    private control: TControl = new TControl(this.system);
+    private messageControl = new JMessage.TControl(); // TODO
+    private control: TControl = new TControl(this.system, this.messageControl);
 
     constructor(
         private globals: dGlobals
