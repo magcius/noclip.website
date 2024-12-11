@@ -251,11 +251,10 @@ export class J2DPane {
 
             if(this.parent) {
                 // TODO: Handle parents offsets and alpha
-                this.makeMatrix();
             } else {
                 this.drawPos[0] += offsetX;
                 this.drawPos[1] += offsetY;
-                this.makeMatrix();
+                // this.makeMatrix();
                 this.drawAlpha = this.data.alpha;
             }
 

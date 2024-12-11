@@ -1,3 +1,5 @@
+import { mat4, vec3 } from "gl-matrix";
+import { J2DGrafContext, J2DPane, J2DPicture, SCRN } from "../Common/JSYSTEM/J2D.js";
 import { BTI, BTIData } from "../Common/JSYSTEM/JUTTexture.js";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import { ViewerRenderInput } from "../viewer.js";
@@ -6,6 +8,7 @@ import { dProcName_e } from "./d_procname.js";
 import { dComIfG_resLoad, ResType } from "./d_resorce.js";
 import { cPhs__Status, fGlobals, fpc_bs__Constructor, fpcPf__Register, fpcSCtRq_Request, leafdraw_class } from "./framework.js";
 import { dGlobals } from "./Main.js";
+import { MtxTrans } from "./m_do_mtx.js";
 
 let currentPlaceName: number | null = null;
 
@@ -60,11 +63,16 @@ export function updatePlaceName(globals: dGlobals) {
 
 export class d_place_name extends leafdraw_class {
     public static PROCESS_NAME = dProcName_e.d_place_name;
+    private pane: J2DPane;
+    private ctx2D: J2DGrafContext;
 
     public override load(globals: dGlobals): cPhs__Status {
         let status = dComIfG_resLoad(globals, 'PName');
         if (status != cPhs__Status.Complete)
             return status;
+
+        const screen = globals.resCtrl.getObjectRes(ResType.Blo, `PName`, 0x04)
+        this.ctx2D = new J2DGrafContext(globals.renderer.device);
 
         // The Outset Island image lives inside the arc. All others are loose files in 'res/placename/'
         let img: BTIData;
@@ -78,16 +86,36 @@ export class d_place_name extends leafdraw_class {
             const imgData = globals.modelCache.getFileData(filename);
             img = new BTIData(globals.context.device, globals.renderer.renderCache, BTI.parse(imgData, filename).texture);
         }
+
+        this.pane = new J2DPane(screen.panes[0], globals.renderer.renderCache);
+        this.pane.children[0].data.visible = false;
+        this.pane.children[1].data.visible = false;
+        const pic = this.pane.children[2] as J2DPicture;
+        pic.tex = img;
     
         return cPhs__Status.Complete;
     }
 
     public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        debugger;
+        const pane = this.pane.children[2];
+        
+        let x = (pane.data.x / 640);
+        let y = 1.0 - (pane.data.y / 480);
+
+        let h = (pane.data.h / 480);
+        let w = h * (pane.data.w / pane.data.h) / globals.camera.aspect;
+
+        // @TODO: Remove. Do this in J2D
+        MtxTrans([x, y, -1], false, pane.drawMtx);
+        mat4.scale(pane.drawMtx, pane.drawMtx, [w, h, 1]);
+
+        this.pane.draw(this.ctx2D, renderInstManager);
     }
 
     public override execute(globals: dGlobals, deltaTimeFrames: number): void {
-        debugger;
+
+        // this.positionM(this.test.modelMatrix, 0.5, 0.5, -1.0, .5, .1);
+        // this.test.modelMatrix
     }
 }
 
