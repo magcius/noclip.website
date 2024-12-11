@@ -123,10 +123,14 @@ export class J3DFrameCtrl {
             if (timeInFrames >= this.endFrame)
                 return this.startFrame;
         } else if (this.loopMode === LoopMode.Repeat) {
-            if (timeInFrames >= this.endFrame)
-                return timeInFrames - (this.endFrame - this.repeatStartFrame);
-            if (timeInFrames < this.startFrame)
-                return timeInFrames + (this.repeatStartFrame - this.startFrame);
+            while (timeInFrames >= this.endFrame) {
+                if (this.endFrame - this.repeatStartFrame <= 0.0) { break; }
+                timeInFrames -= (this.endFrame - this.repeatStartFrame);
+            }
+            while (timeInFrames < this.startFrame) {
+                if (this.repeatStartFrame - this.startFrame <= 0.0) { break; }
+                timeInFrames += (this.repeatStartFrame - this.startFrame);
+            }
         } else if (this.loopMode === LoopMode.MirroredOnce) {
             if (timeInFrames >= this.endFrame)
                 return this.endFrame - (timeInFrames - this.endFrame);
