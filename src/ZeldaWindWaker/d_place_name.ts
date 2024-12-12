@@ -6,7 +6,7 @@ import { ViewerRenderInput } from "../viewer.js";
 import { EDemoMode } from "./d_demo.js";
 import { dProcName_e } from "./d_procname.js";
 import { dComIfG_resLoad, ResType } from "./d_resorce.js";
-import { cPhs__Status, fGlobals, fpc_bs__Constructor, fpcPf__Register, fpcSCtRq_Request, leafdraw_class } from "./framework.js";
+import { cPhs__Status, fGlobals, fopMsgM_Delete, fpc_bs__Constructor, fpcPf__Register, fpcSCtRq_Request, leafdraw_class, msg_class } from "./framework.js";
 import { dGlobals } from "./Main.js";
 import { MtxTrans } from "./m_do_mtx.js";
 
@@ -61,7 +61,7 @@ export function updatePlaceName(globals: dGlobals) {
 }
 
 
-export class d_place_name extends leafdraw_class {
+export class d_place_name extends msg_class {
     public static PROCESS_NAME = dProcName_e.d_place_name;
     private pane: J2DPane;
     private ctx2D: J2DGrafContext;
