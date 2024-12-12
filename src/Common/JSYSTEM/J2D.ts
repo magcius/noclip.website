@@ -16,15 +16,11 @@ import { mat4, vec2, vec4 } from "gl-matrix";
 import { GfxRenderCache } from "../../gfx/render/GfxRenderCache.js";
 import { ViewerRenderInput } from "../../viewer.js";
 
-//#region  Scratch
 const materialParams = new MaterialParams();
 const drawParams = new DrawParams();
 
-const scratchVec4a = vec4.create();
 const scratchMat = mat4.create();
-//#endregion
 
-//#region  Helpers
 interface ResRef {
     type: number;
     name: string;
@@ -42,9 +38,7 @@ function parseResourceReference(dst: ResRef, buffer: ArrayBufferSlice, offset: n
 
     return nameLen + 2;
 }
-//#endregion
 
-//#region Enums
 /**
  * If set, the UVs for a quad will be pinned (bound) to the quad edge. If not set, the UVs will be clipped by the quad. 
  * For instance, if the texture is 200 pixels wide, but the quad is 100 pixels wide and Right is not set, the texture 
@@ -56,9 +50,26 @@ enum J2DUVBinding {
     Right = (1 << 2),
     Left = (1 << 3),
 };
-//#endregion
 
-//#region INF1
+
+// TODO: Move and reorganize
+export class J2DGrafContext {
+    sceneParams = new SceneParams();
+
+    constructor(device: GfxDevice) {
+        // @NOTE: The y axis is inverted by this ortho matrix. Gamecube origin is top-left, ours is bottom left.  
+        projectionMatrixForCuboid(this.sceneParams.u_Projection, 0, 1, 1, 0, -1, 0);
+        const clipSpaceNearZ = device.queryVendorInfo().clipSpaceNearZ;
+        projectionMatrixConvertClipSpaceNearZ(this.sceneParams.u_Projection, clipSpaceNearZ, GfxClipSpaceNearZ.NegativeOne);
+    }
+
+    public setOnRenderInst(renderInst: GfxRenderInst) {
+        const sceneParamsOffs = renderInst.allocateUniformBuffer(GX_Material.GX_Program.ub_SceneParams, ub_SceneParamsBufferSize);
+        fillSceneParamsData(renderInst.mapUniformBufferF32(GX_Material.GX_Program.ub_SceneParams), sceneParamsOffs, this.sceneParams);
+    }
+}
+
+//#region Loading/INF1
 export interface INF1 {
     width: number;
     height: number;
@@ -74,7 +85,7 @@ function readINF1Chunk(buffer: ArrayBufferSlice): INF1 {
 }
 //#endregion
 
-//#region J2DPicture
+//#region Loading/J2DPicture
 interface PIC1 extends PAN1 {
     timg: ResRef;
     tlut: ResRef;
@@ -115,9 +126,9 @@ function readPIC1Chunk(buffer: ArrayBufferSlice, parent: PAN1 | null): PIC1 {
 
     return { ...pane, timg, tlut, uvBinding: binding, flags, colorBlack, colorWhite, colorCorners };
 }
-//#endregion J2DPicture
+//#endregion Loading/J2DPicture
 
-//#region J2Pane
+//#region Loading/J2Pane
 interface PAN1 {
     parent: PAN1 | null;
     type: string;
@@ -164,9 +175,9 @@ function readPAN1Chunk(buffer: ArrayBufferSlice, parent: PAN1 | null): PAN1 {
     offset = align(offset, 4);
     return { parent, type, visible, tag, x, y, w, h, rot, basePos, alpha, inheritAlpha, offset, children: [] };
 }
-//#endregion J2Pane
+//#endregion Loading/J2Pane
 
-//#region J2Screen
+//#region Loading/J2Screen
 export interface SCRN {
     inf1: INF1;
     panes: PAN1[];
@@ -217,22 +228,6 @@ export class BLO {
 }
 
 //#endregion J2Screen
-// TODO: Move and reorganize
-export class J2DGrafContext {
-    sceneParams = new SceneParams();
-
-    constructor(device: GfxDevice) {
-        // @NOTE: The y axis is inverted by this ortho matrix. Gamecube origin is top-left, ours is bottom left.  
-        projectionMatrixForCuboid(this.sceneParams.u_Projection, 0, 1, 1, 0, -1, 0);
-        const clipSpaceNearZ = device.queryVendorInfo().clipSpaceNearZ;
-        projectionMatrixConvertClipSpaceNearZ(this.sceneParams.u_Projection, clipSpaceNearZ, GfxClipSpaceNearZ.NegativeOne);
-    }
-
-    public setOnRenderInst(renderInst: GfxRenderInst) {
-        const sceneParamsOffs = renderInst.allocateUniformBuffer(GX_Material.GX_Program.ub_SceneParams, ub_SceneParamsBufferSize);
-        fillSceneParamsData(renderInst.mapUniformBufferF32(GX_Material.GX_Program.ub_SceneParams), sceneParamsOffs, this.sceneParams);
-    }
-}
 
 //#region J2DPane
 export class J2DPane {
@@ -329,7 +324,7 @@ export class J2DPicture extends J2DPane {
 
     constructor(data: PAN1, private cache: GfxRenderCache, parent: J2DPane | null) {
         super(data, cache, parent);
-        // @TODO: If the type > 4, load the image on construction
+        // @TODO: If type > 4, load the image on construction
         if (this.data.timg.type !== 0 && this.data.timg.type !== 2) { console.warn('Untested J2D feature'); }
 
         if (this.data.tlut.type !== 0) { console.warn('Untested J2D feature'); }
