@@ -31,7 +31,7 @@ export function updatePlaceName(globals: dGlobals) {
         const demoName = globals.scnPlay.demo.getName();
 
         if(demoName == 'awake') { 
-            if (frameNo >= 200 && frameNo < 0x15e) {
+            if (frameNo >= 200 && frameNo < 350) {
                 globals.scnPlay.placenameIndex = Placename.OutsetIsland;
                 globals.scnPlay.placenameState = PlacenameState.Visible;
             } else if(frameNo >= 0x15e) {
@@ -65,6 +65,7 @@ export class d_place_name extends msg_class {
     public static PROCESS_NAME = dProcName_e.d_place_name;
     private pane: J2DPane;
     private ctx2D: J2DGrafContext;
+    private animFrame: number = 0;
 
     public override load(globals: dGlobals): cPhs__Status {
         let status = dComIfG_resLoad(globals, 'PName');
@@ -113,9 +114,36 @@ export class d_place_name extends msg_class {
     }
 
     public override execute(globals: dGlobals, deltaTimeFrames: number): void {
+        if (globals.scnPlay.placenameState == PlacenameState.Visible) {
+            this.openAnime(deltaTimeFrames);
+        } else if (globals.scnPlay.placenameState == PlacenameState.Hidden) {
+            if (this.closeAnime(deltaTimeFrames))
+                fopMsgM_Delete(globals.frameworkGlobals, this);
+        }
+    }
 
-        // this.positionM(this.test.modelMatrix, 0.5, 0.5, -1.0, .5, .1);
-        // this.test.modelMatrix
+    private openAnime(deltaTimeFrames: number) {
+        if(this.animFrame < 10) {
+            this.animFrame += deltaTimeFrames;
+
+            const pct = (this.animFrame / 10)
+            const alpha = pct * pct;
+
+            this.pane.data.alpha = alpha * 0xFF;
+        }
+    }
+
+    private closeAnime(deltaTimeFrames: number) {
+        if(this.animFrame > 0) {
+            this.animFrame -= deltaTimeFrames;
+
+            const pct = (this.animFrame / 10)
+            const alpha = pct * pct;
+
+            this.pane.data.alpha = alpha * 0xFF;
+        }
+
+        return this.animFrame <= 0;
     }
 }
 
@@ -130,3 +158,4 @@ export function d_pn__RegisterConstructors(globals: fGlobals): void {
 
     R(d_place_name);
 }
+
