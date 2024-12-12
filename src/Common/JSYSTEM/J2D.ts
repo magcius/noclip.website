@@ -14,6 +14,7 @@ import { BTIData } from "./JUTTexture.js";
 import { GXMaterialBuilder } from "../../gx/GXMaterialBuilder.js";
 import { mat4, vec2, vec4 } from "gl-matrix";
 import { GfxRenderCache } from "../../gfx/render/GfxRenderCache.js";
+import { ViewerRenderInput } from "../../viewer.js";
 
 //#region  Scratch
 const materialParams = new MaterialParams();
@@ -260,15 +261,17 @@ export class J2DPane {
     }
 
     // NOTE: Overwritten by child classes 
-    public drawSelf(renderInstManager: GfxRenderInstManager, offsetX: number, offsetY: number, ctx: J2DGrafContext) { }
+    public drawSelf(renderInstManager: GfxRenderInstManager, viewerRenderInput: ViewerRenderInput, ctx2D: J2DGrafContext, offsetX: number, offsetY: number) { }
 
-    public draw(ctx: J2DGrafContext, renderInstManager: GfxRenderInstManager, offsetX: number = 0, offsetY: number = 0, clip: boolean = true): void {
+    public draw(renderInstManager: GfxRenderInstManager, viewerRenderInput: ViewerRenderInput, ctx2D: J2DGrafContext, offsetX: number = 0, offsetY: number = 0, clip: boolean = true): void {
         const boundsValid = this.data.w > 0 && this.data.h > 0;
 
         if (this.data.visible && boundsValid) {
             // Src data is in GameCube pixels (640x480), convert to normalized screen coordinates [0-1]. 
+            // To support dynamic aspect ratios, we keep the original screenspace height and the original aspect ratio. 
+            // So changing the window width will not cause 2D elements to scale, but changing the window height will. 
             vec2.set(this.drawPos, this.data.x / 640, this.data.y / 480);
-            vec2.set(this.drawDimensions, this.data.w / 480, this.data.h / 480);
+            vec2.set(this.drawDimensions, this.data.w / (480 * viewerRenderInput.camera.aspect), this.data.h / 480);
             this.drawAlpha = this.data.alpha / 0xFF;
 
             if (this.parent) {
@@ -285,9 +288,9 @@ export class J2DPane {
             }
 
             if (this.drawDimensions[0] > 0 && this.drawDimensions[1] > 0) {
-                this.drawSelf(renderInstManager, offsetX, offsetY, ctx);
+                this.drawSelf(renderInstManager, viewerRenderInput, ctx2D, offsetX, offsetY);
                 for (const pane of this.children) {
-                    pane.draw(ctx, renderInstManager, offsetX, offsetY, clip);
+                    pane.draw(renderInstManager, viewerRenderInput, ctx2D, offsetX, offsetY, clip);
                 }
             }
         }
@@ -342,7 +345,7 @@ export class J2DPicture extends J2DPane {
         this.prepare();
     }
 
-    public override drawSelf(renderInstManager: GfxRenderInstManager, offsetX: number, offsetY: number, ctx2D: J2DGrafContext): void {
+    public override drawSelf(renderInstManager: GfxRenderInstManager, viewerRenderInput: ViewerRenderInput, ctx2D: J2DGrafContext, offsetX: number, offsetY: number): void {
         if(!this.tex) { return; }
 
         renderInstManager.pushTemplate();
