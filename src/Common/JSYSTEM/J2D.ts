@@ -54,7 +54,7 @@ enum J2DUVBinding {
 
 // TODO: Move and reorganize
 export class J2DGrafContext {
-    sceneParams = new SceneParams();
+    private sceneParams = new SceneParams();
 
     constructor(device: GfxDevice) {
         // @NOTE: The y axis is inverted by this ortho matrix. Gamecube origin is top-left, ours is bottom left.  

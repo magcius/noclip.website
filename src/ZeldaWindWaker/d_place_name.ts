@@ -1,14 +1,12 @@
-import { mat4, vec3 } from "gl-matrix";
-import { J2DGrafContext, J2DPane, J2DPicture, J2DScreen, SCRN } from "../Common/JSYSTEM/J2D.js";
+import { J2DGrafContext, J2DPicture, J2DScreen } from "../Common/JSYSTEM/J2D.js";
 import { BTI, BTIData } from "../Common/JSYSTEM/JUTTexture.js";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import { ViewerRenderInput } from "../viewer.js";
 import { EDemoMode } from "./d_demo.js";
 import { dProcName_e } from "./d_procname.js";
 import { dComIfG_resLoad, ResType } from "./d_resorce.js";
-import { cPhs__Status, fGlobals, fopMsgM_Delete, fpc_bs__Constructor, fpcPf__Register, fpcSCtRq_Request, leafdraw_class, msg_class } from "./framework.js";
+import { cPhs__Status, fGlobals, fopMsgM_Delete, fpc_bs__Constructor, fpcPf__Register, fpcSCtRq_Request, msg_class } from "./framework.js";
 import { dGlobals } from "./Main.js";
-import { MtxTrans } from "./m_do_mtx.js";
 
 let currentPlaceName: number | null = null;
 
