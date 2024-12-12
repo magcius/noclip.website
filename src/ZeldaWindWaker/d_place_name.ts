@@ -16,6 +16,22 @@ export const enum Placename {
     OutsetIsland,
     ForsakenFortress,
     DragonRoost,
+    ForestHaven,
+    GreatfishIsland,
+    WindfallIsland,
+    TowerOfTheGods,
+    KingdomOfHyrule,
+    GaleIsle,
+    HeadstoneIsle,
+    FireMountain,
+    IceRingIsle,
+    FairyAtoll,
+    DragonRoostCavern,
+    ForbiddenWoods,
+    TowerOfTheGods2,
+    EarthTemple,
+    WindTemple,
+    GanonsTower,
 }
 
 export const enum PlacenameState {
@@ -82,7 +98,8 @@ export class d_place_name extends msg_class {
         if (globals.scnPlay.placenameIndex === Placename.OutsetIsland) {
             img = globals.resCtrl.getObjectRes(ResType.Bti, `PName`, 0x07)
         } else {
-            const filename = `placename/pn_0${globals.scnPlay.placenameIndex + 1}.bti`; // @TODO: Need to support 2 digit numbers
+            const placenameId = (globals.scnPlay.placenameIndex + 1);
+            const filename = `placename/pn_${placenameId.toString().padStart(2, "0")}.bti`; 
             status = globals.modelCache.requestFileData(filename);
             if (status !== cPhs__Status.Complete)
                 return status;
