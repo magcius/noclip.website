@@ -92,7 +92,7 @@ export class d_place_name extends msg_class {
         this.pane.children[0].data.visible = false;
         this.pane.children[1].data.visible = false;
         const pic = this.pane.children[2] as J2DPicture;
-        pic.tex = img;
+        pic.setTexture(img);
     
         return cPhs__Status.Complete;
     }

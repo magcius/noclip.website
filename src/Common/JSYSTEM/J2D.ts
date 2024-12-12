@@ -321,91 +321,28 @@ export class J2DPicture extends J2DPane {
 
     private sdraw = new TSDraw(); // TODO: Time to move TSDraw out of Mario Galaxy?
     private materialHelper: GXMaterialHelperGfx;
-    public tex: BTIData; // TODO: Make private
+    private tex: BTIData;
 
-    constructor(data: PAN1, cache: GfxRenderCache, parent: J2DPane | null) {
+    constructor(data: PAN1, private cache: GfxRenderCache, parent: J2DPane | null) {
         super(data, cache, parent);
-
-        this.sdraw.setVtxDesc(GX.Attr.POS, true);
-        this.sdraw.setVtxDesc(GX.Attr.TEX0, true);
-        this.sdraw.setVtxDesc(GX.Attr.CLR0, true);
-
-        this.sdraw.beginDraw(cache);
-        this.sdraw.begin(GX.Command.DRAW_QUADS, 4);
-        this.sdraw.position3f32(0, 0, 0);
-        this.sdraw.color4color(GX.Attr.CLR0, colorNewFromRGBA8(this.data.colorCorners[0]));
-        this.sdraw.texCoord2f32(GX.Attr.TEX0, 0, 1);
-        this.sdraw.position3f32(0, 1, 0);
-        this.sdraw.color4color(GX.Attr.CLR0, colorNewFromRGBA8(this.data.colorCorners[1]));
-        this.sdraw.texCoord2f32(GX.Attr.TEX0, 0, 0);
-        this.sdraw.position3f32(1, 1, 0);
-        this.sdraw.color4color(GX.Attr.CLR0, colorNewFromRGBA8(this.data.colorCorners[3]));
-        this.sdraw.texCoord2f32(GX.Attr.TEX0, 1, 0);
-        this.sdraw.position3f32(1, 0, 0);
-        this.sdraw.color4color(GX.Attr.CLR0, colorNewFromRGBA8(this.data.colorCorners[2]));
-        this.sdraw.texCoord2f32(GX.Attr.TEX0, 1, 1);
-        this.sdraw.end();
-        this.sdraw.endDraw(cache);
-
-        const mb = new GXMaterialBuilder('J2DPane');
-        // Assume alpha is enabled. This is byte 1 on a JUTTexture, but noclip doesn't read it
-        mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
-        // 0: Multiply tex and vertex colors and alpha
-        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR0A0);
-        mb.setTevColorIn(0, GX.CC.ZERO, GX.CC.TEXC, GX.CC.RASC, GX.CC.ZERO);
-        mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.TEXA, GX.CA.RASA, GX.CA.ZERO);
-        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-        // 1: Multiply result alpha by dynamic alpha (this.drawAlpha)
-        mb.setTevOrder(1, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR_ZERO);
-        mb.setTevColorIn(1, GX.CC.CPREV, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO);
-        mb.setTevAlphaIn(1, GX.CA.ZERO, GX.CA.APREV, GX.CA.A0, GX.CA.ZERO);
-        mb.setTevColorOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-        mb.setTevAlphaOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-
-        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
-        mb.setZMode(false, GX.CompareType.ALWAYS, false);
-        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA, GX.LogicOp.SET);
-        mb.setUsePnMtxIdx(false);
-        this.materialHelper = new GXMaterialHelperGfx(mb.finish());
+        // @TODO: If the type > 4, load the image on construction
+        if (this.data.timg.type != 0 && this.data.timg.type != 2) { console.warn('Untested J2D feature'); }
 
         if (this.data.tlut.type != 0) { console.warn('Untested J2D feature'); }
+        if (this.data.uvBinding != 15) { console.warn('Untested J2D feature'); } 
         if (this.data.flags != 0) { console.warn('Untested J2D feature'); }
         if (this.data.colorBlack != 0 || this.data.colorWhite != 0xFFFFFFFF) { console.warn('Untested J2D feature'); }
         if (this.data.colorCorners[0] != 0xFFFFFFFF || this.data.colorCorners[1] != 0xFFFFFFFF
             || this.data.colorCorners[2] != 0xFFFFFFFF || this.data.colorCorners[3] != 0xFFFFFFFF) { console.warn('Untested J2D feature'); }
     }
 
+    public setTexture(tex: BTIData) {
+        this.tex = tex;
+        this.prepare();
+    }
+
     public override drawSelf(renderInstManager: GfxRenderInstManager, offsetX: number, offsetY: number, ctx2D: J2DGrafContext): void {
-        let u0, t1, u1, t2;
-
-        const texDimensions = [this.tex.btiTexture.width, this.tex.btiTexture.height];
-        const bindLeft = this.data.uvBinding & J2DUVBinding.Left;
-        const bindRight = this.data.uvBinding & J2DUVBinding.Right;
-        const bindTop = this.data.uvBinding & J2DUVBinding.Top;
-        const bindBottom = this.data.uvBinding & J2DUVBinding.Bottom;
-
-        if (bindLeft) {
-            u0 = 0.0;
-            u1 = bindRight ? 1.0 : (this.drawDimensions[0] / texDimensions[0]);
-        } else if (bindRight) {
-            u0 = 1.0 - (this.drawDimensions[0] / texDimensions[0]);
-            u1 = 1.0;
-        } else {
-            u0 = 0.5 - (this.drawDimensions[0] / texDimensions[0]) / 2.0;
-            u1 = 0.5 + (this.drawDimensions[0] / texDimensions[0]) / 2.0;
-        }
-
-        if (bindTop) {
-            t1 = 0.0;
-            t1 = bindBottom ? 1.0 : (this.drawDimensions[1] / texDimensions[1]);
-        } else if (bindBottom) {
-            t1 = 1.0 - (this.drawDimensions[1] / texDimensions[1]);
-            t1 = 1.0;
-        } else {
-            t1 = 0.5 - (this.drawDimensions[1] / texDimensions[1]) / 2.0;
-            t1 = 0.5 + (this.drawDimensions[1] / texDimensions[1]) / 2.0;
-        }
+        if(!this.tex) { return; }
 
         renderInstManager.pushTemplate();
         const renderInst = renderInstManager.newRenderInst();
@@ -429,6 +366,83 @@ export class J2DPicture extends J2DPane {
 
     public override destroy(device: GfxDevice): void {
         this.sdraw.destroy(device);
+    }
+
+    private prepare() {
+        assert(!!this.tex);
+
+        let u0, v0, v1, u1;
+        const texDimensions = [this.tex.btiTexture.width, this.tex.btiTexture.height];
+        const bindLeft = this.data.uvBinding & J2DUVBinding.Left;
+        const bindRight = this.data.uvBinding & J2DUVBinding.Right;
+        const bindTop = this.data.uvBinding & J2DUVBinding.Top;
+        const bindBottom = this.data.uvBinding & J2DUVBinding.Bottom;
+
+        if (bindLeft) {
+            u0 = 0.0;
+            u1 = bindRight ? 1.0 : (this.drawDimensions[0] / texDimensions[0]);
+        } else if (bindRight) {
+            u0 = 1.0 - (this.drawDimensions[0] / texDimensions[0]);
+            u1 = 1.0;
+        } else {
+            u0 = 0.5 - (this.drawDimensions[0] / texDimensions[0]) / 2.0;
+            u1 = 0.5 + (this.drawDimensions[0] / texDimensions[0]) / 2.0;
+        }
+
+        if (bindTop) {
+            v0 = 0.0;
+            v1 = bindBottom ? 1.0 : (this.drawDimensions[1] / texDimensions[1]);
+        } else if (bindBottom) {
+            v0 = 1.0 - (this.drawDimensions[1] / texDimensions[1]);
+            v1 = 1.0;
+        } else {
+            v0 = 0.5 - (this.drawDimensions[1] / texDimensions[1]) / 2.0;
+            v1 = 0.5 + (this.drawDimensions[1] / texDimensions[1]) / 2.0;
+        }
+
+
+        this.sdraw.setVtxDesc(GX.Attr.POS, true);
+        this.sdraw.setVtxDesc(GX.Attr.TEX0, true);
+        this.sdraw.setVtxDesc(GX.Attr.CLR0, true);
+
+        this.sdraw.beginDraw(this.cache);
+        this.sdraw.begin(GX.Command.DRAW_QUADS, 4);
+        this.sdraw.position3f32(0, 0, 0);
+        this.sdraw.color4color(GX.Attr.CLR0, colorNewFromRGBA8(this.data.colorCorners[0]));
+        this.sdraw.texCoord2f32(GX.Attr.TEX0, u0, v1);
+        this.sdraw.position3f32(0, 1, 0);
+        this.sdraw.color4color(GX.Attr.CLR0, colorNewFromRGBA8(this.data.colorCorners[1]));
+        this.sdraw.texCoord2f32(GX.Attr.TEX0, u0, v0);
+        this.sdraw.position3f32(1, 1, 0);
+        this.sdraw.color4color(GX.Attr.CLR0, colorNewFromRGBA8(this.data.colorCorners[3]));
+        this.sdraw.texCoord2f32(GX.Attr.TEX0, u1, v0);
+        this.sdraw.position3f32(1, 0, 0);
+        this.sdraw.color4color(GX.Attr.CLR0, colorNewFromRGBA8(this.data.colorCorners[2]));
+        this.sdraw.texCoord2f32(GX.Attr.TEX0, u1, v1);
+        this.sdraw.end();
+        this.sdraw.endDraw(this.cache);
+
+        const mb = new GXMaterialBuilder('J2DPane');
+        // Assume alpha is enabled. This is byte 1 on a JUTTexture, but noclip doesn't read it
+        mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+        // 0: Multiply tex and vertex colors and alpha
+        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR0A0);
+        mb.setTevColorIn(0, GX.CC.ZERO, GX.CC.TEXC, GX.CC.RASC, GX.CC.ZERO);
+        mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.TEXA, GX.CA.RASA, GX.CA.ZERO);
+        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        // 1: Multiply result alpha by dynamic alpha (this.drawAlpha)
+        mb.setTevOrder(1, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR_ZERO);
+        mb.setTevColorIn(1, GX.CC.CPREV, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO);
+        mb.setTevAlphaIn(1, GX.CA.ZERO, GX.CA.APREV, GX.CA.A0, GX.CA.ZERO);
+        mb.setTevColorOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+
+        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
+        mb.setZMode(false, GX.CompareType.ALWAYS, false);
+        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA, GX.LogicOp.SET);
+        mb.setUsePnMtxIdx(false);
+        this.materialHelper = new GXMaterialHelperGfx(mb.finish());
     }
 }
 //#endregion
