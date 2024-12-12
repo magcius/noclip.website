@@ -35,7 +35,7 @@ function parseResourceReference(dst: ResRef, buffer: ArrayBufferSlice, offset: n
     const nameLen = dataView.getUint8(offset + 1);
     dst.name = readString(buffer, offset + 2, nameLen);
 
-    if (dst.type == 2 || dst.type == 3 || dst.type == 4) {
+    if (dst.type === 2 || dst.type === 3 || dst.type === 4) {
         dst.name = "";
     }
 
@@ -255,8 +255,8 @@ export class J2DPane {
             }
         }
 
-        if (this.data.basePos != 0) { console.warn('Untested J2D feature'); }
-        if (this.data.rot != 0) { console.warn('Untested J2D feature'); }
+        if (this.data.basePos !== 0) { console.warn('Untested J2D feature'); }
+        if (this.data.rot !== 0) { console.warn('Untested J2D feature'); }
     }
 
     // NOTE: Overwritten by child classes 
@@ -300,11 +300,11 @@ export class J2DPane {
     }
 
     private makeMatrix() {
-        if (this.data.rot != 0) {
+        if (this.data.rot !== 0) {
             debugger; // Untested
             // TODO:
             // MTXTrans(stack1, -mBasePosition.x, -mBasePosition.y, 0.0f);
-            // f32 rot = mRotationAxis == ROTATE_Z ? -mRotation : mRotation;
+            // f32 rot = mRotationAxis === ROTATE_Z ? -mRotation : mRotation;
             // MTXRotDeg(stack2, mRotationAxis, rot);
             // MTXTrans(stack3, mBasePosition.x + x, mBasePosition.y + y, 0.0f);
             // MTXConcat(stack2, stack1, mMtx);
@@ -327,14 +327,14 @@ export class J2DPicture extends J2DPane {
     constructor(data: PAN1, private cache: GfxRenderCache, parent: J2DPane | null) {
         super(data, cache, parent);
         // @TODO: If the type > 4, load the image on construction
-        if (this.data.timg.type != 0 && this.data.timg.type != 2) { console.warn('Untested J2D feature'); }
+        if (this.data.timg.type !== 0 && this.data.timg.type !== 2) { console.warn('Untested J2D feature'); }
 
-        if (this.data.tlut.type != 0) { console.warn('Untested J2D feature'); }
-        if (this.data.uvBinding != 15) { console.warn('Untested J2D feature'); } 
-        if (this.data.flags != 0) { console.warn('Untested J2D feature'); }
-        if (this.data.colorBlack != 0 || this.data.colorWhite != 0xFFFFFFFF) { console.warn('Untested J2D feature'); }
-        if (this.data.colorCorners[0] != 0xFFFFFFFF || this.data.colorCorners[1] != 0xFFFFFFFF
-            || this.data.colorCorners[2] != 0xFFFFFFFF || this.data.colorCorners[3] != 0xFFFFFFFF) { console.warn('Untested J2D feature'); }
+        if (this.data.tlut.type !== 0) { console.warn('Untested J2D feature'); }
+        if (this.data.uvBinding !== 15) { console.warn('Untested J2D feature'); } 
+        if (this.data.flags !== 0) { console.warn('Untested J2D feature'); }
+        if (this.data.colorBlack !== 0 || this.data.colorWhite !== 0xFFFFFFFF) { console.warn('Untested J2D feature'); }
+        if (this.data.colorCorners[0] !== 0xFFFFFFFF || this.data.colorCorners[1] !== 0xFFFFFFFF
+            || this.data.colorCorners[2] !== 0xFFFFFFFF || this.data.colorCorners[3] !== 0xFFFFFFFF) { console.warn('Untested J2D feature'); }
     }
 
     public setTexture(tex: BTIData) {

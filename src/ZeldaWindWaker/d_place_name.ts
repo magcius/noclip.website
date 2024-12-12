@@ -26,18 +26,18 @@ export const enum PlacenameState {
 
 export function updatePlaceName(globals: dGlobals) {
     // From d_menu_window::dMs_placenameMove()
-    if(globals.scnPlay.demo.getMode() == EDemoMode.Playing) {
+    if(globals.scnPlay.demo.getMode() === EDemoMode.Playing) {
         const frameNo = globals.scnPlay.demo.getFrameNoMsg();
         const demoName = globals.scnPlay.demo.getName();
 
-        if(demoName == 'awake') { 
+        if(demoName === 'awake') { 
             if (frameNo >= 200 && frameNo < 350) {
                 globals.scnPlay.placenameIndex = Placename.OutsetIsland;
                 globals.scnPlay.placenameState = PlacenameState.Visible;
             } else if(frameNo >= 0x15e) {
                 globals.scnPlay.placenameState = PlacenameState.Hidden;
             }
-        } else if (demoName == 'majyuu_shinnyuu') {
+        } else if (demoName === 'majyuu_shinnyuu') {
             if (frameNo >= 0xb54 && frameNo < 0xbea) {
                 globals.scnPlay.placenameIndex = Placename.ForsakenFortress;
                 globals.scnPlay.placenameState = PlacenameState.Visible;
@@ -49,12 +49,12 @@ export function updatePlaceName(globals: dGlobals) {
 
     // From d_meter::dMeter_placeNameMove 
     if(currentPlaceName === null) {
-        if (globals.scnPlay.placenameState == PlacenameState.Visible) {
+        if (globals.scnPlay.placenameState === PlacenameState.Visible) {
             fpcSCtRq_Request(globals.frameworkGlobals, null, dProcName_e.d_place_name, null);
             currentPlaceName = globals.scnPlay.placenameIndex;
         }
     } else {
-        if (globals.scnPlay.placenameState == PlacenameState.Hidden) {
+        if (globals.scnPlay.placenameState === PlacenameState.Hidden) {
             currentPlaceName = null;
         }
     }
@@ -69,7 +69,7 @@ export class d_place_name extends msg_class {
 
     public override load(globals: dGlobals): cPhs__Status {
         let status = dComIfG_resLoad(globals, 'PName');
-        if (status != cPhs__Status.Complete)
+        if (status !== cPhs__Status.Complete)
             return status;
 
         const screen = globals.resCtrl.getObjectRes(ResType.Blo, `PName`, 0x04)
@@ -114,9 +114,9 @@ export class d_place_name extends msg_class {
     }
 
     public override execute(globals: dGlobals, deltaTimeFrames: number): void {
-        if (globals.scnPlay.placenameState == PlacenameState.Visible) {
+        if (globals.scnPlay.placenameState === PlacenameState.Visible) {
             this.openAnime(deltaTimeFrames);
-        } else if (globals.scnPlay.placenameState == PlacenameState.Hidden) {
+        } else if (globals.scnPlay.placenameState === PlacenameState.Hidden) {
             if (this.closeAnime(deltaTimeFrames))
                 fopMsgM_Delete(globals.frameworkGlobals, this);
         }
