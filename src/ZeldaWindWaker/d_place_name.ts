@@ -25,6 +25,8 @@ export const enum PlacenameState {
 }
 
 export function updatePlaceName(globals: dGlobals) {
+    // TODO: Initiate other place names manually
+
     // From d_menu_window::dMs_placenameMove()
     if (globals.scnPlay.demo.getMode() === EDemoMode.Playing) {
         const frameNo = globals.scnPlay.demo.getFrameNoMsg();
@@ -98,18 +100,6 @@ export class d_place_name extends msg_class {
     }
 
     public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        const pane = this.pane.children[2];
-
-        let x = (pane.data.x / 640);
-        let y = 1.0 - (pane.data.y / 480);
-
-        let h = (pane.data.h / 480);
-        let w = h * (pane.data.w / pane.data.h) / globals.camera.aspect;
-
-        // @TODO: Remove. Do this in J2D
-        MtxTrans([x, y, -1], false, pane.drawMtx);
-        mat4.scale(pane.drawMtx, pane.drawMtx, [w, h, 1]);
-
         renderInstManager.setCurrentList(globals.dlst.ui[0]);
         this.pane.draw(renderInstManager, viewerInput, this.ctx2D);
     }
