@@ -43,6 +43,20 @@ function parseResourceReference(dst: ResRef, buffer: ArrayBufferSlice, offset: n
 }
 //#endregion
 
+//#region Enums
+/**
+ * If set, the UVs for a quad will be pinned (bound) to the quad edge. If not set, the UVs will be clipped by the quad. 
+ * For instance, if the texture is 200 pixels wide, but the quad is 100 pixels wide and Right is not set, the texture 
+ * will be clipped by half. If both Left and Right are set, the texture will be squashed to fit within the quad.
+ */
+enum J2DUVBinding {
+    Bottom = (1 << 0),
+    Top = (1 << 1),
+    Right = (1 << 2),
+    Left = (1 << 3),
+};
+//#endregion
+
 //#region INF1
 export interface INF1 {
     width: number;
@@ -63,7 +77,7 @@ function readINF1Chunk(buffer: ArrayBufferSlice): INF1 {
 interface PIC1 extends PAN1 {
     timg: ResRef;
     tlut: ResRef;
-    binding: number;
+    uvBinding: number;
     flags: number;
     colorBlack: Color;
     colorWhite: Color;
@@ -95,7 +109,7 @@ function readPIC1Chunk(buffer: ArrayBufferSlice, parent: PAN1 | null): PIC1 {
     if( dataCount >= 7) { colorWhite = view.getUint32(offset + 6); }
     if( dataCount >= 8) { colorCorner = view.getUint32(offset + 10); }
 
-    return {...pane, timg, tlut, binding, flags, colorBlack: colorNewFromRGBA8(colorBlack), 
+    return {...pane, timg, tlut, uvBinding: binding, flags, colorBlack: colorNewFromRGBA8(colorBlack), 
         colorWhite: colorNewFromRGBA8(colorWhite), colorCorner: colorNewFromRGBA8(colorCorner) };
 }
 //#endregion J2DPicture
@@ -205,7 +219,7 @@ export class J2DGrafContext {
     sceneParams = new SceneParams();
 
     constructor(device: GfxDevice) {
-        projectionMatrixForCuboid(this.sceneParams.u_Projection, 0, 1, 0, 1, -1, 1);
+        projectionMatrixForCuboid(this.sceneParams.u_Projection, 0, 1, 0, 1, -1, 0);
         const clipSpaceNearZ = device.queryVendorInfo().clipSpaceNearZ;
         projectionMatrixConvertClipSpaceNearZ(this.sceneParams.u_Projection, clipSpaceNearZ, GfxClipSpaceNearZ.NegativeOne);
     }
@@ -224,7 +238,7 @@ export class J2DPane {
     public drawMtx = mat4.create();
     public drawAlpha = 1.0;
     public drawPos = vec2.create();
-    public drawRange = vec2.create();
+    public drawDimensions = vec2.create();
 
     constructor(public data: PAN1, cache: GfxRenderCache, parent: J2DPane | null = null ) {
         this.parent = parent;
@@ -248,7 +262,7 @@ export class J2DPane {
         if(this.data.visible && boundsValid) {
             // Src data is in GameCube pixels (640x480), convert to normalized screen coordinates [0-1]. 
             vec2.set(this.drawPos, this.data.x / 640, this.data.y / 480);
-            vec2.set(this.drawRange, this.data.w / 480 /* TODO: Multiply by aspect */ , this.data.h / 480);
+            vec2.set(this.drawDimensions, this.data.w / 480 /* TODO: Multiply by aspect */ , this.data.h / 480);
             this.drawAlpha = this.data.alpha / 0xFF;
 
             if(this.parent) {
@@ -264,7 +278,7 @@ export class J2DPane {
                 this.makeMatrix();
             }
 
-            if(this.drawRange[0] > 0 && this.drawRange[1] > 0) {
+            if(this.drawDimensions[0] > 0 && this.drawDimensions[1] > 0) {
                 this.drawSelf(renderInstManager, offsetX, offsetY, ctx);
                 for (const pane of this.children) {
                     pane.draw(ctx, renderInstManager, offsetX, offsetY, clip);
@@ -274,7 +288,9 @@ export class J2DPane {
     }
 
     public destroy(device: GfxDevice): void {
-        // TODO: Destroy children
+        for (const pane of this.children) {
+            pane.destroy(device);
+        }
     }
 
     private makeMatrix() {
@@ -299,6 +315,7 @@ export class J2DPicture extends J2DPane {
     private sdraw = new TSDraw(); // TODO: Time to move TSDraw out of Mario Galaxy?
     private materialHelper: GXMaterialHelperGfx;
     public tex: BTIData; // TODO: Make private
+    public override data: PIC1;
 
     constructor(data: PAN1, cache: GfxRenderCache, parent: J2DPane | null ) {
         super(data, cache, parent);
@@ -333,6 +350,36 @@ export class J2DPicture extends J2DPane {
     }
 
     public override drawSelf(renderInstManager: GfxRenderInstManager, offsetX: number, offsetY: number, ctx2D: J2DGrafContext): void {
+        let u0, t1, u1, t2;
+        
+        const texDimensions = [this.tex.btiTexture.width, this.tex.btiTexture.height]; 
+        const bindLeft = this.data.uvBinding & J2DUVBinding.Left;
+        const bindRight = this.data.uvBinding & J2DUVBinding.Right;
+        const bindTop = this.data.uvBinding & J2DUVBinding.Top;
+        const bindBottom = this.data.uvBinding & J2DUVBinding.Bottom;
+        
+        if (bindLeft) {
+            u0 = 0.0;
+            u1 = bindRight ? 1.0 : (this.drawDimensions[0] / texDimensions[0]);
+        } else if (bindRight) {
+            u0 = 1.0 - (this.drawDimensions[0] / texDimensions[0]);
+            u1 = 1.0;
+        } else {
+            u0 = 0.5 - (this.drawDimensions[0] / texDimensions[0]) / 2.0;
+            u1 = 0.5 + (this.drawDimensions[0] / texDimensions[0]) / 2.0;
+        }
+
+        if (bindTop) {
+            t1 = 0.0;
+            t1 = bindBottom ? 1.0 : (this.drawDimensions[1] / texDimensions[1]);
+        } else if (bindBottom) {
+            t1 = 1.0 - (this.drawDimensions[1] / texDimensions[1]);
+            t1 = 1.0;
+        } else {
+            t1 = 0.5 - (this.drawDimensions[1] / texDimensions[1]) / 2.0;
+            t1 = 0.5 + (this.drawDimensions[1] / texDimensions[1]) / 2.0;
+        }
+
         renderInstManager.pushTemplate();
         const renderInst = renderInstManager.newRenderInst();
 
@@ -344,7 +391,7 @@ export class J2DPicture extends J2DPane {
         this.materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
         
-        const scale = mat4.fromScaling(scratchMat, [this.drawRange[0], this.drawRange[1], 1])
+        const scale = mat4.fromScaling(scratchMat, [this.drawDimensions[0], this.drawDimensions[1], 1])
         mat4.mul(drawParams.u_PosMtx[0], this.drawMtx, scale);
         this.materialHelper.allocateDrawParamsDataOnInst(renderInst, drawParams);
 
