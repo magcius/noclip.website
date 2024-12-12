@@ -20,6 +20,7 @@ const materialParams = new MaterialParams();
 const drawParams = new DrawParams();
 
 const scratchVec4a = vec4.create();
+const scratchMat = mat4.create();
 //#endregion
 
 //#region  Helpers
@@ -204,7 +205,7 @@ export class J2DGrafContext {
     sceneParams = new SceneParams();
 
     constructor(device: GfxDevice) {
-        projectionMatrixForCuboid(this.sceneParams.u_Projection, 0, 1, 0, 1, 0, 1);
+        projectionMatrixForCuboid(this.sceneParams.u_Projection, 0, 1, 0, 1, -1, 1);
         const clipSpaceNearZ = device.queryVendorInfo().clipSpaceNearZ;
         projectionMatrixConvertClipSpaceNearZ(this.sceneParams.u_Projection, clipSpaceNearZ, GfxClipSpaceNearZ.NegativeOne);
     }
@@ -245,17 +246,22 @@ export class J2DPane {
         const boundsValid = this.data.w > 0 && this.data.h > 0;
 
         if(this.data.visible && boundsValid) {
-            // Src data is in GameCube pixels (640x480, origin bottom left), convert to screen coordinates [0-1] origin upper left. 
-            vec2.set(this.drawPos, this.data.x / 640, 1.0 - this.data.y / 480);
+            // Src data is in GameCube pixels (640x480), convert to normalized screen coordinates [0-1]. 
+            vec2.set(this.drawPos, this.data.x / 640, this.data.y / 480);
             vec2.set(this.drawRange, this.data.w / 480 /* TODO: Multiply by aspect */ , this.data.h / 480);
+            this.drawAlpha = this.data.alpha / 0xFF;
 
             if(this.parent) {
-                // TODO: Handle parents offsets and alpha
+                this.makeMatrix();
+                mat4.mul(this.drawMtx, this.parent.drawMtx, this.drawMtx );
+                if(this.data.inheritAlpha) {
+                    this.drawAlpha *= this.parent.drawAlpha;
+                }
             } else {
+                // Offsets only affect the root pane
                 this.drawPos[0] += offsetX;
                 this.drawPos[1] += offsetY;
-                // this.makeMatrix();
-                this.drawAlpha = this.data.alpha;
+                this.makeMatrix();
             }
 
             if(this.drawRange[0] > 0 && this.drawRange[1] > 0) {
@@ -265,55 +271,6 @@ export class J2DPane {
                 }
             }
         }
-
-        // JSUTree<J2DPane> * pParent = mPaneTree.getParent();
-        // J2DPane * pParentPane = NULL;
-        // if (pParent != NULL)
-        //     pParentPane = pParent->getObject();
-
-        // if (mVisible && mBounds.isValid()) {
-        //     mScreenBounds = mBounds;
-        //     mDrawBounds = mBounds;
-
-        //     if (pParentPane != NULL) {
-        //         JGeometry::TBox2<f32> screenBounds = pParentPane->mScreenBounds;
-        //         mScreenBounds.addPos(screenBounds.i.x, screenBounds.i.y);
-        //         MTXConcat(pParentPane->mDrawMtx, mMtx, mDrawMtx);
-
-        //         if (clip) {
-        //             JGeometry::TBox2<f32> screenBounds = pParentPane->mScreenBounds;
-        //             mDrawBounds.addPos(screenBounds.i.x, screenBounds.i.y);
-        //             mDrawBounds.intersect(pParentPane->mDrawBounds);
-        //         }
-
-        //         mDrawAlpha = mAlpha;
-        //         if (mInheritAlpha)
-        //             mDrawAlpha = (mAlpha * pParentPane->mDrawAlpha) / 0xFF;
-        //     } else {
-        //         mScreenBounds.addPos(x, y);
-        //         makeMatrix(mBounds.i.x + x, mBounds.i.y + y);
-        //         MTXCopy(mMtx, mDrawMtx);
-        //         mDrawBounds.set(mScreenBounds);
-        //         mDrawAlpha = mAlpha;
-        //     }
-
-        //     JGeometry::TBox2<f32> clipBounds(0.0f, 0.0f, 0.0f, 0.0f);
-        //     if (clip)
-        //         ((J2DOrthoGraph*)pCtx)->scissorBounds(&clipBounds, &mDrawBounds);
-
-        //     if (mDrawBounds.isValid() || !clip) {
-        //         ctx.place(mScreenBounds);
-        //         if (clip) {
-        //             ctx.scissor(clipBounds);
-        //             ctx.setScissor();
-        //         }
-        //         GXSetCullMode((GXCullMode)mCullMode);
-        //         drawSelf(x, y, &ctx.mPosMtx);
-
-        //         for (JSUTreeIterator<J2DPane> iter = mPaneTree.getFirstChild(); iter != mPaneTree.getEndChild(); ++iter)
-        //             iter->draw(0.0f, 0.0f, pCtx, clip);
-        //     }
-        // }
     }
 
     public destroy(device: GfxDevice): void {
@@ -331,8 +288,7 @@ export class J2DPane {
             // MTXConcat(stack2, stack1, mMtx);
             // MTXConcat(stack3, mMtx, mMtx);
         } else {
-            computeModelMatrixT(this.drawMtx, this.drawPos[0], this.drawPos[1], -1 );
-            mat4.scale(this.drawMtx, this.drawMtx, [this.drawRange[0], this.drawRange[1], 1]);
+            computeModelMatrixT(this.drawMtx, this.drawPos[0], this.drawPos[1], 0 );
         }
     }
 }
@@ -350,16 +306,15 @@ export class J2DPicture extends J2DPane {
         this.sdraw.setVtxDesc(GX.Attr.POS, true);
         this.sdraw.setVtxDesc(GX.Attr.TEX0, true);
 
-        const size = 1;
         this.sdraw.beginDraw(cache);
         this.sdraw.begin(GX.Command.DRAW_QUADS, 4);
         this.sdraw.position3f32(0, 0, 0);
         this.sdraw.texCoord2f32(GX.Attr.TEX0, 0, 1);
-        this.sdraw.position3f32(0, size, 0);
+        this.sdraw.position3f32(0, 1, 0);
         this.sdraw.texCoord2f32(GX.Attr.TEX0, 0, 0);
-        this.sdraw.position3f32(size, size, 0);
+        this.sdraw.position3f32(1, 1, 0);
         this.sdraw.texCoord2f32(GX.Attr.TEX0, 1, 0);
-        this.sdraw.position3f32(size, 0, 0);
+        this.sdraw.position3f32(1, 0, 0);
         this.sdraw.texCoord2f32(GX.Attr.TEX0, 1, 1);
         this.sdraw.end();
         this.sdraw.endDraw(cache);
@@ -388,8 +343,9 @@ export class J2DPicture extends J2DPane {
         this.tex.fillTextureMapping(materialParams.m_TextureMapping[0]);
         this.materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
-
-        mat4.copy(drawParams.u_PosMtx[0], this.drawMtx);
+        
+        const scale = mat4.fromScaling(scratchMat, [this.drawRange[0], this.drawRange[1], 1])
+        mat4.mul(drawParams.u_PosMtx[0], this.drawMtx, scale);
         this.materialHelper.allocateDrawParamsDataOnInst(renderInst, drawParams);
 
         renderInstManager.submitRenderInst(renderInst);
