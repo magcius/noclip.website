@@ -127,7 +127,7 @@ export class d_place_name extends msg_class {
         if (this.animFrame < 10) {
             this.animFrame += deltaTimeFrames;
 
-            const pct = (this.animFrame / 10)
+            const pct = Math.min(this.animFrame / 10, 1.0)
             const alpha = pct * pct;
 
             this.pane.data.alpha = alpha * 0xFF;
@@ -138,7 +138,7 @@ export class d_place_name extends msg_class {
         if (this.animFrame > 0) {
             this.animFrame -= deltaTimeFrames;
 
-            const pct = (this.animFrame / 10)
+            const pct = Math.min(this.animFrame / 10, 1.0)
             const alpha = pct * pct;
 
             this.pane.data.alpha = alpha * 0xFF;
