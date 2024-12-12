@@ -79,9 +79,9 @@ interface PIC1 extends PAN1 {
     tlut: ResRef;
     uvBinding: number;
     flags: number;
-    colorBlack: Color;
-    colorWhite: Color;
-    colorCorner: Color;
+    colorBlack: number;
+    colorWhite: number;
+    colorCorners: number[];
 }
 
 function readPIC1Chunk(buffer: ArrayBufferSlice, parent: PAN1 | null): PIC1 {
@@ -102,15 +102,17 @@ function readPIC1Chunk(buffer: ArrayBufferSlice, parent: PAN1 | null): PIC1 {
     let flags = 0;
     let colorBlack = 0x0;
     let colorWhite = 0xFFFFFFFF;
-    let colorCorner = 0xFFFFFFFF;
+    let colorCorners = [0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF];
 
     if( dataCount >= 4) { flags = view.getUint8(offset + 0); }
     if( dataCount >= 6) { colorBlack = view.getUint32(offset + 2); }
     if( dataCount >= 7) { colorWhite = view.getUint32(offset + 6); }
-    if( dataCount >= 8) { colorCorner = view.getUint32(offset + 10); }
+    if( dataCount >= 8) { colorCorners[0] = view.getUint32(offset + 10); }
+    if( dataCount >= 9) { colorCorners[1] = view.getUint32(offset + 10); }
+    if( dataCount >= 10) { colorCorners[2] = view.getUint32(offset + 10); }
+    if( dataCount >= 11) { colorCorners[3] = view.getUint32(offset + 10); }
 
-    return {...pane, timg, tlut, uvBinding: binding, flags, colorBlack: colorNewFromRGBA8(colorBlack), 
-        colorWhite: colorNewFromRGBA8(colorWhite), colorCorner: colorNewFromRGBA8(colorCorner) };
+    return {...pane, timg, tlut, uvBinding: binding, flags, colorBlack, colorWhite, colorCorners };
 }
 //#endregion J2DPicture
 
@@ -251,6 +253,9 @@ export class J2DPane {
                 default: console.warn('Unsupported J2D type:', pane.type); break;
             }
         }
+
+        if(this.data.basePos != 0) { console.warn('Untested J2D feature'); }
+        if(this.data.rot != 0) { console.warn('Untested J2D feature'); }
     }
 
     // NOTE: Overwritten by child classes 
@@ -312,41 +317,73 @@ export class J2DPane {
 
 //#region J2DPicture
 export class J2DPicture extends J2DPane {
+    public override data: PIC1;
+
     private sdraw = new TSDraw(); // TODO: Time to move TSDraw out of Mario Galaxy?
     private materialHelper: GXMaterialHelperGfx;
     public tex: BTIData; // TODO: Make private
-    public override data: PIC1;
 
     constructor(data: PAN1, cache: GfxRenderCache, parent: J2DPane | null ) {
         super(data, cache, parent);
         
         this.sdraw.setVtxDesc(GX.Attr.POS, true);
         this.sdraw.setVtxDesc(GX.Attr.TEX0, true);
+        this.sdraw.setVtxDesc(GX.Attr.CLR0, true);
+
+        const colors = this.data.colorCorners.map(c => colorNewFromRGBA8(this.data.colorCorners[0]));
+        colors.forEach(c => c.a = 0.5);
 
         this.sdraw.beginDraw(cache);
         this.sdraw.begin(GX.Command.DRAW_QUADS, 4);
         this.sdraw.position3f32(0, 0, 0);
+        this.sdraw.color4color(GX.Attr.CLR0, colors[0] );
         this.sdraw.texCoord2f32(GX.Attr.TEX0, 0, 1);
         this.sdraw.position3f32(0, 1, 0);
+        this.sdraw.color4color(GX.Attr.CLR0, colors[1] );
         this.sdraw.texCoord2f32(GX.Attr.TEX0, 0, 0);
         this.sdraw.position3f32(1, 1, 0);
+        this.sdraw.color4color(GX.Attr.CLR0, colors[3] );
         this.sdraw.texCoord2f32(GX.Attr.TEX0, 1, 0);
         this.sdraw.position3f32(1, 0, 0);
+        this.sdraw.color4color(GX.Attr.CLR0, colors[2] );
         this.sdraw.texCoord2f32(GX.Attr.TEX0, 1, 1);
         this.sdraw.end();
         this.sdraw.endDraw(cache);
 
         const mb = new GXMaterialBuilder('J2DPane');
-        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
         mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO);
-        mb.setTevColorIn(0, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.TEXC);
-        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, false, GX.Register.PREV);
-        mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.TEXA);
-        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, false, GX.Register.PREV);
-        mb.setZMode(true, GX.CompareType.LEQUAL, false);
-        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA);
+        mb.setTevColorIn(0, GX.CC.TEXC, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO);
+        
+        // Assume alpha is enabled. This is byte 1 on a JUTTexture, but noclip doesn't read it
+        mb.setTevAlphaIn(0, GX.CA.TEXA, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO);
+
+        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+
+        // TODO:
+        // GXSetTevKColor(GX_KCOLOR0, mBlendKonstColor);
+        // GXSetTevKColor(GX_KCOLOR2, mBlendKonstAlpha);
+
+        // TODO: Why isn't this using the alpha from the vertex colors?
+        if( true /* Alpha */) {
+            mb.setTevOrder(1, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0);
+            mb.setTevColorIn(1, GX.CC.CPREV, GX.CC.RASC, GX.CC.ZERO, GX.CC.ZERO);
+            mb.setTevAlphaIn(1, GX.CA.APREV, GX.CA.RASA, GX.CA.ZERO, GX.CA.ZERO);
+            mb.setTevColorOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+            mb.setTevAlphaOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        }
+
+        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
+        mb.setZMode(false, GX.CompareType.ALWAYS, false);
+        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA, GX.LogicOp.SET);
         mb.setUsePnMtxIdx(false);
         this.materialHelper = new GXMaterialHelperGfx(mb.finish());
+
+        if(this.data.tlut.type != 0)  { console.warn('Untested J2D feature'); }
+        if(this.data.flags != 0) { console.warn('Untested J2D feature'); }
+        if(this.data.colorBlack != 0 || this.data.colorWhite != 0xFFFFFFFF) { console.warn('Untested J2D feature'); }
+        if(this.data.colorCorners[0] != 0xFFFFFFFF || this.data.colorCorners[1] != 0xFFFFFFFF
+            || this.data.colorCorners[2] != 0xFFFFFFFF || this.data.colorCorners[3] != 0xFFFFFFFF) { console.warn('Untested J2D feature'); }
     }
 
     public override drawSelf(renderInstManager: GfxRenderInstManager, offsetX: number, offsetY: number, ctx2D: J2DGrafContext): void {
