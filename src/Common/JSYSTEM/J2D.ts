@@ -227,7 +227,7 @@ export class BLO {
     }
 }
 
-//#endregion J2Screen
+//#endregion Loading/J2Screen
 
 //#region J2DPane
 export class J2DPane {
@@ -445,4 +445,16 @@ export class J2DPicture extends J2DPane {
         this.materialHelper = new GXMaterialHelperGfx(mb.finish());
     }
 }
+//#endregion
+
+//#region J2DScreen
+export class J2DScreen extends J2DPane {
+    public color: Color
+
+    constructor(data: SCRN, cache: GfxRenderCache) {
+        super(data.panes[0], cache, null);
+        this.color = data.inf1.color;
+    }
+}
+
 //#endregion

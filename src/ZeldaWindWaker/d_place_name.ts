@@ -1,5 +1,5 @@
 import { mat4, vec3 } from "gl-matrix";
-import { J2DGrafContext, J2DPane, J2DPicture, SCRN } from "../Common/JSYSTEM/J2D.js";
+import { J2DGrafContext, J2DPane, J2DPicture, J2DScreen, SCRN } from "../Common/JSYSTEM/J2D.js";
 import { BTI, BTIData } from "../Common/JSYSTEM/JUTTexture.js";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import { ViewerRenderInput } from "../viewer.js";
@@ -65,7 +65,7 @@ export function updatePlaceName(globals: dGlobals) {
 
 export class d_place_name extends msg_class {
     public static PROCESS_NAME = dProcName_e.d_place_name;
-    private pane: J2DPane;
+    private screen: J2DScreen;
     private ctx2D: J2DGrafContext;
     private animFrame: number = 0;
 
@@ -90,10 +90,10 @@ export class d_place_name extends msg_class {
             img = new BTIData(globals.context.device, globals.renderer.renderCache, BTI.parse(imgData, filename).texture);
         }
 
-        this.pane = new J2DPane(screen.panes[0], globals.renderer.renderCache);
-        this.pane.children[0].data.visible = false;
-        this.pane.children[1].data.visible = false;
-        const pic = this.pane.children[2] as J2DPicture;
+        this.screen = new J2DScreen(screen, globals.renderer.renderCache);
+        this.screen.children[0].data.visible = false;
+        this.screen.children[1].data.visible = false;
+        const pic = this.screen.children[2] as J2DPicture;
         pic.setTexture(img);
 
         return cPhs__Status.Complete;
@@ -101,7 +101,7 @@ export class d_place_name extends msg_class {
 
     public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         renderInstManager.setCurrentList(globals.dlst.ui[0]);
-        this.pane.draw(renderInstManager, viewerInput, this.ctx2D);
+        this.screen.draw(renderInstManager, viewerInput, this.ctx2D);
     }
 
     public override execute(globals: dGlobals, deltaTimeFrames: number): void {
@@ -120,7 +120,7 @@ export class d_place_name extends msg_class {
             const pct = Math.min(this.animFrame / 10, 1.0)
             const alpha = pct * pct;
 
-            this.pane.data.alpha = alpha * 0xFF;
+            this.screen.data.alpha = alpha * 0xFF;
         }
     }
 
@@ -131,7 +131,7 @@ export class d_place_name extends msg_class {
             const pct = Math.min(this.animFrame / 10, 1.0)
             const alpha = pct * pct;
 
-            this.pane.data.alpha = alpha * 0xFF;
+            this.screen.data.alpha = alpha * 0xFF;
         }
 
         return this.animFrame <= 0;
