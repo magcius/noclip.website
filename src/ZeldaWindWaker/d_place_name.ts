@@ -48,7 +48,7 @@ export function updatePlaceName(globals: dGlobals) {
     }
 
     // From d_meter::dMeter_placeNameMove 
-    if(!currentPlaceName) {
+    if(currentPlaceName === null) {
         if (globals.scnPlay.placenameState == PlacenameState.Visible) {
             fpcSCtRq_Request(globals.frameworkGlobals, null, dProcName_e.d_place_name, null);
             currentPlaceName = globals.scnPlay.placenameIndex;
