@@ -5,7 +5,7 @@ import { Color, colorNewFromRGBA8 } from "../../Color.js";
 import { GfxRenderInst, GfxRenderInstManager } from "../../gfx/render/GfxRenderInstManager.js";
 import * as GX_Material from '../../gx/gx_material.js';
 import * as GX from '../../gx/gx_enum.js';
-import { DrawParams, fillSceneParamsData, GXMaterialHelperGfx, MaterialParams, SceneParams, ub_SceneParamsBufferSize } from "../../gx/gx_render.js";
+import { ColorKind, DrawParams, fillSceneParamsData, GXMaterialHelperGfx, MaterialParams, SceneParams, ub_SceneParamsBufferSize } from "../../gx/gx_render.js";
 import { GfxClipSpaceNearZ, GfxDevice } from "../../gfx/platform/GfxPlatform.js";
 import { computeModelMatrixT, projectionMatrixForCuboid } from "../../MathHelpers.js";
 import { projectionMatrixConvertClipSpaceNearZ } from "../../gfx/helpers/ProjectionHelpers.js";
@@ -152,7 +152,7 @@ function readPAN1Chunk(buffer: ArrayBufferSlice, parent: PAN1 | null): PAN1 {
 
     let rot = 0;
     let basePos = 0;
-    let alpha = 0;
+    let alpha = 0xFF;
     let inheritAlpha = true;
 
     if(dataCount >= 7) { rot = view.getUint16(offset); offset += 2; }
@@ -330,48 +330,38 @@ export class J2DPicture extends J2DPane {
         this.sdraw.setVtxDesc(GX.Attr.TEX0, true);
         this.sdraw.setVtxDesc(GX.Attr.CLR0, true);
 
-        const colors = this.data.colorCorners.map(c => colorNewFromRGBA8(this.data.colorCorners[0]));
-        colors.forEach(c => c.a = 0.5);
-
         this.sdraw.beginDraw(cache);
         this.sdraw.begin(GX.Command.DRAW_QUADS, 4);
         this.sdraw.position3f32(0, 0, 0);
-        this.sdraw.color4color(GX.Attr.CLR0, colors[0] );
+        this.sdraw.color4color(GX.Attr.CLR0, colorNewFromRGBA8(this.data.colorCorners[0]) );
         this.sdraw.texCoord2f32(GX.Attr.TEX0, 0, 1);
         this.sdraw.position3f32(0, 1, 0);
-        this.sdraw.color4color(GX.Attr.CLR0, colors[1] );
+        this.sdraw.color4color(GX.Attr.CLR0, colorNewFromRGBA8(this.data.colorCorners[1]) );
         this.sdraw.texCoord2f32(GX.Attr.TEX0, 0, 0);
         this.sdraw.position3f32(1, 1, 0);
-        this.sdraw.color4color(GX.Attr.CLR0, colors[3] );
+        this.sdraw.color4color(GX.Attr.CLR0, colorNewFromRGBA8(this.data.colorCorners[3]) );
         this.sdraw.texCoord2f32(GX.Attr.TEX0, 1, 0);
         this.sdraw.position3f32(1, 0, 0);
-        this.sdraw.color4color(GX.Attr.CLR0, colors[2] );
+        this.sdraw.color4color(GX.Attr.CLR0, colorNewFromRGBA8(this.data.colorCorners[2]) );
         this.sdraw.texCoord2f32(GX.Attr.TEX0, 1, 1);
         this.sdraw.end();
         this.sdraw.endDraw(cache);
 
         const mb = new GXMaterialBuilder('J2DPane');
-        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO);
-        mb.setTevColorIn(0, GX.CC.TEXC, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO);
-        
         // Assume alpha is enabled. This is byte 1 on a JUTTexture, but noclip doesn't read it
-        mb.setTevAlphaIn(0, GX.CA.TEXA, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO);
-
+        mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+        // 0: Multiply tex and vertex colors and alpha
+        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR0A0);
+        mb.setTevColorIn(0, GX.CC.ZERO, GX.CC.TEXC, GX.CC.RASC, GX.CC.ZERO);
+        mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.TEXA, GX.CA.RASA, GX.CA.ZERO);
         mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
         mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-
-        // TODO:
-        // GXSetTevKColor(GX_KCOLOR0, mBlendKonstColor);
-        // GXSetTevKColor(GX_KCOLOR2, mBlendKonstAlpha);
-
-        // TODO: Why isn't this using the alpha from the vertex colors?
-        if( true /* Alpha */) {
-            mb.setTevOrder(1, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0);
-            mb.setTevColorIn(1, GX.CC.CPREV, GX.CC.RASC, GX.CC.ZERO, GX.CC.ZERO);
-            mb.setTevAlphaIn(1, GX.CA.APREV, GX.CA.RASA, GX.CA.ZERO, GX.CA.ZERO);
-            mb.setTevColorOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-            mb.setTevAlphaOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-        }
+        // 1: Multiply result alpha by dynamic alpha (this.drawAlpha)
+        mb.setTevOrder(1, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR_ZERO);
+        mb.setTevColorIn(1, GX.CC.CPREV, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO);
+        mb.setTevAlphaIn(1, GX.CA.ZERO, GX.CA.APREV, GX.CA.A0, GX.CA.ZERO);
+        mb.setTevColorOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
 
         mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
         mb.setZMode(false, GX.CompareType.ALWAYS, false);
@@ -424,6 +414,7 @@ export class J2DPicture extends J2DPane {
         this.sdraw.setOnRenderInst(renderInst);
         this.materialHelper.setOnRenderInst(renderInstManager.gfxRenderCache, renderInst);
 
+        materialParams.u_Color[ColorKind.C0].a = this.drawAlpha;
         this.tex.fillTextureMapping(materialParams.m_TextureMapping[0]);
         this.materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
