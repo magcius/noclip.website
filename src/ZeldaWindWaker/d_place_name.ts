@@ -110,6 +110,7 @@ export class d_place_name extends msg_class {
         MtxTrans([x, y, -1], false, pane.drawMtx);
         mat4.scale(pane.drawMtx, pane.drawMtx, [w, h, 1]);
 
+        renderInstManager.setCurrentList(globals.dlst.ui[0]);
         this.pane.draw(renderInstManager, viewerInput, this.ctx2D);
     }
 
