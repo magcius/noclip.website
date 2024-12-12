@@ -16,39 +16,39 @@ export const enum Placename {
     OutsetIsland,
     ForsakenFortress,
     DragonRoost,
-} 
+}
 
 export const enum PlacenameState {
     Init,
     Hidden,
     Visible,
-} 
+}
 
 export function updatePlaceName(globals: dGlobals) {
     // From d_menu_window::dMs_placenameMove()
-    if(globals.scnPlay.demo.getMode() === EDemoMode.Playing) {
+    if (globals.scnPlay.demo.getMode() === EDemoMode.Playing) {
         const frameNo = globals.scnPlay.demo.getFrameNoMsg();
         const demoName = globals.scnPlay.demo.getName();
 
-        if(demoName === 'awake') { 
+        if (demoName === 'awake') {
             if (frameNo >= 200 && frameNo < 350) {
                 globals.scnPlay.placenameIndex = Placename.OutsetIsland;
                 globals.scnPlay.placenameState = PlacenameState.Visible;
-            } else if(frameNo >= 0x15e) {
+            } else if (frameNo >= 0x15e) {
                 globals.scnPlay.placenameState = PlacenameState.Hidden;
             }
         } else if (demoName === 'majyuu_shinnyuu') {
             if (frameNo >= 0xb54 && frameNo < 0xbea) {
                 globals.scnPlay.placenameIndex = Placename.ForsakenFortress;
                 globals.scnPlay.placenameState = PlacenameState.Visible;
-            } else if(frameNo >= 0xbea) {
+            } else if (frameNo >= 0xbea) {
                 globals.scnPlay.placenameState = PlacenameState.Hidden;
             }
         }
     }
 
     // From d_meter::dMeter_placeNameMove 
-    if(currentPlaceName === null) {
+    if (currentPlaceName === null) {
         if (globals.scnPlay.placenameState === PlacenameState.Visible) {
             fpcSCtRq_Request(globals.frameworkGlobals, null, dProcName_e.d_place_name, null);
             currentPlaceName = globals.scnPlay.placenameIndex;
@@ -77,7 +77,7 @@ export class d_place_name extends msg_class {
 
         // The Outset Island image lives inside the arc. All others are loose files in 'res/placename/'
         let img: BTIData;
-        if( globals.scnPlay.placenameIndex === Placename.OutsetIsland ) {
+        if (globals.scnPlay.placenameIndex === Placename.OutsetIsland) {
             img = globals.resCtrl.getObjectRes(ResType.Bti, `PName`, 0x07)
         } else {
             const filename = `placename/pn_0${globals.scnPlay.placenameIndex + 1}.bti`; // @TODO: Need to support 2 digit numbers
@@ -93,13 +93,13 @@ export class d_place_name extends msg_class {
         this.pane.children[1].data.visible = false;
         const pic = this.pane.children[2] as J2DPicture;
         pic.setTexture(img);
-    
+
         return cPhs__Status.Complete;
     }
 
     public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         const pane = this.pane.children[2];
-        
+
         let x = (pane.data.x / 640);
         let y = 1.0 - (pane.data.y / 480);
 
@@ -110,7 +110,7 @@ export class d_place_name extends msg_class {
         MtxTrans([x, y, -1], false, pane.drawMtx);
         mat4.scale(pane.drawMtx, pane.drawMtx, [w, h, 1]);
 
-        this.pane.draw(renderInstManager, viewerInput, this.ctx2D );
+        this.pane.draw(renderInstManager, viewerInput, this.ctx2D);
     }
 
     public override execute(globals: dGlobals, deltaTimeFrames: number): void {
@@ -123,7 +123,7 @@ export class d_place_name extends msg_class {
     }
 
     private openAnime(deltaTimeFrames: number) {
-        if(this.animFrame < 10) {
+        if (this.animFrame < 10) {
             this.animFrame += deltaTimeFrames;
 
             const pct = (this.animFrame / 10)
@@ -134,7 +134,7 @@ export class d_place_name extends msg_class {
     }
 
     private closeAnime(deltaTimeFrames: number) {
-        if(this.animFrame > 0) {
+        if (this.animFrame > 0) {
             this.animFrame -= deltaTimeFrames;
 
             const pct = (this.animFrame / 10)

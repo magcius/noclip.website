@@ -333,7 +333,7 @@ export class J2DPicture extends J2DPane {
         if (this.data.timg.type !== 0 && this.data.timg.type !== 2) { console.warn('Untested J2D feature'); }
 
         if (this.data.tlut.type !== 0) { console.warn('Untested J2D feature'); }
-        if (this.data.uvBinding !== 15) { console.warn('Untested J2D feature'); } 
+        if (this.data.uvBinding !== 15) { console.warn('Untested J2D feature'); }
         if (this.data.flags !== 0) { console.warn('Untested J2D feature'); }
         if (this.data.colorBlack !== 0 || this.data.colorWhite !== 0xFFFFFFFF) { console.warn('Untested J2D feature'); }
         if (this.data.colorCorners[0] !== 0xFFFFFFFF || this.data.colorCorners[1] !== 0xFFFFFFFF
@@ -346,7 +346,7 @@ export class J2DPicture extends J2DPane {
     }
 
     public override drawSelf(renderInstManager: GfxRenderInstManager, viewerRenderInput: ViewerRenderInput, ctx2D: J2DGrafContext, offsetX: number, offsetY: number): void {
-        if(!this.tex) { return; }
+        if (!this.tex) { return; }
 
         renderInstManager.pushTemplate();
         const renderInst = renderInstManager.newRenderInst();
