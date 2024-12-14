@@ -1,15 +1,14 @@
 
-import { vec2, vec3, vec4 } from 'gl-matrix';
-import { UnityVersion, UnityAssetFile, UnityAssetFileObject, UnityClassID, UnityGameObject, UnityPPtr, UnityStreamingInfo, UnityMesh, UnityMeshCompression, UnityVertexFormat, UnitySubMesh, UnityAABB, UnityChannelInfo, UnityGLTextureSettings, UnityTextureFormat, UnityTexture2D, UnityMaterial, UnityTextureColorSpace } from '../../../rust/pkg/noclip_support';
+import { vec2, vec3 } from 'gl-matrix';
+import { UnityAABB, UnityAssetFile, UnityAssetFileObject, UnityChannelInfo, UnityClassID, UnityGLTextureSettings, UnityMaterial, UnityMesh, UnityMeshCompression, UnityPPtr, UnityStreamingInfo, UnitySubMesh, UnityTexture2D, UnityTextureColorSpace, UnityTextureFormat, UnityVersion, UnityVertexFormat } from '../../../rust/pkg/noclip_support';
 import ArrayBufferSlice from '../../ArrayBufferSlice.js';
 import { Color, TransparentBlack, colorNewFromRGBA } from '../../Color.js';
 import { DataFetcher } from '../../DataFetcher.js';
-import { downloadBlob } from '../../DownloadUtils.js';
 import * as Geometry from '../../Geometry.js';
 import { Destroyable, SceneContext } from '../../SceneBase.js';
 import { TextureMapping } from '../../TextureHolder.js';
 import { coalesceBuffer, makeStaticDataBuffer } from '../../gfx/helpers/BufferHelpers.js';
-import { fillColor, fillVec4, fillVec4v } from '../../gfx/helpers/UniformBufferHelpers.js';
+import { fillColor, fillVec4 } from '../../gfx/helpers/UniformBufferHelpers.js';
 import { GfxBufferUsage, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxMipFilterMode, GfxSampler, GfxSamplerDescriptor, GfxTexFilterMode, GfxTexture, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxWrapMode, makeTextureDescriptor2D } from '../../gfx/platform/GfxPlatform.js';
 import { FormatCompFlags, getFormatCompByteSize, setFormatCompFlags } from '../../gfx/platform/GfxPlatformFormat.js';
 import { GfxRenderCache } from '../../gfx/render/GfxRenderCache.js';
@@ -149,6 +148,7 @@ export class AssetFile {
     private doneLoadingHeader(buffer: Uint8Array): void {
         this.ensureAssetFile(buffer);
         this.assetFile.append_metadata_chunk(buffer);
+        console.log(this.path, this.assetFile.get_version_string());
         this.unityObjects = this.assetFile.get_objects();
         for (let i = 0; i < this.unityObjects.length; i++)
             this.unityObjectByFileID.set(this.unityObjects[i].file_id, this.unityObjects[i]);
@@ -240,10 +240,9 @@ export class AssetFile {
         if (pptr.file_index === 0) {
             return this;
         } else {
-            let externalFilename = assertExists(this.assetFile.get_external_path(pptr));
-            if (externalFilename.startsWith("Library/")) {
-                externalFilename = externalFilename.replace("Library/", "Resources/");
-            }
+            let externalFilename = assertExists(this.assetFile.get_external_path(pptr)).toLowerCase();
+            if (externalFilename.startsWith("library/"))
+                externalFilename = externalFilename.replace("library/", "resources/");
             return assetSystem.fetchAssetFile(externalFilename, true);
         }
     }
@@ -296,13 +295,13 @@ export class AssetFile {
             return this.promiseCache.get(pathID)! as Promise<T>;
 
         const promise = this.fetchObject(pathID).then((objData) => {
-                return createFunc(assetSystem, objData).then((v) => {
-                    this.dataCache.set(pathID, v);
-                    return v;
-                }).catch(e => {
-                    console.error(`failed to fetch ${this.path}: ${pathID}, ${e}`);
-                    throw e;
-                });
+            return createFunc(assetSystem, objData).then((v) => {
+                this.dataCache.set(pathID, v);
+                return v;
+            }).catch(e => {
+                console.error(`failed to fetch ${this.path}: ${pathID}, ${e}`);
+                throw e;
+            });
         });
         this.promiseCache.set(pathID, promise);
         return promise;

@@ -19,7 +19,7 @@ export async function loadRustLib() {
         const url = await import('url');
         const wasmPath = path.join(path.dirname(url.fileURLToPath(import.meta.url)), '../rust/pkg/noclip_support_bg.wasm');
         const wasm = fs.readFileSync(wasmPath);
-        rust.initSync(wasm);
+        rust.initSync({ module: wasm });
     }
 */
 

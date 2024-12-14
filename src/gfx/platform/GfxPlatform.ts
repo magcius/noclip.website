@@ -459,6 +459,7 @@ export interface GfxDevice {
     readBuffer(o: GfxReadback, dstOffset: number, buffer: GfxBuffer, srcOffset: number, byteSize: number): void;
     readPixelFromTexture(o: GfxReadback, dstOffset: number, a: GfxTexture, x: number, y: number): void;
     submitReadback(o: GfxReadback): void;
+
     /**
      * Checks if the readback object {@param o} is ready. If so, this will write the full set of readback
      * values to {@param dst}, starting at index {@param dstOffs}, and returns true. If the readback is

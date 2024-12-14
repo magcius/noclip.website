@@ -579,9 +579,8 @@ function buildOverlay(overlayInfo: OverlayInfo, faceInfos: BSPFaceInfo[], bspSur
             const overlayPoints = nArray(4, () => new MeshVertex());
             buildOverlayPoints(overlayPoints, overlayInfo);
 
-            fetchVertexFromBuffer(surfacePoints[0], vertexData, indexData[index + 0]);
-            fetchVertexFromBuffer(surfacePoints[1], vertexData, indexData[index + 1]);
-            fetchVertexFromBuffer(surfacePoints[2], vertexData, indexData[index + 2]);
+            for (let i = 0; i < 3; i++)
+                fetchVertexFromBuffer(surfacePoints[i], vertexData, indexData[index + i]);
 
             // Store our surface plane for later, so we can re-project back to it...
             surfacePlane.setTri(surfacePoints[0].position, surfacePoints[2].position, surfacePoints[1].position);

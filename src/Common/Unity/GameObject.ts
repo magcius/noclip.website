@@ -11,6 +11,7 @@ import { ViewerRenderInput } from "../../viewer.js";
 import { AssetFile, AssetLocation, AssetObjectData, UnityAssetResourceType, UnityAssetSystem, UnityChannel, UnityMaterialData, UnityMeshData, createUnityAssetSystem } from "./AssetManager.js";
 import { rust } from "../../rustlib.js";
 import { UnityMeshRenderer, UnityVec3, UnityQuaternion, UnityTransform, UnityPPtr, UnityGameObject, UnityMeshFilter, UnityAssetFileObject, UnityVersion } from "../../../rust/pkg/noclip_support.js";
+import { AABB } from "../../Geometry.js";
 
 export abstract class UnityComponent {
     public async load(level: UnityLevel): Promise<void> {
@@ -193,8 +194,6 @@ export class MeshRenderer extends UnityComponent {
         if (meshData === null)
             return;
 
-        // TODO(jstpierre): AABB culling
-
         if (this.staticBatchSubmeshCount > 0) {
             mat4.copy(this.modelMatrix, noclipSpaceFromUnitySpace);
         } else {
@@ -202,6 +201,12 @@ export class MeshRenderer extends UnityComponent {
             const transform = assertExists(this.gameObject.getComponent(Transform));
             mat4.copy(this.modelMatrix, transform.modelMatrix);
         }
+
+        // TODO(jstpierre): AABB culling
+        const aabb = new AABB();
+        aabb.transform(meshData.bbox, this.modelMatrix);
+        if (!viewerInput.camera.frustum.contains(aabb))
+            return;
 
         const template = renderInstManager.pushTemplate();
 
