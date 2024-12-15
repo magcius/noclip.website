@@ -1,3 +1,6 @@
+// Nintendo 2D rendering, version 1. Used by Wind Waker. 
+// Twilight Princess (and likely newer titles), use J2D version 2. 
+
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { JSystemFileReaderHelper } from "./J3D/J3DLoader.js";
 import { align, assert, readString } from "../../util.js";

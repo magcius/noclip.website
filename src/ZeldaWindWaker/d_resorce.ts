@@ -13,7 +13,7 @@ import { dGlobals } from "./Main.js";
 import { cPhs__Status } from "./framework.js";
 import { cBgD_t } from "./d_bg.js";
 import { NamedArrayBufferSlice } from "../DataFetcher.js";
-import { BLO, SCRN } from "../Common/JSYSTEM/J2D.js";
+import { BLO, SCRN } from "../Common/JSYSTEM/J2Dv1.js";
 
 export interface DZSChunkHeader {
     type: string;

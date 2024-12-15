@@ -1,4 +1,4 @@
-import { J2DGrafContext, J2DPicture, J2DScreen } from "../Common/JSYSTEM/J2D.js";
+import { J2DGrafContext, J2DPicture, J2DScreen } from "../Common/JSYSTEM/J2Dv1.js";
 import { BTI, BTIData } from "../Common/JSYSTEM/JUTTexture.js";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import { ViewerRenderInput } from "../viewer.js";
