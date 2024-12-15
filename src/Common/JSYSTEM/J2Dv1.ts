@@ -323,7 +323,7 @@ export class J2DPicture extends J2DPane {
 
     private sdraw = new TSDraw(); // TODO: Time to move TSDraw out of Mario Galaxy?
     private materialHelper: GXMaterialHelperGfx;
-    private tex: BTIData;
+    private tex: BTIData | null = null;
 
     constructor(data: PAN1, private cache: GfxRenderCache, parent: J2DPane | null) {
         super(data, cache, parent);
