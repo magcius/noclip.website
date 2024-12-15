@@ -255,7 +255,7 @@ export class J2DPane {
         if (this.data.rot !== 0) { console.warn('Untested J2D feature'); }
     }
 
-    // NOTE: Overwritten by child classes 
+    // NOTE: Overwritten by child classes which actually do some rendering, such as J2DPicture
     public drawSelf(renderInstManager: GfxRenderInstManager, viewerRenderInput: ViewerRenderInput, ctx2D: J2DGrafContext, offsetX: number, offsetY: number) { }
 
     public draw(renderInstManager: GfxRenderInstManager, viewerRenderInput: ViewerRenderInput, ctx2D: J2DGrafContext, offsetX: number = 0, offsetY: number = 0, clip: boolean = true): void {
