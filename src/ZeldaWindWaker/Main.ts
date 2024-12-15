@@ -42,7 +42,7 @@ import { WoodPacket } from './d_wood.js';
 import { fopAcM_create, fopAcM_searchFromName, fopAc_ac_c } from './f_op_actor.js';
 import { cPhs__Status, fGlobals, fopDw_Draw, fopScn, fpcCt_Handler, fpcLy_SetCurrentLayer, fpcM_Management, fpcPf__Register, fpcSCtRq_Request, fpc_pc__ProfileList } from './framework.js';
 import { dDemo_manager_c, EDemoCamFlags, EDemoMode } from './d_demo.js';
-import { d_pn__RegisterConstructors, Placename, PlacenameState, updatePlaceName } from './d_place_name.js';
+import { d_pn__RegisterConstructors, Placename, PlacenameState, dPn__update } from './d_place_name.js';
 
 type SymbolData = { Filename: string, SymbolName: string, Data: ArrayBufferSlice };
 type SymbolMapData = { SymbolData: SymbolData[] };
@@ -798,7 +798,7 @@ class d_s_play extends fopScn {
         this.demo.update();
 
         // From d_menu_window::dMs_placenameMove()
-        updatePlaceName(globals);
+        dPn__update(globals);
 
         // From executeEvtManager() -> SpecialProcPackage()
         if (this.demo.getMode() === EDemoMode.Ended) {

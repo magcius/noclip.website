@@ -38,7 +38,7 @@ export const enum PlacenameState {
     Visible,
 }
 
-export function updatePlaceName(globals: dGlobals) {
+export function dPn__update(globals: dGlobals) {
     // TODO: Initiate other place names manually
 
     // From d_menu_window::dMs_placenameMove()
