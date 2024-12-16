@@ -60,7 +60,7 @@ export class J2DGrafContext {
     private sceneParams = new SceneParams();
 
     constructor(device: GfxDevice) {
-        // @NOTE: The y axis is inverted by this ortho matrix. Gamecube origin is top-left, ours is bottom left.  
+        // NOTE: Bottom is 1, Top is 0, to match the J2D convention
         projectionMatrixForCuboid(this.sceneParams.u_Projection, 0, 1, 1, 0, -1, 0);
         const clipSpaceNearZ = device.queryVendorInfo().clipSpaceNearZ;
         projectionMatrixConvertClipSpaceNearZ(this.sceneParams.u_Projection, clipSpaceNearZ, GfxClipSpaceNearZ.NegativeOne);
@@ -407,21 +407,20 @@ export class J2DPicture extends J2DPane {
         this.sdraw.setVtxDesc(GX.Attr.TEX0, true);
         this.sdraw.setVtxDesc(GX.Attr.CLR0, true);
 
-        // @NOTE: Y positions are inverted, to account for the projection matrix Y-flip. Gamecube origin is top-left, ours is bottom left.  
         this.sdraw.beginDraw(this.cache);
         this.sdraw.begin(GX.Command.DRAW_QUADS, 4);
         this.sdraw.position3f32(0, 0, 0);
         this.sdraw.color4color(GX.Attr.CLR0, colorNewFromRGBA8(this.data.colorCorners[0]));
-        this.sdraw.texCoord2f32(GX.Attr.TEX0, u0, v1);
-        this.sdraw.position3f32(0, -1, 0);
-        this.sdraw.color4color(GX.Attr.CLR0, colorNewFromRGBA8(this.data.colorCorners[1]));
-        this.sdraw.texCoord2f32(GX.Attr.TEX0, u0, v0);
-        this.sdraw.position3f32(1, -1, 0);
-        this.sdraw.color4color(GX.Attr.CLR0, colorNewFromRGBA8(this.data.colorCorners[3]));
-        this.sdraw.texCoord2f32(GX.Attr.TEX0, u1, v0);
+        this.sdraw.texCoord2f32(GX.Attr.TEX0, u0, v0); // 0
         this.sdraw.position3f32(1, 0, 0);
         this.sdraw.color4color(GX.Attr.CLR0, colorNewFromRGBA8(this.data.colorCorners[2]));
-        this.sdraw.texCoord2f32(GX.Attr.TEX0, u1, v1);
+        this.sdraw.texCoord2f32(GX.Attr.TEX0, u1, v0); // 1
+        this.sdraw.position3f32(1, 1, 0);
+        this.sdraw.color4color(GX.Attr.CLR0, colorNewFromRGBA8(this.data.colorCorners[3]));
+        this.sdraw.texCoord2f32(GX.Attr.TEX0, u1, v1); // 0
+        this.sdraw.position3f32(0, 1, 0);
+        this.sdraw.color4color(GX.Attr.CLR0, colorNewFromRGBA8(this.data.colorCorners[1]));
+        this.sdraw.texCoord2f32(GX.Attr.TEX0, u0, v1); // 0
         this.sdraw.end();
         this.sdraw.endDraw(this.cache);
 
