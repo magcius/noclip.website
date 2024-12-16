@@ -80,7 +80,6 @@ export function dPn__update(globals: dGlobals) {
 export class d_place_name extends msg_class {
     public static PROCESS_NAME = dProcName_e.d_place_name;
     private screen: J2DScreen;
-    private ctx2D: J2DGrafContext;
     private animFrame: number = 0;
 
     public override load(globals: dGlobals): cPhs__Status {
@@ -88,8 +87,7 @@ export class d_place_name extends msg_class {
         if (status !== cPhs__Status.Complete)
             return status;
 
-        const screen = globals.resCtrl.getObjectRes(ResType.Blo, `PName`, 0x04)
-        this.ctx2D = new J2DGrafContext(globals.renderer.device);
+        const screen = globals.resCtrl.getObjectRes(ResType.Blo, `PName`, 0x04);
 
         // The Outset Island image lives inside the arc. All others are loose files in 'res/placename/'
         let img: BTIData;
@@ -116,7 +114,7 @@ export class d_place_name extends msg_class {
 
     public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         renderInstManager.setCurrentList(globals.dlst.ui[0]);
-        this.screen.draw(renderInstManager, viewerInput, this.ctx2D);
+        this.screen.draw(renderInstManager, viewerInput, null);
     }
 
     public override execute(globals: dGlobals, deltaTimeFrames: number): void {

@@ -58,10 +58,12 @@ enum J2DUVBinding {
 // TODO: Move and reorganize
 export class J2DGrafContext {
     private sceneParams = new SceneParams();
+    public aspectRatio: number;
 
-    constructor(device: GfxDevice) {
-        // NOTE: Bottom is 1, Top is 0, to match the J2D convention
-        projectionMatrixForCuboid(this.sceneParams.u_Projection, 0, 1, 1, 0, -1, 0);
+    constructor(device: GfxDevice, x: number, y: number, w: number, h: number, far: number, near: number) {
+        this.aspectRatio = w / h;
+        // NOTE: Y axis is inverted here (bottom = height), to match the original J2D convention
+        projectionMatrixForCuboid(this.sceneParams.u_Projection, x, w, h, y, near, far);
         const clipSpaceNearZ = device.queryVendorInfo().clipSpaceNearZ;
         projectionMatrixConvertClipSpaceNearZ(this.sceneParams.u_Projection, clipSpaceNearZ, GfxClipSpaceNearZ.NegativeOne);
     }
@@ -265,11 +267,10 @@ export class J2DPane {
         const boundsValid = this.data.w > 0 && this.data.h > 0;
 
         if (this.data.visible && boundsValid) {
-            // Src data is in GameCube pixels (640x480), convert to normalized screen coordinates [0-1]. 
             // To support dynamic aspect ratios, we keep the original screenspace height and the original aspect ratio. 
             // So changing the window width will not cause 2D elements to scale, but changing the window height will. 
-            vec2.set(this.drawPos, this.data.x / 640, this.data.y / 480);
-            vec2.set(this.drawDimensions, this.data.w / (480 * viewerRenderInput.camera.aspect), this.data.h / 480);
+            vec2.set(this.drawPos, this.data.x, this.data.y);
+            vec2.set(this.drawDimensions, this.data.w * (ctx2D.aspectRatio / viewerRenderInput.camera.aspect), this.data.h);
             this.drawAlpha = this.data.alpha / 0xFF;
 
             if (this.parent) {
@@ -452,10 +453,22 @@ export class J2DPicture extends J2DPane {
 //#region J2DScreen
 export class J2DScreen extends J2DPane {
     public color: Color
+    private static defaultCtx: J2DGrafContext;
 
     constructor(data: SCRN, cache: GfxRenderCache) {
         super(data.panes[0], cache, null);
         this.color = data.inf1.color;
+    }
+
+    override draw(renderInstManager: GfxRenderInstManager, viewerRenderInput: ViewerRenderInput, ctx2D: J2DGrafContext | null, offsetX?: number, offsetY?: number): void {
+        if (ctx2D !== null) {
+            super.draw(renderInstManager, viewerRenderInput, ctx2D, offsetX, offsetY);
+        } else {
+            if(!J2DScreen.defaultCtx) { 
+                J2DScreen.defaultCtx = new J2DGrafContext(renderInstManager.gfxRenderCache.device, 0.0, 0.0, 640.0, 480.0, -1.0, 0.0);
+            }
+            super.draw(renderInstManager, viewerRenderInput, J2DScreen.defaultCtx, offsetX, offsetY);
+        }
     }
 }
 
