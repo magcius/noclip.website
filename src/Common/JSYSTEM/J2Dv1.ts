@@ -453,10 +453,11 @@ export class J2DPicture extends J2DPane {
 //#region J2DScreen
 export class J2DScreen extends J2DPane {
     public color: Color
-    private static defaultCtx: J2DGrafContext;
+    private defaultCtx: J2DGrafContext;
 
     constructor(data: SCRN, cache: GfxRenderCache) {
         super(data.panes[0], cache, null);
+        this.defaultCtx = new J2DGrafContext(cache.device, 0.0, 0.0, 640.0, 480.0, -1.0, 0.0);
         this.color = data.inf1.color;
     }
 
@@ -464,10 +465,7 @@ export class J2DScreen extends J2DPane {
         if (ctx2D !== null) {
             super.draw(renderInstManager, viewerRenderInput, ctx2D, offsetX, offsetY);
         } else {
-            if(!J2DScreen.defaultCtx) { 
-                J2DScreen.defaultCtx = new J2DGrafContext(renderInstManager.gfxRenderCache.device, 0.0, 0.0, 640.0, 480.0, -1.0, 0.0);
-            }
-            super.draw(renderInstManager, viewerRenderInput, J2DScreen.defaultCtx, offsetX, offsetY);
+            super.draw(renderInstManager, viewerRenderInput, this.defaultCtx, offsetX, offsetY);
         }
     }
 }
