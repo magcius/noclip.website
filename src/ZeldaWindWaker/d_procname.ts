@@ -32,4 +32,5 @@ export const enum dProcName_e {
     d_a_swhit0          = 0x01C9,
     d_kyeff             = 0x01E4,
     d_kyeff2            = 0x01E5,
+    d_place_name        = 0x01EE,
 };

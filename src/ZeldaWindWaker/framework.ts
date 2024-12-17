@@ -1,9 +1,10 @@
 
-import { vec3 } from "gl-matrix";
+import { ReadonlyVec3, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import { arrayRemove, assert, assertExists, nArray } from "../util.js";
 import { ViewerRenderInput } from "../viewer.js";
+import { fopAc_ac_c } from "./f_op_actor.js";
 
 export type fpc_pc__ProfileList = { Profiles: ArrayBufferSlice[] };
 
@@ -490,6 +491,46 @@ export function fopKyM_create(globals: fGlobals, pcName: number, parameters: num
 
 export function fopKyM_Delete(globals: fGlobals, ky: kankyo_class): void {
     fpcDt_Delete(globals, ky);
+}
+//#endregion
+
+//#region fopMsgM
+export class msg_class extends leafdraw_class {
+    public actor: fopAc_ac_c | null;
+    public pos = vec3.create();
+    public msgNo: number;
+    
+    private loadInit: boolean = false;
+
+    public override load(globals: GlobalUserData, prm: fopMsg_prm_class | null): cPhs__Status {
+        if (!this.loadInit) {
+            this.loadInit = true;
+
+            if (prm !== null) {
+                if (prm.pos !== null)
+                    vec3.copy(this.pos, prm.pos);
+                this.actor = prm.actor;
+                this.msgNo = prm.msgNo;
+            }
+        }
+        return cPhs__Status.Next;
+    }
+};
+
+export interface fopMsg_prm_class {
+    actor: fopAc_ac_c | null;
+    pos: ReadonlyVec3 | null;
+    msgNo: number;
+}
+
+export function fopMsgM_Delete(globals: fGlobals, msg: leafdraw_class) {
+    fpcDt_Delete(globals, msg);
+}
+
+export function fopMsgM_create(globals: fGlobals, pcName: number): number | null {
+    // Create on current layer.
+    const prm: fopMsg_prm_class = { actor: null, pos: null, msgNo: 0 };
+    return fpcSCtRq_Request(globals, null, pcName, prm);
 }
 //#endregion
 //#endregion
