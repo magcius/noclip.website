@@ -25,21 +25,21 @@ const drawParams = new DrawParams();
 const scratchMat = mat4.create();
 
 interface ResRef {
-    type: number;
-    name: string;
+    refType: number;
+    resType: string;
+    resName: string;
+    arcName: string | null;
+    _nextOffset: number;
 }
 
-function parseResourceReference(dst: ResRef, buffer: ArrayBufferSlice, offset: number): number {
+function parseResourceReference(buffer: ArrayBufferSlice, offset: number, resType: string, arcName: string | null): ResRef {
     const dataView = buffer.createDataView();
-    dst.type = dataView.getUint8(offset + 0);
+    const refType = dataView.getUint8(offset + 0);
     const nameLen = dataView.getUint8(offset + 1);
-    dst.name = readString(buffer, offset + 2, nameLen);
+    const resName = readString(buffer, offset + 2, nameLen);
 
-    if (dst.type === 2 || dst.type === 3 || dst.type === 4) {
-        dst.name = "";
-    }
-
-    return nameLen + 2;
+    const nextOffset = offset + nameLen + 2;
+    return { refType, resType, resName, arcName, _nextOffset: nextOffset }
 }
 
 /**
@@ -109,12 +109,10 @@ function readPIC1Chunk(buffer: ArrayBufferSlice, parent: PAN1 | null): PIC1 {
     const dataCount = view.getUint8(pane.offset + 0);
     let offset = pane.offset + 1;
 
-    const timg = { type: 0, name: "" };
-    const tlut = { type: 0, name: "" };
-    offset += parseResourceReference(timg, buffer, offset);
-    offset += parseResourceReference(tlut, buffer, offset);
-    const binding = view.getUint8(offset);
-    offset += 1;
+    const timg = parseResourceReference(buffer, offset, 'TIMG', null);
+    const tlut = parseResourceReference(buffer, timg._nextOffset, 'TLUT', null);
+    const binding = view.getUint8(tlut._nextOffset);
+    offset = tlut._nextOffset + 1;
 
     let flags = 0;
     let colorBlack = 0x0;
@@ -329,9 +327,9 @@ export class J2DPicture extends J2DPane {
     constructor(data: PAN1, private cache: GfxRenderCache, parent: J2DPane | null) {
         super(data, cache, parent);
         // @TODO: If type > 4, load the image on construction
-        if (this.data.timg.type !== 0 && this.data.timg.type !== 2) { console.warn('Untested J2D feature'); }
+        if (this.data.timg.refType !== 0 && this.data.timg.refType !== 2) { console.warn('Untested J2D feature'); }
 
-        if (this.data.tlut.type !== 0) { console.warn('Untested J2D feature'); }
+        if (this.data.tlut.refType !== 0) { console.warn('Untested J2D feature'); }
         if (this.data.uvBinding !== 15) { console.warn('Untested J2D feature'); }
         if (this.data.flags !== 0) { console.warn('Untested J2D feature'); }
         if (this.data.colorBlack !== 0 || this.data.colorWhite !== 0xFFFFFFFF) { console.warn('Untested J2D feature'); }
