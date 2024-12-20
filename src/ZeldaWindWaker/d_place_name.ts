@@ -89,6 +89,8 @@ export class d_place_name extends msg_class {
 
         const screen = globals.resCtrl.getObjectRes(ResType.Blo, `PName`, 0x04);
 
+        // @TODO: If we're on Outset Island (0), don't load any textures. Add support for BLO loading the default textures.
+
         // The Outset Island image lives inside the arc. All others are loose files in 'res/placename/'
         let img: BTIData;
         if (globals.scnPlay.placenameIndex === Placename.OutsetIsland) {
@@ -114,7 +116,10 @@ export class d_place_name extends msg_class {
 
     public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         renderInstManager.setCurrentList(globals.dlst.ui[0]);
-        this.screen.draw(renderInstManager, viewerInput, null);
+
+        // @TODO: This will be needed when drawing all Wind Waker 2D elements. It should be in dComIfG_play_c. 
+        const ctx = new J2DGrafContext(globals.context.device, 0.0, 0.0, 608.0, 448.0, -1.0, 0.0);
+        this.screen.draw(renderInstManager, viewerInput, ctx);
     }
 
     public override execute(globals: dGlobals, deltaTimeFrames: number): void {
