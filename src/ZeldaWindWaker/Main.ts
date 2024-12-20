@@ -1,5 +1,5 @@
 
-import { mat4, vec3 } from 'gl-matrix';
+import { mat4, vec3, vec4 } from 'gl-matrix';
 
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import { DataFetcher } from '../DataFetcher.js';
@@ -202,15 +202,22 @@ export class dGlobals {
     }
 }
 
+const enum CameraMode {
+    Default,
+    Cinematic
+}
+
 class dCamera_c {
     // For people to play around with.
     public cameraFrozen = false;
 
-    public execute(globals: dGlobals) {
-        
-    }
+    private trimHeight = 0;
+    private cameraMode: CameraMode = CameraMode.Default;
+    private scissor = vec4.create();
 
-    public draw(globals: dGlobals, viewerInput: Viewer.ViewerRenderInput) {
+    private static trimHeightCinematic = 65.0;
+
+    public execute(globals: dGlobals, viewerInput: Viewer.ViewerRenderInput) {
         // Near/far planes are decided by the stage data.
         const stag = globals.dStage_dt.stag;
 
@@ -250,10 +257,23 @@ class dCamera_c {
             globals.camera.setClipPlanes(globals.camera.near, globals.camera.far);
             globals.camera.worldMatrixUpdated();
 
+            this.cameraMode = CameraMode.Cinematic;
             globals.context.inputManager.isMouseEnabled = false;
         } else {
+            this.cameraMode = CameraMode.Default;
             globals.context.inputManager.isMouseEnabled = true;
         }
+        
+        // From dCamera_c::CalcTrimSize()
+        // Animate up to the trim size for the current mode.
+        if(this.cameraMode == CameraMode.Cinematic) {
+            this.trimHeight += (dCamera_c.trimHeightCinematic - this.trimHeight) * 0.25;
+        } else {
+            this.trimHeight += -this.trimHeight * 0.25;
+        }
+
+        const trimPx = (this.trimHeight / 480) * viewerInput.backbufferHeight;
+        vec4.set(this.scissor, 0, trimPx, viewerInput.backbufferWidth, viewerInput.backbufferHeight - 2 * trimPx);
 
         if (!this.cameraFrozen) {
             mat4.getTranslation(globals.cameraPosition, globals.camera.worldMatrix);
@@ -262,6 +282,10 @@ class dCamera_c {
             // Update the "player position" from the camera.
             vec3.copy(globals.playerPosition, globals.cameraPosition);
         }
+    }
+
+    public applyScissor(pass: GfxRenderPass) {
+        pass.setScissor(this.scissor[0], this.scissor[1], this.scissor[2], this.scissor[3]);
     }
 }
 
@@ -512,7 +536,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         }
 
         this.globals.camera = viewerInput.camera;
-        this.camera.draw(this.globals, viewerInput);
+        this.camera.execute(this.globals, viewerInput);
 
         // Not sure exactly where this is ordered...
         dKy_setLight(this.globals);
@@ -587,6 +611,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
             const skyboxDepthTargetID = builder.createRenderTargetID(this.mainDepthDesc, 'Skybox Depth');
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, skyboxDepthTargetID);
             pass.exec((passRenderer) => {
+                this.camera.applyScissor(passRenderer);
                 this.executeListSet(passRenderer, dlst.sky);
             });
         });
@@ -599,6 +624,8 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
+                this.camera.applyScissor(passRenderer);
+
                 this.executeList(passRenderer, dlst.sea);
                 this.executeListSet(passRenderer, dlst.bg);
 
