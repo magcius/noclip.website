@@ -234,7 +234,6 @@ class dCamera_c {
         // noclip modification: if we're paused, allow noclip camera control during demos
         const isPaused = viewerInput.deltaTime === 0;
 
-        // TODO: Determine the correct place for this
         // dCamera_c::Store() sets the camera params if the demo camera is active
         const demoCam = globals.scnPlay.demo.getSystem().getCamera();
         if (demoCam && !isPaused) {
@@ -242,6 +241,8 @@ class dCamera_c {
             let targetPos = vec3.add(scratchVec3a, globals.cameraPosition, globals.cameraFwd);
             let upVec = vec3.set(scratchVec3b, 0, 1, 0);
             let roll = 0.0;
+
+            // TODO: Blend between these camera params when switching camera modes, instead of the sudden snap.
 
             if (demoCam.flags & EDemoCamFlags.HasTargetPos) { targetPos = demoCam.targetPosition; }
             if (demoCam.flags & EDemoCamFlags.HasEyePos) { viewPos = demoCam.viewPosition; }
@@ -1055,7 +1056,7 @@ class DemoDesc extends SceneDesc implements Viewer.SceneDesc {
                 console.debug(`Loading stage demo file: ${globals.roomCtrl.demoArcName}`);
 
                 globals.modelCache.fetchObjectData(globals.roomCtrl.demoArcName).catch(e => {
-                    // @TODO: Better error handling. This does not prevent a debugger break.
+                    // TODO: Better error handling. This does not prevent a debugger break.
                     console.log(`Failed to load stage demo file: ${globals.roomCtrl.demoArcName}`, e);
                 })
             }
@@ -1074,7 +1075,7 @@ class DemoDesc extends SceneDesc implements Viewer.SceneDesc {
             setTimeout(waitForActors, 30);
         })(); });
 
-        // @TODO: Set noclip layer visiblity based on this.layer
+        // TODO: Set noclip layer visiblity based on this.layer
 
         // From dEvDtStaff_c::specialProcPackage()
         let demoData;
