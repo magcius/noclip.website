@@ -4,8 +4,10 @@ import HtmlWebpackPlugin from 'html-webpack-plugin';
 import { GitRevisionPlugin } from 'git-revision-webpack-plugin';
 import { CleanWebpackPlugin } from 'clean-webpack-plugin';
 import ForkTsCheckerWebpackPlugin from 'fork-ts-checker-webpack-plugin';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const targets = JSON.parse(fs.readFileSync(__dirname + '/package.json', 'utf8')).browserslist;
+const targets = JSON.parse(fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), 'package.json'), 'utf8')).browserslist;
 const gitRevision = new GitRevisionPlugin();
 
 const config: rspack.Configuration = {
