@@ -202,6 +202,69 @@ export class dGlobals {
     }
 }
 
+class dCamera_c {
+    // For people to play around with.
+    public cameraFrozen = false;
+
+    public execute(globals: dGlobals) {
+        
+    }
+
+    public draw(globals: dGlobals, viewerInput: Viewer.ViewerRenderInput) {
+        // Near/far planes are decided by the stage data.
+        const stag = globals.dStage_dt.stag;
+
+        // Pull in the near plane to decrease Z-fighting, some stages set it far too close...
+        let nearPlane = Math.max(stag.nearPlane, 5);
+        let farPlane = stag.farPlane;
+
+        // noclip modification: if this is the sea map, push our far plane out a bit.
+        if (globals.stageName === 'sea')
+            farPlane *= 2;
+
+        globals.camera.setClipPlanes(nearPlane, farPlane);
+
+        // noclip modification: if we're paused, allow noclip camera control during demos
+        const isPaused = viewerInput.deltaTime === 0;
+
+        // TODO: Determine the correct place for this
+        // dCamera_c::Store() sets the camera params if the demo camera is active
+        const demoCam = globals.scnPlay.demo.getSystem().getCamera();
+        if (demoCam && !isPaused) {
+            let viewPos = globals.cameraPosition;
+            let targetPos = vec3.add(scratchVec3a, globals.cameraPosition, globals.cameraFwd);
+            let upVec = vec3.set(scratchVec3b, 0, 1, 0);
+            let roll = 0.0;
+
+            if (demoCam.flags & EDemoCamFlags.HasTargetPos) { targetPos = demoCam.targetPosition; }
+            if (demoCam.flags & EDemoCamFlags.HasEyePos) { viewPos = demoCam.viewPosition; }
+            if (demoCam.flags & EDemoCamFlags.HasUpVec) { upVec = demoCam.upVector; }
+            if (demoCam.flags & EDemoCamFlags.HasFovY) { globals.camera.fovY = demoCam.fovY * MathConstants.DEG_TO_RAD; }
+            if (demoCam.flags & EDemoCamFlags.HasRoll) { roll = demoCam.roll * MathConstants.DEG_TO_RAD; }
+            if (demoCam.flags & EDemoCamFlags.HasAspect) { debugger; /* Untested. Remove once confirmed working */ }
+            if (demoCam.flags & EDemoCamFlags.HasNearZ) { globals.camera.near = demoCam.projNear; }
+            if (demoCam.flags & EDemoCamFlags.HasFarZ) { globals.camera.far = demoCam.projFar; }
+
+            mat4.targetTo(globals.camera.worldMatrix, viewPos, targetPos, upVec);
+            mat4.rotateZ(globals.camera.worldMatrix, globals.camera.worldMatrix, roll);
+            globals.camera.setClipPlanes(globals.camera.near, globals.camera.far);
+            globals.camera.worldMatrixUpdated();
+
+            globals.context.inputManager.isMouseEnabled = false;
+        } else {
+            globals.context.inputManager.isMouseEnabled = true;
+        }
+
+        if (!this.cameraFrozen) {
+            mat4.getTranslation(globals.cameraPosition, globals.camera.worldMatrix);
+            getMatrixAxisZ(globals.cameraFwd, globals.camera.worldMatrix);
+            vec3.negate(globals.cameraFwd, globals.cameraFwd);
+            // Update the "player position" from the camera.
+            vec3.copy(globals.playerPosition, globals.cameraPosition);
+        }
+    }
+}
+
 function gain(v: number, k: number): number {
     const a = 0.5 * Math.pow(2*((v < 0.5) ? v : 1.0 - v), k);
     return v < 0.5 ? a : 1.0 - a;
@@ -322,6 +385,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
     private mainColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
     private mainDepthDesc = new GfxrRenderTargetDescription(GfxFormat.D32F);
     private opaqueSceneTextureMapping = new TextureMapping();
+    private camera = new dCamera_c();
 
     public renderHelper: GXRenderHelperGfx;
 
@@ -402,9 +466,6 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         return [roomsPanel, scenarioPanel, renderHacksPanel];
     }
 
-    // For people to play around with.
-    public cameraFrozen = false;
-
     private getRoomStatus(ac: fopAc_ac_c): dStage_roomStatus_c | null {
         if (ac.roomNo === -1)
             return null;
@@ -450,59 +511,8 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
             }
         }
 
-        // Near/far planes are decided by the stage data.
-        const stag = this.globals.dStage_dt.stag;
-
-        // Pull in the near plane to decrease Z-fighting, some stages set it far too close...
-        let nearPlane = Math.max(stag.nearPlane, 5);
-        let farPlane = stag.farPlane;
-
-        // noclip modification: if this is the sea map, push our far plane out a bit.
-        if (this.globals.stageName === 'sea')
-            farPlane *= 2;
-
-        viewerInput.camera.setClipPlanes(nearPlane, farPlane);
-
-        // noclip modification: if we're paused, allow noclip camera control during demos
-        const isPaused = viewerInput.deltaTime === 0;
-
-        // TODO: Determine the correct place for this
-        // dCamera_c::Store() sets the camera params if the demo camera is active
-        const demoCam = this.globals.scnPlay.demo.getSystem().getCamera();
-        if (demoCam && !isPaused) {
-            let viewPos = this.globals.cameraPosition;
-            let targetPos = vec3.add(scratchVec3a, this.globals.cameraPosition, this.globals.cameraFwd);
-            let upVec = vec3.set(scratchVec3b, 0, 1, 0);
-            let roll = 0.0;
-
-            if (demoCam.flags & EDemoCamFlags.HasTargetPos) { targetPos = demoCam.targetPosition; }
-            if (demoCam.flags & EDemoCamFlags.HasEyePos) { viewPos = demoCam.viewPosition; }
-            if (demoCam.flags & EDemoCamFlags.HasUpVec) { upVec = demoCam.upVector; }
-            if (demoCam.flags & EDemoCamFlags.HasFovY) { viewerInput.camera.fovY = demoCam.fovY * MathConstants.DEG_TO_RAD; }
-            if (demoCam.flags & EDemoCamFlags.HasRoll) { roll = demoCam.roll * MathConstants.DEG_TO_RAD; }
-            if (demoCam.flags & EDemoCamFlags.HasAspect) { debugger; /* Untested. Remove once confirmed working */ }
-            if (demoCam.flags & EDemoCamFlags.HasNearZ) { viewerInput.camera.near = demoCam.projNear; }
-            if (demoCam.flags & EDemoCamFlags.HasFarZ) { viewerInput.camera.far = demoCam.projFar; }
-
-            mat4.targetTo(viewerInput.camera.worldMatrix, viewPos, targetPos, upVec);
-            mat4.rotateZ(viewerInput.camera.worldMatrix, viewerInput.camera.worldMatrix, roll);
-            viewerInput.camera.setClipPlanes(viewerInput.camera.near, viewerInput.camera.far);
-            viewerInput.camera.worldMatrixUpdated();
-
-            this.globals.context.inputManager.isMouseEnabled = false;
-        } else {
-            this.globals.context.inputManager.isMouseEnabled = true;
-        }
-
-        if (!this.cameraFrozen) {
-            mat4.getTranslation(this.globals.cameraPosition, viewerInput.camera.worldMatrix);
-            getMatrixAxisZ(this.globals.cameraFwd, viewerInput.camera.worldMatrix);
-            vec3.negate(this.globals.cameraFwd, this.globals.cameraFwd);
-            // Update the "player position" from the camera.
-            vec3.copy(this.globals.playerPosition, this.globals.cameraPosition);
-        }
-
         this.globals.camera = viewerInput.camera;
+        this.camera.draw(this.globals, viewerInput);
 
         // Not sure exactly where this is ordered...
         dKy_setLight(this.globals);
