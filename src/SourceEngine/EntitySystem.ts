@@ -291,10 +291,12 @@ export class BaseEntity {
         this.playSequenceIndex(this.findSequenceLabel(label));
     }
 
-    public spawn(entitySystem: EntitySystem): void {
+    public setupParent(entitySystem: EntitySystem): void {
         if (this.entity.parentname)
             this.setParentEntity(entitySystem.findEntityByTargetName(this.entity.parentname));
+    }
 
+    public spawn(entitySystem: EntitySystem): void {
         if (this.entity.defaultanim) {
             this.seqdefaultindex = this.findSequenceLabel(this.entity.defaultanim);
             this.playSequenceIndex(this.seqdefaultindex);
@@ -1111,6 +1113,7 @@ abstract class BaseDoor extends BaseToggle {
     }
 
     private hitTop(entitySystem: EntitySystem): void {
+        this.toggleState = ToggleState.Top;
         this.output_onFullyOpen.fire(entitySystem, this, this);
 
         if (this.wait > 0) {
@@ -1119,6 +1122,7 @@ abstract class BaseDoor extends BaseToggle {
     }
 
     private hitBottom(entitySystem: EntitySystem): void {
+        this.toggleState = ToggleState.Bottom;
         this.output_onFullyClosed.fire(entitySystem, this, this);
     }
 
@@ -4465,9 +4469,16 @@ export class EntitySystem {
             // Still fetching; nothing to do.
             return;
         } else if (spawnStateAction === SpawnState.ReadyForSpawn) {
+            // Set all parent relationships so that the origin relationships are correct
+            // before calling the spawn method on anything.
+            for (let i = 0; i < this.entities.length; i++) {
+                const entity = this.entities[i];
+                assert(entity.spawnState === SpawnState.ReadyForSpawn);
+                entity.setupParent(this);
+            }
+
             for (let i = 0; i < this.entities.length; i++)
-                if (this.entities[i].spawnState === SpawnState.ReadyForSpawn)
-                    this.entities[i].spawn(this);
+                this.entities[i].spawn(this);
         }
 
         this.processOutputQueue();
