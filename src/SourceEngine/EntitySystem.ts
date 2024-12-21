@@ -4473,12 +4473,15 @@ export class EntitySystem {
             // before calling the spawn method on anything.
             for (let i = 0; i < this.entities.length; i++) {
                 const entity = this.entities[i];
-                assert(entity.spawnState === SpawnState.ReadyForSpawn);
-                entity.setupParent(this);
+                if (entity.spawnState === SpawnState.ReadyForSpawn)
+                    entity.setupParent(this);
             }
 
-            for (let i = 0; i < this.entities.length; i++)
-                this.entities[i].spawn(this);
+            for (let i = 0; i < this.entities.length; i++) {
+                const entity = this.entities[i];
+                if (entity.spawnState === SpawnState.ReadyForSpawn)
+                    entity.spawn(this);
+            }
         }
 
         this.processOutputQueue();
