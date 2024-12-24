@@ -268,7 +268,7 @@ export class J2DPane {
             // To support dynamic aspect ratios, we keep the original screenspace height and the original aspect ratio. 
             // So changing the window width will not cause 2D elements to scale, but changing the window height will. 
             vec2.set(this.drawPos, this.data.x, this.data.y);
-            vec2.set(this.drawDimensions, this.data.w * (ctx2D.aspectRatio / viewerRenderInput.camera.aspect), this.data.h);
+            vec2.set(this.drawDimensions, this.data.w * (ctx2D.aspectRatio / viewerRenderInput.camera.aspect), this.data.h); // TODO: Don't use camera.aspect, use backbuffer aspect
             this.drawAlpha = this.data.alpha / 0xFF;
 
             if (this.parent) {

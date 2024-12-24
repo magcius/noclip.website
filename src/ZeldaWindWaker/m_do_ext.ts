@@ -103,12 +103,12 @@ export function mDoExt_modelEntryDL(globals: dGlobals, modelInstance: J3DModelIn
         modelInstance.setTexturesEnabled(globals.renderHacks.texturesEnabled);
     }
 
-    modelInstance.calcView(viewerInput.camera, viewerInput.camera.viewMatrix);
+    modelInstance.calcView(globals.camera.viewerCamera, globals.camera.viewerCamera.viewMatrix);
 
     renderInstManager.setCurrentList(drawListSet[0]);
-    modelInstance.drawOpa(device, renderInstManager, viewerInput.camera);
+    modelInstance.drawOpa(device, renderInstManager, globals.camera.viewerCamera);
     renderInstManager.setCurrentList(drawListSet[1]);
-    modelInstance.drawXlu(device, renderInstManager, viewerInput.camera);
+    modelInstance.drawXlu(device, renderInstManager, globals.camera.viewerCamera);
 }
 
 export function mDoExt_modelUpdateDL(globals: dGlobals, modelInstance: J3DModelInstance, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, drawListSet: dDlst_list_Set | null = null): void {
@@ -242,8 +242,8 @@ export function mDoLib_project(dst: vec3, v: vec3, camera: Camera, v4 = scratchV
     vec3.set(dst, v4[0], v4[1], v4[2]);
 }
 
-export function mDoLib_projectFB(dst: vec3, v: vec3, viewerInput: ViewerRenderInput): void {
-    mDoLib_project(dst, v, viewerInput.camera);
+export function mDoLib_projectFB(dst: vec3, v: vec3, camera: Camera, viewerInput: ViewerRenderInput): void {
+    mDoLib_project(dst, v, camera);
     // Put in viewport framebuffer space.
     dst[0] = (dst[0] * 0.5 + 0.5) * viewerInput.backbufferWidth;
     dst[1] = (dst[1] * 0.5 + 0.5) * viewerInput.backbufferHeight;

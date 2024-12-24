@@ -366,14 +366,14 @@ export class FlowerPacket {
     }
 
     private drawFlowers(globals: dGlobals, roomIdx: number, type: FlowerType, model: DynamicModel, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        const camera = viewerInput.camera;
+        const camera = globals.camera;
 
-        getMatrixTranslation(scratchVec3a, camera.worldMatrix);
+        getMatrixTranslation(scratchVec3a, camera.viewerCamera.worldMatrix);
 
         const template = renderInstManager.pushTemplate();
         template.setSamplerBindingsFromTextureMappings(model.textureMapping);
         setColorFromRoomNo(globals, materialParams, roomIdx);
-        dKy_GxFog_set(globals.g_env_light, materialParams.u_FogBlock, viewerInput.camera);
+        dKy_GxFog_set(globals.g_env_light, materialParams.u_FogBlock, camera);
         model.materialHelper.allocateMaterialParamsDataOnInst(template, materialParams);
         model.materialHelper.setOnRenderInst(renderInstManager.gfxRenderCache, template);
 
@@ -388,7 +388,7 @@ export class FlowerPacket {
 
             const renderInst = renderInstManager.newRenderInst();
             model.shapes[0].setOnRenderInst(renderInst);
-            mat4.mul(drawParams.u_PosMtx[0], camera.viewMatrix, data.modelMatrix);
+            mat4.mul(drawParams.u_PosMtx[0], camera.viewerCamera.viewMatrix, data.modelMatrix);
             model.materialHelper.allocateDrawParamsDataOnInst(renderInst, drawParams);
             renderInstManager.submitRenderInst(renderInst);
         }
@@ -726,8 +726,8 @@ export class TreePacket {
         if (room.length === 0)
             return;
 
-        const worldToView = viewerInput.camera.viewMatrix;
-        const worldCamPos = mat4.getTranslation(scratchVec3b, viewerInput.camera.worldMatrix);
+        const worldToView = globals.camera.viewerCamera.viewMatrix;
+        const worldCamPos = mat4.getTranslation(scratchVec3b, globals.camera.viewerCamera.worldMatrix);
 
         // Draw shadows
         {
@@ -735,7 +735,7 @@ export class TreePacket {
             const template = renderInstManager.pushTemplate();
             template.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT);
             setColorFromRoomNo(globals, materialParams, roomIdx);
-            dKy_GxFog_set(globals.g_env_light, materialParams.u_FogBlock, viewerInput.camera);
+            dKy_GxFog_set(globals.g_env_light, materialParams.u_FogBlock, globals.camera);
             // Set the shadow color. Pulled from d_tree::l_shadowColor$4656
             colorFromRGBA(materialParams.u_Color[ColorKind.C0], 0, 0, 0, 0x64/0xFF);
             this.treeModel.shadow.materialHelper.allocateMaterialParamsDataOnInst(template, materialParams);
@@ -760,7 +760,7 @@ export class TreePacket {
         {
             const template = renderInstManager.pushTemplate();
             setColorFromRoomNo(globals, materialParams, roomIdx);
-            dKy_GxFog_set(globals.g_env_light, materialParams.u_FogBlock, viewerInput.camera);
+            dKy_GxFog_set(globals.g_env_light, materialParams.u_FogBlock, globals.camera);
             // Set the tree alpha. This fades after the tree is cut. This is multiplied with the texture alpha at the end of TEV stage 1.
             colorFromRGBA(materialParams.u_Color[ColorKind.C2], 0, 0, 0, 1);
             this.treeModel.main.materialHelper.allocateMaterialParamsDataOnInst(template, materialParams);
@@ -1024,13 +1024,13 @@ export class GrassPacket {
         if (room.length === 0)
             return;
 
-        const worldToView = viewerInput.camera.viewMatrix;
-        const worldCamPos = mat4.getTranslation(scratchVec3b, viewerInput.camera.worldMatrix);
+        const worldToView = globals.camera.viewerCamera.viewMatrix;
+        const worldCamPos = mat4.getTranslation(scratchVec3b, globals.camera.viewerCamera.worldMatrix);
 
         const template = renderInstManager.pushTemplate();
         template.setSamplerBindingsFromTextureMappings(this.grassModel.textureMapping);
         setColorFromRoomNo(globals, materialParams, roomIdx);
-        dKy_GxFog_set(globals.g_env_light, materialParams.u_FogBlock, viewerInput.camera);
+        dKy_GxFog_set(globals.g_env_light, materialParams.u_FogBlock, globals.camera);
         this.grassModel.materialHelper.allocateMaterialParamsDataOnInst(template, materialParams);
         this.grassModel.materialHelper.setOnRenderInst(renderInstManager.gfxRenderCache, template);
 

@@ -207,7 +207,7 @@ const enum CameraMode {
     Cinematic
 }
 
-class dCamera_c {
+export class dCamera_c {
     // TODO: Remove
     public viewerCamera: Camera;
 
@@ -561,17 +561,17 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
 
         renderInstManager.setCurrentList(dlst.bg[0]);
         {
-            this.globals.particleCtrl.calc(viewerInput);
+            this.globals.particleCtrl.calc(this.globals, viewerInput);
 
             for (let group = EffectDrawGroup.Main; group <= EffectDrawGroup.Indirect; group++) {
                 let texPrjMtx: mat4 | null = null;
 
                 if (group === EffectDrawGroup.Indirect) {
                     texPrjMtx = scratchMatrix;
-                    texProjCameraSceneTex(texPrjMtx, viewerInput.camera, 1);
+                    texProjCameraSceneTex(texPrjMtx, this.globals.camera.viewerCamera, 1);
                 }
 
-                this.globals.particleCtrl.setDrawInfo(viewerInput.camera.viewMatrix, viewerInput.camera.projectionMatrix, texPrjMtx, viewerInput.camera.frustum);
+                this.globals.particleCtrl.setDrawInfo(this.globals.camera.viewerCamera.viewMatrix, this.globals.camera.viewerCamera.projectionMatrix, texPrjMtx, this.globals.camera.viewerCamera.frustum);
                 renderInstManager.setCurrentList(dlst.effect[group]);
                 this.globals.particleCtrl.draw(device, this.renderHelper.renderInstManager, group);
             }

@@ -1384,7 +1384,7 @@ export class dKankyo_star_Packet {
         vec3.transformMat4(scratchVec3d, scratchVec3d, scratchMatrix);
 
         // Projected moon position.
-        mDoLib_projectFB(scratchVec3e, envLight.moonPos, viewerInput);
+        mDoLib_projectFB(scratchVec3e, envLight.moonPos, viewerInput.camera, viewerInput);
 
         let radius = 0.0, angle: number = -Math.PI, angleIncr = 0.0;
         for (let i = 0; i < envLight.starCount; i++) {
@@ -1415,7 +1415,7 @@ export class dKankyo_star_Packet {
 
             vec3.add(scratchVec3a, scratchVec3a, globals.cameraPosition);
 
-            mDoLib_projectFB(scratchVec3, scratchVec3a, viewerInput);
+            mDoLib_projectFB(scratchVec3, scratchVec3a, viewerInput.camera, viewerInput);
             const distToMoon = vec3.dist(scratchVec3, scratchVec3e);
             if (distToMoon < 80.0)
                 continue;

@@ -161,11 +161,11 @@ export function loadRawTexture(globals: dGlobals, data: ArrayBufferSlice, width:
 const materialParams = new MaterialParams();
 const drawParams = new DrawParams();
 
-function submitScratchRenderInst(renderInstManager: GfxRenderInstManager, materialHelper: GXMaterialHelperGfx, renderInst: GfxRenderInst, viewerInput: ViewerRenderInput, materialParams_ = materialParams, drawParams_ = drawParams): void {
+function submitScratchRenderInst(globals: dGlobals, renderInstManager: GfxRenderInstManager, materialHelper: GXMaterialHelperGfx, renderInst: GfxRenderInst, materialParams_ = materialParams, drawParams_ = drawParams): void {
     materialHelper.setOnRenderInst(renderInstManager.gfxRenderCache, renderInst);
     renderInst.setSamplerBindingsFromTextureMappings(materialParams_.m_TextureMapping);
     materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams_);
-    mat4.copy(drawParams_.u_PosMtx[0], viewerInput.camera.viewMatrix);
+    mat4.copy(drawParams_.u_PosMtx[0], globals.camera.viewerCamera.viewMatrix);
     materialHelper.allocateDrawParamsDataOnInst(renderInst, drawParams_);
     renderInstManager.submitRenderInst(renderInst);
 }
@@ -338,7 +338,7 @@ export class dKankyo_sun_Packet {
                 if (i === 1)
                     moonSize *= 1.7;
 
-                computeMatrixWithoutTranslation(scratchMatrix, viewerInput.camera.worldMatrix);
+                computeMatrixWithoutTranslation(scratchMatrix, globals.camera.viewerCamera.worldMatrix);
                 mat4.rotateZ(scratchMatrix, scratchMatrix, MathConstants.DEG_TO_RAD * (45 + (360.0 * ((moonPitch - camPitch) / -8.0))));
 
                 if (i === 0) {
@@ -369,7 +369,7 @@ export class dKankyo_sun_Packet {
                 }
 
                 const renderInst = ddraw.makeRenderInst(renderInstManager);
-                submitScratchRenderInst(renderInstManager, this.materialHelperSunMoon, renderInst, viewerInput);
+                submitScratchRenderInst(globals, renderInstManager, this.materialHelperSunMoon, renderInst);
             }
         }
 
@@ -377,7 +377,7 @@ export class dKankyo_sun_Packet {
             const sunPos = this.sunPos;
 
             const sunPitch = vecPitch(sunPos);
-            computeMatrixWithoutTranslation(scratchMatrix, viewerInput.camera.worldMatrix);
+            computeMatrixWithoutTranslation(scratchMatrix, globals.camera.viewerCamera.worldMatrix);
             mat4.rotateZ(scratchMatrix, scratchMatrix, MathConstants.DEG_TO_RAD * (-50 + (360.0 * ((sunPitch - camPitch) / -8.0))));
 
             let sunSizeBase = 575.0;
@@ -402,7 +402,7 @@ export class dKankyo_sun_Packet {
                 this.drawSquare(ddraw, scratchMatrix, sunPos, sunSize, 1.0, 1.0);
                 const renderInst = ddraw.makeRenderInst(renderInstManager);
 
-                submitScratchRenderInst(renderInstManager, this.materialHelperSunMoon, renderInst, viewerInput);
+                submitScratchRenderInst(globals, renderInstManager, this.materialHelperSunMoon, renderInst);
             }
         }
     }
@@ -428,7 +428,7 @@ export class dKankyo_sun_Packet {
 
        const envLight = globals.g_env_light;
 
-        computeMatrixWithoutTranslation(scratchMatrix, viewerInput.camera.worldMatrix);
+        computeMatrixWithoutTranslation(scratchMatrix, globals.camera.viewerCamera.worldMatrix);
 
         if (this.drawLenzInSky)
             renderInstManager.setCurrentList(globals.dlst.sky[1]);
@@ -493,7 +493,7 @@ export class dKankyo_sun_Packet {
         colorCopy(materialParams.u_Color[ColorKind.C0], this.lensflareColor, lensflareAlpha);
 
         const renderInst = ddraw.makeRenderInst(renderInstManager);
-        submitScratchRenderInst(renderInstManager, this.materialHelperLenzflareSolid, renderInst, viewerInput);
+        submitScratchRenderInst(globals, renderInstManager, this.materialHelperLenzflareSolid, renderInst);
 
         mat4.rotateZ(scratchMatrix, scratchMatrix, this.lensflareAngle);
 
@@ -536,7 +536,7 @@ export class dKankyo_sun_Packet {
             materialParams.u_Color[ColorKind.C0].a *= alpha;
             colorFromRGBA8(materialParams.u_Color[ColorKind.C1], 0xFF91491E);
 
-            submitScratchRenderInst(renderInstManager, this.materialHelperLenzflare, renderInst, viewerInput);
+            submitScratchRenderInst(globals, renderInstManager, this.materialHelperLenzflare, renderInst);
         }
     }
 
@@ -739,7 +739,7 @@ export class dKankyo_vrkumo_Packet {
 
             if (ddraw.hasIndicesToDraw()) {
                 const renderInst = ddraw.makeRenderInst(renderInstManager);
-                submitScratchRenderInst(renderInstManager, this.materialHelper, renderInst, viewerInput);
+                submitScratchRenderInst(globals, renderInstManager, this.materialHelper, renderInst);
             }
         }
 
@@ -809,7 +809,7 @@ export class dKankyo_rain_Packet {
         const envLight = globals.g_env_light;
         const ddraw = this.ddraw;
 
-        computeMatrixWithoutTranslation(scratchMatrix, viewerInput.camera.worldMatrix);
+        computeMatrixWithoutTranslation(scratchMatrix, globals.camera.viewerCamera.worldMatrix);
 
         renderInstManager.setCurrentList(globals.dlst.wetherEffect);
 
@@ -881,7 +881,7 @@ export class dKankyo_rain_Packet {
 
         if (ddraw.hasIndicesToDraw()) {
             const renderInst = ddraw.makeRenderInst(renderInstManager);
-            submitScratchRenderInst(renderInstManager, this.materialHelperRain, renderInst, viewerInput);
+            submitScratchRenderInst(globals, renderInstManager, this.materialHelperRain, renderInst);
         }
     }
 
@@ -949,7 +949,7 @@ export class dKankyo_rain_Packet {
         ddraw.end();
 
         const renderInst = ddraw.makeRenderInst(renderInstManager);
-        submitScratchRenderInst(renderInstManager, this.materialHelperSibuki, renderInst, viewerInput);
+        submitScratchRenderInst(globals, renderInstManager, this.materialHelperSibuki, renderInst);
     }
 
     public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
@@ -1061,7 +1061,7 @@ export class dKankyo_wave_Packet {
             return;
 
         const ddraw = this.ddraw;
-        computeMatrixWithoutTranslation(scratchMatrix, viewerInput.camera.worldMatrix);
+        computeMatrixWithoutTranslation(scratchMatrix, globals.camera.viewerCamera.worldMatrix);
 
         renderInstManager.setCurrentList(globals.dlst.wetherEffect);
 
@@ -1071,7 +1071,7 @@ export class dKankyo_wave_Packet {
         else
             this.texUsonami.fillTextureMapping(materialParams.m_TextureMapping[0]);
 
-        dKy_GxFog_sea_set(envLight, materialParams.u_FogBlock, viewerInput.camera);
+        dKy_GxFog_sea_set(envLight, materialParams.u_FogBlock, globals.camera);
 
         ddraw.beginDraw(globals.modelCache.cache);
         ddraw.begin(GX.Command.DRAW_QUADS, 4 * envLight.waveCount);
@@ -1130,7 +1130,7 @@ export class dKankyo_wave_Packet {
 
         if (ddraw.hasIndicesToDraw()) {
             const renderInst = ddraw.makeRenderInst(renderInstManager);
-            submitScratchRenderInst(renderInstManager, this.materialHelper, renderInst, viewerInput);
+            submitScratchRenderInst(globals, renderInstManager, this.materialHelper, renderInst);
         }
     }
 
@@ -1211,7 +1211,7 @@ export class dKankyo_star_Packet {
         else
             renderInstManager.setCurrentList(globals.dlst.sky[1]);
 
-        dKy_GxFog_sea_set(envLight, materialParams.u_FogBlock, viewerInput.camera);
+        dKy_GxFog_sea_set(envLight, materialParams.u_FogBlock, globals.camera);
 
         ddraw.beginDraw(globals.modelCache.cache);
         ddraw.begin(GX.Command.DRAW_TRIANGLES, 6 * envLight.starCount);
@@ -1226,7 +1226,7 @@ export class dKankyo_star_Packet {
         vec3.set(scratchVec3c, starSize, -0.5 * starSize, 0.0);
         vec3.set(scratchVec3d, -starSize, -0.5 * starSize, 0.0);
 
-        computeMatrixWithoutTranslation(scratchMatrix, viewerInput.camera.worldMatrix);
+        computeMatrixWithoutTranslation(scratchMatrix, globals.camera.viewerCamera.worldMatrix);
         mat4.rotateZ(scratchMatrix, scratchMatrix, this.rot * MathConstants.DEG_TO_RAD);
 
         vec3.transformMat4(scratchVec3b, scratchVec3b, scratchMatrix);
@@ -1234,7 +1234,7 @@ export class dKankyo_star_Packet {
         vec3.transformMat4(scratchVec3d, scratchVec3d, scratchMatrix);
 
         // Projected moon position.
-        mDoLib_projectFB(scratchVec3e, envLight.moonPos, viewerInput);
+        mDoLib_projectFB(scratchVec3e, envLight.moonPos, globals.camera.viewerCamera, viewerInput);
 
         let radius = 0.0, angle = -Math.PI, angleIncr = 0.0;
         for (let i = 0; i < envLight.starCount; i++) {
@@ -1265,7 +1265,7 @@ export class dKankyo_star_Packet {
 
             vec3.add(scratchVec3a, scratchVec3a, globals.cameraPosition);
 
-            mDoLib_projectFB(scratchVec3, scratchVec3a, viewerInput);
+            mDoLib_projectFB(scratchVec3, scratchVec3a, globals.camera.viewerCamera, viewerInput);
             const distToMoon = vec3.dist(scratchVec3, scratchVec3e);
             if (distToMoon < 80.0)
                 continue;
@@ -1313,7 +1313,7 @@ export class dKankyo_star_Packet {
 
         if (ddraw.hasIndicesToDraw()) {
             const renderInst = ddraw.makeRenderInst(renderInstManager);
-            submitScratchRenderInst(renderInstManager, this.materialHelper, renderInst, viewerInput);
+            submitScratchRenderInst(globals, renderInstManager, this.materialHelper, renderInst);
         }
     }
 
@@ -1371,7 +1371,7 @@ export class dKankyo_housi_Packet {
             return;
 
         const ddraw = this.ddraw;
-        computeMatrixWithoutTranslation(scratchMatrix, viewerInput.camera.worldMatrix);
+        computeMatrixWithoutTranslation(scratchMatrix, globals.camera.viewerCamera.worldMatrix);
 
         renderInstManager.setCurrentList(globals.dlst.wetherEffect);
 
@@ -1428,7 +1428,7 @@ export class dKankyo_housi_Packet {
             colorFromRGBA8(materialParams.u_Color[ColorKind.C0], 0xE5FFC8FF);
             colorFromRGBA8(materialParams.u_Color[ColorKind.C1], 0x43D2CAFF);
 
-            submitScratchRenderInst(renderInstManager, this.materialHelper, renderInst, viewerInput);
+            submitScratchRenderInst(globals, renderInstManager, this.materialHelper, renderInst);
         }
     }
 
@@ -1487,7 +1487,7 @@ export class dKankyo_moya_Packet {
             return;
 
         const ddraw = this.ddraw;
-        computeMatrixWithoutTranslation(scratchMatrix, viewerInput.camera.worldMatrix);
+        computeMatrixWithoutTranslation(scratchMatrix, globals.camera.viewerCamera.worldMatrix);
         mat4.rotateZ(scratchMatrix, scratchMatrix, this.rot * MathConstants.DEG_TO_RAD);
 
         renderInstManager.setCurrentList(globals.dlst.wetherEffect);
@@ -1548,7 +1548,7 @@ export class dKankyo_moya_Packet {
             else
                 colorCopy(materialParams.u_Color[ColorKind.C0], envLight.bgCol[0].K0, 1.0);
 
-            submitScratchRenderInst(renderInstManager, this.materialHelper, renderInst, viewerInput);
+            submitScratchRenderInst(globals, renderInstManager, this.materialHelper, renderInst);
         }
     }
 

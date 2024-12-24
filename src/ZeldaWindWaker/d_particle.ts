@@ -69,11 +69,11 @@ export class dPa_control_c {
         this.drawInfo.frustum = frustum;
     }
 
-    public calc(viewerInput: ViewerRenderInput): void {
+    public calc(globals: dGlobals, viewerInput: ViewerRenderInput): void {
         const inc = viewerInput.deltaTime / 1000 * 30;
 
         // Some hacky distance culling for emitters.
-        getMatrixTranslation(scratchVec3a, viewerInput.camera.worldMatrix);
+        getMatrixTranslation(scratchVec3a, globals.camera.viewerCamera.worldMatrix);
         for (let i = 0; i < this.emitterManager.aliveEmitters.length; i++) {
             const emitter = this.emitterManager.aliveEmitters[i];
             const cullDistance = (emitter as any).cullDistance ?? 5000;

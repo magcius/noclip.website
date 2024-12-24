@@ -1849,7 +1849,7 @@ export class BMDObjectRenderer {
 
             // Don't compute screen area culling on child meshes (don't want heads to disappear before bodies.)
             bboxScratch.transform(this.modelInstance.modelData.bbox, this.modelInstance.modelMatrix);
-            computeScreenSpaceProjectionFromWorldSpaceAABB(screenProjection, viewerInput.camera, bboxScratch);
+            computeScreenSpaceProjectionFromWorldSpaceAABB(screenProjection, globals.camera.viewerCamera, bboxScratch);
 
             if (screenProjection.getScreenArea() <= 0.0002)
                 return;
@@ -1857,7 +1857,7 @@ export class BMDObjectRenderer {
 
         mat4.getTranslation(scratchVec3a, this.modelMatrix);
         settingTevStruct(globals, this.lightTevColorType, scratchVec3a, this.tevstr);
-        setLightTevColorType(globals, this.modelInstance, this.tevstr, viewerInput.camera);
+        setLightTevColorType(globals, this.modelInstance, this.tevstr, globals.camera);
 
         if( morf ) {
             morf.calc();

@@ -4,7 +4,7 @@ import { AABB } from "../Geometry.js";
 import { Camera, computeScreenSpaceProjectionFromWorldSpaceAABB, computeScreenSpaceProjectionFromWorldSpaceSphere, ScreenSpaceProjection } from "../Camera.js";
 import { base_process_class, cPhs__Status, fGlobals, fopDwTg_DrawQTo, fopDwTg_ToDrawQ, fpcPc__IsVisible, fpcSCtRq_Request, leafdraw_class } from "./framework.js";
 import { dKy_tevstr_c, dKy_tevstr_init } from "./d_kankyo.js";
-import { dGlobals } from "./Main.js";
+import { dCamera_c, dGlobals } from "./Main.js";
 import { assert } from "../util.js";
 import { transformVec3Mat4w1 } from "../MathHelpers.js";
 import { dProcName_e } from "./d_procname.js";
@@ -101,7 +101,7 @@ export class fopAc_ac_c extends leafdraw_class {
         vec4.set(this.cullSizeSphere, x, y, z, r);
     }
 
-    protected cullingCheck(camera: Camera): boolean {
+    protected cullingCheck(camera: dCamera_c): boolean {
         if (!fpcPc__IsVisible(this))
             return false;
 
@@ -109,7 +109,7 @@ export class fopAc_ac_c extends leafdraw_class {
         if (this.cullMtx === null)
             throw "whoops";
 
-        const frustum = camera.frustum;
+        const frustum = camera.viewerCamera.frustum;
 
         if (this.cullSizeBox !== null) {
             // If the box is empty, that means I forgot to fill it in for a certain actor.
@@ -122,7 +122,7 @@ export class fopAc_ac_c extends leafdraw_class {
             if (!frustum.contains(scratchAABB))
                 return false;
 
-            computeScreenSpaceProjectionFromWorldSpaceAABB(scratchScreenSpaceProjection, camera, scratchAABB);
+            computeScreenSpaceProjectionFromWorldSpaceAABB(scratchScreenSpaceProjection, camera.viewerCamera, scratchAABB);
             if (scratchScreenSpaceProjection.getScreenArea() <= 0.0002)
                 return false;
         } else if (this.cullSizeSphere !== null) {
@@ -133,7 +133,7 @@ export class fopAc_ac_c extends leafdraw_class {
             if (!frustum.containsSphere(scratchVec3a, radius))
                 return false;
 
-            computeScreenSpaceProjectionFromWorldSpaceSphere(scratchScreenSpaceProjection, camera, scratchVec3a, radius);
+            computeScreenSpaceProjectionFromWorldSpaceSphere(scratchScreenSpaceProjection, camera.viewerCamera, scratchVec3a, radius);
             if (scratchScreenSpaceProjection.getScreenArea() <= 0.0002)
                 return false;
         }
