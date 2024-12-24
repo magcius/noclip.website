@@ -9,6 +9,7 @@ import * as RARC from '../Common/JSYSTEM/JKRArchive.js';
 import * as BYML from '../byml.js';
 import * as UI from '../ui.js';
 import * as Viewer from '../viewer.js';
+import * as GX_Material from '../gx/gx_material.js';
 
 import { Camera, texProjCameraSceneTex } from '../Camera.js';
 import { TransparentBlack } from '../Color.js';
@@ -17,7 +18,7 @@ import { J3DModelInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase.js';
 import * as JPA from '../Common/JSYSTEM/JPA.js';
 import { BTIData } from '../Common/JSYSTEM/JUTTexture.js';
 import { dfRange } from '../DebugFloaters.js';
-import { MathConstants, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, range } from '../MathHelpers.js';
+import { MathConstants, getMatrixAxisZ, getMatrixTranslation, range } from '../MathHelpers.js';
 import { SceneContext } from '../SceneBase.js';
 import { TextureMapping } from '../TextureHolder.js';
 import { setBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
@@ -25,7 +26,7 @@ import { GfxDevice, GfxFormat, GfxRenderPass, GfxTexture, makeTextureDescriptor2
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { GfxrAttachmentSlot, GfxrRenderTargetDescription } from '../gfx/render/GfxRenderGraph.js';
 import { GfxRenderInstList, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
-import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render.js';
+import { GXRenderHelperGfx, SceneParams, fillSceneParams, fillSceneParamsData } from '../gx/gx_render.js';
 import { FlowerPacket, GrassPacket, TreePacket } from './Grass.js';
 import { LegacyActor__RegisterFallbackConstructor } from './LegacyActor.js';
 import { dDlst_2DStatic_c, d_a__RegisterConstructors } from './d_a.js';
@@ -236,7 +237,6 @@ export class dCamera_c extends Camera {
 
         mat4.copy(this.viewMatrix, camera.viewMatrix);
         mat4.copy(this.projectionMatrix, camera.projectionMatrix);
-        this.finishSetup();
     }
 
     public execute(globals: dGlobals, viewerInput: Viewer.ViewerRenderInput) {
@@ -427,6 +427,7 @@ const enum EffectDrawGroup {
 const scratchMatrix = mat4.create();
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
+const scratchSceneParams = new SceneParams();
 export class WindWakerRenderer implements Viewer.SceneGfx {
     private mainColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
     private mainDepthDesc = new GfxrRenderTargetDescription(GfxFormat.D32F);
@@ -566,8 +567,10 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         if (this.globals.renderHacks.wireframe)
             template.setMegaStateFlags({ wireframe: true });
 
-        // TODO: This is setting the wrong projection matrix
-        fillSceneParamsDataOnTemplate(template, viewerInput);
+        fillSceneParams(scratchSceneParams, this.globals.camera.projectionMatrix, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+        let offs = template.getUniformBufferOffset(GX_Material.GX_Program.ub_SceneParams);
+        const d = template.mapUniformBufferF32(GX_Material.GX_Program.ub_SceneParams);
+        fillSceneParamsData(d, offs, scratchSceneParams);
 
         this.extraTextures.prepareToRender(device);
 
