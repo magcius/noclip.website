@@ -215,6 +215,7 @@ export class dCamera_c extends Camera {
 
     // For people to play around with.
     public cameraFrozen = false;
+    public trimmingEnabled = false;
 
     private trimHeight = 0;
     private cameraMode: CameraMode = CameraMode.Default;
@@ -302,7 +303,9 @@ export class dCamera_c extends Camera {
     }
 
     public applyScissor(pass: GfxRenderPass) {
-        pass.setScissor(this.scissor[0], this.scissor[1], this.scissor[2], this.scissor[3]);
+        if (this.trimmingEnabled) {
+            pass.setScissor(this.scissor[0], this.scissor[1], this.scissor[2], this.scissor[3]);
+        }
     }
 }
 
