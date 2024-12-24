@@ -477,7 +477,7 @@ class LightConfig {
         const diffSrc = this.lightObj[0];
         const diffDst = modelInstance.getGXLightReference(0);
         vec3.set(diffDst.Position, diffSrc.x, diffSrc.y, diffSrc.z);
-        lightSetWorldPosition(diffDst, camera, diffDst.Position);
+        lightSetWorldPosition(diffDst, camera.viewMatrix, diffDst.Position);
         colorFromRGBA(diffDst.Color, diffSrc.r/0xFF, diffSrc.g/0xFF, diffSrc.b/0xFF, diffSrc.a/0xFF);
         vec3.set(diffDst.CosAtten, 1.0, 0.0, 0.0);
         vec3.set(diffDst.DistAtten, 1.0, 0.0, 0.0);

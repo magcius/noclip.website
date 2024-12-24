@@ -90,8 +90,6 @@ export function mDoExt_modelEntryDL(globals: dGlobals, modelInstance: J3DModelIn
     if (!modelInstance.visible)
         return;
 
-    const device = globals.modelCache.device;
-
     if (drawListSet === null)
         drawListSet = globals.dlst.bg;
 
@@ -103,12 +101,13 @@ export function mDoExt_modelEntryDL(globals: dGlobals, modelInstance: J3DModelIn
         modelInstance.setTexturesEnabled(globals.renderHacks.texturesEnabled);
     }
 
-    modelInstance.calcView(viewerInput.camera, viewerInput.camera.viewMatrix);
+    const camera = viewerInput.camera;
+    modelInstance.calcView(camera.viewMatrix, camera.frustum);
 
     renderInstManager.setCurrentList(drawListSet[0]);
-    modelInstance.drawOpa(device, renderInstManager, viewerInput.camera);
+    modelInstance.drawOpa(renderInstManager, camera.projectionMatrix);
     renderInstManager.setCurrentList(drawListSet[1]);
-    modelInstance.drawXlu(device, renderInstManager, viewerInput.camera);
+    modelInstance.drawXlu(renderInstManager, camera.projectionMatrix);
 }
 
 export function mDoExt_modelUpdateDL(globals: dGlobals, modelInstance: J3DModelInstance, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, drawListSet: dDlst_list_Set | null = null): void {

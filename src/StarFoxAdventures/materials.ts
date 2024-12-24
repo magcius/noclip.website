@@ -793,8 +793,9 @@ export class StandardMapMaterial extends StandardMaterial {
         this.aprevIsValid = false;
 
         this.mb.setTexMtx(2, (dst: mat4, matCtx: MaterialRenderContext) => {
+            
             // Flipped
-            texProjCameraSceneTex(dst, matCtx.sceneCtx.viewerInput.camera, -matCtx.sceneCtx.flipYScale);
+            texProjCameraSceneTex(dst, matCtx.sceneCtx.viewerInput.camera.projectionMatrix, -matCtx.sceneCtx.flipYScale);
             mat4.mul(dst, dst, matCtx.modelToViewMtx);
             return dst;
         });
@@ -1381,13 +1382,13 @@ class WaterMaterial extends MaterialBase {
     protected rebuildInternal() {
         this.mb.setTexMtx(0, (dst: mat4, ctx: MaterialRenderContext) => {
             // Flipped
-            texProjCameraSceneTex(dst, ctx.sceneCtx.viewerInput.camera, -ctx.sceneCtx.flipYScale);
+            texProjCameraSceneTex(dst, ctx.sceneCtx.viewerInput.camera.projectionMatrix, -ctx.sceneCtx.flipYScale);
             mat4.mul(dst, dst, ctx.modelToViewMtx);
         });
 
         this.mb.setTexMtx(1, (dst: mat4, ctx: MaterialRenderContext) => {
             // Unflipped
-            texProjCameraSceneTex(dst, ctx.sceneCtx.viewerInput.camera, ctx.sceneCtx.flipYScale);
+            texProjCameraSceneTex(dst, ctx.sceneCtx.viewerInput.camera.projectionMatrix, ctx.sceneCtx.flipYScale);
             mat4.mul(dst, dst, ctx.modelToViewMtx);
         });
 

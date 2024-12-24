@@ -406,7 +406,7 @@ class MaterialInstance {
         }
 
         if (texSrt.mapMode === BRRES.MapMode.PROJECTION) {
-            texProjCameraSceneTex(dstPost, camera, flipYScale);
+            texProjCameraSceneTex(dstPost, camera.projectionMatrix, flipYScale);
 
             // Apply effect matrix.
             mat4.mul(dstPost, texSrt.effectMtx, dstPost);

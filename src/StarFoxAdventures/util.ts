@@ -1,7 +1,7 @@
+import { mat4, ReadonlyVec3, vec3 } from 'gl-matrix';
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
-import { mat4, vec3, quat, ReadonlyVec3 } from 'gl-matrix';
 import { Camera } from '../Camera.js';
-import { computeModelMatrixSRT, getMatrixTranslation, transformVec3Mat4w0 } from '../MathHelpers.js';
+import { getMatrixTranslation } from '../MathHelpers.js';
 
 export function dataSubarray(data: DataView, byteOffset: number, byteLength?: number, index: number = 0, stride: number = byteLength ?? 0): DataView {
     return new DataView(data.buffer, data.byteOffset + byteOffset + index * stride, byteLength);
@@ -134,7 +134,7 @@ export function readVec3(data: DataView, byteOffset: number = 0): vec3 {
         data.getFloat32(byteOffset + 0),
         data.getFloat32(byteOffset + 4),
         data.getFloat32(byteOffset + 8)
-        );
+    );
 }
 
 // Reads bitfields. Bits are pulled from the most significant bits of each byte

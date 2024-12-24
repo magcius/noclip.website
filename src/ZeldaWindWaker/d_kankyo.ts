@@ -618,12 +618,12 @@ export function dKy_GxFog_sea_set(envLight: dScnKy_env_light_c, fog: FogBlock, c
 // have global state, we have to do this here.
 export function dKy_setLight__OnModelInstance(envLight: dScnKy_env_light_c, modelInstance: J3DModelInstance, camera: Camera): void {
     for (let i = 0; i < 2; i++)
-        lightSetFromWorldLight(modelInstance.getGXLightReference(i), envLight.lightStatus[i], camera);
+        lightSetFromWorldLight(modelInstance.getGXLightReference(i), camera.viewMatrix, envLight.lightStatus[i]);
 }
 
 export function dKy_setLight__OnMaterialParams(envLight: dScnKy_env_light_c, materialParams: MaterialParams, camera: Camera): void {
     for (let i = 0; i < 2; i++)
-        lightSetFromWorldLight(materialParams.u_Lights[i], envLight.lightStatus[i], camera);
+        lightSetFromWorldLight(materialParams.u_Lights[i], camera.viewMatrix, envLight.lightStatus[i]);
 }
 
 export function setLightTevColorType(globals: dGlobals, modelInstance: J3DModelInstance, tevStr: dKy_tevstr_c, camera: Camera): void {
@@ -634,10 +634,10 @@ export function setLightTevColorType(globals: dGlobals, modelInstance: J3DModelI
     }
 
     const light0 = modelInstance.getGXLightReference(0);
-    lightSetFromWorldLight(light0, tevStr.lightObj, camera);
+    lightSetFromWorldLight(light0, camera.viewMatrix, tevStr.lightObj);
 
     const light1 = modelInstance.getGXLightReference(1);
-    lightSetFromWorldLight(light1, envLight.lightStatus[1], camera);
+    lightSetFromWorldLight(light1, camera.viewMatrix, envLight.lightStatus[1]);
 
     // if (toon_proc_check() == 0)
 

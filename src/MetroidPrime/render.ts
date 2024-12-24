@@ -16,7 +16,7 @@ import { GfxRendererLayer, GfxRenderInst, makeSortKey, setSortKeyBias, setSortKe
 import { computeViewMatrix, computeViewMatrixSkybox } from '../Camera.js';
 import { LoadedVertexData, LoadedVertexDraw, LoadedVertexLayout } from '../gx/gx_displaylist.js';
 import * as GX_Material from '../gx/gx_material.js';
-import { GX_Program, GXMaterialHacks, lightSetWorldDirectionNormalMatrix, lightSetWorldPositionViewMatrix } from '../gx/gx_material.js';
+import { GX_Program, GXMaterialHacks, lightSetWorldDirection, lightSetWorldPosition } from '../gx/gx_material.js';
 import { AreaAttributes, Effect, Entity, LightParameters, MP1EntityType, WorldLightingOptions } from './script.js';
 import { Color, colorAdd, colorCopy, colorMult, colorNewCopy, OpaqueBlack, TransparentBlack, White } from '../Color.js';
 import { computeNormalMatrix, getMatrixTranslation, setMatrixTranslation, texEnvMtx, transformVec3Mat4w0, transformVec3Mat4w1, Vec3One } from '../MathHelpers.js';
@@ -290,8 +290,8 @@ class MaterialGroupInstance {
                 if (actorLights !== null && i < actorLights.lights.length) {
                     const light = actorLights.lights[i].gxLight;
                     materialParams.u_Lights[i].copy(light);
-                    lightSetWorldPositionViewMatrix(materialParams.u_Lights[i], viewMatrix, light.Position);
-                    lightSetWorldDirectionNormalMatrix(materialParams.u_Lights[i], viewMatrix, light.Direction);
+                    lightSetWorldPosition(materialParams.u_Lights[i], viewMatrix, light.Position);
+                    lightSetWorldDirection(materialParams.u_Lights[i], viewMatrix, light.Direction);
                 } else {
                     materialParams.u_Lights[i].reset();
                 }

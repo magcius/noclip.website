@@ -1,6 +1,6 @@
 
 import { mat4, vec3 } from "gl-matrix";
-import { CameraController, computeViewMatrix, computeViewSpaceDepthFromWorldSpacePoint } from "../Camera.js";
+import { CameraController, computeViewSpaceDepthFromWorldSpacePoint } from "../Camera.js";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
 import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
 import { fillMatrix4x3, fillMatrix4x4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers.js";
@@ -91,8 +91,7 @@ export class NfsRenderer implements SceneGfx {
         let offs = template.allocateUniformBuffer(NfsProgram.ub_SceneParams, 24);
         const sceneParamsMapped = template.mapUniformBufferF32(NfsProgram.ub_SceneParams);
         const worldProjMatrix = mat4.create();
-        computeViewMatrix(worldProjMatrix, viewerInput.camera);
-        mat4.mul(worldProjMatrix, viewerInput.camera.projectionMatrix, worldProjMatrix);
+        mat4.mul(worldProjMatrix, viewerInput.camera.projectionMatrix, viewerInput.camera.viewMatrix);
         offs += fillMatrix4x4(sceneParamsMapped, offs, worldProjMatrix);
         offs += fillVec4v(sceneParamsMapped, offs, [cameraPos[0], cameraPos[1], cameraPos[2], 0]);
         offs += fillVec4v(sceneParamsMapped, offs, [viewerInput.backbufferWidth, viewerInput.backbufferHeight, 0, 0]);

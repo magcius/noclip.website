@@ -235,9 +235,10 @@ class FakeWaterModelInstance {
         if (!this.visible)
             return;
 
+        const camera = viewerInput.camera;
         this.modelInstance.animationController.setTimeInMilliseconds(viewerInput.time);
         this.modelInstance.calcAnim();
-        this.modelInstance.calcView(viewerInput.camera, viewerInput.camera.viewMatrix);
+        this.modelInstance.calcView(camera.viewMatrix, camera.frustum);
 
         const template = renderInstManager.pushTemplate();
 
@@ -247,7 +248,7 @@ class FakeWaterModelInstance {
 
         // Push our material instance.
         this.materialInstance.setOnRenderInst(renderInstManager.gfxRenderCache, template);
-        this.materialInstance.fillMaterialParams(template, this.modelInstance.materialInstanceState, this.modelInstance.shapeInstanceState.worldToViewMatrix, this.modelInstance.modelMatrix, viewerInput.camera, drawParams);
+        this.materialInstance.fillMaterialParams(template, this.modelInstance.materialInstanceState, this.modelInstance.shapeInstanceState.viewFromWorldMatrix, this.modelInstance.modelMatrix, viewerInput.camera.projectionMatrix, drawParams);
         this.plane.prepareToRender(renderInstManager);
 
         renderInstManager.popTemplate();

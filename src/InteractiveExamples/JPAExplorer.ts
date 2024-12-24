@@ -463,7 +463,7 @@ export class Explorer implements SceneGfx {
         {
             renderInstManager.setCurrentList(this.indirectList);
             const texPrjMtx = scratchMatrix;
-            texProjCameraSceneTex(texPrjMtx, viewerInput.camera, 1);
+            texProjCameraSceneTex(texPrjMtx, viewerInput.camera.projectionMatrix, 1);
             this.effectSystem.setDrawInfo(viewerInput.camera.viewMatrix, viewerInput.camera.projectionMatrix, texPrjMtx);
             this.effectSystem.draw(device, this.renderHelper.renderInstManager, EfGroup.Indirect);
         }

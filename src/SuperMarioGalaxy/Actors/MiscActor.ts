@@ -6424,6 +6424,8 @@ export class ElectricRailHolder extends NameObj {
     public override draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         super.draw(sceneObjHolder, renderInstManager, viewerInput);
 
+        const camera = viewerInput.camera;
+
         const cache = renderInstManager.gfxRenderCache;
         for (let i = 0; i < ElectricRailType.Count; i++) {
             const modelObj = this.models[i];
@@ -6433,7 +6435,7 @@ export class ElectricRailHolder extends NameObj {
             const template = renderInstManager.pushTemplate();
 
             const modelInstance = modelObj.modelInstance!;
-            mat4.copy(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
+            mat4.copy(drawParams.u_PosMtx[0], camera.viewMatrix);
 
             const materialInstance = modelInstance.materialInstances[0];
             materialInstance.setOnRenderInst(cache, template);
@@ -6447,7 +6449,7 @@ export class ElectricRailHolder extends NameObj {
                 if (!rail.visibleScenario || !rail.visibleAlive)
                     continue;
 
-                materialInstance.fillOnMaterialParams(materialParams, modelInstance.materialInstanceState, viewerInput.camera, modelInstance.modelMatrix, drawParams);
+                materialInstance.fillOnMaterialParams(materialParams, modelInstance.materialInstanceState, camera.projectionMatrix, camera.viewMatrix, modelInstance.modelMatrix, drawParams);
                 const railTemplate = renderInstManager.pushTemplate();
                 railTemplate.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
                 rail.drawRail(sceneObjHolder, renderInstManager, materialInstance.materialHelper, materialParams);

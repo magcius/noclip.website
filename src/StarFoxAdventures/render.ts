@@ -1,27 +1,27 @@
 import { mat4, vec3 } from 'gl-matrix';
-import * as Viewer from '../viewer.js';
+import { CameraController } from '../Camera.js';
+import { colorNewFromRGBA8, White } from '../Color.js';
+import { setBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
+import { GfxDevice, GfxFormat, GfxMipFilterMode, GfxTexFilterMode, GfxWrapMode } from '../gfx/platform/GfxPlatform.js';
+import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrPass, GfxrPassScope, GfxrRenderTargetDescription, GfxrRenderTargetID, GfxrResolveTextureID, GfxrTemporalTexture } from '../gfx/render/GfxRenderGraph.js';
+import { GfxRenderInst, GfxRenderInstList, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import * as GX from '../gx/gx_enum.js';
 import * as GX_Material from '../gx/gx_material.js';
-import { fillSceneParams, fillSceneParamsData, GXMaterialHelperGfx, GXRenderHelperGfx, MaterialParams, DrawParams, SceneParams } from '../gx/gx_render.js';
-import { GfxDevice, GfxFormat, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode } from '../gfx/platform/GfxPlatform.js';
-import { GfxRenderInst, GfxRenderInstList, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
-import { CameraController, computeViewMatrix } from '../Camera.js';
-import { setBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
-import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrPass, GfxrPassScope, GfxrRenderTargetDescription, GfxrRenderTargetID, GfxrResolveTextureID, GfxrTemporalTexture } from '../gfx/render/GfxRenderGraph.js';
-import { colorNewFromRGBA8, White } from '../Color.js';
+import { DrawParams, fillSceneParams, fillSceneParamsData, GXMaterialHelperGfx, GXRenderHelperGfx, MaterialParams, SceneParams } from '../gx/gx_render.js';
+import { TDDraw } from '../SuperMarioGalaxy/DDraw.js';
 import { TextureMapping } from '../TextureHolder.js';
 import { nArray } from '../util.js';
-import { TDDraw } from '../SuperMarioGalaxy/DDraw.js';
+import * as Viewer from '../viewer.js';
 
-import { SFAAnimationController } from './animation.js';
-import { MaterialFactory, HeatShimmerMaterial, MaterialRenderContext } from './materials.js';
-import { radsToAngle16, vecPitch } from './util.js';
-import { DepthResampler } from './depthresampler.js';
-import { BlurFilter } from './blur.js';
-import { getMatrixAxisZ } from '../MathHelpers.js';
-import { World } from './world.js';
 import { gfxDeviceNeedsFlipY } from '../gfx/helpers/GfxDeviceHelpers.js';
+import { getMatrixAxisZ } from '../MathHelpers.js';
 import { SceneContext } from '../SceneBase.js';
+import { SFAAnimationController } from './animation.js';
+import { BlurFilter } from './blur.js';
+import { DepthResampler } from './depthresampler.js';
+import { HeatShimmerMaterial, MaterialFactory, MaterialRenderContext } from './materials.js';
+import { radsToAngle16, vecPitch } from './util.js';
+import { World } from './world.js';
 
 export interface SceneUpdateContext {
     viewerInput: Viewer.ViewerRenderInput;
@@ -308,7 +308,7 @@ export class SFARenderer implements Viewer.SceneGfx {
             world: this.world,
         };
 
-        computeViewMatrix(sceneCtx.worldToViewMtx, viewerInput.camera);
+        mat4.copy(sceneCtx.worldToViewMtx, viewerInput.camera.viewMatrix);
         mat4.invert(sceneCtx.viewToWorldMtx, sceneCtx.worldToViewMtx);
 
         this.addSkyRenderInsts(device, renderInstManager, this.renderLists, sceneCtx);

@@ -490,7 +490,7 @@ export class TwilightPrincessRenderer implements Viewer.SceneGfx {
 
                 if (group === EffectDrawGroup.Indirect) {
                     texPrjMtx = scratchMatrix;
-                    texProjCameraSceneTex(texPrjMtx, viewerInput.camera, 1);
+                    texProjCameraSceneTex(texPrjMtx, viewerInput.camera.projectionMatrix, 1);
                 }
 
                 this.globals.particleCtrl.setDrawInfo(viewerInput.camera.viewMatrix, viewerInput.camera.projectionMatrix, texPrjMtx, viewerInput.camera.frustum);

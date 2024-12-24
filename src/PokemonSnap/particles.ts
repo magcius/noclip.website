@@ -1,21 +1,21 @@
+
 import * as RDP from "../Common/N64/RDP.js";
 
 import { mat4, vec3, vec4 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { TexCM } from "../Common/N64/Image.js";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
-import { GfxBuffer, GfxBufferUsage, GfxDevice, GfxFormat, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxSampler, GfxTexture, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxProgram, GfxMegaStateDescriptor, GfxCompareMode, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform.js";
+import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
+import { fillMatrix4x3, fillMatrix4x4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers.js";
+import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferUsage, GfxCompareMode, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxMegaStateDescriptor, GfxProgram, GfxSampler, GfxTexture, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
-import { GfxRenderInstManager, makeSortKey, GfxRendererLayer } from "../gfx/render/GfxRenderInstManager.js";
-import { clamp, lerp, MathConstants, normToLength, normToLengthAndAdd, transformVec3Mat4w0, Vec3Zero, Vec3UnitX, calcBillboardMatrix, CalcBillboardFlags } from "../MathHelpers.js";
+import { GfxRendererLayer, GfxRenderInstManager, makeSortKey } from "../gfx/render/GfxRenderInstManager.js";
+import { CalcBillboardFlags, calcBillboardMatrix, clamp, lerp, MathConstants, normToLength, normToLengthAndAdd, transformVec3Mat4w0, Vec3UnitX, Vec3Zero } from "../MathHelpers.js";
 import { DeviceProgram } from "../Program.js";
+import { TextureMapping } from "../TextureHolder.js";
 import { align, assert, hexzero, nArray } from "../util.js";
 import { ViewerRenderInput } from "../viewer.js";
 import { getColor, getVec3 } from "./room.js";
-import { fillMatrix4x4, fillMatrix4x3, fillVec4v } from "../gfx/helpers/UniformBufferHelpers.js";
-import { TextureMapping } from "../TextureHolder.js";
-import { computeViewMatrix } from "../Camera.js";
-import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
 
 export interface EmitterData {
     isCommon: boolean;
@@ -968,8 +968,7 @@ class Particle {
         let offs = renderInst.allocateUniformBuffer(ParticleProgram.ub_DrawParams, 12 + 4 * 2);
         const draw = renderInst.mapUniformBufferF32(ParticleProgram.ub_DrawParams);
 
-        computeViewMatrix(particleMtx, viewerInput.camera);
-        mat4.mul(particleMtx, particleMtx, this.modelMatrix);
+        mat4.mul(particleMtx, viewerInput.camera.viewMatrix, this.modelMatrix);
         calcBillboardMatrix(particleMtx, particleMtx, CalcBillboardFlags.UseRollLocal | CalcBillboardFlags.PriorityZ | CalcBillboardFlags.UseZPlane);
         offs += fillMatrix4x3(draw, offs, particleMtx);
 

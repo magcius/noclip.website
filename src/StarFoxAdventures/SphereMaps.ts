@@ -1,15 +1,15 @@
 import { mat4, vec3 } from 'gl-matrix';
-import { computeViewMatrix } from '../Camera.js';
 import { Blue, Color, colorCopy, colorNewFromRGBA, Red, TransparentBlack, White } from '../Color.js';
+import { projectionMatrixConvertClipSpaceNearZ } from '../gfx/helpers/ProjectionHelpers.js';
 import { GfxClipSpaceNearZ, GfxDevice, GfxFormat, GfxMipFilterMode, GfxSampler, GfxTexFilterMode, GfxWrapMode } from '../gfx/platform/GfxPlatform.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrPass, GfxrPassScope, GfxrRenderTargetDescription, GfxrRenderTargetID, GfxrResolveTextureID } from '../gfx/render/GfxRenderGraph.js';
 import { GfxRenderInstList, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
 import * as GX from '../gx/gx_enum.js';
 import * as GX_Material from '../gx/gx_material.js';
-import { ColorKind, fillSceneParams, fillSceneParamsData, GXRenderHelperGfx, MaterialParams, DrawParams, SceneParams } from '../gx/gx_render.js';
+import { ColorKind, DrawParams, fillSceneParams, fillSceneParamsData, gxBindingLayouts, GXRenderHelperGfx, MaterialParams, SceneParams, ub_SceneParamsBufferSize } from '../gx/gx_render.js';
 import { projectionMatrixForCuboid } from '../MathHelpers.js';
-import { TDDraw, TSDraw } from "../SuperMarioGalaxy/DDraw.js";
+import { TSDraw } from "../SuperMarioGalaxy/DDraw.js";
 import { TextureMapping } from '../TextureHolder.js';
 import { nArray } from '../util.js';
 import { SFAMaterialBuilder } from './MaterialBuilder.js';
@@ -19,15 +19,11 @@ import { TextureFetcher } from './textures.js';
 import { mat4SetTranslation } from './util.js';
 import { World } from './world.js';
 import { LightType } from './WorldLights.js';
-import { ub_SceneParamsBufferSize } from '../gx/gx_render.js';
-import { gxBindingLayouts } from '../gx/gx_render.js';
-import { projectionMatrixConvertClipSpaceNearZ } from '../gfx/helpers/ProjectionHelpers.js';
 
 const scratchMaterialParams = new MaterialParams();
 const scratchDrawParams = new DrawParams();
 const scratchSceneParams = new SceneParams();
 const scratchMtx0 = mat4.create();
-const scratchMtx1 = mat4.create();
 const scratchVec0 = vec3.create();
 const scratchVec1 = vec3.create();
 
@@ -231,10 +227,8 @@ export class SphereMapManager {
         const skyLight = this.world.envfxMan.skyLight;
         const groundLight = this.world.envfxMan.groundLight;
 
-        const worldView = scratchMtx0;
-        computeViewMatrix(worldView, sceneCtx.viewerInput.camera);
-        const worldViewSR = scratchMtx1;
-        mat4.copy(worldViewSR, worldView);
+        const worldViewSR = scratchMtx0;
+        mat4.copy(worldViewSR, sceneCtx.viewToWorldMtx);
         mat4SetTranslation(worldViewSR, 0, 0, 0);
 
         const skyLightVec = scratchVec0;

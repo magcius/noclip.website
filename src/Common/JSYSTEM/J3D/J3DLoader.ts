@@ -549,8 +549,9 @@ export const enum TexMtxMapMode {
     ProjmapBasic = 0x02,
     ViewProjmapBasic = 0x03,
     // Unknown: 0x04, 0x05. No known uses.
+    Unk0x04 = 0x04,
+    Unk0x05 = 0x05,
     // Uses "Old" conventions, remaps translation in fourth component
-    // TODO(jstpierre): Figure out the geometric interpretation of old vs. new
     EnvmapOld = 0x06,
     // Uses "New" conventions, remaps translation in third component
     Envmap = 0x07,

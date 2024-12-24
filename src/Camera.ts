@@ -1021,8 +1021,8 @@ export function deserializeCamera(camera: Camera, view: DataView, byteOffs: numb
     return 0x04*4*3;
 }
 
-function texProjCamera(dst: mat4, camera: Camera, scaleS: number, scaleT: number, transS: number, transT: number): void {
-    const projMtx = camera.projectionMatrix;
+function texProjCamera(dst: mat4, clipFromViewMatrix: ReadonlyMat4, scaleS: number, scaleT: number, transS: number, transT: number): void {
+    const projMtx = clipFromViewMatrix;
 
     // Avoid multiplications where we know the result will be 0.
     dst[0]  = projMtx[0]  * scaleS;
@@ -1049,8 +1049,8 @@ function texProjCamera(dst: mat4, camera: Camera, scaleS: number, scaleT: number
     dst[15] = 9999.0;
 }
 
-export function texProjCameraSceneTex(dst: mat4, camera: Camera, flipYScale: number): void {
+export function texProjCameraSceneTex(dst: mat4, clipFromViewMatrix: ReadonlyMat4, flipYScale: number): void {
     // Map from -1 to 1 to 0 to 1.
     let scaleS = 0.5, scaleT = -0.5 * flipYScale, transS = 0.5, transT = 0.5;
-    texProjCamera(dst, camera, scaleS, scaleT, transS, transT);
+    texProjCamera(dst, clipFromViewMatrix, scaleS, scaleT, transS, transT);
 }

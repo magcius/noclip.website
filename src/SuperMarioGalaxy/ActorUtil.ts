@@ -905,7 +905,7 @@ export function isValidDraw(actor: LiveActor): boolean {
 
 export function loadTexProjectionMtx(m: mat4, textureMapping: TextureMapping, camera: Camera): void {
     const flipYScale = textureMapping.flipY ? -1 : 1;
-    texProjCameraSceneTex(m, camera, flipYScale);
+    texProjCameraSceneTex(m, camera.projectionMatrix, flipYScale);
     mat4.mul(m, m, camera.viewMatrix);
 }
 
