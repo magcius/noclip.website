@@ -1,10 +1,11 @@
 {
     "compilerOptions": {
-        "target": "es2017",
+        "target": "ES2022",
         "alwaysStrict": true,
         "downlevelIteration": true,
         "esModuleInterop": true,
         "experimentalDecorators": true,
+        "emitDecoratorMetadata": true,
         "noImplicitAny": true,
         "noImplicitOverride": true,
         "noImplicitReturns": true,
@@ -16,14 +17,14 @@
         "useDefineForClassFields": false,
         "resolveJsonModule": true,
         "lib": [
-            "ES2020",
-            "ES2021.String",
+            "ES2022",
             "ES2024.ArrayBuffer",
-            "dom"
+            "DOM"
         ],
         "sourceMap": true,
         "moduleResolution": "Bundler",
         "module": "ESNext",
+        "isolatedModules": true,
         "types": [
             "gl-matrix",
             "webxr"

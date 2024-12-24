@@ -52,10 +52,10 @@ rust/target/
 .pnpm-debug.log
 .cache/
 
-data/*
-!data/.empty
-dist/*
-!dist/.htaccess
+data/
+dist/
+public/data/*
+!public/data/.gitkeep
 
 # wasm-pack not working correctly
 pkg/index.js
