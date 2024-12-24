@@ -223,11 +223,10 @@ export class dCamera_c extends Camera {
     private static trimHeightCinematic = 65.0;
 
     public finishSetup(): void {
-        mat4.invert(this.worldMatrix, this.viewMatrix);
-        mat4.mul(this.clipFromWorldMatrix, this.projectionMatrix, this.viewMatrix);
+        mat4.invert(this.viewMatrix, this.worldMatrix);
+        this.setClipPlanes(this.near, this.far);
         getMatrixTranslation(this.cameraPos, this.worldMatrix);
         getMatrixAxisZ(this.cameraFwd, this.viewMatrix);
-        this.frustum.updateClipFrustum(this.clipFromWorldMatrix, this.clipSpaceNearZ);
     }
 
     public setupFromCamera(camera: Camera): void {
@@ -235,7 +234,7 @@ export class dCamera_c extends Camera {
         this.aspect = camera.aspect;
         this.fovY = camera.fovY;
 
-        mat4.copy(this.viewMatrix, camera.viewMatrix);
+        mat4.copy(this.worldMatrix, camera.worldMatrix);
         mat4.copy(this.projectionMatrix, camera.projectionMatrix);
     }
 
@@ -272,7 +271,6 @@ export class dCamera_c extends Camera {
             if (demoCam.flags & EDemoCamFlags.HasNearZ) { this.near = demoCam.projNear; }
             if (demoCam.flags & EDemoCamFlags.HasFarZ) { this.far = demoCam.projFar; }
 
-            // TODO: Clean this up
             mat4.targetTo(this.worldMatrix, this.cameraPos, targetPos, this.cameraUp);
             mat4.rotateZ(this.worldMatrix, this.worldMatrix, this.roll);
 
@@ -283,9 +281,6 @@ export class dCamera_c extends Camera {
             globals.context.inputManager.isMouseEnabled = true;
         }
 
-        // TODO: Clean this up
-        this.worldMatrixUpdated();
-        this.setClipPlanes(this.near, this.far);
         this.finishSetup();
         
         // From dCamera_c::CalcTrimSize()
