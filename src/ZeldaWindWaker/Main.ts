@@ -267,7 +267,7 @@ class dCamera_c {
         
         // From dCamera_c::CalcTrimSize()
         // Animate up to the trim size for the current mode.
-        if(this.cameraMode == CameraMode.Cinematic) {
+        if(this.cameraMode === CameraMode.Cinematic) {
             this.trimHeight += (dCamera_c.trimHeightCinematic - this.trimHeight) * 0.25;
         } else {
             this.trimHeight += -this.trimHeight * 0.25;
