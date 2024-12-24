@@ -8,7 +8,7 @@ import { GfxRenderInstList, GfxRenderInstManager } from '../gfx/render/GfxRender
 import * as GX from '../gx/gx_enum.js';
 import * as GX_Material from '../gx/gx_material.js';
 import { ColorKind, DrawParams, fillSceneParams, fillSceneParamsData, gxBindingLayouts, GXRenderHelperGfx, MaterialParams, SceneParams, ub_SceneParamsBufferSize } from '../gx/gx_render.js';
-import { projectionMatrixForCuboid } from '../MathHelpers.js';
+import { projectionMatrixForCuboid, setMatrixTranslation, Vec3Zero } from '../MathHelpers.js';
 import { TSDraw } from "../SuperMarioGalaxy/DDraw.js";
 import { TextureMapping } from '../TextureHolder.js';
 import { nArray } from '../util.js';
@@ -16,7 +16,6 @@ import { SFAMaterialBuilder } from './MaterialBuilder.js';
 import { makeMaterialTexture, MaterialFactory } from './materials.js';
 import { SceneRenderContext, setGXMaterialOnRenderInst } from './render.js';
 import { TextureFetcher } from './textures.js';
-import { mat4SetTranslation } from './util.js';
 import { World } from './world.js';
 import { LightType } from './WorldLights.js';
 
@@ -86,7 +85,7 @@ function createReflectiveProbeMaterial(materialFactory: MaterialFactory, texFetc
     mb.setTevDirect(stage0);
     mb.setTexMtx(0, (dst: mat4) => {
         mat4.fromScaling(dst, [0.5, -0.5, 0.5]);
-        mat4SetTranslation(dst, 0.5, 0.5, 0.0);
+        setMatrixTranslation(dst, [0.5, 0.5, 0.0]);
     });
     const texCoord = mb.genTexCoord(GX.TexGenType.MTX2x4, GX.TexGenSrc.NRM, GX.TexGenMatrix.TEXMTX0);
     const texMap = mb.genTexMap(makeMaterialTexture(texFetcher.getTexture(materialFactory.cache, 0x5dc, false)));
@@ -229,7 +228,7 @@ export class SphereMapManager {
 
         const worldViewSR = scratchMtx0;
         mat4.copy(worldViewSR, sceneCtx.viewToWorldMtx);
-        mat4SetTranslation(worldViewSR, 0, 0, 0);
+        setMatrixTranslation(worldViewSR, Vec3Zero);
 
         const skyLightVec = scratchVec0;
         vec3.transformMat4(skyLightVec, skyLight.direction, worldViewSR);

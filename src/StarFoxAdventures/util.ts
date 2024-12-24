@@ -71,16 +71,6 @@ export function mat4FromRowMajor(
     );
 }
 
-export function mat4SetValue(mtx: mat4, row: number, col: number, m: number): void {
-    mtx[4 * col + row] = m;
-}
-
-export function mat4SetTranslation(mtx: mat4, x: number, y: number, z: number): void {
-    mat4SetValue(mtx, 0, 3, x);
-    mat4SetValue(mtx, 1, 3, y);
-    mat4SetValue(mtx, 2, 3, z);
-}
-
 // Compute model matrix from scale, rotation, and translation.
 // This version is unique to SFA:
 // Rotations are applied in the order: Z (roll), then X (pitch), then Y (yaw).

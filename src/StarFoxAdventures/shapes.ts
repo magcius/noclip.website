@@ -10,12 +10,11 @@ import { GfxRendererLayer, GfxRenderInst, GfxRenderInstManager, setSortKeyDepth,
 import { compilePartialVtxLoader, compileVtxLoaderMultiVat, GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, LoadedVertexDraw, LoadedVertexLayout, VtxLoader } from '../gx/gx_displaylist.js';
 import * as GX_Material from '../gx/gx_material.js';
 import { createInputLayout, DrawParams, MaterialParams } from '../gx/gx_render.js';
-import { transformVec3Mat4w1 } from '../MathHelpers.js';
+import { setMatrixTranslation, transformVec3Mat4w1, Vec3Zero } from '../MathHelpers.js';
 import { nArray } from '../util.js';
 import { MaterialRenderContext, SFAMaterial, StandardMapMaterial } from './materials.js';
 import { ModelRenderContext } from './models.js';
 import { setGXMaterialOnRenderInst } from './render.js';
-import { mat4SetTranslation } from './util.js';
 import { LightType } from './WorldLights.js';
 
 export interface ShapeRenderContext {
@@ -293,7 +292,7 @@ export class Shape {
             for (let i = 0; i < drawParams.u_PosMtx.length; i++) {
                 // XXX: this is the game's peculiar way of creating normal matrices
                 mat4.copy(scratchMaterialParams.u_TexMtx[i], drawParams.u_PosMtx[i]);
-                mat4SetTranslation(scratchMaterialParams.u_TexMtx[i], 0, 0, 0);
+                setMatrixTranslation(scratchMaterialParams.u_TexMtx[i], Vec3Zero);
                 mat4.mul(scratchMaterialParams.u_TexMtx[i], scratchMaterialParams.u_TexMtx[i], descaleMtx);
                 // The following line causes glitches due to an issue related to computeNormalMatrix's method of detecting uniform scaling.
                 // computeNormalMatrix(scratchMaterialParams.u_TexMtx[i], drawParams.u_PosMtx[i]);
