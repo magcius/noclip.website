@@ -68,7 +68,7 @@ class d_a_noclip_legacy extends fopAc_ac_c {
 
         this.cullMtx = baseObj.modelMatrix;
 
-        if (this.cullSizeSphere !== null && !Object.isFrozen(this.cullSizeSphere)) {
+        if (this.cullSizeSphere !== null && this.cullSizeSphere[3] === 0.0) {
             // Convert us to a box.
             this.cullSizeSphere = null;
             this.cullSizeBox = new AABB();

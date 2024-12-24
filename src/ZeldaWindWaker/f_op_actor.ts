@@ -1,17 +1,16 @@
 
 import { mat4, ReadonlyVec3, vec3, vec4 } from "gl-matrix";
+import { Camera } from "../Camera.js";
 import { AABB } from "../Geometry.js";
-import { Camera, calcScreenSpaceProjectionFromWorldSpaceAABB, ScreenSpaceProjection, calcScreenSpaceProjectionFromWorldSpaceSphere } from "../Camera.js";
-import { base_process_class, cPhs__Status, fGlobals, fopDwTg_DrawQTo, fopDwTg_ToDrawQ, fpcDt_Delete, fpcM_Management, fpcPc__IsVisible, fpcSCtRq_Request, leafdraw_class } from "./framework.js";
-import { dKy_tevstr_c, dKy_tevstr_init } from "./d_kankyo.js";
-import { dGlobals } from "./Main.js";
+import { MathConstants, transformVec3Mat4w1 } from "../MathHelpers.js";
 import { assert } from "../util.js";
-import { transformVec3Mat4w1 } from "../MathHelpers.js";
+import { dKy_tevstr_c, dKy_tevstr_init } from "./d_kankyo.js";
 import { dProcName_e } from "./d_procname.js";
+import { base_process_class, cPhs__Status, fGlobals, fopDwTg_DrawQTo, fopDwTg_ToDrawQ, fpcDt_Delete, fpcPc__IsVisible, fpcSCtRq_Request, leafdraw_class } from "./framework.js";
+import { dGlobals } from "./Main.js";
 
 const scratchVec3a = vec3.create();
 const scratchAABB = new AABB();
-const scratchScreenSpaceProjection = new ScreenSpaceProjection();
 export class fopAc_ac_c extends leafdraw_class {
     public pos = vec3.create();
     public rot = vec3.create();
@@ -40,7 +39,7 @@ export class fopAc_ac_c extends leafdraw_class {
         } else if (cullType === 0x0E) {
             this.cullSizeBox = new AABB();
         } else if (cullType < 0x17) {
-            // this.cullSizeSphere = this.cullSizeSphere[cullType - 0x0F];
+            this.cullSizeSphere = fopAc_ac_c.cullSizeSphere[cullType - 0x0F];
         } else if (cullType === 0x17) {
             this.cullSizeSphere = vec4.create();
         }
@@ -91,13 +90,24 @@ export class fopAc_ac_c extends leafdraw_class {
         new AABB(-60.0,  -20.0, -60.0,     60.0, 160.0,  60.0), // 0x0D
     ];
 
+    private static cullSizeSphere: vec4[] = [
+        vec4.fromValues(0.0, 0.0, 0.0, 80.0),
+        vec4.fromValues(0.0, 0.0, 0.0, 50.0),
+        vec4.fromValues(0.0, 0.0, 0.0, 100.0),
+        vec4.fromValues(0.0, 0.0, 0.0, 150.0),
+        vec4.fromValues(0.0, 0.0, 0.0, 200.0),
+        vec4.fromValues(0.0, 0.0, 0.0, 250.0),
+        vec4.fromValues(0.0, 0.0, 0.0, 300.0),
+        vec4.fromValues(0.0, 0.0, 0.0, 400.0),
+    ];
+
     protected setCullSizeBox(minX: number, minY: number, minZ: number, maxX: number, maxY: number, maxZ: number): void {
         assert(this.cullSizeBox !== null && !Object.isFrozen(this.cullSizeBox));
         this.cullSizeBox.set(minX, minY, minZ, maxX, maxY, maxZ);
     }
 
     protected setCullSizeSphere(x: number, y: number, z: number, r: number): void {
-        assert(this.cullSizeSphere !== null && !Object.isFrozen(this.cullSizeSphere));
+        assert(this.cullSizeSphere !== null && this.cullSizeSphere[3] === 0.0);
         vec4.set(this.cullSizeSphere, x, y, z, r);
     }
 
@@ -122,8 +132,19 @@ export class fopAc_ac_c extends leafdraw_class {
             if (!frustum.contains(scratchAABB))
                 return false;
 
-            calcScreenSpaceProjectionFromWorldSpaceAABB(scratchScreenSpaceProjection, camera, scratchAABB);
-            if (scratchScreenSpaceProjection.getScreenArea() <= 0.0002)
+            // Calculate screen area.
+            let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+            for (let i = 0; i < 8; i++) {
+                scratchAABB.cornerPoint(scratchVec3a, i);
+                vec3.transformMat4(scratchVec3a, scratchVec3a, camera.clipFromWorldMatrix);
+                minX = Math.min(minX, scratchVec3a[0]); maxX = Math.max(maxX, scratchVec3a[0]);
+                minY = Math.min(minY, scratchVec3a[1]); maxY = Math.max(maxY, scratchVec3a[1]);
+            }
+            const extX = (maxX - minX) * 0.5;
+            const extY = (maxY - minY) * 0.5;
+            const area = extX * extY;
+
+            if (area <= 0.0002)
                 return false;
         } else if (this.cullSizeSphere !== null) {
             vec3.set(scratchVec3a, this.cullSizeSphere[0], this.cullSizeSphere[1], this.cullSizeSphere[2]);
@@ -133,8 +154,11 @@ export class fopAc_ac_c extends leafdraw_class {
             if (!frustum.containsSphere(scratchVec3a, radius))
                 return false;
 
-            calcScreenSpaceProjectionFromWorldSpaceSphere(scratchScreenSpaceProjection, camera, scratchVec3a, radius);
-            if (scratchScreenSpaceProjection.getScreenArea() <= 0.0002)
+            // Calculate the length of a line R at distance D from the camera.
+            const r = Math.abs(camera.projectionMatrix[11] * this.cullSizeSphere[2] + camera.projectionMatrix[15]);
+            const area = MathConstants.TAU * r;
+
+            if (area <= 0.0002)
                 return false;
         }
 
