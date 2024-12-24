@@ -568,7 +568,7 @@ export class d_a_sea extends fopAc_ac_c {
         materialHelper.setOnRenderInst(renderInstManager.gfxRenderCache, renderInst);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
         materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
-        mat4.copy(drawParams.u_PosMtx[0], globals.camera.viewerCamera.viewMatrix);
+        mat4.copy(drawParams.u_PosMtx[0], globals.camera.viewMatrix);
         materialHelper.allocateDrawParamsDataOnInst(renderInst, drawParams);
         renderInstManager.submitRenderInst(renderInst);
     }

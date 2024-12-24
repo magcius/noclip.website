@@ -109,7 +109,7 @@ export class fopAc_ac_c extends leafdraw_class {
         if (this.cullMtx === null)
             throw "whoops";
 
-        const frustum = camera.viewerCamera.frustum;
+        const frustum = camera.frustum;
 
         if (this.cullSizeBox !== null) {
             // If the box is empty, that means I forgot to fill it in for a certain actor.
@@ -122,7 +122,7 @@ export class fopAc_ac_c extends leafdraw_class {
             if (!frustum.contains(scratchAABB))
                 return false;
 
-            computeScreenSpaceProjectionFromWorldSpaceAABB(scratchScreenSpaceProjection, camera.viewerCamera, scratchAABB);
+            computeScreenSpaceProjectionFromWorldSpaceAABB(scratchScreenSpaceProjection, camera, scratchAABB);
             if (scratchScreenSpaceProjection.getScreenArea() <= 0.0002)
                 return false;
         } else if (this.cullSizeSphere !== null) {
@@ -133,7 +133,7 @@ export class fopAc_ac_c extends leafdraw_class {
             if (!frustum.containsSphere(scratchVec3a, radius))
                 return false;
 
-            computeScreenSpaceProjectionFromWorldSpaceSphere(scratchScreenSpaceProjection, camera.viewerCamera, scratchVec3a, radius);
+            computeScreenSpaceProjectionFromWorldSpaceSphere(scratchScreenSpaceProjection, camera, scratchVec3a, radius);
             if (scratchScreenSpaceProjection.getScreenArea() <= 0.0002)
                 return false;
         }

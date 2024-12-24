@@ -280,22 +280,22 @@ export class J3DModelInstanceSimple extends J3DModelInstance {
     }
 
     // The classic public interface, for compatibility.
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, camera: Camera = viewerInput.camera): void {
         if (!this.visible)
             return;
 
         this.animationController.setTimeInMilliseconds(viewerInput.time);
-        this.calcSkybox(viewerInput.camera);
+        this.calcSkybox(camera);
         this.calcAnim();
-        this.calcView(viewerInput.camera, viewerInput.camera.viewMatrix);
+        this.calcView(camera, camera.viewMatrix);
 
         // If entire model is culled away, then we don't need to render anything.
         if (!this.isAnyShapeVisible())
             return;
 
-        const depth = this.computeDepth(viewerInput.camera);
+        const depth = this.computeDepth(camera);
         for (let i = 0; i < this.materialInstances.length; i++)
-            this.materialInstances[i].prepareToRenderShapes(device, renderInstManager, depth, viewerInput.camera, this.modelData, this.materialInstanceState, this.shapeInstanceState);
+            this.materialInstances[i].prepareToRenderShapes(device, renderInstManager, depth, camera, this.modelData, this.materialInstanceState, this.shapeInstanceState);
     }
 
     public override destroy(device: GfxDevice): void {

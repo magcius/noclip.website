@@ -368,7 +368,7 @@ export class FlowerPacket {
     private drawFlowers(globals: dGlobals, roomIdx: number, type: FlowerType, model: DynamicModel, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         const camera = globals.camera;
 
-        getMatrixTranslation(scratchVec3a, camera.viewerCamera.worldMatrix);
+        getMatrixTranslation(scratchVec3a, camera.worldMatrix);
 
         const template = renderInstManager.pushTemplate();
         template.setSamplerBindingsFromTextureMappings(model.textureMapping);
@@ -388,7 +388,7 @@ export class FlowerPacket {
 
             const renderInst = renderInstManager.newRenderInst();
             model.shapes[0].setOnRenderInst(renderInst);
-            mat4.mul(drawParams.u_PosMtx[0], camera.viewerCamera.viewMatrix, data.modelMatrix);
+            mat4.mul(drawParams.u_PosMtx[0], camera.viewMatrix, data.modelMatrix);
             model.materialHelper.allocateDrawParamsDataOnInst(renderInst, drawParams);
             renderInstManager.submitRenderInst(renderInst);
         }
@@ -726,8 +726,8 @@ export class TreePacket {
         if (room.length === 0)
             return;
 
-        const worldToView = globals.camera.viewerCamera.viewMatrix;
-        const worldCamPos = mat4.getTranslation(scratchVec3b, globals.camera.viewerCamera.worldMatrix);
+        const worldToView = globals.camera.viewMatrix;
+        const worldCamPos = mat4.getTranslation(scratchVec3b, globals.camera.worldMatrix);
 
         // Draw shadows
         {
@@ -975,7 +975,7 @@ export class GrassPacket {
 
             vec3.copy(scratchVec3a, data.pos);
             scratchVec3a[1] += 260.0;
-            data.flags = setBitFlagEnabled(data.flags, GrassFlags.IsFrustumCulled, !globals.camera.viewerCamera.frustum.containsSphere(scratchVec3a, 260.0));
+            data.flags = setBitFlagEnabled(data.flags, GrassFlags.IsFrustumCulled, !globals.camera.frustum.containsSphere(scratchVec3a, 260.0));
 
             if (!(data.flags & GrassFlags.IsFrustumCulled)) {
                 // Update model matrix for all non-culled objects
@@ -1024,8 +1024,8 @@ export class GrassPacket {
         if (room.length === 0)
             return;
 
-        const worldToView = globals.camera.viewerCamera.viewMatrix;
-        const worldCamPos = mat4.getTranslation(scratchVec3b, globals.camera.viewerCamera.worldMatrix);
+        const worldToView = globals.camera.viewMatrix;
+        const worldCamPos = mat4.getTranslation(scratchVec3b, globals.camera.worldMatrix);
 
         const template = renderInstManager.pushTemplate();
         template.setSamplerBindingsFromTextureMappings(this.grassModel.textureMapping);

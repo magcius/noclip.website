@@ -132,7 +132,7 @@ class dDlst_alphaModel_c {
 
             if (data.type === dDlst_alphaModel__Type.Bonbori) {
                 this.bonboriShape.setOnRenderInst(template);
-                mat4.mul(drawParams.u_PosMtx[0], globals.camera.viewerCamera.viewMatrix, data.mtx);
+                mat4.mul(drawParams.u_PosMtx[0], globals.camera.viewMatrix, data.mtx);
                 this.materialHelperBackRevZ.allocateDrawParamsDataOnInst(template, drawParams);
 
                 materialParams.u_Color[ColorKind.MAT0].a = data.alpha / 0xFF;

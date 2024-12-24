@@ -50,7 +50,7 @@ class dDemo_camera_c extends TCamera {
         const camera = this.globals.camera;
         if (!camera)
             return 0.0;
-        return camera.viewerCamera.near;
+        return camera.near;
     }
 
     public override JSGSetProjectionNear(v: number) {
@@ -62,7 +62,7 @@ class dDemo_camera_c extends TCamera {
         const camera = this.globals.camera;
         if (!camera)
             return 1.0;
-        return camera.viewerCamera.far;
+        return camera.far;
     }
 
 
@@ -76,7 +76,7 @@ class dDemo_camera_c extends TCamera {
         const camera = this.globals.camera;
         if (!camera)
             return 60.0;
-        return camera.viewerCamera.fovY;
+        return camera.fovY;
     }
 
 
@@ -90,7 +90,7 @@ class dDemo_camera_c extends TCamera {
         const camera = this.globals.camera;
         if (!camera)
             return 1.3333;
-        return camera.viewerCamera.aspect;
+        return camera.aspect;
     }
 
 
@@ -101,7 +101,7 @@ class dDemo_camera_c extends TCamera {
 
 
     public override JSGGetViewPosition(dst: vec3) {
-        vec3.copy(dst, this.globals.cameraPosition);
+        vec3.copy(dst, this.globals.camera.cameraPos);
     }
 
 
@@ -115,7 +115,7 @@ class dDemo_camera_c extends TCamera {
         const camera = this.globals.camera;
         if (!camera)
             vec3.set(dst, 0, 1, 0);
-        getMatrixAxisY(dst, camera.viewerCamera.viewMatrix); // @TODO: Double check that this is correct
+        vec3.copy(dst, camera.cameraUp);
     }
 
 
@@ -129,7 +129,7 @@ class dDemo_camera_c extends TCamera {
         const camera = this.globals.camera;
         if (!camera)
             vec3.zero(dst);
-        vec3.add(dst, this.globals.cameraPosition, this.globals.cameraFwd);
+        vec3.add(dst, this.globals.camera.cameraPos, this.globals.camera.cameraFwd);
     }
 
 
@@ -143,7 +143,7 @@ class dDemo_camera_c extends TCamera {
         const camera = this.globals.camera;
         if (!camera)
             return 0.0;
-        return this.roll; // HACK: Instead of actually computing roll (complicated), just assume no one else is modifying it
+        return camera.roll;
     }
 
 

@@ -73,7 +73,7 @@ export class dPa_control_c {
         const inc = viewerInput.deltaTime / 1000 * 30;
 
         // Some hacky distance culling for emitters.
-        getMatrixTranslation(scratchVec3a, globals.camera.viewerCamera.worldMatrix);
+        getMatrixTranslation(scratchVec3a, globals.camera.worldMatrix);
         for (let i = 0; i < this.emitterManager.aliveEmitters.length; i++) {
             const emitter = this.emitterManager.aliveEmitters[i];
             const cullDistance = (emitter as any).cullDistance ?? 5000;

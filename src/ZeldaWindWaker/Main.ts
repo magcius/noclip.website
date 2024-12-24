@@ -17,7 +17,7 @@ import { J3DModelInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase.js';
 import * as JPA from '../Common/JSYSTEM/JPA.js';
 import { BTIData } from '../Common/JSYSTEM/JUTTexture.js';
 import { dfRange } from '../DebugFloaters.js';
-import { MathConstants, getMatrixAxisZ, range } from '../MathHelpers.js';
+import { MathConstants, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, range } from '../MathHelpers.js';
 import { SceneContext } from '../SceneBase.js';
 import { TextureMapping } from '../TextureHolder.js';
 import { setBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
@@ -141,8 +141,6 @@ export class dGlobals {
     public playerPosition = vec3.create();
     // g_dComIfG_gameInfo.mPlay.mCameraInfo[0].mpCamera
     public camera = new dCamera_c();
-    public cameraPosition = vec3.create();
-    public cameraFwd = vec3.create();
 
     public resCtrl: dRes_control_c;
     // TODO(jstpierre): Remove
@@ -207,9 +205,12 @@ const enum CameraMode {
     Cinematic
 }
 
-export class dCamera_c {
-    // TODO: Remove
-    public viewerCamera: Camera;
+export class dCamera_c extends Camera {
+    // The current camera position, in Wind Waker engine world space.
+    public cameraPos = vec3.create();
+    public cameraFwd = vec3.create();
+    public cameraUp = vec3.fromValues(0, 1, 0);
+    public roll = 0.0;
 
     // For people to play around with.
     public cameraFrozen = false;
@@ -220,19 +221,37 @@ export class dCamera_c {
 
     private static trimHeightCinematic = 65.0;
 
+    public finishSetup(): void {
+        mat4.invert(this.worldMatrix, this.viewMatrix);
+        mat4.mul(this.clipFromWorldMatrix, this.projectionMatrix, this.viewMatrix);
+        getMatrixTranslation(this.cameraPos, this.worldMatrix);
+        getMatrixAxisZ(this.cameraFwd, this.viewMatrix);
+        this.frustum.updateClipFrustum(this.clipFromWorldMatrix, this.clipSpaceNearZ);
+    }
+
+    public setupFromCamera(camera: Camera): void {
+        this.clipSpaceNearZ = camera.clipSpaceNearZ;
+        this.aspect = camera.aspect;
+        this.fovY = camera.fovY;
+
+        mat4.copy(this.viewMatrix, camera.viewMatrix);
+        mat4.copy(this.projectionMatrix, camera.projectionMatrix);
+        this.finishSetup();
+    }
+
     public execute(globals: dGlobals, viewerInput: Viewer.ViewerRenderInput) {
+        this.setupFromCamera(viewerInput.camera);
+
         // Near/far planes are decided by the stage data.
         const stag = globals.dStage_dt.stag;
 
         // Pull in the near plane to decrease Z-fighting, some stages set it far too close...
-        let nearPlane = Math.max(stag.nearPlane, 5);
-        let farPlane = stag.farPlane;
+        this.near = Math.max(stag.nearPlane, 5);
+        this.far = stag.farPlane;
 
         // noclip modification: if this is the sea map, push our far plane out a bit.
         if (globals.stageName === 'sea')
-            farPlane *= 2;
-
-        this.viewerCamera.setClipPlanes(nearPlane, farPlane);
+            this.far *= 2;
 
         // noclip modification: if we're paused, allow noclip camera control during demos
         const isPaused = viewerInput.deltaTime === 0;
@@ -240,26 +259,22 @@ export class dCamera_c {
         // dCamera_c::Store() sets the camera params if the demo camera is active
         const demoCam = globals.scnPlay.demo.getSystem().getCamera();
         if (demoCam && !isPaused) {
-            let viewPos = globals.cameraPosition;
-            let targetPos = vec3.add(scratchVec3a, globals.cameraPosition, globals.cameraFwd);
-            let upVec = vec3.set(scratchVec3b, 0, 1, 0);
-            let roll = 0.0;
+            let targetPos = vec3.add(scratchVec3a, this.cameraPos, this.cameraFwd);
 
             // TODO: Blend between these camera params when switching camera modes, instead of the sudden snap.
 
-            if (demoCam.flags & EDemoCamFlags.HasTargetPos) { targetPos = demoCam.targetPosition; }
-            if (demoCam.flags & EDemoCamFlags.HasEyePos) { viewPos = demoCam.viewPosition; }
-            if (demoCam.flags & EDemoCamFlags.HasUpVec) { upVec = demoCam.upVector; }
-            if (demoCam.flags & EDemoCamFlags.HasFovY) { this.viewerCamera.fovY = demoCam.fovY * MathConstants.DEG_TO_RAD; }
-            if (demoCam.flags & EDemoCamFlags.HasRoll) { roll = demoCam.roll * MathConstants.DEG_TO_RAD; }
+            if (demoCam.flags & EDemoCamFlags.HasTargetPos) { vec3.copy(targetPos, demoCam.targetPosition); }
+            if (demoCam.flags & EDemoCamFlags.HasEyePos) { vec3.copy(this.cameraPos, demoCam.viewPosition); }
+            if (demoCam.flags & EDemoCamFlags.HasUpVec) { this.cameraUp = demoCam.upVector; }
+            if (demoCam.flags & EDemoCamFlags.HasFovY) { this.fovY = demoCam.fovY * MathConstants.DEG_TO_RAD; }
+            if (demoCam.flags & EDemoCamFlags.HasRoll) { this.roll = demoCam.roll * MathConstants.DEG_TO_RAD; }
             if (demoCam.flags & EDemoCamFlags.HasAspect) { debugger; /* Untested. Remove once confirmed working */ }
-            if (demoCam.flags & EDemoCamFlags.HasNearZ) { this.viewerCamera.near = demoCam.projNear; }
-            if (demoCam.flags & EDemoCamFlags.HasFarZ) { this.viewerCamera.far = demoCam.projFar; }
+            if (demoCam.flags & EDemoCamFlags.HasNearZ) { this.near = demoCam.projNear; }
+            if (demoCam.flags & EDemoCamFlags.HasFarZ) { this.far = demoCam.projFar; }
 
-            mat4.targetTo(this.viewerCamera.worldMatrix, viewPos, targetPos, upVec);
-            mat4.rotateZ(this.viewerCamera.worldMatrix, this.viewerCamera.worldMatrix, roll);
-            this.viewerCamera.setClipPlanes(this.viewerCamera.near, this.viewerCamera.far);
-            this.viewerCamera.worldMatrixUpdated();
+            // TODO: Clean this up
+            mat4.targetTo(this.worldMatrix, this.cameraPos, targetPos, this.cameraUp);
+            mat4.rotateZ(this.worldMatrix, this.worldMatrix, this.roll);
 
             this.cameraMode = CameraMode.Cinematic;
             globals.context.inputManager.isMouseEnabled = false;
@@ -267,6 +282,11 @@ export class dCamera_c {
             this.cameraMode = CameraMode.Default;
             globals.context.inputManager.isMouseEnabled = true;
         }
+
+        // TODO: Clean this up
+        this.worldMatrixUpdated();
+        this.setClipPlanes(this.near, this.far);
+        this.finishSetup();
         
         // From dCamera_c::CalcTrimSize()
         // Animate up to the trim size for the current mode.
@@ -280,11 +300,9 @@ export class dCamera_c {
         vec4.set(this.scissor, 0, trimPx, viewerInput.backbufferWidth, viewerInput.backbufferHeight - 2 * trimPx);
 
         if (!this.cameraFrozen) {
-            mat4.getTranslation(globals.cameraPosition, this.viewerCamera.worldMatrix);
-            getMatrixAxisZ(globals.cameraFwd, this.viewerCamera.worldMatrix);
-            vec3.negate(globals.cameraFwd, globals.cameraFwd);
             // Update the "player position" from the camera.
-            vec3.copy(globals.playerPosition, globals.cameraPosition);
+            // TODO: Move this out of here
+            vec3.copy(globals.playerPosition, this.cameraPos);
         }
     }
 
@@ -538,7 +556,6 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
             }
         }
 
-        this.globals.camera.viewerCamera = viewerInput.camera;
         this.globals.camera.execute(this.globals, viewerInput);
 
         // Not sure exactly where this is ordered...
@@ -549,7 +566,9 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         if (this.globals.renderHacks.wireframe)
             template.setMegaStateFlags({ wireframe: true });
 
+        // TODO: This is setting the wrong projection matrix
         fillSceneParamsDataOnTemplate(template, viewerInput);
+
         this.extraTextures.prepareToRender(device);
 
         fpcM_Management(this.globals.frameworkGlobals, this.globals, renderInstManager, viewerInput);
@@ -568,10 +587,10 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
 
                 if (group === EffectDrawGroup.Indirect) {
                     texPrjMtx = scratchMatrix;
-                    texProjCameraSceneTex(texPrjMtx, this.globals.camera.viewerCamera, 1);
+                    texProjCameraSceneTex(texPrjMtx, this.globals.camera, 1);
                 }
 
-                this.globals.particleCtrl.setDrawInfo(this.globals.camera.viewerCamera.viewMatrix, this.globals.camera.viewerCamera.projectionMatrix, texPrjMtx, this.globals.camera.viewerCamera.frustum);
+                this.globals.particleCtrl.setDrawInfo(this.globals.camera.viewMatrix, this.globals.camera.projectionMatrix, texPrjMtx, this.globals.camera.frustum);
                 renderInstManager.setCurrentList(dlst.effect[group]);
                 this.globals.particleCtrl.draw(device, this.renderHelper.renderInstManager, group);
             }

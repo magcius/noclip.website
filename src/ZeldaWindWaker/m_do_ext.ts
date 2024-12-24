@@ -103,12 +103,12 @@ export function mDoExt_modelEntryDL(globals: dGlobals, modelInstance: J3DModelIn
         modelInstance.setTexturesEnabled(globals.renderHacks.texturesEnabled);
     }
 
-    modelInstance.calcView(globals.camera.viewerCamera, globals.camera.viewerCamera.viewMatrix);
+    modelInstance.calcView(globals.camera, globals.camera.viewMatrix);
 
     renderInstManager.setCurrentList(drawListSet[0]);
-    modelInstance.drawOpa(device, renderInstManager, globals.camera.viewerCamera);
+    modelInstance.drawOpa(device, renderInstManager, globals.camera);
     renderInstManager.setCurrentList(drawListSet[1]);
-    modelInstance.drawXlu(device, renderInstManager, globals.camera.viewerCamera);
+    modelInstance.drawXlu(device, renderInstManager, globals.camera);
 }
 
 export function mDoExt_modelUpdateDL(globals: dGlobals, modelInstance: J3DModelInstance, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, drawListSet: dDlst_list_Set | null = null): void {

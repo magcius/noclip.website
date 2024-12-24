@@ -1849,7 +1849,7 @@ export class BMDObjectRenderer {
 
             // Don't compute screen area culling on child meshes (don't want heads to disappear before bodies.)
             bboxScratch.transform(this.modelInstance.modelData.bbox, this.modelInstance.modelMatrix);
-            computeScreenSpaceProjectionFromWorldSpaceAABB(screenProjection, globals.camera.viewerCamera, bboxScratch);
+            computeScreenSpaceProjectionFromWorldSpaceAABB(screenProjection, globals.camera, bboxScratch);
 
             if (screenProjection.getScreenArea() <= 0.0002)
                 return;
@@ -1864,7 +1864,7 @@ export class BMDObjectRenderer {
             morf.entryDL(globals, renderInstManager, viewerInput);
         } else {
             this.setExtraTextures(globals.renderer.extraTextures);
-            this.modelInstance.prepareToRender(device, renderInstManager, viewerInput);
+            this.modelInstance.prepareToRender(device, renderInstManager, viewerInput, globals.camera);
         }
         
         for (let i = 0; i < this.childObjects.length; i++)

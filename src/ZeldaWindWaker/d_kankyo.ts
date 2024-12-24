@@ -600,10 +600,10 @@ function GxFogSet_Sub(fog: FogBlock, tevStr: { fogStartZ: number, fogEndZ: numbe
     colorCopy(fog.Color, fogColor);
 
     // Empirically decided.
-    const fogFarPlane = Number.isFinite(camera.viewerCamera.far) ? camera.viewerCamera.far : 100000;
+    const fogFarPlane = Number.isFinite(camera.far) ? camera.far : 100000;
 
-    const type = camera.viewerCamera.isOrthographic ? FogType.ORTHO_LIN : FogType.PERSP_LIN;
-    fogBlockSet(fog, type, tevStr.fogStartZ, tevStr.fogEndZ, camera.viewerCamera.near, fogFarPlane);
+    const type = camera.isOrthographic ? FogType.ORTHO_LIN : FogType.PERSP_LIN;
+    fogBlockSet(fog, type, tevStr.fogStartZ, tevStr.fogEndZ, camera.near, fogFarPlane);
 }
 
 export function dKy_GxFog_set(envLight: dScnKy_env_light_c, fog: FogBlock, camera: dCamera_c): void {
@@ -618,12 +618,12 @@ export function dKy_GxFog_sea_set(envLight: dScnKy_env_light_c, fog: FogBlock, c
 // have global state, we have to do this here.
 export function dKy_setLight__OnModelInstance(envLight: dScnKy_env_light_c, modelInstance: J3DModelInstance, camera: dCamera_c): void {
     for (let i = 0; i < 2; i++)
-        lightSetFromWorldLight(modelInstance.getGXLightReference(i), envLight.lightStatus[i], camera.viewerCamera);
+        lightSetFromWorldLight(modelInstance.getGXLightReference(i), envLight.lightStatus[i], camera);
 }
 
 export function dKy_setLight__OnMaterialParams(envLight: dScnKy_env_light_c, materialParams: MaterialParams, camera: dCamera_c): void {
     for (let i = 0; i < 2; i++)
-        lightSetFromWorldLight(materialParams.u_Lights[i], envLight.lightStatus[i], camera.viewerCamera);
+        lightSetFromWorldLight(materialParams.u_Lights[i], envLight.lightStatus[i], camera);
 }
 
 export function setLightTevColorType(globals: dGlobals, modelInstance: J3DModelInstance, tevStr: dKy_tevstr_c, camera: dCamera_c): void {
@@ -634,10 +634,10 @@ export function setLightTevColorType(globals: dGlobals, modelInstance: J3DModelI
     }
 
     const light0 = modelInstance.getGXLightReference(0);
-    lightSetFromWorldLight(light0, tevStr.lightObj, camera.viewerCamera);
+    lightSetFromWorldLight(light0, tevStr.lightObj, camera);
 
     const light1 = modelInstance.getGXLightReference(1);
-    lightSetFromWorldLight(light1, envLight.lightStatus[1], camera.viewerCamera);
+    lightSetFromWorldLight(light1, envLight.lightStatus[1], camera);
 
     // if (toon_proc_check() == 0)
 
@@ -690,7 +690,7 @@ function setSunpos(envLight: dScnKy_env_light_c, cameraPos: vec3): void {
 function drawKankyo(globals: dGlobals): void {
     const envLight = globals.g_env_light;
 
-    setSunpos(envLight, globals.cameraPosition);
+    setSunpos(envLight, globals.camera.cameraPos);
     SetBaseLight(globals);
     setLight(globals, envLight);
 }

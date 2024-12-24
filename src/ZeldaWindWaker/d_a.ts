@@ -621,8 +621,8 @@ class d_a_vrbox extends fopAc_ac_c {
         if (fili !== null)
             skyboxOffsY = fili.skyboxY;
 
-        MtxTrans(globals.cameraPosition, false);
-        calc_mtx[13] -= 0.09 * (globals.cameraPosition[1] - skyboxOffsY);
+        MtxTrans(globals.camera.cameraPos, false);
+        calc_mtx[13] -= 0.09 * (globals.camera.cameraPos[1] - skyboxOffsY);
         mat4.copy(this.model.modelMatrix, calc_mtx);
 
         dKy_setLight__OnModelInstance(envLight, this.model, globals.camera);
@@ -676,7 +676,7 @@ class d_a_vrbox2 extends fopAc_ac_c {
         }
 
         // Camera forward in XZ plane
-        vec3.copy(scratchVec3a, globals.cameraFwd);
+        vec3.copy(scratchVec3a, globals.camera.cameraFwd);
         scratchVec3a[1] = 0;
         vec3.normalize(scratchVec3a, scratchVec3a);
 
@@ -738,8 +738,8 @@ class d_a_vrbox2 extends fopAc_ac_c {
         if (fili !== null)
             skyboxOffsY = fili.skyboxY;
 
-        MtxTrans(globals.cameraPosition, false);
-        calc_mtx[13] -= 0.09 * (globals.cameraPosition[1] - skyboxOffsY);
+        MtxTrans(globals.camera.cameraPos, false);
+        calc_mtx[13] -= 0.09 * (globals.camera.cameraPos[1] - skyboxOffsY);
 
         if (this.usoUmi !== null) {
             mat4.copy(this.usoUmi.modelMatrix, calc_mtx);
@@ -818,10 +818,10 @@ class d_a_kytag00 extends fopAc_ac_c {
 
     private get_check_pos(globals: dGlobals): vec3 {
         // Return the closer of the two.
-        if (this.alwaysCheckPlayerPos || vec3.distance(this.pos, globals.playerPosition) < vec3.distance(this.pos, globals.cameraPosition))
+        if (this.alwaysCheckPlayerPos || vec3.distance(this.pos, globals.playerPosition) < vec3.distance(this.pos, globals.camera.cameraPos))
             return globals.playerPosition;
         else
-            return globals.cameraPosition;
+            return globals.camera.cameraPos;
     }
 
     private wether_tag_efect_move(globals: dGlobals): void {
@@ -1199,7 +1199,7 @@ function dDlst_texSpecmapST(dst: mat4, globals: dGlobals, pos: ReadonlyVec3, tev
     mat4.mul(dst, dst, scratchMat4a);
 
     // Half-vector lookAt transform.
-    vec3.sub(scratchVec3a, pos, globals.cameraPosition);
+    vec3.sub(scratchVec3a, pos, globals.camera.cameraPos);
     dKyr_get_vectle_calc(tevStr.lightObj.Position, pos, scratchVec3b);
     vecHalfAngle(scratchVec3a, scratchVec3a, scratchVec3b);
     mat4.lookAt(scratchMat4a, Vec3Zero, scratchVec3a, Vec3UnitY);
@@ -1524,7 +1524,7 @@ class dDlst_2DObject_c extends dDlst_2DBase_c {
         this.materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
 
-        mat4.mul(drawParams.u_PosMtx[0], globals.camera.viewerCamera.viewMatrix, this.modelMatrix);
+        mat4.mul(drawParams.u_PosMtx[0], globals.camera.viewMatrix, this.modelMatrix);
         this.materialHelper.allocateDrawParamsDataOnInst(renderInst, drawParams);
 
         renderInstManager.submitRenderInst(renderInst);
@@ -1574,7 +1574,7 @@ class dDlst_2DNumber_c extends dDlst_2DBase_c {
 
             vec3.set(scratchVec3a, x, 0, 0);
             mat4.translate(scratchMat4a, this.modelMatrix, scratchVec3a);
-            mat4.mul(drawParams.u_PosMtx[0], globals.camera.viewerCamera.viewMatrix, scratchMat4a);
+            mat4.mul(drawParams.u_PosMtx[0], globals.camera.viewMatrix, scratchMat4a);
             x -= this.spacing * 2;
 
             this.materialHelper.allocateDrawParamsDataOnInst(renderInst, drawParams);
@@ -2288,7 +2288,7 @@ class dCloth_packet_c {
             for (let fly = 0; fly < this.flyGridSize; fly++) {
                 transformVec3Mat4w1(scratchVec3a, this.mtx, this.posArr[this.curArr][this.getIndex(fly, hoist)]);
                 transformVec3Mat4w0(scratchVec3b, this.mtx, this.nrmArr[this.getIndex(fly, hoist)]);
-                drawWorldSpaceVector(ctx, globals.camera.viewerCamera.clipFromWorldMatrix, scratchVec3a, scratchVec3b, 50);
+                drawWorldSpaceVector(ctx, globals.camera.clipFromWorldMatrix, scratchVec3a, scratchVec3b, 50);
             }
         }
         */
@@ -2303,7 +2303,7 @@ class dCloth_packet_c {
         colorCopy(materialParams.u_Color[ColorKind.C0], this.tevStr.colorC0);
         colorCopy(materialParams.u_Color[ColorKind.C1], this.tevStr.colorK0);
         colorCopy(materialParams.u_Color[ColorKind.C2], this.tevStr.colorK1);
-        mat4.mul(drawParams.u_PosMtx[0], globals.camera.viewerCamera.viewMatrix, this.mtx);
+        mat4.mul(drawParams.u_PosMtx[0], globals.camera.viewMatrix, this.mtx);
         this.materialHelper.allocateDrawParamsDataOnInst(template, drawParams);
 
         const ddraw = this.ddraw;
@@ -2769,8 +2769,8 @@ class d_a_majuu_flag extends fopAc_ac_c {
         /*
         for (let i = 0; i < this.pointCount; i++) {
             transformVec3Mat4w1(scratchVec3a, this.mtx, this.posArr[0][i]);
-            drawWorldSpacePoint(getDebugOverlayCanvas2D(), globals.camera.viewerCamera.clipFromWorldMatrix, scratchVec3a);
-            drawWorldSpaceText(getDebugOverlayCanvas2D(), globals.camera.viewerCamera.clipFromWorldMatrix, scratchVec3a, '' + i);
+            drawWorldSpacePoint(getDebugOverlayCanvas2D(), globals.camera.clipFromWorldMatrix, scratchVec3a);
+            drawWorldSpaceText(getDebugOverlayCanvas2D(), globals.camera.clipFromWorldMatrix, scratchVec3a, '' + i);
         }
         */
 
@@ -2791,7 +2791,7 @@ class d_a_majuu_flag extends fopAc_ac_c {
         colorCopy(materialParams.u_Color[ColorKind.C0], this.tevStr.colorC0);
         colorCopy(materialParams.u_Color[ColorKind.C1], this.tevStr.colorK0);
         colorCopy(materialParams.u_Color[ColorKind.C2], this.tevStr.colorK1);
-        mat4.mul(drawParams.u_PosMtx[0], globals.camera.viewerCamera.viewMatrix, this.mtx);
+        mat4.mul(drawParams.u_PosMtx[0], globals.camera.viewMatrix, this.mtx);
         this.materialHelper.allocateDrawParamsDataOnInst(template, drawParams);
 
         const ddraw = this.ddraw;
@@ -3190,9 +3190,9 @@ class d_a_kamome extends fopAc_ac_c {
         setLightTevColorType(globals, this.morf.model, this.tevStr, globals.camera);
         this.morf.entryDL(globals, renderInstManager, viewerInput);
 
-        // drawWorldSpaceLine(getDebugOverlayCanvas2D(), globals.camera.viewerCamera.clipFromWorldMatrix, this.pos, this.targetPos, Green, 2);
-        // drawWorldSpacePoint(getDebugOverlayCanvas2D(), globals.camera.viewerCamera.clipFromWorldMatrix, this.pos, Magenta, 8);
-        // drawWorldSpacePoint(getDebugOverlayCanvas2D(), globals.camera.viewerCamera.clipFromWorldMatrix, this.targetPos, Yellow, 6);
+        // drawWorldSpaceLine(getDebugOverlayCanvas2D(), globals.camera.clipFromWorldMatrix, this.pos, this.targetPos, Green, 2);
+        // drawWorldSpacePoint(getDebugOverlayCanvas2D(), globals.camera.clipFromWorldMatrix, this.pos, Magenta, 8);
+        // drawWorldSpacePoint(getDebugOverlayCanvas2D(), globals.camera.clipFromWorldMatrix, this.targetPos, Yellow, 6);
 
         // shadow
     }
@@ -3755,7 +3755,7 @@ class d_a_oship extends fopAc_ac_c implements ModeFuncExec<d_a_oship_mode> {
     ];
 
     private changeModeByRange(globals: dGlobals): void {
-        const dist = cLib_distanceXZ(this.pos, globals.cameraPosition);
+        const dist = cLib_distanceXZ(this.pos, globals.camera.cameraPos);
         let mode = this.curMode;
         if (dist < 2500.0)
             mode = d_a_oship_mode.rangeA;
@@ -3829,7 +3829,7 @@ class d_a_oship extends fopAc_ac_c implements ModeFuncExec<d_a_oship_mode> {
     private modeAttackInit(globals: dGlobals): void {
         this.attackTimer = -1;
 
-        vec3.copy(this.targetPos, globals.cameraPosition);
+        vec3.copy(this.targetPos, globals.camera.cameraPos);
 
         // Aim at our target.
 
@@ -3907,7 +3907,7 @@ class d_a_oship extends fopAc_ac_c implements ModeFuncExec<d_a_oship_mode> {
     }
 
     private rangeTargetCommon(globals: dGlobals, deltaTimeFrames: number): void {
-        vec3.copy(this.targetPos, globals.cameraPosition);
+        vec3.copy(this.targetPos, globals.camera.cameraPos);
         this.calcY(globals);
 
         if (this.checkTgHit(globals))
@@ -3978,19 +3978,19 @@ class d_a_oship extends fopAc_ac_c implements ModeFuncExec<d_a_oship_mode> {
         mDoExt_modelEntryDL(globals, this.model, renderInstManager, viewerInput);
 
         /*
-        drawWorldSpaceText(getDebugOverlayCanvas2D(), globals.camera.viewerCamera.clipFromWorldMatrix, this.pos, `PId: ${this.processId}`, 0, White, { outline: 2 });
-        drawWorldSpaceText(getDebugOverlayCanvas2D(), globals.camera.viewerCamera.clipFromWorldMatrix, this.pos, `Mode: ${d_a_oship_mode[this.curMode]}`, 14, White, { outline: 2 });
-        drawWorldSpaceText(getDebugOverlayCanvas2D(), globals.camera.viewerCamera.clipFromWorldMatrix, this.pos, `Aim  : ${hexzero0x(this.aimRotX, 4)} ${hexzero0x(this.aimRotY, 4)}`, 14*2, White, { outline: 2 });
-        drawWorldSpaceText(getDebugOverlayCanvas2D(), globals.camera.viewerCamera.clipFromWorldMatrix, this.pos, `Aim T: ${hexzero0x(this.aimRotXTarget, 4)} ${hexzero0x(this.aimRotYTarget, 4)}`, 14*3, White, { outline: 2 });
-        drawWorldSpaceText(getDebugOverlayCanvas2D(), globals.camera.viewerCamera.clipFromWorldMatrix, this.pos, `Tgt  : ${this.targetPos[0].toFixed(2)} ${this.targetPos[1].toFixed(2)} ${this.targetPos[2].toFixed(2)}`, 14*4, White, { outline: 2 });
-        drawWorldSpacePoint(getDebugOverlayCanvas2D(), globals.camera.viewerCamera.clipFromWorldMatrix, this.targetPos, Green, 10);
+        drawWorldSpaceText(getDebugOverlayCanvas2D(), globals.camera.clipFromWorldMatrix, this.pos, `PId: ${this.processId}`, 0, White, { outline: 2 });
+        drawWorldSpaceText(getDebugOverlayCanvas2D(), globals.camera.clipFromWorldMatrix, this.pos, `Mode: ${d_a_oship_mode[this.curMode]}`, 14, White, { outline: 2 });
+        drawWorldSpaceText(getDebugOverlayCanvas2D(), globals.camera.clipFromWorldMatrix, this.pos, `Aim  : ${hexzero0x(this.aimRotX, 4)} ${hexzero0x(this.aimRotY, 4)}`, 14*2, White, { outline: 2 });
+        drawWorldSpaceText(getDebugOverlayCanvas2D(), globals.camera.clipFromWorldMatrix, this.pos, `Aim T: ${hexzero0x(this.aimRotXTarget, 4)} ${hexzero0x(this.aimRotYTarget, 4)}`, 14*3, White, { outline: 2 });
+        drawWorldSpaceText(getDebugOverlayCanvas2D(), globals.camera.clipFromWorldMatrix, this.pos, `Tgt  : ${this.targetPos[0].toFixed(2)} ${this.targetPos[1].toFixed(2)} ${this.targetPos[2].toFixed(2)}`, 14*4, White, { outline: 2 });
+        drawWorldSpacePoint(getDebugOverlayCanvas2D(), globals.camera.clipFromWorldMatrix, this.targetPos, Green, 10);
         */
     }
 
     private setMtx(globals: dGlobals, deltaTimeFrames: number): void {
         dLib_waveRot(globals, this.wave, this.pos, this.attackSwayAmount, deltaTimeFrames);
 
-        const angleY = this.rot[1] + cLib_targetAngleY(this.pos, globals.cameraPosition);
+        const angleY = this.rot[1] + cLib_targetAngleY(this.pos, globals.camera.cameraPos);
         const swayAmount = Math.sin(cM_s2rad(this.attackSwayTimer)) * (this.attackSwayAmount * 10);
 
         if (this.curMode !== d_a_oship_mode.delete) {
@@ -4575,8 +4575,8 @@ export class d_a_ff extends fopAc_ac_c {
         const peekZ = globals.dlst.peekZ;
         const dst = this.peekZResult;
 
-        mDoLib_project(scratchVec3a, this.pos, globals.camera.viewerCamera);
-        if (globals.camera.viewerCamera.clipSpaceNearZ === GfxClipSpaceNearZ.NegativeOne)
+        mDoLib_project(scratchVec3a, this.pos, globals.camera);
+        if (globals.camera.clipSpaceNearZ === GfxClipSpaceNearZ.NegativeOne)
             scratchVec3a[2] = scratchVec3a[2] * 0.5 + 0.5;
 
         if (!peekZ.newData(dst, scratchVec3a[0], scratchVec3a[1], scratchVec3a[2]))
