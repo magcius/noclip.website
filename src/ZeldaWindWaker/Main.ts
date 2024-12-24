@@ -18,7 +18,7 @@ import { J3DModelInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase.js';
 import * as JPA from '../Common/JSYSTEM/JPA.js';
 import { BTIData } from '../Common/JSYSTEM/JUTTexture.js';
 import { dfRange } from '../DebugFloaters.js';
-import { MathConstants, getMatrixAxisZ, getMatrixTranslation, range } from '../MathHelpers.js';
+import { MathConstants, clamp, getMatrixAxisZ, getMatrixTranslation, range } from '../MathHelpers.js';
 import { SceneContext } from '../SceneBase.js';
 import { TextureMapping } from '../TextureHolder.js';
 import { setBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
@@ -285,11 +285,12 @@ export class dCamera_c extends Camera {
         this.finishSetup();
 
         // From dCamera_c::CalcTrimSize()
-        // Animate up to the trim size for the current mode.
+        // Animate up to the trim size for the current mode (even when paused)
+        const deltaTimeFrames = clamp(viewerInput.deltaTime / 1000 * 30, 0.5, 1);
         if (this.cameraMode === CameraMode.Cinematic) {
-            this.trimHeight += (dCamera_c.trimHeightCinematic - this.trimHeight) * 0.25;
+            this.trimHeight += (dCamera_c.trimHeightCinematic - this.trimHeight) * 0.25 * deltaTimeFrames;
         } else {
-            this.trimHeight += -this.trimHeight * 0.25;
+            this.trimHeight += -this.trimHeight * 0.25 * deltaTimeFrames;
         }
 
         const trimPx = (this.trimHeight / 480) * viewerInput.backbufferHeight;
