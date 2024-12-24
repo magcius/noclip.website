@@ -7,7 +7,7 @@ import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrPass, GfxrPassScope, GfxrRend
 import { GfxRenderInst, GfxRenderInstList, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import * as GX from '../gx/gx_enum.js';
 import * as GX_Material from '../gx/gx_material.js';
-import { DrawParams, fillSceneParams, fillSceneParamsData, GXMaterialHelperGfx, GXRenderHelperGfx, MaterialParams, SceneParams } from '../gx/gx_render.js';
+import { DrawParams, fillSceneParamsData, fillSceneParamsDataOnTemplate, GXMaterialHelperGfx, GXRenderHelperGfx, MaterialParams, SceneParams } from '../gx/gx_render.js';
 import { TDDraw } from '../SuperMarioGalaxy/DDraw.js';
 import { TextureMapping } from '../TextureHolder.js';
 import { nArray } from '../util.js';
@@ -37,9 +37,6 @@ export interface SceneRenderContext {
 }
 
 const BACKGROUND_COLOR = colorNewFromRGBA8(0xCCCCCCFF);
-
-const SCREENSPACE_ORTHO_MTX = mat4.create();
-mat4.ortho(SCREENSPACE_ORTHO_MTX, 0.0, 640.0, 0.0, 480.0, 1.0, 100.0);
 
 export interface SFARenderLists {
     skyscape: GfxRenderInstList;
@@ -142,11 +139,12 @@ export class SFARenderer implements Viewer.SceneGfx {
         const template = this.renderHelper.pushTemplateRenderInst();
 
         // Setup to draw in screen space
-        fillSceneParams(scratchSceneParams, SCREENSPACE_ORTHO_MTX, sceneCtx.viewerInput.backbufferWidth, sceneCtx.viewerInput.backbufferHeight);
+        mat4.ortho(scratchSceneParams.u_Projection, 0.0, 640.0, 0.0, 480.0, 1.0, 100.0);
+        scratchSceneParams.u_SceneTextureLODBias = 0;
         let offs = template.getUniformBufferOffset(GX_Material.GX_Program.ub_SceneParams);
         const d = template.mapUniformBufferF32(GX_Material.GX_Program.ub_SceneParams);
         fillSceneParamsData(d, offs, scratchSceneParams);
-        
+
         // Extract pitch
         const cameraFwd = scratchVec0;
         getMatrixAxisZ(cameraFwd, sceneCtx.viewerInput.camera.worldMatrix);

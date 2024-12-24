@@ -335,12 +335,20 @@ export class GfxRenderInst {
     }
 
     /**
+     * This is a convenience wrapper for {@param allocateUniformBuffer} and {@param mapUniformBufferF32}
+     * that returns a pre-sliced {@see Float32Array} for the given offset.
+     */
+    public allocateUniformBufferF32(bufferIndex: number, wordCount: number): Float32Array {
+        const wordOffset = this.allocateUniformBuffer(bufferIndex, wordCount);
+        return this._uniformBuffer.mapBufferF32().subarray(wordOffset);
+    }
+
+    /**
      * Returns the offset into the uniform buffer, in words, that is assigned to the buffer slot
      * at index {@param bufferIndex}, to be used with e.g. {@see mapUniformBufferF32}.
      */
     public getUniformBufferOffset(bufferIndex: number) {
-        const wordOffset = this._dynamicUniformBufferByteOffsets[bufferIndex] >>> 2;
-        return wordOffset;
+        return this._dynamicUniformBufferByteOffsets[bufferIndex] >>> 2;
     }
 
     /**

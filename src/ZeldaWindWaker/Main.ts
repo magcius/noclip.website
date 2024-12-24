@@ -1,5 +1,5 @@
 
-import { mat4, vec3 } from 'gl-matrix';
+import { mat4, vec3, vec4 } from 'gl-matrix';
 
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import { DataFetcher } from '../DataFetcher.js';
@@ -17,15 +17,15 @@ import { J3DModelInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase.js';
 import * as JPA from '../Common/JSYSTEM/JPA.js';
 import { BTIData } from '../Common/JSYSTEM/JUTTexture.js';
 import { dfRange } from '../DebugFloaters.js';
-import { MathConstants, getMatrixAxisZ, range } from '../MathHelpers.js';
+import { MathConstants, getMatrixAxisZ, getMatrixTranslation, range } from '../MathHelpers.js';
 import { SceneContext } from '../SceneBase.js';
 import { TextureMapping } from '../TextureHolder.js';
 import { setBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
-import { GfxDevice, GfxFormat, GfxRenderPass, GfxTexture, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform.js';
+import { GfxClipSpaceNearZ, GfxDevice, GfxFormat, GfxRenderPass, GfxTexture, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { GfxrAttachmentSlot, GfxrRenderTargetDescription } from '../gfx/render/GfxRenderGraph.js';
 import { GfxRenderInstList, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
-import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render.js';
+import { GXRenderHelperGfx, SceneParams, calcLODBias, fillSceneParamsData } from '../gx/gx_render.js';
 import { FlowerPacket, GrassPacket, TreePacket } from './Grass.js';
 import { LegacyActor__RegisterFallbackConstructor } from './LegacyActor.js';
 import { dDlst_2DStatic_c, d_a__RegisterConstructors } from './d_a.js';
@@ -43,6 +43,8 @@ import { fopAcM_create, fopAcM_searchFromName, fopAc_ac_c } from './f_op_actor.j
 import { cPhs__Status, fGlobals, fopDw_Draw, fopScn, fpcCt_Handler, fpcLy_SetCurrentLayer, fpcM_Management, fpcPf__Register, fpcSCtRq_Request, fpc_pc__ProfileList } from './framework.js';
 import { dDemo_manager_c, EDemoCamFlags, EDemoMode } from './d_demo.js';
 import { d_pn__RegisterConstructors, Placename, PlacenameState, dPn__update } from './d_place_name.js';
+import { GX_Program } from '../gx/gx_material.js';
+import { Frustum } from '../Geometry.js';
 
 type SymbolData = { Filename: string, SymbolName: string, Data: ArrayBufferSlice };
 type SymbolMapData = { SymbolData: SymbolData[] };
@@ -122,6 +124,8 @@ class RenderHacks {
     public renderHacksChanged = false;
 }
 
+const sceneParams = new SceneParams();
+
 export class dGlobals {
     public g_env_light = new dScnKy_env_light_c();
     public dlst: dDlst_list_c;
@@ -137,12 +141,10 @@ export class dGlobals {
     // "Current" room number.
     public mStayNo: number = 0;
 
-    // g_dComIfG_gameInfo.mPlay.mpPlayer.mPos3
+    // g_dComIfG_gameInfo.mPlay.mpPlayer.mPos
     public playerPosition = vec3.create();
     // g_dComIfG_gameInfo.mPlay.mCameraInfo[0].mpCamera
-    public camera: Camera;
-    public cameraPosition = vec3.create();
-    public cameraFwd = vec3.create();
+    public camera = new dCamera_c();
 
     public resCtrl: dRes_control_c;
     // TODO(jstpierre): Remove
@@ -157,7 +159,7 @@ export class dGlobals {
 
     public sea: d_a_sea | null = null;
 
-    constructor(public context: SceneContext, public modelCache: ModelCache, private extraSymbolData: SymbolMap, public frameworkGlobals: fGlobals) {
+    constructor(public sceneContext: SceneContext, public modelCache: ModelCache, private extraSymbolData: SymbolMap, public frameworkGlobals: fGlobals) {
         this.resCtrl = this.modelCache.resCtrl;
 
         this.relNameTable = createRelNameTable(extraSymbolData);
@@ -199,6 +201,131 @@ export class dGlobals {
         this.particleCtrl.destroy(device);
         this.dlst.destroy(device);
         this.quadStatic.destroy(device);
+    }
+}
+
+const enum CameraMode {
+    Default,
+    Cinematic
+}
+
+export class dCamera_c {
+    public viewFromWorldMatrix = mat4.create(); // aka viewMatrix
+    public worldFromViewMatrix = mat4.create(); // aka worldMatrix
+    public clipFromWorldMatrix = mat4.create();
+    public clipFromViewMatrix = mat4.create(); // aka projectionMatrix
+
+    public clipSpaceNearZ: GfxClipSpaceNearZ;
+
+    // Frustum is stored in Wind Waker engine world space.
+    public frustum = new Frustum();
+    public aspect = 1.0;
+    public fovY = 0.0;
+    public near = 0.0;
+    public far = 0.0;
+
+    // The current camera position, in Wind Waker engine world space.
+    public cameraPos = vec3.create();
+    public cameraFwd = vec3.create();
+    public cameraUp = vec3.fromValues(0, 1, 0);
+    public roll = 0.0;
+
+    // For people to play around with.
+    public frozen = false;
+
+    private trimHeight = 0;
+    private cameraMode: CameraMode = CameraMode.Default;
+    private scissor = vec4.create();
+
+    private static trimHeightCinematic = 65.0;
+
+    public finishSetup(): void {
+        mat4.invert(this.worldFromViewMatrix, this.viewFromWorldMatrix);
+        mat4.mul(this.clipFromWorldMatrix, this.clipFromViewMatrix, this.viewFromWorldMatrix);
+        getMatrixTranslation(this.cameraPos, this.worldFromViewMatrix);
+        getMatrixAxisZ(this.cameraFwd, this.worldFromViewMatrix);
+        this.frustum.updateClipFrustum(this.clipFromWorldMatrix, this.clipSpaceNearZ);
+    }
+
+    public setupFromCamera(camera: Camera): void {
+        this.clipSpaceNearZ = camera.clipSpaceNearZ;
+        this.aspect = camera.aspect;
+        this.fovY = camera.fovY;
+
+        mat4.copy(this.viewFromWorldMatrix, camera.viewMatrix);
+        mat4.copy(this.clipFromViewMatrix, camera.projectionMatrix);
+        this.finishSetup();
+    }
+
+    public execute(globals: dGlobals, viewerInput: Viewer.ViewerRenderInput) {
+        // Near/far planes are decided by the stage data.
+        const stag = globals.dStage_dt.stag;
+
+        // Pull in the near plane to decrease Z-fighting, some stages set it far too close...
+        let near = Math.max(stag.nearPlane, 5);
+        let far = stag.farPlane;
+
+        // noclip modification: if this is the sea map, push our far plane out a bit.
+        if (globals.stageName === 'sea')
+            far *= 2;
+
+        // noclip modification: if we're paused, allow noclip camera control during demos
+        const isPaused = viewerInput.deltaTime === 0;
+
+        // dCamera_c::Store() sets the camera params if the demo camera is active
+        const demoCam = globals.scnPlay.demo.getSystem().getCamera();
+        if (demoCam && !isPaused) {
+            const targetPos = vec3.add(scratchVec3a, this.cameraPos, this.cameraFwd);
+
+            // TODO: Blend between these camera params when switching camera modes, instead of the sudden snap.
+
+            if (demoCam.flags & EDemoCamFlags.HasTargetPos) { vec3.copy(targetPos, demoCam.targetPosition); }
+            if (demoCam.flags & EDemoCamFlags.HasEyePos) { vec3.copy(this.cameraPos, demoCam.viewPosition); }
+            if (demoCam.flags & EDemoCamFlags.HasUpVec) { vec3.copy(this.cameraUp, demoCam.upVector); }
+            if (demoCam.flags & EDemoCamFlags.HasFovY) { this.fovY = demoCam.fovY * MathConstants.DEG_TO_RAD; }
+            if (demoCam.flags & EDemoCamFlags.HasRoll) { this.roll = demoCam.roll * MathConstants.DEG_TO_RAD; }
+            if (demoCam.flags & EDemoCamFlags.HasAspect) { debugger; /* Untested. Remove once confirmed working */ }
+            if (demoCam.flags & EDemoCamFlags.HasNearZ) { near = demoCam.projNear; }
+            if (demoCam.flags & EDemoCamFlags.HasFarZ) { far = demoCam.projFar; }
+
+            // TODO: Clean this up
+            mat4.targetTo(this.worldFromViewMatrix, this.cameraPos, targetPos, this.cameraUp);
+            mat4.rotateZ(this.worldFromViewMatrix, this.worldFromViewMatrix, this.roll);
+
+            this.cameraMode = CameraMode.Cinematic;
+            globals.sceneContext.inputManager.isMouseEnabled = false;
+        } else {
+            this.cameraMode = CameraMode.Default;
+            globals.sceneContext.inputManager.isMouseEnabled = true;
+        }
+
+        // TODO: Clean this up
+        viewerInput.camera.setClipPlanes(near, far);
+        this.near = near;
+        this.far = far;
+        this.setupFromCamera(viewerInput.camera);
+        this.finishSetup();
+
+        // From dCamera_c::CalcTrimSize()
+        // Animate up to the trim size for the current mode.
+        if (this.cameraMode === CameraMode.Cinematic) {
+            this.trimHeight += (dCamera_c.trimHeightCinematic - this.trimHeight) * 0.25;
+        } else {
+            this.trimHeight += -this.trimHeight * 0.25;
+        }
+
+        const trimPx = (this.trimHeight / 480) * viewerInput.backbufferHeight;
+        vec4.set(this.scissor, 0, trimPx, viewerInput.backbufferWidth, viewerInput.backbufferHeight - 2 * trimPx);
+
+        if (!this.frozen) {
+            // Update the "player position" from the camera.
+            // TODO: Move this out of here
+            vec3.copy(globals.playerPosition, this.cameraPos);
+        }
+    }
+
+    public applyScissor(pass: GfxRenderPass) {
+        pass.setScissor(this.scissor[0], this.scissor[1], this.scissor[2], this.scissor[3]);
     }
 }
 
@@ -317,7 +444,6 @@ const enum EffectDrawGroup {
 
 const scratchMatrix = mat4.create();
 const scratchVec3a = vec3.create();
-const scratchVec3b = vec3.create();
 export class WindWakerRenderer implements Viewer.SceneGfx {
     private mainColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
     private mainDepthDesc = new GfxrRenderTargetDescription(GfxFormat.D32F);
@@ -402,9 +528,6 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         return [roomsPanel, scenarioPanel, renderHacksPanel];
     }
 
-    // For people to play around with.
-    public cameraFrozen = false;
-
     private getRoomStatus(ac: fopAc_ac_c): dStage_roomStatus_c | null {
         if (ac.roomNo === -1)
             return null;
@@ -425,16 +548,18 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
     }
 
     private executeDrawAll(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
+        const globals = this.globals;
+
         this.time = viewerInput.time;
 
         // noclip hack: if only one room is visible, make it the mStayNo
         const singleRoomVisibleNo = this.getSingleRoomVisible();
         if (singleRoomVisibleNo !== -1)
-            this.globals.mStayNo = singleRoomVisibleNo;
+            globals.mStayNo = singleRoomVisibleNo;
 
         // Update actor visibility from settings.
         // TODO(jstpierre): Figure out a better place to put this?
-        const fwGlobals = this.globals.frameworkGlobals;
+        const fwGlobals = globals.frameworkGlobals;
         for (let i = 0; i < fwGlobals.dwQueue.length; i++) {
             for (let j = 0; j < fwGlobals.dwQueue[i].length; j++) {
                 const ac = fwGlobals.dwQueue[i][j];
@@ -444,104 +569,57 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
 
                     ac.roomVisible = roomVisible && objectLayerVisible(this.roomLayerMask, ac.roomLayer);
 
-                    if (ac.roomVisible && !this.globals.renderHacks.objectsVisible && fpcIsObject(ac.processName))
+                    if (ac.roomVisible && !globals.renderHacks.objectsVisible && fpcIsObject(ac.processName))
                         ac.roomVisible = false;
                 }
             }
         }
 
-        // Near/far planes are decided by the stage data.
-        const stag = this.globals.dStage_dt.stag;
-
-        // Pull in the near plane to decrease Z-fighting, some stages set it far too close...
-        let nearPlane = Math.max(stag.nearPlane, 5);
-        let farPlane = stag.farPlane;
-
-        // noclip modification: if this is the sea map, push our far plane out a bit.
-        if (this.globals.stageName === 'sea')
-            farPlane *= 2;
-
-        viewerInput.camera.setClipPlanes(nearPlane, farPlane);
-
-        // noclip modification: if we're paused, allow noclip camera control during demos
-        const isPaused = viewerInput.deltaTime === 0;
-
-        // TODO: Determine the correct place for this
-        // dCamera_c::Store() sets the camera params if the demo camera is active
-        const demoCam = this.globals.scnPlay.demo.getSystem().getCamera();
-        if (demoCam && !isPaused) {
-            let viewPos = this.globals.cameraPosition;
-            let targetPos = vec3.add(scratchVec3a, this.globals.cameraPosition, this.globals.cameraFwd);
-            let upVec = vec3.set(scratchVec3b, 0, 1, 0);
-            let roll = 0.0;
-
-            if (demoCam.flags & EDemoCamFlags.HasTargetPos) { targetPos = demoCam.targetPosition; }
-            if (demoCam.flags & EDemoCamFlags.HasEyePos) { viewPos = demoCam.viewPosition; }
-            if (demoCam.flags & EDemoCamFlags.HasUpVec) { upVec = demoCam.upVector; }
-            if (demoCam.flags & EDemoCamFlags.HasFovY) { viewerInput.camera.fovY = demoCam.fovY * MathConstants.DEG_TO_RAD; }
-            if (demoCam.flags & EDemoCamFlags.HasRoll) { roll = demoCam.roll * MathConstants.DEG_TO_RAD; }
-            if (demoCam.flags & EDemoCamFlags.HasAspect) { debugger; /* Untested. Remove once confirmed working */ }
-            if (demoCam.flags & EDemoCamFlags.HasNearZ) { viewerInput.camera.near = demoCam.projNear; }
-            if (demoCam.flags & EDemoCamFlags.HasFarZ) { viewerInput.camera.far = demoCam.projFar; }
-
-            mat4.targetTo(viewerInput.camera.worldMatrix, viewPos, targetPos, upVec);
-            mat4.rotateZ(viewerInput.camera.worldMatrix, viewerInput.camera.worldMatrix, roll);
-            viewerInput.camera.setClipPlanes(viewerInput.camera.near, viewerInput.camera.far);
-            viewerInput.camera.worldMatrixUpdated();
-
-            this.globals.context.inputManager.isMouseEnabled = false;
-        } else {
-            this.globals.context.inputManager.isMouseEnabled = true;
-        }
-
-        if (!this.cameraFrozen) {
-            mat4.getTranslation(this.globals.cameraPosition, viewerInput.camera.worldMatrix);
-            getMatrixAxisZ(this.globals.cameraFwd, viewerInput.camera.worldMatrix);
-            vec3.negate(this.globals.cameraFwd, this.globals.cameraFwd);
-            // Update the "player position" from the camera.
-            vec3.copy(this.globals.playerPosition, this.globals.cameraPosition);
-        }
-
-        this.globals.camera = viewerInput.camera;
+        globals.camera.execute(globals, viewerInput);
 
         // Not sure exactly where this is ordered...
-        dKy_setLight(this.globals);
+        dKy_setLight(globals);
 
         const template = this.renderHelper.pushTemplateRenderInst();
         const renderInstManager = this.renderHelper.renderInstManager;
-        if (this.globals.renderHacks.wireframe)
+        if (globals.renderHacks.wireframe)
             template.setMegaStateFlags({ wireframe: true });
 
-        fillSceneParamsDataOnTemplate(template, viewerInput);
+        mat4.copy(sceneParams.u_Projection, globals.camera.clipFromViewMatrix);
+        sceneParams.u_SceneTextureLODBias = calcLODBias(viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+        let offs = template.getUniformBufferOffset(GX_Program.ub_SceneParams);
+        const d = template.mapUniformBufferF32(GX_Program.ub_SceneParams);
+        fillSceneParamsData(d, offs, sceneParams);
+
         this.extraTextures.prepareToRender(device);
 
-        fpcM_Management(this.globals.frameworkGlobals, this.globals, renderInstManager, viewerInput);
+        fpcM_Management(globals.frameworkGlobals, globals, renderInstManager, viewerInput);
 
-        const dlst = this.globals.dlst;
+        const dlst = globals.dlst;
 
         renderInstManager.setCurrentList(dlst.alphaModel);
-        dlst.alphaModel0.draw(this.globals, renderInstManager, viewerInput);
+        dlst.alphaModel0.draw(globals, renderInstManager, viewerInput);
 
         renderInstManager.setCurrentList(dlst.bg[0]);
         {
-            this.globals.particleCtrl.calc(viewerInput);
+            globals.particleCtrl.calc(globals, viewerInput);
 
             for (let group = EffectDrawGroup.Main; group <= EffectDrawGroup.Indirect; group++) {
                 let texPrjMtx: mat4 | null = null;
 
                 if (group === EffectDrawGroup.Indirect) {
                     texPrjMtx = scratchMatrix;
-                    texProjCameraSceneTex(texPrjMtx, viewerInput.camera.projectionMatrix, 1);
+                    texProjCameraSceneTex(texPrjMtx, globals.camera.clipFromViewMatrix, 1);
                 }
 
-                this.globals.particleCtrl.setDrawInfo(viewerInput.camera.viewMatrix, viewerInput.camera.projectionMatrix, texPrjMtx, viewerInput.camera.frustum);
+                globals.particleCtrl.setDrawInfo(globals.camera.viewFromWorldMatrix, globals.camera.clipFromViewMatrix, texPrjMtx, globals.camera.frustum);
                 renderInstManager.setCurrentList(dlst.effect[group]);
-                this.globals.particleCtrl.draw(device, this.renderHelper.renderInstManager, group);
+                globals.particleCtrl.draw(device, this.renderHelper.renderInstManager, group);
             }
         }
 
         this.renderHelper.renderInstManager.popTemplate();
-        this.globals.renderHacks.renderHacksChanged = false;
+        globals.renderHacks.renderHacksChanged = false;
     }
 
     private executeList(passRenderer: GfxRenderPass, list: GfxRenderInstList): void {

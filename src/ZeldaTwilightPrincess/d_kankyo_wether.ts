@@ -1533,7 +1533,7 @@ function dKyr_sun_move(globals: dGlobals, deltaTimeFrames: number): void {
 
         if (sunCanGlare) {
             // Original game projects the vector into viewport space, and gets distance to 320, 240.
-            mDoLib_project(scratchVec3, pkt.sunPos, globals.camera);
+            mDoLib_project(scratchVec3, pkt.sunPos, globals.camera.clipFromWorldMatrix);
 
             const peekZ = globals.dlst.peekZ;
 

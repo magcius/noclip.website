@@ -16,10 +16,9 @@
         "useDefineForClassFields": false,
         "resolveJsonModule": true,
         "lib": [
-            "es2017",
-            "es2019.array",
-            "es2021.string",
-            "esnext.BigInt",
+            "ES2020",
+            "ES2021.String",
+            "ES2024.ArrayBuffer",
             "dom"
         ],
         "sourceMap": true,

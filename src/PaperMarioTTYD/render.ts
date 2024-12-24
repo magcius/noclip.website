@@ -1,5 +1,5 @@
 
-import { BasicGXRendererHelper, ColorKind, DrawParams, fillSceneParams, fillSceneParamsData, fillSceneParamsDataOnTemplate, GXMaterialHelperGfx, GXShapeHelperGfx, GXTextureHolder, loadedDataCoalescerComboGfx, MaterialParams, SceneParams, translateWrapModeGfx, ub_SceneParamsBufferSize } from '../gx/gx_render.js';
+import { BasicGXRendererHelper, calcLODBias, ColorKind, DrawParams, fillSceneParamsData, fillSceneParamsDataOnTemplate, GXMaterialHelperGfx, GXShapeHelperGfx, GXTextureHolder, loadedDataCoalescerComboGfx, MaterialParams, SceneParams, translateWrapModeGfx, ub_SceneParamsBufferSize } from '../gx/gx_render.js';
 
 import * as TPL from './tpl.js';
 import { AnimationEntry, Batch, bindMaterialAnimator, bindMeshAnimator, CollisionFlags, DrawModeFlags, Material, MaterialAnimator, MaterialLayer, MeshAnimator, Sampler, SceneGraphNode, SceneGraphPart, TTYDWorld } from './world.js';
@@ -321,6 +321,8 @@ class NodeInstance {
         template.setMegaStateFlags(this.megaStateFlags);
 
         if (this.isDecal) {
+            // TODO(jstpierre): Fix this math.
+            //
             // The game will actually adjust the projection matrix based on the child index, if the decal flag
             // is set. This happens in _mapDispMapObj.
             //
@@ -340,7 +342,8 @@ class NodeInstance {
             if (depthBias !== 1.0) {
                 let offs = template.allocateUniformBuffer(GX_Program.ub_SceneParams, ub_SceneParamsBufferSize);
                 const d = template.mapUniformBufferF32(GX_Program.ub_SceneParams);
-                fillSceneParams(sceneParams, viewerInput.camera.projectionMatrix, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+                mat4.copy(sceneParams.u_Projection, viewerInput.camera.projectionMatrix);
+                sceneParams.u_SceneTextureLODBias = calcLODBias(viewerInput.backbufferWidth, viewerInput.backbufferHeight);
 
                 projectionMatrixConvertClipSpaceNearZ(sceneParams.u_Projection, GfxClipSpaceNearZ.Zero, camera.clipSpaceNearZ);
                 sceneParams.u_Projection[10] *= depthBias;

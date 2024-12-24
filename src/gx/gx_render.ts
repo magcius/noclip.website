@@ -152,18 +152,12 @@ function fillDrawParamsDataWithOptimizations(material: GX_Material.GXMaterial, d
     assert(d.length >= offs);
 }
 
-export function fillSceneParams(sceneParams: SceneParams, projectionMatrix: ReadonlyMat4, viewportWidth: number, viewportHeight: number, customLODBias: number | null = null): void {
-    mat4.copy(sceneParams.u_Projection, projectionMatrix);
-
-    if (customLODBias !== null) {
-        sceneParams.u_SceneTextureLODBias = customLODBias;
-    } else {
-        // Mip levels in GX are assumed to be relative to the GameCube's embedded framebuffer (EFB) size,
-        // which is hardcoded to be 640x528. We need to bias our mipmap LOD selection by this amount to
-        // make sure textures are sampled correctly...
-        const textureLODBias = Math.log2(Math.min(viewportWidth / GX_Material.EFB_WIDTH, viewportHeight / GX_Material.EFB_HEIGHT));
-        sceneParams.u_SceneTextureLODBias = textureLODBias;
-    }
+export function calcLODBias(viewportWidth: number, viewportHeight: number): number {
+    // Mip levels in GX are assumed to be relative to the GameCube's embedded framebuffer (EFB) size,
+    // which is hardcoded to be 640x528. We need to bias our mipmap LOD selection by this amount to
+    // make sure textures are sampled correctly...
+    const textureLODBias = Math.log2(Math.min(viewportWidth / GX_Material.EFB_WIDTH, viewportHeight / GX_Material.EFB_HEIGHT));
+    return textureLODBias;
 }
 
 export function loadedDataCoalescerComboGfx(device: GfxDevice, loadedVertexDatas: LoadedVertexData[]): GfxBufferCoalescerCombo {
@@ -605,10 +599,11 @@ export const gxBindingLayouts: GfxBindingLayoutDescriptor[] = [
 
 const sceneParams = new SceneParams();
 export function fillSceneParamsDataOnTemplate(renderInst: GfxRenderInst, viewerInput: Viewer.ViewerRenderInput, customLODBias: number | null = null, sceneParamsScratch = sceneParams): void {
-    fillSceneParams(sceneParamsScratch, viewerInput.camera.projectionMatrix, viewerInput.backbufferWidth, viewerInput.backbufferHeight, customLODBias);
+    mat4.copy(sceneParamsScratch.u_Projection, viewerInput.camera.projectionMatrix);
+    sceneParams.u_SceneTextureLODBias = customLODBias !== null ? customLODBias : calcLODBias(viewerInput.backbufferWidth, viewerInput.backbufferHeight);
     let offs = renderInst.getUniformBufferOffset(GX_Material.GX_Program.ub_SceneParams);
     const d = renderInst.mapUniformBufferF32(GX_Material.GX_Program.ub_SceneParams);
-    fillSceneParamsData(d, offs, sceneParams);
+    fillSceneParamsData(d, offs, sceneParamsScratch);
 }
 
 export class GXRenderHelperGfx extends GfxRenderHelper {

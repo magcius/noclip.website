@@ -86,7 +86,7 @@ class d_a_noclip_legacy extends fopAc_ac_c {
         if (this.objectRenderers.length === 0)
             return;
 
-        if (!this.cullingCheck(viewerInput.camera))
+        if (!this.cullingCheck(globals.camera))
             return;
 
         const device = globals.modelCache.device;
@@ -367,7 +367,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     else if (actorName === 'Hi1') fetchArchive(`Hi`).then((rarc) => buildModel(rarc, `bdlm/hi.bdl`).bindANK1(parseBCK(rarc, `bcks/hi_wait01.bck`)));
     // Princess Zelda
     else if (actorName === 'p_zelda') fetchArchive(`Pz`).then((rarc) => {
-        const m = buildModel(rarc, `bdlm/pz.bdl`);            
+        const m = buildModel(rarc, `bdlm/pz.bdl`);
         m.setMaterialColorWriteEnabled("m_pz_eyeLdamA", false);
         m.setMaterialColorWriteEnabled("m_pz_eyeLdamB", false);
         m.setMaterialColorWriteEnabled("m_pz_mayuLdamA", false);
@@ -1257,7 +1257,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     else if (actorName === 'Oq') fetchArchive(`Oq`).then((rarc) => buildModel(rarc, `bmdm/oq.bmd`).bindANK1(parseBCK(rarc, `bck/nom_wait.bck`)));
     else if (actorName === 'Oqw') fetchArchive(`Oq`).then((rarc) => buildModel(rarc, `bmdm/red_oq.bmd`).bindANK1(parseBCK(rarc, `bck/umi_new_wait.bck`)));
     else if (actorName === 'Daiocta') fetchArchive(`Daiocta`).then((rarc) => buildModel(rarc, `bdlm/do_main1.bdl`).bindANK1(parseBCK(rarc, `bck/wait1.bck`)));
-    else if (actorName === 'Fmastr1' || actorName === 'Fmastr2') fetchArchive(`fm`).then((rarc) => { 
+    else if (actorName === 'Fmastr1' || actorName === 'Fmastr2') fetchArchive(`fm`).then((rarc) => {
         buildModel(rarc, `bdl/fm.bdl`).bindANK1(parseBCK(rarc, `bcks/wait.bck`));
         const holeModel = buildModel(rarc, `bdlm/ypit00.bdl`);
         holeModel.bindTTK1(parseBTK(rarc, `btk/ypit00.btk`));
@@ -1270,7 +1270,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         const m = buildModel(rarc, `bdlm/bl.bdl`);
 
         const bubbleType = (actor.parameters & 0x000000FF);
-        
+
         if (bubbleType === 0x80) {
             m.bindTTK1(parseBTK(rarc, 'btk/off.btk'));
         } else {
@@ -1286,7 +1286,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     else if (actorName === 'Tn') fetchArchive(`Tn`).then(async (rarc) => {
         const equipmentType = (actor.rot![0] & 0x00E0) >>> 5;
         const armorColor = (actor.parameters & 0x000000F0) >>> 4;
-        
+
         const mainModel = buildModel(rarc, `bmdm/tn_main.bmd`);
         const mainAnim = parseBCK(rarc, `bck/aniou1.bck`);
         mainModel.bindTRK1(parseBRK(rarc, `brk/tn_main.brk`), animFrame(armorColor));
@@ -1295,7 +1295,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         const swordModel = buildChildModel(weaponRarc, `bdlc/tn_ken1.bdl`);
         swordModel.setParentJoint(mainModel, `j_tn_item_r1`);
         mat4.translate(swordModel.modelMatrix, swordModel.modelMatrix, [0, 0, 85]);
-        
+
         const armorModel = buildChildModel(rarc, `bmdm/tn_yoroi1.bmd`);
         armorModel.setParentJoint(mainModel, `j_tn_mune1`);
         armorModel.bindTRK1(parseBRK(rarc, `brk/tn_yoroi1.brk`), animFrame(armorColor));
@@ -1873,16 +1873,16 @@ export class BMDObjectRenderer {
 
         mat4.getTranslation(scratchVec3a, this.modelMatrix);
         settingTevStruct(globals, this.lightTevColorType, scratchVec3a, this.tevstr);
-        setLightTevColorType(globals, this.modelInstance, this.tevstr, viewerInput.camera);
+        setLightTevColorType(globals, this.modelInstance, this.tevstr, globals.camera);
 
-        if( morf ) {
+        if (morf) {
             morf.calc();
             morf.entryDL(globals, renderInstManager, viewerInput);
         } else {
             this.setExtraTextures(globals.renderer.extraTextures);
             this.modelInstance.prepareToRender(device, renderInstManager, viewerInput);
         }
-        
+
         for (let i = 0; i < this.childObjects.length; i++)
             this.childObjects[i].prepareToRender(globals, null, device, renderInstManager, viewerInput);
     }

@@ -69,7 +69,7 @@ export class dPa_control_c {
         this.drawInfo.frustum = frustum;
     }
 
-    public calc(viewerInput: ViewerRenderInput): void {
+    public calc(globals: dGlobals, viewerInput: ViewerRenderInput): void {
         const inc = viewerInput.deltaTime / 1000 * 30;
 
         // Some hacky distance culling for emitters.

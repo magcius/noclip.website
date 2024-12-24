@@ -7,7 +7,7 @@ import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrPass, GfxrPassScope, GfxrRend
 import { GfxRenderInstList, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
 import * as GX from '../gx/gx_enum.js';
 import * as GX_Material from '../gx/gx_material.js';
-import { ColorKind, DrawParams, fillSceneParams, fillSceneParamsData, gxBindingLayouts, GXRenderHelperGfx, MaterialParams, SceneParams, ub_SceneParamsBufferSize } from '../gx/gx_render.js';
+import { ColorKind, DrawParams, fillSceneParamsData, gxBindingLayouts, GXRenderHelperGfx, MaterialParams, SceneParams, ub_SceneParamsBufferSize } from '../gx/gx_render.js';
 import { projectionMatrixForCuboid, setMatrixTranslation, Vec3Zero } from '../MathHelpers.js';
 import { TSDraw } from "../SuperMarioGalaxy/DDraw.js";
 import { TextureMapping } from '../TextureHolder.js';
@@ -55,8 +55,6 @@ function setSpecularLightAtten(light: GX_Material.Light, atten: number) {
 }
 
 const SPHERE_MAP_DIM = 32;
-const SPHERE_MAP_PROJECTION_MTX = mat4.create();
-projectionMatrixForCuboid(SPHERE_MAP_PROJECTION_MTX, 1.0, -1.0, -1.0, 1.0, 1.0, 15.0); // Yes, left and right are meant to be 1 and -1, respectively.
 
 function createHemisphericProbeMaterial(materialFactory: MaterialFactory): SFAMaterialBuilder<World> {
     const mb = new SFAMaterialBuilder<World>('Ambient Hemispheric Probe Material');
@@ -282,7 +280,8 @@ export class SphereMapManager {
         renderInst.setBindingLayouts(gxBindingLayouts);
 
         // Setup to draw in clip space
-        fillSceneParams(scratchSceneParams, SPHERE_MAP_PROJECTION_MTX, SPHERE_MAP_DIM, SPHERE_MAP_DIM);
+        projectionMatrixForCuboid(scratchSceneParams.u_Projection, 1.0, -1.0, -1.0, 1.0, 1.0, 15.0); // Yes, left and right are meant to be 1 and -1, respectively.
+        scratchSceneParams.u_SceneTextureLODBias = 0;
         projectionMatrixConvertClipSpaceNearZ(scratchSceneParams.u_Projection, device.queryVendorInfo().clipSpaceNearZ, GfxClipSpaceNearZ.NegativeOne);
         let offs = renderInst.allocateUniformBuffer(GX_Material.GX_Program.ub_SceneParams, ub_SceneParamsBufferSize);
         const d = renderInst.mapUniformBufferF32(GX_Material.GX_Program.ub_SceneParams);

@@ -4,8 +4,8 @@ import { TTK1, LoopMode, TRK1, AnimationBase, TPT1, VAF1, ANK1, JointTransformIn
 import { J3DModelInstance, J3DModelData, JointMatrixCalc, ShapeInstanceState } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import { ViewerRenderInput } from "../viewer.js";
-import { dGlobals } from "./Main.js";
-import { mat4, vec3, vec4 } from "gl-matrix";
+import { dCamera_c, dGlobals } from "./Main.js";
+import { mat4, ReadonlyMat4, vec3, vec4 } from "gl-matrix";
 import { Camera, divideByW } from "../Camera.js";
 import { dDlst_list_Set } from "./d_drawlist.js";
 
@@ -101,13 +101,13 @@ export function mDoExt_modelEntryDL(globals: dGlobals, modelInstance: J3DModelIn
         modelInstance.setTexturesEnabled(globals.renderHacks.texturesEnabled);
     }
 
-    const camera = viewerInput.camera;
-    modelInstance.calcView(camera.viewMatrix, camera.frustum);
+    const camera = globals.camera;
+    modelInstance.calcView(camera.viewFromWorldMatrix, camera.frustum);
 
     renderInstManager.setCurrentList(drawListSet[0]);
-    modelInstance.drawOpa(renderInstManager, camera.projectionMatrix);
+    modelInstance.drawOpa(renderInstManager, camera.clipFromViewMatrix);
     renderInstManager.setCurrentList(drawListSet[1]);
-    modelInstance.drawXlu(renderInstManager, camera.projectionMatrix);
+    modelInstance.drawXlu(renderInstManager, camera.clipFromViewMatrix);
 }
 
 export function mDoExt_modelUpdateDL(globals: dGlobals, modelInstance: J3DModelInstance, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, drawListSet: dDlst_list_Set | null = null): void {
@@ -234,15 +234,15 @@ export class mDoExt_McaMorf implements JointMatrixCalc {
 }
 
 const scratchVec4 = vec4.create();
-export function mDoLib_project(dst: vec3, v: vec3, camera: Camera, v4 = scratchVec4): void {
+export function mDoLib_project(dst: vec3, v: vec3, clipFromWorldMatrix: ReadonlyMat4, v4 = scratchVec4): void {
     vec4.set(v4, v[0], v[1], v[2], 1.0);
-    vec4.transformMat4(v4, v4, camera.clipFromWorldMatrix);
+    vec4.transformMat4(v4, v4, clipFromWorldMatrix);
     divideByW(v4, v4);
     vec3.set(dst, v4[0], v4[1], v4[2]);
 }
 
-export function mDoLib_projectFB(dst: vec3, v: vec3, viewerInput: ViewerRenderInput): void {
-    mDoLib_project(dst, v, viewerInput.camera);
+export function mDoLib_projectFB(dst: vec3, v: vec3, viewerInput: ViewerRenderInput, clipFromWorldMatrix: ReadonlyMat4 = viewerInput.camera.clipFromWorldMatrix): void {
+    mDoLib_project(dst, v, clipFromWorldMatrix);
     // Put in viewport framebuffer space.
     dst[0] = (dst[0] * 0.5 + 0.5) * viewerInput.backbufferWidth;
     dst[1] = (dst[1] * 0.5 + 0.5) * viewerInput.backbufferHeight;

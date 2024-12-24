@@ -246,14 +246,14 @@ export class BloomEffect extends ImageEffectBase {
     }
 
     private allocateParameterBuffer(renderInst: GfxRenderInst) {
-        let offs = renderInst.allocateUniformBuffer(0, 4);
-        const d = renderInst.mapUniformBufferF32(0);
+        const d = renderInst.allocateUniformBufferF32(0, 4);
 
         const bloomIntensity = (this.bloomIntensity * this.strength) / 0xFF;
         const threshold = this.threshold / 0xFF;
         const intensity1 = this.intensity1 / 0xFF;
         const intensity2 = this.intensity2 / 0xFF;
 
+        let offs = 0;
         offs += fillVec4(d, offs, bloomIntensity, threshold, intensity1, intensity2);
     }
 
@@ -490,13 +490,13 @@ export class BloomEffectSimple extends ImageEffectBase {
     }
 
     private allocateParameterBuffer(renderInst: GfxRenderInst) {
-        let offs = renderInst.allocateUniformBuffer(0, 4);
-        const d = renderInst.mapUniformBufferF32(0);
+        const d = renderInst.allocateUniformBufferF32(0, 4);
 
         const maskFilter = this.maskFilter;
         const threshold = this.threshold / 0xFF;
         const intensity = (this.intensity * this.strength);
 
+        let offs = 0;
         offs += fillVec4(d, offs, maskFilter, threshold, intensity);
     }
 
@@ -656,12 +656,13 @@ export class DepthOfFieldBlur extends ImageEffectBase {
     }
 
     private allocateParameterBuffer(renderInst: GfxRenderInst) {
-        let offs = renderInst.allocateUniformBuffer(0, 4);
-        const d = renderInst.mapUniformBufferF32(0);
+        const d = renderInst.allocateUniformBufferF32(0, 4);
 
         const intensity = this.intensity * this.strength;
         const blurMaxDist = fallback(this.blurMaxDist, 0xF8) / 0xFF;
         const blurMinDist = fallback(this.blurMinDist, 0xF2) / 0xFF;
+
+        let offs = 0;
         offs += fillVec4(d, offs, intensity, blurMaxDist, blurMinDist, IsDepthReversed ? 1.0 : 0.0);
     }
 

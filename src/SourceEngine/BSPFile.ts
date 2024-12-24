@@ -978,10 +978,7 @@ class ResizableArrayBuffer {
 
         if (byteSize > this.byteCapacity) {
             this.byteCapacity = Math.max(byteSize, this.byteCapacity * 2);
-            const oldBuffer = this.buffer;
-            const newBuffer = new ArrayBuffer(this.byteCapacity);
-            new Uint8Array(newBuffer).set(new Uint8Array(oldBuffer));
-            this.buffer = newBuffer;
+            this.buffer = this.buffer.transfer(this.byteCapacity);
         }
     }
 

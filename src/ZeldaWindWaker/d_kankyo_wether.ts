@@ -161,11 +161,11 @@ export function loadRawTexture(globals: dGlobals, data: ArrayBufferSlice, width:
 const materialParams = new MaterialParams();
 const drawParams = new DrawParams();
 
-function submitScratchRenderInst(renderInstManager: GfxRenderInstManager, materialHelper: GXMaterialHelperGfx, renderInst: GfxRenderInst, viewerInput: ViewerRenderInput, materialParams_ = materialParams, drawParams_ = drawParams): void {
+function submitScratchRenderInst(globals: dGlobals, renderInstManager: GfxRenderInstManager, materialHelper: GXMaterialHelperGfx, renderInst: GfxRenderInst, materialParams_ = materialParams, drawParams_ = drawParams): void {
     materialHelper.setOnRenderInst(renderInstManager.gfxRenderCache, renderInst);
     renderInst.setSamplerBindingsFromTextureMappings(materialParams_.m_TextureMapping);
     materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams_);
-    mat4.copy(drawParams_.u_PosMtx[0], viewerInput.camera.viewMatrix);
+    mat4.copy(drawParams_.u_PosMtx[0], globals.camera.viewFromWorldMatrix);
     materialHelper.allocateDrawParamsDataOnInst(renderInst, drawParams_);
     renderInstManager.submitRenderInst(renderInst);
 }
@@ -310,7 +310,7 @@ export class dKankyo_sun_Packet {
         if (!drawSun && !drawMoon)
             return;
 
-        const camPitch = vecPitch(globals.cameraFwd);
+        const camPitch = vecPitch(globals.camera.cameraFwd);
 
         renderInstManager.setCurrentList(globals.dlst.sky[1]);
 
@@ -324,8 +324,8 @@ export class dKankyo_sun_Packet {
                 vec3.copy(moonPos, this.sunPos);
             } else {
                 // Mirror the sun position
-                vec3.sub(moonPos, this.sunPos, globals.cameraPosition);
-                vec3.scaleAndAdd(moonPos, globals.cameraPosition, moonPos, -1.0);
+                vec3.sub(moonPos, this.sunPos, globals.camera.cameraPos);
+                vec3.scaleAndAdd(moonPos, globals.camera.cameraPos, moonPos, -1.0);
             }
 
             const scaleX = dayOfWeek < 4 ? -1 : 1;
@@ -338,7 +338,7 @@ export class dKankyo_sun_Packet {
                 if (i === 1)
                     moonSize *= 1.7;
 
-                computeMatrixWithoutTranslation(scratchMatrix, viewerInput.camera.worldMatrix);
+                computeMatrixWithoutTranslation(scratchMatrix, globals.camera.worldFromViewMatrix);
                 mat4.rotateZ(scratchMatrix, scratchMatrix, MathConstants.DEG_TO_RAD * (45 + (360.0 * ((moonPitch - camPitch) / -8.0))));
 
                 if (i === 0) {
@@ -369,7 +369,7 @@ export class dKankyo_sun_Packet {
                 }
 
                 const renderInst = ddraw.makeRenderInst(renderInstManager);
-                submitScratchRenderInst(renderInstManager, this.materialHelperSunMoon, renderInst, viewerInput);
+                submitScratchRenderInst(globals, renderInstManager, this.materialHelperSunMoon, renderInst);
             }
         }
 
@@ -377,7 +377,7 @@ export class dKankyo_sun_Packet {
             const sunPos = this.sunPos;
 
             const sunPitch = vecPitch(sunPos);
-            computeMatrixWithoutTranslation(scratchMatrix, viewerInput.camera.worldMatrix);
+            computeMatrixWithoutTranslation(scratchMatrix, globals.camera.worldFromViewMatrix);
             mat4.rotateZ(scratchMatrix, scratchMatrix, MathConstants.DEG_TO_RAD * (-50 + (360.0 * ((sunPitch - camPitch) / -8.0))));
 
             let sunSizeBase = 575.0;
@@ -402,7 +402,7 @@ export class dKankyo_sun_Packet {
                 this.drawSquare(ddraw, scratchMatrix, sunPos, sunSize, 1.0, 1.0);
                 const renderInst = ddraw.makeRenderInst(renderInstManager);
 
-                submitScratchRenderInst(renderInstManager, this.materialHelperSunMoon, renderInst, viewerInput);
+                submitScratchRenderInst(globals, renderInstManager, this.materialHelperSunMoon, renderInst);
             }
         }
     }
@@ -428,7 +428,7 @@ export class dKankyo_sun_Packet {
 
        const envLight = globals.g_env_light;
 
-        computeMatrixWithoutTranslation(scratchMatrix, viewerInput.camera.worldMatrix);
+        computeMatrixWithoutTranslation(scratchMatrix, globals.camera.worldFromViewMatrix);
 
         if (this.drawLenzInSky)
             renderInstManager.setCurrentList(globals.dlst.sky[1]);
@@ -493,7 +493,7 @@ export class dKankyo_sun_Packet {
         colorCopy(materialParams.u_Color[ColorKind.C0], this.lensflareColor, lensflareAlpha);
 
         const renderInst = ddraw.makeRenderInst(renderInstManager);
-        submitScratchRenderInst(renderInstManager, this.materialHelperLenzflareSolid, renderInst, viewerInput);
+        submitScratchRenderInst(globals, renderInstManager, this.materialHelperLenzflareSolid, renderInst);
 
         mat4.rotateZ(scratchMatrix, scratchMatrix, this.lensflareAngle);
 
@@ -536,7 +536,7 @@ export class dKankyo_sun_Packet {
             materialParams.u_Color[ColorKind.C0].a *= alpha;
             colorFromRGBA8(materialParams.u_Color[ColorKind.C1], 0xFF91491E);
 
-            submitScratchRenderInst(renderInstManager, this.materialHelperLenzflare, renderInst, viewerInput);
+            submitScratchRenderInst(globals, renderInstManager, this.materialHelperLenzflare, renderInst);
         }
     }
 
@@ -702,7 +702,7 @@ export class dKankyo_vrkumo_Packet {
                 y = Math.sin(polarY0);
                 z = Math.cos(polarY0) * Math.cos(azimuthal + azimuthalOffsY0);
                 vec3.set(scratchVec3, x * domeRadius, y * domeRadius, z * domeRadius);
-                vec3.add(scratchVec3, scratchVec3, globals.cameraPosition);
+                vec3.add(scratchVec3, scratchVec3, globals.camera.cameraPos);
                 ddraw.position3vec3(scratchVec3);
                 ddraw.color4color(GX.Attr.CLR0, materialParams.u_Color[ColorKind.C0]);
                 ddraw.texCoord2f32(GX.Attr.TEX0, 0, 0);
@@ -711,7 +711,7 @@ export class dKankyo_vrkumo_Packet {
                 y = Math.sin(polarY0);
                 z = Math.cos(polarY0) * Math.cos(azimuthal - azimuthalOffsY0);
                 vec3.set(scratchVec3, x * domeRadius, y * domeRadius, z * domeRadius);
-                vec3.add(scratchVec3, scratchVec3, globals.cameraPosition);
+                vec3.add(scratchVec3, scratchVec3, globals.camera.cameraPos);
                 ddraw.position3vec3(scratchVec3);
                 ddraw.color4color(GX.Attr.CLR0, materialParams.u_Color[ColorKind.C0]);
                 ddraw.texCoord2f32(GX.Attr.TEX0, 1, 0);
@@ -720,7 +720,7 @@ export class dKankyo_vrkumo_Packet {
                 y = Math.sin(polarY1);
                 z = Math.cos(polarY1) * Math.cos(azimuthal - azimuthalOffsY1);
                 vec3.set(scratchVec3, x * domeRadius, y * domeRadius, z * domeRadius);
-                vec3.add(scratchVec3, scratchVec3, globals.cameraPosition);
+                vec3.add(scratchVec3, scratchVec3, globals.camera.cameraPos);
                 ddraw.position3vec3(scratchVec3);
                 ddraw.color4color(GX.Attr.CLR0, materialParams.u_Color[ColorKind.C0]);
                 ddraw.texCoord2f32(GX.Attr.TEX0, 1, 1);
@@ -729,7 +729,7 @@ export class dKankyo_vrkumo_Packet {
                 y = Math.sin(polarY1);
                 z = Math.cos(polarY1) * Math.cos(azimuthal + azimuthalOffsY1);
                 vec3.set(scratchVec3, x * domeRadius, y * domeRadius, z * domeRadius);
-                vec3.add(scratchVec3, scratchVec3, globals.cameraPosition);
+                vec3.add(scratchVec3, scratchVec3, globals.camera.cameraPos);
                 ddraw.position3vec3(scratchVec3);
                 ddraw.color4color(GX.Attr.CLR0, materialParams.u_Color[ColorKind.C0]);
                 ddraw.texCoord2f32(GX.Attr.TEX0, 0, 1);
@@ -739,7 +739,7 @@ export class dKankyo_vrkumo_Packet {
 
             if (ddraw.hasIndicesToDraw()) {
                 const renderInst = ddraw.makeRenderInst(renderInstManager);
-                submitScratchRenderInst(renderInstManager, this.materialHelper, renderInst, viewerInput);
+                submitScratchRenderInst(globals, renderInstManager, this.materialHelper, renderInst);
             }
         }
 
@@ -809,7 +809,7 @@ export class dKankyo_rain_Packet {
         const envLight = globals.g_env_light;
         const ddraw = this.ddraw;
 
-        computeMatrixWithoutTranslation(scratchMatrix, viewerInput.camera.worldMatrix);
+        computeMatrixWithoutTranslation(scratchMatrix, globals.camera.worldFromViewMatrix);
 
         renderInstManager.setCurrentList(globals.dlst.wetherEffect);
 
@@ -838,7 +838,7 @@ export class dKankyo_rain_Packet {
 
             // basePos
             vec3.add(scratchVec3, rain.basePos, rain.pos);
-            const dist = vec3.distance(scratchVec3, globals.cameraPosition);
+            const dist = vec3.distance(scratchVec3, globals.camera.cameraPos);
             vec3.add(scratchVec3c, scratchVec3c, scratchVec3);
             vec3.add(scratchVec3d, scratchVec3d, scratchVec3);
 
@@ -881,7 +881,7 @@ export class dKankyo_rain_Packet {
 
         if (ddraw.hasIndicesToDraw()) {
             const renderInst = ddraw.makeRenderInst(renderInstManager);
-            submitScratchRenderInst(renderInstManager, this.materialHelperRain, renderInst, viewerInput);
+            submitScratchRenderInst(globals, renderInstManager, this.materialHelperRain, renderInst);
         }
     }
 
@@ -897,9 +897,9 @@ export class dKankyo_rain_Packet {
         this.sibukiAlpha = cLib_addCalc(this.sibukiAlpha, alphaTarget, 0.2, 3.0, 0.001);
 
         let additionalAlphaFade: number;
-        if (globals.cameraFwd[1] > 0.0 && globals.cameraFwd[1] < 0.5)
-            additionalAlphaFade = 1.0 - (globals.cameraFwd[1] / 0.5);
-        else if (globals.cameraFwd[1] > 0.0)
+        if (globals.camera.cameraFwd[1] > 0.0 && globals.camera.cameraFwd[1] < 0.5)
+            additionalAlphaFade = 1.0 - (globals.camera.cameraFwd[1] / 0.5);
+        else if (globals.camera.cameraFwd[1] > 0.0)
             additionalAlphaFade = 0.0;
         else
             additionalAlphaFade = 1.0;
@@ -949,7 +949,7 @@ export class dKankyo_rain_Packet {
         ddraw.end();
 
         const renderInst = ddraw.makeRenderInst(renderInstManager);
-        submitScratchRenderInst(renderInstManager, this.materialHelperSibuki, renderInst, viewerInput);
+        submitScratchRenderInst(globals, renderInstManager, this.materialHelperSibuki, renderInst);
     }
 
     public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
@@ -1061,7 +1061,7 @@ export class dKankyo_wave_Packet {
             return;
 
         const ddraw = this.ddraw;
-        computeMatrixWithoutTranslation(scratchMatrix, viewerInput.camera.worldMatrix);
+        computeMatrixWithoutTranslation(scratchMatrix, globals.camera.worldFromViewMatrix);
 
         renderInstManager.setCurrentList(globals.dlst.wetherEffect);
 
@@ -1071,7 +1071,7 @@ export class dKankyo_wave_Packet {
         else
             this.texUsonami.fillTextureMapping(materialParams.m_TextureMapping[0]);
 
-        dKy_GxFog_sea_set(envLight, materialParams.u_FogBlock, viewerInput.camera);
+        dKy_GxFog_sea_set(envLight, materialParams.u_FogBlock, globals.camera);
 
         ddraw.beginDraw(globals.modelCache.cache);
         ddraw.begin(GX.Command.DRAW_QUADS, 4 * envLight.waveCount);
@@ -1130,7 +1130,7 @@ export class dKankyo_wave_Packet {
 
         if (ddraw.hasIndicesToDraw()) {
             const renderInst = ddraw.makeRenderInst(renderInstManager);
-            submitScratchRenderInst(renderInstManager, this.materialHelper, renderInst, viewerInput);
+            submitScratchRenderInst(globals, renderInstManager, this.materialHelper, renderInst);
         }
     }
 
@@ -1211,7 +1211,7 @@ export class dKankyo_star_Packet {
         else
             renderInstManager.setCurrentList(globals.dlst.sky[1]);
 
-        dKy_GxFog_sea_set(envLight, materialParams.u_FogBlock, viewerInput.camera);
+        dKy_GxFog_sea_set(envLight, materialParams.u_FogBlock, globals.camera);
 
         ddraw.beginDraw(globals.modelCache.cache);
         ddraw.begin(GX.Command.DRAW_TRIANGLES, 6 * envLight.starCount);
@@ -1226,7 +1226,7 @@ export class dKankyo_star_Packet {
         vec3.set(scratchVec3c, starSize, -0.5 * starSize, 0.0);
         vec3.set(scratchVec3d, -starSize, -0.5 * starSize, 0.0);
 
-        computeMatrixWithoutTranslation(scratchMatrix, viewerInput.camera.worldMatrix);
+        computeMatrixWithoutTranslation(scratchMatrix, globals.camera.worldFromViewMatrix);
         mat4.rotateZ(scratchMatrix, scratchMatrix, this.rot * MathConstants.DEG_TO_RAD);
 
         vec3.transformMat4(scratchVec3b, scratchVec3b, scratchMatrix);
@@ -1234,7 +1234,7 @@ export class dKankyo_star_Packet {
         vec3.transformMat4(scratchVec3d, scratchVec3d, scratchMatrix);
 
         // Projected moon position.
-        mDoLib_projectFB(scratchVec3e, envLight.moonPos, viewerInput);
+        mDoLib_projectFB(scratchVec3e, envLight.moonPos, viewerInput, globals.camera.clipFromWorldMatrix);
 
         let radius = 0.0, angle = -Math.PI, angleIncr = 0.0;
         for (let i = 0; i < envLight.starCount; i++) {
@@ -1263,9 +1263,9 @@ export class dKankyo_star_Packet {
                     radius = (20.0 * i) / 1000.0;
             }
 
-            vec3.add(scratchVec3a, scratchVec3a, globals.cameraPosition);
+            vec3.add(scratchVec3a, scratchVec3a, globals.camera.cameraPos);
 
-            mDoLib_projectFB(scratchVec3, scratchVec3a, viewerInput);
+            mDoLib_projectFB(scratchVec3, scratchVec3a, viewerInput, globals.camera.clipFromWorldMatrix);
             const distToMoon = vec3.dist(scratchVec3, scratchVec3e);
             if (distToMoon < 80.0)
                 continue;
@@ -1313,7 +1313,7 @@ export class dKankyo_star_Packet {
 
         if (ddraw.hasIndicesToDraw()) {
             const renderInst = ddraw.makeRenderInst(renderInstManager);
-            submitScratchRenderInst(renderInstManager, this.materialHelper, renderInst, viewerInput);
+            submitScratchRenderInst(globals, renderInstManager, this.materialHelper, renderInst);
         }
     }
 
@@ -1371,7 +1371,7 @@ export class dKankyo_housi_Packet {
             return;
 
         const ddraw = this.ddraw;
-        computeMatrixWithoutTranslation(scratchMatrix, viewerInput.camera.worldMatrix);
+        computeMatrixWithoutTranslation(scratchMatrix, globals.camera.worldFromViewMatrix);
 
         renderInstManager.setCurrentList(globals.dlst.wetherEffect);
 
@@ -1428,7 +1428,7 @@ export class dKankyo_housi_Packet {
             colorFromRGBA8(materialParams.u_Color[ColorKind.C0], 0xE5FFC8FF);
             colorFromRGBA8(materialParams.u_Color[ColorKind.C1], 0x43D2CAFF);
 
-            submitScratchRenderInst(renderInstManager, this.materialHelper, renderInst, viewerInput);
+            submitScratchRenderInst(globals, renderInstManager, this.materialHelper, renderInst);
         }
     }
 
@@ -1487,7 +1487,7 @@ export class dKankyo_moya_Packet {
             return;
 
         const ddraw = this.ddraw;
-        computeMatrixWithoutTranslation(scratchMatrix, viewerInput.camera.worldMatrix);
+        computeMatrixWithoutTranslation(scratchMatrix, globals.camera.worldFromViewMatrix);
         mat4.rotateZ(scratchMatrix, scratchMatrix, this.rot * MathConstants.DEG_TO_RAD);
 
         renderInstManager.setCurrentList(globals.dlst.wetherEffect);
@@ -1548,7 +1548,7 @@ export class dKankyo_moya_Packet {
             else
                 colorCopy(materialParams.u_Color[ColorKind.C0], envLight.bgCol[0].K0, 1.0);
 
-            submitScratchRenderInst(renderInstManager, this.materialHelper, renderInst, viewerInput);
+            submitScratchRenderInst(globals, renderInstManager, this.materialHelper, renderInst);
         }
     }
 
@@ -1589,11 +1589,11 @@ function dKyr_sun_move(globals: dGlobals): void {
 
     const roomType = dStage_stagInfo_GetSTType(globals.dStage_dt.stag);
     if (envLight.baseLight.color.r === 0.0 && roomType !== 2) {
-        dKyr_get_vectle_calc(globals.cameraPosition, envLight.baseLight.pos, scratchVec3);
+        dKyr_get_vectle_calc(globals.camera.cameraPos, envLight.baseLight.pos, scratchVec3);
     } else {
-        dKyr_get_vectle_calc(globals.cameraPosition, envLight.sunPos, scratchVec3);
+        dKyr_get_vectle_calc(globals.camera.cameraPos, envLight.sunPos, scratchVec3);
     }
-    vec3.scaleAndAdd(pkt.sunPos, globals.cameraPosition, scratchVec3, 8000.0);
+    vec3.scaleAndAdd(pkt.sunPos, globals.camera.cameraPos, scratchVec3, 8000.0);
     const horizonY = scratchVec3[1];
 
     let sunCanGlare = true;
@@ -1618,7 +1618,7 @@ function dKyr_sun_move(globals: dGlobals): void {
 
         if (sunCanGlare) {
             // Original game projects the vector into viewport space, and gets distance to 320, 240.
-            mDoLib_project(scratchVec3, pkt.sunPos, globals.camera);
+            mDoLib_project(scratchVec3, pkt.sunPos, globals.camera.clipFromWorldMatrix);
 
             const peekZ = globals.dlst.peekZ;
 
@@ -1678,7 +1678,7 @@ function dKyr_sun_move(globals: dGlobals): void {
     }
 
     if (dKyr_moon_arrival_check(envLight)) {
-        const diffY = (pkt.sunPos[1] - globals.cameraPosition[1]) / -8000.0;
+        const diffY = (pkt.sunPos[1] - globals.camera.cameraPos[1]) / -8000.0;
         const target = Math.min(diffY * diffY * 6.0, 1.0);
         pkt.moonAlpha = cLib_addCalc(pkt.moonAlpha, target, 0.2, 0.01, 0.001);
     } else {
@@ -1687,19 +1687,19 @@ function dKyr_sun_move(globals: dGlobals): void {
 }
 
 function dKy_set_eyevect_calc(globals: dGlobals, dst: vec3, scaleXZ: number, scaleY: number = scaleXZ): void {
-    dst[0] = globals.cameraPosition[0] + globals.cameraFwd[0] * scaleXZ;
-    dst[1] = (globals.cameraPosition[1] + globals.cameraFwd[1] * scaleY) - 200.0;
-    dst[2] = globals.cameraPosition[2] + globals.cameraFwd[2] * scaleXZ;
+    dst[0] = globals.camera.cameraPos[0] + globals.camera.cameraFwd[0] * scaleXZ;
+    dst[1] = (globals.camera.cameraPos[1] + globals.camera.cameraFwd[1] * scaleY) - 200.0;
+    dst[2] = globals.camera.cameraPos[2] + globals.camera.cameraFwd[2] * scaleXZ;
 }
 
 function dKy_set_eyevect_calc2(globals: dGlobals, dst: vec3, scaleXZ: number, scaleY: number = scaleXZ): void {
-    vec3.copy(dst, globals.cameraFwd);
+    vec3.copy(dst, globals.camera.cameraFwd);
     if (scaleY === 0.0)
         dst[1] = 0.0;
     vec3.normalize(dst, dst);
-    dst[0] = globals.cameraPosition[0] + dst[0] * scaleXZ;
-    dst[1] = globals.cameraPosition[1] + dst[1] * scaleXZ;
-    dst[2] = globals.cameraPosition[2] + dst[2] * scaleXZ;
+    dst[0] = globals.camera.cameraPos[0] + dst[0] * scaleXZ;
+    dst[1] = globals.camera.cameraPos[1] + dst[1] * scaleXZ;
+    dst[2] = globals.camera.cameraPos[2] + dst[2] * scaleXZ;
 }
 
 function dKyr_lenzflare_move(globals: dGlobals): void {
@@ -1709,21 +1709,21 @@ function dKyr_lenzflare_move(globals: dGlobals): void {
     dKy_set_eyevect_calc(globals, scratchVec3, 7200);
     dKyr_get_vectle_calc(scratchVec3, pkt.sunPos, scratchVec3);
 
-    const dist = vec3.distance(scratchVec3, globals.cameraFwd);
+    const dist = vec3.distance(scratchVec3, globals.camera.cameraFwd);
     const intensity = 250.0 + (350.0 * dist);
     for (let i = 0; i < 6; i++) {
         const whichLenz = i + 2;
         vec3.scaleAndAdd(pkt.lensflarePos[i], pkt.sunPos, scratchVec3, -intensity * whichLenz);
     }
 
-    mDoLib_project(scratchVec3, pkt.sunPos, globals.camera);
+    mDoLib_project(scratchVec3, pkt.sunPos, globals.camera.clipFromWorldMatrix);
     pkt.lensflareAngle = Math.atan2(scratchVec3[1], scratchVec3[0]) + Math.PI / 2;
 }
 
 function wether_move_thunder(globals: dGlobals): void {
     const envLight = globals.g_env_light;
     if (envLight.thunderActive) {
-        dKyr_thunder_move(globals, envLight, globals.cameraPosition);
+        dKyr_thunder_move(globals, envLight, globals.camera.cameraPos);
     } else if (envLight.thunderMode !== ThunderMode.Off) {
         dKyr_thunder_init(envLight);
         envLight.thunderActive = true;
@@ -1746,9 +1746,9 @@ function dKyr_kamome_move(globals: dGlobals, deltaTimeFrames: number): void {
                 if (eff.timer <= 0.0) {
                     eff.angleY = cM_rndFX(Math.PI);
                     eff.angleX = cM_rndFX(Math.PI);
-                    eff.pos[0] = globals.cameraPosition[0] + Math.sin(eff.angleY) * 7000.0;
+                    eff.pos[0] = globals.camera.cameraPos[0] + Math.sin(eff.angleY) * 7000.0;
                     eff.pos[1] = 4500.0;
-                    eff.pos[2] = globals.cameraPosition[2] + Math.cos(eff.angleY) * 7000.0;
+                    eff.pos[2] = globals.camera.cameraPos[2] + Math.cos(eff.angleY) * 7000.0;
                     eff.angleYSpeed = cM_rndFX(1.0);
                     eff.scale = 0.0;
                     eff.timer = 300.0 + cM_rndF(180.0);
@@ -1775,9 +1775,9 @@ function dKyr_kamome_move(globals: dGlobals, deltaTimeFrames: number): void {
                 const newTargetY = Math.abs(Math.sin(eff.angleX) * 3200.0);
                 const newTargetZ = Math.cos(eff.angleY) * 7000.0;
 
-                eff.pos[0] = globals.cameraPosition[0] + newTargetX;
+                eff.pos[0] = globals.camera.cameraPos[0] + newTargetX;
                 eff.pos[1] = newTargetY + 4800;
-                eff.pos[2] = globals.cameraPosition[2] + newTargetZ;
+                eff.pos[2] = globals.camera.cameraPos[2] + newTargetZ;
                 eff.emitter.setGlobalTranslation(eff.pos);
 
                 if (eff.timer > 0 && spawnBirds) {
@@ -1964,7 +1964,7 @@ function dKyr_windline_move(globals: dGlobals, deltaTimeFrames: number): void {
             vec3.scaleAndAdd(eff.animPos, eff.animPos, scratchVec3, swervePosMag * deltaTimeFrames);
             vec3.add(emitter.globalTranslation, eff.basePos, eff.animPos);
 
-            const dist = vec3.distance(emitter.globalTranslation, globals.cameraPosition);
+            const dist = vec3.distance(emitter.globalTranslation, globals.camera.cameraPos);
             const distFade = Math.min(dist / 200.0, 1.0);
 
             const colorAvg = (envLight.bgCol[0].K0.r + envLight.bgCol[0].K0.g + envLight.bgCol[0].K0.b) / 3;
@@ -2093,14 +2093,14 @@ function wether_move_rain(globals: dGlobals, deltaTimeFrames: number): void {
                     } else {
                         vec3.set(rain.pos, cM_rndFX(800), cM_rndFX(800), cM_rndFX(800));
                     }
-                    rain.minY = -800 + globals.cameraPosition[1];
+                    rain.minY = -800 + globals.camera.cameraPos[1];
                 }
 
                 const posY = rain.basePos[1] + rain.pos[1];
                 if (posY < 20.0 + rain.minY) {
                     vec3.copy(rain.basePos, scratchVec3);
                     vec3.set(rain.pos, cM_rndFX(800.0), 200.0, cM_rndFX(800.0));
-                    rain.minY = -800 + globals.cameraPosition[1];
+                    rain.minY = -800 + globals.camera.cameraPos[1];
                     rain.timer = 10;
                 }
             } else {
@@ -2111,7 +2111,7 @@ function wether_move_rain(globals: dGlobals, deltaTimeFrames: number): void {
             vec3.set(rain.pos, cM_rndFX(800.0), cM_rndFX(600.0), cM_rndFX(800.0));
             rain.alpha = 1.0;
             rain.timer = 0;
-            rain.minY = -800 + globals.cameraPosition[1];
+            rain.minY = -800 + globals.camera.cameraPos[1];
             rain.initialized = true;
         }
 
@@ -2335,7 +2335,7 @@ function wether_move_moya(globals: dGlobals, deltaTimeFrames: number): void {
 
         eff.sizeTimer += 120 * deltaTimeFrames;
 
-        const distanceCam = vec3.distance(globals.cameraPosition, scratchVec3c);
+        const distanceCam = vec3.distance(globals.camera.cameraPos, scratchVec3c);
         eff.size = (Math.sin(cM_s2rad(eff.sizeTimer)) * 40.0) + eff.baseSize + (eff.baseSize * 1.5 * (distanceCam - 1000.0) / 2000.0);
 
         if (i < envLight.moyaCount) {
@@ -2404,7 +2404,7 @@ function wether_move_wave(globals: dGlobals, deltaTimeFrames: number): void {
         skyboxY = fili.skyboxY;
 
     // Camera forward in XZ plane
-    vec3.copy(scratchVec3a, globals.cameraFwd);
+    vec3.copy(scratchVec3a, globals.camera.cameraFwd);
     scratchVec3a[1] = 0;
     vec3.normalize(scratchVec3a, scratchVec3a);
 
@@ -2472,7 +2472,7 @@ function wether_move_wave(globals: dGlobals, deltaTimeFrames: number): void {
 
         // Sea flat fade.
         if (envLight.waveFlatInter > 0.0) {
-            const dist = Math.hypot(globals.cameraPosition[0] - scratchVec3d[0], globals.cameraPosition[2] - scratchVec3d[2]);
+            const dist = Math.hypot(globals.camera.cameraPos[0] - scratchVec3d[0], globals.camera.cameraPos[2] - scratchVec3d[2]);
             const innerRadius = envLight.waveFlatInter * 1.5 * envLight.waveSpawnRadius;
             const outerRadius = innerRadius + 1000.0;
             const fade = invlerpDistance(dist, innerRadius, outerRadius);
@@ -2487,7 +2487,7 @@ function wether_move_wave(globals: dGlobals, deltaTimeFrames: number): void {
             wave.strengthEnv *= fade;
         }
 
-        const windSpeed = Math.max(windPow, vec3.distance(scratchVec3d, globals.cameraPosition));
+        const windSpeed = Math.max(windPow, vec3.distance(scratchVec3d, globals.camera.cameraPos));
         const alphaTarget = saturate(1.03 * (1.0 - (windSpeed / (2.0 * envLight.waveSpawnDist))) * Math.sin(wave.animCounter));
         wave.alpha = cLib_addCalc(wave.alpha, alphaTarget, 0.5, 0.5, 0.001);
         wave.basePos[1] = skyboxY;
@@ -2532,7 +2532,7 @@ function vrkumo_move(globals: dGlobals, deltaTimeFrames: number): void {
         if (globals.stageName === 'Siren' && globals.mStayNo === 17)
             skyboxY = -14101.0;
         // TODO(jstpierre): Re-enable this?
-        // skyboxOffsY -= 0.09 * (globals.cameraPosition[1] - skyboxY);
+        // skyboxOffsY -= 0.09 * (globals.camera.cameraPos[1] - skyboxY);
     }
 
     for (let i = 0; i < 100; i++) {
@@ -2630,7 +2630,7 @@ function wether_move_vrkumo(globals: dGlobals, deltaTimeFrames: number): void {
 
         if (globals.stageName === 'sea' && globals.mStayNo === 9) {
             vec3.set(scratchVec3, -180000.0, 750.0, -200000.0);
-            const sqrDist = vec3.squaredDistance(globals.cameraPosition, scratchVec3);
+            const sqrDist = vec3.squaredDistance(globals.camera.cameraPos, scratchVec3);
             if (sqrDist < 2500**2)
                 pkt.strength = 1.0;
         }
@@ -2789,7 +2789,7 @@ export class d_thunder extends kankyo_class {
         this.scale[1] = nearMul * (20.0 + cM_rndF(60.0));
         this.scale[2] = 1.0;
 
-        const fwd = globals.cameraFwd;
+        const fwd = globals.camera.cameraFwd;
         const a = Math.atan2(fwd[0], fwd[2]);
         const theta = (cM_rndFX(1.0) < 0.0) ? a - Math.PI / 2 : a + Math.PI / 2;
         const phi = vecPitch(fwd);
@@ -2797,9 +2797,9 @@ export class d_thunder extends kankyo_class {
         const cosP = Math.cos(phi);
 
         const rndRot = cM_rndFX(120000.0);
-        this.pos[0] = globals.cameraPosition[0] + 100000.0 * fwd[0] + ((cosP * sinT) * rndRot);
-        this.pos[1] = globals.cameraPosition[1] + cM_rndFX(2000.0);
-        this.pos[2] = globals.cameraPosition[2] + 100000.0 * fwd[2] + ((cosP * cosT) * rndRot);
+        this.pos[0] = globals.camera.cameraPos[0] + 100000.0 * fwd[0] + ((cosP * sinT) * rndRot);
+        this.pos[1] = globals.camera.cameraPos[1] + cM_rndFX(2000.0);
+        this.pos[2] = globals.camera.cameraPos[2] + 100000.0 * fwd[2] + ((cosP * cosT) * rndRot);
         return cPhs__Status.Next;
     }
 

@@ -709,9 +709,8 @@ export class FallOutFieldDraw extends NameObj {
     }
 
     private allocateParameterBuffer(renderInst: GfxRenderInst) {
-        let offs = renderInst.allocateUniformBuffer(0, 8);
-        const d = renderInst.mapUniformBufferF32(0);
-
+        const d = renderInst.allocateUniformBufferF32(0, 8);
+        let offs = 0;
         offs += fillColor(d, offs, this.edgeColor);
         offs += fillVec4(d, offs, this.invert ? 1.0 : 0.0);
     }

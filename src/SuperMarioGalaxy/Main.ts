@@ -19,7 +19,7 @@ import { setBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '
 import { gfxDeviceNeedsFlipY } from '../gfx/helpers/GfxDeviceHelpers.js';
 import { projectionMatrixConvertClipSpaceNearZ } from '../gfx/helpers/ProjectionHelpers.js';
 
-import { SceneParams, fillSceneParams, ub_SceneParamsBufferSize, fillSceneParamsData } from '../gx/gx_render.js';
+import { SceneParams,  ub_SceneParamsBufferSize, fillSceneParamsData, calcLODBias } from '../gx/gx_render.js';
 import { EFB_WIDTH, EFB_HEIGHT, GX_Program } from '../gx/gx_material.js';
 import { GXRenderHelperGfx } from '../gx/gx_render.js';
 
@@ -427,16 +427,17 @@ export class SMGRenderer implements Viewer.SceneGfx {
         this.executeMovementList();
         this.executeCalcAnimList();
 
+        sceneParams.u_SceneTextureLODBias = calcLODBias(viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+
         // Prepare our two scene params buffers.
         const sceneParamsOffs3D = this.renderHelper.uniformBuffer.allocateChunk(ub_SceneParamsBufferSize);
-        fillSceneParams(sceneParams, viewerInput.camera.projectionMatrix, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+        mat4.copy(sceneParams.u_Projection, viewerInput.camera.projectionMatrix);
         fillSceneParamsData(this.renderHelper.uniformBuffer.mapBufferF32(), sceneParamsOffs3D, sceneParams);
         sceneObjHolder.renderParams.sceneParamsOffs3D = sceneParamsOffs3D;
 
         const sceneParamsOffs2D = this.renderHelper.uniformBuffer.allocateChunk(ub_SceneParamsBufferSize);
-        projectionMatrixForCuboid(scratchMatrix, 0, viewerInput.backbufferWidth, 0, viewerInput.backbufferHeight, -10000.0, 10000.0);
-        projectionMatrixConvertClipSpaceNearZ(scratchMatrix, viewerInput.camera.clipSpaceNearZ, GfxClipSpaceNearZ.NegativeOne);
-        fillSceneParams(sceneParams, scratchMatrix, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+        projectionMatrixForCuboid(sceneParams.u_Projection, 0, viewerInput.backbufferWidth, 0, viewerInput.backbufferHeight, -10000.0, 10000.0);
+        projectionMatrixConvertClipSpaceNearZ(sceneParams.u_Projection, viewerInput.camera.clipSpaceNearZ, GfxClipSpaceNearZ.NegativeOne);
         fillSceneParamsData(this.renderHelper.uniformBuffer.mapBufferF32(), sceneParamsOffs2D, sceneParams);
         sceneObjHolder.renderParams.sceneParamsOffs2D = sceneParamsOffs2D;
 

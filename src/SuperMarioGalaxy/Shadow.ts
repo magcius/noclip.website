@@ -1082,8 +1082,8 @@ class AlphaShadow extends NameObj {
 
         // Blend onto main screen.
         const renderInst = renderInstManager.newRenderInst();
-        const sceneParamsOffs = renderInst.allocateUniformBuffer(GX_Program.ub_SceneParams, ub_SceneParamsBufferSize);
-        fillSceneParamsData(renderInst.mapUniformBufferF32(GX_Program.ub_SceneParams), sceneParamsOffs, this.orthoSceneParams);
+        const d = renderInst.allocateUniformBufferF32(GX_Program.ub_SceneParams, ub_SceneParamsBufferSize);
+        fillSceneParamsData(d, 0, this.orthoSceneParams);
         this.materialHelperDrawAlpha.setOnRenderInst(renderInstManager.gfxRenderCache, renderInst);
         this.materialHelperDrawAlpha.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);

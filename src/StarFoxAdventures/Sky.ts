@@ -6,7 +6,7 @@ import { TDDraw } from "../SuperMarioGalaxy/DDraw.js";
 import * as GX from '../gx/gx_enum.js';
 import * as GX_Material from '../gx/gx_material.js';
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder.js';
-import { DrawParams, GXMaterialHelperGfx, MaterialParams, fillSceneParamsDataOnTemplate, SceneParams, fillSceneParams, fillSceneParamsData, GXRenderHelperGfx } from '../gx/gx_render.js';
+import { DrawParams, GXMaterialHelperGfx, MaterialParams, fillSceneParamsDataOnTemplate, SceneParams, fillSceneParamsData, GXRenderHelperGfx, calcLODBias } from '../gx/gx_render.js';
 import { getMatrixAxisZ } from '../MathHelpers.js';
 
 import { ObjectRenderContext } from './objects.js';
@@ -55,7 +55,8 @@ export class Sky {
         const template = renderHelper.pushTemplateRenderInst();
 
         // Setup to draw in clip space
-        fillSceneParams(scratchSceneParams, mat4.create(), sceneCtx.viewerInput.backbufferWidth, sceneCtx.viewerInput.backbufferHeight);
+        mat4.identity(scratchSceneParams.u_Projection);
+        scratchSceneParams.u_SceneTextureLODBias = calcLODBias(sceneCtx.viewerInput.backbufferWidth, sceneCtx.viewerInput.backbufferHeight);
         projectionMatrixConvertClipSpaceNearZ(scratchSceneParams.u_Projection, device.queryVendorInfo().clipSpaceNearZ, GfxClipSpaceNearZ.NegativeOne);
         let offs = template.getUniformBufferOffset(GX_Material.GX_Program.ub_SceneParams);
         const d = template.mapUniformBufferF32(GX_Material.GX_Program.ub_SceneParams);

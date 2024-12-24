@@ -366,14 +366,12 @@ export class FlowerPacket {
     }
 
     private drawFlowers(globals: dGlobals, roomIdx: number, type: FlowerType, model: DynamicModel, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        const camera = viewerInput.camera;
-
-        getMatrixTranslation(scratchVec3a, camera.worldMatrix);
+        const camera = globals.camera;
 
         const template = renderInstManager.pushTemplate();
         template.setSamplerBindingsFromTextureMappings(model.textureMapping);
         setColorFromRoomNo(globals, materialParams, roomIdx);
-        dKy_GxFog_set(globals.g_env_light, materialParams.u_FogBlock, viewerInput.camera);
+        dKy_GxFog_set(globals.g_env_light, materialParams.u_FogBlock, camera);
         model.materialHelper.allocateMaterialParamsDataOnInst(template, materialParams);
         model.materialHelper.setOnRenderInst(renderInstManager.gfxRenderCache, template);
 
@@ -383,12 +381,12 @@ export class FlowerPacket {
 
             if (data.flags & FlowerFlags.IsFrustumCulled || data.type !== type)
                 continue;
-            if (distanceCull(scratchVec3a, data.pos))
+            if (distanceCull(camera.cameraPos, data.pos))
                 continue;
 
             const renderInst = renderInstManager.newRenderInst();
             model.shapes[0].setOnRenderInst(renderInst);
-            mat4.mul(drawParams.u_PosMtx[0], camera.viewMatrix, data.modelMatrix);
+            mat4.mul(drawParams.u_PosMtx[0], camera.viewFromWorldMatrix, data.modelMatrix);
             model.materialHelper.allocateDrawParamsDataOnInst(renderInst, drawParams);
             renderInstManager.submitRenderInst(renderInst);
         }
@@ -726,8 +724,7 @@ export class TreePacket {
         if (room.length === 0)
             return;
 
-        const worldToView = viewerInput.camera.viewMatrix;
-        const worldCamPos = mat4.getTranslation(scratchVec3b, viewerInput.camera.worldMatrix);
+        const camera = globals.camera;
 
         // Draw shadows
         {
@@ -735,7 +732,7 @@ export class TreePacket {
             const template = renderInstManager.pushTemplate();
             template.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT);
             setColorFromRoomNo(globals, materialParams, roomIdx);
-            dKy_GxFog_set(globals.g_env_light, materialParams.u_FogBlock, viewerInput.camera);
+            dKy_GxFog_set(globals.g_env_light, materialParams.u_FogBlock, camera);
             // Set the shadow color. Pulled from d_tree::l_shadowColor$4656
             colorFromRGBA(materialParams.u_Color[ColorKind.C0], 0, 0, 0, 0x64/0xFF);
             this.treeModel.shadow.materialHelper.allocateMaterialParamsDataOnInst(template, materialParams);
@@ -744,12 +741,12 @@ export class TreePacket {
 
             for (let i = 0; i < room.length; i++) {
                 const data = room[i];
-                if (distanceCull(worldCamPos, data.pos))
+                if (distanceCull(camera.cameraPos, data.pos))
                     continue;
 
                 const shadowRenderInst = renderInstManager.newRenderInst();
                 this.treeModel.shadow.shapes[0].setOnRenderInst(shadowRenderInst);
-                mat4.mul(drawParams.u_PosMtx[0], worldToView, data.shadowModelMtx);
+                mat4.mul(drawParams.u_PosMtx[0], camera.viewFromWorldMatrix, data.shadowModelMtx);
                 this.treeModel.shadow.materialHelper.allocateDrawParamsDataOnInst(shadowRenderInst, drawParams);
                 renderInstManager.submitRenderInst(shadowRenderInst);
             }
@@ -760,7 +757,7 @@ export class TreePacket {
         {
             const template = renderInstManager.pushTemplate();
             setColorFromRoomNo(globals, materialParams, roomIdx);
-            dKy_GxFog_set(globals.g_env_light, materialParams.u_FogBlock, viewerInput.camera);
+            dKy_GxFog_set(globals.g_env_light, materialParams.u_FogBlock, camera);
             // Set the tree alpha. This fades after the tree is cut. This is multiplied with the texture alpha at the end of TEV stage 1.
             colorFromRGBA(materialParams.u_Color[ColorKind.C2], 0, 0, 0, 1);
             this.treeModel.main.materialHelper.allocateMaterialParamsDataOnInst(template, materialParams);
@@ -772,18 +769,18 @@ export class TreePacket {
 
                 if (data.flags & TreeFlags.IsFrustumCulled)
                     continue;
-                if (distanceCull(worldCamPos, data.pos))
+                if (distanceCull(camera.cameraPos, data.pos))
                     continue;
 
                 const trunkRenderInst = renderInstManager.newRenderInst();
                 this.treeModel.main.shapes[0].setOnRenderInst(trunkRenderInst);
-                mat4.mul(drawParams.u_PosMtx[0], worldToView, data.trunkModelMtx);
+                mat4.mul(drawParams.u_PosMtx[0], camera.viewFromWorldMatrix, data.trunkModelMtx);
                 this.treeModel.main.materialHelper.allocateDrawParamsDataOnInst(trunkRenderInst, drawParams);
                 renderInstManager.submitRenderInst(trunkRenderInst);
 
                 const topRenderInst = renderInstManager.newRenderInst();
                 this.treeModel.main.shapes[1].setOnRenderInst(topRenderInst);
-                mat4.mul(drawParams.u_PosMtx[0], worldToView, data.topModelMtx);
+                mat4.mul(drawParams.u_PosMtx[0], camera.viewFromWorldMatrix, data.topModelMtx);
                 this.treeModel.main.materialHelper.allocateDrawParamsDataOnInst(topRenderInst, drawParams);
                 renderInstManager.submitRenderInst(topRenderInst);
             }
@@ -1024,13 +1021,12 @@ export class GrassPacket {
         if (room.length === 0)
             return;
 
-        const worldToView = viewerInput.camera.viewMatrix;
-        const worldCamPos = mat4.getTranslation(scratchVec3b, viewerInput.camera.worldMatrix);
+        const camera = globals.camera;
 
         const template = renderInstManager.pushTemplate();
         template.setSamplerBindingsFromTextureMappings(this.grassModel.textureMapping);
         setColorFromRoomNo(globals, materialParams, roomIdx);
-        dKy_GxFog_set(globals.g_env_light, materialParams.u_FogBlock, viewerInput.camera);
+        dKy_GxFog_set(globals.g_env_light, materialParams.u_FogBlock, camera);
         this.grassModel.materialHelper.allocateMaterialParamsDataOnInst(template, materialParams);
         this.grassModel.materialHelper.setOnRenderInst(renderInstManager.gfxRenderCache, template);
 
@@ -1039,12 +1035,12 @@ export class GrassPacket {
 
             if (data.flags & GrassFlags.IsFrustumCulled)
                 continue;
-            if (distanceCull(worldCamPos, data.pos))
+            if (distanceCull(camera.cameraPos, data.pos))
                 continue;
 
             const renderInst = renderInstManager.newRenderInst();
             this.grassModel.shapes[0].setOnRenderInst(renderInst);
-            mat4.mul(drawParams.u_PosMtx[0], worldToView, data.modelMtx);
+            mat4.mul(drawParams.u_PosMtx[0], camera.viewFromWorldMatrix, data.modelMtx);
             this.grassModel.materialHelper.allocateDrawParamsDataOnInst(renderInst, drawParams);
             renderInstManager.submitRenderInst(renderInst);
         }

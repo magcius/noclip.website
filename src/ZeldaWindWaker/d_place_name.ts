@@ -100,7 +100,7 @@ export class d_place_name extends msg_class {
             if (status !== cPhs__Status.Complete)
                 return status;
             const imgData = globals.modelCache.getFileData(filename);
-            img = new BTIData(globals.context.device, globals.renderer.renderCache, BTI.parse(imgData, filename).texture);
+            img = new BTIData(globals.sceneContext.device, globals.renderer.renderCache, BTI.parse(imgData, filename).texture);
         }
 
         this.screen = new J2DScreen(screen, globals.renderer.renderCache);

@@ -7,7 +7,7 @@ import { assert } from "../util.js";
 import { dKy_tevstr_c, dKy_tevstr_init } from "./d_kankyo.js";
 import { dProcName_e } from "./d_procname.js";
 import { base_process_class, cPhs__Status, fGlobals, fopDwTg_DrawQTo, fopDwTg_ToDrawQ, fpcDt_Delete, fpcPc__IsVisible, fpcSCtRq_Request, leafdraw_class } from "./framework.js";
-import { dGlobals } from "./Main.js";
+import { dCamera_c, dGlobals } from "./Main.js";
 
 const scratchVec3a = vec3.create();
 const scratchAABB = new AABB();
@@ -111,7 +111,7 @@ export class fopAc_ac_c extends leafdraw_class {
         vec4.set(this.cullSizeSphere, x, y, z, r);
     }
 
-    protected cullingCheck(camera: Camera): boolean {
+    protected cullingCheck(camera: dCamera_c): boolean {
         if (!fpcPc__IsVisible(this))
             return false;
 
@@ -155,7 +155,7 @@ export class fopAc_ac_c extends leafdraw_class {
                 return false;
 
             // Calculate the length of a line R at distance D from the camera.
-            const r = Math.abs(camera.projectionMatrix[11] * this.cullSizeSphere[2] + camera.projectionMatrix[15]);
+            const r = Math.abs(camera.clipFromViewMatrix[11] * this.cullSizeSphere[2] + camera.clipFromViewMatrix[15]);
             const area = MathConstants.TAU * r;
 
             if (area <= 0.0002)

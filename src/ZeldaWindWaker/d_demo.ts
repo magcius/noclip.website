@@ -99,37 +99,32 @@ class dDemo_camera_c extends TCamera {
         this.flags |= EDemoCamFlags.HasAspect;
     }
 
-
     public override JSGGetViewPosition(dst: vec3) {
-        vec3.copy(dst, this.globals.cameraPosition);
+        vec3.copy(dst, this.globals.camera.cameraPos);
     }
-
 
     public override JSGSetViewPosition(v: ReadonlyVec3) {
         vec3.copy(this.viewPosition, v);
         this.flags |= EDemoCamFlags.HasEyePos;
     }
 
-
     public override JSGGetViewUpVector(dst: vec3) {
         const camera = this.globals.camera;
         if (!camera)
             vec3.set(dst, 0, 1, 0);
-        getMatrixAxisY(dst, camera.viewMatrix); // @TODO: Double check that this is correct
+        getMatrixAxisY(dst, camera.viewFromWorldMatrix); // @TODO: Double check that this is correct
     }
-
 
     public override JSGSetViewUpVector(v: ReadonlyVec3) {
         vec3.copy(this.upVector, v);
         this.flags |= EDemoCamFlags.HasUpVec;
     }
 
-
     public override JSGGetViewTargetPosition(dst: vec3) {
         const camera = this.globals.camera;
         if (!camera)
             vec3.zero(dst);
-        vec3.add(dst, this.globals.cameraPosition, this.globals.cameraFwd);
+        vec3.add(dst, this.globals.camera.cameraPos, this.globals.camera.cameraFwd);
     }
 
 
@@ -476,7 +471,7 @@ export class dDemo_manager_c {
             return false;
         }
 
-        const dtFrames = this.globals.context.viewerInput.deltaTime / 1000.0 * 30;
+        const dtFrames = this.globals.sceneContext.viewerInput.deltaTime / 1000.0 * 30;
 
         // noclip modification: If a demo is suspended (waiting for the user to interact with a message), just resume
         if (this.control.isSuspended()) { this.control.setSuspend(0); }

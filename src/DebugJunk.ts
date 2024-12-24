@@ -2,7 +2,7 @@
 
 import { ReadonlyMat4, ReadonlyVec3, ReadonlyVec4, mat4, vec3, vec4 } from "gl-matrix";
 import ArrayBufferSlice from "./ArrayBufferSlice.js";
-import { ScreenSpaceProjection, divideByW } from "./Camera.js";
+import { divideByW } from "./Camera.js";
 import { Blue, Color, Green, Magenta, OpaqueBlack, Red, colorToCSS } from "./Color.js";
 import { downloadBuffer, downloadBufferSlice } from "./DownloadUtils.js";
 import { AABB } from "./Geometry.js";
@@ -315,18 +315,6 @@ export function drawScreenSpaceBox(ctx: CanvasRenderingContext2D, x1: number, y1
     ctx.lineWidth = lineWidth;
     ctx.strokeStyle = colorToCSS(color);
     ctx.stroke();
-}
-
-export function drawScreenSpaceProjection(ctx: CanvasRenderingContext2D, proj: ScreenSpaceProjection, color: Color = Magenta): void {
-    const cw = ctx.canvas.width;
-    const ch = ctx.canvas.height;
-
-    const x1 = (proj.projectedMinX + 1) * cw / 2;
-    const x2 = (proj.projectedMaxX + 1) * cw / 2;
-    const y1 = (-proj.projectedMinY + 1) * ch / 2;
-    const y2 = (-proj.projectedMaxY + 1) * ch / 2;
-
-    drawScreenSpaceBox(ctx, x1, y1, x2, y2, color);
 }
 
 function flashItem(item: any, fieldName: string, step: number = 0) {
