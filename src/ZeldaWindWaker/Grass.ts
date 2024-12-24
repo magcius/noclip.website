@@ -975,7 +975,7 @@ export class GrassPacket {
 
             vec3.copy(scratchVec3a, data.pos);
             scratchVec3a[1] += 260.0;
-            data.flags = setBitFlagEnabled(data.flags, GrassFlags.IsFrustumCulled, !globals.camera.frustum.containsSphere(scratchVec3a, 260.0));
+            data.flags = setBitFlagEnabled(data.flags, GrassFlags.IsFrustumCulled, !globals.camera.viewerCamera.frustum.containsSphere(scratchVec3a, 260.0));
 
             if (!(data.flags & GrassFlags.IsFrustumCulled)) {
                 // Update model matrix for all non-culled objects

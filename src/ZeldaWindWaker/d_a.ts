@@ -3539,7 +3539,7 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
         this.model.calcAnim();
 
         if (this.isShip()) {
-            if (this.velocityFwd > 2.0 && this.cullingCheck(globals.camera)) {
+            if (this.velocityFwd > 2.0 && this.cullingCheck(globals.camera.viewerCamera)) {
                 this.setWave(globals, deltaTimeFrames);
             } else {
                 this.waveL!.remove();
@@ -4105,7 +4105,7 @@ class d_a_oship extends fopAc_ac_c implements ModeFuncExec<d_a_oship_mode> {
         this.setMtx(globals, deltaTimeFrames);
 
         this.visible
-        if (this.velocityFwd > 2.0 && this.cullingCheck(globals.camera)) {
+        if (this.velocityFwd > 2.0 && this.cullingCheck(globals.camera.viewerCamera)) {
             this.setWave(globals, deltaTimeFrames);
         } else {
             this.waveL.remove();
@@ -4575,8 +4575,8 @@ export class d_a_ff extends fopAc_ac_c {
         const peekZ = globals.dlst.peekZ;
         const dst = this.peekZResult;
 
-        mDoLib_project(scratchVec3a, this.pos, globals.camera);
-        if (globals.camera.clipSpaceNearZ === GfxClipSpaceNearZ.NegativeOne)
+        mDoLib_project(scratchVec3a, this.pos, globals.camera.viewerCamera);
+        if (globals.camera.viewerCamera.clipSpaceNearZ === GfxClipSpaceNearZ.NegativeOne)
             scratchVec3a[2] = scratchVec3a[2] * 0.5 + 0.5;
 
         if (!peekZ.newData(dst, scratchVec3a[0], scratchVec3a[1], scratchVec3a[2]))

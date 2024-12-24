@@ -140,7 +140,7 @@ export class dGlobals {
     // g_dComIfG_gameInfo.mPlay.mpPlayer.mPos3
     public playerPosition = vec3.create();
     // g_dComIfG_gameInfo.mPlay.mCameraInfo[0].mpCamera
-    public camera: Camera;
+    public camera = new dCamera_c();
     public cameraPosition = vec3.create();
     public cameraFwd = vec3.create();
 
@@ -208,6 +208,9 @@ const enum CameraMode {
 }
 
 class dCamera_c {
+    // TODO: Remove
+    public viewerCamera: Camera;
+
     // For people to play around with.
     public cameraFrozen = false;
 
@@ -229,7 +232,7 @@ class dCamera_c {
         if (globals.stageName === 'sea')
             farPlane *= 2;
 
-        globals.camera.setClipPlanes(nearPlane, farPlane);
+        this.viewerCamera.setClipPlanes(nearPlane, farPlane);
 
         // noclip modification: if we're paused, allow noclip camera control during demos
         const isPaused = viewerInput.deltaTime === 0;
@@ -247,16 +250,16 @@ class dCamera_c {
             if (demoCam.flags & EDemoCamFlags.HasTargetPos) { targetPos = demoCam.targetPosition; }
             if (demoCam.flags & EDemoCamFlags.HasEyePos) { viewPos = demoCam.viewPosition; }
             if (demoCam.flags & EDemoCamFlags.HasUpVec) { upVec = demoCam.upVector; }
-            if (demoCam.flags & EDemoCamFlags.HasFovY) { globals.camera.fovY = demoCam.fovY * MathConstants.DEG_TO_RAD; }
+            if (demoCam.flags & EDemoCamFlags.HasFovY) { this.viewerCamera.fovY = demoCam.fovY * MathConstants.DEG_TO_RAD; }
             if (demoCam.flags & EDemoCamFlags.HasRoll) { roll = demoCam.roll * MathConstants.DEG_TO_RAD; }
             if (demoCam.flags & EDemoCamFlags.HasAspect) { debugger; /* Untested. Remove once confirmed working */ }
-            if (demoCam.flags & EDemoCamFlags.HasNearZ) { globals.camera.near = demoCam.projNear; }
-            if (demoCam.flags & EDemoCamFlags.HasFarZ) { globals.camera.far = demoCam.projFar; }
+            if (demoCam.flags & EDemoCamFlags.HasNearZ) { this.viewerCamera.near = demoCam.projNear; }
+            if (demoCam.flags & EDemoCamFlags.HasFarZ) { this.viewerCamera.far = demoCam.projFar; }
 
-            mat4.targetTo(globals.camera.worldMatrix, viewPos, targetPos, upVec);
-            mat4.rotateZ(globals.camera.worldMatrix, globals.camera.worldMatrix, roll);
-            globals.camera.setClipPlanes(globals.camera.near, globals.camera.far);
-            globals.camera.worldMatrixUpdated();
+            mat4.targetTo(this.viewerCamera.worldMatrix, viewPos, targetPos, upVec);
+            mat4.rotateZ(this.viewerCamera.worldMatrix, this.viewerCamera.worldMatrix, roll);
+            this.viewerCamera.setClipPlanes(this.viewerCamera.near, this.viewerCamera.far);
+            this.viewerCamera.worldMatrixUpdated();
 
             this.cameraMode = CameraMode.Cinematic;
             globals.context.inputManager.isMouseEnabled = false;
@@ -277,8 +280,8 @@ class dCamera_c {
         vec4.set(this.scissor, 0, trimPx, viewerInput.backbufferWidth, viewerInput.backbufferHeight - 2 * trimPx);
 
         if (!this.cameraFrozen) {
-            mat4.getTranslation(globals.cameraPosition, globals.camera.worldMatrix);
-            getMatrixAxisZ(globals.cameraFwd, globals.camera.worldMatrix);
+            mat4.getTranslation(globals.cameraPosition, this.viewerCamera.worldMatrix);
+            getMatrixAxisZ(globals.cameraFwd, this.viewerCamera.worldMatrix);
             vec3.negate(globals.cameraFwd, globals.cameraFwd);
             // Update the "player position" from the camera.
             vec3.copy(globals.playerPosition, globals.cameraPosition);
@@ -410,7 +413,6 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
     private mainColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
     private mainDepthDesc = new GfxrRenderTargetDescription(GfxFormat.D32F);
     private opaqueSceneTextureMapping = new TextureMapping();
-    private camera = new dCamera_c();
 
     public renderHelper: GXRenderHelperGfx;
 
@@ -536,8 +538,8 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
             }
         }
 
-        this.globals.camera = viewerInput.camera;
-        this.camera.execute(this.globals, viewerInput);
+        this.globals.camera.viewerCamera = viewerInput.camera;
+        this.globals.camera.execute(this.globals, viewerInput);
 
         // Not sure exactly where this is ordered...
         dKy_setLight(this.globals);
@@ -612,7 +614,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
             const skyboxDepthTargetID = builder.createRenderTargetID(this.mainDepthDesc, 'Skybox Depth');
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, skyboxDepthTargetID);
             pass.exec((passRenderer) => {
-                this.camera.applyScissor(passRenderer);
+                this.globals.camera.applyScissor(passRenderer);
                 this.executeListSet(passRenderer, dlst.sky);
             });
         });
@@ -625,7 +627,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                this.camera.applyScissor(passRenderer);
+                this.globals.camera.applyScissor(passRenderer);
 
                 this.executeList(passRenderer, dlst.sea);
                 this.executeListSet(passRenderer, dlst.bg);

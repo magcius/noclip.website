@@ -702,7 +702,7 @@ export class WoodPacket implements J3DPacket {
                     const clipPos = vec3.set(scratchVec3a, unit.pos[0], unit.pos[1] + kClipCenterYOffset, unit.pos[2]);
 
                     // s32 res = mDoLib_clipper::clip(j3dSys.getViewMtx(), clipPos, kClipRadius);
-                    const culled = !globals.camera.frustum.containsSphere(clipPos, kClipRadius);
+                    const culled = !globals.camera.viewerCamera.frustum.containsSphere(clipPos, kClipRadius);
 
                     if (culled) {
                         unit.flags |= UnitState_e.IsFrustumCulled;
@@ -737,7 +737,7 @@ export class WoodPacket implements J3DPacket {
 
                     const shadowRenderInst = renderInstManager.newRenderInst();
                     this.model.shapeShadow.setOnRenderInst(shadowRenderInst);
-                    mat4.mul(drawParams.u_PosMtx[0], globals.camera.viewMatrix, unit.shadowModelMtx);
+                    mat4.mul(drawParams.u_PosMtx[0], globals.camera.viewerCamera.viewMatrix, unit.shadowModelMtx);
                     this.model.shadowMaterial.allocateDrawParamsDataOnInst(shadowRenderInst, drawParams);
                     renderInstManager.submitRenderInst(shadowRenderInst);
                 }
@@ -783,7 +783,7 @@ export class WoodPacket implements J3DPacket {
 
                         const renderInst = renderInstManager.newRenderInst();
                         this.model.shapeMain.setOnRenderInst(renderInst);
-                        mat4.mul(drawParams.u_PosMtx[0], globals.camera.viewMatrix, unit.modelMtx);
+                        mat4.mul(drawParams.u_PosMtx[0], globals.camera.viewerCamera.viewMatrix, unit.modelMtx);
                         this.model.bushMaterial.allocateDrawParamsDataOnInst(renderInst, drawParams);
                         renderInstManager.submitRenderInst(renderInst);
 
@@ -797,7 +797,7 @@ export class WoodPacket implements J3DPacket {
                     // Always draw the trunk
                     const renderInst = renderInstManager.newRenderInst();
                     this.model.shapeTrunk.setOnRenderInst(renderInst);
-                    mat4.mul(drawParams.u_PosMtx[0], globals.camera.viewMatrix, unit.trunkModelMtx);
+                    mat4.mul(drawParams.u_PosMtx[0], globals.camera.viewerCamera.viewMatrix, unit.trunkModelMtx);
                     this.model.bushMaterial.allocateDrawParamsDataOnInst(renderInst, drawParams);
                     renderInstManager.submitRenderInst(renderInst);
                 }

@@ -50,7 +50,7 @@ class dDemo_camera_c extends TCamera {
         const camera = this.globals.camera;
         if (!camera)
             return 0.0;
-        return camera.near;
+        return camera.viewerCamera.near;
     }
 
     public override JSGSetProjectionNear(v: number) {
@@ -62,7 +62,7 @@ class dDemo_camera_c extends TCamera {
         const camera = this.globals.camera;
         if (!camera)
             return 1.0;
-        return camera.far;
+        return camera.viewerCamera.far;
     }
 
 
@@ -76,7 +76,7 @@ class dDemo_camera_c extends TCamera {
         const camera = this.globals.camera;
         if (!camera)
             return 60.0;
-        return camera.fovY;
+        return camera.viewerCamera.fovY;
     }
 
 
@@ -90,7 +90,7 @@ class dDemo_camera_c extends TCamera {
         const camera = this.globals.camera;
         if (!camera)
             return 1.3333;
-        return camera.aspect;
+        return camera.viewerCamera.aspect;
     }
 
 
@@ -115,7 +115,7 @@ class dDemo_camera_c extends TCamera {
         const camera = this.globals.camera;
         if (!camera)
             vec3.set(dst, 0, 1, 0);
-        getMatrixAxisY(dst, camera.viewMatrix); // @TODO: Double check that this is correct
+        getMatrixAxisY(dst, camera.viewerCamera.viewMatrix); // @TODO: Double check that this is correct
     }
 
 

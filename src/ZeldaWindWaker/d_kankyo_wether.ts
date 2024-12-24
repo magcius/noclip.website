@@ -1618,7 +1618,7 @@ function dKyr_sun_move(globals: dGlobals): void {
 
         if (sunCanGlare) {
             // Original game projects the vector into viewport space, and gets distance to 320, 240.
-            mDoLib_project(scratchVec3, pkt.sunPos, globals.camera);
+            mDoLib_project(scratchVec3, pkt.sunPos, globals.camera.viewerCamera);
 
             const peekZ = globals.dlst.peekZ;
 
@@ -1716,7 +1716,7 @@ function dKyr_lenzflare_move(globals: dGlobals): void {
         vec3.scaleAndAdd(pkt.lensflarePos[i], pkt.sunPos, scratchVec3, -intensity * whichLenz);
     }
 
-    mDoLib_project(scratchVec3, pkt.sunPos, globals.camera);
+    mDoLib_project(scratchVec3, pkt.sunPos, globals.camera.viewerCamera);
     pkt.lensflareAngle = Math.atan2(scratchVec3[1], scratchVec3[0]) + Math.PI / 2;
 }
 
