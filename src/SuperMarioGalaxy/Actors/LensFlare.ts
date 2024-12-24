@@ -43,16 +43,10 @@ const scratchVec2 = vec2.create();
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
 const scratchVec3c = vec3.create();
-const scratchVec4 = vec4.create();
+const scratchVec3 = vec3.create();
 const scratchMatrix = mat4.create();
 
-function project(dst: vec4, v: ReadonlyVec3, viewerInput: ViewerRenderInput): void {
-    vec4.set(dst, v[0], v[1], v[2], 1.0);
-    vec4.transformMat4(dst, dst, viewerInput.camera.clipFromWorldMatrix);
-    divideByW(dst, dst);
-}
-
-function calcScreenPosition(dst: vec2, v: ReadonlyVec4, viewerInput: ViewerRenderInput): void {
+function calcScreenPosition(dst: vec2, v: ReadonlyVec3, viewerInput: ViewerRenderInput): void {
     dst[0] = (v[0] * 0.5 + 0.5) * viewerInput.backbufferWidth;
     dst[1] = (v[1] * 0.5 + 0.5) * viewerInput.backbufferHeight;
 }
@@ -88,8 +82,8 @@ export class BrightObjBase {
         checkArg.pointsVisibleNum = 0;
         vec2.set(checkArg.posCenterAccum, 0.0, 0.0);
 
-        project(scratchVec4, position, sceneObjHolder.viewerInput);
-        calcScreenPosition(checkArg.posCenter, scratchVec4, sceneObjHolder.viewerInput);
+        vec3.transformMat4(scratchVec3, position, sceneObjHolder.viewerInput.camera.clipFromWorldMatrix);
+        calcScreenPosition(checkArg.posCenter, scratchVec3, sceneObjHolder.viewerInput);
         this.checkVisible(sceneObjHolder, checkArg, position);
 
         for (let i = 0; i < 8; i++) {
@@ -114,7 +108,7 @@ export class BrightObjBase {
     }
 
     private checkVisible(sceneObjHolder: SceneObjHolder, checkArg: BrightObjCheckArg, position: ReadonlyVec3): void {
-        project(scratchVec4, position, sceneObjHolder.viewerInput);
+        vec3.transformMat4(scratchVec3, position, sceneObjHolder.viewerInput.camera.clipFromWorldMatrix);
 
         let peekZResult: PeekZResult;
         if (checkArg.pointsNum === checkArg.peekZ.length) {
@@ -124,8 +118,8 @@ export class BrightObjBase {
             peekZResult = checkArg.peekZ[checkArg.pointsNum];
         }
 
-        let x = scratchVec4[0];
-        let y = scratchVec4[1];
+        let x = scratchVec3[0];
+        let y = scratchVec3[1];
         if (!gfxDeviceNeedsFlipY(sceneObjHolder.modelCache.device))
             y *= -1;
 
@@ -137,7 +131,7 @@ export class BrightObjBase {
             // Test if the depth buffer is less than our projected Z coordinate.
             // Depth buffer readback should result in 0.0 for the near plane, and 1.0 for the far plane.
             // Put projected coordinate in 0-1 normalized space.
-            let projectedZ = scratchVec4[2];
+            let projectedZ = scratchVec3[2];
 
             if (sceneObjHolder.modelCache.device.queryVendorInfo().clipSpaceNearZ === GfxClipSpaceNearZ.NegativeOne)
                 projectedZ = projectedZ * 0.5 + 0.5;
@@ -146,7 +140,7 @@ export class BrightObjBase {
 
             if (visible) {
                 checkArg.pointsVisibleNum++;
-                calcScreenPosition(scratchVec2, scratchVec4, sceneObjHolder.viewerInput);
+                calcScreenPosition(scratchVec2, scratchVec3, sceneObjHolder.viewerInput);
                 vec2.add(checkArg.posCenterAccum, checkArg.posCenterAccum, scratchVec2);
             }
         }

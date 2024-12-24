@@ -1,7 +1,7 @@
 
 import { mat4, vec3, vec4 } from "gl-matrix";
 import { AABB } from "../Geometry.js";
-import { Camera, computeScreenSpaceProjectionFromWorldSpaceAABB, computeScreenSpaceProjectionFromWorldSpaceSphere, ScreenSpaceProjection } from "../Camera.js";
+import { Camera, calcScreenSpaceProjectionFromWorldSpaceAABB, calcScreenSpaceProjectionFromWorldSpaceSphere, ScreenSpaceProjection } from "../Camera.js";
 import { base_process_class, cPhs__Status, fGlobals, fopDwTg_DrawQTo, fopDwTg_ToDrawQ, fpcPc__IsVisible, fpcSCtRq_Request, leafdraw_class } from "../ZeldaWindWaker/framework.js";
 import { dKy_tevstr_c, dKy_tevstr_init } from "./d_kankyo.js";
 import { dGlobals } from "./Main.js";
@@ -121,7 +121,7 @@ export class fopAc_ac_c extends leafdraw_class {
             if (!frustum.contains(scratchAABB))
                 return false;
 
-            computeScreenSpaceProjectionFromWorldSpaceAABB(scratchScreenSpaceProjection, camera, scratchAABB);
+            calcScreenSpaceProjectionFromWorldSpaceAABB(scratchScreenSpaceProjection, camera, scratchAABB);
             if (scratchScreenSpaceProjection.getScreenArea() <= 0.0002)
                 return false;
         } else if (this.cullSizeSphere !== null) {
@@ -132,7 +132,7 @@ export class fopAc_ac_c extends leafdraw_class {
             if (!frustum.containsSphere(scratchVec3a, radius))
                 return false;
 
-            computeScreenSpaceProjectionFromWorldSpaceSphere(scratchScreenSpaceProjection, camera, scratchVec3a, radius);
+            calcScreenSpaceProjectionFromWorldSpaceSphere(scratchScreenSpaceProjection, camera, scratchVec3a, radius);
             if (scratchScreenSpaceProjection.getScreenArea() <= 0.0002)
                 return false;
         }

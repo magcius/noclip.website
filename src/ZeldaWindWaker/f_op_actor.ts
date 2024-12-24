@@ -1,8 +1,8 @@
 
 import { mat4, ReadonlyVec3, vec3, vec4 } from "gl-matrix";
 import { AABB } from "../Geometry.js";
-import { Camera, computeScreenSpaceProjectionFromWorldSpaceAABB, computeScreenSpaceProjectionFromWorldSpaceSphere, ScreenSpaceProjection } from "../Camera.js";
-import { base_process_class, cPhs__Status, fGlobals, fopDwTg_DrawQTo, fopDwTg_ToDrawQ, fpcPc__IsVisible, fpcSCtRq_Request, leafdraw_class } from "./framework.js";
+import { Camera, calcScreenSpaceProjectionFromWorldSpaceAABB, ScreenSpaceProjection, calcScreenSpaceProjectionFromWorldSpaceSphere } from "../Camera.js";
+import { base_process_class, cPhs__Status, fGlobals, fopDwTg_DrawQTo, fopDwTg_ToDrawQ, fpcDt_Delete, fpcM_Management, fpcPc__IsVisible, fpcSCtRq_Request, leafdraw_class } from "./framework.js";
 import { dKy_tevstr_c, dKy_tevstr_init } from "./d_kankyo.js";
 import { dGlobals } from "./Main.js";
 import { assert } from "../util.js";
@@ -122,7 +122,7 @@ export class fopAc_ac_c extends leafdraw_class {
             if (!frustum.contains(scratchAABB))
                 return false;
 
-            computeScreenSpaceProjectionFromWorldSpaceAABB(scratchScreenSpaceProjection, camera, scratchAABB);
+            calcScreenSpaceProjectionFromWorldSpaceAABB(scratchScreenSpaceProjection, camera, scratchAABB);
             if (scratchScreenSpaceProjection.getScreenArea() <= 0.0002)
                 return false;
         } else if (this.cullSizeSphere !== null) {
@@ -133,7 +133,7 @@ export class fopAc_ac_c extends leafdraw_class {
             if (!frustum.containsSphere(scratchVec3a, radius))
                 return false;
 
-            computeScreenSpaceProjectionFromWorldSpaceSphere(scratchScreenSpaceProjection, camera, scratchVec3a, radius);
+            calcScreenSpaceProjectionFromWorldSpaceSphere(scratchScreenSpaceProjection, camera, scratchVec3a, radius);
             if (scratchScreenSpaceProjection.getScreenArea() <= 0.0002)
                 return false;
         }
@@ -164,6 +164,10 @@ export interface fopAcM_prm_class {
     // NOTE(jstpierre): This isn't part of the original struct, it simply doesn't
     // load inactive layers...
     layer: number;
+}
+
+export function fopAcM_delete(globals: fGlobals, ac: fopAc_ac_c): void {
+    return fpcDt_Delete(globals, ac);
 }
 
 export function fopAcM_create(globals: fGlobals, pcName: dProcName_e, parameters: number, pos: ReadonlyVec3 | null, roomNo: number, rot: ReadonlyVec3 | null, scale: ReadonlyVec3 | null, subtype: number, parentPcId: number): number | null {

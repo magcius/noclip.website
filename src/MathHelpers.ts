@@ -385,7 +385,7 @@ export function projectionMatrixForCuboid(m: mat4, left: number, right: number, 
     m[15] = 1;
 }
 
-export function computeEulerAngleRotationFromSRTMatrix(dst: vec3, m: ReadonlyMat4): void {
+export function calcEulerAngleRotationFromSRTMatrix(dst: vec3, m: ReadonlyMat4): void {
     // "Euler Angle Conversion", Ken Shoemake, Graphics Gems IV. http://www.gregslabaugh.net/publications/euler.pdf
 
     if (compareEpsilon(m[2], 1.0)) {
@@ -403,7 +403,7 @@ export function computeEulerAngleRotationFromSRTMatrix(dst: vec3, m: ReadonlyMat
     }
 }
 
-export function computeUnitSphericalCoordinates(dst: vec3, azimuthal: number, polar: number): void {
+export function calcUnitSphericalCoordinates(dst: vec3, azimuthal: number, polar: number): void {
     // https://en.wikipedia.org/wiki/Spherical_coordinate_system
     // https://en.wikipedia.org/wiki/List_of_common_coordinate_transformations#From_spherical_coordinates
     // Wikipedia uses the convention of Z-up, we use Y-up here.

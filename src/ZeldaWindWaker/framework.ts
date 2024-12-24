@@ -46,6 +46,7 @@ export const enum cPhs__Status {
     Started,
     Loading,
     Next,
+    Stop,
     Complete,
     Error,
 }
@@ -110,7 +111,7 @@ function fpcDt_Handler(globals: fGlobals, globalUserData: GlobalUserData): void 
     globals.dtQueue.length = 0;
 }
 
-function fpcDt_Delete(globals: fGlobals, pc: base_process_class): void {
+export function fpcDt_Delete(globals: fGlobals, pc: base_process_class): void {
     fpcDt_ToDeleteQ(globals, pc);
 }
 
@@ -180,6 +181,8 @@ export function fpcCt_Handler(globals: fGlobals, globalUserData: GlobalUserData)
             shouldDelete = true;
         } else if (status === cPhs__Status.Error) {
             console.error(`Had error loading`);
+            shouldDelete = true;
+        } else if (status === cPhs__Status.Stop) {
             shouldDelete = true;
         } else if (status === cPhs__Status.Loading) {
             hadAnyLoading = true;

@@ -19,7 +19,7 @@ import { VertexAttributeInput } from '../../gx/gx_displaylist.js';
 import * as GX from '../../gx/gx_enum.js';
 import { getVertexInputLocation } from '../../gx/gx_material.js';
 import { ColorKind, GXMaterialHelperGfx, MaterialParams, DrawParams } from '../../gx/gx_render.js';
-import { clamp, clampRange, computeEulerAngleRotationFromSRTMatrix, computeModelMatrixR, computeModelMatrixS, computeModelMatrixSRT, computeNormalMatrix, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, isNearZero, isNearZeroVec3, lerp, MathConstants, normToLength, quatFromEulerRadians, saturate, scaleMatrix, setMatrixTranslation, transformVec3Mat4w0, transformVec3Mat4w1, vec3FromBasis2, vec3FromBasis3, Vec3NegY, vec3SetAll, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from '../../MathHelpers.js';
+import { clamp, clampRange, calcEulerAngleRotationFromSRTMatrix, computeModelMatrixR, computeModelMatrixS, computeModelMatrixSRT, computeNormalMatrix, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, isNearZero, isNearZeroVec3, lerp, MathConstants, normToLength, quatFromEulerRadians, saturate, scaleMatrix, setMatrixTranslation, transformVec3Mat4w0, transformVec3Mat4w1, vec3FromBasis2, vec3FromBasis3, Vec3NegY, vec3SetAll, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from '../../MathHelpers.js';
 import { TextureMapping } from '../../TextureHolder.js';
 import { assert, assertExists, fallback, leftPad, mod, nArray } from '../../util.js';
 import * as Viewer from '../../viewer.js';
@@ -7171,7 +7171,7 @@ class PlantMember extends LiveActor<PlantMemberNrv> {
         const angle = getRandomFloat(-Math.PI, Math.PI);
         mat4.rotateY(scratchMatrix, scratchMatrix, angle);
 
-        computeEulerAngleRotationFromSRTMatrix(this.rotation, scratchMatrix);
+        calcEulerAngleRotationFromSRTMatrix(this.rotation, scratchMatrix);
     }
 
     public tryEmitHint(): boolean {
@@ -7686,7 +7686,7 @@ export class BrightSun extends LiveActor {
         quatSetRotate(scratchQuat, Vec3UnitZ, scratchVec3);
         mat4.fromQuat(scratchMatrix, scratchQuat);
 
-        computeEulerAngleRotationFromSRTMatrix(this.sun.rotation, scratchMatrix);
+        calcEulerAngleRotationFromSRTMatrix(this.sun.rotation, scratchMatrix);
     }
 
     public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
@@ -8669,7 +8669,7 @@ class HeatHazeEffect extends LiveActor {
         getMatrixTranslation(this.translation, sceneObjHolder.viewerInput.camera.worldMatrix);
         vec3.scaleAndAdd(this.translation, this.translation, scratchVec3, this.depth);
 
-        computeEulerAngleRotationFromSRTMatrix(this.rotation, sceneObjHolder.viewerInput.camera.worldMatrix);
+        calcEulerAngleRotationFromSRTMatrix(this.rotation, sceneObjHolder.viewerInput.camera.worldMatrix);
 
         const scale = this.depth / 1000.0;
         vec3SetAll(this.scale, scale);

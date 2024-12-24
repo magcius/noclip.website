@@ -5,7 +5,7 @@ import { J3DFrameCtrl, J3DFrameCtrl__UpdateFlags } from "../Common/JSYSTEM/J3D/J
 import { J3DModelData, J3DModelInstance, MaterialInstance, TEX1Data } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
 import { GfxDevice, GfxFormat } from "../gfx/platform/GfxPlatform.js";
 import { LoadedVertexData, LoadedVertexLayout, VertexAttributeInput } from "../gx/gx_displaylist.js";
-import { computeEulerAngleRotationFromSRTMatrix, computeModelMatrixSRT, computeNormalMatrix, Mat4Identity } from "../MathHelpers.js";
+import { calcEulerAngleRotationFromSRTMatrix, computeModelMatrixSRT, computeNormalMatrix, Mat4Identity } from "../MathHelpers.js";
 import { align, assertExists, fallback, nArray, nullify } from "../util.js";
 import * as Viewer from '../viewer.js';
 import { calcGravity, connectToScene, invalidateCollisionPartsForActor, isBckExist, isBckPlaying, isBpkExist, isBpkPlaying, isBrkExist, isBrkPlaying, isBtkExist, isBtkPlaying, isBtpExist, isBtpPlaying, isBvaExist, isBvaPlaying, resetAllCollisionMtx, startBck, startBpk, startBrk, startBtk, startBtp, startBva, validateCollisionPartsForActor } from "./ActorUtil.js";
@@ -569,7 +569,7 @@ export function getJMapInfoRotate(dst: vec3, sceneObjHolder: SceneObjHolder, inf
     const stageDataHolder = assertExists(sceneObjHolder.stageDataHolder.findPlacedStageDataHolder(infoIter));
     mat4.mul(scratch, stageDataHolder.placementMtx, scratch);
 
-    computeEulerAngleRotationFromSRTMatrix(dst, scratch);
+    calcEulerAngleRotationFromSRTMatrix(dst, scratch);
 }
 
 export function makeMtxTRFromActor(dst: mat4, actor: LiveActor): void {

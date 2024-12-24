@@ -5,7 +5,7 @@ import { Camera } from "../Camera.js";
 import { Color, OpaqueBlack, TransparentBlack, White, colorCopy, colorFromRGBA, colorNewCopy, colorNewFromRGBA8 } from "../Color.js";
 import { J3DModelInstance, MaterialInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
 import { LoopMode } from "../Common/JSYSTEM/J3D/J3DLoader.js";
-import { MathConstants, Vec3Zero, computeUnitSphericalCoordinates, invlerp, lerp, saturate } from "../MathHelpers.js";
+import { MathConstants, Vec3Zero, calcUnitSphericalCoordinates, invlerp, lerp, saturate } from "../MathHelpers.js";
 import { cLib_addCalc, cM_rndF } from "../ZeldaWindWaker/SComponent.js";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import * as GX from "../gx/gx_enum.js";
@@ -977,7 +977,7 @@ export function settingTevStruct_colget_player(envLight: dScnKy_env_light_c, tev
 }
 
 export function dKy_lightdir_set(dst: vec3, x: number, y: number): void {
-    computeUnitSphericalCoordinates(dst, x * MathConstants.DEG_TO_RAD, y * MathConstants.DEG_TO_RAD);
+    calcUnitSphericalCoordinates(dst, x * MathConstants.DEG_TO_RAD, y * MathConstants.DEG_TO_RAD);
 }
 
 export function settingTevStruct(globals: dGlobals, lightType: LightType, pos: vec3 | null, tevStr: dKy_tevstr_c): void {

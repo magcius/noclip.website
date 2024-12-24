@@ -1,30 +1,27 @@
 
-import * as Viewer from '../viewer.js';
 import * as RARC from '../Common/JSYSTEM/JKRArchive.js';
+import * as Viewer from '../viewer.js';
 
-import { TwilightPrincessRenderer, dGlobals } from "./Main.js";
-import { mat4, vec3 } from "gl-matrix";
+import { mat4, ReadonlyVec3, vec3 } from "gl-matrix";
+import AnimationController from '../AnimationController.js';
+import { colorNewFromRGBA8 } from '../Color.js';
 import { J3DModelData } from '../Common/JSYSTEM/J3D/J3DGraphBase.js';
 import { J3DModelInstanceSimple } from '../Common/JSYSTEM/J3D/J3DGraphSimple.js';
-import { GfxRendererLayer } from '../gfx/render/GfxRenderInstManager.js';
-import { LoopMode, ANK1, TTK1, TRK1, TPT1 } from '../Common/JSYSTEM/J3D/J3DLoader.js';
-import { assertExists, hexzero, leftPad } from '../util.js';
-import { ResType, ResEntry, ResAssetType } from './d_resorce.js';
-import AnimationController from '../AnimationController.js';
+import { ANK1, LoopMode, TPT1, TRK1, TTK1 } from '../Common/JSYSTEM/J3D/J3DLoader.js';
 import { AABB } from '../Geometry.js';
-import { computeModelMatrixSRT, scaleMatrix } from '../MathHelpers.js';
-import { LightType, dKy_tevstr_init, dKy_tevstr_c, settingTevStruct, setLightTevColorType_MAJI } from './d_kankyo.js';
-import { JPABaseEmitter } from '../Common/JSYSTEM/JPA.js';
-import { cPhs__Status, fGlobals, fpcPf__RegisterFallback } from '../ZeldaWindWaker/framework.js'
-import { ScreenSpaceProjection, computeScreenSpaceProjectionFromWorldSpaceAABB } from '../Camera.js';
 import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
-import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
+import { GfxRenderInstManager, GfxRendererLayer } from '../gfx/render/GfxRenderInstManager.js';
 import { ColorKind } from '../gx/gx_render.js';
-import { colorNewFromRGBA8 } from '../Color.js';
-import { calc_mtx, MtxTrans, mDoMtx_ZXYrotM, mDoMtx_YrotM } from '../ZeldaWindWaker/m_do_mtx.js';
+import { computeModelMatrixSRT } from '../MathHelpers.js';
+import { assertExists, leftPad } from '../util.js';
+import { cPhs__Status, fGlobals, fpcPf__RegisterFallback } from '../ZeldaWindWaker/framework.js';
+import { MtxTrans, calc_mtx, mDoMtx_YrotM, mDoMtx_ZXYrotM } from '../ZeldaWindWaker/m_do_mtx.js';
 import { cM_s2rad } from '../ZeldaWindWaker/SComponent.js';
-import { fopAc_ac_c, fopAcM_GetParamBit, fopAcM_prm_class } from './f_op_actor.js';
 import { dProcName_e } from './d_a.js';
+import { LightType, dKy_tevstr_c, dKy_tevstr_init, setLightTevColorType_MAJI, settingTevStruct } from './d_kankyo.js';
+import { ResAssetType, ResEntry, ResType } from './d_resorce.js';
+import { fopAcM_GetParamBit, fopAcM_prm_class, fopAc_ac_c } from './f_op_actor.js';
+import { dGlobals } from "./Main.js";
 
 const scratchVec3a = vec3.create();
 
@@ -52,11 +49,32 @@ class d_a_noclip_legacy extends fopAc_ac_c {
             this.phase = cPhs__Status.Loading;
 
             spawnLegacyActor(globals, this, prm).then(() => {
-                this.phase = cPhs__Status.Next;
+                this.phase = this.finishLoading(globals);
             });
         }
 
         return this.phase;
+    }
+
+    private finishLoading(globals: dGlobals): cPhs__Status {
+        const baseObj = this.objectRenderers[0];
+        if (baseObj === undefined)
+            return cPhs__Status.Stop;
+
+        this.cullMtx = baseObj.modelMatrix;
+
+        if (this.cullSizeSphere !== null && !Object.isFrozen(this.cullSizeSphere)) {
+            // Convert us to a box.
+            this.cullSizeSphere = null;
+            this.cullSizeBox = new AABB();
+        }
+
+        if (this.cullSizeBox !== null && !Object.isFrozen(this.cullSizeBox)) {
+            // Compute the cull box using only the parent.
+            this.cullSizeBox.copy(baseObj.modelInstance.modelData.bbox);
+        }
+
+        return cPhs__Status.Next;
     }
 
     public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
@@ -79,7 +97,6 @@ class d_a_noclip_legacy extends fopAc_ac_c {
 
 function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: fopAcM_prm_class): Promise<void> {
     const modelCache = globals.modelCache;
-    const renderer = globals.renderer;
     const resCtrl = modelCache.resCtrl;
 
     const actorName = globals.dStage__searchNameRev(legacy.processName, legacy.subtype);
@@ -165,16 +182,12 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         return resInfo.lazyLoadResource(ResType.Btp, assertExists(resInfo.res.find((res) => path.endsWith(res.file.name))));
     }
 
-    function createEmitter(context: TwilightPrincessRenderer, resourceId: number): JPABaseEmitter {
-        return globals.particleCtrl.set(globals, 0, resourceId, null)!;
-    }
-
     const enum TagShape {
         Cube,
         Cylinder,
     }
 
-    function createTag(shape: TagShape, rgba8Color: number, scale: vec3): void {
+    function createTag(shape: TagShape, rgba8Color: number, scale: ReadonlyVec3): void {
         if (shape === TagShape.Cube) {
             fetchArchive(`K_cube00`).then((rarc) => {
                 const m = buildModel(rarc, `bmdr/k_size_cube.bmd`, true);
@@ -1394,8 +1407,6 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
 
 // Special-case actors
 
-const bboxScratch = new AABB();
-const screenProjection = new ScreenSpaceProjection();
 class BMDObjectRenderer {
     public visible = true;
     public isTag = false;
@@ -1448,13 +1459,6 @@ class BMDObjectRenderer {
             mat4.mul(this.modelInstance.modelMatrix, this.parentJointMatrix, this.modelMatrix);
         } else {
             mat4.copy(this.modelInstance.modelMatrix, this.modelMatrix);
-
-            // Don't compute screen area culling on child meshes (don't want heads to disappear before bodies.)
-            bboxScratch.transform(this.modelInstance.modelData.bbox, this.modelInstance.modelMatrix);
-            computeScreenSpaceProjectionFromWorldSpaceAABB(screenProjection, viewerInput.camera, bboxScratch);
-
-            if (screenProjection.getScreenArea() <= 0.0002)
-                return;
         }
 
         mat4.getTranslation(scratchVec3a, this.modelMatrix);
