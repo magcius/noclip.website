@@ -275,6 +275,9 @@ export class dCamera_c extends Camera {
             mat4.targetTo(this.worldMatrix, this.cameraPos, targetPos, this.cameraUp);
             mat4.rotateZ(this.worldMatrix, this.worldMatrix, this.roll);
 
+            // Keep the noclip camera in sync with the demo cam so it isn't jarring when we pause
+            mat4.copy(viewerInput.camera.worldMatrix, this.worldMatrix);
+
             this.cameraMode = CameraMode.Cinematic;
             globals.context.inputManager.isMouseEnabled = false;
         } else {
