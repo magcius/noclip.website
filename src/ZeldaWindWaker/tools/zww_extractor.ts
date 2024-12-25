@@ -357,27 +357,33 @@ async function loadBinaries(): Promise<Binary[]> {
     const binaries: Binary[] = [];
 
     // Parse DOL.
-    binaries.push(new DOL(`${pathBaseIn}/main.dol`, `${pathBaseIn}/maps/framework.map`));
+    binaries.push(new DOL(`${pathBaseIn}/sys/main.dol`, `${pathBaseIn}/files/maps/framework.map`));
 
     // Parse RELs.
-    const rels = readdirSync(`${pathBaseIn}/rels`);
+    const rels = readdirSync(`${pathBaseIn}/files/rels`);
     for (let i = 0; i < rels.length; i++) {
         const relName = rels[i];
-        const relFilename = `${pathBaseIn}/rels/${relName}`;
+        const relFilename = `${pathBaseIn}/files/rels/${relName}`;
         const relData = fetchDataSync(relFilename);
-        const mapFilename = `${pathBaseIn}/maps/${relName.replace('.rel', '.map')}`;
+        const mapFilename = `${pathBaseIn}/files/maps/${relName.replace('.rel', '.map')}`;
         binaries.push(new REL(relName, relData, mapFilename));
     }
 
-    const relsARC = JKRArchive.parse(fetchDataSync(`${pathBaseIn}/RELS.arc`));
+    const relsARC = JKRArchive.parse(fetchDataSync(`${pathBaseIn}/files/RELS.arc`));
+    const maps = readdirSync(`${pathBaseIn}/files/maps`);
     for (let i = 0; i < relsARC.files.length; i++) {
         const file = relsARC.files[i];
         if (!file.name.endsWith('.rel'))
             continue;
-        const relName = file.name;
+        const mapFilename = maps.find((m) => m.toLowerCase() === file.name.replace('.rel', '.map'));
+        if (!mapFilename) {
+            console.error(`Could not find map for ${file.name}`);
+            process.exit(1);
+        }
+        const relName = mapFilename.replace('.map', '.rel');
         const relData = file.buffer;
-        const mapFilename = `${pathBaseIn}/maps/${relName.replace('.rel', '.map')}`;
-        binaries.push(new REL(relName, relData, mapFilename));
+        const mapPath = `${pathBaseIn}/files/maps/${mapFilename}`;
+        binaries.push(new REL(relName, relData, mapPath));
     }
 
     return binaries;
