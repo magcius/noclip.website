@@ -14,8 +14,11 @@ export async function loadRustLib() {
 
 /*
     if (typeof process !== 'undefined') {
+        // @ts-ignore
         const fs = await import('fs');
+        // @ts-ignore
         const path = await import('path');
+        // @ts-ignore
         const url = await import('url');
         const wasmPath = path.join(path.dirname(url.fileURLToPath(import.meta.url)), '../rust/pkg/noclip_support_bg.wasm');
         const wasm = fs.readFileSync(wasmPath);

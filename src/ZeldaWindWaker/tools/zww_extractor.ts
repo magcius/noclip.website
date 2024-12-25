@@ -3,7 +3,7 @@ import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import * as BYML from "../../byml.js";
 import * as Yaz0 from '../../Common/Compression/Yaz0.js';
 import * as JKRArchive from "../../Common/JSYSTEM/JKRArchive.js";
-import { openSync, readSync, closeSync, readFileSync, writeFileSync, readdirSync, mkdirSync } from "fs";
+import { openSync, readSync, closeSync, readFileSync, writeFileSync, readdirSync, mkdirSync, cpSync } from "fs";
 import { assertExists, hexzero, assert, readString } from "../../util.js";
 import { Endianness } from "../../endian.js";
 import { loadRustLib } from "../../rustlib.js";
@@ -420,12 +420,22 @@ function extractProfiles(binaries: Binary[]) {
     writeFileSync(`${pathBaseOut}/f_pc_profiles.crg1_arc`, Buffer.from(data));
 }
 
+function copyDir(dirName: string, dstPath: string): void {
+    cpSync(`${pathBaseIn}/files/${dirName}`, `${pathBaseOut}/${dstPath}`, { recursive: true });
+}
+
 async function main() {
     await loadRustLib();
 
     const binaries = await loadBinaries();
     extractExtra(binaries);
     extractProfiles(binaries);
+
+    copyDir(`res/Msg`, `Msg`);
+    copyDir(`res/Object`, `Object`);
+    copyDir(`res/Particle`, `Particle`);
+    copyDir(`res/placename`, `placename`);
+    copyDir(`res/Stage`, `Stage`);
 }
 
 main();
