@@ -18,7 +18,7 @@ import * as JPA from '../Common/JSYSTEM/JPA.js';
 import { BTIData } from '../Common/JSYSTEM/JUTTexture.js';
 import { dfRange } from '../DebugFloaters.js';
 import { Frustum } from '../Geometry.js';
-import { MathConstants, clamp, getMatrixAxisZ, getMatrixTranslation, projectionMatrixForFrustum, range } from '../MathHelpers.js';
+import { MathConstants, clamp, getMatrixAxisZ, getMatrixTranslation, lerp, projectionMatrixForFrustum, range } from '../MathHelpers.js';
 import { SceneContext } from '../SceneBase.js';
 import { TextureMapping } from '../TextureHolder.js';
 import { projectionMatrixConvertClipSpaceNearZ } from '../gfx/helpers/ProjectionHelpers.js';
@@ -230,6 +230,7 @@ export class dCamera_c {
     // The current camera position, in Wind Waker engine world space.
     public cameraPos = vec3.create();
     public cameraFwd = vec3.create();
+    public cameraTarget = vec3.create();
     public cameraUp = vec3.fromValues(0, 1, 0);
     public roll = 0.0;
 
@@ -237,8 +238,11 @@ export class dCamera_c {
     public frozen = false;
     public enableLetterboxing = true;
 
-    private trimHeight = 0;
     private cameraMode: CameraMode = CameraMode.Default;
+    private cameraModeBlendVal = 0;
+    private demoFov = 0;
+    private demoRoll = 0;
+    private trimHeight = 0;
     private scissor = vec4.create();
 
     private static trimHeightCinematic = 65.0;
@@ -256,6 +260,12 @@ export class dCamera_c {
         this.clipSpaceNearZ = camera.clipSpaceNearZ;
         this.aspect = camera.aspect;
         this.fovY = camera.fovY;
+        this.roll = 0;
+
+        getMatrixTranslation(this.cameraPos, camera.worldMatrix);
+        getMatrixAxisZ(this.cameraFwd, camera.worldMatrix);
+        vec3.negate(this.cameraFwd, this.cameraFwd);
+        this.cameraTarget = vec3.scaleAndAdd(scratchVec3a, this.cameraPos, this.cameraFwd, 1000);
 
         mat4.copy(this.worldFromViewMatrix, camera.worldMatrix);
         mat4.copy(this.clipFromViewMatrix, camera.projectionMatrix);
@@ -282,25 +292,14 @@ export class dCamera_c {
         // dCamera_c::Store() sets the camera params if the demo camera is active
         const demoCam = globals.scnPlay.demo.getSystem().getCamera();
         if (demoCam && !isPaused) {
-            const targetPos = vec3.add(scratchVec3a, this.cameraPos, this.cameraFwd);
-
-            // TODO: Blend between these camera params when switching camera modes, instead of the sudden snap.
-
-            if (demoCam.flags & EDemoCamFlags.HasTargetPos) { vec3.copy(targetPos, demoCam.targetPosition); }
+            if (demoCam.flags & EDemoCamFlags.HasTargetPos) { vec3.copy(this.cameraTarget, demoCam.targetPosition); }
             if (demoCam.flags & EDemoCamFlags.HasEyePos) { vec3.copy(this.cameraPos, demoCam.viewPosition); }
             if (demoCam.flags & EDemoCamFlags.HasUpVec) { vec3.copy(this.cameraUp, demoCam.upVector); }
-            if (demoCam.flags & EDemoCamFlags.HasFovY) { this.fovY = demoCam.fovY * MathConstants.DEG_TO_RAD; }
-            if (demoCam.flags & EDemoCamFlags.HasRoll) { this.roll = demoCam.roll * MathConstants.DEG_TO_RAD; }
+            if (demoCam.flags & EDemoCamFlags.HasFovY) { this.demoFov = demoCam.fovY * MathConstants.DEG_TO_RAD; }
+            if (demoCam.flags & EDemoCamFlags.HasRoll) { this.demoRoll = demoCam.roll; }
             if (demoCam.flags & EDemoCamFlags.HasAspect) { debugger; /* Untested. Remove once confirmed working */ }
             if (demoCam.flags & EDemoCamFlags.HasNearZ) { this.near = demoCam.projNear; }
             if (demoCam.flags & EDemoCamFlags.HasFarZ) { this.far = demoCam.projFar; }
-
-            mat4.targetTo(this.worldFromViewMatrix, this.cameraPos, targetPos, this.cameraUp);
-            mat4.rotateZ(this.worldFromViewMatrix, this.worldFromViewMatrix, this.roll);
-
-            // Keep noclip and demo cameras in sync. Ensures that when the user pauses, the camera doesn't snap to an old location
-            mat4.copy(viewerInput.camera.worldMatrix, this.worldFromViewMatrix);
-            viewerInput.camera.worldMatrixUpdated();
 
             this.cameraMode = CameraMode.Cinematic;
             globals.sceneContext.inputManager.isMouseEnabled = false;
@@ -309,6 +308,22 @@ export class dCamera_c {
             globals.sceneContext.inputManager.isMouseEnabled = true;
         }
 
+        // Adapted from dCamera_c::CalcTrimSize()
+        // When switching between Cinematic and Regular camera modes (e.g. when pausing a cutscene), 
+        // blend the camera parameters smoothly. This accounts for deltaTime, but still works when paused. 
+        const deltaTimeFrames = clamp(viewerInput.deltaTime / 1000 * 30, 0.5, 1);
+        this.cameraModeBlendVal += (this.cameraMode - this.cameraModeBlendVal) * 0.25 * deltaTimeFrames;
+        this.trimHeight = lerp(0, dCamera_c.trimHeightCinematic, this.cameraModeBlendVal);
+        this.fovY = lerp(this.fovY, this.demoFov, this.cameraModeBlendVal);
+        this.roll = lerp(this.roll, this.demoRoll, this.cameraModeBlendVal);
+
+        mat4.targetTo(this.worldFromViewMatrix, this.cameraPos, this.cameraTarget, this.cameraUp);
+        mat4.rotateZ(this.worldFromViewMatrix, this.worldFromViewMatrix, this.roll * MathConstants.DEG_TO_RAD);
+
+        // Keep noclip and demo cameras in sync. Ensures that when the user pauses, the camera doesn't snap to an old location
+        mat4.copy(viewerInput.camera.worldMatrix, this.worldFromViewMatrix);
+        viewerInput.camera.worldMatrixUpdated();
+
         // Compute updated projection matrix
         const nearY = Math.tan(this.fovY * 0.5) * this.near;
         const nearX = nearY * this.aspect;
@@ -316,19 +331,11 @@ export class dCamera_c {
         projectionMatrixReverseDepth(this.clipFromViewMatrix);
         projectionMatrixConvertClipSpaceNearZ(this.clipFromViewMatrix, this.clipSpaceNearZ, GfxClipSpaceNearZ.NegativeOne);
 
-        this.finishSetup();
-
-        // From dCamera_c::CalcTrimSize()
-        // Animate up to the trim size for the current mode. Take deltaTime into account, but still animate when paused.
-        const deltaTimeFrames = clamp(viewerInput.deltaTime / 1000 * 30, 0.5, 1);
-        if (this.cameraMode === CameraMode.Cinematic) {
-            this.trimHeight += (dCamera_c.trimHeightCinematic - this.trimHeight) * 0.25 * deltaTimeFrames;
-        } else {
-            this.trimHeight += -this.trimHeight * 0.25 * deltaTimeFrames;
-        }
-
+        // Scissor setup
         const trimPx = (this.trimHeight / 480) * viewerInput.backbufferHeight;
         vec4.set(this.scissor, 0, trimPx, viewerInput.backbufferWidth, viewerInput.backbufferHeight - 2 * trimPx);
+
+        this.finishSetup();
 
         if (!this.frozen) {
             // Update the "player position" from the camera.
