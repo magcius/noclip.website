@@ -17,7 +17,7 @@ import { J3DModelInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase.js';
 import * as JPA from '../Common/JSYSTEM/JPA.js';
 import { BTIData } from '../Common/JSYSTEM/JUTTexture.js';
 import { dfRange } from '../DebugFloaters.js';
-import { MathConstants, getMatrixAxisZ, getMatrixTranslation, range } from '../MathHelpers.js';
+import { MathConstants, getMatrixAxisZ, getMatrixTranslation, projectionMatrixForFrustum, range } from '../MathHelpers.js';
 import { SceneContext } from '../SceneBase.js';
 import { TextureMapping } from '../TextureHolder.js';
 import { setBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
@@ -45,6 +45,8 @@ import { dDemo_manager_c, EDemoCamFlags, EDemoMode } from './d_demo.js';
 import { d_pn__RegisterConstructors, Placename, PlacenameState, dPn__update } from './d_place_name.js';
 import { GX_Program } from '../gx/gx_material.js';
 import { Frustum } from '../Geometry.js';
+import { projectionMatrixReverseDepth } from '../gfx/helpers/ReversedDepthHelpers.js';
+import { projectionMatrixConvertClipSpaceNearZ } from '../gfx/helpers/ProjectionHelpers.js';
 
 type SymbolData = { Filename: string, SymbolName: string, Data: ArrayBufferSlice };
 type SymbolMapData = { SymbolData: SymbolData[] };
@@ -240,7 +242,7 @@ export class dCamera_c {
     private static trimHeightCinematic = 65.0;
 
     public finishSetup(): void {
-        mat4.invert(this.worldFromViewMatrix, this.viewFromWorldMatrix);
+        mat4.invert(this.viewFromWorldMatrix, this.worldFromViewMatrix);
         mat4.mul(this.clipFromWorldMatrix, this.clipFromViewMatrix, this.viewFromWorldMatrix);
         getMatrixTranslation(this.cameraPos, this.worldFromViewMatrix);
         getMatrixAxisZ(this.cameraFwd, this.worldFromViewMatrix);
@@ -252,22 +254,24 @@ export class dCamera_c {
         this.aspect = camera.aspect;
         this.fovY = camera.fovY;
 
-        mat4.copy(this.viewFromWorldMatrix, camera.viewMatrix);
+        mat4.copy(this.worldFromViewMatrix, camera.worldMatrix);
         mat4.copy(this.clipFromViewMatrix, camera.projectionMatrix);
         this.finishSetup();
     }
 
     public execute(globals: dGlobals, viewerInput: Viewer.ViewerRenderInput) {
+        this.setupFromCamera(viewerInput.camera);
+
         // Near/far planes are decided by the stage data.
         const stag = globals.dStage_dt.stag;
 
         // Pull in the near plane to decrease Z-fighting, some stages set it far too close...
-        let near = Math.max(stag.nearPlane, 5);
-        let far = stag.farPlane;
+        this.near = Math.max(stag.nearPlane, 5);
+        this.far = stag.farPlane;
 
         // noclip modification: if this is the sea map, push our far plane out a bit.
         if (globals.stageName === 'sea')
-            far *= 2;
+            this.far *= 2;
 
         // noclip modification: if we're paused, allow noclip camera control during demos
         const isPaused = viewerInput.deltaTime === 0;
@@ -285,12 +289,15 @@ export class dCamera_c {
             if (demoCam.flags & EDemoCamFlags.HasFovY) { this.fovY = demoCam.fovY * MathConstants.DEG_TO_RAD; }
             if (demoCam.flags & EDemoCamFlags.HasRoll) { this.roll = demoCam.roll * MathConstants.DEG_TO_RAD; }
             if (demoCam.flags & EDemoCamFlags.HasAspect) { debugger; /* Untested. Remove once confirmed working */ }
-            if (demoCam.flags & EDemoCamFlags.HasNearZ) { near = demoCam.projNear; }
-            if (demoCam.flags & EDemoCamFlags.HasFarZ) { far = demoCam.projFar; }
+            if (demoCam.flags & EDemoCamFlags.HasNearZ) { this.near = demoCam.projNear; }
+            if (demoCam.flags & EDemoCamFlags.HasFarZ) { this.far = demoCam.projFar; }
 
-            // TODO: Clean this up
             mat4.targetTo(this.worldFromViewMatrix, this.cameraPos, targetPos, this.cameraUp);
             mat4.rotateZ(this.worldFromViewMatrix, this.worldFromViewMatrix, this.roll);
+
+            // Keep noclip and demo cameras in sync. Ensures that when the user pauses, the camera doesn't snap to an old location
+            mat4.copy(viewerInput.camera.worldMatrix, this.worldFromViewMatrix);
+            viewerInput.camera.worldMatrixUpdated();
 
             this.cameraMode = CameraMode.Cinematic;
             globals.sceneContext.inputManager.isMouseEnabled = false;
@@ -299,11 +306,13 @@ export class dCamera_c {
             globals.sceneContext.inputManager.isMouseEnabled = true;
         }
 
-        // TODO: Clean this up
-        viewerInput.camera.setClipPlanes(near, far);
-        this.near = near;
-        this.far = far;
-        this.setupFromCamera(viewerInput.camera);
+        // Compute updated projection matrix
+        const nearY = Math.tan(this.fovY * 0.5) * this.near;
+        const nearX = nearY * this.aspect;
+        projectionMatrixForFrustum(this.clipFromViewMatrix, -nearX, nearX, -nearY, nearY, this.near, this.far);
+        projectionMatrixReverseDepth(this.clipFromViewMatrix);
+        projectionMatrixConvertClipSpaceNearZ(this.clipFromViewMatrix, this.clipSpaceNearZ, GfxClipSpaceNearZ.NegativeOne);
+
         this.finishSetup();
 
         // From dCamera_c::CalcTrimSize()
