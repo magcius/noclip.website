@@ -20,7 +20,7 @@ import { dProcName_e } from './d_procname.js';
 import { ResAssetType, ResEntry, ResType } from './d_resorce.js';
 import { fopAcM_prm_class, fopAc_ac_c } from './f_op_actor.js';
 import { cPhs__Status, fGlobals, fpcPf__RegisterFallback } from './framework.js';
-import { mDoExt_McaMorf } from './m_do_ext.js';
+import { mDoExt_McaMorf, mDoExt_modelEntryDL } from './m_do_ext.js';
 import { MtxTrans, calc_mtx, mDoMtx_ZXYrotM } from './m_do_mtx.js';
 import { WindWakerRenderer, ZWWExtraTextures, dGlobals } from "./Main.js";
 
@@ -48,6 +48,7 @@ class d_a_noclip_legacy extends fopAc_ac_c {
     private phase = cPhs__Status.Started;
     public morf: mDoExt_McaMorf;
     public objectRenderers: BMDObjectRenderer[] = [];
+    public isDemoActor = false;
 
     public override subload(globals: dGlobals, prm: fopAcM_prm_class): cPhs__Status {
         if (this.phase === cPhs__Status.Started) {
@@ -82,6 +83,15 @@ class d_a_noclip_legacy extends fopAc_ac_c {
         return cPhs__Status.Next;
     }
 
+    public override execute(globals: dGlobals, deltaTimeFrames: number): void {
+        this.isDemoActor = dDemo_setDemoData(globals, deltaTimeFrames, this, 0x6A, this.morf);
+        if (this.isDemoActor) {
+            MtxTrans(this.pos, false);
+            mDoMtx_ZXYrotM(calc_mtx, this.rot);
+            mat4.copy(this.objectRenderers[0].modelMatrix, calc_mtx);
+        }
+    }
+
     public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         if (this.objectRenderers.length === 0)
             return;
@@ -90,18 +100,10 @@ class d_a_noclip_legacy extends fopAc_ac_c {
             return;
 
         const device = globals.modelCache.device;
-        const dtFrames = Math.min(viewerInput.deltaTime / 1000 * 30, 5);
-
-        const isDemoActor = dDemo_setDemoData(globals, dtFrames, this, 0x6A, this.morf);
-        if (isDemoActor) {
-            MtxTrans(this.pos, false);
-            mDoMtx_ZXYrotM(calc_mtx, this.rot);
-            mat4.copy(this.objectRenderers[0].modelMatrix, calc_mtx);
-        }
 
         renderInstManager.setCurrentList(globals.dlst.bg[0]);
         for (let i = 0; i < this.objectRenderers.length; i++)
-            this.objectRenderers[i].prepareToRender(globals, isDemoActor ? this.morf : null, device, renderInstManager, viewerInput);
+            this.objectRenderers[i].prepareToRender(globals, this.isDemoActor ? this.morf : null, device, renderInstManager, viewerInput);
     }
 
     public override delete(globals: dGlobals): void {
