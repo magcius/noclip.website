@@ -47,6 +47,7 @@ import { dStage_dt_c_roomLoader, dStage_dt_c_roomReLoader, dStage_dt_c_stageInit
 import { WoodPacket } from './d_wood.js';
 import { fopAcM_create, fopAcM_searchFromName, fopAc_ac_c } from './f_op_actor.js';
 import { cPhs__Status, fGlobals, fopDw_Draw, fopScn, fpcCt_Handler, fpcLy_SetCurrentLayer, fpcM_Management, fpcPf__Register, fpcSCtRq_Request, fpc_pc__ProfileList } from './framework.js';
+import { J2DGrafContext } from '../Common/JSYSTEM/J2Dv1.js';
 
 type SymbolData = { Filename: string, SymbolName: string, Data: ArrayBufferSlice };
 type SymbolMapData = { SymbolData: SymbolData[] };
@@ -864,6 +865,8 @@ class d_s_play extends fopScn {
     public placenameIndex: Placename;
     public placenameState: PlacenameState;
 
+    public orthoGraf2D: J2DGrafContext;
+
     public override load(globals: dGlobals, userData: any): cPhs__Status {
         super.load(globals, userData);
 
@@ -873,6 +876,8 @@ class d_s_play extends fopScn {
         this.flowerPacket = new FlowerPacket(globals);
         this.grassPacket = new GrassPacket(globals);
         this.woodPacket = new WoodPacket(globals);
+
+        this.orthoGraf2D = new J2DGrafContext(globals.modelCache.device, 0.0, 0.0, 608.0, 448.0, -1.0, 0.0);
 
         globals.scnPlay = this;
 

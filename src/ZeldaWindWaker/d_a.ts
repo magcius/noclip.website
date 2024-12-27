@@ -1,6 +1,7 @@
 
 import { ReadonlyMat4, ReadonlyVec3, mat4, quat, vec2, vec3 } from "gl-matrix";
 import { TransparentBlack, colorCopy, colorFromRGBA8, colorNewCopy, colorNewFromRGBA8 } from "../Color.js";
+import { calcANK1JointAnimationTransform } from "../Common/JSYSTEM/J3D/J3DGraphAnimator.js";
 import { J3DModelData, J3DModelInstance, buildEnvMtx } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
 import { JointTransformInfo, LoopMode, TRK1, TTK1 } from "../Common/JSYSTEM/J3D/J3DLoader.js";
 import { JPABaseEmitter, JPASetRMtxSTVecFromMtx } from "../Common/JSYSTEM/JPA.js";
@@ -8,36 +9,35 @@ import { BTIData } from "../Common/JSYSTEM/JUTTexture.js";
 import { Vec3One, Vec3UnitY, Vec3UnitZ, Vec3Zero, clamp, computeMatrixWithoutTranslation, computeModelMatrixR, computeModelMatrixS, lerp, saturate, scaleMatrix, transformVec3Mat4w0, transformVec3Mat4w1 } from "../MathHelpers.js";
 import { GlobalSaveManager } from "../SaveManager.js";
 import { TDDraw, TSDraw } from "../SuperMarioGalaxy/DDraw.js";
+import { TextureMapping } from "../TextureHolder.js";
 import { Endianness } from "../endian.js";
 import { compareDepthValues } from "../gfx/helpers/ReversedDepthHelpers.js";
-import { GfxClipSpaceNearZ, GfxCompareMode, GfxDevice, GfxTexture } from "../gfx/platform/GfxPlatform.js";
+import { GfxClipSpaceNearZ, GfxCompareMode, GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
-import { GfxRendererLayer, GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
+import { GfxRenderInst, GfxRenderInstManager, GfxRendererLayer } from "../gfx/render/GfxRenderInstManager.js";
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder.js";
 import * as GX from '../gx/gx_enum.js';
 import { TevDefaultSwapTables } from "../gx/gx_material.js";
 import { ColorKind, DrawParams, GXMaterialHelperGfx, MaterialParams } from "../gx/gx_render.js";
 import { arrayRemove, assert, assertExists, nArray } from "../util.js";
 import { ViewerRenderInput } from "../viewer.js";
-import { cLib_addCalc, cLib_addCalc2, cLib_addCalcAngleRad2, cLib_addCalcAngleS, cLib_addCalcAngleS2, cLib_addCalcPosXZ2, cLib_chasePosXZ, cLib_distanceSqXZ, cLib_distanceXZ, cLib_targetAngleX, cLib_targetAngleY, cM_s2rad, cM_atan2s, cM_rndF, cM_rndFX } from "./SComponent.js";
+import { dGlobals } from "./Main.js";
+import { cLib_addCalc, cLib_addCalc2, cLib_addCalcAngleRad2, cLib_addCalcAngleS, cLib_addCalcAngleS2, cLib_addCalcPosXZ2, cLib_chasePosXZ, cLib_distanceSqXZ, cLib_distanceXZ, cLib_targetAngleX, cLib_targetAngleY, cM_atan2s, cM_rndF, cM_rndFX, cM_s2rad } from "./SComponent.js";
 import { dLib_getWaterY, dLib_waveInit, dLib_waveRot, dLib_wave_c, d_a_sea } from "./d_a_sea.js";
 import { cBgW_Flags, dBgS_GndChk, dBgW } from "./d_bg.js";
+import { EDemoActorFlags, dDemo_setDemoData } from "./d_demo.js";
 import { PeekZResult } from "./d_dlst_peekZ.js";
+import { dDlst_alphaModel__Type } from "./d_drawlist.js";
 import { LIGHT_INFLUENCE, LightType, WAVE_INFO, dKy_change_colpat, dKy_checkEventNightStop, dKy_plight_cut, dKy_plight_set, dKy_setLight__OnMaterialParams, dKy_setLight__OnModelInstance, dKy_tevstr_c, dKy_tevstr_init, setLightTevColorType, settingTevStruct } from "./d_kankyo.js";
 import { ThunderMode, dKyr_get_vectle_calc, dKyw_get_AllWind_vecpow, dKyw_get_wind_pow, dKyw_get_wind_vec, dKyw_rain_set, loadRawTexture } from "./d_kankyo_wether.js";
 import { dPa_splashEcallBack, dPa_trackEcallBack, dPa_waveEcallBack } from "./d_particle.js";
+import { dProcName_e } from "./d_procname.js";
 import { ResType, dComIfG_resLoad } from "./d_resorce.js";
 import { dPath, dPath_GetRoomPath, dPath__Point, dStage_Multi_c, dStage_stagInfo_GetSTType } from "./d_stage.js";
+import { fopAcIt_JudgeByID, fopAcM_create, fopAcM_prm_class, fopAc_ac_c } from "./f_op_actor.js";
 import { cPhs__Status, fGlobals, fpcPf__Register, fpcSCtRq_Request, fpc_bs__Constructor } from "./framework.js";
-import { mDoExt_McaMorf, mDoExt_bckAnm, mDoExt_brkAnm, mDoExt_btkAnm, mDoExt_btpAnm, mDoExt_modelEntryDL, mDoExt_modelUpdateDL, mDoLib_project } from "./m_do_ext.js";
+import { mDoExt_McaMorf, mDoExt_bckAnm, mDoExt_brkAnm, mDoExt_btkAnm, mDoExt_btpAnm, mDoExt_modelEntryDL, mDoExt_modelUpdateDL } from "./m_do_ext.js";
 import { MtxPosition, MtxTrans, calc_mtx, mDoMtx_XYZrotM, mDoMtx_XrotM, mDoMtx_YrotM, mDoMtx_YrotS, mDoMtx_ZXYrotM, mDoMtx_ZrotM, mDoMtx_ZrotS, quatM } from "./m_do_mtx.js";
-import { dGlobals } from "./Main.js";
-import { dDlst_alphaModel__Type } from "./d_drawlist.js";
-import { dDemo_setDemoData, EDemoActorFlags } from "./d_demo.js";
-import { fopAc_ac_c, fopAcIt_JudgeByID, fopAcM_create, fopAcM_prm_class } from "./f_op_actor.js";
-import { dProcName_e } from "./d_procname.js";
-import { TextureMapping } from "../TextureHolder.js";
-import { calcANK1JointAnimationTransform } from "../Common/JSYSTEM/J3D/J3DGraphAnimator.js";
 
 // Framework'd actors
 
@@ -4573,7 +4573,7 @@ export class d_a_ff extends fopAc_ac_c {
         const peekZ = globals.dlst.peekZ;
         const dst = this.peekZResult;
 
-        mDoLib_project(scratchVec3a, this.pos, globals.camera.clipFromWorldMatrix);
+        vec3.transformMat4(scratchVec3a, this.pos, globals.camera.clipFromWorldMatrix);
         if (globals.camera.clipSpaceNearZ === GfxClipSpaceNearZ.NegativeOne)
             scratchVec3a[2] = scratchVec3a[2] * 0.5 + 0.5;
 

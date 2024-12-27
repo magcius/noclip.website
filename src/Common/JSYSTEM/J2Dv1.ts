@@ -3,7 +3,7 @@
 
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { JSystemFileReaderHelper } from "./J3D/J3DLoader.js";
-import { align, assert, readString } from "../../util.js";
+import { align, assert, assertExists, readString } from "../../util.js";
 import { Color, colorNewFromRGBA8 } from "../../Color.js";
 import { GfxRenderInst, GfxRenderInstManager } from "../../gfx/render/GfxRenderInstManager.js";
 import * as GX_Material from '../../gx/gx_material.js';
@@ -451,20 +451,14 @@ export class J2DPicture extends J2DPane {
 //#region J2DScreen
 export class J2DScreen extends J2DPane {
     public color: Color
-    private defaultCtx: J2DGrafContext;
 
     constructor(data: SCRN, cache: GfxRenderCache) {
         super(data.panes[0], cache, null);
-        this.defaultCtx = new J2DGrafContext(cache.device, 0.0, 0.0, 640.0, 480.0, -1.0, 0.0);
         this.color = data.inf1.color;
     }
 
-    override draw(renderInstManager: GfxRenderInstManager, viewerRenderInput: ViewerRenderInput, ctx2D: J2DGrafContext | null, offsetX?: number, offsetY?: number): void {
-        if (ctx2D !== null) {
-            super.draw(renderInstManager, viewerRenderInput, ctx2D, offsetX, offsetY);
-        } else {
-            super.draw(renderInstManager, viewerRenderInput, this.defaultCtx, offsetX, offsetY);
-        }
+    public override draw(renderInstManager: GfxRenderInstManager, viewerRenderInput: ViewerRenderInput, ctx2D: J2DGrafContext, offsetX?: number, offsetY?: number): void {
+        super.draw(renderInstManager, viewerRenderInput, ctx2D, offsetX, offsetY);
     }
 }
 

@@ -1896,8 +1896,6 @@ export function lightSetWorldPosition(light: Light, viewMatrix: ReadonlyMat4, v:
 }
 
 export function lightSetWorldDirection(light: Light, viewMatrix: ReadonlyMat4, v: ReadonlyVec3): void {
-    // TODO(jstpierre): In theory, we should multiply by the inverse-transpose of the view matrix.
-    // However, I don't want to calculate that right now, and it shouldn't matter too much...
     transformVec3Mat4w0(light.Direction, viewMatrix, v);
     vec3.normalize(light.Direction, v);
 }

@@ -12,7 +12,7 @@ import { TDDraw } from "../SuperMarioGalaxy/DDraw.js";
 import { TextureMapping } from "../TextureHolder.js";
 import { cLib_addCalc, cM_s2rad, cM_rndF, cM_rndFX } from "../ZeldaWindWaker/SComponent.js";
 import { PeekZManager, PeekZResult } from "../ZeldaWindWaker/d_dlst_peekZ.js";
-import { mDoLib_project, mDoLib_projectFB } from "../ZeldaWindWaker/m_do_ext.js";
+import { mDoLib_projectFB } from "../ZeldaWindWaker/m_do_ext.js";
 import { MtxTrans, calc_mtx, mDoMtx_XrotM, mDoMtx_ZrotM } from "../ZeldaWindWaker/m_do_mtx.js";
 import { fullscreenMegaState, setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
@@ -1533,7 +1533,7 @@ function dKyr_sun_move(globals: dGlobals, deltaTimeFrames: number): void {
 
         if (sunCanGlare) {
             // Original game projects the vector into viewport space, and gets distance to 320, 240.
-            mDoLib_project(scratchVec3, pkt.sunPos, globals.camera.clipFromWorldMatrix);
+            vec3.transformMat4(scratchVec3, pkt.sunPos, globals.camera.clipFromWorldMatrix);
 
             const peekZ = globals.dlst.peekZ;
 

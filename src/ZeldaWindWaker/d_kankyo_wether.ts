@@ -23,7 +23,7 @@ import { dKy_GxFog_sea_set, dKy_actor_addcol_amb_set, dKy_actor_addcol_dif_set, 
 import { ResType } from "./d_resorce.js";
 import { dStage_FileList_dt_c, dStage_stagInfo_GetSTType } from "./d_stage.js";
 import { cPhs__Status, fGlobals, fopKyM_Delete, fopKyM_create, fpcPf__Register, fpc_bs__Constructor, kankyo_class } from "./framework.js";
-import { mDoExt_brkAnm, mDoExt_btkAnm, mDoExt_modelUpdateDL, mDoLib_project, mDoLib_projectFB } from "./m_do_ext.js";
+import { mDoExt_brkAnm, mDoExt_btkAnm, mDoExt_modelUpdateDL, mDoLib_projectFB } from "./m_do_ext.js";
 import { MtxTrans, calc_mtx, mDoMtx_XrotM, mDoMtx_ZrotM } from "./m_do_mtx.js";
 import { dGlobals } from "./Main.js";
 import { dProcName_e } from "./d_procname.js";
@@ -1618,7 +1618,7 @@ function dKyr_sun_move(globals: dGlobals): void {
 
         if (sunCanGlare) {
             // Original game projects the vector into viewport space, and gets distance to 320, 240.
-            mDoLib_project(scratchVec3, pkt.sunPos, globals.camera.clipFromWorldMatrix);
+            vec3.transformMat4(scratchVec3, pkt.sunPos, globals.camera.clipFromWorldMatrix);
 
             const peekZ = globals.dlst.peekZ;
 
@@ -1716,7 +1716,7 @@ function dKyr_lenzflare_move(globals: dGlobals): void {
         vec3.scaleAndAdd(pkt.lensflarePos[i], pkt.sunPos, scratchVec3, -intensity * whichLenz);
     }
 
-    mDoLib_project(scratchVec3, pkt.sunPos, globals.camera.clipFromWorldMatrix);
+    vec3.transformMat4(scratchVec3, pkt.sunPos, globals.camera.clipFromWorldMatrix);
     pkt.lensflareAngle = Math.atan2(scratchVec3[1], scratchVec3[0]) + Math.PI / 2;
 }
 

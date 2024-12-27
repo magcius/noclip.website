@@ -1,4 +1,4 @@
-import { J2DGrafContext, J2DPicture, J2DScreen } from "../Common/JSYSTEM/J2Dv1.js";
+import { J2DPicture, J2DScreen } from "../Common/JSYSTEM/J2Dv1.js";
 import { BTI, BTIData } from "../Common/JSYSTEM/JUTTexture.js";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import { ViewerRenderInput } from "../viewer.js";
@@ -114,7 +114,7 @@ export class d_place_name extends msg_class {
 
     public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         renderInstManager.setCurrentList(globals.dlst.ui[0]);
-        this.screen.draw(renderInstManager, viewerInput, null);
+        this.screen.draw(renderInstManager, viewerInput, globals.scnPlay.orthoGraf2D);
     }
 
     public override execute(globals: dGlobals, deltaTimeFrames: number): void {

@@ -1,13 +1,12 @@
 
-import { J3DFrameCtrl, J3DFrameCtrl__UpdateFlags, entryTexMtxAnimator, entryTevRegAnimator, entryTexNoAnimator, VAF1_getVisibility, entryJointAnimator, calcJointMatrixFromTransform, calcANK1JointAnimationTransform } from "../Common/JSYSTEM/J3D/J3DGraphAnimator.js";
-import { TTK1, LoopMode, TRK1, AnimationBase, TPT1, VAF1, ANK1, JointTransformInfo } from "../Common/JSYSTEM/J3D/J3DLoader.js";
-import { J3DModelInstance, J3DModelData, JointMatrixCalc, ShapeInstanceState } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
+import { mat4, ReadonlyMat4, ReadonlyVec3, vec3 } from "gl-matrix";
+import { calcANK1JointAnimationTransform, calcJointMatrixFromTransform, entryJointAnimator, entryTevRegAnimator, entryTexMtxAnimator, entryTexNoAnimator, J3DFrameCtrl, J3DFrameCtrl__UpdateFlags, VAF1_getVisibility } from "../Common/JSYSTEM/J3D/J3DGraphAnimator.js";
+import { J3DModelData, J3DModelInstance, JointMatrixCalc, ShapeInstanceState } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
+import { AnimationBase, ANK1, JointTransformInfo, LoopMode, TPT1, TRK1, TTK1, VAF1 } from "../Common/JSYSTEM/J3D/J3DLoader.js";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import { ViewerRenderInput } from "../viewer.js";
-import { dCamera_c, dGlobals } from "./Main.js";
-import { mat4, ReadonlyMat4, vec3, vec4 } from "gl-matrix";
-import { Camera, divideByW } from "../Camera.js";
 import { dDlst_list_Set } from "./d_drawlist.js";
+import { dGlobals } from "./Main.js";
 
 abstract class mDoExt_baseAnm<T extends AnimationBase> {
     public frameCtrl = new J3DFrameCtrl(0);
@@ -236,16 +235,8 @@ export class mDoExt_McaMorf implements JointMatrixCalc {
     }
 }
 
-const scratchVec4 = vec4.create();
-export function mDoLib_project(dst: vec3, v: vec3, clipFromWorldMatrix: ReadonlyMat4, v4 = scratchVec4): void {
-    vec4.set(v4, v[0], v[1], v[2], 1.0);
-    vec4.transformMat4(v4, v4, clipFromWorldMatrix);
-    divideByW(v4, v4);
-    vec3.set(dst, v4[0], v4[1], v4[2]);
-}
-
-export function mDoLib_projectFB(dst: vec3, v: vec3, viewerInput: ViewerRenderInput, clipFromWorldMatrix: ReadonlyMat4 = viewerInput.camera.clipFromWorldMatrix): void {
-    mDoLib_project(dst, v, clipFromWorldMatrix);
+export function mDoLib_projectFB(dst: vec3, v: ReadonlyVec3, viewerInput: ViewerRenderInput, clipFromWorldMatrix: ReadonlyMat4 = viewerInput.camera.clipFromWorldMatrix): void {
+    vec3.transformMat4(dst, v, clipFromWorldMatrix);
     // Put in viewport framebuffer space.
     dst[0] = (dst[0] * 0.5 + 0.5) * viewerInput.backbufferWidth;
     dst[1] = (dst[1] * 0.5 + 0.5) * viewerInput.backbufferHeight;
