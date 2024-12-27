@@ -352,7 +352,8 @@ export function startBva(actor: LiveActor, name: string): void {
 }
 
 export function startBckIfExist(actor: LiveActor, name: string): boolean {
-    const bck = actor.resourceHolder.getRes(actor.resourceHolder.motionTable, name);
+    const resourceHolder = actor.modelManager!.resourceHolder;
+    const bck = resourceHolder.getRes(resourceHolder.motionTable, name);
     if (bck !== null) {
         actor.modelManager!.startBck(name);
         if (actor.effectKeeper !== null)
@@ -362,35 +363,40 @@ export function startBckIfExist(actor: LiveActor, name: string): boolean {
 }
 
 export function startBtkIfExist(actor: LiveActor, name: string): boolean {
-    const btk = actor.resourceHolder.getRes(actor.resourceHolder.btkTable, name);
+    const resourceHolder = actor.modelManager!.resourceHolder;
+    const btk = resourceHolder.getRes(resourceHolder.btkTable, name);
     if (btk !== null)
         actor.modelManager!.startBtk(name);
     return btk !== null;
 }
 
 export function startBrkIfExist(actor: LiveActor, name: string): boolean {
-    const brk = actor.resourceHolder.getRes(actor.resourceHolder.brkTable, name);
+    const resourceHolder = actor.modelManager!.resourceHolder;
+    const brk = resourceHolder.getRes(resourceHolder.brkTable, name);
     if (brk !== null)
         actor.modelManager!.startBrk(name);
     return brk !== null;
 }
 
 export function startBpkIfExist(actor: LiveActor, name: string): boolean {
-    const bpk = actor.resourceHolder.getRes(actor.resourceHolder.bpkTable, name);
+    const resourceHolder = actor.modelManager!.resourceHolder;
+    const bpk = resourceHolder.getRes(resourceHolder.bpkTable, name);
     if (bpk !== null)
         actor.modelManager!.startBpk(name);
     return bpk !== null;
 }
 
 export function startBtpIfExist(actor: LiveActor, name: string): boolean {
-    const btp = actor.resourceHolder.getRes(actor.resourceHolder.btpTable, name);
+    const resourceHolder = actor.modelManager!.resourceHolder;
+    const btp = resourceHolder.getRes(resourceHolder.btpTable, name);
     if (btp !== null)
         actor.modelManager!.startBtp(name);
     return btp !== null;
 }
 
 export function startBvaIfExist(actor: LiveActor, name: string): boolean {
-    const bva = actor.resourceHolder.getRes(actor.resourceHolder.bvaTable, name);
+    const resourceHolder = actor.modelManager!.resourceHolder;
+    const bva = resourceHolder.getRes(resourceHolder.bvaTable, name);
     if (bva !== null)
         actor.modelManager!.startBva(name);
     return bva !== null;
@@ -1316,7 +1322,8 @@ export function makeMtxFrontNoSupportPos(dst: mat4, front: ReadonlyVec3, pos: Re
 }
 
 export function isExistCollisionResource(actor: LiveActor, name: string): boolean {
-    return actor.resourceHolder.arc.findFileData(`${name.toLowerCase()}.kcl`) !== null;
+    const resourceHolder = actor.modelManager!.resourceHolder;
+    return resourceHolder.arc.findFileData(`${name.toLowerCase()}.kcl`) !== null;
 }
 
 export function useStageSwitchSleep(sceneObjHolder: SceneObjHolder, actor: LiveActor, infoIter: JMapInfoIter | null): void {

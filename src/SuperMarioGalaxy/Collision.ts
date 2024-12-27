@@ -890,7 +890,7 @@ export function invalidateCollisionParts(sceneObjHolder: SceneObjHolder, parts: 
 }
 
 const scratchMatrix = mat4.create();
-export function createCollisionPartsFromLiveActor(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, hitSensor: HitSensor, hostMtx: mat4 | null, scaleType: CollisionScaleType, resourceHolder: ResourceHolder = actor.resourceHolder!): CollisionParts {
+export function createCollisionPartsFromLiveActor(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, hitSensor: HitSensor, hostMtx: mat4 | null, scaleType: CollisionScaleType, resourceHolder: ResourceHolder = actor.modelManager!.resourceHolder): CollisionParts {
     let initialHostMtx: mat4;
     if (hostMtx !== null) {
         initialHostMtx = hostMtx;
@@ -908,12 +908,13 @@ export function createCollisionPartsFromLiveActor(sceneObjHolder: SceneObjHolder
 }
 
 function tryCreateCollisionParts(sceneObjHolder: SceneObjHolder, actor: LiveActor, hitSensor: HitSensor, category: CollisionKeeperCategory, filenameBase: string): CollisionParts | null {
-    const res = actor.resourceHolder.arc.findFileData(`${filenameBase}.kcl`);
+    const resourceHolder = actor.modelManager!.resourceHolder;
+    const res = resourceHolder.arc.findFileData(`${filenameBase}.kcl`);
     if (res === null)
         return null;
 
     makeMtxTRSFromActor(scratchMatrix, actor);
-    const parts = createCollisionParts(sceneObjHolder, actor.zoneAndLayer, actor.resourceHolder, filenameBase, hitSensor, scratchMatrix, CollisionScaleType.AutoScale, category);
+    const parts = createCollisionParts(sceneObjHolder, actor.zoneAndLayer, resourceHolder, filenameBase, hitSensor, scratchMatrix, CollisionScaleType.AutoScale, category);
     if (parts !== null)
         validateCollisionParts(sceneObjHolder, parts);
 

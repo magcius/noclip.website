@@ -254,7 +254,7 @@ abstract class TAdaptor {
         this.variableValues[startKeyIdx + 0].setValue_immediate(data.r);
         this.variableValues[startKeyIdx + 1].setValue_immediate(data.g);
         this.variableValues[startKeyIdx + 2].setValue_immediate(data.b);
-        this.variableValues[startKeyIdx + 4].setValue_immediate(data.a);
+        this.variableValues[startKeyIdx + 3].setValue_immediate(data.a);
     }
 
     // Get the current value of 4 consecutive VariableValues, as a GXColor. E.g. Fog color.
@@ -262,7 +262,7 @@ abstract class TAdaptor {
         dst.r = this.variableValues[startKeyIdx + 0].getValue();
         dst.g = this.variableValues[startKeyIdx + 1].getValue();
         dst.b = this.variableValues[startKeyIdx + 2].getValue();
-        dst.a = this.variableValues[startKeyIdx + 2].getValue();
+        dst.a = this.variableValues[startKeyIdx + 3].getValue();
     }
 
     public adaptor_updateVariableValue(obj: STBObject, frameCount: number) {

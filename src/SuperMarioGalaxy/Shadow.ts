@@ -1301,10 +1301,11 @@ function addShadowFromCSV(sceneObjHolder: SceneObjHolder, actor: LiveActor, info
 export function initShadowFromCSV(sceneObjHolder: SceneObjHolder, actor: LiveActor, filename: string = 'Shadow'): void {
     let shadowFile: ArrayBufferSlice | null;
 
+    const resourceHolder = actor.modelManager!.resourceHolder;
     if (sceneObjHolder.sceneDesc.gameBit === GameBits.SMG1)
-        shadowFile = actor.resourceHolder.arc.findFileData(`${filename}.bcsv`);
+        shadowFile = resourceHolder.arc.findFileData(`${filename}.bcsv`);
     else if (sceneObjHolder.sceneDesc.gameBit === GameBits.SMG2)
-        shadowFile = actor.resourceHolder.arc.findFileData(`ActorInfo/${filename}.bcsv`);
+        shadowFile = resourceHolder.arc.findFileData(`ActorInfo/${filename}.bcsv`);
     else
         throw "whoops";
 

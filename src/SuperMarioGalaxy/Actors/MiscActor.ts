@@ -4125,7 +4125,8 @@ export class WarpPod extends LiveActor {
             this.warpPathPoints.push(v);
         }
 
-        this.pathDrawer = new WarpPodPathDrawer(sceneObjHolder, this.resourceHolder.arc, this.warpPathPoints, this.color);
+        const resourceHolder = this.modelManager!.resourceHolder;
+        this.pathDrawer = new WarpPodPathDrawer(sceneObjHolder, resourceHolder.arc, this.warpPathPoints, this.color);
     }
 
     private lookForPair(sceneObjHolder: SceneObjHolder): WarpPod | null {

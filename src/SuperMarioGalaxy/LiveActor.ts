@@ -78,11 +78,12 @@ class ActorAnimKeeper {
     }
 
     public static tryCreate(actor: LiveActor): ActorAnimKeeper | null {
-        let bcsv = actor.resourceHolder.arc.findFileData('ActorAnimCtrl.bcsv');
+        const resourceHolder = actor.modelManager!.resourceHolder;
+        let bcsv = resourceHolder.arc.findFileData('ActorAnimCtrl.bcsv');
 
         // Super Mario Galaxy 2 puts these assets in a subfolder.
         if (bcsv === null)
-            bcsv = actor.resourceHolder.arc.findFileData('ActorInfo/ActorAnimCtrl.bcsv');
+            bcsv = resourceHolder.arc.findFileData('ActorInfo/ActorAnimCtrl.bcsv');
 
         if (bcsv === null)
             return null;
@@ -756,10 +757,6 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
     }
 
     // TODO(jstpierre): Remove these accessors.
-    public get resourceHolder(): ResourceHolder {
-        return this.modelManager!.resourceHolder;
-    }
-
     public get modelInstance(): J3DModelInstance | null {
         return this.modelManager !== null ? this.modelManager.modelInstance : null;
     }
@@ -892,7 +889,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
 
     public initActorCollisionParts(sceneObjHolder: SceneObjHolder, name: string, hitSensor: HitSensor, resourceHolder: ResourceHolder | null, hostMtx: mat4 | null, scaleType: CollisionScaleType): void {
         if (resourceHolder === null)
-            resourceHolder = this.resourceHolder;
+            resourceHolder = this.modelManager!.resourceHolder;
 
         this.collisionParts = createCollisionPartsFromLiveActor(sceneObjHolder, this, name, hitSensor, hostMtx, scaleType, resourceHolder);
         invalidateCollisionPartsForActor(sceneObjHolder, this);
