@@ -690,7 +690,7 @@ class Main {
 
     private _loadTimeState(sceneDescId: string): void {
         const timeStateKey = `TimeState/${sceneDescId}`;
-        const timeStateStr = this.saveManager.loadState(timeStateKey);
+        const timeStateStr = this.saveManager.loadStateFromLocation(timeStateKey, SaveStateLocation.SessionStorage);
         if (!timeStateStr)
             return;
 

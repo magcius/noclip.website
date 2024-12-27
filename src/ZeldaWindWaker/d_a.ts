@@ -4766,11 +4766,12 @@ class d_a_npc_ls1 extends fopNpc_npc_c {
         { anmIdx: 0, nextPrmIdx: 1, morf: 8.0, playSpeed: 1.0, loopMode: 2, },
         { anmIdx: 5, nextPrmIdx: 1, morf: 8.0, playSpeed: 1.0, loopMode: 2, },
         { anmIdx: 10, nextPrmIdx: 2, morf: 8.0, playSpeed: 1.0, loopMode: 2, },
-        { anmIdx: 5, nextPrmIdx: 1, morf: 8.0, playSpeed: 1.0, loopMode: 2, }];
+        { anmIdx: 5, nextPrmIdx: 1, morf: 8.0, playSpeed: 1.0, loopMode: 2, }
+    ];
 
     public override subload(globals: dGlobals): cPhs__Status {
         const success = this.decideType(this.parameters);
-        if (!success) { return cPhs__Status.Error; }
+        if (!success) { return cPhs__Status.Stop; }
 
         let status = dComIfG_resLoad(globals, this.arcName);
         if (status !== cPhs__Status.Complete)

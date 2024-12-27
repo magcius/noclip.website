@@ -574,8 +574,7 @@ class TActorAdaptor extends TAdaptor {
 
         if (reverse) { frame = maxFrame - frame; }
         if (maxFrame > 0.0) {
-            const func = FVB.TFunctionValue.toFunction_outside(outsideType);
-            frame = func(frame, maxFrame);
+            frame = FVB.TFunctionValue.calcFunction_outside(outsideType, frame, maxFrame);
         }
         return frame;
     }
@@ -1135,12 +1134,12 @@ namespace FVB {
 
         public setIdNo(idNo: number) { this.idNo = idNo; }
 
-        public static toFunction_outside(type: EExtrapolateType): (frame: number, maxFrame: number) => number {
+        public static calcFunction_outside(type: EExtrapolateType, frame: number, maxFrame: number) {
             switch (type) {
-                case EExtrapolateType.Raw: return (f, m) => f;
-                case EExtrapolateType.Repeat: return (f, m) => { f = f % m; return f < 0 ? f + m : f; }
-                case EExtrapolateType.Turn: return (f, m) => { f %= (2 * m); if (f < 0) f += m; return f > m ? 2 * m - f : f };
-                case EExtrapolateType.Clamp: return (f, m) => clamp(f, 0.0, m);
+                case EExtrapolateType.Raw: return frame;
+                case EExtrapolateType.Repeat: frame = frame % maxFrame; return frame < 0 ? frame + maxFrame : frame;
+                case EExtrapolateType.Turn: frame %= (2 * maxFrame); if (frame < 0) frame += maxFrame; return frame > maxFrame ? 2 * maxFrame - frame : frame;
+                case EExtrapolateType.Clamp: return clamp(frame, 0.0, maxFrame);
             }
         }
     }
@@ -1391,8 +1390,8 @@ namespace FVB {
             private extrapolate(progress: number) {
                 let t = progress
                 t -= this.begin;
-                if( t < 0.0 ) { t = FVB.TFunctionValue.toFunction_outside(this.underflow)(t, this.diff); }
-                else if( t >= this.diff) { t = FVB.TFunctionValue.toFunction_outside(this.overflow)(t, this.diff); }
+                if (t < 0.0) { t = FVB.TFunctionValue.calcFunction_outside(this.underflow, t, this.diff); }
+                else if (t >= this.diff) { t = FVB.TFunctionValue.calcFunction_outside(this.overflow, t, this.diff); }
                 t += this.begin;
                 return t;
             }
@@ -1920,7 +1919,6 @@ export class TControl {
     }
 
     public forward(frameCount: number): boolean {
-        ;
         let andStatus = 0xFF;
         let orStatus = 0;
 
@@ -1969,7 +1967,7 @@ export class TControl {
     }
 
     public createMessageObject(blockObj: TBlockObject): STBObject | null {
-        if( blockObj.type == 'JMSG' ) {
+        if (blockObj.type == 'JMSG') {
             const adaptor = new TMessageAdaptor(this.msgControl);
             const obj = new TMessageObject(this, blockObj, adaptor);
     

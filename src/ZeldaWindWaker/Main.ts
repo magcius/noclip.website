@@ -328,7 +328,6 @@ export class dCamera_c {
 
         if (!this.frozen) {
             // Update the "player position" from the camera.
-            // TODO: Move this out of here
             vec3.copy(globals.playerPosition, this.cameraPos);
         }
     }

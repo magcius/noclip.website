@@ -230,7 +230,7 @@ export class dDemo_actor_c extends TActor {
                 case 4: btpId = this.stbData.getInt32(1); break;
                 case 5: btpId = this.stbData.getInt32(2); break;
                 case 6: btpId = this.stbData.getInt32(2); break;
-                default: 
+                default:
                     return null;
             }
         }
@@ -242,7 +242,7 @@ export class dDemo_actor_c extends TActor {
             if ((btpId & 0x10000) != 0) {
                 arcName = globals.roomCtrl.demoArcName!;
             }
-            
+
             const btp = globals.resCtrl.getObjectIDRes(ResType.Btp, arcName, btpId);
             this.textAnimFrameMax = this.stbData.getInt16(6);
             return btp;
@@ -254,29 +254,29 @@ export class dDemo_actor_c extends TActor {
     }
 
     public getBtkData(globals: dGlobals, arcName: string): TTK1 | null {
-            if (!(this.flags & EDemoActorFlags.HasData)) {
+        if (!(this.flags & EDemoActorFlags.HasData)) {
+            return null;
+        }
+
+        let btkId;
+        switch(this.stbDataId) {
+            case 2: btkId = this.stbData.getInt16(4); break;
+            case 5: btkId = this.stbData.getInt32(6); break;
+            case 6: btkId = this.stbData.getInt32(6); break;
+            default:
                 return null;
-            }
-            
-            let btkId;
-            switch(this.stbDataId) {
-                case 2: btkId = this.stbData.getInt16(4); break;
-                case 5: btkId = this.stbData.getInt32(6); break;
-                case 6: btkId = this.stbData.getInt32(6); break;
-                default: 
-                    return null;
-            }
-        
-            if (btkId == this.btkId) {
-                return null;
-            }
-        
-            this.btkId = btkId;
-            if ((btkId & 0x10000) != 0) {
-                arcName = globals.roomCtrl.demoArcName!;
-            }
-            
-            return globals.resCtrl.getObjectIDRes(ResType.Btk, arcName, btkId);
+        }
+
+        if (btkId == this.btkId) {
+            return null;
+        }
+
+        this.btkId = btkId;
+        if ((btkId & 0x10000) != 0) {
+            arcName = globals.roomCtrl.demoArcName!;
+        }
+
+        return globals.resCtrl.getObjectIDRes(ResType.Btk, arcName, btkId);
     }
 
     public override JSGGetName() { return this.name; }
@@ -323,7 +323,7 @@ export class dDemo_actor_c extends TActor {
 
     public override JSGSetShape(id: number): void {
         this.shapeId = id;
-        this.flags |= EDemoActorFlags.HasShape
+        this.flags |= EDemoActorFlags.HasShape;
     }
 
     public override JSGSetAnimation(id: number): void {
@@ -489,7 +489,7 @@ export class dDemo_manager_c {
 }
 
 /**
- * Called by Actor update functions to update their data from the demo version of the actor. 
+ * Called by Actor update functions to update their data from the demo version of the actor.
  */
 export function dDemo_setDemoData(globals: dGlobals, dtFrames: number, actor: fopAc_ac_c, flagMask: number,
     morf: mDoExt_McaMorf | null = null, arcName: string | null = null) {
