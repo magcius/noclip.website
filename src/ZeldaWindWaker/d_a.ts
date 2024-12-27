@@ -5762,8 +5762,11 @@ class d_a_title extends fopAc_ac_c {
     private bckShip = new mDoExt_bckAnm();
     private bpkShip = new mDoExt_btpAnm();
 
-    private frameCounter = -50;
-    private offsetX = 0.0;
+    private anmFrameCounter = 0
+    private delayFrameCounter = 120;
+    private shipFrameCounter = -50;
+    private enterMode = 0;
+    private shipOffsetX: number;
 
     public override subload(globals: dGlobals): cPhs__Status {
         const status = dComIfG_resLoad(globals, d_a_title.arcName);
@@ -5778,10 +5781,21 @@ class d_a_title extends fopAc_ac_c {
 
     public override execute(globals: dGlobals, deltaTimeFrames: number): void {
         // TODO: 
-        this.frameCounter += deltaTimeFrames;
+        if (this.delayFrameCounter > 0) {
+            this.delayFrameCounter -= deltaTimeFrames;
+    
+            if (this.delayFrameCounter == 0) {
+                // TODO: mDoAud_seStart(JA_SE_TITLE_WIND);
+            }
+        } else {
+            this.calc_2d_alpha(deltaTimeFrames);
+        }
 
-        // calc_2d_alpha()
-        this.bpkShip.frameCtrl.setFrame(1);
+        if (this.enterMode == 2) {
+            this.enterMode = 3;
+        } else if (this.enterMode == 3) {
+            this.shipFrameCounter += deltaTimeFrames;
+        }
         
         this.bckShip.play(deltaTimeFrames);
         this.set_mtx();
@@ -5877,7 +5891,7 @@ class d_a_title extends fopAc_ac_c {
 
     private set_mtx() {
         vec3.set(this.modelShip.baseScale, 0.9, 0.9, 0.9);
-        mat4.fromTranslation(this.modelShip.modelMatrix, [0, 0, 1000]);
+        mat4.fromTranslation(this.modelShip.modelMatrix, [0 + this.shipOffsetX, 0, 1000]);
         mDoMtx_ZXYrotM(this.modelShip.modelMatrix, [0, 0x4000, 0]); 
 
         // pos.set(m094 + attr().field_0x00, attr().field_0x04, 0.0f);
@@ -5897,6 +5911,30 @@ class d_a_title extends fopAc_ac_c {
         // mDoMtx_stack_c::transS(pos.x, pos.y, -10010.0f);
         // mDoMtx_stack_c::ZXYrotM(0, -0x8000, 0);
         // mModel_kirari->setBaseTRMtx(mDoMtx_stack_c::get());
+    }
+
+    private calc_2d_alpha(deltaTimeFrames: number) {
+        this.anmFrameCounter += deltaTimeFrames;
+        if (this.anmFrameCounter >= 200 && this.enterMode == 0) {
+            this.enterMode = 1;
+        }
+
+        if (this.enterMode == 0) {
+            if (this.shipFrameCounter < 0) {
+                this.shipFrameCounter += deltaTimeFrames;
+            }
+            // TODO:
+        } else {
+            // TODO:
+        }
+
+        if (this.shipFrameCounter <= 0) {
+            this.shipOffsetX = (this.shipFrameCounter * this.shipFrameCounter) * -0.1;
+            this.bpkShip.frameCtrl.setFrame(100.0 + (this.shipFrameCounter * 2));
+        } else {
+            this.shipOffsetX = (this.shipFrameCounter * this.shipFrameCounter) * 0.1;
+            this.bpkShip.frameCtrl.setFrame(100.0 - (this.shipFrameCounter * 2));
+        }
     }
 }
 
