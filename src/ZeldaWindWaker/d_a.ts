@@ -38,6 +38,7 @@ import { fopAcIt_JudgeByID, fopAcM_create, fopAcM_prm_class, fopAc_ac_c } from "
 import { cPhs__Status, fGlobals, fpcPf__Register, fpcSCtRq_Request, fpc_bs__Constructor } from "./framework.js";
 import { mDoExt_McaMorf, mDoExt_bckAnm, mDoExt_brkAnm, mDoExt_btkAnm, mDoExt_btpAnm, mDoExt_modelEntryDL, mDoExt_modelUpdateDL } from "./m_do_ext.js";
 import { MtxPosition, MtxTrans, calc_mtx, mDoMtx_XYZrotM, mDoMtx_XrotM, mDoMtx_YrotM, mDoMtx_YrotS, mDoMtx_ZXYrotM, mDoMtx_ZrotM, mDoMtx_ZrotS, quatM } from "./m_do_mtx.js";
+import { J2DGrafContext } from "../Common/JSYSTEM/J2Dv1.js";
 
 // Framework'd actors
 
@@ -5787,6 +5788,22 @@ class d_a_title extends fopAc_ac_c {
     }
 
     public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        let oldViewMtx = globals.camera.viewFromWorldMatrix;
+        let oldProjMtx = globals.camera.clipFromViewMatrix;
+
+        // From mDoGph_Painter(). Set up new view and ortho proj matrices. 
+        // TODO: This should be set by the Opa2D draw list
+        const adjustedWidth = 480 * viewerInput.backbufferWidth / viewerInput.backbufferHeight;
+        mat4.fromTranslation(scratchMat4a, [adjustedWidth * 0.5, 240, 1000]);
+        mDoMtx_ZrotM(scratchMat4a, -0x8000);
+        globals.camera.viewFromWorldMatrix = scratchMat4a;
+        const orthoCtx = new J2DGrafContext(globals.sceneContext.device, -9.0, -21.0, adjustedWidth + 10, 503.0, 100000.0, -100000.0);
+        globals.camera.clipFromViewMatrix = orthoCtx.sceneParams.u_Projection;
+        mat4.mul(globals.camera.clipFromWorldMatrix, globals.camera.clipFromViewMatrix, globals.camera.viewFromWorldMatrix);
+        globals.camera.frustum.updateClipFrustum(globals.camera.clipFromWorldMatrix, globals.camera.clipSpaceNearZ);
+        const template = renderInstManager.pushTemplate();
+        orthoCtx.setOnRenderInst(template);
+
         // TODO: This should be a global immediate light set by the Opa2D draw list
         const light = this.modelShip.getGXLightReference(0);
         light.Position = [-35000.0, 0.0, -30000.0];
@@ -5798,6 +5815,13 @@ class d_a_title extends fopAc_ac_c {
             this.bpkShip.entry(this.modelShip);
             mDoExt_modelUpdateDL(globals, this.modelShip, renderInstManager, globals.dlst.ui);
         }
+
+        // TODO: This should be set by the Opa2D draw list
+        globals.camera.viewFromWorldMatrix = oldViewMtx;
+        globals.camera.clipFromViewMatrix = oldProjMtx;
+        mat4.mul(globals.camera.clipFromWorldMatrix, globals.camera.clipFromViewMatrix, globals.camera.viewFromWorldMatrix);
+        globals.camera.frustum.updateClipFrustum(globals.camera.clipFromWorldMatrix, globals.camera.clipSpaceNearZ);
+        renderInstManager.popTemplate();
     }
 
     private proc_init2D(globals: dGlobals) {

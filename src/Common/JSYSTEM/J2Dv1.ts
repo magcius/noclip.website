@@ -67,7 +67,7 @@ const enum J2DUVBinding {
 };
 
 export class J2DGrafContext {
-    private sceneParams = new SceneParams();
+    public sceneParams = new SceneParams();
     public aspectRatio: number;
 
     constructor(device: GfxDevice, x: number, y: number, private w: number, private h: number, far: number, near: number) {
