@@ -987,6 +987,11 @@ class DemoDesc extends SceneDesc implements Viewer.SceneDesc {
             fopAcM_create(globals.frameworkGlobals, dProcName_e.d_a_py_lk, 0, null, globals.mStayNo, null, null, 0xFF, -1);
         }
 
+        // From dStage_playerInit
+        if (this.stbFilename == 'title.stb') {
+            fopAcM_create(globals.frameworkGlobals, dProcName_e.d_a_title, 0, null, globals.mStayNo, null, null, 0xFF, -1);
+        }
+
         // noclip modification: ensure all the actors are created before we load the cutscene
         await new Promise(resolve => { (function waitForActors(){
             if (globals.frameworkGlobals.ctQueue.length === 0) return resolve(null);

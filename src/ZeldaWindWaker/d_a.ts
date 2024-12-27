@@ -5753,6 +5753,22 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
     }
 }
 
+class d_a_title extends fopAc_ac_c {
+    public static PROCESS_NAME = dProcName_e.d_a_title;
+
+    public override subload(globals: dGlobals): cPhs__Status {
+        return cPhs__Status.Next;
+    }
+
+    public override execute(globals: dGlobals, deltaTimeFrames: number): void {
+        
+    }
+
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        
+    }
+}
+
 interface constructor extends fpc_bs__Constructor {
     PROCESS_NAME: dProcName_e;
 }
@@ -5787,4 +5803,5 @@ export function d_a__RegisterConstructors(globals: fGlobals): void {
     R(d_a_npc_ls1);
     R(d_a_npc_zl1);
     R(d_a_py_lk);
+    R(d_a_title);
 }
