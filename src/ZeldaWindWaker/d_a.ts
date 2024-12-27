@@ -1,6 +1,6 @@
 
 import { ReadonlyMat4, ReadonlyVec3, mat4, quat, vec2, vec3 } from "gl-matrix";
-import { TransparentBlack, colorCopy, colorFromRGBA8, colorNewCopy, colorNewFromRGBA8 } from "../Color.js";
+import { TransparentBlack, White, colorCopy, colorFromRGBA8, colorNewCopy, colorNewFromRGBA8 } from "../Color.js";
 import { calcANK1JointAnimationTransform } from "../Common/JSYSTEM/J3D/J3DGraphAnimator.js";
 import { J3DModelData, J3DModelInstance, buildEnvMtx } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
 import { JointTransformInfo, LoopMode, TRK1, TTK1 } from "../Common/JSYSTEM/J3D/J3DLoader.js";
@@ -5787,10 +5787,16 @@ class d_a_title extends fopAc_ac_c {
     }
 
     public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        // TODO: This should be a global immediate light set by the Opa2D draw list
+        const light = this.modelShip.getGXLightReference(0);
+        light.Position = [-35000.0, 0.0, -30000.0];
+        light.Direction = [0, 0, 0];
+        light.Color = White;
+
         if (this.bpkShip.frameCtrl.getFrame() != 0.0) {
             this.bckShip.entry(this.modelShip);
             this.bpkShip.entry(this.modelShip);
-            mDoExt_modelUpdateDL(globals, this.modelShip, renderInstManager, viewerInput, globals.dlst.ui);
+            mDoExt_modelUpdateDL(globals, this.modelShip, renderInstManager, globals.dlst.ui);
         }
     }
 
