@@ -248,6 +248,7 @@ export class dCamera_c {
         mat4.mul(this.clipFromWorldMatrix, this.clipFromViewMatrix, this.viewFromWorldMatrix);
         getMatrixTranslation(this.cameraPos, this.worldFromViewMatrix);
         getMatrixAxisZ(this.cameraFwd, this.worldFromViewMatrix);
+        vec3.negate(this.cameraFwd, this.cameraFwd);
         this.frustum.updateClipFrustum(this.clipFromWorldMatrix, this.clipSpaceNearZ);
     }
 
