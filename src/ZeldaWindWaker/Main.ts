@@ -17,36 +17,36 @@ import { J3DModelInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase.js';
 import * as JPA from '../Common/JSYSTEM/JPA.js';
 import { BTIData } from '../Common/JSYSTEM/JUTTexture.js';
 import { dfRange } from '../DebugFloaters.js';
+import { Frustum } from '../Geometry.js';
 import { MathConstants, getMatrixAxisZ, getMatrixTranslation, projectionMatrixForFrustum, range } from '../MathHelpers.js';
 import { SceneContext } from '../SceneBase.js';
 import { TextureMapping } from '../TextureHolder.js';
+import { projectionMatrixConvertClipSpaceNearZ } from '../gfx/helpers/ProjectionHelpers.js';
 import { setBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
+import { projectionMatrixReverseDepth } from '../gfx/helpers/ReversedDepthHelpers.js';
 import { GfxClipSpaceNearZ, GfxDevice, GfxFormat, GfxRenderPass, GfxTexture, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { GfxrAttachmentSlot, GfxrRenderTargetDescription } from '../gfx/render/GfxRenderGraph.js';
 import { GfxRenderInstList, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
-import { GXRenderHelperGfx, SceneParams, calcLODBias, fillSceneParamsData } from '../gx/gx_render.js';
+import { GX_Program } from '../gx/gx_material.js';
+import { GXRenderHelperGfx, SceneParams, calcLODBias, fillSceneParamsData, ub_SceneParamsBufferSize } from '../gx/gx_render.js';
 import { FlowerPacket, GrassPacket, TreePacket } from './Grass.js';
 import { LegacyActor__RegisterFallbackConstructor } from './LegacyActor.js';
 import { dDlst_2DStatic_c, d_a__RegisterConstructors } from './d_a.js';
 import { d_a_sea } from './d_a_sea.js';
 import { dBgS } from './d_bg.js';
+import { EDemoCamFlags, EDemoMode, dDemo_manager_c } from './d_demo.js';
 import { dDlst_list_Set, dDlst_list_c } from './d_drawlist.js';
 import { dKankyo_create, dKy__RegisterConstructors, dKy_setLight, dScnKy_env_light_c } from './d_kankyo.js';
 import { dKyw__RegisterConstructors } from './d_kankyo_wether.js';
 import { dPa_control_c } from './d_particle.js';
+import { Placename, PlacenameState, dPn__update, d_pn__RegisterConstructors } from './d_place_name.js';
 import { dProcName_e } from './d_procname.js';
 import { ResType, dRes_control_c } from './d_resorce.js';
 import { dStage_dt_c_roomLoader, dStage_dt_c_roomReLoader, dStage_dt_c_stageInitLoader, dStage_dt_c_stageLoader, dStage_roomControl_c, dStage_roomStatus_c, dStage_stageDt_c } from './d_stage.js';
 import { WoodPacket } from './d_wood.js';
 import { fopAcM_create, fopAcM_searchFromName, fopAc_ac_c } from './f_op_actor.js';
 import { cPhs__Status, fGlobals, fopDw_Draw, fopScn, fpcCt_Handler, fpcLy_SetCurrentLayer, fpcM_Management, fpcPf__Register, fpcSCtRq_Request, fpc_pc__ProfileList } from './framework.js';
-import { dDemo_manager_c, EDemoCamFlags, EDemoMode } from './d_demo.js';
-import { d_pn__RegisterConstructors, Placename, PlacenameState, dPn__update } from './d_place_name.js';
-import { GX_Program } from '../gx/gx_material.js';
-import { Frustum } from '../Geometry.js';
-import { projectionMatrixReverseDepth } from '../gfx/helpers/ReversedDepthHelpers.js';
-import { projectionMatrixConvertClipSpaceNearZ } from '../gfx/helpers/ProjectionHelpers.js';
 
 type SymbolData = { Filename: string, SymbolName: string, Data: ArrayBufferSlice };
 type SymbolMapData = { SymbolData: SymbolData[] };
@@ -595,9 +595,8 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
 
         mat4.copy(sceneParams.u_Projection, globals.camera.clipFromViewMatrix);
         sceneParams.u_SceneTextureLODBias = calcLODBias(viewerInput.backbufferWidth, viewerInput.backbufferHeight);
-        let offs = template.getUniformBufferOffset(GX_Program.ub_SceneParams);
-        const d = template.mapUniformBufferF32(GX_Program.ub_SceneParams);
-        fillSceneParamsData(d, offs, sceneParams);
+        const d = template.allocateUniformBufferF32(GX_Program.ub_SceneParams, ub_SceneParamsBufferSize);
+        fillSceneParamsData(d, 0, sceneParams);
 
         this.extraTextures.prepareToRender(device);
 

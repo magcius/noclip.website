@@ -1,20 +1,20 @@
+
 import { mat4, vec3 } from 'gl-matrix';
 import { GfxClipSpaceNearZ, GfxDevice } from '../gfx/platform/GfxPlatform.js';
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription, GfxrRenderTargetID } from '../gfx/render/GfxRenderGraph.js';
-import { TDDraw } from "../SuperMarioGalaxy/DDraw.js";
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import * as GX from '../gx/gx_enum.js';
 import * as GX_Material from '../gx/gx_material.js';
+import { DrawParams, GXMaterialHelperGfx, GXRenderHelperGfx, MaterialParams, SceneParams, calcLODBias, fillSceneParamsData, fillSceneParamsDataOnTemplate, ub_SceneParamsBufferSize } from '../gx/gx_render.js';
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder.js';
-import { DrawParams, GXMaterialHelperGfx, MaterialParams, fillSceneParamsDataOnTemplate, SceneParams, fillSceneParamsData, GXRenderHelperGfx, calcLODBias } from '../gx/gx_render.js';
 import { getMatrixAxisZ } from '../MathHelpers.js';
+import { TDDraw } from "../SuperMarioGalaxy/DDraw.js";
 
-import { ObjectRenderContext } from './objects.js';
-import { SceneRenderContext, SFARenderLists, setGXMaterialOnRenderInst } from './render.js';
-import { vecPitch } from './util.js';
-import { getCamPos } from './util.js';
-import { World } from './world.js';
 import { projectionMatrixConvertClipSpaceNearZ } from '../gfx/helpers/ProjectionHelpers.js';
+import { ObjectRenderContext } from './objects.js';
+import { SFARenderLists, SceneRenderContext, setGXMaterialOnRenderInst } from './render.js';
+import { getCamPos, vecPitch } from './util.js';
+import { World } from './world.js';
 
 const materialParams = new MaterialParams();
 const drawParams = new DrawParams();
@@ -50,17 +50,14 @@ export class Sky {
         if (tex === null || tex === undefined)
             return;
 
-        // Call renderHelper.pushTemplateRenderInst (not renderInstManager.pushTemplateRenderInst)
-        // to obtain a local SceneParams buffer
-        const template = renderHelper.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplate();
 
         // Setup to draw in clip space
         mat4.identity(scratchSceneParams.u_Projection);
         scratchSceneParams.u_SceneTextureLODBias = calcLODBias(sceneCtx.viewerInput.backbufferWidth, sceneCtx.viewerInput.backbufferHeight);
         projectionMatrixConvertClipSpaceNearZ(scratchSceneParams.u_Projection, device.queryVendorInfo().clipSpaceNearZ, GfxClipSpaceNearZ.NegativeOne);
-        let offs = template.getUniformBufferOffset(GX_Material.GX_Program.ub_SceneParams);
-        const d = template.mapUniformBufferF32(GX_Material.GX_Program.ub_SceneParams);
-        fillSceneParamsData(d, offs, scratchSceneParams);
+        const d = template.allocateUniformBufferF32(GX_Material.GX_Program.ub_SceneParams, ub_SceneParamsBufferSize);
+        fillSceneParamsData(d, 0, scratchSceneParams);
 
         materialParams.m_TextureMapping[0].gfxTexture = tex.gfxTexture;
         materialParams.m_TextureMapping[0].gfxSampler = tex.gfxSampler;

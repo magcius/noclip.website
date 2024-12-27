@@ -1,29 +1,29 @@
 
-//@ts-ignore
-import program_glsl from './program.glsl';
-import * as Viewer from '../viewer.js';
-import * as Tex from './tex.js';
-import { GfxBufferUsage, GfxDevice, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxFormat, GfxBuffer, GfxInputLayout, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxTextureDimension, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxCullMode, GfxProgram, GfxMegaStateDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform.js";
 import { mat4 } from "gl-matrix";
-import { GfxRenderInstManager, makeSortKeyOpaque, GfxRendererLayer, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager.js";
-import { DeviceProgram } from "../Program.js";
-import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2, fillVec4 } from "../gfx/helpers/UniformBufferHelpers.js";
-import { ModelTreeNode, ModelTreeLeaf, ModelTreeGroup, PropertyType } from "./map_shape.js";
-import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
-import { RSPOutput, Vertex } from "./f3dex2.js";
-import { assert, nArray, assertExists, setBitFlagEnabled } from "../util.js";
-import { TextureHolder, LoadedTexture, TextureMapping } from "../TextureHolder.js";
-import { computeViewSpaceDepthFromWorldSpaceAABB } from "../Camera.js";
-import { AABB } from "../Geometry.js";
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import { getImageFormatString } from "../BanjoKazooie/f3dex.js";
+import { computeViewSpaceDepthFromWorldSpaceAABB } from "../Camera.js";
 import { TextFilt } from '../Common/N64/Image.js';
+import { translateCM } from '../Common/N64/RDP.js';
+import { calcTextureScaleForShift } from '../Common/N64/RSP.js';
+import { AABB } from "../Geometry.js";
+import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers.js';
 import { reverseDepthForDepthOffset } from '../gfx/helpers/ReversedDepthHelpers.js';
-import { calcTextureScaleForShift } from '../Common/N64/RSP.js';
-import { translateCM } from '../Common/N64/RDP.js';
 import { convertToCanvas } from '../gfx/helpers/TextureConversionHelpers.js';
-import ArrayBufferSlice from '../ArrayBufferSlice.js';
+import { fillMatrix4x2, fillMatrix4x3, fillMatrix4x4, fillVec4 } from "../gfx/helpers/UniformBufferHelpers.js";
+import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxMegaStateDescriptor, GfxMipFilterMode, GfxProgram, GfxSampler, GfxTexFilterMode, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
+import { GfxRendererLayer, GfxRenderInstManager, makeSortKeyOpaque, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager.js";
+import { DeviceProgram } from "../Program.js";
+import { LoadedTexture, TextureHolder, TextureMapping } from "../TextureHolder.js";
+import { assert, assertExists, nArray, setBitFlagEnabled } from "../util.js";
+import * as Viewer from '../viewer.js';
+import { RSPOutput, Vertex } from "./f3dex2.js";
+import { ModelTreeGroup, ModelTreeLeaf, ModelTreeNode, PropertyType } from "./map_shape.js";
+//@ts-ignore
+import program_glsl from './program.glsl';
+import * as Tex from './tex.js';
 
 class PaperMario64Program extends DeviceProgram {
     public static a_Position = 0;
@@ -195,26 +195,24 @@ export class BackgroundBillboardRenderer {
         this.textureHolder.fillTextureMapping(this.textureMappings[0], this.textureName);
     }
 
-    public prepareToRender(renderInstManager: GfxRenderInstManager, renderInput: Viewer.ViewerRenderInput): void {
+    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setDrawCount(3);
         renderInst.sortKey = makeSortKeyOpaque(GfxRendererLayer.BACKGROUND, this.gfxProgram.ResourceUniqueId);
         renderInst.setVertexInput(null, null, null);
         renderInst.setBindingLayouts(backgroundBillboardBindingLayouts);
         renderInst.setGfxProgram(this.gfxProgram);
-        renderInst.allocateUniformBuffer(BackgroundBillboardProgram.ub_Params, 4);
 
         // Set our texture bindings.
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMappings);
 
-        // Upload new buffer data.
-        let offs = renderInst.getUniformBufferOffset(BackgroundBillboardProgram.ub_Params);
-        const d = renderInst.mapUniformBufferF32(BackgroundBillboardProgram.ub_Params);
+        const d = renderInst.allocateUniformBufferF32(BackgroundBillboardProgram.ub_Params, 4);
+        let offs = 0;
 
         // Extract yaw
-        const view = renderInput.camera.viewMatrix;
+        const view = viewerInput.camera.viewMatrix;
         const o = Math.atan2(-view[2], view[0]) / (Math.PI * 2) * 4;
-        const aspect = renderInput.backbufferWidth / renderInput.backbufferHeight;
+        const aspect = viewerInput.backbufferWidth / viewerInput.backbufferHeight;
 
         offs += fillVec4(d, offs, aspect, -1, o, 0);
         renderInstManager.submitRenderInst(renderInst);

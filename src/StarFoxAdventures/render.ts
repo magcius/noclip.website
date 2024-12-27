@@ -1,3 +1,4 @@
+
 import { mat4, vec3 } from 'gl-matrix';
 import { CameraController } from '../Camera.js';
 import { colorNewFromRGBA8, White } from '../Color.js';
@@ -7,7 +8,7 @@ import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrPass, GfxrPassScope, GfxrRend
 import { GfxRenderInst, GfxRenderInstList, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import * as GX from '../gx/gx_enum.js';
 import * as GX_Material from '../gx/gx_material.js';
-import { DrawParams, fillSceneParamsData, fillSceneParamsDataOnTemplate, GXMaterialHelperGfx, GXRenderHelperGfx, MaterialParams, SceneParams } from '../gx/gx_render.js';
+import { DrawParams, fillSceneParamsData, GXMaterialHelperGfx, GXRenderHelperGfx, MaterialParams, SceneParams, ub_SceneParamsBufferSize } from '../gx/gx_render.js';
 import { TDDraw } from '../SuperMarioGalaxy/DDraw.js';
 import { TextureMapping } from '../TextureHolder.js';
 import { nArray } from '../util.js';
@@ -134,16 +135,13 @@ export class SFARenderer implements Viewer.SceneGfx {
     protected addWorldRenderPassesInner(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext) {}
 
     private renderHeatShimmer(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, mainColorTargetID: GfxrRenderTargetID, sourceColorResolveTextureID: GfxrResolveTextureID, sourceDepthTargetID: GfxrRenderTargetID, sceneCtx: SceneRenderContext) {
-        // Call renderHelper.pushTemplateRenderInst (not renderInstManager)
-        // to obtain a local SceneParams buffer
-        const template = this.renderHelper.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplate();
 
         // Setup to draw in screen space
         mat4.ortho(scratchSceneParams.u_Projection, 0.0, 640.0, 0.0, 480.0, 1.0, 100.0);
         scratchSceneParams.u_SceneTextureLODBias = 0;
-        let offs = template.getUniformBufferOffset(GX_Material.GX_Program.ub_SceneParams);
-        const d = template.mapUniformBufferF32(GX_Material.GX_Program.ub_SceneParams);
-        fillSceneParamsData(d, offs, scratchSceneParams);
+        const d = template.allocateUniformBufferF32(GX_Material.GX_Program.ub_SceneParams, ub_SceneParamsBufferSize);
+        fillSceneParamsData(d, 0, scratchSceneParams);
 
         // Extract pitch
         const cameraFwd = scratchVec0;

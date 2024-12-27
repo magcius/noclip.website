@@ -601,16 +601,14 @@ const sceneParams = new SceneParams();
 export function fillSceneParamsDataOnTemplate(renderInst: GfxRenderInst, viewerInput: Viewer.ViewerRenderInput, customLODBias: number | null = null, sceneParamsScratch = sceneParams): void {
     mat4.copy(sceneParamsScratch.u_Projection, viewerInput.camera.projectionMatrix);
     sceneParams.u_SceneTextureLODBias = customLODBias !== null ? customLODBias : calcLODBias(viewerInput.backbufferWidth, viewerInput.backbufferHeight);
-    let offs = renderInst.getUniformBufferOffset(GX_Material.GX_Program.ub_SceneParams);
-    const d = renderInst.mapUniformBufferF32(GX_Material.GX_Program.ub_SceneParams);
-    fillSceneParamsData(d, offs, sceneParamsScratch);
+    let d = renderInst.allocateUniformBufferF32(GX_Material.GX_Program.ub_SceneParams, ub_SceneParamsBufferSize);
+    fillSceneParamsData(d, 0, sceneParamsScratch);
 }
 
 export class GXRenderHelperGfx extends GfxRenderHelper {
     public override pushTemplateRenderInst(): GfxRenderInst {
         const template = super.pushTemplateRenderInst();
         template.setBindingLayouts(gxBindingLayouts);
-        template.allocateUniformBuffer(GX_Material.GX_Program.ub_SceneParams, ub_SceneParamsBufferSize);
         return template;
     }
 }

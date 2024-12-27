@@ -320,9 +320,7 @@ export class GfxRenderInst {
 
     /**
      * Allocates {@param wordCount} words from the uniform buffer and assigns it to the buffer
-     * slot at index {@param bufferIndex}. As a convenience, this also directly returns the same
-     * offset into the uniform buffer, in words, that would be returned by a subsequent call to
-     * {@see getUniformBufferOffset}.
+     * slot at index {@param bufferIndex}, and returns the index into the buffer.
      */
     public allocateUniformBuffer(bufferIndex: number, wordCount: number): number {
         assert(this._bindingDescriptors[0].bindingLayout.numUniformBuffers <= this._dynamicUniformBufferByteOffsets.length);
@@ -331,7 +329,7 @@ export class GfxRenderInst {
 
         const dst = this._bindingDescriptors[0].uniformBufferBindings[bufferIndex];
         dst.wordCount = wordCount;
-        return this.getUniformBufferOffset(bufferIndex);
+        return this._dynamicUniformBufferByteOffsets[bufferIndex] >>> 2;
     }
 
     /**
@@ -341,14 +339,6 @@ export class GfxRenderInst {
     public allocateUniformBufferF32(bufferIndex: number, wordCount: number): Float32Array {
         const wordOffset = this.allocateUniformBuffer(bufferIndex, wordCount);
         return this._uniformBuffer.mapBufferF32().subarray(wordOffset);
-    }
-
-    /**
-     * Returns the offset into the uniform buffer, in words, that is assigned to the buffer slot
-     * at index {@param bufferIndex}, to be used with e.g. {@see mapUniformBufferF32}.
-     */
-    public getUniformBufferOffset(bufferIndex: number) {
-        return this._dynamicUniformBufferByteOffsets[bufferIndex] >>> 2;
     }
 
     /**

@@ -95,8 +95,8 @@ class BackgroundBillboardRenderer {
         renderInst.setGfxProgram(this.gfxProgram);
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMappings);
 
-        let offs = renderInst.allocateUniformBuffer(BackgroundBillboardProgram.ub_Params, 4);
-        const d = renderInst.mapUniformBufferF32(BackgroundBillboardProgram.ub_Params);
+        const d = renderInst.allocateUniformBufferF32(BackgroundBillboardProgram.ub_Params, 4);
+        let offs = 0;
 
         const aspect = renderInput.backbufferWidth / renderInput.backbufferHeight;
 
