@@ -268,7 +268,7 @@ class d_a_ep extends fopAc_ac_c {
         if (this.type === 0 || this.type === 3) {
             settingTevStruct(globals, LightType.BG0, this.pos, this.tevStr);
             setLightTevColorType(globals, this.model, this.tevStr, globals.camera);
-            mDoExt_modelUpdateDL(globals, this.model, renderInstManager, viewerInput);
+            mDoExt_modelUpdateDL(globals, this.model, renderInstManager);
 
             // TODO(jstpierre): ga
         }
@@ -512,7 +512,7 @@ class d_a_bg extends fopAc_ac_c {
             settingTevStruct(globals, LightType.BG0 + i, null, this.bgTevStr[i]!);
             setLightTevColorType(globals, this.bgModel[i]!, this.bgTevStr[i]!, globals.camera);
             // this is actually mDoExt_modelEntryDL
-            mDoExt_modelUpdateDL(globals, this.bgModel[i]!, renderInstManager, viewerInput);
+            mDoExt_modelUpdateDL(globals, this.bgModel[i]!, renderInstManager);
         }
 
         const roomNo = this.parameters;
@@ -626,7 +626,7 @@ class d_a_vrbox extends fopAc_ac_c {
         mat4.copy(this.model.modelMatrix, calc_mtx);
 
         dKy_setLight__OnModelInstance(envLight, this.model, globals.camera);
-        mDoExt_modelUpdateDL(globals, this.model, renderInstManager, viewerInput, globals.dlst.sky);
+        mDoExt_modelUpdateDL(globals, this.model, renderInstManager, globals.dlst.sky);
     }
 }
 
@@ -743,17 +743,17 @@ class d_a_vrbox2 extends fopAc_ac_c {
 
         if (this.usoUmi !== null) {
             mat4.copy(this.usoUmi.modelMatrix, calc_mtx);
-            mDoExt_modelUpdateDL(globals, this.usoUmi, renderInstManager, viewerInput, globals.dlst.sky);
+            mDoExt_modelUpdateDL(globals, this.usoUmi, renderInstManager, globals.dlst.sky);
         }
 
         if (this.kasumiMae !== null) {
             mat4.copy(this.kasumiMae.modelMatrix, calc_mtx);
-            mDoExt_modelUpdateDL(globals, this.kasumiMae, renderInstManager, viewerInput, globals.dlst.sky);
+            mDoExt_modelUpdateDL(globals, this.kasumiMae, renderInstManager, globals.dlst.sky);
         }
 
         calc_mtx[13] += 100.0;
         mat4.copy(this.backCloud.modelMatrix, calc_mtx);
-        mDoExt_modelUpdateDL(globals, this.backCloud, renderInstManager, viewerInput, globals.dlst.sky);
+        mDoExt_modelUpdateDL(globals, this.backCloud, renderInstManager, globals.dlst.sky);
     }
 }
 
@@ -1086,7 +1086,7 @@ class d_a_obj_Ygush00 extends fopAc_ac_c {
 
         this.btkAnm.entry(this.model);
         this.bckAnm.entry(this.model);
-        mDoExt_modelUpdateDL(globals, this.model, renderInstManager, viewerInput);
+        mDoExt_modelUpdateDL(globals, this.model, renderInstManager);
     }
 }
 
@@ -1174,7 +1174,7 @@ class d_a_obj_lpalm extends fopAc_ac_c {
 
         settingTevStruct(globals, LightType.BG0, this.pos, this.tevStr);
         setLightTevColorType(globals, this.model, this.tevStr, globals.camera);
-        mDoExt_modelUpdateDL(globals, this.model, renderInstManager, viewerInput);
+        mDoExt_modelUpdateDL(globals, this.model, renderInstManager);
     }
 }
 
@@ -1260,7 +1260,7 @@ class d_a_obj_zouK extends fopAc_ac_c {
         setLightTevColorType(globals, this.model, this.tevStr, globals.camera);
         this.setEffectMtx(globals, this.pos, 0.5);
         this.bckAnm.entry(this.model);
-        mDoExt_modelUpdateDL(globals, this.model, renderInstManager, viewerInput);
+        mDoExt_modelUpdateDL(globals, this.model, renderInstManager);
     }
 }
 
@@ -1314,7 +1314,7 @@ class d_a_swhit0 extends fopAc_ac_c {
         this.model.setColorOverride(ColorKind.C2, d_a_swhit0.color2Normal);
         this.bckAnm.entry(this.model);
         this.btkAnm.entry(this.model);
-        mDoExt_modelUpdateDL(globals, this.model, renderInstManager, viewerInput);
+        mDoExt_modelUpdateDL(globals, this.model, renderInstManager);
     }
 }
 
@@ -1511,8 +1511,7 @@ class dDlst_2DObject_c extends dDlst_2DBase_c {
         super();
     }
 
-    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        const device = globals.modelCache.device;
+    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager): void {
         const renderInst = renderInstManager.newRenderInst();
 
         globals.quadStatic.setOnRenderInst(renderInst);
@@ -1552,8 +1551,7 @@ class dDlst_2DNumber_c extends dDlst_2DBase_c {
         return cPhs__Status.Complete;
     }
 
-    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        const device = globals.modelCache.device;
+    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager): void {
         const template = renderInstManager.pushTemplate();
 
         globals.quadStatic.setOnRenderInst(template);
@@ -1967,24 +1965,24 @@ class d_a_mgameboard extends fopAc_ac_c {
 
         settingTevStruct(globals, LightType.Actor, this.pos, this.tevStr);
         setLightTevColorType(globals, this.boardModel, this.tevStr, globals.camera);
-        mDoExt_modelUpdateDL(globals, this.boardModel, renderInstManager, viewerInput);
+        mDoExt_modelUpdateDL(globals, this.boardModel, renderInstManager);
 
         if (!this.minigameActive)
             return;
 
         setLightTevColorType(globals, this.cursorModel, this.tevStr, globals.camera);
-        mDoExt_modelUpdateDL(globals, this.cursorModel, renderInstManager, viewerInput, globals.dlst.ui);
+        mDoExt_modelUpdateDL(globals, this.cursorModel, renderInstManager, globals.dlst.ui);
 
         for (let i = 0; i < this.hitModelCount; i++) {
             const model = this.hitModels[i];
             setLightTevColorType(globals, model, this.tevStr, globals.camera);
-            mDoExt_modelUpdateDL(globals, model, renderInstManager, viewerInput, globals.dlst.ui);
+            mDoExt_modelUpdateDL(globals, model, renderInstManager, globals.dlst.ui);
         }
 
         for (let i = 0; i < this.missModelCount; i++) {
             const model = this.missModels[i];
             setLightTevColorType(globals, model, this.tevStr, globals.camera);
-            mDoExt_modelUpdateDL(globals, model, renderInstManager, viewerInput, globals.dlst.ui);
+            mDoExt_modelUpdateDL(globals, model, renderInstManager, globals.dlst.ui);
         }
 
         // Show ships after the game ends.
@@ -1992,19 +1990,19 @@ class d_a_mgameboard extends fopAc_ac_c {
             for (let i = 0; i < this.minigame.ships.length; i++) {
                 const model = this.shipModels[i];
                 setLightTevColorType(globals, model, this.tevStr, globals.camera);
-                mDoExt_modelUpdateDL(globals, model, renderInstManager, viewerInput, globals.dlst.ui);
+                mDoExt_modelUpdateDL(globals, model, renderInstManager, globals.dlst.ui);
             }
         }
 
         renderInstManager.setCurrentList(globals.dlst.ui[1]);
         for (let i = 0; i < this.bullet.length; i++)
-            this.bullet[i].draw(globals, renderInstManager, viewerInput);
+            this.bullet[i].draw(globals, renderInstManager);
         for (let i = 0; i < this.squid.length; i++)
-            this.squid[i].draw(globals, renderInstManager, viewerInput);
-        this.scoreNum.draw(globals, renderInstManager, viewerInput);
-        this.highscoreNum.draw(globals, renderInstManager, viewerInput);
-        this.highscoreLabel.draw(globals, renderInstManager, viewerInput);
-        this.highscorePad.draw(globals, renderInstManager, viewerInput);
+            this.squid[i].draw(globals, renderInstManager);
+        this.scoreNum.draw(globals, renderInstManager);
+        this.highscoreNum.draw(globals, renderInstManager);
+        this.highscoreLabel.draw(globals, renderInstManager);
+        this.highscorePad.draw(globals, renderInstManager);
     }
 }
 
@@ -2280,7 +2278,7 @@ class dCloth_packet_c {
         renderInstManager.submitRenderInst(renderInst);
     }
 
-    public cloth_draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    public cloth_draw(globals: dGlobals, renderInstManager: GfxRenderInstManager): void {
         /*
         const ctx = getDebugOverlayCanvas2D();
 
@@ -2382,8 +2380,8 @@ class d_a_sie_flag extends fopAc_ac_c {
         settingTevStruct(globals, LightType.BG0, this.pos, this.tevStr);
         settingTevStruct(globals, LightType.Actor, this.pos, this.clothTevStr);
         setLightTevColorType(globals, this.model, this.tevStr, globals.camera);
-        mDoExt_modelUpdateDL(globals, this.model, renderInstManager, viewerInput);
-        this.cloth.cloth_draw(globals, renderInstManager, viewerInput);
+        mDoExt_modelUpdateDL(globals, this.model, renderInstManager);
+        this.cloth.cloth_draw(globals, renderInstManager);
     }
 
     public override execute(globals: dGlobals, deltaTimeFrames: number): void {
@@ -2468,8 +2466,8 @@ class d_a_tori_flag extends fopAc_ac_c {
         settingTevStruct(globals, LightType.BG0, this.pos, this.tevStr);
         settingTevStruct(globals, LightType.Actor, this.pos, this.clothTevStr);
         setLightTevColorType(globals, this.model, this.tevStr, globals.camera);
-        mDoExt_modelUpdateDL(globals, this.model, renderInstManager, viewerInput);
-        this.cloth.cloth_draw(globals, renderInstManager, viewerInput);
+        mDoExt_modelUpdateDL(globals, this.model, renderInstManager);
+        this.cloth.cloth_draw(globals, renderInstManager);
     }
 
     public override execute(globals: dGlobals, deltaTimeFrames: number): void {
@@ -3188,7 +3186,7 @@ class d_a_kamome extends fopAc_ac_c {
 
         settingTevStruct(globals, LightType.Actor, this.pos, this.tevStr);
         setLightTevColorType(globals, this.morf.model, this.tevStr, globals.camera);
-        this.morf.entryDL(globals, renderInstManager, viewerInput);
+        this.morf.entryDL(globals, renderInstManager);
 
         // drawWorldSpaceLine(getDebugOverlayCanvas2D(), globals.camera.clipFromWorldMatrix, this.pos, this.targetPos, Green, 2);
         // drawWorldSpacePoint(getDebugOverlayCanvas2D(), globals.camera.clipFromWorldMatrix, this.pos, Magenta, 8);
@@ -3447,7 +3445,7 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
             // update bck
         }
 
-        mDoExt_modelUpdateDL(globals, this.model, renderInstManager, viewerInput);
+        mDoExt_modelUpdateDL(globals, this.model, renderInstManager);
 
         if (this.isSv()) {
             // rope, rope end
@@ -3975,7 +3973,7 @@ class d_a_oship extends fopAc_ac_c implements ModeFuncExec<d_a_oship_mode> {
         setLightTevColorType(globals, this.model, this.tevStr, globals.camera);
         const specScale = 0.75;
         dDlst_texSpecmapST(this.effectMtx, globals, this.pos, this.tevStr, specScale);
-        mDoExt_modelEntryDL(globals, this.model, renderInstManager, viewerInput);
+        mDoExt_modelEntryDL(globals, this.model, renderInstManager);
 
         /*
         drawWorldSpaceText(getDebugOverlayCanvas2D(), globals.camera.clipFromWorldMatrix, this.pos, `PId: ${this.processId}`, 0, White, { outline: 2 });
@@ -4251,7 +4249,7 @@ class d_a_obj_flame extends fopAc_ac_c {
         if (this.brkAnm !== null)
             this.brkAnm.entry(this.model);
 
-        mDoExt_modelUpdateDL(globals, this.model, renderInstManager, viewerInput, globals.dlst.wetherEffectSet);
+        mDoExt_modelUpdateDL(globals, this.model, renderInstManager, globals.dlst.wetherEffectSet);
     }
 
     private mode_wait(globals: dGlobals): void {
@@ -4707,13 +4705,13 @@ export class d_a_ff extends fopAc_ac_c {
             MtxTrans(this.pos, false);
             scaleMatrix(calc_mtx, calc_mtx, this.flyScale);
             mat4.copy(this.model[0].modelMatrix, calc_mtx);
-            mDoExt_modelUpdateDL(globals, this.model[0], renderInstManager, viewerInput, globals.dlst.effect);
+            mDoExt_modelUpdateDL(globals, this.model[0], renderInstManager, globals.dlst.effect);
 
             if (this.glowScale > 0.01) {
                 mDoMtx_YrotM(calc_mtx, this.liveTimer * 0x0100);
                 scaleMatrix(calc_mtx, calc_mtx, this.glowScale, this.glowScale * this.glowScaleY, this.glowScale);
                 mat4.copy(this.model[1].modelMatrix, calc_mtx);
-                mDoExt_modelUpdateDL(globals, this.model[1], renderInstManager, viewerInput, globals.dlst.effect);
+                mDoExt_modelUpdateDL(globals, this.model[1], renderInstManager, globals.dlst.effect);
             }
         }
     }
@@ -4803,13 +4801,13 @@ class d_a_npc_ls1 extends fopNpc_npc_c {
         // this.btkAnim.entry(this.morf.model, this.btkFrame);
         // this.btpAnim.entry(this.morf.model, this.btpFrame);
 
-        this.morf.entryDL(globals, renderInstManager, viewerInput);
+        this.morf.entryDL(globals, renderInstManager);
 
-        mDoExt_modelEntryDL(globals, this.handModel, renderInstManager, viewerInput);
+        mDoExt_modelEntryDL(globals, this.handModel, renderInstManager);
 
         if (this.itemModel) {
             setLightTevColorType(globals, this.itemModel, this.tevStr, globals.camera);
-            mDoExt_modelEntryDL(globals, this.itemModel, renderInstManager, viewerInput);
+            mDoExt_modelEntryDL(globals, this.itemModel, renderInstManager);
         }
 
         this.drawShadow();
@@ -5036,7 +5034,7 @@ class d_a_npc_zl1 extends fopNpc_npc_c {
         if (this.btpAnim.anm) this.btpAnim.entry(this.morf.model);
         if (this.btkAnim.anm) this.btkAnim.entry(this.morf.model);
 
-        this.morf.entryDL(globals, renderInstManager, viewerInput);
+        this.morf.entryDL(globals, renderInstManager);
     }
 
     public override execute(globals: dGlobals, deltaTimeFrames: number): void {
@@ -5303,15 +5301,15 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
             this.model.setShapeVisible(LkModelShape.Buckle, false);
 
             setLightTevColorType(globals, this.modelKatsura, this.tevStr, globals.camera);
-            mDoExt_modelEntryDL(globals, this.modelKatsura, renderInstManager, viewerInput);
+            mDoExt_modelEntryDL(globals, this.modelKatsura, renderInstManager);
         }
 
         if (this.equippedItem === LkEquipItem.Sword) {
             setLightTevColorType(globals, this.equippedItemModel!, this.tevStr, globals.camera);
-            mDoExt_modelEntryDL(globals, this.equippedItemModel!, renderInstManager, viewerInput);
+            mDoExt_modelEntryDL(globals, this.equippedItemModel!, renderInstManager);
 
             setLightTevColorType(globals, this.modelSwordHilt, this.tevStr, globals.camera);
-            mDoExt_modelEntryDL(globals, this.modelSwordHilt, renderInstManager, viewerInput);
+            mDoExt_modelEntryDL(globals, this.modelSwordHilt, renderInstManager);
         }
 
         // TODO:
@@ -5326,7 +5324,7 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
         if (this.anmBtk.anm) this.anmBtk.entry(this.model);
 
         setLightTevColorType(globals, this.model, this.tevStr, globals.camera);
-        mDoExt_modelEntryDL(globals, this.model, renderInstManager, viewerInput);
+        mDoExt_modelEntryDL(globals, this.model, renderInstManager);
     }
 
     private playerInit(globals: dGlobals) {

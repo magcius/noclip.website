@@ -1105,9 +1105,6 @@ export class J3DModelInstance {
             if (cullFrustum === null || disableCulling || jnt1.joints[i].bbox.isEmpty()) {
                 this.jointVisibility[i] = true;
             } else {
-                // Frustum cull.
-                // Note to future self: joint bboxes do *not* contain their child joints (see: trees in Super Mario Sunshine).
-                // You *cannot* use PARTIAL_INTERSECTION to optimize frustum culling.
                 bboxScratch.transform(jnt1.joints[i].bbox, jointToWorldMatrix);
                 this.jointVisibility[i] = cullFrustum.contains(bboxScratch);
             }

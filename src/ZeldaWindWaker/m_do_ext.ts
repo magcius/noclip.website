@@ -86,7 +86,7 @@ export class mDoExt_bvaAnm extends mDoExt_baseAnm<VAF1> {
     }
 }
 
-export function mDoExt_modelEntryDL(globals: dGlobals, modelInstance: J3DModelInstance, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, drawListSet: dDlst_list_Set | null = null): void {
+export function mDoExt_modelEntryDL(globals: dGlobals, modelInstance: J3DModelInstance, renderInstManager: GfxRenderInstManager, drawListSet: dDlst_list_Set | null = null): void {
     if (!modelInstance.visible)
         return;
 
@@ -104,18 +104,21 @@ export function mDoExt_modelEntryDL(globals: dGlobals, modelInstance: J3DModelIn
     const camera = globals.camera;
     modelInstance.calcView(camera.viewFromWorldMatrix, camera.frustum);
 
+    if (!modelInstance.isAnyShapeVisible())
+        return;
+
     renderInstManager.setCurrentList(drawListSet[0]);
     modelInstance.drawOpa(renderInstManager, camera.clipFromViewMatrix);
     renderInstManager.setCurrentList(drawListSet[1]);
     modelInstance.drawXlu(renderInstManager, camera.clipFromViewMatrix);
 }
 
-export function mDoExt_modelUpdateDL(globals: dGlobals, modelInstance: J3DModelInstance, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, drawListSet: dDlst_list_Set | null = null): void {
+export function mDoExt_modelUpdateDL(globals: dGlobals, modelInstance: J3DModelInstance, renderInstManager: GfxRenderInstManager, drawListSet: dDlst_list_Set | null = null): void {
     if (!modelInstance.visible)
         return;
 
     modelInstance.calcAnim();
-    mDoExt_modelEntryDL(globals, modelInstance, renderInstManager, viewerInput, drawListSet);
+    mDoExt_modelEntryDL(globals, modelInstance, renderInstManager, drawListSet);
 }
 
 const scratchTransform = new JointTransformInfo();
@@ -228,8 +231,8 @@ export class mDoExt_McaMorf implements JointMatrixCalc {
         this.model.jointMatrixCalc = this;
     }
 
-    public entryDL(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, drawListSet: dDlst_list_Set | null = null): void {
-        mDoExt_modelEntryDL(globals, this.model, renderInstManager, viewerInput);
+    public entryDL(globals: dGlobals, renderInstManager: GfxRenderInstManager, drawListSet: dDlst_list_Set | null = null): void {
+        mDoExt_modelEntryDL(globals, this.model, renderInstManager, drawListSet);
     }
 }
 

@@ -2812,7 +2812,7 @@ export class d_thunder extends kankyo_class {
 
         this.btkAnm.entry(this.model, this.btkTime);
         this.brkAnm.entry(this.model);
-        mDoExt_modelUpdateDL(globals, this.model, renderInstManager, viewerInput);
+        mDoExt_modelUpdateDL(globals, this.model, renderInstManager);
     }
 
     public override execute(globals: dGlobals, deltaTimeFrames: number): void {

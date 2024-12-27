@@ -288,6 +288,6 @@ export class mDoExt_morf_c implements JointMatrixCalc {
     }
 
     public entryDL(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, drawListSet: dDlst_list_Set | null = null): void {
-        mDoExt_modelEntryDL(globals, this.model, renderInstManager, viewerInput);
+        mDoExt_modelEntryDL(globals, this.model, renderInstManager, viewerInput, drawListSet);
     }
 }

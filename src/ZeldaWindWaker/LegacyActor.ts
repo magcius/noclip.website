@@ -20,7 +20,7 @@ import { dProcName_e } from './d_procname.js';
 import { ResAssetType, ResEntry, ResType } from './d_resorce.js';
 import { fopAcM_prm_class, fopAc_ac_c } from './f_op_actor.js';
 import { cPhs__Status, fGlobals, fpcPf__RegisterFallback } from './framework.js';
-import { mDoExt_McaMorf, mDoExt_modelEntryDL } from './m_do_ext.js';
+import { mDoExt_McaMorf, mDoExt_modelEntryDL, mDoExt_modelUpdateDL } from './m_do_ext.js';
 import { MtxTrans, calc_mtx, mDoMtx_ZXYrotM } from './m_do_mtx.js';
 import { WindWakerRenderer, ZWWExtraTextures, dGlobals } from "./Main.js";
 
@@ -1813,7 +1813,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
 
 // Special-case actors
 
-export class BMDObjectRenderer {
+class BMDObjectRenderer {
     public visible = true;
     public modelMatrix: mat4 = mat4.create();
     public lightTevColorType = LightType.Actor;
@@ -1851,13 +1851,6 @@ export class BMDObjectRenderer {
         this.modelInstance.setMaterialColorWriteEnabled(materialName, v);
     }
 
-    private setExtraTextures(extraTextures: ZWWExtraTextures): void {
-        extraTextures.fillExtraTextures(this.modelInstance);
-
-        for (let i = 0; i < this.childObjects.length; i++)
-            this.childObjects[i].setExtraTextures(extraTextures);
-    }
-
     public prepareToRender(globals: dGlobals, morf: mDoExt_McaMorf | null, device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         if (!this.visible)
             return;
@@ -1879,10 +1872,10 @@ export class BMDObjectRenderer {
 
         if (morf) {
             morf.calc();
-            morf.entryDL(globals, renderInstManager, viewerInput);
+            morf.entryDL(globals, renderInstManager);
         } else {
-            this.setExtraTextures(globals.renderer.extraTextures);
-            this.modelInstance.prepareToRender(device, renderInstManager, viewerInput);
+            this.modelInstance.animationController.setTimeInMilliseconds(viewerInput.time);
+            mDoExt_modelUpdateDL(globals, this.modelInstance, renderInstManager);
         }
 
         for (let i = 0; i < this.childObjects.length; i++)
