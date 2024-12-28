@@ -13,7 +13,7 @@ import { dGlobals } from "./Main.js";
 import { cPhs__Status } from "./framework.js";
 import { cBgD_t } from "./d_bg.js";
 import { NamedArrayBufferSlice } from "../DataFetcher.js";
-import { BLO, SCRN } from "../Common/JSYSTEM/J2Dv1.js";
+import { BLO, ResourceResolver, SCRN } from "../Common/JSYSTEM/J2Dv1.js";
 
 export interface DZSChunkHeader {
     type: string;
@@ -113,7 +113,18 @@ export class dRes_control_c {
     public getResByID<T extends ResType>(resType: T, arcName: string, resID: number, resList: dRes_info_c[]): ResAssetType<T> {
         const resInfo = assertExists(this.findResInfo(arcName, resList));
         return resInfo.getResByID(resType, resID);
-    }    
+    }
+    
+    public getResResolver(arcName: string): ResourceResolver {
+        return (resType: string, resName: string) => {
+            switch(resType) {
+                case 'TIMG': return this.getObjectResByName(ResType.Bti, arcName, resName);
+                case 'TLUT': console.warn('TLUT resource references not yet supported'); debugger; return null;
+                case 'FONT': console.warn('FONT resource references not yet supported'); debugger; return null;
+                default: return null;
+            }
+        }
+    }
 
     public mountRes(device: GfxDevice, cache: GfxRenderCache, arcName: string, archive: JKRArchive, resList: dRes_info_c[]): void {
         if (this.findResInfo(arcName, resList) !== null)

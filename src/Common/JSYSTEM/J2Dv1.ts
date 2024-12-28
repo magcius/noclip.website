@@ -13,7 +13,7 @@ import { GfxClipSpaceNearZ, GfxDevice } from "../../gfx/platform/GfxPlatform.js"
 import { computeModelMatrixT, projectionMatrixForCuboid } from "../../MathHelpers.js";
 import { projectionMatrixConvertClipSpaceNearZ } from "../../gfx/helpers/ProjectionHelpers.js";
 import { TSDraw } from "../../SuperMarioGalaxy/DDraw.js";
-import { BTIData } from "./JUTTexture.js";
+import { BTI, BTIData } from "./JUTTexture.js";
 import { GXMaterialBuilder } from "../../gx/GXMaterialBuilder.js";
 import { mat4, vec2, vec4 } from "gl-matrix";
 import { GfxRenderCache } from "../../gfx/render/GfxRenderCache.js";
@@ -23,6 +23,9 @@ const materialParams = new MaterialParams();
 const drawParams = new DrawParams();
 
 const scratchMat = mat4.create();
+
+// TODO: Find a better home for this
+export type ResourceResolver = (resType: string, resName: string) => any | null;
 
 interface ResRef {
     refType: number;
@@ -316,6 +319,12 @@ export class J2DPane {
             computeModelMatrixT(this.drawMtx, this.drawPos[0], this.drawPos[1], 0);
         }
     }
+
+    protected resolveReferences(resolver: ResourceResolver) {
+        for(let child of this.children) {
+            child.resolveReferences(resolver);
+        }
+    }
 }
 //#endregion
 
@@ -329,10 +338,7 @@ export class J2DPicture extends J2DPane {
 
     constructor(data: PAN1, private cache: GfxRenderCache, parent: J2DPane | null) {
         super(data, cache, parent);
-        // @TODO: If type > 4, load the image on construction
-        if (this.data.timg.refType !== 0 && this.data.timg.refType !== 2) { console.warn('Untested J2D feature'); }
 
-        if (this.data.tlut.refType !== 0) { console.warn('Untested J2D feature'); }
         if (this.data.uvBinding !== 15) { console.warn('Untested J2D feature'); }
         if (this.data.flags !== 0) { console.warn('Untested J2D feature'); }
         if (this.data.colorBlack !== 0 || this.data.colorWhite !== 0xFFFFFFFF) { console.warn('Untested J2D feature'); }
@@ -448,6 +454,15 @@ export class J2DPicture extends J2DPane {
         mb.setUsePnMtxIdx(false);
         this.materialHelper = new GXMaterialHelperGfx(mb.finish());
     }
+
+    protected override resolveReferences(resolver: ResourceResolver) {
+        if(this.data.timg.refType > 1) {
+            if (this.data.timg.refType !== 2) { console.warn('Untested J2D feature'); }
+            this.tex = resolver(this.data.timg.resType, this.data.timg.resName);
+            if (this.tex) { this.prepare(); }
+        }
+        assert(this.data.tlut.refType === 0, 'TLUT references currently unsupported');
+    }
 }
 //#endregion
 
@@ -455,9 +470,10 @@ export class J2DPicture extends J2DPane {
 export class J2DScreen extends J2DPane {
     public color: Color
 
-    constructor(data: SCRN, cache: GfxRenderCache) {
+    constructor(data: SCRN, cache: GfxRenderCache, resolver: ResourceResolver) {
         super(data, cache, null);
         this.color = data.color;
+        this.resolveReferences(resolver);
     }
 
     public override draw(renderInstManager: GfxRenderInstManager, viewerRenderInput: ViewerRenderInput, ctx2D: J2DGrafContext, offsetX?: number, offsetY?: number): void {

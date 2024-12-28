@@ -4,7 +4,7 @@ import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import { ViewerRenderInput } from "../viewer.js";
 import { EDemoMode } from "./d_demo.js";
 import { dProcName_e } from "./d_procname.js";
-import { dComIfG_resLoad, ResType } from "./d_resorce.js";
+import { dComIfG_resLoad, dRes_control_c, ResType } from "./d_resorce.js";
 import { cPhs__Status, fGlobals, fopMsgM_Delete, fpc_bs__Constructor, fpcPf__Register, fpcSCtRq_Request, msg_class } from "./framework.js";
 import { dGlobals } from "./Main.js";
 
@@ -103,7 +103,7 @@ export class d_place_name extends msg_class {
             img = new BTIData(globals.sceneContext.device, globals.renderer.renderCache, BTI.parse(imgData, filename).texture);
         }
 
-        this.screen = new J2DScreen(screen, globals.renderer.renderCache);
+        this.screen = new J2DScreen(screen, globals.renderer.renderCache, globals.resCtrl.getResResolver('PName'));
         this.screen.children[0].children[0].data.visible = false;
         this.screen.children[0].children[1].data.visible = false;
         const pic = this.screen.children[0].children[2] as J2DPicture;
