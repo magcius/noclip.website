@@ -38,7 +38,7 @@ import { fopAcIt_JudgeByID, fopAcM_create, fopAcM_prm_class, fopAc_ac_c } from "
 import { cPhs__Status, fGlobals, fpcPf__Register, fpcSCtRq_Request, fpc_bs__Constructor } from "./framework.js";
 import { mDoExt_McaMorf, mDoExt_bckAnm, mDoExt_brkAnm, mDoExt_btkAnm, mDoExt_btpAnm, mDoExt_modelEntryDL, mDoExt_modelUpdateDL } from "./m_do_ext.js";
 import { MtxPosition, MtxTrans, calc_mtx, mDoMtx_XYZrotM, mDoMtx_XrotM, mDoMtx_YrotM, mDoMtx_YrotS, mDoMtx_ZXYrotM, mDoMtx_ZrotM, mDoMtx_ZrotS, quatM } from "./m_do_mtx.js";
-import { J2DGrafContext } from "../Common/JSYSTEM/J2Dv1.js";
+import { J2DGrafContext, J2DScreen } from "../Common/JSYSTEM/J2Dv1.js";
 
 // Framework'd actors
 
@@ -5761,6 +5761,7 @@ class d_a_title extends fopAc_ac_c {
     private modelShip: J3DModelInstance;
     private bckShip = new mDoExt_bckAnm();
     private bpkShip = new mDoExt_brkAnm();
+    private screen: J2DScreen;
 
     private anmFrameCounter = 0
     private delayFrameCounter = 120;
@@ -5835,10 +5836,27 @@ class d_a_title extends fopAc_ac_c {
         mat4.mul(globals.camera.clipFromWorldMatrix, globals.camera.clipFromViewMatrix, globals.camera.viewFromWorldMatrix);
         globals.camera.frustum.updateClipFrustum(globals.camera.clipFromWorldMatrix, globals.camera.clipSpaceNearZ);
         renderInstManager.popTemplate();
+
+        this.screen.draw(renderInstManager, globals.scnPlay.orthoGraf2D);
     }
 
     private proc_init2D(globals: dGlobals) {
-
+        const screenData = globals.resCtrl.getObjectResByName(ResType.Blo, d_a_title.arcName, "title_logo_e.blo");
+        assert(screenData !== null);
+        this.screen = new J2DScreen(screenData, globals.renderer.renderCache, globals.resCtrl.getResResolver(d_a_title.arcName));
+    
+        // m0A0[2] = this.screen->search('pres');
+        // m0A0[3] = this.screen->search('nint');
+        // m0A0[0] = this.screen->search('zeld');
+        // m0A0[1] = this.screen->search('zelj');
+        // m0A0[4] = this.screen->search('eft1');
+        // m0A0[5] = this.screen->search('eft2');
+    
+        // for (s32 i = 0; i < (s32)ARRAY_SIZE(pane); i++) {
+        //     fopMsgM_setPaneData(&pane[i], m0A0[i]);
+        //     fopMsgM_setNowAlpha(&pane[i], 0.0f);
+        //     fopMsgM_setAlpha(&pane[i]);
+        // }
     }
 
     private proc_init3D(globals: dGlobals) {
