@@ -140,7 +140,7 @@ interface PAN1 {
     type: string;
     children: PAN1[];
     visible: boolean;
-    tag: string;
+    tag: string | number;
     x: number;
     y: number;
     w: number;
@@ -161,7 +161,8 @@ function readPAN1Chunk(buffer: ArrayBufferSlice, parent: PAN1 | null): PAN1 {
     const dataCount = view.getUint8(offset + 0);
 
     const visible = !!view.getUint8(offset + 1);
-    const tag = readString(buffer, offset + 4, 4);
+    let tag: string | number = readString(buffer, offset + 4, 4);
+    if(tag == '') tag = view.getUint32(offset + 4);
     const x = view.getInt16(offset + 8);
     const y = view.getInt16(offset + 10);
     const w = view.getInt16(offset + 12);
