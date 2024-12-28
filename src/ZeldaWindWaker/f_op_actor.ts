@@ -7,7 +7,8 @@ import { assert } from "../util.js";
 import { dKy_tevstr_c, dKy_tevstr_init } from "./d_kankyo.js";
 import { dProcName_e } from "./d_procname.js";
 import { base_process_class, cPhs__Status, fGlobals, fopDwTg_DrawQTo, fopDwTg_ToDrawQ, fpcDt_Delete, fpcPc__IsVisible, fpcSCtRq_Request, leafdraw_class } from "./framework.js";
-import { dCamera_c, dGlobals } from "./Main.js";
+import { dGlobals } from "./Main.js";
+import { dCamera_c } from "./d_camera.js";
 
 const scratchVec3a = vec3.create();
 const scratchAABB = new AABB();
