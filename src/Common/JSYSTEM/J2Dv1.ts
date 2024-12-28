@@ -181,9 +181,8 @@ function readPAN1Chunk(buffer: ArrayBufferSlice, parent: PAN1 | null): PAN1 {
 //#endregion Loading/J2Pane
 
 //#region Loading/J2Screen
-export interface SCRN {
-    inf1: INF1;
-    panes: PAN1[];
+export interface SCRN extends PAN1 {
+    color: Color
 }
 
 export class BLO {
@@ -194,7 +193,11 @@ export class BLO {
         const inf1 = readINF1Chunk(j2d.nextChunk('INF1'))
         const panes: PAN1[] = [];
 
-        let parentStack: (PAN1 | null)[] = [null];
+        const screen: SCRN = { parent: null, type: 'SCRN', children: [], visible: true, 
+            x: 0, y: 0, w: inf1.width, h: inf1.height, color: inf1.color, rot: 0, tag: '', basePos: 0, 
+            alpha: inf1.color.a, inheritAlpha: false, offset: 0 };
+
+        let parentStack: (PAN1 | null)[] = [screen];
         let shouldContinue = true;
         while (shouldContinue) {
             const magic = readString(buffer, j2d.offs, 4);
@@ -226,7 +229,7 @@ export class BLO {
             }
         }
 
-        return { inf1, panes };
+        return screen;
     }
 }
 
@@ -453,8 +456,8 @@ export class J2DScreen extends J2DPane {
     public color: Color
 
     constructor(data: SCRN, cache: GfxRenderCache) {
-        super(data.panes[0], cache, null);
-        this.color = data.inf1.color;
+        super(data, cache, null);
+        this.color = data.color;
     }
 
     public override draw(renderInstManager: GfxRenderInstManager, viewerRenderInput: ViewerRenderInput, ctx2D: J2DGrafContext, offsetX?: number, offsetY?: number): void {

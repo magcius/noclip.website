@@ -104,9 +104,9 @@ export class d_place_name extends msg_class {
         }
 
         this.screen = new J2DScreen(screen, globals.renderer.renderCache);
-        this.screen.children[0].data.visible = false;
-        this.screen.children[1].data.visible = false;
-        const pic = this.screen.children[2] as J2DPicture;
+        this.screen.children[0].children[0].data.visible = false;
+        this.screen.children[0].children[1].data.visible = false;
+        const pic = this.screen.children[0].children[2] as J2DPicture;
         pic.setTexture(img);
 
         return cPhs__Status.Complete;
