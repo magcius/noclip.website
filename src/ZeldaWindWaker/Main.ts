@@ -46,7 +46,7 @@ import { ResType, dRes_control_c } from './d_resorce.js';
 import { dStage_dt_c_roomLoader, dStage_dt_c_roomReLoader, dStage_dt_c_stageInitLoader, dStage_dt_c_stageLoader, dStage_roomControl_c, dStage_roomStatus_c, dStage_stageDt_c } from './d_stage.js';
 import { WoodPacket } from './d_wood.js';
 import { fopAcM_create, fopAcM_searchFromName, fopAc_ac_c } from './f_op_actor.js';
-import { cPhs__Status, fGlobals, fopDw_Draw, fopScn, fpcCt_Handler, fpcLy_SetCurrentLayer, fpcM_Management, fpcPf__Register, fpcSCtRq_Request, fpc_pc__ProfileList } from './framework.js';
+import { cPhs__Status, fGlobals, fopDw_Draw, fopScn, fpcCt_Handler, fpcLy_SetCurrentLayer, fpcM_Management, fpcPf__Register, fpcSCtRq_Request, fpc_pc__ProfileList, leafdraw_class } from './framework.js';
 import { J2DGrafContext } from '../Common/JSYSTEM/J2Dv1.js';
 
 type SymbolData = { Filename: string, SymbolName: string, Data: ArrayBufferSlice };
@@ -147,7 +147,7 @@ export class dGlobals {
     // g_dComIfG_gameInfo.mPlay.mpPlayer.mPos
     public playerPosition = vec3.create();
     // g_dComIfG_gameInfo.mPlay.mCameraInfo[0].mpCamera
-    public camera = new dCamera_c();
+    public camera: dCamera_c;
 
     public resCtrl: dRes_control_c;
     // TODO(jstpierre): Remove
@@ -212,7 +212,9 @@ const enum CameraMode {
     Cinematic
 }
 
-export class dCamera_c {
+export class dCamera_c extends leafdraw_class {
+    public static PROCESS_NAME = dProcName_e.d_camera;
+
     public viewFromWorldMatrix = mat4.create(); // aka viewMatrix
     public worldFromViewMatrix = mat4.create(); // aka worldMatrix
     public clipFromWorldMatrix = mat4.create();
@@ -272,8 +274,14 @@ export class dCamera_c {
         this.finishSetup();
     }
 
-    public execute(globals: dGlobals, viewerInput: Viewer.ViewerRenderInput) {
-        this.setupFromCamera(viewerInput.camera);
+    public override load(globals: dGlobals, userData: any): cPhs__Status {
+        globals.camera = this;
+        return cPhs__Status.Next;
+    }
+
+    // Executes after the demo manager and other systems that can modify the camera 
+    public override execute(globals: dGlobals, deltaTimeFrames: number): void {
+        this.setupFromCamera(globals.sceneContext.viewerInput.camera);
 
         // Near/far planes are decided by the stage data.
         const stag = globals.dStage_dt.stag;
@@ -287,7 +295,7 @@ export class dCamera_c {
             this.far *= 2;
 
         // noclip modification: if we're paused, allow noclip camera control during demos
-        const isPaused = viewerInput.deltaTime === 0;
+        const isPaused = globals.sceneContext.viewerInput.deltaTime === 0;
 
         // dCamera_c::Store() sets the camera params if the demo camera is active
         const demoCam = globals.scnPlay.demo.getSystem().getCamera();
@@ -311,7 +319,7 @@ export class dCamera_c {
         // Adapted from dCamera_c::CalcTrimSize()
         // When switching between Cinematic and Regular camera modes (e.g. when pausing a cutscene), 
         // blend the camera parameters smoothly. This accounts for deltaTime, but still works when paused. 
-        const deltaTimeFrames = clamp(viewerInput.deltaTime / 1000 * 30, 0.5, 1);
+        deltaTimeFrames = clamp(deltaTimeFrames, 0.5, 1);
         this.cameraModeBlendVal += (this.cameraMode - this.cameraModeBlendVal) * 0.25 * deltaTimeFrames;
         this.trimHeight = lerp(0, dCamera_c.trimHeightCinematic, this.cameraModeBlendVal);
         this.fovY = lerp(this.fovY, this.demoFov, this.cameraModeBlendVal);
@@ -321,8 +329,8 @@ export class dCamera_c {
         mat4.rotateZ(this.worldFromViewMatrix, this.worldFromViewMatrix, this.roll * MathConstants.DEG_TO_RAD);
 
         // Keep noclip and demo cameras in sync. Ensures that when the user pauses, the camera doesn't snap to an old location
-        mat4.copy(viewerInput.camera.worldMatrix, this.worldFromViewMatrix);
-        viewerInput.camera.worldMatrixUpdated();
+        mat4.copy(globals.sceneContext.viewerInput.camera.worldMatrix, this.worldFromViewMatrix);
+        globals.sceneContext.viewerInput.camera.worldMatrixUpdated();
 
         // Compute updated projection matrix
         const nearY = Math.tan(this.fovY * 0.5) * this.near;
@@ -332,8 +340,8 @@ export class dCamera_c {
         projectionMatrixConvertClipSpaceNearZ(this.clipFromViewMatrix, this.clipSpaceNearZ, GfxClipSpaceNearZ.NegativeOne);
 
         // Scissor setup
-        const trimPx = (this.trimHeight / 480) * viewerInput.backbufferHeight;
-        vec4.set(this.scissor, 0, trimPx, viewerInput.backbufferWidth, viewerInput.backbufferHeight - 2 * trimPx);
+        const trimPx = (this.trimHeight / 480) * globals.sceneContext.viewerInput.backbufferHeight;
+        vec4.set(this.scissor, 0, trimPx, globals.sceneContext.viewerInput.backbufferWidth, globals.sceneContext.viewerInput.backbufferHeight - 2 * trimPx);
 
         this.finishSetup();
 
@@ -341,6 +349,16 @@ export class dCamera_c {
             // Update the "player position" from the camera.
             vec3.copy(globals.playerPosition, this.cameraPos);
         }
+    }
+
+    // Executes before any other draw in other systems 
+    override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        const template = renderInstManager.pushTemplate();
+
+        mat4.copy(sceneParams.u_Projection, globals.camera.clipFromViewMatrix);
+        sceneParams.u_SceneTextureLODBias = calcLODBias(viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+        const d = template.allocateUniformBufferF32(GX_Program.ub_SceneParams, ub_SceneParamsBufferSize);
+        fillSceneParamsData(d, 0, sceneParams);
     }
 
     public applyScissor(pass: GfxRenderPass) {
@@ -596,8 +614,6 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
             }
         }
 
-        globals.camera.execute(globals, viewerInput);
-
         // Not sure exactly where this is ordered...
         dKy_setLight(globals);
 
@@ -605,11 +621,6 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         const renderInstManager = this.renderHelper.renderInstManager;
         if (globals.renderHacks.wireframe)
             template.setMegaStateFlags({ wireframe: true });
-
-        mat4.copy(sceneParams.u_Projection, globals.camera.clipFromViewMatrix);
-        sceneParams.u_SceneTextureLODBias = calcLODBias(viewerInput.backbufferWidth, viewerInput.backbufferHeight);
-        const d = template.allocateUniformBufferF32(GX_Program.ub_SceneParams, ub_SceneParamsBufferSize);
-        fillSceneParamsData(d, 0, sceneParams);
 
         this.extraTextures.prepareToRender(device);
 
@@ -991,6 +1002,7 @@ class SceneDesc {
         const f_pc_profiles = BYML.parse<fpc_pc__ProfileList>(modelCache.getFileData(`f_pc_profiles.crg1_arc`), BYML.FileType.CRG1);
         const framework = new fGlobals(f_pc_profiles);
 
+        fpcPf__Register(framework, dProcName_e.d_camera, dCamera_c);
         fpcPf__Register(framework, dProcName_e.d_s_play, d_s_play);
         dKy__RegisterConstructors(framework);
         dKyw__RegisterConstructors(framework);
@@ -1006,6 +1018,11 @@ class SceneDesc {
         const renderer = new WindWakerRenderer(device, globals);
         context.destroyablePool.push(renderer);
         globals.renderer = renderer;
+
+        // NOTE: The camera must be created before d_s_play, as that determines the draw order and camera must draw first. 
+        // TODO: Use the RCAM/CAMR data from the stage to set the initial camera position
+        const camId = fpcSCtRq_Request(framework, null, dProcName_e.d_camera, null);
+        assert(camId !== null);
 
         const pcId = fpcSCtRq_Request(framework, null, dProcName_e.d_s_play, null);
         assert(pcId !== null);
