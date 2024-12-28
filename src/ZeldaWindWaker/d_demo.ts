@@ -466,20 +466,18 @@ export class dDemo_manager_c {
         this.mode = 0;
     }
 
-    public update(): boolean {
+    public update(deltaTimeFrames: number): boolean {
         if (!this.curFile) {
             return false;
         }
 
-        const dtFrames = this.globals.sceneContext.viewerInput.deltaTime / 1000.0 * 30;
-
         // noclip modification: If a demo is suspended (waiting for the user to interact with a message), just resume
         if (this.control.isSuspended()) { this.control.setSuspend(0); }
 
-        if (this.control.forward(dtFrames)) {
-            this.frame += dtFrames;
+        if (this.control.forward(deltaTimeFrames)) {
+            this.frame += deltaTimeFrames;
             if (!this.control.isSuspended()) {
-                this.frameNoMsg += dtFrames;
+                this.frameNoMsg += deltaTimeFrames;
             }
         } else {
             this.mode = EDemoMode.Ended;

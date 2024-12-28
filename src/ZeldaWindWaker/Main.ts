@@ -900,7 +900,7 @@ class d_s_play extends fopScn {
     }
 
     public override execute(globals: dGlobals, deltaTimeFrames: number): void {
-        this.demo.update();
+        this.demo.update(deltaTimeFrames);
 
         // From d_menu_window::dMs_placenameMove()
         dPn__update(globals);
