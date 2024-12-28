@@ -125,7 +125,7 @@ export class dCamera_c extends leafdraw_class {
             if (demoCam.flags & EDemoCamFlags.HasNearZ) { this.near = demoCam.projNear; }
             if (demoCam.flags & EDemoCamFlags.HasFarZ) { this.far = demoCam.projFar; }
 
-            this.cameraMode = CameraMode.Cinematic;
+            this.cameraMode = (globals.scnPlay.demo.getName() == 'title') ? CameraMode.Default : CameraMode.Cinematic;
             globals.sceneContext.inputManager.isMouseEnabled = false;
         } else {
             this.cameraMode = CameraMode.Default;
