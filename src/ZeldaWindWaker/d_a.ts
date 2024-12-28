@@ -5760,13 +5760,13 @@ class d_a_title extends fopAc_ac_c {
 
     private modelShip: J3DModelInstance;
     private bckShip = new mDoExt_bckAnm();
-    private bpkShip = new mDoExt_btpAnm();
+    private bpkShip = new mDoExt_brkAnm();
 
     private anmFrameCounter = 0
     private delayFrameCounter = 120;
     private shipFrameCounter = -50;
     private enterMode = 0;
-    private shipOffsetX: number;
+    private shipOffsetX: number = 0;
 
     public override subload(globals: dGlobals): cPhs__Status {
         const status = dComIfG_resLoad(globals, d_a_title.arcName);
@@ -5780,7 +5780,6 @@ class d_a_title extends fopAc_ac_c {
     }
 
     public override execute(globals: dGlobals, deltaTimeFrames: number): void {
-        // TODO: 
         if (this.delayFrameCounter > 0) {
             this.delayFrameCounter -= deltaTimeFrames;
     
@@ -5891,7 +5890,7 @@ class d_a_title extends fopAc_ac_c {
 
     private set_mtx() {
         vec3.set(this.modelShip.baseScale, 0.9, 0.9, 0.9);
-        mat4.fromTranslation(this.modelShip.modelMatrix, [0 + this.shipOffsetX, 0, 1000]);
+        mat4.fromTranslation(this.modelShip.modelMatrix, [this.shipOffsetX, 0, 1000]);
         mDoMtx_ZXYrotM(this.modelShip.modelMatrix, [0, 0x4000, 0]); 
 
         // pos.set(m094 + attr().field_0x00, attr().field_0x04, 0.0f);
