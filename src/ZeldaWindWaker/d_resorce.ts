@@ -51,7 +51,7 @@ export type ResAssetType<T extends ResType> =
     T extends ResType.Model ? J3DModelData :
     T extends ResType.Bmt ? J3DModelMaterialData :
     T extends ResType.Bck ? ANK1 :
-    T extends ResType.Bpk ? TPT1 :
+    T extends ResType.Bpk ? TRK1 :
     T extends ResType.Brk ? TRK1 :
     T extends ResType.Btp ? TPT1 :
     T extends ResType.Btk ? TTK1 :
