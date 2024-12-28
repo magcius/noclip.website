@@ -46,7 +46,7 @@ import { ResType, dRes_control_c } from './d_resorce.js';
 import { dStage_dt_c_roomLoader, dStage_dt_c_roomReLoader, dStage_dt_c_stageInitLoader, dStage_dt_c_stageLoader, dStage_roomControl_c, dStage_roomStatus_c, dStage_stageDt_c } from './d_stage.js';
 import { WoodPacket } from './d_wood.js';
 import { fopAcM_create, fopAcM_searchFromName, fopAc_ac_c } from './f_op_actor.js';
-import { cPhs__Status, fGlobals, fopDw_Draw, fopScn, fpcCt_Handler, fpcLy_SetCurrentLayer, fpcM_Management, fpcPf__Register, fpcSCtRq_Request, fpc_pc__ProfileList, leafdraw_class } from './framework.js';
+import { cPhs__Status, fGlobals, fopDwTg_ToDrawQ, fopDw_Draw, fopScn, fpcCt_Handler, fpcLy_SetCurrentLayer, fpcM_Management, fpcPf__Register, fpcSCtRq_Request, fpc_pc__ProfileList, leafdraw_class } from './framework.js';
 import { J2DGrafContext } from '../Common/JSYSTEM/J2Dv1.js';
 
 type SymbolData = { Filename: string, SymbolName: string, Data: ArrayBufferSlice };
@@ -276,6 +276,7 @@ export class dCamera_c extends leafdraw_class {
 
     public override load(globals: dGlobals, userData: any): cPhs__Status {
         globals.camera = this;
+        fopDwTg_ToDrawQ(globals.frameworkGlobals, this, this.drawPriority);
         return cPhs__Status.Next;
     }
 
@@ -1019,11 +1020,6 @@ class SceneDesc {
         context.destroyablePool.push(renderer);
         globals.renderer = renderer;
 
-        // NOTE: The camera must be created before d_s_play, as that determines the draw order and camera must draw first. 
-        // TODO: Use the RCAM/CAMR data from the stage to set the initial camera position
-        const camId = fpcSCtRq_Request(framework, null, dProcName_e.d_camera, null);
-        assert(camId !== null);
-
         const pcId = fpcSCtRq_Request(framework, null, dProcName_e.d_s_play, null);
         assert(pcId !== null);
 
@@ -1033,6 +1029,10 @@ class SceneDesc {
         // Set the stage as the active layer.
         // Normally, all of this would be done in d_scn_play.
         fpcLy_SetCurrentLayer(globals.frameworkGlobals, globals.scnPlay.layer);
+
+        // TODO: Use the RCAM/CAMR data from the stage to set the initial camera position
+        const camId = fpcSCtRq_Request(framework, null, dProcName_e.d_camera, null);
+        assert(camId !== null);
 
         const resCtrl = modelCache.resCtrl;
 
