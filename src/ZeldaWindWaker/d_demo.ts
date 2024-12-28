@@ -450,8 +450,8 @@ export class dDemo_manager_c {
             this.control.transformSetOrigin(originPos, rotY || 0);
         }
 
-        this.frame = 0;
-        this.frameNoMsg = 0;
+        this.frame = startFrame || 0;
+        this.frameNoMsg = startFrame || 0;
         this.curFile = data;
         this.mode = EDemoMode.Playing;
 
