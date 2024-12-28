@@ -332,7 +332,7 @@ export class J2DPane {
 export class J2DPicture extends J2DPane {
     public override data: PIC1;
 
-    private sdraw = new TSDraw(); // TODO: Time to move TSDraw out of Mario Galaxy?
+    private sdraw: TSDraw; // TODO: Time to move TSDraw out of Mario Galaxy?
     private materialHelper: GXMaterialHelperGfx;
     private tex: BTIData | null = null;
 
@@ -352,7 +352,7 @@ export class J2DPicture extends J2DPane {
     }
 
     public override drawSelf(renderInstManager: GfxRenderInstManager, viewerRenderInput: ViewerRenderInput, ctx2D: J2DGrafContext, offsetX: number, offsetY: number): void {
-        if (!this.tex) { return; }
+        if (!this.tex || !this.sdraw) { return; }
 
         renderInstManager.pushTemplate();
         const renderInst = renderInstManager.newRenderInst();
@@ -380,6 +380,8 @@ export class J2DPicture extends J2DPane {
 
     private prepare() {
         assert(!!this.tex);
+        if (this.sdraw) { this.sdraw.destroy(this.cache.device); }
+        this.sdraw = new TSDraw();
 
         let u0, v0, v1, u1;
         const texDimensions = [this.tex.btiTexture.width, this.tex.btiTexture.height];
