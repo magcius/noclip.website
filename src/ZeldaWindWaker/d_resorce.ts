@@ -13,7 +13,7 @@ import { dGlobals } from "./Main.js";
 import { cPhs__Status } from "./framework.js";
 import { cBgD_t } from "./d_bg.js";
 import { NamedArrayBufferSlice } from "../DataFetcher.js";
-import { BLO, ResourceResolver, SCRN } from "../Common/JSYSTEM/J2Dv1.js";
+import { BLO, JUTResType, ResourceResolver, SCRN } from "../Common/JSYSTEM/J2Dv1.js";
 
 export interface DZSChunkHeader {
     type: string;
@@ -115,12 +115,12 @@ export class dRes_control_c {
         return resInfo.getResByID(resType, resID);
     }
     
-    public getResResolver(arcName: string): ResourceResolver {
-        return (resType: string, resName: string) => {
+    public getResResolver(arcName: string): ResourceResolver<JUTResType> {
+        return (resType: JUTResType, resName: string) => {
             switch(resType) {
-                case 'TIMG': return this.getObjectResByName(ResType.Bti, arcName, resName);
-                case 'TLUT': console.warn('TLUT resource references not yet supported'); debugger; return null;
-                case 'FONT': console.warn('FONT resource references not yet supported'); debugger; return null;
+                case JUTResType.TIMG: return this.getObjectResByName(ResType.Bti, arcName, resName);
+                case JUTResType.TLUT: console.warn('TLUT resource references not yet supported'); debugger; return null;
+                case JUTResType.FONT: console.warn('FONT resource references not yet supported'); debugger; return null;
                 default: return null;
             }
         }

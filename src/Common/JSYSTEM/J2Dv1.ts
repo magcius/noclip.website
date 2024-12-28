@@ -3,7 +3,7 @@
 
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { JSystemFileReaderHelper } from "./J3D/J3DLoader.js";
-import { align, assert, assertExists, readString } from "../../util.js";
+import { align, assert, readString } from "../../util.js";
 import { Color, colorNewFromRGBA8 } from "../../Color.js";
 import { GfxRenderInst, GfxRenderInstManager } from "../../gfx/render/GfxRenderInstManager.js";
 import * as GX_Material from '../../gx/gx_material.js';
@@ -24,18 +24,28 @@ const drawParams = new DrawParams();
 
 const scratchMat = mat4.create();
 
+export const enum JUTResType {
+    'TIMG', 'TLUT', 'FONT'
+}
+
+export type JUTResAssetType<T extends JUTResType> =
+    T extends JUTResType.TIMG ? BTIData :
+    T extends JUTResType.TLUT ? null :
+    T extends JUTResType.FONT ? null :
+    unknown;
+
 // TODO: Find a better home for this
-export type ResourceResolver = (resType: string, resName: string) => any | null;
+export type ResourceResolver<T extends JUTResType> = (resType: T, resName: string) => JUTResAssetType<T> | null;
 
 interface ResRef {
     refType: number;
-    resType: string;
+    resType: JUTResType;
     resName: string;
     arcName: string | null;
     _nextOffset: number;
 }
 
-function parseResourceReference(buffer: ArrayBufferSlice, offset: number, resType: string, arcName: string | null): ResRef {
+function parseResourceReference(buffer: ArrayBufferSlice, offset: number, resType: JUTResType, arcName: string | null): ResRef {
     const dataView = buffer.createDataView();
     const refType = dataView.getUint8(offset + 0);
     const nameLen = dataView.getUint8(offset + 1);
@@ -112,8 +122,8 @@ function readPIC1Chunk(buffer: ArrayBufferSlice, parent: PAN1 | null): PIC1 {
     const dataCount = view.getUint8(pane.offset + 0);
     let offset = pane.offset + 1;
 
-    const timg = parseResourceReference(buffer, offset, 'TIMG', null);
-    const tlut = parseResourceReference(buffer, timg._nextOffset, 'TLUT', null);
+    const timg = parseResourceReference(buffer, offset, JUTResType.TIMG, null);
+    const tlut = parseResourceReference(buffer, timg._nextOffset, JUTResType.TLUT, null);
     const binding = view.getUint8(tlut._nextOffset);
     offset = tlut._nextOffset + 1;
 
@@ -335,7 +345,7 @@ export class J2DPane {
         }
     }
 
-    protected resolveReferences(resolver: ResourceResolver) {
+    protected resolveReferences(resolver: ResourceResolver<JUTResType>) {
         for(let child of this.children) {
             child.resolveReferences(resolver);
         }
@@ -472,10 +482,10 @@ export class J2DPicture extends J2DPane {
         this.materialHelper = new GXMaterialHelperGfx(mb.finish());
     }
 
-    protected override resolveReferences(resolver: ResourceResolver) {
+    protected override resolveReferences(resolver: ResourceResolver<JUTResType.TIMG>) {
         if(this.data.timg.refType > 1) {
             if (this.data.timg.refType !== 2) { console.warn('Untested J2D feature'); }
-            this.tex = resolver(this.data.timg.resType, this.data.timg.resName);
+            this.tex = resolver(JUTResType.TIMG, this.data.timg.resName);
             if (this.tex) { this.prepare(); }
         }
         assert(this.data.tlut.refType === 0, 'TLUT references currently unsupported');
@@ -487,7 +497,7 @@ export class J2DPicture extends J2DPane {
 export class J2DScreen extends J2DPane {
     public color: Color
 
-    constructor(data: SCRN, cache: GfxRenderCache, resolver: ResourceResolver) {
+    constructor(data: SCRN, cache: GfxRenderCache, resolver: ResourceResolver<JUTResType>) {
         super(data, cache, null);
         this.color = data.color;
         this.resolveReferences(resolver);
