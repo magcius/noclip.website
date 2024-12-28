@@ -264,6 +264,9 @@ export class J2DPane {
         if (this.data.rot !== 0) { console.warn('Untested J2D feature'); }
     }
 
+    public hide() { this.data.visible = false; }
+    public show() { this.data.visible = true; }
+
     // NOTE: Overwritten by child classes which actually do some rendering, such as J2DPicture
     public drawSelf(renderInstManager: GfxRenderInstManager, viewerRenderInput: ViewerRenderInput, ctx2D: J2DGrafContext, offsetX: number, offsetY: number) { }
 
@@ -297,6 +300,17 @@ export class J2DPane {
                 }
             }
         }
+    }
+    
+    public search(tag: string | number): J2DPane | null {
+        if (this.data.tag === tag) {
+            return this;
+        }
+        for (let child of this.children) {
+            const res = child.search(tag);
+            if (res) { return res; }
+        }
+        return null;
     }
 
     public destroy(device: GfxDevice): void {
@@ -480,6 +494,13 @@ export class J2DScreen extends J2DPane {
 
     public override draw(renderInstManager: GfxRenderInstManager, viewerRenderInput: ViewerRenderInput, ctx2D: J2DGrafContext, offsetX?: number, offsetY?: number): void {
         super.draw(renderInstManager, viewerRenderInput, ctx2D, offsetX, offsetY);
+    }
+
+    public override search(tag: string | number) {
+        if(tag === '' || tag === 0) {
+            return null;
+        }
+        return super.search(tag);
     }
 }
 
