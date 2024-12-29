@@ -88,26 +88,24 @@ export class d_place_name extends msg_class {
         if (status !== cPhs__Status.Complete)
             return status;
 
-        const screen = globals.resCtrl.getObjectRes(ResType.Blo, `PName`, 0x04);
-
-        // The Outset Island image lives inside the arc. All others are loose files in 'res/placename/'
-        let img: BTIData;
-        if (globals.scnPlay.placenameIndex === Placename.OutsetIsland) {
-            img = globals.resCtrl.getObjectRes(ResType.Bti, `PName`, 0x07)
-        } else {
-            const placenameId = (globals.scnPlay.placenameIndex + 1);
-            const filename = `placename/pn_${placenameId.toString().padStart(2, "0")}.bti`; 
-            status = globals.modelCache.requestFileData(filename);
-            if (status !== cPhs__Status.Complete)
-                return status;
-            const imgData = globals.modelCache.getFileData(filename);
-            img = new BTIData(globals.sceneContext.device, globals.renderer.renderCache, BTI.parse(imgData, filename).texture);
-        }
-
-        this.screen = new J2DScreen(screen, globals.renderer.renderCache, globals.resCtrl.getResResolver('PName'));
-
+        const screenData = globals.resCtrl.getObjectRes(ResType.Blo, `PName`, 0x04);
+        this.screen = new J2DScreen(screenData, globals.renderer.renderCache, globals.resCtrl.getResResolver('PName'));
         this.screen.search('blc1')!.hide();
         this.screen.search('blc2')!.hide();
+
+        // The Outset Island image lives inside the PName arc. All others are loose files in 'res/placename/'        
+        if (globals.scnPlay.placenameIndex === Placename.OutsetIsland) {
+            return cPhs__Status.Complete;
+        }
+
+        const placenameId = (globals.scnPlay.placenameIndex + 1);
+        const filename = `placename/pn_${placenameId.toString().padStart(2, "0")}.bti`; 
+        status = globals.modelCache.requestFileData(filename);
+        if (status !== cPhs__Status.Complete)
+            return status;
+        const imgData = globals.modelCache.getFileData(filename);
+        
+        const img = new BTIData(globals.sceneContext.device, globals.renderer.renderCache, BTI.parse(imgData, filename).texture);
         const pic = assertExists(this.screen.search('\0\0pn')) as J2DPicture;
         pic.setTexture(img);
 
