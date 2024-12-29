@@ -209,7 +209,7 @@ class TerrainMaterial extends UnityMaterialInstance {
 class AShortHikeMaterialFactory extends UnityMaterialFactory {
     public createMaterialInstance(runtime: UnityRuntime, materialData: UnityMaterialData): UnityMaterialInstance {
         // TODO(jstpierre): Pull out serialized shader data
-        if (materialData.texturesByName.has('_Splat3'))
+        if (materialData.shaderName?.startsWith('Custom Unlit/Unlit Terrain'))
             return new TerrainMaterial(runtime, materialData);
         else
             return new TempMaterial(runtime, materialData);

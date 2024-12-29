@@ -1,6 +1,6 @@
 
 import { vec2, vec3 } from 'gl-matrix';
-import { UnityAABB, UnityAssetFile, UnityAssetFileObject, UnityChannelInfo, UnityClassID, UnityGLTextureSettings, UnityMaterial, UnityMesh, UnityMeshCompression, UnityPPtr, UnityStreamingInfo, UnitySubMesh, UnityTexture2D, UnityTextureColorSpace, UnityTextureFormat, UnityVersion, UnityVertexFormat } from '../../../rust/pkg/noclip_support';
+import { UnityAABB, UnityAssetFile, UnityAssetFileObject, UnityChannelInfo, UnityClassID, UnityGLTextureSettings, UnityMaterial, UnityMesh, UnityMeshCompression, UnityPPtr, UnityShader, UnityStreamingInfo, UnitySubMesh, UnityTexture2D, UnityTextureColorSpace, UnityTextureFormat, UnityVersion, UnityVertexFormat } from '../../../rust/pkg/noclip_support';
 import ArrayBufferSlice from '../../ArrayBufferSlice.js';
 import { Color, TransparentBlack, colorNewFromRGBA } from '../../Color.js';
 import { DataFetcher } from '../../DataFetcher.js';
@@ -120,6 +120,7 @@ type ResType<T extends UnityAssetResourceType> =
     T extends UnityAssetResourceType.Mesh ? UnityMeshData :
     T extends UnityAssetResourceType.Texture2D ? UnityTexture2DData :
     T extends UnityAssetResourceType.Material ? UnityMaterialData :
+    T extends UnityAssetResourceType.Shader ? UnityShaderData :
     never;
 
 type CreateFunc<T> = (assetSystem: UnityAssetSystem, objData: AssetObjectData) => Promise<T | null>;
@@ -136,7 +137,7 @@ export class AssetFile {
     private promiseCache = new Map<BigInt, Promise<Destroyable | null>>();
     public dataOffset: bigint = BigInt(0);
 
-    constructor(private path: string, public version: UnityVersion) {
+    constructor(public path: string, public version: UnityVersion) {
     }
 
     private ensureAssetFile(buffer: Uint8Array): void {
@@ -148,7 +149,6 @@ export class AssetFile {
     private doneLoadingHeader(buffer: Uint8Array): void {
         this.ensureAssetFile(buffer);
         this.assetFile.append_metadata_chunk(buffer);
-        console.log(this.path, this.assetFile.get_version_string());
         this.unityObjects = this.assetFile.get_objects();
         for (let i = 0; i < this.unityObjects.length; i++)
             this.unityObjectByFileID.set(this.unityObjects[i].file_id, this.unityObjects[i]);
@@ -213,7 +213,6 @@ export class AssetFile {
     public async fetchObject(pathID: BigInt): Promise<AssetObjectData> {
         if (this.waitForHeaderPromise !== null)
             await this.waitForHeaderPromise;
-
 
         try {
             const obj = assertExists(this.unityObjectByFileID.get(pathID));
@@ -283,6 +282,12 @@ export class AssetFile {
         return new UnityTexture2DData(assetSystem.renderCache, header, data);
     };
 
+    private createShaderData = async (assetSystem: UnityAssetSystem, objData: AssetObjectData): Promise<UnityShaderData> => {
+        const header = rust.UnityShader.create(assetSystem.version, objData.data);
+        const shaderData = new UnityShaderData(objData.location, header);
+        return shaderData;
+    };
+
     private createMaterialData = async (assetSystem: UnityAssetSystem, objData: AssetObjectData): Promise<UnityMaterialData> => {
         const header = rust.UnityMaterial.create(assetSystem.version, objData.data);
         const materialData = new UnityMaterialData(objData.location, header);
@@ -317,6 +322,8 @@ export class AssetFile {
             return this.fetchFromCache(assetSystem, pathID, this.createTexture2DData) as Promise<ResType<T>>;
         else if (type === UnityAssetResourceType.Material)
             return this.fetchFromCache(assetSystem, pathID, this.createMaterialData) as Promise<ResType<T>>;
+        else if (type === UnityAssetResourceType.Shader)
+            return this.fetchFromCache(assetSystem, pathID, this.createShaderData) as Promise<ResType<T>>;
         else
             throw "whoops";
     }
@@ -332,12 +339,43 @@ export class AssetFile {
     }
 }
 
+function pptrToKey(file: AssetFile, p: UnityPPtr): string {
+    return JSON.stringify([file.path, Number(p.path_id)]);
+}
+
 export class UnityAssetSystem {
     private assetFiles = new Map<string, AssetFile>();
+    private shaderPPtrToName = new Map<string, string>();
     public renderCache: GfxRenderCache;
 
     constructor(public device: GfxDevice, private dataFetcher: DataFetcher, private basePath: string, public version: UnityVersion) {
         this.renderCache = new GfxRenderCache(this.device);
+    }
+
+    public async init() {
+        const globalGameManager = this.fetchAssetFile("globalgamemanagers", true);
+        await globalGameManager.waitForHeader();
+        const scriptMapperFileObj = globalGameManager.unityObjects.find(obj => obj.class_id === UnityClassID.ScriptMapper);
+        if (scriptMapperFileObj === undefined) {
+            console.warn('no script mapper found');
+            return;
+        }
+        const scriptMapperPromise = globalGameManager.fetchObject(scriptMapperFileObj.file_id);
+        await this.fetchData();
+        const scriptMapperData = await scriptMapperPromise;
+        const scriptMapper = rust.UnityScriptMapper.create(this.version, scriptMapperData.data);
+        const pptrs = scriptMapper.get_shader_pointers();
+        const shaderNames = scriptMapper.get_shader_names();
+        for (let i = 0; i < pptrs.length; i++) {
+            const assetFile = globalGameManager.getPPtrFile(this, pptrs[i]);
+            this.shaderPPtrToName.set(pptrToKey(assetFile, pptrs[i]), shaderNames[i]);
+        }
+    }
+
+    public getShaderNameFromPPtr(location: AssetLocation, pptr: UnityPPtr): string | undefined {
+        const assetFile = location.file.getPPtrFile(this, pptr);
+        const key = pptrToKey(assetFile, pptr);
+        return this.shaderPPtrToName.get(key);
     }
 
     public async fetchBytes(filename: string, range: Range): Promise<ArrayBufferSlice> {
@@ -713,11 +751,23 @@ export class UnityTexture {
     }
 }
 
+export class UnityShaderData {
+    public name: string;
+
+    constructor(private location: AssetLocation, private header: UnityShader) {
+        this.name = header.name;
+    }
+
+    public destroy(device: GfxDevice): void {}
+}
+
 export class UnityMaterialData {
     public name: string;
     public texturesByName: Map<string, UnityTexture> = new Map();
     public colorsByName: Map<string, Color> = new Map();
     public floatsByName: Map<string, number> = new Map();
+    public shader: UnityShaderData | null = null;
+    public shaderName: string | null = null;
 
     constructor(private location: AssetLocation, private header: UnityMaterial) {
         this.name = this.header.name;
@@ -776,6 +826,13 @@ export class UnityMaterialData {
         for (const name of this.header.get_float_keys()) {
             this.floatsByName.set(name, this.header.get_float_by_key(name)!);
         }
+
+        const shaderPPtr = this.header.shader;
+        this.shader = await assetSystem.fetchResource(UnityAssetResourceType.Shader, this.location, shaderPPtr);
+        const shaderName = assetSystem.getShaderNameFromPPtr(this.location, shaderPPtr);
+        if (shaderName !== undefined) {
+            this.shaderName = shaderName;
+        }
     }
 
     public destroy(device: GfxDevice): void {
@@ -785,7 +842,9 @@ export class UnityMaterialData {
 
 export async function createUnityAssetSystem(context: SceneContext, basePath: string, version: UnityVersion): Promise<UnityAssetSystem> {
     const runtime = await context.dataShare.ensureObject(`UnityAssetSystem/${basePath}`, async () => {
-        return new UnityAssetSystem(context.device, context.dataFetcher, basePath, version);
+        const system = new UnityAssetSystem(context.device, context.dataFetcher, basePath, version);
+        await system.init();
+        return system;
     });
     return runtime;
 }

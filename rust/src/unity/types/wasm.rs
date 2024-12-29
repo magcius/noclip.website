@@ -1,9 +1,11 @@
 use std::collections::HashMap;
 
+use deku::DekuContainerRead;
 use noclip_macros::{FromStructPerField, FromEnumPerVariant, from};
 use wasm_bindgen::prelude::*;
 use deku::{DekuRead, bitvec::BitSlice};
 
+use crate::unity::types::common::CharArray;
 use super::common::{ColorRGBA, Matrix4x4, PPtr, Quaternion, Vec2, Vec3, Vec4, AABB, UnityVersion};
 use super::binary;
 
@@ -23,7 +25,7 @@ macro_rules! define_create {
 }
 
 #[wasm_bindgen(js_name = "UnityPPtr")]
-#[derive(Debug, Copy, Clone)]
+#[derive(PartialEq, Eq, Hash, Debug, Copy, Clone)]
 pub struct WasmFriendlyPPtr {
     pub file_index: u32,
     pub path_id: i64,
@@ -141,6 +143,27 @@ impl Material {
 
     pub fn get_color_by_key(&self, key: &str) -> Option<ColorRGBA> {
         self.colors.get(key).cloned()
+    }
+}
+
+// Note: the actual Shader type is insanely complicated, so we don't want to
+// actually implement a binary reader for it unless we're trying to actually
+// recreate Unity's shader compilation pipeline. Instead, let's just read in the
+// name to be identifiable in noclip.
+#[wasm_bindgen(js_name = "UnityShader", getter_with_clone)]
+#[derive(Debug, Clone)]
+pub struct Shader {
+    pub name: String,
+}
+
+#[wasm_bindgen(js_class = "UnityShader")]
+impl Shader {
+    pub fn create(_version: UnityVersion, data: &[u8]) -> Result<Self, String> {
+        let (_, name) = CharArray::from_bytes((data, 0))
+            .map_err(|err| format!("{:?}", err))?;
+        Ok(Shader {
+            name: name.into(),
+        })
     }
 }
 
@@ -675,6 +698,24 @@ pub struct StaticBatchInfo {
     pub submesh_count: u16,
 }
 
+#[wasm_bindgen(js_name = "UnityScriptMapper")]
+#[derive(Clone, Debug, FromStructPerField)]
+#[from(binary::ScriptMapper)]
+pub struct ScriptMapper {
+    shader_to_name_map: HashMap<WasmFriendlyPPtr, String>,
+}
+
+#[wasm_bindgen(js_class = "UnityScriptMapper")]
+impl ScriptMapper {
+    pub fn get_shader_pointers(&self) -> Vec<WasmFriendlyPPtr> {
+        self.shader_to_name_map.keys().cloned().collect()
+    }
+
+    pub fn get_shader_names(&self) -> Vec<String> {
+        self.shader_to_name_map.values().cloned().collect()
+    }
+}
+
 define_create!(GameObject, "UnityGameObject");
 define_create!(Transform, "UnityTransform");
 define_create!(Material, "UnityMaterial");
@@ -683,3 +724,4 @@ define_create!(VertexData, "UnityVertexData");
 define_create!(Texture2D, "UnityTexture2D");
 define_create!(MeshFilter, "UnityMeshFilter");
 define_create!(MeshRenderer, "UnityMeshRenderer");
+define_create!(ScriptMapper, "UnityScriptMapper");

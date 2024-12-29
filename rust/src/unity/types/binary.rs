@@ -506,3 +506,10 @@ pub struct MeshFilter {
     pub game_object: PPtr<GameObject>,
     pub mesh: PPtr<Mesh>,
 }
+
+#[derive(DekuRead, Clone, Debug)]
+#[deku(ctx = "_version: UnityVersion")]
+pub struct ScriptMapper {
+    pub shader_to_name_map: Map<PPtr<()>, CharArray>,
+    pub preload_shaders: bool,
+}
