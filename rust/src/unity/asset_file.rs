@@ -77,7 +77,7 @@ impl AssetFile {
                 ClassID::MonoBehavior
             };
             result.push(AssetFileObject {
-                file_id:obj.file_id,
+                file_id: obj.file_id,
                 byte_start,
                 byte_size: obj.byte_size as usize,
                 class_id,
