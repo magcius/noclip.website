@@ -509,17 +509,116 @@ pub enum TextureWrapMode {
 #[derive(FromEnumPerVariant, Clone, Copy, Debug)]
 #[from(binary::TextureFormat)]
 pub enum TextureFormat {
-    Alpha8       = 0x01,
-    RGB24        = 0x03,
-    RGBA32       = 0x04,
-    ARGB32       = 0x05,
-    BC1          = 0x0A,
-    BC2          = 0x0B,
-    BC3          = 0x0C,
-    BC6H         = 0x18,
-    BC7          = 0x19,
-    DXT1Crunched = 0x1C,
-    DXT5Crunched = 0x1D,
+    // Alpha 8 bit texture format.
+    Alpha8 = 1,
+    // RGBA 16 bit texture format.
+    ARGB16 = 2,
+    // RGB 24 bit texture format.
+    RGB24 = 3,
+    // RGBA 32 bit texture format.
+    RGBA32 = 4,
+    // ARGB 32 bit texture format.
+    ARGB32 = 5,
+    // RGB 16 bit texture format.
+    RGB16 = 7,
+    // Red 16 bit texture format.
+    R16 = 9,
+    // DXT1 compressed texture format.
+    DXT1 = 10,
+    // DXT5 compressed texture format.
+    DXT5 = 12,
+    // RGBA 16 bit (4444) texture format.
+    RGBA16 = 13,
+
+    // R 16 bit texture format.
+    RHalf = 15,
+    // RG 32 bit texture format.
+    RGHalf = 16,
+    // RGBA 64 bit texture format.
+    RGBAHalf = 17,
+
+    // R 32 bit texture format.
+    RFloat = 18,
+    // RG 64 bit texture format.
+    RGFloat = 19,
+    // RGBA 128 bit texture format.
+    RGBAFloat = 20,
+
+    // RGB 32 bit packed float format.
+    RGB9E5 = 22,
+
+    // R BC4 compressed texture format.
+    BC4 = 26,
+    // RG BC5 compressed texture format.
+    BC5 = 27,
+    // HDR RGB BC6 compressed texture format.
+    BC6H = 24,
+    // RGBA BC7 compressed texture format.
+    BC7 = 25,
+
+    // DXT1 crunched texture format.
+    DXT1Crunched = 28,
+    // DXT5 crunched texture format.
+    DXT5Crunched = 29,
+    // ETC (GLES2.0) 4 bits/pixel compressed RGB texture format.
+    EtcRGB4 = 34,
+    // EAC 4 bits/pixel compressed 16-bit R texture format
+    EacR = 41,
+    // EAC 4 bits/pixel compressed 16-bit signed R texture format
+    EacRSigned = 42,
+    // EAC 8 bits/pixel compressed 16-bit RG texture format
+    EacRG = 43,
+    // EAC 8 bits/pixel compressed 16-bit signed RG texture format
+    EacRGSigned = 44,
+
+    // ETC2 (GLES3.0) 4 bits/pixel compressed RGB texture format.
+    Etc2RGB4 = 45,
+    // ETC2 (GLES3.0) 4 bits/pixel compressed RGB + 1-bit alpha texture format.
+    Etc2RGB4PunchthroughAlpha = 46,
+    // ETC2 (GLES3.0) 8 bits/pixel compressed RGBA texture format.
+    Etc2RGBA8 = 47,
+
+    // ASTC uses 128bit block of varying sizes (we use only square blocks). It does not distinguish RGB/RGBA
+    Astc4x4 = 48,
+    Astc5x5 = 49,
+    Astc6x6 = 50,
+    Astc8x8 = 51,
+    Astc10x10 = 52,
+    Astc12x12 = 53,
+
+    // RG 16 bit texture format.
+    RG16 = 62,
+    // Red 8 bit texture format.
+    R8 = 63,
+    // ETC1 crunched texture format.
+    EtcRGB4Crunched = 64,
+    // ETC2_RGBA8 crunched texture format.
+    Etc2RGBA8Crunched = 65,
+
+    // ASTC (block size 4x4) compressed HDR RGB(A) texture format.
+    AstcHdr4x4 = 66,
+    // ASTC (block size 5x5) compressed HDR RGB(A)  texture format.
+    AstcHdr5x5 = 67,
+    // ASTC (block size 4x6x6) compressed HDR RGB(A) texture format.
+    AstcHdr6x6 = 68,
+    // ASTC (block size 8x8) compressed HDR RGB(A) texture format.
+    AstcHdr8x8 = 69,
+    // ASTC (block size 10x10) compressed HDR RGB(A) texture format.
+    AstcHdr10x10 = 70,
+    // ASTC (block size 12x12) compressed HDR RGB(A) texture format.
+    AstcHdr12x12 = 71,
+
+    RG32 = 72,
+    RGB48 = 73,
+    RGBA64 = 74,
+    R8Signed = 75,
+    RG16Signed = 76,
+    RGB24Signed = 77,
+    RGBA32Signed = 78,
+    R16Signed = 79,
+    RG32Signed = 80,
+    RGB48Signed = 81,
+    RGBA64Signed = 82,
 }
 
 #[wasm_bindgen(js_name = "UnityTextureColorSpace")]

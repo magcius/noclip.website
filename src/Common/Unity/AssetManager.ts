@@ -540,40 +540,40 @@ function loadMesh(device: GfxDevice, mesh: UnityMesh): UnityMeshData {
 }
 
 function translateTextureFormat(fmt: UnityTextureFormat, colorSpace: UnityTextureColorSpace): GfxFormat {
-    if (fmt === rust.UnityTextureFormat.BC1 && colorSpace === rust.UnityTextureColorSpace.Linear)
-        return GfxFormat.BC1;
-    else if (fmt === rust.UnityTextureFormat.BC1 && colorSpace === rust.UnityTextureColorSpace.SRGB)
-        return GfxFormat.BC1_SRGB;
-    else if (fmt === rust.UnityTextureFormat.BC3 && colorSpace === rust.UnityTextureColorSpace.Linear)
-        return GfxFormat.BC3;
-    else if (fmt === rust.UnityTextureFormat.BC3 && colorSpace === rust.UnityTextureColorSpace.SRGB)
-        return GfxFormat.BC3_SRGB;
+    if (fmt === rust.UnityTextureFormat.Alpha8 && colorSpace === rust.UnityTextureColorSpace.Linear)
+        return GfxFormat.U8_R_NORM;
+    else if (fmt === rust.UnityTextureFormat.R8 && colorSpace === rust.UnityTextureColorSpace.Linear)
+        return GfxFormat.U8_R_NORM;
+    else if (fmt === rust.UnityTextureFormat.RHalf && colorSpace === rust.UnityTextureColorSpace.Linear)
+        return GfxFormat.U16_R_NORM;
     else if (fmt === rust.UnityTextureFormat.RGB24 && colorSpace === rust.UnityTextureColorSpace.Linear)
         return GfxFormat.U8_RGBA_NORM;
     else if (fmt === rust.UnityTextureFormat.RGB24 && colorSpace === rust.UnityTextureColorSpace.SRGB)
         return GfxFormat.U8_RGBA_SRGB;
     else if (fmt === rust.UnityTextureFormat.RGBA32 && colorSpace === rust.UnityTextureColorSpace.Linear)
         return GfxFormat.U8_RGBA_NORM;
+    else if (fmt === rust.UnityTextureFormat.RGBAHalf && colorSpace === rust.UnityTextureColorSpace.Linear)
+        return GfxFormat.U16_RGBA_NORM;
     else if (fmt === rust.UnityTextureFormat.RGBA32 && colorSpace === rust.UnityTextureColorSpace.SRGB)
         return GfxFormat.U8_RGBA_SRGB;
     else if (fmt === rust.UnityTextureFormat.ARGB32 && colorSpace === rust.UnityTextureColorSpace.Linear)
         return GfxFormat.U8_RGBA_NORM;
     else if (fmt === rust.UnityTextureFormat.ARGB32 && colorSpace === rust.UnityTextureColorSpace.SRGB)
         return GfxFormat.U8_RGBA_SRGB;
-    else if (fmt === rust.UnityTextureFormat.DXT1Crunched && colorSpace === rust.UnityTextureColorSpace.Linear)
+    else if ((fmt === rust.UnityTextureFormat.DXT1 || fmt === rust.UnityTextureFormat.DXT1Crunched) && colorSpace === rust.UnityTextureColorSpace.Linear)
         return GfxFormat.BC1;
-    else if (fmt === rust.UnityTextureFormat.DXT1Crunched && colorSpace === rust.UnityTextureColorSpace.SRGB)
+    else if ((fmt === rust.UnityTextureFormat.DXT1 || fmt === rust.UnityTextureFormat.DXT1Crunched) && colorSpace === rust.UnityTextureColorSpace.SRGB)
         return GfxFormat.BC1_SRGB;
-    else if (fmt === rust.UnityTextureFormat.DXT5Crunched && colorSpace === rust.UnityTextureColorSpace.Linear)
+    else if ((fmt === rust.UnityTextureFormat.DXT5 || fmt === rust.UnityTextureFormat.DXT5Crunched) && colorSpace === rust.UnityTextureColorSpace.Linear)
         return GfxFormat.BC3;
-    else if (fmt === rust.UnityTextureFormat.DXT5Crunched && colorSpace === rust.UnityTextureColorSpace.SRGB)
+    else if ((fmt === rust.UnityTextureFormat.DXT5 || fmt === rust.UnityTextureFormat.DXT5Crunched) && colorSpace === rust.UnityTextureColorSpace.SRGB)
         return GfxFormat.BC3_SRGB;
     else if (fmt === rust.UnityTextureFormat.BC7 && colorSpace === rust.UnityTextureColorSpace.Linear)
         return GfxFormat.BC7;
     else if (fmt === rust.UnityTextureFormat.BC7 && colorSpace === rust.UnityTextureColorSpace.SRGB)
         return GfxFormat.BC7_SRGB;
     else
-        throw "whoops";
+        throw new Error(`unknown texture format ${fmt} and colorspace ${colorSpace} combo`);
 }
 
 function translateWrapMode(v: number): GfxWrapMode {
@@ -607,16 +607,14 @@ function translateSampler(header: UnityGLTextureSettings): GfxSamplerDescriptor 
 }
 
 function calcLevelSize(fmt: UnityTextureFormat, w: number, h: number): number {
-    if (fmt === rust.UnityTextureFormat.BC1 || fmt === rust.UnityTextureFormat.BC2 || fmt === rust.UnityTextureFormat.BC3 || fmt === rust.UnityTextureFormat.BC6H || fmt === rust.UnityTextureFormat.BC7|| fmt === rust.UnityTextureFormat.DXT1Crunched || fmt === rust.UnityTextureFormat.DXT5Crunched) {
+    if (fmt === rust.UnityTextureFormat.BC6H || fmt === rust.UnityTextureFormat.BC7|| fmt === rust.UnityTextureFormat.DXT1 || fmt === rust.UnityTextureFormat.DXT5 || fmt === rust.UnityTextureFormat.DXT1Crunched || fmt === rust.UnityTextureFormat.DXT5Crunched) {
         w = Math.max(w, 4);
         h = Math.max(h, 4);
         const depth = 1;
         const count = ((w * h) / 16) * depth;
-        if (fmt === rust.UnityTextureFormat.BC1 || fmt === rust.UnityTextureFormat.DXT1Crunched)
+        if (fmt === rust.UnityTextureFormat.DXT1 || fmt === rust.UnityTextureFormat.DXT1Crunched)
             return count * 8;
-        else if (fmt === rust.UnityTextureFormat.BC2)
-            return count * 16;
-        else if (fmt === rust.UnityTextureFormat.BC3 || fmt === rust.UnityTextureFormat.DXT5Crunched)
+        else if (fmt === rust.UnityTextureFormat.DXT5 || fmt === rust.UnityTextureFormat.DXT5Crunched)
             return count * 16;
         else if (fmt === rust.UnityTextureFormat.BC6H)
             return count * 16;
@@ -629,6 +627,8 @@ function calcLevelSize(fmt: UnityTextureFormat, w: number, h: number): number {
     } else if (fmt === rust.UnityTextureFormat.RGB24) {
         return w * h * 4;
     } else if (fmt === rust.UnityTextureFormat.RGBA32) {
+        return w * h * 4;
+    } else if (fmt === rust.UnityTextureFormat.RGBAHalf) {
         return w * h * 4;
     } else if (fmt === rust.UnityTextureFormat.ARGB32) {
         return w * h * 4;
