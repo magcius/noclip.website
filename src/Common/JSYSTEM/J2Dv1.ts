@@ -257,10 +257,10 @@ export class J2DPane {
     public children: J2DPane[] = []; // @TODO: Make private, provide search mechanism
     private parent: J2DPane | null = null;
 
-    public drawMtx = mat4.create();
-    public drawAlpha = 1.0;
-    public drawPos = vec2.create();
-    public drawDimensions = vec2.create();
+    protected drawMtx = mat4.create();
+    protected drawAlpha = 1.0;
+    protected drawPos = vec2.create();
+    protected drawDimensions = vec2.create();
 
     constructor(public data: PAN1, cache: GfxRenderCache, parent: J2DPane | null = null) {
         this.parent = parent;
@@ -286,6 +286,14 @@ export class J2DPane {
 
     public hide(): void {
         this.data.visible = false;
+    }
+
+    public setAlpha(alpha: number) { 
+        this.data.alpha = alpha * 0xFF; 
+    }
+    
+    public getAlpha(alpha: number) { 
+        this.data.alpha = alpha / 0xFF; 
     }
 
     // NOTE: Overwritten by child classes which actually do some rendering, such as J2DPicture
