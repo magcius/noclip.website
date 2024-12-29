@@ -38,7 +38,7 @@ import { fopAcIt_JudgeByID, fopAcM_create, fopAcM_prm_class, fopAc_ac_c } from "
 import { cPhs__Status, fGlobals, fpcPf__Register, fpcSCtRq_Request, fpc_bs__Constructor } from "./framework.js";
 import { mDoExt_McaMorf, mDoExt_bckAnm, mDoExt_brkAnm, mDoExt_btkAnm, mDoExt_btpAnm, mDoExt_modelEntryDL, mDoExt_modelUpdateDL } from "./m_do_ext.js";
 import { MtxPosition, MtxTrans, calc_mtx, mDoMtx_XYZrotM, mDoMtx_XrotM, mDoMtx_YrotM, mDoMtx_YrotS, mDoMtx_ZXYrotM, mDoMtx_ZrotM, mDoMtx_ZrotS, quatM } from "./m_do_mtx.js";
-import { J2DGrafContext, J2DScreen } from "../Common/JSYSTEM/J2Dv1.js";
+import { J2DGrafContext, J2DPane, J2DScreen } from "../Common/JSYSTEM/J2Dv1.js";
 
 // Framework'd actors
 
@@ -5754,6 +5754,15 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
     }
 }
 
+const enum TitlePane {
+    MainTitle,
+    JapanSubtitle,
+    PressStart,
+    Nintendo,
+    Effect1,
+    Effect2,
+}
+
 class d_a_title extends fopAc_ac_c {
     public static PROCESS_NAME = dProcName_e.d_a_title;
     public static arcName = 'TlogoE' // Tlogo, TlogoE, TlogoE[0-9]
@@ -5762,10 +5771,12 @@ class d_a_title extends fopAc_ac_c {
     private bckShip = new mDoExt_bckAnm();
     private bpkShip = new mDoExt_brkAnm();
     private screen: J2DScreen;
+    private panes: J2DPane[] = []; 
 
     private anmFrameCounter = 0
     private delayFrameCounter = 120;
     private shipFrameCounter = -50;
+    private blinkFrameCounter = 0;
     private enterMode = 0;
     private shipOffsetX: number = 0;
 
@@ -5844,19 +5855,19 @@ class d_a_title extends fopAc_ac_c {
         const screenData = globals.resCtrl.getObjectResByName(ResType.Blo, d_a_title.arcName, "title_logo_e.blo");
         assert(screenData !== null);
         this.screen = new J2DScreen(screenData, globals.renderer.renderCache, globals.resCtrl.getResResolver(d_a_title.arcName));
+        this.screen.color = White;
+        this.screen.setAlpha(1.0); // TODO: This isn't here originally
     
-        // m0A0[2] = this.screen->search('pres');
-        // m0A0[3] = this.screen->search('nint');
-        // m0A0[0] = this.screen->search('zeld');
-        // m0A0[1] = this.screen->search('zelj');
-        // m0A0[4] = this.screen->search('eft1');
-        // m0A0[5] = this.screen->search('eft2');
+        this.panes[TitlePane.MainTitle] = this.screen.search('zeld')!;
+        this.panes[TitlePane.JapanSubtitle] = this.screen.search('zelj')!;
+        this.panes[TitlePane.PressStart] = this.screen.search('pres')!;
+        this.panes[TitlePane.Nintendo] = this.screen.search('nint')!;
+        this.panes[4] = this.screen.search('eft1')!;
+        this.panes[5] = this.screen.search('eft2')!;
     
-        // for (s32 i = 0; i < (s32)ARRAY_SIZE(pane); i++) {
-        //     fopMsgM_setPaneData(&pane[i], m0A0[i]);
-        //     fopMsgM_setNowAlpha(&pane[i], 0.0f);
-        //     fopMsgM_setAlpha(&pane[i]);
-        // }
+        for (let pane of this.panes) {
+            pane.setAlpha(0.0);
+        }
     }
 
     private proc_init3D(globals: dGlobals) {
@@ -5940,9 +5951,56 @@ class d_a_title extends fopAc_ac_c {
             if (this.shipFrameCounter < 0) {
                 this.shipFrameCounter += deltaTimeFrames;
             }
-            // TODO:
+
+            // TODO: Emitters
+
+            if (this.anmFrameCounter <= 30) {
+                this.panes[TitlePane.MainTitle].setAlpha(0.0);
+            } else if (this.anmFrameCounter <= 80) {
+                this.panes[TitlePane.MainTitle].setAlpha((this.anmFrameCounter - 30) / 50.0);
+            } else {
+                this.panes[TitlePane.MainTitle].setAlpha(1.0);
+            }
+
+            // TODO: Viewable japanese version            
+            this.panes[TitlePane.JapanSubtitle].setAlpha(0.0);
+
+            // TODO: Emitters
+            
+            if (this.anmFrameCounter <= 150) {
+                this.panes[TitlePane.Nintendo].setAlpha(0.0);
+            } else if (this.anmFrameCounter <= 170) {
+                this.panes[TitlePane.Nintendo].setAlpha((this.anmFrameCounter - 150) / 20.0);
+            } else {
+                this.panes[TitlePane.Nintendo].setAlpha(1.0);
+            }
+
+            if (this.anmFrameCounter <= 160) {
+                this.panes[TitlePane.PressStart].setAlpha(0.0);
+            } else if (this.anmFrameCounter <= 180) {
+                this.panes[TitlePane.PressStart].setAlpha((this.anmFrameCounter - 160) / 20.0);
+            } else {
+                this.panes[TitlePane.PressStart].setAlpha(1.0);
+            }
         } else {
-            // TODO:
+            // TODO: Emitters
+
+            this.panes[TitlePane.MainTitle].setAlpha(1.0);
+            this.panes[TitlePane.JapanSubtitle].setAlpha(0.0);
+
+            // mBtkSub.setFrame(mBtkSub.getEndFrame());
+            this.panes[TitlePane.Nintendo].setAlpha(1.0);
+            if (this.blinkFrameCounter >= 100) {
+                this.blinkFrameCounter = 0;
+            } else {
+                this.blinkFrameCounter += deltaTimeFrames;
+            }
+
+            if (this.blinkFrameCounter >= 50) {
+                this.panes[TitlePane.PressStart].setAlpha((this.blinkFrameCounter - 50) / 50.0);
+            } else {
+                this.panes[TitlePane.PressStart].setAlpha((50 - this.blinkFrameCounter) / 50.0);
+            }
         }
 
         if (this.shipFrameCounter <= 0) {
