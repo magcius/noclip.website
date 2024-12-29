@@ -71,11 +71,8 @@ export function nArray<T>(n: number, c: (i: number) => T): T[] {
     return d;
 }
 
-// Eat your heart out, npm.
 export function leftPad(S: string, spaces: number, ch: string = '0'): string {
-    while (S.length < spaces)
-        S = `${ch}${S}`;
-    return S;
+    return S.padStart(spaces, ch);
 }
 
 export function hexzero(n: number, spaces: number): string {
