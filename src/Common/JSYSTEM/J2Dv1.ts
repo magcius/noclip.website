@@ -4,7 +4,7 @@
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { JSystemFileReaderHelper } from "./J3D/J3DLoader.js";
 import { align, assert, readString } from "../../util.js";
-import { Color, colorNewFromRGBA8 } from "../../Color.js";
+import { Color, colorEqual, colorNewFromRGBA8, OpaqueBlack, TransparentBlack, White } from "../../Color.js";
 import { GfxRenderInst, GfxRenderInstManager } from "../../gfx/render/GfxRenderInstManager.js";
 import * as GX_Material from '../../gx/gx_material.js';
 import * as GX from '../../gx/gx_enum.js';
@@ -13,11 +13,10 @@ import { GfxClipSpaceNearZ, GfxDevice } from "../../gfx/platform/GfxPlatform.js"
 import { computeModelMatrixT, projectionMatrixForCuboid } from "../../MathHelpers.js";
 import { projectionMatrixConvertClipSpaceNearZ } from "../../gfx/helpers/ProjectionHelpers.js";
 import { TSDraw } from "../../SuperMarioGalaxy/DDraw.js";
-import { BTI, BTIData } from "./JUTTexture.js";
+import { BTIData } from "./JUTTexture.js";
 import { GXMaterialBuilder } from "../../gx/GXMaterialBuilder.js";
-import { mat4, vec2, vec4 } from "gl-matrix";
+import { mat4, vec2 } from "gl-matrix";
 import { GfxRenderCache } from "../../gfx/render/GfxRenderCache.js";
-import { ViewerRenderInput } from "../../viewer.js";
 
 const materialParams = new MaterialParams();
 const drawParams = new DrawParams();
@@ -25,7 +24,7 @@ const drawParams = new DrawParams();
 const scratchMat = mat4.create();
 
 export const enum JUTResType {
-    'TIMG', 'TLUT', 'FONT'
+    TIMG, TLUT, FONT,
 }
 
 export type JUTResAssetType<T extends JUTResType> =
@@ -52,7 +51,7 @@ function parseResourceReference(buffer: ArrayBufferSlice, offset: number, resTyp
     const resName = readString(buffer, offset + 2, nameLen);
 
     const nextOffset = offset + nameLen + 2;
-    return { refType, resType, resName, arcName, _nextOffset: nextOffset }
+    return { refType, resType, resName, arcName, _nextOffset: nextOffset };
 }
 
 /**
@@ -60,20 +59,18 @@ function parseResourceReference(buffer: ArrayBufferSlice, offset: number, resTyp
  * For instance, if the texture is 200 pixels wide, but the quad is 100 pixels wide and Right is not set, the texture 
  * will be clipped by half. If both Left and Right are set, the texture will be squashed to fit within the quad.
  */
-enum J2DUVBinding {
+const enum J2DUVBinding {
     Bottom = (1 << 0),
     Top = (1 << 1),
     Right = (1 << 2),
     Left = (1 << 3),
 };
 
-
-// TODO: Move and reorganize
 export class J2DGrafContext {
     private sceneParams = new SceneParams();
     public aspectRatio: number;
 
-    constructor(device: GfxDevice, x: number, y: number, w: number, h: number, far: number, near: number) {
+    constructor(device: GfxDevice, x: number, y: number, private w: number, private h: number, far: number, near: number) {
         this.aspectRatio = w / h;
         // NOTE: Y axis is inverted here (bottom = height), to match the original J2D convention
         projectionMatrixForCuboid(this.sceneParams.u_Projection, x, w, h, y, near, far);
@@ -81,9 +78,15 @@ export class J2DGrafContext {
         projectionMatrixConvertClipSpaceNearZ(this.sceneParams.u_Projection, clipSpaceNearZ, GfxClipSpaceNearZ.NegativeOne);
     }
 
-    public setOnRenderInst(renderInst: GfxRenderInst) {
-        const sceneParamsOffs = renderInst.allocateUniformBuffer(GX_Material.GX_Program.ub_SceneParams, ub_SceneParamsBufferSize);
-        fillSceneParamsData(renderInst.mapUniformBufferF32(GX_Material.GX_Program.ub_SceneParams), sceneParamsOffs, this.sceneParams);
+    public setupView(backbufferWidth: number, backbufferHeight: number): void {
+        const screenAspect = backbufferWidth / backbufferHeight;
+        const grafAspect = this.w / this.h;
+        this.aspectRatio = grafAspect / screenAspect;
+    }
+
+    public setOnRenderInst(renderInst: GfxRenderInst): void {
+        const d = renderInst.allocateUniformBufferF32(GX_Material.GX_Program.ub_SceneParams, ub_SceneParamsBufferSize);
+        fillSceneParamsData(d, 0, this.sceneParams);
     }
 }
 
@@ -91,15 +94,15 @@ export class J2DGrafContext {
 export interface INF1 {
     width: number;
     height: number;
-    color: Color
+    color: Color;
 }
 
 function readINF1Chunk(buffer: ArrayBufferSlice): INF1 {
     const view = buffer.createDataView();
-    const width = view.getUint16(8);
-    const height = view.getUint16(10);
-    const color = view.getUint32(12);
-    return { width, height, color: colorNewFromRGBA8(color) };
+    const width = view.getUint16(0x08, false);
+    const height = view.getUint16(0x0A, false);
+    const color = colorNewFromRGBA8(view.getUint32(0x0C, false));
+    return { width, height, color };
 }
 //#endregion
 
@@ -109,9 +112,9 @@ interface PIC1 extends PAN1 {
     tlut: ResRef;
     uvBinding: number;
     flags: number;
-    colorBlack: number;
-    colorWhite: number;
-    colorCorners: number[];
+    colorBlack: Color;
+    colorWhite: Color;
+    colorCorners: Color[];
 }
 
 function readPIC1Chunk(buffer: ArrayBufferSlice, parent: PAN1 | null): PIC1 {
@@ -119,7 +122,7 @@ function readPIC1Chunk(buffer: ArrayBufferSlice, parent: PAN1 | null): PIC1 {
 
     const pane = readPAN1Chunk(buffer, parent);
 
-    const dataCount = view.getUint8(pane.offset + 0);
+    const dataCount = view.getUint8(pane.offset + 0x00);
     let offset = pane.offset + 1;
 
     const timg = parseResourceReference(buffer, offset, JUTResType.TIMG, null);
@@ -128,17 +131,17 @@ function readPIC1Chunk(buffer: ArrayBufferSlice, parent: PAN1 | null): PIC1 {
     offset = tlut._nextOffset + 1;
 
     let flags = 0;
-    let colorBlack = 0x0;
-    let colorWhite = 0xFFFFFFFF;
-    let colorCorners = [0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF];
+    let colorBlack = TransparentBlack;
+    let colorWhite = White;
+    let colorCorners = [White, White, White, White];
 
-    if (dataCount >= 4) { flags = view.getUint8(offset + 0); }
-    if (dataCount >= 6) { colorBlack = view.getUint32(offset + 2); }
-    if (dataCount >= 7) { colorWhite = view.getUint32(offset + 6); }
-    if (dataCount >= 8) { colorCorners[0] = view.getUint32(offset + 10); }
-    if (dataCount >= 9) { colorCorners[1] = view.getUint32(offset + 10); }
-    if (dataCount >= 10) { colorCorners[2] = view.getUint32(offset + 10); }
-    if (dataCount >= 11) { colorCorners[3] = view.getUint32(offset + 10); }
+    if (dataCount >= 4) { flags = view.getUint8(offset + 0x00); }
+    if (dataCount >= 6) { colorBlack = colorNewFromRGBA8(view.getUint32(offset + 0x02)); }
+    if (dataCount >= 7) { colorWhite = colorNewFromRGBA8(view.getUint32(offset + 0x06)); }
+    if (dataCount >= 8) { colorCorners[0] = colorNewFromRGBA8(view.getUint32(offset + 0x0A)); }
+    if (dataCount >= 9) { colorCorners[1] = colorNewFromRGBA8(view.getUint32(offset + 0x0E)); }
+    if (dataCount >= 10) { colorCorners[2] = colorNewFromRGBA8(view.getUint32(offset + 0x12)); }
+    if (dataCount >= 11) { colorCorners[3] = colorNewFromRGBA8(view.getUint32(offset + 0x16)); }
 
     return { ...pane, timg, tlut, uvBinding: binding, flags, colorBlack, colorWhite, colorCorners };
 }
@@ -150,7 +153,7 @@ interface PAN1 {
     type: string;
     children: PAN1[];
     visible: boolean;
-    tag: string | number;
+    tag: string;
     x: number;
     y: number;
     w: number;
@@ -171,8 +174,7 @@ function readPAN1Chunk(buffer: ArrayBufferSlice, parent: PAN1 | null): PAN1 {
     const dataCount = view.getUint8(offset + 0);
 
     const visible = !!view.getUint8(offset + 1);
-    let tag: string | number = readString(buffer, offset + 4, 4);
-    if(tag == '') tag = view.getUint32(offset + 4);
+    let tag = readString(buffer, offset + 4, 4, false);
     const x = view.getInt16(offset + 8);
     const y = view.getInt16(offset + 10);
     const w = view.getInt16(offset + 12);
@@ -204,16 +206,17 @@ export class BLO {
         const j2d = new JSystemFileReaderHelper(buffer);
         assert(j2d.magic === 'SCRNblo1');
 
-        const inf1 = readINF1Chunk(j2d.nextChunk('INF1'))
+        const inf1 = readINF1Chunk(j2d.nextChunk('INF1'));
         const panes: PAN1[] = [];
 
-        const screen: SCRN = { parent: null, type: 'SCRN', children: [], visible: true, 
+        const screen: SCRN = {
+            parent: null, type: 'SCRN', children: [], visible: true, 
             x: 0, y: 0, w: inf1.width, h: inf1.height, color: inf1.color, rot: 0, tag: '', basePos: 0, 
-            alpha: inf1.color.a, inheritAlpha: false, offset: 0 };
+            alpha: inf1.color.a, inheritAlpha: false, offset: 0,
+        };
 
         let parentStack: (PAN1 | null)[] = [screen];
-        let shouldContinue = true;
-        while (shouldContinue) {
+        outer: while (true) {
             const magic = readString(buffer, j2d.offs, 4);
             const chunkSize = j2d.view.getUint32(j2d.offs + 4);
 
@@ -225,7 +228,7 @@ export class BLO {
                 // case 'TBX1': readTBX1Chunk(j2d.nextChunk('TBX1')); break;
 
                 // Hierarchy
-                case 'EXT1': shouldContinue = false; break;
+                case 'EXT1': break outer;
                 case 'BGN1': j2d.offs += chunkSize; parentStack.push(panes[panes.length - 1]); break;
                 case 'END1': j2d.offs += chunkSize; parentStack.pop(); break;
 
@@ -266,37 +269,44 @@ export class J2DPane {
                 case 'PAN1': this.children.push(new J2DPane(pane, cache, this)); break;
                 case 'PIC1': this.children.push(new J2DPicture(pane, cache, this)); break;
                 // case 'WIN1': this.children.push(new J2DWindow(pane)); break;
-                // case 'TBX1': this.children.push(new J2DTextbox(pane)); break;
+                // case 'TBX1': this.children.push(new J2DTextBox(pane)); break;
                 default: console.warn('Unsupported J2D type:', pane.type); break;
             }
         }
 
-        if (this.data.basePos !== 0) { console.warn('Untested J2D feature'); }
-        if (this.data.rot !== 0) { console.warn('Untested J2D feature'); }
+        if (this.data.basePos !== 0)
+            console.warn(`Untested J2D feature: basePosition ${this.data.basePos}`);
+        if (this.data.rot !== 0)
+            console.warn(`Untested J2D feature: rot ${this.data.rot}`);
     }
 
-    public hide() { this.data.visible = false; }
-    public show() { this.data.visible = true; }
+    public show(): void {
+        this.data.visible = true;
+    }
+
+    public hide(): void {
+        this.data.visible = false;
+    }
 
     // NOTE: Overwritten by child classes which actually do some rendering, such as J2DPicture
-    public drawSelf(renderInstManager: GfxRenderInstManager, viewerRenderInput: ViewerRenderInput, ctx2D: J2DGrafContext, offsetX: number, offsetY: number) { }
+    public drawSelf(renderInstManager: GfxRenderInstManager, ctx2D: J2DGrafContext, offsetX: number, offsetY: number) {
+    }
 
-    public draw(renderInstManager: GfxRenderInstManager, viewerRenderInput: ViewerRenderInput, ctx2D: J2DGrafContext, offsetX: number = 0, offsetY: number = 0, clip: boolean = true): void {
+    public draw(renderInstManager: GfxRenderInstManager, ctx2D: J2DGrafContext, offsetX: number = 0, offsetY: number = 0, clip: boolean = true): void {
         const boundsValid = this.data.w > 0 && this.data.h > 0;
 
         if (this.data.visible && boundsValid) {
             // To support dynamic aspect ratios, we keep the original screenspace height and the original aspect ratio. 
             // So changing the window width will not cause 2D elements to scale, but changing the window height will. 
             vec2.set(this.drawPos, this.data.x, this.data.y);
-            vec2.set(this.drawDimensions, this.data.w * (ctx2D.aspectRatio / viewerRenderInput.camera.aspect), this.data.h);
+            vec2.set(this.drawDimensions, this.data.w * ctx2D.aspectRatio, this.data.h);
             this.drawAlpha = this.data.alpha / 0xFF;
 
             if (this.parent) {
                 this.makeMatrix();
                 mat4.mul(this.drawMtx, this.parent.drawMtx, this.drawMtx);
-                if (this.data.inheritAlpha) {
+                if (this.data.inheritAlpha)
                     this.drawAlpha *= this.parent.drawAlpha;
-                }
             } else {
                 // Offsets only affect the root pane
                 this.drawPos[0] += offsetX;
@@ -305,32 +315,28 @@ export class J2DPane {
             }
 
             if (this.drawDimensions[0] > 0 && this.drawDimensions[1] > 0) {
-                this.drawSelf(renderInstManager, viewerRenderInput, ctx2D, offsetX, offsetY);
-                for (const pane of this.children) {
-                    pane.draw(renderInstManager, viewerRenderInput, ctx2D, offsetX, offsetY, clip);
-                }
+                this.drawSelf(renderInstManager, ctx2D, offsetX, offsetY);
+                for (let i = 0; i < this.children.length; i++)
+                    this.children[i].draw(renderInstManager, ctx2D, offsetX, offsetY, clip);
             }
         }
     }
     
-    public search(tag: string | number): J2DPane | null {
-        if (this.data.tag === tag) {
+    public search(tag: string): J2DPane | null {
+        if (this.data.tag === tag)
             return this;
-        }
-        for (let child of this.children) {
+
+        for (let i = 0; i < this.children.length; i++) {
+            const child = this.children[i];
             const res = child.search(tag);
-            if (res) { return res; }
+            if (res !== null)
+                return res;
         }
+
         return null;
     }
 
-    public destroy(device: GfxDevice): void {
-        for (const pane of this.children) {
-            pane.destroy(device);
-        }
-    }
-
-    private makeMatrix() {
+    private makeMatrix(): void {
         if (this.data.rot !== 0) {
             debugger; // Untested
             // TODO:
@@ -345,10 +351,14 @@ export class J2DPane {
         }
     }
 
-    protected resolveReferences(resolver: ResourceResolver<JUTResType>) {
-        for(let child of this.children) {
-            child.resolveReferences(resolver);
-        }
+    protected resolveReferences(resolver: ResourceResolver<JUTResType>): void {
+        for (let i = 0; i < this.children.length; i++)
+            this.children[i].resolveReferences(resolver);
+    }
+
+    public destroy(device: GfxDevice): void {
+        for (let i = 0; i < this.children.length; i++)
+            this.children[i].destroy(device);
     }
 }
 //#endregion
@@ -357,7 +367,7 @@ export class J2DPane {
 export class J2DPicture extends J2DPane {
     public override data: PIC1;
 
-    private sdraw: TSDraw; // TODO: Time to move TSDraw out of Mario Galaxy?
+    private sdraw: TSDraw | null = null;
     private materialHelper: GXMaterialHelperGfx;
     private tex: BTIData | null = null;
 
@@ -366,9 +376,10 @@ export class J2DPicture extends J2DPane {
 
         if (this.data.uvBinding !== 15) { console.warn('Untested J2D feature'); }
         if (this.data.flags !== 0) { console.warn('Untested J2D feature'); }
-        if (this.data.colorBlack !== 0 || this.data.colorWhite !== 0xFFFFFFFF) { console.warn('Untested J2D feature'); }
-        if (this.data.colorCorners[0] !== 0xFFFFFFFF || this.data.colorCorners[1] !== 0xFFFFFFFF
-            || this.data.colorCorners[2] !== 0xFFFFFFFF || this.data.colorCorners[3] !== 0xFFFFFFFF) { console.warn('Untested J2D feature'); }
+        if (!colorEqual(this.data.colorBlack, TransparentBlack) || !colorEqual(this.data.colorWhite, White))
+            console.warn(`Untested J2D feature colorBlack ${this.data.colorBlack}, colorWhite ${this.data.colorWhite}`);
+        if (!colorEqual(this.data.colorCorners[0], White) || !colorEqual(this.data.colorCorners[1], White) || !colorEqual(this.data.colorCorners[2], White) || !colorEqual(this.data.colorCorners[3], White))
+            console.warn(`Untested J2D feature colorCorners ${this.data.colorCorners}`);
     }
 
     public setTexture(tex: BTIData) {
@@ -376,8 +387,9 @@ export class J2DPicture extends J2DPane {
         this.prepare();
     }
 
-    public override drawSelf(renderInstManager: GfxRenderInstManager, viewerRenderInput: ViewerRenderInput, ctx2D: J2DGrafContext, offsetX: number, offsetY: number): void {
-        if (!this.tex || !this.sdraw) { return; }
+    public override drawSelf(renderInstManager: GfxRenderInstManager, ctx2D: J2DGrafContext, offsetX: number, offsetY: number): void {
+        if (this.tex === null || this.sdraw === null)
+            return;
 
         renderInstManager.pushTemplate();
         const renderInst = renderInstManager.newRenderInst();
@@ -391,7 +403,7 @@ export class J2DPicture extends J2DPane {
         this.materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
 
-        const scale = mat4.fromScaling(scratchMat, [this.drawDimensions[0], this.drawDimensions[1], 1])
+        const scale = mat4.fromScaling(scratchMat, [this.drawDimensions[0], this.drawDimensions[1], 1]);
         mat4.mul(drawParams.u_PosMtx[0], this.drawMtx, scale);
         this.materialHelper.allocateDrawParamsDataOnInst(renderInst, drawParams);
 
@@ -400,12 +412,17 @@ export class J2DPicture extends J2DPane {
     }
 
     public override destroy(device: GfxDevice): void {
-        this.sdraw.destroy(device);
+        if (this.sdraw !== null) {
+            this.sdraw.destroy(device);
+            this.sdraw = null;
+        }
     }
 
     private prepare() {
-        assert(!!this.tex);
-        if (this.sdraw) { this.sdraw.destroy(this.cache.device); }
+        assert(this.tex !== null);
+
+        if (this.sdraw !== null)
+            this.sdraw.destroy(this.cache.device);
         this.sdraw = new TSDraw();
 
         let u0, v0, v1, u1;
@@ -415,28 +432,30 @@ export class J2DPicture extends J2DPane {
         const bindTop = this.data.uvBinding & J2DUVBinding.Top;
         const bindBottom = this.data.uvBinding & J2DUVBinding.Bottom;
 
+        const aspectX = (this.drawDimensions[0] / texDimensions[0]);
+        const aspectY = (this.drawDimensions[1] / texDimensions[1]);
+
         if (bindLeft) {
             u0 = 0.0;
-            u1 = bindRight ? 1.0 : (this.drawDimensions[0] / texDimensions[0]);
+            u1 = bindRight ? 1.0 : aspectX;
         } else if (bindRight) {
-            u0 = 1.0 - (this.drawDimensions[0] / texDimensions[0]);
+            u0 = 1.0 - aspectX;
             u1 = 1.0;
         } else {
-            u0 = 0.5 - (this.drawDimensions[0] / texDimensions[0]) / 2.0;
-            u1 = 0.5 + (this.drawDimensions[0] / texDimensions[0]) / 2.0;
+            u0 = 0.5 - aspectX / 2.0;
+            u1 = 0.5 + aspectX / 2.0;
         }
 
         if (bindTop) {
             v0 = 0.0;
-            v1 = bindBottom ? 1.0 : (this.drawDimensions[1] / texDimensions[1]);
+            v1 = bindBottom ? 1.0 : aspectY;
         } else if (bindBottom) {
-            v0 = 1.0 - (this.drawDimensions[1] / texDimensions[1]);
+            v0 = 1.0 - aspectY;
             v1 = 1.0;
         } else {
-            v0 = 0.5 - (this.drawDimensions[1] / texDimensions[1]) / 2.0;
-            v1 = 0.5 + (this.drawDimensions[1] / texDimensions[1]) / 2.0;
+            v0 = 0.5 - aspectY / 2.0;
+            v1 = 0.5 + aspectY / 2.0;
         }
-
 
         this.sdraw.setVtxDesc(GX.Attr.POS, true);
         this.sdraw.setVtxDesc(GX.Attr.TEX0, true);
@@ -445,17 +464,17 @@ export class J2DPicture extends J2DPane {
         this.sdraw.beginDraw(this.cache);
         this.sdraw.begin(GX.Command.DRAW_QUADS, 4);
         this.sdraw.position3f32(0, 0, 0);
-        this.sdraw.color4color(GX.Attr.CLR0, colorNewFromRGBA8(this.data.colorCorners[0]));
-        this.sdraw.texCoord2f32(GX.Attr.TEX0, u0, v0); // 0
+        this.sdraw.color4color(GX.Attr.CLR0, this.data.colorCorners[0]);
+        this.sdraw.texCoord2f32(GX.Attr.TEX0, u0, v0);
         this.sdraw.position3f32(1, 0, 0);
-        this.sdraw.color4color(GX.Attr.CLR0, colorNewFromRGBA8(this.data.colorCorners[2]));
-        this.sdraw.texCoord2f32(GX.Attr.TEX0, u1, v0); // 1
+        this.sdraw.color4color(GX.Attr.CLR0, this.data.colorCorners[2]);
+        this.sdraw.texCoord2f32(GX.Attr.TEX0, u1, v0);
         this.sdraw.position3f32(1, 1, 0);
-        this.sdraw.color4color(GX.Attr.CLR0, colorNewFromRGBA8(this.data.colorCorners[3]));
-        this.sdraw.texCoord2f32(GX.Attr.TEX0, u1, v1); // 0
+        this.sdraw.color4color(GX.Attr.CLR0, this.data.colorCorners[3]);
+        this.sdraw.texCoord2f32(GX.Attr.TEX0, u1, v1);
         this.sdraw.position3f32(0, 1, 0);
-        this.sdraw.color4color(GX.Attr.CLR0, colorNewFromRGBA8(this.data.colorCorners[1]));
-        this.sdraw.texCoord2f32(GX.Attr.TEX0, u0, v1); // 0
+        this.sdraw.color4color(GX.Attr.CLR0, this.data.colorCorners[1]);
+        this.sdraw.texCoord2f32(GX.Attr.TEX0, u0, v1);
         this.sdraw.end();
         this.sdraw.endDraw(this.cache);
 
@@ -482,12 +501,16 @@ export class J2DPicture extends J2DPane {
         this.materialHelper = new GXMaterialHelperGfx(mb.finish());
     }
 
-    protected override resolveReferences(resolver: ResourceResolver<JUTResType.TIMG>) {
-        if(this.data.timg.refType > 1) {
-            if (this.data.timg.refType !== 2) { console.warn('Untested J2D feature'); }
-            this.tex = resolver(JUTResType.TIMG, this.data.timg.resName);
-            if (this.tex) { this.prepare(); }
+    protected override resolveReferences(resolver: ResourceResolver<JUTResType.TIMG>): void {
+        const timg = this.data.timg;
+         if (timg.refType > 1) {
+            if (timg.refType !== 2)
+                console.warn(`Untested J2D feature refType ${timg.refType}`);
+            this.tex = resolver(JUTResType.TIMG, timg.resName);
+            if (this.tex !== null)
+                this.prepare();
         }
+
         assert(this.data.tlut.refType === 0, 'TLUT references currently unsupported');
     }
 }
@@ -495,7 +518,7 @@ export class J2DPicture extends J2DPane {
 
 //#region J2DScreen
 export class J2DScreen extends J2DPane {
-    public color: Color
+    public color: Color;
 
     constructor(data: SCRN, cache: GfxRenderCache, resolver: ResourceResolver<JUTResType>) {
         super(data, cache, null);
@@ -503,14 +526,13 @@ export class J2DScreen extends J2DPane {
         this.resolveReferences(resolver);
     }
 
-    public override draw(renderInstManager: GfxRenderInstManager, viewerRenderInput: ViewerRenderInput, ctx2D: J2DGrafContext, offsetX?: number, offsetY?: number): void {
-        super.draw(renderInstManager, viewerRenderInput, ctx2D, offsetX, offsetY);
+    public override draw(renderInstManager: GfxRenderInstManager, ctx2D: J2DGrafContext, offsetX?: number, offsetY?: number): void {
+        super.draw(renderInstManager, ctx2D, offsetX, offsetY);
     }
 
-    public override search(tag: string | number) {
-        if(tag === '' || tag === 0) {
+    public override search(tag: string) {
+        if (tag === '')
             return null;
-        }
         return super.search(tag);
     }
 }

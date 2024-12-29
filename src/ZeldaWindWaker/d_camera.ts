@@ -84,6 +84,11 @@ export class dCamera_c extends leafdraw_class {
         this.finishSetup();
     }
 
+    public snapToCinematic(): void {
+        this.cameraMode = CameraMode.Cinematic;
+        this.cameraModeBlendVal = 1.0;
+    }
+
     public override load(globals: dGlobals, userData: any): cPhs__Status {
         globals.camera = this;
         fopDwTg_ToDrawQ(globals.frameworkGlobals, this, this.drawPriority);
@@ -173,7 +178,7 @@ export class dCamera_c extends leafdraw_class {
     }
 
     public applyScissor(pass: GfxRenderPass) {
-        if(this.enableLetterboxing) {
+        if (this.enableLetterboxing) {
             pass.setScissor(this.scissor[0], this.scissor[1], this.scissor[2], this.scissor[3]);
         }
     }

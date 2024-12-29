@@ -758,6 +758,8 @@ class d_s_play extends fopScn {
     public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         super.draw(globals, renderInstManager, viewerInput);
 
+        this.orthoGraf2D.setupView(viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+
         // Magma/Grass/Trees/Bushes/Flowers
         const frameCount = viewerInput.time / 1000.0 * 30;
 
@@ -994,16 +996,18 @@ class DemoDesc extends SceneDesc implements Viewer.SceneDesc {
         // @TODO: Set noclip layer visiblity based on this.layer
 
         // From dEvDtStaff_c::specialProcPackage()
-        let demoData;
-        if(globals.roomCtrl.demoArcName)
+        let demoData: ArrayBufferSlice | null = null;
+        if (globals.roomCtrl.demoArcName)
             demoData = globals.modelCache.resCtrl.getObjectResByName(ResType.Stb, globals.roomCtrl.demoArcName, this.stbFilename);
-        if (!demoData)
+        if (demoData === null)
             demoData = globals.modelCache.resCtrl.getStageResByName(ResType.Stb, "Stage", this.stbFilename);
-        
-        if( demoData ) { globals.scnPlay.demo.create(this.id, demoData, this.offsetPos, this.rotY / 180.0 * Math.PI, this.startFrame); }
-        else { console.warn('Failed to load demo data:', this.stbFilename); }
 
-        return this.globals.renderer;
+        if (demoData !== null) {
+            globals.scnPlay.demo.create(this.id, demoData, this.offsetPos, this.rotY / 180.0 * Math.PI, this.startFrame);
+            globals.camera.snapToCinematic();
+        } else {
+            console.warn('Failed to load demo data:', this.stbFilename);
+        }
     }
 }
 

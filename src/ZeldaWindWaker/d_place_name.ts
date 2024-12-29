@@ -1,6 +1,7 @@
 import { J2DPicture, J2DScreen } from "../Common/JSYSTEM/J2Dv1.js";
 import { BTI, BTIData } from "../Common/JSYSTEM/JUTTexture.js";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
+import { assertExists } from "../util.js";
 import { ViewerRenderInput } from "../viewer.js";
 import { EDemoMode } from "./d_demo.js";
 import { dProcName_e } from "./d_procname.js";
@@ -104,9 +105,10 @@ export class d_place_name extends msg_class {
         }
 
         this.screen = new J2DScreen(screen, globals.renderer.renderCache, globals.resCtrl.getResResolver('PName'));
-        this.screen.children[0].children[0].data.visible = false;
-        this.screen.children[0].children[1].data.visible = false;
-        const pic = this.screen.children[0].children[2] as J2DPicture;
+
+        this.screen.search('blc1')!.hide();
+        this.screen.search('blc2')!.hide();
+        const pic = assertExists(this.screen.search('\0\0pn')) as J2DPicture;
         pic.setTexture(img);
 
         return cPhs__Status.Complete;
@@ -114,7 +116,7 @@ export class d_place_name extends msg_class {
 
     public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         renderInstManager.setCurrentList(globals.dlst.ui[0]);
-        this.screen.draw(renderInstManager, viewerInput, globals.scnPlay.orthoGraf2D);
+        this.screen.draw(renderInstManager, globals.scnPlay.orthoGraf2D);
     }
 
     public override execute(globals: dGlobals, deltaTimeFrames: number): void {
