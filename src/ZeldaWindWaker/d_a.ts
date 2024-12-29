@@ -5768,8 +5768,12 @@ class d_a_title extends fopAc_ac_c {
     public static arcName = 'TlogoE' // Tlogo, TlogoE, TlogoE[0-9]
 
     private modelShip: J3DModelInstance;
+    private modelSubtitle: J3DModelInstance;
+    private modelSubtitleShimmer: J3DModelInstance;
     private bckShip = new mDoExt_bckAnm();
     private bpkShip = new mDoExt_brkAnm();
+    private btkSubtitle = new mDoExt_btkAnm();
+    private btkShimmer = new mDoExt_btkAnm();
     private screen: J2DScreen;
     private panes: J2DPane[] = []; 
 
@@ -5777,6 +5781,7 @@ class d_a_title extends fopAc_ac_c {
     private delayFrameCounter = 120;
     private shipFrameCounter = -50;
     private blinkFrameCounter = 0;
+    private shimmerFrameCounter = (cM_rndF(120) + 10 + 130.0);
     private enterMode = 0;
     private shipOffsetX: number = 0;
 
@@ -5834,11 +5839,10 @@ class d_a_title extends fopAc_ac_c {
         light.Position = [-35000.0, 0.0, -30000.0];
         light.Direction = [0, 0, 0];
         light.Color = White;
-
-        if (this.bpkShip.frameCtrl.getFrame() != 0.0) {
-            this.bckShip.entry(this.modelShip);
-            this.bpkShip.entry(this.modelShip);
-            mDoExt_modelUpdateDL(globals, this.modelShip, renderInstManager, globals.dlst.ui);
+        
+        {
+            this.model_draw(globals, renderInstManager);
+            this.screen.draw(renderInstManager, globals.scnPlay.orthoGraf2D);
         }
 
         // TODO: This should be set by the Opa2D draw list
@@ -5847,8 +5851,6 @@ class d_a_title extends fopAc_ac_c {
         mat4.mul(globals.camera.clipFromWorldMatrix, globals.camera.clipFromViewMatrix, globals.camera.viewFromWorldMatrix);
         globals.camera.frustum.updateClipFrustum(globals.camera.clipFromWorldMatrix, globals.camera.clipSpaceNearZ);
         renderInstManager.popTemplate();
-
-        this.screen.draw(renderInstManager, globals.scnPlay.orthoGraf2D);
     }
 
     private proc_init2D(globals: dGlobals) {
@@ -5874,23 +5876,11 @@ class d_a_title extends fopAc_ac_c {
         const modelDataShip = globals.resCtrl.getObjectRes(ResType.Model, d_a_title.arcName, 0xD);
         this.modelShip = new J3DModelInstance(modelDataShip);
         
-        // J3DModelData* modelData_ship = (J3DModelData*)dComIfG_getObjectRes(ARCNAME, VERSION_SELECT(TLOGO_BDL_TITLE_SHIP, TLOGOE_BDL_TITLE_SHIP, TLOGOE0_BDL_TITLE_SHIP));
-        // JUT_ASSERT(VERSION_SELECT(0xD1, 0xFC, 0xFC), modelData_ship != NULL);
+        const modelDataSub = globals.resCtrl.getObjectRes(ResType.Model, d_a_title.arcName, 0xC);
+        this.modelSubtitle = new J3DModelInstance(modelDataSub);
 
-        // mModel_ship = mDoExt_J3DModel__create(modelData_ship, 0x80000U, 0x37441423U);
-        // JUT_ASSERT(VERSION_SELECT(0xD6, 0x101, 0x101), mModel_ship != NULL);
-
-        // J3DModelData* modelData_sub = (J3DModelData*)dComIfG_getObjectRes(ARCNAME, VERSION_SELECT(TLOGO_BDL_SUBTITLE_START_ANIM, TLOGOE_BDL_SUBTITLE_START_ANIM_E, TLOGOE0_BDL_SUBTITLE_START_ANIM_E));
-        // JUT_ASSERT(VERSION_SELECT(0xDA, 0x105, 0x105), modelData_sub != NULL);
-
-        // mModel_subtitle = mDoExt_J3DModel__create(modelData_sub, 0x80000U, 0x37441422U);
-        // JUT_ASSERT(VERSION_SELECT(0xDF, 0x10A, 0x10A), mModel_subtitle != NULL);
-
-        // J3DModelData* modelData_kirari = (J3DModelData*)dComIfG_getObjectRes(ARCNAME, VERSION_SELECT(TLOGO_BDL_SUBTITLE_KIRARI, TLOGOE_BDL_SUBTITLE_KIRARI_E, TLOGOE0_BDL_SUBTITLE_KIRARI_E));
-        // JUT_ASSERT(VERSION_SELECT(0xE3, 0x10E, 0x10E), modelData_kirari != NULL);
-
-        // mModel_kirari = mDoExt_J3DModel__create(modelData_kirari, 0x80000U, 0x37441422U);
-        // JUT_ASSERT(VERSION_SELECT(0xE8, 0x113, 0x113), mModel_kirari != NULL);
+        const modelDataKirari = globals.resCtrl.getObjectRes(ResType.Model, d_a_title.arcName, 0xB);
+        this.modelSubtitleShimmer = new J3DModelInstance(modelDataKirari);
 
         const bckDataShip = globals.resCtrl.getObjectRes(ResType.Bck, d_a_title.arcName, 0x8);
         this.bckShip.init(modelDataShip, bckDataShip, true, LoopMode.Repeat, 1.0, 0, -1, false);
@@ -5901,20 +5891,30 @@ class d_a_title extends fopAc_ac_c {
         this.bpkShip.frameCtrl.setFrame(0.0);
         this.bpkShip.frameCtrl.setRate(1.0);
 
-        // J3DAnmTextureSRTKey* btk_sub = static_cast<J3DAnmTextureSRTKey*>(dComIfG_getObjectRes(ARCNAME, VERSION_SELECT(TLOGO_BTK_SUBTITLE_START_ANIM, TLOGOE_BTK_SUBTITLE_START_ANIM_E, TLOGOE0_BTK_SUBTITLE_START_ANIM_E)));
-        // JUT_ASSERT(VERSION_SELECT(0x106, 0x131, 0x131), btk_sub != NULL);
+        const btkDataSub = globals.resCtrl.getObjectRes(ResType.Btk, d_a_title.arcName, 0x14);
+        this.btkSubtitle.init(modelDataSub, btkDataSub, true, LoopMode.Once, 1.0, 0, -1, false);
 
-        // BOOL ok_btk_subtitle = mBtkSub.init(modelData_sub, btk_sub, TRUE, J3DFrameCtrl::LOOP_ONCE_e, 1.0f, 0, -1, false, 0);
-        // JUT_ASSERT(VERSION_SELECT(0x10D, 0x138, 0x138), ok_btk_subtitle != FALSE);
+        const btkDataShimmer = globals.resCtrl.getObjectRes(ResType.Btk, d_a_title.arcName, 0x13);
+        this.btkShimmer.init(modelDataKirari, btkDataShimmer, true, LoopMode.Once, 1.0, 0, -1, false);
 
-        // J3DAnmTextureSRTKey* btk_kirari = static_cast<J3DAnmTextureSRTKey*>(dComIfG_getObjectRes(ARCNAME, VERSION_SELECT(TLOGO_BTK_SUBTITLE_KIRARI, TLOGOE_BTK_SUBTITLE_KIRARI_E, TLOGOE0_BTK_SUBTITLE_KIRARI_E)));
-        // JUT_ASSERT(VERSION_SELECT(0x112, 0x13D, 0x13D), btk_kirari != NULL);
-
-        // BOOL ok_btk_kirari = mBtkKirari.init(modelData_kirari, btk_kirari, TRUE, J3DFrameCtrl::LOOP_REPEAT_e, 1.0f, 0, -1, false, 0);
-        // JUT_ASSERT(VERSION_SELECT(0x119, 0x144, 0x144), ok_btk_kirari != FALSE);
-
-        // mDoExt_restoreCurrentHeap();
         this.set_mtx();
+    }
+
+    private model_draw(globals: dGlobals, renderInstManager: GfxRenderInstManager) {
+        
+        if (this.btkSubtitle.frameCtrl.getFrame() != 0.0) {
+            this.btkShimmer.entry(this.modelSubtitleShimmer)
+            mDoExt_modelUpdateDL(globals, this.modelSubtitleShimmer, renderInstManager, globals.dlst.ui);
+        
+            this.btkSubtitle.entry(this.modelSubtitle);
+            mDoExt_modelUpdateDL(globals, this.modelSubtitle, renderInstManager, globals.dlst.ui);
+        }
+
+        if (this.bpkShip.frameCtrl.getFrame() != 0.0) {
+            this.bckShip.entry(this.modelShip);
+            this.bpkShip.entry(this.modelShip);
+            mDoExt_modelUpdateDL(globals, this.modelShip, renderInstManager, globals.dlst.ui);
+        }
     }
 
     private set_mtx() {
@@ -5922,23 +5922,14 @@ class d_a_title extends fopAc_ac_c {
         mat4.fromTranslation(this.modelShip.modelMatrix, [this.shipOffsetX, 0, 1000]);
         mDoMtx_ZXYrotM(this.modelShip.modelMatrix, [0, 0x4000, 0]); 
 
-        // pos.set(m094 + attr().field_0x00, attr().field_0x04, 0.0f);
-        // mDoMtx_stack_c::transS(pos.x, pos.y, 1000.0f);
-        // mDoMtx_stack_c::ZXYrotM(0, 0x4000, 0);
-        // mModel_ship->setBaseTRMtx(mDoMtx_stack_c::get());
+        vec3.set(this.modelSubtitle.baseScale, 1.0, 1.0, 1.0);
+        vec3.set(this.modelSubtitleShimmer.baseScale, 1.0, 1.0, 1.0);
 
-        // scale.set(attr().field_0x18, attr().field_0x1C, 1.0f);
-        // mModel_subtitle->setBaseScale(scale);
-        // mModel_kirari->setBaseScale(scale);
+        mat4.fromTranslation(this.modelSubtitle.modelMatrix, [-57.0, -3.0, -10000.0]);
+        mDoMtx_ZXYrotM(this.modelSubtitle.modelMatrix, [0, -0x8000, 0]); 
 
-        // pos.set(attr().field_0x10, attr().field_0x14, 0.0f);
-        // mDoMtx_stack_c::transS(pos.x, pos.y, -10000.0f);
-        // mDoMtx_stack_c::ZXYrotM(0, -0x8000, 0);
-        // mModel_subtitle->setBaseTRMtx(mDoMtx_stack_c::get());
-
-        // mDoMtx_stack_c::transS(pos.x, pos.y, -10010.0f);
-        // mDoMtx_stack_c::ZXYrotM(0, -0x8000, 0);
-        // mModel_kirari->setBaseTRMtx(mDoMtx_stack_c::get());
+        mat4.fromTranslation(this.modelSubtitleShimmer.modelMatrix, [-57.0, -3.0, -10010.0]);
+        mDoMtx_ZXYrotM(this.modelSubtitleShimmer.modelMatrix, [0, -0x8000, 0]); 
     }
 
     private calc_2d_alpha(deltaTimeFrames: number) {
@@ -5966,6 +5957,10 @@ class d_a_title extends fopAc_ac_c {
             this.panes[TitlePane.JapanSubtitle].setAlpha(0.0);
 
             // TODO: Emitters
+
+            if (this.anmFrameCounter >= 80) {
+                this.btkSubtitle.play(deltaTimeFrames);
+            }
             
             if (this.anmFrameCounter <= 150) {
                 this.panes[TitlePane.Nintendo].setAlpha(0.0);
@@ -5988,7 +5983,7 @@ class d_a_title extends fopAc_ac_c {
             this.panes[TitlePane.MainTitle].setAlpha(1.0);
             this.panes[TitlePane.JapanSubtitle].setAlpha(0.0);
 
-            // mBtkSub.setFrame(mBtkSub.getEndFrame());
+            this.btkSubtitle.frameCtrl.setFrame(this.btkSubtitle.frameCtrl.endFrame);
             this.panes[TitlePane.Nintendo].setAlpha(1.0);
             if (this.blinkFrameCounter >= 100) {
                 this.blinkFrameCounter = 0;
@@ -6001,6 +5996,17 @@ class d_a_title extends fopAc_ac_c {
             } else {
                 this.panes[TitlePane.PressStart].setAlpha((50 - this.blinkFrameCounter) / 50.0);
             }
+        }
+
+        if (this.shimmerFrameCounter <= 0) {
+            const finished = this.btkShimmer.play(deltaTimeFrames);
+            if(finished) {
+                this.btkShimmer.frameCtrl.setFrame(0.0);
+                this.btkShimmer.frameCtrl.setRate(1.0);
+                this.shimmerFrameCounter = cM_rndF(120) + 10;
+            }
+        } else {
+            this.shimmerFrameCounter -= deltaTimeFrames;
         }
 
         if (this.shipFrameCounter <= 0) {
