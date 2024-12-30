@@ -438,6 +438,9 @@ class Main {
     }
 
     private setIsPlaying(v: boolean): void {
+        if (this.isPlaying === v)
+            return;
+
         this.isPlaying = v;
         this.ui.playPauseButton.setIsPlaying(v);
 
@@ -759,7 +762,7 @@ class Main {
         return this.saveManager.getSaveStateSlotKey(assertExists(this._getCurrentSceneDescId()), slotIndex);
     }
 
-    private _onSceneChanged(scene: SceneGfx, sceneStateStr: string | null): void {
+    private _onSceneChanged(scene: SceneGfx, sceneStateStr: string | null, timeState: TimeState | null): void {
         scene.onstatechanged = () => {
             this._saveStateAndUpdateURL();
         };
@@ -780,11 +783,8 @@ class Main {
         if (this.viewer.cameraController === null)
             this.viewer.setCameraController(new FPSCameraController());
 
-        if (IS_DEVELOPMENT) {
-            const timeState = this._loadTimeState(this._getCurrentSceneDescId()!);
-            if (timeState !== null)
-                this._applyTimeState(timeState);
-        }
+        if (timeState !== null)
+            this._applyTimeState(timeState);
 
         if (!this._loadSceneSaveState(sceneStateStr)) {
             const camera = this.viewer.camera;
@@ -866,7 +866,7 @@ class Main {
         inputManager.reset();
         const viewerInput = this.viewer.viewerRenderInput;
 
-        const timeState = this._loadTimeState(this.sceneDatabase.getSceneDescId(sceneDesc));
+        const timeState = IS_DEVELOPMENT ? this._loadTimeState(this.sceneDatabase.getSceneDescId(sceneDesc)) : null;
         const initialSceneTime = timeState !== null ? timeState.sceneTime : 0;
 
         const context: SceneContext = {
@@ -898,7 +898,7 @@ class Main {
                 dataFetcher.setProgress();
                 this.loadingSceneDesc = null;
                 this.viewer.setScene(scene);
-                this._onSceneChanged(scene, sceneStateStr);
+                this._onSceneChanged(scene, sceneStateStr, timeState);
             }
         });
 
