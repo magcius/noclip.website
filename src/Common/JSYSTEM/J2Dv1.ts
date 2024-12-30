@@ -384,8 +384,6 @@ export class J2DPicture extends J2DPane {
 
         if (this.data.uvBinding !== 15) { console.warn('Untested J2D feature'); }
         if (this.data.flags !== 0) { console.warn('Untested J2D feature'); }
-        if (!colorEqual(this.data.colorBlack, TransparentBlack) || !colorEqual(this.data.colorWhite, White))
-            console.warn(`Untested J2D feature colorBlack ${this.data.colorBlack}, colorWhite ${this.data.colorWhite}`);
         if (!colorEqual(this.data.colorCorners[0], White) || !colorEqual(this.data.colorCorners[1], White) || !colorEqual(this.data.colorCorners[2], White) || !colorEqual(this.data.colorCorners[3], White))
             console.warn(`Untested J2D feature colorCorners ${this.data.colorCorners}`);
     }
@@ -406,7 +404,10 @@ export class J2DPicture extends J2DPane {
         this.sdraw.setOnRenderInst(renderInst);
         this.materialHelper.setOnRenderInst(renderInstManager.gfxRenderCache, renderInst);
 
-        materialParams.u_Color[ColorKind.C0].a = this.drawAlpha;
+        materialParams.u_Color[ColorKind.C0] = this.data.colorBlack;
+        materialParams.u_Color[ColorKind.C1] = this.data.colorWhite;
+        materialParams.u_Color[ColorKind.C2].a = this.drawAlpha;
+
         this.tex.fillTextureMapping(materialParams.m_TextureMapping[0]);
         this.materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
@@ -487,20 +488,36 @@ export class J2DPicture extends J2DPane {
         this.sdraw.endDraw(this.cache);
 
         const mb = new GXMaterialBuilder('J2DPane');
+        let tevStage = 0;
+
         // Assume alpha is enabled. This is byte 1 on a JUTTexture, but noclip doesn't read it
         mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+        
         // 0: Multiply tex and vertex colors and alpha
-        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR0A0);
-        mb.setTevColorIn(0, GX.CC.ZERO, GX.CC.TEXC, GX.CC.RASC, GX.CC.ZERO);
-        mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.TEXA, GX.CA.RASA, GX.CA.ZERO);
-        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-        // 1: Multiply result alpha by dynamic alpha (this.drawAlpha)
-        mb.setTevOrder(1, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR_ZERO);
-        mb.setTevColorIn(1, GX.CC.CPREV, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO);
-        mb.setTevAlphaIn(1, GX.CA.ZERO, GX.CA.APREV, GX.CA.A0, GX.CA.ZERO);
-        mb.setTevColorOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-        mb.setTevAlphaOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevOrder(tevStage, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR0A0);
+        mb.setTevColorIn(tevStage, GX.CC.ZERO, GX.CC.TEXC, GX.CC.RASC, GX.CC.ZERO);
+        mb.setTevAlphaIn(tevStage, GX.CA.ZERO, GX.CA.TEXA, GX.CA.RASA, GX.CA.ZERO);
+        mb.setTevColorOp(tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaOp(tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        tevStage += 1;
+
+        // 1: Lerp between the Black and White colors based on previous stage result
+        if (!colorEqual(this.data.colorBlack, TransparentBlack) || !colorEqual(this.data.colorWhite, White)) {
+            mb.setTevOrder(tevStage, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR_ZERO);
+            mb.setTevColorIn(tevStage, GX.CC.C0, GX.CC.C1, GX.CC.CPREV, GX.CC.ZERO);
+            mb.setTevAlphaIn(tevStage, GX.CA.A0, GX.CA.A1, GX.CA.APREV, GX.CA.ZERO);
+            mb.setTevColorOp(tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+            mb.setTevAlphaOp(tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+            tevStage += 1;
+        }
+
+        // 2: Multiply result alpha by dynamic alpha (this.drawAlpha)
+        mb.setTevOrder(tevStage, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR_ZERO);
+        mb.setTevColorIn(tevStage, GX.CC.CPREV, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO);
+        mb.setTevAlphaIn(tevStage, GX.CA.ZERO, GX.CA.APREV, GX.CA.A2, GX.CA.ZERO);
+        mb.setTevColorOp(tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaOp(tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        tevStage += 1;
 
         mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
         mb.setZMode(false, GX.CompareType.ALWAYS, false);
