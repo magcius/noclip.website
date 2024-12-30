@@ -742,7 +742,7 @@ class d_s_play extends fopScn {
         this.grassPacket = new GrassPacket(globals);
         this.woodPacket = new WoodPacket(globals);
 
-        this.currentGrafPort = new J2DGrafContext(globals.modelCache.device, 0.0, 0.0, 608.0, 448.0, -1.0, 1.0);
+        this.currentGrafPort = new J2DGrafContext(globals.modelCache.device, 0.0, 0.0, 640.0, 480.0, -1.0, 1.0);
 
         globals.scnPlay = this;
 
