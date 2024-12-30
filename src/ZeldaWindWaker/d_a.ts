@@ -5842,6 +5842,8 @@ class d_a_title extends fopAc_ac_c {
         
         {
             this.model_draw(globals, renderInstManager);
+
+            renderInstManager.setCurrentList(globals.dlst.ui2D[0]);
             this.screen.draw(renderInstManager, globals.scnPlay.orthoGraf2D);
         }
 
