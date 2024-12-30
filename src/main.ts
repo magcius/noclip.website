@@ -440,7 +440,9 @@ class Main {
     private setIsPlaying(v: boolean): void {
         this.isPlaying = v;
         this.ui.playPauseButton.setIsPlaying(v);
-        this._saveCurrentTimeState(this._getCurrentSceneDescId()!);
+
+        if (IS_DEVELOPMENT)
+            this._saveCurrentTimeState(this._getCurrentSceneDescId()!);
     }
 
     private _decodeHashString(hashString: string): [string, string] {
@@ -694,16 +696,20 @@ class Main {
         return this.sceneDatabase.getSceneDescId(this.currentSceneDesc);
     }
 
-    private _loadTimeState(sceneDescId: string): void {
-        const timeStateKey = `TimeState/${sceneDescId}`;
-        const timeStateStr = this.saveManager.loadStateFromLocation(timeStateKey, SaveStateLocation.SessionStorage);
-        if (!timeStateStr)
-            return;
-
-        const timeState = JSON.parse(timeStateStr) as TimeState;
+    private _applyTimeState(timeState: TimeState): void {
         this.setIsPlaying(timeState.isPlaying);
         this.sceneTimeScale = timeState.sceneTimeScale;
         this.viewer.sceneTime = timeState.sceneTime;
+    }
+
+    private _loadTimeState(sceneDescId: string): TimeState | null {
+        const timeStateKey = `TimeState/${sceneDescId}`;
+        const timeStateStr = this.saveManager.loadStateFromLocation(timeStateKey, SaveStateLocation.SessionStorage);
+        if (!timeStateStr)
+            return null;
+
+        const timeState = JSON.parse(timeStateStr) as TimeState;
+        return timeState;
     }
 
     private _saveCurrentTimeState(sceneDescId: string): void {
@@ -762,6 +768,7 @@ class Main {
         if (scene.createPanels)
             scenePanels = scene.createPanels();
         this.ui.setScenePanels(scenePanels);
+
         // Force time to play when loading a map.
         this.setIsPlaying(true);
 
@@ -773,8 +780,11 @@ class Main {
         if (this.viewer.cameraController === null)
             this.viewer.setCameraController(new FPSCameraController());
 
-        if (IS_DEVELOPMENT)
-            this._loadTimeState(this._getCurrentSceneDescId()!);
+        if (IS_DEVELOPMENT) {
+            const timeState = this._loadTimeState(this._getCurrentSceneDescId()!);
+            if (timeState !== null)
+                this._applyTimeState(timeState);
+        }
 
         if (!this._loadSceneSaveState(sceneStateStr)) {
             const camera = this.viewer.camera;
@@ -855,8 +865,12 @@ class Main {
         const inputManager = this.viewer.inputManager;
         inputManager.reset();
         const viewerInput = this.viewer.viewerRenderInput;
+
+        const timeState = this._loadTimeState(this.sceneDatabase.getSceneDescId(sceneDesc));
+        const initialSceneTime = timeState !== null ? timeState.sceneTime : 0;
+
         const context: SceneContext = {
-            device, dataFetcher, dataShare, uiContainer, destroyablePool, inputManager, viewerInput,
+            device, dataFetcher, dataShare, uiContainer, destroyablePool, inputManager, viewerInput, initialSceneTime,
         };
 
         // The age delta on pruneOldObjects determines whether any resources willf be shared at all.
