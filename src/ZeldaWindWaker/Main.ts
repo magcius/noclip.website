@@ -543,6 +543,8 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
                 this.executeList(passRenderer, dlst.effect[EffectDrawGroup.Main]);
                 this.executeList(passRenderer, dlst.wetherEffect);
                 this.executeListSet(passRenderer, dlst.ui);
+
+                this.executeListSet(passRenderer, dlst.ui2D);
             });
         });
 
