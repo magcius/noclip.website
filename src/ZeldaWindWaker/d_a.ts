@@ -5823,11 +5823,10 @@ class d_a_title extends fopAc_ac_c {
 
         // From mDoGph_Painter(). Set up new view and ortho proj matrices. 
         // TODO: This should be set by the Opa2D draw list
-        const adjustedWidth = 480 * viewerInput.backbufferWidth / viewerInput.backbufferHeight;
-        mat4.fromTranslation(scratchMat4a, [adjustedWidth * 0.5, 240, 1000]);
+        const orthoCtx = globals.scnPlay.currentGrafPort;
+        mat4.fromTranslation(scratchMat4a, [orthoCtx.aspectRatioCorrection * 320, 240, 1000]);
         mDoMtx_ZrotM(scratchMat4a, -0x8000);
         globals.camera.viewFromWorldMatrix = scratchMat4a;
-        const orthoCtx = new J2DGrafContext(globals.sceneContext.device, -9.0, -21.0, adjustedWidth + 10, 503.0, 100000.0, -100000.0);
         globals.camera.clipFromViewMatrix = orthoCtx.sceneParams.u_Projection;
         mat4.mul(globals.camera.clipFromWorldMatrix, globals.camera.clipFromViewMatrix, globals.camera.viewFromWorldMatrix);
         globals.camera.frustum.updateClipFrustum(globals.camera.clipFromWorldMatrix, globals.camera.clipSpaceNearZ);
@@ -5844,7 +5843,7 @@ class d_a_title extends fopAc_ac_c {
             this.model_draw(globals, renderInstManager);
 
             renderInstManager.setCurrentList(globals.dlst.ui2D[0]);
-            this.screen.draw(renderInstManager, globals.scnPlay.orthoGraf2D);
+            this.screen.draw(renderInstManager, orthoCtx);
         }
 
         // TODO: This should be set by the Opa2D draw list

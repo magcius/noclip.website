@@ -114,7 +114,7 @@ export class d_place_name extends msg_class {
 
     public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         renderInstManager.setCurrentList(globals.dlst.ui[0]);
-        this.screen.draw(renderInstManager, globals.scnPlay.orthoGraf2D);
+        this.screen.draw(renderInstManager, globals.scnPlay.currentGrafPort);
     }
 
     public override execute(globals: dGlobals, deltaTimeFrames: number): void {

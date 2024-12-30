@@ -499,6 +499,10 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         const dlst = this.globals.dlst;
         dlst.peekZ.beginFrame(device);
 
+        // From mDoGph_Painter, 
+        this.globals.scnPlay.currentGrafPort.setOrtho(-9.0, -21.0, 650.0, 503.0, 100000.0, -100000.0);
+        this.globals.scnPlay.currentGrafPort.setPort(viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+
         this.executeDrawAll(device, viewerInput);
 
         const renderInstManager = this.renderHelper.renderInstManager;
@@ -726,7 +730,7 @@ class d_s_play extends fopScn {
     public placenameIndex: Placename;
     public placenameState: PlacenameState;
 
-    public orthoGraf2D: J2DGrafContext;
+    public currentGrafPort: J2DGrafContext;
 
     public override load(globals: dGlobals, userData: any): cPhs__Status {
         super.load(globals, userData);
@@ -738,7 +742,7 @@ class d_s_play extends fopScn {
         this.grassPacket = new GrassPacket(globals);
         this.woodPacket = new WoodPacket(globals);
 
-        this.orthoGraf2D = new J2DGrafContext(globals.modelCache.device, 0.0, 0.0, 608.0, 448.0, -1.0, 0.0);
+        this.currentGrafPort = new J2DGrafContext(globals.modelCache.device, 0.0, 0.0, 608.0, 448.0, -1.0, 1.0);
 
         globals.scnPlay = this;
 
@@ -759,8 +763,6 @@ class d_s_play extends fopScn {
 
     public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         super.draw(globals, renderInstManager, viewerInput);
-
-        this.orthoGraf2D.setupView(viewerInput.backbufferWidth, viewerInput.backbufferHeight);
 
         // Magma/Grass/Trees/Bushes/Flowers
         const frameCount = viewerInput.time / 1000.0 * 30;

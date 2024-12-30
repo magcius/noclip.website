@@ -15,7 +15,7 @@ import { projectionMatrixConvertClipSpaceNearZ } from "../../gfx/helpers/Project
 import { TSDraw } from "../../SuperMarioGalaxy/DDraw.js";
 import { BTIData } from "./JUTTexture.js";
 import { GXMaterialBuilder } from "../../gx/GXMaterialBuilder.js";
-import { mat4, vec2 } from "gl-matrix";
+import { mat4, vec2, vec4 } from "gl-matrix";
 import { GfxRenderCache } from "../../gfx/render/GfxRenderCache.js";
 
 const materialParams = new MaterialParams();
@@ -67,21 +67,45 @@ const enum J2DUVBinding {
 };
 
 export class J2DGrafContext {
+    private clipSpaceNearZ: GfxClipSpaceNearZ; 
     public sceneParams = new SceneParams();
-    public aspectRatio: number;
+    public viewport = vec4.create();
+    public ortho = vec4.create();
 
-    constructor(device: GfxDevice, x: number, y: number, private w: number, private h: number, far: number, near: number) {
-        this.aspectRatio = w / h;
-        // NOTE: Y axis is inverted here (bottom = height), to match the original J2D convention
-        projectionMatrixForCuboid(this.sceneParams.u_Projection, x, w, h, y, near, far);
-        const clipSpaceNearZ = device.queryVendorInfo().clipSpaceNearZ;
-        projectionMatrixConvertClipSpaceNearZ(this.sceneParams.u_Projection, clipSpaceNearZ, GfxClipSpaceNearZ.NegativeOne);
+    public near: number;
+    public far: number;
+
+    // Used to preserve the aspect ratio of assets that were designed for 640x480, but being rendered at a different resolution.
+    public aspectRatioCorrection: number = 1.0;
+
+    constructor(device: GfxDevice, vpX: number, vpY: number, vpWidth: number, vpHeight: number, near: number, far: number) {
+        this.clipSpaceNearZ = device.queryVendorInfo().clipSpaceNearZ;
+        vec4.set(this.viewport, vpX, vpY, vpWidth, vpHeight);
+        vec4.set(this.ortho, 0, 0, vpWidth, vpHeight);
+        this.near = far;
+        this.far = far;
     }
 
-    public setupView(backbufferWidth: number, backbufferHeight: number): void {
-        const screenAspect = backbufferWidth / backbufferHeight;
-        const grafAspect = this.w / this.h;
-        this.aspectRatio = grafAspect / screenAspect;
+    public setOrtho(left: number, top: number, right: number, bottom: number, far: number, near: number) {
+        vec4.set(this.ortho, left, right, bottom, top);
+        this.near = near;
+        this.far = far;
+    }
+
+    public setPort(backbufferWidth: number, backbufferHeight: number) {
+        // To support dynamic aspect ratios, we keep the original screenspace height and the original aspect ratio. 
+        // So changing the window width will not cause 2D elements to scale, but changing the window height will. 
+        const dstAspect = backbufferWidth / backbufferHeight;
+        const srcAspect = this.viewport[2] / this.viewport[3];
+        this.aspectRatioCorrection = dstAspect / srcAspect;
+
+        const left = this.ortho[0] * this.aspectRatioCorrection;
+        const right = this.ortho[1] * this.aspectRatioCorrection;
+        const bottom = this.ortho[2] + 0.5;
+        const top = this.ortho[3];
+ 
+        projectionMatrixForCuboid(this.sceneParams.u_Projection, left, right, bottom, top, this.near, this.far);
+        projectionMatrixConvertClipSpaceNearZ(this.sceneParams.u_Projection, this.clipSpaceNearZ, GfxClipSpaceNearZ.NegativeOne);
     }
 
     public setOnRenderInst(renderInst: GfxRenderInst): void {
@@ -304,10 +328,8 @@ export class J2DPane {
         const boundsValid = this.data.w > 0 && this.data.h > 0;
 
         if (this.data.visible && boundsValid) {
-            // To support dynamic aspect ratios, we keep the original screenspace height and the original aspect ratio. 
-            // So changing the window width will not cause 2D elements to scale, but changing the window height will. 
             vec2.set(this.drawPos, this.data.x, this.data.y);
-            vec2.set(this.drawDimensions, this.data.w * ctx2D.aspectRatio, this.data.h);
+            vec2.set(this.drawDimensions, this.data.w, this.data.h);
             this.drawAlpha = this.data.alpha / 0xFF;
 
             if (this.parent) {
