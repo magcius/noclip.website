@@ -55,6 +55,18 @@ function parseResourceReference(buffer: ArrayBufferSlice, offset: number, resTyp
 }
 
 /**
+ * When rendering a J2D element that was originally designed for 4:3 in a wider aspect ratio, the screenspace Y 
+ * positions are maintained but the X positions must be adjusted. Often we simply want to keep the elements centered,
+ * but occasionally we want to anchor them to the left or right. 
+ * See also: J2DGrafContext.setPort() and dPlaceName.load()
+ */
+export enum J2DAnchorPos {
+    Left,
+    Center,
+    Right 
+}
+
+/**
  * If set, the UVs for a quad will be pinned (bound) to the quad edge. If not set, the UVs will be clipped by the quad. 
  * For instance, if the texture is 200 pixels wide, but the quad is 100 pixels wide and Right is not set, the texture 
  * will be clipped by half. If both Left and Right are set, the texture will be squashed to fit within the quad.
@@ -566,14 +578,22 @@ export class J2DPicture extends J2DPane {
 //#region J2DScreen
 export class J2DScreen extends J2DPane {
     public color: Color;
+    public anchorPos: J2DAnchorPos;
 
-    constructor(data: SCRN, cache: GfxRenderCache, resolver: ResourceResolver<JUTResType>) {
+    constructor(data: SCRN, cache: GfxRenderCache, resolver: ResourceResolver<JUTResType>, anchorPos: J2DAnchorPos) {
         super(data, cache, null);
         this.color = data.color;
+        this.anchorPos = anchorPos;
         this.resolveReferences(resolver);
     }
 
     public override draw(renderInstManager: GfxRenderInstManager, ctx2D: J2DGrafContext, offsetX?: number, offsetY?: number): void {
+        switch(this.anchorPos) {
+            case J2DAnchorPos.Left: this.data.x = 0; break;
+            case J2DAnchorPos.Center: this.data.x = (ctx2D.aspectRatioCorrection - 1.0) * ctx2D.viewport[2] * 0.5; break;
+            case J2DAnchorPos.Right: this.data.x = (ctx2D.aspectRatioCorrection - 1.0) * ctx2D.viewport[2]; break;
+        }
+
         super.draw(renderInstManager, ctx2D, offsetX, offsetY);
     }
 
