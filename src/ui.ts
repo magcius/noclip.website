@@ -2695,7 +2695,7 @@ export class UI {
 
     public cameraSpeedIndicator = new CameraSpeedIndicator();
     private bottomBar = new BottomBar();
-    private playPauseButton = new PlayPauseButton();
+    public playPauseButton = new PlayPauseButton();
     private shareButton = new ShareButton();
     private fullscreenButton = new FullscreenButton();
 
@@ -2704,10 +2704,9 @@ export class UI {
     private isDragging: boolean = false;
     private lastMouseActiveTime: number = -1;
 
-    public isPlaying: boolean = true;
-
     public isEmbedMode: boolean = false;
     public isVisible: boolean = true;
+    public hasScene: boolean = false;
 
     public studioModeEnabled: boolean = false;
 
@@ -2781,11 +2780,6 @@ export class UI {
         this.studioPanel = new StudioPanel(this, viewer);
         this.toplevel.appendChild(this.studioPanel.elem);
 
-        this.playPauseButton.onplaypause = (shouldBePlaying) => {
-            this.togglePlayPause(shouldBePlaying);
-        };
-        this.playPauseButton.setIsPlaying(this.isPlaying);
-
         this.about.onfaq = () => {
             this.faqPanel.elem.style.display = 'block';
         };
@@ -2800,9 +2794,8 @@ export class UI {
         this.elem = this.toplevel;
     }
 
-    public togglePlayPause(shouldBePlaying: boolean = !this.isPlaying): void {
-        this.isPlaying = shouldBePlaying;
-        this.playPauseButton.setIsPlaying(this.isPlaying);
+    public setIsPlaying(v: boolean): void {
+        this.playPauseButton.setIsPlaying(v);
     }
 
     public toggleWebXRCheckbox(shouldBeChecked: boolean = !this.xrSettings.enableXRCheckBox.checked) {
@@ -2853,7 +2846,17 @@ export class UI {
         this.debugFloaterHolder.destroyScene();
     }
 
+    private setHasScene(v: boolean): void {
+        if (this.hasScene === v)
+            return;
+
+        this.hasScene = v;
+        this.syncVisibilityState();
+    }
+
     public setScenePanels(scenePanels: Panel[] | null): void {
+        this.setHasScene(scenePanels !== null);
+
         if (scenePanels !== null) {
             this.setPanels([this.sceneSelect, ...scenePanels, this.textureViewer, this.viewerSettings, this.xrSettings, this.statisticsPanel, this.studioSidePanel, this.about]);
         } else {
@@ -2907,9 +2910,11 @@ export class UI {
         this.bottomBar.setVisible(bottomBarVisible);
         this.bottomBar.setActive(this.shouldBottomBarBeFadeIn());
 
+        this.playPauseButton.setVisible(this.hasScene);
+
         const extraButtonsVisible = !this.isEmbedMode;
         this.cameraSpeedIndicator.setVisible(extraButtonsVisible);
-        this.shareButton.setVisible(extraButtonsVisible);
+        this.shareButton.setVisible(extraButtonsVisible && this.hasScene);
     }
 
     public setEmbedMode(v: boolean): void {

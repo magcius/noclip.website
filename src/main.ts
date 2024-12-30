@@ -345,8 +345,10 @@ class Main {
     private webXRContext: WebXRContext;
 
     public sceneTimeScale = 1.0;
-    public isEmbedMode = false;
+    private isPlaying = false;
     private isFrameStep = false;
+
+    public isEmbedMode = false;
     private pixelSize = 1;
 
     // Link to debugJunk so we can reference it from the DevTools.
@@ -435,6 +437,12 @@ class Main {
         this._onRequestAnimationFrameCanvas();
     }
 
+    private setIsPlaying(v: boolean): void {
+        this.isPlaying = v;
+        this.ui.playPauseButton.setIsPlaying(v);
+        this._saveCurrentTimeState(this._getCurrentSceneDescId()!);
+    }
+
     private _decodeHashString(hashString: string): [string, string] {
         let sceneDescId: string = '', sceneSaveState: string = '';
         const firstSemicolon = hashString.indexOf(';');
@@ -509,9 +517,9 @@ class Main {
         if (inputManager.isKeyDownEventTriggered('Numpad3'))
             this._exportSaveData();
         if (inputManager.isKeyDownEventTriggered('Period'))
-            this.ui.togglePlayPause();
+            this.setIsPlaying(!this.isPlaying);
         if (inputManager.isKeyDown('Comma')) {
-            this.ui.togglePlayPause(false);
+            this.setIsPlaying(false);
             this.isFrameStep = true;
         }
         if (inputManager.isKeyDownEventTriggered('F9'))
@@ -550,13 +558,11 @@ class Main {
         const shouldTakeScreenshot = this.viewer.inputManager.isKeyDownEventTriggered('Numpad7') || this.viewer.inputManager.isKeyDownEventTriggered('BracketRight');
 
         let sceneTimeScale = this.sceneTimeScale;
-        if (!this.ui.isPlaying) {
-            if (this.isFrameStep) {
-                sceneTimeScale /= 4.0;
-                this.isFrameStep = false;
-            } else {
-                sceneTimeScale = 0.0;
-            }
+        if (this.isFrameStep) {
+            sceneTimeScale /= 4.0;
+            this.isFrameStep = false;
+        } else if (!this.isPlaying) {
+            sceneTimeScale = 0.0;
         }
 
         if (!this.viewer.externalControl) {
@@ -695,13 +701,13 @@ class Main {
             return;
 
         const timeState = JSON.parse(timeStateStr) as TimeState;
-        this.ui.togglePlayPause(timeState.isPlaying);
+        this.setIsPlaying(timeState.isPlaying);
         this.sceneTimeScale = timeState.sceneTimeScale;
         this.viewer.sceneTime = timeState.sceneTime;
     }
 
     private _saveCurrentTimeState(sceneDescId: string): void {
-        const timeState: TimeState = { isPlaying: this.ui.isPlaying, sceneTimeScale: this.sceneTimeScale, sceneTime: this.viewer.sceneTime };
+        const timeState: TimeState = { isPlaying: this.isPlaying, sceneTimeScale: this.sceneTimeScale, sceneTime: this.viewer.sceneTime };
         const timeStateStr = JSON.stringify(timeState);
         const timeStateKey = `TimeState/${sceneDescId}`;
         this.saveManager.saveTemporaryState(timeStateKey, timeStateStr);
@@ -757,7 +763,7 @@ class Main {
             scenePanels = scene.createPanels();
         this.ui.setScenePanels(scenePanels);
         // Force time to play when loading a map.
-        this.ui.togglePlayPause(true);
+        this.setIsPlaying(true);
 
         const sceneDescId = this._getCurrentSceneDescId()!;
         this.saveManager.setCurrentSceneDescId(sceneDescId);
@@ -892,6 +898,7 @@ class Main {
         this.toplevel.appendChild(this.ui.elem);
         this.ui.sceneSelect.onscenedescselected = this._onSceneDescSelected.bind(this);
         this.ui.xrSettings.onWebXRStateRequested = this._onWebXRStateRequested.bind(this);
+        this.ui.playPauseButton.onplaypause = this.setIsPlaying.bind(this);
 
         this.webXRContext.onsupportedchanged = () => {
             this._syncWebXRSettingsVisible();
