@@ -35,7 +35,7 @@ import { EDemoMode, dDemo_manager_c } from './d_demo.js';
 import { dDlst_list_Set, dDlst_list_c } from './d_drawlist.js';
 import { dKankyo_create, dKy__RegisterConstructors, dKy_setLight, dScnKy_env_light_c } from './d_kankyo.js';
 import { dKyw__RegisterConstructors } from './d_kankyo_wether.js';
-import { dPa_control_c } from './d_particle.js';
+import { dPa_control_c, ParticleGroup } from './d_particle.js';
 import { Placename, PlacenameState, dPn__update, d_pn__RegisterConstructors } from './d_place_name.js';
 import { dProcName_e } from './d_procname.js';
 import { ResType, dRes_control_c } from './d_resorce.js';
@@ -403,16 +403,16 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         {
             globals.particleCtrl.calc(globals, viewerInput);
 
-            for (let group = EffectDrawGroup.Main; group <= EffectDrawGroup.Indirect; group++) {
+            for (let group = ParticleGroup.Normal; group <= ParticleGroup.TwoDmenuBack; group++) {
                 let texPrjMtx: mat4 | null = null;
 
-                if (group === EffectDrawGroup.Indirect) {
+                if (group === ParticleGroup.Projection) {
                     texPrjMtx = scratchMatrix;
                     texProjCameraSceneTex(texPrjMtx, globals.camera.clipFromViewMatrix, 1);
                 }
 
                 globals.particleCtrl.setDrawInfo(globals.camera.viewFromWorldMatrix, globals.camera.clipFromViewMatrix, texPrjMtx, globals.camera.frustum);
-                renderInstManager.setCurrentList(dlst.effect[group]);
+                renderInstManager.setCurrentList(dlst.effect[group == ParticleGroup.Projection ? EffectDrawGroup.Indirect : EffectDrawGroup.Main]);
                 globals.particleCtrl.draw(device, this.renderHelper.renderInstManager, group);
             }
         }

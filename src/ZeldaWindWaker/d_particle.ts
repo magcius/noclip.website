@@ -30,9 +30,18 @@ export abstract class dPa_levelEcallBack extends JPAEmitterCallBack {
     }
 }
 
-const enum EffectDrawGroup {
-    Main = 0,
-    Indirect = 1,
+export const enum ParticleGroup {
+    Normal,
+    NormalP1,
+    Toon,
+    ToonP1,
+    Projection,
+    ShipTail,
+    Wind,
+    TwoDfore,
+    TwoDback,
+    TwoDmenuFore,
+    TwoDmenuBack,
 }
 
 function setTextureMappingIndirect(m: TextureMapping, flipY: boolean): void {
@@ -159,9 +168,9 @@ export class dPa_control_c {
         // This seems to mark it as an indirect particle (???) for simple particles.
         // ref. d_paControl_c::readCommon / readRoomScene
         if (!!(userID & 0x4000)) {
-            baseEmitter.drawGroupId = EffectDrawGroup.Indirect;
+            baseEmitter.drawGroupId = ParticleGroup.Projection;
         } else {
-            baseEmitter.drawGroupId = EffectDrawGroup.Main;
+            baseEmitter.drawGroupId = ParticleGroup.Normal;
         }
 
         if (pos !== null)
