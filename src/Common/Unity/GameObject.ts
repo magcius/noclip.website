@@ -169,7 +169,6 @@ export class MeshRenderer extends UnityComponent {
             const materialPPtr = materials[i];
             // Don't wait on materials, we can render them as they load in...
             this.fetchMaterial(level, i, materialPPtr);
-            // materialPPtr.free();
         }
     }
 

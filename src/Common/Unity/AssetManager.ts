@@ -247,23 +247,18 @@ export class AssetFile {
     }
 
     private createMeshData = async (assetSystem: UnityAssetSystem, objData: AssetObjectData): Promise<UnityMeshData> => {
-        try {
-            const mesh = rust.UnityMesh.create(assetSystem.version, objData.data);
+        const mesh = rust.UnityMesh.create(assetSystem.version, objData.data);
 
-            const streamingInfo: UnityStreamingInfo = mesh.streaming_info;
-            if (streamingInfo.path.length !== 0) {
-                const buf = await assetSystem.fetchStreamingInfo(streamingInfo);
-                mesh.set_vertex_data(buf.createTypedArray(Uint8Array));
-            }
+        const streamingInfo: UnityStreamingInfo = mesh.streaming_info;
+        if (streamingInfo.path.length !== 0) {
+            const buf = await assetSystem.fetchStreamingInfo(streamingInfo);
+            mesh.set_vertex_data(buf.createTypedArray(Uint8Array));
+        }
 
-            if (mesh.mesh_compression !== UnityMeshCompression.Off) {
-                return loadCompressedMesh(assetSystem.device, mesh);
-            } else {
-                return loadMesh(assetSystem.device, mesh);
-            }
-        } catch (e) {
-            console.error(objData);
-            throw e;
+        if (mesh.mesh_compression !== UnityMeshCompression.Off) {
+            return loadCompressedMesh(assetSystem.device, mesh);
+        } else {
+            return loadMesh(assetSystem.device, mesh);
         }
     };
 
@@ -299,14 +294,10 @@ export class AssetFile {
         if (this.promiseCache.has(pathID))
             return this.promiseCache.get(pathID)! as Promise<T>;
 
-        const promise = this.fetchObject(pathID).then((objData) => {
-            return createFunc(assetSystem, objData).then((v) => {
-                this.dataCache.set(pathID, v);
-                return v;
-            }).catch(e => {
-                console.error(`failed to fetch ${this.path}: ${pathID}, ${e}`);
-                throw e;
-            });
+        const promise = this.fetchObject(pathID).then(async objData => {
+            const v = await createFunc(assetSystem, objData);
+            this.dataCache.set(pathID, v);
+            return v;
         });
         this.promiseCache.set(pathID, promise);
         return promise;
@@ -357,7 +348,7 @@ export class UnityAssetSystem {
         await globalGameManager.waitForHeader();
         const scriptMapperFileObj = globalGameManager.unityObjects.find(obj => obj.class_id === UnityClassID.ScriptMapper);
         if (scriptMapperFileObj === undefined) {
-            console.warn('no script mapper found');
+            console.warn('no ScriptMapper found');
             return;
         }
         const scriptMapperPromise = globalGameManager.fetchObject(scriptMapperFileObj.file_id);
@@ -767,7 +758,6 @@ export class UnityMaterialData {
     public colorsByName: Map<string, Color> = new Map();
     public floatsByName: Map<string, number> = new Map();
     public shader: UnityShaderData | null = null;
-    public shaderName: string | null = null;
 
     constructor(private location: AssetLocation, private header: UnityMaterial) {
         this.name = this.header.name;
@@ -829,10 +819,10 @@ export class UnityMaterialData {
 
         const shaderPPtr = this.header.shader;
         this.shader = await assetSystem.fetchResource(UnityAssetResourceType.Shader, this.location, shaderPPtr);
+        assert(this.shader !== null);
         const shaderName = assetSystem.getShaderNameFromPPtr(this.location, shaderPPtr);
-        if (shaderName !== undefined) {
-            this.shaderName = shaderName;
-        }
+        assert(shaderName !== undefined);
+        this.shader.name = shaderName;
     }
 
     public destroy(device: GfxDevice): void {
