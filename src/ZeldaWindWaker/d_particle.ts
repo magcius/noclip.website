@@ -270,6 +270,8 @@ class dPa_simpleEcallBack extends JPAEmitterCallBack {
         if(this.baseEmitter) {
             this.baseEmitter.drawGroupId = groupID;
             this.baseEmitter.emitterCallBack = this;
+            this.baseEmitter.maxFrame = 0;
+            this.baseEmitter.stopCreateParticle();
 
             // From dPa_simpleEcallBack::draw(). Fixup TEV settings for particles that access the framebuffer.  
             if (groupID == ParticleGroup.Projection) {
@@ -307,7 +309,7 @@ class dPa_simpleEcallBack extends JPAEmitterCallBack {
         emitter.playCreateParticle();
         for(let simple of this.datas) {
             // TODO: Frustum culling
-            vec3.copy(workData.emitterTranslation, simple.pos);
+            emitter.setGlobalTranslation(workData.emitterTranslation);
             colorCopy(emitter.globalColorPrm, simple.prmColor);
             colorCopy(emitter.globalColorEnv, simple.envColor);
             for (let i = 0; i < emitThisFrame; i++) {
