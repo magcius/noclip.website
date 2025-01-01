@@ -293,10 +293,7 @@ class GrowableBuffer {
 
         if (newBufferSize > this.bufferSize) {
             this.bufferSize = align(newBufferSize, this.growAmount);
-            const newBuffer = new ArrayBuffer(this.bufferSize);
-            // memcpy
-            new Uint8Array(newBuffer).set(new Uint8Array(this.buffer));
-            this.buffer = newBuffer;
+            this.buffer = this.buffer.transfer(newBufferSize);
             this.view = new DataView(this.buffer);
         }
     }

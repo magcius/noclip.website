@@ -12,7 +12,7 @@ export class GfxRenderDynamicUniformBuffer {
     public gfxBuffer: GfxBuffer | null = null;
 
     private shadowBufferF32: Float32Array | null = null;
-    private shadowBufferU8: Uint8Array | null = null;
+    private shadowBufferU8: Uint8Array<ArrayBuffer> | null = null;
 
     constructor(private device: GfxDevice) {
         const limits = device.queryLimits();
@@ -51,7 +51,7 @@ export class GfxRenderDynamicUniformBuffer {
 
             // Grow logarithmically, aligned to page size.
             const newWordCount = alignNonPowerOfTwo(Math.max(this.currentWordOffset, this.shadowBufferF32!.length * 2), this.uniformBufferMaxPageWordSize);
-            const buffer = this.shadowBufferU8.buffer as ArrayBuffer;
+            const buffer = this.shadowBufferU8.buffer;
             const newBuffer = buffer.transfer(newWordCount << 2);
 
             this.shadowBufferU8 = new Uint8Array(newBuffer);

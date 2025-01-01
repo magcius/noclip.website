@@ -3,7 +3,7 @@
 import { readFileSync, writeFileSync } from 'fs';
 
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
-import * as BCSV from '../luigis_mansion/bcsv.js';
+import * as BCSV from '../LuigisMansion/bcsv.js';
 import { guessDebugName } from '../SuperMarioGalaxy/JMapInfo.js';
 import { assert } from 'console';
 

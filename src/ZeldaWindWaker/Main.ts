@@ -202,71 +202,12 @@ export class dGlobals {
     }
 }
 
-function gain(v: number, k: number): number {
-    const a = 0.5 * Math.pow(2*((v < 0.5) ? v : 1.0 - v), k);
-    return v < 0.5 ? a : 1.0 - a;
-}
-
-class DynToonTex {
-    public gfxTexture: GfxTexture;
-    public desiredPower: number = 0;
-    private texPower: number = 0;
-    private textureData: Uint8Array[] = [new Uint8Array(256*1*2)];
-
-    constructor(device: GfxDevice) {
-        this.gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RG_NORM, 256, 1, 1));
-        device.setResourceName(this.gfxTexture, 'DynToonTex');
-    }
-
-    private fillTextureData(k: number): void {
-        let dstOffs = 0;
-        const dst = this.textureData[0];
-        for (let i = 0; i < 256; i++) {
-            const t = i / 255;
-            dst[dstOffs++] = gain(t, k) * 255;
-            // TODO(jstpierre): Lantern
-            dst[dstOffs++] = 0;
-        }
-    }
-
-    public prepareToRender(device: GfxDevice): void {
-        if (this.texPower !== this.desiredPower) {
-            this.texPower = this.desiredPower;
-
-            // Recreate toon texture.
-            this.fillTextureData(this.texPower);
-            device.uploadTextureData(this.gfxTexture, 0, this.textureData);
-        }
-    }
-
-    public destroy(device: GfxDevice): void {
-        device.destroyTexture(this.gfxTexture);
-    }
-}
-
 export class ZWWExtraTextures {
     public textureMapping: TextureMapping[] = nArray(2, () => new TextureMapping());
-    public dynToonTex: DynToonTex;
-
-    @dfRange(1, 15, 0.01)
-    public toonTexPower: number = 15;
 
     constructor(device: GfxDevice, ZAtoon: BTIData, ZBtoonEX: BTIData) {
         ZAtoon.fillTextureMapping(this.textureMapping[0]);
         ZBtoonEX.fillTextureMapping(this.textureMapping[1]);
-        this.dynToonTex = new DynToonTex(device);
-    }
-
-    public powerPopup(): void {
-        this.textureMapping[0].gfxTexture = this.dynToonTex.gfxTexture;
-        this.textureMapping[1].gfxTexture = this.dynToonTex.gfxTexture;
-
-        window.main.ui.debugFloaterHolder.bindPanel(this);
-    }
-
-    public prepareToRender(device: GfxDevice): void {
-        this.dynToonTex.desiredPower = this.toonTexPower;
-        this.dynToonTex.prepareToRender(device);
     }
 
     public fillExtraTextures(modelInstance: J3DModelInstance): void {
@@ -277,10 +218,6 @@ export class ZWWExtraTextures {
         const ZBtoonEX_map = modelInstance.getTextureMappingReference('ZBtoonEX');
         if (ZBtoonEX_map !== null)
             ZBtoonEX_map.copy(this.textureMapping[1]);
-    }
-
-    public destroy(device: GfxDevice): void {
-        this.dynToonTex.destroy(device);
     }
 }
 
@@ -455,8 +392,6 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         if (globals.renderHacks.wireframe)
             template.setMegaStateFlags({ wireframe: true });
 
-        this.extraTextures.prepareToRender(device);
-
         fpcM_Management(globals.frameworkGlobals, globals, renderInstManager, viewerInput);
 
         const dlst = globals.dlst;
@@ -578,7 +513,6 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
 
     public destroy(device: GfxDevice): void {
         this.renderHelper.destroy();
-        this.extraTextures.destroy(device);
         this.globals.destroy(device);
         this.globals.frameworkGlobals.delete(this.globals);
     }
