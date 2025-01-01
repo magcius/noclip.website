@@ -5859,7 +5859,6 @@ class d_a_title extends fopAc_ac_c {
         assert(screenData !== null);
         this.screen = new J2DScreen(screenData, globals.renderer.renderCache, globals.resCtrl.getResResolver(d_a_title.arcName), J2DAnchorPos.Center);
         this.screen.color = White;
-        this.screen.setAlpha(1.0); // TODO: This isn't here originally
 
         this.panes[TitlePane.MainTitle] = this.screen.search('zeld')!;
         this.panes[TitlePane.JapanSubtitle] = this.screen.search('zelj')!;

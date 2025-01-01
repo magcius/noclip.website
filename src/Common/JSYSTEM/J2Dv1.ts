@@ -248,7 +248,7 @@ export class BLO {
         const screen: SCRN = {
             parent: null, type: 'SCRN', children: [], visible: true,
             x: 0, y: 0, w: inf1.width, h: inf1.height, color: inf1.color, rot: 0, tag: '', basePos: 0,
-            alpha: inf1.color.a, inheritAlpha: false, offset: 0,
+            alpha: 0xFF, inheritAlpha: true, offset: 0,
         };
 
         let parentStack: (PAN1 | null)[] = [screen];
