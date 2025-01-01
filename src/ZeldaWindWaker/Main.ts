@@ -940,9 +940,9 @@ class DemoDesc extends SceneDesc implements Viewer.SceneDesc {
         public override stageDir: string,
         public override name: string,
         public override roomList: number[],
-        public stbFilename: string, 
+        public stbFilename: string,
         public layer: number,
-        public offsetPos?:vec3, 
+        public offsetPos?: vec3,
         public rotY: number = 0,
         public startCode?: number,
         public eventFlags?: number,
@@ -966,7 +966,7 @@ class DemoDesc extends SceneDesc implements Viewer.SceneDesc {
         globals.scnPlay.demo.remove();
 
         // TODO: Don't render until the camera has been placed for this demo. The cuts are jarring.
-    
+
         // noclip modification: This normally happens on room load. Do it here instead so that we don't waste time 
         //                      loading .arcs for cutscenes that aren't going to be played
         const lbnk = globals.roomCtrl.status[this.roomList[0]].data.lbnk;
@@ -987,7 +987,7 @@ class DemoDesc extends SceneDesc implements Viewer.SceneDesc {
         await globals.modelCache.waitForLoad();
 
         // Most cutscenes expect the Link actor to be loaded
-        if(!fopAcM_searchFromName(globals, 'Link', 0, 0)) {
+        if (!fopAcM_searchFromName(globals, 'Link', 0, 0)) {
             fopAcM_create(globals.frameworkGlobals, dProcName_e.d_a_py_lk, 0, null, globals.mStayNo, null, null, 0xFF, -1);
         }
 
@@ -997,10 +997,12 @@ class DemoDesc extends SceneDesc implements Viewer.SceneDesc {
         }
 
         // noclip modification: ensure all the actors are created before we load the cutscene
-        await new Promise(resolve => { (function waitForActors(){
-            if (globals.frameworkGlobals.ctQueue.length === 0) return resolve(null);
-            setTimeout(waitForActors, 30);
-        })(); });
+        await new Promise(resolve => {
+            (function waitForActors() {
+                if (globals.frameworkGlobals.ctQueue.length === 0) return resolve(null);
+                setTimeout(waitForActors, 30);
+            })();
+        });
 
         // @TODO: Set noclip layer visiblity based on this.layer
 

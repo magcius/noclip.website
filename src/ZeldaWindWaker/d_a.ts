@@ -5775,7 +5775,7 @@ class d_a_title extends fopAc_ac_c {
     private btkSubtitle = new mDoExt_btkAnm();
     private btkShimmer = new mDoExt_btkAnm();
     private screen: J2DScreen;
-    private panes: J2DPane[] = []; 
+    private panes: J2DPane[] = [];
 
     private anmFrameCounter = 0
     private delayFrameCounter = 120;
@@ -5789,17 +5789,17 @@ class d_a_title extends fopAc_ac_c {
         const status = dComIfG_resLoad(globals, d_a_title.arcName);
         if (status !== cPhs__Status.Complete)
             return status;
-        
+
         this.proc_init2D(globals);
         this.proc_init3D(globals);
-        
+
         return cPhs__Status.Next;
     }
 
     public override execute(globals: dGlobals, deltaTimeFrames: number): void {
         if (this.delayFrameCounter > 0) {
             this.delayFrameCounter -= deltaTimeFrames;
-    
+
             if (this.delayFrameCounter == 0) {
                 // TODO: mDoAud_seStart(JA_SE_TITLE_WIND);
             }
@@ -5812,7 +5812,7 @@ class d_a_title extends fopAc_ac_c {
         } else if (this.enterMode == 3) {
             this.shipFrameCounter += deltaTimeFrames;
         }
-        
+
         this.bckShip.play(deltaTimeFrames);
         this.set_mtx();
     }
@@ -5838,7 +5838,7 @@ class d_a_title extends fopAc_ac_c {
         light.Position = [-35000.0, 0.0, -30000.0];
         light.Direction = [0, 0, 0];
         light.Color = White;
-        
+
         {
             this.model_draw(globals, renderInstManager);
 
@@ -5860,14 +5860,14 @@ class d_a_title extends fopAc_ac_c {
         this.screen = new J2DScreen(screenData, globals.renderer.renderCache, globals.resCtrl.getResResolver(d_a_title.arcName), J2DAnchorPos.Center);
         this.screen.color = White;
         this.screen.setAlpha(1.0); // TODO: This isn't here originally
-    
+
         this.panes[TitlePane.MainTitle] = this.screen.search('zeld')!;
         this.panes[TitlePane.JapanSubtitle] = this.screen.search('zelj')!;
         this.panes[TitlePane.PressStart] = this.screen.search('pres')!;
         this.panes[TitlePane.Nintendo] = this.screen.search('nint')!;
         this.panes[4] = this.screen.search('eft1')!;
         this.panes[5] = this.screen.search('eft2')!;
-    
+
         for (let pane of this.panes) {
             pane.setAlpha(0.0);
         }
@@ -5876,7 +5876,7 @@ class d_a_title extends fopAc_ac_c {
     private proc_init3D(globals: dGlobals) {
         const modelDataShip = globals.resCtrl.getObjectRes(ResType.Model, d_a_title.arcName, 0xD);
         this.modelShip = new J3DModelInstance(modelDataShip);
-        
+
         const modelDataSub = globals.resCtrl.getObjectRes(ResType.Model, d_a_title.arcName, 0xC);
         this.modelSubtitle = new J3DModelInstance(modelDataSub);
 
@@ -5902,11 +5902,11 @@ class d_a_title extends fopAc_ac_c {
     }
 
     private model_draw(globals: dGlobals, renderInstManager: GfxRenderInstManager) {
-        
+
         if (this.btkSubtitle.frameCtrl.getFrame() != 0.0) {
             this.btkShimmer.entry(this.modelSubtitleShimmer)
             mDoExt_modelUpdateDL(globals, this.modelSubtitleShimmer, renderInstManager, globals.dlst.ui);
-        
+
             this.btkSubtitle.entry(this.modelSubtitle);
             mDoExt_modelUpdateDL(globals, this.modelSubtitle, renderInstManager, globals.dlst.ui);
         }
@@ -5921,16 +5921,16 @@ class d_a_title extends fopAc_ac_c {
     private set_mtx() {
         vec3.set(this.modelShip.baseScale, 0.9, 0.9, 0.9);
         mat4.fromTranslation(this.modelShip.modelMatrix, [this.shipOffsetX, 0, 1000]);
-        mDoMtx_ZXYrotM(this.modelShip.modelMatrix, [0, 0x4000, 0]); 
+        mDoMtx_ZXYrotM(this.modelShip.modelMatrix, [0, 0x4000, 0]);
 
         vec3.set(this.modelSubtitle.baseScale, 1.0, 1.0, 1.0);
         vec3.set(this.modelSubtitleShimmer.baseScale, 1.0, 1.0, 1.0);
 
         mat4.fromTranslation(this.modelSubtitle.modelMatrix, [-57.0, -3.0, -10000.0]);
-        mDoMtx_ZXYrotM(this.modelSubtitle.modelMatrix, [0, -0x8000, 0]); 
+        mDoMtx_ZXYrotM(this.modelSubtitle.modelMatrix, [0, -0x8000, 0]);
 
         mat4.fromTranslation(this.modelSubtitleShimmer.modelMatrix, [-57.0, -3.0, -10010.0]);
-        mDoMtx_ZXYrotM(this.modelSubtitleShimmer.modelMatrix, [0, -0x8000, 0]); 
+        mDoMtx_ZXYrotM(this.modelSubtitleShimmer.modelMatrix, [0, -0x8000, 0]);
     }
 
     private calc_2d_alpha(deltaTimeFrames: number) {
@@ -5962,7 +5962,7 @@ class d_a_title extends fopAc_ac_c {
             if (this.anmFrameCounter >= 80) {
                 this.btkSubtitle.play(deltaTimeFrames);
             }
-            
+
             if (this.anmFrameCounter <= 150) {
                 this.panes[TitlePane.Nintendo].setAlpha(0.0);
             } else if (this.anmFrameCounter <= 170) {
@@ -6001,7 +6001,7 @@ class d_a_title extends fopAc_ac_c {
 
         if (this.shimmerFrameCounter <= 0) {
             const finished = this.btkShimmer.play(deltaTimeFrames);
-            if(finished) {
+            if (finished) {
                 this.btkShimmer.frameCtrl.setFrame(0.0);
                 this.btkShimmer.frameCtrl.setRate(1.0);
                 this.shimmerFrameCounter = cM_rndF(120) + 10;

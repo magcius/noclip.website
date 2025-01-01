@@ -57,13 +57,13 @@ function parseResourceReference(buffer: ArrayBufferSlice, offset: number, resTyp
 /**
  * When rendering a J2D element that was originally designed for 4:3 in a wider aspect ratio, the screenspace Y 
  * positions are maintained but the X positions must be adjusted. Often we simply want to keep the elements centered,
- * but occasionally we want to anchor them to the left or right. 
+ * but occasionally we want to anchor them to the left or right side of the screen (e.g. Wind Waker place names). 
  * See also: J2DGrafContext.setPort() and dPlaceName.load()
  */
 export enum J2DAnchorPos {
     Left,
     Center,
-    Right 
+    Right
 }
 
 /**
@@ -79,7 +79,7 @@ const enum J2DUVBinding {
 };
 
 export class J2DGrafContext {
-    private clipSpaceNearZ: GfxClipSpaceNearZ; 
+    private clipSpaceNearZ: GfxClipSpaceNearZ;
     public sceneParams = new SceneParams();
     public viewport = vec4.create();
     public ortho = vec4.create();
@@ -115,7 +115,7 @@ export class J2DGrafContext {
         const right = this.ortho[1] * this.aspectRatioCorrection;
         const bottom = this.ortho[2] + 0.5;
         const top = this.ortho[3];
- 
+
         projectionMatrixForCuboid(this.sceneParams.u_Projection, left, right, bottom, top, this.near, this.far);
         projectionMatrixConvertClipSpaceNearZ(this.sceneParams.u_Projection, this.clipSpaceNearZ, GfxClipSpaceNearZ.NegativeOne);
     }
@@ -246,8 +246,8 @@ export class BLO {
         const panes: PAN1[] = [];
 
         const screen: SCRN = {
-            parent: null, type: 'SCRN', children: [], visible: true, 
-            x: 0, y: 0, w: inf1.width, h: inf1.height, color: inf1.color, rot: 0, tag: '', basePos: 0, 
+            parent: null, type: 'SCRN', children: [], visible: true,
+            x: 0, y: 0, w: inf1.width, h: inf1.height, color: inf1.color, rot: 0, tag: '', basePos: 0,
             alpha: inf1.color.a, inheritAlpha: false, offset: 0,
         };
 
@@ -324,12 +324,12 @@ export class J2DPane {
         this.data.visible = false;
     }
 
-    public setAlpha(alpha: number) { 
-        this.data.alpha = alpha * 0xFF; 
+    public setAlpha(alpha: number) {
+        this.data.alpha = alpha * 0xFF;
     }
-    
-    public getAlpha(alpha: number) { 
-        this.data.alpha = alpha / 0xFF; 
+
+    public getAlpha(alpha: number) {
+        this.data.alpha = alpha / 0xFF;
     }
 
     // NOTE: Overwritten by child classes which actually do some rendering, such as J2DPicture
@@ -363,7 +363,7 @@ export class J2DPane {
             }
         }
     }
-    
+
     public search(tag: string): J2DPane | null {
         if (this.data.tag === tag)
             return this;
@@ -526,7 +526,7 @@ export class J2DPicture extends J2DPane {
 
         // Assume alpha is enabled. This is byte 1 on a JUTTexture, but noclip doesn't read it
         mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
-        
+
         // 0: Multiply tex and vertex colors and alpha
         mb.setTevOrder(tevStage, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR0A0);
         mb.setTevColorIn(tevStage, GX.CC.ZERO, GX.CC.TEXC, GX.CC.RASC, GX.CC.ZERO);
@@ -562,7 +562,7 @@ export class J2DPicture extends J2DPane {
 
     protected override resolveReferences(resolver: ResourceResolver<JUTResType.TIMG>): void {
         const timg = this.data.timg;
-         if (timg.refType > 1) {
+        if (timg.refType > 1) {
             if (timg.refType !== 2)
                 console.warn(`Untested J2D feature refType ${timg.refType}`);
             this.tex = resolver(JUTResType.TIMG, timg.resName);
@@ -588,7 +588,7 @@ export class J2DScreen extends J2DPane {
     }
 
     public override draw(renderInstManager: GfxRenderInstManager, ctx2D: J2DGrafContext, offsetX?: number, offsetY?: number): void {
-        switch(this.anchorPos) {
+        switch (this.anchorPos) {
             case J2DAnchorPos.Left: this.data.x = 0; break;
             case J2DAnchorPos.Center: this.data.x = (ctx2D.aspectRatioCorrection - 1.0) * ctx2D.viewport[2] * 0.5; break;
             case J2DAnchorPos.Right: this.data.x = (ctx2D.aspectRatioCorrection - 1.0) * ctx2D.viewport[2]; break;
