@@ -53,9 +53,8 @@ rust/target/
 .cache/
 
 data/*
-!data/.empty
-dist/*
-!dist/.htaccess
+!data/.gitkeep
+dist/
 
 # wasm-pack not working correctly
 pkg/index.js
