@@ -268,8 +268,20 @@ class dPa_simpleEcallBack extends JPAEmitterCallBack {
         this.groupID = groupID;
         this.baseEmitter = emitterManager.createEmitter(resData);
         if(this.baseEmitter) {
+            this.baseEmitter.drawGroupId = groupID;
             this.baseEmitter.emitterCallBack = this;
-            if(userID == 0xa06a || userID == 0xa410) {
+
+            // From dPa_simpleEcallBack::draw(). Fixup TEV settings for particles that access the framebuffer.  
+            if (groupID == ParticleGroup.Projection) {
+                const m = resData.materialHelper.material;
+                m.tevStages[0].alphaInA = GX.CA.ZERO;
+                m.tevStages[0].alphaInB = GX.CA.ZERO;
+                m.tevStages[0].alphaInC = GX.CA.ZERO;
+                m.tevStages[0].alphaInD = GX.CA.A0;
+                resData.materialHelper.materialInvalidated();
+            }
+
+            if (userID == 0xa06a || userID == 0xa410) {
                 // TODO: Smoke callback
             }
         }
