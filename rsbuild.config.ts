@@ -10,6 +10,9 @@ try {
 }
 
 export default defineConfig({
+  server: {
+    htmlFallback: false,
+  },
   source: {
     entry: {
       index: './src/main.ts',
