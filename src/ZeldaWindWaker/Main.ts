@@ -499,6 +499,10 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         const dlst = this.globals.dlst;
         dlst.peekZ.beginFrame(device);
 
+        // From mDoGph_Painter, 
+        this.globals.scnPlay.currentGrafPort.setOrtho(-9.0, -21.0, 650.0, 503.0, 100000.0, -100000.0);
+        this.globals.scnPlay.currentGrafPort.setPort(viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+
         this.executeDrawAll(device, viewerInput);
 
         const renderInstManager = this.renderHelper.renderInstManager;
@@ -543,6 +547,8 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
                 this.executeList(passRenderer, dlst.effect[EffectDrawGroup.Main]);
                 this.executeList(passRenderer, dlst.wetherEffect);
                 this.executeListSet(passRenderer, dlst.ui);
+
+                this.executeListSet(passRenderer, dlst.ui2D);
             });
         });
 
@@ -724,7 +730,7 @@ class d_s_play extends fopScn {
     public placenameIndex: Placename;
     public placenameState: PlacenameState;
 
-    public orthoGraf2D: J2DGrafContext;
+    public currentGrafPort: J2DGrafContext;
 
     public override load(globals: dGlobals, userData: any): cPhs__Status {
         super.load(globals, userData);
@@ -736,7 +742,7 @@ class d_s_play extends fopScn {
         this.grassPacket = new GrassPacket(globals);
         this.woodPacket = new WoodPacket(globals);
 
-        this.orthoGraf2D = new J2DGrafContext(globals.modelCache.device, 0.0, 0.0, 608.0, 448.0, -1.0, 0.0);
+        this.currentGrafPort = new J2DGrafContext(globals.modelCache.device, 0.0, 0.0, 640.0, 480.0, -1.0, 1.0);
 
         globals.scnPlay = this;
 
@@ -757,8 +763,6 @@ class d_s_play extends fopScn {
 
     public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         super.draw(globals, renderInstManager, viewerInput);
-
-        this.orthoGraf2D.setupView(viewerInput.backbufferWidth, viewerInput.backbufferHeight);
 
         // Magma/Grass/Trees/Bushes/Flowers
         const frameCount = viewerInput.time / 1000.0 * 30;
@@ -936,9 +940,9 @@ class DemoDesc extends SceneDesc implements Viewer.SceneDesc {
         public override stageDir: string,
         public override name: string,
         public override roomList: number[],
-        public stbFilename: string, 
+        public stbFilename: string,
         public layer: number,
-        public offsetPos?:vec3, 
+        public offsetPos?: vec3,
         public rotY: number = 0,
         public startCode?: number,
         public eventFlags?: number,
@@ -962,7 +966,7 @@ class DemoDesc extends SceneDesc implements Viewer.SceneDesc {
         globals.scnPlay.demo.remove();
 
         // TODO: Don't render until the camera has been placed for this demo. The cuts are jarring.
-    
+
         // noclip modification: This normally happens on room load. Do it here instead so that we don't waste time 
         //                      loading .arcs for cutscenes that aren't going to be played
         const lbnk = globals.roomCtrl.status[this.roomList[0]].data.lbnk;
@@ -983,15 +987,22 @@ class DemoDesc extends SceneDesc implements Viewer.SceneDesc {
         await globals.modelCache.waitForLoad();
 
         // Most cutscenes expect the Link actor to be loaded
-        if(!fopAcM_searchFromName(globals, 'Link', 0, 0)) {
+        if (!fopAcM_searchFromName(globals, 'Link', 0, 0)) {
             fopAcM_create(globals.frameworkGlobals, dProcName_e.d_a_py_lk, 0, null, globals.mStayNo, null, null, 0xFF, -1);
         }
 
+        // From dStage_playerInit
+        if (this.stbFilename == 'title.stb') {
+            fopAcM_create(globals.frameworkGlobals, dProcName_e.d_a_title, 0, null, globals.mStayNo, null, null, 0xFF, -1);
+        }
+
         // noclip modification: ensure all the actors are created before we load the cutscene
-        await new Promise(resolve => { (function waitForActors(){
-            if (globals.frameworkGlobals.ctQueue.length === 0) return resolve(null);
-            setTimeout(waitForActors, 30);
-        })(); });
+        await new Promise(resolve => {
+            (function waitForActors() {
+                if (globals.frameworkGlobals.ctQueue.length === 0) return resolve(null);
+                setTimeout(waitForActors, 30);
+            })();
+        });
 
         // @TODO: Set noclip layer visiblity based on this.layer
 

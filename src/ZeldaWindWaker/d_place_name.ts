@@ -1,4 +1,4 @@
-import { J2DPicture, J2DScreen } from "../Common/JSYSTEM/J2Dv1.js";
+import { J2DAnchorPos, J2DPicture, J2DScreen } from "../Common/JSYSTEM/J2Dv1.js";
 import { BTI, BTIData } from "../Common/JSYSTEM/JUTTexture.js";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import { assertExists } from "../util.js";
@@ -89,7 +89,7 @@ export class d_place_name extends msg_class {
             return status;
 
         const screenData = globals.resCtrl.getObjectRes(ResType.Blo, `PName`, 0x04);
-        this.screen = new J2DScreen(screenData, globals.renderer.renderCache, globals.resCtrl.getResResolver('PName'));
+        this.screen = new J2DScreen(screenData, globals.renderer.renderCache, globals.resCtrl.getResResolver('PName'), J2DAnchorPos.Left);
         this.screen.search('blc1')!.hide();
         this.screen.search('blc2')!.hide();
 
@@ -114,7 +114,7 @@ export class d_place_name extends msg_class {
 
     public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         renderInstManager.setCurrentList(globals.dlst.ui[0]);
-        this.screen.draw(renderInstManager, globals.scnPlay.orthoGraf2D);
+        this.screen.draw(renderInstManager, globals.scnPlay.currentGrafPort);
     }
 
     public override execute(globals: dGlobals, deltaTimeFrames: number): void {

@@ -1,6 +1,6 @@
 
 import { ReadonlyMat4, ReadonlyVec3, mat4, quat, vec2, vec3 } from "gl-matrix";
-import { TransparentBlack, colorCopy, colorFromRGBA8, colorNewCopy, colorNewFromRGBA8 } from "../Color.js";
+import { TransparentBlack, White, colorCopy, colorFromRGBA8, colorNewCopy, colorNewFromRGBA8 } from "../Color.js";
 import { calcANK1JointAnimationTransform } from "../Common/JSYSTEM/J3D/J3DGraphAnimator.js";
 import { J3DModelData, J3DModelInstance, buildEnvMtx } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
 import { JointTransformInfo, LoopMode, TRK1, TTK1 } from "../Common/JSYSTEM/J3D/J3DLoader.js";
@@ -38,6 +38,7 @@ import { fopAcIt_JudgeByID, fopAcM_create, fopAcM_prm_class, fopAc_ac_c } from "
 import { cPhs__Status, fGlobals, fpcPf__Register, fpcSCtRq_Request, fpc_bs__Constructor } from "./framework.js";
 import { mDoExt_McaMorf, mDoExt_bckAnm, mDoExt_brkAnm, mDoExt_btkAnm, mDoExt_btpAnm, mDoExt_modelEntryDL, mDoExt_modelUpdateDL } from "./m_do_ext.js";
 import { MtxPosition, MtxTrans, calc_mtx, mDoMtx_XYZrotM, mDoMtx_XrotM, mDoMtx_YrotM, mDoMtx_YrotS, mDoMtx_ZXYrotM, mDoMtx_ZrotM, mDoMtx_ZrotS, quatM } from "./m_do_mtx.js";
+import { J2DAnchorPos, J2DGrafContext, J2DPane, J2DScreen } from "../Common/JSYSTEM/J2Dv1.js";
 
 // Framework'd actors
 
@@ -5753,6 +5754,271 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
     }
 }
 
+const enum TitlePane {
+    MainTitle,
+    JapanSubtitle,
+    PressStart,
+    Nintendo,
+    Effect1,
+    Effect2,
+}
+
+class d_a_title extends fopAc_ac_c {
+    public static PROCESS_NAME = dProcName_e.d_a_title;
+    public static arcName = 'TlogoE' // Tlogo, TlogoE, TlogoE[0-9]
+
+    private modelShip: J3DModelInstance;
+    private modelSubtitle: J3DModelInstance;
+    private modelSubtitleShimmer: J3DModelInstance;
+    private bckShip = new mDoExt_bckAnm();
+    private bpkShip = new mDoExt_brkAnm();
+    private btkSubtitle = new mDoExt_btkAnm();
+    private btkShimmer = new mDoExt_btkAnm();
+    private screen: J2DScreen;
+    private panes: J2DPane[] = [];
+
+    private anmFrameCounter = 0
+    private delayFrameCounter = 120;
+    private shipFrameCounter = -50;
+    private blinkFrameCounter = 0;
+    private shimmerFrameCounter = (cM_rndF(120) + 10 + 130.0);
+    private enterMode = 0;
+    private shipOffsetX: number = 0;
+
+    public override subload(globals: dGlobals): cPhs__Status {
+        const status = dComIfG_resLoad(globals, d_a_title.arcName);
+        if (status !== cPhs__Status.Complete)
+            return status;
+
+        this.proc_init2D(globals);
+        this.proc_init3D(globals);
+
+        return cPhs__Status.Next;
+    }
+
+    public override execute(globals: dGlobals, deltaTimeFrames: number): void {
+        if (this.delayFrameCounter > 0) {
+            this.delayFrameCounter -= deltaTimeFrames;
+
+            if (this.delayFrameCounter == 0) {
+                // TODO: mDoAud_seStart(JA_SE_TITLE_WIND);
+            }
+        } else {
+            this.calc_2d_alpha(deltaTimeFrames);
+        }
+
+        if (this.enterMode == 2) {
+            this.enterMode = 3;
+        } else if (this.enterMode == 3) {
+            this.shipFrameCounter += deltaTimeFrames;
+        }
+
+        this.bckShip.play(deltaTimeFrames);
+        this.set_mtx();
+    }
+
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        let oldViewMtx = globals.camera.viewFromWorldMatrix;
+        let oldProjMtx = globals.camera.clipFromViewMatrix;
+
+        // From mDoGph_Painter(). Set up new view and ortho proj matrices. 
+        // TODO: This should be set by the Opa2D draw list
+        const orthoCtx = globals.scnPlay.currentGrafPort;
+        mat4.fromTranslation(scratchMat4a, [orthoCtx.aspectRatioCorrection * 320, 240, 1000]);
+        mDoMtx_ZrotM(scratchMat4a, -0x8000);
+        globals.camera.viewFromWorldMatrix = scratchMat4a;
+        globals.camera.clipFromViewMatrix = orthoCtx.sceneParams.u_Projection;
+        mat4.mul(globals.camera.clipFromWorldMatrix, globals.camera.clipFromViewMatrix, globals.camera.viewFromWorldMatrix);
+        globals.camera.frustum.updateClipFrustum(globals.camera.clipFromWorldMatrix, globals.camera.clipSpaceNearZ);
+        const template = renderInstManager.pushTemplate();
+        orthoCtx.setOnRenderInst(template);
+
+        // TODO: This should be a global immediate light set by the Opa2D draw list
+        const light = this.modelShip.getGXLightReference(0);
+        light.Position = [-35000.0, 0.0, -30000.0];
+        light.Direction = [0, 0, 0];
+        light.Color = White;
+
+        {
+            this.model_draw(globals, renderInstManager);
+
+            renderInstManager.setCurrentList(globals.dlst.ui2D[0]);
+            this.screen.draw(renderInstManager, orthoCtx);
+        }
+
+        // TODO: This should be set by the Opa2D draw list
+        globals.camera.viewFromWorldMatrix = oldViewMtx;
+        globals.camera.clipFromViewMatrix = oldProjMtx;
+        mat4.mul(globals.camera.clipFromWorldMatrix, globals.camera.clipFromViewMatrix, globals.camera.viewFromWorldMatrix);
+        globals.camera.frustum.updateClipFrustum(globals.camera.clipFromWorldMatrix, globals.camera.clipSpaceNearZ);
+        renderInstManager.popTemplate();
+    }
+
+    private proc_init2D(globals: dGlobals) {
+        const screenData = globals.resCtrl.getObjectResByName(ResType.Blo, d_a_title.arcName, "title_logo_e.blo");
+        assert(screenData !== null);
+        this.screen = new J2DScreen(screenData, globals.renderer.renderCache, globals.resCtrl.getResResolver(d_a_title.arcName), J2DAnchorPos.Center);
+        this.screen.color = White;
+
+        this.panes[TitlePane.MainTitle] = this.screen.search('zeld')!;
+        this.panes[TitlePane.JapanSubtitle] = this.screen.search('zelj')!;
+        this.panes[TitlePane.PressStart] = this.screen.search('pres')!;
+        this.panes[TitlePane.Nintendo] = this.screen.search('nint')!;
+        this.panes[4] = this.screen.search('eft1')!;
+        this.panes[5] = this.screen.search('eft2')!;
+
+        for (let pane of this.panes) {
+            pane.setAlpha(0.0);
+        }
+    }
+
+    private proc_init3D(globals: dGlobals) {
+        const modelDataShip = globals.resCtrl.getObjectRes(ResType.Model, d_a_title.arcName, 0xD);
+        this.modelShip = new J3DModelInstance(modelDataShip);
+
+        const modelDataSub = globals.resCtrl.getObjectRes(ResType.Model, d_a_title.arcName, 0xC);
+        this.modelSubtitle = new J3DModelInstance(modelDataSub);
+
+        const modelDataKirari = globals.resCtrl.getObjectRes(ResType.Model, d_a_title.arcName, 0xB);
+        this.modelSubtitleShimmer = new J3DModelInstance(modelDataKirari);
+
+        const bckDataShip = globals.resCtrl.getObjectRes(ResType.Bck, d_a_title.arcName, 0x8);
+        this.bckShip.init(modelDataShip, bckDataShip, true, LoopMode.Repeat, 1.0, 0, -1, false);
+
+        const bpkDataShip = globals.resCtrl.getObjectRes(ResType.Bpk, d_a_title.arcName, 0x10);
+        this.bpkShip.init(modelDataShip, bpkDataShip, true, LoopMode.Repeat, 1.0, 0, -1, false);
+
+        this.bpkShip.frameCtrl.setFrame(0.0);
+        this.bpkShip.frameCtrl.setRate(1.0);
+
+        const btkDataSub = globals.resCtrl.getObjectRes(ResType.Btk, d_a_title.arcName, 0x14);
+        this.btkSubtitle.init(modelDataSub, btkDataSub, true, LoopMode.Once, 1.0, 0, -1, false);
+
+        const btkDataShimmer = globals.resCtrl.getObjectRes(ResType.Btk, d_a_title.arcName, 0x13);
+        this.btkShimmer.init(modelDataKirari, btkDataShimmer, true, LoopMode.Once, 1.0, 0, -1, false);
+
+        this.set_mtx();
+    }
+
+    private model_draw(globals: dGlobals, renderInstManager: GfxRenderInstManager) {
+
+        if (this.btkSubtitle.frameCtrl.getFrame() != 0.0) {
+            this.btkShimmer.entry(this.modelSubtitleShimmer)
+            mDoExt_modelUpdateDL(globals, this.modelSubtitleShimmer, renderInstManager, globals.dlst.ui);
+
+            this.btkSubtitle.entry(this.modelSubtitle);
+            mDoExt_modelUpdateDL(globals, this.modelSubtitle, renderInstManager, globals.dlst.ui);
+        }
+
+        if (this.bpkShip.frameCtrl.getFrame() != 0.0) {
+            this.bckShip.entry(this.modelShip);
+            this.bpkShip.entry(this.modelShip);
+            mDoExt_modelUpdateDL(globals, this.modelShip, renderInstManager, globals.dlst.ui);
+        }
+    }
+
+    private set_mtx() {
+        vec3.set(this.modelShip.baseScale, 0.9, 0.9, 0.9);
+        mat4.fromTranslation(this.modelShip.modelMatrix, [this.shipOffsetX, 0, 1000]);
+        mDoMtx_ZXYrotM(this.modelShip.modelMatrix, [0, 0x4000, 0]);
+
+        vec3.set(this.modelSubtitle.baseScale, 1.0, 1.0, 1.0);
+        vec3.set(this.modelSubtitleShimmer.baseScale, 1.0, 1.0, 1.0);
+
+        mat4.fromTranslation(this.modelSubtitle.modelMatrix, [-57.0, -3.0, -10000.0]);
+        mDoMtx_ZXYrotM(this.modelSubtitle.modelMatrix, [0, -0x8000, 0]);
+
+        mat4.fromTranslation(this.modelSubtitleShimmer.modelMatrix, [-57.0, -3.0, -10010.0]);
+        mDoMtx_ZXYrotM(this.modelSubtitleShimmer.modelMatrix, [0, -0x8000, 0]);
+    }
+
+    private calc_2d_alpha(deltaTimeFrames: number) {
+        this.anmFrameCounter += deltaTimeFrames;
+        if (this.anmFrameCounter >= 200 && this.enterMode == 0) {
+            this.enterMode = 1;
+        }
+
+        if (this.enterMode == 0) {
+            if (this.shipFrameCounter < 0) {
+                this.shipFrameCounter += deltaTimeFrames;
+            }
+
+            // TODO: Emitters
+
+            if (this.anmFrameCounter <= 30) {
+                this.panes[TitlePane.MainTitle].setAlpha(0.0);
+            } else if (this.anmFrameCounter <= 80) {
+                this.panes[TitlePane.MainTitle].setAlpha((this.anmFrameCounter - 30) / 50.0);
+            } else {
+                this.panes[TitlePane.MainTitle].setAlpha(1.0);
+            }
+
+            // TODO: Viewable japanese version            
+            this.panes[TitlePane.JapanSubtitle].setAlpha(0.0);
+
+            // TODO: Emitters
+
+            if (this.anmFrameCounter >= 80) {
+                this.btkSubtitle.play(deltaTimeFrames);
+            }
+
+            if (this.anmFrameCounter <= 150) {
+                this.panes[TitlePane.Nintendo].setAlpha(0.0);
+            } else if (this.anmFrameCounter <= 170) {
+                this.panes[TitlePane.Nintendo].setAlpha((this.anmFrameCounter - 150) / 20.0);
+            } else {
+                this.panes[TitlePane.Nintendo].setAlpha(1.0);
+            }
+
+            if (this.anmFrameCounter <= 160) {
+                this.panes[TitlePane.PressStart].setAlpha(0.0);
+            } else if (this.anmFrameCounter <= 180) {
+                this.panes[TitlePane.PressStart].setAlpha((this.anmFrameCounter - 160) / 20.0);
+            } else {
+                this.panes[TitlePane.PressStart].setAlpha(1.0);
+            }
+        } else {
+            // TODO: Emitters
+
+            this.panes[TitlePane.MainTitle].setAlpha(1.0);
+            this.panes[TitlePane.JapanSubtitle].setAlpha(0.0);
+
+            this.btkSubtitle.frameCtrl.setFrame(this.btkSubtitle.frameCtrl.endFrame);
+            this.panes[TitlePane.Nintendo].setAlpha(1.0);
+            if (this.blinkFrameCounter >= 100) {
+                this.blinkFrameCounter = 0;
+            } else {
+                this.blinkFrameCounter += deltaTimeFrames;
+            }
+
+            if (this.blinkFrameCounter >= 50) {
+                this.panes[TitlePane.PressStart].setAlpha((this.blinkFrameCounter - 50) / 50.0);
+            } else {
+                this.panes[TitlePane.PressStart].setAlpha((50 - this.blinkFrameCounter) / 50.0);
+            }
+        }
+
+        if (this.shimmerFrameCounter <= 0) {
+            const finished = this.btkShimmer.play(deltaTimeFrames);
+            if (finished) {
+                this.btkShimmer.frameCtrl.setFrame(0.0);
+                this.btkShimmer.frameCtrl.setRate(1.0);
+                this.shimmerFrameCounter = cM_rndF(120) + 10;
+            }
+        } else {
+            this.shimmerFrameCounter -= deltaTimeFrames;
+        }
+
+        if (this.shipFrameCounter <= 0) {
+            this.shipOffsetX = (this.shipFrameCounter * this.shipFrameCounter) * -0.1;
+            this.bpkShip.frameCtrl.setFrame(100.0 + (this.shipFrameCounter * 2));
+        } else {
+            this.shipOffsetX = (this.shipFrameCounter * this.shipFrameCounter) * 0.1;
+            this.bpkShip.frameCtrl.setFrame(100.0 - (this.shipFrameCounter * 2));
+        }
+    }
+}
+
 interface constructor extends fpc_bs__Constructor {
     PROCESS_NAME: dProcName_e;
 }
@@ -5787,4 +6053,5 @@ export function d_a__RegisterConstructors(globals: fGlobals): void {
     R(d_a_npc_ls1);
     R(d_a_npc_zl1);
     R(d_a_py_lk);
+    R(d_a_title);
 }

@@ -29,6 +29,7 @@ export const enum dProcName_e {
     d_a_vrbox           = 0x01BA,
     d_a_vrbox2          = 0x01BB,
     d_a_bg              = 0x01BC,
+    d_a_title           = 0x01C1,
     d_a_swhit0          = 0x01C9,
     d_camera            = 0x01E2,
     d_kyeff             = 0x01E4,

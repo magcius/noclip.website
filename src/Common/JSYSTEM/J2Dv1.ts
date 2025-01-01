@@ -15,7 +15,7 @@ import { projectionMatrixConvertClipSpaceNearZ } from "../../gfx/helpers/Project
 import { TSDraw } from "../../SuperMarioGalaxy/DDraw.js";
 import { BTIData } from "./JUTTexture.js";
 import { GXMaterialBuilder } from "../../gx/GXMaterialBuilder.js";
-import { mat4, vec2 } from "gl-matrix";
+import { mat4, vec2, vec4 } from "gl-matrix";
 import { GfxRenderCache } from "../../gfx/render/GfxRenderCache.js";
 
 const materialParams = new MaterialParams();
@@ -55,6 +55,18 @@ function parseResourceReference(buffer: ArrayBufferSlice, offset: number, resTyp
 }
 
 /**
+ * When rendering a J2D element that was originally designed for 4:3 in a wider aspect ratio, the screenspace Y 
+ * positions are maintained but the X positions must be adjusted. Often we simply want to keep the elements centered,
+ * but occasionally we want to anchor them to the left or right side of the screen (e.g. Wind Waker place names). 
+ * See also: J2DGrafContext.setPort() and dPlaceName.load()
+ */
+export enum J2DAnchorPos {
+    Left,
+    Center,
+    Right
+}
+
+/**
  * If set, the UVs for a quad will be pinned (bound) to the quad edge. If not set, the UVs will be clipped by the quad. 
  * For instance, if the texture is 200 pixels wide, but the quad is 100 pixels wide and Right is not set, the texture 
  * will be clipped by half. If both Left and Right are set, the texture will be squashed to fit within the quad.
@@ -67,21 +79,45 @@ const enum J2DUVBinding {
 };
 
 export class J2DGrafContext {
-    private sceneParams = new SceneParams();
-    public aspectRatio: number;
+    private clipSpaceNearZ: GfxClipSpaceNearZ;
+    public sceneParams = new SceneParams();
+    public viewport = vec4.create();
+    public ortho = vec4.create();
 
-    constructor(device: GfxDevice, x: number, y: number, private w: number, private h: number, far: number, near: number) {
-        this.aspectRatio = w / h;
-        // NOTE: Y axis is inverted here (bottom = height), to match the original J2D convention
-        projectionMatrixForCuboid(this.sceneParams.u_Projection, x, w, h, y, near, far);
-        const clipSpaceNearZ = device.queryVendorInfo().clipSpaceNearZ;
-        projectionMatrixConvertClipSpaceNearZ(this.sceneParams.u_Projection, clipSpaceNearZ, GfxClipSpaceNearZ.NegativeOne);
+    public near: number;
+    public far: number;
+
+    // Used to preserve the aspect ratio of assets that were designed for 640x480, but being rendered at a different resolution.
+    public aspectRatioCorrection: number = 1.0;
+
+    constructor(device: GfxDevice, vpX: number, vpY: number, vpWidth: number, vpHeight: number, near: number, far: number) {
+        this.clipSpaceNearZ = device.queryVendorInfo().clipSpaceNearZ;
+        vec4.set(this.viewport, vpX, vpY, vpWidth, vpHeight);
+        vec4.set(this.ortho, 0, 0, vpWidth, vpHeight);
+        this.near = far;
+        this.far = far;
     }
 
-    public setupView(backbufferWidth: number, backbufferHeight: number): void {
-        const screenAspect = backbufferWidth / backbufferHeight;
-        const grafAspect = this.w / this.h;
-        this.aspectRatio = grafAspect / screenAspect;
+    public setOrtho(left: number, top: number, right: number, bottom: number, far: number, near: number) {
+        vec4.set(this.ortho, left, right, bottom, top);
+        this.near = near;
+        this.far = far;
+    }
+
+    public setPort(backbufferWidth: number, backbufferHeight: number) {
+        // To support dynamic aspect ratios, we keep the original screenspace height and the original aspect ratio. 
+        // So changing the window width will not cause 2D elements to scale, but changing the window height will. 
+        const dstAspect = backbufferWidth / backbufferHeight;
+        const srcAspect = this.viewport[2] / this.viewport[3];
+        this.aspectRatioCorrection = dstAspect / srcAspect;
+
+        const left = this.ortho[0] * this.aspectRatioCorrection;
+        const right = this.ortho[1] * this.aspectRatioCorrection;
+        const bottom = this.ortho[2] + 0.5;
+        const top = this.ortho[3];
+
+        projectionMatrixForCuboid(this.sceneParams.u_Projection, left, right, bottom, top, this.near, this.far);
+        projectionMatrixConvertClipSpaceNearZ(this.sceneParams.u_Projection, this.clipSpaceNearZ, GfxClipSpaceNearZ.NegativeOne);
     }
 
     public setOnRenderInst(renderInst: GfxRenderInst): void {
@@ -210,9 +246,9 @@ export class BLO {
         const panes: PAN1[] = [];
 
         const screen: SCRN = {
-            parent: null, type: 'SCRN', children: [], visible: true, 
-            x: 0, y: 0, w: inf1.width, h: inf1.height, color: inf1.color, rot: 0, tag: '', basePos: 0, 
-            alpha: inf1.color.a, inheritAlpha: false, offset: 0,
+            parent: null, type: 'SCRN', children: [], visible: true,
+            x: 0, y: 0, w: inf1.width, h: inf1.height, color: inf1.color, rot: 0, tag: '', basePos: 0,
+            alpha: 0xFF, inheritAlpha: true, offset: 0,
         };
 
         let parentStack: (PAN1 | null)[] = [screen];
@@ -257,10 +293,10 @@ export class J2DPane {
     public children: J2DPane[] = []; // @TODO: Make private, provide search mechanism
     private parent: J2DPane | null = null;
 
-    public drawMtx = mat4.create();
-    public drawAlpha = 1.0;
-    public drawPos = vec2.create();
-    public drawDimensions = vec2.create();
+    protected drawMtx = mat4.create();
+    protected drawAlpha = 1.0;
+    protected drawPos = vec2.create();
+    protected drawDimensions = vec2.create();
 
     constructor(public data: PAN1, cache: GfxRenderCache, parent: J2DPane | null = null) {
         this.parent = parent;
@@ -288,6 +324,14 @@ export class J2DPane {
         this.data.visible = false;
     }
 
+    public setAlpha(alpha: number) {
+        this.data.alpha = alpha * 0xFF;
+    }
+
+    public getAlpha(alpha: number) {
+        this.data.alpha = alpha / 0xFF;
+    }
+
     // NOTE: Overwritten by child classes which actually do some rendering, such as J2DPicture
     public drawSelf(renderInstManager: GfxRenderInstManager, ctx2D: J2DGrafContext, offsetX: number, offsetY: number) {
     }
@@ -296,10 +340,8 @@ export class J2DPane {
         const boundsValid = this.data.w > 0 && this.data.h > 0;
 
         if (this.data.visible && boundsValid) {
-            // To support dynamic aspect ratios, we keep the original screenspace height and the original aspect ratio. 
-            // So changing the window width will not cause 2D elements to scale, but changing the window height will. 
             vec2.set(this.drawPos, this.data.x, this.data.y);
-            vec2.set(this.drawDimensions, this.data.w * ctx2D.aspectRatio, this.data.h);
+            vec2.set(this.drawDimensions, this.data.w, this.data.h);
             this.drawAlpha = this.data.alpha / 0xFF;
 
             if (this.parent) {
@@ -321,7 +363,7 @@ export class J2DPane {
             }
         }
     }
-    
+
     public search(tag: string): J2DPane | null {
         if (this.data.tag === tag)
             return this;
@@ -376,8 +418,6 @@ export class J2DPicture extends J2DPane {
 
         if (this.data.uvBinding !== 15) { console.warn('Untested J2D feature'); }
         if (this.data.flags !== 0) { console.warn('Untested J2D feature'); }
-        if (!colorEqual(this.data.colorBlack, TransparentBlack) || !colorEqual(this.data.colorWhite, White))
-            console.warn(`Untested J2D feature colorBlack ${this.data.colorBlack}, colorWhite ${this.data.colorWhite}`);
         if (!colorEqual(this.data.colorCorners[0], White) || !colorEqual(this.data.colorCorners[1], White) || !colorEqual(this.data.colorCorners[2], White) || !colorEqual(this.data.colorCorners[3], White))
             console.warn(`Untested J2D feature colorCorners ${this.data.colorCorners}`);
     }
@@ -398,7 +438,10 @@ export class J2DPicture extends J2DPane {
         this.sdraw.setOnRenderInst(renderInst);
         this.materialHelper.setOnRenderInst(renderInstManager.gfxRenderCache, renderInst);
 
-        materialParams.u_Color[ColorKind.C0].a = this.drawAlpha;
+        materialParams.u_Color[ColorKind.C0] = this.data.colorBlack;
+        materialParams.u_Color[ColorKind.C1] = this.data.colorWhite;
+        materialParams.u_Color[ColorKind.C2].a = this.drawAlpha;
+
         this.tex.fillTextureMapping(materialParams.m_TextureMapping[0]);
         this.materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
@@ -479,20 +522,36 @@ export class J2DPicture extends J2DPane {
         this.sdraw.endDraw(this.cache);
 
         const mb = new GXMaterialBuilder('J2DPane');
+        let tevStage = 0;
+
         // Assume alpha is enabled. This is byte 1 on a JUTTexture, but noclip doesn't read it
         mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+
         // 0: Multiply tex and vertex colors and alpha
-        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR0A0);
-        mb.setTevColorIn(0, GX.CC.ZERO, GX.CC.TEXC, GX.CC.RASC, GX.CC.ZERO);
-        mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.TEXA, GX.CA.RASA, GX.CA.ZERO);
-        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-        // 1: Multiply result alpha by dynamic alpha (this.drawAlpha)
-        mb.setTevOrder(1, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR_ZERO);
-        mb.setTevColorIn(1, GX.CC.CPREV, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO);
-        mb.setTevAlphaIn(1, GX.CA.ZERO, GX.CA.APREV, GX.CA.A0, GX.CA.ZERO);
-        mb.setTevColorOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-        mb.setTevAlphaOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevOrder(tevStage, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR0A0);
+        mb.setTevColorIn(tevStage, GX.CC.ZERO, GX.CC.TEXC, GX.CC.RASC, GX.CC.ZERO);
+        mb.setTevAlphaIn(tevStage, GX.CA.ZERO, GX.CA.TEXA, GX.CA.RASA, GX.CA.ZERO);
+        mb.setTevColorOp(tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaOp(tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        tevStage += 1;
+
+        // 1: Lerp between the Black and White colors based on previous stage result
+        if (!colorEqual(this.data.colorBlack, TransparentBlack) || !colorEqual(this.data.colorWhite, White)) {
+            mb.setTevOrder(tevStage, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR_ZERO);
+            mb.setTevColorIn(tevStage, GX.CC.C0, GX.CC.C1, GX.CC.CPREV, GX.CC.ZERO);
+            mb.setTevAlphaIn(tevStage, GX.CA.A0, GX.CA.A1, GX.CA.APREV, GX.CA.ZERO);
+            mb.setTevColorOp(tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+            mb.setTevAlphaOp(tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+            tevStage += 1;
+        }
+
+        // 2: Multiply result alpha by dynamic alpha (this.drawAlpha)
+        mb.setTevOrder(tevStage, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR_ZERO);
+        mb.setTevColorIn(tevStage, GX.CC.CPREV, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO);
+        mb.setTevAlphaIn(tevStage, GX.CA.ZERO, GX.CA.APREV, GX.CA.A2, GX.CA.ZERO);
+        mb.setTevColorOp(tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaOp(tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        tevStage += 1;
 
         mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
         mb.setZMode(false, GX.CompareType.ALWAYS, false);
@@ -503,7 +562,7 @@ export class J2DPicture extends J2DPane {
 
     protected override resolveReferences(resolver: ResourceResolver<JUTResType.TIMG>): void {
         const timg = this.data.timg;
-         if (timg.refType > 1) {
+        if (timg.refType > 1) {
             if (timg.refType !== 2)
                 console.warn(`Untested J2D feature refType ${timg.refType}`);
             this.tex = resolver(JUTResType.TIMG, timg.resName);
@@ -519,14 +578,22 @@ export class J2DPicture extends J2DPane {
 //#region J2DScreen
 export class J2DScreen extends J2DPane {
     public color: Color;
+    public anchorPos: J2DAnchorPos;
 
-    constructor(data: SCRN, cache: GfxRenderCache, resolver: ResourceResolver<JUTResType>) {
+    constructor(data: SCRN, cache: GfxRenderCache, resolver: ResourceResolver<JUTResType>, anchorPos: J2DAnchorPos) {
         super(data, cache, null);
         this.color = data.color;
+        this.anchorPos = anchorPos;
         this.resolveReferences(resolver);
     }
 
     public override draw(renderInstManager: GfxRenderInstManager, ctx2D: J2DGrafContext, offsetX?: number, offsetY?: number): void {
+        switch (this.anchorPos) {
+            case J2DAnchorPos.Left: this.data.x = 0; break;
+            case J2DAnchorPos.Center: this.data.x = (ctx2D.aspectRatioCorrection - 1.0) * ctx2D.viewport[2] * 0.5; break;
+            case J2DAnchorPos.Right: this.data.x = (ctx2D.aspectRatioCorrection - 1.0) * ctx2D.viewport[2]; break;
+        }
+
         super.draw(renderInstManager, ctx2D, offsetX, offsetY);
     }
 
