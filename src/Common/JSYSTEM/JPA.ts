@@ -1711,7 +1711,7 @@ export class JPABaseEmitter {
             throw "whoops";
     }
 
-    private createParticle(): JPABaseParticle | null {
+    public createParticle(): JPABaseParticle | null {
         if (this.emitterManager.deadParticlePool.length === 0)
             return null;
 
@@ -1736,7 +1736,6 @@ export class JPABaseEmitter {
                     this.emitCount = bem1.divNumber * bem1.divNumber * 4 + 2;
                 else
                     this.emitCount = bem1.divNumber;
-                workData.volumeEmitCount = this.emitCount;
                 workData.volumeEmitIdx = 0;
             } else {
                 // Rate
@@ -1747,6 +1746,8 @@ export class JPABaseEmitter {
                 if (!!(this.status & JPAEmitterStatus.FIRST_EMISSION) && this.rate !== 0.0 && this.emitCount < 1.0)
                     this.emitCount = 1;
             }
+
+            workData.volumeEmitCount = this.emitCount;
 
             if (!!(this.status & JPAEmitterStatus.STOP_CREATE_PARTICLE))
                 this.emitCount = 0;
