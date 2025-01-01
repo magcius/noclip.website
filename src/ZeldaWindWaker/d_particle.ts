@@ -82,9 +82,9 @@ export class dPa_control_c {
             setTextureMappingIndirect(m, this.flipY);
         this.jpacData.push(jpacData);
 
-        for(let id of j_o_id) {
+        for (let id of j_o_id) {
             const resData = this.getResData(globals, id);
-            if(resData) {
+            if (resData) {
                 this.newSimple(resData, id, id & 0x4000 ? ParticleGroup.Projection : ParticleGroup.Normal)
             }
         }
@@ -97,9 +97,9 @@ export class dPa_control_c {
             setTextureMappingIndirect(m, this.flipY);
         this.jpacData.push(jpacData);
 
-        for(let id of s_o_id) {
+        for (let id of s_o_id) {
             const resData = this.getResData(globals, id);
-            if(resData) {
+            if (resData) {
                 let groupID;
                 if (id & 0x4000) groupID = ParticleGroup.Projection;
                 else if (id & 0x2000) groupID = ParticleGroup.Toon;
@@ -267,7 +267,7 @@ class dPa_simpleEcallBack extends JPAEmitterCallBack {
         this.userID = userID;
         this.groupID = groupID;
         this.baseEmitter = emitterManager.createEmitter(resData);
-        if(this.baseEmitter) {
+        if (this.baseEmitter) {
             this.baseEmitter.drawGroupId = groupID;
             this.baseEmitter.emitterCallBack = this;
             this.baseEmitter.maxFrame = 0;
@@ -290,7 +290,7 @@ class dPa_simpleEcallBack extends JPAEmitterCallBack {
     }
 
     public set(pos: vec3, alpha: number, prmColor: Color, envColor: Color, isAffectedByWind: boolean) {
-        this.datas.push({ pos: vec3.clone(pos), prmColor: colorNewCopy(prmColor, alpha), envColor: colorNewCopy(envColor), isAffectedByWind});
+        this.datas.push({ pos: vec3.clone(pos), prmColor: colorNewCopy(prmColor, alpha), envColor: colorNewCopy(envColor), isAffectedByWind });
     }
 
     public override executeAfter(emitter: JPABaseEmitter): void {
@@ -307,16 +307,16 @@ class dPa_simpleEcallBack extends JPAEmitterCallBack {
         this.emitCount -= emitThisFrame;
 
         emitter.playCreateParticle();
-        for(let simple of this.datas) {
+        for (let simple of this.datas) {
             // TODO: Frustum culling
             emitter.setGlobalTranslation(workData.emitterTranslation);
             colorCopy(emitter.globalColorPrm, simple.prmColor);
             colorCopy(emitter.globalColorEnv, simple.envColor);
             for (let i = 0; i < emitThisFrame; i++) {
                 const particle = emitter.createParticle();
-                if(!particle) 
+                if (!particle)
                     break;
-                
+
                 vec3.copy(particle.offsetPosition, simple.pos);
                 if (simple.isAffectedByWind) {
                     // TODO: Wind callback
