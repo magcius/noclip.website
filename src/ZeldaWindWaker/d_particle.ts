@@ -47,20 +47,29 @@ export class dPa_control_c {
     private drawInfo = new JPADrawInfo();
     private jpacData: JPACData[] = [];
     private resourceDatas = new Map<number, JPAResourceData>();
+    private flipY: boolean;
 
-    constructor(cache: GfxRenderCache, private jpac: JPAC[]) {
+    constructor(cache: GfxRenderCache) {
         const device = cache.device;
-        const flipY = gfxDeviceNeedsFlipY(device);
+        this.flipY = gfxDeviceNeedsFlipY(device);
         this.emitterManager = new JPAEmitterManager(cache, 6000, 300);
-        for (let i = 0; i < this.jpac.length; i++) {
-            const jpacData = new JPACData(this.jpac[i]);
+    }
 
-            const m = jpacData.getTextureMappingReference('AK_kagerouSwap00');
-            if (m !== null)
-                setTextureMappingIndirect(m, flipY);
+    public createCommon(commonJpac: JPAC) {
+        const jpacData = new JPACData(commonJpac);
+        const m = jpacData.getTextureMappingReference('AK_kagerouSwap00');
+        if (m !== null)
+            setTextureMappingIndirect(m, this.flipY);
+        this.jpacData.push(jpacData);
+    }
 
-            this.jpacData.push(jpacData);
-        }
+    public createRoomScene(sceneJpac: JPAC) {
+        const jpacData = new JPACData(sceneJpac);
+        const m = jpacData.getTextureMappingReference('AK_kagerouSwap00');
+        if (m !== null)
+            setTextureMappingIndirect(m, this.flipY);
+
+        this.jpacData.push(jpacData);
     }
 
     public setDrawInfo(posCamMtx: ReadonlyMat4, prjMtx: ReadonlyMat4, texPrjMtx: ReadonlyMat4 | null, frustum: Frustum): void {
@@ -127,6 +136,8 @@ export class dPa_control_c {
                 const resData = new JPAResourceData(device, cache, jpacData, jpaResRaw);
                 this.patchResData(globals, resData);
                 this.resourceDatas.set(userIndex, resData);
+            } else {
+                return null;
             }
         }
 

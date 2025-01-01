@@ -823,12 +823,9 @@ class SceneDesc {
 
         renderer.extraTextures = new ZWWExtraTextures(device, ZAtoon, ZBtoonEX);
 
-        const jpac: JPA.JPAC[] = [];
-        for (let i = 0; i < particleArchives.length; i++) {
-            const jpacData = modelCache.getFileData(particleArchives[i]);
-            jpac.push(JPA.parse(jpacData));
-        }
-        globals.particleCtrl = new dPa_control_c(renderer.renderCache, jpac);
+        globals.particleCtrl = new dPa_control_c(renderer.renderCache);
+        globals.particleCtrl.createCommon(JPA.parse(modelCache.getFileData(particleArchives[0])));
+        globals.particleCtrl.createRoomScene(JPA.parse(modelCache.getFileData(particleArchives[1])));
 
         // dStage_Create
         dKankyo_create(globals);
