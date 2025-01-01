@@ -824,8 +824,8 @@ class SceneDesc {
         renderer.extraTextures = new ZWWExtraTextures(device, ZAtoon, ZBtoonEX);
 
         globals.particleCtrl = new dPa_control_c(renderer.renderCache);
-        globals.particleCtrl.createCommon(JPA.parse(modelCache.getFileData(particleArchives[0])));
-        globals.particleCtrl.createRoomScene(JPA.parse(modelCache.getFileData(particleArchives[1])));
+        globals.particleCtrl.createCommon(globals, JPA.parse(modelCache.getFileData(particleArchives[0])));
+        globals.particleCtrl.createRoomScene(globals, JPA.parse(modelCache.getFileData(particleArchives[1])));
 
         // dStage_Create
         dKankyo_create(globals);

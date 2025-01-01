@@ -2,7 +2,7 @@
 // particle
 
 import { mat4, ReadonlyMat4, ReadonlyVec3, vec2, vec3 } from "gl-matrix";
-import { Color, colorCopy } from "../Color.js";
+import { Color, colorCopy, colorNewCopy } from "../Color.js";
 import { JPABaseEmitter, JPAEmitterManager, JPAResourceData, JPAEmitterCallBack, JPADrawInfo, JPACData, JPAC, JPAResourceRaw } from "../Common/JSYSTEM/JPA.js";
 import { Frustum } from "../Geometry.js";
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
@@ -11,7 +11,7 @@ import { EFB_HEIGHT, EFB_WIDTH } from "../gx/gx_material.js";
 import { computeModelMatrixR, getMatrixTranslation, saturate, transformVec3Mat4w0 } from "../MathHelpers.js";
 import { TDDraw } from "../SuperMarioGalaxy/DDraw.js";
 import { TextureMapping } from "../TextureHolder.js";
-import { nArray } from "../util.js";
+import { assert, nArray } from "../util.js";
 import { ViewerRenderInput } from "../viewer.js";
 import { dKy_get_seacolor } from "./d_kankyo.js";
 import { cLib_addCalc2, cM_s2rad } from "./SComponent.js";
@@ -20,6 +20,16 @@ import * as GX from '../gx/gx_enum.js';
 import { ColorKind } from "../gx/gx_render.js";
 import { gfxDeviceNeedsFlipY } from "../gfx/helpers/GfxDeviceHelpers.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
+
+// Simple common particles
+const j_o_id: number[] = [ 0x0000, 0x0001, 0x0002, 0x0003, 0x03DA, 0x03DB, 0x03DC, 0x4004 ];
+
+// Simple scene particles
+const s_o_id: number[] = [
+    0x8058, 0x8059, 0x805A, 0x805B, 0x805C, 0x8221, 0x8222, 0x8060, 0x8061, 0x8062, 0x8063, 0x8064, 0x8065, 0x8066, 
+    0x8067, 0x8068, 0x8069, 0x81D5, 0x8240, 0x8241, 0x8306, 0x8407, 0x8408, 0x8409, 0x8443, 0x840A, 0x840B, 0x840C,
+    0x840D, 0x840E, 0x840F, 0xA410, 0xA06A, 0xC06B,
+];
 
 export abstract class dPa_levelEcallBack extends JPAEmitterCallBack {
     constructor(protected globals: dGlobals) {
@@ -57,6 +67,7 @@ export class dPa_control_c {
     private jpacData: JPACData[] = [];
     private resourceDatas = new Map<number, JPAResourceData>();
     private flipY: boolean;
+    private simpleCallbacks: dPa_simpleEcallBack[] = [];
 
     constructor(cache: GfxRenderCache) {
         const device = cache.device;
@@ -64,21 +75,44 @@ export class dPa_control_c {
         this.emitterManager = new JPAEmitterManager(cache, 6000, 300);
     }
 
-    public createCommon(commonJpac: JPAC) {
+    public createCommon(globals: dGlobals, commonJpac: JPAC) {
         const jpacData = new JPACData(commonJpac);
         const m = jpacData.getTextureMappingReference('AK_kagerouSwap00');
         if (m !== null)
             setTextureMappingIndirect(m, this.flipY);
         this.jpacData.push(jpacData);
+
+        for(let id of j_o_id) {
+            const resData = this.getResData(globals, id);
+            if(resData) {
+                this.newSimple(resData, id, id & 0x4000 ? ParticleGroup.Projection : ParticleGroup.Normal)
+            }
+        }
     }
 
-    public createRoomScene(sceneJpac: JPAC) {
+    public createRoomScene(globals: dGlobals, sceneJpac: JPAC) {
         const jpacData = new JPACData(sceneJpac);
         const m = jpacData.getTextureMappingReference('AK_kagerouSwap00');
         if (m !== null)
             setTextureMappingIndirect(m, this.flipY);
-
         this.jpacData.push(jpacData);
+
+        for(let id of s_o_id) {
+            const resData = this.getResData(globals, id);
+            if(resData) {
+                let groupID;
+                if (id & 0x4000) groupID = ParticleGroup.Projection;
+                else if (id & 0x2000) groupID = ParticleGroup.Toon;
+                else groupID = ParticleGroup.Normal;
+                this.newSimple(resData, id, groupID)
+            }
+        }
+    }
+
+    private newSimple(resData: JPAResourceData, userID: number, groupID: number) {
+        const simple = new dPa_simpleEcallBack();
+        simple.create(this.emitterManager, resData, userID, groupID);
+        this.simpleCallbacks.push(simple);
     }
 
     public setDrawInfo(posCamMtx: ReadonlyMat4, prjMtx: ReadonlyMat4, texPrjMtx: ReadonlyMat4 | null, frustum: Frustum): void {
@@ -201,23 +235,81 @@ export class dPa_control_c {
         return baseEmitter;
     }
 
-    // TODO(jstpierre): Full simple particle system
-/*
-    public setSimple(globals: dGlobals, userID: number, pos: ReadonlyVec3, alpha: number = 1.0, colorPrm: Color | null = null, colorEnv: Color | null = null, affectedByWind: boolean = false): boolean {
-        let groupID = EffectDrawGroup.Main;
-
-        if (!!(userID & 0x4000))
-            groupID = EffectDrawGroup.Indirect;
-
-        this.set(globals, groupID, userID, pos, null, null, alpha, null, 0, colorPrm, colorEnv);
-        return true;
+    public setSimple(userID: number, pos: vec3, alpha: number, prmColor: Color, envColor: Color, isAffectedByWind: boolean) {
+        const simple = this.simpleCallbacks.find(s => s.userID == userID);
+        if (!simple)
+            return false;
+        return simple.set(pos, alpha / 0xFF, prmColor, envColor, isAffectedByWind);
     }
-*/
 
     public destroy(device: GfxDevice): void {
         for (let i = 0; i < this.jpacData.length; i++)
             this.jpacData[i].destroy(device);
         this.emitterManager.destroy(device);
+    }
+}
+
+interface dPa_simpleData_c {
+    pos: vec3;
+    prmColor: Color;
+    envColor: Color;
+    isAffectedByWind: boolean;
+};
+
+class dPa_simpleEcallBack extends JPAEmitterCallBack {
+    public userID: number;
+    public groupID: number;
+    private baseEmitter: JPABaseEmitter | null;
+    private datas: dPa_simpleData_c[] = [];
+    private emitCount: number = 0;
+
+    public create(emitterManager: JPAEmitterManager, resData: JPAResourceData, userID: number, groupID: number) {
+        this.userID = userID;
+        this.groupID = groupID;
+        this.baseEmitter = emitterManager.createEmitter(resData);
+        if(this.baseEmitter) {
+            this.baseEmitter.emitterCallBack = this;
+            if(userID == 0xa06a || userID == 0xa410) {
+                // TODO: Smoke callback
+            }
+        }
+    }
+
+    public set(pos: vec3, alpha: number, prmColor: Color, envColor: Color, isAffectedByWind: boolean) {
+        this.datas.push({ pos: vec3.clone(pos), prmColor: colorNewCopy(prmColor, alpha), envColor: colorNewCopy(envColor), isAffectedByWind});
+    }
+
+    public override executeAfter(emitter: JPABaseEmitter): void {
+        const workData = emitter.emitterManager.workData;
+        if (workData.volumeEmitCount <= 0) {
+            this.datas = [];
+            return;
+        }
+
+        // The emit count is often 1 per game-frame, meaning our emit count will be ~0.5 
+        // So we track the emit count across frames and only actually emit when it is >1
+        this.emitCount += workData.volumeEmitCount * workData.deltaTime;
+        const emitThisFrame = Math.floor(this.emitCount);
+        this.emitCount -= emitThisFrame;
+
+        emitter.playCreateParticle();
+        for(let simple of this.datas) {
+            // TODO: Frustum culling
+            vec3.copy(workData.emitterTranslation, simple.pos);
+            colorCopy(emitter.globalColorPrm, simple.prmColor);
+            colorCopy(emitter.globalColorEnv, simple.envColor);
+            for (let i = 0; i < emitThisFrame; i++) {
+                const particle = emitter.createParticle();
+                if(!particle) 
+                    break;
+                
+                vec3.copy(particle.offsetPosition, simple.pos);
+                if (simple.isAffectedByWind) {
+                    // TODO: Wind callback
+                }
+            }
+        }
+        emitter.stopCreateParticle();
     }
 }
 
