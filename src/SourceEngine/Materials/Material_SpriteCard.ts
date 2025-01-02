@@ -41,9 +41,9 @@ layout(binding = 0) uniform sampler2D u_Texture;
 
 #if defined VERT
 void mainVS() {
-    Mat4x3 t_WorldFromLocalMatrix = CalcWorldFromLocalMatrix();
-    vec3 t_PositionWorld = Mul(t_WorldFromLocalMatrix, vec4(a_Position, 1.0));
-    gl_Position = Mul(u_ProjectionView, vec4(t_PositionWorld, 1.0));
+    mat4x3 t_WorldFromLocalMatrix = CalcWorldFromLocalMatrix();
+    vec3 t_PositionWorld = t_WorldFromLocalMatrix * vec4(a_Position, 1.0));
+    gl_Position = u_ProjectionView * vec4(t_PositionWorld, 1.0));
     v_TexCoord0.xy = CalcScaleBias(a_TexCoord01.xy, u_BaseTextureScaleBias[0]);
     v_TexCoord0.zw = CalcScaleBias(a_TexCoord01.xy, u_BaseTextureScaleBias[1]);
     v_TexCoord1.xy = CalcScaleBias(a_TexCoord01.xy, u_BaseTextureScaleBias[2]);

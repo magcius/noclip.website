@@ -122,16 +122,16 @@ export class MaterialShaderTemplateBase extends UberShaderTemplateBasic {
 // #define DEBUG_DIFFUSEONLY 1
 // #define DEBUG_FULLBRIGHT 1
 
-layout(std140) uniform ub_SceneParams {
-    Mat4x4 u_ProjectionView;
+layout(std140, row_major) uniform ub_SceneParams {
+    mat4 u_ProjectionView;
     vec4 u_SceneMisc[3];
 };
 
-layout(std140) uniform ub_SkinningParams {
+layout(std140, row_major) uniform ub_SkinningParams {
 #if SKINNING_MODE == ${SkinningMode.Smooth}
-    Mat4x3 u_BoneMatrix[${MaterialShaderTemplateBase.MaxSkinningParamsBoneMatrix}];
+    mat4x3 u_BoneMatrix[${MaterialShaderTemplateBase.MaxSkinningParamsBoneMatrix}];
 #else
-    Mat4x3 u_ModelMatrix;
+    mat4x3 u_ModelMatrix;
 #endif
 };
 
@@ -247,15 +247,15 @@ layout(location = ${MaterialShaderTemplateBase.a_BoneWeights}) in vec4 a_BoneWei
 layout(location = ${MaterialShaderTemplateBase.a_BoneIDs}) in vec4 a_BoneIndices;
 #endif
 
-Mat4x3 CalcWorldFromLocalMatrix() {
+mat4x3 CalcWorldFromLocalMatrix() {
 #if SKINNING_MODE == ${SkinningMode.Smooth}
     // Calculate our per-vertex position.
-    Mat4x3 t_WorldFromLocalMatrix = _Mat4x3(0.0);
+    mat4x3 t_WorldFromLocalMatrix = mat4x3(0.0);
 
-    Fma(t_WorldFromLocalMatrix, u_BoneMatrix[int(a_BoneIndices.x)], a_BoneWeights.x);
-    Fma(t_WorldFromLocalMatrix, u_BoneMatrix[int(a_BoneIndices.y)], a_BoneWeights.y);
-    Fma(t_WorldFromLocalMatrix, u_BoneMatrix[int(a_BoneIndices.z)], a_BoneWeights.z);
-    Fma(t_WorldFromLocalMatrix, u_BoneMatrix[int(a_BoneIndices.w)], a_BoneWeights.w);
+    t_WorldFromLocalMatrix += u_BoneMatrix[int(a_BoneIndices.x)] * a_BoneWeights.x;
+    t_WorldFromLocalMatrix += u_BoneMatrix[int(a_BoneIndices.y)] * a_BoneWeights.y;
+    t_WorldFromLocalMatrix += u_BoneMatrix[int(a_BoneIndices.z)] * a_BoneWeights.z;
+    t_WorldFromLocalMatrix += u_BoneMatrix[int(a_BoneIndices.w)] * a_BoneWeights.w;
 
     return t_WorldFromLocalMatrix;
 #else

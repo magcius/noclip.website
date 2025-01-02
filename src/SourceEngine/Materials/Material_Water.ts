@@ -47,7 +47,7 @@ precision mediump sampler2DArray;
 
 ${MaterialShaderTemplateBase.Common}
 
-layout(std140) uniform ub_ObjectParams {
+layout(std140, row_major) uniform ub_ObjectParams {
     vec4 u_BumpScaleBias;
 #if defined USE_TEXSCROLL
     vec4 u_TexScroll0ScaleBias;
@@ -56,7 +56,7 @@ layout(std140) uniform ub_ObjectParams {
     vec4 u_RefractTint;
     vec4 u_ReflectTint;
     vec4 u_WaterFogColor;
-    Mat4x4 u_ProjectedDepthToWorld;
+    mat4 u_ProjectedDepthToWorld;
 
 #if defined USE_FLOWMAP
     vec4 u_BaseTextureScaleBias;
@@ -114,10 +114,10 @@ layout(binding = 14) uniform sampler2D u_TextureFramebufferDepth;
 
 #if defined VERT
 void mainVS() {
-    Mat4x3 t_WorldFromLocalMatrix = CalcWorldFromLocalMatrix();
-    vec3 t_PositionWorld = Mul(t_WorldFromLocalMatrix, vec4(a_Position, 1.0));
+    mat4x3 t_WorldFromLocalMatrix = CalcWorldFromLocalMatrix();
+    vec3 t_PositionWorld = t_WorldFromLocalMatrix * vec4(a_Position, 1.0);
     v_PositionWorld.xyz = t_PositionWorld;
-    gl_Position = Mul(u_ProjectionView, vec4(t_PositionWorld, 1.0));
+    gl_Position = u_ProjectionView * vec4(t_PositionWorld, 1.0);
 
     // Convert from projected position to texture space.
     // TODO(jstpierre): This could probably be done easier with gl_FragCoord
@@ -159,7 +159,7 @@ vec3 CalcPosWorldFromScreen(vec2 t_ProjTexCoord, float t_DepthSample) {
     // Reconstruct world-space position for the sample.
     vec3 t_PosViewport = vec3(t_ProjTexCoord.x, t_ProjTexCoord.y, t_DepthSample);
     vec4 t_PosClip = CalcPosClipFromViewport(t_PosViewport);
-    vec4 t_PosWorld = Mul(u_ProjectedDepthToWorld, t_PosClip);
+    vec4 t_PosWorld = u_ProjectedDepthToWorld * t_PosClip;
     // Divide by W.
     t_PosWorld.xyz /= t_PosWorld.www;
     return t_PosWorld.xyz;
