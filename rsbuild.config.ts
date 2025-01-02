@@ -1,6 +1,10 @@
-import { defineConfig } from '@rsbuild/core';
+import { defineConfig, type RequestHandler } from '@rsbuild/core';
 import { pluginTypeCheck } from '@rsbuild/plugin-type-check';
 import { execSync } from 'node:child_process';
+import { readdir } from 'node:fs';
+import type { ServerResponse } from 'node:http';
+import parseUrl from 'parseurl';
+import send from 'send';
 
 let gitCommit = '(unknown)';
 try {
@@ -10,9 +14,6 @@ try {
 }
 
 export default defineConfig({
-  server: {
-    htmlFallback: false,
-  },
   source: {
     entry: {
       index: './src/main.ts',
@@ -63,4 +64,53 @@ export default defineConfig({
       },
     },
   },
+  // Disable fallback to index for 404 responses.
+  server: {
+    htmlFallback: false,
+  },
+  // Setup middleware to serve the `data` directory.
+  dev: {
+    setupMiddlewares: [
+      (middlewares, _server) => {
+        middlewares.unshift(serveData);
+        return middlewares;
+      },
+    ],
+  },
 });
+
+// Serve files from the `data` directory.
+const serveData: RequestHandler = (req, res, next) => {
+  if (req.method !== 'GET' && req.method !== 'HEAD') {
+    next();
+    return;
+  }
+  const matches = parseUrl(req)?.pathname?.match(/^\/data(\/.*)?$/);
+  if (!matches) {
+    next();
+    return;
+  }
+  // The `send` package handles Range requests, conditional GET,
+  // ETag generation, Cache-Control, Last-Modified, and more.
+  const stream = send(req, matches[1] || '', {
+    index: false,
+    root: 'data',
+    dotfiles: 'allow',
+  });
+  stream.on(
+    'directory',
+    function handleDirectory(
+      this: send.SendStream,
+      res: ServerResponse,
+      path: string,
+    ) {
+      // Print directory listing
+      readdir(path, (err, list) => {
+        if (err) return this.error(500, err);
+        res.setHeader('Content-Type', 'text/plain; charset=UTF-8');
+        res.end(`${list.join('\n')}\n`);
+      });
+    },
+  );
+  stream.pipe(res);
+};
