@@ -95,7 +95,6 @@ const serveData: RequestHandler = (req, res, next) => {
   const stream = send(req, matches[1] || '', {
     index: false,
     root: 'data',
-    dotfiles: 'allow',
   });
   stream.on(
     'directory',
@@ -107,8 +106,10 @@ const serveData: RequestHandler = (req, res, next) => {
       // Print directory listing
       readdir(path, (err, list) => {
         if (err) return this.error(500, err);
+        const filtered = list.filter((file) => !file.startsWith('.'));
+        if (filtered.length === 0) return this.error(404);
         res.setHeader('Content-Type', 'text/plain; charset=UTF-8');
-        res.end(`${list.join('\n')}\n`);
+        res.end(`${filtered.join('\n')}\n`);
       });
     },
   );
