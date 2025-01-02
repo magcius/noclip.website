@@ -58,6 +58,11 @@ vec3 MulNormalMatrix(Mat4x3 t_Matrix, vec3 t_Value) {
     vec3 t_SqScale = vec3(dot(t_Col0, t_Col0), dot(t_Col1, t_Col1), dot(t_Col2, t_Col2));
     return normalize(Mul(t_Matrix, vec4(t_Value / t_SqScale, 0.0)));
 }
+
+vec3 MulNormalMatrix(mat4x3 t_Matrix, vec3 t_Value) {
+    vec3 t_SqScale = vec3(dot(t_Matrix[0], t_Matrix[0]), dot(t_Matrix[1], t_Matrix[1]), dot(t_Matrix[2], t_Matrix[2]));
+    return normalize(t_Matrix * vec4(t_Value / t_SqScale, 0.0));
+}
 `;
 
 export const CalcScaleBias: string = `

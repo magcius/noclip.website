@@ -333,8 +333,8 @@ export function materialHasDynamicAlphaTest(material: { hasDynamicAlphaTest?: bo
 function generateBindingsDefinition(material: { hasPostTexMtxBlock?: boolean, hasLightsBlock?: boolean, hasFogBlock?: boolean, usePnMtxIdx?: boolean, hasDynamicAlphaTest?: boolean }): string {
     return `
 // Expected to be constant across the entire scene.
-layout(std140) uniform ub_SceneParams {
-    Mat4x4 u_Projection;
+layout(std140, row_major) uniform ub_SceneParams {
+    mat4 u_Projection;
     vec4 u_Misc0;
 };
 
@@ -358,19 +358,19 @@ struct FogBlock {
 };
 
 // Expected to change with each material.
-layout(std140) uniform ub_MaterialParams {
+layout(std140, row_major) uniform ub_MaterialParams {
     vec4 u_ColorMatReg[2];
     vec4 u_ColorAmbReg[2];
     vec4 u_KonstColor[4];
     vec4 u_Color[4];
-    Mat4x3 u_TexMtx[10];
+    mat4x3 u_TexMtx[10];
     vec4 u_TextureSizes[4];
     vec4 u_TextureBiases[2];
-    Mat4x2 u_IndTexMtx[3];
+    mat4x2 u_IndTexMtx[3];
 
     // Optional parameters.
 ${materialHasPostTexMtxBlock(material) ? `
-    Mat4x3 u_PostTexMtx[20];
+    mat4x3 u_PostTexMtx[20];
 ` : ``}
 ${materialHasLightsBlock(material) ? `
     Light u_LightParams[8];
@@ -384,11 +384,11 @@ ${materialHasDynamicAlphaTest(material) ? `
 };
 
 // Expected to change with each shape draw.
-layout(std140) uniform ub_DrawParams {
+layout(std140, row_major) uniform ub_DrawParams {
 ${materialUsePnMtxIdx(material) ? `
-    Mat4x3 u_PosMtx[10];
+    mat4x3 u_PosMtx[10];
 ` : `
-    Mat4x3 u_PosMtx[1];
+    mat4x3 u_PosMtx[1];
 `}
 };
 
@@ -573,23 +573,23 @@ ${this.generateLightAttnFn(chan, lightName)}
     }
 
     // Output is a vec3, src is a vec4.
-    private generateMulPntMatrixStatic(pnt: GX.TexGenMatrix, src: string, funcName: string = `Mul`): string {
+    private generateMulPntMatrixStatic(pnt: GX.TexGenMatrix, src: string, nrm: boolean = false): string {
         if (pnt === GX.TexGenMatrix.IDENTITY) {
             return `${src}.xyz`;
         } else if (pnt >= GX.TexGenMatrix.TEXMTX0) {
             const texMtxIdx = (pnt - GX.TexGenMatrix.TEXMTX0) / 3;
-            return `${funcName}(u_TexMtx[${texMtxIdx}], ${src})`;
+            return nrm ? `MulNormalMatrix(u_TexMtx[${texMtxIdx}], ${src})` : `(u_TexMtx[${texMtxIdx}] * ${src})`;
         } else if (pnt >= GX.TexGenMatrix.PNMTX0) {
             const pnMtxIdx = (pnt - GX.TexGenMatrix.PNMTX0) / 3;
-            return `${funcName}(u_PosMtx[${pnMtxIdx}], ${src})`;
+            return nrm ? `MulNormalMatrix(u_PosMtx[${pnMtxIdx}], ${src})` : `(u_PosMtx[${pnMtxIdx}] * ${src})`;
         } else {
             throw "whoops";
         }
     }
 
     // Output is a vec3, src is a vec4.
-    private generateMulPntMatrixDynamic(attrStr: string, src: string, funcName: string = `Mul`): string {
-        return `${funcName}(GetPosTexMatrix(${attrStr}), ${src})`;
+    private generateMulPntMatrixDynamic(attrStr: string, src: string, nrm: boolean = false): string {
+        return nrm ? `MulNormalMatrix(GetPosTexMatrix(${attrStr}), ${src})` : `(GetPosTexMatrix(${attrStr}) * ${src})`;
     }
 
     private generateTexMtxIdxAttr(index: GX.TexCoordID): string {
@@ -642,7 +642,7 @@ ${this.generateLightAttnFn(chan, lightName)}
             return `${src}.xyz`;
         } else if (texCoordGen.postMatrix >= GX.PostTexGenMatrix.PTTEXMTX0) {
             const texMtxIdx = (texCoordGen.postMatrix - GX.PostTexGenMatrix.PTTEXMTX0) / 3;
-            return `Mul(u_PostTexMtx[${texMtxIdx}], ${src})`;
+            return `(u_PostTexMtx[${texMtxIdx}] * ${src})`;
         } else {
             throw "whoops";
         }
@@ -1115,15 +1115,15 @@ ${this.generateLightAttnFn(chan, lightName)}
         case GX.IndTexMtxID._0:
         case GX.IndTexMtxID._1:
         case GX.IndTexMtxID._2:
-            return `Mul(u_IndTexMtx[${indTexMtxIdx}], vec4(${indTexCoord}, 0.0))`;
+            return `u_IndTexMtx[${indTexMtxIdx}] * vec4(${indTexCoord}, 0.0)`;
         case GX.IndTexMtxID.S0:
         case GX.IndTexMtxID.S1:
         case GX.IndTexMtxID.S2:
-            return `(u_IndTexMtx[${indTexMtxIdx}].mx.w * ReadTexCoord${stage.texCoordId}() * ${indTexCoord}.xx)`;
+            return `(u_IndTexMtx[${indTexMtxIdx}][3][0] * ReadTexCoord${stage.texCoordId}() * ${indTexCoord}.xx)`;
         case GX.IndTexMtxID.T0:
         case GX.IndTexMtxID.T1:
         case GX.IndTexMtxID.T2:
-            return `(u_IndTexMtx[${indTexMtxIdx}].mx.w * ReadTexCoord${stage.texCoordId}() * ${indTexCoord}.yy)`;
+            return `(u_IndTexMtx[${indTexMtxIdx}][3][0] * ReadTexCoord${stage.texCoordId}() * ${indTexCoord}.yy)`;
         default:
             throw "whoops";
         }
@@ -1385,11 +1385,10 @@ ${this.generateFogAdj(`t_FogBase`)}
     }
 
     private generateMul(attr: string, pos: boolean, nrm: boolean): string {
-        const mul = nrm ? `MulNormalMatrix` : `Mul`;
         const src = nrm ? attr : `vec4(${attr}.xyz, ${pos ? `1.0` : `0.0`})`;
         const gen = materialUsePnMtxIdx(this.material) ?
-            this.generateMulPntMatrixDynamic(`a_Position.w`, src, mul) :
-            this.generateMulPntMatrixStatic(GX.TexGenMatrix.PNMTX0, src, mul);
+            this.generateMulPntMatrixDynamic(`a_Position.w`, src, nrm) :
+            this.generateMulPntMatrixStatic(GX.TexGenMatrix.PNMTX0, src, nrm);
         return pos ? gen : `normalize(${gen}.xyz)`;
     }
 
@@ -1413,10 +1412,10 @@ ${this.generateTexCoordVaryings()}
 ${both}
 ${this.generateVertAttributeDefs()}
 
-Mat4x3 GetPosTexMatrix(float t_MtxIdxFloat) {
+mat4x3 GetPosTexMatrix(float t_MtxIdxFloat) {
     uint t_MtxIdx = uint(t_MtxIdxFloat);
     if (t_MtxIdx == 20u)
-        return _Mat4x3(1.0);
+        return mat4x3(1.0);
     else if (t_MtxIdx >= 10u)
         return u_TexMtx[(t_MtxIdx - 10u)];
     else
@@ -1440,7 +1439,7 @@ void main() {
     vec4 t_ColorChanTemp;
 ${this.generateLightChannels()}
 ${this.generateTexGens()}
-    gl_Position = Mul(u_Projection, vec4(t_Position, 1.0));
+    gl_Position = u_Projection * vec4(t_Position, 1.0);
 }
 `;
 

@@ -288,13 +288,8 @@ export class DataFetcher {
     public async init() {
         if (IS_DEVELOPMENT) {
             // Check for the existence of a /data directory.
-            const url = getDataURLForPath('', true);
-            try {
-                await this.fetchURL(url, {});
-                this.useDevelopmentStorage = true;
-            } catch(e) {
-                this.useDevelopmentStorage = false;
-            }
+            // TODO(jstpierre): Put back this fix for rsbuild.
+            this.useDevelopmentStorage = true;
         } else {
             this.useDevelopmentStorage = false;
         }

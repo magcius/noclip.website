@@ -56,7 +56,6 @@ class DMPProgram extends DeviceProgram {
     public static a_BoneWeights = 7;
 
     public static BindingsDefinition = `
-
 struct Light {
     vec4 Ambient;
     vec4 Diffuse;
@@ -66,12 +65,12 @@ struct Light {
 };
 
 // Expected to be constant across the entire scene.
-layout(std140) uniform ub_SceneParams {
-    Mat4x4 u_Projection;
+layout(std140, row_major) uniform ub_SceneParams {
+    mat4 u_Projection;
 };
 
 // Expected to change with each material.
-layout(std140) uniform ub_MaterialParams {
+layout(std140, row_major) uniform ub_MaterialParams {
     vec4 u_MatDiffuseColor;
     vec4 u_MatAmbientColor;
     vec4 u_MaterialFlags;
@@ -83,7 +82,7 @@ layout(std140) uniform ub_MaterialParams {
     vec4 u_FogStartEnd;
 
     vec4 u_ConstantColor[6];
-    Mat4x3 u_TexMtx[3];
+    mat4x3 u_TexMtx[3];
     vec4 u_MatMisc[1];
 };
 
@@ -96,9 +95,9 @@ layout(std140) uniform ub_MaterialParams {
 #define u_RenderFog        (u_MaterialFlags.z)
 #define u_DepthOffset      (u_MatMisc[0].w)
 
-layout(std140) uniform ub_PrmParams {
-    Mat4x3 u_BoneMatrix[16];
-    Mat4x3 u_ViewMatrix;
+layout(std140, row_major) uniform ub_PrmParams {
+    mat4x3 u_BoneMatrix[16];
+    mat4x3 u_ViewMatrix;
     vec4 u_PrmMisc[1];
 };
 
@@ -379,10 +378,10 @@ uniform samplerCube u_Cubemap;
         case LutInput.CosNormalView:  index = "dot(t_Normal, normalize(v_View.xyz))"; break;
         case LutInput.CosLightNormal: index = "dot(t_LightVector, t_Normal)"; break;
         case LutInput.CosLightSpot:   index = "dot(t_LightVector, t_SpotDir)"; break;
-        case LutInput.CosPhi:{
-                const half_angle_proj = "normalize(t_HalfVector) - t_Normal * dot(t_Normal, normalize(t_HalfVector))"
-                index = `dot(${half_angle_proj}, t_Tangent)`;
-            } break;
+        case LutInput.CosPhi: {
+            const half_angle_proj = "normalize(t_HalfVector) - t_Normal * dot(t_Normal, normalize(t_HalfVector))"
+            index = `dot(${half_angle_proj}, t_Tangent)`;
+        } break;
         }
 
         output = `texture(SAMPLER_2D(u_TextureLUT), vec2(((${index} + 1.0) * 0.5) + (1.0 / 512.0), ${this.generateFloat(sampler.index)})).r`;
@@ -404,7 +403,7 @@ in vec2 v_TexCoord2;
 in vec3 v_Normal;
 in vec4 v_QuatNormal;
 in float v_Depth;
-in vec4 v_View;
+in vec3 v_View;
 
 vec3 QuatRotate(vec4 q, vec3 v) {
     return v + 2.0 * cross(q.xyz, cross(q.xyz, v) + q.w * v);
@@ -474,11 +473,12 @@ out vec2 v_TexCoord2;
 out vec3 v_Normal;
 out vec4 v_QuatNormal;
 out float v_Depth;
-out vec4 v_View;
+out vec3 v_View;
 
-vec4 CalcQuatFromNormal(vec3 normal){
+vec4 CalcQuatFromNormal(vec3 normal) {
     float QuatZ = 0.5 * (normal.z + 1.0);
-    if (QuatZ <= 0.0) return vec4(1.0, 0.0, 0.0, 0.0);
+    if (QuatZ <= 0.0)
+        return vec4(1.0, 0.0, 0.0, 0.0);
     QuatZ = 1.0 / sqrt(QuatZ);
     return vec4((0.5 * normal.xy) * QuatZ, (1.0 / QuatZ), 0.0);
 }
@@ -517,7 +517,6 @@ vec4 FullQuatCalcFallback(in vec4 t_temp0, in vec4 t_Normal, in vec4 t_temp1) {
 }
 
 vec4 CalcQuatFromTangent(in vec3 t_Tangent) {
-
     vec4 t_temp0 = vec4(normalize(cross(v_Normal, t_Tangent)), 0.0);
     vec4 t_temp1 = vec4(cross(t_temp0.xyz, v_Normal.xyz), t_temp0.z);
     vec4 t_Normal = vec4(v_Normal.xyz, t_temp0.x);
@@ -569,7 +568,7 @@ vec3 CalcTextureCoordRaw(in int t_Idx) {
     } else if (t_MappingMode == 1) {
         // UV mapping.
         vec2 t_TexSrc = CalcTextureSrc(t_Params.y);
-        return Mul(u_TexMtx[t_Idx], vec4(t_TexSrc, 0.0, 1.0));
+        return u_TexMtx[t_Idx] * vec4(t_TexSrc, 0.0, 1.0);
     } else if (t_MappingMode == 2) {
         // Cube env mapping.
         //vec3 t_Incident = normalize(vec3(t_Position.xy, -t_Position.z) - vec3(u_CameraPos.xy, -u_CameraPos.z));
@@ -580,7 +579,7 @@ vec3 CalcTextureCoordRaw(in int t_Idx) {
         // Sphere env mapping.
         // Convert view-space normal to proper place.
         vec2 t_TexSrc = (v_Normal.xy * 0.5) + 0.5;
-        return Mul(u_TexMtx[t_Idx], vec4(t_TexSrc, 0.0, 1.0));
+        return u_TexMtx[t_Idx] * vec4(t_TexSrc, 0.0, 1.0);
     } else if (t_MappingMode == 4) {
         // Projection mapping.
         // Not implemented yet.
@@ -599,7 +598,7 @@ vec3 CalcTextureCoord(in int t_Idx) {
 
 void main() {
     // Compute our matrix.
-    Mat4x3 t_BoneMatrix;
+    mat4x3 t_BoneMatrix;
 
     vec4 t_BoneWeights = a_BoneWeights;
 
@@ -613,28 +612,26 @@ void main() {
     if (u_BoneDimension < 1.0)
         t_BoneWeights.x = 0.0;
 
-    if ((t_BoneWeights.x + t_BoneWeights.y + t_BoneWeights.z + t_BoneWeights.w) > 0.0) {
-        t_BoneMatrix = _Mat4x3(0.0);
-
-        Fma(t_BoneMatrix, u_BoneMatrix[int(a_BoneIndices.x)], t_BoneWeights.x);
-        Fma(t_BoneMatrix, u_BoneMatrix[int(a_BoneIndices.y)], t_BoneWeights.y);
-        Fma(t_BoneMatrix, u_BoneMatrix[int(a_BoneIndices.z)], t_BoneWeights.z);
-        Fma(t_BoneMatrix, u_BoneMatrix[int(a_BoneIndices.w)], t_BoneWeights.w);
+    if (any(greaterThan(t_BoneWeights.xyzw, vec4(0.0)))) {
+        t_BoneMatrix = mat4x3(0.0);
+        t_BoneMatrix += u_BoneMatrix[int(a_BoneIndices.x)] * t_BoneWeights.x;
+        t_BoneMatrix += u_BoneMatrix[int(a_BoneIndices.y)] * t_BoneWeights.y;
+        t_BoneMatrix += u_BoneMatrix[int(a_BoneIndices.z)] * t_BoneWeights.z;
+        t_BoneMatrix += u_BoneMatrix[int(a_BoneIndices.w)] * t_BoneWeights.w;
     } else {
         // If we have no bone weights, then we're in rigid skinning, so take the first bone index.
         // If we're single-bone, then our bone indices will be 0, so this also works for that.
         t_BoneMatrix = u_BoneMatrix[int(a_BoneIndices.x)];
     }
 
-    vec4 t_LocalPosition = vec4(a_Position, 1.0);
-    vec4 t_ModelPosition = Mul(_Mat4x4(t_BoneMatrix), t_LocalPosition);
-    vec4 t_ViewPosition = Mul(_Mat4x4(u_ViewMatrix), t_ModelPosition);
-    gl_Position = Mul(u_Projection, t_ViewPosition);
+    vec3 t_ModelPosition = t_BoneMatrix * vec4(a_Position, 1.0);
+    vec3 t_ViewPosition = u_ViewMatrix * vec4(t_ModelPosition, 1.0);
+    gl_Position = u_Projection * vec4(t_ViewPosition, 1.0);
 
     vec3 t_ModelNormal = MulNormalMatrix(t_BoneMatrix, a_Normal);
-    vec3 t_ModelTangent = Mul(_Mat4x4(t_BoneMatrix), vec4(a_Tangent, 0.0)).xyz;
-    vec3 t_ViewTangent = normalize(Mul(_Mat4x4(u_ViewMatrix), vec4(t_ModelTangent, 0.0)).xyz);
-    v_Normal = normalize(Mul(_Mat4x4(u_ViewMatrix), vec4(t_ModelNormal, 0.0)).xyz);
+    vec3 t_ModelTangent = (t_BoneMatrix * vec4(a_Tangent, 0.0)).xyz;
+    vec3 t_ViewTangent = normalize((u_ViewMatrix * vec4(t_ModelTangent, 0.0)).xyz);
+    v_Normal = normalize((u_ViewMatrix * vec4(t_ModelNormal, 0.0)).xyz);
     v_QuatNormal = vec4(1.0, 0.0, 0.0, 0.0);
 
     v_Depth = gl_Position.w;
