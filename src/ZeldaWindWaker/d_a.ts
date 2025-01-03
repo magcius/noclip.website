@@ -5814,7 +5814,10 @@ class d_a_title extends fopAc_ac_c {
     private btkShimmer = new mDoExt_btkAnm();
     private screen: J2DScreen;
     private panes: J2DPane[] = []; 
-    private emitter: JPABaseEmitter | null = null;
+    
+    private cloudEmitter: JPABaseEmitter | null = null;
+    private sparkleEmitter: JPABaseEmitter | null = null;
+    private sparklePos = vec3.create();
 
     private anmFrameCounter = 0
     private delayFrameCounter = 120;
@@ -5977,21 +5980,21 @@ class d_a_title extends fopAc_ac_c {
             this.enterMode = 1;
         }
 
+        const puffPos = vec3.set(scratchVec3a, 
+            ((this.panes[TitlePane.ShipParticles].data.x - 320.0) - this.shipOffsetX) + 85.0,
+            (this.panes[TitlePane.ShipParticles].data.y - 240.0) + 5.0,
+            0.0
+        );
+
         if (this.enterMode == 0) {
             if (this.shipFrameCounter < 0) {
                 this.shipFrameCounter += deltaTimeFrames;
-            }
+            }            
 
-            const emitterPos = vec3.set(scratchVec3a, 
-                ((this.panes[TitlePane.ShipParticles].data.x - 320.0) - this.shipOffsetX) + 85.0,
-                (this.panes[TitlePane.ShipParticles].data.y - 240.0) + 5.0,
-                0.0
-            );
-
-            if (this.emitter == null) {
-                this.emitter = globals.particleCtrl.set(globals, ParticleGroup.TwoDback, 0x83F9, emitterPos);
+            if (this.cloudEmitter === null) {
+                this.cloudEmitter = globals.particleCtrl.set(globals, ParticleGroup.TwoDback, 0x83F9, puffPos);
             } else {    
-                this.emitter.setGlobalTranslation(emitterPos);
+                this.cloudEmitter.setGlobalTranslation(puffPos);
             }
 
             if (this.anmFrameCounter <= 30) {
@@ -6005,7 +6008,19 @@ class d_a_title extends fopAc_ac_c {
             // TODO: Viewable japanese version            
             this.panes[TitlePane.JapanSubtitle].setAlpha(0.0);
 
-            // TODO: Emitters
+            if (this.anmFrameCounter >= 80 && !this.sparkleEmitter) {
+                // if (daTitle_Kirakira_Sound_flag == true) {
+                //     mDoAud_seStart(JA_SE_TITLE_KIRA);
+                //     daTitle_Kirakira_Sound_flag = false;
+                // }
+    
+                const sparklePane = this.panes[TitlePane.ShipParticles];
+                vec3.set(this.sparklePos, sparklePane.data.x - 320.0, sparklePane.data.y - 240.0, 0.0);
+                this.sparkleEmitter = globals.particleCtrl.set(globals, ParticleGroup.TwoDfore, 0x83FB, this.sparklePos);
+            } else if (this.anmFrameCounter > 80 && this.anmFrameCounter <= 115 && this.sparkleEmitter) {
+                this.sparklePos[0] += (this.panes[TitlePane.Effect2].data.x - this.panes[TitlePane.ShipParticles].data.x) / 35.0 * deltaTimeFrames;
+                this.sparkleEmitter.setGlobalTranslation(this.sparklePos);
+            }
 
             if (this.anmFrameCounter >= 80) {
                 this.btkSubtitle.play(deltaTimeFrames);
@@ -6027,10 +6042,19 @@ class d_a_title extends fopAc_ac_c {
                 this.panes[TitlePane.PressStart].setAlpha(1.0);
             }
         } else {
-            // TODO: Emitters
+            if (this.cloudEmitter === null) {
+                this.cloudEmitter = globals.particleCtrl.set(globals, ParticleGroup.TwoDback, 0x83F9, puffPos);
+            } else {
+                this.cloudEmitter.setGlobalTranslation(puffPos);
+            }
 
             this.panes[TitlePane.MainTitle].setAlpha(1.0);
             this.panes[TitlePane.JapanSubtitle].setAlpha(0.0);
+
+            if (this.sparkleEmitter) {
+                this.sparkleEmitter.becomeInvalidEmitter();
+                this.sparkleEmitter = null;
+            }
 
             this.btkSubtitle.frameCtrl.setFrame(this.btkSubtitle.frameCtrl.endFrame);
             this.panes[TitlePane.Nintendo].setAlpha(1.0);
