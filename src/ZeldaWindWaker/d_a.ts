@@ -350,11 +350,11 @@ class d_a_ep extends fopAc_ac_c {
             this.lightPowerTarget = this.scale[0];
         } else if (this.state === 3 || this.state === 4) {
             this.lightPower = cLib_addCalc2(this.lightPower, this.lightPowerTarget, 0.5 * deltaTimeFrames, 0.2);
-            if (this.type !== 2) {
+            
+            // TODO: Type 2 flames should be handled by d_a_lamp, but for now lets just handle them here 
+            if (true || this.type !== 2) {
                 if (this.burstTimer < 7) globals.particleCtrl.setSimple(0x0001, flamePos, 0xFF, White, White, false);
                 // Check for collision. If hit, set the burst timer to emit a quick burst of flame 
-
-                // Emit a heat particle and reset the timer
                 flamePos[1] += 20;
                 globals.particleCtrl.setSimple(0x4004, flamePos, 0xFF, White, White, false);
             }
