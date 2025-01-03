@@ -217,6 +217,11 @@ class d_a_ep extends fopAc_ac_c {
     private lightPower: number = 0.0;
     private lightPowerTarget: number = 0.0;
 
+    private burstEmitter: JPABaseEmitter | null = null;
+    private burstRotY: number = 0;
+    private burstRotZ: number = 0;
+    private burstTimer = 0;
+
     private timers = nArray(3, () => 0);
     private alphaModelMtx = mat4.create();
     private alphaModelRotX = 0;
@@ -294,8 +299,8 @@ class d_a_ep extends fopAc_ac_c {
             }
         }
 
-        this.alphaModelAlpha = cLib_addCalc2(this.alphaModelAlpha, this.alphaModelAlphaTarget, 1.0, 1.0);
-        this.alphaModelScale = cLib_addCalc2(this.alphaModelScale, this.alphaModelScaleTarget, 0.4, 0.04);
+        this.alphaModelAlpha = cLib_addCalc2(this.alphaModelAlpha, this.alphaModelAlphaTarget, 1.0 * deltaTimeFrames, 1.0);
+        this.alphaModelScale = cLib_addCalc2(this.alphaModelScale, this.alphaModelScaleTarget, 0.4 * deltaTimeFrames, 0.04);
         MtxTrans(this.posTop, false);
         mDoMtx_YrotM(calc_mtx, this.alphaModelRotY);
         mDoMtx_XrotM(calc_mtx, this.alphaModelRotX);
@@ -303,10 +308,9 @@ class d_a_ep extends fopAc_ac_c {
         vec3.set(scratchVec3a, scale, scale, scale);
         mat4.scale(calc_mtx, calc_mtx, scratchVec3a);
         mat4.copy(this.alphaModelMtx, calc_mtx);
+        this.ep_move(globals, deltaTimeFrames);
         this.alphaModelRotY += 0xD0 * deltaTimeFrames;
         this.alphaModelRotX += 0x100 * deltaTimeFrames;
-
-        this.ep_move(globals);
     }
 
     public override delete(globals: dGlobals): void {
@@ -335,22 +339,27 @@ class d_a_ep extends fopAc_ac_c {
         // TODO(jstpierre): ga
     }
 
-    private ep_move(globals: dGlobals): void {
+    private ep_move(globals: dGlobals, deltaTimeFrames: number): void {
+
+        const flamePos = vec3.set(scratchVec3a, this.posTop[0], this.posTop[1] + -240 + 235 + 15, this.posTop[2]);
+
         // tons of fun timers and such
         if (this.state === 0) {
             // check switches
             this.state = 3;
             this.lightPowerTarget = this.scale[0];
         } else if (this.state === 3 || this.state === 4) {
-            this.lightPower = cLib_addCalc2(this.lightPower, this.lightPowerTarget, 0.5, 0.2);
+            this.lightPower = cLib_addCalc2(this.lightPower, this.lightPowerTarget, 0.5 * deltaTimeFrames, 0.2);
             if (this.type !== 2) {
-                const pos = vec3.set(scratchVec3a, this.posTop[0], this.posTop[1] + -240 + 235 + 15, this.posTop[2]);
-                globals.particleCtrl.setSimple(0x0001, pos, 0xFF, White, White, false);
-                pos[1] += 20;
-                globals.particleCtrl.setSimple(0x4004, pos, 0xFF, White, White, false);
+                if (this.burstTimer < 7) globals.particleCtrl.setSimple(0x0001, flamePos, 0xFF, White, White, false);
+                // Check for collision. If hit, set the burst timer to emit a quick burst of flame 
 
-                // check a bunch of stuff, collision, etc.
+                // Emit a heat particle and reset the timer
+                flamePos[1] += 20;
+                globals.particleCtrl.setSimple(0x4004, flamePos, 0xFF, White, White, false);
             }
+
+            // check a bunch of stuff, collision, etc.
         }
 
         vec3.copy(this.light.pos, this.posTop);
@@ -360,7 +369,28 @@ class d_a_ep extends fopAc_ac_c {
         this.light.power = this.lightPower * 150.0;
         this.light.fluctuation = 250.0;
 
-        // other emitter stuff
+        // When hit with an attack, emit a quick burst of flame before returning to normal
+        if (this.burstTimer >= 0) {
+            if (this.burstTimer == 0x28 && !this.burstEmitter) {
+                const pos = vec3.set(scratchVec3a, this.posTop[0], this.posTop[1] + -240 + 235 + 8, this.posTop[2]);
+                this.burstEmitter = globals.particleCtrl.set(globals, 0, 0x01EA, pos)!;
+            }
+            if (this.burstEmitter) {
+                mDoMtx_YrotS(scratchMat4a, this.burstRotY);
+                const target = (this.burstTimer > 10) ? 4.0 : 0.0;
+                this.burstRotZ = cLib_addCalc2(this.burstRotZ, target, 1.0 * deltaTimeFrames, 0.5)
+                const emitterDir = vec3.set(scratchVec3b, 0.0, 1.0, this.burstRotZ);
+                MtxPosition(emitterDir, emitterDir, scratchMat4a);
+                vec3.copy(this.burstEmitter.localDirection, emitterDir);
+
+                if (this.burstTimer <= 1.0) {
+                    this.burstEmitter.maxFrame = -1;
+                    this.burstEmitter.stopCreateParticle();
+                    this.burstEmitter = null;
+                }
+            }
+            this.burstTimer -= deltaTimeFrames;
+        }
     }
 }
 
