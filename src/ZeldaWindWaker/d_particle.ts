@@ -158,6 +158,7 @@ export class dPa_control_c {
         return null;
     }
 
+    // TODO: Remove
     private patchResData(globals: dGlobals, resData: JPAResourceData): void {
         if (resData.resourceId & 0x4000) {
             const m = resData.materialHelper.material;
@@ -316,7 +317,9 @@ class dPa_simpleEcallBack extends JPAEmitterCallBack {
                 const particle = emitter.createParticle();
                 if (!particle)
                     break;
-
+                
+                // NOTE: Overwriting this removes the influence of the local emitter translation (bem.emitterTrs)
+                //       I.e. all simple emitters ignore their local offsets and are fixed to the local origin.
                 vec3.copy(particle.offsetPosition, simple.pos);
                 if (simple.isAffectedByWind) {
                     // TODO: Wind callback
