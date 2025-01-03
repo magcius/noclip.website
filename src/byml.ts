@@ -278,8 +278,8 @@ export function parse<T>(buffer: ArrayBufferSlice, fileType: FileType = FileType
 }
 
 class GrowableBuffer {
-    public buffer: ArrayBuffer;
-    public view: DataView;
+    public buffer = new ArrayBuffer();
+    public view = new DataView(this.buffer);
     public userSize: number = 0;
     public bufferSize: number = 0;
 
@@ -293,16 +293,13 @@ class GrowableBuffer {
 
         if (newBufferSize > this.bufferSize) {
             this.bufferSize = align(newBufferSize, this.growAmount);
-            this.buffer = this.buffer.transfer(newBufferSize);
+            this.buffer = this.buffer.transfer(this.bufferSize);
             this.view = new DataView(this.buffer);
         }
     }
 
     public finalize(): ArrayBuffer {
-        const buffer = this.buffer;
-        // Clear out to avoid GC.
-        (this as any).buffer = null;
-        return buffer.slice(0x00, this.userSize);
+        return this.buffer.transfer(this.userSize);
     }
 }
 
