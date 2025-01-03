@@ -16,6 +16,7 @@ import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorH
 import { AABB } from "../Geometry.js";
 import { convertToCanvas } from "../gfx/helpers/TextureConversionHelpers.js";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
 
 export class KatamariDamacyProgram extends DeviceProgram {
     public static a_Position = 0;
@@ -29,16 +30,15 @@ export class KatamariDamacyProgram extends DeviceProgram {
 precision mediump float;
 
 // Expected to be constant across the entire scene.
-layout(std140) uniform ub_SceneParams {
-    Mat4x4 u_Projection;
+layout(std140, row_major) uniform ub_SceneParams {
+    mat4 u_ProjectionView;
     vec4 u_LightDirs[2];
     vec4 u_LightColors[3];
 };
 
-layout(std140) uniform ub_ModelParams {
-    Mat4x3 u_BoneMatrix[SKINNING_MATRIX_COUNT];
-    Mat4x3 u_NormalMatrix[SKINNING_MATRIX_COUNT];
-    Mat4x2 u_TextureMatrix[1];
+layout(std140, row_major) uniform ub_ModelParams {
+    mat4x3 u_BoneMatrix[SKINNING_MATRIX_COUNT];
+    mat4x2 u_TextureMatrix[1];
     vec4 u_Color;
     vec4 u_Misc[1];
 };
@@ -57,13 +57,16 @@ layout(location = 0) in vec4 a_Position;
 layout(location = 1) in vec3 a_Normal;
 layout(location = 2) in vec2 a_TexCoord;
 
+${GfxShaderLibrary.MulNormalMatrix}
+
 void main() {
     int t_SkinningIndex = int(a_Position.w);
-    gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_BoneMatrix[t_SkinningIndex]), vec4(a_Position.xyz, 1.0)));
-    v_TexCoord = Mul(_Mat4x4(u_TextureMatrix[0]), vec4(a_TexCoord, 0.0, 1.0)).xy;
+    vec3 t_PositionWorld = u_BoneMatrix[t_SkinningIndex] * vec4(a_Position.xyz, 1.0);
+    gl_Position = u_ProjectionView * vec4(t_PositionWorld, 1.0);
+    v_TexCoord = u_TextureMatrix[0] * vec4(a_TexCoord, 0.0, 1.0);
 
 #ifdef LIGHTING
-    vec3 t_Normal = normalize(Mul(_Mat4x4(u_NormalMatrix[t_SkinningIndex]), vec4(a_Normal, 0.0)).xyz);
+    vec3 t_Normal = MulNormalMatrix(u_BoneMatrix[t_SkinningIndex], a_Normal);
     v_DiffuseLighting = u_LightColors[2].rgb;
     for (int i = 0; i < 2; i++)
         v_DiffuseLighting += max(dot(t_Normal, u_LightDirs[i].xyz), 0.0) * u_LightColors[i].rgb;
@@ -278,7 +281,7 @@ export class BINModelPartInstance {
         });
     }
 
-    public prepareToRender(renderInstManager: GfxRenderInstManager, modelViewMatrices: mat4[], modelMatrices: mat4[], textureMatrix: ReadonlyMat4, currentPalette: number): void {
+    public prepareToRender(renderInstManager: GfxRenderInstManager, modelMatrices: ReadonlyMat4[], textureMatrix: ReadonlyMat4, currentPalette: number): void {
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setGfxProgram(this.gfxProgram);
         renderInst.setMegaStateFlags(this.megaStateFlags);
@@ -292,8 +295,6 @@ export class BINModelPartInstance {
 
         let offs = renderInst.allocateUniformBuffer(KatamariDamacyProgram.ub_ModelParams, 12*2*this.transformCount+8+4+4);
         const d = renderInst.mapUniformBufferF32(KatamariDamacyProgram.ub_ModelParams);
-        for (let i = 0; i < this.transformCount; i++)
-            offs += fillMatrix4x3(d, offs, modelViewMatrices[i]);
         for (let i = 0; i < this.transformCount; i++)
             offs += fillMatrix4x3(d, offs, modelMatrices[i]);
         offs += fillMatrix4x2(d, offs, scratchTextureMatrix);
@@ -334,7 +335,7 @@ export class BINModelInstance {
         this.visible = visible;
     }
 
-    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, toNoclip: mat4, currentPalette: number, depth = 0): void {
+    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, toNoclip: ReadonlyMat4, currentPalette: number, depth = 0): void {
         if (!this.visible)
             return;
 
@@ -350,14 +351,11 @@ export class BINModelInstance {
         template.sortKey = makeSortKey(this.layer)
         template.sortKey = setSortKeyDepth(template.sortKey, depth);
 
-        mat4.mul(scratchModelViews[0], viewerInput.camera.viewMatrix, scratchModelMatrices[0]);
-        for (let i = 0; i < this.skinningMatrices.length; i++) {
+        for (let i = 0; i < this.skinningMatrices.length; i++)
             mat4.mul(scratchModelMatrices[i + 1], toNoclip, this.skinningMatrices[i]);
-            mat4.mul(scratchModelViews[i + 1], viewerInput.camera.viewMatrix, scratchModelMatrices[i + 1]);
-        }
 
         for (let i = 0; i < this.modelParts.length; i++)
-            this.modelParts[i].prepareToRender(renderInstManager, scratchModelViews, scratchModelMatrices, this.textureMatrix, currentPalette);
+            this.modelParts[i].prepareToRender(renderInstManager, scratchModelMatrices, this.textureMatrix, currentPalette);
 
         renderInstManager.popTemplate();
     }

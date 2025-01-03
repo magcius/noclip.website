@@ -21,6 +21,7 @@ import { CalcBillboardFlags, calcBillboardMatrix, computeMatrixWithoutScale } fr
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers.js';
 import { White, colorNewCopy } from '../Color.js';
+import { GfxShaderLibrary } from '../gfx/helpers/GfxShaderLibrary.js';
 
 export class NITRO_Program extends DeviceProgram {
     public static a_Position = 0;
@@ -37,16 +38,16 @@ export class NITRO_Program extends DeviceProgram {
 precision mediump float;
 
 // Expected to be constant across the entire scene.
-layout(std140) uniform ub_SceneParams {
-    Mat4x4 u_Projection;
+layout(std140, row_major) uniform ub_SceneParams {
+    mat4 u_Projection;
     // Light configuration
     vec4 u_LightDir[4];
     vec4 u_LightColor[4];
 };
 
 // Expected to change with each material.
-layout(std140) uniform ub_MaterialParams {
-    Mat4x2 u_TexMtx[1];
+layout(std140, row_major) uniform ub_MaterialParams {
+    mat4x2 u_TexMtx[1];
     vec4 u_Misc[4];
 };
 #define u_DiffuseColor  (u_Misc[0].xyz)
@@ -56,8 +57,8 @@ layout(std140) uniform ub_MaterialParams {
 #define u_TexCoordMode  (u_Misc[0].w)
 #define u_LightMask     (u_Misc[1].w)
 
-layout(std140) uniform ub_DrawParams {
-    Mat4x3 u_PosMtx[32];
+layout(std140, row_major) uniform ub_DrawParams {
+    mat4x3 u_PosMtx[32];
 };
 
 uniform sampler2D u_Texture;
@@ -94,22 +95,25 @@ vec3 CalcLight(in vec3 vtxNormal) {
     return ret;
 }
 
+${GfxShaderLibrary.MulNormalMatrix}
+
 void main() {
-    Mat4x3 t_PosMtx = u_PosMtx[int(a_PosMtxIdx)];
-    gl_Position = Mul(u_Projection, Mul(_Mat4x4(t_PosMtx), vec4(a_Position, 1.0)));
+    mat4x3 t_PosMtx = u_PosMtx[int(a_PosMtxIdx)];
+    vec3 t_PositionView = t_PosMtx * vec4(a_Position, 1.0);
+    gl_Position = u_Projection * vec4(t_PositionView, 1.0);
     v_Color = a_Color;
 
     if (a_Color.r < 0.0) {
         // Turn on lighting
-        vec3 vtxNormal = normalize(Mul(_Mat4x4(t_PosMtx), vec4(a_Normal, 0.0))).xyz;
-        v_Color.rgb = CalcLight(vtxNormal);
+        vec3 t_NormalView = MulNormalMatrix(t_PosMtx, a_Normal);
+        v_Color.rgb = CalcLight(t_NormalView);
     }
 
     vec2 t_TexSpaceCoord;
     if (u_TexCoordMode == 2.0) { // TexCoordMode.NORMAL
-        v_TexCoord = Mul(u_TexMtx[0], vec4(a_Normal, 1.0)).st;
+        v_TexCoord = u_TexMtx[0] * vec4(a_Normal, 1.0);
     } else {
-        v_TexCoord = Mul(u_TexMtx[0], vec4(a_UV, 1.0, 1.0)).st;
+        v_TexCoord = u_TexMtx[0] * vec4(a_UV, 1.0, 1.0);
     }
 }
 `;

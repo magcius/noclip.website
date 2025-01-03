@@ -7,7 +7,7 @@ import * as UI from '../ui.js';
 
 import * as IV from './iv.js';
 import { GfxDevice, GfxBufferUsage, GfxBuffer, GfxFormat, GfxInputLayout, GfxProgram, GfxBindingLayoutDescriptor, GfxVertexBufferFrequency, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxCullMode, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from '../gfx/platform/GfxPlatform.js';
-import { fillColor, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers.js';
+import { fillColor, fillMatrix4x3, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers.js';
 import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers.js';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
@@ -25,12 +25,12 @@ class IVProgram extends DeviceProgram {
     public override both = `
 precision mediump float;
 
-layout(std140) uniform ub_SceneParams {
-    Mat4x4 u_Projection;
-    Mat4x4 u_ModelView;
+layout(std140, row_major) uniform ub_SceneParams {
+    mat4 u_Projection;
+    mat4x3 u_ModelView;
 };
 
-layout(std140) uniform ub_ObjectParams {
+layout(std140, row_major) uniform ub_ObjectParams {
     vec4 u_Color;
 };
 
@@ -42,7 +42,8 @@ layout(location = ${IVProgram.a_Normal}) attribute vec3 a_Normal;
 
 void mainVS() {
     const float t_ModelScale = 20.0;
-    gl_Position = Mul(u_Projection, Mul(u_ModelView, vec4(a_Position * t_ModelScale, 1.0)));
+    vec3 t_PositionWorld = u_ModelView * vec4(a_Position * t_ModelScale, 1.0);
+    gl_Position = u_Projection * vec4(t_PositionWorld, 1.0);
     vec3 t_LightDirection = normalize(vec3(.2, -1, .5));
     float t_LightIntensityF = dot(-a_Normal, t_LightDirection);
     float t_LightIntensityB = dot( a_Normal, t_LightDirection);
@@ -219,7 +220,7 @@ export class Scene implements Viewer.SceneGfx {
         let offs = template.allocateUniformBuffer(IVProgram.ub_SceneParams, 32);
         const mapped = template.mapUniformBufferF32(IVProgram.ub_SceneParams);
         offs += fillMatrix4x4(mapped, offs, viewerInput.camera.projectionMatrix);
-        offs += fillMatrix4x4(mapped, offs, viewerInput.camera.viewMatrix);
+        offs += fillMatrix4x3(mapped, offs, viewerInput.camera.viewMatrix);
 
         this.renderHelper.renderInstManager.setCurrentList(this.renderInstListMain);
 

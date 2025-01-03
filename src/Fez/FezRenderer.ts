@@ -22,18 +22,19 @@ import { GeometryData } from './GeometryData.js';
 import { Fez_Level, Fez_BackgroundPlane } from './XNB_Fez.js';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
+import { GfxShaderLibrary } from '../gfx/helpers/GfxShaderLibrary.js';
 
 class FezProgram {
     public static ub_SceneParams = 0;
     public static ub_ShapeParams = 1;
 
     public both = `
-layout(std140) uniform ub_SceneParams {
-    Mat4x4 u_Projection;
+layout(std140, row_major) uniform ub_SceneParams {
+    mat4 u_Projection;
 };
 
-layout(std140) uniform ub_ShapeParams {
-    Mat4x3 u_BoneMatrix[1];
+layout(std140, row_major) uniform ub_ShapeParams {
+    mat4x3 u_BoneMatrix[1];
     vec4 u_LightDirection;
     vec4 u_TexScaleBiasPre;
     vec4 u_TexScaleBiasPost;
@@ -58,9 +59,12 @@ out vec3 v_Normal;
 out vec2 v_TexCoord;
 out vec3 v_ShadowTexCoord;
 
+${GfxShaderLibrary.MulNormalMatrix}
+
 void main() {
-    gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_BoneMatrix[0]), vec4(a_Position, 1.0)));
-    v_Normal = normalize(Mul(_Mat4x4(u_BoneMatrix[0]), vec4(a_Normal, 0.0)).xyz);
+    vec3 t_PositionWorld = u_BoneMatrix[0] * vec4(a_Position, 1.0);
+    gl_Position = u_Projection * vec4(t_PositionWorld, 1.0);
+    v_Normal = MulNormalMatrix(u_BoneMatrix[0], a_Normal);
     v_TexCoord = a_TexCoord.xy * u_TexScaleBiasPre.xy + u_TexScaleBiasPre.zw;
     v_ShadowTexCoord = gl_Position.xyw;
 }

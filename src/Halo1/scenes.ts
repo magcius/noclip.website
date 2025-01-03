@@ -67,16 +67,15 @@ varying vec3 v_Position;
     public static common = `
 precision mediump float;
 
-layout(std140) uniform ub_SceneParams {
-    Mat4x4 u_Projection;
-    Mat4x4 u_ViewMatrix;
+layout(std140, row_major) uniform ub_SceneParams {
+    mat4 u_ProjectionView;
     vec3 u_PlayerPos;
     vec4 u_FogColor;
     vec4 u_FogDistances;
 };
 
-layout(std140) uniform ub_ModelParams {
-    Mat4x4 u_ModelMatrix;
+layout(std140, row_major) uniform ub_ModelParams {
+    mat4x3 u_ModelMatrix;
 };
 
 layout(binding = 0) uniform sampler2D u_Texture0;
@@ -128,17 +127,17 @@ vec3 CalcTangentToWorld(in vec3 t_TangentNormal, in vec3 t_Basis0, in vec3 t_Bas
 
     public override vert = `
 ${BaseProgram.vertexAttrs}
-vec4 toWorldCoord(vec4 x) {
-    return Mul(u_ModelMatrix, x);
-}
+
+${GfxShaderLibrary.MulNormalMatrix}
 
 void mainVS() {
-    gl_Position = Mul(u_Projection, Mul(u_ViewMatrix, toWorldCoord(vec4(a_Position, 1.0))));
+    vec3 t_PositionWorld = u_ModelMatrix * vec4(a_Position, 1.0);
+    gl_Position = u_ProjectionView * vec4(t_PositionWorld, 1.0);
     v_UV = a_TexCoord;
-    v_Normal = normalize(toWorldCoord(vec4(a_Normal.xyz, 0.0)).xyz);
-    v_Binormal = normalize(toWorldCoord(vec4(a_Binormal.xyz, 0.0)).xyz);
-    v_Tangent = normalize(toWorldCoord(vec4(a_Tangent.xyz, 0.0)).xyz);
-    v_Position = toWorldCoord(vec4(a_Position.xyz, 1.0)).xyz;
+    v_Normal = MulNormalMatrix(u_ModelMatrix, a_Normal);
+    v_Binormal = normalize(u_ModelMatrix * vec4(a_Binormal.xyz, 0.0));
+    v_Tangent = normalize(u_ModelMatrix * vec4(a_Tangent.xyz, 0.0));
+    v_Position = t_PositionWorld;
 }
 `;
 
@@ -1228,7 +1227,7 @@ class ShaderEnvironmentProgram extends BaseProgram {
     public static a_LightmapTexCoord = 6;
 
     public static override varying = `
-varying vec2 v_lightmapUV;
+varying vec2 v_LightmapUV;
 varying vec3 v_IncidentLight;
 `;
 
@@ -1248,19 +1247,18 @@ layout(location = ${ShaderEnvironmentProgram.a_TexCoord}) in vec2 a_TexCoord;
 layout(location = ${ShaderEnvironmentProgram.a_IncidentLight}) in vec3 a_IncidentLight;
 layout(location = ${ShaderEnvironmentProgram.a_LightmapTexCoord}) in vec2 a_LightmapTexCoord;
 
-vec4 toWorldCoord(vec4 x) {
-    return Mul(u_ModelMatrix, x);
-}
+${GfxShaderLibrary.MulNormalMatrix}
 
 void mainVS() {
-    gl_Position = Mul(u_Projection, Mul(u_ViewMatrix, toWorldCoord(vec4(a_Position, 1.0))));
+    vec3 t_PositionWorld = u_ModelMatrix * vec4(a_Position, 1.0);
+    gl_Position = u_ProjectionView * vec4(t_PositionWorld, 1.0);
     v_UV = a_TexCoord;
-    v_Normal = normalize(toWorldCoord(vec4(a_Normal.xyz, 0.0)).xyz);
-    v_Binormal = normalize(toWorldCoord(vec4(a_Binormal.xyz, 0.0)).xyz);
-    v_Tangent = normalize(toWorldCoord(vec4(a_Tangent.xyz, 0.0)).xyz);
-    v_Position = toWorldCoord(vec4(a_Position.xyz, 1.0)).xyz;
+    v_Normal = MulNormalMatrix(u_ModelMatrix, a_Normal);
+    v_Binormal = normalize(u_ModelMatrix * vec4(a_Binormal.xyz, 0.0));
+    v_Tangent = normalize(u_ModelMatrix * vec4(a_Tangent.xyz, 0.0));
+    v_Position = t_PositionWorld;
     v_IncidentLight = a_IncidentLight;
-    v_lightmapUV = a_LightmapTexCoord;
+    v_LightmapUV = a_LightmapTexCoord;
 }
 `;
 
@@ -1370,7 +1368,7 @@ vec3 t_EyeWorld = normalize(u_PlayerPos - v_Position);
 
             if (this.has_lightmap) {
                 fragBody.push(`
-vec3 t_LightmapSample = texture(SAMPLER_2D(u_Texture1), v_lightmapUV).rgb;
+vec3 t_LightmapSample = texture(SAMPLER_2D(u_Texture1), v_LightmapUV).rgb;
 float t_Variance = dot(v_IncidentLight.rgb, v_IncidentLight.rgb);
 float t_BumpAtten = (dot(v_IncidentLight, t_NormalWorld) * t_Variance) + (1.0 - t_Variance);
 color.rgb *= t_LightmapSample * t_BumpAtten;
@@ -1964,8 +1962,7 @@ class HaloScene implements Viewer.SceneGfx {
 
         let offs = template.allocateUniformBuffer(BaseProgram.ub_SceneParams, 32 + 12);
         const mapped = template.mapUniformBufferF32(BaseProgram.ub_SceneParams);
-        offs += fillMatrix4x4(mapped, offs, this.mainView.clipFromViewMatrix);
-        offs += fillMatrix4x4(mapped, offs, this.mainView.viewFromWorldMatrix);
+        offs += fillMatrix4x4(mapped, offs, this.mainView.clipFromWorldMatrix);
         offs += fillVec3v(mapped, offs, this.mainView.cameraPos);
         offs += fillVec4v(mapped, offs, this.fogColor);
         offs += fillVec4v(mapped, offs, this.fogDistances);
