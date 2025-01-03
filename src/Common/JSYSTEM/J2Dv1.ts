@@ -17,6 +17,7 @@ import { BTIData } from "./JUTTexture.js";
 import { GXMaterialBuilder } from "../../gx/GXMaterialBuilder.js";
 import { mat4, vec2, vec4 } from "gl-matrix";
 import { GfxRenderCache } from "../../gfx/render/GfxRenderCache.js";
+import { Frustum } from "../../Geometry.js";
 
 const materialParams = new MaterialParams();
 const drawParams = new DrawParams();
@@ -80,10 +81,11 @@ const enum J2DUVBinding {
 
 export class J2DGrafContext {
     private clipSpaceNearZ: GfxClipSpaceNearZ;
+    private frustum = new Frustum();
+
     public sceneParams = new SceneParams();
     public viewport = vec4.create();
     public ortho = vec4.create();
-
     public near: number;
     public far: number;
 
@@ -118,6 +120,18 @@ export class J2DGrafContext {
 
         projectionMatrixForCuboid(this.sceneParams.u_Projection, left, right, bottom, top, this.near, this.far);
         projectionMatrixConvertClipSpaceNearZ(this.sceneParams.u_Projection, this.clipSpaceNearZ, GfxClipSpaceNearZ.NegativeOne);
+
+    }
+
+    /**
+     * noclip modification:
+     * Given a view matrix, return a Frustum which can be used for culling. 
+     * In the original game, frustums are generated from proj matrices alone. But noclip expects viewProj frustums. 
+     */
+    public getFrustumForView(viewFromWorldMatrix: mat4): Frustum {
+        const clipFromWorldMatrix = mat4.mul(scratchMat, this.sceneParams.u_Projection, viewFromWorldMatrix);
+        this.frustum.updateClipFrustum(clipFromWorldMatrix, this.clipSpaceNearZ);
+        return this.frustum;
     }
 
     public setOnRenderInst(renderInst: GfxRenderInst): void {
