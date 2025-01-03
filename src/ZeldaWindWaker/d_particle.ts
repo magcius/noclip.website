@@ -75,7 +75,7 @@ export class dPa_control_c {
         this.emitterManager = new JPAEmitterManager(cache, 6000, 300);
     }
 
-    public createCommon(globals: dGlobals, commonJpac: JPAC) {
+    public createCommon(globals: dGlobals, commonJpac: JPAC): void {
         const jpacData = new JPACData(commonJpac);
         const m = jpacData.getTextureMappingReference('AK_kagerouSwap00');
         if (m !== null)
@@ -90,7 +90,7 @@ export class dPa_control_c {
         }
     }
 
-    public createRoomScene(globals: dGlobals, sceneJpac: JPAC) {
+    public createRoomScene(globals: dGlobals, sceneJpac: JPAC): void {
         const jpacData = new JPACData(sceneJpac);
         const m = jpacData.getTextureMappingReference('AK_kagerouSwap00');
         if (m !== null)
@@ -109,7 +109,7 @@ export class dPa_control_c {
         }
     }
 
-    private newSimple(resData: JPAResourceData, userID: number, groupID: number) {
+    private newSimple(resData: JPAResourceData, userID: number, groupID: number): void {
         const simple = new dPa_simpleEcallBack();
         simple.create(this.emitterManager, resData, userID, groupID);
         this.simpleCallbacks.push(simple);
@@ -227,7 +227,7 @@ export class dPa_control_c {
         return baseEmitter;
     }
 
-    public setSimple(userID: number, pos: vec3, alpha: number, prmColor: Color, envColor: Color, isAffectedByWind: boolean) {
+    public setSimple(userID: number, pos: vec3, alpha: number, prmColor: Color, envColor: Color, isAffectedByWind: boolean): boolean {
         const simple = this.simpleCallbacks.find(s => s.userID == userID);
         if (!simple)
             return false;
@@ -281,8 +281,9 @@ class dPa_simpleEcallBack extends JPAEmitterCallBack {
         }
     }
 
-    public set(pos: vec3, alpha: number, prmColor: Color, envColor: Color, isAffectedByWind: boolean) {
+    public set(pos: vec3, alpha: number, prmColor: Color, envColor: Color, isAffectedByWind: boolean): boolean {
         this.datas.push({ pos: vec3.clone(pos), prmColor: colorNewCopy(prmColor, alpha), envColor: colorNewCopy(envColor), isAffectedByWind });
+        return true;
     }
 
     public override executeAfter(emitter: JPABaseEmitter): void {
