@@ -158,19 +158,6 @@ export class dPa_control_c {
         return null;
     }
 
-    // TODO: Remove
-    private patchResData(globals: dGlobals, resData: JPAResourceData): void {
-        if (resData.resourceId & 0x4000) {
-            const m = resData.materialHelper.material;
-            m.tevStages[0].alphaInA = GX.CA.ZERO;
-            m.tevStages[0].alphaInB = GX.CA.ZERO;
-            m.tevStages[0].alphaInC = GX.CA.ZERO;
-            m.tevStages[0].alphaInD = GX.CA.A0;
-
-            resData.materialHelper.materialInvalidated();
-        }
-    }
-
     private getResData(globals: dGlobals, userIndex: number): JPAResourceData | null {
         if (!this.resourceDatas.has(userIndex)) {
             const data = this.findResData(userIndex);
@@ -178,7 +165,6 @@ export class dPa_control_c {
                 const [jpacData, jpaResRaw] = data;
                 const device = globals.modelCache.device, cache = globals.modelCache.cache;
                 const resData = new JPAResourceData(device, cache, jpacData, jpaResRaw);
-                this.patchResData(globals, resData);
                 this.resourceDatas.set(userIndex, resData);
             } else {
                 return null;
