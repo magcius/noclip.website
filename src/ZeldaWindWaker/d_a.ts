@@ -30,7 +30,7 @@ import { PeekZResult } from "./d_dlst_peekZ.js";
 import { dDlst_alphaModel__Type } from "./d_drawlist.js";
 import { LIGHT_INFLUENCE, LightType, WAVE_INFO, dKy_change_colpat, dKy_checkEventNightStop, dKy_plight_cut, dKy_plight_set, dKy_setLight__OnMaterialParams, dKy_setLight__OnModelInstance, dKy_tevstr_c, dKy_tevstr_init, setLightTevColorType, settingTevStruct } from "./d_kankyo.js";
 import { ThunderMode, dKyr_get_vectle_calc, dKyw_get_AllWind_vecpow, dKyw_get_wind_pow, dKyw_get_wind_vec, dKyw_rain_set, loadRawTexture } from "./d_kankyo_wether.js";
-import { dPa_splashEcallBack, dPa_trackEcallBack, dPa_waveEcallBack } from "./d_particle.js";
+import { dPa_splashEcallBack, dPa_trackEcallBack, dPa_waveEcallBack, ParticleGroup } from "./d_particle.js";
 import { dProcName_e } from "./d_procname.js";
 import { ResType, dComIfG_resLoad } from "./d_resorce.js";
 import { dPath, dPath_GetRoomPath, dPath__Point, dStage_Multi_c, dStage_stagInfo_GetSTType } from "./d_stage.js";
@@ -5797,7 +5797,7 @@ const enum TitlePane {
     JapanSubtitle,
     PressStart,
     Nintendo,
-    Effect1,
+    ShipParticles,
     Effect2,
 }
 
@@ -5813,7 +5813,8 @@ class d_a_title extends fopAc_ac_c {
     private btkSubtitle = new mDoExt_btkAnm();
     private btkShimmer = new mDoExt_btkAnm();
     private screen: J2DScreen;
-    private panes: J2DPane[] = [];
+    private panes: J2DPane[] = []; 
+    private emitter: JPABaseEmitter | null = null;
 
     private anmFrameCounter = 0
     private delayFrameCounter = 120;
@@ -5842,7 +5843,7 @@ class d_a_title extends fopAc_ac_c {
                 // TODO: mDoAud_seStart(JA_SE_TITLE_WIND);
             }
         } else {
-            this.calc_2d_alpha(deltaTimeFrames);
+            this.calc_2d_alpha(globals, deltaTimeFrames);
         }
 
         if (this.enterMode == 2) {
@@ -5970,7 +5971,7 @@ class d_a_title extends fopAc_ac_c {
         mDoMtx_ZXYrotM(this.modelSubtitleShimmer.modelMatrix, [0, -0x8000, 0]);
     }
 
-    private calc_2d_alpha(deltaTimeFrames: number) {
+    private calc_2d_alpha(globals: dGlobals, deltaTimeFrames: number) {
         this.anmFrameCounter += deltaTimeFrames;
         if (this.anmFrameCounter >= 200 && this.enterMode == 0) {
             this.enterMode = 1;
@@ -5981,7 +5982,17 @@ class d_a_title extends fopAc_ac_c {
                 this.shipFrameCounter += deltaTimeFrames;
             }
 
-            // TODO: Emitters
+            const emitterPos = vec3.set(scratchVec3a, 
+                ((this.panes[TitlePane.ShipParticles].data.x - 320.0) - this.shipOffsetX) + 85.0,
+                (this.panes[TitlePane.ShipParticles].data.y - 240.0) + 5.0,
+                0.0
+            );
+
+            if (this.emitter == null) {
+                this.emitter = globals.particleCtrl.set(globals, ParticleGroup.TwoDback, 0x83F9, emitterPos);
+            } else {    
+                this.emitter.setGlobalTranslation(emitterPos);
+            }
 
             if (this.anmFrameCounter <= 30) {
                 this.panes[TitlePane.MainTitle].setAlpha(0.0);
