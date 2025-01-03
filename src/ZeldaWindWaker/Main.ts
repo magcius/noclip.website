@@ -403,7 +403,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         {
             globals.particleCtrl.calc(globals, viewerInput);
 
-            for (let group = ParticleGroup.Normal; group <= ParticleGroup.TwoDmenuBack; group++) {
+            for (let group = ParticleGroup.Normal; group <= ParticleGroup.Wind; group++) {
                 let texPrjMtx: mat4 | null = null;
 
                 if (group === ParticleGroup.Projection) {
@@ -413,6 +413,19 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
 
                 globals.particleCtrl.setDrawInfo(globals.camera.viewFromWorldMatrix, globals.camera.clipFromViewMatrix, texPrjMtx, globals.camera.frustum);
                 renderInstManager.setCurrentList(dlst.effect[group == ParticleGroup.Projection ? EffectDrawGroup.Indirect : EffectDrawGroup.Main]);
+                globals.particleCtrl.draw(device, this.renderHelper.renderInstManager, group);
+            }
+
+            // From mDoGph_Painter(). Draw the 2D particle groups with 640x480 ortho matrices.  
+            for (let group = ParticleGroup.TwoDfore; group <= ParticleGroup.TwoDmenuBack; group++) {
+                const orthoCtx = this.globals.scnPlay.currentGrafPort;
+                const viewMtx = mat4.fromTranslation(scratchMatrix, [orthoCtx.aspectRatioCorrection * 320, 240, 0]);
+                const frustum = orthoCtx.getFrustumForView(viewMtx);
+                const template = renderInstManager.pushTemplate();
+                orthoCtx.setOnRenderInst(template);
+
+                globals.particleCtrl.setDrawInfo(viewMtx, orthoCtx.sceneParams.u_Projection, null, frustum);
+                renderInstManager.setCurrentList(dlst.effect[EffectDrawGroup.Main]);
                 globals.particleCtrl.draw(device, this.renderHelper.renderInstManager, group);
             }
         }
