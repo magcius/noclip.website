@@ -2,17 +2,17 @@
 precision mediump float;
 
 // Expected to be constant across the entire scene.
-layout(std140) uniform ub_SceneParams {
-    Mat4x4 u_Projection;
+layout(std140, row_major) uniform ub_SceneParams {
+    mat4 u_Projection;
     vec4 u_Misc0;
 };
 
 #define u_ScreenSize (u_Misc0.xy)
 #define u_LodBias (u_Misc0.z)
 
-layout(std140) uniform ub_DrawParams {
-    Mat4x3 u_BoneMatrix[1];
-    Mat4x2 u_TexMatrix[2];
+layout(std140, row_major) uniform ub_DrawParams {
+    mat4x3 u_BoneMatrix[1];
+    mat4x2 u_TexMatrix[2];
 };
 
 uniform sampler2D u_Texture0;
@@ -32,15 +32,16 @@ vec3 Monochrome(vec3 t_Color) {
 }
 
 void main() {
-    gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_BoneMatrix[0]), vec4(a_Position, 1.0)));
+    vec3 t_PositionView = u_BoneMatrix[0] * vec4(a_Position, 1.0);
+    gl_Position = u_Projection * vec4(t_PositionView, 1.0);
     v_Color = a_Color;
 
 #ifdef USE_MONOCHROME_VERTEX_COLOR
     v_Color.rgb = Monochrome(v_Color.rgb);
 #endif
 
-    v_TexCoord.xy = Mul(u_TexMatrix[0], vec4(a_TexCoord, 1.0, 1.0));
-    v_TexCoord.zw = Mul(u_TexMatrix[1], vec4(a_TexCoord, 1.0, 1.0));
+    v_TexCoord.xy = u_TexMatrix[0] * vec4(a_TexCoord, 1.0, 1.0);
+    v_TexCoord.zw = u_TexMatrix[1] * vec4(a_TexCoord, 1.0, 1.0);
 }
 #endif
 

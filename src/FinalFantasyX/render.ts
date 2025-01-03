@@ -31,15 +31,15 @@ export class FFXProgram extends DeviceProgram {
 precision mediump float;
 
 // Expected to be constant across the entire scene.
-layout(std140) uniform ub_SceneParams {
-    Mat4x4 u_Projection;
-    Mat4x3 u_LightDirection;
+layout(std140, row_major) uniform ub_SceneParams {
+    mat4 u_Projection;
+    mat4x3 u_LightDirection;
     float  u_RenderHacks;
 };
 
-layout(std140) uniform ub_ModelParams {
-    Mat4x3 u_BoneMatrix;
-    Mat4x2 u_TextureMatrix;
+layout(std140, row_major) uniform ub_ModelParams {
+    mat4x3 u_BoneMatrix;
+    mat4x2 u_TextureMatrix;
     vec4   u_Params;
 };
 
@@ -57,12 +57,14 @@ layout(location = 3) in vec4 a_Extra;
 
 void main() {
     int hackFlags = int(u_RenderHacks);
+
+    vec3 t_PositionLocal = a_Position;
 #if EFFECT == 1
-    gl_Position = vec4(mix(a_Position, a_Extra.xyz, u_Params.x), 1.0);
-#else
-    gl_Position = vec4(a_Position, 1.0);
+    t_PositionLocal = mix(t_PositionLocal, a_Extra.xyz, u_Params.x);
 #endif
-    gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_BoneMatrix), gl_Position));
+
+    vec3 t_PositionView = u_BoneMatrix * vec4(t_PositionLocal, 1.0);
+    gl_Position = u_Projection * vec4(t_PositionView, 1.0);
 
 #if EFFECT == 4
     v_Color = mix(a_Color, a_Extra, u_Params.x);
@@ -74,9 +76,9 @@ void main() {
         v_Color = vec4(1.);
 
 #if EFFECT == 6
-    vec4 t_viewNormal = Mul(_Mat4x4(u_BoneMatrix), vec4(a_Extra.xyz, 0.0));
-    t_viewNormal = Mul(_Mat4x4(u_LightDirection), vec4(t_viewNormal.xyz, 0.0));
-    v_TexCoord = (t_viewNormal.xz/4.0) + 0.5;
+    vec4 t_ViewNormal = u_BoneMatrix * vec4(a_Extra.xyz, 0.0);
+    t_ViewNormal = u_LightDirection * vec4(t_ViewNormal.xyz, 0.0);
+    v_TexCoord = (t_ViewNormal.xz/4.0) + 0.5;
 #elif EFFECT == 3
     v_TexCoord = mix(a_TexCoord, a_Extra.xy, u_Params.x);
 #elif EFFECT == 5
@@ -84,7 +86,8 @@ void main() {
 #else
     v_TexCoord = a_TexCoord;
 #endif
-    v_TexCoord = Mul(_Mat4x4(u_TextureMatrix), vec4(v_TexCoord, 0.0, 1.0)).xy;
+
+    v_TexCoord = u_TextureMatrix * vec4(v_TexCoord, 0.0, 1.0);
 }
 `;
 
@@ -353,7 +356,7 @@ const enum RenderLayer {
 
 const scratchMatrix = mat4.create();
 const scratchAABB = new AABB();
-const posScrath = vec3.create();
+const scratchVec3 = vec3.create();
 // LevelModelInstance is the basic unit of geometry
 export class LevelModelInstance {
     public drawCalls: DrawCallInstance[] = [];
@@ -395,8 +398,8 @@ export class LevelModelInstance {
         template.setVertexInput(this.data.inputLayout, this.data.vertexBufferDescriptors, this.data.indexBufferDescriptor);
         template.sortKey = makeSortKey(this.layer);
         if (this.depthSort) {
-            transformVec3Mat4w1(posScrath, scratchMatrix, this.model.center);
-            template.sortKey = setSortKeyDepth(template.sortKey, -posScrath[2]);
+            transformVec3Mat4w1(scratchVec3, scratchMatrix, this.model.center);
+            template.sortKey = setSortKeyDepth(template.sortKey, -scratchVec3[2]);
         }
 
         for (let i = 0; i < this.drawCalls.length; i++)

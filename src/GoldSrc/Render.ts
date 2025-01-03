@@ -149,8 +149,8 @@ class GoldSrcProgram extends DeviceProgram {
     public static a_TexCoord = 1;
 
     public override both = `
-layout(std140) uniform ub_SceneParams {
-    Mat4x4 u_ViewProjection;
+layout(std140, row_major) uniform ub_SceneParams {
+    mat4 u_ProjectionView;
 };
 
 uniform sampler2D u_TextureDiffuse;
@@ -164,7 +164,7 @@ layout(location = ${GoldSrcProgram.a_TexCoord}) in vec4 a_TexCoord;
 out vec4 v_TexCoord;
 
 void main() {
-    gl_Position = Mul(u_ViewProjection, vec4(a_Position, 1.0));
+    gl_Position = u_ProjectionView * vec4(a_Position, 1.0);
     v_TexCoord = a_TexCoord;
 }
 `;

@@ -40,14 +40,14 @@ export class DQ8Program extends DeviceProgram {
 #define SMOOTH_SKINNING() (SKINNING_MATRIX_COUNT > 0)
 
 precision mediump float;
-layout(std140) uniform ub_SceneParams {
-    Mat4x4 u_Projection;
+layout(std140, row_major) uniform ub_SceneParams {
+    mat4 u_Projection;
 };
-layout(std140) uniform ub_MDTSubmeshParams {
-    Mat4x4 u_ModelView;
-    Mat4x4 u_RigidTrans;
+layout(std140, row_major) uniform ub_MDTSubmeshParams {
+    mat4x3 u_ModelView;
+    mat4x3 u_RigidTrans;
 #if SMOOTH_SKINNING()
-    Mat4x3 u_JointMatrix[SKINNING_MATRIX_COUNT];
+    mat4x3 u_JointMatrix[SKINNING_MATRIX_COUNT];
 #endif
     vec4 u_BGColor;
     vec4 u_BGColor2;
@@ -76,28 +76,31 @@ out vec2 v_TexCoord;
 out vec4 v_col;
 
 void mainVS() {
-    vec4 pos = vec4(a_Position, 1.0);
-
 #if SMOOTH_SKINNING()
-    Mat4x3 t_JointMatrix = _Mat4x3(0.0);
-    Fma(t_JointMatrix, u_JointMatrix[int(a_JointIndices.x)], a_JointWeights.x);
-    Fma(t_JointMatrix, u_JointMatrix[int(a_JointIndices.y)], a_JointWeights.y);
-    Fma(t_JointMatrix, u_JointMatrix[int(a_JointIndices.z)], a_JointWeights.z);
-    Fma(t_JointMatrix, u_JointMatrix[int(a_JointIndices.w)], a_JointWeights.w);
-    pos = Mul(_Mat4x4(t_JointMatrix), pos);
+    mat4x3 t_JointMatrix = mat4x3(0.0);
+    t_JointMatrix += u_JointMatrix[int(a_JointIndices.x)] * a_JointWeights.x;
+    t_JointMatrix += u_JointMatrix[int(a_JointIndices.y)] * a_JointWeights.y;
+    t_JointMatrix += u_JointMatrix[int(a_JointIndices.z)] * a_JointWeights.z;
+    t_JointMatrix += u_JointMatrix[int(a_JointIndices.w)] * a_JointWeights.w;
 #else
-    pos = Mul(u_RigidTrans,pos);
+    mat4x3 t_JointMatrix = u_RigidTrans;
 #endif
 
+    vec3 t_PositionLocal = t_JointMatrix * vec4(a_Position, 1.0);
+
     if (u_bIsSkybox > 0.0)
-        pos = Mul(u_RigidTrans,pos);
+        t_PositionLocal = u_RigidTrans * vec4(t_PositionLocal, 1.0); // ???
+
     if (u_bIsSkybox > 0.0)
         v_col = u_BGColor;
     else
         v_col = a_vColor;
-    if (u_bIsSkybox > 0.0 && pos.y < 2000.0 && pos.y > -2000.0)
+
+    if (u_bIsSkybox > 0.0 && t_PositionLocal.y < 2000.0 && t_PositionLocal.y > -2000.0)
         v_col = u_BGColor2;
-    gl_Position = Mul(u_Projection, Mul(u_ModelView,pos));
+
+    vec3 t_PositionView = u_ModelView * vec4(t_PositionLocal, 1.0);
+    gl_Position = u_Projection * vec4(t_PositionView, 1.0);
     v_TexCoord = a_TexCoord;
 }
 #endif
@@ -305,17 +308,17 @@ export class MDTSubmeshInstance {
 
             let offs = renderInst.allocateUniformBuffer(DQ8Program.ub_MDTSubmeshParams, 16 * 2 + 12 + 16 * (this.mdtData.smoothSkinning ? MDS.MDS.maxJointCount : 0));
             const d = renderInst.mapUniformBufferF32(DQ8Program.ub_MDTSubmeshParams);
-            offs += fillMatrix4x4(d, offs, viewMatrix);
+            offs += fillMatrix4x3(d, offs, viewMatrix);
 
             if (jointPerVertCount && !bIsSkybox) {
                 mat4.invert(scratchMatrix, modelMatrix);
                 mat4.mul(scratchMatrix, scratchMatrix, boneMatrices[this.rigidJointId]);
-                offs += fillMatrix4x4(d, offs, scratchMatrix);
+                offs += fillMatrix4x3(d, offs, scratchMatrix);
             } else {
                 if (!bIsSkybox)
-                    offs += fillMatrix4x4(d, offs, boneMatrices[this.rigidJointId]);
+                    offs += fillMatrix4x3(d, offs, boneMatrices[this.rigidJointId]);
                 else
-                    offs += fillMatrix4x4(d, offs, modelMatrix);
+                    offs += fillMatrix4x3(d, offs, modelMatrix);
             } 
 
             if (this.mdtData.smoothSkinning) {

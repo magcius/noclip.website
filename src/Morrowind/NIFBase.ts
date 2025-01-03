@@ -276,15 +276,15 @@ class NifShader extends DeviceProgram {
 precision mediump float;
 precision mediump sampler2DArray;
 
-layout(std140) uniform ub_SceneParams {
-    Mat4x4 u_ClipFromWorld;
+layout(std140, row_major) uniform ub_SceneParams {
+    mat4 u_ClipFromWorld;
     vec4 u_SunDirection;
     vec4 u_SunDiffuse;
     vec4 u_SunAmbient;
 };
 
-layout(std140) uniform ub_ObjectParams {
-    Mat4x3 u_LocalFromNode;
+layout(std140, row_major) uniform ub_ObjectParams {
+    mat4x3 u_LocalFromNode;
     vec4 u_Misc[1];
     vec4 u_DiffuseColor;
     vec4 u_AmbientColor;
@@ -292,8 +292,8 @@ layout(std140) uniform ub_ObjectParams {
 };
 
 #if USE_INSTANCING()
-layout(std140) uniform ub_InstanceParams {
-    Mat4x3 u_WorldFromLocal[${NifShader.MaxInstances}];
+layout(std140, row_major) uniform ub_InstanceParams {
+    mat4x3 u_WorldFromLocal[${NifShader.MaxInstances}];
 };
 #endif
 
@@ -312,26 +312,25 @@ layout(location = ${NifShader.a_Color0}) in vec4 a_Color0;
 layout(location = ${NifShader.a_TexCoord0}) in vec2 a_TexCoord0;
 
 ${GfxShaderLibrary.saturate}
+${GfxShaderLibrary.MulNormalMatrix}
 
 out vec4 v_Color0;
 out vec2 v_TexCoord0;
 
 void main() {
-    vec3 t_PositionLocal = Mul(u_LocalFromNode, vec4(a_Position, 1.0));
-    vec3 t_NormalLocal = normalize(Mul(u_LocalFromNode, vec4(a_Normal, 0.0)));
-
     vec3 t_PositionWorld;
     vec3 t_NormalWorld;
+
 #if USE_INSTANCING()
-    Mat4x3 t_WorldFromLocal = u_WorldFromLocal[gl_InstanceID];
-    t_PositionWorld = Mul(t_WorldFromLocal, vec4(t_PositionLocal, 1.0));
-    t_NormalWorld = normalize(Mul(t_WorldFromLocal, vec4(t_NormalLocal, 0.0)));
+    mat4x3 t_WorldFromNode = mat4x3(mat4(u_WorldFromLocal[gl_InstanceID]) * mat4(u_LocalFromNode));
+    t_PositionWorld = t_WorldFromNode * vec4(a_Position, 1.0);
+    t_NormalWorld = MulNormalMatrix(t_WorldFromNode, a_Normal);
 #else
-    t_PositionWorld = t_PositionLocal;
-    t_NormalWorld = normalize(t_NormalLocal);
+    t_PositionWorld = u_LocalFromNode * vec4(a_Position, 1.0);
+    t_NormalWorld = MulNormalMatrix(u_LocalFromNode, a_Normal);
 #endif
 
-    gl_Position = Mul(u_ClipFromWorld, vec4(t_PositionWorld, 1.0));
+    gl_Position = u_ClipFromWorld * vec4(t_PositionWorld, 1.0);
 
     vec4 t_DiffuseColor = u_DiffuseColor;
     vec4 t_AmbientColor = u_AmbientColor;

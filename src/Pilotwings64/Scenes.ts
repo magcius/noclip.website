@@ -2301,29 +2301,29 @@ class SnowProgram extends DeviceProgram {
     public static ub_DrawParams = 1;
 
     public override both = `
-layout(std140) uniform ub_SceneParams {
-    Mat4x4 u_Projection;
+layout(std140, row_major) uniform ub_SceneParams {
+    mat4 u_Projection;
 };
 
-layout(std140) uniform ub_DrawParams {
-    Mat4x3 u_BoneMatrix;
+layout(std140, row_major) uniform ub_DrawParams {
+    mat4x3 u_BoneMatrix;
     vec4 u_Shift;
 };`
     public override vert = `
 layout(location = 0) in vec3 a_Position;
 
 void main() {
-    gl_Position = vec4(a_Position, 1.0) + vec4(u_Shift.xyz, 0.0);
+    vec3 t_PositionLocal = a_Position + u_Shift.xyz;
     // slightly clumsy, force into 0-10k cube, then shift center to origin
     // just easier than dealing with negative mod values
     float cubeSide = 5000.0;
-    gl_Position = mod(gl_Position, 2.0*vec4(cubeSide)) - vec4(vec3(cubeSide), 0.0);
-    gl_Position = Mul(_Mat4x4(u_BoneMatrix), gl_Position);
+    t_PositionLocal = mod(t_PositionLocal, 2.0 * vec3(cubeSide)) - vec3(cubeSide);
+    t_PositionLocal = u_BoneMatrix * vec4(t_PositionLocal, 1.0);
     // shift snow cube in front of camera
-    gl_Position.z -= cubeSide;
+    t_PositionLocal.z -= cubeSide;
     // add offset based on which corner this is, undoing perspective correction so every flake is the same size
-    gl_Position += (u_Shift.w * gl_Position.z) * vec4(float(gl_VertexID & 1) - 0.5, float((gl_VertexID >> 1) & 1) - 0.5, 0.0, 0.0);
-    gl_Position = Mul(u_Projection, gl_Position);
+    t_PositionLocal += (u_Shift.w * t_PositionLocal.z) * vec3(float(gl_VertexID & 1) - 0.5, float((gl_VertexID >> 1) & 1) - 0.5, 0.0);
+    gl_Position = u_Projection * vec4(t_PositionLocal, 1.0);
     // game writes snow directly to the frame buffer, with a very simple projection
     // this effectively leads to a slightly larger FOV, so apply the same multiplier here
     gl_Position = gl_Position * vec4(0.81778, 0.81778, 1.0, 1.0);

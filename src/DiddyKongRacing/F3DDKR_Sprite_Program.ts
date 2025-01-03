@@ -14,22 +14,22 @@ export class F3DDKR_Sprite_Program extends DeviceProgram {
     public override both = `
 precision mediump float;
 
-layout(std140) uniform ub_SceneParams {
-    Mat4x4 u_Projection;
+layout(std140, row_major) uniform ub_SceneParams {
+    mat4 u_Projection;
 };
 
 struct SpriteInstance {
     vec4 info; // x = u_TexCoords index, y = Number of frames, z = alpha test, w = offset y
     vec4 color;
-    Mat4x3 viewMatrix;
+    mat4x3 modelViewMatrix;
 };
 
-layout(std140) uniform ub_DrawParams {
+layout(std140, row_major) uniform ub_DrawParams {
     vec4 u_SpritesInfo; // x = Current frame.
     SpriteInstance u_Instances[${MAX_NUM_OF_SPRITE_INSTANCES}];
 };
 
-layout(std140) uniform ub_TexParams {
+layout(std140, row_major) uniform ub_TexParams {
     vec4 u_TexCoords[${MAX_NUM_OF_SPRITE_FRAMES}];
 };
 
@@ -59,7 +59,9 @@ void main() {
 
     v_Color = instance.color;
 
-    gl_Position = Mul(u_Projection, Mul(_Mat4x4(instance.viewMatrix), vec4((a_Position+offset)*spriteSize, 1.0, 1.0)));
+    vec2 t_PositionLocal = (a_Position + offset) * spriteSize;
+    vec3 t_PositionView = instance.modelViewMatrix * vec4(t_PositionLocal, 1.0, 1.0);
+    gl_Position = u_Projection * vec4(t_PositionView, 1.0);
 
     if(gl_VertexID == 0) {
         v_TexCoord = vec2(x, y);

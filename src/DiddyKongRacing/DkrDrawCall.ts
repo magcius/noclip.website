@@ -21,8 +21,7 @@ const FLAG_IS_INVISIBLE_GEOMETRY = 0x00000100;
 const FLAG_IS_ENV_MAP_ENABLED    = 0x00008000; // Spherical Environment Mapping
 const FLAG_IS_TEXTURE_ANIMATED   = 0x00010000;
 
-const viewMatrixScratch = mat4.create();
-const viewMatrixCalcScratch = mat4.create();
+const scratchMatrix = mat4.create();
 const mirrorMatrix = mat4.fromValues(
     -1, 0, 0, 0,
      0, 1, 0, 0,
@@ -259,16 +258,15 @@ export class DkrDrawCall {
                 offs += 16;
             }
 
-            computeViewMatrix(viewMatrixScratch, viewerInput.camera);
-            if(DkrControlGlobals.ADV2_MIRROR.on) {
-                mat4.mul(viewMatrixCalcScratch, mirrorMatrix, params.modelMatrix);
-                mat4.mul(viewMatrixCalcScratch, viewMatrixScratch, viewMatrixCalcScratch);
+            if (DkrControlGlobals.ADV2_MIRROR.on) {
+                mat4.mul(scratchMatrix, mirrorMatrix, params.modelMatrix);
+                mat4.mul(scratchMatrix, viewerInput.camera.viewMatrix, scratchMatrix);
             } else {
-                mat4.mul(viewMatrixCalcScratch, viewMatrixScratch, params.modelMatrix);
+                mat4.mul(scratchMatrix, viewerInput.camera.viewMatrix, params.modelMatrix);
             }
-            offs += fillMatrix4x3(d, offs, viewMatrixCalcScratch);
+            offs += fillMatrix4x3(d, offs, scratchMatrix);
 
-            if(!!params.objAnim) {
+            if (!!params.objAnim) {
                 const currentFrameIndex = params.objAnim.getCurrentFrame();
                 this.vertexBufferDescriptors[0].byteOffset = this.objAnimPositionBufferByteOffset[params.objAnimIndex][currentFrameIndex];
                 const nextFrameIndex = (currentFrameIndex + 1) % params.objAnim.getKeyframes().length;

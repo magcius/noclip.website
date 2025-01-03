@@ -32,14 +32,14 @@ varying vec2 v_TexCoord0;
 
 #if defined VERT
 void mainVS() {
-    Mat4x3 t_WorldFromLocalMatrix = CalcWorldFromLocalMatrix();
-    vec3 t_PositionWorld = Mul(t_WorldFromLocalMatrix, vec4(a_Position, 1.0));
+    mat4x3 t_WorldFromLocalMatrix = CalcWorldFromLocalMatrix();
+    vec3 t_PositionWorld = t_WorldFromLocalMatrix * vec4(a_Position, 1.0);
     vec3 t_LightDirection = normalize(vec3(.2, -1, .5));
     vec3 normal = MulNormalMatrix(t_WorldFromLocalMatrix, normalize(a_Normal));
     float t_LightIntensityF = dot(-normal, t_LightDirection);
     float t_LightIntensityB = dot( normal, t_LightDirection);
 
-    gl_Position = Mul(u_ProjectionView, vec4(t_PositionWorld, 1.0));
+    gl_Position = u_ProjectionView * vec4(t_PositionWorld, 1.0);
     v_LightIntensity = vec2(t_LightIntensityF, t_LightIntensityB);
     v_TexCoord0 = CalcScaleBias(a_TexCoord0, u_MainTexST);
 }
@@ -126,14 +126,14 @@ uniform sampler2D u_Splat3;
 
 #ifdef VERT
 void mainVS() {
-    Mat4x3 t_WorldFromLocalMatrix = CalcWorldFromLocalMatrix();
-    vec3 t_PositionWorld = Mul(t_WorldFromLocalMatrix, vec4(a_Position, 1.0));
+    mat4x3 t_WorldFromLocalMatrix = CalcWorldFromLocalMatrix();
+    vec3 t_PositionWorld = t_WorldFromLocalMatrix * vec4(a_Position, 1.0);
     vec3 t_LightDirection = normalize(vec3(.2, -1, .5));
     vec3 normal = MulNormalMatrix(t_WorldFromLocalMatrix, normalize(a_Normal));
     float t_LightIntensityF = dot(-normal, t_LightDirection);
     float t_LightIntensityB = dot( normal, t_LightDirection);
 
-    gl_Position = Mul(u_ProjectionView, vec4(t_PositionWorld, 1.0));
+    gl_Position = u_ProjectionView * vec4(t_PositionWorld, 1.0);
     v_LightIntensity = vec2(t_LightIntensityF, t_LightIntensityB);
 
     for (int i = 0; i < 6; i++)

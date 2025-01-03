@@ -511,10 +511,9 @@ class DrawCallInstance {
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMappings);
         renderInst.setDrawCount(this.drawCall.indexCount, this.drawCall.firstIndex);
 
-        let offs = renderInst.allocateUniformBuffer(KingdomHeartsIIProgram.ub_DrawParams, 32);
+        let offs = renderInst.allocateUniformBuffer(KingdomHeartsIIProgram.ub_DrawParams, 16);
         const mapped = renderInst.mapUniformBufferF32(KingdomHeartsIIProgram.ub_DrawParams);
-        offs += fillMatrix4x4(mapped, offs, modelMatrix);
-        offs += fillMatrix4x3(mapped, offs, viewerInput.camera.viewMatrix);
+        offs += fillMatrix4x3(mapped, offs, modelMatrix);
         if (this.drawCall.textureAnim) {
             this.drawCall.textureAnim.fillUVOffset(uvAnimOffsetScratch);
             mapped[offs++] = uvAnimOffsetScratch[0];
@@ -585,7 +584,7 @@ class SceneRenderer {
 
         let offs = template.allocateUniformBuffer(KingdomHeartsIIProgram.ub_SceneParams, 20);
         const sceneParamsMapped = template.mapUniformBufferF32(KingdomHeartsIIProgram.ub_SceneParams);
-        offs += fillMatrix4x4(sceneParamsMapped, offs, viewerInput.camera.projectionMatrix);
+        offs += fillMatrix4x4(sceneParamsMapped, offs, viewerInput.camera.clipFromWorldMatrix);
         sceneParamsMapped[offs] = viewerInput.time;
 
         for (const instance of this.drawCallInstances) {

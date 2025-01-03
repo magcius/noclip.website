@@ -512,15 +512,15 @@ class TerrainProgram extends DeviceProgram {
 precision mediump float;
 precision mediump sampler2DArray;
 
-layout(std140) uniform ub_SceneParams {
-    Mat4x4 u_ClipFromWorld;
+layout(std140, row_major) uniform ub_SceneParams {
+    mat4 u_ClipFromWorld;
     vec4 u_SunDirection;
     vec4 u_SunDiffuse;
     vec4 u_SunAmbient;
 };
 
-layout(std140) uniform ub_ObjectParams {
-    Mat4x3 u_WorldFromLocal;
+layout(std140, row_major) uniform ub_ObjectParams {
+    mat4x3 u_WorldFromLocal;
 };
 
 layout(location = 0) uniform sampler2DArray u_TextureTerrain;
@@ -542,9 +542,9 @@ void main() {
     float x = (uv.x - 0.5) * 8192.0;
     float y = (uv.y - 0.5) * 8192.0;
     float z = a_Height;
-    vec3 t_PositionWorld = Mul(u_WorldFromLocal, vec4(x, y, z, 1.0));
+    vec3 t_PositionWorld = u_WorldFromLocal * vec4(x, y, z, 1.0);
 
-    gl_Position = Mul(u_ClipFromWorld, vec4(t_PositionWorld, 1.0));
+    gl_Position = u_ClipFromWorld * vec4(t_PositionWorld, 1.0);
     v_Color = a_Color;
     v_Color *= dot(a_Normal, u_SunDirection.xyz) * u_SunDiffuse.xyz + u_SunAmbient.xyz;
 }

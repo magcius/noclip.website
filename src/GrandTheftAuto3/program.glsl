@@ -2,10 +2,10 @@
 precision mediump float;
 precision lowp sampler2DArray;
 
-layout(std140) uniform ub_SceneParams {
-    Mat4x4 u_Projection;
-    Mat4x3 u_ViewMatrix;
-    Mat4x3 u_WorldMatrix;
+layout(std140, row_major) uniform ub_SceneParams {
+    mat4x4 u_Projection;
+    mat4x3 u_ViewMatrix;
+    mat4x3 u_WorldMatrix;
     vec4 u_Frustum;
     vec4 u_AmbientColor;
     vec4 u_SkyTopColor;
@@ -38,7 +38,8 @@ layout(location = 2) in vec3 a_TexCoord;
 layout(location = 3) in vec3 a_TexScroll;
 
 void main() {
-    gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_ViewMatrix), vec4(a_Position, 1.0)));
+    vec3 t_PositionView = u_ViewMatrix * vec4(a_Position, 1.0);
+    gl_Position = u_Projection * vec4(t_PositionView, 1.0);
     v_Color = a_Color;
     v_TexCoord = a_TexCoord;
     v_TexScroll = a_TexScroll;
@@ -53,8 +54,8 @@ void main() {
 
     // TODO: get this working again
     vec3 nearPlane = v_Position * u_Frustum.xyz;
-    vec3 cameraRay = Mul(u_WorldMatrix, vec4(nearPlane, 0.0));
-    vec3 cameraPos = Mul(u_WorldMatrix, vec4(vec3(0.0), 1.0));
+    vec3 cameraRay = u_WorldMatrix * vec4(nearPlane, 0.0);
+    vec3 cameraPos = u_WorldMatrix * vec4(vec3(0.0), 1.0);
     float elevation = atan(cameraRay.y, length(cameraRay.zx));
     gl_FragColor = mix(u_SkyBotColor, u_SkyTopColor, clamp(abs(elevation / radians(45.0)), 0.0, 1.0));
     gl_FragDepth = 0.0;
@@ -72,8 +73,9 @@ void main() {
         gl_FragColor = mix(gl_FragColor, t_Color, t_Color.a);
 
         // slightly overlap water tiles to avoid seam
-        vec4 clipOffset = 0.01 * vec4(0, 0, 1, 0);
-        vec4 clipSpacePos = Mul(u_Projection, Mul(_Mat4x4(u_ViewMatrix), vec4(oceanPlane, 1.0)) + clipOffset);
+        vec3 clipOffset = 0.01 * vec3(0, 0, 1);
+        vec3 viewSpacePos = (u_ViewMatrix * vec4(oceanPlane, 1.0)) + clipOffset;
+        vec4 clipSpacePos = u_Projection * vec4(viewSpacePos, 1.0);
         float depthNDC = clipSpacePos.z / clipSpacePos.w;
         gl_FragDepth = 0.5 + 0.5 * depthNDC;
     }

@@ -15,14 +15,14 @@ export class F3DDKR_Program extends DeviceProgram {
     public override both = `
 precision mediump float;
 
-layout(std140) uniform ub_SceneParams {
-    Mat4x4 u_Projection;
+layout(std140, row_major) uniform ub_SceneParams {
+    mat4 u_Projection;
 };
 
-layout(std140) uniform ub_DrawParams {
+layout(std140, row_major) uniform ub_DrawParams {
     vec4 u_Color;
     vec4 u_Misc[1];
-    Mat4x3 u_ViewMatrix;
+    mat4x3 u_ModelViewMatrix;
 };
 
 #define u_TexCoordOffset (u_Misc[0].xy)
@@ -59,18 +59,21 @@ void main() {
     vec3 pos;
     bvec4 t_Options = DecodeOptions();
 
-    if(t_Options.w) { // t_Options.w = Use object animation
+    if (t_Options.w) { // t_Options.w = Use object animation
         pos = mix(a_Position, a_Position_2, u_AnimProgress); // lerp between the keyframes.
     } else {
         pos = a_Position; // Just use the default position.
     }
 
-    gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_ViewMatrix), vec4(pos, 1.0)));
-    if(t_Options.z) {
+    vec3 t_PositionView = u_ModelViewMatrix * vec4(pos, 1.0);
+    gl_Position = u_Projection * vec4(t_PositionView, 1.0);
+
+    if (t_Options.z) {
         v_Color = vec4(1.0, 1.0, 1.0, 1.0);
     } else {
         v_Color = vec4(a_Color.xyz, a_Color.w * u_Color.w);
     }
+
     v_TexCoord = a_TexCoord + u_TexCoordOffset.xy;
 }
 `;
@@ -94,17 +97,18 @@ void main() {
 
     bvec4 t_Options = DecodeOptions();
 
-    if(t_Options.x) {
+    if (t_Options.x) {
         textureColor = Texture2D_N64_Bilerp(PP_SAMPLER_2D(u_Texture), v_TexCoord);
     }
 
-    if(t_Options.y) {
+    if (t_Options.y) {
         vertexColor = v_Color;
     }
 
     gl_FragColor = vertexColor * textureColor;
 
-    if(gl_FragColor.a == 0.0) discard; 
+    if (gl_FragColor.a == 0.0)
+        discard; 
 }
 `;
 

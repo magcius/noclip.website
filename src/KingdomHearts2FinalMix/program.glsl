@@ -1,14 +1,14 @@
+
 precision mediump float;
 
 // Expected to be constant across the entire scene.
-layout(std140) uniform ub_SceneParams {
-    Mat4x4 u_Projection;
+layout(std140, row_major) uniform ub_SceneParams {
+    mat4 u_ProjectionView;
     float u_Time;
 };
 
-layout(std140) uniform ub_DrawParams {
-    Mat4x4 u_Model;
-    Mat4x3 u_View;
+layout(std140, row_major) uniform ub_DrawParams {
+    mat4x3 u_Model;
     vec4 u_AnimOffset;
 };
 
@@ -33,7 +33,8 @@ layout(location = 6) in vec2 a_TexScroll;
 layout(location = 7) in vec3 a_Normal;
 
 void main() {
-    gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_View), Mul(u_Model, vec4(a_Position, 1.0))));
+    vec3 t_PositionWorld = u_Model * vec4(a_Position, 1.0);
+    gl_Position = u_ProjectionView * vec4(t_PositionWorld, 1.0);
     v_Color = a_Color;
     v_TexCoord = a_TexCoord;
     v_TexClip = a_TexClip;

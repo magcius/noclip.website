@@ -574,12 +574,12 @@ class ParticleProgram extends DeviceProgram {
     public override both = `
 precision mediump float;
 
-layout(std140) uniform ub_SceneParams {
-    Mat4x4 u_Projection;
+layout(std140, row_major) uniform ub_SceneParams {
+    mat4 u_Projection;
 };
 
-layout(std140) uniform ub_DrawParams {
-    Mat4x3 u_Matrix;
+layout(std140, row_major) uniform ub_DrawParams {
+    mat4x3 u_Matrix;
     vec4 u_PrimColor;
     vec4 u_EnvColor;
 };
@@ -592,7 +592,8 @@ varying vec2 v_TexCoord;`;
 layout(location = 0) in vec3 a_Position;
 
 void main() {
-    gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_Matrix), vec4(a_Position, 1.0)));
+    vec3 t_PositionView = u_Matrix * vec4(a_Position, 1.0);
+    gl_Position = u_Projection * vec4(t_PositionView, 1.0);
     v_TexCoord = vec2(gl_VertexID & 1, (gl_VertexID >> 1) & 1);
 }`;
     public override frag = `

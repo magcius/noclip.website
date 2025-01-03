@@ -427,10 +427,9 @@ class DrawCallInstance {
             mat4.rotateY(modelMatrixScratch, modelMatrixScratch, this.drawCall.rotYFactor * viewerInput.time / (Math.PI * 6));
         }
 
-        let offs = renderInst.allocateUniformBuffer(KingdomHeartsProgram.ub_DrawParams, 32);
+        let offs = renderInst.allocateUniformBuffer(KingdomHeartsProgram.ub_DrawParams, 16);
         const mapped = renderInst.mapUniformBufferF32(KingdomHeartsProgram.ub_DrawParams);
-        offs += fillMatrix4x4(mapped, offs, modelMatrixScratch);
-        offs += fillMatrix4x3(mapped, offs, viewerInput.camera.viewMatrix);
+        offs += fillMatrix4x3(mapped, offs, modelMatrixScratch);
 
         if (this.drawCall.spriteAnim) {
             this.drawCall.spriteAnim.getUVOffset(viewerInput.time, uvAnimOffsetScratch);
@@ -500,7 +499,7 @@ export class SceneRenderer {
 
         let offs = template.allocateUniformBuffer(KingdomHeartsProgram.ub_SceneParams, 20);
         const sceneParamsMapped = template.mapUniformBufferF32(KingdomHeartsProgram.ub_SceneParams);
-        offs += fillMatrix4x4(sceneParamsMapped, offs, viewerInput.camera.projectionMatrix);
+        offs += fillMatrix4x4(sceneParamsMapped, offs, viewerInput.camera.clipFromWorldMatrix);
         sceneParamsMapped[offs] = viewerInput.time;
 
         for (let i = 0; i < this.drawCallInstances.length; i++)

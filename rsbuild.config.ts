@@ -40,7 +40,8 @@ export default defineConfig({
     // at the root.
     copy: [
       { from: 'src/**/*.wasm', to: '[name][ext]' },
-      { from: 'node_modules/librw/lib/librw.wasm' },
+      { from: 'node_modules/librw/lib/librw.wasm', to: 'static/js/[name][ext]' },
+      { from: 'src/vendor/basis_universal/basis_transcoder.wasm', to: 'static/js/[name][ext]' },
     ],
   },
   // Enable async TypeScript type checking.
