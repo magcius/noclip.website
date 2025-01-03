@@ -317,6 +317,7 @@ class dPa_simpleEcallBack extends JPAEmitterCallBack {
                 }
             }
         }
+        this.datas = [];
         emitter.stopCreateParticle();
     }
 }

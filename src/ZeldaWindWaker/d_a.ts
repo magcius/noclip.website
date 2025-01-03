@@ -246,18 +246,6 @@ class d_a_ep extends fopAc_ac_c {
 
         dKy_plight_set(globals.g_env_light, this.light);
 
-        // Create particle systems.
-
-        // TODO(jstpierre): Implement the real thing.
-        const pos = vec3.set(scratchVec3a, this.posTop[0], this.posTop[1] + -240 + 235 + 15, this.posTop[2]);
-        globals.particleCtrl.setSimple(0x0001, pos, 0xFF, White, White, false);
-        if (this.type !== 2) {
-            pos[1] += 20;
-            globals.particleCtrl.setSimple(0x4004, pos, 0xFF, White, White, false);
-        }
-        const pc = globals.particleCtrl.set(globals, 0, 0x01EA, null)!;
-        vec3.copy(pc.globalTranslation, this.posTop);
-        pc.globalTranslation[1] += -240 + 235 + 8;
         // TODO(jstpierre): ga
 
         return cPhs__Status.Next;
@@ -318,7 +306,7 @@ class d_a_ep extends fopAc_ac_c {
         this.alphaModelRotY += 0xD0 * deltaTimeFrames;
         this.alphaModelRotX += 0x100 * deltaTimeFrames;
 
-        this.ep_move();
+        this.ep_move(globals);
     }
 
     public override delete(globals: dGlobals): void {
@@ -347,7 +335,7 @@ class d_a_ep extends fopAc_ac_c {
         // TODO(jstpierre): ga
     }
 
-    private ep_move(): void {
+    private ep_move(globals: dGlobals): void {
         // tons of fun timers and such
         if (this.state === 0) {
             // check switches
@@ -356,8 +344,12 @@ class d_a_ep extends fopAc_ac_c {
         } else if (this.state === 3 || this.state === 4) {
             this.lightPower = cLib_addCalc2(this.lightPower, this.lightPowerTarget, 0.5, 0.2);
             if (this.type !== 2) {
+                const pos = vec3.set(scratchVec3a, this.posTop[0], this.posTop[1] + -240 + 235 + 15, this.posTop[2]);
+                globals.particleCtrl.setSimple(0x0001, pos, 0xFF, White, White, false);
+                pos[1] += 20;
+                globals.particleCtrl.setSimple(0x4004, pos, 0xFF, White, White, false);
+
                 // check a bunch of stuff, collision, etc.
-                // setSimple 0x4004
             }
         }
 
