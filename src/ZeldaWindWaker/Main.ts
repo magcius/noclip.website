@@ -416,8 +416,8 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
                 globals.particleCtrl.draw(device, this.renderHelper.renderInstManager, group);
             }
 
-            // From mDoGph_Painter(). Draw the 2D particle groups with 640x480 ortho matrices.  
-            for (let group = ParticleGroup.TwoDfore; group <= ParticleGroup.TwoDmenuBack; group++) {
+            // From mDoGph_Painter(). Draw the 2D particle groups with different view/proj matrices. 
+            {
                 const orthoCtx = this.globals.scnPlay.currentGrafPort;
                 const viewMtx = mat4.fromTranslation(scratchMatrix, [orthoCtx.aspectRatioCorrection * 320, 240, 0]);
                 const frustum = orthoCtx.getFrustumForView(viewMtx);
@@ -425,8 +425,14 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
                 orthoCtx.setOnRenderInst(template);
 
                 globals.particleCtrl.setDrawInfo(viewMtx, orthoCtx.sceneParams.u_Projection, null, frustum);
-                renderInstManager.setCurrentList(dlst.effect[EffectDrawGroup.Main]);
-                globals.particleCtrl.draw(device, this.renderHelper.renderInstManager, group);
+                
+                renderInstManager.setCurrentList(dlst.particle2DBack);
+                globals.particleCtrl.draw(device, this.renderHelper.renderInstManager, ParticleGroup.TwoDback);
+                globals.particleCtrl.draw(device, this.renderHelper.renderInstManager, ParticleGroup.TwoDmenuBack);
+
+                renderInstManager.setCurrentList(dlst.particle2DFore);
+                globals.particleCtrl.draw(device, this.renderHelper.renderInstManager, ParticleGroup.TwoDfore);
+                globals.particleCtrl.draw(device, this.renderHelper.renderInstManager, ParticleGroup.TwoDmenuFore);
             }
         }
 
@@ -494,9 +500,11 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
 
                 this.executeList(passRenderer, dlst.effect[EffectDrawGroup.Main]);
                 this.executeList(passRenderer, dlst.wetherEffect);
-                this.executeListSet(passRenderer, dlst.ui);
 
+                this.executeList(passRenderer, dlst.particle2DBack);
+                this.executeListSet(passRenderer, dlst.ui);
                 this.executeListSet(passRenderer, dlst.ui2D);
+                this.executeList(passRenderer, dlst.particle2DFore);
             });
         });
 
