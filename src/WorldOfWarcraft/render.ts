@@ -944,7 +944,7 @@ export class LoadingAdtRenderer {
 
             let offs = renderInst.allocateUniformBuffer(
                 LoadingAdtProgram.ub_ModelParams,
-                16 + 4,
+                12 + 4,
             );
             const mapped = renderInst.mapUniformBufferF32(
                 LoadingAdtProgram.ub_ModelParams,
@@ -961,7 +961,7 @@ export class LoadingAdtRenderer {
                 ADT_SIZE / 2,
                 500,
             ]);
-            offs += fillMatrix4x4(mapped, offs, this.scratchMat4);
+            offs += fillMatrix4x3(mapped, offs, this.scratchMat4);
             offs += fillVec4(mapped, offs, this.frequency * this.time);
 
             renderInst.setVertexInput(
@@ -1112,13 +1112,13 @@ export class WaterRenderer {
 
             let offs = renderInst.allocateUniformBuffer(
                 WaterProgram.ub_WaterParams,
-                16 + 4,
+                4 + 12,
             );
             const mapped = renderInst.mapUniformBufferF32(
                 WaterProgram.ub_WaterParams,
             );
             offs += fillVec4(mapped, offs, liquidType.category);
-            offs += fillMatrix4x4(mapped, offs, modelMatrix);
+            offs += fillMatrix4x3(mapped, offs, modelMatrix);
 
             const liquidTextures = this.liquidTexturesByType.get(
                 liquid.liquidType,

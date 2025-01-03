@@ -1,25 +1,23 @@
 
-import { SceneObjHolder, SceneObj } from "./Main.js";
-import { NameObj, CalcAnimType, MovementType } from "./NameObj.js";
-import { getMatrixTranslation } from "../MathHelpers.js";
 import { vec3 } from "gl-matrix";
-import { AreaObj, AreaObjMgr, AreaFormType } from "./AreaObj.js";
-import { JMapInfoIter, getJMapInfoArg7, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3 } from "./JMapInfo.js";
-import { ZoneAndLayer } from "./LiveActor.js";
-import { fallback } from "../util.js";
-import { connectToScene, getAreaObj } from "./ActorUtil.js";
-import { DeviceProgram } from "../Program.js";
-import { TextureMapping } from "../TextureHolder.js";
-import { nArray, assert } from "../util.js";
-import { GfxWrapMode, GfxTexFilterMode, GfxBindingLayoutDescriptor, GfxMipFilterMode, GfxBlendMode, GfxBlendFactor, GfxMegaStateDescriptor, GfxFormat, GfxProgram, GfxTextureDimension, GfxSamplerFormatKind } from "../gfx/platform/GfxPlatform.js";
-import { fillVec4 } from "../gfx/helpers/UniformBufferHelpers.js";
-import { GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import { fullscreenMegaState, makeMegaState, setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
-import { MathConstants } from "../MathHelpers.js";
-import { GfxrAttachmentSlot, GfxrRenderTargetDescription, GfxrGraphBuilder, GfxrRenderTargetID } from "../gfx/render/GfxRenderGraph.js";
 import { GfxShaderLibrary, glslGenerateFloat } from "../gfx/helpers/GfxShaderLibrary.js";
 import { IsDepthReversed } from "../gfx/helpers/ReversedDepthHelpers.js";
+import { fillVec4 } from "../gfx/helpers/UniformBufferHelpers.js";
+import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxFormat, GfxMegaStateDescriptor, GfxMipFilterMode, GfxProgram, GfxSamplerFormatKind, GfxTexFilterMode, GfxTextureDimension, GfxWrapMode } from "../gfx/platform/GfxPlatform.js";
+import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription, GfxrRenderTargetID } from "../gfx/render/GfxRenderGraph.js";
+import { GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import { GXShaderLibrary } from "../gx/gx_material.js";
+import { getMatrixTranslation } from "../MathHelpers.js";
+import { DeviceProgram } from "../Program.js";
+import { TextureMapping } from "../TextureHolder.js";
+import { assert, fallback, nArray } from "../util.js";
+import { connectToScene, getAreaObj } from "./ActorUtil.js";
+import { AreaFormType, AreaObj, AreaObjMgr } from "./AreaObj.js";
+import { JMapInfoIter, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg7 } from "./JMapInfo.js";
+import { ZoneAndLayer } from "./LiveActor.js";
+import { SceneObj, SceneObjHolder } from "./Main.js";
+import { CalcAnimType, MovementType, NameObj } from "./NameObj.js";
 
 const scratchVec3 = vec3.create();
 

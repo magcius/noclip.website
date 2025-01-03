@@ -33,8 +33,8 @@ export class F3DEX_Program extends DeviceProgram {
     public override both = `
 precision mediump float;
 
-layout(std140) uniform ub_SceneParams {
-    Mat4x4 u_Projection;
+layout(std140, row_major) uniform ub_SceneParams {
+    mat4 u_Projection;
 #ifdef LIGHTING
     #ifdef TEXTURE_GEN
         vec4 u_LookAtVectors[2];
@@ -47,9 +47,9 @@ layout(std140) uniform ub_SceneParams {
 #endif
 };
 
-layout(std140) uniform ub_DrawParams {
-    Mat4x3 u_BoneMatrix[BONE_MATRIX_COUNT];
-    Mat4x2 u_TexMatrix[2];
+layout(std140, row_major) uniform ub_DrawParams {
+    mat4x3 u_BoneMatrix[BONE_MATRIX_COUNT];
+    mat4x2 u_TexMatrix[2];
 };
 
 layout(std140) uniform ub_CombineParameters {
@@ -93,7 +93,8 @@ vec3 ConvertToSignedInt(vec3 t_Input) {
 
 void main() {
     int t_BoneIndex = int(a_Position.w);
-    gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_BoneMatrix[t_BoneIndex]), vec4(a_Position.xyz, 1.0)));
+    vec3 t_PositionView = u_BoneMatrix[t_BoneIndex] * vec4(a_Position.xyz, 1.0);
+    gl_Position = u_Projection * vec4(t_PositionView, 1.0);
     v_Color = t_One;
 
 #ifdef USE_VERTEX_COLOR
@@ -104,15 +105,16 @@ void main() {
     v_Color.rgb = Monochrome(v_Color.rgb);
 #endif
 
-    v_TexCoord.xy = Mul(u_TexMatrix[0], vec4(a_TexCoord, 1.0, 1.0));
-    v_TexCoord.zw = Mul(u_TexMatrix[1], vec4(a_TexCoord, 1.0, 1.0));
+    v_TexCoord.xy = u_TexMatrix[0] * vec4(a_TexCoord, 1.0, 1.0);
+    v_TexCoord.zw = u_TexMatrix[1] * vec4(a_TexCoord, 1.0, 1.0);
 
     ${this.generateClamp()}
 
 #ifdef LIGHTING
     // convert (unsigned) colors to normal vector components
     vec4 t_Normal = vec4(ConvertToSignedInt(a_Color.rgb), 0.0);
-    t_Normal = normalize(Mul(_Mat4x4(u_BoneMatrix[t_BoneIndex]), t_Normal));
+    vec3 t_NormalView = u_BoneMatrix[t_BoneIndex] * vec4(t_Normal.xyz, 0.0);
+    t_Normal = normalize(vec4(t_NormalView, 0.0));
 
 #ifdef PARAMETERIZED_LIGHTING
     v_Color = ${this.generateLightingExpression()};

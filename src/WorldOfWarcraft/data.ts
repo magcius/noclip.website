@@ -63,6 +63,7 @@ import { getDerivativeBezier, getPointBezier } from "../Spline.js";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
 import { reverseDepthForCompareMode } from "../gfx/helpers/ReversedDepthHelpers.js";
 import {
+    fillMatrix4x2,
     fillMatrix4x4,
     fillVec3v,
     fillVec4,
@@ -1043,11 +1044,9 @@ export class ModelBatch {
     }
 
     public setModelParams(renderInst: GfxRenderInst) {
-        const numVec4s = 4;
-        const numMat4s = 3;
         let offset = renderInst.allocateUniformBuffer(
             ModelProgram.ub_MaterialParams,
-            numVec4s * 4 + numMat4s * 16,
+            4 * 4 + 8 * 4,
         );
         const uniformBuf = renderInst.mapUniformBufferF32(
             ModelProgram.ub_MaterialParams,
@@ -1076,23 +1075,22 @@ export class ModelBatch {
             color[2],
             this.getVertexColorAlpha(),
         );
-        offset += fillMatrix4x4(
+        offset += fillMatrix4x2(
             uniformBuf,
             offset,
             this.getTextureTransform(0),
         );
-        offset += fillMatrix4x4(
+        offset += fillMatrix4x2(
             uniformBuf,
             offset,
             this.getTextureTransform(1),
         );
-        const textureWeight: vec4 = [
+        offset += fillVec4(uniformBuf, offset,
             this.getTextureWeight(0),
             this.getTextureWeight(1),
             this.getTextureWeight(2),
             this.getTextureWeight(3),
-        ];
-        offset += fillVec4v(uniformBuf, offset, textureWeight);
+        );
     }
 }
 
