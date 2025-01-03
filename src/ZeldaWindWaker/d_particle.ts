@@ -287,20 +287,21 @@ class dPa_simpleEcallBack extends JPAEmitterCallBack {
 
         emitter.playCreateParticle();
         for (let simple of this.datas) {
-            // TODO: Frustum culling
-            emitter.setGlobalTranslation(workData.emitterTranslation);
-            colorCopy(emitter.globalColorPrm, simple.prmColor);
-            colorCopy(emitter.globalColorEnv, simple.envColor);
-            for (let i = 0; i < emitThisFrame; i++) {
-                const particle = emitter.createParticle();
-                if (!particle)
-                    break;
-                
-                // NOTE: Overwriting this removes the influence of the local emitter translation (bem.emitterTrs)
-                //       I.e. all simple emitters ignore their local offsets and are fixed to the local origin.
-                vec3.copy(particle.offsetPosition, simple.pos);
-                if (simple.isAffectedByWind) {
-                    // TODO: Wind callback
+            if (!workData.frustum || workData.frustum.containsSphere(simple.pos, 200)) {
+                emitter.setGlobalTranslation(simple.pos);
+                colorCopy(emitter.globalColorPrm, simple.prmColor);
+                colorCopy(emitter.globalColorEnv, simple.envColor);
+                for (let i = 0; i < emitThisFrame; i++) {
+                    const particle = emitter.createParticle();
+                    if (!particle)
+                        break;
+                    
+                    // NOTE: Overwriting this removes the influence of the local emitter translation (bem.emitterTrs)
+                    //       I.e. all simple emitters ignore their local offsets and are fixed to the local origin.
+                    vec3.copy(particle.offsetPosition, simple.pos);
+                    if (simple.isAffectedByWind) {
+                        // TODO: Wind callback
+                    }
                 }
             }
         }
