@@ -199,15 +199,6 @@ export class dPa_control_c {
 
         baseEmitter.drawGroupId = groupID;
 
-        // HACK for now
-        // This seems to mark it as an indirect particle (???) for simple particles.
-        // ref. d_paControl_c::readCommon / readRoomScene
-        if (!!(userID & 0x4000)) {
-            baseEmitter.drawGroupId = ParticleGroup.Projection;
-        } else {
-            baseEmitter.drawGroupId = ParticleGroup.Normal;
-        }
-
         if (pos !== null)
             vec3.copy(baseEmitter.globalTranslation, pos);
         if (rot !== null)
