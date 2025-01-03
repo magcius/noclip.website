@@ -52,7 +52,7 @@ layout(std140, row_major) uniform ub_DrawParams {
     mat4x2 u_TexMatrix[2];
 };
 
-layout(std140) uniform ub_CombineParameters {
+layout(std140, row_major) uniform ub_CombineParameters {
     vec4 u_PrimColor;
     vec4 u_EnvColor;
 #ifdef EXTRA_COMBINE

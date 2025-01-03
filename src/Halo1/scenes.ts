@@ -157,7 +157,7 @@ void mainVS() {
 
 class ShaderTransparencyGenericProgram extends BaseProgram {
     public static BindingsDefinition = `
-layout(std140) uniform ub_ShaderParams {
+layout(std140, row_major) uniform ub_ShaderParams {
     Mat4x2 u_MapTransform0;
     Mat4x2 u_MapTransform1;
     Mat4x2 u_MapTransform2;
@@ -616,7 +616,7 @@ class MaterialRender_TransparencyGeneric {
 
 class ShaderTransparencyChicagoProgram extends BaseProgram {
     public static BindingsDefinition = `
-layout(std140) uniform ub_ShaderParams {
+layout(std140, row_major) uniform ub_ShaderParams {
     Mat4x2 u_MapTransform0;
     Mat4x2 u_MapTransform1;
     Mat4x2 u_MapTransform2;
@@ -773,7 +773,7 @@ void mainPS() {
 
 class ShaderTransparencyWaterProgram extends BaseProgram {
     public static BindingsDefinition = `
-layout(std140) uniform ub_ShaderParams {
+layout(std140, row_major) uniform ub_ShaderParams {
     Mat4x2 u_RippleTransform;
     vec4 u_PerpendicularTint;
     vec4 u_ParallelTint;
@@ -858,7 +858,7 @@ class RippleAnimation {
 
 class ShaderCompositeRippleProgram extends DeviceProgram {
     public static BindingsDefinition = `
-layout(std140) uniform ub_ShaderParams {
+layout(std140, row_major) uniform ub_ShaderParams {
     Mat4x2 u_MapTransform0;
     Mat4x2 u_MapTransform1;
     Mat4x2 u_MapTransform2;
@@ -1136,7 +1136,7 @@ interface TextureAnimationFunction {
 
 class ShaderModelProgram extends BaseProgram {
     public static BindingsDefinition = `
-layout(std140) uniform ub_ShaderParams {
+layout(std140, row_major) uniform ub_ShaderParams {
     Mat4x2 u_BaseMapTransform;
 };
 `;
@@ -1232,7 +1232,7 @@ varying vec3 v_IncidentLight;
 `;
 
     public static BindingsDefinition = `
-layout(std140) uniform ub_ShaderParams {
+layout(std140, row_major) uniform ub_ShaderParams {
     vec4 u_ReflectionPerpendicularColor;
     vec4 u_ReflectionParallelColor;
 };

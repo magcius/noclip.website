@@ -127,7 +127,7 @@ class FurProgram extends DeviceProgram {
 
     public override both = `
 layout(std140, row_major) uniform ub_ShapeParams {
-    mat4x4 u_Projection;
+    mat4 u_Projection;
     mat4x3 u_BoneMatrix[1];
     vec4 u_Misc[3];
     vec4 u_TintColor;

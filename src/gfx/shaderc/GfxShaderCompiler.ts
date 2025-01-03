@@ -161,7 +161,6 @@ ${hasFragColor ? `
 #define gl_FragColor o_color
 ${type === 'frag' ? `layout(location = 0) out vec4 o_color;` : ''}
 ` : ``}
-${GfxShaderLibrary.mat4}
 ${definesString}
 ${rest}
 `.trim();

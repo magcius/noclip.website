@@ -1,7 +1,7 @@
 import { DeviceProgram } from "../../../Program.js";
 import { makeStaticDataBuffer } from "../../../gfx/helpers/BufferHelpers.js";
 import { filterDegenerateTriangleIndexBuffer, convertToTriangleIndexBuffer, GfxTopology } from "../../../gfx/helpers/TopologyHelpers.js";
-import { fillColor, fillMatrix4x4, fillVec3v, fillVec4 } from "../../../gfx/helpers/UniformBufferHelpers.js";
+import { fillColor, fillMatrix4x3, fillMatrix4x4, fillVec3v, fillVec4 } from "../../../gfx/helpers/UniformBufferHelpers.js";
 import { GfxIndexBufferDescriptor, GfxBindingLayoutDescriptor, GfxVertexBufferDescriptor, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxMegaStateDescriptor, GfxCompareMode, GfxBlendFactor, GfxCullMode } from "../../../gfx/platform/GfxPlatform.js";
 import { GfxFormat } from "../../../gfx/platform/GfxPlatformFormat.js";
 import { GfxBuffer, GfxProgram, GfxInputLayout } from "../../../gfx/platform/GfxPlatformImpl.js";
@@ -45,10 +45,10 @@ struct DirectionalLight {
     vec4 color;
 };
 
-layout(std140) uniform ub_AtomicParams {
-    Mat4x4 u_Projection;
-    Mat4x4 u_ViewMatrix;
-    Mat4x4 u_ModelMatrix;
+layout(std140, row_major) uniform ub_AtomicParams {
+    mat4 u_Projection;
+    mat4x3 u_ViewMatrix;
+    mat4x3 u_ModelMatrix;
     DirectionalLight u_DirectionalLights[MAX_DIRECTIONAL_LIGHTS];
     vec4 u_AmbientColor;
     vec4 u_FogColor;
@@ -63,7 +63,7 @@ layout(std140) uniform ub_AtomicParams {
 #define u_EnablePrelit ((u_AtomicFlags & 0x1) != 0)
 #define u_EnableLight ((u_AtomicFlags & 0x2) != 0)
 
-layout(std140) uniform ub_MeshParams {
+layout(std140, row_major) uniform ub_MeshParams {
     vec4 u_MaterialColor;
     vec4 u_MeshMisc;
 };
@@ -82,18 +82,21 @@ varying float v_FogAmount;
 `;
 
     public override vert = `
-${GfxShaderLibrary.invlerp}
-${GfxShaderLibrary.saturate}
-
 layout(location = ${AtomicProgram.a_Position}) in vec3 a_Position;
 layout(location = ${AtomicProgram.a_Normal}) in vec3 a_Normal;
 layout(location = ${AtomicProgram.a_Color}) in vec4 a_Color;
 layout(location = ${AtomicProgram.a_TexCoord}) in vec2 a_TexCoord;
 
-void main() {
-    gl_Position = Mul(u_Projection, Mul(u_ViewMatrix, Mul(u_ModelMatrix, vec4(a_Position, 1.0))));
+${GfxShaderLibrary.invlerp}
+${GfxShaderLibrary.saturate}
+${GfxShaderLibrary.MulNormalMatrix}
 
-    vec3 t_Normal = normalize(Mul(u_ModelMatrix, vec4(a_Normal, 0.0)).xyz);
+void main() {
+    vec3 t_PositionWorld = u_ModelMatrix * vec4(a_Position, 1.0);
+    vec3 t_PositionView = u_ViewMatrix * vec4(t_PositionWorld, 1.0);
+    gl_Position = u_Projection * vec4(t_PositionView, 1.0);
+
+    vec3 t_Normal = MulNormalMatrix(u_ModelMatrix, a_Normal);
 
     vec4 t_Color = u_EnablePrelit ? a_Color : (u_EnableLight ? vec4(0, 0, 0, 1) : vec4(1.0));
 
@@ -271,8 +274,8 @@ class InstanceData {
         const mapped = template.mapUniformBufferF32(AtomicProgram.ub_AtomicParams);
 
         offs += fillMatrix4x4(mapped, offs, rw.viewerInput.camera.projectionMatrix);
-        offs += fillMatrix4x4(mapped, offs, rw.camera.viewMatrix);
-        offs += fillMatrix4x4(mapped, offs, atomic.frame.matrix);
+        offs += fillMatrix4x3(mapped, offs, rw.camera.viewMatrix);
+        offs += fillMatrix4x3(mapped, offs, atomic.frame.matrix);
 
         if (geom.flags & RpGeometryFlag.LIGHT) {
             const ambientColor = scratchColor1;

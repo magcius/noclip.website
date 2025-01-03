@@ -22,7 +22,7 @@ precision mediump float;
 ${MaterialShaderTemplateBase.Common}
 
 // In the future, we should use vertex data for some of this...
-layout(std140) uniform ub_ObjectParams {
+layout(std140, row_major) uniform ub_ObjectParams {
     vec4 u_BaseTextureScaleBias[5]; // Two animation frames, dual
     vec4 u_Color;
     vec4 u_Misc[1];

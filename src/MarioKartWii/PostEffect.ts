@@ -74,7 +74,7 @@ class EggBloomBaseProgram extends DeviceProgram {
 uniform sampler2D u_Texture;
 uniform sampler2D u_Texture2;
 
-layout(std140) uniform ub_Params {
+layout(std140, row_major) uniform ub_Params {
     vec4 u_ThresholdColor;
     vec4 u_CompositeColor;
     vec4 u_CompositeColorScale;
@@ -423,7 +423,7 @@ class EggDOFBaseProgram extends DeviceProgram {
 uniform sampler2D u_Texture;
 uniform sampler2D u_Texture2;
 
-layout(std140) uniform ub_Params {
+layout(std140, row_major) uniform ub_Params {
     Mat4x2 u_IndTexMat;
     vec4 u_Misc0;
 };

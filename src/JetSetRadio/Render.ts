@@ -30,7 +30,7 @@ export class JSRProgram extends DeviceProgram {
 precision mediump float;
 // Expected to be constant across the entire scene.
 layout(std140, row_major) uniform ub_SceneParams {
-    mat4x4 u_Projection;
+    mat4 u_Projection;
     mat4x3 u_LightDirection;
 };
 layout(std140, row_major) uniform ub_ModelParams {

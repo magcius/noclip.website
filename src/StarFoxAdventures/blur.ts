@@ -22,7 +22,7 @@ import { fillVec4 } from "../gfx/helpers/UniformBufferHelpers.js";
 const BindingsDefinition = `
 uniform sampler2D u_Texture;
 
-layout(std140) uniform ub_Params {
+layout(std140, row_major) uniform ub_Params {
     vec4 u_Misc[1];
 };
 #define u_HalfTexel (u_Misc[0].xy)

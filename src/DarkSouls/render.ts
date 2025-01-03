@@ -357,7 +357,7 @@ class MaterialProgram_Base extends DeviceProgram {
     public static BindingDefinitions = `
 // Expected to be constant across the entire scene.
 layout(std140, row_major) uniform ub_SceneParams {
-    mat4x4 u_ProjectionView;
+    mat4 u_ProjectionView;
     vec4 u_CameraPosWorld; // DebugMode is in w
 };
 

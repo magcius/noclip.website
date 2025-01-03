@@ -20,7 +20,7 @@ precision mediump float;
 
 ${MaterialShaderTemplateBase.Common}
 
-layout(std140) uniform ub_ObjectParams {
+layout(std140, row_major) uniform ub_ObjectParams {
     vec4 u_BumpScaleBias;
     vec4 u_RefractTint;
     vec4 u_Misc[1];

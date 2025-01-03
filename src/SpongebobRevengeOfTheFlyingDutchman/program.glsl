@@ -11,25 +11,25 @@ struct OmniLight {
 };
 
 struct HFog {
-    Mat4x4 transform;
+    mat4 transform;
     vec4 color;
 };
 
 #define NUM_OMNI_LIGHTS 4
 
-layout(std140) uniform ub_SceneParams {
-    Mat4x4 u_Projection;
+layout(std140, row_major) uniform ub_SceneParams {
+    mat4 u_Projection;
 };
 
-layout(std140) uniform ub_MaterialParams {
-    Mat4x3 u_ModelView;
-    Mat4x3 u_View;
+layout(std140, row_major) uniform ub_MaterialParams {
+    mat4x3 u_Model;
+    mat4x3 u_ModelView;
     vec4 u_Color;
     vec4 u_Emit;
-    Mat4x2 u_TexTransform;
+    mat4x2 u_TexTransform;
 };
 
-layout(std140) uniform ub_InstanceParams {
+layout(std140, row_major) uniform ub_InstanceParams {
     DirectionalLight u_light;
     HFog u_hFog;
     OmniLight u_omni[NUM_OMNI_LIGHTS];
@@ -39,7 +39,7 @@ uniform sampler2D u_Texture;
 uniform sampler2D u_TextureReflection;
 
 varying vec2 v_TexCoord;
-varying vec4 v_WorldPosition;
+varying vec3 v_WorldPosition;
 varying vec3 v_LightColor;
 varying vec3 v_ClipNormal;
 
@@ -49,11 +49,14 @@ layout(location = 1) in vec2 a_TexCoord;
 layout(location = 2) in vec3 a_Normal;
 
 void main() {
-    v_WorldPosition = Mul(_Mat4x4(u_ModelView), vec4(a_Position, 1.0));
-    gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_View), vec4(a_Position, 1.0)));
-    v_TexCoord = Mul(_Mat4x4(u_TexTransform), vec4(a_TexCoord.xy, 1.0, 1.0)).xy;
-    vec3 worldNormal = normalize(Mul(_Mat4x4(u_ModelView), vec4(a_Normal, 0.0)).xyz);
-    v_ClipNormal = normalize(Mul(_Mat4x4(u_View), vec4(worldNormal, 0.0)).xyz);
+    v_WorldPosition = u_Model * vec4(a_Position, 1.0);
+    vec3 t_PositionView = u_ModelView * vec4(a_Position, 1.0);
+    gl_Position = u_Projection * vec4(t_PositionView, 1.0);
+
+    v_TexCoord = u_TexTransform * vec4(a_TexCoord.xy, 1.0, 1.0);
+    vec3 worldNormal = normalize(u_Model * vec4(a_Normal, 0.0));
+    v_ClipNormal = u_ModelView * vec4(a_Normal, 0.0);
+
     // AMBIENT
     v_LightColor = u_light.ambient;
     // DIFFUSE
@@ -88,7 +91,7 @@ void main() {
     gl_FragColor = vec4(surfacecol * v_LightColor + reflectionColor.rgb, alpha);
     // FOG
     if (u_hFog.color.a > 0.0) {
-        vec4 fogPos = Mul(u_hFog.transform, v_WorldPosition);
+        vec4 fogPos = u_hFog.transform * vec4(v_WorldPosition, 1.0);
         float fogAmount = clamp(1.0 - fogPos.y, 0.0, 1.0);
         gl_FragColor.rgb = mix(gl_FragColor.rgb, u_hFog.color.rgb, fogAmount * u_hFog.color.a);
     }

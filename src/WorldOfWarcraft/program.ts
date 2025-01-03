@@ -304,7 +304,7 @@ layout(std140, row_major) uniform ub_ModelParams {
     mat4x3 u_Transform;
 };
 
-layout(std140) uniform ub_BatchParams {
+layout(std140, row_major) uniform ub_BatchParams {
     vec4 shaderParams; // vertexShader, pixelShader, numColorBufs, _
     vec4 materialParams; // blendMode, applyInteriorLight, applyExteriorLight, unlit
     vec4 moreMaterialParams; // unfogged, exterior_light, sidn, window
@@ -1304,7 +1304,7 @@ struct DoodadInstance {
     mat4x3 transform;
 };
 
-layout(std140) uniform ub_EmitterParams {
+layout(std140, row_major) uniform ub_EmitterParams {
     vec4 params; // alphaTest, fragShaderType, blendMode
     vec4 ub_texScale; // x, y, _, _
 };

@@ -20,7 +20,7 @@ class TempMaterialProgram extends UnityShaderProgramBase {
     public override both = `
 ${UnityShaderProgramBase.Common}
 
-layout(std140) uniform ub_MaterialParams {
+layout(std140, row_major) uniform ub_MaterialParams {
     vec4 u_Color;
     vec4 u_MainTexST;
     vec4 u_Misc[1];
