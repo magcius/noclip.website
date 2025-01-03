@@ -4450,19 +4450,38 @@ class d_a_obj_flame extends fopAc_ac_c {
     }
 
     private em_simple_set(globals: dGlobals): void {
-        /*
         if (this.em0State === d_a_obj_em_state.TurnOn) {
             vec3.copy(scratchVec3a, this.eyePos);
             scratchVec3a[1] += this.extraScaleY * this.eyePosY * -300.0;
-            globals.particleCtrl.setSimple(globals, 0x805A, scratchVec3a, 1.0, White, White, false);
+            globals.particleCtrl.setSimple(0x805A, scratchVec3a, 0xFF, White, White, false);
         }
 
         if (this.em1State === d_a_obj_em_state.TurnOn)
-            globals.particleCtrl.setSimple(globals, 0x805B, this.eyePos, 1.0, White, White, false);
+            globals.particleCtrl.setSimple(0x805B, this.eyePos, 0xFF, White, White, false);
 
         if (this.em2State === d_a_obj_em_state.TurnOn)
-            globals.particleCtrl.setSimple(globals, this.bubblesParticleID, this.eyePos, 1.0, White, White, false);
-        */
+            globals.particleCtrl.setSimple(this.bubblesParticleID, this.pos, 0xFF, White, White, false);
+    }
+
+    private em_simple_inv(globals: dGlobals): void {
+        const forceKillEm = false;
+        if (forceKillEm) {
+            if (this.em0State === d_a_obj_em_state.On)
+                this.em0State = d_a_obj_em_state.TurnOff;
+            if (this.em2State === d_a_obj_em_state.On)
+                this.em2State = d_a_obj_em_state.TurnOff;
+        }
+
+        if (this.em0State === d_a_obj_em_state.TurnOff) {
+            this.em0 = null;
+        }
+        if (this.em1State === d_a_obj_em_state.TurnOff) {
+            this.em1 = null;
+        }
+        if (this.em2State !== d_a_obj_em_state.TurnOff) {
+            return;
+        }
+        this.em2 = null;
     }
 
     private mode_proc_call(globals: dGlobals, deltaTimeFrames: number): void {
@@ -4472,11 +4491,10 @@ class d_a_obj_flame extends fopAc_ac_c {
 
         this.mode_proc_tbl[this.mode].call(this, globals);
 
-        // TODO(jstpierre): Simple particle system
-        if (false && this.useSimpleEm) {
+        if (this.useSimpleEm) {
             this.em_position(globals);
             this.em_simple_set(globals);
-            // this.em_simple_inv(globals);
+            this.em_simple_inv(globals);
         } else {
             this.em_manual_set(globals);
             this.em_manual_inv(globals);
