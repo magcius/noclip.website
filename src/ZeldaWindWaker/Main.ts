@@ -17,7 +17,7 @@ import { J3DModelInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase.js';
 import * as JPA from '../Common/JSYSTEM/JPA.js';
 import { BTIData } from '../Common/JSYSTEM/JUTTexture.js';
 import { dfRange } from '../DebugFloaters.js';
-import { range } from '../MathHelpers.js';
+import { computeModelMatrixT, range } from '../MathHelpers.js';
 import { SceneContext } from '../SceneBase.js';
 import { TextureMapping } from '../TextureHolder.js';
 import { setBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
@@ -419,10 +419,11 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
             // From mDoGph_Painter(). Draw the 2D particle groups with different view/proj matrices. 
             {
                 const orthoCtx = this.globals.scnPlay.currentGrafPort;
-                const viewMtx = mat4.fromTranslation(scratchMatrix, [orthoCtx.aspectRatioCorrection * 320, 240, 0]);
                 const template = renderInstManager.pushTemplate();
                 orthoCtx.setOnRenderInst(template);
 
+                const viewMtx = scratchMatrix;
+                computeModelMatrixT(viewMtx, orthoCtx.aspectRatioCorrection * 320, 240, 0);
                 globals.particleCtrl.setDrawInfo(viewMtx, orthoCtx.sceneParams.u_Projection, null, null);
                 
                 renderInstManager.setCurrentList(dlst.particle2DBack);
