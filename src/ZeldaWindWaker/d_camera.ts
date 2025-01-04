@@ -9,7 +9,7 @@ import { dGlobals } from "./Main.js";
 import { EDemoCamFlags } from "./d_demo.js";
 import { projectionMatrixReverseDepth } from "../gfx/helpers/ReversedDepthHelpers.js";
 import { projectionMatrixConvertClipSpaceNearZ } from "../gfx/helpers/ProjectionHelpers.js";
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
+import { GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import { calcLODBias, fillSceneParamsData, SceneParams, ub_SceneParamsBufferSize } from "../gx/gx_render.js";
 import { GX_Program } from "../gx/gx_material.js";
 import { ViewerRenderInput } from "../viewer.js";
@@ -167,14 +167,16 @@ export class dCamera_c extends leafdraw_class {
         }
     }
 
-    // Executes before any other draw in other systems 
-    override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        const template = renderInstManager.pushTemplate();
-
-        mat4.copy(sceneParams.u_Projection, globals.camera.clipFromViewMatrix);
+    public setOnRenderInst(globals: dGlobals, renderInst: GfxRenderInst, viewerInput: ViewerRenderInput): void {
+        mat4.copy(sceneParams.u_Projection, this.clipFromViewMatrix);
         sceneParams.u_SceneTextureLODBias = calcLODBias(viewerInput.backbufferWidth, viewerInput.backbufferHeight);
-        const d = template.allocateUniformBufferF32(GX_Program.ub_SceneParams, ub_SceneParamsBufferSize);
+        const d = renderInst.allocateUniformBufferF32(GX_Program.ub_SceneParams, ub_SceneParamsBufferSize);
         fillSceneParamsData(d, 0, sceneParams);
+    }
+
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        const template = renderInstManager.getCurrentTemplate();
+        this.setOnRenderInst(globals, template, viewerInput);
     }
 
     public applyScissor(pass: GfxRenderPass) {

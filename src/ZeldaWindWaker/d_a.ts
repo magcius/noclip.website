@@ -6058,11 +6058,9 @@ class d_a_title extends fopAc_ac_c {
 
             this.btkSubtitle.frameCtrl.setFrame(this.btkSubtitle.frameCtrl.endFrame);
             this.panes[TitlePane.Nintendo].setAlpha(1.0);
-            if (this.blinkFrameCounter >= 100) {
-                this.blinkFrameCounter = 0;
-            } else {
-                this.blinkFrameCounter += deltaTimeFrames;
-            }
+            this.blinkFrameCounter += deltaTimeFrames;
+            while (this.blinkFrameCounter >= 100)
+                this.blinkFrameCounter -= 100;
 
             if (this.blinkFrameCounter >= 50) {
                 this.panes[TitlePane.PressStart].setAlpha((this.blinkFrameCounter - 50) / 50.0);

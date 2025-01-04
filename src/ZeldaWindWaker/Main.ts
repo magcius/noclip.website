@@ -415,7 +415,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
                 globals.particleCtrl.draw(device, this.renderHelper.renderInstManager, group);
             }
 
-            // From mDoGph_Painter(). Draw the 2D particle groups with different view/proj matrices. 
+            // From mDoGph_Painter(). Draw the 2D particle groups with different view/proj matrices.
             {
                 const orthoCtx = this.globals.scnPlay.currentGrafPort;
                 const template = renderInstManager.pushTemplate();
@@ -424,7 +424,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
                 const viewMtx = scratchMatrix;
                 computeModelMatrixT(viewMtx, orthoCtx.aspectRatioCorrection * 320, 240, 0);
                 globals.particleCtrl.setDrawInfo(viewMtx, orthoCtx.sceneParams.u_Projection, null, null);
-                
+
                 renderInstManager.setCurrentList(dlst.particle2DBack);
                 globals.particleCtrl.draw(device, this.renderHelper.renderInstManager, ParticleGroup.TwoDback);
                 globals.particleCtrl.draw(device, this.renderHelper.renderInstManager, ParticleGroup.TwoDmenuBack);
@@ -432,6 +432,8 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
                 renderInstManager.setCurrentList(dlst.particle2DFore);
                 globals.particleCtrl.draw(device, this.renderHelper.renderInstManager, ParticleGroup.TwoDfore);
                 globals.particleCtrl.draw(device, this.renderHelper.renderInstManager, ParticleGroup.TwoDmenuFore);
+
+                renderInstManager.popTemplate();
             }
         }
 
@@ -452,7 +454,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         const dlst = this.globals.dlst;
         dlst.peekZ.beginFrame(device);
 
-        // From mDoGph_Painter, 
+        // From mDoGph_Painter,
         this.globals.scnPlay.currentGrafPort.setOrtho(-9.0, -21.0, 650.0, 503.0, 100000.0, -100000.0);
         this.globals.scnPlay.currentGrafPort.setPort(viewerInput.backbufferWidth, viewerInput.backbufferHeight);
 
@@ -902,8 +904,8 @@ class DemoDesc extends SceneDesc implements Viewer.SceneDesc {
         super(stageDir, name, roomList);
         assert(this.roomList.length === 1);
 
-        // Use a distinct ID for demos so that we don't conflict with the non-demo version of this stage. 
-        // Without this, going to a scene like Outset Island and reloading will select the first Outset Island demo.  
+        // Use a distinct ID for demos so that we don't conflict with the non-demo version of this stage.
+        // Without this, going to a scene like Outset Island and reloading will select the first Outset Island demo.
         this.id = this.stbFilename.slice(0, -4);
     }
 
@@ -918,7 +920,7 @@ class DemoDesc extends SceneDesc implements Viewer.SceneDesc {
 
         // TODO: Don't render until the camera has been placed for this demo. The cuts are jarring.
 
-        // noclip modification: This normally happens on room load. Do it here instead so that we don't waste time 
+        // noclip modification: This normally happens on room load. Do it here instead so that we don't waste time
         //                      loading .arcs for cutscenes that aren't going to be played
         const lbnk = globals.roomCtrl.status[this.roomList[0]].data.lbnk;
         if (lbnk) {
@@ -979,7 +981,7 @@ class DemoDesc extends SceneDesc implements Viewer.SceneDesc {
 // Most of this data comes from the PLAY action of the PACKAGE actor in an event from a Stage's event_list.dat. This
 // action has properties for the room and layer that these cutscenes are designed for. HOWEVER, this data is often missing.
 // It has been reconstructed by cross-referencing each Room's lbnk section (which points to a Demo*.arc file for each layer),
-// the .stb files contained in each of those Objects/Demo*.arc files, and the FileName attribute from the event action.   
+// the .stb files contained in each of those Objects/Demo*.arc files, and the FileName attribute from the event action.
 const demoDescs = [
     new DemoDesc("sea", "Pirate Zelda Fly", [44], "kaizoku_zelda_fly.stb", 0, [-200000.0, 0.0, 320000.0], 180.0, 0, 0),
     new DemoDesc("sea", "Zola Awakens", [13], "awake_zola.stb", 8, [200000.0, 0.0, -200000.0], 0, 227, 0),
@@ -1030,7 +1032,7 @@ const demoDescs = [
     new DemoDesc("sea_T", "Departure", [0xFF], "departure.stb", 0, [-200000.0, 0.0, 320000.0], 0.0, 0, 0),
     new DemoDesc("sea_T", "PirateZeldaFly", [0xFF], "kaizoku_zelda_fly.stb", 0, [-200000.0, 0.0, 320000.0], 180.0, 0, 0),
 
-    // The game expects this STB file to be in Stage/Ocean/Stage.arc, but it is not. Must be a leftover. 
+    // The game expects this STB file to be in Stage/Ocean/Stage.arc, but it is not. Must be a leftover.
     new DemoDesc("Ocean", "counter.stb", [-1], "counter.stb", 0, [0, 0, 0], 0, 0, 0),
 ]
 

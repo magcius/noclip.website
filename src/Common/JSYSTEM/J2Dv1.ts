@@ -432,7 +432,6 @@ export class J2DPicture extends J2DPane {
         if (this.tex === null || this.sdraw === null)
             return;
 
-        renderInstManager.pushTemplate();
         const renderInst = renderInstManager.newRenderInst();
 
         ctx2D.setOnRenderInst(renderInst);
@@ -452,7 +451,6 @@ export class J2DPicture extends J2DPane {
         this.materialHelper.allocateDrawParamsDataOnInst(renderInst, drawParams);
 
         renderInstManager.submitRenderInst(renderInst);
-        renderInstManager.popTemplate();
     }
 
     public override destroy(device: GfxDevice): void {
