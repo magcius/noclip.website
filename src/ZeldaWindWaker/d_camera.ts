@@ -22,6 +22,12 @@ const enum CameraMode {
     Cinematic
 }
 
+export const enum CameraTrimHeight {
+    Default,
+    Cinematic,
+    Vista,
+}
+
 export class dCamera_c extends leafdraw_class {
     public static PROCESS_NAME = dProcName_e.d_camera;
 
@@ -55,9 +61,8 @@ export class dCamera_c extends leafdraw_class {
     private demoFov = 0;
     private demoRoll = 0;
     private trimHeight = 0;
+    private trimMode = CameraTrimHeight.Default;
     private scissor = vec4.create();
-
-    private static trimHeightCinematic = 65.0;
 
     public finishSetup(): void {
         mat4.invert(this.viewFromWorldMatrix, this.worldFromViewMatrix);
@@ -87,6 +92,10 @@ export class dCamera_c extends leafdraw_class {
     public snapToCinematic(): void {
         this.cameraMode = CameraMode.Cinematic;
         this.cameraModeBlendVal = 1.0;
+    }
+
+    public setTrimHeight(trimMode: CameraTrimHeight) {
+        this.trimMode = trimMode;
     }
 
     public override load(globals: dGlobals, userData: any): cPhs__Status {
@@ -132,8 +141,13 @@ export class dCamera_c extends leafdraw_class {
             globals.sceneContext.inputManager.isMouseEnabled = true;
         }
 
-        // From dCamera_c::SetTrimSize() and defaultTriming()
-        const trimSize = globals.scnPlay.demo.getName() != 'title' ? dCamera_c.trimHeightCinematic : 0;
+        // From dCamera_c::CalcTrimSize()
+        let trimSize = 0;
+        switch (this.trimMode) {
+            case CameraTrimHeight.Cinematic: trimSize = 65.0; break;
+            case CameraTrimHeight.Vista: trimSize = 35.0; break;
+            case CameraTrimHeight.Default: trimSize = 0.0; break;
+        }
 
         // Adapted from dCamera_c::CalcTrimSize()
         // When switching between Cinematic and Regular camera modes (e.g. when pausing a cutscene), 

@@ -31,7 +31,7 @@ import { LegacyActor__RegisterFallbackConstructor } from './LegacyActor.js';
 import { dDlst_2DStatic_c, d_a__RegisterConstructors } from './d_a.js';
 import { d_a_sea } from './d_a_sea.js';
 import { dBgS } from './d_bg.js';
-import { dCamera_c } from './d_camera.js';
+import { CameraTrimHeight, dCamera_c } from './d_camera.js';
 import { EDemoMode, dDemo_manager_c } from './d_demo.js';
 import { dDlst_list_Set, dDlst_list_c } from './d_drawlist.js';
 import { dKankyo_create, dKy__RegisterConstructors, dKy_setLight, dScnKy_env_light_c } from './d_kankyo.js';
@@ -968,6 +968,7 @@ class DemoDesc extends SceneDesc implements Viewer.SceneDesc {
 
         if (demoData !== null) {
             globals.scnPlay.demo.create(this.id, demoData, this.offsetPos, this.rotY / 180.0 * Math.PI, this.startFrame);
+            globals.camera.setTrimHeight(this.id != 'title' ? CameraTrimHeight.Cinematic : CameraTrimHeight.Default)
             globals.camera.snapToCinematic();
         } else {
             console.warn('Failed to load demo data:', this.stbFilename);
