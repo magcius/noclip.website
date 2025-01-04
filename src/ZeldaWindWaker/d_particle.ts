@@ -115,7 +115,7 @@ export class dPa_control_c {
         this.simpleCallbacks.push(simple);
     }
 
-    public setDrawInfo(posCamMtx: ReadonlyMat4, prjMtx: ReadonlyMat4, texPrjMtx: ReadonlyMat4 | null, frustum: Frustum): void {
+    public setDrawInfo(posCamMtx: ReadonlyMat4, prjMtx: ReadonlyMat4, texPrjMtx: ReadonlyMat4 | null, frustum: Frustum | null): void {
         this.drawInfo.posCamMtx = posCamMtx;
         this.drawInfo.texPrjMtx = texPrjMtx;
         this.drawInfo.frustum = frustum;

@@ -420,11 +420,10 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
             {
                 const orthoCtx = this.globals.scnPlay.currentGrafPort;
                 const viewMtx = mat4.fromTranslation(scratchMatrix, [orthoCtx.aspectRatioCorrection * 320, 240, 0]);
-                const frustum = orthoCtx.getFrustumForView(viewMtx);
                 const template = renderInstManager.pushTemplate();
                 orthoCtx.setOnRenderInst(template);
 
-                globals.particleCtrl.setDrawInfo(viewMtx, orthoCtx.sceneParams.u_Projection, null, frustum);
+                globals.particleCtrl.setDrawInfo(viewMtx, orthoCtx.sceneParams.u_Projection, null, null);
                 
                 renderInstManager.setCurrentList(dlst.particle2DBack);
                 globals.particleCtrl.draw(device, this.renderHelper.renderInstManager, ParticleGroup.TwoDback);
