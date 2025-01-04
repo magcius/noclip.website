@@ -125,19 +125,22 @@ export class dCamera_c extends leafdraw_class {
             if (demoCam.flags & EDemoCamFlags.HasNearZ) { this.near = demoCam.projNear; }
             if (demoCam.flags & EDemoCamFlags.HasFarZ) { this.far = demoCam.projFar; }
 
-            this.cameraMode = (globals.scnPlay.demo.getName() == 'title') ? CameraMode.Default : CameraMode.Cinematic;
+            this.cameraMode = CameraMode.Cinematic;
             globals.sceneContext.inputManager.isMouseEnabled = false;
         } else {
             this.cameraMode = CameraMode.Default;
             globals.sceneContext.inputManager.isMouseEnabled = true;
         }
 
+        // From dCamera_c::SetTrimSize() and defaultTriming()
+        const trimSize = globals.scnPlay.demo.getName() != 'title' ? dCamera_c.trimHeightCinematic : 0;
+
         // Adapted from dCamera_c::CalcTrimSize()
         // When switching between Cinematic and Regular camera modes (e.g. when pausing a cutscene), 
         // blend the camera parameters smoothly. This accounts for deltaTime, but still works when paused. 
         deltaTimeFrames = clamp(deltaTimeFrames, 0.5, 1);
         this.cameraModeBlendVal += (this.cameraMode - this.cameraModeBlendVal) * 0.25 * deltaTimeFrames;
-        this.trimHeight = lerp(0, dCamera_c.trimHeightCinematic, this.cameraModeBlendVal);
+        this.trimHeight = lerp(0, trimSize, this.cameraModeBlendVal);
         this.fovY = lerp(this.fovY, this.demoFov, this.cameraModeBlendVal);
         this.roll = lerp(this.roll, this.demoRoll, this.cameraModeBlendVal);
 

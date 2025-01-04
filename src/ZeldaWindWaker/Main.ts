@@ -968,8 +968,7 @@ class DemoDesc extends SceneDesc implements Viewer.SceneDesc {
 
         if (demoData !== null) {
             globals.scnPlay.demo.create(this.id, demoData, this.offsetPos, this.rotY / 180.0 * Math.PI, this.startFrame);
-            if (globals.scnPlay.demo.getName() !== 'title')
-                globals.camera.snapToCinematic();
+            globals.camera.snapToCinematic();
         } else {
             console.warn('Failed to load demo data:', this.stbFilename);
         }
