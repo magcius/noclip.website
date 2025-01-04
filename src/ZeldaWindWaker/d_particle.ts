@@ -127,12 +127,16 @@ export class dPa_control_c {
         // Some hacky distance culling for emitters.
         for (let i = 0; i < this.emitterManager.aliveEmitters.length; i++) {
             const emitter = this.emitterManager.aliveEmitters[i];
-            
+
             // Don't distance cull 2D/UI emitters
-            if(emitter.drawGroupId >= ParticleGroup.TwoDfore)
+            if (emitter.drawGroupId >= ParticleGroup.TwoDfore)
                 continue;
 
-            const cullDistance = (emitter as any).cullDistance ?? 5000;
+            let cullDistance = (emitter as any).cullDistance;
+            if (cullDistance === null)
+                continue;
+
+            cullDistance = cullDistance ?? 8000;
             if (vec3.distance(emitter.globalTranslation, globals.camera.cameraPos) > cullDistance) {
                 emitter.stopCalcEmitter();
                 emitter.stopDrawParticle();

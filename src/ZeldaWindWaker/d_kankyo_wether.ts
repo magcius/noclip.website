@@ -1,7 +1,7 @@
 
 import { ReadonlyVec2, ReadonlyVec3, mat4, vec2, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
-import { Color, White, colorCopy, colorFromRGBA, colorFromRGBA8, colorLerp, colorNewCopy, colorNewFromRGBA8 } from "../Color.js";
+import { Color, Magenta, White, colorCopy, colorFromRGBA, colorFromRGBA8, colorLerp, colorNewCopy, colorNewFromRGBA8 } from "../Color.js";
 import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
 import { LoopMode } from "../Common/JSYSTEM/J3D/J3DLoader.js";
 import { JPABaseEmitter } from "../Common/JSYSTEM/JPA.js";
@@ -27,6 +27,8 @@ import { mDoExt_brkAnm, mDoExt_btkAnm, mDoExt_modelUpdateDL, mDoLib_projectFB } 
 import { MtxTrans, calc_mtx, mDoMtx_XrotM, mDoMtx_ZrotM } from "./m_do_mtx.js";
 import { dGlobals } from "./Main.js";
 import { dProcName_e } from "./d_procname.js";
+import { drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk.js";
+import { ParticleGroup } from "./d_particle.js";
 
 export function dKyr__sun_arrival_check(envLight: dScnKy_env_light_c): boolean {
     return envLight.curTime > 97.5 && envLight.curTime < 292.5;
@@ -1753,7 +1755,7 @@ function dKyr_kamome_move(globals: dGlobals, deltaTimeFrames: number): void {
                     eff.scale = 0.0;
                     eff.timer = 300.0 + cM_rndF(180.0);
                     eff.emitter = globals.particleCtrl.set(globals, 0, 0x429, eff.pos);
-                    (eff.emitter as any).cullDistance = 10000;
+                    (eff.emitter as any).cullDistance = null;
                     eff.state = 1;
                 } else {
                     eff.timer -= deltaTimeFrames;
@@ -1907,7 +1909,8 @@ function dKyr_windline_move(globals: dGlobals, deltaTimeFrames: number): void {
                 }
 
                 // TODO(jstpierre): dPa_control_c
-                eff.emitter = globals.particleCtrl.set(globals, 0, 0x31, null)!;
+                eff.emitter = globals.particleCtrl.set(globals, ParticleGroup.Normal, 0x31, null)!;
+                (eff.emitter as any).cullDistance = null;
                 vec3.add(eff.emitter.globalTranslation, eff.basePos, eff.animPos);
 
                 let effScale = hasCustomWindPower ? 0.14 : 1.0;
@@ -1973,7 +1976,7 @@ function dKyr_windline_move(globals: dGlobals, deltaTimeFrames: number): void {
 
             const maxVel = 0.08 + (0.008 * (i / 30));
             if (eff.state === 1) {
-                eff.stateTimer = cLib_addCalc(eff.stateTimer, 1.0, 0.3, 0.1 * maxVel, 0.01);
+                eff.stateTimer = cLib_addCalc(eff.stateTimer, 1.0, 0.3 * deltaTimeFrames, 0.1 * maxVel, 0.01);
 
                 if (eff.stateTimer >= 1.0)
                     eff.state = 2;
@@ -1983,7 +1986,7 @@ function dKyr_windline_move(globals: dGlobals, deltaTimeFrames: number): void {
             } else {
                 // Modification for noclip: Increase the max hangtime by a lot.
                 const speed = 0.4;
-                eff.stateTimer = cLib_addCalc(eff.stateTimer, 0.0, speed, maxVel * (0.1 + 0.01 * (i / 30)), 0.01);
+                eff.stateTimer = cLib_addCalc(eff.stateTimer, 0.0, speed * deltaTimeFrames, maxVel * (0.1 + 0.01 * (i / 30)), 0.01);
                 if (eff.stateTimer <= 0.0) {
                     emitter.deleteAllParticle();
                     emitter.becomeInvalidEmitterImmediate();
