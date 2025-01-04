@@ -13,15 +13,15 @@ import * as Viewer from '../viewer.js';
 import { texProjCameraSceneTex } from '../Camera.js';
 import { TransparentBlack } from '../Color.js';
 import * as Yaz0 from '../Common/Compression/Yaz0.js';
+import { J2DGrafContext } from '../Common/JSYSTEM/J2Dv1.js';
 import { J3DModelInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase.js';
 import * as JPA from '../Common/JSYSTEM/JPA.js';
 import { BTIData } from '../Common/JSYSTEM/JUTTexture.js';
-import { dfRange } from '../DebugFloaters.js';
 import { computeModelMatrixT, range } from '../MathHelpers.js';
 import { SceneContext } from '../SceneBase.js';
 import { TextureMapping } from '../TextureHolder.js';
 import { setBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
-import { GfxDevice, GfxFormat, GfxRenderPass, GfxTexture, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform.js';
+import { GfxDevice, GfxFormat, GfxRenderPass } from '../gfx/platform/GfxPlatform.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { GfxrAttachmentSlot, GfxrRenderTargetDescription } from '../gfx/render/GfxRenderGraph.js';
 import { GfxRenderInstList, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
@@ -31,20 +31,19 @@ import { LegacyActor__RegisterFallbackConstructor } from './LegacyActor.js';
 import { dDlst_2DStatic_c, d_a__RegisterConstructors } from './d_a.js';
 import { d_a_sea } from './d_a_sea.js';
 import { dBgS } from './d_bg.js';
+import { dCamera_c } from './d_camera.js';
 import { EDemoMode, dDemo_manager_c } from './d_demo.js';
 import { dDlst_list_Set, dDlst_list_c } from './d_drawlist.js';
 import { dKankyo_create, dKy__RegisterConstructors, dKy_setLight, dScnKy_env_light_c } from './d_kankyo.js';
 import { dKyw__RegisterConstructors } from './d_kankyo_wether.js';
-import { dPa_control_c, ParticleGroup } from './d_particle.js';
+import { ParticleGroup, dPa_control_c } from './d_particle.js';
 import { Placename, PlacenameState, dPn__update, d_pn__RegisterConstructors } from './d_place_name.js';
 import { dProcName_e } from './d_procname.js';
 import { ResType, dRes_control_c } from './d_resorce.js';
 import { dStage_dt_c_roomLoader, dStage_dt_c_roomReLoader, dStage_dt_c_stageInitLoader, dStage_dt_c_stageLoader, dStage_roomControl_c, dStage_roomStatus_c, dStage_stageDt_c } from './d_stage.js';
 import { WoodPacket } from './d_wood.js';
 import { fopAcM_create, fopAcM_searchFromName, fopAc_ac_c } from './f_op_actor.js';
-import { cPhs__Status, fGlobals, fopDw_Draw, fopScn, fpcCt_Handler, fpcLy_SetCurrentLayer, fpcM_Management, fpcPf__Register, fpcSCtRq_Request, fpc_pc__ProfileList, leafdraw_class } from './framework.js';
-import { J2DGrafContext } from '../Common/JSYSTEM/J2Dv1.js';
-import { dCamera_c } from './d_camera.js';
+import { cPhs__Status, fGlobals, fopDw_Draw, fopScn, fpcCt_Handler, fpcLy_SetCurrentLayer, fpcM_Management, fpcPf__Register, fpcSCtRq_Request, fpc_pc__ProfileList } from './framework.js';
 
 type SymbolData = { Filename: string, SymbolName: string, Data: ArrayBufferSlice };
 type SymbolMapData = { SymbolData: SymbolData[] };
@@ -967,7 +966,8 @@ class DemoDesc extends SceneDesc implements Viewer.SceneDesc {
 
         if (demoData !== null) {
             globals.scnPlay.demo.create(this.id, demoData, this.offsetPos, this.rotY / 180.0 * Math.PI, this.startFrame);
-            globals.camera.snapToCinematic();
+            if (globals.scnPlay.demo.getName() !== 'title')
+                globals.camera.snapToCinematic();
         } else {
             console.warn('Failed to load demo data:', this.stbFilename);
         }
