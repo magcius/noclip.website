@@ -30,7 +30,7 @@ import { PeekZResult } from "./d_dlst_peekZ.js";
 import { dDlst_alphaModel__Type } from "./d_drawlist.js";
 import { LIGHT_INFLUENCE, LightType, WAVE_INFO, dKy_change_colpat, dKy_checkEventNightStop, dKy_plight_cut, dKy_plight_set, dKy_setLight__OnMaterialParams, dKy_setLight__OnModelInstance, dKy_tevstr_c, dKy_tevstr_init, setLightTevColorType, settingTevStruct } from "./d_kankyo.js";
 import { ThunderMode, dKyr_get_vectle_calc, dKyw_get_AllWind_vecpow, dKyw_get_wind_pow, dKyw_get_wind_vec, dKyw_rain_set, loadRawTexture } from "./d_kankyo_wether.js";
-import { dPa_splashEcallBack, dPa_trackEcallBack, dPa_waveEcallBack } from "./d_particle.js";
+import { dPa_splashEcallBack, dPa_trackEcallBack, dPa_waveEcallBack, ParticleGroup } from "./d_particle.js";
 import { dProcName_e } from "./d_procname.js";
 import { ResType, dComIfG_resLoad } from "./d_resorce.js";
 import { dPath, dPath_GetRoomPath, dPath__Point, dStage_Multi_c, dStage_stagInfo_GetSTType } from "./d_stage.js";
@@ -217,6 +217,11 @@ class d_a_ep extends fopAc_ac_c {
     private lightPower: number = 0.0;
     private lightPowerTarget: number = 0.0;
 
+    private burstEmitter: JPABaseEmitter | null = null;
+    private burstRotY: number = 0;
+    private burstRotZ: number = 0;
+    private burstTimer = 0;
+
     private timers = nArray(3, () => 0);
     private alphaModelMtx = mat4.create();
     private alphaModelRotX = 0;
@@ -246,20 +251,6 @@ class d_a_ep extends fopAc_ac_c {
 
         dKy_plight_set(globals.g_env_light, this.light);
 
-        // Create particle systems.
-
-        // TODO(jstpierre): Implement the real thing.
-        const pa = globals.particleCtrl.set(globals, 0, 0x0001, null)!;
-        vec3.copy(pa.globalTranslation, this.posTop);
-        pa.globalTranslation[1] += -240 + 235 + 15;
-        if (this.type !== 2) {
-            const pb = globals.particleCtrl.set(globals, 0, 0x4004, null)!;
-            vec3.copy(pb.globalTranslation, pa.globalTranslation);
-            pb.globalTranslation[1] += 20;
-        }
-        const pc = globals.particleCtrl.set(globals, 0, 0x01EA, null)!;
-        vec3.copy(pc.globalTranslation, this.posTop);
-        pc.globalTranslation[1] += -240 + 235 + 8;
         // TODO(jstpierre): ga
 
         return cPhs__Status.Next;
@@ -308,8 +299,8 @@ class d_a_ep extends fopAc_ac_c {
             }
         }
 
-        this.alphaModelAlpha = cLib_addCalc2(this.alphaModelAlpha, this.alphaModelAlphaTarget, 1.0, 1.0);
-        this.alphaModelScale = cLib_addCalc2(this.alphaModelScale, this.alphaModelScaleTarget, 0.4, 0.04);
+        this.alphaModelAlpha = cLib_addCalc2(this.alphaModelAlpha, this.alphaModelAlphaTarget, 1.0 * deltaTimeFrames, 1.0);
+        this.alphaModelScale = cLib_addCalc2(this.alphaModelScale, this.alphaModelScaleTarget, 0.4 * deltaTimeFrames, 0.04);
         MtxTrans(this.posTop, false);
         mDoMtx_YrotM(calc_mtx, this.alphaModelRotY);
         mDoMtx_XrotM(calc_mtx, this.alphaModelRotX);
@@ -317,10 +308,9 @@ class d_a_ep extends fopAc_ac_c {
         vec3.set(scratchVec3a, scale, scale, scale);
         mat4.scale(calc_mtx, calc_mtx, scratchVec3a);
         mat4.copy(this.alphaModelMtx, calc_mtx);
+        this.ep_move(globals, deltaTimeFrames);
         this.alphaModelRotY += 0xD0 * deltaTimeFrames;
         this.alphaModelRotX += 0x100 * deltaTimeFrames;
-
-        this.ep_move();
     }
 
     public override delete(globals: dGlobals): void {
@@ -349,18 +339,27 @@ class d_a_ep extends fopAc_ac_c {
         // TODO(jstpierre): ga
     }
 
-    private ep_move(): void {
+    private ep_move(globals: dGlobals, deltaTimeFrames: number): void {
+
+        const flamePos = vec3.set(scratchVec3a, this.posTop[0], this.posTop[1] + -240 + 235 + 15, this.posTop[2]);
+
         // tons of fun timers and such
         if (this.state === 0) {
             // check switches
             this.state = 3;
             this.lightPowerTarget = this.scale[0];
         } else if (this.state === 3 || this.state === 4) {
-            this.lightPower = cLib_addCalc2(this.lightPower, this.lightPowerTarget, 0.5, 0.2);
-            if (this.type !== 2) {
-                // check a bunch of stuff, collision, etc.
-                // setSimple 0x4004
+            this.lightPower = cLib_addCalc2(this.lightPower, this.lightPowerTarget, 0.5 * deltaTimeFrames, 0.2);
+            
+            // TODO: Type 2 flames should be handled by d_a_lamp, but for now lets just handle them here 
+            if (true || this.type !== 2) {
+                if (this.burstTimer < 7) globals.particleCtrl.setSimple(0x0001, flamePos, 0xFF, White, White, false);
+                // Check for collision. If hit, set the burst timer to emit a quick burst of flame 
+                flamePos[1] += 20;
+                globals.particleCtrl.setSimple(0x4004, flamePos, 0xFF, White, White, false);
             }
+
+            // check a bunch of stuff, collision, etc.
         }
 
         vec3.copy(this.light.pos, this.posTop);
@@ -370,7 +369,28 @@ class d_a_ep extends fopAc_ac_c {
         this.light.power = this.lightPower * 150.0;
         this.light.fluctuation = 250.0;
 
-        // other emitter stuff
+        // When hit with an attack, emit a quick burst of flame before returning to normal
+        if (this.burstTimer >= 0) {
+            if (this.burstTimer == 0x28 && !this.burstEmitter) {
+                const pos = vec3.set(scratchVec3a, this.posTop[0], this.posTop[1] + -240 + 235 + 8, this.posTop[2]);
+                this.burstEmitter = globals.particleCtrl.set(globals, 0, 0x01EA, pos)!;
+            }
+            if (this.burstEmitter) {
+                mDoMtx_YrotS(scratchMat4a, this.burstRotY);
+                const target = (this.burstTimer > 10) ? 4.0 : 0.0;
+                this.burstRotZ = cLib_addCalc2(this.burstRotZ, target, 1.0 * deltaTimeFrames, 0.5)
+                const emitterDir = vec3.set(scratchVec3b, 0.0, 1.0, this.burstRotZ);
+                MtxPosition(emitterDir, emitterDir, scratchMat4a);
+                vec3.copy(this.burstEmitter.localDirection, emitterDir);
+
+                if (this.burstTimer <= 1.0) {
+                    this.burstEmitter.maxFrame = -1;
+                    this.burstEmitter.stopCreateParticle();
+                    this.burstEmitter = null;
+                }
+            }
+            this.burstTimer -= deltaTimeFrames;
+        }
     }
 }
 
@@ -4430,19 +4450,38 @@ class d_a_obj_flame extends fopAc_ac_c {
     }
 
     private em_simple_set(globals: dGlobals): void {
-        /*
         if (this.em0State === d_a_obj_em_state.TurnOn) {
             vec3.copy(scratchVec3a, this.eyePos);
             scratchVec3a[1] += this.extraScaleY * this.eyePosY * -300.0;
-            globals.particleCtrl.setSimple(globals, 0x805A, scratchVec3a, 1.0, White, White, false);
+            globals.particleCtrl.setSimple(0x805A, scratchVec3a, 0xFF, White, White, false);
         }
 
         if (this.em1State === d_a_obj_em_state.TurnOn)
-            globals.particleCtrl.setSimple(globals, 0x805B, this.eyePos, 1.0, White, White, false);
+            globals.particleCtrl.setSimple(0x805B, this.eyePos, 0xFF, White, White, false);
 
         if (this.em2State === d_a_obj_em_state.TurnOn)
-            globals.particleCtrl.setSimple(globals, this.bubblesParticleID, this.eyePos, 1.0, White, White, false);
-        */
+            globals.particleCtrl.setSimple(this.bubblesParticleID, this.pos, 0xFF, White, White, false);
+    }
+
+    private em_simple_inv(globals: dGlobals): void {
+        const forceKillEm = false;
+        if (forceKillEm) {
+            if (this.em0State === d_a_obj_em_state.On)
+                this.em0State = d_a_obj_em_state.TurnOff;
+            if (this.em2State === d_a_obj_em_state.On)
+                this.em2State = d_a_obj_em_state.TurnOff;
+        }
+
+        if (this.em0State === d_a_obj_em_state.TurnOff) {
+            this.em0 = null;
+        }
+        if (this.em1State === d_a_obj_em_state.TurnOff) {
+            this.em1 = null;
+        }
+        if (this.em2State !== d_a_obj_em_state.TurnOff) {
+            return;
+        }
+        this.em2 = null;
     }
 
     private mode_proc_call(globals: dGlobals, deltaTimeFrames: number): void {
@@ -4452,11 +4491,10 @@ class d_a_obj_flame extends fopAc_ac_c {
 
         this.mode_proc_tbl[this.mode].call(this, globals);
 
-        // TODO(jstpierre): Simple particle system
-        if (false && this.useSimpleEm) {
+        if (this.useSimpleEm) {
             this.em_position(globals);
             this.em_simple_set(globals);
-            // this.em_simple_inv(globals);
+            this.em_simple_inv(globals);
         } else {
             this.em_manual_set(globals);
             this.em_manual_inv(globals);
@@ -5759,7 +5797,7 @@ const enum TitlePane {
     JapanSubtitle,
     PressStart,
     Nintendo,
-    Effect1,
+    ShipParticles,
     Effect2,
 }
 
@@ -5775,7 +5813,11 @@ class d_a_title extends fopAc_ac_c {
     private btkSubtitle = new mDoExt_btkAnm();
     private btkShimmer = new mDoExt_btkAnm();
     private screen: J2DScreen;
-    private panes: J2DPane[] = [];
+    private panes: J2DPane[] = []; 
+    
+    private cloudEmitter: JPABaseEmitter | null = null;
+    private sparkleEmitter: JPABaseEmitter | null = null;
+    private sparklePos = vec3.create();
 
     private anmFrameCounter = 0
     private delayFrameCounter = 120;
@@ -5804,7 +5846,7 @@ class d_a_title extends fopAc_ac_c {
                 // TODO: mDoAud_seStart(JA_SE_TITLE_WIND);
             }
         } else {
-            this.calc_2d_alpha(deltaTimeFrames);
+            this.calc_2d_alpha(globals, deltaTimeFrames);
         }
 
         if (this.enterMode == 2) {
@@ -5932,18 +5974,28 @@ class d_a_title extends fopAc_ac_c {
         mDoMtx_ZXYrotM(this.modelSubtitleShimmer.modelMatrix, [0, -0x8000, 0]);
     }
 
-    private calc_2d_alpha(deltaTimeFrames: number) {
+    private calc_2d_alpha(globals: dGlobals, deltaTimeFrames: number) {
         this.anmFrameCounter += deltaTimeFrames;
         if (this.anmFrameCounter >= 200 && this.enterMode == 0) {
             this.enterMode = 1;
         }
 
+        const puffPos = vec3.set(scratchVec3a, 
+            ((this.panes[TitlePane.ShipParticles].data.x - 320.0) - this.shipOffsetX) + 85.0,
+            (this.panes[TitlePane.ShipParticles].data.y - 240.0) + 5.0,
+            0.0
+        );
+
         if (this.enterMode == 0) {
             if (this.shipFrameCounter < 0) {
                 this.shipFrameCounter += deltaTimeFrames;
-            }
+            }            
 
-            // TODO: Emitters
+            if (this.cloudEmitter === null) {
+                this.cloudEmitter = globals.particleCtrl.set(globals, ParticleGroup.TwoDback, 0x83F9, puffPos);
+            } else {    
+                this.cloudEmitter.setGlobalTranslation(puffPos);
+            }
 
             if (this.anmFrameCounter <= 30) {
                 this.panes[TitlePane.MainTitle].setAlpha(0.0);
@@ -5956,7 +6008,19 @@ class d_a_title extends fopAc_ac_c {
             // TODO: Viewable japanese version            
             this.panes[TitlePane.JapanSubtitle].setAlpha(0.0);
 
-            // TODO: Emitters
+            if (this.anmFrameCounter >= 80 && !this.sparkleEmitter) {
+                // if (daTitle_Kirakira_Sound_flag == true) {
+                //     mDoAud_seStart(JA_SE_TITLE_KIRA);
+                //     daTitle_Kirakira_Sound_flag = false;
+                // }
+    
+                const sparklePane = this.panes[TitlePane.ShipParticles];
+                vec3.set(this.sparklePos, sparklePane.data.x - 320.0, sparklePane.data.y - 240.0, 0.0);
+                this.sparkleEmitter = globals.particleCtrl.set(globals, ParticleGroup.TwoDfore, 0x83FB, this.sparklePos);
+            } else if (this.anmFrameCounter > 80 && this.anmFrameCounter <= 115 && this.sparkleEmitter) {
+                this.sparklePos[0] += (this.panes[TitlePane.Effect2].data.x - this.panes[TitlePane.ShipParticles].data.x) / 35.0 * deltaTimeFrames;
+                this.sparkleEmitter.setGlobalTranslation(this.sparklePos);
+            }
 
             if (this.anmFrameCounter >= 80) {
                 this.btkSubtitle.play(deltaTimeFrames);
@@ -5978,10 +6042,19 @@ class d_a_title extends fopAc_ac_c {
                 this.panes[TitlePane.PressStart].setAlpha(1.0);
             }
         } else {
-            // TODO: Emitters
+            if (this.cloudEmitter === null) {
+                this.cloudEmitter = globals.particleCtrl.set(globals, ParticleGroup.TwoDback, 0x83F9, puffPos);
+            } else {
+                this.cloudEmitter.setGlobalTranslation(puffPos);
+            }
 
             this.panes[TitlePane.MainTitle].setAlpha(1.0);
             this.panes[TitlePane.JapanSubtitle].setAlpha(0.0);
+
+            if (this.sparkleEmitter) {
+                this.sparkleEmitter.becomeInvalidEmitter();
+                this.sparkleEmitter = null;
+            }
 
             this.btkSubtitle.frameCtrl.setFrame(this.btkSubtitle.frameCtrl.endFrame);
             this.panes[TitlePane.Nintendo].setAlpha(1.0);

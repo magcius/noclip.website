@@ -17,6 +17,7 @@ import { BTIData } from "./JUTTexture.js";
 import { GXMaterialBuilder } from "../../gx/GXMaterialBuilder.js";
 import { mat4, vec2, vec4 } from "gl-matrix";
 import { GfxRenderCache } from "../../gfx/render/GfxRenderCache.js";
+import { Frustum } from "../../Geometry.js";
 
 const materialParams = new MaterialParams();
 const drawParams = new DrawParams();
@@ -83,7 +84,6 @@ export class J2DGrafContext {
     public sceneParams = new SceneParams();
     public viewport = vec4.create();
     public ortho = vec4.create();
-
     public near: number;
     public far: number;
 
@@ -118,6 +118,7 @@ export class J2DGrafContext {
 
         projectionMatrixForCuboid(this.sceneParams.u_Projection, left, right, bottom, top, this.near, this.far);
         projectionMatrixConvertClipSpaceNearZ(this.sceneParams.u_Projection, this.clipSpaceNearZ, GfxClipSpaceNearZ.NegativeOne);
+
     }
 
     public setOnRenderInst(renderInst: GfxRenderInst): void {

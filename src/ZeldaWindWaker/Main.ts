@@ -17,7 +17,7 @@ import { J3DModelInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase.js';
 import * as JPA from '../Common/JSYSTEM/JPA.js';
 import { BTIData } from '../Common/JSYSTEM/JUTTexture.js';
 import { dfRange } from '../DebugFloaters.js';
-import { range } from '../MathHelpers.js';
+import { computeModelMatrixT, range } from '../MathHelpers.js';
 import { SceneContext } from '../SceneBase.js';
 import { TextureMapping } from '../TextureHolder.js';
 import { setBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
@@ -35,7 +35,7 @@ import { EDemoMode, dDemo_manager_c } from './d_demo.js';
 import { dDlst_list_Set, dDlst_list_c } from './d_drawlist.js';
 import { dKankyo_create, dKy__RegisterConstructors, dKy_setLight, dScnKy_env_light_c } from './d_kankyo.js';
 import { dKyw__RegisterConstructors } from './d_kankyo_wether.js';
-import { dPa_control_c } from './d_particle.js';
+import { dPa_control_c, ParticleGroup } from './d_particle.js';
 import { Placename, PlacenameState, dPn__update, d_pn__RegisterConstructors } from './d_place_name.js';
 import { dProcName_e } from './d_procname.js';
 import { ResType, dRes_control_c } from './d_resorce.js';
@@ -403,17 +403,36 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         {
             globals.particleCtrl.calc(globals, viewerInput);
 
-            for (let group = EffectDrawGroup.Main; group <= EffectDrawGroup.Indirect; group++) {
+            for (let group = ParticleGroup.Normal; group <= ParticleGroup.Wind; group++) {
                 let texPrjMtx: mat4 | null = null;
 
-                if (group === EffectDrawGroup.Indirect) {
+                if (group === ParticleGroup.Projection) {
                     texPrjMtx = scratchMatrix;
                     texProjCameraSceneTex(texPrjMtx, globals.camera.clipFromViewMatrix, 1);
                 }
 
                 globals.particleCtrl.setDrawInfo(globals.camera.viewFromWorldMatrix, globals.camera.clipFromViewMatrix, texPrjMtx, globals.camera.frustum);
-                renderInstManager.setCurrentList(dlst.effect[group]);
+                renderInstManager.setCurrentList(dlst.effect[group == ParticleGroup.Projection ? EffectDrawGroup.Indirect : EffectDrawGroup.Main]);
                 globals.particleCtrl.draw(device, this.renderHelper.renderInstManager, group);
+            }
+
+            // From mDoGph_Painter(). Draw the 2D particle groups with different view/proj matrices. 
+            {
+                const orthoCtx = this.globals.scnPlay.currentGrafPort;
+                const template = renderInstManager.pushTemplate();
+                orthoCtx.setOnRenderInst(template);
+
+                const viewMtx = scratchMatrix;
+                computeModelMatrixT(viewMtx, orthoCtx.aspectRatioCorrection * 320, 240, 0);
+                globals.particleCtrl.setDrawInfo(viewMtx, orthoCtx.sceneParams.u_Projection, null, null);
+                
+                renderInstManager.setCurrentList(dlst.particle2DBack);
+                globals.particleCtrl.draw(device, this.renderHelper.renderInstManager, ParticleGroup.TwoDback);
+                globals.particleCtrl.draw(device, this.renderHelper.renderInstManager, ParticleGroup.TwoDmenuBack);
+
+                renderInstManager.setCurrentList(dlst.particle2DFore);
+                globals.particleCtrl.draw(device, this.renderHelper.renderInstManager, ParticleGroup.TwoDfore);
+                globals.particleCtrl.draw(device, this.renderHelper.renderInstManager, ParticleGroup.TwoDmenuFore);
             }
         }
 
@@ -481,9 +500,11 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
 
                 this.executeList(passRenderer, dlst.effect[EffectDrawGroup.Main]);
                 this.executeList(passRenderer, dlst.wetherEffect);
-                this.executeListSet(passRenderer, dlst.ui);
 
+                this.executeList(passRenderer, dlst.particle2DBack);
+                this.executeListSet(passRenderer, dlst.ui);
                 this.executeListSet(passRenderer, dlst.ui2D);
+                this.executeList(passRenderer, dlst.particle2DFore);
             });
         });
 
@@ -823,12 +844,9 @@ class SceneDesc {
 
         renderer.extraTextures = new ZWWExtraTextures(device, ZAtoon, ZBtoonEX);
 
-        const jpac: JPA.JPAC[] = [];
-        for (let i = 0; i < particleArchives.length; i++) {
-            const jpacData = modelCache.getFileData(particleArchives[i]);
-            jpac.push(JPA.parse(jpacData));
-        }
-        globals.particleCtrl = new dPa_control_c(renderer.renderCache, jpac);
+        globals.particleCtrl = new dPa_control_c(renderer.renderCache);
+        globals.particleCtrl.createCommon(globals, JPA.parse(modelCache.getFileData(particleArchives[0])));
+        globals.particleCtrl.createRoomScene(globals, JPA.parse(modelCache.getFileData(particleArchives[1])));
 
         // dStage_Create
         dKankyo_create(globals);
