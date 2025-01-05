@@ -5,7 +5,7 @@ import ArrayBufferSlice from "../../ArrayBufferSlice";
 import { align, assert, nArray, readString } from "../../util.js";
 import { JSystemFileReaderHelper } from "./J3D/J3DLoader.js";
 import { GfxColor } from "../../gfx/platform/GfxPlatform";
-import { clamp } from "../../MathHelpers.js";
+import { clamp, MathConstants } from "../../MathHelpers.js";
 import { Endianness } from "../../endian.js";
 
 const scratchVec3a = vec3.create();
@@ -1901,17 +1901,17 @@ export class TControl {
     public isTransformEnabled() { return !!this.transformOrigin; }
     public getTransformOnSet() { return this.transformOnSetMtx; }
     public getTransformOnGet() { return this.transformOnGetMtx; }
-    public transformSetOrigin(originPos: vec3, rotY: number) {
+    public transformSetOrigin(originPos: vec3, rotYDeg: number) {
         this.transformOrigin = originPos;
-        this.transformRotY = rotY;
+        this.transformRotY = rotYDeg;
 
         // The "OnGet" matrix transforms from world space into demo space
-        mat4.fromYRotation(this.transformOnGetMtx, -rotY);
+        mat4.fromYRotation(this.transformOnGetMtx, -rotYDeg * MathConstants.DEG_TO_RAD);
         mat4.translate(this.transformOnGetMtx, this.transformOnGetMtx, vec3.negate(scratchVec3a, originPos));
 
         // The "OnSet" matrix is the inverse 
         mat4.fromTranslation(this.transformOnSetMtx, originPos);
-        mat4.rotateY(this.transformOnSetMtx, this.transformOnSetMtx, rotY);
+        mat4.rotateY(this.transformOnSetMtx, this.transformOnSetMtx, rotYDeg * MathConstants.DEG_TO_RAD);
     }
 
     public setControlObject(obj: TBlockObject) {

@@ -967,7 +967,7 @@ class DemoDesc extends SceneDesc implements Viewer.SceneDesc {
             demoData = globals.modelCache.resCtrl.getStageResByName(ResType.Stb, "Stage", this.stbFilename);
 
         if (demoData !== null) {
-            globals.scnPlay.demo.create(this.id, demoData, this.offsetPos, this.rotY / 180.0 * Math.PI, this.startFrame);
+            globals.scnPlay.demo.create(this.id, demoData, this.offsetPos, this.rotY, this.startFrame);
             globals.camera.setTrimHeight(this.id != 'title' ? CameraTrimHeight.Cinematic : CameraTrimHeight.Default)
             globals.camera.snapToCinematic();
         } else {

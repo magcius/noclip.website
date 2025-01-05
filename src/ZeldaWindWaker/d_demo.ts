@@ -436,7 +436,7 @@ export class dDemo_manager_c {
     public getMode() { return this.mode; }
     public getSystem() { return this.system; }
 
-    public create(name: string, data: ArrayBufferSlice, originPos?: vec3, rotY?: number, startFrame?: number): boolean {
+    public create(name: string, data: ArrayBufferSlice, originPos?: vec3, rotYDeg?: number, startFrame?: number): boolean {
         this.name = name;
         this.parser = new TParse(this.control);
 
@@ -447,7 +447,7 @@ export class dDemo_manager_c {
 
         this.control.forward(startFrame || 0);
         if (originPos) {
-            this.control.transformSetOrigin(originPos, rotY || 0);
+            this.control.transformSetOrigin(originPos, rotYDeg || 0);
         }
 
         this.frame = startFrame || 0;
