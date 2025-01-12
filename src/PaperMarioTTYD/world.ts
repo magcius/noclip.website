@@ -749,7 +749,7 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
         computeModelMatrixSRT(modelMatrix, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
 
         const drawModeStructOffs = mainDataOffs + view.getUint32(offs + 0x58);
-        const cullModes: GX.CullMode[] = [GX.CullMode.FRONT, GX.CullMode.BACK, GX.CullMode.ALL, GX.CullMode.NONE];
+        const cullModes: GX.CullMode[] = [GX.CullMode.FRONT, GX.CullMode.BACK, GX.CullMode.NONE, GX.CullMode.NONE];
         const cullMode: GX.CullMode = cullModes[view.getUint8(drawModeStructOffs + 0x01)];
 
         const drawModeFlags: DrawModeFlags = view.getUint8(drawModeStructOffs + 0x02);
