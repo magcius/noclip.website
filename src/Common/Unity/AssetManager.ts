@@ -16,9 +16,10 @@ import { rust } from '../../rustlib.js';
 import { assert, assertExists, fallbackUndefined } from '../../util.js';
 
 function concatBufs(a: Uint8Array<ArrayBuffer>, b: Uint8Array<ArrayBuffer>): Uint8Array<ArrayBuffer> {
+    const origByteLength = a.byteLength;
     const newBuffer = a.buffer.transfer(a.byteLength + b.byteLength);
     const result = new Uint8Array(newBuffer);
-    result.set(b, a.byteLength);
+    result.set(b, origByteLength);
     return result;
 }
 
