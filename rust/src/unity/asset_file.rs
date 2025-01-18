@@ -40,7 +40,8 @@ impl AssetFile {
     pub fn append_metadata_chunk(&mut self, data: &[u8]) -> Result<(), String> {
         // data will be the file from bytes 0..data_offset, so skip to where the metadata starts
         let bitslice = BitSlice::from_slice(data);
-        let (rest, _) = SerializedFileHeader::read(&bitslice, ()).unwrap();
+        let (rest, _) = SerializedFileHeader::read(&bitslice, ())
+            .map_err(|err| format!("failed to parse metadata file header: {:?}", err))?;
         match SerializedFileMetadata::read(rest, self.header.version) {
             Ok((_, metadata)) => self.metadata = Some(metadata),
             Err(err) => return Err(format!("failed to parse metadata: {:?}", err)),
