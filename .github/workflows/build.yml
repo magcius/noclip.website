@@ -38,7 +38,7 @@ jobs:
       run: pnpm run build
 
     - name: Deploy
-      if: github.ref == 'refs/heads/master'
+      if: github.ref == 'refs/heads/main'
       uses: burnett01/rsync-deployments@7.0.1
       with:
         switches: -va --delete-after --exclude=data/ --exclude=priv/ --exclude=.well-known/
