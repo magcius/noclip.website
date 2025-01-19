@@ -41,3 +41,4 @@ nalgebra-glm = "0.19.0"
 rand = "0.8.5"
 getrandom = { version = "0.2.15", features = ["js"] }
 noclip-macros = { version = "*", path = "./noclip-macros" }
+texture2ddecoder = { git = "https://github.com/wgreenberg/texture2ddecoder" }

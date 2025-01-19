@@ -38,3 +38,27 @@ pub fn deflate_raw_decompress(src: &[u8]) -> Vec<u8> {
     inflate::inflate_bytes(src).unwrap()
 }
 
+#[wasm_bindgen(js_name = "CrunchTexture")]
+pub struct CrunchTexture {
+    handle: texture2ddecoder::CrunchHandle,
+}
+
+#[wasm_bindgen(js_class = "CrunchTexture")]
+impl CrunchTexture {
+    pub fn new(data: &[u8]) -> Result<Self, String> {
+        let handle = texture2ddecoder::CrunchHandle::new(data)
+            .map_err(|err| format!("{:?}", err))?;
+        Ok(Self {
+            handle,
+        })
+    }
+
+    pub fn get_num_levels(&self) -> u32 {
+        self.handle.get_num_levels()
+    }
+
+    pub fn decode_level(&self, data: &[u8], level_index: u32) -> Result<Vec<u8>, String> {
+        self.handle.unpack_level(data, level_index)
+            .map_err(|err| err.into())
+    }
+}

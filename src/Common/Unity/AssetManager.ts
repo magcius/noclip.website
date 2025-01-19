@@ -1,6 +1,6 @@
 
 import { vec2, vec3 } from 'gl-matrix';
-import { UnityAABB, UnityAssetFile, UnityAssetFileObject, UnityChannelInfo, UnityClassID, UnityGLTextureSettings, UnityMaterial, UnityMesh, UnityMeshCompression, UnityPPtr, UnityShader, UnityStreamingInfo, UnitySubMesh, UnityTexture2D, UnityTextureColorSpace, UnityTextureFormat, UnityVersion, UnityVertexFormat } from '../../../rust/pkg/noclip_support';
+import { UnityAABB, UnityAssetFile, UnityAssetFileObject, UnityChannelInfo, UnityClassID, UnityGLTextureSettings, UnityMaterial, UnityMesh, UnityMeshCompression, UnityPPtr, UnityShader, UnityStreamingInfo, UnitySubMesh, UnityTexture2D, UnityTextureColorSpace, UnityTextureFormat, UnityVersion, UnityVertexFormat, CrunchTexture } from '../../../rust/pkg/noclip_support';
 import ArrayBufferSlice from '../../ArrayBufferSlice.js';
 import { Color, TransparentBlack, colorNewFromRGBA } from '../../Color.js';
 import { DataFetcher } from '../../DataFetcher.js';
@@ -712,19 +712,21 @@ export class UnityTexture2DData {
 
         this.gfxSampler = cache.createSampler(translateSampler(header.texture_settings));
 
-        // TODO(jstpierre): Support crunched formats
-        if (header.texture_format === rust.UnityTextureFormat.DXT1Crunched) {
-            console.warn(`DXT1Crunched ${this.header.name}`);
-            return;
+        if (header.texture_format === rust.UnityTextureFormat.DXT1Crunched || header.texture_format === rust.UnityTextureFormat.DXT5Crunched) {
+            const crunched = CrunchTexture.new(data);
+            const levels = [];
+            // FIXME: texture2ddecoder seems to be broken for higher mip levels
+            // let numLevels = crunched.get_num_levels();
+            let numLevels = 1;
+            for (let i = 0; i < numLevels; i++) {
+                levels.push(crunched.decode_level(data, i));
+            }
+            device.uploadTextureData(this.gfxTexture, 0, levels);
+        } else {
+            const oData = imageFormatConvertData(data, header.texture_format);
+            const levels = calcLevels(oData, header.texture_format, header.width, header.height, header.mip_count);
+            device.uploadTextureData(this.gfxTexture, 0, levels);
         }
-        if (header.texture_format === rust.UnityTextureFormat.DXT5Crunched) {
-            console.warn(`DXT5Crunched ${this.header.name}`);
-            return;
-        }
-
-        const oData = imageFormatConvertData(data, header.texture_format);
-        const levels = calcLevels(oData, header.texture_format, header.width, header.height, header.mip_count);
-        device.uploadTextureData(this.gfxTexture, 0, levels);
     }
 
     public fillTextureMapping(dst: TextureMapping): void {
