@@ -713,7 +713,6 @@ export class UnityTexture2DData {
         this.gfxSampler = cache.createSampler(translateSampler(header.texture_settings));
 
         if (header.texture_format === rust.UnityTextureFormat.DXT1Crunched || header.texture_format === rust.UnityTextureFormat.DXT5Crunched) {
-            console.warn(header.name, header.texture_format);
             const crunched = CrunchTexture.new(data);
             const levels = [];
             // FIXME: texture2ddecoder seems to be broken for higher mip levels
