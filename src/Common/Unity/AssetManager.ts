@@ -156,8 +156,10 @@ export class AssetFile {
         this.waitForHeaderPromise = null;
     }
 
-    public waitForHeader(): Promise<void> {
-        return assertExists(this.waitForHeaderPromise);
+    public async waitForHeader() {
+        if (this.waitForHeaderPromise !== null) {
+            await this.waitForHeaderPromise;
+        }
     }
 
     private async initFullInternal(dataFetcher: DataFetcher): Promise<void> {

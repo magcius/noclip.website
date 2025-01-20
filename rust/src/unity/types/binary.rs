@@ -135,7 +135,7 @@ pub struct Mesh {
     pub keep_vertices: u8,
     pub keep_indices: u8,
     pub index_format: IndexFormat,
-    pub index_buffer: UnityArray<u8>,
+    pub index_buffer: ByteArray,
     #[deku(count = "(4 - deku::byte_offset % 4) % 4")] _alignment2: Vec<u8>,
     #[deku(ctx = "version")]
     pub vertex_data: VertexData,
@@ -143,9 +143,9 @@ pub struct Mesh {
     pub compressed_mesh: CompressedMesh,
     pub local_aabb: AABB,
     pub mesh_usage_flags: i32,
-    pub baked_convex_collision_mesh: UnityArray<u8>,
+    pub baked_convex_collision_mesh: ByteArray,
     #[deku(count = "(4 - deku::byte_offset % 4) % 4")] _alignment4: Vec<u8>,
-    pub baked_triangle_collision_mesh: UnityArray<u8>,
+    pub baked_triangle_collision_mesh: ByteArray,
     #[deku(count = "(4 - deku::byte_offset % 4) % 4")] _alignment5: Vec<u8>,
     pub mesh_metrics: [f32; 2],
     #[deku(ctx = "version")]
@@ -211,8 +211,37 @@ pub struct SubMesh {
 pub struct VertexData {
     pub vertex_count: u32,
     pub channels: UnityArray<ChannelInfo>,
-    pub data: UnityArray<u8>,
+    pub data: ByteArray,
     #[deku(count = "(4 - deku::byte_offset % 4) % 4")] _alignment: Vec<u8>,
+}
+
+#[derive(Default, Debug, Clone)]
+pub struct ByteArray {
+    pub data: Vec<u8>,
+}
+
+impl<'a> DekuRead<'a> for ByteArray {
+    fn read(
+        input: &'a deku::bitvec::BitSlice<u8, deku::bitvec::Msb0>,
+        ctx: (),
+    ) -> Result<(&'a deku::bitvec::BitSlice<u8, deku::bitvec::Msb0>, Self), DekuError>
+    where Self: Sized {
+        let (rest, count) = i32::read(input, ctx)?;
+        let (data_bits, rest) = rest.split_at(count as usize * 8);
+        let bytes = data_bits.domain().region().unwrap().1;
+        Ok((
+            rest,
+            Self {
+                data: bytes.to_vec(),
+            },
+        ))
+    }
+}
+
+impl From<ByteArray> for Vec<u8> {
+    fn from(value: ByteArray) -> Self {
+        value.data
+    }
 }
 
 #[derive(DekuRead, Clone, Debug)]
@@ -323,9 +352,9 @@ pub struct Texture2D {
     pub lightmap_format: i32,
     pub color_space: ColorSpace,
     #[deku(cond = "version >= UnityVersion::V2020_3_16f1")]
-    pub platform_blob: UnityArray<u8>,
+    pub platform_blob: ByteArray,
     #[deku(count = "(4 - deku::byte_offset % 4) % 4")] _alignment2: Vec<u8>,
-    pub data: UnityArray<u8>,
+    pub data: ByteArray,
     #[deku(count = "(4 - deku::byte_offset % 4) % 4")] _alignment3: Vec<u8>,
     #[deku(ctx = "version")]
     pub streaming_info: StreamingInfo,
