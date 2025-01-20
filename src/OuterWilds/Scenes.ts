@@ -19,7 +19,7 @@ class TempMaterialProgram extends UnityShaderProgramBase {
     public override both = `
 ${UnityShaderProgramBase.Common}
 
-layout(std140, row_major) uniform ub_MaterialParams {
+layout(std140) uniform ub_MaterialParams {
     vec4 u_Color;
     vec4 u_MainTexST;
     vec4 u_Misc[1];
@@ -108,7 +108,7 @@ class TerrainMaterialProgram extends UnityShaderProgramBase {
     public override both = `
 ${UnityShaderProgramBase.Common}
 
-layout(std140, row_major) uniform ub_MaterialParams {
+layout(std140) uniform ub_MaterialParams {
     vec4 u_Color;
     vec4 u_TexST[6];
     vec4 u_Misc[1];
@@ -126,7 +126,7 @@ uniform sampler2D u_Splat3;
 
 #ifdef VERT
 void mainVS() {
-    mat4x3 t_WorldFromLocalMatrix = CalcWorldFromLocalMatrix();
+    Mat4x3 t_WorldFromLocalMatrix = CalcWorldFromLocalMatrix();
     vec3 t_PositionWorld = t_WorldFromLocalMatrix * vec4(a_Position, 1.0);
     vec3 t_LightDirection = normalize(vec3(.2, -1, .5));
     vec3 normal = MulNormalMatrix(t_WorldFromLocalMatrix, normalize(a_Normal));
@@ -175,6 +175,7 @@ class TerrainMaterial extends UnityMaterialInstance {
     constructor(runtime: UnityRuntime, private materialData: UnityMaterialData) {
         super();
 
+        console.log(this.materialData.name, this.materialData.texturesByName.keys());
         this.materialData.fillTextureMapping(this.textureMapping[0], '_SideTex');
         this.materialData.fillTextureMapping(this.textureMapping[1], '_Control1');
         this.materialData.fillTextureMapping(this.textureMapping[2], '_Splat0');
@@ -206,9 +207,24 @@ class TerrainMaterial extends UnityMaterialInstance {
     }
 }
 
-class AShortHikeMaterialFactory extends UnityMaterialFactory {
+class OuterWildsMaterialFactory extends UnityMaterialFactory {
+    public registry: Map<string, string[]> = new Map();
+
     public createMaterialInstance(runtime: UnityRuntime, materialData: UnityMaterialData): UnityMaterialInstance {
-        if (materialData.shader?.name?.startsWith('Custom Unlit/Unlit Terrain'))
+        // TODO(jstpierre): Pull out serialized shader data
+        // console.log(materialData.name, materialData.texturesByName.keys(), materialData.shader);
+        // const matType = materialData.name.split("_")[0];
+        // const matNames = Array.from(materialData.texturesByName.keys());
+        // const existing = this.registry.get(matType);
+        // if (existing) {
+        //     if (JSON.stringify(matNames) !== JSON.stringify(existing)) {
+        //         console.warn(`mat ${materialData.name} differs from ${existing}: ${matNames}`)
+        //     }
+        // } else {
+        //     console.log(`setting ${matType} => ${matNames}`);
+        //     this.registry.set(matType, Array.from(matNames));
+        // }
+        if (materialData.texturesByName.has('_Splat3'))
             return new TerrainMaterial(runtime, materialData);
         else
             return new TempMaterial(runtime, materialData);
@@ -278,13 +294,13 @@ class UnityRenderer implements Viewer.SceneGfx {
     }
 }
 
-class AShortHikeSceneDesc implements Viewer.SceneDesc {
+class OuterWildsSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
-        const runtime = await createUnityRuntime(context, `AShortHike`, UnityVersion.V2021_3_27f1);
-        runtime.materialFactory = new AShortHikeMaterialFactory();
+        const runtime = await createUnityRuntime(context, `OuterWilds`, UnityVersion.V2019_4_39f1);
+        runtime.materialFactory = new OuterWildsMaterialFactory();
         await runtime.loadLevel(this.id);
 
         const renderer = new UnityRenderer(runtime);
@@ -292,12 +308,13 @@ class AShortHikeSceneDesc implements Viewer.SceneDesc {
     }
 }
 
-const id = 'AShortHike';
-const name = 'A Short Hike';
+const id = 'OuterWilds';
+const name = 'Outer Wilds';
 
 const sceneDescs = [
-    new AShortHikeSceneDesc(`level1`, "Main Menu"),
-    new AShortHikeSceneDesc(`level2`, "The Island"),
+    new OuterWildsSceneDesc(`level0`, "Main Menu"),
+    new OuterWildsSceneDesc(`level1`, "Solar System"),
+    new OuterWildsSceneDesc(`level2`, "End"),
 ];
 
 export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs, hidden: true };
