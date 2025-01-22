@@ -1,3 +1,4 @@
+
 use deku::prelude::*;
 
 // https://github.com/AssetRipper/TypeTreeDumps/blob/main/StructsDump/release/2019.4.39f1.dump
@@ -153,14 +154,14 @@ pub struct Mesh {
 }
 
 #[derive(DekuRead, Clone, Copy, Debug)]
-#[deku(type = "i32")]
+#[deku(id_type = "i32")]
 pub enum IndexFormat {
     UInt16 = 0,
     UInt32 = 1,
 }
 
 #[derive(DekuRead, Clone, Copy, Debug)]
-#[deku(type = "u8")]
+#[deku(id_type = "u8")]
 pub enum MeshCompression {
     Off = 0,
     Low = 1,
@@ -220,21 +221,12 @@ pub struct ByteArray {
     pub data: Vec<u8>,
 }
 
-impl<'a> DekuRead<'a> for ByteArray {
-    fn read(
-        input: &'a deku::bitvec::BitSlice<u8, deku::bitvec::Msb0>,
-        ctx: (),
-    ) -> Result<(&'a deku::bitvec::BitSlice<u8, deku::bitvec::Msb0>, Self), DekuError>
-    where Self: Sized {
-        let (rest, count) = i32::read(input, ctx)?;
-        let (data_bits, rest) = rest.split_at(count as usize * 8);
-        let bytes = data_bits.domain().region().unwrap().1;
-        Ok((
-            rest,
-            Self {
-                data: bytes.to_vec(),
-            },
-        ))
+impl<'a, Ctx> DekuReader<'a, Ctx> for ByteArray where Ctx: Copy {
+    fn from_reader_with_ctx<R: deku::no_std_io::Read + deku::no_std_io::Seek>(reader: &mut Reader<R>, _ctx: Ctx) -> Result<Self, DekuError> {
+        let count = i32::from_reader_with_ctx(reader, ())? as usize;
+        let mut buf = vec![0x00; count];
+        reader.read_bytes(count, &mut buf)?;
+        Ok(ByteArray{ data: buf })
     }
 }
 
@@ -271,7 +263,7 @@ pub struct ChannelInfo {
 }
 
 #[derive(DekuRead, Clone, Debug)]
-#[deku(type = "u8")]
+#[deku(id_type = "u8")]
 pub enum VertexFormat {
     #[deku(id = "0")] Float,
     #[deku(id = "1")] Float16,
@@ -390,7 +382,7 @@ pub struct GLTextureSettings {
 }
 
 #[derive(DekuRead, Clone, Debug)]
-#[deku(type = "i32")]
+#[deku(id_type = "i32")]
 pub enum TextureFilterMode {
     Nearest = 0,
     Bilinear = 1,
@@ -398,7 +390,7 @@ pub enum TextureFilterMode {
 }
 
 #[derive(DekuRead, Clone, Debug)]
-#[deku(type = "i32")]
+#[deku(id_type = "i32")]
 pub enum TextureWrapMode {
     Repeat = 0,
     Clamp = 1,
@@ -408,7 +400,7 @@ pub enum TextureWrapMode {
 
 // copied from https://github.com/Unity-Technologies/UnityCsReference/blob/129a67089d125df5b95b659d3535deaf9968e86c/Editor/Mono/AssetPipeline/TextureImporterEnums.cs#L37
 #[derive(DekuRead, Clone, Debug)]
-#[deku(type = "i32")]
+#[deku(id_type = "i32")]
 pub enum TextureFormat {
     // Alpha 8 bit texture format.
     Alpha8 = 1,
@@ -523,7 +515,7 @@ pub enum TextureFormat {
 }
 
 #[derive(DekuRead, Clone, Debug)]
-#[deku(type = "i32")]
+#[deku(id_type = "i32")]
 pub enum ColorSpace {
     Linear = 0x00,
     SRGB   = 0x01,
