@@ -138,13 +138,15 @@ fn from_u32<T>(v: u32) -> Result<T, DekuError>
 
 fn read_field_to_u32<R: deku::no_std_io::Read + deku::no_std_io::Seek>(reader: &mut Reader<R>, field_offset_bits: usize, field_size_bits: usize) -> Result<u32, DekuError> {
     // Assumes the reader points to the start of the record
-    let old = reader.seek(std::io::SeekFrom::Current(0i64)).unwrap();
+    let old = reader.seek(std::io::SeekFrom::Current(0))
+        .map_err(|err| DekuError::Io(err.kind()))?;
 
     // This is somewhat annoying. Deku uses Msb0 ordering, while we want Lsb0 ordering.
     // Do the math ourselves rather than using Deku's read_bits.
     // Deku trunk supports Lsb0 ordering, but that's not released yet.
     let field_offset_bytes = field_offset_bits >> 3;
-    reader.seek(std::io::SeekFrom::Current(field_offset_bytes as i64)).unwrap();
+    reader.seek(std::io::SeekFrom::Current(field_offset_bytes as i64))
+        .map_err(|err| DekuError::Io(err.kind()))?;
 
     let shift = field_offset_bits & 7;
     let field_size_bytes = (field_size_bits + 7 + shift) >> 3;
@@ -157,7 +159,8 @@ fn read_field_to_u32<R: deku::no_std_io::Read + deku::no_std_io::Seek>(reader: &
     let mask = (1 << field_size_bits) - 1;
     let result = (v >> shift) & mask;
 
-    reader.seek(std::io::SeekFrom::Start(old)).unwrap();
+    reader.seek(std::io::SeekFrom::Start(old))
+        .map_err(|err| DekuError::Io(err.kind()))?;
     Ok(result)
 }
 
@@ -195,8 +198,10 @@ impl Wdc4Db2File {
 
     pub fn read_string_helper<'a, R: deku::no_std_io::Read + deku::no_std_io::Seek>(&self, reader: &mut Reader<R>, string_offset: u32) -> Result<String, DekuError> {
         let mut string = String::new();
-        let old = reader.seek(std::io::SeekFrom::Current(0)).unwrap();
-        reader.seek(std::io::SeekFrom::Current(string_offset as i64)).unwrap();
+        let old = reader.seek(std::io::SeekFrom::Current(0))
+            .map_err(|err| DekuError::Io(err.kind()))?;
+        reader.seek(std::io::SeekFrom::Current(string_offset as i64))
+            .map_err(|err| DekuError::Io(err.kind()))?;
 
         loop {
             let byte = u8::from_reader_with_ctx(reader, ())?;
@@ -209,17 +214,20 @@ impl Wdc4Db2File {
             }
         }
 
-        reader.seek(std::io::SeekFrom::Start(old)).unwrap();
+        reader.seek(std::io::SeekFrom::Start(old))
+            .map_err(|err| DekuError::Io(err.kind()))?;
         Ok(string)
     }
 
     pub fn read_string_direct<'a, R: deku::no_std_io::Read + deku::no_std_io::Seek>(&self, reader: &mut Reader<R>, field_number: usize, extra_offset: usize) -> Result<String, DekuError> {
         let field_offset = (self.field_storage_info[field_number].field_offset_bits as usize) + (extra_offset * 8);
-        let old = reader.seek(std::io::SeekFrom::Current(0)).unwrap();
+        let old = reader.seek(std::io::SeekFrom::Current(0))
+            .map_err(|err| DekuError::Io(err.kind()))?;
         reader.skip_bits(field_offset)?;
         let string_offset = u32::from_reader_with_ctx(reader, ())?;
         let v = if string_offset != 0 { self.read_string_helper(reader, string_offset - 4) } else { Ok("".into()) };
-        reader.seek(std::io::SeekFrom::Start(old)).unwrap();
+        reader.seek(std::io::SeekFrom::Start(old))
+            .map_err(|err| DekuError::Io(err.kind()))?;
         v
     }
 
@@ -235,10 +243,12 @@ impl Wdc4Db2File {
         let field_size = self.field_storage_info[field_number].field_size_bits as usize;
         let result = match &self.field_storage_info[field_number].storage_type {
             StorageType::None { .. } => {
-                let old = reader.seek(std::io::SeekFrom::Current(0i64)).unwrap();
+                let old = reader.seek(std::io::SeekFrom::Current(0i64))
+                    .map_err(|err| DekuError::Io(err.kind()))?;
                 reader.skip_bits(field_offset)?;
                 let v = T::from_reader_with_ctx(reader, ())?;
-                reader.seek(std::io::SeekFrom::Start(old)).unwrap();
+                reader.seek(std::io::SeekFrom::Start(old))
+                    .map_err(|err| DekuError::Io(err.kind()))?;
                 v
             },
             StorageType::Bitpacked { offset_bits: _, size_bits, flags: _ } | StorageType::BitpackedSigned { offset_bits: _, size_bits, flags: _ } => {
@@ -332,13 +342,15 @@ impl<T> DatabaseTable<T> {
         let mut cursor = Cursor::new(&data);
         let mut reader = Reader::new(&mut cursor);
 
-        reader.seek(std::io::SeekFrom::Start(records_start as u64)).unwrap();
+        reader.seek(std::io::SeekFrom::Start(records_start as u64))
+            .map_err(|err| err.to_string())?;
         let mut id = db2.header.min_id;
         for _ in 0..db2.header.record_count {
             let value = T::from_reader_with_ctx(&mut reader, db2.clone())
                 .map_err(|e| format!("{:?}", e))?;
             // our abuse of Deku in the database system always puts the cursor back where it started, so advance to the next record manually
-            reader.seek(std::io::SeekFrom::Current(db2.header.record_size as i64)).unwrap();
+            reader.seek(std::io::SeekFrom::Current(db2.header.record_size as i64))
+                .map_err(|err| err.to_string())?;
             records.push(value);
             ids.push(id);
             id += 1;
@@ -349,7 +361,8 @@ impl<T> DatabaseTable<T> {
         let id_list_start: usize = strings_start + db2.header.string_table_size as usize;
         let id_list_size: usize = db2.section_headers[0].id_list_size as usize;
         if id_list_size > 0 {
-            reader.seek(std::io::SeekFrom::Start(id_list_start as u64)).unwrap();
+            reader.seek(std::io::SeekFrom::Start(id_list_start as u64))
+                .map_err(|err| err.to_string())?;
             assert_eq!(id_list_size, records.len() * 4);
             for i in 0..records.len() {
                 id = u32::from_reader_with_ctx(&mut reader, ())
