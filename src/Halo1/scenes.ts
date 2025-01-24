@@ -158,10 +158,10 @@ void mainVS() {
 class ShaderTransparencyGenericProgram extends BaseProgram {
     public static BindingsDefinition = `
 layout(std140, row_major) uniform ub_ShaderParams {
-    Mat4x2 u_MapTransform0;
-    Mat4x2 u_MapTransform1;
-    Mat4x2 u_MapTransform2;
-    Mat4x2 u_MapTransform3;
+    mat4x2 u_MapTransform0;
+    mat4x2 u_MapTransform1;
+    mat4x2 u_MapTransform2;
+    mat4x2 u_MapTransform3;
     vec4 u_Color0[8];
     vec4 u_Color1[8];
 };
@@ -176,10 +176,10 @@ layout(std140, row_major) uniform ub_ShaderParams {
         const fragBody: string[] = [];
 
         fragBody.push(`
-vec2 uv0 = Mul(u_MapTransform0, vec4(v_UV, 1.0, 1.0));
-vec2 uv1 = Mul(u_MapTransform1, vec4(v_UV, 1.0, 1.0));
-vec2 uv2 = Mul(u_MapTransform2, vec4(v_UV, 1.0, 1.0));
-vec2 uv3 = Mul(u_MapTransform3, vec4(v_UV, 1.0, 1.0));
+vec2 uv0 = u_MapTransform0 * vec4(v_UV, 1.0, 1.0);
+vec2 uv1 = u_MapTransform1 * vec4(v_UV, 1.0, 1.0);
+vec2 uv2 = u_MapTransform2 * vec4(v_UV, 1.0, 1.0);
+vec2 uv3 = u_MapTransform3 * vec4(v_UV, 1.0, 1.0);
 `);
         if (this.shader.first_map_type === rust.ShaderTransparentGenericMapType.Map2D) {
             fragBody.push(`vec4 t0 = texture(SAMPLER_2D(u_Texture0), uv0);`);
@@ -617,10 +617,10 @@ class MaterialRender_TransparencyGeneric {
 class ShaderTransparencyChicagoProgram extends BaseProgram {
     public static BindingsDefinition = `
 layout(std140, row_major) uniform ub_ShaderParams {
-    Mat4x2 u_MapTransform0;
-    Mat4x2 u_MapTransform1;
-    Mat4x2 u_MapTransform2;
-    Mat4x2 u_MapTransform3;
+    mat4x2 u_MapTransform0;
+    mat4x2 u_MapTransform1;
+    mat4x2 u_MapTransform2;
+    mat4x2 u_MapTransform3;
 };
 `;
 
@@ -655,10 +655,10 @@ layout(std140, row_major) uniform ub_ShaderParams {
             }
         }
         const fragBody: string[] = [
-            `vec2 uv0 = Mul(u_MapTransform0, vec4(v_UV, 1.0, 1.0));`,
-            `vec2 uv1 = Mul(u_MapTransform1, vec4(v_UV, 1.0, 1.0));`,
-            `vec2 uv2 = Mul(u_MapTransform2, vec4(v_UV, 1.0, 1.0));`,
-            `vec2 uv3 = Mul(u_MapTransform3, vec4(v_UV, 1.0, 1.0));`,
+            `vec2 uv0 = u_MapTransform0 * vec4(v_UV, 1.0, 1.0);`,
+            `vec2 uv1 = u_MapTransform1 * vec4(v_UV, 1.0, 1.0);`,
+            `vec2 uv2 = u_MapTransform2 * vec4(v_UV, 1.0, 1.0);`,
+            `vec2 uv3 = u_MapTransform3 * vec4(v_UV, 1.0, 1.0);`,
             `vec4 t0 = texture(SAMPLER_2D(u_Texture0), uv0);`,
             `vec4 t1 = texture(SAMPLER_2D(u_Texture1), uv1);`,
             `vec4 t2 = texture(SAMPLER_2D(u_Texture2), uv2);`,
@@ -774,7 +774,7 @@ void mainPS() {
 class ShaderTransparencyWaterProgram extends BaseProgram {
     public static BindingsDefinition = `
 layout(std140, row_major) uniform ub_ShaderParams {
-    Mat4x2 u_RippleTransform;
+    mat4x2 u_RippleTransform;
     vec4 u_PerpendicularTint;
     vec4 u_ParallelTint;
 };
@@ -806,7 +806,7 @@ void mainPS() {
         t_ReflectionAlpha *= t_Base.a;
     }
 
-    vec2 uv = Mul(u_RippleTransform, vec4(v_UV, 1.0, 1.0));
+    vec2 uv = u_RippleTransform * vec4(v_UV, 1.0, 1.0);
     vec4 t_BumpMap = 2.0 * texture(SAMPLER_2D(u_Texture1), uv) - 1.0;
 
     vec3 t_NormalWorld = normalize(CalcTangentToWorld(t_BumpMap.rgb, v_Tangent, v_Binormal, v_Normal));
@@ -859,10 +859,10 @@ class RippleAnimation {
 class ShaderCompositeRippleProgram extends DeviceProgram {
     public static BindingsDefinition = `
 layout(std140, row_major) uniform ub_ShaderParams {
-    Mat4x2 u_MapTransform0;
-    Mat4x2 u_MapTransform1;
-    Mat4x2 u_MapTransform2;
-    Mat4x2 u_MapTransform3;
+    mat4x2 u_MapTransform0;
+    mat4x2 u_MapTransform1;
+    mat4x2 u_MapTransform2;
+    mat4x2 u_MapTransform3;
     vec4 u_Misc[1];
 };
 `;
@@ -882,10 +882,10 @@ layout(binding = 2) uniform sampler2D u_Texture2;
 layout(binding = 3) uniform sampler2D u_Texture3;
 
 void mainPS() {
-    vec2 uv0 = Mul(u_MapTransform0, vec4(v_TexCoord, 1.0, 1.0));
-    vec2 uv1 = Mul(u_MapTransform1, vec4(v_TexCoord, 1.0, 1.0));
-    vec2 uv2 = Mul(u_MapTransform2, vec4(v_TexCoord, 1.0, 1.0));
-    vec2 uv3 = Mul(u_MapTransform3, vec4(v_TexCoord, 1.0, 1.0));
+    vec2 uv0 = u_MapTransform0 * vec4(v_TexCoord, 1.0, 1.0);
+    vec2 uv1 = u_MapTransform1 * vec4(v_TexCoord, 1.0, 1.0);
+    vec2 uv2 = u_MapTransform2 * vec4(v_TexCoord, 1.0, 1.0);
+    vec2 uv3 = u_MapTransform3 * vec4(v_TexCoord, 1.0, 1.0);
 
     vec4 t_BumpMap0 = 2.0 * texture(SAMPLER_2D(u_Texture0), uv0) - 1.0;
     vec4 t_BumpMap1 = 2.0 * texture(SAMPLER_2D(u_Texture1), uv1) - 1.0;
@@ -1137,7 +1137,7 @@ interface TextureAnimationFunction {
 class ShaderModelProgram extends BaseProgram {
     public static BindingsDefinition = `
 layout(std140, row_major) uniform ub_ShaderParams {
-    Mat4x2 u_BaseMapTransform;
+    mat4x2 u_BaseMapTransform;
 };
 `;
 
@@ -1150,7 +1150,7 @@ layout(std140, row_major) uniform ub_ShaderParams {
         const fragBody: string[] = [];
 
         fragBody.push(`
-vec4 t_BaseTexture = texture(SAMPLER_2D(u_Texture0), Mul(u_BaseMapTransform, vec4(v_UV, 1.0, 1.0))).rgba;
+vec4 t_BaseTexture = texture(SAMPLER_2D(u_Texture0), u_BaseMapTransform * vec4(v_UV, 1.0, 1.0)).rgba;
 gl_FragColor.rgba = t_BaseTexture.rgba;
 CalcFog(gl_FragColor, v_Position);
 `);

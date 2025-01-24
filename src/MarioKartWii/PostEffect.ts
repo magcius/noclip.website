@@ -424,7 +424,7 @@ uniform sampler2D u_Texture;
 uniform sampler2D u_Texture2;
 
 layout(std140, row_major) uniform ub_Params {
-    Mat4x2 u_IndTexMat;
+    mat4x2 u_IndTexMat;
     vec4 u_Misc0;
 };
 
@@ -482,7 +482,7 @@ void main() {
 
 #ifdef USE_IND_WARP_TEX
     // Handcoded indtex pipeline...
-    vec2 t_WarpTexCoord = Mul(u_IndTexMat, vec4(v_TexCoord, 0.0, 1.0));
+    vec2 t_WarpTexCoord = u_IndTexMat * vec4(v_TexCoord, 0.0, 1.0);
     vec2 t_IndTexOffs = ((255.0 * texture(SAMPLER_2D(u_Texture2), t_WarpTexCoord).ba) - 128.0) * u_IndTexIndScale;
     t_TexCoord += t_IndTexOffs;
 #endif

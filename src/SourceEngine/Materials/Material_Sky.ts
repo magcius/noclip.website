@@ -23,7 +23,7 @@ precision mediump float;
 ${MaterialShaderTemplateBase.Common}
 
 layout(std140, row_major) uniform ub_ObjectParams {
-    Mat4x2 u_BaseTextureTransform;
+    mat4x2 u_BaseTextureTransform;
     vec4 u_ColorScale;
 };
 
