@@ -139,20 +139,23 @@ fn from_u32<T>(v: u32) -> Result<T, DekuError>
 fn read_field_to_u32<R: deku::no_std_io::Read + deku::no_std_io::Seek>(reader: &mut Reader<R>, field_offset_bits: usize, field_size_bits: usize) -> Result<u32, DekuError> {
     // Assumes the reader points to the start of the record
     let old = reader.seek(std::io::SeekFrom::Current(0i64)).unwrap();
-    reader.skip_bits(field_offset_bits)?;
-    assert!(field_size_bits <= 32);
-    let num_bits_to_read = (field_size_bits + 7) & !7;
 
-    let mut result = 0;
-    if let Some(bits) = reader.read_bits(num_bits_to_read)? {
-        for bit_num in 0..field_size_bits {
-            let byte_index = bit_num >> 3;
-            let bit_index = 7 - (bit_num % 8);
-            if bits[byte_index * 8 + bit_index] {
-                result |= 1 << bit_num;
-            }
-        }
-    }
+    // This is somewhat annoying. Deku uses Msb0 ordering, while we want Lsb0 ordering.
+    // Do the math ourselves rather than using Deku's read_bits.
+    // Deku trunk supports Lsb0 ordering, but that's not released yet.
+    let field_offset_bytes = field_offset_bits >> 3;
+    reader.seek(std::io::SeekFrom::Current(field_offset_bytes as i64)).unwrap();
+
+    let shift = field_offset_bits & 7;
+    let field_size_bytes = (field_size_bits + 7 + shift) >> 3;
+    assert!(field_size_bits <= 32);
+
+    let mut buf = [0x00; 4];
+    reader.read_bytes(field_size_bytes, &mut buf)?;
+    let v = u32::from_le_bytes(buf);
+
+    let mask = (1 << field_size_bits) - 1;
+    let result = (v >> shift) & mask;
 
     reader.seek(std::io::SeekFrom::Start(old)).unwrap();
     Ok(result)
