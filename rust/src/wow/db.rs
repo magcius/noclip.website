@@ -136,7 +136,7 @@ fn from_u32<T>(v: u32) -> Result<T, DekuError>
     T::from_reader_with_ctx(&mut reader, ())
 }
 
-fn read_field_to_u32<R: deku::no_std_io::Read + deku::no_std_io::Seek>(reader: &mut Reader<R>, field_offset_bits: usize, field_size_bits: usize) -> Result<u32, DekuError> {
+fn read_field_to_u32<R: std::io::Read + std::io::Seek>(reader: &mut Reader<R>, field_offset_bits: usize, field_size_bits: usize) -> Result<u32, DekuError> {
     // Assumes the reader points to the start of the record
     let old = reader.seek(std::io::SeekFrom::Current(0))
         .map_err(|err| DekuError::Io(err.kind()))?;
@@ -176,7 +176,7 @@ impl Wdc4Db2File {
         }
     }
 
-    pub fn read_vec<'a, T, R: deku::no_std_io::Read + deku::no_std_io::Seek>(&self, reader: &mut Reader<R>, field_number: usize) -> Result<Vec<T>, DekuError>
+    pub fn read_vec<'a, T, R: std::io::Read + std::io::Seek>(&self, reader: &mut Reader<R>, field_number: usize) -> Result<Vec<T>, DekuError>
         where for<'b> T: DekuReader<'b, ()>
     {
         let field_offset = self.field_storage_info[field_number].field_offset_bits as usize;
@@ -196,7 +196,7 @@ impl Wdc4Db2File {
         Ok(result)
     }
 
-    pub fn read_string_helper<'a, R: deku::no_std_io::Read + deku::no_std_io::Seek>(&self, reader: &mut Reader<R>, string_offset: u32) -> Result<String, DekuError> {
+    pub fn read_string_helper<'a, R: std::io::Read + std::io::Seek>(&self, reader: &mut Reader<R>, string_offset: u32) -> Result<String, DekuError> {
         let mut string = String::new();
         let old = reader.seek(std::io::SeekFrom::Current(0))
             .map_err(|err| DekuError::Io(err.kind()))?;
@@ -219,7 +219,7 @@ impl Wdc4Db2File {
         Ok(string)
     }
 
-    pub fn read_string_direct<'a, R: deku::no_std_io::Read + deku::no_std_io::Seek>(&self, reader: &mut Reader<R>, field_number: usize, extra_offset: usize) -> Result<String, DekuError> {
+    pub fn read_string_direct<'a, R: std::io::Read + std::io::Seek>(&self, reader: &mut Reader<R>, field_number: usize, extra_offset: usize) -> Result<String, DekuError> {
         let field_offset = (self.field_storage_info[field_number].field_offset_bits as usize) + (extra_offset * 8);
         let old = reader.seek(std::io::SeekFrom::Current(0))
             .map_err(|err| DekuError::Io(err.kind()))?;
@@ -231,12 +231,12 @@ impl Wdc4Db2File {
         v
     }
 
-    pub fn read_string<'a, R: deku::no_std_io::Read + deku::no_std_io::Seek>(&self, reader: &mut Reader<R>, field_number: usize) -> Result<String, DekuError> {
+    pub fn read_string<'a, R: std::io::Read + std::io::Seek>(&self, reader: &mut Reader<R>, field_number: usize) -> Result<String, DekuError> {
         let string_offset = self.read_field::<u32, R>(reader, field_number)?;
         self.read_string_helper(reader, string_offset)
     }
 
-    pub fn read_field<'a, T, R: deku::no_std_io::Read + deku::no_std_io::Seek>(&self, reader: &mut Reader<R>, field_number: usize) -> Result<T, DekuError>
+    pub fn read_field<'a, T, R: std::io::Read + std::io::Seek>(&self, reader: &mut Reader<R>, field_number: usize) -> Result<T, DekuError>
         where for<'b> T: DekuReader<'b, ()>
     {
         let field_offset = self.field_storage_info[field_number].field_offset_bits as usize;

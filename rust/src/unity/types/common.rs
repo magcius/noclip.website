@@ -29,7 +29,7 @@ fn check_count(count: usize, limit: usize) -> Result<(), DekuError> {
 }
 
 impl<'a, T, Ctx> DekuReader<'a, Ctx> for UnityArray<T> where T: DekuReader<'a, Ctx>, Ctx: Clone {
-    fn from_reader_with_ctx<R: deku::no_std_io::Read + deku::no_std_io::Seek>(reader: &mut Reader<R>, ctx: Ctx) -> Result<Self, DekuError> {
+    fn from_reader_with_ctx<R: std::io::Read + std::io::Seek>(reader: &mut Reader<R>, ctx: Ctx) -> Result<Self, DekuError> {
         let count = i32::from_reader_with_ctx(reader, ())? as usize;
         let mut values = Vec::new();
         for _ in 0..count {
@@ -56,7 +56,7 @@ pub struct Map<K, V> {
 impl<'a, K, V, Ctx> DekuReader<'a, Ctx> for Map<K, V>
     where K: DekuReader<'a, Ctx>, V: DekuReader<'a, Ctx>, Ctx: Clone
 {
-    fn from_reader_with_ctx<R: deku::no_std_io::Read + deku::no_std_io::Seek>(reader: &mut Reader<R>, ctx: Ctx) -> Result<Self, DekuError> {
+    fn from_reader_with_ctx<R: std::io::Read + std::io::Seek>(reader: &mut Reader<R>, ctx: Ctx) -> Result<Self, DekuError> {
         let count = i32::from_reader_with_ctx(reader, ())?;
         let mut keys = Vec::new();
         let mut values = Vec::new();
@@ -199,7 +199,7 @@ pub struct Matrix4x4 {
     pub e3: Vec4,
 }
 
-fn unpack_i32s<R: deku::no_std_io::Read + deku::no_std_io::Seek>(reader: &mut Reader<R>, num_items: usize, bit_size: usize) -> Result<Vec<i32>, DekuError> {
+fn unpack_i32s<R: std::io::Read + std::io::Seek>(reader: &mut Reader<R>, num_items: usize, bit_size: usize) -> Result<Vec<i32>, DekuError> {
     let mut result = Vec::new();
     for _ in 0..num_items {
         let value = i32::from_reader_with_ctx(reader, BitSize(bit_size))?;
@@ -220,7 +220,7 @@ impl From<Packedi32Vec> for Vec<i32> {
 }
 
 impl<'a, Ctx> DekuReader<'a, Ctx> for Packedi32Vec where Ctx: Clone {
-    fn from_reader_with_ctx<R: deku::no_std_io::Read + deku::no_std_io::Seek>(reader: &mut Reader<R>, _ctx: Ctx) -> Result<Self, DekuError> {
+    fn from_reader_with_ctx<R: std::io::Read + std::io::Seek>(reader: &mut Reader<R>, _ctx: Ctx) -> Result<Self, DekuError> {
         let num_items = u32::from_reader_with_ctx(reader, ())? as usize;
         let byte_array_count = u32::from_reader_with_ctx(reader, ())? as usize;
         reader.seek(SeekFrom::Current(byte_array_count as i64)).unwrap();
@@ -248,7 +248,7 @@ impl From<Packedf32Vec> for Vec<f32> {
 }
 
 impl<'a, Ctx> DekuReader<'a, Ctx> for Packedf32Vec where Ctx: Clone {
-    fn from_reader_with_ctx<R: deku::no_std_io::Read + deku::no_std_io::Seek>(reader: &mut Reader<R>, _ctx: Ctx) -> Result<Self, DekuError> {
+    fn from_reader_with_ctx<R: std::io::Read + std::io::Seek>(reader: &mut Reader<R>, _ctx: Ctx) -> Result<Self, DekuError> {
         let num_items = u32::from_reader_with_ctx(reader, ())?;
         let scale = f32::from_reader_with_ctx(reader, ())?;
         let start = f32::from_reader_with_ctx(reader, ())?;

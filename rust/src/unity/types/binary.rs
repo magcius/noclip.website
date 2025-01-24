@@ -222,7 +222,7 @@ pub struct ByteArray {
 }
 
 impl<'a, Ctx> DekuReader<'a, Ctx> for ByteArray where Ctx: Copy {
-    fn from_reader_with_ctx<R: deku::no_std_io::Read + deku::no_std_io::Seek>(reader: &mut Reader<R>, _ctx: Ctx) -> Result<Self, DekuError> {
+    fn from_reader_with_ctx<R: std::io::Read + std::io::Seek>(reader: &mut Reader<R>, _ctx: Ctx) -> Result<Self, DekuError> {
         let count = i32::from_reader_with_ctx(reader, ())? as usize;
         let mut buf = vec![0x00; count];
         reader.read_bytes(count, &mut buf)?;
