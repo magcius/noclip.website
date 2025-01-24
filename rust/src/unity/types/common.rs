@@ -1,8 +1,10 @@
+use std::borrow::Cow;
+use std::io::{Seek, SeekFrom};
 use std::{collections::HashMap, fmt::Debug, hash::Hash, marker::PhantomData};
 use std::clone::Clone;
 
 use wasm_bindgen::prelude::*;
-use deku::{bitvec::{BitSlice, Msb0}, ctx::BitSize, prelude::*};
+use deku::{ctx::BitSize, prelude::*};
 
 // Important: these must be ordered by chronological release date, so
 // PartialOrd can correctly compare them.
@@ -21,28 +23,21 @@ pub struct UnityArray<T> {
 
 fn check_count(count: usize, limit: usize) -> Result<(), DekuError> {
     if count > limit {
-        return Err(DekuError::Assertion(format!("Got unreasonably large count: {} > {}", count, limit)));
+        return Err(DekuError::Assertion(Cow::from(format!("Got unreasonably large count: {} > {}", count, limit))));
     }
     Ok(())
 }
 
-impl<'a, T, Ctx> DekuRead<'a, Ctx> for UnityArray<T> where T: DekuRead<'a, Ctx>, Ctx: Clone {
-    fn read(
-        input: &'a deku::bitvec::BitSlice<u8, deku::bitvec::Msb0>,
-        ctx: Ctx,
-    ) -> Result<(&'a deku::bitvec::BitSlice<u8, deku::bitvec::Msb0>, Self), DekuError>
-    where
-        Self: Sized {
-            let (mut rest, count) = i32::read(input, ())?;
-            let mut values = Vec::new();
-            for _ in 0..count {
-                let (new_rest, value) = T::read(rest, ctx.clone())?;
-                rest = new_rest;
-                values.push(value);
-            }
-            Ok((rest, UnityArray {
-                values,
-            }))
+impl<'a, T, Ctx> DekuReader<'a, Ctx> for UnityArray<T> where T: DekuReader<'a, Ctx>, Ctx: Clone {
+    fn from_reader_with_ctx<R: std::io::Read + std::io::Seek>(reader: &mut Reader<R>, ctx: Ctx) -> Result<Self, DekuError> {
+        let count = i32::from_reader_with_ctx(reader, ())? as usize;
+        let mut values = Vec::new();
+        for _ in 0..count {
+            values.push(T::from_reader_with_ctx(reader, ctx.clone())?);
+        }
+        Ok(UnityArray {
+            values,
+        })
     }
 }
 
@@ -58,30 +53,21 @@ pub struct Map<K, V> {
     pub values: Vec<V>,
 }
 
-impl<'a, K, V, Ctx> DekuRead<'a, Ctx> for Map<K, V>
-    where K: DekuRead<'a, Ctx>, V: DekuRead<'a, Ctx>, Ctx: Clone
+impl<'a, K, V, Ctx> DekuReader<'a, Ctx> for Map<K, V>
+    where K: DekuReader<'a, Ctx>, V: DekuReader<'a, Ctx>, Ctx: Clone
 {
-    fn read(
-        input: &'a deku::bitvec::BitSlice<u8, deku::bitvec::Msb0>,
-        ctx: Ctx,
-    ) -> Result<(&'a deku::bitvec::BitSlice<u8, deku::bitvec::Msb0>, Self), DekuError>
-    where
-        Self: Sized {
-            let (mut rest, count) = i32::read(input, ())?;
-            let mut keys = Vec::new();
-            let mut values = Vec::new();
-            for _ in 0..count {
-                let (new_rest, key) = K::read(rest, ctx.clone())?;
-                rest = new_rest;
-                let (new_rest, value) = V::read(rest, ctx.clone())?;
-                rest = new_rest;
-                keys.push(key);
-                values.push(value);
-            }
-            Ok((rest, Map {
-                keys,
-                values,
-            }))
+    fn from_reader_with_ctx<R: std::io::Read + std::io::Seek>(reader: &mut Reader<R>, ctx: Ctx) -> Result<Self, DekuError> {
+        let count = i32::from_reader_with_ctx(reader, ())?;
+        let mut keys = Vec::new();
+        let mut values = Vec::new();
+        for _ in 0..count {
+            keys.push(K::from_reader_with_ctx(reader, ctx.clone())?);
+            values.push(V::from_reader_with_ctx(reader, ctx.clone())?);
+        }
+        Ok(Map {
+            keys,
+            values,
+        })
     }
 }
 
@@ -213,15 +199,13 @@ pub struct Matrix4x4 {
     pub e3: Vec4,
 }
 
-fn unpack_i32s(input: &BitSlice<u8, Msb0>, num_items: usize, bit_size: usize) -> Result<(&BitSlice<u8, Msb0>, Vec<i32>), DekuError> {
+fn unpack_i32s<R: std::io::Read + std::io::Seek>(reader: &mut Reader<R>, num_items: usize, bit_size: usize) -> Result<Vec<i32>, DekuError> {
     let mut result = Vec::new();
-    let mut rest = input;
     for _ in 0..num_items {
-        let (new_rest, value) = i32::read(rest, BitSize(bit_size))?;
-        rest = new_rest;
+        let value = i32::from_reader_with_ctx(reader, BitSize(bit_size))?;
         result.push(value);
     }
-    Ok((rest, result))
+    Ok(result)
 }
 
 #[derive(Clone, Debug)]
@@ -235,21 +219,20 @@ impl From<Packedi32Vec> for Vec<i32> {
     }
 }
 
-impl<'a> DekuRead<'a> for Packedi32Vec {
-    fn read(input: &'a BitSlice<u8, Msb0>, ctx: ()) -> Result<(&'a BitSlice<u8, Msb0>, Self), DekuError>
-    where
-        Self: Sized {
-            let (mut rest, num_items) = u32::read(input, ctx)?;
-            let (new_rest, byte_array_count) = u32::read(rest, ctx)?;
-            rest = new_rest;
-            let (new_rest, bit_size) = u8::read(&rest[8 * byte_array_count as usize..], ctx)?;
-            // align
-            let last_rest = &new_rest[3*8..];
-            let (_, data) = unpack_i32s(rest, num_items as usize, bit_size as usize)?;
+impl<'a, Ctx> DekuReader<'a, Ctx> for Packedi32Vec where Ctx: Clone {
+    fn from_reader_with_ctx<R: std::io::Read + std::io::Seek>(reader: &mut Reader<R>, _ctx: Ctx) -> Result<Self, DekuError> {
+        let num_items = u32::from_reader_with_ctx(reader, ())? as usize;
+        let byte_array_count = u32::from_reader_with_ctx(reader, ())? as usize;
+        reader.seek(SeekFrom::Current(byte_array_count as i64)).unwrap();
+        let bit_size: u8 = u8::from_reader_with_ctx(reader, ())?;
+        reader.seek(SeekFrom::Current(-(byte_array_count as i64) - 1)).unwrap();
+        reader.bits_read -= 8;
+        let data = unpack_i32s(reader, num_items as usize, bit_size as usize)?;
+        reader.skip_bits(4 * 8)?; // bit_size, padding
 
-            Ok((last_rest, Packedi32Vec {
-                data,
-            }))
+        Ok(Packedi32Vec {
+            data,
+        })
     }
 }
 
@@ -264,30 +247,28 @@ impl From<Packedf32Vec> for Vec<f32> {
     }
 }
 
-impl<'a> DekuRead<'a> for Packedf32Vec {
-    fn read(input: &'a BitSlice<u8, Msb0>, ctx: ()) -> Result<(&'a BitSlice<u8, Msb0>, Self), DekuError>
-    where
-        Self: Sized {
-            let (mut rest, num_items) = u32::read(input, ctx)?;
-            let (new_rest, scale) = f32::read(rest, ctx)?;
-            rest = new_rest;
-            let (new_rest, start) = f32::read(rest, ctx)?;
-            rest = new_rest;
-            let (new_rest, byte_array_count) = u32::read(rest, ctx)?;
-            rest = new_rest;
-            let (new_rest, bit_size) = u8::read(&rest[8 * byte_array_count as usize..], ctx)?;
-            // align
-            let last_rest = &new_rest[3*8..];
+impl<'a, Ctx> DekuReader<'a, Ctx> for Packedf32Vec where Ctx: Clone {
+    fn from_reader_with_ctx<R: std::io::Read + std::io::Seek>(reader: &mut Reader<R>, _ctx: Ctx) -> Result<Self, DekuError> {
+        let num_items = u32::from_reader_with_ctx(reader, ())?;
+        let scale = f32::from_reader_with_ctx(reader, ())?;
+        let start = f32::from_reader_with_ctx(reader, ())?;
+        let byte_array_count = u32::from_reader_with_ctx(reader, ())? as usize;
+        reader.seek(SeekFrom::Current(byte_array_count as i64)).unwrap();
+        let bit_size = u8::from_reader_with_ctx(reader, ())?;
+        reader.seek(SeekFrom::Current(-(byte_array_count as i64) - 1)).unwrap();
+        reader.bits_read -= 8;
 
-            let max = ((1 << bit_size) as f32) - 1.0;
-            let (_, ints) = unpack_i32s(rest, num_items as usize, bit_size as usize)?;
-            let mut result = Vec::new();
-            for v in ints {
-                result.push(start + (v as f32) * scale / max);
-            }
+        let max = ((1 << bit_size) as f32) - 1.0;
+        let ints = unpack_i32s(reader, num_items as usize, bit_size as usize)?;
+        let mut result = Vec::new();
+        for v in ints {
+            result.push(start + (v as f32) * scale / max);
+        }
 
-            Ok((last_rest, Packedf32Vec {
-                data: result,
-            }))
+        reader.skip_bits(4 * 8)?; // bit_size, padding
+
+        Ok(Packedf32Vec {
+            data: result,
+        })
     }
 }

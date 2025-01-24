@@ -1,9 +1,11 @@
 use std::collections::HashMap;
+use std::io::Cursor;
 
+use deku::reader::Reader;
 use deku::DekuContainerRead;
 use noclip_macros::{FromStructPerField, FromEnumPerVariant, from};
 use wasm_bindgen::prelude::*;
-use deku::{DekuRead, bitvec::BitSlice};
+use deku::DekuReader;
 
 use crate::unity::types::common::CharArray;
 use super::common::{ColorRGBA, Matrix4x4, PPtr, Quaternion, Vec2, Vec3, Vec4, AABB, UnityVersion};
@@ -14,9 +16,10 @@ macro_rules! define_create {
         #[wasm_bindgen(js_class = $u)]
         impl $t {
             pub fn create(version: UnityVersion, data: &[u8]) -> Result<$t, String> {
-                let bitslice = BitSlice::from_slice(data);
-                match binary::$t::read(&bitslice, version) {
-                    Ok((_, value)) => Ok(value.into()),
+                let mut cursor = Cursor::new(data);
+                let mut reader = Reader::new(&mut cursor);
+                match binary::$t::from_reader_with_ctx(&mut reader, version) {
+                    Ok(value) => Ok(value.into()),
                     Err(err) => return Err(format!("Couldn't create {}: {:?}", $u, err)),
                 }
             }

@@ -376,7 +376,7 @@ pub struct M2Material {
 
 #[wasm_bindgen(js_name = "WowM2BlendingMode")]
 #[derive(DekuRead, Debug, Copy, Clone)]
-#[deku(type = "u16")]
+#[deku(id_type = "u16")]
 pub enum M2BlendingMode {
     Opaque = 0,
     AlphaKey = 1,

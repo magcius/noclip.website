@@ -3,7 +3,7 @@ use deku::prelude::*;
 
 #[wasm_bindgen(js_name = "UnityClassID")]
 #[derive(DekuRead, Debug, Copy, Clone, PartialEq)]
-#[deku(type = "i32")]
+#[deku(id_type = "i32")]
 #[repr(i32)]
 pub enum ClassID {
     #[deku(id = "-1")] UnknownType,

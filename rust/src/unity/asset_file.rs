@@ -1,5 +1,7 @@
-use deku::bitvec::BitSlice;
-use deku::{DekuContainerRead, DekuRead};
+use std::io::Cursor;
+
+use deku::reader::Reader;
+use deku::{DekuContainerRead, DekuReader};
 use wasm_bindgen::prelude::*;
 
 use crate::unity::types::wasm::WasmFriendlyPPtr;
@@ -39,11 +41,12 @@ impl AssetFile {
 
     pub fn append_metadata_chunk(&mut self, data: &[u8]) -> Result<(), String> {
         // data will be the file from bytes 0..data_offset, so skip to where the metadata starts
-        let bitslice = BitSlice::from_slice(data);
-        let (rest, _) = SerializedFileHeader::read(&bitslice, ())
+        let mut cursor = Cursor::new(data);
+        let mut reader = Reader::new(&mut cursor);
+        let _header = SerializedFileHeader::from_reader_with_ctx(&mut reader, ())
             .map_err(|err| format!("failed to parse metadata file header: {:?}", err))?;
-        match SerializedFileMetadata::read(rest, self.header.version) {
-            Ok((_, metadata)) => self.metadata = Some(metadata),
+        match SerializedFileMetadata::from_reader_with_ctx(&mut reader, self.header.version) {
+            Ok(metadata) => self.metadata = Some(metadata),
             Err(err) => return Err(format!("failed to parse metadata: {:?}", err)),
         }
         Ok(())
