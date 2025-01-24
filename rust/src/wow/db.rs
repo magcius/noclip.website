@@ -969,8 +969,9 @@ mod test {
 
     #[test]
     fn test_liquid_type() {
-        let d5 = std::fs::read("../data/wotlk/dbfilesclient/liquidtype.db2").unwrap();
-        let db: DatabaseTable<LiquidType> = DatabaseTable::new(&d5).unwrap();
+        let sheep_path = "../data/WorldOfWarcraft/sheep0";
+        let d4 = SheepfileManager::load_file_id_data(sheep_path, 1371380).unwrap(); // liquidTypes
+        let db: DatabaseTable<LiquidType> = DatabaseTable::new(&d4).unwrap();
         dbg!(&db.get_record(20).unwrap().name);
         dbg!(&db.get_record(21).unwrap().name);
         dbg!(&db.get_record(22));
@@ -979,7 +980,8 @@ mod test {
 
     #[test]
     fn test_skybox() {
-        let d5 = std::fs::read("../data/wotlk/dbfilesclient/lightskybox.db2").unwrap();
+        let sheep_path = "../data/WorldOfWarcraft/sheep0";
+        let d5 = SheepfileManager::load_file_id_data(sheep_path, 1308501).unwrap(); // lightSkyboxData
         let db: DatabaseTable<LightSkyboxRecord> = DatabaseTable::new(&d5).unwrap();
         dbg!(&db.records[0..4]);
     }

@@ -116,7 +116,7 @@ mod tests {
 
     #[test]
     fn test() {
-        let base_path = PathBuf::from_str("C:\\Users\\ifnsp\\dev\\noclip.website\\data\\AShortHike").unwrap();
+        let base_path = PathBuf::from_str("../data/AShortHike").unwrap();
         let data = std::fs::read(&base_path.join("resources.assets")).unwrap();
         let version = UnityVersion::V2021_3_27f1;
         let mut asset_file = AssetFile::initialize_with_header_chunk(&data).unwrap();
