@@ -226,6 +226,7 @@ impl<'a, Ctx> DekuReader<'a, Ctx> for Packedi32Vec where Ctx: Clone {
         reader.seek(SeekFrom::Current(byte_array_count as i64)).unwrap();
         let bit_size: u8 = u8::from_reader_with_ctx(reader, ())?;
         reader.seek(SeekFrom::Current(-(byte_array_count as i64) - 1)).unwrap();
+        reader.bits_read -= 8;
         let data = unpack_i32s(reader, num_items as usize, bit_size as usize)?;
         reader.skip_bits(4 * 8)?; // bit_size, padding
 
@@ -255,6 +256,7 @@ impl<'a, Ctx> DekuReader<'a, Ctx> for Packedf32Vec where Ctx: Clone {
         reader.seek(SeekFrom::Current(byte_array_count as i64)).unwrap();
         let bit_size = u8::from_reader_with_ctx(reader, ())?;
         reader.seek(SeekFrom::Current(-(byte_array_count as i64) - 1)).unwrap();
+        reader.bits_read -= 8;
 
         let max = ((1 << bit_size) as f32) - 1.0;
         let ints = unpack_i32s(reader, num_items as usize, bit_size as usize)?;

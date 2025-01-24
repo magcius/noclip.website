@@ -5,7 +5,7 @@ pub fn deku_peek<'a, T, R: deku::no_std_io::Read + deku::no_std_io::Seek>(reader
     where for<'b> T: DekuReader<'b, ()> + Debug
 {
     println!("deku_peek - {}", msg);
-    println!("  offset: {}", reader.bits_read);
+    println!("  offset: {} / {}", reader.bits_read >> 3, reader.bits_read);
     match T::from_reader_with_ctx(reader, ()) {
         Ok(value) => {
             println!("  value: {:?}", value);
