@@ -37,17 +37,19 @@ export class NITRO_Program extends DeviceProgram {
     public static both = `
 precision mediump float;
 
+${GfxShaderLibrary.MatrixLibrary}
+
 // Expected to be constant across the entire scene.
-layout(std140, row_major) uniform ub_SceneParams {
-    mat4 u_Projection;
+layout(std140) uniform ub_SceneParams {
+    Mat4x4 u_Projection;
     // Light configuration
     vec4 u_LightDir[4];
     vec4 u_LightColor[4];
 };
 
 // Expected to change with each material.
-layout(std140, row_major) uniform ub_MaterialParams {
-    mat4x2 u_TexMtx[1];
+layout(std140) uniform ub_MaterialParams {
+    Mat2x4 u_TexMtx[1];
     vec4 u_Misc[4];
 };
 #define u_DiffuseColor  (u_Misc[0].xyz)
@@ -57,8 +59,8 @@ layout(std140, row_major) uniform ub_MaterialParams {
 #define u_TexCoordMode  (u_Misc[0].w)
 #define u_LightMask     (u_Misc[1].w)
 
-layout(std140, row_major) uniform ub_DrawParams {
-    mat4x3 u_PosMtx[32];
+layout(std140) uniform ub_DrawParams {
+    Mat3x4 u_PosMtx[32];
 };
 
 uniform sampler2D u_Texture;
@@ -98,9 +100,9 @@ vec3 CalcLight(in vec3 vtxNormal) {
 ${GfxShaderLibrary.MulNormalMatrix}
 
 void main() {
-    mat4x3 t_PosMtx = u_PosMtx[int(a_PosMtxIdx)];
+    mat4x3 t_PosMtx = UnpackMatrix(u_PosMtx[int(a_PosMtxIdx)]);
     vec3 t_PositionView = t_PosMtx * vec4(a_Position, 1.0);
-    gl_Position = u_Projection * vec4(t_PositionView, 1.0);
+    gl_Position = UnpackMatrix(u_Projection) * vec4(t_PositionView, 1.0);
     v_Color = a_Color;
 
     if (a_Color.r < 0.0) {
@@ -111,9 +113,9 @@ void main() {
 
     vec2 t_TexSpaceCoord;
     if (u_TexCoordMode == 2.0) { // TexCoordMode.NORMAL
-        v_TexCoord = u_TexMtx[0] * vec4(a_Normal, 1.0);
+        v_TexCoord = UnpackMatrix(u_TexMtx[0]) * vec4(a_Normal, 1.0);
     } else {
-        v_TexCoord = u_TexMtx[0] * vec4(a_UV, 1.0, 1.0);
+        v_TexCoord = UnpackMatrix(u_TexMtx[0]) * vec4(a_UV, 1.0, 1.0);
     }
 }
 `;

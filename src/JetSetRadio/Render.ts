@@ -29,19 +29,22 @@ export class JSRProgram extends DeviceProgram {
     public override both = `
 precision mediump float;
 
+${GfxShaderLibrary.MatrixLibrary}
+
 // Expected to be constant across the entire scene.
-layout(std140, row_major) uniform ub_SceneParams {
-    mat4 u_Projection;
-    mat4x3 u_LightDirection;
+layout(std140) uniform ub_SceneParams {
+    Mat4x4 u_Projection;
+    Mat3x4 u_LightDirection;
 };
 
-layout(std140, row_major) uniform ub_ModelParams {
-    mat4x3 u_BoneMatrix;
-    mat4x2 u_TextureMatrix;
+layout(std140) uniform ub_ModelParams {
+    Mat3x4 u_BoneMatrix;
+    Mat2x4 u_TextureMatrix;
     vec4   u_Diffuse;
     vec4   u_Ambient;
     vec4   u_Specular;
 };
+
 #ifdef NORMAL
 varying vec3 v_Normal;
 #endif
@@ -75,11 +78,12 @@ layout(location = 4) in vec4 a_Specular;
 ${GfxShaderLibrary.MulNormalMatrix}
 
 void main() {
-    vec3 t_PositionView = u_BoneMatrix * vec4(a_Position, 1.0);
-    gl_Position = u_Projection * vec4(t_PositionView, 1.0);
+    mat4x3 t_BoneMatrix = UnpackMatrix(u_BoneMatrix);
+    vec3 t_PositionView = t_BoneMatrix * vec4(a_Position, 1.0);
+    gl_Position = UnpackMatrix(u_Projection) * vec4(t_PositionView, 1.0);
 
 #ifdef NORMAL
-    v_Normal = MulNormalMatrix(u_BoneMatrix, a_Normal);
+    v_Normal = MulNormalMatrix(t_BoneMatrix, a_Normal);
 #endif
 
 #ifdef DIFFUSE
@@ -90,7 +94,7 @@ void main() {
 #endif
 #ifdef TEXTURE
     v_TexCoord = a_TexCoord;
-    v_TexCoord = u_TextureMatrix * vec4(v_TexCoord, 0.0, 1.0);
+    v_TexCoord = UnpackMatrix(u_TextureMatrix) * vec4(v_TexCoord, 0.0, 1.0);
 #endif
 }
 `;

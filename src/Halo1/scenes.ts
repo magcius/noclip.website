@@ -67,15 +67,17 @@ varying vec3 v_Position;
     public static common = `
 precision mediump float;
 
-layout(std140, row_major) uniform ub_SceneParams {
-    mat4 u_ProjectionView;
+${GfxShaderLibrary.MatrixLibrary}
+
+layout(std140) uniform ub_SceneParams {
+    Mat4x4 u_ProjectionView;
     vec3 u_PlayerPos;
     vec4 u_FogColor;
     vec4 u_FogDistances;
 };
 
-layout(std140, row_major) uniform ub_ModelParams {
-    mat4x3 u_ModelMatrix;
+layout(std140) uniform ub_ModelParams {
+    Mat3x4 u_ModelMatrix;
 };
 
 layout(binding = 0) uniform sampler2D u_Texture0;
@@ -131,12 +133,13 @@ ${BaseProgram.vertexAttrs}
 ${GfxShaderLibrary.MulNormalMatrix}
 
 void mainVS() {
-    vec3 t_PositionWorld = u_ModelMatrix * vec4(a_Position, 1.0);
-    gl_Position = u_ProjectionView * vec4(t_PositionWorld, 1.0);
+    mat4x3 t_ModelMatrix = UnpackMatrix(u_ModelMatrix);
+    vec3 t_PositionWorld = t_ModelMatrix * vec4(a_Position, 1.0);
+    gl_Position = UnpackMatrix(u_ProjectionView) * vec4(t_PositionWorld, 1.0);
     v_UV = a_TexCoord;
-    v_Normal = MulNormalMatrix(u_ModelMatrix, a_Normal);
-    v_Binormal = normalize(u_ModelMatrix * vec4(a_Binormal.xyz, 0.0));
-    v_Tangent = normalize(u_ModelMatrix * vec4(a_Tangent.xyz, 0.0));
+    v_Normal = MulNormalMatrix(t_ModelMatrix, a_Normal);
+    v_Binormal = normalize(t_ModelMatrix * vec4(a_Binormal.xyz, 0.0));
+    v_Tangent = normalize(t_ModelMatrix * vec4(a_Tangent.xyz, 0.0));
     v_Position = t_PositionWorld;
 }
 `;
@@ -157,11 +160,11 @@ void mainVS() {
 
 class ShaderTransparencyGenericProgram extends BaseProgram {
     public static BindingsDefinition = `
-layout(std140, row_major) uniform ub_ShaderParams {
-    mat4x2 u_MapTransform0;
-    mat4x2 u_MapTransform1;
-    mat4x2 u_MapTransform2;
-    mat4x2 u_MapTransform3;
+layout(std140) uniform ub_ShaderParams {
+    Mat2x4 u_MapTransform0;
+    Mat2x4 u_MapTransform1;
+    Mat2x4 u_MapTransform2;
+    Mat2x4 u_MapTransform3;
     vec4 u_Color0[8];
     vec4 u_Color1[8];
 };
@@ -176,10 +179,10 @@ layout(std140, row_major) uniform ub_ShaderParams {
         const fragBody: string[] = [];
 
         fragBody.push(`
-vec2 uv0 = u_MapTransform0 * vec4(v_UV, 1.0, 1.0);
-vec2 uv1 = u_MapTransform1 * vec4(v_UV, 1.0, 1.0);
-vec2 uv2 = u_MapTransform2 * vec4(v_UV, 1.0, 1.0);
-vec2 uv3 = u_MapTransform3 * vec4(v_UV, 1.0, 1.0);
+vec2 uv0 = UnpackMatrix(u_MapTransform0) * vec4(v_UV, 1.0, 1.0);
+vec2 uv1 = UnpackMatrix(u_MapTransform1) * vec4(v_UV, 1.0, 1.0);
+vec2 uv2 = UnpackMatrix(u_MapTransform2) * vec4(v_UV, 1.0, 1.0);
+vec2 uv3 = UnpackMatrix(u_MapTransform3) * vec4(v_UV, 1.0, 1.0);
 `);
         if (this.shader.first_map_type === rust.ShaderTransparentGenericMapType.Map2D) {
             fragBody.push(`vec4 t0 = texture(SAMPLER_2D(u_Texture0), uv0);`);
@@ -616,11 +619,11 @@ class MaterialRender_TransparencyGeneric {
 
 class ShaderTransparencyChicagoProgram extends BaseProgram {
     public static BindingsDefinition = `
-layout(std140, row_major) uniform ub_ShaderParams {
-    mat4x2 u_MapTransform0;
-    mat4x2 u_MapTransform1;
-    mat4x2 u_MapTransform2;
-    mat4x2 u_MapTransform3;
+layout(std140) uniform ub_ShaderParams {
+    Mat2x4 u_MapTransform0;
+    Mat2x4 u_MapTransform1;
+    Mat2x4 u_MapTransform2;
+    Mat2x4 u_MapTransform3;
 };
 `;
 
@@ -655,10 +658,10 @@ layout(std140, row_major) uniform ub_ShaderParams {
             }
         }
         const fragBody: string[] = [
-            `vec2 uv0 = u_MapTransform0 * vec4(v_UV, 1.0, 1.0);`,
-            `vec2 uv1 = u_MapTransform1 * vec4(v_UV, 1.0, 1.0);`,
-            `vec2 uv2 = u_MapTransform2 * vec4(v_UV, 1.0, 1.0);`,
-            `vec2 uv3 = u_MapTransform3 * vec4(v_UV, 1.0, 1.0);`,
+            `vec2 uv0 = UnpackMatrix(u_MapTransform0) * vec4(v_UV, 1.0, 1.0);`,
+            `vec2 uv1 = UnpackMatrix(u_MapTransform1) * vec4(v_UV, 1.0, 1.0);`,
+            `vec2 uv2 = UnpackMatrix(u_MapTransform2) * vec4(v_UV, 1.0, 1.0);`,
+            `vec2 uv3 = UnpackMatrix(u_MapTransform3) * vec4(v_UV, 1.0, 1.0);`,
             `vec4 t0 = texture(SAMPLER_2D(u_Texture0), uv0);`,
             `vec4 t1 = texture(SAMPLER_2D(u_Texture1), uv1);`,
             `vec4 t2 = texture(SAMPLER_2D(u_Texture2), uv2);`,
@@ -773,8 +776,8 @@ void mainPS() {
 
 class ShaderTransparencyWaterProgram extends BaseProgram {
     public static BindingsDefinition = `
-layout(std140, row_major) uniform ub_ShaderParams {
-    mat4x2 u_RippleTransform;
+layout(std140) uniform ub_ShaderParams {
+    Mat2x4 u_RippleTransform;
     vec4 u_PerpendicularTint;
     vec4 u_ParallelTint;
 };
@@ -806,7 +809,7 @@ void mainPS() {
         t_ReflectionAlpha *= t_Base.a;
     }
 
-    vec2 uv = u_RippleTransform * vec4(v_UV, 1.0, 1.0);
+    vec2 uv = UnpackMatrix(u_RippleTransform) * vec4(v_UV, 1.0, 1.0);
     vec4 t_BumpMap = 2.0 * texture(SAMPLER_2D(u_Texture1), uv) - 1.0;
 
     vec3 t_NormalWorld = normalize(CalcTangentToWorld(t_BumpMap.rgb, v_Tangent, v_Binormal, v_Normal));
@@ -858,11 +861,11 @@ class RippleAnimation {
 
 class ShaderCompositeRippleProgram extends DeviceProgram {
     public static BindingsDefinition = `
-layout(std140, row_major) uniform ub_ShaderParams {
-    mat4x2 u_MapTransform0;
-    mat4x2 u_MapTransform1;
-    mat4x2 u_MapTransform2;
-    mat4x2 u_MapTransform3;
+layout(std140) uniform ub_ShaderParams {
+    Mat2x4 u_MapTransform0;
+    Mat2x4 u_MapTransform1;
+    Mat2x4 u_MapTransform2;
+    Mat2x4 u_MapTransform3;
     vec4 u_Misc[1];
 };
 `;
@@ -882,10 +885,10 @@ layout(binding = 2) uniform sampler2D u_Texture2;
 layout(binding = 3) uniform sampler2D u_Texture3;
 
 void mainPS() {
-    vec2 uv0 = u_MapTransform0 * vec4(v_TexCoord, 1.0, 1.0);
-    vec2 uv1 = u_MapTransform1 * vec4(v_TexCoord, 1.0, 1.0);
-    vec2 uv2 = u_MapTransform2 * vec4(v_TexCoord, 1.0, 1.0);
-    vec2 uv3 = u_MapTransform3 * vec4(v_TexCoord, 1.0, 1.0);
+    vec2 uv0 = UnpackMatrix(u_MapTransform0) * vec4(v_TexCoord, 1.0, 1.0);
+    vec2 uv1 = UnpackMatrix(u_MapTransform1) * vec4(v_TexCoord, 1.0, 1.0);
+    vec2 uv2 = UnpackMatrix(u_MapTransform2) * vec4(v_TexCoord, 1.0, 1.0);
+    vec2 uv3 = UnpackMatrix(u_MapTransform3) * vec4(v_TexCoord, 1.0, 1.0);
 
     vec4 t_BumpMap0 = 2.0 * texture(SAMPLER_2D(u_Texture0), uv0) - 1.0;
     vec4 t_BumpMap1 = 2.0 * texture(SAMPLER_2D(u_Texture1), uv1) - 1.0;
@@ -1136,8 +1139,8 @@ interface TextureAnimationFunction {
 
 class ShaderModelProgram extends BaseProgram {
     public static BindingsDefinition = `
-layout(std140, row_major) uniform ub_ShaderParams {
-    mat4x2 u_BaseMapTransform;
+layout(std140) uniform ub_ShaderParams {
+    Mat2x4 u_BaseMapTransform;
 };
 `;
 
@@ -1150,7 +1153,8 @@ layout(std140, row_major) uniform ub_ShaderParams {
         const fragBody: string[] = [];
 
         fragBody.push(`
-vec4 t_BaseTexture = texture(SAMPLER_2D(u_Texture0), u_BaseMapTransform * vec4(v_UV, 1.0, 1.0)).rgba;
+vec2 uv0 = UnpackMatrix(u_BaseMapTransform) * vec4(v_UV, 1.0, 1.0);
+vec4 t_BaseTexture = texture(SAMPLER_2D(u_Texture0), uv0).rgba;
 gl_FragColor.rgba = t_BaseTexture.rgba;
 CalcFog(gl_FragColor, v_Position);
 `);
@@ -1232,7 +1236,7 @@ varying vec3 v_IncidentLight;
 `;
 
     public static BindingsDefinition = `
-layout(std140, row_major) uniform ub_ShaderParams {
+layout(std140) uniform ub_ShaderParams {
     vec4 u_ReflectionPerpendicularColor;
     vec4 u_ReflectionParallelColor;
 };
@@ -1250,12 +1254,13 @@ layout(location = ${ShaderEnvironmentProgram.a_LightmapTexCoord}) in vec2 a_Ligh
 ${GfxShaderLibrary.MulNormalMatrix}
 
 void mainVS() {
-    vec3 t_PositionWorld = u_ModelMatrix * vec4(a_Position, 1.0);
-    gl_Position = u_ProjectionView * vec4(t_PositionWorld, 1.0);
+    mat4x3 t_ModelMatrix = UnpackMatrix(u_ModelMatrix);
+    vec3 t_PositionWorld = t_ModelMatrix * vec4(a_Position, 1.0);
+    gl_Position = UnpackMatrix(u_ProjectionView) * vec4(t_PositionWorld, 1.0);
     v_UV = a_TexCoord;
-    v_Normal = MulNormalMatrix(u_ModelMatrix, a_Normal);
-    v_Binormal = normalize(u_ModelMatrix * vec4(a_Binormal.xyz, 0.0));
-    v_Tangent = normalize(u_ModelMatrix * vec4(a_Tangent.xyz, 0.0));
+    v_Normal = MulNormalMatrix(t_ModelMatrix, a_Normal);
+    v_Binormal = normalize(t_ModelMatrix * vec4(a_Binormal.xyz, 0.0));
+    v_Tangent = normalize(t_ModelMatrix * vec4(a_Tangent.xyz, 0.0));
     v_Position = t_PositionWorld;
     v_IncidentLight = a_IncidentLight;
     v_LightmapUV = a_LightmapTexCoord;

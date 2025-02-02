@@ -56,6 +56,8 @@ class DMPProgram extends DeviceProgram {
     public static a_BoneWeights = 7;
 
     public static BindingsDefinition = `
+${GfxShaderLibrary.MatrixLibrary}
+
 struct Light {
     vec4 Ambient;
     vec4 Diffuse;
@@ -65,12 +67,12 @@ struct Light {
 };
 
 // Expected to be constant across the entire scene.
-layout(std140, row_major) uniform ub_SceneParams {
-    mat4 u_Projection;
+layout(std140) uniform ub_SceneParams {
+    Mat4x4 u_Projection;
 };
 
 // Expected to change with each material.
-layout(std140, row_major) uniform ub_MaterialParams {
+layout(std140) uniform ub_MaterialParams {
     vec4 u_MatDiffuseColor;
     vec4 u_MatAmbientColor;
     vec4 u_MaterialFlags;
@@ -82,7 +84,7 @@ layout(std140, row_major) uniform ub_MaterialParams {
     vec4 u_FogStartEnd;
 
     vec4 u_ConstantColor[6];
-    mat4x3 u_TexMtx[3];
+    Mat3x4 u_TexMtx[3];
     vec4 u_MatMisc[1];
 };
 
@@ -95,9 +97,9 @@ layout(std140, row_major) uniform ub_MaterialParams {
 #define u_RenderFog        (u_MaterialFlags.z)
 #define u_DepthOffset      (u_MatMisc[0].w)
 
-layout(std140, row_major) uniform ub_PrmParams {
-    mat4x3 u_BoneMatrix[16];
-    mat4x3 u_ViewMatrix;
+layout(std140) uniform ub_PrmParams {
+    Mat3x4 u_BoneMatrix[16];
+    Mat3x4 u_ViewMatrix;
     vec4 u_PrmMisc[1];
 };
 
@@ -568,7 +570,7 @@ vec3 CalcTextureCoordRaw(in int t_Idx) {
     } else if (t_MappingMode == 1) {
         // UV mapping.
         vec2 t_TexSrc = CalcTextureSrc(t_Params.y);
-        return u_TexMtx[t_Idx] * vec4(t_TexSrc, 0.0, 1.0);
+        return UnpackMatrix(u_TexMtx[t_Idx]) * vec4(t_TexSrc, 0.0, 1.0);
     } else if (t_MappingMode == 2) {
         // Cube env mapping.
         //vec3 t_Incident = normalize(vec3(t_Position.xy, -t_Position.z) - vec3(u_CameraPos.xy, -u_CameraPos.z));
@@ -579,7 +581,7 @@ vec3 CalcTextureCoordRaw(in int t_Idx) {
         // Sphere env mapping.
         // Convert view-space normal to proper place.
         vec2 t_TexSrc = (v_Normal.xy * 0.5) + 0.5;
-        return u_TexMtx[t_Idx] * vec4(t_TexSrc, 0.0, 1.0);
+        return UnpackMatrix(u_TexMtx[t_Idx]) * vec4(t_TexSrc, 0.0, 1.0);
     } else if (t_MappingMode == 4) {
         // Projection mapping.
         // Not implemented yet.
@@ -614,24 +616,24 @@ void main() {
 
     if (any(greaterThan(t_BoneWeights.xyzw, vec4(0.0)))) {
         t_BoneMatrix = mat4x3(0.0);
-        t_BoneMatrix += u_BoneMatrix[int(a_BoneIndices.x)] * t_BoneWeights.x;
-        t_BoneMatrix += u_BoneMatrix[int(a_BoneIndices.y)] * t_BoneWeights.y;
-        t_BoneMatrix += u_BoneMatrix[int(a_BoneIndices.z)] * t_BoneWeights.z;
-        t_BoneMatrix += u_BoneMatrix[int(a_BoneIndices.w)] * t_BoneWeights.w;
+        t_BoneMatrix += UnpackMatrix(u_BoneMatrix[int(a_BoneIndices.x)]) * t_BoneWeights.x;
+        t_BoneMatrix += UnpackMatrix(u_BoneMatrix[int(a_BoneIndices.y)]) * t_BoneWeights.y;
+        t_BoneMatrix += UnpackMatrix(u_BoneMatrix[int(a_BoneIndices.z)]) * t_BoneWeights.z;
+        t_BoneMatrix += UnpackMatrix(u_BoneMatrix[int(a_BoneIndices.w)]) * t_BoneWeights.w;
     } else {
         // If we have no bone weights, then we're in rigid skinning, so take the first bone index.
         // If we're single-bone, then our bone indices will be 0, so this also works for that.
-        t_BoneMatrix = u_BoneMatrix[int(a_BoneIndices.x)];
+        t_BoneMatrix = UnpackMatrix(u_BoneMatrix[int(a_BoneIndices.x)]);
     }
 
     vec3 t_ModelPosition = t_BoneMatrix * vec4(a_Position, 1.0);
-    vec3 t_ViewPosition = u_ViewMatrix * vec4(t_ModelPosition, 1.0);
-    gl_Position = u_Projection * vec4(t_ViewPosition, 1.0);
+    vec3 t_ViewPosition = UnpackMatrix(u_ViewMatrix) * vec4(t_ModelPosition, 1.0);
+    gl_Position = UnpackMatrix(u_Projection) * vec4(t_ViewPosition, 1.0);
 
     vec3 t_ModelNormal = MulNormalMatrix(t_BoneMatrix, a_Normal);
     vec3 t_ModelTangent = (t_BoneMatrix * vec4(a_Tangent, 0.0)).xyz;
-    vec3 t_ViewTangent = normalize((u_ViewMatrix * vec4(t_ModelTangent, 0.0)).xyz);
-    v_Normal = normalize((u_ViewMatrix * vec4(t_ModelNormal, 0.0)).xyz);
+    vec3 t_ViewTangent = normalize((UnpackMatrix(u_ViewMatrix) * vec4(t_ModelTangent, 0.0)).xyz);
+    v_Normal = normalize((UnpackMatrix(u_ViewMatrix) * vec4(t_ModelNormal, 0.0)).xyz);
     v_QuatNormal = vec4(1.0, 0.0, 0.0, 0.0);
 
     v_Depth = gl_Position.w;

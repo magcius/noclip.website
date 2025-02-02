@@ -3,8 +3,12 @@ use wasm_bindgen::prelude::wasm_bindgen;
 use web_sys::console;
 use std::error::Error;
 
-fn show_error(place: &str, error: impl Error) {
+fn show_error(place: &str, error: impl Error, location: Option<naga::SourceLocation>) {
     console::log_2(&place.into(), &error.to_string().into());
+
+    if let Some(loc) = location {
+        console::log_3(&"At line".into(), &loc.line_number.into(), &loc.line_position.into());
+    };
 
     let mut e = error.source();
     while let Some(source) = e {
@@ -30,7 +34,8 @@ pub fn glsl_compile(source: &str, stage: &str, validation_enabled: bool) -> Stri
         Ok(v) => v,
         Err(errors) => {
             for e in errors.errors {
-                show_error(&"glsl::parse_str", e);
+                let location = e.location(source);
+                show_error(&"glsl::parse_str", e, location);
             }
 
             panic!();
@@ -41,7 +46,7 @@ pub fn glsl_compile(source: &str, stage: &str, validation_enabled: bool) -> Stri
     let info = match naga::valid::Validator::new(validation_flags, naga::valid::Capabilities::all()).validate(&module) {
         Ok(v) => v,
         Err(e) => {
-            show_error(&"validator", e);
+            show_error(&"validator", e, None);
             panic!();
         }
     };
@@ -50,7 +55,7 @@ pub fn glsl_compile(source: &str, stage: &str, validation_enabled: bool) -> Stri
     match naga::back::wgsl::write_string(&module, &info, writer_flags) {
         Ok(v) => v,
         Err(e) => {
-            show_error(&"wgsl::write_string", e);
+            show_error(&"wgsl::write_string", e, None);
             panic!();
         }
     }

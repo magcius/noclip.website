@@ -1,3 +1,4 @@
+import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
 import { DeviceProgram } from "../Program.js";
 
 export const MAX_NUM_OF_OBJ_ANIM_VERTICES = 1024; 
@@ -15,14 +16,16 @@ export class F3DDKR_Program extends DeviceProgram {
     public override both = `
 precision mediump float;
 
-layout(std140, row_major) uniform ub_SceneParams {
-    mat4 u_Projection;
+${GfxShaderLibrary.MatrixLibrary}
+
+layout(std140) uniform ub_SceneParams {
+    Mat4x4 u_Projection;
 };
 
-layout(std140, row_major) uniform ub_DrawParams {
+layout(std140) uniform ub_DrawParams {
     vec4 u_Color;
     vec4 u_Misc[1];
-    mat4x3 u_ModelViewMatrix;
+    Mat3x4 u_ModelViewMatrix;
 };
 
 #define u_TexCoordOffset (u_Misc[0].xy)
@@ -65,8 +68,8 @@ void main() {
         pos = a_Position; // Just use the default position.
     }
 
-    vec3 t_PositionView = u_ModelViewMatrix * vec4(pos, 1.0);
-    gl_Position = u_Projection * vec4(t_PositionView, 1.0);
+    vec3 t_PositionView = UnpackMatrix(u_ModelViewMatrix) * vec4(pos, 1.0);
+    gl_Position = UnpackMatrix(u_Projection) * vec4(t_PositionView, 1.0);
 
     if (t_Options.z) {
         v_Color = vec4(1.0, 1.0, 1.0, 1.0);

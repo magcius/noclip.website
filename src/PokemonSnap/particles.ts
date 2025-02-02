@@ -16,6 +16,7 @@ import { TextureMapping } from "../TextureHolder.js";
 import { align, assert, hexzero, nArray } from "../util.js";
 import { ViewerRenderInput } from "../viewer.js";
 import { getColor, getVec3 } from "./room.js";
+import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
 
 export interface EmitterData {
     isCommon: boolean;
@@ -574,12 +575,14 @@ class ParticleProgram extends DeviceProgram {
     public override both = `
 precision mediump float;
 
-layout(std140, row_major) uniform ub_SceneParams {
-    mat4 u_Projection;
+${GfxShaderLibrary.MatrixLibrary}
+
+layout(std140) uniform ub_SceneParams {
+    Mat4x4 u_Projection;
 };
 
-layout(std140, row_major) uniform ub_DrawParams {
-    mat4x3 u_Matrix;
+layout(std140) uniform ub_DrawParams {
+    Mat3x4 u_Matrix;
     vec4 u_PrimColor;
     vec4 u_EnvColor;
 };
@@ -592,12 +595,13 @@ varying vec2 v_TexCoord;`;
 layout(location = 0) in vec3 a_Position;
 
 void main() {
-    vec3 t_PositionView = u_Matrix * vec4(a_Position, 1.0);
-    gl_Position = u_Projection * vec4(t_PositionView, 1.0);
+    vec3 t_PositionView = UnpackMatrix(u_Matrix) * vec4(a_Position, 1.0);
+    gl_Position = UnpackMatrix(u_Projection) * vec4(t_PositionView, 1.0);
     v_TexCoord = vec2(gl_VertexID & 1, (gl_VertexID >> 1) & 1);
 }`;
-    public override frag = `
-// Implements N64-style "triangle bilienar filtering" with three taps.
+
+public override frag = `
+// Implements N64-style "triangle bilinear filtering" with three taps.
 // Based on ArthurCarvalho's implementation, modified by NEC and Jasper for noclip.
 vec4 Texture2D_N64_Bilerp(PD_SAMPLER_2D(t_Texture), vec2 t_TexCoord) {
     vec2 t_Size = vec2(textureSize(PU_SAMPLER_2D(t_Texture), 0));

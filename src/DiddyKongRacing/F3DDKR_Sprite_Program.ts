@@ -1,4 +1,5 @@
 
+import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
 import { DeviceProgram } from "../Program.js";
 
 export const MAX_NUM_OF_SPRITE_INSTANCES = 150;
@@ -14,22 +15,24 @@ export class F3DDKR_Sprite_Program extends DeviceProgram {
     public override both = `
 precision mediump float;
 
-layout(std140, row_major) uniform ub_SceneParams {
-    mat4 u_Projection;
+${GfxShaderLibrary.MatrixLibrary}
+
+layout(std140) uniform ub_SceneParams {
+    Mat4x4 u_Projection;
 };
 
 struct SpriteInstance {
     vec4 info; // x = u_TexCoords index, y = Number of frames, z = alpha test, w = offset y
     vec4 color;
-    mat4x3 modelViewMatrix;
+    Mat3x4 modelViewMatrix;
 };
 
-layout(std140, row_major) uniform ub_DrawParams {
+layout(std140) uniform ub_DrawParams {
     vec4 u_SpritesInfo; // x = Current frame.
     SpriteInstance u_Instances[${MAX_NUM_OF_SPRITE_INSTANCES}];
 };
 
-layout(std140, row_major) uniform ub_TexParams {
+layout(std140) uniform ub_TexParams {
     vec4 u_TexCoords[${MAX_NUM_OF_SPRITE_FRAMES}];
 };
 
@@ -60,16 +63,16 @@ void main() {
     v_Color = instance.color;
 
     vec2 t_PositionLocal = (a_Position + offset) * spriteSize;
-    vec3 t_PositionView = instance.modelViewMatrix * vec4(t_PositionLocal, 1.0, 1.0);
-    gl_Position = u_Projection * vec4(t_PositionView, 1.0);
+    vec3 t_PositionView = UnpackMatrix(instance.modelViewMatrix) * vec4(t_PositionLocal, 1.0, 1.0);
+    gl_Position = UnpackMatrix(u_Projection) * vec4(t_PositionView, 1.0);
 
-    if(gl_VertexID == 0) {
+    if (gl_VertexID == 0) {
         v_TexCoord = vec2(x, y);
-    } else if(gl_VertexID == 1) {
+    } else if (gl_VertexID == 1) {
         v_TexCoord = vec2(x + w, y);
-    } else if(gl_VertexID == 2) {
+    } else if (gl_VertexID == 2) {
         v_TexCoord = vec2(x, y + h);
-    } else if(gl_VertexID == 3) {
+    } else if (gl_VertexID == 3) {
         v_TexCoord = vec2(x + w, y + h);
     }
 
@@ -78,7 +81,7 @@ void main() {
 `;
 
     public override frag = `
-// Implements N64-style "triangle bilienar filtering" with three taps.
+// Implements N64-style "triangle bilinear filtering" with three taps.
 // Based on ArthurCarvalho's implementation, modified by NEC and Jasper for noclip.
 vec4 Texture2D_N64_Bilerp(PD_SAMPLER_2D(t_Texture), vec2 t_TexCoord) {
     vec2 t_Size = vec2(textureSize(PU_SAMPLER_2D(t_Texture), 0));

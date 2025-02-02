@@ -518,7 +518,7 @@ class FullscreenBlitProgram extends DeviceProgram {
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 1, numSamplers: 1 }];
 
 const fallOutFieldDrawCommon = `
-layout(std140, row_major) uniform ub_Params {
+layout(std140) uniform ub_Params {
     vec4 u_EdgeColor;
     vec4 u_Misc[1];
 };

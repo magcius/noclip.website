@@ -94,12 +94,12 @@ class PsychonautsProgram extends DeviceProgram {
 precision mediump float;
 
 // Expected to be constant across the entire scene.
-layout(std140, row_major) uniform ub_SceneParams {
-    mat4 u_Projection;
+layout(std140) uniform ub_SceneParams {
+    Mat4x4 u_Projection;
 };
 
-layout(std140, row_major) uniform ub_MeshFragParams {
-    mat4x3 u_BoneMatrix[1];
+layout(std140) uniform ub_MeshFragParams {
+    Mat3x4 u_BoneMatrix[1];
     vec4 u_MaterialColor;
     vec4 u_TexCoordOffs;
 };
@@ -118,8 +118,8 @@ layout(location = ${PsychonautsProgram.a_TexCoord0}) in vec2 a_TexCoord0;
 layout(location = ${PsychonautsProgram.a_TexCoord1}) in vec2 a_TexCoord1;
 
 void main() {
-    vec3 t_PositionView = u_BoneMatrix[0] * vec4(a_Position, 1.0);
-    gl_Position = u_Projection * vec4(t_PositionView, 1.0);
+    vec3 t_PositionView = UnpackMatrix(u_BoneMatrix[0]) * vec4(a_Position, 1.0);
+    gl_Position = UnpackMatrix(u_Projection) * vec4(t_PositionView, 1.0);
     v_Color = a_Color;
     v_TexCoord.xy = a_TexCoord0 + u_TexCoordOffs.xy;
     v_TexCoord.zw = a_TexCoord1;

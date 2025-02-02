@@ -24,6 +24,7 @@ import * as MDS from './mds.js';
 import * as MOT from './mot.js';
 import * as SINFO from './sceneInfo.js';
 import * as STB from './stb.js';
+import { GfxShaderLibrary } from '../gfx/helpers/GfxShaderLibrary.js';
 
 export class DQ8Program extends DeviceProgram {
     public static ub_SceneParams = 0;
@@ -39,15 +40,17 @@ export class DQ8Program extends DeviceProgram {
     public override both = `
 #define SMOOTH_SKINNING() (SKINNING_MATRIX_COUNT > 0)
 
+${GfxShaderLibrary.MatrixLibrary}
+
 precision mediump float;
-layout(std140, row_major) uniform ub_SceneParams {
-    mat4 u_Projection;
+layout(std140) uniform ub_SceneParams {
+    Mat4x4 u_Projection;
 };
-layout(std140, row_major) uniform ub_MDTSubmeshParams {
-    mat4x3 u_ModelView;
-    mat4x3 u_RigidTrans;
+layout(std140) uniform ub_MDTSubmeshParams {
+    Mat3x4 u_ModelView;
+    Mat3x4 u_RigidTrans;
 #if SMOOTH_SKINNING()
-    mat4x3 u_JointMatrix[SKINNING_MATRIX_COUNT];
+    Mat3x4 u_JointMatrix[SKINNING_MATRIX_COUNT];
 #endif
     vec4 u_BGColor;
     vec4 u_BGColor2;
@@ -78,18 +81,18 @@ out vec4 v_col;
 void mainVS() {
 #if SMOOTH_SKINNING()
     mat4x3 t_JointMatrix = mat4x3(0.0);
-    t_JointMatrix += u_JointMatrix[int(a_JointIndices.x)] * a_JointWeights.x;
-    t_JointMatrix += u_JointMatrix[int(a_JointIndices.y)] * a_JointWeights.y;
-    t_JointMatrix += u_JointMatrix[int(a_JointIndices.z)] * a_JointWeights.z;
-    t_JointMatrix += u_JointMatrix[int(a_JointIndices.w)] * a_JointWeights.w;
+    t_JointMatrix += UnpackMatrix(u_JointMatrix[int(a_JointIndices.x)]) * a_JointWeights.x;
+    t_JointMatrix += UnpackMatrix(u_JointMatrix[int(a_JointIndices.y)]) * a_JointWeights.y;
+    t_JointMatrix += UnpackMatrix(u_JointMatrix[int(a_JointIndices.z)]) * a_JointWeights.z;
+    t_JointMatrix += UnpackMatrix(u_JointMatrix[int(a_JointIndices.w)]) * a_JointWeights.w;
 #else
-    mat4x3 t_JointMatrix = u_RigidTrans;
+    mat4x3 t_JointMatrix = UnpackMatrix(u_RigidTrans);
 #endif
 
     vec3 t_PositionLocal = t_JointMatrix * vec4(a_Position, 1.0);
 
     if (u_bIsSkybox > 0.0)
-        t_PositionLocal = u_RigidTrans * vec4(t_PositionLocal, 1.0); // ???
+        t_PositionLocal = UnpackMatrix(u_RigidTrans) * vec4(t_PositionLocal, 1.0); // ???
 
     if (u_bIsSkybox > 0.0)
         v_col = u_BGColor;
@@ -99,8 +102,8 @@ void mainVS() {
     if (u_bIsSkybox > 0.0 && t_PositionLocal.y < 2000.0 && t_PositionLocal.y > -2000.0)
         v_col = u_BGColor2;
 
-    vec3 t_PositionView = u_ModelView * vec4(t_PositionLocal, 1.0);
-    gl_Position = u_Projection * vec4(t_PositionView, 1.0);
+    vec3 t_PositionView = UnpackMatrix(u_ModelView) * vec4(t_PositionLocal, 1.0);
+    gl_Position = UnpackMatrix(u_Projection) * vec4(t_PositionView, 1.0);
     v_TexCoord = a_TexCoord;
 }
 #endif

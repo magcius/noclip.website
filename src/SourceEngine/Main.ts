@@ -1532,7 +1532,7 @@ const bindingLayoutsBloom: GfxBindingLayoutDescriptor[] = [
 
 class BloomDownsampleProgram extends DeviceProgram {
     public override both = `
-layout(std140, row_major) uniform ub_Params {
+layout(std140) uniform ub_Params {
     vec4 u_Misc[2];
 };
 
@@ -1585,7 +1585,7 @@ void main() {
 
 class BloomBlurProgram extends DeviceProgram {
     public override both = `
-layout(std140, row_major) uniform ub_Params {
+layout(std140) uniform ub_Params {
     vec4 u_Misc[2];
 };
 

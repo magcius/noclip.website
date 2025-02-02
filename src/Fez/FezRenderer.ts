@@ -29,12 +29,14 @@ class FezProgram {
     public static ub_ShapeParams = 1;
 
     public both = `
-layout(std140, row_major) uniform ub_SceneParams {
-    mat4 u_Projection;
+${GfxShaderLibrary.MatrixLibrary}
+
+layout(std140) uniform ub_SceneParams {
+    Mat4x4 u_Projection;
 };
 
-layout(std140, row_major) uniform ub_ShapeParams {
-    mat4x3 u_BoneMatrix[1];
+layout(std140) uniform ub_ShapeParams {
+    Mat3x4 u_BoneMatrix[1];
     vec4 u_LightDirection;
     vec4 u_TexScaleBiasPre;
     vec4 u_TexScaleBiasPost;
@@ -62,9 +64,10 @@ out vec3 v_ShadowTexCoord;
 ${GfxShaderLibrary.MulNormalMatrix}
 
 void main() {
-    vec3 t_PositionWorld = u_BoneMatrix[0] * vec4(a_Position, 1.0);
-    gl_Position = u_Projection * vec4(t_PositionWorld, 1.0);
-    v_Normal = MulNormalMatrix(u_BoneMatrix[0], a_Normal);
+    mat4x3 t_BoneMatrix = UnpackMatrix(u_BoneMatrix[0]);
+    vec3 t_PositionWorld = t_BoneMatrix * vec4(a_Position, 1.0);
+    gl_Position = UnpackMatrix(u_Projection) * vec4(t_PositionWorld, 1.0);
+    v_Normal = MulNormalMatrix(t_BoneMatrix, a_Normal);
     v_TexCoord = a_TexCoord.xy * u_TexScaleBiasPre.xy + u_TexScaleBiasPre.zw;
     v_ShadowTexCoord = gl_Position.xyw;
 }

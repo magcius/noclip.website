@@ -14,6 +14,7 @@ import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
 import { GfxRenderInstList, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
 import { CameraController } from '../Camera.js';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
+import { GfxShaderLibrary } from '../gfx/helpers/GfxShaderLibrary.js';
 
 class IVProgram extends DeviceProgram {
     public static a_Position = 0;
@@ -25,16 +26,18 @@ class IVProgram extends DeviceProgram {
     public override both = `
 precision mediump float;
 
-layout(std140, row_major) uniform ub_SceneParams {
-    mat4 u_Projection;
-    mat4x3 u_ModelView;
+${GfxShaderLibrary.MatrixLibrary}
+
+layout(std140) uniform ub_SceneParams {
+    Mat4x4 u_Projection;
+    Mat3x4 u_ModelView;
 };
 
-layout(std140, row_major) uniform ub_ObjectParams {
+layout(std140) uniform ub_ObjectParams {
     vec4 u_Color;
 };
 
-varying vec2 v_LightIntensity;
+varying float v_LightIntensity;
 
 #ifdef VERT
 layout(location = ${IVProgram.a_Position}) attribute vec3 a_Position;
@@ -42,19 +45,16 @@ layout(location = ${IVProgram.a_Normal}) attribute vec3 a_Normal;
 
 void mainVS() {
     const float t_ModelScale = 20.0;
-    vec3 t_PositionWorld = u_ModelView * vec4(a_Position * t_ModelScale, 1.0);
-    gl_Position = u_Projection * vec4(t_PositionWorld, 1.0);
+    vec3 t_PositionWorld = UnpackMatrix(u_ModelView) * vec4(a_Position * t_ModelScale, 1.0);
+    gl_Position = UnpackMatrix(u_Projection) * vec4(t_PositionWorld, 1.0);
     vec3 t_LightDirection = normalize(vec3(.2, -1, .5));
-    float t_LightIntensityF = dot(-a_Normal, t_LightDirection);
-    float t_LightIntensityB = dot( a_Normal, t_LightDirection);
-    v_LightIntensity = vec2(t_LightIntensityF, t_LightIntensityB);
+    v_LightIntensity = -dot(a_Normal, t_LightDirection);
 }
 #endif
 
 #ifdef FRAG
 void mainPS() {
-    float t_LightIntensity = gl_FrontFacing ? v_LightIntensity.x : v_LightIntensity.y;
-    float t_LightTint = 0.3 * t_LightIntensity;
+    float t_LightTint = 0.3 * v_LightIntensity;
     gl_FragColor = u_Color + vec4(t_LightTint, t_LightTint, t_LightTint, 0.0);
 }
 #endif
@@ -66,6 +66,7 @@ class Chunk {
     public posBuffer: GfxBuffer;
     public nrmBuffer: GfxBuffer;
     public vertexBufferDescriptors: GfxVertexBufferDescriptor[];
+    private visible = true;
 
     constructor(device: GfxDevice, public chunk: IV.Chunk, private inputLayout: GfxInputLayout) {
         // Run through our data, calculate normals and such.
@@ -125,6 +126,9 @@ class Chunk {
     }
 
     public prepareToRender(renderInstManager: GfxRenderInstManager): void {
+        if (!this.visible)
+            return;
+
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, null);
         renderInst.setDrawCount(this.numVertices);
@@ -144,9 +148,7 @@ export class IVRenderer {
     private chunks: Chunk[];
 
     constructor(device: GfxDevice, public iv: IV.IV, inputLayout: GfxInputLayout) {
-        // TODO(jstpierre): Coalesce chunks?
         this.name = iv.name;
-
         this.chunks = this.iv.chunks.map((chunk) => new Chunk(device, chunk, inputLayout));
     }
 
