@@ -110,13 +110,15 @@ export class UnityShaderProgramBase extends DeviceProgram {
     public static Common = `
 precision mediump float;
 
-layout(std140, row_major) uniform ub_SceneParams {
-    mat4 u_ProjectionView;
+${GfxShaderLibrary.MatrixLibrary}
+
+layout(std140) uniform ub_SceneParams {
+    Mat4x4 u_ProjectionView;
 };
 
-layout(std140, row_major) uniform ub_ShapeParams {
+layout(std140) uniform ub_ShapeParams {
     // TODO(jstpierre): Skinned mesh
-    mat4x3 u_BoneMatrix[1];
+    Mat3x4 u_BoneMatrix[1];
 };
 
 #ifdef VERT
@@ -138,7 +140,7 @@ ${GfxShaderLibrary.MulNormalMatrix}
 ${GfxShaderLibrary.CalcScaleBias}
 
 mat4x3 CalcWorldFromLocalMatrix() {
-    return u_BoneMatrix[0];
+    return UnpackMatrix(u_BoneMatrix[0]);
 }
 #endif
 `;

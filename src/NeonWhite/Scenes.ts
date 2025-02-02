@@ -40,7 +40,7 @@ void mainVS() {
     float t_LightIntensityF = dot(-normal, t_LightDirection);
     float t_LightIntensityB = dot( normal, t_LightDirection);
 
-    gl_Position = u_ProjectionView * vec4(t_PositionWorld, 1.0);
+    gl_Position = UnpackMatrix(u_ProjectionView) * vec4(t_PositionWorld, 1.0);
     v_LightIntensity = vec2(t_LightIntensityF, t_LightIntensityB);
     v_TexCoord0 = CalcScaleBias(a_TexCoord0, u_MainTexST);
 }

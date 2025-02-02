@@ -355,9 +355,11 @@ class MaterialProgram_Base extends DeviceProgram {
     public static ub_MeshFragParams = 1;
 
     public static BindingDefinitions = `
+${GfxShaderLibrary.MatrixLibrary}
+
 // Expected to be constant across the entire scene.
-layout(std140, row_major) uniform ub_SceneParams {
-    mat4 u_ProjectionView;
+layout(std140) uniform ub_SceneParams {
+    Mat4x4 u_ProjectionView;
     vec4 u_CameraPosWorld; // DebugMode is in w
 };
 
@@ -570,8 +572,8 @@ precision mediump float;
 
 ${MaterialProgram_Base.BindingDefinitions}
 
-layout(std140, row_major) uniform ub_MeshFragParams {
-    mat4x3 u_WorldFromLocal[1];
+layout(std140) uniform ub_MeshFragParams {
+    Mat3x4 u_WorldFromLocal[1];
     vec4 u_DiffuseMapColor;
     vec4 u_SpecularMapColor;
     vec4 u_EnvDifColor;
@@ -651,18 +653,19 @@ layout(location = ${MaterialProgram_Base.a_Tangent1})  in vec4 a_Tangent1;
 ${GfxShaderLibrary.MulNormalMatrix}
 
 void main() {
-    vec3 t_PositionWorld = u_WorldFromLocal[0] * vec4(a_Position, 1.0);
+    mat4x3 t_WorldFromLocal = UnpackMatrix(u_WorldFromLocal[0]);
+    vec3 t_PositionWorld = t_WorldFromLocal * vec4(a_Position, 1.0);
     v_PositionWorld = t_PositionWorld.xyz;
-    gl_Position = u_ProjectionView * vec4(t_PositionWorld, 1.0);
+    gl_Position = UnpackMatrix(u_ProjectionView) * vec4(t_PositionWorld, 1.0);
 
-    vec3 t_NormalWorld = MulNormalMatrix(u_WorldFromLocal[0], UNORM_TO_SNORM(a_Normal.xyz));
+    vec3 t_NormalWorld = MulNormalMatrix(t_WorldFromLocal, UNORM_TO_SNORM(a_Normal.xyz));
     v_TangentSpaceBasisZ = t_NormalWorld;
 
-    vec3 t_TangentWorld0 = normalize(u_WorldFromLocal[0] * vec4(UNORM_TO_SNORM(a_Tangent0.xyz), 0.0));
+    vec3 t_TangentWorld0 = normalize(t_WorldFromLocal * vec4(UNORM_TO_SNORM(a_Tangent0.xyz), 0.0));
     v_TangentSpaceBasisY0 = vec4(t_TangentWorld0, UNORM_TO_SNORM(a_Tangent0.w));
 
 #ifdef HAS_TANGENT1
-    vec3 t_TangentWorld1 = normalize(u_WorldFromLocal[0] * vec4(UNORM_TO_SNORM(a_Tangent1.xyz), 0.0));
+    vec3 t_TangentWorld1 = normalize(t_WorldFromLocal * vec4(UNORM_TO_SNORM(a_Tangent1.xyz), 0.0));
     v_TangentSpaceBasisY1 = vec4(t_TangentWorld1, UNORM_TO_SNORM(a_Tangent1.w));
 #endif
 
@@ -1010,8 +1013,8 @@ ${MaterialProgram_Base.BindingDefinitions}
 
 layout(binding = 8) uniform samplerCube u_TextureDummy;
 
-layout(std140, row_major) uniform ub_MeshFragParams {
-    mat4x3 u_WorldFromLocal[1];
+layout(std140) uniform ub_MeshFragParams {
+    Mat3x4 u_WorldFromLocal[1];
     DirectionalLight u_DirectionalLight;
     FogParams u_FogParams;
     vec4 u_Misc[7];
@@ -1037,9 +1040,10 @@ layout(location = ${MaterialProgram_Base.a_Position})  in vec3 a_Position;
 layout(location = ${MaterialProgram_Base.a_TexCoord0}) in vec4 a_TexCoord0;
 
 void main() {
-    vec3 t_PositionWorld = u_WorldFromLocal[0] * vec4(a_Position, 1.0);
+    mat4x3 t_WorldFromLocal = UnpackMatrix(u_WorldFromLocal[0]);
+    vec3 t_PositionWorld = t_WorldFromLocal * vec4(a_Position, 1.0);
     v_PositionWorld = t_PositionWorld.xyz;
-    gl_Position = u_ProjectionView * vec4(t_PositionWorld, 1.0);
+    gl_Position = UnpackMatrix(u_ProjectionView) * vec4(t_PositionWorld, 1.0);
 
     v_TexCoord0.xy = DecodeTexCoord(a_TexCoord0.xy) * u_TileScale.xx + u_TexScroll0.xy;
     v_TexCoord1.xy = DecodeTexCoord(a_TexCoord0.xy) * u_TileScale.yy + u_TexScroll1.xy;
@@ -1076,8 +1080,8 @@ ${MaterialProgram_Base.BindingDefinitions}
 
 layout(binding = 8) uniform samplerCube u_TextureDummy;
 
-layout(std140, row_major) uniform ub_MeshFragParams {
-    mat4x3 u_WorldFromLocal[1];
+layout(std140) uniform ub_MeshFragParams {
+    Mat3x4 u_WorldFromLocal[1];
     DirectionalLight u_DirectionalLight;
     FogParams u_FogParams;
     vec4 u_Misc[7];
@@ -1129,20 +1133,21 @@ layout(location = ${MaterialProgram_Base.a_Tangent1})  in vec4 a_Tangent1;
 ${GfxShaderLibrary.MulNormalMatrix}
 
 void main() {
-    vec3 t_PositionWorld = u_WorldFromLocal[0] * vec4(a_Position, 1.0);
+    mat4x3 t_WorldFromLocal = UnpackMatrix(u_WorldFromLocal[0]);
+    vec3 t_PositionWorld = t_WorldFromLocal * vec4(a_Position, 1.0);
     v_PositionWorld = t_PositionWorld.xyz;
-    gl_Position = u_ProjectionView * vec4(t_PositionWorld, 1.0);
+    gl_Position = UnpackMatrix(u_ProjectionView) * vec4(t_PositionWorld, 1.0);
 
     v_Color = a_Color;
     v_TexCoord0 = a_TexCoord0.xy;
     v_TexCoordProj.xyz = gl_Position.xyw;
 
-    v_TangentSpaceBasisZ = MulNormalMatrix(u_WorldFromLocal[0], UNORM_TO_SNORM(a_Normal.xyz));
-    v_TangentSpaceBasisY = normalize(u_WorldFromLocal[0] * vec4(UNORM_TO_SNORM(a_Tangent0.xyz), 0.0));
+    v_TangentSpaceBasisZ = MulNormalMatrix(t_WorldFromLocal, UNORM_TO_SNORM(a_Normal.xyz));
+    v_TangentSpaceBasisY = normalize(t_WorldFromLocal * vec4(UNORM_TO_SNORM(a_Tangent0.xyz), 0.0));
     v_TangentSpaceBasisX = normalize(cross(v_TangentSpaceBasisZ, v_TangentSpaceBasisY) * UNORM_TO_SNORM(a_Tangent0.w));
 
-    v_TexCoordProjX = (u_ProjectionView * vec4(t_PositionWorld + v_TangentSpaceBasisX, 0.0)).xyw;
-    v_TexCoordProjY = (u_ProjectionView * vec4(t_PositionWorld + v_TangentSpaceBasisY, 0.0)).xyw;
+    v_TexCoordProjX = (UnpackMatrix(u_ProjectionView) * vec4(t_PositionWorld + v_TangentSpaceBasisX, 0.0)).xyw;
+    v_TexCoordProjY = (UnpackMatrix(u_ProjectionView) * vec4(t_PositionWorld + v_TangentSpaceBasisY, 0.0)).xyw;
 }
 `;
 
@@ -1996,7 +2001,7 @@ class DepthOfFieldBlurProgram extends DeviceProgram {
 uniform sampler2D u_TextureColor;
 uniform sampler2D u_Texture2;
 
-layout(std140, row_major) uniform ub_Params {
+layout(std140) uniform ub_Params {
     vec4 u_Misc[1];
 };
 #define u_DispersionSq      (u_Misc[0].x)
@@ -2063,7 +2068,7 @@ class DepthOfFieldCombineProgram extends DeviceProgram {
 uniform sampler2D u_TextureColor;
 uniform sampler2D u_TextureFramebufferDepth;
 
-layout(std140, row_major) uniform ub_Params {
+layout(std140) uniform ub_Params {
     vec4 u_Misc[3];
 };
 #define u_NearParam            (u_Misc[1].xyz)
@@ -2269,7 +2274,7 @@ class BloomFilterProgram extends DeviceProgram {
 uniform sampler2D u_TextureColor;
 uniform sampler2D u_TextureFramebufferDepth;
 
-layout(std140, row_major) uniform ub_Params {
+layout(std140) uniform ub_Params {
     vec4 u_Misc[3];
 };
 #define u_NearParam            (u_Misc[0].xyz)
@@ -2456,7 +2461,7 @@ class BloomCombineProgram extends DeviceProgram {
 uniform sampler2D u_TextureColor;
 uniform sampler2D u_Texture2;
 
-layout(std140, row_major) uniform ub_Params {
+layout(std140) uniform ub_Params {
     vec4 u_Misc[3];
 };
 #define u_NearParam            (u_Misc[0].xyz)
@@ -2720,11 +2725,13 @@ class Bloom {
 
 class ToneCorrectProgram extends DeviceProgram {
     public static Common = `
+${GfxShaderLibrary.MatrixLibrary}
+
 uniform sampler2D u_TextureColor;
 uniform sampler2D u_Texture2;
 
-layout(std140, row_major) uniform ub_Params {
-    mat4x3 u_ToneCorrectMatrix;
+layout(std140) uniform ub_Params {
+    Mat3x4 u_ToneCorrectMatrix;
     vec4 u_Misc[1];
 };
 `;
@@ -2747,7 +2754,7 @@ void main() {
     t_Color.rgb *= t_Exposure;
     t_Color.rgb /= (t_Color.rgb + vec3(1.0));
 
-    t_Color.rgb = u_ToneCorrectMatrix * vec4(t_Color.rgb, 1.0);
+    t_Color.rgb = UnpackMatrix(u_ToneCorrectMatrix) * vec4(t_Color.rgb, 1.0);
     gl_FragColor = t_Color;
 }
 `;

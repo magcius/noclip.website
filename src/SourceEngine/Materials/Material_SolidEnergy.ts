@@ -21,11 +21,11 @@ precision mediump float;
 
 ${MaterialShaderTemplateBase.Common}
 
-layout(std140, row_major) uniform ub_ObjectParams {
-    mat4x2 u_BaseTextureTransform;
+layout(std140) uniform ub_ObjectParams {
+    Mat2x4 u_BaseTextureTransform;
 #if defined USE_DETAIL
-    mat4x2 u_Detail1TextureTransform;
-    mat4x2 u_Detail2TextureTransform;
+    Mat2x4 u_Detail1TextureTransform;
+    Mat2x4 u_Detail2TextureTransform;
 #endif
 #if defined USE_FLOWMAP
     vec4 u_Misc[3];
@@ -60,7 +60,7 @@ void mainVS() {
     mat4x3 t_WorldFromLocalMatrix = CalcWorldFromLocalMatrix();
     vec3 t_PositionWorld = t_WorldFromLocalMatrix * vec4(a_Position, 1.0);
     v_PositionWorld.xyz = t_PositionWorld;
-    gl_Position = u_ProjectionView * vec4(t_PositionWorld, 1.0);
+    gl_Position = UnpackMatrix(u_ProjectionView) * vec4(t_PositionWorld, 1.0);
     v_PositionWorld.w = -gl_Position.z;
 #if !GFX_CLIPSPACE_NEAR_ZERO()
     v_PositionWorld.w = v_PositionWorld.w * 0.5 + 0.5;
@@ -71,14 +71,14 @@ void mainVS() {
     vec3 t_TangentSWorld = normalize(t_WorldFromLocalMatrix * vec4(a_TangentS.xyz, 0.0));
     vec3 t_TangentTWorld = cross(t_TangentSWorld, t_NormalWorld);
 
-    v_TexCoord0.xy = u_BaseTextureTransform * vec4(a_TexCoord01.xy, 1.0, 1.0);
+    v_TexCoord0.xy = UnpackMatrix(u_BaseTextureTransform) * vec4(a_TexCoord01.xy, 1.0, 1.0);
     v_TexCoord0.zw = vec2(0.0);
 
     v_TexCoord1.xyzw = vec4(0.0);
 
 #if defined USE_DETAIL
-    v_TexCoord1.xy = u_Detail1TextureTransform * vec4(a_TexCoord01.xy, 1.0, 1.0);
-    v_TexCoord1.zw = u_Detail2TextureTransform * vec4(a_TexCoord01.xy, 1.0, 1.0);
+    v_TexCoord1.xy = UnpackMatrix(u_Detail1TextureTransform) * vec4(a_TexCoord01.xy, 1.0, 1.0);
+    v_TexCoord1.zw = UnpackMatrix(u_Detail2TextureTransform) * vec4(a_TexCoord01.xy, 1.0, 1.0);
 #endif
 
 #if defined USE_FLOWMAP

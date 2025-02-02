@@ -19,7 +19,7 @@ class TempMaterialProgram extends UnityShaderProgramBase {
     public override both = `
 ${UnityShaderProgramBase.Common}
 
-layout(std140, row_major) uniform ub_MaterialParams {
+layout(std140) uniform ub_MaterialParams {
     vec4 u_Color;
     vec4 u_MainTexST;
     vec4 u_Misc[1];
@@ -39,7 +39,7 @@ void mainVS() {
     float t_LightIntensityF = dot(-normal, t_LightDirection);
     float t_LightIntensityB = dot( normal, t_LightDirection);
 
-    gl_Position = u_ProjectionView * vec4(t_PositionWorld, 1.0);
+    gl_Position = UnpackMatrix(u_ProjectionView) * vec4(t_PositionWorld, 1.0);
     v_LightIntensity = vec2(t_LightIntensityF, t_LightIntensityB);
     v_TexCoord0 = CalcScaleBias(a_TexCoord0, u_MainTexST);
 }
@@ -108,7 +108,7 @@ class TerrainMaterialProgram extends UnityShaderProgramBase {
     public override both = `
 ${UnityShaderProgramBase.Common}
 
-layout(std140, row_major) uniform ub_MaterialParams {
+layout(std140) uniform ub_MaterialParams {
     vec4 u_Color;
     vec4 u_TexST[6];
     vec4 u_Misc[1];
@@ -133,7 +133,7 @@ void mainVS() {
     float t_LightIntensityF = dot(-normal, t_LightDirection);
     float t_LightIntensityB = dot( normal, t_LightDirection);
 
-    gl_Position = u_ProjectionView * vec4(t_PositionWorld, 1.0);
+    gl_Position = UnpackMatrix(u_ProjectionView) * vec4(t_PositionWorld, 1.0);
     v_LightIntensity = vec2(t_LightIntensityF, t_LightIntensityB);
 
     for (int i = 0; i < 6; i++)

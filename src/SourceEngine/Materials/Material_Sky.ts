@@ -22,8 +22,8 @@ precision mediump float;
 
 ${MaterialShaderTemplateBase.Common}
 
-layout(std140, row_major) uniform ub_ObjectParams {
-    mat4x2 u_BaseTextureTransform;
+layout(std140) uniform ub_ObjectParams {
+    Mat2x4 u_BaseTextureTransform;
     vec4 u_ColorScale;
 };
 
@@ -35,8 +35,8 @@ layout(binding = 0) uniform sampler2D u_Texture;
 void mainVS() {
     mat4x3 t_WorldFromLocalMatrix = CalcWorldFromLocalMatrix();
     vec3 t_PositionWorld = t_WorldFromLocalMatrix * vec4(a_Position, 1.0);
-    gl_Position = u_ProjectionView * vec4(t_PositionWorld, 1.0);
-    v_TexCoord0.xy = u_BaseTextureTransform * vec4(a_TexCoord01.xy, 0.0, 1.0);
+    gl_Position = UnpackMatrix(u_ProjectionView) * vec4(t_PositionWorld, 1.0);
+    v_TexCoord0.xy = UnpackMatrix(u_BaseTextureTransform) * vec4(a_TexCoord01.xy, 0.0, 1.0);
 }
 #endif
 
@@ -58,8 +58,8 @@ precision mediump float;
 
 ${MaterialShaderTemplateBase.Common}
 
-layout(std140, row_major) uniform ub_ObjectParams {
-    mat4x2 u_BaseTextureTransform;
+layout(std140) uniform ub_ObjectParams {
+    Mat2x4 u_BaseTextureTransform;
     vec4 u_TextureSizeInfo;
     vec4 u_ColorScale;
 };
@@ -79,9 +79,9 @@ layout(binding = 0) uniform sampler2D u_TextureHdrCompressed;
 void mainVS() {
     mat4x3 t_WorldFromLocalMatrix = CalcWorldFromLocalMatrix();
     vec3 t_PositionWorld = t_WorldFromLocalMatrix * vec4(a_Position, 1.0);
-    gl_Position = u_ProjectionView * vec4(t_PositionWorld, 1.0);
+    gl_Position = UnpackMatrix(u_ProjectionView) * vec4(t_PositionWorld, 1.0);
 
-    vec2 t_TexCoord = u_BaseTextureTransform * vec4(a_TexCoord01.xy, 0.0, 1.0);
+    vec2 t_TexCoord = UnpackMatrix(u_BaseTextureTransform) * vec4(a_TexCoord01.xy, 0.0, 1.0);
 
     v_TexCoord0.xy = t_TexCoord + vec2(-u_TexelXIncr, -u_TexelYIncr);
     v_TexCoord0.zw = t_TexCoord + vec2( u_TexelXIncr, -u_TexelYIncr);

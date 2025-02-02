@@ -20,7 +20,7 @@ precision mediump float;
 
 ${MaterialShaderTemplateBase.Common}
 
-layout(std140, row_major) uniform ub_ObjectParams {
+layout(std140) uniform ub_ObjectParams {
     vec4 u_BumpScaleBias;
     vec4 u_RefractTint;
     vec4 u_Misc[1];
@@ -66,7 +66,7 @@ void mainVS() {
     mat4x3 t_WorldFromLocalMatrix = CalcWorldFromLocalMatrix();
     vec3 t_PositionWorld = t_WorldFromLocalMatrix * vec4(a_Position, 1.0);
     v_PositionWorld.xyz = t_PositionWorld;
-    gl_Position = u_ProjectionView * vec4(t_PositionWorld, 1.0);
+    gl_Position = UnpackMatrix(u_ProjectionView) * vec4(t_PositionWorld, 1.0);
 
     vec3 t_NormalWorld = normalize(t_WorldFromLocalMatrix * vec4(a_Normal.xyz, 0.0));
 

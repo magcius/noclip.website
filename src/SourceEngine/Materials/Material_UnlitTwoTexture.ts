@@ -19,9 +19,9 @@ precision mediump float;
 
 ${MaterialShaderTemplateBase.Common}
 
-layout(std140, row_major) uniform ub_ObjectParams {
-    mat4x2 u_Texture1Transform;
-    mat4x2 u_Texture2Transform;
+layout(std140) uniform ub_ObjectParams {
+    Mat2x4 u_Texture1Transform;
+    Mat2x4 u_Texture2Transform;
     vec4 u_ModulationColor;
 };
 
@@ -38,10 +38,10 @@ void mainVS() {
     mat4x3 t_WorldFromLocalMatrix = CalcWorldFromLocalMatrix();
     vec3 t_PositionWorld = t_WorldFromLocalMatrix * vec4(a_Position, 1.0);
     v_PositionWorld.xyz = t_PositionWorld;
-    gl_Position = u_ProjectionView * vec4(t_PositionWorld, 1.0);
+    gl_Position = UnpackMatrix(u_ProjectionView) * vec4(t_PositionWorld, 1.0);
 
-    v_TexCoord0.xy = u_Texture1Transform * vec4(a_TexCoord01.xy, 1.0, 1.0);
-    v_TexCoord0.zw = u_Texture2Transform * vec4(a_TexCoord01.xy, 1.0, 1.0);
+    v_TexCoord0.xy = UnpackMatrix(u_Texture1Transform) * vec4(a_TexCoord01.xy, 1.0, 1.0);
+    v_TexCoord0.zw = UnpackMatrix(u_Texture2Transform) * vec4(a_TexCoord01.xy, 1.0, 1.0);
 }
 #endif
 
