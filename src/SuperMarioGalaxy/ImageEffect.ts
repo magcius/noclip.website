@@ -104,7 +104,7 @@ class BloomPassBaseProgram extends DeviceProgram {
 uniform sampler2D u_Texture;
 uniform sampler2D u_Texture2;
 
-layout(std140, row_major) uniform ub_Params {
+layout(std140) uniform ub_Params {
     vec4 u_Misc[1];
 };
 #define u_BloomIntensity (u_Misc[0].x)
@@ -389,7 +389,7 @@ uniform sampler2D u_Texture;
 uniform sampler2D u_Texture2;
 in vec2 v_TexCoord;
 
-layout(std140, row_major) uniform ub_Params {
+layout(std140) uniform ub_Params {
     vec4 u_Misc[1];
 };
 #define u_MaskFilter   (u_Misc[0].x)
@@ -556,7 +556,7 @@ class DepthOfFieldProgram extends DeviceProgram {
 uniform sampler2D u_TextureColor;
 uniform sampler2D u_TextureFramebufferDepth;
 
-layout(std140, row_major) uniform ub_Params {
+layout(std140) uniform ub_Params {
     vec4 u_Misc[1];
 };
 #define u_Intensity         (u_Misc[0].x)

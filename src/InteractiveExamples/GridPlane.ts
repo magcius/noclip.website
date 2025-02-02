@@ -16,9 +16,11 @@ class GridPlaneProgram extends DeviceProgram {
     public static ub_SceneParams = 0;
 
     public override both = `
-layout(std140, row_major) uniform ub_Params {
-    mat4 u_WorldFromClip;
-    mat4 u_ClipFromWorld;
+${GfxShaderLibrary.MatrixLibrary}
+
+layout(std140) uniform ub_Params {
+    Mat4x4 u_WorldFromClip;
+    Mat4x4 u_ClipFromWorld;
     vec4 u_GridColor;
     vec4 u_Misc[1];
 };
@@ -53,7 +55,7 @@ ${GfxShaderLibrary.saturate}
 ${GfxShaderLibrary.invlerp}
 
 vec3 CalcWorldPos(in vec2 t_ClipXY, in float t_ClipZ) {
-    vec4 t_World = u_WorldFromClip * vec4(t_ClipXY, t_ClipZ, 1.0);
+    vec4 t_World = UnpackMatrix(u_WorldFromClip) * vec4(t_ClipXY, t_ClipZ, 1.0);
     return t_World.xyz / t_World.www;
 }
 
@@ -94,7 +96,7 @@ void main() {
         if (t_FragWorldFar.y > t_FragWorldNear.y)
             gl_FragColor.a *= 0.2;
 
-        vec4 t_PlaneClipPos = u_ClipFromWorld * vec4(t_FragWorldPos.xyz, 1.0);
+        vec4 t_PlaneClipPos = UnpackMatrix(u_ClipFromWorld) * vec4(t_FragWorldPos.xyz, 1.0);
         t_PlaneClipPos.xyz /= t_PlaneClipPos.www;
 
         float t_PlaneClipZ = t_PlaneClipPos.z;

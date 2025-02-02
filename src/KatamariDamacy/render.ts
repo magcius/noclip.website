@@ -29,16 +29,18 @@ export class KatamariDamacyProgram extends DeviceProgram {
     private static reflectionDeclarations = `
 precision mediump float;
 
+${GfxShaderLibrary.MatrixLibrary}
+
 // Expected to be constant across the entire scene.
-layout(std140, row_major) uniform ub_SceneParams {
-    mat4 u_ProjectionView;
+layout(std140) uniform ub_SceneParams {
+    Mat4x4 u_ProjectionView;
     vec4 u_LightDirs[2];
     vec4 u_LightColors[3];
 };
 
-layout(std140, row_major) uniform ub_ModelParams {
-    mat4x3 u_BoneMatrix[SKINNING_MATRIX_COUNT];
-    mat4x2 u_TextureMatrix[1];
+layout(std140) uniform ub_ModelParams {
+    Mat3x4 u_BoneMatrix[SKINNING_MATRIX_COUNT];
+    Mat2x4 u_TextureMatrix[1];
     vec4 u_Color;
     vec4 u_Misc[1];
 };
@@ -61,12 +63,13 @@ ${GfxShaderLibrary.MulNormalMatrix}
 
 void main() {
     int t_SkinningIndex = int(a_Position.w);
-    vec3 t_PositionWorld = u_BoneMatrix[t_SkinningIndex] * vec4(a_Position.xyz, 1.0);
-    gl_Position = u_ProjectionView * vec4(t_PositionWorld, 1.0);
-    v_TexCoord = u_TextureMatrix[0] * vec4(a_TexCoord, 0.0, 1.0);
+    mat4x3 t_BoneMatrix = UnpackMatrix(u_BoneMatrix[t_SkinningIndex]);
+    vec3 t_PositionWorld = t_BoneMatrix * vec4(a_Position.xyz, 1.0);
+    gl_Position = UnpackMatrix(u_ProjectionView) * vec4(t_PositionWorld, 1.0);
+    v_TexCoord = UnpackMatrix(u_TextureMatrix[0]) * vec4(a_TexCoord, 0.0, 1.0);
 
 #ifdef LIGHTING
-    vec3 t_Normal = MulNormalMatrix(u_BoneMatrix[t_SkinningIndex], a_Normal);
+    vec3 t_Normal = MulNormalMatrix(t_BoneMatrix, a_Normal);
     v_DiffuseLighting = u_LightColors[2].rgb;
     for (int i = 0; i < 2; i++)
         v_DiffuseLighting += max(dot(t_Normal, u_LightDirs[i].xyz), 0.0) * u_LightColors[i].rgb;

@@ -139,8 +139,10 @@ class TurboUBER extends DeviceProgram {
     public static globalDefinitions = `
 precision mediump float;
 
-layout(std140, row_major) uniform ub_ShapeParams {
-    mat4 u_ProjectionView;
+${GfxShaderLibrary.MatrixLibrary}
+
+layout(std140) uniform ub_ShapeParams {
+    Mat4x4 u_ProjectionView;
     vec4 u_CameraPosWorld;
 };
 
@@ -150,13 +152,13 @@ struct EnvLightParam {
     vec4 Direction;
 };
 
-layout(std140, row_major) uniform ub_MaterialParams {
-    mat4x3 u_Model;
-    mat4x2 u_TexCoordSRT0;
+layout(std140) uniform ub_MaterialParams {
+    Mat3x4 u_Model;
+    Mat2x4 u_TexCoordSRT0;
     vec4 u_TexCoordBake0ScaleBias;
     vec4 u_TexCoordBake1ScaleBias;
-    mat4x2 u_TexCoordSRT2;
-    mat4x2 u_TexCoordSRT3;
+    Mat2x4 u_TexCoordSRT2;
+    Mat2x4 u_TexCoordSRT3;
     vec4 u_AlbedoColorAndTransparency;
     vec4 u_EmissionColorAndNormalMapWeight;
     vec4 u_SpecularColorAndIntensity;
@@ -225,8 +227,8 @@ out vec3 v_NormalWorld;
 out vec4 v_TangentWorld;
 
 void main() {
-    v_PositionWorld = u_Model * vec4(a_Position, 1.0);
-    gl_Position = u_ProjectionView * vec4(v_PositionWorld, 1.0);
+    v_PositionWorld = UnpackMatrix(u_Model) * vec4(a_Position, 1.0);
+    gl_Position = UnpackMatrix(u_ProjectionView) * vec4(v_PositionWorld, 1.0);
 
     bool gsys_invalidate_texture_srt = ${this.shaderOptionBool('gsys_invalidate_texture_srt')};
 
@@ -235,9 +237,9 @@ void main() {
         v_TexCoord23.xy = a_TexCoord2.xy;
         v_TexCoord23.zw = a_TexCoord3.xy;
     } else {
-        v_TexCoord0 = u_TexCoordSRT0 * vec4(a_TexCoord0.xy, 1.0, 1.0);
-        v_TexCoord23.xy = u_TexCoordSRT2 * vec4(a_TexCoord2.xy, 1.0, 1.0);
-        v_TexCoord23.zw = u_TexCoordSRT3 * vec4(a_TexCoord3.xy, 1.0, 1.0);
+        v_TexCoord0 = UnpackMatrix(u_TexCoordSRT0) * vec4(a_TexCoord0.xy, 1.0, 1.0);
+        v_TexCoord23.xy = UnpackMatrix(u_TexCoordSRT2) * vec4(a_TexCoord2.xy, 1.0, 1.0);
+        v_TexCoord23.zw = UnpackMatrix(u_TexCoordSRT3) * vec4(a_TexCoord3.xy, 1.0, 1.0);
     }
 
     v_TexCoordBake.xy = CalcScaleBias(a_TexCoord1.xy, u_TexCoordBake0ScaleBias);
