@@ -68,8 +68,21 @@ export function rwTexture(texture: rw.Texture, txdName: string, useDXT = true): 
     const image = texture.raster.toImage();
     image.unindex();
     const { width, height } = image;
-    const levels = [image.pixels!.slice()];
-    const pixelFormat = (image.depth === 32) ? GfxFormat.U8_RGBA_NORM : GfxFormat.U8_RGB_NORM;
+    const levels: Uint8Array[] = [];
+    if (image.depth === 24) {
+        const in24 = image.pixels!;
+        const out = new Uint8Array(width * height * 4);
+        for (let i = 0; i < width * height; i++) {
+            out[i*4+0] = in24[i*3+0];
+            out[i*4+1] = in24[i*3+1];
+            out[i*4+2] = in24[i*3+2];
+            out[i*4+3] = 0xFF;
+        }
+        levels.push(out);
+    } else if (image.depth === 32) {
+        levels.push(image.pixels!.slice());
+    }
+    const pixelFormat = GfxFormat.U8_RGBA_NORM;
     const transparent = image.hasAlpha();
     image.delete();
     return { name, width, height, levels, pixelFormat, transparent };
