@@ -390,14 +390,16 @@ class NfsProgram extends DeviceProgram {
     public override both = `
 precision mediump float;
 
-layout(std140, row_major) uniform ub_SceneParams {
-    mat4 u_WorldProjMat;
+${GfxShaderLibrary.MatrixLibrary}
+
+layout(std140) uniform ub_SceneParams {
+    Mat4x4 u_WorldProjMat;
     vec4 u_CameraPos;
     vec2 u_ViewportSize;
 };
 
-layout(std140, row_major) uniform ub_ObjectParams {
-    mat4x3 u_ObjectWorldMat;
+layout(std140) uniform ub_ObjectParams {
+    Mat3x4 u_ObjectWorldMat;
     vec2 u_uvOffset;
     float u_FogIntensity;
 };
@@ -471,15 +473,16 @@ out float v_Gloss;
 out float v_Alpha;
 
 void main() {
-    vec3 worldPos = u_ObjectWorldMat * vec4(a_Position, 1.0);
-    gl_Position = u_WorldProjMat * vec4(worldPos, 1.0);
+    mat4x3 t_ObjectWorldMat = UnpackMatrix(u_ObjectWorldMat);
+    vec3 worldPos = t_ObjectWorldMat * vec4(a_Position, 1.0);
+    gl_Position = UnpackMatrix(u_WorldProjMat) * vec4(worldPos, 1.0);
     vec3 worldPosGame = toGameWorldSpace(worldPos);
 
     vec3 cameraPosWorld = toGameWorldSpace(u_CameraPos.xyz);
     vec3 vecToEye = cameraPosWorld - worldPosGame;
-    vec3 normal = toGameWorldSpace(MulNormalMatrix(u_ObjectWorldMat, a_Normal));
+    vec3 normal = toGameWorldSpace(MulNormalMatrix(t_ObjectWorldMat, a_Normal));
 #ifdef NORMALMAP
-    vec3 tangent = toGameWorldSpace(u_ObjectWorldMat * vec4(a_Tangent, 0.0));
+    vec3 tangent = toGameWorldSpace(t_ObjectWorldMat * vec4(a_Tangent, 0.0));
     vec3 bitangent = normalize(cross(normal, tangent));
 
     vec3 tangentLightVec = toTangentSpace(-SunDirection, tangent, bitangent, normal);

@@ -13,6 +13,7 @@ import { NfsTexture } from "./region.js";
 import { attachmentStatesAdditive, attachmentStatesTranslucent } from "./render.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { computeViewSpaceDepthFromWorldSpacePoint } from "../Camera.js";
+import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
 
 export class NfsParticleEmitterGroup {
     private children: NfsParticleEmitter[];
@@ -233,12 +234,14 @@ export class NfsParticleProgram extends DeviceProgram {
     public static ub_ObjectParams = 1;
 
     public override both = `
-layout(std140, row_major) uniform ub_SceneParams {
-    mat4 u_ViewProjMat;
+${GfxShaderLibrary.MatrixLibrary}
+
+layout(std140) uniform ub_SceneParams {
+    Mat4x4 u_ViewProjMat;
 };
 
-layout(std140, row_major) uniform ub_ObjectParams {
-    mat4x3 u_ObjectViewMat;
+layout(std140) uniform ub_ObjectParams {
+    Mat3x4 u_ObjectViewMat;
     vec4 u_Color;
     float u_Frame;
     float u_Size;
@@ -253,8 +256,8 @@ layout(location = ${NfsParticleProgram.a_Position}) in vec3 a_Position;
 out vec2 v_TexCoord;
 
 void main() {
-    vec3 t_PositionWorld = u_ObjectViewMat * vec4(a_Position, 1.0);
-    gl_Position = u_ViewProjMat * vec4(t_PositionWorld, 1.0);
+    vec3 t_PositionWorld = UnpackMatrix(u_ObjectViewMat) * vec4(a_Position, 1.0);
+    gl_Position = UnpackMatrix(u_ViewProjMat) * vec4(t_PositionWorld, 1.0);
 
     float frame = mod(u_Frame, u_Size * u_Size);
     float constX = mod(frame, u_Size);

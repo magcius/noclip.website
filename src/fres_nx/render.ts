@@ -25,6 +25,7 @@ import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from 
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers.js';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
+import { GfxShaderLibrary } from '../gfx/helpers/GfxShaderLibrary.js';
 
 export class BRTITextureHolder extends TextureHolder<BNTX.BRTI> {
     public addFRESTextures(device: GfxDevice, fres: FRES): void {
@@ -147,9 +148,11 @@ class AglProgram extends DeviceProgram {
     public static globalDefinitions = `
 precision mediump float;
 
-layout(std140, row_major) uniform ub_ShapeParams {
-    mat4 u_Projection;
-    mat4x3 u_ModelView;
+${GfxShaderLibrary.MatrixLibrary}
+
+layout(std140) uniform ub_ShapeParams {
+    Mat4x4 u_Projection;
+    Mat3x4 u_ModelView;
 };
 
 uniform sampler2D u_Samplers[8];
@@ -289,8 +292,8 @@ out vec4 v_NormalWorld;
 out vec4 v_TangentWorld;
 
 void main() {
-    vec3 t_PositionView = u_ModelView * vec4(_p0, 1.0);
-    gl_Position = u_Projection * vec4(t_PositionView, 1.0);
+    vec3 t_PositionView = UnpackMatrix(u_ModelView) * vec4(_p0, 1.0);
+    gl_Position = UnpackMatrix(u_Projection) * vec4(t_PositionView, 1.0);
     v_PositionWorld = _p0.xyz;
     v_TexCoord0 = _u0;
     v_VtxColor = _c0;

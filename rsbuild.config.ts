@@ -47,14 +47,7 @@ export default defineConfig({
   // Enable async TypeScript type checking.
   plugins: [pluginTypeCheck()],
   tools: {
-    // Add a rule to treat .glsl files as source assets.
-    rspack(_config, { addRules }) {
-      addRules([
-        {
-          test: /\.glsl$/,
-          type: 'asset/source',
-        },
-      ]);
+    rspack(_config) {
     },
     // Disable standards-compliant class field transforms.
     swc: {

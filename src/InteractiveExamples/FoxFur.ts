@@ -126,9 +126,9 @@ class FurProgram extends DeviceProgram {
     public static ub_ShapeParams = 0;
 
     public override both = `
-layout(std140, row_major) uniform ub_ShapeParams {
-    mat4 u_Projection;
-    mat4x3 u_BoneMatrix[1];
+layout(std140) uniform ub_ShapeParams {
+    Mat4x4 u_Projection;
+    Mat3x4 u_BoneMatrix[1];
     vec4 u_Misc[3];
     vec4 u_TintColor;
 };
@@ -159,8 +159,8 @@ out vec2 v_TexCoord;
 
 void main() {
     vec3 t_PositionLocal = a_Position.xyz + (a_Normal.xyz * u_LayerMagnitude);
-    vec3 t_PositionView = u_BoneMatrix[0] * vec4(t_PositionLocal, 1.0);
-    gl_Position = u_Projection * vec4(t_PositionView, 1.0);
+    vec3 t_PositionView = UnpackMatrix(u_BoneMatrix[0]) * vec4(t_PositionLocal, 1.0);
+    gl_Position = UnpackMatrix(u_Projection) * vec4(t_PositionView, 1.0);
     v_TexCoord = a_TexCoord.xy;
 }
 `;

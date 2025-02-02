@@ -45,10 +45,10 @@ struct DirectionalLight {
     vec4 color;
 };
 
-layout(std140, row_major) uniform ub_AtomicParams {
-    mat4 u_Projection;
-    mat4x3 u_ViewMatrix;
-    mat4x3 u_ModelMatrix;
+layout(std140) uniform ub_AtomicParams {
+    Mat4x4 u_Projection;
+    Mat3x4 u_ViewMatrix;
+    Mat3x4 u_ModelMatrix;
     DirectionalLight u_DirectionalLights[MAX_DIRECTIONAL_LIGHTS];
     vec4 u_AmbientColor;
     vec4 u_FogColor;
@@ -63,7 +63,7 @@ layout(std140, row_major) uniform ub_AtomicParams {
 #define u_EnablePrelit ((u_AtomicFlags & 0x1) != 0)
 #define u_EnableLight ((u_AtomicFlags & 0x2) != 0)
 
-layout(std140, row_major) uniform ub_MeshParams {
+layout(std140) uniform ub_MeshParams {
     vec4 u_MaterialColor;
     vec4 u_MeshMisc;
 };
@@ -92,11 +92,11 @@ ${GfxShaderLibrary.saturate}
 ${GfxShaderLibrary.MulNormalMatrix}
 
 void main() {
-    vec3 t_PositionWorld = u_ModelMatrix * vec4(a_Position, 1.0);
-    vec3 t_PositionView = u_ViewMatrix * vec4(t_PositionWorld, 1.0);
-    gl_Position = u_Projection * vec4(t_PositionView, 1.0);
+    vec3 t_PositionWorld = UnpackMatrix(u_ModelMatrix) * vec4(a_Position, 1.0);
+    vec3 t_PositionView = UnpackMatrix(u_ViewMatrix) * vec4(t_PositionWorld, 1.0);
+    gl_Position = UnpackMatrix(u_Projection) * vec4(t_PositionView, 1.0);
 
-    vec3 t_Normal = MulNormalMatrix(u_ModelMatrix, a_Normal);
+    vec3 t_Normal = MulNormalMatrix(UnpackMatrix(u_ModelMatrix), a_Normal);
 
     vec4 t_Color = u_EnablePrelit ? a_Color : (u_EnableLight ? vec4(0, 0, 0, 1) : vec4(1.0));
 

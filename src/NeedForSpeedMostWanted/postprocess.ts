@@ -149,7 +149,7 @@ void main() {
 
 class NfsVisualTreatmentProgram extends DeviceProgram {
     public override both = `
-layout(std140, row_major) uniform ub_PostProcParams {
+layout(std140) uniform ub_PostProcParams {
     float ub_TintIntensity;
 };
 
