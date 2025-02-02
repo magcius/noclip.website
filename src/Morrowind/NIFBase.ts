@@ -1,24 +1,24 @@
 
 import { ReadonlyMat4, mat3, mat4, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { computeViewSpaceDepthFromWorldSpacePoint } from "../Camera.js";
 import { Color, White, colorCopy, colorNewCopy } from "../Color.js";
 import { Frustum } from "../Geometry.js";
-import { computeModelMatrixSRT, getMatrixTranslation, scaleMatrix, transformVec3Mat4w1 } from "../MathHelpers.js";
+import { getMatrixTranslation, scaleMatrix, transformVec3Mat4w1 } from "../MathHelpers.js";
 import { DeviceProgram } from "../Program.js";
 import { TextureMapping } from "../TextureHolder.js";
 import { makeStaticDataBufferFromSlice } from "../gfx/helpers/BufferHelpers.js";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
+import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
+import { reverseDepthForCompareMode } from "../gfx/helpers/ReversedDepthHelpers.js";
 import { fillColor, fillMatrix4x3, fillVec4 } from "../gfx/helpers/UniformBufferHelpers.js";
-import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBufferUsage, GfxCompareMode, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxMegaStateDescriptor, GfxMipFilterMode, GfxSamplerDescriptor, GfxTexFilterMode, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxWrapMode } from "../gfx/platform/GfxPlatform.js";
+import { GfxBlendFactor, GfxBufferUsage, GfxCompareMode, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxMegaStateDescriptor, GfxMipFilterMode, GfxSamplerDescriptor, GfxTexFilterMode, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxWrapMode } from "../gfx/platform/GfxPlatform.js";
 import { GfxBuffer, GfxInputLayout, GfxProgram } from "../gfx/platform/GfxPlatformImpl.js";
-import { GfxRenderInst, GfxRenderInstManager, GfxRendererLayer, makeDepthKey, makeSortKey, makeSortKeyTranslucent, setSortKeyDepthKey, setSortKeyTranslucentDepth } from "../gfx/render/GfxRenderInstManager.js";
+import { GfxRenderInst, GfxRenderInstManager, makeDepthKey, setSortKeyTranslucentDepth } from "../gfx/render/GfxRenderInstManager.js";
 import { assert, assertExists, fallbackUndefined, nArray, readString, setBitFlagEnabled } from "../util.js";
 import { normalizeTexturePath } from "./ESM.js";
 import { NIFParse } from "./NIFParse.js";
 import { Globals, ModelCache } from "./Render.js";
-import { computeViewSpaceDepthFromWorldSpacePoint } from "../Camera.js";
-import { reverseDepthForCompareMode } from "../gfx/helpers/ReversedDepthHelpers.js";
-import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
 
 export class Stream {
     private offset: number = 0;
@@ -276,24 +276,34 @@ class NifShader extends DeviceProgram {
 precision mediump float;
 precision mediump sampler2DArray;
 
-layout(std140, row_major) uniform ub_SceneParams {
-    mat4 u_ClipFromWorld;
+${GfxShaderLibrary.MatrixLibrary}
+
+layout(std140) uniform ub_SceneParams {
+    Mat4x4 u_ClipFromWorld;
     vec4 u_SunDirection;
     vec4 u_SunDiffuse;
     vec4 u_SunAmbient;
 };
 
-layout(std140, row_major) uniform ub_ObjectParams {
-    mat4x3 u_LocalFromNode;
+layout(std140) uniform ub_ObjectParams {
+    Mat3x4 u_LocalFromNode;
     vec4 u_Misc[1];
     vec4 u_DiffuseColor;
     vec4 u_AmbientColor;
     vec4 u_EmissiveColor;
 };
 
+layout(location = 0) uniform sampler2D u_TextureBase;
+layout(location = 1) uniform sampler2D u_TextureDark;
+layout(location = 2) uniform sampler2D u_TextureDetail;
+layout(location = 3) uniform sampler2D u_TextureGloss;
+layout(location = 4) uniform sampler2D u_TextureGlow;
+layout(location = 5) uniform sampler2D u_TextureBump;
+layout(location = 6) uniform sampler2D u_TextureDecal;
+
 #if USE_INSTANCING()
-layout(std140, row_major) uniform ub_InstanceParams {
-    mat4x3 u_WorldFromLocal[${NifShader.MaxInstances}];
+layout(std140) uniform ub_InstanceParams {
+    Mat3x4 u_WorldFromLocal[${NifShader.MaxInstances}];
 };
 #endif
 
@@ -322,15 +332,15 @@ void main() {
     vec3 t_NormalWorld;
 
 #if USE_INSTANCING()
-    mat4x3 t_WorldFromNode = mat4x3(mat4(u_WorldFromLocal[gl_InstanceID]) * mat4(u_LocalFromNode));
-    t_PositionWorld = t_WorldFromNode * vec4(a_Position, 1.0);
-    t_NormalWorld = MulNormalMatrix(t_WorldFromNode, a_Normal);
+    mat4x3 t_WorldFromNode = mat4x3(mat4(UnpackMatrix(u_WorldFromLocal[gl_InstanceID])) * mat4(UnpackMatrix(u_LocalFromNode)));
 #else
-    t_PositionWorld = u_LocalFromNode * vec4(a_Position, 1.0);
-    t_NormalWorld = MulNormalMatrix(u_LocalFromNode, a_Normal);
+    mat4x3 t_WorldFromNode = UnpackMatrix(u_LocalFromNode);
 #endif
 
-    gl_Position = u_ClipFromWorld * vec4(t_PositionWorld, 1.0);
+    t_PositionWorld = t_WorldFromNode * vec4(a_Position, 1.0);
+    t_NormalWorld = MulNormalMatrix(t_WorldFromNode, a_Normal);
+
+    gl_Position = UnpackMatrix(u_ClipFromWorld) * vec4(t_PositionWorld, 1.0);
 
     vec4 t_DiffuseColor = u_DiffuseColor;
     vec4 t_AmbientColor = u_AmbientColor;
@@ -356,15 +366,6 @@ void main() {
 `;
 
     public override frag = `
-layout(location = 0) uniform sampler2D u_TextureBase;
-layout(location = 1) uniform sampler2D u_TextureDark;
-layout(location = 2) uniform sampler2D u_TextureDetail;
-layout(location = 3) uniform sampler2D u_TextureGloss;
-layout(location = 4) uniform sampler2D u_TextureGlow;
-layout(location = 5) uniform sampler2D u_TextureBump;
-layout(location = 6) uniform sampler2D u_TextureDecal;
-
-in vec3 v_NormalWorld;
 in vec4 v_Color0;
 in vec2 v_TexCoord0;
 
