@@ -15,6 +15,7 @@ import { branchlessONB } from "../../DebugJunk.js";
 import { MathConstants, Vec3UnitX, Vec3UnitY, Vec3UnitZ, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, vec3FromBasis2 } from "../../MathHelpers.js";
 import { IsDepthReversed } from "./ReversedDepthHelpers.js";
 import { assert } from "../platform/GfxPlatformUtil.js";
+import { GfxShaderLibrary } from "./GfxShaderLibrary.js";
 
 // TODO(jstpierre):
 //  - Integrate text renderer?
@@ -42,9 +43,11 @@ const bindingLayouts: GfxBindingLayoutDescriptor[] = [
 ];
 
 const debugDrawVS = `
-layout(std140, row_major) uniform ub_BaseData {
-    mat4 u_ClipFromView;
-    mat4x3 u_ViewFromWorld;
+${GfxShaderLibrary.MatrixLibrary}
+
+layout(std140) uniform ub_BaseData {
+    Mat4x4 u_ClipFromView;
+    Mat3x4 u_ViewFromWorld;
     vec4 u_Misc[1];
 };
 
@@ -60,7 +63,7 @@ flat out uint v_Flags;
 
 void main() {
     uint t_Flags = uint(a_Color.a);
-    gl_Position = u_ClipFromView * vec4(u_ViewFromWorld * vec4(a_Position.xyz, 1.0), 1.0);
+    gl_Position = UnpackMatrix(u_ClipFromView) * vec4(UnpackMatrix(u_ViewFromWorld) * vec4(a_Position.xyz, 1.0), 1.0);
 
     if (gl_InstanceID >= 1) {
         uint t_LineIndex = uint(gl_InstanceID - 1);

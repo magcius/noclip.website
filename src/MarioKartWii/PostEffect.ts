@@ -74,7 +74,7 @@ class EggBloomBaseProgram extends DeviceProgram {
 uniform sampler2D u_Texture;
 uniform sampler2D u_Texture2;
 
-layout(std140, row_major) uniform ub_Params {
+layout(std140) uniform ub_Params {
     vec4 u_ThresholdColor;
     vec4 u_CompositeColor;
     vec4 u_CompositeColorScale;
@@ -420,11 +420,13 @@ export function parseBDOF(buffer: ArrayBufferSlice): BDOF {
 
 class EggDOFBaseProgram extends DeviceProgram {
     public static BindingsDefinition = `
+${GfxShaderLibrary.MatrixLibrary}
+
 uniform sampler2D u_Texture;
 uniform sampler2D u_Texture2;
 
-layout(std140, row_major) uniform ub_Params {
-    mat4x2 u_IndTexMat;
+layout(std140) uniform ub_Params {
+    Mat2x4 u_IndTexMat;
     vec4 u_Misc0;
 };
 
@@ -482,7 +484,7 @@ void main() {
 
 #ifdef USE_IND_WARP_TEX
     // Handcoded indtex pipeline...
-    vec2 t_WarpTexCoord = u_IndTexMat * vec4(v_TexCoord, 0.0, 1.0);
+    vec2 t_WarpTexCoord = UnpackMatrix(u_IndTexMat) * vec4(v_TexCoord, 0.0, 1.0);
     vec2 t_IndTexOffs = ((255.0 * texture(SAMPLER_2D(u_Texture2), t_WarpTexCoord).ba) - 128.0) * u_IndTexIndScale;
     t_TexCoord += t_IndTexOffs;
 #endif

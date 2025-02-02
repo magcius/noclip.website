@@ -3,6 +3,16 @@
 
 export namespace GfxShaderLibrary {
 
+export const MatrixLibrary = `
+struct Mat2x4 { vec4 mx; vec4 my; };
+struct Mat3x4 { vec4 mx; vec4 my; vec4 mz; };
+struct Mat4x4 { vec4 mx; vec4 my; vec4 mz; vec4 mw; };
+
+mat4x2 UnpackMatrix(Mat2x4 m) { return mat4x2(transpose(mat4(m.mx, m.my, vec4(0, 0, 0, 0), vec4(0, 0, 0, 1)))); }
+mat4x3 UnpackMatrix(Mat3x4 m) { return mat4x3(transpose(mat4(m.mx, m.my, m.mz, vec4(0, 0, 0, 1)))); }
+mat4 UnpackMatrix(Mat4x4 m) { return transpose(mat4(m.mx, m.my, m.mz, m.mw)); }
+`;
+
 // Helper math utility
 export const saturate: string = `
 float saturate(float v) { return clamp(v, 0.0, 1.0); }

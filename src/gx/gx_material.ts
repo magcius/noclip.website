@@ -332,9 +332,11 @@ export function materialHasDynamicAlphaTest(material: { hasDynamicAlphaTest?: bo
 
 function generateBindingsDefinition(material: { hasPostTexMtxBlock?: boolean, hasLightsBlock?: boolean, hasFogBlock?: boolean, usePnMtxIdx?: boolean, hasDynamicAlphaTest?: boolean }): string {
     return `
+${GfxShaderLibrary.MatrixLibrary}
+
 // Expected to be constant across the entire scene.
-layout(std140, row_major) uniform ub_SceneParams {
-    mat4 u_Projection;
+layout(std140) uniform ub_SceneParams {
+    Mat4x4 u_Projection;
     vec4 u_Misc0;
 };
 
@@ -358,19 +360,19 @@ struct FogBlock {
 };
 
 // Expected to change with each material.
-layout(std140, row_major) uniform ub_MaterialParams {
+layout(std140) uniform ub_MaterialParams {
     vec4 u_ColorMatReg[2];
     vec4 u_ColorAmbReg[2];
     vec4 u_KonstColor[4];
     vec4 u_Color[4];
-    mat4x3 u_TexMtx[10];
+    Mat3x4 u_TexMtx[10];
     vec4 u_TextureSizes[4];
     vec4 u_TextureBiases[2];
-    mat4x2 u_IndTexMtx[3];
+    Mat2x4 u_IndTexMtx[3];
 
     // Optional parameters.
 ${materialHasPostTexMtxBlock(material) ? `
-    mat4x3 u_PostTexMtx[20];
+    Mat3x4 u_PostTexMtx[20];
 ` : ``}
 ${materialHasLightsBlock(material) ? `
     Light u_LightParams[8];
@@ -384,11 +386,11 @@ ${materialHasDynamicAlphaTest(material) ? `
 };
 
 // Expected to change with each shape draw.
-layout(std140, row_major) uniform ub_DrawParams {
+layout(std140) uniform ub_DrawParams {
 ${materialUsePnMtxIdx(material) ? `
-    mat4x3 u_PosMtx[10];
+    Mat3x4 u_PosMtx[10];
 ` : `
-    mat4x3 u_PosMtx[1];
+    Mat3x4 u_PosMtx[1];
 `}
 };
 
@@ -578,10 +580,10 @@ ${this.generateLightAttnFn(chan, lightName)}
             return `${src}.xyz`;
         } else if (pnt >= GX.TexGenMatrix.TEXMTX0) {
             const texMtxIdx = (pnt - GX.TexGenMatrix.TEXMTX0) / 3;
-            return nrm ? `MulNormalMatrix(u_TexMtx[${texMtxIdx}], ${src})` : `(u_TexMtx[${texMtxIdx}] * ${src})`;
+            return nrm ? `MulNormalMatrix(UnpackMatrix(u_TexMtx[${texMtxIdx}]), ${src})` : `(UnpackMatrix(u_TexMtx[${texMtxIdx}]) * ${src})`;
         } else if (pnt >= GX.TexGenMatrix.PNMTX0) {
             const pnMtxIdx = (pnt - GX.TexGenMatrix.PNMTX0) / 3;
-            return nrm ? `MulNormalMatrix(u_PosMtx[${pnMtxIdx}], ${src})` : `(u_PosMtx[${pnMtxIdx}] * ${src})`;
+            return nrm ? `MulNormalMatrix(UnpackMatrix(u_PosMtx[${pnMtxIdx}]), ${src})` : `(UnpackMatrix(u_PosMtx[${pnMtxIdx}]) * ${src})`;
         } else {
             throw "whoops";
         }
@@ -642,7 +644,7 @@ ${this.generateLightAttnFn(chan, lightName)}
             return `${src}.xyz`;
         } else if (texCoordGen.postMatrix >= GX.PostTexGenMatrix.PTTEXMTX0) {
             const texMtxIdx = (texCoordGen.postMatrix - GX.PostTexGenMatrix.PTTEXMTX0) / 3;
-            return `(u_PostTexMtx[${texMtxIdx}] * ${src})`;
+            return `(UnpackMatrix(u_PostTexMtx[${texMtxIdx}]) * ${src})`;
         } else {
             throw "whoops";
         }
@@ -1115,15 +1117,15 @@ ${this.generateLightAttnFn(chan, lightName)}
         case GX.IndTexMtxID._0:
         case GX.IndTexMtxID._1:
         case GX.IndTexMtxID._2:
-            return `u_IndTexMtx[${indTexMtxIdx}] * vec4(${indTexCoord}, 0.0)`;
+            return `UnpackMatrix(u_IndTexMtx[${indTexMtxIdx}]) * vec4(${indTexCoord}, 0.0)`;
         case GX.IndTexMtxID.S0:
         case GX.IndTexMtxID.S1:
         case GX.IndTexMtxID.S2:
-            return `(u_IndTexMtx[${indTexMtxIdx}][3][0] * ReadTexCoord${stage.texCoordId}() * ${indTexCoord}.xx)`;
+            return `u_IndTexMtx[${indTexMtxIdx}].mw.x * ReadTexCoord${stage.texCoordId}() * ${indTexCoord}.xx)`;
         case GX.IndTexMtxID.T0:
         case GX.IndTexMtxID.T1:
         case GX.IndTexMtxID.T2:
-            return `(u_IndTexMtx[${indTexMtxIdx}][3][0] * ReadTexCoord${stage.texCoordId}() * ${indTexCoord}.yy)`;
+            return `u_IndTexMtx[${indTexMtxIdx}].mw.x * ReadTexCoord${stage.texCoordId}() * ${indTexCoord}.yy)`;
         default:
             throw "whoops";
         }
@@ -1417,9 +1419,9 @@ mat4x3 GetPosTexMatrix(float t_MtxIdxFloat) {
     if (t_MtxIdx == 20u)
         return mat4x3(1.0);
     else if (t_MtxIdx >= 10u)
-        return u_TexMtx[(t_MtxIdx - 10u)];
+        return UnpackMatrix(u_TexMtx[(t_MtxIdx - 10u)]);
     else
-        return u_PosMtx[t_MtxIdx];
+        return UnpackMatrix(u_PosMtx[t_MtxIdx]);
 }
 
 ${GfxShaderLibrary.MulNormalMatrix}
@@ -1439,7 +1441,7 @@ void main() {
     vec4 t_ColorChanTemp;
 ${this.generateLightChannels()}
 ${this.generateTexGens()}
-    gl_Position = u_Projection * vec4(t_Position, 1.0);
+    gl_Position = UnpackMatrix(u_Projection) * vec4(t_Position, 1.0);
 }
 `;
 
