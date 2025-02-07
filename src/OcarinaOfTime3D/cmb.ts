@@ -4,7 +4,6 @@ import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import { mat4, ReadonlyVec4, vec4 } from 'gl-matrix';
 import { TextureFormat, decodeTexture, computeTextureByteSize, getTextureFormatFromGLFormat } from './pica_texture.js';
 import { GfxCullMode, GfxBlendMode, GfxBlendFactor, GfxMegaStateDescriptor, GfxCompareMode, GfxChannelWriteMask, GfxChannelBlendState, GfxTextureDimension } from '../gfx/platform/GfxPlatform.js';
-import { makeMegaState } from '../gfx/helpers/GfxMegaStateDescriptorHelpers.js';
 import { Color, colorNewFromRGBA8, colorNewFromRGBA } from '../Color.js';
 import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers.js';
 import { AnimationKeyframeHermite, sampleAnimationTrack,} from './csab.js';
@@ -277,7 +276,7 @@ export interface Material {
     textureEnvironment: TextureEnvironment;
     alphaTestFunction: GfxCompareMode;
     alphaTestReference: number;
-    renderFlags: GfxMegaStateDescriptor;
+    renderFlags: Partial<GfxMegaStateDescriptor>;
     isTransparent: boolean;
     polygonOffset: number;
     isVertexLightingEnabled: boolean;
@@ -624,7 +623,7 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
         }
 
         const isTransparent = blendEnabled;
-        const renderFlags = makeMegaState({
+        const renderFlags = {
             attachmentsState: [
                 {
                     channelWriteMask: GfxChannelWriteMask.AllChannels,
@@ -636,7 +635,7 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
             depthCompare: reverseDepthForCompareMode(depthTestFunction),
             depthWrite: depthWriteEnabled,
             cullMode,
-        });
+        };
 
         const combinerBufferColor = colorNewFromRGBA(bufferColorR, bufferColorG, bufferColorB, bufferColorA);
         const textureEnvironment = { textureCombiners, combinerBufferColor };
