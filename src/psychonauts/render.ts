@@ -20,6 +20,7 @@ import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 import { AABB } from '../Geometry.js';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers.js';
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
+import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
 
 function decodeTextureData(format: TextureFormat, width: number, height: number, pixels: Uint8Array<ArrayBuffer>): DecodedSurfaceSW {
     switch (format) {
@@ -92,6 +93,8 @@ class PsychonautsProgram extends DeviceProgram {
 
     public override both = `
 precision mediump float;
+
+${GfxShaderLibrary.MatrixLibrary}
 
 // Expected to be constant across the entire scene.
 layout(std140) uniform ub_SceneParams {
