@@ -82,7 +82,7 @@ layout(std140) uniform ub_ObjectParams {
     vec4 u_SpecTintBoost;
 #endif
 #if defined USE_PROJECTED_LIGHT
-    mat4 u_ProjectedLightFromWorldMatrix;
+    Mat4x4 u_ProjectedLightFromWorldMatrix;
     vec4 u_ProjectedLightColor;
     vec4 u_ProjectedLightOrigin;
 #endif
@@ -901,7 +901,7 @@ void mainPS() {
 
 #if defined USE_PROJECTED_LIGHT
     // Projected Light (Flashlight, env_projected_texture)
-    vec4 t_ProjectedLightCoord = u_ProjectedLightFromWorldMatrix * vec4(v_PositionWorld.xyz, 1.0);
+    vec4 t_ProjectedLightCoord = UnpackMatrix(u_ProjectedLightFromWorldMatrix) * vec4(v_PositionWorld.xyz, 1.0);
     t_ProjectedLightCoord.xyz /= t_ProjectedLightCoord.www;
 
     // Clip space is between -1 and 1. Move it into 0...1 space.
