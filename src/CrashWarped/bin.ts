@@ -1468,6 +1468,7 @@ function generateVertices(view: DataView, header: SVTX, comp: CompressedVertex[]
             dst[dstOffset++] = view.getUint8(offs + 2);
             dst[dstOffset++] = view.getUint8(offs + 1);
             offs += 3;
+            dstOffset++;
         }
     } else {
         const stream = new SignedBitStream(view);
@@ -1485,6 +1486,7 @@ function generateVertices(view: DataView, header: SVTX, comp: CompressedVertex[]
             dst[dstOffset++] = tmpVtx[0];
             dst[dstOffset++] = tmpVtx[1];
             dst[dstOffset++] = tmpVtx[2];
+            dstOffset++;
         }
     }
     return dstOffset;
@@ -1570,7 +1572,7 @@ function buildModel(view: DataView, geo: TGEO, svtx: SVTX[], textures: number[])
 
     // weirdly these two counts can disagree, this didn't cause issues before
     const animationVertexCount = geo.compression.length || svtx[0].count;
-    const animationRowSize = (3 * animationVertexCount + 3) & (~3); // round up to mult of 4
+    const animationRowSize = 4 * animationVertexCount;
     const vertexData: VertexAnimationData = {
         buffer: new Uint8Array(animationRowSize * svtx.length),
         vtxCount: animationVertexCount,
@@ -1626,9 +1628,9 @@ function buildModel(view: DataView, geo: TGEO, svtx: SVTX[], textures: number[])
                     attrData[infoOffs + 5] = (info.vs[i] + .5) / animationVertexCount;
                 } else {
                     // apply scale and translation now, since we won't do it at render time for simple meshes
-                    attrData[infoOffs + 5] = (vertexData.buffer[3 * info.vs[i] + 0] + svtx[0].origin[0]) * geo.scale[0] / 8;
-                    attrData[infoOffs + 6] = (vertexData.buffer[3 * info.vs[i] + 1] + svtx[0].origin[1]) * geo.scale[1] / 8;
-                    attrData[infoOffs + 7] = (vertexData.buffer[3 * info.vs[i] + 2] + svtx[0].origin[2]) * geo.scale[2] / 8;
+                    attrData[infoOffs + 5] = (vertexData.buffer[4 * info.vs[i] + 0] + svtx[0].origin[0]) * geo.scale[0] / 8;
+                    attrData[infoOffs + 6] = (vertexData.buffer[4 * info.vs[i] + 1] + svtx[0].origin[1]) * geo.scale[1] / 8;
+                    attrData[infoOffs + 7] = (vertexData.buffer[4 * info.vs[i] + 2] + svtx[0].origin[2]) * geo.scale[2] / 8;
                 }
 
                 indexData[indexOffs] = indexOffs;

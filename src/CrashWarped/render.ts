@@ -669,7 +669,7 @@ export class AnimatedMeshData extends ModelData {
     constructor(device: GfxDevice, cache: GfxRenderCache, public mesh: BIN.AnimatedMeshGFX, animator: TextureAnimator) {
         super(animator);
 
-        const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGB_NORM, mesh.vertexData.vtxCount, mesh.vertexData.frameCount, 1));
+        const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, mesh.vertexData.vtxCount, mesh.vertexData.frameCount, 1));
         device.uploadTextureData(gfxTexture, 0, [mesh.vertexData.buffer]);
 
         this.vertexTextureMapping.gfxTexture = gfxTexture;
