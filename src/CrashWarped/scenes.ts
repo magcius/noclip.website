@@ -222,7 +222,7 @@ class CrashWarpedScene implements SceneDesc {
 
     public async createScene(device: GfxDevice, context: SceneContext) {
         const folder = (this.index / 0x10) >>> 0;
-        const subpath = `S${folder.toString()}/S00000${hexzero(this.index, 2)}`;
+        const subpath = `S${folder.toString()}/S00000${hexzero(this.index, 2).toUpperCase()}`;
         const levelIndex = await context.dataFetcher.fetchData(`${pathBase}/${subpath}.NSD`);
         const levelData = await context.dataFetcher.fetchData(`${pathBase}/${subpath}.NSF`);
         const pre = Date.now();
