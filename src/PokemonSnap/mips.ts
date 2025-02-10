@@ -2,7 +2,7 @@ import { nArray, assert } from '../util.js';
 
 export const enum Opcode {
     NOP     = 0x00,
-
+    BRANCH  = 0x01,
     JAL     = 0x03,
     BEQ     = 0x04,
     BNE     = 0x05,
@@ -33,10 +33,28 @@ export const enum Opcode {
 
     // register opcode block
     REGOP   = 0x100,
+    SLL     = 0x100,
+    SRL     = 0x102,
+    SRA     = 0x103,
+    SLLV    = 0x104,
+    SRLV    = 0x106,
+    SRAV    = 0x107,
+
     JR      = 0x108,
+    JALR    = 0x109,
+    MFHI    = 0x110,
+    MFLO    = 0x112,
+    MULT    = 0x118,
+    DIV     = 0x11A,
+    ADD     = 0x120,
     ADDU    = 0x121,
+    SUB     = 0x122,
+    SUBU    = 0x123,
     AND     = 0x124,
     OR      = 0x125,
+    XOR     = 0x126,
+    NOR     = 0x127,
+    SLT     = 0x12A,
 
     // coprocessor 1 opcode block
     COPOP   = 0x200,
@@ -49,6 +67,10 @@ export const enum Opcode {
     SUBS    = 0x301,
     MULS    = 0x302,
     MOVS    = 0x306,
+
+    // extra branch instruction block
+    BLTZ    = 0x400,
+    BGEZ    = 0x401,
 }
 
 export const enum RegName {
@@ -62,10 +84,34 @@ export const enum RegName {
     A3 = 0x07,
 
     S0 = 0x10,
+    S1 = 0x11,
+    S2 = 0x12,
+    S3 = 0x13,
+    S4 = 0x14,
+    S5 = 0x15,
+    S6 = 0x16,
+    S7 = 0x17,
 
     SP = 0x1D,
     FP = 0x1E,
     RA = 0x1F,
+}
+
+export function parseMIPSOpcode(instr: number): Opcode {
+    let op: Opcode = instr >>> 26;
+    const rs = (instr >>> 21) & 0x1F;
+    const rt = (instr >>> 16) & 0x1F;
+    if (op === Opcode.NOP && instr !== 0)
+        op = (instr & 0x3F) | Opcode.REGOP;
+    else if (op === Opcode.COP1) {
+        if (rs === Opcode.COP0 || rs === Opcode.COP1)
+            op = Opcode.FLOATOP | (instr & 0x3F);
+        else
+            op = Opcode.COPOP | rs;
+    } else if (op === Opcode.BRANCH) {
+        op = Opcode.BLTZ | rt;
+    }
+    return op;
 }
 
 export interface Register {
@@ -124,16 +170,8 @@ export class NaiveInterpreter {
             const instr = view.getUint32(offs + 0x00);
             this.lastInstr = instr;
 
-            let op: Opcode = instr >>> 26;
+            const op = parseMIPSOpcode(instr);
             const rs = (instr >>> 21) & 0x1F;
-            if (op === Opcode.NOP && instr !== 0)
-                op = (instr & 0x3F) | Opcode.REGOP;
-            else if (op === Opcode.COP1) {
-                if (rs === Opcode.COP0 || rs === Opcode.COP1)
-                    op = Opcode.FLOATOP | (instr & 0x3F);
-                else
-                    op = Opcode.COPOP | rs;
-            }
             const rt = (instr >>> 16) & 0x1F;
             const rd = (instr >>> 11) & 0x1F;
             const frd = (instr >>> 6) & 0x1F;
