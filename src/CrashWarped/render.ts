@@ -15,6 +15,7 @@ import { convertToCanvas } from "../gfx/helpers/TextureConversionHelpers.js";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { CalcBillboardFlags, calcBillboardMatrix, getMatrixAxisX, getMatrixTranslation, invlerp, transformVec3Mat4w0 } from "../MathHelpers.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
+import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
 export class WarpedProgram extends DeviceProgram {
     public static a_Position = 0;
     public static a_Color = 1;
@@ -26,6 +27,9 @@ export class WarpedProgram extends DeviceProgram {
 
     public override both = `
 precision mediump float;
+
+${GfxShaderLibrary.MatrixLibrary}
+
 // Expected to be constant across the entire scene.
 layout(row_major, std140) uniform ub_SceneParams {
     Mat4x4 u_Projection;
@@ -33,14 +37,14 @@ layout(row_major, std140) uniform ub_SceneParams {
     vec4 u_WorldZ;
 };
 layout(row_major, std140) uniform ub_ModelParams {
-    Mat4x3 u_ModelView;
+    Mat3x4 u_ModelView;
     vec4 u_Params;
     vec4 u_BlendColor;
     vec4 u_Diffuse;
     vec4 u_Specular;
 };
 layout(row_major, std140) uniform ub_TexParams {
-    Mat4x2 u_TexMatrix;
+    Mat2x4 u_TexMatrix;
     vec4 u_DrawParams;
 };
 varying vec3 v_TexCoord;
@@ -79,7 +83,7 @@ void main() {
 #else
     vec4 viewPosition = vec4(a_Position, 1.0);
 #endif
-    viewPosition = Mul(_Mat4x4(u_ModelView), viewPosition);
+    viewPosition.xyz = UnpackMatrix(u_ModelView)*viewPosition;
 
 v_Color = mod(a_Color, 2.0);
 
@@ -120,7 +124,7 @@ v_Color = mod(a_Color, 2.0);
     }
 #endif
 
-    gl_Position = Mul(u_Projection, viewPosition);
+    gl_Position = UnpackMatrix(u_Projection) * viewPosition;
     // compute shifted depth
     // viewPosition.z += u_Params.y;
     // float altZ = dot(u_Projection.mz, viewPosition);
@@ -155,7 +159,7 @@ v_Color = mod(a_Color, 2.0);
         v_Color = vec3(u_BlendColor.a);
 #ifdef TEXTURE
     v_TexCoord = vec3(a_TexCoord, 1.0);
-    v_TexCoord.xy = Mul(_Mat4x4(u_TexMatrix), vec4(v_TexCoord.xy, 0.0, 1.0)).xy;
+    v_TexCoord.xy = UnpackMatrix(u_TexMatrix)*vec4(v_TexCoord.xy, 0.0, 1.0);
 #ifdef RETRO
     v_TexCoord *= gl_Position.w;
 #endif
@@ -996,12 +1000,15 @@ class WaterProgram extends DeviceProgram {
 
     public override both = `
 precision mediump float;
+
+${GfxShaderLibrary.MatrixLibrary}
+
 // Expected to be constant across the entire scene.
 layout(row_major, std140) uniform ub_SceneParams {
     Mat4x4 u_Projection;
 };
 layout(row_major, std140) uniform ub_ModelParams {
-    Mat4x3 u_ModelViewMatrix;
+    Mat3x4 u_ModelViewMatrix;
     vec4 u_Params;
 };
 
@@ -1027,7 +1034,7 @@ void main() {
     vec4 end = texture(SAMPLER_2D(u_Waves_1), reduced);
     vec4 attrs = mix(begin, end, u_Params.x);
     vec4 realPos = vec4(pos.x, float(a_Position.y) * (attrs.w - .5) *2. , pos.y, 1.);
-    gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_ModelViewMatrix), realPos));
+    gl_Position = UnpackMatrix(u_Projection) * vec4(UnpackMatrix(u_ModelViewMatrix) * realPos, 1.);
     v_TexCoord = attrs.xy;
     float dist = clamp(distance(pos, camPos)/16., 1., 3.);
     v_Color = attrs.z * (3. - dist)/2.;
@@ -1155,16 +1162,19 @@ class TerrainProgram extends DeviceProgram {
 
     public override both = `
 precision mediump float;
+
+${GfxShaderLibrary.MatrixLibrary}
+
 // Expected to be constant across the entire scene.
 layout(row_major, std140) uniform ub_SceneParams {
     Mat4x4 u_Projection;
 };
 layout(row_major, std140) uniform ub_ModelParams {
-    Mat4x3 u_ModelViewMatrix;
+    Mat3x4 u_ModelViewMatrix;
     vec4 u_Params;
 };
 layout(row_major, std140) uniform ub_DrawParams {
-    Mat4x2 u_TexMatrix;
+    Mat2x4 u_TexMatrix;
 };
 
 varying vec2 v_TexCoord;
@@ -1175,19 +1185,19 @@ uniform sampler2D u_Texture;
 `;
 
     public override vert = `
-layout(location = 0) in vec2 a_Position;
-layout(location = 1) in float a_QuadIndex;
+layout(location = 0) in uvec3 a_Position;
+layout(location = 1) in uint a_QuadIndex;
 
 void main() {
-    vec2 pos = a_Position.xy;
+    vec2 pos = vec2(a_Position.xy);
     vec2 camPos = u_Params.xy;
     pos += 8.*floor(camPos/8.) - 32.;
     vec4 data = texture(SAMPLER_2D(u_Terrain), (pos + .5)/64.);
     vec4 realPos = vec4(pos.x, data.a, pos.y, 1.);
-    gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_ModelViewMatrix), realPos));
-    int index = int(a_QuadIndex);
-    v_TexCoord = vec2(index & 1, .5*float(index & 2));
-    v_TexCoord = Mul(_Mat4x4(u_TexMatrix), vec4(v_TexCoord, 0, 1)).xy;
+    gl_Position = UnpackMatrix(u_Projection) * vec4(UnpackMatrix(u_ModelViewMatrix) * realPos, 1.);
+    uint index = a_QuadIndex;
+    v_TexCoord = vec2(index & 1u, .5*float(index & 2u));
+    v_TexCoord = UnpackMatrix(u_TexMatrix) * vec4(v_TexCoord, 0, 1);
     float dist = clamp(distance(pos, camPos)/4., 4., 5.);
     v_Color = vec4(data.rgb, 5. - dist);
 }
