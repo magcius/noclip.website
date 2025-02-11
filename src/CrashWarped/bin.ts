@@ -2050,7 +2050,6 @@ function parseTerrain(view: DataView, name: string, offsets: number[], cache: Te
     let offs = offsets[0] + 8;
     const textures: number[] = [];
     for (let i = 0; i < texCount; i++) {
-        console.log(view.getUint32(offs, true));
         const uv = parseUV(view, offs + 4);
         textures.push(cache.findOrParse(texChunk, uv));
         offs += 0x10;

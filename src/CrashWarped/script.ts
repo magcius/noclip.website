@@ -760,8 +760,7 @@ class InstructionPrinter implements InstructionHandler<string> {
             if (this.inMIPS) {
                 if (inst === 0) {
                     this.currIndex++;
-                }
-                else if (inst === 0x03E00008) {
+                } else if (inst === 0x03E00008) {
                     this.instJump = -2;
                     this.inMIPS = false;
                     out.push(`${this.currIndex} MIPS RETURN`)
@@ -775,6 +774,7 @@ class InstructionPrinter implements InstructionHandler<string> {
                     this.currIndex += 2;
                     this.inMIPS = false;
                 } else {
+                    out.push(`${this.currIndex} MIPS ${MIPS[parseMIPSOpcode(inst)]} ${inst.toString(16)}`);
                     this.currIndex++;
                     // const res = lookupMIPS(behavior.name, this.currIndex*4, inst, null, null!);
                     // if (res.blockSize < 0) {
@@ -1004,13 +1004,12 @@ interface signalReceiver {
     args: number[];
 }
 
-const receiver: signalReceiver = {
+const receivers: signalReceiver[] = nArray(3, () => ({
     inUse: false,
     wasB: false,
     newState: 0,
-
     args: nArray(10, () => 0),
-}
+}));
 
 const scratchVecs = nArray(3, () => vec3.create());
 const pathScratch = nArray(3, () => vec3.create());
@@ -1205,16 +1204,25 @@ export class CrashObject {
         switch (this.get(Source.OBJECT_ID)) {
             // case 0x580002: case 0x040018:
             //     thresh = 1; break;
-            case 0x440001: case 0x440002: case 0x440003: case 0x440004:
-            case 0x440006: case 0x44000B: thresh = 0; break;
+            // rings of power lens flares
+            case 0x200000: case 0x200003: case 0x300000: case 0x300001:
 
+            case 0x440001: case 0x440002: case 0x440003: case 0x440004:
+            case 0x440006: case 0x44000B:
+
+            thresh = 0; break;
         }
 
         return game.frame >= this.lastUpdate + thresh;
     }
 
     public tryUpdateSelfAndChildren(game: GameState): void {
-        this.update(game);
+        try {
+            this.update(game);
+        } catch (e) {
+            this.errored = true;
+            console.warn("exception", this.state, this.id, this.index);
+        }
         let child = this.getObj(Source.CHILD, game);
         while (child) {
             const next = child.getObj(Source.NEXT, game);
@@ -1359,7 +1367,7 @@ export class CrashObject {
         }
         let path: ReadonlyVec3[] = this.placement.path;
         if (this.db !== this.placement.db) {
-            console.warn("snapping non-placement path")
+            // console.warn("snapping non-placement path")
             path = assertExists(assertExists(this.db).vecSeries.get(DatabaseKey.PATH))[0];
         }
 
@@ -2059,7 +2067,16 @@ export class CrashObject {
         }
         // console.log("sending", signal, "from", this.index, "to", target.index)
         let newState = 0xFF;
-        assert(!receiver.inUse)
+        let receiver: signalReceiver | null = null;
+        let receiverIndex = 0;
+        for (let i = 0; i < receivers.length; i++) {
+            if (receivers[i].inUse)
+                continue;
+            receiver = receivers[i];
+            receiverIndex = i;
+            break;
+        }
+        assert(receiver !== null)
 
         receiver.newState = -1;
         for (let i = 0; i < argCount; i++)
@@ -2071,7 +2088,7 @@ export class CrashObject {
             receiver.inUse = true;
 
             target.push(rawSignal);
-            target.push(buildPointer(PointerBase.RECEIVER, 0));
+            target.push(buildPointer(PointerBase.RECEIVER, receiverIndex));
             target.stackFrame(2);
             target.setScriptPointer(target.get(Source.ON_SIGNAL), game);
             target.runScript(ScriptMode.SIGNAL, game);
@@ -2224,6 +2241,7 @@ class InstructionExecutor implements InstructionHandler<ExecResult> {
                     break;
                 }
                 if (ptr.base === PointerBase.RECEIVER) {
+                    const receiver = receivers[ptr.offset];
                     assert(receiver.inUse);
                     result = receiver.args[right >>> 8];
                 } else if (ptr.base === PointerBase.MEMBER) {
@@ -2399,12 +2417,6 @@ class InstructionExecutor implements InstructionHandler<ExecResult> {
     }
     public spawnChild(fileIndex: number, id: number, count: number, argCount: number): ExecResult {
         let spawn = true;
-        // switch (this.behavior.name) {
-        //     case "WillC": case "DispC":
-        //     case "FruiC": case "FshOC":
-        //     case "SmOC": case "EfOC": case "DSmOC":
-        //         spawn = false;
-        // }
         if (this.game.objects.length < 500 && spawn) {
             // console.warn('spawn', inst, this.placement);
             const name = this.game.level.classNameList[fileIndex];
@@ -2677,13 +2689,16 @@ class InstructionExecutor implements InstructionHandler<ExecResult> {
             this.obj.sendSignal(target, signal, argCount, this.game);
         } else if (op === Opcode.COLLIDE_ONE || op === Opcode.COLLIDE_ALL) {
             target.collideAllChildren(this.obj, targetSrc, signal, argCount, this.game);
-            console.log("collide with", varString(targetSrc), signal.toString(16), this.obj.index)
+            // console.log("collide with", varString(targetSrc), signal.toString(16), this.obj.index)
         }
         for (let i = 0; i < argCount; i++)
             this.obj.pop();
         return ExecResult.CONTINUE;
     }
     public receive(op: Opcode, arg: Source, srcOp: number, action: number, scriptOffset: number): ExecResult {
+        const receiverInfo = parsePointer(this.obj.getParameter(1));
+        assert(receiverInfo.base === PointerBase.RECEIVER);
+        const receiver = receivers[receiverInfo.offset];
         if (!receiver.inUse)
             return ExecResult.FAILED_SIGNAL;
         let value = 1;
@@ -2793,6 +2808,7 @@ export class NaiveInterpreter {
         this.currScript = obj.currScriptBehavior.name;
         this.startOffset = start;
         this.fileOffset = view.byteOffset + start;
+        this.regs[RegName.S0] = buildPointer(PointerBase.OBJECT, obj.index);
 
         let branchDest = -1, inDelay = false, shouldBranch = false;
         let offs = start;
@@ -2861,7 +2877,8 @@ export class NaiveInterpreter {
                             } else
                                 this.regs[rt] = baseObj.get(src);
                         } else {
-                            debugger;
+                            // bad deref
+                            // debugger;
                         }
                     }
                 } break;
@@ -2885,13 +2902,9 @@ export class NaiveInterpreter {
                         game.globals[imm >> 2] = this.regs[rt];
                     } else {
                         let baseObj: CrashObject | null = null;
-                        if (rs === RegName.S0) {
-                            baseObj = obj;
-                        } else {
-                            const ptr = parsePointer(this.regs[rs]);
-                            if (ptr.base === PointerBase.OBJECT) {
-                                baseObj = game.objects[ptr.offset];
-                            }
+                        const ptr = parsePointer(this.regs[rs]);
+                        if (ptr.base === PointerBase.OBJECT) {
+                            baseObj = game.objects[ptr.offset];
                         }
                         if (baseObj) {
                             // loading from object

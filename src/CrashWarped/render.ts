@@ -1252,7 +1252,7 @@ export class TerrainMeshData {
             depthWrite: true,
             cullMode: GfxCullMode.None,
         };
-        setAttachmentStateSimple(this.megaStateFlags, translateBlendMode(BIN.XLUBlendMode.DISABLED));
+        setAttachmentStateSimple(this.megaStateFlags, translateBlendMode(BIN.XLUBlendMode.AVERAGE));
 
         this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, vertexData.buffer);
 
