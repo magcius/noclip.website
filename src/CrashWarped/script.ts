@@ -774,7 +774,6 @@ class InstructionPrinter implements InstructionHandler<string> {
                     this.currIndex += 2;
                     this.inMIPS = false;
                 } else {
-                    out.push(`${this.currIndex} MIPS ${MIPS[parseMIPSOpcode(inst)]} ${inst.toString(16)}`);
                     this.currIndex++;
                     // const res = lookupMIPS(behavior.name, this.currIndex*4, inst, null, null!);
                     // if (res.blockSize < 0) {
