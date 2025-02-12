@@ -2,10 +2,16 @@ import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { SceneContext } from "../SceneBase.js";
 import { SceneGfx } from "../viewer.js";
 
+import { parse as parseSCX } from './scx/parser.js'
+import { SCX } from "./scx/types.js";
+import { fetchTextures, makeTextureHolder } from "./util.js";
+import Renderer from './renderer.js';
+
 type Variant = { 
   name: string, 
   cameras: [string, string][],
-  scenePaths: string[]
+  scenePaths: string[], 
+  envTexturePaths: string[]
 };
 type Screensaver = { name: string, basePath: string, variants: Record<string, Variant> };
 
@@ -25,6 +31,9 @@ const screensavers: Record<string, Screensaver> = {
 
           "Mercury_Pool_Drop.scx",
           "Mercury_Pool_Splash.scx",
+        ],
+        envTexturePaths: [
+          'Environment_Cave.TIF',
         ]
       },
       industrial: {
@@ -39,6 +48,9 @@ const screensavers: Record<string, Screensaver> = {
 
           "Mercury_Pool_Drop.scx",
           "Mercury_Pool_Splash.scx",
+        ],
+        envTexturePaths: [
+          'Environment_Tech.tif',
         ]
       }
     },
@@ -64,6 +76,10 @@ const screensavers: Record<string, Screensaver> = {
           // "Balance_Man1AReal.scx",
           // "Balance_Man1B.scx",
           "Balance_Man2A.scx",
+        ],
+        envTexturePaths: [
+          'EnvironmentGold.tif',
+          'EnvironmentSilver.tif',
         ]
       },
       arena: {
@@ -82,6 +98,9 @@ const screensavers: Record<string, Screensaver> = {
           "Balance_Man3A.scx",
           // "Balance_Man3B.scx",
           "Balance_Man4A.scx",
+        ],
+        envTexturePaths: [
+          'EnvironmentTech.tif',
         ]
       }
     },
@@ -105,6 +124,9 @@ const screensavers: Record<string, Screensaver> = {
           "Sparkle.scx",
           "Pendulum_SW_Pendulum.scx",
           "Pendulum_SW_Scene.scx",
+        ],
+        envTexturePaths: [
+          'EnvironmentGold.tif',
         ]
       },
       checkerboard: {
@@ -122,6 +144,9 @@ const screensavers: Record<string, Screensaver> = {
           "Sparkle.scx",
           "Pendulum_Pendulum.scx",
           "Pendulum_Scene.scx",
+        ],
+        envTexturePaths: [
+          'EnvironmentGold.tif',
         ]
       }
     },
@@ -139,8 +164,30 @@ export const sceneGroup = {
           id: `${screensaverID}-${variantID}`,
           name: variant.name,
           createScene: async (device: GfxDevice, sceneContext: SceneContext): Promise<SceneGfx> => {
-            // TODO
-            return {render: _=>_, destroy: _=>_};
+            const screensaver = screensavers[screensaverID];
+            const variant = screensaver.variants[variantID];
+            const { cameras } = variant;
+            const basePath = `PlusForXP/${screensaver.basePath}`
+            const scenes: Record<string, SCX.Scene> = Object.fromEntries(await Promise.all(
+              variant.scenePaths
+                .map(
+                  filename => sceneContext.dataFetcher.fetchData(`${basePath}${filename}`)
+                  .then(({arrayBuffer}) => parseSCX(new Uint8Array(arrayBuffer)))
+                  .then(scene => ([`${filename}/`, scene]))
+                )
+            ));
+            const [textures, envTextures] = await Promise.all([
+              fetchTextures(sceneContext.dataFetcher, basePath, 
+                (Object.values(scenes) as SCX.Scene[])
+                .flatMap(({shaders}) => shaders ?? [])
+                .map(shader => shader.texture)
+                .filter(texture => texture != null)
+                .map(texturePath => texturePath.replaceAll("\\", "/"))
+              ),
+              fetchTextures(sceneContext.dataFetcher, basePath, variant.envTexturePaths)
+            ]);
+            const textureHolder = makeTextureHolder([...textures, ...envTextures]);
+            return new Renderer(device, {basePath, scenes, textures, envTextures, cameras}, textureHolder);
           }
         }))
     ]))
