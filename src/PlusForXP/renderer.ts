@@ -1,6 +1,8 @@
 import {
   GfxBlendFactor,
-  GfxBlendMode, GfxBufferFrequencyHint,
+  GfxBlendMode,
+  GfxBuffer,
+  GfxBufferFrequencyHint,
   GfxBufferUsage,
   GfxCullMode,
   GfxDevice,
@@ -21,13 +23,14 @@ import {
   standardFullClearRenderPassDescriptor
 } from '../gfx/helpers/RenderGraphHelpers.js';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
-import { Color, colorNewFromRGBA } from '../Color.js';
+import { Color, colorFromRGBA, colorNewFromRGBA } from '../Color.js';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers.js';
 import { mat4, quat, vec3, vec4 } from 'gl-matrix';
 import { GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode } from "../gfx/platform/GfxPlatform.js";
 import { Camera, CameraController } from '../Camera.js';
 import { defaultMegaState, setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers.js';
 import { align } from '../util.js';
+import { bakeLights } from './bake_lights.js';
 import { Material, Mesh, Texture, SceneNode } from './types.js';
 import { SceneGfx, ViewerRenderInput } from "../viewer.js";
 import Plus4XPProgram from "./program.js";
@@ -41,6 +44,15 @@ type Context = {
   envTextures: Texture[],
   envMapRotation: [number, number, number],
   cameras: [string, string][],
+};
+
+type UnbakedMesh = {
+  node: SceneNode,
+  mesh: SCX.Mesh,
+  lights: SCX.Light[],
+  shader: SCX.Shader,
+  diffuseColorBuffer: GfxBuffer,
+  sceneName: string
 };
 
 export default class Renderer implements SceneGfx {
@@ -128,9 +140,11 @@ export default class Renderer implements SceneGfx {
       meshes: []
     };
 
+    const unbakedMeshes: UnbakedMesh[] = [];
     // this.buildScene(device, "Sphere", sphereScene, unbakedMeshes);
+
     for (const [name, scene] of Object.entries(context.scenes)) {
-      this.buildScene(device, name, scene);
+      this.buildScene(device, name, scene, unbakedMeshes);
     }
 
     this.customCamera = new Camera();
@@ -145,6 +159,29 @@ export default class Renderer implements SceneGfx {
     this.renderableNodes = [...this.sceneNodesByName.values()].filter(node => node.meshes.length ?? 0 > 0);
 
     this.updateNodeTransform(this.rootNode, false, null);
+    
+    const transformedLightsBySceneName: Map<string, SCX.Light[]> = new Map();
+    const rootTransform = this.rootNode.worldTransform;
+
+    for (const {node, shader, mesh, diffuseColorBuffer, sceneName, lights} of unbakedMeshes) {
+      if (!transformedLightsBySceneName.has(sceneName)) {
+        transformedLightsBySceneName.set(sceneName, 
+          lights.map((light: SCX.Light) : SCX.Light => ({
+            ...light,
+            pos: light.pos == undefined ? undefined : [...vec3.transformMat4(vec3.create(), light.pos, rootTransform)] as SCX.Vec3,
+            dir: light.dir == undefined ? undefined : [...vec4.transformMat4(vec4.create(), [...light.dir, 0], rootTransform)] as SCX.Vec3,
+          }))
+        );
+      }
+      const diffuseColors = bakeLights(
+        mesh, 
+        shader, 
+        node.worldTransform, 
+        transformedLightsBySceneName.get(sceneName)!
+      );
+      device.uploadBufferData(diffuseColorBuffer, 0, new Uint8Array(diffuseColors.buffer));
+    }
+    
 
     const requiredTextures = new Map();
     for (const material of this.materialsByName.values()) {
@@ -185,7 +222,7 @@ export default class Renderer implements SceneGfx {
     device.uploadTextureData(this.missingTexture, 0, [new Uint8Array([0xFF, 0x00, 0xFF, 0xFF])]);
   }
 
-  private buildScene(device: GfxDevice, sceneName: string, scene: SCX.Scene ) {
+  private buildScene(device: GfxDevice, sceneName: string, scene: SCX.Scene, unbakedMeshes:UnbakedMesh[] ) {
     
     /*
     for (const {ambient} of scene.globals) {
@@ -319,7 +356,16 @@ export default class Renderer implements SceneGfx {
         );
         const indexBufferDescriptor = { buffer: indexBuffer, byteOffset: 0 };
 
-        // TODO: lights and light baking
+        const lights: SCX.Light[] = [
+          {
+            type: "ambient",
+            name: 'ambient',
+            color: scene.globals[0].ambient,
+          } as SCX.Light,
+          ...scene.lights.values()
+        ];
+        
+        unbakedMeshes.push({ node, mesh, shader: material.shader, diffuseColorBuffer, sceneName, lights });
 
         meshes.push({
           inputLayout,
