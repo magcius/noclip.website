@@ -1264,7 +1264,7 @@ class FrameDebouncer {
         if (this.timeoutId !== null)
             this.clear();
         if (this.callback !== null)
-            this.timeoutId = setTimeout(this.onframe, this.timeout);
+            this.timeoutId = window.setTimeout(this.onframe, this.timeout);
     }
 
     public clear() {
