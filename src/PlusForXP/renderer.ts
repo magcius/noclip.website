@@ -25,5 +25,6 @@ export default class Renderer implements SceneGfx {
 
   destroy(device: GfxDevice): void {
     // TODO
+    this.textureHolder.destroy(device);
   }
 }
