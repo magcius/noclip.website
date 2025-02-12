@@ -1,19 +1,36 @@
 import {
-  GfxBufferFrequencyHint,
-  GfxBufferUsage, GfxDevice,
-  GfxFormat, GfxTexture, GfxTextureDimension,
+  GfxBlendFactor,
+  GfxBlendMode, GfxBufferFrequencyHint,
+  GfxBufferUsage,
+  GfxCullMode,
+  GfxDevice,
+  GfxFormat, GfxMegaStateDescriptor,
+  GfxRenderProgramDescriptor,
+  GfxSampler, GfxTexture, GfxTextureDimension,
   GfxTextureUsage, GfxVertexBufferFrequency
 } from "../gfx/platform/GfxPlatform.js";
 import { TextureHolder } from "../TextureHolder.js";
 import { SCX } from './scx/types.js';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
+import { GfxRenderInstList, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
+import { preprocessProgramObj_GLSL } from '../gfx/shaderc/GfxShaderCompiler.js';
+import { fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers.js';
+import {
+  makeAttachmentClearDescriptor,
+  makeBackbufferDescSimple,
+  standardFullClearRenderPassDescriptor
+} from '../gfx/helpers/RenderGraphHelpers.js';
+import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 import { Color, colorNewFromRGBA } from '../Color.js';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers.js';
-import { mat4, vec3 } from 'gl-matrix';
-import { CameraController } from '../Camera.js';
+import { mat4, quat, vec3, vec4 } from 'gl-matrix';
+import { GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode } from "../gfx/platform/GfxPlatform.js";
+import { Camera, CameraController } from '../Camera.js';
+import { defaultMegaState, setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers.js';
 import { align } from '../util.js';
 import { Material, Mesh, Texture, SceneNode } from './types.js';
 import { SceneGfx, ViewerRenderInput } from "../viewer.js";
+import Plus4XPProgram from "./program.js";
 import { buildNodeAnimations, ChannelAnimation } from "./animation.js";
 
 type Context = {
@@ -28,22 +45,55 @@ export default class Renderer implements SceneGfx {
 
   private texturesByPath:Record<string, Texture>;
   private envGfxTexture:GfxTexture | null;
+  private envMapMatrix = mat4.create();
   private missingTexture: GfxTexture;
+  private program: GfxRenderProgramDescriptor;
   private renderHelper: GfxRenderHelper;
+  private renderInstListMain = new GfxRenderInstList();
   private ambientColor: Color = colorNewFromRGBA(0, 0, 0);
   private rootNode: SceneNode;
   private materialsByName = new Map<string, Material>();
   private sceneNodesByName = new Map<string | undefined, SceneNode>();
   private renderableNodes: SceneNode[] = [];
   private camerasByName = new Map<string, SCX.Camera>();
+  private cameras: [string, string | null][];
+  private activeCameraName: string | null = null;
+  private lastViewerCameraMatrix: string | null = null;
+  private customCamera: Camera;
+  private scratchViewMatrix = mat4.create();
   private scratchModelMatrix = mat4.create();
+  private scratchWorldInverseTransposeMatrix = mat4.create();
+  private diffuseSampler: GfxSampler | null;
+  private envSampler: GfxSampler | null;
   private animations: ChannelAnimation[] = [];
   private animating: boolean = true;
-  
+  private megaStateFlags: GfxMegaStateDescriptor;
+
   constructor(device: GfxDevice, context: Context, public textureHolder: TextureHolder<any>) {
 
+    this.megaStateFlags = {
+      ...defaultMegaState,
+      cullMode: GfxCullMode.Back
+    };
+    setAttachmentStateSimple(this.megaStateFlags, {
+        blendMode: GfxBlendMode.Add,
+        blendSrcFactor: GfxBlendFactor.SrcAlpha,
+        blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
+    });
+
     this.renderHelper = new GfxRenderHelper(device);
-    
+    this.program = preprocessProgramObj_GLSL(device, new Plus4XPProgram());
+
+    const samplerDescriptor = {
+      wrapS: GfxWrapMode.Repeat,
+      wrapT: GfxWrapMode.Repeat,
+      minFilter: GfxTexFilterMode.Bilinear,
+      magFilter: GfxTexFilterMode.Bilinear,
+      mipFilter: GfxMipFilterMode.NoMip
+    };
+    this.diffuseSampler = device.createSampler(samplerDescriptor);
+    this.envSampler = device.createSampler(samplerDescriptor);
+
     this.texturesByPath = Object.fromEntries(
       context.textures.map(texture => ([texture.path, texture]))
     );
@@ -79,6 +129,9 @@ export default class Renderer implements SceneGfx {
       this.buildScene(device, name, scene);
     }
 
+    this.customCamera = new Camera();
+    this.cameras = [["FreeCam", null], ...context.cameras];
+
     // parent the scene nodes
     for (const sceneNode of this.sceneNodesByName.values()) {
       sceneNode.parent = this.sceneNodesByName.get(sceneNode.parentName) ?? this.rootNode;
@@ -88,7 +141,7 @@ export default class Renderer implements SceneGfx {
     this.renderableNodes = [...this.sceneNodesByName.values()].filter(node => node.meshes.length ?? 0 > 0);
 
     this.updateNodeTransform(this.rootNode, false, null);
-    
+
     const requiredTextures = new Map();
     for (const material of this.materialsByName.values()) {
 
@@ -128,7 +181,7 @@ export default class Renderer implements SceneGfx {
     device.uploadTextureData(this.missingTexture, 0, [new Uint8Array([0xFF, 0x00, 0xFF, 0xFF])]);
   }
 
-  private buildScene(device: GfxDevice, sceneName: string, scene: SCX.Scene) {
+  private buildScene(device: GfxDevice, sceneName: string, scene: SCX.Scene ) {
     
     /*
     for (const {ambient} of scene.globals) {
@@ -285,6 +338,12 @@ export default class Renderer implements SceneGfx {
     c.setSceneMoveSpeedMult(0.04);
   }
 
+  /*
+  serializeSaveState?(dst: ArrayBuffer, offs: number): number {}
+  deserializeSaveState?(src: ArrayBuffer, offs: number, byteLength: number): number {}
+  onstatechanged?: (() => void) | undefined;
+  */
+ 
   render(device: GfxDevice, viewerInput: ViewerRenderInput): void {
     const {deltaTime} = viewerInput;
     this.animating = deltaTime > 0;
@@ -293,7 +352,158 @@ export default class Renderer implements SceneGfx {
     
     this.animations.forEach(anim => anim(deltaTime / 1000));
     
-    // TODO: prepareToRender
+    const renderInstManager = this.renderHelper.renderInstManager;
+    const builder = this.renderHelper.renderGraph.newGraphBuilder();
+
+    const renderPassDescriptor = makeAttachmentClearDescriptor(this.ambientColor);
+    const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, renderPassDescriptor);
+    const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, standardFullClearRenderPassDescriptor);
+
+    const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
+    const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
+    builder.pushPass((pass) => {
+        pass.setDebugName('Main');
+        pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+        pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
+        pass.exec((passRenderer) => {
+            this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
+        });
+    });
+    this.renderHelper.antialiasingSupport.pushPasses(builder, viewerInput, mainColorTargetID);
+    builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
+    this.prepareToRender(device, viewerInput, renderInstManager);
+    this.renderHelper.renderGraph.execute(builder);
+    this.renderInstListMain.reset();
+  }
+
+  // count = 0;
+
+  private prepareToRender(device: GfxDevice, viewerInput: ViewerRenderInput, renderInstManager: GfxRenderInstManager) {
+
+    // if (this.count >= 10) {
+    //   return;
+    // }
+    // this.count++;
+
+    const template = this.renderHelper.pushTemplateRenderInst();
+    template.setBindingLayouts(Plus4XPProgram.bindingLayouts);
+    const gfxProgram = renderInstManager.gfxRenderCache.createProgramSimple(this.program);
+    template.setGfxProgram(gfxProgram);
+    template.setMegaStateFlags(this.megaStateFlags);
+
+    this.updateNodeTransform(this.rootNode, false, null);
+
+    const cameraViewMatrix: mat4 = mat4.create();
+    
+    updateCameraParams: {
+      let cameraOffset = template.allocateUniformBuffer(Plus4XPProgram.ub_CameraParams, 16 * 3 /*3 Mat4x4*/);
+      const cameraBuffer = template.mapUniformBufferF32(Plus4XPProgram.ub_CameraParams);
+
+      this.lastViewerCameraMatrix ??= [...viewerInput.camera.worldMatrix].join("_");
+      
+      if (this.activeCameraName != null) {
+        
+        const camera: SCX.Camera = this.camerasByName.get(this.activeCameraName)!;
+        const cameraNode: SceneNode = this.sceneNodesByName.get(this.activeCameraName)!;
+        
+        this.customCamera.clipSpaceNearZ = viewerInput.camera.clipSpaceNearZ;
+        this.customCamera.setPerspective(
+          viewerInput.camera.fovY, // camera.fov,
+          viewerInput.camera.aspect,
+          camera.nearclip,
+          camera.farclip
+        );
+        
+        const cameraWorldPos = mat4.getTranslation(vec3.create(), cameraNode.worldTransform);
+        const targetWorldPos = vec3.transformMat4(vec3.create(), camera.targetpos, this.rootNode.worldTransform);
+        const relativePos = vec3.sub(vec3.create(), targetWorldPos, cameraWorldPos);
+        mat4.fromTranslation(this.scratchViewMatrix, cameraWorldPos);
+        mat4.rotateY(this.scratchViewMatrix, this.scratchViewMatrix, 
+          -Math.PI / 2 - Math.atan2(relativePos[2], relativePos[0])
+        );
+        mat4.rotateX(this.scratchViewMatrix, this.scratchViewMatrix, Math.atan2(relativePos[1], Math.sqrt(
+          relativePos[0] ** 2 +
+          relativePos[2] ** 2
+        )));
+        
+        if (this.activeCameraName != null && this.lastViewerCameraMatrix !== [...viewerInput.camera.worldMatrix].join("_")) {
+          this.activeCameraName = null;
+          mat4.copy(viewerInput.camera.worldMatrix, this.scratchViewMatrix);
+          viewerInput.camera.worldMatrixUpdated();
+          cameraOffset += fillMatrix4x4(cameraBuffer, cameraOffset, viewerInput.camera.projectionMatrix);
+        } else {
+          cameraOffset += fillMatrix4x4(cameraBuffer, cameraOffset, this.customCamera.projectionMatrix);
+        }
+        mat4.invert(this.scratchViewMatrix, this.scratchViewMatrix);
+        cameraOffset += fillMatrix4x4(cameraBuffer, cameraOffset, this.scratchViewMatrix);
+        mat4.copy(cameraViewMatrix, this.scratchViewMatrix);
+      } else {
+        cameraOffset += fillMatrix4x4(cameraBuffer, cameraOffset, viewerInput.camera.projectionMatrix);
+        cameraOffset += fillMatrix4x4(cameraBuffer, cameraOffset, viewerInput.camera.viewMatrix);
+        mat4.copy(cameraViewMatrix, viewerInput.camera.viewMatrix);
+      }
+
+      mat4.invert(this.scratchViewMatrix, cameraViewMatrix);
+      cameraOffset += fillMatrix4x4(cameraBuffer, cameraOffset, this.scratchViewMatrix);
+    }
+
+    this.renderHelper.renderInstManager.setCurrentList(this.renderInstListMain);
+
+    renderSimulation: {
+      // TODO: render any sim-related stuff, ie. mercury pool and sand runtime texture
+    }
+    
+    renderSceneNodeMeshes: {
+      for (const node of this.renderableNodes) {        
+        for (const mesh of node.meshes!) {  
+          
+          renderMesh: {
+            const renderInst = renderInstManager.newRenderInst();  
+            updateObjectParams: {
+              let objectOffset = renderInst.allocateUniformBuffer(Plus4XPProgram.ub_ObjectParams, 16 * 3 + 4 /*Mat4x3 * 3 + vec4*/);
+              const object = renderInst.mapUniformBufferF32(Plus4XPProgram.ub_ObjectParams);
+              objectOffset += fillMatrix4x4(object, objectOffset, node.worldTransform);
+
+              mat4.invert(this.scratchWorldInverseTransposeMatrix, node.worldTransform);
+              mat4.transpose(this.scratchWorldInverseTransposeMatrix, this.scratchWorldInverseTransposeMatrix);
+              objectOffset += fillMatrix4x4(object, objectOffset, this.scratchWorldInverseTransposeMatrix);
+
+              objectOffset += fillMatrix4x4(object, objectOffset, this.envMapMatrix);
+
+              {
+                object[objectOffset] = mesh.material.gfxTexture == null ? 1 : 0;
+                objectOffset++;
+              }
+            }
+            
+            renderInst.setSamplerBindingsFromTextureMappings([
+              {
+                gfxTexture: mesh.material.gfxTexture ?? this.missingTexture,
+                gfxSampler: this.diffuseSampler,
+                lateBinding: null
+              },
+              {
+                gfxTexture: this.envGfxTexture ?? this.missingTexture,
+                gfxSampler: this.envSampler,
+                lateBinding: null
+              }
+            ]);
+            
+            renderInst.setVertexInput(
+              mesh.inputLayout,
+              mesh.vertexBufferDescriptors, 
+              mesh.indexBufferDescriptor
+            );
+          
+            renderInst.setDrawCount(mesh.indexCount);
+            renderInstManager.submitRenderInst(renderInst);
+          }
+        }
+      }
+    }
+
+    renderInstManager.popTemplate();
+    this.renderHelper.prepareToRender();
   }
 
   private updateNodeTransform(node: SceneNode, parentChanged: boolean, parentWorldTransform: mat4 | null) {
@@ -344,6 +554,14 @@ export default class Renderer implements SceneGfx {
         device.destroyBuffer(mesh.indexBufferDescriptor.buffer);
       }
     }
+    if (this.diffuseSampler != null) {
+      device.destroySampler(this.diffuseSampler);
+    }
+    this.diffuseSampler = null;
+    if (this.envSampler != null) {
+      device.destroySampler(this.envSampler);
+    }
+    this.envSampler = null;
     this.sceneNodesByName.clear();
     this.renderableNodes.length = 0;
     this.camerasByName.clear();
