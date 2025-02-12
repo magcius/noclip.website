@@ -32,12 +32,14 @@ import { Material, Mesh, Texture, SceneNode } from './types.js';
 import { SceneGfx, ViewerRenderInput } from "../viewer.js";
 import Plus4XPProgram from "./program.js";
 import { buildNodeAnimations, ChannelAnimation } from "./animation.js";
+// import sphereScene from "./sphere.js";
 
 type Context = {
   basePath: string,
   scenes: Record<string, SCX.Scene>,
   textures: Texture[],
   envTextures: Texture[],
+  envMapRotation: [number, number, number],
   cameras: [string, string][],
 };
 
@@ -110,6 +112,7 @@ export default class Renderer implements SceneGfx {
       });
       device.uploadTextureData(this.envGfxTexture, 0, [firstEnvTexture.rgba8]);
     }
+    mat4.fromQuat(this.envMapMatrix, quat.fromEuler(quat.create(), ...context.envMapRotation));
     
     this.rootNode = {
       name: "root",
@@ -125,6 +128,7 @@ export default class Renderer implements SceneGfx {
       meshes: []
     };
 
+    // this.buildScene(device, "Sphere", sphereScene, unbakedMeshes);
     for (const [name, scene] of Object.entries(context.scenes)) {
       this.buildScene(device, name, scene);
     }

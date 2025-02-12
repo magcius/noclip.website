@@ -11,7 +11,8 @@ type Variant = {
   name: string, 
   cameras: [string, string][],
   scenePaths: string[], 
-  envTexturePaths: string[]
+  envTexturePaths: string[], 
+  envMapRotation: [number, number, number] 
 };
 type Screensaver = { name: string, basePath: string, variants: Record<string, Variant> };
 
@@ -34,7 +35,8 @@ const screensavers: Record<string, Screensaver> = {
         ],
         envTexturePaths: [
           'Environment_Cave.TIF',
-        ]
+        ],
+        envMapRotation: [90, 180, 0]
       },
       industrial: {
         name: "Industrial", 
@@ -51,7 +53,8 @@ const screensavers: Record<string, Screensaver> = {
         ],
         envTexturePaths: [
           'Environment_Tech.tif',
-        ]
+        ],
+        envMapRotation: [90, 180, 0]
       }
     },
   },
@@ -80,7 +83,8 @@ const screensavers: Record<string, Screensaver> = {
         envTexturePaths: [
           'EnvironmentGold.tif',
           'EnvironmentSilver.tif',
-        ]
+        ],
+        envMapRotation: [0, 0, 0]
       },
       arena: {
         name: "Arena",
@@ -101,7 +105,8 @@ const screensavers: Record<string, Screensaver> = {
         ],
         envTexturePaths: [
           'EnvironmentTech.tif',
-        ]
+        ],
+        envMapRotation: [0, 90, 0]
       }
     },
   },
@@ -127,7 +132,8 @@ const screensavers: Record<string, Screensaver> = {
         ],
         envTexturePaths: [
           'EnvironmentGold.tif',
-        ]
+        ],
+        envMapRotation: [0, 0, 0]
       },
       checkerboard: {
         name: "Checkerboard", 
@@ -147,7 +153,8 @@ const screensavers: Record<string, Screensaver> = {
         ],
         envTexturePaths: [
           'EnvironmentGold.tif',
-        ]
+        ],
+        envMapRotation: [0, 0, 0]
       }
     },
   },
@@ -166,7 +173,7 @@ export const sceneGroup = {
           createScene: async (device: GfxDevice, sceneContext: SceneContext): Promise<SceneGfx> => {
             const screensaver = screensavers[screensaverID];
             const variant = screensaver.variants[variantID];
-            const { cameras } = variant;
+            const { envMapRotation, cameras } = variant;
             const basePath = `PlusForXP/${screensaver.basePath}`
             const scenes: Record<string, SCX.Scene> = Object.fromEntries(await Promise.all(
               variant.scenePaths
@@ -187,7 +194,7 @@ export const sceneGroup = {
               fetchTextures(sceneContext.dataFetcher, basePath, variant.envTexturePaths)
             ]);
             const textureHolder = makeTextureHolder([...textures, ...envTextures]);
-            return new Renderer(device, {basePath, scenes, textures, envTextures, cameras}, textureHolder);
+            return new Renderer(device, {basePath, scenes, textures, envTextures, envMapRotation, cameras}, textureHolder);
           }
         }))
     ]))
