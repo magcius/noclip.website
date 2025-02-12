@@ -35,6 +35,7 @@ import { Material, Mesh, Texture, SceneNode } from './types.js';
 import { SceneGfx, ViewerRenderInput } from "../viewer.js";
 import Plus4XPProgram from "./program.js";
 import { buildNodeAnimations, ChannelAnimation } from "./animation.js";
+import * as UI from '../ui.js';
 // import sphereScene from "./sphere.js";
 
 type Context = {
@@ -83,6 +84,8 @@ export default class Renderer implements SceneGfx {
   private animating: boolean = true;
   private megaStateFlags: GfxMegaStateDescriptor;
 
+  private cameraSelect: UI.SingleSelect;
+  
   constructor(device: GfxDevice, context: Context, public textureHolder: TextureHolder<any>) {
 
     this.megaStateFlags = {
@@ -388,6 +391,23 @@ export default class Renderer implements SceneGfx {
     c.setSceneMoveSpeedMult(0.04);
   }
 
+  public createPanels(): UI.Panel[] {
+    const cameraPanel = new UI.Panel();
+    cameraPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
+    cameraPanel.setTitle(UI.EYE_ICON, 'Vantage Points');
+    this.cameraSelect = new UI.SingleSelect();
+    this.cameraSelect.setStrings(this.cameras.map(a => a[0]));
+    this.cameraSelect.onselectionchange = (strIndex: number) => {
+      const choice = this.cameras[strIndex];
+      this.activeCameraName = choice[1];
+      this.lastViewerCameraMatrix = null;
+    };
+    this.cameraSelect.selectItem(1); // TODO: persist through serialize/deserialize
+    cameraPanel.contents.appendChild(this.cameraSelect.elem);
+    
+    return [cameraPanel];
+  }
+
   /*
   serializeSaveState?(dst: ArrayBuffer, offs: number): number {}
   deserializeSaveState?(src: ArrayBuffer, offs: number, byteLength: number): number {}
@@ -477,7 +497,7 @@ export default class Renderer implements SceneGfx {
         )));
         
         if (this.activeCameraName != null && this.lastViewerCameraMatrix !== [...viewerInput.camera.worldMatrix].join("_")) {
-          this.activeCameraName = null;
+          this.cameraSelect.selectItem(0);
           mat4.copy(viewerInput.camera.worldMatrix, this.scratchViewMatrix);
           viewerInput.camera.worldMatrixUpdated();
           cameraOffset += fillMatrix4x4(cameraBuffer, cameraOffset, viewerInput.camera.projectionMatrix);
