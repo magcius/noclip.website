@@ -63,7 +63,7 @@ class WarpedRenderer implements SceneGfx {
     }
 
     public adjustCameraController(c: CameraController) {
-        c.setSceneMoveSpeedMult(.3);
+        c.setSceneMoveSpeedMult(.1);
     }
 
     public createPanels(): UI.Panel[] {
@@ -293,6 +293,9 @@ class CrashWarpedScene implements SceneDesc {
             );
         }
 
+        if (this.index === 0x3c) // title screen has weird triangles?
+            renderer.worldParts[0].visible = false;
+
         renderer.data = parsed;
         return renderer;
     }
@@ -326,11 +329,11 @@ export const sceneDescs = [
     new CrashWarpedScene(0x1D, "Double Header"),
     new CrashWarpedScene(0x04, "N. Tropy"),
     "Egyptian Room",
+    new CrashWarpedScene(0x1E, "Sphynxinator"),
     new CrashWarpedScene(0x13, "Bye Bye Blimps"),
     new CrashWarpedScene(0x0D, "Tell No Tales"),
     new CrashWarpedScene(0x1B, "Future Frenzy"),
     new CrashWarpedScene(0x18, "Tomb Wader"),
-    new CrashWarpedScene(0x1E, "Sphynxinator"),
     new CrashWarpedScene(0x05, "N. Gin"),
     "Future Room",
     new CrashWarpedScene(0x20, "Orange Asphalt"),

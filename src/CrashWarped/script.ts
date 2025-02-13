@@ -2416,9 +2416,11 @@ class InstructionExecutor implements InstructionHandler<ExecResult> {
     }
     public spawnChild(fileIndex: number, id: number, count: number, argCount: number): ExecResult {
         let spawn = true;
+        const name = this.game.level.classNameList[fileIndex];
+        if (name === "ShadC")
+            spawn = false; // no shadows for now
         if (this.game.objects.length < 500 && spawn) {
             // console.warn('spawn', inst, this.placement);
-            const name = this.game.level.classNameList[fileIndex];
             for (let i = 0; i < count; i++)
                 this.obj.spawnChild(id, argCount, assertExists(this.game.level.behaviors.get(name)), this.game);
         }
@@ -2668,9 +2670,9 @@ class InstructionExecutor implements InstructionHandler<ExecResult> {
                     const rot = this.obj.getVec(Source.YAW_SPEED, scratchVecs[1]);
                     vec3.scale(rot, rot, toRad);
                     this.obj.getVec(vec, scratchVecs[2]);
-                    vec3.rotateY(v, v, Vec3Zero, rot[2]);
-                    vec3.rotateX(v, v, Vec3Zero, rot[0]);
                     vec3.rotateY(v, v, Vec3Zero, rot[1] - rot[2]);
+                    vec3.rotateX(v, v, Vec3Zero, rot[0]);
+                    vec3.rotateY(v, v, Vec3Zero, rot[2]);
                 }
                 vec3.add(v, v, scratchVecs[2]);
                 this.obj.setVec(otherVec, v);
