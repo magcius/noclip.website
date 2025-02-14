@@ -13,7 +13,7 @@ import { AttachmentStateSimple, setAttachmentStateSimple } from "../gfx/helpers/
 import { assert, assertExists, nArray } from "../util.js";
 import { convertToCanvas } from "../gfx/helpers/TextureConversionHelpers.js";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
-import { CalcBillboardFlags, calcBillboardMatrix, getMatrixAxisX, getMatrixTranslation, invlerp, transformVec3Mat4w0 } from "../MathHelpers.js";
+import { CalcBillboardFlags, calcBillboardMatrix, getMatrixAxisX, getMatrixTranslation, invlerp, Mat4Identity, transformVec3Mat4w0 } from "../MathHelpers.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
 export class WarpedProgram extends DeviceProgram {
@@ -31,19 +31,19 @@ precision mediump float;
 ${GfxShaderLibrary.MatrixLibrary}
 
 // Expected to be constant across the entire scene.
-layout(row_major, std140) uniform ub_SceneParams {
+layout(std140) uniform ub_SceneParams {
     Mat4x4 u_Projection;
     vec4 u_WorldX;
     vec4 u_WorldZ;
 };
-layout(row_major, std140) uniform ub_ModelParams {
+layout(std140) uniform ub_ModelParams {
     Mat3x4 u_ModelView;
     vec4 u_Params;
     vec4 u_BlendColor;
     vec4 u_Diffuse;
     vec4 u_Specular;
 };
-layout(row_major, std140) uniform ub_TexParams {
+layout(std140) uniform ub_TexParams {
     Mat2x4 u_TexMatrix;
     vec4 u_DrawParams;
 };
@@ -77,7 +77,7 @@ void main() {
     int mode = int(u_Params.z);
     int drawMode = int(u_DrawParams.x);
 #ifdef ANIMATED
-    vec4 viewPosition = texture(SAMPLER_2D(u_VertexAnimation), vec2(a_PositionIndex, u_Params.x));
+    vec4 viewPosition = textureLod(SAMPLER_2D(u_VertexAnimation), vec2(a_PositionIndex, u_Params.x), 0);
     viewPosition.xyz *= 255./8.;
     viewPosition.w = 1.0;
 #else
@@ -317,6 +317,11 @@ export class RenderGlobals {
     public renderInstManager: GfxRenderInstManager;
     public renderInstListMain = new GfxRenderInstList();
     public renderInstListSkybox = new GfxRenderInstList();
+    public textureRemaps: WarpTextureRemap[] = nArray(4, () => ({
+        id: -1,
+        from: -1,
+        to: -1,
+    }));
 
     constructor(device: GfxDevice, public textures: TextureData[], public meshData: AnyGFXData[]) {
         this.renderHelper = new GfxRenderHelper(device);
@@ -455,9 +460,9 @@ class DrawCallInstance {
         let currTex: BIN.TexturePage | null = null;
         if (this.drawCall.textureIndex >= 0) {
             this.fillMappingFromTexture(texAnim.textures[this.drawCall.textureIndex]);
-            for (let i = 0; i < params.textureRemaps.length; i++) {
-                if (this.drawCall.textureIndex === params.textureRemaps[i].from) {
-                    this.textureMappings[0].gfxTexture = texAnim.textures[params.textureRemaps[i].to].gfxTexture;
+            for (let i = 0; i < globals.textureRemaps.length; i++) {
+                if (this.drawCall.textureIndex === globals.textureRemaps[i].from) {
+                    this.textureMappings[0].gfxTexture = texAnim.textures[globals.textureRemaps[i].to].gfxTexture;
                 }
             }
             currTex = texAnim.textures[this.drawCall.textureIndex].page;
@@ -793,12 +798,11 @@ export interface RenderParams {
     depthOffset: number;
     debug: number;
     mirrored: boolean;
-    textureRemaps: WarpTextureRemap[];
 }
 
 const scratchMatrices = nArray(2, () => mat4.create());
 const scratchVec = vec3.create();
-export function renderMesh(globals: RenderGlobals, viewerInput: Viewer.ViewerRenderInput, data: ModelData, mtx: mat4, vtxFrame: number, uvFrame: number, params: RenderParams): void {
+export function renderMesh(globals: RenderGlobals, viewerInput: Viewer.ViewerRenderInput, data: ModelData, mtx: ReadonlyMat4, pos: ReadonlyVec3, vtxFrame: number, uvFrame: number, params: RenderParams): void {
     if (uvFrame >= 0)
         data.animator.setFrame(uvFrame);
     else
@@ -811,11 +815,7 @@ export function renderMesh(globals: RenderGlobals, viewerInput: Viewer.ViewerRen
     let offs = template.allocateUniformBuffer(WarpedProgram.ub_ModelParams, 12 + 4 * 4);
     const mapped = template.mapUniformBufferF32(WarpedProgram.ub_ModelParams);
 
-    mat4.mul(scratchMatrices[0], viewerInput.camera.viewMatrix, mtx);
-    // game actually uses full billboarding, but we want to support more camera angles
-    if (params.billboard)
-        calcBillboardMatrix(scratchMatrices[0], scratchMatrices[0], CalcBillboardFlags.UseRollGlobal | CalcBillboardFlags.PriorityY | CalcBillboardFlags.UseZPlane);
-    // animated meshes have per-frame offsets that need to be applied
+    modelView(scratchMatrices[0], viewerInput, mtx, pos, params.billboard);
     data.applyVertexRescaling(scratchMatrices[1], scratchMatrices[0], vtxFrame);
 
     let simpleMode = params.mode;
@@ -851,7 +851,6 @@ const lightScratch: RenderParams = {
     specular: vec3.create(),
     depthOffset: 0,
     debug: -1,
-    textureRemaps: [],
     mirrored: false,
 };
 
@@ -859,11 +858,10 @@ export function renderWorldMesh(globals: RenderGlobals, viewerInput: Viewer.View
     if (skybox) {
         getMatrixTranslation(scratchVec, viewerInput.camera.worldMatrix);
         vec3.add(scratchVec, scratchVec, pos);
-        mat4.fromTranslation(scratchMatrices[0], scratchVec);
     } else
-        mat4.fromTranslation(scratchMatrices[0], pos);
+        vec3.copy(scratchVec, pos);
     lightScratch.skybox = skybox;
-    renderMesh(globals, viewerInput, data, scratchMatrices[0], 0, -1, lightScratch);
+    renderMesh(globals, viewerInput, data, Mat4Identity, scratchVec, 0, -1, lightScratch);
 }
 
 export class QuadListData {
@@ -931,7 +929,17 @@ export class QuadListData {
     }
 }
 
-export function renderQuadList(globals: RenderGlobals, viewerInput: Viewer.ViewerRenderInput, data: QuadListData, mtx: mat4, frame: number, params: RenderParams): void {
+function modelView(dst: mat4, viewerInput: Viewer.ViewerRenderInput, mtx: ReadonlyMat4, pos: ReadonlyVec3, billboard: boolean): void {
+    mat4.fromTranslation(dst, pos);
+    mat4.mul(dst, viewerInput.camera.viewMatrix, dst);
+    // the game does Z billboarding, but the camera rarely points up or down in game
+    if (billboard) {
+        calcBillboardMatrix(dst, dst, CalcBillboardFlags.UseRollLocal | CalcBillboardFlags.PriorityY | CalcBillboardFlags.UseZSphere);
+    }
+    mat4.mul(dst, dst, mtx); // preserve rotation in original matrix for billboards
+}
+
+export function renderQuadList(globals: RenderGlobals, viewerInput: Viewer.ViewerRenderInput, data: QuadListData, mtx: ReadonlyMat4, pos: ReadonlyVec3, frame: number, params: RenderParams): void {
     const template = globals.renderInstManager.pushTemplate();
 
     template.setVertexInput(data.inputLayout, data.vertexBufferDescriptors, data.indexBufferDescriptor);
@@ -939,8 +947,7 @@ export function renderQuadList(globals: RenderGlobals, viewerInput: Viewer.Viewe
 
     let offs = template.allocateUniformBuffer(WarpedProgram.ub_ModelParams, 12 + 4 * 4);
     const mapped = template.mapUniformBufferF32(WarpedProgram.ub_ModelParams);
-    mat4.mul(scratchMatrices[0], viewerInput.camera.viewMatrix, mtx);
-    calcBillboardMatrix(scratchMatrices[0], scratchMatrices[0], CalcBillboardFlags.UseRollGlobal | CalcBillboardFlags.PriorityY | CalcBillboardFlags.UseZPlane);
+    modelView(scratchMatrices[0], viewerInput, mtx, pos, true);
     offs += fillMatrix4x3(mapped, offs, scratchMatrices[0]);
     offs += fillVec4(mapped, offs, 0);
 
@@ -956,11 +963,10 @@ export function renderQuadList(globals: RenderGlobals, viewerInput: Viewer.Viewe
     globals.renderInstManager.popTemplate();
 }
 
-export function renderSprite(globals: RenderGlobals, viewerInput: Viewer.ViewerRenderInput, mtx: mat4, billboard: boolean, uv: BIN.UV, code: number, color: ReadonlyVec3): void {
+export function renderSprite(globals: RenderGlobals, viewerInput: Viewer.ViewerRenderInput, mtx: ReadonlyMat4, pos: ReadonlyVec3, billboard: boolean, uv: BIN.UV, code: number, color: ReadonlyVec3): void {
     getMatrixAxisX(scratchVec, mtx);
     const scale = vec3.len(scratchVec);
-    getMatrixTranslation(scratchVec, mtx);
-    if (!viewerInput.camera.frustum.containsSphere(scratchVec, 12.5 * scale))
+    if (!viewerInput.camera.frustum.containsSphere(pos, 12.5 * scale))
         return;
 
     const template = globals.renderInstManager.pushTemplate();
@@ -969,11 +975,7 @@ export function renderSprite(globals: RenderGlobals, viewerInput: Viewer.ViewerR
 
     let offs = template.allocateUniformBuffer(WarpedProgram.ub_ModelParams, 12 + 4 * 4);
     const mapped = template.mapUniformBufferF32(WarpedProgram.ub_ModelParams);
-
-    mat4.mul(scratchMatrices[0], viewerInput.camera.viewMatrix, mtx);
-    if (billboard)
-        calcBillboardMatrix(scratchMatrices[0], scratchMatrices[0], CalcBillboardFlags.UseRollLocal | CalcBillboardFlags.PriorityZ | CalcBillboardFlags.UseZSphere);
-
+    modelView(scratchMatrices[0], viewerInput, mtx, pos, billboard);
     offs += fillMatrix4x3(mapped, offs, scratchMatrices[0]);
     offs += fillVec4(mapped, offs, 0, 0, RenderMode.DEFAULT);
     // set param to 1 to use this instead of the color in the vertex buffer
@@ -1004,10 +1006,10 @@ precision mediump float;
 ${GfxShaderLibrary.MatrixLibrary}
 
 // Expected to be constant across the entire scene.
-layout(row_major, std140) uniform ub_SceneParams {
+layout(std140) uniform ub_SceneParams {
     Mat4x4 u_Projection;
 };
-layout(row_major, std140) uniform ub_ModelParams {
+layout(std140) uniform ub_ModelParams {
     Mat3x4 u_ModelViewMatrix;
     vec4 u_Params;
 };
@@ -1030,8 +1032,8 @@ void main() {
     pos = floor(pos + camPos - 64.);
 #endif
     vec2 reduced = (pos + .5)/32.;
-    vec4 begin = texture(SAMPLER_2D(u_Waves_0), reduced);
-    vec4 end = texture(SAMPLER_2D(u_Waves_1), reduced);
+    vec4 begin = textureLod(SAMPLER_2D(u_Waves_0), reduced, 0);
+    vec4 end = textureLod(SAMPLER_2D(u_Waves_1), reduced, 0);
     vec4 attrs = mix(begin, end, u_Params.x);
     vec4 realPos = vec4(pos.x, float(a_Position.y) * (attrs.w - .5) *2. , pos.y, 1.);
     gl_Position = UnpackMatrix(u_Projection) * vec4(UnpackMatrix(u_ModelViewMatrix) * realPos, 1.);
@@ -1103,7 +1105,7 @@ export class WaterMeshData {
             { location: WaterProgram.a_Position, bufferIndex: 0, bufferByteOffset: 0, format: GfxFormat.U8_RGB },
         ];
         const vertexLayoutDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: 3, frequency: GfxVertexBufferFrequency.PerVertex },
+            { byteStride: 4, frequency: GfxVertexBufferFrequency.PerVertex },
         ];
         this.vertexBufferDescriptors = [{ buffer: this.vertexBuffer, byteOffset: 0, }];
 
@@ -1166,14 +1168,14 @@ precision mediump float;
 ${GfxShaderLibrary.MatrixLibrary}
 
 // Expected to be constant across the entire scene.
-layout(row_major, std140) uniform ub_SceneParams {
+layout(std140) uniform ub_SceneParams {
     Mat4x4 u_Projection;
 };
-layout(row_major, std140) uniform ub_ModelParams {
+layout(std140) uniform ub_ModelParams {
     Mat3x4 u_ModelViewMatrix;
     vec4 u_Params;
 };
-layout(row_major, std140) uniform ub_DrawParams {
+layout(std140) uniform ub_DrawParams {
     Mat2x4 u_TexMatrix;
 };
 
@@ -1192,7 +1194,7 @@ void main() {
     vec2 pos = vec2(a_Position.xy);
     vec2 camPos = u_Params.xy;
     pos += 8.*floor(camPos/8.) - 32.;
-    vec4 data = texture(SAMPLER_2D(u_Terrain), (pos + .5)/64.);
+    vec4 data = textureLod(SAMPLER_2D(u_Terrain), (pos + .5)/64., 0);
     vec4 realPos = vec4(pos.x, data.a, pos.y, 1.);
     gl_Position = UnpackMatrix(u_Projection) * vec4(UnpackMatrix(u_ModelViewMatrix) * realPos, 1.);
     uint index = a_QuadIndex;
@@ -1261,7 +1263,7 @@ export class TerrainMeshData {
             { location: TerrainProgram.a_QuadIndex, bufferIndex: 0, bufferByteOffset: 2, format: GfxFormat.U8_R },
         ];
         const vertexLayoutDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: 3, frequency: GfxVertexBufferFrequency.PerVertex },
+            { byteStride: 4, frequency: GfxVertexBufferFrequency.PerVertex },
         ];
         this.vertexBufferDescriptors = [{ buffer: this.vertexBuffer, byteOffset: 0, }];
 

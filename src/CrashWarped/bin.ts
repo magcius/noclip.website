@@ -1890,7 +1890,7 @@ interface WaterMesh {
 }
 function parseWaterGrid(view: DataView, offsets: number[]): WaterMesh {
     assert(offsets.length === 2 && offsets[1] - offsets[0] === 255 * 256);
-    const VERTEX_STRIDE = 3;
+    const VERTEX_STRIDE = 4;
     let triCount = 0;
     for (let offs = offsets[0]; offs < offsets[1]; offs++) {
         const triFlags = view.getUint8(offs) >>> 5;
@@ -1964,7 +1964,7 @@ function parseWaterGrid(view: DataView, offsets: number[]): WaterMesh {
 }
 
 function fakeWaterGrid(): WaterMesh {
-    const VERTEX_STRIDE = 3;
+    const VERTEX_STRIDE = 4;
     const maxX = 128;
     const maxZ = 128;
 
@@ -2069,7 +2069,7 @@ function parseTerrain(view: DataView, name: string, offsets: number[], cache: Te
         hasXLU: false,
     });
 
-    const VERTEX_STRIDE = 2 + 1;
+    const VERTEX_STRIDE = 4;
     // TODO: maybe make this smaller and use instancing?
     // tiled 8x8 pattern of textured quads, but different occurrences of a vertex have different UV coords
     const vertexData = new Uint8Array(64*64*4*VERTEX_STRIDE);

@@ -16,7 +16,8 @@ import * as BIN from "./bin.js";
 import * as SCRIPT from "./script.js";
 import { TextureData, ModelData, AnyGFXData, QuadListData, renderWorldMesh, TextureAnimator, WaterMeshData, TerrainMeshData, RenderGlobals, renderSprite } from "./render.js";
 import * as UI from "../ui.js";
-import { getMatrixAxisX, getMatrixAxisZ } from "../MathHelpers.js";
+import { getMatrixAxisX, getMatrixAxisZ, Mat4Identity } from "../MathHelpers.js";
+import { IS_DEVELOPMENT } from "../BuildVersion.js";
 const pathBase = `CrashWarped`;
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 3, numSamplers: 2 }];
@@ -56,10 +57,10 @@ class WarpedRenderer implements SceneGfx {
     public state: SCRIPT.GameState;
     public globals: RenderGlobals;
 
-    constructor(context: SceneContext, level: BIN.LevelData, id: number) {
+    constructor(context: SceneContext, level: BIN.LevelData, public id: number) {
         this.textureHolder = new FakeTextureHolder([]);
-        this.state = new SCRIPT.GameState(id, level);
         this.globals = new RenderGlobals(context.device, this.textureData, this.modelData)
+        this.state = new SCRIPT.GameState(id, level, this.globals);
     }
 
     public adjustCameraController(c: CameraController) {
@@ -123,6 +124,16 @@ class WarpedRenderer implements SceneGfx {
         this.globals.renderHelper.renderGraph.execute(builder);
         this.globals.renderInstListMain.reset();
         this.globals.renderInstListSkybox.reset();
+
+        if (this.state.levelToLoad >= 0 && IS_DEVELOPMENT) {
+            for (let desc of sceneGroup.sceneDescs) {
+                if (typeof desc === "string")
+                    continue;
+                if ((desc as CrashWarpedScene).index === this.state.levelToLoad) {
+                    setTimeout(() => window.main.ui.sceneSelect.onscenedescselected(desc), 50);
+                }
+            }
+        }
     }
 
     public prepareToRender(device: GfxDevice, viewerInput: ViewerRenderInput): void {
@@ -169,8 +180,8 @@ class WarpedRenderer implements SceneGfx {
                     vec3.set(scr[0], x * 64, this.state.waterHeight(x, z), z * 64);
                     mat4.fromTranslation(scrMatrix, scr[0]);
                     const frame = buoys.buoyUVs[(x + z + (this.state.frame >> 1)) % (buoys.buoyUVs.length - 1)];
-                    vec3.set(scr[0], .5, color === 0 ? .15625 : .5, .15625);
-                    renderSprite(this.globals, viewerInput, scrMatrix, true, frame, 0x2E, scr[0]);
+                    vec3.set(scr[1], .5, color === 0 ? .15625 : .5, .15625);
+                    renderSprite(this.globals, viewerInput, Mat4Identity, scr[0], true, frame, 0x2E, scr[1]);
                 }
             }
         }
@@ -304,7 +315,6 @@ class CrashWarpedScene implements SceneDesc {
 export const id = 'CrashWarped';
 export const name = "Crash Bandicoot: Warped";
 export const sceneDescs = [
-    "Hub",
     new CrashWarpedScene(0x3C, "Title Screen"),
     new CrashWarpedScene(0x02, "Hub"),
     "Medieval Room",
@@ -348,12 +358,12 @@ export const sceneDescs = [
     new CrashWarpedScene(0x26, "Eggipus Rex"),
     new CrashWarpedScene(0x27, "Hot Coco"),
     new CrashWarpedScene(0x1F, "Rings of Power"),
-    "Other",
+    "Cutscenes",
     new CrashWarpedScene(0x28, "Intro"),
     new CrashWarpedScene(0x29, "Normal Ending"),
     new CrashWarpedScene(0x2A, "100% Ending"),
     new CrashWarpedScene(0x3A, "Boss Dialog"),
-    new CrashWarpedScene(0x3B, "Uka Uka Dialog"),
+    new CrashWarpedScene(0x3B, "Game Over"),
 ];
 
 export const sceneGroup: SceneGroup = { id, name, sceneDescs, hidden: false };

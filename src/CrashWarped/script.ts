@@ -6,6 +6,7 @@ import { mat4, ReadonlyVec3, vec3 } from "gl-matrix";
 import { RenderParams as RenderParams, ModelData, QuadListData, renderMesh, renderQuadList, WarpTextureRemap, RenderMode, RenderGlobals, renderSprite } from "./render.js";
 import { AABB } from "../Geometry.js";
 import { parseMIPSOpcode, Opcode as MIPS, RegName } from "../PokemonSnap/mips.js";
+import { IS_DEVELOPMENT } from "../BuildVersion.js";
 
 enum Opcode {
     ADD = 0x00,
@@ -208,6 +209,7 @@ enum GlobalVariable {
     DEATHS_IN_SEGMENT = 0x92,
     AREA_UNLOCKS = 0x96,
     TIME_TRIAL = 0xAD,
+    BOSS_CUTSCENE = 0XBF,
 }
 
 export function initGlobals(id: number, completed: boolean, globals: number[]): void {
@@ -232,6 +234,7 @@ export function initGlobals(id: number, completed: boolean, globals: number[]): 
     globals[0x12] = 7;
     globals[0x5F] = 0x2A;
     globals[0xA] = 0x100;
+    globals[GlobalVariable.BOSS_CUTSCENE] = randomRange(1, 21) | 0;
     globals[0x61] = buildPointer(PointerBase.OBJECT, 0); // not sure what this is or how it gets set
 }
 
@@ -243,6 +246,7 @@ export function updateState(game: GameState, viewerInput: ViewerRenderInput): vo
     game.globals[GlobalVariable.CAMERA_POS_X] = game.player.get(Source.POS_X);
     game.globals[GlobalVariable.CAMERA_POS_Y] = game.player.get(Source.POS_Y);
     game.globals[GlobalVariable.CAMERA_POS_Z] = game.player.get(Source.POS_Z);
+    game.player.pos[1] -= 20; // make it easier to hit buttons, without affecting skybox
     const id = game.globals[GlobalVariable.LEVEL_ID] >>> 8;
     if (id === 0xE || id === 0x1C) // side scrolling water levels
         game.player.pos[2] = 675;
@@ -904,8 +908,9 @@ export class GameState {
     public root: CrashObject;
     public currObjIndex = -1;
     public instCount = 0;
+    public levelToLoad = -1;
 
-    constructor(levelID: number, public level: LevelData) {
+    constructor(levelID: number, public level: LevelData, public renderGlobals: RenderGlobals) {
         this.root = new CrashObject(-1, 0, level.behaviors.get("DispC")!, null!);
         this.player = new CrashObject(-1, 1, level.behaviors.get("DispC")!, null!);
         this.objects.push(this.root);
@@ -924,7 +929,7 @@ export class GameState {
         const waveIndex = 32 * (gridZ & 31) + (gridX & 31);
 
         const js = assertExists(this.level.jetski);
-        const scale = js.vertexData[vtxIndex * 3 + 1];
+        const scale = js.vertexData[vtxIndex * 4 + 1];
 
         const animIndex = this.frame >> 3;
         const tex0 = js.waveTextures[animIndex % js.waveTextures.length];
@@ -1023,11 +1028,6 @@ const renderScratch: RenderParams = {
     specular: vec3.create(),
     depthOffset: 0,
     debug: -1,
-    textureRemaps: nArray(4, () => ({
-        id: -1,
-        from: -1,
-        to: -1,
-    } as WarpTextureRemap)),
     mirrored: false,
 };
 
@@ -1059,7 +1059,7 @@ export class CrashObject {
     public pos = vec3.create();
     public euler = vec3.create();
     public scale = vec3.fromValues(1, 1, 1);
-    public modelMatrix = mat4.create();
+    public rotScaleMatrix = mat4.create();
 
     private nextUpdate = 0;
     public errored = false;
@@ -1092,7 +1092,7 @@ export class CrashObject {
         vec3.copy(this.pos, Vec3Zero);
         vec3.copy(this.euler, Vec3Zero);
         vec3.copy(this.scale, Vec3One);
-        mat4.identity(this.modelMatrix);
+        mat4.identity(this.rotScaleMatrix);
 
         this.nextUpdate = 0;
         this.errored = false;
@@ -1209,7 +1209,11 @@ export class CrashObject {
             case 0x440001: case 0x440002: case 0x440003: case 0x440004:
             case 0x440006: case 0x44000B:
 
-            thresh = 0; break;
+
+                return true;
+            case 0x320001: // car tires
+                this.nextUpdate = game.frame; // the tires don't really animate
+                return true;
         }
 
         return game.frame >= this.lastUpdate + thresh;
@@ -1276,34 +1280,33 @@ export class CrashObject {
         }
         switch (angleOrder) {
             case 2:
-            mat4.fromZRotation(this.modelMatrix, z);
+            mat4.fromZRotation(this.rotScaleMatrix, z);
             if (x !== 0)
-                mat4.rotateX(this.modelMatrix, this.modelMatrix, x);
+                mat4.rotateX(this.rotScaleMatrix, this.rotScaleMatrix, x);
             break;
             case 4: case 5: case 6: case 7: case 11: case 12: {
-                mat4.fromYRotation(this.modelMatrix, y);
+                mat4.fromYRotation(this.rotScaleMatrix, y);
                 if (x !== 0)
-                    mat4.rotateX(this.modelMatrix, this.modelMatrix, x);
+                    mat4.rotateX(this.rotScaleMatrix, this.rotScaleMatrix, x);
                 if (z !== 0)
-                    mat4.rotateZ(this.modelMatrix, this.modelMatrix, z);
+                    mat4.rotateZ(this.rotScaleMatrix, this.rotScaleMatrix, z);
             } break;
             case 13: case 14: {
-                mat4.fromZRotation(this.modelMatrix, z);
+                mat4.fromZRotation(this.rotScaleMatrix, z);
                 if (x !== 0)
-                    mat4.rotateX(this.modelMatrix, this.modelMatrix, x);
+                    mat4.rotateX(this.rotScaleMatrix, this.rotScaleMatrix, x);
                 if (y !== 0)
-                    mat4.rotateY(this.modelMatrix, this.modelMatrix, y);
+                    mat4.rotateY(this.rotScaleMatrix, this.rotScaleMatrix, y);
             } break;
             default: {
-                mat4.fromYRotation(this.modelMatrix, z);
+                mat4.fromYRotation(this.rotScaleMatrix, z);
                 if (x !== 0)
-                    mat4.rotateX(this.modelMatrix, this.modelMatrix, x);
+                    mat4.rotateX(this.rotScaleMatrix, this.rotScaleMatrix, x);
                 if (z !== y)
-                    mat4.rotateY(this.modelMatrix, this.modelMatrix, y-z);
+                    mat4.rotateY(this.rotScaleMatrix, this.rotScaleMatrix, y-z);
             } break;
         }
-        mat4.scale(this.modelMatrix, this.modelMatrix, this.scale);
-        setMatrixTranslation(this.modelMatrix, this.pos);
+        mat4.scale(this.rotScaleMatrix, this.rotScaleMatrix, this.scale);
     }
 
     public collideAllChildren(obj: CrashObject, src: Source, signal: number, argCount: number, game: GameState, depth = 0): void {
@@ -1375,7 +1378,7 @@ export class CrashObject {
         let frac = (t & 0xFF) / 0xFF;
         if (index >= path.length) {
             // assert(false)
-            console.warn("bad path index", t, path.length);
+            // console.warn("bad path index", t, path.length);
             t = 0;
             index = 0;
             frac = 0;
@@ -1652,7 +1655,7 @@ export class CrashObject {
             const billboard = transformMode !== 3;
             // do the blend now, since we didn't set the mesh vertex colors
             vec3.lerp(scratchVecs[0], frame.color, renderScratch.blendColor, renderScratch.blendFactor);
-            renderSprite(globals, viewerInput, this.modelMatrix, billboard, frame.uv, frame.code, scratchVecs[0]);
+            renderSprite(globals, viewerInput, this.rotScaleMatrix, this.pos, billboard, frame.uv, frame.code, scratchVecs[0]);
             return;
         }
 
@@ -1677,13 +1680,13 @@ export class CrashObject {
             }
             renderScratch.debug = this.get(Source.OBJECT_ID);
             assert(transformMode !== 9) // y offset?
-            renderMesh(globals, viewerInput, data, this.modelMatrix, animFrame, uvFrame, renderScratch);
+            renderMesh(globals, viewerInput, data, this.rotScaleMatrix, this.pos, animFrame, uvFrame, renderScratch);
         } else if (data instanceof QuadListData) {
             // assert(modelFormat === 2 || modelFormat === 3)
             renderScratch.mode = RenderMode.QUAD_LIST;
             // if (renderScratch.blendFactor !== 0)
             //     debugger
-            renderQuadList(globals, viewerInput, data, this.modelMatrix, animFrame, renderScratch);
+            renderQuadList(globals, viewerInput, data, this.rotScaleMatrix, this.pos, animFrame, renderScratch);
         } else {
             assert(modelFormat === 4 || modelFormat === 5)
         }
@@ -2060,6 +2063,13 @@ export class CrashObject {
 
     public sendSignal(target: CrashObject | null, rawSignal: number, argCount: number, game: GameState): void {
         const signal = rawSignal >>> 8;
+
+        if (IS_DEVELOPMENT && target && target.index === 1 && signal === 0x16) {
+            this.set(Source.TEMP_A, 1);
+            game.levelToLoad = 2;
+            return;
+        }
+
         if (target === null || signal >= target.behavior.signalIndices.length) {
             this.set(Source.TEMP_A, 0);
             return;
@@ -2261,8 +2271,8 @@ class InstructionExecutor implements InstructionHandler<ExecResult> {
                 // and textures are replaced globally across all objects
                 // luckily this is only used for warps, so we can be lazy
                 const ind = left >> 8;
-                for (let i = 0; i < renderScratch.textureRemaps.length; i++) {
-                    const target = renderScratch.textureRemaps[i];
+                for (let i = 0; i < this.game.renderGlobals.textureRemaps.length; i++) {
+                    const target = this.game.renderGlobals.textureRemaps[i];
                     if (target.id !== vidoID)
                         continue;
                     target.from = refModel.frames[ind].uv.texIndex;
@@ -2271,19 +2281,19 @@ class InstructionExecutor implements InstructionHandler<ExecResult> {
             case Opcode.DECOMPRESS_SPECIAL_TEXTURE: {
                 this.obj.set(Source.TEMP_A, 0x300); // seems like it will always be a palette + indices
                 const texSeq = assertExists(this.game.level.vidos.get(left));
-                for (let i = 0; i < renderScratch.textureRemaps.length; i++) {
-                    const target = renderScratch.textureRemaps[i];
+                for (let i = 0; i < this.game.renderGlobals.textureRemaps.length; i++) {
+                    const target = this.game.renderGlobals.textureRemaps[i];
                     if (target.id !== left)
                         continue;
                     target.to = texSeq[right >> 8];
                 }
             } break;
             case Opcode.FREE_SPECIAL_TEXTURE: {
-                for (let i = 0; i < renderScratch.textureRemaps.length; i++) {
-                    if (renderScratch.textureRemaps[i].id === left) {
-                        renderScratch.textureRemaps[i].id = -1;
-                        renderScratch.textureRemaps[i].from = -1;
-                        renderScratch.textureRemaps[i].to = -1;
+                for (let i = 0; i < this.game.renderGlobals.textureRemaps.length; i++) {
+                    if (this.game.renderGlobals.textureRemaps[i].id === left) {
+                        this.game.renderGlobals.textureRemaps[i].id = -1;
+                        this.game.renderGlobals.textureRemaps[i].from = -1;
+                        this.game.renderGlobals.textureRemaps[i].to = -1;
                     }
                 }
             } break;
@@ -2369,9 +2379,9 @@ class InstructionExecutor implements InstructionHandler<ExecResult> {
             case Opcode.STORE_SIN: result = 0x1000 * Math.sin(val * toRad); break;
             case Opcode.LOAD_SPECIAL_TEXTURE: {
                 let found = false;
-                for (let i = 0; i < renderScratch.textureRemaps.length; i++) {
-                    if (renderScratch.textureRemaps[i].id === -1) {
-                        renderScratch.textureRemaps[i].id = val;
+                for (let i = 0; i < this.game.renderGlobals.textureRemaps.length; i++) {
+                    if (this.game.renderGlobals.textureRemaps[i].id === -1) {
+                        this.game.renderGlobals.textureRemaps[i].id = val;
                         found = true;
                         break;
                     }
@@ -2497,13 +2507,16 @@ class InstructionExecutor implements InstructionHandler<ExecResult> {
                             this.obj.setParent(this.game.root, this.game);
                         }
                     } break;
-                    case 0x10: {
+                    case 10: {
+                        this.game.levelToLoad = mainArg >>> 8;
+                    } break;
+                    case 16: {
                         const ptr = parsePointer(mainArg);
                         assert(ptr.base === PointerBase.BEHAVIOR);
                         const name = this.game.level.classNameList[ptr.offset];
                         assertExists(this.obj.getObj(other, this.game)).varBehavior = assertExists(this.game.level.behaviors.get(name));
                     } break;
-                    case 0x11: {
+                    case 17: {
                         const ptr = parsePointer(mainArg);
                         assert(ptr.base === PointerBase.OBJECT);
                         const other = assertExists(this.game.objects[ptr.offset]);
@@ -2647,8 +2660,10 @@ class InstructionExecutor implements InstructionHandler<ExecResult> {
                     other.getVec(Source.POS_X, scratchVecs[1]);
                     vec3.mul(scratchVecs[0], scratchVecs[0], other.scale);
                     vec3.add(scratchVecs[0], scratchVecs[0], scratchVecs[1]);
-                } else
-                    transformVec3Mat4w1(scratchVecs[0], other.modelMatrix, scratchVecs[0]);
+                } else {
+                    transformVec3Mat4w1(scratchVecs[0], other.rotScaleMatrix, scratchVecs[0]);
+                    vec3.add(scratchVecs[0], scratchVecs[0], other.pos);
+                }
                 vec3.scale(scratchVecs[0], scratchVecs[0], 0x1000);
                 this.obj.setVec(vec, scratchVecs[0]);
             } break;
