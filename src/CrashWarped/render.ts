@@ -77,7 +77,7 @@ void main() {
     int mode = int(u_Params.z);
     int drawMode = int(u_DrawParams.x);
 #ifdef ANIMATED
-    vec4 viewPosition = textureLod(SAMPLER_2D(u_VertexAnimation), vec2(a_PositionIndex, u_Params.x), 0);
+    vec4 viewPosition = textureLod(SAMPLER_2D(u_VertexAnimation), vec2(a_PositionIndex, u_Params.x), 0.);
     viewPosition.xyz *= 255./8.;
     viewPosition.w = 1.0;
 #else
@@ -1032,8 +1032,8 @@ void main() {
     pos = floor(pos + camPos - 64.);
 #endif
     vec2 reduced = (pos + .5)/32.;
-    vec4 begin = textureLod(SAMPLER_2D(u_Waves_0), reduced, 0);
-    vec4 end = textureLod(SAMPLER_2D(u_Waves_1), reduced, 0);
+    vec4 begin = textureLod(SAMPLER_2D(u_Waves_0), reduced, 0.);
+    vec4 end = textureLod(SAMPLER_2D(u_Waves_1), reduced, 0.);
     vec4 attrs = mix(begin, end, u_Params.x);
     vec4 realPos = vec4(pos.x, float(a_Position.y) * (attrs.w - .5) *2. , pos.y, 1.);
     gl_Position = UnpackMatrix(u_Projection) * vec4(UnpackMatrix(u_ModelViewMatrix) * realPos, 1.);
@@ -1194,7 +1194,7 @@ void main() {
     vec2 pos = vec2(a_Position.xy);
     vec2 camPos = u_Params.xy;
     pos += 8.*floor(camPos/8.) - 32.;
-    vec4 data = textureLod(SAMPLER_2D(u_Terrain), (pos + .5)/64., 0);
+    vec4 data = textureLod(SAMPLER_2D(u_Terrain), (pos + .5)/64., 0.);
     vec4 realPos = vec4(pos.x, data.a, pos.y, 1.);
     gl_Position = UnpackMatrix(u_Projection) * vec4(UnpackMatrix(u_ModelViewMatrix) * realPos, 1.);
     uint index = a_QuadIndex;
