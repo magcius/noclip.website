@@ -646,7 +646,6 @@ function buildDecal(pt: ReadonlyVec3, halfWidth: number, halfHeight: number, que
     const surfaces: OverlaySurface[] = [];
     const surfacePlane = new Plane();
     const textureSpaceBasis = nArray(3, () => vec3.create());
-    const dpt = vec3.create();
 
     for (const face of faces) {
         const faceInfo = faceInfos[face];
@@ -674,6 +673,11 @@ function buildDecal(pt: ReadonlyVec3, halfWidth: number, halfHeight: number, que
             // Build the surface plane.
             surfacePlane.setTri(surfacePoints[0].position, surfacePoints[2].position, surfacePoints[1].position);
 
+            // Reject any triangles that are too far from the decal's origin.
+            vec3.sub(scratchVec3a, pt, surfacePoints[0].position);
+            if (vec3.dot(scratchVec3a, surfacePlane.n) >= halfWidth)
+                continue;
+
             vec3.copy(textureSpaceBasis[2], surfacePlane.n);
 
             if (Math.abs(surfacePlane.n[2]) >= Math.sin(MathConstants.TAU * 0.25)) {
@@ -691,7 +695,7 @@ function buildDecal(pt: ReadonlyVec3, halfWidth: number, halfHeight: number, que
             normToLength(textureSpaceBasis[1], halfHeight);
 
             // Project our origin point down to the plane.
-            surfacePlane.projectToPlane(dpt, pt);
+            surfacePlane.projectToPlane(scratchVec3a, pt);
 
             // Compute the four corners of the decal.
             const overlayPoints = nArray(4, () => new MeshVertex());
@@ -699,7 +703,7 @@ function buildDecal(pt: ReadonlyVec3, halfWidth: number, halfHeight: number, que
                 const p = overlayPoints[i];
                 const sx = (0b0110 >>> i) & 1;
                 const sy = (0b1100 >>> i) & 1;
-                vec3FromBasis2(p.position, dpt, textureSpaceBasis[0], sx * 2 - 1, textureSpaceBasis[1], sy * 2 - 1);
+                vec3FromBasis2(p.position, scratchVec3a, textureSpaceBasis[0], sx * 2 - 1, textureSpaceBasis[1], sy * 2 - 1);
                 vec2.set(p.uv, sx, sy);
             }
 
