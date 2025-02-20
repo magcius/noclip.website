@@ -1146,8 +1146,8 @@ void main() {
     v_TangentSpaceBasisY = normalize(t_WorldFromLocal * vec4(UNORM_TO_SNORM(a_Tangent0.xyz), 0.0));
     v_TangentSpaceBasisX = normalize(cross(v_TangentSpaceBasisZ, v_TangentSpaceBasisY) * UNORM_TO_SNORM(a_Tangent0.w));
 
-    v_TexCoordProjX = (UnpackMatrix(u_ProjectionView) * vec4(t_PositionWorld + v_TangentSpaceBasisX, 0.0)).xyw;
-    v_TexCoordProjY = (UnpackMatrix(u_ProjectionView) * vec4(t_PositionWorld + v_TangentSpaceBasisY, 0.0)).xyw;
+    v_TexCoordProjX = (UnpackMatrix(u_ProjectionView) * vec4(t_PositionWorld + v_TangentSpaceBasisX, 1.0)).xyw;
+    v_TexCoordProjY = (UnpackMatrix(u_ProjectionView) * vec4(t_PositionWorld + v_TangentSpaceBasisY, 1.0)).xyw;
 }
 `;
 
