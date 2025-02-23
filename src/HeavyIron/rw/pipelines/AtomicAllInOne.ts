@@ -38,6 +38,8 @@ class AtomicProgram extends DeviceProgram {
     public override both = `
 precision mediump float;
 
+${GfxShaderLibrary.MatrixLibrary}
+
 #define MAX_DIRECTIONAL_LIGHTS ${MAX_DIRECTIONAL_LIGHTS}
 
 struct DirectionalLight {
