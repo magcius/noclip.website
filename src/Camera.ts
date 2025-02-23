@@ -36,7 +36,7 @@ export class Camera {
     public linearVelocity = vec3.create();
 
     public frustum = new Frustum();
-    public fovY: number;
+    public fovY: number = MathConstants.TAU / 6;
     public aspect: number;
     public isOrthographic: boolean = false;
 

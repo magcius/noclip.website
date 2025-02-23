@@ -90,8 +90,6 @@ export class Viewer {
 
     public camera = new Camera();
 
-    static readonly FOV_Y_DEFAULT: number = MathConstants.TAU / 6;
-    public fovY: number = Viewer.FOV_Y_DEFAULT;
     // Scene time. Can be paused / scaled / rewound / whatever.
     public sceneTime: number = 0;
     // requestAnimationFrame time. Used to calculate dt from the new time.
@@ -298,7 +296,6 @@ export class Viewer {
 
         camera.newFrame();
         const aspect = this.canvas.width / this.canvas.height;
-        camera.fovY = this.fovY;
         camera.aspect = aspect;
         camera.setClipPlanes(5);
 

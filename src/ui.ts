@@ -3,7 +3,7 @@
 
 import * as Viewer from './viewer.js';
 import { assertExists, assert } from './util.js';
-import { CameraControllerClass, OrbitCameraController, FPSCameraController, OrthoCameraController } from './Camera.js';
+import { CameraControllerClass, OrbitCameraController, FPSCameraController, OrthoCameraController, CameraController, Camera } from './Camera.js';
 import { Color, colorToCSS } from './Color.js';
 import { GITHUB_REVISION_URL, GITHUB_URL, GIT_SHORT_REVISION, IS_DEVELOPMENT } from './BuildVersion.js';
 import { SaveManager, GlobalSaveManager } from "./SaveManager.js";
@@ -1611,7 +1611,6 @@ class ViewerSettings extends Panel {
         this.fovSlider = new Slider();
         this.fovSlider.setLabel("Field of View");
         this.fovSlider.setRange(1, 100);
-        this.fovSlider.setValue(Viewer.Viewer.FOV_Y_DEFAULT / Math.PI * 100);
         this.fovSlider.onvalue = this.onFovSliderChange.bind(this);
         this.contents.appendChild(this.fovSlider.elem);
 
@@ -1654,7 +1653,7 @@ class ViewerSettings extends Panel {
 
     private onFovSliderChange(): void {
         const value = this.fovSlider.getT();
-        this.viewer.fovY = value * (Math.PI * 0.995);
+        this.viewer.camera.fovY = value * (Math.PI * 0.995);
     }
 
     private onKeyMoveSpeedChanged(): void {
@@ -1668,8 +1667,11 @@ class ViewerSettings extends Panel {
         }
     }
 
-    public setInitialKeyMoveSpeed(v: number): void {
-        this.camSpeedSlider.setValue(v);
+    public setupFromCamera(cameraController: CameraController, camera: Camera): void {
+        const keyMoveSpeed = cameraController.getKeyMoveSpeed();
+        if (keyMoveSpeed !== null)
+            this.camSpeedSlider.setValue(keyMoveSpeed);
+        this.fovSlider.setValue(camera.fovY / Math.PI * 100);
     }
 
     private setCameraControllerClass(cameraControllerClass: CameraControllerClass) {
@@ -2818,9 +2820,7 @@ export class UI {
     public sceneChanged() {
         const cameraControllerClass = this.viewer.cameraController!.constructor as CameraControllerClass;
         this.viewerSettings.cameraControllerSelected(cameraControllerClass);
-        const keyMoveSpeed = this.viewer.cameraController!.getKeyMoveSpeed();
-        if (keyMoveSpeed !== null)
-            this.viewerSettings.setInitialKeyMoveSpeed(keyMoveSpeed);
+        this.viewerSettings.setupFromCamera(this.viewer.cameraController!, this.viewer.camera);
 
         // Textures
         if (this.viewer.scene !== null) {
