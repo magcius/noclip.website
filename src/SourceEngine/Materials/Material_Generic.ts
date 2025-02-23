@@ -1645,14 +1645,11 @@ export class Material_Generic extends BaseMaterial {
         // Compute modulation color.
         if (this.shaderType === GenericShaderType.Black) {
             colorCopy(MaterialUtil.scratchColor, OpaqueBlack);
+            MaterialUtil.scratchColor.a *= this.paramGetNumber('$alpha');
+            offs += fillColor(d, offs, MaterialUtil.scratchColor);
         } else {
-            colorCopy(MaterialUtil.scratchColor, White);
-            this.paramGetVector('$color').mulColor(MaterialUtil.scratchColor);
-            this.paramGetVector('$color2').mulColor(MaterialUtil.scratchColor);
+            offs += this.paramFillModulationColor(d, offs, false);
         }
-
-        MaterialUtil.scratchColor.a *= this.paramGetNumber('$alpha');
-        offs += fillColor(d, offs, MaterialUtil.scratchColor);
 
         const alphaTestReference = this.paramGetNumber('$alphatestreference');
         const detailBlendFactor = this.paramGetNumber('$detailblendfactor');

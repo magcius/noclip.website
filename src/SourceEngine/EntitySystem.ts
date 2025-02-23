@@ -1571,7 +1571,7 @@ class func_tracktrain extends BaseEntity {
 
     private output_onstart = new EntityOutput();
 
-    private currentPath: path_track;
+    private currentPath: path_track | null = null;
     private waitTime = 0.0;
     private activated = false;
 
@@ -1589,7 +1589,7 @@ class func_tracktrain extends BaseEntity {
     public override spawn(entitySystem: EntitySystem): void {
         super.spawn(entitySystem);
 
-        this.currentPath = assertExists(entitySystem.findEntityByTargetName(this.entity.target) as path_track);
+        this.currentPath = entitySystem.findEntityByTargetName(this.entity.target) as path_track;
         this.velocityType = Number(fallbackUndefined(this.entity.velocitytype, '0'));
         this.orientationType = Number(fallbackUndefined(this.entity.orientationtype, '0'));
         this.length = Number(fallbackUndefined(this.entity.wheels, '0'));
@@ -1607,6 +1607,9 @@ class func_tracktrain extends BaseEntity {
 
     public override movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
         super.movement(entitySystem, renderContext);
+
+        if (this.currentPath === null)
+            return;
 
         if (!this.activated) {
             vec3.copy(this.localOrigin, this.currentPath.localOrigin);
