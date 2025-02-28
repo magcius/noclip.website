@@ -5,7 +5,7 @@ import { DataFetcher } from '../DataFetcher.js';
 import { Texture } from './types.js';
 import { range } from '../MathHelpers.js';
 
-export const decodeImage = (path: string, imageBytes: ArrayBufferLike) : {rgba8: Uint8Array, width: number, height: number} | null => {
+const decodeImage = (path: string, imageBytes: ArrayBufferLike) : {rgba8: Uint8Array, width: number, height: number} | null => {
   const extension = path.toLowerCase().split(".").pop();
   switch (extension) {
     case "tif": 
@@ -31,10 +31,23 @@ export const decodeImage = (path: string, imageBytes: ArrayBufferLike) : {rgba8:
   return null;
 };
 
+const flipImage = (image : {rgba8: Uint8Array, width: number, height: number}) : {rgba8: Uint8Array, width: number, height: number} => {
+  const data: number[] = Array(image.height).fill(null).map(
+    (_, i) => ([...image.rgba8.subarray(
+      i * image.width * 4,
+      (i + 1) * image.width * 4
+    )])
+  ).reverse().flat();
+  return {
+    ...image,
+    rgba8: new Uint8Array(data)
+  };
+}
+
 export const fetchTextures = (dataFetcher: DataFetcher, basePath: string, texturePaths: string[]) : Promise<Texture[]> => 
   Promise.all(
     texturePaths.map(path => dataFetcher.fetchData(`${basePath}/${path}`).then(({arrayBuffer}) => ({
-      ...decodeImage(path, arrayBuffer)!,
+      ...flipImage(decodeImage(path, arrayBuffer)!),
       path
     })))
   );

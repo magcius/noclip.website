@@ -74,15 +74,11 @@ in vec2 v_DiffuseTexCoord;
 in vec2 v_EnvTexCoord;
 
 void main() {
-  vec3 color = v_DiffuseColor.rgb;
+  vec3 color;
   if (u_reflective == 1.0) {
-    vec2 t_TexCoordEnv = vec2(v_EnvTexCoord.x, 1.0 - v_EnvTexCoord.y);
-    vec3 t_EnvSample = texture(SAMPLER_2D(envTexture), t_TexCoordEnv).rgb;
-    color = t_EnvSample;
+    color = texture(SAMPLER_2D(envTexture), v_EnvTexCoord).rgb;
   } else {
-    vec2 t_TexCoordDiffuse = vec2(v_DiffuseTexCoord.x, 1.0 - v_DiffuseTexCoord.y);
-    vec3 t_DiffuseSample = texture(SAMPLER_2D(diffuseTexture), t_TexCoordDiffuse).rgb;
-    color *= t_DiffuseSample;
+    color = v_DiffuseColor.rgb * texture(SAMPLER_2D(diffuseTexture), v_DiffuseTexCoord).rgb;
   }
   gl_FragColor = vec4(color, v_DiffuseColor.a);
 }
