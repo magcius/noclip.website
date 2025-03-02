@@ -1589,7 +1589,7 @@ class func_tracktrain extends BaseEntity {
     public override spawn(entitySystem: EntitySystem): void {
         super.spawn(entitySystem);
 
-        this.currentPath = entitySystem.findEntityByTargetName(this.entity.target) as path_track;
+        this.currentPath = this.entity.target !== undefined ? entitySystem.findEntityByTargetName(this.entity.target) as path_track : null;
         this.velocityType = Number(fallbackUndefined(this.entity.velocitytype, '0'));
         this.orientationType = Number(fallbackUndefined(this.entity.orientationtype, '0'));
         this.length = Number(fallbackUndefined(this.entity.wheels, '0'));
