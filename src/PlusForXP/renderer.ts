@@ -478,7 +478,7 @@ export default class Renderer implements SceneGfx {
         
         this.customCamera.clipSpaceNearZ = viewerInput.camera.clipSpaceNearZ;
         this.customCamera.setPerspective(
-          viewerInput.camera.fovY, // camera.fov,
+          camera.fov,
           viewerInput.camera.aspect,
           camera.nearclip,
           camera.farclip
