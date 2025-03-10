@@ -165,18 +165,28 @@ export interface CombineParams {
     a1: AlphaCombinePass;
 }
 
+// smoosh all high values into the appropriate "zero" case
+function mapAdditive(x: number): number {
+    if (x >= 8)
+        return CCMUX.ADD_ZERO;
+    return x;
+}
+
+function mapMult(x: number): number {
+    if (x >= 16)
+        return CCMUX.MUL_ZERO;
+    return x;
+}
+
 export function decodeCombineParams(w0: number, w1: number): CombineParams {
-    // because we aren't implementing all the combine input options (notably, not noise)
-    // and the highest values are just 0, we can get away with throwing away high bits:
-    // ax,bx,dx can be 3 bits, and cx can be 4
-    const a0  = (w0 >>> 20) & 0x07;
-    const c0  = (w0 >>> 15) & 0x0f;
+    const a0  = mapAdditive((w0 >>> 20) & 0x0f);
+    const c0  = mapMult((w0 >>> 15) & 0x1f);
     const Aa0 = (w0 >>> 12) & 0x07;
     const Ac0 = (w0 >>> 9) & 0x07;
-    const a1  = (w0 >>> 5) & 0x07;
-    const c1  = (w0 >>> 0) & 0x0f;
-    const b0  = (w1 >>> 28) & 0x07;
-    const b1  = (w1 >>> 24) & 0x07;
+    const a1  = mapAdditive((w0 >>> 5) & 0x0f);
+    const c1  = mapMult((w0 >>> 0) & 0x1f);
+    const b0  = mapAdditive((w1 >>> 28) & 0x0f);
+    const b1  = mapAdditive((w1 >>> 24) & 0x0f);
     const Aa1 = (w1 >>> 21) & 0x07;
     const Ac1 = (w1 >>> 18) & 0x07;
     const d0  = (w1 >>> 15) & 0x07;
@@ -272,13 +282,13 @@ export function generateCombineParamsString(comb: CombineParams, twoCycle: boole
         "SHADE","ENVIRONMENT","1","NOISE",
         "0","0","0","0","0","0","0","0",
     ];
-    
+
     let colorB = [
         "COMBINED","TEXEL0","TEXEL1","PRIMITIVE",
         "SHADE","ENVIRONMENT","CENTER","K4",
         "0","0","0","0","0","0","0","0",
     ];
-    
+
     let colorC = [
         "COMBINED","TEXEL0","TEXEL1","PRIMITIVE",
         "SHADE","ENVIRONMENT","SCALE","COMBINED_ALPHA",
@@ -287,17 +297,17 @@ export function generateCombineParamsString(comb: CombineParams, twoCycle: boole
         "PRIM_LOD_FRAC","K5",
         "0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0"
     ];
-    
+
     let colorD = [
         "COMBINED","TEXEL0","TEXEL1","PRIMITIVE",
         "SHADE","ENVIRONMENT","1","0"
     ];
-    
+
     let alphaABD = [
         "COMBINED","TEXEL0","TEXEL1","PRIMITIVE",
         "SHADE","ENVIRONMENT","1","0"
     ];
-    
+
     let alphaC = [
         "LOD_FRACTION","TEXEL0","TEXEL1","PRIMITIVE",
         "SHADE","ENVIRONMENT","PRIM_LOD_FRAC","0"
