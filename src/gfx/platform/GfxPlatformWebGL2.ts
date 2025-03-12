@@ -1165,7 +1165,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         return queryPool;
     }
 
-    public async createWebXRLayer(webXRSession: XRSession): Promise<XRWebGLLayer> {
+    public async createWebXRLayer(webXRSession: XRSession): Promise<XRLayer> {
         await this.gl.makeXRCompatible();
         return new XRWebGLLayer(webXRSession, this.gl, { antialias: false });
     }
