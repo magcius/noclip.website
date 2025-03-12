@@ -6,12 +6,11 @@ import { SceneDesc, SceneGroup } from "./SceneBase.js";
 import { CameraController, Camera, XRCameraController, CameraUpdateResult } from './Camera.js';
 import { GfxDevice, GfxSwapChain, GfxStatisticsGroup, GfxTexture, makeTextureDescriptor2D, GfxFormat } from './gfx/platform/GfxPlatform.js';
 import { createSwapChainForWebGL2, gfxDeviceGetImpl_GL, GfxPlatformWebGL2Config } from './gfx/platform/GfxPlatformWebGL2.js';
-import { createSwapChainForWebGPU } from './gfx/platform/GfxPlatformWebGPU.js';
+import { createSwapChainForWebGPU, GfxPlatformWebGPUConfig } from './gfx/platform/GfxPlatformWebGPU.js';
 import { downloadFrontBufferToCanvas } from './Screenshot.js';
 import { RenderStatistics, RenderStatisticsTracker } from './RenderStatistics.js';
 import { AntialiasingMode } from './gfx/helpers/RenderGraphHelpers.js';
 import { WebXRContext } from './WebXR.js';
-import { MathConstants } from './MathHelpers.js';
 import { IS_DEVELOPMENT } from './BuildVersion.js';
 import { GlobalSaveManager } from './SaveManager.js';
 import { mat4 } from 'gl-matrix';
@@ -166,11 +165,11 @@ export class Viewer {
         this.renderStatisticsTracker.beginFrame();
 
         resetGfxStatisticsGroup(this.statisticsGroup);
-        this.gfxDevice.pushStatisticsGroup(this.statisticsGroup);
+        this.gfxDevice.setStatisticsGroup(this.statisticsGroup);
 
         this.renderViewport();
 
-        this.gfxDevice.popStatisticsGroup();
+        this.gfxDevice.setStatisticsGroup(null);
         this.gfxDevice.endFrame();
 
         const renderStatistics = this.renderStatisticsTracker.endFrame();
@@ -211,7 +210,7 @@ export class Viewer {
         this.renderStatisticsTracker.beginFrame();
 
         resetGfxStatisticsGroup(this.statisticsGroup);
-        this.gfxDevice.pushStatisticsGroup(this.statisticsGroup);
+        this.gfxDevice.setStatisticsGroup(this.statisticsGroup);
 
         for (let i = 0; i < webXRContext.views.length; i++) {
             this.viewerRenderInput.camera = this.xrCameraController.cameras[i];
@@ -234,7 +233,7 @@ export class Viewer {
             this.viewerRenderInput.deltaTime = 0;
         }
 
-        this.gfxDevice.popStatisticsGroup();
+        this.gfxDevice.setStatisticsGroup(null);
         this.gfxDevice.endFrame();
         const renderStatistics = this.renderStatisticsTracker.endFrame();
         this.finishRenderStatistics(renderStatistics, this.statisticsGroup);
@@ -378,7 +377,10 @@ async function initializeViewerWebGL2(out: ViewerOut, canvas: HTMLCanvasElement)
 }
 
 async function initializeViewerWebGPU(out: ViewerOut, canvas: HTMLCanvasElement): Promise<InitErrorCode> {
-    const gfxSwapChain = await createSwapChainForWebGPU(canvas);
+    const config = new GfxPlatformWebGPUConfig();
+    config.trackResources = IS_DEVELOPMENT;
+
+    const gfxSwapChain = await createSwapChainForWebGPU(canvas, config);
     if (gfxSwapChain === null)
         return InitErrorCode.MISSING_MISC_WEB_APIS;
 

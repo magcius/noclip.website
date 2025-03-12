@@ -464,7 +464,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
     // Pass Execution
     private _currentRenderPassDescriptor: GfxRenderPassDescriptor | null = null;
-    private _statisticsGroupStack: GfxStatisticsGroup[] = [];
+    private _currentStatisticsGroup: GfxStatisticsGroup | null = null;
     private _resolveColorAttachmentsChanged: boolean = false;
     private _resolveColorReadFramebuffer: WebGLFramebuffer;
     private _resolveColorDrawFramebuffer: WebGLFramebuffer;
@@ -1634,12 +1634,8 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             this._resourceCreationTracker.checkForLeaks();
     }
 
-    public pushStatisticsGroup(statisticsGroup: GfxStatisticsGroup): void {
-        this._statisticsGroupStack.push(statisticsGroup);
-    }
-
-    public popStatisticsGroup(): void {
-        this._statisticsGroupStack.pop();
+    public setStatisticsGroup(statisticsGroup: GfxStatisticsGroup | null): void {
+        this._currentStatisticsGroup = statisticsGroup;
     }
 
     public programPatched(o: GfxProgram, descriptor: GfxRenderProgramDescriptor): void {
@@ -1664,23 +1660,23 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
     //#region Pass execution
     private _debugGroupStatisticsDrawCall(count: number = 1): void {
-        for (let i = this._statisticsGroupStack.length - 1; i >= 0; i--)
-            this._statisticsGroupStack[i].drawCallCount += count;
+        if (this._currentStatisticsGroup !== null)
+            this._currentStatisticsGroup.drawCallCount += count;
     }
 
     private _debugGroupStatisticsBufferUpload(count: number = 1): void {
-        for (let i = this._statisticsGroupStack.length - 1; i >= 0; i--)
-            this._statisticsGroupStack[i].bufferUploadCount += count;
+        if (this._currentStatisticsGroup !== null)
+            this._currentStatisticsGroup.bufferUploadCount += count;
     }
 
     private _debugGroupStatisticsTextureBind(count: number = 1): void {
-        for (let i = this._statisticsGroupStack.length - 1; i >= 0; i--)
-            this._statisticsGroupStack[i].textureBindCount += count;
+        if (this._currentStatisticsGroup !== null)
+            this._currentStatisticsGroup.textureBindCount += count;
     }
 
     private _debugGroupStatisticsTriangles(count: number): void {
-        for (let i = this._statisticsGroupStack.length - 1; i >= 0; i--)
-            this._statisticsGroupStack[i].triangleCount += count;
+        if (this._currentStatisticsGroup !== null)
+            this._currentStatisticsGroup.triangleCount += count;
     }
 
     private _compileShader(contents: string, type: GLenum): WebGLShader {

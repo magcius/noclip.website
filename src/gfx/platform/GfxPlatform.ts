@@ -484,8 +484,7 @@ export interface GfxDevice {
     setResourceLeakCheck(o: GfxResource, v: boolean): void;
     checkForLeaks(): void;
     programPatched(o: GfxProgram, descriptor: GfxRenderProgramDescriptor): void;
-    pushStatisticsGroup(statisticsGroup: GfxStatisticsGroup): void;
-    popStatisticsGroup(): void;
+    setStatisticsGroup(statisticsGroup: GfxStatisticsGroup | null): void;
 }
 
 export type { GfxBuffer, GfxTexture, GfxRenderTarget, GfxSampler, GfxProgram, GfxInputLayout, GfxRenderPipeline, GfxBindings };
