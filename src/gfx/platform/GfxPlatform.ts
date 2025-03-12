@@ -235,7 +235,6 @@ export interface GfxAttachmentState {
 
 export interface GfxMegaStateDescriptor {
     attachmentsState: GfxAttachmentState[];
-    blendConstant: GfxColor; // TODO(jstpierre): Make this dynamic state?
     depthCompare: GfxCompareMode;
     depthWrite: boolean;
     stencilCompare: GfxCompareMode;
@@ -361,6 +360,7 @@ export interface GfxRenderPass {
     setBindings(bindingLayoutIndex: number, bindings: GfxBindings, dynamicByteOffsets: number[]): void;
     setVertexInput(inputLayout: GfxInputLayout | null, buffers: (GfxVertexBufferDescriptor | null)[] | null, indexBuffer: GfxIndexBufferDescriptor | null): void;
     setStencilRef(value: number): void;
+    setBlendColor(color: GfxColor): void;
 
     // Draw commands.
     draw(vertexCount: number, firstVertex: number): void;

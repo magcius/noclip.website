@@ -2,7 +2,6 @@
 import { GfxMegaStateDescriptor, GfxFrontFaceMode, GfxCullMode, GfxStencilOp, GfxCompareMode, GfxBlendFactor, GfxBlendMode, GfxAttachmentState, GfxChannelWriteMask, GfxChannelBlendState } from "../platform/GfxPlatform.js";
 import { reverseDepthForCompareMode } from "./ReversedDepthHelpers.js";
 import { fallbackUndefined } from "../platform/GfxPlatformUtil.js";
-import { gfxColorCopy, gfxColorNewCopy } from '../platform/GfxPlatformUtil.js';
 
 function copyChannelBlendState(dst: GfxChannelBlendState, src: GfxChannelBlendState): void {
     dst.blendDstFactor = src.blendDstFactor;
@@ -37,9 +36,6 @@ export function setMegaStateFlags(dst: GfxMegaStateDescriptor, src: Partial<GfxM
     if (src.attachmentsState !== undefined)
         copyAttachmentsState(dst.attachmentsState, src.attachmentsState);
 
-    if (src.blendConstant !== undefined)
-        gfxColorCopy(dst.blendConstant, src.blendConstant);
-
     dst.depthCompare = fallbackUndefined(src.depthCompare, dst.depthCompare);
     dst.depthWrite = fallbackUndefined(src.depthWrite, dst.depthWrite);
     dst.stencilCompare = fallbackUndefined(src.stencilCompare, dst.stencilCompare);
@@ -56,7 +52,6 @@ export function copyMegaState(src: GfxMegaStateDescriptor): GfxMegaStateDescript
     // Copy fields that need copying.
     dst.attachmentsState = [];
     copyAttachmentsState(dst.attachmentsState, src.attachmentsState);
-    dst.blendConstant = gfxColorNewCopy(dst.blendConstant);
     return dst;
 }
 
@@ -116,10 +111,8 @@ export const defaultMegaState: GfxMegaStateDescriptor = {
         rgbBlendState: defaultBlendState,
         alphaBlendState: defaultBlendState,
     }],
-
-    blendConstant: { r: 0, g: 0, b: 0, a: 0 },
-    depthWrite: true,
     depthCompare: reverseDepthForCompareMode(GfxCompareMode.LessEqual),
+    depthWrite: true,
     stencilCompare: GfxCompareMode.Always,
     stencilWrite: false,
     stencilPassOp: GfxStencilOp.Keep,

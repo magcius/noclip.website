@@ -59,7 +59,6 @@ interface GfxInputLayoutP_WebGPU extends GfxInputLayout {
 interface GfxRenderPipelineP_WebGPU extends GfxRenderPipeline {
     descriptor: GfxRenderPipelineDescriptor;
     gpuRenderPipeline: GPURenderPipeline | null;
-    blendConstant: GfxColor | null;
     isCreatingAsync: boolean;
 }
 
@@ -484,20 +483,6 @@ function translateBindGroupSamplerBinding(sampler: GfxBindingLayoutSamplerDescri
         return { type: "non-filtering" };
 }
 
-function factorUsesBlendConstant(v: GfxBlendFactor): boolean {
-    return v === GfxBlendFactor.ConstantColor || v === GfxBlendFactor.OneMinusConstantColor;
-}
-
-function extractBlendConstant(pipeline: GfxRenderPipelineDescriptor): GfxColor | null {
-    for (let i = 0; i < pipeline.megaStateDescriptor.attachmentsState.length; i++) {
-        const at = pipeline.megaStateDescriptor.attachmentsState[i];
-        if (factorUsesBlendConstant(at.rgbBlendState.blendSrcFactor) || factorUsesBlendConstant(at.rgbBlendState.blendDstFactor) || factorUsesBlendConstant(at.alphaBlendState.blendSrcFactor) || factorUsesBlendConstant(at.alphaBlendState.blendDstFactor))
-            return pipeline.megaStateDescriptor.blendConstant;
-    }
-
-    return null;
-}
-
 function prependLineNo(str: string, lineStart: number = 1) {
     const lines = str.split('\n');
     return lines.map((s, i) => `${leftPad('' + (lineStart + i), 4, ' ')}  ${s}`).join('\n');
@@ -678,9 +663,6 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
         const pipeline = pipeline_ as GfxRenderPipelineP_WebGPU;
         const gpuRenderPipeline = assertExists(pipeline.gpuRenderPipeline);
         this.gpuRenderPassEncoder!.setPipeline(gpuRenderPipeline);
-
-        if (pipeline.blendConstant !== null)
-            this.gpuRenderPassEncoder!.setBlendConstant(pipeline.blendConstant);
     }
 
     public setVertexInput(inputLayout_: GfxInputLayout | null, vertexBuffers: (GfxVertexBufferDescriptor | null)[] | null, indexBuffer: GfxIndexBufferDescriptor | null): void {
@@ -708,6 +690,10 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
 
     public setStencilRef(ref: number): void {
         this.gpuRenderPassEncoder!.setStencilReference(ref);
+    }
+
+    public setBlendColor(color: GfxColor): void {
+        this.gpuRenderPassEncoder!.setBlendConstant(color);
     }
 
     public draw(vertexCount: number, firstVertex: number): void {
@@ -1287,10 +1273,9 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     public createRenderPipeline(descriptor: GfxRenderPipelineDescriptor): GfxRenderPipeline {
         const gpuRenderPipeline: GPURenderPipeline | null = null;
         const isCreatingAsync = false;
-        const blendConstant = extractBlendConstant(descriptor);
         const renderPipeline: GfxRenderPipelineP_WebGPU = {
             _T: _T.RenderPipeline, ResourceUniqueId: this.getNextUniqueId(),
-            descriptor, isCreatingAsync, gpuRenderPipeline, blendConstant,
+            descriptor, isCreatingAsync, gpuRenderPipeline,
         };
         this._createRenderPipeline(renderPipeline, true);
         return renderPipeline;

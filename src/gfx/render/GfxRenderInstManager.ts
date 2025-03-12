@@ -2,7 +2,7 @@
 import { nArray, assert, assertExists } from "../../util.js";
 import { clamp } from "../../MathHelpers.js";
 
-import { GfxMegaStateDescriptor, GfxDevice, GfxRenderPass, GfxRenderPipelineDescriptor, GfxPrimitiveTopology, GfxBindingLayoutDescriptor, GfxBindingsDescriptor, GfxSamplerBinding, GfxProgram, GfxInputLayout, GfxFormat, GfxRenderPassDescriptor, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../platform/GfxPlatform.js";
+import { GfxMegaStateDescriptor, GfxDevice, GfxRenderPass, GfxRenderPipelineDescriptor, GfxPrimitiveTopology, GfxBindingLayoutDescriptor, GfxBindingsDescriptor, GfxSamplerBinding, GfxProgram, GfxInputLayout, GfxFormat, GfxRenderPassDescriptor, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor, GfxColor } from "../platform/GfxPlatform.js";
 
 import { defaultMegaState, copyMegaState, setMegaStateFlags } from "../helpers/GfxMegaStateDescriptorHelpers.js";
 
@@ -164,6 +164,9 @@ export class GfxRenderInst {
     private _drawStart: number = 0;
     private _drawCount: number = 0;
     private _drawInstanceCount: number = 1;
+
+    private _stencilRef: number | null = null;
+    private _blendColor: GfxColor | null = null;
 
     constructor() {
         this._renderPipelineDescriptor = {
@@ -485,6 +488,14 @@ export class GfxRenderInst {
         this._renderPipelineDescriptor.sampleCount = sampleCount;
     }
 
+    public setStencilRef(value: number | null): void {
+        this._stencilRef = value;
+    }
+
+    public setBlendColor(value: GfxColor | null): void {
+        this._blendColor = value;
+    }
+
     public drawOnPass(cache: GfxRenderCache, passRenderer: GfxRenderPass): void {
         const device = cache.device;
         this.setAttachmentFormatsFromRenderPass(device, passRenderer);
@@ -515,6 +526,11 @@ export class GfxRenderInst {
             passRenderer.setBindings(i, gfxBindings, this._dynamicUniformBufferByteOffsets.slice(uboIndex, uboIndex + numBuffers));
             uboIndex += numBuffers;
         }
+
+        if (this._stencilRef !== null)
+            passRenderer.setStencilRef(this._stencilRef);
+        if (this._blendColor !== null)
+            passRenderer.setBlendColor(this._blendColor);
 
         const indexed = this._indexBuffer !== null;
         if (this._drawInstanceCount > 1) {

@@ -1,7 +1,6 @@
 
 import { GfxSamplerBinding, GfxBufferBinding, GfxBindingsDescriptor, GfxRenderPipelineDescriptor, GfxBindingLayoutDescriptor, GfxInputLayoutDescriptor, GfxVertexAttributeDescriptor, GfxProgram, GfxMegaStateDescriptor, GfxAttachmentState, GfxChannelBlendState, GfxSamplerDescriptor, GfxInputLayoutBufferDescriptor, GfxFormat, GfxBindingLayoutSamplerDescriptor, GfxRenderAttachmentView } from './GfxPlatform.js';
 import { copyMegaState } from '../helpers/GfxMegaStateDescriptorHelpers.js';
-import { gfxColorEqual } from './GfxPlatformUtil.js';
 
 type EqualFunc<K> = (a: K, b: K) => boolean;
 type CopyFunc<T> = (a: T) => T;
@@ -125,8 +124,6 @@ function gfxAttachmentStateEquals(a: Readonly<GfxAttachmentState>, b: Readonly<G
 }
 function gfxMegaStateDescriptorEquals(a: GfxMegaStateDescriptor, b: GfxMegaStateDescriptor): boolean {
     if (!arrayEqual(a.attachmentsState, b.attachmentsState, gfxAttachmentStateEquals))
-        return false;
-    if (!gfxColorEqual(a.blendConstant, b.blendConstant))
         return false;
 
     return (

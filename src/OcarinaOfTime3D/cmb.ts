@@ -276,7 +276,7 @@ export interface Material {
     textureEnvironment: TextureEnvironment;
     alphaTestFunction: GfxCompareMode;
     alphaTestReference: number;
-    renderFlags: Partial<GfxMegaStateDescriptor>;
+    megaStateFlags: Partial<GfxMegaStateDescriptor>;
     isTransparent: boolean;
     polygonOffset: number;
     isVertexLightingEnabled: boolean;
@@ -302,13 +302,14 @@ export interface Material {
     ambientColor: Color;
     specular0Color: Color;
     specular1Color: Color;
+    blendColor: Color;
 
-    lutDist0:   MaterialLutSampler;
-    lutDist1:   MaterialLutSampler;
-    lutFesnel:  MaterialLutSampler;
-    lutReflecR: MaterialLutSampler;
-    lutReflecG: MaterialLutSampler;
-    lutReflecB: MaterialLutSampler;
+    lutDist0: MaterialLutSampler;
+    lutDist1: MaterialLutSampler;
+    lutFresnel: MaterialLutSampler;
+    lutReflectR: MaterialLutSampler;
+    lutReflectG: MaterialLutSampler;
+    lutReflectB: MaterialLutSampler;
 }
 
 export function calcTexMtx(dst: mat4, scaleS: number, scaleT: number, rotation: number, translationS: number, translationT: number): void {
@@ -487,28 +488,28 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
             scale: view.getFloat32(offs + 0xFC, true)
         };
 
-        const lutReflecR = {
+        const lutReflectR = {
             isAbsolute: !!view.getUint8(offs + 0x100),
             index: view.getInt8(offs + 0x101),
             input: view.getUint16(offs + 0x102, true),
             scale: view.getFloat32(offs + 0x104, true)
         };
 
-        const lutReflecG = {
+        const lutReflectG = {
             isAbsolute: !!view.getUint8(offs + 0x109),
             index: view.getInt8(offs + 0x109),
             input: view.getUint16(offs + 0x10A, true),
             scale: view.getFloat32(offs + 0x10C, true)
         };
 
-        const lutReflecB = {
+        const lutReflectB = {
             isAbsolute: !!view.getUint8(offs + 0x110),
             index: view.getInt8(offs + 0x111),
             input: view.getUint16(offs + 0x112, true),
             scale: view.getFloat32(offs + 0x114, true)
         };
 
-        const lutFesnel = {
+        const lutFresnel = {
             isAbsolute: !!view.getUint8(offs + 0x118),
             index: view.getInt8(offs + 0x119),
             input: view.getUint16(offs + 0x11A, true),
@@ -611,11 +612,11 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
         const blendColorG = view.getFloat32(offs + 0x150, true);
         const blendColorB = view.getFloat32(offs + 0x154, true);
         const blendColorA = view.getFloat32(offs + 0x158, true);
-        const blendConstant = colorNewFromRGBA(blendColorR, blendColorG, blendColorB, blendColorA);
+        const blendColor = colorNewFromRGBA(blendColorR, blendColorG, blendColorB, blendColorA);
 
         if (usesBlendConstantAlpha) {
             assert(!usesBlendConstantColor);
-            blendConstant.r = blendConstant.g = blendConstant.b = blendConstant.a;
+            blendColor.r = blendColor.g = blendColor.b = blendColor.a;
             rgbBlendState.blendSrcFactor = translateBlendFactor(rgbBlendState.blendSrcFactor);
             rgbBlendState.blendDstFactor = translateBlendFactor(rgbBlendState.blendDstFactor);
             alphaBlendState.blendSrcFactor = translateBlendFactor(alphaBlendState.blendSrcFactor);
@@ -623,7 +624,7 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
         }
 
         const isTransparent = blendEnabled;
-        const renderFlags: Partial<GfxMegaStateDescriptor> = {
+        const megaStateFlags: Partial<GfxMegaStateDescriptor> = {
             attachmentsState: [
                 {
                     channelWriteMask: GfxChannelWriteMask.AllChannels,
@@ -631,7 +632,6 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
                     alphaBlendState,
                 },
             ],
-            blendConstant,
             depthCompare: reverseDepthForCompareMode(depthTestFunction),
             depthWrite: depthWriteEnabled,
             cullMode,
@@ -640,11 +640,11 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
         const combinerBufferColor = colorNewFromRGBA(bufferColorR, bufferColorG, bufferColorB, bufferColorA);
         const textureEnvironment = { textureCombiners, combinerBufferColor };
         cmb.materials.push({
-            index: i, renderLayer, texCoordConfig, textureBindings, textureCoordinators, constantColors, textureEnvironment, alphaTestFunction, alphaTestReference, renderFlags,
+            index: i, renderLayer, texCoordConfig, textureBindings, textureCoordinators, constantColors, textureEnvironment, alphaTestFunction, alphaTestReference, megaStateFlags,
             isTransparent, polygonOffset, isVertexLightingEnabled, isFragmentLightingEnabled, isFogEnabled, lightingConfig, fresnelSelector,
             bumpMode, bumpTextureIndex, isBumpRenormEnabled, isClampHighlight, isGeoFactorEnabled, isGeo0Enabled, isGeo1Enabled, isDist0Enabled, isDist1Enabled, isReflectionEnabled,
-            emissionColor, ambientColor, diffuseColor, specular0Color, specular1Color,
-            lutDist0, lutDist1, lutFesnel, lutReflecR, lutReflecG, lutReflecB,
+            emissionColor, ambientColor, diffuseColor, specular0Color, specular1Color, blendColor,
+            lutDist0, lutDist1, lutFresnel, lutReflectR, lutReflectG, lutReflectB,
         });
 
         offs += 0x15C;

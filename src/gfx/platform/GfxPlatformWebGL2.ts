@@ -1,12 +1,11 @@
 
-import { GfxAttachmentState, GfxBindingLayoutDescriptor, GfxBindingsDescriptor, GfxBlendFactor, GfxBlendMode, GfxBufferBinding, GfxBufferFrequencyHint, GfxBufferUsage, GfxChannelBlendState, GfxChannelWriteMask, GfxClipSpaceNearZ, GfxCompareMode, GfxComputePass, GfxComputePipelineDescriptor, GfxComputeProgramDescriptor, GfxCullMode, GfxStatisticsGroup, GfxDevice, GfxDeviceLimits, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxInputLayoutDescriptor, GfxMegaStateDescriptor, GfxMipFilterMode, GfxPass, GfxPlatformFramebuffer, GfxPrimitiveTopology, GfxRenderProgramDescriptor, GfxQueryPoolType, GfxRenderPass, GfxRenderPassDescriptor, GfxRenderPipelineDescriptor, GfxRenderTargetDescriptor, GfxSamplerBinding, GfxSamplerDescriptor, GfxSamplerFormatKind, GfxSwapChain, GfxTexFilterMode, GfxTextureDescriptor, GfxTextureDimension, GfxTextureUsage, GfxVendorInfo, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxViewportOrigin, GfxWrapMode, GfxRenderAttachmentView, GfxRenderPassAttachmentColor, GfxRenderPassAttachment, GfxRenderPassAttachmentDepthStencil } from './GfxPlatform.js';
+import { GfxAttachmentState, GfxBindingLayoutDescriptor, GfxBindingsDescriptor, GfxBlendFactor, GfxBlendMode, GfxBufferBinding, GfxBufferFrequencyHint, GfxBufferUsage, GfxChannelBlendState, GfxChannelWriteMask, GfxClipSpaceNearZ, GfxCompareMode, GfxComputePass, GfxComputePipelineDescriptor, GfxComputeProgramDescriptor, GfxCullMode, GfxStatisticsGroup, GfxDevice, GfxDeviceLimits, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxInputLayoutDescriptor, GfxMegaStateDescriptor, GfxMipFilterMode, GfxPass, GfxPlatformFramebuffer, GfxPrimitiveTopology, GfxRenderProgramDescriptor, GfxQueryPoolType, GfxRenderPass, GfxRenderPassDescriptor, GfxRenderPipelineDescriptor, GfxRenderTargetDescriptor, GfxSamplerBinding, GfxSamplerDescriptor, GfxSamplerFormatKind, GfxSwapChain, GfxTexFilterMode, GfxTextureDescriptor, GfxTextureDimension, GfxTextureUsage, GfxVendorInfo, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxViewportOrigin, GfxWrapMode, GfxRenderAttachmentView, GfxRenderPassAttachmentColor, GfxRenderPassAttachment, GfxRenderPassAttachmentDepthStencil, GfxColor } from './GfxPlatform.js';
 import { FormatCompFlags, FormatFlags, FormatTypeFlags, GfxFormat, getFormatByteSize, getFormatCompByteSize, getFormatCompFlags, getFormatFlags, getFormatSamplerKind, getFormatTypeFlags } from "./GfxPlatformFormat.js";
 import { GfxBindings, GfxBuffer, GfxComputePipeline, GfxInputLayout, GfxProgram, GfxQueryPool, GfxReadback, GfxRenderPipeline, GfxRenderTarget, GfxResource, GfxSampler, GfxTexture, GfxTextureImpl, _T, defaultBindingLayoutSamplerDescriptor, isFormatSamplerKindCompatible } from "./GfxPlatformImpl.js";
 
 import { copyAttachmentState, copyMegaState, defaultMegaState } from '../helpers/GfxMegaStateDescriptorHelpers.js';
 import { assert, assertExists, leftPad, nArray, nullify } from './GfxPlatformUtil.js';
 import { gfxRenderAttachmentViewEquals } from './GfxPlatformObjUtil.js';
-import { gfxColorCopy, gfxColorEqual } from './GfxPlatformUtil.js';
 
 // This is a workaround for ANGLE not supporting UBOs greater than 64kb (the limit of D3D).
 // https://bugs.chromium.org/p/angleproject/issues/detail?id=3388
@@ -2171,11 +2170,6 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             this._setAttachmentState(newMegaState.attachmentsState[0]);
         }
 
-        if (!gfxColorEqual(currentMegaState.blendConstant, newMegaState.blendConstant)) {
-            gl.blendColor(newMegaState.blendConstant.r, newMegaState.blendConstant.g, newMegaState.blendConstant.b, newMegaState.blendConstant.a);
-            gfxColorCopy(currentMegaState.blendConstant, newMegaState.blendConstant);
-        }
-
         if (currentMegaState.depthCompare !== newMegaState.depthCompare) {
             gl.depthFunc(newMegaState.depthCompare);
             currentMegaState.depthCompare = newMegaState.depthCompare;
@@ -2341,6 +2335,10 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             return;
         this._currentStencilRef = value;
         this._applyStencil();
+    }
+
+    public setBlendColor(color: GfxColor): void {
+        this.gl.blendColor(color.r, color.g, color.b, color.a);
     }
 
     public draw(count: number, firstVertex: number): void {

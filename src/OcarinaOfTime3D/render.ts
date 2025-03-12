@@ -320,9 +320,9 @@ uniform samplerCube u_Cubemap;
         if(material.isReflectionEnabled){
             if(this.IsLUTSupported(MatLutType.ReflectR))
                 S+= `
-        t_ReflValue.r = ${this.getLutInput(material.lutReflecB)};
-        t_ReflValue.g = ${this.IsLUTSupported(MatLutType.ReflectG) ? this.getLutInput(material.lutReflecG) : `t_ReflValue.r`};
-        t_ReflValue.b = ${this.IsLUTSupported(MatLutType.ReflectB) ? this.getLutInput(material.lutReflecB) : `t_ReflValue.r`};
+        t_ReflValue.r = ${this.getLutInput(material.lutReflectR)};
+        t_ReflValue.g = ${this.IsLUTSupported(MatLutType.ReflectG) ? this.getLutInput(material.lutReflectG) : `t_ReflValue.r`};
+        t_ReflValue.b = ${this.IsLUTSupported(MatLutType.ReflectB) ? this.getLutInput(material.lutReflectB) : `t_ReflValue.r`};
         `;
         }
 
@@ -334,7 +334,7 @@ uniform samplerCube u_Cubemap;
             specular_1 = `(${specular_1} * t_GeoFactor)`;
 
         if (material.fresnelSelector !== FresnelSelector.No && this.IsLUTSupported(MatLutType.Fresnel)) {
-            const value = this.getLutInput(material.lutFesnel);
+            const value = this.getLutInput(material.lutFresnel);
 
             // Only use the last light
             S += `\tif(i == 1){\n\t\t\t`;
@@ -832,7 +832,8 @@ class MaterialInstance {
         let offs = template.allocateUniformBuffer(DMPProgram.ub_MaterialParams, 4*4 + 4*5*3 + 4*2 + 4*6 + 4*3*3 + 4);
         const layer = this.material.isTransparent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
         template.sortKey = makeSortKey(layer + this.material.renderLayer);
-        template.setMegaStateFlags(this.material.renderFlags);
+        template.setMegaStateFlags(this.material.megaStateFlags);
+        template.setBlendColor(this.material.blendColor);
 
         if (this.gfxProgram === null)
             this.gfxProgram = cache.createProgram(this.program!);
