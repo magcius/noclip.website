@@ -740,8 +740,8 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
 
     private copyAttachment(dst: GfxTextureSharedP_WebGPU, dstView: GfxRenderAttachmentView, src: GfxTextureSharedP_WebGPU, srcView: GfxRenderAttachmentView): void {
         assert(src.sampleCount === 1);
-        const srcCopy: GPUImageCopyTexture = { texture: src.gpuTexture, mipLevel: srcView.level, origin: [0, 0, srcView.z] };
-        const dstCopy: GPUImageCopyTexture = { texture: dst.gpuTexture, mipLevel: dstView.level, origin: [0, 0, dstView.z] };
+        const srcCopy: GPUTexelCopyTextureInfo = { texture: src.gpuTexture, mipLevel: srcView.level, origin: [0, 0, srcView.z] };
+        const dstCopy: GPUTexelCopyTextureInfo = { texture: dst.gpuTexture, mipLevel: dstView.level, origin: [0, 0, dstView.z] };
         assert((src.width >>> srcView.level) === (dst.width >>> dstView.level));
         assert((src.height >>> srcView.level) === (dst.height >>> dstView.level));
         assert(!!(src.usage & GPUTextureUsage.COPY_SRC));
@@ -1034,11 +1034,12 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             depthOrArrayLayers: descriptor.depthOrArrayLayers,
         };
         const mipLevelCount = descriptor.numLevels;
+        const sampleCount = descriptor.sampleCount;
         const format = translateTextureFormat(descriptor.pixelFormat);
         const dimension = translateTextureDimension(descriptor.dimension);
         const usage = translateTextureUsage(descriptor.usage);
 
-        const gpuTexture = this.device.createTexture({ size, mipLevelCount, format, dimension, usage });
+        const gpuTexture = this.device.createTexture({ size, mipLevelCount, format, dimension, usage, sampleCount });
         const gpuTextureView = gpuTexture.createView({
             dimension: translateViewDimension(descriptor.dimension),
         });
@@ -1049,7 +1050,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             depthOrArrayLayers: descriptor.depthOrArrayLayers,
             numLevels: mipLevelCount,
             usage,
-            sampleCount: 1,
+            sampleCount,
             gpuTexture, gpuTextureView,
             dimension: descriptor.dimension,
         };
@@ -1671,7 +1672,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         return {
             uniformBufferMaxPageWordSize: this.device.limits.maxUniformBufferBindingSize >>> 2,
             uniformBufferWordAlignment: this.device.limits.minUniformBufferOffsetAlignment >>> 2,
-            supportedSampleCounts: [1],
+            supportedSampleCounts: [1, 4],
             occlusionQueriesRecommended: true,
             computeShadersSupported: true,
             wireframeSupported: false,

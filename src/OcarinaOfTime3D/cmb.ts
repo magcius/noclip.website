@@ -623,7 +623,7 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
         }
 
         const isTransparent = blendEnabled;
-        const renderFlags = {
+        const renderFlags: Partial<GfxMegaStateDescriptor> = {
             attachmentsState: [
                 {
                     channelWriteMask: GfxChannelWriteMask.AllChannels,
