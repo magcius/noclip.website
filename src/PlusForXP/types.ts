@@ -1,6 +1,7 @@
 import { mat4, vec3 } from "gl-matrix";
 import { GfxIndexBufferDescriptor, GfxInputLayout, GfxTexture, GfxVertexBufferDescriptor } from "../gfx/platform/GfxPlatform.js";
 import { SCX } from "./scx/types.js";
+import { ViewerRenderInput } from "../viewer.js";
 
 export type Texture = {
   path: string,
@@ -34,8 +35,16 @@ export type SceneNode = {
   parent?: SceneNode,
   children: SceneNode[],
   transform: Transform,
+  animatedTransform?: Transform,
   worldTransform: mat4,
   transformChanged: boolean,
   animates: boolean,
+  visible: boolean,
+  worldVisible: boolean,
   meshes: Mesh[]
 };
+
+export interface ISimulation {
+  setup(sceneNodesByName: Map<string, SceneNode>): void;
+  update(input: ViewerRenderInput, sceneNodesByName: Map<string, SceneNode>): void;
+}

@@ -74,13 +74,12 @@ in vec2 v_DiffuseTexCoord;
 in vec2 v_EnvTexCoord;
 
 void main() {
-  vec3 color;
-  if (u_reflective == 1.0) {
-    color = texture(SAMPLER_2D(envTexture), v_EnvTexCoord).rgb;
-  } else {
-    color = v_DiffuseColor.rgb * texture(SAMPLER_2D(diffuseTexture), v_DiffuseTexCoord).rgb;
-  }
-  gl_FragColor = vec4(color, v_DiffuseColor.a);
+  vec4 reflectiveColor = texture(SAMPLER_2D(envTexture), v_EnvTexCoord);
+  vec4 diffuseColor = v_DiffuseColor * texture(SAMPLER_2D(diffuseTexture), v_DiffuseTexCoord);
+  gl_FragColor = vec4(
+    mix(diffuseColor, reflectiveColor, u_reflective).rgb, 
+    v_DiffuseColor.a
+  );
 }
 `;
 }

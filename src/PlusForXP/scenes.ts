@@ -6,13 +6,31 @@ import { parse as parseSCX } from './scx/parser.js'
 import { SCX } from "./scx/types.js";
 import { fetchTextures, makeTextureHolder } from "./util.js";
 import Renderer from './renderer.js';
+import MercuryPool from "./simulations/mercury_pool.js";
+import RobotCircus from "./simulations/robot_circus.js";
+import SandPendulum from "./simulations/sand_pendulum.js";
+import pool from "./pool.js";
+import { ISimulation } from "./types.js";
+
+type EnvironmentMap = {
+  texturePath: string,
+  rotation: [number, number, number]
+};
+
+type SceneSource = {
+  path: string, 
+  count?: number,
+  scene?: SCX.Scene,
+  environment?: EnvironmentMap
+};
 
 type Variant = { 
   name: string, 
   cameras: [string, string][],
-  scenePaths: string[], 
+  scenes: SceneSource[], 
   envTexturePaths: string[], 
-  envMapRotation: [number, number, number] 
+  envMapRotation: [number, number, number],
+  createSimulation: () => ISimulation
 };
 type Screensaver = { name: string, basePath: string, variants: Record<string, Variant> };
 
@@ -22,39 +40,41 @@ const screensavers: Record<string, Screensaver> = {
     basePath: "Screensavers/Mercury Pool/Media/",
     variants: {
       cavern: {
-        name: "Cavern", 
+        name: "Cavern",
         cameras: [
           ["Dolly", "Mercury_Pool_Cave_Camera.scx/Camera02"]
         ],
-        scenePaths: [
-          "Mercury_Pool_Cave_Scene.scx",
-          "Mercury_Pool_Cave_Camera.scx",
-
-          "Mercury_Pool_Drop.scx",
-          "Mercury_Pool_Splash.scx",
+        scenes: [
+          {path: "Mercury_Pool_Cave_Scene.scx"},
+          {path: "Mercury_Pool_Cave_Camera.scx"},
+          {path: "pool", scene: pool},
+          {path: "Mercury_Pool_Drop.scx", count: 3},
+          {path: "Mercury_Pool_Splash.scx", count: 3},
         ],
         envTexturePaths: [
           'Environment_Cave.TIF',
         ],
-        envMapRotation: [90, 180, 0]
+        envMapRotation: [90, 180, 0],
+        createSimulation: () => new MercuryPool()
       },
       industrial: {
-        name: "Industrial", 
+        name: "Industrial",
         cameras: [
           ["Orbit", "Mercury_Pool_Tech_Camera.scx/Camera01"],
         ],
-        scenePaths: [
-          "Mercury_Pool_Tech_Scene.scx",
-          "Mercury_Pool_Tech_Camera.scx",
-          "Mercury_Pool_Tech_Sky.scx",
-
-          "Mercury_Pool_Drop.scx",
-          "Mercury_Pool_Splash.scx",
+        scenes: [
+          {path: "Mercury_Pool_Tech_Scene.scx"},
+          {path: "Mercury_Pool_Tech_Camera.scx"},
+          {path: "Mercury_Pool_Tech_Sky.scx"},
+          {path: "pool", scene: pool},
+          {path: "Mercury_Pool_Drop.scx", count: 3},
+          {path: "Mercury_Pool_Splash.scx", count: 3},
         ],
         envTexturePaths: [
           'Environment_Tech.tif',
         ],
-        envMapRotation: [90, 180, 0]
+        envMapRotation: [90, 180, 0],
+        createSimulation: () => new MercuryPool()
       }
     },
   },
@@ -68,23 +88,24 @@ const screensavers: Record<string, Screensaver> = {
           ["Coaster", "Balance_Camera_Coaster.scx/Camera02"],
           ["Orbit", "Balance_Camera_Orbit.scx/Camera01"]
         ],
-        scenePaths: [
-          "Balance_Scene.scx",
-          "Balance_Bar.scx",
-          "Balance_Stand.scx",
-          "Balance_Camera_Coaster.scx",
-          "Balance_Camera_Orbit.scx",
+        scenes: [
+          {path: "Balance_Scene.scx"},
+          {path: "Balance_Bar.scx"},
+          {path: "Balance_Stand.scx"},
+          {path: "Balance_Camera_Coaster.scx"},
+          {path: "Balance_Camera_Orbit.scx"},
 
-          "Balance_Man1A.scx",
-          // "Balance_Man1AReal.scx",
-          // "Balance_Man1B.scx",
-          "Balance_Man2A.scx",
+          {path: "Balance_Man1A.scx"},
+          // {path: "Balance_Man1AReal.scx"}, // animated, unused
+          // {path: "Balance_Man1B.scx"}, // animated, unused
+          {path: "Balance_Man2A.scx"},
         ],
         envTexturePaths: [
           'EnvironmentGold.tif',
           'EnvironmentSilver.tif',
         ],
-        envMapRotation: [0, 0, 0]
+        envMapRotation: [0, 0, 0],
+        createSimulation: () => new RobotCircus()
       },
       arena: {
         name: "Arena",
@@ -92,21 +113,22 @@ const screensavers: Record<string, Screensaver> = {
           ["Coaster", "Balance_Camera_Coaster.scx/Camera02"],
           ["Orbit", "Balance_Camera_Orbit.scx/Camera01"]
         ],
-        scenePaths: [
-          "Balance_Tech_Scene.scx",
-          "Balance_Tech_Bar.scx",
-          "Balance_Tech_Stand.scx",
-          "Balance_Camera_Coaster.scx",
-          "Balance_Camera_Orbit.scx",
+        scenes: [
+          {path: "Balance_Tech_Scene.scx"},
+          {path: "Balance_Tech_Bar.scx"},
+          {path: "Balance_Tech_Stand.scx"},
+          {path: "Balance_Camera_Coaster.scx"},
+          {path: "Balance_Camera_Orbit.scx"},
 
-          "Balance_Man3A.scx",
-          // "Balance_Man3B.scx",
-          "Balance_Man4A.scx",
+          {path: "Balance_Man3A.scx"},
+          // {path: "Balance_Man3B.scx"},
+          {path: "Balance_Man4A.scx"},
         ],
         envTexturePaths: [
           'EnvironmentTech.tif',
         ],
-        envMapRotation: [0, 90, 0]
+        envMapRotation: [0, 90, 0],
+        createSimulation: () => new RobotCircus()
       }
     },
   },
@@ -120,20 +142,21 @@ const screensavers: Record<string, Screensaver> = {
           ["Coaster", "Pendulum_Camera_Closeup.scx/Camera02"],
           ["Orbit", "Pendulum_Camera_Orbit.scx/Camera01"],
         ],
-        scenePaths: [
-          "Pendulum_Camera_Orbit.scx",
-          "Pendulum_Camera.scx",
-          "Pendulum_Camera_Closeup.scx",
-          "Pendulum_Sand.scx",
-          "Pendulum_Sand_Particles.scx",
-          "Sparkle.scx",
-          "Pendulum_SW_Pendulum.scx",
-          "Pendulum_SW_Scene.scx",
+        scenes: [
+          {path: "Pendulum_Camera_Orbit.scx"},
+          {path: "Pendulum_Camera.scx"},
+          {path: "Pendulum_Camera_Closeup.scx"},
+          {path: "Pendulum_Sand.scx"},
+          {path: "Pendulum_Sand_Particles.scx"},
+          {path: "Sparkle.scx"},
+          {path: "Pendulum_SW_Pendulum.scx"},
+          {path: "Pendulum_SW_Scene.scx"},
         ],
         envTexturePaths: [
           'EnvironmentGold.tif',
         ],
-        envMapRotation: [0, 0, 0]
+        envMapRotation: [0, 0, 0],
+        createSimulation: () => new SandPendulum()
       },
       checkerboard: {
         name: "Checkerboard", 
@@ -141,23 +164,36 @@ const screensavers: Record<string, Screensaver> = {
           ["Coaster", "Pendulum_Camera_Closeup.scx/Camera02"],
           ["Orbit", "Pendulum_Camera_Orbit.scx/Camera01"],
         ],
-        scenePaths: [
-          "Pendulum_Camera_Orbit.scx",
-          "Pendulum_Camera.scx",
-          "Pendulum_Camera_Closeup.scx",
-          "Pendulum_Sand.scx",
-          "Pendulum_Sand_Particles.scx",
-          "Sparkle.scx",
-          "Pendulum_Pendulum.scx",
-          "Pendulum_Scene.scx",
+        scenes: [
+          {path: "Pendulum_Camera_Orbit.scx"},
+          {path: "Pendulum_Camera.scx"},
+          {path: "Pendulum_Camera_Closeup.scx"},
+          {path: "Pendulum_Sand.scx"},
+          {path: "Pendulum_Sand_Particles.scx"},
+          {path: "Sparkle.scx"},
+          {path: "Pendulum_Pendulum.scx"},
+          {path: "Pendulum_Scene.scx"},
         ],
         envTexturePaths: [
           'EnvironmentGold.tif',
         ],
-        envMapRotation: [0, 0, 0]
+        envMapRotation: [0, 0, 0],
+        createSimulation: () => new SandPendulum()
       }
     },
   },
+};
+
+const fetchScene = async (sceneContext: SceneContext, basePath: string, source: SceneSource) : Promise<[string, SCX.Scene][]> => {
+  const {path, count} = source;
+  let scene = source.scene;
+  if (scene == null) {
+    const data = await sceneContext.dataFetcher.fetchData(`${basePath}${path}`);
+    scene = await parseSCX(new Uint8Array(data.arrayBuffer));
+  }
+  return (count ?? 1) > 1
+    ? Array(count).fill(0).map((_, i) => ([`${path}_${i + 1}/`, scene]))
+    : [[`${path}/`, scene]];
 };
 
 export const sceneGroup = {
@@ -173,16 +209,11 @@ export const sceneGroup = {
           createScene: async (device: GfxDevice, sceneContext: SceneContext): Promise<SceneGfx> => {
             const screensaver = screensavers[screensaverID];
             const variant = screensaver.variants[variantID];
-            const { envMapRotation, cameras } = variant;
+            const { envMapRotation, cameras, createSimulation: simulateFunc } = variant;
             const basePath = `PlusForXP/${screensaver.basePath}`
-            const scenes: Record<string, SCX.Scene> = Object.fromEntries(await Promise.all(
-              variant.scenePaths
-                .map(
-                  filename => sceneContext.dataFetcher.fetchData(`${basePath}${filename}`)
-                  .then(({arrayBuffer}) => parseSCX(new Uint8Array(arrayBuffer)))
-                  .then(scene => ([`${filename}/`, scene]))
-                )
-            ));
+            const scenes: Record<string, SCX.Scene> = Object.fromEntries((await Promise.all(
+              variant.scenes.map((source) => fetchScene(sceneContext, basePath, source))
+            )).flat());
             const [textures, envTextures] = await Promise.all([
               fetchTextures(sceneContext.dataFetcher, basePath, 
                 (Object.values(scenes) as SCX.Scene[])
@@ -194,7 +225,7 @@ export const sceneGroup = {
               fetchTextures(sceneContext.dataFetcher, basePath, variant.envTexturePaths)
             ]);
             const textureHolder = makeTextureHolder([...textures, ...envTextures]);
-            return new Renderer(device, {basePath, scenes, textures, envTextures, envMapRotation, cameras}, textureHolder);
+            return new Renderer(device, {basePath, scenes, textures, envTextures, envMapRotation, cameras, simulateFunc}, textureHolder);
           }
         }))
     ]))

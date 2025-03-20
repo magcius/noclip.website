@@ -31,7 +31,7 @@ import { Camera, CameraController } from '../Camera.js';
 import { defaultMegaState, setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers.js';
 import { align } from '../util.js';
 import { bakeLights } from './bake_lights.js';
-import { Material, Mesh, Texture, SceneNode } from './types.js';
+import { Material, Mesh, Texture, SceneNode, ISimulation } from './types.js';
 import { SceneGfx, ViewerRenderInput } from "../viewer.js";
 import Plus4XPProgram from "./program.js";
 import { buildNodeAnimations, ChannelAnimation } from "./animation.js";
@@ -45,6 +45,7 @@ type Context = {
   envTextures: Texture[],
   envMapRotation: [number, number, number],
   cameras: [string, string][],
+  simulateFunc?: () => ISimulation
 };
 
 type UnbakedMesh = {
@@ -68,7 +69,7 @@ export default class Renderer implements SceneGfx {
   private ambientColor: Color = colorNewFromRGBA(0, 0, 0);
   private rootNode: SceneNode;
   private materialsByName = new Map<string, Material>();
-  private sceneNodesByName = new Map<string | undefined, SceneNode>();
+  private sceneNodesByName = new Map<string, SceneNode>();
   private renderableNodes: SceneNode[] = [];
   private camerasByName = new Map<string, SCX.Camera>();
   private cameras: [string, string | null][];
@@ -83,11 +84,11 @@ export default class Renderer implements SceneGfx {
   private animations: ChannelAnimation[] = [];
   private animating: boolean = true;
   private megaStateFlags: GfxMegaStateDescriptor;
-
+  private simulation: ISimulation | null;
   private cameraSelect: UI.SingleSelect;
   
   constructor(device: GfxDevice, context: Context, public textureHolder: TextureHolder<any>) {
-
+    this.simulation = context.simulateFunc?.() ?? null;
     this.megaStateFlags = {
       ...defaultMegaState,
       cullMode: GfxCullMode.Back
@@ -140,6 +141,8 @@ export default class Renderer implements SceneGfx {
       worldTransform: mat4.create(),
       transformChanged: true,
       animates: false,
+      visible: true,
+      worldVisible: true,
       meshes: []
     };
 
@@ -152,12 +155,6 @@ export default class Renderer implements SceneGfx {
 
     this.customCamera = new Camera();
     this.cameras = [["FreeCam", null], ...context.cameras];
-
-    // parent the scene nodes
-    for (const sceneNode of this.sceneNodesByName.values()) {
-      sceneNode.parent = this.sceneNodesByName.get(sceneNode.parentName) ?? this.rootNode;
-      sceneNode.parent.children.push(sceneNode);
-    }
 
     this.renderableNodes = [...this.sceneNodesByName.values()].filter(node => node.meshes.length ?? 0 > 0);
 
@@ -223,9 +220,33 @@ export default class Renderer implements SceneGfx {
       usage:  GfxTextureUsage.Sampled,
     });
     device.uploadTextureData(this.missingTexture, 0, [new Uint8Array([0xFF, 0x00, 0xFF, 0xFF])]);
+
+    this.simulation?.setup?.(this.sceneNodesByName);
   }
 
   private buildScene(device: GfxDevice, sceneName: string, scene: SCX.Scene, unbakedMeshes:UnbakedMesh[] ) {
+
+    const nodes = new Map<string, SceneNode>();
+
+    const sceneRoot: SceneNode = {
+      name: sceneName + "_root",
+      children: [],
+      transform: {
+        trans: vec3.create(),
+        rot: vec3.create(),
+        scale: vec3.fromValues(1, 1, 1)
+      },
+      parentName: undefined,
+      parent: this.rootNode,
+      worldTransform: mat4.create(),
+      transformChanged: true,
+      animates: false,
+      visible: true,
+      worldVisible: true,
+      meshes: []
+    };
+    this.sceneNodesByName.set(sceneRoot.name, sceneRoot);
+    this.rootNode.children.push(sceneRoot);
     
     /*
     for (const {ambient} of scene.globals) {
@@ -244,7 +265,7 @@ export default class Renderer implements SceneGfx {
     // Create camera scene nodes and their animations
     for (const camera of scene.cameras) {
       const cameraName = sceneName + camera.name;
-      const sceneNode = {
+      const node: SceneNode = {
         name: cameraName,
         transform: {
           trans: vec3.fromValues(...camera.pos),
@@ -255,12 +276,21 @@ export default class Renderer implements SceneGfx {
         worldTransform: mat4.create(),
         transformChanged: true,
         animates: camera.animations != null,
+        visible: true,
+        worldVisible: true,
         meshes: []
       };
-      this.sceneNodesByName.set(cameraName, sceneNode);
+      this.sceneNodesByName.set(cameraName, node);
+      node.parent = this.rootNode;
+      node.parent.children.push(node);
       this.camerasByName.set(cameraName, camera);
       if (camera.animations != null) {
-        this.animations.push(...buildNodeAnimations(sceneNode.transform, camera.animations));
+        node.animatedTransform = {
+          trans: vec3.clone(node.transform.trans),
+          rot: vec3.clone(node.transform.rot),
+          scale: vec3.clone(node.transform.scale),
+        };
+        this.animations.push(...buildNodeAnimations(node.animatedTransform!, camera.animations));
       }
     }
 
@@ -294,15 +324,17 @@ export default class Renderer implements SceneGfx {
       }
       const objectName = sceneName + object.name;
       const meshes: Mesh[] = [];
-      const node = {
+      const node: SceneNode = {
         name: objectName,
         parentName: object.parent == null ? undefined : sceneName + object.parent,
-        parent: this.rootNode,
+        parent: sceneRoot,
         children: [],
         transform,
         worldTransform: mat4.create(),
         transformChanged: true,
         animates: object.animations != null,
+        visible: true,
+        worldVisible: true,
         meshes
       };
       for (const mesh of object.meshes ?? []) {
@@ -380,10 +412,22 @@ export default class Renderer implements SceneGfx {
       }
       
       this.sceneNodesByName.set(objectName, node);
+      nodes.set(objectName, node);
 
       if (object.animations != null) {
-        this.animations.push(...buildNodeAnimations(node.transform, object.animations));
+        node.animatedTransform = {
+          trans: vec3.clone(node.transform.trans),
+          rot: vec3.clone(node.transform.rot),
+          scale: vec3.clone(node.transform.scale),
+        };
+        this.animations.push(...buildNodeAnimations(node.animatedTransform!, object.animations));
       }
+    }
+
+    // parent the nodes within the scene
+    for (const sceneNode of nodes.values()) {
+      sceneNode.parent = nodes.get(sceneNode.parentName ?? "") ?? sceneRoot;
+      sceneNode.parent.children.push(sceneNode);
     }
   }
 
@@ -418,9 +462,10 @@ export default class Renderer implements SceneGfx {
     const {deltaTime} = viewerInput;
     this.animating = deltaTime > 0;
 
-    // TODO: update the sim
-    
-    this.animations.forEach(anim => anim(deltaTime / 1000));
+    if (this.animating) {
+      this.simulation?.update?.(viewerInput, this.sceneNodesByName);
+      this.animations.forEach(anim => anim(deltaTime / 1000));
+    }
     
     const renderInstManager = this.renderHelper.renderInstManager;
     const builder = this.renderHelper.renderGraph.newGraphBuilder();
@@ -524,7 +569,11 @@ export default class Renderer implements SceneGfx {
     }
     
     renderSceneNodeMeshes: {
-      for (const node of this.renderableNodes) {        
+      for (const node of this.renderableNodes) {
+        if (!node.worldVisible) {
+          continue;
+        }
+        
         for (const mesh of node.meshes!) {  
           
           renderMesh: {
@@ -581,19 +630,22 @@ export default class Renderer implements SceneGfx {
     node.transformChanged = false;
 
     if (shouldUpdate) {
+      const transform = node.animates ? node.animatedTransform! : node.transform;
       const scratch = this.scratchModelMatrix;
       mat4.identity(scratch);
-      mat4.translate(scratch, scratch, node.transform.trans);
-      mat4.rotateZ(scratch, scratch, node.transform.rot[2]);
-      mat4.rotateY(scratch, scratch, node.transform.rot[1]);
-      mat4.rotateX(scratch, scratch, node.transform.rot[0]);
-      mat4.scale(scratch, scratch, node.transform.scale);
+      mat4.translate(scratch, scratch, transform.trans);
+      mat4.rotateZ(scratch, scratch, transform.rot[2]);
+      mat4.rotateY(scratch, scratch, transform.rot[1]);
+      mat4.rotateX(scratch, scratch, transform.rot[0]);
+      mat4.scale(scratch, scratch, transform.scale);
 
       mat4.mul(
         node.worldTransform,
         parentWorldTransform ?? mat4.create(),
         scratch,
       );
+
+      node.worldVisible = node.visible && (node.parent?.worldVisible ?? true);
     }
     if (node.children != null) {
       for (const child of node.children) {

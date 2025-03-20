@@ -2,7 +2,7 @@ import {decode as tifDecode} from 'tiff'
 import {decode as jpgDecode} from 'jpeg-js'
 import { FakeTextureHolder } from '../TextureHolder.js';
 import { DataFetcher } from '../DataFetcher.js';
-import { Texture } from './types.js';
+import { SceneNode, Texture } from './types.js';
 import { range } from '../MathHelpers.js';
 
 const decodeImage = (path: string, imageBytes: ArrayBufferLike) : {rgba8: Uint8Array, width: number, height: number} | null => {
@@ -64,3 +64,22 @@ export const makeTextureHolder = (textures: Texture[]) => new FakeTextureHolder(
     return { name, surfaces: [canvas] }
   })
 );
+
+export const reparent = (child: SceneNode, newParent: SceneNode) => {
+  const index = child.parent?.children.indexOf(child) ?? -1;
+  if (index !== -1) {
+    child.parent!.children.splice(index, 1);
+  }
+  child.parent = newParent;
+  child.parentName = newParent.name;
+  newParent.children.push(child);
+}
+
+export const getParentNodes = (node: SceneNode) : SceneNode[] => {
+  const parents = [node];
+  while (node.parent != null) {
+    node = node.parent;
+    parents.push(node);
+  }
+  return parents;
+}
