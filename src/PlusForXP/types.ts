@@ -15,12 +15,18 @@ export type Material = {
   gfxTexture: GfxTexture | null
 };
 
+export type EnvironmentMap = {
+  texturePath: string,
+  rotation: [number, number, number]
+};
+
 export type Mesh = {
   inputLayout: GfxInputLayout,
   vertexBufferDescriptors: GfxVertexBufferDescriptor[],
   indexBufferDescriptor: GfxIndexBufferDescriptor,
   indexCount: number,
-  material: Material
+  material: Material,
+  envID?: string
 };
 
 export type Transform = {

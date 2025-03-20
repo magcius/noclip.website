@@ -31,7 +31,7 @@ import { Camera, CameraController } from '../Camera.js';
 import { defaultMegaState, setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers.js';
 import { align } from '../util.js';
 import { bakeLights } from './bake_lights.js';
-import { Material, Mesh, Texture, SceneNode, ISimulation } from './types.js';
+import { Material, Mesh, Texture, SceneNode, ISimulation, EnvironmentMap } from './types.js';
 import { SceneGfx, ViewerRenderInput } from "../viewer.js";
 import Plus4XPProgram from "./program.js";
 import { buildNodeAnimations, ChannelAnimation } from "./animation.js";
@@ -40,10 +40,9 @@ import * as UI from '../ui.js';
 
 type Context = {
   basePath: string,
-  scenes: Record<string, SCX.Scene>,
+  scenes: Record<string, [SCX.Scene, string?]>,
   textures: Texture[],
-  envTextures: Texture[],
-  envMapRotation: [number, number, number],
+  environmentMaps: Record<string, EnvironmentMap>,
   cameras: [string, string][],
   simulateFunc?: () => ISimulation
 };
@@ -60,9 +59,9 @@ type UnbakedMesh = {
 export default class Renderer implements SceneGfx {
 
   private texturesByPath:Record<string, Texture>;
-  private envGfxTexture:GfxTexture | null;
-  private envMapMatrix = mat4.create();
+  private environmentMapsByID = new Map<string, [GfxTexture, mat4]>();
   private missingTexture: GfxTexture;
+  private missingEnvMap: [GfxTexture, mat4];
   private program: GfxRenderProgramDescriptor;
   private renderHelper: GfxRenderHelper;
   private renderInstListMain = new GfxRenderInstList();
@@ -116,20 +115,6 @@ export default class Renderer implements SceneGfx {
       context.textures.map(texture => ([texture.path, texture]))
     );
 
-    const firstEnvTexture = context.envTextures[0];
-    if (firstEnvTexture != null) {
-      this.envGfxTexture = device.createTexture({
-        ...firstEnvTexture,
-        dimension: GfxTextureDimension.n2D,
-        pixelFormat: GfxFormat.U8_RGBA_NORM,
-        depthOrArrayLayers: 1,
-        numLevels: 1,
-        usage:  GfxTextureUsage.Sampled,
-      });
-      device.uploadTextureData(this.envGfxTexture, 0, [firstEnvTexture.rgba8]);
-    }
-    mat4.fromQuat(this.envMapMatrix, quat.fromEuler(quat.create(), ...context.envMapRotation));
-    
     this.rootNode = {
       name: "root",
       children: [],
@@ -149,8 +134,23 @@ export default class Renderer implements SceneGfx {
     const unbakedMeshes: UnbakedMesh[] = [];
     // this.buildScene(device, "Sphere", sphereScene, unbakedMeshes);
 
-    for (const [name, scene] of Object.entries(context.scenes)) {
-      this.buildScene(device, name, scene, unbakedMeshes);
+    for (const [envID, {texturePath, rotation}] of Object.entries(context.environmentMaps)) {
+      const envTexture = this.texturesByPath[texturePath];
+      const texture = device.createTexture({
+        ...envTexture,
+        dimension: GfxTextureDimension.n2D,
+        pixelFormat: GfxFormat.U8_RGBA_NORM,
+        depthOrArrayLayers: 1,
+        numLevels: 1,
+        usage:  GfxTextureUsage.Sampled,
+      });
+      device.uploadTextureData(texture, 0, [envTexture.rgba8]);
+      const envMatrix = mat4.fromQuat(mat4.create(), quat.fromEuler(quat.create(), ...rotation));
+      this.environmentMapsByID.set(envID, [texture, envMatrix]);
+    }
+    
+    for (const [name, [scene, envID]] of Object.entries(context.scenes)) {
+      this.buildScene(device, name, scene, envID, unbakedMeshes);
     }
 
     this.customCamera = new Camera();
@@ -219,12 +219,13 @@ export default class Renderer implements SceneGfx {
       numLevels: 1,
       usage:  GfxTextureUsage.Sampled,
     });
+    this.missingEnvMap = [this.missingTexture, mat4.create()];
     device.uploadTextureData(this.missingTexture, 0, [new Uint8Array([0xFF, 0x00, 0xFF, 0xFF])]);
 
     this.simulation?.setup?.(this.sceneNodesByName);
   }
 
-  private buildScene(device: GfxDevice, sceneName: string, scene: SCX.Scene, unbakedMeshes:UnbakedMesh[] ) {
+  private buildScene(device: GfxDevice, sceneName: string, scene: SCX.Scene, envID: string | undefined, unbakedMeshes:UnbakedMesh[] ) {
 
     const nodes = new Map<string, SceneNode>();
 
@@ -407,7 +408,8 @@ export default class Renderer implements SceneGfx {
           vertexBufferDescriptors,
           indexBufferDescriptor,
           indexCount: mesh.indices.length,
-          material
+          material,
+          envID
         });
       }
       
@@ -577,6 +579,7 @@ export default class Renderer implements SceneGfx {
         for (const mesh of node.meshes!) {  
           
           renderMesh: {
+            const [envMapTexture, envMapMatrix] = (mesh.envID == null ? null : this.environmentMapsByID.get(mesh.envID)) ?? this.missingEnvMap;
             const renderInst = renderInstManager.newRenderInst();  
             updateObjectParams: {
               let objectOffset = renderInst.allocateUniformBuffer(Plus4XPProgram.ub_ObjectParams, 16 * 3 + 4 /*Mat4x3 * 3 + vec4*/);
@@ -587,7 +590,7 @@ export default class Renderer implements SceneGfx {
               mat4.transpose(this.scratchWorldInverseTransposeMatrix, this.scratchWorldInverseTransposeMatrix);
               objectOffset += fillMatrix4x4(object, objectOffset, this.scratchWorldInverseTransposeMatrix);
 
-              objectOffset += fillMatrix4x4(object, objectOffset, this.envMapMatrix);
+              objectOffset += fillMatrix4x4(object, objectOffset, envMapMatrix);
 
               {
                 object[objectOffset] = mesh.material.gfxTexture == null ? 1 : 0;
@@ -602,7 +605,7 @@ export default class Renderer implements SceneGfx {
                 lateBinding: null
               },
               {
-                gfxTexture: this.envGfxTexture ?? this.missingTexture,
+                gfxTexture: envMapTexture,
                 gfxSampler: this.envSampler,
                 lateBinding: null
               }
