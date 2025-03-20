@@ -83,3 +83,13 @@ export const getParentNodes = (node: SceneNode) : SceneNode[] => {
   }
   return parents;
 }
+
+export const getDescendants = (node: SceneNode) : SceneNode[] => {
+  const descendants = new Set<SceneNode>();
+  const f = (n: SceneNode) => {
+    descendants.add(n);
+    n.children.forEach(f);
+  }
+  f(node);
+  return [...descendants];
+}

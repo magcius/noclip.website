@@ -1,7 +1,7 @@
 import { ViewerRenderInput } from "../../viewer";
 import { ISimulation, SceneNode } from "../types";
 import { mat4, quat, vec3, vec4 } from 'gl-matrix';
-import { reparent } from "../util";
+import { getDescendants, reparent } from "../util";
 
 export default class RobotCircus implements ISimulation {
 
@@ -10,21 +10,13 @@ export default class RobotCircus implements ISimulation {
   private bot1: SceneNode;
   private bot2: SceneNode;
 
-  constructor() {
-
-  }
-
   setup(sceneNodesByName: Map<string, SceneNode>): void {
     this.isTech = sceneNodesByName.has("Balance_Tech_Bar.scx/balance bar");
     this.bar = sceneNodesByName.get(this.isTech ? "Balance_Tech_Bar.scx/_root" : "Balance_Bar.scx/_root")!;
     this.bot1 = sceneNodesByName.get(this.isTech ? "Balance_Man3A.scx/_root" : "Balance_Man1A.scx/_root")!;
     this.bot2 = sceneNodesByName.get(this.isTech ? "Balance_Man4A.scx/_root" : "Balance_Man2A.scx/_root")!;
     
-    for (const key of sceneNodesByName.keys()) {
-      if (key?.includes("Balance_Man")) {
-        sceneNodesByName.get(key)!.animates = false;
-      }
-    }
+    getDescendants(this.bot1).forEach(n => n.animates = false);
   
     vec3.set(this.bar.transform.trans, 0, 0, this.isTech ? 120 : 161);
     reparent(this.bot1, this.bar);

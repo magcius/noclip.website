@@ -9,10 +9,6 @@ export default class SandPendulum implements ISimulation {
   private sandParticles: SceneNode;
   private sparkle: SceneNode;
   
-  constructor() {
-
-  }
-
   setup(sceneNodesByName: Map<string, SceneNode>): void {
     this.isGrotto = sceneNodesByName.has("Pendulum_SW_Pendulum.scx/Pendulum Arrowhead");
     this.pendulum = sceneNodesByName.get(this.isGrotto ? "Pendulum_SW_Pendulum.scx/Pendulum Arrowhead" : "Pendulum_Pendulum.scx/Pendulum")!;
@@ -46,7 +42,7 @@ export default class SandPendulum implements ISimulation {
     const angleX = Math.sin((input?.time ?? 0) * 3 / 1000) * maxAngle;
     const angleY = 0;
     vec3.set(this.pendulum.transform.rot, angleX + (this.isGrotto ? 0 : Math.PI * 0.5), 0, angleY);
-    
+
     this.pendulum.transformChanged = true;
     this.sandParticles.transformChanged = true;
     this.sparkle.transformChanged = true;

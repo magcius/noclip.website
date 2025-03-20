@@ -62,6 +62,19 @@ export default class Renderer implements SceneGfx {
   private environmentMapsByID = new Map<string, [GfxTexture, mat4]>();
   private missingTexture: GfxTexture;
   private missingEnvMap: [GfxTexture, mat4];
+  private fallbackMaterial: Material = {
+    shader: {
+      name: "fallback",
+      id: -1,
+      ambient: [0, 0, 0],
+      diffuse: [1, 1, 1],
+      specular: [1, 1, 1],
+      opacity: 1,
+      luminance: 1,
+      blend: 0
+    },
+    gfxTexture: null
+  };
   private program: GfxRenderProgramDescriptor;
   private renderHelper: GfxRenderHelper;
   private renderInstListMain = new GfxRenderInstList();
@@ -90,7 +103,8 @@ export default class Renderer implements SceneGfx {
     this.simulation = context.simulateFunc?.() ?? null;
     this.megaStateFlags = {
       ...defaultMegaState,
-      cullMode: GfxCullMode.Back
+      // cullMode: GfxCullMode.Back
+      cullMode: GfxCullMode.None
     };
     setAttachmentStateSimple(this.megaStateFlags, {
         blendMode: GfxBlendMode.Add,
@@ -343,10 +357,9 @@ export default class Renderer implements SceneGfx {
           continue;
         }
 
-        const material = this.materialsByName.get(sceneName + mesh.shader);
-        if (material == null) {
-          console.warn(`Missing shader ${mesh.shader} on mesh in ${object.name} of scene ${sceneName}`);
-          continue;
+        const material = this.materialsByName.get(sceneName + mesh.shader) ?? this.fallbackMaterial;
+        if (material == this.fallbackMaterial) {
+          console.warn(`Missing shader ${mesh.shader} on mesh in ${object.name} of scene ${sceneName}. Falling back to default material.`);
         }
 
         const a = align;
