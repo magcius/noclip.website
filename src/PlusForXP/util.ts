@@ -4,6 +4,8 @@ import { FakeTextureHolder } from '../TextureHolder.js';
 import { DataFetcher } from '../DataFetcher.js';
 import { SceneNode, Texture } from './types.js';
 import { range } from '../MathHelpers.js';
+import { GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxDevice } from '../gfx/platform/GfxPlatform.js';
+import { align } from '../util.js';
 
 const decodeImage = (path: string, imageBytes: ArrayBufferLike) : {rgba8: Uint8Array, width: number, height: number} | null => {
   const extension = path.toLowerCase().split(".").pop();
@@ -92,4 +94,13 @@ export const getDescendants = (node: SceneNode) : SceneNode[] => {
   }
   f(node);
   return [...descendants];
+}
+
+export const makeDataBuffer = (device: GfxDevice, usage: GfxBufferUsage, data: ArrayBufferLike, dynamic: boolean = false): GfxBuffer => {
+  return device.createBuffer(
+    align(data.byteLength, 4) / 4, 
+    usage, 
+    dynamic ? GfxBufferFrequencyHint.Dynamic : GfxBufferFrequencyHint.Static, 
+    new Uint8Array(data, 0, data.byteLength)
+  );
 }

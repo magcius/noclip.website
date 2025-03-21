@@ -24,7 +24,6 @@ import {
 } from '../gfx/helpers/RenderGraphHelpers.js';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 import { Color, colorFromRGBA, colorNewFromRGBA } from '../Color.js';
-import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers.js';
 import { mat4, quat, vec3, vec4 } from 'gl-matrix';
 import { GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode } from "../gfx/platform/GfxPlatform.js";
 import { Camera, CameraController } from '../Camera.js';
@@ -33,8 +32,9 @@ import { bakeLights } from './bake_lights.js';
 import { Material, Mesh, Texture, SceneNode, ISimulation, EnvironmentMap } from './types.js';
 import { SceneGfx, ViewerRenderInput } from "../viewer.js";
 import Plus4XPProgram from "./program.js";
-import { buildNodeAnimations, ChannelAnimation } from "./animation.js";
+import { buildNodeAnimations } from "./animation.js";
 import * as UI from '../ui.js';
+import { makeDataBuffer } from "./util.js";
 // import sphereScene from "./sphere.js";
 
 type Context = {
@@ -305,7 +305,7 @@ export default class Renderer implements SceneGfx {
         children: [],
         worldTransform: mat4.create(),
         transformChanged: true,
-        animates: camera.animations != null,
+        animates: (camera.animations?.length ?? 0) > 0,
         loops: true,
         animations: [],
         visible: true,
@@ -365,13 +365,14 @@ export default class Renderer implements SceneGfx {
         transform,
         worldTransform: mat4.create(),
         transformChanged: true,
-        animates: object.animations != null,
+        animates: (object.animations?.length ?? 0) > 0,
         loops: true,
         animations: [],
         visible: true,
         worldVisible: true,
         meshes
       };
+
       for (const mesh of object.meshes ?? []) {
         if (mesh.indices.length <= 0) {
           continue;
@@ -391,33 +392,37 @@ export default class Renderer implements SceneGfx {
           new Float32Array(mesh.vertexcount * 4).fill(1).buffer
         ));
 
-        const positionBuffer = makeStaticDataBuffer(
-          device, 
+        const positions = new Float32Array(mesh.positions);
+        const positionBuffer = makeDataBuffer(
+          device,
           GfxBufferUsage.Vertex, 
-          new Float32Array(mesh.positions).buffer
+          positions.buffer,
+          mesh.dynamic
         );
 
-        const normalBuffer = makeStaticDataBuffer(
-          device, 
+        const normals = new Float32Array(mesh.normals);
+        const normalBuffer = makeDataBuffer(
+          device,
           GfxBufferUsage.Vertex, 
-          new Float32Array(mesh.normals).buffer
+          normals.buffer,
+          mesh.dynamic
         );
 
-        const texcoordBuffer = makeStaticDataBuffer(
-          device, 
+        const texcoordBuffer = makeDataBuffer(
+          device,
           GfxBufferUsage.Vertex, 
           new Float32Array(mesh.texCoords).buffer
         );
 
-        const vertexBufferDescriptors = [
-            { buffer: positionBuffer, byteOffset: 0, },
-            { buffer: normalBuffer, byteOffset: 0, },
-            { buffer: diffuseColorBuffer, byteOffset: 0, },
-            { buffer: texcoordBuffer, byteOffset: 0, },
+        const vertexAttributes = [
+            { name: "position", ...(mesh.dynamic ? {data: positions} : {}), buffer: positionBuffer, byteOffset: 0, },
+            { name: "normal", ...(mesh.dynamic ? {data: normals} : {}), buffer: normalBuffer, byteOffset: 0, },
+            { name: "diffuseColor", buffer: diffuseColorBuffer, byteOffset: 0, },
+            { name: "texCoord", buffer: texcoordBuffer, byteOffset: 0, },
         ];
 
-        const indexBuffer = makeStaticDataBuffer(
-          device, 
+        const indexBuffer = makeDataBuffer(
+          device,
           GfxBufferUsage.Index, 
           new Uint32Array(mesh.indices).buffer
         );
@@ -436,7 +441,7 @@ export default class Renderer implements SceneGfx {
 
         meshes.push({
           inputLayout,
-          vertexBufferDescriptors,
+          vertexAttributes,
           indexBufferDescriptor,
           indexCount: mesh.indices.length,
           material,
@@ -497,7 +502,7 @@ export default class Renderer implements SceneGfx {
     this.animating = deltaTime > 0;
 
     if (this.animating) {
-      this.simulation?.update?.(viewerInput, this.sceneNodesByName);
+      this.simulation?.update?.(viewerInput, this.sceneNodesByName, device);
       for (const node of this.animatableNodes) {
         if (!node.animates) {
           continue;
@@ -651,7 +656,7 @@ export default class Renderer implements SceneGfx {
             
             renderInst.setVertexInput(
               mesh.inputLayout,
-              mesh.vertexBufferDescriptors, 
+              mesh.vertexAttributes, 
               mesh.indexBufferDescriptor
             );
           
@@ -709,7 +714,7 @@ export default class Renderer implements SceneGfx {
       if (node.meshes == null || node.meshes.length === 0) {
         continue;
       }
-      for (const {buffer} of node.meshes[0].vertexBufferDescriptors) {
+      for (const {buffer} of node.meshes[0].vertexAttributes) {
         device.destroyBuffer(buffer);
       }
       for (const mesh of node.meshes) {

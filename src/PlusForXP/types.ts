@@ -1,5 +1,5 @@
 import { mat4, vec3 } from "gl-matrix";
-import { GfxIndexBufferDescriptor, GfxInputLayout, GfxTexture, GfxVertexBufferDescriptor } from "../gfx/platform/GfxPlatform.js";
+import { GfxDevice, GfxIndexBufferDescriptor, GfxInputLayout, GfxTexture, GfxVertexBufferDescriptor } from "../gfx/platform/GfxPlatform.js";
 import { SCX } from "./scx/types.js";
 import { ViewerRenderInput } from "../viewer.js";
 import { ChannelAnimation } from "./animation.js";
@@ -22,9 +22,11 @@ export type EnvironmentMap = {
   tint?: [number, number, number]
 };
 
+export type VertexAttribute = GfxVertexBufferDescriptor & {name: string, data?: Float32Array};
+
 export type Mesh = {
   inputLayout: GfxInputLayout,
-  vertexBufferDescriptors: GfxVertexBufferDescriptor[],
+  vertexAttributes: VertexAttribute[],
   indexBufferDescriptor: GfxIndexBufferDescriptor,
   indexCount: number,
   material: Material,
@@ -56,5 +58,5 @@ export type SceneNode = {
 
 export interface ISimulation {
   setup(sceneNodesByName: Map<string, SceneNode>): void;
-  update(input: ViewerRenderInput, sceneNodesByName: Map<string, SceneNode>): void;
+  update(input: ViewerRenderInput, sceneNodesByName: Map<string, SceneNode>, device: GfxDevice): void;
 }

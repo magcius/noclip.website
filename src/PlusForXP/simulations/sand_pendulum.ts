@@ -2,6 +2,7 @@ import { vec3 } from "gl-matrix";
 import { ViewerRenderInput } from "../../viewer";
 import { ISimulation, SceneNode } from "../types";
 import { reparent } from "../util";
+import { GfxDevice } from "../../gfx/platform/GfxPlatform";
 
 export default class SandPendulum implements ISimulation {
   private isGrotto: boolean;
@@ -36,7 +37,7 @@ export default class SandPendulum implements ISimulation {
     this.sparkle.transformChanged = true;
   }
   
-  update(input: ViewerRenderInput, sceneNodesByName: Map<string, SceneNode>): void {
+  update(input: ViewerRenderInput, sceneNodesByName: Map<string, SceneNode>, device: GfxDevice): void {
     // TODO: lissajous with randomized initial velocity
     const maxAngle = Math.PI * 0.1;
     const angleX = Math.sin((input?.time ?? 0) * 3 / 1000) * maxAngle;

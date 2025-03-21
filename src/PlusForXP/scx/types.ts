@@ -88,8 +88,9 @@ export namespace SCX {
 		normals: number[],
 		texCoords: number[],
 		positions: number[],
-		
 		indices: number[],
+		
+		dynamic?: boolean,
 	};
 
 	export type PolygonMesh = Mesh & {

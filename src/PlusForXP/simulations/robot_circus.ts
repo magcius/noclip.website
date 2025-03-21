@@ -2,6 +2,7 @@ import { ViewerRenderInput } from "../../viewer";
 import { ISimulation, SceneNode } from "../types";
 import { mat4, quat, vec3, vec4 } from 'gl-matrix';
 import { getDescendants, reparent } from "../util";
+import { GfxDevice } from "../../gfx/platform/GfxPlatform";
 
 export default class RobotCircus implements ISimulation {
 
@@ -31,7 +32,7 @@ export default class RobotCircus implements ISimulation {
     this.bar.transformChanged = true;
   }
 
-  update(input: ViewerRenderInput, sceneNodesByName: Map<string, SceneNode>): void {
+  update(input: ViewerRenderInput, sceneNodesByName: Map<string, SceneNode>, device: GfxDevice): void {
     const angle = Math.PI * ((this.isTech ? 0 : -0.5) + (input?.time ?? 0) / 1000);
     if (this.isTech) {
       vec3.set(this.bar.transform.rot, 0, angle, 0);

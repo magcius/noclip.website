@@ -1,8 +1,9 @@
 import { vec3 } from "gl-matrix";
 import { SCX } from "./scx/types.js";
 
-const numSegments = 32;
-const vertices = Array(numSegments + 1).fill(0).map((_, y) => Array(numSegments + 1).fill(0).map((_, x) => {
+export const numSegments = 32;
+export const numVertexRows = numSegments + 1;
+const vertices = Array(numVertexRows).fill(0).map((_, y) => Array(numVertexRows).fill(0).map((_, x) => {
   return {
     position: vec3.fromValues(
       x / numSegments - 0.5, // TODO: experiment with equilateral placement
@@ -15,32 +16,14 @@ const vertices = Array(numSegments + 1).fill(0).map((_, y) => Array(numSegments 
 const quadIndices = (a:number, b:number, c:number, d:number) : number[] => [a, b, c, a, c, d];
 const quads = Array(numSegments).fill(0).map((_, i) => Array(numSegments).fill(0).map((_, j) => {
   return quadIndices(
-    (i + 0) * (numSegments + 1) + j + 0, 
-    (i + 0) * (numSegments + 1) + j + 1, 
-    (i + 1) * (numSegments + 1) + j + 1, 
-    (i + 1) * (numSegments + 1) + j + 0
+    (i + 0) * (numVertexRows) + j + 0, 
+    (i + 0) * (numVertexRows) + j + 1, 
+    (i + 1) * (numVertexRows) + j + 1, 
+    (i + 1) * (numVertexRows) + j + 0
   );
 })).flat();
 
-const positions = vertices.map(v => [...v.position]).flat();
-const normals = vertices.map(v => [...v.normal]).flat();
-const indices = quads.flat();
-
-const vertexcount = vertices.length;
-
-const pool = {
-  vertexcount,
-  positions,
-  normals,
-  texCoords: Array(vertexcount * 2).fill(0),
-  indices
-};
-
-export type PoolScene = SCX.Scene & {
-
-};
-
-const poolScene: PoolScene = {
+const poolScene: SCX.Scene = {
   shaders: [{
     name: "pool",
     id: 1,
@@ -63,11 +46,16 @@ const poolScene: PoolScene = {
     transforms: [{
       trans: [0, 0, 0],
       rot: [0, 0, 0],
-      scale: [64, 64, 1]
+      scale: [1, 1, 1]
     }],
     meshes: [{
-      ...pool,
-      shader: 1
+      vertexcount: vertices.length,
+      positions: vertices.map(v => [...v.position]).flat(),
+      normals: vertices.map(v => [...v.normal]).flat(),
+      indices: quads.flat(),
+      texCoords: Array(vertices.length * 2).fill(0),
+      shader: 1,
+      dynamic: true
     }],
     animations: []
   }]

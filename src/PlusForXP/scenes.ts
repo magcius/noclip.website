@@ -42,11 +42,11 @@ const screensavers: Record<string, Screensaver> = {
           {path: "Mercury_Pool_Cave_Scene.scx"},
           {path: "Mercury_Pool_Cave_Camera.scx"},
           {path: "pool", scene: pool, envID: "cave"},
-          {path: "Mercury_Pool_Drop.scx", count: 3, envID: "cave"},
-          {path: "Mercury_Pool_Splash.scx", count: 3, envID: "cave"},
+          {path: "Mercury_Pool_Drop.scx", count: 5, envID: "cave"},
+          {path: "Mercury_Pool_Splash.scx", count: 5, envID: "cave"},
         ],
         environmentMaps: {
-          "cave": { texturePath: "Environment_Cave.TIF", rotation: [90, 180, 0], tint: [0.6, 0.9, 0.5] }
+          "cave": { texturePath: "Environment_Cave.TIF", rotation: [90, 180, 0], tint: [0.4, 1.0, 0.5] }
         },
         createSimulation: () => new MercuryPool()
       },
@@ -60,8 +60,8 @@ const screensavers: Record<string, Screensaver> = {
           {path: "Mercury_Pool_Tech_Camera.scx"},
           {path: "Mercury_Pool_Tech_Sky.scx"},
           {path: "pool", scene: pool, envID: "tech"},
-          {path: "Mercury_Pool_Drop.scx", count: 3, envID: "tech"},
-          {path: "Mercury_Pool_Splash.scx", count: 3, envID: "tech"},
+          {path: "Mercury_Pool_Drop.scx", count: 5, envID: "tech"},
+          {path: "Mercury_Pool_Splash.scx", count: 5, envID: "tech"},
         ],
         environmentMaps: {
           "tech": { texturePath: "Environment_Tech.tif", rotation: [90, 180, 0], tint: [1.8, 1.8, 1.8]}
