@@ -27,6 +27,7 @@ layout(std140, row_major) uniform ub_ObjectParams {
   mat4 u_ModelMatrix;
   mat4 u_ModelInverseTransposeMatrix;
   mat4 u_EnvMapMatrix;
+  vec4 u_EnvMapTint;
   float u_reflective;
 };
 
@@ -74,7 +75,7 @@ in vec2 v_DiffuseTexCoord;
 in vec2 v_EnvTexCoord;
 
 void main() {
-  vec4 reflectiveColor = texture(SAMPLER_2D(envTexture), v_EnvTexCoord);
+  vec4 reflectiveColor = texture(SAMPLER_2D(envTexture), v_EnvTexCoord) * u_EnvMapTint;
   vec4 diffuseColor = v_DiffuseColor * texture(SAMPLER_2D(diffuseTexture), v_DiffuseTexCoord);
   gl_FragColor = vec4(
     mix(diffuseColor, reflectiveColor, u_reflective).rgb, 

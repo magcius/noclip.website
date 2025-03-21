@@ -2,6 +2,7 @@ import { mat4, vec3 } from "gl-matrix";
 import { GfxIndexBufferDescriptor, GfxInputLayout, GfxTexture, GfxVertexBufferDescriptor } from "../gfx/platform/GfxPlatform.js";
 import { SCX } from "./scx/types.js";
 import { ViewerRenderInput } from "../viewer.js";
+import { ChannelAnimation } from "./animation.js";
 
 export type Texture = {
   path: string,
@@ -17,7 +18,8 @@ export type Material = {
 
 export type EnvironmentMap = {
   texturePath: string,
-  rotation: [number, number, number]
+  rotation: [number, number, number],
+  tint?: [number, number, number]
 };
 
 export type Mesh = {
@@ -45,6 +47,8 @@ export type SceneNode = {
   worldTransform: mat4,
   transformChanged: boolean,
   animates: boolean,
+  loops: boolean,
+  animations: ChannelAnimation[],
   visible: boolean,
   worldVisible: boolean,
   meshes: Mesh[]

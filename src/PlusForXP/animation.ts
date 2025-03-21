@@ -5,11 +5,11 @@ type Interpolation = (toKey: SCX.Keyframe, fromKey: SCX.Keyframe, now: number, d
 
 const interpolations: Record<string, Interpolation> = {
   "linear": (toKey, fromKey, now, duration) => {
-    const percent = now / duration;
+    const percent = Math.max(0, Math.min(1, now / duration));
     return toKey.value * percent + fromKey.value * (1 - percent);
   },
   "hermite": (toKey, fromKey, now, duration) => {
-    const p1 = now / duration;
+    const p1 = Math.max(0, Math.min(1, now / duration));
     const p2 = p1 ** 2;
     const p3 = p1 ** 3;
 
@@ -41,11 +41,17 @@ const channelModifiers: Record<SCX.KeyframeAnimationChannel, (transform: Transfo
   zscale: (transform, value) => transform.scale[2] = value
 };
 
-export type ChannelAnimation = (delta: number) => void;
+export type ChannelAnimation = {
+  update: (delta: number, loop: boolean) => void,
+  reset: () => void
+};
 
-export const buildNodeAnimations = (transform: Transform, animations: SCX.KeyframeAnimation[]): ChannelAnimation[] => 
-  animations
-    .filter(({channel}) => channelModifiers[channel] != null)
+export const buildNodeAnimations = (transform: Transform, animations: SCX.KeyframeAnimation[]): ChannelAnimation[] => {
+  animations = animations.filter(({channel}) => channelModifiers[channel] != null);
+  const fullAnimDuration = Math.max(
+    ...animations.flatMap(anim => anim.keyframes).map(keyframe => keyframe.time / 1000)
+  );
+  return animations
     .map(animation => {
       const channelModifier = channelModifiers[animation.channel]!;
       const interpolation = interpolations[animation.interp] ?? interpolations.linear;
@@ -54,16 +60,26 @@ export const buildNodeAnimations = (transform: Transform, animations: SCX.Keyfra
       const keyframes = animation.keyframes;
       let now = 0;
 
-      return (delta: number) => {
+      const update = (delta: number, loop: boolean) => {
         if (delta <= 0) {
           return;
         }
-        now = (now + delta) % animDuration;
+        
+        now += delta;
+        if (loop) {
+          now %= fullAnimDuration;
+        }
+
         const index = times.findIndex(time => time > now);
         const [toKey, fromKey] = [keyframes.at(index)!, keyframes.at(index - 1)!];
         const [toTime, fromTime] = [times.at(index)!, times.at(index - 1)! + (index === 0 ? -animDuration : 0)];
         const tweenDuration = toTime - fromTime;
         const currentValue = interpolation(toKey, fromKey, now - fromTime, tweenDuration);
         channelModifier(transform, currentValue);
-      }
+      };
+
+      const reset = () => now = 0;
+
+      return {update, reset};
     });
+  }
