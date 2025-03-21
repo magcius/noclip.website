@@ -81,9 +81,9 @@ const screensavers: Record<string, Screensaver> = {
           ["Orbit", "Balance_Camera_Orbit.scx/Camera01"]
         ],
         scenes: [
-          {path: "Balance_Scene.scx", envID: "silver"}, // envID necessary?
-          {path: "Balance_Bar.scx", envID: "silver"}, // envID necessary?
-          {path: "Balance_Stand.scx", envID: "silver"}, // envID necessary?
+          {path: "Balance_Scene.scx"},
+          {path: "Balance_Bar.scx", envID: "silver"},
+          {path: "Balance_Stand.scx", envID: "silver"},
           {path: "Balance_Camera_Coaster.scx"},
           {path: "Balance_Camera_Orbit.scx"},
 
@@ -105,15 +105,15 @@ const screensavers: Record<string, Screensaver> = {
           ["Orbit", "Balance_Camera_Orbit.scx/Camera01"]
         ],
         scenes: [
-          {path: "Balance_Tech_Scene.scx", envID: "tech"}, // envID necessary?
-          {path: "Balance_Tech_Bar.scx", envID: "tech"}, // envID necessary?
-          {path: "Balance_Tech_Stand.scx", envID: "tech"}, // envID necessary?
-          {path: "Balance_Camera_Coaster.scx", envID: "tech"}, // envID necessary?
-          {path: "Balance_Camera_Orbit.scx", envID: "tech"}, // envID necessary?
+          {path: "Balance_Tech_Scene.scx"},
+          {path: "Balance_Tech_Bar.scx", envID: "tech"},
+          {path: "Balance_Tech_Stand.scx", envID: "tech"},
+          {path: "Balance_Camera_Coaster.scx"},
+          {path: "Balance_Camera_Orbit.scx"},
 
-          {path: "Balance_Man3A.scx", envID: "tech"}, // envID necessary?
-          // {path: "Balance_Man3B.scx", envID: "tech"}, // envID necessary?
-          {path: "Balance_Man4A.scx", envID: "tech"}, // envID necessary?
+          {path: "Balance_Man3A.scx", envID: "tech"},
+          // {path: "Balance_Man3B.scx", envID: "tech"},
+          {path: "Balance_Man4A.scx", envID: "tech"},
         ],
         environmentMaps: {
           "tech": { texturePath: "EnvironmentTech.tif", rotation: [0, 90, 0] },
@@ -133,14 +133,14 @@ const screensavers: Record<string, Screensaver> = {
           ["Orbit", "Pendulum_Camera_Orbit.scx/Camera01"],
         ],
         scenes: [
-          {path: "Pendulum_Camera_Orbit.scx", envID: "gold"}, // envID necessary?
-          {path: "Pendulum_Camera.scx", envID: "gold"}, // envID necessary?
-          {path: "Pendulum_Camera_Closeup.scx", envID: "gold"}, // envID necessary?
-          {path: "Pendulum_Sand.scx", envID: "gold"}, // envID necessary?
-          {path: "Pendulum_Sand_Particles.scx", envID: "gold"}, // envID necessary?
-          {path: "Sparkle.scx", envID: "gold"}, // envID necessary?
-          {path: "Pendulum_SW_Pendulum.scx", envID: "gold"}, // envID necessary?
-          {path: "Pendulum_SW_Scene.scx", envID: "gold"}, // envID necessary?
+          {path: "Pendulum_Camera_Orbit.scx"},
+          {path: "Pendulum_Camera.scx"},
+          {path: "Pendulum_Camera_Closeup.scx"},
+          {path: "Pendulum_Sand.scx"},
+          {path: "Pendulum_Sand_Particles.scx"},
+          {path: "Sparkle.scx"},
+          {path: "Pendulum_SW_Pendulum.scx", envID: "gold"},
+          {path: "Pendulum_SW_Scene.scx"},
         ],
         environmentMaps: {
           "gold": { texturePath: "EnvironmentGold.tif", rotation: [0, 0, 0] },
@@ -154,14 +154,14 @@ const screensavers: Record<string, Screensaver> = {
           ["Orbit", "Pendulum_Camera_Orbit.scx/Camera01"],
         ],
         scenes: [
-          {path: "Pendulum_Camera_Orbit.scx", envID: "gold"}, // envID necessary?
-          {path: "Pendulum_Camera.scx", envID: "gold"}, // envID necessary?
-          {path: "Pendulum_Camera_Closeup.scx", envID: "gold"}, // envID necessary?
-          {path: "Pendulum_Sand.scx", envID: "gold"}, // envID necessary?
-          {path: "Pendulum_Sand_Particles.scx", envID: "gold"}, // envID necessary?
-          {path: "Sparkle.scx", envID: "gold"}, // envID necessary?
-          {path: "Pendulum_Pendulum.scx", envID: "gold"}, // envID necessary?
-          {path: "Pendulum_Scene.scx", envID: "gold"}, // envID necessary?
+          {path: "Pendulum_Camera_Orbit.scx"},
+          {path: "Pendulum_Camera.scx"},
+          {path: "Pendulum_Camera_Closeup.scx"},
+          {path: "Pendulum_Sand.scx"},
+          {path: "Pendulum_Sand_Particles.scx"},
+          {path: "Sparkle.scx"},
+          {path: "Pendulum_Pendulum.scx", envID: "gold"},
+          {path: "Pendulum_Scene.scx"},
         ],
         environmentMaps: {
           "gold": { texturePath: "EnvironmentGold.tif", rotation: [0, 0, 0] },
