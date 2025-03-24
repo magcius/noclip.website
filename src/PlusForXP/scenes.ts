@@ -6,10 +6,9 @@ import { parse as parseSCX } from './scx/parser.js'
 import { SCX } from "./scx/types.js";
 import { fetchTextures, makeTextureHolder } from "./util.js";
 import Renderer from './renderer.js';
-import MercuryPool from "./simulations/mercury_pool.js";
+import {poolScene as pool, MercuryPool} from "./simulations/mercury_pool.js";
 import RobotCircus from "./simulations/robot_circus.js";
 import SandPendulum from "./simulations/sand_pendulum.js";
-import pool from "./pool.js";
 import { EnvironmentMap, ISimulation } from "./types.js";
 
 type SceneSource = {

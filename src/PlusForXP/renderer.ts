@@ -108,8 +108,8 @@ export default class Renderer implements SceneGfx {
     this.simulation = context.simulateFunc?.() ?? null;
     this.megaStateFlags = {
       ...defaultMegaState,
-      // cullMode: GfxCullMode.Back
-      cullMode: GfxCullMode.None
+      cullMode: GfxCullMode.Back
+      // cullMode: GfxCullMode.None
     };
     setAttachmentStateSimple(this.megaStateFlags, {
         blendMode: GfxBlendMode.Add,

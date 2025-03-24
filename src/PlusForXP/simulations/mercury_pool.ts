@@ -3,7 +3,74 @@ import { ViewerRenderInput } from "../../viewer";
 import { ISimulation, SceneNode, VertexAttribute } from "../types";
 import { getDescendants } from "../util";
 import { GfxBuffer, GfxDevice } from "../../gfx/platform/GfxPlatform";
-import { numVertexRows } from "../pool";
+import { SCX } from "../scx/types.js";
+
+const numSegments = 32;
+const numVertexRows = numSegments + 1;
+
+const vertices = Array(numVertexRows).fill(0).map((_, y) => Array(numVertexRows).fill(0).map((_, x) => {
+  return {
+    position: vec3.fromValues(
+      // x / numSegments - 0.5,
+      (x + (x > 0 && x < numVertexRows - 1 ? (y % 2) / 2 - 0.25 : 0)) / numSegments - 0.5,
+      y / numSegments - 0.5, 
+      0
+    ),
+    normal: vec3.fromValues(0, 0, 1)
+  };
+})).flat().map((vert, i) => ({...vert, i}));
+const trianglePairIndices = (a:number, b:number, c:number, d:number, swap: boolean) : number[][] => 
+  // [[a, b, d], [b, c, c /* d */]];
+  // swap ? [[a, b, c], [a, c, c /* d */]] : [[a, b, d], [b, c, c /* d */]];
+  swap ? [[a, b, c], [a, c, d]] : [[a, b, d], [b, c, d]];
+const triangles = Array(numSegments)
+  .fill(0).map((_, i) => Array(numSegments)
+    .fill(0).map((_, j) => trianglePairIndices(
+      (i + 0) * (numVertexRows) + j + 0, 
+      (i + 0) * (numVertexRows) + j + 1, 
+      (i + 1) * (numVertexRows) + j + 1, 
+      (i + 1) * (numVertexRows) + j + 0,
+      i % 2 === 1
+    )).flat()
+  ).flat();
+
+export const poolScene: SCX.Scene = {
+  shaders: [{
+    name: "pool",
+    id: 1,
+    ambient: [ 1, 1, 1 ],
+    diffuse: [ 1, 1, 1 ],
+    specular: [ 1, 1, 1 ],
+    opacity: 1,
+    luminance: 0,
+    blend: 1
+  }],
+  globals: [{
+    animinterval: [0, 1000],
+    framerate: 0,
+    ambient: [0, 0, 0]
+  }],
+  cameras: [],
+  lights: [],
+  objects: [{
+    name: "pool",
+    transforms: [{
+      trans: [0, 0, 0],
+      rot: [0, 0, 0],
+      scale: [1, 1, 1]
+    }],
+    meshes: [{
+      vertexcount: vertices.length,
+      positions: vertices.map(v => [...v.position]).flat(),
+      normals: vertices.map(v => [...v.normal]).flat(),
+      indices: triangles.flat(),
+      texCoords: Array(vertices.length * 2).fill(0),
+      shader: 1,
+      dynamic: true
+    }],
+    animations: []
+  }]
+};
 
 enum MercuryDropState {
   "waiting",
@@ -28,7 +95,7 @@ type DynamicAttribute = {
   uint8Array: Uint8Array
 };
 
-export default class MercuryPool implements ISimulation {
+export class MercuryPool implements ISimulation {
   
   private isInitialized: boolean;
   private isIndustrial: boolean;
@@ -37,8 +104,10 @@ export default class MercuryPool implements ISimulation {
   private fallDuration: number;
   private splashDuration: number;
   private rippleDuration: number;
-  private poolPositions: DynamicAttribute;
-  private poolNormals: DynamicAttribute;
+  private poolPositions: vec3[];
+  private poolPositionAttribute: DynamicAttribute;
+  private poolNormals: vec3[];
+  private poolNormalAttribute: DynamicAttribute;
   private poolScale: number;
   
   setup(sceneNodesByName: Map<string, SceneNode>): void {
@@ -51,7 +120,7 @@ export default class MercuryPool implements ISimulation {
     };
     this.isIndustrial = sceneNodesByName.has("Mercury_Pool_Tech_Scene.scx/_root");
     this.dropRange = this.isIndustrial ? [28, 28] : [16, 16];
-    this.fallDuration = 1000;
+    this.fallDuration = 800;
     this.splashDuration = 1333;
     this.rippleDuration = 5000;
     this.poolScale = this.isIndustrial ? 64 : 72;
@@ -60,19 +129,23 @@ export default class MercuryPool implements ISimulation {
     pool.transformChanged = true;
     const poolAttributes = pool.meshes[0].vertexAttributes;
     
-    const poolPositions = poolAttributes.find(buffer => buffer.name === "position")!;
-    this.poolPositions = {
-      buffer: poolPositions.buffer,
-      data: poolPositions.data!,
-      uint8Array: new Uint8Array(poolPositions.data!.buffer)
+    const poolPositionAttribute = poolAttributes.find(buffer => buffer.name === "position")!;
+    this.poolPositionAttribute = {
+      buffer: poolPositionAttribute.buffer,
+      data: poolPositionAttribute.data!,
+      uint8Array: new Uint8Array(poolPositionAttribute.data!.buffer)
     };
 
-    const poolNormals = poolAttributes.find(buffer => buffer.name === "normal")!;
-    this.poolNormals = {
-      buffer: poolNormals.buffer,
-      data: poolNormals.data!,
-      uint8Array: new Uint8Array(poolNormals.data!.buffer)
+    this.poolPositions = Array(numVertexRows * numVertexRows).fill(0).map((_, i) => this.poolPositionAttribute.data.subarray(i * 3, (i + 1) * 3));
+
+    const poolNormalAttribute = poolAttributes.find(buffer => buffer.name === "normal")!;
+    this.poolNormalAttribute = {
+      buffer: poolNormalAttribute.buffer,
+      data: poolNormalAttribute.data!,
+      uint8Array: new Uint8Array(poolNormalAttribute.data!.buffer)
     };
+
+    this.poolNormals = Array(numVertexRows * numVertexRows).fill(0).map((_, i) => this.poolNormalAttribute.data.subarray(i * 3, (i + 1) * 3));
 
     this.drops = [];
     for (let i = 1; i < 10; i++) {
@@ -96,9 +169,11 @@ export default class MercuryPool implements ISimulation {
 
     if (!this.isInitialized) {
       this.isInitialized = true;
+      let firstStartTime = time - Math.random() * this.rippleDuration;
       for (const drop of this.drops) {
-        drop.startTime = time - Math.random() * this.rippleDuration;
-        drop.lastStartTime = drop.startTime;
+        drop.startTime = firstStartTime;
+        drop.lastStartTime = firstStartTime;
+        firstStartTime += Math.random() * (this.fallDuration + this.rippleDuration);
       }
     }
     
@@ -129,7 +204,7 @@ export default class MercuryPool implements ISimulation {
             splashModel.transformChanged = true;
             splashAnimatedNodes.forEach(n => n.animations.forEach(anim => anim.reset()))
           } else {
-            dropModel.transform.trans[2] = ((time - drop.startTime) / 1000 - 1) * -100;
+            dropModel.transform.trans[2] = 100 * (1 - (time - drop.startTime) / this.fallDuration);
             dropModel.transformChanged = true;
           }
           break;
@@ -146,53 +221,36 @@ export default class MercuryPool implements ISimulation {
       }
     }
 
-    // Update pool vertex positions and normals
-
-    const positionData = this.poolPositions.data;
-    const normalData = this.poolNormals.data;
-
-    const vertPosition = vec2.create();
+    const v0 = vec3.create(), v1 = vec3.create();
     for (let i = 0; i < numVertexRows; i++) {
       for (let j = 0; j < numVertexRows; j++) {
-        const index = (i * numVertexRows + j) * 3;
-        vec2.set(
-          vertPosition, 
-          positionData[index + 0] * this.poolScale, 
-          positionData[index + 1] * this.poolScale
-        );
+        const index = i * numVertexRows + j;
+        this.poolPositions[index][2] = 0;
+        vec3.scale(v0,  this.poolPositions[index], this.poolScale);
         let sum = 0;
         for (const drop of this.drops) {
           const t = Math.max(0, time - drop.lastStartTime - this.fallDuration);
-          const dist = vec2.distance(vertPosition, drop.position);
+          const dist = vec2.distance(v0 as vec2, drop.position);
           let x = Math.max(0, 12 * t / 1000 - dist);
-          sum += (-Math.cos(x * 0.6) * 0.5 + 0.5) * Math.max(0, 1 - t / this.rippleDuration) * (300 / this.poolScale) / (1 + dist * 0.1);
+          sum += (-Math.cos(x * 0.6) * 0.5 + 0.5) * Math.max(0, 1 - t / this.rippleDuration) * (250 / this.poolScale) / (1 + dist * 0.1);
         }
-        positionData[index + 2] = sum;
+        this.poolPositions[index][2] = sum;
       }
     }
 
-    const vertNormal = vec3.create();
-    for (let i = 0; i < numVertexRows; i++) {
-      for (let j = 0; j < numVertexRows; j++) {
-        const index = (i * numVertexRows + j) * 3;
-        const height = positionData[index + 2];
-        const heightN = positionData[(i - 1 * numVertexRows + j    ) * 3 + 2] ?? height;
-        const heightS = positionData[(i + 1 * numVertexRows + j    ) * 3 + 2] ?? height;
-        const heightE = positionData[(i     * numVertexRows + j - 1) * 3 + 2] ?? height;
-        const heightW = positionData[(i     * numVertexRows + j + 1) * 3 + 2] ?? height;
-        vec3.set(
-          vertNormal, 
-          2 * this.poolScale,
-          heightN - heightS, 
-          heightE - heightW, 
-        );
-        vec3.normalize(vertNormal, vertNormal);
-        normalData.set(vertNormal, index);
-      }
+    const normalData = this.poolNormalAttribute.data;
+    normalData.fill(0);
+    for (const [index0, index1, index2] of triangles) {
+      vec3.sub(v0, this.poolPositions[index1], this.poolPositions[index0]);
+      vec3.sub(v1, this.poolPositions[index2], this.poolPositions[index1]);
+      vec3.cross(v0, v1, v0);
+      vec3.add(this.poolNormals[index0], this.poolNormals[index0], v0);
+      vec3.add(this.poolNormals[index1], this.poolNormals[index1], v0);
+      vec3.add(this.poolNormals[index2], this.poolNormals[index2], v0);
     }
 
-    device.uploadBufferData(this.poolPositions.buffer, 0, this.poolPositions.uint8Array);
-    device.uploadBufferData(this.poolNormals.buffer, 0, this.poolNormals.uint8Array);
+    device.uploadBufferData(this.poolPositionAttribute.buffer, 0, this.poolPositionAttribute.uint8Array);
+    device.uploadBufferData(this.poolNormalAttribute.buffer, 0, this.poolNormalAttribute.uint8Array);
   }
 
   static createDropPosition(range: [number, number]) : [number, number] {
