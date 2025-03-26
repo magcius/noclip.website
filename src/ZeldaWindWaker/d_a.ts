@@ -6095,6 +6095,7 @@ class br_s {
     modelRope1: J3DModelInstance | null = null;
     modelRope0: J3DModelInstance | null = null;
     flags: number = 0;
+    posSim = vec3.create();
     pos = vec3.create();
     rot = vec3.create();
     scale = vec3.create();
@@ -6123,6 +6124,7 @@ class d_a_bridge extends fopAc_ac_c {
     private pathId: number;
     private unkParam: number;
 
+    private startPos: ReadonlyVec3;
     private endPos: ReadonlyVec3;
     private plankCount: number;
     private planks: br_s[];
@@ -6147,10 +6149,10 @@ class d_a_bridge extends fopAc_ac_c {
         const path = dPath_GetRoomPath(globals, this.pathId, globals.mStayNo);
         assert(!!path);
         
-        this.pos = path.points[0].pos;
+        this.startPos = path.points[0].pos;
         this.endPos = path.points[1].pos;
 
-        const diff = vec3.sub(scratchVec3a, this.endPos, this.pos);
+        const diff = vec3.sub(scratchVec3a, this.endPos, this.startPos);
         const distXZ = Math.hypot(diff[0], diff[2]);
         
         this.rot[1] = cM_atan2s(diff[0], diff[2]);
@@ -6258,16 +6260,16 @@ class d_a_bridge extends fopAc_ac_c {
             const curPlank = this.planks[i];
             const prevPlank = this.planks[i - 1];
 
-            const offsetVec = vec3.sub(scratchVec3b, curPlank.pos, prevPlank.pos);
+            const offsetVec = vec3.sub(scratchVec3b, curPlank.posSim, prevPlank.posSim);
             const offsetAngleXZ = cM_atan2s(offsetVec[0], offsetVec[2]);  
             const offsetDistXZ = Math.hypot(offsetVec[0], offsetVec[2]);
-            const offsetAngleY = cM_atan2s((curPlank.pos[1] + curPlank.biasY * 0.5) - prevPlank.pos[1], offsetDistXZ);
+            const offsetAngleY = cM_atan2s((curPlank.posSim[1] + curPlank.biasY * 0.5) - prevPlank.posSim[1], offsetDistXZ);
 
             mDoMtx_YrotS(calc_mtx, offsetAngleXZ);
             mDoMtx_XrotM(calc_mtx, -offsetAngleY);
 
             MtxPosition(scratchVec3d, plankOffsetVec);
-            curPlank.pos = vec3.add(curPlank.pos, prevPlank.pos, scratchVec3d);
+            curPlank.posSim = vec3.add(curPlank.posSim, prevPlank.posSim, scratchVec3d);
         }
 
         // for (iVar12 = 1; iVar12 < bridge->mBrCount; iVar12 = iVar12 + 1) {
@@ -6321,10 +6323,10 @@ class d_a_bridge extends fopAc_ac_c {
             const curPlank = this.planks[i];
             const nextPlank = this.planks[i + 1];
 
-            const offsetVec = vec3.sub(scratchVec3b, curPlank.pos, nextPlank.pos);
+            const offsetVec = vec3.sub(scratchVec3b, curPlank.posSim, nextPlank.posSim);
             const offsetAngleXZ = cM_atan2s(offsetVec[0], offsetVec[2]);  
             const offsetDistXZ = Math.hypot(offsetVec[0], offsetVec[2]);
-            const offsetAngleY = cM_atan2s((curPlank.pos[1] + curPlank.biasY * 0.5) - nextPlank.pos[1], offsetDistXZ);
+            const offsetAngleY = cM_atan2s((curPlank.posSim[1] + curPlank.biasY * 0.5) - nextPlank.posSim[1], offsetDistXZ);
 
             nextPlank.rot[1] = offsetAngleXZ;
             nextPlank.rot[0] = -offsetAngleY;
@@ -6333,7 +6335,7 @@ class d_a_bridge extends fopAc_ac_c {
             mDoMtx_XrotM(calc_mtx, -offsetAngleY);
 
             MtxPosition(scratchVec3d, plankConstraintVec);
-            curPlank.pos = vec3.add(curPlank.pos, nextPlank.pos, scratchVec3d);
+            curPlank.posSim = vec3.add(curPlank.posSim, nextPlank.posSim, scratchVec3d);
         }
 
         // curBr = param_2 + param_1->mBrCount + -2;
@@ -6376,12 +6378,12 @@ class d_a_bridge extends fopAc_ac_c {
         const curPlank = this.planks[0];
         const nextPlank = this.planks[1];
 
-        const offsetVec = vec3.sub(scratchVec3b, curPlank.pos, nextPlank.pos);
+        const offsetVec = vec3.sub(scratchVec3b, curPlank.posSim, nextPlank.posSim);
         const offsetAngleXZ = cM_atan2s(offsetVec[0], offsetVec[2]);
         curPlank.rot[1] = offsetAngleXZ;
 
         const offsetDistXZ = Math.hypot(offsetVec[0], offsetVec[2]);
-        const offsetAngleY = cM_atan2s(curPlank.pos[1] - nextPlank.pos[1], offsetDistXZ);
+        const offsetAngleY = cM_atan2s(curPlank.posSim[1] - nextPlank.posSim[1], offsetDistXZ);
         curPlank.rot[0] = -offsetAngleY;
 
         // fVar3 = (pBr->mCurPos).x - pBr[1].mCurPos.x;
@@ -6403,15 +6405,24 @@ class d_a_bridge extends fopAc_ac_c {
     }
 
     private bridge_move(globals: dGlobals) {
-        vec3.copy(this.planks[0].pos, this.pos);
+        vec3.copy(this.planks[0].posSim, this.startPos);
 
         // Iteratively solve for a "rope bridge" constraint on each plank by iterating forward and backward
         this.control1(globals);
-        vec3.copy(this.planks[this.plankCount - 1].pos, this.endPos);
+        vec3.copy(this.planks[this.plankCount - 1].posSim, this.endPos);
         this.control2(globals);
         this.control3(globals);
 
-        for(let plank of this.planks) {
+        const rootOffset = vec3.sub(scratchVec3a, this.startPos, this.planks[0].posSim);
+        vec3.copy(this.pos, this.planks[0].posSim);
+        vec3.copy(this.rot, this.planks[0].rot);
+
+        for(let i = 0; i < this.plankCount; i++) {
+            const plank = this.planks[i];
+
+            const rootOffsetMag = (this.plankCount - i) / this.plankCount * 0.75;
+            vec3.scaleAndAdd(plank.pos, plank.posSim, rootOffset, rootOffsetMag);
+
             plank.biasY = cLib_addCalc2(plank.biasY, -15.0, 1.0, 5.0);
         }
     }
