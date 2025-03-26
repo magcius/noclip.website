@@ -6106,7 +6106,7 @@ class br_s {
 
 enum BridgeFlags {
     IsMetal     = 1 << 0,
-    Unk         = 1 << 1,
+    LimitPlanks = 1 << 1,
     NoRopes     = 1 << 2,
     UseDarkTex  = 1 << 3,
 }
@@ -6126,6 +6126,7 @@ class d_a_bridge extends fopAc_ac_c {
 
     private startPos: ReadonlyVec3;
     private endPos: ReadonlyVec3;
+    private visiblePlankCount: number;
     private plankCount: number;
     private planks: br_s[];
 
@@ -6179,9 +6180,9 @@ class d_a_bridge extends fopAc_ac_c {
             plank.model = new J3DModelInstance(modelPlankData);
             assert(!!plank.model);
             
-            // Attach ropes to every third plank
+            // Attach ropes to every fourth plank
             if((this.flags & BridgeFlags.NoRopes) == 0) {
-                if ((i + ropeBias) % 3 == 0) {
+                if (((i + ropeBias) & 4) == 0) {
                     plank.flags = 0b111; // TODO: Label flags. This marks this plank as having ropes attached
                     if( this.type == BridgeType.Metal ) {
                         plank.modelRope0 = new J3DModelInstance(modelChainData);
@@ -6224,6 +6225,24 @@ class d_a_bridge extends fopAc_ac_c {
             if( r < 0.5 ) {
                 plank.rotYExtra = -0x8000;
             }
+        }
+
+        this.cullMtx = this.planks[0].model.modelMatrix;
+        this.setCullSizeBox(-120.0, -30.0, -60.0, 120.0, 30.0, 60.0);
+        this.cullFarDistanceRatio = 10.0;
+
+        // Limit the number of visible planks. They are still simulated, but won't be drawn or collided. 
+        // I assume this is to keep the support ropes matching up.   
+        if( (this.flags & BridgeFlags.LimitPlanks) == 0 ) {
+            this.visiblePlankCount = this.plankCount;
+        } else if (this.plankCount < 16) {
+            if (this.plankCount < 12) {
+                this.visiblePlankCount = 7;
+            } else {
+                this.visiblePlankCount = 11;
+            }
+        } else {
+            this.visiblePlankCount = 15;
         }
 
         return cPhs__Status.Next;
@@ -6429,7 +6448,9 @@ class d_a_bridge extends fopAc_ac_c {
 
     public override execute(globals: dGlobals, deltaTimeFrames: number): void {
         this.bridge_move(globals);
-        for (let plank of this.planks) {
+        for (let i = 0; i < this.plankCount; i++) {
+            const plank = this.planks[i];
+
             MtxTrans(plank.pos, false);
             mDoMtx_YrotM(calc_mtx, plank.rot[1]);
             mDoMtx_XrotM(calc_mtx, plank.rot[0]);
@@ -6437,7 +6458,16 @@ class d_a_bridge extends fopAc_ac_c {
 
             // Lots of stuff here. Particles, ropes, etc...
 
+            // Half the planks are rotated 180 degrees (to simulate island craftsmanship)
             mDoMtx_YrotM(calc_mtx, plank.rotYExtra);
+            
+            // Hide planks that exceed the max visible count
+            if (i >= this.visiblePlankCount) {
+                vec3.zero(plank.scale);
+                vec3.zero(plank.model.baseScale);
+                plank.flags = 0;
+            }
+
             mat4.copy(plank.model.modelMatrix, calc_mtx);
         }
     }
