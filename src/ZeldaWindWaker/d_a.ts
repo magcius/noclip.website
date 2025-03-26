@@ -6098,7 +6098,9 @@ class br_s {
     pos = vec3.create();
     rot = vec3.create();
     scale = vec3.create();
+
     rotYExtra: number = 0;
+    biasY: number = 0;
 }
 
 enum BridgeFlags {
@@ -6199,22 +6201,22 @@ class d_a_bridge extends fopAc_ac_c {
                 }
             }
 
-            if (this.type == BridgeType.Metal) {
-                // TODO:
-                // fVar10 = SComponent::cM_rndF(0.3);
-                //     (pBr->mScale).y = fVar10 + 1.0;
-                //     if ((i + iVar8 & 3U) == 0) {
-                //     (pBr->mScale).x = 1.05;
-                //     }
-                //     else {
-                //     fVar10 = SComponent::cM_rndF(0.1);
-                //     (pBr->mScale).x = fVar10 + 1.0;
-                //     }
+            if (this.type == BridgeType.Wood) {
+                const r = cM_rndF(0.3);
+                plank.scale[1] = r + 1.0;
+                if ((i + ropeBias) % 3 == 0) {
+                    plank.scale[0] = 1.05;
+                } else {
+                    const r = cM_rndF(0.1);
+                    plank.scale[0] = r + 1.0;
+                }
             } else {
                 plank.scale[0] = 1.0;
                 plank.scale[1] = 1.0;
             }
             plank.scale[2] = 1.5;
+
+            vec3.copy(plank.model.baseScale, plank.scale);
 
             const r = cM_rndF(1.0);
             if( r < 0.5 ) {
@@ -6259,7 +6261,7 @@ class d_a_bridge extends fopAc_ac_c {
             const offsetVec = vec3.sub(scratchVec3b, curPlank.pos, prevPlank.pos);
             const offsetAngleXZ = cM_atan2s(offsetVec[0], offsetVec[2]);  
             const offsetDistXZ = Math.hypot(offsetVec[0], offsetVec[2]);
-            const offsetAngleY = cM_atan2s(curPlank.pos[1] - prevPlank.pos[1], offsetDistXZ);
+            const offsetAngleY = cM_atan2s((curPlank.pos[1] + curPlank.biasY * 0.5) - prevPlank.pos[1], offsetDistXZ);
 
             mDoMtx_YrotS(calc_mtx, offsetAngleXZ);
             mDoMtx_XrotM(calc_mtx, -offsetAngleY);
@@ -6322,7 +6324,7 @@ class d_a_bridge extends fopAc_ac_c {
             const offsetVec = vec3.sub(scratchVec3b, curPlank.pos, nextPlank.pos);
             const offsetAngleXZ = cM_atan2s(offsetVec[0], offsetVec[2]);  
             const offsetDistXZ = Math.hypot(offsetVec[0], offsetVec[2]);
-            const offsetAngleY = cM_atan2s(curPlank.pos[1] - nextPlank.pos[1], offsetDistXZ);
+            const offsetAngleY = cM_atan2s((curPlank.pos[1] + curPlank.biasY * 0.5) - nextPlank.pos[1], offsetDistXZ);
 
             nextPlank.rot[1] = offsetAngleXZ;
             nextPlank.rot[0] = -offsetAngleY;
@@ -6408,6 +6410,10 @@ class d_a_bridge extends fopAc_ac_c {
         vec3.copy(this.planks[this.plankCount - 1].pos, this.endPos);
         this.control2(globals);
         this.control3(globals);
+
+        for(let plank of this.planks) {
+            plank.biasY = cLib_addCalc2(plank.biasY, -15.0, 1.0, 5.0);
+        }
     }
 
     public override execute(globals: dGlobals, deltaTimeFrames: number): void {
