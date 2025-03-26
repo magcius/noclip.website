@@ -6090,6 +6090,349 @@ class d_a_title extends fopAc_ac_c {
     }
 }
 
+class br_s {
+    model: J3DModelInstance;
+    modelRope1: J3DModelInstance | null = null;
+    modelRope0: J3DModelInstance | null = null;
+    flags: number = 0;
+    pos = vec3.create();
+    rot = vec3.create();
+    scale = vec3.create();
+    rotYExtra: number = 0;
+}
+
+enum BridgeFlags {
+    IsMetal     = 1 << 0,
+    Unk         = 1 << 1,
+    NoRopes     = 1 << 2,
+    UseDarkTex  = 1 << 3,
+}
+
+enum BridgeType {
+    Wood = 0,
+    Metal = 1
+}
+class d_a_bridge extends fopAc_ac_c {
+    public static PROCESS_NAME = dProcName_e.d_a_bridge;
+    public static arcName = 'Bridge';
+
+    private flags: number;
+    private type: BridgeType;
+    private pathId: number;
+    private unkParam: number;
+
+    private endPos: ReadonlyVec3;
+    private plankCount: number;
+    private planks: br_s[];
+
+    private swayX: number;
+    private swayXMag: number;
+
+    private modelPlank: J3DModelInstance;
+
+    public override subload(globals: dGlobals): cPhs__Status {
+        const status = dComIfG_resLoad(globals, d_a_bridge.arcName);
+        if (status !== cPhs__Status.Complete)
+            return status;
+
+        this.flags = this.parameters & 0xFF;
+        if (this.flags == 0xFF) this.flags = 0;
+
+        this.unkParam = (this.parameters >> 8) & 0xFF;
+        this.pathId = (this.parameters >> 16) & 0xFF;
+        assert(this.pathId !== 0xFF);
+
+        const path = dPath_GetRoomPath(globals, this.pathId, globals.mStayNo);
+        assert(!!path);
+        
+        this.pos = path.points[0].pos;
+        this.endPos = path.points[1].pos;
+
+        const diff = vec3.sub(scratchVec3a, this.endPos, this.pos);
+        const distXZ = Math.hypot(diff[0], diff[2]);
+        
+        this.rot[1] = cM_atan2s(diff[0], diff[2]);
+        this.rot[0] = -cM_atan2s(diff[1], distXZ);
+
+        const dist = vec3.length(diff);
+        const plankBias = (dist > 1300) ? 3.0 : 0.0;
+        this.plankCount = Math.floor(dist / ((plankBias + 47.0) * 1.5));
+        assert(this.plankCount < 50);
+        this.planks = nArray(this.plankCount, () => new br_s());
+
+        // createHeap
+        this.type = this.flags & 1;
+        if (this.flags & BridgeFlags.NoRopes) this.type = BridgeType.Metal;
+
+        const bmdIds = [0x04 /* Wood */, 0x05 /* Metal */]; 
+        const modelPlankData = globals.resCtrl.getObjectRes(ResType.Model, d_a_bridge.arcName, bmdIds[this.type]);
+        const modelChainData = globals.resCtrl.getObjectRes(ResType.Model, d_a_bridge.arcName, 0x06);
+
+        const ropeBias = (this.type == BridgeType.Metal) ? 0 : 2;
+
+        for (let i = 0; i < this.plankCount; i++) {
+            const plank = this.planks[i];
+            plank.model = new J3DModelInstance(modelPlankData);
+            assert(!!plank.model);
+            
+            // Attach ropes to every third plank
+            if((this.flags & BridgeFlags.NoRopes) == 0) {
+                if ((i + ropeBias) % 3 == 0) {
+                    plank.flags = 0b111; // TODO: Label flags. This marks this plank as having ropes attached
+                    if( this.type == BridgeType.Metal ) {
+                        plank.modelRope0 = new J3DModelInstance(modelChainData);
+                        plank.modelRope1 = new J3DModelInstance(modelChainData);
+                    } else {
+                        const ropeTexID = (this.flags & BridgeFlags.UseDarkTex) ? 0x8D : 0x7E;
+                        const ropeTex = globals.resCtrl.getObjectRes(ResType.Bti, "Always", ropeTexID);
+                        // Construct mDoExt_3DlineMat1_c with this tex
+                        // mDoExt_3DlineMat1_c::init(&pBr->mLineMat1,4,5,pRVar3,1);
+                    }
+                }
+
+                // Always construct mDoExt_3Dlines for the first plank
+                if (i == 0) {
+                    const ropeTexID = (this.flags & BridgeFlags.UseDarkTex) ? 0x8D : 0x7E;
+                    const ropeTex = globals.resCtrl.getObjectRes(ResType.Bti, "Always", ropeTexID);
+                    // Construct mDoExt_3DlineMat1_c with this tex
+                    // mDoExt_3DlineMat1_c::init(&pAct->mLineMat,2,0xe,pRVar3,0);
+                }
+            }
+
+            if (this.type == BridgeType.Metal) {
+                // TODO:
+                // fVar10 = SComponent::cM_rndF(0.3);
+                //     (pBr->mScale).y = fVar10 + 1.0;
+                //     if ((i + iVar8 & 3U) == 0) {
+                //     (pBr->mScale).x = 1.05;
+                //     }
+                //     else {
+                //     fVar10 = SComponent::cM_rndF(0.1);
+                //     (pBr->mScale).x = fVar10 + 1.0;
+                //     }
+            } else {
+                plank.scale[0] = 1.0;
+                plank.scale[1] = 1.0;
+            }
+            plank.scale[2] = 1.5;
+
+            const r = cM_rndF(1.0);
+            if( r < 0.5 ) {
+                plank.rotYExtra = -0x8000;
+            }
+        }
+
+        return cPhs__Status.Next;
+    }
+
+    private control1(globals: dGlobals) {
+        // this.swayX += 0x578;
+        // bridge->m02EE = bridge->m02EE + bridge->m02F2;
+        
+        // swayPhase = 8000;
+        // brNext = pBr + 1;
+        // if (bridge->mBrCount > 10) {
+        //     swayPhase = 4000;
+        // }
+
+        // Offset the root X position based on wind strength
+        // const swayX = this.swayXMag * Math.cos(cM_s2rad(this.swayX));
+        // const swayPosX = vec3.set(scratchVec3a, swayX, 0, 0 );
+        // mDoMtx_YrotS(calc_mtx, this.rot[1]);
+        // const swayXVec = MtxPosition(scratchVec3b, swayPosX);
+
+        // vec3.set(scratchVec3a, 1, 0, 0);
+        // const bridgeDir = MtxPosition(scratchVec3c, scratchVec3a);
+
+        // TODO: Handle wind angle adjustment
+        // local_94.x = 0.0;
+        // local_94.z = *windPower * 5.0;
+        // mDoMtx_YrotS(*calc_mtx,windAngle);
+        // MtxPosition(&local_94,&local_c4);
+
+        const plankOffsetVec = vec3.set(scratchVec3a, 0, 0, 75);
+
+        for( let i = 1; i < this.planks.length; i++ ) {
+            const curPlank = this.planks[i];
+            const prevPlank = this.planks[i - 1];
+
+            const offsetVec = vec3.sub(scratchVec3b, curPlank.pos, prevPlank.pos);
+            const offsetAngleXZ = cM_atan2s(offsetVec[0], offsetVec[2]);  
+            const offsetDistXZ = Math.hypot(offsetVec[0], offsetVec[2]);
+            const offsetAngleY = cM_atan2s(curPlank.pos[1] - prevPlank.pos[1], offsetDistXZ);
+
+            mDoMtx_YrotS(calc_mtx, offsetAngleXZ);
+            mDoMtx_XrotM(calc_mtx, -offsetAngleY);
+
+            MtxPosition(scratchVec3d, plankOffsetVec);
+            curPlank.pos = vec3.add(curPlank.pos, prevPlank.pos, scratchVec3d);
+        }
+
+        // for (iVar12 = 1; iVar12 < bridge->mBrCount; iVar12 = iVar12 + 1) {
+                // swayScalar = brCur->mUnkMag;
+                // swayZ = swayScalar *
+                //         pAct->mSwayZMag *
+                //         JKernel::JMath::jmaSinTable
+                //         [(int)((int)pAct->mSwayXZ + i * swayPhase & 0xffffU) >>
+                //         (JKernel::JMath::jmaSinShift & 0x3f)];
+                // swayY = JKernel::JMath::jmaSinTable
+                //         [(int)((int)pAct->mSwayY + i * (swayPhase + 1000) & 0xffffU) >>
+                //         (JKernel::JMath::jmaSinShift & 0x3f)];
+                // offsetX = windVec.x +
+                //         swayXVec.x * swayScalar +
+                //         ((brCur->mCurPos).x - brCur[-1].mCurPos.x) + swayZ * bridgeDir.x;
+                // swayYMag = pAct->mSwayYMag;
+                // biasY = brCur->mUnkYOffset;
+                // curPosY = (brCur->mCurPos).y;
+                // biasY2 = brCur->mSwayYExtra;
+                // prevPosY = brCur[-1].mCurPos.y;
+                // swayZ = windVec.z +
+                //         swayXVec.z * swayScalar +
+                //         ((brCur->mCurPos).z - brCur[-1].mCurPos.z) + swayZ * bridgeDir.z;
+                // offsetAngleXZ = SComponent::cM_atan2s(offsetX,swayZ);
+                // swayZ = offsetX * offsetX + swayZ * swayZ;
+                // if (swayZ > 0.0) {
+                // offsetX = 1.0 / SQRT(swayZ);
+                // offsetX = offsetX * 0.5 * (3.0 - swayZ * offsetX * offsetX);
+                // offsetX = offsetX * 0.5 * (3.0 - swayZ * offsetX * offsetX);
+                // swayZ = swayZ * offsetX * 0.5 * (3.0 - swayZ * offsetX * offsetX);
+                // }
+                // offsetAngleY = SComponent::cM_atan2s
+                //                         (swayScalar * swayYMag * swayY +
+                //                         ((biasY * 0.5 + curPosY + biasY2 * swayScalar * 0.5) - prevPosY),swayZ
+                //                         );
+                // mDoMtx_YrotS(SComponent::calc_mtx,(int)(short)offsetAngleXZ);
+                // mDoMtx_XrotM(SComponent::calc_mtx,-(short)offsetAngleY);
+                // SComponent::MtxPosition(&local_94,&local_a0);
+                // (brCur->mCurPos).x = brCur[-1].mCurPos.x + local_a0.x;
+                // (brCur->mCurPos).y = brCur[-1].mCurPos.y + local_a0.y;
+                // (brCur->mCurPos).z = brCur[-1].mCurPos.z + local_a0.z;
+                // brCur = brCur + 1;
+        // }
+    }
+
+    private control2(globals: dGlobals) {
+        const plankConstraintVec = vec3.set(scratchVec3a, 0, 0, 75);
+
+        // Traverse the planks in reverse order, skipping the final plank
+        for (let i = this.plankCount - 2; i >= 0; i--) {
+            const curPlank = this.planks[i];
+            const nextPlank = this.planks[i + 1];
+
+            const offsetVec = vec3.sub(scratchVec3b, curPlank.pos, nextPlank.pos);
+            const offsetAngleXZ = cM_atan2s(offsetVec[0], offsetVec[2]);  
+            const offsetDistXZ = Math.hypot(offsetVec[0], offsetVec[2]);
+            const offsetAngleY = cM_atan2s(curPlank.pos[1] - nextPlank.pos[1], offsetDistXZ);
+
+            nextPlank.rot[1] = offsetAngleXZ;
+            nextPlank.rot[0] = -offsetAngleY;
+
+            mDoMtx_YrotS(calc_mtx, offsetAngleXZ);
+            mDoMtx_XrotM(calc_mtx, -offsetAngleY);
+
+            MtxPosition(scratchVec3d, plankConstraintVec);
+            curPlank.pos = vec3.add(curPlank.pos, nextPlank.pos, scratchVec3d);
+        }
+
+        // curBr = param_2 + param_1->mBrCount + -2;
+        // local_88[0].x = 0.0;
+        // local_88[0].y = 0.0;
+        // local_88[0].z = 75.0;
+        // for (iVar11 = 0; iVar11 < param_1->mBrCount + -1; iVar11 = iVar11 + 1) {
+        //   fVar1 = curBr->mUnkYOffset;
+        //   fVar2 = (curBr->mCurPos).y;
+        //   fVar3 = curBr->mSwayYExtra;
+        //   fVar4 = curBr->mSwayScalar;
+        //   fVar5 = curBr[1].mCurPos.y;
+
+        //   fVar6 = (curBr->mCurPos).x - curBr[1].mCurPos.x;
+        //   fVar7 = (curBr->mCurPos).z - curBr[1].mCurPos.z;
+        //   iVar8 = SComponent::cM_atan2s(fVar6,fVar7);
+        //   fVar6 = fVar6 * fVar6 + fVar7 * fVar7;
+        //   if (fVar6 > 0.0) {
+        //     fVar7 = 1.0 / SQRT(fVar6);
+        //     fVar7 = fVar7 * 0.5 * (3.0 - fVar6 * fVar7 * fVar7);
+        //     fVar7 = fVar7 * 0.5 * (3.0 - fVar6 * fVar7 * fVar7);
+        //     fVar6 = fVar6 * fVar7 * 0.5 * (3.0 - fVar6 * fVar7 * fVar7);
+        //   }
+
+        //   iVar9 = SComponent::cM_atan2s((fVar1 * 0.5 + fVar2 + fVar3 * fVar4 * 0.5) - fVar5,fVar6);
+
+        //   curBr[1].mRotation.y = (short)iVar8;
+        //   curBr[1].mRotation.x = -(short)iVar9;
+        //   mDoMtx_YrotS(SComponent::calc_mtx,(int)(short)iVar8);
+        //   mDoMtx_XrotM(SComponent::calc_mtx,-(short)iVar9);
+        //   SComponent::MtxPosition(local_88,&local_94);
+        //   (curBr->mCurPos).x = curBr[1].mCurPos.x + local_94.x;
+        //   (curBr->mCurPos).y = curBr[1].mCurPos.y + local_94.y;
+        //   (curBr->mCurPos).z = curBr[1].mCurPos.z + local_94.z;
+        //   curBr = curBr + -1;
+        // }
+    }
+
+    private control3(globals: dGlobals) {
+        const curPlank = this.planks[0];
+        const nextPlank = this.planks[1];
+
+        const offsetVec = vec3.sub(scratchVec3b, curPlank.pos, nextPlank.pos);
+        const offsetAngleXZ = cM_atan2s(offsetVec[0], offsetVec[2]);
+        curPlank.rot[1] = offsetAngleXZ;
+
+        const offsetDistXZ = Math.hypot(offsetVec[0], offsetVec[2]);
+        const offsetAngleY = cM_atan2s(curPlank.pos[1] - nextPlank.pos[1], offsetDistXZ);
+        curPlank.rot[0] = -offsetAngleY;
+
+        // fVar3 = (pBr->mCurPos).x - pBr[1].mCurPos.x;
+        // fVar4 = (pBr->mCurPos).z - pBr[1].mCurPos.z;
+        // iVar5 = SComponent::cM_atan2s(fVar3,fVar4);
+        // (pBr->mRotation).y = (short)iVar5;
+
+        // fVar3 = fVar3 * fVar3 + fVar4 * fVar4;
+        // if (fVar3 > 0.0) {
+        //   fVar4 = 1.0 / SQRT(fVar3);
+        //   fVar4 = fVar4 * 0.5 * (3.0 - fVar3 * fVar4 * fVar4);
+        //   fVar4 = fVar4 * 0.5 * (3.0 - fVar3 * fVar4 * fVar4);
+        //   fVar3 = fVar3 * fVar4 * 0.5 * (3.0 - fVar3 * fVar4 * fVar4);
+        // }
+        // fVar1 = (pBr->mCurPos).y;
+        // fVar2 = pBr[1].mCurPos.y;
+        // iVar5 = SComponent::cM_atan2s(fVar1 - fVar2,fVar3);
+        // (pBr->mRotation).x = -(short)iVar5;
+    }
+
+    private bridge_move(globals: dGlobals) {
+        vec3.copy(this.planks[0].pos, this.pos);
+
+        // Iteratively solve for a "rope bridge" constraint on each plank by iterating forward and backward
+        this.control1(globals);
+        vec3.copy(this.planks[this.plankCount - 1].pos, this.endPos);
+        this.control2(globals);
+        this.control3(globals);
+    }
+
+    public override execute(globals: dGlobals, deltaTimeFrames: number): void {
+        this.bridge_move(globals);
+        for (let plank of this.planks) {
+            MtxTrans(plank.pos, false);
+            mDoMtx_YrotM(calc_mtx, plank.rot[1]);
+            mDoMtx_XrotM(calc_mtx, plank.rot[0]);
+            mDoMtx_ZrotM(calc_mtx, plank.rot[2]);
+
+            // Lots of stuff here. Particles, ropes, etc...
+
+            mDoMtx_YrotM(calc_mtx, plank.rotYExtra);
+            mat4.copy(plank.model.modelMatrix, calc_mtx);
+        }
+    }
+
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        for( let plank of this.planks ) {
+            setLightTevColorType(globals, plank.model, this.tevStr, globals.camera);            
+            mDoExt_modelUpdateDL(globals, plank.model, renderInstManager);
+        }
+    }
+}
+
 interface constructor extends fpc_bs__Constructor {
     PROCESS_NAME: dProcName_e;
 }
@@ -6125,4 +6468,5 @@ export function d_a__RegisterConstructors(globals: fGlobals): void {
     R(d_a_npc_zl1);
     R(d_a_py_lk);
     R(d_a_title);
+    R(d_a_bridge);
 }

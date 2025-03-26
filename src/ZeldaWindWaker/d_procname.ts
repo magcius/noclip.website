@@ -7,6 +7,7 @@ export const enum dProcName_e {
     d_a_mgameboard      = 0x0040,
     d_a_obj_ikada       = 0x0046,
     d_a_obj_lpalm       = 0x004B,
+    d_a_bridge          = 0x005B,
     d_a_obj_Ygush00     = 0x0099,
     d_a_py_lk           = 0x00A9,
     d_a_majuu_flag      = 0x00AF,
