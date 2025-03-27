@@ -22,14 +22,14 @@ import { ColorKind, DrawParams, GXMaterialHelperGfx, MaterialParams } from "../g
 import { arrayRemove, assert, assertExists, nArray } from "../util.js";
 import { ViewerRenderInput } from "../viewer.js";
 import { dGlobals } from "./Main.js";
-import { cLib_addCalc, cLib_addCalc2, cLib_addCalcAngleRad2, cLib_addCalcAngleS, cLib_addCalcAngleS2, cLib_addCalcPosXZ2, cLib_chasePosXZ, cLib_distanceSqXZ, cLib_distanceXZ, cLib_targetAngleX, cLib_targetAngleY, cM_atan2s, cM_rndF, cM_rndFX, cM_s2rad } from "./SComponent.js";
+import { cLib_addCalc, cLib_addCalc0, cLib_addCalc2, cLib_addCalcAngleRad2, cLib_addCalcAngleS, cLib_addCalcAngleS2, cLib_addCalcPosXZ2, cLib_chasePosXZ, cLib_distanceSqXZ, cLib_distanceXZ, cLib_targetAngleX, cLib_targetAngleY, cM_atan2s, cM_rndF, cM_rndFX, cM_s2rad } from "./SComponent.js";
 import { dLib_getWaterY, dLib_waveInit, dLib_waveRot, dLib_wave_c, d_a_sea } from "./d_a_sea.js";
 import { cBgW_Flags, dBgS_GndChk, dBgW } from "./d_bg.js";
 import { EDemoActorFlags, dDemo_setDemoData } from "./d_demo.js";
 import { PeekZResult } from "./d_dlst_peekZ.js";
 import { dDlst_alphaModel__Type } from "./d_drawlist.js";
 import { LIGHT_INFLUENCE, LightType, WAVE_INFO, dKy_change_colpat, dKy_checkEventNightStop, dKy_plight_cut, dKy_plight_set, dKy_setLight__OnMaterialParams, dKy_setLight__OnModelInstance, dKy_tevstr_c, dKy_tevstr_init, setLightTevColorType, settingTevStruct } from "./d_kankyo.js";
-import { ThunderMode, dKyr_get_vectle_calc, dKyw_get_AllWind_vecpow, dKyw_get_wind_pow, dKyw_get_wind_vec, dKyw_rain_set, loadRawTexture } from "./d_kankyo_wether.js";
+import { ThunderMode, dKyr_get_vectle_calc, dKyw_get_AllWind_vecpow, dKyw_get_wind_pow, dKyw_get_wind_vec, dKyw_get_wind_vecpow, dKyw_rain_set, loadRawTexture } from "./d_kankyo_wether.js";
 import { dPa_splashEcallBack, dPa_trackEcallBack, dPa_waveEcallBack, ParticleGroup } from "./d_particle.js";
 import { dProcName_e } from "./d_procname.js";
 import { ResType, dComIfG_resLoad } from "./d_resorce.js";
@@ -6102,6 +6102,7 @@ class br_s {
 
     rotYExtra: number = 0;
     biasY: number = 0;
+    biasUnk: number = 0;
 }
 
 enum BridgeFlags {
@@ -6129,11 +6130,23 @@ class d_a_bridge extends fopAc_ac_c {
     private visiblePlankCount: number;
     private plankCount: number;
     private planks: br_s[];
-
-    private swayX: number;
-    private swayXMag: number;
-
     private modelPlank: J3DModelInstance;
+
+    private windAngle: number;
+    private windPower: number;
+
+    private swayPhaseXZ = 0;
+    private swayPhaseY = 0;
+    private swayVelXZ = 0x578;
+    private swayVelY = 3000;
+    private swayMagXZ = 0;
+    private swayRootMag = 0;
+    private swayMagY = 0;
+
+    private swayScalar = 1.0; // TODO: How is this set in the original code? Ghidra can only find reads.
+
+    private swayRideMag = 0;
+    private swayRootMagCalc = 0;
 
     public override subload(globals: dGlobals): cPhs__Status {
         const status = dComIfG_resLoad(globals, d_a_bridge.arcName);
@@ -6248,30 +6261,28 @@ class d_a_bridge extends fopAc_ac_c {
         return cPhs__Status.Next;
     }
 
-    private control1(globals: dGlobals) {
-        // this.swayX += 0x578;
-        // bridge->m02EE = bridge->m02EE + bridge->m02F2;
+    private control1(deltaTimeFrames: number) {
+        this.swayPhaseXZ += this.swayVelXZ * deltaTimeFrames;
+        this.swayPhaseY += this.swayVelY * deltaTimeFrames;
         
-        // swayPhase = 8000;
-        // brNext = pBr + 1;
-        // if (bridge->mBrCount > 10) {
-        //     swayPhase = 4000;
-        // }
+        // Increase the sway phase for each plank so they appear to move snakelike
+        const swayPhaseStep = (this.plankCount > 10) ? 4000 : 8000;
 
-        // Offset the root X position based on wind strength
-        // const swayX = this.swayXMag * Math.cos(cM_s2rad(this.swayX));
-        // const swayPosX = vec3.set(scratchVec3a, swayX, 0, 0 );
-        // mDoMtx_YrotS(calc_mtx, this.rot[1]);
-        // const swayXVec = MtxPosition(scratchVec3b, swayPosX);
+        // Offset the root position based on wind strength
+        const rootSway = this.swayRootMag * Math.cos(cM_s2rad(this.swayPhaseXZ));
+        const swayPosX = vec3.set(scratchVec3a, rootSway, 0, 0 );
+        mDoMtx_YrotS(calc_mtx, this.rot[1]);
+        const rootOffsetVec = scratchVec3b;
+        MtxPosition(rootOffsetVec, swayPosX);
 
-        // vec3.set(scratchVec3a, 1, 0, 0);
-        // const bridgeDir = MtxPosition(scratchVec3c, scratchVec3a);
+        vec3.set(scratchVec3a, 1, 0, 0);
+        const bridgeDir = scratchVec3c;
+        MtxPosition(bridgeDir, scratchVec3a);
 
-        // TODO: Handle wind angle adjustment
-        // local_94.x = 0.0;
-        // local_94.z = *windPower * 5.0;
-        // mDoMtx_YrotS(*calc_mtx,windAngle);
-        // MtxPosition(&local_94,&local_c4);
+        const wind = vec3.set(scratchVec3a, 0, 0, this.windPower * 5.0);
+        mDoMtx_YrotS(calc_mtx, this.windAngle);
+        const windVec = scratchVec3e;
+        MtxPosition(windVec, wind);
 
         const plankOffsetVec = vec3.set(scratchVec3a, 0, 0, 75);
 
@@ -6279,10 +6290,15 @@ class d_a_bridge extends fopAc_ac_c {
             const curPlank = this.planks[i];
             const prevPlank = this.planks[i - 1];
 
-            const offsetVec = vec3.sub(scratchVec3b, curPlank.posSim, prevPlank.posSim);
-            const offsetAngleXZ = cM_atan2s(offsetVec[0], offsetVec[2]);  
-            const offsetDistXZ = Math.hypot(offsetVec[0], offsetVec[2]);
-            const offsetAngleY = cM_atan2s((curPlank.posSim[1] + curPlank.biasY * 0.5) - prevPlank.posSim[1], offsetDistXZ);
+            const swayXZ = this.swayScalar * this.swayMagXZ * Math.sin(cM_s2rad(this.swayPhaseXZ + i * swayPhaseStep));
+            const offsetX = windVec[0] + rootOffsetVec[0] * this.swayScalar + (curPlank.posSim[0] - prevPlank.posSim[0]) + swayXZ * bridgeDir[0];
+            const offsetZ = windVec[2] + rootOffsetVec[2] * this.swayScalar + (curPlank.posSim[2] - prevPlank.posSim[2]) + swayXZ * bridgeDir[2];
+            const offsetAngleXZ = cM_atan2s(offsetX, offsetZ);
+            const offsetDistXZ = Math.hypot(offsetX, offsetZ);
+            
+            const swayY = Math.sin(cM_s2rad(this.swayPhaseY + i * (swayPhaseStep + 1000)));
+            const offsetAngleY = cM_atan2s(this.swayScalar * this.swayMagY * swayY + 
+                ((curPlank.biasUnk * 0.5 + curPlank.posSim[1] + curPlank.biasY * this.swayScalar * 0.5) - prevPlank.posSim[1]), offsetDistXZ);
 
             mDoMtx_YrotS(calc_mtx, offsetAngleXZ);
             mDoMtx_XrotM(calc_mtx, -offsetAngleY);
@@ -6290,51 +6306,9 @@ class d_a_bridge extends fopAc_ac_c {
             MtxPosition(scratchVec3d, plankOffsetVec);
             curPlank.posSim = vec3.add(curPlank.posSim, prevPlank.posSim, scratchVec3d);
         }
-
-        // for (iVar12 = 1; iVar12 < bridge->mBrCount; iVar12 = iVar12 + 1) {
-                // swayScalar = brCur->mUnkMag;
-                // swayZ = swayScalar *
-                //         pAct->mSwayZMag *
-                //         JKernel::JMath::jmaSinTable
-                //         [(int)((int)pAct->mSwayXZ + i * swayPhase & 0xffffU) >>
-                //         (JKernel::JMath::jmaSinShift & 0x3f)];
-                // swayY = JKernel::JMath::jmaSinTable
-                //         [(int)((int)pAct->mSwayY + i * (swayPhase + 1000) & 0xffffU) >>
-                //         (JKernel::JMath::jmaSinShift & 0x3f)];
-                // offsetX = windVec.x +
-                //         swayXVec.x * swayScalar +
-                //         ((brCur->mCurPos).x - brCur[-1].mCurPos.x) + swayZ * bridgeDir.x;
-                // swayYMag = pAct->mSwayYMag;
-                // biasY = brCur->mUnkYOffset;
-                // curPosY = (brCur->mCurPos).y;
-                // biasY2 = brCur->mSwayYExtra;
-                // prevPosY = brCur[-1].mCurPos.y;
-                // swayZ = windVec.z +
-                //         swayXVec.z * swayScalar +
-                //         ((brCur->mCurPos).z - brCur[-1].mCurPos.z) + swayZ * bridgeDir.z;
-                // offsetAngleXZ = SComponent::cM_atan2s(offsetX,swayZ);
-                // swayZ = offsetX * offsetX + swayZ * swayZ;
-                // if (swayZ > 0.0) {
-                // offsetX = 1.0 / SQRT(swayZ);
-                // offsetX = offsetX * 0.5 * (3.0 - swayZ * offsetX * offsetX);
-                // offsetX = offsetX * 0.5 * (3.0 - swayZ * offsetX * offsetX);
-                // swayZ = swayZ * offsetX * 0.5 * (3.0 - swayZ * offsetX * offsetX);
-                // }
-                // offsetAngleY = SComponent::cM_atan2s
-                //                         (swayScalar * swayYMag * swayY +
-                //                         ((biasY * 0.5 + curPosY + biasY2 * swayScalar * 0.5) - prevPosY),swayZ
-                //                         );
-                // mDoMtx_YrotS(SComponent::calc_mtx,(int)(short)offsetAngleXZ);
-                // mDoMtx_XrotM(SComponent::calc_mtx,-(short)offsetAngleY);
-                // SComponent::MtxPosition(&local_94,&local_a0);
-                // (brCur->mCurPos).x = brCur[-1].mCurPos.x + local_a0.x;
-                // (brCur->mCurPos).y = brCur[-1].mCurPos.y + local_a0.y;
-                // (brCur->mCurPos).z = brCur[-1].mCurPos.z + local_a0.z;
-                // brCur = brCur + 1;
-        // }
     }
 
-    private control2(globals: dGlobals) {
+    private control2() {
         const plankConstraintVec = vec3.set(scratchVec3a, 0, 0, 75);
 
         // Traverse the planks in reverse order, skipping the final plank
@@ -6393,7 +6367,7 @@ class d_a_bridge extends fopAc_ac_c {
         // }
     }
 
-    private control3(globals: dGlobals) {
+    private control3() {
         const curPlank = this.planks[0];
         const nextPlank = this.planks[1];
 
@@ -6404,50 +6378,52 @@ class d_a_bridge extends fopAc_ac_c {
         const offsetDistXZ = Math.hypot(offsetVec[0], offsetVec[2]);
         const offsetAngleY = cM_atan2s(curPlank.posSim[1] - nextPlank.posSim[1], offsetDistXZ);
         curPlank.rot[0] = -offsetAngleY;
-
-        // fVar3 = (pBr->mCurPos).x - pBr[1].mCurPos.x;
-        // fVar4 = (pBr->mCurPos).z - pBr[1].mCurPos.z;
-        // iVar5 = SComponent::cM_atan2s(fVar3,fVar4);
-        // (pBr->mRotation).y = (short)iVar5;
-
-        // fVar3 = fVar3 * fVar3 + fVar4 * fVar4;
-        // if (fVar3 > 0.0) {
-        //   fVar4 = 1.0 / SQRT(fVar3);
-        //   fVar4 = fVar4 * 0.5 * (3.0 - fVar3 * fVar4 * fVar4);
-        //   fVar4 = fVar4 * 0.5 * (3.0 - fVar3 * fVar4 * fVar4);
-        //   fVar3 = fVar3 * fVar4 * 0.5 * (3.0 - fVar3 * fVar4 * fVar4);
-        // }
-        // fVar1 = (pBr->mCurPos).y;
-        // fVar2 = pBr[1].mCurPos.y;
-        // iVar5 = SComponent::cM_atan2s(fVar1 - fVar2,fVar3);
-        // (pBr->mRotation).x = -(short)iVar5;
     }
 
-    private bridge_move(globals: dGlobals) {
+    private bridge_move(globals: dGlobals, deltaTimeFrames: number) {
         vec3.copy(this.planks[0].posSim, this.startPos);
 
         // Iteratively solve for a "rope bridge" constraint on each plank by iterating forward and backward
-        this.control1(globals);
+        this.control1(deltaTimeFrames);
         vec3.copy(this.planks[this.plankCount - 1].posSim, this.endPos);
-        this.control2(globals);
-        this.control3(globals);
+        this.control2();
+        this.control3();
 
         const rootOffset = vec3.sub(scratchVec3a, this.startPos, this.planks[0].posSim);
         vec3.copy(this.pos, this.planks[0].posSim);
         vec3.copy(this.rot, this.planks[0].rot);
 
-        for(let i = 0; i < this.plankCount; i++) {
+        for (let i = 0; i < this.plankCount; i++) {
             const plank = this.planks[i];
 
             const rootOffsetMag = (this.plankCount - i) / this.plankCount * 0.75;
             vec3.scaleAndAdd(plank.pos, plank.posSim, rootOffset, rootOffsetMag);
 
-            plank.biasY = cLib_addCalc2(plank.biasY, -15.0, 1.0, 5.0);
+            plank.biasY = cLib_addCalc2(plank.biasY, -15.0, 1.0, 5.0);                                                                          
+            plank.biasUnk = cLib_addCalc0(plank.biasUnk, 1.0, 5.0); // @TODO: Confim that cLib_addCalc0() actually targets 0. Should we just remove it?
         }
+
+        this.swayMagY = this.swayRideMag;
+        this.swayMagXZ = this.swayRideMag;
+        this.swayRootMag = this.swayRootMagCalc;
+
+        const targetMag = (this.windPower < 0.1) ? 0.0 : 2.0;
+        this.swayRideMag = cLib_addCalc2(this.swayRideMag, targetMag, 0.1, 0.1);
+        this.swayRootMagCalc = cLib_addCalc2(this.swayRootMagCalc, targetMag * 0.3, 0.1, 0.05);
     }
 
     public override execute(globals: dGlobals, deltaTimeFrames: number): void {
-        this.bridge_move(globals);
+        const windVec = dKyw_get_wind_vec(globals.g_env_light);
+        this.windAngle = cM_atan2s(windVec[0], windVec[2]);
+        this.windPower = dKyw_get_wind_pow(globals.g_env_light);
+
+        // if (((pAct->mTypeBits & 2) != 0) && (pAct->mpAite == (bridge_class *)0x0)) {
+        //   pbVar6 = search_aite(pAct);
+        //   pAct->mpAite = pbVar6;
+        // }
+
+        this.bridge_move(globals, deltaTimeFrames);
+
         for (let i = 0; i < this.plankCount; i++) {
             const plank = this.planks[i];
 
