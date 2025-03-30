@@ -1,6 +1,6 @@
 
 import { ReadonlyMat4, ReadonlyVec3, mat4, quat, vec2, vec3 } from "gl-matrix";
-import { TransparentBlack, White, colorCopy, colorFromRGBA8, colorNewCopy, colorNewFromRGBA8 } from "../Color.js";
+import { TransparentBlack, White, colorCopy, colorFromRGBA8, colorNewCopy, colorNewFromRGBA, colorNewFromRGBA8 } from "../Color.js";
 import { calcANK1JointAnimationTransform } from "../Common/JSYSTEM/J3D/J3DGraphAnimator.js";
 import { J3DModelData, J3DModelInstance, buildEnvMtx } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
 import { JointTransformInfo, LoopMode, TRK1, TTK1 } from "../Common/JSYSTEM/J3D/J3DLoader.js";
@@ -36,9 +36,9 @@ import { ResType, dComIfG_resLoad } from "./d_resorce.js";
 import { dPath, dPath_GetRoomPath, dPath__Point, dStage_Multi_c, dStage_stagInfo_GetSTType } from "./d_stage.js";
 import { fopAcIt_JudgeByID, fopAcM_create, fopAcM_prm_class, fopAc_ac_c } from "./f_op_actor.js";
 import { cPhs__Status, fGlobals, fpcPf__Register, fpcSCtRq_Request, fpc_bs__Constructor } from "./framework.js";
-import { mDoExt_McaMorf, mDoExt_bckAnm, mDoExt_brkAnm, mDoExt_btkAnm, mDoExt_btpAnm, mDoExt_modelEntryDL, mDoExt_modelUpdateDL } from "./m_do_ext.js";
+import { mDoExt_3DlineMat1_c, mDoExt_McaMorf, mDoExt_bckAnm, mDoExt_brkAnm, mDoExt_btkAnm, mDoExt_btpAnm, mDoExt_modelEntryDL, mDoExt_modelUpdateDL } from "./m_do_ext.js";
 import { MtxPosition, MtxTrans, calc_mtx, mDoMtx_XYZrotM, mDoMtx_XrotM, mDoMtx_YrotM, mDoMtx_YrotS, mDoMtx_ZXYrotM, mDoMtx_ZrotM, mDoMtx_ZrotS, quatM } from "./m_do_mtx.js";
-import { J2DAnchorPos, J2DGrafContext, J2DPane, J2DScreen } from "../Common/JSYSTEM/J2Dv1.js";
+import { J2DAnchorPos, J2DPane, J2DScreen } from "../Common/JSYSTEM/J2Dv1.js";
 
 // Framework'd actors
 
@@ -6100,6 +6100,9 @@ class br_s {
     rot = vec3.create();
     scale = vec3.create();
 
+    ropePosLeft: vec3[] = [];
+    ropePosRight: vec3[] = [];
+
     rotYExtra: number = 0;
     biasY: number = 0;
     biasUnk: number = 0;
@@ -6107,9 +6110,9 @@ class br_s {
 
 enum BridgeFlags {
     IsMetal     = 1 << 0,
-    LimitPlanks = 1 << 1,
-    NoRopes     = 1 << 2,
-    UseDarkTex  = 1 << 3,
+    UseMiddleMarker = 1 << 1,
+    NoRopes     = 1 << 2, // TODO: This might actually be "UseChains"
+    UseDarkRopeTex  = 1 << 3,
 }
 
 enum BridgeType {
@@ -6123,17 +6126,19 @@ class d_a_bridge extends fopAc_ac_c {
     private flags: number;
     private type: BridgeType;
     private pathId: number;
-    private unkParam: number;
+    private cutRopeSwayPhase: number;
 
     private startPos: ReadonlyVec3;
     private endPos: ReadonlyVec3;
     private visiblePlankCount: number;
     private plankCount: number;
     private planks: br_s[];
-    private modelPlank: J3DModelInstance;
+    private ropeLines = new mDoExt_3DlineMat1_c();
 
     private windAngle: number;
     private windPower: number;
+    private frameCount = 0;
+    private uncutRopeCount = 0;
 
     private swayPhaseXZ = 0;
     private swayPhaseY = 0;
@@ -6142,11 +6147,9 @@ class d_a_bridge extends fopAc_ac_c {
     private swayMagXZ = 0;
     private swayRootMag = 0;
     private swayMagY = 0;
-
-    private swayScalar = 1.0; // TODO: How is this set in the original code? Ghidra can only find reads.
-
     private swayRideMag = 0;
     private swayRootMagCalc = 0;
+    private swayScalar = 1.0; // TODO: How is this set in the original code? Ghidra can only find reads.
 
     public override subload(globals: dGlobals): cPhs__Status {
         const status = dComIfG_resLoad(globals, d_a_bridge.arcName);
@@ -6156,7 +6159,7 @@ class d_a_bridge extends fopAc_ac_c {
         this.flags = this.parameters & 0xFF;
         if (this.flags == 0xFF) this.flags = 0;
 
-        this.unkParam = (this.parameters >> 8) & 0xFF;
+        this.cutRopeSwayPhase = (this.parameters >> 8) & 0xFF;
         this.pathId = (this.parameters >> 16) & 0xFF;
         assert(this.pathId !== 0xFF);
 
@@ -6188,6 +6191,10 @@ class d_a_bridge extends fopAc_ac_c {
 
         const ropeBias = (this.type == BridgeType.Metal) ? 0 : 2;
 
+        const ropeTexID = (this.flags & BridgeFlags.UseDarkRopeTex) ? 0x8D : 0x7E;
+        const ropeTexData = globals.resCtrl.getObjectRes(ResType.Bti, "Always", ropeTexID);
+        this.ropeLines.init(2, 14, ropeTexData, false);
+
         for (let i = 0; i < this.plankCount; i++) {
             const plank = this.planks[i];
             plank.model = new J3DModelInstance(modelPlankData);
@@ -6195,13 +6202,16 @@ class d_a_bridge extends fopAc_ac_c {
             
             // Attach ropes to every fourth plank
             if((this.flags & BridgeFlags.NoRopes) == 0) {
-                if (((i + ropeBias) & 4) == 0) {
+                if (((i + ropeBias) % 4) == 0) {
                     plank.flags = 0b111; // TODO: Label flags. This marks this plank as having ropes attached
+                    plank.ropePosLeft = nArray(3, () => vec3.create());
+                    plank.ropePosRight = nArray(3, () => vec3.create());
+
                     if( this.type == BridgeType.Metal ) {
                         plank.modelRope0 = new J3DModelInstance(modelChainData);
                         plank.modelRope1 = new J3DModelInstance(modelChainData);
                     } else {
-                        const ropeTexID = (this.flags & BridgeFlags.UseDarkTex) ? 0x8D : 0x7E;
+                        const ropeTexID = (this.flags & BridgeFlags.UseDarkRopeTex) ? 0x8D : 0x7E;
                         const ropeTex = globals.resCtrl.getObjectRes(ResType.Bti, "Always", ropeTexID);
                         // Construct mDoExt_3DlineMat1_c with this tex
                         // mDoExt_3DlineMat1_c::init(&pBr->mLineMat1,4,5,pRVar3,1);
@@ -6210,7 +6220,7 @@ class d_a_bridge extends fopAc_ac_c {
 
                 // Always construct mDoExt_3Dlines for the first plank
                 if (i == 0) {
-                    const ropeTexID = (this.flags & BridgeFlags.UseDarkTex) ? 0x8D : 0x7E;
+                    const ropeTexID = (this.flags & BridgeFlags.UseDarkRopeTex) ? 0x8D : 0x7E;
                     const ropeTex = globals.resCtrl.getObjectRes(ResType.Bti, "Always", ropeTexID);
                     // Construct mDoExt_3DlineMat1_c with this tex
                     // mDoExt_3DlineMat1_c::init(&pAct->mLineMat,2,0xe,pRVar3,0);
@@ -6246,7 +6256,7 @@ class d_a_bridge extends fopAc_ac_c {
 
         // Limit the number of visible planks. They are still simulated, but won't be drawn or collided. 
         // I assume this is to keep the support ropes matching up.   
-        if( (this.flags & BridgeFlags.LimitPlanks) == 0 ) {
+        if( (this.flags & BridgeFlags.UseMiddleMarker) == 0 ) {
             this.visiblePlankCount = this.plankCount;
         } else if (this.plankCount < 16) {
             if (this.plankCount < 12) {
@@ -6330,41 +6340,6 @@ class d_a_bridge extends fopAc_ac_c {
             MtxPosition(scratchVec3d, plankConstraintVec);
             curPlank.posSim = vec3.add(curPlank.posSim, nextPlank.posSim, scratchVec3d);
         }
-
-        // curBr = param_2 + param_1->mBrCount + -2;
-        // local_88[0].x = 0.0;
-        // local_88[0].y = 0.0;
-        // local_88[0].z = 75.0;
-        // for (iVar11 = 0; iVar11 < param_1->mBrCount + -1; iVar11 = iVar11 + 1) {
-        //   fVar1 = curBr->mUnkYOffset;
-        //   fVar2 = (curBr->mCurPos).y;
-        //   fVar3 = curBr->mSwayYExtra;
-        //   fVar4 = curBr->mSwayScalar;
-        //   fVar5 = curBr[1].mCurPos.y;
-
-        //   fVar6 = (curBr->mCurPos).x - curBr[1].mCurPos.x;
-        //   fVar7 = (curBr->mCurPos).z - curBr[1].mCurPos.z;
-        //   iVar8 = SComponent::cM_atan2s(fVar6,fVar7);
-        //   fVar6 = fVar6 * fVar6 + fVar7 * fVar7;
-        //   if (fVar6 > 0.0) {
-        //     fVar7 = 1.0 / SQRT(fVar6);
-        //     fVar7 = fVar7 * 0.5 * (3.0 - fVar6 * fVar7 * fVar7);
-        //     fVar7 = fVar7 * 0.5 * (3.0 - fVar6 * fVar7 * fVar7);
-        //     fVar6 = fVar6 * fVar7 * 0.5 * (3.0 - fVar6 * fVar7 * fVar7);
-        //   }
-
-        //   iVar9 = SComponent::cM_atan2s((fVar1 * 0.5 + fVar2 + fVar3 * fVar4 * 0.5) - fVar5,fVar6);
-
-        //   curBr[1].mRotation.y = (short)iVar8;
-        //   curBr[1].mRotation.x = -(short)iVar9;
-        //   mDoMtx_YrotS(SComponent::calc_mtx,(int)(short)iVar8);
-        //   mDoMtx_XrotM(SComponent::calc_mtx,-(short)iVar9);
-        //   SComponent::MtxPosition(local_88,&local_94);
-        //   (curBr->mCurPos).x = curBr[1].mCurPos.x + local_94.x;
-        //   (curBr->mCurPos).y = curBr[1].mCurPos.y + local_94.y;
-        //   (curBr->mCurPos).z = curBr[1].mCurPos.z + local_94.z;
-        //   curBr = curBr + -1;
-        // }
     }
 
     private control3() {
@@ -6424,6 +6399,7 @@ class d_a_bridge extends fopAc_ac_c {
 
         this.bridge_move(globals, deltaTimeFrames);
 
+        this.uncutRopeCount = 0;
         for (let i = 0; i < this.plankCount; i++) {
             const plank = this.planks[i];
 
@@ -6432,7 +6408,37 @@ class d_a_bridge extends fopAc_ac_c {
             mDoMtx_XrotM(calc_mtx, plank.rot[0]);
             mDoMtx_ZrotM(calc_mtx, plank.rot[2]);
 
-            // Lots of stuff here. Particles, ropes, etc...
+            // Compute rope positions on the plan for left/right/top/bottom
+            if (plank.flags & 4) {
+                const offset = vec3.set(scratchVec3a, plank.scale[0] * 99.0, 0, 0);
+                MtxPosition(plank.ropePosRight[1], offset);
+                offset[0] *= -1;
+                MtxPosition(plank.ropePosLeft[1], offset);
+                offset[1] -= 30.0;
+                MtxPosition(plank.ropePosLeft[2], offset);
+                offset[0] *= -1;
+                MtxPosition(plank.ropePosRight[2], offset);
+
+                // TODO: Handle the metal cooldown?
+
+                const ropeHeight = this.flags & BridgeFlags.IsMetal ? 1000.0 : 200.0;
+                vec3.copy(plank.ropePosRight[0], plank.ropePosRight[1]);
+                vec3.copy(plank.ropePosLeft[0], plank.ropePosLeft[1]);
+                plank.ropePosRight[0][1] += ropeHeight;
+                plank.ropePosLeft[0][1] += ropeHeight;
+
+                // TODO: Use to connect to "half bridges" e.g. Outset Island                                                       
+                // if (((pAct->mTypeBits & 2) != 0) && (idx == (char)pAct->mVisibleBrCount + -1)) {
+                // (pAct->mFinalRopeConnectPosRight).x = pBr->mRopePlankPosRight[0].x;
+                // (pAct->mFinalRopeConnectPosRight).y = pBr->mRopePlankPosRight[0].y;
+                // (pAct->mFinalRopeConnectPosRight).z = pBr->mRopePlankPosRight[0].z;
+                // (pAct->mFinalRopeConnectPosLeft).x = pBr->mRopePlankPosLeft[0].x;
+                // (pAct->mFinalRopeConnectPosLeft).y = pBr->mRopePlankPosLeft[0].y;
+                // (pAct->mFinalRopeConnectPosLeft).z = pBr->mRopePlankPosLeft[0].z;
+                // }
+            }
+
+            // Lots of stuff here. Particles, collision, etc...
 
             // Half the planks are rotated 180 degrees (to simulate island craftsmanship)
             mDoMtx_YrotM(calc_mtx, plank.rotYExtra);
@@ -6445,13 +6451,81 @@ class d_a_bridge extends fopAc_ac_c {
             }
 
             mat4.copy(plank.model.modelMatrix, calc_mtx);
+
+            // Compute the rope connection points for this plank (if this plank has ropes)
+            if ((this.flags & BridgeFlags.IsMetal) == 0 && (plank.flags & 4) ) {
+                const lineRight = this.ropeLines.lines[0];
+                const lineLeft = this.ropeLines.lines[1];
+
+                if ((plank.flags & 1) == 0) {
+                    // If right side cut...
+                } else {
+                    vec3.copy(lineRight.segments[this.uncutRopeCount + 1], plank.ropePosRight[0]);
+                }
+
+                if ((plank.flags & 2) == 0) {
+                    // If left side cut...
+                } else {
+                    vec3.copy(lineLeft.segments[this.uncutRopeCount + 1], plank.ropePosLeft[0]);
+                }
+
+                this.uncutRopeCount += 1;
+            }
         }
+
+        this.frameCount += deltaTimeFrames;
+
+        settingTevStruct(globals, LightType.BG0, this.pos, this.tevStr);
     }
 
     public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         for( let plank of this.planks ) {
             setLightTevColorType(globals, plank.model, this.tevStr, globals.camera);            
             mDoExt_modelUpdateDL(globals, plank.model, renderInstManager);
+        }
+
+        // Set start and end positions of the main rope
+        if ((this.flags & (BridgeFlags.IsMetal | BridgeFlags.NoRopes)) == 0) {
+            const startSegRight = this.ropeLines.lines[0].segments[0];
+            const startSegLeft = this.ropeLines.lines[1].segments[0];
+            const endSegRight = this.ropeLines.lines[0].segments[this.uncutRopeCount + 1];
+            const endSegLeft = this.ropeLines.lines[1].segments[this.uncutRopeCount + 1];
+
+            const ropeOffset = scratchVec3a; 
+            const ropeOffsetLocal = vec3.set(scratchVec3b, -120, 350.0, -40.0);
+            mDoMtx_YrotS(calc_mtx, -this.rot[1]); // TODO: This negative shouldn't be here, something got flipped
+            MtxPosition(ropeOffset, ropeOffsetLocal);
+            vec3.add(startSegRight, this.startPos, ropeOffset);
+
+            ropeOffsetLocal[0] *= -1;
+            MtxPosition(ropeOffset, ropeOffsetLocal);
+            vec3.add(startSegLeft, this.startPos, ropeOffset);
+
+            if (false && this.flags & BridgeFlags.UseMiddleMarker) {
+                // TODO: Connect two half bridges
+                // pbVar10 = pAct->mpAite;
+                //   if (pbVar10 != (bridge_class *)0x0) {
+                //     pcVar9->x = (pbVar10->mFinalRopeConnectPosLeft).x;
+                //     pcVar9->y = (pbVar10->mFinalRopeConnectPosLeft).y;
+                //     pcVar9->z = (pbVar10->mFinalRopeConnectPosLeft).z;
+                //   }
+            } else {
+                ropeOffsetLocal[2] *= -1;
+
+                MtxPosition(ropeOffset, ropeOffsetLocal);
+                vec3.add(endSegLeft, this.endPos, ropeOffset);
+
+                ropeOffsetLocal[0] *= -1;
+                MtxPosition(ropeOffset, ropeOffsetLocal);
+                vec3.add(endSegRight, this.endPos, ropeOffset);
+            }
+
+            const mainRopeWidth = this.flags & BridgeFlags.UseDarkRopeTex ? 6.5 : 4.0;
+            const mainRopeColor = colorNewFromRGBA(0x96/0xFF, 0x96/0xFF, 0x96/0xFF, 1.0);
+            this.ropeLines.updateWithScale(globals, this.uncutRopeCount + 2, mainRopeWidth, mainRopeColor, 0, this.tevStr);
+            
+            this.ropeLines.setMaterial(); // TODO: Should we call this every frame?
+            this.ropeLines.draw(globals, renderInstManager);
         }
     }
 }
