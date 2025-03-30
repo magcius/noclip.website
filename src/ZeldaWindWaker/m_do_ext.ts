@@ -191,14 +191,15 @@ export class mDoExt_3DlineMat1_c implements mDoExt_3DlineMat_c {
         displayListRegistersInitGX(matRegisters);
         displayListRegistersRun(matRegisters, new ArrayBufferSlice(displayList.buffer));
         const material = parseMaterial(matRegisters, `mDoExt_3DlineMat1_c`);
-        // Configure TEV to show only the vertex lighting
-        // material.tevStages[0].colorInA = 15;
-        // material.tevStages[0].colorInB = 15;
-        // material.tevStages[0].colorInC = 15;
-        // material.tevStages[0].colorInD = 10;
-        material.tevStages[0].rasSwapTable = [0, 0, 0, 0]; // TODO: The global light only has its r channel set. 
-        // This copies that value to the other channels. 
-        // Otherwise we get a "red" light. How does this normally work?
+
+        // Noclip disables diffuse lighting if the attenuation function is set to None. However this DL sets diffuse to
+        // CLAMP and attenuation to NONE, so I don't believe that's correct. Modify the atten to work with Noclip.  
+        material.lightChannels[0].colorChannel.attenuationFunction = GX.AttenuationFunction.SPOT;
+
+        // TODO: The global light color only has its r channel set. This copies that value to the other channels. 
+        //       Otherwise we get a "red" light. How does this normally work?
+        material.tevStages[0].rasSwapTable = [0, 0, 0, 0]; 
+        
         this.materialHelper = new GXMaterialHelperGfx(material);
     }
 
