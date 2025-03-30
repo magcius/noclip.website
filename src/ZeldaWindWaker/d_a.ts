@@ -6109,10 +6109,10 @@ class br_s {
 }
 
 enum BridgeFlags {
-    IsMetal     = 1 << 0,
+    IsMetal = 1 << 0,
     ConnectToPartner = 1 << 1,
-    NoRopes     = 1 << 2, // TODO: This might actually be "UseChains"
-    UseDarkRopeTex  = 1 << 3,
+    NoRopes = 1 << 2, // TODO: This might actually be "UseChains"
+    UseDarkRopeTex = 1 << 3,
 }
 
 enum BridgeType {
@@ -6134,7 +6134,7 @@ class d_a_bridge extends fopAc_ac_c {
     private plankCount: number;
     private planks: br_s[];
     private ropeLines = new mDoExt_3DlineMat1_c();
-    private partner: d_a_bridge | null = null; 
+    private partner: d_a_bridge | null = null;
 
     private windAngle: number;
     private windPower: number;
@@ -6168,13 +6168,13 @@ class d_a_bridge extends fopAc_ac_c {
 
         const path = dPath_GetRoomPath(globals, this.pathId, globals.mStayNo);
         assert(!!path);
-        
+
         this.startPos = path.points[0].pos;
         this.endPos = path.points[1].pos;
 
         const diff = vec3.sub(scratchVec3a, this.endPos, this.startPos);
         const distXZ = Math.hypot(diff[0], diff[2]);
-        
+
         this.rot[1] = cM_atan2s(diff[0], diff[2]);
         this.rot[0] = -cM_atan2s(diff[1], distXZ);
 
@@ -6188,7 +6188,7 @@ class d_a_bridge extends fopAc_ac_c {
         this.type = this.flags & 1;
         if (this.flags & BridgeFlags.NoRopes) this.type = BridgeType.Metal;
 
-        const bmdIds = [0x04 /* Wood */, 0x05 /* Metal */]; 
+        const bmdIds = [0x04 /* Wood */, 0x05 /* Metal */];
         const modelPlankData = globals.resCtrl.getObjectRes(ResType.Model, d_a_bridge.arcName, bmdIds[this.type]);
         const modelChainData = globals.resCtrl.getObjectRes(ResType.Model, d_a_bridge.arcName, 0x06);
 
@@ -6202,15 +6202,15 @@ class d_a_bridge extends fopAc_ac_c {
             const plank = this.planks[i];
             plank.model = new J3DModelInstance(modelPlankData);
             assert(!!plank.model);
-            
+
             // Attach ropes to every fourth plank
-            if((this.flags & BridgeFlags.NoRopes) == 0) {
+            if ((this.flags & BridgeFlags.NoRopes) == 0) {
                 if (((i + ropeBias) % 4) == 0) {
                     plank.flags = 0b111; // TODO: Label flags. This marks this plank as having ropes attached
                     plank.ropePosLeft = nArray(3, () => vec3.create());
                     plank.ropePosRight = nArray(3, () => vec3.create());
 
-                    if( this.type == BridgeType.Metal ) {
+                    if (this.type == BridgeType.Metal) {
                         plank.modelRope0 = new J3DModelInstance(modelChainData);
                         plank.modelRope1 = new J3DModelInstance(modelChainData);
                     } else {
@@ -6248,7 +6248,7 @@ class d_a_bridge extends fopAc_ac_c {
             vec3.copy(plank.model.baseScale, plank.scale);
 
             const r = cM_rndF(1.0);
-            if( r < 0.5 ) {
+            if (r < 0.5) {
                 plank.rotYExtra = -0x8000;
             }
         }
@@ -6259,7 +6259,7 @@ class d_a_bridge extends fopAc_ac_c {
 
         // Limit the number of visible planks. They are still simulated, but won't be drawn or collided. 
         // I assume this is to keep the support ropes matching up.   
-        if( (this.flags & BridgeFlags.ConnectToPartner) == 0 ) {
+        if ((this.flags & BridgeFlags.ConnectToPartner) == 0) {
             this.visiblePlankCount = this.plankCount;
         } else if (this.plankCount < 16) {
             if (this.plankCount < 12) {
@@ -6277,13 +6277,13 @@ class d_a_bridge extends fopAc_ac_c {
     private control1(deltaTimeFrames: number) {
         this.swayPhaseXZ += this.swayVelXZ * deltaTimeFrames;
         this.swayPhaseY += this.swayVelY * deltaTimeFrames;
-        
+
         // Increase the sway phase for each plank so they appear to move snakelike
         const swayPhaseStep = (this.plankCount > 10) ? 4000 : 8000;
 
         // Offset the root position based on wind strength
         const rootSway = this.swayRootMag * Math.cos(cM_s2rad(this.swayPhaseXZ));
-        const swayPosX = vec3.set(scratchVec3a, rootSway, 0, 0 );
+        const swayPosX = vec3.set(scratchVec3a, rootSway, 0, 0);
         mDoMtx_YrotS(calc_mtx, this.rot[1]);
         const rootOffsetVec = scratchVec3b;
         MtxPosition(rootOffsetVec, swayPosX);
@@ -6299,7 +6299,7 @@ class d_a_bridge extends fopAc_ac_c {
 
         const plankOffsetVec = vec3.set(scratchVec3a, 0, 0, 75);
 
-        for( let i = 1; i < this.planks.length; i++ ) {
+        for (let i = 1; i < this.planks.length; i++) {
             const curPlank = this.planks[i];
             const prevPlank = this.planks[i - 1];
 
@@ -6308,9 +6308,9 @@ class d_a_bridge extends fopAc_ac_c {
             const offsetZ = windVec[2] + rootOffsetVec[2] * this.swayScalar + (curPlank.posSim[2] - prevPlank.posSim[2]) + swayXZ * bridgeDir[2];
             const offsetAngleXZ = cM_atan2s(offsetX, offsetZ);
             const offsetDistXZ = Math.hypot(offsetX, offsetZ);
-            
+
             const swayY = Math.sin(cM_s2rad(this.swayPhaseY + i * (swayPhaseStep + 1000)));
-            const offsetAngleY = cM_atan2s(this.swayScalar * this.swayMagY * swayY + 
+            const offsetAngleY = cM_atan2s(this.swayScalar * this.swayMagY * swayY +
                 ((curPlank.biasUnk * 0.5 + curPlank.posSim[1] + curPlank.biasY * this.swayScalar * 0.5) - prevPlank.posSim[1]), offsetDistXZ);
 
             mDoMtx_YrotS(calc_mtx, offsetAngleXZ);
@@ -6330,7 +6330,7 @@ class d_a_bridge extends fopAc_ac_c {
             const nextPlank = this.planks[i + 1];
 
             const offsetVec = vec3.sub(scratchVec3b, curPlank.posSim, nextPlank.posSim);
-            const offsetAngleXZ = cM_atan2s(offsetVec[0], offsetVec[2]);  
+            const offsetAngleXZ = cM_atan2s(offsetVec[0], offsetVec[2]);
             const offsetDistXZ = Math.hypot(offsetVec[0], offsetVec[2]);
             const offsetAngleY = cM_atan2s((curPlank.posSim[1] + curPlank.biasY * 0.5) - nextPlank.posSim[1], offsetDistXZ);
 
@@ -6377,7 +6377,7 @@ class d_a_bridge extends fopAc_ac_c {
             const rootOffsetMag = (this.plankCount - i) / this.plankCount * 0.75;
             vec3.scaleAndAdd(plank.pos, plank.posSim, rootOffset, rootOffsetMag);
 
-            plank.biasY = cLib_addCalc2(plank.biasY, -15.0, 1.0, 5.0);                                                                          
+            plank.biasY = cLib_addCalc2(plank.biasY, -15.0, 1.0, 5.0);
             plank.biasUnk = cLib_addCalc0(plank.biasUnk, 1.0, 5.0); // @TODO: Confim that cLib_addCalc0() actually targets 0. Should we just remove it?
         }
 
@@ -6395,7 +6395,7 @@ class d_a_bridge extends fopAc_ac_c {
         this.windAngle = cM_atan2s(windVec[0], windVec[2]);
         this.windPower = dKyw_get_wind_pow(globals.g_env_light);
 
-        if (this.flags & BridgeFlags.ConnectToPartner && !this.partner ) {
+        if (this.flags & BridgeFlags.ConnectToPartner && !this.partner) {
             // this.partner = fopAcIt_JudgeByID(globals.frameworkGlobals, this.processId);
             this.partner = fpcEx_Search(globals.frameworkGlobals, (pc: base_process_class, self: fopAc_ac_c) => {
                 return (pc.processName == dProcName_e.d_a_bridge && pc != self);
@@ -6442,7 +6442,7 @@ class d_a_bridge extends fopAc_ac_c {
 
             // Half the planks are rotated 180 degrees (to simulate island craftsmanship)
             mDoMtx_YrotM(calc_mtx, plank.rotYExtra);
-            
+
             // Hide planks that exceed the max visible count
             if (i >= this.visiblePlankCount) {
                 vec3.zero(plank.scale);
@@ -6453,7 +6453,7 @@ class d_a_bridge extends fopAc_ac_c {
             mat4.copy(plank.model.modelMatrix, calc_mtx);
 
             // Compute the rope connection points for this plank (if this plank has ropes)
-            if ((this.flags & BridgeFlags.IsMetal) == 0 && (plank.flags & 4) ) {
+            if ((this.flags & BridgeFlags.IsMetal) == 0 && (plank.flags & 4)) {
                 const lineRight = this.ropeLines.lines[0];
                 const lineLeft = this.ropeLines.lines[1];
 
@@ -6479,8 +6479,8 @@ class d_a_bridge extends fopAc_ac_c {
     }
 
     public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        for( let plank of this.planks ) {
-            setLightTevColorType(globals, plank.model, this.tevStr, globals.camera);            
+        for (let plank of this.planks) {
+            setLightTevColorType(globals, plank.model, this.tevStr, globals.camera);
             mDoExt_modelUpdateDL(globals, plank.model, renderInstManager);
         }
 
@@ -6491,7 +6491,7 @@ class d_a_bridge extends fopAc_ac_c {
             const endSegRight = this.ropeLines.lines[0].segments[this.uncutRopeCount + 1];
             const endSegLeft = this.ropeLines.lines[1].segments[this.uncutRopeCount + 1];
 
-            const ropeOffset = scratchVec3a; 
+            const ropeOffset = scratchVec3a;
             const ropeOffsetLocal = vec3.set(scratchVec3b, -120, 350.0, -40.0);
             mDoMtx_YrotS(calc_mtx, -this.rot[1]); // TODO: This negative shouldn't be here, something got flipped
             MtxPosition(ropeOffset, ropeOffsetLocal);
@@ -6518,9 +6518,9 @@ class d_a_bridge extends fopAc_ac_c {
             }
 
             const mainRopeWidth = this.flags & BridgeFlags.UseDarkRopeTex ? 6.5 : 4.0;
-            const mainRopeColor = colorNewFromRGBA(0x96/0xFF, 0x96/0xFF, 0x96/0xFF, 1.0);
+            const mainRopeColor = colorNewFromRGBA(0x96 / 0xFF, 0x96 / 0xFF, 0x96 / 0xFF, 1.0);
             this.ropeLines.updateWithScale(globals, this.uncutRopeCount + 2, mainRopeWidth, mainRopeColor, 0, this.tevStr);
-            
+
             this.ropeLines.setMaterial(); // TODO: Should we call this every frame?
             this.ropeLines.draw(globals, renderInstManager);
         }
