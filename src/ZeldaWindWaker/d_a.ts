@@ -6092,16 +6092,17 @@ class d_a_title extends fopAc_ac_c {
 
 class br_s {
     model: J3DModelInstance;
-    modelRope1: J3DModelInstance | null = null;
-    modelRope0: J3DModelInstance | null = null;
     flags: number = 0;
     posSim = vec3.create();
     pos = vec3.create();
     rot = vec3.create();
     scale = vec3.create();
-
     ropePosLeft: vec3[] = [];
     ropePosRight: vec3[] = [];
+
+    modelChainLeft: J3DModelInstance | null = null;
+    modelChainRight: J3DModelInstance | null = null;
+    lineRope: mDoExt_3DlineMat1_c | null = null;
 
     rotYExtra: number = 0;
     biasY: number = 0;
@@ -6142,6 +6143,7 @@ class d_a_bridge extends fopAc_ac_c {
     private uncutRopeCount = 0;
     private ropeEndPosLeft = vec3.create();
     private ropeEndPosRight = vec3.create();
+    private static ropeColor = colorNewFromRGBA(0x96 / 0xFF, 0x96 / 0xFF, 0x96 / 0xFF, 1.0);
 
     private swayPhaseXZ = 0;
     private swayPhaseY = 0;
@@ -6211,22 +6213,12 @@ class d_a_bridge extends fopAc_ac_c {
                     plank.ropePosRight = nArray(3, () => vec3.create());
 
                     if (this.type == BridgeType.Metal) {
-                        plank.modelRope0 = new J3DModelInstance(modelChainData);
-                        plank.modelRope1 = new J3DModelInstance(modelChainData);
+                        plank.modelChainLeft = new J3DModelInstance(modelChainData);
+                        plank.modelChainRight = new J3DModelInstance(modelChainData);
                     } else {
-                        const ropeTexID = (this.flags & BridgeFlags.UseDarkRopeTex) ? 0x8D : 0x7E;
-                        const ropeTex = globals.resCtrl.getObjectRes(ResType.Bti, "Always", ropeTexID);
-                        // Construct mDoExt_3DlineMat1_c with this tex
-                        // mDoExt_3DlineMat1_c::init(&pBr->mLineMat1,4,5,pRVar3,1);
+                        plank.lineRope = new mDoExt_3DlineMat1_c();
+                        plank.lineRope.init(2, 2, ropeTexData, true);
                     }
-                }
-
-                // Always construct mDoExt_3Dlines for the first plank
-                if (i == 0) {
-                    const ropeTexID = (this.flags & BridgeFlags.UseDarkRopeTex) ? 0x8D : 0x7E;
-                    const ropeTex = globals.resCtrl.getObjectRes(ResType.Bti, "Always", ropeTexID);
-                    // Construct mDoExt_3DlineMat1_c with this tex
-                    // mDoExt_3DlineMat1_c::init(&pAct->mLineMat,2,0xe,pRVar3,0);
                 }
             }
 
@@ -6479,12 +6471,33 @@ class d_a_bridge extends fopAc_ac_c {
     }
 
     public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        const mainRopeWidth = this.flags & BridgeFlags.UseDarkRopeTex ? 6.5 : 4.0;
+
         for (let plank of this.planks) {
             setLightTevColorType(globals, plank.model, this.tevStr, globals.camera);
             mDoExt_modelUpdateDL(globals, plank.model, renderInstManager);
+
+            if (plank.flags & 4) {
+                if (this.flags & BridgeFlags.IsMetal) {
+                    // TODO: Render chain models
+                } else {
+                    assert(!!plank.lineRope);
+                    const rightSegs = plank.lineRope.lines[0].segments;
+                    const leftSegs = plank.lineRope.lines[1].segments;
+
+                    vec3.copy(rightSegs[0], plank.ropePosRight[0]);
+                    vec3.copy(rightSegs[1], plank.ropePosRight[1]);
+                    vec3.copy(leftSegs[0], plank.ropePosLeft[0]);
+                    vec3.copy(leftSegs[1], plank.ropePosLeft[1]);
+
+                    plank.lineRope.updateWithScale(globals, 2, mainRopeWidth, d_a_bridge.ropeColor, 0, this.tevStr);
+                    plank.lineRope.setMaterial(); // TODO: Should we call this every frame?
+                    plank.lineRope.draw(globals, renderInstManager);
+                }
+            }
         }
 
-        // Set start and end positions of the main rope
+        // Set start and end positions, then draw the main rope
         if ((this.flags & (BridgeFlags.IsMetal | BridgeFlags.NoRopes)) == 0) {
             const startSegRight = this.ropeLines.lines[0].segments[0];
             const startSegLeft = this.ropeLines.lines[1].segments[0];
@@ -6517,10 +6530,7 @@ class d_a_bridge extends fopAc_ac_c {
                 vec3.add(endSegRight, this.endPos, ropeOffset);
             }
 
-            const mainRopeWidth = this.flags & BridgeFlags.UseDarkRopeTex ? 6.5 : 4.0;
-            const mainRopeColor = colorNewFromRGBA(0x96 / 0xFF, 0x96 / 0xFF, 0x96 / 0xFF, 1.0);
-            this.ropeLines.updateWithScale(globals, this.uncutRopeCount + 2, mainRopeWidth, mainRopeColor, 0, this.tevStr);
-
+            this.ropeLines.updateWithScale(globals, this.uncutRopeCount + 2, mainRopeWidth, d_a_bridge.ropeColor, 0, this.tevStr);
             this.ropeLines.setMaterial(); // TODO: Should we call this every frame?
             this.ropeLines.draw(globals, renderInstManager);
         }
