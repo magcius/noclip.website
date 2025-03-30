@@ -233,7 +233,7 @@ export class mDoExt_3DlineMat1_c implements mDoExt_3DlineMat_c {
             for (let j = 0; j < this.numSegments * 2; j += 2) {
                 this.ddraw.position3vec3(line.positions[this.curArr][j + 0]);
                 this.ddraw.texCoord2vec2(GX.Attr.TEX0, line.texCoords![this.curArr][j + 0]);
-                this.ddraw.normal3f32(0.25, 0.0, 0.0); // TODO: These normals aren't working. It seems to be that they should be using the identity matrix, but NoClip will always use the normal version of the PosMtx
+                this.ddraw.normal3f32(0.25, 0.0, 0.0);
 
                 this.ddraw.position3vec3(line.positions[this.curArr][j + 1]);
                 this.ddraw.texCoord2vec2(GX.Attr.TEX0, line.texCoords![this.curArr][j + 1]);
