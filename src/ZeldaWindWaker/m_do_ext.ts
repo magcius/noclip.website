@@ -113,7 +113,7 @@ export class mDoExt_3Dline_c {
 
     init(numSegments: number, hasSize: boolean, hasTex: boolean): void {
         this.segments = nArray(numSegments, () => vec3.create());
-        
+
         if (hasSize) { this.scales = nArray(numSegments, () => 0.0); }
 
         const numVerts = numSegments * 2;
@@ -121,8 +121,8 @@ export class mDoExt_3Dline_c {
 
         if (hasTex) {
             this.texCoords = nArray(2, () => nArray(numVerts, () => vec2.create()));
-            
-            for(let i = 0; i < numSegments; i++) {
+
+            for (let i = 0; i < numSegments; i++) {
                 this.texCoords[0][i * 2 + 0][0] = 0.0;
                 this.texCoords[1][i * 2 + 0][0] = 0.0;
                 this.texCoords[0][i * 2 + 1][0] = 1.0;
@@ -172,17 +172,17 @@ export class mDoExt_3DlineMat1_c implements mDoExt_3DlineMat_c {
         this.curArr = 0;
 
         this.lines = nArray(numLines, () => new mDoExt_3Dline_c());
-        for( let i = 0; i < numLines; i++ ) {
+        for (let i = 0; i < numLines; i++) {
             this.lines[i].init(numSegments, hasSize, true);
         }
 
         this.tex = img;
-        
+
         this.ddraw.setVtxDesc(GX.Attr.POS, true);
         this.ddraw.setVtxDesc(GX.Attr.NRM, true);
         this.ddraw.setVtxDesc(GX.Attr.TEX0, true);
     }
-    
+
     public setMaterial(): void {
         // TODO: Optimize this. Pre-generate the material helpers for both command lists. Select on setMaterial(). 
 
@@ -197,11 +197,11 @@ export class mDoExt_3DlineMat1_c implements mDoExt_3DlineMat_c {
         // material.tevStages[0].colorInC = 15;
         // material.tevStages[0].colorInD = 10;
         material.tevStages[0].rasSwapTable = [0, 0, 0, 0]; // TODO: The global light only has its r channel set. 
-                                                           // This copies that value to the other channels. 
-                                                           // Otherwise we get a "red" light. How does this normally work?
+        // This copies that value to the other channels. 
+        // Otherwise we get a "red" light. How does this normally work?
         this.materialHelper = new GXMaterialHelperGfx(material);
     }
-    
+
     public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager): void {
         // GXLoadTexObj(&mTexObj, GX_TEXMAP0);
         // u16 h = GXGetTexObjHeight(&mTexObj);
@@ -212,7 +212,7 @@ export class mDoExt_3DlineMat1_c implements mDoExt_3DlineMat_c {
 
         // TODO: Is this the same as dKy_SetLight_again?
         dKy_setLight__OnMaterialParams(globals.g_env_light, materialParams, globals.camera);
-        
+
         this.tex.fillTextureMapping(materialParams.m_TextureMapping[0]);
         template.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
 
@@ -220,7 +220,7 @@ export class mDoExt_3DlineMat1_c implements mDoExt_3DlineMat_c {
         colorCopy(materialParams.u_Color[ColorKind.C1], this.tevStr.colorK0);
         colorCopy(materialParams.u_Color[ColorKind.C2], this.color);
         mat4.copy(drawParams.u_PosMtx[0], globals.camera.viewFromWorldMatrix);
-        
+
         this.materialHelper.allocateMaterialParamsDataOnInst(template, materialParams);
         this.materialHelper.allocateDrawParamsDataOnInst(template, drawParams);
 
@@ -230,12 +230,12 @@ export class mDoExt_3DlineMat1_c implements mDoExt_3DlineMat_c {
             this.ddraw.allocPrimitives(GX.Command.DRAW_TRIANGLE_STRIP, this.numSegments * 2);
             this.ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP);
             for (let j = 0; j < this.numSegments * 2; j += 2) {
-                this.ddraw.position3vec3( line.positions[this.curArr][ j + 0] );
-                this.ddraw.texCoord2vec2( GX.Attr.TEX0, line.texCoords![this.curArr][ j + 0] );
+                this.ddraw.position3vec3(line.positions[this.curArr][j + 0]);
+                this.ddraw.texCoord2vec2(GX.Attr.TEX0, line.texCoords![this.curArr][j + 0]);
                 this.ddraw.normal3f32(0.25, 0.0, 0.0); // TODO: These normals aren't working. It seems to be that they should be using the identity matrix, but NoClip will always use the normal version of the PosMtx
 
-                this.ddraw.position3vec3( line.positions[this.curArr][ j + 1] );
-                this.ddraw.texCoord2vec2( GX.Attr.TEX0, line.texCoords![this.curArr][ j + 1] );
+                this.ddraw.position3vec3(line.positions[this.curArr][j + 1]);
+                this.ddraw.texCoord2vec2(GX.Attr.TEX0, line.texCoords![this.curArr][j + 1]);
                 this.ddraw.normal3f32(-0.25, 0.0, 0.0);
             }
             this.ddraw.end();
@@ -249,7 +249,7 @@ export class mDoExt_3DlineMat1_c implements mDoExt_3DlineMat_c {
         renderInstManager.popTemplate();
     }
 
-    public updateWithScale(globals: dGlobals, segmentCount: number, scale: number, color: Color, space: number, tevStr: dKy_tevstr_c): void { 
+    public updateWithScale(globals: dGlobals, segmentCount: number, scale: number, color: Color, space: number, tevStr: dKy_tevstr_c): void {
         this.color = color;
         this.tevStr = tevStr;
         this.numSegments = Math.min(segmentCount, this.maxSegments);
@@ -262,15 +262,15 @@ export class mDoExt_3DlineMat1_c implements mDoExt_3DlineMat_c {
             let segIdx = 0;
             let vertIdx = 0;
             assert(!!line.texCoords);
-            
+
             const dstPos = line.positions[this.curArr];
             const dstUvs = line.texCoords[this.curArr];
             let r_scale = scale;
-            
+
             // Handle the first segment
             dstUvs[vertIdx + 0][1] = dist;
             dstUvs[vertIdx + 1][1] = dist;
-            
+
             const segVec = vec3.sub(scratchVec3a, srcPos[segIdx + 1], srcPos[segIdx + 0]);
             const delta = vec3.length(segVec);
             dist += delta * 0.1;
@@ -293,17 +293,17 @@ export class mDoExt_3DlineMat1_c implements mDoExt_3DlineMat_c {
 
             // Handle all of the middle segments
             for (let j = this.numSegments - 2; j > 0; j--) {
-                if( j < space ) {
+                if (j < space) {
                     r_scale -= spacing;
                 }
 
                 dstUvs[vertIdx + 0][1] = dist;
                 dstUvs[vertIdx + 1][1] = dist;
-                
+
                 const segVec = vec3.sub(scratchVec3a, srcPos[segIdx + 1], srcPos[segIdx + 0]);
                 const delta = vec3.length(segVec);
                 dist += delta * 0.1;
-    
+
                 // Normalize and then scale a vector orthogonal to both the segment and eye
                 const eyeVec = vec3.sub(scratchVec3b, srcPos[segIdx + 0], globals.camera.cameraPos);
                 const eyeCross = vec3.cross(scratchVec3a, segVec, eyeVec);
@@ -311,7 +311,7 @@ export class mDoExt_3DlineMat1_c implements mDoExt_3DlineMat_c {
                 if (mag !== 0.0) {
                     mag = scale / mag;
                 }
-                vec3.scale(eyeCross, eyeCross, mag); 
+                vec3.scale(eyeCross, eyeCross, mag);
 
                 nextP0;
                 // Average the offset vectors from this and the previous billboard computation
@@ -342,8 +342,8 @@ export class mDoExt_3DlineMat1_c implements mDoExt_3DlineMat_c {
             }
         }
     }
-    
-    public update( segmentCount: number, color: Color, tevStr: dKy_tevstr_c): void {
+
+    public update(segmentCount: number, color: Color, tevStr: dKy_tevstr_c): void {
         // TODO:
     }
 
