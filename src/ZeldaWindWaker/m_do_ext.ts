@@ -166,6 +166,21 @@ const l_mat1DL = new Uint8Array([
 ]);
 
 export class mDoExt_3DlineMat1_c implements mDoExt_3DlineMat_c {
+    public lines: mDoExt_3Dline_c[];
+    private ddraw = new TDDraw();
+
+    private tex: BTIData;
+    private color: Color;
+    private tevStr: dKy_tevstr_c;
+    private numLines: number;
+    private maxSegments: number;
+    private numSegments: number;
+    private curArr: number;
+    private material: GXMaterialHelperGfx;
+
+    private static materialUnlit: GXMaterialHelperGfx;
+    private static materialLit: GXMaterialHelperGfx;
+
     public init(numLines: number, numSegments: number, img: BTIData, hasSize: boolean): void {
         this.numLines = numLines;
         this.maxSegments = numSegments;
@@ -181,26 +196,30 @@ export class mDoExt_3DlineMat1_c implements mDoExt_3DlineMat_c {
         this.ddraw.setVtxDesc(GX.Attr.POS, true);
         this.ddraw.setVtxDesc(GX.Attr.NRM, true);
         this.ddraw.setVtxDesc(GX.Attr.TEX0, true);
+
+        // Parse display lists into usable materials
+        if (!mDoExt_3DlineMat1_c.materialUnlit) {
+            const matRegisters = new DisplayListRegisters();
+            displayListRegistersInitGX(matRegisters);
+    
+            displayListRegistersRun(matRegisters, new ArrayBufferSlice(l_mat1DL.buffer));
+            let material = parseMaterial(matRegisters, `mDoExt_3DlineMat1_c: Unlit`);
+            mDoExt_3DlineMat1_c.materialUnlit = new GXMaterialHelperGfx(material);
+    
+            displayListRegistersRun(matRegisters, new ArrayBufferSlice(l_toonMat1DL.buffer));
+            material = parseMaterial(matRegisters, `mDoExt_3DlineMat1_c: Lit`);
+            // Noclip disables diffuse lighting if the attenuation function is set to None. However this DL sets diffuse to
+            // CLAMP and attenuation to NONE, so I don't believe that's correct. Modify the atten to work with Noclip.  
+            material.lightChannels[0].colorChannel.attenuationFunction = GX.AttenuationFunction.SPOT;
+            // TODO: The global light color only has its r channel set. This copies that value to the other channels. 
+            //       Otherwise we get a "red" light. How does this normally work?
+            material.tevStages[0].rasSwapTable = [0, 0, 0, 0];
+            mDoExt_3DlineMat1_c.materialLit = new GXMaterialHelperGfx(material);
+        }
     }
 
     public setMaterial(): void {
-        // TODO: Optimize this. Pre-generate the material helpers for both command lists. Select on setMaterial(). 
-
-        const matRegisters = new DisplayListRegisters();
-        const displayList = this.tevStr ? l_toonMat1DL : l_mat1DL;
-        displayListRegistersInitGX(matRegisters);
-        displayListRegistersRun(matRegisters, new ArrayBufferSlice(displayList.buffer));
-        const material = parseMaterial(matRegisters, `mDoExt_3DlineMat1_c`);
-
-        // Noclip disables diffuse lighting if the attenuation function is set to None. However this DL sets diffuse to
-        // CLAMP and attenuation to NONE, so I don't believe that's correct. Modify the atten to work with Noclip.  
-        material.lightChannels[0].colorChannel.attenuationFunction = GX.AttenuationFunction.SPOT;
-
-        // TODO: The global light color only has its r channel set. This copies that value to the other channels. 
-        //       Otherwise we get a "red" light. How does this normally work?
-        material.tevStages[0].rasSwapTable = [0, 0, 0, 0]; 
-        
-        this.materialHelper = new GXMaterialHelperGfx(material);
+        this.material = this.tevStr ? mDoExt_3DlineMat1_c.materialLit : mDoExt_3DlineMat1_c.materialUnlit;
     }
 
     public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager): void {
@@ -222,8 +241,8 @@ export class mDoExt_3DlineMat1_c implements mDoExt_3DlineMat_c {
         colorCopy(materialParams.u_Color[ColorKind.C2], this.color);
         mat4.copy(drawParams.u_PosMtx[0], globals.camera.viewFromWorldMatrix);
 
-        this.materialHelper.allocateMaterialParamsDataOnInst(template, materialParams);
-        this.materialHelper.allocateDrawParamsDataOnInst(template, drawParams);
+        this.material.allocateMaterialParamsDataOnInst(template, materialParams);
+        this.material.allocateDrawParamsDataOnInst(template, drawParams);
 
         this.ddraw.beginDraw(globals.modelCache.cache);
         for (let i = 0; i < this.numLines; i++) {
@@ -244,7 +263,7 @@ export class mDoExt_3DlineMat1_c implements mDoExt_3DlineMat_c {
         this.ddraw.endDraw(renderInstManager);
 
         const renderInst = this.ddraw.makeRenderInst(renderInstManager);
-        this.materialHelper.setOnRenderInst(renderInstManager.gfxRenderCache, renderInst);
+        this.material.setOnRenderInst(renderInstManager.gfxRenderCache, renderInst);
         renderInstManager.submitRenderInst(renderInst);
 
         renderInstManager.popTemplate();
@@ -351,19 +370,6 @@ export class mDoExt_3DlineMat1_c implements mDoExt_3DlineMat_c {
     public getMaterialID(): number {
         return 1;
     }
-
-    public lines: mDoExt_3Dline_c[];
-
-    private tex: BTIData;
-    private color: Color;
-    private tevStr: dKy_tevstr_c;
-    private numLines: number;
-    private maxSegments: number;
-    private numSegments: number;
-    private curArr: number;
-
-    private ddraw = new TDDraw();
-    private materialHelper: GXMaterialHelperGfx;
 }
 
 export function mDoExt_modelEntryDL(globals: dGlobals, modelInstance: J3DModelInstance, renderInstManager: GfxRenderInstManager, drawListSet: dDlst_list_Set | null = null): void {

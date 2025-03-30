@@ -6491,7 +6491,7 @@ class d_a_bridge extends fopAc_ac_c {
                     vec3.copy(leftSegs[1], plank.ropePosLeft[1]);
 
                     plank.lineRope.updateWithScale(globals, 2, mainRopeWidth, d_a_bridge.ropeColor, 0, this.tevStr);
-                    plank.lineRope.setMaterial(); // TODO: Should we call this every frame?
+                    plank.lineRope.setMaterial();
                     plank.lineRope.draw(globals, renderInstManager);
                 }
             }
@@ -6531,7 +6531,7 @@ class d_a_bridge extends fopAc_ac_c {
             }
 
             this.ropeLines.updateWithScale(globals, this.uncutRopeCount + 2, mainRopeWidth, d_a_bridge.ropeColor, 0, this.tevStr);
-            this.ropeLines.setMaterial(); // TODO: Should we call this every frame?
+            this.ropeLines.setMaterial();
             this.ropeLines.draw(globals, renderInstManager);
         }
     }
