@@ -9,12 +9,11 @@ import { dDlst_list_Set } from "./d_drawlist.js";
 import { dGlobals } from "./Main.js";
 import { assert, nArray } from "../util.js";
 import { BTIData } from "../Common/JSYSTEM/JUTTexture.js";
-import { dKy_setLight__OnMaterialParams, dKy_tevstr_c } from "./d_kankyo.js";
+import { dKy_GxFog_set, dKy_setLight__OnMaterialParams, dKy_tevstr_c } from "./d_kankyo.js";
 import { Color, colorCopy } from "../Color.js";
 import { TDDraw } from "../SuperMarioGalaxy/DDraw.js";
 import { ColorKind, DrawParams, GXMaterialHelperGfx, MaterialParams } from "../gx/gx_render.js";
 import * as GX from '../gx/gx_enum.js';
-import { GXMaterialBuilder } from "../gx/GXMaterialBuilder.js";
 import { DisplayListRegisters, displayListRegistersInitGX, displayListRegistersRun } from "../gx/gx_displaylist.js";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { parseMaterial } from "../gx/gx_material.js";
@@ -204,10 +203,16 @@ export class mDoExt_3DlineMat1_c implements mDoExt_3DlineMat_c {
     
             displayListRegistersRun(matRegisters, new ArrayBufferSlice(l_mat1DL.buffer));
             let material = parseMaterial(matRegisters, `mDoExt_3DlineMat1_c: Unlit`);
+            material.ropInfo.fogType = GX.FogType.PERSP_LIN;
+            material.ropInfo.fogAdjEnabled = true;
+            material.hasFogBlock = true;
             mDoExt_3DlineMat1_c.materialUnlit = new GXMaterialHelperGfx(material);
     
             displayListRegistersRun(matRegisters, new ArrayBufferSlice(l_toonMat1DL.buffer));
             material = parseMaterial(matRegisters, `mDoExt_3DlineMat1_c: Lit`);
+            material.ropInfo.fogType = GX.FogType.PERSP_LIN;
+            material.ropInfo.fogAdjEnabled = true;
+            material.hasFogBlock = true;
             // Noclip disables diffuse lighting if the attenuation function is set to None. However this DL sets diffuse to
             // CLAMP and attenuation to NONE, so I don't believe that's correct. Modify the atten to work with Noclip.  
             material.lightChannels[0].colorChannel.attenuationFunction = GX.AttenuationFunction.SPOT;
@@ -232,6 +237,7 @@ export class mDoExt_3DlineMat1_c implements mDoExt_3DlineMat_c {
 
         // TODO: Is this the same as dKy_SetLight_again?
         dKy_setLight__OnMaterialParams(globals.g_env_light, materialParams, globals.camera);
+        dKy_GxFog_set(globals.g_env_light, materialParams.u_FogBlock, globals.camera);
 
         this.tex.fillTextureMapping(materialParams.m_TextureMapping[0]);
         template.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
