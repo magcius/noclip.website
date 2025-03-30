@@ -34,8 +34,8 @@ import { dPa_splashEcallBack, dPa_trackEcallBack, dPa_waveEcallBack, ParticleGro
 import { dProcName_e } from "./d_procname.js";
 import { ResType, dComIfG_resLoad } from "./d_resorce.js";
 import { dPath, dPath_GetRoomPath, dPath__Point, dStage_Multi_c, dStage_stagInfo_GetSTType } from "./d_stage.js";
-import { fopAcIt_JudgeByID, fopAcM_create, fopAcM_prm_class, fopAc_ac_c } from "./f_op_actor.js";
-import { cPhs__Status, fGlobals, fpcPf__Register, fpcSCtRq_Request, fpc_bs__Constructor } from "./framework.js";
+import { fopAcIt_JudgeByID, fopAcM_create, fopAcM_prm_class, fopAcM_searchFromName, fopAc_ac_c } from "./f_op_actor.js";
+import { base_process_class, cPhs__Status, fGlobals, fpcEx_Search, fpcPf__Register, fpcSCtRq_Request, fpc_bs__Constructor } from "./framework.js";
 import { mDoExt_3DlineMat1_c, mDoExt_McaMorf, mDoExt_bckAnm, mDoExt_brkAnm, mDoExt_btkAnm, mDoExt_btpAnm, mDoExt_modelEntryDL, mDoExt_modelUpdateDL } from "./m_do_ext.js";
 import { MtxPosition, MtxTrans, calc_mtx, mDoMtx_XYZrotM, mDoMtx_XrotM, mDoMtx_YrotM, mDoMtx_YrotS, mDoMtx_ZXYrotM, mDoMtx_ZrotM, mDoMtx_ZrotS, quatM } from "./m_do_mtx.js";
 import { J2DAnchorPos, J2DPane, J2DScreen } from "../Common/JSYSTEM/J2Dv1.js";
@@ -6110,7 +6110,7 @@ class br_s {
 
 enum BridgeFlags {
     IsMetal     = 1 << 0,
-    UseMiddleMarker = 1 << 1,
+    ConnectToPartner = 1 << 1,
     NoRopes     = 1 << 2, // TODO: This might actually be "UseChains"
     UseDarkRopeTex  = 1 << 3,
 }
@@ -6134,11 +6134,14 @@ class d_a_bridge extends fopAc_ac_c {
     private plankCount: number;
     private planks: br_s[];
     private ropeLines = new mDoExt_3DlineMat1_c();
+    private partner: d_a_bridge | null = null; 
 
     private windAngle: number;
     private windPower: number;
     private frameCount = 0;
     private uncutRopeCount = 0;
+    private ropeEndPosLeft = vec3.create();
+    private ropeEndPosRight = vec3.create();
 
     private swayPhaseXZ = 0;
     private swayPhaseY = 0;
@@ -6256,7 +6259,7 @@ class d_a_bridge extends fopAc_ac_c {
 
         // Limit the number of visible planks. They are still simulated, but won't be drawn or collided. 
         // I assume this is to keep the support ropes matching up.   
-        if( (this.flags & BridgeFlags.UseMiddleMarker) == 0 ) {
+        if( (this.flags & BridgeFlags.ConnectToPartner) == 0 ) {
             this.visiblePlankCount = this.plankCount;
         } else if (this.plankCount < 16) {
             if (this.plankCount < 12) {
@@ -6392,10 +6395,12 @@ class d_a_bridge extends fopAc_ac_c {
         this.windAngle = cM_atan2s(windVec[0], windVec[2]);
         this.windPower = dKyw_get_wind_pow(globals.g_env_light);
 
-        // if (((pAct->mTypeBits & 2) != 0) && (pAct->mpAite == (bridge_class *)0x0)) {
-        //   pbVar6 = search_aite(pAct);
-        //   pAct->mpAite = pbVar6;
-        // }
+        if (this.flags & BridgeFlags.ConnectToPartner && !this.partner ) {
+            // this.partner = fopAcIt_JudgeByID(globals.frameworkGlobals, this.processId);
+            this.partner = fpcEx_Search(globals.frameworkGlobals, (pc: base_process_class, self: fopAc_ac_c) => {
+                return (pc.processName == dProcName_e.d_a_bridge && pc != self);
+            }, this) as d_a_bridge;
+        }
 
         this.bridge_move(globals, deltaTimeFrames);
 
@@ -6427,15 +6432,10 @@ class d_a_bridge extends fopAc_ac_c {
                 plank.ropePosRight[0][1] += ropeHeight;
                 plank.ropePosLeft[0][1] += ropeHeight;
 
-                // TODO: Use to connect to "half bridges" e.g. Outset Island                                                       
-                // if (((pAct->mTypeBits & 2) != 0) && (idx == (char)pAct->mVisibleBrCount + -1)) {
-                // (pAct->mFinalRopeConnectPosRight).x = pBr->mRopePlankPosRight[0].x;
-                // (pAct->mFinalRopeConnectPosRight).y = pBr->mRopePlankPosRight[0].y;
-                // (pAct->mFinalRopeConnectPosRight).z = pBr->mRopePlankPosRight[0].z;
-                // (pAct->mFinalRopeConnectPosLeft).x = pBr->mRopePlankPosLeft[0].x;
-                // (pAct->mFinalRopeConnectPosLeft).y = pBr->mRopePlankPosLeft[0].y;
-                // (pAct->mFinalRopeConnectPosLeft).z = pBr->mRopePlankPosLeft[0].z;
-                // }
+                if (this.flags & BridgeFlags.ConnectToPartner && i == (this.visiblePlankCount - 1)) {
+                    vec3.copy(this.ropeEndPosRight, plank.ropePosRight[0]);
+                    vec3.copy(this.ropeEndPosLeft, plank.ropePosLeft[0]);
+                }
             }
 
             // Lots of stuff here. Particles, collision, etc...
@@ -6501,14 +6501,11 @@ class d_a_bridge extends fopAc_ac_c {
             MtxPosition(ropeOffset, ropeOffsetLocal);
             vec3.add(startSegLeft, this.startPos, ropeOffset);
 
-            if (false && this.flags & BridgeFlags.UseMiddleMarker) {
-                // TODO: Connect two half bridges
-                // pbVar10 = pAct->mpAite;
-                //   if (pbVar10 != (bridge_class *)0x0) {
-                //     pcVar9->x = (pbVar10->mFinalRopeConnectPosLeft).x;
-                //     pcVar9->y = (pbVar10->mFinalRopeConnectPosLeft).y;
-                //     pcVar9->z = (pbVar10->mFinalRopeConnectPosLeft).z;
-                //   }
+            if (this.flags & BridgeFlags.ConnectToPartner) {
+                if (this.partner) {
+                    vec3.copy(endSegRight, this.partner.ropeEndPosLeft);
+                    vec3.copy(endSegLeft, this.partner.ropeEndPosRight);
+                }
             } else {
                 ropeOffsetLocal[2] *= -1;
 

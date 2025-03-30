@@ -256,6 +256,15 @@ export function fpcLy_SetCurrentLayer(globals: fGlobals, layer: layer_class): vo
     globals.lyCurr = layer;
 }
 
+export function fpcLyIt_AllJudge(globals: fGlobals, judgeFunc: (pc: base_process_class, userData: any) => boolean, userData: any): base_process_class | null {
+    for (let pc of globals.lnQueue) {
+        if (judgeFunc(pc, userData)) {
+            return pc;
+        }
+    }
+    return null;
+}
+
 //#endregion
 
 //#region fpcEx (framework process executor)
@@ -282,6 +291,10 @@ function fpcEx_ToExecuteQ(globals: fGlobals, process: base_process_class): void 
     // fpcLnTg_ToQueue
     globals.liQueue[process.pi.listID].push(process);
     globals.lnQueue.push(process);
+}
+
+export function fpcEx_Search(globals: fGlobals, judgeFunc: (pc: base_process_class, userData: any) => boolean, userData: any): base_process_class | null {
+    return fpcLyIt_AllJudge(globals, judgeFunc, userData);
 }
 
 //#endregion
@@ -502,7 +515,7 @@ export class msg_class extends leafdraw_class {
     public actor: fopAc_ac_c | null;
     public pos = vec3.create();
     public msgNo: number;
-    
+
     private loadInit: boolean = false;
 
     public override load(globals: GlobalUserData, prm: fopMsg_prm_class | null): cPhs__Status {
