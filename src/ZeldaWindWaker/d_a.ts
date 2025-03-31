@@ -6168,7 +6168,7 @@ class d_a_bridge extends fopAc_ac_c {
         this.pathId = (this.parameters >> 16) & 0xFF;
         assert(this.pathId !== 0xFF);
 
-        const path = dPath_GetRoomPath(globals, this.pathId, globals.mStayNo);
+        const path = dPath_GetRoomPath(globals, this.pathId, this.roomNo);
         assert(!!path);
 
         this.startPos = path.points[0].pos;
