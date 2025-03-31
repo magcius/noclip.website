@@ -6155,7 +6155,7 @@ class d_a_bridge extends fopAc_ac_c {
     private swayMagY = 0;
     private swayRideMag = 0;
     private swayRootMagCalc = 0;
-    private swayScalar = 1.0; // TODO: How is this set in the original code? Ghidra can only find reads.
+    private swayScalar = 1.0; // How is this set in the original code? Ghidra can only find reads.
 
     public override subload(globals: dGlobals): cPhs__Status {
         const status = dComIfG_resLoad(globals, d_a_bridge.arcName);
@@ -6199,7 +6199,7 @@ class d_a_bridge extends fopAc_ac_c {
 
         const ropeTexID = (this.flags & BridgeFlags.UseDarkRopeTex) ? 0x8D : 0x7E;
         const ropeTexData = globals.resCtrl.getObjectRes(ResType.Bti, "Always", ropeTexID);
-        this.ropeLines.init(2, 14, ropeTexData, false);
+        this.ropeLines.init(globals, 2, 14, ropeTexData, false);
 
         for (let i = 0; i < this.plankCount; i++) {
             const plank = this.planks[i];
@@ -6218,7 +6218,7 @@ class d_a_bridge extends fopAc_ac_c {
                         plank.modelChainRight = new J3DModelInstance(modelChainData);
                     } else {
                         plank.lineRope = new mDoExt_3DlineMat1_c();
-                        plank.lineRope.init(2, 2, ropeTexData, true);
+                        plank.lineRope.init(globals, 2, 2, ropeTexData, true);
                     }
                 }
             }
