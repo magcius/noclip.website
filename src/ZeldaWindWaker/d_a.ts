@@ -6371,7 +6371,7 @@ class d_a_bridge extends fopAc_ac_c {
             vec3.scaleAndAdd(plank.pos, plank.posSim, rootOffset, rootOffsetMag);
 
             plank.biasY = cLib_addCalc2(plank.biasY, -15.0, 1.0, 5.0);
-            plank.biasUnk = cLib_addCalc0(plank.biasUnk, 1.0, 5.0); // @TODO: Confim that cLib_addCalc0() actually targets 0. Should we just remove it?
+            plank.biasUnk = cLib_addCalc0(plank.biasUnk, 1.0, 5.0);
         }
 
         this.swayMagY = this.swayRideMag;
