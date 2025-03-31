@@ -21,7 +21,7 @@ const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
 const scratchVec3c = vec3.create();
 const scratchVec3d = vec3.create();
-const materialParams = new MaterialParams(); // TODO: Move?
+const materialParams = new MaterialParams();
 const drawParams = new DrawParams();
 
 abstract class mDoExt_baseAnm<T extends AnimationBase> {
@@ -106,8 +106,8 @@ export class mDoExt_3Dline_c {
 
     // GPU data
     public scales: number[] | null = null;
-    public texCoords: vec2[][] | null = null;
-    public positions: vec3[][];
+    public texCoords: vec2[] | null = null;
+    public positions: vec3[];
 
     public init(numSegments: number, hasSize: boolean, hasTex: boolean): void {
         this.segments = nArray(numSegments, () => vec3.create());
@@ -115,16 +115,14 @@ export class mDoExt_3Dline_c {
         if (hasSize) { this.scales = nArray(numSegments, () => 0.0); }
 
         const numVerts = numSegments * 2;
-        this.positions = nArray(2, () => nArray(numVerts, () => vec3.create()));
+        this.positions = nArray(numVerts, () => vec3.create());
 
         if (hasTex) {
-            this.texCoords = nArray(2, () => nArray(numVerts, () => vec2.create()));
+            this.texCoords = nArray(numVerts, () => vec2.create());
 
             for (let i = 0; i < numSegments; i++) {
-                this.texCoords[0][i * 2 + 0][0] = 0.0;
-                this.texCoords[1][i * 2 + 0][0] = 0.0;
-                this.texCoords[0][i * 2 + 1][0] = 1.0;
-                this.texCoords[1][i * 2 + 1][0] = 1.0;
+                this.texCoords[i * 2 + 0][0] = 0.0;
+                this.texCoords[i * 2 + 1][0] = 1.0;
             }
         }
     }
@@ -146,13 +144,11 @@ export class mDoExt_3DlineMat1_c implements mDoExt_3DlineMat_c {
     private numLines: number;
     private maxSegments: number;
     private numSegments: number;
-    private curArr: number;
     private material: GXMaterialHelperGfx | null = null;
 
     public init(numLines: number, numSegments: number, img: BTIData, hasSize: boolean): void {
         this.numLines = numLines;
         this.maxSegments = numSegments;
-        this.curArr = 0;
 
         this.lines = nArray(numLines, () => new mDoExt_3Dline_c());
         for (let i = 0; i < numLines; i++) {
@@ -189,11 +185,6 @@ export class mDoExt_3DlineMat1_c implements mDoExt_3DlineMat_c {
     public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager): void {
         assert(!!this.material);
 
-        // GXLoadTexObj(&mTexObj, GX_TEXMAP0);
-        // u16 h = GXGetTexObjHeight(&mTexObj);
-        // u16 w = GXGetTexObjWidth(&mTexObj);
-        // GXSetTexCoordScaleManually(GX_TEXCOORD0, GX_TRUE, w, h);
-
         // TODO: Is this the same as dKy_SetLight_again?
         dKy_setLight__OnMaterialParams(globals.g_env_light, materialParams, globals.camera);
         dKy_GxFog_tevstr_set(this.tevStr, materialParams.u_FogBlock, globals.camera);
@@ -209,12 +200,12 @@ export class mDoExt_3DlineMat1_c implements mDoExt_3DlineMat_c {
             const line = this.lines[i];
             this.ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP, this.numSegments * 2);
             for (let j = 0; j < this.numSegments * 2; j += 2) {
-                this.ddraw.position3vec3(line.positions[this.curArr][j + 0]);
-                this.ddraw.texCoord2vec2(GX.Attr.TEX0, line.texCoords![this.curArr][j + 0]);
+                this.ddraw.position3vec3(line.positions[j + 0]);
+                this.ddraw.texCoord2vec2(GX.Attr.TEX0, line.texCoords![j + 0]);
                 this.ddraw.normal3f32(0.25, 0.0, 0.0);
 
-                this.ddraw.position3vec3(line.positions[this.curArr][j + 1]);
-                this.ddraw.texCoord2vec2(GX.Attr.TEX0, line.texCoords![this.curArr][j + 1]);
+                this.ddraw.position3vec3(line.positions[j + 1]);
+                this.ddraw.texCoord2vec2(GX.Attr.TEX0, line.texCoords![j + 1]);
                 this.ddraw.normal3f32(-0.25, 0.0, 0.0);
             }
             this.ddraw.end();
@@ -244,8 +235,8 @@ export class mDoExt_3DlineMat1_c implements mDoExt_3DlineMat_c {
             let vertIdx = 0;
             assert(!!line.texCoords);
 
-            const dstPos = line.positions[this.curArr];
-            const dstUvs = line.texCoords[this.curArr];
+            const dstPos = line.positions;
+            const dstUvs = line.texCoords;
             let r_scale = scale;
 
             // Handle the first segment
@@ -322,10 +313,6 @@ export class mDoExt_3DlineMat1_c implements mDoExt_3DlineMat_c {
                 vec3.copy(dstPos[vertIdx + 1], nextP1);
             }
         }
-    }
-
-    public update(segmentCount: number, color: Color, tevStr: dKy_tevstr_c): void {
-        // TODO:
     }
 
     public getMaterialID(): number {
