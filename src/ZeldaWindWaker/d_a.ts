@@ -6129,6 +6129,7 @@ class d_a_bridge extends fopAc_ac_c {
     private pathId: number;
     private cutRopeSwayPhase: number;
 
+    private startRot = vec3.create();
     private startPos: ReadonlyVec3;
     private endPos: ReadonlyVec3;
     private visiblePlankCount: number;
@@ -6177,8 +6178,8 @@ class d_a_bridge extends fopAc_ac_c {
         const diff = vec3.sub(scratchVec3a, this.endPos, this.startPos);
         const distXZ = Math.hypot(diff[0], diff[2]);
 
-        this.rot[1] = cM_atan2s(diff[0], diff[2]);
-        this.rot[0] = -cM_atan2s(diff[1], distXZ);
+        this.startRot[1] = cM_atan2s(diff[0], diff[2]);
+        this.startRot[0] = -cM_atan2s(diff[1], distXZ);
 
         const dist = vec3.length(diff);
         const plankBias = (dist > 1300) ? 3.0 : 0.0;
@@ -6208,7 +6209,7 @@ class d_a_bridge extends fopAc_ac_c {
             // Attach ropes to every fourth plank
             if ((this.flags & BridgeFlags.NoRopes) == 0) {
                 if (((i + ropeBias) % 4) == 0) {
-                    plank.flags = 0b111; // TODO: Label flags. This marks this plank as having ropes attached
+                    plank.flags = 0b111; // 0b100: HasRope, 0b010: RightRopeUncut, 0b001: LeftRopeUncut
                     plank.ropePosLeft = nArray(3, () => vec3.create());
                     plank.ropePosRight = nArray(3, () => vec3.create());
 
@@ -6506,7 +6507,7 @@ class d_a_bridge extends fopAc_ac_c {
 
             const ropeOffset = scratchVec3a;
             const ropeOffsetLocal = vec3.set(scratchVec3b, -120, 350.0, -40.0);
-            mDoMtx_YrotS(calc_mtx, -this.rot[1]); // TODO: This negative shouldn't be here, something got flipped
+            mDoMtx_YrotS(calc_mtx, this.startRot[1]);
             MtxPosition(ropeOffset, ropeOffsetLocal);
             vec3.add(startSegRight, this.startPos, ropeOffset);
 
