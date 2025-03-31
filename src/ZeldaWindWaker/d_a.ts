@@ -6091,22 +6091,22 @@ class d_a_title extends fopAc_ac_c {
 }
 
 class br_s {
-    model: J3DModelInstance;
-    flags: number = 0;
-    posSim = vec3.create();
-    pos = vec3.create();
-    rot = vec3.create();
-    scale = vec3.create();
-    ropePosLeft: vec3[] = [];
-    ropePosRight: vec3[] = [];
+    public model: J3DModelInstance;
+    public flags: number = 0;
+    public posSim = vec3.create();
+    public pos = vec3.create();
+    public rot = vec3.create();
+    public scale = vec3.create();
+    public ropePosLeft: vec3[] = [];
+    public ropePosRight: vec3[] = [];
 
-    modelChainLeft: J3DModelInstance | null = null;
-    modelChainRight: J3DModelInstance | null = null;
-    lineRope: mDoExt_3DlineMat1_c | null = null;
+    public modelChainLeft: J3DModelInstance | null = null;
+    public modelChainRight: J3DModelInstance | null = null;
+    public lineRope: mDoExt_3DlineMat1_c | null = null;
 
-    rotYExtra: number = 0;
-    biasY: number = 0;
-    biasUnk: number = 0;
+    public rotYExtra: number = 0;
+    public biasY: number = 0;
+    public biasUnk: number = 0;
 }
 
 enum BridgeFlags {
