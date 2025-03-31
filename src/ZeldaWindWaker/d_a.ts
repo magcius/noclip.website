@@ -6199,7 +6199,7 @@ class d_a_bridge extends fopAc_ac_c {
 
         const ropeTexID = (this.flags & BridgeFlags.UseDarkRopeTex) ? 0x8D : 0x7E;
         const ropeTexData = globals.resCtrl.getObjectRes(ResType.Bti, "Always", ropeTexID);
-        this.ropeLines.init(globals, 2, 14, ropeTexData, false);
+        this.ropeLines.init(2, 14, ropeTexData, false);
 
         for (let i = 0; i < this.plankCount; i++) {
             const plank = this.planks[i];
@@ -6218,7 +6218,7 @@ class d_a_bridge extends fopAc_ac_c {
                         plank.modelChainRight = new J3DModelInstance(modelChainData);
                     } else {
                         plank.lineRope = new mDoExt_3DlineMat1_c();
-                        plank.lineRope.init(globals, 2, 2, ropeTexData, true);
+                        plank.lineRope.init(2, 2, ropeTexData, true);
                     }
                 }
             }
@@ -6492,7 +6492,7 @@ class d_a_bridge extends fopAc_ac_c {
                     vec3.copy(leftSegs[1], plank.ropePosLeft[1]);
 
                     plank.lineRope.updateWithScale(globals, 2, mainRopeWidth, d_a_bridge.ropeColor, 0, this.tevStr);
-                    plank.lineRope.setMaterial();
+                    plank.lineRope.setMaterial(globals);
                     plank.lineRope.draw(globals, renderInstManager);
                 }
             }
@@ -6532,7 +6532,7 @@ class d_a_bridge extends fopAc_ac_c {
             }
 
             this.ropeLines.updateWithScale(globals, this.uncutRopeCount + 2, mainRopeWidth, d_a_bridge.ropeColor, 0, this.tevStr);
-            this.ropeLines.setMaterial();
+            this.ropeLines.setMaterial(globals);
             this.ropeLines.draw(globals, renderInstManager);
         }
     }

@@ -7,7 +7,7 @@ import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import { ViewerRenderInput } from "../viewer.js";
 import { dDlst_list_Set } from "./d_drawlist.js";
 import { dGlobals } from "./Main.js";
-import { assert, nArray } from "../util.js";
+import { assert, assertExists, nArray } from "../util.js";
 import { BTIData } from "../Common/JSYSTEM/JUTTexture.js";
 import { dKy_GxFog_set, dKy_setLight__OnMaterialParams, dKy_tevstr_c } from "./d_kankyo.js";
 import { Color, colorCopy } from "../Color.js";
@@ -133,7 +133,7 @@ export class mDoExt_3Dline_c {
 
 export interface mDoExt_3DlineMat_c {
     getMaterialID(): number;
-    setMaterial(): void;
+    setMaterial(globals: dGlobals): void;
     draw(globals: dGlobals, renderInstManager: GfxRenderInstManager): void;
 }
 
@@ -148,12 +148,9 @@ export class mDoExt_3DlineMat1_c implements mDoExt_3DlineMat_c {
     private maxSegments: number;
     private numSegments: number;
     private curArr: number;
-    private material: GXMaterialHelperGfx;
+    private material: GXMaterialHelperGfx | null = null;
 
-    private static materialUnlit: GXMaterialHelperGfx;
-    private static materialLit: GXMaterialHelperGfx;
-
-    public init(globals: dGlobals, numLines: number, numSegments: number, img: BTIData, hasSize: boolean): void {
+    public init(numLines: number, numSegments: number, img: BTIData, hasSize: boolean): void {
         this.numLines = numLines;
         this.maxSegments = numSegments;
         this.curArr = 0;
@@ -168,38 +165,31 @@ export class mDoExt_3DlineMat1_c implements mDoExt_3DlineMat_c {
         this.ddraw.setVtxDesc(GX.Attr.POS, true);
         this.ddraw.setVtxDesc(GX.Attr.NRM, true);
         this.ddraw.setVtxDesc(GX.Attr.TEX0, true);
+    }
 
-        // Parse display lists into usable materials
-        if (!mDoExt_3DlineMat1_c.materialUnlit) {
+    public setMaterial(globals: dGlobals): void {
+        if(!this.material) {
+            const dlName = this.tevStr ? `l_toonMat1DL` : `l_mat1DL`;
+
+            // Parse display lists into usable materials
+            const dl = globals.findExtraSymbolData(`m_Do_ext.o`, dlName);
             const matRegisters = new DisplayListRegisters();
             displayListRegistersInitGX(matRegisters);
-    
-            const l_mat1DL = globals.findExtraSymbolData(`m_Do_ext.o`, `l_mat1DL`);
-            displayListRegistersRun(matRegisters, l_mat1DL);
-            let material = parseMaterial(matRegisters, `mDoExt_3DlineMat1_c: Unlit`);
-            material.ropInfo.fogType = GX.FogType.PERSP_LIN;
-            material.ropInfo.fogAdjEnabled = true;
-            material.hasFogBlock = true;
-            mDoExt_3DlineMat1_c.materialUnlit = new GXMaterialHelperGfx(material);
-    
-            const l_toonMat1DL = globals.findExtraSymbolData(`m_Do_ext.o`, `l_toonMat1DL`);
-            displayListRegistersRun(matRegisters, l_toonMat1DL);
-            material = parseMaterial(matRegisters, `mDoExt_3DlineMat1_c: Lit`);
+            displayListRegistersRun(matRegisters, dl);
+            const material = parseMaterial(matRegisters, `mDoExt_3DlineMat1_c: ${dlName}`);
             material.ropInfo.fogType = GX.FogType.PERSP_LIN;
             material.ropInfo.fogAdjEnabled = true;
             material.hasFogBlock = true;
             // TODO: The global light color only has its r channel set. This copies that value to the other channels. 
             //       Otherwise we get a "red" light. How does this normally work?
             material.tevStages[0].rasSwapTable = [0, 0, 0, 0];
-            mDoExt_3DlineMat1_c.materialLit = new GXMaterialHelperGfx(material);
+            this.material = new GXMaterialHelperGfx(material);
         }
     }
 
-    public setMaterial(): void {
-        this.material = this.tevStr ? mDoExt_3DlineMat1_c.materialLit : mDoExt_3DlineMat1_c.materialUnlit;
-    }
-
     public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager): void {
+        assert(!!this.material);
+
         // GXLoadTexObj(&mTexObj, GX_TEXMAP0);
         // u16 h = GXGetTexObjHeight(&mTexObj);
         // u16 w = GXGetTexObjWidth(&mTexObj);
