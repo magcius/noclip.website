@@ -6417,8 +6417,6 @@ class d_a_bridge extends fopAc_ac_c {
                 offset[0] *= -1;
                 MtxPosition(plank.ropePosRight[2], offset);
 
-                // TODO: Handle the metal cooldown?
-
                 const ropeHeight = this.flags & BridgeFlags.IsMetal ? 1000.0 : 200.0;
                 vec3.copy(plank.ropePosRight[0], plank.ropePosRight[1]);
                 vec3.copy(plank.ropePosLeft[0], plank.ropePosLeft[1]);
@@ -6480,7 +6478,19 @@ class d_a_bridge extends fopAc_ac_c {
 
             if (plank.flags & 4) {
                 if (this.flags & BridgeFlags.IsMetal) {
-                    // TODO: Render chain models
+                    assert(!!plank.modelChainRight);
+                    MtxTrans(plank.ropePosRight[1], false);
+                    mDoMtx_XrotM(calc_mtx, -0x4000);
+                    mat4.copy(plank.modelChainRight.modelMatrix, calc_mtx);
+                    setLightTevColorType(globals, plank.modelChainRight, this.tevStr, globals.camera);
+                    mDoExt_modelUpdateDL(globals, plank.modelChainRight, renderInstManager);
+
+                    assert(!!plank.modelChainLeft);
+                    MtxTrans(plank.ropePosLeft[1], false);
+                    mDoMtx_XrotM(calc_mtx, -0x4000);
+                    mat4.copy(plank.modelChainLeft.modelMatrix, calc_mtx);
+                    setLightTevColorType(globals, plank.modelChainLeft, this.tevStr, globals.camera);
+                    mDoExt_modelUpdateDL(globals, plank.modelChainLeft, renderInstManager);
                 } else {
                     assert(!!plank.lineRope);
                     const rightSegs = plank.lineRope.lines[0].segments;
