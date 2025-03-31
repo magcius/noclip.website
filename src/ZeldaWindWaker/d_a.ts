@@ -6112,7 +6112,7 @@ class br_s {
 enum BridgeFlags {
     IsMetal = 1 << 0,
     ConnectToPartner = 1 << 1,
-    NoRopes = 1 << 2, // TODO: This might actually be "UseChains"
+    NoRopes = 1 << 2,
     UseDarkRopeTex = 1 << 3,
 }
 
