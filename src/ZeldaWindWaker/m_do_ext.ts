@@ -110,7 +110,7 @@ export class mDoExt_3Dline_c {
     public texCoords: vec2[][] | null = null;
     public positions: vec3[][];
 
-    init(numSegments: number, hasSize: boolean, hasTex: boolean): void {
+    public init(numSegments: number, hasSize: boolean, hasTex: boolean): void {
         this.segments = nArray(numSegments, () => vec3.create());
 
         if (hasSize) { this.scales = nArray(numSegments, () => 0.0); }
@@ -230,28 +230,20 @@ export class mDoExt_3DlineMat1_c implements mDoExt_3DlineMat_c {
         // u16 w = GXGetTexObjWidth(&mTexObj);
         // GXSetTexCoordScaleManually(GX_TEXCOORD0, GX_TRUE, w, h);
 
-        const template = renderInstManager.pushTemplate();
-
         // TODO: Is this the same as dKy_SetLight_again?
         dKy_setLight__OnMaterialParams(globals.g_env_light, materialParams, globals.camera);
         dKy_GxFog_set(globals.g_env_light, materialParams.u_FogBlock, globals.camera);
 
         this.tex.fillTextureMapping(materialParams.m_TextureMapping[0]);
-        template.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
-
         colorCopy(materialParams.u_Color[ColorKind.C0], this.tevStr.colorC0);
         colorCopy(materialParams.u_Color[ColorKind.C1], this.tevStr.colorK0);
         colorCopy(materialParams.u_Color[ColorKind.C2], this.color);
         mat4.copy(drawParams.u_PosMtx[0], globals.camera.viewFromWorldMatrix);
 
-        this.material.allocateMaterialParamsDataOnInst(template, materialParams);
-        this.material.allocateDrawParamsDataOnInst(template, drawParams);
-
         this.ddraw.beginDraw(globals.modelCache.cache);
         for (let i = 0; i < this.numLines; i++) {
             const line = this.lines[i];
-            this.ddraw.allocPrimitives(GX.Command.DRAW_TRIANGLE_STRIP, this.numSegments * 2);
-            this.ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP);
+            this.ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP, this.numSegments * 2);
             for (let j = 0; j < this.numSegments * 2; j += 2) {
                 this.ddraw.position3vec3(line.positions[this.curArr][j + 0]);
                 this.ddraw.texCoord2vec2(GX.Attr.TEX0, line.texCoords![this.curArr][j + 0]);
@@ -266,10 +258,12 @@ export class mDoExt_3DlineMat1_c implements mDoExt_3DlineMat_c {
         this.ddraw.endDraw(renderInstManager);
 
         const renderInst = this.ddraw.makeRenderInst(renderInstManager);
+        renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
+        this.material.allocateMaterialParamsDataOnInst(renderInst, materialParams);
+        this.material.allocateDrawParamsDataOnInst(renderInst, drawParams);
         this.material.setOnRenderInst(renderInstManager.gfxRenderCache, renderInst);
-        renderInstManager.submitRenderInst(renderInst);
 
-        renderInstManager.popTemplate();
+        renderInstManager.submitRenderInst(renderInst);
     }
 
     public updateWithScale(globals: dGlobals, segmentCount: number, scale: number, color: Color, space: number, tevStr: dKy_tevstr_c): void {

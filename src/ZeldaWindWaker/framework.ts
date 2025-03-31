@@ -257,7 +257,8 @@ export function fpcLy_SetCurrentLayer(globals: fGlobals, layer: layer_class): vo
 }
 
 export function fpcLyIt_AllJudge(globals: fGlobals, judgeFunc: (pc: base_process_class, userData: any) => boolean, userData: any): base_process_class | null {
-    for (let pc of globals.lnQueue) {
+    for (let i = 0; i < globals.lnQueue.length; i++) {
+        const pc = globals.lnQueue[i];
         if (judgeFunc(pc, userData)) {
             return pc;
         }
