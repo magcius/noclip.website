@@ -7,15 +7,14 @@ import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import { ViewerRenderInput } from "../viewer.js";
 import { dDlst_list_Set } from "./d_drawlist.js";
 import { dGlobals } from "./Main.js";
-import { assert, assertExists, nArray } from "../util.js";
+import { assert, nArray } from "../util.js";
 import { BTIData } from "../Common/JSYSTEM/JUTTexture.js";
-import { dKy_GxFog_set, dKy_setLight__OnMaterialParams, dKy_tevstr_c } from "./d_kankyo.js";
+import { dKy_GxFog_tevstr_set, dKy_setLight__OnMaterialParams, dKy_tevstr_c } from "./d_kankyo.js";
 import { Color, colorCopy } from "../Color.js";
 import { TDDraw } from "../SuperMarioGalaxy/DDraw.js";
 import { ColorKind, DrawParams, GXMaterialHelperGfx, MaterialParams } from "../gx/gx_render.js";
 import * as GX from '../gx/gx_enum.js';
 import { DisplayListRegisters, displayListRegistersInitGX, displayListRegistersRun } from "../gx/gx_displaylist.js";
-import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { parseMaterial } from "../gx/gx_material.js";
 
 const scratchVec3a = vec3.create();
@@ -197,8 +196,7 @@ export class mDoExt_3DlineMat1_c implements mDoExt_3DlineMat_c {
 
         // TODO: Is this the same as dKy_SetLight_again?
         dKy_setLight__OnMaterialParams(globals.g_env_light, materialParams, globals.camera);
-        // TODO: Fog is not being applied in Dragon Roost Cavern
-        dKy_GxFog_set(globals.g_env_light, materialParams.u_FogBlock, globals.camera);
+        dKy_GxFog_tevstr_set(this.tevStr, materialParams.u_FogBlock, globals.camera);
 
         this.tex.fillTextureMapping(materialParams.m_TextureMapping[0]);
         colorCopy(materialParams.u_Color[ColorKind.C0], this.tevStr.colorC0);

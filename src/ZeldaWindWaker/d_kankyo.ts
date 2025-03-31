@@ -615,6 +615,10 @@ export function dKy_GxFog_sea_set(envLight: dScnKy_env_light_c, fog: FogBlock, c
     GxFogSet_Sub(fog, envLight, camera, envLight.vrUsoUmiCol);
 }
 
+export function dKy_GxFog_tevstr_set(tevStr: dKy_tevstr_c, fog: FogBlock, camera: dCamera_c): void {
+    GxFogSet_Sub(fog, tevStr, camera);
+}
+
 // This is effectively the global state that dKy_setLight sets up, but since we don't
 // have global state, we have to do this here.
 export function dKy_setLight__OnModelInstance(envLight: dScnKy_env_light_c, modelInstance: J3DModelInstance, camera: dCamera_c): void {
