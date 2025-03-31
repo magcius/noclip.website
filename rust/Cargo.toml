@@ -14,7 +14,7 @@ crate-type = ["cdylib", "rlib"]
 wasm-opt = ['-O', '--enable-bulk-memory']
 
 [package.metadata.wasm-pack.profile.profiling]
-wasm-opt = ['-Os', '--debuginfo']
+wasm-opt = ['-Os', '--enable-bulk-memory', '--debuginfo']
 demangle-name-section = true
 dwarf-debug-info = true
 
