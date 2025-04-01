@@ -6144,7 +6144,7 @@ class d_a_bridge extends fopAc_ac_c {
     private uncutRopeCount = 0;
     private ropeEndPosLeft = vec3.create();
     private ropeEndPosRight = vec3.create();
-    private static ropeColor = colorNewFromRGBA(0x96 / 0xFF, 0x96 / 0xFF, 0x96 / 0xFF, 1.0);
+    private static ropeColor = colorNewFromRGBA8(0x969696FF);
 
     private swayPhaseXZ = 0;
     private swayPhaseY = 0;
@@ -6163,7 +6163,7 @@ class d_a_bridge extends fopAc_ac_c {
             return status;
 
         this.flags = this.parameters & 0xFF;
-        if (this.flags == 0xFF) this.flags = 0;
+        if (this.flags === 0xFF) this.flags = 0;
 
         this.cutRopeSwayPhase = (this.parameters >> 8) & 0xFF;
         this.pathId = (this.parameters >> 16) & 0xFF;
@@ -6195,7 +6195,7 @@ class d_a_bridge extends fopAc_ac_c {
         const modelPlankData = globals.resCtrl.getObjectRes(ResType.Model, d_a_bridge.arcName, bmdIds[this.type]);
         const modelChainData = globals.resCtrl.getObjectRes(ResType.Model, d_a_bridge.arcName, 0x06);
 
-        const ropeBias = (this.type == BridgeType.Metal) ? 0 : 2;
+        const ropeBias = (this.type === BridgeType.Metal) ? 0 : 2;
 
         const ropeTexID = (this.flags & BridgeFlags.UseDarkRopeTex) ? 0x8D : 0x7E;
         const ropeTexData = globals.resCtrl.getObjectRes(ResType.Bti, "Always", ropeTexID);
@@ -6207,13 +6207,13 @@ class d_a_bridge extends fopAc_ac_c {
             assert(!!plank.model);
 
             // Attach ropes to every fourth plank
-            if ((this.flags & BridgeFlags.NoRopes) == 0) {
-                if (((i + ropeBias) % 4) == 0) {
+            if ((this.flags & BridgeFlags.NoRopes) === 0) {
+                if (((i + ropeBias) % 4) === 0) {
                     plank.flags = 0b111; // 0b100: HasRope, 0b010: RightRopeUncut, 0b001: LeftRopeUncut
                     plank.ropePosLeft = nArray(3, () => vec3.create());
                     plank.ropePosRight = nArray(3, () => vec3.create());
 
-                    if (this.type == BridgeType.Metal) {
+                    if (this.type === BridgeType.Metal) {
                         plank.modelChainLeft = new J3DModelInstance(modelChainData);
                         plank.modelChainRight = new J3DModelInstance(modelChainData);
                     } else {
@@ -6223,10 +6223,10 @@ class d_a_bridge extends fopAc_ac_c {
                 }
             }
 
-            if (this.type == BridgeType.Wood) {
+            if (this.type === BridgeType.Wood) {
                 const r = cM_rndF(0.3);
                 plank.scale[1] = r + 1.0;
-                if ((i + ropeBias) % 3 == 0) {
+                if ((i + ropeBias) % 3 === 0) {
                     plank.scale[0] = 1.05;
                 } else {
                     const r = cM_rndF(0.1);
@@ -6252,7 +6252,7 @@ class d_a_bridge extends fopAc_ac_c {
 
         // Limit the number of visible planks. They are still simulated, but won't be drawn or collided. 
         // I assume this is to keep the support ropes matching up.   
-        if ((this.flags & BridgeFlags.ConnectToPartner) == 0) {
+        if ((this.flags & BridgeFlags.ConnectToPartner) === 0) {
             this.visiblePlankCount = this.plankCount;
         } else if (this.plankCount < 16) {
             if (this.plankCount < 12) {
@@ -6391,7 +6391,7 @@ class d_a_bridge extends fopAc_ac_c {
         if (this.flags & BridgeFlags.ConnectToPartner && !this.partner) {
             // this.partner = fopAcIt_JudgeByID(globals.frameworkGlobals, this.processId);
             this.partner = fpcEx_Search(globals.frameworkGlobals, (pc: base_process_class, self: fopAc_ac_c) => {
-                return (pc.processName == dProcName_e.d_a_bridge && pc != self);
+                return (pc.processName === dProcName_e.d_a_bridge && pc != self);
             }, this) as d_a_bridge;
         }
 
@@ -6423,7 +6423,7 @@ class d_a_bridge extends fopAc_ac_c {
                 plank.ropePosRight[0][1] += ropeHeight;
                 plank.ropePosLeft[0][1] += ropeHeight;
 
-                if (this.flags & BridgeFlags.ConnectToPartner && i == (this.visiblePlankCount - 1)) {
+                if (this.flags & BridgeFlags.ConnectToPartner && i === (this.visiblePlankCount - 1)) {
                     vec3.copy(this.ropeEndPosRight, plank.ropePosRight[0]);
                     vec3.copy(this.ropeEndPosLeft, plank.ropePosLeft[0]);
                 }
@@ -6444,17 +6444,17 @@ class d_a_bridge extends fopAc_ac_c {
             mat4.copy(plank.model.modelMatrix, calc_mtx);
 
             // Compute the rope connection points for this plank (if this plank has ropes)
-            if ((this.flags & BridgeFlags.IsMetal) == 0 && (plank.flags & 4)) {
+            if ((this.flags & BridgeFlags.IsMetal) === 0 && (plank.flags & 4)) {
                 const lineRight = this.ropeLines.lines[0];
                 const lineLeft = this.ropeLines.lines[1];
 
-                if ((plank.flags & 1) == 0) {
+                if ((plank.flags & 1) === 0) {
                     // If right side cut...
                 } else {
                     vec3.copy(lineRight.segments[this.uncutRopeCount + 1], plank.ropePosRight[0]);
                 }
 
-                if ((plank.flags & 2) == 0) {
+                if ((plank.flags & 2) === 0) {
                     // If left side cut...
                 } else {
                     vec3.copy(lineLeft.segments[this.uncutRopeCount + 1], plank.ropePosLeft[0]);
@@ -6509,7 +6509,7 @@ class d_a_bridge extends fopAc_ac_c {
         }
 
         // Set start and end positions, then draw the main rope
-        if ((this.flags & (BridgeFlags.IsMetal | BridgeFlags.NoRopes)) == 0) {
+        if ((this.flags & (BridgeFlags.IsMetal | BridgeFlags.NoRopes)) === 0) {
             const startSegRight = this.ropeLines.lines[0].segments[0];
             const startSegLeft = this.ropeLines.lines[1].segments[0];
             const endSegRight = this.ropeLines.lines[0].segments[this.uncutRopeCount + 1];

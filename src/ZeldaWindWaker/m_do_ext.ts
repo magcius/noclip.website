@@ -163,7 +163,7 @@ export class mDoExt_3DlineMat1_c implements mDoExt_3DlineMat_c {
     }
 
     public setMaterial(globals: dGlobals): void {
-        if(!this.material) {
+        if (!this.material) {
             const dlName = this.tevStr ? `l_toonMat1DL` : `l_mat1DL`;
 
             // Parse display lists into usable materials
@@ -182,7 +182,6 @@ export class mDoExt_3DlineMat1_c implements mDoExt_3DlineMat_c {
     public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager): void {
         assert(!!this.material);
 
-        // TODO: Is this the same as dKy_SetLight_again?
         dKy_setLight__OnMaterialParams(globals.g_env_light, materialParams, globals.camera);
         dKy_GxFog_tevstr_set(this.tevStr, materialParams.u_FogBlock, globals.camera);
 
@@ -222,7 +221,7 @@ export class mDoExt_3DlineMat1_c implements mDoExt_3DlineMat_c {
         this.color = color;
         this.tevStr = tevStr;
         this.numSegments = Math.min(segmentCount, this.maxSegments);
-        const spacing = (space != 0) ? scale / space : 0.0;
+        const spacing = (space !== 0) ? scale / space : 0.0;
 
         let dist = 0.0;
         for (let i = 0; i < this.numLines; i++) {
@@ -302,7 +301,7 @@ export class mDoExt_3DlineMat1_c implements mDoExt_3DlineMat_c {
             dstUvs[vertIdx + 0][1] = dist;
             dstUvs[vertIdx + 1][1] = dist;
 
-            if (space != 0) {
+            if (space !== 0) {
                 vec3.copy(dstPos[vertIdx + 0], srcPos[segIdx]);
                 vec3.copy(dstPos[vertIdx + 1], srcPos[segIdx]);
             } else {
