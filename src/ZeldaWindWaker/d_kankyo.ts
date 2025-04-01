@@ -1165,7 +1165,7 @@ function envcolor_init(globals: dGlobals): void {
 
     envLight.timeAdv = 0.02;
 
-    colorFromRGBA(envLight.lightStatus[0].Color, 1.0, 0.0, 0.0, 0.0);
+    colorCopy(envLight.lightStatus[0].Color, White);
     colorFromRGBA(envLight.lightStatus[1].Color, 0.0, 0.0, 0.0, 0.0);
 
     envLight.diceWeatherChangeTime = (envLight.curTime + 15.0) % 360.0;

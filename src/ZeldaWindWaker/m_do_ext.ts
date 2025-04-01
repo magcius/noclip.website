@@ -175,9 +175,6 @@ export class mDoExt_3DlineMat1_c implements mDoExt_3DlineMat_c {
             material.ropInfo.fogType = GX.FogType.PERSP_LIN;
             material.ropInfo.fogAdjEnabled = true;
             material.hasFogBlock = true;
-            // TODO: The global light color only has its r channel set. This copies that value to the other channels. 
-            //       Otherwise we get a "red" light. How does this normally work?
-            material.tevStages[0].rasSwapTable = [0, 0, 0, 0];
             this.material = new GXMaterialHelperGfx(material);
         }
     }
