@@ -16,6 +16,7 @@ import { ColorKind, DrawParams, GXMaterialHelperGfx, MaterialParams } from "../g
 import * as GX from '../gx/gx_enum.js';
 import { DisplayListRegisters, displayListRegistersInitGX, displayListRegistersRun } from "../gx/gx_displaylist.js";
 import { parseMaterial } from "../gx/gx_material.js";
+import { normToLength } from "../MathHelpers.js";
 
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
@@ -109,10 +110,11 @@ export class mDoExt_3Dline_c {
     public texCoords: vec2[] | null = null;
     public positions: vec3[];
 
-    public init(numSegments: number, hasSize: boolean, hasTex: boolean): void {
+    constructor(numSegments: number, hasSize: boolean, hasTex: boolean) {
         this.segments = nArray(numSegments, () => vec3.create());
 
-        if (hasSize) { this.scales = nArray(numSegments, () => 0.0); }
+        if (hasSize)
+            this.scales = nArray(numSegments, () => 0.0);
 
         const numVerts = numSegments * 2;
         this.positions = nArray(numVerts, () => vec3.create());
@@ -129,7 +131,6 @@ export class mDoExt_3Dline_c {
 }
 
 export interface mDoExt_3DlineMat_c {
-    getMaterialID(): number;
     setMaterial(globals: dGlobals): void;
     draw(globals: dGlobals, renderInstManager: GfxRenderInstManager): void;
 }
@@ -146,16 +147,12 @@ export class mDoExt_3DlineMat1_c implements mDoExt_3DlineMat_c {
     private numSegments: number;
     private material: GXMaterialHelperGfx | null = null;
 
-    public init(numLines: number, numSegments: number, img: BTIData, hasSize: boolean): void {
+    public init(numLines: number, numSegments: number, tex: BTIData, hasSize: boolean): void {
         this.numLines = numLines;
         this.maxSegments = numSegments;
 
-        this.lines = nArray(numLines, () => new mDoExt_3Dline_c());
-        for (let i = 0; i < numLines; i++) {
-            this.lines[i].init(numSegments, hasSize, true);
-        }
-
-        this.tex = img;
+        this.lines = nArray(numLines, () => new mDoExt_3Dline_c(numSegments, hasSize, true));
+        this.tex = tex;
 
         this.ddraw.setVtxDesc(GX.Attr.POS, true);
         this.ddraw.setVtxDesc(GX.Attr.NRM, true);
@@ -217,102 +214,40 @@ export class mDoExt_3DlineMat1_c implements mDoExt_3DlineMat_c {
         renderInstManager.submitRenderInst(renderInst);
     }
 
-    public updateWithScale(globals: dGlobals, segmentCount: number, scale: number, color: Color, space: number, tevStr: dKy_tevstr_c): void {
+    public updateWithScale(globals: dGlobals, segmentCount: number, width: number, color: Color, taperNum: number, tevStr: dKy_tevstr_c): void {
         this.color = color;
         this.tevStr = tevStr;
         this.numSegments = Math.min(segmentCount, this.maxSegments);
-        const spacing = (space !== 0) ? scale / space : 0.0;
+        const taperStartIdx = this.numSegments - taperNum;
 
         let dist = 0.0;
         for (let i = 0; i < this.numLines; i++) {
             const line = this.lines[i];
-            const srcPos = line.segments;
-            let segIdx = 0;
             let vertIdx = 0;
             assert(!!line.texCoords);
 
-            const dstPos = line.positions;
-            const dstUvs = line.texCoords;
-            let r_scale = scale;
+            for (let j = 0; j < this.numSegments; j++) {
+                const taperScale = taperNum > 0 ? (Math.max(j - taperStartIdx, 0) / taperNum) : 1.0;
 
-            // Handle the first segment
-            dstUvs[vertIdx + 0][1] = dist;
-            dstUvs[vertIdx + 1][1] = dist;
+                if (j < this.numSegments - 1)
+                    vec3.sub(scratchVec3a, line.segments[j + 1], line.segments[j + 0]);
 
-            const segVec = vec3.sub(scratchVec3a, srcPos[segIdx + 1], srcPos[segIdx + 0]);
-            const delta = vec3.length(segVec);
-            dist += delta * 0.1;
+                vec3.sub(scratchVec3b, line.segments[j + 0], globals.camera.cameraPos);
+                vec3.cross(scratchVec3b, scratchVec3a, scratchVec3b);
+                normToLength(scratchVec3b, width * taperScale);
 
-            // Normalize and then scale a vector orthogonal to both the segment and eye
-            const eyeVec = vec3.sub(scratchVec3b, srcPos[segIdx + 0], globals.camera.cameraPos);
-            const eyeCross = vec3.cross(scratchVec3a, segVec, eyeVec);
-            const mag = vec3.length(eyeCross);
-            if (mag !== 0.0) {
-                vec3.scale(eyeCross, eyeCross, scale / mag);
-            }
+                vec3.add(line.positions[vertIdx + 0], line.segments[j], scratchVec3b);
+                vec3.sub(line.positions[vertIdx + 1], line.segments[j], scratchVec3b);
 
-            vec3.add(dstPos[vertIdx + 0], srcPos[segIdx], eyeCross);
-            vec3.sub(dstPos[vertIdx + 1], srcPos[segIdx], eyeCross);
+                line.texCoords[vertIdx + 0][1] = dist;
+                line.texCoords[vertIdx + 1][1] = dist;
 
-            segIdx += 1;
-            vertIdx += 2;
-            const nextP0 = vec3.add(scratchVec3c, srcPos[segIdx], eyeCross);
-            const nextP1 = vec3.sub(scratchVec3d, srcPos[segIdx], eyeCross);
-
-            // Handle all of the middle segments
-            for (let j = this.numSegments - 2; j > 0; j--) {
-                if (j < space) {
-                    r_scale -= spacing;
-                }
-
-                dstUvs[vertIdx + 0][1] = dist;
-                dstUvs[vertIdx + 1][1] = dist;
-
-                const segVec = vec3.sub(scratchVec3a, srcPos[segIdx + 1], srcPos[segIdx + 0]);
-                const delta = vec3.length(segVec);
-                dist += delta * 0.1;
-
-                // Normalize and then scale a vector orthogonal to both the segment and eye
-                const eyeVec = vec3.sub(scratchVec3b, srcPos[segIdx + 0], globals.camera.cameraPos);
-                const eyeCross = vec3.cross(scratchVec3a, segVec, eyeVec);
-                let mag = vec3.length(eyeCross);
-                if (mag !== 0.0) {
-                    mag = scale / mag;
-                }
-                vec3.scale(eyeCross, eyeCross, mag);
-
-                nextP0;
-                // Average the offset vectors from this and the previous billboard computation
-                vec3.add(nextP0, nextP0, srcPos[segIdx + 0]);
-                vec3.add(nextP0, nextP0, eyeCross);
-                vec3.scale(dstPos[vertIdx + 0], nextP0, 0.5);
-
-                vec3.add(nextP1, nextP1, srcPos[segIdx + 0]);
-                vec3.sub(nextP1, nextP1, eyeCross);
-                vec3.scale(dstPos[vertIdx + 1], nextP1, 0.5);
-
-                segIdx += 1;
                 vertIdx += 2;
-                vec3.add(nextP0, srcPos[segIdx], eyeCross);
-                vec3.sub(nextP1, srcPos[segIdx], eyeCross);
-            }
 
-            // Handle the last segment
-            dstUvs[vertIdx + 0][1] = dist;
-            dstUvs[vertIdx + 1][1] = dist;
-
-            if (space !== 0) {
-                vec3.copy(dstPos[vertIdx + 0], srcPos[segIdx]);
-                vec3.copy(dstPos[vertIdx + 1], srcPos[segIdx]);
-            } else {
-                vec3.copy(dstPos[vertIdx + 0], nextP0);
-                vec3.copy(dstPos[vertIdx + 1], nextP1);
+                const delta = vec3.length(scratchVec3a);
+                dist += delta * 0.1;
             }
         }
-    }
-
-    public getMaterialID(): number {
-        return 1;
     }
 }
 
