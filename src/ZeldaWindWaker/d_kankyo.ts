@@ -615,6 +615,10 @@ export function dKy_GxFog_sea_set(envLight: dScnKy_env_light_c, fog: FogBlock, c
     GxFogSet_Sub(fog, envLight, camera, envLight.vrUsoUmiCol);
 }
 
+export function dKy_GxFog_tevstr_set(tevStr: dKy_tevstr_c, fog: FogBlock, camera: dCamera_c): void {
+    GxFogSet_Sub(fog, tevStr, camera);
+}
+
 // This is effectively the global state that dKy_setLight sets up, but since we don't
 // have global state, we have to do this here.
 export function dKy_setLight__OnModelInstance(envLight: dScnKy_env_light_c, modelInstance: J3DModelInstance, camera: dCamera_c): void {
@@ -1161,7 +1165,7 @@ function envcolor_init(globals: dGlobals): void {
 
     envLight.timeAdv = 0.02;
 
-    colorFromRGBA(envLight.lightStatus[0].Color, 1.0, 0.0, 0.0, 0.0);
+    colorCopy(envLight.lightStatus[0].Color, White);
     colorFromRGBA(envLight.lightStatus[1].Color, 0.0, 0.0, 0.0, 0.0);
 
     envLight.diceWeatherChangeTime = (envLight.curTime + 15.0) % 360.0;

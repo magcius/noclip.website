@@ -1,6 +1,6 @@
 
 import { ReadonlyMat4, ReadonlyVec3, mat4, quat, vec2, vec3 } from "gl-matrix";
-import { TransparentBlack, White, colorCopy, colorFromRGBA8, colorNewCopy, colorNewFromRGBA8 } from "../Color.js";
+import { TransparentBlack, White, colorCopy, colorFromRGBA8, colorNewCopy, colorNewFromRGBA, colorNewFromRGBA8 } from "../Color.js";
 import { calcANK1JointAnimationTransform } from "../Common/JSYSTEM/J3D/J3DGraphAnimator.js";
 import { J3DModelData, J3DModelInstance, buildEnvMtx } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
 import { JointTransformInfo, LoopMode, TRK1, TTK1 } from "../Common/JSYSTEM/J3D/J3DLoader.js";
@@ -22,23 +22,23 @@ import { ColorKind, DrawParams, GXMaterialHelperGfx, MaterialParams } from "../g
 import { arrayRemove, assert, assertExists, nArray } from "../util.js";
 import { ViewerRenderInput } from "../viewer.js";
 import { dGlobals } from "./Main.js";
-import { cLib_addCalc, cLib_addCalc2, cLib_addCalcAngleRad2, cLib_addCalcAngleS, cLib_addCalcAngleS2, cLib_addCalcPosXZ2, cLib_chasePosXZ, cLib_distanceSqXZ, cLib_distanceXZ, cLib_targetAngleX, cLib_targetAngleY, cM_atan2s, cM_rndF, cM_rndFX, cM_s2rad } from "./SComponent.js";
+import { cLib_addCalc, cLib_addCalc0, cLib_addCalc2, cLib_addCalcAngleRad2, cLib_addCalcAngleS, cLib_addCalcAngleS2, cLib_addCalcPosXZ2, cLib_chasePosXZ, cLib_distanceSqXZ, cLib_distanceXZ, cLib_targetAngleX, cLib_targetAngleY, cM_atan2s, cM_rndF, cM_rndFX, cM_s2rad } from "./SComponent.js";
 import { dLib_getWaterY, dLib_waveInit, dLib_waveRot, dLib_wave_c, d_a_sea } from "./d_a_sea.js";
 import { cBgW_Flags, dBgS_GndChk, dBgW } from "./d_bg.js";
 import { EDemoActorFlags, dDemo_setDemoData } from "./d_demo.js";
 import { PeekZResult } from "./d_dlst_peekZ.js";
 import { dDlst_alphaModel__Type } from "./d_drawlist.js";
 import { LIGHT_INFLUENCE, LightType, WAVE_INFO, dKy_change_colpat, dKy_checkEventNightStop, dKy_plight_cut, dKy_plight_set, dKy_setLight__OnMaterialParams, dKy_setLight__OnModelInstance, dKy_tevstr_c, dKy_tevstr_init, setLightTevColorType, settingTevStruct } from "./d_kankyo.js";
-import { ThunderMode, dKyr_get_vectle_calc, dKyw_get_AllWind_vecpow, dKyw_get_wind_pow, dKyw_get_wind_vec, dKyw_rain_set, loadRawTexture } from "./d_kankyo_wether.js";
+import { ThunderMode, dKyr_get_vectle_calc, dKyw_get_AllWind_vecpow, dKyw_get_wind_pow, dKyw_get_wind_vec, dKyw_get_wind_vecpow, dKyw_rain_set, loadRawTexture } from "./d_kankyo_wether.js";
 import { dPa_splashEcallBack, dPa_trackEcallBack, dPa_waveEcallBack, ParticleGroup } from "./d_particle.js";
 import { dProcName_e } from "./d_procname.js";
 import { ResType, dComIfG_resLoad } from "./d_resorce.js";
 import { dPath, dPath_GetRoomPath, dPath__Point, dStage_Multi_c, dStage_stagInfo_GetSTType } from "./d_stage.js";
-import { fopAcIt_JudgeByID, fopAcM_create, fopAcM_prm_class, fopAc_ac_c } from "./f_op_actor.js";
-import { cPhs__Status, fGlobals, fpcPf__Register, fpcSCtRq_Request, fpc_bs__Constructor } from "./framework.js";
-import { mDoExt_McaMorf, mDoExt_bckAnm, mDoExt_brkAnm, mDoExt_btkAnm, mDoExt_btpAnm, mDoExt_modelEntryDL, mDoExt_modelUpdateDL } from "./m_do_ext.js";
+import { fopAcIt_JudgeByID, fopAcM_create, fopAcM_prm_class, fopAcM_searchFromName, fopAc_ac_c } from "./f_op_actor.js";
+import { base_process_class, cPhs__Status, fGlobals, fpcEx_Search, fpcPf__Register, fpcSCtRq_Request, fpc_bs__Constructor } from "./framework.js";
+import { mDoExt_3DlineMat1_c, mDoExt_McaMorf, mDoExt_bckAnm, mDoExt_brkAnm, mDoExt_btkAnm, mDoExt_btpAnm, mDoExt_modelEntryDL, mDoExt_modelUpdateDL } from "./m_do_ext.js";
 import { MtxPosition, MtxTrans, calc_mtx, mDoMtx_XYZrotM, mDoMtx_XrotM, mDoMtx_YrotM, mDoMtx_YrotS, mDoMtx_ZXYrotM, mDoMtx_ZrotM, mDoMtx_ZrotS, quatM } from "./m_do_mtx.js";
-import { J2DAnchorPos, J2DGrafContext, J2DPane, J2DScreen } from "../Common/JSYSTEM/J2Dv1.js";
+import { J2DAnchorPos, J2DPane, J2DScreen } from "../Common/JSYSTEM/J2Dv1.js";
 
 // Framework'd actors
 
@@ -6090,6 +6090,464 @@ class d_a_title extends fopAc_ac_c {
     }
 }
 
+class br_s {
+    public model: J3DModelInstance;
+    public flags: number = 0;
+    public posSim = vec3.create();
+    public pos = vec3.create();
+    public rot = vec3.create();
+    public scale = vec3.create();
+    public ropePosLeft: vec3[] = [];
+    public ropePosRight: vec3[] = [];
+
+    public modelChainLeft: J3DModelInstance | null = null;
+    public modelChainRight: J3DModelInstance | null = null;
+    public lineRope: mDoExt_3DlineMat1_c | null = null;
+
+    public rotYExtra: number = 0;
+    public biasY: number = 0;
+    public biasUnk: number = 0;
+}
+
+enum BridgeFlags {
+    IsMetal = 1 << 0,
+    ConnectToPartner = 1 << 1,
+    NoRopes = 1 << 2,
+    UseDarkRopeTex = 1 << 3,
+}
+
+enum BridgeType {
+    Wood = 0,
+    Metal = 1
+}
+class d_a_bridge extends fopAc_ac_c {
+    public static PROCESS_NAME = dProcName_e.d_a_bridge;
+    public static arcName = 'Bridge';
+
+    private flags: number;
+    private type: BridgeType;
+    private pathId: number;
+    private cutRopeSwayPhase: number;
+
+    private startRot = vec3.create();
+    private startPos: ReadonlyVec3;
+    private endPos: ReadonlyVec3;
+    private visiblePlankCount: number;
+    private plankCount: number;
+    private planks: br_s[];
+    private ropeLines = new mDoExt_3DlineMat1_c();
+    private partner: d_a_bridge | null = null;
+
+    private windAngle: number;
+    private windPower: number;
+    private frameCount = 0;
+    private uncutRopeCount = 0;
+    private ropeEndPosLeft = vec3.create();
+    private ropeEndPosRight = vec3.create();
+    private static ropeColor = colorNewFromRGBA8(0x969696FF);
+
+    private swayPhaseXZ = 0;
+    private swayPhaseY = 0;
+    private swayVelXZ = 0x578;
+    private swayVelY = 3000;
+    private swayMagXZ = 0;
+    private swayRootMag = 0;
+    private swayMagY = 0;
+    private swayRideMag = 0;
+    private swayRootMagCalc = 0;
+    private swayScalar = 1.0; // How is this set in the original code? Ghidra can only find reads.
+
+    public override subload(globals: dGlobals): cPhs__Status {
+        const status = dComIfG_resLoad(globals, d_a_bridge.arcName);
+        if (status !== cPhs__Status.Complete)
+            return status;
+
+        this.flags = this.parameters & 0xFF;
+        if (this.flags === 0xFF) this.flags = 0;
+
+        this.cutRopeSwayPhase = (this.parameters >> 8) & 0xFF;
+        this.pathId = (this.parameters >> 16) & 0xFF;
+        assert(this.pathId !== 0xFF);
+
+        const path = dPath_GetRoomPath(globals, this.pathId, this.roomNo);
+        assert(!!path);
+
+        this.startPos = path.points[0].pos;
+        this.endPos = path.points[1].pos;
+
+        const diff = vec3.sub(scratchVec3a, this.endPos, this.startPos);
+        const distXZ = Math.hypot(diff[0], diff[2]);
+
+        this.startRot[1] = cM_atan2s(diff[0], diff[2]);
+        this.startRot[0] = -cM_atan2s(diff[1], distXZ);
+
+        const dist = vec3.length(diff);
+        const plankBias = (dist > 1300) ? 3.0 : 0.0;
+        this.plankCount = Math.floor(dist / ((plankBias + 47.0) * 1.5));
+        assert(this.plankCount < 50);
+        this.planks = nArray(this.plankCount, () => new br_s());
+
+        // createHeap
+        this.type = this.flags & 1;
+        if (this.flags & BridgeFlags.NoRopes) this.type = BridgeType.Metal;
+
+        const bmdIds = [0x04 /* Wood */, 0x05 /* Metal */];
+        const modelPlankData = globals.resCtrl.getObjectRes(ResType.Model, d_a_bridge.arcName, bmdIds[this.type]);
+        const modelChainData = globals.resCtrl.getObjectRes(ResType.Model, d_a_bridge.arcName, 0x06);
+
+        const ropeBias = (this.type === BridgeType.Metal) ? 0 : 2;
+
+        const ropeTexID = (this.flags & BridgeFlags.UseDarkRopeTex) ? 0x8D : 0x7E;
+        const ropeTexData = globals.resCtrl.getObjectRes(ResType.Bti, "Always", ropeTexID);
+        this.ropeLines.init(2, 14, ropeTexData, false);
+
+        for (let i = 0; i < this.plankCount; i++) {
+            const plank = this.planks[i];
+            plank.model = new J3DModelInstance(modelPlankData);
+            assert(!!plank.model);
+
+            // Attach ropes to every fourth plank
+            if ((this.flags & BridgeFlags.NoRopes) === 0) {
+                if (((i + ropeBias) % 4) === 0) {
+                    plank.flags = 0b111; // 0b100: HasRope, 0b010: RightRopeUncut, 0b001: LeftRopeUncut
+                    plank.ropePosLeft = nArray(3, () => vec3.create());
+                    plank.ropePosRight = nArray(3, () => vec3.create());
+
+                    if (this.type === BridgeType.Metal) {
+                        plank.modelChainLeft = new J3DModelInstance(modelChainData);
+                        plank.modelChainRight = new J3DModelInstance(modelChainData);
+                    } else {
+                        plank.lineRope = new mDoExt_3DlineMat1_c();
+                        plank.lineRope.init(2, 2, ropeTexData, true);
+                    }
+                }
+            }
+
+            if (this.type === BridgeType.Wood) {
+                const r = cM_rndF(0.3);
+                plank.scale[1] = r + 1.0;
+                if ((i + ropeBias) % 3 === 0) {
+                    plank.scale[0] = 1.05;
+                } else {
+                    const r = cM_rndF(0.1);
+                    plank.scale[0] = r + 1.0;
+                }
+            } else {
+                plank.scale[0] = 1.0;
+                plank.scale[1] = 1.0;
+            }
+            plank.scale[2] = 1.5;
+
+            vec3.copy(plank.model.baseScale, plank.scale);
+
+            const r = cM_rndF(1.0);
+            if (r < 0.5) {
+                plank.rotYExtra = -0x8000;
+            }
+        }
+
+        this.cullMtx = this.planks[0].model.modelMatrix;
+        this.setCullSizeBox(-120.0, -30.0, -60.0, 120.0, 30.0, 60.0);
+        this.cullFarDistanceRatio = 10.0;
+
+        // Limit the number of visible planks. They are still simulated, but won't be drawn or collided. 
+        // I assume this is to keep the support ropes matching up.   
+        if ((this.flags & BridgeFlags.ConnectToPartner) === 0) {
+            this.visiblePlankCount = this.plankCount;
+        } else if (this.plankCount < 16) {
+            if (this.plankCount < 12) {
+                this.visiblePlankCount = 7;
+            } else {
+                this.visiblePlankCount = 11;
+            }
+        } else {
+            this.visiblePlankCount = 15;
+        }
+
+        return cPhs__Status.Next;
+    }
+
+    private control1(deltaTimeFrames: number) {
+        this.swayPhaseXZ += this.swayVelXZ * deltaTimeFrames;
+        this.swayPhaseY += this.swayVelY * deltaTimeFrames;
+
+        // Increase the sway phase for each plank so they appear to move snakelike
+        const swayPhaseStep = (this.plankCount > 10) ? 4000 : 8000;
+
+        // Offset the root position based on wind strength
+        const rootSway = this.swayRootMag * Math.cos(cM_s2rad(this.swayPhaseXZ));
+        const swayPosX = vec3.set(scratchVec3a, rootSway, 0, 0);
+        mDoMtx_YrotS(calc_mtx, this.rot[1]);
+        const rootOffsetVec = scratchVec3b;
+        MtxPosition(rootOffsetVec, swayPosX);
+
+        vec3.set(scratchVec3a, 1, 0, 0);
+        const bridgeDir = scratchVec3c;
+        MtxPosition(bridgeDir, scratchVec3a);
+
+        const wind = vec3.set(scratchVec3a, 0, 0, this.windPower * 5.0);
+        mDoMtx_YrotS(calc_mtx, this.windAngle);
+        const windVec = scratchVec3e;
+        MtxPosition(windVec, wind);
+
+        const plankOffsetVec = vec3.set(scratchVec3a, 0, 0, 75);
+
+        for (let i = 1; i < this.planks.length; i++) {
+            const curPlank = this.planks[i];
+            const prevPlank = this.planks[i - 1];
+
+            const swayXZ = this.swayScalar * this.swayMagXZ * Math.sin(cM_s2rad(this.swayPhaseXZ + i * swayPhaseStep));
+            const offsetX = windVec[0] + rootOffsetVec[0] * this.swayScalar + (curPlank.posSim[0] - prevPlank.posSim[0]) + swayXZ * bridgeDir[0];
+            const offsetZ = windVec[2] + rootOffsetVec[2] * this.swayScalar + (curPlank.posSim[2] - prevPlank.posSim[2]) + swayXZ * bridgeDir[2];
+            const offsetAngleXZ = cM_atan2s(offsetX, offsetZ);
+            const offsetDistXZ = Math.hypot(offsetX, offsetZ);
+
+            const swayY = Math.sin(cM_s2rad(this.swayPhaseY + i * (swayPhaseStep + 1000)));
+            const offsetAngleY = cM_atan2s(this.swayScalar * this.swayMagY * swayY +
+                ((curPlank.biasUnk * 0.5 + curPlank.posSim[1] + curPlank.biasY * this.swayScalar * 0.5) - prevPlank.posSim[1]), offsetDistXZ);
+
+            mDoMtx_YrotS(calc_mtx, offsetAngleXZ);
+            mDoMtx_XrotM(calc_mtx, -offsetAngleY);
+
+            MtxPosition(scratchVec3d, plankOffsetVec);
+            curPlank.posSim = vec3.add(curPlank.posSim, prevPlank.posSim, scratchVec3d);
+        }
+    }
+
+    private control2() {
+        const plankConstraintVec = vec3.set(scratchVec3a, 0, 0, 75);
+
+        // Traverse the planks in reverse order, skipping the final plank
+        for (let i = this.plankCount - 2; i >= 0; i--) {
+            const curPlank = this.planks[i];
+            const nextPlank = this.planks[i + 1];
+
+            const offsetVec = vec3.sub(scratchVec3b, curPlank.posSim, nextPlank.posSim);
+            const offsetAngleXZ = cM_atan2s(offsetVec[0], offsetVec[2]);
+            const offsetDistXZ = Math.hypot(offsetVec[0], offsetVec[2]);
+            const offsetAngleY = cM_atan2s((curPlank.posSim[1] + curPlank.biasY * 0.5) - nextPlank.posSim[1], offsetDistXZ);
+
+            nextPlank.rot[1] = offsetAngleXZ;
+            nextPlank.rot[0] = -offsetAngleY;
+
+            mDoMtx_YrotS(calc_mtx, offsetAngleXZ);
+            mDoMtx_XrotM(calc_mtx, -offsetAngleY);
+
+            MtxPosition(scratchVec3d, plankConstraintVec);
+            curPlank.posSim = vec3.add(curPlank.posSim, nextPlank.posSim, scratchVec3d);
+        }
+    }
+
+    private control3() {
+        const curPlank = this.planks[0];
+        const nextPlank = this.planks[1];
+
+        const offsetVec = vec3.sub(scratchVec3b, curPlank.posSim, nextPlank.posSim);
+        const offsetAngleXZ = cM_atan2s(offsetVec[0], offsetVec[2]);
+        curPlank.rot[1] = offsetAngleXZ;
+
+        const offsetDistXZ = Math.hypot(offsetVec[0], offsetVec[2]);
+        const offsetAngleY = cM_atan2s(curPlank.posSim[1] - nextPlank.posSim[1], offsetDistXZ);
+        curPlank.rot[0] = -offsetAngleY;
+    }
+
+    private bridge_move(globals: dGlobals, deltaTimeFrames: number) {
+        vec3.copy(this.planks[0].posSim, this.startPos);
+
+        // Iteratively solve for a "rope bridge" constraint on each plank by iterating forward and backward
+        this.control1(deltaTimeFrames);
+        vec3.copy(this.planks[this.plankCount - 1].posSim, this.endPos);
+        this.control2();
+        this.control3();
+
+        const rootOffset = vec3.sub(scratchVec3a, this.startPos, this.planks[0].posSim);
+        vec3.copy(this.pos, this.planks[0].posSim);
+        vec3.copy(this.rot, this.planks[0].rot);
+
+        for (let i = 0; i < this.plankCount; i++) {
+            const plank = this.planks[i];
+
+            const rootOffsetMag = (this.plankCount - i) / this.plankCount * 0.75;
+            vec3.scaleAndAdd(plank.pos, plank.posSim, rootOffset, rootOffsetMag);
+
+            plank.biasY = cLib_addCalc2(plank.biasY, -15.0, 1.0, 5.0);
+            plank.biasUnk = cLib_addCalc0(plank.biasUnk, 1.0, 5.0);
+        }
+
+        this.swayMagY = this.swayRideMag;
+        this.swayMagXZ = this.swayRideMag;
+        this.swayRootMag = this.swayRootMagCalc;
+
+        const targetMag = (this.windPower < 0.1) ? 0.0 : 2.0;
+        this.swayRideMag = cLib_addCalc2(this.swayRideMag, targetMag, 0.1, 0.1);
+        this.swayRootMagCalc = cLib_addCalc2(this.swayRootMagCalc, targetMag * 0.3, 0.1, 0.05);
+    }
+
+    public override execute(globals: dGlobals, deltaTimeFrames: number): void {
+        const windVec = dKyw_get_wind_vec(globals.g_env_light);
+        this.windAngle = cM_atan2s(windVec[0], windVec[2]);
+        this.windPower = dKyw_get_wind_pow(globals.g_env_light);
+
+        if (this.flags & BridgeFlags.ConnectToPartner && !this.partner) {
+            // this.partner = fopAcIt_JudgeByID(globals.frameworkGlobals, this.processId);
+            this.partner = fpcEx_Search(globals.frameworkGlobals, (pc: base_process_class, self: fopAc_ac_c) => {
+                return (pc.processName === dProcName_e.d_a_bridge && pc != self);
+            }, this) as d_a_bridge;
+        }
+
+        this.bridge_move(globals, deltaTimeFrames);
+
+        this.uncutRopeCount = 0;
+        for (let i = 0; i < this.plankCount; i++) {
+            const plank = this.planks[i];
+
+            MtxTrans(plank.pos, false);
+            mDoMtx_YrotM(calc_mtx, plank.rot[1]);
+            mDoMtx_XrotM(calc_mtx, plank.rot[0]);
+            mDoMtx_ZrotM(calc_mtx, plank.rot[2]);
+
+            // Compute rope positions on the plan for left/right/top/bottom
+            if (plank.flags & 4) {
+                const offset = vec3.set(scratchVec3a, plank.scale[0] * 99.0, 0, 0);
+                MtxPosition(plank.ropePosRight[1], offset);
+                offset[0] *= -1;
+                MtxPosition(plank.ropePosLeft[1], offset);
+                offset[1] -= 30.0;
+                MtxPosition(plank.ropePosLeft[2], offset);
+                offset[0] *= -1;
+                MtxPosition(plank.ropePosRight[2], offset);
+
+                const ropeHeight = this.flags & BridgeFlags.IsMetal ? 1000.0 : 200.0;
+                vec3.copy(plank.ropePosRight[0], plank.ropePosRight[1]);
+                vec3.copy(plank.ropePosLeft[0], plank.ropePosLeft[1]);
+                plank.ropePosRight[0][1] += ropeHeight;
+                plank.ropePosLeft[0][1] += ropeHeight;
+
+                if (this.flags & BridgeFlags.ConnectToPartner && i === (this.visiblePlankCount - 1)) {
+                    vec3.copy(this.ropeEndPosRight, plank.ropePosRight[0]);
+                    vec3.copy(this.ropeEndPosLeft, plank.ropePosLeft[0]);
+                }
+            }
+
+            // Lots of stuff here. Particles, collision, etc...
+
+            // Half the planks are rotated 180 degrees (to simulate island craftsmanship)
+            mDoMtx_YrotM(calc_mtx, plank.rotYExtra);
+
+            // Hide planks that exceed the max visible count
+            if (i >= this.visiblePlankCount) {
+                vec3.zero(plank.scale);
+                vec3.zero(plank.model.baseScale);
+                plank.flags = 0;
+            }
+
+            mat4.copy(plank.model.modelMatrix, calc_mtx);
+
+            // Compute the rope connection points for this plank (if this plank has ropes)
+            if ((this.flags & BridgeFlags.IsMetal) === 0 && (plank.flags & 4)) {
+                const lineRight = this.ropeLines.lines[0];
+                const lineLeft = this.ropeLines.lines[1];
+
+                if ((plank.flags & 1) === 0) {
+                    // If right side cut...
+                } else {
+                    vec3.copy(lineRight.segments[this.uncutRopeCount + 1], plank.ropePosRight[0]);
+                }
+
+                if ((plank.flags & 2) === 0) {
+                    // If left side cut...
+                } else {
+                    vec3.copy(lineLeft.segments[this.uncutRopeCount + 1], plank.ropePosLeft[0]);
+                }
+
+                this.uncutRopeCount += 1;
+            }
+        }
+
+        this.frameCount += deltaTimeFrames;
+
+        settingTevStruct(globals, LightType.BG0, this.pos, this.tevStr);
+    }
+
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        const mainRopeWidth = this.flags & BridgeFlags.UseDarkRopeTex ? 6.5 : 4.0;
+
+        for (let plank of this.planks) {
+            setLightTevColorType(globals, plank.model, this.tevStr, globals.camera);
+            mDoExt_modelUpdateDL(globals, plank.model, renderInstManager);
+
+            if (plank.flags & 4) {
+                if (this.flags & BridgeFlags.IsMetal) {
+                    assert(!!plank.modelChainRight);
+                    MtxTrans(plank.ropePosRight[1], false);
+                    mDoMtx_XrotM(calc_mtx, -0x4000);
+                    mat4.copy(plank.modelChainRight.modelMatrix, calc_mtx);
+                    setLightTevColorType(globals, plank.modelChainRight, this.tevStr, globals.camera);
+                    mDoExt_modelUpdateDL(globals, plank.modelChainRight, renderInstManager);
+
+                    assert(!!plank.modelChainLeft);
+                    MtxTrans(plank.ropePosLeft[1], false);
+                    mDoMtx_XrotM(calc_mtx, -0x4000);
+                    mat4.copy(plank.modelChainLeft.modelMatrix, calc_mtx);
+                    setLightTevColorType(globals, plank.modelChainLeft, this.tevStr, globals.camera);
+                    mDoExt_modelUpdateDL(globals, plank.modelChainLeft, renderInstManager);
+                } else {
+                    assert(!!plank.lineRope);
+                    const rightSegs = plank.lineRope.lines[0].segments;
+                    const leftSegs = plank.lineRope.lines[1].segments;
+
+                    vec3.copy(rightSegs[0], plank.ropePosRight[0]);
+                    vec3.copy(rightSegs[1], plank.ropePosRight[1]);
+                    vec3.copy(leftSegs[0], plank.ropePosLeft[0]);
+                    vec3.copy(leftSegs[1], plank.ropePosLeft[1]);
+
+                    plank.lineRope.updateWithScale(globals, 2, mainRopeWidth, d_a_bridge.ropeColor, 0, this.tevStr);
+                    plank.lineRope.setMaterial(globals);
+                    plank.lineRope.draw(globals, renderInstManager);
+                }
+            }
+        }
+
+        // Set start and end positions, then draw the main rope
+        if ((this.flags & (BridgeFlags.IsMetal | BridgeFlags.NoRopes)) === 0) {
+            const startSegRight = this.ropeLines.lines[0].segments[0];
+            const startSegLeft = this.ropeLines.lines[1].segments[0];
+            const endSegRight = this.ropeLines.lines[0].segments[this.uncutRopeCount + 1];
+            const endSegLeft = this.ropeLines.lines[1].segments[this.uncutRopeCount + 1];
+
+            const ropeOffset = scratchVec3a;
+            const ropeOffsetLocal = vec3.set(scratchVec3b, -120, 350.0, -40.0);
+            mDoMtx_YrotS(calc_mtx, this.startRot[1]);
+            MtxPosition(ropeOffset, ropeOffsetLocal);
+            vec3.add(startSegRight, this.startPos, ropeOffset);
+
+            ropeOffsetLocal[0] *= -1;
+            MtxPosition(ropeOffset, ropeOffsetLocal);
+            vec3.add(startSegLeft, this.startPos, ropeOffset);
+
+            if (this.flags & BridgeFlags.ConnectToPartner) {
+                if (this.partner) {
+                    vec3.copy(endSegRight, this.partner.ropeEndPosLeft);
+                    vec3.copy(endSegLeft, this.partner.ropeEndPosRight);
+                }
+            } else {
+                ropeOffsetLocal[2] *= -1;
+
+                MtxPosition(ropeOffset, ropeOffsetLocal);
+                vec3.add(endSegLeft, this.endPos, ropeOffset);
+
+                ropeOffsetLocal[0] *= -1;
+                MtxPosition(ropeOffset, ropeOffsetLocal);
+                vec3.add(endSegRight, this.endPos, ropeOffset);
+            }
+
+            this.ropeLines.updateWithScale(globals, this.uncutRopeCount + 2, mainRopeWidth, d_a_bridge.ropeColor, 0, this.tevStr);
+            this.ropeLines.setMaterial(globals);
+            this.ropeLines.draw(globals, renderInstManager);
+        }
+    }
+}
+
 interface constructor extends fpc_bs__Constructor {
     PROCESS_NAME: dProcName_e;
 }
@@ -6125,4 +6583,5 @@ export function d_a__RegisterConstructors(globals: fGlobals): void {
     R(d_a_npc_zl1);
     R(d_a_py_lk);
     R(d_a_title);
+    R(d_a_bridge);
 }

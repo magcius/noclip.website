@@ -1,5 +1,5 @@
 
-import { mat4, ReadonlyMat4, ReadonlyVec3, vec3 } from "gl-matrix";
+import { mat4, ReadonlyMat4, ReadonlyVec3, vec2, vec3 } from "gl-matrix";
 import { calcANK1JointAnimationTransform, calcJointMatrixFromTransform, entryJointAnimator, entryTevRegAnimator, entryTexMtxAnimator, entryTexNoAnimator, J3DFrameCtrl, J3DFrameCtrl__UpdateFlags, VAF1_getVisibility } from "../Common/JSYSTEM/J3D/J3DGraphAnimator.js";
 import { J3DModelData, J3DModelInstance, JointMatrixCalc, ShapeInstanceState } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
 import { AnimationBase, ANK1, JointTransformInfo, LoopMode, TPT1, TRK1, TTK1, VAF1 } from "../Common/JSYSTEM/J3D/J3DLoader.js";
@@ -7,6 +7,22 @@ import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import { ViewerRenderInput } from "../viewer.js";
 import { dDlst_list_Set } from "./d_drawlist.js";
 import { dGlobals } from "./Main.js";
+import { assert, nArray } from "../util.js";
+import { BTIData } from "../Common/JSYSTEM/JUTTexture.js";
+import { dKy_GxFog_tevstr_set, dKy_setLight__OnMaterialParams, dKy_tevstr_c } from "./d_kankyo.js";
+import { Color, colorCopy } from "../Color.js";
+import { TDDraw } from "../SuperMarioGalaxy/DDraw.js";
+import { ColorKind, DrawParams, GXMaterialHelperGfx, MaterialParams } from "../gx/gx_render.js";
+import * as GX from '../gx/gx_enum.js';
+import { DisplayListRegisters, displayListRegistersInitGX, displayListRegistersRun } from "../gx/gx_displaylist.js";
+import { parseMaterial } from "../gx/gx_material.js";
+
+const scratchVec3a = vec3.create();
+const scratchVec3b = vec3.create();
+const scratchVec3c = vec3.create();
+const scratchVec3d = vec3.create();
+const materialParams = new MaterialParams();
+const drawParams = new DrawParams();
 
 abstract class mDoExt_baseAnm<T extends AnimationBase> {
     public frameCtrl = new J3DFrameCtrl(0);
@@ -82,6 +98,221 @@ export class mDoExt_bvaAnm extends mDoExt_baseAnm<VAF1> {
         // TODO(jstpierre): J3DVisibilityManager?
         for (let i = 0; i < modelInstance.shapeInstances.length; i++)
             modelInstance.shapeInstances[i].visible = VAF1_getVisibility(this.anm, i, this.frameCtrl.currentTimeInFrames);
+    }
+}
+
+export class mDoExt_3Dline_c {
+    public segments: vec3[];
+
+    // GPU data
+    public scales: number[] | null = null;
+    public texCoords: vec2[] | null = null;
+    public positions: vec3[];
+
+    public init(numSegments: number, hasSize: boolean, hasTex: boolean): void {
+        this.segments = nArray(numSegments, () => vec3.create());
+
+        if (hasSize) { this.scales = nArray(numSegments, () => 0.0); }
+
+        const numVerts = numSegments * 2;
+        this.positions = nArray(numVerts, () => vec3.create());
+
+        if (hasTex) {
+            this.texCoords = nArray(numVerts, () => vec2.create());
+
+            for (let i = 0; i < numSegments; i++) {
+                this.texCoords[i * 2 + 0][0] = 0.0;
+                this.texCoords[i * 2 + 1][0] = 1.0;
+            }
+        }
+    }
+}
+
+export interface mDoExt_3DlineMat_c {
+    getMaterialID(): number;
+    setMaterial(globals: dGlobals): void;
+    draw(globals: dGlobals, renderInstManager: GfxRenderInstManager): void;
+}
+
+export class mDoExt_3DlineMat1_c implements mDoExt_3DlineMat_c {
+    public lines: mDoExt_3Dline_c[];
+    private ddraw = new TDDraw();
+
+    private tex: BTIData;
+    private color: Color;
+    private tevStr: dKy_tevstr_c;
+    private numLines: number;
+    private maxSegments: number;
+    private numSegments: number;
+    private material: GXMaterialHelperGfx | null = null;
+
+    public init(numLines: number, numSegments: number, img: BTIData, hasSize: boolean): void {
+        this.numLines = numLines;
+        this.maxSegments = numSegments;
+
+        this.lines = nArray(numLines, () => new mDoExt_3Dline_c());
+        for (let i = 0; i < numLines; i++) {
+            this.lines[i].init(numSegments, hasSize, true);
+        }
+
+        this.tex = img;
+
+        this.ddraw.setVtxDesc(GX.Attr.POS, true);
+        this.ddraw.setVtxDesc(GX.Attr.NRM, true);
+        this.ddraw.setVtxDesc(GX.Attr.TEX0, true);
+    }
+
+    public setMaterial(globals: dGlobals): void {
+        if (!this.material) {
+            const dlName = this.tevStr ? `l_toonMat1DL` : `l_mat1DL`;
+
+            // Parse display lists into usable materials
+            const dl = globals.findExtraSymbolData(`m_Do_ext.o`, dlName);
+            const matRegisters = new DisplayListRegisters();
+            displayListRegistersInitGX(matRegisters);
+            displayListRegistersRun(matRegisters, dl);
+            const material = parseMaterial(matRegisters, `mDoExt_3DlineMat1_c: ${dlName}`);
+            material.ropInfo.fogType = GX.FogType.PERSP_LIN;
+            material.ropInfo.fogAdjEnabled = true;
+            material.hasFogBlock = true;
+            this.material = new GXMaterialHelperGfx(material);
+        }
+    }
+
+    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager): void {
+        assert(!!this.material);
+
+        dKy_setLight__OnMaterialParams(globals.g_env_light, materialParams, globals.camera);
+        dKy_GxFog_tevstr_set(this.tevStr, materialParams.u_FogBlock, globals.camera);
+
+        this.tex.fillTextureMapping(materialParams.m_TextureMapping[0]);
+        colorCopy(materialParams.u_Color[ColorKind.C0], this.tevStr.colorC0);
+        colorCopy(materialParams.u_Color[ColorKind.C1], this.tevStr.colorK0);
+        colorCopy(materialParams.u_Color[ColorKind.C2], this.color);
+        mat4.copy(drawParams.u_PosMtx[0], globals.camera.viewFromWorldMatrix);
+
+        this.ddraw.beginDraw(globals.modelCache.cache);
+        for (let i = 0; i < this.numLines; i++) {
+            const line = this.lines[i];
+            this.ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP, this.numSegments * 2);
+            for (let j = 0; j < this.numSegments * 2; j += 2) {
+                this.ddraw.position3vec3(line.positions[j + 0]);
+                this.ddraw.texCoord2vec2(GX.Attr.TEX0, line.texCoords![j + 0]);
+                this.ddraw.normal3f32(0.25, 0.0, 0.0);
+
+                this.ddraw.position3vec3(line.positions[j + 1]);
+                this.ddraw.texCoord2vec2(GX.Attr.TEX0, line.texCoords![j + 1]);
+                this.ddraw.normal3f32(-0.25, 0.0, 0.0);
+            }
+            this.ddraw.end();
+        }
+        this.ddraw.endDraw(renderInstManager);
+
+        const renderInst = this.ddraw.makeRenderInst(renderInstManager);
+        renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
+        this.material.allocateMaterialParamsDataOnInst(renderInst, materialParams);
+        this.material.allocateDrawParamsDataOnInst(renderInst, drawParams);
+        this.material.setOnRenderInst(renderInstManager.gfxRenderCache, renderInst);
+
+        renderInstManager.submitRenderInst(renderInst);
+    }
+
+    public updateWithScale(globals: dGlobals, segmentCount: number, scale: number, color: Color, space: number, tevStr: dKy_tevstr_c): void {
+        this.color = color;
+        this.tevStr = tevStr;
+        this.numSegments = Math.min(segmentCount, this.maxSegments);
+        const spacing = (space !== 0) ? scale / space : 0.0;
+
+        let dist = 0.0;
+        for (let i = 0; i < this.numLines; i++) {
+            const line = this.lines[i];
+            const srcPos = line.segments;
+            let segIdx = 0;
+            let vertIdx = 0;
+            assert(!!line.texCoords);
+
+            const dstPos = line.positions;
+            const dstUvs = line.texCoords;
+            let r_scale = scale;
+
+            // Handle the first segment
+            dstUvs[vertIdx + 0][1] = dist;
+            dstUvs[vertIdx + 1][1] = dist;
+
+            const segVec = vec3.sub(scratchVec3a, srcPos[segIdx + 1], srcPos[segIdx + 0]);
+            const delta = vec3.length(segVec);
+            dist += delta * 0.1;
+
+            // Normalize and then scale a vector orthogonal to both the segment and eye
+            const eyeVec = vec3.sub(scratchVec3b, srcPos[segIdx + 0], globals.camera.cameraPos);
+            const eyeCross = vec3.cross(scratchVec3a, segVec, eyeVec);
+            const mag = vec3.length(eyeCross);
+            if (mag !== 0.0) {
+                vec3.scale(eyeCross, eyeCross, scale / mag);
+            }
+
+            vec3.add(dstPos[vertIdx + 0], srcPos[segIdx], eyeCross);
+            vec3.sub(dstPos[vertIdx + 1], srcPos[segIdx], eyeCross);
+
+            segIdx += 1;
+            vertIdx += 2;
+            const nextP0 = vec3.add(scratchVec3c, srcPos[segIdx], eyeCross);
+            const nextP1 = vec3.sub(scratchVec3d, srcPos[segIdx], eyeCross);
+
+            // Handle all of the middle segments
+            for (let j = this.numSegments - 2; j > 0; j--) {
+                if (j < space) {
+                    r_scale -= spacing;
+                }
+
+                dstUvs[vertIdx + 0][1] = dist;
+                dstUvs[vertIdx + 1][1] = dist;
+
+                const segVec = vec3.sub(scratchVec3a, srcPos[segIdx + 1], srcPos[segIdx + 0]);
+                const delta = vec3.length(segVec);
+                dist += delta * 0.1;
+
+                // Normalize and then scale a vector orthogonal to both the segment and eye
+                const eyeVec = vec3.sub(scratchVec3b, srcPos[segIdx + 0], globals.camera.cameraPos);
+                const eyeCross = vec3.cross(scratchVec3a, segVec, eyeVec);
+                let mag = vec3.length(eyeCross);
+                if (mag !== 0.0) {
+                    mag = scale / mag;
+                }
+                vec3.scale(eyeCross, eyeCross, mag);
+
+                nextP0;
+                // Average the offset vectors from this and the previous billboard computation
+                vec3.add(nextP0, nextP0, srcPos[segIdx + 0]);
+                vec3.add(nextP0, nextP0, eyeCross);
+                vec3.scale(dstPos[vertIdx + 0], nextP0, 0.5);
+
+                vec3.add(nextP1, nextP1, srcPos[segIdx + 0]);
+                vec3.sub(nextP1, nextP1, eyeCross);
+                vec3.scale(dstPos[vertIdx + 1], nextP1, 0.5);
+
+                segIdx += 1;
+                vertIdx += 2;
+                vec3.add(nextP0, srcPos[segIdx], eyeCross);
+                vec3.sub(nextP1, srcPos[segIdx], eyeCross);
+            }
+
+            // Handle the last segment
+            dstUvs[vertIdx + 0][1] = dist;
+            dstUvs[vertIdx + 1][1] = dist;
+
+            if (space !== 0) {
+                vec3.copy(dstPos[vertIdx + 0], srcPos[segIdx]);
+                vec3.copy(dstPos[vertIdx + 1], srcPos[segIdx]);
+            } else {
+                vec3.copy(dstPos[vertIdx + 0], nextP0);
+                vec3.copy(dstPos[vertIdx + 1], nextP1);
+            }
+        }
+    }
+
+    public getMaterialID(): number {
+        return 1;
     }
 }
 
