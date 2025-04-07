@@ -428,7 +428,8 @@ const sceneDescs = [
     new TTYDSceneDesc('rsh_06_b'),
     new TTYDSceneDesc('rsh_06_c'),
 
-    "Battle Backgrounds",    new TTYDSceneDesc('stg_00_0', "Rogueport Harbor", null, null),
+    "Battle Backgrounds",    
+    new TTYDSceneDesc('stg_00_0', "Rogueport Harbor", null, null),
     new TTYDSceneDesc('stg_00_4', "Rogueport East", null, null),
     new TTYDSceneDesc('stg_00_1', "Rogueport Sewers", null, null),
     new TTYDSceneDesc('stg_00_2', "Blooper Fight", null, null),
