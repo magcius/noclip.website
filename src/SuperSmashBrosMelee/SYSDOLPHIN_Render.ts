@@ -1185,7 +1185,7 @@ class HSD_DObj_Instance {
             else if (cullMode === HSD_PObjFlags.CULLBACK)
                 megaStateFlags.cullMode = GfxCullMode.Back;
             else
-                megaStateFlags.cullMode = GfxCullMode.FrontAndBack;
+                throw "whoops";
 
             shapeHelper.setOnRenderInst(renderInst);
             this.mobj.materialHelper.allocateDrawParamsDataOnInst(renderInst, drawParams);

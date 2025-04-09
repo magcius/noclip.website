@@ -612,7 +612,7 @@ export class Map {
                             if (command === 0x00) {
                                 snoopPresent = true;
                                 const sectionID = view.getUint32(currf3dexOffset + 0x04, false);
-                                const currSection = this.sections.find((section) => section.meshID == sectionID);
+                                const currSection = this.sections.find((section) => section.meshID === sectionID);
 
                                 if (currSection !== undefined) {
                                     this.displayLists.push({

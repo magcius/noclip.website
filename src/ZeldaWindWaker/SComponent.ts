@@ -19,6 +19,10 @@ export function cLib_addCalc2(src: number, target: number, speed: number, maxVel
     return src + clampAbs(speed * (target - src), 0.0, maxVel);
 }
 
+export function cLib_addCalc0(src: number, speed: number, maxVel: number): number {
+    return cLib_addCalc2(src, 0.0, speed, maxVel);
+}
+
 export function cLib_addCalcAngleRad(src: number, target: number, speed: number, maxVel: number, minVel: number): number {
     if (speed === 0.0)
         return src;

@@ -1,29 +1,29 @@
-
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase.js";
 import { SourceFileSystem, SourceLoadContext } from "./Main.js";
 import { createScene } from "./Scenes.js";
+
+const pathRoot = `HalfLife2_2024`;
+const pathHL2 = `${pathRoot}/hl2`;
 
 class HalfLife2SceneDesc implements SceneDesc {
     constructor(public id: string, public name: string = id) {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext) {
-        const filesystem = await context.dataShare.ensureObject(`${pathBase}/SourceFileSystem`, async () => {
+        const filesystem = await context.dataShare.ensureObject(`${pathHL2}/SourceFileSystem`, async () => {
             const filesystem = new SourceFileSystem(context.dataFetcher);
             await Promise.all([
-                filesystem.createVPKMount(`${pathBase}/hl2_textures`),
-                filesystem.createVPKMount(`${pathBase}/hl2_misc`),
+                filesystem.createVPKMount(`${pathHL2}/hl2_textures`),
+                filesystem.createVPKMount(`${pathHL2}/hl2_misc`),
             ]);
             return filesystem;
         });
 
         const loadContext = new SourceLoadContext(filesystem);
-        return createScene(context, loadContext, this.id, `${pathBase}/maps/${this.id}.bsp`);
+        return createScene(context, loadContext, this.id, `${pathHL2}/maps/${this.id}.bsp`);
     }
 }
-
-const pathBase = `HalfLife2`;
 
 const id = 'HalfLife2';
 const name = 'Half-Life 2';

@@ -2,18 +2,18 @@
 import { mat4, ReadonlyMat4, ReadonlyVec3, vec3 } from 'gl-matrix';
 import { IS_DEVELOPMENT } from '../BuildVersion.js';
 import { computeViewSpaceDepthFromWorldSpacePoint } from '../Camera.js';
-import { Color, colorCopy, colorLerp, colorNewCopy, Cyan, Green, Magenta, Red, White } from '../Color.js';
+import { Color, colorCopy, colorLerp, colorNewCopy, Cyan, Green, Magenta, Red, White, Yellow } from '../Color.js';
 import { drawWorldSpaceAABB, drawWorldSpaceLine, drawWorldSpaceLocator, drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from '../DebugJunk.js';
 import { AABB } from '../Geometry.js';
 import { projectionMatrixConvertClipSpaceNearZ } from '../gfx/helpers/ProjectionHelpers.js';
 import { projectionMatrixReverseDepth } from '../gfx/helpers/ReversedDepthHelpers.js';
-import { GfxClipSpaceNearZ, GfxDevice, GfxFormat } from '../gfx/platform/GfxPlatform.js';
+import { GfxBuffer, GfxBufferUsage, GfxClipSpaceNearZ, GfxCompareMode, GfxDevice, GfxFormat } from '../gfx/platform/GfxPlatform.js';
 import { GfxrGraphBuilder, GfxrRenderTargetDescription } from '../gfx/render/GfxRenderGraph.js';
 import { GfxRenderInstManager, setSortKeyDepth } from '../gfx/render/GfxRenderInstManager.js';
-import { clamp, computeModelMatrixR, computeModelMatrixSRT, getMatrixAxis, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, lerp, MathConstants, projectionMatrixForFrustum, randomRange, saturate, scaleMatrix, setMatrixTranslation, transformVec3Mat4w1, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from '../MathHelpers.js';
+import { clamp, computeModelMatrixR, computeModelMatrixSRT, getMatrixAxis, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, lerp, MathConstants, projectionMatrixForFrustum, randomRange, saturate, scaleMatrix, setMatrixTranslation, transformVec3Mat4w1, vec3SetAll, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from '../MathHelpers.js';
 import { getRandomInt, getRandomVector } from '../SuperMarioGalaxy/ActorUtil.js';
 import { arrayRemove, assert, assertExists, fallbackUndefined, leftPad, nArray, nullify } from '../util.js';
-import { BSPEntity } from './BSPFile.js';
+import { BSPEntity, DecalSurface } from './BSPFile.js';
 import { BSPModelRenderer, BSPRenderer, BSPSurfaceRenderer, ProjectedLightRenderer, RenderObjectKind, SourceEngineView, SourceEngineViewType, SourceRenderContext, SourceRenderer, SourceWorldViewRenderer } from './Main.js';
 import { ParticleControlPoint, ParticleSystemInstance } from './ParticleSystem.js';
 import { SpriteInstance } from './Sprite.js';
@@ -23,6 +23,7 @@ import { vmtParseColor, vmtParseNumber, vmtParseVector } from './VMT.js';
 import { EntityMaterialParameters, FogParams, BaseMaterial } from './Materials/MaterialBase.js';
 import { ParameterReference, paramSetNum } from './Materials/MaterialParameters.js';
 import { LightCache, worldLightingCalcColorForPoint } from './Materials/WorldLight.js';
+import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers.js';
 
 type EntityMessageValue = string;
 
@@ -138,7 +139,7 @@ export class BaseEntity {
     private seqrate = 1;
     private holdAnimation: boolean = false;
 
-    constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, private bspRenderer: BSPRenderer, protected entity: BSPEntity) {
+    constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, protected bspRenderer: BSPRenderer, protected entity: BSPEntity) {
         if (entity.model)
             this.setModelName(renderContext, entity.model);
 
@@ -290,10 +291,12 @@ export class BaseEntity {
         this.playSequenceIndex(this.findSequenceLabel(label));
     }
 
-    public spawn(entitySystem: EntitySystem): void {
+    public setupParent(entitySystem: EntitySystem): void {
         if (this.entity.parentname)
             this.setParentEntity(entitySystem.findEntityByTargetName(this.entity.parentname));
+    }
 
+    public spawn(entitySystem: EntitySystem): void {
         if (this.entity.defaultanim) {
             this.seqdefaultindex = this.findSequenceLabel(this.entity.defaultanim);
             this.playSequenceIndex(this.seqdefaultindex);
@@ -1110,6 +1113,7 @@ abstract class BaseDoor extends BaseToggle {
     }
 
     private hitTop(entitySystem: EntitySystem): void {
+        this.toggleState = ToggleState.Top;
         this.output_onFullyOpen.fire(entitySystem, this, this);
 
         if (this.wait > 0) {
@@ -1118,6 +1122,7 @@ abstract class BaseDoor extends BaseToggle {
     }
 
     private hitBottom(entitySystem: EntitySystem): void {
+        this.toggleState = ToggleState.Bottom;
         this.output_onFullyClosed.fire(entitySystem, this, this);
     }
 
@@ -1198,7 +1203,7 @@ class func_door extends BaseDoor {
             scratchAABB.transform(this.modelBSP.model.bbox, scratchMat4a);
         else if (this.modelStudio !== null)
             scratchAABB.transform(this.modelStudio.modelData.viewBB, scratchMat4a);
-        scratchAABB.extents(this.modelExtents);
+        scratchAABB.getHalfExtents(this.modelExtents);
 
         angleVec(scratchVec3a, null, null, this.moveDir);
         const moveDistance = Math.abs(vec3.dot(scratchVec3a, this.modelExtents) * 2.0) - this.lip;
@@ -1566,7 +1571,7 @@ class func_tracktrain extends BaseEntity {
 
     private output_onstart = new EntityOutput();
 
-    private currentPath: path_track;
+    private currentPath: path_track | null = null;
     private waitTime = 0.0;
     private activated = false;
 
@@ -1584,7 +1589,7 @@ class func_tracktrain extends BaseEntity {
     public override spawn(entitySystem: EntitySystem): void {
         super.spawn(entitySystem);
 
-        this.currentPath = assertExists(entitySystem.findEntityByTargetName(this.entity.target) as path_track);
+        this.currentPath = this.entity.target !== undefined ? entitySystem.findEntityByTargetName(this.entity.target) as path_track : null;
         this.velocityType = Number(fallbackUndefined(this.entity.velocitytype, '0'));
         this.orientationType = Number(fallbackUndefined(this.entity.orientationtype, '0'));
         this.length = Number(fallbackUndefined(this.entity.wheels, '0'));
@@ -1602,6 +1607,9 @@ class func_tracktrain extends BaseEntity {
 
     public override movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
         super.movement(entitySystem, renderContext);
+
+        if (this.currentPath === null)
+            return;
 
         if (!this.activated) {
             vec3.copy(this.localOrigin, this.currentPath.localOrigin);
@@ -3938,7 +3946,7 @@ export class point_camera extends BaseEntity {
         super(entitySystem, renderContext, bspRenderer, entity);
 
         this.fovY = Number(this.entity.fov);
-        this.useScreenAspectRatio = fallbackUndefined(this.entity.usescreenaspectratio, '1') !== '0';
+        this.useScreenAspectRatio = fallbackUndefined(this.entity.usescreenaspectratio, '0') !== '0';
 
         this.viewRenderer.pvsFallback = false;
         this.viewRenderer.renderObjectMask &= ~(RenderObjectKind.DetailProps);
@@ -4151,6 +4159,91 @@ class info_particle_system extends BaseEntity {
     }
 }
 
+class infodecal extends BaseEntity {
+    public static classname = `infodecal`;
+    private materialInstance: BaseMaterial | null = null;
+    private vertexBuffer: GfxBuffer | null = null;
+    private indexBuffer: GfxBuffer | null = null;
+    private surfaces: DecalSurface[] = [];
+    private bbox = new AABB();
+
+    constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        super(entitySystem, renderContext, bspRenderer, entity);
+
+        const texture = entity['texture'];
+        this.bindMaterial(renderContext, texture);
+    }
+
+    private async bindMaterial(renderContext: SourceRenderContext, materialName: string) {
+        const materialInstance = await renderContext.materialCache.createMaterialInstance(materialName);
+        materialInstance.entityParams = this.ensureMaterialParams();
+        materialInstance.hasVertexColorInput = false;
+        await materialInstance.init(renderContext);
+        this.materialInstance = materialInstance;
+
+        this.spawnDecal(renderContext);
+    }
+
+    private spawnDecal(renderContext: SourceRenderContext): void {
+        assert(this.materialInstance !== null);
+        const tex = assertExists(this.materialInstance.representativeTexture);
+        const decalScale = this.materialInstance.paramGetNumber('$decalscale');
+        const halfWidth = tex.width * decalScale * 0.5;
+        const halfHeight = tex.height * decalScale * 0.5;
+
+        this.getAbsOrigin(scratchVec3a);
+        const decalResult = this.bspRenderer.bsp.buildDecal(scratchVec3a, halfWidth, halfHeight);
+
+        const device = renderContext.renderCache.device;
+        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, decalResult.vertexData);
+        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, decalResult.indexData);
+        this.surfaces = decalResult.surfaces;
+
+        for (let i = 0; i < this.surfaces.length; i++)
+            this.bbox.union(this.bbox, this.surfaces[i].bbox);
+    }
+
+    public override getLocalRenderBounds(dst: AABB): boolean {
+        dst.copy(this.bbox);
+        return true;
+    }
+
+    public override prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager): void {
+        if (renderContext.currentView.viewType !== SourceEngineViewType.MainView)
+            return;
+
+        if (this.materialInstance === null || this.vertexBuffer === null || this.indexBuffer === null)
+            return;
+
+        const template = renderInstManager.pushTemplate();
+        template.setVertexInput(this.bspRenderer.inputLayout, [{ buffer: this.vertexBuffer, byteOffset: 0 }], { buffer: this.indexBuffer, byteOffset: 0 });
+        this.materialInstance.setOnRenderInstModelMatrix(template, null);
+
+        this.materialInstance.calcProjectedLight(renderContext, this.bbox);
+
+        for (let i = 0; i < this.surfaces.length; i++) {
+            const surface = this.surfaces[i];
+            if (!renderContext.currentView.frustum.contains(surface.bbox))
+                return;
+
+            const renderInst = renderInstManager.newRenderInst();
+            this.materialInstance.setOnRenderInst(renderContext, renderInst, surface.lightmapPackerPageIndex);
+            renderInst.setDrawCount(surface.indexCount, surface.startIndex);
+            this.materialInstance.getRenderInstListForView(renderContext.currentView).submitRenderInst(renderInst);
+        }
+
+        renderInstManager.popTemplate();
+    }
+
+    public override destroy(device: GfxDevice): void {
+        super.destroy(device);
+        if (this.vertexBuffer !== null)
+            device.destroyBuffer(this.vertexBuffer);
+        if (this.indexBuffer !== null)
+            device.destroyBuffer(this.indexBuffer);
+    }
+}
+
 interface EntityFactory<T extends BaseEntity = BaseEntity> {
     new(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity): T;
     classname: string;
@@ -4219,6 +4312,7 @@ export class EntityFactoryRegistry {
         this.registerFactory(info_camera_link);
         this.registerFactory(info_player_start);
         // this.registerFactory(info_particle_system);
+        this.registerFactory(infodecal);
         this.registerFactory(path_track);
     }
 
@@ -4378,9 +4472,19 @@ export class EntitySystem {
             // Still fetching; nothing to do.
             return;
         } else if (spawnStateAction === SpawnState.ReadyForSpawn) {
-            for (let i = 0; i < this.entities.length; i++)
-                if (this.entities[i].spawnState === SpawnState.ReadyForSpawn)
-                    this.entities[i].spawn(this);
+            // Set all parent relationships so that the origin relationships are correct
+            // before calling the spawn method on anything.
+            for (let i = 0; i < this.entities.length; i++) {
+                const entity = this.entities[i];
+                if (entity.spawnState === SpawnState.ReadyForSpawn)
+                    entity.setupParent(this);
+            }
+
+            for (let i = 0; i < this.entities.length; i++) {
+                const entity = this.entities[i];
+                if (entity.spawnState === SpawnState.ReadyForSpawn)
+                    entity.spawn(this);
+            }
         }
 
         this.processOutputQueue();

@@ -29,8 +29,8 @@ export interface ANCS {
 }
 
 export function parse(stream: InputStream, resourceSystem: ResourceSystem, assetID: string): ANCS {
-    assert(stream.readUint16() == 1); // ANCS version
-    assert(stream.readUint16() == 1); // character set version
+    assert(stream.readUint16() === 1); // ANCS version
+    assert(stream.readUint16() === 1); // character set version
     const numChars = stream.readUint32();
     const charSet: MetroidCharacter[] = [];
 
@@ -61,7 +61,7 @@ export function parse(stream: InputStream, resourceSystem: ResourceSystem, asset
         const pas4 = stream.readFourCC();
         const numAnimStates = stream.readUint32();
         const defaultAnimState = stream.readUint32();
-        assert(pas4 == 'PAS4');
+        assert(pas4 === 'PAS4');
 
         for (let stateIdx = 0; stateIdx < numAnimStates; stateIdx++) {
             stream.skip(4);
@@ -74,7 +74,7 @@ export function parse(stream: InputStream, resourceSystem: ResourceSystem, asset
                 const parmType = stream.readUint32();
                 assert(parmType >= 0 && parmType <= 4);
 
-                const parmValueSize = (parmType == 3 ? 1 : 4);
+                const parmValueSize = (parmType === 3 ? 1 : 4);
                 stream.skip(8);
                 stream.skip(parmValueSize * 2);
                 combinedParmSize += parmValueSize;

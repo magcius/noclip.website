@@ -74,8 +74,7 @@ pub struct M2TrackPartial<T> {
 }
 
 impl<T> M2TrackPartial<T> {
-    pub fn allocate(&mut self, data: &[u8]) -> Result<(), String>
-        where for<'a> T: DekuRead<'a> {
+    pub fn allocate(&mut self, data: &[u8]) -> Result<(), String> where for<'a> T: DekuReader<'a> {
         self.timestamps = Some(self.timestamps_unallocated.to_vec(data)?);
         self.values = Some(self.values_unallocated.to_vec(data)?);
 
@@ -102,8 +101,7 @@ pub struct M2Track<T> {
 }
 
 impl<T> M2Track<T> {
-    pub fn allocate(&mut self, data: &[u8]) -> Result<(), String>
-        where for<'a> T: DekuRead<'a> {
+    pub fn allocate(&mut self, data: &[u8]) -> Result<(), String> where for<'a> T: DekuReader<'a> {
         let mut timestamps = Vec::new();
         for arr in self.timestamps_unallocated.to_vec(data)? {
             timestamps.push(arr.to_vec(data)?);

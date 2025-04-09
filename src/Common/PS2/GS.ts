@@ -551,7 +551,7 @@ export function gsMemoryMapReadImagePSMT4_PSMCT32(pixels: Uint8Array, map: GSMem
             pixels[dstIdx + 0] = map.data[p + 0x00];
             pixels[dstIdx + 1] = map.data[p + 0x01];
             pixels[dstIdx + 2] = map.data[p + 0x02];
-            const rawAlpha = alphaReg == -1 ? map.data[p + 0x03] : alphaReg;
+            const rawAlpha = alphaReg === -1 ? map.data[p + 0x03] : alphaReg;
             pixels[dstIdx + 3] = Math.min(0xFF, rawAlpha * 2);
 
             dstIdx += 0x04;
@@ -577,7 +577,7 @@ export function gsMemoryMapReadImagePSMT8_PSMCT32(pixels: Uint8Array, map: GSMem
             pixels[dstIdx + 0] = map.data[p + 0x00];
             pixels[dstIdx + 1] = map.data[p + 0x01];
             pixels[dstIdx + 2] = map.data[p + 0x02];
-            const rawAlpha = alphaReg == -1 ? map.data[p + 0x03] : alphaReg;
+            const rawAlpha = alphaReg === -1 ? map.data[p + 0x03] : alphaReg;
             pixels[dstIdx + 3] = Math.min(0xFF, rawAlpha * 2);
 
             dstIdx += 0x04;
@@ -603,7 +603,7 @@ export function gsMemoryMapReadImagePSMT8H_PSMCT32(pixels: Uint8Array, map: GSMe
             pixels[dstIdx + 0] = map.data[p + 0x00];
             pixels[dstIdx + 1] = map.data[p + 0x01];
             pixels[dstIdx + 2] = map.data[p + 0x02];
-            const rawAlpha = alphaReg == -1 ? map.data[p + 0x03] : alphaReg;
+            const rawAlpha = alphaReg === -1 ? map.data[p + 0x03] : alphaReg;
             pixels[dstIdx + 3] = Math.min(0xFF, rawAlpha * 2);
 
             dstIdx += 0x04;
@@ -624,7 +624,7 @@ export function gsMemoryMapReadImagePSMT4HH_PSMCT32(pixels: Uint8Array, map: GSM
             pixels[dstIdx + 0] = map.data[p + 0x00];
             pixels[dstIdx + 1] = map.data[p + 0x01];
             pixels[dstIdx + 2] = map.data[p + 0x02];
-            const rawAlpha = alphaReg == -1 ? map.data[p + 0x03] : alphaReg;
+            const rawAlpha = alphaReg === -1 ? map.data[p + 0x03] : alphaReg;
             pixels[dstIdx + 3] = Math.min(0xFF, rawAlpha * 2);
 
             dstIdx += 0x04;
@@ -646,7 +646,7 @@ export function gsMemoryMapReadImagePSMT4HL_PSMCT32(pixels: Uint8Array, map: GSM
             pixels[dstIdx + 0] = map.data[p + 0x00];
             pixels[dstIdx + 1] = map.data[p + 0x01];
             pixels[dstIdx + 2] = map.data[p + 0x02];
-            const rawAlpha = alphaReg == -1 ? map.data[p + 0x03] : alphaReg;
+            const rawAlpha = alphaReg === -1 ? map.data[p + 0x03] : alphaReg;
             pixels[dstIdx + 3] = Math.min(0xFF, rawAlpha * 2);
 
             dstIdx += 0x04;

@@ -27,6 +27,7 @@ export interface SceneContext {
     destroyablePool: Destroyable[];
     inputManager: InputManager;
     viewerInput: ViewerRenderInput;
+    initialSceneTime: number;
 }
 
 export interface SceneDesc {

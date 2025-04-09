@@ -1,22 +1,21 @@
 
-import { NameObj } from "../NameObj.js";
-import { SceneObjHolder, SceneObj } from "../Main.js";
-import { connectToSceneMapObjMovement, getPlayerPos, getAreaObj, connectToScene3DModelFor2D, showModel, hideModel, startBrk, setBrkFrameAndStop, getBrkFrameMax, startBtk, startBckWithInterpole, isBckStopped, setBckFrameAndStop, getBckFrameMax, setMtxAxisXYZ, getCamYdir } from "../ActorUtil.js";
-import { ViewerRenderInput } from "../../viewer.js";
-import { vec3, vec2, vec4, mat4, ReadonlyVec3, ReadonlyVec4 } from "gl-matrix";
-import { AreaObj, AreaFormType } from "../AreaObj.js";
-import { JMapInfoIter, getJMapInfoArg0 } from "../JMapInfo.js";
-import { fallback } from "../../util.js";
-import { LiveActor, ZoneAndLayer, isDead, dynamicSpawnZoneAndLayer } from "../LiveActor.js";
-import { isFirstStep } from "../Spine.js";
-import { saturate, MathConstants, setMatrixTranslation, transformVec3Mat4w1, vec3SetAll } from "../../MathHelpers.js";
-import { divideByW } from "../../Camera.js";
+import { ReadonlyVec3, mat4, vec2, vec3 } from "gl-matrix";
+import { MathConstants, saturate, setMatrixTranslation, transformVec3Mat4w1, vec3SetAll } from "../../MathHelpers.js";
 import { PeekZManager, PeekZResult } from "../../ZeldaWindWaker/d_dlst_peekZ.js";
-import { GfxDevice, GfxCompareMode, GfxClipSpaceNearZ } from "../../gfx/platform/GfxPlatform.js";
+import { gfxDeviceNeedsFlipY } from "../../gfx/helpers/GfxDeviceHelpers.js";
 import { compareDepthValues } from "../../gfx/helpers/ReversedDepthHelpers.js";
+import { GfxClipSpaceNearZ, GfxCompareMode, GfxDevice } from "../../gfx/platform/GfxPlatform.js";
 import { GfxrGraphBuilder, GfxrRenderTargetID } from "../../gfx/render/GfxRenderGraph.js";
 import { GfxRenderInstManager } from "../../gfx/render/GfxRenderInstManager.js";
-import { gfxDeviceNeedsFlipY } from "../../gfx/helpers/GfxDeviceHelpers.js";
+import { fallback } from "../../util.js";
+import { ViewerRenderInput } from "../../viewer.js";
+import { connectToScene3DModelFor2D, connectToSceneMapObjMovement, getAreaObj, getBckFrameMax, getBrkFrameMax, getCamYdir, getPlayerPos, hideModel, isBckStopped, setBckFrameAndStop, setBrkFrameAndStop, setMtxAxisXYZ, showModel, startBckWithInterpole, startBrk, startBtk } from "../ActorUtil.js";
+import { AreaFormType, AreaObj } from "../AreaObj.js";
+import { JMapInfoIter, getJMapInfoArg0 } from "../JMapInfo.js";
+import { LiveActor, ZoneAndLayer, dynamicSpawnZoneAndLayer, isDead } from "../LiveActor.js";
+import { SceneObj, SceneObjHolder } from "../Main.js";
+import { NameObj } from "../NameObj.js";
+import { isFirstStep } from "../Spine.js";
 
 function calcRotateY(x: number, y: number): number {
     return (MathConstants.TAU / 4) + Math.atan2(-y, x);
@@ -43,16 +42,10 @@ const scratchVec2 = vec2.create();
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
 const scratchVec3c = vec3.create();
-const scratchVec4 = vec4.create();
+const scratchVec3 = vec3.create();
 const scratchMatrix = mat4.create();
 
-function project(dst: vec4, v: ReadonlyVec3, viewerInput: ViewerRenderInput): void {
-    vec4.set(dst, v[0], v[1], v[2], 1.0);
-    vec4.transformMat4(dst, dst, viewerInput.camera.clipFromWorldMatrix);
-    divideByW(dst, dst);
-}
-
-function calcScreenPosition(dst: vec2, v: ReadonlyVec4, viewerInput: ViewerRenderInput): void {
+function calcScreenPosition(dst: vec2, v: ReadonlyVec3, viewerInput: ViewerRenderInput): void {
     dst[0] = (v[0] * 0.5 + 0.5) * viewerInput.backbufferWidth;
     dst[1] = (v[1] * 0.5 + 0.5) * viewerInput.backbufferHeight;
 }
@@ -88,8 +81,8 @@ export class BrightObjBase {
         checkArg.pointsVisibleNum = 0;
         vec2.set(checkArg.posCenterAccum, 0.0, 0.0);
 
-        project(scratchVec4, position, sceneObjHolder.viewerInput);
-        calcScreenPosition(checkArg.posCenter, scratchVec4, sceneObjHolder.viewerInput);
+        vec3.transformMat4(scratchVec3, position, sceneObjHolder.viewerInput.camera.clipFromWorldMatrix);
+        calcScreenPosition(checkArg.posCenter, scratchVec3, sceneObjHolder.viewerInput);
         this.checkVisible(sceneObjHolder, checkArg, position);
 
         for (let i = 0; i < 8; i++) {
@@ -114,7 +107,7 @@ export class BrightObjBase {
     }
 
     private checkVisible(sceneObjHolder: SceneObjHolder, checkArg: BrightObjCheckArg, position: ReadonlyVec3): void {
-        project(scratchVec4, position, sceneObjHolder.viewerInput);
+        vec3.transformMat4(scratchVec3, position, sceneObjHolder.viewerInput.camera.clipFromWorldMatrix);
 
         let peekZResult: PeekZResult;
         if (checkArg.pointsNum === checkArg.peekZ.length) {
@@ -124,8 +117,8 @@ export class BrightObjBase {
             peekZResult = checkArg.peekZ[checkArg.pointsNum];
         }
 
-        let x = scratchVec4[0];
-        let y = scratchVec4[1];
+        let x = scratchVec3[0];
+        let y = scratchVec3[1];
         if (!gfxDeviceNeedsFlipY(sceneObjHolder.modelCache.device))
             y *= -1;
 
@@ -137,7 +130,7 @@ export class BrightObjBase {
             // Test if the depth buffer is less than our projected Z coordinate.
             // Depth buffer readback should result in 0.0 for the near plane, and 1.0 for the far plane.
             // Put projected coordinate in 0-1 normalized space.
-            let projectedZ = scratchVec4[2];
+            let projectedZ = scratchVec3[2];
 
             if (sceneObjHolder.modelCache.device.queryVendorInfo().clipSpaceNearZ === GfxClipSpaceNearZ.NegativeOne)
                 projectedZ = projectedZ * 0.5 + 0.5;
@@ -146,7 +139,7 @@ export class BrightObjBase {
 
             if (visible) {
                 checkArg.pointsVisibleNum++;
-                calcScreenPosition(scratchVec2, scratchVec4, sceneObjHolder.viewerInput);
+                calcScreenPosition(scratchVec2, scratchVec3, sceneObjHolder.viewerInput);
                 vec2.add(checkArg.posCenterAccum, checkArg.posCenterAccum, scratchVec2);
             }
         }

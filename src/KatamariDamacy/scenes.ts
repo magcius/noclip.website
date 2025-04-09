@@ -145,7 +145,7 @@ const lightingSetupList: number[] = [0, 0, 1, 2, 0, 0, 0, 0, 0, 3, 4, 0, 0];
 
 const lightDirScratch = vec3.create();
 export function fillSceneParamsData(d: Float32Array, camera: Camera, lightingIndex: number = -1, offs: number = 0): void {
-    offs += fillMatrix4x4(d, offs, camera.projectionMatrix);
+    offs += fillMatrix4x4(d, offs, camera.clipFromWorldMatrix);
     if (lightingIndex === -1) {
         for (let i = 0; i < 5; i++)
             offs += fillVec3v(d, offs, Vec3Zero);

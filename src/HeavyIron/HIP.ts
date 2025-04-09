@@ -19,7 +19,7 @@ class HIPStream {
         let s = '';
         while (true) {
             const c = this.view.getUint8(this.pos++);
-            if (c == 0) {
+            if (c === 0) {
                 break;
             }
             s += String.fromCharCode(c);
@@ -96,7 +96,7 @@ export class HIPFile {
 
     public findAsset(id: number): HIPAsset | undefined {
         return this.assets.find((asset: HIPAsset) => {
-            return asset.id == id;
+            return asset.id === id;
         });
     }
 

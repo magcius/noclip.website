@@ -51,15 +51,15 @@ layout(std140) uniform ub_ObjectParams {
     // We support up to N lights.
     WorldLight u_WorldLights[${ShaderTemplate_Generic.MaxDynamicWorldLights}];
 #endif
-    Mat4x2 u_BaseTextureTransform;
+    Mat2x4 u_BaseTextureTransform;
 #if defined USE_BUMPMAP
-    Mat4x2 u_BumpmapTransform;
+    Mat2x4 u_BumpmapTransform;
 #endif
 #if defined USE_BUMPMAP2
-    Mat4x2 u_Bumpmap2Transform;
+    Mat2x4 u_Bumpmap2Transform;
 #endif
 #if defined USE_DETAIL
-    Mat4x2 u_DetailTextureTransform;
+    Mat2x4 u_DetailTextureTransform;
 #endif
 #if defined USE_ENVMAP_MASK
     vec4 u_EnvmapMaskScaleBias;
@@ -274,13 +274,13 @@ vec3 AmbientLight(in vec3 t_NormalWorld) {
 
 void CalcTreeSway(inout vec3 t_PositionLocal) {
 #if defined VERT && defined USE_TREE_SWAY
-    Mat4x3 t_WorldFromLocalMatrix = CalcWorldFromLocalMatrix();
+    mat4x3 t_WorldFromLocalMatrix = CalcWorldFromLocalMatrix();
     float t_WindIntensity = length(u_TreeSwayWindDir);
-    vec3 t_WindDirLocal = Mul(vec3(u_TreeSwayWindDir, 0.0), t_WorldFromLocalMatrix).xyz;
+    vec3 t_WindDirLocal = (vec3(u_TreeSwayWindDir, 0.0) * t_WorldFromLocalMatrix).xyz;
 
     vec3 t_PosOffs = vec3(0.0);
 
-    vec3 t_OriginWorld = Mul(t_WorldFromLocalMatrix, vec4(0.0, 0.0, 0.0, 1.0));
+    vec3 t_OriginWorld = t_WorldFromLocalMatrix * vec4(0.0, 0.0, 0.0, 1.0);
     float t_TimeOffset = dot(t_OriginWorld, vec3(1.0)) * 19.0;
 
     float t_SwayTime = (u_TreeSwayTime + t_TimeOffset) * u_TreeSwaySpeed;
@@ -314,12 +314,12 @@ void mainVS() {
     vec3 t_PositionLocal = a_Position;
     CalcTreeSway(t_PositionLocal);
 
-    Mat4x3 t_WorldFromLocalMatrix = CalcWorldFromLocalMatrix();
-    vec3 t_PositionWorld = Mul(t_WorldFromLocalMatrix, vec4(t_PositionLocal, 1.0));
+    mat4x3 t_WorldFromLocalMatrix = CalcWorldFromLocalMatrix();
+    vec3 t_PositionWorld = t_WorldFromLocalMatrix * vec4(t_PositionLocal, 1.0);
     v_PositionWorld.xyz = t_PositionWorld;
-    gl_Position = Mul(u_ProjectionView, vec4(t_PositionWorld, 1.0));
+    gl_Position = UnpackMatrix(u_ProjectionView) * vec4(t_PositionWorld, 1.0);
 
-    vec3 t_NormalWorld = normalize(Mul(t_WorldFromLocalMatrix, vec4(a_Normal.xyz, 0.0)));
+    vec3 t_NormalWorld = normalize(t_WorldFromLocalMatrix * vec4(a_Normal.xyz, 0.0));
 
 #if defined USE_VERTEX_COLOR
     v_Color = a_Color;
@@ -382,7 +382,7 @@ void mainVS() {
 #endif
 
 #if defined HAS_FULL_TANGENTSPACE
-    vec3 t_TangentSWorld = normalize(Mul(t_WorldFromLocalMatrix, vec4(a_TangentS.xyz, 0.0)));
+    vec3 t_TangentSWorld = normalize(t_WorldFromLocalMatrix * vec4(a_TangentS.xyz, 0.0));
     vec3 t_TangentTWorld = cross(t_TangentSWorld, t_NormalWorld);
 
     v_TangentSpaceBasis0 = t_TangentSWorld * a_TangentS.w;
@@ -390,7 +390,7 @@ void mainVS() {
 #endif
     v_TangentSpaceBasis2 = t_NormalWorld;
 
-    v_TexCoord0.xy = Mul(u_BaseTextureTransform, vec4(a_TexCoord01.xy, 1.0, 1.0));
+    v_TexCoord0.xy = UnpackMatrix(u_BaseTextureTransform) * vec4(a_TexCoord01.xy, 1.0, 1.0);
     v_TexCoord0.zw = a_TexCoord01.xy;
 #if defined USE_LIGHTMAP || defined USE_DECAL
     v_TexCoord1.xy = a_TexCoord01.zw;
@@ -659,7 +659,7 @@ void mainPS() {
         float t_SeamlessDetailScale = u_DetailTextureTransform.mx.x;
         t_DetailTexture = DebugColorTexture(SeamlessSampleTex(PP_SAMPLER_2D(u_TextureDetail), t_SeamlessDetailScale));
     } else {
-        vec2 t_DetailTexCoord = Mul(u_DetailTextureTransform, vec4(v_TexCoord0.zw, 1.0, 1.0));
+        vec2 t_DetailTexCoord = UnpackMatrix(u_DetailTextureTransform) * vec4(v_TexCoord0.zw, 1.0, 1.0);
         t_DetailTexture = DebugColorTexture(texture(SAMPLER_2D(u_TextureDetail), t_DetailTexCoord));
     }
     t_Albedo = CalcDetail(t_Albedo, t_DetailTexture);
@@ -674,7 +674,7 @@ void mainPS() {
     bool use_ssbump = ${MaterialUtil.getDefineBool(m, `USE_SSBUMP`)};
 
     // TODO(jstpierre): It seems like $bumptransform might not even be respected in lightmappedgeneric shaders?
-    vec2 t_BumpmapTexCoord = ${MaterialUtil.ifDefineBool(m, `USE_BUMPMAP`, `Mul(u_BumpmapTransform, vec4(v_TexCoord0.zw, 1.0, 1.0))`, `vec2(0.0)`)};
+    vec2 t_BumpmapTexCoord = ${MaterialUtil.ifDefineBool(m, `USE_BUMPMAP`, `UnpackMatrix(u_BumpmapTransform) * vec4(v_TexCoord0.zw, 1.0, 1.0)`, `vec2(0.0)`)};
     vec4 t_BumpmapSample = vec4(0.0);
     vec3 t_BumpmapNormal;
 
@@ -683,7 +683,7 @@ void mainPS() {
 
         bool use_bumpmap2 = ${MaterialUtil.getDefineBool(m, `USE_BUMPMAP2`)};
         if (use_bumpmap2) {
-            vec2 t_Bumpmap2TexCoord = ${MaterialUtil.ifDefineBool(m, `USE_BUMPMAP2`, `Mul(u_Bumpmap2Transform, vec4(v_TexCoord0.zw, 1.0, 1.0))`, `vec2(0.0)`)};
+            vec2 t_Bumpmap2TexCoord = ${MaterialUtil.ifDefineBool(m, `USE_BUMPMAP2`, `UnpackMatrix(u_Bumpmap2Transform) * vec4(v_TexCoord0.zw, 1.0, 1.0)`, `vec2(0.0)`)};
             vec4 t_Bumpmap2Sample = UnpackNormalMap(texture(SAMPLER_2D(u_TextureBumpmap2), t_Bumpmap2TexCoord));
 
             bool use_bumpmask = ${MaterialUtil.getDefineBool(m, `USE_BUMPMASK`)};
@@ -728,8 +728,6 @@ void mainPS() {
 
     // Lightmap Diffuse
     if (use_lightmap) {
-        vec3 t_LightmapColor0 = SampleLightmapTexture(texture(SAMPLER_2DArray(u_TextureLightmap), vec3(v_TexCoord1.xy, 0.0)));
-
         if (use_diffuse_bumpmap) {
             vec3 t_LightmapColor1 = SampleLightmapTexture(texture(SAMPLER_2DArray(u_TextureLightmap), vec3(v_TexCoord1.xy, 1.0)));
             vec3 t_LightmapColor2 = SampleLightmapTexture(texture(SAMPLER_2DArray(u_TextureLightmap), vec3(v_TexCoord1.xy, 2.0)));
@@ -737,7 +735,7 @@ void mainPS() {
 
             vec3 t_Influence;
 
-            bool t_NormalizeInfluence = true;
+            bool t_NormalizeInfluence = false;
 
             if (use_ssbump) {
                 // SSBUMP precomputes the elements of t_Influence (calculated below) offline.
@@ -771,6 +769,7 @@ void mainPS() {
             t_DiffuseLighting += t_LightmapColor2 * t_Influence.y;
             t_DiffuseLighting += t_LightmapColor3 * t_Influence.z;
         } else {
+            vec3 t_LightmapColor0 = SampleLightmapTexture(texture(SAMPLER_2DArray(u_TextureLightmap), vec3(v_TexCoord1.xy, 0.0)));
             t_DiffuseLighting.rgb = t_LightmapColor0;
         }
     } else {
@@ -779,7 +778,7 @@ void mainPS() {
 #if defined USE_STATIC_VERTEX_LIGHTING_3
             vec3 t_Influence;
 
-            if (false && use_bumpmap) {
+            if (use_bumpmap) {
                 t_Influence.x = clamp(dot(t_BumpmapNormal, g_RNBasis0), 0.0, 1.0);
                 t_Influence.y = clamp(dot(t_BumpmapNormal, g_RNBasis1), 0.0, 1.0);
                 t_Influence.z = clamp(dot(t_BumpmapNormal, g_RNBasis2), 0.0, 1.0);
@@ -902,7 +901,7 @@ void mainPS() {
 
 #if defined USE_PROJECTED_LIGHT
     // Projected Light (Flashlight, env_projected_texture)
-    vec4 t_ProjectedLightCoord = Mul(u_ProjectedLightFromWorldMatrix, vec4(v_PositionWorld.xyz, 1.0));
+    vec4 t_ProjectedLightCoord = UnpackMatrix(u_ProjectedLightFromWorldMatrix) * vec4(v_PositionWorld.xyz, 1.0);
     t_ProjectedLightCoord.xyz /= t_ProjectedLightCoord.www;
 
     // Clip space is between -1 and 1. Move it into 0...1 space.
@@ -1646,14 +1645,11 @@ export class Material_Generic extends BaseMaterial {
         // Compute modulation color.
         if (this.shaderType === GenericShaderType.Black) {
             colorCopy(MaterialUtil.scratchColor, OpaqueBlack);
+            MaterialUtil.scratchColor.a *= this.paramGetNumber('$alpha');
+            offs += fillColor(d, offs, MaterialUtil.scratchColor);
         } else {
-            colorCopy(MaterialUtil.scratchColor, White);
-            this.paramGetVector('$color').mulColor(MaterialUtil.scratchColor);
-            this.paramGetVector('$color2').mulColor(MaterialUtil.scratchColor);
+            offs += this.paramFillModulationColor(d, offs, false);
         }
-
-        MaterialUtil.scratchColor.a *= this.paramGetNumber('$alpha');
-        offs += fillColor(d, offs, MaterialUtil.scratchColor);
 
         const alphaTestReference = this.paramGetNumber('$alphatestreference');
         const detailBlendFactor = this.paramGetNumber('$detailblendfactor');

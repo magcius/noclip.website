@@ -250,7 +250,7 @@ class ModelExhibitRenderer extends SFARenderer {
                 mat4.mul(jointMtx, jointMtx, matrix);
                 const jointPt = vec3.create();
                 mat4.getTranslation(jointPt, jointMtx);
-                if (joint.parent != 0xff) {
+                if (joint.parent !== 0xff) {
                     const parentMtx = mat4.clone(modelInst.skeletonInst!.getJointMatrix(joint.parent));
                     mat4.mul(parentMtx, parentMtx, matrix);
                     const parentPt = vec3.create();

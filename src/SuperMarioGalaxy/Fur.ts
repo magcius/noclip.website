@@ -665,23 +665,25 @@ export function initMultiFur(sceneObjHolder: SceneObjHolder, actor: LiveActor, l
         if (bodyMapSamplerIndex === -1)
             bodyMapSamplerIndex = 0;
 
+        const resourceHolder = actor.modelManager!.resourceHolder;
+
         const lengthMapName = `${materialName}Length.bti`;
-        const lengthMapData = actor.resourceHolder.arc.findFileData(lengthMapName);
+        const lengthMapData = resourceHolder.arc.findFileData(lengthMapName);
         const lengthMap = lengthMapData !== null ? BTI.parse(lengthMapData, lengthMapName).texture : null;
 
         const indirectMapName = `${materialName}Indirect.bti`;
-        const indirectMapData = actor.resourceHolder.arc.findFileData(indirectMapName);
+        const indirectMapData = resourceHolder.arc.findFileData(indirectMapName);
         const indirectMap = indirectMapData !== null ? BTI.parse(indirectMapData, indirectMapName).texture : null;
 
         const densityMapName = `${materialName}Density.bti`;
-        const densityMapData = actor.resourceHolder.arc.findFileData(densityMapName);
+        const densityMapData = resourceHolder.arc.findFileData(densityMapName);
         const densityMap = densityMapData !== null ? BTI.parse(densityMapData, densityMapName).texture : null;
 
         const furParam = Object.assign({}, defaultFurParam) as FurParam;
         const dynFurParam = new DynamicFurParam();
         dynFurParam.lightType = lightType;
 
-        const furTxt = actor.resourceHolder.arc.findFileData(`${materialName}.fur.txt`);
+        const furTxt = resourceHolder.arc.findFileData(`${materialName}.fur.txt`);
         if (furTxt !== null)
             initFurParamFromDVD(furParam, dynFurParam, furTxt);
 

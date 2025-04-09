@@ -86,7 +86,7 @@ function parseMaterial(buffer: ArrayBufferSlice, texs:MPHTex[]): MDL0Material {
 
     let width;
     let height;
-    if (palletIndex == 0xFFFF || textureIndex == 0xFFFF) {
+    if (palletIndex === 0xFFFF || textureIndex === 0xFFFF) {
         paletteName = null;
         textureName = null;
         width = 1.0;
@@ -423,14 +423,14 @@ export function parseMPH_Model(buffer: ArrayBufferSlice): MPHbin {
         return transform;
     }
     function computeNodeMatrices(index: number){
-        if(mphNode.length == 0 || index == -1){
+        if(mphNode.length === 0 || index === -1){
             return;
         }
-        for (let i = index; i != -1;) {
+        for (let i = index; i !== -1;) {
             let node = mphNode[i];
             let transform = mat4.create();
             transform = computeNodeTransforms(node.scale, node.rotation, node.position);
-            if(node.parent == -1){
+            if(node.parent === -1){
                 node.transform = transform;
             } else {
                 mat4.multiply(node.transform, transform, mphNode[node.parent].transform);
@@ -438,7 +438,7 @@ export function parseMPH_Model(buffer: ArrayBufferSlice): MPHbin {
             const name = node.name;
             const jointMatrix = node.transform;
             nodes.push({ name, jointMatrix });
-            if(node.child != -1){
+            if(node.child !== -1){
                 computeNodeMatrices(node.child);
             }
             i = node.next;

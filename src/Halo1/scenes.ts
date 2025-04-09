@@ -67,16 +67,17 @@ varying vec3 v_Position;
     public static common = `
 precision mediump float;
 
+${GfxShaderLibrary.MatrixLibrary}
+
 layout(std140) uniform ub_SceneParams {
-    Mat4x4 u_Projection;
-    Mat4x4 u_ViewMatrix;
+    Mat4x4 u_ProjectionView;
     vec3 u_PlayerPos;
     vec4 u_FogColor;
     vec4 u_FogDistances;
 };
 
 layout(std140) uniform ub_ModelParams {
-    Mat4x4 u_ModelMatrix;
+    Mat3x4 u_ModelMatrix;
 };
 
 layout(binding = 0) uniform sampler2D u_Texture0;
@@ -128,17 +129,18 @@ vec3 CalcTangentToWorld(in vec3 t_TangentNormal, in vec3 t_Basis0, in vec3 t_Bas
 
     public override vert = `
 ${BaseProgram.vertexAttrs}
-vec4 toWorldCoord(vec4 x) {
-    return Mul(u_ModelMatrix, x);
-}
+
+${GfxShaderLibrary.MulNormalMatrix}
 
 void mainVS() {
-    gl_Position = Mul(u_Projection, Mul(u_ViewMatrix, toWorldCoord(vec4(a_Position, 1.0))));
+    mat4x3 t_ModelMatrix = UnpackMatrix(u_ModelMatrix);
+    vec3 t_PositionWorld = t_ModelMatrix * vec4(a_Position, 1.0);
+    gl_Position = UnpackMatrix(u_ProjectionView) * vec4(t_PositionWorld, 1.0);
     v_UV = a_TexCoord;
-    v_Normal = normalize(toWorldCoord(vec4(a_Normal.xyz, 0.0)).xyz);
-    v_Binormal = normalize(toWorldCoord(vec4(a_Binormal.xyz, 0.0)).xyz);
-    v_Tangent = normalize(toWorldCoord(vec4(a_Tangent.xyz, 0.0)).xyz);
-    v_Position = toWorldCoord(vec4(a_Position.xyz, 1.0)).xyz;
+    v_Normal = MulNormalMatrix(t_ModelMatrix, a_Normal);
+    v_Binormal = normalize(t_ModelMatrix * vec4(a_Binormal.xyz, 0.0));
+    v_Tangent = normalize(t_ModelMatrix * vec4(a_Tangent.xyz, 0.0));
+    v_Position = t_PositionWorld;
 }
 `;
 
@@ -159,10 +161,10 @@ void mainVS() {
 class ShaderTransparencyGenericProgram extends BaseProgram {
     public static BindingsDefinition = `
 layout(std140) uniform ub_ShaderParams {
-    Mat4x2 u_MapTransform0;
-    Mat4x2 u_MapTransform1;
-    Mat4x2 u_MapTransform2;
-    Mat4x2 u_MapTransform3;
+    Mat2x4 u_MapTransform0;
+    Mat2x4 u_MapTransform1;
+    Mat2x4 u_MapTransform2;
+    Mat2x4 u_MapTransform3;
     vec4 u_Color0[8];
     vec4 u_Color1[8];
 };
@@ -177,10 +179,10 @@ layout(std140) uniform ub_ShaderParams {
         const fragBody: string[] = [];
 
         fragBody.push(`
-vec2 uv0 = Mul(u_MapTransform0, vec4(v_UV, 1.0, 1.0));
-vec2 uv1 = Mul(u_MapTransform1, vec4(v_UV, 1.0, 1.0));
-vec2 uv2 = Mul(u_MapTransform2, vec4(v_UV, 1.0, 1.0));
-vec2 uv3 = Mul(u_MapTransform3, vec4(v_UV, 1.0, 1.0));
+vec2 uv0 = UnpackMatrix(u_MapTransform0) * vec4(v_UV, 1.0, 1.0);
+vec2 uv1 = UnpackMatrix(u_MapTransform1) * vec4(v_UV, 1.0, 1.0);
+vec2 uv2 = UnpackMatrix(u_MapTransform2) * vec4(v_UV, 1.0, 1.0);
+vec2 uv3 = UnpackMatrix(u_MapTransform3) * vec4(v_UV, 1.0, 1.0);
 `);
         if (this.shader.first_map_type === rust.ShaderTransparentGenericMapType.Map2D) {
             fragBody.push(`vec4 t0 = texture(SAMPLER_2D(u_Texture0), uv0);`);
@@ -618,10 +620,10 @@ class MaterialRender_TransparencyGeneric {
 class ShaderTransparencyChicagoProgram extends BaseProgram {
     public static BindingsDefinition = `
 layout(std140) uniform ub_ShaderParams {
-    Mat4x2 u_MapTransform0;
-    Mat4x2 u_MapTransform1;
-    Mat4x2 u_MapTransform2;
-    Mat4x2 u_MapTransform3;
+    Mat2x4 u_MapTransform0;
+    Mat2x4 u_MapTransform1;
+    Mat2x4 u_MapTransform2;
+    Mat2x4 u_MapTransform3;
 };
 `;
 
@@ -656,10 +658,10 @@ layout(std140) uniform ub_ShaderParams {
             }
         }
         const fragBody: string[] = [
-            `vec2 uv0 = Mul(u_MapTransform0, vec4(v_UV, 1.0, 1.0));`,
-            `vec2 uv1 = Mul(u_MapTransform1, vec4(v_UV, 1.0, 1.0));`,
-            `vec2 uv2 = Mul(u_MapTransform2, vec4(v_UV, 1.0, 1.0));`,
-            `vec2 uv3 = Mul(u_MapTransform3, vec4(v_UV, 1.0, 1.0));`,
+            `vec2 uv0 = UnpackMatrix(u_MapTransform0) * vec4(v_UV, 1.0, 1.0);`,
+            `vec2 uv1 = UnpackMatrix(u_MapTransform1) * vec4(v_UV, 1.0, 1.0);`,
+            `vec2 uv2 = UnpackMatrix(u_MapTransform2) * vec4(v_UV, 1.0, 1.0);`,
+            `vec2 uv3 = UnpackMatrix(u_MapTransform3) * vec4(v_UV, 1.0, 1.0);`,
             `vec4 t0 = texture(SAMPLER_2D(u_Texture0), uv0);`,
             `vec4 t1 = texture(SAMPLER_2D(u_Texture1), uv1);`,
             `vec4 t2 = texture(SAMPLER_2D(u_Texture2), uv2);`,
@@ -775,7 +777,7 @@ void mainPS() {
 class ShaderTransparencyWaterProgram extends BaseProgram {
     public static BindingsDefinition = `
 layout(std140) uniform ub_ShaderParams {
-    Mat4x2 u_RippleTransform;
+    Mat2x4 u_RippleTransform;
     vec4 u_PerpendicularTint;
     vec4 u_ParallelTint;
 };
@@ -807,7 +809,7 @@ void mainPS() {
         t_ReflectionAlpha *= t_Base.a;
     }
 
-    vec2 uv = Mul(u_RippleTransform, vec4(v_UV, 1.0, 1.0));
+    vec2 uv = UnpackMatrix(u_RippleTransform) * vec4(v_UV, 1.0, 1.0);
     vec4 t_BumpMap = 2.0 * texture(SAMPLER_2D(u_Texture1), uv) - 1.0;
 
     vec3 t_NormalWorld = normalize(CalcTangentToWorld(t_BumpMap.rgb, v_Tangent, v_Binormal, v_Normal));
@@ -860,10 +862,10 @@ class RippleAnimation {
 class ShaderCompositeRippleProgram extends DeviceProgram {
     public static BindingsDefinition = `
 layout(std140) uniform ub_ShaderParams {
-    Mat4x2 u_MapTransform0;
-    Mat4x2 u_MapTransform1;
-    Mat4x2 u_MapTransform2;
-    Mat4x2 u_MapTransform3;
+    Mat2x4 u_MapTransform0;
+    Mat2x4 u_MapTransform1;
+    Mat2x4 u_MapTransform2;
+    Mat2x4 u_MapTransform3;
     vec4 u_Misc[1];
 };
 `;
@@ -883,10 +885,10 @@ layout(binding = 2) uniform sampler2D u_Texture2;
 layout(binding = 3) uniform sampler2D u_Texture3;
 
 void mainPS() {
-    vec2 uv0 = Mul(u_MapTransform0, vec4(v_TexCoord, 1.0, 1.0));
-    vec2 uv1 = Mul(u_MapTransform1, vec4(v_TexCoord, 1.0, 1.0));
-    vec2 uv2 = Mul(u_MapTransform2, vec4(v_TexCoord, 1.0, 1.0));
-    vec2 uv3 = Mul(u_MapTransform3, vec4(v_TexCoord, 1.0, 1.0));
+    vec2 uv0 = UnpackMatrix(u_MapTransform0) * vec4(v_TexCoord, 1.0, 1.0);
+    vec2 uv1 = UnpackMatrix(u_MapTransform1) * vec4(v_TexCoord, 1.0, 1.0);
+    vec2 uv2 = UnpackMatrix(u_MapTransform2) * vec4(v_TexCoord, 1.0, 1.0);
+    vec2 uv3 = UnpackMatrix(u_MapTransform3) * vec4(v_TexCoord, 1.0, 1.0);
 
     vec4 t_BumpMap0 = 2.0 * texture(SAMPLER_2D(u_Texture0), uv0) - 1.0;
     vec4 t_BumpMap1 = 2.0 * texture(SAMPLER_2D(u_Texture1), uv1) - 1.0;
@@ -1138,7 +1140,7 @@ interface TextureAnimationFunction {
 class ShaderModelProgram extends BaseProgram {
     public static BindingsDefinition = `
 layout(std140) uniform ub_ShaderParams {
-    Mat4x2 u_BaseMapTransform;
+    Mat2x4 u_BaseMapTransform;
 };
 `;
 
@@ -1151,7 +1153,8 @@ layout(std140) uniform ub_ShaderParams {
         const fragBody: string[] = [];
 
         fragBody.push(`
-vec4 t_BaseTexture = texture(SAMPLER_2D(u_Texture0), Mul(u_BaseMapTransform, vec4(v_UV, 1.0, 1.0))).rgba;
+vec2 uv0 = UnpackMatrix(u_BaseMapTransform) * vec4(v_UV, 1.0, 1.0);
+vec4 t_BaseTexture = texture(SAMPLER_2D(u_Texture0), uv0).rgba;
 gl_FragColor.rgba = t_BaseTexture.rgba;
 CalcFog(gl_FragColor, v_Position);
 `);
@@ -1228,7 +1231,7 @@ class ShaderEnvironmentProgram extends BaseProgram {
     public static a_LightmapTexCoord = 6;
 
     public static override varying = `
-varying vec2 v_lightmapUV;
+varying vec2 v_LightmapUV;
 varying vec3 v_IncidentLight;
 `;
 
@@ -1248,19 +1251,19 @@ layout(location = ${ShaderEnvironmentProgram.a_TexCoord}) in vec2 a_TexCoord;
 layout(location = ${ShaderEnvironmentProgram.a_IncidentLight}) in vec3 a_IncidentLight;
 layout(location = ${ShaderEnvironmentProgram.a_LightmapTexCoord}) in vec2 a_LightmapTexCoord;
 
-vec4 toWorldCoord(vec4 x) {
-    return Mul(u_ModelMatrix, x);
-}
+${GfxShaderLibrary.MulNormalMatrix}
 
 void mainVS() {
-    gl_Position = Mul(u_Projection, Mul(u_ViewMatrix, toWorldCoord(vec4(a_Position, 1.0))));
+    mat4x3 t_ModelMatrix = UnpackMatrix(u_ModelMatrix);
+    vec3 t_PositionWorld = t_ModelMatrix * vec4(a_Position, 1.0);
+    gl_Position = UnpackMatrix(u_ProjectionView) * vec4(t_PositionWorld, 1.0);
     v_UV = a_TexCoord;
-    v_Normal = normalize(toWorldCoord(vec4(a_Normal.xyz, 0.0)).xyz);
-    v_Binormal = normalize(toWorldCoord(vec4(a_Binormal.xyz, 0.0)).xyz);
-    v_Tangent = normalize(toWorldCoord(vec4(a_Tangent.xyz, 0.0)).xyz);
-    v_Position = toWorldCoord(vec4(a_Position.xyz, 1.0)).xyz;
+    v_Normal = MulNormalMatrix(t_ModelMatrix, a_Normal);
+    v_Binormal = normalize(t_ModelMatrix * vec4(a_Binormal.xyz, 0.0));
+    v_Tangent = normalize(t_ModelMatrix * vec4(a_Tangent.xyz, 0.0));
+    v_Position = t_PositionWorld;
     v_IncidentLight = a_IncidentLight;
-    v_lightmapUV = a_LightmapTexCoord;
+    v_LightmapUV = a_LightmapTexCoord;
 }
 `;
 
@@ -1370,7 +1373,7 @@ vec3 t_EyeWorld = normalize(u_PlayerPos - v_Position);
 
             if (this.has_lightmap) {
                 fragBody.push(`
-vec3 t_LightmapSample = texture(SAMPLER_2D(u_Texture1), v_lightmapUV).rgb;
+vec3 t_LightmapSample = texture(SAMPLER_2D(u_Texture1), v_LightmapUV).rgb;
 float t_Variance = dot(v_IncidentLight.rgb, v_IncidentLight.rgb);
 float t_BumpAtten = (dot(v_IncidentLight, t_NormalWorld) * t_Variance) + (1.0 - t_Variance);
 color.rgb *= t_LightmapSample * t_BumpAtten;
@@ -1964,8 +1967,7 @@ class HaloScene implements Viewer.SceneGfx {
 
         let offs = template.allocateUniformBuffer(BaseProgram.ub_SceneParams, 32 + 12);
         const mapped = template.mapUniformBufferF32(BaseProgram.ub_SceneParams);
-        offs += fillMatrix4x4(mapped, offs, this.mainView.clipFromViewMatrix);
-        offs += fillMatrix4x4(mapped, offs, this.mainView.viewFromWorldMatrix);
+        offs += fillMatrix4x4(mapped, offs, this.mainView.clipFromWorldMatrix);
         offs += fillVec3v(mapped, offs, this.mainView.cameraPos);
         offs += fillVec4v(mapped, offs, this.fogColor);
         offs += fillVec4v(mapped, offs, this.fogDistances);

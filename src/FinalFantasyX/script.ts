@@ -692,7 +692,7 @@ class Controller {
     }
 
     public finishThread(cutoff: number, runMain: boolean): void {
-        if (this.currSignal != null) {
+        if (this.currSignal !== null) {
             if (this.currSignal.type === SignalType.ON_END)
                 this.script.ack(this.currSignal);
             this.deleteOwnSignal(this.currSignal);
@@ -1117,11 +1117,11 @@ export class EventScript {
             } else if (op === Opcode.EQ) {
                 const a = c.stack.pop();
                 const b = c.stack.pop();
-                c.stack.push(a == b ? 1 : 0);
+                c.stack.push(a === b ? 1 : 0);
             } else if (op === Opcode.NEQ) {
                 const a = c.stack.pop();
                 const b = c.stack.pop();
-                c.stack.push(a != b ? 1 : 0);
+                c.stack.push(a !== b ? 1 : 0);
             } else if (op === Opcode.LT || op === Opcode.LT_2) {
                 const a = c.stack.pop();
                 const b = c.stack.pop();
@@ -1176,7 +1176,7 @@ export class EventScript {
                 c.stack.push(b % a);
             } else if (op === Opcode.NOT_LOGIC) {
                 const a = c.stack.pop();
-                c.stack.push(a == 0 ? 1 : 0);
+                c.stack.push(a === 0 ? 1 : 0);
             } else if (op === Opcode.NEG) {
                 const a = c.stack.pop();
                 c.stack.push(-a);

@@ -353,7 +353,7 @@ export function parse(buffer: ArrayBufferSlice): AnimGroup {
         const dispMode = view.getUint32(shapeIdx + 0xA0);
 
         const cullModeRaw = view.getUint32(shapeIdx + 0xA4);
-        const cullModeTable: GX.CullMode[] = [GX.CullMode.BACK, GX.CullMode.FRONT, GX.CullMode.ALL, GX.CullMode.NONE];
+        const cullModeTable: GX.CullMode[] = [GX.CullMode.BACK, GX.CullMode.FRONT, GX.CullMode.NONE, GX.CullMode.NONE];
         const cullMode = cullModeTable[cullModeRaw];
 
         const shape: AnimGroupData_Shape = { name, vtxArrays, draws, dispMode, cullMode };

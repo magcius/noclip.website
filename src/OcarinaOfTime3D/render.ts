@@ -51,12 +51,12 @@ class DMPProgram extends DeviceProgram {
     public static a_Tangent = 2;
     public static a_Color = 3;
     public static a_TexCoord0 = 4;
-    public static a_TexCoord1 = 5;
-    public static a_TexCoord2 = 6;
-    public static a_BoneIndices = 7;
-    public static a_BoneWeights = 8;
+    public static a_TexCoord12 = 5;
+    public static a_BoneIndices = 6;
+    public static a_BoneWeights = 7;
 
     public static BindingsDefinition = `
+${GfxShaderLibrary.MatrixLibrary}
 
 struct Light {
     vec4 Ambient;
@@ -84,7 +84,7 @@ layout(std140) uniform ub_MaterialParams {
     vec4 u_FogStartEnd;
 
     vec4 u_ConstantColor[6];
-    Mat4x3 u_TexMtx[3];
+    Mat3x4 u_TexMtx[3];
     vec4 u_MatMisc[1];
 };
 
@@ -98,8 +98,8 @@ layout(std140) uniform ub_MaterialParams {
 #define u_DepthOffset      (u_MatMisc[0].w)
 
 layout(std140) uniform ub_PrmParams {
-    Mat4x3 u_BoneMatrix[16];
-    Mat4x3 u_ViewMatrix;
+    Mat3x4 u_BoneMatrix[16];
+    Mat3x4 u_ViewMatrix;
     vec4 u_PrmMisc[1];
 };
 
@@ -156,7 +156,7 @@ uniform samplerCube u_Cubemap;
         case 1: // Texture 1 has TexCoord 1
             return `texture(SAMPLER_2D(u_Texture1), v_TexCoord1.xy)`;
         case 2: // Texture 2 has either TexCoord 1 or 2 as input
-            if (this.material.texCoordConfig == TexCoordConfig.Config0110 || this.material.texCoordConfig == TexCoordConfig.Config0111 || this.material.texCoordConfig == TexCoordConfig.Config0112)
+            if (this.material.texCoordConfig === TexCoordConfig.Config0110 || this.material.texCoordConfig === TexCoordConfig.Config0111 || this.material.texCoordConfig === TexCoordConfig.Config0112)
                 return `texture(SAMPLER_2D(u_Texture2), v_TexCoord1.xy)`;
             else
                 return `texture(SAMPLER_2D(u_Texture2), v_TexCoord2.xy)`;
@@ -320,9 +320,9 @@ uniform samplerCube u_Cubemap;
         if(material.isReflectionEnabled){
             if(this.IsLUTSupported(MatLutType.ReflectR))
                 S+= `
-        t_ReflValue.r = ${this.getLutInput(material.lutReflecB)};
-        t_ReflValue.g = ${this.IsLUTSupported(MatLutType.ReflectG) ? this.getLutInput(material.lutReflecG) : `t_ReflValue.r`};
-        t_ReflValue.b = ${this.IsLUTSupported(MatLutType.ReflectB) ? this.getLutInput(material.lutReflecB) : `t_ReflValue.r`};
+        t_ReflValue.r = ${this.getLutInput(material.lutReflectR)};
+        t_ReflValue.g = ${this.IsLUTSupported(MatLutType.ReflectG) ? this.getLutInput(material.lutReflectG) : `t_ReflValue.r`};
+        t_ReflValue.b = ${this.IsLUTSupported(MatLutType.ReflectB) ? this.getLutInput(material.lutReflectB) : `t_ReflValue.r`};
         `;
         }
 
@@ -334,7 +334,7 @@ uniform samplerCube u_Cubemap;
             specular_1 = `(${specular_1} * t_GeoFactor)`;
 
         if (material.fresnelSelector !== FresnelSelector.No && this.IsLUTSupported(MatLutType.Fresnel)) {
-            const value = this.getLutInput(material.lutFesnel);
+            const value = this.getLutInput(material.lutFresnel);
 
             // Only use the last light
             S += `\tif(i == 1){\n\t\t\t`;
@@ -362,12 +362,12 @@ uniform samplerCube u_Cubemap;
     private IsLUTSupported(lutType: MatLutType): boolean {
         const config = this.material.lightingConfig;
         switch(lutType){
-            case MatLutType.Distribution0: return config != LightingConfig.Config1;
-            case MatLutType.Distribution1: return config != LightingConfig.Config0 && config != LightingConfig.Config1 && config != LightingConfig.Config5;
+            case MatLutType.Distribution0: return config !== LightingConfig.Config1;
+            case MatLutType.Distribution1: return config !== LightingConfig.Config0 && config !== LightingConfig.Config1 && config !== LightingConfig.Config5;
             case MatLutType.Fresnel: return config !== LightingConfig.Config0 && config !== LightingConfig.Config2 && config !== LightingConfig.Config4;
-            case MatLutType.ReflectR: return config != LightingConfig.Config3;
+            case MatLutType.ReflectR: return config !== LightingConfig.Config3;
             case MatLutType.ReflectG:
-            case MatLutType.ReflectB: return config == LightingConfig.Config4 || config == LightingConfig.Config5 || config == LightingConfig.Config7;
+            case MatLutType.ReflectB: return config === LightingConfig.Config4 || config === LightingConfig.Config5 || config === LightingConfig.Config7;
         }
     }
 
@@ -380,10 +380,10 @@ uniform samplerCube u_Cubemap;
         case LutInput.CosNormalView:  index = "dot(t_Normal, normalize(v_View.xyz))"; break;
         case LutInput.CosLightNormal: index = "dot(t_LightVector, t_Normal)"; break;
         case LutInput.CosLightSpot:   index = "dot(t_LightVector, t_SpotDir)"; break;
-        case LutInput.CosPhi:{
-                const half_angle_proj = "normalize(t_HalfVector) - t_Normal * dot(t_Normal, normalize(t_HalfVector))"
-                index = `dot(${half_angle_proj}, t_Tangent)`;
-            } break;
+        case LutInput.CosPhi: {
+            const half_angle_proj = "normalize(t_HalfVector) - t_Normal * dot(t_Normal, normalize(t_HalfVector))"
+            index = `dot(${half_angle_proj}, t_Tangent)`;
+        } break;
         }
 
         output = `texture(SAMPLER_2D(u_TextureLUT), vec2(((${index} + 1.0) * 0.5) + (1.0 / 512.0), ${this.generateFloat(sampler.index)})).r`;
@@ -405,7 +405,7 @@ in vec2 v_TexCoord2;
 in vec3 v_Normal;
 in vec4 v_QuatNormal;
 in float v_Depth;
-in vec4 v_View;
+in vec3 v_View;
 
 vec3 QuatRotate(vec4 q, vec3 v) {
     return v + 2.0 * cross(q.xyz, cross(q.xyz, v) + q.w * v);
@@ -435,9 +435,8 @@ void main() {
         t_ResultColor.rgba = vec4(v_TexCoord0.xy, 1.0, 1.0);
     #endif
 
-    if(u_IsFogEnabled > 0.0 && u_RenderFog > 0.0)
-    {
-        //(M-1): Hack for now
+    if (u_IsFogEnabled > 0.0 && u_RenderFog > 0.0) {
+        // TODO(M-1): Implement true fog
         float t_FogFactor = smoothstep(u_FogStart - v_Depth, u_FogEnd + v_Depth, v_Depth);
         t_ResultColor.rgb = mix(t_ResultColor.rgb, u_FogColor.rgb, t_FogFactor);
     }
@@ -464,8 +463,7 @@ layout(location = ${DMPProgram.a_Normal}) in vec3 a_Normal;
 layout(location = ${DMPProgram.a_Tangent}) in vec3 a_Tangent;
 layout(location = ${DMPProgram.a_Color}) in vec4 a_Color;
 layout(location = ${DMPProgram.a_TexCoord0}) in vec2 a_TexCoord0;
-layout(location = ${DMPProgram.a_TexCoord1}) in vec2 a_TexCoord1;
-layout(location = ${DMPProgram.a_TexCoord2}) in vec2 a_TexCoord2;
+layout(location = ${DMPProgram.a_TexCoord12}) in vec4 a_TexCoord12;
 layout(location = ${DMPProgram.a_BoneIndices}) in vec4 a_BoneIndices;
 layout(location = ${DMPProgram.a_BoneWeights}) in vec4 a_BoneWeights;
 
@@ -477,11 +475,12 @@ out vec2 v_TexCoord2;
 out vec3 v_Normal;
 out vec4 v_QuatNormal;
 out float v_Depth;
-out vec4 v_View;
+out vec3 v_View;
 
-vec4 CalcQuatFromNormal(vec3 normal){
+vec4 CalcQuatFromNormal(vec3 normal) {
     float QuatZ = 0.5 * (normal.z + 1.0);
-    if (QuatZ <= 0.0) return vec4(1.0, 0.0, 0.0, 0.0);
+    if (QuatZ <= 0.0)
+        return vec4(1.0, 0.0, 0.0, 0.0);
     QuatZ = 1.0 / sqrt(QuatZ);
     return vec4((0.5 * normal.xy) * QuatZ, (1.0 / QuatZ), 0.0);
 }
@@ -520,7 +519,6 @@ vec4 FullQuatCalcFallback(in vec4 t_temp0, in vec4 t_Normal, in vec4 t_temp1) {
 }
 
 vec4 CalcQuatFromTangent(in vec3 t_Tangent) {
-
     vec4 t_temp0 = vec4(normalize(cross(v_Normal, t_Tangent)), 0.0);
     vec4 t_temp1 = vec4(cross(t_temp0.xyz, v_Normal.xyz), t_temp0.z);
     vec4 t_Normal = vec4(v_Normal.xyz, t_temp0.x);
@@ -554,9 +552,9 @@ vec2 CalcTextureSrc(in int t_TexSrcIdx) {
     if (t_TexSrcIdx == 0)
         return a_TexCoord0;
     else if (t_TexSrcIdx == 1)
-        return a_TexCoord1;
+        return a_TexCoord12.xy;
     else if (t_TexSrcIdx == 2)
-        return a_TexCoord2;
+        return a_TexCoord12.zw;
     else
         // Should not be possible.
         return vec2(0.0, 0.0);
@@ -572,7 +570,7 @@ vec3 CalcTextureCoordRaw(in int t_Idx) {
     } else if (t_MappingMode == 1) {
         // UV mapping.
         vec2 t_TexSrc = CalcTextureSrc(t_Params.y);
-        return Mul(u_TexMtx[t_Idx], vec4(t_TexSrc, 0.0, 1.0));
+        return UnpackMatrix(u_TexMtx[t_Idx]) * vec4(t_TexSrc, 0.0, 1.0);
     } else if (t_MappingMode == 2) {
         // Cube env mapping.
         //vec3 t_Incident = normalize(vec3(t_Position.xy, -t_Position.z) - vec3(u_CameraPos.xy, -u_CameraPos.z));
@@ -583,7 +581,7 @@ vec3 CalcTextureCoordRaw(in int t_Idx) {
         // Sphere env mapping.
         // Convert view-space normal to proper place.
         vec2 t_TexSrc = (v_Normal.xy * 0.5) + 0.5;
-        return Mul(u_TexMtx[t_Idx], vec4(t_TexSrc, 0.0, 1.0));
+        return UnpackMatrix(u_TexMtx[t_Idx]) * vec4(t_TexSrc, 0.0, 1.0);
     } else if (t_MappingMode == 4) {
         // Projection mapping.
         // Not implemented yet.
@@ -602,7 +600,7 @@ vec3 CalcTextureCoord(in int t_Idx) {
 
 void main() {
     // Compute our matrix.
-    Mat4x3 t_BoneMatrix;
+    mat4x3 t_BoneMatrix;
 
     vec4 t_BoneWeights = a_BoneWeights;
 
@@ -616,28 +614,26 @@ void main() {
     if (u_BoneDimension < 1.0)
         t_BoneWeights.x = 0.0;
 
-    if ((t_BoneWeights.x + t_BoneWeights.y + t_BoneWeights.z + t_BoneWeights.w) > 0.0) {
-        t_BoneMatrix = _Mat4x3(0.0);
-
-        Fma(t_BoneMatrix, u_BoneMatrix[int(a_BoneIndices.x)], t_BoneWeights.x);
-        Fma(t_BoneMatrix, u_BoneMatrix[int(a_BoneIndices.y)], t_BoneWeights.y);
-        Fma(t_BoneMatrix, u_BoneMatrix[int(a_BoneIndices.z)], t_BoneWeights.z);
-        Fma(t_BoneMatrix, u_BoneMatrix[int(a_BoneIndices.w)], t_BoneWeights.w);
+    if (any(greaterThan(t_BoneWeights.xyzw, vec4(0.0)))) {
+        t_BoneMatrix = mat4x3(0.0);
+        t_BoneMatrix += UnpackMatrix(u_BoneMatrix[int(a_BoneIndices.x)]) * t_BoneWeights.x;
+        t_BoneMatrix += UnpackMatrix(u_BoneMatrix[int(a_BoneIndices.y)]) * t_BoneWeights.y;
+        t_BoneMatrix += UnpackMatrix(u_BoneMatrix[int(a_BoneIndices.z)]) * t_BoneWeights.z;
+        t_BoneMatrix += UnpackMatrix(u_BoneMatrix[int(a_BoneIndices.w)]) * t_BoneWeights.w;
     } else {
         // If we have no bone weights, then we're in rigid skinning, so take the first bone index.
         // If we're single-bone, then our bone indices will be 0, so this also works for that.
-        t_BoneMatrix = u_BoneMatrix[int(a_BoneIndices.x)];
+        t_BoneMatrix = UnpackMatrix(u_BoneMatrix[int(a_BoneIndices.x)]);
     }
 
-    vec4 t_LocalPosition = vec4(a_Position, 1.0);
-    vec4 t_ModelPosition = Mul(_Mat4x4(t_BoneMatrix), t_LocalPosition);
-    vec4 t_ViewPosition = Mul(_Mat4x4(u_ViewMatrix), t_ModelPosition);
-    gl_Position = Mul(u_Projection, t_ViewPosition);
+    vec3 t_ModelPosition = t_BoneMatrix * vec4(a_Position, 1.0);
+    vec3 t_ViewPosition = UnpackMatrix(u_ViewMatrix) * vec4(t_ModelPosition, 1.0);
+    gl_Position = UnpackMatrix(u_Projection) * vec4(t_ViewPosition, 1.0);
 
     vec3 t_ModelNormal = MulNormalMatrix(t_BoneMatrix, a_Normal);
-    vec3 t_ModelTangent = Mul(_Mat4x4(t_BoneMatrix), vec4(a_Tangent, 0.0)).xyz;
-    vec3 t_ViewTangent = normalize(Mul(_Mat4x4(u_ViewMatrix), vec4(t_ModelTangent, 0.0)).xyz);
-    v_Normal = normalize(Mul(_Mat4x4(u_ViewMatrix), vec4(t_ModelNormal, 0.0)).xyz);
+    vec3 t_ModelTangent = (t_BoneMatrix * vec4(a_Tangent, 0.0)).xyz;
+    vec3 t_ViewTangent = normalize((UnpackMatrix(u_ViewMatrix) * vec4(t_ModelTangent, 0.0)).xyz);
+    v_Normal = normalize((UnpackMatrix(u_ViewMatrix) * vec4(t_ModelNormal, 0.0)).xyz);
     v_QuatNormal = vec4(1.0, 0.0, 0.0, 0.0);
 
     v_Depth = gl_Position.w;
@@ -744,7 +740,7 @@ class MaterialInstance {
             this.gfxSamplers.push(gfxSampler);
 
             const cmb = this.cmbData.cmb;
-            if (i == 0 && cmb.textures[binding.textureIdx].dimension === GfxTextureDimension.Cube)
+            if (i === 0 && cmb.textures[binding.textureIdx].dimension === GfxTextureDimension.Cube)
                 this.textureMappings[4].gfxSampler = gfxSampler;
             else
                 this.textureMappings[i].gfxSampler = gfxSampler;
@@ -836,7 +832,8 @@ class MaterialInstance {
         let offs = template.allocateUniformBuffer(DMPProgram.ub_MaterialParams, 4*4 + 4*5*3 + 4*2 + 4*6 + 4*3*3 + 4);
         const layer = this.material.isTransparent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
         template.sortKey = makeSortKey(layer + this.material.renderLayer);
-        template.setMegaStateFlags(this.material.renderFlags);
+        template.setMegaStateFlags(this.material.megaStateFlags);
+        template.setBlendColor(this.material.blendColor);
 
         if (this.gfxProgram === null)
             this.gfxProgram = cache.createProgram(this.program!);
@@ -1031,21 +1028,12 @@ class SepdData {
             }
         };
 
-        // Transform everything into floats.
-        const loadVertexAttrib = (location: number, format: GfxFormat, data: ArrayBufferSlice | null, vertexAttrib: CMB.SepdVertexAttrib | null) => {
-            let buffer: GfxBuffer;
-            let frequency = GfxVertexBufferFrequency.PerVertex;
-            if (vertexAttrib === null || data === null || data.byteLength === 0 || vertexAttrib.mode === CMB.SepdVertexAttribMode.CONSTANT) {
-                const constantData = new Float32Array(4);
-                if (vertexAttrib !== null)
-                    constantData.set(vertexAttrib.constant);
-                buffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, constantData.buffer);
-                frequency = GfxVertexBufferFrequency.Constant;
-            } else {
-                const newData = transformVertexData(data.slice(vertexAttrib.start), vertexAttrib.dataType, vertexAttrib.scale);
-                buffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, newData.buffer, newData.byteOffset, newData.byteLength);
-            }
+        const hasVertexAttib = (data: ArrayBufferSlice | null, vertexAttrib: CMB.SepdVertexAttrib | null) => {
+            return vertexAttrib !== null && data !== null && data.byteLength !== 0 && vertexAttrib.mode !== CMB.SepdVertexAttribMode.CONSTANT;
+        };
 
+        const pushBuffer = (location: number, format: GfxFormat, data: Float32Array, frequency: GfxVertexBufferFrequency) => {
+            const buffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, data.buffer, data.byteOffset, data.byteLength);
             const bufferIndex = this.vertexBufferDescriptors.length;
             this.buffers.push(buffer);
             this.vertexBufferDescriptors.push({ buffer, byteOffset: 0 });
@@ -1053,17 +1041,66 @@ class SepdData {
             vertexAttributeDescriptors.push({ location, format, bufferIndex, bufferByteOffset: 0 });
         };
 
+        const getConstantData = (vertexAttrib: CMB.SepdVertexAttrib | null) => {
+            const constantData = new Float32Array(4);
+            if (vertexAttrib !== null)
+                constantData.set(vertexAttrib.constant);
+            return constantData;
+        };
+
+        // Transform everything into floats.
+        const loadVertexAttrib = (location: number, format: GfxFormat, data: ArrayBufferSlice | null, vertexAttrib: CMB.SepdVertexAttrib | null) => {
+            if (hasVertexAttib(data, vertexAttrib)) {
+                const newData = transformVertexData(data!.slice(vertexAttrib!.start), vertexAttrib!.dataType, vertexAttrib!.scale);
+                pushBuffer(location, format, newData, GfxVertexBufferFrequency.PerVertex);
+            } else {
+                const constantData = getConstantData(vertexAttrib);
+                pushBuffer(location, format, constantData, GfxVertexBufferFrequency.Constant);
+            }
+        };
+
         loadVertexAttrib(DMPProgram.a_Position,  GfxFormat.F32_RGB, vatr.position, sepd.position);
         loadVertexAttrib(DMPProgram.a_Normal,    GfxFormat.F32_RGB, vatr.normal, sepd.normal);
         loadVertexAttrib(DMPProgram.a_Tangent,   GfxFormat.F32_RGB, sepd.hasTangents ? vatr.tangent : null, sepd.tangent);
         loadVertexAttrib(DMPProgram.a_Color,     GfxFormat.F32_RGBA, vatr.color, sepd.color);
         loadVertexAttrib(DMPProgram.a_TexCoord0, GfxFormat.F32_RG, vatr.texCoord0, sepd.texCoord0);
-        loadVertexAttrib(DMPProgram.a_TexCoord1, GfxFormat.F32_RG, vatr.texCoord1, sepd.texCoord1);
-        loadVertexAttrib(DMPProgram.a_TexCoord2, GfxFormat.F32_RG, vatr.texCoord2, sepd.texCoord2);
 
-        const hasBoneIndices = sepd.prms[0].skinningMode !== CMB.SkinningMode.SINGLE_BONE && sepd.boneIndices.dataType === CMB.DataType.UByte;
+        // We special case a_TexCoord12 here since we need to staple it together from texCoord0 and texCoord1.
+        // loadVertexAttrib(DMPProgram.a_TexCoord1, GfxFormat.F32_RG, vatr.texCoord1, sepd.texCoord1);
+        // loadVertexAttrib(DMPProgram.a_TexCoord2, GfxFormat.F32_RG, vatr.texCoord2, sepd.texCoord2);
+
+        const hasTexCoord1 = hasVertexAttib(vatr.texCoord1, sepd.texCoord1);
+        const hasTexCoord2 = hasVertexAttib(vatr.texCoord2, sepd.texCoord2);
+        if (hasTexCoord1 || hasTexCoord2) {
+            const data1 = hasTexCoord1 ? transformVertexData(vatr.texCoord1!.slice(sepd.texCoord1!.start), sepd.texCoord1!.dataType, sepd.texCoord1!.scale) : getConstantData(sepd.texCoord1);
+            const data1Stride = hasTexCoord1 ? 2 : 0;
+
+            const data2 = hasTexCoord2 ? transformVertexData(vatr.texCoord2!.slice(sepd.texCoord2!.start), sepd.texCoord2!.dataType, sepd.texCoord2!.scale) : getConstantData(sepd.texCoord1);
+            const data2Stride = hasTexCoord2 ? 2 : 0;
+
+            const vertexCount = data1.length / 2;
+            const newData = new Float32Array(vertexCount * 4);
+
+            for (let i = 0; i < vertexCount; i++) {
+                newData[i*4+0] = data1[i*data1Stride+0];
+                newData[i*4+1] = data1[i*data1Stride+1];
+                newData[i*4+2] = data2[i*data2Stride+0];
+                newData[i*4+3] = data2[i*data2Stride+1];
+            }
+
+            pushBuffer(DMPProgram.a_TexCoord12, GfxFormat.F32_RGBA, newData, GfxVertexBufferFrequency.PerVertex);
+        } else {
+            const constantData = new Float32Array(4);
+            if (sepd.texCoord0 !== null)
+                constantData.set(sepd.texCoord0.constant.slice(0, 2), 0);
+            if (sepd.texCoord1 !== null)
+                constantData.set(sepd.texCoord1.constant.slice(0, 2), 2);
+            pushBuffer(DMPProgram.a_TexCoord12, GfxFormat.F32_RGBA, constantData, GfxVertexBufferFrequency.Constant);
+        }
+
+        const hasBoneIndices = sepd.prms[0].skinningMode !== CMB.SkinningMode.SingleBone && sepd.boneIndices.dataType === CMB.DataType.UByte;
         loadVertexAttrib(DMPProgram.a_BoneIndices, setFormatCompFlags(GfxFormat.F32_R, sepd.boneDimension), hasBoneIndices ? vatr.boneIndices : null, sepd.boneIndices);
-        const hasBoneWeights = sepd.prms[0].skinningMode === CMB.SkinningMode.SMOOTH_SKINNING;
+        const hasBoneWeights = sepd.prms[0].skinningMode === CMB.SkinningMode.SmoothSkinning;
         loadVertexAttrib(DMPProgram.a_BoneWeights, setFormatCompFlags(GfxFormat.F32_R, sepd.boneDimension), hasBoneWeights ? vatr.boneWeights : null, sepd.boneWeights);
 
         let indexBufferCount = 0;
@@ -1129,7 +1166,7 @@ class ShapeInstance {
             for (let i = 0; i < 16; i++) {
                 if (i < prms.boneTable.length) {
                     const boneId = prms.boneTable[i];
-                    if (prms.skinningMode === CMB.SkinningMode.SMOOTH_SKINNING) {
+                    if (prms.skinningMode === CMB.SkinningMode.SmoothSkinning) {
                         mat4.mul(scratchMatrix, boneMatrices[boneId], inverseBindPoseMatrices[boneId]);
                     } else {
                         mat4.copy(scratchMatrix, boneMatrices[boneId]);

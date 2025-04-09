@@ -1,6 +1,4 @@
 
-import { GfxColor } from './GfxPlatform.js';
-
 // Copied from toplevel util.ts
 
 export function assert(b: boolean, message: string = ""): asserts b {
@@ -24,11 +22,8 @@ export function range(start: number, count: number): number[] {
     return L;
 }
 
-// Eat your heart out, npm.
 export function leftPad(S: string, spaces: number, ch: string = '0'): string {
-    while (S.length < spaces)
-        S = `${ch}${S}`;
-    return S;
+    return S.padStart(spaces, ch);
 }
 
 export function nArray<T>(n: number, c: () => T): T[] {
@@ -54,20 +49,4 @@ export function alignNonPowerOfTwo(n: number, multiple: number): number {
 
 export function fallbackUndefined<T>(v: T | null | undefined, fallback: T): T {
     return (v !== null && v !== undefined) ? v : fallback;
-}
-
-export function gfxColorEqual(c0: Readonly<GfxColor>, c1: Readonly<GfxColor>): boolean {
-    return c0.r === c1.r && c0.g === c1.g && c0.b === c1.b && c0.a === c1.a;
-}
-
-export function gfxColorCopy(dst: GfxColor, src: Readonly<GfxColor>): void {
-    dst.r = src.r;
-    dst.g = src.g;
-    dst.b = src.b;
-    dst.a = src.a;
-}
-
-export function gfxColorNewCopy(src: Readonly<GfxColor>): GfxColor {
-    const { r, g, b, a } = src;
-    return { r, g, b, a };
 }

@@ -212,7 +212,7 @@ function readEMeshFrag(stream: DataStream, version: number): EMeshFrag {
     if (!!(materialFlags & MaterialFlags.Lightmap)) {
         const lightmap0TextureID = stream.readUint32();
         const lightmap1TextureID = stream.readUint32();
-        if (lightmap1TextureID != 0xFFFFFFFF) {
+        if (lightmap1TextureID !== 0xFFFFFFFF) {
             const switchLightName = stream.readStringStream_4b();
         }
 
@@ -254,7 +254,7 @@ function readEMeshFrag(stream: DataStream, version: number): EMeshFrag {
     const streamUVCount = stream.readUint32();
     let streamUV: ArrayBufferSlice | null = null;
     let uvCoordScale: number = 0;
-    if (streamUVCount != 0) {
+    if (streamUVCount !== 0) {
         uvCoordScale = stream.readFloat32();
         streamUV = stream.readSlice(0x04 * streamUVCount * iVertCount);
     }

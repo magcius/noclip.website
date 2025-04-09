@@ -27,6 +27,7 @@ class PatchProgram extends DeviceProgram {
 
     public override both = `
 ${GfxShaderLibrary.saturate}
+${GfxShaderLibrary.MatrixLibrary}
 
 layout(std140) uniform ub_SceneParams {
     Mat4x4 u_ProjectionView;
@@ -38,8 +39,8 @@ struct WaveParam {
 };
 
 layout(std140) uniform ub_ObjectParams {
-    Mat4x3 u_PatchToMeshMatrix;
-    Mat4x3 u_MeshToWorldMatrix;
+    Mat3x4 u_PatchToMeshMatrix;
+    Mat3x4 u_MeshToWorldMatrix;
     WaveParam u_Wave[2];
     vec4 u_ColorAdd;
 };
@@ -72,6 +73,8 @@ out vec3 v_NormalWorld;
 out vec3 v_TangentWorld;
 out vec2 v_TexCoordLocal;
 
+${GfxShaderLibrary.MulNormalMatrix}
+
 vec3 SphereFromCube(vec3 t_Pos) {
     // http://mathproofs.blogspot.com/2005/07/mapping-cube-to-sphere.html
     vec3 t_Pos2 = t_Pos * t_Pos;
@@ -87,8 +90,8 @@ void main() {
     vec3 t_PatchPos = vec3(t_PatchLoc.x, 0.0, t_PatchLoc.y);
     vec3 t_PatchNrm = vec3(0.0, 1.0, 0.0);
 
-    vec3 t_MeshPos = Mul(_Mat4x4(u_PatchToMeshMatrix), vec4(t_PatchPos, 1.0)).xyz;
-    vec3 t_MeshNrm = Mul(_Mat4x4(u_PatchToMeshMatrix), vec4(t_PatchNrm, 0.0)).xyz;
+    vec3 t_MeshPos = UnpackMatrix(u_PatchToMeshMatrix) * vec4(t_PatchPos, 1.0);
+    vec3 t_MeshNrm = UnpackMatrix(u_PatchToMeshMatrix) * vec4(t_PatchNrm, 0.0);
     vec3 t_MeshTng = vec3(1.0, 0.0, 0.0);
     vec2 t_TexCoordMesh;
     t_TexCoordMesh.xy = a_TexCoord.xy;
@@ -102,17 +105,17 @@ void main() {
     t_TexCoordMesh.y = t_MeshNrm.y * 0.5 + 0.5;
 #endif
 
-    vec3 t_PosWorld = Mul(_Mat4x4(u_MeshToWorldMatrix), vec4(t_MeshPos, 1.0)).xyz;
-    v_NormalWorld = normalize(Mul(_Mat4x4(u_MeshToWorldMatrix), vec4(t_MeshNrm, 0.0)).xyz);
-    v_TangentWorld = normalize(Mul(_Mat4x4(u_MeshToWorldMatrix), vec4(t_MeshTng, 0.0)).xyz);
+    mat4x3 t_MeshToWorldMatrix = UnpackMatrix(u_MeshToWorldMatrix);
+    v_PositionWorld = t_MeshToWorldMatrix * vec4(t_MeshPos, 1.0);
+    v_NormalWorld = MulNormalMatrix(t_MeshToWorldMatrix, t_MeshNrm);
+    v_TangentWorld = normalize(t_MeshToWorldMatrix * vec4(t_MeshTng, 0.0));
 
 #ifdef MODE_SPHERE
-    t_PosWorld.xyz += v_NormalWorld.xyz * CalcWaveHeight(0u, t_TexCoordMesh.xy);
-    t_PosWorld.xyz += v_NormalWorld.xyz * CalcWaveHeight(1u, t_TexCoordMesh.xy);
+    v_PositionWorld += v_NormalWorld * CalcWaveHeight(0u, t_TexCoordMesh.xy);
+    v_PositionWorld += v_NormalWorld * CalcWaveHeight(1u, t_TexCoordMesh.xy);
 #endif
 
-    v_PositionWorld.xyz = t_PosWorld.xyz;
-    gl_Position = Mul(u_ProjectionView, vec4(t_PosWorld, 1.0));
+    gl_Position = UnpackMatrix(u_ProjectionView) * vec4(v_PositionWorld, 1.0);
 
     v_NormalMesh.xyz = t_MeshNrm.xyz;
     v_TexCoordLocal.xy = a_TexCoord.xy;
@@ -263,7 +266,6 @@ class PatchLibrary {
     private patchVariation: { startIndex: number, indexCount: number }[] = [];
 
     constructor(cache: GfxRenderCache, public sideNumQuads: number = 32) {
-        const device = cache.device;
         const sideNumVerts = sideNumQuads + 1;
 
         let totalNumVerts = sideNumVerts ** 2.0;

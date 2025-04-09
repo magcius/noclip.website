@@ -150,9 +150,9 @@ class SceneDesc implements Viewer.SceneDesc {
                 const posY = assertExists(getField<number>(lightInfo, record, "pos_y"));
                 const posZ = assertExists(getField<number>(lightInfo, record, "pos_z"));
 
-                assert(posX == 0);
-                assert(posY == 0);
-                assert(posZ == 0);
+                assert(posX === 0);
+                assert(posY === 0);
+                assert(posZ === 0);
 
                 const ambientR = assertExists(getField<number>(lightInfo, record, "ambient_x")) / 0xFF;
                 const ambientG = assertExists(getField<number>(lightInfo, record, "ambient_y")) / 0xFF;
@@ -230,7 +230,7 @@ class SceneDesc implements Viewer.SceneDesc {
                         const record = roomFurnitureEntries.records[j];
 
                         const cmbFilename = assertExists(getField<string>(roomFurnitureEntries, record, "dmd_name"));
-                        const cmbFile = outerRoomGar.files.find((file) => file.name == `${cmbFilename}.cmb`);
+                        const cmbFile = outerRoomGar.files.find((file) => file.name === `${cmbFilename}.cmb`);
 
                         // TODO(jstpierre): What to do if the file is missing?
                         if (cmbFile === undefined)

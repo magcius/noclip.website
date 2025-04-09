@@ -9,7 +9,7 @@ import { Plane, AABB } from "../Geometry.js";
 import { nArray, readString, assert } from "../util.js";
 import { Endianness } from "../endian.js";
 import { MathConstants } from "../MathHelpers.js";
-import { fopAc_ac_c } from "./framework.js";
+import { fopAc_ac_c } from "./f_op_actor.js";
 
 export const enum cBgW_Flags {
     None      = 0x00,

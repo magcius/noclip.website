@@ -3,7 +3,7 @@ import { JMapInfoIter } from "./JMapInfo.js";
 import { ReadonlyVec3, vec3 } from "gl-matrix";
 import { SceneObjHolder } from "./Main.js";
 import { assertExists, assert, fallback } from "../util.js";
-import { clamp, isNearZero, isNearZeroVec3 } from "../MathHelpers.js";
+import { clamp, isNearZero, isNearZeroVec3, vec3FromBasis3 } from "../MathHelpers.js";
 import { drawWorldSpacePoint, getDebugOverlayCanvas2D, drawWorldSpaceLine } from "../DebugJunk.js";
 import { Camera } from "../Camera.js";
 import { Magenta, Yellow, Cyan } from "../Color.js";
@@ -591,6 +591,9 @@ export class RailRider {
         const totalLength = this.getTotalLength();
         const speed = totalLength / nPoints;
 
+        if (this.bezierRail.isClosed)
+            nPoints++;
+
         this.bezierRail.calcPos(scratchVec3b, 0);
         debugDraw.beginBatchLine(nPoints);
         for (let i = 0; i < nPoints; i++) {
@@ -598,6 +601,13 @@ export class RailRider {
             debugDraw.drawLine(scratchVec3b, scratchVec3c, Magenta);
             vec3.copy(scratchVec3b, scratchVec3c);
         }
+
+        if (this.bezierRail.isClosed) {
+            this.bezierRail.calcPos(scratchVec3b, totalLength);
+            this.bezierRail.calcPos(scratchVec3c, 0);
+            debugDraw.drawLine(scratchVec3b, scratchVec3c, Magenta);
+        }
+
         debugDraw.endBatch();
     }
 }

@@ -5,7 +5,7 @@ import { J3DFrameCtrl, J3DFrameCtrl__UpdateFlags } from "../Common/JSYSTEM/J3D/J
 import { J3DModelData, J3DModelInstance, MaterialInstance, TEX1Data } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
 import { GfxDevice, GfxFormat } from "../gfx/platform/GfxPlatform.js";
 import { LoadedVertexData, LoadedVertexLayout, VertexAttributeInput } from "../gx/gx_displaylist.js";
-import { computeEulerAngleRotationFromSRTMatrix, computeModelMatrixSRT, computeNormalMatrix } from "../MathHelpers.js";
+import { calcEulerAngleRotationFromSRTMatrix, computeModelMatrixSRT, computeNormalMatrix, Mat4Identity } from "../MathHelpers.js";
 import { align, assertExists, fallback, nArray, nullify } from "../util.js";
 import * as Viewer from '../viewer.js';
 import { calcGravity, connectToScene, invalidateCollisionPartsForActor, isBckExist, isBckPlaying, isBpkExist, isBpkPlaying, isBrkExist, isBrkPlaying, isBtkExist, isBtkPlaying, isBtpExist, isBtpPlaying, isBvaExist, isBvaPlaying, resetAllCollisionMtx, startBck, startBpk, startBrk, startBtk, startBtp, startBva, validateCollisionPartsForActor } from "./ActorUtil.js";
@@ -78,11 +78,12 @@ class ActorAnimKeeper {
     }
 
     public static tryCreate(actor: LiveActor): ActorAnimKeeper | null {
-        let bcsv = actor.resourceHolder.arc.findFileData('ActorAnimCtrl.bcsv');
+        const resourceHolder = actor.modelManager!.resourceHolder;
+        let bcsv = resourceHolder.arc.findFileData('ActorAnimCtrl.bcsv');
 
         // Super Mario Galaxy 2 puts these assets in a subfolder.
         if (bcsv === null)
-            bcsv = actor.resourceHolder.arc.findFileData('ActorInfo/ActorAnimCtrl.bcsv');
+            bcsv = resourceHolder.arc.findFileData('ActorInfo/ActorAnimCtrl.bcsv');
 
         if (bcsv === null)
             return null;
@@ -241,7 +242,7 @@ function patchBMD(bmd: BMD): void {
 }
 
 // This is roughly ShapePacketUserData::callDL().
-function fillMaterialParamsCallback(materialParams: MaterialParams, materialInstance: MaterialInstance, viewMatrix: ReadonlyMat4, modelMatrix: ReadonlyMat4, camera: Camera, drawParams: DrawParams): void {
+function fillMaterialParamsCallback(materialParams: MaterialParams, materialInstance: MaterialInstance, clipFromViewMatrix: ReadonlyMat4, viewFromWorldMatrix: ReadonlyMat4, modelMatrix: ReadonlyMat4, drawParams: DrawParams): void {
     const material = materialInstance.materialData.material;
     let hasAnyEnvMap = false;
 
@@ -251,18 +252,15 @@ function fillMaterialParamsCallback(materialParams: MaterialParams, materialInst
             continue;
 
         const matrixMode = texMtx.info & 0x3F;
-        const isUsingEnvMap = (matrixMode === 0x01 || matrixMode === 0x06 || matrixMode === 0x07);
-
-        if (isUsingEnvMap)
-            hasAnyEnvMap = true;
+        hasAnyEnvMap = hasAnyEnvMap || (matrixMode === TexMtxMapMode.EnvmapBasic || matrixMode === TexMtxMapMode.EnvmapOld || matrixMode === TexMtxMapMode.Envmap);
 
         const dst = materialParams.u_PostTexMtx[i];
         const flipY = materialParams.m_TextureMapping[i].flipY;
 
-        materialInstance.calcPostTexMtxInput(dst, texMtx, viewMatrix);
+        materialInstance.calcPostTexMtxInput(dst, texMtx, viewFromWorldMatrix);
         const texSRT = scratchMatrix;
         materialInstance.calcTexSRT(texSRT, i);
-        materialInstance.calcTexMtx(dst, texMtx, texSRT, modelMatrix, camera, flipY);
+        materialInstance.calcTexMtx(dst, texMtx, texSRT, modelMatrix, clipFromViewMatrix, flipY);
     }
 
     if (hasAnyEnvMap) {
@@ -572,7 +570,7 @@ export function getJMapInfoRotate(dst: vec3, sceneObjHolder: SceneObjHolder, inf
     const stageDataHolder = assertExists(sceneObjHolder.stageDataHolder.findPlacedStageDataHolder(infoIter));
     mat4.mul(scratch, stageDataHolder.placementMtx, scratch);
 
-    computeEulerAngleRotationFromSRTMatrix(dst, scratch);
+    calcEulerAngleRotationFromSRTMatrix(dst, scratch);
 }
 
 export function makeMtxTRFromActor(dst: mat4, actor: LiveActor): void {
@@ -759,10 +757,6 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
     }
 
     // TODO(jstpierre): Remove these accessors.
-    public get resourceHolder(): ResourceHolder {
-        return this.modelManager!.resourceHolder;
-    }
-
     public get modelInstance(): J3DModelInstance | null {
         return this.modelManager !== null ? this.modelManager.modelInstance : null;
     }
@@ -895,7 +889,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
 
     public initActorCollisionParts(sceneObjHolder: SceneObjHolder, name: string, hitSensor: HitSensor, resourceHolder: ResourceHolder | null, hostMtx: mat4 | null, scaleType: CollisionScaleType): void {
         if (resourceHolder === null)
-            resourceHolder = this.resourceHolder;
+            resourceHolder = this.modelManager!.resourceHolder;
 
         this.collisionParts = createCollisionPartsFromLiveActor(sceneObjHolder, this, name, hitSensor, hostMtx, scaleType, resourceHolder);
         invalidateCollisionPartsForActor(sceneObjHolder, this);
@@ -963,9 +957,9 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         this.calcAndSetBaseMtxBase();
     }
 
-    protected getActorVisible(camera: Camera): boolean {
+    protected getActorVisible(camera: Camera | null): boolean {
         if (this.visibleScenario && this.visibleAlive) {
-            if (this.boundingSphereRadius !== null)
+            if (this.boundingSphereRadius !== null && camera !== null)
                 return camera.frustum.containsSphere(this.translation, this.boundingSphereRadius);
             else
                 return true;
@@ -992,14 +986,11 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
             setCollisionMtx(this, this.collisionParts);
     }
 
-    public override calcViewAndEntry(sceneObjHolder: SceneObjHolder, camera: Camera, viewMatrix: mat4 | null): void {
+    public override calcViewAndEntry(sceneObjHolder: SceneObjHolder, camera: Camera | null, viewMatrix: ReadonlyMat4): void {
         if (this.modelInstance === null)
             return;
 
-        if (viewMatrix !== null)
-            this.modelInstance.calcView(camera, camera.viewMatrix);
-        else
-            this.modelInstance.calcView(null, null);
+        this.modelInstance.calcView(viewMatrix, camera !== null ? camera.frustum : null);
 
         const visible = this.visibleModel && this.getActorVisible(camera);
         this.modelInstance.visible = visible;
@@ -1007,7 +998,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
             return;
 
         if (this.actorLightCtrl !== null) {
-            this.actorLightCtrl.loadLight(this.modelInstance, camera);
+            this.actorLightCtrl.loadLight(this.modelInstance, camera!);
         } else {
             // If we don't have an individualized actor light control, then load the default area light.
             // This is basically what DrawBufferExecuter::draw() and DrawBufferGroup::draw() effectively do.
@@ -1038,7 +1029,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
                 //
                 // Rather than emulate this whole system, just hardcode the end result. So, setAmbient = false.
                 const setAmbient = false;
-                lightInfo.setOnModelInstance(this.modelInstance, camera, setAmbient);
+                lightInfo.setOnModelInstance(this.modelInstance, camera!, setAmbient);
             }
         }
     }

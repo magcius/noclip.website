@@ -22,7 +22,7 @@ import { Endianness } from "../../endian.js";
 import { GfxDevice, GfxInputLayout, GfxBuffer, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBufferUsage, GfxBufferFrequencyHint, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferDescriptor } from "../../gfx/platform/GfxPlatform.js";
 import { getPointHermite } from "../../Spline.js";
 import { getVertexInputLocation, GX_Program } from "../../gx/gx_material.js";
-import { Color, colorNewFromRGBA, colorCopy, colorNewCopy, White, colorFromRGBA8, colorLerp, colorMult, colorNewFromRGBA8 } from "../../Color.js";
+import { type Color, colorNewFromRGBA, colorCopy, colorNewCopy, White, colorFromRGBA8, colorLerp, colorMult, colorNewFromRGBA8 } from "../../Color.js";
 import { MaterialParams, ColorKind, DrawParams, fillIndTexMtx, fillTextureSize, fillTextureBias } from "../../gx/gx_render.js";
 import { GXMaterialHelperGfx } from "../../gx/gx_render.js";
 import { computeModelMatrixSRT, computeModelMatrixR, lerp, MathConstants, normToLengthAndAdd, normToLength, isNearZeroVec3, transformVec3Mat4w1, transformVec3Mat4w0, getMatrixAxisZ, setMatrixTranslation, setMatrixAxis, Vec3Zero, vec3SetAll } from "../../MathHelpers.js";
@@ -1711,7 +1711,7 @@ export class JPABaseEmitter {
             throw "whoops";
     }
 
-    private createParticle(): JPABaseParticle | null {
+    public createParticle(): JPABaseParticle | null {
         if (this.emitterManager.deadParticlePool.length === 0)
             return null;
 
@@ -1736,7 +1736,6 @@ export class JPABaseEmitter {
                     this.emitCount = bem1.divNumber * bem1.divNumber * 4 + 2;
                 else
                     this.emitCount = bem1.divNumber;
-                workData.volumeEmitCount = this.emitCount;
                 workData.volumeEmitIdx = 0;
             } else {
                 // Rate
@@ -1747,6 +1746,8 @@ export class JPABaseEmitter {
                 if (!!(this.status & JPAEmitterStatus.FIRST_EMISSION) && this.rate !== 0.0 && this.emitCount < 1.0)
                     this.emitCount = 1;
             }
+
+            workData.volumeEmitCount = this.emitCount;
 
             if (!!(this.status & JPAEmitterStatus.STOP_CREATE_PARTICLE))
                 this.emitCount = 0;
@@ -2990,7 +2991,7 @@ export class JPABaseParticle {
 
         this.time = this.age / this.lifeTime;
 
-        if (this.age != 0) {
+        if (this.age !== 0) {
             if (!!(this.status & JPAParticleStatus.FOLLOW_EMITTER))
                 vec3.copy(this.offsetPosition, workData.emitterGlobalCenterPos);
 

@@ -42,7 +42,7 @@ function parseZelda(buffer: ArrayBufferSlice): ZAR {
 
     const magic: Magic = readString(buffer, 0x00, 0x04, false) as Magic;
     assert([Magic.ZAR1, Magic.GAR2].includes(magic));
-    const version = magic == Magic.ZAR1 ? CMB.Version.Ocarina : CMB.Version.Majora;
+    const version = magic === Magic.ZAR1 ? CMB.Version.Ocarina : CMB.Version.Majora;
 
     const size = view.getUint32(0x04, true);
     const numFileTypes = view.getUint16(0x08, true);

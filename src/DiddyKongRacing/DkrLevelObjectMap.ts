@@ -88,7 +88,7 @@ export class DkrLevelObjectMap {
                     continue;
                 }
 
-                if(obj.getModelType() == MODEL_TYPE_3D_MODEL) {
+                if(obj.getModelType() === MODEL_TYPE_3D_MODEL) {
                     const model = obj.getModel();
                     if(!!model) {
                         const params: DkrDrawCallParams = {

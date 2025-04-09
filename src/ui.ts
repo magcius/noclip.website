@@ -3,7 +3,7 @@
 
 import * as Viewer from './viewer.js';
 import { assertExists, assert } from './util.js';
-import { CameraControllerClass, OrbitCameraController, FPSCameraController, OrthoCameraController } from './Camera.js';
+import { CameraControllerClass, OrbitCameraController, FPSCameraController, OrthoCameraController, CameraController, Camera } from './Camera.js';
 import { Color, colorToCSS } from './Color.js';
 import { GITHUB_REVISION_URL, GITHUB_URL, GIT_SHORT_REVISION, IS_DEVELOPMENT } from './BuildVersion.js';
 import { SaveManager, GlobalSaveManager } from "./SaveManager.js";
@@ -55,6 +55,7 @@ export const TIME_OF_DAY_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox
 export const RENDER_HACKS_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 110 105" height="20" fill="white"><path d="M95,5v60H65c0-16.6-13.4-30-30-30V5H95z"/><path d="M65,65c0,16.6-13.4,30-30,30C18.4,95,5,81.6,5,65c0-16.6,13.4-30,30-30v30H65z"/></svg>`;
 export const SAND_CLOCK_ICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" height="20" fill="white"><g><path d="M79.3,83.3h-6.2H24.9h-6.2c-1.7,0-3,1.3-3,3s1.3,3,3,3h60.6c1.7,0,3-1.3,3-3S81,83.3,79.3,83.3z"/><path d="M18.7,14.7h6.2h48.2h6.2c1.7,0,3-1.3,3-3s-1.3-3-3-3H18.7c-1.7,0-3,1.3-3,3S17,14.7,18.7,14.7z"/><path d="M73.1,66c0-0.9-0.4-1.8-1.1-2.4L52.8,48.5L72,33.4c0.7-0.6,1.1-1.4,1.1-2.4V20.7H24.9V31c0,0.9,0.4,1.8,1.1,2.4l19.1,15.1   L26,63.6c-0.7,0.6-1.1,1.4-1.1,2.4v11.3h48.2V66z"/></g></svg>';
 export const VR_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" height="20" fill="white"><g><path d="M29,8H3A1,1,0,0,0,2,9V23a1,1,0,0,0,1,1H13a1,1,0,0,0,1-.83l.66-4A1.36,1.36,0,0,1,16,18a1.38,1.38,0,0,1,1.36,1.26L18,23.17A1,1,0,0,0,19,24H29a1,1,0,0,0,1-1V9A1,1,0,0,0,29,8ZM8.5,19A3.5,3.5,0,1,1,12,15.5,3.5,3.5,0,0,1,8.5,19Zm15,0A3.5,3.5,0,1,1,27,15.5,3.5,3.5,0,0,1,23.5,19Z"/></g></svg>`;
+export const CUTSCENE_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 142.448 142.448" height="20" fill="white"><g><path d="M142.411,68.9C141.216,31.48,110.968,1.233,73.549,0.038c-20.361-0.646-39.41,7.104-53.488,21.639 C6.527,35.65-0.584,54.071,0.038,73.549c1.194,37.419,31.442,67.667,68.861,68.861c0.779,0.025,1.551,0.037,2.325,0.037 c19.454,0,37.624-7.698,51.163-21.676C135.921,106.799,143.033,88.377,142.411,68.9z M111.613,110.336 c-10.688,11.035-25.032,17.112-40.389,17.112c-0.614,0-1.228-0.01-1.847-0.029c-29.532-0.943-53.404-24.815-54.348-54.348 c-0.491-15.382,5.122-29.928,15.806-40.958c10.688-11.035,25.032-17.112,40.389-17.112c0.614,0,1.228,0.01,1.847,0.029 c29.532,0.943,53.404,24.815,54.348,54.348C127.91,84.76,122.296,99.306,111.613,110.336z"></path> <path d="M94.585,67.086L63.001,44.44c-3.369-2.416-8.059-0.008-8.059,4.138v45.293 c0,4.146,4.69,6.554,8.059,4.138l31.583-22.647C97.418,73.331,97.418,69.118,94.585,67.086z"></path> </g></svg>`
 
 export function setChildren(parent: Element, children: Element[]): void {
     // We want to swap children around without removing them, since removing them will cause
@@ -914,6 +915,11 @@ function randomChoice<T>(L: T[]): T {
     return assertExists(L[idx]);
 }
 
+interface SceneDatabase {
+    sceneGroups: (string | SceneGroup)[];
+    onchanged: (() => void) | null;
+}
+
 class SceneSelect extends Panel {
     private sceneGroups: (string | SceneGroup)[] = [];
     private sceneDescs: (string | SceneDesc)[] = [];
@@ -931,7 +937,7 @@ class SceneSelect extends Panel {
     private currentSearchTokens: RegExp[] = [];
 
     public loadProgress: number;
-    public onscenedescselected: (sceneGroup: SceneGroup, sceneDesc: SceneDesc) => void;
+    public onscenedescselected: (sceneDesc: SceneDesc) => void;
 
     constructor(public viewer: Viewer.Viewer) {
         super();
@@ -1059,7 +1065,7 @@ class SceneSelect extends Panel {
 
                 if (!explicitlyInvisible) {
                     // If header matches, then we are explicitly visible.
-                    if (!visible == lastGroupHeaderVisible)
+                    if (!visible === lastGroupHeaderVisible)
                         visible = true;
 
                     // If name matches, then we are explicitly visible.
@@ -1104,7 +1110,7 @@ class SceneSelect extends Panel {
         this.sceneDescList.setHighlighted(this.sceneDescs.indexOf(this.currentSceneDesc));
     }
 
-    public setSceneGroups(sceneGroups: (string | SceneGroup)[]) {
+    private setSceneGroups(sceneGroups: (string | SceneGroup)[]) {
         this.sceneGroups = sceneGroups;
         this.sceneGroupList.setItems(sceneGroups.map((g): ScrollSelectItem => {
             if (typeof g === 'string')
@@ -1115,6 +1121,13 @@ class SceneSelect extends Panel {
         this.syncSceneDescs();
     }
 
+    public setSceneDatabase(sceneDatabase: SceneDatabase): void {
+        this.setSceneGroups(sceneDatabase.sceneGroups);
+        sceneDatabase.onchanged = () => {
+            this.setSceneGroups(sceneDatabase.sceneGroups);
+        };
+    }
+
     public setProgress(pct: number): void {
         this.loadProgress = pct;
         this.syncFlairs();
@@ -1122,7 +1135,7 @@ class SceneSelect extends Panel {
     }
 
     private selectSceneDesc(sceneDesc: SceneDesc) {
-        this.onscenedescselected(this.selectedSceneGroup, sceneDesc);
+        this.onscenedescselected(sceneDesc);
     }
 
     private selectSceneDescIndex(i: number) {
@@ -1598,7 +1611,6 @@ class ViewerSettings extends Panel {
         this.fovSlider = new Slider();
         this.fovSlider.setLabel("Field of View");
         this.fovSlider.setRange(1, 100);
-        this.fovSlider.setValue(Viewer.Viewer.FOV_Y_DEFAULT / Math.PI * 100);
         this.fovSlider.onvalue = this.onFovSliderChange.bind(this);
         this.contents.appendChild(this.fovSlider.elem);
 
@@ -1641,7 +1653,7 @@ class ViewerSettings extends Panel {
 
     private onFovSliderChange(): void {
         const value = this.fovSlider.getT();
-        this.viewer.fovY = value * (Math.PI * 0.995);
+        this.viewer.camera.fovY = value * (Math.PI * 0.995);
     }
 
     private onKeyMoveSpeedChanged(): void {
@@ -1655,8 +1667,11 @@ class ViewerSettings extends Panel {
         }
     }
 
-    public setInitialKeyMoveSpeed(v: number): void {
-        this.camSpeedSlider.setValue(v);
+    public setupFromCamera(cameraController: CameraController, camera: Camera): void {
+        const keyMoveSpeed = cameraController.getKeyMoveSpeed();
+        if (keyMoveSpeed !== null)
+            this.camSpeedSlider.setValue(keyMoveSpeed);
+        this.fovSlider.setValue(camera.fovY / Math.PI * 100);
     }
 
     private setCameraControllerClass(cameraControllerClass: CameraControllerClass) {
@@ -1973,7 +1988,7 @@ class About extends Panel {
 
 <p><a href="https://discord.gg/bkJmKKv"><strong>JOIN THE DISCORD</strong> by clicking here</a></p>
 
-<p><strong>CODE PRIMARILY WRITTEN</strong> by <a href="https://twitter.com/JasperRLZ">Jasper</a></p>
+<p><strong>CODE PRIMARILY WRITTEN</strong> by Jasper</p>
 
 <p><strong>OPEN SOURCE</strong> at <a href="${GITHUB_URL}">GitHub</a></p>
 
@@ -2682,7 +2697,7 @@ export class UI {
 
     public cameraSpeedIndicator = new CameraSpeedIndicator();
     private bottomBar = new BottomBar();
-    private playPauseButton = new PlayPauseButton();
+    public playPauseButton = new PlayPauseButton();
     private shareButton = new ShareButton();
     private fullscreenButton = new FullscreenButton();
 
@@ -2691,10 +2706,9 @@ export class UI {
     private isDragging: boolean = false;
     private lastMouseActiveTime: number = -1;
 
-    public isPlaying: boolean = true;
-
     public isEmbedMode: boolean = false;
     public isVisible: boolean = true;
+    public hasScene: boolean = false;
 
     public studioModeEnabled: boolean = false;
 
@@ -2768,11 +2782,6 @@ export class UI {
         this.studioPanel = new StudioPanel(this, viewer);
         this.toplevel.appendChild(this.studioPanel.elem);
 
-        this.playPauseButton.onplaypause = (shouldBePlaying) => {
-            this.togglePlayPause(shouldBePlaying);
-        };
-        this.playPauseButton.setIsPlaying(this.isPlaying);
-
         this.about.onfaq = () => {
             this.faqPanel.elem.style.display = 'block';
         };
@@ -2787,9 +2796,8 @@ export class UI {
         this.elem = this.toplevel;
     }
 
-    public togglePlayPause(shouldBePlaying: boolean = !this.isPlaying): void {
-        this.isPlaying = shouldBePlaying;
-        this.playPauseButton.setIsPlaying(this.isPlaying);
+    public setIsPlaying(v: boolean): void {
+        this.playPauseButton.setIsPlaying(v);
     }
 
     public toggleWebXRCheckbox(shouldBeChecked: boolean = !this.xrSettings.enableXRCheckBox.checked) {
@@ -2804,7 +2812,7 @@ export class UI {
         this.syncVisibilityState();
     }
 
-    public setSaveState(saveState: string) {
+    public setShareSaveState(saveState: string) {
         const shareURL = buildShareURL(saveState);
         this.shareButton.setShareURL(shareURL);
     }
@@ -2812,9 +2820,7 @@ export class UI {
     public sceneChanged() {
         const cameraControllerClass = this.viewer.cameraController!.constructor as CameraControllerClass;
         this.viewerSettings.cameraControllerSelected(cameraControllerClass);
-        const keyMoveSpeed = this.viewer.cameraController!.getKeyMoveSpeed();
-        if (keyMoveSpeed !== null)
-            this.viewerSettings.setInitialKeyMoveSpeed(keyMoveSpeed);
+        this.viewerSettings.setupFromCamera(this.viewer.cameraController!, this.viewer.camera);
 
         // Textures
         if (this.viewer.scene !== null) {
@@ -2840,7 +2846,17 @@ export class UI {
         this.debugFloaterHolder.destroyScene();
     }
 
+    private setHasScene(v: boolean): void {
+        if (this.hasScene === v)
+            return;
+
+        this.hasScene = v;
+        this.syncVisibilityState();
+    }
+
     public setScenePanels(scenePanels: Panel[] | null): void {
+        this.setHasScene(scenePanels !== null);
+
         if (scenePanels !== null) {
             this.setPanels([this.sceneSelect, ...scenePanels, this.textureViewer, this.viewerSettings, this.xrSettings, this.statisticsPanel, this.studioSidePanel, this.about]);
         } else {
@@ -2894,9 +2910,11 @@ export class UI {
         this.bottomBar.setVisible(bottomBarVisible);
         this.bottomBar.setActive(this.shouldBottomBarBeFadeIn());
 
+        this.playPauseButton.setVisible(this.hasScene);
+
         const extraButtonsVisible = !this.isEmbedMode;
         this.cameraSpeedIndicator.setVisible(extraButtonsVisible);
-        this.shareButton.setVisible(extraButtonsVisible);
+        this.shareButton.setVisible(extraButtonsVisible && this.hasScene);
     }
 
     public setEmbedMode(v: boolean): void {

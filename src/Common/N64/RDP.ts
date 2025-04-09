@@ -165,18 +165,28 @@ export interface CombineParams {
     a1: AlphaCombinePass;
 }
 
+// smoosh all high values into the appropriate "zero" case
+function mapAdditive(x: number): number {
+    if (x >= 8)
+        return CCMUX.ADD_ZERO;
+    return x;
+}
+
+function mapMult(x: number): number {
+    if (x >= 16)
+        return CCMUX.MUL_ZERO;
+    return x;
+}
+
 export function decodeCombineParams(w0: number, w1: number): CombineParams {
-    // because we aren't implementing all the combine input options (notably, not noise)
-    // and the highest values are just 0, we can get away with throwing away high bits:
-    // ax,bx,dx can be 3 bits, and cx can be 4
-    const a0  = (w0 >>> 20) & 0x07;
-    const c0  = (w0 >>> 15) & 0x0f;
+    const a0  = mapAdditive((w0 >>> 20) & 0x0f);
+    const c0  = mapMult((w0 >>> 15) & 0x1f);
     const Aa0 = (w0 >>> 12) & 0x07;
     const Ac0 = (w0 >>> 9) & 0x07;
-    const a1  = (w0 >>> 5) & 0x07;
-    const c1  = (w0 >>> 0) & 0x0f;
-    const b0  = (w1 >>> 28) & 0x07;
-    const b1  = (w1 >>> 24) & 0x07;
+    const a1  = mapAdditive((w0 >>> 5) & 0x0f);
+    const c1  = mapMult((w0 >>> 0) & 0x1f);
+    const b0  = mapAdditive((w1 >>> 28) & 0x0f);
+    const b1  = mapAdditive((w1 >>> 24) & 0x0f);
     const Aa1 = (w1 >>> 21) & 0x07;
     const Ac1 = (w1 >>> 18) & 0x07;
     const d0  = (w1 >>> 15) & 0x07;
@@ -198,14 +208,14 @@ export function decodeCombineParams(w0: number, w1: number): CombineParams {
 }
 
 function colorCombinePassUsesT0(ccp: ColorCombinePass) {
-    return (ccp.a == CCMUX.TEXEL0) || (ccp.a == CCMUX.TEXEL0_A) ||
-        (ccp.b == CCMUX.TEXEL0) || (ccp.b == CCMUX.TEXEL0_A) ||
-        (ccp.c == CCMUX.TEXEL0) || (ccp.c == CCMUX.TEXEL0_A) ||
-        (ccp.d == CCMUX.TEXEL0) || (ccp.d == CCMUX.TEXEL0_A);
+    return (ccp.a === CCMUX.TEXEL0) || (ccp.a === CCMUX.TEXEL0_A) ||
+        (ccp.b === CCMUX.TEXEL0) || (ccp.b === CCMUX.TEXEL0_A) ||
+        (ccp.c === CCMUX.TEXEL0) || (ccp.c === CCMUX.TEXEL0_A) ||
+        (ccp.d === CCMUX.TEXEL0) || (ccp.d === CCMUX.TEXEL0_A);
 }
 
 function alphaCombinePassUsesT0(acp: AlphaCombinePass) {
-    return (acp.a == ACMUX.TEXEL0 || acp.b == ACMUX.TEXEL0 || acp.c == ACMUX.TEXEL0 || acp.d == ACMUX.TEXEL0);
+    return (acp.a === ACMUX.TEXEL0 || acp.b === ACMUX.TEXEL0 || acp.c === ACMUX.TEXEL0 || acp.d === ACMUX.TEXEL0);
 }
 
 export function combineParamsUsesT0(cp: CombineParams) {
@@ -214,14 +224,14 @@ export function combineParamsUsesT0(cp: CombineParams) {
 }
 
 function colorCombinePassUsesT1(ccp: ColorCombinePass) {
-    return (ccp.a == CCMUX.TEXEL1) || (ccp.a == CCMUX.TEXEL1_A) ||
-        (ccp.b == CCMUX.TEXEL1) || (ccp.b == CCMUX.TEXEL1_A) ||
-        (ccp.c == CCMUX.TEXEL1) || (ccp.c == CCMUX.TEXEL1_A) ||
-        (ccp.d == CCMUX.TEXEL1) || (ccp.d == CCMUX.TEXEL1_A);
+    return (ccp.a === CCMUX.TEXEL1) || (ccp.a === CCMUX.TEXEL1_A) ||
+        (ccp.b === CCMUX.TEXEL1) || (ccp.b === CCMUX.TEXEL1_A) ||
+        (ccp.c === CCMUX.TEXEL1) || (ccp.c === CCMUX.TEXEL1_A) ||
+        (ccp.d === CCMUX.TEXEL1) || (ccp.d === CCMUX.TEXEL1_A);
 }
 
 function alphaCombinePassUsesT1(acp: AlphaCombinePass) {
-    return (acp.a == ACMUX.TEXEL1 || acp.b == ACMUX.TEXEL1 || acp.c == ACMUX.TEXEL1 || acp.d == ACMUX.TEXEL1);
+    return (acp.a === ACMUX.TEXEL1 || acp.b === ACMUX.TEXEL1 || acp.c === ACMUX.TEXEL1 || acp.d === ACMUX.TEXEL1);
 }
 
 export function combineParamsUsesT1(cp: CombineParams) {
@@ -233,7 +243,7 @@ export function combineParamsUsesT1(cp: CombineParams) {
 export function combineParamsUseTexelsInSecondCycle(comb: CombineParams): boolean {
     for(let param of [comb.a1.a, comb.a1.b, comb.a1.c, comb.a1.d, comb.c1.a, comb.c1.b, comb.c1.c, comb.c1.d]) {
         // note that I'm using the CCMUX enum even though we're comparing against color and alpha
-        // (b/c in this case CCMUX.TEXEL0 == ACMUX.TEXEL0 and same for TEXEL1)
+        // (b/c in this case CCMUX.TEXEL0 === ACMUX.TEXEL0 and same for TEXEL1)
         // same principle applies to other methods
         if(param === CCMUX.TEXEL0 || param === CCMUX.TEXEL1)
             return true;
@@ -272,13 +282,13 @@ export function generateCombineParamsString(comb: CombineParams, twoCycle: boole
         "SHADE","ENVIRONMENT","1","NOISE",
         "0","0","0","0","0","0","0","0",
     ];
-    
+
     let colorB = [
         "COMBINED","TEXEL0","TEXEL1","PRIMITIVE",
         "SHADE","ENVIRONMENT","CENTER","K4",
         "0","0","0","0","0","0","0","0",
     ];
-    
+
     let colorC = [
         "COMBINED","TEXEL0","TEXEL1","PRIMITIVE",
         "SHADE","ENVIRONMENT","SCALE","COMBINED_ALPHA",
@@ -287,17 +297,17 @@ export function generateCombineParamsString(comb: CombineParams, twoCycle: boole
         "PRIM_LOD_FRAC","K5",
         "0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0"
     ];
-    
+
     let colorD = [
         "COMBINED","TEXEL0","TEXEL1","PRIMITIVE",
         "SHADE","ENVIRONMENT","1","0"
     ];
-    
+
     let alphaABD = [
         "COMBINED","TEXEL0","TEXEL1","PRIMITIVE",
         "SHADE","ENVIRONMENT","1","0"
     ];
-    
+
     let alphaC = [
         "LOD_FRACTION","TEXEL0","TEXEL1","PRIMITIVE",
         "SHADE","ENVIRONMENT","PRIM_LOD_FRAC","0"

@@ -4,7 +4,7 @@ import { FloatingPanel } from './DebugFloaters.js';
 import { drawWorldSpaceLine, drawWorldSpacePoint, getDebugOverlayCanvas2D } from './DebugJunk.js';
 import { Blue, Color, Green, Red, Magenta, Cyan } from './Color.js';
 import { StudioCameraController } from './Camera.js';
-import { clamp, computeEulerAngleRotationFromSRTMatrix, getMatrixAxisZ, lerp, invlerp, Vec3UnitY, Vec3Zero, MathConstants } from './MathHelpers.js';
+import { clamp, calcEulerAngleRotationFromSRTMatrix, getMatrixAxisZ, lerp, invlerp, Vec3UnitY, Vec3Zero, MathConstants } from './MathHelpers.js';
 import { mat4, ReadonlyMat4, vec3, vec2 } from 'gl-matrix';
 import { GlobalSaveManager } from './SaveManager.js';
 import { getPointHermite } from './Spline.js';
@@ -2479,7 +2479,7 @@ export class StudioPanel extends FloatingPanel {
                     } else {
                         mat4.rotateZ(this.scratchMat, this.scratchMat, this.animationPreviewSteps[i].bank);
                     }
-                    computeEulerAngleRotationFromSRTMatrix(this.scratchVec3a, this.scratchMat);
+                    calcEulerAngleRotationFromSRTMatrix(this.scratchVec3a, this.scratchMat);
                     vec3.copy(this.scratchVec3c, Vec3UnitY);
                     vec3.rotateZ(this.scratchVec3c, this.scratchVec3c, Vec3Zero, -this.scratchVec3a[2]);
                     vec3.rotateY(this.scratchVec3c, this.scratchVec3c, Vec3Zero, -this.scratchVec3a[1]);
@@ -2511,7 +2511,7 @@ export class StudioPanel extends FloatingPanel {
                     } else {
                         mat4.rotateZ(this.scratchMat, this.scratchMat, this.animationPreviewSteps[stepIndex].bank);
                     }
-                    computeEulerAngleRotationFromSRTMatrix(this.scratchVec3a, this.scratchMat);
+                    calcEulerAngleRotationFromSRTMatrix(this.scratchVec3a, this.scratchMat);
                     vec3.copy(this.scratchVec3c, Vec3UnitY);
                     vec3.rotateZ(this.scratchVec3c, this.scratchVec3c, Vec3Zero, -this.scratchVec3a[2]);
                     vec3.rotateY(this.scratchVec3c, this.scratchVec3c, Vec3Zero, -this.scratchVec3a[1]);
@@ -3603,7 +3603,7 @@ export class StudioPanel extends FloatingPanel {
         const lookAtYKf: Keyframe = { time: t, value: this.scratchVecLook[1], tangentIn: 0, tangentOut: 0, interpInType: interpType, interpOutType: interpType, easeInCoeff: 1, easeOutCoeff: 1 };
         const lookAtZKf: Keyframe = { time: t, value: this.scratchVecLook[2], tangentIn: 0, tangentOut: 0, interpInType: interpType, interpOutType: interpType, easeInCoeff: 1, easeOutCoeff: 1 };
 
-        computeEulerAngleRotationFromSRTMatrix(this.scratchVecPos, mat);
+        calcEulerAngleRotationFromSRTMatrix(this.scratchVecPos, mat);
         vec3.copy(this.scratchVecLook, Vec3UnitY);
         vec3.rotateZ(this.scratchVecLook, this.scratchVecLook, Vec3Zero, -this.scratchVecPos[2]);
         vec3.rotateY(this.scratchVecLook, this.scratchVecLook, Vec3Zero, -this.scratchVecPos[1]);

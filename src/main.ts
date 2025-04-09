@@ -84,7 +84,6 @@ import * as Scenes_DiddyKongRacing from './DiddyKongRacing/scenes.js';
 import * as Scenes_SpongebobRevengeOfTheFlyingDutchman from "./SpongebobRevengeOfTheFlyingDutchman/scenes.js";
 import * as Scenes_MarioKart8Deluxe from './MarioKart8Deluxe/Scenes.js';
 import * as Scenes_JetSetRadio from './JetSetRadio/Scenes.js';
-import * as Scenes_Subnautica from './Subnautica/scenes.js';
 import * as Scenes_Halo1 from './Halo1/scenes.js';
 import * as Scenes_WorldOfWarcraft from './WorldOfWarcraft/scenes.js';
 import * as Scenes_Glover from './Glover/scenes.js';
@@ -93,6 +92,10 @@ import * as Scenes_SuperMonkeyBall from './SuperMonkeyBall/Scenes_SuperMonkeyBal
 import * as Scenes_DragonQuest8 from './DragonQuest8/scenes.js';
 import * as Scenes_Morrowind from './Morrowind/Scenes.js';
 import * as Scenes_EstrangedActI from './SourceEngine/Scenes_EstrangedActI.js';
+import * as Scenes_AShortHike from './AShortHike/Scenes.js';
+import * as Scenes_NeonWhite from './NeonWhite/Scenes.js';
+import * as Scenes_OuterWilds from './OuterWilds/Scenes.js';
+import * as Scenes_CrashWarped from './CrashWarped/scenes.js';
 
 import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_FileDrops.js';
 
@@ -115,6 +118,7 @@ import { DataShare } from './DataShare.js';
 import InputManager from './InputManager.js';
 import { WebXRContext } from './WebXR.js';
 import { debugJunk } from './DebugJunk.js';
+import { IS_DEVELOPMENT } from './BuildVersion.js';
 
 const sceneGroups: (string | SceneGroup)[] = [
     "Wii",
@@ -186,6 +190,7 @@ const sceneGroups: (string | SceneGroup)[] = [
     Scenes_Portal2.sceneGroup,
     Scenes_WorldOfWarcraft.vanillaSceneGroup,
     "Experimental",
+    Scenes_CrashWarped.sceneGroup,
     Scenes_DonkeyKong64.sceneGroup,
     Scenes_DonkeyKongCountryReturns.sceneGroup,
     Scenes_Elebits.sceneGroup,
@@ -214,7 +219,6 @@ const sceneGroups: (string | SceneGroup)[] = [
     Scenes_TheStanleyParable.sceneGroup,
     Scenes_Infra.sceneGroup,
     Scenes_JetSetRadio.sceneGroup,
-    Scenes_Subnautica.sceneGroup,
     Scenes_WorldOfWarcraft.bcSceneGroup,
     Scenes_WorldOfWarcraft.wotlkSceneGroup,
     Scenes_HalfLife.sceneGroup,
@@ -222,6 +226,9 @@ const sceneGroups: (string | SceneGroup)[] = [
     Scenes_NeoTokyo.sceneGroup,
     Scenes_Morrowind.sceneGroup,
     Scenes_EstrangedActI.sceneGroup,
+    Scenes_AShortHike.sceneGroup,
+    Scenes_NeonWhite.sceneGroup,
+    Scenes_OuterWilds.sceneGroup,
 ];
 
 function convertCanvasToPNG(canvas: HTMLCanvasElement): Promise<Blob> {
@@ -262,21 +269,73 @@ class AnimationLoop implements ViewerUpdateInfo {
     };
 }
 
-function getSceneDescs(sceneGroup: SceneGroup): SceneDesc[] {
-    return sceneGroup.sceneDescs.filter((g) => typeof g !== 'string') as SceneDesc[];
+class SceneDatabase {
+    private sceneDescToGroup = new Map<SceneDesc, SceneGroup>();
+    private sceneDescToId = new Map<SceneDesc, string>();
+    private idToSceneDesc = new Map<string, SceneDesc>();
+
+    public onchanged: (() => void) | null = null;
+
+    constructor(public sceneGroups: (SceneGroup | string)[]) {
+        for (const sceneGroup of sceneGroups) {
+            if (typeof sceneGroup !== "object")
+                continue;
+
+            for (const sceneDesc of sceneGroup.sceneDescs)
+                if (typeof sceneDesc === "object")
+                    this.addSceneDesc(sceneGroup, sceneDesc);
+
+            if (sceneGroup.sceneIdMap !== undefined) {
+                for (const [altSceneId, sceneId] of sceneGroup.sceneIdMap) {
+                    const altSceneDescId = `${sceneGroup.id}/${altSceneId}`;
+                    const sceneDescId = `${sceneGroup.id}/${sceneId}`;
+                    const sceneDesc = assertExists(this.idToSceneDesc.get(sceneDescId));
+                    this.idToSceneDesc.set(altSceneDescId, sceneDesc);
+                }
+            }
+        }
+    }
+
+    private _makeSceneDescId(sceneGroup: SceneGroup, sceneDesc: SceneDesc): string {
+        return `${sceneGroup.id}/${sceneDesc.id}`;
+    }
+
+    public getSceneDescId(sceneDesc: SceneDesc): string {
+        return this.sceneDescToId.get(sceneDesc)!;
+    }
+
+    public getSceneDescGroup(sceneDesc: SceneDesc): SceneGroup {
+        return this.sceneDescToGroup.get(sceneDesc)!;
+    }
+
+    public getSceneDescForId(sceneDescId: string): SceneDesc | null {
+        return this.idToSceneDesc.get(sceneDescId) ?? null;
+    }
+
+    public addSceneDesc(sceneGroup: SceneGroup, sceneDesc: SceneDesc): void {
+        assert(sceneGroup.sceneDescs.includes(sceneDesc));
+        const id = this._makeSceneDescId(sceneGroup, sceneDesc);
+        this.sceneDescToGroup.set(sceneDesc, sceneGroup);
+        this.sceneDescToId.set(sceneDesc, id);
+        this.idToSceneDesc.set(id, sceneDesc);
+
+        if (this.onchanged !== null)
+            this.onchanged();
+    }
 }
+
+type TimeState = { isPlaying: boolean, sceneTimeScale: number, sceneTime: number };
 
 class Main {
     public toplevel: HTMLElement;
     public canvas: HTMLCanvasElement;
     public viewer: Viewer;
-    public groups: (string | SceneGroup)[];
     public ui: UI;
     public saveManager = GlobalSaveManager;
 
     private droppedFileGroup: SceneGroup;
+    private sceneDatabase = new SceneDatabase(sceneGroups);
 
-    private currentSceneGroup: SceneGroup | null = null;
     private currentSceneDesc: SceneDesc | null = null;
 
     private loadingSceneDesc: SceneDesc | null = null;
@@ -290,8 +349,10 @@ class Main {
     private webXRContext: WebXRContext;
 
     public sceneTimeScale = 1.0;
-    public isEmbedMode = false;
+    private isPlaying = false;
     private isFrameStep = false;
+
+    public isEmbedMode = false;
     private pixelSize = 1;
 
     // Link to debugJunk so we can reference it from the DevTools.
@@ -350,7 +411,7 @@ class Main {
             this.ui.statisticsPanel.addRenderStatistics(statistics);
         };
         this.viewer.oncamerachanged = (force: boolean) => {
-            this._saveState(force);
+            this._autoSaveState(force);
         };
         this.viewer.inputManager.ondraggingmodechanged = () => {
             this.ui.setDraggingMode(this.viewer.inputManager.getDraggingMode());
@@ -361,29 +422,16 @@ class Main {
         this.dataFetcher = new DataFetcher(this.ui.sceneSelect);
         await this.dataFetcher.init();
 
-        this.groups = sceneGroups;
-
         this.droppedFileGroup = { id: "drops", name: "Dropped Files", sceneDescs: [] };
-        this.groups.push('Other');
-        this.groups.push(this.droppedFileGroup);
+        sceneGroups.push('Other');
+        sceneGroups.push(this.droppedFileGroup);
 
-        this._loadSceneGroups();
+        this.ui.sceneSelect.setSceneDatabase(this.sceneDatabase);
 
         window.onhashchange = this._onHashChange.bind(this);
 
         if (this.currentSceneDesc === null)
-            this._onHashChange();
-
-        if (this.currentSceneDesc === null) {
-            // Load the state from session storage.
-            const currentDescId = this.saveManager.getCurrentSceneDescId();
-            if (currentDescId !== null) {
-                // Load save slot 0.
-                const key = this.saveManager.getSaveStateSlotKey(currentDescId, 0);
-                const sceneState = this.saveManager.loadState(key);
-                this._loadSceneDescById(currentDescId, sceneState);
-            }
-        }
+            this._loadInitialStateFromHash();
 
         if (this.currentSceneDesc === null) {
             // Make the user choose a scene if there's nothing loaded by default...
@@ -393,10 +441,55 @@ class Main {
         this._onRequestAnimationFrameCanvas();
     }
 
-    private _onHashChange(): void {
+    private setIsPlaying(v: boolean): void {
+        if (this.isPlaying === v)
+            return;
+
+        this.isPlaying = v;
+        this.ui.playPauseButton.setIsPlaying(v);
+
+        if (IS_DEVELOPMENT)
+            this._saveCurrentTimeState(this._getCurrentSceneDescId()!);
+    }
+
+    private _decodeHashString(hashString: string): [string, string] {
+        let sceneDescId: string = '', sceneSaveState: string = '';
+        const firstSemicolon = hashString.indexOf(';');
+        if (firstSemicolon >= 0) {
+            sceneDescId = hashString.slice(0, firstSemicolon);
+            sceneSaveState = hashString.slice(firstSemicolon + 1);
+        } else {
+            sceneDescId = hashString;
+        }
+
+        return [sceneDescId, sceneSaveState];
+    }
+
+    private _decodeHash(): [string, string] {
         const hash = window.location.hash;
-        if (hash.startsWith('#'))
-            this._loadState(decodeURIComponent(hash.slice(1)));
+        if (hash.startsWith('#')) {
+            return this._decodeHashString(decodeURIComponent(hash.slice(1)));
+        } else {
+            return ['', ''];
+        }
+    }
+
+    private _onHashChange(): void {
+        const [sceneDescId, sceneSaveState] = this._decodeHash();
+        const sceneDesc = this.sceneDatabase.getSceneDescForId(sceneDescId);
+        if (sceneDesc !== null)
+            this._loadSceneDesc(sceneDesc, sceneSaveState);
+    }
+
+    private _loadInitialStateFromHash(): void {
+        const [sceneDescId, sceneSaveState] = this._decodeHash();
+        const sceneDesc = this.sceneDatabase.getSceneDescForId(sceneDescId);
+        if (sceneDesc !== null) {
+            // Load save slot 0 from session storage.
+            const key = this.saveManager.getSaveStateSlotKey(sceneDescId, 0);
+            const sceneState = this.saveManager.loadState(key) ?? sceneSaveState;
+            this._loadSceneDesc(sceneDesc, sceneState);
+        }
     }
 
     private _exportSaveData() {
@@ -405,7 +498,7 @@ class Main {
         downloadBlob(`noclip_export_${date.toISOString()}.nclsp`, new Blob([saveData]));
     }
 
-    private pickSaveStatesAction(inputManager: InputManager): SaveStatesAction {
+    private _pickSaveStatesAction(inputManager: InputManager): SaveStatesAction {
         if (inputManager.isKeyDown('ShiftLeft'))
             return SaveStatesAction.Save;
         else if (inputManager.isKeyDown('AltLeft'))
@@ -414,7 +507,7 @@ class Main {
             return SaveStatesAction.Load;
     }
 
-    private checkKeyShortcuts() {
+    private _checkKeyShortcuts() {
         const inputManager = this.viewer.inputManager;
         if (inputManager.isKeyDownEventTriggered('KeyZ'))
             this._toggleUI();
@@ -424,7 +517,7 @@ class Main {
             if (inputManager.isKeyDownEventTriggered('Digit'+i)) {
                 if (this.currentSceneDesc) {
                     const key = this._getSaveStateSlotKey(i);
-                    const action = this.pickSaveStatesAction(inputManager);
+                    const action = this._pickSaveStatesAction(inputManager);
                     this.doSaveStatesAction(action, key);
                 }
             }
@@ -433,13 +526,13 @@ class Main {
         if (inputManager.isKeyDownEventTriggered('Numpad3'))
             this._exportSaveData();
         if (inputManager.isKeyDownEventTriggered('Period'))
-            this.ui.togglePlayPause();
+            this.setIsPlaying(!this.isPlaying);
         if (inputManager.isKeyDown('Comma')) {
-            this.ui.togglePlayPause(false);
+            this.setIsPlaying(false);
             this.isFrameStep = true;
         }
         if (inputManager.isKeyDownEventTriggered('F9'))
-            this._loadSceneDesc(this.currentSceneGroup!, this.currentSceneDesc!, this._getSceneSaveState(), true);
+            this._loadSceneDesc(this.currentSceneDesc!, this._getSceneSaveState(), true);
     }
 
     private async _onWebXRStateRequested(state: boolean) {
@@ -466,7 +559,7 @@ class Main {
     }
 
     private _onPostAnimFrameUpdate = (updateInfo: ViewerUpdateInfo): void => {
-        this.checkKeyShortcuts();
+        this._checkKeyShortcuts();
 
         prepareFrameDebugOverlayCanvas2D();
 
@@ -474,13 +567,11 @@ class Main {
         const shouldTakeScreenshot = this.viewer.inputManager.isKeyDownEventTriggered('Numpad7') || this.viewer.inputManager.isKeyDownEventTriggered('BracketRight');
 
         let sceneTimeScale = this.sceneTimeScale;
-        if (!this.ui.isPlaying) {
-            if (this.isFrameStep) {
-                sceneTimeScale /= 4.0;
-                this.isFrameStep = false;
-            } else {
-                sceneTimeScale = 0.0;
-            }
+        if (this.isFrameStep) {
+            sceneTimeScale /= 4.0;
+            this.isFrameStep = false;
+        } else if (!this.isPlaying) {
+            sceneTimeScale = 0.0;
         }
 
         if (!this.viewer.externalControl) {
@@ -515,8 +606,8 @@ class Main {
         const files = await traverseFileSystemDataTransfer(transfer);
         const sceneDesc = new DroppedFileSceneDesc(files);
         this.droppedFileGroup.sceneDescs.push(sceneDesc);
-        this._loadSceneGroups();
-        this._loadSceneDesc(this.droppedFileGroup, sceneDesc);
+        this.sceneDatabase.addSceneDesc(this.droppedFileGroup, sceneDesc);
+        this._loadSceneDesc(sceneDesc);
     }
 
     private _onResize() {
@@ -605,57 +696,50 @@ class Main {
         }
     }
 
-    private _loadSceneDescById(id: string, sceneState: string | null): void {
-        const [groupId, ...sceneRest] = id.split('/');
-        let sceneId = decodeURIComponent(sceneRest.join('/'));
-
-        const group = this.groups.find((g) => typeof g !== 'string' && g.id === groupId) as SceneGroup;
-        if (!group)
-            return;
-
-        if (group.sceneIdMap !== undefined && group.sceneIdMap.has(sceneId))
-            sceneId = group.sceneIdMap.get(sceneId)!;
-
-        const desc = getSceneDescs(group).find((d) => d.id === sceneId);
-        if (!desc)
-            return;
-
-        this._loadSceneDesc(group, desc, sceneState);
-    }
-
-    private _loadState(state: string) {
-        let sceneDescId: string = '', sceneSaveState: string = '';
-        const firstSemicolon = state.indexOf(';');
-        if (firstSemicolon >= 0) {
-            sceneDescId = state.slice(0, firstSemicolon);
-            sceneSaveState = state.slice(firstSemicolon + 1);
-        } else {
-            sceneDescId = state;
-        }
-
-        return this._loadSceneDescById(sceneDescId, sceneSaveState);
-    }
-
     private _getCurrentSceneDescId() {
-        if (this.currentSceneGroup === null || this.currentSceneDesc === null)
+        if (this.currentSceneDesc === null)
             return null;
 
-        const groupId = this.currentSceneGroup.id;
-        const sceneId = this.currentSceneDesc.id;
-        return `${groupId}/${sceneId}`;
+        return this.sceneDatabase.getSceneDescId(this.currentSceneDesc);
     }
 
-    private _saveState(forceUpdateURL: boolean = false) {
-        if (this.currentSceneGroup === null || this.currentSceneDesc === null)
+    private _applyTimeState(timeState: TimeState): void {
+        this.setIsPlaying(timeState.isPlaying);
+        this.sceneTimeScale = timeState.sceneTimeScale;
+        this.viewer.sceneTime = timeState.sceneTime;
+    }
+
+    private _loadTimeState(sceneDescId: string): TimeState | null {
+        const timeStateKey = `TimeState/${sceneDescId}`;
+        const timeStateStr = this.saveManager.loadStateFromLocation(timeStateKey, SaveStateLocation.SessionStorage);
+        if (!timeStateStr)
+            return null;
+
+        const timeState = JSON.parse(timeStateStr) as TimeState;
+        return timeState;
+    }
+
+    private _saveCurrentTimeState(sceneDescId: string): void {
+        const timeState: TimeState = { isPlaying: this.isPlaying, sceneTimeScale: this.sceneTimeScale, sceneTime: this.viewer.sceneTime };
+        const timeStateStr = JSON.stringify(timeState);
+        const timeStateKey = `TimeState/${sceneDescId}`;
+        this.saveManager.saveTemporaryState(timeStateKey, timeStateStr);
+    }
+
+    private _autoSaveState(forceUpdateURL: boolean = false) {
+        if (this.currentSceneDesc === null)
             return;
 
         const sceneStateStr = this._getSceneSaveState();
-        const currentDescId = this._getCurrentSceneDescId()!;
-        const key = this.saveManager.getSaveStateSlotKey(currentDescId, 0);
+        const currentSceneDescId = this._getCurrentSceneDescId()!;
+        const key = this.saveManager.getSaveStateSlotKey(currentSceneDescId, 0);
         this.saveManager.saveTemporaryState(key, sceneStateStr);
 
-        const saveState = `${currentDescId};${sceneStateStr}`;
-        this.ui.setSaveState(saveState);
+        if (IS_DEVELOPMENT)
+            this._saveCurrentTimeState(currentSceneDescId);
+
+        const saveState = `${currentSceneDescId};${sceneStateStr}`;
+        this.ui.setShareSaveState(saveState);
 
         let shouldUpdateURL = forceUpdateURL;
         if (!shouldUpdateURL) {
@@ -675,14 +759,14 @@ class Main {
     }
 
     private _saveStateAndUpdateURL(): void {
-        this._saveState(true);
+        this._autoSaveState(true);
     }
 
     private _getSaveStateSlotKey(slotIndex: number): string {
         return this.saveManager.getSaveStateSlotKey(assertExists(this._getCurrentSceneDescId()), slotIndex);
     }
 
-    private _onSceneChanged(scene: SceneGfx, sceneStateStr: string | null): void {
+    private _onSceneChanged(scene: SceneGfx, sceneStateStr: string | null, timeState: TimeState | null): void {
         scene.onstatechanged = () => {
             this._saveStateAndUpdateURL();
         };
@@ -691,17 +775,20 @@ class Main {
         if (scene.createPanels)
             scenePanels = scene.createPanels();
         this.ui.setScenePanels(scenePanels);
+
         // Force time to play when loading a map.
-        this.ui.togglePlayPause(true);
+        this.setIsPlaying(true);
 
         const sceneDescId = this._getCurrentSceneDescId()!;
         this.saveManager.setCurrentSceneDescId(sceneDescId);
-        this._saveStateAndUpdateURL();
 
         if (scene.createCameraController !== undefined)
             this.viewer.setCameraController(scene.createCameraController());
         if (this.viewer.cameraController === null)
             this.viewer.setCameraController(new FPSCameraController());
+
+        if (timeState !== null)
+            this._applyTimeState(timeState);
 
         if (!this._loadSceneSaveState(sceneStateStr)) {
             const camera = this.viewer.camera;
@@ -719,11 +806,12 @@ class Main {
             mat4.getTranslation(this.viewer.xrCameraController.offset, camera.worldMatrix);
         }
 
+        this._saveStateAndUpdateURL();
         this.ui.sceneChanged();
     }
 
-    private _onSceneDescSelected(sceneGroup: SceneGroup, sceneDesc: SceneDesc) {
-        this._loadSceneDesc(sceneGroup, sceneDesc);
+    private _onSceneDescSelected(sceneDesc: SceneDesc) {
+        this._loadSceneDesc(sceneDesc);
     }
 
     private doSaveStatesAction(action: SaveStatesAction, key: string): void {
@@ -742,9 +830,9 @@ class Main {
 
     private loadSceneDelta = 1;
 
-    private _loadSceneDesc(sceneGroup: SceneGroup, sceneDesc: SceneDesc, sceneStateStr: string | null = null, force: boolean = false): void {
+    private _loadSceneDesc(sceneDesc: SceneDesc, sceneStateStr: string | null = null, force: boolean = false): void {
         if (this.currentSceneDesc === sceneDesc && !force) {
-            this._loadSceneSaveState(sceneStateStr)
+            this._loadSceneSaveState(sceneStateStr);
             return;
         }
 
@@ -761,13 +849,14 @@ class Main {
             this.destroyablePool[i].destroy(device);
         this.destroyablePool.length = 0;
 
+        const sceneGroup = this.sceneDatabase.getSceneDescGroup(sceneDesc);
+
         // Unhide any hidden scene groups upon being loaded.
         if (sceneGroup.hidden)
             sceneGroup.hidden = false;
 
-        this.currentSceneGroup = sceneGroup;
         this.currentSceneDesc = sceneDesc;
-        this.ui.sceneSelect.setCurrentDesc(this.currentSceneGroup, this.currentSceneDesc);
+        this.ui.sceneSelect.setCurrentDesc(sceneGroup, this.currentSceneDesc);
 
         this.ui.sceneSelect.setProgress(0);
 
@@ -780,11 +869,15 @@ class Main {
         const inputManager = this.viewer.inputManager;
         inputManager.reset();
         const viewerInput = this.viewer.viewerRenderInput;
+
+        const timeState = IS_DEVELOPMENT ? this._loadTimeState(this.sceneDatabase.getSceneDescId(sceneDesc)) : null;
+        const initialSceneTime = timeState !== null ? timeState.sceneTime : 0;
+
         const context: SceneContext = {
-            device, dataFetcher, dataShare, uiContainer, destroyablePool, inputManager, viewerInput,
+            device, dataFetcher, dataShare, uiContainer, destroyablePool, inputManager, viewerInput, initialSceneTime,
         };
 
-        // The age delta on pruneOldObjects determines whether any resources will be shared at all.
+        // The age delta on pruneOldObjects determines whether any resources willf be shared at all.
         // delta = 0 means that we destroy the set of resources used by the previous scene, before
         // we increment the age below fore the "new" scene, which is the only proper way to do leak
         // checking. Typically, we allow one old scene's worth of contents.
@@ -809,16 +902,12 @@ class Main {
                 dataFetcher.setProgress();
                 this.loadingSceneDesc = null;
                 this.viewer.setScene(scene);
-                this._onSceneChanged(scene, sceneStateStr);
+                this._onSceneChanged(scene, sceneStateStr, timeState);
             }
         });
 
         // Set window title.
         document.title = `${sceneDesc.name} - ${sceneGroup.name} - noclip`;
-    }
-
-    private _loadSceneGroups() {
-        this.ui.sceneSelect.setSceneGroups(this.groups);
     }
 
     private _makeUI() {
@@ -827,6 +916,7 @@ class Main {
         this.toplevel.appendChild(this.ui.elem);
         this.ui.sceneSelect.onscenedescselected = this._onSceneDescSelected.bind(this);
         this.ui.xrSettings.onWebXRStateRequested = this._onWebXRStateRequested.bind(this);
+        this.ui.playPauseButton.onplaypause = this.setIsPlaying.bind(this);
 
         this.webXRContext.onsupportedchanged = () => {
             this._syncWebXRSettingsVisible();
@@ -843,10 +933,10 @@ class Main {
     }
 
     private _getSceneDownloadPrefix() {
-        const groupId = this.currentSceneGroup!.id;
+        const sceneGroup = this.sceneDatabase.getSceneDescGroup(this.currentSceneDesc!);
         const sceneId = this.currentSceneDesc!.id;
         const date = new Date();
-        return `${groupId}_${sceneId}_${date.toISOString()}`;
+        return `${sceneGroup.id}_${sceneId}_${date.toISOString()}`;
     }
 
     private _takeScreenshot(opaque: boolean = true) {

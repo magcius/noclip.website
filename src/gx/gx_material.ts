@@ -5,8 +5,7 @@ import * as GX from './gx_enum.js';
 
 import { colorCopy, colorFromRGBA, TransparentBlack, colorNewCopy } from '../Color.js';
 import { GfxFormat } from '../gfx/platform/GfxPlatformFormat.js';
-import { vec3, mat4, ReadonlyVec3 } from 'gl-matrix';
-import { Camera } from '../Camera.js';
+import { vec3, ReadonlyVec3, ReadonlyMat4 } from 'gl-matrix';
 import { assert } from '../util.js';
 import { IsDepthReversed } from '../gfx/helpers/ReversedDepthHelpers.js';
 import { MathConstants, transformVec3Mat4w1, transformVec3Mat4w0 } from '../MathHelpers.js';
@@ -333,6 +332,8 @@ export function materialHasDynamicAlphaTest(material: { hasDynamicAlphaTest?: bo
 
 function generateBindingsDefinition(material: { hasPostTexMtxBlock?: boolean, hasLightsBlock?: boolean, hasFogBlock?: boolean, usePnMtxIdx?: boolean, hasDynamicAlphaTest?: boolean }): string {
     return `
+${GfxShaderLibrary.MatrixLibrary}
+
 // Expected to be constant across the entire scene.
 layout(std140) uniform ub_SceneParams {
     Mat4x4 u_Projection;
@@ -364,14 +365,14 @@ layout(std140) uniform ub_MaterialParams {
     vec4 u_ColorAmbReg[2];
     vec4 u_KonstColor[4];
     vec4 u_Color[4];
-    Mat4x3 u_TexMtx[10];
+    Mat3x4 u_TexMtx[10];
     vec4 u_TextureSizes[4];
     vec4 u_TextureBiases[2];
-    Mat4x2 u_IndTexMtx[3];
+    Mat2x4 u_IndTexMtx[3];
 
     // Optional parameters.
 ${materialHasPostTexMtxBlock(material) ? `
-    Mat4x3 u_PostTexMtx[20];
+    Mat3x4 u_PostTexMtx[20];
 ` : ``}
 ${materialHasLightsBlock(material) ? `
     Light u_LightParams[8];
@@ -387,9 +388,9 @@ ${materialHasDynamicAlphaTest(material) ? `
 // Expected to change with each shape draw.
 layout(std140) uniform ub_DrawParams {
 ${materialUsePnMtxIdx(material) ? `
-    Mat4x3 u_PosMtx[10];
+    Mat3x4 u_PosMtx[10];
 ` : `
-    Mat4x3 u_PosMtx[1];
+    Mat3x4 u_PosMtx[1];
 `}
 };
 
@@ -471,7 +472,7 @@ export class GX_Program extends DeviceProgram {
         const NdotL = `dot(t_Normal, t_LightDeltaDir)`;
 
         let diffFn = chan.diffuseFunction;
-        if (chan.attenuationFunction === GX.AttenuationFunction.NONE)
+        if (chan.attenuationFunction === GX.AttenuationFunction.SPEC)
             diffFn = GX.DiffuseFunction.NONE;
 
         switch (diffFn) {
@@ -488,14 +489,14 @@ export class GX_Program extends DeviceProgram {
         } else if (chan.attenuationFunction === GX.AttenuationFunction.SPOT) {
             const attn = `max(0.0, dot(t_LightDeltaDir, ${lightName}.Direction.xyz))`;
             const cosAttn = `max(0.0, ApplyAttenuation(${lightName}.CosAtten.xyz, ${attn}))`;
-            const normalize = (chan.diffuseFunction !== GX.DiffuseFunction.NONE) ? `normalize` : ``;
-            const distAttn = `dot(${normalize}(${lightName}.DistAtten.xyz), vec3(1.0, t_LightDeltaDist, t_LightDeltaDist2))`;
+            const distAttn = `dot(${lightName}.DistAtten.xyz, vec3(1.0, t_LightDeltaDist, t_LightDeltaDist2))`;
             return `
     t_Attenuation = max(0.0, ${cosAttn} / ${distAttn});`;
         } else if (chan.attenuationFunction === GX.AttenuationFunction.SPEC) {
             const attn = `(dot(t_Normal, t_LightDeltaDir) >= 0.0) ? max(0.0, dot(t_Normal, ${lightName}.Direction.xyz)) : 0.0`;
             const cosAttn = `ApplyAttenuation(${lightName}.CosAtten.xyz, t_Attenuation)`;
-            const distAttn = `max(0.0, ApplyAttenuation(${lightName}.DistAtten.xyz, t_Attenuation))`;
+            const normalize = (chan.diffuseFunction !== GX.DiffuseFunction.NONE) ? `normalize` : ``;
+            const distAttn = `max(0.0, ApplyAttenuation(${normalize}(${lightName}.DistAtten.xyz), t_Attenuation))`;
             return `
     t_Attenuation = ${attn};
     t_Attenuation = max(0.0, ${cosAttn} / ${distAttn});`;
@@ -574,23 +575,23 @@ ${this.generateLightAttnFn(chan, lightName)}
     }
 
     // Output is a vec3, src is a vec4.
-    private generateMulPntMatrixStatic(pnt: GX.TexGenMatrix, src: string, funcName: string = `Mul`): string {
+    private generateMulPntMatrixStatic(pnt: GX.TexGenMatrix, src: string, nrm: boolean = false): string {
         if (pnt === GX.TexGenMatrix.IDENTITY) {
             return `${src}.xyz`;
         } else if (pnt >= GX.TexGenMatrix.TEXMTX0) {
             const texMtxIdx = (pnt - GX.TexGenMatrix.TEXMTX0) / 3;
-            return `${funcName}(u_TexMtx[${texMtxIdx}], ${src})`;
+            return nrm ? `MulNormalMatrix(UnpackMatrix(u_TexMtx[${texMtxIdx}]), ${src})` : `(UnpackMatrix(u_TexMtx[${texMtxIdx}]) * ${src})`;
         } else if (pnt >= GX.TexGenMatrix.PNMTX0) {
             const pnMtxIdx = (pnt - GX.TexGenMatrix.PNMTX0) / 3;
-            return `${funcName}(u_PosMtx[${pnMtxIdx}], ${src})`;
+            return nrm ? `MulNormalMatrix(UnpackMatrix(u_PosMtx[${pnMtxIdx}]), ${src})` : `(UnpackMatrix(u_PosMtx[${pnMtxIdx}]) * ${src})`;
         } else {
             throw "whoops";
         }
     }
 
     // Output is a vec3, src is a vec4.
-    private generateMulPntMatrixDynamic(attrStr: string, src: string, funcName: string = `Mul`): string {
-        return `${funcName}(GetPosTexMatrix(${attrStr}), ${src})`;
+    private generateMulPntMatrixDynamic(attrStr: string, src: string, nrm: boolean = false): string {
+        return nrm ? `MulNormalMatrix(GetPosTexMatrix(${attrStr}), ${src})` : `(GetPosTexMatrix(${attrStr}) * ${src})`;
     }
 
     private generateTexMtxIdxAttr(index: GX.TexCoordID): string {
@@ -643,7 +644,7 @@ ${this.generateLightAttnFn(chan, lightName)}
             return `${src}.xyz`;
         } else if (texCoordGen.postMatrix >= GX.PostTexGenMatrix.PTTEXMTX0) {
             const texMtxIdx = (texCoordGen.postMatrix - GX.PostTexGenMatrix.PTTEXMTX0) / 3;
-            return `Mul(u_PostTexMtx[${texMtxIdx}], ${src})`;
+            return `(UnpackMatrix(u_PostTexMtx[${texMtxIdx}]) * ${src})`;
         } else {
             throw "whoops";
         }
@@ -1116,15 +1117,15 @@ ${this.generateLightAttnFn(chan, lightName)}
         case GX.IndTexMtxID._0:
         case GX.IndTexMtxID._1:
         case GX.IndTexMtxID._2:
-            return `Mul(u_IndTexMtx[${indTexMtxIdx}], vec4(${indTexCoord}, 0.0))`;
+            return `UnpackMatrix(u_IndTexMtx[${indTexMtxIdx}]) * vec4(${indTexCoord}, 0.0)`;
         case GX.IndTexMtxID.S0:
         case GX.IndTexMtxID.S1:
         case GX.IndTexMtxID.S2:
-            return `(u_IndTexMtx[${indTexMtxIdx}].mx.w * ReadTexCoord${stage.texCoordId}() * ${indTexCoord}.xx)`;
+            return `u_IndTexMtx[${indTexMtxIdx}].mw.x * ReadTexCoord${stage.texCoordId}() * ${indTexCoord}.xx)`;
         case GX.IndTexMtxID.T0:
         case GX.IndTexMtxID.T1:
         case GX.IndTexMtxID.T2:
-            return `(u_IndTexMtx[${indTexMtxIdx}].mx.w * ReadTexCoord${stage.texCoordId}() * ${indTexCoord}.yy)`;
+            return `u_IndTexMtx[${indTexMtxIdx}].mw.x * ReadTexCoord${stage.texCoordId}() * ${indTexCoord}.yy)`;
         default:
             throw "whoops";
         }
@@ -1386,11 +1387,10 @@ ${this.generateFogAdj(`t_FogBase`)}
     }
 
     private generateMul(attr: string, pos: boolean, nrm: boolean): string {
-        const mul = nrm ? `MulNormalMatrix` : `Mul`;
         const src = nrm ? attr : `vec4(${attr}.xyz, ${pos ? `1.0` : `0.0`})`;
         const gen = materialUsePnMtxIdx(this.material) ?
-            this.generateMulPntMatrixDynamic(`a_Position.w`, src, mul) :
-            this.generateMulPntMatrixStatic(GX.TexGenMatrix.PNMTX0, src, mul);
+            this.generateMulPntMatrixDynamic(`a_Position.w`, src, nrm) :
+            this.generateMulPntMatrixStatic(GX.TexGenMatrix.PNMTX0, src, nrm);
         return pos ? gen : `normalize(${gen}.xyz)`;
     }
 
@@ -1414,14 +1414,14 @@ ${this.generateTexCoordVaryings()}
 ${both}
 ${this.generateVertAttributeDefs()}
 
-Mat4x3 GetPosTexMatrix(float t_MtxIdxFloat) {
+mat4x3 GetPosTexMatrix(float t_MtxIdxFloat) {
     uint t_MtxIdx = uint(t_MtxIdxFloat);
     if (t_MtxIdx == 20u)
-        return _Mat4x3(1.0);
+        return mat4x3(1.0);
     else if (t_MtxIdx >= 10u)
-        return u_TexMtx[(t_MtxIdx - 10u)];
+        return UnpackMatrix(u_TexMtx[(t_MtxIdx - 10u)]);
     else
-        return u_PosMtx[t_MtxIdx];
+        return UnpackMatrix(u_PosMtx[t_MtxIdx]);
 }
 
 ${GfxShaderLibrary.MulNormalMatrix}
@@ -1441,7 +1441,7 @@ void main() {
     vec4 t_ColorChanTemp;
 ${this.generateLightChannels()}
 ${this.generateTexGens()}
-    gl_Position = Mul(u_Projection, vec4(t_Position, 1.0));
+    gl_Position = UnpackMatrix(u_Projection) * vec4(t_Position, 1.0);
 }
 `;
 
@@ -1892,28 +1892,18 @@ export function getRasColorChannelID(v: GX.ColorChannelID): GX.RasColorChannelID
     }
 }
 
-export function lightSetWorldPositionViewMatrix(light: Light, viewMatrix: mat4, v: ReadonlyVec3): void {
+export function lightSetWorldPosition(light: Light, viewMatrix: ReadonlyMat4, v: ReadonlyVec3): void {
     transformVec3Mat4w1(light.Position, viewMatrix, v);
 }
 
-export function lightSetWorldPosition(light: Light, camera: Camera, v: ReadonlyVec3): void {
-    return lightSetWorldPositionViewMatrix(light, camera.viewMatrix, v);
-}
-
-export function lightSetWorldDirectionNormalMatrix(light: Light, normalMatrix: mat4, v: ReadonlyVec3): void {
-    transformVec3Mat4w0(light.Direction, normalMatrix, v);
+export function lightSetWorldDirection(light: Light, viewMatrix: ReadonlyMat4, v: ReadonlyVec3): void {
+    transformVec3Mat4w0(light.Direction, viewMatrix, v);
     vec3.normalize(light.Direction, v);
 }
 
-export function lightSetWorldDirection(light: Light, camera: Camera, v: ReadonlyVec3): void {
-    // TODO(jstpierre): In theory, we should multiply by the inverse-transpose of the view matrix.
-    // However, I don't want to calculate that right now, and it shouldn't matter too much...
-    return lightSetWorldDirectionNormalMatrix(light, camera.viewMatrix, v);
-}
-
-export function lightSetFromWorldLight(dst: Light, worldLight: Light, camera: Camera): void {
-    lightSetWorldPosition(dst, camera, worldLight.Position);
-    lightSetWorldDirection(dst, camera, worldLight.Direction);
+export function lightSetFromWorldLight(dst: Light, viewMatrix: ReadonlyMat4, worldLight: Light): void {
+    lightSetWorldPosition(dst, viewMatrix, worldLight.Position);
+    lightSetWorldDirection(dst, viewMatrix, worldLight.Direction);
     vec3.copy(dst.DistAtten, worldLight.DistAtten);
     vec3.copy(dst.CosAtten, worldLight.CosAtten);
     colorCopy(dst.Color, worldLight.Color);

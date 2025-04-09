@@ -22,9 +22,7 @@ import { DkrControlGlobals } from './DkrControlGlobals.js';
 import { DkrObject, MODEL_TYPE_2D_BILLBOARD } from './DkrObject.js';
 import { F3DDKR_Sprite_Program, MAX_NUM_OF_SPRITE_FRAMES, MAX_NUM_OF_SPRITE_INSTANCES } from './F3DDKR_Sprite_Program.js';
 
-const viewMatrixScratch = mat4.create();
-const viewMatrixCalcScratch = mat4.create();
-const viewMatrixCalc2Scratch = mat4.create();
+const scratchMatrix = mat4.create();
 const mirrorMatrix = mat4.fromValues(
     -1, 0, 0, 0,
      0, 1, 0, 0,
@@ -239,8 +237,6 @@ export class DkrSprites {
         this.bind(renderInst);
         renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, 0);
 
-        computeViewMatrix(viewMatrixScratch, viewerInput.camera);
-
         assert(layerInstances.length <= MAX_NUM_OF_SPRITE_INSTANCES);
         for (let i = 0; i < layerInstances.length; i++) {
             const instanceObject: DkrObject = layerInstances[i];
@@ -253,13 +249,13 @@ export class DkrSprites {
             const color = instanceObject.getSpriteColor();
             offs += fillVec4v(d, offs, color);
             if (DkrControlGlobals.ADV2_MIRROR.on) {
-                mat4.mul(viewMatrixCalcScratch, mirrorMatrix, instanceObject.getModelMatrix());
-                mat4.mul(viewMatrixCalcScratch, viewMatrixScratch, viewMatrixCalcScratch);
+                mat4.mul(scratchMatrix, mirrorMatrix, instanceObject.getModelMatrix());
+                mat4.mul(scratchMatrix, viewerInput.camera.viewMatrix, scratchMatrix);
             } else {
-                mat4.mul(viewMatrixCalcScratch, viewMatrixScratch, instanceObject.getModelMatrix());
+                mat4.mul(scratchMatrix, viewerInput.camera.viewMatrix, instanceObject.getModelMatrix());
             }
-            calcBillboardMatrix(viewMatrixCalc2Scratch, viewMatrixCalcScratch, CalcBillboardFlags.UseRollLocal | CalcBillboardFlags.PriorityZ | CalcBillboardFlags.UseZPlane);
-            offs += fillMatrix4x3(d, offs, viewMatrixCalc2Scratch);
+            calcBillboardMatrix(scratchMatrix, scratchMatrix, CalcBillboardFlags.UseRollLocal | CalcBillboardFlags.PriorityZ | CalcBillboardFlags.UseZPlane);
+            offs += fillMatrix4x3(d, offs, scratchMatrix);
         }
 
         // Set tex parameters

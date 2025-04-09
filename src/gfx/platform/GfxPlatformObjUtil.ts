@@ -1,7 +1,6 @@
 
 import { GfxSamplerBinding, GfxBufferBinding, GfxBindingsDescriptor, GfxRenderPipelineDescriptor, GfxBindingLayoutDescriptor, GfxInputLayoutDescriptor, GfxVertexAttributeDescriptor, GfxProgram, GfxMegaStateDescriptor, GfxAttachmentState, GfxChannelBlendState, GfxSamplerDescriptor, GfxInputLayoutBufferDescriptor, GfxFormat, GfxBindingLayoutSamplerDescriptor, GfxRenderAttachmentView } from './GfxPlatform.js';
 import { copyMegaState } from '../helpers/GfxMegaStateDescriptorHelpers.js';
-import { gfxColorEqual } from './GfxPlatformUtil.js';
 
 type EqualFunc<K> = (a: K, b: K) => boolean;
 type CopyFunc<T> = (a: T) => T;
@@ -115,7 +114,7 @@ export function gfxBindingsDescriptorEquals(a: Readonly<GfxBindingsDescriptor>, 
     return true;
 }
 function gfxChannelBlendStateEquals(a: Readonly<GfxChannelBlendState>, b: Readonly<GfxChannelBlendState>): boolean {
-    return a.blendMode == b.blendMode && a.blendSrcFactor === b.blendSrcFactor && a.blendDstFactor === b.blendDstFactor;
+    return a.blendMode === b.blendMode && a.blendSrcFactor === b.blendSrcFactor && a.blendDstFactor === b.blendDstFactor;
 }
 function gfxAttachmentStateEquals(a: Readonly<GfxAttachmentState>, b: Readonly<GfxAttachmentState>): boolean {
     if (!gfxChannelBlendStateEquals(a.rgbBlendState, b.rgbBlendState)) return false;
@@ -125,8 +124,6 @@ function gfxAttachmentStateEquals(a: Readonly<GfxAttachmentState>, b: Readonly<G
 }
 function gfxMegaStateDescriptorEquals(a: GfxMegaStateDescriptor, b: GfxMegaStateDescriptor): boolean {
     if (!arrayEqual(a.attachmentsState, b.attachmentsState, gfxAttachmentStateEquals))
-        return false;
-    if (!gfxColorEqual(a.blendConstant, b.blendConstant))
         return false;
 
     return (

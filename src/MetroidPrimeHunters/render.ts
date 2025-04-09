@@ -40,14 +40,14 @@ function translateWrapMode(repeat: boolean, flip: boolean): GfxWrapMode {
 }
 
 function parseMPHTexImageParamWrapModeS(w0: number): GfxWrapMode {
-    const repeatS = (((w0 >> 0) & 0x01) == 0x1);
-    const flipS = (((w0 >> 1) & 0x01) == 0x1);
+    const repeatS = (((w0 >> 0) & 0x01) === 0x1);
+    const flipS = (((w0 >> 1) & 0x01) === 0x1);
     return translateWrapMode(repeatS, flipS);
 }
 
 function parseMPHTexImageParamWrapModeT(w0: number): GfxWrapMode {
-    const repeatT = (((w0 >> 8) & 0x01) == 0x1);
-    const flipT = (((w0 >> 9) & 0x01) == 0x1);
+    const repeatT = (((w0 >> 8) & 0x01) === 0x1);
+    const flipT = (((w0 >> 9) & 0x01) === 0x1);
     return translateWrapMode(repeatT, flipT);
 }
 

@@ -1,29 +1,28 @@
 
-//@ts-ignore
-import program_glsl from './program.glsl';
-import * as Viewer from '../viewer.js';
-import * as Tex from './tex.js';
-import { GfxBufferUsage, GfxDevice, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxFormat, GfxBuffer, GfxInputLayout, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxTextureDimension, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxCullMode, GfxProgram, GfxMegaStateDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform.js";
 import { mat4 } from "gl-matrix";
-import { GfxRenderInstManager, makeSortKeyOpaque, GfxRendererLayer, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager.js";
-import { DeviceProgram } from "../Program.js";
-import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2, fillVec4 } from "../gfx/helpers/UniformBufferHelpers.js";
-import { ModelTreeNode, ModelTreeLeaf, ModelTreeGroup, PropertyType } from "./map_shape.js";
-import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
-import { RSPOutput, Vertex } from "./f3dex2.js";
-import { assert, nArray, assertExists, setBitFlagEnabled } from "../util.js";
-import { TextureHolder, LoadedTexture, TextureMapping } from "../TextureHolder.js";
-import { computeViewSpaceDepthFromWorldSpaceAABB } from "../Camera.js";
-import { AABB } from "../Geometry.js";
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import { getImageFormatString } from "../BanjoKazooie/f3dex.js";
+import { computeViewSpaceDepthFromWorldSpaceAABB } from "../Camera.js";
 import { TextFilt } from '../Common/N64/Image.js';
+import { translateCM } from '../Common/N64/RDP.js';
+import { calcTextureScaleForShift } from '../Common/N64/RSP.js';
+import { AABB } from "../Geometry.js";
+import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers.js';
 import { reverseDepthForDepthOffset } from '../gfx/helpers/ReversedDepthHelpers.js';
-import { calcTextureScaleForShift } from '../Common/N64/RSP.js';
-import { translateCM } from '../Common/N64/RDP.js';
 import { convertToCanvas } from '../gfx/helpers/TextureConversionHelpers.js';
-import ArrayBufferSlice from '../ArrayBufferSlice.js';
+import { fillMatrix4x2, fillMatrix4x3, fillMatrix4x4, fillVec4 } from "../gfx/helpers/UniformBufferHelpers.js";
+import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxMegaStateDescriptor, GfxMipFilterMode, GfxProgram, GfxSampler, GfxTexFilterMode, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
+import { GfxRendererLayer, GfxRenderInstManager, makeSortKeyOpaque, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager.js";
+import { DeviceProgram } from "../Program.js";
+import { LoadedTexture, TextureHolder, TextureMapping } from "../TextureHolder.js";
+import { assert, assertExists, nArray, setBitFlagEnabled } from "../util.js";
+import * as Viewer from '../viewer.js';
+import { RSPOutput, Vertex } from "./f3dex2.js";
+import { ModelTreeGroup, ModelTreeLeaf, ModelTreeNode, PropertyType } from "./map_shape.js";
+import * as Tex from './tex.js';
+import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
 
 class PaperMario64Program extends DeviceProgram {
     public static a_Position = 0;
@@ -33,8 +32,132 @@ class PaperMario64Program extends DeviceProgram {
     public static ub_SceneParams = 0;
     public static ub_DrawParams = 1;
 
-    private static program = program_glsl;
-    public override both = PaperMario64Program.program;
+    public override both = `
+precision mediump float;
+
+${GfxShaderLibrary.MatrixLibrary}
+
+// Expected to be constant across the entire scene.
+layout(std140) uniform ub_SceneParams {
+    Mat4x4 u_Projection;
+    vec4 u_Misc0;
+};
+
+#define u_ScreenSize (u_Misc0.xy)
+#define u_LodBias (u_Misc0.z)
+
+layout(std140) uniform ub_DrawParams {
+    Mat3x4 u_BoneMatrix[1];
+    Mat2x4 u_TexMatrix[2];
+};
+
+uniform sampler2D u_Texture0;
+uniform sampler2D u_Texture1;
+
+varying vec4 v_Color;
+varying vec4 v_TexCoord;
+
+#ifdef VERT
+layout(location = 0) in vec3 a_Position;
+layout(location = 1) in vec4 a_Color;
+layout(location = 2) in vec2 a_TexCoord;
+
+vec3 Monochrome(vec3 t_Color) {
+    // NTSC primaries.
+    return vec3(dot(t_Color.rgb, vec3(0.299, 0.587, 0.114)));
+}
+
+void main() {
+    vec3 t_PositionView = UnpackMatrix(u_BoneMatrix[0]) * vec4(a_Position, 1.0);
+    gl_Position = UnpackMatrix(u_Projection) * vec4(t_PositionView, 1.0);
+    v_Color = a_Color;
+
+#ifdef USE_MONOCHROME_VERTEX_COLOR
+    v_Color.rgb = Monochrome(v_Color.rgb);
+#endif
+
+    v_TexCoord.xy = UnpackMatrix(u_TexMatrix[0]) * vec4(a_TexCoord, 1.0, 1.0);
+    v_TexCoord.zw = UnpackMatrix(u_TexMatrix[1]) * vec4(a_TexCoord, 1.0, 1.0);
+}
+#endif
+
+#ifdef FRAG
+vec4 Texture2D_N64_Point(PD_SAMPLER_2D(t_Texture), vec2 t_TexCoord, float t_LodLevel) {
+    return textureLod(PU_SAMPLER_2D(t_Texture), t_TexCoord, t_LodLevel);
+}
+
+vec4 Texture2D_N64_Average(PD_SAMPLER_2D(t_Texture), vec2 t_TexCoord, float t_LodLevel) {
+    // Unimplemented.
+    return textureLod(PU_SAMPLER_2D(t_Texture), t_TexCoord, t_LodLevel);
+}
+
+// Implements N64-style "triangle bilinear filtering" with three taps.
+// Based on ArthurCarvalho's implementation, modified by NEC and Jasper for noclip.
+vec4 Texture2D_N64_Bilerp(PD_SAMPLER_2D(t_Texture), vec2 t_TexCoord, float t_LodLevel) {
+    vec2 t_Size = vec2(textureSize(PU_SAMPLER_2D(t_Texture), 0));
+    vec2 t_Offs = fract(t_TexCoord*t_Size - vec2(0.5));
+    t_Offs -= step(1.0, t_Offs.x + t_Offs.y);
+    vec4 t_S0 = textureLod(PU_SAMPLER_2D(t_Texture), t_TexCoord - t_Offs / t_Size, t_LodLevel);
+    vec4 t_S1 = textureLod(PU_SAMPLER_2D(t_Texture), t_TexCoord - vec2(t_Offs.x - sign(t_Offs.x), t_Offs.y) / t_Size, t_LodLevel);
+    vec4 t_S2 = textureLod(PU_SAMPLER_2D(t_Texture), t_TexCoord - vec2(t_Offs.x, t_Offs.y - sign(t_Offs.y)) / t_Size, t_LodLevel);
+    return t_S0 + abs(t_Offs.x)*(t_S1-t_S0) + abs(t_Offs.y)*(t_S2-t_S0);
+}
+
+vec4 Texture2D_N64(PD_SAMPLER_2D(t_Texture), vec2 t_TexCoord) {
+    vec2 t_Dx = abs(dFdx(t_TexCoord)) * u_ScreenSize;
+    float t_Lod = max(t_Dx.x, t_Dx.y);
+    float t_LodTile = floor(log2(floor(t_Lod)));
+    float t_LodFrac = fract(t_Lod/pow(2.0, t_LodTile));
+    float t_LodLevel = (t_LodTile + t_LodFrac);
+    // TODO(jstpierre): Figure out why we need this LOD bias. I don't believe the N64 even supports one...
+    t_LodLevel += u_LodBias;
+
+#if defined(USE_TEXTFILT_POINT)
+    return Texture2D_N64_Point(PF_SAMPLER_2D(t_Texture), t_TexCoord, t_LodLevel);
+#elif defined(USE_TEXTFILT_AVERAGE)
+    return Texture2D_N64_Average(PF_SAMPLER_2D(t_Texture), t_TexCoord, t_LodLevel);
+#elif defined(USE_TEXTFILT_BILERP)
+    return Texture2D_N64_Bilerp(PF_SAMPLER_2D(t_Texture), t_TexCoord, t_LodLevel);
+#endif
+}
+
+void main() {
+    vec4 t_Color = vec4(1.0);
+
+#ifdef USE_TEXTURE
+
+    vec4 t_Texel0 = Texture2D_N64(PP_SAMPLER_2D(u_Texture0), v_TexCoord.xy);
+
+#ifdef USE_2CYCLE_MODE
+
+    vec4 t_Texel1 = Texture2D_N64(PP_SAMPLER_2D(u_Texture1), v_TexCoord.zw);
+#if defined(USE_COMBINE_MODULATE)
+    t_Color = t_Texel0 * t_Texel1 * v_Color;
+#elif defined(USE_COMBINE_DIFFERENCE)
+    t_Color.rgb = v_Color.rgb;
+    t_Color.a = (t_Texel0.a - t_Texel1.a) * v_Color.a;
+#elif defined(USE_COMBINE_INTERP)
+    t_Color.rgb = mix(t_Texel0.rgb, t_Texel1.rgb, v_Color.a);
+    t_Color.a = t_Texel0.a;
+#endif
+
+#else /* USE_2CYCLE_MODE */
+    t_Color = t_Texel0 * v_Color;
+#endif /* USE_2CYCLE_MODE */
+
+#else /* USE_TEXTURE */
+    t_Color = v_Color;
+#endif /* USE_TEXTURE */
+
+#ifdef USE_ALPHA_MASK
+    if (t_Color.a < 0.0125)
+        discard;
+#endif
+
+    gl_FragColor = t_Color;
+}
+#endif
+    `;
 }
 
 function makeVertexBufferData(v: Vertex[]): ArrayBufferLike {
@@ -173,7 +296,7 @@ function translateCullMode(m: number): GfxCullMode {
     const cullFront = !!(m & 0x200);
     const cullBack = !!(m & 0x400);
     if (cullFront && cullBack)
-        return GfxCullMode.FrontAndBack;
+        throw "whoops";
     else if (cullFront)
         return GfxCullMode.Front;
     else if (cullBack)
@@ -195,26 +318,24 @@ export class BackgroundBillboardRenderer {
         this.textureHolder.fillTextureMapping(this.textureMappings[0], this.textureName);
     }
 
-    public prepareToRender(renderInstManager: GfxRenderInstManager, renderInput: Viewer.ViewerRenderInput): void {
+    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setDrawCount(3);
         renderInst.sortKey = makeSortKeyOpaque(GfxRendererLayer.BACKGROUND, this.gfxProgram.ResourceUniqueId);
         renderInst.setVertexInput(null, null, null);
         renderInst.setBindingLayouts(backgroundBillboardBindingLayouts);
         renderInst.setGfxProgram(this.gfxProgram);
-        renderInst.allocateUniformBuffer(BackgroundBillboardProgram.ub_Params, 4);
 
         // Set our texture bindings.
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMappings);
 
-        // Upload new buffer data.
-        let offs = renderInst.getUniformBufferOffset(BackgroundBillboardProgram.ub_Params);
-        const d = renderInst.mapUniformBufferF32(BackgroundBillboardProgram.ub_Params);
+        const d = renderInst.allocateUniformBufferF32(BackgroundBillboardProgram.ub_Params, 4);
+        let offs = 0;
 
         // Extract yaw
-        const view = renderInput.camera.viewMatrix;
+        const view = viewerInput.camera.viewMatrix;
         const o = Math.atan2(-view[2], view[0]) / (Math.PI * 2) * 4;
-        const aspect = renderInput.backbufferWidth / renderInput.backbufferHeight;
+        const aspect = viewerInput.backbufferWidth / viewerInput.backbufferHeight;
 
         offs += fillVec4(d, offs, aspect, -1, o, 0);
         renderInstManager.submitRenderInst(renderInst);
@@ -270,7 +391,7 @@ class ModelTreeLeafInstance {
 
         if (this.renderModeProperty === 0x01 || this.renderModeProperty === 0x04) {
             this.renderMode = RenderMode.OPA;
-        } else if (this.renderModeProperty == 0x05 || this.renderModeProperty === 0x07 || this.renderModeProperty === 0x0D || this.renderModeProperty === 0x10) {
+        } else if (this.renderModeProperty === 0x05 || this.renderModeProperty === 0x07 || this.renderModeProperty === 0x0D || this.renderModeProperty === 0x10) {
             this.renderMode = RenderMode.DEC;
         } else {
             this.renderMode = RenderMode.XLU;

@@ -20,6 +20,7 @@ import { Flipbook, LoopMode, ReverseMode, MirrorMode, FlipbookMode } from './fli
 import { calcTextureMatrixFromRSPState } from '../Common/N64/RSP.js';
 import { convertToCanvas } from '../gfx/helpers/TextureConversionHelpers.js';
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
+import { GfxShaderLibrary } from '../gfx/helpers/GfxShaderLibrary.js';
 
 export class F3DEX_Program extends DeviceProgram {
     public static a_Position = 0;
@@ -32,6 +33,8 @@ export class F3DEX_Program extends DeviceProgram {
 
     public override both = `
 precision mediump float;
+
+${GfxShaderLibrary.MatrixLibrary}
 
 layout(std140) uniform ub_SceneParams {
     Mat4x4 u_Projection;
@@ -48,8 +51,8 @@ layout(std140) uniform ub_SceneParams {
 };
 
 layout(std140) uniform ub_DrawParams {
-    Mat4x3 u_BoneMatrix[BONE_MATRIX_COUNT];
-    Mat4x2 u_TexMatrix[2];
+    Mat3x4 u_BoneMatrix[BONE_MATRIX_COUNT];
+    Mat2x4 u_TexMatrix[2];
 };
 
 layout(std140) uniform ub_CombineParameters {
@@ -93,7 +96,9 @@ vec3 ConvertToSignedInt(vec3 t_Input) {
 
 void main() {
     int t_BoneIndex = int(a_Position.w);
-    gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_BoneMatrix[t_BoneIndex]), vec4(a_Position.xyz, 1.0)));
+    mat4x3 t_BoneMatrix = UnpackMatrix(u_BoneMatrix[t_BoneIndex]);
+    vec3 t_PositionView = t_BoneMatrix * vec4(a_Position.xyz, 1.0);
+    gl_Position = UnpackMatrix(u_Projection) * vec4(t_PositionView, 1.0);
     v_Color = t_One;
 
 #ifdef USE_VERTEX_COLOR
@@ -104,15 +109,16 @@ void main() {
     v_Color.rgb = Monochrome(v_Color.rgb);
 #endif
 
-    v_TexCoord.xy = Mul(u_TexMatrix[0], vec4(a_TexCoord, 1.0, 1.0));
-    v_TexCoord.zw = Mul(u_TexMatrix[1], vec4(a_TexCoord, 1.0, 1.0));
+    v_TexCoord.xy = UnpackMatrix(u_TexMatrix[0]) * vec4(a_TexCoord, 1.0, 1.0);
+    v_TexCoord.zw = UnpackMatrix(u_TexMatrix[1]) * vec4(a_TexCoord, 1.0, 1.0);
 
     ${this.generateClamp()}
 
 #ifdef LIGHTING
     // convert (unsigned) colors to normal vector components
     vec4 t_Normal = vec4(ConvertToSignedInt(a_Color.rgb), 0.0);
-    t_Normal = normalize(Mul(_Mat4x4(u_BoneMatrix[t_BoneIndex]), t_Normal));
+    vec3 t_NormalView = t_BoneMatrix * vec4(t_Normal.xyz, 0.0);
+    t_Normal = normalize(vec4(t_NormalView, 0.0));
 
 #ifdef PARAMETERIZED_LIGHTING
     v_Color = ${this.generateLightingExpression()};
@@ -181,9 +187,9 @@ void main() {
         let alphaThreshold = 0;
         if (alphaCompare === 0x01) {
             alphaThreshold = this.blendAlpha;
-        } else if (alphaCompare != 0x00) {
+        } else if (alphaCompare !== 0x00) {
             alphaThreshold = .0125; // should be dither
-        } else if (cvgXAlpha != 0x00) {
+        } else if (cvgXAlpha !== 0x00) {
             // this line is taken from GlideN64, but here's some rationale:
             // With this bit set, the pixel coverage value is multiplied by alpha
             // before being sent to the blender. While coverage mostly matters for

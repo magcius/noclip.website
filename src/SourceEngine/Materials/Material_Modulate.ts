@@ -20,7 +20,7 @@ precision mediump float;
 ${MaterialShaderTemplateBase.Common}
 
 layout(std140) uniform ub_ObjectParams {
-    Mat4x2 u_BaseTextureTransform;
+    Mat2x4 u_BaseTextureTransform;
 };
 
 varying vec3 v_PositionWorld;
@@ -32,12 +32,12 @@ uniform sampler2D u_BaseTexture;
 
 #if defined VERT
 void mainVS() {
-    Mat4x3 t_WorldFromLocalMatrix = CalcWorldFromLocalMatrix();
-    vec3 t_PositionWorld = Mul(t_WorldFromLocalMatrix, vec4(a_Position, 1.0));
+    mat4x3 t_WorldFromLocalMatrix = CalcWorldFromLocalMatrix();
+    vec3 t_PositionWorld = t_WorldFromLocalMatrix * vec4(a_Position, 1.0);
     v_PositionWorld.xyz = t_PositionWorld;
-    gl_Position = Mul(u_ProjectionView, vec4(t_PositionWorld, 1.0));
+    gl_Position = UnpackMatrix(u_ProjectionView) * vec4(t_PositionWorld, 1.0);
 
-    v_TexCoord0.xy = Mul(u_BaseTextureTransform, vec4(a_TexCoord01.xy, 1.0, 1.0));
+    v_TexCoord0.xy = UnpackMatrix(u_BaseTextureTransform) * vec4(a_TexCoord01.xy, 1.0, 1.0);
 }
 #endif
 

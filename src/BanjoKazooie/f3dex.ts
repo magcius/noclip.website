@@ -146,7 +146,7 @@ export function translateCullMode(m: number): GfxCullMode {
     const cullFront = !!(m & RSP_Geometry.G_CULL_FRONT);
     const cullBack = !!(m & RSP_Geometry.G_CULL_BACK);
     if (cullFront && cullBack)
-        return GfxCullMode.FrontAndBack;
+        throw "whoops";
     else if (cullFront)
         return GfxCullMode.Front;
     else if (cullBack)
@@ -284,7 +284,7 @@ export class RSPState implements RSPStateInterface {
 
             dc.textureIndices.push(this._translateTileTexture(this.SP_TextureState.tile));
 
-            if (this.SP_TextureState.level == 0 && RDP.combineParamsUsesT1(dc.DP_Combine)) {
+            if (this.SP_TextureState.level === 0 && RDP.combineParamsUsesT1(dc.DP_Combine)) {
                 // if tex1 is used, and it isn't a mipmap, load it
                 // In 2CYCLE mode, it uses tile and tile + 1.
                 dc.textureIndices.push(this._translateTileTexture(this.SP_TextureState.tile + 1));

@@ -77,6 +77,8 @@ class TheWitnessShaderTemplate extends UberShaderTemplate<Render_Material> {
         return `
 precision mediump float;
 
+${GfxShaderLibrary.MatrixLibrary}
+
 layout(std140) uniform ub_SceneParams {
     Mat4x4 u_ViewProjection;
     vec4 u_CameraPosWorld;
@@ -92,7 +94,7 @@ layout(std140) uniform ub_SceneParams {
 #define u_SceneTime (u_KeyLightColor.w)
 
 layout(std140) uniform ub_ObjectParams {
-    Mat4x3 u_ModelMatrix;
+    Mat3x4 u_ModelMatrix;
     vec4 u_MaterialColorAndEmission;
     vec4 u_FoliageParams;
     vec4 u_SpecularParams;
@@ -128,6 +130,7 @@ uniform sampler2D u_TerrainColor;
 
 ${GfxShaderLibrary.saturate}
 ${GfxShaderLibrary.CalcScaleBias}
+${GfxShaderLibrary.MulNormalMatrix}
 
 vec3 UnpackNormalMap(in vec4 t_NormalMapSample) {
     vec3 t_Normal;
@@ -224,20 +227,21 @@ void mainVS() {
         t_PositionLocal += (t_NormalLocal * t_ShellExtrude);
     }
 
-    v_PositionWorld = Mul(_Mat4x4(u_ModelMatrix), vec4(t_PositionLocal, 1.0)).xyz;
+    mat4x3 t_ModelMatrix = UnpackMatrix(u_ModelMatrix);
+    v_PositionWorld = t_ModelMatrix * vec4(t_PositionLocal, 1.0);
 
-    vec3 t_NormalWorld = Mul(_Mat4x4(u_ModelMatrix), vec4(t_NormalLocal, 0.0)).xyz;
+    vec3 t_NormalWorld = MulNormalMatrix(t_ModelMatrix, t_NormalLocal);
     vec3 t_TangentSWorld = a_TangentS.xyz;
     vec3 t_TangentTWorld = cross(t_NormalWorld, t_TangentSWorld);
 
     bool use_wind = ${this.is_flag(m, Material_Flags.Wind_Animation)};
     if (use_wind) {
         vec4 t_WindParam = a_Color0.xyzw;
-        vec3 t_ObjectPos = Mat4x3GetCol3(u_ModelMatrix);
+        vec3 t_ObjectPos = t_ModelMatrix[3];
         CalcTrunkWind(v_PositionWorld, a_Color0, t_ObjectPos);
     }
 
-    gl_Position = Mul(u_ViewProjection, vec4(v_PositionWorld, 1.0));
+    gl_Position = UnpackMatrix(u_ViewProjection) * vec4(v_PositionWorld, 1.0);
     v_TexCoord0 = a_TexCoord0.xy;
 
     bool use_scroll_speed = ${this.is_type(m, Material_Type.Refract) || this.is_type(m, Material_Type.Decal)};

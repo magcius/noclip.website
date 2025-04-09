@@ -6,13 +6,14 @@ import { ViewerRenderInput, SceneGfx } from "../viewer.js";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
 import { assertExists } from "../util.js";
-import { parseNSBMD } from "./NNS_G3D.js";
+import { BTX0, parseNSBMD, parseNSBTX } from "./NNS_G3D.js";
 import { NITRO_Program } from "../SuperMario64DS/render.js";
 import { fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers.js";
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { GfxRenderInstList } from "../gfx/render/GfxRenderInstManager.js";
+import { NamedArrayBufferSlice } from "../DataFetcher.js";
 
 class BasicNSBMDRenderer implements SceneGfx {
     private renderHelper: GfxRenderHelper;
@@ -79,17 +80,33 @@ class BasicNSBMDRenderer implements SceneGfx {
     }
 }
 
-export function createBasicNSBMDRendererFromNSBMD(device: GfxDevice, buffer: ArrayBufferSlice) {
+export function createBasicNSBMDRendererFromNSBMD(device: GfxDevice, buffers: NamedArrayBufferSlice[]) {
     const textureHolder = new FakeTextureHolder([]);
     const renderer = new BasicNSBMDRenderer(device, textureHolder);
 
-    const bmd = parseNSBMD(buffer);
-    for (let i = 0; i < bmd.models.length; i++) {
-        const mdl0 = bmd.models[0];
-        const mdl0Renderer = new MDL0Renderer(renderer.getCache(), mdl0, assertExists(bmd.tex0));
-        for (let j = 0; j < mdl0Renderer.viewerTextures.length; j++)
-            textureHolder.viewerTextures.push(mdl0Renderer.viewerTextures[j]);
-        renderer.mdl0Renderers.push(mdl0Renderer);
+    const texs = buffers.filter((x) => x.name.endsWith('.nsbtx')).map((x) => parseNSBTX(x));
+    let btx0: BTX0 | null = null;
+    for (let i = 0; i < texs.length; i++) {
+        const e = texs[i];
+        if (btx0 === null) {
+            btx0 = e;
+            continue;
+        }
+
+        btx0.tex0.textures.push(...e.tex0.textures);
+        btx0.tex0.palettes.push(...e.tex0.palettes);
+    }
+
+    const bmds = buffers.filter((x) => x.name.endsWith('.nsbmd')).map((x) => parseNSBMD(x));
+    for (let i = 0; i < bmds.length; i++) {
+        const bmd = bmds[i];
+        for (let j = 0; j < bmd.models.length; j++) {
+            const mdl0 = bmd.models[j];
+            const mdl0Renderer = new MDL0Renderer(renderer.getCache(), mdl0, bmd.tex0 ?? assertExists(btx0).tex0);
+            for (let k = 0; k < mdl0Renderer.viewerTextures.length; k++)
+                textureHolder.viewerTextures.push(mdl0Renderer.viewerTextures[k]);
+            renderer.mdl0Renderers.push(mdl0Renderer);
+        }
     }
 
     return renderer;

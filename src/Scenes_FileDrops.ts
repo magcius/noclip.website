@@ -96,7 +96,7 @@ export async function createSceneFromFiles(context: SceneContext, buffers: Named
         return J3D.createSceneFromBuffer(context, buffer);
 
     if (buffer.name.endsWith('.nsbmd'))
-        return NNS_G3D.createBasicNSBMDRendererFromNSBMD(device, buffer);
+        return NNS_G3D.createBasicNSBMDRendererFromNSBMD(device, buffers);
 
     if (buffers.length === 2 && buffers[0].name === 'd' && buffers[1].name === 't')
         return PaperMarioTTYD.createWorldRendererFromBuffers(device, buffers[0], buffers[1]);

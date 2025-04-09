@@ -1,33 +1,28 @@
 import { mat4, vec3 } from 'gl-matrix';
-import { computeViewMatrix } from '../Camera.js';
 import { Blue, Color, colorCopy, colorNewFromRGBA, Red, TransparentBlack, White } from '../Color.js';
+import { projectionMatrixConvertClipSpaceNearZ } from '../gfx/helpers/ProjectionHelpers.js';
 import { GfxClipSpaceNearZ, GfxDevice, GfxFormat, GfxMipFilterMode, GfxSampler, GfxTexFilterMode, GfxWrapMode } from '../gfx/platform/GfxPlatform.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrPass, GfxrPassScope, GfxrRenderTargetDescription, GfxrRenderTargetID, GfxrResolveTextureID } from '../gfx/render/GfxRenderGraph.js';
 import { GfxRenderInstList, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
 import * as GX from '../gx/gx_enum.js';
 import * as GX_Material from '../gx/gx_material.js';
-import { ColorKind, fillSceneParams, fillSceneParamsData, GXRenderHelperGfx, MaterialParams, DrawParams, SceneParams } from '../gx/gx_render.js';
-import { projectionMatrixForCuboid } from '../MathHelpers.js';
-import { TDDraw, TSDraw } from "../SuperMarioGalaxy/DDraw.js";
+import { ColorKind, DrawParams, fillSceneParamsData, gxBindingLayouts, GXRenderHelperGfx, MaterialParams, SceneParams, ub_SceneParamsBufferSize } from '../gx/gx_render.js';
+import { projectionMatrixForCuboid, setMatrixTranslation, Vec3Zero } from '../MathHelpers.js';
+import { TSDraw } from "../SuperMarioGalaxy/DDraw.js";
 import { TextureMapping } from '../TextureHolder.js';
 import { nArray } from '../util.js';
 import { SFAMaterialBuilder } from './MaterialBuilder.js';
 import { makeMaterialTexture, MaterialFactory } from './materials.js';
 import { SceneRenderContext, setGXMaterialOnRenderInst } from './render.js';
 import { TextureFetcher } from './textures.js';
-import { mat4SetTranslation } from './util.js';
 import { World } from './world.js';
 import { LightType } from './WorldLights.js';
-import { ub_SceneParamsBufferSize } from '../gx/gx_render.js';
-import { gxBindingLayouts } from '../gx/gx_render.js';
-import { projectionMatrixConvertClipSpaceNearZ } from '../gfx/helpers/ProjectionHelpers.js';
 
 const scratchMaterialParams = new MaterialParams();
 const scratchDrawParams = new DrawParams();
 const scratchSceneParams = new SceneParams();
 const scratchMtx0 = mat4.create();
-const scratchMtx1 = mat4.create();
 const scratchVec0 = vec3.create();
 const scratchVec1 = vec3.create();
 
@@ -60,8 +55,6 @@ function setSpecularLightAtten(light: GX_Material.Light, atten: number) {
 }
 
 const SPHERE_MAP_DIM = 32;
-const SPHERE_MAP_PROJECTION_MTX = mat4.create();
-projectionMatrixForCuboid(SPHERE_MAP_PROJECTION_MTX, 1.0, -1.0, -1.0, 1.0, 1.0, 15.0); // Yes, left and right are meant to be 1 and -1, respectively.
 
 function createHemisphericProbeMaterial(materialFactory: MaterialFactory): SFAMaterialBuilder<World> {
     const mb = new SFAMaterialBuilder<World>('Ambient Hemispheric Probe Material');
@@ -90,7 +83,7 @@ function createReflectiveProbeMaterial(materialFactory: MaterialFactory, texFetc
     mb.setTevDirect(stage0);
     mb.setTexMtx(0, (dst: mat4) => {
         mat4.fromScaling(dst, [0.5, -0.5, 0.5]);
-        mat4SetTranslation(dst, 0.5, 0.5, 0.0);
+        setMatrixTranslation(dst, [0.5, 0.5, 0.0]);
     });
     const texCoord = mb.genTexCoord(GX.TexGenType.MTX2x4, GX.TexGenSrc.NRM, GX.TexGenMatrix.TEXMTX0);
     const texMap = mb.genTexMap(makeMaterialTexture(texFetcher.getTexture(materialFactory.cache, 0x5dc, false)));
@@ -231,11 +224,9 @@ export class SphereMapManager {
         const skyLight = this.world.envfxMan.skyLight;
         const groundLight = this.world.envfxMan.groundLight;
 
-        const worldView = scratchMtx0;
-        computeViewMatrix(worldView, sceneCtx.viewerInput.camera);
-        const worldViewSR = scratchMtx1;
-        mat4.copy(worldViewSR, worldView);
-        mat4SetTranslation(worldViewSR, 0, 0, 0);
+        const worldViewSR = scratchMtx0;
+        mat4.copy(worldViewSR, sceneCtx.viewToWorldMtx);
+        setMatrixTranslation(worldViewSR, Vec3Zero);
 
         const skyLightVec = scratchVec0;
         vec3.transformMat4(skyLightVec, skyLight.direction, worldViewSR);
@@ -289,7 +280,8 @@ export class SphereMapManager {
         renderInst.setBindingLayouts(gxBindingLayouts);
 
         // Setup to draw in clip space
-        fillSceneParams(scratchSceneParams, SPHERE_MAP_PROJECTION_MTX, SPHERE_MAP_DIM, SPHERE_MAP_DIM);
+        projectionMatrixForCuboid(scratchSceneParams.u_Projection, 1.0, -1.0, -1.0, 1.0, 1.0, 15.0); // Yes, left and right are meant to be 1 and -1, respectively.
+        scratchSceneParams.u_SceneTextureLODBias = 0;
         projectionMatrixConvertClipSpaceNearZ(scratchSceneParams.u_Projection, device.queryVendorInfo().clipSpaceNearZ, GfxClipSpaceNearZ.NegativeOne);
         let offs = renderInst.allocateUniformBuffer(GX_Material.GX_Program.ub_SceneParams, ub_SceneParamsBufferSize);
         const d = renderInst.mapUniformBufferF32(GX_Material.GX_Program.ub_SceneParams);

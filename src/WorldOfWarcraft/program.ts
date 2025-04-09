@@ -94,9 +94,11 @@ vec2 envmapTexCoord(const vec3 viewSpacePos, const vec3 viewSpaceNormal) {
     public static commonDeclarations = `
 precision mediump float;
 
+${GfxShaderLibrary.MatrixLibrary}
+
 layout(std140) uniform ub_SceneParams {
     Mat4x4 u_Projection;
-    Mat4x3 u_View;
+    Mat3x4 u_View;
     vec4 u_CameraPos;
 
     // lighting
@@ -249,21 +251,23 @@ void mainVS() {
     int colorIndex = int(a_ColorIndex);
     v_Color = vec4(1.0);
     if (colorIndex == ${SkyboxColor.Top}) {
-      v_Color = skyTopColor;
+        v_Color = skyTopColor;
     } else if (colorIndex == ${SkyboxColor.Middle}) {
-      v_Color = skyMiddleColor;
+        v_Color = skyMiddleColor;
     } else if (colorIndex == ${SkyboxColor.Band1}) {
-      v_Color = skyBand1Color;
+        v_Color = skyBand1Color;
     } else if (colorIndex == ${SkyboxColor.Band2}) {
-      v_Color = skyBand2Color;
+        v_Color = skyBand2Color;
     } else if (colorIndex == ${SkyboxColor.Smog}) {
-      v_Color = skySmogColor;
+        v_Color = skySmogColor;
     } else if (colorIndex == ${SkyboxColor.Fog}) {
-      v_Color = skyFogColor;
+        v_Color = skyFogColor;
     } else {
-      v_Color = vec4(1.0, 0.0, 1.0, 1.0);
+        v_Color = vec4(1.0, 0.0, 1.0, 1.0);
     }
-    gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_View), vec4(a_Position, 0.0)));
+
+    vec3 t_PositionView = UnpackMatrix(u_View) * vec4(a_Position, 0.0);
+    gl_Position = UnpackMatrix(u_Projection) * vec4(t_PositionView, 1.0);
 }
 #endif
 
@@ -299,7 +303,7 @@ export class WmoProgram extends BaseProgram {
 ${BaseProgram.commonDeclarations}
 
 layout(std140) uniform ub_ModelParams {
-    Mat4x3 u_Transform;
+    Mat3x4 u_Transform;
 };
 
 layout(std140) uniform ub_BatchParams {
@@ -338,12 +342,14 @@ layout(location = ${WmoProgram.a_TexCoord3}) attribute vec2 a_TexCoord3;
 ${GfxShaderLibrary.MulNormalMatrix}
 
 void mainVS() {
-    v_Position = Mul(u_Transform, vec4(a_Position, 1.0)).xyz;
-    v_Normal = MulNormalMatrix(u_Transform, a_Normal);
+    mat4x3 t_Transform = UnpackMatrix(u_Transform);
+    v_Position = t_Transform * vec4(a_Position, 1.0);
+    v_Normal = MulNormalMatrix(t_Transform, a_Normal);
 
-    vec3 viewPosition = Mul(_Mat4x4(u_View), vec4(v_Position, 1.0)).xyz;
-    vec3 viewNormal = Mul(_Mat4x4(u_View), vec4(v_Normal, 0.0)).xyz;
-    gl_Position = Mul(u_Projection, vec4(viewPosition, 1.0));
+    mat4x3 t_View = UnpackMatrix(u_View);
+    vec3 viewPosition = t_View * vec4(v_Position, 1.0);
+    vec3 viewNormal = t_View * vec4(v_Normal, 0.0);
+    gl_Position = UnpackMatrix(u_Projection) * vec4(viewPosition, 1.0);
 
     int numColorBuffers = int(shaderParams.z);
     v_Color0 = numColorBuffers >= 1 ? a_Color0.bgra : vec4(0.0, 0.0, 0.0, 1.0);
@@ -599,41 +605,6 @@ void mainPS() {
 `;
 }
 
-export class DebugWmoPortalProgram extends BaseProgram {
-    public static a_Position = 0;
-
-    public static ub_ModelParams = 1;
-
-    public static bindingLayouts: GfxBindingLayoutDescriptor[] = [
-        {
-            numUniformBuffers: super.numUniformBuffers + 1,
-            numSamplers: super.numSamplers,
-        },
-    ];
-
-    public override both = `
-${BaseProgram.commonDeclarations}
-
-layout(std140) uniform ub_ModelParams {
-    Mat4x4 u_ModelMatrix;
-};
-
-#ifdef VERT
-layout(location = ${DebugWmoPortalProgram.a_Position}) attribute vec3 a_Position;
-
-void mainVS() {
-    gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_View), Mul(u_ModelMatrix, vec4(a_Position, 1.0))));
-}
-#endif
-
-#ifdef FRAG
-void mainPS() {
-    gl_FragColor = vec4(1.0, 0.0, 1.0, 1.0);
-}
-#endif
-`;
-}
-
 export class LoadingAdtProgram extends BaseProgram {
     public static a_Position = 0;
 
@@ -652,7 +623,7 @@ ${BaseProgram.commonDeclarations}
 varying vec4 v_Color;
 
 layout(std140) uniform ub_ModelParams {
-    Mat4x4 u_ModelMatrix;
+    Mat3x4 u_ModelMatrix;
     vec4 u_Params; // time, _, _, _
 };
 
@@ -660,10 +631,10 @@ layout(std140) uniform ub_ModelParams {
 layout(location = ${LoadingAdtProgram.a_Position}) attribute vec3 a_Position;
 
 void mainVS() {
-    vec4 color1 = vec4(0.55);
-    vec4 color2 = vec4(0.75);
     v_Color = mix(skyFogColor, skyBand1Color, sin(u_Params.x) * 0.5 + 0.2);
-    gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_View), Mul(u_ModelMatrix, vec4(a_Position, 1.0))));
+    vec3 t_PositionWorld = UnpackMatrix(u_ModelMatrix) * vec4(a_Position, 1.0);
+    vec3 t_PositionView = UnpackMatrix(u_View) * vec4(t_PositionWorld, 1.0);
+    gl_Position = UnpackMatrix(u_Projection) * vec4(t_PositionView, 1.0);
 }
 #endif
 
@@ -693,13 +664,13 @@ export class WaterProgram extends BaseProgram {
 ${BaseProgram.commonDeclarations}
 
 varying vec3 v_Color;
-varying vec4 v_Position;
+varying vec3 v_Position;
 varying vec2 v_TexCoord;
 varying float v_Depth;
 
 layout(std140) uniform ub_WaterParams {
     vec4 u_WaterParams; // LiquidCategory, _, _, _
-    Mat4x4 u_ModelMatrix;
+    Mat3x4 u_ModelMatrix;
 };
 
 layout(binding = 0) uniform sampler2D u_Texture0;
@@ -712,8 +683,10 @@ layout(location = ${WaterProgram.a_Depth}) attribute float a_Depth;
 void mainVS() {
     v_TexCoord = a_TexCoord;
     v_Depth = a_Depth;
-    v_Position = Mul(u_ModelMatrix, vec4(a_Position, 1.0));
-    gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_View), v_Position));
+
+    v_Position = UnpackMatrix(u_ModelMatrix) * vec4(a_Position, 1.0);
+    vec3 t_PositionView = UnpackMatrix(u_View) * vec4(v_Position, 1.0);
+    gl_Position = UnpackMatrix(u_Projection) * vec4(t_PositionView, 1.0);
 }
 #endif
 
@@ -800,7 +773,8 @@ void mainVS() {
     v_Color = a_Color;
     v_Lighting = a_Lighting;
     v_Normal = a_Normal;
-    gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_View), vec4(a_Position, 1.0)));
+    vec3 t_PositionView = UnpackMatrix(u_View) * vec4(a_Position, 1.0);
+    gl_Position = UnpackMatrix(u_Projection) * vec4(t_PositionView, 1.0);
     v_Position = a_Position.xyz;
 }
 #endif
@@ -893,12 +867,12 @@ export class ModelProgram extends BaseProgram {
                 if (uv.startsWith("t")) {
                     let n = parseInt(uv[1]);
                     if (n < 2) {
-                        return `    v_UV${uvIndex} = Mul(texMat${n - 1}, vec4(a_TexCoord${n - 1}, 0.0, 1.0)).xy;`;
+                        return `        v_UV${uvIndex} = UnpackMatrix(texMat${n - 1}) * vec4(a_TexCoord${n - 1}, 0.0, 1.0);`;
                     } else {
-                        return `    v_UV${uvIndex} = v_UV${n};`;
+                        return `        v_UV${uvIndex} = v_UV${n};`;
                     }
                 } else if (uv === "env") {
-                    return `    v_UV${uvIndex} = envCoord;`;
+                    return `        v_UV${uvIndex} = envCoord;`;
                 } else {
                     throw `unrecognized uv ${uv}`;
                 }
@@ -912,23 +886,17 @@ ${BaseProgram.commonDeclarations}
 ${GfxShaderLibrary.MulNormalMatrix}
 
 struct DoodadInstance {
-    Mat4x3 transform;
+    Mat3x4 transform;
     vec4 interiorAmbientColor;
     vec4 interiorDirectColor;
     vec4 lightingParams; // [applyInteriorLighting, applyExteriorLighting, interiorExteriorBlend/skyboxBlend, isSkybox]
 };
 
 struct M2Light {
-  vec4 ambientColor;
-  vec4 diffuseColor;
-  vec4 position; // x, y, z, boneIndex
-  vec4 params; // attenuationStart, attenuationEnd, visible, _
-};
-
-struct BoneParams {
-    Mat4x4 transform;
-    Mat4x4 postBillboardTransform;
-    vec4 params; // isSphericalBillboard, _, _, _
+    vec4 ambientColor;
+    vec4 diffuseColor;
+    vec4 position; // x, y, z, boneIndex
+    vec4 params; // attenuationStart, attenuationEnd, visible, _
 };
 
 layout(std140) uniform ub_DoodadParams {
@@ -940,8 +908,8 @@ layout(std140) uniform ub_MaterialParams {
     vec4 shaderTypes; // [pixelShader, vertexShader, _, _]
     vec4 materialParams; // [blendMode, unfogged, unlit, _]
     vec4 meshColor;
-    Mat4x4 texMat0;
-    Mat4x4 texMat1;
+    Mat2x4 texMat0;
+    Mat2x4 texMat1;
     vec4 textureWeight;
 };
 
@@ -973,69 +941,51 @@ float edgeScan(vec3 position, vec3 normal){
     return clamp(2.7 * dotProductClamped * dotProductClamped - 0.4, 0.0, 1.0);
 }
 
-Mat4x3 convertMat4(mat4 m) {
-    mat4 t = transpose(m);
-    Mat4x3 result;
-    result.mx = t[0];
-    result.my = t[1];
-    result.mz = t[2];
-    return result;
-}
-
-mat4 convertMat4x4(Mat4x4 m) {
-    return transpose(mat4(m.mx, m.my, m.mz, m.mw));
-}
-
-mat4 convertMat4x4(Mat4x3 m) {
-    return transpose(mat4(m.mx, m.my, m.mz, vec4(0, 0, 0, 1)));
-}
-
-void calcBillboardMat(inout mat4 m) {
+void calcBillboardMat(inout mat4x3 m) {
     vec3 upVec = vec3(0, 0, 1);
     vec3 forwardVec = normalize(u_CameraPos.xyz - m[3].xyz);
     vec3 leftVec = normalize(cross(upVec, forwardVec));
     upVec = normalize(cross(forwardVec, leftVec));
-    m[0] = vec4(forwardVec, 0.0);
-    m[1] = vec4(leftVec, 0.0);
-    m[2] = vec4(upVec, 0.0);
+    m[0] = forwardVec;
+    m[1] = leftVec;
+    m[2] = upVec;
 }
 
-mat4 getBoneTransform(uint boneIndex) {
+mat4x3 getBoneTransform(uint boneIndex) {
     vec4 mx = texelFetch(TEXTURE(u_TextureBoneMatrix), ivec2(1, boneIndex), 0);
     vec4 my = texelFetch(TEXTURE(u_TextureBoneMatrix), ivec2(2, boneIndex), 0);
     vec4 mz = texelFetch(TEXTURE(u_TextureBoneMatrix), ivec2(3, boneIndex), 0);
-    return transpose(mat4(mx, my, mz, vec4(0, 0, 0, 1)));
+    return transpose(mat3x4(mx, my, mz));
 }
 
-mat4 getPostBillboardTransform(uint boneIndex) {
+mat4x3 getPostBillboardTransform(uint boneIndex) {
     vec4 mx = texelFetch(TEXTURE(u_TextureBoneMatrix), ivec2(4, boneIndex), 0);
     vec4 my = texelFetch(TEXTURE(u_TextureBoneMatrix), ivec2(5, boneIndex), 0);
     vec4 mz = texelFetch(TEXTURE(u_TextureBoneMatrix), ivec2(6, boneIndex), 0);
-    return transpose(mat4(mx, my, mz, vec4(0, 0, 0, 1)));
+    return transpose(mat3x4(mx, my, mz));
 }
 
 vec4 getBoneParams(uint boneIndex) {
     return texelFetch(TEXTURE(u_TextureBoneMatrix), ivec2(0, boneIndex), 0);
 }
 
-Mat4x3 getBoneMatrix(uint index) {
+mat4x3 getBoneMatrix(uint index) {
     DoodadInstance params = instances[gl_InstanceID];
     vec4 boneParams = getBoneParams(index);
-    mat4 modelMatrix = convertMat4x4(params.transform);
-    mat4 transform = modelMatrix * getPostBillboardTransform(index);
+    mat4x3 transform = mat4x3(mat4(UnpackMatrix(params.transform)) * mat4(getPostBillboardTransform(index)));
     if (boneParams.x > 0.0) {
         calcBillboardMat(transform);
     }
-    transform = transform * getBoneTransform(index);
-    return convertMat4(transform);
+    transform = mat4x3(mat4(transform) * mat4(getBoneTransform(index)));
+    return transform;
 }
 
-Mat4x3 getCombinedBoneMat() {
-    Mat4x3 result = _Mat4x3(0.0);
-    Fma(result, getBoneMatrix(a_BoneIndices.x), a_BoneWeights.x);
-    Fma(result, getBoneMatrix(a_BoneIndices.y), a_BoneWeights.y);
-    Fma(result, getBoneMatrix(a_BoneIndices.z), a_BoneWeights.z);
-    Fma(result, getBoneMatrix(a_BoneIndices.w), a_BoneWeights.w);
+mat4x3 getCombinedBoneMat() {
+    mat4x3 result = mat4x3(0.0);
+    result += getBoneMatrix(a_BoneIndices.x) * a_BoneWeights.x;
+    result += getBoneMatrix(a_BoneIndices.y) * a_BoneWeights.y;
+    result += getBoneMatrix(a_BoneIndices.z) * a_BoneWeights.z;
+    result += getBoneMatrix(a_BoneIndices.w) * a_BoneWeights.w;
     return result;
 }
 
@@ -1043,15 +993,15 @@ void mainVS() {
     DoodadInstance params = instances[gl_InstanceID];
     bool isSkybox = params.lightingParams.w > 0.0;
     float w = isSkybox ? 0.0 : 1.0;
-    Mat4x3 boneTransform = getCombinedBoneMat();
 
-    v_Position = Mul(_Mat4x4(boneTransform), vec4(a_Position, 1.0)).xyz;
+    mat4x3 boneTransform = getCombinedBoneMat();
+    v_Position = boneTransform * vec4(a_Position, 1.0);
     v_Normal = MulNormalMatrix(boneTransform, a_Normal);
 
-    vec3 viewPosition = Mul(_Mat4x4(u_View), vec4(v_Position, w)).xyz;
-    vec3 viewNormal = Mul(_Mat4x4(u_View), vec4(v_Normal, 0.0)).xyz;
+    vec3 viewPosition = UnpackMatrix(u_View) * vec4(v_Position, w);
+    vec3 viewNormal = UnpackMatrix(u_View) * vec4(v_Normal, 0.0);
 
-    gl_Position = Mul(u_Projection, vec4(viewPosition, 1.0));
+    gl_Position = UnpackMatrix(u_Projection) * vec4(viewPosition, 1.0);
     v_InstanceID = float(gl_InstanceID); // FIXME: hack until we get flat variables working
 
     vec4 combinedColor = clamp(meshColor, 0.0, 1.0);
@@ -1130,7 +1080,7 @@ void mainPS() {
         float attenuationStart = light.params.x;
         float attenuationEnd = light.params.y;
         bool visible = light.params.z > 0.0;
-        vec3 posToLight = v_Position - Mul(_Mat4x4(doodad.transform), vec4(light.position.xyz, 1.0)).xyz;
+        vec3 posToLight = v_Position - (UnpackMatrix(doodad.transform) * vec4(light.position.xyz, 1.0)).xyz;
         float distance = length(posToLight);
         float diffuse = max(dot(posToLight, v_Normal) / distance, 0.0);
         float attenuation = 1.0 - clamp((distance - attenuationStart) * (1.0 / (attenuationEnd - attenuationStart)), 0.0, 1.0);
@@ -1355,7 +1305,7 @@ export class ParticleProgram extends BaseProgram {
 ${BaseProgram.commonDeclarations}
 
 struct DoodadInstance {
-    Mat4x3 transform;
+    Mat3x4 transform;
 };
 
 layout(std140) uniform ub_EmitterParams {
@@ -1388,8 +1338,8 @@ void mainVS() {
     v_Color = texelFetch(TEXTURE(u_DataTex), ivec2(1, texelY), 0);
     vec2 scale = texelFetch(TEXTURE(u_DataTex), ivec2(2, texelY), 0).xy;
     vec2 texPos = texelFetch(TEXTURE(u_DataTex), ivec2(3, texelY), 0).xy;
-    v_Position = Mul(_Mat4x4(doodad.transform), vec4(pos, 1.0)).xyz;
-    vec4 viewSpacePos = Mul(_Mat4x4(u_View), vec4(v_Position, 1.0));
+    v_Position = UnpackMatrix(doodad.transform) * vec4(pos, 1.0);
+    vec3 viewSpacePos = UnpackMatrix(u_View) * vec4(v_Position, 1.0);
     vec2 texScale = ub_texScale.xy;
     if (vertNum == 0) {
         viewSpacePos.x -= scale.x;
@@ -1409,7 +1359,7 @@ void mainVS() {
         v_UV0 = texPos + vec2(0.0, 1.0) * texScale;
     }
 
-    gl_Position = Mul(u_Projection, vec4(viewSpacePos.xyz, 1.0));
+    gl_Position = UnpackMatrix(u_Projection) * vec4(viewSpacePos.xyz, 1.0);
 }
 #endif
 

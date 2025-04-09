@@ -12,29 +12,28 @@ import { preprocessProgram_GLSL } from "../shaderc/GfxShaderCompiler.js";
 import { GfxTopology, convertToTrianglesRange } from "./TopologyHelpers.js";
 import { setAttachmentStateSimple } from "./GfxMegaStateDescriptorHelpers.js";
 import { branchlessONB } from "../../DebugJunk.js";
-import { MathConstants, Vec3UnitX, Vec3UnitY, Vec3UnitZ, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation } from "../../MathHelpers.js";
+import { MathConstants, Vec3UnitX, Vec3UnitY, Vec3UnitZ, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, vec3FromBasis2 } from "../../MathHelpers.js";
 import { IsDepthReversed } from "./ReversedDepthHelpers.js";
 import { assert } from "../platform/GfxPlatformUtil.js";
+import { GfxShaderLibrary } from "./GfxShaderLibrary.js";
 
 // TODO(jstpierre):
 //  - Integrate text renderer?
 //  - More primitive types
 //  - Support view-space and screen-space primitives
-//  - Line width emulation?
 
 interface DebugDrawOptions {
     flags?: DebugDrawFlags;
 };
 
 export const enum DebugDrawFlags {
-    Default = 0,
-
     WorldSpace = 0,
     ViewSpace = 1 << 0,
     ScreenSpace = 1 << 1,
-    BillboardSpace = 1 << 2,
 
     DepthTint = 1 << 3,
+
+    Default = DepthTint,
 };
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [
@@ -44,9 +43,11 @@ const bindingLayouts: GfxBindingLayoutDescriptor[] = [
 ];
 
 const debugDrawVS = `
+${GfxShaderLibrary.MatrixLibrary}
+
 layout(std140) uniform ub_BaseData {
     Mat4x4 u_ClipFromView;
-    Mat4x3 u_ViewFromWorld;
+    Mat3x4 u_ViewFromWorld;
     vec4 u_Misc[1];
 };
 
@@ -62,7 +63,17 @@ flat out uint v_Flags;
 
 void main() {
     uint t_Flags = uint(a_Color.a);
-    gl_Position = Mul(u_ClipFromView, Mul(_Mat4x4(u_ViewFromWorld), vec4(a_Position.xyz, 1.0)));
+    gl_Position = UnpackMatrix(u_ClipFromView) * vec4(UnpackMatrix(u_ViewFromWorld) * vec4(a_Position.xyz, 1.0), 1.0);
+
+    if (gl_InstanceID >= 1) {
+        uint t_LineIndex = uint(gl_InstanceID - 1);
+        vec2 t_PosOffs;
+        t_PosOffs.x = (t_LineIndex & 1u) != 0u ? 1.0f : -1.0f;
+        t_PosOffs.y = (t_LineIndex & 2u) != 0u ? 1.0f : -1.0f;
+        t_PosOffs.xy *= float((t_LineIndex / 4u) + 1u);
+        gl_Position.xy += (t_PosOffs / u_ScreenSize) * gl_Position.w;
+    }
+
     v_Color = a_Color;
     v_Color.a = 1.0 - fract(a_Color.a);
     v_Color.rgb *= v_Color.aaa;
@@ -85,10 +96,11 @@ bool IsSomethingInFront(float t_DepthSample) {
 
 void main() {
     vec4 t_Color = v_Color;
+
     if ((v_Flags & uint(${DebugDrawFlags.DepthTint})) != 0u) {
         float t_DepthSample = texelFetch(SAMPLER_2D(u_TextureFramebufferDepth), ivec2(gl_FragCoord.xy), 0).r;
         if (IsSomethingInFront(t_DepthSample))
-            t_Color.rgba *= 0.2;
+            t_Color.rgba *= 0.15;
     }
 
     gl_FragColor = t_Color;
@@ -123,7 +135,7 @@ class BufferPage {
 
     public renderInst = new GfxRenderInst();
 
-    constructor(cache: GfxRenderCache, public behaviorType: BehaviorType, vertexCount: number, indexCount: number) {
+    constructor(cache: GfxRenderCache, public behaviorType: BehaviorType, vertexCount: number, indexCount: number, private lineThickness: number) {
         const device = cache.device;
 
         this.vertexData = new Float32Array(vertexCount * this.vertexStride);
@@ -188,10 +200,12 @@ class BufferPage {
         ], { buffer: this.indexBuffer, byteOffset: 0 });
 
         setAttachmentStateSimple(this.renderInst.getMegaStateFlags(), { blendMode: GfxBlendMode.Add, blendSrcFactor: GfxBlendFactor.One, blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha });
-        if (this.behaviorType === BehaviorType.Lines)
+        if (this.behaviorType === BehaviorType.Lines) {
             this.renderInst.setMegaStateFlags({ depthCompare: GfxCompareMode.Always, depthWrite: false });
-        else if (this.behaviorType === BehaviorType.Transparent)
+            this.renderInst.setInstanceCount(1 + (this.lineThickness - 1) * 4);
+        } else if (this.behaviorType === BehaviorType.Transparent) {
             this.renderInst.setMegaStateFlags({ depthWrite: false });
+        }
 
         this.renderInst.setDrawCount(this.indexDataOffs);
 
@@ -216,6 +230,7 @@ export class DebugDraw {
     private debugDrawProgram: GfxProgram;
     private depthSampler: GfxSampler;
     private currentPage: BufferPage | null = null; // for the batch system
+    private lineThickness = 3;
 
     public static scratchVec3 = nArray(4, () => vec3.create());
 
@@ -273,7 +288,7 @@ export class DebugDraw {
 
         vertexCount = align(vertexCount, this.defaultPageVertexCount);
         indexCount = align(indexCount, this.defaultPageIndexCount);
-        const page = new BufferPage(this.cache, behaviorType, vertexCount, indexCount);
+        const page = new BufferPage(this.cache, behaviorType, vertexCount, indexCount, this.lineThickness);
         this.pages.push(page);
         return page;
     }
@@ -390,8 +405,7 @@ export class DebugDraw {
             const signX = i & 1 ? -1 : 1;
             const signY = i & 2 ? -1 : 1;
             const s = dst[i];
-            vec3.scaleAndAdd(s, center, right, signX * rightMag);
-            vec3.scaleAndAdd(s, s, up, signY * upMag);
+            vec3FromBasis2(s, center, right, signX * rightMag, up, signY * upMag);
         }
     }
 

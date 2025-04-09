@@ -13,6 +13,7 @@ import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorH
 import { lerpAngle } from "../MathHelpers.js";
 import { PVRTextureHolder } from "./Scenes.js";
 import { assert, nArray } from "../util.js";
+import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
 
 export class JSRProgram extends DeviceProgram {
     public static a_Position = 0;
@@ -27,18 +28,23 @@ export class JSRProgram extends DeviceProgram {
 
     public override both = `
 precision mediump float;
+
+${GfxShaderLibrary.MatrixLibrary}
+
 // Expected to be constant across the entire scene.
 layout(std140) uniform ub_SceneParams {
     Mat4x4 u_Projection;
-    Mat4x3 u_LightDirection;
+    Mat3x4 u_LightDirection;
 };
+
 layout(std140) uniform ub_ModelParams {
-    Mat4x3 u_BoneMatrix;
-    Mat4x2 u_TextureMatrix;
+    Mat3x4 u_BoneMatrix;
+    Mat2x4 u_TextureMatrix;
     vec4   u_Diffuse;
     vec4   u_Ambient;
     vec4   u_Specular;
 };
+
 #ifdef NORMAL
 varying vec3 v_Normal;
 #endif
@@ -68,12 +74,18 @@ layout(location = 3) in vec4 a_Diffuse;
 #ifdef SPECULAR
 layout(location = 4) in vec4 a_Specular;
 #endif
+
+${GfxShaderLibrary.MulNormalMatrix}
+
 void main() {
-    gl_Position = vec4(a_Position, 1.0);
-    gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_BoneMatrix), gl_Position));
+    mat4x3 t_BoneMatrix = UnpackMatrix(u_BoneMatrix);
+    vec3 t_PositionView = t_BoneMatrix * vec4(a_Position, 1.0);
+    gl_Position = UnpackMatrix(u_Projection) * vec4(t_PositionView, 1.0);
+
 #ifdef NORMAL
-    v_Normal = normalize(Mul(_Mat4x4(u_BoneMatrix), vec4(a_Normal, 0.0)).xyz);
+    v_Normal = MulNormalMatrix(t_BoneMatrix, a_Normal);
 #endif
+
 #ifdef DIFFUSE
     v_Diffuse = a_Diffuse;
 #endif
@@ -82,7 +94,7 @@ void main() {
 #endif
 #ifdef TEXTURE
     v_TexCoord = a_TexCoord;
-    v_TexCoord = Mul(_Mat4x4(u_TextureMatrix), vec4(v_TexCoord, 0.0, 1.0)).xy;
+    v_TexCoord = UnpackMatrix(u_TextureMatrix) * vec4(v_TexCoord, 0.0, 1.0);
 #endif
 }
 `;

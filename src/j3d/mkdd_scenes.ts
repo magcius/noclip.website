@@ -133,7 +133,7 @@ interface BOL {
 
 function parseBOL(buffer: ArrayBufferSlice): BOL {
     const view = buffer.createDataView();
-    assert(readString(buffer, 0x00, 0x04) == '0015');
+    assert(readString(buffer, 0x00, 0x04) === '0015');
     const objectTableCount = view.getUint16(0x1E);
     const objectTableOffs = view.getUint32(0x54);
 
@@ -252,7 +252,7 @@ class MKDDSceneDesc implements Viewer.SceneDesc {
                     const btk = BTK.parse(btkFileData);
 
                     for (const materialInstance of courseModelInstance.materialInstances) {
-                        if (btk.uvAnimationEntries.findIndex((x) => x.materialName == materialInstance.name) != -1) {
+                        if (btk.uvAnimationEntries.findIndex((x) => x.materialName === materialInstance.name) !== -1) {
                             bindTTK1MaterialInstance(materialInstance, courseModelInstance.animationController, btk);
                         }
                     }
@@ -525,10 +525,8 @@ class MKDDSceneDesc implements Viewer.SceneDesc {
                     spawnObject(obj, 'objects/wa_search1.bmd', ['objects/wa_search1.bck']);
                     break;
                 case 0x1195:
-                    if (obj.settings[2] == 0)
-                    {
+                    if (obj.settings[2] === 0)
                         spawnObject(obj, 'objects/cannon1.bmd');
-                    }
                     break;
                 case 0x1196:
                     break;

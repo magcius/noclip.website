@@ -1,7 +1,7 @@
 
 import { mat4, quat, ReadonlyMat4, ReadonlyQuat, ReadonlyVec3, vec3 } from 'gl-matrix';
 import { GfxRenderInstManager } from '../../gfx/render/GfxRenderInstManager.js';
-import { clamp, computeEulerAngleRotationFromSRTMatrix, computeModelMatrixR, computeModelMatrixT, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, isNearZero, isNearZeroVec3, lerp, lerpAngle, MathConstants, normToLength, normToLengthAndAdd, quatFromEulerRadians, saturate, scaleMatrix, setMatrixTranslation, transformVec3Mat4w0, transformVec3Mat4w1, vec3SetAll, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from '../../MathHelpers.js';
+import { clamp, calcEulerAngleRotationFromSRTMatrix, computeModelMatrixR, computeModelMatrixT, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, isNearZero, isNearZeroVec3, lerp, lerpAngle, MathConstants, normToLength, normToLengthAndAdd, quatFromEulerRadians, saturate, scaleMatrix, setMatrixTranslation, transformVec3Mat4w0, transformVec3Mat4w1, vec3SetAll, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from '../../MathHelpers.js';
 import { assert, assertExists, fallback, nArray } from '../../util.js';
 import * as Viewer from '../../viewer.js';
 import { addVelocityFromPush, addVelocityFromPushHorizon, addVelocityMoveToDirection, addVelocityToGravity, appearStarPiece, attenuateVelocity, blendQuatUpFront, calcDistanceToPlayer, calcFrontVec, calcGravity, calcGravityVector, calcMtxFromGravityAndZAxis, calcNearestRailPos, calcNearestRailDirection, calcPerpendicFootToLine, calcRailPointPos, calcRailStartPos, calcSqDistanceToPlayer, calcUpVec, calcVelocityMoveToDirection, connectToScene, connectToSceneCollisionEnemyNoShadowedMapObjStrongLight, connectToSceneCollisionEnemyStrongLight, connectToSceneEnemy, connectToSceneEnemyMovement, connectToSceneIndirectEnemy, declareStarPiece, excludeCalcShadowToMyCollision, FixedPosition, getBckFrameMax, getBrkFrameMax, getCamYdir, getCamZdir, getCurrentRailPointArg0, getEaseInOutValue, getEaseInValue, getGroupFromArray, getJointMtxByName, getPlayerPos, getRailDirection, getRailPointNum, getRandomInt, getRandomVector, hideModel, initCollisionParts, initDefaultPos, invalidateShadowAll, isActionEnd, isBckOneTimeAndStopped, isBckPlaying, isBckStopped, isBrkStopped, isBtpStopped, isHiddenModel, isInDeath, isNearPlayer, isNearPlayerPose, isOnSwitchA, isSameDirection, isValidSwitchA, isValidSwitchAppear, isValidSwitchB, isValidSwitchDead, joinToGroupArray, listenStageSwitchOnOffA, listenStageSwitchOnOffB, makeMtxFrontUp, makeMtxFrontUpPos, makeMtxTRFromQuatVec, makeMtxUpFront, makeMtxUpFrontPos, makeMtxUpNoSupportPos, makeQuatFromVec, makeQuatUpFront, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordAndTransToRailStartPoint, moveCoordToRailPoint, moveCoordToStartPos, moveTransToCurrentRailPos, quatFromMat4, quatGetAxisX, quatGetAxisY, quatGetAxisZ, quatSetRotate, reboundVelocityFromCollision, reboundVelocityFromEachCollision, restrictVelocity, reverseRailDirection, rotateQuatRollBall, sendMsgPushAndKillVelocityToTarget, setBckFrameAndStop, setBckRate, setBrkFrameAndStop, setBvaRate, setRailCoord, setRailCoordSpeed, setRailDirectionToEnd, showModel, startAction, startBck, startBckNoInterpole, startBckWithInterpole, startBpk, startBrk, startBtk, startBtp, startBtpIfExist, startBva, syncStageSwitchAppear, tryStartBck, turnVecToVecCos, turnVecToVecCosOnPlane, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, validateShadowAll, vecKillElement, setBtkFrameAndStop, getBckFrame, setBckFrame, isRailReachedGoal, isRailReachedNearGoal, setRailDirectionToStart, moveCoordToNearestPos, moveTransToOtherActorRailPos, moveCoord, calcNearestRailPosAndDirection, isLoopRail, isRailGoingToEnd, getRandomFloat, calcVecToPlayerH, calcVecFromPlayerH, calcDistanceToPlayerH, makeQuatSideUp, turnQuatYDirRad, setMtxQuat, calcRailEndPointDirection, rotateVecDegree, calcSideVec, connectToSceneMapObj, makeMtxSideUp, makeMtxSideFront, appearStarPieceToDirection, isNearPlayerAnyTime, addVelocityMoveToTarget, addVelocityAwayFromTarget, blendMtx, getRailPos, getRailTotalLength, connectToSceneMapObjDecorationStrongLight, connectToSceneMapObjMovement, getRailCoord, calcRailPosAtCoord, calcRailDirectionAtCoord, moveRailRider, getCurrentRailPointNo, getNextRailPointNo, moveCoordAndTransToRailPoint, getBckFrameMaxNamed, clampVecAngleDeg, connectToSceneEnvironment, isBtkExist, isBtkStopped, clampVecAngleRad, connectToSceneEnemyDecorationMovementCalcAnim, isExistRail, getRailPointArg0, getRailPointCoord, calcReboundVelocity, calcReboundVelocitySimple, calcNerveEaseInOutValue } from '../ActorUtil.js';
@@ -1388,7 +1388,7 @@ export class Unizo extends LiveActor<UnizoNrv> {
         getCamZdir(scratchVec3b, sceneObjHolder.viewerInput.camera);
         vec3.negate(scratchVec3b, scratchVec3b);
         makeMtxFrontUp(scratchMatrix, scratchVec3b, scratchVec3a);
-        computeEulerAngleRotationFromSRTMatrix(this.breakModel.rotation, scratchMatrix);
+        calcEulerAngleRotationFromSRTMatrix(this.breakModel.rotation, scratchMatrix);
         this.breakModel.makeActorAppeared(sceneObjHolder);
 
         hideModel(this);
@@ -4508,7 +4508,7 @@ function calcRotate(actor: LiveActor, front: ReadonlyVec3, turnSpeedDegrees: num
         vec3.copy(scratchVec3a, scratchVec3b);
 
     makeMtxUpFront(scratchMatrix, scratchVec3a, scratchVec3c);
-    computeEulerAngleRotationFromSRTMatrix(actor.rotation, scratchMatrix);
+    calcEulerAngleRotationFromSRTMatrix(actor.rotation, scratchMatrix);
 }
 
 function moveAndTurnToTarget(actor: LiveActor, target: ReadonlyVec3, moveSpeed: number, gravitySpeed: number, velocityDamp: number, turnSpeedDegrees: number): void {
@@ -7109,7 +7109,7 @@ export class Mogucchi extends LiveActor<MogucchiNrv> {
         getRailDirection(scratchVec3a, this);
         vec3.negate(scratchVec3b, this.gravityStrikeVec);
         makeMtxUpFront(scratchMatrix, scratchVec3b, scratchVec3a);
-        computeEulerAngleRotationFromSRTMatrix(this.rotation, scratchMatrix);
+        calcEulerAngleRotationFromSRTMatrix(this.rotation, scratchMatrix);
     }
 
     public override makeActorAppeared(sceneObjHolder: SceneObjHolder): void {

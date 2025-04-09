@@ -116,7 +116,7 @@ function expand5to8(n: number): number {
 function translateCullMode(renderWhichFaces: number): GfxCullMode {
     switch (renderWhichFaces) {
     case 0x00: // Render Nothing
-        return GfxCullMode.FrontAndBack;
+        throw "whoops";
     case 0x01: // Render Back
         return GfxCullMode.Front;
     case 0x02: // Render Front

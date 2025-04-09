@@ -34,6 +34,7 @@ import { calcTextureScaleForShift } from '../Common/N64/RSP.js';
 import { colorNewFromRGBA } from '../Color.js';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 import { convertToCanvas } from '../gfx/helpers/TextureConversionHelpers.js';
+import { GfxShaderLibrary } from '../gfx/helpers/GfxShaderLibrary.js';
 
 interface Pilotwings64FSFileChunk {
     tag: string;
@@ -124,7 +125,7 @@ function parseUVCT_Chunk(chunk: Pilotwings64FSFileChunk): UVCT_Chunk {
         for (let j = 0; j < matrixCount; j++) {
             const mtx = mat4.create();
             offs += RDP.readMatrixRDP(mtx, view, offs);
-            if (j == 0) { // TODO: figure out what other matrices are for
+            if (j === 0) { // TODO: figure out what other matrices are for
                 placement = mtx;
             }
             assert(mtx[15] === 1.0);
@@ -541,7 +542,7 @@ function parseUVTX_Chunk(chunk: Pilotwings64FSFileChunk, name: string): UVTX {
         const tile = tiles[i];
 
         if (tile.lrs === 0 && tile.lrt === 0) { // technically a 1x1 texture
-            assert(scaleS != 0 || scaleT != 0 || combineScaleS != 0 || combineScaleT != 0)
+            assert(scaleS !== 0 || scaleT !== 0 || combineScaleS !== 0 || combineScaleT !== 0)
             // convert stored dimensions to fixed point
             tile.lrs = view.getUint16(dlEnd + 0x00) * 4 - 4;
             tile.lrt = view.getUint16(dlEnd + 0x02) * 4 - 4;
@@ -568,7 +569,7 @@ function parseUVTX_Chunk(chunk: Pilotwings64FSFileChunk, name: string): UVTX {
         levels.push({ width: tileW, height: tileH, pixels: dst, shiftS: tile.shifts, shiftT: tile.shiftt, usesPaired });
 
         // For now, use only one LOD.
-        if (pairedIndex == 0xfff)
+        if (pairedIndex === 0xfff)
             break;
     }
 
@@ -680,7 +681,7 @@ interface UVMD {
 }
 
 function parseUVMD(file: Pilotwings64FSFile): UVMD {
-    assert(file.chunks.length == 1);
+    assert(file.chunks.length === 1);
     const view = file.chunks[0].buffer.createDataView();
     const vertCount = view.getUint16(0x0);
     const lodCount = view.getUint8(0x02);
@@ -743,7 +744,7 @@ function parseUVMD(file: Pilotwings64FSFile): UVMD {
                             vertBuffer[write] = (index & 0x3FFF) + read;
                     }
                 }
-                assert(indexData.length - indexOffset == 3 * triCount);
+                assert(indexData.length - indexOffset === 3 * triCount);
                 materials.push({ rspModeInfo, textureIndex, indexOffset, triCount });
             }
             parts.push({ indexData: new Uint16Array(indexData), materials, attachmentLevel });
@@ -833,7 +834,7 @@ function parseSPTH(file: Pilotwings64FSFile): SPTH {
         } else if (tag === 'SCPR') {
             currTrack = rTrack;
         } else {
-            assert(tag === 'SCP#' && i == file.chunks.length - 1);
+            assert(tag === 'SCP#' && i === file.chunks.length - 1);
             break;
         }
 
@@ -1138,7 +1139,7 @@ function parseUPWT(file: Pilotwings64FSFile): UPWT {
                 // this is read from a table
                 let modelIndex = 0xd9 + special + 2 * other + 4 * size;
                 if (special > 1) {
-                    // goal ring, game skips if special != 3
+                    // goal ring, game skips if special !== 3
                     modelIndex = 0xf1;
                 }
                 rings.push({ position, angles, axis, modelIndex });
@@ -1293,7 +1294,7 @@ function parseUVEN_Chunk(chunk: Pilotwings64FSFileChunk): UVEN {
     let oceanModel: number | undefined;
     let oceanFlags: number | undefined;
     let offs = 0x01;
-    if (modelCount == 2) {
+    if (modelCount === 2) {
         skyboxModel = view.getUint16(offs + 0x00);
         skyboxFlags = view.getUint8(offs + 0x02);
         offs += 0x03;
@@ -2301,33 +2302,36 @@ class SnowProgram extends DeviceProgram {
     public static ub_DrawParams = 1;
 
     public override both = `
+${GfxShaderLibrary.MatrixLibrary}
+
 layout(std140) uniform ub_SceneParams {
     Mat4x4 u_Projection;
 };
 
 layout(std140) uniform ub_DrawParams {
-    Mat4x3 u_BoneMatrix;
+    Mat3x4 u_BoneMatrix;
     vec4 u_Shift;
 };`
     public override vert = `
 layout(location = 0) in vec3 a_Position;
 
 void main() {
-    gl_Position = vec4(a_Position, 1.0) + vec4(u_Shift.xyz, 0.0);
+    vec3 t_PositionLocal = a_Position + u_Shift.xyz;
     // slightly clumsy, force into 0-10k cube, then shift center to origin
     // just easier than dealing with negative mod values
     float cubeSide = 5000.0;
-    gl_Position = mod(gl_Position, 2.0*vec4(cubeSide)) - vec4(vec3(cubeSide), 0.0);
-    gl_Position = Mul(_Mat4x4(u_BoneMatrix), gl_Position);
+    t_PositionLocal = mod(t_PositionLocal, 2.0 * vec3(cubeSide)) - vec3(cubeSide);
+    t_PositionLocal = UnpackMatrix(u_BoneMatrix) * vec4(t_PositionLocal, 1.0);
     // shift snow cube in front of camera
-    gl_Position.z -= cubeSide;
+    t_PositionLocal.z -= cubeSide;
     // add offset based on which corner this is, undoing perspective correction so every flake is the same size
-    gl_Position += (u_Shift.w * gl_Position.z) * vec4(float(gl_VertexID & 1) - 0.5, float((gl_VertexID >> 1) & 1) - 0.5, 0.0, 0.0);
-    gl_Position = Mul(u_Projection, gl_Position);
+    t_PositionLocal += (u_Shift.w * t_PositionLocal.z) * vec3(float(gl_VertexID & 1) - 0.5, float((gl_VertexID >> 1) & 1) - 0.5, 0.0);
+    gl_Position = UnpackMatrix(u_Projection) * vec4(t_PositionLocal, 1.0);
     // game writes snow directly to the frame buffer, with a very simple projection
     // this effectively leads to a slightly larger FOV, so apply the same multiplier here
     gl_Position = gl_Position * vec4(0.81778, 0.81778, 1.0, 1.0);
 }`;
+
     public override frag = `
 void main() {
     gl_FragColor = vec4(1.0); // flakes are just white

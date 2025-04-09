@@ -12,7 +12,7 @@ import { TDDraw } from "../SuperMarioGalaxy/DDraw.js";
 import { TextureMapping } from "../TextureHolder.js";
 import { cLib_addCalc, cM_s2rad, cM_rndF, cM_rndFX } from "../ZeldaWindWaker/SComponent.js";
 import { PeekZManager, PeekZResult } from "../ZeldaWindWaker/d_dlst_peekZ.js";
-import { mDoLib_project, mDoLib_projectFB } from "../ZeldaWindWaker/m_do_ext.js";
+import { mDoLib_projectFB } from "../ZeldaWindWaker/m_do_ext.js";
 import { MtxTrans, calc_mtx, mDoMtx_XrotM, mDoMtx_ZrotM } from "../ZeldaWindWaker/m_do_mtx.js";
 import { fullscreenMegaState, setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
@@ -31,9 +31,10 @@ import { ViewerRenderInput } from "../viewer.js";
 import { dKy_actor_addcol_amb_set, dKy_addcol_fog_set, dKy_bg1_addcol_amb_set, dKy_bg_addcol_amb_set, dKy_darkworld_check, dKy_daynight_check, dKy_efplight_cut, dKy_efplight_set, dKy_get_dayofweek, dKy_set_actcol_ratio, dKy_set_bgcol_ratio, dKy_set_fogcol_ratio, dKy_set_vrboxcol_ratio, dKy_undwater_filter_draw, dKy_vrbox_addcol_kasumi_set, dKy_vrbox_addcol_sky0_set, dScnKy_env_light_c } from "./d_kankyo.js";
 import { ResType } from "./d_resorce.js";
 import { dStage_FileList_dt_c, dStage_stagInfo_GetArg0, dStage_stagInfo_GetSTType } from "./d_stage.js";
-import { cPhs__Status, fGlobals, fopKyM_Delete, fopKyM_create, fpcPf__Register, fpc__ProcessName, fpc_bs__Constructor, kankyo_class } from "./framework.js";
 import { mDoExt_brkAnm, mDoExt_modelUpdateDL } from "./m_do_ext.js";
 import { dGlobals } from "./Main.js";
+import { cPhs__Status, fGlobals, fopKyM_create, fopKyM_Delete, fpc_bs__Constructor, fpcPf__Register, kankyo_class } from "../ZeldaWindWaker/framework.js";
+import { dProcName_e } from "./d_a.js";
 
 export function dKyw_wether_init(globals: dGlobals): void {
     const envLight = globals.g_env_light;
@@ -183,7 +184,7 @@ function dKyr_thunder_move(globals: dGlobals, envLight: dScnKy_env_light_c, came
 
         if (cM_rndF(1.0) < 0.18) {
             // Spawn lighting bolt
-            fopKyM_create(globals.frameworkGlobals, fpc__ProcessName.d_thunder, -1, null, null);
+            fopKyM_create(globals.frameworkGlobals, dProcName_e.d_thunder, -1, null, null);
         }
     } else if (envLight.thunderState === ThunderState.FadeNear || envLight.thunderState === ThunderState.FadeFar) {
         envLight.thunderFlashTimer = cLib_addCalc(envLight.thunderFlashTimer, 0.0, 0.1, 0.05, 0.001);
@@ -260,12 +261,12 @@ export function loadRawTexture(globals: dGlobals, data: ArrayBufferSlice, width:
 const materialParams = new MaterialParams();
 const drawParams = new DrawParams();
 
-function submitScratchRenderInst(renderInstManager: GfxRenderInstManager, materialHelper: GXMaterialHelperGfx, renderInst: GfxRenderInst, viewerInput: ViewerRenderInput, materialParams_ = materialParams, drawParams_ = drawParams): void {
+function submitScratchRenderInst(renderInstManager: GfxRenderInstManager, materialHelper: GXMaterialHelperGfx, renderInst: GfxRenderInst, viewerInput: ViewerRenderInput): void {
     materialHelper.setOnRenderInst(renderInstManager.gfxRenderCache, renderInst);
-    renderInst.setSamplerBindingsFromTextureMappings(materialParams_.m_TextureMapping);
-    materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams_);
-    mat4.copy(drawParams_.u_PosMtx[0], viewerInput.camera.viewMatrix);
-    materialHelper.allocateDrawParamsDataOnInst(renderInst, drawParams_);
+    renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
+    materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
+    mat4.copy(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
+    materialHelper.allocateDrawParamsDataOnInst(renderInst, drawParams);
     renderInstManager.submitRenderInst(renderInst);
 }
 
@@ -444,6 +445,8 @@ export class dKankyo_sun_Packet {
 
         renderInstManager.setCurrentList(globals.dlst.sky[1]);
 
+        materialParams.clear();
+
         if (drawMoon) {
             let dayOfWeek = dKy_get_dayofweek(envLight);
             if (envLight.curTime < 180)
@@ -534,6 +537,8 @@ export class dKankyo_sun_Packet {
             renderInstManager.setCurrentList(globals.dlst.sky[1]);
         else
             renderInstManager.setCurrentList(globals.dlst.wetherEffect);
+
+        materialParams.clear();
 
         const invDist = 1.0 - this.distFalloff;
         const flareViz = (0.6 + (0.4 * this.visibility * invDist ** 2));
@@ -755,6 +760,8 @@ export class dKankyo_vrkumo_Packet {
 
         colorFromRGBA(materialParams.u_Color[ColorKind.C1], 0, 0, 0, 0);
 
+        materialParams.clear();
+
         for (let textureIdx = 2; textureIdx >= 0; textureIdx--) {
             this.textures[textureIdx].fillTextureMapping(materialParams.m_TextureMapping[0]);
 
@@ -871,7 +878,7 @@ export class dKankyo_vrkumo_Packet {
                 ddraw.texCoord2f32(GX.Attr.TEX0, 0, 1);
 
                 const stageName = globals.stageName;
-                if (stageName == "F_SP127" || stageName == "D_MN07" || stageName == "D_MN08" || stageName == "D_MN07A" || (stageName == "F_SP103" && globals.mStayNo === 0)) {
+                if (stageName === "F_SP127" || stageName === "D_MN07" || stageName === "D_MN08" || stageName === "D_MN07A" || (stageName === "F_SP103" && globals.mStayNo === 0)) {
                     x = Math.cos(polarY0) * Math.sin(azimuthal + azimuthalOffsY0);
                     y = Math.sin(polarY0);
                     z = Math.cos(polarY0) * Math.cos(azimuthal + azimuthalOffsY0);
@@ -980,6 +987,8 @@ export class dKankyo_housi_Packet {
         computeMatrixWithoutTranslation(scratchMatrix, viewerInput.camera.worldMatrix);
 
         renderInstManager.setCurrentList(globals.dlst.wetherEffect);
+
+        materialParams.clear();
 
         ddraw.beginDraw(globals.modelCache.cache);
         ddraw.begin(GX.Command.DRAW_QUADS, 4 * this.count);
@@ -1206,6 +1215,8 @@ export class dKankyo_rain_Packet {
         if (finalAlpha <= 0.001)
             return;
 
+        materialParams.clear();
+
         const ddraw = this.ddraw;
         renderInstManager.setCurrentList(globals.dlst.wetherEffect);
 
@@ -1349,6 +1360,8 @@ export class dKankyo_star_Packet {
             renderInstManager.setCurrentList(globals.dlst.bg[1]);
         else
             renderInstManager.setCurrentList(globals.dlst.sky[1]);
+
+        materialParams.clear();
 
         ddraw.beginDraw(globals.modelCache.cache);
         ddraw.begin(GX.Command.DRAW_TRIANGLES, 6 * envLight.starCount);
@@ -1520,7 +1533,7 @@ function dKyr_sun_move(globals: dGlobals, deltaTimeFrames: number): void {
 
         if (sunCanGlare) {
             // Original game projects the vector into viewport space, and gets distance to 320, 240.
-            mDoLib_project(scratchVec3, pkt.sunPos, globals.camera);
+            vec3.transformMat4(scratchVec3, pkt.sunPos, globals.camera.clipFromWorldMatrix);
 
             const peekZ = globals.dlst.peekZ;
 
@@ -1959,7 +1972,7 @@ function vrkumo_move(globals: dGlobals, deltaTimeFrames: number): void {
                 }
 
                 let x = Math.sin(rnd_0);
-                if (Math.abs(rnd_1 * x) != 0.0) {
+                if (Math.abs(rnd_1 * x) !== 0.0) {
                     if (x <= 0.0) {
                         x -= 5000;
                     } else {
@@ -1968,7 +1981,7 @@ function vrkumo_move(globals: dGlobals, deltaTimeFrames: number): void {
                 }
 
                 let z = Math.cos(rnd_0);
-                if (Math.abs(rnd_1 * z) != 0.0) {
+                if (Math.abs(rnd_1 * z) !== 0.0) {
                     if (z <= 0.0) {
                         z -= 5000;
                     } else {
@@ -2166,7 +2179,7 @@ export function dKyw_get_AllWind_vecpow(dst: vec3, envLight: dScnKy_env_light_c,
 }
 
 export class d_thunder extends kankyo_class {
-    public static PROCESS_NAME = fpc__ProcessName.d_thunder;
+    public static PROCESS_NAME = dProcName_e.d_thunder;
     private model: J3DModelInstance;
     private brkAnm = new mDoExt_brkAnm();
     private rotation: number = 0.0;
@@ -2469,7 +2482,7 @@ export class mDoGph_bloom_c {
 }
 
 interface constructor extends fpc_bs__Constructor {
-    PROCESS_NAME: fpc__ProcessName;
+    PROCESS_NAME: dProcName_e;
 }
 
 export function dKyw__RegisterConstructors(globals: fGlobals): void {

@@ -20,8 +20,9 @@ import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 import { AABB } from '../Geometry.js';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers.js';
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
+import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
 
-function decodeTextureData(format: TextureFormat, width: number, height: number, pixels: Uint8Array): DecodedSurfaceSW {
+function decodeTextureData(format: TextureFormat, width: number, height: number, pixels: Uint8Array<ArrayBuffer>): DecodedSurfaceSW {
     switch (format) {
     case TextureFormat.B8G8R8A8:
         return { type: 'RGBA', flag: 'SRGB', width, height, depth: 1, pixels };
@@ -93,13 +94,15 @@ class PsychonautsProgram extends DeviceProgram {
     public override both = `
 precision mediump float;
 
+${GfxShaderLibrary.MatrixLibrary}
+
 // Expected to be constant across the entire scene.
 layout(std140) uniform ub_SceneParams {
     Mat4x4 u_Projection;
 };
 
 layout(std140) uniform ub_MeshFragParams {
-    Mat4x3 u_BoneMatrix[1];
+    Mat3x4 u_BoneMatrix[1];
     vec4 u_MaterialColor;
     vec4 u_TexCoordOffs;
 };
@@ -118,7 +121,8 @@ layout(location = ${PsychonautsProgram.a_TexCoord0}) in vec2 a_TexCoord0;
 layout(location = ${PsychonautsProgram.a_TexCoord1}) in vec2 a_TexCoord1;
 
 void main() {
-    gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_BoneMatrix[0]), vec4(a_Position, 1.0)));
+    vec3 t_PositionView = UnpackMatrix(u_BoneMatrix[0]) * vec4(a_Position, 1.0);
+    gl_Position = UnpackMatrix(u_Projection) * vec4(t_PositionView, 1.0);
     v_Color = a_Color;
     v_TexCoord.xy = a_TexCoord0 + u_TexCoordOffs.xy;
     v_TexCoord.zw = a_TexCoord1;

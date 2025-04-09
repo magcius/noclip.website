@@ -1,21 +1,22 @@
+
 import * as RDP from "../Common/N64/RDP.js";
 
 import { mat4, vec3, vec4 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { TexCM } from "../Common/N64/Image.js";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
-import { GfxBuffer, GfxBufferUsage, GfxDevice, GfxFormat, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxSampler, GfxTexture, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxProgram, GfxMegaStateDescriptor, GfxCompareMode, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform.js";
+import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
+import { fillMatrix4x3, fillMatrix4x4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers.js";
+import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferUsage, GfxCompareMode, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxMegaStateDescriptor, GfxProgram, GfxSampler, GfxTexture, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
-import { GfxRenderInstManager, makeSortKey, GfxRendererLayer } from "../gfx/render/GfxRenderInstManager.js";
-import { clamp, lerp, MathConstants, normToLength, normToLengthAndAdd, transformVec3Mat4w0, Vec3Zero, Vec3UnitX, calcBillboardMatrix, CalcBillboardFlags } from "../MathHelpers.js";
+import { GfxRendererLayer, GfxRenderInstManager, makeSortKey } from "../gfx/render/GfxRenderInstManager.js";
+import { CalcBillboardFlags, calcBillboardMatrix, clamp, lerp, MathConstants, normToLength, normToLengthAndAdd, transformVec3Mat4w0, Vec3UnitX, Vec3Zero } from "../MathHelpers.js";
 import { DeviceProgram } from "../Program.js";
+import { TextureMapping } from "../TextureHolder.js";
 import { align, assert, hexzero, nArray } from "../util.js";
 import { ViewerRenderInput } from "../viewer.js";
 import { getColor, getVec3 } from "./room.js";
-import { fillMatrix4x4, fillMatrix4x3, fillVec4v } from "../gfx/helpers/UniformBufferHelpers.js";
-import { TextureMapping } from "../TextureHolder.js";
-import { computeViewMatrix } from "../Camera.js";
-import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
+import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
 
 export interface EmitterData {
     isCommon: boolean;
@@ -574,12 +575,14 @@ class ParticleProgram extends DeviceProgram {
     public override both = `
 precision mediump float;
 
+${GfxShaderLibrary.MatrixLibrary}
+
 layout(std140) uniform ub_SceneParams {
     Mat4x4 u_Projection;
 };
 
 layout(std140) uniform ub_DrawParams {
-    Mat4x3 u_Matrix;
+    Mat3x4 u_Matrix;
     vec4 u_PrimColor;
     vec4 u_EnvColor;
 };
@@ -592,11 +595,13 @@ varying vec2 v_TexCoord;`;
 layout(location = 0) in vec3 a_Position;
 
 void main() {
-    gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_Matrix), vec4(a_Position, 1.0)));
+    vec3 t_PositionView = UnpackMatrix(u_Matrix) * vec4(a_Position, 1.0);
+    gl_Position = UnpackMatrix(u_Projection) * vec4(t_PositionView, 1.0);
     v_TexCoord = vec2(gl_VertexID & 1, (gl_VertexID >> 1) & 1);
 }`;
-    public override frag = `
-// Implements N64-style "triangle bilienar filtering" with three taps.
+
+public override frag = `
+// Implements N64-style "triangle bilinear filtering" with three taps.
 // Based on ArthurCarvalho's implementation, modified by NEC and Jasper for noclip.
 vec4 Texture2D_N64_Bilerp(PD_SAMPLER_2D(t_Texture), vec2 t_TexCoord) {
     vec2 t_Size = vec2(textureSize(PU_SAMPLER_2D(t_Texture), 0));
@@ -968,8 +973,7 @@ class Particle {
         let offs = renderInst.allocateUniformBuffer(ParticleProgram.ub_DrawParams, 12 + 4 * 2);
         const draw = renderInst.mapUniformBufferF32(ParticleProgram.ub_DrawParams);
 
-        computeViewMatrix(particleMtx, viewerInput.camera);
-        mat4.mul(particleMtx, particleMtx, this.modelMatrix);
+        mat4.mul(particleMtx, viewerInput.camera.viewMatrix, this.modelMatrix);
         calcBillboardMatrix(particleMtx, particleMtx, CalcBillboardFlags.UseRollLocal | CalcBillboardFlags.PriorityZ | CalcBillboardFlags.UseZPlane);
         offs += fillMatrix4x3(draw, offs, particleMtx);
 

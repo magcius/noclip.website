@@ -1133,7 +1133,6 @@ export const bcSceneGroup: Viewer.SceneGroup = {
     id: "WorldOfWarcraftBC",
     name: "World of Warcraft: The Burning Crusade",
     sceneDescs: bcSceneDescs,
-    hidden: true,
 };
 
 export const wotlkSceneGroup: Viewer.SceneGroup = {

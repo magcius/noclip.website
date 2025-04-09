@@ -1,22 +1,20 @@
 
 import { mat4, ReadonlyMat4, vec3 } from 'gl-matrix';
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
-import { Camera, computeViewMatrix } from '../Camera.js';
+import { Camera } from '../Camera.js';
 import { colorCopy, colorNewFromRGBA } from '../Color.js';
 import { AABB } from '../Geometry.js';
-import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers.js';
 import { GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxDevice, GfxIndexBufferDescriptor, GfxInputLayout, GfxVertexBufferDescriptor } from '../gfx/platform/GfxPlatform.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { GfxRendererLayer, GfxRenderInst, GfxRenderInstManager, setSortKeyDepth, setSortKeyLayer } from "../gfx/render/GfxRenderInstManager.js";
-import { compilePartialVtxLoader, compileVtxLoaderMultiVat, GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, LoadedVertexDraw, LoadedVertexLayout, VertexAttributeInput, VtxLoader } from '../gx/gx_displaylist.js';
-import { createInputLayout, MaterialParams, DrawParams } from '../gx/gx_render.js';
-import { transformVec3Mat4w1 } from '../MathHelpers.js';
-import { nArray } from '../util.js';
+import { compilePartialVtxLoader, compileVtxLoaderMultiVat, GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, LoadedVertexDraw, LoadedVertexLayout, VtxLoader } from '../gx/gx_displaylist.js';
 import * as GX_Material from '../gx/gx_material.js';
+import { createInputLayout, DrawParams, MaterialParams } from '../gx/gx_render.js';
+import { setMatrixTranslation, transformVec3Mat4w1, Vec3Zero } from '../MathHelpers.js';
+import { nArray } from '../util.js';
 import { MaterialRenderContext, SFAMaterial, StandardMapMaterial } from './materials.js';
 import { ModelRenderContext } from './models.js';
 import { setGXMaterialOnRenderInst } from './render.js';
-import { mat4SetTranslation } from './util.js';
 import { LightType } from './WorldLights.js';
 
 export interface ShapeRenderContext {
@@ -83,7 +81,6 @@ class MyShapeHelper {
 }
 
 const scratchMtx0 = mat4.create();
-const scratchMtx1 = mat4.create();
 const scratchVec0 = vec3.create();
 
 // The vertices and polygons of a shape.
@@ -150,11 +147,8 @@ export class ShapeGeometry {
 
         this.drawParams.clear();
 
-        const worldToViewMtx = scratchMtx0;
-        computeViewMatrix(worldToViewMtx, camera);
-
-        const modelToViewMtx = scratchMtx1;
-        mat4.mul(modelToViewMtx, worldToViewMtx, modelToWorldMtx);
+        const modelToViewMtx = scratchMtx0;
+        mat4.mul(modelToViewMtx, camera.viewMatrix, modelToWorldMtx);
 
         // Use GfxRendererLayer.TRANSLUCENT to force sorting behavior as in the game.
         // The translucent flag must be set before calling setSortKeyDepth, otherwise errors will occur.
@@ -298,7 +292,7 @@ export class Shape {
             for (let i = 0; i < drawParams.u_PosMtx.length; i++) {
                 // XXX: this is the game's peculiar way of creating normal matrices
                 mat4.copy(scratchMaterialParams.u_TexMtx[i], drawParams.u_PosMtx[i]);
-                mat4SetTranslation(scratchMaterialParams.u_TexMtx[i], 0, 0, 0);
+                setMatrixTranslation(scratchMaterialParams.u_TexMtx[i], Vec3Zero);
                 mat4.mul(scratchMaterialParams.u_TexMtx[i], scratchMaterialParams.u_TexMtx[i], descaleMtx);
                 // The following line causes glitches due to an issue related to computeNormalMatrix's method of detecting uniform scaling.
                 // computeNormalMatrix(scratchMaterialParams.u_TexMtx[i], drawParams.u_PosMtx[i]);

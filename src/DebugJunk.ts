@@ -2,11 +2,11 @@
 
 import { ReadonlyMat4, ReadonlyVec3, ReadonlyVec4, mat4, vec3, vec4 } from "gl-matrix";
 import ArrayBufferSlice from "./ArrayBufferSlice.js";
-import { ScreenSpaceProjection, divideByW } from "./Camera.js";
+import { divideByW } from "./Camera.js";
 import { Blue, Color, Green, Magenta, OpaqueBlack, Red, colorToCSS } from "./Color.js";
 import { downloadBuffer, downloadBufferSlice } from "./DownloadUtils.js";
 import { AABB } from "./Geometry.js";
-import { MathConstants, Vec3UnitX, Vec3UnitY, Vec3UnitZ, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, lerp, transformVec3Mat4w0 } from "./MathHelpers.js";
+import { MathConstants, Vec3UnitX, Vec3UnitY, Vec3UnitZ, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, lerp, transformVec3Mat4w0, vec3FromBasis2 } from "./MathHelpers.js";
 import { Slider } from "./ui.js";
 import { assertExists, hexzero, nArray } from "./util.js";
 
@@ -208,12 +208,10 @@ export function drawWorldSpaceCircle(ctx: CanvasRenderingContext2D, clipFromWorl
         branchlessONB(scratchVec3a, scratchVec3b, axis);
 
         const t0 = ((i + 0) / nPoints) * MathConstants.TAU;
-        vec3.scaleAndAdd(scratchVec3v, center, scratchVec3a, Math.sin(t0) * radius);
-        vec3.scaleAndAdd(scratchVec3v, scratchVec3v, scratchVec3b, Math.cos(t0) * radius);
+        vec3FromBasis2(scratchVec3v, center, scratchVec3a, Math.sin(t0) * radius, scratchVec3b, Math.cos(t0) * radius);
 
         const t1 = ((i + 1) / nPoints) * MathConstants.TAU;
-        vec3.scaleAndAdd(scratchVec3a, center, scratchVec3a, Math.sin(t1) * radius);
-        vec3.scaleAndAdd(scratchVec3a, scratchVec3a, scratchVec3b, Math.cos(t1) * radius);
+        vec3FromBasis2(scratchVec3v, center, scratchVec3a, Math.sin(t1) * radius, scratchVec3b, Math.cos(t1) * radius);
 
         drawWorldSpaceLine(ctx, clipFromWorldMatrix, scratchVec3v, scratchVec3a, color);
     }
@@ -260,8 +258,7 @@ export function drawWorldSpaceCylinder(ctx: CanvasRenderingContext2D, clipFromWo
         vec3.scaleAndAdd(scratchVec3a, scratchVec3a, axis, height);
         mat4.fromRotation(scratchMatrix, t1, axis);
         transformVec3Mat4w0(scratchVec3b, scratchMatrix, Vec3UnitX);
-        vec3.scaleAndAdd(scratchVec3b, center, scratchVec3b, radius);
-        vec3.scaleAndAdd(scratchVec3b, scratchVec3b, axis, height);
+        vec3FromBasis2(scratchVec3b, center, scratchVec3b, radius, axis, height);
         drawWorldSpaceLine(ctx, clipFromWorldMatrix, scratchVec3a, scratchVec3b);
     }
 }
@@ -318,18 +315,6 @@ export function drawScreenSpaceBox(ctx: CanvasRenderingContext2D, x1: number, y1
     ctx.lineWidth = lineWidth;
     ctx.strokeStyle = colorToCSS(color);
     ctx.stroke();
-}
-
-export function drawScreenSpaceProjection(ctx: CanvasRenderingContext2D, proj: ScreenSpaceProjection, color: Color = Magenta): void {
-    const cw = ctx.canvas.width;
-    const ch = ctx.canvas.height;
-
-    const x1 = (proj.projectedMinX + 1) * cw / 2;
-    const x2 = (proj.projectedMaxX + 1) * cw / 2;
-    const y1 = (-proj.projectedMinY + 1) * ch / 2;
-    const y2 = (-proj.projectedMaxY + 1) * ch / 2;
-
-    drawScreenSpaceBox(ctx, x1, y1, x2, y2, color);
 }
 
 function flashItem(item: any, fieldName: string, step: number = 0) {

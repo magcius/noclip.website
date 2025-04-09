@@ -1,25 +1,23 @@
 
-import { SceneObjHolder, SceneObj } from "./Main.js";
-import { NameObj, CalcAnimType, MovementType } from "./NameObj.js";
-import { getMatrixTranslation } from "../MathHelpers.js";
 import { vec3 } from "gl-matrix";
-import { AreaObj, AreaObjMgr, AreaFormType } from "./AreaObj.js";
-import { JMapInfoIter, getJMapInfoArg7, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3 } from "./JMapInfo.js";
-import { ZoneAndLayer } from "./LiveActor.js";
-import { fallback } from "../util.js";
-import { connectToScene, getAreaObj } from "./ActorUtil.js";
-import { DeviceProgram } from "../Program.js";
-import { TextureMapping } from "../TextureHolder.js";
-import { nArray, assert } from "../util.js";
-import { GfxWrapMode, GfxTexFilterMode, GfxBindingLayoutDescriptor, GfxMipFilterMode, GfxBlendMode, GfxBlendFactor, GfxMegaStateDescriptor, GfxFormat, GfxProgram, GfxTextureDimension, GfxSamplerFormatKind } from "../gfx/platform/GfxPlatform.js";
-import { fillVec4 } from "../gfx/helpers/UniformBufferHelpers.js";
-import { GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import { fullscreenMegaState, makeMegaState, setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
-import { MathConstants } from "../MathHelpers.js";
-import { GfxrAttachmentSlot, GfxrRenderTargetDescription, GfxrGraphBuilder, GfxrRenderTargetID } from "../gfx/render/GfxRenderGraph.js";
 import { GfxShaderLibrary, glslGenerateFloat } from "../gfx/helpers/GfxShaderLibrary.js";
 import { IsDepthReversed } from "../gfx/helpers/ReversedDepthHelpers.js";
+import { fillVec4 } from "../gfx/helpers/UniformBufferHelpers.js";
+import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxFormat, GfxMegaStateDescriptor, GfxMipFilterMode, GfxProgram, GfxSamplerFormatKind, GfxTexFilterMode, GfxTextureDimension, GfxWrapMode } from "../gfx/platform/GfxPlatform.js";
+import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription, GfxrRenderTargetID } from "../gfx/render/GfxRenderGraph.js";
+import { GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import { GXShaderLibrary } from "../gx/gx_material.js";
+import { getMatrixTranslation } from "../MathHelpers.js";
+import { DeviceProgram } from "../Program.js";
+import { TextureMapping } from "../TextureHolder.js";
+import { assert, fallback, nArray } from "../util.js";
+import { connectToScene, getAreaObj } from "./ActorUtil.js";
+import { AreaFormType, AreaObj, AreaObjMgr } from "./AreaObj.js";
+import { JMapInfoIter, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg7 } from "./JMapInfo.js";
+import { ZoneAndLayer } from "./LiveActor.js";
+import { SceneObj, SceneObjHolder } from "./Main.js";
+import { CalcAnimType, MovementType, NameObj } from "./NameObj.js";
 
 const scratchVec3 = vec3.create();
 
@@ -246,14 +244,14 @@ export class BloomEffect extends ImageEffectBase {
     }
 
     private allocateParameterBuffer(renderInst: GfxRenderInst) {
-        let offs = renderInst.allocateUniformBuffer(0, 4);
-        const d = renderInst.mapUniformBufferF32(0);
+        const d = renderInst.allocateUniformBufferF32(0, 4);
 
         const bloomIntensity = (this.bloomIntensity * this.strength) / 0xFF;
         const threshold = this.threshold / 0xFF;
         const intensity1 = this.intensity1 / 0xFF;
         const intensity2 = this.intensity2 / 0xFF;
 
+        let offs = 0;
         offs += fillVec4(d, offs, bloomIntensity, threshold, intensity1, intensity2);
     }
 
@@ -490,13 +488,13 @@ export class BloomEffectSimple extends ImageEffectBase {
     }
 
     private allocateParameterBuffer(renderInst: GfxRenderInst) {
-        let offs = renderInst.allocateUniformBuffer(0, 4);
-        const d = renderInst.mapUniformBufferF32(0);
+        const d = renderInst.allocateUniformBufferF32(0, 4);
 
         const maskFilter = this.maskFilter;
         const threshold = this.threshold / 0xFF;
         const intensity = (this.intensity * this.strength);
 
+        let offs = 0;
         offs += fillVec4(d, offs, maskFilter, threshold, intensity);
     }
 
@@ -656,12 +654,13 @@ export class DepthOfFieldBlur extends ImageEffectBase {
     }
 
     private allocateParameterBuffer(renderInst: GfxRenderInst) {
-        let offs = renderInst.allocateUniformBuffer(0, 4);
-        const d = renderInst.mapUniformBufferF32(0);
+        const d = renderInst.allocateUniformBufferF32(0, 4);
 
         const intensity = this.intensity * this.strength;
         const blurMaxDist = fallback(this.blurMaxDist, 0xF8) / 0xFF;
         const blurMinDist = fallback(this.blurMinDist, 0xF2) / 0xFF;
+
+        let offs = 0;
         offs += fillVec4(d, offs, intensity, blurMaxDist, blurMinDist, IsDepthReversed ? 1.0 : 0.0);
     }
 

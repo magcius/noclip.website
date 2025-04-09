@@ -3,7 +3,7 @@ import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
 import { fillMatrix4x3, fillVec4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers.js";
 import {  GfxBufferUsage,GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform.js";
 import { GfxBuffer, GfxInputLayout } from "../gfx/platform/GfxPlatformImpl.js";
-import { GfxRenderInstList, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
+import { GfxRenderInstList, GfxRenderInstManager, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager.js";
 import { CalcBillboardFlags, calcBillboardMatrix, lerp, transformVec3Mat4w1 } from "../MathHelpers.js";
 import { DeviceProgram } from "../Program.js";
 import { assert } from "../util.js";
@@ -12,6 +12,8 @@ import { NfsMap } from "./map.js";
 import { NfsTexture } from "./region.js";
 import { attachmentStatesAdditive, attachmentStatesTranslucent } from "./render.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
+import { computeViewSpaceDepthFromWorldSpacePoint } from "../Camera.js";
+import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
 
 export class NfsParticleEmitterGroup {
     private children: NfsParticleEmitter[];
@@ -21,7 +23,12 @@ export class NfsParticleEmitterGroup {
     }
 
     public prepareToRender(renderInstManager: GfxRenderInstManager, renderInstList: GfxRenderInstList, viewerInput: ViewerRenderInput) {
+        const template = renderInstManager.pushTemplate();
+        const pos: vec3 = [this.transformationMatrix[12], this.transformationMatrix[13], this.transformationMatrix[14]];
+        const depth = computeViewSpaceDepthFromWorldSpacePoint(viewerInput.camera.viewMatrix, pos);
+        template.sortKey = setSortKeyDepth(template.sortKey, depth);
         this.children.forEach(e => e.prepareToRender(renderInstManager, renderInstList, viewerInput));
+        renderInstManager.popTemplate();
     }
 }
 
@@ -177,7 +184,7 @@ export class NfsParticleEmitter {
 
     public emitParticle() {
         let particle;
-        if(this.minFreeParticle == this.particlePool.length) {
+        if(this.minFreeParticle === this.particlePool.length) {
             particle = new NfsParticle();
             this.particlePool.push(particle);
         }
@@ -227,18 +234,21 @@ export class NfsParticleProgram extends DeviceProgram {
     public static ub_ObjectParams = 1;
 
     public override both = `
+${GfxShaderLibrary.MatrixLibrary}
 
-    layout(std140) uniform ub_SceneParams {
-        Mat4x4 u_ViewProjMat;
-    };
+layout(std140) uniform ub_SceneParams {
+    Mat4x4 u_ViewProjMat;
+};
 
-    layout(std140) uniform ub_ObjectParams {
-        Mat4x3 u_ObjectViewMat;
-        vec4 u_Color;
-        float u_Frame;
-        float u_Size;
-    };
-    `;
+layout(std140) uniform ub_ObjectParams {
+    Mat3x4 u_ObjectViewMat;
+    vec4 u_Color;
+    float u_Frame;
+    float u_Size;
+};
+
+uniform sampler2D u_Texture;
+`;
 
     public override vert = `
 layout(location = ${NfsParticleProgram.a_Position}) in vec3 a_Position;
@@ -246,7 +256,8 @@ layout(location = ${NfsParticleProgram.a_Position}) in vec3 a_Position;
 out vec2 v_TexCoord;
 
 void main() {
-    gl_Position = Mul(u_ViewProjMat, vec4(Mul(u_ObjectViewMat, vec4(a_Position, 1.0)), 1.0));
+    vec3 t_PositionWorld = UnpackMatrix(u_ObjectViewMat) * vec4(a_Position, 1.0);
+    gl_Position = UnpackMatrix(u_ViewProjMat) * vec4(t_PositionWorld, 1.0);
 
     float frame = mod(u_Frame, u_Size * u_Size);
     float constX = mod(frame, u_Size);
@@ -255,10 +266,8 @@ void main() {
     texCoord.y = 1.0 - texCoord.y;
     v_TexCoord = texCoord / u_Size + (1.0 / u_Size) * vec2(constX, constY);
 }
-    `;
-
+`;
     public override frag = `
-uniform sampler2D u_Texture;
 
 in vec2 v_TexCoord;
 
@@ -266,8 +275,7 @@ void main() {
     gl_FragColor = (texture(SAMPLER_2D(u_Texture), v_TexCoord) * u_Color).rgba;
     gl_FragColor.a *= 2.0;
 }
-    `;
-
+`;
 }
 
 type NfsParticleEmitterType = {

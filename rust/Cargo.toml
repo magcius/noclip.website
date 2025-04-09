@@ -1,3 +1,6 @@
+[workspace]
+members = ["noclip-macros"]
+
 [package]
 name = "noclip-support"
 version = "0.0.0"
@@ -7,8 +10,13 @@ edition = "2018"
 [lib]
 crate-type = ["cdylib", "rlib"]
 
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = ['-O', '--enable-bulk-memory']
+
 [package.metadata.wasm-pack.profile.profiling]
-wasm-opt = ['-Os', '--debuginfo']
+wasm-opt = ['-Os', '--enable-bulk-memory', '--debuginfo']
+demangle-name-section = true
+dwarf-debug-info = true
 
 [profile.release]
 lto = true
@@ -17,7 +25,7 @@ opt-level = "s"
 [dependencies]
 byteorder = "1.4.3"
 console_error_panic_hook = "0.1.7"
-deku = { version = "0.16.0", features = ["logging"] }
+deku = { version = "0.18.1", features = ["logging"] }
 env_logger = "0.10.1"
 inflate = "0.4.5"
 js-sys = "0.3.60"
@@ -25,12 +33,15 @@ polymorph = { git = "https://github.com/wgreenberg/polymorph", features = ["shee
 log = "0.4.21"
 lz4_flex = { version = "0.10.0", default-features = false, features = ["safe-decode", "checked-decode"] }
 lzma-rs = { version = "0.3.0", features = ["raw_decoder"] }
-naga = { git = "https://github.com/gfx-rs/wgpu", features = ["glsl-in", "wgsl-out"] }
+naga = { git = "https://github.com/magcius/wgpu", branch = "issue-4349", features = ["glsl-in", "wgsl-out"] }
 num_enum = "0.5.7"
-wasm-bindgen = "0.2.92"
+wasm-bindgen = "=0.2.95"
 web-sys = { version = "0.3.48", features = ["console"] }
-wee_alloc = { version = "0.4.5", optional = true }
 nalgebra-glm = "0.19.0"
 rand = "0.8.5"
 getrandom = { version = "0.2.15", features = ["js"] }
+noclip-macros = { version = "*", path = "./noclip-macros" }
+texture2ddecoder = { git = "https://github.com/wgreenberg/texture2ddecoder" }
 
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(wasm_bindgen_unstable_test_coverage)'] }

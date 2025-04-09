@@ -22,6 +22,7 @@ import { SceneGfx, ViewerRenderInput } from "../viewer.js";
 import { BSA } from "./BSA.js";
 import { CELL, ESM, FRMR, LAND } from "./ESM.js";
 import { NIF, NIFData } from "./NIFBase.js";
+import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
 
 const noclipSpaceFromMorrowindSpace = mat4.fromValues(
     -1, 0, 0, 0,
@@ -336,11 +337,11 @@ class CellTerrain {
 }
 
 const bindingLayoutsNifInstanced: GfxBindingLayoutDescriptor[] = [
-    { numUniformBuffers: 3, numSamplers: 8 },
+    { numUniformBuffers: 3, numSamplers: 7 },
 ];
 
 const bindingLayoutsNifSingle: GfxBindingLayoutDescriptor[] = [
-    { numUniformBuffers: 2, numSamplers: 8 },
+    { numUniformBuffers: 2, numSamplers: 7 },
 ];
 
 class StaticModel {
@@ -369,7 +370,7 @@ class StaticModel {
 
             const d = uniformBuffer.mapBufferF32();
             offs += fillMatrix4x3(d, offs, instance.modelMatrix);
-            if (++numInstances == maxInstances)
+            if (++numInstances === maxInstances)
                 submitDrawInstanced();
         };
 
@@ -512,6 +513,8 @@ class TerrainProgram extends DeviceProgram {
 precision mediump float;
 precision mediump sampler2DArray;
 
+${GfxShaderLibrary.MatrixLibrary}
+
 layout(std140) uniform ub_SceneParams {
     Mat4x4 u_ClipFromWorld;
     vec4 u_SunDirection;
@@ -520,7 +523,7 @@ layout(std140) uniform ub_SceneParams {
 };
 
 layout(std140) uniform ub_ObjectParams {
-    Mat4x3 u_WorldFromLocal;
+    Mat3x4 u_WorldFromLocal;
 };
 
 layout(location = 0) uniform sampler2DArray u_TextureTerrain;
@@ -542,9 +545,9 @@ void main() {
     float x = (uv.x - 0.5) * 8192.0;
     float y = (uv.y - 0.5) * 8192.0;
     float z = a_Height;
-    vec3 t_PositionWorld = Mul(u_WorldFromLocal, vec4(x, y, z, 1.0));
+    vec3 t_PositionWorld = UnpackMatrix(u_WorldFromLocal) * vec4(x, y, z, 1.0);
 
-    gl_Position = Mul(u_ClipFromWorld, vec4(t_PositionWorld, 1.0));
+    gl_Position = UnpackMatrix(u_ClipFromWorld) * vec4(t_PositionWorld, 1.0);
     v_Color = a_Color;
     v_Color *= dot(a_Normal, u_SunDirection.xyz) * u_SunDiffuse.xyz + u_SunAmbient.xyz;
 }
@@ -566,16 +569,22 @@ void main() {
     ivec2 t_TexCoordI = ivec2(t_TexCoord);
     vec4 t_Terrain = SampleTerrain(t_TexCoord, ivec2(0, 0));
 
+    vec4 t_TerrainPX = SampleTerrain(t_TexCoord, ivec2(1, 0));
+    vec4 t_TerrainNX = SampleTerrain(t_TexCoord, ivec2(-1, 0));
+
     // XXX(jstpierre): This doesn't blend across chunk boundaries, need a dynamic terrain system
     if (t_Frac.x > 0.5 && t_TexCoordI.x < 15)
-        t_Terrain = mix(t_Terrain, SampleTerrain(t_TexCoord, ivec2(1, 0)), t_Frac.x - 0.5);
+        t_Terrain = mix(t_Terrain, t_TerrainPX, t_Frac.x - 0.5);
     else if (t_TexCoordI.x > 0)
-        t_Terrain = mix(t_Terrain, SampleTerrain(t_TexCoord, ivec2(-1, 0)), 0.5 - t_Frac.x);
+        t_Terrain = mix(t_Terrain, t_TerrainNX, 0.5 - t_Frac.x);
+
+    vec4 t_TerrainPY = SampleTerrain(t_TexCoord, ivec2(0, 1));
+    vec4 t_TerrainNY = SampleTerrain(t_TexCoord, ivec2(0, -1));
 
     if (t_Frac.y > 0.5 && t_TexCoordI.y < 15)
-        t_Terrain = mix(t_Terrain, SampleTerrain(t_TexCoord, ivec2(0, 1)), t_Frac.y - 0.5);
+        t_Terrain = mix(t_Terrain, t_TerrainPY, t_Frac.y - 0.5);
     else if (t_TexCoordI.y > 0)
-        t_Terrain = mix(t_Terrain, SampleTerrain(t_TexCoord, ivec2(0, -1)), 0.5 - t_Frac.y);
+        t_Terrain = mix(t_Terrain, t_TerrainNY, 0.5 - t_Frac.y);
 
     bool t_ShowGridLines = false;
     if (t_ShowGridLines) {
@@ -637,7 +646,13 @@ class WorldManager {
             mipFilter: GfxMipFilterMode.Linear,
         });
 
-        this.textureMapping[1].gfxSampler = this.textureMapping[0].gfxSampler; // doesn't matter, only use texelFetch
+        this.textureMapping[1].gfxSampler = renderCache.createSampler({
+            wrapS: GfxWrapMode.Repeat,
+            wrapT: GfxWrapMode.Repeat,
+            minFilter: GfxTexFilterMode.Point,
+            magFilter: GfxTexFilterMode.Point,
+            mipFilter: GfxMipFilterMode.Nearest,
+        });
     }
 
     public getStaticModel(globals: Globals, path: string): StaticModel {
@@ -731,9 +746,13 @@ class SkyManager {
 
         mat4.fromTranslation(scratchMatrix, globals.view.cameraPos);
 
+        const template = renderInstManager.pushTemplate();
+        template.setBindingLayouts(bindingLayoutsNifSingle);
+        template.setInstanceCount(1);
         this.atmosphere.getTriShapes().forEach((triShape) => {
             triShape.prepareToRenderSingle(globals, renderInstManager, scratchMatrix);
         });
+        renderInstManager.popTemplate();
     }
 }
 

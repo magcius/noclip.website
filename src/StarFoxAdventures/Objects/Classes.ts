@@ -482,7 +482,7 @@ export const SFA_CLASSES: {[num: number]: typeof SFAClass} = {
         constructor(obj: ObjectInstance, data: DataView) {
             super(obj, data);
             commonSetup(obj, data, 0x18);
-            const modelNum = data.getInt8(0x19) != 0 ? 1 : 0;
+            const modelNum = data.getInt8(0x19) !== 0 ? 1 : 0;
             obj.setModelNum(modelNum);
         }
     },
@@ -597,7 +597,7 @@ export const SFA_CLASSES: {[num: number]: typeof SFAClass} = {
             commonSetup(obj, data, 0x18, 0x19);
             obj.roll = 0;
             const scaleParam = data.getInt16(0x1c);
-            if (scaleParam != 0)
+            if (scaleParam !== 0)
                 obj.scale *= 0.1 * scaleParam;
         }
     },

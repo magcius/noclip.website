@@ -761,7 +761,7 @@ export class GloverEnemy implements GenericRenderable {
             return true;
         }
 
-        if ((instrFlags & 0x1) != 0) {
+        if ((instrFlags & 0x1) !== 0) {
             journeyVec[0] /= distXZ;
             journeyVec[2] /= distXZ;
             journeyVec[0] *= enemy_beh[this.enemyType].walkSpeed;
@@ -773,7 +773,7 @@ export class GloverEnemy implements GenericRenderable {
             this.setXZVelocityBasedOnRotation(enemy_beh[this.enemyType].walkSpeed, enemy_beh[this.enemyType].maxVelocity);
         }
 
-        if ((instrFlags & 0x2) != 0) {
+        if ((instrFlags & 0x2) !== 0) {
             if ((enemy_beh[this.enemyType].actorFlags & 0x1000000) === 0) {
                 const xz_speed = Math.sqrt(this.velocity[0]*this.velocity[0] + this.velocity[2]*this.velocity[2]);
                 if (xz_speed >= enemy_beh[this.enemyType].maxVelocity) {
@@ -788,7 +788,7 @@ export class GloverEnemy implements GenericRenderable {
             }
         }
 
-        if ((instrFlags & 0x2000) != 0) {
+        if ((instrFlags & 0x2000) !== 0) {
             const theta_diff = subtractAngles(this.dstEulers[1], this.nextEulers[1]) * enemy_roll_modulation[this.enemyType];
             if (Math.abs(theta_diff) > 0.08) {
                 this.dstEulers[2] = theta_diff;
@@ -804,7 +804,7 @@ export class GloverEnemy implements GenericRenderable {
         assert(this.curInstr.params !== undefined);
         assert(this.curInstr.params.__type === "EnemyInstructionRandomWalk");
         let chooseNewPoint = false;
-        if (this.curInstrExecCount == 0) {
+        if (this.curInstrExecCount === 0) {
             if ((this.curInstr.flags & 0x4000) === 0) {
                 if (this.enemyType === EnemyType.yoofow) {
                     this.actor.playSkeletalAnimation(0xd, false, false);
@@ -862,42 +862,42 @@ export class GloverEnemy implements GenericRenderable {
         assert(this.curInstr.params !== undefined);
         assert(this.curInstr.params.__type === "EnemyInstructionRest");
 
-        if (this.enemyType == EnemyType.hubchicken) {
+        if (this.enemyType === EnemyType.hubchicken) {
             // TODO: hack to let chicken swing, because the rest of this
             //       is not properly implemented
             return;
         }  
-        if (this.enemyType == EnemyType.dibber) {
+        if (this.enemyType === EnemyType.dibber) {
             vec3.scale(this.velocity, this.velocity, 0.5);
         }
         const restFlags = this.curInstr.params.flags;
-        if (this.curInstrExecCount == 0) {
+        if (this.curInstrExecCount === 0) {
             let queueAnim = false;
-            if ((restFlags & 2) == 0) {
-                if ((this.curInstr.flags & 0x4000) == 0) {
-                    if ((restFlags & 4) == 0) {
+            if ((restFlags & 2) === 0) {
+                if ((this.curInstr.flags & 0x4000) === 0) {
+                    if ((restFlags & 4) === 0) {
                         queueAnim = false;
                     } else {
                         this.actor.isPlaying = false;
                         queueAnim = true;
                     }
-                    this.actor.playSkeletalAnimation(5, this.curInstr.params.animStartPlaying != 0, queueAnim);
+                    this.actor.playSkeletalAnimation(5, this.curInstr.params.animStartPlaying !== 0, queueAnim);
                 }
             } else {
-                if ((restFlags & 4) != 0) {
+                if ((restFlags & 4) !== 0) {
                     this.actor.isPlaying = false;
                     queueAnim = true;
                 }
                 this.actor.playSkeletalAnimation(0xe, false, queueAnim);
-                if ((this.curInstr.flags & 0x4000) == 0) {
+                if ((this.curInstr.flags & 0x4000) === 0) {
                     queueAnim = true;
-                    this.actor.playSkeletalAnimation(5, this.curInstr.params.animStartPlaying != 0, queueAnim);
+                    this.actor.playSkeletalAnimation(5, this.curInstr.params.animStartPlaying !== 0, queueAnim);
                 }
             }
         }
 
         // TODO:
-        // if (((restFlags & 1) != 0) && this.curInstrExecCount < 5) {
+        // if (((restFlags & 1) !== 0) && this.curInstrExecCount < 5) {
         //     spawnParticles_801b70f8(this.actor.pos,2,0.0,0.8);
         // }
     }
@@ -934,8 +934,8 @@ export class GloverEnemy implements GenericRenderable {
                 }
                 case 'EnemyInstructionDash': {
                     if (this.curInstrExecCount === 0) {
-                        if ((this.curInstr.flags & 0x40000) == 0) {
-                            if ((this.curInstr.flags & 0x4000) == 0) {
+                        if ((this.curInstr.flags & 0x40000) === 0) {
+                            if ((this.curInstr.flags & 0x4000) === 0) {
                                 this.actor.playSkeletalAnimation(0xd, true, false);
                                 this.actor.playSkeletalAnimation(0xf, true, true);
                             }
@@ -944,7 +944,7 @@ export class GloverEnemy implements GenericRenderable {
                             this.actor.playSkeletalAnimation(9, true, true);
                         }
                     }
-                    if ((this.curInstr.flags & 0x80000) === 0 || this.actor.currentAnimIdx != 0xd) {
+                    if ((this.curInstr.flags & 0x80000) === 0 || this.actor.currentAnimIdx !== 0xd) {
                         advanceInstr = this.walkTo(
                             [instrParams.destinationX, instrParams.destinationY, instrParams.destinationZ], 
                             instrParams.velMagnitude,
@@ -962,7 +962,7 @@ export class GloverEnemy implements GenericRenderable {
                     // TODO: this is a hack to keep dibbers from flipping out.
                     //       figure out why, in game, they don't need this:
                     // TODO: even with this, a dibber near the beginning of PH2 flips out. investigate
-                    if (this.curInstrExecCount == 0) {
+                    if (this.curInstrExecCount === 0) {
                         vec3.zero(this.velocity);
                     }
                     advanceInstr = this.instrTurn();
@@ -981,19 +981,19 @@ export class GloverEnemy implements GenericRenderable {
                 }
 
                 case 'EnemyInstructionPlayAnimation': {
-                    if (this.curInstrExecCount == 0) {
+                    if (this.curInstrExecCount === 0) {
                         // TODO:
-                        // if (((enemy->curInstruction).flags & INSTR_FLAG_SLOW_DOWN_CLOSE_TO_DESTINATION) != 0) {
+                        // if (((enemy->curInstruction).flags & INSTR_FLAG_SLOW_DOWN_CLOSE_TO_DESTINATION) !== 0) {
                         //     animReset_80133b9c(&enemy->actor);
                         // }
                         let animIdx = 0;
                         if (instrParams.animIdx1 < 0) {
-                            if ((this.curInstr.flags & 0x2) != 0) {
+                            if ((this.curInstr.flags & 0x2) !== 0) {
                                 this.actor.isPlaying = false;
                             }
                             animIdx = instrParams.animIdx2;
                         } else {
-                            if ((this.curInstr.flags & 0x2) != 0) {
+                            if ((this.curInstr.flags & 0x2) !== 0) {
                                 this.actor.isPlaying = false;
                             }
                             animIdx = instrParams.animIdx1 + 10;
@@ -1025,7 +1025,7 @@ export class GloverEnemy implements GenericRenderable {
             if (this.curInstrLifetime > 0) {
                 this.curInstrLifetime -= 1;
             }
-            if (this.curInstrLifetime == 0 && !advanceInstr) {
+            if (this.curInstrLifetime === 0 && !advanceInstr) {
                 // TODO: if guard is a hack for incomplete fumble ai
                 if (this.enemyType !== EnemyType.fumble) {
                     this.curInstrIdx++
@@ -1096,8 +1096,8 @@ export class GloverEnemy implements GenericRenderable {
 
         if ((beh.actorFlags & 1) !== 0) {
             // TODO: need floor collision, first:
-            // const gravAccel = (beh.actorFlags & 0x40) == 0 ? 1.2 : 0.6;
-            // const terminalVelocity = (beh.actorFlags & 0x1000000) == 0 ? -15 : -100000;
+            // const gravAccel = (beh.actorFlags & 0x40) === 0 ? 1.2 : 0.6;
+            // const terminalVelocity = (beh.actorFlags & 0x1000000) === 0 ? -15 : -100000;
             // this.velocity[1] = Math.max(this.velocity[1] - gravAccel, terminalVelocity);
 
             vec3.scale(this.velocity, this.velocity, Math.max(0, beh.decel0x18));

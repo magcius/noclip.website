@@ -265,7 +265,7 @@ export class DkrAnimationTrack {
         let spawnActorId = this.nodes[0].getProperties().objectToSpawn;
         assert(spawnActorId >= 0);
         const lastProperties = this.nodes[this.nodes.length - 1].getProperties();
-        if (lastProperties.gotoNode == 0x00) {
+        if (lastProperties.gotoNode === 0x00) {
             this.doesLoop = true;
             this.isLoopConnected = true;
         } else if (lastProperties.pauseFrameCount >= 0) {
@@ -344,7 +344,7 @@ export class DkrAnimationTrack {
                 }
             }
 
-            if(curNodeIndex != lastNodeIndex) {
+            if (curNodeIndex !== lastNodeIndex) {
                 this.fadeCheck(curNodeIndex);
                 this.ObjAnimIndexCheck(curNodeIndex);
                 const currentProperties = this.getCurrentNode(curNodeIndex).getProperties();
@@ -368,7 +368,7 @@ export class DkrAnimationTrack {
             const stopNode = this.doesLoop ? this.nodes.length : this.nodes.length - 1;
             if(curNodeIndex >= stopNode) {
                 this.fadeCheck(curNodeIndex);
-                if(this.currentAlpha != this.points[this.points.length - 1].alpha) {
+                if (this.currentAlpha !== this.points[this.points.length - 1].alpha) {
                     this.points[this.points.length - 1].alpha = this.currentAlpha;
                 }
                 //console.log(this.actorName);
@@ -508,11 +508,11 @@ export class DkrAnimationTrack {
                 deltaZ = pos[2] - curPos[2];
 
                 let dist = Math.sqrt(Math.pow(deltaX, 2) + Math.pow(deltaY, 2) + Math.pow(deltaZ, 2)) / speedMult;
-                if(dist != 0.0) {
+                if (dist !== 0.0) {
                     speeds.objSpeed *= speeds.nodeSpeed / dist;
                 }
             }
-        } while(++i != 2);
+        } while (++i !== 2);
 
         curPos[0] += deltaX;
         curPos[1] += deltaY;
@@ -802,11 +802,11 @@ export class DkrAnimationTracks {
                 if(!this.channels[key].hasAnimationCamera()) {
                     continue;
                 }
-                if(key == '1') {
+                if(key === '1') {
                     hasFlyby = trackSelectStrings.length;
                 }
                 let indexStr = parseInt(key).toString(16).toUpperCase();
-                if(indexStr.length == 1) {
+                if(indexStr.length === 1) {
                     indexStr = '0' + indexStr;
                 }
                 let trackName;

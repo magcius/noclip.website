@@ -43,6 +43,8 @@ class KlonoaRenderer implements Viewer.SceneGfx {
 
     constructor(device: GfxDevice) {
         this.renderHelper = new GXRenderHelperGfx(device);
+        const flipY = gfxDeviceNeedsFlipY(device);
+        this.textureHolder.setTextureOverride("ph_dummy128", { gfxTexture: null, lateBinding: 'opaque-scene-texture', width: EFB_WIDTH, height: EFB_HEIGHT, flipY });
     }
 
     public adjustCameraController(c: CameraController) {
@@ -61,7 +63,6 @@ class KlonoaRenderer implements Viewer.SceneGfx {
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
-        const renderInstManager = this.renderHelper.renderInstManager;
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
         this.animationController.setTimeInMilliseconds(viewerInput.time);
@@ -107,9 +108,7 @@ class KlonoaRenderer implements Viewer.SceneGfx {
                 pass.attachResolveTexture(opaqueSceneTextureID);
 
                 pass.exec((passRenderer, scope) => {
-                    const flipY = gfxDeviceNeedsFlipY(device);
-                    const textureOverride: TextureOverride = { gfxTexture: scope.getResolveTextureForID(opaqueSceneTextureID), width: EFB_WIDTH, height: EFB_HEIGHT, flipY };
-                    this.textureHolder.setTextureOverride("ph_dummy128", textureOverride);
+                    this.renderInstListInd.resolveLateSamplerBinding('opaque-scene-texture', { gfxTexture: scope.getResolveTextureForID(opaqueSceneTextureID), gfxSampler: null, lateBinding: null });
                     this.renderInstListInd.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
                 });
             });

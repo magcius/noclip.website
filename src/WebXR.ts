@@ -51,7 +51,7 @@ export class WebXRContext {
     }
 
     public async start() {
-        const xr = (window.navigator as any).xr as XRSystem;
+        const xr = window.navigator.xr!;
 
         this.xrSession = await xr.requestSession('immersive-vr', {
             requiredFeatures: [],
@@ -65,7 +65,7 @@ export class WebXRContext {
         ]);
 
         const layer = await this.swapChain.createWebXRLayer(this.xrSession);
-        this.xrSession.updateRenderState({ baseLayer: layer, depthNear: 5, depthFar: 1000000.0 });
+        this.xrSession.updateRenderState({ layers: [layer], depthNear: 5, depthFar: 1000000.0 });
 
         if (this.onstart !== null)
             this.onstart();

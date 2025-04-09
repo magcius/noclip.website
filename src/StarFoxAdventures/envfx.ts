@@ -1,17 +1,15 @@
 import { mat4, vec3 } from 'gl-matrix';
+import { Color, colorCopy, colorNewFromRGBA, colorScale, White } from '../Color.js';
 import { DataFetcher } from '../DataFetcher.js';
-import { Color, colorNewFromRGBA, colorCopy, colorNewCopy, colorFromRGBA, White, colorScale } from '../Color.js';
 import { nArray } from '../util.js';
 
+import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
+import { ObjectInstance } from './objects.js';
+import { SceneUpdateContext } from './render.js';
 import { SFATexture } from './textures.js';
 import { dataSubarray, readUint16 } from './util.js';
-import { ObjectInstance } from './objects.js';
 import { World } from './world.js';
-import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
 import { createDirectionalLight, Light } from './WorldLights.js';
-import { SceneUpdateContext } from './render.js';
-import { computeViewMatrix } from '../Camera.js';
-import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 
 enum EnvfxType {
     Atmosphere = 5,
@@ -75,22 +73,9 @@ export class EnvfxManager {
 
     public update(device: GfxDevice, sceneCtx: SceneUpdateContext) {
         this.updateAmbience();
-
-        const viewToWorldMtx = scratchMtx0;
-        computeViewMatrix(viewToWorldMtx, sceneCtx.viewerInput.camera);
-        mat4.invert(viewToWorldMtx, viewToWorldMtx);
-
-        const viewToWorldTY = viewToWorldMtx[4*3+1];
-
-        // XXX: This code causes the mist to "overwhelm" the camera when the camera is immersed.
-        //      This doesn't work well with noclip, so I have disabled it.
-        // let mistParam;
-        // if (viewToWorldTY >= this.mistTop)
-        //     mistParam = 0;
-        // else if (viewToWorldTY <= this.mistBottom)
-        //     mistParam = 64;
-        // else
-        //     mistParam = 64 * (this.mistTop - viewToWorldTY) / (this.mistTop - this.mistBottom);
+        // const viewToWorldTY = sceneCtx.viewerInput.camera.worldMatrix[13];
+        // const mistPercent = 1.0 - saturate(invlerp(this.mistBottom, this.mistTop, viewToWorldTY));
+        // let mistParam = mistPercent * 64.0;
         let mistParam = 0; // Behave as if the camera is always above the mist
         this.updateMistTexture(device, mistParam);
     }

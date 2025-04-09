@@ -123,7 +123,7 @@ class dDlst_alphaModel_c {
         if (this.datas.length === 0)
             return;
 
-        const device = globals.modelCache.device, cache = globals.modelCache.cache;
+        const cache = globals.modelCache.cache;
 
         for (let i = 0; i < this.datas.length; i++) {
             const data = this.datas[i];
@@ -132,7 +132,7 @@ class dDlst_alphaModel_c {
 
             if (data.type === dDlst_alphaModel__Type.Bonbori) {
                 this.bonboriShape.setOnRenderInst(template);
-                mat4.mul(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix, data.mtx);
+                mat4.mul(drawParams.u_PosMtx[0], globals.camera.viewFromWorldMatrix, data.mtx);
                 this.materialHelperBackRevZ.allocateDrawParamsDataOnInst(template, drawParams);
 
                 materialParams.u_Color[ColorKind.MAT0].a = data.alpha / 0xFF;
@@ -198,6 +198,16 @@ export class dDlst_list_c {
         new GfxRenderInstList(gfxRenderInstCompareNone, GfxRenderInstExecutionOrder.Backwards),
         new GfxRenderInstList(gfxRenderInstCompareNone, GfxRenderInstExecutionOrder.Backwards),
     ];
+
+    // These correspond to 2DOpa and 2DXlu
+    public ui2D: dDlst_list_Set = [
+        new GfxRenderInstList(gfxRenderInstCompareNone, GfxRenderInstExecutionOrder.Forwards),
+        new GfxRenderInstList(gfxRenderInstCompareNone, GfxRenderInstExecutionOrder.Forwards)
+    ];
+
+    public particle2DBack = new GfxRenderInstList(gfxRenderInstCompareNone, GfxRenderInstExecutionOrder.Forwards);
+    public particle2DFore = new GfxRenderInstList(gfxRenderInstCompareNone, GfxRenderInstExecutionOrder.Forwards);
+
     public alphaModel = new GfxRenderInstList(gfxRenderInstCompareNone, GfxRenderInstExecutionOrder.Forwards);
     public peekZ = new PeekZManager(128);
     public alphaModel0: dDlst_alphaModel_c;

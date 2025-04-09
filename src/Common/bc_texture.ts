@@ -10,12 +10,12 @@ interface DecodedSurfaceBase {
 }
 
 interface DecodedSurfaceUN {
-    pixels: Uint8Array;
+    pixels: Uint8Array<ArrayBuffer>;
 }
 
 interface DecodedSurfaceSN {
     flag: 'SNORM';
-    pixels: Int8Array;
+    pixels: Int8Array<ArrayBuffer>;
 }
 
 interface DecodedSurfaceRGBAUN extends DecodedSurfaceBase, DecodedSurfaceUN {
@@ -374,10 +374,10 @@ function decompressBC45Surface(surface: DecodedSurfaceBC45): DecodedSurfaceRGBA 
     }
 
     if (surface.flag === 'SNORM') {
-        const pixels: Int8Array = dst as Int8Array;
+        const pixels = dst as Int8Array<ArrayBuffer>;
         return { type: 'RGBA', flag: surface.flag, width, height, depth, pixels };
     } else {
-        const pixels: Uint8Array = dst as Uint8Array;
+        const pixels = dst as Uint8Array<ArrayBuffer>;
         return { type: 'RGBA', flag: surface.flag, width, height, depth, pixels };
     }
 }

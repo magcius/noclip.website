@@ -12,7 +12,7 @@ export class GfxRenderDynamicUniformBuffer {
     public gfxBuffer: GfxBuffer | null = null;
 
     private shadowBufferF32: Float32Array | null = null;
-    private shadowBufferU8: Uint8Array | null = null;
+    private shadowBufferU8: Uint8Array<ArrayBuffer> | null = null;
 
     constructor(private device: GfxDevice) {
         const limits = device.queryLimits();
@@ -41,20 +41,21 @@ export class GfxRenderDynamicUniformBuffer {
     }
 
     private ensureShadowBuffer(wordOffset: number, wordCount: number): void {
-        if (this.shadowBufferU8 === null || this.shadowBufferF32 === null) {
+        if (this.shadowBufferU8 === null) {
             const newWordCount = alignNonPowerOfTwo(this.currentWordOffset, this.uniformBufferMaxPageWordSize);
-            this.shadowBufferU8 = new Uint8Array(newWordCount * 4);
-            this.shadowBufferF32 = new Float32Array(this.shadowBufferU8.buffer);
-        } else if (wordOffset + wordCount >= this.shadowBufferF32.length) {
+            const buffer = new ArrayBuffer(newWordCount << 2);
+            this.shadowBufferU8 = new Uint8Array(buffer);
+            this.shadowBufferF32 = new Float32Array(buffer);
+        } else if (wordOffset + wordCount >= this.shadowBufferF32!.length) {
             assert(wordOffset < this.currentWordOffset && wordOffset + wordCount <= this.currentWordOffset);
 
             // Grow logarithmically, aligned to page size.
-            const newWordCount = alignNonPowerOfTwo(Math.max(this.currentWordOffset, this.shadowBufferF32.length * 2), this.uniformBufferMaxPageWordSize);
-            const newBuffer = new Uint8Array(newWordCount * 4);
+            const newWordCount = alignNonPowerOfTwo(Math.max(this.currentWordOffset, this.shadowBufferF32!.length * 2), this.uniformBufferMaxPageWordSize);
+            const buffer = this.shadowBufferU8.buffer;
+            const newBuffer = buffer.transfer(newWordCount << 2);
 
-            newBuffer.set(this.shadowBufferU8, 0);
-            this.shadowBufferU8 = newBuffer;
-            this.shadowBufferF32 = new Float32Array(this.shadowBufferU8.buffer);
+            this.shadowBufferU8 = new Uint8Array(newBuffer);
+            this.shadowBufferF32 = new Float32Array(newBuffer);
 
             if (!(this.currentWordOffset <= newWordCount))
                 throw new Error(`Assert fail: this.currentWordOffset [${this.currentWordOffset}] <= newWordCount [${newWordCount}]`);

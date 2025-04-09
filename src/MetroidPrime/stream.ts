@@ -37,7 +37,7 @@ export class InputStream {
         this.offs = align(this.offs, multiple);
     }
 
-    public readBool(): boolean { const v = this.view.getUint8(this.offs++); assert(v == 0 || v == 1); return (v == 1); }
+    public readBool(): boolean { const v = this.view.getUint8(this.offs++); assert(v === 0 || v === 1); return (v === 1); }
     public readInt8(): number { return this.view.getInt8(this.offs++); }
     public readUint8(): number { return this.view.getUint8(this.offs++); }
     public readInt16(): number { const v = this.view.getInt16(this.offs); this.offs += 2; return v; }

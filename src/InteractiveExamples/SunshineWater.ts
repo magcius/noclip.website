@@ -141,7 +141,7 @@ class SunshineWaterModel {
         bindTTK1MaterialInstance(this.seaMaterialInstance, this.animationController, btk);
         this.plane = new PlaneShape(device, cache);
 
-        this.shapeInstanceState.worldToViewMatrix = scratchViewMatrix;
+        this.shapeInstanceState.viewFromWorldMatrix = scratchViewMatrix;
     }
 
     public mangleMaterial(material: MaterialEntry, configName: string): void {
@@ -192,11 +192,11 @@ class SunshineWaterModel {
         fillSceneParamsDataOnTemplate(template, viewerInput);
         this.seaMaterialInstance.setOnRenderInst(renderHelper.renderInstManager.gfxRenderCache, template);
 
-        computeViewMatrix(this.shapeInstanceState.worldToViewMatrix, viewerInput.camera);
-        mat4.mul(drawParams.u_PosMtx[0], this.shapeInstanceState.worldToViewMatrix, this.modelMatrix);
+        computeViewMatrix(this.shapeInstanceState.viewFromWorldMatrix, viewerInput.camera);
+        mat4.mul(drawParams.u_PosMtx[0], this.shapeInstanceState.viewFromWorldMatrix, this.modelMatrix);
         this.seaMaterialInstance.materialHelper.allocateDrawParamsDataOnInst(template, drawParams);
 
-        this.seaMaterialInstance.fillMaterialParams(template, this.materialInstanceState, this.shapeInstanceState.worldToViewMatrix, this.modelMatrix, viewerInput.camera, drawParams);
+        this.seaMaterialInstance.fillMaterialParams(template, this.materialInstanceState, this.shapeInstanceState.viewFromWorldMatrix, viewerInput.camera.projectionMatrix, this.modelMatrix, drawParams);
 
         this.plane.prepareToRender(renderHelper);
 

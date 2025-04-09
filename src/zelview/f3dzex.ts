@@ -119,13 +119,13 @@ function translateZMode(zmode: ZMode): GfxCompareMode {
 }
 
 export function translateCullMode(geoMode: number): GfxCullMode {
-    if (geoMode & RSP_Geometry.G_CULL_BACK) {
-        if (geoMode & RSP_Geometry.G_CULL_FRONT) {
-            return GfxCullMode.FrontAndBack;
-        } else {
-            return GfxCullMode.Back;
-        }
-    } else if (geoMode & RSP_Geometry.G_CULL_FRONT) {
+    const cullBack = !!(geoMode & RSP_Geometry.G_CULL_BACK);
+    const cullFront = !!(geoMode & RSP_Geometry.G_CULL_FRONT);
+    if (cullBack && cullFront) {
+        throw "whoops";
+    } else if (cullBack) {
+        return GfxCullMode.Back;
+    } else if (cullFront) {
         return GfxCullMode.Front;
     } else {
         return GfxCullMode.None;
@@ -264,7 +264,7 @@ export class DrawCall {
     public indexCount: number = 0;
 
     public usesTexture1(): boolean {
-        return getCycleTypeFromOtherModeH(this.DP_OtherModeH) == OtherModeH_CycleType.G_CYC_2CYCLE &&
+        return getCycleTypeFromOtherModeH(this.DP_OtherModeH) === OtherModeH_CycleType.G_CYC_2CYCLE &&
             RDP.combineParamsUsesT1(this.DP_Combine);
     }
 }
@@ -537,7 +537,7 @@ export class RSPState {
 
     private _usesTexture1() {
         const combineParams = RDP.decodeCombineParams(this.DP_CombineH, this.DP_CombineL);
-        return getCycleTypeFromOtherModeH(this.DP_OtherModeH) == OtherModeH_CycleType.G_CYC_2CYCLE &&
+        return getCycleTypeFromOtherModeH(this.DP_OtherModeH) === OtherModeH_CycleType.G_CYC_2CYCLE &&
             RDP.combineParamsUsesT1(combineParams);
     }
 
@@ -746,7 +746,7 @@ export class RSPState {
             const view = lkup.buffer.createDataView();
             // TODO: copy correctly; perform interleaving (maybe unnecessary?)
             // In color-indexed mode, textures are stored in the second half of TMEM (FIXME: really?)
-            const tmemAddr = this.DP_TextureImageState.fmt == ImageFormat.G_IM_FMT_CI ? 0x800 : (tile.tmem * 8);
+            const tmemAddr = this.DP_TextureImageState.fmt === ImageFormat.G_IM_FMT_CI ? 0x800 : (tile.tmem * 8);
             const numBytes = ((getSizBitsPerPixel(this.DP_TextureImageState.siz) * (texels + 1) + 7) / 8)|0;
             for (let i = 0; i < numBytes; i++) {
                 this.tmem[tmemAddr + i] = view.getUint8(lkup.offs + i);

@@ -183,7 +183,7 @@ export class UVTX {
         // (so it can be compared to otherUVTXIndex, maybe other things?)
         this.flagsAndIndex = view.getUint32(curPos + 7);
         let otherUVTXIndex = view.getUint16(curPos + 11);
-        if(otherUVTXIndex != 0xFFF) {
+        if (otherUVTXIndex !== 0xFFF) {
             //TODO: I think this is right?
             if(otherUVTXIndex === (this.flagsAndIndex & 0xFFF)) {
                 this.otherUVTX = this;
@@ -228,7 +228,7 @@ export class UVTX {
         // then read palettes if there are any to read
         // TODO: this.unkByte1 is not just a bool - what is it
         const palettesData: ArrayBufferSlice[] = [];
-        if (this.unkByte1 == 0) {
+        if (this.unkByte1 === 0) {
             for (let i = 0; i < this.levelCount; i++) {
                 //TODO(?)
                 // i+1 because 0 palette is reserved or something

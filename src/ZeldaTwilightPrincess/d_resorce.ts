@@ -4,15 +4,15 @@ import { BMD, BMT, BCK, BPK, BTK, BRK, ANK1, TRK1, TTK1, BVA, VAF1, BTP, TPT1, J
 import { JKRArchive, RARCFile } from "../Common/JSYSTEM/JKRArchive.js";
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
-import { assert, readString, assertExists } from "../util.js";
+import { readString, assertExists } from "../util.js";
 import { J3DModelData, J3DModelMaterialData } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
 import { BTI, BTIData } from "../Common/JSYSTEM/JUTTexture.js";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { Destroyable } from "../SceneBase.js";
 import { dGlobals } from "./Main.js";
-import { cPhs__Status } from "./framework.js";
 import { cBgD_t } from "../ZeldaWindWaker/d_bg.js";
 import { NamedArrayBufferSlice } from "../DataFetcher.js";
+import { cPhs__Status } from "../ZeldaWindWaker/framework.js";
 
 export interface DZSChunkHeader {
     type: string;

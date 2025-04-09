@@ -2,7 +2,7 @@
 import { nArray, assert, assertExists } from "../../util.js";
 import { clamp } from "../../MathHelpers.js";
 
-import { GfxMegaStateDescriptor, GfxDevice, GfxRenderPass, GfxRenderPipelineDescriptor, GfxPrimitiveTopology, GfxBindingLayoutDescriptor, GfxBindingsDescriptor, GfxSamplerBinding, GfxProgram, GfxInputLayout, GfxFormat, GfxRenderPassDescriptor, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../platform/GfxPlatform.js";
+import { GfxMegaStateDescriptor, GfxDevice, GfxRenderPass, GfxRenderPipelineDescriptor, GfxPrimitiveTopology, GfxBindingLayoutDescriptor, GfxBindingsDescriptor, GfxSamplerBinding, GfxProgram, GfxInputLayout, GfxFormat, GfxRenderPassDescriptor, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor, GfxColor } from "../platform/GfxPlatform.js";
 
 import { defaultMegaState, copyMegaState, setMegaStateFlags } from "../helpers/GfxMegaStateDescriptorHelpers.js";
 
@@ -165,6 +165,9 @@ export class GfxRenderInst {
     private _drawCount: number = 0;
     private _drawInstanceCount: number = 1;
 
+    private _stencilRef: number | null = null;
+    private _blendColor: GfxColor | null = null;
+
     constructor() {
         this._renderPipelineDescriptor = {
             bindingLayouts: [],
@@ -320,9 +323,7 @@ export class GfxRenderInst {
 
     /**
      * Allocates {@param wordCount} words from the uniform buffer and assigns it to the buffer
-     * slot at index {@param bufferIndex}. As a convenience, this also directly returns the same
-     * offset into the uniform buffer, in words, that would be returned by a subsequent call to
-     * {@see getUniformBufferOffset}.
+     * slot at index {@param bufferIndex}, and returns the index into the buffer.
      */
     public allocateUniformBuffer(bufferIndex: number, wordCount: number): number {
         assert(this._bindingDescriptors[0].bindingLayout.numUniformBuffers <= this._dynamicUniformBufferByteOffsets.length);
@@ -331,16 +332,16 @@ export class GfxRenderInst {
 
         const dst = this._bindingDescriptors[0].uniformBufferBindings[bufferIndex];
         dst.wordCount = wordCount;
-        return this.getUniformBufferOffset(bufferIndex);
+        return this._dynamicUniformBufferByteOffsets[bufferIndex] >>> 2;
     }
 
     /**
-     * Returns the offset into the uniform buffer, in words, that is assigned to the buffer slot
-     * at index {@param bufferIndex}, to be used with e.g. {@see mapUniformBufferF32}.
+     * This is a convenience wrapper for {@param allocateUniformBuffer} and {@param mapUniformBufferF32}
+     * that returns a pre-sliced {@see Float32Array} for the given offset.
      */
-    public getUniformBufferOffset(bufferIndex: number) {
-        const wordOffset = this._dynamicUniformBufferByteOffsets[bufferIndex] >>> 2;
-        return wordOffset;
+    public allocateUniformBufferF32(bufferIndex: number, wordCount: number): Float32Array {
+        const wordOffset = this.allocateUniformBuffer(bufferIndex, wordCount);
+        return this._uniformBuffer.mapBufferF32().subarray(wordOffset);
     }
 
     /**
@@ -480,11 +481,19 @@ export class GfxRenderInst {
             if (sampleCount === -1)
                 sampleCount = depthStencilAttachmentDescriptor.sampleCount;
             else
-                assert(sampleCount == depthStencilAttachmentDescriptor.sampleCount);
+                assert(sampleCount === depthStencilAttachmentDescriptor.sampleCount);
         }
 
         assert(sampleCount > 0);
         this._renderPipelineDescriptor.sampleCount = sampleCount;
+    }
+
+    public setStencilRef(value: number | null): void {
+        this._stencilRef = value;
+    }
+
+    public setBlendColor(value: GfxColor | null): void {
+        this._blendColor = value;
     }
 
     public drawOnPass(cache: GfxRenderCache, passRenderer: GfxRenderPass): void {
@@ -517,6 +526,11 @@ export class GfxRenderInst {
             passRenderer.setBindings(i, gfxBindings, this._dynamicUniformBufferByteOffsets.slice(uboIndex, uboIndex + numBuffers));
             uboIndex += numBuffers;
         }
+
+        if (this._stencilRef !== null)
+            passRenderer.setStencilRef(this._stencilRef);
+        if (this._blendColor !== null)
+            passRenderer.setBlendColor(this._blendColor);
 
         const indexed = this._indexBuffer !== null;
         if (this._drawInstanceCount > 1) {

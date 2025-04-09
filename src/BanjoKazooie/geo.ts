@@ -723,7 +723,7 @@ export const enum RenderZMode {
 function commonSetup<N extends GeoNode>(buffer: ArrayBufferSlice, isTooie: boolean, builder: nodeBuilder<N>, zMode: number, textureData?: ArrayBufferSlice): GeoContext<N> {
     const view = buffer.createDataView();
 
-    assert(view.getUint32(0x00) == 0x0B);
+    assert(view.getUint32(0x00) === 0x0B);
 
     const f3dexOffs = view.getUint32(0x0C);
     const f3dexCount = view.getUint32(f3dexOffs + 0x00);

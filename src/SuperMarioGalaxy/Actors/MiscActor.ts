@@ -19,7 +19,7 @@ import { VertexAttributeInput } from '../../gx/gx_displaylist.js';
 import * as GX from '../../gx/gx_enum.js';
 import { getVertexInputLocation } from '../../gx/gx_material.js';
 import { ColorKind, GXMaterialHelperGfx, MaterialParams, DrawParams } from '../../gx/gx_render.js';
-import { clamp, clampRange, computeEulerAngleRotationFromSRTMatrix, computeModelMatrixR, computeModelMatrixS, computeModelMatrixSRT, computeNormalMatrix, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, isNearZero, isNearZeroVec3, lerp, MathConstants, normToLength, quatFromEulerRadians, saturate, scaleMatrix, setMatrixTranslation, transformVec3Mat4w0, transformVec3Mat4w1, Vec3NegY, vec3SetAll, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from '../../MathHelpers.js';
+import { clamp, clampRange, calcEulerAngleRotationFromSRTMatrix, computeModelMatrixR, computeModelMatrixS, computeModelMatrixSRT, computeNormalMatrix, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, isNearZero, isNearZeroVec3, lerp, MathConstants, normToLength, quatFromEulerRadians, saturate, scaleMatrix, setMatrixTranslation, transformVec3Mat4w0, transformVec3Mat4w1, vec3FromBasis2, vec3FromBasis3, Vec3NegY, vec3SetAll, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from '../../MathHelpers.js';
 import { TextureMapping } from '../../TextureHolder.js';
 import { assert, assertExists, fallback, leftPad, mod, nArray } from '../../util.js';
 import * as Viewer from '../../viewer.js';
@@ -4125,7 +4125,8 @@ export class WarpPod extends LiveActor {
             this.warpPathPoints.push(v);
         }
 
-        this.pathDrawer = new WarpPodPathDrawer(sceneObjHolder, this.resourceHolder.arc, this.warpPathPoints, this.color);
+        const resourceHolder = this.modelManager!.resourceHolder;
+        this.pathDrawer = new WarpPodPathDrawer(sceneObjHolder, resourceHolder.arc, this.warpPathPoints, this.color);
     }
 
     private lookForPair(sceneObjHolder: SceneObjHolder): WarpPod | null {
@@ -6424,6 +6425,8 @@ export class ElectricRailHolder extends NameObj {
     public override draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         super.draw(sceneObjHolder, renderInstManager, viewerInput);
 
+        const camera = viewerInput.camera;
+
         const cache = renderInstManager.gfxRenderCache;
         for (let i = 0; i < ElectricRailType.Count; i++) {
             const modelObj = this.models[i];
@@ -6433,7 +6436,7 @@ export class ElectricRailHolder extends NameObj {
             const template = renderInstManager.pushTemplate();
 
             const modelInstance = modelObj.modelInstance!;
-            mat4.copy(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
+            mat4.copy(drawParams.u_PosMtx[0], camera.viewMatrix);
 
             const materialInstance = modelInstance.materialInstances[0];
             materialInstance.setOnRenderInst(cache, template);
@@ -6447,7 +6450,7 @@ export class ElectricRailHolder extends NameObj {
                 if (!rail.visibleScenario || !rail.visibleAlive)
                     continue;
 
-                materialInstance.fillOnMaterialParams(materialParams, modelInstance.materialInstanceState, viewerInput.camera, modelInstance.modelMatrix, drawParams);
+                materialInstance.fillOnMaterialParams(materialParams, modelInstance.materialInstanceState, camera.projectionMatrix, camera.viewMatrix, modelInstance.modelMatrix, drawParams);
                 const railTemplate = renderInstManager.pushTemplate();
                 railTemplate.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
                 rail.drawRail(sceneObjHolder, renderInstManager, materialInstance.materialHelper, materialParams);
@@ -6671,13 +6674,11 @@ export class ElectricRail extends LiveActor implements ElectricRailBase {
                 vec3.scaleAndAdd(scratchVec3, separator.position, separator.up, y);
                 const tx = 0.5 * j;
 
-                vec3.scaleAndAdd(scratchVec3a, scratchVec3, separator.right, x0);
-                vec3.scaleAndAdd(scratchVec3a, scratchVec3a, separator.up, y0);
+                vec3FromBasis2(scratchVec3a, scratchVec3, separator.right, x0, separator.up, y0);
                 ddraw.position3vec3(scratchVec3a);
                 ddraw.texCoord2f32(GX.Attr.TEX0, tx, 0.0);
 
-                vec3.scaleAndAdd(scratchVec3a, scratchVec3, separator.right, x1);
-                vec3.scaleAndAdd(scratchVec3a, scratchVec3a, separator.up, y1);
+                vec3FromBasis2(scratchVec3a, scratchVec3, separator.right, x1, separator.up, y1);
                 ddraw.position3vec3(scratchVec3a);
                 ddraw.texCoord2f32(GX.Attr.TEX0, tx, 1.0);
             }
@@ -6924,13 +6925,11 @@ export class ElectricRailMoving extends LiveActor implements ElectricRailBase {
                     makeAxisCrossPlane(scratchVec3c, scratchVec3b, scratchVec3a);
                 }
 
-                vec3.scaleAndAdd(scratchVec3a, scratchVec3, scratchVec3c, x0);
-                vec3.scaleAndAdd(scratchVec3a, scratchVec3a, scratchVec3b, y0);
+                vec3FromBasis2(scratchVec3a, scratchVec3, scratchVec3c, x0, scratchVec3b, y0);
                 ddraw.position3vec3(scratchVec3a);
                 ddraw.texCoord2f32(GX.Attr.TEX0, tx, 0.0);
 
-                vec3.scaleAndAdd(scratchVec3a, scratchVec3, scratchVec3c, x1);
-                vec3.scaleAndAdd(scratchVec3a, scratchVec3a, scratchVec3b, y1);
+                vec3FromBasis2(scratchVec3a, scratchVec3, scratchVec3c, x1, scratchVec3b, y1);
                 ddraw.position3vec3(scratchVec3a);
                 ddraw.texCoord2f32(GX.Attr.TEX0, tx, 1.0);
             }
@@ -7173,7 +7172,7 @@ class PlantMember extends LiveActor<PlantMemberNrv> {
         const angle = getRandomFloat(-Math.PI, Math.PI);
         mat4.rotateY(scratchMatrix, scratchMatrix, angle);
 
-        computeEulerAngleRotationFromSRTMatrix(this.rotation, scratchMatrix);
+        calcEulerAngleRotationFromSRTMatrix(this.rotation, scratchMatrix);
     }
 
     public tryEmitHint(): boolean {
@@ -7323,11 +7322,11 @@ export class PlantGroup extends LiveActor {
             makeAxisCrossPlane(scratchVec3a, scratchVec3b, gravity);
 
             // Right
-            vec3.scaleAndAdd(scratchVec3a, this.translation, scratchVec3a, Math.cos(angle) * radius);
-            // Up
-            vec3.scaleAndAdd(scratchVec3a, scratchVec3a, scratchVec3b, Math.sin(angle) * radius);
-
-            vec3.scaleAndAdd(scratchVec3a, scratchVec3a, gravity, -100.0);
+            vec3FromBasis3(scratchVec3a, this.translation,
+                scratchVec3a, Math.cos(angle) * radius, // Right
+                scratchVec3b, Math.sin(angle) * radius, // Forward
+                gravity, -100.0, // Up
+            );
             vec3.scale(scratchVec3b, gravity, 1000.0);
 
             getFirstPolyOnLineToMap(sceneObjHolder, member.translation, null, scratchVec3a, scratchVec3b);
@@ -7688,7 +7687,7 @@ export class BrightSun extends LiveActor {
         quatSetRotate(scratchQuat, Vec3UnitZ, scratchVec3);
         mat4.fromQuat(scratchMatrix, scratchQuat);
 
-        computeEulerAngleRotationFromSRTMatrix(this.sun.rotation, scratchMatrix);
+        calcEulerAngleRotationFromSRTMatrix(this.sun.rotation, scratchMatrix);
     }
 
     public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
@@ -8671,7 +8670,7 @@ class HeatHazeEffect extends LiveActor {
         getMatrixTranslation(this.translation, sceneObjHolder.viewerInput.camera.worldMatrix);
         vec3.scaleAndAdd(this.translation, this.translation, scratchVec3, this.depth);
 
-        computeEulerAngleRotationFromSRTMatrix(this.rotation, sceneObjHolder.viewerInput.camera.worldMatrix);
+        calcEulerAngleRotationFromSRTMatrix(this.rotation, sceneObjHolder.viewerInput.camera.worldMatrix);
 
         const scale = this.depth / 1000.0;
         vec3SetAll(this.scale, scale);
@@ -9012,16 +9011,14 @@ export class WhirlPoolAccelerator extends LiveActor {
             const point = this.points[i];
 
             vec3.add(scratchVec3a, point.position, scratchVec3);
-            vec3.scaleAndAdd(scratchVec3a, scratchVec3a, point.axisX, point.radius * x0);
-            vec3.scaleAndAdd(scratchVec3a, scratchVec3a, point.axisZ, point.radius * z0);
+            vec3FromBasis2(scratchVec3a, scratchVec3a, point.axisX, point.radius * x0, point.axisZ, z0);
 
             ddraw.position3vec3(scratchVec3a);
             ddraw.color4rgba8(GX.Attr.CLR0, 0xFF, 0xFF, 0xFF, point.alpha);
             ddraw.texCoord2f32(GX.Attr.TEX0, point.texCoordS + texCoordS0, texCoordT);
 
             vec3.add(scratchVec3a, point.position, scratchVec3);
-            vec3.scaleAndAdd(scratchVec3a, scratchVec3a, point.axisX, point.radius * x1);
-            vec3.scaleAndAdd(scratchVec3a, scratchVec3a, point.axisZ, point.radius * z1);
+            vec3FromBasis2(scratchVec3a, scratchVec3a, point.axisX, point.radius * x1, point.axisZ, z1);
 
             ddraw.position3vec3(scratchVec3a);
             ddraw.color4rgba8(GX.Attr.CLR0, 0xFF, 0xFF, 0xFF, point.alpha);

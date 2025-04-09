@@ -1,15 +1,15 @@
 import { mat4 } from "gl-matrix";
-import * as BRRES from "../rres/brres.js";
 import AnimationController from "../AnimationController.js";
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { BasicGXRendererHelper, fillSceneParamsDataOnTemplate } from "../gx/gx_render.js";
-import { EggLightManager } from "../rres/Egg.js";
+import * as BRRES from "../rres/brres.js";
 import { MDL0ModelInstance, RRESTextureHolder } from "../rres/render.js";
 import { SceneContext } from "../SceneBase.js";
+import { assertExists } from "../util.js";
 import * as Viewer from "../viewer.js";
 import { PMP, PMPObject } from "./PMP.js";
 import { ResourceSystem } from "./ResouceSystem.js";
-import { assertExists } from "../util.js";
+import { CameraController } from "../Camera.js";
 
 class WiiSportsRenderer extends BasicGXRendererHelper {
     public animationController = new AnimationController();
@@ -59,6 +59,10 @@ class WiiSportsRenderer extends BasicGXRendererHelper {
 
         this.renderHelper.renderInstManager.popTemplate();
         this.renderHelper.prepareToRender();
+    }
+
+    public adjustCameraController(c: CameraController): void {c
+        c.setSceneMoveSpeedMult(2/60);
     }
 
     public override destroy(device: GfxDevice): void {
@@ -148,7 +152,7 @@ class BowlingSceneDesc implements Viewer.SceneDesc {
         const stageBRRES = renderer.mountRRES(device, `G3D/${this.id}.brres`);
         const scn0BRRES = renderer.mountRRES(device, `G3D/${this.id}_rsca.brres`);
 
-        renderer.bindSCN0(assertExists(scn0BRRES.scn0.find(x => x.name == "RPScene")));
+        renderer.bindSCN0(assertExists(scn0BRRES.scn0.find(x => x.name === "RPScene")));
 
         for (let mdl0 of stageBRRES.mdl0) {
             const instance = renderer.spawnModel(device, stageBRRES, mdl0.name);
@@ -204,13 +208,13 @@ class GolfSceneDesc implements Viewer.SceneDesc {
         renderer.bindAnimations(instance, brres, name);
         mat4.copy(instance.modelMatrix, object.modelMatrix);
 
-        if (brres.mdl0.find(x => x.name == waterName)) {
+        if (brres.mdl0.find(x => x.name === waterName)) {
             const instanceWater = renderer.spawnModel(device, brres, waterName);
             renderer.bindAnimations(instanceWater, brres, waterName);
             mat4.copy(instanceWater.modelMatrix, object.modelMatrix);
         }
 
-        if (brres.mdl0.find(x => x.name == WaveName)) {
+        if (brres.mdl0.find(x => x.name === WaveName)) {
             const instanceWave = renderer.spawnModel(device, brres, WaveName);
             renderer.bindAnimations(instanceWave, brres, WaveName);
             mat4.copy(instanceWave.modelMatrix, object.modelMatrix);
@@ -297,7 +301,7 @@ class GolfSceneDesc implements Viewer.SceneDesc {
         const courseBRRES = renderer.mountRRES(device, `G3D/${golfName}.brres`);
         const courseMDL0 = renderer.spawnModel(device, courseBRRES, golfName);
 
-        renderer.bindSCN0(assertExists(courseBRRES.scn0.find(x => x.name == sceneName)));
+        renderer.bindSCN0(assertExists(courseBRRES.scn0.find(x => x.name === sceneName)));
         courseMDL0.bindLightSetting(renderer.lightSetting);
 
         renderer.bindAnimations(courseMDL0, courseBRRES, golfName);
@@ -311,7 +315,7 @@ class GolfSceneDesc implements Viewer.SceneDesc {
 
         // Hide the height map and show the normal texture for the green
         // TODO: since the projection is not done correctly, use the height map for now
-        //const greenMaterial = courseMDL0.materialInstances.find(x => x.materialData.material.name == "M_Green");
+        //const greenMaterial = courseMDL0.materialInstances.find(x => x.materialData.material.name === "M_Green");
 
         //if (greenMaterial) {
         //    greenMaterial.materialData.material.colorConstants[2] = colorNewFromRGBA(1, 1, 1, 1);
@@ -348,7 +352,7 @@ class BoxingSceneDesc implements Viewer.SceneDesc {
 
         // Load main model
         const stageBRRES = renderer.mountRRES(device, `G3D/${this.id}.brres`);
-        renderer.bindSCN0(assertExists(stageBRRES.scn0.find(x => x.name == this.id)));
+        renderer.bindSCN0(assertExists(stageBRRES.scn0.find(x => x.name === this.id)));
 
         if (this.id === "box_ring") {
             // The animation loops, for unknown reason. Set it to play once,

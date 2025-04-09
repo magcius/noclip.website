@@ -180,7 +180,7 @@ function parseComplexNode(context: ParseContext, buffer: ArrayBufferSlice, offs:
     case NodeType.PathTable:
         return parsePathTable(context, buffer, offs);
     case NodeType.BinaryData:
-        if (numValues == 0x00FFFFFF) {
+        if (numValues === 0x00FFFFFF) {
             const numValues2 = view.getUint32(offs + 0x04, context.littleEndian);
             return buffer.subarray(offs + 0x08, numValues + numValues2);
         } else {
@@ -253,7 +253,7 @@ export function parse<T>(buffer: ArrayBufferSlice, fileType: FileType = FileType
     assert(magics.includes(magic));
     const view = buffer.createDataView();
 
-    const littleEndian = magic.slice(0, 2) == 'YB';
+    const littleEndian = magic.slice(0, 2) === 'YB';
     const endianness: Endianness = littleEndian ? Endianness.LITTLE_ENDIAN : Endianness.BIG_ENDIAN;
     const context: ParseContext = new ParseContext(fileType, endianness);
 
@@ -278,8 +278,8 @@ export function parse<T>(buffer: ArrayBufferSlice, fileType: FileType = FileType
 }
 
 class GrowableBuffer {
-    public buffer: ArrayBuffer;
-    public view: DataView;
+    public buffer = new ArrayBuffer();
+    public view = new DataView(this.buffer);
     public userSize: number = 0;
     public bufferSize: number = 0;
 
@@ -293,19 +293,13 @@ class GrowableBuffer {
 
         if (newBufferSize > this.bufferSize) {
             this.bufferSize = align(newBufferSize, this.growAmount);
-            const newBuffer = new ArrayBuffer(this.bufferSize);
-            // memcpy
-            new Uint8Array(newBuffer).set(new Uint8Array(this.buffer));
-            this.buffer = newBuffer;
+            this.buffer = this.buffer.transfer(this.bufferSize);
             this.view = new DataView(this.buffer);
         }
     }
 
     public finalize(): ArrayBuffer {
-        const buffer = this.buffer;
-        // Clear out to avoid GC.
-        (this as any).buffer = null;
-        return buffer.slice(0x00, this.userSize);
+        return this.buffer.transfer(this.userSize);
     }
 }
 
@@ -585,9 +579,9 @@ function gatherStrings(v: Node, keyStrings: Set<string>, valueStrings: Set<strin
 }
 
 function bymlStrCompare(a: string, b: string): number {
-    if (a == '')
+    if (a === '')
         return 1;
-    else if (b == '')
+    else if (b === '')
         return -1;
     else
         return a.localeCompare(b);
@@ -626,7 +620,7 @@ export function write<T extends {}>(v: T, fileType: FileType = FileType.CRG1, ma
         magic = magics[magics.length - 1];
     assert(magic.length === 0x04);
 
-    const littleEndian = magic.slice(0, 2) == 'YB';
+    const littleEndian = magic.slice(0, 2) === 'YB';
     const endianness: Endianness = littleEndian ? Endianness.LITTLE_ENDIAN : Endianness.BIG_ENDIAN;
 
     const keyStringSet = new Set<string>(['']);

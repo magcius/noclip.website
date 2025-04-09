@@ -1414,7 +1414,7 @@ export function parseMissionSetupBIN(buffers: ArrayBufferSlice[], defs: ArrayBuf
             const u16NameIdx = view.getUint16(randomSpawnsIdx + 0x00, true);
             const u8LocPosType = view.getUint8(randomSpawnsIdx + 0x02);
             const s8RandomLocGroupNo = view.getInt8(randomSpawnsIdx + 0x03);
-            if (u16NameIdx == 0xFFFF)
+            if (u16NameIdx === 0xFFFF)
                 break;
             if (u8LocPosType !== 0)
                 assertExists(randomGroups[s8RandomLocGroupNo]).objectCount++;

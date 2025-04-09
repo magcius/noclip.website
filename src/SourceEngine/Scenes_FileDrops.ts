@@ -10,7 +10,6 @@ export async function createKitchenSinkSourceFilesytem(dataFetcher: DataFetcher)
     const filesystem = new SourceFileSystem(dataFetcher);
     // Mount all the things!
     await Promise.all([
-        // filesystem.createVPKMount(`CounterStrikeGO/pak01`),
         filesystem.createVPKMount(`CounterStrikeSource/cstrike_pak`),
         filesystem.createVPKMount(`TeamFortress2/tf/tf2_textures`),
         filesystem.createVPKMount(`TeamFortress2/tf/tf2_misc`),
@@ -19,9 +18,6 @@ export async function createKitchenSinkSourceFilesytem(dataFetcher: DataFetcher)
         filesystem.createVPKMount(`Portal2/portal2_dlc2/pak01`),
         filesystem.createVPKMount(`Portal/portal_pak`),
         filesystem.createVPKMount(`GarrysMod/garrysmod`),
-        // filesystem.createGMAMount(`GarrysMod/YukiTheater/base-content.gma`),
-        // filesystem.createGMAMount(`GarrysMod/YukiTheater/social-content.gma`),
-        // filesystem.createGMAMount(`GarrysMod/YukiTheater/content.gma`),
         filesystem.createVPKMount(`HalfLife2Ep1/ep1_pak`),
         filesystem.createVPKMount(`HalfLife2Ep2/ep2_pak`),
         filesystem.createVPKMount(`HalfLife2DM/hl2mp_pak`),

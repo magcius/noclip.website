@@ -8,32 +8,66 @@ import { JPABaseEmitter } from "../Common/JSYSTEM/JPA.js";
 import { BTIData } from "../Common/JSYSTEM/JUTTexture.js";
 import { MathConstants, Vec3UnitY, invlerp, saturate, scaleMatrix } from "../MathHelpers.js";
 import { TSDraw } from "../SuperMarioGalaxy/DDraw.js";
-import { cLib_addCalc, cLib_addCalc2, cLib_addCalcAngleS2, cLib_addCalcAngleS_, cLib_chaseF, cLib_targetAngleX, cLib_targetAngleY, cM_s2rad, cM_deg2s, cM_atan2s } from "../ZeldaWindWaker/SComponent.js";
+import { cLib_addCalc, cLib_addCalc2, cLib_addCalcAngleS2, cLib_addCalcAngleS_, cLib_chaseF, cLib_targetAngleX, cLib_targetAngleY, cM_atan2s, cM_deg2s, cM_s2rad } from "../ZeldaWindWaker/SComponent.js";
 import { dBgW } from "../ZeldaWindWaker/d_bg.js";
 import { MtxPosition, MtxTrans, calc_mtx, mDoMtx_XrotM, mDoMtx_YrotM, mDoMtx_YrotS, mDoMtx_ZXYrotM, mDoMtx_ZrotM } from "../ZeldaWindWaker/m_do_mtx.js";
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
-import { GfxRenderInst, GfxRenderInstList, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
+import { GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder.js";
 import * as GX from '../gx/gx_enum.js';
 import { ColorKind, DrawParams, GXMaterialHelperGfx, MaterialParams } from "../gx/gx_render.js";
 import { assertExists, leftPad, nArray, readString } from "../util.js";
 import { ViewerRenderInput } from "../viewer.js";
-import { LIGHT_INFLUENCE, LightType, dKy_plight_set, dKy_GxFog_set, dKy_change_colpat, dKy_daynight_check, dKy_event_proc, dKy_plight_cut, dKy_plight_priority_set, dKy_setLight__OnModelInstance, dKy_tevstr_c, dKy_tevstr_init, dScnKy_env_light_c, dice_rain_minus, setLightTevColorType_MAJI, settingTevStruct, dKy_darkworld_check } from "./d_kankyo.js";
+import { dGlobals } from "./Main.js";
+import { dDlst_list_Set } from "./d_drawlist.js";
+import { ItemNo } from "./d_item_data.js";
+import { LIGHT_INFLUENCE, LightType, dKy_GxFog_set, dKy_change_colpat, dKy_darkworld_check, dKy_daynight_check, dKy_event_proc, dKy_plight_cut, dKy_plight_priority_set, dKy_plight_set, dKy_setLight__OnModelInstance, dKy_tevstr_c, dKy_tevstr_init, dScnKy_env_light_c, dice_rain_minus, setLightTevColorType_MAJI, settingTevStruct } from "./d_kankyo.js";
 import { dKyr_get_vectle_calc, dKyw_get_wind_pow, dKyw_get_wind_vec, dKyw_rain_set } from "./d_kankyo_wether.js";
 import { ResType, dComIfG_resLoad } from "./d_resorce.js";
 import { dPath, dPath_GetRoomPath, dPath__Point, dStage_Multi_c, dStage_stagInfo_GetArg0 } from "./d_stage.js";
-import { cPhs__Status, fGlobals, fopAcM_create, fopAc_ac_c, fpcPf__Register, fpc__ProcessName, fpc_bs__Constructor } from "./framework.js";
-import { mDoExt_bckAnm, mDoExt_brkAnm, mDoExt_btkAnm, mDoExt_modelUpdateDL, mDoExt_morf_c, mDoExt_setIndirectTex, mDoExt_setupStageTexture, mDoExt_setupShareTexture } from "./m_do_ext.js";
-import { dGlobals } from "./Main.js";
-import { ItemNo } from "./d_item_data.js";
-import { dDlst_list_Set } from "./d_drawlist.js";
+import { mDoExt_bckAnm, mDoExt_brkAnm, mDoExt_btkAnm, mDoExt_modelUpdateDL, mDoExt_morf_c, mDoExt_setIndirectTex, mDoExt_setupShareTexture, mDoExt_setupStageTexture } from "./m_do_ext.js";
+import { fopAc_ac_c, fopAcM_create } from "./f_op_actor.js";
+import { cPhs__Status, fGlobals, fpc_bs__Constructor, fpcPf__Register } from "../ZeldaWindWaker/framework.js";
 
-const scratchMat4a = mat4.create();
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
 
 // Framework'd actors
+
+export const enum dProcName_e {
+    d_s_play            = 0x000B,
+    d_kankyo            = 0x0013,
+    d_envse             = 0x0014,
+    d_a_obj_magLiftRot  = 0x0038,
+    d_a_obj_onsen       = 0x0082,
+    d_a_obj_lv3water    = 0x00D5,
+    d_a_obj_iceblock    = 0x00DF,
+    d_a_tbox            = 0x00FB,
+    d_a_tbox2           = 0x00FC,
+    d_a_alink           = 0x00FD,
+    d_a_obj_suisya      = 0x011D,
+    d_a_obj_firepillar2 = 0x015E,
+    d_a_obj_firewood2   = 0x016A,
+    d_a_obj_glowSphere  = 0x017B,
+    d_a_e_hp            = 0x01E1,
+    d_a_obj_item        = 0x0218,
+    d_a_obj_life        = 0x021B,
+    kytag06             = 0x02B0,
+    kytag07             = 0x02B1,
+    kytag10             = 0x02B4,
+    kytag17             = 0x02BB,
+    d_thunder           = 0x02D9,
+    d_a_vrbox           = 0x02DA,
+    d_a_vrbox2          = 0x02DB,
+    d_a_bg              = 0x02DC,
+    d_a_set_bg_obj      = 0x02DD,
+    d_a_bg_obj          = 0x02DE,
+    d_a_obj_carry       = 0x02FC,
+    d_a_grass           = 0x0310,
+    d_kyeff             = 0x0311,
+    d_kyeff2            = 0x0312,
+};
 
 function dComIfGp_getMapTrans(globals: dGlobals, roomNo: number): dStage_Multi_c | null {
     for (let i = 0; i < globals.dStage_dt.mult.length; i++)
@@ -203,7 +237,7 @@ function dKy_bg_MAxx_proc(globals: dGlobals, modelInstance: J3DModelInstance): d
                     c1.b = 180 / 255;
                     c1.a = 255 / 255;
 
-                    if (globals.renderer.currentLayer == 1)
+                    if (globals.renderer.currentLayer === 1)
                         c1.a = 0.0;
 
                     materialInstance.setColorOverride(ColorKind.C1, c1);
@@ -256,7 +290,7 @@ function dKy_bg_MAxx_proc(globals: dGlobals, modelInstance: J3DModelInstance): d
 }
 
 class d_a_bg extends fopAc_ac_c {
-    public static PROCESS_NAME = fpc__ProcessName.d_a_bg;
+    public static PROCESS_NAME = dProcName_e.d_a_bg;
 
     private numBg = 6;
     private bgModel: (J3DModelInstance | null)[] = nArray(this.numBg, () => null);
@@ -439,7 +473,7 @@ class d_a_bg extends fopAc_ac_c {
 }
 
 class d_a_vrbox extends fopAc_ac_c {
-    public static PROCESS_NAME = fpc__ProcessName.d_a_vrbox;
+    public static PROCESS_NAME = dProcName_e.d_a_vrbox;
     private model: J3DModelInstance;
 
     public override subload(globals: dGlobals): cPhs__Status {
@@ -503,7 +537,7 @@ class d_a_vrbox extends fopAc_ac_c {
 }
 
 class d_a_vrbox2 extends fopAc_ac_c {
-    public static PROCESS_NAME = fpc__ProcessName.d_a_vrbox2;
+    public static PROCESS_NAME = dProcName_e.d_a_vrbox2;
     private backCloud: J3DModelInstance;
     private sun: J3DModelInstance;
     private sunBtkAnm = new mDoExt_btkAnm();
@@ -759,7 +793,7 @@ class dDlst_2DObject_c extends dDlst_2DBase_c {
 }
 
 class d_a_obj_suisya extends fopAc_ac_c {
-    public static PROCESS_NAME = fpc__ProcessName.d_a_obj_suisya;
+    public static PROCESS_NAME = dProcName_e.d_a_obj_suisya;
     private model: J3DModelInstance;
 
     public override subload(globals: dGlobals): cPhs__Status {
@@ -801,7 +835,7 @@ class d_a_obj_suisya extends fopAc_ac_c {
 }
 
 class d_a_set_bg_obj extends fopAc_ac_c {
-    public static PROCESS_NAME = fpc__ProcessName.d_a_set_bg_obj;
+    public static PROCESS_NAME = dProcName_e.d_a_set_bg_obj;
 
     public override subload(globals: dGlobals): cPhs__Status {
         const envLight = globals.g_env_light;
@@ -845,10 +879,10 @@ class daBgObj_Spec {
             const name = readString(buffer, offset);
             offset += name.length + 1;
 
-            if (view.getUint8(offset) != 0) {
+            if (view.getUint8(offset) !== 0) {
                 const name = readString(buffer, offset);
                 offset += name.length + 1;
-            } else if (view.getUint8(offset) == 0 && view.getUint8(offset + 1) == 1) {
+            } else if (view.getUint8(offset) === 0 && view.getUint8(offset + 1) === 1) {
                 offset += 2;
             }
         }
@@ -982,7 +1016,7 @@ class daBgObj_Spec {
 }
 
 class d_a_bg_obj extends fopAc_ac_c {
-    public static PROCESS_NAME = fpc__ProcessName.d_a_bg_obj;
+    public static PROCESS_NAME = dProcName_e.d_a_bg_obj;
     private models0: J3DModelInstance[] = [];
     private models1: J3DModelInstance[] = [];
 
@@ -1158,7 +1192,7 @@ class d_a_bg_obj extends fopAc_ac_c {
 }
 
 class d_a_obj_glowSphere extends fopAc_ac_c {
-    public static PROCESS_NAME = fpc__ProcessName.d_a_obj_glowSphere;
+    public static PROCESS_NAME = dProcName_e.d_a_obj_glowSphere;
     private model: J3DModelInstance;
     private brk = new mDoExt_brkAnm();
     private btk = new mDoExt_btkAnm();
@@ -1246,7 +1280,7 @@ class d_a_obj_glowSphere extends fopAc_ac_c {
 }
 
 class d_a_obj_iceblk extends fopAc_ac_c {
-    public static PROCESS_NAME = fpc__ProcessName.d_a_obj_iceblock;
+    public static PROCESS_NAME = dProcName_e.d_a_obj_iceblock;
     private model: J3DModelInstance;
 
     public override subload(globals: dGlobals): cPhs__Status {
@@ -1301,7 +1335,7 @@ class d_a_obj_iceblk extends fopAc_ac_c {
 }
 
 class kytag10_class extends fopAc_ac_c {
-    public static PROCESS_NAME = fpc__ProcessName.kytag10;
+    public static PROCESS_NAME = dProcName_e.kytag10;
 
     private emitter1: JPABaseEmitter | null;
     private emitter2: JPABaseEmitter | null;
@@ -1451,7 +1485,7 @@ class kytag10_class extends fopAc_ac_c {
 }
 
 class d_a_obj_firepillar2 extends fopAc_ac_c {
-    public static PROCESS_NAME = fpc__ProcessName.d_a_obj_firepillar2;
+    public static PROCESS_NAME = dProcName_e.d_a_obj_firepillar2;
 
     private emitter1: JPABaseEmitter | null;
     private emitter2: JPABaseEmitter | null;
@@ -1786,7 +1820,7 @@ class d_a_obj_firepillar2 extends fopAc_ac_c {
 }
 
 class d_a_obj_lv3water extends fopAc_ac_c {
-    public static PROCESS_NAME = fpc__ProcessName.d_a_obj_lv3water;
+    public static PROCESS_NAME = dProcName_e.d_a_obj_lv3water;
     private model: J3DModelInstance;
     private modelIndirect: J3DModelInstance;
     private btk = new mDoExt_btkAnm();
@@ -1870,7 +1904,7 @@ class d_a_obj_lv3water extends fopAc_ac_c {
 }
 
 class kytag17_class extends fopAc_ac_c {
-    public static PROCESS_NAME = fpc__ProcessName.kytag17;
+    public static PROCESS_NAME = dProcName_e.kytag17;
 
     public override subload(globals: dGlobals): cPhs__Status {
         const envLight = globals.g_env_light;
@@ -1883,7 +1917,7 @@ class kytag17_class extends fopAc_ac_c {
 
 // Dice Weather System Manager Tag
 class kytag06_class extends fopAc_ac_c {
-    public static PROCESS_NAME = fpc__ProcessName.kytag06;
+    public static PROCESS_NAME = dProcName_e.kytag06;
     public type: number;
     public mode: number;
     public windPower: number = 0.0;
@@ -2137,7 +2171,7 @@ class kytag06_class extends fopAc_ac_c {
         case 2:
             colpat_weather = 1;
             
-            if ((deltaTimeFrames & 3) == 0) {
+            if ((deltaTimeFrames & 3) === 0) {
                 if (envLight.rainCount < 40) {
                     envLight.rainCount++;
                     dKyw_rain_set(envLight, envLight.rainCount);
@@ -2186,7 +2220,7 @@ class kytag06_class extends fopAc_ac_c {
             colpat_weather = 1;
             
             if (envLight.snowCount < 125) {
-                if ((deltaTimeFrames & 3) == 0) {
+                if ((deltaTimeFrames & 3) === 0) {
                     envLight.snowCount++;
                 }
             } else {
@@ -2201,7 +2235,7 @@ class kytag06_class extends fopAc_ac_c {
             break;
         }
 
-        if (envLight.colpatWeather != colpat_weather && !envLight.cameraInWater) {
+        if (envLight.colpatWeather !== colpat_weather && !envLight.cameraInWater) {
             envLight.colpatWeather = colpat_weather;
             dKy_change_colpat(envLight, colpat_weather);
         }
@@ -2300,7 +2334,7 @@ class kytag06_class extends fopAc_ac_c {
             break;
         }
 
-        if (envLight.colpatWeather != colpat_weather && !envLight.cameraInWater) {
+        if (envLight.colpatWeather !== colpat_weather && !envLight.cameraInWater) {
             envLight.colpatWeather = colpat_weather;
             dKy_change_colpat(envLight, colpat_weather);
         }
@@ -2337,7 +2371,7 @@ class kytag06_class extends fopAc_ac_c {
 }
 
 class kytag07_class extends fopAc_ac_c {
-    public static PROCESS_NAME = fpc__ProcessName.kytag07;
+    public static PROCESS_NAME = dProcName_e.kytag07;
 
     private lightInfluence: LIGHT_INFLUENCE = new LIGHT_INFLUENCE();
     private unk_588: number;
@@ -2414,7 +2448,7 @@ class daItemBase extends fopAc_ac_c {
 
         if (brkID > 0) {
             const brk_anm = resCtrl.getObjectRes(ResType.Brk, arcName, brkID);
-            const play_anm = globals.item_resource[this.itemNo].tevFrm == 0xFF ? true : false;
+            const play_anm = globals.item_resource[this.itemNo].tevFrm === 0xFF ? true : false;
             this.brk = new mDoExt_brkAnm();
             this.brk.init(mdl_data, brk_anm, play_anm, LoopMode.Repeat);
         }
@@ -2431,7 +2465,7 @@ class daItemBase extends fopAc_ac_c {
             const tevFrm = globals.item_resource[this.itemNo].tevFrm;
 
             if (this.brk !== null) {
-                if (tevFrm != 0xFF)
+                if (tevFrm !== 0xFF)
                     this.brk.entry(this.model, tevFrm);
                 else
                     this.brk.entry(this.model);
@@ -2461,7 +2495,7 @@ class daItemBase extends fopAc_ac_c {
 };
 
 class d_a_obj_item extends daItemBase {
-    public static PROCESS_NAME = fpc__ProcessName.d_a_obj_item;
+    public static PROCESS_NAME = dProcName_e.d_a_obj_item;
 
     private initialized: boolean = false;
 
@@ -2505,7 +2539,7 @@ class d_a_obj_item extends daItemBase {
             break;
         case 6:
         default:
-            if (this.switchNo != 0xFF)
+            if (this.switchNo !== 0xFF)
                 this.hide();
             break;
         }
@@ -2589,7 +2623,7 @@ class d_a_obj_item extends daItemBase {
                 break;
             case 6:
             default:
-                if (this.switchNo != 0xFF)
+                if (this.switchNo !== 0xFF)
                     this.hide();
                 break;
             }
@@ -2605,7 +2639,7 @@ class d_a_obj_item extends daItemBase {
 }
 
 class d_a_obj_life extends daItemBase {
-    public static PROCESS_NAME = fpc__ProcessName.d_a_obj_life;
+    public static PROCESS_NAME = dProcName_e.d_a_obj_life;
 
     private initialized: boolean = false;
 
@@ -2688,7 +2722,7 @@ class d_a_obj_life extends daItemBase {
 }
 
 class d_a_obj_carry extends fopAc_ac_c {
-    public static PROCESS_NAME = fpc__ProcessName.d_a_obj_carry;
+    public static PROCESS_NAME = dProcName_e.d_a_obj_carry;
     private type: number;
     private model: J3DModelInstance;
 
@@ -2769,7 +2803,7 @@ class d_a_obj_carry extends fopAc_ac_c {
 }
 
 class d_a_obj_firewood2 extends fopAc_ac_c {
-    public static PROCESS_NAME = fpc__ProcessName.d_a_obj_firewood2;
+    public static PROCESS_NAME = dProcName_e.d_a_obj_firewood2;
 
     private light: LIGHT_INFLUENCE = new LIGHT_INFLUENCE();
     private light_pos = vec3.create();
@@ -2875,7 +2909,7 @@ class d_a_obj_firewood2 extends fopAc_ac_c {
 }
 
 class d_a_obj_onsen extends fopAc_ac_c {
-    public static PROCESS_NAME = fpc__ProcessName.d_a_obj_onsen;
+    public static PROCESS_NAME = dProcName_e.d_a_obj_onsen;
 
     private model: J3DModelInstance;
     private modelIndirect: J3DModelInstance;
@@ -2951,7 +2985,7 @@ class d_a_obj_onsen extends fopAc_ac_c {
 }
 
 class d_a_obj_magLiftRot extends fopAc_ac_c {
-    public static PROCESS_NAME = fpc__ProcessName.d_a_obj_magLiftRot;
+    public static PROCESS_NAME = dProcName_e.d_a_obj_magLiftRot;
 
     private model: J3DModelInstance;
     private brk: mDoExt_brkAnm | null = null;
@@ -3164,7 +3198,7 @@ class d_a_obj_magLiftRot extends fopAc_ac_c {
 
 // Imp Poe
 class d_a_e_hp extends fopAc_ac_c {
-    public static PROCESS_NAME = fpc__ProcessName.d_a_e_hp;
+    public static PROCESS_NAME = dProcName_e.d_a_e_hp;
     private morf: mDoExt_morf_c;
     private lanternModel: J3DModelInstance;
     private glowMorf: mDoExt_morf_c;
@@ -3185,7 +3219,7 @@ class d_a_e_hp extends fopAc_ac_c {
         if (status !== cPhs__Status.Complete)
             return status;
 
-        this.alwaysOn = (this.rot[2] & 1) == 0 ? true : false;
+        this.alwaysOn = (this.rot[2] & 1) === 0 ? true : false;
 
         this.rot[2] = 0;
         this.rot[0] = 0;
@@ -3296,7 +3330,7 @@ class d_a_e_hp extends fopAc_ac_c {
 }
 
 interface constructor extends fpc_bs__Constructor {
-    PROCESS_NAME: fpc__ProcessName;
+    PROCESS_NAME: dProcName_e;
 }
 
 export function d_a__RegisterConstructors(globals: fGlobals): void {

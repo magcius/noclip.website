@@ -2,7 +2,7 @@
 import { mat4, vec3, vec4, quat, ReadonlyVec3, ReadonlyMat4, ReadonlyVec4 } from 'gl-matrix';
 import InputManager from './InputManager.js';
 import { Frustum, AABB } from './Geometry.js';
-import { clampRange, projectionMatrixForFrustum, computeUnitSphericalCoordinates, projectionMatrixForCuboid, lerpAngle, MathConstants, getMatrixAxisY, transformVec3Mat4w1, Vec3Zero, Vec3UnitY, Vec3UnitX, Vec3UnitZ, transformVec3Mat4w0, getMatrixAxisZ, getMatrixAxisX, computeEulerAngleRotationFromSRTMatrix } from './MathHelpers.js';
+import { clampRange, projectionMatrixForFrustum, calcUnitSphericalCoordinates, projectionMatrixForCuboid, lerpAngle, MathConstants, getMatrixAxisY, transformVec3Mat4w1, Vec3Zero, Vec3UnitY, Vec3UnitX, Vec3UnitZ, transformVec3Mat4w0, getMatrixAxisZ, getMatrixAxisX, calcEulerAngleRotationFromSRTMatrix } from './MathHelpers.js';
 import { projectionMatrixConvertClipSpaceNearZ } from './gfx/helpers/ProjectionHelpers.js';
 import { WebXRContext } from './WebXR.js';
 import { assert } from './util.js';
@@ -36,7 +36,7 @@ export class Camera {
     public linearVelocity = vec3.create();
 
     public frustum = new Frustum();
-    public fovY: number;
+    public fovY: number = MathConstants.TAU / 6;
     public aspect: number;
     public isOrthographic: boolean = false;
 
@@ -137,14 +137,13 @@ const scratchVec3c = vec3.create();
 const scratchVec3d = vec3.create();
 const scratchVec3e = vec3.create();
 const scratchVec3f = vec3.create();
-const scratchVec4 = vec4.create();
 const scratchMat4 = mat4.create();
 const scratchQuat = quat.create();
 
 /**
- * Computes a view-space depth given @param viewMatrix and @param aabb in world-space.
+ * Computes a view-space depth given {@param viewMatrix} and {@param aabb} in world-space.
  * 
- * This is computed by taking the depth of the center of the passed-in @param aabb.
+ * This is computed by taking the depth of the center of the passed-in {@param aabb}.
  * 
  * The convention of "view-space depth" is that 0 is near plane, +z is further away.
  *
@@ -160,11 +159,11 @@ export function computeViewSpaceDepthFromWorldSpaceAABB(viewMatrix: ReadonlyMat4
 }
 
 /**
- * Computes a view-space depth given @param viewMatrix and @param v in world-space.
+ * Computes a view-space depth given {@param viewMatrix} and {@param v} in world-space.
  * 
  * The convention of "view-space depth" is that 0 is near plane, +z is further away.
  *
- * The returned value is not clamped to the near or far planes -- that is, the depth
+ * The returned value is not clamped to the near or far planes &mdash; that is, the depth
  * value is less than zero if the camera is behind the point.
  *
  * The returned value can be passed directly to {@see GfxRenderInst.setSortKeyDepth},
@@ -179,97 +178,6 @@ export function divideByW(dst: vec4, src: ReadonlyVec4): void {
     dst[1] = src[1] / src[3];
     dst[2] = src[2] / src[3];
     dst[3] = 1.0;
-}
-
-export class ScreenSpaceProjection {
-    // These values are in "flat clip space" (that is, -1 corresponds to the left frustum plane,
-    // and +1 corresponds to the right frustum plane). If the projected area extends beyond these
-    // planes, then these values might go less than -1 or greater than +1. This is normal.
-    public projectedMinX!: number;
-    public projectedMinY!: number;
-    public projectedMaxX!: number;
-    public projectedMaxY!: number;
-
-    constructor() {
-        this.reset();
-    }
-
-    public reset(): void {
-        this.projectedMinX = Infinity;
-        this.projectedMinY = Infinity;
-        this.projectedMaxX = -Infinity;
-        this.projectedMaxY = -Infinity;
-    }
-
-    /**
-     * Returns the screen area, in normalized units, of the projection as a measure from 0 to 1.
-     *
-     * It is possible for this measure to return greater than 1, if a box that is larger than the
-     * whole screen is computed. You need to clamp manually if you do not want this to happen.
-     */
-    public getScreenArea(): number {
-        const extX = (this.projectedMaxX - this.projectedMinX) * 0.5;
-        const extY = (this.projectedMaxY - this.projectedMinY) * 0.5;
-        return extX * extY;
-    }
-
-    public union(projectedX: number, projectedY: number): void {
-        this.projectedMinX = Math.min(this.projectedMinX, projectedX);
-        this.projectedMinY = Math.min(this.projectedMinY, projectedY);
-        this.projectedMaxX = Math.max(this.projectedMaxX, projectedX);
-        this.projectedMaxY = Math.max(this.projectedMaxY, projectedY);
-    }
-}
-
-/**
- * Transforms the world-space point @param p, viewed by the camera @param Camera into
- * normalized clip space and stores the result in @param output. Note that this is normalized
- * clip space (between -1 and 1 on all three axes). Conversion into screen or viewport space
- * is not done in this function.
- */
-export function computeClipSpacePointFromWorldSpacePoint(output: vec3, camera: Camera, p: ReadonlyVec3, v4 = scratchVec4): void {
-    vec4.set(v4, p[0], p[1], p[2], 1.0);
-    vec4.transformMat4(v4, v4, camera.clipFromWorldMatrix);
-    const w = v4[3];
-    vec3.set(output, v4[0] / w, v4[1] / w, v4[2] / w);
-}
-
-/**
- * Computes the screen-space projection @param screenSpaceProjection, that
- * a sphere in world-space coordinates with parameters @param center and @param radius
- * will take up when viewed by @param camera.
- */
-export function computeScreenSpaceProjectionFromWorldSpaceSphere(screenSpaceProjection: ScreenSpaceProjection, camera: Camera, center: ReadonlyVec3, radius: number, v: vec3 = scratchVec3a, v4: vec4 = scratchVec4): void {
-    screenSpaceProjection.reset();
-
-    transformVec3Mat4w1(v, camera.viewMatrix, center);
-
-    v[2] = -Math.max(Math.abs(v[2] - radius), camera.near);
-
-    const viewCenterX = v[0], viewCenterY = v[1], viewCenterZ = v[2];
-
-    // Compute the corners of screen-space square that encloses the sphere.
-    for (let xs = -1; xs <= 1; xs += 2) {
-        for (let ys = -1; ys <= 1; ys += 2) {
-            vec4.set(v4, viewCenterX + radius*xs, viewCenterY + radius*ys, viewCenterZ, 1.0);
-            vec4.transformMat4(v4, v4, camera.projectionMatrix);
-            divideByW(v4, v4);
-            screenSpaceProjection.union(v4[0], v4[1]);
-        }
-    }
-}
-
-/**
- * Computes the screen-space projection @param screenSpaceProjection, that
- * world-space AABB @param aabb will take up when viewed by @param camera.
- */
-export function computeScreenSpaceProjectionFromWorldSpaceAABB(screenSpaceProjection: ScreenSpaceProjection, camera: Camera, aabb: AABB, v: vec3 = scratchVec3a, v4: vec4 = scratchVec4): void {
-    const radius = aabb.boundingSphereRadius();
-
-    // Compute view-space center.
-    aabb.centerPoint(v);
-
-    return computeScreenSpaceProjectionFromWorldSpaceSphere(screenSpaceProjection, camera, v, radius, v, v4);
 }
 
 export const enum CameraUpdateResult {
@@ -790,7 +698,7 @@ export class OrbitCameraController implements CameraController {
             vec3.scaleAndAdd(this.translation, this.translation, scratchVec3a, this.tyVel);
 
             const eyePos = scratchVec3a;
-            computeUnitSphericalCoordinates(eyePos, this.x, this.y);
+            calcUnitSphericalCoordinates(eyePos, this.x, this.y);
             vec3.scale(eyePos, eyePos, this.z);
             vec3.add(eyePos, eyePos, this.translation);
             this.camera.isOrthographic = false;
@@ -968,7 +876,7 @@ export class OrthoCameraController implements CameraController {
 
         const eyePos = scratchVec3a;
 
-        computeUnitSphericalCoordinates(eyePos, this.x, this.y);
+        calcUnitSphericalCoordinates(eyePos, this.x, this.y);
         vec3.scale(eyePos, eyePos, -this.farPlane / 2);
         vec3.add(eyePos, eyePos, this.translation);
         mat4.targetTo(this.camera.worldMatrix, eyePos, this.translation, Vec3UnitY);
@@ -1021,8 +929,8 @@ export function deserializeCamera(camera: Camera, view: DataView, byteOffs: numb
     return 0x04*4*3;
 }
 
-function texProjCamera(dst: mat4, camera: Camera, scaleS: number, scaleT: number, transS: number, transT: number): void {
-    const projMtx = camera.projectionMatrix;
+function texProjCamera(dst: mat4, clipFromViewMatrix: ReadonlyMat4, scaleS: number, scaleT: number, transS: number, transT: number): void {
+    const projMtx = clipFromViewMatrix;
 
     // Avoid multiplications where we know the result will be 0.
     dst[0]  = projMtx[0]  * scaleS;
@@ -1049,8 +957,8 @@ function texProjCamera(dst: mat4, camera: Camera, scaleS: number, scaleT: number
     dst[15] = 9999.0;
 }
 
-export function texProjCameraSceneTex(dst: mat4, camera: Camera, flipYScale: number): void {
+export function texProjCameraSceneTex(dst: mat4, clipFromViewMatrix: ReadonlyMat4, flipYScale: number): void {
     // Map from -1 to 1 to 0 to 1.
     let scaleS = 0.5, scaleT = -0.5 * flipYScale, transS = 0.5, transT = 0.5;
-    texProjCamera(dst, camera, scaleS, scaleT, transS, transT);
+    texProjCamera(dst, clipFromViewMatrix, scaleS, scaleT, transS, transT);
 }

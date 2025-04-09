@@ -715,7 +715,7 @@ class SceneDesc implements Viewer.SceneDesc {
 
         const setupFile = assertExists(findFileByID(obj, obj.SetupFileId));
         this.addObjects(device, setupFile.Data, objectData, sceneRenderer);
-        if (obj.SceneID == 0x0b) {
+        if (obj.SceneID === 0x0b) {
             const clanker = objectData.spawnObject(device, sceneRenderer.sceneEmitters, Actors.clankerID, vec3.fromValues(5500, 1100 /* or 0 */, 0))[0]! as GeometryRenderer;
             clanker.animationController.init(15); // seems slower than others, not sure the source
             // TODO: make sure Clanker renders before the parts

@@ -43,8 +43,9 @@ class DataFetcherRequest {
         this.request = new Request(this.url, { signal: this.abortController.signal });
 
         if (this.options.rangeStart !== undefined && this.options.rangeSize !== undefined) {
-            const rangeStart = this.options.rangeStart;
-            const rangeEnd = rangeStart + this.options.rangeSize - 1; // Range header is inclusive.
+            const rangeStart = Number(this.options.rangeStart);
+            const rangeSize = Number(this.options.rangeSize);
+            let rangeEnd = rangeStart + rangeSize - Number(1);
             this.request.headers.set('range', `bytes=${rangeStart}-${rangeEnd}`);
 
             // Partial responses are unsupported with Cache, for some lovely reason.
@@ -219,12 +220,12 @@ interface DataFetcherOptions {
      * rangeStart: 0-based byte index for the range Header. Use to request part of a file.
      * Must be specified in tandem with rangeSize.
      */
-    rangeStart?: number;
+    rangeStart?: number | bigint;
     /**
      * rangeSize: Length for the range header.
      * Must be specified together with rangeStart.
      */
-    rangeSize?: number;
+    rangeSize?: number | bigint;
 }
 
 class DataFetcherMount {
@@ -256,7 +257,7 @@ class DataFetcherMount {
 
         let blob: Blob = await fileHandle.getFile();
         if (options.rangeStart !== undefined && options.rangeSize !== undefined)
-            blob = blob.slice(options.rangeStart, options.rangeSize);
+            blob = blob.slice(Number(options.rangeStart), Number(options.rangeSize));
 
         const arrayBuffer = await blob.arrayBuffer();
         const arrayBufferSlice = new ArrayBufferSlice(arrayBuffer) as NamedArrayBufferSlice;
@@ -287,13 +288,8 @@ export class DataFetcher {
     public async init() {
         if (IS_DEVELOPMENT) {
             // Check for the existence of a /data directory.
-            const url = getDataURLForPath('', true);
-            try {
-                await this.fetchURL(url, {});
-                this.useDevelopmentStorage = true;
-            } catch(e) {
-                this.useDevelopmentStorage = false;
-            }
+            // TODO(jstpierre): Put back this fix for rsbuild.
+            this.useDevelopmentStorage = true;
         } else {
             this.useDevelopmentStorage = false;
         }
@@ -355,7 +351,7 @@ export class DataFetcher {
             return;
         }
 
-        if (this.debugDisplay == null) {
+        if (this.debugDisplay === null) {
             this.debugDisplay = document.createElement('div');
             this.debugDisplay.style.position = 'absolute';
             this.debugDisplay.style.bottom = '16px';
@@ -364,7 +360,8 @@ export class DataFetcher {
             this.debugDisplay.style.textShadow = '1px 1px 2px black';
             this.debugDisplay.style.font = '12pt monospace';
             this.debugDisplay.style.whiteSpace = `pre`;
-            this.debugDisplay.style.textAlign = 'right';
+            this.debugDisplay.style.textAlign = `right`;
+            this.debugDisplay.style.pointerEvents = `none`;
             window.main.ui.elem.appendChild(this.debugDisplay);
         }
 

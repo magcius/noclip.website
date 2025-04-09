@@ -7,14 +7,14 @@ import { TextureMapping } from '../TextureHolder.js';
 import { texProjCameraSceneTex } from '../Camera.js';
 
 import { SFATexture, TextureFetcher } from './textures.js';
-import { mat4SetRow, mat4FromRowMajor, mat4SetValue, mat4SetRowMajor, mat4SetTranslation } from './util.js';
+import { mat4SetRow, mat4FromRowMajor, mat4SetRowMajor } from './util.js';
 import { mat4, vec3 } from 'gl-matrix';
 import { FurFactory } from './fur.js';
 import { SFAAnimationController } from './animation.js';
 import { colorFromRGBA, Color, colorCopy, White, OpaqueBlack, colorNewCopy, TransparentBlack, Red, Blue } from '../Color.js';
 import { SceneRenderContext } from './render.js';
 import { ColorFunc, getGXIndTexMtxID, getGXIndTexMtxID_S, getGXIndTexMtxID_T, getGXKonstAlphaSel, getGXKonstColorSel, getGXPostTexGenMatrix, IndTexStage, SFAMaterialBuilder, TevStage, TexCoord, TexFunc, TexMap } from './MaterialBuilder.js';
-import { clamp } from '../MathHelpers.js';
+import { clamp, setMatrixTranslation } from '../MathHelpers.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 
 export interface ShaderLayer {
@@ -223,7 +223,7 @@ export abstract class StandardMaterial extends MaterialBase {
     protected rebuildInternal() {
         this.rebuildSpecialized();
 
-        this.mb.setCullMode((this.shader.flags & ShaderFlags.CullBackface) != 0 ? GX.CullMode.BACK : GX.CullMode.NONE);
+        this.mb.setCullMode((this.shader.flags & ShaderFlags.CullBackface) !== 0 ? GX.CullMode.BACK : GX.CullMode.NONE);
 
         if (this.blendOverride !== undefined) {
             this.blendOverride(this.mb);
@@ -479,7 +479,7 @@ export class StandardMapMaterial extends StandardMaterial {
         mat4.fromScaling(pttexmtx0, [0.9, 0.9, 1.0]);
         const postTexMtx0 = this.mb.genPostTexMtx((dst: mat4, matCtx: MaterialRenderContext) => {
             mat4.copy(dst, pttexmtx0);
-            mat4SetValue(dst, 1, 3, 0.125 * matCtx.sceneCtx.animController.envAnimValue1);
+            dst[13] = 0.125 * matCtx.sceneCtx.animController.envAnimValue1;
         });
 
         const pttexmtx1 = mat4.create();
@@ -490,8 +490,8 @@ export class StandardMapMaterial extends StandardMaterial {
         const postTexMtx1 = this.mb.genPostTexMtx((dst: mat4, matCtx: MaterialRenderContext) => {
             mat4.copy(dst, pttexmtx1);
             const v = 0.0625 * matCtx.sceneCtx.animController.envAnimValue0;
-            mat4SetValue(dst, 0, 3, v);
-            mat4SetValue(dst, 1, 3, v);
+            dst[12] = v;
+            dst[13] = v;
         });
 
         const postTexMtx2 = this.mb.genPostTexMtx((dst: mat4) => {
@@ -553,7 +553,7 @@ export class StandardMapMaterial extends StandardMaterial {
 
         const pttexmtx0 = mat4.create();
         mat4.fromScaling(pttexmtx0, [0.008, 0.008, 0.008]);
-        mat4SetTranslation(pttexmtx0, 0.8 * 0.01 * mapOriginX, 0.0, 0.8 * 0.01 * mapOriginZ);
+        setMatrixTranslation(pttexmtx0, [0.8 * 0.01 * mapOriginX, 0.0, 0.8 * 0.01 * mapOriginZ]);
         const postRotate0 = mat4.create();
         mat4.fromRotation(postRotate0, 1.0, [3, -1, 1]);
         const postTexMtx0 = this.mb.genPostTexMtx((dst: mat4, ctx: MaterialRenderContext) => {
@@ -565,7 +565,7 @@ export class StandardMapMaterial extends StandardMaterial {
         
         const pttexmtx1 = mat4.create();
         mat4.fromScaling(pttexmtx1, [0.005, 0.005, 0.005]);
-        mat4SetTranslation(pttexmtx1, 0.5 * 0.01 * mapOriginX, 0.0, 0.5 * 0.01 * mapOriginZ);
+        setMatrixTranslation(pttexmtx1, [0.5 * 0.01 * mapOriginX, 0.0, 0.5 * 0.01 * mapOriginZ]);
         const postRotate1 = mat4.create();
         mat4.fromRotation(postRotate1, 1.0, [1, -1, 3]);
         const postTexMtx1 = this.mb.genPostTexMtx((dst: mat4, ctx: MaterialRenderContext) => {
@@ -585,7 +585,7 @@ export class StandardMapMaterial extends StandardMaterial {
         const pttexmtx2 = mat4.create();
         const postTexMtx2 = this.mb.genPostTexMtx((dst: mat4, ctx: MaterialRenderContext) => {
             mat4.fromScaling(pttexmtx2, [0.01, 0.01, 0.01]);
-            mat4SetTranslation(pttexmtx2, 0.01 * mapOriginX + ctx.sceneCtx.animController.envAnimValue0, 0.0, 0.01 * mapOriginZ);
+            setMatrixTranslation(pttexmtx2, [0.01 * mapOriginX + ctx.sceneCtx.animController.envAnimValue0, 0.0, 0.01 * mapOriginZ]);
             mat4.mul(pttexmtx2, rot67deg, pttexmtx2);
             mat4.mul(dst, pttexmtx2, ctx.sceneCtx.viewToWorldMtx);
             mat4.mul(dst, postRotate2, dst);
@@ -607,7 +607,7 @@ export class StandardMapMaterial extends StandardMaterial {
         const pttexmtx3 = mat4.create();
         const postTexMtx3 = this.mb.genPostTexMtx((dst: mat4, ctx: MaterialRenderContext) => {
             mat4.fromScaling(pttexmtx3, [0.01, 0.01, 0.01]);
-            mat4SetTranslation(pttexmtx3, 0.01 * mapOriginX, 0.0, 0.01 * mapOriginZ + ctx.sceneCtx.animController.envAnimValue1);
+            setMatrixTranslation(pttexmtx3, [0.01 * mapOriginX, 0.0, 0.01 * mapOriginZ + ctx.sceneCtx.animController.envAnimValue1]);
             mat4.mul(dst, pttexmtx3, ctx.sceneCtx.viewToWorldMtx);
             mat4.mul(dst, postRotate3, dst);
             mat4SetRow(dst, 2, 0.0, 0.0, 0.0, 1.0);
@@ -793,8 +793,9 @@ export class StandardMapMaterial extends StandardMaterial {
         this.aprevIsValid = false;
 
         this.mb.setTexMtx(2, (dst: mat4, matCtx: MaterialRenderContext) => {
+            
             // Flipped
-            texProjCameraSceneTex(dst, matCtx.sceneCtx.viewerInput.camera, -matCtx.sceneCtx.flipYScale);
+            texProjCameraSceneTex(dst, matCtx.sceneCtx.viewerInput.camera.projectionMatrix, -matCtx.sceneCtx.flipYScale);
             mat4.mul(dst, dst, matCtx.modelToViewMtx);
             return dst;
         });
@@ -862,7 +863,7 @@ class StandardObjectMaterial extends StandardMaterial {
         const indStage = this.mb.genIndTexStage();
         const indTexMtx = this.mb.genIndTexMtx((dst: mat4, ctx: MaterialRenderContext) => {
             mat4.fromScaling(dst, [0.5, 0.5, 0.0]);
-            mat4SetValue(dst, 0, 3, 0.125); // The matrix scale must be stored in the first row's w
+            dst[12] = 0.125; // The matrix scale must be stored in the first row's w
         });
         const nbtTex = this.texFetcher.getTexture(this.cache, this.shader.nbtTexId!, true)!;
         const nbtTexMap = this.mb.genTexMap(makeMaterialTexture(nbtTex));
@@ -889,7 +890,7 @@ class StandardObjectMaterial extends StandardMaterial {
         const pttexmtx = this.mb.genPostTexMtx((dst: mat4, ctx: MaterialRenderContext) => {
             const s = 0.5 * 3.0 * ((this.shader.nbtParams >> 4) / 7.0 - 1.0);
             mat4.fromScaling(dst, [s, s, 0.0]);
-            mat4SetTranslation(dst, 0.0, 0.0, 1.0);
+            setMatrixTranslation(dst, [0.0, 0.0, 1.0]);
         });
         // Matrix comes from TEX0MTXIDX
         const binrmTexCoord = this.mb.genTexCoord(GX.TexGenType.MTX2x4, GX.TexGenSrc.BINRM, GX.TexGenMatrix.TEXMTX0, false, getGXPostTexGenMatrix(pttexmtx));
@@ -1154,7 +1155,7 @@ class StandardObjectMaterial extends StandardMaterial {
     private setupShaderLayers(preProbe: boolean, fooFlag: boolean /* TODO: better name */) {
         for (let i = 0; i < this.shader.layers.length; i++) {
             const layer = this.shader.layers[i];
-            if (!!(layer.tevMode & 0x80) == preProbe) {
+            if (!!(layer.tevMode & 0x80) === preProbe) {
                 if (layer.texId !== null) {
                     const texMap = this.mb.genTexMap(makeMaterialTexture(this.texFetcher.getTexture(this.cache, layer.texId, true)));
                     // TODO: support scrollable textures (e.g. eyeballs)
@@ -1381,19 +1382,19 @@ class WaterMaterial extends MaterialBase {
     protected rebuildInternal() {
         this.mb.setTexMtx(0, (dst: mat4, ctx: MaterialRenderContext) => {
             // Flipped
-            texProjCameraSceneTex(dst, ctx.sceneCtx.viewerInput.camera, -ctx.sceneCtx.flipYScale);
+            texProjCameraSceneTex(dst, ctx.sceneCtx.viewerInput.camera.projectionMatrix, -ctx.sceneCtx.flipYScale);
             mat4.mul(dst, dst, ctx.modelToViewMtx);
         });
 
         this.mb.setTexMtx(1, (dst: mat4, ctx: MaterialRenderContext) => {
             // Unflipped
-            texProjCameraSceneTex(dst, ctx.sceneCtx.viewerInput.camera, ctx.sceneCtx.flipYScale);
+            texProjCameraSceneTex(dst, ctx.sceneCtx.viewerInput.camera.projectionMatrix, ctx.sceneCtx.flipYScale);
             mat4.mul(dst, dst, ctx.modelToViewMtx);
         });
 
         this.mb.setTexMtx(3, (dst: mat4, ctx: MaterialRenderContext) => {
             mat4.identity(dst);
-            mat4SetValue(dst, 1, 3, ctx.sceneCtx.animController.envAnimValue0);
+            dst[13] = ctx.sceneCtx.animController.envAnimValue0;
         });
 
         const texMap0 = this.mb.genTexMap(makeOpaqueColorTextureDownscale2x());
@@ -1417,8 +1418,8 @@ class WaterMaterial extends MaterialBase {
         mat4.mul(texmtx4, rot45deg, texmtx4);
         this.mb.setTexMtx(4, (dst: mat4, matCtx: MaterialRenderContext) => {
             mat4.copy(dst, texmtx4);
-            mat4SetValue(dst, 0, 3, matCtx.sceneCtx.animController.envAnimValue1);
-            mat4SetValue(dst, 1, 3, matCtx.sceneCtx.animController.envAnimValue1);
+            dst[12] = matCtx.sceneCtx.animController.envAnimValue1;
+            dst[13] = matCtx.sceneCtx.animController.envAnimValue1;
         });
 
         const texCoord2 = this.mb.genTexCoord(GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.TEXMTX4);
@@ -1515,8 +1516,8 @@ class FurMaterial extends MaterialBase {
         const texMap2 = this.mb.genTexMap(this.factory.getWavyTexture());
         this.mb.setTexMtx(1, (dst: mat4, matCtx: MaterialRenderContext) => {
             mat4.fromTranslation(dst, [0.25 * matCtx.sceneCtx.animController.envAnimValue0, 0.25 * matCtx.sceneCtx.animController.envAnimValue1, 0.0]);
-            mat4SetValue(dst, 0, 0, 0.0125);
-            mat4SetValue(dst, 1, 1, 0.0125);
+            dst[0] = 0.0125;
+            dst[5] = 0.0125;
         });
 
         const texCoord2 = this.mb.genTexCoord(GX.TexGenType.MTX2x4, GX.TexGenSrc.POS, GX.TexGenMatrix.TEXMTX1);
@@ -1612,8 +1613,8 @@ export class HeatShimmerMaterial extends MaterialBase {
 
         const pttexmtx0 = this.mb.genPostTexMtx((dst: mat4, matCtx: MaterialRenderContext) => {
             mat4.fromScaling(dst, [7.0, 7.0, 1.0]);
-            mat4SetValue(dst, 0, 3, matCtx.sceneCtx.animController.envAnimValue0 * 10.0);
-            mat4SetValue(dst, 1, 3, -matCtx.sceneCtx.animController.envAnimValue1 * 10.0);
+            dst[12] = matCtx.sceneCtx.animController.envAnimValue0 * 10.0;
+            dst[13] = matCtx.sceneCtx.animController.envAnimValue1 * -10.0;
         });
         const texCoord1 = this.mb.genTexCoord(GX.TexGenType.MTX3x4, GX.TexGenSrc.TEX0, undefined, undefined, getGXPostTexGenMatrix(pttexmtx0));
 
@@ -1697,7 +1698,7 @@ export class FaultyTVMaterial extends MaterialBase {
 
         this.mb.setTexMtx(0, (dst: mat4, matCtx: MaterialRenderContext) => {
             mat4.fromScaling(dst, [0.2, 0.2, 1.0]);
-            mat4SetValue(dst, 1, 3, -matCtx.sceneCtx.animController.envAnimValue0);
+            dst[13] = -matCtx.sceneCtx.animController.envAnimValue0;
         });
         const texCoord1 = this.mb.genTexCoord(GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.TEXMTX0);
 
@@ -1706,8 +1707,8 @@ export class FaultyTVMaterial extends MaterialBase {
         this.mb.setTexMtx(1, (dst: mat4, matCtx: MaterialRenderContext) => {
             mat4.fromScaling(dst, [0.25, 0.25, 1.0]);
             mat4.mul(dst, rot45, dst);
-            mat4SetValue(dst, 0, 3, matCtx.sceneCtx.animController.envAnimValue1);
-            mat4SetValue(dst, 1, 3, matCtx.sceneCtx.animController.envAnimValue1);
+            dst[12] = matCtx.sceneCtx.animController.envAnimValue1;
+            dst[13] = matCtx.sceneCtx.animController.envAnimValue1;
         });
         const texCoord2 = this.mb.genTexCoord(GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.TEXMTX1);
 

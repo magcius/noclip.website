@@ -1,13 +1,29 @@
 
-import { J3DFrameCtrl, J3DFrameCtrl__UpdateFlags, entryTexMtxAnimator, entryTevRegAnimator, entryTexNoAnimator, VAF1_getVisibility, entryJointAnimator, calcJointMatrixFromTransform, calcANK1JointAnimationTransform } from "../Common/JSYSTEM/J3D/J3DGraphAnimator.js";
-import { TTK1, LoopMode, TRK1, AnimationBase, TPT1, VAF1, ANK1, JointTransformInfo } from "../Common/JSYSTEM/J3D/J3DLoader.js";
-import { J3DModelInstance, J3DModelData, JointMatrixCalc, ShapeInstanceState } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
+import { mat4, ReadonlyMat4, ReadonlyVec3, vec2, vec3 } from "gl-matrix";
+import { calcANK1JointAnimationTransform, calcJointMatrixFromTransform, entryJointAnimator, entryTevRegAnimator, entryTexMtxAnimator, entryTexNoAnimator, J3DFrameCtrl, J3DFrameCtrl__UpdateFlags, VAF1_getVisibility } from "../Common/JSYSTEM/J3D/J3DGraphAnimator.js";
+import { J3DModelData, J3DModelInstance, JointMatrixCalc, ShapeInstanceState } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
+import { AnimationBase, ANK1, JointTransformInfo, LoopMode, TPT1, TRK1, TTK1, VAF1 } from "../Common/JSYSTEM/J3D/J3DLoader.js";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import { ViewerRenderInput } from "../viewer.js";
-import { dGlobals } from "./Main.js";
-import { mat4, vec3, vec4 } from "gl-matrix";
-import { Camera, divideByW } from "../Camera.js";
 import { dDlst_list_Set } from "./d_drawlist.js";
+import { dGlobals } from "./Main.js";
+import { assert, nArray } from "../util.js";
+import { BTIData } from "../Common/JSYSTEM/JUTTexture.js";
+import { dKy_GxFog_tevstr_set, dKy_setLight__OnMaterialParams, dKy_tevstr_c } from "./d_kankyo.js";
+import { Color, colorCopy } from "../Color.js";
+import { TDDraw } from "../SuperMarioGalaxy/DDraw.js";
+import { ColorKind, DrawParams, GXMaterialHelperGfx, MaterialParams } from "../gx/gx_render.js";
+import * as GX from '../gx/gx_enum.js';
+import { DisplayListRegisters, displayListRegistersInitGX, displayListRegistersRun } from "../gx/gx_displaylist.js";
+import { parseMaterial } from "../gx/gx_material.js";
+import { normToLength } from "../MathHelpers.js";
+
+const scratchVec3a = vec3.create();
+const scratchVec3b = vec3.create();
+const scratchVec3c = vec3.create();
+const scratchVec3d = vec3.create();
+const materialParams = new MaterialParams();
+const drawParams = new DrawParams();
 
 abstract class mDoExt_baseAnm<T extends AnimationBase> {
     public frameCtrl = new J3DFrameCtrl(0);
@@ -86,11 +102,158 @@ export class mDoExt_bvaAnm extends mDoExt_baseAnm<VAF1> {
     }
 }
 
-export function mDoExt_modelEntryDL(globals: dGlobals, modelInstance: J3DModelInstance, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, drawListSet: dDlst_list_Set | null = null): void {
+export class mDoExt_3Dline_c {
+    public segments: vec3[];
+
+    // GPU data
+    public scales: number[] | null = null;
+    public texCoords: vec2[] | null = null;
+    public positions: vec3[];
+
+    constructor(numSegments: number, hasSize: boolean, hasTex: boolean) {
+        this.segments = nArray(numSegments, () => vec3.create());
+
+        if (hasSize)
+            this.scales = nArray(numSegments, () => 0.0);
+
+        const numVerts = numSegments * 2;
+        this.positions = nArray(numVerts, () => vec3.create());
+
+        if (hasTex) {
+            this.texCoords = nArray(numVerts, () => vec2.create());
+
+            for (let i = 0; i < numSegments; i++) {
+                this.texCoords[i * 2 + 0][0] = 0.0;
+                this.texCoords[i * 2 + 1][0] = 1.0;
+            }
+        }
+    }
+}
+
+export interface mDoExt_3DlineMat_c {
+    setMaterial(globals: dGlobals): void;
+    draw(globals: dGlobals, renderInstManager: GfxRenderInstManager): void;
+}
+
+export class mDoExt_3DlineMat1_c implements mDoExt_3DlineMat_c {
+    public lines: mDoExt_3Dline_c[];
+    private ddraw = new TDDraw();
+
+    private tex: BTIData;
+    private color: Color;
+    private tevStr: dKy_tevstr_c;
+    private numLines: number;
+    private maxSegments: number;
+    private numSegments: number;
+    private material: GXMaterialHelperGfx | null = null;
+
+    public init(numLines: number, numSegments: number, tex: BTIData, hasSize: boolean): void {
+        this.numLines = numLines;
+        this.maxSegments = numSegments;
+
+        this.lines = nArray(numLines, () => new mDoExt_3Dline_c(numSegments, hasSize, true));
+        this.tex = tex;
+
+        this.ddraw.setVtxDesc(GX.Attr.POS, true);
+        this.ddraw.setVtxDesc(GX.Attr.NRM, true);
+        this.ddraw.setVtxDesc(GX.Attr.TEX0, true);
+    }
+
+    public setMaterial(globals: dGlobals): void {
+        if (!this.material) {
+            const dlName = this.tevStr ? `l_toonMat1DL` : `l_mat1DL`;
+
+            // Parse display lists into usable materials
+            const dl = globals.findExtraSymbolData(`m_Do_ext.o`, dlName);
+            const matRegisters = new DisplayListRegisters();
+            displayListRegistersInitGX(matRegisters);
+            displayListRegistersRun(matRegisters, dl);
+            const material = parseMaterial(matRegisters, `mDoExt_3DlineMat1_c: ${dlName}`);
+            material.ropInfo.fogType = GX.FogType.PERSP_LIN;
+            material.ropInfo.fogAdjEnabled = true;
+            material.hasFogBlock = true;
+            this.material = new GXMaterialHelperGfx(material);
+        }
+    }
+
+    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager): void {
+        assert(!!this.material);
+
+        dKy_setLight__OnMaterialParams(globals.g_env_light, materialParams, globals.camera);
+        dKy_GxFog_tevstr_set(this.tevStr, materialParams.u_FogBlock, globals.camera);
+
+        this.tex.fillTextureMapping(materialParams.m_TextureMapping[0]);
+        colorCopy(materialParams.u_Color[ColorKind.C0], this.tevStr.colorC0);
+        colorCopy(materialParams.u_Color[ColorKind.C1], this.tevStr.colorK0);
+        colorCopy(materialParams.u_Color[ColorKind.C2], this.color);
+        mat4.copy(drawParams.u_PosMtx[0], globals.camera.viewFromWorldMatrix);
+
+        this.ddraw.beginDraw(globals.modelCache.cache);
+        for (let i = 0; i < this.numLines; i++) {
+            const line = this.lines[i];
+            this.ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP, this.numSegments * 2);
+            for (let j = 0; j < this.numSegments * 2; j += 2) {
+                this.ddraw.position3vec3(line.positions[j + 0]);
+                this.ddraw.texCoord2vec2(GX.Attr.TEX0, line.texCoords![j + 0]);
+                this.ddraw.normal3f32(0.25, 0.0, 0.0);
+
+                this.ddraw.position3vec3(line.positions[j + 1]);
+                this.ddraw.texCoord2vec2(GX.Attr.TEX0, line.texCoords![j + 1]);
+                this.ddraw.normal3f32(-0.25, 0.0, 0.0);
+            }
+            this.ddraw.end();
+        }
+        this.ddraw.endDraw(renderInstManager);
+
+        const renderInst = this.ddraw.makeRenderInst(renderInstManager);
+        renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
+        this.material.allocateMaterialParamsDataOnInst(renderInst, materialParams);
+        this.material.allocateDrawParamsDataOnInst(renderInst, drawParams);
+        this.material.setOnRenderInst(renderInstManager.gfxRenderCache, renderInst);
+
+        renderInstManager.submitRenderInst(renderInst);
+    }
+
+    public updateWithScale(globals: dGlobals, segmentCount: number, width: number, color: Color, taperNum: number, tevStr: dKy_tevstr_c): void {
+        this.color = color;
+        this.tevStr = tevStr;
+        this.numSegments = Math.min(segmentCount, this.maxSegments);
+        const taperStartIdx = this.numSegments - taperNum;
+
+        let dist = 0.0;
+        for (let i = 0; i < this.numLines; i++) {
+            const line = this.lines[i];
+            let vertIdx = 0;
+            assert(!!line.texCoords);
+
+            for (let j = 0; j < this.numSegments; j++) {
+                const taperScale = taperNum > 0 ? (Math.max(j - taperStartIdx, 0) / taperNum) : 1.0;
+
+                if (j < this.numSegments - 1)
+                    vec3.sub(scratchVec3a, line.segments[j + 1], line.segments[j + 0]);
+
+                vec3.sub(scratchVec3b, line.segments[j + 0], globals.camera.cameraPos);
+                vec3.cross(scratchVec3b, scratchVec3a, scratchVec3b);
+                normToLength(scratchVec3b, width * taperScale);
+
+                vec3.add(line.positions[vertIdx + 0], line.segments[j], scratchVec3b);
+                vec3.sub(line.positions[vertIdx + 1], line.segments[j], scratchVec3b);
+
+                line.texCoords[vertIdx + 0][1] = dist;
+                line.texCoords[vertIdx + 1][1] = dist;
+
+                vertIdx += 2;
+
+                const delta = vec3.length(scratchVec3a);
+                dist += delta * 0.1;
+            }
+        }
+    }
+}
+
+export function mDoExt_modelEntryDL(globals: dGlobals, modelInstance: J3DModelInstance, renderInstManager: GfxRenderInstManager, drawListSet: dDlst_list_Set | null = null): void {
     if (!modelInstance.visible)
         return;
-
-    const device = globals.modelCache.device;
 
     if (drawListSet === null)
         drawListSet = globals.dlst.bg;
@@ -103,20 +266,24 @@ export function mDoExt_modelEntryDL(globals: dGlobals, modelInstance: J3DModelIn
         modelInstance.setTexturesEnabled(globals.renderHacks.texturesEnabled);
     }
 
-    modelInstance.calcView(viewerInput.camera, viewerInput.camera.viewMatrix);
+    const camera = globals.camera;
+    modelInstance.calcView(camera.viewFromWorldMatrix, camera.frustum);
+
+    if (!modelInstance.isAnyShapeVisible())
+        return;
 
     renderInstManager.setCurrentList(drawListSet[0]);
-    modelInstance.drawOpa(device, renderInstManager, viewerInput.camera);
+    modelInstance.drawOpa(renderInstManager, camera.clipFromViewMatrix);
     renderInstManager.setCurrentList(drawListSet[1]);
-    modelInstance.drawXlu(device, renderInstManager, viewerInput.camera);
+    modelInstance.drawXlu(renderInstManager, camera.clipFromViewMatrix);
 }
 
-export function mDoExt_modelUpdateDL(globals: dGlobals, modelInstance: J3DModelInstance, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, drawListSet: dDlst_list_Set | null = null): void {
+export function mDoExt_modelUpdateDL(globals: dGlobals, modelInstance: J3DModelInstance, renderInstManager: GfxRenderInstManager, drawListSet: dDlst_list_Set | null = null): void {
     if (!modelInstance.visible)
         return;
 
     modelInstance.calcAnim();
-    mDoExt_modelEntryDL(globals, modelInstance, renderInstManager, viewerInput, drawListSet);
+    mDoExt_modelEntryDL(globals, modelInstance, renderInstManager, drawListSet);
 }
 
 const scratchTransform = new JointTransformInfo();
@@ -188,7 +355,7 @@ export class mDoExt_McaMorf implements JointMatrixCalc {
     }
 
     public setMorf(morfFrames: number): void {
-        if (this.prevMorf < 0.0 || morfFrames < 0.0) {
+        if (this.prevMorf < 0.0 || morfFrames <= 0.0) {
             this.curMorf = 1.0;
         } else {
             this.curMorf = 0.0;
@@ -229,21 +396,13 @@ export class mDoExt_McaMorf implements JointMatrixCalc {
         this.model.jointMatrixCalc = this;
     }
 
-    public entryDL(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, drawListSet: dDlst_list_Set | null = null): void {
-        mDoExt_modelEntryDL(globals, this.model, renderInstManager, viewerInput);
+    public entryDL(globals: dGlobals, renderInstManager: GfxRenderInstManager, drawListSet: dDlst_list_Set | null = null): void {
+        mDoExt_modelEntryDL(globals, this.model, renderInstManager, drawListSet);
     }
 }
 
-const scratchVec4 = vec4.create();
-export function mDoLib_project(dst: vec3, v: vec3, camera: Camera, v4 = scratchVec4): void {
-    vec4.set(v4, v[0], v[1], v[2], 1.0);
-    vec4.transformMat4(v4, v4, camera.clipFromWorldMatrix);
-    divideByW(v4, v4);
-    vec3.set(dst, v4[0], v4[1], v4[2]);
-}
-
-export function mDoLib_projectFB(dst: vec3, v: vec3, viewerInput: ViewerRenderInput): void {
-    mDoLib_project(dst, v, viewerInput.camera);
+export function mDoLib_projectFB(dst: vec3, v: ReadonlyVec3, viewerInput: ViewerRenderInput, clipFromWorldMatrix: ReadonlyMat4 = viewerInput.camera.clipFromWorldMatrix): void {
+    vec3.transformMat4(dst, v, clipFromWorldMatrix);
     // Put in viewport framebuffer space.
     dst[0] = (dst[0] * 0.5 + 0.5) * viewerInput.backbufferWidth;
     dst[1] = (dst[1] * 0.5 + 0.5) * viewerInput.backbufferHeight;

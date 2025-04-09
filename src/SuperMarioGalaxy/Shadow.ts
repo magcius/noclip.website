@@ -9,7 +9,7 @@ import { connectToScene, isValidDraw, calcGravityVectorOrZero, calcGravityVector
 import { NameObj, MovementType, CalcAnimType, DrawBufferType, DrawType, GameBits } from "./NameObj.js";
 import { vec3, mat4, ReadonlyVec3, ReadonlyMat4 } from "gl-matrix";
 import { HitSensor } from "./HitSensor.js";
-import { getMatrixTranslation, transformVec3Mat4w1, computeModelMatrixS, setMatrixTranslation, projectionMatrixForCuboid, computeMatrixWithoutTranslation, transformVec3Mat4w0, getMatrixAxis, setMatrixAxis, scaleMatrix, Vec3Zero, getMatrixAxisY, MathConstants, isNearZero } from "../MathHelpers.js";
+import { getMatrixTranslation, transformVec3Mat4w1, computeModelMatrixS, setMatrixTranslation, projectionMatrixForCuboid, computeMatrixWithoutTranslation, transformVec3Mat4w0, getMatrixAxis, setMatrixAxis, scaleMatrix, Vec3Zero, getMatrixAxisY, MathConstants, isNearZero, vec3FromBasis3 } from "../MathHelpers.js";
 import { getFirstPolyOnLineCategory, Triangle, CollisionKeeperCategory, CollisionPartsFilterFunc } from "./Collision.js";
 import { JMapInfoIter, createCsvParser } from "./JMapInfo.js";
 import { assertExists, fallback, assert, nArray } from "../util.js";
@@ -645,10 +645,6 @@ class ShadowVolumeCylinder extends ShadowVolumeModel {
 }
 
 function makeVtxFromAxes(dst: vec3, base: ReadonlyVec3, x: ReadonlyVec3, y: ReadonlyVec3, z: ReadonlyVec3, mx: 1 | -1, my: 1 | -1, mz: 1 | -1): void {
-    vec3.copy(dst, base);
-    vec3.scaleAndAdd(dst, dst, x, mx);
-    vec3.scaleAndAdd(dst, dst, y, my);
-    vec3.scaleAndAdd(dst, dst, z, mz);
 }
 
 class ShadowVolumeBox extends ShadowVolumeDrawer {
@@ -688,15 +684,15 @@ class ShadowVolumeBox extends ShadowVolumeDrawer {
         vec3.scale(scratchVec3c, scratchVec3c, sizeZ);
 
         // Compute our vertices.
-        makeVtxFromAxes(this.vtx[0], scratchVec3d, scratchVec3a, scratchVec3b, scratchVec3c, +1.0, +1.0, +1.0);
-        makeVtxFromAxes(this.vtx[1], scratchVec3d, scratchVec3a, scratchVec3b, scratchVec3c, +1.0, +1.0, -1.0);
-        makeVtxFromAxes(this.vtx[2], scratchVec3d, scratchVec3a, scratchVec3b, scratchVec3c, +1.0, -1.0, +1.0);
-        makeVtxFromAxes(this.vtx[3], scratchVec3d, scratchVec3a, scratchVec3b, scratchVec3c, +1.0, -1.0, -1.0);
+        vec3FromBasis3(this.vtx[0], scratchVec3d, scratchVec3a, +1.0, scratchVec3b, +1.0, scratchVec3c, +1.0);
+        vec3FromBasis3(this.vtx[1], scratchVec3d, scratchVec3a, +1.0, scratchVec3b, +1.0, scratchVec3c, -1.0);
+        vec3FromBasis3(this.vtx[2], scratchVec3d, scratchVec3a, +1.0, scratchVec3b, -1.0, scratchVec3c, +1.0);
+        vec3FromBasis3(this.vtx[3], scratchVec3d, scratchVec3a, +1.0, scratchVec3b, -1.0, scratchVec3c, -1.0);
 
-        makeVtxFromAxes(this.vtx[4], scratchVec3d, scratchVec3a, scratchVec3b, scratchVec3c, -1.0, +1.0, +1.0);
-        makeVtxFromAxes(this.vtx[5], scratchVec3d, scratchVec3a, scratchVec3b, scratchVec3c, -1.0, +1.0, -1.0);
-        makeVtxFromAxes(this.vtx[6], scratchVec3d, scratchVec3a, scratchVec3b, scratchVec3c, -1.0, -1.0, +1.0);
-        makeVtxFromAxes(this.vtx[7], scratchVec3d, scratchVec3a, scratchVec3b, scratchVec3c, -1.0, -1.0, -1.0);
+        vec3FromBasis3(this.vtx[4], scratchVec3d, scratchVec3a, -1.0, scratchVec3b, +1.0, scratchVec3c, +1.0);
+        vec3FromBasis3(this.vtx[5], scratchVec3d, scratchVec3a, -1.0, scratchVec3b, +1.0, scratchVec3c, -1.0);
+        vec3FromBasis3(this.vtx[6], scratchVec3d, scratchVec3a, -1.0, scratchVec3b, -1.0, scratchVec3c, +1.0);
+        vec3FromBasis3(this.vtx[7], scratchVec3d, scratchVec3a, -1.0, scratchVec3b, -1.0, scratchVec3c, -1.0);
 
         const dropLength = this.calcBaseDropLength();
         vec3.scale(scratchVec3d, dropDir, dropLength);
@@ -1086,8 +1082,8 @@ class AlphaShadow extends NameObj {
 
         // Blend onto main screen.
         const renderInst = renderInstManager.newRenderInst();
-        const sceneParamsOffs = renderInst.allocateUniformBuffer(GX_Program.ub_SceneParams, ub_SceneParamsBufferSize);
-        fillSceneParamsData(renderInst.mapUniformBufferF32(GX_Program.ub_SceneParams), sceneParamsOffs, this.orthoSceneParams);
+        const d = renderInst.allocateUniformBufferF32(GX_Program.ub_SceneParams, ub_SceneParamsBufferSize);
+        fillSceneParamsData(d, 0, this.orthoSceneParams);
         this.materialHelperDrawAlpha.setOnRenderInst(renderInstManager.gfxRenderCache, renderInst);
         this.materialHelperDrawAlpha.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
@@ -1305,10 +1301,11 @@ function addShadowFromCSV(sceneObjHolder: SceneObjHolder, actor: LiveActor, info
 export function initShadowFromCSV(sceneObjHolder: SceneObjHolder, actor: LiveActor, filename: string = 'Shadow'): void {
     let shadowFile: ArrayBufferSlice | null;
 
+    const resourceHolder = actor.modelManager!.resourceHolder;
     if (sceneObjHolder.sceneDesc.gameBit === GameBits.SMG1)
-        shadowFile = actor.resourceHolder.arc.findFileData(`${filename}.bcsv`);
+        shadowFile = resourceHolder.arc.findFileData(`${filename}.bcsv`);
     else if (sceneObjHolder.sceneDesc.gameBit === GameBits.SMG2)
-        shadowFile = actor.resourceHolder.arc.findFileData(`ActorInfo/${filename}.bcsv`);
+        shadowFile = resourceHolder.arc.findFileData(`ActorInfo/${filename}.bcsv`);
     else
         throw "whoops";
 

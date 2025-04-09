@@ -178,9 +178,8 @@ export class TDDraw extends TDDrawBase {
         if (newByteSize > this.vertexData.byteLength) {
             assert(this.startIndex === 0);
             const newByteSizeAligned = align(newByteSize, this.vertexData.byteLength);
-            const newData = new Uint8Array(newByteSizeAligned);
-            newData.set(new Uint8Array(this.vertexData.buffer));
-            this.vertexData = new DataView(newData.buffer);
+            const newBuffer = (this.vertexData.buffer as ArrayBuffer).transfer(newByteSizeAligned);
+            this.vertexData = new DataView(newBuffer);
             this.recreateVertexBuffer = true;
         }
     }
@@ -188,10 +187,9 @@ export class TDDraw extends TDDrawBase {
     protected ensureIndexBufferData(newSize: number): void {
         if (newSize > this.indexData.length) {
             assert(this.startIndex === 0);
-            const newByteSizeAligned = align(newSize, this.indexData.byteLength);
-            const newData = new Uint16Array(newByteSizeAligned);
-            newData.set(this.indexData);
-            this.indexData = newData;
+            const newSizeAligned = align(newSize, this.indexData.length);
+            const newBuffer = (this.indexData.buffer as ArrayBuffer).transfer(newSizeAligned * 2);
+            this.indexData = new Uint16Array(newBuffer);
             this.recreateIndexBuffer = true;
         }
     }
@@ -282,18 +280,16 @@ export class TSDraw extends TDDrawBase {
     protected ensureVertexBufferData(newByteSize: number): void {
         if (newByteSize > this.vertexData.byteLength) {
             const newByteSizeAligned = align(newByteSize, this.vertexData.byteLength);
-            const newData = new Uint8Array(newByteSizeAligned);
-            newData.set(new Uint8Array(this.vertexData.buffer));
-            this.vertexData = new DataView(newData.buffer);
+            const newBuffer = (this.vertexData.buffer as ArrayBuffer).transfer(newByteSizeAligned);
+            this.vertexData = new DataView(newBuffer);
         }
     }
 
     protected ensureIndexBufferData(newSize: number): void {
         if (newSize > this.indexData.length) {
             const newSizeAligned = align(newSize, this.indexData.byteLength);
-            const newData = new Uint16Array(newSizeAligned);
-            newData.set(this.indexData);
-            this.indexData = newData;
+            const newBuffer = (this.indexData.buffer as ArrayBuffer).transfer(newSizeAligned * 2);
+            this.indexData = new Uint16Array(newBuffer);
         }
     }
 

@@ -3,7 +3,7 @@ use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen(js_name = "WowColorEncoding")]
 #[derive(Debug, DekuRead, Copy, Clone)]
-#[deku(type = "u8")]
+#[deku(id_type = "u8")]
 pub enum ColorEncoding {
     #[deku(id = "1")]
     Uncompressed,
@@ -15,7 +15,7 @@ pub enum ColorEncoding {
 
 #[wasm_bindgen(js_name = "WowPixelFormat")]
 #[derive(Debug, DekuRead, Copy, Clone)]
-#[deku(type = "u8")]
+#[deku(id_type = "u8")]
 pub enum PixelFormat {
     #[deku(id = "0")]
     Dxt1,

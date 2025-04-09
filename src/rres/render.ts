@@ -8,7 +8,7 @@ import { Color, colorCopy } from '../Color.js';
 import { drawWorldSpaceLine, getDebugOverlayCanvas2D } from '../DebugJunk.js';
 import { AABB, IntersectionState } from "../Geometry.js";
 import { GfxBufferCoalescerCombo } from '../gfx/helpers/BufferHelpers.js';
-import { GfxDevice, GfxSampler, GfxTexture } from "../gfx/platform/GfxPlatform.js";
+import { GfxDevice, GfxTexture } from "../gfx/platform/GfxPlatform.js";
 import { arrayCopy } from '../gfx/platform/GfxPlatformObjUtil.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { GfxRendererLayer, GfxRenderInst, GfxRenderInstManager, makeSortKey, setSortKeyBias, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager.js";
@@ -16,11 +16,11 @@ import { LoadedVertexDraw } from '../gx/gx_displaylist.js';
 import { TexMapID } from '../gx/gx_enum.js';
 import * as GX_Material from '../gx/gx_material.js';
 import { ColorKind, DrawParams, GXMaterialHelperGfx, GXShapeHelperGfx, GXTextureHolder, loadedDataCoalescerComboGfx, loadTextureFromMipChain, MaterialParams, translateTexFilterGfx, translateWrapModeGfx } from "../gx/gx_render.js";
+import { calcMipChain } from '../gx/gx_texture.js';
 import { CalcBillboardFlags, calcBillboardMatrix, computeNormalMatrix, getMatrixAxisY, texEnvMtx } from '../MathHelpers.js';
-import { TextureHolder, TextureMapping } from "../TextureHolder.js";
+import { TextureMapping } from "../TextureHolder.js";
 import { assert, assertExists, nArray } from '../util.js';
 import { ViewerRenderInput } from "../viewer.js";
-import { calcMipChain } from '../gx/gx_texture.js';
 
 export class RRESTextureHolder extends GXTextureHolder<BRRES.TEX0> {
     public addRRESTextures(device: GfxDevice, rres: BRRES.RRES): void {
@@ -175,7 +175,7 @@ class ShapeInstance {
     public prepareToRender(renderInstManager: GfxRenderInstManager, depth: number, camera: Camera, instanceStateData: InstanceStateData): void {
         const materialInstance = this.materialInstance;
 
-        if (!materialInstance.visible)
+        if (!materialInstance.visible || !materialInstance.materialHelper.valid)
             return;
 
         const template = renderInstManager.pushTemplate();
@@ -406,7 +406,7 @@ class MaterialInstance {
         }
 
         if (texSrt.mapMode === BRRES.MapMode.PROJECTION) {
-            texProjCameraSceneTex(dstPost, camera, flipYScale);
+            texProjCameraSceneTex(dstPost, camera.projectionMatrix, flipYScale);
 
             // Apply effect matrix.
             mat4.mul(dstPost, texSrt.effectMtx, dstPost);
@@ -789,7 +789,7 @@ export class MDL0ModelInstance {
         let depth = -1;
         if (modelVisibility !== IntersectionState.Outside) {
             const rootJoint = mdl0.nodes[0];
-            if (rootJoint.bbox != null) {
+            if (rootJoint.bbox !== null) {
                 bboxScratch.transform(rootJoint.bbox, this.modelMatrix);
                 depth = Math.max(computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera.viewMatrix, bboxScratch), 0);
             } else {

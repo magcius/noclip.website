@@ -232,7 +232,7 @@ export class DkrObject {
         if(!DkrControlGlobals.SHOW_DEV_OBJECTS.on && this.isDeveloperObject) {
             return vec4DontShowObject;
         }
-        if(this.name == 'GoldCoin' && DkrControlGlobals.DARKEN_ADV2_COINS.on) {
+        if(this.name === 'GoldCoin' && DkrControlGlobals.DARKEN_ADV2_COINS.on) {
             return vec4.fromValues(0.4, 0.4, 0.4, 1.0);
         }
         return this.spriteColor;
@@ -291,15 +291,15 @@ export class DkrObject {
     public update(deltaTime: number): void {
         const delta = deltaTime / 1000;
         let updateMatrix = false;
-        if(this.angularSpeed[0] != 0) {
+        if(this.angularSpeed[0] !== 0) {
             this.rotation[0] += this.angularSpeed[0] * delta;
             updateMatrix = true;
         }
-        if(this.angularSpeed[1] != 0) {
+        if(this.angularSpeed[1] !== 0) {
             this.rotation[1] += this.angularSpeed[1] * delta;
             updateMatrix = true;
         }
-        if(this.angularSpeed[2] != 0) {
+        if(this.angularSpeed[2] !== 0) {
             this.rotation[2] += this.angularSpeed[2] * delta;
             updateMatrix = true;
         }
@@ -409,7 +409,7 @@ export class DkrObject {
                 const numberBalloonsToOpen = view.getUint8(0xD);
                 this.properties.numberToOpen = numberBalloonsToOpen;
                 this.modelScale *= view.getUint8(0x12) / 64.0;
-                if(this.name == 'LevelDoor' || this.name == 'WorldGate') {
+                if(this.name === 'LevelDoor' || this.name === 'WorldGate') {
                     this.texFrameOverride.set(1016, numberBalloonsToOpen % 10); // Tex #1016 = Ones place (0 to 9)
                     this.texFrameOverride.set(1017, Math.floor(numberBalloonsToOpen / 10) - 1); // Tex #1017 = Tens place (1 to 8)
                 }
@@ -557,7 +557,7 @@ export class DkrObject {
                     gotoNode: view.getUint8(0x1D),
                     channel: view.getUint8(0x21),
                     pauseFrameCount: view.getInt8(0x24),
-                    specialHide: view.getUint8(0x26) != 0, // Needs a better name.
+                    specialHide: view.getUint8(0x26) !== 0, // Needs a better name.
                     messageId: view.getUint8(0x27),
                     fadeAlpha: view.getUint8(0x2B),
                     nextAnim: view.getUint8(0x2C),

@@ -38,7 +38,7 @@ interface ActorKeyframeSet {
 
 function keyframeLerp(dst: vec3, cur: GloverObjbank.AffineFrame, next: GloverObjbank.AffineFrame, t: number): vec3 {
     let duration = next.t - cur.t
-    if (duration == 0) {
+    if (duration === 0) {
         t = 1
     } else {
         t = (t - cur.t) / duration;
@@ -53,7 +53,7 @@ function keyframeLerp(dst: vec3, cur: GloverObjbank.AffineFrame, next: GloverObj
 const slerpScratchVec4 = vec4.create();
 function keyframeSlerp(dst: vec4, cur: GloverObjbank.AffineFrame, next: GloverObjbank.AffineFrame, t: number): vec4 {
     let duration = next.t - cur.t
-    if (duration == 0) {
+    if (duration === 0) {
         t = 1
     } else {
         t = (t - cur.t) / duration;
@@ -182,7 +182,7 @@ export class ActorMeshNode {
                 if (nextKeyframes.scale >= this.mesh.numScale) {
                     nextKeyframes.scale = this.keyframeState.scale;
                 }
-                if (this.keyframeState.scale == startIdx) {
+                if (this.keyframeState.scale === startIdx) {
                     // TODO: confirm this is the right behavior:
                     this.keyframeState.scale = this.mesh.scale.length - 1;
                     nextKeyframes.scale = this.keyframeState.scale;
@@ -199,7 +199,7 @@ export class ActorMeshNode {
                 if (nextKeyframes.translation >= this.mesh.numTranslation) {
                     nextKeyframes.translation = this.keyframeState.translation;
                 }
-                if (this.keyframeState.translation == startIdx) {
+                if (this.keyframeState.translation === startIdx) {
                     // TODO: confirm this is the right behavior:
                     this.keyframeState.translation = this.mesh.translation.length - 1;
                     nextKeyframes.translation = this.keyframeState.translation;
@@ -216,7 +216,7 @@ export class ActorMeshNode {
                 if (nextKeyframes.rotation >= this.mesh.numRotation) {
                     nextKeyframes.rotation = this.keyframeState.rotation;
                 }
-                if (this.keyframeState.rotation == startIdx) {
+                if (this.keyframeState.rotation === startIdx) {
                     // TODO: confirm this is the right behavior:
                     this.keyframeState.rotation = this.mesh.rotation.length - 1;
                     nextKeyframes.rotation = this.keyframeState.rotation;
@@ -352,8 +352,8 @@ export class GloverActorRenderer implements Shadows.Collidable, Shadows.ShadowCa
             blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
         });
 
-        const overlay = (this.actorObject.mesh.renderMode & 0x80) != 0;
-        const xlu = (this.actorObject.mesh.renderMode & 0x2) != 0;
+        const overlay = (this.actorObject.mesh.renderMode & 0x80) !== 0;
+        const xlu = (this.actorObject.mesh.renderMode & 0x2) !== 0;
 
         this.rootMesh = new ActorMeshNode(device, cache, segments, textures, sceneLights, overlay, actorObject.objId, actorObject.mesh)
 
@@ -372,7 +372,7 @@ export class GloverActorRenderer implements Shadows.Collidable, Shadows.ShadowCa
 
         this.allocateLightingBuffer = false;
         this.rootMesh.forEachMesh((node) => {
-            if ((node.mesh.renderMode & 0x8) == 0) {
+            if ((node.mesh.renderMode & 0x8) === 0) {
                 this.allocateLightingBuffer = true;
             }
         })
@@ -387,7 +387,7 @@ export class GloverActorRenderer implements Shadows.Collidable, Shadows.ShadowCa
 
         // Hardcoded fix:
         // Force crysbk to render behind crystf
-        if (this.actorObject.objId == 0x530E329C) {
+        if (this.actorObject.objId === 0x530E329C) {
             this.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT + Render.GloverRendererLayer.OPAQUE); 
         }
     }
@@ -613,8 +613,8 @@ class GloverMeshRenderer {
     {
         const buffer = meshData._io.buffer;
         const rspState = new Render.GloverRSPState(segments, textures);
-        const xlu = (this.meshData.renderMode & 0x2) != 0;
-        const decals = (this.meshData.renderMode & 0x4) != 0;
+        const xlu = (this.meshData.renderMode & 0x2) !== 0;
+        const decals = (this.meshData.renderMode & 0x4) !== 0;
 
         this.id = meshData.id;
 
@@ -623,7 +623,7 @@ class GloverMeshRenderer {
         rspState.gSPSetGeometryMode(F3DEX.RSP_Geometry.G_SHADE | F3DEX.RSP_Geometry.G_SHADING_SMOOTH);
         Render.setRenderMode(rspState, decals, xlu, overlay, meshData.alpha/255);
 
-        if ((this.meshData.renderMode & 0x8) == 0) {
+        if ((this.meshData.renderMode & 0x8) === 0) {
             rspState.gSPSetGeometryMode(F3DEX.RSP_Geometry.G_LIGHTING);
         } else {
             rspState.gSPClearGeometryMode(F3DEX.RSP_Geometry.G_LIGHTING);
@@ -635,7 +635,7 @@ class GloverMeshRenderer {
             rspState.gSPSetGeometryMode(F3DEX.RSP_Geometry.G_CULL_BACK);
         }
         try {
-            if (meshData.displayListPtr != 0) {
+            if (meshData.displayListPtr !== 0) {
                 const displayListOffs = meshData.displayListPtr & 0x00FFFFFF;
                 rspState.gSPTexture(true, 0, 5, 0.999985 * 0x10000, 0.999985 * 0x10000);
 
@@ -684,19 +684,19 @@ class GloverMeshRenderer {
         if (this.meshData.numSprites > 0) {
             for (let spriteData of this.meshData.sprites) {
                 const sprite = new Sprite.GloverSpriteRenderer(
-                    device, cache, textures, [spriteData.textureId], this.meshData.alpha != 0xFF);
+                    device, cache, textures, [spriteData.textureId], this.meshData.alpha !== 0xFF);
                 const spriteMatrix = mat4.create();
                 mat4.translate(spriteMatrix, spriteMatrix, [spriteData.x, spriteData.y, spriteData.z]);
                 mat4.scale(spriteMatrix, spriteMatrix, [spriteData.width/3, spriteData.height/3, 1]);
                 this.sprites.push(sprite);
                 this.spriteMatrices.push(spriteMatrix);
-                // if ((spriteData.flags & 0x8) == 0) {
+                // if ((spriteData.flags & 0x8) === 0) {
                 // TODO: weird special-case 0x10 sprite scaling:
                 //     spriteData.flags |= 0x8;
-                //     if (spriteData->tex->width == 0x10) {
+                //     if (spriteData->tex->width === 0x10) {
                 //         sprite.width *= 2;
                 //     }
-                //     if (spriteData->tex->height == 0x10) {
+                //     if (spriteData->tex->height === 0x10) {
                 //         sprite.height *= 2;
                 //     }
                 // }
@@ -720,14 +720,14 @@ class GloverMeshRenderer {
 
             let drawCall = rspState._newDrawCall();
             drawCall.dynamicGeometry = true;
-            if ((texFile.flags & 4) != 0) {
+            if ((texFile.flags & 4) !== 0) {
                 drawCall.dynamicTextures.add(texFile.id);
             }
 
             drawCall.textureIndices.push(Render.loadRspTexture(rspState, this.textures, textureId));
 
             for (let faceIdx = 0; faceIdx < geo.numFaces; faceIdx++) {
-                if (geo.textureIds[faceIdx] != textureId) {
+                if (geo.textureIds[faceIdx] !== textureId) {
                     continue;
                 }
                 drawCall.vertices.push(
@@ -946,7 +946,7 @@ export class GloverBlurRenderer {
             v.c0 = 0xC8;
             v.c1 = 0xC8;
             v.c2 = 0xC8;
-            v.a = ((x & 1) == 0) ? this.bottomAlpha : this.topAlpha;
+            v.a = ((x & 1) === 0) ? this.bottomAlpha : this.topAlpha;
             this.vertexPool.push(v);
         }
 
@@ -975,7 +975,7 @@ export class GloverBlurRenderer {
 
     private decayVertices() {
         for (let idx = 0; idx < this.vertexPool.length; idx += 1) {
-            const decay = ((idx & 1) == 0) ? this.bottomAlphaDecay : this.topAlphaDecay;
+            const decay = ((idx & 1) === 0) ? this.bottomAlphaDecay : this.topAlphaDecay;
             const vertex = this.vertexPool[idx];
             if (vertex.a < .008) {
                 vertex.a = 0;
@@ -995,7 +995,7 @@ export class GloverBlurRenderer {
 
         const len = this.vertexPool.length;
         let cursor = (this.vertexPoolWritePtr + 2) % len;
-        while (cursor != this.vertexPoolWritePtr) {
+        while (cursor !== this.vertexPoolWritePtr) {
 
             if (!all) {
                 if (this.vertexPool[(cursor+2)%len].a < 0.008 &&
@@ -1237,23 +1237,23 @@ export class GloverElectricityRenderer implements Render.GenericRenderable {
             let v0 = this.vertexPool[x*2];
             let v1 = this.vertexPool[x*2+1];
 
-            if (this.randStyle == ElectricityRandStyle.Straight) {
+            if (this.randStyle === ElectricityRandStyle.Straight) {
                 vec3.set(rndPoint,
                     Math.floor(Math.random() * rndMax) - rndMax / 2,
                     Math.floor(Math.random() * rndMax) - rndMax / 2,
                     Math.floor(Math.random() * rndMax) - rndMax / 2);
-            } else if (this.randStyle == ElectricityRandStyle.CurveUp) {
+            } else if (this.randStyle === ElectricityRandStyle.CurveUp) {
                 vec3.set(rndPoint,
                     Math.floor(Math.random() * rndMax),
                     Math.floor(Math.random() * rndMax),
                     Math.floor(Math.random() * rndMax));
-            } else if (this.randStyle == ElectricityRandStyle.CurveDown) {
+            } else if (this.randStyle === ElectricityRandStyle.CurveDown) {
                 vec3.set(rndPoint,
                     Math.floor(Math.random() * rndMax),
                     Math.floor(Math.random() * rndMax),
                     Math.floor(Math.random() * rndMax));
             }
-            if (x == 1 || x == this.numSegments - 2) {
+            if (x === 1 || x === this.numSegments - 2) {
                 rndPoint[0] *= 0.5;
                 rndPoint[1] *= 0.5;
                 rndPoint[2] *= 0.5;

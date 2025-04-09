@@ -3,7 +3,7 @@ import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import * as BYML from "../../byml.js";
 import * as Yaz0 from '../../Common/Compression/Yaz0.js';
 import * as JKRArchive from "../../Common/JSYSTEM/JKRArchive.js";
-import { openSync, readSync, closeSync, readFileSync, writeFileSync, readdirSync, mkdirSync } from "fs";
+import { openSync, readSync, closeSync, readFileSync, writeFileSync, readdirSync, mkdirSync, cpSync } from "fs";
 import { assertExists, hexzero, assert, readString } from "../../util.js";
 import { Endianness } from "../../endian.js";
 import { loadRustLib } from "../../rustlib.js";
@@ -341,6 +341,13 @@ function extractExtra(binaries: Binary[]) {
     extractSymbol(datas, framework, `d_drawlist.o`, `l_frontZMat`);
     extractSymbol(datas, framework, `d_drawlist.o`, `l_frontNoZSubMat`);
 
+    // main.dol : d_a_player_main.o 
+    extractSymbol(datas, framework, `d_a_player_main.o`, `mAnmDataTable__9daPy_lk_c`);
+
+    // main.dol : m_Do_ext.o 
+    extractSymbol(datas, framework, `m_Do_ext.o`, `l_toonMat1DL`);
+    extractSymbol(datas, framework, `m_Do_ext.o`, `l_mat1DL`);
+
     const crg1 = {
         SymbolData: datas,
     };
@@ -354,27 +361,33 @@ async function loadBinaries(): Promise<Binary[]> {
     const binaries: Binary[] = [];
 
     // Parse DOL.
-    binaries.push(new DOL(`${pathBaseIn}/main.dol`, `${pathBaseIn}/maps/framework.map`));
+    binaries.push(new DOL(`${pathBaseIn}/sys/main.dol`, `${pathBaseIn}/files/maps/framework.map`));
 
     // Parse RELs.
-    const rels = readdirSync(`${pathBaseIn}/rels`);
+    const rels = readdirSync(`${pathBaseIn}/files/rels`);
     for (let i = 0; i < rels.length; i++) {
         const relName = rels[i];
-        const relFilename = `${pathBaseIn}/rels/${relName}`;
+        const relFilename = `${pathBaseIn}/files/rels/${relName}`;
         const relData = fetchDataSync(relFilename);
-        const mapFilename = `${pathBaseIn}/maps/${relName.replace('.rel', '.map')}`;
+        const mapFilename = `${pathBaseIn}/files/maps/${relName.replace('.rel', '.map')}`;
         binaries.push(new REL(relName, relData, mapFilename));
     }
 
-    const relsARC = JKRArchive.parse(fetchDataSync(`${pathBaseIn}/RELS.arc`));
+    const relsARC = JKRArchive.parse(fetchDataSync(`${pathBaseIn}/files/RELS.arc`));
+    const maps = readdirSync(`${pathBaseIn}/files/maps`);
     for (let i = 0; i < relsARC.files.length; i++) {
         const file = relsARC.files[i];
         if (!file.name.endsWith('.rel'))
             continue;
-        const relName = file.name;
+        const mapFilename = maps.find((m) => m.toLowerCase() === file.name.replace('.rel', '.map'));
+        if (!mapFilename) {
+            console.error(`Could not find map for ${file.name}`);
+            process.exit(1);
+        }
+        const relName = mapFilename.replace('.map', '.rel');
         const relData = file.buffer;
-        const mapFilename = `${pathBaseIn}/maps/${relName.replace('.rel', '.map')}`;
-        binaries.push(new REL(relName, relData, mapFilename));
+        const mapPath = `${pathBaseIn}/files/maps/${mapFilename}`;
+        binaries.push(new REL(relName, relData, mapPath));
     }
 
     return binaries;
@@ -411,12 +424,22 @@ function extractProfiles(binaries: Binary[]) {
     writeFileSync(`${pathBaseOut}/f_pc_profiles.crg1_arc`, Buffer.from(data));
 }
 
+function copyDir(dirName: string, dstPath: string): void {
+    cpSync(`${pathBaseIn}/files/${dirName}`, `${pathBaseOut}/${dstPath}`, { recursive: true });
+}
+
 async function main() {
     await loadRustLib();
 
     const binaries = await loadBinaries();
     extractExtra(binaries);
     extractProfiles(binaries);
+
+    copyDir(`res/Msg`, `Msg`);
+    copyDir(`res/Object`, `Object`);
+    copyDir(`res/Particle`, `Particle`);
+    copyDir(`res/placename`, `placename`);
+    copyDir(`res/Stage`, `Stage`);
 }
 
 main();

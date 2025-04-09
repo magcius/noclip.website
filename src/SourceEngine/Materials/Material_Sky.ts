@@ -11,6 +11,7 @@ import { MaterialShaderTemplateBase, BaseMaterial, AlphaBlendMode, MaterialUtil 
 import { UberShaderInstanceBasic } from "../UberShader.js";
 import * as P from "./MaterialParameters.js";
 import { MaterialCache } from "./MaterialCache.js";
+import { colorScale } from "../../Color.js";
 
 //#region Sky
 export class ShaderTemplate_Sky extends MaterialShaderTemplateBase {
@@ -22,7 +23,7 @@ precision mediump float;
 ${MaterialShaderTemplateBase.Common}
 
 layout(std140) uniform ub_ObjectParams {
-    Mat4x2 u_BaseTextureTransform;
+    Mat2x4 u_BaseTextureTransform;
     vec4 u_ColorScale;
 };
 
@@ -32,10 +33,10 @@ layout(binding = 0) uniform sampler2D u_Texture;
 
 #if defined VERT
 void mainVS() {
-    Mat4x3 t_WorldFromLocalMatrix = CalcWorldFromLocalMatrix();
-    vec3 t_PositionWorld = Mul(t_WorldFromLocalMatrix, vec4(a_Position, 1.0));
-    gl_Position = Mul(u_ProjectionView, vec4(t_PositionWorld, 1.0));
-    v_TexCoord0.xy = Mul(u_BaseTextureTransform, vec4(a_TexCoord01.xy, 0.0, 1.0));
+    mat4x3 t_WorldFromLocalMatrix = CalcWorldFromLocalMatrix();
+    vec3 t_PositionWorld = t_WorldFromLocalMatrix * vec4(a_Position, 1.0);
+    gl_Position = UnpackMatrix(u_ProjectionView) * vec4(t_PositionWorld, 1.0);
+    v_TexCoord0.xy = UnpackMatrix(u_BaseTextureTransform) * vec4(a_TexCoord01.xy, 0.0, 1.0);
 }
 #endif
 
@@ -58,7 +59,7 @@ precision mediump float;
 ${MaterialShaderTemplateBase.Common}
 
 layout(std140) uniform ub_ObjectParams {
-    Mat4x2 u_BaseTextureTransform;
+    Mat2x4 u_BaseTextureTransform;
     vec4 u_TextureSizeInfo;
     vec4 u_ColorScale;
 };
@@ -76,11 +77,11 @@ layout(binding = 0) uniform sampler2D u_TextureHdrCompressed;
 
 #if defined VERT
 void mainVS() {
-    Mat4x3 t_WorldFromLocalMatrix = CalcWorldFromLocalMatrix();
-    vec3 t_PositionWorld = Mul(t_WorldFromLocalMatrix, vec4(a_Position, 1.0));
-    gl_Position = Mul(u_ProjectionView, vec4(t_PositionWorld, 1.0));
+    mat4x3 t_WorldFromLocalMatrix = CalcWorldFromLocalMatrix();
+    vec3 t_PositionWorld = t_WorldFromLocalMatrix * vec4(a_Position, 1.0);
+    gl_Position = UnpackMatrix(u_ProjectionView) * vec4(t_PositionWorld, 1.0);
 
-    vec2 t_TexCoord = Mul(u_BaseTextureTransform, vec4(a_TexCoord01.xy, 0.0, 1.0));
+    vec2 t_TexCoord = UnpackMatrix(u_BaseTextureTransform) * vec4(a_TexCoord01.xy, 0.0, 1.0);
 
     v_TexCoord0.xy = t_TexCoord + vec2(-u_TexelXIncr, -u_TexelYIncr);
     v_TexCoord0.zw = t_TexCoord + vec2( u_TexelXIncr, -u_TexelYIncr);
@@ -193,9 +194,7 @@ export class Material_Sky extends BaseMaterial {
             offs += fillVec4v(d, offs, this.textureSizeInfo!);
 
             this.paramGetVector('$color').fillColor(MaterialUtil.scratchColor, 1.0);
-            MaterialUtil.scratchColor.r *= 8.0;
-            MaterialUtil.scratchColor.g *= 8.0;
-            MaterialUtil.scratchColor.b *= 8.0;
+            colorScale(MaterialUtil.scratchColor, MaterialUtil.scratchColor, 8.0);
 
             offs += fillColor(d, offs, MaterialUtil.scratchColor);
         } else if (this.type === Material_Sky_Type.Sky) {

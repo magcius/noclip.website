@@ -63,6 +63,7 @@ import { getDerivativeBezier, getPointBezier } from "../Spline.js";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
 import { reverseDepthForCompareMode } from "../gfx/helpers/ReversedDepthHelpers.js";
 import {
+    fillMatrix4x2,
     fillMatrix4x4,
     fillVec3v,
     fillVec4,
@@ -166,9 +167,10 @@ type WmoDefinitionKey = [number, number, number];
 
 export class WowCache {
     private sheepfile: Sheepfile;
-    private promiseCache = new Map<number, Promise<unknown>>();
+    private promiseCache = new Map<number, Promise<any>>();
     private promiseCacheLiquidTypes = new Map<number, Promise<LiquidType>>(); // liquid types aren't fileIDs
     private wmoDefinitionCache = new Map<string, WmoDefinition>(); // keys are WmoDefinitionKey.toString()
+    private models: ModelData[] = [];
 
     constructor(
         public dataFetcher: DataFetcher,
@@ -250,6 +252,7 @@ export class WowCache {
         return this.getOrLoad(fileId, async (fileId: number) => {
             const d = new ModelData(fileId);
             await d.load(this);
+            this.models.push(d);
             return d;
         });
     }
@@ -286,8 +289,9 @@ export class WowCache {
         );
     }
 
-    public destroy(): void {
+    public destroy(device: GfxDevice): void {
         this.sheepfile.destroy();
+        this.models.forEach(model => model.destroy(device));
         this.clear();
     }
 }
@@ -501,6 +505,11 @@ export class ParticleEmitter {
 
     public numParticles(): number {
         return this.emitter.num_particles();
+    }
+
+    public destroy(device: GfxDevice) {
+        if (this.dataTexture)
+            device.destroyTexture(this.dataTexture);
     }
 }
 
@@ -730,9 +739,8 @@ export class ModelData {
         return [1, 1, 1, 1];
     }
 
-    public destroy() {
-        this.animationManager.free();
-        this.boneData.forEach((bone) => bone.destroy());
+    public destroy(device: GfxDevice) {
+        this.particleEmitters.forEach(emitter => emitter.destroy(device));
     }
 }
 
@@ -810,10 +818,6 @@ export class BoneData {
 
     constructor(public pivot: mat4, public antiPivot: mat4, public flags: WowM2BoneFlags, public parentBoneId: number) {
         this.isSphericalBillboard = flags.spherical_billboard;
-    }
-
-    public destroy() {
-        this.flags.free();
     }
 }
 
@@ -1040,11 +1044,9 @@ export class ModelBatch {
     }
 
     public setModelParams(renderInst: GfxRenderInst) {
-        const numVec4s = 4;
-        const numMat4s = 3;
         let offset = renderInst.allocateUniformBuffer(
             ModelProgram.ub_MaterialParams,
-            numVec4s * 4 + numMat4s * 16,
+            4 * 4 + 8 * 4,
         );
         const uniformBuf = renderInst.mapUniformBufferF32(
             ModelProgram.ub_MaterialParams,
@@ -1073,23 +1075,22 @@ export class ModelBatch {
             color[2],
             this.getVertexColorAlpha(),
         );
-        offset += fillMatrix4x4(
+        offset += fillMatrix4x2(
             uniformBuf,
             offset,
             this.getTextureTransform(0),
         );
-        offset += fillMatrix4x4(
+        offset += fillMatrix4x2(
             uniformBuf,
             offset,
             this.getTextureTransform(1),
         );
-        const textureWeight: vec4 = [
+        offset += fillVec4(uniformBuf, offset,
             this.getTextureWeight(0),
             this.getTextureWeight(1),
             this.getTextureWeight(2),
             this.getTextureWeight(3),
-        ];
-        offset += fillVec4v(uniformBuf, offset, textureWeight);
+        );
     }
 }
 
@@ -1101,7 +1102,7 @@ function setM2BlendModeMegaState(renderInst: GfxRenderInst, blendMode: WowM2Blen
     };
 
     if (depthWrite === undefined) {
-        depthWrite = (blendMode == rust.WowM2BlendingMode.Opaque || blendMode === rust.WowM2BlendingMode.AlphaKey);
+        depthWrite = (blendMode === rust.WowM2BlendingMode.Opaque || blendMode === rust.WowM2BlendingMode.AlphaKey);
     }
 
     const cullMode = doubleSided ? GfxCullMode.None : GfxCullMode.Back;

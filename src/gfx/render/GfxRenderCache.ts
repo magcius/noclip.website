@@ -41,15 +41,9 @@ function gfxAttachmentStateHash(hash: number, a: GfxAttachmentState): number {
     return hash;
 }
 
-function gfxColorHash(hash: number, a: GfxColor): number {
-    hash = hashCodeNumberUpdate(hash, (a.r << 24) | (a.g << 16) | (a.b << 8) | a.a);
-    return hash;
-}
-
 function gfxMegaStateDescriptorHash(hash: number, a: GfxMegaStateDescriptor): number {
     for (let i = 0; i < a.attachmentsState.length; i++)
         hash = gfxAttachmentStateHash(hash, a.attachmentsState[i]);
-    hash = gfxColorHash(hash, a.blendConstant);
     hash = hashCodeNumberUpdate(hash, a.depthCompare);
     hash = hashCodeNumberUpdate(hash, a.depthWrite ? 1 : 0);
     hash = hashCodeNumberUpdate(hash, a.stencilCompare);

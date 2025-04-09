@@ -31,12 +31,15 @@ jobs:
     - name: Install Node dependencies
       run: pnpm install
 
+    - name: Debug
+      run: echo "RUST_LOG=info" >> $GITHUB_ENV
+
     - name: Run build
       run: pnpm run build
 
     - name: Deploy
-      if: github.ref == 'refs/heads/master'
-      uses: burnett01/rsync-deployments@7.0.1
+      if: github.ref == 'refs/heads/main'
+      uses: burnett01/rsync-deployments@7.0.2
       with:
         switches: -va --delete-after --exclude=data/ --exclude=priv/ --exclude=.well-known/
         path: dist/

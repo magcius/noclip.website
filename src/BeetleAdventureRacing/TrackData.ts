@@ -170,7 +170,7 @@ let curHue = 0;
 let curLightness = 0.5;
 function nextConsistentRandomColor() {
     curHue = (curHue + (107 / 360)) % 1;
-    curLightness = (curLightness == 0.5 ? 1 : 0.5);
+    curLightness = (curLightness === 0.5 ? 1 : 0.5);
 
     let color: Color = colorNewFromRGBA(0, 0, 0, 0);
     colorFromHSL(color, curHue, curLightness, 0.5);

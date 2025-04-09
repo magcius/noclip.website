@@ -10,7 +10,7 @@ export interface TPF {
 
 export function parse(buffer: ArrayBufferSlice): TPF {
     const view = buffer.createDataView();
-    assert(readString(buffer, 0x00, 0x04, false) == 'TPF\0');
+    assert(readString(buffer, 0x00, 0x04, false) === 'TPF\0');
 
     const count = view.getUint32(0x08, true);
 

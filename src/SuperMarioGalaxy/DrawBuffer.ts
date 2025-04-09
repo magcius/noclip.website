@@ -147,7 +147,7 @@ class DrawBufferExecuter {
         for (let i = 0; i < materialOrder.length; i++) {
             const materialIndex = materialOrder[i];
             const materialInstance = this.modelInstance!.materialInstances[materialIndex];
-            materialInstance.prepareToRenderShapes(device, renderInstManager, depth, camera, this.modelInstance.modelData, this.modelInstance.materialInstanceState, this.modelInstance.shapeInstanceState);
+            materialInstance.prepareToRenderShapes(renderInstManager, depth, camera.projectionMatrix, this.modelInstance.modelData, this.modelInstance.materialInstanceState, this.modelInstance.shapeInstanceState);
         }
     }
 
@@ -157,7 +157,7 @@ class DrawBufferExecuter {
     }
 
     public drawXlu(device: GfxDevice, renderInstManager: GfxRenderInstManager, camera: Camera): void {
-        const depth = this.modelInstance.computeDepth(camera);
+        const depth = this.modelInstance.computeDepth();
         this.draw(device, renderInstManager, camera, this.materialOrderXlu, depth);
     }
 }

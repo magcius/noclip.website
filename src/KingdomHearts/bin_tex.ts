@@ -27,7 +27,7 @@ export class Texture {
     public pixels(): Uint8Array {
         const width = this.clipRight - this.clipLeft + 1;
         const height = this.clipBottom - this.clipTop + 1;
-        if (width == this.parent.width && height == this.parent.height) {
+        if (width === this.parent.width && height === this.parent.height) {
             return new Uint8Array(this.parent.pixels);
         }
         let clipped = new Uint8Array(width * height * 4);
@@ -50,18 +50,18 @@ export class TextureBlock {
     }
 
     public isOvf(): boolean {
-        return this.bank == 0 && this.dataOffs >= 0x100000;
+        return this.bank === 0 && this.dataOffs >= 0x100000;
     }
 
     public build(texDataView: DataView, texClutView: DataView) {
         if (this.deswizzle) {
             let dataOffs = this.dataOffs;
-            if (this.bank == 0) {
+            if (this.bank === 0) {
                 dataOffs -= 0x100000;
             }
-            if (this.bitDepth == 8) {
+            if (this.bitDepth === 8) {
                 deswizzleIndexed8(texDataView, dataOffs, this.width, this.height);
-            } else if (this.bitDepth == 4) {
+            } else if (this.bitDepth === 4) {
                 deswizzleIndexed4(texDataView, dataOffs, this.width, this.height);
             }
         }
@@ -88,13 +88,13 @@ export class TextureBlock {
         if (this.bank >= 0) {
             dataOffs += 0x100000 * (this.isOvf() ? -1 : this.bank);
         }
-        const pixelsPerByte = this.bitDepth == 4 ? 2 : 1;
+        const pixelsPerByte = this.bitDepth === 4 ? 2 : 1;
         for (let y = texture.clipTop; y <= texture.clipBottom; y++) {
             for (let x = texture.clipLeft; x <= texture.clipRight; x++) {
                 const offs = y * this.width + x;
                 let p = texDataView.getUint8(dataOffs + offs / pixelsPerByte);
-                if (pixelsPerByte == 2) {
-                    p = ((x % 2 == 0) ? p : (p >> 4)) & 0xF;
+                if (pixelsPerByte === 2) {
+                    p = ((x % 2 === 0) ? p : (p >> 4)) & 0xF;
                 } else {
                     // Flip bits 4 and 5: 000xy000 -> 000yx000
                     p = ((p & 0xE7) | ((p & 0x8) << 1) | ((p & 0x10) >> 1));
@@ -129,13 +129,13 @@ export class TextureAtlas {
 
     private _buildAtlas(textureBlocks: TextureBlock[]) {
         const textureBlocksSorted = textureBlocks.slice(0).sort((a, b) => {
-            return a.bitDepth < b.bitDepth || (a.bitDepth == b.bitDepth && a.dataOffs < b.dataOffs) ? -1 : 1;
+            return a.bitDepth < b.bitDepth || (a.bitDepth === b.bitDepth && a.dataOffs < b.dataOffs) ? -1 : 1;
         });
         // Number of 256x256 blocks to fill in the atlas.
         let numSquares = 0;
         for (let i = 0; i < textureBlocksSorted.length; i++) {
             // Assume 4-bit texture blocks are 512x256, whereas 8-bit texture blocks are 256x256.
-            numSquares += textureBlocksSorted[i].bitDepth == 4 ? 2 : 1;
+            numSquares += textureBlocksSorted[i].bitDepth === 4 ? 2 : 1;
         }
         const squaresPerRow = Math.round(Math.sqrt(numSquares) / 2) * 2;
         const squaresPerCol = Math.floor(numSquares / squaresPerRow) + 1;
@@ -153,7 +153,7 @@ export class TextureAtlas {
                 const dst = ((atlasY * 256 + y) * squaresPerRow + atlasX) * 1024
                 this.pixels.set(textureBlock.pixels.slice(src, src + textureBlock.width * 4), dst);
             }
-            atlasIndex += textureBlocksSorted[i].bitDepth == 4 ? 2 : 1;
+            atlasIndex += textureBlocksSorted[i].bitDepth === 4 ? 2 : 1;
         }
     }
 }
@@ -220,7 +220,7 @@ export function deswizzleIndexed4(texView: DataView, offs: number, width: number
             const n = (Math.floor(index / (tiles * 0x100)) % rows) * 0x40;
             const r = a + b + c + d + e + f + g + h + m + n;
             let x = source[Math.floor(r / 2)];
-            if (r % 2 == 1) {
+            if (r % 2 === 1) {
                 x >>= 4;
             }
             v[j] = x & 0xF;
