@@ -2,7 +2,7 @@ import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase.js";
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { HIGame, HIScene } from "./HIScene.js";
 
-const dataPath = 'SpongeBobMovie';
+const dataPath = 'SpongeBobMovie/v1';
 
 class TSSMSceneDesc implements SceneDesc {
     constructor(public id: string, public name: string) {
