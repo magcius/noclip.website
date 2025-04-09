@@ -1,17 +1,17 @@
 import { ViewerRenderInput } from "../../viewer";
-import { ISimulation, SceneNode } from "../types";
+import { Simulation, SceneNode, Texture, Material } from "../types";
 import { mat4, quat, vec3, vec4 } from 'gl-matrix';
 import { getDescendants, reparent } from "../util";
 import { GfxDevice } from "../../gfx/platform/GfxPlatform";
 
-export default class RobotCircus implements ISimulation {
+export default class RobotCircus extends Simulation {
 
   private isTech: boolean;
   private bar: SceneNode;
   private bot1: SceneNode;
   private bot2: SceneNode;
 
-  setup(sceneNodesByName: Map<string, SceneNode>): void {
+  override setup(device: GfxDevice, texturesByPath: Map<string, Texture>, materialsByName: Map<string, Material>, sceneNodesByName: Map<string, SceneNode>): void {
     this.isTech = sceneNodesByName.has("Balance_Tech_Bar.scx/balance bar");
     this.bar = sceneNodesByName.get(this.isTech ? "Balance_Tech_Bar.scx/_root" : "Balance_Bar.scx/_root")!;
     this.bot1 = sceneNodesByName.get(this.isTech ? "Balance_Man3A.scx/_root" : "Balance_Man1A.scx/_root")!;
@@ -32,7 +32,7 @@ export default class RobotCircus implements ISimulation {
     this.bar.transformChanged = true;
   }
 
-  update(input: ViewerRenderInput, sceneNodesByName: Map<string, SceneNode>, device: GfxDevice): void {
+  override update(input: ViewerRenderInput, sceneNodesByName: Map<string, SceneNode>, device: GfxDevice): void {
     const angle = Math.PI * ((this.isTech ? 0 : -0.5) + (input?.time ?? 0) / 1000);
     if (this.isTech) {
       vec3.set(this.bar.transform.rot, 0, angle, 0);

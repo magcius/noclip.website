@@ -9,7 +9,7 @@ import Renderer from './renderer.js';
 import {poolScene as pool, MercuryPool} from "./simulations/mercury_pool.js";
 import RobotCircus from "./simulations/robot_circus.js";
 import SandPendulum from "./simulations/sand_pendulum.js";
-import { EnvironmentMap, ISimulation } from "./types.js";
+import { EnvironmentMap, Simulation } from "./types.js";
 
 type SceneSource = {
   path: string, 
@@ -23,7 +23,7 @@ type Variant = {
   cameras: [string, string][],
   scenes: SceneSource[], 
   environmentMaps: Record<string, EnvironmentMap>,
-  createSimulation: () => ISimulation
+  createSimulation: () => Simulation
 };
 type Screensaver = { name: string, basePath: string, variants: Record<string, Variant> };
 

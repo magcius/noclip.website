@@ -6,6 +6,7 @@ import { SceneNode, Texture } from './types.js';
 import { range } from '../MathHelpers.js';
 import { GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxDevice } from '../gfx/platform/GfxPlatform.js';
 import { align } from '../util.js';
+import { mat4, vec3 } from 'gl-matrix';
 
 const decodeImage = (path: string, imageBytes: ArrayBufferLike) : {rgba8: Uint8Array, width: number, height: number} | null => {
   const extension = path.toLowerCase().split(".").pop();
@@ -67,6 +68,24 @@ export const makeTextureHolder = (textures: Texture[]) => new FakeTextureHolder(
   })
 );
 
+export const createSceneNode = (initData: Partial<SceneNode> & {name: string}) : SceneNode => ({
+  children: [],
+  transform: {
+    trans: vec3.create(),
+    rot: vec3.create(),
+    scale: vec3.fromValues(1, 1, 1)
+  },
+  worldTransform: mat4.create(),
+  animates: false,
+  loops: false,
+  animations: [],
+  visible: true,
+  worldVisible: true,
+  meshes: [],
+  ...initData,
+  transformChanged: true
+});
+
 export const reparent = (child: SceneNode, newParent: SceneNode) => {
   const index = child.parent?.children.indexOf(child) ?? -1;
   if (index !== -1) {
@@ -75,6 +94,25 @@ export const reparent = (child: SceneNode, newParent: SceneNode) => {
   child.parent = newParent;
   child.parentName = newParent.name;
   newParent.children.push(child);
+}
+
+export const wrapNode = (node: SceneNode, suffix: string = "-wrap"): SceneNode => {
+  const {transform} = node;
+  const wrapper = createSceneNode({
+    name: node.name + suffix,
+    transform: {
+      trans: vec3.clone(transform.trans),
+      rot: [0, 0, 0],
+      scale: [1, 1, 1],
+    }
+  });
+  vec3.set(transform.trans, 0, 0, 0);
+  if (node.parent != null) {
+    const index = node.parent.children.indexOf(node);
+    node.parent.children[index] = wrapper;
+  }
+  reparent(node, wrapper);
+  return wrapper;
 }
 
 export const getParentNodes = (node: SceneNode) : SceneNode[] => {

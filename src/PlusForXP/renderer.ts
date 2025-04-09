@@ -23,18 +23,18 @@ import {
   standardFullClearRenderPassDescriptor
 } from '../gfx/helpers/RenderGraphHelpers.js';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
-import { Color, colorFromRGBA, colorNewFromRGBA } from '../Color.js';
+import { Color, colorNewFromRGBA } from '../Color.js';
 import { mat4, quat, vec3, vec4 } from 'gl-matrix';
 import { GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode } from "../gfx/platform/GfxPlatform.js";
 import { Camera, CameraController } from '../Camera.js';
 import { defaultMegaState, setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers.js';
 import { bakeLights } from './bake_lights.js';
-import { Material, Mesh, Texture, SceneNode, ISimulation, EnvironmentMap } from './types.js';
+import { Material, Mesh, Texture, SceneNode, Simulation, EnvironmentMap } from './types.js';
 import { SceneGfx, ViewerRenderInput } from "../viewer.js";
 import Plus4XPProgram from "./program.js";
 import { buildNodeAnimations } from "./animation.js";
 import * as UI from '../ui.js';
-import { makeDataBuffer } from "./util.js";
+import { createSceneNode, makeDataBuffer } from "./util.js";
 // import sphereScene from "./sphere.js";
 
 type Context = {
@@ -43,7 +43,7 @@ type Context = {
   textures: Texture[],
   environmentMaps: Record<string, EnvironmentMap>,
   cameras: [string, string][],
-  simulateFunc?: () => ISimulation
+  simulateFunc?: () => Simulation
 };
 
 type UnbakedMesh = {
@@ -63,7 +63,7 @@ type ComputedEnvironmentMap = {
 
 export default class Renderer implements SceneGfx {
 
-  private texturesByPath:Record<string, Texture>;
+  private texturesByPath:Map<string, Texture>;
   private environmentMapsByID = new Map<string, ComputedEnvironmentMap>();
   private missingTexture: GfxTexture;
   private missingEnvMap: ComputedEnvironmentMap;
@@ -101,14 +101,14 @@ export default class Renderer implements SceneGfx {
   private envSampler: GfxSampler | null;
   private animating: boolean = true;
   private megaStateFlags: GfxMegaStateDescriptor;
-  private simulation: ISimulation | null;
+  private simulation: Simulation | null;
   private cameraSelect: UI.SingleSelect;
   
   constructor(device: GfxDevice, context: Context, public textureHolder: TextureHolder<any>) {
     this.simulation = context.simulateFunc?.() ?? null;
     this.megaStateFlags = {
       ...defaultMegaState,
-      cullMode: GfxCullMode.Back
+      cullMode: GfxCullMode.Back,
       // cullMode: GfxCullMode.None
     };
     setAttachmentStateSimple(this.megaStateFlags, {
@@ -130,7 +130,7 @@ export default class Renderer implements SceneGfx {
     this.diffuseSampler = device.createSampler(samplerDescriptor);
     this.envSampler = device.createSampler(samplerDescriptor);
 
-    this.texturesByPath = Object.fromEntries(
+    this.texturesByPath = new Map(
       context.textures.map(texture => ([texture.path, texture]))
     );
 
@@ -155,7 +155,7 @@ export default class Renderer implements SceneGfx {
     const unbakedMeshes: UnbakedMesh[] = [];
 
     for (const [envID, {texturePath, rotation, tint}] of Object.entries(context.environmentMaps)) {
-      const envTexture = this.texturesByPath[texturePath];
+      const envTexture = this.texturesByPath.get(texturePath)!;
       const texture = device.createTexture({
         ...envTexture,
         dimension: GfxTextureDimension.n2D,
@@ -205,13 +205,12 @@ export default class Renderer implements SceneGfx {
       device.uploadBufferData(diffuseColorBuffer, 0, new Uint8Array(diffuseColors.buffer));
     }
     
-
-    const requiredTextures = new Map();
+    const requiredTextures = new Map<string, Texture>();
     for (const material of this.materialsByName.values()) {
 
       const texture = (material.shader.texture == null) 
         ? null 
-        : this.texturesByPath[material.shader.texture.replaceAll("\\", "/")];
+        : this.texturesByPath.get(material.shader.texture.replaceAll("\\", "/"));
 
       if (texture == null) {
         continue;
@@ -228,9 +227,10 @@ export default class Renderer implements SceneGfx {
           usage:  GfxTextureUsage.Sampled,
         });
         device.uploadTextureData(gfxTexture, 0, [texture.rgba8]);
-        requiredTextures.set(texturePath, gfxTexture);
+        texture.gfxTexture = gfxTexture;
+        requiredTextures.set(texturePath, texture);
       }
-      material.gfxTexture = requiredTextures.get(texture?.path);
+      material.gfxTexture = requiredTextures.get(texture?.path)?.gfxTexture ?? null;
     }
 
     this.missingTexture = device.createTexture({
@@ -249,40 +249,19 @@ export default class Renderer implements SceneGfx {
     };
     device.uploadTextureData(this.missingTexture, 0, [new Uint8Array([0xFF, 0x00, 0xFF, 0xFF])]);
 
-    this.simulation?.setup?.(this.sceneNodesByName);
+    this.simulation?.setup?.(device, this.texturesByPath, this.materialsByName, this.sceneNodesByName);
   }
 
   private buildScene(device: GfxDevice, sceneName: string, scene: SCX.Scene, envID: string | undefined, unbakedMeshes:UnbakedMesh[] ) {
 
     const nodes = new Map<string, SceneNode>();
 
-    const sceneRoot: SceneNode = {
+    const sceneRoot: SceneNode = createSceneNode({
       name: sceneName + "_root",
-      children: [],
-      transform: {
-        trans: vec3.create(),
-        rot: vec3.create(),
-        scale: vec3.fromValues(1, 1, 1)
-      },
-      parentName: undefined,
-      parent: this.rootNode,
-      worldTransform: mat4.create(),
-      transformChanged: true,
-      animates: false,
-      loops: false,
-      animations: [],
-      visible: true,
-      worldVisible: true,
-      meshes: []
-    };
+      parent: this.rootNode
+    });
     this.sceneNodesByName.set(sceneRoot.name, sceneRoot);
     this.rootNode.children.push(sceneRoot);
-    
-    /*
-    for (const {ambient} of scene.globals) {
-      colorFromRGBA(this.ambientColor, ...ambient);
-    }
-    */
 
     // Create the materials
     for (const shader of scene.shaders) {
@@ -295,23 +274,16 @@ export default class Renderer implements SceneGfx {
     // Create camera scene nodes and their animations
     for (const camera of scene.cameras) {
       const cameraName = sceneName + camera.name;
-      const node: SceneNode = {
+      const node: SceneNode = createSceneNode({
         name: cameraName,
         transform: {
           trans: vec3.fromValues(...camera.pos),
           rot: vec3.fromValues(Math.PI / 2, 0, 0),
           scale: vec3.fromValues(1, 1, 1)
         },
-        children: [],
-        worldTransform: mat4.create(),
-        transformChanged: true,
         animates: (camera.animations?.length ?? 0) > 0,
-        loops: true,
-        animations: [],
-        visible: true,
-        worldVisible: true,
-        meshes: []
-      };
+        loops: true
+      });
       this.sceneNodesByName.set(cameraName, node);
       node.parent = this.rootNode;
       node.parent.children.push(node);
@@ -357,21 +329,15 @@ export default class Renderer implements SceneGfx {
       }
       const objectName = sceneName + object.name;
       const meshes: Mesh[] = [];
-      const node: SceneNode = {
+      const node: SceneNode = createSceneNode({
         name: objectName,
         parentName: object.parent == null ? undefined : sceneName + object.parent,
         parent: sceneRoot,
-        children: [],
         transform,
-        worldTransform: mat4.create(),
-        transformChanged: true,
         animates: (object.animations?.length ?? 0) > 0,
         loops: true,
-        animations: [],
-        visible: true,
-        worldVisible: true,
         meshes
-      };
+      });
 
       for (const mesh of object.meshes ?? []) {
         if (mesh.indices.length <= 0) {
@@ -520,6 +486,9 @@ export default class Renderer implements SceneGfx {
 
     const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
     const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
+    
+    this.simulation?.render(this.renderHelper, builder);
+    
     builder.pushPass((pass) => {
         pass.setDebugName('Main');
         pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
@@ -528,16 +497,18 @@ export default class Renderer implements SceneGfx {
             this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
         });
     });
+    
     this.renderHelper.antialiasingSupport.pushPasses(builder, viewerInput, mainColorTargetID);
     builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
-    this.prepareToRender(device, viewerInput, renderInstManager);
+    this.prepareToRender(viewerInput, renderInstManager);
     this.renderHelper.renderGraph.execute(builder);
+    this.simulation?.renderReset();
     this.renderInstListMain.reset();
   }
 
   // count = 0;
 
-  private prepareToRender(device: GfxDevice, viewerInput: ViewerRenderInput, renderInstManager: GfxRenderInstManager) {
+  private prepareToRender(viewerInput: ViewerRenderInput, renderInstManager: GfxRenderInstManager) {
 
     // if (this.count >= 10) {
     //   return;
@@ -606,12 +577,8 @@ export default class Renderer implements SceneGfx {
       cameraOffset += fillMatrix4x4(cameraBuffer, cameraOffset, this.scratchViewMatrix);
     }
 
-    this.renderHelper.renderInstManager.setCurrentList(this.renderInstListMain);
+    renderInstManager.setCurrentList(this.renderInstListMain);
 
-    renderSimulation: {
-      // TODO: render any sim-related stuff, ie. mercury pool and sand runtime texture
-    }
-    
     renderSceneNodeMeshes: {
       for (const node of this.renderableNodes) {
         if (!node.worldVisible) {
@@ -701,6 +668,8 @@ export default class Renderer implements SceneGfx {
   }
 
   destroy(device: GfxDevice): void {
+    this.simulation?.destroy(device);
+    this.simulation = null;
     this.textureHolder.destroy(device);
     this.renderHelper.destroy();
     for (const material of this.materialsByName.values()) {

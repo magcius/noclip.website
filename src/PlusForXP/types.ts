@@ -3,12 +3,15 @@ import { GfxDevice, GfxIndexBufferDescriptor, GfxInputLayout, GfxTexture, GfxVer
 import { SCX } from "./scx/types.js";
 import { ViewerRenderInput } from "../viewer.js";
 import { ChannelAnimation } from "./animation.js";
+import { GfxrGraphBuilder } from "../gfx/render/GfxRenderGraph.js";
+import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
 
 export type Texture = {
   path: string,
   width: number,
   height: number,
-  rgba8: Uint8Array
+  rgba8: Uint8Array,
+  gfxTexture?: GfxTexture
 };
 
 export type Material = {
@@ -56,7 +59,10 @@ export type SceneNode = {
   meshes: Mesh[]
 };
 
-export interface ISimulation {
-  setup(sceneNodesByName: Map<string, SceneNode>): void;
-  update(input: ViewerRenderInput, sceneNodesByName: Map<string, SceneNode>, device: GfxDevice): void;
+export abstract class Simulation {
+  setup(device: GfxDevice, texturesByPath: Map<string, Texture>, materialsByName: Map<string, Material>, sceneNodesByName: Map<string, SceneNode>): void {}
+  update(input: ViewerRenderInput, sceneNodesByName: Map<string, SceneNode>, device: GfxDevice): void {}
+  render(renderHelper: GfxRenderHelper, builder: GfxrGraphBuilder): void {}
+  renderReset(): void {}
+  destroy(device: GfxDevice): void {}
 }

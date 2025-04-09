@@ -1,6 +1,6 @@
 import { vec2, vec3 } from "gl-matrix";
 import { ViewerRenderInput } from "../../viewer";
-import { ISimulation, SceneNode, VertexAttribute } from "../types";
+import { Material, SceneNode, Simulation, Texture, VertexAttribute } from "../types";
 import { getDescendants } from "../util";
 import { GfxBuffer, GfxDevice } from "../../gfx/platform/GfxPlatform";
 import { SCX } from "../scx/types.js";
@@ -95,7 +95,7 @@ type DynamicAttribute = {
   uint8Array: Uint8Array
 };
 
-export class MercuryPool implements ISimulation {
+export class MercuryPool extends Simulation {
   
   private isInitialized: boolean;
   private isIndustrial: boolean;
@@ -110,7 +110,7 @@ export class MercuryPool implements ISimulation {
   private poolNormalAttribute: DynamicAttribute;
   private poolScale: number;
   
-  setup(sceneNodesByName: Map<string, SceneNode>): void {
+  override setup(device: GfxDevice, texturesByPath: Map<string, Texture>, materialsByName: Map<string, Material>, sceneNodesByName: Map<string, SceneNode>): void {
     const dropTemplate = {
       initialized: false,
       startTime: 0,
@@ -164,7 +164,7 @@ export class MercuryPool implements ISimulation {
     }
   }
 
-  update(input: ViewerRenderInput, sceneNodesByName: Map<string, SceneNode>, device: GfxDevice): void {
+  override update(input: ViewerRenderInput, sceneNodesByName: Map<string, SceneNode>, device: GfxDevice): void {
     const {time} = input;
 
     if (!this.isInitialized) {
