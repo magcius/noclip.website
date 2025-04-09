@@ -102,7 +102,7 @@ export class HIScene implements SceneGfx {
 
     public findObject(id: number): HIBase | null {
         const obj = this.baseList.find((base: HIBase) => {
-            return base.baseAsset.id == id;
+            return base.baseAsset.id === id;
         });
         return obj || null;
     }
@@ -110,9 +110,9 @@ export class HIScene implements SceneGfx {
     public sendEvent(to: HIBase, event: HIEvent, params?: number[] | ArrayBufferSlice, from?: HIBase) {
         this.debug.eventLog.push(this, to, event, from);
 
-        if (event == HIEvent.Disable) {
+        if (event === HIEvent.Disable) {
             to.disable();
-        } else if (event == HIEvent.Enable) {
+        } else if (event === HIEvent.Enable) {
             to.enable();
         }
 

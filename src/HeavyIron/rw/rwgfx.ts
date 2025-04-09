@@ -11,7 +11,7 @@ import { makeStaticDataBuffer } from "../../gfx/helpers/BufferHelpers.js";
 import { convertToTriangleIndexBuffer, convertToTriangles, filterDegenerateTriangleIndexBuffer, GfxTopology } from "../../gfx/helpers/TopologyHelpers.js";
 import { makeMegaState } from "../../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
 import { reverseDepthForCompareMode } from "../../gfx/helpers/ReversedDepthHelpers.js";
-import { fillColor, fillMatrix4x4, fillVec3v, fillVec4 } from "../../gfx/helpers/UniformBufferHelpers.js";
+import { fillColor, fillMatrix4x3, fillMatrix4x4, fillVec3v, fillVec4 } from "../../gfx/helpers/UniformBufferHelpers.js";
 import { Color, colorCopy, colorNewCopy, OpaqueBlack, TransparentBlack, White } from "../../Color.js";
 import { assert, nArray } from "../../util.js";
 import { TextureMapping } from "../../TextureHolder.js";
@@ -81,6 +81,8 @@ class RwGfxProgram extends DeviceProgram {
     public override both = `
 precision mediump float;
 
+${GfxShaderLibrary.MatrixLibrary}
+
 #if USE_LIGHTING
 #define MAX_LIGHTS ${RwGfx.MAX_LIGHTS}
 
@@ -93,8 +95,8 @@ struct Light {
 
 layout(std140) uniform ub_SceneParams {
     Mat4x4 u_Projection;
-    Mat4x4 u_ViewMatrix;
-    Mat4x4 u_ModelMatrix;
+    Mat3x4 u_ViewMatrix;
+    Mat3x4 u_ModelMatrix;
 #if USE_LIGHTING
     Light u_Lights[MAX_LIGHTS];
 #endif
@@ -127,16 +129,19 @@ varying float v_FogAmount;
 `;
 
     public override vert = `
-${GfxShaderLibrary.invlerp}
-${GfxShaderLibrary.saturate}
-
 layout(location = ${RwGfxProgram.a_Position}) in vec3 a_Position;
 layout(location = ${RwGfxProgram.a_Normal}) in vec3 a_Normal;
 layout(location = ${RwGfxProgram.a_Color}) in vec4 a_Color;
 layout(location = ${RwGfxProgram.a_TexCoord}) in vec2 a_TexCoord;
 
+${GfxShaderLibrary.invlerp}
+${GfxShaderLibrary.saturate}
+${GfxShaderLibrary.MulNormalMatrix}
+
 void main() {
-    gl_Position = Mul(u_Projection, Mul(u_ViewMatrix, Mul(u_ModelMatrix, vec4(a_Position, 1.0))));
+    vec3 t_PositionWorld = UnpackMatrix(u_ModelMatrix) * vec4(a_Position, 1.0);
+    vec3 t_PositionView = UnpackMatrix(u_ViewMatrix) * vec4(t_PositionWorld, 1.0);
+    gl_Position = UnpackMatrix(u_Projection) * vec4(t_PositionView, 1.0);
 
 #if USE_COLOR_ARRAY
     vec4 t_Color = a_Color;
@@ -147,7 +152,7 @@ void main() {
 #endif
 
 #if (USE_NORMAL_ARRAY && USE_LIGHTING)
-    vec3 t_Normal = normalize(Mul(u_ModelMatrix, vec4(a_Normal, 0.0)).xyz);
+    vec3 t_Normal = MulNormalMatrix(UnpackMatrix(u_ModelMatrix), a_Normal);
     vec3 t_LightColor = vec3(0.0);
     for (int i = 0; i < MAX_LIGHTS; i++) {
         Light light = u_Lights[i];
@@ -1034,7 +1039,7 @@ export class RwGfx {
             useNormalArray: this.normalArrayEnabled,
             useColorArray: this.colorArrayEnabled,
             useTextureCoordArray: this.texCoordArrayEnabled,
-            useTexture: (this.textureRaster != null),
+            useTexture: (this.textureRaster !== null),
             useFog: this.fogEnabled,
             useLighting: this.lightingEnabled,
             useAlphaTest: this.alphaTestEnabled,
@@ -1058,10 +1063,10 @@ export class RwGfx {
         offs += fillMatrix4x4(mapped, offs, this.projectionMatrix);
 
         // u_ViewMatrix
-        offs += fillMatrix4x4(mapped, offs, this.viewMatrix);
+        offs += fillMatrix4x3(mapped, offs, this.viewMatrix);
 
         // u_ModelMatrix
-        offs += fillMatrix4x4(mapped, offs, this.modelMatrix);
+        offs += fillMatrix4x3(mapped, offs, this.modelMatrix);
 
         if (this.lightingEnabled) {
             // u_Lights
