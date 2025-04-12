@@ -1,4 +1,4 @@
-import { vec3 } from "gl-matrix";
+import { vec2, vec3 } from "gl-matrix";
 import { ViewerRenderInput } from "../../viewer";
 import { Simulation, SceneNode, Texture, Material } from "../types";
 import { wrapNode, reparent, makeDataBuffer } from "../util";
@@ -10,26 +10,33 @@ import { GfxrAttachmentSlot, GfxrGraphBuilder } from "../../gfx/render/GfxRender
 import { GfxRenderInstList } from "../../gfx/render/GfxRenderInstManager";
 import { GfxRenderHelper } from "../../gfx/render/GfxRenderHelper";
 import { fillVec4 } from "../../gfx/helpers/UniformBufferHelpers";
+import { lerp } from "../../MathHelpers";
 
 export default class SandPendulum extends Simulation {
   private isGrotto: boolean;
   private pendulum: SceneNode;
   private sandParticles: SceneNode;
   private sparkle: SceneNode;
+  private fadeStart: number = 0;
+  private fade: number = 0;
+  private isResetting: boolean = false;
+  private energy: number = 1;
 
   private pivot0: SceneNode;
   private pivot1: SceneNode;
   private pivot2: SceneNode;
 
   private sandProgram: GfxRenderProgramDescriptor;
-  private coord: [number, number, number, number] = [0, 0, 0, 0];
+  private lastCoord: vec2 = vec2.create();
+  private coord: vec2 = vec2.create();
   private gfxTexture: GfxTexture;
   private originalSandTexture: Texture;
   private inputLayout: GfxInputLayout;
   private vertexAttributes: GfxVertexBufferDescriptor[];
   private indexBufferDescriptor: GfxIndexBufferDescriptor;
   private megaStateFlags: GfxMegaStateDescriptor;
-  private indexCount = 6;
+  private numParticles = 3;
+  private indexCount = 6 * this.numParticles;
   private sampler: GfxSampler;
   private renderInstListSand = new GfxRenderInstList();
   
@@ -60,26 +67,35 @@ export default class SandPendulum extends Simulation {
       indexBufferFormat: GfxFormat.U32_R,
       vertexAttributeDescriptors: [
           { location: 0, bufferIndex: 0, format: GfxFormat.F32_RG, bufferByteOffset: 0, }, // position
+          { location: 1, bufferIndex: 1, format: GfxFormat.F32_R, bufferByteOffset: 0, }, // particle ID
       ],
       vertexBufferDescriptors: [
           { byteStride: 2*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
+          { byteStride: 1*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
       ]
     });
 
     const positionBuffer = makeDataBuffer(
       device,
       GfxBufferUsage.Vertex, 
-      new Float32Array([0, 0, 1, 0, 0, 1, 1, 1]).buffer
+      new Float32Array(Array(this.numParticles).fill([0, 0, 1, 0, 0, 1, 1, 1]).flat()).buffer
+    );
+
+    const particleIDBuffer = makeDataBuffer(
+      device,
+      GfxBufferUsage.Vertex, 
+      new Float32Array(Array(this.numParticles).fill(0).map((_, index) => Array(4).fill(index)).flat()).buffer
     );
 
     this.vertexAttributes = [
-      { buffer: positionBuffer, byteOffset: 0, }
+      { buffer: positionBuffer, byteOffset: 0, },
+      { buffer: particleIDBuffer, byteOffset: 0, },
     ];
 
     const indexBuffer = makeDataBuffer(
       device,
       GfxBufferUsage.Index, 
-      new Uint32Array([0, 1, 2, 1, 2, 3]).buffer
+      new Uint32Array(Array(this.numParticles).fill(0).map((_, index) => [0, 1, 2, 1, 2, 3].map(i => index * 4 + i)).flat()).buffer
     );
     this.indexBufferDescriptor = { buffer: indexBuffer, byteOffset: 0 };
 
@@ -179,16 +195,36 @@ export default class SandPendulum extends Simulation {
     const sinTime = Math.sin(time);
     const cosTime = Math.cos(time);
     
-    // TODO: energy loss and reset
-    // TODO: lissajous with randomized initial velocity
-    // TODO: triangle?? how the heck am I supposed
+    this.energy *= lerp(0.95, 0.9995, Math.pow(this.energy, 0.02));
+    // TODO: input.deltaTime decay
     
-    this.pivot0.transform.rot[0] = sinTime * 0.25 * 0.75;
-    this.pivot0.transform.rot[1] = cosTime * 0.25 * 0.25;
+    this.fade = -1;
+    if (this.isResetting) {
+      this.fade = (input.time - this.fadeStart) / 3000;
+      this.energy = this.fade;
+      this.isResetting = this.fade <= 1;
+      if (!this.isResetting) {
+        this.energy = 1;
+        this.fade = -1;
+        vec2.set(this.lastCoord, 0, 0);
+        vec2.set(this.coord, 0, 0);
+      }
+    } else if (this.energy < 0.1) {
+      this.fadeStart = input.time;
+      this.isResetting = true;
+    }
+    
+    // TODO: lissajous with randomized initial velocity
+    // TODO: triangle?? how the heck am I supposed—
+    //       for that matter, how'd that one on YouTube do a square?
+    // TODO: resetting and initial conditions
+
+    this.pivot0.transform.rot[0] = sinTime * 0.2 * this.energy;
+    this.pivot0.transform.rot[1] = cosTime * 0.1 * this.energy;
     this.pivot0.transformChanged = true;
 
-    this.pivot1.transform.rot[0] = sinTime * 0.25 * 0.25;
-    this.pivot1.transform.rot[1] = cosTime * 0.25 * 0.75;
+    this.pivot1.transform.rot[0] = sinTime * 0.1 * this.energy;
+    this.pivot1.transform.rot[1] = cosTime * 0.2 * this.energy;
     this.pivot1.transformChanged = true;
 
     // if (this.pivot2 != null) {
@@ -197,18 +233,26 @@ export default class SandPendulum extends Simulation {
     //   this.pivot2.transformChanged = true;
     // }
 
-    this.pendulum.transform.rot[2] = sinTime * 0.25;
+    this.pendulum.transform.rot[2] = sinTime * 0.25 * this.energy;
     this.pendulum.transformChanged = true;
     
     // TODO: draw to texture, and fade
     
     // TODO: aim sparkle at camera
     // this.sparkle.transformChanged = true;
-
-    this.coord = [-Math.cos(time) * 0.72, Math.sin(time) * 0.72, 0, 0];
   }
 
   override render(renderHelper: GfxRenderHelper, builder: GfxrGraphBuilder): void {
+
+    [this.coord, this.lastCoord] = [this.lastCoord, this.coord];
+    this.coord = [
+      this.sandParticles.worldTransform[12] *  0.032, 
+      this.sandParticles.worldTransform[14] * -0.032, 
+    ];
+    if (vec2.sqrDist(this.coord, this.lastCoord) > 0.1) {
+      return;
+    }
+
     const { renderInstManager } = renderHelper;
 
     builder.pushPass((pass) => {
@@ -228,9 +272,10 @@ export default class SandPendulum extends Simulation {
     template.setGfxProgram(gfxProgram);
     template.setMegaStateFlags(this.megaStateFlags);
     
-    let offset = template.allocateUniformBuffer(Plus4XPSandProgram.ub_SandParams, 4);
+    let offset = template.allocateUniformBuffer(Plus4XPSandProgram.ub_SandParams, 4 * 2);
     const sand = template.mapUniformBufferF32(Plus4XPSandProgram.ub_SandParams);
-    offset += fillVec4(sand, offset, ...(this.coord as [number, number, number, number]));
+    offset += fillVec4(sand, offset, ...(this.lastCoord as [number, number]), ...(this.coord as [number, number]));
+    offset += fillVec4(sand, offset, this.fade, this.numParticles);
     template.setSamplerBindingsFromTextureMappings([{ gfxTexture: this.originalSandTexture.gfxTexture!, gfxSampler: this.sampler, lateBinding: null }]);
     
     const renderInst = renderInstManager.newRenderInst();
@@ -247,6 +292,7 @@ export default class SandPendulum extends Simulation {
   override destroy(device: GfxDevice): void {
     device.destroyTexture(this.originalSandTexture.gfxTexture!);
     device.destroyBuffer(this.vertexAttributes[0].buffer);
+    device.destroyBuffer(this.vertexAttributes[1].buffer);
     device.destroyBuffer(this.indexBufferDescriptor.buffer);
     device.destroySampler(this.sampler);
   }
