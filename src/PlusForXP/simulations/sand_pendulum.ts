@@ -1,7 +1,7 @@
-import { vec2, vec3 } from "gl-matrix";
+import { mat4, quat, vec2, vec3 } from "gl-matrix";
 import { ViewerRenderInput } from "../../viewer";
 import { Simulation, SceneNode, Texture, Material } from "../types";
-import { wrapNode, reparent, makeDataBuffer } from "../util";
+import { wrapNode, reparent, makeDataBuffer, updateNodeTransform } from "../util";
 import { GfxBlendFactor, GfxBlendMode, GfxBufferUsage, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxMegaStateDescriptor, GfxMipFilterMode, GfxRenderProgramDescriptor, GfxSampler, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxWrapMode } from "../../gfx/platform/GfxPlatform";
 import Plus4XPSandProgram from "../sandProgram.js";
 import { preprocessProgramObj_GLSL } from "../../gfx/shaderc/GfxShaderCompiler";
@@ -17,6 +17,7 @@ export default class SandPendulum extends Simulation {
   private pendulum: SceneNode;
   private sandParticles: SceneNode;
   private sparkle: SceneNode;
+  private sparkleSprite: SceneNode;
   private fadeStart: number = 0;
   private fade: number = 0;
   private isResetting: boolean = false;
@@ -24,7 +25,7 @@ export default class SandPendulum extends Simulation {
 
   private pivot0: SceneNode;
   private pivot1: SceneNode;
-  private pivot2: SceneNode;
+  // private pivot2: SceneNode;
 
   private sandProgram: GfxRenderProgramDescriptor;
   private lastCoord: vec2 = vec2.create();
@@ -44,8 +45,9 @@ export default class SandPendulum extends Simulation {
     this.isGrotto = sceneNodesByName.has("Pendulum_SW_Pendulum.scx/Pendulum Arrowhead");
     this.pendulum = sceneNodesByName.get(this.isGrotto ? "Pendulum_SW_Pendulum.scx/Pendulum Arrowhead" : "Pendulum_Pendulum.scx/Pendulum")!;
     this.sandParticles = sceneNodesByName.get("Pendulum_Sand_Particles.scx/_root")!;
-    this.sparkle = sceneNodesByName.get("Sparkle.scx/Plane01")!;
-    this.sparkle.visible = false;
+    this.sparkle = sceneNodesByName.get("Sparkle.scx/_root")!;
+    this.sparkleSprite = sceneNodesByName.get("Sparkle.scx/Plane01")!;
+    this.sparkleSprite.isGhost = true;
 
     this.sandProgram = preprocessProgramObj_GLSL(device, new Plus4XPSandProgram());
     const sandTexturePath = "Pendulum_Sand_textures/Sand.tif";
@@ -148,7 +150,7 @@ export default class SandPendulum extends Simulation {
 
       this.pivot0 = pivotRingB;
       this.pivot1 = pivotRingC;
-      this.pivot2 = pivotRingA;
+      // this.pivot2 = pivotRingA;
     } else {
       const pivotRingAArt = sceneNodesByName.get("Pendulum_Scene.scx/Pivot Ring")!;
       const pivotRingA = wrapNode(pivotRingAArt);
@@ -181,10 +183,10 @@ export default class SandPendulum extends Simulation {
     vec3.set(this.sandParticles.transform.rot, ...sandRotate);
     
     const sparkleTranslate: [number, number, number] = this.isGrotto ? [0, 0, -82] : [0, -81, 0];
-    const sparkleRotate: [number, number, number] = this.isGrotto ? [-Math.PI * 0.5, 0, 0] : [Math.PI, 0, 0];
     vec3.set(this.sparkle.transform.trans, ...sparkleTranslate);
-    vec3.set(this.sparkle.transform.rot, ...sparkleRotate);
-
+    vec3.set(this.sparkle.transform.rot, 0, 0, 0);
+    vec3.set(this.sparkle.transform.scale, 0.4, 0.4, 0.4);
+    
     this.pendulum.transformChanged = true;
     this.sandParticles.transformChanged = true;
     this.sparkle.transformChanged = true;
@@ -200,7 +202,7 @@ export default class SandPendulum extends Simulation {
     
     this.fade = -1;
     if (this.isResetting) {
-      this.fade = (input.time - this.fadeStart) / 3000;
+      this.fade = (input.time - this.fadeStart) / 6000;
       this.energy = this.fade;
       this.isResetting = this.fade <= 1;
       if (!this.isResetting) {
@@ -236,20 +238,49 @@ export default class SandPendulum extends Simulation {
     this.pendulum.transform.rot[2] = sinTime * 0.25 * this.energy;
     this.pendulum.transformChanged = true;
     
-    // TODO: draw to texture, and fade
-    
-    // TODO: aim sparkle at camera
-    // this.sparkle.transformChanged = true;
+    if (this.isResetting) {
+      this.sparkle.visible = true;
+
+      vec3.set(this.sparkleSprite.transform.rot, 0, time, 0);
+      this.sparkleSprite.transformChanged = true;
+
+      if (this.sandParticles.visible) {
+        this.sandParticles.visible = false;
+        this.sandParticles.transformChanged = true;
+      }
+    } else {
+      if (this.sparkle.visible) {
+        this.sparkle.visible = false;
+        this.sparkle.transformChanged = true;
+      }
+      if (!this.sandParticles.visible) {
+        this.sandParticles.visible = true;
+        this.sandParticles.transformChanged = true;
+      }
+    }
   }
 
-  override render(renderHelper: GfxRenderHelper, builder: GfxrGraphBuilder): void {
+  override render(renderHelper: GfxRenderHelper, builder: GfxrGraphBuilder, cameraWorldPos: vec3): void {
 
-    [this.coord, this.lastCoord] = [this.lastCoord, this.coord];
-    this.coord = [
-      this.sandParticles.worldTransform[12] *  0.032, 
-      this.sandParticles.worldTransform[14] * -0.032, 
-    ];
-    if (vec2.sqrDist(this.coord, this.lastCoord) > 0.1) {
+    if (this.isResetting) {
+      const pos = mat4.getTranslation(vec3.create(), this.sparkle.worldTransform);
+      const dir = vec3.sub(vec3.create(), pos, cameraWorldPos);
+      const angleY = (-Math.PI / 2 - Math.atan2(dir[2], dir[0])) * 180 / Math.PI;
+      const angleX = Math.atan2(dir[1], Math.sqrt(dir[0] ** 2 + dir[2] ** 2)) * 180 / Math.PI;
+      const scale = mat4.getScaling(vec3.create(), this.sparkle.worldTransform);
+      const faceCamera = quat.fromEuler(quat.create(), 90 - angleX, 180 + angleY, 0);
+      mat4.fromRotationTranslationScale(this.sparkle.worldTransform, faceCamera, pos, scale);
+      this.sparkle.transformChanged = true;
+      updateNodeTransform(this.sparkleSprite, true, this.sparkle.worldTransform, true);
+    } else {
+      [this.coord, this.lastCoord] = [this.lastCoord, this.coord];
+      this.coord = [
+        this.sandParticles.worldTransform[12] *  0.032, 
+        this.sandParticles.worldTransform[14] * -0.032, 
+      ];
+    }
+
+    if (vec2.sqrDist(this.coord, this.lastCoord) > 0.05) {
       return;
     }
 

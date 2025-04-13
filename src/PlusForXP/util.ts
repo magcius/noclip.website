@@ -110,6 +110,8 @@ export const wrapNode = (node: SceneNode, suffix: string = "-wrap"): SceneNode =
   if (node.parent != null) {
     const index = node.parent.children.indexOf(node);
     node.parent.children[index] = wrapper;
+    wrapper.parentName = node.parentName;
+    wrapper.parent = node.parent;
   }
   reparent(node, wrapper);
   return wrapper;
@@ -141,4 +143,35 @@ export const makeDataBuffer = (device: GfxDevice, usage: GfxBufferUsage, data: A
     dynamic ? GfxBufferFrequencyHint.Dynamic : GfxBufferFrequencyHint.Static, 
     new Uint8Array(data, 0, data.byteLength)
   );
+}
+
+const scratchModelMatrix = mat4.create();
+
+export const updateNodeTransform = (node: SceneNode, parentChanged: boolean, parentWorldTransform: mat4 | null, animating: boolean) => {
+  const shouldUpdate = node.transformChanged || parentChanged || (node.animates && animating);
+  node.transformChanged = false;
+
+  if (shouldUpdate) {
+    const transform = node.animates ? node.animatedTransform! : node.transform;
+    const scratch = scratchModelMatrix;
+    mat4.identity(scratch);
+    mat4.translate(scratch, scratch, transform.trans);
+    mat4.rotateZ(scratch, scratch, transform.rot[2]);
+    mat4.rotateY(scratch, scratch, transform.rot[1]);
+    mat4.rotateX(scratch, scratch, transform.rot[0]);
+    mat4.scale(scratch, scratch, transform.scale);
+
+    mat4.mul(
+      node.worldTransform,
+      parentWorldTransform ?? mat4.create(),
+      scratch,
+    );
+
+    node.worldVisible = node.visible && (node.parent?.worldVisible ?? true);
+  }
+  if (node.children != null) {
+    for (const child of node.children) {
+      updateNodeTransform(child, shouldUpdate, node.worldTransform, animating);
+    }
+  }
 }

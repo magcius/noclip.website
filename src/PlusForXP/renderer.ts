@@ -3,8 +3,7 @@ import {
   GfxBlendMode,
   GfxBuffer,
   GfxBufferFrequencyHint,
-  GfxBufferUsage,
-  GfxCullMode,
+  GfxBufferUsage, GfxCompareMode, GfxCullMode,
   GfxDevice,
   GfxFormat, GfxMegaStateDescriptor,
   GfxRenderProgramDescriptor,
@@ -34,7 +33,7 @@ import { SceneGfx, ViewerRenderInput } from "../viewer.js";
 import Plus4XPProgram from "./program.js";
 import { buildNodeAnimations } from "./animation.js";
 import * as UI from '../ui.js';
-import { createSceneNode, makeDataBuffer } from "./util.js";
+import { createSceneNode, makeDataBuffer, updateNodeTransform } from "./util.js";
 // import sphereScene from "./sphere.js";
 
 type Context = {
@@ -181,7 +180,7 @@ export default class Renderer implements SceneGfx {
 
     this.renderableNodes = [...this.sceneNodesByName.values()].filter(node => node.meshes.length ?? 0 > 0);
 
-    this.updateNodeTransform(this.rootNode, false, null);
+    updateNodeTransform(this.rootNode, false, null, this.animating);
     
     const transformedLightsBySceneName: Map<string, SCX.Light[]> = new Map();
     const rootTransform = this.rootNode.worldTransform;
@@ -487,7 +486,16 @@ export default class Renderer implements SceneGfx {
     const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
     const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
     
-    this.simulation?.render(this.renderHelper, builder);
+    updateNodeTransform(this.rootNode, false, null, this.animating);
+
+    if (this.animating) {
+      const cameraWorldPos = mat4.getTranslation(vec3.create(), 
+        this.activeCameraName != null
+        ? this.sceneNodesByName.get(this.activeCameraName)!.worldTransform
+        : viewerInput.camera.worldMatrix
+      );
+      this.simulation?.render(this.renderHelper, builder, cameraWorldPos);
+    }
     
     builder.pushPass((pass) => {
         pass.setDebugName('Main');
@@ -520,8 +528,6 @@ export default class Renderer implements SceneGfx {
     const gfxProgram = renderInstManager.gfxRenderCache.createProgramSimple(this.program);
     template.setGfxProgram(gfxProgram);
     template.setMegaStateFlags(this.megaStateFlags);
-
-    this.updateNodeTransform(this.rootNode, false, null);
 
     const cameraViewMatrix: mat4 = mat4.create();
     
@@ -578,91 +584,69 @@ export default class Renderer implements SceneGfx {
     }
 
     renderInstManager.setCurrentList(this.renderInstListMain);
-
-    renderSceneNodeMeshes: {
-      for (const node of this.renderableNodes) {
-        if (!node.worldVisible) {
-          continue;
-        }
-        
-        for (const mesh of node.meshes!) {  
-          
-          renderMesh: {
-            const envMap = (mesh.envID == null ? null : this.environmentMapsByID.get(mesh.envID)) ?? this.missingEnvMap;
-            const renderInst = renderInstManager.newRenderInst();  
-            updateObjectParams: {
-              let objectOffset = renderInst.allocateUniformBuffer(Plus4XPProgram.ub_ObjectParams, 16 * 3 + 4 + 4 /*Mat4x3 * 3 + vec4 * 2*/);
-              const object = renderInst.mapUniformBufferF32(Plus4XPProgram.ub_ObjectParams);
-              objectOffset += fillMatrix4x4(object, objectOffset, node.worldTransform);
-
-              mat4.invert(this.scratchWorldInverseTransposeMatrix, node.worldTransform);
-              mat4.transpose(this.scratchWorldInverseTransposeMatrix, this.scratchWorldInverseTransposeMatrix);
-              objectOffset += fillMatrix4x4(object, objectOffset, this.scratchWorldInverseTransposeMatrix);
-
-              objectOffset += fillMatrix4x4(object, objectOffset, envMap.matrix);
-              objectOffset += fillVec4(object, objectOffset, ...(envMap.tint as [number, number, number, number]));
-
-              {
-                object[objectOffset] = mesh.material.gfxTexture == null ? 1 : 0;
-                objectOffset++;
-              }
-            }
-            
-            renderInst.setSamplerBindingsFromTextureMappings([
-              {
-                gfxTexture: mesh.material.gfxTexture ?? this.missingTexture,
-                gfxSampler: this.diffuseSampler,
-                lateBinding: null
-              },
-              {
-                gfxTexture: envMap.texture,
-                gfxSampler: this.envSampler,
-                lateBinding: null
-              }
-            ]);
-            
-            renderInst.setVertexInput(
-              mesh.inputLayout,
-              mesh.vertexAttributes, 
-              mesh.indexBufferDescriptor
-            );
-          
-            renderInst.setDrawCount(mesh.indexCount);
-            renderInstManager.submitRenderInst(renderInst);
-          }
-        }
-      }
-    }
-
+    this.renderSceneNodeMeshes(renderInstManager, false);
+    this.renderSceneNodeMeshes(renderInstManager, true);
     renderInstManager.popTemplate();
     this.renderHelper.prepareToRender();
   }
 
-  private updateNodeTransform(node: SceneNode, parentChanged: boolean, parentWorldTransform: mat4 | null) {
-    const shouldUpdate = node.transformChanged || parentChanged || (node.animates && this.animating);
-    node.transformChanged = false;
+  private renderSceneNodeMeshes(renderInstManager: GfxRenderInstManager, ghosts: boolean) {
 
-    if (shouldUpdate) {
-      const transform = node.animates ? node.animatedTransform! : node.transform;
-      const scratch = this.scratchModelMatrix;
-      mat4.identity(scratch);
-      mat4.translate(scratch, scratch, transform.trans);
-      mat4.rotateZ(scratch, scratch, transform.rot[2]);
-      mat4.rotateY(scratch, scratch, transform.rot[1]);
-      mat4.rotateX(scratch, scratch, transform.rot[0]);
-      mat4.scale(scratch, scratch, transform.scale);
+    renderInstManager.getCurrentTemplate().setMegaStateFlags({
+      depthCompare: ghosts ? GfxCompareMode.Always : GfxCompareMode.GreaterEqual,
+      depthWrite: !ghosts
+    });
 
-      mat4.mul(
-        node.worldTransform,
-        parentWorldTransform ?? mat4.create(),
-        scratch,
-      );
+    for (const node of this.renderableNodes) {
+      if (!node.worldVisible || (node.isGhost ?? false) != ghosts) {
+        continue;
+      }
+      
+      for (const mesh of node.meshes!) {  
+        
+        renderMesh: {
+          const envMap = (mesh.envID == null ? null : this.environmentMapsByID.get(mesh.envID)) ?? this.missingEnvMap;
+          const renderInst = renderInstManager.newRenderInst();  
+          updateObjectParams: {
+            let objectOffset = renderInst.allocateUniformBuffer(Plus4XPProgram.ub_ObjectParams, 16 * 3 + 4 + 4 /*Mat4x3 * 3 + vec4 * 2*/);
+            const object = renderInst.mapUniformBufferF32(Plus4XPProgram.ub_ObjectParams);
+            objectOffset += fillMatrix4x4(object, objectOffset, node.worldTransform);
 
-      node.worldVisible = node.visible && (node.parent?.worldVisible ?? true);
-    }
-    if (node.children != null) {
-      for (const child of node.children) {
-        this.updateNodeTransform(child, shouldUpdate, node.worldTransform);
+            mat4.invert(this.scratchWorldInverseTransposeMatrix, node.worldTransform);
+            mat4.transpose(this.scratchWorldInverseTransposeMatrix, this.scratchWorldInverseTransposeMatrix);
+            objectOffset += fillMatrix4x4(object, objectOffset, this.scratchWorldInverseTransposeMatrix);
+
+            objectOffset += fillMatrix4x4(object, objectOffset, envMap.matrix);
+            objectOffset += fillVec4(object, objectOffset, ...(envMap.tint as [number, number, number, number]));
+
+            {
+              object[objectOffset] = mesh.material.gfxTexture == null ? 1 : 0;
+              objectOffset++;
+            }
+          }
+          
+          renderInst.setSamplerBindingsFromTextureMappings([
+            {
+              gfxTexture: mesh.material.gfxTexture ?? this.missingTexture,
+              gfxSampler: this.diffuseSampler,
+              lateBinding: null
+            },
+            {
+              gfxTexture: envMap.texture,
+              gfxSampler: this.envSampler,
+              lateBinding: null
+            }
+          ]);
+          
+          renderInst.setVertexInput(
+            mesh.inputLayout,
+            mesh.vertexAttributes, 
+            mesh.indexBufferDescriptor
+          );
+        
+          renderInst.setDrawCount(mesh.indexCount);
+          renderInstManager.submitRenderInst(renderInst);
+        }
       }
     }
   }

@@ -56,13 +56,14 @@ export type SceneNode = {
   animations: ChannelAnimation[],
   visible: boolean,
   worldVisible: boolean,
-  meshes: Mesh[]
+  meshes: Mesh[],
+  isGhost?: boolean
 };
 
 export abstract class Simulation {
   setup(device: GfxDevice, texturesByPath: Map<string, Texture>, materialsByName: Map<string, Material>, sceneNodesByName: Map<string, SceneNode>): void {}
   update(input: ViewerRenderInput, sceneNodesByName: Map<string, SceneNode>, device: GfxDevice): void {}
-  render(renderHelper: GfxRenderHelper, builder: GfxrGraphBuilder): void {}
+  render(renderHelper: GfxRenderHelper, builder: GfxrGraphBuilder, cameraWorldPos: vec3): void {}
   renderReset(): void {}
   destroy(device: GfxDevice): void {}
 }

@@ -79,7 +79,7 @@ void main() {
   vec4 diffuseColor = v_DiffuseColor * texture(SAMPLER_2D(diffuseTexture), v_DiffuseTexCoord);
   gl_FragColor = vec4(
     mix(diffuseColor, reflectiveColor, u_reflective).rgb, 
-    v_DiffuseColor.a
+    v_DiffuseColor.a * diffuseColor.a
   );
 }
 `;
