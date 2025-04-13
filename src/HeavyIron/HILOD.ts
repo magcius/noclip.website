@@ -1,13 +1,16 @@
 import { vec3 } from "gl-matrix";
 import { HIModelFlags, HIModelInstance } from "./HIModel.js";
 import { HIModelBucket } from "./HIModelBucket.js";
-import { HIAssetType, HIScene } from "./HIScene.js";
+import { HIGame, HIScene } from "./HIScene.js";
 import { RwEngine, RwStream } from "./rw/rwcore.js";
 import { getMatrixAxisX, getMatrixTranslation } from "../MathHelpers.js";
+import { RpClump } from "./rw/rpworld.js";
+import { HIAssetType } from "./HIAssetTypes.js";
 
 interface HILODTable {
     baseBucket: HIModelBucket | null;
     noRenderDist: number;
+    flags: number;
     lodBucket: (HIModelBucket | null)[];
     lodDist: number[];
 }
@@ -27,28 +30,29 @@ export class HILOD {
     private managerList: HILODManager[] = [];
 
     public setup(scene: HIScene) {
-        for (const hip of scene.hips) {
+        for (const hip of scene.assetManager.hips) {
             for (const layer of hip.layers) {
                 for (const asset of layer.assets) {
                     if (asset.type === HIAssetType.LODT) {
-                        const stream = new RwStream(asset.data);
+                        const stream = new RwStream(asset.rawData);
                         const count = stream.readUint32();
                         for (let i = 0; i < count; i++) {
                             const baseBucketID = stream.readUint32();
                             const noRenderDist = stream.readFloat();
+                            const flags = (scene.game >= HIGame.TSSM) ? stream.readUint32() : 0;
                             const lodBucketID = [ stream.readUint32(), stream.readUint32(), stream.readUint32() ];
                             const lodDist = [ stream.readFloat(), stream.readFloat(), stream.readFloat() ];
 
                             let baseBucket: HIModelBucket | null = null;
-                            if (scene.models.has(baseBucketID)) {
-                                const model = scene.models.get(baseBucketID)!;
-                                baseBucket = scene.modelBucketManager.getBucket(model.atomics[0]);
+                            const baseModel = scene.assetManager.findAsset(baseBucketID)?.runtimeData as RpClump;
+                            if (baseModel) {
+                                baseBucket = scene.modelBucketManager.getBucket(baseModel.atomics[0]);
                             }
 
                             const lodBucket: (HIModelBucket | null)[] = [];
                             for (let i = 0; i < 3; i++) {
-                                if (scene.models.has(lodBucketID[i])) {
-                                    const model = scene.models.get(lodBucketID[i])!;
+                                const model = scene.assetManager.findAsset(lodBucketID[i])?.runtimeData as RpClump;
+                                if (model) {
                                     lodBucket.push(scene.modelBucketManager.getBucket(model.atomics[0]));
                                 }
                             }
@@ -57,7 +61,7 @@ export class HILOD {
                                 lodDist[i] *= lodDist[i];
                             }
 
-                            this.tableList.push({ baseBucket, noRenderDist, lodBucket, lodDist });
+                            this.tableList.push({ baseBucket, noRenderDist, flags, lodBucket, lodDist });
                         }
                     }
                 }

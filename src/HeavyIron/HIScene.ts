@@ -4,7 +4,7 @@ import { DataFetcher } from "../DataFetcher.js";
 import { SceneContext } from "../SceneBase.js";
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { SceneGfx, ViewerRenderInput } from "../viewer.js";
-import { HIEvent } from "./HIEvent.js";
+import { convertToHIEvent, HIEvent } from "./HIEvent.js";
 import { HIBase } from "./HIBase.js";
 import { HIFog } from "./HIFog.js";
 import { HIDispatcher } from "./HIDispatcher.js";
@@ -13,120 +13,32 @@ import { HIEntSimpleObj } from "./HIEntSimpleObj.js";
 import { HIEnt } from "./HIEnt.js";
 import { HILightKit, HILightKitManager } from "./HILightKit.js";
 import { HIEnv } from "./HIEnv.js";
-import { HIModelAssetInfo, HIModelManager, HIPipeInfoTable } from "./HIModel.js";
+import { HIModelManager, HIPipeInfoTable } from "./HIModel.js";
 import { HIModelBucketManager } from "./HIModelBucket.js";
-import { HIPAsset, HIPFile } from "./HIP.js";
+import { HIPAsset } from "./HIP.js";
 import { HIPlatform } from "./HIPlatform.js";
 import { HISkyDomeManager } from "./HISkyDome.js";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
-import { strHash } from "./Util.js";
-import { JSP } from "./JSP.js";
+import { strHash, strHashCat } from "./Util.js";
 import { HIRenderState, HIRenderStateManager } from "./HIRenderState.js";
 import { HIDebug } from "./HIDebug.js";
 import { RpClump } from "./rw/rpworld.js";
-import { RwEngine, RwTexture, RwStream, RwPluginID, RwTexDictionary } from "./rw/rwcore.js";
+import { RwEngine, RwTexture, RwStream, } from "./rw/rwcore.js";
 import { HIEntButton, HIEntButtonManager } from "./HIEntButton.js";
 import { HIEntDestructObj } from "./HIEntDestructObj.js";
 import { HINPCCommon } from "./HINPCCommon.js";
-import { HIEntPlayer } from "./HIEntPlayer.js";
+import { HIEntPlayer, HIEntPlayerBFBB, HIEntPlayerTSSM } from "./HIEntPlayer.js";
 import { HIAssetPickupTable, HIEntPickup, HIEntPickupManager } from "./HIEntPickup.js";
 import { HILOD } from "./HILOD.js";
+import { HIDynAsset } from "./HIDynAsset.js";
+import { HIEntTeleportBox } from "./HIEntTeleportBox.js";
+import { HIAssetManager } from "./HIAssetManager.js";
+import { HIAssetType } from "./HIAssetTypes.js";
 
-export const enum HIAssetType {
-    ALST = 0x414C5354,
-    ANIM = 0x414E494D,
-    ATBL = 0x4154424C,
-    ATKT = 0x41544B54,
-    BINK = 0x42494E4B,
-    BOUL = 0x424F554C,
-    BSP  = 0x42535020,
-    BUTN = 0x4255544E,
-    CAM  = 0x43414D20,
-    CCRV = 0x43435256,
-    CNTR = 0x434E5452,
-    COLL = 0x434F4C4C,
-    COND = 0x434F4E44,
-    CRDT = 0x43524454,
-    CSN  = 0x43534E20,
-    CSNM = 0x43534E4D,
-    CSSS = 0x43535353,
-    CTOC = 0x43544F43,
-    DEST = 0x44455354,
-    DPAT = 0x44504154,
-    DSCO = 0x4453434F,
-    DSTR = 0x44535452,
-    DTRK = 0x4454524B,
-    DUPC = 0x44555043,
-    DYNA = 0x44594E41,
-    EGEN = 0x4547454E,
-    ENV  = 0x454E5620,
-    FLY  = 0x464C5920,
-    FOG  = 0x464F4720,
-    GRSM = 0x4752534D,
-    GRUP = 0x47525550,
-    GUST = 0x47555354,
-    HANG = 0x48414E47,
-    JAW  = 0x4A415720,
-    JSP  = 0x4A535020,
-    LITE = 0x4C495445,
-    LKIT = 0x4C4B4954,
-    LOBM = 0x4C4F424D,
-    LODT = 0x4C4F4454,
-    MAPR = 0x4D415052,
-    MINF = 0x4D494E46,
-    MODL = 0x4D4F444C,
-    MPHT = 0x4D504854,
-    MRKR = 0x4D524B52,
-    MVPT = 0x4D565054,
-    NGMS = 0x4E474D53,
-    NPC  = 0x4E504320,
-    NPCS = 0x4E504353,
-    ONEL = 0x4F4E454C,
-    PARE = 0x50415245,
-    PARP = 0x50415250,
-    PARS = 0x50415253,
-    PEND = 0x50454E44,
-    PGRS = 0x50475253,
-    PICK = 0x5049434B,
-    PIPT = 0x50495054,
-    PKUP = 0x504B5550,
-    PLAT = 0x504C4154,
-    PLYR = 0x504C5952,
-    PORT = 0x504F5254,
-    PRJT = 0x50524A54,
-    RANM = 0x52414E4D,
-    RAW  = 0x52415720,
-    RWTX = 0x52575458,
-    SCRP = 0x53435250,
-    SDFX = 0x53444658,
-    SFX  = 0x53465820,
-    SGRP = 0x53475250,
-    SHDW = 0x53484457,
-    SHRP = 0x53485250,
-    SIMP = 0x53494D50,
-    SLID = 0x534C4944,
-    SND  = 0x534E4420,
-    SNDI = 0x534E4449,
-    SNDS = 0x534E4453,
-    SPLN = 0x53504C4E,
-    SPLP = 0x53504C50,
-    SSET = 0x53534554,
-    SUBT = 0x53554254,
-    SURF = 0x53555246,
-    TEXS = 0x54455853,
-    TEXT = 0x54455854,
-    TIMR = 0x54494D52,
-    TPIK = 0x5450494B,
-    TRIG = 0x54524947,
-    TRWT = 0x54525754,
-    UI   = 0x55492020,
-    UIFT = 0x55494654,
-    UIM  = 0x55494D20,
-    VIL  = 0x56494C20,
-    VILP = 0x56494C50,
-    VOLU = 0x564F4C55,
-    WIRE = 0x57495245,
-    ZLIN = 0x5A4C494E,
+export const enum HIGame {
+    BFBBBeta,
+    BFBB,
+    TSSM,
 }
 
 export class HIRenderHacks {
@@ -137,17 +49,14 @@ export class HIRenderHacks {
     public player = true;
     public showAllEntities = false;
     public showAllJSPNodes = false;
-    public frustumCulling = false;
+    public frustumCulling = true;
 }
 
 export class HIScene implements SceneGfx {
     private rw: RwEngine;
 
     public debug = new HIDebug();
-    public hips: HIPFile[] = [];
-    public textures = new Map<number, RwTexture>();
-    public models = new Map<number, RpClump>();
-    public modelInfos = new Map<number, HIModelAssetInfo>();
+    public assetManager = new HIAssetManager();
     public env: HIEnv;
     public camera: HICamera;
     public player: HIEntPlayer;
@@ -155,7 +64,7 @@ export class HIScene implements SceneGfx {
     public renderStateManager = new HIRenderStateManager();
     public lightKitManager = new HILightKitManager();
     public modelManager = new HIModelManager();
-    public modelBucketManager = new HIModelBucketManager();
+    public modelBucketManager = new HIModelBucketManager(this.game < HIGame.TSSM ? 256 : 512);
     public skydomeManager = new HISkyDomeManager();
     public pickupManager = new HIEntPickupManager();
     public buttonManager = new HIEntButtonManager();
@@ -164,12 +73,12 @@ export class HIScene implements SceneGfx {
     public entList: HIEnt[] = [];
     public renderHacks = new HIRenderHacks();
 
-    constructor(device: GfxDevice, context: SceneContext) {
+    constructor(public game: HIGame, device: GfxDevice, context: SceneContext) {
         this.rw = new RwEngine(device, context);
 
         this.rw.textureFindCallback = (name, maskName) => {
             const id = strHash(name + ".RW3");
-            return this.textures.get(id) || null;
+            return (this.assetManager.findAsset(id)?.runtimeData as RwTexture) || null;
         };
 
         this.camera = new HICamera();
@@ -183,31 +92,12 @@ export class HIScene implements SceneGfx {
     public destroy(device: GfxDevice) {
         this.modelBucketManager.deinit();
 
-        for (const [, model] of this.models) {
-            model.destroy(this.rw);
-        }
-
-        for (const [, texture] of this.textures) {
-            texture.destroy(this.rw);
-        }
-
-        this.env.jsp.destroy(this.rw);
-
+        this.assetManager.destroy(this.rw);
         this.rw.destroy();
     }
 
     public adjustCameraController(c: CameraController) {
         c.setSceneMoveSpeedMult(0.025);
-    }
-
-    public findAsset(id: number): HIPAsset | undefined {
-        for (const hip of this.hips) {
-            const asset = hip.findAsset(id);
-            if (asset) {
-                return asset;
-            }
-        }
-        return undefined;
     }
 
     public findObject(id: number): HIBase | null {
@@ -236,7 +126,7 @@ export class HIScene implements SceneGfx {
             to.handleEvent(event, params, this);
 
             for (const link of to.links) {
-                if (event !== link.srcEvent) {
+                if (event !== convertToHIEvent(link.srcEvent, this.game)) {
                     continue;
                 }
                 if (link.chkAssetID !== 0 && (from === undefined || link.chkAssetID !== from.baseAsset.id)) {
@@ -248,7 +138,7 @@ export class HIScene implements SceneGfx {
                     continue;
                 }
 
-                this.sendEvent(sendTo, link.dstEvent, link.param, to);
+                this.sendEvent(sendTo, convertToHIEvent(link.dstEvent, this.game), link.param, to);
             }
         }
 
@@ -261,88 +151,89 @@ export class HIScene implements SceneGfx {
         }
     }
 
-    private async fetchHIP(dataFetcher: DataFetcher, path: string) {
-        const idx = this.hips.length++;
-        const buf = await dataFetcher.fetchData(path);
-        this.hips[idx] = HIPFile.read(buf);
-    }
-
     public async load(dataFetcher: DataFetcher, hipPaths: string[]): Promise<void> {
-        for (const path of hipPaths) {
-            this.fetchHIP(dataFetcher, path);
-        }
-        await dataFetcher.waitForLoad();
+        await this.assetManager.load(dataFetcher, hipPaths, this.game, this.rw);
 
-        const jsp = new JSP();
+        const modelAssets: HIPAsset[] = [];
         const pipeTables: HIPipeInfoTable[] = [];
 
-        for (const hip of this.hips) {
+        for (const hip of this.assetManager.hips) {
             for (const layer of hip.layers) {
                 for (const asset of layer.assets) {
                     switch (asset.type) {
-                    case HIAssetType.JSP:
-                        jsp.load(asset.data, this.rw);
-                        break;
-                    case HIAssetType.MINF:
-                        this.modelInfos.set(asset.id, new HIModelAssetInfo(new RwStream(asset.data)));
-                        break;
                     case HIAssetType.MODL:
-                        this.loadModel(asset);
+                        modelAssets.push(asset);
                         break;
                     case HIAssetType.PICK:
-                        this.pickupTable = new HIAssetPickupTable(new RwStream(asset.data));
+                        this.pickupTable = this.assetManager.findAssetByType(HIAssetType.PICK, 0)!.runtimeData as HIAssetPickupTable;
                         break;
                     case HIAssetType.PIPT:
-                        pipeTables.push(new HIPipeInfoTable(new RwStream(asset.data)));
-                        break;
-                    case HIAssetType.RWTX:
-                        this.loadTexture(asset);
+                        pipeTables.push(asset.runtimeData as HIPipeInfoTable);
                         break;
                     }
                 }
             }
         }
 
-        this.loadPipeTables(pipeTables);
+        this.loadPipeTables(pipeTables, modelAssets);
 
-        for (const hip of this.hips) {
+        for (const hip of this.assetManager.hips) {
             for (const layer of hip.layers) {
                 for (const asset of layer.assets) {
                     switch (asset.type) {
                     case HIAssetType.BUTN:
-                        this.addEnt(new HIEntButton(new RwStream(asset.data), this));
+                        this.addEnt(new HIEntButton(new RwStream(asset.rawData), this));
                         break;
                     case HIAssetType.DPAT:
-                        this.addBase(new HIDispatcher(new RwStream(asset.data), this));
+                        this.addBase(new HIDispatcher(new RwStream(asset.rawData), this));
                         break;
                     case HIAssetType.DSTR:
-                        this.addEnt(new HIEntDestructObj(new RwStream(asset.data), this));
+                        this.addEnt(new HIEntDestructObj(new RwStream(asset.rawData), this));
                         break;
+                    case HIAssetType.DYNA:
+                    {
+                        const stream = new RwStream(asset.rawData);
+                        const dynAsset = new HIDynAsset(stream);
+                        switch (dynAsset.type) {
+                        case strHash("game_object:Teleport"):
+                            this.addEnt(new HIEntTeleportBox(dynAsset, stream, this));
+                            break;
+                        }
+                        break;
+                    }
                     case HIAssetType.ENV:
-                        this.env = new HIEnv(new RwStream(asset.data), this, jsp);
+                        this.env = new HIEnv(new RwStream(asset.rawData), this, this.assetManager.jsps);
                         this.addBase(this.env);
                         break;
                     case HIAssetType.FOG:
-                        this.addBase(new HIFog(new RwStream(asset.data), this));
+                        this.addBase(new HIFog(new RwStream(asset.rawData), this));
                         break;
                     case HIAssetType.PKUP:
                     {
-                        const pkup = new HIEntPickup(new RwStream(asset.data), this);
+                        const pkup = new HIEntPickup(new RwStream(asset.rawData), this);
                         this.pickupManager.add(pkup);
                         this.addEnt(pkup);
                         break;
                     }
                     case HIAssetType.PLYR:
-                        this.player = new HIEntPlayer(new RwStream(asset.data), this);
+                        switch (this.game) {
+                        case HIGame.BFBBBeta:
+                        case HIGame.BFBB:
+                            this.player = new HIEntPlayerBFBB(new RwStream(asset.rawData), this);
+                            break;
+                        case HIGame.TSSM:
+                            this.player = new HIEntPlayerTSSM(new RwStream(asset.rawData), this);
+                            break;
+                        }
                         break;
                     case HIAssetType.PLAT:
-                        this.addEnt(new HIPlatform(new RwStream(asset.data), this));
+                        this.addEnt(new HIPlatform(new RwStream(asset.rawData), this));
                         break;
                     case HIAssetType.SIMP:
-                        this.addEnt(new HIEntSimpleObj(new RwStream(asset.data), this));
+                        this.addEnt(new HIEntSimpleObj(new RwStream(asset.rawData), this));
                         break;
                     case HIAssetType.VIL:
-                        this.addEnt(new HINPCCommon(new RwStream(asset.data), this));
+                        this.addEnt(new HINPCCommon(new RwStream(asset.rawData), this));
                         break;
                     }
                 }
@@ -363,60 +254,19 @@ export class HIScene implements SceneGfx {
         this.sendEventAll(HIEvent.LevelBegin);
     }
 
-    private loadModel(asset: HIPAsset): boolean {
-        if (asset.data.byteLength === 0) return true;
-
-        const stream = new RwStream(asset.data);
-        if (!stream.findChunk(RwPluginID.CLUMP)) {
-            console.warn(`Clump not found in asset ${asset.name}`);
-            return false;
-        }
-
-        const clump = RpClump.streamRead(stream, this.rw);
-        if (!clump) return false;
-
-        this.models.set(asset.id, clump);
-        return true;
-    }
-
-    private loadTexture(asset: HIPAsset): boolean {
-        if (asset.data.byteLength === 0) return true;
-
-        // Don't load duplicate textures, temporary hack to prevent memory leaks
-        // TODO: Have each asset keep track of their own runtime data like in the OG game
-        if (this.textures.has(asset.id)) return true;
-        
-        const stream = new RwStream(asset.data);
-        if (!stream.findChunk(RwPluginID.TEXDICTIONARY)) {
-            console.warn(`Tex dictionary not found in asset ${asset.name}`);
-            return false;
-        }
-    
-        const texDict = RwTexDictionary.streamRead(stream, this.rw);
-        if (!texDict) return false;
-
-        // We only use the first texture
-        const texture = texDict.textures[0];
-        texDict.removeTexture(texture);
-        
-        texDict.destroy(this.rw);
-        
-        this.textures.set(asset.id, texture);
-        return true;
-    }
-
-    private loadPipeTables(pipeTables: HIPipeInfoTable[]) {
-        for (const [id, model] of this.models) {
+    private loadPipeTables(pipeTables: HIPipeInfoTable[], modelAssets: HIPAsset[]) {
+        for (const asset of modelAssets) {
+            const model = asset.runtimeData as RpClump;
             let remainSubObjBits = (1 << model.atomics.length) - 1;
             for (const pipt of pipeTables) {
                 for (const pipe of pipt.data) {
-                    if (pipe.modelHashID === id) {
+                    if (pipe.modelHashID === asset.id || strHashCat(pipe.modelHashID, ".dff") === asset.id) {
                         const subObjBits = pipe.subObjectBits & remainSubObjBits;
                         if (subObjBits) {
                             let currSubObjBits = subObjBits;
                             for (let i = model.atomics.length-1; i >= 0; i--) {
                                 if (currSubObjBits & 0x1) {
-                                    this.modelBucketManager.insertBucket(model.atomics[i], pipe.pipeFlags);
+                                    this.modelBucketManager.insertBucket(model.atomics[i], pipe.pipe);
                                 }
                                 currSubObjBits >>>= 1;
                             }
@@ -434,7 +284,7 @@ export class HIScene implements SceneGfx {
             if (remainSubObjBits) {
                 for (let i = model.atomics.length-1; i >= 0; i--) {
                     if (remainSubObjBits & 0x1) {
-                        this.modelBucketManager.insertBucket(model.atomics[i], 0);
+                        this.modelBucketManager.insertBucket(model.atomics[i], { flags: 0, layer: 0, alphaDiscard: 0 });
                     }
                     remainSubObjBits >>>= 1;
                 }
@@ -450,9 +300,8 @@ export class HIScene implements SceneGfx {
         }
         
         if (this.env.envAsset.objectLightKit) {
-            const lkitAsset = this.findAsset(this.env.envAsset.objectLightKit);
-            if (lkitAsset) {
-                const lkit = new HILightKit(lkitAsset.data, this.rw);
+            const lkit = this.assetManager.findAsset(this.env.envAsset.objectLightKit)?.runtimeData as HILightKit;
+            if (lkit) {
                 for (const ent of this.entList) {
                     if (ent.model) {
                         ent.lightKit = lkit;
@@ -462,11 +311,13 @@ export class HIScene implements SceneGfx {
         }
 
         if (this.player.playerAsset.lightKitID) {
-            const lkitAsset = this.findAsset(this.player.playerAsset.lightKitID);
-            if (lkitAsset) {
-                this.player.lightKit = new HILightKit(lkitAsset.data, this.rw);
+            const lkit = this.assetManager.findAsset(this.player.playerAsset.lightKitID)?.runtimeData as HILightKit;
+            if (lkit) {
+                this.player.lightKit = lkit;
             }
         }
+
+        this.pickupManager.setup(this);
     }
 
     private reset() {
@@ -502,7 +353,11 @@ export class HIScene implements SceneGfx {
 
         this.camera.disableFogHack = !this.renderHacks.fog;
         this.camera.disableFrustumCullHack = !this.renderHacks.frustumCulling;
-        this.env.jsp.showAllNodesHack = this.renderHacks.showAllJSPNodes;
+
+        for (const jsp of this.env.jsps) {
+            jsp.showAllNodesHack = this.renderHacks.showAllJSPNodes;
+        }
+        
         this.skydomeManager.disableHack = !this.renderHacks.skydome;
 
         this.camera.begin(this.rw);

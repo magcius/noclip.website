@@ -39,116 +39,116 @@ export class HIRenderStateManager {
 
         this.rs = rs;
 
-        rw.renderState.textureFilter = RwTextureFilterMode.LINEAR;
+        rw.renderState.setTextureFilter(RwTextureFilterMode.LINEAR);
         camera.setFogRenderStates(rw);
-        rw.renderState.vertexAlphaEnable = true;
-        rw.renderState.cullMode = RwCullMode.NONE;
-        rw.renderState.textureAddressU = RwTextureAddressMode.WRAP;
-        rw.renderState.textureAddressV = RwTextureAddressMode.WRAP;
-        rw.renderState.srcBlend = RwBlendFunction.SRCALPHA;
-        rw.renderState.destBlend = RwBlendFunction.INVSRCALPHA;
-        rw.renderState.shadeMode = RwShadeMode.GOURAUD;
-        rw.renderState.zWriteEnable = true;
-        rw.renderState.zTestEnable = true;
+        rw.renderState.setVertexAlphaEnabled(true);
+        rw.renderState.setCullMode(RwCullMode.NONE);
+        rw.renderState.setTextureAddressU(RwTextureAddressMode.WRAP);
+        rw.renderState.setTextureAddressV(RwTextureAddressMode.WRAP);
+        rw.renderState.setSrcBlend(RwBlendFunction.SRCALPHA);
+        rw.renderState.setDstBlend(RwBlendFunction.INVSRCALPHA);
+        rw.renderState.setShadeMode(RwShadeMode.GOURAUD);
+        rw.renderState.setZWriteEnabled(true);
+        rw.renderState.setZTestEnabled(true);
 
         switch (rs) {
         case HIRenderState.Particles:
-            rw.renderState.zWriteEnable = false;
-            rw.renderState.fogEnable = false;
-            rw.renderState.shadeMode = RwShadeMode.FLAT;
+            rw.renderState.setZWriteEnabled(false);
+            rw.renderState.setFogEnabled(false);
+            rw.renderState.setShadeMode(RwShadeMode.FLAT);
             break;
         case HIRenderState.OpaqueModels:
-            rw.renderState.vertexAlphaEnable = false;
+            rw.renderState.setVertexAlphaEnabled(false);
             break;
         case HIRenderState.Environment:
-            rw.renderState.vertexAlphaEnable = false;
-            rw.renderState.cullMode = RwCullMode.BACK;
+            rw.renderState.setVertexAlphaEnabled(false);
+            rw.renderState.setCullMode(RwCullMode.BACK);
             break;
         case HIRenderState.Lightning:
-            rw.renderState.zWriteEnable = false;
-            rw.renderState.destBlend = RwBlendFunction.ONE;
+            rw.renderState.setZWriteEnabled(false);
+            rw.renderState.setDstBlend(RwBlendFunction.ONE);
             break;
         case HIRenderState.Streak:
-            rw.renderState.zWriteEnable = false;
+            rw.renderState.setZWriteEnabled(false);
             break;
         case HIRenderState.NPCVisual:
-            rw.renderState.zWriteEnable = false;
+            rw.renderState.setZWriteEnabled(false);
             break;
         case HIRenderState.Glare:
-            rw.renderState.zWriteEnable = false;
-            rw.renderState.zTestEnable = false;
-            rw.renderState.fogEnable = false;
-            rw.renderState.destBlend = RwBlendFunction.ONE;
+            rw.renderState.setZWriteEnabled(false);
+            rw.renderState.setZTestEnabled(false);
+            rw.renderState.setFogEnabled(false);
+            rw.renderState.setDstBlend(RwBlendFunction.ONE);
             break;
         case HIRenderState.Font:
-            rw.renderState.zWriteEnable = false;
-            rw.renderState.zTestEnable = false;
-            rw.renderState.fogEnable = false;
-            rw.renderState.vertexAlphaEnable = false;
-            rw.renderState.srcBlend = RwBlendFunction.ONE;
-            rw.renderState.destBlend = RwBlendFunction.ZERO;
+            rw.renderState.setZWriteEnabled(false);
+            rw.renderState.setZTestEnabled(false);
+            rw.renderState.setFogEnabled(false);
+            rw.renderState.setVertexAlphaEnabled(false);
+            rw.renderState.setSrcBlend(RwBlendFunction.ONE);
+            rw.renderState.setDstBlend(RwBlendFunction.ZERO);
             break;
         case HIRenderState.HUD:
-            rw.renderState.fogEnable = false;
+            rw.renderState.setFogEnabled(false);
             break;
         case HIRenderState.Bubble:
-            rw.renderState.fogEnable = false;
-            rw.renderState.vertexAlphaEnable = false;
-            rw.renderState.cullMode = RwCullMode.BACK;
+            rw.renderState.setFogEnabled(false);
+            rw.renderState.setVertexAlphaEnabled(false);
+            rw.renderState.setCullMode(RwCullMode.BACK);
             break;
         case HIRenderState.SkyBack:
-            rw.renderState.zWriteEnable = false;
-            rw.renderState.zTestEnable = false;
-            rw.renderState.fogEnable = false;
+            rw.renderState.setZWriteEnabled(false);
+            rw.renderState.setZTestEnabled(false);
+            rw.renderState.setFogEnabled(false);
             break;
         case HIRenderState.Fill:
-            rw.renderState.zWriteEnable = false;
-            rw.renderState.zTestEnable = false;
-            rw.renderState.fogEnable = false;
-            rw.renderState.vertexAlphaEnable = false;
-            rw.renderState.srcBlend = RwBlendFunction.ONE;
-            rw.renderState.destBlend = RwBlendFunction.ZERO;
-            rw.renderState.shadeMode = RwShadeMode.FLAT;
+            rw.renderState.setZWriteEnabled(false);
+            rw.renderState.setZTestEnabled(false);
+            rw.renderState.setFogEnabled(false);
+            rw.renderState.setVertexAlphaEnabled(false);
+            rw.renderState.setSrcBlend(RwBlendFunction.ONE);
+            rw.renderState.setDstBlend(RwBlendFunction.ZERO);
+            rw.renderState.setShadeMode(RwShadeMode.FLAT);
             break;
         case HIRenderState.OOBFade:
-            rw.renderState.zTestEnable = false;
-            rw.renderState.fogEnable = false;
-            rw.renderState.shadeMode = RwShadeMode.FLAT;
+            rw.renderState.setZTestEnabled(false);
+            rw.renderState.setFogEnabled(false);
+            rw.renderState.setShadeMode(RwShadeMode.FLAT);
             break;
         case HIRenderState.OOBPlayerZ:
-            rw.renderState.vertexAlphaEnable = false;
-            rw.renderState.shadeMode = RwShadeMode.FLAT;
-            rw.renderState.srcBlend = RwBlendFunction.ONE;
-            rw.renderState.destBlend = RwBlendFunction.ZERO;
+            rw.renderState.setVertexAlphaEnabled(false);
+            rw.renderState.setShadeMode(RwShadeMode.FLAT);
+            rw.renderState.setSrcBlend(RwBlendFunction.ONE);
+            rw.renderState.setDstBlend(RwBlendFunction.ZERO);
             break;
         case HIRenderState.OOBPlayerAlpha:
-            rw.renderState.vertexAlphaEnable = false;
-            rw.renderState.destBlend = RwBlendFunction.ONE;
+            rw.renderState.setVertexAlphaEnabled(false);
+            rw.renderState.setDstBlend(RwBlendFunction.ONE);
             break;
         case HIRenderState.OOBHand:
-            rw.renderState.zWriteEnable = false;
-            rw.renderState.zTestEnable = false;
-            rw.renderState.fogEnable = false;
-            rw.renderState.vertexAlphaEnable = false;
-            rw.renderState.srcBlend = RwBlendFunction.ONE;
-            rw.renderState.destBlend = RwBlendFunction.ZERO;
+            rw.renderState.setZWriteEnabled(false);
+            rw.renderState.setZTestEnabled(false);
+            rw.renderState.setFogEnabled(false);
+            rw.renderState.setVertexAlphaEnabled(false);
+            rw.renderState.setSrcBlend(RwBlendFunction.ONE);
+            rw.renderState.setDstBlend(RwBlendFunction.ZERO);
             break;
         case HIRenderState.Newsfish:
-            rw.renderState.zTestEnable = false;
-            rw.renderState.fogEnable = false;
-            rw.renderState.vertexAlphaEnable = false;
-            rw.renderState.srcBlend = RwBlendFunction.ONE;
-            rw.renderState.destBlend = RwBlendFunction.ZERO;
+            rw.renderState.setZTestEnabled(false);
+            rw.renderState.setFogEnabled(false);
+            rw.renderState.setVertexAlphaEnabled(false);
+            rw.renderState.setSrcBlend(RwBlendFunction.ONE);
+            rw.renderState.setDstBlend(RwBlendFunction.ZERO);
             break;
         case HIRenderState.CruiseHUD:
-            rw.renderState.zWriteEnable = false;
-            rw.renderState.zTestEnable = false;
-            rw.renderState.fogEnable = false;
+            rw.renderState.setZWriteEnabled(false);
+            rw.renderState.setZTestEnabled(false);
+            rw.renderState.setFogEnabled(false);
             break;
         case HIRenderState.DiscoFloorGlow:
-            rw.renderState.zWriteEnable = false;
-            rw.renderState.zTestEnable = false;
-            rw.renderState.destBlend = RwBlendFunction.ONE;
+            rw.renderState.setZWriteEnabled(false);
+            rw.renderState.setZTestEnabled(false);
+            rw.renderState.setDstBlend(RwBlendFunction.ONE);
             break;
         }
     }

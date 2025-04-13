@@ -1,8 +1,7 @@
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { assert } from "../util.js";
-import { HICamera } from "./HICamera.js";
 import { HIScene } from "./HIScene.js";
-import { RpAtomic, RpAtomicFlag, RpClump, RpGeometry, RpGeometryFlag } from "./rw/rpworld.js";
+import { RpAtomic, RpAtomicFlag, RpClump, RpGeometryFlag } from "./rw/rpworld.js";
 import { RwChunkHeader, RwCullMode, RwEngine, RwPluginID, RwStream } from "./rw/rwcore.js";
 
 enum JSPNodeFlags {
@@ -14,9 +13,11 @@ enum JSPNodeFlags {
 interface JSPNode {
     atomic: RpAtomic;
     nodeFlags: number;
+    sortOrder: number; // version 5+
 }
 
 export class JSP {
+    public clumps: RpClump[] = [];
     public nodeList: JSPNode[] = [];
     public showAllNodesHack = false;
 
@@ -30,8 +31,8 @@ export class JSP {
                     node.atomic.geometry.flags &= ~(RpGeometryFlag.PRELIT | RpGeometryFlag.LIGHT);
                 }
 
-                rw.renderState.cullMode = (node.nodeFlags & JSPNodeFlags.DISABLECULL) ? RwCullMode.NONE : RwCullMode.BACK;
-                rw.renderState.zWriteEnable = (node.nodeFlags & JSPNodeFlags.DISABLEZWRITE) === 0;
+                rw.renderState.setCullMode((node.nodeFlags & JSPNodeFlags.DISABLECULL) ? RwCullMode.NONE : RwCullMode.BACK);
+                rw.renderState.setZWriteEnabled((node.nodeFlags & JSPNodeFlags.DISABLEZWRITE) === 0);
 
                 node.atomic.render(rw);
 
@@ -54,34 +55,59 @@ export class JSP {
     private loadClump(stream: RwStream, rw: RwEngine) {
         const clump = RpClump.streamRead(stream, rw);
         if (clump) {
-            for (let i = clump.atomics.length - 1; i >= 0; i--) {
-                this.nodeList.push({ atomic: clump.atomics[i], nodeFlags: 0 });
-            }
+            this.clumps.push(clump);
         }
     }
 
     private loadJSPInfo(stream: RwStream, header: RwChunkHeader, rw: RwEngine) {
-        // BSP Tree - skip for now
+        for (const clump of this.clumps) {
+            for (let i = clump.atomics.length - 1; i >= 0; i--) {
+                this.nodeList.push({ atomic: clump.atomics[i], nodeFlags: 0, sortOrder: 0 });
+            }
+        }
+
+        // 0xBEEF01 chunk is BSP Tree - skip for now
         stream.pos = header.end;
 
         while (stream.pos < stream.buffer.byteLength) {
             const header = stream.readChunkHeader();
+
+            // 0xBEEF02 - JSP
             if (header.type === 0xBEEF02) {
-                const idtag = stream.readUint32();
-                const version = stream.readUint32();
+                const idtag = stream.readUint32(); // This is a char[4] in the OG game
+                assert(idtag === 0x0050534A); // 'JSP\0' - reversed bytes since it's read as a uint32
+
+                const version = stream.readUint32(); // 3 in BFBB, 5 in TSSM and beyond
                 const jspNodeCount = stream.readUint32();
-                stream.pos += 12;
 
                 // This should be true as long as the BSP layers are before the JSPINFO layer in the .HOP file
                 assert(jspNodeCount === this.nodeList.length);
 
-                for (let i = 0; i < jspNodeCount; i++) {
-                    const originalMatIndex = stream.readInt32();
-                    const nodeFlags = stream.readInt32();
+                stream.pos += 12; // Skip over some placeholder values (NULL pointers that get set at runtime)
 
-                    this.nodeList[i].nodeFlags = nodeFlags;
+                if (version >= 5) {
+                    stream.pos += 20; // Skip over more placeholder values
+
+                    for (let i = 0; i < jspNodeCount; i++) {
+                        const originalMatIndex = stream.readInt32();
+                        const nodeFlags = stream.readUint16();
+                        const sortOrder = stream.readInt16();
+
+                        this.nodeList[i].nodeFlags = nodeFlags;
+                        this.nodeList[i].sortOrder = sortOrder;
+                    }
+                } else {
+                    for (let i = 0; i < jspNodeCount; i++) {
+                        const originalMatIndex = stream.readInt32();
+                        const nodeFlags = stream.readInt32();
+    
+                        this.nodeList[i].nodeFlags = nodeFlags;
+                    }
                 }
+                
+                // JSP node tree data follows - ignoring for now
             }
+
             stream.pos = header.end;
         }
     }

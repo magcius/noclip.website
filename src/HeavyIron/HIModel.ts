@@ -1,12 +1,12 @@
 import { mat4, vec3 } from "gl-matrix";
 import { HIModelBucket } from "./HIModelBucket.js";
-import { HIScene } from "./HIScene.js";
+import { HIGame, HIScene } from "./HIScene.js";
 import { HILightKit } from "./HILightKit.js";
 import { RwEngine, RwStream } from "./rw/rwcore.js";
 import { RpAtomic, RpGeometryFlag } from "./rw/rpworld.js";
 import { Color, OpaqueBlack, colorCopy, colorNewCopy } from "../Color.js";
 
-export const enum HIPipeFlags {
+const enum HIPipeFlagsBFBB {
     ZBUFFER_SHIFT             = 2,
     ZBUFFER_MASK              = (3<<ZBUFFER_SHIFT),
     ZBUFFER_DISABLE           = (1<<ZBUFFER_SHIFT),
@@ -32,22 +32,74 @@ export const enum HIPipeFlags {
     ALPHADISCARD_MASK         = (255<<ALPHADISCARD_SHIFT)
 }
 
+export const enum HIPipeFlags {
+    FOG_SHIFT                 = 3,
+    FOG_DISABLE               = (1<<FOG_SHIFT),
+    CULL_SHIFT                = 4,
+    CULL_MASK                 = (3<<CULL_SHIFT),
+    CULL_DOUBLESIDED          = (1<<CULL_SHIFT),
+    CULL_FRONTONLY            = (2<<CULL_SHIFT),
+    CULL_BACKTHENFRONT        = (3<<CULL_SHIFT),
+    LIGHTING_SHIFT            = 6,
+    LIGHTING_MASK             = (3<<LIGHTING_SHIFT),
+    LIGHTING_PRELIGHTONLY     = (1<<LIGHTING_SHIFT),
+    LIGHTING_KITPRELIGHT      = (2<<LIGHTING_SHIFT),
+    SRCBLEND_SHIFT            = 8,
+    SRCBLEND_MASK             = (15<<SRCBLEND_SHIFT),
+    DESTBLEND_SHIFT           = 12,
+    DESTBLEND_MASK            = (15<<DESTBLEND_SHIFT),
+    ZBUFFER_SHIFT             = 16,
+    ZBUFFER_MASK              = (3<<ZBUFFER_SHIFT),
+    ZBUFFER_DISABLE           = (1<<ZBUFFER_SHIFT),
+    ZBUFFER_ZFIRST            = (2<<ZBUFFER_SHIFT)
+}
+
+export interface HIPipe {
+    flags: number;
+    layer: number;
+    alphaDiscard: number;
+}
+
 export interface HIPipeInfo {
     modelHashID: number;
     subObjectBits: number;
-    pipeFlags: number;
+    pipe: HIPipe;
 }
 
 export class HIPipeInfoTable {
     public data: HIPipeInfo[] = [];
 
-    constructor(stream: RwStream) {
+    constructor(stream: RwStream, game: HIGame) {
         const count = stream.readInt32();
-        for (let i = 0; i < count; i++) {
-            const modelHashID = stream.readUint32();
-            const subObjectBits = stream.readUint32();
-            const pipeFlags = stream.readUint32();
-            this.data.push({ modelHashID, subObjectBits, pipeFlags });
+        if (game >= HIGame.TSSM) {
+            for (let i = 0; i < count; i++) {
+                const modelHashID = stream.readUint32();
+                const subObjectBits = stream.readUint32();
+                const pipeFlags = stream.readUint32();
+                const pipeLayer = stream.readUint8();
+                const pipeAlphaDiscard = stream.readUint8();
+                stream.pos += 2; // padding
+                this.data.push({ modelHashID, subObjectBits, pipe: { flags: pipeFlags, layer: pipeLayer, alphaDiscard: pipeAlphaDiscard } });
+            }
+        } else { // BFBB
+            for (let i = 0; i < count; i++) {
+                const modelHashID = stream.readUint32();
+                const subObjectBits = stream.readUint32();
+                let pipeFlags = stream.readUint32();
+
+                // Convert to TSSM pipe format
+
+                const fog = (pipeFlags & HIPipeFlagsBFBB.FOG_DISABLE) >>> HIPipeFlagsBFBB.FOG_SHIFT;
+                const zbuffer = (pipeFlags & HIPipeFlagsBFBB.ZBUFFER_MASK) >>> HIPipeFlagsBFBB.ZBUFFER_SHIFT;
+                const layer = (pipeFlags & HIPipeFlagsBFBB.LAYER_MASK) >>> HIPipeFlagsBFBB.LAYER_SHIFT;
+                const alphaDiscard = (pipeFlags & HIPipeFlagsBFBB.ALPHADISCARD_MASK) >>> HIPipeFlagsBFBB.ALPHADISCARD_SHIFT;
+
+                pipeFlags &= ~(HIPipeFlagsBFBB.FOG_DISABLE | HIPipeFlagsBFBB.ZBUFFER_MASK | HIPipeFlagsBFBB.LAYER_MASK | HIPipeFlagsBFBB.ALPHADISCARD_MASK);
+                pipeFlags |= (fog << HIPipeFlags.FOG_SHIFT);
+                pipeFlags |= (zbuffer << HIPipeFlags.ZBUFFER_SHIFT);
+
+                this.data.push({ modelHashID, subObjectBits, pipe: { flags: pipeFlags, layer: layer, alphaDiscard: alphaDiscard } });
+            }
         }
     }
 }
@@ -106,7 +158,7 @@ export class HIModelInstance {
     public bucket: HIModelBucket;
     public bucketNext: HIModelInstance | null = null;
     public lightKit: HILightKit | null = null;
-    public pipeFlags = 0;
+    public pipe: HIPipe;
     public redMultiplier = 1.0;
     public greenMultiplier = 1.0;
     public blueMultiplier = 1.0;
@@ -118,7 +170,10 @@ export class HIModelInstance {
         this.flags = flags | HIModelFlags.Visible;
         this.boneIndex = boneIndex;
         this.bucket = scene.modelBucketManager.getBucket(data)!;
-        this.pipeFlags = this.bucket.pipeFlags;
+        this.pipe = this.bucket.pipe;
+        if (this.pipe.layer === 0) {
+            this.pipe.layer = 21;
+        }
         this.alpha = data.geometry.materials[0].color.a;
     }
 
@@ -202,7 +257,7 @@ export class HIModelInstance {
             this.data.geometry.flags &= ~RpGeometryFlag.PRELIT;
         }
 
-        if (this.lightKit && (this.pipeFlags & HIPipeFlags.LIGHTING_MASK) !== HIPipeFlags.LIGHTING_KITPRELIGHT) {
+        if (this.lightKit && (this.pipe.flags & HIPipeFlags.LIGHTING_MASK) !== HIPipeFlags.LIGHTING_KITPRELIGHT) {
             this.data.geometry.flags &= ~RpGeometryFlag.PRELIT;
         }
 

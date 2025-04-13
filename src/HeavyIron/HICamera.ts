@@ -24,8 +24,14 @@ export class HICamera {
         if (this.fog) {
             rw.camera.clearColor = this.fog.bgcolor;
         }
+
         rw.camera.nearPlane = DEFAULT_NEAR_CLIP;
-        rw.camera.farPlane = DEFAULT_FAR_CLIP;
+        if (this.fog && !this.disableFogHack) {
+            rw.camera.farPlane = this.fog.stop;
+        } else {
+            rw.camera.farPlane = DEFAULT_FAR_CLIP;
+        }
+
         rw.camera.begin(rw);
     }
 
@@ -35,12 +41,12 @@ export class HICamera {
 
     public setFogRenderStates(rw: RwEngine) {
         if (this.fog && !this.disableFogHack) {
-            rw.renderState.fogEnable = true;
-            rw.renderState.fogColor = this.fog.fogcolor;
+            rw.renderState.setFogEnabled(true);
+            rw.renderState.setFogColor(this.fog.fogcolor);
             rw.camera.fogPlane = this.fog.start;
             rw.camera.farPlane = this.fog.stop;
         } else {
-            rw.renderState.fogEnable = false;
+            rw.renderState.setFogEnabled(false);
             rw.camera.farPlane = DEFAULT_FAR_CLIP;
         }
     }
@@ -52,12 +58,12 @@ export class HICamera {
     
         const scale = scratchVec3;
         mat4.getScaling(scale, mat);
-        const radius = sph[3] * Math.sqrt(Math.max(scale[0], scale[1], scale[2]));
+        const radius = sph[3] * Math.max(scale[0], scale[1], scale[2]);
     
         const center = scratchVec3;
         vec3.set(center, sph[0], sph[1], sph[2]);
         vec3.transformMat4(center, center, mat);
     
-        return !rw.viewerInput.camera.frustum.containsSphere(center, radius);
+        return !rw.camera.frustumContainsSphere(center, radius, rw);
     }
 }

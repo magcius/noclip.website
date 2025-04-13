@@ -1,4 +1,4 @@
-import { HIEnt } from "./HIEnt.js";
+import { HIEnt, HIEntAsset } from "./HIEnt.js";
 import { HIEvent } from "./HIEvent.js";
 import { HIScene } from "./HIScene.js";
 import { RwStream } from "./rw/rwcore.js";
@@ -22,7 +22,7 @@ export class HIEntSimpleObj extends HIEnt {
     public simpAsset: HISimpleObjAsset;
 
     constructor(stream: RwStream, scene: HIScene) {
-        super(stream, scene);
+        super(new HIEntAsset(stream, scene.game), scene);
         this.simpAsset = new HISimpleObjAsset(stream);
         this.readLinks(stream);
         this.parseModelInfo(this.entAsset.modelInfoID, scene);

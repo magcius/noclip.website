@@ -1,6 +1,6 @@
 import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase.js";
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
-import { HIScene } from "./HIScene.js";
+import { HIGame, HIScene } from "./HIScene.js";
 
 const dataPath = 'SpongeBobBattleForBikiniBottom/v2';
 
@@ -18,7 +18,7 @@ class BFBBSceneDesc implements SceneDesc {
             `${dataPath}/${this.id.substring(0, 2)}/${this.id}.HIP`,
         ];
 
-        const scene = new HIScene(device, context);
+        const scene = new HIScene(this.beta ? HIGame.BFBBBeta : HIGame.BFBB, device, context);
         await scene.load(context.dataFetcher, paths);
 
         return scene;
@@ -90,8 +90,8 @@ const sceneDescs = [
     new BFBBSceneDesc('db02', 'Sandy\'s Dream'),
     new BFBBSceneDesc('db03', 'Squidward\'s Dream'),
     new BFBBSceneDesc('db04', 'Mr. Krabs\' Dream'),
-    //new BFBBSceneDesc('db05', 'Patrick\'s Dream (unused)', true),
     new BFBBSceneDesc('db06', 'Patrick\'s Dream'),
+    new BFBBSceneDesc('db05', 'Patrick\'s Dream (unused)', true),
     'Chum Bucket Lab',
     new BFBBSceneDesc('b301', 'MuscleBob Fight (unused)'),
     new BFBBSceneDesc('b302', 'Kah-Rah-Tae!'),

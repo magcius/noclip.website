@@ -1,4 +1,4 @@
-import { HIBase } from "./HIBase.js";
+import { HIBase, HIBaseAsset } from "./HIBase.js";
 import { HIScene } from "./HIScene.js";
 import { JSP } from "./JSP.js";
 import { RwBlendFunction, RwEngine, RwStream } from "./rw/rwcore.js";
@@ -42,16 +42,18 @@ export class HIEnvAsset {
 export class HIEnv extends HIBase {
     public envAsset: HIEnvAsset;
     
-    constructor(stream: RwStream, scene: HIScene, public jsp: JSP) {
-        super(stream, scene);
+    constructor(stream: RwStream, scene: HIScene, public jsps: JSP[]) {
+        super(new HIBaseAsset(stream), scene);
         this.envAsset = new HIEnvAsset(stream);
         this.readLinks(stream);
     }
 
     public render(scene: HIScene, rw: RwEngine) {
-        rw.renderState.srcBlend = RwBlendFunction.SRCALPHA;
-        rw.renderState.destBlend = RwBlendFunction.INVSRCALPHA;
+        rw.renderState.setSrcBlend(RwBlendFunction.SRCALPHA);
+        rw.renderState.setDstBlend(RwBlendFunction.INVSRCALPHA);
         
-        this.jsp.render(scene, rw);
+        for (const jsp of this.jsps) {
+            jsp.render(scene, rw);
+        }
     }
 }

@@ -36,24 +36,24 @@ export class HIBaseAsset {
     public linkCount: number;
     public baseFlags: number;
 
-    constructor(stream: RwStream) {
-        this.id = stream.readUint32();
-        this.baseType = stream.readUint8();
-        this.linkCount = stream.readUint8();
-        this.baseFlags = stream.readUint16();
+    constructor(stream?: RwStream) {
+        if (stream) {
+            this.id = stream.readUint32();
+            this.baseType = stream.readUint8();
+            this.linkCount = stream.readUint8();
+            this.baseFlags = stream.readUint16();
+        }
     }
 }
 
 export class HIBase {
-    public baseAsset: HIBaseAsset;
     public baseFlags: number;
     public links: HILinkAsset[] = [];
 
     /**
      * Load any needed assets from scene.assetManager here
      */
-    constructor(stream: RwStream, scene: HIScene) {
-        this.baseAsset = new HIBaseAsset(stream);
+    constructor(public baseAsset: HIBaseAsset, scene: HIScene) {
         this.baseFlags = this.baseAsset.baseFlags;
     }
 

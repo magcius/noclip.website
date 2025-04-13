@@ -17,9 +17,9 @@ export class HIEventLog {
                 msg += '> ';
             }
 
-            const toAsset = scene.findAsset(to.baseAsset.id)!;
+            const toAsset = scene.assetManager.findAsset(to.baseAsset.id)!;
             if (from) {
-                const fromAsset = scene.findAsset(from.baseAsset.id)!;
+                const fromAsset = scene.assetManager.findAsset(from.baseAsset.id)!;
                 msg += `[Event] ${HIEvent[event]} sent to ${toAsset.name} from ${fromAsset.name}`;
             } else {
                 msg += `[Event] ${HIEvent[event]} sent to ${toAsset.name}`;

@@ -1,5 +1,5 @@
 import { vec3 } from "gl-matrix";
-import { HIModelInstance, HIPipeFlags } from "./HIModel.js";
+import { HIModelInstance, HIPipe, HIPipeFlags } from "./HIModel.js";
 import { HIScene } from "./HIScene.js";
 import { RwBlendFunction, RwCullMode, RwEngine } from "./rw/rwcore.js";
 import { RpAtomic } from "./rw/rpworld.js";
@@ -8,7 +8,7 @@ import { GfxChannelWriteMask } from "../gfx/platform/GfxPlatform.js";
 
 export interface HIModelBucket {
     data: RpAtomic;
-    pipeFlags: number;
+    pipe: HIPipe;
     list: HIModelInstance | null;
 }
 
@@ -30,8 +30,8 @@ export class HIModelBucketManager {
     private alphaList: HIModelAlphaBucket[] = [];
     private alphaCurr = 0;
 
-    constructor() {
-        for (let i = 0; i < 256; i++) {
+    constructor(maxAlphaModels: number) {
+        for (let i = 0; i < maxAlphaModels; i++) {
             this.alphaList.push({ alphaFade: 1.0, sortValue: Infinity, layer: 0 });
         }
     }
@@ -41,8 +41,8 @@ export class HIModelBucketManager {
         this.alphaList.length = 0;
     }
 
-    public insertBucket(data: RpAtomic, pipeFlags: number) {
-        this.bucketList.push({ data, pipeFlags, list: null });
+    public insertBucket(data: RpAtomic, pipe: HIPipe) {
+        this.bucketList.push({ data, pipe, list: null });
     }
 
     public getBucket(data: RpAtomic) {
@@ -75,7 +75,7 @@ export class HIModelBucketManager {
         const camdist2 = vec3.sqrDist(scratchVec3, scratchVec3_2);
         if (camdist2 >= minst.fadeEnd * minst.fadeEnd) return;
 
-        if ((minst.pipeFlags & HIPipeFlags.LIGHTING_MASK) !== HIPipeFlags.LIGHTING_PRELIGHTONLY) {
+        if ((minst.pipe.flags & HIPipeFlags.LIGHTING_MASK) !== HIPipeFlags.LIGHTING_PRELIGHTONLY) {
             minst.lightKit = scene.lightKitManager.lastLightKit;
         }
 
@@ -90,14 +90,14 @@ export class HIModelBucketManager {
             alphaFade = Math.min(alphaFade, 1.0);
         }
 
-        if ((minst.pipeFlags & (HIPipeFlags.SRCBLEND_MASK | HIPipeFlags.DESTBLEND_MASK)) ||
+        if ((minst.pipe.flags & (HIPipeFlags.SRCBLEND_MASK | HIPipeFlags.DESTBLEND_MASK)) ||
             alphaFade !== 1.0 || minst.alpha !== 1.0) {
             if (this.alphaCurr < this.alphaList.length) {
                 this.alphaList[this.alphaCurr].data = minst.bucket.data;
                 this.alphaList[this.alphaCurr].minst = minst;
                 this.alphaList[this.alphaCurr].alphaFade = alphaFade;
                 this.alphaList[this.alphaCurr].sortValue = camdot;
-                this.alphaList[this.alphaCurr].layer = (minst.pipeFlags & HIPipeFlags.LAYER_MASK) >>> HIPipeFlags.LAYER_SHIFT;
+                this.alphaList[this.alphaCurr].layer = minst.pipe.layer;
                 this.alphaCurr++;
             }
         } else {
@@ -117,7 +117,7 @@ export class HIModelBucketManager {
                 scene.lightKitManager.enable(minst.lightKit, scene);
 
                 const oldHack = scene.modelManager.hackDisablePrelight;
-                if ((minst.pipeFlags & HIPipeFlags.LIGHTING_MASK) === HIPipeFlags.LIGHTING_KITPRELIGHT) {
+                if ((minst.pipe.flags & HIPipeFlags.LIGHTING_MASK) === HIPipeFlags.LIGHTING_KITPRELIGHT) {
                     scene.modelManager.hackDisablePrelight = false;
                 }
 
@@ -125,13 +125,13 @@ export class HIModelBucketManager {
                 minst.data = bucket.data;
 
                 let cull = RwCullMode.NONE;
-                if ((minst.pipeFlags & HIPipeFlags.CULL_MASK) === HIPipeFlags.CULL_FRONTONLY) {
+                if ((minst.pipe.flags & HIPipeFlags.CULL_MASK) === HIPipeFlags.CULL_FRONTONLY) {
                     cull = RwCullMode.BACK;
                 }
 
-                rw.renderState.cullMode = cull;
+                rw.renderState.setCullMode(cull);
 
-                scene.camera.fog = (minst.pipeFlags & HIPipeFlags.FOG_DISABLE) ? undefined : fog;
+                scene.camera.fog = (minst.pipe.flags & HIPipeFlags.FOG_DISABLE) ? undefined : fog;
                 scene.camera.setFogRenderStates(rw);
                 
                 minst.renderSingle(scene, rw);
@@ -175,12 +175,12 @@ export class HIModelBucketManager {
             scene.lightKitManager.enable(minst.lightKit, scene);
 
             const oldHack = scene.modelManager.hackDisablePrelight;
-            if ((minst.pipeFlags & HIPipeFlags.LIGHTING_MASK) === HIPipeFlags.LIGHTING_KITPRELIGHT) {
+            if ((minst.pipe.flags & HIPipeFlags.LIGHTING_MASK) === HIPipeFlags.LIGHTING_KITPRELIGHT) {
                 scene.modelManager.hackDisablePrelight = false;
             }
 
-            let srcBlend = ((minst.pipeFlags & HIPipeFlags.SRCBLEND_MASK) >>> HIPipeFlags.SRCBLEND_SHIFT);
-            let dstBlend = ((minst.pipeFlags & HIPipeFlags.DESTBLEND_MASK) >>> HIPipeFlags.DESTBLEND_SHIFT);
+            let srcBlend = ((minst.pipe.flags & HIPipeFlags.SRCBLEND_MASK) >>> HIPipeFlags.SRCBLEND_SHIFT);
+            let dstBlend = ((minst.pipe.flags & HIPipeFlags.DESTBLEND_MASK) >>> HIPipeFlags.DESTBLEND_SHIFT);
 
             if (srcBlend === RwBlendFunction.NABLEND) {
                 srcBlend = RwBlendFunction.SRCALPHA;
@@ -195,33 +195,39 @@ export class HIModelBucketManager {
             minst.alpha *= fade;
 
             let zwrite = true;
-            if ((minst.pipeFlags & HIPipeFlags.ZBUFFER_MASK) === HIPipeFlags.ZBUFFER_DISABLE) {
+            if ((minst.pipe.flags & HIPipeFlags.ZBUFFER_MASK) === HIPipeFlags.ZBUFFER_DISABLE) {
                 zwrite = false;
             }
 
             let cull = RwCullMode.NONE;
-            if ((minst.pipeFlags & HIPipeFlags.CULL_MASK) === HIPipeFlags.CULL_FRONTONLY) {
+            if ((minst.pipe.flags & HIPipeFlags.CULL_MASK) === HIPipeFlags.CULL_FRONTONLY) {
                 cull = RwCullMode.BACK;
             }
 
-            rw.renderState.srcBlend = srcBlend;
-            rw.renderState.destBlend = dstBlend;
-            rw.renderState.zWriteEnable = zwrite;
-            rw.renderState.cullMode = cull;
+            rw.renderState.setSrcBlend(srcBlend);
+            rw.renderState.setDstBlend(dstBlend);
+            rw.renderState.setZWriteEnabled(zwrite);
+            rw.renderState.setCullMode(cull);
 
-            scene.camera.fog = (minst.pipeFlags & HIPipeFlags.FOG_DISABLE) ? undefined : fog;
+            scene.camera.fog = (minst.pipe.flags & HIPipeFlags.FOG_DISABLE) ? undefined : fog;
             scene.camera.setFogRenderStates(rw);
 
-            if ((minst.pipeFlags & HIPipeFlags.CULL_MASK) === HIPipeFlags.CULL_BACKTHENFRONT) {
-                rw.renderState.cullMode = RwCullMode.FRONT;
+            if (minst.pipe.alphaDiscard !== 0) {
+                rw.renderState.setAlphaTestFunctionRef(minst.pipe.alphaDiscard);
+            } else {
+                rw.renderState.setAlphaTestFunctionRef(0);
+            }
+
+            if ((minst.pipe.flags & HIPipeFlags.CULL_MASK) === HIPipeFlags.CULL_BACKTHENFRONT) {
+                rw.renderState.setCullMode(RwCullMode.FRONT);
                 minst.renderSingle(scene, rw);
-                rw.renderState.cullMode = RwCullMode.BACK;
+                rw.renderState.setCullMode(RwCullMode.BACK);
                 minst.renderSingle(scene, rw);
-            } else if ((minst.pipeFlags & HIPipeFlags.ZBUFFER_MASK) === HIPipeFlags.ZBUFFER_ZFIRST) {
+            } else if ((minst.pipe.flags & HIPipeFlags.ZBUFFER_MASK) === HIPipeFlags.ZBUFFER_ZFIRST) {
                 // RenderWare has no API to set the color mask, so the game sets it using platform-specific code
-                rw.renderState.channelWriteMask = GfxChannelWriteMask.None;
+                rw.gfx.setChannelWriteMask(GfxChannelWriteMask.None);
                 minst.renderSingle(scene, rw);
-                rw.renderState.channelWriteMask = GfxChannelWriteMask.AllChannels;
+                rw.gfx.setChannelWriteMask(GfxChannelWriteMask.AllChannels);
                 minst.renderSingle(scene, rw);
             } else {
                 minst.renderSingle(scene, rw);
@@ -231,6 +237,8 @@ export class HIModelBucketManager {
             scene.modelManager.hackDisablePrelight = oldHack;
             minst.data = oldData;
         }
+
+        rw.renderState.setAlphaTestFunctionRef(0);
 
         scene.camera.fog = fog;
         scene.camera.setFogRenderStates(rw);

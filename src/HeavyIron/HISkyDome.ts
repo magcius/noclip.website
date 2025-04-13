@@ -1,6 +1,6 @@
 import { HIBaseFlags } from "./HIBase.js";
 import { HIEnt } from "./HIEnt.js";
-import { HIScene } from "./HIScene.js";
+import { HIGame, HIScene } from "./HIScene.js";
 import { RwEngine } from "./rw/rwcore.js";
 
 interface SkyDomeInfo {
@@ -26,6 +26,14 @@ export class HISkyDomeManager {
     public render(scene: HIScene, rw: RwEngine) {
         if (this.disableHack) return;
 
+        const oldFarClip = rw.camera.farPlane;
+
+        if (scene.game >= HIGame.TSSM) {
+            rw.camera.end(rw);
+            rw.camera.farPlane = 10000.0;
+            rw.camera.begin(rw);
+        }
+
         for (const sky of this.skyList) {
             if (!sky.ent.model) continue;
             if (!sky.ent.isVisible()) continue;
@@ -37,6 +45,12 @@ export class HISkyDomeManager {
             }
 
             scene.modelManager.render(sky.ent.model.data, sky.ent.model.mat, rw);
+        }
+
+        if (scene.game >= HIGame.TSSM) {
+            rw.camera.end(rw);
+            rw.camera.farPlane = oldFarClip;
+            rw.camera.begin(rw);
         }
     }
 }

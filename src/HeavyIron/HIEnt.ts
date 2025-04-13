@@ -1,16 +1,25 @@
 import { mat4, vec3 } from "gl-matrix";
-import { HIBase, HIBaseFlags } from "./HIBase.js";
-import { HIScene } from "./HIScene.js";
+import { HIBase, HIBaseAsset, HIBaseFlags } from "./HIBase.js";
+import { HIGame, HIScene } from "./HIScene.js";
 import { HIModelAssetInfo, HIModelInstance } from "./HIModel.js";
 import { RwEngine, RwStream } from "./rw/rwcore.js";
 import { HILightKit } from "./HILightKit.js";
 import { RpClump } from "./rw/rpworld.js";
+import { HIAssetType } from "./HIAssetTypes.js";
 
 export const enum HIEntFlags {
     Visible = 0x1
 }
 
-export class HIEntAsset {
+export const enum HIEntMoreFlags {
+    PreciseColl = 0x2,
+    Throwable = 0x8,
+    Hittable = 0x10,
+    AnimColl = 0x20,
+    LedgeGrab = 0x80
+}
+
+export class HIEntAsset extends HIBaseAsset {
     public flags: number;
     public subtype: number;
     public pflags: number;
@@ -27,37 +36,41 @@ export class HIEntAsset {
     public modelInfoID: number;
     public animListID: number;
 
-    constructor(stream: RwStream) {
-        this.flags = stream.readUint8();
-        this.subtype = stream.readUint8();
-        this.pflags = stream.readUint8();
-        this.moreFlags = stream.readUint8();
-        stream.pos += 4; // padding
-        this.surfaceID = stream.readUint32();
-        this.ang = stream.readVec3();
-        this.pos = stream.readVec3();
-        this.scale = stream.readVec3();
-        this.redMult = stream.readFloat();
-        this.greenMult = stream.readFloat();
-        this.blueMult = stream.readFloat();
-        this.seeThru = stream.readFloat();
-        this.seeThruSpeed = stream.readFloat();
-        this.modelInfoID = stream.readUint32();
-        this.animListID = stream.readUint32();
+    constructor(stream?: RwStream, game?: HIGame) {
+        super(stream);
+
+        if (stream) {
+            this.flags = stream.readUint8();
+            this.subtype = stream.readUint8();
+            this.pflags = stream.readUint8();
+            this.moreFlags = stream.readUint8();
+            if (game === HIGame.BFBB) {
+                stream.pos += 4; // padding
+            }
+            this.surfaceID = stream.readUint32();
+            this.ang = stream.readVec3();
+            this.pos = stream.readVec3();
+            this.scale = stream.readVec3();
+            this.redMult = stream.readFloat();
+            this.greenMult = stream.readFloat();
+            this.blueMult = stream.readFloat();
+            this.seeThru = stream.readFloat();
+            this.seeThruSpeed = stream.readFloat();
+            this.modelInfoID = stream.readUint32();
+            this.animListID = stream.readUint32();
+        }
     }
 }
 
 export abstract class HIEnt extends HIBase {
-    public entAsset: HIEntAsset;
     public flags: number;
     public moreFlags: number;
     public subType: number;
     public model: HIModelInstance | null = null;
     public lightKit: HILightKit | null = null;
 
-    constructor(stream: RwStream, scene: HIScene) {
-        super(stream, scene);
-        this.entAsset = new HIEntAsset(stream);
+    constructor(public entAsset: HIEntAsset, scene: HIScene) {
+        super(entAsset, scene);
 
         this.flags = this.entAsset.flags;
         this.moreFlags = this.entAsset.moreFlags;
@@ -78,10 +91,13 @@ export abstract class HIEnt extends HIBase {
     }
 
     public parseModelInfo(assetID: number, scene: HIScene) {
-        if (scene.models.has(assetID)) {
-            this.loadModel(scene.models.get(assetID)!, scene);
-        } else if (scene.modelInfos.has(assetID)) {
-            this.model = this.recurseModelInfo(scene.modelInfos.get(assetID)!, scene);
+        if (assetID === 0) return;
+        
+        const modelAsset = scene.assetManager.findAsset(assetID);
+        if (modelAsset && modelAsset.type === HIAssetType.MODL) {
+            this.loadModel(modelAsset.runtimeData as RpClump, scene);
+        } else if (modelAsset && modelAsset.type === HIAssetType.MINF) {
+            this.model = this.recurseModelInfo(modelAsset.runtimeData as HIModelAssetInfo, scene);
         } else {
             console.warn(`Model info ID not found: 0x${assetID}`);
         }
@@ -100,8 +116,9 @@ export abstract class HIEnt extends HIBase {
 
         for (let i = 0; i < info.modelInst.length; i++) {
             const inst = info.modelInst[i];
-            if (scene.models.has(inst.modelID)) {
-                const clump = scene.models.get(inst.modelID)!;
+            const modelAsset = scene.assetManager.findAsset(inst.modelID);
+            if (modelAsset && modelAsset.type === HIAssetType.MODL) {
+                const clump = modelAsset.runtimeData as RpClump;
                 if (i === 0) {
                     tempInst[i] = new HIModelInstance(clump.atomics[0], scene);
                     for (let j = 1; j < clump.atomics.length; j++) {
@@ -114,8 +131,8 @@ export abstract class HIEnt extends HIBase {
                         tempInst[i].attach(new HIModelInstance(clump.atomics[j], scene));
                     }
                 }
-            } else if (scene.modelInfos.has(inst.modelID)) {
-                const info = scene.modelInfos.get(inst.modelID)!;
+            } else if (modelAsset && modelAsset.type === HIAssetType.MINF) {
+                const info = modelAsset.runtimeData as HIModelAssetInfo;
                 const minst = this.recurseModelInfo(info, scene);
                 if (!minst) return null;
 
