@@ -13,13 +13,13 @@ class TSSMSceneDesc implements SceneDesc {
         const paths = [
             `${dataPath}/boot.HIP`,
             //`${dataPath}/boot_US.HIP`,
-            //`${dataPath}/mn/mnuc.HIP`,
-            //`${dataPath}/mn/mnuc_US.HIP`,
-            `${dataPath}/mn/mnui.HIP`,
-            //`${dataPath}/mn/mnui_US.HIP`,
-            `${dataPath}/${this.id.substring(0, 2)}/${this.id}.HOP`,
-            `${dataPath}/${this.id.substring(0, 2)}/${this.id}.HIP`,
-            //`${dataPath}/${this.id.substring(0, 2)}/${this.id}_US.HIP`,
+            //`${dataPath}/MN/mnuc.HIP`,
+            //`${dataPath}/MN/mnuc_US.HIP`,
+            `${dataPath}/MN/mnui.HIP`,
+            //`${dataPath}/MN/mnui_US.HIP`,
+            `${dataPath}/${this.id.substring(0, 2).toUpperCase()}/${this.id}.HOP`,
+            `${dataPath}/${this.id.substring(0, 2).toUpperCase()}/${this.id}.HIP`,
+            //`${dataPath}/${this.id.substring(0, 2).toUpperCase()}/${this.id}_US.HIP`,
         ];
 
         const scene = new HIScene(HIGame.TSSM, device, context);
