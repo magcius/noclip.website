@@ -12,16 +12,72 @@ import { GfxRenderHelper } from "../../gfx/render/GfxRenderHelper";
 import { fillVec4 } from "../../gfx/helpers/UniformBufferHelpers";
 import { lerp } from "../../MathHelpers";
 
+type Swing = {
+  name: string,
+  startEnergy: number,
+  decay: number,
+  finalDecay: number,
+  ampA: (time: number) => number,
+  ampB: (time: number) => number,
+  freqB: number,
+  phaseB: number,
+};
+
+const swings: Swing[] = [
+  {
+    name: "lissajous",
+    startEnergy: 1,
+    decay: 0.99997,
+    finalDecay: 0.995,
+    ampA: (time) => 1,
+    ampB: (time) => 1,
+    freqB: 1.03,
+    phaseB: 0,
+  },
+  {
+    name: "spiral",
+    startEnergy: 1.25,
+    decay: 0.9995,
+    finalDecay: 0.95,
+    ampA: (time) => 1,
+    ampB: (time) => 1,
+    freqB: 1,
+    phaseB: Math.PI / 2,
+  },
+  {
+    name: "flower",
+    startEnergy: 1.25,
+    decay: 0.9999,
+    finalDecay: 0.995,
+    ampA: (time) => Math.cos(time * 2.02/11),
+    ampB: (time) => Math.sin(time * 2.02/11),
+    freqB: 1,
+    phaseB: 0,
+  },
+  {
+    name: "triangle",
+    startEnergy: 1.25,
+    decay: 0.9997,
+    finalDecay: 0.95,
+    ampA: (time) => Math.cos(time * 1.02 / 3),
+    ampB: (time) => Math.sin(time * 1.02 / 3),
+    freqB: 1,
+    phaseB: 0,
+  }
+];
+
 export default class SandPendulum extends Simulation {
   private isGrotto: boolean;
   private pendulum: SceneNode;
   private sandParticles: SceneNode;
   private sparkle: SceneNode;
   private sparkleSprite: SceneNode;
-  private fadeStart: number = 0;
-  private fade: number = 0;
-  private isResetting: boolean = false;
-  private energy: number = 1;
+  private fadeStart: number = -Infinity;
+  private fade: number = 1;
+  private startAngles: vec2 = vec2.create();
+  private isResetting: boolean = true;
+  private energy: number = 0;
+  private swing: Swing;
 
   private pivot0: SceneNode;
   private pivot1: SceneNode;
@@ -52,6 +108,17 @@ export default class SandPendulum extends Simulation {
     this.sandProgram = preprocessProgramObj_GLSL(device, new Plus4XPSandProgram());
     const sandTexturePath = "Pendulum_Sand_textures/Sand.tif";
     this.originalSandTexture = texturesByPath.get(sandTexturePath)!;
+
+    this.swing = swings[Math.floor(Math.random() * swings.length)];
+
+    this.energy = this.swing.startEnergy;
+    this.fade = -1;
+    vec2.set(this.lastCoord, 0, 0);
+    vec2.set(this.coord, 0, 0);
+    this.sparkle.visible = false;
+    this.sparkle.transformChanged = true;
+    this.sandParticles.visible = true;
+    this.sandParticles.transformChanged = true;
     
     this.gfxTexture = device.createTexture({
       ...this.originalSandTexture,
@@ -193,71 +260,81 @@ export default class SandPendulum extends Simulation {
   }
   
   override update(input: ViewerRenderInput, sceneNodesByName: Map<string, SceneNode>, device: GfxDevice): void {
-    const time = input.time * 0.003;
-    const sinTime = Math.sin(time);
-    const cosTime = Math.cos(time);
+    const time = input.time * 0.0032;
     
-    this.energy *= lerp(0.95, 0.9995, Math.pow(this.energy, 0.02));
+    this.energy *= lerp(this.swing.finalDecay, this.swing.decay, Math.pow(this.energy, 0.02));
     // TODO: input.deltaTime decay
     
-    this.fade = -1;
     if (this.isResetting) {
+      vec3.set(this.sparkleSprite.transform.rot, 0, time, 0);
+      this.sparkleSprite.transformChanged = true;
       this.fade = (input.time - this.fadeStart) / 6000;
       this.energy = this.fade;
+      {
+        const [timeA, timeB] = vec2.scale(vec2.create(), this.startAngles, this.energy);
+        this.pivot0.transform.rot[0] = timeA * this.energy * 0.1;
+        this.pivot0.transform.rot[1] = timeB * this.energy * 0.1;
+        this.pivot1.transform.rot[0] = timeA * this.energy * 0.1;
+        this.pivot1.transform.rot[1] = timeB * this.energy * 0.1;
+        this.pendulum.transform.rot[2] = timeA * this.energy * 0.25;
+        this.pivot0.transformChanged = true;
+        this.pivot1.transformChanged = true;
+        this.pendulum.transformChanged = true;
+      }
+      // TODO: move pendulum to initial position
       this.isResetting = this.fade <= 1;
       if (!this.isResetting) {
-        this.energy = 1;
+        this.energy = this.swing.startEnergy;
         this.fade = -1;
         vec2.set(this.lastCoord, 0, 0);
         vec2.set(this.coord, 0, 0);
+        if (this.sparkle.visible) {
+          this.sparkle.visible = false;
+          this.sparkle.transformChanged = true;
+        }
+        if (!this.sandParticles.visible) {
+          this.sandParticles.visible = true;
+          this.sandParticles.transformChanged = true;
+        }
       }
     } else if (this.energy < 0.1) {
       this.fadeStart = input.time;
+      this.fade = 0;
       this.isResetting = true;
-    }
-    
-    // TODO: lissajous with randomized initial velocity
-    // TODO: triangle?? how the heck am I supposed—
-    //       for that matter, how'd that one on YouTube do a square?
-    // TODO: resetting and initial conditions
-
-    this.pivot0.transform.rot[0] = sinTime * 0.2 * this.energy;
-    this.pivot0.transform.rot[1] = cosTime * 0.1 * this.energy;
-    this.pivot0.transformChanged = true;
-
-    this.pivot1.transform.rot[0] = sinTime * 0.1 * this.energy;
-    this.pivot1.transform.rot[1] = cosTime * 0.2 * this.energy;
-    this.pivot1.transformChanged = true;
-
-    // if (this.pivot2 != null) {
-    //   this.pivot2.transform.rot[0] = sinTime * 0;
-    //   this.pivot2.transform.rot[1] = cosTime * 0;
-    //   this.pivot2.transformChanged = true;
-    // }
-
-    this.pendulum.transform.rot[2] = sinTime * 0.25 * this.energy;
-    this.pendulum.transformChanged = true;
-    
-    if (this.isResetting) {
+      this.swing = swings[Math.floor(Math.random() * swings.length)];
+      const future = (this.fadeStart + 6000) * 0.0032;
+      const timeA = Math.sin(future) * this.swing.ampA(future);
+      const timeB = Math.sin(future * this.swing.freqB + this.swing.phaseB) * this.swing.ampB(future);
+      vec2.set(this.startAngles, timeA, timeB);
+      // TODO: reinitialize pendulum state
       this.sparkle.visible = true;
-
-      vec3.set(this.sparkleSprite.transform.rot, 0, time, 0);
-      this.sparkleSprite.transformChanged = true;
-
       if (this.sandParticles.visible) {
         this.sandParticles.visible = false;
         this.sandParticles.transformChanged = true;
       }
     } else {
-      if (this.sparkle.visible) {
-        this.sparkle.visible = false;
-        this.sparkle.transformChanged = true;
-      }
-      if (!this.sandParticles.visible) {
-        this.sandParticles.visible = true;
-        this.sandParticles.transformChanged = true;
-      }
+      this.fade = -1;
+
+      const timeA = Math.sin(time) * this.swing.ampA(time);
+      const timeB = Math.sin(time * this.swing.freqB + this.swing.phaseB) * this.swing.ampB(time);
+            
+      this.pivot0.transform.rot[0] = timeA * this.energy * 0.1;
+      this.pivot0.transform.rot[1] = timeB * this.energy * 0.1;
+      
+      this.pivot1.transform.rot[0] = timeA * this.energy * 0.1;
+      this.pivot1.transform.rot[1] = timeB * this.energy * 0.1;
+      
+      // if (this.pivot2 != null) {
+      //   this.pivot2.transform.rot[0] = timeA * 0;
+      //   this.pivot2.transform.rot[1] = timeB * 0;
+      //   this.pivot2.transformChanged = true;
+      // }
+        
+      this.pendulum.transform.rot[2] = timeA * this.energy * 0.25;
     }
+    this.pivot0.transformChanged = true;
+    this.pivot1.transformChanged = true;
+    this.pendulum.transformChanged = true;
   }
 
   override render(renderHelper: GfxRenderHelper, builder: GfxrGraphBuilder, cameraWorldPos: vec3): void {

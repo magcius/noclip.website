@@ -44,7 +44,7 @@ export default class Plus4XPSandProgram {
 
       if (u_Fade <= 0.0) {
         vec2 pendulumPos = mix(u_LastPendulumPos, u_PendulumPos, a_Order / u_NumParticles);
-        gl_Position = vec4(v_Pos * 0.03 + pendulumPos, 0.0, 1.0);
+        gl_Position = vec4(v_Pos * 0.04 + pendulumPos, 0.0, 1.0);
         // gl_Position = vec4(v_Pos, 0.0, 1.0); // for debugging
       } else {
         gl_Position = vec4(v_Pos, 0.0, 1.0);
