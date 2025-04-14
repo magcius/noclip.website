@@ -40,8 +40,8 @@ export default class RobotCircus extends Simulation {
       vec3.set(this.bot2.transform.rot, 0, angle, 0);
     } else {
       vec3.set(this.bar.transform.rot, 0, angle, 0);
-      vec3.set(this.bot1.transform.rot, 0, angle, Math.PI);
-      vec3.set(this.bot2.transform.rot, 0, -angle, 0);
+      vec3.set(this.bot1.transform.rot, 0, -angle * 1.125, Math.PI);
+      vec3.set(this.bot2.transform.rot, 0, angle * 1.125, 0);
     }
 
     this.bot1.transformChanged = true;
