@@ -96,6 +96,7 @@ import * as Scenes_AShortHike from './AShortHike/Scenes.js';
 import * as Scenes_NeonWhite from './NeonWhite/Scenes.js';
 import * as Scenes_OuterWilds from './OuterWilds/Scenes.js';
 import * as Scenes_CrashWarped from './CrashWarped/scenes.js';
+import * as Scenes_PlusForXP from './PlusForXP/scenes.js';
 
 import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_FileDrops.js';
 
@@ -191,6 +192,7 @@ const sceneGroups: (string | SceneGroup)[] = [
     Scenes_WorldOfWarcraft.vanillaSceneGroup,
     "Experimental",
     Scenes_CrashWarped.sceneGroup,
+    Scenes_PlusForXP.sceneGroup,
     Scenes_DonkeyKong64.sceneGroup,
     Scenes_DonkeyKongCountryReturns.sceneGroup,
     Scenes_Elebits.sceneGroup,
