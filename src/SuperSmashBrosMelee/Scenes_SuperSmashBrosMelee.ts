@@ -208,44 +208,6 @@ function BindFigATreeNames(inst: MeleeFtInstance, names: string[]): void {
             return;
 }
 
-class MeleeFtDesc implements SceneDesc {
-    constructor(public name: string = "Fighter Test Scene", public id = 'Fighters') {
-    }
-
-    public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
-        const dataFetcher = context.dataFetcher;
-
-        const scene = new MeleeRenderer(device);
-
-        const fighterData = await fetchAllPlData(dataFetcher);
-
-        let z = -50;
-        for (let i = 0; i < fighterData.length; i++) {
-            let x = 0;
-
-            const ft = fighterData[i];
-            for (let j = 0; j < ft.variants.length; j++) {
-                const plInst = BuildMeleeInstance(scene.modelCache, ft, j);
-                if (plInst === null) {
-                    console.log('proper root', ft.variants[0].mdArc.publics[0].name);
-                    continue;
-                }
-
-                BindFigATreeNames(plInst, ['Wait', 'Wait1']);
-                plInst.rootInst.modelMatrix[12] = x;
-                plInst.rootInst.modelMatrix[14] = z;
-                scene.jobjRoots.push(plInst.rootInst);
-
-                x += 25;
-            }
-
-            z -= 25;
-        }
-
-        return scene;
-    }
-}
-
 class MeleeTitleDesc implements SceneDesc {
     constructor(public id: string = `Title`, public name: string = `Title Screen`) {}
 
@@ -744,7 +706,6 @@ const sceneDescs = [
     new HSDDesc(`TyZeniga.dat`),
     new HSDDesc(`TyZkMen.dat`),
 
-    new MeleeFtDesc(),
     // new HSDDesc(`PlFxNr.dat`),
     // new HSDDesc(`PlKbNr.dat`),
     // new HSDDesc(`GmRgEBG3.dat`),

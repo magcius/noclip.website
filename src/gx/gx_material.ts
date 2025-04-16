@@ -1121,11 +1121,11 @@ ${this.generateLightAttnFn(chan, lightName)}
         case GX.IndTexMtxID.S0:
         case GX.IndTexMtxID.S1:
         case GX.IndTexMtxID.S2:
-            return `u_IndTexMtx[${indTexMtxIdx}].mw.x * ReadTexCoord${stage.texCoordId}() * ${indTexCoord}.xx)`;
+            return `(u_IndTexMtx[${indTexMtxIdx}].mx.w * ReadTexCoord${stage.texCoordId}() * ${indTexCoord}.xx)`;
         case GX.IndTexMtxID.T0:
         case GX.IndTexMtxID.T1:
         case GX.IndTexMtxID.T2:
-            return `u_IndTexMtx[${indTexMtxIdx}].mw.x * ReadTexCoord${stage.texCoordId}() * ${indTexCoord}.yy)`;
+            return `(u_IndTexMtx[${indTexMtxIdx}].mx.w * ReadTexCoord${stage.texCoordId}() * ${indTexCoord}.yy)`;
         default:
             throw "whoops";
         }
