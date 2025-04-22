@@ -9,6 +9,12 @@ pub fn derive_from_struct_per_field(item: proc_macro::TokenStream) -> proc_macro
     for attr in &input.attrs {
         match &attr.meta {
             syn::Meta::List(meta_list) => {
+                let Some(ident) = meta_list.path.get_ident() else {
+                    continue;
+                };
+                if ident != "from" {
+                    continue;
+                }
                 let tokens: proc_macro::TokenStream = meta_list.tokens.clone().into();
                 from_structs.push(syn::parse_macro_input!(tokens as syn::Path));
             },
