@@ -1411,12 +1411,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         };
 
         if (async) {
-            const timeBegin = window.performance.now();
             const gpuRenderPipeline = await this.device.createRenderPipelineAsync(gpuRenderPipelineDescriptor);
-            const timeEnd = window.performance.now();
-
-            const seconds = (timeEnd - timeBegin) / 1000;
-            console.log(`Pipeline finished`, seconds);
 
             // We might have created a sync pipeline while we were async building; no way to cancel the async
             // pipeline build at this point, so just chuck it out :/
