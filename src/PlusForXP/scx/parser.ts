@@ -3,12 +3,9 @@ import { sanitizeMesh } from "./sanitize_mesh.js";
 import { Token, tokenTable, closeBrace, openBrace } from "./tokens.js"
 import { range } from "../../MathHelpers.js";
 import { splitMesh } from "./split_mesh.js";
+import { getSystemEndianness, Endianness } from "../../endian.js";
 
-const littleEndian = (() => {
-	const buffer = new ArrayBuffer(2);
-	new DataView(buffer).setInt16(0, 256, true);
-	return new Int16Array(buffer)[0] === 256;
-})();
+const littleEndian = getSystemEndianness() === Endianness.LITTLE_ENDIAN;
 
 const toDataView = (bytes: Uint8Array) => new DataView(
 	bytes.buffer,
