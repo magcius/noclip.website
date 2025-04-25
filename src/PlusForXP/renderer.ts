@@ -10,7 +10,7 @@ import {
   GfxSampler, GfxTexture, GfxTextureDimension,
   GfxTextureUsage, GfxVertexBufferFrequency
 } from "../gfx/platform/GfxPlatform.js";
-import { TextureHolder } from "../TextureHolder.js";
+import { TextureBase, TextureHolder } from "../TextureHolder.js";
 import { SCX } from './scx/types.js';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
 import { GfxRenderInstList, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
@@ -102,7 +102,7 @@ export default class Renderer implements SceneGfx {
   private simulation: Simulation | null;
   private cameraSelect: UI.SingleSelect;
   
-  constructor(device: GfxDevice, context: Context, public textureHolder: TextureHolder<any>) {
+  constructor(device: GfxDevice, context: Context, public textureHolder: TextureHolder<TextureBase>) {
     this.simulation = context.simulateFunc?.() ?? null;
     this.megaStateFlags = {
       ...defaultMegaState,
