@@ -1,5 +1,4 @@
 import {decode as tifDecode} from 'tiff'
-import {decode as jpgDecode} from 'jpeg-js'
 import { FakeTextureHolder } from '../TextureHolder.js';
 import { DataFetcher } from '../DataFetcher.js';
 import { SceneNode, Texture } from './types.js';
@@ -8,7 +7,30 @@ import { GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxDevice } from '..
 import { align } from '../util.js';
 import { mat4, vec3 } from 'gl-matrix';
 
-const decodeImage = (path: string, imageBytes: ArrayBufferLike) : {rgba8: Uint8Array, width: number, height: number} | null => {
+const loadJPGData = (jpegBinary: ArrayBuffer): Promise<{width: number, height: number, data: Uint8ClampedArray}> => {
+    const img = document.createElement('img');
+    img.crossOrigin = 'anonymous';
+    const url = window.URL.createObjectURL(new Blob([new Uint8Array(jpegBinary)], {type: 'image/jpg'}));
+    img.src = url;
+
+    return new Promise<ImageData>((resolve, reject) => {
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            const ctx = canvas.getContext('2d')!;
+            ctx.drawImage(img, 0, 0);
+            resolve(ctx.getImageData(0, 0, img.width, img.height));
+            window.URL.revokeObjectURL(url);
+        };
+        img.onerror = (err) => {
+            reject(err);
+            window.URL.revokeObjectURL(url);
+        };
+    });
+}
+
+const decodeImage = async (path: string, imageBytes: ArrayBufferLike) : Promise<{rgba8: Uint8ClampedArray, width: number, height: number} | null> => {
   const extension = path.toLowerCase().split(".").pop();
   switch (extension) {
     case "tif": 
@@ -18,7 +40,7 @@ const decodeImage = (path: string, imageBytes: ArrayBufferLike) : {rgba8: Uint8A
       return {
         width,
         height,
-        rgba8: new Uint8Array(
+        rgba8: new Uint8ClampedArray(
           components === 3
             ? range(0, result.size).flatMap(i => [...result.data.slice(i * 3, (i + 1) * 3), 0xFF])
             : result.data
@@ -27,14 +49,14 @@ const decodeImage = (path: string, imageBytes: ArrayBufferLike) : {rgba8: Uint8A
     }
     case "jpg":
     case "jpeg": {
-      const {width, height, data: rgba8} = jpgDecode(imageBytes as ArrayBuffer, {useTArray: true});
+      const {width, height, data: rgba8} = await loadJPGData(imageBytes as ArrayBuffer);
       return {width, height, rgba8};
     }
   }
   return null;
 };
 
-const flipImage = (image : {rgba8: Uint8Array, width: number, height: number}) : {rgba8: Uint8Array, width: number, height: number} => {
+const flipImage = (image : {rgba8: Uint8ClampedArray, width: number, height: number}) : {rgba8: Uint8ClampedArray, width: number, height: number} => {
   const data: number[] = Array(image.height).fill(null).map(
     (_, i) => ([...image.rgba8.subarray(
       i * image.width * 4,
@@ -43,16 +65,19 @@ const flipImage = (image : {rgba8: Uint8Array, width: number, height: number}) :
   ).reverse().flat();
   return {
     ...image,
-    rgba8: new Uint8Array(data)
+    rgba8: new Uint8ClampedArray(data)
   };
 }
 
 export const fetchTextures = (dataFetcher: DataFetcher, basePath: string, texturePaths: string[]) : Promise<Texture[]> => 
   Promise.all(
-    texturePaths.map(path => dataFetcher.fetchData(`${basePath}/${path}`).then(({arrayBuffer}) => ({
-      ...flipImage(decodeImage(path, arrayBuffer)!),
-      path
-    })))
+    texturePaths.map(path => 
+      dataFetcher.fetchData(`${basePath}/${path}`)
+      .then(({arrayBuffer}) => decodeImage(path, arrayBuffer))
+      .then((imageData) => ({
+        ...flipImage(imageData!),
+        path
+      })))
   );
 
 export const makeTextureHolder = (textures: Texture[]) => new FakeTextureHolder(
