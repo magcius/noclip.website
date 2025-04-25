@@ -11,8 +11,7 @@ export interface NamedArrayBufferSlice extends ArrayBufferSlice {
 function getDataStorageBaseURL(isDevelopment: boolean): string {
     if (isDevelopment)
         return `/data`;
-    else
-        return `https://z.noclip.website`;
+    return import.meta.env.PUBLIC_STORAGE_URL;
 }
 
 function getDataURLForPath(url: string, isDevelopment: boolean): string {
