@@ -34,7 +34,6 @@ import Plus4XPProgram from "./program.js";
 import { buildNodeAnimations } from "./animation.js";
 import * as UI from '../ui.js';
 import { createSceneNode, makeDataBuffer, updateNodeTransform } from "./util.js";
-// import sphereScene from "./sphere.js";
 
 type Context = {
   basePath: string,
@@ -168,8 +167,6 @@ export default class Renderer implements SceneGfx {
       const computedTint = vec4.fromValues(...(tint ?? [1, 1, 1]), 1);
       this.environmentMapsByID.set(envID, {texture, matrix, tint: computedTint});
     }
-
-    // this.buildScene(device, "Sphere", sphereScene, this.environmentMapsByID.keys().next().value, unbakedMeshes);
     
     for (const [name, [scene, envID]] of Object.entries(context.scenes)) {
       this.buildScene(device, name, scene, envID, unbakedMeshes);
