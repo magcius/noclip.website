@@ -65,7 +65,7 @@ void main() {
   
   vec3 r = reflect(e, n);
   r = (u_EnvMapMatrix * vec4(r, 1.0)).xyz;
-  v_EnvTexCoord = r.xy / (2.0 * length(r)) + 0.5;
+  v_EnvTexCoord = normalize(r).xy * 0.5 + 0.5;
 }
 `;
 
