@@ -132,7 +132,7 @@ export const wrapNode = (node: SceneNode, suffix: string = "-wrap"): SceneNode =
     }
   });
   vec3.set(transform.trans, 0, 0, 0);
-  if (node.parent != null) {
+  if (node.parent !== undefined) {
     const index = node.parent.children.indexOf(node);
     node.parent.children[index] = wrapper;
     wrapper.parentName = node.parentName;
@@ -144,7 +144,7 @@ export const wrapNode = (node: SceneNode, suffix: string = "-wrap"): SceneNode =
 
 export const getParentNodes = (node: SceneNode) : SceneNode[] => {
   const parents = [node];
-  while (node.parent != null) {
+  while (node.parent !== undefined) {
     node = node.parent;
     parents.push(node);
   }
@@ -194,7 +194,7 @@ export const updateNodeTransform = (node: SceneNode, parentChanged: boolean, par
 
     node.worldVisible = node.visible && (node.parent?.worldVisible ?? true);
   }
-  if (node.children != null) {
+  if (node.children !== null) {
     for (const child of node.children) {
       updateNodeTransform(child, shouldUpdate, node.worldTransform, animating);
     }

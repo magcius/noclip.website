@@ -27,7 +27,7 @@ const dataParsersByTokenName:Record<string, (bytes: Uint8Array) => (number | str
 const parseDataType = (bytes: Uint8Array, token: Token) : string | number => {
 	let { name } = token;
 	const dataParser = dataParsersByTokenName[name];
-	if (dataParser == null) {
+	if (dataParser === undefined) {
 		console.warn("Unsupported data type:", token.name);
 		return `${name}(${[...bytes].map((b) => b.toString(16).padStart(2, "0")).join("")})`;
 	}
@@ -55,7 +55,7 @@ export const parse = async (scxBytes: Uint8Array) : Promise<SCX.Scene> => {
 		if (token?.type === "data-type") {
 			const values: (string | number)[] = [];
 			const { terminator, vec, size } = token;
-			if (terminator != null) {
+			if (terminator !== undefined) {
 				const end = scxBytes.indexOf(terminator, i);
 				const bytes = scxBytes.subarray(i + 1, end);
 				i = end;
@@ -89,7 +89,7 @@ export const parse = async (scxBytes: Uint8Array) : Promise<SCX.Scene> => {
 			continue;
 		}
 
-		if (token == null) {
+		if (token === undefined) {
 			console.warn("No token:", byte);
 			continue;
 		}
@@ -104,7 +104,7 @@ export const parse = async (scxBytes: Uint8Array) : Promise<SCX.Scene> => {
 			continue;
 		}
 
-		const isValue = token.type === "value" && lastToken != null; // probably should be more rigorous
+		const isValue = token.type === "value" && lastToken !== undefined; // probably should be more rigorous
 		const isFieldName =
 			!isValue && tokenTable[scxBytes[i + 1]]?.name !== openBrace;
 		if (isValue) {
@@ -126,7 +126,7 @@ class Writer {
 	stackTop = () => this.scopeStack[Math.max(0, this.scopeStack.length - 1)]
 
 	writeValues(values: (string | number)[]) {
-		if (this.fieldName == null) {
+		if (this.fieldName === null) {
 			if (!Array.isArray(this.stackTop())) {
 				const o = this.scopeStack.pop();
 				this.stackTop().pop();
@@ -135,7 +135,7 @@ class Writer {
 			return;
 		}
 		const oldValue = this.stackTop()[this.fieldName];
-		if (oldValue != null) {
+		if (oldValue !== undefined) {
 			const array = Array.isArray(oldValue) ? oldValue : [oldValue];
 			array.push(...values);
 			this.stackTop()[this.fieldName] = array;
@@ -157,7 +157,7 @@ class Writer {
 	};
 
 	writeValue(value: any) {
-		if (this.fieldName == null) {
+		if (this.fieldName === null) {
 			console.warn("Dropped value:", value)
 			return
 		}
@@ -181,7 +181,7 @@ class Writer {
 		type = type.toLowerCase();
 		const pluralTypeName = typedListNames[type] ?? `${type}s`;
 		this.fieldName = null;
-		if (this.stackTop()[pluralTypeName] == null) {
+		if (this.stackTop()[pluralTypeName] === undefined) {
 			this.stackTop()[pluralTypeName] = [];
 		}
 		this.scopeStack.push(this.stackTop()[pluralTypeName]);
@@ -202,14 +202,14 @@ class Writer {
 	print () : SCX.Scene {
 		const o = this.scopeStack[0];
 		this.crawlObject(o, (o: Record<string, any>) => {
-			if (o.meshes != null && o.transforms != null) {
+			if (o.meshes !== undefined && o.transforms !== undefined) {
 				const scale = (o.transforms.find(() => true) as SCX.Transform)!.scale;
 				// For now, we only test whether an object is flipped in object space.
 				// It might be worth testing whether an object is flipped in world space.
 				const isFlipped = Math.sign(scale[0] * scale[1] * scale[2]) < 0;
 				const meshes = [];
 				for (const mesh of Object.values(o.meshes) as SCX.PolygonMesh[]) {
-					if (mesh.polycount != null && mesh.polygons != null) {
+					if (mesh.polycount !== undefined && mesh.polygons !== undefined) {
 						meshes.push(...splitMesh(mesh));
 					}
 				}
@@ -217,7 +217,7 @@ class Writer {
 				o.meshes = meshes;
 			}
 			
-			if (o.keycount != null && o.keyframes != null) {
+			if (o.keycount !== undefined && o.keyframes !== undefined) {
 				const keyframes: Keyframe[] = range(0, o.keycount)
 					.map((i) : Keyframe => {
 						const [time, value, tangentIn, tangentOut] = o.keyframes.slice(

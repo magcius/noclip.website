@@ -151,7 +151,7 @@ export class MercuryPool extends Simulation {
     for (let i = 1; i < 10; i++) {
       const dropModel = sceneNodesByName.get(`Mercury_Pool_Drop.scx_${i}/_root`);
       const splashModel = sceneNodesByName.get(`Mercury_Pool_Splash.scx_${i}/_root`);
-      if (dropModel == null || splashModel == null) {
+      if (dropModel === undefined || splashModel === undefined) {
         break;
       }
       dropModel.visible = false;

@@ -324,7 +324,7 @@ export default class SandPendulum extends Simulation {
       this.pivot1.transform.rot[0] = timeA * this.energy * 0.1;
       this.pivot1.transform.rot[1] = timeB * this.energy * 0.1;
       
-      // if (this.pivot2 != null) {
+      // if (this.pivot2 !== null) {
       //   this.pivot2.transform.rot[0] = timeA * 0;
       //   this.pivot2.transform.rot[1] = timeB * 0;
       //   this.pivot2.transformChanged = true;

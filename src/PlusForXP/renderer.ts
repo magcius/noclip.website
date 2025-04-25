@@ -190,8 +190,8 @@ export default class Renderer implements SceneGfx {
         transformedLightsBySceneName.set(sceneName, 
           lights.map((light: SCX.Light) : SCX.Light => ({
             ...light,
-            pos: light.pos == undefined ? undefined : [...vec3.transformMat4(vec3.create(), light.pos, rootTransform)] as SCX.Vec3,
-            dir: light.dir == undefined ? undefined : [...vec4.transformMat4(vec4.create(), [...light.dir, 0], rootTransform)] as SCX.Vec3,
+            pos: light.pos === undefined ? undefined : [...vec3.transformMat4(vec3.create(), light.pos, rootTransform)] as SCX.Vec3,
+            dir: light.dir === undefined ? undefined : [...vec4.transformMat4(vec4.create(), [...light.dir, 0], rootTransform)] as SCX.Vec3,
           }))
         );
       }
@@ -207,11 +207,11 @@ export default class Renderer implements SceneGfx {
     const requiredTextures = new Map<string, Texture>();
     for (const material of this.materialsByName.values()) {
 
-      const texture = (material.shader.texture == null) 
+      const texture = (material.shader.texture === undefined) 
         ? null 
-        : this.texturesByPath.get(material.shader.texture.replaceAll("\\", "/"));
+        : this.texturesByPath.get(material.shader.texture.replaceAll("\\", "/")) ?? null;
 
-      if (texture == null) {
+      if (texture === null) {
         continue;
       }
 
@@ -287,7 +287,7 @@ export default class Renderer implements SceneGfx {
       node.parent = this.rootNode;
       node.parent.children.push(node);
       this.camerasByName.set(cameraName, camera);
-      if (camera.animations != null) {
+      if (camera.animations !== undefined) {
         node.animatedTransform = {
           trans: vec3.clone(node.transform.trans),
           rot: vec3.clone(node.transform.rot),
@@ -330,7 +330,7 @@ export default class Renderer implements SceneGfx {
       const meshes: Mesh[] = [];
       const node: SceneNode = createSceneNode({
         name: objectName,
-        parentName: object.parent == null ? undefined : sceneName + object.parent,
+        parentName: object.parent === null ? undefined : sceneName + object.parent,
         parent: sceneRoot,
         transform,
         animates: (object.animations?.length ?? 0) > 0,
@@ -344,7 +344,7 @@ export default class Renderer implements SceneGfx {
         }
 
         const material = this.materialsByName.get(sceneName + mesh.shader) ?? this.fallbackMaterial;
-        if (material == this.fallbackMaterial) {
+        if (material === this.fallbackMaterial) {
           console.warn(`Missing shader ${mesh.shader} on mesh in ${object.name} of scene ${sceneName}. Falling back to default material.`);
         }
 
@@ -417,7 +417,7 @@ export default class Renderer implements SceneGfx {
       this.sceneNodesByName.set(objectName, node);
       nodes.set(objectName, node);
 
-      if (object.animations != null) {
+      if (object.animations !== undefined) {
         node.animatedTransform = {
           trans: vec3.clone(node.transform.trans),
           rot: vec3.clone(node.transform.rot),
@@ -490,7 +490,7 @@ export default class Renderer implements SceneGfx {
 
     if (this.animating) {
       const cameraWorldPos = mat4.getTranslation(vec3.create(), 
-        this.activeCameraName != null
+        this.activeCameraName !== null
         ? this.sceneNodesByName.get(this.activeCameraName)!.worldTransform
         : viewerInput.camera.worldMatrix
       );
@@ -537,7 +537,7 @@ export default class Renderer implements SceneGfx {
 
       this.lastViewerCameraMatrix ??= [...viewerInput.camera.worldMatrix].join("_");
       
-      if (this.activeCameraName != null) {
+      if (this.activeCameraName !== null) {
         
         const camera: SCX.Camera = this.camerasByName.get(this.activeCameraName)!;
         const cameraNode: SceneNode = this.sceneNodesByName.get(this.activeCameraName)!;
@@ -562,7 +562,7 @@ export default class Renderer implements SceneGfx {
           relativePos[2] ** 2
         )));
         
-        if (this.activeCameraName != null && this.lastViewerCameraMatrix !== [...viewerInput.camera.worldMatrix].join("_")) {
+        if (this.activeCameraName !== null && this.lastViewerCameraMatrix !== [...viewerInput.camera.worldMatrix].join("_")) {
           this.cameraSelect.selectItem(0);
           mat4.copy(viewerInput.camera.worldMatrix, this.scratchViewMatrix);
           viewerInput.camera.worldMatrixUpdated();
@@ -598,14 +598,14 @@ export default class Renderer implements SceneGfx {
     });
 
     for (const node of this.renderableNodes) {
-      if (!node.worldVisible || (node.isGhost ?? false) != ghosts) {
+      if (!node.worldVisible || (node.isGhost ?? false) !== ghosts) {
         continue;
       }
       
       for (const mesh of node.meshes!) {  
         
         renderMesh: {
-          const envMap = (mesh.envID == null ? null : this.environmentMapsByID.get(mesh.envID)) ?? this.missingEnvMap;
+          const envMap = (mesh.envID === undefined ? null : this.environmentMapsByID.get(mesh.envID)) ?? this.missingEnvMap;
           const renderInst = renderInstManager.newRenderInst();  
           updateObjectParams: {
             let objectOffset = renderInst.allocateUniformBuffer(Plus4XPProgram.ub_ObjectParams, 16 * 3 + 4 + 4 /*Mat4x3 * 3 + vec4 * 2*/);
@@ -620,7 +620,7 @@ export default class Renderer implements SceneGfx {
             objectOffset += fillVec4(object, objectOffset, ...(envMap.tint as [number, number, number, number]));
 
             {
-              object[objectOffset] = mesh.material.gfxTexture == null ? 1 : 0;
+              object[objectOffset] = mesh.material.gfxTexture === null ? 1 : 0;
               objectOffset++;
             }
           }
@@ -657,14 +657,14 @@ export default class Renderer implements SceneGfx {
     this.textureHolder.destroy(device);
     this.renderHelper.destroy();
     for (const material of this.materialsByName.values()) {
-      if (material.gfxTexture != null) {
+      if (material.gfxTexture !== null) {
         device.destroyTexture(material.gfxTexture);
         material.gfxTexture = null;
       }
     }
     this.materialsByName.clear();
     for (const node of this.sceneNodesByName.values()) {
-      if (node.meshes == null || node.meshes.length === 0) {
+      if (node.meshes === null || node.meshes.length === 0) {
         continue;
       }
       for (const {buffer} of node.meshes[0].vertexAttributes) {
@@ -674,11 +674,11 @@ export default class Renderer implements SceneGfx {
         device.destroyBuffer(mesh.indexBufferDescriptor.buffer);
       }
     }
-    if (this.diffuseSampler != null) {
+    if (this.diffuseSampler !== null) {
       device.destroySampler(this.diffuseSampler);
     }
     this.diffuseSampler = null;
-    if (this.envSampler != null) {
+    if (this.envSampler !== null) {
       device.destroySampler(this.envSampler);
     }
     this.envSampler = null;

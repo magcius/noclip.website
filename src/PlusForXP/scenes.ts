@@ -174,10 +174,11 @@ const screensavers: Record<string, Screensaver> = {
 const fetchScene = async (sceneContext: SceneContext, basePath: string, source: SceneSource) : Promise<[string, [SCX.Scene, string?]][]> => {
   const {path, count, envID} = source;
   let scene = source.scene;
-  if (scene == null) {
+  if (scene === undefined) {
     const data = await sceneContext.dataFetcher.fetchData(`${basePath}${path}`);
     scene = await parseSCX(new Uint8Array(data.arrayBuffer));
   }
+
   return (count ?? 1) > 1
     ? Array(count).fill(0).map((_, i) => ([`${path}_${i + 1}/`, [scene, envID]]))
     : [[`${path}/`, [scene, envID]]];
@@ -207,7 +208,7 @@ export const sceneGroup = {
                 .map(([scene]) => scene)
                 .flatMap(({shaders}) => shaders ?? [])
                 .map(shader => shader.texture)
-                .filter(texture => texture != null)
+                .filter(texture => texture !== undefined)
                 .map(texturePath => texturePath.replaceAll("\\", "/"))
               ),
               fetchTextures(sceneContext.dataFetcher, basePath, Object.values(environmentMaps).map(({texturePath}) => texturePath))

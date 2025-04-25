@@ -47,7 +47,7 @@ export type ChannelAnimation = {
 };
 
 export const buildNodeAnimations = (transform: Transform, animations: SCX.KeyframeAnimation[]): ChannelAnimation[] => {
-  animations = animations.filter(({channel}) => channelModifiers[channel] != null);
+  animations = animations.filter(({channel}) => channelModifiers[channel] !== null);
   const fullAnimDuration = Math.max(
     ...animations.flatMap(anim => anim.keyframes).map(keyframe => keyframe.time / 1000)
   );

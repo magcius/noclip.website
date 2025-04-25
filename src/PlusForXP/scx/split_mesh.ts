@@ -1,7 +1,7 @@
 import { SCX } from "./types.js";
 
 export const splitMesh = (mesh: SCX.PolygonMesh) : SCX.PolygonMesh[] => {
-  if (mesh.polygons == null) {
+  if (mesh.polygons === undefined) {
     return [];
   }
 
