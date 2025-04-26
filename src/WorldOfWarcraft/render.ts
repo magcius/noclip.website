@@ -1216,6 +1216,7 @@ export class SkyboxRenderer {
             [this.vertexBuffer],
             this.indexBuffer,
         );
+        renderInst.setMegaStateFlags({ depthWrite: false });
         renderInst.setBindingLayouts(SkyboxProgram.bindingLayouts);
         renderInst.setDrawCount(this.numIndices, 0);
         renderInstManager.submitRenderInst(renderInst);
