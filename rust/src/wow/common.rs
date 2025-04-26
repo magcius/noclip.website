@@ -99,7 +99,11 @@ impl<'a> Iterator for ChunkedData<'a> {
         }
         let (_, chunk) = Chunk::from_bytes((&self.data[self.idx..], 0)).unwrap();
         let chunk_start = self.idx + 8;
-        let chunk_end = chunk_start + chunk.size as usize;
+        let mut chunk_end = chunk_start + chunk.size as usize;
+        // hack: ADTs in Zul'Drak seem to be missing 1 chunk for some reason
+        if chunk_end > self.data.len() {
+            chunk_end = self.data.len() - 1;
+        }
         let chunk_data = &self.data[chunk_start..chunk_end];
         self.idx = chunk_end;
         assert!(self.idx <= self.data.len());
