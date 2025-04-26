@@ -631,10 +631,9 @@ export class ModelData {
         this.boneScalings = new Float32Array(this.numBones * 3);
         this.numColors = this.animationManager.get_num_colors();
         this.numLights = this.animationManager.get_num_lights();
-        assert(
-            this.numLights <= 4,
-            `model ${this.fileId} has ${this.numLights} lights`,
-        );
+        if (this.numLights > 4) {
+            console.warn(`model ${this.fileId} has ${this.numLights} lights`);
+        }
         this.vertexColors = new Float32Array(this.numColors * 4);
         this.ambientLightColors = new Float32Array(this.numLights * 4);
         this.diffuseLightColors = new Float32Array(this.numLights * 4);
@@ -1348,10 +1347,14 @@ export class WmoDefinition {
                 doodad.worldAABB.centerPoint(p);
                 vec3.transformMat4(p, p, this.invModelMatrix);
 
+                const groupIds = this.doodadIndexToGroupIds.get(ref)!;
+                if (groupIds.length === 0) {
+                    console.warn(`doodad has 0 group ids: ${doodad.modelId}/${doodad.uniqueId}`)
+                    continue;
+                }
                 // for some reason, the same doodad can exist in multiple groups. if
                 // that's the case, select the closest group (by AABB centerpoint) for
                 // lighting purposes
-                const groupIds = this.doodadIndexToGroupIds.get(ref)!;
                 let group: WowWmoGroupDescriptor;
                 if (groupIds.length > 1) {
                     let closestGroupId;
