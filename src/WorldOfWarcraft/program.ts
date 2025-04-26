@@ -851,33 +851,24 @@ export class ModelProgram extends BaseProgram {
     ];
 
     private static buildVertexShaderBlock(
-        colorType: string,
-        uvs: string[],
+        colorType: "diffuse" | "color" | "edgeFade" | "bw",
+        uvs: ("t1" | "t2" | "t3" | "env")[],
     ): string {
         const colorAssignment =
-            colorType === "diffuse"
-                ? `v_DiffuseColor = vec4(combinedColorHalved.r, combinedColorHalved.g, combinedColorHalved.b, combinedColor.a);`
-                : colorType === "color"
-                  ? `v_DiffuseColor = vec4(0.5, 0.5, 0.5, 1.0);`
-                  : colorType === "edgeFade"
-                    ? `v_DiffuseColor = vec4(combinedColorHalved.r, combinedColorHalved.g, combinedColorHalved.b, combinedColor.a * edgeScanVal);`
-                    : `v_DiffuseColor = vec4(combinedColor.rgb * 0.5, combinedColor.a);`;
+            colorType === "diffuse" ? `v_DiffuseColor = vec4(combinedColorHalved.r, combinedColorHalved.g, combinedColorHalved.b, combinedColor.a);` :
+            colorType === "color" ? `v_DiffuseColor = vec4(0.5, 0.5, 0.5, 1.0);` :
+            colorType === "edgeFade" ? `v_DiffuseColor = vec4(combinedColorHalved.r, combinedColorHalved.g, combinedColorHalved.b, combinedColor.a * edgeScanVal);` :
+            colorType === "bw" ? `v_DiffuseColor = vec4(combinedColor.rgb * 0.5, combinedColor.a);` : ``;
+
         const uvAssignments = uvs
-            .map((uv, uvIndex) => {
-                if (uv.startsWith("t")) {
-                    let n = parseInt(uv[1]);
-                    if (n < 2) {
-                        return `        v_UV${uvIndex} = UnpackMatrix(texMat${n - 1}) * vec4(a_TexCoord${n - 1}, 0.0, 1.0);`;
-                    } else {
-                        return `        v_UV${uvIndex} = v_UV${n};`;
-                    }
-                } else if (uv === "env") {
-                    return `        v_UV${uvIndex} = envCoord;`;
-                } else {
-                    throw `unrecognized uv ${uv}`;
+            .map((assign, uvIndex) => {
+                switch (assign) {
+                    case "t1":  return `        v_UV${uvIndex} = UnpackMatrix(texMat0) * vec4(a_TexCoord0, 0.0, 1.0);`;
+                    case "t2":  return `        v_UV${uvIndex} = UnpackMatrix(texMat1) * vec4(a_TexCoord1, 0.0, 1.0);`;
+                    case "t3":  return `        v_UV${uvIndex} = v_UV2;`;
+                    case "env": return `        v_UV${uvIndex} = envCoord;`;
                 }
-            })
-            .join("\n");
+            }).join("\n");
         return `${colorAssignment}\n${uvAssignments}`;
     }
 
