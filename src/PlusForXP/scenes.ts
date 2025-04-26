@@ -1,6 +1,6 @@
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { SceneContext } from "../SceneBase.js";
-import { SceneGfx } from "../viewer.js";
+import { SceneGfx, SceneDesc } from "../viewer.js";
 
 import { parse as parseSCX } from "./scx/parser.js";
 import { SCX } from "./scx/types.js";
@@ -182,44 +182,57 @@ const fetchScene = async (sceneContext: SceneContext, basePath: string, source: 
         : [[`${path}/`, [scene, envID]]];
 };
 
+class PlusForXPSceneDesc implements SceneDesc {
+    id: string;
+    name: string;
+
+    constructor(
+        private screensaverID: string,
+        private variantID: string,
+        private variant: Variant,
+    ) {
+        this.id = `${screensaverID}-${variantID}`;
+        this.name = variant.name;
+    }
+
+    async createScene(device: GfxDevice, sceneContext: SceneContext): Promise<SceneGfx> {
+        const screensaver = screensavers[this.screensaverID];
+        const { environmentMaps, cameras, createSimulation: simulateFunc } = this.variant;
+        const basePath = `PlusForXP/${screensaver.basePath}`;
+        const scenes: Record<string, [SCX.Scene, string?]> = Object.fromEntries(
+            (await Promise.all(this.variant.scenes.map(async (source) => await fetchScene(sceneContext, basePath, source)))).flat(),
+        );
+        const textures = (
+            await Promise.all([
+                fetchTextures(
+                    sceneContext.dataFetcher,
+                    basePath,
+                    (Object.values(scenes) as [SCX.Scene, string?][])
+                        .map(([scene]) => scene)
+                        .flatMap(({ shaders }) => shaders ?? [])
+                        .map((shader) => shader.texture)
+                        .filter((texture) => texture !== undefined)
+                        .map((texturePath) => texturePath.replaceAll("\\", "/")),
+                ),
+                fetchTextures(
+                    sceneContext.dataFetcher,
+                    basePath,
+                    Object.values(environmentMaps).map(({ texturePath }) => texturePath),
+                ),
+            ])
+        ).flat();
+        const textureHolder = makeTextureHolder(textures);
+        return new Renderer(device, { basePath, scenes, textures, environmentMaps, cameras, simulateFunc }, textureHolder);
+    }
+}
+
 export const sceneGroup = {
     id: "PlusForXP",
     name: "Plus! for XP",
     sceneDescs: (Object.entries(screensavers) as [string, Screensaver][]).flatMap(([screensaverID, screensaver]) => [
         screensaver.name,
-        ...(Object.entries(screensaver.variants) as [string, Variant][]).flatMap(([variantID, variant]) => ({
-            id: `${screensaverID}-${variantID}`,
-            name: variant.name,
-            createScene: async (device: GfxDevice, sceneContext: SceneContext): Promise<SceneGfx> => {
-                const screensaver = screensavers[screensaverID];
-                const variant = screensaver.variants[variantID];
-                const { environmentMaps, cameras, createSimulation: simulateFunc } = variant;
-                const basePath = `PlusForXP/${screensaver.basePath}`;
-                const scenes: Record<string, [SCX.Scene, string?]> = Object.fromEntries(
-                    (await Promise.all(variant.scenes.map(async (source) => await fetchScene(sceneContext, basePath, source)))).flat(),
-                );
-                const textures = (
-                    await Promise.all([
-                        fetchTextures(
-                            sceneContext.dataFetcher,
-                            basePath,
-                            (Object.values(scenes) as [SCX.Scene, string?][])
-                                .map(([scene]) => scene)
-                                .flatMap(({ shaders }) => shaders ?? [])
-                                .map((shader) => shader.texture)
-                                .filter((texture) => texture !== undefined)
-                                .map((texturePath) => texturePath.replaceAll("\\", "/")),
-                        ),
-                        fetchTextures(
-                            sceneContext.dataFetcher,
-                            basePath,
-                            Object.values(environmentMaps).map(({ texturePath }) => texturePath),
-                        ),
-                    ])
-                ).flat();
-                const textureHolder = makeTextureHolder(textures);
-                return new Renderer(device, { basePath, scenes, textures, environmentMaps, cameras, simulateFunc }, textureHolder);
-            },
-        })),
+        ...(Object.entries(screensaver.variants) as [string, Variant][]).flatMap(
+            ([variantID, variant]) => new PlusForXPSceneDesc(screensaverID, variantID, variant),
+        ),
     ]),
 };
