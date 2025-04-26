@@ -42,50 +42,50 @@ type Swing = {
     phaseB: number;
 };
 
-const swings: Swing[] = [
-    {
-        name: "lissajous",
-        startEnergy: 1,
-        decay: 0.99997,
-        finalDecay: 0.995,
-        ampA: (time) => 1,
-        ampB: (time) => 1,
-        freqB: 1.03,
-        phaseB: 0,
-    },
-    {
-        name: "spiral",
-        startEnergy: 1.25,
-        decay: 0.9995,
-        finalDecay: 0.95,
-        ampA: (time) => 1,
-        ampB: (time) => 1,
-        freqB: 1,
-        phaseB: Math.PI / 2,
-    },
-    {
-        name: "flower",
-        startEnergy: 1.25,
-        decay: 0.9999,
-        finalDecay: 0.995,
-        ampA: (time) => Math.cos((time * 2.02) / 11),
-        ampB: (time) => Math.sin((time * 2.02) / 11),
-        freqB: 1,
-        phaseB: 0,
-    },
-    {
-        name: "triangle",
-        startEnergy: 1.25,
-        decay: 0.9997,
-        finalDecay: 0.95,
-        ampA: (time) => Math.cos((time * 1.02) / 3),
-        ampB: (time) => Math.sin((time * 1.02) / 3),
-        freqB: 1,
-        phaseB: 0,
-    },
-];
-
 export default class SandPendulum extends Simulation {
+    swings: Swing[] = [
+        {
+            name: "lissajous",
+            startEnergy: 1,
+            decay: 0.99997,
+            finalDecay: 0.995,
+            ampA: (time) => 1,
+            ampB: (time) => 1,
+            freqB: 1.03,
+            phaseB: 0,
+        },
+        {
+            name: "spiral",
+            startEnergy: 1.25,
+            decay: 0.9995,
+            finalDecay: 0.95,
+            ampA: (time) => 1,
+            ampB: (time) => 1,
+            freqB: 1,
+            phaseB: Math.PI / 2,
+        },
+        {
+            name: "flower",
+            startEnergy: 1.25,
+            decay: 0.9999,
+            finalDecay: 0.995,
+            ampA: (time) => Math.cos((time * 2.02) / 11),
+            ampB: (time) => Math.sin((time * 2.02) / 11),
+            freqB: 1,
+            phaseB: 0,
+        },
+        {
+            name: "triangle",
+            startEnergy: 1.25,
+            decay: 0.9997,
+            finalDecay: 0.95,
+            ampA: (time) => Math.cos((time * 1.02) / 3),
+            ampB: (time) => Math.sin((time * 1.02) / 3),
+            freqB: 1,
+            phaseB: 0,
+        },
+    ] as const;
+
     private isGrotto: boolean;
     private pendulum: SceneNode;
     private sandParticles: SceneNode;
@@ -116,6 +116,10 @@ export default class SandPendulum extends Simulation {
     private sampler: GfxSampler;
     private renderInstListSand = new GfxRenderInstList();
 
+    private pickRandomSwing() {
+        this.swing = this.swings[Math.floor(Math.random() * this.swings.length)];
+    }
+
     override setup(
         device: GfxDevice,
         texturesByPath: Map<string, Texture>,
@@ -133,7 +137,7 @@ export default class SandPendulum extends Simulation {
         const sandTexturePath = "Pendulum_Sand_textures/Sand.tif";
         this.originalSandTexture = texturesByPath.get(sandTexturePath)!;
 
-        this.swing = swings[Math.floor(Math.random() * swings.length)];
+        this.pickRandomSwing();
 
         this.energy = this.swing.startEnergy;
         this.fade = -1;
@@ -347,7 +351,7 @@ export default class SandPendulum extends Simulation {
             this.fadeStart = input.time;
             this.fade = 0;
             this.isResetting = true;
-            this.swing = swings[Math.floor(Math.random() * swings.length)];
+            this.pickRandomSwing();
             const future = (this.fadeStart + 6000) * 0.0032;
             const timeA = Math.sin(future) * this.swing.ampA(future);
             const timeB = Math.sin(future * this.swing.freqB + this.swing.phaseB) * this.swing.ampB(future);

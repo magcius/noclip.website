@@ -6,7 +6,7 @@ import { parse as parseSCX } from "./scx/parser.js";
 import { SCX } from "./scx/types.js";
 import { fetchTextures, makeTextureHolder } from "./util.js";
 import Renderer from "./renderer.js";
-import { poolScene as pool, MercuryPool } from "./simulations/mercury_pool.js";
+import { createPoolScene, MercuryPool } from "./simulations/mercury_pool.js";
 import RobotCircus from "./simulations/robot_circus.js";
 import SandPendulum from "./simulations/sand_pendulum.js";
 import { EnvironmentMap, Simulation } from "./types.js";
@@ -14,7 +14,7 @@ import { EnvironmentMap, Simulation } from "./types.js";
 type SceneSource = {
     path: string;
     count?: number;
-    scene?: SCX.Scene;
+    scene?: () => SCX.Scene;
     envID?: string;
 };
 
@@ -38,7 +38,7 @@ const screensavers: Record<string, Screensaver> = {
                 scenes: [
                     { path: "Mercury_Pool_Cave_Scene.scx" },
                     { path: "Mercury_Pool_Cave_Camera.scx" },
-                    { path: "pool", scene: pool, envID: "cave" },
+                    { path: "pool", scene: () => createPoolScene(), envID: "cave" },
                     { path: "Mercury_Pool_Drop.scx", count: 5, envID: "cave" },
                     { path: "Mercury_Pool_Splash.scx", count: 5, envID: "cave" },
                 ],
@@ -54,7 +54,7 @@ const screensavers: Record<string, Screensaver> = {
                     { path: "Mercury_Pool_Tech_Scene.scx" },
                     { path: "Mercury_Pool_Tech_Camera.scx" },
                     { path: "Mercury_Pool_Tech_Sky.scx" },
-                    { path: "pool", scene: pool, envID: "tech" },
+                    { path: "pool", scene: () => createPoolScene(), envID: "tech" },
                     { path: "Mercury_Pool_Drop.scx", count: 5, envID: "tech" },
                     { path: "Mercury_Pool_Splash.scx", count: 5, envID: "tech" },
                 ],
@@ -169,7 +169,7 @@ const screensavers: Record<string, Screensaver> = {
 
 const fetchScene = async (sceneContext: SceneContext, basePath: string, source: SceneSource): Promise<[string, [SCX.Scene, string?]][]> => {
     const { path, count, envID } = source;
-    let scene = source.scene;
+    let scene = source.scene?.();
     if (scene === undefined) {
         const data = await sceneContext.dataFetcher.fetchData(`${basePath}${path}`);
         scene = await parseSCX(new Uint8Array(data.arrayBuffer));

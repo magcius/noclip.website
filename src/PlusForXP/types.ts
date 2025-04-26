@@ -27,10 +27,12 @@ export type EnvironmentMap = {
 
 export type VertexAttribute = GfxVertexBufferDescriptor & { name: string; data?: Float32Array };
 
+export type Index = GfxIndexBufferDescriptor & { data?: Uint32Array };
+
 export type Mesh = {
     inputLayout: GfxInputLayout;
     vertexAttributes: VertexAttribute[];
-    indexBufferDescriptor: GfxIndexBufferDescriptor;
+    indexBufferDescriptor: Index;
     indexCount: number;
     material: Material;
     envID?: string;

@@ -33,7 +33,7 @@ import { bakeLights } from "./bake_lights.js";
 import { Material, Mesh, Texture, SceneNode, Simulation, EnvironmentMap } from "./types.js";
 import { SceneGfx, ViewerRenderInput } from "../viewer.js";
 import Plus4XPProgram from "./program.js";
-import { buildNodeAnimations } from "./animation.js";
+import { AnimationBuilder } from "./animation.js";
 import * as UI from "../ui.js";
 import { createSceneNode, makeDataBuffer, updateNodeTransform } from "./util.js";
 
@@ -102,6 +102,7 @@ export default class Renderer implements SceneGfx {
     private megaStateFlags: GfxMegaStateDescriptor;
     private simulation: Simulation | null;
     private cameraSelect: UI.SingleSelect;
+    private animationBuilder = new AnimationBuilder();
 
     constructor(
         device: GfxDevice,
@@ -287,7 +288,7 @@ export default class Renderer implements SceneGfx {
                     rot: vec3.clone(node.transform.rot),
                     scale: vec3.clone(node.transform.scale),
                 };
-                node.animations = buildNodeAnimations(node.animatedTransform!, camera.animations);
+                node.animations = this.animationBuilder.build(node.animatedTransform!, camera.animations);
                 this.animatableNodes.push(node);
             }
         }
@@ -354,14 +355,15 @@ export default class Renderer implements SceneGfx {
                 const texcoordBuffer = makeDataBuffer(device, GfxBufferUsage.Vertex, new Float32Array(mesh.texCoords).buffer);
 
                 const vertexAttributes = [
-                    { name: "position", ...(mesh.dynamic ? { data: positions } : {}), buffer: positionBuffer, byteOffset: 0 },
-                    { name: "normal", ...(mesh.dynamic ? { data: normals } : {}), buffer: normalBuffer, byteOffset: 0 },
+                    { name: "position", ...(mesh.dynamic ? { data: positions } : null), buffer: positionBuffer, byteOffset: 0 },
+                    { name: "normal", ...(mesh.dynamic ? { data: normals } : null), buffer: normalBuffer, byteOffset: 0 },
                     { name: "diffuseColor", buffer: diffuseColorBuffer, byteOffset: 0 },
                     { name: "texCoord", buffer: texcoordBuffer, byteOffset: 0 },
                 ];
 
-                const indexBuffer = makeDataBuffer(device, GfxBufferUsage.Index, new Uint32Array(mesh.indices).buffer);
-                const indexBufferDescriptor = { buffer: indexBuffer, byteOffset: 0 };
+                const indices = new Uint32Array(mesh.indices);
+                const indexBuffer = makeDataBuffer(device, GfxBufferUsage.Index, indices.buffer);
+                const indexBufferDescriptor = { buffer: indexBuffer, byteOffset: 0, ...(mesh.dynamic ? { data: indices } : null) };
 
                 const lights: SCX.Light[] = [
                     {
@@ -393,7 +395,7 @@ export default class Renderer implements SceneGfx {
                     rot: vec3.clone(node.transform.rot),
                     scale: vec3.clone(node.transform.scale),
                 };
-                node.animations = buildNodeAnimations(node.animatedTransform!, object.animations);
+                node.animations = this.animationBuilder.build(node.animatedTransform!, object.animations);
                 this.animatableNodes.push(node);
             }
         }

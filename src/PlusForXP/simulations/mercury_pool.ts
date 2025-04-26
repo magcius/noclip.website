@@ -1,6 +1,6 @@
 import { vec2, vec3 } from "gl-matrix";
 import { ViewerRenderInput } from "../../viewer";
-import { Material, SceneNode, Simulation, Texture, VertexAttribute } from "../types";
+import { Material, SceneNode, Simulation, Texture } from "../types";
 import { getDescendants } from "../util";
 import { GfxBuffer, GfxDevice } from "../../gfx/platform/GfxPlatform";
 import { SCX } from "../scx/types.js";
@@ -8,101 +8,103 @@ import { SCX } from "../scx/types.js";
 const numSegments = 32;
 const numVertexRows = numSegments + 1;
 
-const vertices = Array(numVertexRows)
-    .fill(0)
-    .map((_, y) =>
-        Array(numVertexRows)
-            .fill(0)
-            .map((_, x) => {
-                return {
-                    position: vec3.fromValues(
-                        // x / numSegments - 0.5,
-                        (x + (x > 0 && x < numVertexRows - 1 ? (y % 2) / 2 - 0.25 : 0)) / numSegments - 0.5,
-                        y / numSegments - 0.5,
-                        0,
+export const createPoolScene = (): SCX.Scene => {
+    const vertices = Array(numVertexRows)
+        .fill(0)
+        .map((_, y) =>
+            Array(numVertexRows)
+                .fill(0)
+                .map((_, x) => {
+                    return {
+                        position: vec3.fromValues(
+                            // x / numSegments - 0.5,
+                            (x + (x > 0 && x < numVertexRows - 1 ? (y % 2) / 2 - 0.25 : 0)) / numSegments - 0.5,
+                            y / numSegments - 0.5,
+                            0,
+                        ),
+                        normal: vec3.fromValues(0, 0, 1),
+                    };
+                }),
+        )
+        .flat()
+        .map((vert, i) => ({ ...vert, i }));
+    const trianglePairIndices = (a: number, b: number, c: number, d: number, swap: boolean): number[][] =>
+        // [[a, b, d], [b, c, c /* d */]];
+        // swap ? [[a, b, c], [a, c, c /* d */]] : [[a, b, d], [b, c, c /* d */]];
+        swap
+            ? [
+                  [a, b, c],
+                  [a, c, d],
+              ]
+            : [
+                  [a, b, d],
+                  [b, c, d],
+              ];
+    const triangles = Array(numSegments)
+        .fill(0)
+        .map((_, i) =>
+            Array(numSegments)
+                .fill(0)
+                .map((_, j) =>
+                    trianglePairIndices(
+                        (i + 0) * numVertexRows + j + 0,
+                        (i + 0) * numVertexRows + j + 1,
+                        (i + 1) * numVertexRows + j + 1,
+                        (i + 1) * numVertexRows + j + 0,
+                        i % 2 === 1,
                     ),
-                    normal: vec3.fromValues(0, 0, 1),
-                };
-            }),
-    )
-    .flat()
-    .map((vert, i) => ({ ...vert, i }));
-const trianglePairIndices = (a: number, b: number, c: number, d: number, swap: boolean): number[][] =>
-    // [[a, b, d], [b, c, c /* d */]];
-    // swap ? [[a, b, c], [a, c, c /* d */]] : [[a, b, d], [b, c, c /* d */]];
-    swap
-        ? [
-              [a, b, c],
-              [a, c, d],
-          ]
-        : [
-              [a, b, d],
-              [b, c, d],
-          ];
-const triangles = Array(numSegments)
-    .fill(0)
-    .map((_, i) =>
-        Array(numSegments)
-            .fill(0)
-            .map((_, j) =>
-                trianglePairIndices(
-                    (i + 0) * numVertexRows + j + 0,
-                    (i + 0) * numVertexRows + j + 1,
-                    (i + 1) * numVertexRows + j + 1,
-                    (i + 1) * numVertexRows + j + 0,
-                    i % 2 === 1,
-                ),
-            )
-            .flat(),
-    )
-    .flat();
+                )
+                .flat(),
+        )
+        .flat();
 
-export const poolScene: SCX.Scene = {
-    shaders: [
-        {
-            name: "pool",
-            id: 1,
-            ambient: [1, 1, 1],
-            diffuse: [1, 1, 1],
-            specular: [1, 1, 1],
-            opacity: 1,
-            luminance: 0,
-            blend: 1,
-        },
-    ],
-    globals: [
-        {
-            animinterval: [0, 1000],
-            framerate: 0,
-            ambient: [0, 0, 0],
-        },
-    ],
-    cameras: [],
-    lights: [],
-    objects: [
-        {
-            name: "pool",
-            transforms: [
-                {
-                    trans: [0, 0, 0],
-                    rot: [0, 0, 0],
-                    scale: [1, 1, 1],
-                },
-            ],
-            meshes: [
-                {
-                    vertexcount: vertices.length,
-                    positions: vertices.map((v) => [...v.position]).flat(),
-                    normals: vertices.map((v) => [...v.normal]).flat(),
-                    indices: triangles.flat(),
-                    texCoords: Array(vertices.length * 2).fill(0),
-                    shader: 1,
-                    dynamic: true,
-                },
-            ],
-            animations: [],
-        },
-    ],
+    return {
+        shaders: [
+            {
+                name: "pool",
+                id: 1,
+                ambient: [1, 1, 1],
+                diffuse: [1, 1, 1],
+                specular: [1, 1, 1],
+                opacity: 1,
+                luminance: 0,
+                blend: 1,
+            },
+        ],
+        globals: [
+            {
+                animinterval: [0, 1000],
+                framerate: 0,
+                ambient: [0, 0, 0],
+            },
+        ],
+        cameras: [],
+        lights: [],
+        objects: [
+            {
+                name: "pool",
+                transforms: [
+                    {
+                        trans: [0, 0, 0],
+                        rot: [0, 0, 0],
+                        scale: [1, 1, 1],
+                    },
+                ],
+                meshes: [
+                    {
+                        vertexcount: vertices.length,
+                        positions: vertices.map((v) => [...v.position]).flat(),
+                        normals: vertices.map((v) => [...v.normal]).flat(),
+                        indices: triangles.flat(),
+                        texCoords: Array(vertices.length * 2).fill(0),
+                        shader: 1,
+                        dynamic: true,
+                    },
+                ],
+                animations: [],
+            },
+        ],
+    };
 };
 
 enum MercuryDropState {
@@ -128,6 +130,11 @@ type DynamicAttribute = {
     uint8Array: Uint8Array;
 };
 
+type DynamicIndex = {
+    buffer: GfxBuffer;
+    data: Uint32Array;
+};
+
 export class MercuryPool extends Simulation {
     private isInitialized: boolean;
     private isIndustrial: boolean;
@@ -137,6 +144,7 @@ export class MercuryPool extends Simulation {
     private splashDuration: number;
     private rippleDuration: number;
     private poolPositions: vec3[];
+    private poolTriangles: [number, number, number][];
     private poolPositionAttribute: DynamicAttribute;
     private poolNormals: vec3[];
     private poolNormalAttribute: DynamicAttribute;
@@ -165,6 +173,7 @@ export class MercuryPool extends Simulation {
         pool.transform.scale = [this.poolScale, this.poolScale, 1];
         pool.transformChanged = true;
         const poolAttributes = pool.meshes[0].vertexAttributes;
+        const poolIndices = pool.meshes[0].indexBufferDescriptor.data!;
 
         const poolPositionAttribute = poolAttributes.find((buffer) => buffer.name === "position")!;
         this.poolPositionAttribute = {
@@ -176,6 +185,10 @@ export class MercuryPool extends Simulation {
         this.poolPositions = Array(numVertexRows * numVertexRows)
             .fill(0)
             .map((_, i) => this.poolPositionAttribute.data.subarray(i * 3, (i + 1) * 3));
+
+        this.poolTriangles = Array(numSegments * numSegments * 2)
+            .fill(0)
+            .map((_, i) => [...poolIndices.subarray(i * 3, (i + 1) * 3)] as [number, number, number]);
 
         const poolNormalAttribute = poolAttributes.find((buffer) => buffer.name === "normal")!;
         this.poolNormalAttribute = {
@@ -282,7 +295,7 @@ export class MercuryPool extends Simulation {
 
         const normalData = this.poolNormalAttribute.data;
         normalData.fill(0);
-        for (const [index0, index1, index2] of triangles) {
+        for (const [index0, index1, index2] of this.poolTriangles) {
             vec3.sub(v0, this.poolPositions[index1], this.poolPositions[index0]);
             vec3.sub(v1, this.poolPositions[index2], this.poolPositions[index1]);
             vec3.cross(v0, v1, v0);
