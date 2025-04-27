@@ -35,7 +35,7 @@ import { SceneGfx, ViewerRenderInput } from "../viewer.js";
 import Plus4XPProgram from "./program.js";
 import { AnimationBuilder } from "./animation.js";
 import * as UI from "../ui.js";
-import { createSceneNode, makeDataBuffer, updateNodeTransform } from "./util.js";
+import { createSceneNode, createDataBuffer, updateNodeTransform } from "./util.js";
 
 type Context = {
     basePath: string;
@@ -347,12 +347,12 @@ export default class Renderer implements SceneGfx {
                 device.uploadBufferData(diffuseColorBuffer, 0, new Uint8Array(new Float32Array(mesh.vertexcount * 4).fill(1).buffer));
 
                 const positions = new Float32Array(mesh.positions);
-                const positionBuffer = makeDataBuffer(device, GfxBufferUsage.Vertex, positions.buffer, mesh.dynamic);
+                const positionBuffer = createDataBuffer(device, GfxBufferUsage.Vertex, positions.buffer, mesh.dynamic);
 
                 const normals = new Float32Array(mesh.normals);
-                const normalBuffer = makeDataBuffer(device, GfxBufferUsage.Vertex, normals.buffer, mesh.dynamic);
+                const normalBuffer = createDataBuffer(device, GfxBufferUsage.Vertex, normals.buffer, mesh.dynamic);
 
-                const texcoordBuffer = makeDataBuffer(device, GfxBufferUsage.Vertex, new Float32Array(mesh.texCoords).buffer);
+                const texcoordBuffer = createDataBuffer(device, GfxBufferUsage.Vertex, new Float32Array(mesh.texCoords).buffer);
 
                 const vertexAttributes = [
                     { name: "position", ...(mesh.dynamic ? { data: positions } : null), buffer: positionBuffer, byteOffset: 0 },
@@ -362,7 +362,7 @@ export default class Renderer implements SceneGfx {
                 ];
 
                 const indices = new Uint32Array(mesh.indices);
-                const indexBuffer = makeDataBuffer(device, GfxBufferUsage.Index, indices.buffer);
+                const indexBuffer = createDataBuffer(device, GfxBufferUsage.Index, indices.buffer);
                 const indexBufferDescriptor = { buffer: indexBuffer, byteOffset: 0, ...(mesh.dynamic ? { data: indices } : null) };
 
                 const lights: SCX.Light[] = [

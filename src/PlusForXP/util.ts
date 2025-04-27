@@ -71,7 +71,7 @@ export const flipTexture = (texture: Texture): Texture => {
     };
 };
 
-export const makeTextureHolder = (textures: Texture[]) =>
+export const createTextureHolder = (textures: Texture[]) =>
     new FakeTextureHolder(
         textures.map((texture) => {
             const { path: name, rgba8, width, height } = texture;
@@ -153,7 +153,7 @@ export const getDescendants = (node: SceneNode): SceneNode[] => {
     return [...descendants];
 };
 
-export const makeDataBuffer = (device: GfxDevice, usage: GfxBufferUsage, data: ArrayBufferLike, dynamic: boolean = false): GfxBuffer => {
+export const createDataBuffer = (device: GfxDevice, usage: GfxBufferUsage, data: ArrayBufferLike, dynamic: boolean = false): GfxBuffer => {
     return device.createBuffer(
         align(data.byteLength, 4) / 4,
         usage,

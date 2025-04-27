@@ -4,7 +4,7 @@ import { SceneGfx, SceneDesc } from "../viewer.js";
 
 import { parse as parseSCX } from "./scx/parser.js";
 import { SCX } from "./scx/types.js";
-import { decodeImage, flipTexture, makeTextureHolder } from "./util.js";
+import { decodeImage, flipTexture, createTextureHolder } from "./util.js";
 import Renderer from "./renderer.js";
 import { createPoolScene, MercuryPool } from "./simulations/mercury_pool.js";
 import RobotCircus from "./simulations/robot_circus.js";
@@ -238,7 +238,7 @@ class PlusForXPSceneDesc implements SceneDesc {
         }
         await Promise.all(loaders);
 
-        const textureHolder = makeTextureHolder(textures);
+        const textureHolder = createTextureHolder(textures);
         return new Renderer(device, { basePath, scenes, textures, environmentMaps, cameras, simulateFunc }, textureHolder);
     }
 }

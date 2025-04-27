@@ -1,7 +1,7 @@
 import { mat4, quat, vec2, vec3 } from "gl-matrix";
 import { ViewerRenderInput } from "../../viewer";
 import { Simulation, SceneNode, Texture, Material } from "../types";
-import { wrapNode, reparent, makeDataBuffer, updateNodeTransform } from "../util";
+import { wrapNode, reparent, createDataBuffer, updateNodeTransform } from "../util";
 import {
     GfxBlendFactor,
     GfxBlendMode,
@@ -172,7 +172,7 @@ export default class SandPendulum extends Simulation {
             ],
         });
 
-        const positionBuffer = makeDataBuffer(
+        const positionBuffer = createDataBuffer(
             device,
             GfxBufferUsage.Vertex,
             new Float32Array(Array(this.numParticles).fill([0, 0, 1, 0, 0, 1, 1, 1]).flat()).buffer,
@@ -184,14 +184,14 @@ export default class SandPendulum extends Simulation {
             particleIDs.push(i, i, i, i);
             particleIndices.push([0, 1, 2, 1, 2, 3].map((j) => i * 4 + j));
         }
-        const particleIDBuffer = makeDataBuffer(device, GfxBufferUsage.Vertex, new Float32Array(particleIDs.flat()).buffer);
+        const particleIDBuffer = createDataBuffer(device, GfxBufferUsage.Vertex, new Float32Array(particleIDs.flat()).buffer);
 
         this.vertexAttributes = [
             { buffer: positionBuffer, byteOffset: 0 },
             { buffer: particleIDBuffer, byteOffset: 0 },
         ];
 
-        const indexBuffer = makeDataBuffer(device, GfxBufferUsage.Index, new Uint32Array(particleIndices.flat()).buffer);
+        const indexBuffer = createDataBuffer(device, GfxBufferUsage.Index, new Uint32Array(particleIndices.flat()).buffer);
         this.indexBufferDescriptor = { buffer: indexBuffer, byteOffset: 0 };
 
         this.megaStateFlags = {
