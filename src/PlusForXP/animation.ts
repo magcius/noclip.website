@@ -39,7 +39,13 @@ export class AnimationBuilder {
 
     public build = (transform: Transform, animations: SCX.KeyframeAnimation[]): ChannelAnimation[] => {
         animations = animations.filter(({ channel }) => this.channelModifiers[channel] !== null);
-        const fullAnimDuration = Math.max(...animations.flatMap((anim) => anim.keyframes).map((keyframe) => keyframe.time / 1000));
+        const durations = new Set<number>();
+        for (const anim of animations) {
+            for (const keyframe of anim.keyframes) {
+                durations.add(keyframe.time / 1000);
+            }
+        }
+        const fullAnimDuration = Math.max(...durations);
         return animations.map((animation) => {
             const channelModifier = this.channelModifiers[animation.channel]!;
             const interpolation = this.interpolations[animation.interp] ?? this.interpolations.linear;

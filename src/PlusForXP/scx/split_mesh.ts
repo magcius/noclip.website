@@ -11,9 +11,14 @@ export const splitMesh = (mesh: SCX.PolygonMesh): SCX.PolygonMesh[] => {
         polygonsByShaderID[polygon.shader].push(polygon);
     }
 
-    return Object.values(polygonsByShaderID).map((polygons) => ({
-        ...mesh,
-        polygons,
-        polycount: polygons.length,
-    }));
+    const meshes = [];
+    for (const polygons of Object.values(polygonsByShaderID)) {
+        meshes.push({
+            ...mesh,
+            polygons,
+            polycount: polygons.length,
+        });
+    }
+
+    return meshes;
 };

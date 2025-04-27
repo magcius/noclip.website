@@ -39,7 +39,7 @@ import { createSceneNode, makeDataBuffer, updateNodeTransform } from "./util.js"
 
 type Context = {
     basePath: string;
-    scenes: Record<string, [SCX.Scene, string?]>;
+    scenes: Record<string, { scene: SCX.Scene; envID?: string }>;
     textures: Texture[];
     environmentMaps: Record<string, EnvironmentMap>;
     cameras: [string, string][];
@@ -172,7 +172,7 @@ export default class Renderer implements SceneGfx {
             this.environmentMapsByID.set(envID, { texture, matrix, tint: computedTint });
         }
 
-        for (const [name, [scene, envID]] of Object.entries(context.scenes)) {
+        for (const [name, { scene, envID }] of Object.entries(context.scenes)) {
             this.buildScene(device, name, scene, envID, unbakedMeshes);
         }
 
@@ -313,7 +313,7 @@ export default class Renderer implements SceneGfx {
         for (const object of scene.objects) {
             const transform = {
                 trans: vec3.create(),
-                rot: vec3.fromValues(Math.PI / 2, 0, 0),
+                rot: vec3.create(),
                 scale: vec3.fromValues(1, 1, 1),
             };
             for (const { trans, rot, scale } of object.transforms) {
@@ -369,7 +369,7 @@ export default class Renderer implements SceneGfx {
                     {
                         type: "ambient",
                         name: "ambient",
-                        color: scene.globals[0].ambient,
+                        color: scene.globals[0]?.ambient ?? [0, 0, 0],
                     } as SCX.Light,
                     ...scene.lights.values(),
                 ];

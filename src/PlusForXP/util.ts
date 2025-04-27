@@ -30,54 +30,46 @@ const loadJPGData = (jpegBinary: ArrayBuffer): Promise<{ width: number; height: 
     });
 };
 
-const decodeImage = async (path: string, imageBytes: ArrayBufferLike): Promise<{ rgba8: Uint8ClampedArray; width: number; height: number } | null> => {
+export const decodeImage = async (path: string, imageBytes: ArrayBufferLike): Promise<Texture | null> => {
     const extension = path.toLowerCase().split(".").pop();
     switch (extension) {
         case "tif":
         case "tiff": {
             const result = tifDecode(imageBytes)[0];
-            const { width, height, components } = result;
-            return {
-                width,
-                height,
-                rgba8: new Uint8ClampedArray(
-                    components === 3 ? range(0, result.size).flatMap((i) => [...result.data.slice(i * 3, (i + 1) * 3), 0xff]) : result.data,
-                ),
-            };
+            const { width, height, components, size } = result;
+            let rgba8: Uint8ClampedArray;
+            if (components === 3) {
+                const data = [];
+                for (let i = 0; i < size; i++) {
+                    const [r, g, b] = result.data.slice(i * 3, (i + 1) * 3);
+                    data.push(r, g, b, 0xff);
+                }
+                rgba8 = new Uint8ClampedArray(data);
+            } else {
+                rgba8 = new Uint8ClampedArray(result.data);
+            }
+            return { path, width, height, rgba8 };
         }
         case "jpg":
         case "jpeg": {
             const { width, height, data: rgba8 } = await loadJPGData(imageBytes as ArrayBuffer);
-            return { width, height, rgba8 };
+            return { path, width, height, rgba8 };
         }
     }
     return null;
 };
 
-const flipImage = (image: { rgba8: Uint8ClampedArray; width: number; height: number }): { rgba8: Uint8ClampedArray; width: number; height: number } => {
-    const data: number[] = Array(image.height)
-        .fill(null)
-        .map((_, i) => [...image.rgba8.subarray(i * image.width * 4, (i + 1) * image.width * 4)])
-        .reverse()
-        .flat();
+export const flipTexture = (texture: Texture): Texture => {
+    const data: number[] = [];
+    for (let i = 0; i < texture.height; i++) {
+        const row = texture.height - 1 - i;
+        data.push(...texture.rgba8.subarray(row * texture.width * 4, (row + 1) * texture.width * 4));
+    }
     return {
-        ...image,
+        ...texture,
         rgba8: new Uint8ClampedArray(data),
     };
 };
-
-export const fetchTextures = (dataFetcher: DataFetcher, basePath: string, texturePaths: string[]): Promise<Texture[]> =>
-    Promise.all(
-        texturePaths.map((path) =>
-            dataFetcher
-                .fetchData(`${basePath}/${path}`)
-                .then(({ arrayBuffer }) => decodeImage(path, arrayBuffer))
-                .then((imageData) => ({
-                    ...flipImage(imageData!),
-                    path,
-                })),
-        ),
-    );
 
 export const makeTextureHolder = (textures: Texture[]) =>
     new FakeTextureHolder(

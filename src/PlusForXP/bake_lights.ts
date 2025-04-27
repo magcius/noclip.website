@@ -14,12 +14,11 @@ export const bakeLights = (mesh: SCX.Mesh, material: SCX.Shader, worldTransform:
     const normal = vec3.create();
     const normalMatrix = mat3.normalFromMat4(mat3.create(), worldTransform);
     const color = vec3.create();
-    const bakedColors: vec3[] = Array(mesh.vertexcount)
-        .fill(null)
-        .map((_) => vec3.create());
+    const bakedColors: vec3[] = [];
 
     for (let i = 0; i < mesh.vertexcount; i++) {
-        const bakedColor = bakedColors[i];
+        const bakedColor = vec3.create();
+        bakedColors.push(bakedColor);
         vec3.set(position, positions[i * 3 + 0], positions[i * 3 + 1], positions[i * 3 + 2]);
         vec3.set(normal, normals[i * 3 + 0], normals[i * 3 + 1], normals[i * 3 + 2]);
 
@@ -44,7 +43,7 @@ export const bakeLights = (mesh: SCX.Mesh, material: SCX.Shader, worldTransform:
             vec3.add(bakedColor, bakedColor, color);
         }
     }
-    return new Float32Array(bakedColors.flatMap((color) => [...color, material.opacity]));
+    return new Float32Array(bakedColors.flatMap((rgb) => [...rgb, material.opacity]));
 };
 
 type LightCalculation = (light: SCX.Light, normal: vec3, position: vec3) => number;

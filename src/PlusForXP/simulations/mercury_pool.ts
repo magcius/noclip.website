@@ -9,98 +9,60 @@ const numSegments = 32;
 const numVertexRows = numSegments + 1;
 
 export const createPoolScene = (): SCX.Scene => {
-    const vertices = Array(numVertexRows)
-        .fill(0)
-        .map((_, y) =>
-            Array(numVertexRows)
-                .fill(0)
-                .map((_, x) => {
-                    return {
-                        position: vec3.fromValues(
-                            // x / numSegments - 0.5,
-                            (x + (x > 0 && x < numVertexRows - 1 ? (y % 2) / 2 - 0.25 : 0)) / numSegments - 0.5,
-                            y / numSegments - 0.5,
-                            0,
-                        ),
-                        normal: vec3.fromValues(0, 0, 1),
-                    };
-                }),
-        )
-        .flat()
-        .map((vert, i) => ({ ...vert, i }));
-    const trianglePairIndices = (a: number, b: number, c: number, d: number, swap: boolean): number[][] =>
-        // [[a, b, d], [b, c, c /* d */]];
-        // swap ? [[a, b, c], [a, c, c /* d */]] : [[a, b, d], [b, c, c /* d */]];
-        swap
-            ? [
-                  [a, b, c],
-                  [a, c, d],
-              ]
-            : [
-                  [a, b, d],
-                  [b, c, d],
-              ];
-    const triangles = Array(numSegments)
-        .fill(0)
-        .map((_, i) =>
-            Array(numSegments)
-                .fill(0)
-                .map((_, j) =>
-                    trianglePairIndices(
-                        (i + 0) * numVertexRows + j + 0,
-                        (i + 0) * numVertexRows + j + 1,
-                        (i + 1) * numVertexRows + j + 1,
-                        (i + 1) * numVertexRows + j + 0,
-                        i % 2 === 1,
-                    ),
-                )
-                .flat(),
-        )
-        .flat();
+    // A pool scene just contains a planar mesh composed of regular equilateral triangles.
+    const vertices = [];
+    for (let row = 0; row < numVertexRows; row++) {
+        for (let column = 0; column < numVertexRows; column++) {
+            let columnOffset = 0;
+            if (column > 0 && column < numVertexRows - 1) {
+                columnOffset = (row % 2) / 2 - 0.25;
+            }
+            vertices.push({
+                i: row * numVertexRows + column,
+                position: vec3.fromValues((column + columnOffset) / numSegments - 0.5, row / numSegments - 0.5, 0),
+                normal: vec3.fromValues(0, 0, 1),
+            });
+        }
+    }
+    const triangles: number[] = [];
+    for (let row = 0; row < numSegments; row++) {
+        const swap = row % 2 === 1;
+        for (let column = 0; column < numSegments; column++) {
+            const [a, b, c, d] = [
+                (row + 0) * numVertexRows + column + 0,
+                (row + 0) * numVertexRows + column + 1,
+                (row + 1) * numVertexRows + column + 1,
+                (row + 1) * numVertexRows + column + 0,
+            ];
+            if (swap) {
+                triangles.push(a, b, c, a, c, d);
+            } else {
+                triangles.push(a, b, d, b, c, d);
+            }
+        }
+    }
+
+    const mercuryShader: SCX.Shader = { name: "pool", id: 1, ambient: [1, 1, 1], diffuse: [1, 1, 1], specular: [1, 1, 1], opacity: 1, luminance: 0, blend: 1 };
+    const poolMesh = {
+        vertexcount: vertices.length,
+        positions: vertices.map((v) => [...v.position]).flat(),
+        normals: vertices.map((v) => [...v.normal]).flat(),
+        indices: triangles.flat(),
+        texCoords: Array(vertices.length * 2).fill(0),
+        shader: 1,
+        dynamic: true,
+    };
 
     return {
-        shaders: [
-            {
-                name: "pool",
-                id: 1,
-                ambient: [1, 1, 1],
-                diffuse: [1, 1, 1],
-                specular: [1, 1, 1],
-                opacity: 1,
-                luminance: 0,
-                blend: 1,
-            },
-        ],
-        globals: [
-            {
-                animinterval: [0, 1000],
-                framerate: 0,
-                ambient: [0, 0, 0],
-            },
-        ],
+        shaders: [mercuryShader],
+        globals: [],
         cameras: [],
         lights: [],
         objects: [
             {
                 name: "pool",
-                transforms: [
-                    {
-                        trans: [0, 0, 0],
-                        rot: [0, 0, 0],
-                        scale: [1, 1, 1],
-                    },
-                ],
-                meshes: [
-                    {
-                        vertexcount: vertices.length,
-                        positions: vertices.map((v) => [...v.position]).flat(),
-                        normals: vertices.map((v) => [...v.normal]).flat(),
-                        indices: triangles.flat(),
-                        texCoords: Array(vertices.length * 2).fill(0),
-                        shader: 1,
-                        dynamic: true,
-                    },
-                ],
+                transforms: [],
+                meshes: [poolMesh],
                 animations: [],
             },
         ],
@@ -182,13 +144,19 @@ export class MercuryPool extends Simulation {
             uint8Array: new Uint8Array(poolPositionAttribute.data!.buffer),
         };
 
-        this.poolPositions = Array(numVertexRows * numVertexRows)
-            .fill(0)
-            .map((_, i) => this.poolPositionAttribute.data.subarray(i * 3, (i + 1) * 3));
+        const numVertices = numVertexRows ** 2;
+        this.poolPositions = [];
+        for (let i = 0; i < numVertices; i++) {
+            this.poolPositions.push(this.poolPositionAttribute.data.subarray(i * 3, (i + 1) * 3));
+        }
 
-        this.poolTriangles = Array(numSegments * numSegments * 2)
-            .fill(0)
-            .map((_, i) => [...poolIndices.subarray(i * 3, (i + 1) * 3)] as [number, number, number]);
+        const numTriangles = numSegments ** 2 * 2;
+        console.log(numTriangles);
+        this.poolTriangles = [];
+        for (let i = 0; i < numTriangles; i++) {
+            const [index0, index1, index2] = [...poolIndices.subarray(i * 3, (i + 1) * 3)];
+            this.poolTriangles.push([index0, index1, index2]);
+        }
 
         const poolNormalAttribute = poolAttributes.find((buffer) => buffer.name === "normal")!;
         this.poolNormalAttribute = {
@@ -275,8 +243,7 @@ export class MercuryPool extends Simulation {
             }
         }
 
-        const v0 = vec3.create(),
-            v1 = vec3.create();
+        const [v0, v1] = [vec3.create(), vec3.create()];
         for (let i = 0; i < numVertexRows; i++) {
             for (let j = 0; j < numVertexRows; j++) {
                 const index = i * numVertexRows + j;
