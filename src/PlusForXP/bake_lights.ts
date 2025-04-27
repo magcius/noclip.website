@@ -3,8 +3,6 @@ import { SCX } from "./scx/types.js";
 import { Vec3One } from "../MathHelpers.js";
 
 export const bakeLights = (mesh: SCX.Mesh, material: SCX.Shader, worldTransform: mat4, lights: SCX.Light[]): Float32Array => {
-    lights = [...lights].reverse();
-
     const useMaterialColors = material.luminance === 0 && (material.blend < 1 || material.texture === null);
     const ambientColor = useMaterialColors ? material.ambient : null;
     const diffuseColor = useMaterialColors ? material.diffuse : null;
