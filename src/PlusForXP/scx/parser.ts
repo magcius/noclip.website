@@ -2,12 +2,11 @@ import { SCX } from "./types.js";
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { sanitizeMesh } from "./sanitize_mesh.js";
 import { splitMesh } from "./split_mesh.js";
-import { Token, oldTokens } from "./tokens.js";
+import { Token } from "./tokens.js";
 import { Endianness, getSystemEndianness } from "../../endian.js";
 import { FixedTuple } from "../util.js";
 
 type ParseState = {
-    // tokenDebugInfo: [number, string][],
     bytes: Uint8Array;
     dataView: DataView;
     offset: number;
@@ -87,10 +86,6 @@ const parseNumberList = (state: ParseState) => {
 
 const parseFixedTuple = <N extends number>(state: ParseState, count: N): FixedTuple<number, N> => parseNumberList(state) as any;
 
-// const debugSnippet = (state: ParseState, start: number, end?: number | undefined): string => {
-//     return [...state.bytes.slice(start, end ?? state.offset)].map((byte, i) => `${(start + i).toString().padStart(3, " ")} ${byte.toString().padStart(4, "0")}_${oldTokens[byte]?.name ?? "---"}` ).join("\n");
-// }
-
 // enum parsers
 
 const parseOff = (state: ParseState): false => {
@@ -165,10 +160,10 @@ const parsePolygon = (state: ParseState): SCX.Polygon => {
     const polygon: SCX.Polygon = { verts: [0, 0, 0], shader: 0, smgroup: 0 };
     loop: while (state.offset < state.bytes.length) {
         switch (state.bytes[state.offset++]) {
+            case Token.PopScope: break loop;
             case Token.Verts: { polygon.verts = [parseNumber(state), parseNumber(state), parseNumber(state)]; break; }
             case Token.Shader: { polygon.shader = parseNumber(state); break; }
             case Token.SMGroup: { polygon.smgroup = parseNumber(state); break; }
-            case Token.PopScope: break loop;
         }
     }
     return polygon;
@@ -179,13 +174,13 @@ const parseAnimation = (state: ParseState): SCX.KeyframeAnimation => {
     let keyframeCount: number = 0;
     loop: while (state.offset < state.bytes.length) {
         switch (state.bytes[state.offset++]) {
+            case Token.PopScope: break loop;
             case Token.Channel: { animation.channel = parseKeyframeChannel(state); break; }
             case Token.ExtrapPre: { animation.extrappre = parseExtrapolation(state); break; }
             case Token.ExtrapPost: { animation.extrappost = parseExtrapolation(state); break; }
             case Token.Interp: { animation.interp = parseInterpolation(state); break; }
             case Token.KeyCount: { keyframeCount = parseNumber(state); break; }
             case Token.Keys: { bracket(state, () => animation.keyframes = parseKeyframes(state, keyframeCount)); break; }
-            case Token.PopScope: break loop;
         }
     }
     return animation;
@@ -195,10 +190,10 @@ const parseTransform = (state: ParseState): SCX.Transform => {
     const transform: SCX.Transform = { trans: [0, 0, 0], rot: [0, 0, 0], scale: [1, 1, 1] };
     loop: while (state.offset < state.bytes.length) {
         switch (state.bytes[state.offset++]) {
+            case Token.PopScope: break loop;
             case Token.Trans: { transform.trans = parseFixedTuple(state, 3); break; }
             case Token.Rot: { transform.rot = parseFixedTuple(state, 3); break; }
             case Token.Scale: { transform.scale = parseFixedTuple(state, 3); break; }
-            case Token.PopScope: break loop;
         }
     }
     return transform;
@@ -208,6 +203,7 @@ const parseMesh = (state: ParseState): SCX.PolygonMesh => {
     const mesh: SCX.PolygonMesh = { shader: 0, vertexcount: 0, normals: [], texCoords: [], positions: [], indices: [] };
     loop: while (state.offset < state.bytes.length) {
         switch (state.bytes[state.offset++]) {
+            case Token.PopScope: break loop;
             case Token.Shader: { mesh.shader = parseNumber(state); break; }
             case Token.VertexCount: { mesh.vertexcount = parseNumber(state); break; }
             case Token.Normals: { bracket(state, () => mesh.normals = parseNumberList(state)); break; }
@@ -216,8 +212,6 @@ const parseMesh = (state: ParseState): SCX.PolygonMesh => {
             
             case Token.PolyCount: { mesh.polycount = parseNumber(state); break; }
             case Token.Polygon: { mesh.polygons ??= []; mesh.polygons.push(parsePolygon(state)); break; }
-
-            case Token.PopScope: break loop;
         }
     }
     return mesh;
@@ -229,12 +223,12 @@ const parseGlobal = (state: ParseState): SCX.Global => {
     const global: SCX.Global = { animinterval: [0, 0], framerate: 0, ambient: [0, 0, 0] };
     loop: while (state.offset < state.bytes.length) {
         switch (state.bytes[state.offset++]) {
+            case Token.PopScope: break loop;
             case Token.Name: { global.name = parseString(state); break;}
             case Token.TextureFolders: { global.textureFolders = parseOff(state); break; }
             case Token.AnimInterval: { global.animinterval = [parseNumber(state), parseNumber(state)]; break; }
             case Token.Framerate: { global.framerate = parseNumber(state); break; }
             case Token.Ambient: { global.ambient = parseFixedTuple(state, 3); break; }
-            case Token.PopScope: break loop;
         }
     }
     return global;
@@ -244,6 +238,7 @@ const parseObject = (state: ParseState): SCX.Object => {
     const object: SCX.Object = { name: "", transforms: [], meshes: [] };
     loop: while (state.offset < state.bytes.length) {
         switch (state.bytes[state.offset++]) {
+            case Token.PopScope: break loop;
             case Token.Name: { object.name = parseString(state); break;}
             case Token.ID: { object.id = parseNumber(state); break;}
             case Token.Anim: { object.animations ??= []; object.animations.push(parseAnimation(state)); break;}
@@ -251,7 +246,6 @@ const parseObject = (state: ParseState): SCX.Object => {
             case Token.ParentID: { object.parent = parseString(state); break;}
             case Token.Transform: { object.transforms = [parseTransform(state)]; break;}
             case Token.Mesh: { object.meshes = [parseMesh(state)]; break;}
-            case Token.PopScope: break loop;
         }
     }
 
@@ -279,6 +273,7 @@ const parseShader = (state: ParseState): SCX.Shader => {
     const shader: SCX.Shader = { name: "", id: 0, ambient: [0, 0, 0], diffuse: [0, 0, 0], specular: [0, 0, 0], opacity: 0, luminance: 0, blend: 0 };
     loop: while (state.offset < state.bytes.length) {
         switch (state.bytes[state.offset++]) {
+            case Token.PopScope: break loop;
             case Token.Name: { shader.name = parseString(state); break;}
             case Token.ID: { shader.id = parseNumber(state); break;}
             case Token.Ambient: { shader.ambient = parseFixedTuple(state, 3); break;}
@@ -288,7 +283,6 @@ const parseShader = (state: ParseState): SCX.Shader => {
             case Token.Luminance: { shader.luminance = parseNumber(state); break;}
             case Token.Texture: { shader.texture = parseString(state); break;}
             case Token.Blend: { shader.blend = parseNumber(state); break;}
-            case Token.PopScope: break loop;
         }
     }
     return shader;
@@ -298,6 +292,7 @@ const parseLight = (state: ParseState): SCX.Light => {
     const light: SCX.Light = { name: "", type: "ambient" };
     loop: while (state.offset < state.bytes.length) {
         switch (state.bytes[state.offset++]) {
+            case Token.PopScope: break loop;
             case Token.Name: { light.name = parseString(state); break;}
             case Token.Type: { light.type = parseLightType(state); break;}
             case Token.Pos: { light.pos = parseFixedTuple(state, 3); break;}
@@ -309,7 +304,6 @@ const parseLight = (state: ParseState): SCX.Light => {
             case Token.Color: { light.color = parseFixedTuple(state, 3); break;}
             case Token.Intensity: { light.intensity = parseNumber(state); break;}
             case Token.Off: { light.off = parseBoolean(state); break;}
-            case Token.PopScope: break loop;
         }
     }
     return light;
@@ -319,6 +313,7 @@ const parseCamera = (state: ParseState): SCX.Camera => {
     const camera: SCX.Camera = { name: "", fov: 0, nearclip: 0, farclip: 0, pos: [0, 0, 0], targetpos: [0, 0, 0] };
     loop: while (state.offset < state.bytes.length) {
         switch (state.bytes[state.offset++]) {
+            case Token.PopScope: break loop;
             case Token.Name: { camera.name = parseString(state); break; }
             case Token.Anim: { camera.animations ??= []; camera.animations.push(parseAnimation(state)); break;}
             case Token.Fov: { camera.fov = parseNumber(state); break; }
@@ -326,23 +321,18 @@ const parseCamera = (state: ParseState): SCX.Camera => {
             case Token.FarClip: { camera.farclip = parseNumber(state); break; }
             case Token.Pos: { camera.pos = parseFixedTuple(state, 3); break; }
             case Token.TargetPos: { camera.targetpos = parseFixedTuple(state, 3); break; }
-            case Token.PopScope: break loop;
         }
     }
     return camera;
 };
 
-export const parse = (data: ArrayBufferSlice): SCX.Scene => {
+export const parseSCX = (data: ArrayBufferSlice): SCX.Scene => {
     const scene: SCX.Scene = { shaders: [], globals: [], cameras: [], lights: [], objects: [] };
     const bytes = new Uint8Array(data.arrayBuffer);
-    const state: ParseState = {
-        bytes,
-        // tokenDebugInfo: [...bytes].map((byte, i) => [i, `${byte} (${oldTokens[byte]?.name ?? '---'})`]),
-        dataView: data.createDataView(),
-        offset: 0,
-    };
-    while (state.offset < state.bytes.length) {
+    const state: ParseState = { bytes, dataView: data.createDataView(), offset: 0 };
+    loop: while (state.offset < state.bytes.length) {
         switch (state.bytes[state.offset++]) {
+            case Token.PopScope: break loop;
             case Token.Scene: { scene.globals.push(parseGlobal(state)); break; }
             case Token.Object: { scene.objects.push(parseObject(state)); break; }
             case Token.Shader: { scene.shaders.push(parseShader(state)); break; }
