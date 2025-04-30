@@ -2,13 +2,10 @@ import { vec3 } from "gl-matrix";
 import { Endianness, getSystemEndianness } from "../../endian.js";
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { SCX } from "./types.js";
-import { Token } from "./tokens.js";
+import { Token, Numeric } from "./tokens.js";
 
-type ParseState = {
-    bytes: Uint8Array;
-    dataView: DataView;
-    offset: number;
-};
+type DataViewCall = (view: DataView, byteOffset: number) => number;
+const isLittleEndian = getSystemEndianness() === Endianness.LITTLE_ENDIAN;
 
 const appended = <T>(a: T[] | undefined, v: T): T[] => {
     a ??= [];
@@ -16,312 +13,330 @@ const appended = <T>(a: T[] | undefined, v: T): T[] => {
     return a;
 };
 
-const guardedLoop = (state: ParseState, cases: { [key in Token]?: () => void }) => {
-    while (state.offset < state.bytes.length) {
-        const token: Token = state.bytes[state.offset++];
-        if (token === Token.PopScope) return;
-        cases[token]?.();
+export class Parser {
+    private bytes: Uint8Array;
+    private dataView: DataView;
+    private offset: number;
+
+    public static parse(data: ArrayBufferSlice): SCX.Scene {
+        return new Parser(data).parseScene();
     }
-};
 
-// basic data parsers
+    private constructor(data: ArrayBufferSlice) {
+        this.bytes = new Uint8Array(data.arrayBuffer);
+        this.dataView = data.createDataView();
+        this.offset = 0;
+    }
 
-const bracket = (state: ParseState, func: () => void) => {
-    state.offset++;
-    func();
-    state.offset++;
-};
+    // onTokens loops over tokens and returns when it encounters a PopScope.
+    // Meanwhile, it will call the function associted with the current token.
+    private scanScope(cases: { [key in Token]?: () => void }) {
+        while (this.offset < this.bytes.length) {
+            const token: Token = this.bytes[this.offset++];
+            if (token === Token.PopScope) return;
+            cases[token]?.();
+        }
+    }
 
-const parseBoolean = (state: ParseState): boolean => {
-    const token = state.bytes[state.offset++];
-    if (token === Token.True) return true;
-    if (token === Token.False) return false;
-    console.warn("Not a boolean.");
-    return false;
-};
+    // Disregard surrounding PushScope and PopScope tokens
+    private scoped(func: () => void) {
+        this.offset++;
+        func();
+        this.offset++;
+    }
 
-const parseString = (state: ParseState) => {
-    const end = state.bytes.indexOf(0, state.offset);
-    const bytes = state.bytes.subarray(state.offset + 1, end);
-    state.offset = end + 1;
-    return [...bytes].map((c) => String.fromCharCode(c)).join("");
-};
+    // Basic data parsers
 
-const isLittleEndian = getSystemEndianness() === Endianness.LITTLE_ENDIAN;
-type DataViewCall = (view: DataView, byteOffset: number) => number;
-const createDataParser =
-    (size: number, call: DataViewCall) =>
-    (state: ParseState): number => {
-        const value = call(state.dataView, state.offset);
-        state.offset += size;
-        return value;
+    private parseBoolean(): boolean {
+        const token = this.bytes[this.offset++];
+        if (token === Token.True) return true;
+        if (token === Token.False) return false;
+        console.warn("Not a boolean.");
+        return false;
+    }
+
+    private parseString() {
+        const end = this.bytes.indexOf(0, this.offset);
+        const bytes = this.bytes.subarray(this.offset + 1, end);
+        this.offset = end + 1;
+        return [...bytes].map((c) => String.fromCharCode(c)).join("");
+    }
+
+    private static createDataParser =
+        (size: number, call: DataViewCall) =>
+        (parser: Parser): number => {
+            const value = call(parser.dataView, parser.offset);
+            parser.offset += size;
+            return value;
+        };
+
+    private static numericParsers: Record<Numeric, (parser: Parser) => number> = {
+        [Numeric.Number]: Parser.createDataParser(4, (view, offset) => view.getFloat32(offset, isLittleEndian)),
+        [Numeric.Integer]: Parser.createDataParser(4, (view, offset) => view.getInt32(offset, isLittleEndian)),
+        [Numeric.Byte]: Parser.createDataParser(1, (view, offset) => view.getInt8(offset)),
+        [Numeric.UnsignedByte]: Parser.createDataParser(1, (view, offset) => view.getUint8(offset)),
+        [Numeric.Word]: Parser.createDataParser(2, (view, offset) => view.getInt16(offset, isLittleEndian)),
+        [Numeric.UnsignedWord]: Parser.createDataParser(2, (view, offset) => view.getUint16(offset, isLittleEndian)),
     };
 
-const numericParsers: { [key in Token]?: (state: ParseState) => number } = {
-    [Token.Number]: createDataParser(4, (view, offset) => view.getFloat32(offset, isLittleEndian)),
-    [Token.Integer]: createDataParser(4, (view, offset) => view.getInt32(offset, isLittleEndian)),
-    [Token.Byte]: createDataParser(1, (view, offset) => view.getInt8(offset)),
-    [Token.UnsignedByte]: createDataParser(1, (view, offset) => view.getUint8(offset)),
-    [Token.Word]: createDataParser(2, (view, offset) => view.getInt16(offset, isLittleEndian)),
-    [Token.UnsignedWord]: createDataParser(2, (view, offset) => view.getUint16(offset, isLittleEndian)),
-};
+    private parseNumber(numeric?: Numeric) {
+        if (numeric === undefined) numeric = this.bytes[this.offset++];
+        return Parser.numericParsers[numeric]!(this);
+    }
 
-const parseNumber = (state: ParseState, token?: Token) => {
-    if (token === undefined) token = state.bytes[state.offset++];
-    return numericParsers[token]!(state);
-};
+    private parseNumberList() {
+        this.offset++;
+        const values: number[] = [];
+        while (true) {
+            const count = this.parseNumber(Numeric.UnsignedByte);
+            for (let i = 0; i < count; i++) {
+                values.push(this.parseNumber(Numeric.Number));
+            }
+            // A full number list might spill over into its successor
+            const isFull = count >= 0xff;
+            if (isFull) {
+                const peekedToken = this.bytes[this.offset];
+                if (peekedToken === Token.NumberList) {
+                    this.offset++;
+                    continue;
+                }
+                if (peekedToken === Token.Number) {
+                    values.push(this.parseNumber());
+                }
+            }
+            break;
+        }
+        return values;
+    }
 
-const parseNumberList = (state: ParseState) => {
-    state.offset++;
-    const values: number[] = [];
-    while (true) {
-        const count = parseNumber(state, Token.UnsignedByte);
+    private parseVec3(): SCX.Vec3 {
+        return this.parseNumberList().slice(0, 3) as SCX.Vec3;
+    }
+
+    // Enum parsers  // TODO: can these be unified somehow?
+
+    private parseOff(): SCX.Off {
+        const token = this.bytes[this.offset++];
+        const enumValues = Object.values(SCX.Off);
+        if (enumValues.includes(token)) return token;
+        console.warn("Invalid off type.");
+        return enumValues[0] as SCX.Off;
+    }
+
+    private parseLightType(): SCX.LightType {
+        const token = this.bytes[this.offset++];
+        const enumValues = Object.values(SCX.LightType);
+        if (enumValues.includes(token)) return token;
+        console.warn("Invalid light type.");
+        return enumValues[0] as SCX.LightType;
+    }
+
+    private parseKeyframeChannel(): SCX.KeyframeAnimationChannel {
+        const token = this.bytes[this.offset++];
+        const enumValues = Object.values(SCX.KeyframeAnimationChannel);
+        if (enumValues.includes(token)) return token;
+        console.warn("Invalid keyframe channel.");
+        return enumValues[0] as SCX.KeyframeAnimationChannel;
+    }
+
+    private parseExtrapolation(): SCX.Extrapolation {
+        const token = this.bytes[this.offset++];
+        const enumValues = Object.values(SCX.Extrapolation);
+        if (enumValues.includes(token)) return token;
+        console.warn("Invalid extrapolation.");
+        return enumValues[0] as SCX.Extrapolation;
+    }
+
+    private parseInterpolation(): SCX.Interpolation {
+        const token = this.bytes[this.offset++];
+        const enumValues = Object.values(SCX.Interpolation);
+        if (enumValues.includes(token)) return token;
+        console.warn("Invalid interpolation.");
+        return enumValues[0] as SCX.Interpolation;
+    }
+
+    // Minor type parsers
+
+    private parseKeyframes(count: number): SCX.Keyframe[] {
+        const keyframes = [];
         for (let i = 0; i < count; i++) {
-            values.push(parseNumber(state, Token.Number));
+            const [time, value, tangentIn, tangentOut] = [this.parseNumber(), ...this.parseVec3()];
+            keyframes.push({ time, value, tangentIn, tangentOut });
         }
-        // A full number list might spill over into its successor
-        const isFull = count >= 0xff;
-        if (isFull) {
-            const peekedToken = state.bytes[state.offset];
-            if (peekedToken === Token.NumberList) {
-                state.offset++;
-                continue;
-            }
-            if (peekedToken === Token.Number) {
-                values.push(parseNumber(state));
-            }
-        }
-        break;
-    }
-    return values;
-};
-
-const parseVec3 = (state: ParseState): SCX.Vec3 => parseNumberList(state).slice(0, 3) as SCX.Vec3;
-
-// enum parsers
-
-const parseOff = (state: ParseState): SCX.Off => {
-    const token = state.bytes[state.offset++];
-    const enumValues = Object.values(SCX.Off);
-    if (enumValues.includes(token)) return token;
-    console.warn("Invalid off type.");
-    return enumValues[0] as SCX.Off;
-};
-
-const parseLightType = (state: ParseState): SCX.LightType => {
-    const token = state.bytes[state.offset++];
-    const enumValues = Object.values(SCX.LightType);
-    if (enumValues.includes(token)) return token;
-    console.warn("Invalid light type.");
-    return enumValues[0] as SCX.LightType;
-};
-
-const parseKeyframeChannel = (state: ParseState): SCX.KeyframeAnimationChannel => {
-    const token = state.bytes[state.offset++];
-    const enumValues = Object.values(SCX.KeyframeAnimationChannel);
-    if (enumValues.includes(token)) return token;
-    console.warn("Invalid keyframe channel.");
-    return enumValues[0] as SCX.KeyframeAnimationChannel;
-};
-
-const parseExtrapolation = (state: ParseState): SCX.Extrapolation => {
-    const token = state.bytes[state.offset++];
-    const enumValues = Object.values(SCX.Extrapolation);
-    if (enumValues.includes(token)) return token;
-    console.warn("Invalid extrapolation.");
-    return enumValues[0] as SCX.Extrapolation;
-};
-
-const parseInterpolation = (state: ParseState): SCX.Interpolation => {
-    const token = state.bytes[state.offset++];
-    const enumValues = Object.values(SCX.Interpolation);
-    if (enumValues.includes(token)) return token;
-    console.warn("Invalid interpolation.");
-    return enumValues[0] as SCX.Interpolation;
-};
-
-// minor type parsers
-
-const parseKeyframes = (state: ParseState, count: number): SCX.Keyframe[] => {
-    const keyframes = [];
-    for (let i = 0; i < count; i++) {
-        const [time, value, tangentIn, tangentOut] = [parseNumber(state), ...parseVec3(state)];
-        keyframes.push({ time, value, tangentIn, tangentOut });
-    }
-    return keyframes;
-};
-
-const parsePolygon = (state: ParseState): SCX.Polygon => {
-    const polygon: SCX.Polygon = { verts: [0, 0, 0], shader: 0, smgroup: 0 };
-    guardedLoop(state, {
-        [Token.Verts]: () => (polygon.verts = [parseNumber(state), parseNumber(state), parseNumber(state)]),
-        [Token.Shader]: () => (polygon.shader = parseNumber(state)),
-        [Token.SMGroup]: () => (polygon.smgroup = parseNumber(state)),
-    });
-    return polygon;
-};
-
-const parseAnimation = (state: ParseState): SCX.KeyframeAnimation => {
-    const animation: SCX.KeyframeAnimation = {
-        channel: SCX.KeyframeAnimationChannel.TransX,
-        extrappre: SCX.Extrapolation.Constant,
-        extrappost: SCX.Extrapolation.Constant,
-        interp: SCX.Interpolation.Linear,
-        keyframes: [],
-    };
-    let keyframeCount: number = 0;
-    guardedLoop(state, {
-        [Token.Channel]: () => (animation.channel = parseKeyframeChannel(state)),
-        [Token.ExtrapPre]: () => (animation.extrappre = parseExtrapolation(state)),
-        [Token.ExtrapPost]: () => (animation.extrappost = parseExtrapolation(state)),
-        [Token.Interp]: () => (animation.interp = parseInterpolation(state)),
-        [Token.KeyCount]: () => (keyframeCount = parseNumber(state)),
-        [Token.Keys]: () => bracket(state, () => (animation.keyframes = parseKeyframes(state, keyframeCount))),
-    });
-    return animation;
-};
-
-const parseTransform = (state: ParseState): SCX.Transform => {
-    const transform: SCX.Transform = { trans: [0, 0, 0], rot: [0, 0, 0], scale: [1, 1, 1] };
-    guardedLoop(state, {
-        [Token.Trans]: () => (transform.trans = parseVec3(state)),
-        [Token.Rot]: () => (transform.rot = parseVec3(state)),
-        [Token.Scale]: () => (transform.scale = parseVec3(state)),
-    });
-    return transform;
-};
-
-const parseMesh = (state: ParseState): SCX.Mesh[] => {
-    const mesh: SCX.Mesh = { shader: 0, vertexcount: 0, normals: [], texCoords: [], positions: [], indices: [] };
-    let polycount = 0;
-    let polygons: SCX.Polygon[] = [];
-    guardedLoop(state, {
-        [Token.Shader]: () => (mesh.shader = parseNumber(state)),
-        [Token.VertexCount]: () => (mesh.vertexcount = parseNumber(state)),
-        [Token.Normals]: () => bracket(state, () => (mesh.normals = parseNumberList(state))),
-        [Token.UVCoords]: () => bracket(state, () => (mesh.texCoords = parseNumberList(state))),
-        [Token.VertexPoints]: () => bracket(state, () => (mesh.positions = parseNumberList(state))),
-
-        [Token.PolyCount]: () => (polycount = parseNumber(state)),
-        [Token.Polygon]: () => (polygons = appended(polygons, parsePolygon(state))),
-    });
-
-    const polygonsByShaderID: Map<number, SCX.Polygon[]> = new Map(polygons.map(({ shader }) => [shader, []]));
-    for (const polygon of polygons) {
-        polygonsByShaderID.get(polygon.shader)!.push(polygon);
+        return keyframes;
     }
 
-    const meshes = [];
-    for (const polygons of polygonsByShaderID.values()) {
-        meshes.push({
-            ...mesh,
-            shader: polygons[0]?.shader ?? 0,
-            indices: polygons.flatMap((polygon) => polygon.verts),
+    private parsePolygon(): SCX.Polygon {
+        const polygon: SCX.Polygon = { verts: [0, 0, 0], shader: 0, smgroup: 0 };
+        this.scanScope({
+            [Token.Verts]: () => (polygon.verts = [this.parseNumber(), this.parseNumber(), this.parseNumber()]),
+            [Token.Shader]: () => (polygon.shader = this.parseNumber()),
+            [Token.SMGroup]: () => (polygon.smgroup = this.parseNumber()),
         });
+        return polygon;
     }
-    return meshes;
-};
 
-// entity parsers
+    private parseAnimation(): SCX.KeyframeAnimation {
+        const animation: SCX.KeyframeAnimation = {
+            channel: SCX.KeyframeAnimationChannel.TransX,
+            extrappre: SCX.Extrapolation.Constant,
+            extrappost: SCX.Extrapolation.Constant,
+            interp: SCX.Interpolation.Linear,
+            keyframes: [],
+        };
+        let keyframeCount: number = 0;
+        this.scanScope({
+            [Token.Channel]: () => (animation.channel = this.parseKeyframeChannel()),
+            [Token.ExtrapPre]: () => (animation.extrappre = this.parseExtrapolation()),
+            [Token.ExtrapPost]: () => (animation.extrappost = this.parseExtrapolation()),
+            [Token.Interp]: () => (animation.interp = this.parseInterpolation()),
+            [Token.KeyCount]: () => (keyframeCount = this.parseNumber()),
+            [Token.Keys]: () => this.scoped(() => (animation.keyframes = this.parseKeyframes(keyframeCount))),
+        });
+        return animation;
+    }
 
-const parseGlobal = (state: ParseState): SCX.Global => {
-    const global: SCX.Global = { animinterval: [0, 0], framerate: 0, ambient: [0, 0, 0] };
-    guardedLoop(state, {
-        [Token.Name]: () => (global.name = parseString(state)),
-        [Token.TextureFolders]: () => (global.textureFolders = parseOff(state)),
-        [Token.AnimInterval]: () => (global.animinterval = [parseNumber(state), parseNumber(state)]),
-        [Token.Framerate]: () => (global.framerate = parseNumber(state)),
-        [Token.Ambient]: () => (global.ambient = parseVec3(state)),
-    });
-    return global;
-};
+    private parseTransform(): SCX.Transform {
+        const transform: SCX.Transform = { trans: [0, 0, 0], rot: [0, 0, 0], scale: [1, 1, 1] };
+        this.scanScope({
+            [Token.Trans]: () => (transform.trans = this.parseVec3()),
+            [Token.Rot]: () => (transform.rot = this.parseVec3()),
+            [Token.Scale]: () => (transform.scale = this.parseVec3()),
+        });
+        return transform;
+    }
 
-const parseObject = (state: ParseState): SCX.Object => {
-    const object: SCX.Object = { name: "", transform: { trans: [0, 0, 0], rot: [0, 0, 0], scale: [1, 1, 1] }, meshes: [] };
-    guardedLoop(state, {
-        [Token.Name]: () => (object.name = parseString(state)),
-        [Token.ID]: () => (object.id = parseNumber(state)),
-        [Token.Anim]: () => (object.animations = appended(object.animations, parseAnimation(state))),
-        [Token.Parent]: () => (object.parent = parseString(state)),
-        [Token.ParentID]: () => (object.parent = parseString(state)),
-        [Token.Transform]: () => (object.transform = parseTransform(state)),
-        [Token.Mesh]: () => (object.meshes = parseMesh(state)),
-    });
+    private parseMesh(): SCX.Mesh[] {
+        const mesh: SCX.Mesh = { shader: 0, vertexcount: 0, normals: [], texCoords: [], positions: [], indices: [] };
+        let polycount = 0;
+        let polygons: SCX.Polygon[] = [];
+        this.scanScope({
+            [Token.Shader]: () => (mesh.shader = this.parseNumber()),
+            [Token.VertexCount]: () => (mesh.vertexcount = this.parseNumber()),
+            [Token.Normals]: () => this.scoped(() => (mesh.normals = this.parseNumberList())),
+            [Token.UVCoords]: () => this.scoped(() => (mesh.texCoords = this.parseNumberList())),
+            [Token.VertexPoints]: () => this.scoped(() => (mesh.positions = this.parseNumberList())),
 
-    // For now, we only test whether an object is flipped in object space.
-    // It might be worth testing whether an object is flipped in world space.
-    const scale = object.transform.scale;
-    const isFlipped = Math.sign(scale[0] * scale[1] * scale[2]) < 0;
-    if (isFlipped) {
-        const normal = vec3.create();
-        for (const mesh of object.meshes) {
-            for (let i = 0; i < mesh.vertexcount; i++) {
-                vec3.copy(normal, mesh.normals.slice(i * 3, (i + 1) * 3) as SCX.Vec3);
-                vec3.negate(normal, normal);
-                mesh.normals.splice(i * 3, 3, ...normal);
+            [Token.PolyCount]: () => (polycount = this.parseNumber()),
+            [Token.Polygon]: () => (polygons = appended(polygons, this.parsePolygon())),
+        });
+
+        const polygonsByShaderID: Map<number, SCX.Polygon[]> = new Map(polygons.map(({ shader }) => [shader, []]));
+        for (const polygon of polygons) {
+            polygonsByShaderID.get(polygon.shader)!.push(polygon);
+        }
+
+        const meshes = [];
+        for (const polygons of polygonsByShaderID.values()) {
+            meshes.push({
+                ...mesh,
+                shader: polygons[0]?.shader ?? 0,
+                indices: polygons.flatMap((polygon) => polygon.verts),
+            });
+        }
+        return meshes;
+    }
+
+    // Entity parsers
+
+    private parseGlobal(): SCX.Global {
+        const global: SCX.Global = { animinterval: [0, 0], framerate: 0, ambient: [0, 0, 0] };
+        this.scanScope({
+            [Token.Name]: () => (global.name = this.parseString()),
+            [Token.TextureFolders]: () => (global.textureFolders = this.parseOff()),
+            [Token.AnimInterval]: () => (global.animinterval = [this.parseNumber(), this.parseNumber()]),
+            [Token.Framerate]: () => (global.framerate = this.parseNumber()),
+            [Token.Ambient]: () => (global.ambient = this.parseVec3()),
+        });
+        return global;
+    }
+
+    private parseObject(): SCX.Object {
+        const object: SCX.Object = { name: "", transform: { trans: [0, 0, 0], rot: [0, 0, 0], scale: [1, 1, 1] }, meshes: [] };
+        this.scanScope({
+            [Token.Name]: () => (object.name = this.parseString()),
+            [Token.ID]: () => (object.id = this.parseNumber()),
+            [Token.Anim]: () => (object.animations = appended(object.animations, this.parseAnimation())),
+            [Token.Parent]: () => (object.parent = this.parseString()),
+            [Token.ParentID]: () => (object.parent = this.parseString()),
+            [Token.Transform]: () => (object.transform = this.parseTransform()),
+            [Token.Mesh]: () => (object.meshes = this.parseMesh()),
+        });
+
+        // For now, we only test whether an object is flipped in object space.
+        // It might be worth testing whether an object is flipped in world space.
+        const scale = object.transform.scale;
+        const isFlipped = Math.sign(scale[0] * scale[1] * scale[2]) < 0;
+        if (isFlipped) {
+            const normal = vec3.create();
+            for (const mesh of object.meshes) {
+                for (let i = 0; i < mesh.vertexcount; i++) {
+                    vec3.copy(normal, mesh.normals.slice(i * 3, (i + 1) * 3) as SCX.Vec3);
+                    vec3.negate(normal, normal);
+                    mesh.normals.splice(i * 3, 3, ...normal);
+                }
             }
         }
+        return object;
     }
-    return object;
-};
 
-const parseShader = (state: ParseState): SCX.Shader => {
-    const shader: SCX.Shader = { name: "", id: 0, ambient: [0, 0, 0], diffuse: [0, 0, 0], specular: [0, 0, 0], opacity: 0, luminance: 0, blend: 0 };
-    guardedLoop(state, {
-        [Token.Name]: () => (shader.name = parseString(state)),
-        [Token.ID]: () => (shader.id = parseNumber(state)),
-        [Token.Ambient]: () => (shader.ambient = parseVec3(state)),
-        [Token.Diffuse]: () => (shader.diffuse = parseVec3(state)),
-        [Token.Specular]: () => (shader.specular = parseVec3(state)),
-        [Token.Opacity]: () => (shader.opacity = parseNumber(state)),
-        [Token.Luminance]: () => (shader.luminance = parseNumber(state)),
-        [Token.Texture]: () => (shader.texture = parseString(state)),
-        [Token.Blend]: () => (shader.blend = parseNumber(state)),
-    });
-    return shader;
-};
+    private parseShader(): SCX.Shader {
+        const shader: SCX.Shader = { name: "", id: 0, ambient: [0, 0, 0], diffuse: [0, 0, 0], specular: [0, 0, 0], opacity: 0, luminance: 0, blend: 0 };
+        this.scanScope({
+            [Token.Name]: () => (shader.name = this.parseString()),
+            [Token.ID]: () => (shader.id = this.parseNumber()),
+            [Token.Ambient]: () => (shader.ambient = this.parseVec3()),
+            [Token.Diffuse]: () => (shader.diffuse = this.parseVec3()),
+            [Token.Specular]: () => (shader.specular = this.parseVec3()),
+            [Token.Opacity]: () => (shader.opacity = this.parseNumber()),
+            [Token.Luminance]: () => (shader.luminance = this.parseNumber()),
+            [Token.Texture]: () => (shader.texture = this.parseString()),
+            [Token.Blend]: () => (shader.blend = this.parseNumber()),
+        });
+        return shader;
+    }
 
-const parseLight = (state: ParseState): SCX.Light => {
-    const light: SCX.Light = { name: "", type: SCX.LightType.Ambient };
-    guardedLoop(state, {
-        [Token.Name]: () => (light.name = parseString(state)),
-        [Token.Type]: () => (light.type = parseLightType(state)),
-        [Token.Pos]: () => (light.pos = parseVec3(state)),
-        [Token.Dir]: () => (light.dir = parseVec3(state)),
-        [Token.Umbra]: () => (light.umbra = parseNumber(state)),
-        [Token.Penumbra]: () => (light.penumbra = parseNumber(state)),
-        [Token.AttenStart]: () => (light.attenstart = parseNumber(state)),
-        [Token.AttenEnd]: () => (light.attenend = parseNumber(state)),
-        [Token.Color]: () => (light.color = parseVec3(state)),
-        [Token.Intensity]: () => (light.intensity = parseNumber(state)),
-        [Token.Off]: () => (light.off = parseBoolean(state)),
-    });
-    return light;
-};
+    private parseLight(): SCX.Light {
+        const light: SCX.Light = { name: "", type: SCX.LightType.Ambient };
+        this.scanScope({
+            [Token.Name]: () => (light.name = this.parseString()),
+            [Token.Type]: () => (light.type = this.parseLightType()),
+            [Token.Pos]: () => (light.pos = this.parseVec3()),
+            [Token.Dir]: () => (light.dir = this.parseVec3()),
+            [Token.Umbra]: () => (light.umbra = this.parseNumber()),
+            [Token.Penumbra]: () => (light.penumbra = this.parseNumber()),
+            [Token.AttenStart]: () => (light.attenstart = this.parseNumber()),
+            [Token.AttenEnd]: () => (light.attenend = this.parseNumber()),
+            [Token.Color]: () => (light.color = this.parseVec3()),
+            [Token.Intensity]: () => (light.intensity = this.parseNumber()),
+            [Token.Off]: () => (light.off = this.parseBoolean()),
+        });
+        return light;
+    }
 
-const parseCamera = (state: ParseState): SCX.Camera => {
-    const camera: SCX.Camera = { name: "", fov: 0, nearclip: 0, farclip: 0, pos: [0, 0, 0], targetpos: [0, 0, 0] };
-    guardedLoop(state, {
-        [Token.Name]: () => (camera.name = parseString(state)),
-        [Token.Anim]: () => (camera.animations = appended(camera.animations, parseAnimation(state))),
-        [Token.Fov]: () => (camera.fov = parseNumber(state)),
-        [Token.NearClip]: () => (camera.nearclip = parseNumber(state)),
-        [Token.FarClip]: () => (camera.farclip = parseNumber(state)),
-        [Token.Pos]: () => (camera.pos = parseVec3(state)),
-        [Token.TargetPos]: () => (camera.targetpos = parseVec3(state)),
-    });
-    return camera;
-};
+    private parseCamera(): SCX.Camera {
+        const camera: SCX.Camera = { name: "", fov: 0, nearclip: 0, farclip: 0, pos: [0, 0, 0], targetpos: [0, 0, 0] };
+        this.scanScope({
+            [Token.Name]: () => (camera.name = this.parseString()),
+            [Token.Anim]: () => (camera.animations = appended(camera.animations, this.parseAnimation())),
+            [Token.Fov]: () => (camera.fov = this.parseNumber()),
+            [Token.NearClip]: () => (camera.nearclip = this.parseNumber()),
+            [Token.FarClip]: () => (camera.farclip = this.parseNumber()),
+            [Token.Pos]: () => (camera.pos = this.parseVec3()),
+            [Token.TargetPos]: () => (camera.targetpos = this.parseVec3()),
+        });
+        return camera;
+    }
 
-export const parseSCX = (data: ArrayBufferSlice): SCX.Scene => {
-    const scene: SCX.Scene = { shaders: [], global: { animinterval: [0, 0], framerate: 0, ambient: [0, 0, 0] }, cameras: [], lights: [], objects: [] };
-    const state: ParseState = { bytes: new Uint8Array(data.arrayBuffer), dataView: data.createDataView(), offset: 0 };
-    guardedLoop(state, {
-        [Token.Scene]: () => (scene.global = parseGlobal(state)),
-        [Token.Object]: () => scene.objects.push(parseObject(state)),
-        [Token.Shader]: () => scene.shaders.push(parseShader(state)),
-        [Token.Light]: () => scene.lights.push(parseLight(state)),
-        [Token.Camera]: () => scene.cameras.push(parseCamera(state)),
-    });
-    return scene;
-};
+    private parseScene(): SCX.Scene {
+        const scene: SCX.Scene = { shaders: [], global: { animinterval: [0, 0], framerate: 0, ambient: [0, 0, 0] }, cameras: [], lights: [], objects: [] };
+        this.scanScope({
+            [Token.Scene]: () => (scene.global = this.parseGlobal()),
+            [Token.Object]: () => scene.objects.push(this.parseObject()),
+            [Token.Shader]: () => scene.shaders.push(this.parseShader()),
+            [Token.Light]: () => scene.lights.push(this.parseLight()),
+            [Token.Camera]: () => scene.cameras.push(this.parseCamera()),
+        });
+        return scene;
+    }
+}

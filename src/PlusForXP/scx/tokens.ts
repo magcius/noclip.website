@@ -100,3 +100,12 @@ export enum Token {
     Bone0 = 0xe0,
     Emissive = 0xe1,
 }
+
+export enum Numeric {
+    Number = Token.Number,
+    Integer = Token.Integer,
+    Byte = Token.Byte,
+    UnsignedByte = Token.UnsignedByte,
+    Word = Token.Word,
+    UnsignedWord = Token.UnsignedWord,
+}

@@ -2,7 +2,7 @@ import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { SceneContext } from "../SceneBase.js";
 import { SceneGfx, SceneDesc } from "../viewer.js";
 
-import { parseSCX } from "./scx/parser.js";
+import { Parser as SCXParser } from "./scx/parser.js";
 import { SCX } from "./scx/types.js";
 import { decodeImage, createTextureHolder } from "./util.js";
 import Renderer from "./renderer.js";
@@ -190,7 +190,7 @@ class PlusForXPSceneDesc implements SceneDesc {
                         case "fetched": {
                             const { path, count, envID } = source;
                             const data = await sceneContext.dataFetcher.fetchData(`${basePath}${path}`);
-                            const scene = parseSCX(data);
+                            const scene = SCXParser.parse(data);
                             if (count === undefined) {
                                 scenes[`${path}/`] = { scene, envID };
                                 break;
