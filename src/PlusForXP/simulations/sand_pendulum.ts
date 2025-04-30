@@ -388,7 +388,7 @@ export default class SandPendulum extends Simulation {
             updateNodeTransform(this.sparkleSprite, true, this.sparkle.worldTransform, true);
         } else {
             [this.coord, this.lastCoord] = [this.lastCoord, this.coord];
-            this.coord = [this.sandParticles.worldTransform[12] * 0.032, this.sandParticles.worldTransform[14] * -0.032];
+            this.coord = [this.sandParticles.worldTransform[12] * 0.032, this.sandParticles.worldTransform[14] * 0.032];
         }
 
         if (vec2.sqrDist(this.coord, this.lastCoord) > 0.05) {

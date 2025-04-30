@@ -62,18 +62,6 @@ export const decodeImage = async (path: string, imageBytes: ArrayBufferLike): Pr
     return null;
 };
 
-export const flipTexture = (texture: Texture): Texture => {
-    const data: number[] = [];
-    for (let i = 0; i < texture.height; i++) {
-        const row = texture.height - 1 - i;
-        data.push(...texture.rgba8.subarray(row * texture.width * 4, (row + 1) * texture.width * 4));
-    }
-    return {
-        ...texture,
-        rgba8: new Uint8ClampedArray(data),
-    };
-};
-
 export const createTextureHolder = (textures: Texture[]) =>
     new FakeTextureHolder(
         textures.map((texture) => {

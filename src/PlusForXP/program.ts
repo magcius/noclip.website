@@ -43,6 +43,10 @@ export default class Plus4XPProgram {
     out vec2 v_DiffuseTexCoord;
     out vec2 v_EnvTexCoord;
 
+    vec2 flipTexY(vec2 uv) {
+        return vec2(uv.x, 1.0 - uv.y);
+    }
+
     void main() {
     
         vec4 position = vec4(a_Position, 1.0);
@@ -54,7 +58,7 @@ export default class Plus4XPProgram {
         gl_Position = clipPosition;
 
         v_DiffuseColor = min(a_DiffuseColor, 1.0);
-        v_DiffuseTexCoord = a_TexCoord;
+        v_DiffuseTexCoord = flipTexY(a_TexCoord);
 
     
         vec3 e = normalize(worldPosition.xyz - u_ViewInverseMatrix[3].xyz);
@@ -62,7 +66,7 @@ export default class Plus4XPProgram {
     
         vec3 r = reflect(e, n);
         r = (u_EnvMapMatrix * vec4(r, 1.0)).xyz;
-        v_EnvTexCoord = normalize(r).xy * 0.5 + 0.5;
+        v_EnvTexCoord = flipTexY(normalize(r).xy * 0.5 + 0.5);
     }
     `;
 

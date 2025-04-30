@@ -2,9 +2,9 @@ import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { SceneContext } from "../SceneBase.js";
 import { SceneGfx, SceneDesc } from "../viewer.js";
 
-import { parse as parseSCX } from "./scx/parser.js";
+import { parseSCX } from "./scx/parser.js";
 import { SCX } from "./scx/types.js";
-import { decodeImage, flipTexture, createTextureHolder } from "./util.js";
+import { decodeImage, createTextureHolder } from "./util.js";
 import Renderer from "./renderer.js";
 import { createPoolScene, MercuryPool } from "./simulations/mercury_pool.js";
 import RobotCircus from "./simulations/robot_circus.js";
@@ -231,7 +231,7 @@ class PlusForXPSceneDesc implements SceneDesc {
                     const { arrayBuffer } = await sceneContext.dataFetcher.fetchData(`${basePath}/${path}`);
                     const texture = await decodeImage(path, arrayBuffer);
                     if (texture != null) {
-                        textures.push(flipTexture(texture));
+                        textures.push(texture);
                     }
                 })(texturePath),
             );

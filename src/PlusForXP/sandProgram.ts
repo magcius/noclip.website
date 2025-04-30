@@ -36,6 +36,10 @@ export default class Plus4XPSandProgram {
     out vec2 v_TexCoord;
     out vec2 v_Pos;
 
+    vec2 flipTexY(vec2 uv) {
+      return vec2(uv.x, 1.0 - uv.y);
+    }
+
     void main() {
       v_TexCoord = a_Position;
       v_Pos = (a_Position * 2.0 - 1.0);
