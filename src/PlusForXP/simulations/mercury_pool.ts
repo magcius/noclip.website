@@ -151,7 +151,6 @@ export class MercuryPool extends Simulation {
         }
 
         const numTriangles = numSegments ** 2 * 2;
-        console.log(numTriangles);
         this.poolTriangles = [];
         for (let i = 0; i < numTriangles; i++) {
             const [index0, index1, index2] = [...poolIndices.subarray(i * 3, (i + 1) * 3)];
