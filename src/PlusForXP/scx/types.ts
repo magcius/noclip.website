@@ -1,5 +1,5 @@
 export namespace SCX {
-    type Named = { name: string };
+    type Named = { name: string; id?: number };
     type Animatable = { animations?: KeyframeAnimation[] };
 
     export type Vec2 = [number, number];
@@ -16,10 +16,11 @@ export namespace SCX {
         blend: number;
     };
 
-    export type Global = {
+    export type Global = Partial<Named> & {
         animinterval: Vec2;
         framerate: number;
         ambient: Vec3;
+        textureFolders?: false;
     };
 
     export type Transform = {
@@ -32,7 +33,7 @@ export namespace SCX {
 
     export type Interpolation = "linear" | "hermite";
 
-    export type Extrapolation = "cycle" | "constant";
+    export type Extrapolation = "cycle" | "constant" | "oscillate";
 
     export type KeyframeAnimation = {
         channel: KeyframeAnimationChannel;
@@ -45,8 +46,8 @@ export namespace SCX {
     export type Keyframe = {
         time: number;
         value: number;
-        tangentIn?: number;
-        tangentOut?: number;
+        tangentIn: number;
+        tangentOut: number;
     };
 
     export type Camera = Named &
@@ -60,19 +61,18 @@ export namespace SCX {
 
     export type LightType = "spot" | "directional" | "point" | "ambient";
 
-    export type Light = Named &
-        Partial<{
-            type: LightType;
-            pos: Vec3;
-            dir: Vec3;
-            umbra: number;
-            penumbra: number;
-            attenstart: number;
-            attenend: number;
-            color: Vec3;
-            intensity: number;
-            off: boolean;
-        }>;
+    export type Light = Named & {
+        type: LightType;
+        pos?: Vec3;
+        dir?: Vec3;
+        umbra?: number;
+        penumbra?: number;
+        attenstart?: number;
+        attenend?: number;
+        color?: Vec3;
+        intensity?: number;
+        off?: boolean;
+    };
 
     export type Polygon = {
         verts: number[];

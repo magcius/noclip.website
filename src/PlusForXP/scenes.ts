@@ -190,7 +190,7 @@ class PlusForXPSceneDesc implements SceneDesc {
                         case "fetched": {
                             const { path, count, envID } = source;
                             const data = await sceneContext.dataFetcher.fetchData(`${basePath}${path}`);
-                            const scene = await parseSCX(new Uint8Array(data.arrayBuffer));
+                            const scene = parseSCX(data);
                             if (count === undefined) {
                                 scenes[`${path}/`] = { scene, envID };
                                 break;

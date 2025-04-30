@@ -21,7 +21,7 @@ export class AnimationBuilder {
 
             const [r1, r2, r3, r4] = [+(2 * p3 - 3 * p2) + 1, -(2 * p3 - 3 * p2), p3 - p2 - p2 + p1, p3 - p2];
 
-            return r1 * fromKey.value + r2 * toKey.value + r3 * (fromKey.tangentOut ?? 0) + r4 * (toKey.tangentIn ?? 0);
+            return r1 * fromKey.value + r2 * toKey.value + r3 * fromKey.tangentOut + r4 * toKey.tangentIn;
         },
     } as const;
 
