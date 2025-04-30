@@ -1,14 +1,9 @@
 import { decode as tifDecode } from "tiff";
 import { FakeTextureHolder } from "../TextureHolder.js";
-import { DataFetcher } from "../DataFetcher.js";
 import { SceneNode, Texture } from "./types.js";
-import { range } from "../MathHelpers.js";
 import { GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { align } from "../util.js";
 import { mat4, vec3 } from "gl-matrix";
-
-type _FixedTupleOf<T, N extends number, R extends unknown[]> = R["length"] extends N ? R : _FixedTupleOf<T, N, [T, ...R]>;
-export type FixedTuple<T, N extends number> = N extends N ? (number extends N ? T[] : _FixedTupleOf<T, N, []>) : never;
 
 const loadJPGData = (jpegBinary: ArrayBuffer): Promise<{ width: number; height: number; data: Uint8ClampedArray }> => {
     const img = document.createElement("img");

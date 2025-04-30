@@ -311,23 +311,17 @@ export default class Renderer implements SceneGfx {
 
         // Create object scene nodes, their animations, and their meshes
         for (const object of scene.objects) {
-            const transform = {
-                trans: vec3.create(),
-                rot: vec3.create(),
-                scale: vec3.fromValues(1, 1, 1),
-            };
-            for (const { trans, rot, scale } of object.transforms) {
-                vec3.set(transform.trans, ...trans);
-                vec3.set(transform.rot, ...rot);
-                vec3.set(transform.scale, ...scale);
-            }
             const objectName = sceneName + object.name;
             const meshes: Mesh[] = [];
             const node: SceneNode = createSceneNode({
                 name: objectName,
                 parentName: object.parent === null ? undefined : sceneName + object.parent,
                 parent: sceneRoot,
-                transform,
+                transform: {
+                    trans: vec3.fromValues(...object.transform.trans),
+                    rot: vec3.fromValues(...object.transform.rot),
+                    scale: vec3.fromValues(...object.transform.scale),
+                },
                 animates: (object.animations?.length ?? 0) > 0,
                 loops: true,
                 meshes,
@@ -367,9 +361,9 @@ export default class Renderer implements SceneGfx {
 
                 const lights: SCX.Light[] = [
                     {
-                        type: "ambient",
+                        type: SCX.LightType.Ambient,
                         name: "ambient",
-                        color: scene.globals[0]?.ambient ?? [0, 0, 0],
+                        color: scene.global.ambient ?? [0, 0, 0],
                     } as SCX.Light,
                     ...scene.lights.values(),
                 ];

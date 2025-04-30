@@ -55,13 +55,13 @@ export const createPoolScene = (): SCX.Scene => {
 
     return {
         shaders: [mercuryShader],
-        globals: [],
+        global: { animinterval: [0, 1000], framerate: 30, ambient: [0, 0, 0] },
         cameras: [],
         lights: [],
         objects: [
             {
                 name: "pool",
-                transforms: [],
+                transform: { trans: [0, 0, 0], rot: [0, 0, 0], scale: [1, 1, 1] },
                 meshes: [poolMesh],
                 animations: [],
             },

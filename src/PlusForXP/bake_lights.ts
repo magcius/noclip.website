@@ -31,7 +31,7 @@ export const bakeLights = (mesh: SCX.Mesh, material: SCX.Shader, worldTransform:
             }
             vec3.copy(color, Vec3One);
             vec3.scale(color, color, lightIntensity * (light.intensity ?? 1) + material.luminance * 2);
-            const materialColor = light.type === "ambient" ? ambientColor : diffuseColor;
+            const materialColor = light.type === SCX.LightType.Ambient ? ambientColor : diffuseColor;
             if (materialColor !== null) {
                 vec3.mul(color, color, materialColor);
             }
@@ -79,7 +79,7 @@ const spotCalculation = (light: SCX.Light, normal: vec3, position: vec3): number
         return 0;
     }
 
-    if (light.type === "spot") {
+    if (light.type === SCX.LightType.Spot) {
         if (light.dir === undefined || light.penumbra === undefined || light.umbra === undefined) {
             return 0;
         }
@@ -104,8 +104,8 @@ const spotCalculation = (light: SCX.Light, normal: vec3, position: vec3): number
 };
 
 const lightCalculationsByType: Record<SCX.LightType, LightCalculation> = {
-    spot: spotCalculation,
-    directional: (light, normal) => (light.dir === undefined ? 0 : vec3.dot(light.dir, normal)),
-    point: spotCalculation,
-    ambient: () => 1,
+    [SCX.LightType.Spot]: spotCalculation,
+    [SCX.LightType.Directional]: (light, normal) => (light.dir === undefined ? 0 : vec3.dot(light.dir, normal)),
+    [SCX.LightType.Point]: spotCalculation,
+    [SCX.LightType.Ambient]: () => 1,
 };

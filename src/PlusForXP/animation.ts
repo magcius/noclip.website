@@ -26,15 +26,15 @@ export class AnimationBuilder {
     } as const;
 
     channelModifiers: Record<SCX.KeyframeAnimationChannel, (transform: Transform, value: number) => void> = {
-        xtrans: (transform, value) => (transform.trans[0] = value),
-        ytrans: (transform, value) => (transform.trans[1] = value),
-        ztrans: (transform, value) => (transform.trans[2] = value),
-        xrot: (transform, value) => (transform.rot[0] = value),
-        yrot: (transform, value) => (transform.rot[1] = value),
-        zrot: (transform, value) => (transform.rot[2] = value),
-        xscale: (transform, value) => (transform.scale[0] = value),
-        yscale: (transform, value) => (transform.scale[1] = value),
-        zscale: (transform, value) => (transform.scale[2] = value),
+        [SCX.KeyframeAnimationChannel.TransX]: (transform, value) => (transform.trans[0] = value),
+        [SCX.KeyframeAnimationChannel.TransY]: (transform, value) => (transform.trans[1] = value),
+        [SCX.KeyframeAnimationChannel.TransZ]: (transform, value) => (transform.trans[2] = value),
+        [SCX.KeyframeAnimationChannel.RotX]: (transform, value) => (transform.rot[0] = value),
+        [SCX.KeyframeAnimationChannel.RotY]: (transform, value) => (transform.rot[1] = value),
+        [SCX.KeyframeAnimationChannel.RotZ]: (transform, value) => (transform.rot[2] = value),
+        [SCX.KeyframeAnimationChannel.ScaleX]: (transform, value) => (transform.scale[0] = value),
+        [SCX.KeyframeAnimationChannel.ScaleY]: (transform, value) => (transform.scale[1] = value),
+        [SCX.KeyframeAnimationChannel.ScaleZ]: (transform, value) => (transform.scale[2] = value),
     } as const;
 
     public build = (transform: Transform, animations: SCX.KeyframeAnimation[]): ChannelAnimation[] => {

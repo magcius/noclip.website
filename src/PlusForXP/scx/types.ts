@@ -1,3 +1,5 @@
+import { Token } from "./tokens";
+
 export namespace SCX {
     type Named = { name: string; id?: number };
     type Animatable = { animations?: KeyframeAnimation[] };
@@ -16,11 +18,15 @@ export namespace SCX {
         blend: number;
     };
 
+    export enum Off {
+        Off = Token.Off,
+    }
+
     export type Global = Partial<Named> & {
         animinterval: Vec2;
         framerate: number;
         ambient: Vec3;
-        textureFolders?: false;
+        textureFolders?: Off;
     };
 
     export type Transform = {
@@ -29,11 +35,28 @@ export namespace SCX {
         scale: Vec3;
     };
 
-    export type KeyframeAnimationChannel = "xtrans" | "ytrans" | "ztrans" | "xrot" | "yrot" | "zrot" | "xscale" | "yscale" | "zscale";
+    export enum KeyframeAnimationChannel {
+        TransX = Token.TransX,
+        TransY = Token.TransY,
+        TransZ = Token.TransZ,
+        RotX = Token.RotX,
+        RotY = Token.RotY,
+        RotZ = Token.RotZ,
+        ScaleX = Token.ScaleX,
+        ScaleY = Token.ScaleY,
+        ScaleZ = Token.ScaleZ,
+    }
 
-    export type Interpolation = "linear" | "hermite";
+    export enum Interpolation {
+        Linear = Token.Linear,
+        Hermite = Token.Hermite,
+    }
 
-    export type Extrapolation = "cycle" | "constant" | "oscillate";
+    export enum Extrapolation {
+        Cycle = Token.Cycle,
+        Constant = Token.Constant,
+        Oscillate = Token.Oscillate,
+    }
 
     export type KeyframeAnimation = {
         channel: KeyframeAnimationChannel;
@@ -59,7 +82,12 @@ export namespace SCX {
             targetpos: Vec3;
         };
 
-    export type LightType = "spot" | "directional" | "point" | "ambient";
+    export enum LightType {
+        Spot = Token.Spot,
+        Directional = Token.Directional,
+        Point = Token.Point,
+        Ambient = Token.Ambient,
+    }
 
     export type Light = Named & {
         type: LightType;
@@ -91,21 +119,16 @@ export namespace SCX {
         dynamic?: boolean;
     };
 
-    export type PolygonMesh = Mesh & {
-        polycount?: number;
-        polygons?: Polygon[];
-    };
-
     export type Object = Named &
         Animatable & {
             parent?: string;
-            transforms: Transform[];
+            transform: Transform;
             meshes: Mesh[];
         };
 
     export type Scene = {
+        global: Global;
         shaders: Shader[];
-        globals: Global[];
         cameras: Camera[];
         lights: Light[];
         objects: Object[];
