@@ -1,5 +1,5 @@
-import { mat4, vec3, vec4 } from "gl-matrix";
-import { GfxBuffer, GfxDevice, GfxIndexBufferDescriptor, GfxInputLayout, GfxTexture, GfxVertexBufferDescriptor } from "../gfx/platform/GfxPlatform.js";
+import { mat4, vec3 } from "gl-matrix";
+import { GfxDevice, GfxIndexBufferDescriptor, GfxTexture, GfxVertexBufferDescriptor } from "../gfx/platform/GfxPlatform.js";
 import { SCX } from "./scx/types.js";
 import { ViewerRenderInput } from "../viewer.js";
 import { ChannelAnimation } from "./animation.js";
@@ -24,35 +24,20 @@ export type Texture = {
     gfxTexture?: GfxTexture;
 };
 
-export type Material = {
-    shader: SCX.Shader;
-    gfxTexture: GfxTexture | null;
-};
-
 export type EnvironmentMap = {
     texturePath: string;
     rotation: [number, number, number];
     tint?: [number, number, number];
 };
 
-export type ComputedEnvironmentMap = {
-    texture: GfxTexture;
-    matrix: mat4;
-    tint: vec4;
-};
-
-export type UnbakedMesh = {
-    node: SceneNode;
-    mesh: SCX.Mesh;
-    lights: SCX.Light[];
-    shader: SCX.Shader;
-    diffuseColorBuffer: GfxBuffer;
-    sceneName: string;
-};
-
 export type VertexAttribute = GfxVertexBufferDescriptor & { name: string; data?: Float32Array };
 
 export type Index = GfxIndexBufferDescriptor & { data?: Uint32Array };
+
+export type Material = {
+    shader: SCX.Shader;
+    gfxTexture: GfxTexture | null;
+};
 
 export type Mesh = {
     vertexAttributes: VertexAttribute[];
