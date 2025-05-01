@@ -1,11 +1,11 @@
 import { mat4, vec3 } from "gl-matrix";
-import { GfxDevice, GfxIndexBufferDescriptor, GfxTexture, GfxVertexBufferDescriptor } from "../gfx/platform/GfxPlatform.js";
-import { SCX } from "./scx/types.js";
-import { ViewerRenderInput } from "../viewer.js";
-import { ChannelAnimation } from "./animation.js";
-import { GfxrGraphBuilder } from "../gfx/render/GfxRenderGraph.js";
-import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
-import { World } from "./world.js";
+import { GfxDevice, GfxIndexBufferDescriptor, GfxTexture, GfxVertexBufferDescriptor } from "../gfx/platform/GfxPlatform";
+import { SCX } from "./scx/types";
+import { ViewerRenderInput } from "../viewer";
+import { ChannelAnimation } from "./animation";
+import { GfxrGraphBuilder } from "../gfx/render/GfxRenderGraph";
+import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
+import { World } from "./world";
 
 export type WorldData = {
     basePath: string;

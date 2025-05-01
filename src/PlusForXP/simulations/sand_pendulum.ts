@@ -22,7 +22,7 @@ import {
     GfxVertexBufferFrequency,
     GfxWrapMode,
 } from "../../gfx/platform/GfxPlatform";
-import Plus4XPSandProgram from "../sandProgram.js";
+import Plus4XPSandProgram from "../sandProgram";
 import { preprocessProgramObj_GLSL } from "../../gfx/shaderc/GfxShaderCompiler";
 import { defaultMegaState, setAttachmentStateSimple } from "../../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { GfxrAttachmentSlot, GfxrGraphBuilder } from "../../gfx/render/GfxRenderGraph";

@@ -9,26 +9,26 @@ import {
     GfxRenderProgramDescriptor,
     GfxSampler,
     GfxVertexBufferFrequency,
-} from "../gfx/platform/GfxPlatform.js";
-import { TextureBase, TextureHolder } from "../TextureHolder.js";
-import { SCX } from "./scx/types.js";
-import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
-import { GfxRenderInstList, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
-import { preprocessProgramObj_GLSL } from "../gfx/shaderc/GfxShaderCompiler.js";
-import { fillMatrix4x4, fillVec4 } from "../gfx/helpers/UniformBufferHelpers.js";
-import { makeAttachmentClearDescriptor, makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
-import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
-import { colorNewFromRGBA } from "../Color.js";
+} from "../gfx/platform/GfxPlatform";
+import { TextureBase, TextureHolder } from "../TextureHolder";
+import { SCX } from "./scx/types";
+import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
+import { GfxRenderInstList, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
+import { preprocessProgramObj_GLSL } from "../gfx/shaderc/GfxShaderCompiler";
+import { fillMatrix4x4, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
+import { makeAttachmentClearDescriptor, makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers";
+import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph";
+import { colorNewFromRGBA } from "../Color";
 import { mat4, vec3 } from "gl-matrix";
-import { GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode } from "../gfx/platform/GfxPlatform.js";
-import { CameraController } from "../Camera.js";
-import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
-import { SceneNode, Simulation, WorldData } from "./types.js";
-import { SceneGfx, ViewerRenderInput } from "../viewer.js";
-import Plus4XPProgram from "./program.js";
-import * as UI from "../ui.js";
-import { updateNodeTransform } from "./util.js";
-import { World } from "./world.js";
+import { GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode } from "../gfx/platform/GfxPlatform";
+import { CameraController } from "../Camera";
+import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
+import { SceneNode, Simulation, WorldData } from "./types";
+import { SceneGfx, ViewerRenderInput } from "../viewer";
+import Plus4XPProgram from "./program";
+import * as UI from "../ui";
+import { updateNodeTransform } from "./util";
+import { World } from "./world";
 
 export default class Renderer implements SceneGfx {
     private inputLayout: GfxInputLayout;

@@ -1,4 +1,4 @@
-import { SCX } from "./scx/types.js";
+import { SCX } from "./scx/types";
 
 type Interpolation = (toKey: SCX.Keyframe, fromKey: SCX.Keyframe, now: number, duration: number) => number;
 
