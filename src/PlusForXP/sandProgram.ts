@@ -1,5 +1,5 @@
-import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
-import { GfxBindingLayoutDescriptor } from "../gfx/platform/GfxPlatform.js";
+import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary";
+import { GfxBindingLayoutDescriptor } from "../gfx/platform/GfxPlatform";
 
 export default class Plus4XPSandProgram {
     public static bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 1, numSamplers: 1 }];

@@ -3,7 +3,7 @@ import { ViewerRenderInput } from "../../viewer";
 import { SceneNode, Simulation } from "../types";
 import { getDescendants } from "../util";
 import { GfxBuffer, GfxDevice } from "../../gfx/platform/GfxPlatform";
-import { SCX } from "../scx/types.js";
+import { SCX } from "../scx/types";
 import { World } from "../world";
 
 const numSegments = 32;

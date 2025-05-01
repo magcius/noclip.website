@@ -1,15 +1,15 @@
-import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
-import { SceneContext } from "../SceneBase.js";
-import { SceneGfx, SceneDesc } from "../viewer.js";
+import { GfxDevice } from "../gfx/platform/GfxPlatform";
+import { SceneContext } from "../SceneBase";
+import { SceneGfx, SceneDesc } from "../viewer";
 
-import { Parser as SCXParser } from "./scx/parser.js";
-import { SCX } from "./scx/types.js";
-import { decodeImage, createTextureHolder } from "./util.js";
-import Renderer from "./renderer.js";
-import { createPoolScene, MercuryPool } from "./simulations/mercury_pool.js";
-import RobotCircus from "./simulations/robot_circus.js";
-import SandPendulum from "./simulations/sand_pendulum.js";
-import { EnvironmentMap, Simulation, Texture } from "./types.js";
+import { Parser as SCXParser } from "./scx/parser";
+import { SCX } from "./scx/types";
+import { decodeImage, createTextureHolder } from "./util";
+import Renderer from "./renderer";
+import { createPoolScene, MercuryPool } from "./simulations/mercury_pool";
+import RobotCircus from "./simulations/robot_circus";
+import SandPendulum from "./simulations/sand_pendulum";
+import { EnvironmentMap, Simulation, Texture } from "./types";
 
 type SceneSource = { envID?: string } & ({ type: "fetched"; path: string; count?: number } | { type: "procedural"; name: string; func: () => SCX.Scene });
 

@@ -1,8 +1,8 @@
 import { vec3 } from "gl-matrix";
-import { Endianness, getSystemEndianness } from "../../endian.js";
-import ArrayBufferSlice from "../../ArrayBufferSlice.js";
-import { SCX } from "./types.js";
-import { Token, Numeric } from "./tokens.js";
+import { Endianness, getSystemEndianness } from "../../endian";
+import ArrayBufferSlice from "../../ArrayBufferSlice";
+import { SCX } from "./types";
+import { Token, Numeric } from "./tokens";
 
 type DataViewCall = (view: DataView, byteOffset: number) => number;
 const isLittleEndian = getSystemEndianness() === Endianness.LITTLE_ENDIAN;

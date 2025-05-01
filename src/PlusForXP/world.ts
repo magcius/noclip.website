@@ -7,14 +7,14 @@ import {
     GfxTexture,
     GfxTextureDimension,
     GfxTextureUsage,
-} from "../gfx/platform/GfxPlatform.js";
-import { SCX } from "./scx/types.js";
+} from "../gfx/platform/GfxPlatform";
+import { SCX } from "./scx/types";
 import { mat4, quat, vec3, vec4 } from "gl-matrix";
-import { Camera } from "../Camera.js";
-import { bakeLights } from "./bake_lights.js";
-import { WorldData, Texture, EnvironmentMap, SceneNode, Material } from "./types.js";
-import { Animation } from "./animation.js";
-import { createSceneNode, createDataBuffer, updateNodeTransform, reparent, cloneTransform } from "./util.js";
+import { Camera } from "../Camera";
+import { bakeLights } from "./bake_lights";
+import { WorldData, Texture, EnvironmentMap, SceneNode, Material } from "./types";
+import { Animation } from "./animation";
+import { createSceneNode, createDataBuffer, updateNodeTransform, reparent, cloneTransform } from "./util";
 
 export type ComputedEnvironmentMap = {
     texture: GfxTexture;
