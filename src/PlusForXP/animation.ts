@@ -7,7 +7,7 @@ export type ChannelAnimation = {
     reset: () => void;
 };
 
-export class AnimationBuilder {
+export class Animation {
     static interpolations: Record<SCX.Interpolation, Interpolation> = {
         [SCX.Interpolation.Linear]: (toKey, fromKey, now, duration) => {
             const percent = Math.max(0, Math.min(1, now / duration));
@@ -37,8 +37,8 @@ export class AnimationBuilder {
     } as const;
 
     public static build = (transform: SCX.Transform, animations: SCX.KeyframeAnimation[]): ChannelAnimation[] => {
-        const builder = new AnimationBuilder();
-        animations = animations.filter(({ channel }) => AnimationBuilder.channelModifiers[channel] !== null);
+        const builder = new Animation();
+        animations = animations.filter(({ channel }) => Animation.channelModifiers[channel] !== null);
         const durations = new Set<number>();
         for (const anim of animations) {
             for (const keyframe of anim.keyframes) {
@@ -47,8 +47,8 @@ export class AnimationBuilder {
         }
         const fullAnimDuration = Math.max(...durations);
         return animations.map((animation) => {
-            const channelModifier = AnimationBuilder.channelModifiers[animation.channel];
-            const interpolation = AnimationBuilder.interpolations[animation.interp];
+            const channelModifier = Animation.channelModifiers[animation.channel];
+            const interpolation = Animation.interpolations[animation.interp];
             const times = animation.keyframes.map(({ time }) => time / 1000);
             const animDuration = times.at(-1)!;
             const keyframes = animation.keyframes;

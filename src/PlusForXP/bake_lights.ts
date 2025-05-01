@@ -2,10 +2,10 @@ import { mat3, mat4, vec3 } from "gl-matrix";
 import { SCX } from "./scx/types.js";
 import { Vec3One } from "../MathHelpers.js";
 
-export const bakeLights = (mesh: SCX.Mesh, material: SCX.Shader, worldTransform: mat4, lights: SCX.Light[]): Float32Array => {
-    const useMaterialColors = material.luminance === 0 && (material.blend < 1 || material.texture === null);
-    const ambientColor = useMaterialColors ? material.ambient : vec3.fromValues(1, 1, 1);
-    const diffuseColor = useMaterialColors ? material.diffuse : vec3.fromValues(1, 1, 1);
+export const bakeLights = (mesh: SCX.Mesh, shader: SCX.Shader, worldTransform: mat4, lights: SCX.Light[]): Float32Array => {
+    const useShaderColors = shader.luminance === 0 && (shader.blend < 1 || shader.texture === null);
+    const ambientColor = useShaderColors ? shader.ambient : vec3.fromValues(1, 1, 1);
+    const diffuseColor = useShaderColors ? shader.diffuse : vec3.fromValues(1, 1, 1);
 
     const { positions, normals } = mesh;
     const position = vec3.create();
@@ -26,7 +26,7 @@ export const bakeLights = (mesh: SCX.Mesh, material: SCX.Shader, worldTransform:
 
         for (const light of lights) {
             let { intensity } = light;
-            if (intensity <= 0 && material.luminance <= 0) {
+            if (intensity <= 0 && shader.luminance <= 0) {
                 continue;
             }
             intensity *= lightCalculationsByType[light.type!](light, normal, position);
@@ -34,14 +34,14 @@ export const bakeLights = (mesh: SCX.Mesh, material: SCX.Shader, worldTransform:
                 continue;
             }
             vec3.copy(color, Vec3One);
-            vec3.scale(color, color, intensity + material.luminance * 2);
+            vec3.scale(color, color, intensity + shader.luminance * 2);
             const materialColor = light.type === SCX.LightType.Ambient ? ambientColor : diffuseColor;
             vec3.mul(color, color, materialColor);
             vec3.mul(color, color, light.color);
             vec3.add(bakedColor, bakedColor, color);
         }
     }
-    return new Float32Array(bakedColors.flatMap((rgb) => [...rgb, material.opacity]));
+    return new Float32Array(bakedColors.flatMap((rgb) => [...rgb, shader.opacity]));
 };
 
 type LightCalculation = (light: SCX.Light, normal: vec3, position: vec3) => number;

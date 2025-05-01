@@ -1,11 +1,35 @@
-import { GfxBufferFrequencyHint, GfxBufferUsage, GfxDevice, GfxFormat, GfxTexture, GfxTextureDimension, GfxTextureUsage } from "../gfx/platform/GfxPlatform.js";
+import {
+    GfxBuffer,
+    GfxBufferFrequencyHint,
+    GfxBufferUsage,
+    GfxDevice,
+    GfxFormat,
+    GfxTexture,
+    GfxTextureDimension,
+    GfxTextureUsage,
+} from "../gfx/platform/GfxPlatform.js";
 import { SCX } from "./scx/types.js";
 import { mat4, quat, vec3, vec4 } from "gl-matrix";
 import { Camera } from "../Camera.js";
 import { bakeLights } from "./bake_lights.js";
-import { Material, Texture, SceneNode, EnvironmentMap, ComputedEnvironmentMap, UnbakedMesh, WorldData } from "./types.js";
-import { AnimationBuilder } from "./animation.js";
+import { WorldData, Texture, EnvironmentMap, SceneNode, Material } from "./types.js";
+import { Animation } from "./animation.js";
 import { createSceneNode, createDataBuffer, updateNodeTransform, reparent, cloneTransform } from "./util.js";
+
+export type ComputedEnvironmentMap = {
+    texture: GfxTexture;
+    matrix: mat4;
+    tint: vec4;
+};
+
+export type UnbakedMesh = {
+    node: SceneNode;
+    mesh: SCX.Mesh;
+    lights: SCX.Light[];
+    shader: SCX.Shader;
+    diffuseColorBuffer: GfxBuffer;
+    sceneName: string;
+};
 
 export class World {
     private fallbackMaterial: Material;
@@ -99,7 +123,7 @@ export class World {
         this.camerasByName.set(cameraName, camera);
         if (camera.animations !== undefined) {
             node.animatedTransform = cloneTransform(node.transform);
-            node.animations = AnimationBuilder.build(node.animatedTransform!, camera.animations);
+            node.animations = Animation.build(node.animatedTransform!, camera.animations);
             node.animates = node.animations.length > 0;
             this.animatableNodes.push(node);
         }
@@ -160,7 +184,7 @@ export class World {
 
         if (object.animations !== undefined) {
             node.animatedTransform = cloneTransform(node.transform);
-            node.animations = AnimationBuilder.build(node.animatedTransform!, object.animations);
+            node.animations = Animation.build(node.animatedTransform!, object.animations);
             node.animates = node.animations.length > 0;
             this.animatableNodes.push(node);
         }
