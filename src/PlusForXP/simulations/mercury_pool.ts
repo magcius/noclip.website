@@ -1,9 +1,10 @@
 import { vec2, vec3 } from "gl-matrix";
 import { ViewerRenderInput } from "../../viewer";
-import { Material, SceneNode, Simulation, Texture } from "../types";
+import { SceneNode, Simulation } from "../types";
 import { getDescendants } from "../util";
 import { GfxBuffer, GfxDevice } from "../../gfx/platform/GfxPlatform";
 import { SCX } from "../scx/types.js";
+import { World } from "../world";
 
 const numSegments = 32;
 const numVertexRows = numSegments + 1;
@@ -112,12 +113,7 @@ export class MercuryPool extends Simulation {
     private poolNormalAttribute: DynamicAttribute;
     private poolScale: number;
 
-    override setup(
-        device: GfxDevice,
-        texturesByPath: Map<string, Texture>,
-        materialsByName: Map<string, Material>,
-        sceneNodesByName: Map<string, SceneNode>,
-    ): void {
+    override setup(device: GfxDevice, world: World): void {
         const dropTemplate = {
             initialized: false,
             startTime: 0,
@@ -125,13 +121,13 @@ export class MercuryPool extends Simulation {
             position: [0, 0] as [number, number],
             state: MercuryDropState.waiting,
         };
-        this.isIndustrial = sceneNodesByName.has("Mercury_Pool_Tech_Scene.scx/_root");
+        this.isIndustrial = world.sceneNodesByName.has("Mercury_Pool_Tech_Scene.scx/_root");
         this.dropRange = this.isIndustrial ? [28, 28] : [16, 16];
         this.fallDuration = 800;
         this.splashDuration = 1333;
         this.rippleDuration = 5000;
         this.poolScale = this.isIndustrial ? 64 : 72;
-        const pool = sceneNodesByName.get("pool/pool")!;
+        const pool = world.sceneNodesByName.get("pool/pool")!;
         pool.transform.scale = [this.poolScale, this.poolScale, 1];
         pool.transformChanged = true;
         const poolAttributes = pool.meshes[0].vertexAttributes;
@@ -170,8 +166,8 @@ export class MercuryPool extends Simulation {
 
         this.drops = [];
         for (let i = 1; i < 10; i++) {
-            const dropModel = sceneNodesByName.get(`Mercury_Pool_Drop.scx_${i}/_root`);
-            const splashModel = sceneNodesByName.get(`Mercury_Pool_Splash.scx_${i}/_root`);
+            const dropModel = world.sceneNodesByName.get(`Mercury_Pool_Drop.scx_${i}/_root`);
+            const splashModel = world.sceneNodesByName.get(`Mercury_Pool_Splash.scx_${i}/_root`);
             if (dropModel === undefined || splashModel === undefined) {
                 break;
             }
@@ -185,7 +181,7 @@ export class MercuryPool extends Simulation {
         }
     }
 
-    override update(input: ViewerRenderInput, sceneNodesByName: Map<string, SceneNode>, device: GfxDevice): void {
+    override update(device: GfxDevice, input: ViewerRenderInput): void {
         const { time } = input;
 
         if (!this.isInitialized) {

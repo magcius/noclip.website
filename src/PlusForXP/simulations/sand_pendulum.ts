@@ -1,6 +1,6 @@
 import { mat4, quat, vec2, vec3 } from "gl-matrix";
 import { ViewerRenderInput } from "../../viewer";
-import { Simulation, SceneNode, Texture, Material } from "../types";
+import { Simulation, SceneNode, Texture } from "../types";
 import { wrapNode, reparent, createDataBuffer, updateNodeTransform } from "../util";
 import {
     GfxBlendFactor,
@@ -30,6 +30,7 @@ import { GfxRenderInstList } from "../../gfx/render/GfxRenderInstManager";
 import { GfxRenderHelper } from "../../gfx/render/GfxRenderHelper";
 import { fillVec4 } from "../../gfx/helpers/UniformBufferHelpers";
 import { lerp } from "../../MathHelpers";
+import { World } from "../world";
 
 type Swing = {
     name: string;
@@ -120,22 +121,17 @@ export default class SandPendulum extends Simulation {
         this.swing = this.swings[Math.floor(Math.random() * this.swings.length)];
     }
 
-    override setup(
-        device: GfxDevice,
-        texturesByPath: Map<string, Texture>,
-        materialsByName: Map<string, Material>,
-        sceneNodesByName: Map<string, SceneNode>,
-    ): void {
-        this.isGrotto = sceneNodesByName.has("Pendulum_SW_Pendulum.scx/Pendulum Arrowhead");
-        this.pendulum = sceneNodesByName.get(this.isGrotto ? "Pendulum_SW_Pendulum.scx/Pendulum Arrowhead" : "Pendulum_Pendulum.scx/Pendulum")!;
-        this.sandParticles = sceneNodesByName.get("Pendulum_Sand_Particles.scx/_root")!;
-        this.sparkle = sceneNodesByName.get("Sparkle.scx/_root")!;
-        this.sparkleSprite = sceneNodesByName.get("Sparkle.scx/Plane01")!;
+    override setup(device: GfxDevice, world: World): void {
+        this.isGrotto = world.sceneNodesByName.has("Pendulum_SW_Pendulum.scx/Pendulum Arrowhead");
+        this.pendulum = world.sceneNodesByName.get(this.isGrotto ? "Pendulum_SW_Pendulum.scx/Pendulum Arrowhead" : "Pendulum_Pendulum.scx/Pendulum")!;
+        this.sandParticles = world.sceneNodesByName.get("Pendulum_Sand_Particles.scx/_root")!;
+        this.sparkle = world.sceneNodesByName.get("Sparkle.scx/_root")!;
+        this.sparkleSprite = world.sceneNodesByName.get("Sparkle.scx/Plane01")!;
         this.sparkleSprite.isGhost = true;
 
         this.sandProgram = preprocessProgramObj_GLSL(device, new Plus4XPSandProgram());
         const sandTexturePath = "Pendulum_Sand_textures/Sand.tif";
-        this.originalSandTexture = texturesByPath.get(sandTexturePath)!;
+        this.originalSandTexture = world.texturesByPath.get(sandTexturePath)!;
 
         this.pickRandomSwing();
 
@@ -157,8 +153,8 @@ export default class SandPendulum extends Simulation {
             usage: GfxTextureUsage.Sampled,
         });
         device.uploadTextureData(this.gfxTexture, 0, [this.originalSandTexture.rgba8]);
-        texturesByPath.set(sandTexturePath, { ...this.originalSandTexture, gfxTexture: this.gfxTexture });
-        materialsByName.get("Pendulum_Sand.scx/1")!.gfxTexture = this.gfxTexture;
+        world.texturesByPath.set(sandTexturePath, { ...this.originalSandTexture, gfxTexture: this.gfxTexture });
+        world.materialsByName.get("Pendulum_Sand.scx/1")!.gfxTexture = this.gfxTexture;
 
         this.inputLayout = device.createInputLayout({
             indexBufferFormat: GfxFormat.U32_R,
@@ -213,23 +209,23 @@ export default class SandPendulum extends Simulation {
         this.sampler = device.createSampler(samplerDescriptor);
 
         if (this.isGrotto) {
-            const sand = sceneNodesByName.get("Pendulum_Sand.scx/Sand New")!;
+            const sand = world.sceneNodesByName.get("Pendulum_Sand.scx/Sand New")!;
             vec3.add(sand.transform.trans, sand.transform.trans, vec3.fromValues(0, 0, this.isGrotto ? 1 : 0));
             sand.transformChanged = true;
 
-            const pivotRingAArt = sceneNodesByName.get("Pendulum_SW_Scene.scx/Pivot Ring")!;
+            const pivotRingAArt = world.sceneNodesByName.get("Pendulum_SW_Scene.scx/Pivot Ring")!;
             const pivotRingA = wrapNode(pivotRingAArt);
             const offsetA = -1;
             vec3.set(pivotRingAArt.transform.trans, 0, 0, offsetA);
             pivotRingAArt.transformChanged = true;
 
-            const pivotRingBArt = sceneNodesByName.get("Pendulum_SW_Scene.scx/Pivot Ring 03")!;
+            const pivotRingBArt = world.sceneNodesByName.get("Pendulum_SW_Scene.scx/Pivot Ring 03")!;
             const pivotRingB = wrapNode(pivotRingBArt);
             const offsetB = -4;
             vec3.set(pivotRingBArt.transform.trans, 0, 0, offsetB);
             pivotRingBArt.transformChanged = true;
 
-            const pivotRingCArt = sceneNodesByName.get("Pendulum_SW_Scene.scx/Pivot Ring 2")!;
+            const pivotRingCArt = world.sceneNodesByName.get("Pendulum_SW_Scene.scx/Pivot Ring 2")!;
             const pivotRingC = wrapNode(pivotRingCArt);
             const offsetC = -4;
             vec3.set(pivotRingCArt.transform.trans, 0, 0, offsetC);
@@ -252,13 +248,13 @@ export default class SandPendulum extends Simulation {
             this.pivot1 = pivotRingC;
             // this.pivot2 = pivotRingA;
         } else {
-            const pivotRingAArt = sceneNodesByName.get("Pendulum_Scene.scx/Pivot Ring")!;
+            const pivotRingAArt = world.sceneNodesByName.get("Pendulum_Scene.scx/Pivot Ring")!;
             const pivotRingA = wrapNode(pivotRingAArt);
             const offsetA = -3.5;
             vec3.set(pivotRingAArt.transform.trans, 0, 0, offsetA);
             pivotRingAArt.transformChanged = true;
 
-            const pivotRingBArt = sceneNodesByName.get("Pendulum_Scene.scx/Pivot hanger")!;
+            const pivotRingBArt = world.sceneNodesByName.get("Pendulum_Scene.scx/Pivot hanger")!;
             const pivotRingB = wrapNode(pivotRingBArt);
             const offsetB = 4.4;
             vec3.set(pivotRingBArt.transform.trans, 0, 0, offsetB);
@@ -297,7 +293,7 @@ export default class SandPendulum extends Simulation {
         this.sparkle.transformChanged = true;
     }
 
-    override update(input: ViewerRenderInput, sceneNodesByName: Map<string, SceneNode>, device: GfxDevice): void {
+    override update(device: GfxDevice, input: ViewerRenderInput): void {
         const time = input.time * 0.0032;
 
         this.energy *= lerp(this.swing.finalDecay, this.swing.decay, Math.pow(this.energy, 0.02));
