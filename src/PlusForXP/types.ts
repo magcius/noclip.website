@@ -1,5 +1,5 @@
-import { mat4, vec3 } from "gl-matrix";
-import { GfxDevice, GfxIndexBufferDescriptor, GfxInputLayout, GfxTexture, GfxVertexBufferDescriptor } from "../gfx/platform/GfxPlatform.js";
+import { mat4, vec3, vec4 } from "gl-matrix";
+import { GfxBuffer, GfxDevice, GfxIndexBufferDescriptor, GfxInputLayout, GfxTexture, GfxVertexBufferDescriptor } from "../gfx/platform/GfxPlatform.js";
 import { SCX } from "./scx/types.js";
 import { ViewerRenderInput } from "../viewer.js";
 import { ChannelAnimation } from "./animation.js";
@@ -25,6 +25,21 @@ export type EnvironmentMap = {
     tint?: [number, number, number];
 };
 
+export type ComputedEnvironmentMap = {
+    texture: GfxTexture;
+    matrix: mat4;
+    tint: vec4;
+};
+
+export type UnbakedMesh = {
+    node: SceneNode;
+    mesh: SCX.Mesh;
+    lights: SCX.Light[];
+    shader: SCX.Shader;
+    diffuseColorBuffer: GfxBuffer;
+    sceneName: string;
+};
+
 export type VertexAttribute = GfxVertexBufferDescriptor & { name: string; data?: Float32Array };
 
 export type Index = GfxIndexBufferDescriptor & { data?: Uint32Array };
@@ -38,19 +53,13 @@ export type Mesh = {
     envID?: string;
 };
 
-export type Transform = {
-    trans: vec3;
-    rot: vec3;
-    scale: vec3;
-};
-
 export type SceneNode = {
     name: string;
     parentName?: string;
     parent?: SceneNode;
     children: SceneNode[];
-    transform: Transform;
-    animatedTransform?: Transform;
+    transform: SCX.Transform;
+    animatedTransform?: SCX.Transform;
     worldTransform: mat4;
     transformChanged: boolean;
     animates: boolean;
@@ -59,7 +68,7 @@ export type SceneNode = {
     visible: boolean;
     worldVisible: boolean;
     meshes: Mesh[];
-    isGhost?: boolean;
+    isGhost: boolean;
 };
 
 export abstract class Simulation {

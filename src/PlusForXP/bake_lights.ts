@@ -4,8 +4,8 @@ import { Vec3One } from "../MathHelpers.js";
 
 export const bakeLights = (mesh: SCX.Mesh, material: SCX.Shader, worldTransform: mat4, lights: SCX.Light[]): Float32Array => {
     const useMaterialColors = material.luminance === 0 && (material.blend < 1 || material.texture === null);
-    const ambientColor = useMaterialColors ? material.ambient : null;
-    const diffuseColor = useMaterialColors ? material.diffuse : null;
+    const ambientColor = useMaterialColors ? material.ambient : vec3.fromValues(1, 1, 1);
+    const diffuseColor = useMaterialColors ? material.diffuse : vec3.fromValues(1, 1, 1);
 
     const { positions, normals } = mesh;
     const position = vec3.create();
@@ -25,19 +25,19 @@ export const bakeLights = (mesh: SCX.Mesh, material: SCX.Shader, worldTransform:
         vec3.normalize(normal, normal);
 
         for (const light of lights) {
-            const lightIntensity = lightCalculationsByType[light.type!](light, normal, position);
-            if (lightIntensity <= 0) {
+            let { intensity } = light;
+            if (intensity <= 0 && material.luminance <= 0) {
+                continue;
+            }
+            intensity *= lightCalculationsByType[light.type!](light, normal, position);
+            if (intensity <= 0) {
                 continue;
             }
             vec3.copy(color, Vec3One);
-            vec3.scale(color, color, lightIntensity * (light.intensity ?? 1) + material.luminance * 2);
+            vec3.scale(color, color, intensity + material.luminance * 2);
             const materialColor = light.type === SCX.LightType.Ambient ? ambientColor : diffuseColor;
-            if (materialColor !== null) {
-                vec3.mul(color, color, materialColor);
-            }
-            if (light.color !== undefined) {
-                vec3.mul(color, color, light.color);
-            }
+            vec3.mul(color, color, materialColor);
+            vec3.mul(color, color, light.color);
             vec3.add(bakedColor, bakedColor, color);
         }
     }

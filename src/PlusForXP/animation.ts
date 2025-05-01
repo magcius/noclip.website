@@ -1,5 +1,4 @@
 import { SCX } from "./scx/types.js";
-import { Transform } from "./types.js";
 
 type Interpolation = (toKey: SCX.Keyframe, fromKey: SCX.Keyframe, now: number, duration: number) => number;
 
@@ -9,12 +8,12 @@ export type ChannelAnimation = {
 };
 
 export class AnimationBuilder {
-    interpolations: Record<string, Interpolation> = {
-        linear: (toKey, fromKey, now, duration) => {
+    static interpolations: Record<SCX.Interpolation, Interpolation> = {
+        [SCX.Interpolation.Linear]: (toKey, fromKey, now, duration) => {
             const percent = Math.max(0, Math.min(1, now / duration));
             return toKey.value * percent + fromKey.value * (1 - percent);
         },
-        hermite: (toKey, fromKey, now, duration) => {
+        [SCX.Interpolation.Hermite]: (toKey, fromKey, now, duration) => {
             const p1 = Math.max(0, Math.min(1, now / duration));
             const p2 = p1 ** 2;
             const p3 = p1 ** 3;
@@ -25,7 +24,7 @@ export class AnimationBuilder {
         },
     } as const;
 
-    channelModifiers: Record<SCX.KeyframeAnimationChannel, (transform: Transform, value: number) => void> = {
+    static channelModifiers: Record<SCX.KeyframeAnimationChannel, (transform: SCX.Transform, value: number) => void> = {
         [SCX.KeyframeAnimationChannel.TransX]: (transform, value) => (transform.trans[0] = value),
         [SCX.KeyframeAnimationChannel.TransY]: (transform, value) => (transform.trans[1] = value),
         [SCX.KeyframeAnimationChannel.TransZ]: (transform, value) => (transform.trans[2] = value),
@@ -37,8 +36,9 @@ export class AnimationBuilder {
         [SCX.KeyframeAnimationChannel.ScaleZ]: (transform, value) => (transform.scale[2] = value),
     } as const;
 
-    public build = (transform: Transform, animations: SCX.KeyframeAnimation[]): ChannelAnimation[] => {
-        animations = animations.filter(({ channel }) => this.channelModifiers[channel] !== null);
+    public static build = (transform: SCX.Transform, animations: SCX.KeyframeAnimation[]): ChannelAnimation[] => {
+        const builder = new AnimationBuilder();
+        animations = animations.filter(({ channel }) => AnimationBuilder.channelModifiers[channel] !== null);
         const durations = new Set<number>();
         for (const anim of animations) {
             for (const keyframe of anim.keyframes) {
@@ -47,8 +47,8 @@ export class AnimationBuilder {
         }
         const fullAnimDuration = Math.max(...durations);
         return animations.map((animation) => {
-            const channelModifier = this.channelModifiers[animation.channel]!;
-            const interpolation = this.interpolations[animation.interp] ?? this.interpolations.linear;
+            const channelModifier = AnimationBuilder.channelModifiers[animation.channel];
+            const interpolation = AnimationBuilder.interpolations[animation.interp];
             const times = animation.keyframes.map(({ time }) => time / 1000);
             const animDuration = times.at(-1)!;
             const keyframes = animation.keyframes;

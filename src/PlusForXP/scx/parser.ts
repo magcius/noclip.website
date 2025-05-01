@@ -106,11 +106,11 @@ export class Parser {
             }
             break;
         }
-        return values;
+        return new Float32Array(values);
     }
 
-    private parseVec3(): SCX.Vec3 {
-        return this.parseNumberList().slice(0, 3) as SCX.Vec3;
+    private parseVec3(): vec3 {
+        return this.parseNumberList().slice(0, 3);
     }
 
     // Enum parsers  // TODO: can these be unified somehow?
@@ -207,7 +207,14 @@ export class Parser {
     }
 
     private parseMesh(): SCX.Mesh[] {
-        const mesh: SCX.Mesh = { shader: 0, vertexcount: 0, normals: [], texCoords: [], positions: [], indices: [] };
+        const mesh: SCX.Mesh = {
+            shader: 0,
+            vertexcount: 0,
+            normals: new Float32Array(),
+            texCoords: new Float32Array(),
+            positions: new Float32Array(),
+            indices: new Uint32Array(),
+        };
         let polycount = 0;
         let polygons: SCX.Polygon[] = [];
         this.scanScope({
@@ -231,7 +238,7 @@ export class Parser {
             meshes.push({
                 ...mesh,
                 shader: polygons[0]?.shader ?? 0,
-                indices: polygons.flatMap((polygon) => polygon.verts),
+                indices: new Uint32Array(polygons.flatMap((polygon) => polygon.verts)),
             });
         }
         return meshes;
@@ -268,12 +275,12 @@ export class Parser {
         const scale = object.transform.scale;
         const isFlipped = Math.sign(scale[0] * scale[1] * scale[2]) < 0;
         if (isFlipped) {
-            const normal = vec3.create();
+            const normal = new Float32Array(3);
             for (const mesh of object.meshes) {
                 for (let i = 0; i < mesh.vertexcount; i++) {
-                    vec3.copy(normal, mesh.normals.slice(i * 3, (i + 1) * 3) as SCX.Vec3);
+                    normal.set(mesh.normals.slice(i * 3, (i + 1) * 3));
                     vec3.negate(normal, normal);
-                    mesh.normals.splice(i * 3, 3, ...normal);
+                    mesh.normals.set(normal, i * 3);
                 }
             }
         }
@@ -297,7 +304,7 @@ export class Parser {
     }
 
     private parseLight(): SCX.Light {
-        const light: SCX.Light = { name: "", type: SCX.LightType.Ambient };
+        const light: SCX.Light = { name: "", type: SCX.LightType.Ambient, intensity: 0, color: vec3.fromValues(1, 1, 1) };
         this.scanScope({
             [Token.Name]: () => (light.name = this.parseString()),
             [Token.Type]: () => (light.type = this.parseLightType()),
@@ -315,7 +322,7 @@ export class Parser {
     }
 
     private parseCamera(): SCX.Camera {
-        const camera: SCX.Camera = { name: "", fov: 0, nearclip: 0, farclip: 0, pos: [0, 0, 0], targetpos: [0, 0, 0] };
+        const camera: SCX.Camera = { name: "", fov: 0, nearclip: 0, farclip: 0, pos: vec3.create(), targetpos: vec3.create() };
         this.scanScope({
             [Token.Name]: () => (camera.name = this.parseString()),
             [Token.Anim]: () => (camera.animations = appended(camera.animations, this.parseAnimation())),
@@ -329,7 +336,7 @@ export class Parser {
     }
 
     private parseScene(): SCX.Scene {
-        const scene: SCX.Scene = { shaders: [], global: { animinterval: [0, 0], framerate: 0, ambient: [0, 0, 0] }, cameras: [], lights: [], objects: [] };
+        const scene: SCX.Scene = { shaders: [], global: { animinterval: [0, 0], framerate: 0, ambient: vec3.create() }, cameras: [], lights: [], objects: [] };
         this.scanScope({
             [Token.Scene]: () => (scene.global = this.parseGlobal()),
             [Token.Object]: () => scene.objects.push(this.parseObject()),

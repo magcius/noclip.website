@@ -4,6 +4,7 @@ import { SceneNode, Texture } from "./types.js";
 import { GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { align } from "../util.js";
 import { mat4, vec3 } from "gl-matrix";
+import { SCX } from "./scx/types.js";
 
 const loadJPGData = (jpegBinary: ArrayBuffer): Promise<{ width: number; height: number; data: Uint8ClampedArray }> => {
     const img = document.createElement("img");
@@ -37,14 +38,12 @@ export const decodeImage = async (path: string, imageBytes: ArrayBufferLike): Pr
             const { width, height, components, size } = result;
             let rgba8: Uint8ClampedArray;
             if (components === 3) {
-                const data = [];
+                rgba8 = new Uint8ClampedArray(size * 4);
                 for (let i = 0; i < size; i++) {
-                    const [r, g, b] = result.data.slice(i * 3, (i + 1) * 3);
-                    data.push(r, g, b, 0xff);
+                    rgba8.set([...result.data.slice(i * 3, (i + 1) * 3), 0xff], i * 4);
                 }
-                rgba8 = new Uint8ClampedArray(data);
             } else {
-                rgba8 = new Uint8ClampedArray(result.data);
+                rgba8 = new Uint8ClampedArray(result.data.buffer);
             }
             return { path, width, height, rgba8 };
         }
@@ -71,13 +70,14 @@ export const createTextureHolder = (textures: Texture[]) =>
         }),
     );
 
-export const createSceneNode = (initData: Partial<SceneNode> & { name: string }): SceneNode => ({
+export const cloneTransform = (transform: Partial<SCX.Transform>): SCX.Transform => ({
+    trans: vec3.clone(transform.trans ?? vec3.create()),
+    rot: vec3.clone(transform.rot ?? vec3.create()),
+    scale: vec3.clone(transform.scale ?? vec3.fromValues(1, 1, 1)),
+});
+
+export const createSceneNode = (initData: Partial<SceneNode> & { name: string }, initTransform?: Partial<SCX.Transform>): SceneNode => ({
     children: [],
-    transform: {
-        trans: vec3.create(),
-        rot: vec3.create(),
-        scale: vec3.fromValues(1, 1, 1),
-    },
     worldTransform: mat4.create(),
     animates: false,
     loops: false,
@@ -85,7 +85,9 @@ export const createSceneNode = (initData: Partial<SceneNode> & { name: string })
     visible: true,
     worldVisible: true,
     meshes: [],
+    isGhost: false,
     ...initData,
+    transform: cloneTransform(initTransform ?? initData.transform ?? {}),
     transformChanged: true,
 });
 

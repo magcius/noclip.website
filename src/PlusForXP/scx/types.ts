@@ -1,17 +1,15 @@
+import { vec2, vec3 } from "gl-matrix";
 import { Token } from "./tokens";
 
 export namespace SCX {
     type Named = { name: string; id?: number };
     type Animatable = { animations?: KeyframeAnimation[] };
 
-    export type Vec2 = [number, number];
-    export type Vec3 = [number, number, number];
-
     export type Shader = Named & {
         id: number;
-        ambient: Vec3;
-        diffuse: Vec3;
-        specular: Vec3;
+        ambient: vec3;
+        diffuse: vec3;
+        specular: vec3;
         opacity: number;
         luminance: number;
         texture?: string;
@@ -23,16 +21,16 @@ export namespace SCX {
     }
 
     export type Global = Partial<Named> & {
-        animinterval: Vec2;
+        animinterval: vec2;
         framerate: number;
-        ambient: Vec3;
+        ambient: vec3;
         textureFolders?: Off;
     };
 
     export type Transform = {
-        trans: Vec3;
-        rot: Vec3;
-        scale: Vec3;
+        trans: vec3;
+        rot: vec3;
+        scale: vec3;
     };
 
     export enum KeyframeAnimationChannel {
@@ -78,8 +76,8 @@ export namespace SCX {
             fov: number;
             nearclip: number;
             farclip: number;
-            pos: Vec3;
-            targetpos: Vec3;
+            pos: vec3;
+            targetpos: vec3;
         };
 
     export enum LightType {
@@ -91,19 +89,19 @@ export namespace SCX {
 
     export type Light = Named & {
         type: LightType;
-        pos?: Vec3;
-        dir?: Vec3;
+        pos?: vec3;
+        dir?: vec3;
         umbra?: number;
         penumbra?: number;
         attenstart?: number;
         attenend?: number;
-        color?: Vec3;
-        intensity?: number;
+        color: vec3;
+        intensity: number;
         off?: boolean;
     };
 
     export type Polygon = {
-        verts: number[];
+        verts: [number, number, number];
         shader: number;
         smgroup: number;
     };
@@ -111,10 +109,10 @@ export namespace SCX {
     export type Mesh = {
         shader: number;
         vertexcount: number;
-        normals: number[];
-        texCoords: number[];
-        positions: number[];
-        indices: number[];
+        normals: Float32Array;
+        texCoords: Float32Array;
+        positions: Float32Array;
+        indices: Uint32Array;
 
         dynamic?: boolean;
     };

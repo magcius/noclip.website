@@ -1,14 +1,13 @@
 import {
     GfxBlendFactor,
     GfxBlendMode,
-    GfxBuffer,
     GfxBufferFrequencyHint,
     GfxBufferUsage,
     GfxCompareMode,
     GfxCullMode,
     GfxDevice,
     GfxFormat,
-    GfxMegaStateDescriptor,
+    GfxInputLayout,
     GfxRenderProgramDescriptor,
     GfxSampler,
     GfxTexture,
@@ -24,18 +23,18 @@ import { preprocessProgramObj_GLSL } from "../gfx/shaderc/GfxShaderCompiler.js";
 import { fillMatrix4x4, fillVec4 } from "../gfx/helpers/UniformBufferHelpers.js";
 import { makeAttachmentClearDescriptor, makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
-import { Color, colorNewFromRGBA } from "../Color.js";
+import { colorNewFromRGBA } from "../Color.js";
 import { mat4, quat, vec3, vec4 } from "gl-matrix";
 import { GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode } from "../gfx/platform/GfxPlatform.js";
 import { Camera, CameraController } from "../Camera.js";
-import { defaultMegaState, setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
+import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
 import { bakeLights } from "./bake_lights.js";
-import { Material, Mesh, Texture, SceneNode, Simulation, EnvironmentMap } from "./types.js";
+import { Material, Texture, SceneNode, Simulation, EnvironmentMap, ComputedEnvironmentMap, UnbakedMesh } from "./types.js";
 import { SceneGfx, ViewerRenderInput } from "../viewer.js";
 import Plus4XPProgram from "./program.js";
 import { AnimationBuilder } from "./animation.js";
 import * as UI from "../ui.js";
-import { createSceneNode, createDataBuffer, updateNodeTransform } from "./util.js";
+import { createSceneNode, createDataBuffer, updateNodeTransform, reparent, cloneTransform } from "./util.js";
 
 type Context = {
     basePath: string;
@@ -46,84 +45,90 @@ type Context = {
     simulateFunc?: () => Simulation;
 };
 
-type UnbakedMesh = {
-    node: SceneNode;
-    mesh: SCX.Mesh;
-    lights: SCX.Light[];
-    shader: SCX.Shader;
-    diffuseColorBuffer: GfxBuffer;
-    sceneName: string;
-};
-
-type ComputedEnvironmentMap = {
-    texture: GfxTexture;
-    matrix: mat4;
-    tint: vec4;
-};
-
 export default class Renderer implements SceneGfx {
-    private texturesByPath: Map<string, Texture>;
-    private environmentMapsByID = new Map<string, ComputedEnvironmentMap>();
-    private missingTexture: GfxTexture;
-    private missingEnvMap: ComputedEnvironmentMap;
-    private fallbackMaterial: Material = {
-        shader: {
-            name: "fallback",
-            id: -1,
-            ambient: [0, 0, 0],
-            diffuse: [1, 1, 1],
-            specular: [1, 1, 1],
-            opacity: 1,
-            luminance: 1,
-            blend: 0,
-        },
-        gfxTexture: null,
-    };
-    private program: GfxRenderProgramDescriptor;
+    private inputLayout: GfxInputLayout;
     private renderHelper: GfxRenderHelper;
     private renderInstListMain = new GfxRenderInstList();
-    private ambientColor: Color = colorNewFromRGBA(0, 0, 0);
+    private program: GfxRenderProgramDescriptor;
+    private diffuseSampler: GfxSampler | null;
+    private envSampler: GfxSampler | null;
+    private fallbackMaterial: Material;
+
     private rootNode: SceneNode;
+    private sceneRot: vec3 = vec3.fromValues(-Math.PI / 2, 0, 0);
+    private inverseSceneRot: vec3 = vec3.negate(vec3.create(), this.sceneRot);
     private materialsByName = new Map<string, Material>();
     private sceneNodesByName = new Map<string, SceneNode>();
     private renderableNodes: SceneNode[] = [];
     private animatableNodes: SceneNode[] = [];
+
     private camerasByName = new Map<string, SCX.Camera>();
+    private customCamera: Camera;
     private cameras: [string, string | null][];
     private activeCameraName: string | null = null;
-    private lastViewerCameraMatrix: string | null = null;
-    private customCamera: Camera;
-    private scratchViewMatrix = mat4.create();
-    private scratchModelMatrix = mat4.create();
-    private scratchWorldInverseTransposeMatrix = mat4.create();
-    private diffuseSampler: GfxSampler | null;
-    private envSampler: GfxSampler | null;
-    private animating: boolean = true;
-    private megaStateFlags: GfxMegaStateDescriptor;
+
+    private unbakedMeshes: UnbakedMesh[] = [];
+    private texturesByPath: Map<string, Texture>;
+    private environmentMapsByID = new Map<string, ComputedEnvironmentMap>();
+    private defaultTexture: GfxTexture;
+    private defaultEnvMap: ComputedEnvironmentMap;
+
     private simulation: Simulation | null;
     private cameraSelect: UI.SingleSelect;
-    private animationBuilder = new AnimationBuilder();
+    private animating: boolean = true;
+    private lastViewerCameraMatrix: string | null = null;
+    private scratchViewMatrix = mat4.create();
+    private scratchWorldInverseTransposeMatrix = mat4.create();
 
     constructor(
-        device: GfxDevice,
+        private device: GfxDevice,
         context: Context,
         public textureHolder: TextureHolder<TextureBase>,
     ) {
-        this.simulation = context.simulateFunc?.() ?? null;
-        this.megaStateFlags = {
-            ...defaultMegaState,
-            cullMode: GfxCullMode.Back,
-            // cullMode: GfxCullMode.None
-        };
-        setAttachmentStateSimple(this.megaStateFlags, {
-            blendMode: GfxBlendMode.Add,
-            blendSrcFactor: GfxBlendFactor.SrcAlpha,
-            blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
-        });
+        this.setupGraphics();
 
+        this.rootNode = createSceneNode({ name: "root" }, { rot: this.sceneRot });
+        for (const [name, { scene, envID }] of Object.entries(context.scenes)) {
+            this.buildScene(name, scene, envID);
+        }
+
+        this.customCamera = new Camera();
+        this.cameras = [["FreeCam", null], ...context.cameras];
+
+        this.bakeLights();
+        this.buildTextures(context.textures, context.environmentMaps);
+
+        this.simulation = context.simulateFunc?.() ?? null;
+        this.simulation?.setup?.(device, this.texturesByPath, this.materialsByName, this.sceneNodesByName);
+    }
+
+    private setupGraphics() {
+        const device = this.device;
+        setAttachmentStateSimple(
+            { cullMode: GfxCullMode.Back },
+            {
+                blendMode: GfxBlendMode.Add,
+                blendSrcFactor: GfxBlendFactor.SrcAlpha,
+                blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
+            },
+        );
+        this.inputLayout = device.createInputLayout({
+            indexBufferFormat: GfxFormat.U32_R,
+            vertexAttributeDescriptors: [
+                { location: 0, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0 }, // position
+                { location: 1, bufferIndex: 1, format: GfxFormat.F32_RGB, bufferByteOffset: 0 }, // normal
+                { location: 2, bufferIndex: 2, format: GfxFormat.F32_RGBA, bufferByteOffset: 0 }, // diffuseColor
+                { location: 3, bufferIndex: 3, format: GfxFormat.F32_RG, bufferByteOffset: 0 }, // texCoord
+            ],
+            vertexBufferDescriptors: [
+                { byteStride: 3 * 0x04, frequency: GfxVertexBufferFrequency.PerVertex },
+                { byteStride: 3 * 0x04, frequency: GfxVertexBufferFrequency.PerVertex },
+                { byteStride: 4 * 0x04, frequency: GfxVertexBufferFrequency.PerVertex },
+                { byteStride: 2 * 0x04, frequency: GfxVertexBufferFrequency.PerVertex },
+            ],
+        });
         this.renderHelper = new GfxRenderHelper(device);
         this.program = preprocessProgramObj_GLSL(device, new Plus4XPProgram());
-
         const samplerDescriptor = {
             wrapS: GfxWrapMode.Repeat,
             wrapT: GfxWrapMode.Repeat,
@@ -133,30 +138,140 @@ export default class Renderer implements SceneGfx {
         };
         this.diffuseSampler = device.createSampler(samplerDescriptor);
         this.envSampler = device.createSampler(samplerDescriptor);
-
-        this.texturesByPath = new Map(context.textures.map((texture) => [texture.path, texture]));
-
-        this.rootNode = {
-            name: "root",
-            children: [],
-            transform: {
-                trans: vec3.create(),
-                rot: vec3.fromValues(-Math.PI / 2, 0, 0),
-                scale: vec3.fromValues(1, 1, 1),
+        this.fallbackMaterial = {
+            shader: {
+                name: "fallback",
+                id: -1,
+                ambient: vec3.create(),
+                diffuse: vec3.fromValues(1, 1, 1),
+                specular: vec3.fromValues(1, 1, 1),
+                opacity: 1,
+                luminance: 1,
+                blend: 0,
             },
-            worldTransform: mat4.create(),
-            transformChanged: true,
-            animates: false,
-            loops: false,
-            animations: [],
-            visible: true,
-            worldVisible: true,
-            meshes: [],
+            gfxTexture: null,
         };
+    }
 
-        const unbakedMeshes: UnbakedMesh[] = [];
+    private buildScene(sceneName: string, scene: SCX.Scene, envID: string | undefined) {
+        const sceneRoot: SceneNode = createSceneNode({ name: sceneName + "_root", parent: this.rootNode });
+        this.sceneNodesByName.set(sceneRoot.name, sceneRoot);
+        this.rootNode.children.push(sceneRoot);
+        scene.lights.push({
+            type: SCX.LightType.Ambient,
+            name: "ambient",
+            color: scene.global.ambient,
+            intensity: 1,
+        });
 
-        for (const [envID, { texturePath, rotation, tint }] of Object.entries(context.environmentMaps)) {
+        for (const shader of scene.shaders) {
+            this.buildMaterial(sceneName, shader);
+        }
+
+        for (const camera of scene.cameras) {
+            this.buildCamera(sceneName, camera);
+        }
+
+        const nodes = new Map<string, SceneNode>();
+        for (const object of scene.objects) {
+            const node = this.buildObject(sceneName, scene, sceneRoot, object, envID);
+            nodes.set(node.name, node);
+        }
+        for (const sceneNode of nodes.values()) {
+            reparent(sceneNode, nodes.get(sceneNode.parentName ?? "") ?? sceneRoot);
+        }
+    }
+
+    private buildMaterial(sceneName: string, shader: SCX.Shader) {
+        const material = { shader, gfxTexture: null };
+        this.materialsByName.set(sceneName + shader.id, material);
+        return material;
+    }
+
+    private buildCamera(sceneName: string, camera: SCX.Camera) {
+        const cameraName = sceneName + camera.name;
+        const node: SceneNode = createSceneNode({ name: cameraName, loops: true }, { trans: camera.pos, rot: this.inverseSceneRot });
+        this.sceneNodesByName.set(cameraName, node);
+        reparent(node, this.rootNode);
+        this.camerasByName.set(cameraName, camera);
+        if (camera.animations !== undefined) {
+            node.animatedTransform = cloneTransform(node.transform);
+            node.animations = AnimationBuilder.build(node.animatedTransform!, camera.animations);
+            node.animates = node.animations.length > 0;
+            this.animatableNodes.push(node);
+        }
+        return node;
+    }
+
+    private buildObject(sceneName: string, scene: SCX.Scene, sceneRoot: SceneNode, object: SCX.Object, envID: string | undefined) {
+        const device = this.device;
+        const objectName = sceneName + object.name;
+        const node: SceneNode = createSceneNode({
+            name: objectName,
+            parentName: object.parent === null ? undefined : sceneName + object.parent,
+            transform: cloneTransform(object.transform),
+            loops: true,
+        });
+
+        for (const mesh of object.meshes ?? []) {
+            if (mesh.indices.length <= 0) {
+                continue;
+            }
+
+            const material = this.materialsByName.get(sceneName + mesh.shader) ?? this.fallbackMaterial;
+            if (material === this.fallbackMaterial) {
+                console.warn(`Missing shader ${mesh.shader} on mesh in ${object.name} of scene ${sceneName}. Falling back to default material.`);
+            }
+
+            const diffuseColorBuffer = device.createBuffer(mesh.vertexcount * 4, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static);
+            device.uploadBufferData(diffuseColorBuffer, 0, new Uint8Array(new Float32Array(mesh.vertexcount * 4).fill(1).buffer));
+
+            const positionBuffer = createDataBuffer(device, GfxBufferUsage.Vertex, mesh.positions.buffer, mesh.dynamic);
+            const normalBuffer = createDataBuffer(device, GfxBufferUsage.Vertex, mesh.normals.buffer, mesh.dynamic);
+            const texcoordBuffer = createDataBuffer(device, GfxBufferUsage.Vertex, mesh.texCoords.buffer);
+            const vertexAttributes = [
+                { name: "position", ...(mesh.dynamic ? { data: mesh.positions } : null), buffer: positionBuffer, byteOffset: 0 },
+                { name: "normal", ...(mesh.dynamic ? { data: mesh.normals } : null), buffer: normalBuffer, byteOffset: 0 },
+                { name: "diffuseColor", buffer: diffuseColorBuffer, byteOffset: 0 },
+                { name: "texCoord", buffer: texcoordBuffer, byteOffset: 0 },
+            ];
+
+            const indexBuffer = createDataBuffer(device, GfxBufferUsage.Index, mesh.indices.buffer);
+            const indexBufferDescriptor = { buffer: indexBuffer, byteOffset: 0, ...(mesh.dynamic ? { data: mesh.indices } : null) };
+
+            this.unbakedMeshes.push({ node, mesh, shader: material.shader, diffuseColorBuffer, sceneName, lights: scene.lights });
+
+            node.meshes.push({
+                inputLayout: this.inputLayout,
+                vertexAttributes,
+                indexBufferDescriptor,
+                indexCount: mesh.indices.length,
+                material,
+                envID,
+            });
+        }
+
+        this.sceneNodesByName.set(objectName, node);
+        if (node.meshes.length > 0) {
+            this.renderableNodes.push(node);
+        }
+
+        if (object.animations !== undefined) {
+            node.animatedTransform = cloneTransform(node.transform);
+            node.animations = AnimationBuilder.build(node.animatedTransform!, object.animations);
+            node.animates = node.animations.length > 0;
+            this.animatableNodes.push(node);
+        }
+
+        return node;
+    }
+
+    private buildTextures(textures: Texture[], environmentMaps: Record<string, EnvironmentMap>) {
+        const device = this.device;
+
+        this.texturesByPath = new Map(textures.map((texture) => [texture.path, texture]));
+
+        for (const [envID, { texturePath, rotation, tint }] of Object.entries(environmentMaps)) {
             const envTexture = this.texturesByPath.get(texturePath)!;
             const texture = device.createTexture({
                 ...envTexture,
@@ -172,36 +287,21 @@ export default class Renderer implements SceneGfx {
             this.environmentMapsByID.set(envID, { texture, matrix, tint: computedTint });
         }
 
-        for (const [name, { scene, envID }] of Object.entries(context.scenes)) {
-            this.buildScene(device, name, scene, envID, unbakedMeshes);
-        }
-
-        this.customCamera = new Camera();
-        this.cameras = [["FreeCam", null], ...context.cameras];
-
-        this.renderableNodes = [...this.sceneNodesByName.values()].filter((node) => node.meshes.length ?? 0 > 0);
-
-        updateNodeTransform(this.rootNode, false, null, this.animating);
-
-        const transformedLightsBySceneName: Map<string, SCX.Light[]> = new Map();
-        const rootTransform = this.rootNode.worldTransform;
-
-        for (const { node, shader, mesh, diffuseColorBuffer, sceneName, lights } of unbakedMeshes) {
-            if (!transformedLightsBySceneName.has(sceneName)) {
-                transformedLightsBySceneName.set(
-                    sceneName,
-                    lights.map(
-                        (light: SCX.Light): SCX.Light => ({
-                            ...light,
-                            pos: light.pos === undefined ? undefined : ([...vec3.transformMat4(vec3.create(), light.pos, rootTransform)] as SCX.Vec3),
-                            dir: light.dir === undefined ? undefined : ([...vec4.transformMat4(vec4.create(), [...light.dir, 0], rootTransform)] as SCX.Vec3),
-                        }),
-                    ),
-                );
-            }
-            const diffuseColors = bakeLights(mesh, shader, node.worldTransform, transformedLightsBySceneName.get(sceneName)!);
-            device.uploadBufferData(diffuseColorBuffer, 0, new Uint8Array(diffuseColors.buffer));
-        }
+        this.defaultTexture = device.createTexture({
+            width: 1,
+            height: 1,
+            dimension: GfxTextureDimension.n2D,
+            pixelFormat: GfxFormat.U8_RGBA_NORM,
+            depthOrArrayLayers: 1,
+            numLevels: 1,
+            usage: GfxTextureUsage.Sampled,
+        });
+        this.defaultEnvMap = {
+            texture: this.defaultTexture,
+            matrix: mat4.create(),
+            tint: vec4.fromValues(1, 1, 1, 1),
+        };
+        device.uploadTextureData(this.defaultTexture, 0, [new Uint8Array([0xff, 0x00, 0xff, 0xff])]);
 
         const requiredTextures = new Map<string, Texture>();
         for (const material of this.materialsByName.values()) {
@@ -227,177 +327,27 @@ export default class Renderer implements SceneGfx {
             }
             material.gfxTexture = requiredTextures.get(texture?.path)?.gfxTexture ?? null;
         }
-
-        this.missingTexture = device.createTexture({
-            width: 1,
-            height: 1,
-            dimension: GfxTextureDimension.n2D,
-            pixelFormat: GfxFormat.U8_RGBA_NORM,
-            depthOrArrayLayers: 1,
-            numLevels: 1,
-            usage: GfxTextureUsage.Sampled,
-        });
-        this.missingEnvMap = {
-            texture: this.missingTexture,
-            matrix: mat4.create(),
-            tint: vec4.fromValues(1, 1, 1, 1),
-        };
-        device.uploadTextureData(this.missingTexture, 0, [new Uint8Array([0xff, 0x00, 0xff, 0xff])]);
-
-        this.simulation?.setup?.(device, this.texturesByPath, this.materialsByName, this.sceneNodesByName);
     }
 
-    private buildScene(device: GfxDevice, sceneName: string, scene: SCX.Scene, envID: string | undefined, unbakedMeshes: UnbakedMesh[]) {
-        const nodes = new Map<string, SceneNode>();
-
-        const sceneRoot: SceneNode = createSceneNode({
-            name: sceneName + "_root",
-            parent: this.rootNode,
-        });
-        this.sceneNodesByName.set(sceneRoot.name, sceneRoot);
-        this.rootNode.children.push(sceneRoot);
-
-        // Create the materials
-        for (const shader of scene.shaders) {
-            this.materialsByName.set(sceneName + shader.id, {
-                shader: shader,
-                gfxTexture: null,
-            });
-        }
-
-        // Create camera scene nodes and their animations
-        for (const camera of scene.cameras) {
-            const cameraName = sceneName + camera.name;
-            const node: SceneNode = createSceneNode({
-                name: cameraName,
-                transform: {
-                    trans: vec3.fromValues(...camera.pos),
-                    rot: vec3.fromValues(Math.PI / 2, 0, 0),
-                    scale: vec3.fromValues(1, 1, 1),
-                },
-                animates: (camera.animations?.length ?? 0) > 0,
-                loops: true,
-            });
-            this.sceneNodesByName.set(cameraName, node);
-            node.parent = this.rootNode;
-            node.parent.children.push(node);
-            this.camerasByName.set(cameraName, camera);
-            if (camera.animations !== undefined) {
-                node.animatedTransform = {
-                    trans: vec3.clone(node.transform.trans),
-                    rot: vec3.clone(node.transform.rot),
-                    scale: vec3.clone(node.transform.scale),
-                };
-                node.animations = this.animationBuilder.build(node.animatedTransform!, camera.animations);
-                this.animatableNodes.push(node);
+    private bakeLights() {
+        updateNodeTransform(this.rootNode, false, null, false);
+        const transformedLightsBySceneName: Map<string, SCX.Light[]> = new Map();
+        const rootTransform = this.rootNode.worldTransform;
+        for (const { node, shader, mesh, diffuseColorBuffer, sceneName, lights } of this.unbakedMeshes) {
+            if (!transformedLightsBySceneName.has(sceneName)) {
+                transformedLightsBySceneName.set(
+                    sceneName,
+                    lights.map(
+                        (light: SCX.Light): SCX.Light => ({
+                            ...light,
+                            pos: light.pos === undefined ? undefined : vec3.transformMat4(vec3.create(), light.pos, rootTransform),
+                            dir: light.dir === undefined ? undefined : vec3.transformMat4(vec3.create(), light.dir, rootTransform),
+                        }),
+                    ),
+                );
             }
-        }
-
-        const inputLayout = device.createInputLayout({
-            indexBufferFormat: GfxFormat.U32_R,
-            vertexAttributeDescriptors: [
-                { location: 0, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0 }, // position
-                { location: 1, bufferIndex: 1, format: GfxFormat.F32_RGB, bufferByteOffset: 0 }, // normal
-                { location: 2, bufferIndex: 2, format: GfxFormat.F32_RGBA, bufferByteOffset: 0 }, // diffuseColor
-                { location: 3, bufferIndex: 3, format: GfxFormat.F32_RG, bufferByteOffset: 0 }, // texCoord
-            ],
-            vertexBufferDescriptors: [
-                { byteStride: 3 * 0x04, frequency: GfxVertexBufferFrequency.PerVertex },
-                { byteStride: 3 * 0x04, frequency: GfxVertexBufferFrequency.PerVertex },
-                { byteStride: 4 * 0x04, frequency: GfxVertexBufferFrequency.PerVertex },
-                { byteStride: 2 * 0x04, frequency: GfxVertexBufferFrequency.PerVertex },
-            ],
-        });
-
-        // Create object scene nodes, their animations, and their meshes
-        for (const object of scene.objects) {
-            const objectName = sceneName + object.name;
-            const meshes: Mesh[] = [];
-            const node: SceneNode = createSceneNode({
-                name: objectName,
-                parentName: object.parent === null ? undefined : sceneName + object.parent,
-                parent: sceneRoot,
-                transform: {
-                    trans: vec3.fromValues(...object.transform.trans),
-                    rot: vec3.fromValues(...object.transform.rot),
-                    scale: vec3.fromValues(...object.transform.scale),
-                },
-                animates: (object.animations?.length ?? 0) > 0,
-                loops: true,
-                meshes,
-            });
-
-            for (const mesh of object.meshes ?? []) {
-                if (mesh.indices.length <= 0) {
-                    continue;
-                }
-
-                const material = this.materialsByName.get(sceneName + mesh.shader) ?? this.fallbackMaterial;
-                if (material === this.fallbackMaterial) {
-                    console.warn(`Missing shader ${mesh.shader} on mesh in ${object.name} of scene ${sceneName}. Falling back to default material.`);
-                }
-
-                const diffuseColorBuffer = device.createBuffer(mesh.vertexcount * 4, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static);
-                device.uploadBufferData(diffuseColorBuffer, 0, new Uint8Array(new Float32Array(mesh.vertexcount * 4).fill(1).buffer));
-
-                const positions = new Float32Array(mesh.positions);
-                const positionBuffer = createDataBuffer(device, GfxBufferUsage.Vertex, positions.buffer, mesh.dynamic);
-
-                const normals = new Float32Array(mesh.normals);
-                const normalBuffer = createDataBuffer(device, GfxBufferUsage.Vertex, normals.buffer, mesh.dynamic);
-
-                const texcoordBuffer = createDataBuffer(device, GfxBufferUsage.Vertex, new Float32Array(mesh.texCoords).buffer);
-
-                const vertexAttributes = [
-                    { name: "position", ...(mesh.dynamic ? { data: positions } : null), buffer: positionBuffer, byteOffset: 0 },
-                    { name: "normal", ...(mesh.dynamic ? { data: normals } : null), buffer: normalBuffer, byteOffset: 0 },
-                    { name: "diffuseColor", buffer: diffuseColorBuffer, byteOffset: 0 },
-                    { name: "texCoord", buffer: texcoordBuffer, byteOffset: 0 },
-                ];
-
-                const indices = new Uint32Array(mesh.indices);
-                const indexBuffer = createDataBuffer(device, GfxBufferUsage.Index, indices.buffer);
-                const indexBufferDescriptor = { buffer: indexBuffer, byteOffset: 0, ...(mesh.dynamic ? { data: indices } : null) };
-
-                const lights: SCX.Light[] = [
-                    {
-                        type: SCX.LightType.Ambient,
-                        name: "ambient",
-                        color: scene.global.ambient ?? [0, 0, 0],
-                    } as SCX.Light,
-                    ...scene.lights.values(),
-                ];
-
-                unbakedMeshes.push({ node, mesh, shader: material.shader, diffuseColorBuffer, sceneName, lights });
-
-                meshes.push({
-                    inputLayout,
-                    vertexAttributes,
-                    indexBufferDescriptor,
-                    indexCount: mesh.indices.length,
-                    material,
-                    envID,
-                });
-            }
-
-            this.sceneNodesByName.set(objectName, node);
-            nodes.set(objectName, node);
-
-            if (object.animations !== undefined) {
-                node.animatedTransform = {
-                    trans: vec3.clone(node.transform.trans),
-                    rot: vec3.clone(node.transform.rot),
-                    scale: vec3.clone(node.transform.scale),
-                };
-                node.animations = this.animationBuilder.build(node.animatedTransform!, object.animations);
-                this.animatableNodes.push(node);
-            }
-        }
-
-        // parent the nodes within the scene
-        for (const sceneNode of nodes.values()) {
-            sceneNode.parent = nodes.get(sceneNode.parentName ?? "") ?? sceneRoot;
-            sceneNode.parent.children.push(sceneNode);
+            const diffuseColors = bakeLights(mesh, shader, node.worldTransform, transformedLightsBySceneName.get(sceneName)!);
+            this.device.uploadBufferData(diffuseColorBuffer, 0, new Uint8Array(diffuseColors.buffer));
         }
     }
 
@@ -423,10 +373,10 @@ export default class Renderer implements SceneGfx {
     }
 
     /*
-  serializeSaveState?(dst: ArrayBuffer, offs: number): number {}
-  deserializeSaveState?(src: ArrayBuffer, offs: number, byteLength: number): number {}
-  onstatechanged?: (() => void) | undefined;
-  */
+    serializeSaveState?(dst: ArrayBuffer, offs: number): number {}
+    deserializeSaveState?(src: ArrayBuffer, offs: number, byteLength: number): number {}
+    onstatechanged?: (() => void) | undefined;
+    */
 
     render(device: GfxDevice, viewerInput: ViewerRenderInput): void {
         const { deltaTime } = viewerInput;
@@ -445,7 +395,7 @@ export default class Renderer implements SceneGfx {
         const renderInstManager = this.renderHelper.renderInstManager;
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
-        const renderPassDescriptor = makeAttachmentClearDescriptor(this.ambientColor);
+        const renderPassDescriptor = makeAttachmentClearDescriptor(colorNewFromRGBA(0, 0, 0));
         const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, renderPassDescriptor);
         const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, standardFullClearRenderPassDescriptor);
 
@@ -479,19 +429,11 @@ export default class Renderer implements SceneGfx {
         this.renderInstListMain.reset();
     }
 
-    // count = 0;
-
     private prepareToRender(viewerInput: ViewerRenderInput, renderInstManager: GfxRenderInstManager) {
-        // if (this.count >= 10) {
-        //   return;
-        // }
-        // this.count++;
-
         const template = this.renderHelper.pushTemplateRenderInst();
         template.setBindingLayouts(Plus4XPProgram.bindingLayouts);
         const gfxProgram = renderInstManager.gfxRenderCache.createProgramSimple(this.program);
         template.setGfxProgram(gfxProgram);
-        template.setMegaStateFlags(this.megaStateFlags);
 
         const cameraViewMatrix: mat4 = mat4.create();
 
@@ -544,58 +486,58 @@ export default class Renderer implements SceneGfx {
     }
 
     private renderSceneNodeMeshes(renderInstManager: GfxRenderInstManager, ghosts: boolean) {
-        renderInstManager.getCurrentTemplate().setMegaStateFlags({
+        renderInstManager.pushTemplate().setMegaStateFlags({
             depthCompare: ghosts ? GfxCompareMode.Always : GfxCompareMode.GreaterEqual,
             depthWrite: !ghosts,
         });
 
         for (const node of this.renderableNodes) {
-            if (!node.worldVisible || (node.isGhost ?? false) !== ghosts) {
+            if (!node.worldVisible || node.isGhost !== ghosts) {
                 continue;
             }
 
             for (const mesh of node.meshes!) {
-                renderMesh: {
-                    const envMap = (mesh.envID === undefined ? null : this.environmentMapsByID.get(mesh.envID)) ?? this.missingEnvMap;
-                    const renderInst = renderInstManager.newRenderInst();
-                    updateObjectParams: {
-                        let objectOffset = renderInst.allocateUniformBuffer(Plus4XPProgram.ub_ObjectParams, 16 * 3 + 4 + 4 /*Mat4x3 * 3 + vec4 * 2*/);
-                        const object = renderInst.mapUniformBufferF32(Plus4XPProgram.ub_ObjectParams);
-                        objectOffset += fillMatrix4x4(object, objectOffset, node.worldTransform);
+                const envMap = (mesh.envID === undefined ? null : this.environmentMapsByID.get(mesh.envID)) ?? this.defaultEnvMap;
+                const renderInst = renderInstManager.newRenderInst();
+                updateObjectParams: {
+                    let objectOffset = renderInst.allocateUniformBuffer(Plus4XPProgram.ub_ObjectParams, 16 * 3 + 4 + 4 /*Mat4x3 * 3 + vec4 * 2*/);
+                    const object = renderInst.mapUniformBufferF32(Plus4XPProgram.ub_ObjectParams);
+                    objectOffset += fillMatrix4x4(object, objectOffset, node.worldTransform);
 
-                        mat4.invert(this.scratchWorldInverseTransposeMatrix, node.worldTransform);
-                        mat4.transpose(this.scratchWorldInverseTransposeMatrix, this.scratchWorldInverseTransposeMatrix);
-                        objectOffset += fillMatrix4x4(object, objectOffset, this.scratchWorldInverseTransposeMatrix);
+                    mat4.invert(this.scratchWorldInverseTransposeMatrix, node.worldTransform);
+                    mat4.transpose(this.scratchWorldInverseTransposeMatrix, this.scratchWorldInverseTransposeMatrix);
+                    objectOffset += fillMatrix4x4(object, objectOffset, this.scratchWorldInverseTransposeMatrix);
 
-                        objectOffset += fillMatrix4x4(object, objectOffset, envMap.matrix);
-                        objectOffset += fillVec4(object, objectOffset, ...(envMap.tint as [number, number, number, number]));
+                    objectOffset += fillMatrix4x4(object, objectOffset, envMap.matrix);
+                    objectOffset += fillVec4(object, objectOffset, ...(envMap.tint as [number, number, number, number]));
 
-                        {
-                            object[objectOffset] = mesh.material.gfxTexture === null ? 1 : 0;
-                            objectOffset++;
-                        }
+                    {
+                        object[objectOffset] = mesh.material.gfxTexture === null ? 1 : 0;
+                        objectOffset++;
                     }
-
-                    renderInst.setSamplerBindingsFromTextureMappings([
-                        {
-                            gfxTexture: mesh.material.gfxTexture ?? this.missingTexture,
-                            gfxSampler: this.diffuseSampler,
-                            lateBinding: null,
-                        },
-                        {
-                            gfxTexture: envMap.texture,
-                            gfxSampler: this.envSampler,
-                            lateBinding: null,
-                        },
-                    ]);
-
-                    renderInst.setVertexInput(mesh.inputLayout, mesh.vertexAttributes, mesh.indexBufferDescriptor);
-
-                    renderInst.setDrawCount(mesh.indexCount);
-                    renderInstManager.submitRenderInst(renderInst);
                 }
+
+                renderInst.setSamplerBindingsFromTextureMappings([
+                    {
+                        gfxTexture: mesh.material.gfxTexture ?? this.defaultTexture,
+                        gfxSampler: this.diffuseSampler,
+                        lateBinding: null,
+                    },
+                    {
+                        gfxTexture: envMap.texture,
+                        gfxSampler: this.envSampler,
+                        lateBinding: null,
+                    },
+                ]);
+
+                renderInst.setVertexInput(mesh.inputLayout, mesh.vertexAttributes, mesh.indexBufferDescriptor);
+
+                renderInst.setDrawCount(mesh.indexCount);
+                renderInstManager.submitRenderInst(renderInst);
             }
         }
+
+        renderInstManager.popTemplate();
     }
 
     destroy(device: GfxDevice): void {

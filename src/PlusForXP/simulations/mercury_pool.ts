@@ -45,10 +45,10 @@ export const createPoolScene = (): SCX.Scene => {
     const mercuryShader: SCX.Shader = { name: "pool", id: 1, ambient: [1, 1, 1], diffuse: [1, 1, 1], specular: [1, 1, 1], opacity: 1, luminance: 0, blend: 1 };
     const poolMesh = {
         vertexcount: vertices.length,
-        positions: vertices.map((v) => [...v.position]).flat(),
-        normals: vertices.map((v) => [...v.normal]).flat(),
-        indices: triangles.flat(),
-        texCoords: Array(vertices.length * 2).fill(0),
+        positions: new Float32Array(vertices.map((v) => [...v.position]).flat()),
+        normals: new Float32Array(vertices.map((v) => [...v.normal]).flat()),
+        indices: new Uint32Array(triangles.flat()),
+        texCoords: new Float32Array(vertices.length * 2).fill(0),
         shader: 1,
         dynamic: true,
     };
