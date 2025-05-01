@@ -5,6 +5,16 @@ import { ViewerRenderInput } from "../viewer.js";
 import { ChannelAnimation } from "./animation.js";
 import { GfxrGraphBuilder } from "../gfx/render/GfxRenderGraph.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
+import { World } from "./world.js";
+
+export type WorldData = {
+    basePath: string;
+    scenes: Record<string, { scene: SCX.Scene; envID?: string }>;
+    textures: Texture[];
+    environmentMaps: Record<string, EnvironmentMap>;
+    cameras: [string, string][];
+    simulateFunc?: () => Simulation;
+};
 
 export type Texture = {
     path: string;
@@ -45,7 +55,6 @@ export type VertexAttribute = GfxVertexBufferDescriptor & { name: string; data?:
 export type Index = GfxIndexBufferDescriptor & { data?: Uint32Array };
 
 export type Mesh = {
-    inputLayout: GfxInputLayout;
     vertexAttributes: VertexAttribute[];
     indexBufferDescriptor: Index;
     indexCount: number;
@@ -72,8 +81,8 @@ export type SceneNode = {
 };
 
 export abstract class Simulation {
-    setup(device: GfxDevice, texturesByPath: Map<string, Texture>, materialsByName: Map<string, Material>, sceneNodesByName: Map<string, SceneNode>): void {}
-    update(input: ViewerRenderInput, sceneNodesByName: Map<string, SceneNode>, device: GfxDevice): void {}
+    setup(device: GfxDevice, world: World): void {}
+    update(device: GfxDevice, input: ViewerRenderInput): void {}
     render(renderHelper: GfxRenderHelper, builder: GfxrGraphBuilder, cameraWorldPos: vec3): void {}
     renderReset(): void {}
     destroy(device: GfxDevice): void {}

@@ -1,8 +1,9 @@
 import { ViewerRenderInput } from "../../viewer";
-import { Simulation, SceneNode, Texture, Material } from "../types";
-import { mat4, quat, vec3, vec4 } from "gl-matrix";
+import { Simulation, SceneNode } from "../types";
+import { vec3 } from "gl-matrix";
 import { getDescendants, reparent } from "../util";
 import { GfxDevice } from "../../gfx/platform/GfxPlatform";
+import { World } from "../world";
 
 export default class RobotCircus extends Simulation {
     private isTech: boolean;
@@ -10,16 +11,11 @@ export default class RobotCircus extends Simulation {
     private bot1: SceneNode;
     private bot2: SceneNode;
 
-    override setup(
-        device: GfxDevice,
-        texturesByPath: Map<string, Texture>,
-        materialsByName: Map<string, Material>,
-        sceneNodesByName: Map<string, SceneNode>,
-    ): void {
-        this.isTech = sceneNodesByName.has("Balance_Tech_Bar.scx/balance bar");
-        this.bar = sceneNodesByName.get(this.isTech ? "Balance_Tech_Bar.scx/_root" : "Balance_Bar.scx/_root")!;
-        this.bot1 = sceneNodesByName.get(this.isTech ? "Balance_Man3A.scx/_root" : "Balance_Man1A.scx/_root")!;
-        this.bot2 = sceneNodesByName.get(this.isTech ? "Balance_Man4A.scx/_root" : "Balance_Man2A.scx/_root")!;
+    override setup(device: GfxDevice, world: World): void {
+        this.isTech = world.sceneNodesByName.has("Balance_Tech_Bar.scx/balance bar");
+        this.bar = world.sceneNodesByName.get(this.isTech ? "Balance_Tech_Bar.scx/_root" : "Balance_Bar.scx/_root")!;
+        this.bot1 = world.sceneNodesByName.get(this.isTech ? "Balance_Man3A.scx/_root" : "Balance_Man1A.scx/_root")!;
+        this.bot2 = world.sceneNodesByName.get(this.isTech ? "Balance_Man4A.scx/_root" : "Balance_Man2A.scx/_root")!;
 
         getDescendants(this.bot1).forEach((n) => (n.animates = false));
 
@@ -36,7 +32,7 @@ export default class RobotCircus extends Simulation {
         this.bar.transformChanged = true;
     }
 
-    override update(input: ViewerRenderInput, sceneNodesByName: Map<string, SceneNode>, device: GfxDevice): void {
+    override update(device: GfxDevice, input: ViewerRenderInput): void {
         const angle = Math.PI * ((this.isTech ? 0 : -0.5) + (input?.time ?? 0) / 1000);
         if (this.isTech) {
             vec3.set(this.bar.transform.rot, 0, angle, 0);
