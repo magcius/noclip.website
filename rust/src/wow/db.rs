@@ -156,8 +156,12 @@ fn read_field_to_u32<R: std::io::Read + std::io::Seek>(reader: &mut Reader<R>, f
     reader.read_bytes(field_size_bytes, &mut buf)?;
     let v = u32::from_le_bytes(buf);
 
-    let mask = (1 << field_size_bits) - 1;
-    let result = (v >> shift) & mask;
+    let result = if field_size_bits == 32 {
+        v
+    } else {
+        let mask = (1 << field_size_bits) - 1;
+        (v >> shift) & mask
+    };
 
     reader.seek(std::io::SeekFrom::Start(old))
         .map_err(|err| DekuError::Io(err.kind()))?;

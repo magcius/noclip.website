@@ -1868,6 +1868,9 @@ export class LazyWorldData {
         this.adtFileIds = wdt.get_all_map_data();
         const [centerX, centerY] = this.startAdtCoords;
 
+        this.hasBigAlpha = wdt.adt_has_big_alpha();
+        this.hasHeightTexturing = wdt.adt_has_height_texturing();
+
         const promises = [];
         for (
             let x = centerX - this.initialAdtRadius;
@@ -1893,8 +1896,6 @@ export class LazyWorldData {
         );
         await Promise.all(promises);
 
-        this.hasBigAlpha = wdt.adt_has_big_alpha();
-        this.hasHeightTexturing = wdt.adt_has_height_texturing();
         wdt.free();
     }
 
