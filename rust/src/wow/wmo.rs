@@ -1068,6 +1068,10 @@ impl WmoLiquid {
         let mut last_tile_liquid: Option<u8> = None;
         for y in 0..height {
             for x in 0..width {
+                // if we're reaching the limit of u16 indices, stop
+                if index >= u16::MAX - 4 {
+                    break;
+                }
                 let tile_i = y * width + x;
                 let tile = &self.tiles[tile_i];
                 if !tile.is_visible() {

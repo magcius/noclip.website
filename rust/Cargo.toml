@@ -14,11 +14,10 @@ crate-type = ["cdylib", "rlib"]
 wasm-opt = ['-O', '--enable-bulk-memory']
 
 [package.metadata.wasm-pack.profile.dev]
-wasm-opt = ['-Os', '--enable-bulk-memory', '--debuginfo']
+wasm-opt = ['-Os', '--enable-bulk-memory']
 
 [package.metadata.wasm-pack.profile.dev.wasm-bindgen]
 demangle-name-section = true
-dwarf-debug-info = true
 
 [profile.release]
 lto = true
