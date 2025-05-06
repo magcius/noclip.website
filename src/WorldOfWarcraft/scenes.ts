@@ -17,6 +17,7 @@ import { BaseProgram, LoadingAdtProgram, ModelProgram, ParticleProgram, SkyboxPr
 import { LoadingAdtRenderer, ModelRenderer, SkyboxRenderer, TerrainRenderer, WaterRenderer, WmoRenderer } from "./render.js";
 import { TextureCache } from "./tex.js";
 import type { ConvexHull } from "../../rust/pkg/noclip_support";
+import { Blue, Cyan, Green, Red } from "../Color.js";
 
 export const MAP_SIZE = 17066;
 
@@ -304,7 +305,6 @@ export class WdtScene implements Viewer.SceneGfx {
     public currentAdtCoords: [number, number] = [0, 0];
     public loadingAdts: [number, number][] = [];
 
-    public debug = false;
     public enableFog = true;
     public enableParticles = true;
     public cullingState = CullingState.Running;

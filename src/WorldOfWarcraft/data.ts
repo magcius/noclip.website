@@ -120,12 +120,16 @@ export class Database {
             lightParamsDbData,
             liquidTypes,
             lightSkyboxData,
+            zoneLights,
+            zoneLightPoints,
         ] = await Promise.all([
             cache.fetchDataByFileID(1375579), // lightDbData
             cache.fetchDataByFileID(1375580), // lightDataDbData
             cache.fetchDataByFileID(1334669), // lightParamsDbData
             cache.fetchDataByFileID(1371380), // liquidTypes
             cache.fetchDataByFileID(1308501), // lightSkyboxData
+            cache.fetchDataByFileID(1310253), // zoneLights
+            cache.fetchDataByFileID(1310256), // zoneLightPoints
         ]);
 
         this.inner = rust.WowDatabase.new(
@@ -134,6 +138,8 @@ export class Database {
             lightParamsDbData,
             liquidTypes,
             lightSkyboxData,
+            zoneLights,
+            zoneLightPoints,
         );
     }
 
@@ -435,6 +441,7 @@ export class SkyboxData {
             );
         }
         this.modelData = await cache.loadModel(this.modelFileId);
+        this.modelData.isSkybox = true;
     }
 }
 
@@ -515,6 +522,7 @@ export class ParticleEmitter {
 
 export class ModelData {
     private scratchMat4 = mat4.create();
+    public isSkybox = false;
     public skins: SkinData[] = [];
     public blps: BlpData[] = [];
     public vertexBuffer: Uint8Array;
@@ -987,6 +995,9 @@ export class ModelBatch {
         this.vertexShaderId = batch.get_vertex_shader();
         this.submesh = skin.submeshes[batch.skin_submesh_index];
         [this.blendMode, this.materialFlags] = model.materials[this.batch.material_index];
+        if (model.isSkybox && this.blendMode == WowM2BlendingMode.Opaque) {
+            this.blendMode = WowM2BlendingMode.Alpha;
+        }
         this.layer = this.batch.material_layer;
         this.tex0 = this.getBlp(0)!;
         this.tex1 = this.getBlp(1);
