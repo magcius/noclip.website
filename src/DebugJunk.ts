@@ -211,7 +211,7 @@ export function drawWorldSpaceCircle(ctx: CanvasRenderingContext2D, clipFromWorl
         vec3FromBasis2(scratchVec3v, center, scratchVec3a, Math.sin(t0) * radius, scratchVec3b, Math.cos(t0) * radius);
 
         const t1 = ((i + 1) / nPoints) * MathConstants.TAU;
-        vec3FromBasis2(scratchVec3v, center, scratchVec3a, Math.sin(t1) * radius, scratchVec3b, Math.cos(t1) * radius);
+        vec3FromBasis2(scratchVec3a, center, scratchVec3a, Math.sin(t1) * radius, scratchVec3b, Math.cos(t1) * radius);
 
         drawWorldSpaceLine(ctx, clipFromWorldMatrix, scratchVec3v, scratchVec3a, color);
     }

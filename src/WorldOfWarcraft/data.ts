@@ -972,7 +972,12 @@ export class SkinData {
 
     constructor(public skin: WowSkin, model: ModelData) {
         this.submeshes = skin.submeshes;
-        this.batches = skin.batches.map((batch) => new ModelBatch(batch, this.skin, model));
+        const batches = skin.batches.slice();
+        batches.reverse();
+        batches.sort((a, b) => {
+            return b.material_layer - a.material_layer;
+        });
+        this.batches = batches.map((batch, i) => new ModelBatch(batch, this.skin, model, i));
         this.indexBuffer = skin.take_indices();
     }
 }
@@ -991,12 +996,12 @@ export class ModelBatch {
     private sortKeyBase = 0;
     public visible = true;
 
-    constructor(public batch: WowModelBatch, public skin: WowSkin, public model: ModelData) {
+    constructor(public batch: WowModelBatch, public skin: WowSkin, public model: ModelData, layer: number) {
         this.fragmentShaderId = batch.get_pixel_shader();
         this.vertexShaderId = batch.get_vertex_shader();
         this.submesh = skin.submeshes[batch.skin_submesh_index];
         [this.blendMode, this.materialFlags] = model.materials[this.batch.material_index];
-        this.layer = this.batch.material_layer;
+        this.layer = layer;
         this.tex0 = this.getBlp(0)!;
         this.tex1 = this.getBlp(1);
         this.tex2 = this.getBlp(2);

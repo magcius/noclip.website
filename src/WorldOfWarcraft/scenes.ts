@@ -8,7 +8,7 @@ import { GfxClipSpaceNearZ, GfxCullMode, GfxDevice } from "../gfx/platform/GfxPl
 import { GfxProgram } from "../gfx/platform/GfxPlatformImpl.js";
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
-import { GfxRenderInstList } from "../gfx/render/GfxRenderInstManager.js";
+import { gfxRenderInstCompareNone, GfxRenderInstExecutionOrder, GfxRenderInstList } from "../gfx/render/GfxRenderInstManager.js";
 import { rust } from "../rustlib.js";
 import { assert } from "../util.js";
 import * as Viewer from "../viewer.js";
@@ -284,7 +284,7 @@ export class WdtScene implements Viewer.SceneGfx {
     private skyboxRenderer: SkyboxRenderer;
     private loadingAdtRenderer: LoadingAdtRenderer;
     private renderInstListMain = new GfxRenderInstList();
-    private renderInstListSky = new GfxRenderInstList();
+    private renderInstListSky = new GfxRenderInstList(gfxRenderInstCompareNone, GfxRenderInstExecutionOrder.Forwards);
 
     public ADT_LOD0_DISTANCE = 1000;
 
