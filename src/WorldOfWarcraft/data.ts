@@ -989,15 +989,13 @@ export class ModelBatch {
     public tex2: BlpData | null;
     public tex3: BlpData | null;
     private sortKeyBase = 0;
+    public visible = true;
 
     constructor(public batch: WowModelBatch, public skin: WowSkin, public model: ModelData) {
         this.fragmentShaderId = batch.get_pixel_shader();
         this.vertexShaderId = batch.get_vertex_shader();
         this.submesh = skin.submeshes[batch.skin_submesh_index];
         [this.blendMode, this.materialFlags] = model.materials[this.batch.material_index];
-        if (model.isSkybox && this.blendMode == WowM2BlendingMode.Opaque) {
-            this.blendMode = WowM2BlendingMode.Alpha;
-        }
         this.layer = this.batch.material_layer;
         this.tex0 = this.getBlp(0)!;
         this.tex1 = this.getBlp(1);
@@ -1006,10 +1004,14 @@ export class ModelBatch {
         this.sortKeyBase = makeSortKeyBase(this.blendMode, this.layer);
     }
 
-    public setMegaStateFlags(renderInst: GfxRenderInst) {
+    public setMegaStateFlags(renderInst: GfxRenderInst, forceTransparent: boolean) {
+        let blendMode = this.blendMode;
+        if (forceTransparent && this.blendMode == WowM2BlendingMode.Opaque) {
+            blendMode = WowM2BlendingMode.Alpha;
+        }
         setM2BlendModeMegaState(
             renderInst,
-            this.blendMode,
+            blendMode,
             this.materialFlags.two_sided,
             this.materialFlags.depth_write,
             this.materialFlags.depth_tested,
