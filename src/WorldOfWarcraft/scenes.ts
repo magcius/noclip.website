@@ -1,7 +1,7 @@
 import { mat4, ReadonlyMat4, vec3, vec4 } from "gl-matrix";
 import { CameraController } from "../Camera.js";
 import { AABB, Frustum } from "../Geometry.js";
-import { getMatrixTranslation, invlerp, lerp, projectionMatrixForFrustum, saturate, setMatrixTranslation, transformVec3Mat4w1 } from "../MathHelpers.js";
+import { getMatrixTranslation, invlerp, lerp, projectionMatrixForFrustum, saturate, setMatrixTranslation, transformVec3Mat4w1, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from "../MathHelpers.js";
 import { SceneContext } from "../SceneBase.js";
 import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
 import { GfxClipSpaceNearZ, GfxCullMode, GfxDevice } from "../gfx/platform/GfxPlatform.js";
@@ -52,6 +52,8 @@ export class View {
     public clipFromWorldMatrix = mat4.create();
     // aka projectionMatrix
     public clipFromViewMatrix = mat4.create();
+    public backbufferWidth: number;
+    public backbufferHeight: number;
     public interiorSunDirection = vec4.fromValues(-0.30822, -0.30822, -0.9, 0);
     public exteriorDirectColorDirection = vec4.fromValues(-0.30822, -0.30822, -0.9, 0);
     public clipSpaceNearZ: GfxClipSpaceNearZ;
@@ -102,6 +104,9 @@ export class View {
     }
 
     public setupFromViewerInput(viewerInput: Viewer.ViewerRenderInput): void {
+        this.backbufferWidth = viewerInput.backbufferWidth;
+        this.backbufferHeight = viewerInput.backbufferHeight;
+
         this.cullingNearPlane = viewerInput.camera.near;
         this.clipSpaceNearZ = viewerInput.camera.clipSpaceNearZ;
         mat4.mul(this.viewFromWorldMatrix, viewerInput.camera.viewMatrix, noclipSpaceFromAdtSpace);
@@ -657,6 +662,8 @@ export class WdtScene implements Viewer.SceneGfx {
         template.setGfxProgram(this.skyboxProgram);
         template.setBindingLayouts(SkyboxProgram.bindingLayouts);
 
+        this.renderHelper.debugDraw.beginFrame(this.mainView.clipFromViewMatrix, this.mainView.viewFromWorldMatrix, this.mainView.backbufferWidth, this.mainView.backbufferHeight);
+
         const lightingData = this.db.getGlobalLightingData(this.world.lightdbMapId, this.mainView.cameraPos, this.mainView.time);
         BaseProgram.layoutUniformBufs(template, this.mainView, lightingData);
         renderInstManager.setCurrentList(this.renderInstListSky);
@@ -844,6 +851,7 @@ export class WdtScene implements Viewer.SceneGfx {
                 this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
+        this.renderHelper.debugDraw.pushPasses(builder, mainColorTargetID, mainDepthTargetID);
         this.renderHelper.antialiasingSupport.pushPasses(builder, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
