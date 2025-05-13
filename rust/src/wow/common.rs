@@ -1,6 +1,6 @@
 use deku::{ctx::ByteSize, prelude::*};
 use wasm_bindgen::prelude::*;
-use std::{io::Cursor, ops::{AddAssign, Mul}};
+use std::{io::Cursor, ops::{AddAssign, DivAssign, Mul}};
 
 use crate::geometry::AABB;
 
@@ -179,6 +179,14 @@ pub struct Vec3 {
 impl Vec3 {
     pub fn new(v: f32) -> Self {
         Vec3 { x: v, y: v, z: v }
+    }
+}
+
+impl DivAssign<f32> for Vec3 {
+    fn div_assign(&mut self, rhs: f32) {
+        self.x /= rhs;
+        self.y /= rhs;
+        self.z /= rhs;
     }
 }
 

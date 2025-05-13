@@ -558,6 +558,7 @@ pub struct LightResult {
     pub fog_end: f32,
     pub fog_scaler: f32,
     skyboxes: HashMap<String, (u16, f32)>,
+    total_alpha: f32,
 }
 
 #[derive(DekuRead, Debug, Clone)]
@@ -618,8 +619,10 @@ impl LightResult {
                 weight: *weight,
             });
         }
-        // sort lightboxes by weight, highest to lowest
-        result.sort_by(|a, b| b.weight.partial_cmp(&a.weight).unwrap());
+        // sort lightboxes by name for consistent rendering during tweening
+        result.sort_by(|a, b| {
+            a.name.partial_cmp(&b.name).unwrap()
+        });
         result
     }
 }
@@ -631,6 +634,7 @@ impl LightResult {
             skyboxes.insert(skybox.name.clone(), (skybox.flags, 1.0));
         }
         LightResult {
+            total_alpha: 1.0,
             glow: params.glow,
             water_shallow_alpha: params.water_shallow_alpha,
             water_deep_alpha: params.water_deep_alpha,
@@ -662,6 +666,7 @@ impl LightResult {
     }
 
     fn add_scaled(&mut self, other: &LightResult, t: f32) {
+        self.total_alpha += t;
         self.glow += other.glow * t;
         self.water_shallow_alpha += other.water_shallow_alpha * t;
         self.water_deep_alpha += other.water_deep_alpha * t;
@@ -696,6 +701,46 @@ impl LightResult {
             }
         }
     }
+
+    fn normalize(&mut self, default_light: &LightResult) {
+        if self.total_alpha < 1.0 {
+            self.add_scaled(default_light, 1.0 - self.total_alpha);
+        } else if self.total_alpha > 1.0 {
+            self.divide(self.total_alpha);
+        }
+    }
+
+    fn divide(&mut self, t: f32) {
+        self.glow /= t;
+        self.water_shallow_alpha /= t;
+        self.water_deep_alpha /= t;
+        self.ocean_shallow_alpha /= t;
+        self.ocean_deep_alpha /= t;
+        self.ambient_color /= t;
+        self.direct_color /= t;
+        self.sky_top_color /= t;
+        self.sky_middle_color /= t;
+        self.sky_band1_color /= t;
+        self.sky_band2_color /= t;
+        self.sky_smog_color /= t;
+        self.sky_fog_color /= t;
+        self.sun_color /= t;
+        self.cloud_sun_color /= t;
+        self.cloud_emissive_color /= t;
+        self.cloud_layer1_ambient_color /= t;
+        self.cloud_layer2_ambient_color /= t;
+        self.ocean_close_color /= t;
+        self.ocean_far_color /= t;
+        self.river_close_color /= t;
+        self.river_far_color /= t;
+        self.shadow_opacity /= t;
+        self.fog_end /= t;
+        self.fog_scaler /= t;
+
+        for entry in self.skyboxes.values_mut() {
+            entry.1 /= t;
+        }
+    }
 }
 
 impl Lerp for LightResult {
@@ -710,6 +755,7 @@ impl Lerp for LightResult {
         }
 
         LightResult {
+            total_alpha: self.total_alpha.lerp(other.total_alpha, t),
             glow: self.glow.lerp(other.glow, t),
             water_shallow_alpha: self.water_shallow_alpha.lerp(other.water_shallow_alpha, t),
             water_deep_alpha: self.water_deep_alpha.lerp(other.water_deep_alpha, t),
@@ -961,7 +1007,7 @@ impl Database {
             }
         }
 
-        let current_light_data = current_light_data.unwrap();
+        let current_light_data = current_light_data?;
         let mut final_result = LightResult::new(current_light_data, light_param, skybox);
         if current_light_data.time != std::u32::MAX {
             if let Some(next) = next_light_data {
@@ -1000,20 +1046,21 @@ impl Database {
     }
 
     pub fn get_lighting_data(&self, map_id: u16, x: f32, y: f32, z: f32, time: u32) -> LightResult {
-        let mut outer_lights: Vec<(LightResult, f32)> = Vec::new();
         let coord = Vec3 { x, y, z };
-        let default_light = self.get_default_light(map_id, time);
+        let mut result = LightResult::default();
 
-        let mut remaining_alpha = 1.0;
         for light in &self.lights.records {
             if light.map_id == map_id {
                 match light.distance(&coord) {
-                    DistanceResult::Inner => return self.get_light_result(light, time).unwrap_or(default_light),
+                    DistanceResult::Inner => {
+                        if let Some(outer_light) = self.get_light_result(light, time) {
+                            result.add_scaled(&outer_light, 1.0);
+                        }
+                    },
                     DistanceResult::Outer(distance) => {
                         if let Some(outer_light) = self.get_light_result(light, time) {
                             let alpha = 1.0 - (distance - light.falloff_start) / (light.falloff_end - light.falloff_start);
-                            remaining_alpha -= alpha;
-                            outer_lights.push((outer_light, alpha));
+                            result.add_scaled(&outer_light, alpha);
                         }
                     },
                     DistanceResult::None => {},
@@ -1026,37 +1073,14 @@ impl Database {
             let threshold = 100.0;
             // if we're approaching the border of another zone, smoothly taper off to the non-zone lighting
             if dist < threshold {
-                outer_lights.push((zone_light, dist / threshold));
-            } else {
+                result.add_scaled(&zone_light, dist / threshold);
+            } else if result.total_alpha < 1.0 {
                 // otherwise, just accept whatever alpha hasn't been taken by spherical lights
-                outer_lights.push((zone_light, remaining_alpha));
+                result.add_scaled(&zone_light, 1.0 - result.total_alpha);
             }
         }
 
-        if outer_lights.is_empty() {
-            return default_light;
-        }
-
-        outer_lights.sort_unstable_by(|(_, alpha_a), (_, alpha_b)| {
-            alpha_b.partial_cmp(alpha_a).unwrap()
-        });
-
-        let mut result = LightResult::default();
-        let mut total_alpha = 0.0;
-        for (outer_result, mut alpha) in &outer_lights {
-            if total_alpha >= 1.0 {
-                break;
-            }
-
-            if total_alpha + alpha >= 1.0 {
-                alpha = 1.0 - total_alpha;
-            }
-            result.add_scaled(outer_result, alpha);
-            total_alpha += alpha;
-        }
-        if total_alpha < 1.0 {
-            result.add_scaled(&default_light, 1.0 - total_alpha);
-        }
+        result.normalize(&self.get_default_light(map_id, time));
 
         result
     }
@@ -1126,11 +1150,7 @@ mod test {
         let d6: Vec<u8> = SheepfileManager::load_file_id_data(sheep_path, 1310253).unwrap(); // zoneLight
         let d7: Vec<u8> = SheepfileManager::load_file_id_data(sheep_path, 1310256).unwrap(); // zoneLightPoint
         let db = Database::new(&d1, &d2, &d3, &d4, &d5, &d6, &d7).unwrap();
-        dbg!(db.get_all_skyboxes(571));
-        let result = db.get_lighting_data(571, 3827.30810546875, 4953.11572265625, 109.76651000976562, 1440);
-        dbg!(result);
-
-        dbg!(db.get_liquid_type(2));
+        dbg!(db.get_lighting_data(530, 2167.899169921875, 1723.90673828125, 299.3044738769531, 1440));
     }
 
     #[test]
