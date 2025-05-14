@@ -7,7 +7,7 @@ use nalgebra_glm::{make_vec3, vec3, Vec2, Vec3};
 use wasm_bindgen::prelude::*;
 
 use crate::{
-    geometry::{project_vec3_to_vec2, point_inside_polygon, Axis, ConvexHull, Plane, AABB},
+    geometry::{project_vec3_to_vec2, point_inside_convex_polygon, Axis, ConvexHull, Plane, AABB},
     wow::common::{parse, parse_array, ChunkedData},
 };
 
@@ -300,7 +300,7 @@ impl Wmo {
             let test_point = p + t * neg_z;
             let (projected_verts, axis) = portal.project_vertices_to_2d();
             let projected_test_point = project_vec3_to_vec2(&test_point, axis);
-            if point_inside_polygon(&projected_test_point, &projected_verts) {
+            if point_inside_convex_polygon(&projected_test_point, &projected_verts) {
                 return Some(t);
             }
         }

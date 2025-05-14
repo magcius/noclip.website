@@ -308,7 +308,58 @@ pub fn project_vec3_to_vec2(v: &Vec3, axis: Axis) -> Vec2 {
     }
 }
 
-pub fn point_inside_polygon(point: &Vec2, polygon_vertices: &[Vec2]) -> bool {
+// distance from a point p to a line segment defined by a and b
+pub fn dist_point_line_segment(p: &Vec2, a: &Vec2, b: &Vec2) -> f32 {
+    let ab = b - a;
+    let ap = p - a;
+    let r = ab.dot(&ap) / ab.magnitude_squared();
+    if r < 0.0 {
+        ap.magnitude()
+    } else if r > 1.0 {
+        (b - p).magnitude()
+    } else {
+        let numerator = (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x);
+        let denominator = b.metric_distance(&a);
+        numerator.abs() / denominator
+    }
+}
+
+pub fn point_dist_to_polygon(p: &Vec2, polygon_vertices: &[Vec2]) -> f32 {
+    let mut min_dist = f32::INFINITY;
+    for i in 0..polygon_vertices.len() {
+        let a = &polygon_vertices[i];
+        let b = &polygon_vertices[(i+1) % polygon_vertices.len()];
+        let dist = dist_point_line_segment(p, a, b);
+        if dist < min_dist {
+            min_dist = dist;
+        }
+    }
+    min_dist
+}
+
+// more general but slightly slower version of the convex test
+pub fn point_inside_polygon(p: &Vec2, polygon_vertices: &[Vec2]) -> bool {
+    let mut counter = 0;
+    for i in 0..polygon_vertices.len() {
+        let a = polygon_vertices[i];
+        let b = polygon_vertices[(i+1) % polygon_vertices.len()];
+        if p.y > a.y.min(b.y) {
+            if p.y <= a.y.max(b.y) {
+                if p.x <= a.x.max(b.x) {
+                    if a.y != b.y {
+                        let x_intersection = (p.y - a.y) * (b.x - a.x) / (b.y - a.y) + a.x;
+                        if a.x == b.x || p.x <= x_intersection {
+                            counter += 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    counter % 2 != 0
+}
+
+pub fn point_inside_convex_polygon(point: &Vec2, polygon_vertices: &[Vec2]) -> bool {
     let mut sign = None;
     let num_verts = polygon_vertices.len();
     for i in 0..num_verts {

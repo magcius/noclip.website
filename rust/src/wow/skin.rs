@@ -194,11 +194,11 @@ static STATIC_SHADERS: [(PixelShader, VertexShader); 36] = [
 #[derive(Debug, DekuRead, Clone, Copy)]
 pub struct ModelBatch {
     pub flags: u8,
-    pub priority_plane: u8,
+    pub priority_plane: i8,
     pub shader_id: u16,
     pub skin_submesh_index: u16,
     pub geoset_index: u16,
-    pub color_index: u16,
+    pub color_index: i16,
     pub material_index: u16,
     pub material_layer: u16,
     pub texture_count: u16, // 1-4

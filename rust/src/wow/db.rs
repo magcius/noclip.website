@@ -1,6 +1,9 @@
-use std::{collections::{HashMap, HashSet}, io::{Cursor, Seek}};
+use std::{collections::{HashMap, HashSet}, io::{Cursor, Seek, SeekFrom}};
 
 use deku::prelude::*;
+use nalgebra_glm::Vec2;
+use crate::geometry::{point_dist_to_polygon, point_inside_polygon};
+
 use super::common::*;
 use wasm_bindgen::prelude::*;
 
@@ -332,6 +335,8 @@ impl Wdc4Db2File {
 pub struct DatabaseTable<T> {
     records: Vec<T>,
     ids: Vec<u32>,
+    foreign_keys: Option<Vec<u32>>,
+    copies: HashMap<u32, u32>,
 }
 
 impl<T> DatabaseTable<T> {
@@ -340,6 +345,7 @@ impl<T> DatabaseTable<T> {
     {
         let (_, db2) = Wdc4Db2File::from_bytes((&data, 0))
             .map_err(|e| format!("{:?}", e))?;
+        assert!(db2.section_headers.len() == 1);
         let mut records: Vec<T> = Vec::with_capacity(db2.header.record_count as usize);
         let mut ids: Vec<u32> = Vec::with_capacity(db2.header.record_count as usize);
         let records_start = db2.section_headers[0].file_offset as usize;
@@ -374,16 +380,75 @@ impl<T> DatabaseTable<T> {
                 ids[i] = id;
             }
         }
+
+        let mut foreign_keys = None;
+        let relationship_start = id_list_start + id_list_size + 12; // idk
+        if db2.section_headers[0].relationship_data_size > 0 {
+            let mut keys = vec![0; records.len()];
+            reader.seek(SeekFrom::Start(relationship_start as u64))
+                .map_err(|err| err.to_string())?;
+            for _ in 0..records.len() {
+                let foreign_key = u32::from_reader_with_ctx(&mut reader, ())
+                    .map_err(|e| format!("{:?}", e))?;
+                let id = u32::from_reader_with_ctx(&mut reader, ())
+                    .map_err(|e| format!("{:?}", e))?;
+                keys[id as usize] = foreign_key;
+            }
+            foreign_keys = Some(keys);
+        }
+
+        let mut copies = HashMap::new();
+        for _ in 0..db2.section_headers[0].copy_table_count {
+            let id_of_new_row = u32::from_reader_with_ctx(&mut reader, ())
+                .map_err(|e| format!("{:?}", e))?;
+            let id_of_old_row = u32::from_reader_with_ctx(&mut reader, ())
+                .map_err(|e| format!("{:?}", e))?;
+            copies.insert(id_of_new_row, id_of_old_row);
+        }
+
         Ok(DatabaseTable {
             records,
             ids,
+            foreign_keys,
+            copies,
         })
     }
 
-    pub fn get_record(&self, needle: u32) -> Option<&T> {
+    pub fn get_record(&self, mut needle: u32) -> Option<&T> {
+        if let Some(id) = self.copies.get(&needle) {
+            needle = *id;
+        }
         let index = self.ids.iter().position(|haystack| *haystack == needle)?;
         Some(&self.records[index])
     }
+}
+
+#[derive(DekuRead, Debug, Clone)]
+#[deku(ctx = "db2: Wdc4Db2File")]
+struct ZoneLightRecord {
+    #[deku(reader = "db2.read_field(deku::reader, 0)")]
+    pub _unk_1: u32,
+    #[deku(reader = "db2.read_field(deku::reader, 1)")]
+    pub map_id: u16,
+    #[deku(reader = "db2.read_field(deku::reader, 2)")]
+    pub light_id: u16,
+    #[deku(reader = "db2.read_field(deku::reader, 3)")]
+    pub _light_flags: u8,
+    #[deku(reader = "db2.read_field(deku::reader, 4)")]
+    pub z_min: f32,
+    #[deku(reader = "db2.read_field(deku::reader, 5)")]
+    pub z_max: f32,
+    #[deku(reader = "db2.read_field(deku::reader, 6)")]
+    pub _unk_2: u32,
+}
+
+#[derive(DekuRead, Debug, Clone)]
+#[deku(ctx = "db2: Wdc4Db2File")]
+struct ZoneLightPointRecord {
+    #[deku(reader = "db2.read_field(deku::reader, 0)")]
+    pub coords: [f32; 2],
+    #[deku(reader = "db2.read_field(deku::reader, 1)")]
+    pub _point_order: u32,
 }
 
 #[derive(DekuRead, Debug, Clone)]
@@ -393,7 +458,7 @@ pub struct LightParamsRecord {
     #[deku(reader = "db2.read_field(deku::reader, 0)")]
     _celestial_overrides: Vec3,
     #[deku(reader = "db2.read_field(deku::reader, 1)")]
-    pub light_data_id: u32,
+    pub id: u32,
     #[deku(reader = "db2.read_field(deku::reader, 2)")]
     pub highlight_sky: bool,
     #[deku(reader = "db2.read_field(deku::reader, 3)")]
@@ -410,6 +475,8 @@ pub struct LightParamsRecord {
     pub ocean_deep_alpha: f32,
     #[deku(reader = "db2.read_field(deku::reader, 10)")]
     pub flags: f32,
+    #[deku(reader = "db2.read_field(deku::reader, 11)")]
+    pub unk: u32,
 }
 
 #[derive(DekuRead, Debug, Clone)]
@@ -491,6 +558,7 @@ pub struct LightResult {
     pub fog_end: f32,
     pub fog_scaler: f32,
     skyboxes: HashMap<String, (u16, f32)>,
+    total_alpha: f32,
 }
 
 #[derive(DekuRead, Debug, Clone)]
@@ -551,8 +619,10 @@ impl LightResult {
                 weight: *weight,
             });
         }
-        // sort lightboxes by weight, highest to lowest
-        result.sort_by(|a, b| b.weight.partial_cmp(&a.weight).unwrap());
+        // sort lightboxes by name for consistent rendering during tweening
+        result.sort_by(|a, b| {
+            a.name.partial_cmp(&b.name).unwrap()
+        });
         result
     }
 }
@@ -564,6 +634,7 @@ impl LightResult {
             skyboxes.insert(skybox.name.clone(), (skybox.flags, 1.0));
         }
         LightResult {
+            total_alpha: 1.0,
             glow: params.glow,
             water_shallow_alpha: params.water_shallow_alpha,
             water_deep_alpha: params.water_deep_alpha,
@@ -595,6 +666,7 @@ impl LightResult {
     }
 
     fn add_scaled(&mut self, other: &LightResult, t: f32) {
+        self.total_alpha += t;
         self.glow += other.glow * t;
         self.water_shallow_alpha += other.water_shallow_alpha * t;
         self.water_deep_alpha += other.water_deep_alpha * t;
@@ -629,6 +701,46 @@ impl LightResult {
             }
         }
     }
+
+    fn normalize(&mut self, default_light: &LightResult) {
+        if self.total_alpha < 1.0 {
+            self.add_scaled(default_light, 1.0 - self.total_alpha);
+        } else if self.total_alpha > 1.0 {
+            self.divide(self.total_alpha);
+        }
+    }
+
+    fn divide(&mut self, t: f32) {
+        self.glow /= t;
+        self.water_shallow_alpha /= t;
+        self.water_deep_alpha /= t;
+        self.ocean_shallow_alpha /= t;
+        self.ocean_deep_alpha /= t;
+        self.ambient_color /= t;
+        self.direct_color /= t;
+        self.sky_top_color /= t;
+        self.sky_middle_color /= t;
+        self.sky_band1_color /= t;
+        self.sky_band2_color /= t;
+        self.sky_smog_color /= t;
+        self.sky_fog_color /= t;
+        self.sun_color /= t;
+        self.cloud_sun_color /= t;
+        self.cloud_emissive_color /= t;
+        self.cloud_layer1_ambient_color /= t;
+        self.cloud_layer2_ambient_color /= t;
+        self.ocean_close_color /= t;
+        self.ocean_far_color /= t;
+        self.river_close_color /= t;
+        self.river_far_color /= t;
+        self.shadow_opacity /= t;
+        self.fog_end /= t;
+        self.fog_scaler /= t;
+
+        for entry in self.skyboxes.values_mut() {
+            entry.1 /= t;
+        }
+    }
 }
 
 impl Lerp for LightResult {
@@ -643,6 +755,7 @@ impl Lerp for LightResult {
         }
 
         LightResult {
+            total_alpha: self.total_alpha.lerp(other.total_alpha, t),
             glow: self.glow.lerp(other.glow, t),
             water_shallow_alpha: self.water_shallow_alpha.lerp(other.water_shallow_alpha, t),
             water_deep_alpha: self.water_deep_alpha.lerp(other.water_deep_alpha, t),
@@ -773,6 +886,48 @@ pub struct LiquidResult {
     pub tex5: String,
 }
 
+struct ZoneLightLookup {
+    zone_lights: DatabaseTable<ZoneLightRecord>,
+    points: HashMap<u32, Vec<Vec2>>, // zone light id -> points
+}
+
+impl ZoneLightLookup {
+    fn new(
+        zone_lights: DatabaseTable<ZoneLightRecord>,
+        zone_light_points: DatabaseTable<ZoneLightPointRecord>,
+    ) -> Self {
+        let mut points = HashMap::new();
+        for i in 0..zone_light_points.records.len() {
+            let record = &zone_light_points.records[i];
+            let zone_light_id = zone_light_points.foreign_keys.as_ref().unwrap()[i];
+            let pt = Vec2::new(record.coords[0], record.coords[1]);
+            points.entry(zone_light_id)
+                .or_insert(Vec::new())
+                .push(pt);
+        }
+        ZoneLightLookup {
+            zone_lights,
+            points,
+        }
+    }
+
+    pub fn lookup_light_id(&self, map_id: u16, x: f32, y: f32, z: f32) -> Option<(u16, f32)> {
+        let p = Vec2::new(x, y);
+        for i in 0..self.zone_lights.records.len() {
+            let record = &self.zone_lights.records[i];
+            let zone_light_id = self.zone_lights.ids[i];
+            if record.map_id == map_id && z >= record.z_min && z <= record.z_max {
+                let points = self.points.get(&zone_light_id).unwrap();
+                if point_inside_polygon(&p, points) {
+                    let dist = point_dist_to_polygon(&p, points);
+                    return Some((record.light_id, dist));
+                }
+            }
+        }
+        None
+    }
+}
+
 #[wasm_bindgen(js_name = "WowDatabase")]
 pub struct Database {
     lights: DatabaseTable<LightRecord>,
@@ -780,6 +935,7 @@ pub struct Database {
     light_params: DatabaseTable<LightParamsRecord>,
     light_skyboxes: DatabaseTable<LightSkyboxRecord>,
     liquid_types: DatabaseTable<LiquidType>,
+    zone_light_lookup: ZoneLightLookup,
 }
 
 #[wasm_bindgen(js_class = "WowDatabase")]
@@ -790,18 +946,24 @@ impl Database {
         light_params_db: &[u8],
         liquid_types_db: &[u8],
         light_skybox_db: &[u8],
+        zone_lights_db: &[u8],
+        zone_light_points_db: &[u8],
     ) -> Result<Database, String> {
         let lights = DatabaseTable::new(lights_db)?;
         let light_data = DatabaseTable::new(light_data_db)?;
         let light_params = DatabaseTable::new(light_params_db)?;
         let liquid_types = DatabaseTable::new(liquid_types_db)?;
         let light_skyboxes = DatabaseTable::new(light_skybox_db)?;
+        let zone_lights = DatabaseTable::new(zone_lights_db)?;
+        let zone_light_points = DatabaseTable::new(zone_light_points_db)?;
+        let zone_light_lookup = ZoneLightLookup::new(zone_lights, zone_light_points);
         Ok(Self {
             lights,
             light_data,
             light_params,
             liquid_types,
             light_skyboxes,
+            zone_light_lookup,
         })
     }
 
@@ -818,7 +980,7 @@ impl Database {
         let id = light.light_param_ids[0];
         assert!(id != 0);
 
-        let light_param = self.light_params.get_record(id as u32)?;
+        let light_param = self.get_light_param(id as u32)?;
         let skybox = self.light_skyboxes.get_record(light_param.skybox_id);
 
         // based on the given time, find the current and next LightDataRecord
@@ -845,7 +1007,7 @@ impl Database {
             }
         }
 
-        let current_light_data = current_light_data.unwrap();
+        let current_light_data = current_light_data?;
         let mut final_result = LightResult::new(current_light_data, light_param, skybox);
         if current_light_data.time != std::u32::MAX {
             if let Some(next) = next_light_data {
@@ -872,19 +1034,33 @@ impl Database {
         })
     }
 
+    fn get_light_param(&self, needle: u32) -> Option<&LightParamsRecord> {
+        self.light_params.records.iter()
+            .find(|param| param.id == needle)
+    }
+
+    fn lookup_zone_light(&self, map_id: u16, x: f32, y: f32, z:f32, time: u32) -> Option<(LightResult, f32)> {
+        let (zone_light, dist) = self.zone_light_lookup.lookup_light_id(map_id, x, y, z)?;
+        let light = self.lights.get_record(zone_light as u32)?;
+        Some((self.get_light_result(light, time)?, dist))
+    }
+
     pub fn get_lighting_data(&self, map_id: u16, x: f32, y: f32, z: f32, time: u32) -> LightResult {
-        let mut outer_lights: Vec<(LightResult, f32)> = Vec::new();
         let coord = Vec3 { x, y, z };
-        let default_light = self.get_default_light(map_id, time);
+        let mut result = LightResult::default();
 
         for light in &self.lights.records {
             if light.map_id == map_id {
                 match light.distance(&coord) {
-                    DistanceResult::Inner => return self.get_light_result(light, time).unwrap_or(default_light),
+                    DistanceResult::Inner => {
+                        if let Some(outer_light) = self.get_light_result(light, time) {
+                            result.add_scaled(&outer_light, 1.0);
+                        }
+                    },
                     DistanceResult::Outer(distance) => {
                         if let Some(outer_light) = self.get_light_result(light, time) {
                             let alpha = 1.0 - (distance - light.falloff_start) / (light.falloff_end - light.falloff_start);
-                            outer_lights.push((outer_light, alpha));
+                            result.add_scaled(&outer_light, alpha);
                         }
                     },
                     DistanceResult::None => {},
@@ -892,53 +1068,57 @@ impl Database {
             }
         }
 
-        if outer_lights.is_empty() {
-            return default_light;
-        }
-
-        outer_lights.sort_unstable_by(|(_, alpha_a), (_, alpha_b)| {
-            alpha_b.partial_cmp(alpha_a).unwrap()
-        });
-
-        let mut result = LightResult::default();
-        let mut total_alpha = 0.0;
-        for (outer_result, mut alpha) in &outer_lights {
-            if total_alpha >= 1.0 {
-                break;
+        // zone lights are defined by polygonal zones, and are only used in WOTLK
+        if let Some((zone_light, dist)) = self.lookup_zone_light(map_id, x, y, z, time) {
+            let threshold = 100.0;
+            // if we're approaching the border of another zone, smoothly taper off to the non-zone lighting
+            if dist < threshold {
+                result.add_scaled(&zone_light, dist / threshold);
+            } else if result.total_alpha < 1.0 {
+                // otherwise, just accept whatever alpha hasn't been taken by spherical lights
+                result.add_scaled(&zone_light, 1.0 - result.total_alpha);
             }
+        }
 
-            if total_alpha + alpha >= 1.0 {
-                alpha = 1.0 - total_alpha;
-            }
-            result.add_scaled(outer_result, alpha);
-            total_alpha += alpha;
-        }
-        if total_alpha < 1.0 {
-            result.add_scaled(&default_light, 1.0 - total_alpha);
-        }
+        result.normalize(&self.get_default_light(map_id, time));
 
         result
     }
 
     pub fn get_all_skyboxes(&self, map_id: u16) -> Vec<SkyboxMetadata> {
+        let mut light_ids = Vec::new();
         let mut names: HashSet<&str> = HashSet::new();
         let mut result = Vec::new();
-        for light in &self.lights.records {
+        for i in 0..self.lights.records.len() {
+            let light = &self.lights.records[i];
             if light.map_id == map_id {
-                let id = light.light_param_ids[0];
-                assert!(id != 0);
-                let Some(light_param) = self.light_params.get_record(id as u32) else {
-                    continue;
-                };
-                if let Some(skybox) = self.light_skyboxes.get_record(light_param.skybox_id) {
-                    if !names.contains(skybox.name.as_str()) {
-                        result.push(SkyboxMetadata {
-                            name: skybox.name.clone(),
-                            flags: skybox.flags,
-                            weight: 1.0,
-                        });
-                        names.insert(&skybox.name);
-                    }
+                light_ids.push(self.lights.ids[i]);
+            }
+        }
+
+        for zone_light in &self.zone_light_lookup.zone_lights.records {
+            light_ids.push(zone_light.light_id as u32);
+        }
+
+        let mut skybox_ids = HashSet::new();
+        for light_id in light_ids {
+            let light = self.lights.get_record(light_id).unwrap();
+            for param_id in light.light_param_ids {
+                if param_id == 0 { continue; }
+                let light_param = self.get_light_param(param_id as u32).unwrap();
+                skybox_ids.insert(light_param.skybox_id);
+            }
+        }
+
+        for skybox_id in skybox_ids {
+            if let Some(skybox) = self.light_skyboxes.get_record(skybox_id) {
+                if !names.contains(skybox.name.as_str()) {
+                    result.push(SkyboxMetadata {
+                        name: skybox.name.clone(),
+                        flags: skybox.flags,
+                        weight: 1.0,
+                    });
+                    names.insert(&skybox.name);
                 }
             }
         }
@@ -946,6 +1126,7 @@ impl Database {
     }
 }
 
+#[derive(Debug)]
 #[wasm_bindgen(js_name = "WowSkyboxMetadata", getter_with_clone)]
 pub struct SkyboxMetadata {
     pub name: String,
@@ -959,18 +1140,17 @@ mod test {
     use crate::wow::sheep::SheepfileManager;
 
     #[test]
-    fn test() {
+    fn test_lighting_data() {
         let sheep_path = "../data/WorldOfWarcraft/sheep0";
         let d1 = SheepfileManager::load_file_id_data(sheep_path, 1375579).unwrap(); // lightDbData
         let d2 = SheepfileManager::load_file_id_data(sheep_path, 1375580).unwrap(); // lightDataDbData
         let d3 = SheepfileManager::load_file_id_data(sheep_path, 1334669).unwrap(); // lightParamsDbData
         let d4 = SheepfileManager::load_file_id_data(sheep_path, 1371380).unwrap(); // liquidTypes
         let d5 = SheepfileManager::load_file_id_data(sheep_path, 1308501).unwrap(); // lightSkyboxData
-        let db = Database::new(&d1, &d2, &d3, &d4, &d5).unwrap();
-        let result = db.get_lighting_data(0, -8693.8720703125, 646.1775512695312, 125.26680755615234, 1440);
-        dbg!(result);
-
-        dbg!(db.get_liquid_type(2));
+        let d6: Vec<u8> = SheepfileManager::load_file_id_data(sheep_path, 1310253).unwrap(); // zoneLight
+        let d7: Vec<u8> = SheepfileManager::load_file_id_data(sheep_path, 1310256).unwrap(); // zoneLightPoint
+        let db = Database::new(&d1, &d2, &d3, &d4, &d5, &d6, &d7).unwrap();
+        dbg!(db.get_lighting_data(530, 2167.899169921875, 1723.90673828125, 299.3044738769531, 1440));
     }
 
     #[test]

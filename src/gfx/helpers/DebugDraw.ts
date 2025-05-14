@@ -339,7 +339,7 @@ export class DebugDraw {
 
     public drawDiscLineN(center: ReadonlyVec3, n: ReadonlyVec3, r: number, color: Color, sides = 32, options: DebugDrawOptions = { flags: DebugDrawFlags.Default }): void {
         branchlessONB(DebugDraw.scratchVec3[0], DebugDraw.scratchVec3[1], n);
-        this.drawDiscSolidRU(center, DebugDraw.scratchVec3[0], DebugDraw.scratchVec3[1], r, color, sides, options);
+        this.drawDiscLineRU(center, DebugDraw.scratchVec3[0], DebugDraw.scratchVec3[1], r, color, sides, options);
     }
 
     public drawDiscLineRU(center: ReadonlyVec3, right: ReadonlyVec3, up: ReadonlyVec3, r: number, color: Color, sides = 32, options: DebugDrawOptions = { flags: DebugDrawFlags.Default }): void {

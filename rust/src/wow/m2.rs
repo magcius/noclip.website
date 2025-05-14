@@ -41,7 +41,7 @@ pub struct M2Header {
     transparency_lookup_table: WowArray<u16>,
     texture_transforms_lookup_table: WowArray<u16>,
     pub bounding_box: AABBox,
-    pub _bounding_sphere_radius: f32,
+    pub bounding_sphere_radius: f32,
     pub _collision_box: AABBox,
     pub _collision_sphere_radius: f32,
     _collision_triangles: WowArray<u16>,
@@ -309,6 +309,10 @@ impl M2 {
 
     pub fn get_bounding_box(&self) -> AABBox {
         self.header.bounding_box
+    }
+
+    pub fn get_bounding_radius(&self) -> f32 {
+        self.header.bounding_sphere_radius
     }
 
     pub fn take_legacy_textures(&mut self) -> Vec<LegacyTexture> {
