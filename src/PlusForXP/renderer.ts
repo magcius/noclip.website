@@ -1,4 +1,5 @@
 import {
+    GfxBindingLayoutDescriptor,
     GfxBlendFactor,
     GfxBlendMode,
     GfxCompareMode,
@@ -14,7 +15,7 @@ import { TextureBase, TextureHolder } from "../TextureHolder";
 import { SCX } from "./scx/types";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { GfxRenderInstList, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
-import { preprocessProgramObj_GLSL } from "../gfx/shaderc/GfxShaderCompiler";
+import { GfxProgramObjBag, preprocessProgramObj_GLSL } from "../gfx/shaderc/GfxShaderCompiler";
 import { fillMatrix4x4, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { makeAttachmentClearDescriptor, makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers";
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph";
@@ -25,10 +26,95 @@ import { CameraController } from "../Camera";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { SceneNode, Simulation, WorldData } from "./types";
 import { SceneGfx, ViewerRenderInput } from "../viewer";
-import Plus4XPProgram from "./program";
 import * as UI from "../ui";
 import { updateNodeTransform } from "./util";
 import { World } from "./world";
+import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary";
+
+class StandardProgram implements GfxProgramObjBag {
+    public static bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 2, numSamplers: 2 }];
+
+    public static ub_CameraParams = 0;
+    public static ub_ObjectParams = 1;
+
+    public static a_Position = 0;
+    public static a_Normal = 1;
+    public static a_DiffuseColor = 2;
+    public static a_TexCoord = 3;
+
+    public both = `
+    ${GfxShaderLibrary.MatrixLibrary}
+
+    layout(std140, row_major) uniform ub_CameraParams {
+        mat4 u_Projection;
+        mat4 u_ViewMatrix;
+        mat4 u_ViewInverseMatrix;
+    };
+
+    layout(std140, row_major) uniform ub_ObjectParams {
+        mat4 u_ModelMatrix;
+        mat4 u_ModelInverseTransposeMatrix;
+        mat4 u_EnvMapMatrix;
+        vec4 u_EnvMapTint;
+        float u_reflective;
+    };
+
+    uniform sampler2D diffuseTexture;
+    uniform sampler2D envTexture;
+    `;
+
+    public vert: string = `
+    layout(location = ${StandardProgram.a_Position}) in vec3 a_Position;
+    layout(location = ${StandardProgram.a_Normal}) in vec3 a_Normal;
+    layout(location = ${StandardProgram.a_DiffuseColor}) in vec4 a_DiffuseColor;
+    layout(location = ${StandardProgram.a_TexCoord}) in vec2 a_TexCoord;
+
+    out vec4 v_DiffuseColor;
+    out vec2 v_DiffuseTexCoord;
+    out vec2 v_EnvTexCoord;
+
+    vec2 flipTexY(vec2 uv) {
+        return vec2(uv.x, 1.0 - uv.y);
+    }
+
+    void main() {
+    
+        vec4 position = vec4(a_Position, 1.0);
+        vec4 normal = vec4(a_Normal, 1.0);
+    
+        vec4 worldPosition = u_ModelMatrix * position;
+        vec4 viewPosition = u_ViewMatrix * worldPosition;
+        vec4 clipPosition = u_Projection * viewPosition;
+        gl_Position = clipPosition;
+
+        v_DiffuseColor = min(a_DiffuseColor, 1.0);
+        v_DiffuseTexCoord = flipTexY(a_TexCoord);
+
+    
+        vec3 e = normalize(worldPosition.xyz - u_ViewInverseMatrix[3].xyz);
+        vec3 n = normalize((u_ModelInverseTransposeMatrix * normal).xyz);
+    
+        vec3 r = reflect(e, n);
+        r = (u_EnvMapMatrix * vec4(r, 1.0)).xyz;
+        v_EnvTexCoord = flipTexY(normalize(r).xy * 0.5 + 0.5);
+    }
+    `;
+
+    public frag: string = `
+    in vec4 v_DiffuseColor;
+    in vec2 v_DiffuseTexCoord;
+    in vec2 v_EnvTexCoord;
+
+    void main() {
+        vec4 reflectiveColor = texture(SAMPLER_2D(envTexture), v_EnvTexCoord) * u_EnvMapTint;
+        vec4 diffuseColor = v_DiffuseColor * texture(SAMPLER_2D(diffuseTexture), v_DiffuseTexCoord);
+        gl_FragColor = vec4(
+        mix(diffuseColor, reflectiveColor, u_reflective).rgb, 
+        v_DiffuseColor.a * diffuseColor.a
+        );
+    }
+    `;
+}
 
 export default class Renderer implements SceneGfx {
     private inputLayout: GfxInputLayout;
@@ -87,7 +173,7 @@ export default class Renderer implements SceneGfx {
             ],
         });
         this.renderHelper = new GfxRenderHelper(device);
-        this.program = preprocessProgramObj_GLSL(device, new Plus4XPProgram());
+        this.program = preprocessProgramObj_GLSL(device, new StandardProgram());
         const samplerDescriptor = {
             wrapS: GfxWrapMode.Repeat,
             wrapT: GfxWrapMode.Repeat,
@@ -179,15 +265,15 @@ export default class Renderer implements SceneGfx {
 
     private prepareToRender(viewerInput: ViewerRenderInput, renderInstManager: GfxRenderInstManager) {
         const template = this.renderHelper.pushTemplateRenderInst();
-        template.setBindingLayouts(Plus4XPProgram.bindingLayouts);
+        template.setBindingLayouts(StandardProgram.bindingLayouts);
         const gfxProgram = renderInstManager.gfxRenderCache.createProgramSimple(this.program);
         template.setGfxProgram(gfxProgram);
 
         const cameraViewMatrix: mat4 = mat4.create();
 
         updateCameraParams: {
-            let cameraOffset = template.allocateUniformBuffer(Plus4XPProgram.ub_CameraParams, 16 * 3 /*3 Mat4x4*/);
-            const cameraBuffer = template.mapUniformBufferF32(Plus4XPProgram.ub_CameraParams);
+            let cameraOffset = template.allocateUniformBuffer(StandardProgram.ub_CameraParams, 16 * 3 /*3 Mat4x4*/);
+            const cameraBuffer = template.mapUniformBufferF32(StandardProgram.ub_CameraParams);
 
             this.lastViewerCameraMatrix ??= [...viewerInput.camera.worldMatrix].join("_");
 
@@ -248,8 +334,8 @@ export default class Renderer implements SceneGfx {
                 const envMap = (mesh.envID === undefined ? null : this.world.environmentMapsByID.get(mesh.envID)) ?? this.world.defaultEnvMap;
                 const renderInst = renderInstManager.newRenderInst();
                 updateObjectParams: {
-                    let objectOffset = renderInst.allocateUniformBuffer(Plus4XPProgram.ub_ObjectParams, 16 * 3 + 4 + 4 /*Mat4x3 * 3 + vec4 * 2*/);
-                    const object = renderInst.mapUniformBufferF32(Plus4XPProgram.ub_ObjectParams);
+                    let objectOffset = renderInst.allocateUniformBuffer(StandardProgram.ub_ObjectParams, 16 * 3 + 4 + 4 /*Mat4x3 * 3 + vec4 * 2*/);
+                    const object = renderInst.mapUniformBufferF32(StandardProgram.ub_ObjectParams);
                     objectOffset += fillMatrix4x4(object, objectOffset, node.worldTransform);
 
                     mat4.invert(this.scratchWorldInverseTransposeMatrix, node.worldTransform);

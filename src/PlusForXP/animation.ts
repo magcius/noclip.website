@@ -1,6 +1,8 @@
+import { lerp, saturate } from "../MathHelpers";
+import { getPointHermite } from "../Spline";
 import { SCX } from "./scx/types";
 
-type Interpolation = (toKey: SCX.Keyframe, fromKey: SCX.Keyframe, now: number, duration: number) => number;
+type Interpolation = (toKey: SCX.Keyframe, fromKey: SCX.Keyframe, time: number) => number;
 
 export type ChannelAnimation = {
     update: (delta: number, loop: boolean) => void;
@@ -9,18 +11,11 @@ export type ChannelAnimation = {
 
 export class Animation {
     static interpolations: Record<SCX.Interpolation, Interpolation> = {
-        [SCX.Interpolation.Linear]: (toKey, fromKey, now, duration) => {
-            const percent = Math.max(0, Math.min(1, now / duration));
-            return toKey.value * percent + fromKey.value * (1 - percent);
+        [SCX.Interpolation.Linear]: (toKey, fromKey, time) => {
+            return lerp(fromKey.value, toKey.value, time)
         },
-        [SCX.Interpolation.Hermite]: (toKey, fromKey, now, duration) => {
-            const p1 = Math.max(0, Math.min(1, now / duration));
-            const p2 = p1 ** 2;
-            const p3 = p1 ** 3;
-
-            const [r1, r2, r3, r4] = [+(2 * p3 - 3 * p2) + 1, -(2 * p3 - 3 * p2), p3 - p2 - p2 + p1, p3 - p2];
-
-            return r1 * fromKey.value + r2 * toKey.value + r3 * fromKey.tangentOut + r4 * toKey.tangentIn;
+        [SCX.Interpolation.Hermite]: (toKey, fromKey, time) => {
+            return getPointHermite(fromKey.value, toKey.value, fromKey.tangentOut, toKey.tangentIn, time);
         },
     } as const;
 
@@ -37,15 +32,15 @@ export class Animation {
     } as const;
 
     public static build = (transform: SCX.Transform, animations: SCX.KeyframeAnimation[]): ChannelAnimation[] => {
-        const builder = new Animation();
         animations = animations.filter(({ channel }) => Animation.channelModifiers[channel] !== null);
-        const durations = new Set<number>();
+        
+        let fullAnimDuration = 0;
         for (const anim of animations) {
             for (const keyframe of anim.keyframes) {
-                durations.add(keyframe.time / 1000);
+                fullAnimDuration = Math.max(fullAnimDuration, keyframe.time / 1000);
             }
         }
-        const fullAnimDuration = Math.max(...durations);
+        
         return animations.map((animation) => {
             const channelModifier = Animation.channelModifiers[animation.channel];
             const interpolation = Animation.interpolations[animation.interp];
@@ -68,7 +63,7 @@ export class Animation {
                 const [toKey, fromKey] = [keyframes.at(index)!, keyframes.at(index - 1)!];
                 const [toTime, fromTime] = [times.at(index)!, times.at(index - 1)! + (index === 0 ? -animDuration : 0)];
                 const tweenDuration = toTime - fromTime;
-                const currentValue = interpolation(toKey, fromKey, now - fromTime, tweenDuration);
+                const currentValue = interpolation(toKey, fromKey, saturate((now - fromTime) / tweenDuration));
                 channelModifier(transform, currentValue);
             };
 

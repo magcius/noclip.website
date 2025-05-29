@@ -3,6 +3,7 @@ import { Endianness, getSystemEndianness } from "../../endian";
 import ArrayBufferSlice from "../../ArrayBufferSlice";
 import { SCX } from "./types";
 import { Token, Numeric } from "./tokens";
+import { assert } from "../../util";
 
 type DataViewCall = (view: DataView, byteOffset: number) => number;
 const isLittleEndian = getSystemEndianness() === Endianness.LITTLE_ENDIAN;
@@ -110,7 +111,9 @@ export class Parser {
     }
 
     private parseVec3(): vec3 {
-        return this.parseNumberList().slice(0, 3);
+        const array = this.parseNumberList().slice(0, 3);
+        assert(array.length === 3);
+        return array;
     }
 
     // Enum parsers  // TODO: can these be unified somehow?

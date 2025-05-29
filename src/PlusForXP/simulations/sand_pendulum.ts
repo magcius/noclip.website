@@ -3,6 +3,7 @@ import { ViewerRenderInput } from "../../viewer";
 import { Simulation, SceneNode, Texture } from "../types";
 import { wrapNode, reparent, createDataBuffer, updateNodeTransform } from "../util";
 import {
+    GfxBindingLayoutDescriptor,
     GfxBlendFactor,
     GfxBlendMode,
     GfxBufferUsage,
@@ -22,8 +23,7 @@ import {
     GfxVertexBufferFrequency,
     GfxWrapMode,
 } from "../../gfx/platform/GfxPlatform";
-import Plus4XPSandProgram from "../sandProgram";
-import { preprocessProgramObj_GLSL } from "../../gfx/shaderc/GfxShaderCompiler";
+import { GfxProgramObjBag, preprocessProgramObj_GLSL } from "../../gfx/shaderc/GfxShaderCompiler";
 import { defaultMegaState, setAttachmentStateSimple } from "../../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { GfxrAttachmentSlot, GfxrGraphBuilder } from "../../gfx/render/GfxRenderGraph";
 import { GfxRenderInstList } from "../../gfx/render/GfxRenderInstManager";
@@ -31,6 +31,7 @@ import { GfxRenderHelper } from "../../gfx/render/GfxRenderHelper";
 import { fillVec4 } from "../../gfx/helpers/UniformBufferHelpers";
 import { lerp } from "../../MathHelpers";
 import { World } from "../world";
+import { GfxShaderLibrary } from "../../gfx/helpers/GfxShaderLibrary";
 
 type Swing = {
     name: string;
@@ -42,6 +43,83 @@ type Swing = {
     freqB: number;
     phaseB: number;
 };
+
+class SandProgram implements GfxProgramObjBag {
+    public static bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 1, numSamplers: 1 }];
+
+    public static ub_SandParams = 0;
+    public static a_Position = 0;
+    public static a_Order = 1;
+
+    public both = `
+    ${GfxShaderLibrary.MatrixLibrary}
+
+    layout(std140, row_major) uniform ub_SandParams {
+      vec2 u_LastPendulumPos;
+      vec2 u_PendulumPos;
+      float u_Fade;
+      float u_NumParticles;
+    };
+
+    uniform sampler2D sandTexture;
+
+    #define PI ${Math.PI}
+
+    float rand(vec2 co){
+        return fract(sin(dot(co, vec2(12.9898, 78.233))) * 43758.5453);
+    }
+    `;
+
+    public vert: string = `
+
+    layout(location = ${SandProgram.a_Position}) in vec2 a_Position;
+    layout(location = ${SandProgram.a_Order}) in float a_Order;
+
+    out vec2 v_TexCoord;
+    out vec2 v_Pos;
+
+    vec2 flipTexY(vec2 uv) {
+      return vec2(uv.x, 1.0 - uv.y);
+    }
+
+    void main() {
+      v_TexCoord = a_Position;
+      v_Pos = (a_Position * 2.0 - 1.0);
+
+      if (u_Fade <= 0.0) {
+        vec2 pendulumPos = mix(u_LastPendulumPos, u_PendulumPos, a_Order / u_NumParticles);
+        gl_Position = vec4(v_Pos * 0.04 + pendulumPos, 0.0, 1.0);
+        // gl_Position = vec4(v_Pos, 0.0, 1.0); // for debugging
+      } else {
+        gl_Position = vec4(v_Pos, 0.0, 1.0);
+      }
+    }
+    `;
+
+    public frag: string = `
+    in vec2 v_TexCoord;
+    in vec2 v_Pos;
+
+    void main() {
+
+      vec3 color = texture(SAMPLER_2D(sandTexture), v_TexCoord).rgb;
+      
+      if (u_Fade <= 0.0) {
+        if (length(v_Pos) > 1.0) {
+          discard;
+        } else {
+          gl_FragColor = vec4(color * mix(0.7, 1.4, sin(atan(v_Pos.y, v_Pos.x)) * 0.5 + 0.75 * rand(v_Pos)), 1.0 - length(v_Pos));
+        }
+      } else {
+        if (rand(v_Pos) > u_Fade) {
+          discard;
+        } else {
+          gl_FragColor = vec4(color, 1.0);
+        }
+      }
+    }
+  `;
+}
 
 export default class SandPendulum extends Simulation {
     swings: Swing[] = [
@@ -129,7 +207,7 @@ export default class SandPendulum extends Simulation {
         this.sparkleSprite = world.sceneNodesByName.get("Sparkle.scx/Plane01")!;
         this.sparkleSprite.isGhost = true;
 
-        this.sandProgram = preprocessProgramObj_GLSL(device, new Plus4XPSandProgram());
+        this.sandProgram = preprocessProgramObj_GLSL(device, new SandProgram());
         const sandTexturePath = "Pendulum_Sand_textures/Sand.tif";
         this.originalSandTexture = world.texturesByPath.get(sandTexturePath)!;
 
@@ -405,13 +483,13 @@ export default class SandPendulum extends Simulation {
 
         renderInstManager.setCurrentList(this.renderInstListSand);
 
-        template.setBindingLayouts(Plus4XPSandProgram.bindingLayouts);
+        template.setBindingLayouts(SandProgram.bindingLayouts);
         const gfxProgram = renderInstManager.gfxRenderCache.createProgramSimple(this.sandProgram);
         template.setGfxProgram(gfxProgram);
         template.setMegaStateFlags(this.megaStateFlags);
 
-        let offset = template.allocateUniformBuffer(Plus4XPSandProgram.ub_SandParams, 4 * 2);
-        const sand = template.mapUniformBufferF32(Plus4XPSandProgram.ub_SandParams);
+        let offset = template.allocateUniformBuffer(SandProgram.ub_SandParams, 4 * 2);
+        const sand = template.mapUniformBufferF32(SandProgram.ub_SandParams);
         offset += fillVec4(sand, offset, ...(this.lastCoord as [number, number]), ...(this.coord as [number, number]));
         offset += fillVec4(sand, offset, this.fade, this.numParticles);
         template.setSamplerBindingsFromTextureMappings([{ gfxTexture: this.originalSandTexture.gfxTexture!, gfxSampler: this.sampler, lateBinding: null }]);
