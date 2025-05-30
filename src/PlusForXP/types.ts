@@ -12,7 +12,7 @@ export type WorldData = {
     scenes: Record<string, { scene: SCX.Scene; envID?: string }>;
     textures: Texture[];
     environmentMaps: Record<string, EnvironmentMap>;
-    cameras: [string, string][];
+    cameras: {name: string, address: string}[];
     simulateFunc?: () => Simulation;
 };
 

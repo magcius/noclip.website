@@ -126,8 +126,8 @@ export default class Renderer implements SceneGfx {
 
     private world: World;
 
-    private cameras: [string, string | null][];
-    private activeCameraName: string | null = null;
+    private cameras: {name: string, address: string | null}[];
+    private activeCamera: number = 0;
 
     private simulation: Simulation | null;
     private cameraSelect: UI.SingleSelect;
@@ -136,6 +136,12 @@ export default class Renderer implements SceneGfx {
     private scratchViewMatrix = mat4.create();
     private scratchWorldInverseTransposeMatrix = mat4.create();
 
+    public onstatechanged!: () => void;
+
+    private get activeCameraAddress(): string | null {
+        return this.cameras[this.activeCamera].address;
+    }
+
     constructor(
         device: GfxDevice,
         worldData: WorldData,
@@ -143,7 +149,7 @@ export default class Renderer implements SceneGfx {
     ) {
         this.setupGraphics(device);
         this.world = new World(device, worldData);
-        this.cameras = [["FreeCam", null], ...worldData.cameras];
+        this.cameras = [{name: "FreeCam", address: null}, ...worldData.cameras];
         this.simulation = worldData.simulateFunc?.() ?? null;
         this.simulation?.setup?.(device, this.world);
     }
@@ -194,23 +200,32 @@ export default class Renderer implements SceneGfx {
         cameraPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
         cameraPanel.setTitle(UI.EYE_ICON, "Vantage Points");
         this.cameraSelect = new UI.SingleSelect();
-        this.cameraSelect.setStrings(this.cameras.map((a) => a[0]));
-        this.cameraSelect.onselectionchange = (strIndex: number) => {
-            const choice = this.cameras[strIndex];
-            this.activeCameraName = choice[1];
+        this.cameraSelect.setStrings(this.cameras.map(({name}) => name));
+        this.cameraSelect.onselectionchange = (index: number) => {
+            this.activeCamera = index;
             this.lastViewerCameraMatrix = null;
+            this.onstatechanged();
         };
-        this.cameraSelect.selectItem(1); // TODO: persist through serialize/deserialize
+        this.cameraSelect.selectItem(this.activeCamera);
         cameraPanel.contents.appendChild(this.cameraSelect.elem);
 
         return [cameraPanel];
     }
 
-    /*
-    serializeSaveState?(dst: ArrayBuffer, offs: number): number {}
-    deserializeSaveState?(src: ArrayBuffer, offs: number, byteLength: number): number {}
-    onstatechanged?: (() => void) | undefined;
-    */
+    public serializeSaveState(dst: ArrayBuffer, offs: number): number {
+        const view = new DataView(dst);
+        view.setUint8(offs++, this.activeCamera);
+        return offs;
+    }
+
+    public deserializeSaveState(src: ArrayBuffer, offs: number, byteLength: number): number {
+        const view = new DataView(src);
+        if (offs < byteLength) {
+            this.activeCamera = view.getUint8(offs++);
+            this.cameraSelect.selectItem(this.activeCamera);
+        }
+        return offs;
+    }
 
     render(device: GfxDevice, viewerInput: ViewerRenderInput): void {
         const { deltaTime } = viewerInput;
@@ -241,7 +256,7 @@ export default class Renderer implements SceneGfx {
         if (this.animating) {
             const cameraWorldPos = mat4.getTranslation(
                 vec3.create(),
-                this.activeCameraName !== null ? this.world.sceneNodesByName.get(this.activeCameraName)!.worldTransform : viewerInput.camera.worldMatrix,
+                this.activeCameraAddress !== null ? this.world.sceneNodesByName.get(this.activeCameraAddress)!.worldTransform : viewerInput.camera.worldMatrix,
             );
             this.simulation?.render(this.renderHelper, builder, cameraWorldPos);
         }
@@ -277,9 +292,9 @@ export default class Renderer implements SceneGfx {
 
             this.lastViewerCameraMatrix ??= [...viewerInput.camera.worldMatrix].join("_");
 
-            if (this.activeCameraName !== null) {
-                const camera: SCX.Camera = this.world.camerasByName.get(this.activeCameraName)!;
-                const cameraNode: SceneNode = this.world.sceneNodesByName.get(this.activeCameraName)!;
+            if (this.activeCameraAddress !== null) {
+                const camera: SCX.Camera = this.world.camerasByName.get(this.activeCameraAddress)!;
+                const cameraNode: SceneNode = this.world.sceneNodesByName.get(this.activeCameraAddress)!;
 
                 this.world.customCamera.clipSpaceNearZ = viewerInput.camera.clipSpaceNearZ;
                 this.world.customCamera.setPerspective(camera.fov, viewerInput.camera.aspect, camera.nearclip, camera.farclip);
@@ -291,8 +306,9 @@ export default class Renderer implements SceneGfx {
                 mat4.rotateY(this.scratchViewMatrix, this.scratchViewMatrix, -Math.PI / 2 - Math.atan2(relativePos[2], relativePos[0]));
                 mat4.rotateX(this.scratchViewMatrix, this.scratchViewMatrix, Math.atan2(relativePos[1], Math.sqrt(relativePos[0] ** 2 + relativePos[2] ** 2)));
 
-                if (this.activeCameraName !== null && this.lastViewerCameraMatrix !== [...viewerInput.camera.worldMatrix].join("_")) {
-                    this.cameraSelect.selectItem(0);
+                if (this.lastViewerCameraMatrix !== [...viewerInput.camera.worldMatrix].join("_")) {
+                    this.activeCamera = 0;
+                    this.cameraSelect.selectItem(this.activeCamera);
                     mat4.copy(viewerInput.camera.worldMatrix, this.scratchViewMatrix);
                     viewerInput.camera.worldMatrixUpdated();
                     cameraOffset += fillMatrix4x4(cameraBuffer, cameraOffset, viewerInput.camera.projectionMatrix);

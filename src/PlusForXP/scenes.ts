@@ -15,7 +15,7 @@ type SceneSource = { envID?: string } & ({ type: "fetched"; path: string; count?
 
 type Variant = {
     name: string;
-    cameras: [string, string][];
+    cameras: {name: string, address: string}[];
     scenes: SceneSource[];
     environmentMaps: Record<string, EnvironmentMap>;
     createSimulation: () => Simulation;
@@ -29,7 +29,7 @@ const screensavers: Record<string, Screensaver> = {
         variants: {
             cavern: {
                 name: "Cavern",
-                cameras: [["Dolly", "Mercury_Pool_Cave_Camera.scx/Camera02"]],
+                cameras: [{name: "Dolly", address: "Mercury_Pool_Cave_Camera.scx/Camera02"}],
                 scenes: [
                     { type: "fetched", path: "Mercury_Pool_Cave_Scene.scx" },
                     { type: "fetched", path: "Mercury_Pool_Cave_Camera.scx" },
@@ -44,7 +44,7 @@ const screensavers: Record<string, Screensaver> = {
             },
             industrial: {
                 name: "Industrial",
-                cameras: [["Orbit", "Mercury_Pool_Tech_Camera.scx/Camera01"]],
+                cameras: [{name: "Orbit", address: "Mercury_Pool_Tech_Camera.scx/Camera01"}],
                 scenes: [
                     { type: "fetched", path: "Mercury_Pool_Tech_Scene.scx" },
                     { type: "fetched", path: "Mercury_Pool_Tech_Camera.scx" },
@@ -67,8 +67,8 @@ const screensavers: Record<string, Screensaver> = {
             classic: {
                 name: "Classic",
                 cameras: [
-                    ["Coaster", "Balance_Camera_Coaster.scx/Camera02"],
-                    ["Orbit", "Balance_Camera_Orbit.scx/Camera01"],
+                    {name: "Coaster", address: "Balance_Camera_Coaster.scx/Camera02"},
+                    {name: "Orbit", address: "Balance_Camera_Orbit.scx/Camera01"},
                 ],
                 scenes: [
                     { type: "fetched", path: "Balance_Scene.scx" },
@@ -91,8 +91,8 @@ const screensavers: Record<string, Screensaver> = {
             arena: {
                 name: "Arena",
                 cameras: [
-                    ["Coaster", "Balance_Camera_Coaster.scx/Camera02"],
-                    ["Orbit", "Balance_Camera_Orbit.scx/Camera01"],
+                    {name: "Coaster", address: "Balance_Camera_Coaster.scx/Camera02"},
+                    {name: "Orbit", address: "Balance_Camera_Orbit.scx/Camera01"},
                 ],
                 scenes: [
                     { type: "fetched", path: "Balance_Tech_Scene.scx" },
@@ -119,8 +119,8 @@ const screensavers: Record<string, Screensaver> = {
             grotto: {
                 name: "Grotto",
                 cameras: [
-                    ["Coaster", "Pendulum_Camera_Closeup.scx/Camera02"],
-                    ["Orbit", "Pendulum_Camera_Orbit.scx/Camera01"],
+                    {name: "Coaster", address: "Pendulum_Camera_Closeup.scx/Camera02"},
+                    {name: "Orbit", address: "Pendulum_Camera_Orbit.scx/Camera01"},
                 ],
                 scenes: [
                     { type: "fetched", path: "Pendulum_Camera_Orbit.scx" },
@@ -140,8 +140,8 @@ const screensavers: Record<string, Screensaver> = {
             checkerboard: {
                 name: "Checkerboard",
                 cameras: [
-                    ["Coaster", "Pendulum_Camera_Closeup.scx/Camera02"],
-                    ["Orbit", "Pendulum_Camera_Orbit.scx/Camera01"],
+                    {name: "Coaster", address: "Pendulum_Camera_Closeup.scx/Camera02"},
+                    {name: "Orbit", address: "Pendulum_Camera_Orbit.scx/Camera01"},
                 ],
                 scenes: [
                     { type: "fetched", path: "Pendulum_Camera_Orbit.scx" },
