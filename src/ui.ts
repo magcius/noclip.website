@@ -56,6 +56,7 @@ export const RENDER_HACKS_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBo
 export const SAND_CLOCK_ICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" height="20" fill="white"><g><path d="M79.3,83.3h-6.2H24.9h-6.2c-1.7,0-3,1.3-3,3s1.3,3,3,3h60.6c1.7,0,3-1.3,3-3S81,83.3,79.3,83.3z"/><path d="M18.7,14.7h6.2h48.2h6.2c1.7,0,3-1.3,3-3s-1.3-3-3-3H18.7c-1.7,0-3,1.3-3,3S17,14.7,18.7,14.7z"/><path d="M73.1,66c0-0.9-0.4-1.8-1.1-2.4L52.8,48.5L72,33.4c0.7-0.6,1.1-1.4,1.1-2.4V20.7H24.9V31c0,0.9,0.4,1.8,1.1,2.4l19.1,15.1   L26,63.6c-0.7,0.6-1.1,1.4-1.1,2.4v11.3h48.2V66z"/></g></svg>';
 export const VR_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" height="20" fill="white"><g><path d="M29,8H3A1,1,0,0,0,2,9V23a1,1,0,0,0,1,1H13a1,1,0,0,0,1-.83l.66-4A1.36,1.36,0,0,1,16,18a1.38,1.38,0,0,1,1.36,1.26L18,23.17A1,1,0,0,0,19,24H29a1,1,0,0,0,1-1V9A1,1,0,0,0,29,8ZM8.5,19A3.5,3.5,0,1,1,12,15.5,3.5,3.5,0,0,1,8.5,19Zm15,0A3.5,3.5,0,1,1,27,15.5,3.5,3.5,0,0,1,23.5,19Z"/></g></svg>`;
 export const CUTSCENE_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 142.448 142.448" height="20" fill="white"><g><path d="M142.411,68.9C141.216,31.48,110.968,1.233,73.549,0.038c-20.361-0.646-39.41,7.104-53.488,21.639 C6.527,35.65-0.584,54.071,0.038,73.549c1.194,37.419,31.442,67.667,68.861,68.861c0.779,0.025,1.551,0.037,2.325,0.037 c19.454,0,37.624-7.698,51.163-21.676C135.921,106.799,143.033,88.377,142.411,68.9z M111.613,110.336 c-10.688,11.035-25.032,17.112-40.389,17.112c-0.614,0-1.228-0.01-1.847-0.029c-29.532-0.943-53.404-24.815-54.348-54.348 c-0.491-15.382,5.122-29.928,15.806-40.958c10.688-11.035,25.032-17.112,40.389-17.112c0.614,0,1.228,0.01,1.847,0.029 c29.532,0.943,53.404,24.815,54.348,54.348C127.91,84.76,122.296,99.306,111.613,110.336z"></path> <path d="M94.585,67.086L63.001,44.44c-3.369-2.416-8.059-0.008-8.059,4.138v45.293 c0,4.146,4.69,6.554,8.059,4.138l31.583-22.647C97.418,73.331,97.418,69.118,94.585,67.086z"></path> </g></svg>`
+export const EYE_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" fill="none"><path d="M15.0007 12C15.0007 13.6569 13.6576 15 12.0007 15C10.3439 15 9.00073 13.6569 9.00073 12C9.00073 10.3431 10.3439 9 12.0007 9C13.6576 9 15.0007 10.3431 15.0007 12Z" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.0012 5C7.52354 5 3.73326 7.94288 2.45898 12C3.73324 16.0571 7.52354 19 12.0012 19C16.4788 19 20.2691 16.0571 21.5434 12C20.2691 7.94291 16.4788 5 12.0012 5Z" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 
 export function setChildren(parent: Element, children: Element[]): void {
     // We want to swap children around without removing them, since removing them will cause
@@ -1264,7 +1265,7 @@ class FrameDebouncer {
         if (this.timeoutId !== null)
             this.clear();
         if (this.callback !== null)
-            this.timeoutId = setTimeout(this.onframe, this.timeout);
+            this.timeoutId = window.setTimeout(this.onframe, this.timeout);
     }
 
     public clear() {

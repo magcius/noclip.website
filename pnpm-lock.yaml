@@ -20,6 +20,9 @@ importers:
       reflect-metadata:
         specifier: ^0.2.2
         version: 0.2.2
+      tiff:
+        specifier: ^6.1.1
+        version: 6.1.1
     devDependencies:
       '@rsbuild/core':
         specifier: ^1.1.12
@@ -542,6 +545,9 @@ packages:
   inherits@2.0.4:
     resolution: {integrity: sha512-k/vGaX4/Yla3WzyMCvTQOXYeIHvqOKtnqBduzTHpzpQZzAskKMhZ2K+EnBiSM9zGSoIFeMpXKxa4dYeZIQqewQ==}
 
+  iobuffer@5.3.2:
+    resolution: {integrity: sha512-kO3CjNfLZ9t+tHxAMd+Xk4v3D/31E91rMs1dHrm7ikEQrlZ8mLDbQ4z3tZfDM48zOkReas2jx8MWSAmN9+c8Fw==}
+
   is-binary-path@2.1.0:
     resolution: {integrity: sha512-ZMERYes6pDydyuGidse7OsHxtbI7WVeUEozgR/g7rd0xUimYNlvZRE/K2MgZTjWy725IfelLeVcEM97mmtRGXw==}
     engines: {node: '>=8'}
@@ -626,6 +632,9 @@ packages:
     resolution: {integrity: sha512-ZJcqsPiWUAUpvmnJri5TPBooqJOPmC0ttN65juhN15Q8xA+Nbg3BaxBHXQ45EistKKlKElb0edmbPWnKSBkvMg==}
     hasBin: true
 
+  pako@2.1.0:
+    resolution: {integrity: sha512-w+eufiZ1WuJYgPXbV/PO3NCMEc3xqylkKHzp8bxp1uW4qaSNQUkwmLLEc3kKsfz8lpV1F8Ht3U1Cm+9Srog2ug==}
+
   parseurl@1.3.3:
     resolution: {integrity: sha512-CiyeOxFT/JZyN5m0z9PfXw4SCBJ6Sygz1Dpl0wqjlhDEGGBP1GnsUVEL0p63hoG1fcj3fHynXi9NYO4nWOL+qQ==}
     engines: {node: '>= 0.8'}
@@ -699,6 +708,9 @@ packages:
     engines: {node: '>=10.18'}
     peerDependencies:
       tslib: ^2
+
+  tiff@6.1.1:
+    resolution: {integrity: sha512-HN+1xJ6qeTFNNv/2xTgkEINhLUBMEWe9YnUuw3hdLGGgeQOMtKC8JjL4cpKhFThmcSfPrpZ2pYVd3k7XNKLAlQ==}
 
   to-regex-range@5.0.1:
     resolution: {integrity: sha512-65P7iz6X5yEr1cwcgvQxbbIw7Uk3gOy5dIdtZ4rDveLqhrdJP+Li/Hx6tyK0NEb+2GCyneCMJiGqrADCSNk8sQ==}
@@ -1157,6 +1169,8 @@ snapshots:
 
   inherits@2.0.4: {}
 
+  iobuffer@5.3.2: {}
+
   is-binary-path@2.1.0:
     dependencies:
       binary-extensions: 2.3.0
@@ -1233,6 +1247,8 @@ snapshots:
       ignore: 5.3.2
       tree-kill: 1.2.2
 
+  pako@2.1.0: {}
+
   parseurl@1.3.3: {}
 
   path-is-absolute@1.0.1: {}
@@ -1300,6 +1316,11 @@ snapshots:
   thingies@1.21.0(tslib@2.8.1):
     dependencies:
       tslib: 2.8.1
+
+  tiff@6.1.1:
+    dependencies:
+      iobuffer: 5.3.2
+      pako: 2.1.0
 
   to-regex-range@5.0.1:
     dependencies:
