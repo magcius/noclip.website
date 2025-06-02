@@ -5,6 +5,7 @@ import { getDescendants } from "../util";
 import { GfxBuffer, GfxDevice } from "../../gfx/platform/GfxPlatform";
 import { SCX } from "../scx/types";
 import { World } from "../world";
+import { GfxRenderHelper } from "../../gfx/render/GfxRenderHelper";
 
 const numSegments = 32;
 const numVertexRows = numSegments + 1;
@@ -113,7 +114,8 @@ export class MercuryPool extends Simulation {
     private poolNormalAttribute: DynamicAttribute;
     private poolScale: number;
 
-    override setup(device: GfxDevice, world: World): void {
+    override setup(device: GfxDevice, renderHelper: GfxRenderHelper, world: World): void {
+        super.setup(device, renderHelper, world);
         const dropTemplate = {
             initialized: false,
             startTime: 0,
@@ -181,7 +183,7 @@ export class MercuryPool extends Simulation {
         }
     }
 
-    override update(device: GfxDevice, input: ViewerRenderInput): void {
+    override update(input: ViewerRenderInput): void {
         const { time } = input;
 
         if (!this.isInitialized) {
@@ -266,8 +268,8 @@ export class MercuryPool extends Simulation {
             vec3.add(this.poolNormals[index2], this.poolNormals[index2], v0);
         }
 
-        device.uploadBufferData(this.poolPositionAttribute.buffer, 0, this.poolPositionAttribute.uint8Array);
-        device.uploadBufferData(this.poolNormalAttribute.buffer, 0, this.poolNormalAttribute.uint8Array);
+        this.device.uploadBufferData(this.poolPositionAttribute.buffer, 0, this.poolPositionAttribute.uint8Array);
+        this.device.uploadBufferData(this.poolNormalAttribute.buffer, 0, this.poolNormalAttribute.uint8Array);
     }
 
     static createDropPosition(range: [number, number]): [number, number] {

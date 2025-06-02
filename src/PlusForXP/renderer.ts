@@ -7,6 +7,7 @@ import {
     GfxDevice,
     GfxFormat,
     GfxInputLayout,
+    GfxProgram,
     GfxRenderProgramDescriptor,
     GfxSampler,
     GfxVertexBufferFrequency,
@@ -121,6 +122,7 @@ export default class Renderer implements SceneGfx {
     private renderHelper: GfxRenderHelper;
     private renderInstListMain = new GfxRenderInstList();
     private program: GfxRenderProgramDescriptor;
+    private gfxProgram: GfxProgram;
     private diffuseSampler: GfxSampler;
     private envSampler: GfxSampler;
 
@@ -151,7 +153,7 @@ export default class Renderer implements SceneGfx {
         this.world = new World(device, worldData);
         this.cameras = [{name: "FreeCam", address: null}, ...worldData.cameras];
         this.simulation = worldData.simulateFunc?.() ?? null;
-        this.simulation?.setup?.(device, this.world);
+        this.simulation?.setup?.(device, this.renderHelper, this.world);
     }
 
     private setupGraphics(device: GfxDevice) {
@@ -180,6 +182,7 @@ export default class Renderer implements SceneGfx {
         });
         this.renderHelper = new GfxRenderHelper(device);
         this.program = preprocessProgramObj_GLSL(device, new StandardProgram());
+        this.gfxProgram = device.createProgram(this.program);
         const samplerDescriptor = {
             wrapS: GfxWrapMode.Repeat,
             wrapT: GfxWrapMode.Repeat,
@@ -232,7 +235,7 @@ export default class Renderer implements SceneGfx {
         this.animating = deltaTime > 0;
 
         if (this.animating) {
-            this.simulation?.update?.(device, viewerInput);
+            this.simulation?.update?.(viewerInput);
             for (const node of this.world.animatableNodes) {
                 if (!node.animates) {
                     continue;
@@ -258,7 +261,7 @@ export default class Renderer implements SceneGfx {
                 vec3.create(),
                 this.activeCameraAddress !== null ? this.world.sceneNodesByName.get(this.activeCameraAddress)!.worldTransform : viewerInput.camera.worldMatrix,
             );
-            this.simulation?.render(this.renderHelper, builder, cameraWorldPos);
+            this.simulation?.render(builder, cameraWorldPos);
         }
 
         builder.pushPass((pass) => {
@@ -281,8 +284,7 @@ export default class Renderer implements SceneGfx {
     private prepareToRender(viewerInput: ViewerRenderInput, renderInstManager: GfxRenderInstManager) {
         const template = this.renderHelper.pushTemplateRenderInst();
         template.setBindingLayouts(StandardProgram.bindingLayouts);
-        const gfxProgram = renderInstManager.gfxRenderCache.createProgramSimple(this.program);
-        template.setGfxProgram(gfxProgram);
+        template.setGfxProgram(this.gfxProgram);
 
         const cameraViewMatrix: mat4 = mat4.create();
 
@@ -391,11 +393,12 @@ export default class Renderer implements SceneGfx {
     }
 
     destroy(device: GfxDevice): void {
-        this.simulation?.destroy(device);
+        this.simulation?.destroy();
         this.simulation = null;
         this.world.destroy(device);
         this.textureHolder.destroy(device);
         this.renderHelper.destroy();
+        device.destroyProgram(this.gfxProgram);
         device.destroySampler(this.diffuseSampler);
         device.destroySampler(this.envSampler);
     }

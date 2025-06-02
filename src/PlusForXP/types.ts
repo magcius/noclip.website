@@ -66,9 +66,16 @@ export type SceneNode = {
 };
 
 export abstract class Simulation {
-    setup(device: GfxDevice, world: World): void {}
-    update(device: GfxDevice, input: ViewerRenderInput): void {}
-    render(renderHelper: GfxRenderHelper, builder: GfxrGraphBuilder, cameraWorldPos: vec3): void {}
+    protected device: GfxDevice;
+    protected renderHelper: GfxRenderHelper;
+    protected world: World;
+    setup(device: GfxDevice, renderHelper: GfxRenderHelper, world: World): void {
+        this.device = device;
+        this.renderHelper = renderHelper;
+        this.world = world;
+    }
+    update(input: ViewerRenderInput): void {}
+    render(builder: GfxrGraphBuilder, cameraWorldPos: vec3): void {}
     renderReset(): void {}
-    destroy(device: GfxDevice): void {}
+    destroy(): void {}
 }

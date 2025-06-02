@@ -13,6 +13,7 @@ import {
     GfxInputLayout,
     GfxMegaStateDescriptor,
     GfxMipFilterMode,
+    GfxProgram,
     GfxRenderProgramDescriptor,
     GfxSampler,
     GfxTexFilterMode,
@@ -193,13 +194,15 @@ export default class SandPendulum extends Simulation {
     private numParticles = 3;
     private indexCount = 6 * this.numParticles;
     private sampler: GfxSampler;
+    private gfxProgram: GfxProgram;
     private renderInstListSand = new GfxRenderInstList();
 
     private pickRandomSwing() {
         this.swing = this.swings[Math.floor(Math.random() * this.swings.length)];
     }
 
-    override setup(device: GfxDevice, world: World): void {
+    override setup(device: GfxDevice, renderHelper: GfxRenderHelper, world: World): void {
+        super.setup(device, renderHelper, world);
         this.isGrotto = world.sceneNodesByName.has("Pendulum_SW_Pendulum.scx/Pendulum Arrowhead");
         this.pendulum = world.sceneNodesByName.get(this.isGrotto ? "Pendulum_SW_Pendulum.scx/Pendulum Arrowhead" : "Pendulum_Pendulum.scx/Pendulum")!;
         this.sandParticles = world.sceneNodesByName.get("Pendulum_Sand_Particles.scx/_root")!;
@@ -208,6 +211,7 @@ export default class SandPendulum extends Simulation {
         this.sparkleSprite.isGhost = true;
 
         this.sandProgram = preprocessProgramObj_GLSL(device, new SandProgram());
+        this.gfxProgram = device.createProgram(this.sandProgram);
         const sandTexturePath = "Pendulum_Sand_textures/Sand.tif";
         this.originalSandTexture = world.texturesByPath.get(sandTexturePath)!;
 
@@ -371,7 +375,7 @@ export default class SandPendulum extends Simulation {
         this.sparkle.transformChanged = true;
     }
 
-    override update(device: GfxDevice, input: ViewerRenderInput): void {
+    override update(input: ViewerRenderInput): void {
         const time = input.time * 0.0032;
 
         this.energy *= lerp(this.swing.finalDecay, this.swing.decay, Math.pow(this.energy, 0.02));
@@ -449,7 +453,7 @@ export default class SandPendulum extends Simulation {
         this.pendulum.transformChanged = true;
     }
 
-    override render(renderHelper: GfxRenderHelper, builder: GfxrGraphBuilder, cameraWorldPos: vec3): void {
+    override render(builder: GfxrGraphBuilder, cameraWorldPos: vec3): void {
         if (this.isResetting) {
             const pos = mat4.getTranslation(vec3.create(), this.sparkle.worldTransform);
             const dir = vec3.sub(vec3.create(), pos, cameraWorldPos);
@@ -469,23 +473,23 @@ export default class SandPendulum extends Simulation {
             return;
         }
 
-        const { renderInstManager } = renderHelper;
+        const { renderInstManager } = this.renderHelper;
 
         builder.pushPass((pass) => {
             pass.setDebugName("Sand");
             pass.attachTexture(GfxrAttachmentSlot.Color0, this.gfxTexture);
             pass.exec((passRenderer) => {
-                this.renderInstListSand.drawOnPassRenderer(renderHelper.renderCache, passRenderer);
+                this.renderInstListSand.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
 
-        const template = renderHelper.pushTemplateRenderInst();
+        const template = this.renderHelper.pushTemplateRenderInst();
 
         renderInstManager.setCurrentList(this.renderInstListSand);
 
         template.setBindingLayouts(SandProgram.bindingLayouts);
-        const gfxProgram = renderInstManager.gfxRenderCache.createProgramSimple(this.sandProgram);
-        template.setGfxProgram(gfxProgram);
+
+        template.setGfxProgram(this.gfxProgram);
         template.setMegaStateFlags(this.megaStateFlags);
 
         let offset = template.allocateUniformBuffer(SandProgram.ub_SandParams, 4 * 2);
@@ -505,11 +509,12 @@ export default class SandPendulum extends Simulation {
         this.renderInstListSand.reset();
     }
 
-    override destroy(device: GfxDevice): void {
-        device.destroyTexture(this.originalSandTexture.gfxTexture!);
-        device.destroyBuffer(this.vertexAttributes[0].buffer);
-        device.destroyBuffer(this.vertexAttributes[1].buffer);
-        device.destroyBuffer(this.indexBufferDescriptor.buffer);
-        device.destroySampler(this.sampler);
+    override destroy(): void {
+        this.device.destroyProgram(this.gfxProgram);
+        this.device.destroyTexture(this.originalSandTexture.gfxTexture!);
+        this.device.destroyBuffer(this.vertexAttributes[0].buffer);
+        this.device.destroyBuffer(this.vertexAttributes[1].buffer);
+        this.device.destroyBuffer(this.indexBufferDescriptor.buffer);
+        this.device.destroySampler(this.sampler);
     }
 }
