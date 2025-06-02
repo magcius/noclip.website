@@ -1,12 +1,10 @@
 import { vec3 } from "gl-matrix";
-import { Endianness, getSystemEndianness } from "../../endian";
 import ArrayBufferSlice from "../../ArrayBufferSlice";
 import { SCX } from "./types";
 import { Token, Numeric } from "./tokens";
 import { assert } from "../../util";
 
 type DataViewCall = (view: DataView, byteOffset: number) => number;
-const isLittleEndian = getSystemEndianness() === Endianness.LITTLE_ENDIAN;
 
 const appended = <T>(a: T[] | undefined, v: T): T[] => {
     a ??= [];
@@ -72,12 +70,12 @@ export class Parser {
         };
 
     private static numericParsers: Record<Numeric, (parser: Parser) => number> = {
-        [Numeric.Number]: Parser.createDataParser(4, (view, offset) => view.getFloat32(offset, isLittleEndian)),
-        [Numeric.Integer]: Parser.createDataParser(4, (view, offset) => view.getInt32(offset, isLittleEndian)),
+        [Numeric.Number]: Parser.createDataParser(4, (view, offset) => view.getFloat32(offset, true)),
+        [Numeric.Integer]: Parser.createDataParser(4, (view, offset) => view.getInt32(offset, true)),
         [Numeric.Byte]: Parser.createDataParser(1, (view, offset) => view.getInt8(offset)),
         [Numeric.UnsignedByte]: Parser.createDataParser(1, (view, offset) => view.getUint8(offset)),
-        [Numeric.Word]: Parser.createDataParser(2, (view, offset) => view.getInt16(offset, isLittleEndian)),
-        [Numeric.UnsignedWord]: Parser.createDataParser(2, (view, offset) => view.getUint16(offset, isLittleEndian)),
+        [Numeric.Word]: Parser.createDataParser(2, (view, offset) => view.getInt16(offset, true)),
+        [Numeric.UnsignedWord]: Parser.createDataParser(2, (view, offset) => view.getUint16(offset, true)),
     };
 
     private parseNumber(numeric?: Numeric) {
