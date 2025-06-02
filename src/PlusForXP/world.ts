@@ -147,7 +147,11 @@ export class World {
 
             const material = this.materialsByName.get(sceneName + mesh.shader) ?? this.fallbackMaterial;
             if (material === this.fallbackMaterial) {
-                console.warn(`Missing shader ${mesh.shader} on mesh in ${object.name} of scene ${sceneName}. Falling back to default material.`);
+                if (mesh.shader === 0) {
+                    // console.log(`${sceneName}${object.name} uses fallback shader`);
+                } else {
+                    console.warn(`${sceneName}${object.name} uses undeclared shader ${mesh.shader}`);
+                }
             }
 
             const diffuseColorBuffer = device.createBuffer(mesh.vertexcount * 4, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static);

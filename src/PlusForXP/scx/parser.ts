@@ -114,48 +114,13 @@ export class Parser {
         return array;
     }
 
-    // Enum parsers  // TODO: can these be unified somehow?
-
-    private parseOff(): SCX.Off {
+    private parseEnum<E extends {[key: number]: string | number}>(enumInst: E): E[keyof E] {
         const token = this.bytes[this.offset++];
-        const enumValues = Object.values(SCX.Off);
-        if (enumValues.includes(token)) return token;
-        console.warn("Invalid off type.");
-        return enumValues[0] as SCX.Off;
+        const enumValues = Object.values(enumInst);
+        assert(enumValues.includes(token));
+        return token as E[keyof E];
     }
-
-    private parseLightType(): SCX.LightType {
-        const token = this.bytes[this.offset++];
-        const enumValues = Object.values(SCX.LightType);
-        if (enumValues.includes(token)) return token;
-        console.warn("Invalid light type.");
-        return enumValues[0] as SCX.LightType;
-    }
-
-    private parseKeyframeChannel(): SCX.KeyframeAnimationChannel {
-        const token = this.bytes[this.offset++];
-        const enumValues = Object.values(SCX.KeyframeAnimationChannel);
-        if (enumValues.includes(token)) return token;
-        console.warn("Invalid keyframe channel.");
-        return enumValues[0] as SCX.KeyframeAnimationChannel;
-    }
-
-    private parseExtrapolation(): SCX.Extrapolation {
-        const token = this.bytes[this.offset++];
-        const enumValues = Object.values(SCX.Extrapolation);
-        if (enumValues.includes(token)) return token;
-        console.warn("Invalid extrapolation.");
-        return enumValues[0] as SCX.Extrapolation;
-    }
-
-    private parseInterpolation(): SCX.Interpolation {
-        const token = this.bytes[this.offset++];
-        const enumValues = Object.values(SCX.Interpolation);
-        if (enumValues.includes(token)) return token;
-        console.warn("Invalid interpolation.");
-        return enumValues[0] as SCX.Interpolation;
-    }
-
+    
     // Minor type parsers
 
     private parseKeyframes(count: number): SCX.Keyframe[] {
@@ -187,10 +152,10 @@ export class Parser {
         };
         let keyframeCount: number = 0;
         this.scanScope({
-            [Token.Channel]: () => (animation.channel = this.parseKeyframeChannel()),
-            [Token.ExtrapPre]: () => (animation.extrappre = this.parseExtrapolation()),
-            [Token.ExtrapPost]: () => (animation.extrappost = this.parseExtrapolation()),
-            [Token.Interp]: () => (animation.interp = this.parseInterpolation()),
+            [Token.Channel]: () => (animation.channel = this.parseEnum(SCX.KeyframeAnimationChannel)),
+            [Token.ExtrapPre]: () => (animation.extrappre = this.parseEnum(SCX.Extrapolation)),
+            [Token.ExtrapPost]: () => (animation.extrappost = this.parseEnum(SCX.Extrapolation)),
+            [Token.Interp]: () => (animation.interp = this.parseEnum(SCX.Interpolation)),
             [Token.KeyCount]: () => (keyframeCount = this.parseNumber()),
             [Token.Keys]: () => this.scoped(() => (animation.keyframes = this.parseKeyframes(keyframeCount))),
         });
@@ -251,7 +216,7 @@ export class Parser {
         const global: SCX.Global = { animinterval: [0, 0], framerate: 0, ambient: [0, 0, 0] };
         this.scanScope({
             [Token.Name]: () => (global.name = this.parseString()),
-            [Token.TextureFolders]: () => (global.textureFolders = this.parseOff()),
+            [Token.TextureFolders]: () => (global.textureFolders = this.parseEnum(SCX.Off)),
             [Token.AnimInterval]: () => (global.animinterval = [this.parseNumber(), this.parseNumber()]),
             [Token.Framerate]: () => (global.framerate = this.parseNumber()),
             [Token.Ambient]: () => (global.ambient = this.parseVec3()),
@@ -308,7 +273,7 @@ export class Parser {
         const light: SCX.Light = { name: "", type: SCX.LightType.Ambient, intensity: 0, color: vec3.fromValues(1, 1, 1) };
         this.scanScope({
             [Token.Name]: () => (light.name = this.parseString()),
-            [Token.Type]: () => (light.type = this.parseLightType()),
+            [Token.Type]: () => (light.type = this.parseEnum(SCX.LightType)),
             [Token.Pos]: () => (light.pos = this.parseVec3()),
             [Token.Dir]: () => (light.dir = this.parseVec3()),
             [Token.Umbra]: () => (light.umbra = this.parseNumber()),
