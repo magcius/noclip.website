@@ -15,7 +15,7 @@ import {
 import { TextureBase, TextureHolder } from "../TextureHolder";
 import { SCX } from "./scx/types";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
-import { GfxRenderInstList, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
+import { GfxRendererLayer, GfxRenderInstList, GfxRenderInstManager, makeSortKey } from "../gfx/render/GfxRenderInstManager";
 import { GfxProgramObjBag, preprocessProgramObj_GLSL } from "../gfx/shaderc/GfxShaderCompiler";
 import { fillMatrix4x4, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { makeAttachmentClearDescriptor, makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers";
@@ -244,7 +244,6 @@ export default class Renderer implements SceneGfx {
             }
         }
 
-        const renderInstManager = this.renderHelper.renderInstManager;
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
         const renderPassDescriptor = makeAttachmentClearDescriptor(colorNewFromRGBA(0, 0, 0));
@@ -275,13 +274,13 @@ export default class Renderer implements SceneGfx {
 
         this.renderHelper.antialiasingSupport.pushPasses(builder, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
-        this.prepareToRender(viewerInput, renderInstManager);
+        this.prepareToRender(viewerInput);
         this.renderHelper.renderGraph.execute(builder);
         this.simulation?.renderReset();
         this.renderInstListMain.reset();
     }
 
-    private prepareToRender(viewerInput: ViewerRenderInput, renderInstManager: GfxRenderInstManager) {
+    private prepareToRender(viewerInput: ViewerRenderInput) {
         const template = this.renderHelper.pushTemplateRenderInst();
         template.setBindingLayouts(StandardProgram.bindingLayouts);
         template.setGfxProgram(this.gfxProgram);
@@ -329,28 +328,27 @@ export default class Renderer implements SceneGfx {
             mat4.invert(this.scratchViewMatrix, cameraViewMatrix);
             cameraOffset += fillMatrix4x4(cameraBuffer, cameraOffset, this.scratchViewMatrix);
         }
-
+        const renderInstManager = this.renderHelper.renderInstManager;
         renderInstManager.setCurrentList(this.renderInstListMain);
-        this.renderSceneNodeMeshes(renderInstManager, false);
-        this.renderSceneNodeMeshes(renderInstManager, true);
+        this.renderSceneNodeMeshes(renderInstManager);
         renderInstManager.popTemplate();
         this.renderHelper.prepareToRender();
     }
 
-    private renderSceneNodeMeshes(renderInstManager: GfxRenderInstManager, ghosts: boolean) {
-        renderInstManager.pushTemplate().setMegaStateFlags({
-            depthCompare: ghosts ? GfxCompareMode.Always : GfxCompareMode.GreaterEqual,
-            depthWrite: !ghosts,
-        });
-
+    private renderSceneNodeMeshes(renderInstManager: GfxRenderInstManager) {
         for (const node of this.world.renderableNodes) {
-            if (!node.worldVisible || node.isGhost !== ghosts) {
+            if (!node.worldVisible) {
                 continue;
             }
 
             for (const mesh of node.meshes!) {
                 const envMap = (mesh.envID === undefined ? null : this.world.environmentMapsByID.get(mesh.envID)) ?? this.world.defaultEnvMap;
                 const renderInst = renderInstManager.newRenderInst();
+                renderInst.setMegaStateFlags({
+                    depthCompare: node.isGhost ? GfxCompareMode.Always : GfxCompareMode.GreaterEqual,
+                    depthWrite: !node.isGhost,
+                });
+                renderInst.sortKey = makeSortKey(node.isGhost ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE);
                 updateObjectParams: {
                     let objectOffset = renderInst.allocateUniformBuffer(StandardProgram.ub_ObjectParams, 16 * 3 + 4 + 4 /*Mat4x3 * 3 + vec4 * 2*/);
                     const object = renderInst.mapUniformBufferF32(StandardProgram.ub_ObjectParams);
@@ -388,8 +386,6 @@ export default class Renderer implements SceneGfx {
                 renderInstManager.submitRenderInst(renderInst);
             }
         }
-
-        renderInstManager.popTemplate();
     }
 
     destroy(device: GfxDevice): void {
