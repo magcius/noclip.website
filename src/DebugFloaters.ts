@@ -87,7 +87,7 @@ class FloaterControlHandlerValue {
             },
         };
 
-        this.updateInterval = setInterval(() => {
+        this.updateInterval = window.setInterval(() => {
             if (this.obj[this.paramName] !== this.lastValue)
                 this.update();
         }, 10);
