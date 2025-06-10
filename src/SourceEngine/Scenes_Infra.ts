@@ -106,4 +106,4 @@ const sceneDescs = [
     new InfraSceneDesc('infra_ee_wasteland'),
 ];
 
-export const sceneGroup: SceneGroup = { id, name, sceneDescs, hidden: true };
+export const sceneGroup: SceneGroup = { id, name, sceneDescs };
