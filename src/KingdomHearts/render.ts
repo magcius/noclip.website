@@ -5,7 +5,7 @@ import * as UI from '../ui.js';
 import * as Viewer from '../viewer.js';
 import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { DeviceProgram } from "../Program.js";
-import { fillMatrix4x3, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers.js';
+import { fillMatrix4x3, fillMatrix4x4, fillVec4 } from '../gfx/helpers/UniformBufferHelpers.js';
 import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferUsage, GfxCompareMode, GfxCullMode, GfxDevice, GfxFormat, GfxInputLayout, GfxMipFilterMode, GfxRenderPass, GfxSampler, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxWrapMode, GfxProgram, GfxMegaStateDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from '../gfx/platform/GfxPlatform.js';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers.js';
 import { mat4, vec2, vec4 } from 'gl-matrix';
@@ -504,9 +504,10 @@ class DrawCallInstance {
 
         if (this.drawCall.spriteAnim) {
             this.drawCall.spriteAnim.getUVOffset(viewerInput.time, uvAnimOffsetScratch);
-            mapped[offs++] = uvAnimOffsetScratch[0];
-            mapped[offs++] = uvAnimOffsetScratch[1];
+        } else {
+            vec2.zero(uvAnimOffsetScratch);
         }
+        offs += fillVec4(mapped, offs, uvAnimOffsetScratch[0], uvAnimOffsetScratch[1], 0, 0);
 
         renderInstManager.submitRenderInst(renderInst);
     }

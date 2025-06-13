@@ -12,7 +12,7 @@ import { TextureHolder, TextureMapping } from '../TextureHolder.js';
 import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers.js';
 import { nArray, assertExists, assert } from '../util.js';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers.js';
-import { fillMatrix4x4, fillMatrix4x3 } from '../gfx/helpers/UniformBufferHelpers.js';
+import { fillMatrix4x4, fillMatrix4x3, fillVec4 } from '../gfx/helpers/UniformBufferHelpers.js';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
@@ -597,12 +597,11 @@ class DrawCallInstance {
         offs += fillMatrix4x3(mapped, offs, modelMatrix);
         if (this.drawCall.textureAnim) {
             this.drawCall.textureAnim.fillUVOffset(uvAnimOffsetScratch);
-            mapped[offs++] = uvAnimOffsetScratch[0];
-            mapped[offs++] = uvAnimOffsetScratch[1];
         } else {
-            mapped[offs++] = 0;
-            mapped[offs++] = 0;
+            vec2.zero(uvAnimOffsetScratch);
         }
+        offs += fillVec4(mapped, offs, uvAnimOffsetScratch[0], uvAnimOffsetScratch[1], 0, 0);
+
         renderInstManager.submitRenderInst(renderInst);
     }
 
