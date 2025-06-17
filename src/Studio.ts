@@ -1287,6 +1287,8 @@ export class StudioPanel extends FloatingPanel {
 
     private videoRecorder: VideoRecorder | null = null;
 
+    private useDirectRecording = true;
+
     constructor(private ui: UI, private viewer: Viewer.Viewer) {
         super();
 
@@ -2343,8 +2345,7 @@ export class StudioPanel extends FloatingPanel {
     }
 
     private async record() {
-        const isSupported = await VideoRecorder.isSupported();
-        if (isSupported) {
+        if (this.useDirectRecording && await VideoRecorder.isSupported()) {
             this.recordVideo();
         } else {
             this.playAnimation(true);
