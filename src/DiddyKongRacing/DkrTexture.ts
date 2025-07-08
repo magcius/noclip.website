@@ -9,8 +9,6 @@ import { GfxRendererLayer, GfxRenderInst } from '../gfx/render/GfxRenderInstMana
 
 export const SIZE_OF_TEXTURE_INFO = 0x08;
 
-const DELTA_FOR_30_FPS = 1000 / 30;
-
 export class DkrTexture {
     private format: string;
     private layer: GfxRendererLayer;
@@ -130,13 +128,15 @@ export class DkrTexture {
     }
 
     public advanceFrame(deltaTime: number): void {
-        if(this.numberOfFrames < 2 || deltaTime <= 0.0) {
+        if (this.numberOfFrames < 2 || deltaTime <= 0.0) {
             return;
         }
-        this.currentFrameDelay -= DELTA_FOR_30_FPS / deltaTime;
-        if(this.currentFrameDelay <= 0.0) {
+
+        const numFrames = deltaTime * 30 / 1000;
+        this.currentFrameDelay -= numFrames;
+        if (this.currentFrameDelay <= 0.0) {
             this.currentFrame = (this.currentFrame + 1) % this.numberOfFrames;
-            this.currentFrameDelay = this.frameDelayAmount * (DELTA_FOR_30_FPS / deltaTime);
+            this.currentFrameDelay += this.frameDelayAmount;
         }
     }
 

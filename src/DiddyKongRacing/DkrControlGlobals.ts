@@ -157,7 +157,6 @@ export class DkrControlGlobals {
             DkrControlGlobals.ADV2_MIRROR,
         ],
         elem: null!,
-        hidden: false,
     };
     
     static PANEL_ANIM_CAMERA = {
@@ -176,6 +175,5 @@ export class DkrControlGlobals {
             */
         ],
         elem: null!,
-        hidden: true,
     };
 }

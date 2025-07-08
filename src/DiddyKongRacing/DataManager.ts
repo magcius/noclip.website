@@ -25,15 +25,16 @@ export class DataManager {
     // Contains the IDs of the animations used by objects.
     public objectAnimationIds: (number[] | null)[] = [];
 
-    constructor(private context: SceneContext, private pathBase: string, private version: string, callback: Function) {
-        this.path = pathBase + '/' + version + '/';
+    constructor(private context: SceneContext, private pathBase: string, private version: string) {
+        this.path = `${this.pathBase}/${this.version}/`;
+    }
 
-        this.ensureAndFetchFile('data.zip').then((dataZipBinary) => {
+    public fetchData(): Promise<void> {
+        return this.ensureAndFetchFile('data.zip').then((dataZipBinary) => {
             this.zipFile = parseZipFile(dataZipBinary);
             const assetsJsonBinary = this.getFileFromZip('assets.json');
             this.assets = JSON.parse(decodeString(assetsJsonBinary));
             this.parseAssets();
-            callback(this);
         });
     }
 

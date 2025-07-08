@@ -33,6 +33,7 @@ export class DkrLevel {
 
     // Remove when the Animator object is properly implemented.
     public id: number = -1;
+    public hasCameraAnimation = false;
     private hackCresIslandTexScrollers: { drawCall: DkrDrawCall, scrollU: number, scrollV: number }[] = [];
 
     constructor(device: GfxDevice, renderHelper: GfxRenderHelper, private textureCache: DkrTextureCache, id: string, private dataManager: DataManager, private sprites: DkrSprites) {
@@ -76,6 +77,11 @@ export class DkrLevel {
             this.objectMap2 = new DkrLevelObjectMap(objectMap2Buffer, this, device, renderHelper, dataManager, textureCache, sprites);
             this.animationTracks.addAnimationNodes(this.objectMap2.getObjects());
             this.animationTracks.compile(device, this, renderHelper, dataManager, textureCache);
+            
+            this.hasCameraAnimation = this.animationTracks.hasChannel(1);
+            if (!this.hasCameraAnimation)
+                DkrControlGlobals.ENABLE_ANIM_CAMERA.on = false;
+
             this.animationNodesReady();
         }
     }
@@ -96,11 +102,6 @@ export class DkrLevel {
     }
 
     private animationNodesReady(): void {
-        if(this.animationTracks.hasChannel(1)) {
-            (DkrControlGlobals.PANEL_ANIM_CAMERA.elem as Panel).setVisible(true);
-        } else {
-            DkrControlGlobals.ENABLE_ANIM_CAMERA.on = false;
-        }
     }
 
     private mirrorCamera(viewerInput: ViewerRenderInput): void {

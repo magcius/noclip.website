@@ -194,7 +194,7 @@ export class DkrSprites {
 
     public advanceTime(viewerInput: ViewerRenderInput): void {
         if (viewerInput.deltaTime > 0.0)
-            this.currentFrame += 0.1 * ((1000 / 30) / viewerInput.deltaTime);
+            this.currentFrame += viewerInput.deltaTime * (20 / 1000);
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, layer: number) {
