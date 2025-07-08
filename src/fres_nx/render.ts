@@ -155,7 +155,14 @@ layout(std140) uniform ub_ShapeParams {
     Mat3x4 u_ModelView;
 };
 
-uniform sampler2D u_Samplers[8];
+uniform sampler2D u_Texture0;
+uniform sampler2D u_Texture1;
+uniform sampler2D u_Texture2;
+uniform sampler2D u_Texture3;
+uniform sampler2D u_Texture4;
+uniform sampler2D u_Texture5;
+uniform sampler2D u_Texture6;
+uniform sampler2D u_Texture7;
 `;
 
     public override both = AglProgram.globalDefinitions;
@@ -202,7 +209,7 @@ uniform sampler2D u_Samplers[8];
         try {
             const samplerIndex = this.lookupSamplerIndex(shadingModelSamplerBindingName);
             const uv = 'v_TexCoord0';
-            return `texture(SAMPLER_2D(u_Samplers[${samplerIndex}]), ${uv})`;
+            return `texture(SAMPLER_2D(u_Texture${samplerIndex}), ${uv})`;
         } catch(e) {
             // TODO(jstpierre): Figure out wtf is going on.
             console.warn(`${this.name}: No sampler by name ${shadingModelSamplerBindingName}`);
