@@ -12,6 +12,7 @@ import { DkrControlGlobals } from "./DkrControlGlobals.js";
 import { DkrLevel } from "./DkrLevel.js";
 import { DkrObject } from './DkrObject.js';
 import { DkrTextureCache } from "./DkrTextureCache.js";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 
 // This is basically the maximum framerate that is supported.
 // More samples is always technically better, but it also means more RAM being used up.
@@ -260,7 +261,7 @@ export class DkrAnimationTrack {
         return this.doesLoop;
     }
 
-    public compile(device: GfxDevice, level: DkrLevel, renderHelper: GfxRenderHelper, dataManager: DataManager, textureCache: DkrTextureCache): void {
+    public compile(level: DkrLevel, renderCache: GfxRenderCache, dataManager: DataManager, textureCache: DkrTextureCache): void {
         this.nodes.sort((a: DkrObject, b: DkrObject) => a.getProperties().order - b.getProperties().order);
         let spawnActorId = this.nodes[0].getProperties().objectToSpawn;
         assert(spawnActorId >= 0);
@@ -273,7 +274,7 @@ export class DkrAnimationTrack {
             this.doesLoop = true;
         }
 
-        this.actor = new DkrObject(dataManager.levelObjectTranslateTable[spawnActorId], device, level, renderHelper, dataManager, textureCache);
+        this.actor = new DkrObject(dataManager.levelObjectTranslateTable[spawnActorId], level, renderCache, dataManager, textureCache);
         this.actorName = this.actor.getName();
         this.hasBeenCompiled = true;
 
@@ -678,10 +679,10 @@ export class DkrAnimationTracksChannel {
         this.actorTracks[actorIndex].addAnimationNode(node);
     }
 
-    public compile(device: GfxDevice, level: DkrLevel, renderHelper: GfxRenderHelper, dataManager: DataManager, textureCache: DkrTextureCache): void {
+    public compile(level: DkrLevel, renderCache: GfxRenderCache, dataManager: DataManager, textureCache: DkrTextureCache): void {
         this.actorTrackKeys = Object.keys(this.actorTracks);
         for (const key of this.actorTrackKeys) {
-            this.actorTracks[key].compile(device, level, renderHelper, dataManager, textureCache);
+            this.actorTracks[key].compile(level, renderCache, dataManager, textureCache);
             if (this.actorTracks[key].getActorName() === 'AnimCamera')
                 this.animCameraKey = key;
             this.maxDuration = Math.max(this.maxDuration, this.actorTracks[key].getDuration());
@@ -781,11 +782,11 @@ export class DkrAnimationTracks {
                 this.addAnimationNode(node);
     }
 
-    public compile(device: GfxDevice, level: DkrLevel, renderHelper: GfxRenderHelper, dataManager: DataManager, textureCache: DkrTextureCache): void {
+    public compile(level: DkrLevel, renderCache: GfxRenderCache, dataManager: DataManager, textureCache: DkrTextureCache): void {
         this.channelKeys = Object.keys(this.channels);
 
         for(const key of this.channelKeys)
-            this.channels[key].compile(device, level, renderHelper, dataManager, textureCache);
+            this.channels[key].compile(level, renderCache, dataManager, textureCache);
         this.getCameraChannels();
         this.hasBeenCompiled = true;
     }

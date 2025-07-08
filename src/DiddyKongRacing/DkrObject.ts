@@ -14,6 +14,7 @@ import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import { DkrDrawCallParams } from './DkrDrawCall.js';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 
 export const MODEL_TYPE_3D_MODEL = 0;
 export const MODEL_TYPE_2D_BILLBOARD = 1;
@@ -51,7 +52,7 @@ export class DkrObject {
     private renderBeforeLevelMap: boolean = true;
     private usesNormals = false;
 
-    constructor(objectId: number, private device: GfxDevice, private level: DkrLevel, private renderHelper: GfxRenderHelper, dataManager: DataManager, private textureCache: DkrTextureCache) {
+    constructor(objectId: number, private level: DkrLevel, renderCache: GfxRenderCache, dataManager: DataManager, private textureCache: DkrTextureCache, data: ArrayBufferSlice | null = null) {
         this.headerData = dataManager.getObjectHeader(objectId);
         mat4.identity(this.modelMatrix);
         this.headerDataView = this.headerData.createDataView();
@@ -77,11 +78,15 @@ export class DkrObject {
             if (this.modelType === MODEL_TYPE_3D_MODEL) {
                 this.modelIds[i] = modelId;
                 const modelData = dataManager.getObjectModel(modelId);
-                this.models[i] = new DkrObjectModel(modelId, modelData, device, renderHelper, dataManager, textureCache);
+                this.models[i] = new DkrObjectModel(modelId, modelData, renderCache, dataManager, textureCache);
             } else if (this.modelType === MODEL_TYPE_2D_BILLBOARD) {
                 this.spriteIds[i] = modelId;
             }
         }
+
+        if (data !== null)
+            this.parseObjectProperties(renderCache, data);
+
         this.updateModelMatrix();
     }
 
@@ -321,7 +326,7 @@ export class DkrObject {
         );
     }
 
-    public parseObjectProperties(buffer: ArrayBufferSlice) {
+    private parseObjectProperties(renderCache: GfxRenderCache, buffer: ArrayBufferSlice) {
         const view = buffer.createDataView();
 
         this.position[0] = view.getInt16(0x02);
@@ -690,7 +695,7 @@ export class DkrObject {
                     const modelMatrix = mat4.create();
                     mat4.fromRotationTranslationScale(modelMatrix, quatRot, this.position, vec3.fromValues(this.modelScale, this.modelScale, this.modelScale));
 
-                    const zipperParticle = new DkrParticle(this.renderHelper.renderCache, zipperTexture, modelMatrix);
+                    const zipperParticle = new DkrParticle(renderCache, zipperTexture, modelMatrix);
                     this.particles.push(zipperParticle);
                 });
                 this.isDeveloperObject = true;

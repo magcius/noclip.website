@@ -70,7 +70,7 @@ export class DkrObjectModel {
 
     private modelDataView: DataView;
 
-    constructor(private modelId: number, modelData: ArrayBufferSlice, device: GfxDevice, renderHelper: GfxRenderHelper, dataManager: DataManager, textureCache: DkrTextureCache) {
+    constructor(private modelId: number, modelData: ArrayBufferSlice, cache: GfxRenderCache, dataManager: DataManager, textureCache: DkrTextureCache) {
         const view = modelData.createDataView();
 
         this.modelDataView = view;
@@ -104,7 +104,7 @@ export class DkrObjectModel {
             }
         }
 
-        this.loadGeometry(modelData, device, renderHelper, textureCache, numberOfTextures, texturesOffset, triangleBatchInfoOffset, trianglesOffset);
+        this.loadGeometry(modelData, cache, textureCache, numberOfTextures, texturesOffset, triangleBatchInfoOffset, trianglesOffset);
     }
 
     public destroy(device: GfxDevice): void {
@@ -112,14 +112,13 @@ export class DkrObjectModel {
             drawCall.destroy(device);
     }
 
-    private loadGeometry(levelData: ArrayBufferSlice, device: GfxDevice, renderHelper: GfxRenderHelper, textureCache: DkrTextureCache, numberOfTextures: number, texturesOffset: number, triangleBatchInfoOffset: number, trianglesOffset: number): void {
+    private loadGeometry(levelData: ArrayBufferSlice, cache: GfxRenderCache, textureCache: DkrTextureCache, numberOfTextures: number, texturesOffset: number, triangleBatchInfoOffset: number, trianglesOffset: number): void {
         const view = levelData.createDataView();
 
         const textureIndices: number[] = [];
         for (let i = 0; i < numberOfTextures; i++)
             textureIndices.push(view.getUint32(texturesOffset + (i * SIZE_OF_TEXTURE_INFO)));
 
-        const cache = renderHelper.renderCache;
         const batchBuilder = new BatchBuilder();
 
         textureCache.preload3dTextures(textureIndices, () => {

@@ -42,7 +42,7 @@ export class DkrLevel {
             const modelId = parseInt(id.slice(6));
             const modelDataBuffer = dataManager.getLevelModel(modelId);
 
-            this.model = new DkrLevelModel(device, renderHelper, this, textureCache, modelDataBuffer);
+            this.model = new DkrLevelModel(renderHelper.renderCache, this, textureCache, modelDataBuffer);
         } else {
             this.id = parseInt(id);
             const headerDataBuffer = dataManager.getLevelHeader(this.id);
@@ -66,18 +66,18 @@ export class DkrLevel {
             const objectMap2Buffer = dataManager.getLevelObjectMap(objectMap2Id);
 
             if (skydomeId !== 0xFFFF) {
-                this.skydome = new DkrObject(skydomeId, device, this, renderHelper, dataManager, textureCache);
-                this.skydome.setManualScale(100.0); 
+                this.skydome = new DkrObject(skydomeId, this, renderHelper.renderCache, dataManager, textureCache);
+                this.skydome.setManualScale(100.0);
                 // ^ This is a hack that seems to work okay. I'm not sure how the skydomes are scaled/drawn yet.
             }
-            this.model = new DkrLevelModel(device, renderHelper, this, textureCache, modelDataBuffer);
+            this.model = new DkrLevelModel(renderHelper.renderCache, this, textureCache, modelDataBuffer);
 
             this.objectMap1 = new DkrLevelObjectMap(objectMap1Buffer, this, device, renderHelper, dataManager, textureCache, sprites);
             this.animationTracks.addAnimationNodes(this.objectMap1.getObjects());
             this.objectMap2 = new DkrLevelObjectMap(objectMap2Buffer, this, device, renderHelper, dataManager, textureCache, sprites);
             this.animationTracks.addAnimationNodes(this.objectMap2.getObjects());
-            this.animationTracks.compile(device, this, renderHelper, dataManager, textureCache);
-            
+            this.animationTracks.compile(this, renderHelper.renderCache, dataManager, textureCache);
+
             this.hasCameraAnimation = this.animationTracks.hasChannel(1);
             if (!this.hasCameraAnimation)
                 DkrControlGlobals.ENABLE_ANIM_CAMERA.on = false;

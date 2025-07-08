@@ -10,12 +10,13 @@ import { DkrDrawCall, DkrDrawCallParams } from "./DkrDrawCall.js";
 import { BatchBuilder } from "./DkrObjectModel.js";
 import { DkrTriangleBatch, SIZE_OF_TRIANGLE_FACE, SIZE_OF_VERTEX } from "./DkrTriangleBatch.js";
 import { Mat4Identity } from "../MathHelpers.js";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 
 const SIZE_OF_LEVEL_SEGMENT_HEADER = 0x44;
 const SIZE_OF_BATCH_INFO = 12;
 
 class DkrLevelSegment {
-    constructor(device: GfxDevice, renderHelper: GfxRenderHelper, level: DkrLevel, levelData: ArrayBufferSlice, offset: number, textureCache: DkrTextureCache, textureIndices: number[], batchBuilder: BatchBuilder) {
+    constructor(level: DkrLevel, levelData: ArrayBufferSlice, offset: number, textureCache: DkrTextureCache, textureIndices: number[], batchBuilder: BatchBuilder) {
         const view = levelData.createDataView();
 
         let verticesOffset = view.getInt32(offset + 0x00);
@@ -25,7 +26,6 @@ class DkrLevelSegment {
         let triangleBatchInfoOffset = view.getInt32(offset + 0x0C);
         let numberOfTriangleBatches = view.getInt16(offset + 0x20);
 
-        const cache = renderHelper.renderCache;
         for (let i = 0; i < numberOfTriangleBatches; i++) {
             const ti = triangleBatchInfoOffset + (i * SIZE_OF_BATCH_INFO); // Triangle batch info index
             const tiNext = ti + SIZE_OF_BATCH_INFO;
@@ -84,7 +84,7 @@ export class DkrLevelModel {
     private segments: DkrLevelSegment[] = [];
     private drawCalls: DkrDrawCall[] = [];
 
-    constructor(device: GfxDevice, renderHelper: GfxRenderHelper, level: DkrLevel, private textureCache: DkrTextureCache, levelData: ArrayBufferSlice) {
+    constructor(renderCache: GfxRenderCache, level: DkrLevel, private textureCache: DkrTextureCache, levelData: ArrayBufferSlice) {
         const view = levelData.createDataView();
 
         let texturesOffset = view.getUint32(0x00);
@@ -106,11 +106,11 @@ export class DkrLevelModel {
             const batchBuilder = new BatchBuilder();
 
             for (let i = 0; i < numberOfSegments; i++) {
-                const segment = new DkrLevelSegment(device, renderHelper, level, levelData, segmentsOffset + (i * SIZE_OF_LEVEL_SEGMENT_HEADER), textureCache, this.textureIndices, batchBuilder);
+                const segment = new DkrLevelSegment(level, levelData, segmentsOffset + (i * SIZE_OF_LEVEL_SEGMENT_HEADER), textureCache, this.textureIndices, batchBuilder);
                 this.segments.push(segment);
             }
 
-            this.drawCalls = batchBuilder.finish(renderHelper.renderCache, null);
+            this.drawCalls = batchBuilder.finish(renderCache, null);
         });
     }
 

@@ -22,7 +22,7 @@ export class DkrObjectAnimation {
 
     constructor(private animationId: number, private animationData: Uint8Array, vertices: DkrVertex[], animatedVertIndices: number[], numOfAnimatedVertices: number) {
         const dataView = new DataView(animationData.buffer);
-        
+
         let numberOfKeyframes = dataView.getInt32(0);
         let numberOfVertices = vertices.length;
 

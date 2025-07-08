@@ -16,9 +16,6 @@ export class DkrLevelObjectMap {
     private objects: DkrObject[] = [];
 
     constructor(objectMap: ArrayBufferSlice, level: DkrLevel, device: GfxDevice, renderHelper: GfxRenderHelper, dataManager: DataManager, textureCache: DkrTextureCache, sprites: DkrSprites) {
-        let objectIds = new Set<number>(); // Set ensures each item is unqiue
-        let objectEntries: { objectId: number, data: ArrayBufferSlice }[] = [];
-
         const dataView = objectMap.createDataView();
 
         let totalLength = dataView.getUint32(0);
@@ -27,32 +24,16 @@ export class DkrLevelObjectMap {
 
         let currentOffset = 0x10; // Objects start at offset 0x10
 
-        while(currentOffset - 0x10 < totalLength) {
+        while (currentOffset - 0x10 < totalLength) {
             const b0 = dataView.getUint8(currentOffset + 0x00), b1 = dataView.getUint8(currentOffset + 0x01);
             const length = b1 & 0x7F;
             const tableEntry = ((b1 & 0x80) << 1) | b0;
             const objectId = dataManager.levelObjectTranslateTable[tableEntry];
 
-            objectIds.add(objectId);
-            objectEntries.push({
-                objectId: objectId,
-                data: objectMap.subarray(currentOffset, length),
-            });
+            const data = objectMap.subarray(currentOffset, length);
+            this.objects.push(new DkrObject(objectId, level, renderHelper.renderCache, dataManager, textureCache, data));
 
             currentOffset += length;
-        }
-
-        for(let i = 0; i < objectEntries.length; i++) {
-            const objId = objectEntries[i].objectId;
-            this.objects[i] = new DkrObject(
-                objId, 
-                device, 
-                level,
-                renderHelper, 
-                dataManager, 
-                textureCache
-            );
-            this.objects[i].parseObjectProperties(objectEntries[i].data);
         }
 
         sprites.addInstances(this.objects);
