@@ -57,7 +57,7 @@ function fetchDataFragmentSync(path: string, byteOffset: number, byteLength: num
 }
 
 const pathBaseIn  = `../../../data/ffx_raw`;
-const pathBaseOut = `../../../data/ffx`;
+const pathBaseOut = `../../../data/FinalFantasyX`;
 
 function writeBufferSync(path: string, buffer: ArrayBufferSlice): void {
     writeFileSync(path, Buffer.from(buffer.copyToBuffer()));
@@ -70,8 +70,8 @@ const lsnMask = 0x003FFFFF;
 function dumpMapNames() {
     const locIDs: number[] = [];
     const eventIDs: number[][] = [];
-    for (let fileIndex = 0x168; fileIndex <= 0x1B84; fileIndex += 0x12) {
-        const eventFile = `${pathBaseOut}/0c/${hexzero(fileIndex, 4)}.bin`;
+    for (let fileIndex = 0; fileIndex <= 400; fileIndex ++) {
+        const eventFile = `${pathBaseOut}/0c/${hexzero(fileIndex * 0x12, 4)}.bin`;
         let header: ArrayBufferSlice;
         try {
             header = fetchDataFragmentSync(eventFile, 0, 0x40);
@@ -239,6 +239,21 @@ function main() {
             }
         }
     }
+
+    const elfStart = 0x159*sectorSize; // right after folders
+    // pull some files from the ELF
+    writeBufferSync(
+        `${pathBaseOut}/screen_shatter.bin`,
+        fetchDataFragmentSync(isoPath, elfStart + 0x3DD720, 0x20720),
+    );
+    writeBufferSync(
+        `${pathBaseOut}/common_textures.bin`,
+        fetchDataFragmentSync(isoPath, elfStart + 0x3FDE40, 0x32A20),
+    );
+    writeBufferSync(
+        `${pathBaseOut}/env_map_texture.bin`,
+        fetchDataFragmentSync(isoPath, elfStart + 0x201A00, 0x4528),
+    );
 }
 
 main();
