@@ -21,8 +21,8 @@ function fetchDataFragmentSync(path: string, byteOffset: number, byteLength: num
     return new ArrayBufferSlice(b.buffer, b.byteOffset, b.byteLength);
 }
 
-const pathBaseIn  = `../../../data/ztp_raw`;
-const pathBaseOut = `../../../data/j3d/ztp`;
+const pathBaseIn  = `../../../data/ZeldaTwilightPrincess_raw`;
+const pathBaseOut = `../../../data/ZeldaTwilightPrincess`;
 
 interface SymbolMapEntry {
     sectionName: string;
@@ -190,8 +190,6 @@ class REL {
             }
             sectionTableOffs += 0x08;
         }
-
-        this.map = parseMapFile(mapFilename);
     }
 
     public getSymbolData(entry: SymbolMapEntry): ArrayBufferSlice {
