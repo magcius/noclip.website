@@ -159,9 +159,9 @@ export class Viewer {
         this.viewerRenderInput.backbufferWidth = this.canvas.width;
         this.viewerRenderInput.backbufferHeight = this.canvas.height;
         this.gfxSwapChain.configureSwapChain(this.canvas.width, this.canvas.height);
-        this.viewerRenderInput.onscreenTexture = this.gfxSwapChain.getOnscreenTexture();
-
         this.gfxDevice.beginFrame();
+
+        this.viewerRenderInput.onscreenTexture = this.gfxSwapChain.getOnscreenTexture();
         this.renderStatisticsTracker.beginFrame();
 
         resetGfxStatisticsGroup(this.statisticsGroup);
@@ -204,9 +204,9 @@ export class Viewer {
 
         this.viewerRenderInput.time = this.sceneTime;
         this.gfxSwapChain.configureSwapChain(baseLayer.framebufferWidth, baseLayer.framebufferHeight, baseLayer.framebuffer);
-        const swapChainTex = this.gfxSwapChain.getOnscreenTexture();
-
         this.gfxDevice.beginFrame();
+
+        const swapChainTex = this.gfxSwapChain.getOnscreenTexture();
         this.renderStatisticsTracker.beginFrame();
 
         resetGfxStatisticsGroup(this.statisticsGroup);

@@ -924,6 +924,49 @@ export class GfxPlatformWebGPUConfig {
     public shaderDebug = false;
 }
 
+// https://bugzilla.mozilla.org/show_bug.cgi?id=1846605
+class FullscreenAlphaClear {
+    private code = `
+@vertex
+fn main_vs(@builtin(vertex_index) index: u32) -> @builtin(position) vec4f {
+    var pos: vec4f;
+    pos.x = select(-1.0f, 3.0f, index == 1u);
+    pos.y = select(-1.0f, 3.0f, index == 2u);
+    pos.z = 1.0f;
+    pos.w = 1.0f;
+    return pos;
+}
+
+@fragment
+fn main_ps() -> @location(0) vec4f { return vec4f(0.0f, 0.0f, 0.0f, 1.0f); }
+`;
+
+    private pipeline: GPURenderPipeline | null = null;
+
+    constructor(device: GPUDevice, swapChainFormat: GPUTextureFormat) {
+        this.create(device, swapChainFormat);
+    }
+
+    private async create(device: GPUDevice, swapChainFormat: GPUTextureFormat) {
+        const shaderModule = await device.createShaderModule({ code: this.code, label: 'GfxPlatformWebGPU FullscreenClear' });
+        this.pipeline = await device.createRenderPipeline({
+            vertex: { module: shaderModule, entryPoint: 'main_vs' },
+            fragment: { module: shaderModule, entryPoint: 'main_ps', targets: [{ format: swapChainFormat, writeMask: GPUColorWrite.ALPHA }] },
+            layout: 'auto',
+        });
+    }
+
+    public render(cmd: GPUCommandEncoder, view: GPUTextureView): void {
+        if (this.pipeline === null)
+            return;
+
+        const pass = cmd.beginRenderPass({ colorAttachments: [{ view, loadOp: 'load', storeOp: 'store' }] });
+        pass.setPipeline(this.pipeline);
+        pass.draw(3);
+        pass.end();
+    }
+}
+
 class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     private _swapChainWidth = 0;
     private _swapChainHeight = 0;
@@ -933,6 +976,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     private _resourceCreationTracker: ResourceCreationTracker | null = null;
     private _shaderDebug = false;
     private _currentStatisticsGroup: GfxStatisticsGroup | null = null;
+    private _currentOnscreenTexture: GfxTextureP_WebGPU | null = null;
 
     // Fallback resources.
     private _fallbackTexture2D: GfxTextureP_WebGPU;
@@ -952,6 +996,8 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     private _frameCommandEncoder: GPUCommandEncoder | null = null;
     private _readbacksSubmitted: GfxReadbackP_WebGPU[] = [];
     private _queryPoolsSubmitted: GfxQueryPoolP_WebGPU[] = [];
+
+    private _fullscreenAlphaClear: FullscreenAlphaClear | null = null;
 
     // GfxVendorInfo
     public readonly platformString: string = 'WebGPU';
@@ -1002,7 +1048,9 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         this._swapChainFormat = navigator.gpu.getPreferredCanvasFormat();
 
         this.canvasContext.configure({ device: this.device, format: this._swapChainFormat, usage: this._swapChainTextureUsage, alphaMode: 'opaque' });
-        
+        if (navigator.userAgent.includes('Firefox'))
+            this._fullscreenAlphaClear = new FullscreenAlphaClear(device, this._swapChainFormat);
+
         if (configuration.trackResources)
             this._resourceCreationTracker = new ResourceCreationTracker();
 
@@ -1028,22 +1076,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     }
 
     public getOnscreenTexture(): GfxTexture {
-        // TODO(jstpierre): Figure out how to wrap more efficiently.
-        const gpuTexture = this.canvasContext.getCurrentTexture();
-        const gpuTextureView = gpuTexture.createView();
-        const texture: GfxTextureP_WebGPU = {
-            _T: _T.Texture, ResourceUniqueId: 0,
-            gpuTexture, gpuTextureView,
-            pixelFormat: GfxFormat.U8_RGBA_RT,
-            width: this._swapChainWidth,
-            height: this._swapChainHeight,
-            depthOrArrayLayers: 1,
-            numLevels: 1,
-            usage: this._swapChainTextureUsage,
-            sampleCount: 1,
-            dimension: GfxTextureDimension.n2D,
-        };
-        return texture;
+        return assertExists(this._currentOnscreenTexture);
     }
 
     public getDevice(): GfxDevice {
@@ -1630,13 +1663,34 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     public beginFrame(): void {
         assert(this._frameCommandEncoder === null);
         this._frameCommandEncoder = this.device.createCommandEncoder();
+
+        // TODO(jstpierre): Figure out how to wrap more efficiently.
+        const gpuTexture = this.canvasContext.getCurrentTexture();
+        const gpuTextureView = gpuTexture.createView();
+        this._currentOnscreenTexture = {
+            _T: _T.Texture, ResourceUniqueId: 0,
+            gpuTexture, gpuTextureView,
+            pixelFormat: GfxFormat.U8_RGBA_RT,
+            width: this._swapChainWidth,
+            height: this._swapChainHeight,
+            depthOrArrayLayers: 1,
+            numLevels: 1,
+            usage: this._swapChainTextureUsage,
+            sampleCount: 1,
+            dimension: GfxTextureDimension.n2D,
+        };
     }
 
     public endFrame(): void {
         assert(this._frameCommandEncoder !== null);
+        assert(this._currentOnscreenTexture !== null);
+
+        if (this._fullscreenAlphaClear !== null)
+            this._fullscreenAlphaClear.render(this._frameCommandEncoder, this._currentOnscreenTexture.gpuTextureView);
 
         this.device.queue.submit([this._frameCommandEncoder.finish()]);
         this._frameCommandEncoder = null;
+        this._currentOnscreenTexture = null;
 
         // Do any post-command-submit scheduling work
 
