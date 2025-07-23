@@ -302,7 +302,7 @@ export interface Material {
     ambientColor: Color;
     specular0Color: Color;
     specular1Color: Color;
-    blendColor: Color;
+    blendColor: Readonly<Color> | null;
 
     lutDist0: MaterialLutSampler;
     lutDist1: MaterialLutSampler;
@@ -608,19 +608,22 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
         const usesBlendConstantAlpha = factorUsesBlendConstantAlpha(blendSrcFactorRGB) || factorUsesBlendConstantAlpha(blendDstFactorRGB) || factorUsesBlendConstantAlpha(blendSrcFactorAlpha) || factorUsesBlendConstantAlpha(blendDstFactorAlpha);
         const usesBlendConstantColor = factorUsesBlendConstantColor(blendSrcFactorRGB) || factorUsesBlendConstantColor(blendDstFactorRGB) || factorUsesBlendConstantColor(blendSrcFactorAlpha) || factorUsesBlendConstantColor(blendDstFactorAlpha);
 
-        const blendColorR = view.getFloat32(offs + 0x14C, true);
-        const blendColorG = view.getFloat32(offs + 0x150, true);
-        const blendColorB = view.getFloat32(offs + 0x154, true);
-        const blendColorA = view.getFloat32(offs + 0x158, true);
-        const blendColor = colorNewFromRGBA(blendColorR, blendColorG, blendColorB, blendColorA);
+        let blendColor: Color | null = null;
+        if (usesBlendConstantColor || usesBlendConstantAlpha) {
+            const blendColorR = view.getFloat32(offs + 0x14C, true);
+            const blendColorG = view.getFloat32(offs + 0x150, true);
+            const blendColorB = view.getFloat32(offs + 0x154, true);
+            const blendColorA = view.getFloat32(offs + 0x158, true);
+            blendColor = colorNewFromRGBA(blendColorR, blendColorG, blendColorB, blendColorA);
 
-        if (usesBlendConstantAlpha) {
-            assert(!usesBlendConstantColor);
-            blendColor.r = blendColor.g = blendColor.b = blendColor.a;
-            rgbBlendState.blendSrcFactor = translateBlendFactor(rgbBlendState.blendSrcFactor);
-            rgbBlendState.blendDstFactor = translateBlendFactor(rgbBlendState.blendDstFactor);
-            alphaBlendState.blendSrcFactor = translateBlendFactor(alphaBlendState.blendSrcFactor);
-            alphaBlendState.blendDstFactor = translateBlendFactor(alphaBlendState.blendDstFactor);
+            if (usesBlendConstantAlpha) {
+                assert(!usesBlendConstantColor);
+                blendColor.r = blendColor.g = blendColor.b = blendColor.a;
+                rgbBlendState.blendSrcFactor = translateBlendFactor(rgbBlendState.blendSrcFactor);
+                rgbBlendState.blendDstFactor = translateBlendFactor(rgbBlendState.blendDstFactor);
+                alphaBlendState.blendSrcFactor = translateBlendFactor(alphaBlendState.blendSrcFactor);
+                alphaBlendState.blendDstFactor = translateBlendFactor(alphaBlendState.blendDstFactor);
+            }
         }
 
         const isTransparent = blendEnabled;
@@ -720,7 +723,7 @@ export function parseTexChunk(buffer: ArrayBufferSlice, texData: ArrayBufferSlic
                     for (let j = 0; j < depth; j++) {
                         const tempPixels = decodeTexture(format, mipWidth, mipHeight, texData.slice(startOffs[j], endOffs[j]));
                         pixels.set(tempPixels, setOffs);
-                        
+
                         startOffs[j] += mipSize;
                         setOffs += tempPixels.length;
                     }
@@ -787,7 +790,7 @@ function readLutsChunk(cmb: CMB, buffer: ArrayBufferSlice): void {
 
         const frames: AnimationKeyframeHermite[] = [];
         let keyframeTableIdx: number = offs + 0x10;
-        
+
         for (let j = 0; j < numKeyframes; j++) {
             let time = view.getInt32(keyframeTableIdx + 0x00, true);
             const value = view.getFloat32(keyframeTableIdx + 0x04, true);
@@ -1052,7 +1055,7 @@ function readSepdChunk(cmb: CMB, buffer: ArrayBufferSlice): Sepd {
         sepd.hasVertexColors = !!((flags >>> 2) & 1);
         sepd.hasTangents = false;
     }
-    
+
     sepd.position = readVertexAttrib();
     sepd.normal = readVertexAttrib();
 

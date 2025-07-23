@@ -166,7 +166,7 @@ export class GfxRenderInst {
     private _drawInstanceCount: number = 1;
 
     private _stencilRef: number | null = null;
-    private _blendColor: GfxColor | null = null;
+    private _blendColor: Readonly<GfxColor> | null = null;
 
     constructor() {
         this._renderPipelineDescriptor = {
@@ -201,6 +201,8 @@ export class GfxRenderInst {
         this._vertexBuffers = o._vertexBuffers;
         this._indexBuffer = o._indexBuffer;
         this._allowSkippingPipelineIfNotReady = o._allowSkippingPipelineIfNotReady;
+        this._stencilRef = o._stencilRef;
+        this._blendColor = o._blendColor;
         this.sortKey = o.sortKey;
         for (let i = 0; i < o._bindingDescriptors.length; i++) {
             const tbd = this._bindingDescriptors[i], obd = o._bindingDescriptors[i];
@@ -492,7 +494,7 @@ export class GfxRenderInst {
         this._stencilRef = value;
     }
 
-    public setBlendColor(value: GfxColor | null): void {
+    public setBlendColor(value: Readonly<GfxColor> | null): void {
         this._blendColor = value;
     }
 
