@@ -384,8 +384,7 @@ class d_a_ep extends fopAc_ac_c {
                 vec3.copy(this.burstEmitter.localDirection, emitterDir);
 
                 if (this.burstTimer <= 1.0) {
-                    this.burstEmitter.maxFrame = -1;
-                    this.burstEmitter.stopCreateParticle();
+                    this.burstEmitter.becomeInvalidEmitterImmediate();
                     this.burstEmitter = null;
                 }
             }

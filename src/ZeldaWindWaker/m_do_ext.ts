@@ -20,8 +20,6 @@ import { normToLength } from "../MathHelpers.js";
 
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
-const scratchVec3c = vec3.create();
-const scratchVec3d = vec3.create();
 const materialParams = new MaterialParams();
 const drawParams = new DrawParams();
 

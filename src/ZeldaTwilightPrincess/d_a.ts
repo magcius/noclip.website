@@ -5,30 +5,25 @@ import { OpaqueBlack, TransparentBlack, White, colorCopy, colorNewCopy, colorNew
 import { J3DModelData, J3DModelInstance, MaterialInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
 import { LoopMode, TRK1, TTK1 } from "../Common/JSYSTEM/J3D/J3DLoader.js";
 import { JPABaseEmitter } from "../Common/JSYSTEM/JPA.js";
-import { BTIData } from "../Common/JSYSTEM/JUTTexture.js";
 import { MathConstants, Vec3UnitY, invlerp, saturate, scaleMatrix } from "../MathHelpers.js";
-import { TSDraw } from "../SuperMarioGalaxy/DDraw.js";
 import { cLib_addCalc, cLib_addCalc2, cLib_addCalcAngleS2, cLib_addCalcAngleS_, cLib_chaseF, cLib_targetAngleX, cLib_targetAngleY, cM_atan2s, cM_deg2s, cM_s2rad } from "../ZeldaWindWaker/SComponent.js";
 import { dBgW } from "../ZeldaWindWaker/d_bg.js";
+import { cPhs__Status, fGlobals, fpcPf__Register, fpc_bs__Constructor } from "../ZeldaWindWaker/framework.js";
 import { MtxPosition, MtxTrans, calc_mtx, mDoMtx_XrotM, mDoMtx_YrotM, mDoMtx_YrotS, mDoMtx_ZXYrotM, mDoMtx_ZrotM } from "../ZeldaWindWaker/m_do_mtx.js";
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
-import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
-import { GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
-import { GXMaterialBuilder } from "../gx/GXMaterialBuilder.js";
-import * as GX from '../gx/gx_enum.js';
-import { ColorKind, DrawParams, GXMaterialHelperGfx, MaterialParams } from "../gx/gx_render.js";
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
+import { ColorKind, MaterialParams } from "../gx/gx_render.js";
 import { assertExists, leftPad, nArray, readString } from "../util.js";
 import { ViewerRenderInput } from "../viewer.js";
 import { dGlobals } from "./Main.js";
 import { dDlst_list_Set } from "./d_drawlist.js";
 import { ItemNo } from "./d_item_data.js";
-import { LIGHT_INFLUENCE, LightType, dKy_GxFog_set, dKy_change_colpat, dKy_darkworld_check, dKy_daynight_check, dKy_event_proc, dKy_plight_cut, dKy_plight_priority_set, dKy_plight_set, dKy_setLight__OnModelInstance, dKy_tevstr_c, dKy_tevstr_init, dScnKy_env_light_c, dice_rain_minus, setLightTevColorType_MAJI, settingTevStruct } from "./d_kankyo.js";
-import { dKyr_get_vectle_calc, dKyw_get_wind_pow, dKyw_get_wind_vec, dKyw_rain_set } from "./d_kankyo_wether.js";
+import { LIGHT_INFLUENCE, LightType, dKy_change_colpat, dKy_darkworld_check, dKy_daynight_check, dKy_event_proc, dKy_plight_cut, dKy_plight_priority_set, dKy_plight_set, dKy_setLight__OnModelInstance, dKy_tevstr_c, dKy_tevstr_init, dScnKy_env_light_c, dice_rain_minus, setLightTevColorType_MAJI, settingTevStruct } from "./d_kankyo.js";
+import { dKyw_get_wind_pow, dKyw_get_wind_vec, dKyw_rain_set } from "./d_kankyo_wether.js";
 import { ResType, dComIfG_resLoad } from "./d_resorce.js";
 import { dPath, dPath_GetRoomPath, dPath__Point, dStage_Multi_c, dStage_stagInfo_GetArg0 } from "./d_stage.js";
+import { fopAcM_create, fopAc_ac_c } from "./f_op_actor.js";
 import { mDoExt_bckAnm, mDoExt_brkAnm, mDoExt_btkAnm, mDoExt_modelUpdateDL, mDoExt_morf_c, mDoExt_setIndirectTex, mDoExt_setupShareTexture, mDoExt_setupStageTexture } from "./m_do_ext.js";
-import { fopAc_ac_c, fopAcM_create } from "./f_op_actor.js";
-import { cPhs__Status, fGlobals, fpc_bs__Constructor, fpcPf__Register } from "../ZeldaWindWaker/framework.js";
 
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
@@ -529,8 +524,6 @@ class d_a_vrbox extends fopAc_ac_c {
         calc_mtx[13] -= 0.09 * (globals.cameraPosition[1] - skyboxOffsY);
         mat4.copy(this.model.modelMatrix, calc_mtx);
 
-        dKy_GxFog_set(envLight, materialParams.u_FogBlock, viewerInput.camera);
-
         dKy_setLight__OnModelInstance(envLight, this.model, viewerInput.camera);
         mDoExt_modelUpdateDL(globals, this.model, renderInstManager, viewerInput, globals.dlst.sky);
     }
@@ -543,9 +536,6 @@ class d_a_vrbox2 extends fopAc_ac_c {
     private sunBtkAnm = new mDoExt_btkAnm();
     private btkTime = 0.0;
     private kasumiMae: J3DModelInstance | null = null;
-    private kasumiMaeC0 = colorNewCopy(TransparentBlack);
-    private kasumiMaeK0 = colorNewCopy(TransparentBlack);
-    private sunColor = colorNewCopy(TransparentBlack);
     private scrollSpeed = 0.0005;
 
     public override subload(globals: dGlobals): cPhs__Status {
@@ -658,8 +648,6 @@ class d_a_vrbox2 extends fopAc_ac_c {
     public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         const envLight = globals.g_env_light;
 
-        dKy_GxFog_set(envLight, materialParams.u_FogBlock, viewerInput.camera);
-
         let sum = 0;
         sum += envLight.vrKasumiCol.r + envLight.vrKasumiCol.g + envLight.vrKasumiCol.b;
         sum += envLight.vrSkyCol.r + envLight.vrSkyCol.g + envLight.vrSkyCol.b;
@@ -709,95 +697,11 @@ class d_a_vrbox2 extends fopAc_ac_c {
     }
 }
 
-// TODO(jstpierre): This is a hack to put it in 3D.
-const materialParams = new MaterialParams();
-const drawParams = new DrawParams();
-
-// Simple quad shape & input.
-export class dDlst_2DStatic_c {
-    private ddraw = new TSDraw();
-
-    constructor(device: GfxDevice, cache: GfxRenderCache) {
-        this.ddraw.setVtxDesc(GX.Attr.POS, true);
-        this.ddraw.setVtxDesc(GX.Attr.TEX0, true);
-
-        const size = 1;
-        this.ddraw.beginDraw(cache);
-        this.ddraw.begin(GX.Command.DRAW_QUADS, 4);
-        this.ddraw.position3f32(-size, -size, 0);
-        this.ddraw.texCoord2f32(GX.Attr.TEX0, 0, 1);
-        this.ddraw.position3f32(-size, size, 0);
-        this.ddraw.texCoord2f32(GX.Attr.TEX0, 0, 0);
-        this.ddraw.position3f32(size, size, 0);
-        this.ddraw.texCoord2f32(GX.Attr.TEX0, 1, 0);
-        this.ddraw.position3f32(size, -size, 0);
-        this.ddraw.texCoord2f32(GX.Attr.TEX0, 1, 1);
-        this.ddraw.end();
-
-        this.ddraw.endDraw(cache);
-    }
-
-    public setOnRenderInst(renderInst: GfxRenderInst): void {
-        this.ddraw.setOnRenderInst(renderInst);
-    }
-
-    public destroy(device: GfxDevice): void {
-        this.ddraw.destroy(device);
-    }
-}
-
-class dDlst_2DBase_c {
-    public materialHelper: GXMaterialHelperGfx;
-    public modelMatrix = mat4.create();
-
-    constructor() {
-        const mb = new GXMaterialBuilder('2D Object');
-        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
-        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO);
-        mb.setTevColorIn(0, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.TEXC);
-        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, false, GX.Register.PREV);
-        mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.TEXA);
-        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, false, GX.Register.PREV);
-        mb.setZMode(true, GX.CompareType.LEQUAL, false);
-        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA);
-        mb.setUsePnMtxIdx(false);
-        this.materialHelper = new GXMaterialHelperGfx(mb.finish());
-    }
-}
-
-class dDlst_2DObject_c extends dDlst_2DBase_c {
-    public whichTex = 0;
-
-    constructor(private tex0: BTIData, private tex1: BTIData | null = null) {
-        super();
-    }
-
-    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        const device = globals.modelCache.device;
-        const renderInst = renderInstManager.newRenderInst();
-
-        globals.quadStatic.setOnRenderInst(renderInst);
-
-        const tex = this.whichTex === 0 ? this.tex0 : this.tex1!;
-        tex.fillTextureMapping(materialParams.m_TextureMapping[0]);
-
-        this.materialHelper.setOnRenderInst(renderInstManager.gfxRenderCache, renderInst);
-        this.materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
-        renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
-
-        mat4.mul(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix, this.modelMatrix);
-        this.materialHelper.allocateDrawParamsDataOnInst(renderInst, drawParams);
-
-        renderInstManager.submitRenderInst(renderInst);
-    }
-}
-
 class d_a_obj_suisya extends fopAc_ac_c {
     public static PROCESS_NAME = dProcName_e.d_a_obj_suisya;
     private model: J3DModelInstance;
 
     public override subload(globals: dGlobals): cPhs__Status {
-        const envLight = globals.g_env_light;
         const arcName = `Obj_sui`;
 
         const status = dComIfG_resLoad(globals, arcName);
@@ -838,8 +742,6 @@ class d_a_set_bg_obj extends fopAc_ac_c {
     public static PROCESS_NAME = dProcName_e.d_a_set_bg_obj;
 
     public override subload(globals: dGlobals): cPhs__Status {
-        const envLight = globals.g_env_light;
-
         const bg_id = this.parameters & 0xFFFF;
         const arcName = `@bg${leftPad(''+bg_id.toString(16), 4)}`;
 
@@ -1029,9 +931,6 @@ class d_a_bg_obj extends fopAc_ac_c {
     private specData: daBgObj_Spec;
 
     public override subload(globals: dGlobals): cPhs__Status {
-        const envLight = globals.g_env_light;
-        const renderer = globals.renderer;
-
         const bg_id = this.parameters & 0xFFFF;
         const arcName = `@bg${leftPad(''+bg_id.toString(16), 4)}`;
 
@@ -1277,6 +1176,13 @@ class d_a_obj_glowSphere extends fopAc_ac_c {
 
         mDoExt_modelUpdateDL(globals, this.model, renderInstManager, viewerInput, globals.dlst.bg);
     }
+
+    public override delete(globals: dGlobals): void {
+        if (this.emitter1 !== null)
+            this.emitter1.becomeInvalidEmitterImmediate();
+        if (this.emitter2 !== null)
+            this.emitter2.becomeInvalidEmitterImmediate();
+    }
 }
 
 class d_a_obj_iceblk extends fopAc_ac_c {
@@ -1345,11 +1251,9 @@ class kytag10_class extends fopAc_ac_c {
     private pathPnt: number = 0;
     private ptclScale = vec3.create();
     private rate: number;
-    private unk_594: number = 0.0;
+    private pathT: number = 0.0;
 
     public override subload(globals: dGlobals): cPhs__Status {
-        const envLight = globals.g_env_light;
-
         let prm0 = this.parameters & 0xFF;
         if (prm0 === -1) {
             prm0 = 10;
@@ -1374,7 +1278,7 @@ class kytag10_class extends fopAc_ac_c {
         this.rate = this.rot[0] & 0xFF;
         this.path = this.set_path_info(globals);
         this.pathPnt = 0;
-        this.unk_594 = 0;
+        this.pathT = 0;
         this.emitter1 = globals.particleCtrl.set(globals, 0, 0x852B, this.pos);
         this.emitter2 = globals.particleCtrl.set(globals, 0, 0x852C, this.pos);
 
@@ -1396,21 +1300,17 @@ class kytag10_class extends fopAc_ac_c {
             return;
 
         let start_idx = 0;
-        let end_idx = this.path!.points.length - 1;
-        let spD6 = 0;
-        let spD8 = 0;
+        let end_idx = path.points.length - 1;
 
-        this.get_rail_ratio_pos(path, 0, 0.0, spD6, spD8);
-        this.get_rail_ratio_pos(path, end_idx - 1, 1.0, spD6, spD8);
-        const ratio1 = this.get_rail_ratio_pos(path, this.pathPnt, 0.0, spD6, spD8);
-        const ratio2 = this.get_rail_ratio_pos(path, this.pathPnt, 1.0, spD6, spD8);
+        this.get_rail_ratio_pos(scratchVec3a, path, this.pathPnt, 0.0);
+        this.get_rail_ratio_pos(scratchVec3b, path, this.pathPnt, 1.0);
 
-        const tempf = 250.0 / vec3.distance(ratio1, ratio2);
+        const travel = 250.0 / vec3.distance(scratchVec3a, scratchVec3b);
 
-        const ratio3 = this.get_rail_ratio_pos(path, this.pathPnt, this.unk_594, spD6, spD8);
+        this.get_rail_ratio_pos(scratchVec3a, path, this.pathPnt, this.pathT);
 
-        this.emitter1.setGlobalTranslation(ratio3);
-        this.emitter2.setGlobalTranslation(ratio3);
+        this.emitter1.setGlobalTranslation(scratchVec3a);
+        this.emitter2.setGlobalTranslation(scratchVec3a);
 
         this.emitter1.lifeTime = this.lifetime;
         this.emitter2.lifeTime = this.lifetime;
@@ -1427,8 +1327,8 @@ class kytag10_class extends fopAc_ac_c {
             this.emitter2.setRate(rate);
         }
 
-        if (this.unk_594 <= 1.0 - (250.0 - tempf)) {
-            this.unk_594 += tempf * deltaTimeFrames;
+        if (this.pathT <= 1.0 - (250.0 - travel)) {
+            this.pathT += travel * deltaTimeFrames;
             return;
         } else if (this.pathPnt >= end_idx - 1) {
             this.pathPnt = start_idx;
@@ -1436,7 +1336,7 @@ class kytag10_class extends fopAc_ac_c {
             this.pathPnt++;
         }
 
-        this.unk_594 = 0.0;
+        this.pathT = 0.0;
     }
 
     public set_path_info(globals: dGlobals): dPath | null {
@@ -1450,23 +1350,10 @@ class kytag10_class extends fopAc_ac_c {
         return ret;
     }
 
-    public get_rail_ratio_pos(path: dPath, pointIdx: number, param2: number, o_param3: number, o_param4: number): vec3 {
-        let ret = vec3.create();
-
+    public get_rail_ratio_pos(dst: vec3, path: dPath, pointIdx: number, t: number): void {
         const point_a = path.points[pointIdx].pos;
         const point_b = path.points[pointIdx + 1].pos;
-
-        vec3.set(ret, point_a[0] + param2 * (point_b[0] - point_a[0]),
-                      point_a[1] + param2 * (point_b[1] - point_a[1]),
-                      point_a[2] + param2 * (point_b[2] - point_a[2]));
-
-        let calc_vec = vec3.create();
-        dKyr_get_vectle_calc(point_a, point_b, calc_vec);
-
-        o_param3 = cM_atan2s(Math.sqrt(calc_vec[0] * calc_vec[0] + calc_vec[2] * calc_vec[2]), calc_vec[1]);
-        o_param4 = cM_atan2s(calc_vec[0], calc_vec[2]);
-
-        return ret;
+        vec3.lerp(dst, point_a, point_b, t);
     }
 
     public destroy(device: GfxDevice): void {
@@ -1510,8 +1397,6 @@ class d_a_obj_firepillar2 extends fopAc_ac_c {
     private type0Timer: number;
 
     public override subload(globals: dGlobals): cPhs__Status {
-        const envLight = globals.g_env_light;
-
         if (!this.initialized) {
             this.flags0 = this.rot[0];
             this.type = (this.rot[0] >> 4) & 0xF;
@@ -1828,8 +1713,6 @@ class d_a_obj_lv3water extends fopAc_ac_c {
     private type: number;
 
     public override subload(globals: dGlobals): cPhs__Status {
-        const envLight = globals.g_env_light;
-
         this.type = (this.rot![0] >> 8) & 0xFF;
 
         const arcNames = ["Kr10water", "Kr10wat01", "Kr02wat00", "Kr03wat00", "Kr03wat01", "Kr03wat02", "Kr03wat03",

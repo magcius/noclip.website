@@ -20,7 +20,6 @@ import { ViewerRenderInput } from '../viewer.js';
 import { colorCopy, colorFromRGBA } from '../Color.js';
 import { dKy_GxFog_set } from './d_kankyo.js';
 import { dBgS_GndChk } from './d_bg.js';
-import { getMatrixTranslation } from '../MathHelpers.js';
 import { cM_s2rad } from './SComponent.js';
 
 function createMaterialHelper(material: GXMaterial): GXMaterialHelperGfx {
