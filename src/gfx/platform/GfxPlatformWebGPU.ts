@@ -676,8 +676,8 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
 
         if (vertexBuffers !== null) {
             for (let i = 0; i < vertexBuffers.length; i++) {
-                const b = vertexBuffers![i];
-                if (b === null)
+                const b = vertexBuffers[i];
+                if (b === null || b === undefined)
                     continue;
                 this.gpuRenderPassEncoder!.setVertexBuffer(i, getPlatformBuffer(b.buffer), b.byteOffset);
             }
@@ -1823,6 +1823,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             occlusionQueriesRecommended: true,
             computeShadersSupported: true,
             wireframeSupported: false,
+            vertexBufferMinStride: 4,
         };
     }
 

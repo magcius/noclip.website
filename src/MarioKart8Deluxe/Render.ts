@@ -120,6 +120,8 @@ function translateTexFilterMode(filterMode: FilterMode): GfxTexFilterMode {
 
 class TurboUBER extends DeviceProgram {
     public static a_Orders = [ '_p0', '_c0', '_u0', '_u1', '_u2', '_u3', '_n0', '_t0' ];
+    public static a_Types = [ 'vec3', 'vec4', 'vec2', 'vec2', 'vec2', 'vec2', 'vec4', 'vec4' ];
+
     public static s_Orders = ['_a0', '_s0', '_n0', '_n1', '_e0', '_b0', '_b1', '_a1', '_a2', '_a3', '_t0' ];
 
     public static ub_SceneParams = 0;
@@ -200,23 +202,16 @@ uniform sampler2D u_TextureTransmission;  // _t0
     public override both = TurboUBER.globalDefinitions;
 
     public override vert = `
-layout(location = ${this.getAttrLocation('_p0')}) in vec3 a_p0; // _p0
-layout(location = ${this.getAttrLocation('_c0')}) in vec4 a_c0; // _c0
-layout(location = ${this.getAttrLocation('_u0')}) in vec2 a_u0; // _u0
-layout(location = ${this.getAttrLocation('_u1')}) in vec2 a_u1; // _u1
-layout(location = ${this.getAttrLocation('_u2')}) in vec2 a_u2; // _u2
-layout(location = ${this.getAttrLocation('_u3')}) in vec2 a_u3; // _u3
-layout(location = ${this.getAttrLocation('_n0')}) in vec4 a_n0; // _n0
-layout(location = ${this.getAttrLocation('_t0')}) in vec4 a_t0; // _t0
+${this.defineInputs()}
 
-#define a_Position  (a${this.getAttrAssign('_p0')})
-#define a_Color     (a${this.getAttrAssign('_c0')})
-#define a_TexCoord0 (a${this.getAttrAssign('_u0')})
-#define a_TexCoord1 (a${this.getAttrAssign('_u1')})
-#define a_TexCoord2 (a${this.getAttrAssign('_u2')})
-#define a_TexCoord3 (a${this.getAttrAssign('_u3')})
-#define a_Normal    (a${this.getAttrAssign('_n0')})
-#define a_Tangent   (a${this.getAttrAssign('_t0')})
+${this.defineAttr('a_Position', '_p0', 'vec3(0)')}
+${this.defineAttr('a_Color', '_c0', 'vec4(0)')}
+${this.defineAttr('a_TexCoord0', '_u0', 'vec2(0)')}
+${this.defineAttr('a_TexCoord1', '_u1', 'vec2(0)')}
+${this.defineAttr('a_TexCoord2', '_u2', 'vec2(0)')}
+${this.defineAttr('a_TexCoord3', '_u3', 'vec2(0)')}
+${this.defineAttr('a_Normal', '_n0', 'vec4(0)')}
+${this.defineAttr('a_Tangent', '_t0', 'vec4(0)')}
 
 out vec3 v_PositionWorld;
 out vec2 v_TexCoord0;
@@ -251,15 +246,29 @@ void main() {
 }
 `;
 
-    private getAttrAssign(attrName: string): string {
+    private defineInputs(): string {
         const attrAssign = this.fmat.shaderAssign.attrAssign;
-        return fallbackUndefined(attrAssign.get(attrName), attrName);
+        const uniqueAttrs = new Set(attrAssign.values());
+        let lines = '';
+        for (const attrName of uniqueAttrs) {
+            const index = TurboUBER.a_Orders.indexOf(attrName);
+            if (index < 0)
+                continue;
+            const type = TurboUBER.a_Types[index];
+            lines += `layout(location = ${index}) in ${type} a_${attrName};\n`;
+        }
+
+        return lines;
     }
 
-    private getAttrLocation(attrName: string): number {
-        const index = TurboUBER.a_Orders.indexOf(attrName);
-        assert(index >= 0);
-        return index;
+    private defineAttr(varName: string, attrName: string, fallback: string): string {
+        const attrAssign = this.fmat.shaderAssign.attrAssign;
+        const remapAttr = attrAssign.get(attrName);
+        if (remapAttr !== undefined) {
+            return `#define ${varName} (a_${remapAttr})`;
+        } else {
+            return `#define ${varName} (${fallback})`;
+        }
     }
 
     private isTranslucent(): boolean {
@@ -1318,7 +1327,7 @@ class FVTXData {
                 continue;
 
             const vertexBuffer = fvtx.vertexBuffers[bufferIndex];
-            const convertedAttribute = this.convertVertexAttribute(vertexAttribute, vertexBuffer);
+            const convertedAttribute = this.convertVertexAttribute(device, vertexAttribute, vertexBuffer);
             if (convertedAttribute !== null) {
                 const attribBufferIndex = nextBufferIndex++;
 
@@ -1366,13 +1375,30 @@ class FVTXData {
         }
     }
 
-    public convertVertexAttribute(vertexAttribute: FVTX_VertexAttribute, vertexBuffer: FVTX_VertexBuffer): ConvertedVertexAttribute | null {
-        switch (vertexAttribute.format) {
-        case AttributeFormat._10_10_10_2_Snorm:
+    public convertVertexAttribute(device: GfxDevice, vertexAttribute: FVTX_VertexAttribute, vertexBuffer: FVTX_VertexBuffer): ConvertedVertexAttribute | null {
+        if (vertexAttribute.format === AttributeFormat._10_10_10_2_Snorm) {
             return this.convertVertexAttribute_10_10_10_2_Snorm(vertexAttribute, vertexBuffer);
-        default:
+        } else if (device.queryLimits().vertexBufferMinStride > 2 && (vertexAttribute.format === AttributeFormat._8_8_Snorm || vertexAttribute.format === AttributeFormat._8_8_Unorm)) {
+            return this.convertVertexAttribute_Expand(vertexAttribute, vertexBuffer, device.queryLimits().vertexBufferMinStride);
+        } else {
             return null;
         }
+    }
+
+    public convertVertexAttribute_Expand(vertexAttribute: FVTX_VertexAttribute, vertexBuffer: FVTX_VertexBuffer, dstStride: number): ConvertedVertexAttribute {
+        const numElements = vertexBuffer.data.byteLength / vertexBuffer.stride;
+        const dst = new Uint8Array(numElements * dstStride);
+        let dstOffs = 0;
+        let srcOffs = vertexAttribute.offset;
+        const src = vertexBuffer.data.createTypedArray(Uint8Array);
+        for (let i = 0; i < numElements; i++) {
+            for (let j = 0; j < vertexBuffer.stride; j++)
+                dst[dstOffs + j] = src[srcOffs++];
+            dstOffs += dstStride;
+        }
+
+        const format = translateAttributeFormat(vertexAttribute.format);
+        return { format, data: dst.buffer, stride: dstStride };
     }
 
     public convertVertexAttribute_10_10_10_2_Snorm(vertexAttribute: FVTX_VertexAttribute, vertexBuffer: FVTX_VertexBuffer): ConvertedVertexAttribute {
@@ -1509,6 +1535,9 @@ class FSHPInstance {
 
         if (!this.fmatInstance.inColorPass)
             return;
+
+        if (this.fmatInstance.fmat.name === 'fc_RoadOther2')
+            debugger;
 
         // TODO(jstpierre): Joints.
         const template = renderInstManager.pushTemplate();

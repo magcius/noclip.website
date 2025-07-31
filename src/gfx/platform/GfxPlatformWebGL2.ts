@@ -498,6 +498,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     public occlusionQueriesRecommended: boolean;
     public computeShadersSupported: boolean = false;
     public wireframeSupported: boolean = false;
+    public vertexBufferMinStride: number = 1;
 
     constructor(public gl: WebGL2RenderingContext, configuration: GfxPlatformWebGL2Config) {
         this._contextAttributes = assertExists(gl.getContextAttributes());

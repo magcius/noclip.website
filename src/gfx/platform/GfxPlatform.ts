@@ -308,6 +308,7 @@ export interface GfxDeviceLimits {
     occlusionQueriesRecommended: boolean;
     computeShadersSupported: boolean;
     wireframeSupported: boolean;
+    vertexBufferMinStride: number;
 }
 
 export interface GfxStatisticsGroup {
