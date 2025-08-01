@@ -255,7 +255,7 @@ void main() {
             if (index < 0)
                 continue;
             const type = TurboUBER.a_Types[index];
-            lines += `layout(location = ${index}) in ${type} a_${attrName};\n`;
+            lines += `layout(location = ${index}) in ${type} a${attrName};\n`;
         }
 
         return lines;
@@ -265,7 +265,7 @@ void main() {
         const attrAssign = this.fmat.shaderAssign.attrAssign;
         const remapAttr = attrAssign.get(attrName);
         if (remapAttr !== undefined) {
-            return `#define ${varName} (a_${remapAttr})`;
+            return `#define ${varName} (a${remapAttr})`;
         } else {
             return `#define ${varName} (${fallback})`;
         }
