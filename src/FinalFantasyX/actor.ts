@@ -669,6 +669,17 @@ export class Actor {
             getMatrixTranslation(dest, bones[point.bone]);
         transformVec3Mat4w1(dest, this.modelMatrix, dest);
     }
+
+    public destroy(device: GfxDevice) {
+        if (this.vtxTextures) {
+            for (let tex of this.vtxTextures)
+                device.destroyTexture(tex);
+        }
+        if (this.textureCopies) {
+            for (let tex of this.textureCopies)
+                device.destroyTexture(tex);
+        }
+    }
 }
 
 type basicParser = (data: Int16Array, start: number, log?: (s: string) => void) => number;

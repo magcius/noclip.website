@@ -2410,8 +2410,11 @@ export class MagicSceneRenderer implements SceneGfx {
     }
 
     public destroy(device: GfxDevice, destroyHelper=true): void {
-        if (destroyHelper)
+        if (destroyHelper) {
             this.renderHelper.destroy();
+            this.bufferManager.destroy(device);
+            this.sceneTexture.destroy(device);
+        }
         for (let i = 0; i < this.textureData.length; i++)
             this.textureData[i].destroy(device);
         if (this.particles)

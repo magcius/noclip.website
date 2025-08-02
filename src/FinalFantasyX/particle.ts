@@ -5438,12 +5438,12 @@ export class Emitter {
         if (!this.visible)
             return;
         const frameDelta = Math.min(viewerInput.deltaTime * FRAME_RATE / 1000, 1);
-        this.updateMatrix(objects, viewerInput.camera.viewMatrix);
         if (this.waitTimer === EMITTER_DONE_TIMER) {
             this.t += frameDelta;
         }
         if (this.waitTimer === EMITTER_DONE_TIMER || this.bindingFlags & BindingFlags.HIDE)
             return;
+        this.updateMatrix(objects, viewerInput.camera.viewMatrix);
         if (this.spec.id === 0 && this.behavior.shouldClip && this.spec.maxDist >= 0) {
             transformVec3Mat4w0(instScr3, FFXToNoclip, this.pos);
             // game uses a view-space rectangle instead
@@ -5629,7 +5629,6 @@ export class ParticleSystem {
     public t = 0;
     public uniqueCount = 0;
     public pool: Particle | null = null;
-    public buffer: Float32Array | null = null;
 
     constructor(public id: number, public data: ParticleData, private runner?: ParticleRunner) {
         let baseCount = 0;

@@ -2907,12 +2907,25 @@ export class EventScript {
                 c.puppetID = c.stack.pop();
                 c.puppetType = PuppetType.LAYER;
                 return 0;
-            } case 0x0005: {
-                if (c.puppetType === PuppetType.LAYER || c.puppetID === PuppetType.PART) {
-                    c.setTransform(this.objects.parts);
+            } case 0x0005: case 0x019D: {
+                if (id === 0x019D)
+                    c.stack.pop(); // whether to unload actor data? false for 0005
+                switch (c.puppetType) {
+                    case PuppetType.ACTOR:
+                        objects.actors[c.index] = undefined;
+                        if (c.actor) {
+                            c.actor.destroy(objects.cache.device);
+                            c.actor = null;
+                        }
+                        break;
+                    case PuppetType.LAYER:
+                    case PuppetType.PART:
+                        // apply transform one last time
+                        c.setTransform(objects.parts);
+                        break;
                 }
-                c.puppetID = 0;
                 c.puppetType = PuppetType.NONE;
+                c.puppetID = -1;
                 return 0;
             } case 0x0010: {
                 return this.mapEntranceID; // index of map entrance used to get here, might need to set this in some cases?
@@ -3725,23 +3738,6 @@ export class EventScript {
                     activateEffect(this.objects, index, dataIndex, runOnce);
                     return 1;
                 }
-                return 0;
-            }
-            case 0x019D: {
-                c.stack.pop(); // whether to unload actor data?
-                switch (c.puppetType) {
-                    case PuppetType.ACTOR:
-                        objects.actors[c.index] = undefined;
-                        c.actor = null;
-                        break;
-                    case PuppetType.LAYER:
-                    case PuppetType.PART:
-                        // apply transform one last time
-                        c.setTransform(objects.parts);
-                        break;
-                }
-                c.puppetType = PuppetType.NONE;
-                c.puppetID = 0;
                 return 0;
             }
             case 0x019F: {

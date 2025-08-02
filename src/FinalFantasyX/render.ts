@@ -756,6 +756,7 @@ export class ActorModelData {
     public destroy(device: GfxDevice): void {
         device.destroyBuffer(this.attrBuffer);
         device.destroyBuffer(this.indexBuffer);
+        device.destroyTexture(this.vertexTexture);
     }
 }
 
@@ -2307,7 +2308,6 @@ export class ShadowRenderer {
 
     public destroy(device: GfxDevice) {
         device.destroyBuffer(this.indexBuffer);
-        device.destroyInputLayout(this.inputLayout);
     }
 
 }
