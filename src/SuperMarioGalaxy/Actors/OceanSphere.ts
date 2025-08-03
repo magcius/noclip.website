@@ -465,7 +465,7 @@ export class OceanSphere extends LiveActor<OceanSphereNrv> {
             // TODO(jstpierre)
 
             // loadMaterialBack
-            this.ddrawEnv.beginDraw(sceneObjHolder.modelCache.cache);
+            this.ddrawEnv.beginDraw(sceneObjHolder.modelCache.renderCache);
             this.drawSphere(this.ddrawEnv, true);
             const renderInstEnvBack = this.ddrawEnv.endDrawAndMakeRenderInst(renderInstManager);
 
@@ -486,7 +486,7 @@ export class OceanSphere extends LiveActor<OceanSphereNrv> {
 
         // loadMaterialFace
 
-        this.ddrawXlu.beginDraw(sceneObjHolder.modelCache.cache);
+        this.ddrawXlu.beginDraw(sceneObjHolder.modelCache.renderCache);
 
         // GXSetCullMode(GX_CULL_FRONT);
         this.drawSphere(this.ddrawXlu, false);

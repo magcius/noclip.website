@@ -1811,11 +1811,11 @@ export class MaterialFactory {
     private halfGrayGfxTexture: SFATexture | null = null;
     private halfGrayTexture: TexFunc<MaterialRenderContext>;
     private furFactory: FurFactory | null = null;
-    public cache: GfxRenderCache;
+    public renderCache: GfxRenderCache;
     public scrollSlots: ScrollSlot[] = [];
 
     constructor(public device: GfxDevice) {
-        this.cache = new GfxRenderCache(this.device);
+        this.renderCache = new GfxRenderCache(this.device);
     }
 
     public update(animController: SFAAnimationController) {
@@ -1834,11 +1834,11 @@ export class MaterialFactory {
     }
 
     public buildObjectMaterial(shader: Shader, texFetcher: TextureFetcher, hasSkeleton: boolean): SFAMaterial {
-        return new StandardObjectMaterial(this.cache, this, shader, texFetcher, hasSkeleton);
+        return new StandardObjectMaterial(this.renderCache, this, shader, texFetcher, hasSkeleton);
     }
 
     public buildMapMaterial(shader: Shader, texFetcher: TextureFetcher): SFAMaterial {
-        return new StandardMapMaterial(this.cache, this, shader, texFetcher);
+        return new StandardMapMaterial(this.renderCache, this, shader, texFetcher);
     }
     
     public buildWaterMaterial(shader: Shader): SFAMaterial {
@@ -1846,22 +1846,22 @@ export class MaterialFactory {
     }
 
     public buildFurMaterial(shader: Shader, texFetcher: TextureFetcher, texIds: number[], isMapBlock: boolean): SFAMaterial {
-        return new FurMaterial(this.cache, this, shader, texFetcher, isMapBlock);
+        return new FurMaterial(this.renderCache, this, shader, texFetcher, isMapBlock);
     }
 
     public getFurFactory(): FurFactory {
         if (this.furFactory !== null)
             return this.furFactory;
 
-        this.furFactory = new FurFactory(this.cache);
+        this.furFactory = new FurFactory(this.renderCache);
         return this.furFactory;
     }
 
     private genColorTexture(r: number, g: number, b: number, a: number): SFATexture {
         const width = 1;
         const height = 1;
-        const gfxTexture = this.cache.device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, width, height, 1));
-        const gfxSampler = this.cache.createSampler({
+        const gfxTexture = this.renderCache.device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, width, height, 1));
+        const gfxSampler = this.renderCache.createSampler({
             wrapS: GfxWrapMode.Clamp,
             wrapT: GfxWrapMode.Clamp,
             minFilter: GfxTexFilterMode.Point,
@@ -1883,7 +1883,7 @@ export class MaterialFactory {
 
         plot(0, 0, r, g, b, a);
 
-        this.cache.device.uploadTextureData(gfxTexture, 0, [pixels]);
+        this.renderCache.device.uploadTextureData(gfxTexture, 0, [pixels]);
 
         return new SFATexture(gfxTexture, gfxSampler, width, height);
     }
@@ -1922,8 +1922,8 @@ export class MaterialFactory {
         if (this.greenSphereMapTestTexture === undefined) {
             const width = 1024;
             const height = 1024;
-            const gfxTexture = this.cache.device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, width, height, 1));
-            const gfxSampler = this.cache.createSampler({
+            const gfxTexture = this.renderCache.device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, width, height, 1));
+            const gfxSampler = this.renderCache.createSampler({
                 wrapS: GfxWrapMode.Clamp,
                 wrapT: GfxWrapMode.Clamp,
                 minFilter: GfxTexFilterMode.Bilinear,
@@ -1955,7 +1955,7 @@ export class MaterialFactory {
                 }
             }
 
-            this.cache.device.uploadTextureData(gfxTexture, 0, [pixels]);
+            this.renderCache.device.uploadTextureData(gfxTexture, 0, [pixels]);
 
             this.greenSphereMapTestTexture = makeMaterialTexture(new SFATexture(gfxTexture, gfxSampler, width, height));
         }
@@ -1972,8 +1972,8 @@ export class MaterialFactory {
             const height = 1024;
             const gridWidth = 32;
             const gridHeight = 32;
-            const gfxTexture = this.cache.device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, width, height, 1));
-            const gfxSampler = this.cache.createSampler({
+            const gfxTexture = this.renderCache.device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, width, height, 1));
+            const gfxSampler = this.renderCache.createSampler({
                 wrapS: GfxWrapMode.Clamp,
                 wrapT: GfxWrapMode.Clamp,
                 minFilter: GfxTexFilterMode.Bilinear,
@@ -2005,7 +2005,7 @@ export class MaterialFactory {
                 }
             }
 
-            this.cache.device.uploadTextureData(gfxTexture, 0, [pixels]);
+            this.renderCache.device.uploadTextureData(gfxTexture, 0, [pixels]);
 
             this.sphereMapTestTexture = makeMaterialTexture(new SFATexture(gfxTexture, gfxSampler, width, height));
         }
@@ -2019,8 +2019,8 @@ export class MaterialFactory {
 
         const width = 256;
         const height = 4;
-        const gfxTexture = this.cache.device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, width, height, 1));
-        const gfxSampler = this.cache.createSampler({
+        const gfxTexture = this.renderCache.device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, width, height, 1));
+        const gfxSampler = this.renderCache.createSampler({
             wrapS: GfxWrapMode.Clamp,
             wrapT: GfxWrapMode.Clamp,
             minFilter: GfxTexFilterMode.Bilinear,
@@ -2046,7 +2046,7 @@ export class MaterialFactory {
                 plot(x, y, I, I, I, I);
         }
 
-        this.cache.device.uploadTextureData(gfxTexture, 0, [pixels]);
+        this.renderCache.device.uploadTextureData(gfxTexture, 0, [pixels]);
 
         this.rampGfxTexture = new SFATexture(gfxTexture, gfxSampler, width, height);
         this.rampTexture = makeMaterialTexture(this.rampGfxTexture);
@@ -2063,8 +2063,8 @@ export class MaterialFactory {
         
         const width = 128;
         const height = 128;
-        const gfxTexture = this.cache.device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, width, height, 1));
-        const gfxSampler = this.cache.createSampler({
+        const gfxTexture = this.renderCache.device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, width, height, 1));
+        const gfxSampler = this.renderCache.createSampler({
             wrapS: GfxWrapMode.Repeat,
             wrapT: GfxWrapMode.Repeat,
             minFilter: GfxTexFilterMode.Bilinear,
@@ -2106,7 +2106,7 @@ export class MaterialFactory {
             }
         }
 
-        this.cache.device.uploadTextureData(gfxTexture, 0, [pixels]);
+        this.renderCache.device.uploadTextureData(gfxTexture, 0, [pixels]);
 
         this.causticGfxTexture = new SFATexture(gfxTexture, gfxSampler, width, height);
         this.causticTexture = makeMaterialTexture(this.causticGfxTexture);
@@ -2119,8 +2119,8 @@ export class MaterialFactory {
 
         const width = 128;
         const height = 128;
-        const gfxTexture = this.cache.device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, width, height, 1));
-        const gfxSampler = this.cache.createSampler({
+        const gfxTexture = this.renderCache.device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, width, height, 1));
+        const gfxSampler = this.renderCache.createSampler({
             wrapS: GfxWrapMode.Clamp,
             wrapT: GfxWrapMode.Clamp,
             minFilter: GfxTexFilterMode.Bilinear,
@@ -2155,7 +2155,7 @@ export class MaterialFactory {
             }
         }
 
-        this.cache.device.uploadTextureData(gfxTexture, 0, [pixels]);
+        this.renderCache.device.uploadTextureData(gfxTexture, 0, [pixels]);
 
         this.mapLightGfxTexture = new SFATexture(gfxTexture, gfxSampler, width, height);
         this.mapLightTexture = makeMaterialTexture(this.mapLightGfxTexture);
@@ -2172,8 +2172,8 @@ export class MaterialFactory {
         
         const width = 64;
         const height = 64;
-        const gfxTexture = this.cache.device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, width, height, 1));
-        const gfxSampler = this.cache.createSampler({
+        const gfxTexture = this.renderCache.device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, width, height, 1));
+        const gfxSampler = this.renderCache.createSampler({
             wrapS: GfxWrapMode.Repeat,
             wrapT: GfxWrapMode.Repeat,
             minFilter: GfxTexFilterMode.Bilinear,
@@ -2207,7 +2207,7 @@ export class MaterialFactory {
             }
         }
 
-        this.cache.device.uploadTextureData(gfxTexture, 0, [pixels]);
+        this.renderCache.device.uploadTextureData(gfxTexture, 0, [pixels]);
 
         this.wavyGfxTexture = new SFATexture(gfxTexture, gfxSampler, width, height);
         this.wavyTexture = makeMaterialTexture(this.wavyGfxTexture);
@@ -2226,6 +2226,6 @@ export class MaterialFactory {
         if (this.wavyGfxTexture !== null)
             this.wavyGfxTexture.destroy(device);
         this.furFactory?.destroy(device);
-        this.cache.destroy();
+        this.renderCache.destroy();
     }
 }

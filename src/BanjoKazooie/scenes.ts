@@ -277,10 +277,10 @@ export function parseAnimationFile(buffer: ArrayBufferSlice): AnimationFile {
 
 class ObjectData {
     public geoData: (GeometryData | FlipbookData | null)[] = [];
-    public gfxCache: GfxRenderCache;
+    public renderCache: GfxRenderCache;
 
     constructor(device: GfxDevice, private objectSetupData: ObjectSetupData) {
-        this.gfxCache = new GfxRenderCache(device);
+        this.renderCache = new GfxRenderCache(device);
     }
 
     public ensureGeoData(device: GfxDevice, geoFileID: number, objectID = -1): GeometryData | FlipbookData | null {
@@ -306,7 +306,7 @@ class ObjectData {
                 // but most objects support switching beteween opaque and translucent,
                 // so setting translucent by default seems safe
                 const geo = Geo.parseBK(geoData, Geo.RenderZMode.OPA, false);
-                this.geoData[geoFileID] = new GeometryData(device, this.gfxCache, geo, objectID);
+                this.geoData[geoFileID] = new GeometryData(device, this.renderCache, geo, objectID);
             } else {
                 return this.ensureFlipbookData(device, geoFileID);
             }
@@ -323,7 +323,7 @@ class ObjectData {
             }
 
             const flipbook = Flipbook.parse(file.Data);
-            this.geoData[fileID] = new FlipbookData(device, this.gfxCache, flipbook);
+            this.geoData[fileID] = new FlipbookData(device, this.renderCache, flipbook);
         }
 
         const data = this.geoData[fileID];
@@ -474,7 +474,7 @@ class ObjectData {
                 data.renderData.destroy(device);
         }
 
-        this.gfxCache.destroy();
+        this.renderCache.destroy();
     }
 }
 

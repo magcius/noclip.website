@@ -113,7 +113,7 @@ export class TheWitnessGlobals {
     public entity_manager = new Entity_Manager();
     public entity_render_list = new Entity_Render_List();
     public viewpoint = new Viewpoint();
-    public cache: GfxRenderCache;
+    public renderCache: GfxRenderCache;
     public debug_draw: DebugDraw;
     public all_variables: Variables;
     public sky_variables: Variables;
@@ -123,7 +123,7 @@ export class TheWitnessGlobals {
     public scene_time = 0.0;
 
     constructor(public device: GfxDevice, public asset_manager: Asset_Manager) {
-        this.cache = new GfxRenderCache(this.device);
+        this.renderCache = new GfxRenderCache(this.device);
         this.occlusion_manager = new Occlusion_Manager(this.device);
         this.device_material_cache = new Device_Material_Cache();
 

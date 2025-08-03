@@ -6,8 +6,8 @@ import { GfxMegaStateDescriptor, GfxDevice, GfxRenderPass, GfxRenderPipelineDesc
 
 import { defaultMegaState, copyMegaState, setMegaStateFlags } from "../helpers/GfxMegaStateDescriptorHelpers.js";
 
-import { GfxRenderCache } from "./GfxRenderCache.js";
-import { GfxRenderDynamicUniformBuffer } from "./GfxRenderDynamicUniformBuffer.js";
+import type { GfxRenderCache } from "./GfxRenderCache.js";
+import type { GfxRenderDynamicUniformBuffer } from "./GfxRenderDynamicUniformBuffer.js";
 
 /**
  * The "Render" subsystem provides high-level scene graph utiltiies, built on top of gfx/platform and gfx/helpers. A

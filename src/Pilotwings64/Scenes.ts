@@ -2473,10 +2473,10 @@ class DataHolder {
     public uven: UVEN[] = [];
     public uvtp: UVTP[] = [];
     public splineData = new Map<number, SPTH>();
-    public gfxRenderCache: GfxRenderCache;
+    public renderCache: GfxRenderCache;
 
     constructor(device: GfxDevice) {
-        this.gfxRenderCache = new GfxRenderCache(device);
+        this.renderCache = new GfxRenderCache(device);
     }
 
     public destroy(device: GfxDevice): void {
@@ -2486,7 +2486,7 @@ class DataHolder {
             this.uvmdData[i].destroy(device);
         for (let i = 0; i < this.uvctData.length; i++)
             this.uvctData[i].destroy(device);
-        this.gfxRenderCache.destroy();
+        this.renderCache.destroy();
     }
 }
 
@@ -2779,13 +2779,13 @@ async function fetchDataHolder(dataFetcher: DataFetcher, device: GfxDevice): Pro
         const file = fs.files[i];
         if (file.type === 'UVCT') {
             const uvct = parseUVCT(file);
-            dataHolder.uvctData.push(new UVCTData(dataHolder.gfxRenderCache, uvct));
+            dataHolder.uvctData.push(new UVCTData(dataHolder.renderCache, uvct));
         } else if (file.type === 'UVTX') {
             const uvtx = parseUVTX(file);
-            dataHolder.textureData.push(new TextureData(dataHolder.gfxRenderCache, uvtx));
+            dataHolder.textureData.push(new TextureData(dataHolder.renderCache, uvtx));
         } else if (file.type === 'UVMD') {
             const uvmd = parseUVMD(file);
-            dataHolder.uvmdData.push(new ModelData(dataHolder.gfxRenderCache, uvmd, dataHolder.uvmdData.length));
+            dataHolder.uvmdData.push(new ModelData(dataHolder.renderCache, uvmd, dataHolder.uvmdData.length));
         } else if (file.type === 'UVTR') {
             dataHolder.uvtr.push(parseUVTR(file));
         } else if (file.type === 'UVLV') {

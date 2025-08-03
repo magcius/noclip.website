@@ -183,11 +183,11 @@ export class FezRenderer implements Viewer.SceneGfx {
             this.artObjectRenderers.push(renderer);
         }
 
-        this.backgroundPlaneStaticData = new BackgroundPlaneStaticData(device, modelCache.gfxRenderCache);
+        this.backgroundPlaneStaticData = new BackgroundPlaneStaticData(device, modelCache.renderCache);
 
         for (const backgroundPlane of level.backgroundPlanes.values()) {
             const backgroundPlaneData = assertExists(modelCache.backgroundPlaneDatas.find((bp) => bp.name === backgroundPlane.textureName));
-            const renderer = new BackgroundPlaneRenderer(modelCache.gfxRenderCache, backgroundPlane, backgroundPlaneData, this.backgroundPlaneStaticData);
+            const renderer = new BackgroundPlaneRenderer(modelCache.renderCache, backgroundPlane, backgroundPlaneData, this.backgroundPlaneStaticData);
             mat4.mul(renderer.modelMatrix, this.modelMatrix, renderer.modelMatrix);
             this.backgroundPlaneRenderers.push(renderer);
         }

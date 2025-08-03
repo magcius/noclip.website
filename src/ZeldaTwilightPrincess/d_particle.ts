@@ -110,7 +110,7 @@ export class dPa_control_c {
             const data = this.findResData(userIndex);
             if (data !== null) {
                 const [jpacData, jpaResRaw] = data;
-                const device = globals.modelCache.device, cache = globals.modelCache.cache;
+                const device = globals.modelCache.device, cache = globals.modelCache.renderCache;
                 const resData = new JPAResourceData(device, cache, jpacData, jpaResRaw);
                 this.resourceDatas.set(userIndex, resData);
             }

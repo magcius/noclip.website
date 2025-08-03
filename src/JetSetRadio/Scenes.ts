@@ -193,8 +193,8 @@ class ModelCache {
     private texOpaqueMagenta: GfxTexture;
     private texOpaqueWhite: GfxTexture;
 
-    constructor(public device: GfxDevice, public cache: GfxRenderCache, private dataFetcher: DataFetcher, private stageData: StageData) {
-        this.cache = new GfxRenderCache(device);
+    constructor(public device: GfxDevice, public renderCache: GfxRenderCache, private dataFetcher: DataFetcher, private stageData: StageData) {
+        this.renderCache = new GfxRenderCache(device);
 
         this.texOpaqueMagenta = makeSolidColorTexture2D(device, Magenta);
         this.texOpaqueWhite = makeSolidColorTexture2D(device, White);
@@ -266,7 +266,7 @@ class ModelCache {
         const stageLoadAddr = this.stageData.BaseAddress;
         const objects = Ninja.parseNjsObjects(binData, stageLoadAddr, model.Offset);
         const action: Ninja.NJS_ACTION = { frames: 0, objects, motions: [] };
-        const actionData = new NjsActionData(this.device, this.cache, action, 0);
+        const actionData = new NjsActionData(this.device, this.renderCache, action, 0);
         actionData.texlist = this.loadTexlistIndex(model.TexlistIndex);
         this.actionData.push(actionData);
         return actionData;
@@ -282,7 +282,7 @@ class ModelCache {
     }
 
     public destroy(device: GfxDevice): void {
-        this.cache.destroy();
+        this.renderCache.destroy();
         this.textureHolder.destroy(device);
         device.destroyTexture(this.texOpaqueMagenta);
         device.destroyTexture(this.texOpaqueWhite);
@@ -307,7 +307,7 @@ class JetSetRadioSceneDesc implements SceneDesc {
         for (let i = 0; i < stageData.Objects.length; i++) {
             const object = stageData.Objects[i];
             const modelData = modelCache.loadModelData(object.ModelID);
-            const actionInstance = new NjsActionInstance(modelCache.cache, modelData, modelData.texlist, modelCache.textureHolder);
+            const actionInstance = new NjsActionInstance(modelCache.renderCache, modelData, modelData.texlist, modelCache.textureHolder);
             actionInstance.modelID = object.ModelID;
             const modelMatrix = mat4.create();
             mat4.fromTranslation(modelMatrix, object.Translation);
@@ -322,7 +322,7 @@ class JetSetRadioSceneDesc implements SceneDesc {
         if (stageData.Skybox !== null) {
             for (const mesh of stageData.Skybox.Meshes) {
                 const modelDataOuter = modelCache.loadFromModelData(mesh);
-                const actionInstanceOuter = new NjsActionInstance(modelCache.cache, modelDataOuter, modelDataOuter.texlist, modelCache.textureHolder);
+                const actionInstanceOuter = new NjsActionInstance(modelCache.renderCache, modelDataOuter, modelDataOuter.texlist, modelCache.textureHolder);
                 renderer.actions.push(actionInstanceOuter);
             }
         }

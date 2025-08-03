@@ -48,7 +48,7 @@ export class World {
     public renderCache: GfxRenderCache;
 
     private constructor(public context: SceneContext, public gameInfo: GameInfo, public subdirs: string[], private materialFactory: MaterialFactory) {
-        this.renderCache = this.materialFactory.cache;
+        this.renderCache = this.materialFactory.renderCache;
     }
 
     private async init(dataFetcher: DataFetcher) {

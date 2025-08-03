@@ -101,7 +101,7 @@ export class OceanBowl extends LiveActor {
         calcActorAxis(this.axisX, this.axisY, this.axisZ, this);
 
         const device = sceneObjHolder.modelCache.device;
-        const cache = sceneObjHolder.modelCache.cache;
+        const cache = sceneObjHolder.modelCache.renderCache;
         this.initPoints(device, cache);
 
         const waterWaveArc = sceneObjHolder.modelCache.getObjectData('WaterWave')!;
@@ -335,7 +335,7 @@ export class OceanBowl extends LiveActor {
             return;
 
         const device = sceneObjHolder.modelCache.device;
-        const cache = sceneObjHolder.modelCache.cache;
+        const cache = sceneObjHolder.modelCache.renderCache;
 
         for (let i = 0; i < this.points.length; i++) {
             const p = this.points[i];
@@ -405,7 +405,7 @@ export class OceanBowl extends LiveActor {
 
     public drawBloom(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         const device = sceneObjHolder.modelCache.device;
-        const cache = sceneObjHolder.modelCache.cache;
+        const cache = sceneObjHolder.modelCache.renderCache;
 
         // Fill in our material params.
         this.water.fillTextureMapping(materialParams.m_TextureMapping[0]);

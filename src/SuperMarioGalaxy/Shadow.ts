@@ -361,7 +361,7 @@ class ShadowSurfaceCircle extends ShadowSurfaceDrawer {
 
         super.draw(sceneObjHolder, renderInstManager, viewerInput);
 
-        const cache = sceneObjHolder.modelCache.cache;
+        const cache = sceneObjHolder.modelCache.renderCache;
 
         const template = renderInstManager.pushTemplate();
         this.material.setOnRenderInst(cache, template);
@@ -771,7 +771,7 @@ class ShadowVolumeBox extends ShadowVolumeDrawer {
     protected drawShapes(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager): void {
         this.makeVertexBuffer();
 
-        this.ddraw.beginDraw(sceneObjHolder.modelCache.cache);
+        this.ddraw.beginDraw(sceneObjHolder.modelCache.renderCache);
 
         this.ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP);
         this.ddraw.position3vec3(this.vtx[0]);
@@ -812,7 +812,7 @@ class ShadowVolumeBox extends ShadowVolumeDrawer {
         this.ddraw.position3vec3(this.vtx[1]);
         this.ddraw.end();
 
-        const cache = sceneObjHolder.modelCache.cache;
+        const cache = sceneObjHolder.modelCache.renderCache;
         this.ddraw.endDraw(renderInstManager);
 
         const front = renderInstManager.newRenderInst();
@@ -884,7 +884,7 @@ class ShadowVolumeLine extends ShadowVolumeDrawer {
         vec3.scaleAndAdd(this.vtx[7], this.vtx[5], dropDirTo, dropLengthTo);
 
         // Now send our points over.
-        const cache = sceneObjHolder.modelCache.cache;
+        const cache = sceneObjHolder.modelCache.renderCache;
         this.ddraw.beginDraw(cache);
 
         this.ddraw.begin(GX.Command.DRAW_QUADS);
@@ -1025,7 +1025,7 @@ class AlphaShadow extends NameObj {
     constructor(sceneObjHolder: SceneObjHolder) {
         super(sceneObjHolder, 'AlphaShadow');
 
-        const cache = sceneObjHolder.modelCache.cache;
+        const cache = sceneObjHolder.modelCache.renderCache;
 
         connectToScene(sceneObjHolder, this, MovementType.None, CalcAnimType.None, DrawBufferType.None, DrawType.AlphaShadow);
 
@@ -1051,7 +1051,7 @@ class AlphaShadow extends NameObj {
         this.orthoQuad.setVtxDesc(GX.Attr.POS, true);
         this.orthoQuad.setVtxDesc(GX.Attr.TEX0, true);
 
-        this.orthoQuad.beginDraw(sceneObjHolder.modelCache.cache);
+        this.orthoQuad.beginDraw(sceneObjHolder.modelCache.renderCache);
         this.orthoQuad.begin(GX.Command.DRAW_QUADS, 4);
         this.orthoQuad.position3f32(0, 0, 0);
         this.orthoQuad.texCoord2f32(GX.Attr.TEX0, 0, 0);

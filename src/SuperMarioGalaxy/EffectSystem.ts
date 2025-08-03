@@ -55,7 +55,7 @@ export class ParticleResourceHolder {
 
         if (!this.resourceDatas.has(idx)) {
             const device = sceneObjHolder.modelCache.device;
-            const cache = sceneObjHolder.modelCache.cache;
+            const cache = sceneObjHolder.modelCache.renderCache;
             const resData = new JPA.JPAResourceData(device, cache, this.jpacData, this.jpac.effects[idx]);
             resData.name = name;
             this.addTexturesForResource(sceneObjHolder, resData);
@@ -1082,7 +1082,7 @@ export class EffectSystem extends NameObj {
         // These numbers are from GameScene::initEffect.
         const maxParticleCount = 0x1800;
         const maxEmitterCount = 0x200;
-        this.emitterManager = new JPA.JPAEmitterManager(sceneObjHolder.modelCache.cache, maxParticleCount, maxEmitterCount);
+        this.emitterManager = new JPA.JPAEmitterManager(sceneObjHolder.modelCache.renderCache, maxParticleCount, maxEmitterCount);
 
         this.particleEmitterHolder = new ParticleEmitterHolder(this, maxParticleCount);
     }

@@ -2910,7 +2910,7 @@ class SpinDriverPathDrawer extends LiveActor {
             return;
 
         const ddraw = this.ddraw;
-        ddraw.beginDraw(sceneObjHolder.modelCache.cache);
+        ddraw.beginDraw(sceneObjHolder.modelCache.renderCache);
 
         const width = 100;
 
@@ -4154,7 +4154,7 @@ export class WarpPod extends LiveActor {
             return;
 
         if (this.pathDrawer !== null)
-            this.pathDrawer.draw(sceneObjHolder.modelCache.cache, renderInstManager, viewerInput);
+            this.pathDrawer.draw(sceneObjHolder.modelCache.renderCache, renderInstManager, viewerInput);
     }
 
     private glowEffect(sceneObjHolder: SceneObjHolder): void {
@@ -4334,7 +4334,7 @@ export class WaterPlant extends LiveActor {
 
         const waterPlantDrawInit = sceneObjHolder.waterPlantDrawInit!;
 
-        this.ddraw.beginDraw(sceneObjHolder.modelCache.cache);
+        this.ddraw.beginDraw(sceneObjHolder.modelCache.renderCache);
         this.ddraw.allocPrimitives(GX.Command.DRAW_TRIANGLE_STRIP, 8);
 
         for (let i = 0; i < this.plantData.length; i++) {
@@ -4754,7 +4754,7 @@ export class SwingRope extends LiveActor {
     }
 
     private drawStop(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
-        this.ddraw.beginDraw(sceneObjHolder.modelCache.cache);
+        this.ddraw.beginDraw(sceneObjHolder.modelCache.renderCache);
         this.ddraw.allocPrimitives(GX.Command.DRAW_TRIANGLE_STRIP, 12);
 
         const ty = 0.13 * (this.height / 50.0);
@@ -5007,7 +5007,7 @@ export class Trapeze extends LiveActor {
         if (!isValidDraw(this))
             return;
 
-        this.ddraw.beginDraw(sceneObjHolder.modelCache.cache);
+        this.ddraw.beginDraw(sceneObjHolder.modelCache.renderCache);
 
         // Neg
         vec3.scaleAndAdd(scratchVec3a, this.translation, this.axisX, -60.0);
@@ -5176,7 +5176,7 @@ export class Creeper extends LiveActor {
         if (!isValidDraw(this))
             return;
 
-        this.ddraw.beginDraw(sceneObjHolder.modelCache.cache);
+        this.ddraw.beginDraw(sceneObjHolder.modelCache.renderCache);
 
         this.ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP);
         for (let i = 0; i < this.creeperPoints.length; i++) {
@@ -5349,7 +5349,7 @@ class OceanRingDrawer {
     }
 
     public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
-        this.ddraw.beginDraw(sceneObjHolder.modelCache.cache);
+        this.ddraw.beginDraw(sceneObjHolder.modelCache.renderCache);
 
         const p = this.oceanRing.points, pointsPerSegment = this.oceanRing.pointsPerSegment;
 
@@ -5636,7 +5636,7 @@ class OceanRingPipe extends LiveActor {
 
     private initPoints(sceneObjHolder: SceneObjHolder): vec3[] {
         const device = sceneObjHolder.modelCache.device;
-        const cache = sceneObjHolder.modelCache.cache;
+        const cache = sceneObjHolder.modelCache.renderCache;
 
         // Initializes the vertex & index buffers.
 
@@ -6199,7 +6199,7 @@ export class Flag extends LiveActor {
         if (!isValidDraw(this))
             return;
 
-        this.ddraw.beginDraw(sceneObjHolder.modelCache.cache);
+        this.ddraw.beginDraw(sceneObjHolder.modelCache.renderCache);
 
         for (let i = 1; i < this.fixPoints.length; i++) {
             this.ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP);
@@ -6691,7 +6691,7 @@ export class ElectricRail extends LiveActor implements ElectricRailBase {
     }
 
     private drawAndUploadRail(sceneObjHolder: SceneObjHolder): void {
-        const cache = sceneObjHolder.modelCache.cache;
+        const cache = sceneObjHolder.modelCache.renderCache;
         this.ddraw.beginDraw(cache);
 
         this.drawPlane(this.ddraw, this.size, this.size, -this.size, -this.size);
@@ -6942,7 +6942,7 @@ export class ElectricRailMoving extends LiveActor implements ElectricRailBase {
     }
 
     private drawAndUploadRail(sceneObjHolder: SceneObjHolder): void {
-        const cache = sceneObjHolder.modelCache.cache;
+        const cache = sceneObjHolder.modelCache.renderCache;
         this.ddraw.beginDraw(cache);
         this.drawPlane(sceneObjHolder, this.ddraw, this.size, this.size, -this.size, -this.size);
         this.drawPlane(sceneObjHolder, this.ddraw, -this.size, this.size, this.size, -this.size);
@@ -8074,7 +8074,7 @@ class AstroDomeOrbit extends LiveActor {
     }
 
     private drawOrbitPath(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, ddraw: TDDraw, width: number, height: number, color: number): void {
-        ddraw.beginDraw(sceneObjHolder.modelCache.cache);
+        ddraw.beginDraw(sceneObjHolder.modelCache.renderCache);
         this.drawCeiling(ddraw, width, true, height);
         this.drawCeiling(ddraw, width, false, height);
         this.drawSide(ddraw, width, true, height);
@@ -9037,7 +9037,7 @@ export class WhirlPoolAccelerator extends LiveActor {
         if (!isValidDraw(this))
             return;
 
-        this.ddraw.beginDraw(sceneObjHolder.modelCache.cache);
+        this.ddraw.beginDraw(sceneObjHolder.modelCache.renderCache);
         this.drawPlane(this.ddraw,  0.5,  Math.SQRT1_2, -0.5,  Math.SQRT1_2, this.texCoordS + 0/6, this.texCoordS + 1/6);
         this.drawPlane(this.ddraw, -0.5,  Math.SQRT1_2, -1.0,  0.0,          this.texCoordS + 1/6, this.texCoordS + 2/6);
         this.drawPlane(this.ddraw, -1.0,  0.0,          -0.5, -Math.SQRT1_2, this.texCoordS + 2/6, this.texCoordS + 3/6);

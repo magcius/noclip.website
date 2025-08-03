@@ -1013,10 +1013,10 @@ export class AnimGroupInstance {
 export class AnimGroupDataCache {
     public animGroupDataCache = new Map<string, AnimGroupData>();
     public promiseCache = new Map<string, Promise<AnimGroupData>>();
-    private cache: GfxRenderCache;
+    private renderCache: GfxRenderCache;
 
     constructor(private device: GfxDevice, private dataFetcher: DataFetcher, private pathBase: string) {
-        this.cache = new GfxRenderCache(device);
+        this.renderCache = new GfxRenderCache(device);
     }
 
     private async requestAnimGroupDataInternal(ag: string, abortedCallback: AbortedCallback): Promise<AnimGroupData> {
@@ -1031,7 +1031,7 @@ export class AnimGroupDataCache {
         const tgData = await this.dataFetcher.fetchData(`${this.pathBase}/a/${tg}-`, { abortedCallback });
 
         const tpl = TPL.parse(tgData, textureNames);
-        const animGroupData = new AnimGroupData(this.device, this.cache, animGroup, tpl);
+        const animGroupData = new AnimGroupData(this.device, this.renderCache, animGroup, tpl);
         this.animGroupDataCache.set(ag, animGroupData);
         return animGroupData;
     }
@@ -1048,7 +1048,7 @@ export class AnimGroupDataCache {
     }
 
     public destroy(device: GfxDevice): void {
-        this.cache.destroy();
+        this.renderCache.destroy();
         for (const animGroupData of this.animGroupDataCache.values())
             animGroupData.destroy(device);
     }

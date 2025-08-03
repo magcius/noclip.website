@@ -667,7 +667,7 @@ class Device_Material {
     public megaStateFlags: Partial<GfxMegaStateDescriptor> = {};
 
     constructor(globals: TheWitnessGlobals, public render_material: Render_Material) {
-        const wrap_sampler = globals.cache.createSampler({
+        const wrap_sampler = globals.renderCache.createSampler({
             minFilter: GfxTexFilterMode.Bilinear,
             magFilter: GfxTexFilterMode.Bilinear,
             mipFilter: GfxMipFilterMode.Linear,
@@ -675,7 +675,7 @@ class Device_Material {
             wrapT: GfxWrapMode.Repeat,
         });
 
-        const clamp_sampler = globals.cache.createSampler({
+        const clamp_sampler = globals.renderCache.createSampler({
             minFilter: GfxTexFilterMode.Bilinear,
             magFilter: GfxTexFilterMode.Bilinear,
             mipFilter: GfxMipFilterMode.Linear,
@@ -703,7 +703,7 @@ class Device_Material {
         this.load_texture(globals, 10, 'white', clamp_sampler);
 
         this.shader_instance = globals.device_material_cache.create_shader_instance(this.render_material);
-        this.gfx_program = this.shader_instance.getGfxProgram(globals.cache);
+        this.gfx_program = this.shader_instance.getGfxProgram(globals.renderCache);
 
         // Disable invisible material types.
         if (material_type === Material_Type.Collision_Only || material_type === Material_Type.Occluder)
@@ -886,7 +886,7 @@ export class Cached_Shadow_Map {
     constructor(globals: TheWitnessGlobals, world: Entity_World) {
         const texture_name = `${globals.entity_manager.universe_name}_shadow_map_${this.shadow_map_size}`;
 
-        const clamp_sampler = globals.cache.createSampler({
+        const clamp_sampler = globals.renderCache.createSampler({
             minFilter: GfxTexFilterMode.Bilinear,
             magFilter: GfxTexFilterMode.Bilinear,
             mipFilter: GfxMipFilterMode.Linear,

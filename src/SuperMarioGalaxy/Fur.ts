@@ -422,7 +422,7 @@ class FurCtrl {
     private ownDensityMapData: BTIData | null = null;
 
     constructor(sceneObjHolder: SceneObjHolder, private actor: LiveActor, private shapeData: ShapeData, public param: FurParam, private dynamicFurParam: DynamicFurParam, bodyMapSamplerIndex: number, indirectMap: BTI_Texture | null, densityMap: BTI_Texture | null) {
-        const device = sceneObjHolder.modelCache.device, cache = sceneObjHolder.modelCache.cache;
+        const device = sceneObjHolder.modelCache.device, cache = sceneObjHolder.modelCache.renderCache;
 
         if (indirectMap !== null)
             this.ownIndirectMapData = new BTIData(device, cache, indirectMap);
@@ -467,7 +467,7 @@ class FurCtrl {
             this.actor.actorLightCtrl.loadLightOnMaterialParams(materialParams, viewerInput.camera);
         }
 
-        const cache = sceneObjHolder.modelCache.cache;
+        const cache = sceneObjHolder.modelCache.renderCache;
         const shape = this.shapeData.shape;
 
         this.furDrawer.setupMaterial(materialParams, this.dynamicFurParam);
@@ -496,7 +496,7 @@ class FurCtrl {
     }
 
     public calcLayerForm(sceneObjHolder: SceneObjHolder, lengthMap: BTI_Texture | null): void {
-        const device = sceneObjHolder.modelCache.device, cache = sceneObjHolder.modelCache.cache;
+        const device = sceneObjHolder.modelCache.device, cache = sceneObjHolder.modelCache.renderCache;
         const shapeData = this.shapeData;
 
         const numLayers = this.param.numLayers;

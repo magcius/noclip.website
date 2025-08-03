@@ -265,7 +265,7 @@ export function isExistIndirectTexture(actor: LiveActor): boolean {
 
 export function loadBTIData(sceneObjHolder: SceneObjHolder, arc: JKRArchive, filename: string): BTIData {
     const device = sceneObjHolder.modelCache.device;
-    const cache = sceneObjHolder.modelCache.cache;
+    const cache = sceneObjHolder.modelCache.renderCache;
 
     const buffer = arc.findFileData(filename);
     const textureName = `${arc.name}/${filename}`;

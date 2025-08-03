@@ -26,8 +26,8 @@ export class DataShare {
         }
     }
 
-    public pruneOldObjects(device: GfxDevice, delta: number): void {
-        const ageThreshold = this.currentAge - delta;
+    public pruneOldObjects(device: GfxDevice, agesToKeep: number): void {
+        const ageThreshold = this.currentAge - agesToKeep;
         this.deleteObjectsOlderThan(device, ageThreshold);
     }
 

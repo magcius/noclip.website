@@ -213,10 +213,10 @@ void main() {
             renderInst.setGfxProgram(calcBlitProgram(desc));
 
             renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
-            renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);
+            renderInst.drawOnPass(this.helper.renderCache, passRenderer);
 
             if (textAnimList !== undefined)
-                textAnimList.drawOnPassRenderer(renderInstManager.gfxRenderCache, passRenderer);
+                textAnimList.drawOnPassRenderer(this.helper.renderCache, passRenderer);
         };
 
         for (let i = 0; i < debugThumbnails.length; i++)

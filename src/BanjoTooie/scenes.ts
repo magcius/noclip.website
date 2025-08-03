@@ -196,7 +196,7 @@ class ModelCache {
     public archivePromiseCache = new Map<string, Promise<ActorArchive | StaticArchive | CRG1File | null>>();
     public archiveCache = new Map<string, ActorArchive | StaticArchive | CRG1File | null>();
     public archiveDataHolder = new Map<number, GeometryData>();
-    public cache: GfxRenderCache;
+    public renderCache: GfxRenderCache;
 
     public static staticGeometryFlag = 0x1000;
     public static staticFlipbookFlag = 0x2000;
@@ -207,7 +207,7 @@ class ModelCache {
     }
 
     constructor(public device: GfxDevice, private pathBase: string, private dataFetcher: DataFetcher) {
-        this.cache = new GfxRenderCache(device);
+        this.renderCache = new GfxRenderCache(device);
     }
 
     public waitForLoad(): Promise<void> {
@@ -284,7 +284,7 @@ class ModelCache {
             undefined, // actors don't have external textures
             !!(lowFlags & (LowObjectFlags.AltVerts | LowObjectFlags.AltVerts2)), // only used for jinjos right now
         );
-        const data = new GeometryData(this.device, this.cache, geo, id);
+        const data = new GeometryData(this.device, this.renderCache, geo, id);
         this.archiveDataHolder.set(id, data);
         return data;
     }
@@ -302,11 +302,11 @@ class ModelCache {
         const arc = this.getActorArchive(id);
         if (arc.Variants) {
             const geo = Geo.parseBT(findFileByID(arc, arc.Variants[variant])!.Data, Geo.RenderZMode.OPA);
-            data = new GeometryData(this.device, this.cache, geo, id);
+            data = new GeometryData(this.device, this.renderCache, geo, id);
         } else if (arc.Palettes) {
             // make a new copy, though we could reuse index buffer
-            data = new GeometryData(this.device, this.cache, baseData.geo, id);
-            applyPaletteSwap(this.device, this.cache, data, findFileByID(arc, arc.Palettes![variant])!.Data);
+            data = new GeometryData(this.device, this.renderCache, baseData.geo, id);
+            applyPaletteSwap(this.device, this.renderCache, data, findFileByID(arc, arc.Palettes![variant])!.Data);
         } else
             throw `bad variant ${hexzero(id, 3)}:${variant}`;
 
@@ -320,7 +320,7 @@ class ModelCache {
 
         const arc = this.getFile(id);
         const geo = Geo.parseBT(arc.Data, Geo.RenderZMode.OPA);
-        const data = new GeometryData(this.device, this.cache, geo, id);
+        const data = new GeometryData(this.device, this.renderCache, geo, id);
         this.archiveDataHolder.set(id | ModelCache.fileIDFlag, data);
         return data;
     }
@@ -338,13 +338,13 @@ class ModelCache {
             return null;
 
         const geo = Geo.parseBT(findFileByID(arc, modelID)!.Data, Geo.RenderZMode.OPA);
-        const data = new GeometryData(this.device, this.cache, geo, id | flag);
+        const data = new GeometryData(this.device, this.renderCache, geo, id | flag);
         this.archiveDataHolder.set(id | flag, data);
         return data;
     }
 
     public destroy(device: GfxDevice): void {
-        this.cache.destroy();
+        this.renderCache.destroy();
         for (const data of this.archiveDataHolder.values())
             data.renderData.destroy(device);
     }

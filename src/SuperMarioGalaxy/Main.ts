@@ -874,13 +874,13 @@ export class ModelCache {
     public archiveLayoutHolder = new Map<string, LayoutHolder>();
     public extraDataPromiseCache = new Map<string, Promise<ArrayBufferSlice>>();
     public extraDataCache = new Map<string, ArrayBufferSlice>();
-    public cache: GfxRenderCache;
+    public renderCache: GfxRenderCache;
     public textureListHolder = new TextureListHolder();
     public gameSystemFontHolder: GameSystemFontHolder | null = null;
     public particleResourceHolder: ParticleResourceHolder | null = null;
 
     constructor(public device: GfxDevice, private pathBase: string, private dataFetcher: DataFetcher) {
-        this.cache = new GfxRenderCache(device);
+        this.renderCache = new GfxRenderCache(device);
     }
 
     public waitForLoad(): Promise<void> {
@@ -968,7 +968,7 @@ export class ModelCache {
             return this.archiveResourceHolder.get(objectName)!;
 
         const arc = this.getObjectData(objectName);
-        const resourceHolder = new ResourceHolder(this.device, this.cache, objectName, arc);
+        const resourceHolder = new ResourceHolder(this.device, this.renderCache, objectName, arc);
         this.textureListHolder.addTextures(resourceHolder.viewerTextures);
         this.archiveResourceHolder.set(objectName, resourceHolder);
         return resourceHolder;
@@ -992,13 +992,13 @@ export class ModelCache {
 
         const arc = this.getLayoutData(layoutName);
         const gameSystemFontHolder = this.ensureGameSystemFontHolder();
-        const layoutHolder = new LayoutHolder(this.device, this.cache, gameSystemFontHolder, layoutName, arc);
+        const layoutHolder = new LayoutHolder(this.device, this.renderCache, gameSystemFontHolder, layoutName, arc);
         this.archiveLayoutHolder.set(layoutName, layoutHolder);
         return layoutHolder;
     }
 
     public destroy(device: GfxDevice): void {
-        this.cache.destroy();
+        this.renderCache.destroy();
         for (const resourceHolder of this.archiveResourceHolder.values())
             resourceHolder.destroy(device);
         for (const layoutHolder of this.archiveLayoutHolder.values())
@@ -1883,7 +1883,7 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
             return new ModelCache(device, this.pathBase, context.dataFetcher);
         });
 
-        const renderHelper = new GXRenderHelperGfx(device, context, modelCache.cache);
+        const renderHelper = new GXRenderHelperGfx(device, context, modelCache.renderCache);
         context.destroyablePool.push(renderHelper);
 
         const galaxyName = this.galaxyName;

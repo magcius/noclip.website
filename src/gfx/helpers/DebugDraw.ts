@@ -234,11 +234,11 @@ export class DebugDraw {
 
     public static scratchVec3 = nArray(4, () => vec3.create());
 
-    constructor(private cache: GfxRenderCache, uniformBuffer: GfxRenderDynamicUniformBuffer) {
-        const device = cache.device;
-        this.debugDrawProgram = cache.createProgramSimple(preprocessProgram_GLSL(device.queryVendorInfo(), debugDrawVS, debugDrawFS));
+    constructor(private renderCache: GfxRenderCache, uniformBuffer: GfxRenderDynamicUniformBuffer) {
+        const device = renderCache.device;
+        this.debugDrawProgram = renderCache.createProgramSimple(preprocessProgram_GLSL(device.queryVendorInfo(), debugDrawVS, debugDrawFS));
 
-        this.depthSampler = cache.createSampler({
+        this.depthSampler = renderCache.createSampler({
             minFilter: GfxTexFilterMode.Point,
             magFilter: GfxTexFilterMode.Point,
             mipFilter: GfxMipFilterMode.Nearest,
@@ -288,7 +288,7 @@ export class DebugDraw {
 
         vertexCount = align(vertexCount, this.defaultPageVertexCount);
         indexCount = align(indexCount, this.defaultPageIndexCount);
-        const page = new BufferPage(this.cache, behaviorType, vertexCount, indexCount, this.lineThickness);
+        const page = new BufferPage(this.renderCache, behaviorType, vertexCount, indexCount, this.lineThickness);
         this.pages.push(page);
         return page;
     }
@@ -461,7 +461,7 @@ export class DebugDraw {
     }
 
     private endFrame(): boolean {
-        const device = this.cache.device;
+        const device = this.renderCache.device;
         let hasAnyDraws = false;
         for (let i = 0; i < this.pages.length; i++) {
             const page = this.pages[i];
@@ -492,7 +492,7 @@ export class DebugDraw {
                     const page = this.pages[i];
                     if (page.renderInst.getDrawCount() > 0) {
                         page.renderInst.setSamplerBindings(0, [{ gfxTexture: scope.getResolveTextureForID(depthResolveTextureID), gfxSampler: this.depthSampler, lateBinding: null }]);
-                        page.renderInst.drawOnPass(this.cache, passRenderer);
+                        page.renderInst.drawOnPass(this.renderCache, passRenderer);
                     }
                 }
             });
@@ -500,7 +500,7 @@ export class DebugDraw {
     }
 
     public destroy(): void {
-        const device = this.cache.device;
+        const device = this.renderCache.device;
         for (let i = 0; i < this.pages.length; i++)
             this.pages[i].destroy(device);
     }

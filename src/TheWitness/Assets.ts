@@ -727,13 +727,13 @@ function get_processed_filename(type: Asset_Type, source_name: string, options_h
 }
 
 export class Asset_Manager {
-    public cache: GfxRenderCache;
+    public renderCache: GfxRenderCache;
     private destroyables: Destroyable[] = [];
     private asset_cache = new Map<string, any>();
     private entry_cache = new Map<string, ZipFileEntry>();
 
     constructor(public device: GfxDevice) {
-        this.cache = new GfxRenderCache(device);
+        this.renderCache = new GfxRenderCache(device);
     }
 
     private add_bundle(bundle: ZipFile, filename?: string) {
@@ -782,7 +782,7 @@ export class Asset_Manager {
         const asset_data = this.load_asset_data(processed_filename);
         if (asset_data === null)
             return null;
-        const asset = load_asset(this.device, this.cache, type, asset_data, source_name);
+        const asset = load_asset(this.device, this.renderCache, type, asset_data, source_name);
         if ('destroy' in asset)
             this.destroyables.push(asset as Destroyable);
         this.asset_cache.set(processed_filename, asset);
@@ -790,7 +790,7 @@ export class Asset_Manager {
     }
 
     public destroy(device: GfxDevice): void {
-        this.cache.destroy();
+        this.renderCache.destroy();
         for (let i = 0; i < this.destroyables.length; i++)
             this.destroyables[i].destroy(device);
     }

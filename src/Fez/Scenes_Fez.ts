@@ -20,11 +20,11 @@ export class ModelCache {
     public artObjectDatas: ArtObjectData[] = [];
     public backgroundPlaneDatas: BackgroundPlaneData[] = [];
     public skyDatas: SkyData[] = [];
-    public gfxRenderCache: GfxRenderCache;
+    public renderCache: GfxRenderCache;
     private fezTypeReaderManager = new FezContentTypeReaderManager();
 
     constructor(device: GfxDevice, private dataFetcher: DataFetcher) {
-        this.gfxRenderCache = new GfxRenderCache(device);
+        this.renderCache = new GfxRenderCache(device);
     }
 
     public waitForLoad(): Promise<void> {
@@ -38,12 +38,12 @@ export class ModelCache {
 
     private async fetchTrilesetInternal(device: GfxDevice, path: string): Promise<void> {
         const data = await this.fetchXNB<Fez_TrileSet>(`xnb/trile sets/${path}.xnb`);
-        this.trilesetDatas.push(new TrilesetData(device, this.gfxRenderCache, path, data));
+        this.trilesetDatas.push(new TrilesetData(device, this.renderCache, path, data));
     }
 
     private async fetchArtObjectInternal(device: GfxDevice, path: string): Promise<void> {
         const xnb = await this.fetchXNB<Fez_ArtObject>(`xnb/art objects/${path}.xnb`);
-        this.artObjectDatas.push(new ArtObjectData(device, this.gfxRenderCache, path, xnb));
+        this.artObjectDatas.push(new ArtObjectData(device, this.renderCache, path, xnb));
     }
 
     private async fetchBackgroundPlaneInternal(device: GfxDevice, path: string, isAnimated: boolean): Promise<void> {
@@ -57,7 +57,7 @@ export class ModelCache {
     }
 
     private async fetchSkyDataInternal(device: GfxDevice, path: string): Promise<void> {
-        this.skyDatas.push(await fetchSkyData(this, device, this.gfxRenderCache, path));
+        this.skyDatas.push(await fetchSkyData(this, device, this.renderCache, path));
     }
 
     public fetchTrileset(device: GfxDevice, path: string): void {
@@ -85,7 +85,7 @@ export class ModelCache {
     }
 
     public destroy(device: GfxDevice): void {
-        this.gfxRenderCache.destroy();
+        this.renderCache.destroy();
         for (let i = 0; i < this.trilesetDatas.length; i++)
             this.trilesetDatas[i].destroy(device);
         for (let i = 0; i < this.artObjectDatas.length; i++)

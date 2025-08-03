@@ -428,7 +428,7 @@ export class ClipAreaDropLaser extends LiveActor<ClipAreaDropLaserNrv> {
             return;
 
         const ddraw = this.ddraw;
-        ddraw.beginDraw(sceneObjHolder.modelCache.cache);
+        ddraw.beginDraw(sceneObjHolder.modelCache.renderCache);
 
         getCamZdir(scratchVec3b, viewerInput.camera);
 
@@ -679,7 +679,7 @@ export class FallOutFieldDraw extends NameObj {
             this.activate(sceneObjHolder);
         }
 
-        const cache = sceneObjHolder.modelCache.cache;
+        const cache = sceneObjHolder.modelCache.renderCache;
         const linearSampler = cache.createSampler({
             wrapS: GfxWrapMode.Clamp,
             wrapT: GfxWrapMode.Clamp,

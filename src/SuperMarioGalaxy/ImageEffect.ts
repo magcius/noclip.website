@@ -225,7 +225,7 @@ export class BloomEffect extends ImageEffectBase {
         connectToSceneNormalBloom(sceneObjHolder, this);
         sceneObjHolder.create(SceneObj.ImageEffectSystemHolder);
 
-        const cache = sceneObjHolder.modelCache.cache;
+        const cache = sceneObjHolder.modelCache.renderCache;
         const linearSampler = cache.createSampler({
             wrapS: GfxWrapMode.Clamp,
             wrapT: GfxWrapMode.Clamp,
@@ -471,7 +471,7 @@ export class BloomEffectSimple extends ImageEffectBase {
         connectToSceneImageEffect(sceneObjHolder, this);
         sceneObjHolder.create(SceneObj.ImageEffectSystemHolder);
 
-        const device = sceneObjHolder.modelCache.device, cache = sceneObjHolder.modelCache.cache;
+        const device = sceneObjHolder.modelCache.device, cache = sceneObjHolder.modelCache.renderCache;
         const linearSampler = cache.createSampler({
             wrapS: GfxWrapMode.Clamp,
             wrapT: GfxWrapMode.Clamp,
@@ -626,7 +626,7 @@ export class DepthOfFieldBlur extends ImageEffectBase {
         connectToSceneImageEffect(sceneObjHolder, this);
         sceneObjHolder.create(SceneObj.ImageEffectSystemHolder);
 
-        const cache = sceneObjHolder.modelCache.cache;
+        const cache = sceneObjHolder.modelCache.renderCache;
         const linearSampler = cache.createSampler({
             wrapS: GfxWrapMode.Clamp,
             wrapT: GfxWrapMode.Clamp,

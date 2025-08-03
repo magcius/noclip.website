@@ -830,6 +830,7 @@ class Main {
         }
     }
 
+    // How many previous scenes of data share contents to keep? Set it to 0 for leak checking.
     private get loadSceneDelta(): number {
         return this.saveManager.loadSetting("LoadSceneDelta", 1);
     }
@@ -885,10 +886,10 @@ class Main {
             device, dataFetcher, dataShare, uiContainer, destroyablePool, inputManager, viewerInput, initialSceneTime,
         };
 
-        // The age delta on pruneOldObjects determines whether any resources willf be shared at all.
-        // delta = 0 means that we destroy the set of resources used by the previous scene, before
-        // we increment the age below fore the "new" scene, which is the only proper way to do leak
-        // checking. Typically, we allow one old scene's worth of contents.
+        // We save loadSceneDelta's worth of old objects -- the idea being that if you're navigating between similar
+        // scenes, we want to keep stuff in the data share (e.g. going between two Mario Kart tracks, you want to
+        // keep the models for the same objects so we don't need to redownload them). Any objects that haven't been
+        // touched since then will get eliminated eventually.
         this.dataShare.pruneOldObjects(device, this.loadSceneDelta);
 
         if (this.loadSceneDelta === 0)

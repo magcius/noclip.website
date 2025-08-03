@@ -253,7 +253,7 @@ export function loadRawTexture(globals: dGlobals, data: ArrayBufferSlice, width:
         paletteData: null,
         paletteFormat: GX.TexPalette.IA8,
     };
-    const device = globals.modelCache.device, cache = globals.modelCache.cache;
+    const device = globals.modelCache.device, cache = globals.modelCache.renderCache;
     return new BTIData(device, cache, btiTexture);
 }
 
@@ -668,7 +668,7 @@ export class dKankyo_sun_Packet {
     }
 
     public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        this.ddraw.beginDraw(globals.modelCache.cache);
+        this.ddraw.beginDraw(globals.modelCache.renderCache);
         this.ddraw.allocPrimitives(GX.Command.DRAW_TRIANGLES, 2048);
         this.drawLenzflare(globals, this.ddraw, renderInstManager, viewerInput);
         this.drawSunMoon(globals, this.ddraw, renderInstManager, viewerInput);
@@ -754,7 +754,7 @@ export class dKankyo_vrkumo_Packet {
 
         renderInstManager.setCurrentList(globals.dlst.sky[1]);
 
-        ddraw.beginDraw(globals.modelCache.cache);
+        ddraw.beginDraw(globals.modelCache.renderCache);
         ddraw.allocPrimitives(GX.Command.DRAW_QUADS, 4*3*100);
 
         colorFromRGBA(materialParams.u_Color[ColorKind.C1], 0, 0, 0, 0);
@@ -989,7 +989,7 @@ export class dKankyo_housi_Packet {
 
         materialParams.clear();
 
-        ddraw.beginDraw(globals.modelCache.cache);
+        ddraw.beginDraw(globals.modelCache.renderCache);
         ddraw.begin(GX.Command.DRAW_QUADS, 4 * this.count);
 
         for (let i = 0; i < this.count; i++) {
@@ -1266,7 +1266,7 @@ export class dKankyo_rain_Packet {
         if (envLight.rainCount === 0)
             return;
 
-        this.ddraw.beginDraw(globals.modelCache.cache);
+        this.ddraw.beginDraw(globals.modelCache.renderCache);
         this.drawRain(globals, renderInstManager, viewerInput);
         this.drawSibuki(globals, renderInstManager, viewerInput);
         this.ddraw.endDraw(renderInstManager);
@@ -1362,7 +1362,7 @@ export class dKankyo_star_Packet {
 
         materialParams.clear();
 
-        ddraw.beginDraw(globals.modelCache.cache);
+        ddraw.beginDraw(globals.modelCache.renderCache);
         ddraw.begin(GX.Command.DRAW_TRIANGLES, 6 * envLight.starCount);
 
         const star = this.instances[0];
@@ -2330,7 +2330,7 @@ export class mDoGph_bloom_c {
     private textureMapping: TextureMapping[] = nArray(1, () => new TextureMapping());
 
     constructor(globals: dGlobals) {
-        const cache = globals.modelCache.cache;
+        const cache = globals.modelCache.renderCache;
         const linearSampler = cache.createSampler({
             wrapS: GfxWrapMode.Clamp,
             wrapT: GfxWrapMode.Clamp,

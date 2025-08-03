@@ -301,7 +301,7 @@ class LayoutManager {
     public isHidden = false;
 
     constructor(sceneObjHolder: SceneObjHolder, layoutName: string, numRootAnm: number) {
-        const device = sceneObjHolder.modelCache.device, cache = sceneObjHolder.modelCache.cache;
+        const device = sceneObjHolder.modelCache.device, cache = sceneObjHolder.modelCache.renderCache;
 
         this.layoutHolder = sceneObjHolder.modelCache.getLayoutHolder(layoutName);
 

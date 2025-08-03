@@ -585,13 +585,13 @@ export class ModelCache {
     private fileDataCache = new Map<string, ArrayBufferSlice>();
     private archivePromiseCache = new Map<string, Promise<RARC.JKRArchive>>();
     private archiveCache = new Map<string, RARC.JKRArchive>();
-    public cache: GfxRenderCache;
+    public renderCache: GfxRenderCache;
 
     public resCtrl = new dRes_control_c();
     public currentStage: string;
 
     constructor(public device: GfxDevice, private dataFetcher: DataFetcher) {
-        this.cache = new GfxRenderCache(device);
+        this.renderCache = new GfxRenderCache(device);
     }
 
     public waitForLoad(): Promise<any> {
@@ -657,13 +657,13 @@ export class ModelCache {
 
     public async fetchObjectData(arcName: string): Promise<RARC.JKRArchive> {
         const archive = await this.fetchArchive(`res/Object/${arcName}.arc`);
-        this.resCtrl.mountRes(this.device, this.cache, arcName, archive, this.resCtrl.resObj);
+        this.resCtrl.mountRes(this.device, this.renderCache, arcName, archive, this.resCtrl.resObj);
         return archive;
     }
 
     public async fetchMsgData(arcName: string) {
         const archive = await this.fetchArchive(`res/Msg/${arcName}.arc`);
-        this.resCtrl.mountRes(this.device, this.cache, arcName, archive, this.resCtrl.resSystem);
+        this.resCtrl.mountRes(this.device, this.renderCache, arcName, archive, this.resCtrl.resSystem);
     }
 
     public requestFileData(path: string): cPhs__Status {
@@ -702,12 +702,12 @@ export class ModelCache {
 
     public async fetchStageData(arcName: string): Promise<RARC.JKRArchive> {
         const archive = await this.fetchArchive(`res/Stage/${this.currentStage}/${arcName}.arc`);
-        this.resCtrl.mountRes(this.device, this.cache, arcName, archive, this.resCtrl.resStg);
+        this.resCtrl.mountRes(this.device, this.renderCache, arcName, archive, this.resCtrl.resStg);
         return archive;
     }
 
     public destroy(device: GfxDevice): void {
-        this.cache.destroy();
+        this.renderCache.destroy();
         this.resCtrl.destroy(device);
     }
 }
