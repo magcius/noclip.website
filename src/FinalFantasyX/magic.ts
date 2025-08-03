@@ -1137,7 +1137,7 @@ const magicTable: MagicDescriptor[][] = [
                     vec3.set(scratchVec, .05, .05, .05);
                     mat4.fromScaling(scratchMtx, scratchVec);
                     if (args.pointCount > 0)
-                        sys.data.flipbookRenderer.renderTrail(device, mgr, assertExists(sys.data.flipbooks[1]), 0, scratchMtx, args);
+                        sys.data.flipbookRenderer.renderTrail(device, mgr, sys.bufferManager, assertExists(sys.data.flipbooks[1]), 0, scratchMtx, args);
                     // head
                     if (t < 20) {
                         vec3.set(scratchVec, .02, .02, .02);
@@ -1147,7 +1147,7 @@ const magicTable: MagicDescriptor[][] = [
                         transformVec3Mat4w1(scratchVec, viewerInput.camera.viewMatrix, scratchVec);
                         setMatrixTranslation(scratchMtx, scratchVec);
                         vec4.set(colorScratch, 1, 1, 1, 1);
-                        sys.data.flipbookRenderer.render(mgr, viewerInput, assertExists(sys.data.flipbooks[0]), 0, colorScratch, scratchMtx);
+                        sys.data.flipbookRenderer.render(mgr, assertExists(sys.data.flipbooks[0]), 0, colorScratch, scratchMtx);
                     }
                 }
             }
@@ -1778,7 +1778,7 @@ const magicTable: MagicDescriptor[][] = [
                     vec3.set(args.params[args.pointCount++], dt * 0x200, flameState.angles[i], flameState.scales[i]);
                 }
                 mat4.identity(scratchMtx);
-                sys.data.flipbookRenderer.renderTrail(device, mgr, flip, 0, scratchMtx, args);
+                sys.data.flipbookRenderer.renderTrail(device, mgr, sys.bufferManager, flip, 0, scratchMtx, args);
             }
         }];
     }),
@@ -2266,7 +2266,7 @@ export class MagicSceneRenderer implements SceneGfx {
             this.textureHolder.viewerTextures.push(data.viewerTexture);
         }
         this.textureHolder.viewerTextures.sort((a, b) => a.name.localeCompare(b.name));
-        this.particles = new ParticleSystem(id, new ParticleData(parsed, device, cache, this.textureData, this.bufferManager), parsed.runner);
+        this.particles = new ParticleSystem(id, new ParticleData(parsed, device, cache, this.textureData), this.bufferManager, parsed.runner);
         this.particles.loop = true;
         this.particles.active = true;
 

@@ -6,7 +6,7 @@ import { ActorResources, angleStep, LevelObjectHolder } from "./script.js";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import { ViewerRenderInput } from "../viewer.js";
 import { ActorPartInstance, FFXToNoclip, TextureData } from "./render.js";
-import { Emitter, EMITTER_DONE_TIMER, LevelParticles, ParticleData, ParticleSystem, trailArgsScratch } from "./particle.js";
+import { Emitter, EMITTER_DONE_TIMER, LevelParticles, ParticleContext, ParticleData, ParticleSystem, trailArgsScratch } from "./particle.js";
 import { GfxDevice, GfxFormat, GfxTexture, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform.js";
 import { SkinningMode, Animation, ActorModel } from "./bin.js";
 
@@ -304,7 +304,7 @@ export class Actor {
                 this.boneState[idx++] = res.model.bones[i].scale[2];
             }
             if (res.particles) {
-                this.particles = new ParticleSystem(this.id, res.particles, res.model.particles?.runner);
+                this.particles = new ParticleSystem(this.id, res.particles, objects.bufferManager, res.model.particles?.runner);
                 this.particles.active = true;
                 this.particles.loop = true;
                 if (res.particles.data.magicEntries && res.particles.data.magicProgram) {
@@ -638,7 +638,7 @@ export class Actor {
         }
         if (this.magicManager && objects.renderFlags.showParticles) {
             if (this.particles)
-                this.particles.data.debug = objects.renderFlags.debugParticles;
+                this.particles.debug = objects.renderFlags.debugParticles;
             this.magicManager.update(dt, bones, this.particles?.data!, viewerInput, renderInstManager, device);
         }
         if (this.id === 0x10AA) { // end tanker battle
@@ -849,7 +849,7 @@ class MonsterEmitter {
             setMatrixTranslation(particleMtx, particleVec);
 
             vec4.scale(colorScratch, p.color, 2);
-            particleData.flipbookRenderer.render(mgr, viewerInput, flip, (p.t % flip.flipbook.frames.length) | 0, colorScratch, particleMtx);
+            particleData.flipbookRenderer.render(mgr, flip, (p.t % flip.flipbook.frames.length) | 0, colorScratch, particleMtx);
             p.t += dt;
             if (!p.shouldLoop && p.t >= flip.flipbook.frames.length)
                 p.lifetime = 0;
@@ -1237,7 +1237,7 @@ class DripState {
         mat4.identity(particleMtx);
         particleMtx[5] = -1;
         if (args.pointCount > 0)
-            system.data.flipbookRenderer.renderTrail(device, renderInstManager, flipbook, 0, particleMtx, args);
+            system.data.flipbookRenderer.renderTrail(device, renderInstManager, system.bufferManager, flipbook, 0, particleMtx, args);
     }
 }
 
@@ -1277,7 +1277,7 @@ class FlipbookState {
         transformVec3Mat4w0(posScratch, FFXToNoclip, state.pos);
         transformVec3Mat4w1(posScratch, viewerInput.camera.viewMatrix, posScratch);
         setMatrixTranslation(particleMtx, posScratch);
-        system.data.flipbookRenderer.render(renderInstManager, viewerInput, flipbook, this.frame | 0, colorScratch, particleMtx, state.depthShift);
+        system.data.flipbookRenderer.render(renderInstManager, flipbook, this.frame | 0, colorScratch, particleMtx, state.depthShift);
         this.frame += Math.min(viewerInput.deltaTime * 30 / 1000, 1);
         if (this.frame >= flipbook.flipbook.frames.length) {
             this.frame -= flipbook.flipbook.frames.length;
@@ -1374,6 +1374,7 @@ export class MonsterMagicManager {
             this.tick(dt, bones);
         }
 
+        const ctx = this.actor.particles ? new ParticleContext(device, mgr, viewerInput, this.actor.particles) : null;
         for (let i = 0; i < this.states.length; i++) {
             const s = this.states[i];
             if (s.threads[0].pointer < 0)
@@ -1382,7 +1383,7 @@ export class MonsterMagicManager {
                 s.basicEmitter.run(data, viewerInput, mgr, bones, this.actor);
             // we shouldn't need to reference other objects
             if (s.fullEmitter)
-                s.fullEmitter.update(device, null!, viewerInput, mgr, assertExists(this.actor.particles));
+                s.fullEmitter.update(null!, viewerInput, assertExists(ctx));
             if (s.drip)
                 s.drip.render(device, viewerInput, mgr, assertExists(this.actor.particles));
             if (s.flipbook)

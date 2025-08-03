@@ -1412,7 +1412,7 @@ export class FlipbookRenderer {
     private megaStateFlags: Partial<GfxMegaStateDescriptor>;
     private textureMappings: TextureMapping[] = [new TextureMapping()];
 
-    constructor(cache: GfxRenderCache, private textures: TextureData[], private bufferManager: BufferPoolManager) {
+    constructor(cache: GfxRenderCache, private textures: TextureData[]) {
         const program = new FlipbookProgram();
 
         this.megaStateFlags = {
@@ -1436,7 +1436,7 @@ export class FlipbookRenderer {
         this.trailProgram = cache.createProgram(new TrailProgram());
     }
 
-    public render(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, data: FlipbookData, frameIndex: number, color: ReadonlyVec4, modelMatrix: mat4, depthOffset = 0, isGlare = false): void {
+    public render(renderInstManager: GfxRenderInstManager, data: FlipbookData, frameIndex: number, color: ReadonlyVec4, modelMatrix: mat4, depthOffset = 0, isGlare = false): void {
         const template = renderInstManager.pushTemplate();
         const frame = data.flipbook.frames[frameIndex];
         this.textureMappings[0].gfxTexture = this.textures[data.flipbook.textureIndex].gfxTexture;
@@ -1469,13 +1469,13 @@ export class FlipbookRenderer {
         renderInstManager.popTemplate();
     }
 
-    public renderTrail(device: GfxDevice, renderInstManager: GfxRenderInstManager, data: FlipbookData, frameIndex: number, modelMatrix: ReadonlyMat4, args: TrailArgs): void {
+    public renderTrail(device: GfxDevice, renderInstManager: GfxRenderInstManager, bufferManager: BufferPoolManager, data: FlipbookData, frameIndex: number, modelMatrix: ReadonlyMat4, args: TrailArgs): void {
         const template = renderInstManager.pushTemplate();
         this.textureMappings[0].gfxTexture = this.textures[data.flipbook.textureIndex].gfxTexture;
         template.setGfxProgram(this.trailProgram);
         // fill in instanced vertex buffer with positions
         let offs = 0;
-        const buf = this.bufferManager.getBuffer(device, args.pointCount*8);
+        const buf = bufferManager.getBuffer(device, args.pointCount*8);
         for (let i = 0; i < args.pointCount; i++) {
             offs += fillVec3v(buf.buffer, offs, args.points[i], args.params[i][1]);
             const myIndex = frameIndex + args.params[i][0]/data.flipbook.frames[0].duration;
@@ -1879,7 +1879,7 @@ export class RainRenderer {
     private megaStateFlags: Partial<GfxMegaStateDescriptor>;
     private data: RainData;
 
-    constructor(cache: GfxRenderCache, private bufferManger: BufferPoolManager) {
+    constructor(cache: GfxRenderCache) {
         const program = new RainProgram();
 
         this.data = new RainData(cache);
@@ -1897,11 +1897,11 @@ export class RainRenderer {
         this.gfxProgram = cache.createProgram(program);
     }
 
-    public render(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, color: vec4, direction: ReadonlyVec4, positions: Float32Array, count: number): void {
+    public render(device: GfxDevice, renderInstManager: GfxRenderInstManager, bufferManager: BufferPoolManager, viewerInput: Viewer.ViewerRenderInput, color: vec4, direction: ReadonlyVec4, positions: Float32Array, count: number): void {
         const renderInst = renderInstManager.newRenderInst();
 
         renderInst.setGfxProgram(this.gfxProgram);
-        const buf = this.bufferManger.getBuffer(device, count * 4);
+        const buf = bufferManager.getBuffer(device, count * 4);
         buf.buffer.set(positions.subarray(0, count*4));
         renderInst.setVertexInput(this.data.inputLayout, buf.descs, this.data.indexBufferDesc);
         renderInst.setBindingLayouts(noTexBindingLayouts);
@@ -2076,7 +2076,7 @@ export class ElectricRenderer {
     private megaStateFlags: Partial<GfxMegaStateDescriptor>;
     private data: ElectricData;
 
-    constructor(cache: GfxRenderCache, private bufferManger: BufferPoolManager) {
+    constructor(cache: GfxRenderCache) {
         const program = new ElectricProgram();
 
         this.data = new ElectricData(cache);
@@ -2094,11 +2094,11 @@ export class ElectricRenderer {
         this.gfxProgram = cache.createProgram(program);
     }
 
-    public render(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, colors: vec4[], colorStart: number, count: number, filler: BufferFiller, coreWidth: number, colorOffset: number): void {
+    public render(device: GfxDevice, renderInstManager: GfxRenderInstManager, bufferManager: BufferPoolManager, viewerInput: Viewer.ViewerRenderInput, colors: vec4[], colorStart: number, count: number, filler: BufferFiller, coreWidth: number, colorOffset: number): void {
         const renderInst = renderInstManager.newRenderInst();
 
         renderInst.setGfxProgram(this.gfxProgram);
-        const buf = this.bufferManger.getBuffer(device, 8 * count);
+        const buf = bufferManager.getBuffer(device, 8 * count);
         filler.fillBuffer(buf.buffer, viewerInput);
         buf.descs[0].byteOffset = 0;
         buf.descs[1].byteOffset = 4*(4 + 4);

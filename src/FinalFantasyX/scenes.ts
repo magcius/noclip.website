@@ -606,8 +606,8 @@ export class FFXRenderer implements Viewer.SceneGfx {
                     mapPromise = FFXLevelSceneDesc.BattleScene(this.shatter.map, '').
                         createScene(this.levelObjects.cache.device, this.levelObjects.context);
                 }
-                const battlePromise = this.loadAndSetupEncounter(this.shatter.enc);
-                Promise.all([mapPromise, battlePromise]).then(([map, battle]) => {
+                const encPromise = this.loadAndSetupEncounter(this.shatter.enc);
+                Promise.all([mapPromise, encPromise]).then(([map, enc]) => {
                     const scene = map as FFXRenderer;
                     if (scene) {
                         if (this.shatter.map !== scene.levelObjects.mapID) {
@@ -618,19 +618,17 @@ export class FFXRenderer implements Viewer.SceneGfx {
                         scene.levelObjects.actorResources = this.levelObjects.actorResources;
                         this.subScene = scene;
                     }
-                    if (this.shatter.map >= 0) {
-                        const old = this.subScene!.battleState;
+                    if (this.subScene) {
+                        const old = this.subScene.battleState;
                         if (old) {
                             for (let m of old.monsters)
                                 m.destroy(this.levelObjects.cache.device);
                         }
-                        this.subScene!.battleState = battle;
-                        const script = new EventScript(battle.encounter.script, this.subScene!.levelObjects);
-                        script.update(0);
+                        this.subScene.setUpMonsters(enc, this.shatter.map);
                     } else {
-                        this.battleState = battle;
+                        this.setUpMonsters(enc, this.shatter.map);
                     }
-                    this.encounter = battle.encounter;
+                    this.encounter = enc;
                 });
             }
             this.shatter.startT += t - DISTORT_LENGTH;
@@ -793,12 +791,25 @@ export class FFXRenderer implements Viewer.SceneGfx {
         existing.textures = modelTexData;
         existing.fetched |= 1;
         if (model.particles) {
-            existing.particles = new ParticleData(model.particles, this.levelObjects.cache.device, this.levelObjects.cache, modelTexData, this.levelObjects.bufferManager);
+            existing.particles = new ParticleData(model.particles, this.levelObjects.cache.device, this.levelObjects.cache, modelTexData);
         }
     }
 
-    private setUpMonsters(encounter: BIN.EncounterData, objects: LevelObjectHolder, mapID: number, partyCenter: ReadonlyVec3, baseModels: number[]): BattleState {
+    private setUpMonsters(encounter: BIN.EncounterData, mapID: number): void {
         const isUnderwater = [0x02, 0x03, 0x23, 0x2E].includes(mapID);
+
+        const partyCenter = vec3.create();
+        const monsterCenter = vec3.create();
+        let i = 0;
+        for (; i < 3 && i < encounter.battlePositions[0].party.length; i++)
+            vec3.add(partyCenter, partyCenter, encounter.battlePositions[0].party[i]);
+        vec3.scale(partyCenter, partyCenter, 1 / i);
+        for (i = 0; i < encounter.monsters.length && i < encounter.battlePositions[0].monsters.length; i++)
+            vec3.add(monsterCenter, monsterCenter, encounter.battlePositions[0].monsters[i]);
+        vec3.scale(monsterCenter, monsterCenter, 1 / i);
+        // monsters look *past* the party, another 50%
+        vec3.sub(monsterCenter, partyCenter, monsterCenter);
+        vec3.scaleAndAdd(partyCenter, partyCenter, monsterCenter, .5);
 
         const monsters: Actor[] = [];
         const idleCounters: number[] = [];
@@ -806,7 +817,7 @@ export class FFXRenderer implements Viewer.SceneGfx {
             if (i < encounter.battlePositions[0].monsters.length) {
                 // todo: weapons
                 const m = encounter.monsters[i];
-                const a = new Actor(objects, m);
+                const a = new Actor(this.levelObjects, m);
                 switch (m) {
                     case 0x1044:
                     case 0x1045:
@@ -858,8 +869,8 @@ export class FFXRenderer implements Viewer.SceneGfx {
                 a.heading = Math.atan2(partyCenter[2] - a.pos[2], partyCenter[0] - a.pos[0]);
                 a.targetHeading = a.heading;
                 a.visible = false;
-                if (isFlying(baseModels[i]) || isUnderwater) {
-                    a.pos[1] -= 14 + a.scale*objects.actorResources.get(m)!.model!.scales.height/2;
+                if (isFlying(encounter.baseModels[i]) || isUnderwater) {
+                    a.pos[1] -= 14 + a.scale*this.levelObjects.actorResources.get(m)!.model!.scales.height/2;
                     a.flags |= 0x80;
                     a.floorMode = FloorMode.AIR;
                 }
@@ -892,30 +903,20 @@ export class FFXRenderer implements Viewer.SceneGfx {
                 }
             }
         }
-        return { monsters, idleCounters, encounter, startTime: -1 };
+        if (!this.script) {
+            const script = new EventScript(encounter.script, this.levelObjects);
+            script.update(0);
+        }
+        this.battleState = { monsters, idleCounters, encounter, startTime: -1 };
     }
 
-    private async loadAndSetupEncounter(encounterID: number): Promise<BattleState> {
+    private async loadAndSetupEncounter(encounterID: number): Promise<BIN.EncounterData> {
         const encData = await loadFile( this.levelObjects.context, FFXFolder.ENCOUNTERS, encounterID);
         const encounter = BIN.parseEncounter(encData);
 
         const uniqueIDs = [... new Set(encounter.monsters)];
         await Promise.all(uniqueIDs.map(id => this.loadAndParseActorModel(id)));
         // const monsterData = await Promise.all(encounter.monsters.map(id => loadFile(Folder.MONSTER_STATS, id & 0xFFF)));
-        const partyCenter = vec3.create();
-        const monsterCenter = vec3.create();
-        let i = 0;
-        for (; i < 3 && i < encounter.battlePositions[0].party.length; i++)
-            vec3.add(partyCenter, partyCenter, encounter.battlePositions[0].party[i]);
-        vec3.scale(partyCenter, partyCenter, 1 / i);
-        for (i = 0; i < encounter.monsters.length && i < encounter.battlePositions[0].monsters.length; i++)
-            vec3.add(monsterCenter, monsterCenter, encounter.battlePositions[0].monsters[i]);
-        vec3.scale(monsterCenter, monsterCenter, 1 / i);
-        // monsters look *past* the party, another 50%
-        vec3.sub(monsterCenter, partyCenter, monsterCenter);
-        vec3.scaleAndAdd(partyCenter, partyCenter, monsterCenter, .5);
-
-        const baseModels: number[] = [];
         for (let id of encounter.monsters) {
             // const statView = stats.createDataView();
             // const statOffset = statView.getUint32(0xC, true);
@@ -926,11 +927,11 @@ export class FFXRenderer implements Viewer.SceneGfx {
             const res = this.levelObjects.actorResources.get(id);
             if (res?.model) {
                 const modelBase = res.model.defaultAnimations[1].filter(x => x > 0)[0] >>> 0x10;
-                baseModels.push(modelBase);
+                encounter.baseModels.push(modelBase);
             }
         }
-        await Promise.all([... new Set(baseModels)].map(id => this.levelObjects.loadActorResource(id, 1)));
-        return this.setUpMonsters(encounter, this.levelObjects, this.shatter.map, partyCenter, baseModels)
+        await Promise.all([... new Set(encounter.baseModels)].map(id => this.levelObjects.loadActorResource(id, 1)));
+        return encounter;
     }
 
     private createRenderHacksPanel(): UI.Panel {
@@ -1391,7 +1392,7 @@ class FFXLevelSceneDesc implements Viewer.SceneDesc {
 
         for (let i = 0; i < this.magic.length; i++) {
             const id = this.magic[i];
-            const sys = new ParticleSystem(id, new ParticleData(parsedMagic[i], device, cache, textureData, objects.bufferManager), parsedMagic[i].runner);
+            const sys = new ParticleSystem(id, new ParticleData(parsedMagic[i], device, cache, textureData), objects.bufferManager, parsedMagic[i].runner);
             sys.loop = false;
             sys.active = false;
             objects.magic.push(sys);

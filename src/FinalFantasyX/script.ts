@@ -1221,7 +1221,7 @@ export class LevelObjectHolder {
                 opacity: 0,
                 color: vec3.create(),
             };
-        this.particles = new ParticleSystem(-1, new ParticleData(level.particles, cache.device, cache, textureData, this.bufferManager));
+        this.particles = new ParticleSystem(-1, new ParticleData(level.particles, cache.device, cache, textureData), this.bufferManager);
         this.particles.active = true;
         this.shadows = new ShadowRenderer(cache, this.bufferManager);
         this.inputManager = context.inputManager;
@@ -4064,9 +4064,9 @@ export class EventScript {
                         let list = 0;
                         const cat: ActorCategory = c.actor.id >>> 0xC;
                         if (cat === ActorCategory.WEP)
-                            list = 2; // weapons seem to only have battle defaults
+                            list = 1; // weapons seem to only have battle defaults
                         if (this.isBlitzball && (cat === ActorCategory.NPC || cat === ActorCategory.PC))
-                            list = 1; // swimming
+                            list = 2; // swimming
                         const anim = m.defaultAnimations[list][0];
                         if (anim !== undefined)
                             c.actor.animation.set(objects, anim);

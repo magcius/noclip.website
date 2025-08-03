@@ -2320,6 +2320,7 @@ export interface EncounterData {
     script: ScriptData;
     battlePositions: BattlePositions[];
     monsters: number[];
+    baseModels: number[];
 }
 
 export enum ArraySource {
@@ -2585,7 +2586,7 @@ export function parseEncounter(buffer: ArrayBufferSlice): EncounterData {
         offs += isBig ? 0x60 : 0x40;
     }
 
-    return { script, monsters, battlePositions };
+    return { script, monsters, battlePositions, baseModels: [] };
 }
 
 export enum ControlChar {

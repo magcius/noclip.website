@@ -1,4 +1,4 @@
-import { ReadonlyVec3, ReadonlyVec4, mat4, vec2, vec3, vec4 } from "gl-matrix";
+import { ReadonlyMat4, ReadonlyVec3, ReadonlyVec4, mat4, vec2, vec3, vec4 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import * as GS from "../Common/PS2/GS.js";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
@@ -112,9 +112,9 @@ class Instruction {
         this.reset(p); // by default, same as reset
     }
 
-    public render(p: Particle, device: GfxDevice, manager: GfxRenderInstManager, viewerInput: ViewerRenderInput, data: ParticleData): void { }
+    public render(p: Particle, viewerInput: ViewerRenderInput, ctx: ParticleContext): void { }
 
-    public renderAll(p: Particle, device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, data: ParticleData): void { }
+    public renderAll(p: Particle, viewerInput: ViewerRenderInput, ctx: ParticleContext): void { }
 
     public clipEmitter(): boolean { return false; } // by default, leave distant emitters running
 }
@@ -126,11 +126,11 @@ abstract class ScratchInstruction<T extends InstructionData> extends Instruction
     public abstract initScratch(buf: ScratchBuffer, data: T): void;
 }
 
-function ensureScratch<T extends InstructionData>(inst: ScratchInstruction<T>, p: Particle, data: ParticleData): ScratchBuffer {
+function ensureScratch<T extends InstructionData>(inst: ScratchInstruction<T>, p: Particle, sys: ParticleSystem): ScratchBuffer {
     const curr = p.scratch[inst.scratchIndex];
     if (curr)
         return curr;
-    const buf = getScratch(data);
+    const buf = getScratch(sys.data);
     p.scratch[inst.scratchIndex] = buf;
     inst.initScratch(buf, currInstructionData(p.t, inst.data));
     return buf;
@@ -584,17 +584,17 @@ class SimpleFlipbook extends Instruction {
         this.depth = r(offsets[3]);
     }
 
-    public override renderAll(p: Particle, device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, data: ParticleData): void {
+    public override renderAll(p: Particle, viewerInput: ViewerRenderInput, ctx: ParticleContext): void {
         if (this.data[0].index === 0xFFFF)
             return;
-        const flip = assertExists(data.flipbooks[this.data[0].index]);
+        const flip = assertExists(ctx.sys.data.flipbooks[this.data[0].index]);
         for (let curr: Particle | null = p; curr !== null; curr = curr.next) {
             if (!curr.visible)
                 continue;
             const state = curr.vecs[this.frame];
             getColor(colorScratch, curr, this.color);
             const depth = this.data[0].depth ? p.vecs[this.depth][0] : 0;
-            data.flipbookRenderer.render(renderInstManager, viewerInput, flip, state[0], colorScratch, curr.render, depth);
+            ctx.renderFlipbook(flip, state[0], colorScratch, curr.render, depth);
             if (curr.prevT >= 0)
                 updateFlipbook(state, flip.flipbook.frames, curr.t - curr.prevT, this.data[0].speed);
         }
@@ -634,8 +634,8 @@ class FlippedFlipbook extends Instruction {
         this.color = r(offsets[3]);
     }
 
-    public override render(p: Particle, device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, data: ParticleData): void {
-        const flip = assertExists(data.flipbooks[this.data[0].index]);
+    public override render(p: Particle, viewerInput: ViewerRenderInput, ctx: ParticleContext): void {
+        const flip = assertExists(ctx.sys.data.flipbooks[this.data[0].index]);
         const currData = currInstructionData(p.t, this.data);
         if (p.vecs[this.state][2] === 0) {
             p.vecs[this.state][2] = currData.flipX ? Math.sign(Math.random() - .5) : 1;
@@ -655,7 +655,7 @@ class FlippedFlipbook extends Instruction {
         p.render[14] = pos[2];
         mat4.mul(p.render, p.emitter.toView, p.render);
 
-        data.flipbookRenderer.render(renderInstManager, viewerInput, flip, state[0], colorScratch, p.render);
+        ctx.renderFlipbook(flip, state[0], colorScratch, p.render);
         if (p.prevT >= 0)
             updateFlipbook(state, flip.flipbook.frames, p.t - p.prevT, this.data[0].speed);
     }
@@ -812,9 +812,9 @@ class FlipbookCluster extends ScratchInstruction<FlipbookClusterData> {
             setChild(buf, i, childScr);
     }
 
-    public override render(p: Particle, device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, data: ParticleData): void {
+    public override render(p: Particle, viewerInput: ViewerRenderInput, ctx: ParticleContext): void {
         const currData = currInstructionData(p.t, this.data);
-        const scratch = ensureScratch(this, p, data);
+        const scratch = ensureScratch(this, p, ctx.sys);
         const dt = p.t - p.prevT;
         const stateVec = p.vecs[this.state];
         const currFame = viewerInput.time * FRAME_RATE / 1000;
@@ -870,7 +870,7 @@ class FlipbookCluster extends ScratchInstruction<FlipbookClusterData> {
         const yScale = vec3.len(instScr3);
 
         let livingChildren = false;
-        const flip = assertExists(data.flipbooks[currData.index]);
+        const flip = assertExists(ctx.sys.data.flipbooks[currData.index]);
         // update and render children
         for (let i = 0; i < currData.childCount; i++) {
             getChild(scratch, i, childScr);
@@ -908,7 +908,7 @@ class FlipbookCluster extends ScratchInstruction<FlipbookClusterData> {
             scratch.get4(childEnd + (t | 0), colorScratch);
             vec4.mul(colorScratch, p.emitter.color, colorScratch);
             vec4.scale(colorScratch, colorScratch, 1/0x4000);
-            data.flipbookRenderer.render(renderInstManager, viewerInput, flip, flipbookFrame, colorScratch, renderScratch);
+            ctx.renderFlipbook(flip, flipbookFrame, colorScratch, renderScratch);
         }
 
         const cutoff = this.program.lifetime - 1;
@@ -987,7 +987,7 @@ class Pyrefly extends ScratchInstruction<PyreflyData> {
                 vec4.add(p.vecs[this.colors + i], p.vecs[this.colors + i], currData.steps[i]);
 
         getMatrixTranslation(instScr3, p.pose);
-        const scratch = ensureScratch(this, p, system.data);
+        const scratch = ensureScratch(this, p, system);
         const newPhase = p.vecs[this.state][1] - dt;
         if (newPhase < (p.vecs[this.state][1] | 0)) {
             const index = newPhase < 0 ? (Pyrefly.bufferCount - 1) : (newPhase | 0) % Pyrefly.bufferCount;
@@ -996,14 +996,14 @@ class Pyrefly extends ScratchInstruction<PyreflyData> {
         p.vecs[this.state][1] = (newPhase + Pyrefly.bufferCount) % Pyrefly.bufferCount;
     }
 
-    public override render(p: Particle, device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, data: ParticleData): void {
+    public override render(p: Particle, viewerInput: ViewerRenderInput, ctx: ParticleContext): void {
         const currData = currInstructionData(p.t, this.data);
         const dt = p.t - p.prevT;
-        const scratch = ensureScratch(this, p, data);
+        const scratch = ensureScratch(this, p, ctx.sys);
 
         let rng = p.vecs[this.state][2];
         const flipbookT = p.vecs[this.state][0];
-        const flipbook = assertExists(data.flipbooks[currData.flipbook]);
+        const flipbook = assertExists(ctx.sys.data.flipbooks[currData.flipbook]);
 
         const trailHead = p.vecs[this.state][1] | 0;
         let trailIndex = (trailHead + 1) % Pyrefly.bufferCount;
@@ -1070,7 +1070,7 @@ class Pyrefly extends ScratchInstruction<PyreflyData> {
         setMatrixAxis(renderScratch, null, axis, null);
         const baseFrame = (flipbookT/flipbook.flipbook.frames[0].duration) % flipbook.flipbook.frames.length;
         if (args.pointCount > 0)
-            data.flipbookRenderer.renderTrail(device, renderInstManager, flipbook, baseFrame, renderScratch, args);
+            ctx.renderTrail(flipbook, baseFrame, renderScratch, args);
 
         p.vecs[this.state][0] = flipbookT + currData.speed * dt;
     }
@@ -1162,7 +1162,7 @@ class FlipbookTrail extends ScratchInstruction<FlipbookTrailData> {
         const dt = p.t - p.prevT;
 
         getMatrixTranslation(instScr3, p.pose);
-        const scratch = ensureScratch(this, p, system.data);
+        const scratch = ensureScratch(this, p, system);
         const newPhase = p.vecs[this.state][2] - dt;
         if (newPhase < (p.vecs[this.state][2] | 0)) {
             const index = newPhase < 0 ? (FlipbookTrail.bufferCount - 1) : (newPhase | 0) % FlipbookTrail.bufferCount;
@@ -1171,15 +1171,15 @@ class FlipbookTrail extends ScratchInstruction<FlipbookTrailData> {
         p.vecs[this.state][2] = (newPhase + FlipbookTrail.bufferCount) % FlipbookTrail.bufferCount;
     }
 
-    public override render(p: Particle, device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, data: ParticleData): void {
+    public override render(p: Particle, viewerInput: ViewerRenderInput, ctx: ParticleContext): void {
         const currData = currInstructionData(p.t, this.data);
         const dt = p.t - p.prevT;
 
         if (currData.flipbook === 0xFFFF)
             return;
 
-        const scratch = ensureScratch(this, p, data);
-        const flipbook = assertExists(data.flipbooks[currData.flipbook]);
+        const scratch = ensureScratch(this, p, ctx.sys);
+        const flipbook = assertExists(ctx.sys.data.flipbooks[currData.flipbook]);
         const frame = p.vecs[this.state][0];
 
         const trailHead = p.vecs[this.state][2] | 0;
@@ -1248,7 +1248,7 @@ class FlipbookTrail extends ScratchInstruction<FlipbookTrailData> {
         vec3.scale(axis, axis, p.emitter.scale[1]);
         setMatrixAxis(renderScratch, null, axis, null);
         if (args.pointCount > 0)
-            data.flipbookRenderer.renderTrail(device, renderInstManager, flipbook, frame, renderScratch, args);
+            ctx.renderTrail(flipbook, frame, renderScratch, args);
         updateFlipbook(p.vecs[this.state], flipbook.flipbook.frames, dt, currData.speed);
     }
 }
@@ -1300,7 +1300,7 @@ class UVScrollGeo extends Instruction {
         vec4.zero(p.vecs[this.v]);
     }
 
-    public override render(p: Particle, device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, data: ParticleData): void {
+    public override render(p: Particle, viewerInput: ViewerRenderInput, ctx: ParticleContext): void {
         const currData = currInstructionData(p.t, this.data);
         const dt = p.t - p.prevT;
 
@@ -1321,7 +1321,7 @@ class UVScrollGeo extends Instruction {
         getColor(colorScratch, p, this.colorMod);
         const depthOffset = currData.depthOffset ? p.vecs[this.depth][0] : 0;
         const mode = currData.fog ? GeoParticleMode.FOG : GeoParticleMode.DEFAULT;
-        assertExists(data.geos[currData.geoIndex]).prepareToRender(renderInstManager, p.render, -1, p.vecs[this.u][0], p.vecs[this.v][0], colorScratch, depthOffset, mode);
+        ctx.renderGeo(assertExists(ctx.sys.data.geos[currData.geoIndex]), p.render, -1, p.vecs[this.u][0], p.vecs[this.v][0], colorScratch, depthOffset, mode);
     }
 }
 
@@ -1388,7 +1388,7 @@ class WrapUVScrollGeo extends Instruction {
         p.vecs[this.v][2] = 0;
     }
 
-    public override render(p: Particle, device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, data: ParticleData): void {
+    public override render(p: Particle, viewerInput: ViewerRenderInput, ctx: ParticleContext): void {
         const currData = currInstructionData(p.t, this.data);
         const dt = p.t - p.prevT;
 
@@ -1434,17 +1434,17 @@ class WrapUVScrollGeo extends Instruction {
         getColor(colorScratch, p, this.colorMod);
         const depthOffset = currData.depthOffset ? p.vecs[this.depth][0] : 0;
         const mode = currData.fog ? GeoParticleMode.FOG : GeoParticleMode.DEFAULT;
-        const geo = assertExists(data.geos[currData.geoIndex])
+        const geo = assertExists(ctx.sys.data.geos[currData.geoIndex])
         if (currData.useWater) {
             p.vecs[this.texFrame][0] += dt / currData.waterTexDur;
-            const water = data.getWaterTexture(currData.waterTexSlot, p.vecs[this.texFrame][0] | 0);
+            const water = ctx.sys.data.getWaterTexture(currData.waterTexSlot, p.vecs[this.texFrame][0] | 0);
             if (water) {
                 for (let i = 0; i < geo.drawCalls.length; i++) {
                     geo.drawCalls[i].textureMappings[0].gfxTexture = water;
                 }
             }
         }
-        geo.prepareToRender(renderInstManager, p.render, -1, p.vecs[this.u][0], p.vecs[this.v][0], colorScratch, depthOffset, mode, currData.flags);
+        ctx.renderGeo(geo, p.render, -1, p.vecs[this.u][0], p.vecs[this.v][0], colorScratch, depthOffset, mode, currData.flags);
     }
 }
 
@@ -1495,7 +1495,7 @@ class WibbleUVScrollGeo extends Instruction {
         p.vecs[this.v][2] = 0;
     }
 
-    public override render(p: Particle, device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, data: ParticleData): void {
+    public override render(p: Particle, viewerInput: ViewerRenderInput, ctx: ParticleContext): void {
         const currData = currInstructionData(p.t, this.data);
         const dt = p.t - p.prevT;
 
@@ -1515,14 +1515,14 @@ class WibbleUVScrollGeo extends Instruction {
 
         getColor(colorScratch, p, this.colorMod);
         const mode = currData.fog ? GeoParticleMode.FOG : GeoParticleMode.DEFAULT;
-        const geo = assertExists(data.geos[currData.geoIndex]);
-        const water = data.getWaterTexture(currData.waterTexSlot, p.vecs[this.texFrame][0] | 0);
+        const geo = assertExists(ctx.sys.data.geos[currData.geoIndex]);
+        const water = ctx.sys.data.getWaterTexture(currData.waterTexSlot, p.vecs[this.texFrame][0] | 0);
         if (water) {
             for (let i = 0; i < geo.drawCalls.length; i++) {
                 geo.drawCalls[i].textureMappings[0].gfxTexture = water;
             }
         }
-        geo.prepareToRender(renderInstManager, p.render, -1, p.vecs[this.u][0], p.vecs[this.v][0], colorScratch, 0, mode);
+        ctx.renderGeo(geo, p.render, -1, p.vecs[this.u][0], p.vecs[this.v][0], colorScratch, 0, mode);
     }
 }
 
@@ -1546,7 +1546,7 @@ class SimpleGeo extends Instruction {
         this.depth = r(offsets[2]);
     }
 
-    public override render(p: Particle, device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, data: ParticleData): void {
+    public override render(p: Particle, viewerInput: ViewerRenderInput, ctx: ParticleContext): void {
         const currData = currInstructionData(p.t, this.data);
         if (currData.geoIndex === 0xFFFF)
             return;
@@ -1558,7 +1558,7 @@ class SimpleGeo extends Instruction {
         // not really sure what this does, but at the very least is has the same effect of drawing early before depth sorting
         if (currData.flag2000)
             flags |= 2;
-        assertExists(data.geos[currData.geoIndex]).prepareToRender(renderInstManager, p.render, currData.blend, 0, 0, colorScratch, depthOffset, mode, flags);
+        ctx.renderGeo(assertExists(ctx.sys.data.geos[currData.geoIndex]), p.render, currData.blend, 0, 0, colorScratch, depthOffset, mode, flags);
     }
 }
 
@@ -1566,9 +1566,9 @@ class FakeGeo extends Instruction {
     public override renders = true;
     public index = -1;
 
-    public override render(p: Particle, device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, data: ParticleData): void {
+    public override render(p: Particle, viewerInput: ViewerRenderInput, ctx: ParticleContext): void {
         vec4.set(colorScratch, 1, 1, 1, 1);
-        assertExists(data.geos[this.index]).prepareToRender(renderInstManager, p.render, -1, 0, 0, colorScratch);
+        ctx.renderGeo(assertExists(ctx.sys.data.geos[this.index]), p.render, -1, 0, 0, colorScratch);
     }
 }
 
@@ -2186,6 +2186,7 @@ class Electricity extends ScratchInstruction<ElectricData> implements BufferFill
     public params: number; // width; noise strength; target strength; tip speed
     public colors: number;
     public direction: number;
+    public override renders = true;
 
     public maxLength: number;
 
@@ -2260,7 +2261,7 @@ class Electricity extends ScratchInstruction<ElectricData> implements BufferFill
         transformVec3Mat4w0(dirArg, p.pose, dirArg);
         vec3.normalize(dirArg, dirArg);
 
-        const scratch = ensureScratch(this, p, system.data);
+        const scratch = ensureScratch(this, p, system);
 
         if (p.crossed(currData.t)) {
             if (currData.t === 0) {
@@ -2468,11 +2469,11 @@ class Electricity extends ScratchInstruction<ElectricData> implements BufferFill
         }
     }
 
-    public override render(p: Particle, device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, data: ParticleData): void {
+    public override render(p: Particle, viewerInput: ViewerRenderInput, ctx: ParticleContext): void {
         const currData = currInstructionData(p.t, this.data);
-        const scratch = ensureScratch(this, p, data);
+        const scratch = ensureScratch(this, p, ctx.sys);
 
-        if (data.debug) {
+        if (ctx.sys.debug) {
             const ctx = getDebugOverlayCanvas2D();
 
             let chainIndex = p.vecs[this.state][1];
@@ -2516,7 +2517,7 @@ class Electricity extends ScratchInstruction<ElectricData> implements BufferFill
             if (state.endIndex < state.startIndex)
                 count += this.chain.vertexCount;
             if (count > 2)
-                data.electricRenderer.render(device, renderInstManager, viewerInput, p.vecs, this.colors, count, this,
+                ctx.renderElectricity(p.vecs, this.colors, count, this,
                     currData.coreWidthFrac,
                     currData.reversed ? 0 : state.pointsTraveled,
                 );
@@ -2600,8 +2601,8 @@ class ElectricTarget extends Instruction {
         p.vecs[this.state][3] = nextExists ? currData.nextTargetProgram : -1;
     }
 
-    public override render(p: Particle, device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, data: ParticleData): void {
-        if (!data.debug)
+    public override render(p: Particle, viewerInput: ViewerRenderInput, pctx: ParticleContext): void {
+        if (!pctx.sys.debug)
             return;
         const ctx = getDebugOverlayCanvas2D();
         getMatrixTranslation(posScratch, p.pose);
@@ -2700,11 +2701,11 @@ class Rain extends ScratchInstruction<RainData> {
 
     public override initScratch(buf: ScratchBuffer, data: RainData): void {}
 
-    public override render(p: Particle, device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, data: ParticleData): void {
+    public override render(p: Particle, viewerInput: ViewerRenderInput, ctx: ParticleContext): void {
         const currData = this.data[0];
         const dt = p.t - p.prevT;
 
-        const scratch = ensureScratch(this, p, data);
+        const scratch = ensureScratch(this, p, ctx.sys);
 
         getMatrixTranslation(posScratch, viewerInput.camera.worldMatrix);
         transformVec3Mat4w0(posScratch, FFXToNoclip, posScratch);
@@ -2739,7 +2740,7 @@ class Rain extends ScratchInstruction<RainData> {
             }
         }
         getColor(colorScratch, p, this.color);
-        data.rainRenderer.render(device, renderInstManager, viewerInput, colorScratch, currData.vel, scratch.data, currData.count);
+        ctx.renderRain(colorScratch, currData.vel, scratch.data, currData.count);
     }
 }
 
@@ -2766,7 +2767,7 @@ class CircleBlur extends Instruction {
         //     assert(data[i].usePrevFrame);
     }
 
-    public override render(p: Particle, device: GfxDevice, manager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    public override render(p: Particle, viewerInput: ViewerRenderInput): void {
 
     }
 }
@@ -2799,7 +2800,7 @@ class GeoBlur extends Instruction {
         vec4.zero(p.vecs[this.state]);
     }
 
-    public override render(p: Particle, device: GfxDevice, manager: GfxRenderInstManager, viewerInput: ViewerRenderInput, data: ParticleData): void {
+    public override render(p: Particle, viewerInput: ViewerRenderInput, ctx: ParticleContext): void {
         const currData = currInstructionData(p.t, this.data);
         const dt = p.t - p.prevT;
         p.vecs[this.state][1] += dt * p.vecs[this.state][2];
@@ -2812,7 +2813,7 @@ class GeoBlur extends Instruction {
             return;
         getColor(colorScratch, p, this.color);
         // in principle we should modify the alpha that gets used for blending here based on dt
-        assertExists(data.geos[currData.geo]).prepareToRender(manager, p.render, -1, 0, 0, colorScratch, 0, currData.mulZ !== 0 ? GeoParticleMode.BLUR_Z : GeoParticleMode.BLUR, 0, p.vecs[this.state][0]);
+        ctx.renderGeo(assertExists(ctx.sys.data.geos[currData.geo]), p.render, -1, 0, 0, colorScratch, 0, currData.mulZ !== 0 ? GeoParticleMode.BLUR_Z : GeoParticleMode.BLUR, 0, p.vecs[this.state][0]);
     }
 }
 
@@ -2845,7 +2846,7 @@ class Overlay extends Instruction {
         vec4.zero(p.vecs[this.state]);
     }
 
-    public override render(p: Particle, device: GfxDevice, manager: GfxRenderInstManager, viewerInput: ViewerRenderInput, data: ParticleData): void {
+    public override render(p: Particle, viewerInput: ViewerRenderInput, ctx: ParticleContext): void {
         const currData = currInstructionData(p.t, this.data);
     }
 }
@@ -2928,7 +2929,7 @@ class Water extends Instruction {
         p.vecs[this.v][2] = 0;
     }
 
-    public override render(p: Particle, device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, data: ParticleData): void {
+    public override render(p: Particle, viewerInput: ViewerRenderInput, ctx: ParticleContext): void {
         const currData = currInstructionData(p.t, this.data);
         const dt = p.t - p.prevT;
 
@@ -2956,14 +2957,14 @@ class Water extends Instruction {
         waterScratch.radius = currData.radius / Math.abs(p.pose[0]);
         waterScratch.fog = currData.fog;
 
-        const geo = assertExists(data.geos[currData.geo]);
-        const water = data.getWaterTexture(currData.waterTexSlot, p.vecs[this.texState][0] | 0);
+        const geo = assertExists(ctx.sys.data.geos[currData.geo]);
+        const water = ctx.sys.data.getWaterTexture(currData.waterTexSlot, p.vecs[this.texState][0] | 0);
         if (water) {
             for (let i = 0; i < geo.drawCalls.length; i++) {
                 geo.drawCalls[i].textureMappings[0].gfxTexture = water;
             }
         }
-        geo.renderWater(renderInstManager, p.render, p.vecs[this.u][0], p.vecs[this.v][0], colorScratch, waterScratch);
+        ctx.renderWater(geo, p.render, p.vecs[this.u][0], p.vecs[this.v][0], colorScratch, waterScratch);
     }
 }
 
@@ -2985,11 +2986,11 @@ class SimpleGlare extends Instruction {
         this.base = r(offsets[1], ["v", "glare"]) + 1;
     }
 
-    public override render(p: Particle, device: GfxDevice, manager: GfxRenderInstManager, viewerInput: ViewerRenderInput, data: ParticleData): void {
+    public override render(p: Particle, viewerInput: ViewerRenderInput, ctx: ParticleContext): void {
         const currData = currInstructionData(p.t, this.data);
         const dt = p.t - p.prevT;
 
-        const flipbook = assertExists(data.flipbooks[currData.flipbook]);
+        const flipbook = assertExists(ctx.sys.data.flipbooks[currData.flipbook]);
 
         computeModelMatrixS(renderScratch, currData.scale * p.emitter.scale[0], currData.scale * p.emitter.scale[1], 1);
         getMatrixTranslation(posScratch, p.pose);
@@ -2998,7 +2999,7 @@ class SimpleGlare extends Instruction {
 
         vec4.mul(colorScratch, currData.color, p.emitter.color);
         colorScratch[3] *= p.vecs[this.base][0];
-        data.flipbookRenderer.render(manager, viewerInput, flipbook, p.vecs[this.state][0], colorScratch, renderScratch, 0, true);
+        ctx.renderFlipbook(flipbook, p.vecs[this.state][0], colorScratch, renderScratch, 0, true);
         updateFlipbook(p.vecs[this.state], flipbook.flipbook.frames, dt, 0x200);
     }
 }
@@ -3024,14 +3025,14 @@ class ScaledGlare extends Instruction {
         this.base = r(offsets[1], ["v", "glare"]) + 1;
     }
 
-    public override render(p: Particle, device: GfxDevice, manager: GfxRenderInstManager, viewerInput: ViewerRenderInput, data: ParticleData): void {
+    public override render(p: Particle, viewerInput: ViewerRenderInput, ctx: ParticleContext): void {
         const currData = currInstructionData(p.t, this.data);
         const dt = p.t - p.prevT;
 
         if (currData.flipbook === 0xFFFF)
             return;
 
-        const flipbook = assertExists(data.flipbooks[currData.flipbook]);
+        const flipbook = assertExists(ctx.sys.data.flipbooks[currData.flipbook]);
         const ratio = 1 - clamp(p.vecs[this.base][3]/currData.maxRadius, 0, 1);
         let xScale = currData.maxScale * p.emitter.scale[0];
         let yScale = currData.maxScale * p.emitter.scale[1];
@@ -3050,7 +3051,7 @@ class ScaledGlare extends Instruction {
 
         vec4.mul(colorScratch, currData.color, p.emitter.color);
         colorScratch[3] *= p.vecs[this.base][0];
-        data.flipbookRenderer.render(manager, viewerInput, flipbook, p.vecs[this.state][0], colorScratch, renderScratch, 0, true);
+        ctx.renderFlipbook(flipbook, p.vecs[this.state][0], colorScratch, renderScratch, 0, true);
         updateFlipbook(p.vecs[this.state], flipbook.flipbook.frames, dt, 0x200);
     }
 }
@@ -3075,14 +3076,14 @@ class MoreGlare extends Instruction {
         this.base = r(offsets[1], ["v", "glare"]) + 1;
     }
 
-    public override render(p: Particle, device: GfxDevice, manager: GfxRenderInstManager, viewerInput: ViewerRenderInput, data: ParticleData): void {
+    public override render(p: Particle, viewerInput: ViewerRenderInput, ctx: ParticleContext): void {
         const currData = currInstructionData(p.t, this.data);
         const dt = p.t - p.prevT;
 
         if (currData.flipbook === 0xFFFF)
             return;
 
-        const flipbook = assertExists(data.flipbooks[currData.flipbook]);
+        const flipbook = assertExists(ctx.sys.data.flipbooks[currData.flipbook]);
         const ratio = currData.scale * p.vecs[this.base][3]/currData.scaleDist;
         let xScale = -ratio * p.emitter.scale[0];
         let yScale = ratio * p.emitter.scale[1];
@@ -3094,7 +3095,7 @@ class MoreGlare extends Instruction {
 
         vec4.mul(colorScratch, currData.color, p.emitter.color);
         colorScratch[3] *= clamp(p.vecs[this.base][3]/currData.alphaDist, 0, 1)
-        data.flipbookRenderer.render(manager, viewerInput, flipbook, p.vecs[this.state][0], colorScratch, renderScratch, 0, true);
+        ctx.renderFlipbook(flipbook, p.vecs[this.state][0], colorScratch, renderScratch, 0, true);
         updateFlipbook(p.vecs[this.state], flipbook.flipbook.frames, dt, 0x200);
     }
 }
@@ -3125,7 +3126,7 @@ class GlareBase extends Instruction {
         vec4.zero(p.vecs[this.state]);
     }
 
-    public override render(p: Particle, device: GfxDevice, manager: GfxRenderInstManager, viewerInput: ViewerRenderInput, data: ParticleData): void {
+    public override render(p: Particle, viewerInput: ViewerRenderInput, ctx: ParticleContext): void {
         const currData = currInstructionData(p.t, this.data);
         if (p.crossed(currData.t)) {
             p.vecs[this.state][1] += currData.factor;
@@ -4269,12 +4270,10 @@ export class ParticleData {
     public flipbookRenderer: FlipbookRenderer;
     public fullscreen: FullScreenColor;
 
-    public debug = false;
-
-    constructor(public data: LevelParticles, device: GfxDevice, cache: GfxRenderCache, private textureData: TextureData[], bufferManager: BufferPoolManager) {
-        this.rainRenderer = new RainRenderer(cache, bufferManager);
-        this.electricRenderer = new ElectricRenderer(cache, bufferManager);
-        this.flipbookRenderer = new FlipbookRenderer(cache, textureData, bufferManager);
+    constructor(public data: LevelParticles, device: GfxDevice, cache: GfxRenderCache, private textureData: TextureData[]) {
+        this.rainRenderer = new RainRenderer(cache);
+        this.electricRenderer = new ElectricRenderer(cache);
+        this.flipbookRenderer = new FlipbookRenderer(cache, textureData);
         this.fullscreen = new FullScreenColor(cache);
         for (let f of data.flipbooks) {
             this.flipbooks.push(f ? new FlipbookData(device, cache, f) : null);
@@ -5434,7 +5433,7 @@ export class Emitter {
         vec3.copy(this.scale, spec.scale);
     }
 
-    public update(device: GfxDevice, objects: LevelObjectHolder, viewerInput: ViewerRenderInput, renderInstManager: GfxRenderInstManager, system: ParticleSystem): void {
+    public update(objects: LevelObjectHolder, viewerInput: ViewerRenderInput, ctx: ParticleContext): void {
         if (!this.visible)
             return;
         const frameDelta = Math.min(viewerInput.deltaTime * FRAME_RATE / 1000, 1);
@@ -5467,7 +5466,7 @@ export class Emitter {
             for (let i = 0; i < this.particles.length; i++) {
                 const p = this.particles[i];
                 if (p)
-                    p.freeChain(system);
+                    p.freeChain(ctx.sys);
                 this.particles[i] = null;
             }
         }
@@ -5476,10 +5475,10 @@ export class Emitter {
         for (let i = 0; i < this.behavior.programs.length; i++) {
             const prog = this.behavior.programs[i];
             if (this.prevT < prog.start && prog.start <= this.t) {
-                this.emit(system, i)
+                this.emit(ctx.sys, i)
             }
         }
-        const hideMask = system.debug ? 0 : 1;
+        const hideMask = ctx.sys.debug ? 0 : 1;
 
         // update all particles
         for (let i = 0; i < this.behavior.programs.length; i++) {
@@ -5491,15 +5490,15 @@ export class Emitter {
             for (let j = 0; j < prog.instructions.length; j++) {
                 // call all possible functions, most of which will be stubs
                 if ((prog.flags & hideMask) === 0)
-                    prog.instructions[j].renderAll(head, device, renderInstManager, viewerInput, system.data);
+                    prog.instructions[j].renderAll(head, viewerInput, ctx);
                 for (let p: Particle | null = head; p !== null; p = p.next) {
                     // lighting only gets a single update frame in-game, but has "velocity" instructions
                     // which would cause it to change. instead, mimic game behavior by only doing the
                     // initial update for single-frame particles (and hope render() does nothing)
                     if (!singleFrame || p.prevT <= 0)
-                        prog.instructions[j].update(p, system);
+                        prog.instructions[j].update(p, ctx.sys);
                     if (p.visible && (prog.flags & hideMask) === 0)
-                        prog.instructions[j].render(p, device, renderInstManager, viewerInput, system.data);
+                        prog.instructions[j].render(p, viewerInput, ctx);
                 }
             }
             let prev: Particle | null = null;
@@ -5521,7 +5520,7 @@ export class Emitter {
                         prev.next = p.next;
                     // delete just this particle
                     p.next = null;
-                    p.freeChain(system);
+                    p.freeChain(ctx.sys);
                     nextPrev = prev;
                 }
                 p = nextP;
@@ -5548,7 +5547,7 @@ export class Emitter {
             done = this.t >= this.behavior.lifetime;
         }
         if (done)
-            this.destroy(system);
+            this.destroy(ctx.sys);
     }
 
     public emit(system: ParticleSystem, index: number): Particle {
@@ -5630,7 +5629,7 @@ export class ParticleSystem {
     public uniqueCount = 0;
     public pool: Particle | null = null;
 
-    constructor(public id: number, public data: ParticleData, private runner?: ParticleRunner) {
+    constructor(public id: number, public data: ParticleData, public bufferManager: BufferPoolManager, private runner?: ParticleRunner) {
         let baseCount = 0;
         for (let e of data.data.emitters) {
             this.emitters.push(new Emitter(e, data.data));
@@ -5658,6 +5657,7 @@ export class ParticleSystem {
         if (this.t >= 0 && this.runner)
             this.runner(this.t, this, viewerInput, renderInstManager, device, objects);
 
+        const ctx = new ParticleContext(device, renderInstManager, viewerInput, this);
         const wasWaiting = this.t < 0;
         this.t += Math.min(viewerInput.deltaTime * FRAME_RATE / 1000, 1);
         let allDone = true;
@@ -5665,7 +5665,7 @@ export class ParticleSystem {
             const e = this.emitters[i];
             if (e.waitTimer !== EMITTER_DONE_TIMER && e.visible)
                 allDone = false;
-            e.update(device, objects, viewerInput, renderInstManager, this);
+            e.update(objects, viewerInput, ctx);
         }
 
         if (this.loop && allDone && this.t > 0) {
@@ -5676,5 +5676,37 @@ export class ParticleSystem {
                 vec3.set(this.colorMult, 1, 1, 1);
             }
         }
+    }
+}
+
+export class ParticleContext {
+    constructor(
+        private device: GfxDevice,
+        private mgr: GfxRenderInstManager,
+        private viewerInput: ViewerRenderInput,
+        public sys: ParticleSystem) {}
+
+    public renderRain(color: vec4, direction: ReadonlyVec4, positions: Float32Array, count: number): void {
+        this.sys.data.rainRenderer.render(this.device, this.mgr, this.sys.bufferManager, this.viewerInput, color, direction, positions, count);
+    }
+
+    public renderFlipbook(data: FlipbookData, frameIndex: number, color: ReadonlyVec4, modelMatrix: mat4, depthOffset = 0, isGlare = false): void {
+        this.sys.data.flipbookRenderer.render(this.mgr, data, frameIndex, color, modelMatrix, depthOffset, isGlare);
+    }
+
+    public renderTrail(data: FlipbookData, frameIndex: number, modelMatrix: ReadonlyMat4, args: TrailArgs): void {
+        this.sys.data.flipbookRenderer.renderTrail(this.device, this.mgr, this.sys.bufferManager, data, frameIndex, modelMatrix, args);
+    }
+
+    public renderGeo(geo: GeoParticleInstance, modelViewMatrix: mat4, blend: number, uShift: number, vShift: number, colorFactor: vec4, depthOffset = 0, mode = GeoParticleMode.DEFAULT, flags = 0, param = 0): void {
+        geo.prepareToRender(this.mgr, modelViewMatrix, blend, uShift, vShift, colorFactor, depthOffset, mode, flags, param);
+    }
+
+    public renderWater(geo: GeoParticleInstance, modelViewMatrix: mat4, uShift: number, vShift: number, colorFactor: vec4, args: WaterArgs): void {
+        geo.renderWater(this.mgr, modelViewMatrix, uShift, vShift, colorFactor, args);
+    }
+
+    public renderElectricity(colors: vec4[], colorStart: number, count: number, filler: BufferFiller, coreWidth: number, colorOffset: number): void {
+        this.sys.data.electricRenderer.render(this.device, this.mgr, this.sys.bufferManager, this.viewerInput, colors, colorStart, count, filler, coreWidth, colorOffset);
     }
 }
