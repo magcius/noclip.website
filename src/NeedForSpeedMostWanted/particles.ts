@@ -85,8 +85,8 @@ export class NfsParticleEmitter {
             vertexBufferDescriptors,
             vertexAttributeDescriptors,
         });
-        NfsParticleEmitter.vertexBufferDescriptors = [{ buffer: NfsParticleEmitter.vertexBuffer, byteOffset: 0 }];
-        NfsParticleEmitter.indexBufferDescriptor = { buffer: NfsParticleEmitter.indexBuffer, byteOffset: 0 };
+        NfsParticleEmitter.vertexBufferDescriptors = [{ buffer: NfsParticleEmitter.vertexBuffer }];
+        NfsParticleEmitter.indexBufferDescriptor = { buffer: NfsParticleEmitter.indexBuffer };
     }
 
     public update(deltaTime: number) {

@@ -304,9 +304,9 @@ export class MapData {
         });
 
         this.vertexBufferDescriptors = [
-            { buffer: this.vertexBuffer, byteOffset: 0, },
+            { buffer: this.vertexBuffer },
         ];
-        this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
+        this.indexBufferDescriptor = { buffer: this.indexBuffer };
     }
 
     private createBatchedDrawCalls(isSkybox: boolean, meshes: Bin.Mesh[], skyboxTexIndexMap: Map<number, number>, submeshesOut: Bin.Submesh[], layersOut: Layer[]): DrawCall[] {

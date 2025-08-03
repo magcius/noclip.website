@@ -376,8 +376,8 @@ export class ParticleManager {
             ],
             vertexAttributeDescriptors,
         });
-        const vertexBufferDescriptors = [{ buffer: vertexBuffer, byteOffset: 0 }];
-        const indexBufferDescriptor = { buffer: indexBuffer, byteOffset: 0 };
+        const vertexBufferDescriptors = [{ buffer: vertexBuffer }];
+        const indexBufferDescriptor = { buffer: indexBuffer };
         this.spriteData = { vertexBuffer, indexBuffer, inputLayout, vertexBufferDescriptors, indexBufferDescriptor };
 
         // create gfx data for all the textures

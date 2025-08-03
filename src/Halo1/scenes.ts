@@ -1546,10 +1546,10 @@ class LightmapModelData {
         this.indexOffset = this.material.get_index_offset();
 
         this.vertexBufferDescriptors = [
-            { buffer: this.vertexBuffer, byteOffset: 0 },
-            { buffer: this.lightmapVertexBuffer, byteOffset: 0 },
+            { buffer: this.vertexBuffer },
+            { buffer: this.lightmapVertexBuffer },
         ];
-        this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
+        this.indexBufferDescriptor = { buffer: this.indexBuffer };
     }
 
     public setOnRenderInst(renderInst: GfxRenderInst) {
@@ -1746,8 +1746,8 @@ class ModelData {
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, indexData.buffer);
 
         this.inputLayout = this.getInputLayout(cache);
-        this.vertexBufferDescriptors = [{ buffer: this.vertexBuffer, byteOffset: 0 }];
-        this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
+        this.vertexBufferDescriptors = [{ buffer: this.vertexBuffer }];
+        this.indexBufferDescriptor = { buffer: this.indexBuffer };
 
         this.parts.sort((a, b) => {
             return a.origIndex - b.origIndex;

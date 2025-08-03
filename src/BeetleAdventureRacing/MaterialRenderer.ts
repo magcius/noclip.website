@@ -83,8 +83,8 @@ export class MaterialRenderer {
             vertexBufferDescriptors,
         });
 
-        this.vertexBufferDescriptors = [{ buffer: this.vertexBuffer, byteOffset: 0 }];
-        this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
+        this.vertexBufferDescriptors = [{ buffer: this.vertexBuffer }];
+        this.indexBufferDescriptor = { buffer: this.indexBuffer };
 
         // Create UVTX renderers (if necessary)
         if (this.isTextured) {

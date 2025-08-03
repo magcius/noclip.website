@@ -141,7 +141,7 @@ export class NjsMeshData {
             this.vertexBuffers.push(buffer);
             vertexAttributeDescriptors.push({ location: JSRProgram.a_Position, bufferIndex, bufferByteOffset: 0, format: GfxFormat.F32_RGB });
             vertexLayoutBufferDescriptors.push({ byteStride: 0x0C, frequency: GfxVertexBufferFrequency.PerVertex, });
-            this.vertexBufferDescriptors.push({ buffer, byteOffset: 0, });
+            this.vertexBufferDescriptors.push({ buffer });
         }
 
         if (vertexData.normals.length > 0) {
@@ -152,7 +152,7 @@ export class NjsMeshData {
             this.vertexBuffers.push(buffer);
             vertexAttributeDescriptors.push({ location: JSRProgram.a_Normal, bufferIndex, bufferByteOffset: 0, format: GfxFormat.F32_RGB });
             vertexLayoutBufferDescriptors.push({ byteStride: 0x0C, frequency: GfxVertexBufferFrequency.PerVertex, });
-            this.vertexBufferDescriptors.push({ buffer, byteOffset: 0, });
+            this.vertexBufferDescriptors.push({ buffer });
         }
 
         if (vertexData.uvs.length > 0) {
@@ -163,7 +163,7 @@ export class NjsMeshData {
             this.vertexBuffers.push(buffer);
             vertexAttributeDescriptors.push({ location: JSRProgram.a_TexCoord, bufferIndex, bufferByteOffset: 0, format: GfxFormat.F32_RG });
             vertexLayoutBufferDescriptors.push({ byteStride: 0x08, frequency: GfxVertexBufferFrequency.PerVertex, });
-            this.vertexBufferDescriptors.push({ buffer, byteOffset: 0, });
+            this.vertexBufferDescriptors.push({ buffer });
         }
 
         if (vertexData.diffuse.length > 0) {
@@ -174,7 +174,7 @@ export class NjsMeshData {
             this.vertexBuffers.push(buffer);
             vertexAttributeDescriptors.push({ location: JSRProgram.a_Diffuse, bufferIndex, bufferByteOffset: 0, format: GfxFormat.F32_RGBA });
             vertexLayoutBufferDescriptors.push({ byteStride: 0x10, frequency: GfxVertexBufferFrequency.PerVertex, });
-            this.vertexBufferDescriptors.push({ buffer, byteOffset: 0, });
+            this.vertexBufferDescriptors.push({ buffer });
         }
 
         if (vertexData.specular.length > 0) {
@@ -185,11 +185,11 @@ export class NjsMeshData {
             this.vertexBuffers.push(buffer);
             vertexAttributeDescriptors.push({ location: JSRProgram.a_Specular, bufferIndex, bufferByteOffset: 0, format: GfxFormat.F32_RGBA });
             vertexLayoutBufferDescriptors.push({ byteStride: 0x10, frequency: GfxVertexBufferFrequency.PerVertex, });
-            this.vertexBufferDescriptors.push({ buffer, byteOffset: 0, });
+            this.vertexBufferDescriptors.push({ buffer });
         }
 
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, Uint16Array.from(indexData).buffer);
-        this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0, };
+        this.indexBufferDescriptor = { buffer: this.indexBuffer };
 
         this.indexCount = indexData.length;
 

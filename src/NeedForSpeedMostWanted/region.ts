@@ -530,9 +530,9 @@ export class NfsModel {
                 vertexAttributeDescriptors: vertAttDesc, vertexBufferDescriptors: vertInpLayoutBufDesc, indexBufferFormat: GfxFormat.U16_R
             });
             const vertexBufferDescriptors: GfxVertexBufferDescriptor[] = [
-                {buffer: this.vertexBuffers[vertexListIndex], byteOffset: 0}
+                {buffer: this.vertexBuffers[vertexListIndex]}
             ];
-            const indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
+            const indexBufferDescriptor = { buffer: this.indexBuffer };
             this.vertInfos.push({ inputLayout, vertexBufferDescriptors, indexBufferDescriptor, drawCall: { indexOffset, indexCount }, textureMappings, shaderType });
         }
     }

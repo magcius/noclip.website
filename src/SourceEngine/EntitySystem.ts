@@ -4217,7 +4217,7 @@ class infodecal extends BaseEntity {
             return;
 
         const template = renderInstManager.pushTemplate();
-        template.setVertexInput(this.bspRenderer.inputLayout, [{ buffer: this.vertexBuffer, byteOffset: 0 }], { buffer: this.indexBuffer, byteOffset: 0 });
+        template.setVertexInput(this.bspRenderer.inputLayout, [{ buffer: this.vertexBuffer }], { buffer: this.indexBuffer });
         this.materialInstance.setOnRenderInstModelMatrix(template, null);
 
         this.materialInstance.calcProjectedLight(renderContext, this.bbox);

@@ -2285,8 +2285,9 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     }
 
     public setVertexInput(inputLayout_: GfxInputLayout | null, vertexBuffers: (GfxVertexBufferDescriptor | null)[] | null, indexBuffer: GfxIndexBufferDescriptor | null): void {
+        assert(this._currentPipeline.inputLayout === inputLayout_);
+
         if (inputLayout_ !== null) {
-            assert(this._currentPipeline.inputLayout === inputLayout_);
             const inputLayout = inputLayout_ as GfxInputLayoutP_GL;
 
             this._setVAO(inputLayout.vao);
@@ -2301,7 +2302,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
                 gl.bindBuffer(gl.ARRAY_BUFFER, getPlatformBuffer(vertexBuffer.buffer));
 
-                const bufferOffset = vertexBuffer.byteOffset + attr.bufferByteOffset;
+                const bufferOffset = (vertexBuffer.byteOffset ?? 0) + attr.bufferByteOffset;
                 const format = inputLayout.vertexBufferFormats[i];
 
                 const inputLayoutBuffer = inputLayout.vertexBufferDescriptors[attr.bufferIndex]!;
@@ -2316,15 +2317,14 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
                 const buffer = indexBuffer.buffer as GfxBufferP_GL;
                 assert(buffer.usage === GfxBufferUsage.Index);
                 gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, getPlatformBuffer(buffer));
-                this._currentIndexBufferByteOffset = indexBuffer.byteOffset;
+                this._currentIndexBufferByteOffset = indexBuffer.byteOffset ?? 0;
             } else {
                 this._currentIndexBufferByteOffset = null;
             }
         } else {
-            assert(this._currentPipeline.inputLayout === null);
             assert(indexBuffer === null);
             this._setVAO(null);
-            this._currentIndexBufferByteOffset = 0;
+            this._currentIndexBufferByteOffset = null;
         }
     }
 

@@ -154,7 +154,6 @@ export class ModelRenderer {
                 GfxBufferUsage.Vertex,
                 this.model.vertexBuffer.buffer,
             ),
-            byteOffset: 0,
         };
 
         for (let i in this.model.skins) {
@@ -165,7 +164,6 @@ export class ModelRenderer {
                     GfxBufferUsage.Index,
                     skinData.indexBuffer.buffer,
                 ),
-                byteOffset: 0,
             });
             this.skinData.push(skinData);
             this.skinBatchTextures[i] = [];
@@ -188,7 +186,6 @@ export class ModelRenderer {
                 GfxBufferUsage.Index,
                 particleIndexBuf.buffer,
             ),
-            byteOffset: 0,
         };
         this.particleInputLayout = renderHelper.renderCache.createInputLayout({
             vertexAttributeDescriptors: [],
@@ -797,7 +794,7 @@ export class TerrainRenderer {
             indexBufferFormat,
         });
         [this.vertexBuffer, this.indexBuffer] =
-            this.adt.getBufsAndChunks(device);
+            this.adt.getBuffers(device);
         for (let i in this.adt.chunkData) {
             const chunk = this.adt.chunkData[i];
             this.chunkTextureMappings[i] = this.getChunkTextureMapping(chunk);
@@ -915,7 +912,6 @@ export class LoadingAdtRenderer {
         });
 
         this.vertexBuffer = {
-            byteOffset: 0,
             buffer: makeStaticDataBuffer(
                 device,
                 GfxBufferUsage.Vertex,
@@ -924,7 +920,6 @@ export class LoadingAdtRenderer {
         };
         this.numIndices = loadingAdtIndices.length;
         this.indexBuffer = {
-            byteOffset: 0,
             buffer: makeStaticDataBuffer(
                 device,
                 GfxBufferUsage.Index,
@@ -1192,7 +1187,6 @@ export class SkyboxRenderer {
         });
 
         this.vertexBuffer = {
-            byteOffset: 0,
             buffer: makeStaticDataBuffer(
                 device,
                 GfxBufferUsage.Vertex,
@@ -1202,7 +1196,6 @@ export class SkyboxRenderer {
         const convertedIndices = convertToTriangleIndexBuffer(GfxTopology.TriStrips, skyboxIndices);
         this.numIndices = convertedIndices.length;
         this.indexBuffer = {
-            byteOffset: 0,
             buffer: makeStaticDataBuffer(
                 device,
                 GfxBufferUsage.Index,

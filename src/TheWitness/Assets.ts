@@ -605,8 +605,8 @@ class Device_Mesh {
             vertexBufferDescriptors,
         });
 
-        this.vertex_buffer_descriptors = [{ buffer: this.vertex_buffer, byteOffset: 0 }];
-        this.index_buffer_descriptor = this.index_buffer !== null ? { buffer: this.index_buffer, byteOffset: 0 } : null;
+        this.vertex_buffer_descriptors = [{ buffer: this.vertex_buffer }];
+        this.index_buffer_descriptor = this.index_buffer !== null ? { buffer: this.index_buffer } : null;
     }
 
     public setOnRenderInst(renderInst: GfxRenderInst): void {

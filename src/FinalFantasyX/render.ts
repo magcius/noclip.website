@@ -703,9 +703,9 @@ export class LevelModelData {
         this.inputLayout = cache.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
 
         this.vertexBufferDescriptors = [
-            { buffer: this.vertexBuffer, byteOffset: 0, },
+            { buffer: this.vertexBuffer },
         ];
-        this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
+        this.indexBufferDescriptor = { buffer: this.indexBuffer };
     }
 
     public destroy(device: GfxDevice): void {
@@ -748,9 +748,9 @@ export class ActorModelData {
         this.inputLayout = cache.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
 
         this.vertexBufferDescriptors = [
-            { buffer: this.attrBuffer, byteOffset: 0, },
+            { buffer: this.attrBuffer },
         ];
-        this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
+        this.indexBufferDescriptor = { buffer: this.indexBuffer };
     }
 
     public destroy(device: GfxDevice): void {
@@ -792,10 +792,10 @@ export class FlipbookData {
         this.inputLayout = cache.createInputLayout( { vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
 
         this.vertexBufferDesc = [
-            { buffer: this.vertexBuffer, byteOffset: 0 },
-            { buffer: this.vertexBuffer, byteOffset: 0 }, // only used by trails
+            { buffer: this.vertexBuffer },
+            { buffer: this.vertexBuffer }, // only used by trails
         ];
-        this.indexBufferDesc = { buffer: this.indexBuffer, byteOffset: 0 };
+        this.indexBufferDesc = { buffer: this.indexBuffer };
     }
 
     public destroy(device: GfxDevice): void {
@@ -1362,7 +1362,7 @@ class BufferPool {
         // allocate new buffer
         const buffer = new Float32Array(this.floatCount);
         const gfxBuffer = device.createBuffer(this.floatCount, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Dynamic);
-        const descs: GfxVertexBufferDescriptor[] = nArray(2, () => ({ buffer: gfxBuffer, byteOffset: 0 } as GfxVertexBufferDescriptor));
+        const descs: GfxVertexBufferDescriptor[] = nArray(2, () => ({ buffer: gfxBuffer } as GfxVertexBufferDescriptor));
 
         const b: ReusableBuffer = { buffer, gfxBuffer, descs, u8View: new Uint8Array(buffer.buffer) };
         this.buffers.push(b);
@@ -1866,7 +1866,7 @@ export class RainData {
         const indexBufferFormat = GfxFormat.U16_R;
 
         this.inputLayout = cache.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
-        this.indexBufferDesc = { buffer: this.indexBuffer, byteOffset: 0 };
+        this.indexBufferDesc = { buffer: this.indexBuffer };
     }
 
     public destroy(device: GfxDevice): void {
@@ -2057,8 +2057,8 @@ export class ElectricData {
 
         this.inputLayout = cache.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
 
-        this.vertexBufferDesc = [{ buffer: null!, byteOffset: 0 }];
-        this.indexBufferDesc = { buffer: this.indexBuffer, byteOffset: 0 };
+        this.vertexBufferDesc = [{ buffer: null! }];
+        this.indexBufferDesc = { buffer: this.indexBuffer };
     }
 
     public destroy(device: GfxDevice): void {
@@ -2253,7 +2253,7 @@ export class ShadowRenderer {
         const indexBufferFormat = GfxFormat.U16_R;
 
         this.inputLayout = cache.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
-        this.indexBufferDesc = { buffer: this.indexBuffer, byteOffset: 0 };
+        this.indexBufferDesc = { buffer: this.indexBuffer };
 
         this.gfxProgram = cache.createProgram(new ShadowProgram());
         this.megaStateFlags = {

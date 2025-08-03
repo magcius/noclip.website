@@ -285,12 +285,12 @@ export default class SandPendulum extends Simulation {
         const particleIDBuffer = createDataBuffer(device, GfxBufferUsage.Vertex, new Float32Array(particleIDs.flat()).buffer);
 
         this.vertexAttributes = [
-            { buffer: positionBuffer, byteOffset: 0 },
-            { buffer: particleIDBuffer, byteOffset: 0 },
+            { buffer: positionBuffer },
+            { buffer: particleIDBuffer },
         ];
 
         const indexBuffer = createDataBuffer(device, GfxBufferUsage.Index, new Uint32Array(particleIndices.flat()).buffer);
-        this.indexBufferDescriptor = { buffer: indexBuffer, byteOffset: 0 };
+        this.indexBufferDescriptor = { buffer: indexBuffer };
 
         this.megaStateFlags = setAttachmentStateSimple({}, {
             blendMode: GfxBlendMode.Add,

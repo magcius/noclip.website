@@ -108,7 +108,7 @@ export enum GfxStencilOp {
 
 export interface GfxVertexBufferDescriptor {
     buffer: GfxBuffer;
-    byteOffset: number;
+    byteOffset?: number;
 }
 
 export interface GfxIndexBufferDescriptor extends GfxVertexBufferDescriptor {

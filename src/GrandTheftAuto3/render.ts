@@ -381,8 +381,8 @@ export class SkyRenderer extends BaseRenderer {
             { byteStride: 3 * 0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
         this.inputLayout = cache.createInputLayout({ indexBufferFormat: GfxFormat.U32_R, vertexAttributeDescriptors, vertexBufferDescriptors });
-        this.vertexBufferDescriptors = [{ buffer: this.vertexBuffer, byteOffset: 0 }];
-        this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
+        this.vertexBufferDescriptors = [{ buffer: this.vertexBuffer }];
+        this.indexBufferDescriptor = { buffer: this.indexBuffer };
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput) {
@@ -646,8 +646,8 @@ export class SceneRenderer extends BaseRenderer {
             { byteStride: attrLen * 0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
         this.inputLayout = cache.createInputLayout({ indexBufferFormat: GfxFormat.U32_R, vertexAttributeDescriptors, vertexBufferDescriptors });
-        this.vertexBufferDescriptors = [{ buffer: this.vertexBuffer, byteOffset: 0 }];
-        this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
+        this.vertexBufferDescriptors = [{ buffer: this.vertexBuffer }];
+        this.indexBufferDescriptor = { buffer: this.indexBuffer };
         this.megaStateFlags = {
             depthWrite: !dual,
             cullMode: this.params.backface ? GfxCullMode.None : GfxCullMode.Back,

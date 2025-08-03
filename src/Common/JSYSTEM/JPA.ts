@@ -866,8 +866,8 @@ class JPAGlobalRes {
             4, 5, 6, 6, 5, 7,
         ]).buffer);
 
-        this.inputVertexQuad = [{ buffer: this.vertexBufferQuad, byteOffset: 0 }];
-        this.inputIndexQuad = { buffer: this.indexBufferQuad, byteOffset: 0 };
+        this.inputVertexQuad = [{ buffer: this.vertexBufferQuad }];
+        this.inputIndexQuad = { buffer: this.indexBufferQuad };
     }
 
     public destroy(device: GfxDevice): void {
@@ -1004,7 +1004,7 @@ class StripeBufferManager {
     constructor(device: GfxDevice, public inputLayout: GfxInputLayout) {
         const tristripIndexData = makeTriangleIndexBuffer(GfxTopology.TriStrips, 0, MAX_STRIPE_VERTEX_COUNT);
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, tristripIndexData.buffer);
-        this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
+        this.indexBufferDescriptor = { buffer: this.indexBuffer };
     }
 
     public allocateVertexBuffer(device: GfxDevice, vertexCount: number): StripeEntry {
@@ -1022,7 +1022,7 @@ class StripeBufferManager {
         }
 
         const gfxBuffer = device.createBuffer(wordCount, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Dynamic);
-        const entry = new StripeEntry(wordCount, gfxBuffer, [{ buffer: gfxBuffer, byteOffset: 0, },], this.indexBufferDescriptor);
+        const entry = new StripeEntry(wordCount, gfxBuffer, [{ buffer: gfxBuffer },], this.indexBufferDescriptor);
         this.stripeEntry.push(entry);
         return entry;
     }

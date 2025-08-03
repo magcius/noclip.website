@@ -551,8 +551,8 @@ class PatchLibrary {
             vertexBufferDescriptors,
             indexBufferFormat: GfxFormat.U16_R,
         });
-        this.vertexBufferDescriptors = [{ buffer: this.vertexBuffer, byteOffset: 0 }];
-        this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
+        this.vertexBufferDescriptors = [{ buffer: this.vertexBuffer }];
+        this.indexBufferDescriptor = { buffer: this.indexBuffer };
     }
 
     public getVariationNo(splitTop: boolean, splitLeft: boolean, splitRight: boolean, splitBottom: boolean): number {

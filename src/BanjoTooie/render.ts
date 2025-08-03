@@ -631,7 +631,7 @@ export class GeometryRenderer {
                 GfxBufferFrequencyHint.Dynamic
             );
 
-            this.vertexBufferDescriptors = [{ buffer: this.vertexBuffer, byteOffset: 0, }];
+            this.vertexBufferDescriptors = [{ buffer: this.vertexBuffer }];
 
             // allow the render data to destroy the copies later
             this.geometryData.renderData.dynamicBufferCopies.push(this.vertexBuffer);

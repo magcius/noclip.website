@@ -34,11 +34,7 @@ class MyShapeHelper {
             const vertexBuffer = device.createBuffer((loadedVertexData.vertexBuffers[i].byteLength + 3) / 4, GfxBufferUsage.Vertex,
                 dynamicVertices ? GfxBufferFrequencyHint.Dynamic : GfxBufferFrequencyHint.Static);
             this.vertexBuffers.push(vertexBuffer);
-
-            this.vertexBufferDescriptors.push({
-                buffer: vertexBuffer,
-                byteOffset: 0,
-            });
+            this.vertexBufferDescriptors.push({ buffer: vertexBuffer });
         }
 
         this.inputLayout = createInputLayout(cache, loadedVertexLayout);
@@ -46,11 +42,7 @@ class MyShapeHelper {
         this.indexBuffer = device.createBuffer((loadedVertexData.indexData.byteLength + 3) / 4, GfxBufferUsage.Index,
             dynamicIndices ? GfxBufferFrequencyHint.Dynamic : GfxBufferFrequencyHint.Static);
 
-        this.indexBufferDescriptor = {
-            buffer: this.indexBuffer,
-            byteOffset: 0,
-        };
-
+        this.indexBufferDescriptor = { buffer: this.indexBuffer };
         this.uploadData(device, true, true);
     }
 

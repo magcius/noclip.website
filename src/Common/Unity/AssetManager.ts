@@ -496,7 +496,7 @@ function loadCompressedMesh(device: GfxDevice, mesh: UnityMesh): UnityMeshData {
     const layout = device.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
     const indexData = makeStaticDataBuffer(device, GfxBufferUsage.Index, indices.buffer);
     const vertexBuffers = coalesceBuffer(device, GfxBufferUsage.Vertex, [new ArrayBufferSlice(vertices.buffer), new ArrayBufferSlice(normals.buffer)]);
-    const indexBuffer = { buffer: indexData, byteOffset: 0 };
+    const indexBuffer = { buffer: indexData };
     return new UnityMeshData(layout, vertexBuffers, indexBuffer, mesh.local_aabb, mesh.submeshes, indexBufferFormat);
 }
 
@@ -567,7 +567,7 @@ function loadMesh(device: GfxDevice, mesh: UnityMesh): UnityMeshData {
 
     const indexBufferFormat = (mesh.index_format === rust.UnityIndexFormat.UInt32) ? GfxFormat.U32_R : GfxFormat.U16_R;
     const layout = device.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors: layoutBufferDescriptors, indexBufferFormat });
-    const indexBuffer = { buffer: indexData, byteOffset: 0 };
+    const indexBuffer = { buffer: indexData };
     return new UnityMeshData(layout, stateBufferDescriptors, indexBuffer, mesh.local_aabb, mesh.submeshes, indexBufferFormat);
 }
 

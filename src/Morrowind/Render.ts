@@ -287,7 +287,7 @@ class CellTerrain {
         const device = globals.modelCache.device;
         this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, vertexData.buffer);
         this.vertexBufferDescriptors = [
-            { buffer: this.vertexBuffer, byteOffset: 0 },
+            { buffer: this.vertexBuffer },
         ];
 
         // two trianges per edge
@@ -314,7 +314,7 @@ class CellTerrain {
             }
         }
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, indexData.buffer);
-        this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
+        this.indexBufferDescriptor = { buffer: this.indexBuffer };
         this.indexCount = indexData.length;
 
         this.terrainMapTex = device.createTexture(makeTextureDescriptor2D(GfxFormat.F32_R, 16, 16, 1));

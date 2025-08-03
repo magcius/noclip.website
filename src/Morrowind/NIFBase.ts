@@ -198,12 +198,12 @@ class NiTriShapeData {
 
         this.inputLayout = cache.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat: GfxFormat.U16_R });
         this.vertexBufferDescriptors = [
-            { buffer: this.posBuffer, byteOffset: 0 },
-            { buffer: fallbackUndefined(this.nrmBuffer, modelCache.zeroBuffer), byteOffset: 0 },
-            { buffer: fallbackUndefined(this.clrBuffer, modelCache.zeroBuffer), byteOffset: 0 },
-            { buffer: fallbackUndefined(this.uvBuffer[0], modelCache.zeroBuffer), byteOffset: 0 },
+            { buffer: this.posBuffer },
+            { buffer: fallbackUndefined(this.nrmBuffer, modelCache.zeroBuffer) },
+            { buffer: fallbackUndefined(this.clrBuffer, modelCache.zeroBuffer) },
+            { buffer: fallbackUndefined(this.uvBuffer[0], modelCache.zeroBuffer) },
         ];
-        this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
+        this.indexBufferDescriptor = { buffer: this.indexBuffer };
     }
 
     public setOnRenderInst(renderInst: GfxRenderInst): void {

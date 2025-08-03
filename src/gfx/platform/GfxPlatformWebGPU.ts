@@ -672,14 +672,14 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
 
         const inputLayout = inputLayout_ as GfxInputLayoutP_WebGPU;
         if (indexBuffer !== null)
-            this.gpuRenderPassEncoder!.setIndexBuffer(getPlatformBuffer(indexBuffer.buffer), assertExists(inputLayout.indexFormat), indexBuffer.byteOffset);
+            this.gpuRenderPassEncoder!.setIndexBuffer(getPlatformBuffer(indexBuffer.buffer), assertExists(inputLayout.indexFormat), indexBuffer.byteOffset ?? 0);
 
         if (vertexBuffers !== null) {
             for (let i = 0; i < vertexBuffers.length; i++) {
                 const b = vertexBuffers[i];
                 if (b === null || b === undefined)
                     continue;
-                this.gpuRenderPassEncoder!.setVertexBuffer(i, getPlatformBuffer(b.buffer), b.byteOffset);
+                this.gpuRenderPassEncoder!.setVertexBuffer(i, getPlatformBuffer(b.buffer), b.byteOffset ?? 0);
             }
         }
     }

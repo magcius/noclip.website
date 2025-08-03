@@ -700,12 +700,12 @@ export class AnimatedMeshData extends ModelData {
         const vertexLayoutDescriptors: GfxInputLayoutBufferDescriptor[] = [
             { byteStride: 4 * (1 + 3 + 2), frequency: GfxVertexBufferFrequency.PerVertex },
         ];
-        this.vertexBufferDescriptors = [{ buffer: this.attrBuffer, byteOffset: 0 }];
+        this.vertexBufferDescriptors = [{ buffer: this.attrBuffer }];
 
         const indexData = this.mesh.indexData;
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, Uint16Array.from(indexData).buffer);
         const indexBufferFormat = GfxFormat.U16_R;
-        this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0, };
+        this.indexBufferDescriptor = { buffer: this.indexBuffer };
 
         this.inputLayout = cache.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors: vertexLayoutDescriptors, indexBufferFormat });
     }
@@ -750,12 +750,12 @@ export class SimpleMeshData extends ModelData {
         const vertexLayoutDescriptors: GfxInputLayoutBufferDescriptor[] = [
             { byteStride: 4 * (3 + 3 + 2), frequency: GfxVertexBufferFrequency.PerVertex },
         ];
-        this.vertexBufferDescriptors = [{ buffer: this.vertexBuffer, byteOffset: 0, }];
+        this.vertexBufferDescriptors = [{ buffer: this.vertexBuffer }];
 
         const indexData = this.mesh.indexData;
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, Uint16Array.from(indexData).buffer);
         const indexBufferFormat = GfxFormat.U16_R;
-        this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0, };
+        this.indexBufferDescriptor = { buffer: this.indexBuffer };
 
         this.inputLayout = cache.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors: vertexLayoutDescriptors, indexBufferFormat });
     }
@@ -895,12 +895,12 @@ export class QuadListData {
         const vertexLayoutDescriptors: GfxInputLayoutBufferDescriptor[] = [
             { byteStride: 4 * (3 + 3 + 2), frequency: GfxVertexBufferFrequency.PerVertex },
         ];
-        this.vertexBufferDescriptors = [{ buffer: this.vertexBuffer, byteOffset: 0, }];
+        this.vertexBufferDescriptors = [{ buffer: this.vertexBuffer }];
 
         const indexData = this.info.data.indexData;
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, Uint16Array.from(indexData).buffer);
         const indexBufferFormat = GfxFormat.U16_R;
-        this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0, };
+        this.indexBufferDescriptor = { buffer: this.indexBuffer };
 
         this.inputLayout = cache.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors: vertexLayoutDescriptors, indexBufferFormat });
     }
@@ -1107,11 +1107,11 @@ export class WaterMeshData {
         const vertexLayoutDescriptors: GfxInputLayoutBufferDescriptor[] = [
             { byteStride: 4, frequency: GfxVertexBufferFrequency.PerVertex },
         ];
-        this.vertexBufferDescriptors = [{ buffer: this.vertexBuffer, byteOffset: 0, }];
+        this.vertexBufferDescriptors = [{ buffer: this.vertexBuffer }];
 
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, Uint16Array.from(indexData).buffer);
         const indexBufferFormat = GfxFormat.U16_R;
-        this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0, };
+        this.indexBufferDescriptor = { buffer: this.indexBuffer };
 
         this.inputLayout = cache.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors: vertexLayoutDescriptors, indexBufferFormat });
     }
@@ -1265,11 +1265,11 @@ export class TerrainMeshData {
         const vertexLayoutDescriptors: GfxInputLayoutBufferDescriptor[] = [
             { byteStride: 4, frequency: GfxVertexBufferFrequency.PerVertex },
         ];
-        this.vertexBufferDescriptors = [{ buffer: this.vertexBuffer, byteOffset: 0, }];
+        this.vertexBufferDescriptors = [{ buffer: this.vertexBuffer }];
 
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, Uint16Array.from(indexData).buffer);
         const indexBufferFormat = GfxFormat.U16_R;
-        this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0, };
+        this.indexBufferDescriptor = { buffer: this.indexBuffer };
 
         this.inputLayout = cache.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors: vertexLayoutDescriptors, indexBufferFormat });
     }

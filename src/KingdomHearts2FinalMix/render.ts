@@ -524,8 +524,8 @@ export class MapData {
             vertexAttributeDescriptors,
             vertexBufferDescriptors,
         });
-        this.vertexBufferDescriptors = [{ buffer: this.vertexBuffer, byteOffset: 0, }];
-        this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
+        this.vertexBufferDescriptors = [{ buffer: this.vertexBuffer }];
+        this.indexBufferDescriptor = { buffer: this.indexBuffer };
     }
 
     public destroy(device: GfxDevice): void {

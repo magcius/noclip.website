@@ -233,10 +233,10 @@ export class DetailPropLeafRenderer {
 
         this.vertexBuffer = device.createBuffer((this.vertexData.byteLength + 3) >>> 2, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Dynamic);
         this.vertexBufferDescriptors = [
-            { buffer: this.vertexBuffer, byteOffset: 0, },
-            { buffer: renderContext.materialCache.staticResources.zeroVertexBuffer, byteOffset: 0, },
+            { buffer: this.vertexBuffer },
+            { buffer: renderContext.materialCache.staticResources.zeroVertexBuffer },
         ];
-        this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0, };
+        this.indexBufferDescriptor = { buffer: this.indexBuffer };
 
         this.bindMaterial(renderContext, detailMaterial);
     }

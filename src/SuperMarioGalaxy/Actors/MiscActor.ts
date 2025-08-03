@@ -5751,8 +5751,8 @@ class OceanRingPipe extends LiveActor {
             vertexBufferDescriptors,
         });
 
-        this.vertexBufferDescriptors = [{ buffer: this.vertexBuffer, byteOffset: 0, }];
-        this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
+        this.vertexBufferDescriptors = [{ buffer: this.vertexBuffer }];
+        this.indexBufferDescriptor = { buffer: this.indexBuffer };
         return points;
     }
 

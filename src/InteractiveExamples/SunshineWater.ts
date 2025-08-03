@@ -84,10 +84,10 @@ class PlaneShape {
             indexBufferFormat: GfxFormat.U16_R,
         });
         this.vertexBufferDescriptors = [
-            { buffer: this.vtxBuffer, byteOffset: 0, },
-            { buffer: this.zeroBuffer, byteOffset: 0, },
+            { buffer: this.vtxBuffer },
+            { buffer: this.zeroBuffer },
         ];
-        this.indexBufferDescriptor = { buffer: this.idxBuffer, byteOffset: 0 };
+        this.indexBufferDescriptor = { buffer: this.idxBuffer };
     }
 
     public prepareToRender(renderHelper: GXRenderHelperGfx): void {

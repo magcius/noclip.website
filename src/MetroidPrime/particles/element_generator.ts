@@ -1748,7 +1748,7 @@ export class ElementGeneratorShapeHelper {
         const indexData = makeTriangleIndexBuffer(GfxTopology.Quads, 0, maxElementCount * 4);
         this.indexBuffer = makeStaticDataBuffer(renderer.device, GfxBufferUsage.Index, indexData.buffer);
 
-        this.shapeHelper = new GXShapeHelperGfx(renderer.device, renderer.renderCache, [{ buffer: this.vertexBuffer, byteOffset: 0 }], { buffer: this.indexBuffer, byteOffset: 0 }, vertexLayout);
+        this.shapeHelper = new GXShapeHelperGfx(renderer.device, renderer.renderCache, [{ buffer: this.vertexBuffer }], { buffer: this.indexBuffer }, vertexLayout);
     }
 
     static createTex(renderer: RetroSceneRenderer, maxElementCount: number): ElementGeneratorShapeHelper {

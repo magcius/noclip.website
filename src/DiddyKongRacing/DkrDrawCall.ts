@@ -140,9 +140,9 @@ export class DkrDrawCall {
         this.positionBuffer = makeStaticDataBuffer(cache.device, GfxBufferUsage.Vertex, positionBuffer.buffer);
         this.attribBuffer = makeStaticDataBuffer(cache.device, GfxBufferUsage.Vertex, attribBuffer.buffer);
         this.vertexBufferDescriptors = [
-            { buffer: this.positionBuffer, byteOffset: 0 },
-            { buffer: this.positionBuffer, byteOffset: 0 },
-            { buffer: this.attribBuffer, byteOffset: 0 },
+            { buffer: this.positionBuffer },
+            { buffer: this.positionBuffer },
+            { buffer: this.attribBuffer },
         ];
         this.isBuilt = true;
     }

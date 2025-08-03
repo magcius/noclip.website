@@ -2,7 +2,7 @@
 import { ReadonlyMat4, mat4, vec2, vec3 } from "gl-matrix";
 import { Color, TransparentBlack, White, colorCopy, colorNewCopy, colorNewFromRGBA } from "../../Color.js";
 import { dfRange, dfShow } from "../../DebugFloaters.js";
-import { AABB } from "../../Geometry.js";
+import type { AABB } from "../../Geometry.js";
 import { scaleMatrix } from "../../MathHelpers.js";
 import { TextureMapping } from "../../TextureHolder.js";
 import { setAttachmentStateSimple } from "../../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
@@ -15,6 +15,7 @@ import { SourceEngineView, SourceEngineViewType, SourceRenderContext } from "../
 import { UberShaderInstanceBasic, UberShaderTemplateBasic } from "../UberShader.js";
 import type { VMT } from "../VMT.js";
 import type { VTF } from "../VTF.js";
+import { RGBM_SCALE } from "./Lightmap.js";
 import type { MaterialCache } from "./MaterialCache.js";
 import * as P from "./MaterialParameters.js";
 import type { LightCache } from "./WorldLight.js";
@@ -38,8 +39,6 @@ const BindingLayouts: GfxBindingLayoutDescriptor[] = [
         { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.UnfilterableFloat, },      // 14
     ] },
 ];
-
-export const RGBM_SCALE = 6.0;
 
 export const enum StaticLightingMode {
     None,

@@ -226,11 +226,11 @@ class MeshFragData {
             indexBufferFormat: GfxFormat.U16_R,
         });
         this.vertexBufferDescriptors = [
-            { buffer: this.posNrmBuffer, byteOffset: 0 },
-            { buffer: this.colorBuffer !== null ? this.colorBuffer : this.zeroBuffer!, byteOffset: 0, },
-            { buffer: this.uvBuffer !== null ? this.uvBuffer : this.zeroBuffer!, byteOffset: 0, },
+            { buffer: this.posNrmBuffer },
+            { buffer: this.colorBuffer !== null ? this.colorBuffer : this.zeroBuffer! },
+            { buffer: this.uvBuffer !== null ? this.uvBuffer : this.zeroBuffer! },
         ];
-        this.indexBufferDescriptor = { buffer: this.idxBuffer, byteOffset: 0 };
+        this.indexBufferDescriptor = { buffer: this.idxBuffer };
     }
 
     public destroy(device: GfxDevice): void {

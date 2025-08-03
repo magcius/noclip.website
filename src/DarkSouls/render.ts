@@ -171,7 +171,7 @@ class BatchData {
         for (let j = 0; j < batch.primitiveIndexes.length; j++) {
             const coaIndexBuffer = assertExists(indexBuffers.shift());
             this.primitiveIndexCounts.push(assertExists(triangleIndexCounts.shift()));
-            this.primitiveIndexStarts.push((coaIndexBuffer.byteOffset - this.indexBufferDescriptor.byteOffset) / 2);
+            this.primitiveIndexStarts.push((coaIndexBuffer.byteOffset - (this.indexBufferDescriptor.byteOffset ?? 0)) / 2);
         }
     }
 }

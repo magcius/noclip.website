@@ -9,12 +9,12 @@ import {
     GfxFormat,
     GfxTexture,
     GfxTextureDimension,
-    GfxTextureUsage,
+    GfxTextureUsage
 } from "../gfx/platform/GfxPlatform";
 import { Animation } from "./animation.js";
 import { bakeLights } from "./bake_lights.js";
 import { SCX } from "./scx/types.js";
-import { EnvironmentMap, Material, SceneNode, Texture, WorldData } from "./types.js";
+import type { EnvironmentMap, Material, SceneNode, Texture, VertexAttribute, WorldData } from "./types.js";
 import { cloneTransform, createDataBuffer, createSceneNode, reparent, updateNodeTransform } from "./util.js";
 
 export type ComputedEnvironmentMap = {
@@ -161,15 +161,15 @@ export class World {
             const positionBuffer = createDataBuffer(device, GfxBufferUsage.Vertex, mesh.positions.buffer, mesh.dynamic);
             const normalBuffer = createDataBuffer(device, GfxBufferUsage.Vertex, mesh.normals.buffer, mesh.dynamic);
             const texcoordBuffer = createDataBuffer(device, GfxBufferUsage.Vertex, mesh.texCoords.buffer);
-            const vertexAttributes = [
-                { name: "position", ...(mesh.dynamic ? { data: mesh.positions } : null), buffer: positionBuffer, byteOffset: 0 },
-                { name: "normal", ...(mesh.dynamic ? { data: mesh.normals } : null), buffer: normalBuffer, byteOffset: 0 },
-                { name: "diffuseColor", buffer: diffuseColorBuffer, byteOffset: 0 },
-                { name: "texCoord", buffer: texcoordBuffer, byteOffset: 0 },
+            const vertexAttributes: VertexAttribute[] = [
+                { name: "position", ...(mesh.dynamic ? { data: mesh.positions } : null), buffer: positionBuffer },
+                { name: "normal", ...(mesh.dynamic ? { data: mesh.normals } : null), buffer: normalBuffer },
+                { name: "diffuseColor", buffer: diffuseColorBuffer },
+                { name: "texCoord", buffer: texcoordBuffer },
             ];
 
             const indexBuffer = createDataBuffer(device, GfxBufferUsage.Index, mesh.indices.buffer);
-            const indexBufferDescriptor = { buffer: indexBuffer, byteOffset: 0, ...(mesh.dynamic ? { data: mesh.indices } : null) };
+            const indexBufferDescriptor = { buffer: indexBuffer, ...(mesh.dynamic ? { data: mesh.indices } : null) };
 
             this.unbakedMeshes.push({ node, mesh, shader: material.shader, diffuseColorBuffer, sceneName, lights: scene.lights });
 

@@ -53,11 +53,11 @@ export class GeometryData {
             vertexBufferDescriptors,
         });
         this.vertexBufferDescriptors = [
-            { buffer: this.positionBuffer, byteOffset: 0, },
-            { buffer: this.normalBuffer, byteOffset: 0, },
-            { buffer: this.texcoordBuffer, byteOffset: 0, },
+            { buffer: this.positionBuffer },
+            { buffer: this.normalBuffer },
+            { buffer: this.texcoordBuffer },
         ];
-        this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
+        this.indexBufferDescriptor = { buffer: this.indexBuffer };
     }
 
     public destroy(device: GfxDevice): void {

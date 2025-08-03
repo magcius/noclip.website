@@ -1,12 +1,14 @@
 
 import { saturate } from "../../MathHelpers.js";
-import { TextureMapping } from "../../TextureHolder.js";
+import type { TextureMapping } from "../../TextureHolder.js";
 import { GfxDevice, GfxFormat, GfxMipFilterMode, GfxSampler, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxWrapMode } from "../../gfx/platform/GfxPlatform.js";
-import { GfxRenderCache } from "../../gfx/render/GfxRenderCache.js";
+import type { GfxRenderCache } from "../../gfx/render/GfxRenderCache.js";
 import { assert, nArray } from "../../util.js";
-import { LightmapPacker, LightmapPackerPage, FaceLightmapData } from "../BSPFile.js";
-import { SourceRenderContext } from "../Main.js";
-import { BaseMaterial, RGBM_SCALE } from "./MaterialBase.js";
+import type { LightmapPacker, LightmapPackerPage, FaceLightmapData } from "../BSPFile.js";
+import type { SourceRenderContext } from "../Main.js";
+import type { BaseMaterial } from "./MaterialBase.js";
+
+export const RGBM_SCALE = 6.0;
 
 class LightmapPage {
     public gfxTexture: GfxTexture;

@@ -517,8 +517,8 @@ export class RenderData {
             vertexAttributeDescriptors,
         });
 
-        this.vertexBufferDescriptors = [{ buffer: this.vertexBuffer, byteOffset: 0 }];
-        this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
+        this.vertexBufferDescriptors = [{ buffer: this.vertexBuffer }];
+        this.indexBufferDescriptor = { buffer: this.indexBuffer };
     }
 
     public destroy(device: GfxDevice): void {
@@ -1140,7 +1140,7 @@ export class GeometryRenderer {
                 GfxBufferFrequencyHint.Dynamic
             );
 
-            this.vertexBufferDescriptors = [{ buffer: this.vertexBuffer, byteOffset: 0, }];
+            this.vertexBufferDescriptors = [{ buffer: this.vertexBuffer }];
 
             // allow the render data to destroy the copies later
             this.geometryData.renderData.dynamicBufferCopies.push(this.vertexBuffer);

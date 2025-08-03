@@ -1345,10 +1345,7 @@ class FVTXData {
                 };
 
                 const gfxBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, convertedAttribute.data);
-                this.vertexBufferDescriptors[attribBufferIndex] = {
-                    buffer: gfxBuffer,
-                    byteOffset: 0,
-                };
+                this.vertexBufferDescriptors[attribBufferIndex] = { buffer: gfxBuffer };
             } else {
                 // Can use buffer data directly.
                 this.vertexAttributeDescriptors.push({
@@ -1366,10 +1363,7 @@ class FVTXData {
                         frequency: GfxVertexBufferFrequency.PerVertex,
                     };
 
-                    this.vertexBufferDescriptors[bufferIndex] = {
-                        buffer: gfxBuffer,
-                        byteOffset: 0,
-                    };
+                    this.vertexBufferDescriptors[bufferIndex] = { buffer: gfxBuffer };
                 }
             }
         }
@@ -1457,7 +1451,7 @@ export class FSHPMeshData {
 
         this.vertexBufferDescriptors = fvtxData.vertexBufferDescriptors;
         this.indexBuffer = makeStaticDataBufferFromSlice(cache.device, GfxBufferUsage.Index, mesh.indexBufferData);
-        this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
+        this.indexBufferDescriptor = { buffer: this.indexBuffer };
     }
 
     public destroy(device: GfxDevice): void {

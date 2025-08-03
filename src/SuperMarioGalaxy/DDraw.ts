@@ -52,8 +52,8 @@ abstract class TDDrawBase {
             this.vcd[i] = { type: GX.AttrType.NONE };
         }
         
-        this.vertexBufferDescriptors = [{ buffer: null!, byteOffset: 0 }];
-        this.indexBufferDescriptor = { buffer: null!, byteOffset: 0 };
+        this.vertexBufferDescriptors = [{ buffer: null! }];
+        this.indexBufferDescriptor = { buffer: null! };
     }
 
     public setVtxDesc(attr: GX.Attr, enabled: boolean): void {

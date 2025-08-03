@@ -159,7 +159,7 @@ class StudioModelMeshData {
         }
 
         const bufferDescriptors: GfxVertexBufferDescriptor[] = [
-            { buffer: this.vertexBuffer, byteOffset: 0, },
+            { buffer: this.vertexBuffer },
         ];
 
         if (staticLightingMode === StaticLightingMode.StudioVertexLighting) {
@@ -188,7 +188,7 @@ class StudioModelMeshData {
 
         const indexBufferFormat = GfxFormat.U16_R;
         const inputLayout = cache.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
-        const indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0, };
+        const indexBufferDescriptor = { buffer: this.indexBuffer };
         return [inputLayout, bufferDescriptors, indexBufferDescriptor];
     }
 

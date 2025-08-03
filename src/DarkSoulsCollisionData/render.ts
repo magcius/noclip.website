@@ -118,8 +118,8 @@ class Chunk {
         this.nrmBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, nrmData.buffer);
 
         this.vertexBufferDescriptors = [
-            { buffer: this.posBuffer, byteOffset: 0, },
-            { buffer: this.nrmBuffer, byteOffset: 0, },
+            { buffer: this.posBuffer },
+            { buffer: this.nrmBuffer },
         ];
 
         this.numVertices = chunk.indexData.length;

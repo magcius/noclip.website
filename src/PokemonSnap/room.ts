@@ -2371,8 +2371,8 @@ export function eggInputSetup(cache: GfxRenderCache, data: RenderData, vertices:
     });
 
     data.vertexBufferDescriptors = [
-        { buffer: data.vertexBuffer, byteOffset: 0 },
-        { buffer: eggBuffer, byteOffset: 0 },
+        { buffer: data.vertexBuffer },
+        { buffer: eggBuffer },
     ];
-    data.indexBufferDescriptor = { buffer: data.indexBuffer, byteOffset: 0 };
+    data.indexBufferDescriptor = { buffer: data.indexBuffer };
 }

@@ -1586,7 +1586,6 @@ export class LiquidInstance {
                 GfxBufferUsage.Vertex,
                 this.vertices!.buffer,
             ),
-            byteOffset: 0,
         };
     }
 
@@ -1597,7 +1596,6 @@ export class LiquidInstance {
                 GfxBufferUsage.Index,
                 this.indices!.buffer,
             ),
-            byteOffset: 0,
         };
     }
 }
@@ -1729,14 +1727,13 @@ export class AdtData {
         return this.lodData[this.lodLevel].wmoDefs;
     }
 
-    public getBufsAndChunks(device: GfxDevice): [GfxVertexBufferDescriptor, GfxIndexBufferDescriptor] {
+    public getBuffers(device: GfxDevice): [GfxVertexBufferDescriptor, GfxIndexBufferDescriptor] {
         const vertexBuffer = {
             buffer: makeStaticDataBuffer(
                 device,
                 GfxBufferUsage.Vertex,
                 this.vertexBuffer.buffer,
             ),
-            byteOffset: 0,
         };
         const indexBuffer = {
             buffer: makeStaticDataBuffer(
@@ -1744,7 +1741,6 @@ export class AdtData {
                 GfxBufferUsage.Index,
                 this.indexBuffer.buffer,
             ),
-            byteOffset: 0,
         };
         return [vertexBuffer, indexBuffer];
     }

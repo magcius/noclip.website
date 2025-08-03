@@ -1036,7 +1036,7 @@ class SepdData {
             const buffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, data.buffer, data.byteOffset, data.byteLength);
             const bufferIndex = this.vertexBufferDescriptors.length;
             this.buffers.push(buffer);
-            this.vertexBufferDescriptors.push({ buffer, byteOffset: 0 });
+            this.vertexBufferDescriptors.push({ buffer });
             vertexBufferDescriptors.push({ byteStride: getFormatByteSize(format), frequency });
             vertexAttributeDescriptors.push({ location, format, bufferIndex, bufferByteOffset: 0 });
         };
@@ -1128,7 +1128,7 @@ class SepdData {
         const indexBufferFormat = GfxFormat.U16_R;
         this.inputLayout = cache.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
 
-        this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
+        this.indexBufferDescriptor = { buffer: this.indexBuffer };
     }
 
     public destroy(device: GfxDevice): void {

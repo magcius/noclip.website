@@ -300,10 +300,10 @@ export class SkyboxRenderer {
         this.inputLayout = cache.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
 
         this.vertexBufferDescriptors = [
-            { buffer: this.vertexBuffer, byteOffset: 0, },
-            { buffer: renderContext.materialCache.staticResources.zeroVertexBuffer, byteOffset: 0, },
+            { buffer: this.vertexBuffer },
+            { buffer: renderContext.materialCache.staticResources.zeroVertexBuffer },
         ];
-        this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0, };
+        this.indexBufferDescriptor = { buffer: this.indexBuffer };
 
         this.bindMaterial(renderContext);
     }
@@ -659,8 +659,8 @@ export class BSPRenderer {
         const indexBufferFormat = GfxFormat.U32_R;
         this.inputLayout = cache.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
 
-        this.vertexBufferDescriptors = [{ buffer: this.vertexBuffer, byteOffset: 0, }];
-        this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0, };
+        this.vertexBufferDescriptors = [{ buffer: this.vertexBuffer }];
+        this.indexBufferDescriptor = { buffer: this.indexBuffer };
 
         for (let i = 0; i < this.bsp.models.length; i++) {
             const model = this.bsp.models[i];

@@ -235,11 +235,11 @@ export class OceanBowl extends LiveActor {
         });
 
         this.vertexBufferDescriptors = [
-            { buffer: this.positionBuffer, byteOffset: 0, },
-            { buffer: this.colorBuffer, byteOffset: 0, },
-            { buffer: this.texCoord0Buffer, byteOffset: 0, },
+            { buffer: this.positionBuffer },
+            { buffer: this.colorBuffer },
+            { buffer: this.texCoord0Buffer },
         ];
-        this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
+        this.indexBufferDescriptor = { buffer: this.indexBuffer };
 
         // Material.
         let mb: GXMaterialBuilder;

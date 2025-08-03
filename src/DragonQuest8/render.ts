@@ -174,7 +174,7 @@ class MDTData {
         let perInstanceBinding: GfxVertexBufferDescriptor | null = null;
         if (perInstanceBufferWordOffset !== 0) {
             this.perInstanceBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, new Uint8Array(perInstanceBufferData.buffer).buffer);
-            perInstanceBinding = { buffer: this.perInstanceBuffer, byteOffset: 0 };
+            perInstanceBinding = { buffer: this.perInstanceBuffer };
         }
 
         const vertexBufferDescriptors: (GfxInputLayoutBufferDescriptor | null)[] = [
@@ -206,8 +206,8 @@ class MDTData {
         program.defines.set("SKINNING_MATRIX_COUNT", this.smoothSkinning ? MDS.MDS.maxJointCount.toString() : `0`);
         this.program = cache.createProgram(program);
 
-        this.vertexBufferDescriptors = [perInstanceBinding, { buffer: vertexBuffer, byteOffset: 0 }];
-        this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
+        this.vertexBufferDescriptors = [perInstanceBinding, { buffer: vertexBuffer }];
+        this.indexBufferDescriptor = { buffer: this.indexBuffer };
     }
 
     public destroy(device: GfxDevice): void {

@@ -540,7 +540,7 @@ export class RwGfx {
         }
 
         const buffer = makeStaticDataBuffer(this.device, GfxBufferUsage.Vertex, data.buffer);
-        const descriptors = [{ buffer, byteOffset: 0 }];
+        const descriptors = [{ buffer }];
 
         return { buffer, data, vertexCount, descriptors };
     }
@@ -549,7 +549,7 @@ export class RwGfx {
         const wordCount = vertexCount * 12;
         const buffer = this.device.createBuffer(wordCount, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Dynamic);
         const data = new Float32Array(wordCount);
-        const descriptors = [{ buffer, byteOffset: 0 }];
+        const descriptors = [{ buffer }];
 
         return { buffer, data, vertexCount, descriptors };
     }
@@ -590,7 +590,7 @@ export class RwGfx {
         const data = filterDegenerateTriangleIndexBuffer(convertToTriangleIndexBuffer(GfxTopology.TriStrips, indices));
 
         const buffer = makeStaticDataBuffer(this.device, GfxBufferUsage.Index, data.buffer);
-        const descriptor = { buffer, byteOffset: 0 };
+        const descriptor = { buffer };
         const indexCount = data.length;
 
         return { buffer, data, descriptor, indexCount };
@@ -600,7 +600,7 @@ export class RwGfx {
         const wordCount = (indexCount + 1) / 2;
         const buffer = this.device.createBuffer(wordCount, GfxBufferUsage.Index, GfxBufferFrequencyHint.Dynamic);
         const data = new Uint16Array(wordCount);
-        const descriptor = { buffer, byteOffset: 0 };
+        const descriptor = { buffer };
 
         return { buffer, data, descriptor, indexCount };
     }

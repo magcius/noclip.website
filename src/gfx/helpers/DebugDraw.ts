@@ -196,8 +196,8 @@ class BufferPage {
 
         this.renderInst.setPrimitiveTopology(this.behaviorType === BehaviorType.Lines ? GfxPrimitiveTopology.Lines : GfxPrimitiveTopology.Triangles);
         this.renderInst.setVertexInput(this.inputLayout, [
-            { buffer: this.vertexBuffer, byteOffset: 0 },
-        ], { buffer: this.indexBuffer, byteOffset: 0 });
+            { buffer: this.vertexBuffer },
+        ], { buffer: this.indexBuffer });
 
         setAttachmentStateSimple(this.renderInst.getMegaStateFlags(), { blendMode: GfxBlendMode.Add, blendSrcFactor: GfxBlendFactor.One, blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha });
         if (this.behaviorType === BehaviorType.Lines) {

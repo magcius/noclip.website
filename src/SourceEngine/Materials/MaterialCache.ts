@@ -61,10 +61,10 @@ class StaticQuad {
         this.zeroVertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, new ArrayBuffer(16));
 
         this.vertexBufferDescriptorsQuad = [
-            { buffer: this.vertexBufferQuad, byteOffset: 0 },
-            { buffer: this.zeroVertexBuffer, byteOffset: 0, },
+            { buffer: this.vertexBufferQuad },
+            { buffer: this.zeroVertexBuffer },
         ];
-        this.indexBufferDescriptorQuad = { buffer: this.indexBufferQuad, byteOffset: 0 };
+        this.indexBufferDescriptorQuad = { buffer: this.indexBufferQuad };
     }
 
     public setQuadOnRenderInst(renderInst: GfxRenderInst): void {

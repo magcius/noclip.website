@@ -157,7 +157,7 @@ export class DrawCallRenderData {
         });
 
         this.vertexBufferDescriptors = [
-            { buffer: this.vertexBuffer, byteOffset: 0, },
+            { buffer: this.vertexBuffer },
         ];
     }
 
