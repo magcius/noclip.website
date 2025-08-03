@@ -193,11 +193,11 @@ export class mDoExt_3DlineMat1_c implements mDoExt_3DlineMat_c {
             for (let j = 0; j < this.numSegments * 2; j += 2) {
                 this.ddraw.position3vec3(line.positions[j + 0]);
                 this.ddraw.texCoord2vec2(GX.Attr.TEX0, line.texCoords![j + 0]);
-                this.ddraw.normal3f32(0.25, 0.0, 0.0);
+                this.ddraw.normal3f32(1.0, 0.0, 0.0);
 
                 this.ddraw.position3vec3(line.positions[j + 1]);
                 this.ddraw.texCoord2vec2(GX.Attr.TEX0, line.texCoords![j + 1]);
-                this.ddraw.normal3f32(-0.25, 0.0, 0.0);
+                this.ddraw.normal3f32(-1.0, 0.0, 0.0);
             }
             this.ddraw.end();
         }

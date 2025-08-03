@@ -6096,8 +6096,8 @@ class br_s {
     public pos = vec3.create();
     public rot = vec3.create();
     public scale = vec3.create();
-    public ropePosLeft: vec3[] = [];
-    public ropePosRight: vec3[] = [];
+    public ropePosLeft = nArray(3, () => vec3.create());
+    public ropePosRight = nArray(3, () => vec3.create());
 
     public modelChainLeft: J3DModelInstance | null = null;
     public modelChainRight: J3DModelInstance | null = null;
@@ -6108,17 +6108,18 @@ class br_s {
     public biasUnk: number = 0;
 }
 
-enum BridgeFlags {
+const enum BridgeFlags {
     IsMetal = 1 << 0,
     ConnectToPartner = 1 << 1,
     NoRopes = 1 << 2,
     UseDarkRopeTex = 1 << 3,
 }
 
-enum BridgeType {
+const enum BridgeType {
     Wood = 0,
     Metal = 1
 }
+
 class d_a_bridge extends fopAc_ac_c {
     public static PROCESS_NAME = dProcName_e.d_a_bridge;
     public static arcName = 'Bridge';
@@ -6149,7 +6150,7 @@ class d_a_bridge extends fopAc_ac_c {
     private swayPhaseY = 0;
     private swayVelXZ = 0x578;
     private swayVelY = 3000;
-    private swayMagXZ = 0;
+    private swayPlankMag = 0;
     private swayRootMag = 0;
     private swayMagY = 0;
     private swayRideMag = 0;
@@ -6188,7 +6189,8 @@ class d_a_bridge extends fopAc_ac_c {
 
         // createHeap
         this.type = this.flags & 1;
-        if (this.flags & BridgeFlags.NoRopes) this.type = BridgeType.Metal;
+        if (!!(this.flags & BridgeFlags.NoRopes))
+            this.type = BridgeType.Metal;
 
         const bmdIds = [0x04 /* Wood */, 0x05 /* Metal */];
         const modelPlankData = globals.resCtrl.getObjectRes(ResType.Model, d_a_bridge.arcName, bmdIds[this.type]);
@@ -6209,8 +6211,6 @@ class d_a_bridge extends fopAc_ac_c {
             if ((this.flags & BridgeFlags.NoRopes) === 0) {
                 if (((i + ropeBias) % 4) === 0) {
                     plank.flags = 0b111; // 0b100: HasRope, 0b010: RightRopeUncut, 0b001: LeftRopeUncut
-                    plank.ropePosLeft = nArray(3, () => vec3.create());
-                    plank.ropePosRight = nArray(3, () => vec3.create());
 
                     if (this.type === BridgeType.Metal) {
                         plank.modelChainLeft = new J3DModelInstance(modelChainData);
@@ -6273,57 +6273,54 @@ class d_a_bridge extends fopAc_ac_c {
         // Increase the sway phase for each plank so they appear to move snakelike
         const swayPhaseStep = (this.plankCount > 10) ? 4000 : 8000;
 
-        // Offset the root position based on wind strength
-        const rootSway = this.swayRootMag * Math.cos(cM_s2rad(this.swayPhaseXZ));
-        const swayPosX = vec3.set(scratchVec3a, rootSway, 0, 0);
+        // Bridge direction
         mDoMtx_YrotS(calc_mtx, this.rot[1]);
-        const rootOffsetVec = scratchVec3b;
-        MtxPosition(rootOffsetVec, swayPosX);
-
         vec3.set(scratchVec3a, 1, 0, 0);
-        const bridgeDir = scratchVec3c;
-        MtxPosition(bridgeDir, scratchVec3a);
+        MtxPosition(scratchVec3a);
 
-        const wind = vec3.set(scratchVec3a, 0, 0, this.windPower * 5.0);
+        // Wind
         mDoMtx_YrotS(calc_mtx, this.windAngle);
-        const windVec = scratchVec3e;
-        MtxPosition(windVec, wind);
+        vec3.set(scratchVec3b, 0, 0, this.windPower * 5.0);
+        MtxPosition(scratchVec3b);
 
-        const plankOffsetVec = vec3.set(scratchVec3a, 0, 0, 75);
+        const swayRootAmt = this.swayScalar * this.swayRootMag * Math.cos(cM_s2rad(this.swayPhaseXZ));
 
         for (let i = 1; i < this.planks.length; i++) {
             const curPlank = this.planks[i];
             const prevPlank = this.planks[i - 1];
 
-            const swayXZ = this.swayScalar * this.swayMagXZ * Math.sin(cM_s2rad(this.swayPhaseXZ + i * swayPhaseStep));
-            const offsetX = windVec[0] + rootOffsetVec[0] * this.swayScalar + (curPlank.posSim[0] - prevPlank.posSim[0]) + swayXZ * bridgeDir[0];
-            const offsetZ = windVec[2] + rootOffsetVec[2] * this.swayScalar + (curPlank.posSim[2] - prevPlank.posSim[2]) + swayXZ * bridgeDir[2];
+            // Offset the root position based on wind strength
+            const swayPlankAmt = this.swayScalar * this.swayPlankMag * Math.sin(cM_s2rad(this.swayPhaseXZ + i * swayPhaseStep));
+            const swayAmt = swayPlankAmt + swayRootAmt;
+            const offsetX = (curPlank.posSim[0] - prevPlank.posSim[0]) + scratchVec3b[0] + scratchVec3a[0] * swayAmt;
+            const offsetZ = (curPlank.posSim[2] - prevPlank.posSim[2]) + scratchVec3b[2] + scratchVec3a[2] * swayAmt;
             const offsetAngleXZ = cM_atan2s(offsetX, offsetZ);
             const offsetDistXZ = Math.hypot(offsetX, offsetZ);
 
             const swayY = Math.sin(cM_s2rad(this.swayPhaseY + i * (swayPhaseStep + 1000)));
             const offsetAngleY = cM_atan2s(this.swayScalar * this.swayMagY * swayY +
-                ((curPlank.biasUnk * 0.5 + curPlank.posSim[1] + curPlank.biasY * this.swayScalar * 0.5) - prevPlank.posSim[1]), offsetDistXZ);
+                (curPlank.posSim[1] - prevPlank.posSim[1]) + curPlank.biasUnk * 0.5 + curPlank.biasY * this.swayScalar * 0.5, offsetDistXZ);
 
             mDoMtx_YrotS(calc_mtx, offsetAngleXZ);
             mDoMtx_XrotM(calc_mtx, -offsetAngleY);
 
-            MtxPosition(scratchVec3d, plankOffsetVec);
-            curPlank.posSim = vec3.add(curPlank.posSim, prevPlank.posSim, scratchVec3d);
+            vec3.set(scratchVec3c, 0, 0, 75);
+            MtxPosition(scratchVec3c);
+            vec3.add(curPlank.posSim, prevPlank.posSim, scratchVec3c);
         }
     }
 
     private control2() {
-        const plankConstraintVec = vec3.set(scratchVec3a, 0, 0, 75);
 
         // Traverse the planks in reverse order, skipping the final plank
         for (let i = this.plankCount - 2; i >= 0; i--) {
             const curPlank = this.planks[i];
             const nextPlank = this.planks[i + 1];
 
-            const offsetVec = vec3.sub(scratchVec3b, curPlank.posSim, nextPlank.posSim);
-            const offsetAngleXZ = cM_atan2s(offsetVec[0], offsetVec[2]);
-            const offsetDistXZ = Math.hypot(offsetVec[0], offsetVec[2]);
+            const offsetX = (curPlank.posSim[0] - nextPlank.posSim[0]);
+            const offsetZ = (curPlank.posSim[2] - nextPlank.posSim[2]);
+            const offsetAngleXZ = cM_atan2s(offsetX, offsetZ);
+            const offsetDistXZ = Math.hypot(offsetX, offsetZ);
             const offsetAngleY = cM_atan2s((curPlank.posSim[1] + curPlank.biasY * 0.5) - nextPlank.posSim[1], offsetDistXZ);
 
             nextPlank.rot[1] = offsetAngleXZ;
@@ -6332,8 +6329,9 @@ class d_a_bridge extends fopAc_ac_c {
             mDoMtx_YrotS(calc_mtx, offsetAngleXZ);
             mDoMtx_XrotM(calc_mtx, -offsetAngleY);
 
-            MtxPosition(scratchVec3d, plankConstraintVec);
-            curPlank.posSim = vec3.add(curPlank.posSim, nextPlank.posSim, scratchVec3d);
+            vec3.set(scratchVec3a, 0, 0, 75);
+            MtxPosition(scratchVec3a);
+            vec3.add(curPlank.posSim, nextPlank.posSim, scratchVec3a);
         }
     }
 
@@ -6341,12 +6339,13 @@ class d_a_bridge extends fopAc_ac_c {
         const curPlank = this.planks[0];
         const nextPlank = this.planks[1];
 
-        const offsetVec = vec3.sub(scratchVec3b, curPlank.posSim, nextPlank.posSim);
-        const offsetAngleXZ = cM_atan2s(offsetVec[0], offsetVec[2]);
-        curPlank.rot[1] = offsetAngleXZ;
-
-        const offsetDistXZ = Math.hypot(offsetVec[0], offsetVec[2]);
+        const offsetX = (curPlank.posSim[0] - nextPlank.posSim[0]);
+        const offsetZ = (curPlank.posSim[2] - nextPlank.posSim[2]);
+        const offsetAngleXZ = cM_atan2s(offsetX, offsetZ);
+        const offsetDistXZ = Math.hypot(offsetX, offsetZ);
         const offsetAngleY = cM_atan2s(curPlank.posSim[1] - nextPlank.posSim[1], offsetDistXZ);
+
+        curPlank.rot[1] = offsetAngleXZ;
         curPlank.rot[0] = -offsetAngleY;
     }
 
@@ -6374,7 +6373,7 @@ class d_a_bridge extends fopAc_ac_c {
         }
 
         this.swayMagY = this.swayRideMag;
-        this.swayMagXZ = this.swayRideMag;
+        this.swayPlankMag = this.swayRideMag;
         this.swayRootMag = this.swayRootMagCalc;
 
         const targetMag = (this.windPower < 0.1) ? 0.0 : 2.0;
@@ -6387,11 +6386,11 @@ class d_a_bridge extends fopAc_ac_c {
         this.windAngle = cM_atan2s(windVec[0], windVec[2]);
         this.windPower = dKyw_get_wind_pow(globals.g_env_light);
 
-        if (this.flags & BridgeFlags.ConnectToPartner && !this.partner) {
+        if (!!(this.flags & BridgeFlags.ConnectToPartner) && this.partner === null) {
             // this.partner = fopAcIt_JudgeByID(globals.frameworkGlobals, this.processId);
-            this.partner = fpcEx_Search(globals.frameworkGlobals, (pc: base_process_class, self: fopAc_ac_c) => {
-                return (pc.processName === dProcName_e.d_a_bridge && pc != self);
-            }, this) as d_a_bridge;
+            this.partner = fpcEx_Search(globals.frameworkGlobals, (pc: base_process_class) => {
+                return (pc.processName === dProcName_e.d_a_bridge && pc !== this);
+            }, null) as d_a_bridge;
         }
 
         this.bridge_move(globals, deltaTimeFrames);

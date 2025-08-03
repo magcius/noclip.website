@@ -256,7 +256,7 @@ export function fpcLy_SetCurrentLayer(globals: fGlobals, layer: layer_class): vo
     globals.lyCurr = layer;
 }
 
-export function fpcLyIt_AllJudge(globals: fGlobals, judgeFunc: (pc: base_process_class, userData: any) => boolean, userData: any): base_process_class | null {
+export function fpcLyIt_AllJudge<T>(globals: fGlobals, judgeFunc: (pc: base_process_class, userData: T) => boolean, userData: T): base_process_class | null {
     for (let i = 0; i < globals.lnQueue.length; i++) {
         const pc = globals.lnQueue[i];
         if (judgeFunc(pc, userData)) {
@@ -294,7 +294,7 @@ function fpcEx_ToExecuteQ(globals: fGlobals, process: base_process_class): void 
     globals.lnQueue.push(process);
 }
 
-export function fpcEx_Search(globals: fGlobals, judgeFunc: (pc: base_process_class, userData: any) => boolean, userData: any): base_process_class | null {
+export function fpcEx_Search<T>(globals: fGlobals, judgeFunc: (pc: base_process_class, userData: T) => boolean, userData: T): base_process_class | null {
     return fpcLyIt_AllJudge(globals, judgeFunc, userData);
 }
 
