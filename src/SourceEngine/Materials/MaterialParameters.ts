@@ -2,12 +2,12 @@
 import { mat4, vec3 } from "gl-matrix";
 import { TextureMapping } from "../../TextureHolder.js";
 import { assert, assertExists, nArray, nullify } from "../../util.js";
-import { SourceRenderContext } from "../Main.js";
+import type { SourceRenderContext } from "../Main.js";
 import { VKFParamMap, VMT, vmtParseVector } from "../VMT.js";
-import { VTF } from "../VTF.js";
+import type { VTF } from "../VTF.js";
 import { MathConstants, clamp, invlerp, lerp } from "../../MathHelpers.js";
 import { Color, colorFromRGBA } from "../../Color.js";
-import { MaterialCache } from "./MaterialCache.js";
+import type { MaterialCache } from "./MaterialCache.js";
 import { BaseMaterial, EntityMaterialParameters } from "./MaterialBase.js";
 
 interface Parameter {

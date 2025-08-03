@@ -8,7 +8,7 @@ import { GfxrResolveTextureID } from "../../gfx/render/GfxRenderGraph.js";
 import { nArray, assert, assertExists } from "../../util.js";
 import { BSPFile, Cubemap, WorldLight, WorldLightType, AmbientCube, BSPLeaf, WorldLightFlags } from "../BSPFile.js";
 import { BSPRenderer, SourceEngineView, SourceEngineViewType } from "../Main.js";
-import { VTF } from "../VTF.js";
+import type { VTF } from "../VTF.js";
 
 //#region Runtime Lighting / LightCache
 function findEnvCubemapTexture(bspfile: BSPFile, pos: ReadonlyVec3): Cubemap | null {

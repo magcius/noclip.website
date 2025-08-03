@@ -13,11 +13,11 @@ import { GfxRenderInst, GfxRenderInstList } from "../../gfx/render/GfxRenderInst
 import { assert, assertExists, nArray, nullify } from "../../util.js";
 import { SourceEngineView, SourceEngineViewType, SourceRenderContext } from "../Main.js";
 import { UberShaderInstanceBasic, UberShaderTemplateBasic } from "../UberShader.js";
-import { VMT } from "../VMT.js";
-import { VTF } from "../VTF.js";
+import type { VMT } from "../VMT.js";
+import type { VTF } from "../VTF.js";
 import type { MaterialCache } from "./MaterialCache.js";
 import * as P from "./MaterialParameters.js";
-import { LightCache } from "./WorldLight.js";
+import type { LightCache } from "./WorldLight.js";
 
 const BindingLayouts: GfxBindingLayoutDescriptor[] = [
     { numUniformBuffers: 3, numSamplers: 15, samplerEntries: [
