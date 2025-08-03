@@ -861,6 +861,8 @@ class RippleAnimation {
 
 class ShaderCompositeRippleProgram extends DeviceProgram {
     public static BindingsDefinition = `
+${GfxShaderLibrary.MatrixLibrary}
+
 layout(std140) uniform ub_ShaderParams {
     Mat2x4 u_MapTransform0;
     Mat2x4 u_MapTransform1;

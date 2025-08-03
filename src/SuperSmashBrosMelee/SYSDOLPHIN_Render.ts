@@ -145,9 +145,9 @@ class HSD__TexImageDataCache {
 export class HSD_JObjRoot_Data {
     public coalescedBuffers: GfxBufferCoalescerCombo;
     public rootData: HSD_JObj_Data;
-    public texImageData: HSD__TexImageData[] = [];
+    public texImageDataCache = new HSD__TexImageDataCache();
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, public root: HSD_JObjRoot, public texImageDataCache = new HSD__TexImageDataCache()) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, public root: HSD_JObjRoot) {
         const loadedVertexDatas: LoadedVertexData[] = [];
 
         function collectDObj(dobj: HSD_DObj): void {
@@ -174,8 +174,7 @@ export class HSD_JObjRoot_Data {
     public destroy(device: GfxDevice): void {
         this.coalescedBuffers.destroy(device);
         this.rootData.destroy(device);
-        for (let i = 0; i < this.texImageData.length; i++)
-            this.texImageData[i].destroy(device);
+        this.texImageDataCache.destroy(device);
     }
 }
 

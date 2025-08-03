@@ -875,6 +875,9 @@ export class WdtScene implements Viewer.SceneGfx {
         for (let renderer of this.wmoWaterRenderers.values()) {
             renderer.destroy(device);
         }
+        for (let renderer of this.skyboxModelRenderers.values()) {
+            renderer.destroy(device);
+        }
         this.loadingAdtRenderer.destroy(device);
         this.skyboxRenderer.destroy(device);
         this.textureCache.destroy(device);

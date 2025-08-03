@@ -31,8 +31,6 @@ class Skyscape { // Clouds, mountains, etc.
     }
 }
 
-const scratchMtx0 = mat4.create();
-
 const MIST_TEXTURE_DIM = 64;
 
 export class EnvfxManager {
@@ -240,5 +238,6 @@ export class EnvfxManager {
 
     public destroy(device: GfxDevice) {
         this.skyscape.destroy(device);
+        this.mistTexture.destroy(device);
     }
 }

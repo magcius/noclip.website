@@ -1003,6 +1003,11 @@ export class AnimGroupInstance {
         mat4.copy(this.nodeMatrixStack.get(0), this.modelMatrix);
         this.prepareToRenderGroup(device, renderInstManager, viewerInput, this.animGroupData.animGroup.groups.length - 1);
     }
+
+    public destroy(device: GfxDevice): void {
+        for (let i = 0; i < this.shapes.length; i++)
+            this.shapes[i].destroy(device);
+    }
 }
 
 export class AnimGroupDataCache {

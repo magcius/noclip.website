@@ -17,6 +17,7 @@ import * as GX from '../gx/gx_enum.js';
 import { DisplayListRegisters, displayListRegistersInitGX, displayListRegistersRun } from "../gx/gx_displaylist.js";
 import { parseMaterial } from "../gx/gx_material.js";
 import { normToLength } from "../MathHelpers.js";
+import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
@@ -246,6 +247,10 @@ export class mDoExt_3DlineMat1_c implements mDoExt_3DlineMat_c {
                 dist += delta * 0.1;
             }
         }
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.ddraw.destroy(device);
     }
 }
 

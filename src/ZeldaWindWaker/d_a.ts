@@ -6106,6 +6106,11 @@ class br_s {
     public rotYExtra: number = 0;
     public biasY: number = 0;
     public biasUnk: number = 0;
+
+    public destroy(globals: dGlobals): void {
+        if (this.lineRope !== null)
+            this.lineRope.destroy(globals.modelCache.device);
+    }
 }
 
 const enum BridgeFlags {
@@ -6311,7 +6316,6 @@ class d_a_bridge extends fopAc_ac_c {
     }
 
     private control2() {
-
         // Traverse the planks in reverse order, skipping the final plank
         for (let i = this.plankCount - 2; i >= 0; i--) {
             const curPlank = this.planks[i];
@@ -6543,6 +6547,12 @@ class d_a_bridge extends fopAc_ac_c {
             this.ropeLines.setMaterial(globals);
             this.ropeLines.draw(globals, renderInstManager);
         }
+    }
+
+    public override delete(globals: dGlobals): void {
+        for (let i = 0; i < this.planks.length; i++)
+            this.planks[i].destroy(globals);
+        this.ropeLines.destroy(globals.modelCache.device);
     }
 }
 

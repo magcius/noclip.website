@@ -506,6 +506,11 @@ export class MOBJ {
         this.animGroup.prepareToRender(device, renderInstManager, viewerInput);
     }
 
+    public destroy(device: GfxDevice): void {
+        if (this.animGroup !== null)
+            this.animGroup.destroy(device);
+    }
+
     public setPosition(x: number, y: number, z: number): void {
         mat4.fromScaling(this.modelMatrix, [75, 75, 75]);
         this.modelMatrix[12] = x * 7.5;
@@ -689,6 +694,8 @@ export class WorldRenderer extends BasicGXRendererHelper {
             this.backgroundRenderer.destroy(device);
         if (this.animGroupCache !== null)
             this.animGroupCache.destroy(device);
+        for (let i = 0; i < this.mobj.length; i++)
+            this.mobj[i].destroy(device);
         this.rootNode.destroy(device);
     }
 

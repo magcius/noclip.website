@@ -461,6 +461,7 @@ export class GTA3SceneDesc implements SceneDesc {
         await this.fetchTXD(device, dataFetcher, 'particle', texture => {
             if (texture.name === `particle/${this.meta.water.texture}`) {
                 const atlas = new TextureArray(cache, [texture]);
+                textureArrays.push(atlas);
                 renderer.renderers.push(new SkyRenderer(device, cache, atlas));
             }
         });

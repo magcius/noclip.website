@@ -830,7 +830,13 @@ class Main {
         }
     }
 
-    private loadSceneDelta = 1;
+    private get loadSceneDelta(): number {
+        return this.saveManager.loadSetting("LoadSceneDelta", 1);
+    }
+
+    private set loadSceneDelta(v: number) {
+        this.saveManager.saveSetting("LoadSceneDelta", v);
+    }
 
     private _loadSceneDesc(sceneDesc: SceneDesc, sceneStateStr: string | null = null, force: boolean = false): void {
         if (this.currentSceneDesc === sceneDesc && !force) {
