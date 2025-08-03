@@ -1,19 +1,19 @@
 
-import { colorScale, colorCopy, OpaqueBlack, White } from "../../Color.js";
+import { colorCopy, colorScale, OpaqueBlack } from "../../Color.js";
 import { AABB } from "../../Geometry.js";
 import { scaleMatrix } from "../../MathHelpers.js";
 import { TextureMapping } from "../../TextureHolder.js";
 import { setAttachmentStateSimple } from "../../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
-import { fillMatrix4x2, fillVec4, fillMatrix4x4, fillColor, fillVec3v, fillMatrix4x3 } from "../../gfx/helpers/UniformBufferHelpers.js";
-import { GfxBlendFactor, GfxBlendMode, GfxDevice, GfxMegaStateDescriptor } from "../../gfx/platform/GfxPlatform.js";
-import { GfxProgram } from "../../gfx/platform/GfxPlatformImpl.js";
-import { GfxRenderCache } from "../../gfx/render/GfxRenderCache.js";
-import { setSortKeyProgramKey, GfxRendererLayer, makeSortKey, GfxRenderInst } from "../../gfx/render/GfxRenderInstManager.js";
+import { fillColor, fillMatrix4x2, fillMatrix4x4, fillVec3v, fillVec4 } from "../../gfx/helpers/UniformBufferHelpers.js";
+import { GfxBlendFactor, GfxBlendMode, GfxDevice, GfxMegaStateDescriptor, GfxProgram } from "../../gfx/platform/GfxPlatform.js";
+import type { GfxRenderCache } from "../../gfx/render/GfxRenderCache.js";
+import { GfxRendererLayer, GfxRenderInst, makeSortKey, setSortKeyProgramKey } from "../../gfx/render/GfxRenderInstManager.js";
 import { assert, assertExists } from "../../util.js";
-import { SourceRenderContext, SourceEngineViewType } from "../Main.js";
+import { SourceEngineViewType } from "../Main.js";
+import type { SourceRenderContext } from "../Main.js";
 import { UberShaderInstanceBasic } from "../UberShader.js";
-import { AlphaBlendMode, BaseMaterial, LateBindingTexture, MaterialShaderTemplateBase, MaterialUtil, RenderMode, SkinningMode, StaticLightingMode } from "./MaterialBase.js";
-import { MaterialCache } from "./MaterialCache.js";
+import { AlphaBlendMode, BaseMaterial, LateBindingTexture, MaterialShaderTemplateBase, MaterialUtil, RenderMode, StaticLightingMode } from "./MaterialBase.js";
+import type { MaterialCache } from "./MaterialCache.js";
 import * as P from "./MaterialParameters.js";
 import { ProjectedLight, ShaderWorldLightType } from "./WorldLight.js";
 

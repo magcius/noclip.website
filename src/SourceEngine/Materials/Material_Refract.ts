@@ -1,14 +1,13 @@
 
 import { TextureMapping } from "../../TextureHolder.js";
 import { fillVec4 } from "../../gfx/helpers/UniformBufferHelpers.js";
-import { GfxMegaStateDescriptor } from "../../gfx/platform/GfxPlatform.js";
-import { GfxProgram } from "../../gfx/platform/GfxPlatformImpl.js";
-import { GfxRendererLayer, makeSortKey, setSortKeyProgramKey, GfxRenderInst } from "../../gfx/render/GfxRenderInstManager.js";
+import type { GfxMegaStateDescriptor, GfxProgram } from "../../gfx/platform/GfxPlatform.js";
+import { GfxRendererLayer, GfxRenderInst, makeSortKey, setSortKeyProgramKey } from "../../gfx/render/GfxRenderInstManager.js";
 import { assert } from "../../util.js";
-import { SourceRenderContext } from "../Main.js";
+import type { SourceRenderContext } from "../Main.js";
 import { UberShaderInstanceBasic } from "../UberShader.js";
-import { MaterialShaderTemplateBase, BaseMaterial, MaterialUtil } from "./MaterialBase.js";
-import { MaterialCache } from "./MaterialCache.js";
+import { BaseMaterial, MaterialShaderTemplateBase, MaterialUtil } from "./MaterialBase.js";
+import type { MaterialCache } from "./MaterialCache.js";
 import * as P from "./MaterialParameters.js";
 
 //#region Refract

@@ -1,7 +1,7 @@
 import { mat4, ReadonlyMat4, ReadonlyVec3, vec3, vec4 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { assert, assertExists, hexzero, nArray } from "../util.js";
-import { computeModelMatrixS, getMatrixTranslation, lerp, lerpAngle, MathConstants, normToLength, randomRange, setMatrixTranslation, transformVec3Mat4w0, transformVec3Mat4w1, Vec3One } from "../MathHelpers.js";
+import { computeModelMatrixS, getMatrixTranslation, lerp, lerpAngle, MathConstants, normToLength, randomRangeFloat, setMatrixTranslation, transformVec3Mat4w0, transformVec3Mat4w1, Vec3One } from "../MathHelpers.js";
 import { ActorResources, angleStep, LevelObjectHolder } from "./script.js";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import { ViewerRenderInput } from "../viewer.js";
@@ -451,7 +451,7 @@ export class Actor {
                     case 0:
                         seqIndex = 0;
                         st[0] = 1;
-                        st[1] = randomRange(60, 150);
+                        st[1] = randomRangeFloat(60, 150);
                         break;
                     case 1:
                         seqIndex = 0;
@@ -916,7 +916,7 @@ function processMonsterParticle(data: Int16Array, start: number, log?:(s: string
                             if (op === 4)
                                 v[i] = comp;
                             else if (op === 5)
-                                v[i] += randomRange(comp);
+                                v[i] += randomRangeFloat(comp);
                             else if (op === 6)
                                 v[i] += comp;
                         }
@@ -954,7 +954,7 @@ function processMonsterParticle(data: Int16Array, start: number, log?:(s: string
                 const idx = (value >>> 12) & 7;
                 const isAngle = idx >= 2;
                 const factor = isAngle ? MathConstants.TAU / 0x1000 : 1/0x1000;
-                const val = op === 9 ? data[curr + 1] : randomRange(data[curr + 1]);
+                const val = op === 9 ? data[curr + 1] : randomRangeFloat(data[curr + 1]);
                 if (p) {
                     if (op === 9)
                         p.scaleAndAngle[idx] = val * factor;
@@ -1533,7 +1533,7 @@ export class MonsterMagicManager {
                         const val = data[offs++]/scale;
                         if (ctx) {
                             if (base === 0x12)
-                                ctx.state.vecs[index][i] += randomRange(val);
+                                ctx.state.vecs[index][i] += randomRangeFloat(val);
                             else if (base === 0xD6)
                                 ctx.state.vecs[index][i] += val;
                             else

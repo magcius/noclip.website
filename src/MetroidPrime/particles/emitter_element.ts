@@ -2,7 +2,7 @@ import { mat4, vec3 } from 'gl-matrix';
 import { defaultParticleGlobals, GetBool, NumberHolder, ParticleGlobals } from './base_generator.js';
 import { GetVectorElement, VectorElement } from './vector_element.js';
 import { GetRealElement, RealElement } from './real_element.js';
-import { computeModelMatrixSRT, MathConstants, randomRange } from '../../MathHelpers.js';
+import { computeModelMatrixSRT, MathConstants, randomRangeFloat } from '../../MathHelpers.js';
 import { InputStream } from '../stream.js';
 import { assert } from '../../util.js';
 
@@ -39,9 +39,9 @@ export class EESphere implements EmitterElement {
         const radius = { value: 0 };
         this.radius.GetValue(frame, globals, radius);
 
-        posOut[2] = Math.trunc(randomRange(-100, 100)) / 100.0;
-        posOut[1] = Math.trunc(randomRange(-100, 100)) / 100.0;
-        posOut[0] = Math.trunc(randomRange(-100, 100)) / 100.0;
+        posOut[2] = Math.trunc(randomRangeFloat(-100, 100)) / 100.0;
+        posOut[1] = Math.trunc(randomRangeFloat(-100, 100)) / 100.0;
+        posOut[0] = Math.trunc(randomRangeFloat(-100, 100)) / 100.0;
 
         vec3.add(posOut, vec3.scale(posOut, vec3.normalize(posOut, posOut), radius.value), velOut);
 

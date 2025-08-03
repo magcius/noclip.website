@@ -1,29 +1,28 @@
 
 import { mat4, ReadonlyMat4, vec3 } from "gl-matrix";
 import { CameraController } from "../Camera.js";
-import { Color, colorCopy, colorNewCopy, colorNewFromRGBA, Magenta, White } from "../Color.js";
+import { Color, colorCopy, colorNewCopy, colorNewFromRGBA, White } from "../Color.js";
 import { AABB } from "../Geometry.js";
 import { fullscreenMegaState, setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
-import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
+import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
 import { fillColor, fillMatrix4x3, fillMatrix4x4, fillVec3v, fillVec4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers.js";
-import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxCullMode, GfxDevice, GfxFormat, GfxRenderProgramDescriptor, GfxMegaStateDescriptor, GfxMipFilterMode, GfxTexFilterMode, GfxWrapMode } from "../gfx/platform/GfxPlatform.js";
-import { GfxProgram, GfxSampler } from "../gfx/platform/GfxPlatformImpl.js";
+import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxCullMode, GfxDevice, GfxFormat, GfxMegaStateDescriptor, GfxMipFilterMode, GfxProgram, GfxRenderProgramDescriptor, GfxSampler, GfxTexFilterMode, GfxWrapMode } from "../gfx/platform/GfxPlatform.js";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { GfxrAttachmentSlot, GfxrRenderTargetDescription } from "../gfx/render/GfxRenderGraph.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
 import { GfxRendererLayer, GfxRenderInst, GfxRenderInstList, GfxRenderInstManager, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager.js";
+import { preprocessShader_GLSL } from "../gfx/shaderc/GfxShaderCompiler.js";
+import { hashCodeNumberUpdate, HashMap } from "../HashMap.js";
 import { setMatrixTranslation } from "../MathHelpers.js";
 import { DeviceProgram } from "../Program.js";
+import { UberShaderInstance, UberShaderTemplate } from "../SourceEngine/UberShader.js";
 import { TextureMapping } from "../TextureHolder.js";
 import { nArray } from "../util.js";
 import { SceneGfx, ViewerRenderInput } from "../viewer.js";
 import { Asset_Type, Material_Flags, Material_Type, Mesh_Asset, Render_Material, Texture_Asset } from "./Assets.js";
 import { Entity_World, Lightmap_Table } from "./Entity.js";
 import { TheWitnessGlobals } from "./Globals.js";
-import { UberShaderInstance, UberShaderTemplate } from "../SourceEngine/UberShader.js";
-import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
-import { preprocessShader_GLSL } from "../gfx/shaderc/GfxShaderCompiler.js";
-import { hashCodeNumberUpdate, HashMap } from "../HashMap.js";
 
 class DepthCopyProgram extends DeviceProgram {
     public override vert = GfxShaderLibrary.fullscreenVS;

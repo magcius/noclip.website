@@ -5,7 +5,7 @@ import { vec3, mat4, ReadonlyVec3 } from "gl-matrix";
 import { assertExists, assert, nArray } from "../util.js";
 import { ViewerRenderInput } from "../viewer.js";
 import { MotionData, followPath, MotionResult, Motion, projectile, BasicMotionKind, vertical, motionBlockInit, randomCircle, linear, walkToTarget, faceTarget, canHearSong, Target, approachPoint, attemptMove, MoveFlags, Direction, forward, staryuApproach, yawTowards, stepYawTowards } from "./motion.js";
-import { Vec3One, lerp, MathConstants, getMatrixAxisZ, reflectVec3, normToLength, Vec3Zero, transformVec3Mat4w0, Vec3UnitY, angleDist, clampRange, clamp, randomRange } from "../MathHelpers.js";
+import { Vec3One, lerp, MathConstants, getMatrixAxisZ, reflectVec3, normToLength, Vec3Zero, transformVec3Mat4w0, Vec3UnitY, angleDist, clampRange, clamp, randomRangeFloat } from "../MathHelpers.js";
 import { getPathPoint, getPathTangent } from "./animation.js";
 import { ObjectDef } from "./room.js";
 import { ParticleManager } from "./particles.js";
@@ -1673,7 +1673,7 @@ export class Staryu extends Actor {
             } // fall through to spinning
             case 0x802CCAB4: {
                 if (this.spinSpeed === 0)
-                    this.spinSpeed = randomRange(1, 2) * Math.PI / 3;
+                    this.spinSpeed = randomRangeFloat(1, 2) * Math.PI / 3;
                 this.euler[1] += this.spinSpeed * viewerInput.deltaTime / 1000;
             } break;
 
@@ -2015,7 +2015,7 @@ class MiniCrater extends Actor {
         }
         if (viewerInput.time > this.motionData.start) {
             this.lavaSplash.receiveSignal(this, 0x22, globals);
-            this.motionData.start += randomRange(4, 10) * 1000;
+            this.motionData.start += randomRangeFloat(4, 10) * 1000;
         }
         return MotionResult.None;
     }

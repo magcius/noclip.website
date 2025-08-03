@@ -1,6 +1,6 @@
 import { ParticleGlobals, NumberHolder } from './base_generator.js';
 import { InputStream } from '../stream.js';
-import { clamp, lerp, randomRange } from '../../MathHelpers.js';
+import { clamp, lerp, randomRangeFloat } from '../../MathHelpers.js';
 import { GetRealElement, RealElement, REConstant } from './real_element.js';
 import { BaseKeyframeEmitter, BaseKeyframeFunction } from './base_keyframes.js';
 
@@ -137,7 +137,7 @@ export class IEInitialRandom implements IntElement {
             const max = { value: 0 };
             this.min.GetValue(frame, globals, min);
             this.max.GetValue(frame, globals, max);
-            valOut.value = Math.trunc(randomRange(min.value, max.value));
+            valOut.value = Math.trunc(randomRangeFloat(min.value, max.value));
         }
         return false;
     }
@@ -192,7 +192,7 @@ export class IESampleAndHold implements IntElement {
             const sampleSource = { value: 0 };
             this.waitFramesMin.GetValue(frame, globals, waitFramesMin);
             this.waitFramesMax.GetValue(frame, globals, waitFramesMax);
-            this.nextSampleFrame = Math.trunc(randomRange(waitFramesMin.value, waitFramesMax.value)) + frame;
+            this.nextSampleFrame = Math.trunc(randomRangeFloat(waitFramesMin.value, waitFramesMax.value)) + frame;
             this.sampleSource.GetValue(frame, globals, sampleSource);
             this.holdVal = sampleSource.value;
         }
@@ -211,7 +211,7 @@ export class IERandom implements IntElement {
         this.min.GetValue(frame, globals, min);
         this.max.GetValue(frame, globals, max);
         if (min.value > 0)
-            valOut.value = Math.trunc(randomRange(min.value, max.value));
+            valOut.value = Math.trunc(randomRangeFloat(min.value, max.value));
         else
             valOut.value = Math.trunc(Math.random() * 0xffff);
         return false;

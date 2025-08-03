@@ -1,22 +1,22 @@
 
-import { ReadonlyMat4, vec3, vec2, mat4 } from "gl-matrix";
-import { Color, TransparentBlack, White, colorCopy, colorNewCopy, colorNewFromRGBA, colorScale } from "../../Color.js";
-import { dfShow, dfRange } from "../../DebugFloaters.js";
+import { ReadonlyMat4, mat4, vec2, vec3 } from "gl-matrix";
+import { Color, TransparentBlack, White, colorCopy, colorNewCopy, colorNewFromRGBA } from "../../Color.js";
+import { dfRange, dfShow } from "../../DebugFloaters.js";
 import { AABB } from "../../Geometry.js";
 import { scaleMatrix } from "../../MathHelpers.js";
 import { TextureMapping } from "../../TextureHolder.js";
 import { setAttachmentStateSimple } from "../../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
 import { GfxShaderLibrary, glslGenerateFloat } from "../../gfx/helpers/GfxShaderLibrary.js";
-import { fillMatrix4x4, fillVec3v, fillVec4, fillMatrix4x2, fillColor, fillMatrix4x3 } from "../../gfx/helpers/UniformBufferHelpers.js";
+import { fillColor, fillMatrix4x2, fillMatrix4x3, fillMatrix4x4, fillVec3v, fillVec4 } from "../../gfx/helpers/UniformBufferHelpers.js";
 import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxCullMode, GfxFrontFaceMode, GfxMegaStateDescriptor, GfxSamplerFormatKind, GfxTextureDimension } from "../../gfx/platform/GfxPlatform.js";
 import { GfxRenderInst, GfxRenderInstList } from "../../gfx/render/GfxRenderInstManager.js";
 import { assert, assertExists, nArray, nullify } from "../../util.js";
-import { SourceEngineView, SourceRenderContext, SourceEngineViewType } from "../Main.js";
+import { SourceEngineView, SourceEngineViewType, SourceRenderContext } from "../Main.js";
 import { UberShaderInstanceBasic, UberShaderTemplateBasic } from "../UberShader.js";
 import { VMT } from "../VMT.js";
 import { VTF } from "../VTF.js";
+import type { MaterialCache } from "./MaterialCache.js";
 import * as P from "./MaterialParameters.js";
-import { MaterialCache } from "./MaterialCache.js";
 import { LightCache } from "./WorldLight.js";
 
 const BindingLayouts: GfxBindingLayoutDescriptor[] = [

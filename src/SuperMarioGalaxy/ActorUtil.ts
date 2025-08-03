@@ -8,7 +8,7 @@ import { J3DModelData, J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBa
 import { JKRArchive } from "../Common/JSYSTEM/JKRArchive.js";
 import { BTI, BTIData } from "../Common/JSYSTEM/JUTTexture.js";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
-import { computeMatrixWithoutScale, computeModelMatrixR, computeModelMatrixT, getMatrixAxis, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, isNearZero, isNearZeroVec3, lerp, MathConstants, normToLength, randomRange, saturate, scaleMatrix, setMatrixAxis, setMatrixTranslation, transformVec3Mat4w0, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from "../MathHelpers.js";
+import { computeMatrixWithoutScale, computeModelMatrixR, computeModelMatrixT, getMatrixAxis, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, isNearZero, isNearZeroVec3, lerp, MathConstants, normToLength, randomRangeFloat, saturate, scaleMatrix, setMatrixAxis, setMatrixTranslation, transformVec3Mat4w0, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from "../MathHelpers.js";
 import { assert, assertExists } from "../util.js";
 import { getRes, XanimePlayer } from "./Animation.js";
 import { AreaObj, isInAreaObj } from "./AreaObj.js";
@@ -427,7 +427,7 @@ export function setBckFrame(actor: LiveActor, frame: number): void {
 
 export function setBckFrameAtRandom(actor: LiveActor): void {
     const ctrl = actor.modelManager!.getBckCtrl();
-    ctrl.currentTimeInFrames = getRandomFloat(0, ctrl.endFrame);
+    ctrl.currentTimeInFrames = randomRangeFloat(0, ctrl.endFrame);
 }
 
 export function setBckRate(actor: LiveActor, rate: number): void {
@@ -443,7 +443,7 @@ export function setBtkFrameAndStop(actor: LiveActor, frame: number): void {
 
 export function setBtkFrameAtRandom(actor: LiveActor): void {
     const ctrl = actor.modelManager!.getBtkCtrl();
-    ctrl.currentTimeInFrames = getRandomFloat(0, ctrl.endFrame);
+    ctrl.currentTimeInFrames = randomRangeFloat(0, ctrl.endFrame);
 }
 
 export function setBrkRate(actor: LiveActor, rate: number): void {
@@ -576,14 +576,6 @@ export function tryStartAllAnim(actor: LiveActor, animationName: string): boolea
     anyPlayed = startBtpIfExist(actor, animationName) || anyPlayed;
     anyPlayed = startBvaIfExist(actor, animationName) || anyPlayed;
     return anyPlayed;
-}
-
-export function getRandomFloat(min: number, max: number): number {
-    return randomRange(min, max);
-}
-
-export function getRandomInt(min: number, max: number): number {
-    return getRandomFloat(min, max) | 0;
 }
 
 function calcCollisionMtx(dst: mat4, actor: LiveActor): void {
@@ -1176,9 +1168,9 @@ export function isSameDirection(a: ReadonlyVec3, b: ReadonlyVec3, ep: number): b
 }
 
 export function addRandomVector(dst: vec3, src: ReadonlyVec3, mag: number): void {
-    dst[0] = src[0] + getRandomFloat(-mag, mag);
-    dst[1] = src[1] + getRandomFloat(-mag, mag);
-    dst[2] = src[2] + getRandomFloat(-mag, mag);
+    dst[0] = src[0] + randomRangeFloat(-mag, mag);
+    dst[1] = src[1] + randomRangeFloat(-mag, mag);
+    dst[2] = src[2] + randomRangeFloat(-mag, mag);
 }
 
 export function turnRandomVector(dst: vec3, src: ReadonlyVec3, mag: number): void {
@@ -1603,10 +1595,6 @@ export function isNearPlayerPose(sceneObjHolder: SceneObjHolder, actor: LiveActo
 
 export function getJointNum(actor: LiveActor): number {
     return actor.modelInstance!.shapeInstanceState.jointToWorldMatrixArray.length;
-}
-
-export function getRandomVector(dst: vec3, range: number): void {
-    vec3.set(dst, getRandomFloat(-range, range), getRandomFloat(-range, range), getRandomFloat(-range, range));
 }
 
 export function rotateVecDegree(dst: vec3, axis: ReadonlyVec3, degrees: number, m: mat4 = scratchMatrix): void {

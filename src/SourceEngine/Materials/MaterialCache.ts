@@ -1,19 +1,18 @@
 
-import { White, OpaqueBlack, TransparentBlack } from "../../Color.js";
+import { OpaqueBlack, TransparentBlack, White } from "../../Color.js";
 import { makeStaticDataBuffer } from "../../gfx/helpers/BufferHelpers.js";
 import { gfxDeviceNeedsFlipY } from "../../gfx/helpers/GfxDeviceHelpers.js";
 import { makeSolidColorTexture2D } from "../../gfx/helpers/TextureHelpers.js";
-import { GfxVertexBufferDescriptor, GfxIndexBufferDescriptor, GfxDevice, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxBufferUsage, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxCompareMode } from "../../gfx/platform/GfxPlatform.js";
+import { GfxBuffer, GfxBufferUsage, GfxCompareMode, GfxDevice, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxMipFilterMode, GfxSampler, GfxTexFilterMode, GfxTexture, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxWrapMode } from "../../gfx/platform/GfxPlatform.js";
 import { GfxFormat } from "../../gfx/platform/GfxPlatformFormat.js";
-import { GfxBuffer, GfxInputLayout, GfxTexture, GfxSampler } from "../../gfx/platform/GfxPlatformImpl.js";
-import { GfxRenderCache } from "../../gfx/render/GfxRenderCache.js";
-import { GfxRenderInst } from "../../gfx/render/GfxRenderInstManager.js";
-import { Cubemap } from "../BSPFile.js";
-import { SourceFileSystem } from "../Main.js";
+import type { GfxRenderCache } from "../../gfx/render/GfxRenderCache.js";
+import type { GfxRenderInst } from "../../gfx/render/GfxRenderInstManager.js";
+import type { Cubemap } from "../BSPFile.js";
+import type { SourceFileSystem } from "../Main.js";
 import { ParticleSystemCache } from "../ParticleSystem.js";
 import { VMT, parseVMT } from "../VMT.js";
 import { VTF } from "../VTF.js";
-import { MaterialShaderTemplateBase, LateBindingTexture, BaseMaterial } from "./MaterialBase.js";
+import { BaseMaterial, LateBindingTexture, MaterialShaderTemplateBase } from "./MaterialBase.js";
 import { Material_Eyes, ShaderTemplate_Eyes } from "./Material_Eyes.js";
 import { Material_Generic, ShaderTemplate_Generic } from "./Material_Generic.js";
 import { Material_Modulate, ShaderTemplate_Modulate } from "./Material_Modulate.js";

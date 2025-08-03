@@ -1,11 +1,11 @@
 
 import { fullscreenMegaState } from "../helpers/GfxMegaStateDescriptorHelpers.js";
 import { GfxShaderLibrary } from "../helpers/GfxShaderLibrary.js";
+import type { GfxProgram, GfxSampler } from "../platform/GfxPlatform.js";
 import { GfxMipFilterMode, GfxTexFilterMode, GfxWrapMode } from "../platform/GfxPlatform.js";
-import { GfxProgram, GfxSampler } from "../platform/GfxPlatformImpl.js";
 import { GfxRenderCache } from "../render/GfxRenderCache.js";
 import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetID } from "../render/GfxRenderGraph.js";
-import { GfxRenderHelper } from "../render/GfxRenderHelper.js";
+import type { GfxRenderHelper } from "../render/GfxRenderHelper.js";
 import { preprocessProgram_GLSL } from "../shaderc/GfxShaderCompiler.js";
 
 function createProgram(cache: GfxRenderCache): GfxProgram {

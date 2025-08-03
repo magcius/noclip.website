@@ -2,16 +2,17 @@
 import { mat4, ReadonlyMat4, ReadonlyVec3, vec3 } from 'gl-matrix';
 import { IS_DEVELOPMENT } from '../BuildVersion.js';
 import { computeViewSpaceDepthFromWorldSpacePoint } from '../Camera.js';
-import { Color, colorCopy, colorLerp, colorNewCopy, Cyan, Green, Magenta, Red, White, Yellow } from '../Color.js';
+import { Color, colorCopy, colorLerp, colorNewCopy, Cyan, Green, Magenta, Red, White } from '../Color.js';
 import { drawWorldSpaceAABB, drawWorldSpaceLine, drawWorldSpaceLocator, drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from '../DebugJunk.js';
 import { AABB } from '../Geometry.js';
 import { projectionMatrixConvertClipSpaceNearZ } from '../gfx/helpers/ProjectionHelpers.js';
 import { projectionMatrixReverseDepth } from '../gfx/helpers/ReversedDepthHelpers.js';
-import { GfxBuffer, GfxBufferUsage, GfxClipSpaceNearZ, GfxCompareMode, GfxDevice, GfxFormat } from '../gfx/platform/GfxPlatform.js';
+import { GfxBuffer, GfxBufferUsage, GfxClipSpaceNearZ, GfxDevice, GfxFormat } from '../gfx/platform/GfxPlatform.js';
 import { GfxrGraphBuilder, GfxrRenderTargetDescription } from '../gfx/render/GfxRenderGraph.js';
 import { GfxRenderInstManager, setSortKeyDepth } from '../gfx/render/GfxRenderInstManager.js';
-import { clamp, computeModelMatrixR, computeModelMatrixSRT, getMatrixAxis, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, lerp, MathConstants, projectionMatrixForFrustum, randomRange, saturate, scaleMatrix, setMatrixTranslation, transformVec3Mat4w1, vec3SetAll, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from '../MathHelpers.js';
-import { getRandomInt, getRandomVector } from '../SuperMarioGalaxy/ActorUtil.js';
+import { clamp, computeModelMatrixR, computeModelMatrixSRT, getMatrixAxis, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, lerp, MathConstants, projectionMatrixForFrustum, randomRangeFloat, saturate, scaleMatrix, setMatrixTranslation, transformVec3Mat4w1, vec3SetAll, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from '../MathHelpers.js';
+import { randomRangeVec3 } from "../MathHelpers.js";
+import { randomRangeInt } from '../MathHelpers.js';
 import { arrayRemove, assert, assertExists, fallbackUndefined, leftPad, nArray, nullify } from '../util.js';
 import { BSPEntity, DecalSurface } from './BSPFile.js';
 import { BSPModelRenderer, BSPRenderer, BSPSurfaceRenderer, ProjectedLightRenderer, RenderObjectKind, SourceEngineView, SourceEngineViewType, SourceRenderContext, SourceRenderer, SourceWorldViewRenderer } from './Main.js';
@@ -1968,7 +1969,7 @@ class logic_timer extends BaseEntity {
 
     private reset(entitySystem: EntitySystem): void {
         if (this.useRandomTime)
-            this.refiretime = randomRange(this.lowerRandomBound, this.upperRandomBound);
+            this.refiretime = randomRangeFloat(this.lowerRandomBound, this.upperRandomBound);
         this.nextFireTime = entitySystem.currentTime + this.refiretime;
     }
 
@@ -3236,12 +3237,12 @@ class env_steam extends BaseEntity {
 
             // Spread axes
             getMatrixAxisY(scratchVec3a, modelMatrix);
-            vec3.scaleAndAdd(p.velocity, p.velocity, scratchVec3a, randomRange(this.spreadSpeed));
+            vec3.scaleAndAdd(p.velocity, p.velocity, scratchVec3a, randomRangeFloat(this.spreadSpeed));
             getMatrixAxisZ(scratchVec3a, modelMatrix);
-            vec3.scaleAndAdd(p.velocity, p.velocity, scratchVec3a, randomRange(this.spreadSpeed));
+            vec3.scaleAndAdd(p.velocity, p.velocity, scratchVec3a, randomRangeFloat(this.spreadSpeed));
 
-            p.roll = randomRange(0, 360);
-            p.rollDelta = randomRange(-this.rollSpeed, this.rollSpeed);
+            p.roll = randomRangeFloat(0, 360);
+            p.rollDelta = randomRangeFloat(-this.rollSpeed, this.rollSpeed);
             p.lifetime = this.particleLifetime;
 
             this.particlePool.push(p);
@@ -3401,14 +3402,14 @@ class env_citadel_energy_core extends BaseEntity {
                 vec3.scaleAndAdd(p.position, p.position, scratchVec3a, dist);
                 const spreadRange = lerp(6.0, 1.0, randT) * 4.0;
                 getMatrixAxisY(scratchVec3a, modelMatrix);
-                vec3.scaleAndAdd(p.position, p.position, scratchVec3a, randomRange(spreadRange));
+                vec3.scaleAndAdd(p.position, p.position, scratchVec3a, randomRangeFloat(spreadRange));
                 getMatrixAxisZ(scratchVec3a, modelMatrix);
-                vec3.scaleAndAdd(p.position, p.position, scratchVec3a, randomRange(spreadRange));
+                vec3.scaleAndAdd(p.position, p.position, scratchVec3a, randomRangeFloat(spreadRange));
                 p.velocity[2] = 8.0;
                 p.startAlpha = t;
-                p.startSize = randomRange(1, 2);
+                p.startSize = randomRangeFloat(1, 2);
                 p.lifetime = 0.2;
-                p.roll = randomRange(0, 360);
+                p.roll = randomRangeFloat(0, 360);
                 this.chargingParticles.push(p);
             }
         }
@@ -3431,7 +3432,7 @@ class env_citadel_energy_core extends BaseEntity {
             p.startSize = coreScale * (i + 1);
             p.endSize = p.startSize * 2.0;
             p.lifetime = 0.1;
-            p.roll = randomRange(0, 360);
+            p.roll = randomRangeFloat(0, 360);
             this.coreParticles.push(p);
         }
 
@@ -3450,14 +3451,14 @@ class env_citadel_energy_core extends BaseEntity {
                 vec3.scaleAndAdd(p.position, p.position, scratchVec3a, dist);
                 const spreadRange = lerp(6.0, 1.0, randT) * 4.0;
                 getMatrixAxisY(scratchVec3a, modelMatrix);
-                vec3.scaleAndAdd(p.position, p.position, scratchVec3a, randomRange(spreadRange));
+                vec3.scaleAndAdd(p.position, p.position, scratchVec3a, randomRangeFloat(spreadRange));
                 getMatrixAxisZ(scratchVec3a, modelMatrix);
-                vec3.scaleAndAdd(p.position, p.position, scratchVec3a, randomRange(spreadRange));
+                vec3.scaleAndAdd(p.position, p.position, scratchVec3a, randomRangeFloat(spreadRange));
                 p.velocity[2] = 8.0;
                 p.startAlpha = t;
-                p.startSize = randomRange(1, 2);
+                p.startSize = randomRangeFloat(1, 2);
                 p.lifetime = 0.2;
-                p.roll = randomRange(0, 360);
+                p.roll = randomRangeFloat(0, 360);
                 this.chargingParticles.push(p);
             }
         }
@@ -3479,13 +3480,13 @@ class env_citadel_energy_core extends BaseEntity {
             getMatrixAxisX(p.velocity, modelMatrix);
             vec3.scale(p.velocity, p.velocity, 32.0 * i);
 
-            if (i === 2 && getRandomInt(0, 20) === 0) {
+            if (i === 2 && randomRangeInt(0, 20) === 0) {
                 p.lifetime = 0.25;
             } else {
                 p.lifetime = 0.2;
             }
 
-            p.roll = randomRange(0, 360);
+            p.roll = randomRangeFloat(0, 360);
             p.startAlpha = 0.5;
             p.endAlpha = 0;
 
@@ -3514,11 +3515,11 @@ class env_citadel_energy_core extends BaseEntity {
                 vec3.scaleAndAdd(p.position, p.position, scratchVec3a, dist);
                 const spreadRange = lerp(6.0, 1.0, randT) * 2.0 * this.scale;
                 getMatrixAxisY(scratchVec3a, modelMatrix);
-                vec3.scaleAndAdd(p.position, p.position, scratchVec3a, randomRange(spreadRange));
+                vec3.scaleAndAdd(p.position, p.position, scratchVec3a, randomRangeFloat(spreadRange));
                 getMatrixAxisZ(scratchVec3a, modelMatrix);
-                vec3.scaleAndAdd(p.position, p.position, scratchVec3a, randomRange(spreadRange));
+                vec3.scaleAndAdd(p.position, p.position, scratchVec3a, randomRangeFloat(spreadRange));
                 p.lifetime = 0.5;
-                p.roll = randomRange(0, 360);
+                p.roll = randomRangeFloat(0, 360);
                 p.velocity[2] = 2.0;
                 p.startAlpha = 1;
                 p.startSize = 1;
@@ -3883,8 +3884,8 @@ export class env_shake extends BaseEntity {
         if (renderContext.crossedRepeatTime(this.shakeStartTime, this.interval)) {
             // Compute new shake vector.
             const amplitude = this.amplitude * ((1.0 - (time / this.duration)) ** 2);
-            getRandomVector(this.shakeOffset, amplitude);
-            this.shakeRoll = MathConstants.DEG_TO_RAD * randomRange(amplitude) * 0.25;
+            randomRangeVec3(this.shakeOffset, amplitude);
+            this.shakeRoll = MathConstants.DEG_TO_RAD * randomRangeFloat(amplitude) * 0.25;
         }
     }
 

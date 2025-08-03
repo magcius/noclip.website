@@ -3,7 +3,7 @@
 // by Metal, WebGPU and friends. The goal here is to be a good API to write to
 // while also allowing me to port to other backends (like WebGPU) in the future.
 
-import type { GfxBuffer, GfxTexture, GfxRenderTarget, GfxSampler, GfxProgram, GfxInputLayout, GfxRenderPipeline, GfxBindings, GfxResource, GfxReadback, GfxQueryPool, GfxComputePipeline } from "./GfxPlatformImpl.js";
+import type { GfxBuffer, GfxTexture, GfxRenderTarget, GfxSampler, GfxProgram, GfxInputLayout, GfxRenderPipeline, GfxBindings, GfxResource, GfxReadback, GfxQueryPool, GfxComputePipeline, _T, GfxResourceBase } from "./GfxPlatformImpl.js";
 import { GfxFormat } from "./GfxPlatformFormat.js";
 
 export enum GfxCompareMode {
@@ -488,5 +488,5 @@ export interface GfxDevice {
     setStatisticsGroup(statisticsGroup: GfxStatisticsGroup | null): void;
 }
 
-export type { GfxBuffer, GfxTexture, GfxRenderTarget, GfxSampler, GfxProgram, GfxInputLayout, GfxRenderPipeline, GfxBindings };
+export type { GfxBuffer, GfxTexture, GfxRenderTarget, GfxSampler, GfxProgram, GfxInputLayout, GfxRenderPipeline, GfxBindings, GfxComputePipeline, GfxQueryPool, GfxReadback };
 export { GfxFormat };

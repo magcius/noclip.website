@@ -6,9 +6,8 @@
 // and support for a wider variety of variants.
 
 import CodeEditor from "../CodeEditor.js";
-import { GfxDevice, GfxRenderProgramDescriptor } from "../gfx/platform/GfxPlatform.js";
-import { GfxProgram } from "../gfx/platform/GfxPlatformImpl.js";
-import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
+import type { GfxDevice, GfxProgram, GfxRenderProgramDescriptor } from "../gfx/platform/GfxPlatform.js";
+import type { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { preprocessShader_GLSL } from "../gfx/shaderc/GfxShaderCompiler.js";
 import { hashCodeNumberUpdate, HashMap } from "../HashMap.js";
 import { assertExists } from "../util.js";

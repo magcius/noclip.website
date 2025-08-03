@@ -9,7 +9,7 @@ export enum _T { Buffer, Texture, RenderTarget, Sampler, Program, Bindings, Inpu
 export interface GfxTextureImpl extends GfxResourceBase { _T: _T.Texture };
 
 export interface GfxResourceBase { ResourceName?: string, ResourceUniqueId: number };
-export interface GfxBuffer extends GfxResourceBase { _T: _T.Buffer };
+export interface GfxBuffer extends GfxResourceBase { _T: _T.Buffer; };
 export interface GfxTexture extends GfxTextureImpl, Readonly<GfxTextureDescriptor> {};
 export interface GfxRenderTarget extends GfxResourceBase { _T: _T.RenderTarget };
 export interface GfxSampler extends GfxResourceBase { _T: _T.Sampler };

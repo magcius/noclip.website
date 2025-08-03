@@ -53,7 +53,7 @@ import {
     Mat4Identity,
     MathConstants,
     computeModelMatrixSRT,
-    randomRange,
+    randomRangeFloat,
     saturate,
     scaleMatrix,
     setMatrixTranslation,

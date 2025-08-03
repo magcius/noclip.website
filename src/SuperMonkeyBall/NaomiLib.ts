@@ -7,15 +7,14 @@
 import { mat4, vec2, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { Color, colorCopy, colorNewFromRGBA, colorNewFromRGBA8, colorScale } from "../Color.js";
-import { GfxDevice, GfxMipFilterMode, GfxTexFilterMode, GfxWrapMode } from "../gfx/platform/GfxPlatform.js";
-import { GfxSampler } from "../gfx/platform/GfxPlatformImpl.js";
+import { GfxDevice, GfxMipFilterMode, GfxSampler, GfxTexFilterMode, GfxWrapMode } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { GfxRenderInst } from "../gfx/render/GfxRenderInstManager.js";
-import { GXMaterialBuilder } from "../gx/GXMaterialBuilder.js";
 import * as GX from "../gx/gx_enum.js";
 import { GXMaterialHacks } from "../gx/gx_material.js";
 import { ColorKind, DrawParams, GXMaterialHelperGfx, MaterialParams } from "../gx/gx_render.js";
 import { TextureInputGX } from "../gx/gx_texture.js";
+import { GXMaterialBuilder } from "../gx/GXMaterialBuilder.js";
 import { TSDraw } from "../SuperMarioGalaxy/DDraw.js";
 import { LoadedTexture } from "../TextureHolder.js";
 import { assertExists } from "../util.js";

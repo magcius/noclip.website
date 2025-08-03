@@ -1,4 +1,5 @@
-import { mat4, ReadonlyMat4, vec3 } from "gl-matrix";
+import { mat4 } from "gl-matrix";
+import { WowWmoGroupDescriptor } from "../../rust/pkg/noclip_support";
 import { invlerp, lerp } from "../MathHelpers.js";
 import { TextureMapping } from "../TextureHolder.js";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
@@ -10,26 +11,28 @@ import {
 } from "../gfx/helpers/TopologyHelpers.js";
 import {
     fillMatrix4x3,
-    fillMatrix4x4,
     fillVec4,
-    fillVec4v,
+    fillVec4v
 } from "../gfx/helpers/UniformBufferHelpers.js";
 import {
     GfxBlendFactor,
     GfxBlendMode,
+    GfxBuffer,
     GfxBufferUsage,
     GfxCullMode,
     GfxDevice,
     GfxIndexBufferDescriptor,
+    GfxInputLayout,
     GfxInputLayoutBufferDescriptor,
     GfxMegaStateDescriptor,
+    GfxTexture,
     GfxVertexAttributeDescriptor,
     GfxVertexBufferDescriptor,
     GfxVertexBufferFrequency,
     makeTextureDescriptor2D,
 } from "../gfx/platform/GfxPlatform.js";
 import { GfxFormat } from "../gfx/platform/GfxPlatformFormat.js";
-import { GfxBuffer, GfxInputLayout, GfxTexture } from "../gfx/platform/GfxPlatformImpl.js";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
 import {
     GfxRenderInstManager,
@@ -62,20 +65,16 @@ import {
 } from "./mesh.js";
 import {
     LoadingAdtProgram,
-    MAX_BONE_TRANSFORMS,
     MAX_DOODAD_INSTANCES,
     ModelProgram,
     ParticleProgram,
     SkyboxProgram,
     TerrainProgram,
     WaterProgram,
-    WmoProgram,
+    WmoProgram
 } from "./program.js";
-import { FrameData, MAP_SIZE, MapArray, View, WdtScene } from "./scenes.js";
+import { FrameData, MAP_SIZE, MapArray, View } from "./scenes.js";
 import { TextureCache } from "./tex.js";
-import { WowWmoGroupDescriptor } from "../../rust/pkg/noclip_support";
-import { drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk.js";
-import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 
 type TextureMappingArray = (TextureMapping | null)[];
 

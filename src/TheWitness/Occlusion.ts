@@ -1,10 +1,7 @@
 
 import { computeViewSpaceDepthFromWorldSpacePoint } from "../Camera.js";
-import { Color, colorNewCopy, Cyan, Green, Magenta, OpaqueBlack, Red, White } from "../Color.js";
-import { drawScreenSpaceText, drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk.js";
 import { standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
-import { GfxDevice, GfxFormat, GfxQueryPoolType } from "../gfx/platform/GfxPlatform.js";
-import { GfxQueryPool } from "../gfx/platform/GfxPlatformImpl.js";
+import { GfxDevice, GfxFormat, GfxQueryPoolType, GfxQueryPool } from "../gfx/platform/GfxPlatform.js";
 import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription } from "../gfx/render/GfxRenderGraph.js";
 import { gfxRenderInstCompareNone, GfxRenderInstList, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import { Entity_Cluster } from "./Entity.js";

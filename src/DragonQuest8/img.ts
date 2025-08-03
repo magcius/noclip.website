@@ -1,7 +1,6 @@
 import AnimationController from '../AnimationController.js';
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
-import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
-import { GfxSampler, GfxTexture } from '../gfx/platform/GfxPlatformImpl.js';
+import type { GfxDevice, GfxSampler, GfxTexture } from '../gfx/platform/GfxPlatform.js';
 import { assert, assertExists, decodeString, readString } from "../util.js";
 
 export class TexAnimData {

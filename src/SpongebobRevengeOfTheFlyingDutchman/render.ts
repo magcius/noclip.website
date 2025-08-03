@@ -1,60 +1,67 @@
+import * as CRC32 from "crc-32";
 import { mat3, mat4, vec2, vec3 } from "gl-matrix";
 import { CameraController, computeViewMatrix, computeViewSpaceDepthFromWorldSpaceAABB } from "../Camera.js";
 import { colorCopy, colorLerp, colorNewCopy, White } from "../Color.js";
 import { AABB } from "../Geometry.js";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
+import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
 import {
     makeBackbufferDescSimple,
     standardFullClearRenderPassDescriptor
 } from "../gfx/helpers/RenderGraphHelpers.js";
+import { makeSolidColorTexture2D } from '../gfx/helpers/TextureHelpers.js';
 import { fillColor, fillMatrix4x2, fillMatrix4x3, fillMatrix4x4, fillVec3v, fillVec4 } from "../gfx/helpers/UniformBufferHelpers.js";
 import {
     GfxBindingLayoutDescriptor,
     GfxBlendFactor,
     GfxBlendMode,
+    GfxBuffer,
     GfxBufferUsage,
     GfxChannelWriteMask,
     GfxCullMode,
     GfxDevice,
     GfxFormat,
     GfxFrontFaceMode,
-    GfxRenderProgramDescriptor,
     GfxIndexBufferDescriptor,
+    GfxInputLayout,
     GfxInputLayoutBufferDescriptor,
     GfxMegaStateDescriptor,
     GfxMipFilterMode,
+    GfxProgram,
+    GfxRenderProgramDescriptor,
+    GfxSampler,
     GfxTexFilterMode,
+    GfxTexture,
     GfxVertexAttributeDescriptor,
     GfxVertexBufferDescriptor,
     GfxVertexBufferFrequency,
     GfxWrapMode,
 } from "../gfx/platform/GfxPlatform.js";
-import { GfxBuffer, GfxInputLayout, GfxProgram, GfxSampler, GfxTexture } from "../gfx/platform/GfxPlatformImpl.js";
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
 import { GfxRendererLayer, GfxRenderInstList, GfxRenderInstManager, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager.js";
 import { preprocessProgramObj_GLSL } from "../gfx/shaderc/GfxShaderCompiler.js";
 import { hashCodeNumberFinish, hashCodeNumberUpdate, HashMap } from "../HashMap.js";
 import { CalcBillboardFlags, calcBillboardMatrix, getMatrixTranslation, lerp } from "../MathHelpers.js";
+import { DeviceProgram } from '../Program.js';
 import { TextureMapping } from "../TextureHolder.js";
+import * as UI from '../ui.js';
 import { nArray } from "../util.js";
 import * as Viewer from '../viewer.js';
 import { FileType, TotemArchive } from "./archive.js";
 import {
-    BillboardMode, Texture, MaterialFlags,
-    getMaterialFlag, interpTrack, interpTrackInPlace, iterWarpSkybox, precompute_lerp_vec2, precompute_lerp_vec3, precompute_surface_vec3,
+    BillboardMode,
+    getMaterialFlag, interpTrack, interpTrackInPlace, iterWarpSkybox,
+    MaterialFlags,
+    precompute_lerp_vec2, precompute_lerp_vec3, precompute_surface_vec3,
     readBitmap, readHFog, readLight, readLod, readMaterial, readMaterialAnim, readMesh,
     readNode, readOmni, readRotshape, readSkin, readSurface, readWarp,
+    Texture,
     TotemBitmap, TotemHFog, TotemLight, TotemLod, TotemMaterial, TotemMaterialAnim, TotemMesh,
     TotemNode, TotemOmni, TotemRotshape, TotemSkin, TotemSurfaceObject, TotemWarp
 } from "./types/index.js";
 import { colorCopyKeepAlpha, colorLerpKeepAlpha, DataStream, SIZE_VEC2, SIZE_VEC3 } from "./util.js";
-import * as CRC32 from "crc-32";
-import { DeviceProgram } from '../Program.js';
-import * as UI from '../ui.js';
-import { makeSolidColorTexture2D } from '../gfx/helpers/TextureHelpers.js';
-import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
-import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
 
 class RotfdProgram extends DeviceProgram {
     public static ub_SceneParams = 0;

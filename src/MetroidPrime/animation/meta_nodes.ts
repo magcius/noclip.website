@@ -7,7 +7,7 @@ import { CharAnimTime } from './char_anim_time.js';
 import { ANIM } from '../anim.js';
 import { AnimSource } from './data_source.js';
 import { AnimSourceReader, AnimSourceReaderBase, AnimSourceReaderCompressed } from './source_readers.js';
-import { randomRange, saturate } from '../../MathHelpers.js';
+import { randomRangeFloat, saturate } from '../../MathHelpers.js';
 import { ResourceSystem } from '../resource.js';
 import { EVNT } from '../evnt.js';
 
@@ -216,7 +216,7 @@ export class MetaAnimRandom implements IMetaAnim {
     }
 
     public GetAnimationTree(context: AnimSysContext): AnimTreeNode {
-        const r = randomRange(1, 100);
+        const r = randomRangeFloat(1, 100);
         let useRd: RandomData;
         for (let i = 0; i < this.randomData.length; ++i) {
             const rd = this.randomData[i];

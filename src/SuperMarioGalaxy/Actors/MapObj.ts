@@ -11,7 +11,10 @@ import { ColorKind, DrawParams, GXMaterialHelperGfx, MaterialParams } from '../.
 import { clamp, calcEulerAngleRotationFromSRTMatrix, computeModelMatrixR, computeModelMatrixSRT, computeModelMatrixT, getMatrixAxis, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, isNearZero, isNearZeroVec3, lerp, MathConstants, normToLength, quatFromEulerRadians, saturate, scaleMatrix, setMatrixTranslation, transformVec3Mat4w0, Vec3One, vec3SetAll, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from '../../MathHelpers.js';
 import { assert, assertExists, fallback, nArray } from '../../util.js';
 import * as Viewer from '../../viewer.js';
-import { addVelocityToGravity, attenuateVelocity, calcDistToCamera, calcFrontVec, calcGravity, calcGravityVector, calcMtxFromGravityAndZAxis, calcRailPointPos, calcRailPosAtCoord, calcUpVec, connectToSceneCollisionMapObj, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneEnvironment, connectToSceneEnvironmentStrongLight, connectToSceneIndirectMapObj, connectToSceneMapObj, connectToSceneMapObjMovement, connectToSceneMapObjStrongLight, connectToSceneNoShadowedMapObjStrongLight, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, getBckFrameMaxNamed, getBrkFrameMax, getCamPos, getCurrentRailPointArg0, getCurrentRailPointArg1, getCurrentRailPointNo, getEaseOutValue, getJointMtx, getJointMtxByName, getNextRailPointArg2, getPlayerPos, getRailDirection, getRailPointNum, getRailPos, getRailTotalLength, getRandomFloat, getRandomInt, getRandomVector, hideModel, initCollisionParts, initCollisionPartsAutoEqualScaleOne, initDefaultPos, invalidateCollisionPartsForActor, invalidateShadowAll, isBckExist, isBckOneTimeAndStopped, isBckStopped, isBtkExist, isBtpExist, isExistCollisionResource, isExistRail, isHiddenModel, isLoopRail, isNearPlayer, isRailReachedGoal, isSameDirection, isValidSwitchB, isValidSwitchDead, isZeroGravity, joinToGroupArray, listenStageSwitchOnOffA, listenStageSwitchOnOffB, makeMtxFrontNoSupportPos, makeMtxFrontSidePos, makeMtxFrontUpPos, makeMtxUpFrontPos, makeMtxUpNoSupportPos, moveCoord, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordAndTransToRailPoint, moveCoordToNearestPos, reboundVelocityFromCollision, reverseRailDirection, rotateVecDegree, setBckFrameAndStop, setBrkFrameAndStop, setBtkFrameAndStop, setBtpFrameAndStop, showModel, startBck, startBrk, startBtk, startBtp, startBva, syncStageSwitchAppear, tryStartAllAnim, turnVecToVecCosOnPlane, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, validateCollisionPartsForActor, validateShadowAll, vecKillElement, appearStarPieceToDirection, declareStarPiece, isValidSwitchAppear, connectToScene, calcSqDistToCamera, quatFromMat4, turnVecToVecCos, getBckFrameMax, setBvaFrameAndStop, getBvaFrameMax, isBckPlaying, setBckRate, makeAxisCrossPlane, initCollisionPartsAutoEqualScale, connectToSceneEnemy, makeMtxTRFromQuatVec, isValidSwitchA, isOnSwitchA, turnDirectionToTargetRadians, quatGetAxisX, quatGetAxisY, connectToClippedMapParts, blendMtx, drawSimpleModel, listenStageSwitchOnOffAppear, startAction, isActionEnd, stopBck, isOnSwitchB, calcDistanceToPlayer, getCamZdir, getCamYdir, getCamXdir } from '../ActorUtil.js';
+import { addVelocityToGravity, attenuateVelocity, calcDistToCamera, calcFrontVec, calcGravity, calcGravityVector, calcMtxFromGravityAndZAxis, calcRailPointPos, calcRailPosAtCoord, calcUpVec, connectToSceneCollisionMapObj, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneEnvironment, connectToSceneEnvironmentStrongLight, connectToSceneIndirectMapObj, connectToSceneMapObj, connectToSceneMapObjMovement, connectToSceneMapObjStrongLight, connectToSceneNoShadowedMapObjStrongLight, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, getBckFrameMaxNamed, getBrkFrameMax, getCamPos, getCurrentRailPointArg0, getCurrentRailPointArg1, getCurrentRailPointNo, getEaseOutValue, getJointMtx, getJointMtxByName, getNextRailPointArg2, getPlayerPos, getRailDirection, getRailPointNum, getRailPos, getRailTotalLength, hideModel, initCollisionParts, initCollisionPartsAutoEqualScaleOne, initDefaultPos, invalidateCollisionPartsForActor, invalidateShadowAll, isBckExist, isBckOneTimeAndStopped, isBckStopped, isBtkExist, isBtpExist, isExistCollisionResource, isExistRail, isHiddenModel, isLoopRail, isNearPlayer, isRailReachedGoal, isSameDirection, isValidSwitchB, isValidSwitchDead, isZeroGravity, joinToGroupArray, listenStageSwitchOnOffA, listenStageSwitchOnOffB, makeMtxFrontNoSupportPos, makeMtxFrontSidePos, makeMtxFrontUpPos, makeMtxUpFrontPos, makeMtxUpNoSupportPos, moveCoord, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordAndTransToRailPoint, moveCoordToNearestPos, reboundVelocityFromCollision, reverseRailDirection, rotateVecDegree, setBckFrameAndStop, setBrkFrameAndStop, setBtkFrameAndStop, setBtpFrameAndStop, showModel, startBck, startBrk, startBtk, startBtp, startBva, syncStageSwitchAppear, tryStartAllAnim, turnVecToVecCosOnPlane, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, validateCollisionPartsForActor, validateShadowAll, vecKillElement, appearStarPieceToDirection, declareStarPiece, isValidSwitchAppear, connectToScene, calcSqDistToCamera, quatFromMat4, turnVecToVecCos, getBckFrameMax, setBvaFrameAndStop, getBvaFrameMax, isBckPlaying, setBckRate, makeAxisCrossPlane, initCollisionPartsAutoEqualScale, connectToSceneEnemy, makeMtxTRFromQuatVec, isValidSwitchA, isOnSwitchA, turnDirectionToTargetRadians, quatGetAxisX, quatGetAxisY, connectToClippedMapParts, blendMtx, drawSimpleModel, listenStageSwitchOnOffAppear, startAction, isActionEnd, stopBck, isOnSwitchB, calcDistanceToPlayer, getCamZdir, getCamYdir, getCamXdir } from '../ActorUtil.js';
+import { randomRangeVec3 } from "../../MathHelpers.js";
+import { randomRangeInt } from '../../MathHelpers.js';
+import { randomRangeFloat } from '../../MathHelpers.js';
 import { CollisionParts, CollisionScaleType, createCollisionPartsFromLiveActor, getBindedNormal, getBindedPosition, getFirstPolyOnLineToMap, getGroundNormal, isBinded, isBindedGround, isBindedGroundDamageFire, isBindedRoof, isBindedWall, isOnGround, setBinderRadius, setBindTriangleFilter, tryCreateCollisionMoveLimit, validateCollisionParts } from '../Collision.js';
 import { registerDemoActionNerve, tryRegisterDemoCast } from '../Demo.js';
 import { LightType } from '../DrawBuffer.js';
@@ -1466,7 +1469,7 @@ class Rock extends LiveActor<RockNrv> {
             const rotateSpeed = (MathConstants.DEG_TO_RAD * 1386.0) / perim;
 
             if (isFirstStep(this)) {
-                this.rotatePhase = this.type === RockType.WanwanRollingMini ? getRandomFloat(0, MathConstants.TAU) : 0.0;
+                this.rotatePhase = this.type === RockType.WanwanRollingMini ? randomRangeFloat(0, MathConstants.TAU) : 0.0;
                 this.updateRotateX(this.rotatePhase - rotateSpeed * this.appearStep);
             }
 
@@ -3009,7 +3012,7 @@ export class AssemblyBlock extends LiveActor<AssemblyBlockNrv> {
         this.timer = fallback(getJMapInfoArg1(infoIter), 300.0);
         this.isTimed = getJMapInfoBool(fallback(getJMapInfoArg7(infoIter), -1));
 
-        this.idleRotateSpeed = (getRandomInt(0, 2) === 0 ? -0.1 : 0.1) * MathConstants.DEG_TO_RAD;
+        this.idleRotateSpeed = (randomRangeInt(0, 2) === 0 ? -0.1 : 0.1) * MathConstants.DEG_TO_RAD;
 
         if (this.isTimed)
             this.initEffectKeeper(sceneObjHolder, null);
@@ -3322,7 +3325,7 @@ export class StarPiece extends LiveActor<StarPieceNrv> {
         this.initModelManagerWithAnm(sceneObjHolder, this.name);
 
         if (starPieceColorIndex < 0 || starPieceColorIndex > 5)
-            starPieceColorIndex = getRandomInt(0, 6);
+            starPieceColorIndex = randomRangeInt(0, 6);
         this.setColor(starPieceColorIndex);
 
         connectToSceneNoSilhouettedMapObj(sceneObjHolder, this);
@@ -3472,7 +3475,7 @@ export class StarPiece extends LiveActor<StarPieceNrv> {
             this.trySetGravityAndFront(sceneObjHolder, this.gravityVector);
         }
 
-        getRandomVector(this.velocity, speedRange);
+        randomRangeVec3(this.velocity, speedRange);
         vec3.scaleAndAdd(this.velocity, this.velocity, this.gravityVector, -speedUp);
 
         this.launchCommon(sceneObjHolder, forceLandSpeed, forceEffectLight);
@@ -3482,7 +3485,7 @@ export class StarPiece extends LiveActor<StarPieceNrv> {
         vec3.copy(this.translation, translation);
         vec3.negate(this.gravityVector, direction);
         this.trySetGravityAndFront(sceneObjHolder, this.gravityVector);
-        getRandomVector(this.velocity, speedRange);
+        randomRangeVec3(this.velocity, speedRange);
         vec3.scaleAndAdd(this.velocity, this.velocity, direction, speedDirection);
 
         this.launchCommon(sceneObjHolder, forceLandSpeed, forceEffectLight);
@@ -4314,10 +4317,10 @@ export class SmallStone extends LiveActor {
             member.starPieceAppearAtTranslation = this.useGravity;
 
             if (this.type === SmallStoneType.CircleShell) {
-                member.rotation[1] = getRandomFloat(-MathConstants.TAU, MathConstants.TAU);
-                vec3SetAll(member.scale, getRandomFloat(0.75, 1.25));
+                member.rotation[1] = randomRangeFloat(-MathConstants.TAU, MathConstants.TAU);
+                vec3SetAll(member.scale, randomRangeFloat(0.75, 1.25));
                 startBva(member, 'Kind');
-                const whichKind = getRandomInt(0, getBvaFrameMax(member));
+                const whichKind = randomRangeInt(0, getBvaFrameMax(member));
                 setBvaFrameAndStop(member, whichKind);
                 member.breakEffectName = `Break${whichKind + 1}`;
             } else {

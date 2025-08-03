@@ -4,7 +4,9 @@ import { SMGSceneDescBase, ModelCache, SceneObjHolder, SMGRenderer } from "./Mai
 import { JMapInfoIter, createCsvParser } from './JMapInfo.js';
 import { JKRArchive } from '../Common/JSYSTEM/JKRArchive.js';
 import { NameObj, MovementType, GameBits } from './NameObj.js';
-import { connectToScene, getRandomInt, getRandomFloat, getRailTotalLength, vecKillElement } from './ActorUtil.js';
+import { connectToScene, getRailTotalLength, vecKillElement } from './ActorUtil.js';
+import { randomRangeInt } from '../MathHelpers.js';
+import { randomRangeFloat } from '../MathHelpers.js';
 import { vec3, mat4 } from 'gl-matrix';
 import { TicoRail } from './Actors/NPC.js';
 import { SceneContext } from '../SceneBase.js';
@@ -61,7 +63,7 @@ class DayInTheLifeOfALumaController extends NameObj {
 
     private pickNewTico(): void {
         while (true) {
-            this.ticoIndex = getRandomInt(0, this.ticos.length);
+            this.ticoIndex = randomRangeInt(0, this.ticos.length);
             const tico = this.ticos[this.ticoIndex];
 
             if (!tico.visibleAlive || !tico.visibleScenario)
@@ -76,7 +78,7 @@ class DayInTheLifeOfALumaController extends NameObj {
 
         const tico = this.ticos[this.ticoIndex];
         const isShortRail = getRailTotalLength(tico) < 10000;
-        this.currentZoom = isShortRail ? getRandomFloat(500, 2500) : getRandomFloat(1000, 3500);
+        this.currentZoom = isShortRail ? randomRangeFloat(500, 2500) : randomRangeFloat(1000, 3500);
         this.switchCounter = isShortRail ? 2000 : -1;
     }
 
@@ -117,7 +119,7 @@ class DayInTheLifeOfALumaController extends NameObj {
 
         if (tico.isStopped(0)) {
             // Each frame that we're stopped, there's a 1 in 200 chance that we switch.
-            const rnd = getRandomInt(0, 200);
+            const rnd = randomRangeInt(0, 200);
             if (rnd === 0)
                 this.pickNewTico();
         }

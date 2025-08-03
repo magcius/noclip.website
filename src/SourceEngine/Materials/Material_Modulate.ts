@@ -1,14 +1,13 @@
 
 import { TextureMapping } from "../../TextureHolder.js";
 import { setAttachmentStateSimple } from "../../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
-import { GfxMegaStateDescriptor, GfxBlendMode, GfxBlendFactor } from "../../gfx/platform/GfxPlatform.js";
-import { GfxProgram } from "../../gfx/platform/GfxPlatformImpl.js";
-import { GfxRendererLayer, makeSortKey, setSortKeyProgramKey, GfxRenderInst } from "../../gfx/render/GfxRenderInstManager.js";
+import { GfxBlendFactor, GfxBlendMode, GfxMegaStateDescriptor, GfxProgram } from "../../gfx/platform/GfxPlatform.js";
+import { GfxRendererLayer, GfxRenderInst, makeSortKey, setSortKeyProgramKey } from "../../gfx/render/GfxRenderInstManager.js";
 import { assert } from "../../util.js";
-import { SourceRenderContext } from "../Main.js";
+import type { SourceRenderContext } from "../Main.js";
 import { UberShaderInstanceBasic } from "../UberShader.js";
-import { MaterialShaderTemplateBase, BaseMaterial, AlphaBlendMode, MaterialUtil } from "./MaterialBase.js";
-import { MaterialCache } from "./MaterialCache.js";
+import { AlphaBlendMode, BaseMaterial, MaterialShaderTemplateBase, MaterialUtil } from "./MaterialBase.js";
+import type { MaterialCache } from "./MaterialCache.js";
 import * as P from "./MaterialParameters.js";
 
 export class ShaderTemplate_Modulate extends MaterialShaderTemplateBase {

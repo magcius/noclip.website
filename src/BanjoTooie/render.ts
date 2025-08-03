@@ -12,7 +12,7 @@ import { computeViewMatrix, computeViewMatrixSkybox } from '../Camera.js';
 import { TextureMapping } from '../TextureHolder.js';
 import { GfxRenderInstManager, setSortKeyDepthKey, setSortKeyDepth } from '../gfx/render/GfxRenderInstManager.js';
 import { VertexAnimationEffect, VertexEffectType, GeoNode, AnimationSetup, TextureAnimationSetup, GeoFlags, isSelector, isSorter, SoftwareLightingEffect } from '../BanjoKazooie/geo.js';
-import { clamp, lerp, MathConstants, Vec3Zero, Vec3UnitY, getMatrixAxisX, getMatrixAxisY, transformVec3Mat4w0, normToLength, transformVec3Mat4w1, randomRange } from '../MathHelpers.js';
+import { clamp, lerp, MathConstants, Vec3Zero, Vec3UnitY, getMatrixAxisX, getMatrixAxisY, transformVec3Mat4w0, normToLength, transformVec3Mat4w1, randomRangeFloat } from '../MathHelpers.js';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers.js';
 import { RenderData, F3DEX_Program, GeometryData, BoneAnimator, AnimationMode, AdjustableAnimationController } from '../BanjoKazooie/render.js';
 import { calcTextureMatrixFromRSPState } from '../Common/N64/RSP.js';
@@ -67,7 +67,7 @@ function updateVertexEffectState(effect: VertexAnimationEffect, timeInSeconds: n
                     effect.yPhase = 0;
                     // choose a random center, then activate nearby vertices
                     const center = effect.baseVertexValues[Math.floor(Math.random() * effect.baseVertexValues.length)];
-                    const radius = vec3.dist(effect.bbMax!, effect.bbMin!) * randomRange(1 / 8, 1 / 4);
+                    const radius = vec3.dist(effect.bbMax!, effect.bbMin!) * randomRangeFloat(1 / 8, 1 / 4);
                     for (let i = 0; i < effect.baseVertexValues.length; i++) {
                         if (Math.hypot(effect.baseVertexValues[i].x - center.x, effect.baseVertexValues[i].y - center.y, effect.baseVertexValues[i].z - center.z) < radius) {
                             const t = Math.random() + .2;

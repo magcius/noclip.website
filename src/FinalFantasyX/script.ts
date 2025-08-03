@@ -3,7 +3,7 @@ import { Actor, ActorFlags } from "./actor.js";
 import { BindingFlags, Emitter, EMITTER_DONE_TIMER, EmitterState, ParticleData, ParticleSystem } from "./particle.js";
 import { ActorPartInstance, BufferPoolManager, FFXToNoclip, LevelPartInstance, ShadowRenderer, TextureData } from "./render.js";
 import { mat4, ReadonlyVec3, vec3 } from "gl-matrix";
-import { angleDist, clamp, getMatrixTranslation, MathConstants, normToLengthAndAdd, randomRange, setMatrixTranslation, transformVec3Mat4w0, transformVec3Mat4w1, Vec3One } from "../MathHelpers.js";
+import { angleDist, clamp, getMatrixTranslation, MathConstants, normToLengthAndAdd, randomRangeFloat, setMatrixTranslation, transformVec3Mat4w0, transformVec3Mat4w1, Vec3One } from "../MathHelpers.js";
 import { assert, assertExists, hexzero, leftPad, nArray } from "../util.js";
 import { ViewerRenderInput } from "../viewer.js";
 import { getPointBspline } from "../Spline.js";
@@ -4536,7 +4536,7 @@ export class EventScript {
                 } else {
                     // can't pass to ourself, so only four options
                     // the AI actually selects from all five and if it picks the ball carrier chooses to shoot instead
-                    passIndex = randomRange(0, 4) | 0;
+                    passIndex = randomRangeFloat(0, 4) | 0;
                     if (passIndex >= ballHolder)
                         passIndex++;
                 }

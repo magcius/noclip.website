@@ -12,8 +12,7 @@ import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorH
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
 import { reverseDepthForCompareMode } from "../gfx/helpers/ReversedDepthHelpers.js";
 import { fillColor, fillMatrix4x3, fillVec4 } from "../gfx/helpers/UniformBufferHelpers.js";
-import { GfxBlendFactor, GfxBufferUsage, GfxCompareMode, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxMegaStateDescriptor, GfxMipFilterMode, GfxSamplerDescriptor, GfxTexFilterMode, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxWrapMode } from "../gfx/platform/GfxPlatform.js";
-import { GfxBuffer, GfxInputLayout, GfxProgram } from "../gfx/platform/GfxPlatformImpl.js";
+import { GfxBuffer, GfxInputLayout, GfxProgram, GfxBlendFactor, GfxBufferUsage, GfxCompareMode, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxMegaStateDescriptor, GfxMipFilterMode, GfxSamplerDescriptor, GfxTexFilterMode, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxWrapMode } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderInst, GfxRenderInstManager, makeDepthKey, setSortKeyTranslucentDepth } from "../gfx/render/GfxRenderInstManager.js";
 import { assert, assertExists, fallbackUndefined, nArray, readString, setBitFlagEnabled } from "../util.js";
 import { normalizeTexturePath } from "./ESM.js";

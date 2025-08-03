@@ -18,7 +18,7 @@ import { GfxrAttachmentSlot, GfxrRenderTargetDescription, GfxrTemporalTexture } 
 import { GfxRenderInstList } from "../gfx/render/GfxRenderInstManager.js";
 import { LevelParticles, ParticleData, ParticleSystem } from "./particle.js";
 import { drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk.js";
-import { Vec3UnitX, Vec3UnitY, Vec3UnitZ, clamp, getMatrixTranslation, invlerp, lerp, randomRange, setMatrixTranslation, transformVec3Mat4w0, transformVec3Mat4w1 } from "../MathHelpers.js";
+import { Vec3UnitX, Vec3UnitY, Vec3UnitZ, clamp, getMatrixTranslation, invlerp, lerp, randomRangeFloat, setMatrixTranslation, transformVec3Mat4w0, transformVec3Mat4w1 } from "../MathHelpers.js";
 import { Blue, Color, Cyan, Green, Magenta, OpaqueBlack, Red, White, Yellow, colorNewFromRGBA } from "../Color.js";
 import { MagicSceneRenderer } from "./magic.js";
 import { DebugDrawFlags } from "../gfx/helpers/DebugDraw.js";
@@ -566,9 +566,9 @@ export class FFXRenderer implements Viewer.SceneGfx {
                 piece.angles[0] = randomWithMinFrac(16, .5);
                 piece.angles[1] = randomWithMinFrac(16, .5);
                 piece.angles[2] = randomWithMinFrac(16, .5);
-                piece.speeds[0] = -48*this.shatter.dir + randomRange(16);
-                piece.speeds[1] = -512 + randomRange(128);
-                piece.speeds[2] = randomRange(64);
+                piece.speeds[0] = -48*this.shatter.dir + randomRangeFloat(16);
+                piece.speeds[1] = -512 + randomRangeFloat(128);
+                piece.speeds[2] = randomRangeFloat(64);
                 // in the game, the pieces actually cover more than the screen, so speed up a little
                 // vec3.scale(piece.speeds, piece.speeds, 1.2);
             }
@@ -577,7 +577,7 @@ export class FFXRenderer implements Viewer.SceneGfx {
 
             vec4.set(this.shatter.lightPos[0], 0, -256, 0, 320);
             vec4.set(this.shatter.lightPos[1], 128, -16, 0, 256);
-            this.shatter.lightPos[1][2] += randomRange(256);
+            this.shatter.lightPos[1][2] += randomRangeFloat(256);
         }
     }
 
@@ -748,14 +748,14 @@ export class FFXRenderer implements Viewer.SceneGfx {
             if (!m.visible) {
                 m.visible = true;
                 m.animation.setFromList(objects, 1, 8);
-                state.idleCounters[i] = randomRange(0, 4) | 0;
+                state.idleCounters[i] = randomRangeFloat(0, 4) | 0;
             }
             if (!m.animation.running) {
                 m.animation.defaultLoops = 1;
                 m.animation.nextTransition = -1;
                 if (state.idleCounters[i] === 0) {
                     m.animation.setFromList(objects, 1, 0x11);
-                    state.idleCounters[i] = randomRange(0, 4) | 0;
+                    state.idleCounters[i] = randomRangeFloat(0, 4) | 0;
                 } else {
                     m.animation.setFromList(objects, 1, 0x10); // can technically be overwritten
                     state.idleCounters[i]--;
@@ -1067,7 +1067,7 @@ export class FFXRenderer implements Viewer.SceneGfx {
             // const idx = randomRange(0, pools.pools[poolIndex].files.length);
             // this.shatter.enc = files[idx | 0].file;
         }
-        let random = randomRange(0, sum);
+        let random = randomRangeFloat(0, sum);
         for (let f of files) {
             if (random >= f.weight) {
                 random -= f.weight;

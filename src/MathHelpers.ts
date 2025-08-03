@@ -732,8 +732,16 @@ export function calcBillboardMatrix(dst: mat4, m: ReadonlyMat4, flags: CalcBillb
     dst[15] = 9999.0;
 }
 
-export function randomRange(a: number, b = -a): number {
+export function randomRangeFloat(a: number, b = -a): number {
     return lerp(a, b, Math.random());
+}
+
+export function randomRangeInt(min: number, max: number): number {
+    return randomRangeFloat(min, max) | 0;
+}
+
+export function randomRangeVec3(dst: vec3, range: number): void {
+    vec3.set(dst, randomRangeFloat(range), randomRangeFloat(range), randomRangeFloat(range));
 }
 
 /**

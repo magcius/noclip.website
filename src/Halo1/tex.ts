@@ -2,9 +2,9 @@
 import { BitmapFormat, HaloSceneManager, HaloBitmap, HaloBitmapReader } from "../../rust/pkg/noclip_support";
 import { TextureMapping } from "../TextureHolder.js";
 import { makeSolidColorTexture2D } from "../gfx/helpers/TextureHelpers.js";
-import { GfxDevice, GfxMipFilterMode, GfxTexFilterMode, GfxTextureDescriptor, GfxTextureDimension, GfxTextureUsage, GfxWrapMode } from "../gfx/platform/GfxPlatform.js";
+import { GfxTextureDimension, GfxTextureUsage, GfxMipFilterMode, GfxTexFilterMode, GfxWrapMode } from "../gfx/platform/GfxPlatform.js";
+import type { GfxDevice, GfxTextureDescriptor, GfxSampler, GfxTexture } from "../gfx/platform/GfxPlatform.js";
 import { GfxFormat } from "../gfx/platform/GfxPlatformFormat.js";
-import { GfxSampler, GfxTexture } from "../gfx/platform/GfxPlatformImpl.js";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { rust } from "../rustlib.js";

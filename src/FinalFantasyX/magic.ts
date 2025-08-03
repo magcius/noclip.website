@@ -3,7 +3,7 @@ import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { assert, assertExists, hexzero, nArray } from "../util.js";
 import { EMITTER_DONE_TIMER, EmitterSpec, ParticleData, ParticleRunner, ParticleSystem, trailArgsScratch } from "./particle.js";
 import { BranchInfo, NaiveInterpreter, Opcode as MOp, Register, parseOpcode } from "../PokemonSnap/mips.js";
-import { MathConstants, bitsAsFloat32, lerp, randomRange, setMatrixTranslation, transformVec3Mat4w0, transformVec3Mat4w1 } from "../MathHelpers.js";
+import { MathConstants, bitsAsFloat32, lerp, randomRangeFloat, setMatrixTranslation, transformVec3Mat4w0, transformVec3Mat4w1 } from "../MathHelpers.js";
 import { SceneGfx, ViewerRenderInput } from "../viewer.js";
 import { GfxBindingLayoutDescriptor, GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
@@ -1022,10 +1022,10 @@ const magicTable: MagicDescriptor[][] = [
                 let delay = 100;
                 for (let i = 0; i < 8; i++) {
                     const e = sys.emitters[i + 3];
-                    const scale = randomRange(1, 1.2);
+                    const scale = randomRangeFloat(1, 1.2);
                     vec3.set(e.scale, scale, scale, scale);
                     if (i > 0) {
-                        delay += randomRange(2, 6);
+                        delay += randomRangeFloat(2, 6);
                         e.waitTimer = delay;
                     }
                 }
@@ -1760,12 +1760,12 @@ const magicTable: MagicDescriptor[][] = [
                 if (flameState.times[index] <= t - 1) {
                     flameState.times[index] = t;
                     flameState.angles[index] = Math.random();
-                    flameState.scales[index] = .5 + randomRange(.25);
+                    flameState.scales[index] = .5 + randomRangeFloat(.25);
                     const tankerSys = assertExists(objects.actors[2]?.particles);
                     vec3.copy(flameState.pos[index], tankerSys.emitters[tankerSys.emitters.length - 1].pos);
-                    flameState.pos[index][0] += randomRange(2);
-                    flameState.pos[index][2] += randomRange(2);
-                    vec3.set(flameState.vel[index], randomRange(.1), randomRange(.2), randomRange(.1));
+                    flameState.pos[index][0] += randomRangeFloat(2);
+                    flameState.pos[index][2] += randomRangeFloat(2);
+                    vec3.set(flameState.vel[index], randomRangeFloat(.1), randomRangeFloat(.2), randomRangeFloat(.1));
                 }
                 for (let i = 0; i < MAX_FLAMES; i++) {
                     const dt = t - flameState.times[i];
@@ -2300,7 +2300,7 @@ export class MagicSceneRenderer implements SceneGfx {
         }
         // shuffle
         for (let dest = this.currShuffle.length - 1; dest > 0; dest--) {
-            const src = randomRange(0, dest + 1) | 0;
+            const src = randomRangeFloat(0, dest + 1) | 0;
             const tmp = this.currShuffle[src];
             this.currShuffle[src] = this.currShuffle[dest];
             this.currShuffle[dest] = tmp;

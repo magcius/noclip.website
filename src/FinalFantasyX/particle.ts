@@ -2,7 +2,7 @@ import { ReadonlyVec3, ReadonlyVec4, mat4, vec2, vec3, vec4 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import * as GS from "../Common/PS2/GS.js";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
-import { CalcBillboardFlags, calcBillboardMatrix, clamp, computeModelMatrixS, computeModelMatrixSRT, getMatrixAxisX, getMatrixAxisY, getMatrixTranslation, invlerp, lerp, MathConstants, normToLength, randomRange, scaleMatrix, setMatrixAxis, setMatrixTranslation, transformVec3Mat4w0, transformVec3Mat4w1, Vec3One, Vec3UnitZ, Vec3Zero } from "../MathHelpers.js";
+import { CalcBillboardFlags, calcBillboardMatrix, clamp, computeModelMatrixS, computeModelMatrixSRT, getMatrixAxisX, getMatrixAxisY, getMatrixTranslation, invlerp, lerp, MathConstants, normToLength, randomRangeFloat, scaleMatrix, setMatrixAxis, setMatrixTranslation, transformVec3Mat4w0, transformVec3Mat4w1, Vec3One, Vec3UnitZ, Vec3Zero } from "../MathHelpers.js";
 import { assert, assertExists, hexzero, nArray } from "../util.js";
 import { ViewerRenderInput } from "../viewer.js";
 import { Texture } from "./bin.js";
@@ -2730,10 +2730,10 @@ class Rain extends ScratchInstruction<RainData> {
                 for (let comp = 0; comp < 3; comp++) {
                     if (comp === badIndex)
                         continue;
-                    instScr3[comp] = posScratch[comp] + randomRange(currData.range);
+                    instScr3[comp] = posScratch[comp] + randomRangeFloat(currData.range);
                 }
                 scratch.set(i, instScr3);
-                scratch.data[4*i + 3] = currData.baseLength + randomRange(currData.lengthRange);
+                scratch.data[4*i + 3] = currData.baseLength + randomRangeFloat(currData.lengthRange);
                 randomCuboid(instScr4, currData.vel, currData.velRange, Distribution.UNIFORM);
                 scratch.set4(currData.count + i, instScr4);
             }

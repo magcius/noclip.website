@@ -5,7 +5,8 @@ import { quat, vec3, ReadonlyVec3, ReadonlyMat4 } from 'gl-matrix';
 import * as RARC from '../../Common/JSYSTEM/JKRArchive.js';
 import { isNearZero, MathConstants, quatFromEulerRadians, saturate, vec3SetAll, Vec3Zero } from '../../MathHelpers.js';
 import { assertExists, fallback, fallbackUndefined } from '../../util.js';
-import { adjustmentRailCoordSpeed, blendQuatUpFront, calcGravity, connectToSceneIndirectNpc, connectToSceneNpc, getNextRailPointNo, getRailCoordSpeed, getRailDirection, getRailPos, getRandomInt, initDefaultPos, isBckExist, isBckStopped, isExistRail, isRailReachedGoal, makeMtxTRFromQuatVec, makeQuatUpFront, moveCoordAndTransToNearestRailPos, moveRailRider, reverseRailDirection, setBckFrameAtRandom, setBrkFrameAndStop, startAction, startBck, startBckNoInterpole, startBrk, startBtk, startBva, tryStartAction, turnQuatYDirRad, useStageSwitchSleep, moveCoordToStartPos, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, moveCoordAndTransToRailStartPoint, isRailGoingToEnd, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, calcMtxFromGravityAndZAxis, tryStartBck, calcUpVec, rotateVecDegree, getBckFrameMax, moveCoordAndFollowTrans, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, MapObjConnector, useStageSwitchReadAppear, syncStageSwitchAppear, connectToSceneNpcMovement, quatGetAxisZ, isNearPlayer, getPlayerPos, turnDirectionToTargetRadians, getCurrentRailPointNo, getCurrentRailPointArg0, isBckLooped, calcVecToPlayer, isSameDirection, faceToVectorDeg, quatGetAxisY, makeAxisFrontUp, clampVecAngleDeg, connectToSceneMapObj, setBtkFrameAndStop, getJointMtxByName, calcFrontVec, stopBck, isActionLoopedOrStopped, isActionEnd } from '../ActorUtil.js';
+import { adjustmentRailCoordSpeed, blendQuatUpFront, calcGravity, connectToSceneIndirectNpc, connectToSceneNpc, getNextRailPointNo, getRailCoordSpeed, getRailDirection, getRailPos, initDefaultPos, isBckExist, isBckStopped, isExistRail, isRailReachedGoal, makeMtxTRFromQuatVec, makeQuatUpFront, moveCoordAndTransToNearestRailPos, moveRailRider, reverseRailDirection, setBckFrameAtRandom, setBrkFrameAndStop, startAction, startBck, startBckNoInterpole, startBrk, startBtk, startBva, tryStartAction, turnQuatYDirRad, useStageSwitchSleep, moveCoordToStartPos, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, moveCoordAndTransToRailStartPoint, isRailGoingToEnd, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, calcMtxFromGravityAndZAxis, tryStartBck, calcUpVec, rotateVecDegree, getBckFrameMax, moveCoordAndFollowTrans, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, MapObjConnector, useStageSwitchReadAppear, syncStageSwitchAppear, connectToSceneNpcMovement, quatGetAxisZ, isNearPlayer, getPlayerPos, turnDirectionToTargetRadians, getCurrentRailPointNo, getCurrentRailPointArg0, isBckLooped, calcVecToPlayer, isSameDirection, faceToVectorDeg, quatGetAxisY, makeAxisFrontUp, clampVecAngleDeg, connectToSceneMapObj, setBtkFrameAndStop, getJointMtxByName, calcFrontVec, stopBck, isActionLoopedOrStopped, isActionEnd } from '../ActorUtil.js';
+import { randomRangeInt } from '../../MathHelpers.js';
 import { getFirstPolyOnLineToMap, getFirstPolyOnLineToWaterSurface } from '../Collision.js';
 import { createCsvParser, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg4, getJMapInfoArg6, getJMapInfoArg7, iterChildObj, JMapInfoIter } from '../JMapInfo.js';
 import { isDead, LiveActor, ZoneAndLayer, MessageType } from '../LiveActor.js';
@@ -538,7 +539,7 @@ export class Rosetta extends NPCActor {
         if (currentNerve === RosettaNrv.Wait) {
             // Normally this is in control(), but we do this here for the easier interval tracking.
             if (isGreaterEqualStep(this, 300.0)) {
-                const v = getRandomInt(0, 2);
+                const v = randomRangeInt(0, 2);
                 if (v === 0)
                     this.talkParam.waitActionName = 'WaitA';
                 else if (v === 1)
@@ -617,7 +618,7 @@ export class Tico extends NPCActor<TicoNrv> {
         } else if (currentNerve === TicoNrv.Delight) {
             if (isFirstStep(this)) {
                 startAction(this, this.reactionName!);
-                resetAndForwardNode(sceneObjHolder, this.talkCtrl!, getRandomInt(0, 5));
+                resetAndForwardNode(sceneObjHolder, this.talkCtrl!, randomRangeInt(0, 5));
             }
 
             // tryTalkForce
@@ -1089,7 +1090,7 @@ export class Penguin extends NPCActor<PenguinNrv> {
 
         if (currentNerve === PenguinNrv.Wait) {
             if (isFirstStep(this)) {
-                this.diveCounter = getRandomInt(120, 300);
+                this.diveCounter = randomRangeInt(120, 300);
                 if (isExistRail(this))
                     onCalcShadow(this);
             }
@@ -1237,7 +1238,7 @@ export class TicoRail extends LiveActor<TicoRailNrv> {
         startBrk(this, 'ColorChange');
         setBrkFrameAndStop(this, colorChangeFrame);
 
-        const rnd = getRandomInt(0, 2);
+        const rnd = randomRangeInt(0, 2);
         if (rnd === 0)
             this.initNerve(TicoRailNrv.Wait);
         else
@@ -1279,7 +1280,7 @@ export class TicoRail extends LiveActor<TicoRailNrv> {
                 // Original game seems to have a bug where it checks the this sensor, rather than the other actor's sensor.
                 // So the isSameRailActor check will always pass.
                 if (this.isSameRailActor(thisSensor!.actor)) {
-                    const rnd = getRandomInt(0, 2);
+                    const rnd = randomRangeInt(0, 2);
                     if (rnd !== 0) {
                         const dist = calcDistanceVertical(this, otherSensor!.actor.translation);
                         if (dist <= 30) {
@@ -1307,7 +1308,7 @@ export class TicoRail extends LiveActor<TicoRailNrv> {
             return true;
 
         if (isGreaterStep(this, v)) {
-            if (getRandomInt(0, 300) === 0)
+            if (randomRangeInt(0, 300) === 0)
                 return true;
         }
 
@@ -1346,7 +1347,7 @@ export class TicoRail extends LiveActor<TicoRailNrv> {
             rotateVecDegree(this.direction, scratchVec3, turnAmt);
 
             if (isGreaterStep(this, 160)) {
-                const rnd = getRandomInt(0, 2);
+                const rnd = randomRangeInt(0, 2);
                 if (rnd === 0)
                     this.setNerve(TicoRailNrv.MoveSignAndTurn);
                 else
@@ -1420,7 +1421,7 @@ export class TicoRail extends LiveActor<TicoRailNrv> {
         } else if (currentNerve === TicoRailNrv.Talk) {
             if (isFirstStep(this))
                 startBck(this, `Talk`);
-            if (!isBckPlaying(this, `Reaction`) && getRandomInt(0, 60) === 0)
+            if (!isBckPlaying(this, `Reaction`) && randomRangeInt(0, 60) === 0)
                 startBckWithInterpole(this, `Reaction`, 5);
             if (isBckOneTimeAndStopped(this))
                 startBck(this, `Talk`);

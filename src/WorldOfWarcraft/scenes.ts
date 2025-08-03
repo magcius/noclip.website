@@ -1,11 +1,11 @@
 import { mat4, ReadonlyMat4, vec3, vec4 } from "gl-matrix";
+import type { ConvexHull } from "../../rust/pkg/noclip_support";
 import { CameraController } from "../Camera.js";
 import { AABB, Frustum } from "../Geometry.js";
-import { getMatrixTranslation, invlerp, lerp, projectionMatrixForFrustum, saturate, setMatrixTranslation, transformVec3Mat4w1, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from "../MathHelpers.js";
+import { getMatrixTranslation, invlerp, lerp, projectionMatrixForFrustum, setMatrixTranslation, transformVec3Mat4w1 } from "../MathHelpers.js";
 import { SceneContext } from "../SceneBase.js";
 import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
-import { GfxClipSpaceNearZ, GfxCullMode, GfxDevice } from "../gfx/platform/GfxPlatform.js";
-import { GfxProgram } from "../gfx/platform/GfxPlatformImpl.js";
+import { GfxClipSpaceNearZ, GfxCullMode, GfxDevice, GfxProgram } from "../gfx/platform/GfxPlatform.js";
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
 import { gfxRenderInstCompareNone, GfxRenderInstExecutionOrder, GfxRenderInstList } from "../gfx/render/GfxRenderInstManager.js";
@@ -16,8 +16,6 @@ import { AdtCoord, AdtData, Database, DoodadData, LazyWorldData, ModelData, WmoD
 import { BaseProgram, LoadingAdtProgram, ModelProgram, ParticleProgram, SkyboxProgram, TerrainProgram, WaterProgram, WmoProgram } from "./program.js";
 import { LoadingAdtRenderer, ModelRenderer, SkyboxRenderer, TerrainRenderer, WaterRenderer, WmoRenderer } from "./render.js";
 import { TextureCache } from "./tex.js";
-import type { ConvexHull } from "../../rust/pkg/noclip_support";
-import { Blue, Cyan, Green, Red } from "../Color.js";
 
 export const MAP_SIZE = 17066;
 

@@ -5,10 +5,11 @@ import { SceneObjHolder, getObjectName, SceneObj } from "./Main.js";
 import { LiveActor, ZoneAndLayer, getJMapInfoTrans, getJMapInfoRotate, isDead } from "./LiveActor.js";
 import { fallback, nArray, spliceBisectRight, assert } from "../util.js";
 import { computeModelMatrixR, computeModelMatrixSRT, MathConstants, getMatrixAxisX, getMatrixAxisY, getMatrixTranslation, isNearZeroVec3, isNearZero, getMatrixAxisZ, Vec3Zero, setMatrixTranslation, transformVec3Mat4w1, lerp, transformVec3Mat4w0 } from "../MathHelpers.js";
-import { calcMtxAxis, calcPerpendicFootToLineInside, getRandomFloat, useStageSwitchWriteA, useStageSwitchWriteB, isValidSwitchA, isValidSwitchB, connectToSceneMapObjMovement, useStageSwitchSleep, isOnSwitchA, isOnSwitchB, makeAxisVerticalZX, makeMtxUpNoSupportPos, vecKillElement } from "./ActorUtil.js";
+import { calcMtxAxis, calcPerpendicFootToLineInside, useStageSwitchWriteA, useStageSwitchWriteB, isValidSwitchA, isValidSwitchB, connectToSceneMapObjMovement, useStageSwitchSleep, isOnSwitchA, isOnSwitchB, makeAxisVerticalZX, makeMtxUpNoSupportPos, vecKillElement } from "./ActorUtil.js";
+import { randomRangeFloat } from '../MathHelpers.js';
 import { NameObj } from "./NameObj.js";
 import { ViewerRenderInput } from "../viewer.js";
-import { drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceVector, getDebugOverlayCanvas2D } from "../DebugJunk.js";
+import { drawWorldSpaceLine, drawWorldSpaceVector, getDebugOverlayCanvas2D } from "../DebugJunk.js";
 import { Red, Green } from "../Color.js";
 import { RailRider } from "./RailRider.js";
 import { addBaseMatrixFollower, BaseMatrixFollower } from "./Follow.js";
@@ -231,16 +232,16 @@ function settingGravityParamFromJMap(gravity: PlanetGravity, infoIter: JMapInfoI
 }
 
 function generateRandomPointInMatrix(dst: vec3, m: mat4, mag: number = 1): void {
-    dst[0] = getRandomFloat(-mag, mag);
-    dst[1] = getRandomFloat(-mag, mag);
-    dst[2] = getRandomFloat(-mag, mag);
+    dst[0] = randomRangeFloat(-mag, mag);
+    dst[1] = randomRangeFloat(-mag, mag);
+    dst[2] = randomRangeFloat(-mag, mag);
     vec3.transformMat4(dst, dst, m);
 }
 
 function generateRandomPointInCylinder(dst: vec3, pos: ReadonlyVec3, up: ReadonlyVec3, r: number, h: number): void {
-    const theta = getRandomFloat(0, MathConstants.TAU), mag = getRandomFloat(0, r);
+    const theta = randomRangeFloat(0, MathConstants.TAU), mag = randomRangeFloat(0, r);
     dst[0] = Math.cos(theta) * mag;
-    dst[1] = getRandomFloat(0, h);
+    dst[1] = randomRangeFloat(0, h);
     dst[2] = Math.sin(theta) * mag;
     makeMtxUpNoSupportPos(scratchMatrix, up, pos);
     transformVec3Mat4w1(dst, scratchMatrix, dst);
@@ -394,9 +395,9 @@ class ParallelGravity extends PlanetGravity {
             generateRandomPointInCylinder(dst, this.globalPos, this.globalDir, this.cylinderRadius, this.cylinderHeight);
         } else {
             const range = this.range >= 0.0 ? this.range : 50000.0;
-            dst[0] = this.globalPos[0] + getRandomFloat(-range, range);
-            dst[1] = this.globalPos[1] + getRandomFloat(-range, range);
-            dst[2] = this.globalPos[2] + getRandomFloat(-range, range);
+            dst[0] = this.globalPos[0] + randomRangeFloat(-range, range);
+            dst[1] = this.globalPos[1] + randomRangeFloat(-range, range);
+            dst[2] = this.globalPos[2] + randomRangeFloat(-range, range);
         }
     }
 }
@@ -796,9 +797,9 @@ class PointGravity extends PlanetGravity {
     }
 
     protected generateOwnRandomPoint(dst: vec3): void {
-        dst[0] = this.globalPos[0] + getRandomFloat(-this.range, this.range);
-        dst[1] = this.globalPos[1] + getRandomFloat(-this.range, this.range);
-        dst[2] = this.globalPos[2] + getRandomFloat(-this.range, this.range);
+        dst[0] = this.globalPos[0] + randomRangeFloat(-this.range, this.range);
+        dst[1] = this.globalPos[1] + randomRangeFloat(-this.range, this.range);
+        dst[2] = this.globalPos[2] + randomRangeFloat(-this.range, this.range);
     }
 
     public override updateMtx(parentMtx: ReadonlyMat4): void {
@@ -900,9 +901,9 @@ class SegmentGravity extends PlanetGravity {
     protected generateOwnRandomPoint(dst: vec3): void {
         vec3.lerp(dst, this.globalGravityPoints[0], this.globalGravityPoints[1], Math.random());
 
-        dst[0] += getRandomFloat(-this.range, this.range);
-        dst[1] += getRandomFloat(-this.range, this.range);
-        dst[2] += getRandomFloat(-this.range, this.range);
+        dst[0] += randomRangeFloat(-this.range, this.range);
+        dst[1] += randomRangeFloat(-this.range, this.range);
+        dst[2] += randomRangeFloat(-this.range, this.range);
     }
 }
 
@@ -1010,9 +1011,9 @@ class DiskGravity extends PlanetGravity {
     }
 
     protected generateOwnRandomPoint(dst: vec3): void {
-        dst[0] = this.globalPos[0] + getRandomFloat(-this.range, this.range);
-        dst[1] = this.globalPos[1] + getRandomFloat(-this.range, this.range);
-        dst[2] = this.globalPos[2] + getRandomFloat(-this.range, this.range);
+        dst[0] = this.globalPos[0] + randomRangeFloat(-this.range, this.range);
+        dst[1] = this.globalPos[1] + randomRangeFloat(-this.range, this.range);
+        dst[2] = this.globalPos[2] + randomRangeFloat(-this.range, this.range);
     }
 
     public override drawDebug(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
@@ -1116,9 +1117,9 @@ class DiskTorusGravity extends PlanetGravity {
     }
 
     protected generateOwnRandomPoint(dst: vec3): void {
-        dst[0] = this.globalPos[0] + getRandomFloat(-this.range, this.range);
-        dst[1] = this.globalPos[1] + getRandomFloat(-this.range, this.range);
-        dst[2] = this.globalPos[2] + getRandomFloat(-this.range, this.range);
+        dst[0] = this.globalPos[0] + randomRangeFloat(-this.range, this.range);
+        dst[1] = this.globalPos[1] + randomRangeFloat(-this.range, this.range);
+        dst[2] = this.globalPos[2] + randomRangeFloat(-this.range, this.range);
     }
 }
 

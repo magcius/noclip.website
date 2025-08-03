@@ -13,7 +13,8 @@ import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { lerp, saturate, computeModelMatrixS } from "../MathHelpers.js";
 import * as GX from "../gx/gx_enum.js";
 import { GfxDevice, GfxFormat, GfxBufferUsage, GfxBuffer, GfxVertexBufferDescriptor } from "../gfx/platform/GfxPlatform.js";
-import { getRandomFloat, connectToScene, isHiddenModel, isValidDraw } from "./ActorUtil.js";
+import { connectToScene, isHiddenModel, isValidDraw } from "./ActorUtil.js";
+import { randomRangeFloat } from '../MathHelpers.js';
 import { TextureMapping } from "../TextureHolder.js";
 import { Shape } from "../Common/JSYSTEM/J3D/J3DLoader.js";
 import { GXShapeHelperGfx, GXMaterialHelperGfx, MaterialParams, DrawParams, ColorKind } from "../gx/gx_render.js";
@@ -189,8 +190,8 @@ function createFurDensityMap(mapDensity: ReadonlyVec4, mapThickness: ReadonlyVec
 
         const numPoints = (width * height * layerDensity);
         for (let j = 0; j < numPoints; j++) {
-            const x = getRandomFloat(0.0, width) | 0;
-            const y = getRandomFloat(0.0, height) | 0;
+            const x = randomRangeFloat(0.0, width) | 0;
+            const y = randomRangeFloat(0.0, height) | 0;
 
             data[(y * width + x) * 2 + 0] = 0xFF * layerThickness;
             data[(y * width + x) * 2 + 1] = 0xFF - layerMixingRatio;

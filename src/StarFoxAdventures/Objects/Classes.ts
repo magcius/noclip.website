@@ -4,7 +4,7 @@ import { LGTPointLgt, LGTProjecte, Torch, Torch2 } from './Lights.js';
 import { ObjectInstance } from '../objects.js';
 import { angle16ToRads, readUint32 } from '../util.js';
 import { World } from '../world.js';
-import { getRandomInt } from '../../SuperMarioGalaxy/ActorUtil.js';
+import { randomRangeInt } from '../../MathHelpers.js';
 import { MaterialRenderContext, StandardMaterial } from '../materials.js';
 import * as GX from '../../gx/gx_enum.js';
 import { SFAClass } from './SFAClass.js';
@@ -552,7 +552,7 @@ export const SFA_CLASSES: {[num: number]: typeof SFAClass} = {
             let scaleParam = data.getInt16(0x1a);
             if (scaleParam === 0)
                 scaleParam = 500;
-            obj.scale = 1 / (scaleParam / getRandomInt(600, 1000));
+            obj.scale = 1 / (scaleParam / randomRangeInt(600, 1000));
         }
     },
     [551]: class extends SFAClass { // VFP_lavasta
@@ -696,9 +696,9 @@ export const SFA_CLASSES: {[num: number]: typeof SFAClass} = {
     [679]: class extends SFAClass { // ARWProximit
         constructor(obj: ObjectInstance, data: DataView) {
             super(obj, data);
-            obj.yaw = angle16ToRads(getRandomInt(0, 0xffff));
-            obj.pitch = angle16ToRads(getRandomInt(0, 0xffff));
-            obj.roll = angle16ToRads(getRandomInt(0, 0xffff));
+            obj.yaw = angle16ToRads(randomRangeInt(0, 0xffff));
+            obj.pitch = angle16ToRads(randomRangeInt(0, 0xffff));
+            obj.roll = angle16ToRads(randomRangeInt(0, 0xffff));
         }
     },
     [681]: LGTPointLgt, // LGTPointLgt

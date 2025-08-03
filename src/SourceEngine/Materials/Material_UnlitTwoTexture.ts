@@ -1,11 +1,10 @@
 
 import { TextureMapping } from "../../TextureHolder.js";
-import { GfxMegaStateDescriptor } from "../../gfx/platform/GfxPlatform.js";
-import { GfxProgram } from "../../gfx/platform/GfxPlatformImpl.js";
+import { GfxMegaStateDescriptor, GfxProgram } from "../../gfx/platform/GfxPlatform.js";
 import { GfxRendererLayer, makeSortKey, setSortKeyProgramKey, GfxRenderInst } from "../../gfx/render/GfxRenderInstManager.js";
 import { assert } from "../../util.js";
-import { SourceRenderContext } from "../Main.js";
-import { MaterialCache } from "./MaterialCache.js";
+import type { SourceRenderContext } from "../Main.js";
+import type { MaterialCache } from "./MaterialCache.js";
 import { UberShaderInstanceBasic } from "../UberShader.js";
 import { MaterialShaderTemplateBase, BaseMaterial, MaterialUtil } from "./MaterialBase.js";
 import * as P from "./MaterialParameters.js";

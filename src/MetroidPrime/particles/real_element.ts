@@ -1,6 +1,6 @@
 import { defaultParticleGlobals, GetBool, NumberHolder, ParticleGlobals } from './base_generator.js';
 import { InputStream } from '../stream.js';
-import { clamp, lerp, MathConstants, randomRange } from '../../MathHelpers.js';
+import { clamp, lerp, MathConstants, randomRangeFloat } from '../../MathHelpers.js';
 import { GetIntElement, IntElement } from './int_element.js';
 import { GetVectorElement, VectorElement } from './vector_element.js';
 import { ColorElement, GetColorElement } from './color_element.js';
@@ -138,7 +138,7 @@ export class REInitialRandom implements RealElement {
             const max = { value: 0 };
             this.min.GetValue(frame, globals, min);
             this.max.GetValue(frame, globals, max);
-            valOut.value = randomRange(min.value, max.value);
+            valOut.value = randomRangeFloat(min.value, max.value);
         }
         return false;
     }
@@ -155,7 +155,7 @@ export class RERandom implements RealElement {
         const max = { value: 0 };
         this.min.GetValue(frame, globals, min);
         this.max.GetValue(frame, globals, max);
-        valOut.value = randomRange(min.value, max.value);
+        valOut.value = randomRangeFloat(min.value, max.value);
         return false;
     }
 

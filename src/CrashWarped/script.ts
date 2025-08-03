@@ -1,6 +1,6 @@
 import { DatabaseKey, GOOL, LevelData, MeshFlags, ModelInfo, ModelType, ObjectPlacement, SeriesDatabase, decodeChunkName } from "./bin.js";
 import { assert, assertExists, nArray } from "../util.js";
-import { clamp, getMatrixTranslation, lerp, MathConstants, normToLength, randomRange, setMatrixTranslation, transformVec3Mat4w1, Vec3One, Vec3Zero } from "../MathHelpers.js";
+import { clamp, getMatrixTranslation, lerp, MathConstants, normToLength, randomRangeFloat, setMatrixTranslation, transformVec3Mat4w1, Vec3One, Vec3Zero } from "../MathHelpers.js";
 import { ViewerRenderInput } from "../viewer.js";
 import { mat4, ReadonlyVec3, vec3 } from "gl-matrix";
 import { RenderParams as RenderParams, ModelData, QuadListData, renderMesh, renderQuadList, WarpTextureRemap, RenderMode, RenderGlobals, renderSprite } from "./render.js";
@@ -234,7 +234,7 @@ export function initGlobals(id: number, completed: boolean, globals: number[]): 
     globals[0x12] = 7;
     globals[0x5F] = 0x2A;
     globals[0xA] = 0x100;
-    globals[GlobalVariable.BOSS_CUTSCENE] = randomRange(1, 21) | 0;
+    globals[GlobalVariable.BOSS_CUTSCENE] = randomRangeFloat(1, 21) | 0;
     globals[0x61] = buildPointer(PointerBase.OBJECT, 0); // not sure what this is or how it gets set
 }
 
@@ -2208,7 +2208,7 @@ class InstructionExecutor implements InstructionHandler<ExecResult> {
             case Opcode.MOD: result = left % right; break;
             case Opcode.XOR: result = left ^ right; break;
             case Opcode.HAS_BITS: result = bool((left & right) === right); break;
-            case Opcode.RAND: result = randomRange(left, right) | 0; break;
+            case Opcode.RAND: result = randomRangeFloat(left, right) | 0; break;
             case Opcode.SHIFT: {
                 if (right >= 0)
                     result = left << right;
