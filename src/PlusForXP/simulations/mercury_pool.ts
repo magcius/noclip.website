@@ -1,11 +1,12 @@
+
 import { vec2, vec3 } from "gl-matrix";
-import { ViewerRenderInput } from "../../viewer";
-import { SceneNode, Simulation } from "../types";
-import { getDescendants } from "../util";
-import { GfxBuffer, GfxDevice } from "../../gfx/platform/GfxPlatform";
-import { SCX } from "../scx/types";
-import { World } from "../world";
-import { GfxRenderHelper } from "../../gfx/render/GfxRenderHelper";
+import { GfxBuffer, GfxDevice } from "../../gfx/platform/GfxPlatform.js";
+import { GfxRenderHelper } from "../../gfx/render/GfxRenderHelper.js";
+import { ViewerRenderInput } from "../../viewer.js";
+import { SCX } from "../scx/types.js";
+import { SceneNode, Simulation } from "../types.js";
+import { getDescendants } from "../util.js";
+import { World } from "../world.js";
 
 const numSegments = 32;
 const numVertexRows = numSegments + 1;

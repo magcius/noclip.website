@@ -1,3 +1,6 @@
+
+import { mat4, quat, vec3, vec4 } from "gl-matrix";
+import { Camera } from "../Camera.js";
 import {
     GfxBuffer,
     GfxBufferFrequencyHint,
@@ -8,13 +11,11 @@ import {
     GfxTextureDimension,
     GfxTextureUsage,
 } from "../gfx/platform/GfxPlatform";
-import { SCX } from "./scx/types";
-import { mat4, quat, vec3, vec4 } from "gl-matrix";
-import { Camera } from "../Camera";
-import { bakeLights } from "./bake_lights";
-import { WorldData, Texture, EnvironmentMap, SceneNode, Material } from "./types";
-import { Animation } from "./animation";
-import { createSceneNode, createDataBuffer, updateNodeTransform, reparent, cloneTransform } from "./util";
+import { Animation } from "./animation.js";
+import { bakeLights } from "./bake_lights.js";
+import { SCX } from "./scx/types.js";
+import { EnvironmentMap, Material, SceneNode, Texture, WorldData } from "./types.js";
+import { cloneTransform, createDataBuffer, createSceneNode, reparent, updateNodeTransform } from "./util.js";
 
 export type ComputedEnvironmentMap = {
     texture: GfxTexture;
@@ -292,16 +293,16 @@ export class World {
         }
         this.materialsByName.clear();
         for (const node of this.sceneNodesByName.values()) {
-            if (node.meshes === null || node.meshes.length === 0) {
-                continue;
-            }
-            for (const { buffer } of node.meshes[0].vertexAttributes) {
-                device.destroyBuffer(buffer);
-            }
-            for (const mesh of node.meshes) {
+            for (let i = 0; i < node.meshes.length; i++) {
+                const mesh = node.meshes[i];
+                for (let j = 0; j < mesh.vertexAttributes.length; j++)
+                    device.destroyBuffer(mesh.vertexAttributes[j].buffer);
                 device.destroyBuffer(mesh.indexBufferDescriptor.buffer);
             }
         }
+        device.destroyTexture(this.defaultTexture);
+        for (const tex of this.environmentMapsByID.values())
+            device.destroyTexture(tex.texture);
         this.sceneNodesByName.clear();
         this.renderableNodes.length = 0;
         this.camerasByName.clear();

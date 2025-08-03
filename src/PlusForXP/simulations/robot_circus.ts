@@ -1,10 +1,11 @@
-import { ViewerRenderInput } from "../../viewer";
-import { Simulation, SceneNode } from "../types";
+
 import { vec3 } from "gl-matrix";
-import { getDescendants, reparent } from "../util";
-import { GfxDevice } from "../../gfx/platform/GfxPlatform";
-import { World } from "../world";
-import { GfxRenderHelper } from "../../gfx/render/GfxRenderHelper";
+import { GfxDevice } from "../../gfx/platform/GfxPlatform.js";
+import { GfxRenderHelper } from "../../gfx/render/GfxRenderHelper.js";
+import { ViewerRenderInput } from "../../viewer.js";
+import { SceneNode, Simulation } from "../types.js";
+import { getDescendants, reparent } from "../util.js";
+import { World } from "../world.js";
 
 export default class RobotCircus extends Simulation {
     private isTech: boolean;

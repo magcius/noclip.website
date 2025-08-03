@@ -1,3 +1,4 @@
+
 export enum Token {
     PushScope = 0x7b,
     PopScope = 0x7d,

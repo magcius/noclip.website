@@ -1,6 +1,7 @@
+
 import { mat3, mat4, vec3 } from "gl-matrix";
-import { SCX } from "./scx/types";
-import { Vec3One } from "../MathHelpers";
+import { SCX } from "./scx/types.js";
+import { Vec3One } from "../MathHelpers.js";
 
 export const bakeLights = (mesh: SCX.Mesh, shader: SCX.Shader, worldTransform: mat4, lights: SCX.Light[]): Float32Array => {
     const useShaderColors = shader.luminance === 0 && (shader.blend < 1 || shader.texture === null);

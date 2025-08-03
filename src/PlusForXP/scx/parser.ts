@@ -1,8 +1,9 @@
+
 import { vec3 } from "gl-matrix";
-import ArrayBufferSlice from "../../ArrayBufferSlice";
-import { SCX } from "./types";
-import { Token, Numeric } from "./tokens";
-import { assert } from "../../util";
+import ArrayBufferSlice from "../../ArrayBufferSlice.js";
+import { assert } from "../../util.js";
+import { Numeric, Token } from "./tokens.js";
+import { SCX } from "./types.js";
 
 type DataViewCall = (view: DataView, byteOffset: number) => number;
 

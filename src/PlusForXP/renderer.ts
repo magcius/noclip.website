@@ -1,36 +1,35 @@
+
+import { mat4, vec3 } from "gl-matrix";
+import { CameraController } from "../Camera.js";
+import { colorNewFromRGBA } from "../Color.js";
+import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
+import { makeAttachmentClearDescriptor, makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
+import { fillMatrix4x4, fillVec4 } from "../gfx/helpers/UniformBufferHelpers.js";
 import {
     GfxBindingLayoutDescriptor,
-    GfxBlendFactor,
-    GfxBlendMode,
     GfxCompareMode,
-    GfxCullMode,
     GfxDevice,
     GfxFormat,
     GfxInputLayout,
+    GfxMipFilterMode,
     GfxProgram,
     GfxRenderProgramDescriptor,
     GfxSampler,
+    GfxTexFilterMode,
     GfxVertexBufferFrequency,
-} from "../gfx/platform/GfxPlatform";
-import { TextureBase, TextureHolder } from "../TextureHolder";
-import { SCX } from "./scx/types";
-import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
-import { GfxRendererLayer, GfxRenderInstList, GfxRenderInstManager, makeSortKey } from "../gfx/render/GfxRenderInstManager";
-import { GfxProgramObjBag, preprocessProgramObj_GLSL } from "../gfx/shaderc/GfxShaderCompiler";
-import { fillMatrix4x4, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
-import { makeAttachmentClearDescriptor, makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers";
-import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph";
-import { colorNewFromRGBA } from "../Color";
-import { mat4, vec3 } from "gl-matrix";
-import { GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode } from "../gfx/platform/GfxPlatform";
-import { CameraController } from "../Camera";
-import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
-import { SceneNode, Simulation, WorldData } from "./types";
-import { SceneGfx, ViewerRenderInput } from "../viewer";
-import * as UI from "../ui";
-import { updateNodeTransform } from "./util";
-import { World } from "./world";
-import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary";
+    GfxWrapMode
+} from "../gfx/platform/GfxPlatform.js";
+import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
+import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
+import { GfxRendererLayer, GfxRenderInstList, GfxRenderInstManager, makeSortKey } from "../gfx/render/GfxRenderInstManager.js";
+import { GfxProgramObjBag, preprocessProgramObj_GLSL } from "../gfx/shaderc/GfxShaderCompiler.js";
+import { TextureBase, TextureHolder } from "../TextureHolder.js";
+import * as UI from "../ui.js";
+import { SceneGfx, ViewerRenderInput } from "../viewer.js";
+import { SCX } from "./scx/types.js";
+import { SceneNode, Simulation, WorldData } from "./types.js";
+import { updateNodeTransform } from "./util.js";
+import { World } from "./world.js";
 
 class StandardProgram implements GfxProgramObjBag {
     public static bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 2, numSamplers: 2 }];
@@ -157,15 +156,9 @@ export default class Renderer implements SceneGfx {
     }
 
     private setupGraphics(device: GfxDevice) {
-        setAttachmentStateSimple(
-            { cullMode: GfxCullMode.Back },
-            {
-                blendMode: GfxBlendMode.Add,
-                blendSrcFactor: GfxBlendFactor.SrcAlpha,
-                blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
-            },
-        );
-        this.inputLayout = device.createInputLayout({
+        this.renderHelper = new GfxRenderHelper(device);
+        const cache = this.renderHelper.renderCache;
+        this.inputLayout = cache.createInputLayout({
             indexBufferFormat: GfxFormat.U32_R,
             vertexAttributeDescriptors: [
                 { location: 0, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0 }, // position
@@ -180,9 +173,8 @@ export default class Renderer implements SceneGfx {
                 { byteStride: 2 * 0x04, frequency: GfxVertexBufferFrequency.PerVertex },
             ],
         });
-        this.renderHelper = new GfxRenderHelper(device);
         this.program = preprocessProgramObj_GLSL(device, new StandardProgram());
-        this.gfxProgram = device.createProgram(this.program);
+        this.gfxProgram = cache.createProgramSimple(this.program);
         const samplerDescriptor = {
             wrapS: GfxWrapMode.Repeat,
             wrapT: GfxWrapMode.Repeat,
@@ -190,8 +182,8 @@ export default class Renderer implements SceneGfx {
             magFilter: GfxTexFilterMode.Bilinear,
             mipFilter: GfxMipFilterMode.NoMip,
         };
-        this.diffuseSampler = device.createSampler(samplerDescriptor);
-        this.envSampler = device.createSampler(samplerDescriptor);
+        this.diffuseSampler = cache.createSampler(samplerDescriptor);
+        this.envSampler = cache.createSampler(samplerDescriptor);
     }
 
     public adjustCameraController(c: CameraController) {
@@ -287,47 +279,46 @@ export default class Renderer implements SceneGfx {
 
         const cameraViewMatrix: mat4 = mat4.create();
 
-        updateCameraParams: {
-            let cameraOffset = template.allocateUniformBuffer(StandardProgram.ub_CameraParams, 16 * 3 /*3 Mat4x4*/);
-            const cameraBuffer = template.mapUniformBufferF32(StandardProgram.ub_CameraParams);
+        let cameraOffset = template.allocateUniformBuffer(StandardProgram.ub_CameraParams, 16 * 3 /*3 Mat4x4*/);
+        const cameraBuffer = template.mapUniformBufferF32(StandardProgram.ub_CameraParams);
 
-            this.lastViewerCameraMatrix ??= [...viewerInput.camera.worldMatrix].join("_");
+        this.lastViewerCameraMatrix ??= [...viewerInput.camera.worldMatrix].join("_");
 
-            if (this.activeCameraAddress !== null) {
-                const camera: SCX.Camera = this.world.camerasByName.get(this.activeCameraAddress)!;
-                const cameraNode: SceneNode = this.world.sceneNodesByName.get(this.activeCameraAddress)!;
+        if (this.activeCameraAddress !== null) {
+            const camera: SCX.Camera = this.world.camerasByName.get(this.activeCameraAddress)!;
+            const cameraNode: SceneNode = this.world.sceneNodesByName.get(this.activeCameraAddress)!;
 
-                this.world.customCamera.clipSpaceNearZ = viewerInput.camera.clipSpaceNearZ;
-                this.world.customCamera.setPerspective(camera.fov, viewerInput.camera.aspect, camera.nearclip, camera.farclip);
+            this.world.customCamera.clipSpaceNearZ = viewerInput.camera.clipSpaceNearZ;
+            this.world.customCamera.setPerspective(camera.fov, viewerInput.camera.aspect, camera.nearclip, camera.farclip);
 
-                const cameraWorldPos = mat4.getTranslation(vec3.create(), cameraNode.worldTransform);
-                const targetWorldPos = vec3.transformMat4(vec3.create(), camera.targetpos, this.world.rootNode.worldTransform);
-                const relativePos = vec3.sub(vec3.create(), targetWorldPos, cameraWorldPos);
-                mat4.fromTranslation(this.scratchViewMatrix, cameraWorldPos);
-                mat4.rotateY(this.scratchViewMatrix, this.scratchViewMatrix, -Math.PI / 2 - Math.atan2(relativePos[2], relativePos[0]));
-                mat4.rotateX(this.scratchViewMatrix, this.scratchViewMatrix, Math.atan2(relativePos[1], Math.sqrt(relativePos[0] ** 2 + relativePos[2] ** 2)));
+            const cameraWorldPos = mat4.getTranslation(vec3.create(), cameraNode.worldTransform);
+            const targetWorldPos = vec3.transformMat4(vec3.create(), camera.targetpos, this.world.rootNode.worldTransform);
+            const relativePos = vec3.sub(vec3.create(), targetWorldPos, cameraWorldPos);
+            mat4.fromTranslation(this.scratchViewMatrix, cameraWorldPos);
+            mat4.rotateY(this.scratchViewMatrix, this.scratchViewMatrix, -Math.PI / 2 - Math.atan2(relativePos[2], relativePos[0]));
+            mat4.rotateX(this.scratchViewMatrix, this.scratchViewMatrix, Math.atan2(relativePos[1], Math.sqrt(relativePos[0] ** 2 + relativePos[2] ** 2)));
 
-                if (this.lastViewerCameraMatrix !== [...viewerInput.camera.worldMatrix].join("_")) {
-                    this.activeCamera = 0;
-                    this.cameraSelect.selectItem(this.activeCamera);
-                    mat4.copy(viewerInput.camera.worldMatrix, this.scratchViewMatrix);
-                    viewerInput.camera.worldMatrixUpdated();
-                    cameraOffset += fillMatrix4x4(cameraBuffer, cameraOffset, viewerInput.camera.projectionMatrix);
-                } else {
-                    cameraOffset += fillMatrix4x4(cameraBuffer, cameraOffset, this.world.customCamera.projectionMatrix);
-                }
-                mat4.invert(this.scratchViewMatrix, this.scratchViewMatrix);
-                cameraOffset += fillMatrix4x4(cameraBuffer, cameraOffset, this.scratchViewMatrix);
-                mat4.copy(cameraViewMatrix, this.scratchViewMatrix);
-            } else {
+            if (this.lastViewerCameraMatrix !== [...viewerInput.camera.worldMatrix].join("_")) {
+                this.activeCamera = 0;
+                this.cameraSelect.selectItem(this.activeCamera);
+                mat4.copy(viewerInput.camera.worldMatrix, this.scratchViewMatrix);
+                viewerInput.camera.worldMatrixUpdated();
                 cameraOffset += fillMatrix4x4(cameraBuffer, cameraOffset, viewerInput.camera.projectionMatrix);
-                cameraOffset += fillMatrix4x4(cameraBuffer, cameraOffset, viewerInput.camera.viewMatrix);
-                mat4.copy(cameraViewMatrix, viewerInput.camera.viewMatrix);
+            } else {
+                cameraOffset += fillMatrix4x4(cameraBuffer, cameraOffset, this.world.customCamera.projectionMatrix);
             }
-
-            mat4.invert(this.scratchViewMatrix, cameraViewMatrix);
+            mat4.invert(this.scratchViewMatrix, this.scratchViewMatrix);
             cameraOffset += fillMatrix4x4(cameraBuffer, cameraOffset, this.scratchViewMatrix);
+            mat4.copy(cameraViewMatrix, this.scratchViewMatrix);
+        } else {
+            cameraOffset += fillMatrix4x4(cameraBuffer, cameraOffset, viewerInput.camera.projectionMatrix);
+            cameraOffset += fillMatrix4x4(cameraBuffer, cameraOffset, viewerInput.camera.viewMatrix);
+            mat4.copy(cameraViewMatrix, viewerInput.camera.viewMatrix);
         }
+
+        mat4.invert(this.scratchViewMatrix, cameraViewMatrix);
+        cameraOffset += fillMatrix4x4(cameraBuffer, cameraOffset, this.scratchViewMatrix);
+
         const renderInstManager = this.renderHelper.renderInstManager;
         renderInstManager.setCurrentList(this.renderInstListMain);
         this.renderSceneNodeMeshes(renderInstManager);
@@ -349,23 +340,20 @@ export default class Renderer implements SceneGfx {
                     depthWrite: !node.isGhost,
                 });
                 renderInst.sortKey = makeSortKey(node.isGhost ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE);
-                updateObjectParams: {
-                    let objectOffset = renderInst.allocateUniformBuffer(StandardProgram.ub_ObjectParams, 16 * 3 + 4 + 4 /*Mat4x3 * 3 + vec4 * 2*/);
-                    const object = renderInst.mapUniformBufferF32(StandardProgram.ub_ObjectParams);
-                    objectOffset += fillMatrix4x4(object, objectOffset, node.worldTransform);
 
-                    mat4.invert(this.scratchWorldInverseTransposeMatrix, node.worldTransform);
-                    mat4.transpose(this.scratchWorldInverseTransposeMatrix, this.scratchWorldInverseTransposeMatrix);
-                    objectOffset += fillMatrix4x4(object, objectOffset, this.scratchWorldInverseTransposeMatrix);
+                let objectOffset = renderInst.allocateUniformBuffer(StandardProgram.ub_ObjectParams, 16 * 3 + 4 + 4 /*Mat4x3 * 3 + vec4 * 2*/);
+                const object = renderInst.mapUniformBufferF32(StandardProgram.ub_ObjectParams);
+                objectOffset += fillMatrix4x4(object, objectOffset, node.worldTransform);
 
-                    objectOffset += fillMatrix4x4(object, objectOffset, envMap.matrix);
-                    objectOffset += fillVec4(object, objectOffset, ...(envMap.tint as [number, number, number, number]));
+                mat4.invert(this.scratchWorldInverseTransposeMatrix, node.worldTransform);
+                mat4.transpose(this.scratchWorldInverseTransposeMatrix, this.scratchWorldInverseTransposeMatrix);
+                objectOffset += fillMatrix4x4(object, objectOffset, this.scratchWorldInverseTransposeMatrix);
 
-                    {
-                        object[objectOffset] = mesh.material.gfxTexture === null ? 1 : 0;
-                        objectOffset++;
-                    }
-                }
+                objectOffset += fillMatrix4x4(object, objectOffset, envMap.matrix);
+                objectOffset += fillVec4(object, objectOffset, ...(envMap.tint as [number, number, number, number]));
+
+                object[objectOffset] = mesh.material.gfxTexture === null ? 1 : 0;
+                objectOffset++;
 
                 renderInst.setSamplerBindingsFromTextureMappings([
                     {
@@ -394,8 +382,5 @@ export default class Renderer implements SceneGfx {
         this.world.destroy(device);
         this.textureHolder.destroy(device);
         this.renderHelper.destroy();
-        device.destroyProgram(this.gfxProgram);
-        device.destroySampler(this.diffuseSampler);
-        device.destroySampler(this.envSampler);
     }
 }

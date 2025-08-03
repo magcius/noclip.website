@@ -1,10 +1,11 @@
-import { decode as tifDecode } from "tiff";
-import { FakeTextureHolder } from "../TextureHolder";
-import { SceneNode, Texture } from "./types";
-import { GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxDevice } from "../gfx/platform/GfxPlatform";
-import { align } from "../util";
+
 import { mat4, vec3 } from "gl-matrix";
-import { SCX } from "./scx/types";
+import { decode as tifDecode } from "tiff";
+import { GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxDevice } from "../gfx/platform/GfxPlatform.js";
+import { FakeTextureHolder } from "../TextureHolder.js";
+import { align } from "../util.js";
+import { SCX } from "./scx/types.js";
+import { SceneNode, Texture } from "./types.js";
 
 const loadJPGData = (jpegBinary: ArrayBuffer): Promise<{ width: number; height: number; data: Uint8ClampedArray }> => {
     const img = document.createElement("img");

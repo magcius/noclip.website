@@ -1,7 +1,8 @@
+
 import { mat4, quat, vec2, vec3 } from "gl-matrix";
-import { ViewerRenderInput } from "../../viewer";
-import { Simulation, SceneNode, Texture } from "../types";
-import { wrapNode, reparent, createDataBuffer, updateNodeTransform } from "../util";
+import { setAttachmentStateSimple } from "../../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
+import { GfxShaderLibrary } from "../../gfx/helpers/GfxShaderLibrary.js";
+import { fillVec4 } from "../../gfx/helpers/UniformBufferHelpers.js";
 import {
     GfxBindingLayoutDescriptor,
     GfxBlendFactor,
@@ -23,16 +24,16 @@ import {
     GfxVertexBufferDescriptor,
     GfxVertexBufferFrequency,
     GfxWrapMode,
-} from "../../gfx/platform/GfxPlatform";
-import { GfxProgramObjBag, preprocessProgramObj_GLSL } from "../../gfx/shaderc/GfxShaderCompiler";
-import { defaultMegaState, setAttachmentStateSimple } from "../../gfx/helpers/GfxMegaStateDescriptorHelpers";
-import { GfxrAttachmentSlot, GfxrGraphBuilder } from "../../gfx/render/GfxRenderGraph";
-import { GfxRenderInstList } from "../../gfx/render/GfxRenderInstManager";
-import { GfxRenderHelper } from "../../gfx/render/GfxRenderHelper";
-import { fillVec4 } from "../../gfx/helpers/UniformBufferHelpers";
-import { lerp, MathConstants } from "../../MathHelpers";
-import { World } from "../world";
-import { GfxShaderLibrary } from "../../gfx/helpers/GfxShaderLibrary";
+} from "../../gfx/platform/GfxPlatform.js";
+import { GfxrAttachmentSlot, GfxrGraphBuilder } from "../../gfx/render/GfxRenderGraph.js";
+import { GfxRenderHelper } from "../../gfx/render/GfxRenderHelper.js";
+import { GfxRenderInstList } from "../../gfx/render/GfxRenderInstManager.js";
+import { GfxProgramObjBag, preprocessProgramObj_GLSL } from "../../gfx/shaderc/GfxShaderCompiler.js";
+import { lerp, MathConstants } from "../../MathHelpers.js";
+import { ViewerRenderInput } from "../../viewer.js";
+import { SceneNode, Simulation, Texture } from "../types.js";
+import { createDataBuffer, reparent, updateNodeTransform, wrapNode } from "../util.js";
+import { World } from "../world.js";
 
 type Swing = {
     name: string;
@@ -206,7 +207,7 @@ export default class SandPendulum extends Simulation {
     private inputLayout: GfxInputLayout;
     private vertexAttributes: GfxVertexBufferDescriptor[];
     private indexBufferDescriptor: GfxIndexBufferDescriptor;
-    private megaStateFlags: GfxMegaStateDescriptor;
+    private megaStateFlags: Partial<GfxMegaStateDescriptor>;
     private numParticles = 3;
     private indexCount = 6 * this.numParticles;
     private sampler: GfxSampler;
@@ -226,8 +227,9 @@ export default class SandPendulum extends Simulation {
         this.sparkleSprite = world.sceneNodesByName.get("Sparkle.scx/Plane01")!;
         this.sparkleSprite.isGhost = true;
 
+        const cache = renderHelper.renderCache;
         this.sandProgram = preprocessProgramObj_GLSL(device, new SandProgram());
-        this.gfxProgram = device.createProgram(this.sandProgram);
+        this.gfxProgram = cache.createProgramSimple(this.sandProgram);
         const sandTexturePath = "Pendulum_Sand_textures/Sand.tif";
         this.originalSandTexture = world.texturesByPath.get(sandTexturePath)!;
 
@@ -256,7 +258,7 @@ export default class SandPendulum extends Simulation {
         world.texturesByPath.set(sandTexturePath, { ...this.originalSandTexture, gfxTexture: this.gfxTexture });
         world.materialsByName.get("Pendulum_Sand.scx/1")!.gfxTexture = this.gfxTexture;
 
-        this.inputLayout = device.createInputLayout({
+        this.inputLayout = cache.createInputLayout({
             indexBufferFormat: GfxFormat.U32_R,
             vertexAttributeDescriptors: [
                 { location: 0, bufferIndex: 0, format: GfxFormat.F32_RG, bufferByteOffset: 0 }, // position
@@ -290,10 +292,7 @@ export default class SandPendulum extends Simulation {
         const indexBuffer = createDataBuffer(device, GfxBufferUsage.Index, new Uint32Array(particleIndices.flat()).buffer);
         this.indexBufferDescriptor = { buffer: indexBuffer, byteOffset: 0 };
 
-        this.megaStateFlags = {
-            ...defaultMegaState,
-        };
-        setAttachmentStateSimple(this.megaStateFlags, {
+        this.megaStateFlags = setAttachmentStateSimple({}, {
             blendMode: GfxBlendMode.Add,
             blendSrcFactor: GfxBlendFactor.SrcAlpha,
             blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
@@ -306,7 +305,7 @@ export default class SandPendulum extends Simulation {
             magFilter: GfxTexFilterMode.Point,
             mipFilter: GfxMipFilterMode.NoMip,
         };
-        this.sampler = device.createSampler(samplerDescriptor);
+        this.sampler = cache.createSampler(samplerDescriptor);
 
         if (this.isGrotto) {
             const sand = world.sceneNodesByName.get("Pendulum_Sand.scx/Sand New")!;
@@ -520,16 +519,14 @@ export default class SandPendulum extends Simulation {
         renderInstManager.popTemplate();
     }
 
-    override renderReset(): void {
+    public override renderReset(): void {
         this.renderInstListSand.reset();
     }
 
-    override destroy(): void {
-        this.device.destroyProgram(this.gfxProgram);
+    public override destroy(): void {
         this.device.destroyTexture(this.originalSandTexture.gfxTexture!);
         this.device.destroyBuffer(this.vertexAttributes[0].buffer);
         this.device.destroyBuffer(this.vertexAttributes[1].buffer);
         this.device.destroyBuffer(this.indexBufferDescriptor.buffer);
-        this.device.destroySampler(this.sampler);
     }
 }

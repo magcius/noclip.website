@@ -1,5 +1,6 @@
+
 import { vec2, vec3 } from "gl-matrix";
-import { Token } from "./tokens";
+import { Token } from "./tokens.js";
 
 export namespace SCX {
     type Named = { name: string; id?: number };

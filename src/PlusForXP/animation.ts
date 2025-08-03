@@ -1,6 +1,7 @@
-import { lerp, saturate } from "../MathHelpers";
-import { getPointHermite } from "../Spline";
-import { SCX } from "./scx/types";
+
+import { lerp, saturate } from "../MathHelpers.js";
+import { getPointHermite } from "../Spline.js";
+import { SCX } from "./scx/types.js";
 
 type Interpolation = (toKey: SCX.Keyframe, fromKey: SCX.Keyframe, time: number) => number;
 
