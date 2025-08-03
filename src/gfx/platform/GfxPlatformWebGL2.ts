@@ -492,7 +492,6 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
     // GfxLimits
     private _uniformBufferMaxPageByteSize: number;
-    private _invalidateFramebufferBroken: boolean = false;
     public uniformBufferWordAlignment: number;
     public uniformBufferMaxPageWordSize: number;
     public supportedSampleCounts: number[];
@@ -617,14 +616,6 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             // getQueryParameter on Firefox causes a full GL command buffer sync
             // (verified with private correspondence with Kelsey Gilbert).
             this.occlusionQueriesRecommended = false;
-        }
-
-        const WEBGL_debug_renderer_info = gl.getExtension('WEBGL_debug_renderer_info');
-        if (WEBGL_debug_renderer_info !== null) {
-            const vendor = gl.getParameter(WEBGL_debug_renderer_info.UNMASKED_VENDOR_WEBGL);
-            // https://bugs.webkit.org/show_bug.cgi?id=280799
-            if (vendor === "Apple Inc.")
-                this._invalidateFramebufferBroken = true;
         }
     }
 
@@ -2421,7 +2412,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
                     gl.blitFramebuffer(0, 0, colorResolveFrom.width, colorResolveFrom.height, 0, 0, colorResolveTo.width, colorResolveTo.height, gl.COLOR_BUFFER_BIT, gl.LINEAR);
                 }
 
-                if (!colorStore && !this._invalidateFramebufferBroken)
+                if (!colorStore)
                     gl.invalidateFramebuffer(gl.READ_FRAMEBUFFER, [gl.COLOR_ATTACHMENT0]);
 
                 if (boundReadFB)
@@ -2455,7 +2446,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
                 gl.blitFramebuffer(0, 0, depthStencilResolveFrom.width, depthStencilResolveFrom.height, 0, 0, depthStencilResolveTo.width, depthStencilResolveTo.height, gl.DEPTH_BUFFER_BIT, gl.NEAREST);
             }
 
-            if (!depthStencilStore && !this._invalidateFramebufferBroken)
+            if (!depthStencilStore)
                 gl.invalidateFramebuffer(gl.READ_FRAMEBUFFER, [gl.DEPTH_STENCIL_ATTACHMENT]);
 
             if (boundReadFB)
