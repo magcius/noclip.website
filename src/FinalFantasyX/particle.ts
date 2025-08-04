@@ -2095,8 +2095,6 @@ class ElectricColor extends Instruction {
         this.state = r(offsets[1], ["elecState", "elecParams", "v", "v", "v", "v"]);
         this.params = this.state + 1;
         this.colors = this.state + 2;
-
-        console.log(data);
     }
 
     public override update(p: Particle, system: ParticleSystem): void {
@@ -4312,8 +4310,6 @@ function getParticle(system: ParticleSystem, emitter: Emitter): Particle {
     let p = system.pool;
     if (p === null) {
         p = new Particle(system.uniqueCount++);
-        if (system.uniqueCount % 100 === 0)
-            console.log(system.uniqueCount);
     } else
         system.pool = p.next;
     p.reset();
@@ -4647,7 +4643,7 @@ type textureDecoder = (tex0: GS.GSRegisterTEX0) => number;
 const FLIPBOOK_VERTEX_STRIDE = 2 + 4 + 2; // 2 pos, 4 color, 2 uv
 
 const interestingOps = new Map<number, string>([
-    [0x19, "var trail"],
+    // [0x19, "var trail"],
     // [ 0x1a, "trail"],
     // [ 0x24, "glare"],
     // [ 0x2D, "blur"],
@@ -4663,22 +4659,12 @@ const interestingOps = new Map<number, string>([
 ])
 
 const unkOps = new Map<number, string>([
-    [ 0x20, "lens flare motion"],
-    [ 0x21, "lens flare"],
     [ 0x22, "lens flare"],
-    [ 0x23, "lens flare"],
-    [ 0x24, "bloom/glare"],
     [ 0x2b, "muzzle flash math"], // bevelle wedding
     [ 0x2f, "basic"],
-    [ 0x3c, "electric color vel"],
     [ 0x56, "dynamic vertices"], // besaid trials
-    [ 0x58, "water???"], // boats
-    [ 0x73, "omega ruins"],
-    [ 0x73, "heal orb"],
-    [ 0x74, "heal orb"],
     [ 0x7a, "translated mtx"], // ruins - stairs
     [ 0x82, "spectral keeper fight"],
-    [ 0x8a, "screen overlay"], // lake bottom
     [ 0x8c, "jecht fight"],
     [ 0x8d, "jecht fight"],
     [ 0x8e, "jecht fight"],
@@ -4925,7 +4911,6 @@ export function parseParticleData(buffer: ArrayBufferSlice, offs: number, gsMap:
                 if (inst instanceof WibbleUVScrollGeo || (inst instanceof WrapUVScrollGeo && inst.data[0].useWater)) {
                     assert(inst.data.length === 1)
                     const slot = inst.data[0].waterTexSlot;
-                    console.log("wibble", i, j, "slot", slot, inst.data[0].waterTexDur, inst.data[0].geoIndex)
                     // assert(wibbleGeos[slot] === undefined);
                     if (inst.data[0].waterTexDur > 0) {
                         if (waterGeos[slot]) {
@@ -4942,7 +4927,6 @@ export function parseParticleData(buffer: ArrayBufferSlice, offs: number, gsMap:
                 if (inst instanceof Water) {
                     assert(inst.data.length === 1)
                     const slot = inst.data[0].waterTexSlot;
-                    console.log("water wibble", i, j, "slot", slot, inst.data[0].waterTexDur, inst.data[0].geo)
                     if (waterGeos[slot]) {
                         assert(waterGeos[slot].duration === inst.data[0].waterTexDur);
                     } else {

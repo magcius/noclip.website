@@ -2181,8 +2181,10 @@ export class EventScript {
                 const entry = w.stack.pop();
                 const thread = w.stack.pop();
                 const array = w.stack.pop();
-                console.log(`set default for t${thread} to s${hexzero(w.index, 2)}e${hexzero(entry, 2)}`);
-                w.flags &= ~WorkerFlags.COLLISION_ACTIVE; // assume this is disabling interaction
+                if (w.debug)
+                    console.log(`set default for t${thread} to s${hexzero(w.index, 2)}e${hexzero(entry, 2)}`);
+                if (w.actor && w.actor.id === 0x5002)  // assume this is disabling interaction with the chest
+                    w.flags &= ~WorkerFlags.COLLISION_ACTIVE;
             } else if (op === Opcode.SET_EDGE_TRIGGER) {
                 throw `unhandled op ${hexzero(op, 2)}`;
             } else {
@@ -2398,7 +2400,6 @@ export class EventScript {
         } else if (arr.source === BIN.ArraySource.PRIVATE) {
             return assertExists(c.privateArrays[varIndex])[index];
         }
-        console.warn("getting", arr, "from", c.index)
         return 0;
     }
 
@@ -3426,7 +3427,7 @@ export class EventScript {
                 return (Math.random()*range) | 0;
             } case 0x00A7: {
                 const index = c.stack.pop();
-                console.log('deactivating', index, "from", c.index);
+                // console.log('deactivating', index, "from", c.index);
                 this.workers[index].flags &= ~WorkerFlags.ACTIVE;
                 return 0;
             } case 0x00A8: {
@@ -3777,7 +3778,7 @@ export class EventScript {
                 let index = c.puppetID;
                 if (id === 0x1C9)
                     index = c.stack.pop();
-                console.log('deactivate effect', index);
+                // console.log('deactivate effect', index);
                 deactivateEffect(this.objects, index, type);
                 return 1;
             }
@@ -4061,12 +4062,7 @@ export class EventScript {
                 if (c.actor) {
                     const m = c.actor.model;
                     if (m) {
-                        let list = 0;
-                        const cat: ActorCategory = c.actor.id >>> 0xC;
-                        if (cat === ActorCategory.WEP)
-                            list = 1; // weapons seem to only have battle defaults
-                        if (this.isBlitzball && (cat === ActorCategory.NPC || cat === ActorCategory.PC))
-                            list = 2; // swimming
+                        const list = this.isBlitzball ? 2 : 0;
                         const anim = m.defaultAnimations[list][0];
                         if (anim !== undefined)
                             c.actor.animation.set(objects, anim);
@@ -4864,7 +4860,6 @@ export class EventScript {
                     return false;
                 }
             }
-            console.log('found position', worker, entry);
             return true;
         });
         if (!found)
@@ -4985,7 +4980,6 @@ export class EventScript {
                 return (sphereVar >= 0 && gotPos)
             });
         }
-        console.log("djose", target.toString(16), entry.toString(16), sphereVar.toString(16), possource.toString(16))
         b.enabledCheck = (delta: ReadonlyVec3) => {
             const hasSphere = this.readVariable(this.workers[1], sphereVar) !== 0;
             const holding = this.readVariable(this.workers[1], holdingVar) !== 0;
@@ -5137,7 +5131,6 @@ class Button {
 
         this.owner = script.workers[index];
         this.elem.onclick = () => {
-            console.log("clicked", this.label)
             onClick();
             this.clicked = true;
         };
@@ -5219,338 +5212,4 @@ class Button {
             elem.style.display = 'none';
         }
     }
-}
-
-
-type momentCondition = number[][] | null;
-
-interface labelEdge {
-    source: number;
-    moments: momentCondition;
-}
-
-interface labelStatus {
-    loadsModel: boolean;
-    sources: labelEdge[];
-}
-
-type fakeStackValue = number | null | "moment" | "comparison";
-
-// function orCondition(status: labelStatus, cond: momentCondition, other: boolean): void {
-//     status.hasOtherCondition = status.hasOtherCondition || other;
-//     if (!status.condition) {
-//         status.condition = cond;
-//         return;
-//     }
-//     if (cond)
-//         status.condition = status.condition.concat(...cond);
-// }
-
-function union(a: momentCondition, b: momentCondition): momentCondition {
-    if (!a || !b)
-        return null;
-    let ai = 0, bi = 0;
-    const out: momentCondition = [];
-    let curr: number[] | null = null;
-    while (ai < a.length || bi < b.length) {
-        let aLower, nextStart;
-        if (ai < a.length && bi < b.length) {
-            nextStart = Math.min(a[ai][0], b[bi][0]);
-            aLower = a[ai][0] < b[bi][0];
-        } else if (ai < a.length) {
-            aLower = true;
-            nextStart = a[ai][0];
-        } else {
-            aLower = false;
-            nextStart = b[bi][0];
-        }
-        const nextEnd = aLower ? a[ai][1] : b[bi][1];
-        if (!curr || nextStart > curr[1]) {
-            curr = [nextStart, nextEnd];
-            out.push(curr);
-        } else {
-            curr[1] = nextEnd;
-        }
-        if (aLower) {
-            ai++;
-        } else {
-            bi++;
-        }
-    }
-    return out;
-}
-
-function intersection(a: momentCondition, b: momentCondition): momentCondition {
-    if (!a) {
-        if (b)
-            return new Array(...b);
-        return null;
-    }
-    if (!b)
-        return new Array(...a);
-    let ai = 0, bi = 0;
-    const out: momentCondition = [];
-    while (ai < a.length && bi < b.length) {
-        if (b[bi][1] <= a[ai][0]) {
-            bi++;
-            continue;
-        }
-        if (a[ai][1] <= b[bi][0]) {
-            ai++;
-            continue;
-        }
-        const left = Math.max(a[ai][0], b[bi][0]);
-        const endA = a[ai][1], endB = b[bi][1];
-        const right = Math.min(endA, endB);
-        out.push([left, right]);
-        if (endA <= endB)
-            ai++;
-        if (endB <= endA)
-            bi++;
-    }
-    return out;
-}
-
-function flipSet(x: momentCondition): momentCondition {
-    if (!x)
-        return [];
-    const out: momentCondition = [];
-    let left = -Infinity;
-    for (let r of x) {
-        if (r[0] > left) {
-            out.push([left, r[0]]);
-        }
-        left = r[1];
-    }
-    if (left < Infinity)
-        out.push([left, Infinity]);
-    return out;
-}
-
-type compOp = Opcode.LT | Opcode.LTE | Opcode.GT | Opcode.GTE | Opcode.EQ;
-
-function flipOp(op: compOp): compOp {
-    switch (op) {
-        case Opcode.LT: return Opcode.GT;
-        case Opcode.GT: return Opcode.LT;
-        case Opcode.LTE: return Opcode.GTE;
-        case Opcode.GTE: return Opcode.LTE;
-        case Opcode.EQ: return Opcode.EQ;
-    }
-}
-
-
-function makeComparison(op: compOp, left: fakeStackValue, right: fakeStackValue): momentCondition {
-    if (right === "moment")
-        return makeComparison(flipOp(op), right, left);
-    if (left !== "moment" || typeof right !== "number")
-        return [];
-    switch (op) {
-        case Opcode.LT: return [[-Infinity, right]];
-        case Opcode.LTE: return [[-Infinity, right + 1]];
-        case Opcode.GT: return [[right + 1, Infinity]];
-        case Opcode.GTE: return [[right, Infinity]];
-        case Opcode.EQ: return [[right, right + 1]];
-    }
-}
-
-function checkGameMoments(data: BIN.ScriptData): number {
-    // assume if the "game moment" is referenced it's the first variable
-    if (!(data.arrays.length > 0 && data.arrays[0].source === BIN.ArraySource.GLOBAL && data.arrays[0].offset === 0xA00))
-        return 0;
-    const allModelConds: momentCondition[] = [];
-    for (let w of data.workers) {
-        if (w.type !== BIN.WorkerType.MOTION)
-            continue;
-
-        let offs = w.entrypoints[0];
-        const statuses = new Map<number, labelStatus>();
-        statuses.set(offs, {
-            loadsModel: false,
-            sources: [],
-        });
-        for (let val of w.labels) {
-            if (val < w.entrypoints[1]) {
-                statuses.set(val, {
-                    loadsModel: false,
-                    sources: [],
-                });
-            }
-        }
-        let currLabel = offs;
-        let currCond: momentCondition = null;
-        let caseIsMoment = false;
-        let stack: (fakeStackValue)[] = [null, null];
-        let comparison: momentCondition = null;
-        let anyModel = false;
-
-        const push = (x: fakeStackValue) => {
-            stack[1] = stack[0];
-            stack[0] = x;
-        }
-
-        const pop = () => {
-            const x = stack[0];
-            stack[0] = stack[1];
-            stack[1] = null;
-            return x;
-        }
-
-        while (true) {
-            if (offs === w.entrypoints[1])
-                break;
-            if (w.labels.includes(offs)) {
-                if (currLabel >= 0)
-                    assertExists(statuses.get(offs)).sources.push({
-                        source: currLabel,
-                        moments: currCond,
-                    });
-                currLabel = offs;
-                currCond = null;
-            }
-
-            const raw = data.code.getUint8(offs++);
-            let imm = 0;
-            if (raw & 0x80) {
-                imm = data.code.getUint16(offs, true);
-                offs += 2;
-            }
-            const op = raw & 0x7F;
-            if (op === Opcode.GET_DATUM && imm === 0) {
-                push("moment");
-            } else if (op === Opcode.SET_CASE) {
-                caseIsMoment = pop() === "moment";
-            } else if (op === Opcode.GET_CASE) {
-                if (caseIsMoment)
-                    push("moment");
-                else
-                    push(null);
-            } else if (op === Opcode.IMM) {
-                push(imm);
-            } else if (op === Opcode.JUMP || op === Opcode.SET_JUMP) {
-                assertExists(statuses.get(w.labels[imm])).sources.push({
-                    source: currLabel,
-                    moments: currCond,
-                })
-                // we'll pick up the new one's conditions
-                currCond = [];
-                currLabel = -1;
-            } else if (op === Opcode.LT || op === Opcode.LTU) {
-                comparison = makeComparison(Opcode.LT, stack[0], stack[1]);
-                push("comparison");
-            } else if (op === Opcode.LTE || op === Opcode.LTEU) {
-                comparison = makeComparison(Opcode.LTE, stack[0], stack[1]);
-                push("comparison");
-            } else if (op === Opcode.GT || op === Opcode.GTU) {
-                comparison = makeComparison(Opcode.GT, stack[0], stack[1]);
-                push("comparison");
-            } else if (op === Opcode.GTE || op === Opcode.GTEU) {
-                comparison = makeComparison(Opcode.GTE, stack[0], stack[1]);
-                push("comparison");
-            } else if (op === Opcode.EQ) {
-                comparison = makeComparison(Opcode.EQ, stack[0], stack[1]);
-                push("comparison");
-            } else if (op === Opcode.FUNC || op === Opcode.FUNC_RET) {
-                if (imm === 0x0001 || imm === 0x0134) {
-                    // ignore main party
-                    if (typeof stack[0] === "number" && stack[0] > 0xfff) {
-                        assertExists(statuses.get(currLabel)).loadsModel = true;
-                        anyModel = true;
-                    }
-                }
-                pop();
-                pop();
-            } else if (op === Opcode.SET_BNEZ || op === Opcode.SET_BEZ) {
-                const target = assertExists(statuses.get(w.labels[imm]));
-                if (stack[0] === "comparison" && comparison) {
-                    const trueCond = intersection(currCond, comparison);
-                    const falseCond = intersection(currCond, flipSet(comparison));
-                    target.sources.push({
-                        source: currLabel,
-                        moments: op === Opcode.SET_BNEZ ? trueCond : falseCond,
-                    })
-                    currCond = op === Opcode.SET_BNEZ ? falseCond : trueCond;
-                } else {
-                    target.sources.push({
-                        source: currLabel,
-                        moments: currCond,
-                    })
-                }
-                comparison = null;
-                pop();
-            } else if (op === Opcode.NOT_LOGIC) {
-                if (stack[0] === "comparison" && comparison) {
-                    comparison = flipSet(comparison);
-                } else {
-                    push(null);
-                }
-            } else {
-                push(null);
-            }
-
-
-        }
-        if (anyModel) {
-            const fullConditions = new Map<number, momentCondition>();
-            const computeFull = (offs: number): momentCondition => {
-                const cached = fullConditions.get(offs);
-                if (cached !== undefined)
-                    return cached;
-                const status = assertExists(statuses.get(offs));
-                let acc: momentCondition = [];
-                if (offs === w.entrypoints[0])
-                    acc = null;
-                else {
-                    // hopefully no loops
-                    for (let edge of status.sources) {
-                        acc = union(acc, intersection(edge.moments, computeFull(edge.source)));
-                    }
-                }
-                fullConditions.set(offs, acc);
-                return acc;
-            }
-            let models: momentCondition = [];
-            for (let [o, st] of statuses.entries()) {
-                const full = computeFull(o);
-                if (st.loadsModel)
-                    models = union(models, full);
-            }
-            if (models && models.length > 0)
-                allModelConds.push(models);
-        }
-    }
-    console.log(allModelConds);
-    const allEndpoints = new Set<number>();
-    for (let cond of allModelConds) {
-        if (!cond)
-            continue;
-        for (let rng of cond) {
-            allEndpoints.add(rng[0]);
-            allEndpoints.add(rng[1]);
-        }
-    }
-    const endPointList: number[] = new Array(...allEndpoints).sort((a,b) => a-b);
-    const lookup: number[] = [];
-    for (let i = 0; i < endPointList.length; i++) {
-        lookup[endPointList[i]] = i;
-    }
-    const counts = nArray(endPointList.length, () => 0);
-    for (let cond of allModelConds) {
-        if (!cond)
-            continue;
-        for (let range of cond) {
-            for (let i = lookup[range[0]]; i < lookup[range[1]]; i++) {
-                counts[i]++;
-            }
-        }
-    }
-    console.log(endPointList, counts)
-    let max = 0, out = 0;
-    for (let i = 0; i < counts.length; i++) {
-        if (counts[i] > max) {
-            max = counts[i];
-            out = endPointList[i];
-        }
-    }
-    return out;
 }

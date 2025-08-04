@@ -233,6 +233,7 @@ export class FFXRenderer implements Viewer.SceneGfx {
     }
 
     public prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
+        viewerInput.camera.setClipPlanes(.1);
         this.renderHelper.renderInstManager.setCurrentList(this.renderInstListMain);
         if (this.subScene) {
             this.subScene.levelObjects.renderFlags.textures = this.levelObjects.renderFlags.textures;
