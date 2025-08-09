@@ -104,13 +104,14 @@ export async function createSceneFromFiles(context: SceneContext, buffers: Named
     if (buffer.name.endsWith('.bch'))
         CTR_H3D.parse(buffer);
 
-    if (buffer.name.endsWith('.bsp') || buffer.name.endsWith('.gma'))
-        return SourceFileDrops.createFileDropsScene(context, buffer); 
-
+    // Source renderer also use .gma extension, so try SMB first to see if it parses or not
     const superMonkeyBallRenderer = SuperMonkeyBall.createSceneFromNamedBuffers(context, buffers);
     if (superMonkeyBallRenderer !== null) {
         return superMonkeyBallRenderer;
     }
+
+    if (buffer.name.endsWith('.bsp') || buffer.name.endsWith('.gma'))
+        return SourceFileDrops.createFileDropsScene(context, buffer); 
 
     throw "whoops";
 }
