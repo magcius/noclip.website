@@ -1,28 +1,26 @@
+
 // Nintendo 2D rendering, version 1. Used by Wind Waker. 
 // Twilight Princess (and likely newer titles), use J2D version 2. 
 
-import ArrayBufferSlice from "../../ArrayBufferSlice.js";
-import { JSystemFileReaderHelper } from "./J3D/J3DLoader.js";
-import { align, assert, readString } from "../../util.js";
-import { Color, colorEqual, colorNewFromRGBA8, OpaqueBlack, TransparentBlack, White } from "../../Color.js";
-import { GfxRenderInst, GfxRenderInstManager } from "../../gfx/render/GfxRenderInstManager.js";
-import * as GX_Material from '../../gx/gx_material.js';
-import * as GX from '../../gx/gx_enum.js';
-import { ColorKind, DrawParams, fillSceneParamsData, GXMaterialHelperGfx, MaterialParams, SceneParams, ub_SceneParamsBufferSize } from "../../gx/gx_render.js";
-import { GfxClipSpaceNearZ, GfxDevice } from "../../gfx/platform/GfxPlatform.js";
-import { computeModelMatrixT, projectionMatrixForCuboid } from "../../MathHelpers.js";
-import { projectionMatrixConvertClipSpaceNearZ } from "../../gfx/helpers/ProjectionHelpers.js";
-import { TSDraw } from "../../SuperMarioGalaxy/DDraw.js";
-import { BTIData } from "./JUTTexture.js";
-import { GXMaterialBuilder } from "../../gx/GXMaterialBuilder.js";
 import { mat4, vec2, vec4 } from "gl-matrix";
+import ArrayBufferSlice from "../../ArrayBufferSlice.js";
+import { Color, colorCopy, colorEqual, colorNewFromRGBA8, TransparentBlack, White } from "../../Color.js";
+import { projectionMatrixConvertClipSpaceNearZ } from "../../gfx/helpers/ProjectionHelpers.js";
+import { GfxClipSpaceNearZ, GfxDevice } from "../../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from "../../gfx/render/GfxRenderCache.js";
-import { Frustum } from "../../Geometry.js";
+import { GfxRenderInst, GfxRenderInstManager } from "../../gfx/render/GfxRenderInstManager.js";
+import * as GX from '../../gx/gx_enum.js';
+import * as GX_Material from '../../gx/gx_material.js';
+import { ColorKind, DrawParams, fillSceneParamsData, GXMaterialHelperGfx, MaterialParams, SceneParams, ub_SceneParamsBufferSize } from "../../gx/gx_render.js";
+import { GXMaterialBuilder } from "../../gx/GXMaterialBuilder.js";
+import { computeModelMatrixT, projectionMatrixForCuboid, scaleMatrix } from "../../MathHelpers.js";
+import { TSDraw } from "../../SuperMarioGalaxy/DDraw.js";
+import { align, assert, readString } from "../../util.js";
+import { JSystemFileReaderHelper } from "./J3D/J3DLoader.js";
+import { BTIData } from "./JUTTexture.js";
 
 const materialParams = new MaterialParams();
 const drawParams = new DrawParams();
-
-const scratchMat = mat4.create();
 
 export const enum JUTResType {
     TIMG, TLUT, FONT,
@@ -64,7 +62,7 @@ function parseResourceReference(buffer: ArrayBufferSlice, offset: number, resTyp
 export enum J2DAnchorPos {
     Left,
     Center,
-    Right
+    Right,
 }
 
 /**
@@ -93,9 +91,7 @@ export class J2DGrafContext {
     constructor(device: GfxDevice, vpX: number, vpY: number, vpWidth: number, vpHeight: number, near: number, far: number) {
         this.clipSpaceNearZ = device.queryVendorInfo().clipSpaceNearZ;
         vec4.set(this.viewport, vpX, vpY, vpWidth, vpHeight);
-        vec4.set(this.ortho, 0, 0, vpWidth, vpHeight);
-        this.near = far;
-        this.far = far;
+        this.setOrtho(vpX, vpY, vpX + vpWidth, vpY + vpHeight, near, far);
     }
 
     public setOrtho(left: number, top: number, right: number, bottom: number, far: number, near: number) {
@@ -410,7 +406,7 @@ export class J2DPane {
 export class J2DPicture extends J2DPane {
     public override data: PIC1;
 
-    private sdraw: TSDraw | null = null;
+    private sdraw = new TSDraw();
     private materialHelper: GXMaterialHelperGfx;
     private tex: BTIData | null = null;
 
@@ -421,11 +417,68 @@ export class J2DPicture extends J2DPane {
         if (this.data.flags !== 0) { console.warn('Untested J2D feature'); }
         if (!colorEqual(this.data.colorCorners[0], White) || !colorEqual(this.data.colorCorners[1], White) || !colorEqual(this.data.colorCorners[2], White) || !colorEqual(this.data.colorCorners[3], White))
             console.warn(`Untested J2D feature colorCorners ${this.data.colorCorners}`);
+
+        this.sdraw.setVtxDesc(GX.Attr.POS, true);
+        this.sdraw.setVtxDesc(GX.Attr.TEX0, true);
+        this.sdraw.setVtxDesc(GX.Attr.CLR0, true);
+
+        this.sdraw.beginDraw(this.cache);
+        this.sdraw.begin(GX.Command.DRAW_QUADS, 4);
+        this.sdraw.position3f32(0, 0, 0);
+        this.sdraw.color4color(GX.Attr.CLR0, this.data.colorCorners[0]);
+        this.sdraw.texCoord2f32(GX.Attr.TEX0, 0, 0);
+        this.sdraw.position3f32(1, 0, 0);
+        this.sdraw.color4color(GX.Attr.CLR0, this.data.colorCorners[2]);
+        this.sdraw.texCoord2f32(GX.Attr.TEX0, 1, 0);
+        this.sdraw.position3f32(1, 1, 0);
+        this.sdraw.color4color(GX.Attr.CLR0, this.data.colorCorners[3]);
+        this.sdraw.texCoord2f32(GX.Attr.TEX0, 1, 1);
+        this.sdraw.position3f32(0, 1, 0);
+        this.sdraw.color4color(GX.Attr.CLR0, this.data.colorCorners[1]);
+        this.sdraw.texCoord2f32(GX.Attr.TEX0, 0, 1);
+        this.sdraw.end();
+        this.sdraw.endDraw(this.cache);
+        const mb = new GXMaterialBuilder('J2DPane');
+        let tevStage = 0;
+
+        // Assume alpha is enabled. This is byte 1 on a JUTTexture, but noclip doesn't read it
+        mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+
+        // Multiply texture and vertex colors
+        mb.setTevOrder(tevStage, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR0A0);
+        mb.setTevColorIn(tevStage, GX.CC.ZERO, GX.CC.TEXC, GX.CC.RASC, GX.CC.ZERO);
+        mb.setTevAlphaIn(tevStage, GX.CA.ZERO, GX.CA.TEXA, GX.CA.RASA, GX.CA.ZERO);
+        mb.setTevColorOp(tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaOp(tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        tevStage += 1;
+
+        // Lerp between the Black and White colors based on previous stage result
+        if (!colorEqual(this.data.colorBlack, TransparentBlack) || !colorEqual(this.data.colorWhite, White)) {
+            mb.setTevOrder(tevStage, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR_ZERO);
+            mb.setTevColorIn(tevStage, GX.CC.C0, GX.CC.C1, GX.CC.CPREV, GX.CC.ZERO);
+            mb.setTevAlphaIn(tevStage, GX.CA.A0, GX.CA.A1, GX.CA.APREV, GX.CA.ZERO);
+            mb.setTevColorOp(tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+            mb.setTevAlphaOp(tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+            tevStage += 1;
+        }
+
+        // Multiply result alpha by dynamic alpha (this.drawAlpha)
+        mb.setTevOrder(tevStage, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR_ZERO);
+        mb.setTevColorIn(tevStage, GX.CC.CPREV, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO);
+        mb.setTevAlphaIn(tevStage, GX.CA.ZERO, GX.CA.APREV, GX.CA.A2, GX.CA.ZERO);
+        mb.setTevColorOp(tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaOp(tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        tevStage += 1;
+
+        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.TEXMTX0);
+        mb.setZMode(false, GX.CompareType.ALWAYS, false);
+        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA, GX.LogicOp.SET);
+        mb.setUsePnMtxIdx(false);
+        this.materialHelper = new GXMaterialHelperGfx(mb.finish());
     }
 
-    public setTexture(tex: BTIData) {
+    public setTexture(tex: BTIData): void {
         this.tex = tex;
-        this.prepare();
     }
 
     public override drawSelf(renderInstManager: GfxRenderInstManager, ctx2D: J2DGrafContext, offsetX: number, offsetY: number): void {
@@ -438,44 +491,20 @@ export class J2DPicture extends J2DPane {
         this.sdraw.setOnRenderInst(renderInst);
         this.materialHelper.setOnRenderInst(renderInstManager.gfxRenderCache, renderInst);
 
-        materialParams.u_Color[ColorKind.C0] = this.data.colorBlack;
-        materialParams.u_Color[ColorKind.C1] = this.data.colorWhite;
+        colorCopy(materialParams.u_Color[ColorKind.C0], this.data.colorBlack);
+        colorCopy(materialParams.u_Color[ColorKind.C1], this.data.colorWhite);
         materialParams.u_Color[ColorKind.C2].a = this.drawAlpha;
 
-        this.tex.fillTextureMapping(materialParams.m_TextureMapping[0]);
-        this.materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
-        renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
-
-        const scale = mat4.fromScaling(scratchMat, [this.drawDimensions[0], this.drawDimensions[1], 1]);
-        mat4.mul(drawParams.u_PosMtx[0], this.drawMtx, scale);
-        this.materialHelper.allocateDrawParamsDataOnInst(renderInst, drawParams);
-
-        renderInstManager.submitRenderInst(renderInst);
-    }
-
-    public override destroy(device: GfxDevice): void {
-        if (this.sdraw !== null) {
-            this.sdraw.destroy(device);
-            this.sdraw = null;
-        }
-    }
-
-    private prepare() {
-        assert(this.tex !== null);
-
-        if (this.sdraw !== null)
-            this.sdraw.destroy(this.cache.device);
-        this.sdraw = new TSDraw();
-
         let u0, v0, v1, u1;
-        const texDimensions = [this.tex.btiTexture.width, this.tex.btiTexture.height];
-        const bindLeft = this.data.uvBinding & J2DUVBinding.Left;
-        const bindRight = this.data.uvBinding & J2DUVBinding.Right;
-        const bindTop = this.data.uvBinding & J2DUVBinding.Top;
-        const bindBottom = this.data.uvBinding & J2DUVBinding.Bottom;
+        const bindLeft = !!(this.data.uvBinding & J2DUVBinding.Left);
+        const bindRight = !!(this.data.uvBinding & J2DUVBinding.Right);
+        const bindTop = !!(this.data.uvBinding & J2DUVBinding.Top);
+        const bindBottom = !!(this.data.uvBinding & J2DUVBinding.Bottom);
 
-        const aspectX = (this.drawDimensions[0] / texDimensions[0]);
-        const aspectY = (this.drawDimensions[1] / texDimensions[1]);
+        // TODO(jstpierre): This does nothing, because prepare() is called before drawDimensions[] is set.
+        // Use TEXMTX to apply this scaling logic in draw().
+        const aspectX = (this.drawDimensions[0] / this.tex.btiTexture.width);
+        const aspectY = (this.drawDimensions[1] / this.tex.btiTexture.height);
 
         if (bindLeft) {
             u0 = 0.0;
@@ -499,64 +528,25 @@ export class J2DPicture extends J2DPane {
             v1 = 0.5 + aspectY / 2.0;
         }
 
-        this.sdraw.setVtxDesc(GX.Attr.POS, true);
-        this.sdraw.setVtxDesc(GX.Attr.TEX0, true);
-        this.sdraw.setVtxDesc(GX.Attr.CLR0, true);
+        const texMtx = materialParams.u_TexMtx[0];
+        mat4.identity(texMtx);
+        texMtx[0] = (u1 - u0);
+        texMtx[5] = (v1 - v0);
+        texMtx[12] = u0;
+        texMtx[13] = v0;
 
-        this.sdraw.beginDraw(this.cache);
-        this.sdraw.begin(GX.Command.DRAW_QUADS, 4);
-        this.sdraw.position3f32(0, 0, 0);
-        this.sdraw.color4color(GX.Attr.CLR0, this.data.colorCorners[0]);
-        this.sdraw.texCoord2f32(GX.Attr.TEX0, u0, v0);
-        this.sdraw.position3f32(1, 0, 0);
-        this.sdraw.color4color(GX.Attr.CLR0, this.data.colorCorners[2]);
-        this.sdraw.texCoord2f32(GX.Attr.TEX0, u1, v0);
-        this.sdraw.position3f32(1, 1, 0);
-        this.sdraw.color4color(GX.Attr.CLR0, this.data.colorCorners[3]);
-        this.sdraw.texCoord2f32(GX.Attr.TEX0, u1, v1);
-        this.sdraw.position3f32(0, 1, 0);
-        this.sdraw.color4color(GX.Attr.CLR0, this.data.colorCorners[1]);
-        this.sdraw.texCoord2f32(GX.Attr.TEX0, u0, v1);
-        this.sdraw.end();
-        this.sdraw.endDraw(this.cache);
+        this.tex.fillTextureMapping(materialParams.m_TextureMapping[0]);
+        this.materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
+        renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
 
-        const mb = new GXMaterialBuilder('J2DPane');
-        let tevStage = 0;
+        scaleMatrix(drawParams.u_PosMtx[0], this.drawMtx, this.drawDimensions[0], this.drawDimensions[1]);
+        this.materialHelper.allocateDrawParamsDataOnInst(renderInst, drawParams);
 
-        // Assume alpha is enabled. This is byte 1 on a JUTTexture, but noclip doesn't read it
-        mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+        renderInstManager.submitRenderInst(renderInst);
+    }
 
-        // 0: Multiply tex and vertex colors and alpha
-        mb.setTevOrder(tevStage, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR0A0);
-        mb.setTevColorIn(tevStage, GX.CC.ZERO, GX.CC.TEXC, GX.CC.RASC, GX.CC.ZERO);
-        mb.setTevAlphaIn(tevStage, GX.CA.ZERO, GX.CA.TEXA, GX.CA.RASA, GX.CA.ZERO);
-        mb.setTevColorOp(tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-        mb.setTevAlphaOp(tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-        tevStage += 1;
-
-        // 1: Lerp between the Black and White colors based on previous stage result
-        if (!colorEqual(this.data.colorBlack, TransparentBlack) || !colorEqual(this.data.colorWhite, White)) {
-            mb.setTevOrder(tevStage, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR_ZERO);
-            mb.setTevColorIn(tevStage, GX.CC.C0, GX.CC.C1, GX.CC.CPREV, GX.CC.ZERO);
-            mb.setTevAlphaIn(tevStage, GX.CA.A0, GX.CA.A1, GX.CA.APREV, GX.CA.ZERO);
-            mb.setTevColorOp(tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-            mb.setTevAlphaOp(tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-            tevStage += 1;
-        }
-
-        // 2: Multiply result alpha by dynamic alpha (this.drawAlpha)
-        mb.setTevOrder(tevStage, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR_ZERO);
-        mb.setTevColorIn(tevStage, GX.CC.CPREV, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO);
-        mb.setTevAlphaIn(tevStage, GX.CA.ZERO, GX.CA.APREV, GX.CA.A2, GX.CA.ZERO);
-        mb.setTevColorOp(tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-        mb.setTevAlphaOp(tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-        tevStage += 1;
-
-        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
-        mb.setZMode(false, GX.CompareType.ALWAYS, false);
-        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA, GX.LogicOp.SET);
-        mb.setUsePnMtxIdx(false);
-        this.materialHelper = new GXMaterialHelperGfx(mb.finish());
+    public override destroy(device: GfxDevice): void {
+        this.sdraw.destroy(device);
     }
 
     protected override resolveReferences(resolver: ResourceResolver<JUTResType.TIMG>): void {
@@ -565,8 +555,6 @@ export class J2DPicture extends J2DPane {
             if (timg.refType !== 2)
                 console.warn(`Untested J2D feature refType ${timg.refType}`);
             this.tex = resolver(JUTResType.TIMG, timg.resName);
-            if (this.tex !== null)
-                this.prepare();
         }
 
         assert(this.data.tlut.refType === 0, 'TLUT references currently unsupported');
@@ -602,5 +590,4 @@ export class J2DScreen extends J2DPane {
         return super.search(tag);
     }
 }
-
 //#endregion

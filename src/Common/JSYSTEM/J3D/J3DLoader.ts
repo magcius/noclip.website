@@ -5,18 +5,17 @@ import { mat4, quat, vec3 } from 'gl-matrix';
 
 import ArrayBufferSlice from '../../../ArrayBufferSlice.js';
 import { Endianness } from '../../../endian.js';
-import { assert, assertExists, readString } from '../../../util.js';
+import { assert, readString } from '../../../util.js';
 
-import { compileVtxLoader, GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, LoadedVertexLayout, getAttributeByteSize, compileLoadedVertexLayout } from '../../../gx/gx_displaylist.js';
+import BitMap from '../../../BitMap.js';
+import { Color, colorCopy, colorNewFromRGBA, colorNewFromRGBA8, TransparentBlack, White } from '../../../Color.js';
+import { AABB } from '../../../Geometry.js';
+import { compileLoadedVertexLayout, compileVtxLoader, getAttributeByteSize, GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, LoadedVertexLayout } from '../../../gx/gx_displaylist.js';
 import * as GX from '../../../gx/gx_enum.js';
 import * as GX_Material from '../../../gx/gx_material.js';
-import { ColorKind } from '../../../gx/gx_render.js';
-import { AABB } from '../../../Geometry.js';
-import BitMap from '../../../BitMap.js';
-import { autoOptimizeMaterial } from '../../../gx/gx_render.js';
-import { Color, colorNewFromRGBA, colorCopy, colorNewFromRGBA8, White, TransparentBlack } from '../../../Color.js';
-import { readBTI_Texture, BTI_Texture } from '../JUTTexture.js';
+import { autoOptimizeMaterial, ColorKind } from '../../../gx/gx_render.js';
 import { quatFromEulerRadians } from '../../../MathHelpers.js';
+import { BTI_Texture, readBTI_Texture } from '../JUTTexture.js';
 
 //#region Helpers
 // ResNTAB / JUTNameTab

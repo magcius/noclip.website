@@ -114,7 +114,7 @@ export class dRes_control_c {
         const resInfo = assertExists(this.findResInfo(arcName, resList));
         return resInfo.getResByID(resType, resID);
     }
-    
+
     public getResResolver(arcName: string): ResourceResolver<JUTResType> {
         return (resType: JUTResType, resName: string) => {
             switch(resType) {

@@ -3181,7 +3181,7 @@ class d_a_kamome extends fopAc_ac_c {
 
         if (this.use_path_move) {
             this.kamome_path_move(globals, deltaTimeFrames);
-        } if (this.type === 4) {
+        } else if (this.type === 4) {
             this.kamome_imuoto_move(globals, deltaTimeFrames);
         } else if (this.type === 5) {
             this.kamome_imuoto2_move(globals, deltaTimeFrames);

@@ -1,3 +1,4 @@
+
 import { J2DAnchorPos, J2DPicture, J2DScreen } from "../Common/JSYSTEM/J2Dv1.js";
 import { BTI, BTIData } from "../Common/JSYSTEM/JUTTexture.js";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
@@ -5,7 +6,7 @@ import { assertExists } from "../util.js";
 import { ViewerRenderInput } from "../viewer.js";
 import { EDemoMode } from "./d_demo.js";
 import { dProcName_e } from "./d_procname.js";
-import { dComIfG_resLoad, dRes_control_c, ResType } from "./d_resorce.js";
+import { dComIfG_resLoad, ResType } from "./d_resorce.js";
 import { cPhs__Status, fGlobals, fopMsgM_Delete, fpc_bs__Constructor, fpcPf__Register, fpcSCtRq_Request, msg_class } from "./framework.js";
 import { dGlobals } from "./Main.js";
 
@@ -64,7 +65,7 @@ export function dPn__update(globals: dGlobals) {
         }
     }
 
-    // From d_meter::dMeter_placeNameMove 
+    // From d_meter::dMeter_placeNameMove
     if (currentPlaceName === null) {
         if (globals.scnPlay.placenameState === PlacenameState.Visible) {
             fpcSCtRq_Request(globals.frameworkGlobals, null, dProcName_e.d_place_name, null);
@@ -93,18 +94,18 @@ export class d_place_name extends msg_class {
         this.screen.search('blc1')!.hide();
         this.screen.search('blc2')!.hide();
 
-        // The Outset Island image lives inside the PName arc. All others are loose files in 'res/placename/'        
+        // The Outset Island image lives inside the PName arc. All others are loose files in 'res/placename/'
         if (globals.scnPlay.placenameIndex === Placename.OutsetIsland) {
             return cPhs__Status.Complete;
         }
 
         const placenameId = (globals.scnPlay.placenameIndex + 1);
-        const filename = `placename/pn_${placenameId.toString().padStart(2, "0")}.bti`; 
+        const filename = `placename/pn_${placenameId.toString().padStart(2, "0")}.bti`;
         status = globals.modelCache.requestFileData(filename);
         if (status !== cPhs__Status.Complete)
             return status;
         const imgData = globals.modelCache.getFileData(filename);
-        
+
         const img = new BTIData(globals.sceneContext.device, globals.renderer.renderCache, BTI.parse(imgData, filename).texture);
         const pic = assertExists(this.screen.search('\0\0pn')) as J2DPicture;
         pic.setTexture(img);
@@ -162,4 +163,3 @@ export function d_pn__RegisterConstructors(globals: fGlobals): void {
 
     R(d_place_name);
 }
-
