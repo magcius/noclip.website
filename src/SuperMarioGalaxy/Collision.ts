@@ -11,7 +11,7 @@ import { transformVec3Mat4w1, transformVec3Mat4w0, isNearZero, isNearZeroVec3, g
 import { connectToScene, vecKillElement } from "./ActorUtil.js";
 import { JMapInfoIter } from "./JMapInfo.js";
 import { AABB } from "../Geometry.js";
-import { drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk.js";
+import { drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText } from "../DebugJunk.js";
 import { Yellow, colorNewCopy, Magenta } from "../Color.js";
 
 export class Triangle {

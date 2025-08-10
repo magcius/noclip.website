@@ -1,27 +1,26 @@
 
 // Misc NPC actors.
 
-import { quat, vec3, ReadonlyVec3, ReadonlyMat4 } from 'gl-matrix';
+import { quat, ReadonlyMat4, ReadonlyVec3, vec3 } from 'gl-matrix';
 import * as RARC from '../../Common/JSYSTEM/JKRArchive.js';
-import { isNearZero, MathConstants, quatFromEulerRadians, saturate, vec3SetAll, Vec3Zero } from '../../MathHelpers.js';
+import { getMatrixTranslation, isNearZero, MathConstants, quatFromEulerRadians, randomRangeInt, saturate, vec3SetAll, Vec3Zero } from '../../MathHelpers.js';
 import { assertExists, fallback, fallbackUndefined } from '../../util.js';
-import { adjustmentRailCoordSpeed, blendQuatUpFront, calcGravity, connectToSceneIndirectNpc, connectToSceneNpc, getNextRailPointNo, getRailCoordSpeed, getRailDirection, getRailPos, initDefaultPos, isBckExist, isBckStopped, isExistRail, isRailReachedGoal, makeMtxTRFromQuatVec, makeQuatUpFront, moveCoordAndTransToNearestRailPos, moveRailRider, reverseRailDirection, setBckFrameAtRandom, setBrkFrameAndStop, startAction, startBck, startBckNoInterpole, startBrk, startBtk, startBva, tryStartAction, turnQuatYDirRad, useStageSwitchSleep, moveCoordToStartPos, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, moveCoordAndTransToRailStartPoint, isRailGoingToEnd, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, calcMtxFromGravityAndZAxis, tryStartBck, calcUpVec, rotateVecDegree, getBckFrameMax, moveCoordAndFollowTrans, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, MapObjConnector, useStageSwitchReadAppear, syncStageSwitchAppear, connectToSceneNpcMovement, quatGetAxisZ, isNearPlayer, getPlayerPos, turnDirectionToTargetRadians, getCurrentRailPointNo, getCurrentRailPointArg0, isBckLooped, calcVecToPlayer, isSameDirection, faceToVectorDeg, quatGetAxisY, makeAxisFrontUp, clampVecAngleDeg, connectToSceneMapObj, setBtkFrameAndStop, getJointMtxByName, calcFrontVec, stopBck, isActionLoopedOrStopped, isActionEnd } from '../ActorUtil.js';
-import { randomRangeInt } from '../../MathHelpers.js';
+import { adjustmentRailCoordSpeed, blendQuatUpFront, calcDistanceVertical, calcFrontVec, calcGravity, calcMtxFromGravityAndZAxis, calcUpVec, calcVecToPlayer, clampVecAngleDeg, connectToSceneIndirectNpc, connectToSceneMapObj, connectToSceneNpc, connectToSceneNpcMovement, faceToVectorDeg, getBckFrameMax, getCurrentRailPointArg0, getCurrentRailPointNo, getJointMtx, getJointMtxByName, getNextRailPointNo, getPlayerPos, getRailCoordSpeed, getRailDirection, getRailPointPosEnd, getRailPointPosStart, getRailPos, initDefaultPos, isActionEnd, isActionLoopedOrStopped, isBckExist, isBckLooped, isBckOneTimeAndStopped, isBckPlaying, isBckStopped, isExistRail, isNearPlayer, isRailGoingToEnd, isRailReachedGoal, isSameDirection, makeAxisFrontUp, makeMtxTRFromQuatVec, makeQuatUpFront, MapObjConnector, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordAndTransToRailStartPoint, moveCoordToStartPos, moveRailRider, quatGetAxisY, quatGetAxisZ, reverseRailDirection, rotateVecDegree, setBckFrameAtRandom, setBrkFrameAndStop, setBtkFrameAndStop, startAction, startBck, startBckNoInterpole, startBckWithInterpole, startBrk, startBtk, startBva, stopBck, syncStageSwitchAppear, tryStartAction, tryStartBck, turnDirectionToTargetRadians, turnQuatYDirRad, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead } from '../ActorUtil.js';
 import { getFirstPolyOnLineToMap, getFirstPolyOnLineToWaterSurface } from '../Collision.js';
+import { tryRegisterDemoCast } from '../Demo.js';
+import { initFur } from '../Fur.js';
+import { addHitSensorAtJoint, addHitSensorMtx, HitSensor, HitSensorType, invalidateHitSensor, isSensorNpc, isSensorPlayer, sendArbitraryMsg, validateHitSensor } from '../HitSensor.js';
 import { createCsvParser, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg4, getJMapInfoArg6, getJMapInfoArg7, iterChildObj, JMapInfoIter } from '../JMapInfo.js';
-import { isDead, LiveActor, ZoneAndLayer, MessageType } from '../LiveActor.js';
+import { initLightCtrl } from '../LightData.js';
+import { isDead, LiveActor, MessageType, ZoneAndLayer } from '../LiveActor.js';
 import { getObjectName, SceneObjHolder } from '../Main.js';
 import { DrawBufferType } from '../NameObj.js';
 import { isConnectedWithRail } from '../RailRider.js';
-import { isFirstStep, isGreaterStep, isGreaterEqualStep, isLessStep, calcNerveRate, calcNerveValue } from '../Spine.js';
-import { initShadowFromCSV, initShadowVolumeSphere, onCalcShadowOneTime, onCalcShadow, isExistShadow, initShadowVolumeOval, setShadowDropPositionAtJoint, onCalcShadowDropPrivateGravity } from '../Shadow.js';
-import { initLightCtrl } from '../LightData.js';
-import { HitSensorType, isSensorPlayer, HitSensor, isSensorNpc, sendArbitraryMsg, validateHitSensor, invalidateHitSensor, addHitSensorAtJoint, addHitSensorMtx } from '../HitSensor.js';
-import { drawWorldSpaceVector, getDebugOverlayCanvas2D } from '../../DebugJunk.js';
-import { tryRegisterDemoCast } from '../Demo.js';
-import { createPartsModelMapObj, PartsModel } from './PartsModel.js';
-import { initFur } from '../Fur.js';
+import { initShadowFromCSV, initShadowVolumeOval, initShadowVolumeSphere, isExistShadow, onCalcShadow, onCalcShadowDropPrivateGravity, onCalcShadowOneTime, setShadowDropPositionAtJoint } from '../Shadow.js';
+import { calcNerveRate, calcNerveValue, isFirstStep, isGreaterEqualStep, isGreaterStep, isLessStep } from '../Spine.js';
 import { createTalkCtrl, createTalkCtrlDirect, resetAndForwardNode, TalkMessageCtrl, tryTalkNearPlayer } from '../Talk.js';
+import { createPartsModelMapObj, PartsModel } from './PartsModel.js';
+import { drawWorldSpacePoint, getDebugOverlayCanvas2D } from '../../DebugJunk.js';
 
 // Scratchpad
 const scratchVec3 = vec3.create();
@@ -491,6 +490,7 @@ export class Butler extends NPCActor<ButlerNrv> {
         caps.waitNerve = ButlerNrv.Wait;
         caps.hitSensorJointName = 'Body';
         caps.hitSensorRadius = 50.0;
+        vec3.zero(caps.hitSensorOffset);
         caps.initShadowType = InitShadowType.CSV;
         caps.initBinder = false;
         this.initialize(sceneObjHolder, infoIter, caps);
@@ -565,6 +565,7 @@ export class Tico extends NPCActor<TicoNrv> {
         caps.waitNerve = TicoNrv.Wait;
         caps.hitSensorJointName = 'Body';
         caps.hitSensorRadius = 60.0;
+        vec3.zero(caps.hitSensorOffset);
         this.initialize(sceneObjHolder, infoIter, caps);
         this.initMessage(sceneObjHolder, infoIter, 'Tico');
 
@@ -588,6 +589,8 @@ export class Tico extends NPCActor<TicoNrv> {
 
         startAction(this, 'Wait');
         setBckFrameAtRandom(this);
+
+        this.makeActorAppeared(sceneObjHolder);
     }
 
     private initMessage(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, name: string): void {
