@@ -83,6 +83,7 @@ export interface GXMaterial {
     hasLightsBlock?: boolean;
     hasFogBlock?: boolean;
     hasDynamicAlphaTest?: boolean;
+    userData?: any;
 }
 
 export class Light {
@@ -437,7 +438,7 @@ export class GX_Program extends DeviceProgram {
 
     public override name: string;
 
-    constructor(private material: GXMaterial, private hacks: GXMaterialHacks | null = null) {
+    constructor(protected material: GXMaterial, private hacks: GXMaterialHacks | null = null) {
         super();
         this.name = material.name;
         this.generateShaders();
@@ -568,7 +569,11 @@ ${this.generateLightAttnFn(chan, lightName)}
         }
     }
 
-    private generateLightChannels(): string {
+    protected generatePosition(): string {
+        return `vec3 t_Position = ${this.generateMul(`a_Position`, true, false)};`;
+    }
+
+    protected generateLightChannels(): string {
         return this.material.lightChannels.map((lightChannel, i) => {
             return this.generateLightChannel(lightChannel, `v_Color${i}`, i);
         }).join('\n');
@@ -651,7 +656,7 @@ ${this.generateLightAttnFn(chan, lightName)}
     }
 
     // Output is a vec3, src is a vec3.
-    private generateTexGenMatrixMult(texCoordGenIndex: number, src: string) {
+    protected generateTexGenMatrixMult(texCoordGenIndex: number, src: string) {
         if (materialUseTexMtxIdx(this.material, texCoordGenIndex)) {
             const attrStr = this.generateTexMtxIdxAttr(texCoordGenIndex);
             return this.generateMulPntMatrixDynamic(attrStr, src);
@@ -773,7 +778,7 @@ ${this.generateLightAttnFn(chan, lightName)}
             return `${baseCoord} * vec2(${this.generateIndTexStageScaleN(stage.scaleS)}, ${this.generateIndTexStageScaleN(stage.scaleT)})`;
     }
 
-    private generateTextureSample(index: number, coord: string): string {
+    protected generateTextureSample(index: number, coord: string): string {
         return `texture(SAMPLER_2D(u_Texture${index}), ${coord}, TextureLODBias(${index}))`;
     }
 
@@ -784,7 +789,7 @@ ${this.generateLightAttnFn(chan, lightName)}
     vec3 t_IndTexCoord${indTexStageIndex} = 255.0 * ${this.generateTextureSample(stage.texture, this.generateIndTexStageScale(stage))}.abg;`;
     }
 
-    private generateIndTexStages(): string {
+    protected generateIndTexStages(): string {
         return this.material.indTexStages.map((stage, i) => {
             if (stage.texCoordId >= this.material.texGens.length)
                 return '';
@@ -1386,7 +1391,7 @@ ${this.generateFogAdj(`t_FogBase`)}
         }).join('\n');
     }
 
-    private generateMul(attr: string, pos: boolean, nrm: boolean): string {
+    protected generateMul(attr: string, pos: boolean, nrm: boolean): string {
         const src = nrm ? attr : `vec4(${attr}.xyz, ${pos ? `1.0` : `0.0`})`;
         const gen = materialUsePnMtxIdx(this.material) ?
             this.generateMulPntMatrixDynamic(`a_Position.w`, src, nrm) :
@@ -1433,7 +1438,7 @@ float ApplyAttenuation(vec3 t_Coeff, float t_Value) {
 ${this.generateExtraVertexGlobal()}
 
 void main() {
-    vec3 t_Position = ${this.generateMul(`a_Position`, true, false)};
+    ${this.generatePosition()}
     v_Position = t_Position;
     vec3 t_Normal = ${this.usesNormal() ? this.generateMul(`a_Normal`, false, true) : `vec3(0.0)`};
 
@@ -1443,7 +1448,6 @@ void main() {
     vec4 t_ColorChanTemp;
 ${this.generateLightChannels()}
 ${this.generateTexGens()}
-${this.generateExtraVertexMain()}
     gl_Position = UnpackMatrix(u_Projection) * vec4(t_Position, 1.0);
 }
 `;
@@ -1498,7 +1502,6 @@ ${this.generateTevStagesLastMinuteFixup()}
 ${this.generateAlphaTest()}
 ${this.generateFog()}
 ${this.generateDstAlpha()}
-${this.generateExtraPixelMainColor()}
 
     return t_PixelOut;
 }

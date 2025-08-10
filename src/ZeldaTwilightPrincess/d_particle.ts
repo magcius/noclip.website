@@ -87,6 +87,10 @@ export class dPa_control_c {
         this.emitterManager.draw(device, renderInstManager, this.drawInfo, drawGroupId);
     }
 
+    public prepareToRender(device: GfxDevice): void {
+        this.emitterManager.prepareToRender(device);
+    }
+
     private getRM_ID(userID: number): number {
         return userID >>> 15;
     }

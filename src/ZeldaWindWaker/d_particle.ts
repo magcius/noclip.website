@@ -8,10 +8,10 @@ import { Frustum } from "../Geometry.js";
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import { EFB_HEIGHT, EFB_WIDTH } from "../gx/gx_material.js";
-import { computeModelMatrixR, getMatrixTranslation, saturate, transformVec3Mat4w0 } from "../MathHelpers.js";
+import { computeModelMatrixR, saturate, transformVec3Mat4w0 } from "../MathHelpers.js";
 import { TDDraw } from "../SuperMarioGalaxy/DDraw.js";
 import { TextureMapping } from "../TextureHolder.js";
-import { assert, nArray } from "../util.js";
+import { nArray } from "../util.js";
 import { ViewerRenderInput } from "../viewer.js";
 import { dKy_get_seacolor } from "./d_kankyo.js";
 import { cLib_addCalc2, cM_s2rad } from "./SComponent.js";
@@ -153,6 +153,10 @@ export class dPa_control_c {
         this.emitterManager.draw(device, renderInstManager, this.drawInfo, drawGroupId);
     }
 
+    public prepareToRender(device: GfxDevice): void {
+        this.emitterManager.prepareToRender(device);
+    }
+
     private getRM_ID(userID: number): number {
         return userID >>> 15;
     }
@@ -261,16 +265,16 @@ class dPa_simpleEcallBack extends JPAEmitterCallBack {
             this.baseEmitter.stopCreateParticle();
 
             // From dPa_simpleEcallBack::draw(). Fixup TEV settings for particles that access the framebuffer.  
-            if (groupID == ParticleGroup.Projection) {
-                const m = resData.materialHelper.material;
+            if (groupID === ParticleGroup.Projection) {
+                const m = resData.materialHelperP.material;
                 m.tevStages[0].alphaInA = GX.CA.ZERO;
                 m.tevStages[0].alphaInB = GX.CA.ZERO;
                 m.tevStages[0].alphaInC = GX.CA.ZERO;
                 m.tevStages[0].alphaInD = GX.CA.A0;
-                resData.materialHelper.materialInvalidated();
+                resData.materialHelperP.materialInvalidated();
             }
 
-            if (userID == 0xa06a || userID == 0xa410) {
+            if (userID === 0xa06a || userID === 0xa410) {
                 // TODO: Smoke callback
             }
         }

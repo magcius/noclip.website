@@ -125,7 +125,7 @@ export function colorToRGBA8(src: Color): number {
         (src.g * 0xFF) << 16 |
         (src.b * 0xFF) <<  8 |
         (src.a * 0xFF) <<  0
-    );
+    ) >>> 0;
 }
 
 export function colorToCSS(src: Color, a: number = src.a): string {

@@ -1113,6 +1113,10 @@ export class EffectSystem extends NameObj {
         this.emitterManager.draw(device, renderInstManager, this.drawInfo, groupID);
     }
 
+    public prepareToRender(device: GfxDevice): void {
+        this.emitterManager.prepareToRender(device);
+    }
+
     private createEmitter(resData: JPA.JPAResourceData, groupID: number): ParticleEmitter | null {
         const particleEmitter = this.particleEmitterHolder.findAvailableParticleEmitter();
         if (particleEmitter === null)

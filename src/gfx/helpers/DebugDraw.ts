@@ -98,7 +98,7 @@ void main() {
     vec4 t_Color = v_Color;
 
     if ((v_Flags & uint(${DebugDrawFlags.DepthTint})) != 0u) {
-        float t_DepthSample = texelFetch(SAMPLER_2D(u_TextureFramebufferDepth), ivec2(gl_FragCoord.xy), 0).r;
+        float t_DepthSample = texelFetch(TEXTURE(u_TextureFramebufferDepth), ivec2(gl_FragCoord.xy), 0).r;
         if (IsSomethingInFront(t_DepthSample))
             t_Color.rgba *= 0.15;
     }

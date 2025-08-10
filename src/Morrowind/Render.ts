@@ -558,7 +558,7 @@ in vec2 v_CellUV;
 in vec3 v_Color;
 
 vec4 SampleTerrain(vec2 t_TexCoord, ivec2 t_Offset) {
-    float t_TexLayer = texelFetch(SAMPLER_2D(u_TextureTerrainMap), ivec2(t_TexCoord) + t_Offset, 0).r;
+    float t_TexLayer = texelFetch(TEXTURE(u_TextureTerrainMap), ivec2(t_TexCoord) + t_Offset, 0).r;
     return texture(SAMPLER_2DArray(u_TextureTerrain), vec3(t_TexCoord.xy, t_TexLayer));
 }
 

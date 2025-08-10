@@ -435,6 +435,8 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
 
                 renderInstManager.popTemplate();
             }
+
+            globals.particleCtrl.prepareToRender(device);
         }
 
         this.renderHelper.renderInstManager.popTemplate();

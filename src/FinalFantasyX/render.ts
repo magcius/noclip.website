@@ -210,8 +210,8 @@ layout(location = 1) in vec2 a_TexCoord;
 
 void main() {
     int hackFlags = int(u_RenderHacks);
-    vec3 pos = texelFetch(SAMPLER_2D(u_Vertices), ivec2(int(a_Indices.x), 0), 0).xyz;
-    vec3 norm = texelFetch(SAMPLER_2D(u_Vertices), ivec2(int(a_Indices.y), 1), 0).xyz;
+    vec3 pos = texelFetch(TEXTURE(u_Vertices), ivec2(int(a_Indices.x), 0), 0).xyz;
+    vec3 norm = texelFetch(TEXTURE(u_Vertices), ivec2(int(a_Indices.y), 1), 0).xyz;
     norm = UnpackMatrix(u_NormalMatrix) * vec4(norm, 0.);
 
     vec3 viewPos = UnpackMatrix(u_BoneMatrix) * vec4(pos, 1.0);

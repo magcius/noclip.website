@@ -275,6 +275,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
         const effectSystem = this.sceneObjHolder.effectSystem;
 
         const renderInstManager = this.renderHelper.renderInstManager;
+        const device = this.sceneObjHolder.modelCache.device;
 
         for (let drawType = DrawType.EffectDraw3D; drawType <= DrawType.EffectDrawAfterImageEffect; drawType++) {
             renderInstManager.setCurrentList(this.sceneObjHolder.sceneNameObjListExecutor.ensureRenderInstListExecute(drawType));
@@ -288,10 +289,12 @@ export class SMGRenderer implements Viewer.SceneGfx {
             }
 
             effectSystem.setDrawInfo(viewerInput.camera.viewMatrix, viewerInput.camera.projectionMatrix, texPrjMtx, viewerInput.camera.frustum);
-            effectSystem.drawEmitters(this.sceneObjHolder.modelCache.device, this.renderHelper.renderInstManager, drawType);
+            effectSystem.drawEmitters(device, this.renderHelper.renderInstManager, drawType);
 
             this.renderHelper.renderInstManager.popTemplate();
         }
+
+        effectSystem.prepareToRender(device);
     }
 
     private executeOnPass(passRenderer: GfxRenderPass, list: GfxRenderInstList | null): void {

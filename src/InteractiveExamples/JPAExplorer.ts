@@ -104,6 +104,10 @@ class BasicEffectSystem {
         this.emitterManager.draw(device, renderInstManager, this.drawInfo, drawGroupId);
     }
 
+    public prepareToRender(device: GfxDevice): void {
+        this.emitterManager.prepareToRender(device);
+    }
+
     public forceDeleteEmitter(emitter: JPA.JPABaseEmitter): void {
         this.emitterManager.forceDeleteEmitter(emitter);
     }
@@ -467,6 +471,8 @@ export class Explorer implements SceneGfx {
             this.effectSystem.setDrawInfo(viewerInput.camera.viewMatrix, viewerInput.camera.projectionMatrix, texPrjMtx);
             this.effectSystem.draw(device, this.renderHelper.renderInstManager, EfGroup.Indirect);
         }
+
+        this.effectSystem.prepareToRender(device);
 
         renderInstManager.popTemplate();
 

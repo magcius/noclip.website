@@ -497,6 +497,8 @@ export class TwilightPrincessRenderer implements Viewer.SceneGfx {
                 this.globals.particleCtrl.draw(device, this.renderHelper.renderInstManager, group);
             }
 
+            globals.particleCtrl.prepareToRender(device);
+
             renderInstManager.setCurrentList(dlst.indirect[0]);
         }
 
