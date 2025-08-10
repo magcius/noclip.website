@@ -446,7 +446,7 @@ export class GXMaterialHelperGfx {
     public materialParamsBufferSize: number;
     public drawParamsBufferSize: number;
     private materialHacks: GX_Material.GXMaterialHacks = {};
-    private program!: GX_Material.GX_Program;
+    private program: GX_Material.GX_Program | null = null;
     private gfxProgram: GfxProgram | null = null;
     public valid = true;
 
@@ -478,18 +478,20 @@ export class GXMaterialHelperGfx {
 
         this.materialParamsBufferSize = GX_Material.getMaterialParamsBlockSize(this.material);
         this.drawParamsBufferSize = GX_Material.getDrawParamsBlockSize(this.material);
-        this.createProgram();
     }
 
     public cacheProgram(cache: GfxRenderCache): void {
+        if (this.program === null)
+            this.createProgram();
+
         if (this.gfxProgram === null) {
-            this.gfxProgram = cache.createProgram(this.program);
+            this.gfxProgram = cache.createProgram(this.program!);
             this.programKey = this.gfxProgram.ResourceUniqueId;
         }
     }
 
-    public createProgram(): void {
-        this.program = new GX_Material.GX_Program(this.material, this.materialHacks);
+    public createProgram(klass = GX_Material.GX_Program): void {
+        this.program = new klass(this.material, this.materialHacks);
         this.gfxProgram = null;
     }
 

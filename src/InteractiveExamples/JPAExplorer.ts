@@ -77,12 +77,12 @@ class BasicEffectSystem {
         return false;
     }
 
-    private getResourceData(device: GfxDevice, cache: GfxRenderCache, userIndex: number): JPA.JPAResourceData | null {
+    private getResourceData(cache: GfxRenderCache, userIndex: number): JPA.JPAResourceData | null {
         if (!this.resourceDatas.has(userIndex)) {
             const data = this.findResourceData(userIndex);
             if (data !== null) {
                 const [jpacData, jpaResRaw] = data;
-                const resData = new JPA.JPAResourceData(device, cache, jpacData, jpaResRaw);
+                const resData = new JPA.JPAResourceData(cache, jpacData, jpaResRaw);
                 this.resourceDatas.set(userIndex, resData);
             }
         }
@@ -108,8 +108,8 @@ class BasicEffectSystem {
         this.emitterManager.forceDeleteEmitter(emitter);
     }
 
-    public createBaseEmitter(device: GfxDevice, cache: GfxRenderCache, resourceId: number): JPA.JPABaseEmitter {
-        const resData = assertExists(this.getResourceData(device, cache, resourceId));
+    public createBaseEmitter(cache: GfxRenderCache, resourceId: number): JPA.JPABaseEmitter {
+        const resData = assertExists(this.getResourceData(cache, resourceId));
         const emitter = this.emitterManager.createEmitter(resData)!;
         return emitter;
     }
@@ -384,7 +384,7 @@ export class Explorer implements SceneGfx {
 
     private createEmitter(effectIndex = this.currentEffectIndex): void {
         const resourceId = this.jpac.effects[effectIndex].resourceId;
-        const newEmitter = this.effectSystem.createBaseEmitter(this.context.device, this.renderHelper.renderCache, resourceId);
+        const newEmitter = this.effectSystem.createBaseEmitter(this.renderHelper.renderCache, resourceId);
         newEmitter.drawGroupId = this.effectSystem.resourceDataUsesFB(newEmitter.resData) ? EfGroup.Indirect : EfGroup.Main;
         this.emitters.push(newEmitter);
     }

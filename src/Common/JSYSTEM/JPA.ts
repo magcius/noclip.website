@@ -28,7 +28,7 @@ import { GXMaterialHelperGfx } from "../../gx/gx_render.js";
 import { computeModelMatrixSRT, computeModelMatrixR, lerp, MathConstants, normToLengthAndAdd, normToLength, isNearZeroVec3, transformVec3Mat4w1, transformVec3Mat4w0, getMatrixAxisZ, setMatrixTranslation, setMatrixAxis, Vec3Zero, vec3SetAll } from "../../MathHelpers.js";
 import { makeStaticDataBuffer } from "../../gfx/helpers/BufferHelpers.js";
 import { GfxRenderInst, GfxRenderInstManager, makeSortKeyTranslucent, GfxRendererLayer, setSortKeyBias, setSortKeyDepth } from "../../gfx/render/GfxRenderInstManager.js";
-import { fillMatrix4x3, fillColor, fillMatrix4x2 } from "../../gfx/helpers/UniformBufferHelpers.js";
+import { fillMatrix4x3, fillColor, fillMatrix4x2, fillVec4 } from "../../gfx/helpers/UniformBufferHelpers.js";
 import { computeViewSpaceDepthFromWorldSpacePoint } from "../../Camera.js";
 import { makeTriangleIndexBuffer, GfxTopology, getTriangleIndexCountForTopologyIndexCount } from "../../gfx/helpers/TopologyHelpers.js";
 import { GfxRenderCache } from "../../gfx/render/GfxRenderCache.js";
@@ -195,6 +195,7 @@ interface JPABaseShapeBlock {
 
     // Color Animation Settings
     isGlblClrAnm: boolean;
+    isEnableAnmTone: boolean;
     colorCalcIdxType: CalcIdxType;
     colorPrm: Color;
     colorEnv: Color;
@@ -513,7 +514,7 @@ export class JPAResourceData {
     public materialHelper: GXMaterialHelperGfx;
     public textureIds: number[] = [];
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, private jpacData: JPACData, resRaw: JPAResourceRaw) {
+    constructor(cache: GfxRenderCache, private jpacData: JPACData, resRaw: JPAResourceRaw) {
         this.res = parseResource(this.jpacData.jpac.version, resRaw);
         this.resourceId = resRaw.resourceId;
 
@@ -569,13 +570,19 @@ export class JPAResourceData {
             st_c[(bsp1.zModeFlags >>> 1) & 0x07],
             !!((bsp1.zModeFlags >>> 4) & 0x01),
         );
-        mb.setAlphaCompare(
-            st_c[(bsp1.alphaCompareFlags >>> 0) & 0x07],
-            bsp1.alphaRef0,
-            st_ao[(bsp1.alphaCompareFlags >>> 3) & 0x03],
-            st_c[(bsp1.alphaCompareFlags >>> 5) & 0x07],
-            bsp1.alphaRef1,
-        );
+
+        if (bsp1.isEnableAnmTone) {
+            mb.setDynamicAlphaCompare(true);
+            mb.setAlphaCompare(GX.CompareType.GEQUAL, 0, GX.AlphaOp.OR, GX.CompareType.NEVER, 0);
+        } else {
+            mb.setAlphaCompare(
+                st_c[(bsp1.alphaCompareFlags >>> 0) & 0x07],
+                bsp1.alphaRef0,
+                st_ao[(bsp1.alphaCompareFlags >>> 3) & 0x03],
+                st_c[(bsp1.alphaCompareFlags >>> 5) & 0x07],
+                bsp1.alphaRef1,
+            );
+        }
 
         let texCoordId = GX.TexCoordID.TEXCOORD0;
         if (bsp1.isEnableProjection)
@@ -921,7 +928,7 @@ export class JPAEmitterWorkData {
     public materialParams = new MaterialParams();
     public drawParams = new DrawParams();
 
-    public fillParticleRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst): void {
+    public fillParticleRenderInst(renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst): void {
         const materialHelper = this.baseEmitter.resData.materialHelper;
         materialHelper.setOnRenderInst(renderInstManager.gfxRenderCache, renderInst);
 
@@ -965,6 +972,11 @@ export class JPAEmitterWorkData {
         materialOffs += 1*4;
 
         materialOffs += fillMatrix4x2(d, materialOffs, materialParams.u_IndTexMtx[0]);
+        // Skip u_IndTexMtx[2-3]
+        materialOffs += 4*2*2;
+
+        if (materialHelper.material.hasDynamicAlphaTest)
+            materialOffs += fillVec4(d, materialOffs, this.baseEmitter.globalColorPrm.a);
 
         packetOffs += fillMatrix4x3(d, packetOffs, drawParams.u_PosMtx[0]);
 
@@ -993,7 +1005,7 @@ class StripeEntry {
     }
 }
 
-const MAX_STRIPE_VERTEX_COUNT = 512;
+const MAX_STRIPE_VERTEX_COUNT = 65535;
 class StripeBufferManager {
     public stripeEntry: StripeEntry[] = [];
     private indexBuffer: GfxBuffer;
@@ -2039,7 +2051,7 @@ export class JPABaseEmitter {
         renderInst1.setDrawCount(oneStripIndexCount);
         renderInst1.sortKey = workData.particleSortKey;
         renderInst1.setVertexInput(globalRes.inputLayout, entry.vertexBufferDescriptors, entry.indexBufferDescriptor);
-        workData.fillParticleRenderInst(device, renderInstManager, renderInst1);
+        workData.fillParticleRenderInst(renderInstManager, renderInst1);
         renderInstManager.submitRenderInst(renderInst1);
 
         if (isCross) {
@@ -3196,7 +3208,7 @@ export class JPABaseParticle {
         }
     }
 
-    private drawCommon(device: GfxDevice, renderInstManager: GfxRenderInstManager, workData: JPAEmitterWorkData, sp1: CommonShapeTypeFields): void {
+    private drawCommon(renderInstManager: GfxRenderInstManager, workData: JPAEmitterWorkData, sp1: CommonShapeTypeFields): void {
         if (!!(this.status & JPAParticleStatus.INVISIBLE_PARTICLE))
             return;
 
@@ -3423,7 +3435,7 @@ export class JPABaseParticle {
         materialParams.u_Color[ColorKind.C0].a *= this.prmColorAlphaAnm;
         colorMult(materialParams.u_Color[ColorKind.C1], this.colorEnv, workData.baseEmitter.globalColorEnv);
 
-        workData.fillParticleRenderInst(device, renderInstManager, renderInst);
+        workData.fillParticleRenderInst(renderInstManager, renderInst);
 
         renderInstManager.submitRenderInst(renderInst);
     }
@@ -3448,7 +3460,7 @@ export class JPABaseParticle {
             workData.pivotY = 1;
         }
 
-        this.drawCommon(device, renderInstManager, workData, bsp1);
+        this.drawCommon(renderInstManager, workData, bsp1);
     }
 
     public drawC(device: GfxDevice, renderInstManager: GfxRenderInstManager, workData: JPAEmitterWorkData): void {
@@ -3459,7 +3471,7 @@ export class JPABaseParticle {
         workData.pivotX = 1;
         workData.pivotY = 1;
 
-        this.drawCommon(device, renderInstManager, workData, ssp1);
+        this.drawCommon(renderInstManager, workData, ssp1);
     }
 }
 //#endregion
@@ -3617,6 +3629,9 @@ function parseResource_JEFFjpa1(res: JPAResourceRaw): JPAResource {
             const colorLoopOfstMask  = !!((colorAnmCalcFlags >>> 0) & 0x01) ? 0xFFFF : 0x0000;
             const isGlblClrAnm       = !!((colorAnmCalcFlags >>> 1) & 0x01);
 
+            // Does this exist in JEFFjpa1?
+            const isEnableAnmTone = false;
+
             const shapeType: ShapeType = view.getUint8(tableIdx + 0x24);
             const dirType: DirType = view.getUint8(tableIdx + 0x25);
             const rotType: RotType = view.getUint8(tableIdx + 0x26);
@@ -3716,7 +3731,7 @@ function parseResource_JEFFjpa1(res: JPAResourceRaw): JPAResource {
                 colorInSelect, alphaInSelect, blendModeFlags, alphaCompareFlags, alphaRef0, alphaRef1, zModeFlags,
                 anmRndm,
                 isEnableTexture, isGlblTexAnm, texCalcIdxType, texIdx, texIdxAnimData, texIdxLoopOfstMask,
-                isEnableTexScrollAnm, isEnableProjection,
+                isEnableTexScrollAnm, isEnableProjection, isEnableAnmTone,
                 texInitTransX, texInitTransY, texInitScaleX, texInitScaleY, texInitRot,
                 texIncTransX, texIncTransY, texIncScaleX, texIncScaleY, texIncRot,
                 isGlblClrAnm, colorCalcIdxType, colorPrm, colorEnv, colorEnvAnimData, colorPrmAnimData, colorAnimMaxFrm, colorLoopOfstMask,
@@ -4099,11 +4114,11 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
             const isGlblTexAnm         = !!((flags >>> 14) & 0x01);
             const colorInSelect        =    (flags >>> 15) & 0x07;
             const alphaInSelect        =    (flags >>> 18) & 0x01;
-            // 19 = unk
+            const isEnableAnmTone      = !!((flags >>> 19) & 0x01);
             const isEnableProjection   = !!((flags >>> 20) & 0x01);
             const isDrawFwdAhead       = !!((flags >>> 21) & 0x01);
             const isDrawPrntAhead      = !!((flags >>> 22) & 0x01);
-            // 23 = unk
+            const isEnableClip         = !!((flags >>> 23) & 0x01);
             const isEnableTexScrollAnm = !!((flags >>> 24) & 0x01);
 
             if (shapeType === ShapeType.DirectionCross || shapeType === ShapeType.RotationCross)
@@ -4181,7 +4196,7 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
                 colorInSelect, alphaInSelect, blendModeFlags, alphaCompareFlags, alphaRef0, alphaRef1, zModeFlags,
                 anmRndm,
                 isEnableTexture, isGlblTexAnm, texCalcIdxType, texIdx, texIdxAnimData, texIdxLoopOfstMask,
-                isEnableTexScrollAnm, isEnableProjection,
+                isEnableTexScrollAnm, isEnableProjection, isEnableAnmTone,
                 texInitTransX, texInitTransY, texInitScaleX, texInitScaleY, texInitRot,
                 texIncTransX, texIncTransY, texIncScaleX, texIncScaleY, texIncRot,
                 isGlblClrAnm, colorCalcIdxType, colorPrm, colorEnv, colorEnvAnimData, colorPrmAnimData, colorAnimMaxFrm, colorLoopOfstMask,
@@ -4559,6 +4574,9 @@ function parseResource_JPAC2(res: JPAResourceRaw, version: JPACVersion): JPAReso
             const alphaInSelect        =    (flags >>> 18) & 0x01;
             // 19 = unk
 
+            // Does this exist in JPA2?
+            const isEnableAnmTone      = false;
+
             let isEnableProjection, isDrawFwdAhead, isDrawPrntAhead;
             let isEnableTexScrollAnm, tilingS, tilingT, isNoDrawParent;
             let isNoDrawChild;
@@ -4676,7 +4694,7 @@ function parseResource_JPAC2(res: JPAResourceRaw, version: JPACVersion): JPAReso
                 colorInSelect, alphaInSelect, blendModeFlags, alphaCompareFlags, alphaRef0, alphaRef1, zModeFlags,
                 anmRndm,
                 isEnableTexture, isGlblTexAnm, texCalcIdxType, texIdx, texIdxAnimData, texIdxLoopOfstMask,
-                isEnableTexScrollAnm, isEnableProjection,
+                isEnableTexScrollAnm, isEnableProjection, isEnableAnmTone,
                 texInitTransX, texInitTransY, texInitScaleX, texInitScaleY, texInitRot,
                 texIncTransX, texIncTransY, texIncScaleX, texIncScaleY, texIncRot,
                 isGlblClrAnm, colorCalcIdxType, colorPrm, colorEnv, colorEnvAnimData, colorPrmAnimData, colorAnimMaxFrm, colorLoopOfstMask,

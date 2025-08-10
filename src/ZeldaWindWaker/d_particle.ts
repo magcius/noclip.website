@@ -172,8 +172,8 @@ export class dPa_control_c {
             const data = this.findResData(userIndex);
             if (data !== null) {
                 const [jpacData, jpaResRaw] = data;
-                const device = globals.modelCache.device, cache = globals.modelCache.cache;
-                const resData = new JPAResourceData(device, cache, jpacData, jpaResRaw);
+                const cache = globals.modelCache.cache;
+                const resData = new JPAResourceData(cache, jpacData, jpaResRaw);
                 this.resourceDatas.set(userIndex, resData);
             } else {
                 return null;
@@ -437,7 +437,7 @@ export class dPa_waveEcallBack extends dPa_levelEcallBack {
         const renderInst = ddraw.endDrawAndMakeRenderInst(renderInstManager);
         renderInst.sortKey = workData.particleSortKey;
         dKy_get_seacolor(this.globals.g_env_light, workData.materialParams.u_Color[ColorKind.C0], workData.materialParams.u_Color[ColorKind.C1]);
-        workData.fillParticleRenderInst(device, renderInstManager, renderInst);
+        workData.fillParticleRenderInst(renderInstManager, renderInst);
         renderInstManager.submitRenderInst(renderInst);
     }
 
@@ -551,7 +551,7 @@ export class dPa_trackEcallBack extends dPa_levelEcallBack {
 
         const renderInst = ddraw.endDrawAndMakeRenderInst(renderInstManager);
         renderInst.sortKey = workData.particleSortKey;
-        workData.fillParticleRenderInst(device, renderInstManager, renderInst);
+        workData.fillParticleRenderInst(renderInstManager, renderInst);
         renderInstManager.submitRenderInst(renderInst);
     }
 

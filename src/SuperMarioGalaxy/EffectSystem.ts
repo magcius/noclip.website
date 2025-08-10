@@ -54,9 +54,8 @@ export class ParticleResourceHolder {
             return null;
 
         if (!this.resourceDatas.has(idx)) {
-            const device = sceneObjHolder.modelCache.device;
             const cache = sceneObjHolder.modelCache.renderCache;
-            const resData = new JPA.JPAResourceData(device, cache, this.jpacData, this.jpac.effects[idx]);
+            const resData = new JPA.JPAResourceData(cache, this.jpacData, this.jpac.effects[idx]);
             resData.name = name;
             this.addTexturesForResource(sceneObjHolder, resData);
             this.resourceDatas.set(idx, resData);

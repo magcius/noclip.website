@@ -27,6 +27,7 @@ import { ANK1, BCK, BMD, BPK, BRK, BTK, BTP, BVA, ShapeMtxType, TexMtxMapMode, T
 import { MaterialParams, DrawParams } from "../gx/gx_render.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { JKRArchive, RARCFile } from "../Common/JSYSTEM/JKRArchive.js";
+import { GX_Program } from "../gx/gx_material.js";
 
 class ActorAnimDataInfo {
     public Name: string;
@@ -382,6 +383,20 @@ export class ResourceHolder {
     }
 }
 
+export class NoSilhouettedProgram extends GX_Program {
+    public override generateExtraPixelGlobal(): string {
+        return `
+layout(location = 1) out vec4 o_OutColor1;
+`;
+    }
+
+    public override generateExtraPixelMain(): string {
+        return `
+o_OutColor1 = vec4(0.0);
+`;
+    }
+}
+
 export class ModelManager {
     public resourceHolder: ResourceHolder;
     public modelInstance: J3DModelInstance;
@@ -398,6 +413,8 @@ export class ModelManager {
 
         const bmdModel = this.resourceHolder.getModel(objName);
         this.modelInstance = new J3DModelInstance(bmdModel);
+        for (let i = 0; i < this.modelInstance.materialInstances.length; i++)
+            this.modelInstance.materialInstances[i].materialHelper.createProgram(NoSilhouettedProgram);
         this.modelInstance.name = objName;
         if (this.resourceHolder.motionTable.size > 0)
             this.xanimePlayer = new XanimePlayer(this.resourceHolder.motionTable, this.modelInstance);

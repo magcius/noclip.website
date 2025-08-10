@@ -1,24 +1,20 @@
 
 // particle
 
-import { mat4, ReadonlyMat4, ReadonlyVec3, vec2, vec3 } from "gl-matrix";
+import { ReadonlyMat4, ReadonlyVec3, vec2, vec3 } from "gl-matrix";
 import { Color, colorCopy } from "../Color.js";
-import { JPABaseEmitter, JPAEmitterManager, JPAResourceData, JPAEmitterCallBack, JPADrawInfo, JPACData, JPAC, JPAResourceRaw } from "../Common/JSYSTEM/JPA.js";
+import { JPABaseEmitter, JPAC, JPACData, JPADrawInfo, JPAEmitterCallBack, JPAEmitterManager, JPAResourceData, JPAResourceRaw } from "../Common/JSYSTEM/JPA.js";
 import { Frustum } from "../Geometry.js";
+import { gfxDeviceNeedsFlipY } from "../gfx/helpers/GfxDeviceHelpers.js";
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import { EFB_HEIGHT, EFB_WIDTH } from "../gx/gx_material.js";
-import { computeModelMatrixR, getMatrixTranslation, saturate, transformVec3Mat4w0 } from "../MathHelpers.js";
-import { TDDraw } from "../SuperMarioGalaxy/DDraw.js";
+import { computeModelMatrixR, getMatrixTranslation } from "../MathHelpers.js";
 import { TextureMapping } from "../TextureHolder.js";
-import { nArray } from "../util.js";
 import { ViewerRenderInput } from "../viewer.js";
-import { cLib_addCalc2, cM_s2rad } from "../ZeldaWindWaker/SComponent.js";
+import { cM_s2rad } from "../ZeldaWindWaker/SComponent.js";
 import { dGlobals } from "./Main.js";
-import * as GX from '../gx/gx_enum.js';
-import { ColorKind } from "../gx/gx_render.js";
-import { gfxDeviceNeedsFlipY } from "../gfx/helpers/GfxDeviceHelpers.js";
-import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 
 export abstract class dPa_levelEcallBack extends JPAEmitterCallBack {
     constructor(protected globals: dGlobals) {
@@ -111,7 +107,7 @@ export class dPa_control_c {
             if (data !== null) {
                 const [jpacData, jpaResRaw] = data;
                 const device = globals.modelCache.device, cache = globals.modelCache.renderCache;
-                const resData = new JPAResourceData(device, cache, jpacData, jpaResRaw);
+                const resData = new JPAResourceData(cache, jpacData, jpaResRaw);
                 this.resourceDatas.set(userIndex, resData);
             }
         }

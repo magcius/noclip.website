@@ -1430,6 +1430,8 @@ float ApplyAttenuation(vec3 t_Coeff, float t_Value) {
     return dot(t_Coeff, vec3(1.0, t_Value, t_Value*t_Value));
 }
 
+${this.generateExtraVertexGlobal()}
+
 void main() {
     vec3 t_Position = ${this.generateMul(`a_Position`, true, false)};
     v_Position = t_Position;
@@ -1441,6 +1443,7 @@ void main() {
     vec4 t_ColorChanTemp;
 ${this.generateLightChannels()}
 ${this.generateTexGens()}
+${this.generateExtraVertexMain()}
     gl_Position = UnpackMatrix(u_Projection) * vec4(t_Position, 1.0);
 }
 `;
@@ -1471,6 +1474,8 @@ vec3 TevPerCompGT(vec3 a, vec3 b) { return vec3(greaterThan(a, b)); }
 vec3 TevPerCompEQ(vec3 a, vec3 b) { return vec3(greaterThan(a, b)); }
 float TevMask(float n, int mask) { return float(int((n * 255.0)) & mask) / 255.0; }
 
+${this.generateExtraPixelGlobal()}
+
 vec4 MainColor() {
     vec4 s_kColor0   = u_KonstColor[0];
     vec4 s_kColor1   = u_KonstColor[1];
@@ -1493,21 +1498,25 @@ ${this.generateTevStagesLastMinuteFixup()}
 ${this.generateAlphaTest()}
 ${this.generateFog()}
 ${this.generateDstAlpha()}
+${this.generateExtraPixelMainColor()}
 
     return t_PixelOut;
 }
 
 layout(location = 0) out vec4 o_OutColor0;
-layout(location = 1) out vec4 o_OutColor1;
 
 void main() {
     o_OutColor0 = MainColor();
-    // This is a hack for Galaxy shadow clearing...
-    // TODO(jstpierre): Make this configurable? Allow subclassing GX_Material? Yikes...
-    o_OutColor1 = vec4(0.0);
+${this.generateExtraPixelMain()}
 }
 `;
     }
+
+    public generateExtraVertexGlobal() { return ""; }
+    public generateExtraVertexMain() { return ""; }
+    public generateExtraPixelGlobal() { return ""; }
+    public generateExtraPixelMain() { return ""; }
+    public generateExtraPixelMainColor() { return ""; }
 }
 // #endregion
 

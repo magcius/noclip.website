@@ -115,6 +115,7 @@ export class GXMaterialBuilder {
     private alphaTest: AlphaTest;
     private ropInfo: RopInfo;
     private usePnMtxIdx: boolean;
+    private hasDynamicAlphaCompare: boolean;
 
     constructor(private name: string | null = null) {
         this.reset();
@@ -138,6 +139,7 @@ export class GXMaterialBuilder {
         this.setAlphaUpdate(false);
 
         this.usePnMtxIdx = true;
+        this.hasDynamicAlphaCompare = false;
     }
 
     public setCullMode(cullMode: GX.CullMode): void {
@@ -359,13 +361,17 @@ export class GXMaterialBuilder {
         this.usePnMtxIdx = v;
     }
 
+    public setDynamicAlphaCompare(v: boolean): void {
+        this.hasDynamicAlphaCompare = v;
+    }
+
     public finish(name: string | null = null): GXMaterial {
         if (name === null)
             name = this.name;
         if (name === null)
             name = '';
 
-        const material = {
+        const material: GXMaterial = {
             name: name,
             cullMode: this.cullMode,
             lightChannels: this.lightChannels.map(copyLightChannelControl),
@@ -375,6 +381,7 @@ export class GXMaterialBuilder {
             alphaTest: copyAlphaTest(this.alphaTest),
             ropInfo: copyRopInfo(this.ropInfo),
             usePnMtxIdx: this.usePnMtxIdx,
+            hasDynamicAlphaTest: this.hasDynamicAlphaCompare,
         };
         autoOptimizeMaterial(material);
         return material;
