@@ -171,6 +171,17 @@ export class dPa_control_c {
         return null;
     }
 
+    private patchResData(resData: JPAResourceData): void {
+        const texIdx = resData.textureIds[resData.res.bsp1.texIdx];
+
+        // From dPa_simpleEcallBack::draw(). Fixup TEV settings for particles that access the framebuffer.  
+        if (resData.jpacData.textureMapping[texIdx].lateBinding === 'OpaqueSceneTexture') {
+            // Alpha = A0
+            resData.res.bsp1.alphaInSelect = 1;
+            resData.createMaterial();
+        }
+    }
+
     private getResData(globals: dGlobals, userIndex: number): JPAResourceData | null {
         if (!this.resourceDatas.has(userIndex)) {
             const data = this.findResData(userIndex);
@@ -178,6 +189,7 @@ export class dPa_control_c {
                 const [jpacData, jpaResRaw] = data;
                 const cache = globals.modelCache.cache;
                 const resData = new JPAResourceData(cache, jpacData, jpaResRaw);
+                this.patchResData(resData);
                 this.resourceDatas.set(userIndex, resData);
             } else {
                 return null;
@@ -263,16 +275,6 @@ class dPa_simpleEcallBack extends JPAEmitterCallBack {
             this.baseEmitter.emitterCallBack = this;
             this.baseEmitter.maxFrame = 0;
             this.baseEmitter.stopCreateParticle();
-
-            // From dPa_simpleEcallBack::draw(). Fixup TEV settings for particles that access the framebuffer.  
-            if (groupID === ParticleGroup.Projection) {
-                const m = resData.materialHelperP.material;
-                m.tevStages[0].alphaInA = GX.CA.ZERO;
-                m.tevStages[0].alphaInB = GX.CA.ZERO;
-                m.tevStages[0].alphaInC = GX.CA.ZERO;
-                m.tevStages[0].alphaInD = GX.CA.A0;
-                resData.materialHelperP.materialInvalidated();
-            }
 
             if (userID === 0xa06a || userID === 0xa410) {
                 // TODO: Smoke callback

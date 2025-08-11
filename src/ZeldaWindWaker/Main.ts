@@ -21,7 +21,7 @@ import { computeModelMatrixT, range } from '../MathHelpers.js';
 import { SceneContext } from '../SceneBase.js';
 import { TextureMapping } from '../TextureHolder.js';
 import { setBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
-import { GfxDevice, GfxFormat, GfxRenderPass } from '../gfx/platform/GfxPlatform.js';
+import { GfxDevice, GfxFormat, GfxMipFilterMode, GfxRenderPass, GfxTexFilterMode, GfxWrapMode } from '../gfx/platform/GfxPlatform.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { GfxrAttachmentSlot, GfxrRenderTargetDescription } from '../gfx/render/GfxRenderGraph.js';
 import { GfxRenderInstList, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
@@ -272,6 +272,14 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         this.renderHelper = new GXRenderHelperGfx(device);
 
         this.renderCache = this.renderHelper.renderInstManager.gfxRenderCache;
+
+        this.opaqueSceneTextureMapping.gfxSampler = this.renderCache.createSampler({
+            magFilter: GfxTexFilterMode.Bilinear,
+            minFilter: GfxTexFilterMode.Bilinear,
+            mipFilter: GfxMipFilterMode.Nearest,
+            wrapS: GfxWrapMode.Clamp,
+            wrapT: GfxWrapMode.Clamp,
+        });
     }
 
     private setVisibleLayerMask(m: number): void {

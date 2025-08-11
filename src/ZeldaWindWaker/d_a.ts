@@ -340,7 +340,6 @@ class d_a_ep extends fopAc_ac_c {
     }
 
     private ep_move(globals: dGlobals, deltaTimeFrames: number): void {
-
         const flamePos = vec3.set(scratchVec3a, this.posTop[0], this.posTop[1] + -240 + 235 + 15, this.posTop[2]);
 
         // tons of fun timers and such
@@ -350,7 +349,7 @@ class d_a_ep extends fopAc_ac_c {
             this.lightPowerTarget = this.scale[0];
         } else if (this.state === 3 || this.state === 4) {
             this.lightPower = cLib_addCalc2(this.lightPower, this.lightPowerTarget, 0.5 * deltaTimeFrames, 0.2);
-            
+
             // TODO: Type 2 flames should be handled by d_a_lamp, but for now lets just handle them here 
             if (true || this.type !== 2) {
                 if (this.burstTimer < 7) globals.particleCtrl.setSimple(0x0001, flamePos, 0xFF, White, White, false);
@@ -4471,16 +4470,12 @@ class d_a_obj_flame extends fopAc_ac_c {
                 this.em2State = d_a_obj_em_state.TurnOff;
         }
 
-        if (this.em0State === d_a_obj_em_state.TurnOff) {
+        if (this.em0State === d_a_obj_em_state.TurnOff)
             this.em0 = null;
-        }
-        if (this.em1State === d_a_obj_em_state.TurnOff) {
+        if (this.em1State === d_a_obj_em_state.TurnOff)
             this.em1 = null;
-        }
-        if (this.em2State !== d_a_obj_em_state.TurnOff) {
-            return;
-        }
-        this.em2 = null;
+        if (this.em2State === d_a_obj_em_state.TurnOff)
+            this.em2 = null;
     }
 
     private mode_proc_call(globals: dGlobals, deltaTimeFrames: number): void {

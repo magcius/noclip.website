@@ -521,7 +521,7 @@ export class JPAResourceData {
     public usingInstancingC = false;
     public textureIds: number[] = [];
 
-    constructor(cache: GfxRenderCache, private jpacData: JPACData, resRaw: JPAResourceRaw) {
+    constructor(cache: GfxRenderCache, public jpacData: JPACData, resRaw: JPAResourceRaw) {
         this.res = parseResource(this.jpacData.jpac.version, resRaw);
         this.resourceId = resRaw.resourceId;
 
@@ -564,6 +564,14 @@ export class JPAResourceData {
 
         if (ssp1 !== null)
             this.ensureTextureFromTDB1Index(cache, ssp1.texIdx, texIdBase);
+
+        this.createMaterial();
+    }
+
+    public createMaterial(): void {
+        const bsp1 = this.res.bsp1;
+        const etx1 = this.res.etx1;
+        const ssp1 = this.res.ssp1;
 
         // Material.
         const mb = new GXMaterialBuilder(`JPA Material`);
@@ -620,7 +628,7 @@ export class JPAResourceData {
         if (etx1 !== null) {
             if (etx1.indTextureMode !== IndTextureMode.Off) {
                 const indTexCoordId = texCoordId++;
-                mb.setTexCoordGen(indTexCoordId, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.TEXMTX1);
+                mb.setTexCoordGen(indTexCoordId, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
                 mb.setIndTexOrder(GX.IndTexStageID.STAGE0, indTexCoordId, GX.TexMapID.TEXMAP2);
 
                 mb.setTevIndirect(0, GX.IndTexStageID.STAGE0, GX.IndTexFormat._8, GX.IndTexBiasSel.STU, GX.IndTexMtxID._0, GX.IndTexWrap.OFF, GX.IndTexWrap.OFF, false, false, GX.IndTexAlphaSel.OFF);
@@ -641,9 +649,9 @@ export class JPAResourceData {
         mb.setUsePnMtxIdx(false);
 
         let needsDynamicTextureIndex = false;
-        if (bsp1.texIdxAnimData !== null) {
-            assert(bsp1.texIdxAnimData.length < 16);
-            needsDynamicTextureIndex = !bsp1.isGlblTexAnm;
+        if (bsp1.texIdxAnimData !== null && !bsp1.isGlblTexAnm) {
+            assert(this.textureIds.length < 16);
+            needsDynamicTextureIndex = true;
         }
 
         this.usingInstancingP = USE_INSTANCING && !isStripe(bsp1.shapeType);
@@ -679,7 +687,8 @@ export class JPAResourceData {
     }
 
     public fillTextureMapping(m: TextureMapping, idx: number): void {
-        this.jpacData.fillTextureMapping(m, this.textureIds[idx]);
+        if (this.textureIds[idx] !== undefined)
+            this.jpacData.fillTextureMapping(m, this.textureIds[idx]);
     }
 }
 
@@ -1059,9 +1068,8 @@ export class JPAEmitterWorkData {
         materialOffs += 4*1;
 
         materialOffs += fillMatrix4x3(d, materialOffs, materialParams.u_TexMtx[0]);
-        materialOffs += fillMatrix4x3(d, materialOffs, materialParams.u_TexMtx[1]);
-        // Skip u_TexMtx[2-9]
-        materialOffs += 4*3*8;
+        // Skip u_TexMtx[1-9]
+        materialOffs += 4*3*9;
 
         materialOffs += fillTextureSize(d, materialOffs, materialParams.m_TextureMapping[0]);
         // Skip u_TextureSize[1]
@@ -2484,8 +2492,8 @@ export class JPABaseEmitter {
         else if (bsp1.isGlblTexAnm)
             this.resData.fillTextureMapping(materialParams.m_TextureMapping[0], this.texAnmIdx);
         else if (workData.usingInstancing) {
-            for (let i = 0; i < bsp1.texIdxAnimData.length; i++)
-                this.resData.fillTextureMapping(materialParams.m_TextureMapping[i], bsp1.texIdxAnimData[i]);
+            for (let i = 0; i < this.resData.textureIds.length; i++)
+                this.resData.fillTextureMapping(materialParams.m_TextureMapping[i], i);
         }
 
         if (etx1 !== null) {
