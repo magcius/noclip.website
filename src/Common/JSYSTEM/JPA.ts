@@ -1603,6 +1603,13 @@ flat out int v_TexIdx;
 `;
     }
 
+    protected override generateColorVaryings(): string {
+        return `
+flat varying vec4 v_Color0;
+flat varying vec4 v_Color1;
+`;
+    }
+
     protected override generateLightChannels(): string {
         return `
 v_Color0 = data.mColorPrm;

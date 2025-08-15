@@ -736,6 +736,13 @@ ${this.generateLightAttnFn(chan, lightName)}
         }).join('');
     }
 
+    protected generateColorVaryings(): string {
+        return `
+varying vec4 v_Color0;
+varying vec4 v_Color1;
+`;
+    }
+
     private generateTexCoordVaryings(): string {
         return this.material.texGens.map((tg, i) => {
             if (tg.type === GX.TexGenType.MTX2x4 || tg.type === GX.TexGenType.SRTG)
@@ -954,8 +961,8 @@ ${this.generateLightAttnFn(chan, lightName)}
         case GX.CC.A1:    return `t_Color1.aaa`;
         case GX.CC.C2:    return `t_Color2.rgb`;
         case GX.CC.A2:    return `t_Color2.aaa`;
-        case GX.CC.TEXC:  return `${this.generateTexAccess(stage)}.${this.generateColorSwizzle(stage.texSwapTable, colorIn)}`;
-        case GX.CC.TEXA:  return `${this.generateTexAccess(stage)}.${this.generateColorSwizzle(stage.texSwapTable, colorIn)}`;
+        case GX.CC.TEXC:  return `t_TexSample.${this.generateColorSwizzle(stage.texSwapTable, colorIn)}`;
+        case GX.CC.TEXA:  return `t_TexSample.${this.generateColorSwizzle(stage.texSwapTable, colorIn)}`;
         case GX.CC.RASC:  return `saturate(${this.generateRas(stage)}.${this.generateColorSwizzle(stage.rasSwapTable, colorIn)})`;
         case GX.CC.RASA:  return `saturate(${this.generateRas(stage)}.${this.generateColorSwizzle(stage.rasSwapTable, colorIn)})`;
         case GX.CC.ONE:   return `vec3(1)`;
@@ -971,7 +978,7 @@ ${this.generateLightAttnFn(chan, lightName)}
         case GX.CA.A0:    return `t_Color0.a`;
         case GX.CA.A1:    return `t_Color1.a`;
         case GX.CA.A2:    return `t_Color2.a`;
-        case GX.CA.TEXA:  return `${this.generateTexAccess(stage)}.${this.generateComponentSwizzle(stage.texSwapTable, GX.TevColorChan.A)}`;
+        case GX.CA.TEXA:  return `t_TexSample.${this.generateComponentSwizzle(stage.texSwapTable, GX.TevColorChan.A)}`;
         case GX.CA.RASA:  return `saturate(${this.generateRas(stage)}.${this.generateComponentSwizzle(stage.rasSwapTable, GX.TevColorChan.A)})`;
         case GX.CA.KONST: return `${this.generateKonstAlphaSel(stage.konstAlphaSel)}`;
         case GX.CA.ZERO:  return `0.0`;
@@ -1178,6 +1185,7 @@ ${this.generateLightAttnFn(chan, lightName)}
     // colorIn: ${stage.colorInA} ${stage.colorInB} ${stage.colorInC} ${stage.colorInD}  colorOp: ${stage.colorOp} colorBias: ${stage.colorBias} colorScale: ${stage.colorScale} colorClamp: ${stage.colorClamp} colorRegId: ${stage.colorRegId}
     // alphaIn: ${stage.alphaInA} ${stage.alphaInB} ${stage.alphaInC} ${stage.alphaInD}  alphaOp: ${stage.alphaOp} alphaBias: ${stage.alphaBias} alphaScale: ${stage.alphaScale} alphaClamp: ${stage.alphaClamp} alphaRegId: ${stage.alphaRegId}
     // texCoordId: ${stage.texCoordId} texMap: ${stage.texMap} channelId: ${stage.channelId}
+    t_TexSample = ${this.generateTexAccess(stage)};
     ${this.generateTevInputs(stage)}
     ${this.generateColorOp(stage)}
     ${this.generateAlphaOp(stage)}`;
@@ -1410,8 +1418,7 @@ ${GfxShaderLibrary.saturate}
 ${GXShaderLibrary.TevOverflow}
 
 varying vec3 v_Position;
-varying vec4 v_Color0;
-varying vec4 v_Color1;
+${this.generateColorVaryings()}
 ${this.generateTexCoordVaryings()}
 `;
 
@@ -1493,7 +1500,8 @@ vec4 MainColor() {
 
 ${this.generateIndTexStages()}
 
-    vec2 t_TexCoord = vec2(0.0, 0.0);
+    vec2 t_TexCoord = vec2(0.0);
+    vec4 t_TexSample = vec4(0.0);
     vec4 t_TevA, t_TevB, t_TevC, t_TevD;
 ${this.generateTevStages()}
 
