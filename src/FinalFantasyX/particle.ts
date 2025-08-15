@@ -4781,10 +4781,12 @@ export function parseParticleData(buffer: ArrayBufferSlice, offs: number, gsMap:
     } else if (magic.special) {
         [emitters, runner] = magic.special(buffer, pOffs);
     } else {
+        let allOne = true;
         for (let i = 0; i < behaviorCount; i++) {
             const scale = vec3FromView(view, pOffs + 0x10 * i, true);
-            if (vec3.equals(scale, Vec3One) && magic.id >= 0)
-                vec3.scale(scale, scale, .05); // all 1 probably means it's set in the magic code
+            if (!vec3.equals(scale, Vec3One)) {
+                allOne = false;
+            }
             emitters.push({
                 // spread out emitters for debugging
                 pos: vec3.create(), //vec3.fromValues((i - (behaviorCount-1)/2)*50, 0, 0),
@@ -4800,6 +4802,16 @@ export function parseParticleData(buffer: ArrayBufferSlice, offs: number, gsMap:
                 billboard: 0,
                 eulerOrder: 0,
             })
+        }
+        if (allOne && magic.id > 0) {
+            // scale being all 1 probably means it's set in the magic code,
+            // so set something reasonable if we aren't handling that accurately yet
+            for (let e of emitters) {
+                if (magic.id === 0x182) // ugh requiem should be accurate but it looks much bigger than everything else
+                    vec3.scale(e.scale, e.scale, .3);
+                else
+                    vec3.scale(e.scale, e.scale, .05);
+            }
         }
     }
 
@@ -5601,7 +5613,7 @@ export class Emitter {
     }
 }
 
-export type ParticleRunner = (t: number, sys: ParticleSystem, viewerInput: ViewerRenderInput, mgr: GfxRenderInstManager, device: GfxDevice, objects: LevelObjectHolder) => void;
+export type ParticleRunner = (t: number, sys: ParticleSystem, viewerInput: ViewerRenderInput, mgr: GfxRenderInstManager, device: GfxDevice, objects: LevelObjectHolder) => boolean;
 
 export class ParticleSystem {
     public loop = false;
@@ -5638,8 +5650,9 @@ export class ParticleSystem {
         if (!this.active)
             return;
 
+        let stillRunning = false;
         if (this.t >= 0 && this.runner)
-            this.runner(this.t, this, viewerInput, renderInstManager, device, objects);
+            stillRunning = this.runner(this.t, this, viewerInput, renderInstManager, device, objects);
 
         const ctx = new ParticleContext(device, renderInstManager, viewerInput, this);
         const wasWaiting = this.t < 0;
@@ -5652,7 +5665,7 @@ export class ParticleSystem {
             e.update(objects, viewerInput, ctx);
         }
 
-        if (this.loop && allDone && this.t > 0) {
+        if (this.loop && allDone && this.t > 0 && !stillRunning) {
             if (wasWaiting)
                 this.reset();
             else {

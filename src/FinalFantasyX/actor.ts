@@ -639,7 +639,7 @@ export class Actor {
         if (this.magicManager && objects.renderFlags.showParticles) {
             if (this.particles)
                 this.particles.debug = objects.renderFlags.debugParticles;
-            this.magicManager.update(dt, bones, this.particles?.data!, viewerInput, renderInstManager, device);
+            this.magicManager.update(dt, bones, this.particles!, viewerInput, renderInstManager, device);
         }
         if (this.id === 0x10AA) { // end tanker battle
             if (this.animation.id === 0x10aa1019 && !this.animation.running) {
@@ -713,6 +713,8 @@ function otherRef(value: number): string {
         return "parent";
     if (value === -2)
         return "grandparent";
+    if (value === 0)
+        return "root";
     return `other(${hexzero(value & 0xFFFF, 4)})`;
 }
 
@@ -1289,6 +1291,7 @@ class MonsterMagicState {
     public pos = vec3.create();
     public vecs = nArray(6, vec4.create);
     public parent?: MonsterMagicState;
+    public origin = 0;
     public errored = false;
     public alive = true;
     public flags = 0;
@@ -1298,6 +1301,8 @@ class MonsterMagicState {
     public setPos = true;
     public vecBaseState?: MonsterMagicState;
     public savedChildren: (MonsterMagicState | undefined)[] = [];
+    public matrixSource = 0;
+    public atCamera = false;
 
     public threads: MagicThread[] = nArray(4, () => ({
         pointer: -1,
@@ -1344,7 +1349,19 @@ interface MagicRenderContext {
     state: MonsterMagicState;
     bones: ReadonlyMat4[];
     thread: MagicThread;
+    gotEndAll: boolean;
+    flags: number;
+    clearColor: vec3;
 }
+
+const ctxScratch: MagicRenderContext = {
+    state: null!,
+    bones: [],
+    thread: null!,
+    gotEndAll: false,
+    flags: 0,
+    clearColor: vec3.create(),
+};
 
 function jump(ctx: MagicRenderContext, offset: number): void {
     ctx.thread.pointer += offset/2;
@@ -1352,9 +1369,12 @@ function jump(ctx: MagicRenderContext, offset: number): void {
 
 const posScratch = vec3.create();
 
+
+
 export class MonsterMagicManager {
     public states: MonsterMagicState[] = [];
     private toNext = 1;
+    public flags = 0;
 
     constructor(public entries: number[], public data: Int16Array, public actor: Actor) {}
 
@@ -1367,11 +1387,11 @@ export class MonsterMagicManager {
         );
     }
 
-    public update(dt: number, bones: ReadonlyMat4[], data: ParticleData, viewerInput: ViewerRenderInput, mgr: GfxRenderInstManager, device: GfxDevice) {
+    public update(dt: number, bones: ReadonlyMat4[], sys: ParticleSystem, viewerInput: ViewerRenderInput, mgr: GfxRenderInstManager, device: GfxDevice) {
         this.toNext -= dt;
         if (this.toNext <= 0) {
             this.toNext += 1;
-            this.tick(dt, bones);
+            this.tick(dt, bones, sys);
         }
 
         const ctx = this.actor.particles ? new ParticleContext(device, mgr, viewerInput, this.actor.particles) : null;
@@ -1380,10 +1400,25 @@ export class MonsterMagicManager {
             if (s.threads[0].pointer < 0)
                 continue;
             if (s.basicEmitter)
-                s.basicEmitter.run(data, viewerInput, mgr, bones, this.actor);
+                s.basicEmitter.run(sys.data, viewerInput, mgr, bones, this.actor);
             // we shouldn't need to reference other objects
-            if (s.fullEmitter)
+            if (s.fullEmitter) {
+                if (s.matrixSource < 0) {
+                    let source = s;
+                    let count = s.matrixSource;
+                    while (count < 0 && source.parent) {
+                        source = source.parent;
+                        count++;
+                    }
+                    if (count !== 0)
+                        console.warn("can't get source", s.matrixSource)
+                    if (source.atCamera) {
+                        getMatrixTranslation(s.fullEmitter.pos, viewerInput.camera.worldMatrix);
+                        transformVec3Mat4w0(s.fullEmitter.pos, FFXToNoclip, s.fullEmitter.pos);
+                    }
+                }
                 s.fullEmitter.update(null!, viewerInput, assertExists(ctx));
+            }
             if (s.drip)
                 s.drip.render(device, viewerInput, mgr, assertExists(this.actor.particles));
             if (s.flipbook)
@@ -1391,12 +1426,13 @@ export class MonsterMagicManager {
         }
     }
 
-    private tick(dt: number, bones: ReadonlyMat4[]) {
-        const context: MagicRenderContext = {
-            state: this.states[0],
-            bones,
-            thread: null!,
-        };
+    private tick(dt: number, bones: ReadonlyMat4[], sys: ParticleSystem) {
+        ctxScratch.state = this.states[0],
+        ctxScratch.bones = bones;
+        ctxScratch.thread = null!;
+        ctxScratch.gotEndAll = false;
+        ctxScratch.flags = this.flags;
+        vec3.copy(ctxScratch.clearColor, sys.colorMult);
         let anyDeadStates = false;
         for (let i = 0; i < this.states.length; i++) {
             const state = this.states[i];
@@ -1411,11 +1447,11 @@ export class MonsterMagicManager {
                     if (thread.timer > 0)
                         thread.timer--;
                     if (thread.timer === 0) {
-                        context.state = state;
-                        context.thread = thread;
+                        ctxScratch.state = state;
+                        ctxScratch.thread = thread;
                         while (thread.timer === 0 && thread.pointer >= 0) {
                             const prev = thread.pointer;
-                            const step = this.processOp(thread.pointer, context);
+                            const step = this.processOp(thread.pointer, ctxScratch);
                             // a positive step is really the size of the instruction,
                             // which isn't the amount to advance if it was a jump or a sleep
                             if (step < 0) {
@@ -1439,9 +1475,13 @@ export class MonsterMagicManager {
             if (!state.alive)
                 anyDeadStates = true;
         }
-        if (anyDeadStates) { // hopefully we don't need to be careful here
+        if (ctxScratch.gotEndAll) {
+            this.states = [];
+        } else if (anyDeadStates) { // hopefully we don't need to be careful here
             this.states = this.states.filter((s)=>s.alive);
         }
+        this.flags = ctxScratch.flags;
+        vec3.copy(sys.colorMult, ctxScratch.clearColor);
     }
 
     public processOp(start: number,
@@ -1466,9 +1506,7 @@ export class MonsterMagicManager {
             case 0x01: {
                 if (log) log("end all");
                 if (ctx) {
-                    for (let i = 0; i < ctx.state.threads.length; i++)
-                        ctx.state.threads[i].pointer = -1;
-                    ctx.state.alive = false;
+                    ctx.gotEndAll = true;
                 }
                 return 1;
             }
@@ -1491,15 +1529,28 @@ export class MonsterMagicManager {
                 return 1;
             }
             case 0x05: {
-                if (mode === 1) {
-                    if (log) log(`unset tracker flags ${data[offs].toString(16)}`);
+                if (mode === 0 || mode === 1) {
+                    const arg = data[offs];
+                    if (log) log(`${mode === 1 ? 'un' : ''}set tracker flags ${arg.toString(16)}`);
+                    if (ctx) {
+                        if (mode === 0)
+                            ctx.flags |= arg;
+                        else
+                            ctx.flags &= ~arg;
+                    }
                     return 2;
                 } else if (mode === 5) {
-                    if (log) log(`wait tracker flags set ${data[offs].toString(16)}`);
+                    const arg = data[offs];
+                    if (log) log(`wait tracker flags set ${arg.toString(16)}`);
                     if (ctx) {
-                        // not really implemented for now
-                        ctx.thread.timer = 60;
-                        return 0;
+                        if ((ctx.flags & arg) === 0)
+                            ctx.thread.timer = 1;
+                    }
+                    return 2;
+                } else if (mode === 6) {
+                    if (log) log(`set tracker flags ${data[offs].toString(16)} if most recent worker`);
+                    if (ctx) {
+                        ctx.flags |= data[offs]; // hopefully doesn't matter too much
                     }
                     return 2;
                 }
@@ -1596,6 +1647,12 @@ export class MonsterMagicManager {
                         jump(ctx, data[offs]);
                 }
                 return 2;
+            case 0x21: {
+                if (mode === 1) {
+                    if (log) log(`tracker alloc ${data[offs]} ${data[offs + 1]} ${data[offs + 2]}`);
+                    return 4;
+                }
+            } break;
             case 0x22: if (log) log(`damage set`); return 1; // ???
             case 0x23: if (log) log(`blend = ${(data[offs] & 0xFFFF).toString(16)}`); return 2;
             case 0x24: case 0x25: {
@@ -1647,6 +1704,9 @@ export class MonsterMagicManager {
                 } else if (mode === 3) {
                     if (log) log('tex wait');
                     return 1;
+                } else if (mode === 4) {
+                    if (log) log(`tex load from ${data[offs]} to ${data[offs + 1]}`);
+                    return 3;
                 }
             } break;
             case 0x28: {
@@ -1728,6 +1788,7 @@ export class MonsterMagicManager {
                 if (ctx) {
                     const child = new MonsterMagicState(start + refOffset/2);
                     child.parent = ctx.state;
+                    child.origin = child.threads[0].pointer;
                     vec4.copy(child.vecs[0], ctx.state.vecs[0]);
                     vec4.copy(child.vecs[1], ctx.state.vecs[1]);
                     vec3.copy(child.pos, ctx.state.pos);
@@ -1892,24 +1953,46 @@ export class MonsterMagicManager {
                 }
                 return 4;
             } break;
+            case 0x5D: {
+                if ((mode & 0xC) === 0) {
+                    const refOffset = data[offs++];
+                    if (log) log(`fork for each target ${address(start, refOffset)}`);
+                    if (ctx) {
+                        const child = new MonsterMagicState(start + refOffset/2);
+                        child.parent = ctx.state;
+                        vec4.copy(child.vecs[0], ctx.state.vecs[0]);
+                        vec4.copy(child.vecs[1], ctx.state.vecs[1]);
+                        vec3.copy(child.pos, ctx.state.pos);
+                        // set child var based on target
+                        this.states.push(child);
+                    }
+                    return 2;
+                }
+            } break;
             case 0x5F: {
                 if (log) log(`actor pos (${mode})`);
-                if (ctx) {
-                    if (mode === 0) {
+                if (mode === 0) {
+                    if (ctx) {
                         for (let i = 0; i < 3; i++)
                             ctx.state.vecs[1][i] = 16*this.actor.pos[i];
                         vec3.copy(ctx.state.pos, this.actor.pos);
-                        return 1;
-                    } else if (mode === 1) {
-                        const model = assertExists(this.actor.model);
-                        const point = assertExists(model.refPoints[3]);
-                        getMatrixTranslation(ctx.state.pos, ctx.bones[point.bone]);
-                        transformVec3Mat4w1(ctx.state.pos, this.actor.modelMatrix, ctx.state.pos);
-                        ctx.state.pos[1] = this.actor.pos[1] - model.scales.height/2;
+                    }
+                    return 1;
+                } else if (mode === 1) {
+                    if (ctx) {
+                        const model = this.actor.model;
+                        if (model) {
+                            const point = assertExists(model.refPoints[3]);
+                            getMatrixTranslation(ctx.state.pos, ctx.bones[point.bone]);
+                            transformVec3Mat4w1(ctx.state.pos, this.actor.modelMatrix, ctx.state.pos);
+                            ctx.state.pos[1] = this.actor.pos[1] - model.scales.height/2;
+                        } else {
+                            ctx.state.pos[1] = 0;
+                        }
                         for (let i = 0; i < 3; i++)
                             ctx.state.vecs[1][i] = 16*ctx.state.pos[i];
-                        return 1;
                     }
+                    return 1;
                 }
             } break;
             case 0x61: {
@@ -1948,7 +2031,8 @@ export class MonsterMagicManager {
             } break;
             case 0x68: {
                 if (mode === 0 || mode === 1) {
-                    if (log) log(`matrix source (b8) = ${data[offs]}, 19 & 0x80 : ${mode === 1}`);
+                    if (log) log(`matrix source = ${otherRef(data[offs])}, specialProj : ${mode === 1}`);
+                    if (ctx) ctx.state.matrixSource = data[offs];
                     return 2;
                 }
             } break;
@@ -2052,6 +2136,12 @@ export class MonsterMagicManager {
                             maybeChild.threads[threadIndex].pointer = start + jump/2;
                     }
                     return 4;
+                } else if (mode === 4) {
+                    if (log) log(`custom render hook ${data[offs]}`);
+                    return 2;
+                } else if (mode === 5) {
+                    if (log) log(`set some global ${(base & 0x800) !== 0}`);
+                    return 1;
                 }
             } break;
             case 0x84: {
@@ -2082,6 +2172,13 @@ export class MonsterMagicManager {
                 } else if (mode === 2) {
                     if (log) log(`pos = vecOp(vec[1])`);
                     if (ctx) ctx.state.doVecOp();
+                    return 1;
+                } else if (mode === 6) {
+                    if (log) log(`pos = map center`);
+                    if (ctx) {
+                        vec3.zero(ctx.state.pos);
+                        vec4.zero(ctx.state.vecs[1]);
+                    }
                     return 1;
                 } else if (mode === 5) {
                     if (log) log('vec[3] = pos - (prev pos)');
@@ -2119,9 +2216,31 @@ export class MonsterMagicManager {
                     return 3;
                 }
             } break;
+            case 0x90: {
+                if (mode === 2) {
+                    if (ctx) vec3.set(ctx.clearColor, 1, 1, 1);
+                    if (log) log('reset clear color');
+                } else if (mode === 3) {
+                    if (ctx) vec3.zero(ctx.clearColor);
+                    if (log) log('clear color black');
+                } else {
+                    if (log) log('reset gfx color'); // differs by mode (fog, multiplier, ...)
+                }
+                return 1;
+            } break;
             case 0x96: {
                 if (mode === 0) {
                     if (log) log(`save offset (?)`);
+                    return 1;
+                }
+            } break;
+            case 0x97: {
+                if (mode === 4 || mode === 5) {
+                    if (log) log(`set all visible ${mode === 4}`);
+                    return 1;
+                }
+                if (mode === 0 || mode === 1) {
+                    if (log) log(`set self visible ${mode === 0}`);
                     return 1;
                 }
             } break;
@@ -2150,7 +2269,7 @@ export class MonsterMagicManager {
                         if (log) log(`vec[1] = ${scale} mtx . bone[random].offset`);
                         if (ctx) {
                             vec3.zero(posScratch);
-                            const boneCount = assertExists(this.actor.model).bones.length;
+                            const boneCount = this.actor.model ? this.actor.model.bones.length : 1;
                             if (boneCount < 5)
                                 boneIndex = boneCount - 1;
                             else
@@ -2195,12 +2314,16 @@ export class MonsterMagicManager {
                 }
                 if (out > 0) {
                     if (ctx) {
-                        if (useBone) {
-                            vec3.scale(posScratch, posScratch, 10/assertExists(this.actor.model).scales.base);
-                            transformVec3Mat4w1(posScratch, ctx.bones[boneIndex & 0x7FFF], posScratch);
-                            transformVec3Mat4w1(posScratch, this.actor.modelMatrix, posScratch);
+                        if (this.actor.model) {
+                            if (useBone) {
+                                vec3.scale(posScratch, posScratch, 10/this.actor.model.scales.base);
+                                transformVec3Mat4w1(posScratch, ctx.bones[boneIndex & 0x7FFF], posScratch);
+                                transformVec3Mat4w1(posScratch, this.actor.modelMatrix, posScratch);
+                            } else {
+                                this.actor.refPoint(posScratch, ctx.bones, boneIndex);
+                            }
                         } else {
-                            this.actor.refPoint(posScratch, ctx.bones, boneIndex);
+                            vec3.zero(posScratch);
                         }
                         vec3.copy(ctx.state.pos, posScratch);
                         vec3.scale(posScratch, posScratch, 16);
@@ -2225,14 +2348,56 @@ export class MonsterMagicManager {
                         jump(ctx, target);
                     }
                     return 3;
+                } else if (mode === 0xA) {
+                    if (log) log('debug wait');
+                    return 1;
                 }
             } break;
-            case 0xa9:
+            case 0xa4: {
                 const isParent = (base & 0x400) !== 0;
                 const twoVar = (base & 0x800) !== 0;
-                const setVec = (base & 0x200) !== 0;
-                if (isParent)
+                const wait = (base & 0x200) !== 0;
+                if (isParent) {
                     assert(data[offs++] === -1);
+                }
+                const dest = data[offs++];
+                let left = 0, right = 0;
+                if (twoVar) {
+                    const pair = data[offs++];
+                    left = pair & 0xFF;
+                    right = (pair >>> 8) & 0xFF;
+                } else {
+                    left = data[offs++];
+                    right = data[offs++];
+                }
+                assert(left % 4 === 0 && left >= 0x30 && left < 0x90);
+                if (twoVar)
+                    assert(right % 4 === 0 && right >= 0x30 && right < 0x90);
+                const leftIndex = (left - 0x30)/4;
+                const rightIndex = (right - 0x30)/4;
+                if (log) {
+                    let op = "";
+                    switch (mode) {
+                        case 0: op = '!='; break;
+                        case 1: op = '=='; break;
+                        case 2: op = '>='; break;
+                        case 3: op = '>'; break;
+                        case 4: op = '<='; break;
+                        case 5: op = '<'; break;
+                    }
+                    log(`${wait ? "wait" : "branch"} ${vecCompDescByIndex(leftIndex)} ${op} ${twoVar ? vecCompDescByIndex(rightIndex) : right} ${!wait ? address(start, dest) : ''}`)
+                }
+                return offs - start;
+            } break;
+            case 0xa9:
+                const isRoot = (base & 0x400) !== 0;
+                const twoVar = (base & 0x800) !== 0;
+                const setVec = (base & 0x200) !== 0;
+                if (isRoot) {
+                    const rel = data[offs++];
+                    if (rel !== 0)
+                        console.warn('a9 bad rel', rel)
+                }
                 let destOffs = 0, leftOffs = 0, rightOffs = 0;
                 if (twoVar) {
                     destOffs = data[offs] & 0xFF;
@@ -2251,7 +2416,7 @@ export class MonsterMagicManager {
                 const destIndex = (destOffs - 0x30)/4;
                 const rightIndex = (rightOffs - 0x30)/4;
                 if (ctx) {
-                    const vecs = isParent ? assertExists(ctx.state.parent).vecs : ctx.state.vecs;
+                    const vecs = isRoot ? assertExists(ctx.state.parent).vecs : ctx.state.vecs;
                     const left = vecCompByIndex(vecs, leftIndex);
                     const right = twoVar ? vecCompByIndex(vecs, rightIndex) : rightOffs;
                     let final = 0;
@@ -2267,7 +2432,7 @@ export class MonsterMagicManager {
                 }
                 if (log) {
                     const op = "+-*/"[mode];
-                    const target = isParent ? "parent." : "";
+                    const target = isRoot ? "root." : "";
                     let right = "";
                     const left = `${target}${vecCompDescByIndex(leftIndex)}`;
                     if (twoVar) {
@@ -2277,11 +2442,14 @@ export class MonsterMagicManager {
                     }
                     log(`${target}${vecCompDescByIndex(destIndex)} = ${left} ${op} ${right}${setVec ? "; vecOp" : ""}`);
                 }
-                return 3 + (isParent ? 1 : 0);
+                return 3 + (isRoot ? 1 : 0);
             case 0xab: {
                 if (mode === 1) {
                     if (log) log(`copy frame ${data[offs]} to d0`);
                     return 2;
+                } else if (mode === 3) {
+                    if (log) log(`load image 2100`);
+                    return 1;
                 } else if (mode === 4) {
                     if (log) log(`load image ${data[offs].toString(16)} bp${data[offs+1].toString(16)} (${data[offs+4]},${data[offs+5]}) ${data[offs+6]}x${data[offs+7]}`);
                     return 9;
@@ -2320,6 +2488,21 @@ export class MonsterMagicManager {
                         if (ctx.state.parent && ctx.state.parent.parent)
                             ctx.thread.timer = 1;
                     }
+                    return 2;
+                }
+            } break;
+            case 0xb8:
+                if (log) log("NOP");
+                return 1;
+            case 0xc0:
+                if (log) log(`magic sync op ${data[offs]}`);
+                return 2;
+            case 0xd3: {
+                if (mode === 0) {
+                    if (log) log(`set actor layer ${data[offs]}`);
+                    return 2;
+                } else if (mode === 1) {
+                    if (log) log(`render actors layer ${data[offs]}`);
                     return 2;
                 }
             } break;
@@ -2382,16 +2565,19 @@ export class MonsterMagicManager {
                 }
             } break;
             case 0xFF: {
-                if (base * 0x400) {
-                    if (log) log(`ident mtx`);
-                    return 1;
-                } else {
+                const billboard = (base & 0x200) !== 0;
+                const atCamera = (base & 0x800) !== 0;
+                if (ctx) ctx.state.atCamera = atCamera;
+                if (base & 0x400) {
                     if (log) log(`mtx diag(${data[offs]/256},${data[offs+1]/256},${data[offs+2]/256})`);
                     return 4;
+                } else {
+                    if (log) log(`build ${billboard ? "billboard " : ""}mtx${atCamera ? " at camera": ""}`);
+                    return 1;
                 }
             }
         }
-        console.warn("unknown OP", op.toString(16), (base & 0xFFFF).toString(16));
+        console.warn("unknown OP", op.toString(16), (base & 0xFFFF).toString(16), "at", offs.toString(16));
         return -1;
     }
 

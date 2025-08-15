@@ -266,6 +266,11 @@ export function parseLevelTextures(buffer: ArrayBufferSlice, commonBuffer: Array
     return { gsMap, paletteType, particleMap };
 }
 
+// most of the overdrive magic files have seemingly invalid "extra" flipbooks,
+// possibly they are meant to be geometry instead of flipbooks
+// but i'm not sure how to tell without parsing the programs
+const badFlipbookIDs = [0x188, 0x189, 0x18a, 0x18b, 0x18c, 0x18d];
+
 export function parseMagicFile(id: number, buffer: ArrayBufferSlice, common: ArrayBufferSlice | null, textures: Texture[]): LevelParticles {
     const layout = sniffMagic(id, buffer);
     if (!layout)
@@ -294,18 +299,24 @@ export function parseMagicFile(id: number, buffer: ArrayBufferSlice, common: Arr
     const particleStart = view.getUint32(dataStart + magicStart + 4*layout.particleIndex, true) + dataStart;
 
     const data = parseParticleData(buffer, particleStart, gs, textures, [], layout);
-    // if (data.behaviors.length > 1)
-    //     console.log("******************** BEHAVIOR COUNT", data.behaviors.length, " ***************")
-
     const extraFlipbookCount = view.getUint16(dataStart + 0x52, true);
     const extraFlipbookOffset = view.getUint32(dataStart + 0x24, true);
-    if (extraFlipbookCount > 0 && extraFlipbookOffset !== 0) {
+    if (extraFlipbookCount > 0 && extraFlipbookOffset !== 0 && !badFlipbookIDs.includes(id)) {
         data.extraFlipbookIndex = data.flipbooks.length;
         let offs = dataStart + extraFlipbookOffset;
         for (let i = 0; i < extraFlipbookCount; i++, offs += 4) {
             data.flipbooks.push(parseFlipbook(buffer, view.getUint32(offs, true) + dataStart, gs, textures, true));
         }
     }
+
+    const scriptCount = view.getUint16(dataStart + 0x42, true);
+    if (scriptCount > 0) {
+        assert(scriptCount === 1);
+        const actorScriptOffset = dataStart + view.getUint32(dataStart + 0x4, true);
+        data.magicEntries = [0];
+        data.magicProgram = buffer.createTypedArray(Int16Array, actorScriptOffset + 0x10);
+    }
+
     return data;
 }
 
@@ -1822,7 +1833,7 @@ export function parseStandaloneActorParticles(name: string, buffer: ArrayBufferS
     return parseActorParticles(name, buffer, 0, textures, gs);
 }
 
-function parseActorParticles(name: string, buffer: ArrayBufferSlice, offset: number, textures: Texture[], gs: GSMemoryMap, magic?: MagicLayout): LevelParticles {
+function parseActorParticles(name: string, buffer: ArrayBufferSlice, offset: number, textures: Texture[], gs: GSMemoryMap): LevelParticles {
     const view = buffer.createDataView();
     const dataStart = view.getUint32(offset + 0x3c, true) + offset;
     assert(dataStart > offset);
@@ -1846,13 +1857,12 @@ function parseActorParticles(name: string, buffer: ArrayBufferSlice, offset: num
         assert(view.getUint32(seqOffset + dataStart, true) === seqOffset + 0x10);
         assert(view.getUint32(particleOffset + dataStart, true) === particleOffset + 0x10);
         const particleStart = dataStart + particleOffset + 0x10;
-        if (!magic)
-            magic = {
-                id: -1,
-                headers: [],
-                funcMap: null!,
-                particleIndex: 0,
-            };
+        const magic: MagicLayout = {
+            id: -1,
+            headers: [],
+            funcMap: null!,
+            particleIndex: 0,
+        };
         data = parseParticleData(buffer, particleStart, gs, textures, [], magic);
     }
     let extraGeoOffset = view.getUint32(dataStart + 0x10, true);

@@ -1912,7 +1912,7 @@ const sceneDescs = [
     new FFXMagicSceneDesc(0, "Abilities"),
     new FFXMagicSceneDesc(1, "White Magic"),
     new FFXMagicSceneDesc(2, "Black Magic"),
-    // new FFXMagicSceneDesc(3, "Overdrives"),
+    new FFXMagicSceneDesc(3, "Overdrives"),
     new FFXMagicSceneDesc(4, "Ronso"),
     // new FFXMagicSceneDesc(5, "Enemy Abilities"),
     // new FFXMagicSceneDesc(6, "Aeons"),

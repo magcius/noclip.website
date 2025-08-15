@@ -1657,6 +1657,7 @@ class ShatterDrawCallInstance {
 
 const enum GeoParticleRenderFlags {
     DEFAULT = 0,
+    MULTIPART = 1, // each part is depth sorted independently
     EARLY = 2,
     OPAQUE = 4,
 }
@@ -1703,12 +1704,21 @@ export class GeoParticleInstance {
 
         template.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT + (sort ? RenderLayer.PARTICLES : RenderLayer.OPA_PARTICLES));
         if (sort) {
-            // some particle meshes are positioned "at" the origin, with the mesh actually modeled in level-space
-            // so look at some notion of center to improve sorting
-            const geo = assertExists(this.geo.geometry);
-            transformVec3Mat4w1(scratchVec, modelViewMatrix, geo.center);
-            const centerDepth = vec3.len(scratchVec);
-            template.sortKey = setSortKeyDepth(template.sortKey, centerDepth + depthOffset, 500);
+            getMatrixTranslation(scratchVec, modelViewMatrix);
+            if (vec3.len(scratchVec) < 1) {
+                // "simple" particles compute their depth based on where they would send the origin (in model coordinates)
+                // for particles exactly at the camera, this ends up dividing by negative zero, which has the effect of making these render *last*
+                // I can't tell if it's intentional, but the requiem effect is wrong without this sorting behavior
+                template.sortKey = setSortKeyDepth(template.sortKey, 500, 500);
+
+            } else {
+                // some particle meshes are positioned "at" the origin, with the mesh actually modeled in level-space
+                // so look at some notion of center to improve sorting
+                const geo = assertExists(this.geo.geometry);
+                transformVec3Mat4w1(scratchVec, modelViewMatrix, geo.center);
+                const centerDepth = vec3.len(scratchVec);
+                template.sortKey = setSortKeyDepth(template.sortKey, centerDepth + depthOffset, 500);
+            }
         }
 
         let offs = template.allocateUniformBuffer(ParticleProgram.ub_ModelParams, 12  + 2*4);

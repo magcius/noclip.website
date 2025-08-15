@@ -21,6 +21,7 @@ import { GfxRenderInstList, GfxRenderInstManager } from "../gfx/render/GfxRender
 import { hexdump } from "../DebugJunk.js";
 import { LevelObjectHolder } from "./script.js";
 import * as UI from '../ui.js';
+import { Actor as ActorObj, MonsterMagicManager } from "./actor.js";
 
 type MagicSetup = (buf: ArrayBufferSlice, offset: number) => [EmitterSpec[], ParticleRunner?];
 
@@ -1038,6 +1039,7 @@ const magicTable: MagicDescriptor[][] = [
             else if (t > 50)
                 mult = 0;
             vec3.set(sys.colorMult, mult, mult, mult);
+            return false;
         }];
     }),
 ], [ // black magic
@@ -1061,17 +1063,18 @@ const magicTable: MagicDescriptor[][] = [
     _("Flare", 0x68, 0x69),
     _("Ultima", 0x6A),
 ], [ // overdrives
+    _("Requiem", 0x182),
     _("Spiral Cut", 0x186, 0x1bf),
     _("Slice & Dice", 0x187, 0x1c0),
     _("Energy Rain", 0x188, 0x1c1),
     _("Blitz Ace", 0x189, 0x1c2),
-    _("Shooting Star (Blend Issues)", 0x18a),
+    _("Shooting Star", 0x18a),
     _("Dragon Fang", 0x18B),
     _("Banishing Blade", 0x18c),
     _("Tornado", 0x18d),
     // reels
      // these have a lot of effects, maybe just differ in code?
-        _("Power Shot?!?!", 0x1be),
+        // _("Power Shot?!?!", 0x1be),
         // _("Fire Shot", 0x21f),
         // _("Ice Shot", 0x220),
         // _("Water Shot", 0x221),
@@ -1151,6 +1154,7 @@ const magicTable: MagicDescriptor[][] = [
                     }
                 }
             }
+            return false;
         }
     ]}),
     _("Jump", 0x1fc, -1, () => {
@@ -1315,7 +1319,6 @@ const magicTable: MagicDescriptor[][] = [
     _("Megiddo Flame", 0x17e),
     _("Aqua Breath", 0x180),
     _("Photon Wings", 0x181),
-    _("Requiem", 0x182),
     _("Total Annihilation", 0x183),
     _("(Sin's Fin) Gravija", 0x1d5),
     _("Negation", 0x1d6),
@@ -1389,13 +1392,12 @@ const magicTable: MagicDescriptor[][] = [
             e(2, 0, -75/2, 0, .08, 0, 12),
             e(2, 0, -75/4, 0, .08, 0, 14),
         ], (t: number, sys: ParticleSystem) => {
-            if (t >= 0) {
-                let height = sys.emitters[0].spec.pos[1];
-                height += 150 * Math.min(16, t)/16;
-                if (t > 16)
-                    height += Math.min(2, t-16) * 1.83;
-                sys.emitters[0].pos[1] = height;
-            }
+            let height = sys.emitters[0].spec.pos[1];
+            height += 150 * Math.min(16, t)/16;
+            if (t > 16)
+                height += Math.min(2, t-16) * 1.83;
+            sys.emitters[0].pos[1] = height;
+            return false;
         }];
     }),
     _("Diamond Dust", 0xa5, 0x25e),
@@ -1780,6 +1782,7 @@ const magicTable: MagicDescriptor[][] = [
                 mat4.identity(scratchMtx);
                 sys.data.flipbookRenderer.renderTrail(device, mgr, sys.bufferManager, flip, 0, scratchMtx, args);
             }
+            return false;
         }];
     }),
     // more mixes
@@ -2158,6 +2161,7 @@ enum KnownFunc {
     fixMagicPointers = 0x264c28,
     initParticleHeap = 0x264db0,
     updateEmitter = 0x2652e8,
+    initActorMagic = 0x294000,
     fullScreenColor = 0x2b0008,
     randRange = 0x2b0e88,
     fixParticlePointers = 0x2b1a58,
@@ -2193,8 +2197,6 @@ export class MagicSceneRenderer implements SceneGfx {
     private particles: ParticleSystem | null = null;
     private bufferManager = new BufferPoolManager();
     public textureData: TextureData[] = [];
-
-    public debug = false;
 
     private currIndex = 0;
     private currShuffle: number[] = [];
@@ -2266,7 +2268,23 @@ export class MagicSceneRenderer implements SceneGfx {
             this.textureHolder.viewerTextures.push(data.viewerTexture);
         }
         this.textureHolder.viewerTextures.sort((a, b) => a.name.localeCompare(b.name));
-        this.particles = new ParticleSystem(id, new ParticleData(parsed, device, cache, this.textureData), this.bufferManager, parsed.runner);
+        const data = new ParticleData(parsed, device, cache, this.textureData);
+        const dummy = new ActorObj({actorResources: new Map()} as LevelObjectHolder, 0);
+        if (parsed.magicProgram && parsed.behaviors.length > 1 && desc.layout !== "vars") {
+            const m = new MonsterMagicManager([0], parsed.magicProgram, dummy);
+            parsed.runner = (t: number, sys: ParticleSystem, viewerInput: ViewerRenderInput, mgr: GfxRenderInstManager, device: GfxDevice, objects: LevelObjectHolder) => {
+                if (t === 0) {
+                    m.flags = 0;
+                    m.states = [];
+                    this.particles?.emitters.forEach(e=>e.visible = false);
+                    m.startEffect(0);
+                }
+                m.update(viewerInput.deltaTime * 30/1000, [], sys, viewerInput, mgr, device);
+                return m.states.length > 0;
+            };
+        }
+        this.particles = new ParticleSystem(id, data, this.bufferManager, parsed.runner);
+        dummy.particles = this.particles;
         this.particles.loop = true;
         this.particles.active = true;
 
@@ -2339,7 +2357,7 @@ export class MagicSceneRenderer implements SceneGfx {
 
     createCameraController(): CameraController {
         const c = new OrbitCameraController();
-        c.sceneMoveSpeedMult = .1;
+        c.sceneMoveSpeedMult = .05;
         return c;
     }
 
