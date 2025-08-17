@@ -25,7 +25,7 @@ import { getVertexInputLocation, GX_Program } from "../../gx/gx_material.js";
 import { type Color, colorNewFromRGBA, colorCopy, colorNewCopy, White, colorFromRGBA8, colorLerp, colorMult, colorNewFromRGBA8, colorToRGBA8 } from "../../Color.js";
 import { MaterialParams, ColorKind, DrawParams, fillIndTexMtx, fillTextureSize, fillTextureBias } from "../../gx/gx_render.js";
 import { GXMaterialHelperGfx } from "../../gx/gx_render.js";
-import { computeModelMatrixSRT, computeModelMatrixR, lerp, MathConstants, normToLengthAndAdd, normToLength, isNearZeroVec3, transformVec3Mat4w1, transformVec3Mat4w0, setMatrixTranslation, setMatrixAxis, Vec3Zero, vec3SetAll, bitsAsFloat32 } from "../../MathHelpers.js";
+import { computeModelMatrixSRT, computeModelMatrixR, lerp, MathConstants, normToLengthAndAdd, normToLength, isNearZeroVec3, transformVec3Mat4w1, transformVec3Mat4w0, setMatrixTranslation, setMatrixAxis, Vec3Zero, vec3SetAll, bitsAsFloat32, isNearZero } from "../../MathHelpers.js";
 import { makeStaticDataBuffer } from "../../gfx/helpers/BufferHelpers.js";
 import { GfxRenderInst, GfxRenderInstManager, makeSortKeyTranslucent, GfxRendererLayer, setSortKeyBias, setSortKeyDepth } from "../../gfx/render/GfxRenderInstManager.js";
 import { fillMatrix4x3, fillColor, fillMatrix4x2, fillVec4 } from "../../gfx/helpers/UniformBufferHelpers.js";
@@ -334,8 +334,9 @@ const enum FieldAddType {
 }
 
 const enum FieldStatusFlag {
-    NoInheritRotate = 0x02,
-    AirDrag         = 0x04,
+    // TODO(jstpierre): Air uses 0x01 flag
+    LocalSpace     = 0x02,
+    AirDrag        = 0x04,
 
     FadeUseEnTime  = 0x08,
     FadeUseDisTime = 0x10,
@@ -352,8 +353,8 @@ interface JPAFieldBlock {
     addType: FieldAddType;
     // Used by JPA1 and JEFFjpa1
     maxDistSq: number;
-    pos: vec3;
-    dir: vec3;
+    pos: ReadonlyVec3;
+    dir: ReadonlyVec3;
     fadeIn: number;
     fadeOut: number;
     disTime: number;
@@ -2745,7 +2746,7 @@ export class JPABaseParticle {
     public age: number;
     public position = vec3.create();
     public localPosition = vec3.create();
-    public offsetPosition = vec3.create();
+    public globalPosition = vec3.create();
     public velocity = vec3.create();
     public baseVel = vec3.create();
     public fieldAccel = vec3.create();
@@ -2787,11 +2788,11 @@ export class JPABaseParticle {
         if (!!(bem1.emitFlags & EmitFlags.FollowEmitter))
             this.status |= JPAParticleStatus.FOLLOW_EMITTER;
 
-        vec3.copy(this.offsetPosition, workData.emitterGlobalCenterPos);
+        vec3.copy(this.globalPosition, workData.emitterGlobalCenterPos);
 
-        this.position[0] = this.offsetPosition[0] + this.localPosition[0] * workData.globalDynamicsScale[0];
-        this.position[1] = this.offsetPosition[1] + this.localPosition[1] * workData.globalDynamicsScale[1];
-        this.position[2] = this.offsetPosition[2] + this.localPosition[2] * workData.globalDynamicsScale[2];
+        this.position[0] = this.globalPosition[0] + this.localPosition[0] * workData.globalDynamicsScale[0];
+        this.position[1] = this.globalPosition[1] + this.localPosition[1] * workData.globalDynamicsScale[1];
+        this.position[2] = this.globalPosition[2] + this.localPosition[2] * workData.globalDynamicsScale[2];
 
         vec3.zero(this.baseVel);
 
@@ -2895,7 +2896,7 @@ export class JPABaseParticle {
         if (!!(bem1.emitFlags & EmitFlags.FollowEmitterChild))
             this.status |= JPAParticleStatus.FOLLOW_EMITTER;
 
-        vec3.copy(this.offsetPosition, parent.offsetPosition);
+        vec3.copy(this.globalPosition, parent.globalPosition);
 
         const velRndm = ssp1.baseVel * (1.0 + ssp1.baseVelRndm * get_rndm_f(baseEmitter.random));
         const rndX = get_rndm_f(baseEmitter.random) - 0.5;
@@ -3000,7 +3001,7 @@ export class JPABaseParticle {
     private calcFieldGravity(field: JPAFieldBlock, workData: JPAEmitterWorkData): void {
         // Prepare
         vec3.scale(scratchVec3a, field.dir, field.mag);
-        if (!(field.sttFlag & FieldStatusFlag.NoInheritRotate))
+        if (!(field.sttFlag & FieldStatusFlag.LocalSpace))
             transformVec3Mat4w0(scratchVec3a, workData.globalRotation, scratchVec3a);
 
         // Calc
@@ -3009,9 +3010,8 @@ export class JPABaseParticle {
 
     private calcFieldAir(field: JPAFieldBlock, workData: JPAEmitterWorkData): void {
         // Prepare
-        vec3.normalize(scratchVec3a, field.dir);
         vec3.scale(scratchVec3a, field.dir, field.mag);
-        if (!(field.sttFlag & FieldStatusFlag.NoInheritRotate))
+        if (!(field.sttFlag & FieldStatusFlag.LocalSpace))
             transformVec3Mat4w0(scratchVec3a, workData.globalRotation, scratchVec3a);
 
         // Calc
@@ -3025,12 +3025,16 @@ export class JPABaseParticle {
     private calcFieldMagnet(field: JPAFieldBlock, workData: JPAEmitterWorkData): void {
         // Prepare
 
-        // Convert to emitter space.
-        vec3.sub(scratchVec3a, field.pos, workData.emitterTranslation);
-        transformVec3Mat4w0(scratchVec3a, workData.globalRotation, scratchVec3a);
+        if (!!(field.sttFlag & FieldStatusFlag.LocalSpace)) {
+            vec3.sub(scratchVec3a, field.pos, this.globalPosition);
+        } else {
+            // Convert to emitter space.
+            vec3.sub(scratchVec3a, field.pos, workData.emitterTranslation);
+            transformVec3Mat4w0(scratchVec3a, workData.globalRotation, scratchVec3a);
+            vec3.sub(scratchVec3a, scratchVec3a, this.localPosition);
+        }
 
         // Calc
-        vec3.sub(scratchVec3a, scratchVec3a, this.localPosition);
         normToLength(scratchVec3a, field.mag);
         this.calcFieldAffect(scratchVec3a, field, workData);
     }
@@ -3038,15 +3042,19 @@ export class JPABaseParticle {
     private calcFieldNewton(field: JPAFieldBlock, workData: JPAEmitterWorkData): void {
         // Prepare
 
-        // Convert to emitter space.
-        vec3.sub(scratchVec3a, field.pos, workData.emitterTranslation);
-        transformVec3Mat4w0(scratchVec3a, workData.globalRotation, scratchVec3a);
+        if (!!(field.sttFlag & FieldStatusFlag.LocalSpace)) {
+            vec3.sub(scratchVec3a, field.pos, this.globalPosition);
+        } else {
+            // Convert to emitter space.
+            vec3.sub(scratchVec3a, field.pos, workData.emitterTranslation);
+            transformVec3Mat4w0(scratchVec3a, workData.globalRotation, scratchVec3a);
+            vec3.sub(scratchVec3a, scratchVec3a, this.localPosition);
+        }
 
         const power = 10 * field.mag;
         const refDistanceSq = field.refDistance;
 
         // Calc
-        vec3.sub(scratchVec3a, scratchVec3a, this.localPosition);
         const sqDist = vec3.squaredLength(scratchVec3a);
         if (sqDist <= refDistanceSq) {
             normToLength(scratchVec3a, power);
@@ -3275,7 +3283,7 @@ export class JPABaseParticle {
         this.time = this.age / this.lifeTime;
 
         if (!!(this.status & JPAParticleStatus.FOLLOW_EMITTER))
-            vec3.copy(this.offsetPosition, workData.emitterGlobalCenterPos);
+            vec3.copy(this.globalPosition, workData.emitterGlobalCenterPos);
 
         vec3.zero(this.fieldVel);
         vec3.scaleAndAdd(this.baseVel, this.baseVel, this.accel, workData.deltaTime);
@@ -3317,7 +3325,7 @@ export class JPABaseParticle {
                     this.particleScale[0] = this.scaleOut * this.calcScaleFade(scaleAnmX, esp1, esp1.scaleInValueX, esp1.scaleIncreaseRateX, esp1.scaleDecreaseRateX);
 
                     if (esp1.isEnableScaleBySpeedX)
-                        this.particleScale[0] *= 1 / vec3.length(this.velocity);
+                        this.particleScale[0] *= vec3.length(this.velocity) * 0.01;
 
                     const hasScaleAnmY = esp1.isDiffXY;
                     if (hasScaleAnmY) {
@@ -3325,7 +3333,7 @@ export class JPABaseParticle {
                         this.particleScale[1] = this.scaleOut * this.calcScaleFade(scaleAnmY, esp1, esp1.scaleInValueY, esp1.scaleIncreaseRateY, esp1.scaleDecreaseRateY);
 
                         if (esp1.isEnableScaleBySpeedY)
-                            this.particleScale[1] *= 1 / vec3.length(this.velocity);
+                            this.particleScale[1] *= vec3.length(this.velocity) * 0.01;
                     } else {
                         this.particleScale[1] = this.particleScale[0];
                     }
@@ -3375,7 +3383,7 @@ export class JPABaseParticle {
 
             vec3.scaleAndAdd(this.localPosition, this.localPosition, this.velocity, workData.deltaTime);
             vec3.mul(this.position, this.localPosition, workData.globalDynamicsScale);
-            vec3.add(this.position, this.position, this.offsetPosition);
+            vec3.add(this.position, this.position, this.globalPosition);
 
             return true;
         }
@@ -3399,7 +3407,7 @@ export class JPABaseParticle {
 
         if (this.age !== 0) {
             if (!!(this.status & JPAParticleStatus.FOLLOW_EMITTER))
-                vec3.copy(this.offsetPosition, workData.emitterGlobalCenterPos);
+                vec3.copy(this.globalPosition, workData.emitterGlobalCenterPos);
 
             this.baseVel[1] -= ssp1.gravity;
             vec3.zero(this.fieldVel);
@@ -3435,7 +3443,7 @@ export class JPABaseParticle {
 
             vec3.scaleAndAdd(this.localPosition, this.localPosition, this.velocity, workData.deltaTime);
             vec3.mul(this.position, this.localPosition, workData.globalDynamicsScale);
-            vec3.add(this.position, this.position, this.offsetPosition);
+            vec3.add(this.position, this.position, this.globalPosition);
 
             return true;
         }
@@ -3699,9 +3707,15 @@ export class JPABaseParticle {
             this.loadTexMtx(materialParams.u_TexMtx[0], materialParams.m_TextureMapping[0], workData, drawParams.u_PosMtx[0]);
         } else if (shapeType === ShapeType.Direction || shapeType === ShapeType.DirectionCross) {
             applyDir(scratchVec3a, this, sp1.dirType, workData);
+            if (isNearZeroVec3(scratchVec3a, 0.001))
+                return;
+
             vec3.normalize(scratchVec3a, scratchVec3a);
 
             vec3.cross(scratchVec3b, this.axis, scratchVec3a);
+            if (isNearZeroVec3(scratchVec3b, 0.001))
+                return;
+
             vec3.normalize(scratchVec3b, scratchVec3b);
 
             vec3.cross(this.axis, scratchVec3a, scratchVec3b);
@@ -4689,7 +4703,7 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
             const timing = view.getFloat32(dataBegin + 0x18);
             const life = view.getUint16(dataBegin + 0x1C);
             const rate = view.getUint16(dataBegin + 0x1E);
-            const step = view.getUint32(dataBegin + 0x20);
+            const step = view.getUint8(dataBegin + 0x20);
 
             const globalScale2DX = view.getFloat32(dataBegin + 0x24);
             const globalScale2DY = view.getFloat32(dataBegin + 0x28);

@@ -310,10 +310,10 @@ class dPa_simpleEcallBack extends JPAEmitterCallBack {
                     const particle = emitter.createParticle();
                     if (!particle)
                         break;
-                    
+
                     // NOTE: Overwriting this removes the influence of the local emitter translation (bem.emitterTrs)
                     //       I.e. all simple emitters ignore their local offsets and are fixed to the local origin.
-                    vec3.copy(particle.offsetPosition, simple.pos);
+                    vec3.copy(particle.globalPosition, simple.pos);
                     if (simple.isAffectedByWind) {
                         // TODO: Wind callback
                     }
@@ -604,7 +604,7 @@ export class dPa_trackEcallBack extends dPa_levelEcallBack {
 
         for (let i = 0; i < emitter.aliveParticlesBase.length; i++) {
             const particle = emitter.aliveParticlesBase[i];
-            this.getMaxWaterY(particle.offsetPosition);
+            this.getMaxWaterY(particle.globalPosition);
         }
     }
 
