@@ -17,29 +17,15 @@ import { MkbTime } from "./Utils.js";
 import { AnimGroup } from "./AnimGroup.js";
 import { Lighting } from "./Lighting.js";
 
-const scratchRenderParams = new RenderParams();
-
 // Immutable parsed stage definition
 export type StageData = {
-    kind: "Stage";
     stageInfo: StageInfo;
     stagedef: SD.Stage;
     stageGma: Gma.Gma;
     bgGma: Gma.Gma;
     commonGma: Gma.Gma;
+    nlObj: Nl.Obj; // Extra Naomi model archive from filedrop
 };
-
-export type GmaData = {
-    kind: "Gma";
-    gma: Gma.Gma;
-};
-
-export type NlData = {
-    kind: "Nl";
-    obj: Nl.Obj;
-};
-
-export type WorldData = StageData | GmaData | NlData;
 
 // Common interface for GMA and NaomiLib models
 export interface ModelInterface {
@@ -57,16 +43,7 @@ export type WorldState = {
     // TODO(complexplane): Stage bounding sphere (for asteroids in Space?)
 };
 
-export interface World {
-    update(viewerInput: Viewer.ViewerRenderInput): void;
-    prepareToRender(ctx: RenderContext): void;
-    getTextureCache(): TextureCache;
-    getClearColor(): Color;
-    setMaterialHacks(hacks: GX_Material.GXMaterialHacks): void;
-    destroy(device: GfxDevice): void;
-}
-
-export class StageWorld implements World {
+export class World {
     private worldState: WorldState;
     private animGroups: AnimGroup[];
     private background: Background;
@@ -121,61 +98,5 @@ export class StageWorld implements World {
 
     public destroy(device: GfxDevice): void {
         this.worldState.modelCache.destroy(device); // Destroys GPU resources that transitively exist in cache
-    }
-}
-
-// Just render all models in a single GMA or NaomiLib object, not a stage+bg and all
-export class FileDropWorld implements World {
-    private lighting: Lighting;
-    private models: ModelInterface[] = [];
-    private textureCache: TextureCache;
-
-    constructor(device: GfxDevice, renderCache: GfxRenderCache, private worldData: GmaData | NlData) {
-        this.textureCache = new TextureCache();
-        if (worldData.kind === "Gma") {
-            for (const model of worldData.gma.idMap.values()) {
-                this.models.push(new ModelInst(device, renderCache, model, this.textureCache));
-            }
-        } else {
-            for (const nlModel of worldData.obj.values()) {
-                this.models.push(new Nl.ModelInst(device, renderCache, nlModel, this.textureCache));
-            }
-        }
-        this.lighting = new Lighting(BgInfos.Jungle); // Just assume Jungle's lighting, it's used in a few other BGs
-    }
-
-    public update(viewerInput: Viewer.ViewerRenderInput): void {
-        this.lighting.update(viewerInput);
-    }
-
-    public prepareToRender(ctx: RenderContext): void {
-        const renderParams = scratchRenderParams;
-        renderParams.reset();
-        renderParams.lighting = this.lighting;
-        mat4.copy(renderParams.viewFromModel, ctx.viewerInput.camera.viewMatrix);
-        for (let i = 0; i < this.models.length; i++) {
-            this.models[i].prepareToRender(ctx, renderParams);
-        }
-    }
-
-    public getTextureCache(): TextureCache {
-        return this.textureCache;
-    }
-
-    public getClearColor(): Color {
-        return TransparentBlack;
-    }
-
-    public setMaterialHacks(hacks: GX_Material.GXMaterialHacks): void {
-        for (let i = 0; i < this.models.length; i++) {
-            this.models[i].setMaterialHacks(hacks);
-        }
-    }
-
-    public destroy(device: GfxDevice): void {
-        for (let i = 0; i < this.models.length; i++) {
-            this.models[i].destroy(device);
-        }
-        this.textureCache.destroy(device);
     }
 }

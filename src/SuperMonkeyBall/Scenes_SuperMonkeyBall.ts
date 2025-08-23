@@ -1,17 +1,20 @@
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { Destroyable, SceneContext } from "../SceneBase.js";
 import * as Viewer from "../viewer.js";
-import { parseStagedefLz } from "./Stagedef.js";
+import { BgObject, parseStagedefLz } from "./Stagedef.js";
 import { Renderer } from "./Render.js";
-import { StageId, STAGE_INFO_MAP } from "./StageInfo.js";
+import { StageId, STAGE_INFO_MAP, StageInfo } from "./StageInfo.js";
 import * as Gma from "./Gma.js";
 import { parseAVTpl } from "./AVTpl.js";
 import { assertExists, leftPad } from "../util.js";
-import { GmaData, NlData, StageData } from "./World.js";
+import { StageData } from "./World.js";
 import { decompressLZ } from "./AVLZ.js";
-import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { NamedArrayBufferSlice } from "../DataFetcher.js";
 import * as Nl from "./NaomiLib.js";
+import { colorNewFromRGBA, OpaqueBlack } from "../Color.js";
+import { BgDummy } from "./Background.js";
+import * as SD from "./Stagedef.js";
+import { vec3 } from "gl-matrix";
 
 // TODO(jstpierre): Move display list loading to destroyable GmaData rather than
 // this stupid hack...
@@ -84,9 +87,60 @@ class SuperMonkeyBallSceneDesc implements Viewer.SceneDesc {
         const stagedef = parseStagedefLz(stagedefBuf);
         const stageTpl = parseAVTpl(stageTplBuf, `st${stageIdStr}`);
         const stageGma = Gma.parseGma(stageGmaBuf, stageTpl);
+        const nlObj: Nl.Obj = new Map();
 
-        return { kind: "Stage", stageInfo, stagedef, stageGma, bgGma, commonGma };
+        return { stageInfo, stagedef, stageGma, bgGma, commonGma, nlObj };
     }
+}
+
+function buildFakeStage(name: string, gma: Gma.Gma, nlObj: Nl.Obj): StageData {
+    const stageInfo: StageInfo = {
+        id: StageId.St001_Plain,
+        bgInfo: {
+            fileName: name,
+            clearColor: OpaqueBlack,
+            bgConstructor: BgDummy,
+            ambientColor: colorNewFromRGBA(0.6, 0.6, 0.6),
+            infLightColor: colorNewFromRGBA(1, 1, 1),
+            infLightRotX: 8192,
+            infLightRotY: 24576,
+        },
+    };
+    const bgObjects: BgObject[] = [...gma.nameMap.values()].map((model) => { 
+        return {
+            flags: SD.BgModelFlags.Visible,
+            modelName: model.name,
+            pos: vec3.create(),
+            rot: vec3.create(),
+            scale: vec3.fromValues(1, 1, 1),
+            translucency: 0,
+            anim: null,
+            flipbookAnims: null,
+        }; 
+    });
+    const stagedef: SD.Stage = {
+        loopStartSeconds: 0,
+        loopEndSeconds: 0,
+        animGroups: [],
+        initBallPose: { pos: vec3.create(), rot: vec3.create() },
+        falloutPlane: { y: 0 },
+        goals: [],
+        bumpers: [],
+        jamabars: [],
+        bananas: [],
+        levelModels: [],
+        bgObjects,
+        fgObjects: [],
+    };
+    const stageData: StageData = {
+        stageInfo,
+        stagedef,
+        stageGma: gma,
+        bgGma: gma,
+        commonGma: gma,
+        nlObj,
+    };
+    return stageData;
 }
 
 export function createSceneFromNamedBuffers(context: SceneContext, buffers: NamedArrayBufferSlice[]): Renderer | null {
@@ -114,21 +168,16 @@ export function createSceneFromNamedBuffers(context: SceneContext, buffers: Name
     if (modelsBuf.name.endsWith(".gma") && tplBuf.name.endsWith(".tpl")) {
         const tpl = parseAVTpl(tplBuf, tplBuf.name);
         const gma = Gma.parseGma(modelsBuf, tpl);
-        const worldData: GmaData = {
-            kind: "Gma",
-            gma: gma,
-        };
-        return new Renderer(context.device, worldData);
+        const stageData = buildFakeStage(modelsBuf.name, gma, new Map());
+        return new Renderer(context.device, stageData);
     }
 
     if (modelsBuf.name.endsWith("_p.lz") && tplBuf.name.endsWith(".lz")) {
         const tpl = parseAVTpl(decompressLZ(tplBuf), tplBuf.name);
         const nlObj = Nl.parseObj(decompressLZ(modelsBuf), tpl);
-        const worldData: NlData = {
-            kind: "Nl",
-            obj: nlObj,
-        };
-        return new Renderer(context.device, worldData);
+        const gma: Gma.Gma = { nameMap: new Map(), idMap: new Map() };
+        const stageData = buildFakeStage(modelsBuf.name, gma, nlObj);
+        return new Renderer(context.device, stageData);
     }
 
     return null;

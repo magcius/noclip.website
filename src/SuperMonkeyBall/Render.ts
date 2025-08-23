@@ -10,7 +10,7 @@ import { GfxRenderInstList, GfxRenderInstManager } from "../gfx/render/GfxRender
 import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from "../gx/gx_render.js";
 import * as UI from "../ui.js";
 import * as Viewer from "../viewer.js";
-import { FileDropWorld, StageWorld, World, WorldData } from "./World.js";
+import { StageData, World } from "./World.js";
 
 // TODO(complexplane): Put somewhere else
 export type RenderContext = {
@@ -28,13 +28,9 @@ export class Renderer implements Viewer.SceneGfx {
     private opaqueInstList = new GfxRenderInstList();
     private translucentInstList = new GfxRenderInstList();
 
-    constructor(device: GfxDevice, private worldData: WorldData) {
+    constructor(device: GfxDevice, private stageData: StageData) {
         this.renderHelper = new GXRenderHelperGfx(device);
-        if (worldData.kind === "Stage") {
-            this.world = new StageWorld(device, this.renderHelper.renderCache, worldData);
-        } else if (worldData.kind === "Gma" || worldData.kind === "Nl") {
-            this.world = new FileDropWorld(device, this.renderHelper.renderCache, worldData);
-        }
+        this.world = new World(device, this.renderHelper.renderCache, stageData);
         const textureCache = this.world.getTextureCache();
         this.textureCache = textureCache;
         textureCache.updateViewerTextures();
