@@ -23,6 +23,26 @@ export interface BackgroundConstructor {
 const scratchMat4a = mat4.create();
 const scratchRenderParams = new RenderParams();
 
+export class BgDummy implements Background {
+    private bgObjects: BgObjectInst[] = [];
+
+    constructor(state: WorldState, bgObjects: BgObjectInst[]) {
+        this.bgObjects = bgObjects;
+    }
+
+    public update(state: WorldState): void {
+        for (let i = 0; i < this.bgObjects.length; i++) {
+            this.bgObjects[i].update(state);
+        }
+    }
+
+    public prepareToRender(state: WorldState, ctx: RenderContext): void {
+        for (let i = 0; i < this.bgObjects.length; i++) {
+            this.bgObjects[i].prepareToRender(state, ctx);
+        }
+    }
+}
+
 export class BgJungle implements Background {
     private bgObjects: BgObjectInst[] = [];
 
