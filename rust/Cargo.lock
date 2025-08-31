@@ -234,9 +234,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a9711031e209dc1306d66985363b4397d4c7b911597580340b93c9729b55f6eb"
 dependencies = [
  "bitvec",
- "deku_derive",
+ "deku_derive 0.18.1",
+ "no_std_io2 0.8.1",
+ "rustversion",
+]
+
+[[package]]
+name = "deku"
+version = "0.19.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f476a022dcfbb013d1365734a42e05b6aca967ebe0d3bb38170086abd9ea3324"
+dependencies = [
+ "bitvec",
+ "deku_derive 0.19.1",
  "log",
- "no_std_io2",
+ "no_std_io2 0.9.0",
  "rustversion",
 ]
 
@@ -245,6 +257,19 @@ name = "deku_derive"
 version = "0.18.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "58cb0719583cbe4e81fb40434ace2f0d22ccc3e39a74bb3796c22b451b4f139d"
+dependencies = [
+ "darling",
+ "proc-macro-crate 3.2.0",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.96",
+]
+
+[[package]]
+name = "deku_derive"
+version = "0.19.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bb216d425bdf810c165a8ae1649523033e88b5f795480ccec63926295541b084"
 dependencies = [
  "darling",
  "proc-macro-crate 3.2.0",
@@ -506,6 +531,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "no_std_io2"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3c2b9acd47481ab557a89a5665891be79e43cce8a29ad77aa9419d7be5a7c06a"
+dependencies = [
+ "memchr",
+]
+
+[[package]]
 name = "noclip-macros"
 version = "0.1.0"
 dependencies = [
@@ -520,7 +554,7 @@ version = "0.0.0"
 dependencies = [
  "byteorder",
  "console_error_panic_hook",
- "deku",
+ "deku 0.19.1",
  "env_logger 0.10.2",
  "getrandom",
  "inflate",
@@ -625,7 +659,7 @@ name = "polymorph"
 version = "0.1.0"
 source = "git+https://github.com/wgreenberg/polymorph#01adf7df7a22ae2978731404ea1ab434ceb50524"
 dependencies = [
- "deku",
+ "deku 0.18.1",
  "env_logger 0.11.6",
  "hashers",
  "log",
