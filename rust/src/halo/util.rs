@@ -1,7 +1,6 @@
 use std::io::Read;
 use byteorder::ReadBytesExt;
-
-use crate::halo::common::*;
+use anyhow::Result;
 
 pub fn read_null_terminated_string_with_size<T: Read>(data: &mut T, len: usize) -> Result<String> {
     let mut str_buf = vec![0; len];

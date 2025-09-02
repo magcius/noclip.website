@@ -1,15 +1,15 @@
-use std::{io::{Cursor, Seek, SeekFrom, Read}, convert::TryFrom};
+use std::{convert::TryInto, io::{Cursor, Seek, SeekFrom}};
+use deku::prelude::*;
 use num_enum::TryFromPrimitive;
+use anyhow::Result;
+use wasm_bindgen::prelude::*;
 
-use crate::halo::common::*;
-use crate::halo::util::*;
+use crate::{halo::common::*, unity::types::common::NullTerminatedAsciiString};
 use crate::halo::tag::*;
 use crate::halo::bitmap::*;
 use crate::halo::model::*;
 use crate::halo::scenario::*;
 use crate::halo::shader::*;
-
-use byteorder::{LittleEndian, ReadBytesExt};
 
 const BASE_MEMORY_ADDRESS: Pointer = 0x50000000;
 
@@ -47,7 +47,7 @@ impl MapManager {
     pub fn read_map_bytes(&mut self, offset: u64, size: usize) -> Result<Vec<u8>> {
         self.reader.data.seek(SeekFrom::Start(offset))?;
         let mut buf = vec![0; size];
-        self.reader.data.read_exact(&mut buf)?;
+        self.reader.data.read_bytes(size, &mut buf, deku::ctx::Order::Msb0)?;
         Ok(buf)
     }
 
@@ -55,7 +55,7 @@ impl MapManager {
         self.reader.data.seek(SeekFrom::Start(offset))?;
         let mut buf = vec![0; length];
         for n in buf.iter_mut() {
-            *n = self.reader.data.read_u16::<LittleEndian>()?;
+            *n = u16::from_reader_with_ctx(&mut self.reader.data, ())?;
         }
         Ok(buf)
     }
@@ -68,21 +68,22 @@ impl MapManager {
         self.reader.data.seek(SeekFrom::Start(tag_pointer as u64))?;
         let data = match tag_header.primary_class {
             TagClass::Bitmap => {
-                let mut bitmap = Bitmap::deserialize(&mut self.reader.data)?;
+                let mut bitmap = Bitmap::from_reader_with_ctx(&mut self.reader.data, ())?;
                 bitmap.bitmap_group_sequence.read_items(&mut self.reader.data, offset)?;
                 bitmap.data.read_items(&mut self.reader.data, offset)?;
                 TagData::Bitmap(bitmap)
             },
             TagClass::Scenario => {
-                let mut scenario = Scenario::deserialize(&mut self.reader.data)?;
+                let mut scenario = Scenario::from_reader_with_ctx(&mut self.reader.data, ())?;
                 scenario.skies.read_items(&mut self.reader.data, offset)?;
                 scenario.scenery.read_items(&mut self.reader.data, offset)?;
                 scenario.scenery_palette.read_items(&mut self.reader.data, offset)?;
                 scenario.structure_bsp_references.read_items(&mut self.reader.data, offset)?;
+                dbg!(&scenario);
                 TagData::Scenario(scenario)
             },
             TagClass::ScenarioStructureBsp => {
-                let mut bsp = BSP::deserialize(&mut self.reader.data)?;
+                let mut bsp = BSP::from_reader_with_ctx(&mut self.reader.data, ())?;
                 bsp.surfaces.read_items(&mut self.reader.data, offset)?;
                 bsp.lightmaps.read_items(&mut self.reader.data, offset)?;
                 for lightmap in bsp.lightmaps.items.as_mut().unwrap() {
@@ -91,23 +92,23 @@ impl MapManager {
                 TagData::BSP(bsp)
             },
             TagClass::ShaderEnvironment => {
-                let shader = ShaderEnvironment::deserialize(&mut self.reader.data)?;
+                let shader = ShaderEnvironment::from_reader_with_ctx(&mut self.reader.data, ())?;
                 TagData::ShaderEnvironment(shader)
             },
             TagClass::ShaderModel => {
-                let shader = ShaderModel::deserialize(&mut self.reader.data)?;
+                let shader = ShaderModel::from_reader_with_ctx(&mut self.reader.data, ())?;
                 TagData::ShaderModel(shader)
             },
             TagClass::ShaderTransparentChicago => {
-                let mut shader = ShaderTransparentChicago::deserialize(&mut self.reader.data)?;
+                let mut shader = ShaderTransparentChicago::from_reader_with_ctx(&mut self.reader.data, ())?;
                 shader.extra_layers.read_items(&mut self.reader.data, offset)?;
-                shader.maps.read_items(&mut self.reader.data, offset)?;
+                shader.bitmaps.read_items(&mut self.reader.data, offset)?;
                 TagData::ShaderTransparentChicago(shader)
             },
             TagClass::ShaderTransparentGeneric => {
-                let mut shader = ShaderTransparentGeneric::deserialize(&mut self.reader.data)?;
+                let mut shader = ShaderTransparentGeneric::from_reader_with_ctx(&mut self.reader.data, ())?;
                 shader.extra_layers.read_items(&mut self.reader.data, offset)?;
-                shader.maps.read_items(&mut self.reader.data, offset)?;
+                shader.bitmaps.read_items(&mut self.reader.data, offset)?;
                 shader.stages.read_items(&mut self.reader.data, offset)?;
 
                 if shader.stages.count == 0 {
@@ -141,20 +142,20 @@ impl MapManager {
                 TagData::ShaderTransparentGeneric(shader)
             },
             TagClass::ShaderTransparentWater => {
-                let mut shader = ShaderTransparentWater::deserialize(&mut self.reader.data)?;
+                let mut shader = ShaderTransparentWater::from_reader_with_ctx(&mut self.reader.data, ())?;
                 shader.ripples.read_items(&mut self.reader.data, offset)?;
                 TagData::ShaderTransparentWater(shader)
             },
             TagClass::Scenery => {
-                let scenery = Scenery::deserialize(&mut self.reader.data)?;
+                let scenery = Scenery::from_reader_with_ctx(&mut self.reader.data, ())?;
                 TagData::Scenery(scenery)
             },
             TagClass::Sky => {
-                let sky = Sky::deserialize(&mut self.reader.data)?;
+                let sky = Sky::from_reader_with_ctx(&mut self.reader.data, ())?;
                 TagData::Sky(sky)
             },
             TagClass::GbxModel => {
-                let mut model = GbxModel::deserialize(&mut self.reader.data)?;
+                let mut model = GbxModel::from_reader_with_ctx(&mut self.reader.data, ())?;
                 model.geometries.read_items(&mut self.reader.data, offset)?;
                 match &mut model.geometries.items {
                     Some(geometries) => {
@@ -167,7 +168,7 @@ impl MapManager {
                 model.shaders.read_items(&mut self.reader.data, offset)?;
                 TagData::GbxModel(model)
             },
-            _ => return Err(MapReaderError::UnimplementedTag(format!("can't yet read {:?}", tag_header))),
+            _ => return Err(MapReaderError::UnimplementedTag(format!("can't yet read {:?}", tag_header)).into()),
         };
         Ok(Tag { header: tag_header.clone(), data })
     }
@@ -186,74 +187,67 @@ impl MapManager {
     }
 
     pub fn get_scenario_bsps(&mut self, tag: &Tag) -> Result<Vec<Tag>> {
-        if let TagData::Scenario(scenario) = &tag.data {
-            if let Some(bsp_references) = &scenario.structure_bsp_references.items {
-                let bsp_refs_and_headers: Vec<(&ScenarioStructureBSPReference, TagHeader)> = bsp_references.iter()
-                    .map(|bsp_ref| (bsp_ref, self.resolve_dependency(&bsp_ref.structure_bsp).unwrap()))
-                    .collect();
-                let mut result = Vec::new();
-                for (bsp_ref, mut header) in bsp_refs_and_headers {
-                    self.reader.data.seek(SeekFrom::Start(bsp_ref.start as u64))?;
-                    let bsp_header = BSPHeader::deserialize(&mut self.reader.data)?;
-                    let offset = bsp_ref.start as i64 - bsp_ref.address as i64;
-                    header.tag_data = bsp_header.bsp_offset;
-                    let mut tag = self.read_tag_at_offset(&header, offset).unwrap();
-                    if let TagData::BSP(bsp) = &mut tag.data {
-                        bsp.header = Some(bsp_header);
-                    }
-                    result.push(tag);
-                }
-                return Ok(result);
-            }
-            return Err(MapReaderError::InvalidTag("scenario has no bsp references".to_string()))
-        }
-        Err(MapReaderError::InvalidTag(format!("expected scenario tag, got {:?}", tag.header.primary_class)))
-    }
-
-    pub fn get_bitmaps(&mut self) -> Result<Vec<Tag>> {
-        let bitmap_headers: Vec<TagHeader> = self.tag_headers.iter()
-            .filter(|header| matches!(header.primary_class, TagClass::Bitmap))
-            .cloned()
+        let TagData::Scenario(scenario) = &tag.data else {
+            return Err(MapReaderError::InvalidTag(format!("expected scenario tag, got {:?}", tag.header.primary_class)).into());
+        };
+        let Some(bsp_references) = &scenario.structure_bsp_references.items else {
+            return Err(MapReaderError::InvalidTag("scenario has no bsp references".to_string()).into());
+        };
+        let bsp_refs_and_headers: Vec<(&ScenarioStructureBSPReference, TagHeader)> = bsp_references.iter()
+            .map(|bsp_ref| (bsp_ref, self.resolve_dependency(&bsp_ref.structure_bsp).unwrap()))
             .collect();
         let mut result = Vec::new();
-        for hdr in &bitmap_headers {
-            result.push(self.read_tag(hdr)?);
+        for (bsp_ref, mut header) in bsp_refs_and_headers {
+            self.reader.data.seek(SeekFrom::Start(bsp_ref.start as u64))?;
+            let bsp_header = BSPHeader::from_reader_with_ctx(&mut self.reader.data, ())?;
+            let offset = bsp_ref.start as i64 - bsp_ref.address as i64;
+            header.tag_data = bsp_header.bsp_offset;
+            let mut tag = self.read_tag_at_offset(&header, offset).unwrap();
+            if let TagData::BSP(bsp) = &mut tag.data {
+                bsp.header = Some(bsp_header);
+            }
+            result.push(tag);
         }
-        Ok(result)
+        return Ok(result);
     }
 }
 
+#[wasm_bindgen(js_name = "HaloBitmapReader")]
 pub struct ResourceMapReader {
-    pub data: Cursor<Vec<u8>>,
+    data: deku::reader::Reader<Cursor<Vec<u8>>>,
 }
 
+#[wasm_bindgen(js_class = "HaloBitmapReader")]
 impl ResourceMapReader {
     pub fn new(data: Vec<u8>) -> ResourceMapReader {
-        ResourceMapReader { data: Cursor::new(data) }
+        ResourceMapReader { data: deku::reader::Reader::new(Cursor::new(data)) }
     }
 
-    pub fn read_header(&mut self) -> Result<ResourcesHeader> {
-        ResourcesHeader::deserialize(&mut self.data)
+    pub fn get_and_convert_bitmap_data(&mut self, bitmap: &Bitmap, submap: usize) -> Vec<u8> {
+        let bitmap_data = &bitmap.data.items.as_ref().unwrap()[submap];
+        get_and_convert_bitmap_data(&mut self.data, bitmap_data)
     }
+
+    pub fn destroy(self) {}
 }
 
 pub struct MapReader {
-    pub data: Cursor<Vec<u8>>,
+    pub data: deku::reader::Reader<Cursor<Vec<u8>>>,
 }
 
 impl MapReader {
     fn new(data: Vec<u8>) -> MapReader {
-        MapReader { data: Cursor::new(data) }
+        MapReader { data: deku::reader::Reader::new(Cursor::new(data)) }
     }
 
     fn read_header(&mut self) -> Result<Header> {
         self.data.seek(SeekFrom::Start(0))?;
-        Header::deserialize(&mut self.data)
+        Ok(Header::from_reader_with_ctx(&mut self.data, ())?)
     }
 
     fn read_tag_index_header(&mut self, header: &Header) -> Result<TagIndexHeader> {
         self.data.seek(SeekFrom::Start(header.tag_data_offset as u64))?;
-        TagIndexHeader::deserialize(&mut self.data)
+        Ok(TagIndexHeader::from_reader_with_ctx(&mut self.data, ())?)
     }
 
     fn read_tag_headers(&mut self, header: &Header, tag_index_header: &TagIndexHeader) -> Result<Vec<TagHeader>> {
@@ -261,34 +255,27 @@ impl MapReader {
         for i in 0..tag_index_header.tag_count {
             let data_offset = header.tag_data_offset + 40 + (i * 32);
             self.data.seek(SeekFrom::Start(data_offset as u64))?;
-            let mut tag_header = TagHeader::deserialize(&mut self.data)?;
+            let mut tag_header = TagHeader::from_reader_with_ctx(&mut self.data, ())?;
             let path_offset = header.tag_data_offset + tag_header.tag_path - BASE_MEMORY_ADDRESS;
             self.data.seek(SeekFrom::Start(path_offset as u64))?;
-            let path = read_null_terminated_string(&mut self.data)?;
-            tag_header.path = path;
+            let path = NullTerminatedAsciiString::from_reader_with_ctx(&mut self.data, ())?;
+            tag_header.path = path.try_into()?;
             result.push(tag_header);
         }
         Ok(result)
     }
 }
 
-#[derive(Debug)]
-pub struct Header {
-    pub uncompressed_file_size: u32,
-    pub tag_data_offset: Pointer,
-    pub tag_data_size: u32,
-    pub scenario_name: String,
-    pub scenario_type: ScenarioType,
-}
-
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, DekuRead)]
+#[deku(id_type = "u32")]
+#[repr(u32)]
 pub enum ResourceType {
     Bitmaps = 0x1,
     Sounds = 0x2,
     Localization = 0x3,
 }
 
-#[derive(Debug)]
+#[derive(Debug, DekuRead)]
 pub struct ResourcesHeader {
     pub resource_type: ResourceType,
     pub paths_offset: Pointer,
@@ -296,42 +283,17 @@ pub struct ResourcesHeader {
     pub resource_count: u32,
 }
 
-#[derive(Debug)]
+#[derive(Debug, DekuRead)]
 pub struct ResourceHeader {
     pub path_offset: Pointer,
     pub size: u32,
     pub data_offset: Pointer,
+    #[deku(skip)]
     pub path: Option<String>,
 }
 
-impl Deserialize for ResourceHeader {
-    fn deserialize(data: &mut Cursor<Vec<u8>>) -> Result<Self> where Self: Sized {
-        Ok(ResourceHeader {
-            path_offset: data.read_u32::<LittleEndian>()? as Pointer,
-            size: data.read_u32::<LittleEndian>()?,
-            data_offset: data.read_u32::<LittleEndian>()? as Pointer,
-            path: None,
-        })
-    }
-}
-
-impl Deserialize for ResourcesHeader {
-    fn deserialize(data: &mut Cursor<Vec<u8>>) -> Result<Self> where Self: Sized {
-        Ok(ResourcesHeader {
-            resource_type: match data.read_u32::<LittleEndian>()? {
-                0x1 => ResourceType::Bitmaps,
-                0x2 => ResourceType::Sounds,
-                0x3 => ResourceType::Localization,
-                x => return Err(MapReaderError::IO(format!("invalid enum {}", x))),
-            },
-            paths_offset: data.read_u32::<LittleEndian>()? as Pointer,
-            resources_offset: data.read_u32::<LittleEndian>()? as Pointer,
-            resource_count: data.read_u32::<LittleEndian>()?,
-        })
-    }
-}
-
-#[derive(Debug, Copy, Clone, TryFromPrimitive)]
+#[derive(Debug, Copy, Clone, TryFromPrimitive, DekuRead)]
+#[deku(id_type = "u16")]
 #[repr(u16)]
 pub enum ScenarioType {
     Singleplayer = 0,
@@ -339,65 +301,41 @@ pub enum ScenarioType {
     UserInterface = 2,
 }
 
-impl Deserialize for Header {
-    fn deserialize(data: &mut Cursor<Vec<u8>>) -> Result<Self> where Self: Sized {
-        assert_eq!(data.read_u32::<LittleEndian>()?, 1751474532); // magic
-        assert_eq!(data.read_u32::<LittleEndian>()?, 0xD); // MCC
-        let uncompressed_file_size = data.read_u32::<LittleEndian>()?;
-        let _padding_length = data.read_u32::<LittleEndian>()?;
-        let tag_data_offset = data.read_u32::<LittleEndian>()?;
-        let tag_data_size = data.read_u32::<LittleEndian>()?;
-        data.seek(SeekFrom::Current(0x8))?;
-        let scenario_name = read_null_terminated_string_with_size(data, 32)?;
-        let _build_version = read_null_terminated_string_with_size(data, 32)?;
-        let scenario_type = ScenarioType::try_from(data.read_u16::<LittleEndian>()?)?;
-        data.seek(SeekFrom::Current(0x2))?;
-        let _checksum = data.read_u32::<LittleEndian>()?;
-        data.seek(SeekFrom::Current(0x794))?;
-        assert_eq!(data.read_u32::<LittleEndian>()?, 1718579060);
-        Ok(Header{
-            uncompressed_file_size,
-            tag_data_offset,
-            tag_data_size,
-            scenario_name,
-            scenario_type,
-        })
-    }
+#[derive(Debug, DekuRead)]
+#[deku(magic = b"daeh")]
+pub struct Header {
+    #[deku(assert_eq = "0xD")]
+    pub mcc: u32,
+    pub uncompressed_file_size: u32,
+    pub _padding_length: u32,
+    pub tag_data_offset: Pointer,
+    pub tag_data_size: u32,
+    #[deku(count = "32", pad_bytes_before = "8")]
+    pub scenario_name: Vec<u8>,
+    #[deku(count = "32")]
+    pub _build_version: Vec<u8>,
+    pub scenario_type: ScenarioType,
+    #[deku(pad_bytes_before = "2")]
+    pub _checksum: u32,
+    // footer == "toof"
+    #[deku(pad_bytes_before = "1940", assert_eq = "1718579060")]
+    pub _footer: u32,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, DekuRead)]
 pub struct TagIndexHeader {
-    pub tag_count: u32,
     pub tag_array_pointer: Pointer,
+    pub _checksum: u32,
+    pub scenario_tag_id: u32,
+    pub tag_count: u32,
     pub model_part_count: u32,
     pub model_data_file_offset: Pointer,
+    pub _model_part_count_pc: u32,
     pub vertex_data_size: u32,
-    pub scenario_tag_id: u32,
     pub model_data_size: u32,
-}
-
-impl Deserialize for TagIndexHeader {
-    fn deserialize(data: &mut Cursor<Vec<u8>>) -> Result<Self> where Self: Sized {
-        let tag_array_pointer = data.read_u32::<LittleEndian>()?;
-        let _checksum = data.read_u32::<LittleEndian>()?;
-        let scenario_tag_id = data.read_u32::<LittleEndian>()?;
-        let tag_count = data.read_u32::<LittleEndian>()?;
-        let model_part_count = data.read_u32::<LittleEndian>()?;
-        let model_data_file_offset = data.read_u32::<LittleEndian>()?;
-        let _model_part_count_pc = data.read_u32::<LittleEndian>()?;
-        let vertex_data_size = data.read_u32::<LittleEndian>()?;
-        let model_data_size = data.read_u32::<LittleEndian>()?;
-        assert_eq!(data.read_u32::<LittleEndian>()?, 1952540531);
-        Ok(TagIndexHeader {
-            tag_count,
-            tag_array_pointer,
-            model_part_count,
-            model_data_file_offset,
-            scenario_tag_id,
-            vertex_data_size,
-            model_data_size,
-        })
-    }
+    // footer == "sgat"
+    #[deku(assert_eq = "1952540531")]
+    pub _footer: u32,
 }
 
 #[cfg(test)]
@@ -439,12 +377,44 @@ mod tests {
     }
 
     #[test]
+    fn test_foo() {
+        let mut mgr = MapManager::new(read_map("bloodgulch.map")).unwrap();
+        let scenario_tag = mgr.get_scenario().unwrap();
+        let bsps: Vec<BSP> = mgr.get_scenario_bsps(&scenario_tag).unwrap().iter()
+            .map(|tag| match &tag.data {
+                TagData::BSP(bsp) => bsp.clone(),
+                _ => unreachable!(),
+            }).collect();
+        assert!(bsps.len() > 0);
+        let scenario_data = match scenario_tag.data { TagData::Scenario(s) => s, _ => unreachable!(), };
+        for dependency in scenario_data.skies.items.as_ref().unwrap() {
+            dbg!(dependency);
+            let sky_header = mgr.resolve_dependency(dependency).unwrap();
+            match mgr.read_tag(&sky_header).unwrap().data {
+                TagData::Sky(s) => {
+                    let hdr = match mgr.resolve_dependency(&s.model) {
+                        Some(hdr) => hdr,
+                        None => panic!(),
+                    };
+                    let m = match mgr.read_tag(&hdr).unwrap().data {
+                        TagData::GbxModel(model) => Some(model),
+                        _ => unreachable!(),
+                    };
+                    dbg!(m);
+                },
+                _ => unreachable!(),
+            }
+        }
+        assert!(false);
+    }
+
+    #[test]
     fn test_shader_counts() {
         use std::collections::HashMap;
         let mut counts: HashMap<TagClass, usize> = HashMap::new();
-        for file in std::fs::read_dir("../data/halo").unwrap() {
+        for file in std::fs::read_dir("../data/Halo1/maps").unwrap() {
             let name = dbg!(file.unwrap().file_name());
-            if name == "bitmaps.map" {
+            if name == "bitmaps.map" || name == "custom_edition" {
                 continue;
             }
             let mgr = MapManager::new(read_map(&name.to_str().unwrap())).unwrap();
@@ -455,7 +425,7 @@ mod tests {
                 *counts.entry(hdr.primary_class).or_insert(0) += 1;
             }
         }
-    
+
         dbg!(counts.get(&TagClass::Shader));
         dbg!(counts.get(&TagClass::ShaderTransparentWater));
         dbg!(counts.get(&TagClass::ShaderTransparentPlasma));

@@ -1,6 +1,6 @@
 
 import { mat4, ReadonlyMat4, vec3, vec4 } from 'gl-matrix';
-import { AnimationFunction, FramebufferBlendFunction, FunctionSource, HaloBitmapReader, HaloBSP, HaloLightmap, HaloMaterial, HaloModel, HaloModelPart, HaloSceneManager, HaloScenery, HaloSceneryInstance, HaloShaderEnvironment, HaloShaderModel, HaloShaderTransparencyChicago, HaloShaderTransparencyGeneric, HaloShaderTransparentChicagoMap, HaloShaderTransparentGenericMap, HaloShaderTransparentWater, HaloShaderTransparentWaterRipple, HaloSky, ShaderAlphaInput, ShaderInput, ShaderMapping, ShaderOutput, ShaderOutputFunction, ShaderOutputMapping, ShaderTransparentChicagoColorFunction } from '../../rust/pkg/noclip_support';
+import { AnimationFunction, FramebufferBlendFunction, FunctionSource, HaloBitmap, HaloBitmapReader, HaloBSP, HaloLightmap, HaloMaterial, HaloModel, HaloModelPart, HaloSceneManager, HaloScenery, HaloSceneryInstance, HaloShaderEnvironment, HaloShaderModel, HaloShaderTransparencyChicago, HaloShaderTransparencyGeneric, HaloShaderTransparentChicagoBitmap, HaloShaderTransparentGenericMap, HaloShaderTransparentWater, HaloShaderTransparentWaterRipple, HaloSky, ShaderAlphaInput, ShaderInput, ShaderMapping, ShaderOutput, ShaderOutputFunction, ShaderOutputMapping, ShaderTransparentChicagoColorFunction } from '../../rust/pkg/noclip_support';
 import { CameraController, computeViewSpaceDepthFromWorldSpacePoint } from '../Camera.js';
 import { Color, colorCopy, colorNewCopy, White } from '../Color.js';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers.js';
@@ -170,7 +170,7 @@ layout(std140) uniform ub_ShaderParams {
 };
 `;
 
-    constructor(public shader: HaloShaderTransparencyGeneric) {
+    constructor(private mgr: HaloSceneManager, public shader: HaloShaderTransparencyGeneric) {
         super([ShaderTransparencyGenericProgram.BindingsDefinition])
         this.frag = this.generateFragSection();
     }
@@ -418,8 +418,9 @@ vec4 AB, CD, ABCD;
                 throw "whoops";
         }
 
+        const stages = this.shader.get_stages();
         for (let i=0; i<8; i++) {
-            const stage = this.shader.get_stage(i);
+            const stage = stages[i];
             if (!stage) continue;
 
             fragBody.push(`
@@ -525,31 +526,31 @@ class MaterialRender_TransparencyGeneric {
     public sortKeyBase: number = 0;
     public visible = true;
 
-    constructor(textureCache: TextureCache, cache: GfxRenderCache, private shader: HaloShaderTransparencyGeneric, fogEnabled: boolean) {
-        this.textureMapping[1] = textureCache.getTextureMapping(shader.get_bitmap(1));
-        this.textureMapping[2] = textureCache.getTextureMapping(shader.get_bitmap(2));
-        this.textureMapping[3] = textureCache.getTextureMapping(shader.get_bitmap(3));
-        if (shader.first_map_type === rust.ShaderTransparentGenericMapType.Map2D) {
-            this.textureMapping[0] = textureCache.getTextureMapping(shader.get_bitmap(0));
-        } else {
-            this.textureMapping[7] = textureCache.getTextureMapping(shader.get_bitmap(0));
+    constructor(private mgr: HaloSceneManager, textureCache: TextureCache, cache: GfxRenderCache, private shader: HaloShaderTransparencyGeneric, fogEnabled: boolean) {
+        const bitmaps = shader.get_bitmaps();
+        function loadBitmap(index: number): rust.HaloBitmap | undefined {
+            if (index >= bitmaps.length) return undefined;
+            return mgr.resolve_bitmap_dependency(bitmaps[index].bitmap);
         }
-        const maps = [
-            this.shader.get_map(0),
-            this.shader.get_map(1),
-            this.shader.get_map(2),
-            this.shader.get_map(3),
-        ];
-        this.animationHandlers = maps.map(map => map ? new TextureAnimationHandler(map) : undefined);
+        this.textureMapping[1] = textureCache.getTextureMapping(loadBitmap(1));
+        this.textureMapping[2] = textureCache.getTextureMapping(loadBitmap(2));
+        this.textureMapping[3] = textureCache.getTextureMapping(loadBitmap(3));
+        if (shader.first_map_type === rust.ShaderTransparentGenericMapType.Map2D) {
+            this.textureMapping[0] = textureCache.getTextureMapping(loadBitmap(0));
+        } else {
+            this.textureMapping[7] = textureCache.getTextureMapping(loadBitmap(0));
+        }
+        this.animationHandlers = bitmaps.map(map => map ? new TextureAnimationHandler(map) : undefined);
 
         this.mapTransform = mat4.create();
-        const prog = new ShaderTransparencyGenericProgram(shader);
+        const prog = new ShaderTransparencyGenericProgram(this.mgr, shader);
         prog.setDefineBool('USE_FOG', fogEnabled);
         this.gfxProgram = cache.createProgram(prog);
         this.sortKeyBase = makeSortKeyTranslucent(SortKey.Translucent);
 
+        const stages = this.shader.get_stages();
         for (let i = 0; i < 8; i++) {
-            const stage = this.shader.get_stage(i);
+            const stage = stages[i];
             if (stage === undefined)
                 break;
 
@@ -627,7 +628,7 @@ layout(std140) uniform ub_ShaderParams {
 };
 `;
 
-    constructor(public shader: HaloShaderTransparencyChicago) {
+    constructor(private mgr: HaloSceneManager, public shader: HaloShaderTransparencyChicago) {
         super([ShaderTransparencyChicagoProgram.BindingsDefinition])
         this.frag = this.generateFragSection();
     }
@@ -650,13 +651,7 @@ layout(std140) uniform ub_ShaderParams {
     }
 
     private generateFragSection(): string {
-        const maps = [];
-        for (let i=0; i<4; i++) {
-            const map = this.shader.get_map(i);
-            if (map) {
-                maps.push(map);
-            }
-        }
+        let bitmaps = this.shader.get_bitmaps();
         const fragBody: string[] = [
             `vec2 uv0 = UnpackMatrix(u_MapTransform0) * vec4(v_UV, 1.0, 1.0);`,
             `vec2 uv1 = UnpackMatrix(u_MapTransform1) * vec4(v_UV, 1.0, 1.0);`,
@@ -670,8 +665,8 @@ layout(std140) uniform ub_ShaderParams {
 
         fragBody.push(`vec4 scratch, next, current = t0;`);
 
-        for (let i = 0; i < maps.length - 1; i++) {
-            const map = maps[i];
+        for (let i = 0; i < bitmaps.length - 1; i++) {
+            const map = bitmaps[i];
             fragBody.push(`next = t${i + 1};`);
             fragBody.push(this.getColorFunction('scratch.rgb', 'current.rgb', 'next.rgb', map.color_function));
             fragBody.push(this.getColorFunction('scratch.a', 'current.a', 'next.a', map.color_function));
@@ -696,22 +691,21 @@ class MaterialRender_TransparencyChicago {
     public sortKeyBase: number = 0;
     public visible = true;
 
-    constructor(textureCache: TextureCache, cache: GfxRenderCache, private shader: HaloShaderTransparencyChicago, fogEnabled: boolean) {
+    constructor(private mgr: HaloSceneManager, textureCache: TextureCache, cache: GfxRenderCache, private shader: HaloShaderTransparencyChicago, fogEnabled: boolean) {
+        const bitmaps = shader.get_bitmaps();
+        function loadBitmap(index: number): rust.HaloBitmap | undefined {
+            if (index >= bitmaps.length) return undefined;
+            return mgr.resolve_bitmap_dependency(bitmaps[index].bitmap);
+        }
         for (let i = 0; i < 4; i++)
-            this.textureMapping[i] = textureCache.getTextureMapping(shader.get_bitmap(i));
+            this.textureMapping[i] = textureCache.getTextureMapping(loadBitmap(i));
 
         this.mapTransform = mat4.create();
-        const prog = new ShaderTransparencyChicagoProgram(shader);
+        const prog = new ShaderTransparencyChicagoProgram(this.mgr, shader);
         prog.setDefineBool('USE_FOG', fogEnabled);
         this.gfxProgram = cache.createProgram(prog);
         this.sortKeyBase = makeSortKeyTranslucent(SortKey.Translucent);
-        const maps = [
-            this.shader.get_map(0),
-            this.shader.get_map(1),
-            this.shader.get_map(2),
-            this.shader.get_map(3),
-        ];
-        this.animationHandlers = maps.map(map => map ? new TextureAnimationHandler(map) : undefined);
+        this.animationHandlers = bitmaps.map(map => map ? new TextureAnimationHandler(map) : undefined);
     }
 
     public pushPasses(cache: GfxRenderCache, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, view: View): void {
@@ -789,13 +783,6 @@ layout(std140) uniform ub_ShaderParams {
     }
 
     private generateFragSection(): string {
-        const ripples = [];
-        for (let i=0; i<4; i++) {
-            const ripple = this.shader.get_ripple(i);
-            if (ripple)
-                ripples.push(ripple);
-        }
-
         return `
 void mainPS() {
     vec4 t_Base = texture(SAMPLER_2D(u_Texture0), v_UV.xy);
@@ -837,11 +824,11 @@ class RippleAnimation {
     public transform = mat4.create();
 
     public setFromRipple(ripple: HaloShaderTransparentWaterRipple) {
-        this.angle = ripple.animation_angle();
-        this.velocity = ripple.animation_velocity();
-        this.offsetU = ripple.map_u_offset();
-        this.offsetV = ripple.map_v_offset();
-        this.scale = ripple.map_repeats();
+        this.angle = ripple.animation_angle;
+        this.velocity = ripple.animation_velocity;
+        this.offsetU = ripple.map_u_offset;
+        this.offsetV = ripple.map_v_offset;
+        this.scale = ripple.map_repeats;
     }
 
     public calc(time: number): ReadonlyMat4 {
@@ -923,7 +910,8 @@ class MaterialRender_TransparencyWater {
     public sortKeyBase: number = 0;
     public visible = true;
 
-    constructor(textureCache: TextureCache, cache: GfxRenderCache, private shader: HaloShaderTransparentWater, fogEnabled: boolean) {
+    constructor(private mgr: HaloSceneManager, textureCache: TextureCache, cache: GfxRenderCache, private shader: HaloShaderTransparentWater, fogEnabled: boolean) {
+        console.log('oh')
         const device = cache.device;
         this.rippleTexture = device.createTexture({
             pixelFormat: GfxFormat.U8_RGBA_NORM,
@@ -936,8 +924,8 @@ class MaterialRender_TransparencyWater {
         });
         device.setResourceName(this.rippleTexture, `Ripple Texture`);
 
-        this.textureMapping[0] = textureCache.getTextureMapping(shader.get_base_bitmap(), 0, { wrap: false });
-        this.textureMapping[7] = textureCache.getTextureMapping(shader.get_reflection_bitmap());
+        this.textureMapping[0] = textureCache.getTextureMapping(this.mgr.resolve_bitmap_dependency(shader.base_bitmap));
+        this.textureMapping[7] = textureCache.getTextureMapping(this.mgr.resolve_bitmap_dependency(shader.reflection_bitmap));
 
         this.textureMapping[1] = new TextureMapping();
         this.textureMapping[1].gfxTexture = this.rippleTexture;
@@ -945,13 +933,15 @@ class MaterialRender_TransparencyWater {
 
         this.rippleCompositeProgram = cache.createProgram(new ShaderCompositeRippleProgram());
 
-        const ripple_bitmap = shader.get_ripple_bitmap();
+        const ripple_bitmap = this.mgr.resolve_bitmap_dependency(shader.ripple_bitmap);
+        console.log(ripple_bitmap)
+        const ripples = shader.get_ripples();
         for (let i = 0; i < 4; i++) {
-            const ripple = shader.get_ripple(i);
+            const ripple = ripples[i];
             if (!ripple)
                 break;
 
-            this.rippleCompositeMapping[i] = textureCache.getTextureMapping(ripple_bitmap, ripple.map_index());
+            this.rippleCompositeMapping[i] = textureCache.getTextureMapping(ripple_bitmap, ripple.map_index);
             this.rippleCompositeAnimation[i].setFromRipple(ripple);
             ripple.free();
         }
@@ -1074,7 +1064,7 @@ class TextureAnimationHandler {
     private u: TextureAnimationFunction;
     private v: TextureAnimationFunction;
     private rotation: TextureAnimationFunction;
-    constructor(map: HaloShaderTransparentGenericMap | HaloShaderTransparentChicagoMap) {
+    constructor(map: HaloShaderTransparentGenericMap | HaloShaderTransparentChicagoBitmap) {
         this.u = {
             fn: map.u_animation_function,
             scale: map.u_animation_scale,
@@ -1183,12 +1173,13 @@ class MaterialRender_Model {
     public sortKeyBase: number = 0;
     public visible = true;
 
-    constructor(textureCache: TextureCache, cache: GfxRenderCache, private shader: HaloShaderModel, fogEnabled: boolean) {
-        this.textureMapping[0] = textureCache.getTextureMapping(shader.get_base_bitmap());
-        this.textureMapping[1] = textureCache.getTextureMapping(shader.get_detail_bitmap());
-        if (shader.has_reflection_cube_map)
-            this.textureMapping[7] = textureCache.getTextureMapping(shader.get_reflection_cube_map());
-        this.textureMapping[5] = textureCache.getTextureMapping(shader.get_multipurpose_map());
+    constructor(private mgr: HaloSceneManager, textureCache: TextureCache, cache: GfxRenderCache, private shader: HaloShaderModel, fogEnabled: boolean) {
+        this.textureMapping[0] = textureCache.getTextureMapping(this.mgr.resolve_bitmap_dependency(shader.base_map));
+        this.textureMapping[1] = textureCache.getTextureMapping(this.mgr.resolve_bitmap_dependency(shader.detail_map));
+        const reflectionCubeMap = this.mgr.resolve_bitmap_dependency(shader.reflection_cube_map);
+        if (reflectionCubeMap)
+            this.textureMapping[7] = textureCache.getTextureMapping(reflectionCubeMap);
+        this.textureMapping[5] = textureCache.getTextureMapping(this.mgr.resolve_bitmap_dependency(shader.multipurpose_map));
 
         const prog = new ShaderModelProgram(shader);
         prog.setDefineBool('USE_FOG', fogEnabled);
@@ -1269,17 +1260,17 @@ void mainVS() {
 }
 `;
 
-    constructor(public shader: HaloShaderEnvironment | undefined, public has_lightmap: boolean) {
+    constructor(public shader: HaloShaderEnvironment, public has_lightmap: boolean) {
         super([ShaderEnvironmentProgram.varying, ShaderEnvironmentProgram.BindingsDefinition]);
         this.generateFragmentShader();
     }
 
     private getDetailSection(fragBody: String[]): void {
-        fragBody.push(`vec2 primaryUV = v_UV * ${glslGenerateFloat(this.shader!.primary_detail_bitmap_scale)};`)
+        fragBody.push(`vec2 primaryUV = v_UV * ${glslGenerateFloat(this.shader.primary_detail_bitmap_scale)};`)
         fragBody.push(`vec4 primaryDetail = texture(SAMPLER_2D(u_Texture3), primaryUV);`)
-        fragBody.push(`vec2 secondaryUV = v_UV * ${glslGenerateFloat(this.shader!.secondary_detail_bitmap_scale)};`)
+        fragBody.push(`vec2 secondaryUV = v_UV * ${glslGenerateFloat(this.shader.secondary_detail_bitmap_scale)};`)
         fragBody.push(`vec4 secondaryDetail = texture(SAMPLER_2D(u_Texture4), secondaryUV);`)
-        switch (this.shader!.shader_environment_type) {
+        switch (this.shader.shader_environment_type) {
             case rust.ShaderEnvironmentType.Normal:
                 fragBody.push(`vec4 blendedDetail = mix(secondaryDetail, primaryDetail, secondaryDetail.a);`)
                 break;
@@ -1288,11 +1279,11 @@ void mainVS() {
                 fragBody.push(`vec4 blendedDetail = mix(secondaryDetail, primaryDetail, color.a);`);
                 break;
             default:
-                throw new Error(`don't recognize ShaderEnvironmentType ${this.shader!.shader_environment_type}`);
+                throw new Error(`don't recognize ShaderEnvironmentType ${this.shader.shader_environment_type}`);
         }
 
-        if (this.shader!.has_primary_detail_bitmap) {
-            switch (this.shader!.detail_bitmap_function) {
+        if (this.shader.primary_detail_bitmap.path_pointer !== 0) {
+            switch (this.shader.detail_bitmap_function) {
                 case rust.DetailBitmapFunction.DoubleBiasedMultiply:
                     fragBody.push(`color.rgb = saturate(2.0 * color.rgb * blendedDetail.rgb);`);
                     break;
@@ -1303,15 +1294,15 @@ void mainVS() {
                     fragBody.push(`color.rgb = saturate(color.rgb + 2.0 * blendedDetail.rgb - 1.0);`);
                     break;
                 default:
-                    throw new Error(`don't recognize DetailBitmapFunction ${this.shader!.detail_bitmap_function}`)
+                    throw new Error(`don't recognize DetailBitmapFunction ${this.shader.detail_bitmap_function}`)
             }
         }
     }
 
     private getMicroDetailSection(fragBody: String[]): void {
-        fragBody.push(`vec2 microUV = v_UV * ${glslGenerateFloat(this.shader!.micro_detail_bitmap_scale)};`)
+        fragBody.push(`vec2 microUV = v_UV * ${glslGenerateFloat(this.shader.micro_detail_bitmap_scale)};`)
         fragBody.push(`vec4 microDetail = texture(SAMPLER_2D(u_Texture5), microUV);`)
-        switch (this.shader!.shader_environment_type) {
+        switch (this.shader.shader_environment_type) {
             case rust.ShaderEnvironmentType.Normal:
                 fragBody.push(`float specularReflectionMask = blendedDetail.a * base.a * microDetail.a;`)
                 break;
@@ -1322,11 +1313,11 @@ void mainVS() {
                 fragBody.push(`float specularReflectionMask = base.a * microDetail.a;`)
                 break;
             default:
-                throw new Error(`don't recognize ShaderEnvironmentType ${this.shader!.shader_environment_type}`);
+                throw new Error(`don't recognize ShaderEnvironmentType ${this.shader.shader_environment_type}`);
         }
 
-        if (this.shader!.has_micro_detail_bitmap) {
-            switch (this.shader!.detail_bitmap_function) {
+        if (this.shader.micro_detail_bitmap.path_pointer !== 0) {
+            switch (this.shader.detail_bitmap_function) {
                 case rust.DetailBitmapFunction.DoubleBiasedMultiply:
                     fragBody.push(`color.rgb = saturate(2.0 * color.rgb  * microDetail.rgb);`)
                     break;
@@ -1337,7 +1328,7 @@ void mainVS() {
                     fragBody.push(`color.rgb = saturate(color.rgb + 2.0 * microDetail.rgb - 1.0);`)
                     break;
                 default:
-                    throw new Error(`don't recognize DetailBitmapFunction ${this.shader!.detail_bitmap_function}`)
+                    throw new Error(`don't recognize DetailBitmapFunction ${this.shader.detail_bitmap_function}`)
             }
         }
     }
@@ -1362,12 +1353,12 @@ color.rgb = saturate(color.rgb + finalColor * specularReflectionMask);
             fragBody.push(`
 vec4 base = texture(SAMPLER_2D(u_Texture0), v_UV);
 vec4 color = base;
-vec2 t_BumpTexCoord = v_UV * ${glslGenerateFloat(this.shader!.bump_map_scale)};
+vec2 t_BumpTexCoord = v_UV * ${glslGenerateFloat(this.shader.bump_map_scale)};
 vec4 t_BumpMap = 2.0 * texture(SAMPLER_2D(u_Texture2), t_BumpTexCoord) - 1.0;
 vec3 t_EyeWorld = normalize(u_PlayerPos - v_Position);
 `);
 
-            if (this.shader!.has_bump_map) {
+            if (this.shader.bump_map.path_pointer !== 0) {
                 fragBody.push(`vec3 t_NormalWorld = normalize(CalcTangentToWorld(t_BumpMap.rgb, v_Tangent, v_Binormal, v_Normal));`);
             } else {
                 fragBody.push(`vec3 t_NormalWorld = v_Normal;`);
@@ -1382,7 +1373,7 @@ color.rgb *= t_LightmapSample * t_BumpAtten;
 `);
             }
 
-            if (!!(this.shader!.flags & 0x01)) {
+            if (!!(this.shader.flags & 0x01)) {
                 fragBody.push(`
 if (t_BumpMap.a < 0.5)
     discard;
@@ -1391,7 +1382,7 @@ if (t_BumpMap.a < 0.5)
 
             this.getDetailSection(fragBody);
             this.getMicroDetailSection(fragBody);
-            if (this.shader!.has_reflection_cube_map) {
+            if (this.shader.reflection_cube_map.path_pointer !== 0) {
                 this.getReflectionSection(fragBody);
             }
         } else {
@@ -1420,7 +1411,7 @@ class MaterialRender_Environment {
     public sortKeyBase = 0;
     public visible = true;
 
-    constructor(textureCache: TextureCache, cache: GfxRenderCache, private shader: HaloShaderEnvironment, lightmapMapping: TextureMapping | null, fogEnabled: boolean) {
+    constructor(mgr: HaloSceneManager, textureCache: TextureCache, cache: GfxRenderCache, private shader: HaloShaderEnvironment, lightmapMapping: TextureMapping | null, fogEnabled: boolean) {
         const prog = new ShaderEnvironmentProgram(shader, !!lightmapMapping);
         prog.setDefineBool('USE_FOG', fogEnabled);
         this.gfxProgram = cache.createProgram(prog);
@@ -1430,15 +1421,16 @@ class MaterialRender_Environment {
         const parallel = this.shader.parallel_color;
         this.parallelColor = vec4.fromValues(parallel.r, parallel.g, parallel.b, this.shader.parallel_brightness);
         parallel.free();
+        const reflectionCubeMap = mgr.resolve_bitmap_dependency(this.shader.reflection_cube_map);
         this.textureMappings = [
-            textureCache.getTextureMapping(this.shader.get_base_bitmap()),
+            textureCache.getTextureMapping(mgr.resolve_bitmap_dependency(this.shader.base_bitmap)),
             lightmapMapping,
-            textureCache.getTextureMapping(this.shader.get_bump_map()),
-            textureCache.getTextureMapping(this.shader.get_primary_detail_bitmap()),
-            textureCache.getTextureMapping(this.shader.get_secondary_detail_bitmap()),
-            textureCache.getTextureMapping(this.shader.get_micro_detail_bitmap()),
+            textureCache.getTextureMapping(mgr.resolve_bitmap_dependency(this.shader.bump_map)),
+            textureCache.getTextureMapping(mgr.resolve_bitmap_dependency(this.shader.primary_detail_bitmap)),
+            textureCache.getTextureMapping(mgr.resolve_bitmap_dependency(this.shader.secondary_detail_bitmap)),
+            textureCache.getTextureMapping(mgr.resolve_bitmap_dependency(this.shader.micro_detail_bitmap)),
             null,
-            this.shader && this.shader.has_reflection_cube_map ? textureCache.getTextureMapping(this.shader.get_reflection_cube_map()) : null,
+            reflectionCubeMap ? textureCache.getTextureMapping(reflectionCubeMap) : null,
         ];
 
         this.sortKeyBase = makeSortKeyOpaque(GfxRendererLayer.OPAQUE, this.gfxProgram.ResourceUniqueId);
@@ -1480,14 +1472,15 @@ class LightmapRenderer {
         mgr.get_lightmap_materials(lightmap).forEach(material => {
             const shader = this.mgr.get_material_shader(material);
             if (shader instanceof rust.HaloShaderEnvironment) {
-                this.materialRenderers.push(new MaterialRender_Environment(textureCache, renderCache, shader, lightmapTex, fogEnabled));
+                this.materialRenderers.push(new MaterialRender_Environment(this.mgr, textureCache, renderCache, shader, lightmapTex, fogEnabled));
             } else if (shader instanceof rust.HaloShaderTransparencyGeneric) {
-                this.materialRenderers.push(new MaterialRender_TransparencyGeneric(textureCache, renderCache, shader, fogEnabled));
+                this.materialRenderers.push(new MaterialRender_TransparencyGeneric(this.mgr, textureCache, renderCache, shader, fogEnabled));
             } else if (shader instanceof rust.HaloShaderTransparencyChicago) {
-                this.materialRenderers.push(new MaterialRender_TransparencyChicago(textureCache, renderCache, shader, fogEnabled));
+                this.materialRenderers.push(new MaterialRender_TransparencyChicago(this.mgr, textureCache, renderCache, shader, fogEnabled));
             } else if (shader instanceof rust.HaloShaderTransparentWater) {
-                this.materialRenderers.push(new MaterialRender_TransparencyWater(textureCache, renderCache, shader, fogEnabled));
+                this.materialRenderers.push(new MaterialRender_TransparencyWater(this.mgr, textureCache, renderCache, shader, fogEnabled));
             } else {
+                console.error(`failed to get shader for material ${material}`);
                 this.materialRenderers.push(null);
             }
 
@@ -1600,19 +1593,19 @@ class ModelRenderer {
         const shaders = mgr.get_model_shaders(this.model);
         shaders.forEach(shader => {
             if (shader instanceof rust.HaloShaderModel) {
-                this.materialRenderers.push(new MaterialRender_Model(textureCache, renderCache, shader, fogEnabled));
+                this.materialRenderers.push(new MaterialRender_Model(this.mgr, textureCache, renderCache, shader, fogEnabled));
             } else if (shader instanceof rust.HaloShaderTransparencyGeneric) {
-                this.materialRenderers.push(new MaterialRender_TransparencyGeneric(textureCache, renderCache, shader, fogEnabled));
+                this.materialRenderers.push(new MaterialRender_TransparencyGeneric(this.mgr, textureCache, renderCache, shader, fogEnabled));
             } else if (shader instanceof rust.HaloShaderTransparencyChicago) {
-                this.materialRenderers.push(new MaterialRender_TransparencyChicago(textureCache, renderCache, shader, fogEnabled));
+                this.materialRenderers.push(new MaterialRender_TransparencyChicago(this.mgr, textureCache, renderCache, shader, fogEnabled));
             } else if (shader instanceof rust.HaloShaderTransparentWater) {
-                this.materialRenderers.push(new MaterialRender_TransparencyWater(textureCache, renderCache, shader, fogEnabled));
+                this.materialRenderers.push(new MaterialRender_TransparencyWater(this.mgr, textureCache, renderCache, shader, fogEnabled));
             } else {
                 this.materialRenderers.push(null);
             }
         });
 
-        computeModelMatrixS(this.baseMapTransform, this.model.get_base_bitmap_u_scale(), this.model.get_base_bitmap_v_scale());
+        computeModelMatrixS(this.baseMapTransform, this.model.base_bitmap_u_scale, this.model.base_bitmap_v_scale);
     }
 
     public pushPasses(cache: GfxRenderCache, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, view: View): void {
@@ -1714,7 +1707,7 @@ class ModelData {
         let vertexCount = 0, indexCount = 0;
         for (let i = 0; i < parts.length; i++) {
             vertexCount += parts[i].vert_count;
-            indexCount += getTriangleIndexCountForTopologyIndexCount(GfxTopology.TriStrips, parts[i].tri_count);
+            indexCount += getTriangleIndexCountForTopologyIndexCount(GfxTopology.TriStrips, parts[i].tri_count());
         }
         assert(vertexCount <= 0xFFFF);
 
@@ -1832,11 +1825,11 @@ class BSPRenderer {
 
     constructor(public textureCache: TextureCache, renderCache: GfxRenderCache, public bsp: HaloBSP, public mgr: HaloSceneManager, public bspIndex: number, public fogEnabled: boolean) {
         this.trisBuf = makeStaticDataBuffer(renderCache.device, GfxBufferUsage.Index, mgr.get_bsp_indices(this.bsp).buffer);
-        const lightmapsBitmap = this.bsp.get_lightmaps_bitmap();
+        const lightmapsBitmap = this.mgr.resolve_bitmap_dependency(bsp.lightmaps_bitmap);
         this.lightmapRenderers = mgr.get_bsp_lightmaps(this.bsp).map(lightmap => {
             let lightmapTex: TextureMapping | null = null;
-            if (lightmapsBitmap && lightmap.get_bitmap_index() !== 65535) {
-                lightmapTex = this.textureCache.getTextureMapping(lightmapsBitmap!, lightmap.get_bitmap_index());
+            if (lightmapsBitmap && lightmap.bitmap_index !== 65535) {
+                lightmapTex = this.textureCache.getTextureMapping(lightmapsBitmap!, lightmap.bitmap_index);
             }
             return new LightmapRenderer(this.textureCache, renderCache, this.trisBuf, this.bsp, this.mgr, this.bspIndex, lightmap, lightmapTex, fogEnabled);
         });
@@ -1923,7 +1916,7 @@ class HaloScene implements Viewer.SceneGfx {
             color.free();
             vec4.set(this.fogDistances, this.activeSky.outdoor_fog_start_distance, this.activeSky.outdoor_fog_opaque_distance, 0, 0);
             const modelMatrix = mat4.create();
-            const skyModel = this.activeSky.get_model();
+            const skyModel = this.mgr.resolve_model_dependency(this.activeSky.model);
             if (skyModel) {
                 const skyModelData = new ModelData(this.renderHelper.renderCache, mgr, skyModel);
                 this.skyboxData = skyModelData;
