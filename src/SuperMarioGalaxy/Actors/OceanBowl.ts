@@ -162,9 +162,9 @@ export class OceanBowl extends LiveActor {
         }
 
         const pointCount = this.points.length;
-        this.positionBuffer = device.createBuffer(pointCount * 3, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Dynamic);
         this.positionDataF32 = new Float32Array(pointCount * 3);
         this.positionDataU8 = new Uint8Array(this.positionDataF32.buffer);
+        this.positionBuffer = device.createBuffer(this.positionDataU8.byteLength, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Dynamic);
 
         const colorData = new Uint8Array(pointCount * 4);
         let colorIdx = 0;

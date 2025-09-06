@@ -302,8 +302,8 @@ export interface GfxRenderPassDescriptor {
 }
 
 export interface GfxDeviceLimits {
-    uniformBufferWordAlignment: number;
-    uniformBufferMaxPageWordSize: number;
+    uniformBufferByteAlignment: number;
+    uniformBufferMaxPageByteSize: number;
     readonly supportedSampleCounts: number[];
     occlusionQueriesRecommended: boolean;
     computeShadersSupported: boolean;
@@ -407,7 +407,7 @@ export type GfxPass = GfxRenderPass | GfxComputePass;
  * this happens on the GPU timeline. Where possible, do try to upload data at the beginning of the frame.
  */
 export interface GfxDevice {
-    createBuffer(wordCount: number, usage: GfxBufferUsage, hint: GfxBufferFrequencyHint, initialData?: Uint8Array): GfxBuffer;
+    createBuffer(byteCount: number, usage: GfxBufferUsage, hint: GfxBufferFrequencyHint, initialData?: Uint8Array): GfxBuffer;
     createTexture(descriptor: GfxTextureDescriptor): GfxTexture;
     createSampler(descriptor: GfxSamplerDescriptor): GfxSampler;
     createRenderTarget(descriptor: GfxRenderTargetDescriptor): GfxRenderTarget;

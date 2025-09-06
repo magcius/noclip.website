@@ -231,7 +231,7 @@ export class DetailPropLeafRenderer {
         const indexData = makeTriangleIndexBuffer(GfxTopology.Quads, 0, numVertices);
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, indexData.buffer);
 
-        this.vertexBuffer = device.createBuffer((this.vertexData.byteLength + 3) >>> 2, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Dynamic);
+        this.vertexBuffer = device.createBuffer(this.vertexData.byteLength, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Dynamic);
         this.vertexBufferDescriptors = [
             { buffer: this.vertexBuffer },
             { buffer: renderContext.materialCache.staticResources.zeroVertexBuffer },

@@ -1719,7 +1719,7 @@ class ModelData {
         assert(vertexCount <= 0xFFFF);
 
         const device = cache.device;
-        this.vertexBuffer = device.createBuffer((vertexCount * 68) >>> 2, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static);
+        this.vertexBuffer = device.createBuffer((vertexCount * 68), GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static);
 
         const indexData = new Uint16Array(indexCount);
 

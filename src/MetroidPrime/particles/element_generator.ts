@@ -1743,7 +1743,7 @@ export class ElementGeneratorShapeHelper {
         const wordCount = vertexLayout.vertexBufferStrides[0] * maxElementCount;
         const shadowBufferData = new ArrayBuffer(wordCount * 4);
         this.shadowBuffer = new DataView(shadowBufferData);
-        this.vertexBuffer = renderer.device.createBuffer(wordCount, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Dynamic);
+        this.vertexBuffer = renderer.device.createBuffer(shadowBufferData.byteLength, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Dynamic);
 
         const indexData = makeTriangleIndexBuffer(GfxTopology.Quads, 0, maxElementCount * 4);
         this.indexBuffer = makeStaticDataBuffer(renderer.device, GfxBufferUsage.Index, indexData.buffer);

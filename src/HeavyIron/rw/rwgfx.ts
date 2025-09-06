@@ -547,8 +547,8 @@ export class RwGfx {
 
     public createDynamicVertexBuffer(vertexCount: number): RwGfxVertexBuffer {
         const wordCount = vertexCount * 12;
-        const buffer = this.device.createBuffer(wordCount, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Dynamic);
         const data = new Float32Array(wordCount);
+        const buffer = this.device.createBuffer(data.byteLength, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Dynamic);
         const descriptors = [{ buffer }];
 
         return { buffer, data, vertexCount, descriptors };
@@ -597,9 +597,8 @@ export class RwGfx {
     }
 
     public createDynamicIndexBuffer(indexCount: number): RwGfxIndexBuffer {
-        const wordCount = (indexCount + 1) / 2;
-        const buffer = this.device.createBuffer(wordCount, GfxBufferUsage.Index, GfxBufferFrequencyHint.Dynamic);
-        const data = new Uint16Array(wordCount);
+        const data = new Uint16Array(indexCount);
+        const buffer = this.device.createBuffer(data.byteLength, GfxBufferUsage.Index, GfxBufferFrequencyHint.Dynamic);
         const descriptor = { buffer };
 
         return { buffer, data, descriptor, indexCount };

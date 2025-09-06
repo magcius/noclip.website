@@ -1361,7 +1361,7 @@ class BufferPool {
         }
         // allocate new buffer
         const buffer = new Float32Array(this.floatCount);
-        const gfxBuffer = device.createBuffer(this.floatCount, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Dynamic);
+        const gfxBuffer = device.createBuffer(buffer.byteLength, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Dynamic);
         const descs: GfxVertexBufferDescriptor[] = nArray(2, () => ({ buffer: gfxBuffer } as GfxVertexBufferDescriptor));
 
         const b: ReusableBuffer = { buffer, gfxBuffer, descs, u8View: new Uint8Array(buffer.buffer) };

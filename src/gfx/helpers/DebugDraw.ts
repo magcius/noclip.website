@@ -139,10 +139,10 @@ class BufferPage {
         const device = cache.device;
 
         this.vertexData = new Float32Array(vertexCount * this.vertexStride);
-        this.vertexBuffer = device.createBuffer(this.vertexData.length, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Dynamic);
+        this.vertexBuffer = device.createBuffer(this.vertexData.byteLength, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Dynamic);
 
         this.indexData = new Uint16Array(align(indexCount, 2));
-        this.indexBuffer = device.createBuffer(this.indexData.length >>> 1, GfxBufferUsage.Index, GfxBufferFrequencyHint.Dynamic);
+        this.indexBuffer = device.createBuffer(this.indexData.byteLength, GfxBufferUsage.Index, GfxBufferFrequencyHint.Dynamic);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: 0, format: GfxFormat.F32_RGB, bufferIndex: 0, bufferByteOffset: 0 },

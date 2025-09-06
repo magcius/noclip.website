@@ -238,7 +238,7 @@ export class RenderData {
         if (dynamic) {
             // there are vertex effects, so the vertex buffer data will change
             this.vertexBuffer = device.createBuffer(
-                align(this.vertexBufferData.byteLength, 4) / 4,
+                this.vertexBufferData.byteLength,
                 GfxBufferUsage.Vertex,
                 GfxBufferFrequencyHint.Dynamic
             );

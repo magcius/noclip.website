@@ -1116,10 +1116,10 @@ class StripeEntry {
     public shadowBufferU8: Uint8Array;
 
     constructor(device: GfxDevice, public wordCount: number, public indexBufferDescriptor: GfxIndexBufferDescriptor) {
-        this.buffer = device.createBuffer(wordCount, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Dynamic);
-        this.vertexBufferDescriptors = [{ buffer: this.buffer }];
         this.shadowBufferF32 = new Float32Array(wordCount);
         this.shadowBufferU8 = new Uint8Array(this.shadowBufferF32.buffer);
+        this.buffer = device.createBuffer(this.shadowBufferF32.byteLength, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Dynamic);
+        this.vertexBufferDescriptors = [{ buffer: this.buffer }];
     }
 
     public markInUse(): void {

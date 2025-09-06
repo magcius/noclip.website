@@ -1092,9 +1092,10 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         return ++this._resourceUniqueId;
     }
 
-    public createBuffer(wordCount: number, usage_: GfxBufferUsage, hint: GfxBufferFrequencyHint, initialData?: Uint8Array): GfxBuffer {
+    public createBuffer(size: number, usage_: GfxBufferUsage, hint: GfxBufferFrequencyHint, initialData?: Uint8Array): GfxBuffer {
+        size = (size + 3) & ~3; // align to multiple of 4
+
         let usage = translateBufferUsage(usage_);
-        const size = wordCount * 4;
         const gpuBuffer = this.device.createBuffer({ usage, size, mappedAtCreation: initialData !== undefined });
 
         if (initialData !== undefined) {
@@ -1746,7 +1747,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         }
         assert(data.byteLength - srcByteOffset >= byteCount);
 
-        this.device.queue.writeBuffer(getPlatformBuffer(buffer), dstByteOffset, data, srcByteOffset, byteCount);
+        this.device.queue.writeBuffer(getPlatformBuffer(buffer), dstByteOffset, data.buffer, srcByteOffset, byteCount);
 
         this._debugGroupStatisticsBufferUpload();
     }
@@ -1767,7 +1768,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             const mipHeight = texture.height >>> mipLevel;
 
             translateImageLayout(size, layout, texture.pixelFormat, mipWidth, mipHeight);
-            this.device.queue.writeTexture(destination, levelDatas[i], layout, size);
+            this.device.queue.writeTexture(destination, levelDatas[i].buffer, layout, size);
         }
     }
 
@@ -1817,8 +1818,8 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
 
     public queryLimits(): GfxDeviceLimits {
         return {
-            uniformBufferMaxPageWordSize: this.device.limits.maxUniformBufferBindingSize >>> 2,
-            uniformBufferWordAlignment: this.device.limits.minUniformBufferOffsetAlignment >>> 2,
+            uniformBufferMaxPageByteSize: this.device.limits.maxUniformBufferBindingSize,
+            uniformBufferByteAlignment: this.device.limits.minUniformBufferOffsetAlignment,
             supportedSampleCounts: [1, 4],
             occlusionQueriesRecommended: true,
             computeShadersSupported: true,

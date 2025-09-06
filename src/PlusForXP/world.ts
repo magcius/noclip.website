@@ -155,8 +155,8 @@ export class World {
                 }
             }
 
-            const diffuseColorBuffer = device.createBuffer(mesh.vertexcount * 4, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static);
-            device.uploadBufferData(diffuseColorBuffer, 0, new Uint8Array(new Float32Array(mesh.vertexcount * 4).fill(1).buffer));
+            const data = new Float32Array(mesh.vertexcount * 4).fill(1);
+            const diffuseColorBuffer = device.createBuffer(data.byteLength, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, new Uint8Array(data.buffer));
 
             const positionBuffer = createDataBuffer(device, GfxBufferUsage.Vertex, mesh.positions.buffer, mesh.dynamic);
             const normalBuffer = createDataBuffer(device, GfxBufferUsage.Vertex, mesh.normals.buffer, mesh.dynamic);

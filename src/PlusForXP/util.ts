@@ -144,7 +144,7 @@ export const getDescendants = (node: SceneNode): SceneNode[] => {
 
 export const createDataBuffer = (device: GfxDevice, usage: GfxBufferUsage, data: ArrayBufferLike, dynamic: boolean = false): GfxBuffer => {
     return device.createBuffer(
-        align(data.byteLength, 4) / 4,
+        data.byteLength,
         usage,
         dynamic ? GfxBufferFrequencyHint.Dynamic : GfxBufferFrequencyHint.Static,
         new Uint8Array(data, 0, data.byteLength),
