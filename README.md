@@ -37,3 +37,24 @@ Hold `\` | Make camera move slower
 `Numpad 5` | Immediately stop all orbiting (requries Orbit or Ortho camera modes)
 `Numpad 2`/`Numpad 4`/`Numpad 6`/`Numpad 8` | Snap view to front/left/right/top view (requires Orbit camera mode)
 `F` | Not sure what this key does, let me know if you figure it out
+
+## Third-Party Credits
+
+All icons you see are from [The Noun Project](https://thenounproject.com/), used under Creative Commons CC-BY:
+* Truncated Pyramid by Bohdan Burmich
+* Images by Creative Stall
+* Help by Gregor Cresnar
+* Open by Landan Lloyd
+* Nightshift by mikicon
+* Layer by Chameleon Design
+* Sand Clock by James
+* Line Chart by Shastry
+* Search by Alain W.
+* Save by Prime Icons
+* Overlap by Zach Bogart
+* VR by Fauzan Adaiima
+* Play Clapboard by Yoyon Pujiyono
+* Undo by Numero Uno
+* Redo by Numero Uno
+* Zoom In by Tanvir Islam
+* Zoom Out by Tanvir Islam

@@ -1942,8 +1942,6 @@ class StudioSidePanel extends Panel {
 }
 
 class About extends Panel {
-    public onfaq: (() => void) | null = null;
-
     constructor() {
         super();
         this.setTitle(ABOUT_ICON, 'About');
@@ -1981,237 +1979,17 @@ class About extends Panel {
 <h1> <img src="${logoURL}"> <span> noclip.website </span> </h1>
 <h2> A digital museum of video game levels </h2>
 
-<a href="#" class="FAQLink"> What is this? / FAQ </a>
-
 <p> <strong>CLICK AND DRAG</strong> to look around and use <strong>WASD</strong> to move the camera </p>
 <p> Hold <strong>SHIFT</strong> to go faster, and use <strong>MOUSE WHEEL</strong> to fine tune the speed
 <strong>Z</strong> toggles the UI. </p>
 
 <p><a href="https://discord.gg/bkJmKKv"><strong>JOIN THE DISCORD</strong> by clicking here</a></p>
 
-<p><strong>CODE PRIMARILY WRITTEN</strong> by Jasper</p>
-
 <p><strong>OPEN SOURCE</strong> at <a href="${GITHUB_URL}">GitHub</a></p>
 
 <p class="BuildVersion"><a href="${GITHUB_REVISION_URL}">build ${GIT_SHORT_REVISION}</a></p>
 </div>
 `;
-        const faqLink = this.contents.querySelector('.FAQLink') as HTMLAnchorElement;
-        faqLink.onclick = () => {
-            if (this.onfaq !== null)
-                this.onfaq();
-        };
-    }
-}
-
-class FAQPanel implements Widget {
-    private toplevel: HTMLElement;
-    private panel: HTMLElement;
-
-    public elem: HTMLElement;
-
-    constructor() {
-        this.toplevel = document.createElement('div');
-        this.toplevel.classList.add('FAQPanel');
-        this.toplevel.style.position = 'absolute';
-        this.toplevel.style.left = '0';
-        this.toplevel.style.top = '0';
-        this.toplevel.style.right = '0';
-        this.toplevel.style.bottom = '0';
-        this.toplevel.style.background = 'rgba(0, 0, 0, 0.8)';
-        this.toplevel.onclick = () => {
-            this.elem.style.display = 'none';
-        };
-
-        const styleFrag = createDOMFromString(`
-<style>
-.FAQPanel a:link, .FAQPanel a:visited { color: #ddd; }
-.FAQPanel a:hover { color: #fff; }
-</style>
-`);
-        this.toplevel.appendChild(styleFrag);
-
-        this.panel = document.createElement('div');
-        this.panel.style.boxSizing = 'border-box';
-        this.panel.style.width = '50vw';
-        this.panel.style.margin = '5vh auto';
-        this.panel.style.height = '90vh';
-        this.panel.style.backgroundColor = 'black';
-        this.panel.style.padding = '2em';
-        this.panel.style.font = '11pt monospace';
-        this.panel.style.overflow = 'auto';
-        this.panel.style.color = '#ddd';
-        this.panel.style.textAlign = 'justify';
-        this.panel.onclick = (e) => {
-            e.stopPropagation();
-        };
-
-        const qa = document.createElement('div');
-        this.panel.appendChild(qa);
-
-        const faq = `
-## What is noclip.website?
-
-<p>noclip.website is a celebration of video game level design and art. It's a chance to
-explore and deepen your appreciation for some of your favorite games.</p>
-
-## Why did you make this?
-
-<p>I've always had an appreciation for the incredible worlds that game developers make.
-Sometimes staring closely at levels might help you understand the challenges the designers
-were facing, and what problems and techniques they used to solve them. You can learn a lot
-about a game by looking in the places they <em>don't</em> show in the game itself. It's
-also a ton of fun to test your memory, seeing if you can remember how a level is laid
-out, or where two rooms might connect to each other.</p>
-
-## It doesn't work!
-
-<p>Oops, sorry about that. Please let me know through either the <a href="https://discord.gg/bkJmKKv">official noclip.website Discord</a>
-or <a href="https://twitter.com/JasperRLZ/">Twitter</a>. Try to let me know what
-OS/browser/GPU you were using, and what game you tried to view, and I'll investigate.</p>
-
-## Can I request a game?
-
-<p>Maybe. Check around to see if anybody has looked at the game files before. If there's
-existing community documentation, that helps a lot. And if you're around to help answer
-questions or provide map names, I'm even more inclined.</p>
-
-<p>Even having documentation, games can take months of my time to add. So I have to be
-very careful with which games I choose to spend my time with.</p>
-
-<p>If you have some programming skills and want to try to add a game yourself, I fully
-welcome that. Join the Discord and I will be happy to help you get set up with a
-development environment and walk you through the code.</p>
-
-## Why do some levels look broken?
-
-<p>In order to put a game on the website, I first need to take apart the game, extract
-the data, and then figure out how to put it back together. Some of these games, especially
-the newer ones, are really complex with their levels and their models, and that often means
-it takes more work to make it look correct. The line between "game engine" and "game data"
-is only getting blurrier and blurrier.</p>
-
-<p>My dream is that the site contains fully accurate versions of each game, and I try
-to get closer to that goal when I can, but the effort and time involved to make an accurate
-recreation can sometimes be far too much, or would push me more into recreating large
-parts of the original game's engine, which I'm less interested in doing myself.</p>
-
-## How do I export models from the site?
-
-<p>You can't. From the technical side, there is no one consistent file format that has
-all of the features that an accurate model would require. From a personal perspective,
-I'm not ready to take on the support burden of writing an export tool.</p>
-
-<p>That said, if you would like to use my work as a base to build your own tools, the website
-is open-source and source code can be found at <a href="https://github.com/magcius/noclip.website">GitHub</a>.</p>
-
-<p>If you are looking for art for your own projects, there are some fantastic artists
-out there in the community that are always looking for work. Hire them instead of
-using art assets from other games.</p>
-
-## This is cool! Any way I can help you out!
-
-<p>Absolutely. Join <a href="https://discord.gg/bkJmKKv">the official Discord</a> and ask around if you would like to help out.
-The easiest things to help out with are providing savestates and naming maps, and can
-be done even if you do not know how to code. There's also some work that would be
-appreciated to help me improve accuracy, like running games in certain modes to help
-me compare the two.</p>
-
-<p>If you have a more tech-y background, there's always coding work to be done. All
-the source code to the site is available at <a href="https://github.com/magcius/noclip.website">GitHub</a>,
-whether you want to browse around, use it for your own purposes, or help contribute.</p>
-
-## Are you afraid of being taken down?
-
-<p>Less than you might think. Companies take down fan projects when they're competing
-with their in-house projects. I don't see noclip.website as competing with any game
-out there &mdash; it's more of a museum, not a game. The worlds on display are incredible
-and I hope they encourage you to go out and buy a copy of the game itself.</p>
-
-<p>That said, I have enormous respect for the developers and dev teams and if I received
-a take-down request, I would honor it. It is their work on display, after all.</p>
-
-<p>Developers are only able to make these fantastic worlds if we collectively support
-them. noclip would not exist without their hard work and dedication. To ensure that they
-remain healthy, please try to buy games instead of pirating them. I also put in extra effort
-to ensure that all assets available on this site cannot be used to pirate the game itself.</p>
-
-## Do you accept donations?
-
-<p>No. Use the money to buy some games instead.</p>
-
-## Any affiliation to noclip, the documentary people?
-
-<p>I chatted with them once, but the name is a coincidence. The name comes from an old Quake
-command that would let you fly through the levels here, just like in the game.</p>
-
-## Have you seen the YouTube show Boundary Break?
-
-<p>Of course! I love that show. I'm ecstatic to see that exploring video game levels from
-different angles has captured the imaginations of such a wide audience. And I hope that this
-site encourages that same curiosity that's visible all throughout Boundary Break, trekking
-through these levels on your own adventures!</p>
-
-## Who made this site?
-
-<p>In my opinion? The artists and game developers. They made everything you actually see here
-on display.</p>
-
-<p>All icons you see are from <a href="https://thenounproject.com/">The Noun Project</a>,
-used under Creative Commons CC-BY:</p>
-<ul>
-<li> Truncated Pyramid <span>by</span> Bohdan Burmich
-<li> Images <span>by</span> Creative Stall
-<li> Help <span>by</span> Gregor Cresnar
-<li> Open <span>by</span> Landan Lloyd
-<li> Nightshift <span>by</span> mikicon
-<li> Layer <span>by</span> Chameleon Design
-<li> Sand Clock <span>by</span> James
-<li> Line Chart <span>by</span> Shastry
-<li> Search <span>by</span> Alain W.
-<li> Save <span>by</span> Prime Icons
-<li> Overlap <span>by</span> Zach Bogart
-<li> VR <span>by</span> Fauzan Adaiima
-<li> Play Clapboard <span>by</span> Yoyon Pujiyono
-<li> Undo <span>by</span> Numero Uno
-<li> Redo <span>by</span> Numero Uno
-<li> Zoom In <span>by</span> Tanvir Islam
-<li> Zoom Out <span>by</span> Tanvir Islam
-
-</ul>
-`;
-
-        const qas = faq.split('##').slice(1).map((qa) => {
-            const firstNewline = qa.indexOf('\n');
-            const question = qa.slice(0, firstNewline).trim();
-            const answer = qa.slice(firstNewline).trim();
-
-            return { question, answer };
-        });
-
-        for (let i = 0; i < qas.length; i++) {
-            const block = document.createElement('div');
-
-            const title = qas[i].question;
-
-            const q = document.createElement('p');
-            q.style.color = '#ccc';
-            q.style.fontWeight = 'bold';
-            q.style.marginTop = '0';
-            q.style.fontSize = '12pt';
-            q.textContent = title;
-            block.appendChild(q);
-            const a = document.createElement('p');
-            a.style.marginBottom = '1.6em';
-            a.innerHTML = qas[i].answer;
-            block.appendChild(a);
-
-            qa.appendChild(block);
-        }
-
-        this.toplevel.appendChild(this.panel);
-
-        this.elem = this.toplevel;
     }
 }
 
@@ -2691,7 +2469,6 @@ export class UI {
     public statisticsPanel: StatisticsPanel;
     public panels: Panel[];
     private about: About;
-    private faqPanel: FAQPanel;
     private studioSidePanel: StudioSidePanel;
     private studioPanel: StudioPanel;
     private recordingBranding = new RecordingBranding();
@@ -2775,17 +2552,9 @@ export class UI {
         this.statisticsPanel = new StatisticsPanel(viewer);
         this.about = new About();
 
-        this.faqPanel = new FAQPanel();
-        this.faqPanel.elem.style.display = 'none';
-        this.toplevel.appendChild(this.faqPanel.elem);
-
         this.studioSidePanel = new StudioSidePanel(this);
         this.studioPanel = new StudioPanel(this, viewer);
         this.toplevel.appendChild(this.studioPanel.elem);
-
-        this.about.onfaq = () => {
-            this.faqPanel.elem.style.display = 'block';
-        };
 
         window.onmousemove = () => {
             this.setMouseActive();
