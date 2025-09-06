@@ -1,10 +1,8 @@
 
 import { ReadonlyMat4, mat4 } from 'gl-matrix';
-import { computeViewMatrix } from '../Camera.js';
-import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers.js';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers.js';
 import { fillMatrix4x3 } from '../gfx/helpers/UniformBufferHelpers.js';
-import { GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFormat, GfxInputLayout, GfxProgram, GfxVertexBufferDescriptor, GfxVertexBufferFrequency } from '../gfx/platform/GfxPlatform.js';
+import { GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFormat, GfxInputLayout, GfxProgram, GfxVertexBufferDescriptor, GfxVertexBufferFrequency } from '../gfx/platform/GfxPlatform.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { GfxRenderInstManager, GfxRendererLayer, makeSortKey, setSortKeyDepth } from '../gfx/render/GfxRenderInstManager.js';
 import { assert } from '../util.js';
@@ -14,6 +12,7 @@ import { DkrObjectAnimation } from './DkrObjectAnimation.js';
 import { DkrTexture } from './DkrTexture.js';
 import { DkrFinalVertex, DkrTriangleBatch } from './DkrTriangleBatch.js';
 import { F3DDKR_Program } from './F3DDKR_Program.js';
+import { createBufferFromData } from '../gfx/helpers/BufferHelpers.js';
 
 // Currently known flags
 const FLAG_ENABLE_DEPTH_WRITE    = 0x00000010;
@@ -137,8 +136,8 @@ export class DkrDrawCall {
             vertexBufferDescriptors,
         });
 
-        this.positionBuffer = makeStaticDataBuffer(cache.device, GfxBufferUsage.Vertex, positionBuffer.buffer);
-        this.attribBuffer = makeStaticDataBuffer(cache.device, GfxBufferUsage.Vertex, attribBuffer.buffer);
+        this.positionBuffer = createBufferFromData(cache.device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, positionBuffer.buffer);
+        this.attribBuffer = createBufferFromData(cache.device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, attribBuffer.buffer);
         this.vertexBufferDescriptors = [
             { buffer: this.positionBuffer },
             { buffer: this.positionBuffer },

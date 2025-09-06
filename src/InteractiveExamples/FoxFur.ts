@@ -2,7 +2,7 @@
 import { OrbitCameraController } from '../Camera.js';
 
 import { SceneDesc, SceneContext, GraphObjBase } from "../SceneBase.js";
-import { GfxDevice, GfxTexture, GfxBuffer, GfxBufferUsage, GfxFormat, GfxVertexBufferFrequency, GfxInputLayout, GfxBindingLayoutDescriptor, GfxProgram, GfxBlendMode, GfxBlendFactor, GfxCullMode, makeTextureDescriptor2D, GfxChannelWriteMask, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform.js";
+import { GfxDevice, GfxTexture, GfxBuffer, GfxBufferUsage, GfxFormat, GfxVertexBufferFrequency, GfxInputLayout, GfxBindingLayoutDescriptor, GfxProgram, GfxBlendMode, GfxBlendFactor, GfxCullMode, makeTextureDescriptor2D, GfxChannelWriteMask, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor, GfxBufferFrequencyHint } from "../gfx/platform/GfxPlatform.js";
 import { SceneGfx, ViewerRenderInput } from "../viewer.js";
 import { DataFetcher } from "../DataFetcher.js";
 import { makeBackbufferDescSimple, makeAttachmentClearDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
@@ -10,7 +10,6 @@ import { TransparentBlack, colorNewCopy, colorLerp, colorNewFromRGBA } from '../
 import { GfxRenderInstList, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
 import { TextureMapping } from '../TextureHolder.js';
 import { nArray } from '../util.js';
-import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers.js';
 import { DeviceProgram } from '../Program.js';
 import { fillMatrix4x3, fillMatrix4x4, fillColor, fillVec4 } from '../gfx/helpers/UniformBufferHelpers.js';
 import { mat4 } from 'gl-matrix';
@@ -23,6 +22,7 @@ import { GridPlane } from './GridPlane.js';
 import { dfRange, dfShow } from '../DebugFloaters.js';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
+import { createBufferFromData } from '../gfx/helpers/BufferHelpers.js';
 
 const pathBase = `FoxFur`;
 
@@ -309,8 +309,8 @@ class FurObj {
         this.textureMapping[2].gfxTexture = this.indTex;
 
         const obj = parseObjFile(objText);
-        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, obj.vertexBuffer.buffer);
-        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, obj.indexBuffer.buffer);
+        this.vertexBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, obj.vertexBuffer.buffer);
+        this.indexBuffer = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, obj.indexBuffer.buffer);
         this.indexCount = obj.indexBuffer.length;
 
         this.inputLayout = cache.createInputLayout({

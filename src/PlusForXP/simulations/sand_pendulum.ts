@@ -7,6 +7,7 @@ import {
     GfxBindingLayoutDescriptor,
     GfxBlendFactor,
     GfxBlendMode,
+    GfxBufferFrequencyHint,
     GfxBufferUsage,
     GfxDevice,
     GfxFormat,
@@ -32,8 +33,9 @@ import { GfxProgramObjBag, preprocessProgramObj_GLSL } from "../../gfx/shaderc/G
 import { lerp, MathConstants } from "../../MathHelpers.js";
 import { ViewerRenderInput } from "../../viewer.js";
 import { SceneNode, Simulation, Texture } from "../types.js";
-import { createDataBuffer, reparent, updateNodeTransform, wrapNode } from "../util.js";
+import { reparent, updateNodeTransform, wrapNode } from "../util.js";
 import { World } from "../world.js";
+import { createBufferFromData } from "../../gfx/helpers/BufferHelpers.js";
 
 type Swing = {
     name: string;
@@ -270,9 +272,10 @@ export default class SandPendulum extends Simulation {
             ],
         });
 
-        const positionBuffer = createDataBuffer(
+        const positionBuffer = createBufferFromData(
             device,
             GfxBufferUsage.Vertex,
+            GfxBufferFrequencyHint.Static,
             new Float32Array(Array(this.numParticles).fill([0, 0, 1, 0, 0, 1, 1, 1]).flat()).buffer,
         );
 
@@ -282,14 +285,14 @@ export default class SandPendulum extends Simulation {
             particleIDs.push(i, i, i, i);
             particleIndices.push([0, 1, 2, 1, 2, 3].map((j) => i * 4 + j));
         }
-        const particleIDBuffer = createDataBuffer(device, GfxBufferUsage.Vertex, new Float32Array(particleIDs.flat()).buffer);
+        const particleIDBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, new Float32Array(particleIDs.flat()).buffer);
 
         this.vertexAttributes = [
             { buffer: positionBuffer },
             { buffer: particleIDBuffer },
         ];
 
-        const indexBuffer = createDataBuffer(device, GfxBufferUsage.Index, new Uint32Array(particleIndices.flat()).buffer);
+        const indexBuffer = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, new Uint32Array(particleIndices.flat()).buffer);
         this.indexBufferDescriptor = { buffer: indexBuffer };
 
         this.megaStateFlags = setAttachmentStateSimple({}, {

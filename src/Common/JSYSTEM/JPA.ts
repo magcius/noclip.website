@@ -26,7 +26,6 @@ import { type Color, colorNewFromRGBA, colorCopy, colorNewCopy, White, colorFrom
 import { MaterialParams, ColorKind, DrawParams, fillIndTexMtx, fillTextureSize, fillTextureBias } from "../../gx/gx_render.js";
 import { GXMaterialHelperGfx } from "../../gx/gx_render.js";
 import { computeModelMatrixSRT, computeModelMatrixR, lerp, MathConstants, normToLengthAndAdd, normToLength, isNearZeroVec3, transformVec3Mat4w1, transformVec3Mat4w0, setMatrixTranslation, setMatrixAxis, Vec3Zero, vec3SetAll, bitsAsFloat32, isNearZero } from "../../MathHelpers.js";
-import { makeStaticDataBuffer } from "../../gfx/helpers/BufferHelpers.js";
 import { GfxRenderInst, GfxRenderInstManager, makeSortKeyTranslucent, GfxRendererLayer, setSortKeyBias, setSortKeyDepth } from "../../gfx/render/GfxRenderInstManager.js";
 import { fillMatrix4x3, fillColor, fillMatrix4x2, fillVec4 } from "../../gfx/helpers/UniformBufferHelpers.js";
 import { computeViewSpaceDepthFromWorldSpacePoint } from "../../Camera.js";
@@ -38,6 +37,7 @@ import { BTIData, BTI, BTI_Texture } from "./JUTTexture.js";
 import { VertexAttributeInput } from "../../gx/gx_displaylist.js";
 import { dfRange, dfShow } from "../../DebugFloaters.js";
 import { Frustum } from "../../Geometry.js";
+import { createBufferFromData } from "../../gfx/helpers/BufferHelpers.js";
 
 const SORT_PARTICLES = false;
 const USE_INSTANCING = true;
@@ -899,7 +899,7 @@ class JPAGlobalRes {
         const n1 = -25;
 
         const device = cache.device;
-        this.vertexBufferQuad = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, new Float32Array([
+        this.vertexBufferQuad = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, new Float32Array([
             n0, n0, 0, 1, 0,
             n0, n1, 0, 1, 1,
             n1, n0, 0, 0, 0,
@@ -910,7 +910,7 @@ class JPAGlobalRes {
             0, n0, n1, 0, 0,
             0, n1, n1, 0, 1,
         ]).buffer);
-        this.indexBufferQuad = makeStaticDataBuffer(device, GfxBufferUsage.Index, new Uint16Array([
+        this.indexBufferQuad = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, new Uint16Array([
             0, 1, 2, 2, 1, 3,
             4, 5, 6, 6, 5, 7,
         ]).buffer);
@@ -1156,7 +1156,7 @@ class StripeBufferManager {
 
     constructor(device: GfxDevice, public inputLayout: GfxInputLayout) {
         const tristripIndexData = makeTriangleIndexBuffer(GfxTopology.TriStrips, 0, MAX_STRIPE_VERTEX_COUNT);
-        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, tristripIndexData.buffer);
+        this.indexBuffer = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, tristripIndexData.buffer);
         this.indexBufferDescriptor = { buffer: this.indexBuffer };
     }
 

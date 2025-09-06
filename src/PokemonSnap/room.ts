@@ -1,22 +1,22 @@
-import * as F3DEX2 from "./f3dex2.js";
 import * as RDP from "../Common/N64/RDP.js";
+import * as F3DEX2 from "./f3dex2.js";
 import * as MIPS from "./mips.js";
 
+import { vec3, vec4 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { RSPSharedOutput, StagingVertex } from "../BanjoKazooie/f3dex.js";
-import { vec3, vec4 } from "gl-matrix";
-import { assert, hexzero, assertExists, nArray } from "../util.js";
-import { TextFilt, ImageFormat, ImageSize } from "../Common/N64/Image.js";
-import { Endianness } from "../endian.js";
-import { findNewTextures } from "./animation.js";
-import { MotionParser, Motion, Splash, Direction } from "./motion.js";
-import { Vec3UnitY, Vec3One, bitsAsFloat32 } from "../MathHelpers.js";
-import {parseParticles, ParticleSystem } from "./particles.js";
-import { GfxDevice, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxFormat, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform.js";
 import { RenderData } from "../BanjoKazooie/render.js";
-import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
-import { EggProgram } from "./render.js";
+import { ImageFormat, ImageSize, TextFilt } from "../Common/N64/Image.js";
+import { Endianness } from "../endian.js";
+import { GfxBufferFrequencyHint, GfxBufferUsage, GfxFormat, GfxInputLayoutBufferDescriptor, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
+import { bitsAsFloat32, Vec3One, Vec3UnitY } from "../MathHelpers.js";
+import { assert, assertExists, hexzero, nArray } from "../util.js";
+import { findNewTextures } from "./animation.js";
+import { Direction, Motion, MotionParser, Splash } from "./motion.js";
+import { parseParticles, ParticleSystem } from "./particles.js";
+import { EggProgram } from "./render.js";
+import { createBufferFromData } from "../gfx/helpers/BufferHelpers.js";
 
 export interface Level {
     sharedCache: RDP.TextureCache;
@@ -2348,7 +2348,7 @@ function buildEggData(dataMap: DataMap, id: number): Float32Array | undefined {
 
 export function eggInputSetup(cache: GfxRenderCache, data: RenderData, vertices: Float32Array): void {
     const device = cache.device;
-    const eggBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, vertices.buffer);
+    const eggBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, vertices.buffer);
     data.dynamicBufferCopies.push(eggBuffer); // put it here to make sure it gets destroyed later
 
     const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [

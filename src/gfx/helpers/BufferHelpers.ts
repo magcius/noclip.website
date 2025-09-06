@@ -3,7 +3,7 @@
 
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { GfxBuffer, GfxDevice, GfxBufferUsage, GfxBufferFrequencyHint } from "../platform/GfxPlatform.js";
-import { assert, align } from "../platform/GfxPlatformUtil.js";
+import { assert } from "../platform/GfxPlatformUtil.js";
 
 export interface GfxCoalescedBuffer {
     buffer: GfxBuffer;
@@ -106,10 +106,10 @@ export class GfxBufferCoalescerCombo {
     }
 }
 
-export function makeStaticDataBuffer(device: GfxDevice, usage: GfxBufferUsage, data: ArrayBufferLike, srcOffset = 0, srcLength = data.byteLength): GfxBuffer {
-    return device.createBuffer(data.byteLength, usage, GfxBufferFrequencyHint.Static, new Uint8Array(data, srcOffset, srcLength));
+export function createBufferFromData(device: GfxDevice, usage: GfxBufferUsage, hint: GfxBufferFrequencyHint, data: ArrayBufferLike, srcOffset = 0, srcLength = data.byteLength): GfxBuffer {
+    return device.createBuffer(data.byteLength, usage, hint, new Uint8Array(data, srcOffset, srcLength));
 }
 
-export function makeStaticDataBufferFromSlice(device: GfxDevice, usage: GfxBufferUsage, data: ArrayBufferSlice): GfxBuffer {
+export function createBufferFromSlice(device: GfxDevice, usage: GfxBufferUsage, hint: GfxBufferFrequencyHint, data: ArrayBufferSlice): GfxBuffer {
     return device.createBuffer(data.byteLength, usage, GfxBufferFrequencyHint.Static, data.createTypedArray(Uint8Array));
 }

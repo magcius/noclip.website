@@ -1,8 +1,7 @@
 
 import { mat4, vec2 } from 'gl-matrix';
 import { AABB, Frustum, IntersectionState } from '../Geometry.js';
-import { makeStaticDataBufferFromSlice } from '../gfx/helpers/BufferHelpers.js';
-import { GfxBuffer, GfxBufferUsage, GfxDevice, GfxFormat, GfxInputLayoutBufferDescriptor, GfxMipFilterMode, GfxTexFilterMode, GfxTexture, GfxTextureDescriptor, GfxTextureDimension, GfxTextureUsage, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxWrapMode } from '../gfx/platform/GfxPlatform.js';
+import { GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxDevice, GfxFormat, GfxInputLayoutBufferDescriptor, GfxMipFilterMode, GfxTexFilterMode, GfxTexture, GfxTextureDescriptor, GfxTextureDimension, GfxTextureUsage, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxWrapMode } from '../gfx/platform/GfxPlatform.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
 import { TextureMapping } from '../TextureHolder.js';
@@ -11,6 +10,7 @@ import { NfsNode, NodeType } from './datanode.js';
 import { NfsMap, RegionConnections } from './map.js';
 import { NfsParticleEmitterGroup } from './particles.js';
 import { VertexInfo } from './render.js';
+import { createBufferFromSlice } from '../gfx/helpers/BufferHelpers.js';
 
 export type DataSection = {
     node?: NfsNode,
@@ -469,7 +469,7 @@ export class NfsModel {
         const nameStart = NfsModel.textDecoder.decode(nameStartBytes).toUpperCase();
         this.isHiddenModel = nameStart === "SHADOW" || nameStart.startsWith("ANM");
 
-        this.indexBuffer = makeStaticDataBufferFromSlice(device, GfxBufferUsage.Index, meshDataNode.children[2].dataBuffer.slice(0, indexCount * 2));
+        this.indexBuffer = createBufferFromSlice(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, meshDataNode.children[2].dataBuffer.slice(0, indexCount * 2));
 
         const textureList = [];
         const textureListDataView = modelNode.children[1].dataView;
@@ -506,7 +506,7 @@ export class NfsModel {
 
             if(this.vertexBuffers.length === vertexListIndex) {
                 // create new buffer if the current vertex list doesn't have one yet
-                this.vertexBuffers.push(makeStaticDataBufferFromSlice(device, GfxBufferUsage.Vertex, meshDataNode.children[3 + vertexListIndex].dataBuffer));
+                this.vertexBuffers.push(createBufferFromSlice(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, meshDataNode.children[3 + vertexListIndex].dataBuffer));
             }
 
             if(diffuseTexture === undefined)

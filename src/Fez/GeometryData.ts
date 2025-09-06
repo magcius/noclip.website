@@ -1,9 +1,9 @@
 
-import { GfxBuffer, GfxInputLayout, GfxDevice, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform.js";
+import { GfxBuffer, GfxInputLayout, GfxDevice, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor, GfxBufferFrequencyHint } from "../gfx/platform/GfxPlatform.js";
 import { Fez_ShaderInstancedIndexedPrimitives, Fez_VertexPositionNormalTextureInstance } from './XNB_Fez.js';
 import { AABB } from "../Geometry.js";
-import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
+import { createBufferFromData } from "../gfx/helpers/BufferHelpers.js";
 
 export class GeometryData {
     private indexBuffer: GfxBuffer;
@@ -32,10 +32,10 @@ export class GeometryData {
 
         const indices = Uint32Array.from(geometry.indices);
         this.indexCount = indices.length;
-        this.positionBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, posF32A.buffer);
-        this.normalBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, normalF32A.buffer);
-        this.texcoordBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, texcoordF32A.buffer);
-        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, indices.buffer);
+        this.positionBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, posF32A.buffer);
+        this.normalBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, normalF32A.buffer);
+        this.texcoordBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, texcoordF32A.buffer);
+        this.indexBuffer = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, indices.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: 0, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0, }, // Position

@@ -7,7 +7,7 @@ import { drawWorldSpaceAABB, drawWorldSpaceLine, drawWorldSpaceLocator, drawWorl
 import { AABB } from '../Geometry.js';
 import { projectionMatrixConvertClipSpaceNearZ } from '../gfx/helpers/ProjectionHelpers.js';
 import { projectionMatrixReverseDepth } from '../gfx/helpers/ReversedDepthHelpers.js';
-import { GfxBuffer, GfxBufferUsage, GfxClipSpaceNearZ, GfxDevice, GfxFormat } from '../gfx/platform/GfxPlatform.js';
+import { GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxClipSpaceNearZ, GfxDevice, GfxFormat } from '../gfx/platform/GfxPlatform.js';
 import { GfxrGraphBuilder, GfxrRenderTargetDescription } from '../gfx/render/GfxRenderGraph.js';
 import { GfxRenderInstManager, setSortKeyDepth } from '../gfx/render/GfxRenderInstManager.js';
 import { clamp, computeModelMatrixR, computeModelMatrixSRT, getMatrixAxis, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, lerp, MathConstants, projectionMatrixForFrustum, randomRangeFloat, saturate, scaleMatrix, setMatrixTranslation, transformVec3Mat4w1, vec3SetAll, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from '../MathHelpers.js';
@@ -24,7 +24,7 @@ import { vmtParseColor, vmtParseNumber, vmtParseVector } from './VMT.js';
 import { EntityMaterialParameters, FogParams, BaseMaterial } from './Materials/MaterialBase.js';
 import { ParameterReference, paramSetNum } from './Materials/MaterialParameters.js';
 import { LightCache, worldLightingCalcColorForPoint } from './Materials/WorldLight.js';
-import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers.js';
+import { createBufferFromData } from '../gfx/helpers/BufferHelpers.js';
 
 type EntityMessageValue = string;
 
@@ -4196,8 +4196,8 @@ class infodecal extends BaseEntity {
         const decalResult = this.bspRenderer.bsp.buildDecal(scratchVec3a, halfWidth, halfHeight);
 
         const device = renderContext.renderCache.device;
-        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, decalResult.vertexData);
-        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, decalResult.indexData);
+        this.vertexBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, decalResult.vertexData);
+        this.indexBuffer = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, decalResult.indexData);
         this.surfaces = decalResult.surfaces;
 
         for (let i = 0; i < this.surfaces.length; i++)

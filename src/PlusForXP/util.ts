@@ -142,15 +142,6 @@ export const getDescendants = (node: SceneNode): SceneNode[] => {
     return [...descendants];
 };
 
-export const createDataBuffer = (device: GfxDevice, usage: GfxBufferUsage, data: ArrayBufferLike, dynamic: boolean = false): GfxBuffer => {
-    return device.createBuffer(
-        data.byteLength,
-        usage,
-        dynamic ? GfxBufferFrequencyHint.Dynamic : GfxBufferFrequencyHint.Static,
-        new Uint8Array(data, 0, data.byteLength),
-    );
-};
-
 const scratchModelMatrix = mat4.create();
 
 export const updateNodeTransform = (node: SceneNode, parentChanged: boolean, parentWorldTransform: mat4 | null, animating: boolean) => {

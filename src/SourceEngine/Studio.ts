@@ -7,13 +7,13 @@ import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { computeViewSpaceDepthFromWorldSpacePoint } from "../Camera.js";
 import { AABB } from "../Geometry.js";
 import { MathConstants, bitsAsFloat32, getMatrixTranslation, lerp, setMatrixTranslation, transformVec3Mat4w0, transformVec3Mat4w1 } from "../MathHelpers.js";
-import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
-import { GfxBuffer, GfxBufferUsage, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform.js";
+import { GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { GfxRenderInstManager, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager.js";
 import { align, assert, assertExists, nArray, readString } from "../util.js";
 import { SourceFileSystem, SourceRenderContext } from "./Main.js";
 import { BaseMaterial, EntityMaterialParameters, MaterialShaderTemplateBase, SkinningMode, StaticLightingMode } from "./Materials/MaterialBase.js";
+import { createBufferFromData } from "../gfx/helpers/BufferHelpers.js";
 
 // Encompasses the MDL, VVD & VTX formats.
 
@@ -131,8 +131,8 @@ class StudioModelMeshData {
 
     constructor(cache: GfxRenderCache, public stripGroupData: StudioModelStripGroupData[], public materialNames: string[], private flags: StudioModelMeshDataFlags, vertexData: ArrayBufferLike, indexData: ArrayBufferLike, public vertexCount: number) {
         const device = cache.device;
-        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, vertexData);
-        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, indexData);
+        this.vertexBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, vertexData);
+        this.indexBuffer = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, indexData);
 
         // Create our base input state.
         [this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor] = this.createVertexInput(cache, StaticLightingMode.None);
@@ -1661,7 +1661,7 @@ export class HardwareVertData {
             meshHeaderIdx += 0x1C;
         }
 
-        this.buffer = makeStaticDataBuffer(renderContext.device, GfxBufferUsage.Vertex, vertexData.buffer);
+        this.buffer = createBufferFromData(renderContext.device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, vertexData.buffer);
     }
 
     public destroy(device: GfxDevice): void {

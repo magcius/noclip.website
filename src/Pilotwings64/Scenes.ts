@@ -5,13 +5,13 @@ import {
     GfxDevice, GfxBuffer, GfxInputLayout, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexBufferFrequency,
     GfxBindingLayoutDescriptor, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode,
     GfxSampler, GfxBlendFactor, GfxBlendMode, GfxTexture, GfxMegaStateDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D, GfxProgram, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor,
+    GfxBufferFrequencyHint,
 } from "../gfx/platform/GfxPlatform.js";
 import { SceneGfx, ViewerRenderInput, Texture } from "../viewer.js";
 import { SceneDesc, SceneContext, SceneGroup } from "../SceneBase.js";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { readString, assert, hexzero, nArray } from "../util.js";
 import { decompress } from "../Common/Compression/MIO0.js";
-import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
 import { DeviceProgram } from "../Program.js";
 import { GfxRenderInstManager, makeSortKey, GfxRendererLayer, setSortKeyDepth, getSortKeyLayer, GfxRenderInstList } from "../gfx/render/GfxRenderInstManager.js";
 import { fillMatrix4x3, fillMatrix4x4, fillMatrix4x2, fillVec4v, fillVec3v } from "../gfx/helpers/UniformBufferHelpers.js";
@@ -35,6 +35,7 @@ import { colorNewFromRGBA } from '../Color.js';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 import { convertToCanvas } from '../gfx/helpers/TextureConversionHelpers.js';
 import { GfxShaderLibrary } from '../gfx/helpers/GfxShaderLibrary.js';
+import { createBufferFromData } from '../gfx/helpers/BufferHelpers.js';
 
 interface Pilotwings64FSFileChunk {
     tag: string;
@@ -1439,8 +1440,8 @@ class MeshData {
 
     constructor(cache: GfxRenderCache, public mesh: Mesh_Chunk) {
         const device = cache.device;
-        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, mesh.vertexData.buffer);
-        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, mesh.indexData.buffer);
+        this.vertexBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, mesh.vertexData.buffer);
+        this.indexBuffer = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, mesh.indexData.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: F3DEX_Program.a_Position, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0 * 0x04, },
@@ -2383,8 +2384,8 @@ class SnowRenderer {
         }
 
         const device = cache.device;
-        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, flakeVertices.buffer);
-        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, flakeIndices.buffer);
+        this.vertexBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, flakeVertices.buffer);
+        this.indexBuffer = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, flakeIndices.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: SnowProgram.a_Position, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0, },

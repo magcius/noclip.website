@@ -2,7 +2,6 @@ import * as BIN from "./bin.js";
 import { GfxDevice, GfxBuffer, GfxInputLayout, GfxFormat, GfxVertexBufferFrequency, GfxVertexAttributeDescriptor, GfxBufferUsage, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxCullMode, GfxCompareMode, makeTextureDescriptor2D, GfxProgram, GfxMegaStateDescriptor, GfxBlendMode, GfxBlendFactor, GfxInputLayoutBufferDescriptor, GfxTexture, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxSampler, GfxTextureDimension, GfxSamplerFormatKind, GfxTextureUsage } from "../gfx/platform/GfxPlatform.js";
 import { DeviceProgram } from "../Program.js";
 import * as Viewer from "../viewer.js";
-import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
 import { mat4, ReadonlyMat4, ReadonlyVec3, ReadonlyVec4, vec3, vec4 } from "gl-matrix";
 import { fillMatrix4x3, fillMatrix4x2, fillVec3v, fillVec4v, fillVec4 } from "../gfx/helpers/UniformBufferHelpers.js";
 import { TextureMapping } from "../TextureHolder.js";
@@ -18,6 +17,7 @@ import { convertToCanvas } from "../gfx/helpers/TextureConversionHelpers.js";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { Flipbook, ParticleGeometryEntry, TrailArgs, WaterArgs } from "./particle.js";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
+import { createBufferFromData } from "../gfx/helpers/BufferHelpers.js";
 
 export class FFXProgram extends DeviceProgram {
     public static a_Position = 0;
@@ -685,8 +685,8 @@ export class LevelModelData {
     public indexBufferDescriptor: GfxIndexBufferDescriptor;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, public model: BasicModel) {
-        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, this.model.vertexData.buffer);
-        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, this.model.indexData.buffer);
+        this.vertexBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, this.model.vertexData.buffer);
+        this.indexBuffer = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, this.model.indexData.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: FFXProgram.a_Position, bufferIndex: 0, bufferByteOffset: 0 * 4, format: GfxFormat.F32_RGB },
@@ -725,8 +725,8 @@ export class ActorModelData {
     public indexBufferDescriptor: GfxIndexBufferDescriptor;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, public model: BIN.ActorPart) {
-        this.attrBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, this.model.attrData.buffer);
-        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, this.model.indexData.buffer);
+        this.attrBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, this.model.attrData.buffer);
+        this.indexBuffer = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, this.model.indexData.buffer);
         this.vertexTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.F32_RGBA, model.texWidth, 2, 1));
         device.uploadTextureData(this.vertexTexture, 0, [model.vertexData]);
         this.vertexSampler = cache.createSampler({
@@ -771,8 +771,8 @@ export class FlipbookData {
     public totalQuads: number;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, public flipbook: Flipbook) {
-        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, this.flipbook.vertexData.buffer as ArrayBuffer);
-        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, this.flipbook.indexData.buffer as ArrayBuffer);
+        this.vertexBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, this.flipbook.vertexData.buffer as ArrayBuffer);
+        this.indexBuffer = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, this.flipbook.indexData.buffer as ArrayBuffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: FlipbookProgram.a_Position, bufferIndex: 0, bufferByteOffset: 0 * 4, format: GfxFormat.F32_RG },
@@ -1864,7 +1864,7 @@ export class RainData {
     public indexBufferDesc: GfxIndexBufferDescriptor;
 
     constructor(cache: GfxRenderCache) {
-        this.indexBuffer = makeStaticDataBuffer(cache.device, GfxBufferUsage.Index, rectIndices.buffer);
+        this.indexBuffer = createBufferFromData(cache.device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, rectIndices.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: RainProgram.a_Position, bufferIndex: 0, bufferByteOffset: 0, format: GfxFormat.F32_RGBA },
@@ -2049,7 +2049,7 @@ export class ElectricData {
     public inUse = false;
 
     constructor(cache: GfxRenderCache) {
-        this.indexBuffer = makeStaticDataBuffer(cache.device, GfxBufferUsage.Index, electricIndices.buffer);
+        this.indexBuffer = createBufferFromData(cache.device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, electricIndices.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: ElectricProgram.a_Position, bufferIndex: 0, bufferByteOffset: 0 * 4, format: GfxFormat.F32_RGBA },
@@ -2249,7 +2249,7 @@ export class ShadowRenderer {
             circleIndices[i * 3 + 1] = i;
             circleIndices[i * 3 + 2] = (i + 1) % 12;
         }
-        this.indexBuffer = makeStaticDataBuffer(cache.device, GfxBufferUsage.Index, circleIndices.buffer);
+        this.indexBuffer = createBufferFromData(cache.device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, circleIndices.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: 0, bufferIndex: 0, bufferByteOffset: 0 * 4, format: GfxFormat.F32_RGB },

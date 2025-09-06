@@ -7,11 +7,10 @@ import { drawWorldSpaceLine, getDebugOverlayCanvas2D } from '../DebugJunk.js';
 import { CalcBillboardFlags, calcBillboardMatrix } from '../MathHelpers.js';
 import { DeviceProgram } from '../Program.js';
 import { TextureMapping } from '../TextureHolder.js';
-import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers.js';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers.js';
 import { convertToCanvas } from '../gfx/helpers/TextureConversionHelpers.js';
 import { fillColor, fillMatrix4x3, fillMatrix4x4, fillVec4 } from '../gfx/helpers/UniformBufferHelpers.js';
-import { GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferUsage, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxProgram, GfxSampler, GfxTexture, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency } from '../gfx/platform/GfxPlatform.js';
+import { GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxProgram, GfxSampler, GfxTexture, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency } from '../gfx/platform/GfxPlatform.js';
 import { FormatCompFlags, FormatFlags, FormatTypeFlags, makeFormat } from '../gfx/platform/GfxPlatformFormat.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { GfxRenderInst, GfxRenderInstManager, GfxRendererLayer, makeSortKey, setSortKeyDepth, setSortKeyLayer } from '../gfx/render/GfxRenderInstManager.js';
@@ -25,6 +24,7 @@ import * as MOT from './mot.js';
 import * as SINFO from './sceneInfo.js';
 import * as STB from './stb.js';
 import { GfxShaderLibrary } from '../gfx/helpers/GfxShaderLibrary.js';
+import { createBufferFromData } from '../gfx/helpers/BufferHelpers.js';
 
 export class DQ8Program extends DeviceProgram {
     public static ub_SceneParams = 0;
@@ -173,7 +173,7 @@ class MDTData {
 
         let perInstanceBinding: GfxVertexBufferDescriptor | null = null;
         if (perInstanceBufferWordOffset !== 0) {
-            this.perInstanceBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, new Uint8Array(perInstanceBufferData.buffer).buffer);
+            this.perInstanceBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, new Uint8Array(perInstanceBufferData.buffer).buffer);
             perInstanceBinding = { buffer: this.perInstanceBuffer };
         }
 
@@ -198,7 +198,7 @@ class MDTData {
             indexBufferOffs += submesh.indexData.length;
         }
 
-        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, indexData.buffer);
+        this.indexBuffer = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, indexData.buffer);
         const indexBufferFormat = GfxFormat.U16_R;
         this.inputLayout = cache.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
 
@@ -550,7 +550,7 @@ export class MDSData {
     constructor(cache: GfxRenderCache, public mds: MDS.MDS) {
         const device = cache.device;
         for (let i = 0; i < this.mds.mdts.length; i++) {
-            this.vertexBuffers[i] = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, this.mds.mdts[i].vertexData.buffer);
+            this.vertexBuffers[i] = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, this.mds.mdts[i].vertexData.buffer);
             this.mdtData[i] = new MDTData(cache, this.vertexBuffers[i], this.mds.mdts[i]);
         }
 

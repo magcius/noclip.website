@@ -1,15 +1,12 @@
 import {
     ReadonlyMat4,
     ReadonlyVec3,
-    mat3,
     mat4,
     quat,
-    vec2,
     vec3,
-    vec4,
+    vec4
 } from "gl-matrix";
 import {
-    ConvexHull,
     WowAABBox,
     WowAdt,
     WowAdtChunkDescriptor,
@@ -28,7 +25,6 @@ import {
     WowM2BoneFlags,
     WowM2MaterialFlags,
     WowM2ParticleEmitter,
-    WowM2ParticleShaderType,
     WowMapFileDataIDs,
     WowModelBatch,
     WowSkin,
@@ -37,7 +33,6 @@ import {
     WowVec3,
     WowWmo,
     WowWmoGroupDescriptor,
-    WowWmoGroupFlags,
     WowWmoGroupInfo,
     WowWmoHeaderFlags,
     WowWmoLiquidResult,
@@ -45,7 +40,7 @@ import {
     WowWmoMaterialBatch,
     WowWmoMaterialFlags,
     WowWmoMaterialPixelShader,
-    WowWmoMaterialVertexShader,
+    WowWmoMaterialVertexShader
 } from "../../rust/pkg/noclip_support";
 import { DataFetcher } from "../DataFetcher.js";
 import { AABB, Frustum } from "../Geometry.js";
@@ -53,26 +48,18 @@ import {
     Mat4Identity,
     MathConstants,
     computeModelMatrixSRT,
-    randomRangeFloat,
-    saturate,
     scaleMatrix,
-    setMatrixTranslation,
-    transformVec3Mat4w0,
+    setMatrixTranslation
 } from "../MathHelpers.js";
-import { getDerivativeBezier, getPointBezier } from "../Spline.js";
-import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
 import { reverseDepthForCompareMode } from "../gfx/helpers/ReversedDepthHelpers.js";
 import {
     fillMatrix4x2,
-    fillMatrix4x4,
-    fillVec3v,
-    fillVec4,
-    fillVec4v,
+    fillVec4
 } from "../gfx/helpers/UniformBufferHelpers.js";
 import {
     GfxBlendFactor,
     GfxBlendMode,
-    GfxBuffer,
+    GfxBufferFrequencyHint,
     GfxBufferUsage,
     GfxChannelWriteMask,
     GfxCompareMode,
@@ -80,16 +67,11 @@ import {
     GfxDevice,
     GfxFormat,
     GfxIndexBufferDescriptor,
-    GfxInputLayout,
-    GfxInputLayoutBufferDescriptor,
     GfxMegaStateDescriptor,
     GfxTexture,
-    GfxVertexAttributeDescriptor,
     GfxVertexBufferDescriptor,
-    GfxVertexBufferFrequency,
-    makeTextureDescriptor2D,
+    makeTextureDescriptor2D
 } from "../gfx/platform/GfxPlatform.js";
-import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import {
     GfxRenderInst,
     GfxRendererLayer,
@@ -99,7 +81,7 @@ import {
 } from "../gfx/render/GfxRenderInstManager.js";
 import { rust } from "../rustlib.js";
 import { assert } from "../util.js";
-import { ModelProgram, WmoProgram } from "./program.js";
+import { ModelProgram } from "./program.js";
 import {
     MapArray,
     View,
@@ -109,6 +91,7 @@ import {
     placementSpaceFromModelSpace,
 } from "./scenes.js";
 import { Sheepfile } from "./util.js";
+import { createBufferFromData } from "../gfx/helpers/BufferHelpers";
 
 export class Database {
     private inner: WowDatabase;
@@ -1581,9 +1564,10 @@ export class LiquidInstance {
 
     public takeVertices(device: GfxDevice): GfxVertexBufferDescriptor {
         return {
-            buffer: makeStaticDataBuffer(
+            buffer: createBufferFromData(
                 device,
                 GfxBufferUsage.Vertex,
+                GfxBufferFrequencyHint.Static,
                 this.vertices!.buffer,
             ),
         };
@@ -1591,9 +1575,10 @@ export class LiquidInstance {
 
     public takeIndices(device: GfxDevice): GfxIndexBufferDescriptor {
         return {
-            buffer: makeStaticDataBuffer(
+            buffer: createBufferFromData(
                 device,
                 GfxBufferUsage.Index,
+                GfxBufferFrequencyHint.Static,
                 this.indices!.buffer,
             ),
         };
@@ -1729,16 +1714,18 @@ export class AdtData {
 
     public getBuffers(device: GfxDevice): [GfxVertexBufferDescriptor, GfxIndexBufferDescriptor] {
         const vertexBuffer = {
-            buffer: makeStaticDataBuffer(
+            buffer: createBufferFromData(
                 device,
                 GfxBufferUsage.Vertex,
+                GfxBufferFrequencyHint.Static,
                 this.vertexBuffer.buffer,
             ),
         };
         const indexBuffer = {
-            buffer: makeStaticDataBuffer(
+            buffer: createBufferFromData(
                 device,
                 GfxBufferUsage.Index,
+                GfxBufferFrequencyHint.Static,
                 this.indexBuffer.buffer,
             ),
         };

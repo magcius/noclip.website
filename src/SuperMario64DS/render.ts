@@ -9,10 +9,9 @@ import * as Viewer from '../viewer.js';
 import { DeviceProgram } from '../Program.js';
 import { computeViewMatrix, computeViewMatrixSkybox } from '../Camera.js';
 import { TextureMapping } from '../TextureHolder.js';
-import { GfxFormat, GfxBufferUsage, GfxBlendMode, GfxBlendFactor, GfxDevice, GfxBuffer, GfxVertexBufferFrequency, GfxTexFilterMode, GfxMipFilterMode, GfxInputLayout, GfxVertexAttributeDescriptor, GfxSampler, makeTextureDescriptor2D, GfxMegaStateDescriptor, GfxTexture, GfxInputLayoutBufferDescriptor, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from '../gfx/platform/GfxPlatform.js';
-import { fillMatrix4x3, fillVec4, fillMatrix4x2, fillColor } from '../gfx/helpers/UniformBufferHelpers.js';
+import { GfxFormat, GfxBufferUsage, GfxBlendMode, GfxBlendFactor, GfxDevice, GfxBuffer, GfxVertexBufferFrequency, GfxTexFilterMode, GfxMipFilterMode, GfxInputLayout, GfxVertexAttributeDescriptor, GfxSampler, makeTextureDescriptor2D, GfxMegaStateDescriptor, GfxTexture, GfxInputLayoutBufferDescriptor, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor, GfxBufferFrequencyHint } from '../gfx/platform/GfxPlatform.js';
+import { fillMatrix4x3, fillMatrix4x2, fillColor } from '../gfx/helpers/UniformBufferHelpers.js';
 import { GfxRenderInstManager, GfxRenderInst, makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderInstManager.js';
-import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers.js';
 import { parseTexImageParamWrapModeS, parseTexImageParamWrapModeT } from './nitro_tex.js';
 import { assert, nArray } from '../util.js';
 import { BCA, bindBCAAnimator, BCAAnimator } from './sm64ds_bca.js';
@@ -22,6 +21,7 @@ import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers.js';
 import { White, colorNewCopy } from '../Color.js';
 import { GfxShaderLibrary } from '../gfx/helpers/GfxShaderLibrary.js';
+import { createBufferFromData } from '../gfx/helpers/BufferHelpers.js';
 
 export class NITRO_Program extends DeviceProgram {
     public static a_Position = 0;
@@ -150,8 +150,8 @@ export class VertexData {
 
     constructor(cache: GfxRenderCache, public nitroVertexData: NITRO_GX.VertexData) {
         const device = cache.device;
-        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, this.nitroVertexData.packedVertexBuffer.buffer);
-        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, this.nitroVertexData.indexBuffer.buffer);
+        this.vertexBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, this.nitroVertexData.packedVertexBuffer.buffer);
+        this.indexBuffer = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, this.nitroVertexData.indexBuffer.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: NITRO_Program.a_Position, format: GfxFormat.F32_RGB, bufferIndex: 0, bufferByteOffset: 0*4 },

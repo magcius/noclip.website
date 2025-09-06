@@ -1,8 +1,7 @@
 
 import { mat4, vec3 } from "gl-matrix";
-import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
 import { fillMatrix4x4, fillMatrix4x3 } from "../gfx/helpers/UniformBufferHelpers.js";
-import { GfxBuffer, GfxBufferUsage, GfxDevice, GfxFormat, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxMegaStateDescriptor, GfxCullMode, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform.js";
+import { GfxBuffer, GfxBufferUsage, GfxDevice, GfxFormat, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxMegaStateDescriptor, GfxCullMode, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor, GfxBufferFrequencyHint } from "../gfx/platform/GfxPlatform.js";
 import { GfxRendererLayer, GfxRenderInstManager, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager.js";
 import { DeviceProgram } from "../Program.js";
 import { ViewerRenderInput } from "../viewer.js";
@@ -14,6 +13,7 @@ import { drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk.js";
 import { DEBUGGING_TOOLS_STATE, RendererStore } from "./Scenes.js";
 import { Material, RenderOptionsFlags } from "./ParsedFiles/Common.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
+import { createBufferFromData } from "../gfx/helpers/BufferHelpers.js";
 
 export class MaterialRenderer {
     private vertexBuffer: GfxBuffer;
@@ -65,8 +65,8 @@ export class MaterialRenderer {
         this.indexCount = material.indexData.length;
 
         const cache = rendererStore.renderCache, device = cache.device;
-        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, material.vertexData.buffer);
-        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, material.indexData.buffer);
+        this.vertexBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, material.vertexData.buffer);
+        this.indexBuffer = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, material.indexData.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: F3DEX_Program.a_Position, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0 * 0x04, },

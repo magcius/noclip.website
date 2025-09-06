@@ -15,7 +15,8 @@ import { Animation } from "./animation.js";
 import { bakeLights } from "./bake_lights.js";
 import { SCX } from "./scx/types.js";
 import type { EnvironmentMap, Material, SceneNode, Texture, VertexAttribute, WorldData } from "./types.js";
-import { cloneTransform, createDataBuffer, createSceneNode, reparent, updateNodeTransform } from "./util.js";
+import { cloneTransform, createSceneNode, reparent, updateNodeTransform } from "./util.js";
+import { createBufferFromData } from "../gfx/helpers/BufferHelpers.js";
 
 export type ComputedEnvironmentMap = {
     texture: GfxTexture;
@@ -158,9 +159,10 @@ export class World {
             const data = new Float32Array(mesh.vertexcount * 4).fill(1);
             const diffuseColorBuffer = device.createBuffer(data.byteLength, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, new Uint8Array(data.buffer));
 
-            const positionBuffer = createDataBuffer(device, GfxBufferUsage.Vertex, mesh.positions.buffer, mesh.dynamic);
-            const normalBuffer = createDataBuffer(device, GfxBufferUsage.Vertex, mesh.normals.buffer, mesh.dynamic);
-            const texcoordBuffer = createDataBuffer(device, GfxBufferUsage.Vertex, mesh.texCoords.buffer);
+            const usage = mesh.dynamic ? GfxBufferFrequencyHint.Dynamic : GfxBufferFrequencyHint.Static;
+            const positionBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, usage, mesh.positions.buffer);
+            const normalBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, usage, mesh.normals.buffer);
+            const texcoordBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, mesh.texCoords.buffer);
             const vertexAttributes: VertexAttribute[] = [
                 { name: "position", ...(mesh.dynamic ? { data: mesh.positions } : null), buffer: positionBuffer },
                 { name: "normal", ...(mesh.dynamic ? { data: mesh.normals } : null), buffer: normalBuffer },
@@ -168,7 +170,7 @@ export class World {
                 { name: "texCoord", buffer: texcoordBuffer },
             ];
 
-            const indexBuffer = createDataBuffer(device, GfxBufferUsage.Index, mesh.indices.buffer);
+            const indexBuffer = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, mesh.indices.buffer);
             const indexBufferDescriptor = { buffer: indexBuffer, ...(mesh.dynamic ? { data: mesh.indices } : null) };
 
             this.unbakedMeshes.push({ node, mesh, shader: material.shader, diffuseColorBuffer, sceneName, lights: scene.lights });

@@ -1,23 +1,23 @@
 
-import { SceneGfx, ViewerRenderInput } from "../viewer.js";
-import { SceneDesc, SceneContext } from "../SceneBase.js";
-import { GfxDevice, GfxTexture, GfxProgram, GfxBuffer, GfxFormat, GfxInputLayout, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxCullMode, makeTextureDescriptor2D, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform.js";
-import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
-import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
-import { assert, nArray } from "../util.js";
-import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
-import { DeviceProgram } from "../Program.js";
-import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
-import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
-import { GfxRenderInst, GfxRenderInstList, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import { mat4, ReadonlyMat4, ReadonlyVec3, vec2, vec3 } from "gl-matrix";
-import { fillColor, fillMatrix4x3, fillMatrix4x4, fillVec3v, fillVec4 } from "../gfx/helpers/UniformBufferHelpers.js";
-import { computeModelMatrixS, computeModelMatrixSRT, getMatrixTranslation, getMatrixAxisZ, MathConstants, transformVec3Mat4w1 } from "../MathHelpers.js";
+import { Blue, Cyan, Green, OpaqueBlack, Red, Yellow } from "../Color.js";
 import { DataFetcher } from "../DataFetcher.js";
-import { TextureMapping } from "../TextureHolder.js";
-import { Blue, Cyan, Green, Magenta, OpaqueBlack, Red, Yellow } from "../Color.js";
 import { dfLabel, dfRange, dfShow } from "../DebugFloaters.js";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
+import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
+import { fillColor, fillMatrix4x3, fillMatrix4x4, fillVec3v, fillVec4 } from "../gfx/helpers/UniformBufferHelpers.js";
+import { GfxBindingLayoutDescriptor, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxMipFilterMode, GfxProgram, GfxTexFilterMode, GfxTexture, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxWrapMode, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform.js";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
+import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
+import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
+import { GfxRenderInst, GfxRenderInstList, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
+import { computeModelMatrixS, computeModelMatrixSRT, getMatrixTranslation, MathConstants, transformVec3Mat4w1 } from "../MathHelpers.js";
+import { DeviceProgram } from "../Program.js";
+import { SceneContext, SceneDesc } from "../SceneBase.js";
+import { TextureMapping } from "../TextureHolder.js";
+import { assert, nArray } from "../util.js";
+import { SceneGfx, ViewerRenderInput } from "../viewer.js";
+import { createBufferFromData } from "../gfx/helpers/BufferHelpers.js";
 
 class PatchProgram extends DeviceProgram {
     public static a_TexCoord = 0;
@@ -329,7 +329,7 @@ class PatchLibrary {
             vertexData[vertexOffs++] = texCoordT;
         }
 
-        this.vertexBuffer = makeStaticDataBuffer(cache.device, GfxBufferUsage.Vertex, vertexData.buffer);
+        this.vertexBuffer = createBufferFromData(cache.device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, vertexData.buffer);
 
         const gridNumQuads = sideNumQuads ** 2.0;
 
@@ -537,7 +537,7 @@ class PatchLibrary {
             assert(indexOffs === variation.startIndex + variation.indexCount);
         }
 
-        this.indexBuffer = makeStaticDataBuffer(cache.device, GfxBufferUsage.Index, indexData.buffer);
+        this.indexBuffer = createBufferFromData(cache.device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, indexData.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: PatchProgram.a_TexCoord, format: GfxFormat.F32_RG, bufferIndex: 0, bufferByteOffset: 0, },

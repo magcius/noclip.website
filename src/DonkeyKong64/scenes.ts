@@ -22,12 +22,12 @@ import { TextFilt, ImageFormat, ImageSize } from "../Common/N64/Image.js";
 import { RSPSharedOutput, Vertex } from '../BanjoKazooie/f3dex.js';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers.js';
 import { Vec3UnitY, Vec3Zero } from '../MathHelpers.js';
-import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers.js';
 
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import * as Deflate from '../Common/Compression/Deflate.js';
 import { calcTextureMatrixFromRSPState } from '../Common/N64/RSP.js';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
+import { createBufferFromData } from '../gfx/helpers/BufferHelpers.js';
 
 const pathBase = `DonkeyKong64`;
 
@@ -234,21 +234,12 @@ export class RenderData {
     public indexBuffer: GfxBuffer;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, public sharedOutput: RSPSharedOutput, dynamic = false) {
-        this.vertexBufferData = makeVertexBufferData(sharedOutput.vertices);
-        if (dynamic) {
-            // there are vertex effects, so the vertex buffer data will change
-            this.vertexBuffer = device.createBuffer(
-                this.vertexBufferData.byteLength,
-                GfxBufferUsage.Vertex,
-                GfxBufferFrequencyHint.Dynamic
-            );
-        } else {
-            this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, this.vertexBufferData.buffer);
-        }
         assert(sharedOutput.vertices.length <= 0xFFFFFFFF);
+        this.vertexBufferData = makeVertexBufferData(sharedOutput.vertices);
+        this.vertexBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, dynamic ? GfxBufferFrequencyHint.Dynamic : GfxBufferFrequencyHint.Static, this.vertexBufferData.buffer);
 
         const indexBufferData = new Uint32Array(sharedOutput.indices);
-        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, indexBufferData.buffer);
+        this.indexBuffer = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, indexBufferData.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: F3DEX_Program.a_Position, bufferIndex: 0, format: GfxFormat.F32_RGBA, bufferByteOffset: 0*0x04, },

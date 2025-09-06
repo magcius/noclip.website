@@ -1,12 +1,12 @@
 
-import { GfxTexture, GfxDevice, GfxInputLayout, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexBufferFrequency, GfxBuffer, GfxBufferUsage, GfxSampler, GfxInputLayoutBufferDescriptor, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform.js";
+import { GfxTexture, GfxDevice, GfxInputLayout, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexBufferFrequency, GfxBuffer, GfxBufferUsage, GfxSampler, GfxInputLayoutBufferDescriptor, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor, GfxBufferFrequencyHint } from "../gfx/platform/GfxPlatform.js";
 import { makeTextureFromXNA_Texture2D } from "./Texture.js";
-import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
 import { vec2, mat4 } from "gl-matrix";
 import { assert } from "../util.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { XNA_Texture2D } from "./XNB.js";
 import { Fez_AnimatedTexture } from "./XNB_Fez.js";
+import { createBufferFromData } from "../gfx/helpers/BufferHelpers.js";
 
 interface Frame {
     time: number;
@@ -98,8 +98,8 @@ export class BackgroundPlaneStaticData {
         const indexData = Uint16Array.from([
             0, 1, 2, 2, 3, 0,
         ]);
-        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, vertexData.buffer);
-        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, indexData.buffer);
+        this.vertexBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, vertexData.buffer);
+        this.indexBuffer = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, indexData.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: 0, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0*0x04, }, // Position

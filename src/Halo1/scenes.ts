@@ -3,7 +3,6 @@ import { mat4, ReadonlyMat4, vec3, vec4 } from 'gl-matrix';
 import { AnimationFunction, FramebufferBlendFunction, FunctionSource, HaloBitmapReader, HaloBSP, HaloLightmap, HaloMaterial, HaloModel, HaloModelPart, HaloSceneManager, HaloScenery, HaloSceneryInstance, HaloShaderEnvironment, HaloShaderModel, HaloShaderTransparencyChicago, HaloShaderTransparencyGeneric, HaloShaderTransparentChicagoMap, HaloShaderTransparentGenericMap, HaloShaderTransparentWater, HaloShaderTransparentWaterRipple, HaloSky, ShaderAlphaInput, ShaderInput, ShaderMapping, ShaderOutput, ShaderOutputFunction, ShaderOutputMapping, ShaderTransparentChicagoColorFunction } from '../../rust/pkg/noclip_support';
 import { CameraController, computeViewSpaceDepthFromWorldSpacePoint } from '../Camera.js';
 import { Color, colorCopy, colorNewCopy, White } from '../Color.js';
-import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers.js';
 import { fullscreenMegaState, setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers.js';
 import { GfxShaderLibrary, glslGenerateFloat } from '../gfx/helpers/GfxShaderLibrary.js';
 import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
@@ -23,6 +22,7 @@ import { TextureMapping } from '../TextureHolder.js';
 import { assert, nArray } from '../util.js';
 import * as Viewer from '../viewer.js';
 import { TextureCache } from './tex.js';
+import { createBufferFromData } from '../gfx/helpers/BufferHelpers';
 
 /**
  * todo:
@@ -1540,8 +1540,8 @@ class LightmapModelData {
     constructor(cache: GfxRenderCache, mgr: HaloSceneManager, bsp: HaloBSP, public material: HaloMaterial, private indexBuffer: GfxBuffer) {
         this.inputLayout = this.getInputLayout(cache);
         this.modelMatrix = mat4.create();
-        this.vertexBuffer = makeStaticDataBuffer(cache.device, GfxBufferUsage.Vertex, mgr.get_material_vertex_data(this.material, bsp).buffer);
-        this.lightmapVertexBuffer = makeStaticDataBuffer(cache.device, GfxBufferUsage.Vertex, mgr.get_material_lightmap_data(this.material, bsp).buffer);
+        this.vertexBuffer = createBufferFromData(cache.device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, mgr.get_material_vertex_data(this.material, bsp).buffer);
+        this.lightmapVertexBuffer = createBufferFromData(cache.device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, mgr.get_material_lightmap_data(this.material, bsp).buffer);
         this.indexCount = this.material.get_num_indices();
         this.indexOffset = this.material.get_index_offset();
 
@@ -1743,7 +1743,7 @@ class ModelData {
             vertexBase += parts[i].vert_count;
         }
 
-        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, indexData.buffer);
+        this.indexBuffer = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, indexData.buffer);
 
         this.inputLayout = this.getInputLayout(cache);
         this.vertexBufferDescriptors = [{ buffer: this.vertexBuffer }];
@@ -1831,7 +1831,7 @@ class BSPRenderer {
     public lightmapRenderers: LightmapRenderer[];
 
     constructor(public textureCache: TextureCache, renderCache: GfxRenderCache, public bsp: HaloBSP, public mgr: HaloSceneManager, public bspIndex: number, public fogEnabled: boolean) {
-        this.trisBuf = makeStaticDataBuffer(renderCache.device, GfxBufferUsage.Index, mgr.get_bsp_indices(this.bsp).buffer);
+        this.trisBuf = createBufferFromData(renderCache.device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, mgr.get_bsp_indices(this.bsp).buffer);
         const lightmapsBitmap = this.bsp.get_lightmaps_bitmap();
         this.lightmapRenderers = mgr.get_bsp_lightmaps(this.bsp).map(lightmap => {
             let lightmapTex: TextureMapping | null = null;

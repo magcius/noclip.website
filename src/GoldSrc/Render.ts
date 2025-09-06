@@ -1,12 +1,11 @@
 
-import { GfxDevice, GfxTexture, GfxFormat, makeTextureDescriptor2D, GfxInputLayout, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxBuffer, GfxBufferUsage, GfxProgram, GfxCullMode, GfxFrontFaceMode, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform.js";
+import { GfxDevice, GfxTexture, GfxFormat, makeTextureDescriptor2D, GfxInputLayout, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxBuffer, GfxBufferUsage, GfxProgram, GfxCullMode, GfxFrontFaceMode, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor, GfxBufferFrequencyHint } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { assert, assertExists, nArray, readString } from "../util.js";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { convertToCanvas } from "../gfx/helpers/TextureConversionHelpers.js";
 import { SceneGfx, Texture, ViewerRenderInput } from "../viewer.js";
 import { DeviceProgram } from "../Program.js";
-import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
 import { BSPFile, Surface, SurfaceLightmapData } from "./BSPFile.js";
 import { GfxRenderInstList, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import { TextureMapping } from "../TextureHolder.js";
@@ -19,6 +18,7 @@ import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from 
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
 import { LightmapPackerPage } from "../SourceEngine/BSPFile.js";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
+import { createBufferFromData } from "../gfx/helpers/BufferHelpers.js";
 
 function getMipTexName(buffer: ArrayBufferSlice): string {
     return readString(buffer, 0x00, 0x10, true);
@@ -323,8 +323,8 @@ export class BSPRenderer {
         const indexBufferFormat = GfxFormat.U16_R;
         this.inputLayout = cache.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
 
-        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, this.bsp.vertexData);
-        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, this.bsp.indexData);
+        this.vertexBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, this.bsp.vertexData);
+        this.indexBuffer = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, this.bsp.indexData);
 
         this.vertexBufferDescriptors = [
             { buffer: this.vertexBuffer },

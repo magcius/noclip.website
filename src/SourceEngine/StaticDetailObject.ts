@@ -2,10 +2,9 @@
 import { mat4, ReadonlyVec3, vec3, vec4 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { computeViewSpaceDepthFromWorldSpacePoint } from "../Camera.js";
-import { Color, colorClampLDR, colorCopy, colorFromRGBA8, colorNewCopy, colorNewFromRGBA, White } from "../Color.js";
+import { Color, colorCopy, colorFromRGBA8, colorNewCopy, colorNewFromRGBA, White } from "../Color.js";
 import { Endianness } from "../endian.js";
 import { AABB } from "../Geometry.js";
-import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
 import { GfxTopology, makeTriangleIndexBuffer } from "../gfx/helpers/TopologyHelpers.js";
 import { fillColor } from "../gfx/helpers/UniformBufferHelpers.js";
 import { GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform.js";
@@ -18,6 +17,7 @@ import { unpackColorRGBExp32 } from "./Materials/Lightmap.js";
 import { BaseMaterial, EntityMaterialParameters, MaterialShaderTemplateBase } from "./Materials/MaterialBase.js";
 import { LightCache } from "./Materials/WorldLight.js";
 import { computeModelMatrixPosQAngle, HardwareVertData, StudioModelInstance } from "./Studio.js";
+import { createBufferFromData } from "../gfx/helpers/BufferHelpers.js";
 
 //#region Detail Models
 const enum DetailPropOrientation { NORMAL, SCREEN_ALIGNED, SCREEN_ALIGNED_VERTICAL, }
@@ -229,7 +229,7 @@ export class DetailPropLeafRenderer {
         this.vertexData = new Float32Array(numVertices * 9);
 
         const indexData = makeTriangleIndexBuffer(GfxTopology.Quads, 0, numVertices);
-        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, indexData.buffer);
+        this.indexBuffer = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, indexData.buffer);
 
         this.vertexBuffer = device.createBuffer(this.vertexData.byteLength, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Dynamic);
         this.vertexBufferDescriptors = [
