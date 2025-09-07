@@ -1288,6 +1288,7 @@ export class TextureViewer extends Panel {
         super();
 
         this.setTitle(TEXTURES_ICON, 'Textures');
+        this.setVisible(false);
 
         this.scrollList = new SingleSelect();
         this.scrollList.elem.style.height = `200px`;
