@@ -420,20 +420,6 @@ pub struct AdtVBOInfo {
 }
 
 #[derive(DekuRead, Debug, Clone)]
-pub struct MapChunkFlags {
-    #[deku(bits = 1)] pub _has_mcsh: bool,
-    #[deku(bits = 1)] pub _impass: bool,
-    #[deku(bits = 1)] pub _lq_river: bool,
-    #[deku(bits = 1)] pub _lq_ocean: bool,
-    #[deku(bits = 1)] pub _lq_magma: bool,
-    #[deku(bits = 1)] pub _lq_slime: bool,
-    #[deku(bits = 1)] pub _has_mccv: bool,
-    #[deku(bits = 1, pad_bits_after = "7")] pub _unknown: bool,
-    #[deku(bits = 1)] pub _do_not_fix_alpha_map: bool,
-    #[deku(bits = 1, pad_bits_after = "15")] pub _high_res_holes: bool,
-}
-
-#[derive(DekuRead, Debug, Clone)]
 pub struct MapChunkHeader {
     pub flags: u32,
     pub _index_x: u32,
@@ -946,13 +932,6 @@ pub struct LiquidChunkHeader {
     pub instances_offset: u32,
     pub layer_count: u32,
     pub attributes_offset: u32,
-}
-
-#[derive(DekuRead, Debug, Clone)]
-pub struct LiquidChunkAttributes {
-    // These are both 8x8 bitmasks
-    pub _fishable: [u8; 8],
-    pub _deep: [u8; 8],
 }
 
 #[derive(DekuRead, Debug, Clone)]
