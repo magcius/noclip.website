@@ -81,7 +81,7 @@ export class GfxRenderDynamicUniformBuffer {
 
         const shadowBufferF32 = assertExists(this.shadowBufferF32);
 
-        if (shadowBufferF32.length !== this.currentBufferByteSize) {
+        if (shadowBufferF32.byteLength !== this.currentBufferByteSize) {
             this.currentBufferByteSize = shadowBufferF32.byteLength;
 
             if (this.gfxBuffer !== null)
