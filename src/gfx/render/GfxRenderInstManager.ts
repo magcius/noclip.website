@@ -217,13 +217,6 @@ export class GfxRenderInst {
     }
 
     public validate(): void {
-        // Validate uniform buffer bindings.
-        for (let i = 0; i < this._bindingDescriptors.length; i++) {
-            const bd = this._bindingDescriptors[i];
-            for (let j = 0; j < bd.bindingLayout.numUniformBuffers; j++)
-                assert(bd.uniformBufferBindings[j].wordCount > 0);
-        }
-
         assert(this._drawCount > 0);
     }
 

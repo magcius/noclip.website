@@ -220,6 +220,9 @@ export class ModelRenderer {
             this.getTextureMapping(emitter.textures[0]),
             this.getTextureMapping(emitter.textures[1]),
             this.getTextureMapping(emitter.textures[2]),
+            null,
+            null,
+            null,
             dataMapping,
         ];
     }
@@ -242,6 +245,9 @@ export class ModelRenderer {
             this.getTextureMapping(batch.tex1),
             this.getTextureMapping(batch.tex2),
             this.getTextureMapping(batch.tex3),
+            null,
+            null,
+            null,
         ];
     }
 
@@ -349,7 +355,7 @@ export class ModelRenderer {
                     renderInst.setDrawCount(batch.submesh.index_count, batch.submesh.index_start);
                     renderInst.setInstanceCount(doodadChunk.length);
                     const mappings = this.skinBatchTextures[i][j];
-                    mappings[4] = this.boneTexture.getTextureMapping();
+                    mappings[6] = this.boneTexture.getTextureMapping();
                     renderInst.setSamplerBindingsFromTextureMappings(mappings);
                     batch.setModelParams(renderInst);
                     renderInstManager.submitRenderInst(renderInst);
@@ -860,6 +866,11 @@ export class TerrainRenderer {
             [this.vertexBuffer],
             this.indexBuffer,
         );
+
+        let offs = template.allocateUniformBuffer(TerrainProgram.ub_TerrainParams, 4);
+        const d = template.mapUniformBufferF32(TerrainProgram.ub_TerrainParams);
+        offs += fillVec4(d, offs, this.adt.hasBigAlpha ? 1.0 : 0.0);
+
         for (let i of indices) {
             const chunk = this.adt.chunkData[i];
             if (chunk.indexCount === 0) continue;
@@ -972,7 +983,6 @@ export class LoadingAdtRenderer {
                 [this.vertexBuffer],
                 this.indexBuffer,
             );
-            renderInst.setBindingLayouts(LoadingAdtProgram.bindingLayouts);
             renderInst.setDrawCount(this.numIndices, 0);
             renderInstManager.submitRenderInst(renderInst);
         }
@@ -1220,7 +1230,6 @@ export class SkyboxRenderer {
             this.indexBuffer,
         );
         renderInst.setMegaStateFlags({ depthWrite: false });
-        renderInst.setBindingLayouts(SkyboxProgram.bindingLayouts);
         renderInst.setDrawCount(this.numIndices, 0);
         renderInstManager.submitRenderInst(renderInst);
     }
