@@ -23,6 +23,7 @@ import { dfRange, dfShow } from '../DebugFloaters.js';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { createBufferFromData } from '../gfx/helpers/BufferHelpers.js';
+import { GfxShaderLibrary } from '../gfx/helpers/GfxShaderLibrary.js';
 
 const pathBase = `FoxFur`;
 
@@ -126,6 +127,8 @@ class FurProgram extends DeviceProgram {
     public static ub_ShapeParams = 0;
 
     public override both = `
+${GfxShaderLibrary.MatrixLibrary}
+
 layout(std140) uniform ub_ShapeParams {
     Mat4x4 u_Projection;
     Mat3x4 u_BoneMatrix[1];
@@ -397,7 +400,11 @@ class FurObj {
     }
 
     public destroy(device: GfxDevice): void {
-        // ayy lmao
+        device.destroyTexture(this.bodyTex);
+        device.destroyTexture(this.indTex);
+        device.destroyTexture(this.poreTex);
+        device.destroyBuffer(this.indexBuffer);
+        device.destroyBuffer(this.vertexBuffer);
     }
 }
 
@@ -432,8 +439,6 @@ class SceneRenderer implements SceneGfx {
     }
 
     public render(device: GfxDevice, viewerInput: ViewerRenderInput) {
-        const renderInstManager = this.renderHelper.renderInstManager;
-
         const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, clearPass);
         const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, clearPass);
 
@@ -484,6 +489,7 @@ class SceneRenderer implements SceneGfx {
     }
 
     public destroy(device: GfxDevice) {
+        this.renderHelper.destroy();
         for (let i = 0; i < this.obj.length; i++)
             this.obj[i].destroy(device);
     }

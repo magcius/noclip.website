@@ -223,6 +223,11 @@ class SeaRenderer extends SunshineRenderer {
         this.renderHelper.renderInstManager.popTemplate();
         super.prepareToRender(device, viewerInput);
     }
+
+    public override destroy(device: GfxDevice): void {
+        super.destroy(device);
+        this.sunshineWaterModel.destroy(device);
+    }
 }
 
 export class SunshineWaterSceneDesc implements SceneDesc {
