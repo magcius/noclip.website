@@ -1,11 +1,10 @@
-use num_enum::{IntoPrimitive, TryFromPrimitive};
 use deku::prelude::*;
 use wasm_bindgen::prelude::*;
 
 use crate::{halo::common::*, unity::types::common::NullTerminatedAsciiString};
 use crate::halo::tag::*;
 
-#[derive(Debug, IntoPrimitive, TryFromPrimitive, Copy, Clone, DekuRead)]
+#[derive(Debug, Copy, Clone, DekuRead)]
 #[deku(id_type = "u16")]
 #[repr(u16)]
 pub enum ObjectType {
@@ -178,7 +177,7 @@ pub struct LightmapVertex {
 }
 
 #[wasm_bindgen]
-#[derive(Debug, Clone, Copy, TryFromPrimitive, PartialEq, DekuRead)]
+#[derive(Debug, Clone, Copy, PartialEq, DekuRead)]
 #[deku(id_type = "u16")]
 #[repr(u16)]
 pub enum RenderedVerticesType {

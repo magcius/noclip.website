@@ -1,13 +1,12 @@
 use std::io::{Cursor, Seek};
 
-use num_enum::{IntoPrimitive, TryFromPrimitive};
 use deku::prelude::*;
 use wasm_bindgen::prelude::*;
 use crate::{halo::common::*, unity::types::common::NullTerminatedAsciiString};
 use crate::halo::bitmap_utils;
 
 #[wasm_bindgen(js_name = "HaloBitmapType")]
-#[derive(Debug, IntoPrimitive, TryFromPrimitive, Clone, Copy, DekuRead)]
+#[derive(Debug, Clone, Copy, DekuRead)]
 #[deku(id_type = "u16")]
 #[repr(u16)]
 pub enum BitmapType {
@@ -19,7 +18,7 @@ pub enum BitmapType {
 }
 
 #[wasm_bindgen(js_name = "HaloBitmapEncodingFormat")]
-#[derive(Debug, IntoPrimitive, TryFromPrimitive, Clone, Copy, DekuRead)]
+#[derive(Debug, Clone, Copy, DekuRead)]
 #[deku(id_type = "u16")]
 #[repr(u16)]
 pub enum BitmapEncodingFormat {
@@ -32,7 +31,7 @@ pub enum BitmapEncodingFormat {
 }
 
 #[wasm_bindgen(js_name = "HaloBitmapUsage")]
-#[derive(Debug, IntoPrimitive, TryFromPrimitive, Copy, Clone, DekuRead)]
+#[derive(Debug, Copy, Clone, DekuRead)]
 #[deku(id_type = "u16")]
 #[repr(u16)]
 pub enum BitmapUsage {
@@ -44,7 +43,7 @@ pub enum BitmapUsage {
     Vectormap = 0x5,
 }
 
-#[derive(Debug, IntoPrimitive, TryFromPrimitive, Copy, Clone, DekuRead)]
+#[derive(Debug, Copy, Clone, DekuRead)]
 #[deku(id_type = "u16")]
 #[repr(u16)]
 pub enum BitmapSpriteBudgetSize {
@@ -58,7 +57,7 @@ pub enum BitmapSpriteBudgetSize {
 }
 
 #[wasm_bindgen(js_name = "HaloBitmapSpriteUsage")]
-#[derive(Debug, IntoPrimitive, TryFromPrimitive, Copy, Clone, DekuRead)]
+#[derive(Debug, Copy, Clone, DekuRead)]
 #[deku(id_type = "u16")]
 #[repr(u16)]
 pub enum BitmapSpriteUsage {
@@ -86,7 +85,7 @@ pub struct BitmapGroup {
 }
 
 #[wasm_bindgen(js_name = "HaloBitmapClass")]
-#[derive(Debug, IntoPrimitive, TryFromPrimitive, Copy, Clone, DekuRead)]
+#[derive(Debug, Copy, Clone, DekuRead)]
 #[deku(id_type = "u32")]
 #[repr(u32)]
 pub enum BitmapClass {
@@ -178,7 +177,7 @@ pub enum BitmapClass {
 }
 
 #[wasm_bindgen]
-#[derive(Debug, IntoPrimitive, TryFromPrimitive, Copy, Clone, DekuRead)]
+#[derive(Debug, Copy, Clone, DekuRead)]
 #[deku(id_type = "u16")]
 #[repr(u16)]
 pub enum BitmapDataType {
@@ -189,7 +188,7 @@ pub enum BitmapDataType {
 }
 
 #[wasm_bindgen]
-#[derive(Debug, IntoPrimitive, TryFromPrimitive, Copy, Clone, DekuRead)]
+#[derive(Debug, Copy, Clone, DekuRead)]
 #[deku(id_type = "u16")]
 #[repr(u16)]
 pub enum BitmapFormat {

@@ -1,6 +1,5 @@
 use std::{convert::TryInto, io::{Cursor, Seek, SeekFrom}};
 use deku::prelude::*;
-use num_enum::TryFromPrimitive;
 use anyhow::Result;
 use wasm_bindgen::prelude::*;
 
@@ -292,7 +291,7 @@ pub struct ResourceHeader {
     pub path: Option<String>,
 }
 
-#[derive(Debug, Copy, Clone, TryFromPrimitive, DekuRead)]
+#[derive(Debug, Copy, Clone, DekuRead)]
 #[deku(id_type = "u16")]
 #[repr(u16)]
 pub enum ScenarioType {

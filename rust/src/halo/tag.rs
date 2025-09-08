@@ -1,5 +1,4 @@
 use std::convert::TryFrom;
-use num_enum::{IntoPrimitive, TryFromPrimitive};
 use deku::prelude::*;
 use wasm_bindgen::prelude::*;
 
@@ -19,7 +18,7 @@ pub struct TagDependency {
 }
 
 #[wasm_bindgen(js_name = "HaloTagClass")]
-#[derive(Debug, IntoPrimitive, TryFromPrimitive, Copy, Clone, PartialEq, Hash, Eq, DekuRead)]
+#[derive(Debug, Copy, Clone, PartialEq, Hash, Eq, DekuRead)]
 #[deku(id_type = "u32")]
 #[repr(u32)]
 pub enum TagClass {

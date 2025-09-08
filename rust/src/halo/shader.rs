@@ -1,6 +1,5 @@
 use deku::prelude::*;
 use wasm_bindgen::prelude::*;
-use num_enum::TryFromPrimitive;
 use super::tag::*;
 use super::common::*;
 
@@ -35,7 +34,7 @@ impl ShaderTransparentChicago {
 }
 
 #[wasm_bindgen]
-#[derive(Debug, Clone, Copy, TryFromPrimitive, DekuRead)]
+#[derive(Debug, Clone, Copy, DekuRead)]
 #[deku(id_type = "u16")]
 #[repr(u16)]
 pub enum ShaderTransparentChicagoColorFunction {
@@ -192,7 +191,7 @@ pub struct ShaderTransparentGenericStage {
 }
 
 #[wasm_bindgen]
-#[derive(Debug, Copy, Clone, TryFromPrimitive, DekuRead)]
+#[derive(Debug, Copy, Clone, DekuRead)]
 #[deku(id_type = "u16")]
 #[repr(u16)]
 pub enum ShaderOutputMapping {
@@ -205,7 +204,7 @@ pub enum ShaderOutputMapping {
 }
 
 #[wasm_bindgen]
-#[derive(Debug, Copy, Clone, TryFromPrimitive, DekuRead)]
+#[derive(Debug, Copy, Clone, DekuRead)]
 #[deku(id_type = "u16")]
 #[repr(u16)]
 pub enum ShaderOutputFunction {
@@ -214,7 +213,7 @@ pub enum ShaderOutputFunction {
 }
 
 #[wasm_bindgen]
-#[derive(Debug, Copy, Clone, TryFromPrimitive, DekuRead)]
+#[derive(Debug, Copy, Clone, DekuRead)]
 #[deku(id_type = "u16")]
 #[repr(u16)]
 pub enum ShaderOutput {
@@ -230,7 +229,7 @@ pub enum ShaderOutput {
 }
 
 #[wasm_bindgen]
-#[derive(Debug, Copy, Clone, TryFromPrimitive, DekuRead)]
+#[derive(Debug, Copy, Clone, DekuRead)]
 #[deku(id_type = "u16")]
 #[repr(u16)]
 pub enum ShaderMapping {
@@ -245,7 +244,7 @@ pub enum ShaderMapping {
 }
 
 #[wasm_bindgen]
-#[derive(Debug, Copy, Clone, TryFromPrimitive, DekuRead)]
+#[derive(Debug, Copy, Clone, DekuRead)]
 #[deku(id_type = "u16")]
 #[repr(u16)]
 pub enum ShaderInput {
@@ -277,7 +276,7 @@ pub enum ShaderInput {
 }
 
 #[wasm_bindgen]
-#[derive(Debug, Copy, Clone, TryFromPrimitive, DekuRead)]
+#[derive(Debug, Copy, Clone, DekuRead)]
 #[deku(id_type = "u16")]
 #[repr(u16)]
 pub enum ShaderAlphaInput {
@@ -309,7 +308,7 @@ pub enum ShaderAlphaInput {
 }
 
 #[wasm_bindgen]
-#[derive(Debug, Copy, Clone, TryFromPrimitive, DekuRead)]
+#[derive(Debug, Copy, Clone, DekuRead)]
 #[deku(id_type = "u16")]
 #[repr(u16)]
 pub enum FramebufferFadeMode {
@@ -319,7 +318,7 @@ pub enum FramebufferFadeMode {
 }
 
 #[wasm_bindgen]
-#[derive(Debug, Copy, Clone, TryFromPrimitive, DekuRead)]
+#[derive(Debug, Copy, Clone, DekuRead)]
 #[deku(id_type = "u16")]
 #[repr(u16)]
 pub enum FramebufferBlendFunction {
@@ -334,7 +333,7 @@ pub enum FramebufferBlendFunction {
 }
 
 #[wasm_bindgen]
-#[derive(Debug, Copy, Clone, TryFromPrimitive, DekuRead)]
+#[derive(Debug, Copy, Clone, DekuRead)]
 #[deku(id_type = "u16")]
 #[repr(u16)]
 pub enum ShaderTransparentGenericMapType {
@@ -345,7 +344,7 @@ pub enum ShaderTransparentGenericMapType {
 }
 
 #[wasm_bindgen]
-#[derive(Debug, Copy, Clone, TryFromPrimitive, DekuRead)]
+#[derive(Debug, Copy, Clone, DekuRead)]
 #[deku(id_type = "u16")]
 #[repr(u16)]
 pub enum RadiosityDetailLevel {
@@ -413,7 +412,7 @@ pub struct ShaderModel {
 }
 
 #[wasm_bindgen]
-#[derive(Debug, Copy, Clone, TryFromPrimitive, DekuRead)]
+#[derive(Debug, Copy, Clone, DekuRead)]
 #[deku(id_type = "u16")]
 #[repr(u16)]
 pub enum AnimationFunction {
@@ -432,7 +431,7 @@ pub enum AnimationFunction {
 }
 
 #[wasm_bindgen]
-#[derive(Debug, Copy, Clone, TryFromPrimitive, DekuRead)]
+#[derive(Debug, Copy, Clone, DekuRead)]
 #[deku(id_type = "u16")]
 #[repr(u16)]
 pub enum DetailBitmapMask {
@@ -448,7 +447,7 @@ pub enum DetailBitmapMask {
 }
 
 #[wasm_bindgen]
-#[derive(Debug, Copy, Clone, TryFromPrimitive, DekuRead)]
+#[derive(Debug, Copy, Clone, DekuRead)]
 #[deku(id_type = "u16")]
 #[repr(u16)]
 pub enum FunctionSource {
@@ -511,7 +510,7 @@ pub struct ShaderEnvironment {
 }
 
 #[wasm_bindgen]
-#[derive(Copy, Clone, Debug, TryFromPrimitive, DekuRead)]
+#[derive(Copy, Clone, Debug, DekuRead)]
 #[deku(id_type = "u16")]
 #[repr(u16)]
 pub enum ShaderEnvironmentReflectionType {
@@ -521,7 +520,7 @@ pub enum ShaderEnvironmentReflectionType {
 }
 
 #[wasm_bindgen]
-#[derive(Debug, TryFromPrimitive, Copy, Clone, DekuRead)]
+#[derive(Debug, Copy, Clone, DekuRead)]
 #[deku(id_type = "u16")]
 #[repr(u16)]
 pub enum DetailBitmapFunction {
@@ -531,7 +530,7 @@ pub enum DetailBitmapFunction {
 }
 
 #[wasm_bindgen]
-#[derive(Debug, TryFromPrimitive, Copy, Clone, DekuRead)]
+#[derive(Debug, Copy, Clone, DekuRead)]
 #[deku(id_type = "u16")]
 #[repr(u16)]
 pub enum ShaderEnvironmentType {
