@@ -626,7 +626,7 @@ export class GeometryRenderer {
             // make a copy for this renderer
             this.vertexBufferData = new Float32Array(this.geometryData.renderData.vertexBufferData);
             this.vertexBuffer = device.createBuffer(
-                this.vertexBufferData.length,
+                this.vertexBufferData.byteLength,
                 GfxBufferUsage.Vertex,
                 GfxBufferFrequencyHint.Dynamic
             );
