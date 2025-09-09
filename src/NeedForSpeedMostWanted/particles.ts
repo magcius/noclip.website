@@ -1,10 +1,9 @@
 
 import { mat4, vec3, vec4 } from "gl-matrix";
 import { computeViewSpaceDepthFromWorldSpacePoint } from "../Camera.js";
-import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
 import { fillMatrix4x3, fillVec4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers.js";
-import { GfxBuffer, GfxBufferUsage, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform.js";
+import { GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { GfxRenderInstList, GfxRenderInstManager, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager.js";
 import { CalcBillboardFlags, calcBillboardMatrix, lerp, transformVec3Mat4w1 } from "../MathHelpers.js";
@@ -14,6 +13,7 @@ import { ViewerRenderInput } from "../viewer.js";
 import { NfsMap } from "./map.js";
 import { NfsTexture } from "./region.js";
 import { attachmentStatesAdditive, attachmentStatesTranslucent } from "./render.js";
+import { createBufferFromData } from "../gfx/helpers/BufferHelpers.js";
 
 export class NfsParticleEmitterGroup {
     private children: NfsParticleEmitter[];
@@ -71,8 +71,8 @@ export class NfsParticleEmitter {
         const device = cache.device;
 
         // construct simple quad for particles
-        NfsParticleEmitter.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, new Float32Array([-1, 1, 0, 1, 1, 0, -1, -1, 0, 1, -1, 0]).buffer);
-        NfsParticleEmitter.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, new Uint16Array([0, 2, 3, 0, 1, 3]).buffer);
+        NfsParticleEmitter.vertexBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, new Float32Array([-1, 1, 0, 1, 1, 0, -1, -1, 0, 1, -1, 0]).buffer);
+        NfsParticleEmitter.indexBuffer = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, new Uint16Array([0, 2, 3, 0, 1, 3]).buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: 0, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0 },

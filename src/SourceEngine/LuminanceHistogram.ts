@@ -403,9 +403,9 @@ class ImplCompute {
         this.computePipeline = device.createComputePipeline({ program, pipelineLayout });
 
         const bucketCount = this.histogram.bucketCount;
-        this.bucketBuffer = device.createBuffer(bucketCount, GfxBufferUsage.Storage | GfxBufferUsage.CopySrc, GfxBufferFrequencyHint.Dynamic);
-
         this.results = new Uint32Array(bucketCount);
+
+        this.bucketBuffer = device.createBuffer(this.results.byteLength, GfxBufferUsage.Storage | GfxBufferUsage.CopySrc, GfxBufferFrequencyHint.Dynamic);
     }
 
     public debugDraw(ctx: CanvasRenderingContext2D): void {

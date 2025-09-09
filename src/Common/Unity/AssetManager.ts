@@ -7,9 +7,9 @@ import { DataFetcher } from '../../DataFetcher.js';
 import * as Geometry from '../../Geometry.js';
 import { Destroyable, SceneContext } from '../../SceneBase.js';
 import { TextureMapping } from '../../TextureHolder.js';
-import { coalesceBuffer, makeStaticDataBuffer } from '../../gfx/helpers/BufferHelpers.js';
+import { coalesceBuffer, createBufferFromData } from '../../gfx/helpers/BufferHelpers.js';
 import { fillColor, fillVec4 } from '../../gfx/helpers/UniformBufferHelpers.js';
-import { GfxBufferUsage, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxMipFilterMode, GfxSampler, GfxSamplerDescriptor, GfxTexFilterMode, GfxTexture, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxWrapMode, makeTextureDescriptor2D } from '../../gfx/platform/GfxPlatform.js';
+import { GfxBufferFrequencyHint, GfxBufferUsage, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxMipFilterMode, GfxSampler, GfxSamplerDescriptor, GfxTexFilterMode, GfxTexture, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxWrapMode, makeTextureDescriptor2D } from '../../gfx/platform/GfxPlatform.js';
 import { FormatCompFlags, getFormatCompByteSize, setFormatCompFlags } from '../../gfx/platform/GfxPlatformFormat.js';
 import { GfxRenderCache } from '../../gfx/render/GfxRenderCache.js';
 import { rust } from '../../rustlib.js';
@@ -494,7 +494,7 @@ function loadCompressedMesh(device: GfxDevice, mesh: UnityMesh): UnityMeshData {
     ];
     const indexBufferFormat: GfxFormat = GfxFormat.U32_R;
     const layout = device.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
-    const indexData = makeStaticDataBuffer(device, GfxBufferUsage.Index, indices.buffer);
+    const indexData = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, indices.buffer);
     const vertexBuffers = coalesceBuffer(device, GfxBufferUsage.Vertex, [new ArrayBufferSlice(vertices.buffer), new ArrayBufferSlice(normals.buffer)]);
     const indexBuffer = { buffer: indexData };
     return new UnityMeshData(layout, vertexBuffers, indexBuffer, mesh.local_aabb, mesh.submeshes, indexBufferFormat);
@@ -546,8 +546,8 @@ function loadMesh(device: GfxDevice, mesh: UnityMesh): UnityMeshData {
     const layoutBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [];
     const stateBufferDescriptors: GfxVertexBufferDescriptor[] = [];
 
-    const vertData = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, mesh.get_vertex_data().buffer);
-    const indexData = makeStaticDataBuffer(device, GfxBufferUsage.Index, mesh.get_index_data().buffer);
+    const vertData = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, mesh.get_vertex_data().buffer);
+    const indexData = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, mesh.get_index_data().buffer);
 
     const channels = mesh.get_channels();
     for (let i = 0; i < channels.length; i++) {

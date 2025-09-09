@@ -12,7 +12,6 @@ import { ImageFormat, ImageSize, getSizBitsPerPixel } from "../Common/N64/Image.
 import { CalcBillboardFlags, calcBillboardMatrix } from '../MathHelpers.js';
 import { DeviceProgram } from "../Program.js";
 import { TextureMapping } from '../TextureHolder.js';
-import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers.js';
 import { fillMatrix4x2, fillMatrix4x3, fillVec4 } from '../gfx/helpers/UniformBufferHelpers.js';
 import { GfxBindingLayoutDescriptor, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFormat, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxMegaStateDescriptor, GfxProgram, GfxSampler, GfxTexture, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
@@ -22,6 +21,7 @@ import { align, assert, assertExists, nArray } from "../util.js";
 import { Color, colorNewCopy, colorNewFromRGBA } from "../Color.js";
 
 import { GloverObjbank } from './parsers/index.js';
+import { createBufferFromData } from '../gfx/helpers/BufferHelpers.js';
 
 export const enum GloverRendererLayer {
     OPAQUE,
@@ -130,15 +130,7 @@ export class DrawCallRenderData {
         }
 
         this.vertexBufferData = makeVertexBufferData(drawCall.vertices);
-        if (drawCall.dynamicGeometry) {
-            this.vertexBuffer = device.createBuffer(
-                align(this.vertexBufferData.byteLength, 4) / 4,
-                GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Dynamic,
-                new Uint8Array(this.vertexBufferData.buffer),
-            );
-        } else {
-            this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, this.vertexBufferData.buffer);
-        }
+        this.vertexBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, drawCall.dynamicGeometry ? GfxBufferFrequencyHint.Dynamic : GfxBufferFrequencyHint.Static, this.vertexBufferData.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: F3DEX_Program.a_Position, bufferIndex: 0, format: GfxFormat.F32_RGBA, bufferByteOffset: 0*0x04, },

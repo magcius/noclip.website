@@ -1,36 +1,36 @@
 
+import { LoadedTexture, TextureHolder, TextureMapping } from '../TextureHolder.js';
 import * as Viewer from '../viewer.js';
-import { TextureHolder, LoadedTexture, TextureMapping } from '../TextureHolder.js';
 
-import { GfxDevice, GfxSampler, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode, GfxCullMode, GfxCompareMode, GfxInputLayout, GfxBuffer, GfxBufferUsage, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxProgram, GfxMegaStateDescriptor, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D, GfxChannelWriteMask } from '../gfx/platform/GfxPlatform.js';
+import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxChannelWriteMask, GfxCompareMode, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxMegaStateDescriptor, GfxMipFilterMode, GfxProgram, GfxSampler, GfxTexFilterMode, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxWrapMode, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform.js';
 
-import * as BNTX from '../fres_nx/bntx.js';
-import { surfaceToCanvas } from '../Common/bc_texture.js';
-import { translateImageFormat, deswizzle, decompress, getImageFormatString } from '../fres_nx/tegra_texture.js';
-import { FMDL, FSHP, FMAT, FMAT_RenderInfo, FMAT_RenderInfoType, FVTX, FSHP_Mesh, FRES, FVTX_VertexAttribute, FVTX_VertexBuffer, parseFMAT_ShaderParam_Float4, FMAT_ShaderParam, parseFMAT_ShaderParam_Color3, parseFMAT_ShaderParam_Float, parseFMAT_ShaderParam_Texsrt, parseFMAT_ShaderParam_Float2, FMAT_ShaderAssign } from '../fres_nx/bfres.js';
-import { GfxRenderInst, makeSortKey, GfxRendererLayer, setSortKeyDepth, GfxRenderInstManager, GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
-import { TextureAddressMode, FilterMode, IndexFormat, AttributeFormat, getChannelFormat, getTypeFormat } from '../fres_nx/nngfx_enum.js';
-import { nArray, assert, assertExists, fallbackUndefined } from '../util.js';
-import { makeStaticDataBuffer, makeStaticDataBufferFromSlice } from '../gfx/helpers/BufferHelpers.js';
-import { fillMatrix4x4, fillMatrix4x3, fillVec4v, fillColor, fillVec3v, fillMatrix4x2, fillVec4 } from '../gfx/helpers/UniformBufferHelpers.js';
 import { mat4, ReadonlyMat4, vec2, vec3, vec4 } from 'gl-matrix';
-import { computeViewSpaceDepthFromWorldSpaceAABB } from '../Camera.js';
-import { AABB } from '../Geometry.js';
-import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers.js';
-import { DeviceProgram } from '../Program.js';
-import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
-import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
-import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
-import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
+import { computeViewSpaceDepthFromWorldSpaceAABB } from '../Camera.js';
+import { surfaceToCanvas } from '../Common/bc_texture.js';
+import { FMAT, FMAT_RenderInfo, FMAT_RenderInfoType, FMAT_ShaderParam, FMDL, FRES, FSHP, FSHP_Mesh, FVTX, FVTX_VertexAttribute, FVTX_VertexBuffer, parseFMAT_ShaderParam_Color3, parseFMAT_ShaderParam_Float, parseFMAT_ShaderParam_Float2, parseFMAT_ShaderParam_Float4, parseFMAT_ShaderParam_Texsrt } from '../fres_nx/bfres.js';
+import * as BNTX from '../fres_nx/bntx.js';
+import { AttributeFormat, FilterMode, getChannelFormat, getTypeFormat, IndexFormat, TextureAddressMode } from '../fres_nx/nngfx_enum.js';
+import { decompress, deswizzle, getImageFormatString, translateImageFormat } from '../fres_nx/tegra_texture.js';
+import { AABB } from '../Geometry.js';
 import { GfxShaderLibrary, glslGenerateFloat } from '../gfx/helpers/GfxShaderLibrary.js';
+import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
+import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers.js';
+import { fillColor, fillMatrix4x2, fillMatrix4x3, fillMatrix4x4, fillVec3v, fillVec4, fillVec4v } from '../gfx/helpers/UniformBufferHelpers.js';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
+import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
+import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
+import { GfxRendererLayer, GfxRenderInst, GfxRenderInstList, GfxRenderInstManager, makeSortKey, setSortKeyDepth } from '../gfx/render/GfxRenderInstManager.js';
 import { getMatrixTranslation, MathConstants, Vec3Zero } from '../MathHelpers.js';
+import { DeviceProgram } from '../Program.js';
+import { assert, assertExists, nArray } from '../util.js';
 
-import * as SARC from "../fres_nx/sarc.js";
-import * as AGLLightMap from './AGLParameter_LightMap.js';
-import * as AGLEnv from './AGLParameter_Env.js';
-import { colorNewCopy, colorScale, OpaqueBlack, White } from '../Color.js';
 import { IS_DEVELOPMENT } from '../BuildVersion.js';
+import { colorNewCopy, colorScale, OpaqueBlack, White } from '../Color.js';
+import * as SARC from "../fres_nx/sarc.js";
+import * as AGLEnv from './AGLParameter_Env.js';
+import * as AGLLightMap from './AGLParameter_LightMap.js';
+import { createBufferFromData, createBufferFromSlice } from '../gfx/helpers/BufferHelpers.js';
 
 export class BRTITextureHolder extends TextureHolder<BNTX.BRTI> {
     public addFRESTextures(device: GfxDevice, fres: FRES): void {
@@ -1344,7 +1344,7 @@ class FVTXData {
                     frequency: GfxVertexBufferFrequency.PerVertex,
                 };
 
-                const gfxBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, convertedAttribute.data);
+                const gfxBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, convertedAttribute.data);
                 this.vertexBufferDescriptors[attribBufferIndex] = { buffer: gfxBuffer };
             } else {
                 // Can use buffer data directly.
@@ -1356,7 +1356,7 @@ class FVTXData {
                 });
 
                 if (!this.vertexBufferDescriptors[bufferIndex]) {
-                    const gfxBuffer = makeStaticDataBufferFromSlice(device, GfxBufferUsage.Vertex, vertexBuffer.data);
+                    const gfxBuffer = createBufferFromSlice(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, vertexBuffer.data);
 
                     this.inputBufferDescriptors[bufferIndex] = {
                         byteStride: vertexBuffer.stride,
@@ -1450,7 +1450,7 @@ export class FSHPMeshData {
         });
 
         this.vertexBufferDescriptors = fvtxData.vertexBufferDescriptors;
-        this.indexBuffer = makeStaticDataBufferFromSlice(cache.device, GfxBufferUsage.Index, mesh.indexBufferData);
+        this.indexBuffer = createBufferFromSlice(cache.device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, mesh.indexBufferData);
         this.indexBufferDescriptor = { buffer: this.indexBuffer };
     }
 

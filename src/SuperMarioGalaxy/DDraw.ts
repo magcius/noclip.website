@@ -210,7 +210,7 @@ export class TDDraw extends TDDrawBase {
         if (this.recreateVertexBuffer) {
             if (this.vertexBuffer !== null)
                 device.destroyBuffer(this.vertexBuffer);
-            this.vertexBuffer = device.createBuffer((this.vertexData.byteLength + 3) >>> 2, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Dynamic);
+            this.vertexBuffer = device.createBuffer(this.vertexData.byteLength, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Dynamic);
             this.vertexBufferDescriptors[0].buffer = this.vertexBuffer;
             this.recreateVertexBuffer = false;
         }
@@ -218,7 +218,7 @@ export class TDDraw extends TDDrawBase {
         if (this.recreateIndexBuffer) {
             if (this.indexBuffer !== null)
                 device.destroyBuffer(this.indexBuffer);
-            this.indexBuffer = device.createBuffer((this.indexData.byteLength + 3) >>> 2, GfxBufferUsage.Index, GfxBufferFrequencyHint.Dynamic);
+            this.indexBuffer = device.createBuffer(this.indexData.byteLength, GfxBufferUsage.Index, GfxBufferFrequencyHint.Dynamic);
             this.indexBufferDescriptor.buffer = this.indexBuffer;
             this.recreateIndexBuffer = false;
         }
@@ -306,9 +306,9 @@ export class TSDraw extends TDDrawBase {
 
     private flushDeviceObjects(cache: GfxRenderCache): void {
         const device = cache.device;
-        this.vertexBuffer = device.createBuffer((this.vertexData.byteLength + 3) >>> 2, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static);
+        this.vertexBuffer = device.createBuffer(this.vertexData.byteLength, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static);
         this.vertexBufferDescriptors[0].buffer = this.vertexBuffer;
-        this.indexBuffer = device.createBuffer((this.indexData.byteLength + 3) >>> 2, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static);
+        this.indexBuffer = device.createBuffer(this.indexData.byteLength, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static);
         this.indexBufferDescriptor.buffer = this.indexBuffer;
     }
 

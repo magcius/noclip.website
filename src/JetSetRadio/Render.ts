@@ -1,9 +1,8 @@
 
 import * as Ninja from "./Ninja.js";
-import { GfxDevice, GfxBuffer, GfxInputLayout, GfxFormat, GfxVertexBufferFrequency, GfxVertexAttributeDescriptor, GfxBufferUsage, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxCullMode, GfxCompareMode, GfxProgram, GfxMegaStateDescriptor, GfxBlendMode, GfxBlendFactor, GfxInputLayoutBufferDescriptor, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform.js";
+import { GfxDevice, GfxBuffer, GfxInputLayout, GfxFormat, GfxVertexBufferFrequency, GfxVertexAttributeDescriptor, GfxBufferUsage, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxCullMode, GfxCompareMode, GfxProgram, GfxMegaStateDescriptor, GfxBlendMode, GfxBlendFactor, GfxInputLayoutBufferDescriptor, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor, GfxBufferFrequencyHint } from "../gfx/platform/GfxPlatform.js";
 import { DeviceProgram } from "../Program.js";
 import * as Viewer from "../viewer.js";
-import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
 import { mat4, ReadonlyMat4, ReadonlyVec3, vec3, vec4 } from "gl-matrix";
 import { fillMatrix4x3, fillMatrix4x2, fillColor } from "../gfx/helpers/UniformBufferHelpers.js";
 import { TextureMapping } from "../TextureHolder.js";
@@ -14,6 +13,7 @@ import { lerpAngle } from "../MathHelpers.js";
 import { PVRTextureHolder } from "./Scenes.js";
 import { assert, nArray } from "../util.js";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
+import { createBufferFromData } from "../gfx/helpers/BufferHelpers.js";
 
 export class JSRProgram extends DeviceProgram {
     public static a_Position = 0;
@@ -135,7 +135,7 @@ export class NjsMeshData {
 
         if (vertexData.positions.length > 0) {
             const values = vertexData.positions.reduce((accumulator, currentValue) => accumulator.concat(...currentValue), [] as number[]);
-            const buffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, Float32Array.from(values).buffer);
+            const buffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, Float32Array.from(values).buffer);
             const bufferIndex = this.vertexBuffers.length;
 
             this.vertexBuffers.push(buffer);
@@ -146,7 +146,7 @@ export class NjsMeshData {
 
         if (vertexData.normals.length > 0) {
             const values = vertexData.normals.reduce((accumulator, currentValue) => accumulator.concat(...currentValue), [] as number[]);
-            const buffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, Float32Array.from(values).buffer);
+            const buffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, Float32Array.from(values).buffer);
             const bufferIndex = this.vertexBuffers.length;
 
             this.vertexBuffers.push(buffer);
@@ -157,7 +157,7 @@ export class NjsMeshData {
 
         if (vertexData.uvs.length > 0) {
             const values = vertexData.uvs.reduce((accumulator, currentValue) => accumulator.concat(...currentValue), [] as number[]);
-            const buffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, Float32Array.from(values).buffer);
+            const buffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, Float32Array.from(values).buffer);
             const bufferIndex = this.vertexBuffers.length;
 
             this.vertexBuffers.push(buffer);
@@ -168,7 +168,7 @@ export class NjsMeshData {
 
         if (vertexData.diffuse.length > 0) {
             const values = vertexData.diffuse.reduce((accumulator, currentValue) => accumulator.concat(currentValue.r, currentValue.g, currentValue.b, currentValue.a), [] as number[]);
-            const buffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, Float32Array.from(values).buffer);
+            const buffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, Float32Array.from(values).buffer);
             const bufferIndex = this.vertexBuffers.length;
 
             this.vertexBuffers.push(buffer);
@@ -179,7 +179,7 @@ export class NjsMeshData {
 
         if (vertexData.specular.length > 0) {
             const values = vertexData.specular.reduce((accumulator, currentValue) => accumulator.concat(currentValue.r, currentValue.g, currentValue.b, currentValue.a), [] as number[]);
-            const buffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, Float32Array.from(values).buffer);
+            const buffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, Float32Array.from(values).buffer);
             const bufferIndex = this.vertexBuffers.length;
 
             this.vertexBuffers.push(buffer);
@@ -188,7 +188,7 @@ export class NjsMeshData {
             this.vertexBufferDescriptors.push({ buffer });
         }
 
-        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, Uint16Array.from(indexData).buffer);
+        this.indexBuffer = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, Uint16Array.from(indexData).buffer);
         this.indexBufferDescriptor = { buffer: this.indexBuffer };
 
         this.indexCount = indexData.length;

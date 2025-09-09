@@ -380,6 +380,7 @@ export class WaterCameraFilter extends LiveActor<WaterCameraFilterNrv> {
 
     public override destroy(device: GfxDevice): void {
         this.filterTexture.destroy(device);
+        this.ddraw.destroy(device);
     }
 
     public static override requestArchives(sceneObjHolder: SceneObjHolder): void {

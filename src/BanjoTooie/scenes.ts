@@ -4,7 +4,7 @@ import * as UI from '../ui.js';
 import * as Geo from '../BanjoKazooie/geo.js';
 import * as BYML from '../byml.js';
 
-import { GfxDevice, GfxBufferUsage } from '../gfx/platform/GfxPlatform.js';
+import { GfxDevice, GfxBufferUsage, GfxBufferFrequencyHint } from '../gfx/platform/GfxPlatform.js';
 import { FakeTextureHolder, TextureHolder } from '../TextureHolder.js';
 import { textureToCanvas, RenderData, GeometryData, BoneAnimator, AnimationMode } from '../BanjoKazooie/render.js';
 import { GeometryRenderer, layerFromFlags, BTLayer, LowObjectFlags } from './render.js';
@@ -20,8 +20,8 @@ import { DataFetcher, AbortedCallback } from '../DataFetcher.js';
 import { MathConstants, computeModelMatrixSRT } from '../MathHelpers.js';
 import { vec3, mat4, vec4 } from 'gl-matrix';
 import { parseAnimationFile } from '../BanjoKazooie/scenes.js';
-import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers.js';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
+import { createBufferFromData } from '../gfx/helpers/BufferHelpers.js';
 
 const pathBase = `BanjoTooie`;
 
@@ -376,7 +376,7 @@ function applyPaletteSwap(device: GfxDevice, cache: GfxRenderCache, base: Geomet
 
     device.destroyBuffer(base.renderData.vertexBuffer);
 
-    base.renderData.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, base.renderData.vertexBufferData.buffer);
+    base.renderData.vertexBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, base.renderData.vertexBufferData.buffer);
     base.renderData.vertexBufferDescriptors[0].buffer = base.renderData.vertexBuffer;
 }
 

@@ -14,8 +14,7 @@ import * as Yaz0 from '../Common/Compression/Yaz0.js';
 import { DrawParams, fillSceneParamsDataOnTemplate } from '../gx/gx_render.js';
 import { GXRenderHelperGfx } from '../gx/gx_render.js';
 import AnimationController from '../AnimationController.js';
-import { GfxDevice, GfxBuffer, GfxInputLayout, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxIndexBufferDescriptor } from '../gfx/platform/GfxPlatform.js';
-import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers.js';
+import { GfxDevice, GfxBuffer, GfxInputLayout, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxIndexBufferDescriptor, GfxBufferFrequencyHint } from '../gfx/platform/GfxPlatform.js';
 import { makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderInstManager.js';
 import { makeTriangleIndexBuffer, GfxTopology } from '../gfx/helpers/TopologyHelpers.js';
 import { computeViewMatrix, OrbitCameraController } from '../Camera.js';
@@ -24,6 +23,7 @@ import { SceneContext, SceneDesc, SceneGroup } from '../SceneBase.js';
 import { assertExists } from '../util.js';
 import { VertexAttributeInput } from '../gx/gx_displaylist.js';
 import { bindTTK1MaterialInstance } from '../Common/JSYSTEM/J3D/J3DGraphSimple.js';
+import { createBufferFromData } from '../gfx/helpers/BufferHelpers.js';
 
 const scale = 200;
 const posMtx = mat4.create();
@@ -64,8 +64,8 @@ class PlaneShape {
         vtx[18] = 2;
         vtx[19] = 2;
 
-        this.vtxBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, vtx.buffer);
-        this.idxBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, makeTriangleIndexBuffer(GfxTopology.TriStrips, 0, 4).buffer);
+        this.vtxBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, vtx.buffer);
+        this.idxBuffer = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, makeTriangleIndexBuffer(GfxTopology.TriStrips, 0, 4).buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: GX_Material.getVertexInputLocation(VertexAttributeInput.POS), format: GfxFormat.F32_RGB, bufferByteOffset: 4*0, bufferIndex: 0, },
@@ -77,7 +77,7 @@ class PlaneShape {
             { byteStride: 0, frequency: GfxVertexBufferFrequency.Constant, },
         ];
 
-        this.zeroBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, new Uint8Array(16).buffer);
+        this.zeroBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, new Uint8Array(16).buffer);
         this.inputLayout = cache.createInputLayout({
             vertexAttributeDescriptors,
             vertexBufferDescriptors,
@@ -222,6 +222,11 @@ class SeaRenderer extends SunshineRenderer {
         this.sunshineWaterModel.prepareToRender(device, this.renderHelper, viewerInput);
         this.renderHelper.renderInstManager.popTemplate();
         super.prepareToRender(device, viewerInput);
+    }
+
+    public override destroy(device: GfxDevice): void {
+        super.destroy(device);
+        this.sunshineWaterModel.destroy(device);
     }
 }
 

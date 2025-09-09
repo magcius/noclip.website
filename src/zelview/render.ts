@@ -4,8 +4,7 @@ import * as F3DZEX from './f3dzex.js';
 import { DeviceProgram } from "../Program.js";
 import { Texture, getImageFormatString, Vertex, DrawCall, translateBlendMode, translateCullMode, RSP_Geometry, RSPSharedOutput } from "./f3dzex.js";
 import { GfxDevice, GfxFormat, GfxTexture, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxProgram, GfxBufferFrequencyHint, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform.js";
-import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers.js';
-import { assert, nArray, align } from '../util.js';
+import { assert, nArray } from '../util.js';
 import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2, fillVec4, fillVec4v } from '../gfx/helpers/UniformBufferHelpers.js';
 import { mat4, vec3 } from 'gl-matrix';
 import { computeViewMatrix, computeViewMatrixSkybox } from '../Camera.js';
@@ -18,6 +17,7 @@ import { Vec3UnitY, Vec3Zero } from '../MathHelpers.js';
 import { calcTextureScaleForShift } from '../Common/N64/RSP.js';
 import { convertToCanvas } from '../gfx/helpers/TextureConversionHelpers.js';
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
+import { createBufferFromData } from '../gfx/helpers/BufferHelpers.js';
 
 export function textureToCanvas(texture: Texture): Viewer.Texture {
     const canvas = convertToCanvas(ArrayBufferSlice.fromView(texture.pixels), texture.width, texture.height);
@@ -95,17 +95,17 @@ export class RenderData {
         if (dynamic) {
             // there are vertex effects, so the vertex buffer data will change
             this.vertexBuffer = device.createBuffer(
-                align(this.vertexBufferData.byteLength, 4) / 4,
+                this.vertexBufferData.byteLength,
                 GfxBufferUsage.Vertex,
                 GfxBufferFrequencyHint.Dynamic
             );
         } else {
-            this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, this.vertexBufferData.buffer);
+            this.vertexBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, this.vertexBufferData.buffer);
         }
         assert(sharedOutput.vertices.length <= 0xFFFFFFFF);
 
         const indexBufferData = new Uint32Array(sharedOutput.indices);
-        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, indexBufferData.buffer);
+        this.indexBuffer = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, indexBufferData.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: F3DEX_Program.a_Position, bufferIndex: 0, format: GfxFormat.F32_RGBA, bufferByteOffset: 0*0x04, },

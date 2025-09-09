@@ -3,7 +3,6 @@ import { mat3, mat4, vec2, vec3 } from "gl-matrix";
 import { CameraController, computeViewMatrix, computeViewSpaceDepthFromWorldSpaceAABB } from "../Camera.js";
 import { colorCopy, colorLerp, colorNewCopy, White } from "../Color.js";
 import { AABB } from "../Geometry.js";
-import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
 import {
     makeBackbufferDescSimple,
@@ -16,6 +15,7 @@ import {
     GfxBlendFactor,
     GfxBlendMode,
     GfxBuffer,
+    GfxBufferFrequencyHint,
     GfxBufferUsage,
     GfxChannelWriteMask,
     GfxCullMode,
@@ -62,6 +62,7 @@ import {
     TotemNode, TotemOmni, TotemRotshape, TotemSkin, TotemSurfaceObject, TotemWarp
 } from "./types/index.js";
 import { colorCopyKeepAlpha, colorLerpKeepAlpha, DataStream, SIZE_VEC2, SIZE_VEC3 } from "./util.js";
+import { createBufferFromData } from "../gfx/helpers/BufferHelpers.js";
 
 class RotfdProgram extends DeviceProgram {
     public static ub_SceneParams = 0;
@@ -389,8 +390,8 @@ class VertexData {
         public bbox: AABB,
         public material_id: number,
     ) {
-        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, new Uint16Array(indices).buffer);
-        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, new Float32Array(vertices).buffer);
+        this.indexBuffer = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, new Uint16Array(indices).buffer);
+        this.vertexBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, new Float32Array(vertices).buffer);
         this.indexCount = indices.length;
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [

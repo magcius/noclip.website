@@ -656,9 +656,9 @@ export class WdtScene implements Viewer.SceneGfx {
         const renderInstManager = this.renderHelper.renderInstManager;
 
         const template = this.renderHelper.pushTemplateRenderInst();
+        template.setBindingLayouts(BaseProgram.bindingLayouts);
         template.setMegaStateFlags({ cullMode: GfxCullMode.Back });
         template.setGfxProgram(this.skyboxProgram);
-        template.setBindingLayouts(SkyboxProgram.bindingLayouts);
 
         this.renderHelper.debugDraw.beginFrame(this.mainView.clipFromViewMatrix, this.mainView.viewFromWorldMatrix, this.mainView.backbufferWidth, this.mainView.backbufferHeight);
 
@@ -668,7 +668,6 @@ export class WdtScene implements Viewer.SceneGfx {
         this.skyboxRenderer.prepareToRenderSkybox(renderInstManager);
 
         template.setGfxProgram(this.loadingAdtProgram);
-        template.setBindingLayouts(LoadingAdtProgram.bindingLayouts);
         renderInstManager.setCurrentList(this.renderInstListMain);
         this.loadingAdtRenderer.update(this.mainView);
         this.loadingAdtRenderer.prepareToRenderLoadingBox(renderInstManager, this.loadingAdts);
@@ -676,19 +675,16 @@ export class WdtScene implements Viewer.SceneGfx {
         const frame = this.frozenFrameData !== null ? this.frozenFrameData : this.cull();
 
         template.setGfxProgram(this.terrainProgram);
-        template.setBindingLayouts(TerrainProgram.bindingLayouts);
         for (let renderer of this.terrainRenderers.values()) {
             renderer.prepareToRenderTerrain(renderInstManager, frame);
         }
 
         template.setGfxProgram(this.wmoProgram);
-        template.setBindingLayouts(WmoProgram.bindingLayouts);
         for (let renderer of this.wmoRenderers.values()) {
             renderer.prepareToRenderWmo(renderInstManager, frame);
         }
 
         template.setGfxProgram(this.waterProgram);
-        template.setBindingLayouts(WaterProgram.bindingLayouts);
         for (let [adtFileId, renderer] of this.adtWaterRenderers.entries()) {
             renderer.update(this.mainView);
             renderer.prepareToRenderAdtWater(renderInstManager, frame, adtFileId);
@@ -698,7 +694,6 @@ export class WdtScene implements Viewer.SceneGfx {
             renderer.prepareToRenderWmoWater(renderInstManager, frame, wmoId);
         }
 
-        template.setBindingLayouts(ModelProgram.bindingLayouts);
         template.setGfxProgram(this.modelProgram);
         renderInstManager.setCurrentList(this.renderInstListSky);
         if (frame.activeWmoSkybox !== null) {
@@ -738,13 +733,11 @@ export class WdtScene implements Viewer.SceneGfx {
                 });
             if (doodads.length === 0) continue;
 
-            template.setBindingLayouts(ModelProgram.bindingLayouts);
             template.setGfxProgram(this.modelProgram);
             renderer.update(this.mainView);
             renderer.prepareToRenderModel(renderInstManager, doodads);
 
             if (this.enableParticles && renderer.model.particleEmitters.length > 0) {
-                template.setBindingLayouts(ParticleProgram.bindingLayouts);
                 template.setGfxProgram(this.particleProgram);
                 renderer.prepareToRenderParticles(renderInstManager, doodads);
             }

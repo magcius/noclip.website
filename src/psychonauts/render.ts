@@ -5,7 +5,6 @@ import { GfxDevice, GfxFormat, GfxBufferUsage, GfxBuffer, GfxVertexAttributeDesc
 import * as Viewer from "../viewer.js";
 import { decompressBC, DecodedSurfaceSW, surfaceToCanvas } from "../Common/bc_texture.js";
 import { EMeshFrag, EMesh, EScene, EDomain, MaterialFlags } from "./plb.js";
-import { makeStaticDataBuffer, makeStaticDataBufferFromSlice } from "../gfx/helpers/BufferHelpers.js";
 import { DeviceProgram } from "../Program.js";
 import { convertToTriangleIndexBuffer, filterDegenerateTriangleIndexBuffer } from "../gfx/helpers/TopologyHelpers.js";
 import { fillMatrix4x3, fillMatrix4x4, fillVec4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers.js";
@@ -21,6 +20,7 @@ import { AABB } from '../Geometry.js';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers.js';
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
+import { createBufferFromData, createBufferFromSlice } from "../gfx/helpers/BufferHelpers.js";
 
 function decodeTextureData(format: TextureFormat, width: number, height: number, pixels: Uint8Array<ArrayBuffer>): DecodedSurfaceSW {
     switch (format) {
@@ -188,16 +188,16 @@ class MeshFragData {
     constructor(cache: GfxRenderCache, public meshFrag: EMeshFrag) {
         const device = cache.device;
 
-        this.posNrmBuffer = makeStaticDataBufferFromSlice(device, GfxBufferUsage.Vertex, meshFrag.streamPosNrm);
+        this.posNrmBuffer = createBufferFromSlice(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, meshFrag.streamPosNrm);
 
         if (meshFrag.streamColor === null || meshFrag.streamUV === null)
-            this.zeroBuffer = device.createBuffer(32, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static)
+            this.zeroBuffer = device.createBuffer(32, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static);
 
-        this.colorBuffer = meshFrag.streamColor ? makeStaticDataBufferFromSlice(device, GfxBufferUsage.Vertex, meshFrag.streamColor) : null;
+        this.colorBuffer = meshFrag.streamColor ? createBufferFromSlice(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, meshFrag.streamColor) : null;
 
         if (meshFrag.streamUVCount > 0) {
             const uvData = decodeStreamUV(meshFrag.streamUV!, meshFrag.iVertCount, meshFrag.streamUVCount, meshFrag.uvCoordScale);
-            this.uvBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, uvData.buffer);
+            this.uvBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, uvData.buffer);
         } else {
             this.uvBuffer = null;
         }
@@ -205,7 +205,7 @@ class MeshFragData {
         const numIndexes = meshFrag.streamIdx.byteLength / 2;
         const triIdxData = convertToTriangleIndexBuffer(meshFrag.topology, meshFrag.streamIdx.createTypedArray(Uint16Array, 0, numIndexes));
         const idxData = filterDegenerateTriangleIndexBuffer(triIdxData);
-        this.idxBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, idxData.buffer);
+        this.idxBuffer = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, idxData.buffer);
         this.indexCount = idxData.length;
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [

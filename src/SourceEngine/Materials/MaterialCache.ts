@@ -1,9 +1,9 @@
 
 import { OpaqueBlack, TransparentBlack, White } from "../../Color.js";
-import { makeStaticDataBuffer } from "../../gfx/helpers/BufferHelpers.js";
+import { createBufferFromData } from "../../gfx/helpers/BufferHelpers.js";
 import { gfxDeviceNeedsFlipY } from "../../gfx/helpers/GfxDeviceHelpers.js";
 import { makeSolidColorTexture2D } from "../../gfx/helpers/TextureHelpers.js";
-import { GfxBuffer, GfxBufferUsage, GfxCompareMode, GfxDevice, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxMipFilterMode, GfxSampler, GfxTexFilterMode, GfxTexture, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxWrapMode } from "../../gfx/platform/GfxPlatform.js";
+import { GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxCompareMode, GfxDevice, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxMipFilterMode, GfxSampler, GfxTexFilterMode, GfxTexture, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxWrapMode } from "../../gfx/platform/GfxPlatform.js";
 import { GfxFormat } from "../../gfx/platform/GfxPlatformFormat.js";
 import type { GfxRenderCache } from "../../gfx/render/GfxRenderCache.js";
 import type { GfxRenderInst } from "../../gfx/render/GfxRenderInstManager.js";
@@ -48,17 +48,17 @@ class StaticQuad {
         this.inputLayout = cache.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
 
         const n0 = 1, n1 = -1;
-        this.vertexBufferQuad = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, new Float32Array([
+        this.vertexBufferQuad = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, new Float32Array([
             0, n0, n0, 1, 0, 1, 1, 1, 1,
             0, n0, n1, 1, 1, 1, 1, 1, 1,
             0, n1, n0, 0, 0, 1, 1, 1, 1,
             0, n1, n1, 0, 1, 1, 1, 1, 1,
         ]).buffer);
-        this.indexBufferQuad = makeStaticDataBuffer(device, GfxBufferUsage.Index, new Uint16Array([
+        this.indexBufferQuad = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, new Uint16Array([
             0, 1, 2, 2, 1, 3,
         ]).buffer);
 
-        this.zeroVertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, new ArrayBuffer(16));
+        this.zeroVertexBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, new ArrayBuffer(16));
 
         this.vertexBufferDescriptorsQuad = [
             { buffer: this.vertexBufferQuad },

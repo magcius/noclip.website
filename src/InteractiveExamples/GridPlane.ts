@@ -171,6 +171,5 @@ export class GridPlane {
     }
 
     public destroy(device: GfxDevice) {
-        device.destroyProgram(this.gfxProgram);
     }
 }

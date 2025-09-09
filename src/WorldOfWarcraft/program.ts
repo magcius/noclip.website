@@ -18,10 +18,23 @@ import { SkyboxColor } from "./mesh.js";
 import { View } from "./scenes.js";
 
 export class BaseProgram extends DeviceProgram {
-    public static numUniformBuffers = 1;
     public static ub_SceneParams = 0;
 
-    public static numSamplers = 0;
+    public static bindingLayouts: GfxBindingLayoutDescriptor[] = [
+        {
+            numUniformBuffers: 3,
+            numSamplers: 7,
+            samplerEntries: [
+                { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float },
+                { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float },
+                { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float },
+                { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float },
+                { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float },
+                { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float },
+                { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.UnfilterableFloat },
+            ],
+        },
+    ];
 
     public static utils = `
 vec3 calcLight(
@@ -231,13 +244,6 @@ export class SkyboxProgram extends BaseProgram {
     public static a_Position = 0;
     public static a_ColorIndex = 1;
 
-    public static bindingLayouts: GfxBindingLayoutDescriptor[] = [
-        {
-            numUniformBuffers: super.numUniformBuffers,
-            numSamplers: super.numSamplers,
-        },
-    ];
-
     public override both = `
 ${BaseProgram.commonDeclarations}
 
@@ -291,13 +297,6 @@ export class WmoProgram extends BaseProgram {
 
     public static ub_ModelParams = 1;
     public static ub_BatchParams = 2;
-
-    public static bindingLayouts: GfxBindingLayoutDescriptor[] = [
-        {
-            numUniformBuffers: super.numUniformBuffers + 2,
-            numSamplers: super.numSamplers + 4,
-        },
-    ];
 
     public override both = `
 ${BaseProgram.commonDeclarations}
@@ -610,13 +609,6 @@ export class LoadingAdtProgram extends BaseProgram {
 
     public static ub_ModelParams = 1;
 
-    public static bindingLayouts: GfxBindingLayoutDescriptor[] = [
-        {
-            numUniformBuffers: super.numUniformBuffers + 1,
-            numSamplers: super.numSamplers,
-        },
-    ];
-
     public override both = `
 ${BaseProgram.commonDeclarations}
 
@@ -652,13 +644,6 @@ export class WaterProgram extends BaseProgram {
     public static a_Depth = 2;
 
     public static ub_WaterParams = 1;
-
-    public static bindingLayouts: GfxBindingLayoutDescriptor[] = [
-        {
-            numUniformBuffers: super.numUniformBuffers + 1,
-            numSamplers: super.numSamplers + 1,
-        },
-    ];
 
     public override both = `
 ${BaseProgram.commonDeclarations}
@@ -728,15 +713,14 @@ export class TerrainProgram extends BaseProgram {
     public static a_ChunkIndex = 3;
     public static a_Lighting = 4;
 
-    public static bindingLayouts: GfxBindingLayoutDescriptor[] = [
-        {
-            numUniformBuffers: super.numUniformBuffers,
-            numSamplers: super.numSamplers + 6,
-        },
-    ];
+    public static ub_TerrainParams = 1;
 
     public override both = `
 ${BaseProgram.commonDeclarations}
+
+layout(std140) uniform ub_TerrainParams {
+    vec4 u_TerrainParams; // BlendType, _, _, _
+};
 
 layout(binding = 0) uniform sampler2D u_Texture0;
 layout(binding = 1) uniform sampler2D u_Texture1;
@@ -788,7 +772,16 @@ void mainPS() {
     vec4 tex1 = texture(SAMPLER_2D(u_Texture1), v_ChunkCoords);
     vec4 tex2 = texture(SAMPLER_2D(u_Texture2), v_ChunkCoords);
     vec4 tex3 = texture(SAMPLER_2D(u_Texture3), v_ChunkCoords);
-    vec4 tex = mix(mix(mix(tex0, tex1, alphaBlend.g), tex2, alphaBlend.b), tex3, alphaBlend.a);
+
+    float blendType = u_TerrainParams.x;
+    vec4 tex;
+    if (blendType == 0.0f) { // Classic
+        tex = mix(mix(mix(tex0, tex1, alphaBlend.g), tex2, alphaBlend.b), tex3, alphaBlend.a);
+    } else if (blendType == 1.0f) { // "Weighted"
+        float sum = saturate(dot(alphaBlend.gba, vec3(1.0f)));
+        alphaBlend.r = 1.0f - sum;
+        tex = tex0 * alphaBlend.r + tex1 * alphaBlend.g + tex2 * alphaBlend.b + tex3 * alphaBlend.a;
+    }
     vec4 diffuse = 2.0 * tex * v_Color;
 
     vec3 sunDir = -exteriorDirectColorDir.xyz;
@@ -823,7 +816,6 @@ void mainPS() {
 }
 
 export const MAX_DOODAD_INSTANCES = 32;
-export const MAX_BONE_TRANSFORMS = 300;
 
 export class ModelProgram extends BaseProgram {
     public static a_Position = 0;
@@ -835,20 +827,6 @@ export class ModelProgram extends BaseProgram {
 
     public static ub_DoodadParams = 1;
     public static ub_MaterialParams = 2;
-
-    public static bindingLayouts: GfxBindingLayoutDescriptor[] = [
-        {
-            numUniformBuffers: super.numUniformBuffers + 2,
-            numSamplers: super.numSamplers + 5,
-            samplerEntries: [
-                { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float },
-                { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float },
-                { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float },
-                { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float },
-                { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.UnfilterableFloat },
-            ],
-        },
-    ];
 
     private static buildVertexShaderBlock(
         colorType: "diffuse" | "color" | "edgeFade" | "bw",
@@ -908,7 +886,7 @@ layout(binding = 0) uniform sampler2D u_Texture0;
 layout(binding = 1) uniform sampler2D u_Texture1;
 layout(binding = 2) uniform sampler2D u_Texture2;
 layout(binding = 3) uniform sampler2D u_Texture3;
-layout(binding = 4) uniform sampler2D u_TextureBoneMatrix;
+layout(binding = 6) uniform sampler2D u_TextureBoneMatrix;
 
 varying vec2 v_UV0;
 varying vec2 v_UV1;
@@ -1279,19 +1257,6 @@ export class ParticleProgram extends BaseProgram {
     public static ub_EmitterParams = 1;
     public static ub_DoodadParams = 2;
 
-    public static bindingLayouts: GfxBindingLayoutDescriptor[] = [
-        {
-            numUniformBuffers: super.numUniformBuffers + 2,
-            numSamplers: super.numSamplers + 4,
-            samplerEntries: [
-                { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float },
-                { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float },
-                { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float },
-                { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.UnfilterableFloat },
-            ],
-        },
-    ];
-
     public override both = `
 ${BaseProgram.commonDeclarations}
 
@@ -1311,7 +1276,7 @@ layout(std140) uniform ub_DoodadParams {
 layout(binding = 0) uniform sampler2D u_Tex0;
 layout(binding = 1) uniform sampler2D u_Tex1;
 layout(binding = 2) uniform sampler2D u_Tex2;
-layout(binding = 3) uniform sampler2D u_DataTex;
+layout(binding = 6) uniform sampler2D u_DataTex;
 
 varying float v_InstanceID;
 varying vec4 v_Color;

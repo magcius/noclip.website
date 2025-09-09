@@ -492,8 +492,8 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
     // GfxLimits
     private _uniformBufferMaxPageByteSize: number;
-    public uniformBufferWordAlignment: number;
-    public uniformBufferMaxPageWordSize: number;
+    public uniformBufferByteAlignment: number;
+    public uniformBufferMaxPageByteSize: number;
     public supportedSampleCounts: number[];
     public occlusionQueriesRecommended: boolean;
     public computeShadersSupported: boolean = false;
@@ -554,7 +554,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         this._fallbackTexture2DArray = this.createFallbackTexture(GfxTextureDimension.n2DArray, GfxSamplerFormatKind.Float);
         this._fallbackTexture3D = this.createFallbackTexture(GfxTextureDimension.n3D, GfxSamplerFormatKind.Float);
         this._fallbackTextureCube = this.createFallbackTexture(GfxTextureDimension.Cube, GfxSamplerFormatKind.Float);
-        this._fallbackVertexBuffer = this.createBuffer(1, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static);
+        this._fallbackVertexBuffer = this.createBuffer(4, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static);
 
         // Adjust for GL defaults.
         this._currentMegaState.depthCompare = GfxCompareMode.Less;
@@ -593,8 +593,8 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     private _checkLimits(): void {
         const gl = this.gl;
 
-        this.uniformBufferWordAlignment = gl.getParameter(gl.UNIFORM_BUFFER_OFFSET_ALIGNMENT) / 4;
-        this.uniformBufferMaxPageWordSize = this._uniformBufferMaxPageByteSize / 4;
+        this.uniformBufferByteAlignment = gl.getParameter(gl.UNIFORM_BUFFER_OFFSET_ALIGNMENT);
+        this.uniformBufferMaxPageByteSize = this._uniformBufferMaxPageByteSize;
 
         const supportedSampleCounts = gl.getInternalformatParameter(gl.RENDERBUFFER, gl.DEPTH32F_STENCIL8, gl.SAMPLES);
         this.supportedSampleCounts = supportedSampleCounts ? [...supportedSampleCounts] : [];
@@ -609,8 +609,6 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     }
 
     private _checkForBugQuirks(): void {
-        const gl = this.gl;
-
         if (navigator.userAgent.includes('Firefox')) {
             // TODO(jstpierre): File Bugzilla bug, check Firefox version.
             // getQueryParameter on Firefox causes a full GL command buffer sync
@@ -871,8 +869,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         return ++this._resourceUniqueId;
     }
 
-    public createBuffer(wordCount: number, usage: GfxBufferUsage, hint: GfxBufferFrequencyHint, initialData?: Uint8Array): GfxBuffer {
-        const byteSize = wordCount * 4;
+    public createBuffer(byteSize: number, usage: GfxBufferUsage, hint: GfxBufferFrequencyHint, initialData?: Uint8Array): GfxBuffer {
         const gl_buffer_pages: WebGLBuffer[] = [];
 
         let pageByteSize: number;
@@ -1044,8 +1041,6 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         const { bindingLayout, uniformBufferBindings, samplerBindings } = descriptor;
         assert(uniformBufferBindings.length >= bindingLayout.numUniformBuffers);
         assert(samplerBindings.length >= bindingLayout.numSamplers);
-        for (let i = 0; i < bindingLayout.numUniformBuffers; i++)
-            assert(uniformBufferBindings[i].wordCount > 0);
         const bindings: GfxBindingsP_GL = { _T: _T.Bindings, ResourceUniqueId: this.getNextUniqueId(), uniformBufferBindings, samplerBindings };
         if (this._resourceCreationTracker !== null)
             this._resourceCreationTracker.trackResourceCreated(bindings);

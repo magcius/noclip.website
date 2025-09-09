@@ -10,9 +10,8 @@ import { BTIData } from '../../Common/JSYSTEM/JUTTexture.js';
 import { dfRange, dfShow } from '../../DebugFloaters.js';
 import { drawWorldSpaceBasis, drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from '../../DebugJunk.js';
 import { AABB } from '../../Geometry.js';
-import { makeStaticDataBuffer } from '../../gfx/helpers/BufferHelpers.js';
 import { getTriangleIndexCountForTopologyIndexCount, GfxTopology } from '../../gfx/helpers/TopologyHelpers.js';
-import { GfxBuffer, GfxBufferUsage, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency } from '../../gfx/platform/GfxPlatform.js';
+import { GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency } from '../../gfx/platform/GfxPlatform.js';
 import { GfxRenderInstManager } from '../../gfx/render/GfxRenderInstManager.js';
 import { GXMaterialBuilder } from '../../gx/GXMaterialBuilder.js';
 import { VertexAttributeInput } from '../../gx/gx_displaylist.js';
@@ -52,6 +51,7 @@ import { ItemBubble } from './MapObj.js';
 import { createModelObjBloomModel, createModelObjMapObj, createModelObjMapObjStrongLight, ModelObj } from './ModelObj.js';
 import { createPartsModelMapObj, PartsModel } from './PartsModel.js';
 import { GfxRenderCache } from '../../gfx/render/GfxRenderCache.js';
+import { createBufferFromData } from '../../gfx/helpers/BufferHelpers.js';
 
 const materialParams = new MaterialParams();
 const drawParams = new DrawParams();
@@ -5733,8 +5733,8 @@ class OceanRingPipe extends LiveActor {
             moveCoord(this.oceanRing, segmentSize);
         }
 
-        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, vertexData.buffer);
-        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, indexData.buffer);
+        this.vertexBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, vertexData.buffer);
+        this.indexBuffer = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, indexData.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: getVertexInputLocation(VertexAttributeInput.POS), format: GfxFormat.F32_RGB, bufferIndex: 0, bufferByteOffset: 0*0x04, },

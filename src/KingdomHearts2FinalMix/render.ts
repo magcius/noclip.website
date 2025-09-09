@@ -4,14 +4,13 @@ import * as UI from '../ui.js';
 import * as Viewer from '../viewer.js';
 
 import { DeviceProgram } from "../Program.js";
-import { GfxProgram, GfxMegaStateDescriptor, GfxDevice, GfxCullMode, GfxBlendMode, GfxBlendFactor, GfxCompareMode, GfxTexture, GfxSampler, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxRenderPass, GfxTextureDimension, GfxFormat, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxChannelWriteMask, GfxVertexBufferDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D, GfxIndexBufferDescriptor } from '../gfx/platform/GfxPlatform.js';
+import { GfxProgram, GfxMegaStateDescriptor, GfxDevice, GfxCullMode, GfxBlendMode, GfxBlendFactor, GfxCompareMode, GfxTexture, GfxSampler, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxRenderPass, GfxTextureDimension, GfxFormat, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxChannelWriteMask, GfxVertexBufferDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D, GfxIndexBufferDescriptor, GfxBufferFrequencyHint } from '../gfx/platform/GfxPlatform.js';
 import { mat4, vec2, vec4 } from 'gl-matrix';
 import { GfxRenderInstList, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
 import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { TextureHolder, TextureMapping } from '../TextureHolder.js';
 import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers.js';
 import { nArray, assertExists, assert } from '../util.js';
-import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers.js';
 import { fillMatrix4x4, fillMatrix4x3, fillVec4 } from '../gfx/helpers/UniformBufferHelpers.js';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
@@ -19,6 +18,7 @@ import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import { convertToCanvas } from '../gfx/helpers/TextureConversionHelpers.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { GfxShaderLibrary } from '../gfx/helpers/GfxShaderLibrary.js';
+import { createBufferFromData } from '../gfx/helpers/BufferHelpers.js';
 
 export function textureToCanvas(texture: MAP.Texture, baseName: string): Viewer.Texture {
     const canvas = convertToCanvas(ArrayBufferSlice.fromView(texture.pixels()), texture.width(), texture.height());
@@ -503,8 +503,8 @@ export class MapData {
         }
 
         const device = cache.device;
-        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, vBuffer.buffer);
-        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, iBuffer.buffer);
+        this.vertexBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, vBuffer.buffer);
+        this.indexBuffer = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, iBuffer.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: KingdomHeartsIIProgram.a_Position, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0*0x04, },

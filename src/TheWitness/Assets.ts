@@ -4,8 +4,7 @@ import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { Color } from "../Color.js";
 import * as LZ4 from "../Common/Compression/LZ4.js";
 import { AABB } from "../Geometry.js";
-import { makeStaticDataBufferFromSlice } from "../gfx/helpers/BufferHelpers.js";
-import { GfxBuffer, GfxBufferUsage, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform.js";
+import { GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform.js";
 import { getFormatByteSize } from "../gfx/platform/GfxPlatformFormat.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { GfxRenderInst } from "../gfx/render/GfxRenderInstManager.js";
@@ -16,6 +15,7 @@ import { decompressZipFileEntry, parseZipFile, ZipFile, ZipFileEntry } from "../
 import { Entity } from "./Entity.js";
 import { load_entities } from "./Entity_Types.js";
 import { Stream, Stream_read_Color, Stream_read_Vector2, Stream_read_Vector3, Stream_read_Vector4 } from "./Stream.js";
+import { createBufferFromSlice } from "../gfx/helpers/BufferHelpers.js";
 
 export const enum Asset_Type {
     Texture,
@@ -485,10 +485,10 @@ class Device_Mesh {
         this.index_count = sub_mesh_asset.index_count;
         this.instance_count = calculate_instance_count(mesh_asset.material_array[this.material_index]);
 
-        this.vertex_buffer = makeStaticDataBufferFromSlice(device, GfxBufferUsage.Vertex, sub_mesh_asset.vertex_data);
+        this.vertex_buffer = createBufferFromSlice(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, sub_mesh_asset.vertex_data);
 
         if (this.index_count > 0) {
-            this.index_buffer = makeStaticDataBufferFromSlice(device, GfxBufferUsage.Index, sub_mesh_asset.index_data);
+            this.index_buffer = createBufferFromSlice(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, sub_mesh_asset.index_data);
         } else {
             this.index_buffer = null;
         }

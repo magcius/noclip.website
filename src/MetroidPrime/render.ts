@@ -1404,9 +1404,11 @@ export class CMDLRenderer {
     }
 
     public destroy(device: GfxDevice) {
-        if (this.animationData && this.cmdlData.hasSkinIndexData) {
-            // This instance is not part of the CMDL cache.
-            this.cmdlData.destroy(device);
+        if (this.animationData) {
+            if (this.cmdlData.hasSkinIndexData) {
+                // This instance is not part of the CMDL cache.
+                this.cmdlData.destroy(device);
+            }
             this.particleDatabase.Destroy(device);
         }
     }

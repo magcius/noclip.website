@@ -1,25 +1,25 @@
 import { mat4, ReadonlyVec3, vec3 } from "gl-matrix";
-import { makeBackbufferDescSimple, makeAttachmentClearDescriptor, opaqueBlackFullClearRenderPassDescriptor } from "../../gfx/helpers/RenderGraphHelpers.js";
+import { IS_DEVELOPMENT } from "../../BuildVersion.js";
+import { Color, colorCopy, colorNewCopy, OpaqueBlack, TransparentBlack, White } from "../../Color.js";
+import { makeMegaState } from "../../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
+import { GfxShaderLibrary } from "../../gfx/helpers/GfxShaderLibrary.js";
+import { makeAttachmentClearDescriptor, makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor } from "../../gfx/helpers/RenderGraphHelpers.js";
+import { reverseDepthForCompareMode } from "../../gfx/helpers/ReversedDepthHelpers.js";
+import { convertToTriangleIndexBuffer, filterDegenerateTriangleIndexBuffer, GfxTopology } from "../../gfx/helpers/TopologyHelpers.js";
+import { fillColor, fillMatrix4x3, fillMatrix4x4, fillVec3v, fillVec4 } from "../../gfx/helpers/UniformBufferHelpers.js";
 import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxChannelWriteMask, GfxCompareMode, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxMegaStateDescriptor, GfxMipFilterMode, GfxPrimitiveTopology, GfxProgram, GfxSamplerDescriptor, GfxTexFilterMode, GfxTexture, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxWrapMode, makeTextureDescriptor2D } from "../../gfx/platform/GfxPlatform.js";
 import { GfxrAttachmentSlot } from "../../gfx/render/GfxRenderGraph.js";
 import { GfxRenderHelper } from "../../gfx/render/GfxRenderHelper.js";
 import { GfxRenderInst, GfxRenderInstList } from "../../gfx/render/GfxRenderInstManager.js";
-import { SceneContext } from "../../SceneBase.js";
-import { ViewerRenderInput } from "../../viewer.js";
-import { RwAlphaTestFunction, RwBlendFunction, RwCamera, RwCullMode, RwPrimitiveType, RwRaster, RwRasterFormat, RwTextureAddressMode, RwTextureFilterMode } from "./rwcore.js";
-import { makeStaticDataBuffer } from "../../gfx/helpers/BufferHelpers.js";
-import { convertToTriangleIndexBuffer, convertToTriangles, filterDegenerateTriangleIndexBuffer, GfxTopology } from "../../gfx/helpers/TopologyHelpers.js";
-import { makeMegaState } from "../../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
-import { reverseDepthForCompareMode } from "../../gfx/helpers/ReversedDepthHelpers.js";
-import { fillColor, fillMatrix4x3, fillMatrix4x4, fillVec3v, fillVec4 } from "../../gfx/helpers/UniformBufferHelpers.js";
-import { Color, colorCopy, colorNewCopy, OpaqueBlack, TransparentBlack, White } from "../../Color.js";
-import { assert, nArray } from "../../util.js";
-import { TextureMapping } from "../../TextureHolder.js";
-import { DeviceProgram } from "../../Program.js";
-import { GfxShaderLibrary } from "../../gfx/helpers/GfxShaderLibrary.js";
-import { RpLightFlag, RpLightType, RpWorld } from "./rpworld.js";
 import { getMatrixAxisZ } from "../../MathHelpers.js";
-import { IS_DEVELOPMENT } from "../../BuildVersion.js";
+import { DeviceProgram } from "../../Program.js";
+import { SceneContext } from "../../SceneBase.js";
+import { TextureMapping } from "../../TextureHolder.js";
+import { nArray } from "../../util.js";
+import { ViewerRenderInput } from "../../viewer.js";
+import { RpLightFlag, RpLightType, RpWorld } from "./rpworld.js";
+import { RwAlphaTestFunction, RwBlendFunction, RwCamera, RwCullMode, RwRaster, RwRasterFormat, RwTextureAddressMode, RwTextureFilterMode } from "./rwcore.js";
+import { createBufferFromData } from "../../gfx/helpers/BufferHelpers.js";
 
 interface RwGfxProgramDefines {
     useNormalArray: boolean;
@@ -539,7 +539,7 @@ export class RwGfx {
             }
         }
 
-        const buffer = makeStaticDataBuffer(this.device, GfxBufferUsage.Vertex, data.buffer);
+        const buffer = createBufferFromData(this.device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, data.buffer);
         const descriptors = [{ buffer }];
 
         return { buffer, data, vertexCount, descriptors };
@@ -547,8 +547,8 @@ export class RwGfx {
 
     public createDynamicVertexBuffer(vertexCount: number): RwGfxVertexBuffer {
         const wordCount = vertexCount * 12;
-        const buffer = this.device.createBuffer(wordCount, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Dynamic);
         const data = new Float32Array(wordCount);
+        const buffer = this.device.createBuffer(data.byteLength, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Dynamic);
         const descriptors = [{ buffer }];
 
         return { buffer, data, vertexCount, descriptors };
@@ -589,7 +589,7 @@ export class RwGfx {
     public createIndexBuffer(indices: Uint16Array): RwGfxIndexBuffer {
         const data = filterDegenerateTriangleIndexBuffer(convertToTriangleIndexBuffer(GfxTopology.TriStrips, indices));
 
-        const buffer = makeStaticDataBuffer(this.device, GfxBufferUsage.Index, data.buffer);
+        const buffer = createBufferFromData(this.device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, data.buffer);
         const descriptor = { buffer };
         const indexCount = data.length;
 
@@ -597,9 +597,8 @@ export class RwGfx {
     }
 
     public createDynamicIndexBuffer(indexCount: number): RwGfxIndexBuffer {
-        const wordCount = (indexCount + 1) / 2;
-        const buffer = this.device.createBuffer(wordCount, GfxBufferUsage.Index, GfxBufferFrequencyHint.Dynamic);
-        const data = new Uint16Array(wordCount);
+        const data = new Uint16Array(indexCount);
+        const buffer = this.device.createBuffer(data.byteLength, GfxBufferUsage.Index, GfxBufferFrequencyHint.Dynamic);
         const descriptor = { buffer };
 
         return { buffer, data, descriptor, indexCount };

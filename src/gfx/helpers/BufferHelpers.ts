@@ -3,7 +3,7 @@
 
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { GfxBuffer, GfxDevice, GfxBufferUsage, GfxBufferFrequencyHint } from "../platform/GfxPlatform.js";
-import { assert, align } from "../platform/GfxPlatformUtil.js";
+import { assert } from "../platform/GfxPlatformUtil.js";
 
 export interface GfxCoalescedBuffer {
     buffer: GfxBuffer;
@@ -16,11 +16,10 @@ export function coalesceBuffer(device: GfxDevice, usage: GfxBufferUsage, datas: 
     for (let i = 0; i < datas.length; i++)
         dataLength += datas[i].byteLength;
 
-    const wordCount = align(dataLength, 4) / 4;
-    const buffer = device.createBuffer(wordCount, usage, GfxBufferFrequencyHint.Static);
+    const buffer = device.createBuffer(dataLength, usage, GfxBufferFrequencyHint.Static);
 
     const coalescedBuffers: GfxCoalescedBuffer[] = [];
-    const combinedData = new Uint8Array(wordCount * 4);
+    const combinedData = new Uint8Array(dataLength);
     let byteOffset: number = 0;
     for (let i = 0; i < datas.length; i++) {
         const data = datas[i];
@@ -107,10 +106,10 @@ export class GfxBufferCoalescerCombo {
     }
 }
 
-export function makeStaticDataBuffer(device: GfxDevice, usage: GfxBufferUsage, data: ArrayBufferLike, srcOffset = 0, srcLength = data.byteLength): GfxBuffer {
-    return device.createBuffer(align(data.byteLength, 4) / 4, usage, GfxBufferFrequencyHint.Static, new Uint8Array(data, srcOffset, srcLength));
+export function createBufferFromData(device: GfxDevice, usage: GfxBufferUsage, hint: GfxBufferFrequencyHint, data: ArrayBufferLike, srcOffset = 0, srcLength = data.byteLength): GfxBuffer {
+    return device.createBuffer(data.byteLength, usage, hint, new Uint8Array(data, srcOffset, srcLength));
 }
 
-export function makeStaticDataBufferFromSlice(device: GfxDevice, usage: GfxBufferUsage, data: ArrayBufferSlice): GfxBuffer {
-    return device.createBuffer(align(data.byteLength, 4) / 4, usage, GfxBufferFrequencyHint.Static, data.createTypedArray(Uint8Array));
+export function createBufferFromSlice(device: GfxDevice, usage: GfxBufferUsage, hint: GfxBufferFrequencyHint, data: ArrayBufferSlice): GfxBuffer {
+    return device.createBuffer(data.byteLength, usage, GfxBufferFrequencyHint.Static, data.createTypedArray(Uint8Array));
 }

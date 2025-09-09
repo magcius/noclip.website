@@ -1,9 +1,8 @@
 
-import { GfxDevice, GfxBuffer, GfxInputLayout, GfxFormat, GfxVertexBufferFrequency, GfxVertexAttributeDescriptor, GfxBufferUsage, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxCullMode, GfxCompareMode, makeTextureDescriptor2D, GfxProgram, GfxMegaStateDescriptor, GfxBlendMode, GfxBlendFactor, GfxInputLayoutBufferDescriptor, GfxTexture, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform.js";
+import { GfxDevice, GfxBuffer, GfxInputLayout, GfxFormat, GfxVertexBufferFrequency, GfxVertexAttributeDescriptor, GfxBufferUsage, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxCullMode, GfxCompareMode, makeTextureDescriptor2D, GfxProgram, GfxMegaStateDescriptor, GfxBlendMode, GfxBlendFactor, GfxInputLayoutBufferDescriptor, GfxTexture, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor, GfxBufferFrequencyHint } from "../gfx/platform/GfxPlatform.js";
 import { BINModel, BINTexture, BINModelSector, BINModelPart, GSConfiguration } from "./bin.js";
 import { DeviceProgram } from "../Program.js";
 import * as Viewer from "../viewer.js";
-import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
 import { ReadonlyMat4, mat4, vec3 } from "gl-matrix";
 import { fillMatrix4x3, fillColor, fillMatrix4x2, fillVec4 } from "../gfx/helpers/UniformBufferHelpers.js";
 import { TextureMapping } from "../TextureHolder.js";
@@ -17,6 +16,7 @@ import { AABB } from "../Geometry.js";
 import { convertToCanvas } from "../gfx/helpers/TextureConversionHelpers.js";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
+import { createBufferFromData } from "../gfx/helpers/BufferHelpers.js";
 
 export class KatamariDamacyProgram extends DeviceProgram {
     public static a_Position = 0;
@@ -152,8 +152,8 @@ export class BINModelData {
     public indexBufferDescriptor: GfxIndexBufferDescriptor;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, public sectorData: BINModelSectorData, public binModel: BINModel) {
-        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, this.binModel.vertexData.buffer);
-        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, this.binModel.indexData.buffer);
+        this.vertexBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, this.binModel.vertexData.buffer);
+        this.indexBuffer = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, this.binModel.indexData.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: KatamariDamacyProgram.a_Position, bufferIndex: 0, bufferByteOffset: 0*4, format: GfxFormat.F32_RGBA },

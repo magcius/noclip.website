@@ -9,10 +9,9 @@ import { getMatrixTranslation, invlerp } from "../MathHelpers.js";
 import { DeviceProgram } from "../Program.js";
 import { SceneContext } from "../SceneBase.js";
 import { TextureMapping } from "../TextureHolder.js";
-import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
 import { makeAttachmentClearDescriptor, makeBackbufferDescSimple } from "../gfx/helpers/RenderGraphHelpers.js";
 import { fillColor, fillMatrix4x3, fillMatrix4x4, fillVec3v } from "../gfx/helpers/UniformBufferHelpers.js";
-import { GfxBindingLayoutDescriptor, GfxBuffer, GfxBufferUsage, GfxClipSpaceNearZ, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxMipFilterMode, GfxProgram, GfxSamplerFormatKind, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxWrapMode, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform.js";
+import { GfxBindingLayoutDescriptor, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxClipSpaceNearZ, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxMipFilterMode, GfxProgram, GfxSamplerFormatKind, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxWrapMode, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
@@ -23,6 +22,7 @@ import { BSA } from "./BSA.js";
 import { CELL, ESM, FRMR, LAND } from "./ESM.js";
 import { NIF, NIFData } from "./NIFBase.js";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
+import { createBufferFromData } from "../gfx/helpers/BufferHelpers.js";
 
 const noclipSpaceFromMorrowindSpace = mat4.fromValues(
     -1, 0, 0, 0,
@@ -110,7 +110,7 @@ export class ModelCache {
 
     constructor(public device: GfxDevice, private pluginData: PluginData) {
         this.renderCache = new GfxRenderCache(this.device);
-        this.zeroBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, new Uint8Array(16).buffer);
+        this.zeroBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, new Uint8Array(16).buffer);
     }
 
     public getTerrainTexture(): GfxTexture {
@@ -285,7 +285,7 @@ class CellTerrain {
         }
 
         const device = globals.modelCache.device;
-        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, vertexData.buffer);
+        this.vertexBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, vertexData.buffer);
         this.vertexBufferDescriptors = [
             { buffer: this.vertexBuffer },
         ];
@@ -313,7 +313,7 @@ class CellTerrain {
                 indexData[indexIdx++] = i3;
             }
         }
-        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, indexData.buffer);
+        this.indexBuffer = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, indexData.buffer);
         this.indexBufferDescriptor = { buffer: this.indexBuffer };
         this.indexCount = indexData.length;
 

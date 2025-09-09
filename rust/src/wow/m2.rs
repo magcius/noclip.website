@@ -10,12 +10,6 @@ use super::common::{
     fixed_precision_6_9_to_f32, parse_array, AABBox, ChunkedData, Fixedi16, Quat, Vec2, Vec3, WowArray, WowCharArray
 };
 
-// if it's an MD21 chunk, all pointers are relative to the end of that chunk
-#[derive(Debug, DekuRead)]
-pub struct M2HeaderBlock {
-    pub _header: M2Header,
-}
-
 #[derive(Debug, DekuRead, Clone)]
 #[deku(magic = b"MD20")]
 pub struct M2Header {

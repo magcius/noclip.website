@@ -31,7 +31,7 @@ class MyShapeHelper {
 
     constructor(device: GfxDevice, cache: GfxRenderCache, public loadedVertexLayout: LoadedVertexLayout, public loadedVertexData: LoadedVertexData, dynamicVertices: boolean, dynamicIndices: boolean) {
         for (let i = 0; i < loadedVertexData.vertexBuffers.length; i++) {
-            const vertexBuffer = device.createBuffer((loadedVertexData.vertexBuffers[i].byteLength + 3) / 4, GfxBufferUsage.Vertex,
+            const vertexBuffer = device.createBuffer(loadedVertexData.vertexBuffers[i].byteLength, GfxBufferUsage.Vertex,
                 dynamicVertices ? GfxBufferFrequencyHint.Dynamic : GfxBufferFrequencyHint.Static);
             this.vertexBuffers.push(vertexBuffer);
             this.vertexBufferDescriptors.push({ buffer: vertexBuffer });
@@ -39,7 +39,7 @@ class MyShapeHelper {
 
         this.inputLayout = createInputLayout(cache, loadedVertexLayout);
 
-        this.indexBuffer = device.createBuffer((loadedVertexData.indexData.byteLength + 3) / 4, GfxBufferUsage.Index,
+        this.indexBuffer = device.createBuffer(loadedVertexData.indexData.byteLength, GfxBufferUsage.Index,
             dynamicIndices ? GfxBufferFrequencyHint.Dynamic : GfxBufferFrequencyHint.Static);
 
         this.indexBufferDescriptor = { buffer: this.indexBuffer };

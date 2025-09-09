@@ -857,22 +857,6 @@ pub struct LightSkyboxRecord {
     pub _celestial_skybox_file_data_id: u32,
 }
 
-#[derive(DekuRead, Clone, Debug)]
-#[deku(ctx = "_: Wdc4Db2File")]
-pub struct LiquidObject {
-    pub _flow_direction: f32,
-    pub _flow_speed: f32,
-    pub _liquid_type_id: u32,
-}
-
-#[derive(DekuRead, Clone, Debug)]
-#[deku(ctx = "_: Wdc4Db2File")]
-pub struct LiquidTexture {
-    pub _file_data_id: u32,
-    pub _order_index: u32,
-    pub _liquid_type_id: u32,
-}
-
 #[wasm_bindgen(js_name = "WowLiquidResult", getter_with_clone)]
 #[derive(Debug, Clone)]
 pub struct LiquidResult {

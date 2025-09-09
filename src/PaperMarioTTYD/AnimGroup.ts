@@ -592,8 +592,8 @@ class AnimGroupInstance_Shape {
             vtxByteCount += this.shape.draws[i].loadedVertexData.byteLength;
             idxByteCount += this.shape.draws[i].loadedIndexData.byteLength;
         }
-        this.vtxBuffer = device.createBuffer(align(vtxByteCount, 4) / 4, GfxBufferUsage.Vertex, this.animGroupData.animGroup.hasAnyVtxAnm ? GfxBufferFrequencyHint.Dynamic : GfxBufferFrequencyHint.Static);
-        this.idxBuffer = device.createBuffer(align(idxByteCount, 4) / 4, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static);
+        this.vtxBuffer = device.createBuffer(vtxByteCount, GfxBufferUsage.Vertex, this.animGroupData.animGroup.hasAnyVtxAnm ? GfxBufferFrequencyHint.Dynamic : GfxBufferFrequencyHint.Static);
+        this.idxBuffer = device.createBuffer(idxByteCount, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static);
 
         let vtxByteOffset = 0, idxByteOffset = 0;
         this.shapeHelper = this.shape.draws.map((draw, i) => {

@@ -3,8 +3,7 @@ import * as UI from "../ui.js";
 import * as Viewer from "../viewer.js";
 import * as rw from "librw";
 import { TextureMapping, TextureBase } from "../TextureHolder.js";
-import { GfxDevice, GfxFormat, GfxBufferUsage, GfxBuffer, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxInputLayout, GfxProgram, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxTextureDimension, GfxRenderPass, GfxMegaStateDescriptor, GfxBlendMode, GfxBlendFactor, GfxBindingLayoutDescriptor, GfxCullMode, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxInputLayoutDescriptor, GfxTextureUsage, GfxSamplerFormatKind } from "../gfx/platform/GfxPlatform.js";
-import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
+import { GfxDevice, GfxFormat, GfxBufferUsage, GfxBuffer, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxInputLayout, GfxProgram, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxTextureDimension, GfxRenderPass, GfxMegaStateDescriptor, GfxBlendMode, GfxBlendFactor, GfxBindingLayoutDescriptor, GfxCullMode, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxInputLayoutDescriptor, GfxTextureUsage, GfxSamplerFormatKind, GfxBufferFrequencyHint } from "../gfx/platform/GfxPlatform.js";
 import { DeviceProgram } from "../Program.js";
 import { convertToTriangleIndexBuffer, filterDegenerateTriangleIndexBuffer, GfxTopology } from "../gfx/helpers/TopologyHelpers.js";
 import { fillMatrix4x3, fillMatrix4x4, fillColor } from "../gfx/helpers/UniformBufferHelpers.js";
@@ -23,6 +22,7 @@ import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorH
 import { GraphObjBase } from "../SceneBase.js";
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
+import { createBufferFromData } from "../gfx/helpers/BufferHelpers.js";
 
 const TIME_FACTOR = 2500; // one day cycle per minute
 
@@ -371,8 +371,8 @@ export class SkyRenderer extends BaseRenderer {
              1, -1, -1,
         ]);
         const ibuf = new Uint32Array([0,1,2,0,2,3]);
-        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, vbuf.buffer);
-        this.indexBuffer  = makeStaticDataBuffer(device, GfxBufferUsage.Index,  ibuf.buffer);
+        this.vertexBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, vbuf.buffer);
+        this.indexBuffer  = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static,  ibuf.buffer);
         this.indices = ibuf.length;
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: GTA3Program.a_Position, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0 },
@@ -633,8 +633,8 @@ export class SceneRenderer extends BaseRenderer {
             }
         }
 
-        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, vbuf.buffer);
-        this.indexBuffer  = makeStaticDataBuffer(device, GfxBufferUsage.Index,  ibuf.buffer);
+        this.vertexBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, vbuf.buffer);
+        this.indexBuffer  = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static,  ibuf.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: GTA3Program.a_Position,    bufferIndex: 0, format: GfxFormat.F32_RGB,  bufferByteOffset:  0 * 0x04 },

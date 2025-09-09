@@ -278,7 +278,7 @@ impl Wmo {
         closest_group_id
     }
 
-    fn group_portals(&self, group: &WmoGroup) -> PortalIter {
+    fn group_portals(&self, group: &WmoGroup) -> PortalIter<'_> {
         PortalIter::new(group, self)
     }
 
