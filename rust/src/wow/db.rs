@@ -1,6 +1,6 @@
 use std::{collections::{HashMap, HashSet}, io::{Cursor, Seek, SeekFrom}};
 
-use deku::prelude::*;
+use deku::{ctx::Order, prelude::*};
 use nalgebra_glm::Vec2;
 use crate::geometry::{point_dist_to_polygon, point_inside_polygon};
 
@@ -156,7 +156,7 @@ fn read_field_to_u32<R: std::io::Read + std::io::Seek>(reader: &mut Reader<R>, f
     assert!(field_size_bits <= 32);
 
     let mut buf = [0x00; 4];
-    reader.read_bytes(field_size_bytes, &mut buf)?;
+    reader.read_bytes(field_size_bytes, &mut buf, Order::Msb0)?;
     let v = u32::from_le_bytes(buf);
 
     let result = if field_size_bits == 32 {

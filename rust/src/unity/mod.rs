@@ -2,5 +2,5 @@
 
 mod version;
 mod asset_file;
-mod types;
+pub mod types;
 mod util;

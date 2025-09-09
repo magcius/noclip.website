@@ -1,5 +1,5 @@
 
-use deku::prelude::*;
+use deku::{ctx::Order, prelude::*};
 
 // https://github.com/AssetRipper/TypeTreeDumps/blob/main/StructsDump/release/2019.4.39f1.dump
 // e.g. Outer Wilds
@@ -154,6 +154,7 @@ pub struct Mesh {
 }
 
 #[derive(DekuRead, Clone, Copy, Debug)]
+#[repr(i32)]
 #[deku(id_type = "i32")]
 pub enum IndexFormat {
     UInt16 = 0,
@@ -161,6 +162,7 @@ pub enum IndexFormat {
 }
 
 #[derive(DekuRead, Clone, Copy, Debug)]
+#[repr(u8)]
 #[deku(id_type = "u8")]
 pub enum MeshCompression {
     Off = 0,
@@ -225,7 +227,7 @@ impl<'a, Ctx> DekuReader<'a, Ctx> for ByteArray where Ctx: Copy {
     fn from_reader_with_ctx<R: std::io::Read + std::io::Seek>(reader: &mut Reader<R>, _ctx: Ctx) -> Result<Self, DekuError> {
         let count = i32::from_reader_with_ctx(reader, ())? as usize;
         let mut buf = vec![0x00; count];
-        reader.read_bytes(count, &mut buf)?;
+        reader.read_bytes(count, &mut buf, Order::Msb0)?;
         Ok(ByteArray{ data: buf })
     }
 }
@@ -382,6 +384,7 @@ pub struct GLTextureSettings {
 }
 
 #[derive(DekuRead, Clone, Debug)]
+#[repr(i32)]
 #[deku(id_type = "i32")]
 pub enum TextureFilterMode {
     Nearest = 0,
@@ -390,6 +393,7 @@ pub enum TextureFilterMode {
 }
 
 #[derive(DekuRead, Clone, Debug)]
+#[repr(i32)]
 #[deku(id_type = "i32")]
 pub enum TextureWrapMode {
     Repeat = 0,
@@ -400,6 +404,7 @@ pub enum TextureWrapMode {
 
 // copied from https://github.com/Unity-Technologies/UnityCsReference/blob/129a67089d125df5b95b659d3535deaf9968e86c/Editor/Mono/AssetPipeline/TextureImporterEnums.cs#L37
 #[derive(DekuRead, Clone, Debug)]
+#[repr(i32)]
 #[deku(id_type = "i32")]
 pub enum TextureFormat {
     // Alpha 8 bit texture format.
@@ -515,6 +520,7 @@ pub enum TextureFormat {
 }
 
 #[derive(DekuRead, Clone, Debug)]
+#[repr(i32)]
 #[deku(id_type = "i32")]
 pub enum ColorSpace {
     Linear = 0x00,

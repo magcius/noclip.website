@@ -1,6 +1,6 @@
-use std::{io::{Cursor, Seek, SeekFrom}, convert::TryFrom};
-use byteorder::{ReadBytesExt, LittleEndian};
-use num_enum::{IntoPrimitive, TryFromPrimitive};
+use std::convert::TryFrom;
+use deku::prelude::*;
+use wasm_bindgen::prelude::*;
 
 use crate::halo::common::*;
 use crate::halo::scenario::*;
@@ -8,7 +8,8 @@ use crate::halo::bitmap::*;
 use crate::halo::shader::*;
 use crate::halo::model::*;
 
-#[derive(Debug, Clone)]
+#[wasm_bindgen(js_name = "HaloTagDependency")]
+#[derive(Debug, Clone, Copy, DekuRead)]
 pub struct TagDependency {
     pub tag_class: TagClass,
     pub path_pointer: Pointer,
@@ -16,18 +17,9 @@ pub struct TagDependency {
     pub tag_id: u32,
 }
 
-impl Deserialize for TagDependency {
-    fn deserialize(data: &mut Cursor<Vec<u8>>) -> Result<Self> where Self: Sized {
-        Ok(TagDependency {
-            tag_class: TagClass::deserialize(data)?,
-            path_pointer: data.read_u32::<LittleEndian>()?,
-            global_id: data.read_u32::<LittleEndian>()?,
-            tag_id: data.read_u32::<LittleEndian>()?,
-        })
-    }
-}
-
-#[derive(Debug, IntoPrimitive, TryFromPrimitive, Copy, Clone, PartialEq, Hash, Eq)]
+#[wasm_bindgen(js_name = "HaloTagClass")]
+#[derive(Debug, Copy, Clone, PartialEq, Hash, Eq, DekuRead)]
+#[deku(id_type = "u32")]
 #[repr(u32)]
 pub enum TagClass {
     Actor = 0x61637472,
@@ -75,7 +67,7 @@ pub enum TagClass {
     Model = 0x6D6F6465,
     MultiplayerScenarioDescription = 0x6D706C79,
     PreferencesNetworkGame = 0x6E677072,
-    #[num_enum(alternatives = [0xFFFFFFFF])]
+    #[deku(id_pat = "0 | 0xFFFFFFFF")]
     Null = 0,
     Object = 0x6F626A65,
     Particle = 0x70617274,
@@ -117,13 +109,7 @@ pub enum TagClass {
     WeaponHudInterface = 0x77706869,
 }
 
-impl Deserialize for TagClass {
-    fn deserialize(data: &mut Cursor<Vec<u8>>) -> Result<Self> where Self: Sized {
-        Ok(TagClass::try_from(data.read_u32::<LittleEndian>()?)?)
-    }
-}
-
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, DekuRead)]
 pub struct TagHeader {
     pub primary_class: TagClass,
     pub secondary_class: TagClass,
@@ -131,26 +117,11 @@ pub struct TagHeader {
     pub tag_id: u32,
     pub tag_path: u32,
     pub tag_data: u32,
+    #[deku(pad_bytes_after = "4")]
     pub indexed: u32, // seems to always be 0 in bloodgulch
 
+    #[deku(skip)]
     pub path: String, // read in after deserialization
-}
-
-impl Deserialize for TagHeader {
-    fn deserialize(data: &mut Cursor<Vec<u8>>) -> Result<Self> where Self: Sized {
-        let tag = TagHeader {
-            primary_class: TagClass::deserialize(data)?,
-            secondary_class: TagClass::deserialize(data)?,
-            tertiary_class: TagClass::deserialize(data)?,
-            tag_id: data.read_u32::<LittleEndian>()?,
-            tag_path: data.read_u32::<LittleEndian>()?,
-            tag_data: data.read_u32::<LittleEndian>()?,
-            indexed: data.read_u32::<LittleEndian>()?,
-            path: String::new(),
-        };
-        data.seek(SeekFrom::Current(0x4))?;
-        Ok(tag)
-    }
 }
 
 #[derive(Debug, Clone)]

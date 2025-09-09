@@ -1,12 +1,13 @@
-use std::{io::{Cursor, Seek, SeekFrom}, convert::TryFrom};
-use byteorder::{ReadBytesExt, LittleEndian};
-use num_enum::{IntoPrimitive, TryFromPrimitive};
+use std::io::{Cursor, Seek};
+
+use deku::prelude::*;
 use wasm_bindgen::prelude::*;
+use crate::{halo::common::*, unity::types::common::NullTerminatedAsciiString};
+use crate::halo::bitmap_utils;
 
-use crate::halo::common::*;
-use crate::halo::util::*;
-
-#[derive(Debug, IntoPrimitive, TryFromPrimitive, Clone, Copy)]
+#[wasm_bindgen(js_name = "HaloBitmapType")]
+#[derive(Debug, Clone, Copy, DekuRead)]
+#[deku(id_type = "u16")]
 #[repr(u16)]
 pub enum BitmapType {
     Tex2D = 0x0,
@@ -16,8 +17,9 @@ pub enum BitmapType {
     InterfaceBitmaps = 0x4,
 }
 
-#[wasm_bindgen]
-#[derive(Debug, IntoPrimitive, TryFromPrimitive, Clone, Copy)]
+#[wasm_bindgen(js_name = "HaloBitmapEncodingFormat")]
+#[derive(Debug, Clone, Copy, DekuRead)]
+#[deku(id_type = "u16")]
 #[repr(u16)]
 pub enum BitmapEncodingFormat {
     Dxt1 = 0x0,
@@ -28,7 +30,9 @@ pub enum BitmapEncodingFormat {
     Monochrome = 0x5,
 }
 
-#[derive(Debug, IntoPrimitive, TryFromPrimitive, Copy, Clone)]
+#[wasm_bindgen(js_name = "HaloBitmapUsage")]
+#[derive(Debug, Copy, Clone, DekuRead)]
+#[deku(id_type = "u16")]
 #[repr(u16)]
 pub enum BitmapUsage {
     AlphaBlend = 0x0,
@@ -39,7 +43,8 @@ pub enum BitmapUsage {
     Vectormap = 0x5,
 }
 
-#[derive(Debug, IntoPrimitive, TryFromPrimitive, Copy, Clone)]
+#[derive(Debug, Copy, Clone, DekuRead)]
+#[deku(id_type = "u16")]
 #[repr(u16)]
 pub enum BitmapSpriteBudgetSize {
     Sq32x32 = 0x0,
@@ -51,14 +56,17 @@ pub enum BitmapSpriteBudgetSize {
     Sq2048x2048 = 0x6,
 }
 
-#[derive(Debug, IntoPrimitive, TryFromPrimitive, Copy, Clone)]
+#[wasm_bindgen(js_name = "HaloBitmapSpriteUsage")]
+#[derive(Debug, Copy, Clone, DekuRead)]
+#[deku(id_type = "u16")]
 #[repr(u16)]
 pub enum BitmapSpriteUsage {
     BlendAddSubtractMax = 0x0,
     MultiplyMin = 0x1,
     DoubleMultiply = 0x2,
 }
-#[derive(Debug, Clone)]
+
+#[derive(Debug, Clone, DekuRead)]
 pub struct Sprite {
     pub bitmap_index: u16,
     pub left: f32,
@@ -68,39 +76,17 @@ pub struct Sprite {
     pub registration_point: Point2D,
 }
 
-impl Deserialize for Sprite {
-    fn deserialize(data: &mut Cursor<Vec<u8>>) -> Result<Self> where Self: Sized {
-        Ok(Sprite{
-            bitmap_index: data.read_u16::<LittleEndian>()?,
-            left: data.read_f32::<LittleEndian>()?,
-            right: data.read_f32::<LittleEndian>()?,
-            top: data.read_f32::<LittleEndian>()?,
-            bottom: data.read_f32::<LittleEndian>()?,
-            registration_point: Point2D::deserialize(data)?,
-        })
-    }
-}
-
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, DekuRead)]
 pub struct BitmapGroup {
-    pub name: String,
+    pub name: NullTerminatedAsciiString,
     pub first_bitmap_index: u16,
     pub bitmap_count: u16,
     pub sprites: Block<Sprite>,
 }
 
-impl Deserialize for BitmapGroup {
-    fn deserialize(data: &mut Cursor<Vec<u8>>) -> Result<Self> where Self: Sized {
-        Ok(BitmapGroup {
-            name: read_null_terminated_string(data)?,
-            first_bitmap_index: data.read_u16::<LittleEndian>()?,
-            bitmap_count: data.read_u16::<LittleEndian>()?,
-            sprites: Block::deserialize(data)?,
-        })
-    }
-}
-
-#[derive(Debug, IntoPrimitive, TryFromPrimitive, Copy, Clone)]
+#[wasm_bindgen(js_name = "HaloBitmapClass")]
+#[derive(Debug, Copy, Clone, DekuRead)]
+#[deku(id_type = "u32")]
 #[repr(u32)]
 pub enum BitmapClass {
     None = 0xFFFFFFFF,
@@ -191,7 +177,8 @@ pub enum BitmapClass {
 }
 
 #[wasm_bindgen]
-#[derive(Debug, IntoPrimitive, TryFromPrimitive, Copy, Clone)]
+#[derive(Debug, Copy, Clone, DekuRead)]
+#[deku(id_type = "u16")]
 #[repr(u16)]
 pub enum BitmapDataType {
     Tex2D = 0x0,
@@ -201,7 +188,8 @@ pub enum BitmapDataType {
 }
 
 #[wasm_bindgen]
-#[derive(Debug, IntoPrimitive, TryFromPrimitive, Copy, Clone)]
+#[derive(Debug, Copy, Clone, DekuRead)]
+#[deku(id_type = "u16")]
 #[repr(u16)]
 pub enum BitmapFormat {
     A8 = 0x0,
@@ -241,7 +229,8 @@ impl BitmapFormat {
     }
 }
 
-#[derive(Debug, Clone)]
+#[wasm_bindgen(js_name = "HaloBitmapMetadata")]
+#[derive(Debug, Clone, DekuRead)]
 pub struct BitmapData {
     pub bitmap_class: BitmapClass,
     pub width: u16,
@@ -252,110 +241,72 @@ pub struct BitmapData {
     pub flags: u16,
     pub registration_point: Point2DInt,
     pub mipmap_count: u16,
+    #[deku(pad_bytes_before = "2")]
     pub pixel_data_offset: Pointer,
     pub pixel_data_size: u32,
     pub bitmap_tag_id: u32,
+    #[deku(pad_bytes_after = "8")]
     pub pointer: Pointer,
 }
 
+#[wasm_bindgen(js_class = "HaloBitmapMetadata")]
 impl BitmapData {
     pub fn is_external(&self) -> bool {
         (self.flags & 0x100) > 0
     }
 }
 
-impl Deserialize for BitmapData {
-    fn deserialize(data: &mut Cursor<Vec<u8>>) -> Result<Self> where Self: Sized {
-        let bitmap_class = BitmapClass::try_from(data.read_u32::<LittleEndian>()?)?;
-        let width = data.read_u16::<LittleEndian>()?;
-        let height = data.read_u16::<LittleEndian>()?;
-        let depth = data.read_u16::<LittleEndian>()?;
-        let bitmap_type = BitmapDataType::try_from(data.read_u16::<LittleEndian>()?)?;
-        let format = BitmapFormat::try_from(data.read_u16::<LittleEndian>()?)?;
-        let flags = data.read_u16::<LittleEndian>()?;
-        let registration_point = Point2DInt::deserialize(data)?;
-        let mipmap_count = data.read_u16::<LittleEndian>()?;
-        data.seek(SeekFrom::Current(2))?;
-        let pixel_data_offset = data.read_u32::<LittleEndian>()? as Pointer;
-        let pixel_data_size = data.read_u32::<LittleEndian>()?;
-        let bitmap_tag_id = data.read_u32::<LittleEndian>()?;
-        let pointer = data.read_u32::<LittleEndian>()? as Pointer;
-        data.seek(SeekFrom::Current(8))?;
-        Ok(BitmapData {
-            bitmap_class,
-            width,
-            height,
-            depth,
-            bitmap_type,
-            format,
-            flags,
-            registration_point,
-            mipmap_count,
-            pixel_data_offset,
-            pixel_data_size,
-            bitmap_tag_id,
-            pointer,
-        })
-    }
-}
-
-#[derive(Debug, Clone)]
+#[wasm_bindgen(js_name = "HaloBitmap")]
+#[derive(Debug, Clone, DekuRead)]
 pub struct Bitmap {
     pub bitmap_type: BitmapType,
     pub encoding_format: BitmapEncodingFormat,
     pub usage: BitmapUsage,
     pub flags: u16,
-    /*
-    pub detail_fade_factor: f32,
-    pub sharpen_amount: f32,
-    pub bump_height: f32,
-    sprite_budget_size: BitmapSpriteBudgetSize,
-    sprite_budget_count: u16,
-    pub color_plate_width: u16, // non-cached
-    pub color_plate_height: u16, // non-cached
-    compressed_color_plate_pointer: Pointer, // non-cached
-    processed_pixel_data: Pointer, // non-cached
-    pub blur_filter_size: f32,
-    pub alpha_bias: f32,
-    */
+    pub _detail_fade_factor: f32,
+    pub _sharpen_amount: f32,
+    pub _bump_height: f32,
+    _sprite_budget_size: BitmapSpriteBudgetSize,
+    _sprite_budget_count: u16,
+    pub _color_plate_width: u16, // non-cached
+    pub _color_plate_height: u16, // non-cached
+    _compressed_color_plate_pointer: Pointer, // non-cached
+    _processed_pixel_data: Pointer, // non-cached
+    pub _blur_filter_size: f32,
+    pub _alpha_bias: f32,
     pub mipmap_count: u16,
     pub sprite_usage: BitmapSpriteUsage,
     pub sprite_spacing: u16,
-    pub bitmap_group_sequence: Block<BitmapGroup>,
-    pub data: Block<BitmapData>,
+    #[deku(pad_bytes_before = "34")]
+    pub(crate) bitmap_group_sequence: Block<BitmapGroup>,
+    pub(crate) data: Block<BitmapData>,
 }
 
+#[wasm_bindgen(js_class = "HaloBitmap")]
 impl Bitmap {
-    pub fn get_dimensions(&self) -> (u32, u32) {
-        todo!();
+    pub fn get_metadata_for_index(&self, index: usize) -> BitmapData {
+        self.data.items.as_ref().unwrap()[index].clone()
+    }
+
+    pub fn get_tag_id(&self) -> u32 {
+        self.data.items.as_ref().unwrap()[0].bitmap_tag_id
     }
 }
 
-impl Deserialize for Bitmap {
-    fn deserialize(data: &mut Cursor<Vec<u8>>) -> Result<Self> where Self: Sized {
-        let start = data.position();
-        let bitmap_type = BitmapType::try_from(data.read_u16::<LittleEndian>()?)?;
-        let encoding_format = BitmapEncodingFormat::try_from(data.read_u16::<LittleEndian>()?)?;
-        let usage = BitmapUsage::try_from(data.read_u16::<LittleEndian>()?)?;
-        let flags = data.read_u16::<LittleEndian>()?;
-        let _detail_fade_factor = data.read_f32::<LittleEndian>()?;
-        let _sharpen_amount = data.read_f32::<LittleEndian>()?;
-        let _bump_height = data.read_f32::<LittleEndian>()?;
-        let _sprite_budget_size = BitmapSpriteBudgetSize::try_from(data.read_u16::<LittleEndian>()?)?;
-        let _sprite_budget_count = data.read_u16::<LittleEndian>()?;
-        let _color_plate_width = data.read_u16::<LittleEndian>()?; // non-cache
-        let _color_plate_height = data.read_u16::<LittleEndian>()?; // non-cache
-        let _compressed_color_plate_pointer = data.read_u32::<LittleEndian>()? as Pointer; // non-cache
-        let _processed_pixel_data = data.read_u32::<LittleEndian>()? as Pointer; // non-cache
-        let _blur_filter_size = data.read_f32::<LittleEndian>()?;
-        let _alpha_bias = data.read_f32::<LittleEndian>()?;
-        let mipmap_count = data.read_u16::<LittleEndian>()?;
-        let sprite_usage = BitmapSpriteUsage::try_from(data.read_u16::<LittleEndian>()?)?;
-        let sprite_spacing = data.read_u16::<LittleEndian>()?;
-        data.seek(SeekFrom::Start(start + 84))?;
-        let bitmap_group_sequence = Block::deserialize(data)?;
-        data.seek(SeekFrom::Start(start + 96))?;
-        let data = Block::deserialize(data)?;
-        Ok(Bitmap { bitmap_type, encoding_format, usage, flags, mipmap_count, sprite_usage, sprite_spacing, bitmap_group_sequence, data })
+pub fn get_and_convert_bitmap_data(reader: &mut deku::reader::Reader<Cursor<Vec<u8>>>, bitmap_data: &BitmapData) -> Vec<u8> {
+    let offset = bitmap_data.pixel_data_offset as u64;
+    let length = bitmap_data.pixel_data_size as usize;
+    let mut bytes = vec![0; length];
+    reader.seek(std::io::SeekFrom::Start(offset)).unwrap();
+    reader.read_bytes(length, &mut bytes, deku::ctx::Order::Msb0).unwrap();
+    match bitmap_data.format {
+        BitmapFormat::P8 | BitmapFormat::P8Bump => bitmap_utils::convert_p8_data(&bytes),
+        BitmapFormat::A8r8g8b8 => bitmap_utils::convert_a8r8g8b8_data(&bytes),
+        BitmapFormat::X8r8g8b8 => bitmap_utils::convert_x8r8g8b8_data(&bytes),
+        BitmapFormat::A8 => bitmap_utils::convert_a8_data(&bytes),
+        BitmapFormat::Y8 => bitmap_utils::convert_y8_data(&bytes),
+        BitmapFormat::A8y8 => bitmap_utils::convert_a8y8_data(&bytes),
+        BitmapFormat::R5g6b5 => bitmap_utils::convert_r5g6b5_data(&bytes),
+        _ => bytes,
     }
 }
