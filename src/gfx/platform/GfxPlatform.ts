@@ -1,10 +1,11 @@
 
-// This provides a "sane" low-level API for me to render to, kind of inspired
-// by Metal, WebGPU and friends. The goal here is to be a good API to write to
-// while also allowing me to port to other backends (like WebGPU) in the future.
-
 import type { GfxBuffer, GfxTexture, GfxRenderTarget, GfxSampler, GfxProgram, GfxInputLayout, GfxRenderPipeline, GfxBindings, GfxResource, GfxReadback, GfxQueryPool, GfxComputePipeline, _T, GfxResourceBase } from "./GfxPlatformImpl.js";
 import { GfxFormat } from "./GfxPlatformFormat.js";
+
+export enum GfxPlatform {
+    WebGL2,
+    WebGPU,
+}
 
 export enum GfxCompareMode {
     Never        = WebGLRenderingContext.NEVER,
@@ -22,7 +23,7 @@ export enum GfxFrontFaceMode {
     CW  = WebGLRenderingContext.CW,
 }
 
-export const enum GfxCullMode {
+export enum GfxCullMode {
     None,
     Front,
     Back,
@@ -329,7 +330,7 @@ export const enum GfxClipSpaceNearZ {
 }
 
 export interface GfxVendorInfo {
-    readonly platformString: string;
+    readonly platform: GfxPlatform;
     readonly glslVersion: string;
     readonly explicitBindingLocations: boolean;
     readonly separateSamplerTextures: boolean;

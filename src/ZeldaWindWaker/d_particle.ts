@@ -171,14 +171,14 @@ export class dPa_control_c {
         return null;
     }
 
-    private patchResData(resData: JPAResourceData): void {
+    private patchResData(globals: dGlobals, resData: JPAResourceData): void {
         const texIdx = resData.textureIds[resData.res.bsp1.texIdx];
 
         // From dPa_simpleEcallBack::draw(). Fixup TEV settings for particles that access the framebuffer.  
         if (resData.jpacData.textureMapping[texIdx].lateBinding === 'OpaqueSceneTexture') {
             // Alpha = A0
             resData.res.bsp1.alphaInSelect = 1;
-            resData.createMaterial();
+            resData.createMaterial(globals.modelCache.device);
         }
     }
 
@@ -189,7 +189,7 @@ export class dPa_control_c {
                 const [jpacData, jpaResRaw] = data;
                 const cache = globals.modelCache.cache;
                 const resData = new JPAResourceData(cache, jpacData, jpaResRaw);
-                this.patchResData(resData);
+                this.patchResData(globals, resData);
                 this.resourceDatas.set(userIndex, resData);
             } else {
                 return null;

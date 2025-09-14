@@ -19,7 +19,7 @@ import * as GX from "../../gx/gx_enum.js";
 import { assert, readString, assertExists, nArray, align } from "../../util.js";
 import { vec3, mat4, vec2, ReadonlyVec3, ReadonlyMat4 } from "gl-matrix";
 import { Endianness } from "../../endian.js";
-import { GfxDevice, GfxInputLayout, GfxBuffer, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBufferUsage, GfxBufferFrequencyHint, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferDescriptor, GfxTexture, GfxTextureDimension, GfxSamplerFormatKind, makeTextureDescriptor2D, GfxBindings, GfxBindingLayoutDescriptor } from "../../gfx/platform/GfxPlatform.js";
+import { GfxDevice, GfxInputLayout, GfxBuffer, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBufferUsage, GfxBufferFrequencyHint, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferDescriptor, GfxTexture, GfxTextureDimension, GfxSamplerFormatKind, makeTextureDescriptor2D, GfxBindings, GfxBindingLayoutDescriptor, GfxPlatform } from "../../gfx/platform/GfxPlatform.js";
 import { getPointHermite } from "../../Spline.js";
 import { getVertexInputLocation, GX_Program } from "../../gx/gx_material.js";
 import { type Color, colorNewFromRGBA, colorCopy, colorNewCopy, White, colorFromRGBA8, colorLerp, colorMult, colorNewFromRGBA8, colorToRGBA8 } from "../../Color.js";
@@ -566,10 +566,10 @@ export class JPAResourceData {
         if (ssp1 !== null)
             this.ensureTextureFromTDB1Index(cache, ssp1.texIdx, texIdBase);
 
-        this.createMaterial();
+        this.createMaterial(cache.device);
     }
 
-    public createMaterial(): void {
+    public createMaterial(device: GfxDevice): void {
         const bsp1 = this.res.bsp1;
         const etx1 = this.res.etx1;
         const ssp1 = this.res.ssp1;
@@ -655,7 +655,11 @@ export class JPAResourceData {
             needsDynamicTextureIndex = true;
         }
 
-        this.usingInstancingP = USE_INSTANCING && !isStripe(bsp1.shapeType);
+        // Disable instancing on WebGPU since our shader relies on non-uniform texture sampling, which errors out right now...
+        // https://github.com/gpuweb/gpuweb/issues/2482
+        const useInstancing = USE_INSTANCING && device.queryVendorInfo().platform !== GfxPlatform.WebGPU;
+
+        this.usingInstancingP = useInstancing && !isStripe(bsp1.shapeType);
 
         this.materialHelperP = new GXMaterialHelperGfx(mb.finish());
         if (this.usingInstancingP) {
@@ -664,7 +668,7 @@ export class JPAResourceData {
         }
 
         if (ssp1 !== null) {
-            this.usingInstancingC = USE_INSTANCING && !isStripe(ssp1.shapeType);
+            this.usingInstancingC = useInstancing && !isStripe(ssp1.shapeType);
             if (this.usingInstancingP !== this.usingInstancingC) {
                 this.materialHelperC = new GXMaterialHelperGfx(mb.finish());
                 if (this.usingInstancingC) {

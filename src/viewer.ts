@@ -4,7 +4,7 @@ import * as UI from './ui.js';
 import InputManager from './InputManager.js';
 import { SceneDesc, SceneGroup } from "./SceneBase.js";
 import { CameraController, Camera, XRCameraController, CameraUpdateResult } from './Camera.js';
-import { GfxDevice, GfxSwapChain, GfxStatisticsGroup, GfxTexture, makeTextureDescriptor2D, GfxFormat } from './gfx/platform/GfxPlatform.js';
+import { GfxDevice, GfxSwapChain, GfxStatisticsGroup, GfxTexture, makeTextureDescriptor2D, GfxFormat, GfxPlatform } from './gfx/platform/GfxPlatform.js';
 import { createSwapChainForWebGL2, gfxDeviceGetImpl_GL, GfxPlatformWebGL2Config } from './gfx/platform/GfxPlatformWebGL2.js';
 import { createSwapChainForWebGPU, GfxPlatformWebGPUConfig } from './gfx/platform/GfxPlatformWebGPU.js';
 import { downloadFrontBufferToCanvas } from './Screenshot.js';
@@ -255,9 +255,10 @@ export class Viewer {
         statistics.lines.push(`Camera Position: ${camPositionX} ${camPositionY} ${camPositionZ}`);
 
         const vendorInfo = this.gfxDevice.queryVendorInfo();
-        statistics.lines.push(`Platform: ${vendorInfo.platformString}`);
+        const platformString = GfxPlatform[vendorInfo.platform];
+        statistics.lines.push(`Platform: ${platformString}`);
 
-        if (vendorInfo.platformString === 'WebGL2') {
+        if (vendorInfo.platform === GfxPlatform.WebGL2) {
             const impl = gfxDeviceGetImpl_GL(this.gfxDevice);
             const w = impl.gl.drawingBufferWidth, h = impl.gl.drawingBufferHeight;
             statistics.lines.push(`Drawing Buffer Size: ${w}x${h}`);
