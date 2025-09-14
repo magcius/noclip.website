@@ -37,6 +37,7 @@ interface GfxProgramP_WebGPU extends GfxProgram {
     descriptor: GfxRenderProgramDescriptor;
     vertexStage: GPUProgrammableStage | null;
     fragmentStage: GPUProgrammableStage | null;
+    pipelines: GfxRenderPipelineP_WebGPU[];
 }
 
 interface GfxComputeProgramP_WebGPU extends GfxProgram {
@@ -1222,7 +1223,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             code = this.glsl_compile(sourceText, shaderStage, validationEnabled);
         } catch (e) {
             console.error(prependLineNo(sourceText));
-            throw "whoops";
+            throw new Error("Invalid code");
         }
 
         const shaderModule = this.device.createShaderModule({ code });
@@ -1245,10 +1246,28 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         }
     }
 
+    public _createProgramInternal(program: GfxProgramP_WebGPU, descriptor: GfxRenderProgramDescriptor): void {
+        try {
+            program.vertexStage = this._createShaderStageGLSL(descriptor.preprocessedVert, 'vertex');
+            program.fragmentStage = descriptor.preprocessedFrag !== null ? this._createShaderStageGLSL(descriptor.preprocessedFrag, 'fragment') : null;
+        } catch (e) {
+            if ((e as Error).message === "Invalid code")
+                return;
+            throw e;
+        }
+
+        if (program.ResourceName !== undefined) {
+            if (program.vertexStage !== null)
+                program.vertexStage.module.label = program.ResourceName;
+            if (program.fragmentStage !== null)
+                program.fragmentStage.module.label = program.ResourceName;
+        }
+    }
+
     public createProgram(descriptor: GfxRenderProgramDescriptor): GfxProgram {
-        const vertexStage = this._createShaderStageGLSL(descriptor.preprocessedVert, 'vertex');
-        const fragmentStage = descriptor.preprocessedFrag !== null ? this._createShaderStageGLSL(descriptor.preprocessedFrag, 'fragment') : null;
-        const program: GfxProgramP_WebGPU = { _T: _T.Program, ResourceUniqueId: this.getNextUniqueId(), descriptor, vertexStage, fragmentStage, };
+        const pipelines: GfxRenderPipelineP_WebGPU[] = [];
+        const program: GfxProgramP_WebGPU = { _T: _T.Program, ResourceUniqueId: this.getNextUniqueId(), descriptor, vertexStage: null!, fragmentStage: null!, pipelines, };
+        this._createProgramInternal(program, descriptor);
         if (this._resourceCreationTracker !== null)
             this._resourceCreationTracker.trackResourceCreated(program);
         return program;
@@ -1393,6 +1412,12 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             descriptor, isCreatingAsync, gpuRenderPipeline,
         };
         this._createRenderPipeline(renderPipeline, true);
+
+        if (this._shaderDebug) {
+            const program = descriptor.program as GfxProgramP_WebGPU;
+            program.pipelines.push(renderPipeline);
+        }
+
         if (this._resourceCreationTracker !== null)
             this._resourceCreationTracker.trackResourceCreated(renderPipeline);
         return renderPipeline;
@@ -1907,7 +1932,18 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             this._resourceCreationTracker.checkForLeaks();
     }
 
-    public programPatched(o: GfxProgram): void {
+    public programPatched(o: GfxProgram, descriptor: GfxRenderProgramDescriptor): void {
+        assert(this._shaderDebug);
+
+        const program = o as GfxProgramP_WebGPU;
+        program.descriptor = descriptor;
+        this._createProgramInternal(program, descriptor);
+
+        for (let i = 0; i < program.pipelines.length; i++) {
+            const pipeline = program.pipelines[i];
+            pipeline.gpuRenderPipeline = null;
+            this._createRenderPipeline(pipeline, false);
+        }
     }
 
     private _debugGroupStatisticsBufferUpload(count: number = 1): void {

@@ -380,6 +380,7 @@ async function initializeViewerWebGL2(out: ViewerOut, canvas: HTMLCanvasElement)
 async function initializeViewerWebGPU(out: ViewerOut, canvas: HTMLCanvasElement): Promise<InitErrorCode> {
     const config = new GfxPlatformWebGPUConfig();
     config.trackResources = IS_DEVELOPMENT;
+    config.shaderDebug = IS_DEVELOPMENT;
 
     const gfxSwapChain = await createSwapChainForWebGPU(canvas, config);
     if (gfxSwapChain === null)
