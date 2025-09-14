@@ -1793,7 +1793,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             const mipHeight = texture.height >>> mipLevel;
 
             translateImageLayout(size, layout, texture.pixelFormat, mipWidth, mipHeight);
-            this.device.queue.writeTexture(destination, levelDatas[i].buffer, layout, size);
+            this.device.queue.writeTexture(destination, levelDatas[i] as GPUAllowSharedBufferSource, layout, size);
         }
     }
 
