@@ -16,6 +16,7 @@ export class DeviceProgram {
     public vert: string = '';
     public frag: string = '';
     public defines = new Map<string, string>();
+    public maxSamplerBinding = -1;
 
     public definesChanged(): void {
         this.preprocessedVert = '';
@@ -53,8 +54,8 @@ export class DeviceProgram {
 
     public ensurePreprocessed(vendorInfo: GfxVendorInfo): void {
         if (this.preprocessedVert === '') {
-            this.preprocessedVert = preprocessShader_GLSL(vendorInfo, 'vert', this.both + this.vert, this.defines);
-            this.preprocessedFrag = preprocessShader_GLSL(vendorInfo, 'frag', this.both + this.frag, this.defines);
+            this.preprocessedVert = preprocessShader_GLSL(vendorInfo, 'vert', this.both + this.vert, this.defines, this.maxSamplerBinding);
+            this.preprocessedFrag = preprocessShader_GLSL(vendorInfo, 'frag', this.both + this.frag, this.defines, this.maxSamplerBinding);
         }
     }
 

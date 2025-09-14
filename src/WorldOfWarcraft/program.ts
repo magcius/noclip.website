@@ -36,6 +36,8 @@ export class BaseProgram extends DeviceProgram {
         },
     ];
 
+    public override maxSamplerBinding: number = BaseProgram.bindingLayouts[0].numSamplers - 1;
+
     public static utils = `
 vec3 calcLight(
   vec3 diffuseColor,

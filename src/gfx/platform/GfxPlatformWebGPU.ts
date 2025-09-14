@@ -1350,14 +1350,16 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             gpuBindGroupEntries.push({ binding: numBindings++, resource: gpuSampler });
         }
 
-        // numBindings = 0;
         for (let i = 0; i < bindingLayout.numUniformBuffers; i++) {
             const gfxBinding = bindingsDescriptor.uniformBufferBindings[i];
-            assert(gfxBinding.wordCount > 0);
+            // WebGPU doesn't support zero-sized GPUBufferBindings. Work around by assuming that the shader doesn't need the buffer binding,
+            // and just bind the full buffer.
+            // https://github.com/gpuweb/gpuweb/issues/5312
+
             const gpuBufferBinding: GPUBufferBinding = {
                 buffer: getPlatformBuffer(gfxBinding.buffer),
                 offset: 0,
-                size: gfxBinding.wordCount << 2,
+                size: Math.max(gfxBinding.wordCount << 2, 4),
             };
             gpuBindGroupEntries.push({ binding: numBindings++, resource: gpuBufferBinding });
         }
