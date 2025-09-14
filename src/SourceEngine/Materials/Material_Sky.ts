@@ -117,7 +117,7 @@ void mainPS() {
 `;
 }
 
-const enum Material_Sky_Type {
+enum Material_Sky_Type {
     SkyHDRCompressed, Sky,
 }
 

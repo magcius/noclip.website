@@ -46,7 +46,7 @@ export interface PPAK {
  *  13 | 0x190A  0x8048          0x1403 | LUMINANCE_ALPHA LUMINANCE16_ALPHA16 UNSIGNED_SHORT
 */
 
-export const enum TextureFormat {
+export enum TextureFormat {
     B8G8R8A8,
     B8G8R8X8,
     R4G4B4A4,
@@ -128,7 +128,7 @@ function autoDetectMipCount(width: number, height: number): number {
     return count;
 }
 
-export const enum TextureType {
+export enum TextureType {
     NORMAL       = 0,
     CUBEMAP      = 1,
     VOLUME_MAP   = 2,

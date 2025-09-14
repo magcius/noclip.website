@@ -28,7 +28,7 @@ export interface PVR_GlobalIndex {
     id: number;
 }
 
-export const enum PVRTFormat {
+export enum PVRTFormat {
     ARGB1555    = 0x00, // single transparency bit
     RGB565      = 0x01, //
     ARGB4444    = 0x02, //
@@ -38,7 +38,7 @@ export const enum PVRTFormat {
     PAL8BPP     = 0x06, // <no planned support>
 }
 
-export const enum PVRTMask {
+export enum PVRTMask {
     Twiddled                                = 0x01,
     TwiddledMipMaps                         = 0x02,
     VectorQuantized                         = 0x03,

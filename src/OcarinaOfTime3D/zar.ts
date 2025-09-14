@@ -5,7 +5,7 @@ import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { assert, readString } from "../util.js";
 import * as CMB from './cmb.js';
 
-const enum Magic {
+enum Magic {
     ZAR1 = 'ZAR\x01', // OoT3D
     GAR2 = 'GAR\x02', // MM3D
     GAR5 = 'GAR\x05', // LM3DS

@@ -7,7 +7,7 @@ import * as Yay0 from '../Compression/Yay0.js';
 import * as Yaz0 from '../Compression/Yaz0.js';
 import { NamedArrayBufferSlice } from '../../DataFetcher.js';
 
-export const enum JKRFileAttr {
+export enum JKRFileAttr {
     Normal          = 0x01,
     Directory       = 0x02,
     Compressed      = 0x04,
@@ -15,7 +15,7 @@ export const enum JKRFileAttr {
     CompressionType = 0x80,
 }
 
-export const enum JKRCompressionType {
+export enum JKRCompressionType {
     None = 0x00,
     Yay0 = 0x01, // SZP
     Yaz0 = 0x02, // SZS

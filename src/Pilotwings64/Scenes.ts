@@ -980,7 +980,7 @@ function parseUPWL(file: Pilotwings64FSFile): UPWL {
     return { windObjects, landingPads, bonusStar };
 }
 
-const enum Vehicle {
+enum Vehicle {
     HangGlider = 0,
     RocketBelt = 1,
     Gyrocopter = 2,
@@ -990,7 +990,7 @@ const enum Vehicle {
     Birdman = 6,
 }
 
-const enum RotationAxis {
+enum RotationAxis {
     X = 0x78,
     Y = 0x79,
     Z = 0x7A,
@@ -1608,7 +1608,7 @@ interface DecodeMaterialResult {
     combineOverride?: RDP.CombineParams;
 }
 
-const enum PilotwingsRSPFlag {
+enum PilotwingsRSPFlag {
     GOURAUD     = 1 << 1,
     CULL_FRONT  = 1 << 3,
     CULL_BACK   = 1 << 4,
@@ -1909,7 +1909,7 @@ class MaterialInstance {
     }
 }
 
-const enum TexCM {
+enum TexCM {
     WRAP = 0x00, MIRROR = 0x01, CLAMP = 0x02,
 }
 
@@ -2811,7 +2811,7 @@ async function fetchDataHolder(dataFetcher: DataFetcher, device: GfxDevice): Pro
     return dataHolder;
 }
 
-const enum PW64Pass { SKYBOX, NORMAL, SNOW }
+enum PW64Pass { SKYBOX, NORMAL, SNOW }
 
 const toNoclipSpace = mat4.create();
 mat4.fromXRotation(toNoclipSpace, -90 * MathConstants.DEG_TO_RAD);

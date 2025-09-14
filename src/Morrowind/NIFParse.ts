@@ -7,7 +7,7 @@ import { Stream, RecordRef, NiParse } from "./NIFBase.js";
 
 export namespace NIFParse {
 
-export const enum ApplyMode {
+export enum ApplyMode {
     APPLY_REPLACE = 0,
     APPLY_DECAL = 1,
     APPLY_MODULATE = 2,
@@ -15,7 +15,7 @@ export const enum ApplyMode {
     APPLY_HILIGHT2 = 4,
 };
 
-export const enum KeyType {
+export enum KeyType {
     LINEAR_KEY = 1,
     QUADRATIC_KEY = 2,
     TBC_KEY = 3,
@@ -23,7 +23,7 @@ export const enum KeyType {
     CONST_KEY = 5,
 };
 
-export const enum PixelFormat {
+export enum PixelFormat {
     FMT_RGB = 0,
     FMT_RGBA = 1,
     FMT_PAL = 2,
@@ -43,7 +43,7 @@ export const enum PixelFormat {
     FMT_UNKNOWN = 16,
 };
 
-export const enum PixelLayout {
+export enum PixelLayout {
     LAY_PALETTIZED_8 = 0,
     LAY_HIGH_COLOR_16 = 1,
     LAY_TRUE_COLOR_32 = 2,
@@ -63,27 +63,27 @@ export const enum PixelLayout {
     LAY_DEPTH_24_X8 = 16,
 };
 
-export const enum MipMapFormat {
+export enum MipMapFormat {
     MIP_FMT_NO = 0,
     MIP_FMT_YES = 1,
     MIP_FMT_DEFAULT = 2,
 };
 
-export const enum AlphaFormat {
+export enum AlphaFormat {
     ALPHA_NONE = 0,
     ALPHA_BINARY = 1,
     ALPHA_SMOOTH = 2,
     ALPHA_DEFAULT = 3,
 };
 
-export const enum TexClampMode {
+export enum TexClampMode {
     CLAMP_S_CLAMP_T = 0,
     CLAMP_S_WRAP_T = 1,
     WRAP_S_CLAMP_T = 2,
     WRAP_S_WRAP_T = 3,
 };
 
-export const enum TexFilterMode {
+export enum TexFilterMode {
     FILTER_NEAREST = 0,
     FILTER_BILERP = 1,
     FILTER_TRILERP = 2,
@@ -93,29 +93,29 @@ export const enum TexFilterMode {
     FILTER_ANISOTROPIC = 6,
 };
 
-export const enum SourceVertexMode {
+export enum SourceVertexMode {
     VERT_MODE_SRC_IGNORE = 0,
     VERT_MODE_SRC_EMISSIVE = 1,
     VERT_MODE_SRC_AMB_DIF = 2,
 };
 
-export const enum LightingMode {
+export enum LightingMode {
     LIGHT_MODE_EMISSIVE = 0,
     LIGHT_MODE_EMI_AMB_DIF = 1,
 };
 
-export const enum CycleType {
+export enum CycleType {
     CYCLE_LOOP = 0,
     CYCLE_REVERSE = 1,
     CYCLE_CLAMP = 2,
 };
 
-export const enum FieldType {
+export enum FieldType {
     FIELD_WIND = 0,
     FIELD_POINT = 1,
 };
 
-export const enum TestFunction {
+export enum TestFunction {
     TEST_ALWAYS = 0,
     TEST_LESS = 1,
     TEST_EQUAL = 2,
@@ -126,7 +126,7 @@ export const enum TestFunction {
     TEST_NEVER = 7,
 };
 
-export const enum AlphaFunction {
+export enum AlphaFunction {
     ONE = 0,
     ZERO = 1,
     SRC_COLOR = 2,
@@ -140,14 +140,14 @@ export const enum AlphaFunction {
     SRC_ALPHA_SATURATE = 10,
 };
 
-export const enum TextureType {
+export enum TextureType {
     TEX_PROJECTED_LIGHT = 0,
     TEX_PROJECTED_SHADOW = 1,
     TEX_ENVIRONMENT_MAP = 2,
     TEX_FOG_MAP = 3,
 };
 
-export const enum CoordGenType {
+export enum CoordGenType {
     CG_WORLD_PARALLEL = 0,
     CG_WORLD_PERSPECTIVE = 1,
     CG_SPHERE_MAP = 2,
@@ -155,7 +155,7 @@ export const enum CoordGenType {
     CG_DIFFUSE_CUBE_MAP = 4,
 };
 
-export const enum BoundVolumeType {
+export enum BoundVolumeType {
     BASE_BV = 4294967295,
     SPHERE_BV = 0,
     BOX_BV = 1,
@@ -164,7 +164,7 @@ export const enum BoundVolumeType {
     HALFSPACE_BV = 5,
 };
 
-export const enum AnimType {
+export enum AnimType {
     APP_TIME = 0,
     APP_INIT = 1,
 };
@@ -239,7 +239,7 @@ class ZBufferFlags {
     }
 }
 
-export const enum NiNBTMethod {
+export enum NiNBTMethod {
     NBT_METHOD_NONE = 0,
     NBT_METHOD_NDL = 1,
     NBT_METHOD_MAX = 2,

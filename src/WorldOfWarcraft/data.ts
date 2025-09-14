@@ -285,13 +285,13 @@ export class WowCache {
     }
 }
 
-export const enum ProceduralTexture {
+export enum ProceduralTexture {
     River = 0,
     Ocean = 0,
     Wmo = 0,
 }
 
-export const enum LiquidCategory {
+export enum LiquidCategory {
     Water = 0,
     Ocean = 1,
     Lava = 2,

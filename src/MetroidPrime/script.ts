@@ -16,7 +16,7 @@ import { AnimSysContext } from './animation/meta_nodes.js';
 import { PART } from './part.js';
 import { ELSC } from './elsc.js';
 
-export const enum MP1EntityType {
+export enum MP1EntityType {
     Actor                   = 0x00,
     Door                    = 0x03,
     Effect                  = 0x07,
@@ -86,7 +86,7 @@ export class AnimationParameters {
     animID: number;
 }
 
-export const enum WorldLightingOptions {
+export enum WorldLightingOptions {
     Zero = 0,
     NormalLighting = 1,
     NoShadowCast = 2,

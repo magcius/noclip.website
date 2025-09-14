@@ -559,7 +559,7 @@ function computeMatrix(out: mat4, a: ReadonlyMat4, s: ReadonlyVec3, r: ReadonlyV
     mat4.scale(out, out, s);
 }
 
-const enum EulerOrder {
+enum EulerOrder {
     XYZ,
     YXZ,
     ZXY,
@@ -577,7 +577,7 @@ const computeRotationOrderMap = [
     [mat4.rotateZ, mat4.rotateY, mat4.rotateX], // ZYX
 ]
 
-const enum Component {
+enum Component {
     X,
     Y,
     Z,

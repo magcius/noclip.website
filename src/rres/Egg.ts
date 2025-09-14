@@ -13,7 +13,7 @@ import { clamp } from "../MathHelpers.js";
 
 // https://github.com/riidefi/MKWDecompilation/blob/master/EGG/posteffect/Lighting/res_blight.hpp
 
-const enum EggBinaryLightFlags {
+enum EggBinaryLightFlags {
     NONE                 = 0,
     ENABLE               = 1 << 0,
     ENABLE_G3D           = 1 << 5,
@@ -24,7 +24,7 @@ const enum EggBinaryLightFlags {
     ENABLE_G3D_ALPHA     = 1 << 10,
 }
 
-const enum EggBinaryLightType {
+enum EggBinaryLightType {
     POINT = 0x00,
     DIRECTIONAL = 0x01,
     SPOT = 0x02,

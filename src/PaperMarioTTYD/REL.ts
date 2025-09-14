@@ -1,7 +1,7 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 
-const enum RelocationOp {
+enum RelocationOp {
     R_INVALID = -1,
     R_PPC_NONE = 0,
     R_PPC_ADDR32 = 1,

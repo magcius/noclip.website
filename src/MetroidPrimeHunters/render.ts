@@ -230,7 +230,7 @@ class ShapeInstance {
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 3, numSamplers: 1 }];
 
-const enum BillboardMode {
+enum BillboardMode {
     NONE, BB, BBY,
 }
 

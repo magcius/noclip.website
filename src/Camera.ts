@@ -180,7 +180,7 @@ export function divideByW(dst: vec4, src: ReadonlyVec4): void {
     dst[3] = 1.0;
 }
 
-export const enum CameraUpdateResult {
+export enum CameraUpdateResult {
     Unchanged,
     Changed,
     ImportantChange,

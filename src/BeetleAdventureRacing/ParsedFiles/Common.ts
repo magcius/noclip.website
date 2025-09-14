@@ -5,7 +5,7 @@ import { clamp } from "../../MathHelpers.js";
 import { Filesystem } from "../Filesystem.js";
 
 // TODO: all of these names may be too specific
-export const enum RenderOptionsFlags
+export enum RenderOptionsFlags
 {
     ENABLE_TEX_GEN_SPHERICAL  = 1 << 0x1B,
     UNK_1A                    = 1 << 0x1A,

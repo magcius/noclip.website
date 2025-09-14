@@ -67,7 +67,7 @@ export interface HIPLayer {
     assets: HIPAsset[];
 }
 
-const enum HIPBlockID {
+enum HIPBlockID {
     HIPA = 0x48495041,
     PACK = 0x5041434B,
     PVER = 0x50564552,

@@ -347,7 +347,7 @@ interface ViewerOut {
     viewer: Viewer;
 }
 
-export const enum InitErrorCode {
+export enum InitErrorCode {
     SUCCESS,
     NO_WEBGL2_GENERIC,
     GARBAGE_WEBGL2_GENERIC,

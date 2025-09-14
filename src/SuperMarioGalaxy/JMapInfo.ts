@@ -188,7 +188,7 @@ export function createJMapIdInfoFromIter(sceneObjHolder: SceneObjHolder, infoId:
     return new JMapIdInfo(zoneId, infoId);
 }
 
-const enum LinkTagType { None = -1, MapParts, Obj, ChildObj }
+enum LinkTagType { None = -1, MapParts, Obj, ChildObj }
 export class JMapLinkInfo {
     private constructor(public readonly zoneId: number, public readonly objId: number, public readonly linkTagType: LinkTagType) {
     }

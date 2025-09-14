@@ -17,7 +17,7 @@ export function makeAttachmentClearDescriptor(clearColor: Readonly<GfxColor> | '
 export const standardFullClearRenderPassDescriptor = makeAttachmentClearDescriptor(colorNewFromRGBA(0.88, 0.88, 0.88, 1.0));
 export const opaqueBlackFullClearRenderPassDescriptor = makeAttachmentClearDescriptor(OpaqueBlack);
 
-export const enum AntialiasingMode {
+export enum AntialiasingMode {
     None, FXAA, MSAAx4,
 }
 

@@ -29,14 +29,14 @@ export interface MREA {
     lightLayers: AreaLightLayer[];
 }
 
-export const enum AreaVersion {
+export enum AreaVersion {
     MP1 = 0xF,
     MP2 = 0x19,
     MP3 = 0x1E,
     DKCR = 0x20
 }
 
-export const enum UVAnimationType {
+export enum UVAnimationType {
     ENV_MAPPING_NO_TRANS = 0x00,
     ENV_MAPPING          = 0x01,
     UV_SCROLL            = 0x02,
@@ -116,7 +116,7 @@ export interface MaterialSet {
     materials: Material[];
 }
 
-export const enum MaterialFlags {
+export enum MaterialFlags {
     HAS_KONST      = 0x00000008,
     DEPTH_SORTING  = 0x00000010,
     ALPHA_TEST     = 0x00000020,
@@ -824,7 +824,7 @@ export function parseGeometry_MP3_MREA(stream: InputStream, materialSet: Materia
     return [geometry, wobjSectionIndex, gpudSectionIndex];
 }
 
-export const enum AreaLightType {
+export enum AreaLightType {
     LocalAmbient = 0,
     Directional = 1,
     Custom = 2,
@@ -1191,7 +1191,7 @@ export function parse(stream: InputStream, resourceSystem: ResourceSystem): MREA
     return { materialSet, worldModels, scriptLayers, collision, lightLayers };
 }
 
-export const enum MaterialFlags_MP3 {
+export enum MaterialFlags_MP3 {
     BLEND = 0x08,
     MASKED = 0x10,
     ADDITIVE_BLEND = 0x20,

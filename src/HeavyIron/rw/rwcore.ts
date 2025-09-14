@@ -9,7 +9,7 @@ import { AtomicAllInOnePipeline } from "./pipelines/AtomicAllInOne.js";
 import { RwGfx, RwGfxRaster } from "./rwgfx.js";
 import { Im3DPipeline } from "./pipelines/Im3D.js";
 
-export const enum RwPlatformID {
+export enum RwPlatformID {
     NAPLATFORM = 0,
     PCD3D7 = 1,
     PCOGL = 2,
@@ -209,7 +209,7 @@ export class RwStream {
     }
 }
 
-export const enum RwRasterFormat {
+export enum RwRasterFormat {
     DEFAULT = 0x0000,
     _1555 = 0x0100,
     _565 = 0x0200,
@@ -252,7 +252,7 @@ export class RwRaster {
     }
 }
 
-export const enum RwTextureFilterMode {
+export enum RwTextureFilterMode {
     NAFILTERMODE = 0,
     NEAREST,
     LINEAR,
@@ -263,7 +263,7 @@ export const enum RwTextureFilterMode {
     MASK = 0xFF
 }
 
-export const enum RwTextureAddressMode {
+export enum RwTextureAddressMode {
     NATEXTUREADDRESS = 0,
     WRAP,
     MIRROR,
@@ -274,7 +274,7 @@ export const enum RwTextureAddressMode {
     MASK = (UMASK | VMASK)
 }
 
-export const enum RwTextureStreamFlags {
+export enum RwTextureStreamFlags {
     NATEXTURESTREAMFLAG = 0x00,
     USERMIPMAPS = 0x01
 }
@@ -424,7 +424,7 @@ export class RwCamera {
     }
 }
 
-export const enum RwBlendFunction {
+export enum RwBlendFunction {
     NABLEND,
     ZERO,
     ONE,
@@ -439,18 +439,18 @@ export const enum RwBlendFunction {
     SRCALPHASAT
 }
 
-export const enum RwShadeMode {
+export enum RwShadeMode {
     FLAT,
     GOURAUD
 }
 
-export const enum RwCullMode {
+export enum RwCullMode {
     NONE,
     BACK,
     FRONT
 }
 
-export const enum RwAlphaTestFunction {
+export enum RwAlphaTestFunction {
     NEVER,
     LESS,
     EQUAL,
@@ -629,7 +629,7 @@ export class RwIm3DVertex {
     public v = 0;
 }
 
-export const enum RwIm3DTransformFlags {
+export enum RwIm3DTransformFlags {
     VERTEXUV = 0x1,
     ALLOPAQUE = 0x2,
     NOCLIP = 0x4,
@@ -637,7 +637,7 @@ export const enum RwIm3DTransformFlags {
     VERTEXRGBA = 0x10,
 }
 
-export const enum RwPrimitiveType {
+export enum RwPrimitiveType {
     NAPRIMTYPE = 0,
     LINELIST,
     POLYLINE,

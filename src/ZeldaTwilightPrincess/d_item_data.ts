@@ -160,7 +160,7 @@ export function getItemInfo(globals: dGlobals): dItem_itemInfo[] {
     return res;
 }
 
-export const enum ItemNo {
+export enum ItemNo {
     GREEN_RUPEE = 1,
     BLUE_RUPEE,
     YELLOW_RUPEE,

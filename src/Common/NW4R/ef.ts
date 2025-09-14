@@ -71,7 +71,7 @@ class EfParticle {
     }
 }
 
-const enum EfEmitterStatus {
+enum EfEmitterStatus {
     Dead           = 0,
     Alive          = 1 << 0,
     FirstEmission  = 1 << 1,
@@ -490,7 +490,7 @@ function parseEffectResource(buffer: ArrayBufferSlice, name: string): EfEffectRe
     return { name, emitterSettings, materialSettings, particleSettings, emitterTrackInfos, particleTrackInfos };
 }
 
-const enum VolumeType {
+enum VolumeType {
     Circle   = 0x00,
     Line     = 0x01,
     Cube     = 0x05,
@@ -500,11 +500,11 @@ const enum VolumeType {
     Torus    = 0x0A,
 }
 
-const enum EmitterSimFlags {
+enum EmitterSimFlags {
     Forever = 1 << 2,
 }
 
-const enum EmitFlags {
+enum EmitFlags {
     FixedInterval     = 0x00000200,
     FixedPosition     = 0x00000400,
 
@@ -621,15 +621,15 @@ function parseEmitterSettings(buffer: ArrayBufferSlice): EmitterSettings {
     };
 }
 
-const enum ShapeType {
+enum ShapeType {
     Point, Line, Free, Billboard, Directional, Stripe,
 }
 
-const enum RotType {
+enum RotType {
     X, Y, Z, XYZ,
 }
 
-const enum MaterialLightType {
+enum MaterialLightType {
     None, Ambient, Point,
 }
 
@@ -878,7 +878,7 @@ interface TrackInfoU8 {
 
 type TrackInfo = TrackInfoU8;
 
-const enum TrackDataType {
+enum TrackDataType {
     U8 = 0,
     POSTFIELD = 2,
     F32 = 3,

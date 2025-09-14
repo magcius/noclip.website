@@ -16,13 +16,13 @@ function isModifier(key: string) {
 
 export type Listener = (inputManager: InputManager) => void;
 
-const enum TouchGesture {
+enum TouchGesture {
     None,
     Scroll, // 1-finger scroll and pan
     Pinch, // 2-finger pinch in and out
 }
 
-export const enum DraggingMode {
+export enum DraggingMode {
     // Not dragging.
     None,
     // "Normal" dragging. We need to set the UI to have pointer-events: none;

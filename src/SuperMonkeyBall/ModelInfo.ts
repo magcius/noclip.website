@@ -1,5 +1,5 @@
 // Model IDs for GMBE8P/files/test/init/common.gma
-export const enum CommonModelID {
+export enum CommonModelID {
     /*0x0000*/ BALL_TARGET_L,
     /*0x0001*/ BALL_TARGET_R,
     /*0x0002*/ BLU_HEMI_INSIDE,
@@ -195,7 +195,7 @@ export const enum CommonModelID {
 }
 
 // Model IDs for GMBE8P/files/test/bg/bg_nig.gma
-export const enum BgNightModelID {
+export enum BgNightModelID {
     /*0x0000*/ NIG_CITY00,
     /*0x0001*/ NIG_DINER00,
     /*0x0002*/ NIG_DINER00_NEON,
@@ -328,7 +328,7 @@ export const enum BgNightModelID {
 
 
 // Model IDs for GMBE8P/files/test/bg/bg_stm.gma
-export const enum BgStormModelID {
+export enum BgStormModelID {
     /*0x0000*/ STM_BOX,
     /*0x0001*/ STM_FIREBASE,
     /*0x0002*/ STM_PILLAR,

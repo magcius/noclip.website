@@ -1,7 +1,7 @@
 import { bitsAsFloat32, float32AsBits } from '../MathHelpers.js';
 import { nArray, assert } from '../util.js';
 
-export const enum Opcode {
+export enum Opcode {
     NOP     = 0x00,
     BRANCH  = 0x01,
 
@@ -77,7 +77,7 @@ export const enum Opcode {
     BGEZ    = 0x401,
 }
 
-export const enum RegName {
+export enum RegName {
     R0 = 0x00,
     AT = 0x01,
     V0 = 0x02,

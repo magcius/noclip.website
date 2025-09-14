@@ -237,7 +237,7 @@ function convertCanvasToPNG(canvas: HTMLCanvasElement): Promise<Blob> {
     return new Promise((resolve) => canvas.toBlob((b) => resolve(assertExists(b)), 'image/png'));
 }
 
-const enum SaveStatesAction {
+enum SaveStatesAction {
     Load,
     LoadDefault,
     Save,

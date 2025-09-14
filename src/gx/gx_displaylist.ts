@@ -50,7 +50,7 @@ export interface GX_VtxAttrFmt {
 }
 
 // GX_SetVtxDesc
-export const enum GX_VtxDescOutputMode {
+export enum GX_VtxDescOutputMode {
     VertexData,
     Index,
     None,
@@ -70,7 +70,7 @@ export interface GX_Array {
 
 // Similar to GX.Attr, but is for what the shader will use as inputs, rather than
 // the raw GX attributes.
-export const enum VertexAttributeInput {
+export enum VertexAttributeInput {
     // TEXnMTXIDX are packed specially because of GL limitations.
     TEX0123MTXIDX,
     TEX4567MTXIDX,
@@ -1315,7 +1315,7 @@ export function displayListToString(buffer: ArrayBufferSlice) {
         return `0x${n.toString(16)}`;
     }
 
-    const enum RegisterBlock { XF, BP, CP };
+    enum RegisterBlock { XF, BP, CP };
     const blockTables = [GX.XFRegister, GX.BPRegister, GX.CPRegister];
     const blockNames = ['XF', 'BP', 'CP'];
 

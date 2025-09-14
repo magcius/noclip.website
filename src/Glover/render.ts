@@ -23,7 +23,7 @@ import { Color, colorNewCopy, colorNewFromRGBA } from "../Color.js";
 import { GloverObjbank } from './parsers/index.js';
 import { createBufferFromData } from '../gfx/helpers/BufferHelpers.js';
 
-export const enum GloverRendererLayer {
+export enum GloverRendererLayer {
     OPAQUE,
     OPAQUE_BILLBOARD,
     XLU,

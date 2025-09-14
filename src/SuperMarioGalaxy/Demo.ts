@@ -170,7 +170,7 @@ class DemoTimeKeeper {
     }
 }
 
-const enum DemoActionType {
+enum DemoActionType {
     Appear = 0,
     Kill = 1,
     Functor = 2,
@@ -570,10 +570,10 @@ function registerDemoExecutor(sceneObjHolder: SceneObjHolder, executor: DemoExec
     sceneObjHolder.demoDirector!.executorHolder.registerObj(executor);
 }
 
-const enum DemoType { Programmable, TimeKeep }
-const enum CinemaFrameType { Unk }
-const enum StarPointerType { Unk }
-const enum DeleteEffectType { Unk }
+enum DemoType { Programmable, TimeKeep }
+enum CinemaFrameType { Unk }
+enum StarPointerType { Unk }
+enum DeleteEffectType { Unk }
 function startDemoSystem(sceneObjHolder: SceneObjHolder, requester: NameObj, demoName: string, movementControlType: number, demoType: DemoType, frameType: CinemaFrameType, pointerType: StarPointerType, deleteEffectType: DeleteEffectType, subPartName: string | null = null): void {
     if (demoType === DemoType.TimeKeep) {
         sceneObjHolder.demoDirector!.startDemoTimeKeep(sceneObjHolder, requester, demoName, movementControlType, frameType, subPartName);

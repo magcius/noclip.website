@@ -3,7 +3,7 @@ import { HIEntMotionAsset } from "./HIEntMotion.js";
 import { HIGame, HIScene } from "./HIScene.js";
 import { RwEngine, RwStream } from "./rw/rwcore.js";
 
-export const enum HIEntButtonActMethod {
+export enum HIEntButtonActMethod {
     Button,
     PressurePlate
 }

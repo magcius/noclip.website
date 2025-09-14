@@ -2,7 +2,7 @@ import { vec3 } from "gl-matrix";
 import { RwStream } from "./rw/rwcore.js";
 import { HIGame } from "./HIScene.js";
 
-export const enum HIEntMotionType {
+export enum HIEntMotionType {
     ER,
     Orbit,
     Spline,
@@ -40,7 +40,7 @@ export interface HIEntMotionMPData {
     speed: number;
 }
 
-export const enum HIEntMotionMechType {
+export enum HIEntMotionMechType {
     Slide,
     Rot,
     SlideRot,
@@ -48,7 +48,7 @@ export const enum HIEntMotionMechType {
     RotThenSlide
 }
 
-export const enum HIEntMotionMechFlags {
+export enum HIEntMotionMechFlags {
     Returns = (1<<0),
     Once = (1<<1)
 }
@@ -83,7 +83,7 @@ export interface HIEntMotionPenData {
     phase: number;
 }
 
-export const enum HIEntMotionFlags {
+export enum HIEntMotionFlags {
     Stopped = (1<<2)
 }
 

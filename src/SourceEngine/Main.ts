@@ -514,7 +514,7 @@ export class BSPModelRenderer {
     }
 }
 
-export const enum SourceEngineViewType {
+export enum SourceEngineViewType {
     MainView,
     WaterReflectView,
     ShadowMap,
@@ -614,7 +614,7 @@ export class SourceEngineView {
     }
 }
 
-export const enum RenderObjectKind {
+export enum RenderObjectKind {
     WorldSpawn  = 1 << 0,
     Entities    = 1 << 1,
     StaticProps = 1 << 2,

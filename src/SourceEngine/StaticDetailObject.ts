@@ -20,8 +20,8 @@ import { computeModelMatrixPosQAngle, HardwareVertData, StudioModelInstance } fr
 import { createBufferFromData } from "../gfx/helpers/BufferHelpers.js";
 
 //#region Detail Models
-const enum DetailPropOrientation { NORMAL, SCREEN_ALIGNED, SCREEN_ALIGNED_VERTICAL, }
-const enum DetailPropType { MODEL, SPRITE, SHAPE_CROSS, SHAPE_TRI, }
+enum DetailPropOrientation { NORMAL, SCREEN_ALIGNED, SCREEN_ALIGNED_VERTICAL, }
+enum DetailPropType { MODEL, SPRITE, SHAPE_CROSS, SHAPE_TRI, }
 
 interface DetailModel {
     pos: vec3;
@@ -383,7 +383,7 @@ export class DetailPropLeafRenderer {
 //#endregion
 
 //#region Static Models
-export const enum StaticPropFlags {
+export enum StaticPropFlags {
     USE_LIGHTING_ORIGIN    = 0x0002,
     IGNORE_NORMALS         = 0x0008,
     NO_SHADOW              = 0x0010,

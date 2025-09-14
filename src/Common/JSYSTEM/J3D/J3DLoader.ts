@@ -77,7 +77,7 @@ export class JSystemFileReaderHelper {
 //#endregion
 //#region J3DModel
 //#region INF1
-export const enum J3DLoadFlags {
+export enum J3DLoadFlags {
     // Scaling rule
     ScalingRule_Basic = 0x00000000,
     ScalingRule_XSI   = 0x00000001,
@@ -401,7 +401,7 @@ export interface MtxGroup {
     loadedVertexData: LoadedVertexData;
 }
 
-export const enum ShapeMtxType {
+export enum ShapeMtxType {
     Mtx = 0,
     BBoard = 1,
     YBBoard = 2,
@@ -540,7 +540,7 @@ function readSHP1Chunk(buffer: ArrayBufferSlice, bmd: BMD): SHP1 {
 }
 //#endregion
 //#region MAT3
-export const enum TexMtxMapMode {
+export enum TexMtxMapMode {
     None = 0x00,
     // Uses "Basic" conventions, no -1...1 remap.
     // Peach Beach uses EnvmapBasic, not sure on what yet...
@@ -562,7 +562,7 @@ export const enum TexMtxMapMode {
     EnvmapEffectMtx = 0x0B,
 }
 
-export const enum TexMtxProjection {
+export enum TexMtxProjection {
     MTX3x4 = 0,
     MTX2x4 = 1,
 }
@@ -1640,7 +1640,7 @@ export class BMT {
 //#endregion
 
 //#region Animation Core
-export const enum LoopMode {
+export enum LoopMode {
     Once = 0,
     OnceAndReset = 1,
     Repeat = 2,
@@ -1664,7 +1664,7 @@ export interface AnimationBase {
     loopMode: LoopMode;
 }
 
-const enum TangentType {
+enum TangentType {
     In = 0,
     InOut = 1,
 }

@@ -417,13 +417,13 @@ export class FlowerPacket {
 //#endregion
 
 //#region Tree
-const enum TreeFlags {
+enum TreeFlags {
     IsFrustumCulled = 1 << 0,
     NeedsGroundCheck = 1 << 1,
     unk8 = 1 << 3,
 }
 
-const enum TreeStatus {
+enum TreeStatus {
     UNCUT,
 }
 
@@ -800,7 +800,7 @@ export class TreePacket {
 //#endregion
 
 //#region Grass
-const enum GrassFlags {
+enum GrassFlags {
     IsFrustumCulled = 1 << 0,
     NeedsGroundCheck = 1 << 1,
 }

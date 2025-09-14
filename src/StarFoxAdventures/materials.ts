@@ -56,13 +56,13 @@ export enum ShaderAttrFlags {
     CLR = 0x2,
 }
 
-export const enum NormalFlags {
+export enum NormalFlags {
     HasVertexColor = 0x2,
     NBT = 0x8,
     HasVertexAlpha = 0x10,
 }
 
-export const enum LightFlags {
+export enum LightFlags {
     OverrideLighting = 0x2,
 }
 

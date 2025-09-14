@@ -12,7 +12,7 @@ const scratchVec1 = vec3.create();
 const scratchVec2 = vec3.create();
 const scratchBox0 = new AABB();
 
-export const enum LightType {
+export enum LightType {
     NONE = 0,
     POINT = 0x2,
     DIRECTIONAL = 0x4,

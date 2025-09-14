@@ -14,15 +14,15 @@ import { GfxRenderInst, GfxRenderInstManager } from "../../../gfx/render/GfxRend
 import { TextureMapping } from "../../../TextureHolder.js";
 import { GfxRenderCache } from "../../../gfx/render/GfxRenderCache.js";
 
-const enum RFNTGlyphType {
+enum RFNTGlyphType {
     Glyph, Texture,
 }
 
-const enum RFNTEncoding {
+enum RFNTEncoding {
     UTF8, UTF16, SJIS, CP1252,
 }
 
-const enum RFNTCMAPKind { Offset, Array, Dict }
+enum RFNTCMAPKind { Offset, Array, Dict }
 
 interface RFNTCWDHEntry {
     leftSideBearing: number;

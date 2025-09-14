@@ -43,7 +43,7 @@ function parseDZSHeaders(buffer: ArrayBufferSlice): DZS {
     return { headers: chunkHeaders, buffer };
 }
 
-export const enum ResType {
+export enum ResType {
     Model, Bmt, Bck, Bpk, Brk, Btp, Btk, Bti, Dzb, Dzs, Bva, Blo, Stb, Raw,
 }
 

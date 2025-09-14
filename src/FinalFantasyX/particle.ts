@@ -163,7 +163,7 @@ class LoopStep extends Step {
     }
 }
 
-const enum Distribution {
+enum Distribution {
     UNIFORM,
     TRIANGLE,
     CUSP,
@@ -182,7 +182,7 @@ function randomCuboid(dst: vec4, base: vec4, range: vec4, dist: Distribution): v
         dst[i] = base[i] + range[i] * randomFactor(dist);
 }
 
-const enum RandomRange {
+enum RandomRange {
     SYMMETRIC,
     POSITIVE,
     NEGATIVE,
@@ -743,7 +743,7 @@ function setChild(buf: ScratchBuffer, i: number, child: ClusterChild): void {
     buf.set4(i * CLUSTER_VEC_COUNT + 2, child.scale);
 }
 
-const enum ClusterMode {
+enum ClusterMode {
     DEFAULT, // a cluster of individually-animated flipbook particles
     MOVING, // leaves a trail as the emitter moves
     CAMERA, // leaves a trail at an offset from the camera
@@ -1342,7 +1342,7 @@ interface WrapUVScrollGeoData {
     waterTexDur: number;
 }
 
-const enum GeoPos {
+enum GeoPos {
     DEFAULT,
     ORIGIN,
     CAMERA,
@@ -2051,7 +2051,7 @@ export class PointChain extends Instruction {
     }
 }
 
-const enum ChainFlags {
+enum ChainFlags {
     INACTIVE     = 0,
     ACTIVE       = 0x0001, // not actually in game
     FIXED_LENGTH = 0x0002,
@@ -2617,7 +2617,7 @@ interface DepthData {
     space: number;
 }
 
-const enum DepthSpace {
+enum DepthSpace {
     EMITTER = 0,
     VIEW = 1,
     WORLD = 2,
@@ -4182,7 +4182,7 @@ interface EmitterBehavior {
     shouldClip: boolean;
 }
 
-const enum BillboardType {
+enum BillboardType {
     NONE,
     FULL,
     Y_ONLY,
@@ -5131,7 +5131,7 @@ function parseFlipbookFrame(buffer: ArrayBufferSlice, offs: number, decode: text
     return { flags: 0, drawFlags, textureIndex, duration: 0, draws };
 }
 
-const enum GeometryPrimitive {
+enum GeometryPrimitive {
     COLOR_TRI = 0,
     TEX_TRI = 1,
     COLOR_QUAD = 2,
@@ -5371,7 +5371,7 @@ function parseInstruction(buffer: ArrayBufferSlice, blockStart: number, offs: nu
     return i;
 }
 
-export const enum BindingFlags {
+export enum BindingFlags {
     NONE = 0,
     ACTOR = 1,
     LAYER = 2,
@@ -5390,7 +5390,7 @@ export const enum BindingFlags {
 const EMITTER_MAX_TIME = 0x70000;
 export const EMITTER_DONE_TIMER = -0x1000;
 
-export const enum EmitterState {
+export enum EmitterState {
     RUNNING,
     ENDING,
     WAITING,

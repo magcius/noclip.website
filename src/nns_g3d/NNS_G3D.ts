@@ -100,7 +100,7 @@ export interface BMD0 {
 function parseNode(buffer: ArrayBufferSlice, name: string): MDL0Node {
     const view = buffer.createDataView();
 
-    const enum NodeFlags {
+    enum NodeFlags {
         TRANS_ZERO = 0x0001,
         ROT_ZERO = 0x0002,
         SCALE_ONE = 0x0004,
@@ -250,7 +250,7 @@ function calcTexMtx_Max(dst: mat2d, texScaleS: number, texScaleT: number, scaleS
     dst[5] = (scaleT *  sinR * (translationS + 0.5)) + (scaleT * cosR * (translationT - 0.5)) + 0.5;
 }
 
-export const enum TexMtxMode {
+export enum TexMtxMode {
     MAYA = 0x00, // Maya
     SI3D = 0x01, // Softimage|3D
     MAX  = 0x02, // 3D Studio Max
@@ -291,7 +291,7 @@ function parseMaterial(buffer: ArrayBufferSlice, name: string, texMtxMode: TexMt
     const texScaleS = 1 / origWidth;
     const texScaleT = 1 / origHeight;
 
-    const enum MaterialFlags {
+    enum MaterialFlags {
         USE = 0x0001,
         SCALE_ONE = 0x0002,
         ROT_ZERO = 0x0004,
@@ -506,7 +506,7 @@ function parseSRT0(buffer: ArrayBufferSlice): SRT0 {
     // Seems to be completely junk.
     const texMtxMode = view.getUint8(0x07);
 
-    const enum ComponentFlag {
+    enum ComponentFlag {
         FX16   = 0x10000000,
         CONST  = 0x20000000,
         STEP_2 = 0x40000000,
@@ -590,7 +590,7 @@ export function parseNSBTA(buffer: ArrayBufferSlice): BTA0 {
     return { srt0 };
 }
 
-export const enum LoopMode {
+export enum LoopMode {
     ONCE, REPEAT
 }
 

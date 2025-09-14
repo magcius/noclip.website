@@ -14,7 +14,7 @@ import { ModelInterface } from "./World.js";
 import { transformVec3Mat4w1 } from "../MathHelpers.js";
 import { Lighting } from "./Lighting.js";
 
-export const enum RenderSort {
+export enum RenderSort {
     Translucent, // Depth sort "translucent" shapes only
     All, // Sort both translucent and opaque shapes
     None, // Don't sort any shapes

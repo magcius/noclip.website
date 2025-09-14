@@ -56,7 +56,7 @@ export interface FSHP {
     materialIndex: number;
 }
 
-export const enum FMAT_RenderInfoType {
+export enum FMAT_RenderInfoType {
     Int, Float, String,
 }
 
@@ -92,7 +92,7 @@ export interface FMAT_SamplerInfo {
     lodBias: number;
 }
 
-export const enum FMAT_ShaderParamType {
+export enum FMAT_ShaderParamType {
     Bool, Bool2, Bool3, Bool4,
     Int, Int2, Int3, Int4,
     Uint, Uint2, Uint3, Uint4,
@@ -148,7 +148,7 @@ function parseFSKL(buffer: ArrayBufferSlice, offs: number, littleEndian: boolean
     assert(readString(buffer, offs + 0x00, 0x04) === 'FSKL');
     const boneArrayOffs = view.getUint32(offs + 0x18, littleEndian);
 
-    const enum BoneFlag {
+    enum BoneFlag {
         RotationMode_Quat     = 0x00 << 12,
         RotationMode_EulerXyz = 0x01 << 12,
     }

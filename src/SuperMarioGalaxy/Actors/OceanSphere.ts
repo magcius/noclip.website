@@ -148,7 +148,7 @@ class OceanSpherePlaneEdge {
     }
 }
 
-const enum OceanSphereNrv { Wait }
+enum OceanSphereNrv { Wait }
 
 const materialParams = new MaterialParams();
 const drawParams = new DrawParams();

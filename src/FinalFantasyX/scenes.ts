@@ -1186,7 +1186,7 @@ interface FFXShared {
     envMap: TextureData;
 }
 
-export const enum FFXFolder {
+export enum FFXFolder {
     EVENT = 0xC,
     BATTLE_LIST,
     ENCOUNTERS,

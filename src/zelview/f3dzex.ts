@@ -38,7 +38,7 @@ class StagingVertex extends Vertex {
     }
 }
 
-const enum G_MTX {
+enum G_MTX {
     NOPUSH     = 0x00,
     PUSH       = 0x01,
     MUL        = 0x00,
@@ -47,28 +47,28 @@ const enum G_MTX {
     PROJECTION = 0x04,
 }
 
-export const enum BlendParam_PM_Color {
+export enum BlendParam_PM_Color {
     G_BL_CLR_IN  = 0,
     G_BL_CLR_MEM = 1,
     G_BL_CLR_BL  = 2,
     G_BL_CLR_FOG = 3,
 }
 
-export const enum BlendParam_A {
+export enum BlendParam_A {
     G_BL_A_IN    = 0,
     G_BL_A_FOG   = 1,
     G_BL_A_SHADE = 2,
     G_BL_0       = 3,
 }
 
-export const enum BlendParam_B {
+export enum BlendParam_B {
     G_BL_1MA   = 0,
     G_BL_A_MEM = 1,
     G_BL_1     = 2,
     G_BL_0     = 3,
 }
 
-export const enum RSP_Geometry {
+export enum RSP_Geometry {
     G_ZBUFFER            = 1 << 0,
     G_SHADE              = 1 << 2,
     G_SHADING_SMOOTH     = 1 << 9,
@@ -81,7 +81,7 @@ export const enum RSP_Geometry {
     G_CLIPPING           = 1 << 23,
 }
 
-export const enum ZMode {
+export enum ZMode {
     ZMODE_OPA   = 0,
     ZMODE_INTER = 1,
     ZMODE_XLU   = 2, // translucent
@@ -303,7 +303,7 @@ export class Texture {
     }
 }
 
-export const enum OtherModeL_Layout {
+export enum OtherModeL_Layout {
     // cycle-independent
     AA_EN         = 3,
     Z_CMP         = 4,
@@ -464,7 +464,7 @@ export class RSPSharedOutput {
     }
 }
 
-export const enum OtherModeH_Layout {
+export enum OtherModeH_Layout {
     G_MDSFT_BLENDMASK   = 0,
     G_MDSFT_ALPHADITHER = 4,
     G_MDSFT_RGBDITHER   = 6,
@@ -480,7 +480,7 @@ export const enum OtherModeH_Layout {
     G_MDSFT_PIPELINE    = 23,
 }
 
-export const enum OtherModeH_CycleType {
+export enum OtherModeH_CycleType {
     G_CYC_1CYCLE = 0x00,
     G_CYC_2CYCLE = 0x01,
     G_CYC_COPY   = 0x02,
@@ -804,7 +804,7 @@ export class RSPState {
     }
 }
 
-const enum F3DZEX_GBI {
+enum F3DZEX_GBI {
     // DMA
     G_VTX               = 0x01,
     G_MODIFYVTX         = 0x02,

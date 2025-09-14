@@ -76,7 +76,7 @@ function isExistPriorDrawAir(sceneObjHolder: SceneObjHolder): boolean {
         return false;
 }
 
-export const enum SpecialTextureType {
+export enum SpecialTextureType {
     OpaqueSceneTexture = 'opaque-scene-texture',
     AstroMapBoard = 'astro-map-board',
     MarioShadowTexture = `mario-shadow-texture`,
@@ -1067,7 +1067,7 @@ class AreaObjContainer extends NameObj {
     }
 }
 
-export const enum SceneObj {
+export enum SceneObj {
     SensorHitChecker               = 0x00,
     CollisionDirector              = 0x01,
     ClippingDirector               = 0x02,

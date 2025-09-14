@@ -129,7 +129,7 @@ class ModelCache {
     }
 }
 
-const enum ZSSPass {
+enum ZSSPass {
     SKYBOX = 1 << 0,
     MAIN = 1 << 1,
     INDIRECT = 1 << 2,

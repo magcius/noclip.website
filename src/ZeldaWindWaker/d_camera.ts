@@ -17,12 +17,12 @@ import { ViewerRenderInput } from "../viewer.js";
 const scratchVec3a = vec3.create();
 const sceneParams = new SceneParams();
 
-const enum CameraMode {
+enum CameraMode {
     Default,
     Cinematic
 }
 
-export const enum CameraTrimHeight {
+export enum CameraTrimHeight {
     Default,
     Cinematic,
     Vista,

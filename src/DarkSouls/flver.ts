@@ -53,7 +53,7 @@ export interface InputState {
     vertexData: ArrayBufferSlice;
 }
 
-export const enum VertexInputSemantic {
+export enum VertexInputSemantic {
     Position    = 0,
     JointIndex  = 1,
     JointWeight = 2,

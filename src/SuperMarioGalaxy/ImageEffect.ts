@@ -1021,7 +1021,7 @@ export class ImageEffectSystemHolder extends NameObj {
     }
 }
 
-const enum ImageEffectType {
+enum ImageEffectType {
     BloomNormal,
     BloomSimple,
     ScreenBlur,

@@ -235,7 +235,7 @@ class ShapeInstance {
 
 export const nnsG3dBindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 3, numSamplers: 1 }];
 
-const enum BillboardMode {
+enum BillboardMode {
     NONE, BB, BBY,
 }
 
@@ -289,7 +289,7 @@ export class MDL0Renderer {
         const model = this.model;
         const view = model.sbcBuffer.createDataView();
 
-        const enum Op {
+        enum Op {
             NOP, RET, NODE, MTX, MAT, SHP, NODEDESC, BB, BBY, NODEMIX, CALLDL, POSSCALE, ENVMAP, PRJMAP,
         };
 

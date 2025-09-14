@@ -12,7 +12,7 @@ import { dGlobals } from "./Main.js";
 
 let currentPlaceName: number | null = null;
 
-export const enum Placename {
+export enum Placename {
     OutsetIsland,
     ForsakenFortress,
     DragonRoost,
@@ -34,7 +34,7 @@ export const enum Placename {
     GanonsTower,
 }
 
-export const enum PlacenameState {
+export enum PlacenameState {
     Init,
     Hidden,
     Visible,

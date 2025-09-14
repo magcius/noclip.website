@@ -145,7 +145,7 @@ function readESkeleton(stream: DataStream): ESkeleton {
     return { name, joints };
 }
 
-export const enum MaterialFlags {
+export enum MaterialFlags {
     Alpha             = 0x00000001,
     Incandescent      = 0x00000002,
     Skinned           = 0x00000004,

@@ -382,7 +382,7 @@ const materialHacks: GXMaterialHacks = {
     ];
 */
 
-const enum OkamiPass {
+enum OkamiPass {
     SKYBOX = 1 << 0,
     GROUND = 1 << 1,
     WATER = 1 << 2,

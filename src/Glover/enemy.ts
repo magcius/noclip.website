@@ -18,7 +18,7 @@ import { Collidable, Collision, projectOntoTerrain } from './shadows.js';
 
 import { GloverLevel } from './parsers/index.js';
 
-export const enum EnemyType {
+export enum EnemyType {
     bovva = 7, // giant bee
     cannon, // rolley-polley grinning cannon ball
     samtex, // dynamite

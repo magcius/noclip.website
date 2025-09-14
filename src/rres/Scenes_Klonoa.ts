@@ -24,7 +24,7 @@ const name = "Klonoa";
 
 const pathBase = `Klonoa`;
 
-const enum KlonoaPass {
+enum KlonoaPass {
     SKYBOX = 0x01,
     MAIN = 0x02,
     INDIRECT = 0x04,

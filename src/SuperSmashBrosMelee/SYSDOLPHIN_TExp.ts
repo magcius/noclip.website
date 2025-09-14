@@ -14,7 +14,7 @@ export enum HSD_TExpType {
     TE_KONST = 6,
 }
 
-export const enum HSD_TEInput {
+export enum HSD_TEInput {
     TE_END = 0,
     TE_RGB = 1,
     TE_R = 2,
@@ -35,7 +35,7 @@ export const enum HSD_TEInput {
 }
 
 // A pointer in the original code, we just enumerate all possibilities instead here...
-export const enum HSD_TExpCnstVal {
+export enum HSD_TExpCnstVal {
     ONE,
     MOBJ_DIFFUSE,
     MOBJ_ALPHA,

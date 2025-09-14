@@ -27,7 +27,7 @@ export function createDOMFromString(s: string): DocumentFragment {
     return document.createRange().createContextualFragment(s);
 }
 
-const enum FontelloIcon {
+enum FontelloIcon {
     share = '\ue800',
     resize_full = '\ue801',
     pause = '\ue802',
@@ -233,7 +233,7 @@ export class TextEntry implements Widget {
     }
 }
 
-export const enum ScrollSelectItemType {
+export enum ScrollSelectItemType {
     Selectable, Header,
 }
 
@@ -2083,7 +2083,7 @@ class CameraSpeedIndicator implements BottomBarWidget {
     }
 }
 
-const enum BottomBarArea { Left, Center, Right }
+enum BottomBarArea { Left, Center, Right }
 
 function setAreaAnchor(elem: HTMLElement, area: BottomBarArea) {
     if (area === BottomBarArea.Left) {

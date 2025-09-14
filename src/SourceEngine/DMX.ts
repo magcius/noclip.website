@@ -16,7 +16,7 @@ export interface DMXElement {
     attributes: DMXAttribute[];
 }
 
-export const enum DMXAttributeType {
+export enum DMXAttributeType {
     Element = 1,
     Int,
     Float,

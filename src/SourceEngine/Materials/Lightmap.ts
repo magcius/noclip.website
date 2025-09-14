@@ -214,7 +214,7 @@ function lightmapPackRuntimeBumpmap(dstPage: LightmapPage, location: Readonly<Fa
     }
 }
 
-const enum FaceLightmapUpdaterState {
+enum FaceLightmapUpdaterState {
     NotReady,
     NeedsUpload,
     Idle,

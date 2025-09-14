@@ -35,7 +35,7 @@ import { HIEntTeleportBox } from "./HIEntTeleportBox.js";
 import { HIAssetManager } from "./HIAssetManager.js";
 import { HIAssetType } from "./HIAssetTypes.js";
 
-export const enum HIGame {
+export enum HIGame {
     BFBBBeta,
     BFBB,
     TSSM,

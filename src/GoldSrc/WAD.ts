@@ -2,7 +2,7 @@
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { assert, readString } from "../util.js";
 
-export const enum WADLumpType {
+export enum WADLumpType {
     MIPTEX = 0x43,
 }
 

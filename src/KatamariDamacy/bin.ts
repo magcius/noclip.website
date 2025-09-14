@@ -8,21 +8,21 @@ import { GSRegister, GSRegisterTEX0, GSMemoryMap, getGSRegisterTEX0, gsMemoryMap
 import { Endianness } from "../endian.js";
 import { MathConstants, computeModelMatrixSRT } from "../MathHelpers.js";
 
-const enum VifUnpackVN {
+enum VifUnpackVN {
     S = 0x00,
     V2 = 0x01,
     V3 = 0x02,
     V4 = 0x03,
 }
 
-const enum VifUnpackVL {
+enum VifUnpackVL {
     VL_32 = 0x00,
     VL_16 = 0x01,
     VL_8 = 0x02,
     VL_5 = 0x03,
 }
 
-const enum VifUnpackFormat {
+enum VifUnpackFormat {
     S_32  = (VifUnpackVN.S  << 2 | VifUnpackVL.VL_32),
     S_16  = (VifUnpackVN.S  << 2 | VifUnpackVL.VL_16),
     S_8   = (VifUnpackVN.S  << 2 | VifUnpackVL.VL_8),
@@ -930,7 +930,7 @@ export interface MotionParameters {
     speed: number;
 }
 
-export const enum MotionID {
+export enum MotionID {
     ChasePlayer       = 0x03,
     PathTowardsPlayer = 0x05,
     ScaredBird        = 0x06,
@@ -953,7 +953,7 @@ export const enum MotionID {
     DraggedAlong      = 0x25,
 }
 
-export const enum MotionActionID {
+export enum MotionActionID {
     None          = 0x00,
     SetZone       = 0x01,
     PathCollision = 0x02,

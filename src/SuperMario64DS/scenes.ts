@@ -357,7 +357,7 @@ enum ObjectId {
     TRG_MINIMAP_CHANGE = 0x1ff,
 }
 
-const enum DoorType {
+enum DoorType {
     PLANE          = 0x00,
     DOOR_NORMAL    = 0x01,
     DOOR_STAR      = 0x02,

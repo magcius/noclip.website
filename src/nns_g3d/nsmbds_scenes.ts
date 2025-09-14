@@ -226,7 +226,7 @@ class NewSuperMarioBrosDSSceneDesc implements Viewer.SceneDesc {
     }
 }
 
-const enum WorldMapObjType { ROUTE_POINT, START_POINT, TOWER, CASTLE, BIG_CASTLE };
+enum WorldMapObjType { ROUTE_POINT, START_POINT, TOWER, CASTLE, BIG_CASTLE };
 
 class ObjectData {
     constructor(public bmd: BMD0, public btx: BTX0 | null, public bta: BTA0 | null, public btp: BTP0 | null) {

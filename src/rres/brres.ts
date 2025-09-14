@@ -89,7 +89,7 @@ function calcTexMtx_Max(dst: mat4, scaleS: number, scaleT: number, rotation: num
     dst[13] = scaleT * (( sinR * (translationS + 0.5)) + (cosR * (translationT - 0.5))) + 0.5;
 }
 
-const enum TexMatrixMode {
+enum TexMatrixMode {
     Basic = -1,
     Maya = 0,
     XSI = 1,
@@ -141,7 +141,7 @@ function parseResDic(buffer: ArrayBufferSlice, tableOffs: number): ResDicEntry[]
     return entries;
 }
 
-export const enum ResUserDataItemValueType {
+export enum ResUserDataItemValueType {
     S32, F32, STRING,
 }
 
@@ -293,7 +293,7 @@ function parseMDL0_TevEntry(buffer: ArrayBufferSlice, r: DisplayListRegisters, n
     displayListRegistersRun(r, buffer.subarray(dlOffs, 480));
 }
 
-export const enum MapMode {
+export enum MapMode {
     TEXCOORD = 0x00,
     ENV_CAMERA = 0x01,
     PROJECTION = 0x02,
@@ -464,7 +464,7 @@ function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice, version: number): MDL
     const colorAmbRegs: Color[] = [];
     let lightChannelTableIdx = endOfHeaderOffs + 0x3B4;
     for (let i = 0; i < 2; i++) {
-        const enum ChanFlags {
+        enum ChanFlags {
             MATCOLOR_COLOR = (1 << 0),
             MATCOLOR_ALPHA = (1 << 1),
             AMBCOLOR_COLOR = (1 << 2),
@@ -529,7 +529,7 @@ function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice, version: number): MDL
     const texSrts: MDL0_TexSrtEntry[] = [];
     for (let i = 0; i < 8; i++) {
         // SRT
-        const enum Flags {
+        enum Flags {
             SCALE_ONE  = 0x02,
             ROT_ZERO   = 0x04,
             TRANS_ZERO = 0x08,
@@ -687,7 +687,7 @@ function parseMDL0_ShapeEntry(buffer: ArrayBufferSlice, inputBuffers: InputVerte
     const primDLCmdSize = view.getUint32(0x28);
     const primDLOffs = 0x24 + view.getUint32(0x2C);
 
-    const enum VcdFlags {
+    enum VcdFlags {
         PNMTXIDX   = 1 << 0,
         TEX0MTXIDX = 1 << 1,
         TEX1MTXIDX = 1 << 2,
@@ -838,7 +838,7 @@ function parseMDL0_ShapeEntry(buffer: ArrayBufferSlice, inputBuffers: InputVerte
     return { name, mtxIdx, loadedVertexLayout, loadedVertexData };
 }
 
-export const enum NodeFlags {
+export enum NodeFlags {
     SRT_IDENTITY      = 0x00000001,
     TRANS_ZERO        = 0x00000002,
     ROT_ZERO          = 0x00000004,
@@ -848,7 +848,7 @@ export const enum NodeFlags {
     REFER_BB_ANCESTOR = 0x00000400,
 }
 
-export const enum BillboardMode {
+export enum BillboardMode {
     NONE = 0,
     BILLBOARD,
     PERSP_BILLBOARD,
@@ -974,7 +974,7 @@ function parseMDL0_NodeEntry(buffer: ArrayBufferSlice, entryOffs: number, baseOf
     return { name, id, userData, mtxId, flags, billboardMode, billboardRefNodeId, modelMatrix, bbox, visible, parentNodeId, forwardBindPose, inverseBindPose };
 }
 
-export const enum ByteCodeOp {
+export enum ByteCodeOp {
     NOP = 0x00,
     RET = 0x01,
     NODEDESC = 0x02, // NodeID ParentMtxID
@@ -1246,12 +1246,12 @@ function parseMDL0(buffer: ArrayBufferSlice): MDL0 {
 }
 //#endregion
 //#region Animation Core
-export const enum LoopMode {
+export enum LoopMode {
     ONCE = 0x00,
     REPEAT = 0x01,
 }
 
-const enum AnimationTrackType {
+enum AnimationTrackType {
     LINEAR,
     HERMITE,
 }
@@ -1592,7 +1592,7 @@ function findAnimationData_SRT0(srt0: SRT0, materialName: string, texMtxIndex: n
 function parseSRT0_TexData(buffer: ArrayBufferSlice): SRT0_TexData {
     const view = buffer.createDataView();
 
-    const enum Flags {
+    enum Flags {
         SCALE_ONE        = 0x002,
         ROT_ZERO         = 0x004,
         TRANS_ZERO       = 0x008,
@@ -1777,7 +1777,7 @@ function parsePAT0_MatData(buffer: ArrayBufferSlice): PAT0_MatData {
     const materialName = readString(buffer, materialNameOffs);
     const flags = view.getUint32(0x04);
 
-    const enum Flags {
+    enum Flags {
         EXISTS = 1 << 0,
         CONSTANT = 1 << 1,
         TEX_EXISTS = 1 << 2,
@@ -1967,7 +1967,7 @@ function parseCLR0_MatData(buffer: ArrayBufferSlice, numKeyframes: number): CLR0
     const materialName = readString(buffer, materialNameOffs);
     const flags = view.getUint32(0x04);
 
-    const enum Flags {
+    enum Flags {
         EXISTS = 1 << 0,
         CONSTANT = 1 << 1,
     };
@@ -2065,7 +2065,7 @@ interface CHR0_NodeData {
 }
 
 function parseCHR0_NodeData(buffer: ArrayBufferSlice, numKeyframes: number): CHR0_NodeData {
-    const enum Flags {
+    enum Flags {
         IDENTITY                = (1 <<  1),
         RT_ZERO                 = (1 <<  2),
         SCALE_ONE               = (1 <<  3),
@@ -2277,7 +2277,7 @@ export interface VIS0_NodeData {
 }
 
 function parseVIS0_NodeData(buffer: ArrayBufferSlice, duration: number): VIS0_NodeData {
-    const enum Flags {
+    enum Flags {
         CONSTANT_VALUE = 0x01,
         IS_CONSTANT = 0x02,
     };
@@ -2428,7 +2428,7 @@ function parseSCN0_AmbLight(buffer: ArrayBufferSlice, version: number, numKeyfra
     const index = view.getUint32(0x0C);
     const refNumber = view.getUint32(0x10);
 
-    const enum Flags {
+    enum Flags {
         HAS_COLOR = 1 << 0,
         HAS_ALPHA = 1 << 1,
 
@@ -2444,7 +2444,7 @@ function parseSCN0_AmbLight(buffer: ArrayBufferSlice, version: number, numKeyfra
     return { name, refNumber, hasColor, hasAlpha, color };
 }
 
-export const enum SCN0_LightType {
+export enum SCN0_LightType {
     POINT, DIRECTIONAL, SPOT,
 }
 
@@ -2489,7 +2489,7 @@ function parseSCN0_Light(buffer: ArrayBufferSlice, version: number, numKeyframes
 
     const specLightObjIdx = view.getUint32(0x14);
 
-    const enum Flags {
+    enum Flags {
         ENABLE        = 1 << 2,
         HAS_SPECULAR  = 1 << 3,
         HAS_COLOR     = 1 << 4,
@@ -2563,7 +2563,7 @@ function parseSCN0_Fog(buffer: ArrayBufferSlice, version: number, numKeyframes: 
     const index = view.getUint32(0x0C);
     const refNumber = view.getUint32(0x10);
 
-    const enum Flags {
+    enum Flags {
         STARTZ_CONSTANT = 1 << 29,
         ENDZ_CONSTANT   = 1 << 30,
         COLOR_CONSTANT  = 1 << 31,
@@ -2580,7 +2580,7 @@ function parseSCN0_Fog(buffer: ArrayBufferSlice, version: number, numKeyframes: 
     };
 }
 
-export const enum SCN0_CameraType {
+export enum SCN0_CameraType {
     ROTATE, AIM,
 }
 
@@ -2622,7 +2622,7 @@ function parseSCN0_Camera(buffer: ArrayBufferSlice, version: number, numKeyframe
 
     const projType: GX.ProjectionType = view.getUint32(0x14);
 
-    const enum Flags {
+    enum Flags {
         POSX_CONSTANT        = 1 << 17,
         POSY_CONSTANT        = 1 << 18,
         POSZ_CONSTANT        = 1 << 19,
@@ -2928,7 +2928,7 @@ export function parse(buffer: ArrayBufferSlice): RRES {
     return { plt0, tex0, mdl0, srt0, pat0, clr0, chr0, vis0, scn0 };
 }
 
-const enum LightObjFlags {
+enum LightObjFlags {
     NONE = 0,
     ENABLE = 1 << 0,
     HAS_COLOR = 1 << 1,
@@ -2936,7 +2936,7 @@ const enum LightObjFlags {
     SPECULAR = 1 << 3,
 }
 
-export const enum LightObjSpace {
+export enum LightObjSpace {
     WORLD_SPACE,
     VIEW_SPACE,
 }

@@ -25,7 +25,7 @@ export abstract class dPa_levelEcallBack extends JPAEmitterCallBack {
     }
 }
 
-const enum EffectDrawGroup {
+enum EffectDrawGroup {
     Main = 0,
     Indirect = 1,
 }

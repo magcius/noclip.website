@@ -21,7 +21,7 @@ export class HILinkAsset {
     }
 }
 
-export const enum HIBaseFlags {
+export enum HIBaseFlags {
     Enabled = 0x1,
     Persistent = 0x2,
     Valid = 0x4,

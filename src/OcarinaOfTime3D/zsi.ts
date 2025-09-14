@@ -6,7 +6,7 @@ import { assert, nArray, readString } from '../util.js';
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import { mat4, quat, vec3 } from 'gl-matrix';
 
-export const enum Version {
+export enum Version {
     Ocarina, Majora
 }
 
@@ -98,7 +98,7 @@ export class ZSIEnvironmentSettings {
 }
 
 // Subset of Z64 command types.
-const enum HeaderCommands {
+enum HeaderCommands {
     Actor = 0x01,
     Collision = 0x03,
     Rooms = 0x04,

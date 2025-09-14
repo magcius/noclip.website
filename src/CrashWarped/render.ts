@@ -766,7 +766,7 @@ export class SimpleMeshData extends ModelData {
     }
 }
 
-export const enum RenderMode {
+export enum RenderMode {
     DEFAULT,
     FOG,
     XLU,

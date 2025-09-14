@@ -1,4 +1,4 @@
-export const enum HIAssetType {
+export enum HIAssetType {
     ALST = 0x414C5354,
     ANIM = 0x414E494D,
     ATBL = 0x4154424C,

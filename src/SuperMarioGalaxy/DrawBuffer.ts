@@ -7,7 +7,7 @@ import { DrawBufferType } from "./NameObj.js";
 import { GfxRenderInstExecutionOrder, GfxRenderInstList, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import { range } from "../MathHelpers.js";
 
-export const enum LightType {
+export enum LightType {
     None   = -1,
     Player = 0x00,
     Strong = 0x01,
@@ -17,7 +17,7 @@ export const enum LightType {
     Coin   = 0x04,
 }
 
-export const enum DrawCameraType {
+export enum DrawCameraType {
     DrawCameraType_3D     = 0x00,
     DrawCameraType_2D     = 0x01,
     DrawCameraType_Mirror = 0x02,

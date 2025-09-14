@@ -9,21 +9,21 @@ import { parseParticleData, LevelParticles, parseFlipbook, parseGeometry } from 
 import { MagicLayout, sniffMagic } from "./magic.js";
 import { parseActorMagicCommands } from "./actor.js";
 
-const enum VifUnpackVN {
+enum VifUnpackVN {
     S = 0x00,
     V2 = 0x01,
     V3 = 0x02,
     V4 = 0x03,
 }
 
-const enum VifUnpackVL {
+enum VifUnpackVL {
     VL_32 = 0x00,
     VL_16 = 0x01,
     VL_8 = 0x02,
     VL_5 = 0x03,
 }
 
-const enum VifUnpackFormat {
+enum VifUnpackFormat {
     S_32 = (VifUnpackVN.S << 2 | VifUnpackVL.VL_32),
     S_16 = (VifUnpackVN.S << 2 | VifUnpackVL.VL_16),
     S_8 = (VifUnpackVN.S << 2 | VifUnpackVL.VL_8),
@@ -154,7 +154,7 @@ function gsConfigurationEqual(a: GSConfiguration, b: GSConfiguration) {
     return true;
 }
 
-const enum MapSectionType {
+enum MapSectionType {
     LEVEL_PART,
     MODEL,
     TEXTURE,
@@ -166,7 +166,7 @@ const enum MapSectionType {
     COMBINED_EFFECT,
 }
 
-export const enum LevelEffectType {
+export enum LevelEffectType {
     NONE,
     POSITIONS,
     UNUSED,
@@ -1198,7 +1198,7 @@ function parseParticleWaterTex(buffer: ArrayBufferSlice, offs: number, textures:
     return indices;
 }
 
-export const enum SkinningMode {
+export enum SkinningMode {
     BASIC,
     SCALED,
     PERTURB,
@@ -1945,7 +1945,7 @@ interface AnimationGroup {
     animations: Animation[];
 }
 
-const enum SeqOp {
+enum SeqOp {
     END,
     LOAD,
     WAIT_FLAG,
@@ -1955,7 +1955,7 @@ const enum SeqOp {
     WAIT_COUNT,
 }
 
-const enum CurveType {
+enum CurveType {
     Zero,
     One,
     Const,
@@ -2199,7 +2199,7 @@ export function parseAnimation(buffer: ArrayBufferSlice, simple: Boolean): Anima
     return groups;
 }
 
-export const enum KeyframeFormat {
+export enum KeyframeFormat {
     LINEAR,
     SPLINE,
     CONSTANT,
@@ -2213,7 +2213,7 @@ interface Keyframe {
     data: vec3[];
 }
 
-export const enum EffectType {
+export enum EffectType {
     MOTION,
     ROTATION,
     PARAMETER,
@@ -2287,7 +2287,7 @@ interface MapPoint {
     entrypoint: number;
 }
 
-export const enum WorkerType {
+export enum WorkerType {
     NONE,
     MOTION,
     PLAYER_EDGE,
@@ -2343,7 +2343,7 @@ export enum ArraySource {
     EVENT,
 }
 
-export const enum DataFormat {
+export enum DataFormat {
     U8,
     I8,
     U16,

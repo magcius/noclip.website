@@ -26,7 +26,7 @@ interface DebugDrawOptions {
     flags?: DebugDrawFlags;
 };
 
-export const enum DebugDrawFlags {
+export enum DebugDrawFlags {
     WorldSpace = 0,
     ViewSpace = 1 << 0,
     ScreenSpace = 1 << 1,
@@ -114,7 +114,7 @@ function fillVec3p(d: Float32Array, offs: number, v: ReadonlyVec3): number {
     return 3;
 }
 
-const enum BehaviorType {
+enum BehaviorType {
     Lines,
     Opaque,
     Transparent,

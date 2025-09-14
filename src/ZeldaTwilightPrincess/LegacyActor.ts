@@ -182,7 +182,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         return resInfo.lazyLoadResource(ResType.Btp, assertExists(resInfo.res.find((res) => path.endsWith(res.file.name))));
     }
 
-    const enum TagShape {
+    enum TagShape {
         Cube,
         Cylinder,
     }

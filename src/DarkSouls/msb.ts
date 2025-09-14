@@ -13,7 +13,7 @@ export interface MSB {
     parts: Part[];
 }
 
-const enum ModelType {
+enum ModelType {
     MapPiece  = 0x00,
     Object    = 0x01,
     Enemy     = 0x02,
@@ -30,7 +30,7 @@ export interface Model {
     flverPath: string;
 }
 
-const enum PartType {
+enum PartType {
     MapPiece  = 0x00,
     Object    = 0x01,
     Enemy     = 0x02,

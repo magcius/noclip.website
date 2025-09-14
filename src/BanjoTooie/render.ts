@@ -326,7 +326,7 @@ class DrawCallInstance {
     }
 }
 
-export const enum AnimationTrackType {
+export enum AnimationTrackType {
     RotationX,
     RotationY,
     RotationZ,
@@ -459,7 +459,7 @@ class GeoNodeRenderer {
     }
 }
 
-export const enum LowObjectFlags {
+export enum LowObjectFlags {
     ExtraFinal   = 0x00400000,
     Translucent  = 0x00020000,
     EarlyOpaque  = 0x00000800,
@@ -469,11 +469,11 @@ export const enum LowObjectFlags {
     AltVerts     = 0x00000008,
 }
 
-const enum HighObjectFlags {
+enum HighObjectFlags {
     Final        = 0x00008000,
 }
 
-export const enum BTLayer {
+export enum BTLayer {
     Early,
     Opaque,
     AfterPlayers,
@@ -498,7 +498,7 @@ export function layerFromFlags(low: number, high: number): BTLayer {
     return BTLayer.AfterPlayers;
 }
 
-const enum BlinkState {
+enum BlinkState {
     Open,
     Closing,
     Opening,

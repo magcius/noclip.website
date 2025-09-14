@@ -496,7 +496,7 @@ void main() {
     }
 }
     
-const enum DOFDrawMode {
+enum DOFDrawMode {
     DrawMode0,
     DrawMode1,
     DrawMode2,

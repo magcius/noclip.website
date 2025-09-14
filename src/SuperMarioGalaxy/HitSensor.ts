@@ -9,7 +9,7 @@ import { transformVec3Mat4w1, transformVec3Mat4w0, Vec3Zero } from "../MathHelpe
 import { drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk.js";
 import { Color, Magenta } from "../Color.js";
 
-export const enum HitSensorType {
+export enum HitSensorType {
     _Player_Start               = 0x00,
     Player                      = 0x01,
     Puppeteer                   = 0x02,

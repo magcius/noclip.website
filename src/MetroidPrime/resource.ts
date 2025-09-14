@@ -24,7 +24,7 @@ import * as SWHC from './swhc.js';
 import * as ELSC from './elsc.js';
 import { InputStream } from './stream.js';
 
-export const enum ResourceGame {
+export enum ResourceGame {
     MP1,
     MP2,
     MP3,

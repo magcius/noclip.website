@@ -300,7 +300,7 @@ export interface RpAtomicPipeline {
     destroy(atomic: RpAtomic, rw: RwEngine): void;
 }
 
-export const enum RpLightType {
+export enum RpLightType {
     NALIGHTTYPE = 0,
     DIRECTIONAL,
     AMBIENT,
@@ -310,7 +310,7 @@ export const enum RpLightType {
     //SPOTSOFT
 }
 
-export const enum RpLightFlag {
+export enum RpLightFlag {
     LIGHTATOMICS = 0x1,
     LIGHTWORLD = 0x2,
 }

@@ -8,7 +8,7 @@ import { MathConstants, lerp, randomRangeFloat } from "../MathHelpers.js";
 import { FlipbookMode } from "./flipbook.js";
 import { LavaRock, SnowballChunk } from "./actors.js";
 
-export const enum ParticleType {
+export enum ParticleType {
     Sparkle,
     SnowSparkle,
     Carpet,
@@ -17,7 +17,7 @@ export const enum ParticleType {
     AirBubble, // actually an object in the game
 }
 
-const enum MotionType {
+enum MotionType {
     Static,
     ConstantVelocity,
     Projectile,
@@ -248,7 +248,7 @@ export function emitAt(emitter: Emitter, m: mat4, count: number): void {
     emitter.emitCount = count;
 }
 
-export const enum SparkleColor {
+export enum SparkleColor {
     Purple = 0x10,
     DarkBlue = 0x11,
     Green = 0x12,

@@ -53,7 +53,7 @@ class CacheEntry {
     }
 }
 
-export const enum GmaSrc {
+export enum GmaSrc {
     Stage,
     Bg,
     Common,

@@ -7,7 +7,7 @@ import { TextureMapping } from '../TextureHolder.js';
 import { assert, assertExists, nArray } from '../util.js';
 import { AnimationTrack, ColorFlagStart, DataMap, EntryKind, MaterialData, MaterialFlags, Path, PathKind, GFXNode } from './room.js';
 
-export const enum ModelField {
+export enum ModelField {
     Pitch,
     Yaw,
     Roll,
@@ -20,7 +20,7 @@ export const enum ModelField {
     ScaleZ,
 }
 
-export const enum MaterialField {
+export enum MaterialField {
     TexIndex1,
     T0_XShift,
     T0_YShift,
@@ -33,7 +33,7 @@ export const enum MaterialField {
     PalIndex,
 }
 
-export const enum ColorField {
+export enum ColorField {
     Prim,
     Env,
     Blend,
@@ -41,7 +41,7 @@ export const enum ColorField {
     Ambient,
 }
 
-export const enum AObjOP {
+export enum AObjOP {
     NOP,
     STEP,
     LERP,

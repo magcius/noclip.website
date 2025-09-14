@@ -7,7 +7,7 @@ import { LightmapPackerPage } from "../SourceEngine/BSPFile.js";
 import { pairs2obj, ValveKeyValueParser, VKFPair } from "../SourceEngine/VMT.js";
 import { assert, decodeString, ensureInList, readString } from "../util.js";
 
-const enum LumpType {
+enum LumpType {
     ENTITIES = 0,
     PLANES = 1,
     TEXTURES = 2,

@@ -11,17 +11,17 @@ import { readString } from "../util.js";
 import { decompressLZ } from "./AVLZ.js";
 import { parseVec2f, parseVec3f } from "./Utils.js";
 
-export const enum BananaType {
+export enum BananaType {
     Single,
     Bunch,
 }
 
-export const enum AnimType {
+export enum AnimType {
     Loop,
     Once,
 }
 
-export const enum PlaybackState {
+export enum PlaybackState {
     Forward,
     Pause,
     Backward,
@@ -29,13 +29,13 @@ export const enum PlaybackState {
     FastBackward,
 }
 
-export const enum GoalType {
+export enum GoalType {
     Blue,
     Green,
     Red,
 }
 
-export const enum EaseType {
+export enum EaseType {
     Constant,
     Linear,
     Smoothstep, // The game actually treats any value other than constant or linear as smoothstep, I've seen lots of different values
@@ -88,7 +88,7 @@ export type BgAnim = {
     translucencyKeyframes: Keyframe[]; // 1 - alpha?
 };
 
-export const enum BgModelFlags {
+export enum BgModelFlags {
     Visible = 1 << 0, // Sometimes other flags used for visibility?
 }
 

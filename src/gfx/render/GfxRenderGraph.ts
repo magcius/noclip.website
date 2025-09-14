@@ -47,7 +47,7 @@ export class GfxrRenderTargetDescription {
     }
 }
 
-export const enum GfxrAttachmentSlot {
+export enum GfxrAttachmentSlot {
     Color0 = 0,
     Color1 = 1,
     Color2 = 2,

@@ -213,7 +213,7 @@ export class RailPlanetMap extends PlanetMap {
     }
 }
 
-const enum EarthenPipeNrv { Wait }
+enum EarthenPipeNrv { Wait }
 export class EarthenPipe extends LiveActor<EarthenPipeNrv> {
     private pipeStream: PartsModel | null = null;
     private scaleY: number;
@@ -305,7 +305,7 @@ export class EarthenPipe extends LiveActor<EarthenPipeNrv> {
     }
 }
 
-const enum BlackHoleNrv { Wait }
+enum BlackHoleNrv { Wait }
 export class BlackHole extends LiveActor<BlackHoleNrv> {
     private blackHoleModel: ModelObj;
     private effectHostMtx = mat4.create();
@@ -413,7 +413,7 @@ export class BlackHole extends LiveActor<BlackHoleNrv> {
     }
 }
 
-const enum HatchWaterPlanetNrv { Wait, Open, WaitAfterOpen }
+enum HatchWaterPlanetNrv { Wait, Open, WaitAfterOpen }
 export class HatchWaterPlanet extends LiveActor<HatchWaterPlanetNrv> {
     private collisionPartsAfter: CollisionParts;
 
@@ -690,7 +690,7 @@ class FlashingCtrl extends NameObj {
     }
 }
 
-const enum CoinNrv { Fix, FixHide, Move }
+enum CoinNrv { Fix, FixHide, Move }
 class Coin extends LiveActor<CoinNrv> {
     public useLocalGravity: boolean = false;
     private isInWater: boolean = false;
@@ -1050,7 +1050,7 @@ export function requestArchivesPurpleCoin(sceneObjHolder: SceneObjHolder, infoIt
         sceneObjHolder.modelCache.requestObjectData('AirBubble');
 }
 
-const enum CoinGroupNrv { Wait, Appear }
+enum CoinGroupNrv { Wait, Appear }
 abstract class CoinGroup extends LiveActor<CoinGroupNrv> {
     protected coinArray: Coin[] = [];
 
@@ -1528,7 +1528,7 @@ export class GCaptureTarget extends LiveActor {
     }
 }
 
-const enum FountainBigNrv { Wait, Sign, SignStop, Spout, SpoutEnd }
+enum FountainBigNrv { Wait, Sign, SignStop, Spout, SpoutEnd }
 export class FountainBig extends LiveActor<FountainBigNrv> {
     private upVec = vec3.create();
 
@@ -1690,7 +1690,7 @@ export class Sky extends LiveActor {
     }
 }
 
-const enum AirNrv { In, Out }
+enum AirNrv { In, Out }
 export class Air extends LiveActor<AirNrv> {
     private distInThresholdSq: number;
     private distOutThresholdSq: number;
@@ -1770,7 +1770,7 @@ export class PriorDrawAir extends Air {
     }
 }
 
-const enum ShootingStarNrv { PreShooting, Shooting, WaitForNextShoot }
+enum ShootingStarNrv { PreShooting, Shooting, WaitForNextShoot }
 export class ShootingStar extends LiveActor<ShootingStarNrv> {
     private delay: number;
     private distance: number;
@@ -1869,7 +1869,7 @@ export class ShootingStar extends LiveActor<ShootingStarNrv> {
     }
 }
 
-const enum ChipBaseNrv { Wait, Hide, Controled }
+enum ChipBaseNrv { Wait, Hide, Controled }
 class ChipBase extends LiveActor<ChipBaseNrv> {
     private groupID: number = -1;
     private airBubble: PartsModel | null = null;
@@ -2201,8 +2201,8 @@ function createDummyModelCrystalItem(sceneObjHolder: SceneObjHolder, parentActor
     return dummyModel;
 }
 
-const enum CrystalCageSize { S, M, L }
-const enum CrystalCageNrv { Wait, Break, BreakAfter }
+enum CrystalCageSize { S, M, L }
+enum CrystalCageNrv { Wait, Break, BreakAfter }
 export class CrystalCage extends LiveActor<CrystalCageNrv> {
     private size: CrystalCageSize;
     private breakMtx = mat4.create();
@@ -2437,7 +2437,7 @@ export class CrystalCage extends LiveActor<CrystalCageNrv> {
     }
 }
 
-const enum LavaSteamNrv { Wait, Steam }
+enum LavaSteamNrv { Wait, Steam }
 export class LavaSteam extends LiveActor<LavaSteamNrv> {
     private effectScale = vec3.create();
 
@@ -2488,7 +2488,7 @@ export class LavaSteam extends LiveActor<LavaSteamNrv> {
     }
 }
 
-const enum WoodBoxNrv { Wait, Hit, Killed }
+enum WoodBoxNrv { Wait, Hit, Killed }
 export class WoodBox extends LiveActor<WoodBoxNrv> {
     private hitPoints = 1;
     private coinCount = 0;
@@ -2846,7 +2846,7 @@ class SpinDriverShootPath {
     }
 }
 
-const enum SpinDriverColor { Normal, Green, Pink }
+enum SpinDriverColor { Normal, Green, Pink }
 
 class SpinDriverPathDrawer extends LiveActor {
     private ddraw: TDDraw = new TDDraw();
@@ -3055,7 +3055,7 @@ export function createSuperSpinDriverPink(zoneAndLayer: ZoneAndLayer, sceneObjHo
     return new SuperSpinDriver(zoneAndLayer, sceneObjHolder, infoIter, 2);
 }
 
-const enum FishNrv { Approach, Wander }
+enum FishNrv { Approach, Wander }
 class Fish extends LiveActor<FishNrv> {
     private followPointPos = vec3.create();
     private offset = vec3.create();
@@ -3218,7 +3218,7 @@ function explerp(dst: vec3, target: vec3, k: number): void {
     dst[2] += (target[2] - dst[2]) * k;
 }
 
-const enum SeaGullNrv { HoverFront, HoverLeft, HoverRight }
+enum SeaGullNrv { HoverFront, HoverLeft, HoverRight }
 class SeaGull extends LiveActor<SeaGullNrv> {
     private direction: boolean;
     private updatePosCounter: number;
@@ -3607,7 +3607,7 @@ export class CoconutTreeLeafGroup extends LiveActor {
     }
 }
 
-const enum AirBubbleNrv { Wait, Move, KillWait }
+enum AirBubbleNrv { Wait, Move, KillWait }
 export class AirBubble extends LiveActor<AirBubbleNrv> {
     private lifetime: number = 180;
     private spawnLocation = vec3.create();
@@ -3704,7 +3704,7 @@ export class AirBubbleHolder extends LiveActorGroup<AirBubble> {
     }
 }
 
-const enum AirBubbleGeneratorNrv { Wait, Generate }
+enum AirBubbleGeneratorNrv { Wait, Generate }
 export class AirBubbleGenerator extends LiveActor<AirBubbleGeneratorNrv> {
     private delay: number;
     private lifetime: number;
@@ -3750,8 +3750,8 @@ export class AirBubbleGenerator extends LiveActor<AirBubbleGeneratorNrv> {
     }
 }
 
-const enum TreasureBoxType { Normal, Cracked, Gold }
-const enum TreasureBoxNrv { Wait, AlwaysOpen }
+enum TreasureBoxType { Normal, Cracked, Gold }
+enum TreasureBoxNrv { Wait, AlwaysOpen }
 export class TreasureBoxCracked extends LiveActor<TreasureBoxNrv> {
     private type: TreasureBoxType;
 
@@ -3838,7 +3838,7 @@ export class SubmarineSteam extends LiveActor {
     }
 }
 
-const enum PalmIslandNrv { Wait, Float }
+enum PalmIslandNrv { Wait, Float }
 export class PalmIsland extends LiveActor<PalmIslandNrv> {
     private floatDelay: number;
     private rippleTranslation = vec3.create();
@@ -4380,8 +4380,8 @@ export class WaterPlant extends LiveActor {
     }
 }
 
-const enum ShellfishItemType { Coin, YellowChip, BlueChip, KinokoOneUp }
-const enum ShellfishNrv { Wait, Open, OpenWait, CloseSignal, Close }
+enum ShellfishItemType { Coin, YellowChip, BlueChip, KinokoOneUp }
+enum ShellfishNrv { Wait, Open, OpenWait, CloseSignal, Close }
 const shellfishChipOffset = vec3.fromValues(0, 100, 50);
 const shellfishCoinOffset = vec3.fromValues(0, 50, 30);
 export class Shellfish extends LiveActor<ShellfishNrv> {
@@ -6369,7 +6369,7 @@ export class Flag extends LiveActor {
     }
 }
 
-const enum ElectricRailType {
+enum ElectricRailType {
     Normal0,
     Normal1,
     Moving0,
@@ -6974,7 +6974,7 @@ export class ElectricRailMoving extends LiveActor implements ElectricRailBase {
     }
 }
 
-const enum FluffWindEffectNrv { Init, BrowWind }
+enum FluffWindEffectNrv { Init, BrowWind }
 class FluffWindEffect extends LiveActor<FluffWindEffectNrv> {
     private effectHostMtx = mat4.create();
     private effectName: string;
@@ -7042,7 +7042,7 @@ export class FluffWind extends LiveActor {
     }
 }
 
-const enum OceanFloaterLandPartsNrv { Wait, Move, Done }
+enum OceanFloaterLandPartsNrv { Wait, Move, Done }
 export class OceanFloaterLandParts extends LiveActor<OceanFloaterLandPartsNrv> {
     private railMover: MapPartsRailMover | null = null;
     private endPos = vec3.create();
@@ -7124,7 +7124,7 @@ export class OceanFloaterLandParts extends LiveActor<OceanFloaterLandPartsNrv> {
     }
 }
 
-const enum PlantMemberNrv { Wait, Hint }
+enum PlantMemberNrv { Wait, Hint }
 class PlantMember extends LiveActor<PlantMemberNrv> {
     public hasItem: boolean = false;
 
@@ -7383,7 +7383,7 @@ export class MovieStarter extends LiveActor {
     }
 }
 
-const enum WaterLeakPipeNrv { Wait, Freeze }
+enum WaterLeakPipeNrv { Wait, Freeze }
 export class WaterLeakPipe extends LiveActor<WaterLeakPipeNrv> {
     private jointTop: mat4;
     private jointBottom: mat4;
@@ -7428,7 +7428,7 @@ export class WaterLeakPipe extends LiveActor<WaterLeakPipeNrv> {
     }
 }
 
-const enum UFOBaseNrv { Wait, Move, WaitForPlayerOn }
+enum UFOBaseNrv { Wait, Move, WaitForPlayerOn }
 class UFOBase extends LiveActor<UFOBaseNrv> {
     private front = vec3.create();
     private railMover: MapPartsRailMover | null = null;
@@ -7720,7 +7720,7 @@ export class BrightObj extends LiveActor {
     }
 }
 
-const enum FirePressureRadiateNrv { Relax, Wait, PrepareToRadiate, Radiate, RadiateMargin, SyncWait, }
+enum FirePressureRadiateNrv { Relax, Wait, PrepareToRadiate, Radiate, RadiateMargin, SyncWait, }
 export class FirePressureRadiate extends LiveActor<FirePressureRadiateNrv> {
     private effectHostMtx = mat4.create();
     private waitStep: number;
@@ -7911,7 +7911,7 @@ export class CoconutTree extends LiveActor {
     }
 }
 
-const enum AstroDomeSkyNrv { Wait }
+enum AstroDomeSkyNrv { Wait }
 export class AstroDomeSky extends LiveActor<AstroDomeSkyNrv> {
     private isSkybox = true;
 
@@ -8205,8 +8205,8 @@ class AstroDomeOrbit extends LiveActor {
     }
 }
 
-const enum MiniatureGalaxyNrv { Wait }
-const enum MiniatureGalaxyType { Normal, ExGalaxy, Boss }
+enum MiniatureGalaxyNrv { Wait }
+enum MiniatureGalaxyType { Normal, ExGalaxy, Boss }
 export class MiniatureGalaxy extends LiveActor<MiniatureGalaxyNrv> {
     public galaxyType: MiniatureGalaxyType;
 
@@ -8316,7 +8316,7 @@ export class MiniatureGalaxy extends LiveActor<MiniatureGalaxyNrv> {
     }
 }
 
-const enum ScrewSwitchNrv { Wait, End }
+enum ScrewSwitchNrv { Wait, End }
 export class ScrewSwitch extends LiveActor<ScrewSwitchNrv> {
     private mapObjConnector: MapObjConnector;
 
@@ -8429,7 +8429,7 @@ class Button extends NameObj {
     }
 }
 
-const enum ScrewSwitchReverseNrv { Wait, Screw }
+enum ScrewSwitchReverseNrv { Wait, Screw }
 export class ScrewSwitchReverse extends LiveActor<ScrewSwitchReverseNrv> {
     private button: Button;
 
@@ -8494,7 +8494,7 @@ export class ScrewSwitchReverse extends LiveActor<ScrewSwitchReverseNrv> {
     }
 }
 
-const enum SpinLeverSwitchNrv { Wait, SwitchOn, End }
+enum SpinLeverSwitchNrv { Wait, SwitchOn, End }
 export class SpinLeverSwitch extends LiveActor<SpinLeverSwitchNrv> {
     private button: Button;
     private mapObjConnector: MapObjConnector;
@@ -8571,7 +8571,7 @@ export class SpinLeverSwitch extends LiveActor<SpinLeverSwitchNrv> {
     }
 }
 
-const enum LavaGeyserNrv { Wait, WaitSwitch, Sign, ShootUp, ShootKeep, ShootDown }
+enum LavaGeyserNrv { Wait, WaitSwitch, Sign, ShootUp, ShootKeep, ShootDown }
 export class LavaGeyser extends LiveActor<LavaGeyserNrv> {
     private waitTime: number = 0;
     private keepWaitTime: number = 0;
@@ -8712,7 +8712,7 @@ export class HeatHazeDirector extends NameObj {
     }
 }
 
-const enum LavaProminenceNrv { Wait, WaitSwitch, Sign, MoveStartExtra, MoveLoop, MoveEndExtra, }
+enum LavaProminenceNrv { Wait, WaitSwitch, Sign, MoveStartExtra, MoveLoop, MoveEndExtra, }
 function calcUpVecFromGravity(dst: vec3, sceneObjHolder: SceneObjHolder, actor: LiveActor, pos: vec3): void {
     calcGravityVector(sceneObjHolder, actor, pos, dst);
     if (isNearZeroVec3(dst, 0.001))
@@ -9082,7 +9082,7 @@ export class WhirlPoolAccelerator extends LiveActor {
     }
 }
 
-const enum RainCloudNrv { Wait, Disappear, Appear, End, }
+enum RainCloudNrv { Wait, Disappear, Appear, End, }
 export class RainCloud extends LiveActor<RainCloudNrv> {
     private railMover: MapPartsRailMover | null = null;
     private rainCylinder: ModelObj | null = null;
@@ -9291,7 +9291,7 @@ export class RainCloud extends LiveActor<RainCloudNrv> {
     }
 }
 
-const enum LavaProminenceType { LavaProminenceTriple, LavaProminenceEnvironment }
+enum LavaProminenceType { LavaProminenceTriple, LavaProminenceEnvironment }
 export class LavaProminenceTriple extends LiveActor {
     private bloomModel: PartsModel | null;
     private bloomMtx = mat4.create();
@@ -9373,7 +9373,7 @@ export class LavaProminenceTriple extends LiveActor {
     }
 }
 
-const enum FallingSmallRockNrv { Move }
+enum FallingSmallRockNrv { Move }
 export class FallingSmallRock extends LiveActor<FallingSmallRockNrv> {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
@@ -9402,9 +9402,9 @@ export class FallingSmallRock extends LiveActor<FallingSmallRockNrv> {
     }
 }
 
-const enum MorphItemObjNeoNrv { Wait, Appear, Fly, SwitchAppear }
-const enum MorphItemObjNeoType { Hopper, Bee, Teresa, Ice, Fire, Foo }
-const enum MorphItemObjNeoContainerType { None, CrystalBox, ItemBubble }
+enum MorphItemObjNeoNrv { Wait, Appear, Fly, SwitchAppear }
+enum MorphItemObjNeoType { Hopper, Bee, Teresa, Ice, Fire, Foo }
+enum MorphItemObjNeoContainerType { None, CrystalBox, ItemBubble }
 export class MorphItemObjNeo extends LiveActor<MorphItemObjNeoNrv> {
     private type: MorphItemObjNeoType;
     private containerType: MorphItemObjNeoContainerType;

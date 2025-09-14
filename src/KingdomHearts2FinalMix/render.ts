@@ -165,7 +165,7 @@ class DrawCall {
     public layer: Layer | null = null;
 }
 
-const enum MeshGroup {
+enum MeshGroup {
     MAP = 0, SK0 = 1, SK1 = 2
 };
 

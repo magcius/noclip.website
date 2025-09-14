@@ -1,5 +1,5 @@
 
-export const enum dProcName_e {
+export enum dProcName_e {
     d_s_play            = 0x0007,
     d_kankyo            = 0x0015,
     d_envse             = 0x0017,

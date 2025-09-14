@@ -4,7 +4,7 @@ import { mat4, vec3, quat, ReadonlyVec3, ReadonlyMat4 } from "gl-matrix";
 // Misc bits of 3D math.
 
 // Basic scalar constants.
-export const enum MathConstants {
+export enum MathConstants {
     DEG_TO_RAD = 0.017453292519943295, // Math.PI / 180,
     RAD_TO_DEG = 57.29577951308232, // 180 / Math.PI,
     TAU = 6.283185307179586, // Math.PI * 2
@@ -551,7 +551,7 @@ export function vec3FromBasis3(dst: vec3, pt: ReadonlyVec3, b0: ReadonlyVec3, s0
     dst[2] = pt[2] + b0[2] * s0 + b1[2] * s1 + b2[2] * s2;
 }
 
-export const enum CalcBillboardFlags {
+export enum CalcBillboardFlags {
     // The up vector for computing roll should come from the input matrix.
     UseRollLocal = 0 << 0,
     // The up vector for computing roll should be global world up 0, 1, 0.

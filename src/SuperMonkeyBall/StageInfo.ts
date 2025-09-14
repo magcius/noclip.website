@@ -14,7 +14,7 @@ import {
     BgWater,
 } from "./Background.js";
 
-export const enum StageId {
+export enum StageId {
     St001_Plain = 1,
     St002_Diamond = 2,
     St003_Hairpin = 3,
@@ -190,7 +190,7 @@ export const enum StageId {
     St198_Ending_Cutscene_Bg = 198,
 }
 
-export const enum BgType {
+export enum BgType {
     BlueSky = 1,
     Jungle = 13,
     Water = 14,

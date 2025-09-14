@@ -394,11 +394,11 @@ function System_DictionaryReader_Factory(paramsReaders: ContentTypeReader[]): Co
 }
 //#endregion
 
-export const enum XNA_PrimitiveType {
+export enum XNA_PrimitiveType {
     TriangleList, TriangleStrip, LineList, LineStrip,
 }
 
-export const enum XNA_SurfaceFormat {
+export enum XNA_SurfaceFormat {
     Color, Bgr565,
 }
 

@@ -21,7 +21,7 @@ export interface VatrChunk {
     boneWeights: ArrayBufferSlice;
 }
 
-export const enum Version {
+export enum Version {
     Ocarina, Majora, LuigisMansion, EverOasis
 }
 
@@ -111,7 +111,7 @@ export interface TextureBinding {
     wrapT: TextureWrapMode;
 }
 
-export const enum CombineResultOpDMP {
+export enum CombineResultOpDMP {
     REPLACE                  = 0x1E01,
     MODULATE                 = 0x2100,
     ADD                      = 0x0104,
@@ -124,18 +124,18 @@ export const enum CombineResultOpDMP {
     ADD_MULT                 = 0x6402,
 };
 
-export const enum CombineScaleDMP {
+export enum CombineScaleDMP {
     _1                       = 0x01,
     _2                       = 0x02,
     _4                       = 0x04,
 };
 
-export const enum CombineBufferInputDMP {
+export enum CombineBufferInputDMP {
     PREVIOUS                 = 0x8578,
     PREVIOUS_BUFFER          = 0x8579,
 };
 
-export const enum CombineSourceDMP {
+export enum CombineSourceDMP {
     TEXTURE0                 = 0x84C0,
     TEXTURE1                 = 0x84C1,
     TEXTURE2                 = 0x84C2,
@@ -148,7 +148,7 @@ export const enum CombineSourceDMP {
     FRAGMENT_SECONDARY_COLOR = 0x6211,
 };
 
-export const enum CombineOpDMP {
+export enum CombineOpDMP {
     SRC_COLOR                = 0x0300,
     ONE_MINUS_SRC_COLOR      = 0x0301,
     SRC_ALPHA                = 0x0302,
@@ -161,7 +161,7 @@ export const enum CombineOpDMP {
     ONE_MINUS_SRC_B          = 0x8585,
 };
 
-export const enum LightingConfig {
+export enum LightingConfig {
     Config0 = 0x62B0,
     Config1 = 0x62B1,
     Config2 = 0x62B2,
@@ -172,20 +172,20 @@ export const enum LightingConfig {
     Config7 = 0x62B7,
 };
 
-export const enum FresnelSelector {
+export enum FresnelSelector {
     No     = 0x62C0,
     Pri    = 0x62C1,
     Sec    = 0x62C2,
     PriSec = 0x62C3
 };
 
-export const enum BumpMode {
+export enum BumpMode {
     NotUsed   = 0x62C8,
     AsBump    = 0x62C9,
     AsTangent = 0x62CA// Doesn't exist in OoT3D?
 };
 
-export const enum LutInput {
+export enum LutInput {
     CosNormalHalf  = 0x62A0,
     CosViewHalf    = 0x62A1,
     CosNormalView  = 0x62A2,
@@ -194,13 +194,13 @@ export const enum LutInput {
     CosPhi         = 0x62A5
 }
 
-export const enum TextureTransformType {
+export enum TextureTransformType {
     DccMaya,
     DccSoftImage,
     Dcc3dsMax
 }
 
-export const enum TexCoordConfig {
+export enum TexCoordConfig {
     Config0120,
     Config0110,
     Config0111,
@@ -209,7 +209,7 @@ export const enum TexCoordConfig {
     Config0122
 }
 
-export const enum BumpTexture {
+export enum BumpTexture {
     TEXTURE0 = 0x84C0,
     TEXTURE1 = 0x84C1,
     TEXTURE2 = 0x84C2,
@@ -243,7 +243,7 @@ export interface TextureEnvironment {
     combinerBufferColor: Color;
 }
 
-export const enum TextureCoordinatorMappingMethod {
+export enum TextureCoordinatorMappingMethod {
     None,
     UvCoordinateMap,
     CameraCubeEnvMap,
@@ -933,7 +933,7 @@ function readPrmChunk(cmb: CMB, buffer: ArrayBufferSlice): Prm {
     return prm;
 }
 
-export const enum SkinningMode {
+export enum SkinningMode {
     SingleBone = 0x00,
     RigidSkinning = 0x01,
     SmoothSkinning = 0x02,
@@ -975,7 +975,7 @@ function readPrmsChunk(cmb: CMB, buffer: ArrayBufferSlice): Prms {
     return { prm, skinningMode, boneTable };
 }
 
-export const enum SepdVertexAttribMode {
+export enum SepdVertexAttribMode {
     ARRAY = 0,
     CONSTANT = 1,
 }

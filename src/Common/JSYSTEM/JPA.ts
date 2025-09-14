@@ -55,7 +55,7 @@ export interface JPAC {
     textures: BTI[];
 }
 
-const enum VolumeType {
+enum VolumeType {
     Cube     = 0x00,
     Sphere   = 0x01,
     Cylinder = 0x02,
@@ -65,7 +65,7 @@ const enum VolumeType {
     Line     = 0x06,
 }
 
-const enum EmitFlags {
+enum EmitFlags {
     FixedDensity        = 0x01,
     FixedInterval       = 0x02,
     InheritScale        = 0x04,
@@ -105,7 +105,7 @@ interface JPADynamicsBlock {
     rateStep: number;
 }
 
-const enum ShapeType {
+enum ShapeType {
     Point            = 0x00,
     Line             = 0x01,
     Billboard        = 0x02,
@@ -119,7 +119,7 @@ const enum ShapeType {
     YBillboard       = 0x0A,
 }
 
-const enum DirType {
+enum DirType {
     Vel      = 0,
     Pos      = 1,
     PosInv   = 2,
@@ -127,7 +127,7 @@ const enum DirType {
     PrevPctl = 4,
 }
 
-const enum RotType {
+enum RotType {
     Y       = 0x00,
     X       = 0x01,
     Z       = 0x02,
@@ -135,7 +135,7 @@ const enum RotType {
     YJiggle = 0x04,
 }
 
-const enum PlaneType {
+enum PlaneType {
     XY = 0x00,
     XZ = 0x01,
     X  = 0x02,
@@ -206,7 +206,7 @@ interface JPABaseShapeBlock {
     colorLoopOfstMask: number;
 }
 
-const enum CalcIdxType {
+enum CalcIdxType {
     Normal  = 0x00,
     Repeat  = 0x01,
     Reverse = 0x02,
@@ -214,13 +214,13 @@ const enum CalcIdxType {
     Random  = 0x04,
 }
 
-const enum CalcScaleAnmType {
+enum CalcScaleAnmType {
     Normal  = 0x00,
     Repeat  = 0x01,
     Reverse = 0x02,
 }
 
-const enum CalcAlphaWaveType {
+enum CalcAlphaWaveType {
     None    = -1,
     NrmSin  = 0x00,
     AddSin  = 0x01,
@@ -270,7 +270,7 @@ interface JPAExtraShapeBlock {
     rotateDirection: number;
 }
 
-const enum IndTextureMode {
+enum IndTextureMode {
     Off    = 0x00,
     Normal = 0x01,
     Sub    = 0x02,
@@ -315,7 +315,7 @@ interface JPAChildShapeBlock {
     rotateSpeed: number;
 }
 
-const enum FieldType {
+enum FieldType {
     Gravity    = 0x00,
     Air        = 0x01,
     Magnet     = 0x02,
@@ -327,13 +327,13 @@ const enum FieldType {
     Spin       = 0x08,
 }
 
-const enum FieldAddType {
+enum FieldAddType {
     FieldAccel    = 0x00,
     BaseVelocity  = 0x01,
     FieldVelocity = 0x02,
 }
 
-const enum FieldStatusFlag {
+enum FieldStatusFlag {
     // TODO(jstpierre): Air uses 0x01 flag
     LocalSpace     = 0x02,
     AirDrag        = 0x04,
@@ -375,7 +375,7 @@ interface JPAFieldBlock {
     outerSpeed: number;
 }
 
-const enum JPAKeyType {
+enum JPAKeyType {
     None           = -1,
     Rate           = 0x00,
     VolumeSize     = 0x01,
@@ -1399,7 +1399,7 @@ export class JPAEmitterManager {
     }
 }
 
-export const enum JPAEmitterStatus {
+export enum JPAEmitterStatus {
     STOP_CREATE_PARTICLE = 0x0001,
     STOP_CALC_EMITTER    = 0x0002,
     STOP_DRAW_PARTICLE   = 0x0004,
@@ -2735,7 +2735,7 @@ const planeXZSwizzle = mat4.fromValues(
     0, 0,  0, 1,
 );
 
-const enum JPAParticleStatus {
+enum JPAParticleStatus {
     NONE                   = 0x00,
     DELETE_PARTICLE        = 0x02,
     STOP_FIELD_FADE_AFFECT = 0x04,
@@ -3869,7 +3869,7 @@ export class JPABaseParticle {
 //#endregion
 
 //#region JPA Resource Parsing
-const enum JPACVersion {
+enum JPACVersion {
     JEFFjpa1 = 'JEFFjpa1',
     JPAC1_00 = 'JPAC1-00',
     JPAC2_10 = 'JPAC2-10',

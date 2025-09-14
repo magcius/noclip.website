@@ -3,7 +3,7 @@
 
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 
-export const enum GSRegister {
+export enum GSRegister {
     PRIM      = 0x00,
     TEX0_1    = 0x06,
     TEX0_2    = 0x07,
@@ -26,7 +26,7 @@ export const enum GSRegister {
     TRXDIR    = 0x53
 }
 
-export const enum GSPixelStorageFormat {
+export enum GSPixelStorageFormat {
     PSMCT32  = 0x00,
     PSMCT24  = 0x01,
     PSMCT16  = 0x02,
@@ -42,30 +42,30 @@ export const enum GSPixelStorageFormat {
     PSMZ16S  = 0x3A,
 }
 
-export const enum GSCLUTPixelStorageFormat {
+export enum GSCLUTPixelStorageFormat {
     PSMCT32  = 0x00,
     PSMCT16  = 0x02,
     PSMCT16S = 0x0A,
 }
 
-export const enum GSCLUTStorageMode {
+export enum GSCLUTStorageMode {
     CSM1  = 0x00,
     CSM2  = 0x01,
 }
 
-export const enum GSTextureColorComponent {
+export enum GSTextureColorComponent {
     RGB  = 0x00,
     RGBA = 0x01,
 }
 
-export const enum GSTextureFunction {
+export enum GSTextureFunction {
     MODULATE   = 0x00,
     DECAL      = 0x01,
     HIGHLIGHT  = 0x02,
     HIGHLIGHT2 = 0x03,
 }
 
-export const enum GSAlphaCompareMode {
+export enum GSAlphaCompareMode {
     NEVER    = 0x00,
     ALWAYS   = 0x01,
     LESS     = 0x02,
@@ -76,21 +76,21 @@ export const enum GSAlphaCompareMode {
     NOTEQUAL = 0x07,
 }
 
-export const enum GSAlphaFailMode {
+export enum GSAlphaFailMode {
     KEEP     = 0x00,
     FB_ONLY  = 0x01,
     ZB_ONLY  = 0x02,
     RGB_ONLY = 0x03,
 }
 
-export const enum GSDepthCompareMode {
+export enum GSDepthCompareMode {
     NEVER   = 0x00,
     ALWAYS  = 0x01,
     GEQUAL  = 0x02,
     GREATER = 0x03,
 }
 
-export const enum GSTextureFilter {
+export enum GSTextureFilter {
     NEAREST                = 0x00,
     LINEAR                 = 0x01,
     NEAREST_MIPMAP_NEAREST = 0x02,
@@ -99,14 +99,14 @@ export const enum GSTextureFilter {
     LINEAR_MIPMAP_LINEAR   = 0x05,
 }
 
-export const enum GSWrapMode {
+export enum GSWrapMode {
     REPEAT        = 0x00,
     CLAMP         = 0x01,
     REGION_CLAMP  = 0x02,
     REGION_REPEAT = 0x03,
 }
 
-export const enum GSPixelTransmissionOrder {
+export enum GSPixelTransmissionOrder {
     UPPER_LEFT_TO_LOWER_RIGHT = 0x00,
     LOWER_LEFT_TO_UPPER_RIGHT = 0x01,
     UPPER_RIGHT_TO_LOWER_LEFT = 0x02,

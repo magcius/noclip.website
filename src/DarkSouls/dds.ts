@@ -39,12 +39,12 @@ function getSubresourceSize(format: 'DXT1' | 'DXT3' | 'DXT5' | 'RGB' | 'RGBA', w
         return 0;
 }
 
-const enum DDS_PIXELFORMAT_FLAGS {
+enum DDS_PIXELFORMAT_FLAGS {
     DDPF_FOURCC = 0x04,
     DDPF_RGB    = 0x40,
 }
 
-const enum DDS_CAPS2 {
+enum DDS_CAPS2 {
     CUBEMAP          = 0x0200,
     CUBEMAP_ALLFACES = 0xFC00,
 }

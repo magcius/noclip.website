@@ -41,7 +41,7 @@ function isGalaxyQuickCometAppearInCurrentStage(sceneObjHolder: SceneObjHolder):
     return sceneObjHolder.scenarioData.scenarioDataIter.getValueString('Comet') === 'Quick';
 }
 
-const enum DossunNrv { Upper, FallSign, Falling, OnGround, Rising, }
+enum DossunNrv { Upper, FallSign, Falling, OnGround, Rising, }
 export class Dossun extends LiveActor<DossunNrv> {
     private upperHeight: number;
     private maxUpperStep: number;
@@ -151,7 +151,7 @@ export class Dossun extends LiveActor<DossunNrv> {
     }
 }
 
-const enum OnimasuNrv { Wait, Jump, WaitForStamp, Stamp }
+enum OnimasuNrv { Wait, Jump, WaitForStamp, Stamp }
 abstract class Onimasu extends LiveActor<OnimasuNrv> {
     protected effectHostMtx = mat4.create();
     protected rotationAxis = vec3.create();
@@ -520,7 +520,7 @@ export class OnimasuPivot extends Onimasu {
     }
 }
 
-const enum RingBeamNrv { Spread }
+enum RingBeamNrv { Spread }
 class RingBeam extends LiveActor<RingBeamNrv> {
     private axisZ = vec3.create();
     private farPointPos = vec3.create();
@@ -664,7 +664,7 @@ class RingBeam extends LiveActor<RingBeamNrv> {
     }
 }
 
-const enum BallBeamerNrv { Wait, AttackChargeWait, AttackCharging, Inter }
+enum BallBeamerNrv { Wait, AttackChargeWait, AttackCharging, Inter }
 export class BallBeamer extends LiveActor<BallBeamerNrv> {
     private switchOnA: boolean = false;
     private ringBeams: RingBeam[] = [];
@@ -801,7 +801,7 @@ function enableGroupAttack(sceneObjHolder: SceneObjHolder, actor: LiveActor, rad
     return isNearPlayerPose(sceneObjHolder, actor, radius, thresholdY);
 }
 
-const enum RingBeamerNrv { Wait, Attack, Inter }
+enum RingBeamerNrv { Wait, Attack, Inter }
 export class RingBeamer extends LiveActor<RingBeamerNrv> {
     private ringBeam: RingBeam[] = [];
     private currentAttackCount: number = 0;
@@ -917,7 +917,7 @@ function chaseAngle(v0: number, v1: number, maxSpeed: number, maxAngle: number =
         return v1;
 }
 
-const enum JumpBeamerNrv { Hide, Up, Wait, PreOpen, Open, Close, Inter, Down }
+enum JumpBeamerNrv { Hide, Up, Wait, PreOpen, Open, Close, Inter, Down }
 export class JumpBeamer extends LiveActor<JumpBeamerNrv> {
     private headMtx = mat4.create();
     private topMtx: mat4;
@@ -1116,7 +1116,7 @@ function turnMtxToYDir(dst: mat4, v: ReadonlyVec3, rad: number): void {
     setMtxQuat(dst, scratchQuat);
 }
 
-const enum UnizoNrv { Wait, Jump, Chase, CollidePlayer, CollideEnemy, Break, JumpDown, FireDown }
+enum UnizoNrv { Wait, Jump, Chase, CollidePlayer, CollideEnemy, Break, JumpDown, FireDown }
 export class Unizo extends LiveActor<UnizoNrv> {
     private breakModel: ModelObj;
     private jumpHeight = 0.15;
@@ -2018,7 +2018,7 @@ function isPressedRoofAndGround(actor: LiveActor): boolean {
     return vec3.dot(scratchVec3a, actor.gravityVector) >= 0.0;
 }
 
-const enum ItemGeneratorType { None, Coin, StarPiece }
+enum ItemGeneratorType { None, Coin, StarPiece }
 class ItemGenerator {
     private type: ItemGeneratorType = ItemGeneratorType.None;
     private count = 0;
@@ -2049,7 +2049,7 @@ class ItemGenerator {
     }
 }
 
-const enum KuriboNrv { AppearFromBox, Wander, FindPlayer, Chase, PressDown, Stagger }
+enum KuriboNrv { AppearFromBox, Wander, FindPlayer, Chase, PressDown, Stagger }
 export class Kuribo extends LiveActor<KuriboNrv> {
     private poseQuat = quat.create();
     private axisZ = vec3.create();
@@ -2357,7 +2357,7 @@ export class Kuribo extends LiveActor<KuriboNrv> {
     }
 }
 
-const enum KuriboMiniNrv { Wander, FindPlayer, Chase, Stagger }
+enum KuriboMiniNrv { Wander, FindPlayer, Chase, Stagger }
 export class KuriboMini extends LiveActor<KuriboMiniNrv> {
     private poseQuat = quat.create();
     private axisZ = vec3.create();
@@ -2582,8 +2582,8 @@ function createPartsModelEnemyAndFix(sceneObjHolder: SceneObjHolder, parentActor
     return model;
 }
 
-const enum HomingKillerNrv { Appear, MoveStart, Move, ChaseStart, Chase, GoToTarget, Break }
-const enum HomingKillerType { HomingKiller, Torpedo, MagnumKiller }
+enum HomingKillerNrv { Appear, MoveStart, Move, ChaseStart, Chase, GoToTarget, Break }
+enum HomingKillerType { HomingKiller, Torpedo, MagnumKiller }
 class HomingKiller extends LiveActor<HomingKillerNrv> {
     private type: HomingKillerType;
     private baseMtx = mat4.create();
@@ -3164,7 +3164,7 @@ class HomingKiller extends LiveActor<HomingKillerNrv> {
     }
 }
 
-const enum HomingKillerLauncherNrv { AppearKiller, DeadKiller }
+enum HomingKillerLauncherNrv { AppearKiller, DeadKiller }
 export class HomingKillerLauncher extends LiveActor<HomingKillerLauncherNrv> {
     private killer: HomingKiller;
 
@@ -3313,8 +3313,8 @@ class SpinHitController {
     }
 }
 
-const enum TakoboNrv { Wait, Move, Attack, HitPunch, Press }
-const enum TakoboMoveDir { XForward, XBack, ZForward, ZBack }
+enum TakoboNrv { Wait, Move, Attack, HitPunch, Press }
+enum TakoboMoveDir { XForward, XBack, ZForward, ZBack }
 export class Takobo extends LiveActor<TakoboNrv> {
     private frontVec = vec3.create();
     private moveDir = vec3.create();
@@ -3505,7 +3505,7 @@ function calcNerveEaseInOutRate(actor: LiveActor, duration: number): number {
     return getEaseInOutValue(t);
 }
 
-const enum EyeBeamerNrv { Wait, Turn, GotoPatrol, Patrol }
+enum EyeBeamerNrv { Wait, Turn, GotoPatrol, Patrol }
 export class EyeBeamer extends LiveActor<EyeBeamerNrv> {
     private beamModel: ModelObj;
     private beamBloomModel: ModelObj;
@@ -3755,7 +3755,7 @@ function applyVelocityDampAndGravity(actor: LiveActor, gravitySpeed: number, gro
     }
 }
 
-const enum MoguStoneNrv { Taken, Fall, Throw }
+enum MoguStoneNrv { Taken, Fall, Throw }
 class MoguStone extends ModelObj<MoguStoneNrv> {
     private poseQuat = quat.create();
     private throwPlanar = false;
@@ -3855,7 +3855,7 @@ class MoguStone extends ModelObj<MoguStoneNrv> {
     }
 }
 
-const enum MoguNrv { Search, Turn, Throw, Hide, HideWait, Appear }
+enum MoguNrv { Search, Turn, Throw, Hide, HideWait, Appear }
 export class Mogu extends LiveActor<MoguNrv> {
     private axisY = vec3.clone(Vec3UnitY);
     private axisZ = vec3.clone(Vec3UnitZ);
@@ -4072,8 +4072,8 @@ export class Mogu extends LiveActor<MoguNrv> {
     }
 }
 
-const enum NokonokoLandType { Normal, Fast }
-const enum NokonokoLandNrv { Walk, LookAround, TurnStart, Turn, TurnEnd }
+enum NokonokoLandType { Normal, Fast }
+enum NokonokoLandNrv { Walk, LookAround, TurnStart, Turn, TurnEnd }
 export class NokonokoLand extends LiveActor<NokonokoLandNrv> {
     private type: NokonokoLandType;
     private effectAppearTrs = vec3.create();
@@ -4265,7 +4265,7 @@ function addVelocityKeepHeightUseShadow(actor: LiveActor, height: number, speedU
         addVelocityToGravity(actor, speed * speedDownMult);
 }
 
-const enum KoteBugNrv { Wait, Search, EscapeSearch, FlyStart, FlyPursue, FlyEscape, FlyPursueLast, Overturn, OverturnFall, PreRecover, Blow, StampDeath, NoCalcWait }
+enum KoteBugNrv { Wait, Search, EscapeSearch, FlyStart, FlyPursue, FlyEscape, FlyPursueLast, Overturn, OverturnFall, PreRecover, Blow, StampDeath, NoCalcWait }
 export class KoteBug extends LiveActor<KoteBugNrv> {
     private axisZ = vec3.create();
     private centerQuat = quat.create();
@@ -4545,7 +4545,7 @@ function isFaceToPlayerDegree(sceneObjHolder: SceneObjHolder, actor: LiveActor, 
     return isFaceToTargetDegree(actor, scratchVec3a, degree);
 }
 
-const enum KaronNrv { Wait, FixWait, Walk, Turn, WalkOnRail, Search, Pursue }
+enum KaronNrv { Wait, FixWait, Walk, Turn, WalkOnRail, Search, Pursue }
 export class Karon extends LiveActor<KaronNrv> {
     private territory = new TerritoryMover(500.0);
 
@@ -4682,8 +4682,8 @@ interface SnakeheadDataTable {
     restEndStep: number;
 }
 
-const enum SnakeheadType { Big, Small, BigRace, SmallRace }
-const enum SnakeheadNrv { Wait, Waylay, MoveForward, Rest, MoveBack }
+enum SnakeheadType { Big, Small, BigRace, SmallRace }
+enum SnakeheadNrv { Wait, Waylay, MoveForward, Rest, MoveBack }
 export class Snakehead extends LiveActor<SnakeheadNrv> {
     private type: SnakeheadType;
     private shadowMtx = mat4.create();
@@ -4903,8 +4903,8 @@ export class Snakehead extends LiveActor<SnakeheadNrv> {
     }
 }
 
-const enum HanachanPartsType { Head, Body, BodyS }
-const enum HanachanPartsNrv { Walk }
+enum HanachanPartsType { Head, Body, BodyS }
+enum HanachanPartsNrv { Walk }
 class HanachanParts extends LiveActor<HanachanPartsNrv> {
     private type: HanachanPartsType;
     public fallVelocity = vec3.create();
@@ -5004,7 +5004,7 @@ function calcMovingDirectionAlongRail(dst: vec3, actor: LiveActor, pos: Readonly
     return distance;
 }
 
-const enum HanachanNrv { Walk }
+enum HanachanNrv { Walk }
 export class Hanachan extends LiveActor<HanachanNrv> {
     private parts: HanachanParts[] = [];
     private partsHead: HanachanParts;
@@ -5145,8 +5145,8 @@ function getSignHalfProbability(): number {
     return isHalfProbability() ? 1 : -1;
 }
 
-const enum KaninaType { Blue, Red }
-const enum KaninaNrv { Appear, Wait, Walk, Dig, WaitUnderGround, FindPlayer, RunAway, RunAwayBreak, HitWall, RunAwayReboundDirection, ReboundEach, Guard, GuardEnd, DamageFireball, Turn, TurnEnd }
+enum KaninaType { Blue, Red }
+enum KaninaNrv { Appear, Wait, Walk, Dig, WaitUnderGround, FindPlayer, RunAway, RunAwayBreak, HitWall, RunAwayReboundDirection, ReboundEach, Guard, GuardEnd, DamageFireball, Turn, TurnEnd }
 export class Kanina extends LiveActor<KaninaNrv> {
     private type: KaninaType;
     private initPos = vec3.create();
@@ -5562,7 +5562,7 @@ export class Kanina extends LiveActor<KaninaNrv> {
     }
 }
 
-const enum PetariNrv { Lurk, JumpOut, Wait, Approach, Escape }
+enum PetariNrv { Lurk, JumpOut, Wait, Approach, Escape }
 export class Petari extends LiveActor<PetariNrv> {
     private axisZ = vec3.create();
     private starPieceCount: number;
@@ -5729,7 +5729,7 @@ function isNearVec3(a: LiveActor, b: ReadonlyVec3, threshold: number): boolean {
     return vec3.squaredDistance(a.translation, b) >= (threshold ** 2);
 }
 
-const enum GessoNrv { Wait, Search, WalkCharge, Walk, Sink, ComeFromBox, ComeBack, LostPlayer, Attack, PunchDown, Rotate }
+enum GessoNrv { Wait, Search, WalkCharge, Walk, Sink, ComeFromBox, ComeBack, LostPlayer, Attack, PunchDown, Rotate }
 export class Gesso extends LiveActor<GessoNrv> {
     private origTranslation = vec3.create();
     private axisY = vec3.create();
@@ -6113,7 +6113,7 @@ export class Gesso extends LiveActor<GessoNrv> {
     }
 }
 
-const enum BirikyuNrv { Move, MoveCircle, WaitAtEdge, }
+enum BirikyuNrv { Move, MoveCircle, WaitAtEdge, }
 export class Birikyu extends LiveActor<BirikyuNrv> {
     protected axisY = vec3.clone(Vec3UnitY);
     protected axisZ = vec3.clone(Vec3UnitZ);
@@ -6264,7 +6264,7 @@ export class BirikyuWithFace extends Birikyu {
     }
 }
 
-const enum TakoHeiInkNrv { Wait, }
+enum TakoHeiInkNrv { Wait, }
 class TakoHeiInk extends LiveActor<TakoHeiInkNrv> {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter | null) {
         super(zoneAndLayer, sceneObjHolder, 'TakoHeiInk');
@@ -6339,7 +6339,7 @@ function spurtTakoHeiInk(sceneObjHolder: SceneObjHolder, pos: ReadonlyVec3, velo
     return true;
 }
 
-const enum TakoHeiNrv { Wait, Walk, FindTurn, Find, Pursue, AttackSign, Attack, CoolDown, NonActive, }
+enum TakoHeiNrv { Wait, Walk, FindTurn, Find, Pursue, AttackSign, Attack, CoolDown, NonActive, }
 export class TakoHei extends LiveActor<TakoHeiNrv> {
     private origTranslation = vec3.create();
     private poseQuat = quat.create();
@@ -6796,7 +6796,7 @@ interface ActorMoveParam {
     turnSpeed: number;
 }
 
-const enum MetboNrv { Wait, WalkAround, Search, ChaseStart, Chase, Rest, NonActive, }
+enum MetboNrv { Wait, WalkAround, Search, ChaseStart, Chase, Rest, NonActive, }
 export class Metbo extends LiveActor<MetboNrv> {
     private origTranslation = vec3.create();
     private axisZ = vec3.create();
@@ -7037,7 +7037,7 @@ export class Metbo extends LiveActor<MetboNrv> {
     }
 }
 
-const enum MogucchiNrv { Stroll, Scatter, Die }
+enum MogucchiNrv { Stroll, Scatter, Die }
 export class Mogucchi extends LiveActor<MogucchiNrv> {
     private maxStrollSpeed: number;
     private strollSpeed: number;
@@ -7180,7 +7180,7 @@ export class Mogucchi extends LiveActor<MogucchiNrv> {
     }
 }
 
-const enum MogucchiHillNrv { Wait, Move }
+enum MogucchiHillNrv { Wait, Move }
 class MogucchiHill extends LiveActor<MogucchiHillNrv> {
     private static pieceModelNames: string[] = [
         'MogucchiHillA',
@@ -7322,7 +7322,7 @@ class MogucchiHill extends LiveActor<MogucchiHillNrv> {
     }
 }
 
-const enum MogucchiHillPieceNrv { Wait, Appear, Crumble }
+enum MogucchiHillPieceNrv { Wait, Appear, Crumble }
 class MogucchiHillPiece extends LiveActor<MogucchiHillPieceNrv> {
     public baseMtx = mat4.create();
 
@@ -7448,7 +7448,7 @@ class SkeletalFishRailControl {
     }
 }
 
-const enum SkeletalFishBabyNrv { Swim, }
+enum SkeletalFishBabyNrv { Swim, }
 export class SkeletalFishBaby extends LiveActor<SkeletalFishBabyNrv> {
     private maxRailSpeed: number;
     private railSpeed: number;
@@ -7644,7 +7644,7 @@ function moveCoordAndTransToNextPoint(actor: LiveActor): void {
     moveCoordAndTransToRailPoint(actor, getNextRailPointNo(actor));
 }
 
-const enum PukupukuStateLandingNrv { MoveLand, JumpFromLand, JumpFromWater, }
+enum PukupukuStateLandingNrv { MoveLand, JumpFromLand, JumpFromWater, }
 class PukupukuStateLanding extends ActorStateBaseInterface<PukupukuStateLandingNrv> {
     private valueControl = new ValueControl(30);
     private parabolicPath = new ParabolicPath();
@@ -7778,7 +7778,7 @@ class PukupukuStateLanding extends ActorStateBaseInterface<PukupukuStateLandingN
     }
 }
 
-const enum PukupukuNrv { Wait, Landing, MoveWater, MoveWaterAfterJump };
+enum PukupukuNrv { Wait, Landing, MoveWater, MoveWaterAfterJump };
 export class Pukupuku extends LiveActor<PukupukuNrv> {
     private binderOffset = vec3.create();
     private poseQuat = quat.create();
@@ -7919,7 +7919,7 @@ function turnVecToPlane(dst: vec3, src: ReadonlyVec3, up: ReadonlyVec3): void {
     normToLength(dst, length);
 }
 
-const enum JellyfishNrv { Wait, Find, WaitWithRightTurn, WaitWithLeftTurn, ThreatWithLeftTurn, ThreatWithRightTurn, Threat, RailGoal, Death, }
+enum JellyfishNrv { Wait, Find, WaitWithRightTurn, WaitWithLeftTurn, ThreatWithLeftTurn, ThreatWithRightTurn, Threat, RailGoal, Death, }
 export class Jellyfish extends LiveActor<JellyfishNrv> {
     private railSpeed: number;
     private railWaitAtGoal: number;
@@ -8109,10 +8109,10 @@ export class Jellyfish extends LiveActor<JellyfishNrv> {
     }
 }
 
-const enum MerameraEffectHead { None, Wait, Chase, Escape }
-const enum MerameraEffectBody { None, Heat, CoolDown, Cold }
-const enum MerameraElementType { Fire, Ice, }
-const enum MerameraNrv { Wait, Walk, WalkEnd, Float, Runaway, StartDiving, Diving, }
+enum MerameraEffectHead { None, Wait, Chase, Escape }
+enum MerameraEffectBody { None, Heat, CoolDown, Cold }
+enum MerameraElementType { Fire, Ice, }
+enum MerameraNrv { Wait, Walk, WalkEnd, Float, Runaway, StartDiving, Diving, }
 export class Meramera extends LiveActor<MerameraNrv> {
     private elementType: MerameraElementType;
     private effectExtinguishSideMtx = mat4.create();
@@ -8380,7 +8380,7 @@ export class Meramera extends LiveActor<MerameraNrv> {
     }
 }
 
-const enum KillerGunnerSingleNrv { Wait, Charge, Shoot }
+enum KillerGunnerSingleNrv { Wait, Charge, Shoot }
 export class KillerGunnerSingle extends LiveActor<KillerGunnerSingleNrv> {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, `KillerGunnerSingle`);
@@ -8524,7 +8524,7 @@ export class StinkBugBase<T extends number> extends LiveActor<T> {
     }
 }
 
-const enum StinkBugSmallNrv { Wait, DashSign, DashSignEnd, Dash, DashEnd, Back, Search, ForceFall }
+enum StinkBugSmallNrv { Wait, DashSign, DashSignEnd, Dash, DashEnd, Back, Search, ForceFall }
 export class StinkBugSmall extends StinkBugBase<StinkBugSmallNrv> {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, infoIter);
@@ -8696,7 +8696,7 @@ export class StinkBugSmall extends StinkBugBase<StinkBugSmallNrv> {
     }
 }
 
-const enum KameckFireBallNrv { Wait, }
+enum KameckFireBallNrv { Wait, }
 class KameckFireBall extends LiveActor<KameckFireBallNrv> {
     private poseQuat = quat.create();
 
@@ -8780,7 +8780,7 @@ export class KameckFireBallHolder extends LiveActorGroup<KameckFireBall> {
     }
 }
 
-const enum KameckTurtleNrv { }
+enum KameckTurtleNrv { }
 class KameckTurtle extends LiveActor<KameckTurtleNrv> {
     public static override requestArchives(sceneObjHolder: SceneObjHolder): void {
         sceneObjHolder.modelCache.requestObjectData('Koura');
@@ -8799,8 +8799,8 @@ export class KameckBeamTurtleHolder extends LiveActorGroup<KameckTurtle> {
     }
 }
 
-const enum KameckBeamNrv { FollowWand, Shoot, Explosion, Fire, JetTurtle }
-const enum KameckBeamKind { Turtle, FireBall1, FireBall2, FireBall3, }
+enum KameckBeamNrv { FollowWand, Shoot, Explosion, Fire, JetTurtle }
+enum KameckBeamKind { Turtle, FireBall1, FireBall2, FireBall3, }
 class KameckBeam extends LiveActor<KameckBeamNrv> {
     private wandMtx: ReadonlyMat4 | null = null;
     private wandLocalPosition = vec3.create();
@@ -9095,7 +9095,7 @@ class ActiveActorList<T extends LiveActor> {
     }
 }
 
-const enum KameckNrv { Wait, AttackWait, Attack, MoveHide, Move, Appear, Guard }
+enum KameckNrv { Wait, AttackWait, Attack, MoveHide, Move, Appear, Guard }
 export class Kameck extends LiveActor<KameckNrv> {
     private beamKind: KameckBeamKind;
     private nonActiveDistance: number;

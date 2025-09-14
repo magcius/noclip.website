@@ -139,14 +139,14 @@ export function dKyw_rain_set(envLight: dScnKy_env_light_c, count: number): void
     envLight.rainCountOrig = count;
 }
 
-export const enum ThunderMode {
+export enum ThunderMode {
     Off     = 0,
     On      = 1,
     Two     = 2,
     FarOnly = 10,
 }
 
-export const enum ThunderState {
+export enum ThunderState {
     Clear      = 0,
     FlashNear  = 1,
     FlashFar   = 11,
@@ -1476,7 +1476,7 @@ export function dKyr_get_vectle_calc(p0: ReadonlyVec3, p1: ReadonlyVec3, dst: ve
     vec3.normalize(dst, dst);
 }
 
-const enum SunPeekZResult {
+enum SunPeekZResult {
     Visible, Obscured, Culled,
 }
 

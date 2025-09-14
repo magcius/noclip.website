@@ -373,7 +373,7 @@ interface TGEO {
     compression: CompressedVertex[];
 }
 
-const enum UVFlags {
+enum UVFlags {
     MIPS     = 0x80000000,
     SPEED    = 0x7C000000,
     OFFSET   = 0x03F80000,
@@ -799,7 +799,7 @@ function parseSVTX(view: DataView, offsets: number[]): SVTX[] {
     return vtxSets;
 }
 
-export const enum ModelType {
+export enum ModelType {
     MESH = 1,
     SPRITE = 2,
     THREE = 3,
@@ -807,7 +807,7 @@ export const enum ModelType {
     QUAD_LIST = 5,
 }
 
-export const enum MeshFlags {
+export enum MeshFlags {
     INTERPOLATE = 0x1,
 }
 
@@ -860,7 +860,7 @@ interface QuadListGFX {
     drawCalls: DrawCall[][];
 }
 
-const enum ValueFormat {
+enum ValueFormat {
     U8 = 0x01,
     U16 = 0x02,
     S32_3 = 0x03,
@@ -1279,7 +1279,7 @@ function texPageName(chunk: string, uvs: UV): string {
     return `${chunk}_${blendMode.toString(16)}_${uvs.clut.toString(16)}`;
 }
 
-export const enum TexModeFlags {
+export enum TexModeFlags {
     X_BASE = 0x0F,
     Y_BASE = 0x10,
     BLEND = 0x60,
@@ -1289,7 +1289,7 @@ export const enum TexModeFlags {
     TEXTURE_INDEX = 0x1C00,
 }
 
-export const enum XLUBlendMode {
+export enum XLUBlendMode {
     // negative ones aren't real
     OPAQUE_ONLY = -2,
     DISABLED = -1,
@@ -1387,7 +1387,7 @@ function parseSLST(view: DataView, offsets: number[]): void {
 
 }
 
-const enum TriFlags {
+enum TriFlags {
     UV_INDEX        = 0x000000FF,
     TEX_ANIM        = 0x00000100,
     COLOR_INDEX     = 0x0000FE00,

@@ -118,7 +118,7 @@ export class SkyData {
     }
 }
 
-export const enum DayPhase {
+export enum DayPhase {
     Night, Dawn, Day, Dusk
 }
 

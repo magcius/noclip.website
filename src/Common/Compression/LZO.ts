@@ -5,7 +5,7 @@
 
 import ArrayBufferSlice from '../../ArrayBufferSlice.js';
 
-const enum Marker {
+enum Marker {
     M1 = 0x00,
     M2 = 0x40,
     M3 = 0x20,

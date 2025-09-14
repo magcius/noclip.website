@@ -19,7 +19,7 @@ import { ViewerRenderInput } from '../viewer.js';
 import { SymbolMap, dGlobals } from './Main.js';
 import { PeekZManager } from "./d_dlst_peekZ.js";
 
-export const enum dDlst_alphaModel__Type {
+export enum dDlst_alphaModel__Type {
     Bonbori,
     BonboriTwice,
     BeamCheck,

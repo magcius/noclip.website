@@ -519,7 +519,7 @@ export class Projectile extends ModelRenderer {
     }
 }
 
-const enum SplashType {
+enum SplashType {
     Water,
     Lava,
     AppleWater,

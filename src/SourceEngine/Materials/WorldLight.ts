@@ -105,7 +105,7 @@ function worldLightAngleFalloff(light: WorldLight, surfaceNormal: ReadonlyVec3, 
 const scratchVec3 = vec3.create();
 const ntscGrayscale = vec3.fromValues(0.299, 0.587, 0.114);
 
-export const enum ShaderWorldLightType {
+export enum ShaderWorldLightType {
     None, Point, Spot, Directional,
 }
 

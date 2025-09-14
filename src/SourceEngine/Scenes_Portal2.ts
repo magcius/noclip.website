@@ -36,7 +36,7 @@ class prop_button extends BaseEntity {
     }
 }
 
-const enum BaseFloorButtonSkin {
+enum BaseFloorButtonSkin {
     Up = 0, Down = 1,
 }
 

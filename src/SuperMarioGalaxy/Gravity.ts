@@ -101,12 +101,12 @@ function registerGravity(sceneObjHolder: SceneObjHolder, gravity: PlanetGravity)
     sceneObjHolder.planetGravityManager!.registerGravity(gravity);
 }
 
-export const enum GravityTypeMask {
+export enum GravityTypeMask {
     Normal = 0x01,
     Shadow = 0x02,
     Magnet = 0x04,
 }
-const enum GravityPower { Light, Normal, Heavy }
+enum GravityPower { Light, Normal, Heavy }
 
 abstract class PlanetGravity {
     public range = -1.0;
@@ -247,8 +247,8 @@ function generateRandomPointInCylinder(dst: vec3, pos: ReadonlyVec3, up: Readonl
     transformVec3Mat4w1(dst, scratchMatrix, dst);
 }
 
-const enum ParallelGravityRangeType { Sphere, Box, Cylinder }
-const enum ParallelGravityDistanceCalcType { None = -1, X, Y, Z }
+enum ParallelGravityRangeType { Sphere, Box, Cylinder }
+enum ParallelGravityDistanceCalcType { None = -1, X, Y, Z }
 class ParallelGravity extends PlanetGravity {
     private rangeType = ParallelGravityRangeType.Sphere;
     private distanceCalcType = ParallelGravityDistanceCalcType.None;
@@ -1023,7 +1023,7 @@ class DiskGravity extends PlanetGravity {
     }
 }
 
-const enum DiskTorusGravityEdgeType { None, Inside, Outside, Both }
+enum DiskTorusGravityEdgeType { None, Inside, Outside, Both }
 class DiskTorusGravity extends PlanetGravity {
     private bothSide = false;
     private edgeType = DiskTorusGravityEdgeType.Both;

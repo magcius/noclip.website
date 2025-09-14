@@ -292,7 +292,7 @@ interface ArgHandler<S, T> {
     literal: (value: number, s: S) => T;
 }
 
-const enum ArgType {
+enum ArgType {
     CONST,
     BOOL,
     VAR,
@@ -477,7 +477,7 @@ function asVec(arg: Argument): IndirectVecVar | null | undefined {
     return parseArgument<void, IndirectVecVar | null | undefined>(arg, argToVecConverter, undefined);
 }
 
-const enum PointerBase {
+enum PointerBase {
     NONE,
     MEMBER,
     PARAMETER,
@@ -883,7 +883,7 @@ class InstructionPrinter implements InstructionHandler<string> {
 
 const scriptPrinter = new InstructionPrinter();
 
-const enum ExecResult {
+enum ExecResult {
     CONTINUE,
     RETURN,
     NEW_STATE,
@@ -944,7 +944,7 @@ export class GameState {
 
 const toRad = MathConstants.TAU / 0x1000;
 
-const enum ObjectFlags {
+enum ObjectFlags {
     TARGET_YAW   = 0x00000001,
     BACKWARDS    = 0x00000002,
     PATH_YAW     = 0x00000004,
@@ -963,7 +963,7 @@ const enum ObjectFlags {
     FIXED_UV     = 0x00100000,
 }
 
-const enum CollisionFlags {
+enum CollisionFlags {
     HIT_GROUND = 0x0001,
     ON_PATH = 0x0004,
     NEGATIVE_TURN = 0x0008,
@@ -973,14 +973,14 @@ const enum CollisionFlags {
     REACHED_ANGLE = 0x0800,
 }
 
-const enum RefFlags {
+enum RefFlags {
     ACTIVE = 0x1,
     SINGLE_SPAWN = 0x2,
     UNKNOWN_4 = 0x4,
     TRIGGERED = 0x8,
 }
 
-const enum ScriptMode {
+enum ScriptMode {
     UPDATE,
     PRE_RUN,
     SIGNAL,

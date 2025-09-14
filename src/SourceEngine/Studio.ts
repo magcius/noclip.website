@@ -23,18 +23,18 @@ const scratchVec3c = vec3.create();
 const scratchVec3d = vec3.create();
 const scratchQuatb = quat.create();
 
-const enum StudioModelFlags {
+enum StudioModelFlags {
     STATIC_PROP       = 1 << 4,
     EXTRA_VERTEX_DATA = 1 << 26,
 }
 
-const enum OptimizeStripGroupFlags {
+enum OptimizeStripGroupFlags {
     IS_FLEXED                      = 0x01,
     IS_HWSKINNED                   = 0x02,
     IS_DELTA_FLEXED                = 0x04,
 }
 
-const enum OptimizeStripFlags {
+enum OptimizeStripFlags {
     IS_TRILIST                     = 0x01,
     IS_TRISTRIP                    = 0x02,
 }
@@ -115,7 +115,7 @@ class StudioModelStripGroupData {
     public stripData: StudioModelStripData[] = [];
 }
 
-const enum StudioModelMeshDataFlags {
+enum StudioModelMeshDataFlags {
     None = 0,
     HasTexCoord1 = 1 << 0,
 }
@@ -271,7 +271,7 @@ class BoneDesc {
     }
 }
 
-const enum AnimDataFlags {
+enum AnimDataFlags {
     RAWPOS  = 0x01,
     RAWROT  = 0x02,
     ANIMPOS = 0x04,
@@ -551,7 +551,7 @@ class SeqEventDesc {
     }
 }
 
-const enum SeqFlags {
+enum SeqFlags {
     LOOPING = 0x01,
 }
 
@@ -1614,7 +1614,7 @@ export class HardwareVertData {
 
         // Hardware verts are used solely for vertex colors
 
-        const enum VertexFlags { POSITION = 0x01, NORMAL = 0x02, COLOR = 0x04, SPECULAR = 0x08, TANGENT_S = 0x10, TANGENT_T = 0x20, }
+        enum VertexFlags { POSITION = 0x01, NORMAL = 0x02, COLOR = 0x04, SPECULAR = 0x08, TANGENT_S = 0x10, TANGENT_T = 0x20, }
         const vertexFlags: VertexFlags = view.getUint32(0x08, true);
         assert(vertexFlags === VertexFlags.COLOR || vertexFlags === VertexFlags.NORMAL);
 

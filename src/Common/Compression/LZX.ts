@@ -53,7 +53,7 @@ class BitStream {
     }
 }
 
-const enum BlockType {
+enum BlockType {
     Undefined = 0x00,
     Verbatim = 0x01,
     Aligned = 0x02,

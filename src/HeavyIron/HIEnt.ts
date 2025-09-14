@@ -7,11 +7,11 @@ import { HILightKit } from "./HILightKit.js";
 import { RpClump } from "./rw/rpworld.js";
 import { HIAssetType } from "./HIAssetTypes.js";
 
-export const enum HIEntFlags {
+export enum HIEntFlags {
     Visible = 0x1
 }
 
-export const enum HIEntMoreFlags {
+export enum HIEntMoreFlags {
     PreciseColl = 0x2,
     Throwable = 0x8,
     Hittable = 0x10,

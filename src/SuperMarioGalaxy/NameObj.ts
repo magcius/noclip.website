@@ -13,13 +13,13 @@ import { ub_SceneParamsBufferSize } from "../gx/gx_render.js";
 import { GX_Program } from "../gx/gx_material.js";
 import { Mat4Identity } from "../MathHelpers.js";
 
-export const enum GameBits {
+export enum GameBits {
     SMG1 = 0b01,
     SMG2 = 0b10,
     Both = SMG1 | SMG2,
 }
 
-export const enum MovementType {
+export enum MovementType {
     None                           = -1,
 
     StopSceneDelayRequest          = 0x01,
@@ -69,7 +69,7 @@ export const enum MovementType {
     Count
 }
 
-export const enum CalcAnimType {
+export enum CalcAnimType {
     None                           = -1,
 
     ClippedMapParts                = 0x00,
@@ -95,7 +95,7 @@ export const enum CalcAnimType {
     Count,
 }
 
-export const enum DrawBufferType {
+export enum DrawBufferType {
     None                           = -1,
 
     ClippedMapParts                     = 0x00,
@@ -143,7 +143,7 @@ export const enum DrawBufferType {
     AstroMapBoard,
 }
 
-export const enum DrawType {
+export enum DrawType {
     None                           = -1,
 
     SwingRope                      = 0x00,

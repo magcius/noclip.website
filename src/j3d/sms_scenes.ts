@@ -449,7 +449,7 @@ function readSceneBin(buffer: ArrayBufferSlice): SceneBinObj {
     }
 }
 
-export const enum SMSPass {
+export enum SMSPass {
     SKYBOX = 1 << 0,
     MAIN = 1 << 1,
     INDIRECT = 1 << 2,

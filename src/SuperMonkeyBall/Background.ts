@@ -292,7 +292,7 @@ type SunsetModel = {
     desiredTexVel: vec3;
 };
 
-const enum BgSunsetMode {
+enum BgSunsetMode {
     Default,
     HurryUp,
 }

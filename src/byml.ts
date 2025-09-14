@@ -3,12 +3,12 @@ import ArrayBufferSlice from "./ArrayBufferSlice.js";
 import { assert, readString, align } from "./util.js";
 import { Endianness } from "./endian.js";
 
-export const enum FileType {
+export enum FileType {
     BYML,
     CRG1, // Jasper's BYML variant with extensions.
 }
 
-const enum NodeType {
+enum NodeType {
     String       = 0xA0,
     Path         = 0xA1,
     Array        = 0xC0,

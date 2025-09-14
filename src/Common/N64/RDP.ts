@@ -10,7 +10,7 @@ import { setAttachmentStateSimple } from "../../gfx/helpers/GfxMegaStateDescript
 import { mat4 } from "gl-matrix";
 import { reverseDepthForCompareMode } from "../../gfx/helpers/ReversedDepthHelpers.js";
 
-export const enum RENDER_MODES {
+export enum RENDER_MODES {
     G_RM_AA_ZB_OPA_SURF = 0x442078,
     G_RM_AA_ZB_OPA_SURF2 = 0x112078,
     G_RM_AA_ZB_XLU_SURF = 0x4049d8,
@@ -113,7 +113,7 @@ export const enum RENDER_MODES {
     G_RM_PASS = 0xc080000
 }
 
-export const enum CCMUX {
+export enum CCMUX {
     COMBINED    = 0,
     TEXEL0      = 1,
     TEXEL1      = 2,
@@ -133,7 +133,7 @@ export const enum CCMUX {
     MUL_ZERO    = 15, // should really be 31
 }
 
-export const enum ACMUX {
+export enum ACMUX {
     ADD_COMBINED = 0,
     TEXEL0 = 1,
     TEXEL1 = 2,
@@ -530,7 +530,7 @@ export function translateSampler(device: GfxDevice, cache: GfxRenderCache, textu
     });
 }
 
-export const enum OtherModeH_Layout {
+export enum OtherModeH_Layout {
     G_MDSFT_BLENDMASK   = 0,
     G_MDSFT_ALPHADITHER = 4,
     G_MDSFT_RGBDITHER   = 6,
@@ -546,7 +546,7 @@ export const enum OtherModeH_Layout {
     G_MDSFT_PIPELINE    = 23,
 }
 
-export const enum OtherModeH_CycleType {
+export enum OtherModeH_CycleType {
     G_CYC_1CYCLE = 0x00,
     G_CYC_2CYCLE = 0x01,
     G_CYC_COPY   = 0x02,
@@ -561,7 +561,7 @@ export function getTextFiltFromOtherModeH(modeH: number): TextFilt {
     return (modeH >>> OtherModeH_Layout.G_MDSFT_TEXTFILT) & 0x03;
 }
 
-export const enum OtherModeL_Layout {
+export enum OtherModeL_Layout {
     // non-render-mode fields
     G_MDSFT_ALPHACOMPARE = 0,
     G_MDSFT_ZSRCSEL = 2,
@@ -588,7 +588,7 @@ export const enum OtherModeL_Layout {
     P_1 = 30,
 }
 
-export const enum ZMode {
+export enum ZMode {
     ZMODE_OPA   = 0,
     ZMODE_INTER = 1,
     ZMODE_XLU   = 2, // translucent
@@ -607,21 +607,21 @@ function translateZMode(zmode: ZMode): GfxCompareMode {
     throw "Unknown Z mode: " + zmode;
 }
 
-export const enum BlendParam_PM_Color {
+export enum BlendParam_PM_Color {
     G_BL_CLR_IN  = 0,
     G_BL_CLR_MEM = 1,
     G_BL_CLR_BL  = 2,
     G_BL_CLR_FOG = 3,
 }
 
-export const enum BlendParam_A {
+export enum BlendParam_A {
     G_BL_A_IN    = 0,
     G_BL_A_FOG   = 1,
     G_BL_A_SHADE = 2,
     G_BL_0       = 3,
 }
 
-export const enum BlendParam_B {
+export enum BlendParam_B {
     G_BL_1MA   = 0,
     G_BL_A_MEM = 1,
     G_BL_1     = 2,

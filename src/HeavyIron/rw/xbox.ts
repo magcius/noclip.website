@@ -59,7 +59,7 @@ function unswizzle(dst: Uint8Array, src: Uint8Array, width: number, height: numb
     }
 }
 
-const enum DXTFormat {
+enum DXTFormat {
     DXT1 = 12,
     DXT2 = 13,
     DXT3 = 14,

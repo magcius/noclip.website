@@ -136,7 +136,7 @@ export class DataMap {
     }
 }
 
-export const enum SpawnType {
+export enum SpawnType {
     GROUND,
     FLYING,
     OTHER,
@@ -477,7 +477,7 @@ export interface MaterialData {
 
 export const ColorFlagStart = 9;
 
-export const enum MaterialFlags {
+export enum MaterialFlags {
     Tex1    = 0x0001,
     Tex2    = 0x0002,
     Palette = 0x0004,
@@ -878,7 +878,7 @@ function materialDLHandler(scrollData: MaterialData[]): F3DEX2.dlRunner {
 }
 
 
-export const enum EntryKind {
+export enum EntryKind {
     Exit            = 0x00,
     InitFunc        = 0x01,
     Block           = 0x02,
@@ -907,7 +907,7 @@ export const enum EntryKind {
     SetColor        = 0x16, // choose based on flags, also directly sets update time???
 }
 
-export const enum PathKind {
+export enum PathKind {
     Linear,
     Bezier,
     BSpline,
@@ -1326,7 +1326,7 @@ function parseCollisionSubtree(treeView: DataView, planeView: DataView, planeLis
     return { line, posSubtree, posPlane, negSubtree, negPlane };
 }
 
-export const enum InteractionType {
+export enum InteractionType {
     PokefluteA      = 0x05,
     PokefluteB      = 0x06,
     PokefluteC      = 0x07,
@@ -1439,7 +1439,7 @@ function parseStateGraph(dataMap: DataMap, addr: number, nodes: GFXNode[]): Stat
     return {states, animations};
 }
 
-export const enum GeneralFuncs {
+export enum GeneralFuncs {
     RunProcess  = 0x08C28,
     EndProcess  = 0x08F2C,
 
@@ -1455,7 +1455,7 @@ export const enum GeneralFuncs {
     GetRoom     = 0xE2184,
 }
 
-export const enum StateFuncs {
+export enum StateFuncs {
     SetAnimation    = 0x35F138,
     ForceAnimation  = 0x35F15C,
     SetMotion       = 0x35EDF8,
@@ -1481,7 +1481,7 @@ export const enum StateFuncs {
     DanceInteract2  = 0x2C0140,
 }
 
-export const enum ObjectField {
+export enum ObjectField {
     ObjectFlags     = 0x08,
     Tangible        = 0x10,
     // on the root node
@@ -1519,7 +1519,7 @@ export const enum ObjectField {
     PathParam       = 0xEC,
 }
 
-export const enum EndCondition {
+export enum EndCondition {
     Animation   = 0x01,
     Motion      = 0x02,
     Timer       = 0x04,

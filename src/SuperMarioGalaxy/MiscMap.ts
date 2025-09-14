@@ -230,7 +230,7 @@ function computeRotationZAroundPoint(dst: mat4, theta: number, x: number, y: num
 
 const drawParams = new DrawParams();
 
-const enum WaterCameraFilterNrv { Air, AirToWater, Water, WaterToAir }
+enum WaterCameraFilterNrv { Air, AirToWater, Water, WaterToAir }
 export class WaterCameraFilter extends LiveActor<WaterCameraFilterNrv> {
     private angle: number = 0;
     private fade: number = 0;

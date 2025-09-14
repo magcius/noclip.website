@@ -357,7 +357,7 @@ function extractAdditionalObjects(rom: ArrayBufferSlice, setupTable: ObjectLoadE
     map.regions.pop();
 }
 
-const enum MIPSOpcode {
+enum MIPSOpcode {
     regBlock = 0x0,
     JAL = 0x3,
     ADDIU = 0x9,

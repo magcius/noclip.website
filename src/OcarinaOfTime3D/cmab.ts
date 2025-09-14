@@ -14,7 +14,7 @@ import { GfxTexture, GfxTextureDimension } from "../gfx/platform/GfxPlatform.js"
 // CMAB (CTR Material Animation Binary)
 // Seems to be inspired by the .cmata file format. Perhaps an earlier version of NW4C used it?
 
-const enum AnimationTrackType {
+enum AnimationTrackType {
     Linear = 0x01,
     Hermite = 0x02,
     Integer = 0x03,
@@ -72,7 +72,7 @@ export interface CMAB extends AnimationBase {
     textures: Texture[];
 };
 
-export const enum AnimationType {
+export enum AnimationType {
     Translation = 0x01,
     TexturePalette = 0x02,
     DiffuseColor = 0x03,
@@ -85,7 +85,7 @@ export const enum AnimationType {
     EmissionColor = 0x0A
 }
 
-export const enum ColorAnimType {
+export enum ColorAnimType {
     Const0,
     Const1,
     Const2,
@@ -99,7 +99,7 @@ export const enum ColorAnimType {
     Emission,
 }
 
-const enum LoopMode {
+enum LoopMode {
     Once, Repeat,
 }
 

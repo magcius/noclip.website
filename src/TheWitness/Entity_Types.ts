@@ -219,13 +219,13 @@ function unpack_single_portable(stream: Stream, portable_type: Portable_Type, po
     return portable;
 }
 
-const enum Metadata_Type {
+enum Metadata_Type {
     SHORT, INTEGER, FLOAT, STRING, POSITION3, VECTOR3, DIRECTION3, COLOR4, QUATERNION, VECTOR2,
     FLOAT_ARRAY, PORTABLE_ID_ARRAY, FLOAT_FIXED_ARRAY, INTEGER_FIXED_ARRAY, VECTOR3_PATH, VECTOR3_FCURVE,
     WAYPOINT_PATH3, ELEVATION_MAP, TRACED_EDGE_ARRAY, LIGHTMAP_TABLE, PARTICLE_PATH,
 }
 
-const enum Metadata_Item_Flags {
+enum Metadata_Item_Flags {
     CONSTANT                     = 0x00000001,
     PROBABLY_ZERO                = 0x00000002,
     PROBABLY_MAXIMUM             = 0x00000004,

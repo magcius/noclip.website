@@ -11,7 +11,7 @@ import { Endianness } from "../endian.js";
 import { MathConstants } from "../MathHelpers.js";
 import { fopAc_ac_c } from "./f_op_actor.js";
 
-export const enum cBgW_Flags {
+export enum cBgW_Flags {
     None      = 0x00,
     Dynamic   = 0x01,
     NoVtxTbl  = 0x10,
@@ -46,7 +46,7 @@ class cBgD__Tre_t {
     public childBlk: Int16Array;
 }
 
-const enum dBgW__PassFlag {
+enum dBgW__PassFlag {
     None             = 0x00,
     CamThrough       = 0x01,
     ObjThrough       = 0x02,

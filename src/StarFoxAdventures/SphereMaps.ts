@@ -35,7 +35,7 @@ const REFLECTIVE_PROBE_FACTORS = [
     [0.4, 0.5],
 ]
 
-const enum SphereMapType {
+enum SphereMapType {
     // Sky light and ground light emitted against a sphere
     HemisphericProbe,
     // Encoded texture containing Red: sky light, Green: surroundings, Blue: ground light

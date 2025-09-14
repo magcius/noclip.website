@@ -400,7 +400,7 @@ void main() {
 `;
 }
 
-export const enum GeoParticleMode {
+export enum GeoParticleMode {
     DEFAULT,
     BLUR,
     BLUR_Z,
@@ -925,7 +925,7 @@ class ActorDrawCallInstance {
 export const FFXToNoclip = mat4.create();
 mat4.fromXRotation(FFXToNoclip, Math.PI);
 
-const enum RenderLayer {
+enum RenderLayer {
     OPA_SKYBOX,
     OPA,
     OPA_LIGHTING,
@@ -1172,7 +1172,7 @@ export function findTextureIndex(frame: number, effect: BIN.PartEffect): number 
     return key.data[1][0];
 }
 
-export const enum EulerOrder {
+export enum EulerOrder {
     XYZ,
     YXZ,
     ZXY,
@@ -1532,13 +1532,13 @@ export class FlipbookRenderer {
     }
 }
 
-const enum ParticleGeoFlags {
+enum ParticleGeoFlags {
     XLU = 1,
     DRAW_BACK = 2,
     TEX_WRAP = 4,
 }
 
-const enum ParticleArgFlags {
+enum ParticleArgFlags {
     ZTEST = 8,
     BACK_CULL = 0x10,
     NORMALS = 0x40,
@@ -1657,7 +1657,7 @@ class ShatterDrawCallInstance {
     }
 }
 
-const enum GeoParticleRenderFlags {
+enum GeoParticleRenderFlags {
     DEFAULT = 0,
     MULTIPART = 1, // each part is depth sorted independently
     EARLY = 2,

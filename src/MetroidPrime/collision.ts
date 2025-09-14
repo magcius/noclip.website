@@ -34,7 +34,7 @@ export class CollisionIndexData {
     public tris: CollisionTri[] = [];
 }
 
-export const enum CollisionOctreeNodeType {
+export enum CollisionOctreeNodeType {
     None = 0, Branch = 1, Leaf = 2
 }
 

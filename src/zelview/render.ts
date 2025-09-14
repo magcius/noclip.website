@@ -28,7 +28,7 @@ export function textureToCanvas(texture: Texture): Viewer.Texture {
     return { name: texture.name, surfaces, extraInfo };
 }
 
-const enum TexCM {
+enum TexCM {
     WRAP = 0x00, MIRROR = 0x01, CLAMP = 0x02,
 }
 

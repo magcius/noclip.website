@@ -12,13 +12,13 @@ import { moveCoordAndTransToNearestRailPos, moveCoordAndTransToNearestRailPoint,
 import { calcDropShadowVectorOrZero, initShadowVolumeSphere, onCalcShadowOneTime, setShadowDropLength } from './Shadow.js';
 import { getRailArg } from './RailRider.js';
 
-export const enum MoveConditionType { Unconditionally, WaitForPlayerOn }
+export enum MoveConditionType { Unconditionally, WaitForPlayerOn }
 export function getMapPartsArgMoveConditionType(infoIter: JMapInfoIter): MoveConditionType {
     return fallback(infoIter.getValueNumberNoInit('MoveConditionType'), MoveConditionType.Unconditionally);
 }
 
 // Seems to be additional slots at 3, 4, 5...
-const enum SignMotionType { None, MoveStart, MoveWait }
+enum SignMotionType { None, MoveStart, MoveWait }
 function getMapPartsArgSignMotionType(infoIter: JMapInfoIter): SignMotionType {
     return fallback(infoIter.getValueNumberNoInit('SignMotionType'), SignMotionType.None);
 }
@@ -27,7 +27,7 @@ function hasMapPartsMoveStartSignMotion(signMotionType: SignMotionType): boolean
     return signMotionType === SignMotionType.MoveStart || signMotionType === SignMotionType.MoveWait;
 }
 
-export const enum MapPartsShadowType { None }
+export enum MapPartsShadowType { None }
 export function getMapPartsArgShadowType(infoIter: JMapInfoIter): MapPartsShadowType {
     return fallback(infoIter.getValueNumberNoInit('ShadowType'), MapPartsShadowType.None);
 }
@@ -36,12 +36,12 @@ export function hasMapPartsShadow(shadowType: MapPartsShadowType): boolean {
     return shadowType !== MapPartsShadowType.None;
 }
 
-const enum MoveStopType { OnceAndWait, Mirror, Loop, OnceAndVanish, }
+enum MoveStopType { OnceAndWait, Mirror, Loop, OnceAndVanish, }
 function getMapPartsArgMoveStopType(actor: LiveActor): MoveStopType {
     return fallback(getRailArg(actor.railRider!, 'path_arg1'), MoveStopType.Mirror);
 }
 
-export const enum RailGuideType { None, Draw, DrawForward, DrawPoints }
+export enum RailGuideType { None, Draw, DrawForward, DrawPoints }
 export function getMapPartsArgRailGuideType(actor: LiveActor): RailGuideType {
     return fallback(getRailArg(actor.railRider!, 'path_arg2'), RailGuideType.None);
 }
@@ -62,7 +62,7 @@ function getMapPartsArgStopTime(actor: LiveActor): number | null {
     return getCurrentRailPointArg5(actor);
 }
 
-const enum SpeedCalcType { Direct, Time }
+enum SpeedCalcType { Direct, Time }
 
 function getMapPartsArgSpeedCalcType(actor: LiveActor): SpeedCalcType | null {
     return getCurrentRailPointArg7(actor);
@@ -72,13 +72,13 @@ function getMoveStartSignalTime(): number {
     return 50;
 }
 
-const enum RailInitPosType { NearestPos, NearestPoint, Point0 }
+enum RailInitPosType { NearestPos, NearestPoint, Point0 }
 function getMapPartsArgRailInitPosType(actor: LiveActor): RailInitPosType {
     return fallback(getRailArg(actor.railRider!, 'path_arg4'), RailInitPosType.NearestPos);
 }
 
-const enum AxisType { X, Y, Z }
-const enum AccelType { Normal, Swing, Timed }
+enum AxisType { X, Y, Z }
+enum AccelType { Normal, Swing, Timed }
 
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
@@ -104,7 +104,7 @@ class MapPartsFunction<TNerve extends number> extends NameObj {
     }
 }
 
-const enum MapPartsRotatorNrv { NeverMove, Wait, RotateStart, Rotate, StopAtEnd }
+enum MapPartsRotatorNrv { NeverMove, Wait, RotateStart, Rotate, StopAtEnd }
 export class MapPartsRotator extends MapPartsFunction<MapPartsRotatorNrv> {
     private rotateAngle: number;
     private rotateAxis: AxisType;
@@ -273,12 +273,12 @@ export class MapPartsRotator extends MapPartsFunction<MapPartsRotatorNrv> {
     }
 }
 
-export const enum MovePostureType { None, RailDirRail, RailDir, RailDirRailUseShadowGravity }
+export enum MovePostureType { None, RailDirRail, RailDir, RailDirRailUseShadowGravity }
 export function getMapPartsArgMovePosture(actor: LiveActor): MovePostureType {
     return fallback(getRailArg(actor.railRider!, 'path_arg0'), MovePostureType.None);
 }
 
-const enum MapPartsRailPostureNrv { DoNothing, Move }
+enum MapPartsRailPostureNrv { DoNothing, Move }
 export class MapPartsRailPosture extends MapPartsFunction<MapPartsRailPostureNrv> {
     private movePostureType: MovePostureType;
     public mtx = mat4.create();
@@ -385,7 +385,7 @@ export class MapPartsRailPointPassChecker {
     }
 }
 
-const enum MapPartsRailMoverNrv {
+enum MapPartsRailMoverNrv {
     Wait, MoveStart, Move,
     StopAtPointBeforeRotate, RotateAtPoint, StopAtPointAfterRotate,
     StopAtEndBeforeRotate, RotateAtEndPoint, StopAtEndAfterRotate,
@@ -725,7 +725,7 @@ export class MapPartsRailMover extends MapPartsFunction<MapPartsRailMoverNrv> {
     }
 }
 
-const enum MapPartsRailGuideDrawerNrv { HideAll, Draw, DrawForward }
+enum MapPartsRailGuideDrawerNrv { HideAll, Draw, DrawForward }
 class MapPartsRailGuidePoint extends LiveActor {
     constructor(sceneObjHolder: SceneObjHolder, actor: LiveActor, modelName: string, public coord: number, private hasShadow: boolean) {
         super(actor.zoneAndLayer, sceneObjHolder, 'MapPartsRailGuidePoint');

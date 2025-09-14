@@ -6,7 +6,7 @@ import { RwEngine, RwStream } from "./rw/rwcore.js";
 import { RpAtomic, RpGeometryFlag } from "./rw/rpworld.js";
 import { Color, OpaqueBlack, colorCopy, colorNewCopy } from "../Color.js";
 
-const enum HIPipeFlagsBFBB {
+enum HIPipeFlagsBFBB {
     ZBUFFER_SHIFT             = 2,
     ZBUFFER_MASK              = (3<<ZBUFFER_SHIFT),
     ZBUFFER_DISABLE           = (1<<ZBUFFER_SHIFT),
@@ -32,7 +32,7 @@ const enum HIPipeFlagsBFBB {
     ALPHADISCARD_MASK         = (255<<ALPHADISCARD_SHIFT)
 }
 
-export const enum HIPipeFlags {
+export enum HIPipeFlags {
     FOG_SHIFT                 = 3,
     FOG_DISABLE               = (1<<FOG_SHIFT),
     CULL_SHIFT                = 4,
@@ -142,7 +142,7 @@ export class HIModelAssetInfo {
     }
 }
 
-export const enum HIModelFlags {
+export enum HIModelFlags {
     Visible = 0x1,
     LODNoRender = 0x400
 }

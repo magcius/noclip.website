@@ -142,7 +142,7 @@ export class rommap {
     }
 }
 
-export const enum evt_user_func_ret { advance, block, stop, }
+export enum evt_user_func_ret { advance, block, stop, }
 
 interface evt_loop_record {
     pc: number;
@@ -922,7 +922,7 @@ export class evtmgr {
     }
 }
 
-const enum evt_disasm_ptype { dec, hex, user_func, evt, }
+enum evt_disasm_ptype { dec, hex, user_func, evt, }
 interface evt_disasm_opcode_tbl_entry {
     t: evt_disasm_ptype[];
     varargs: boolean;

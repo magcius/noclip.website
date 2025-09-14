@@ -6,7 +6,7 @@ import { mat4 } from "gl-matrix";
 import { GfxTextureDimension } from "../../gfx/platform/GfxPlatform.js";
 
 //#region PICA
-const enum PICAReg {
+enum PICAReg {
     PICA_REG_TEXTURE0_SIZE   = 0x0082,
     PICA_REG_TEXTURE0_ADDR0  = 0x0085,
     PICA_REG_TEXTURE0_FORMAT = 0x008E,
@@ -50,7 +50,7 @@ class PICARegisters {
 //#endregion
 
 //#region H3D
-const enum FileSectionType {
+enum FileSectionType {
     CONTENT,
     STRING,
     COMMAND,
@@ -61,7 +61,7 @@ const enum FileSectionType {
     UNINIT_COMMAND,
 }
 
-const enum RelocationType {
+enum RelocationType {
     CONTENT,
     STRING,
     COMMAND,

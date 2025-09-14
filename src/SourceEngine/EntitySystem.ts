@@ -84,7 +84,7 @@ type EntityInputFunc = (entitySystem: EntitySystem, activator: BaseEntity, value
 const scratchMat4a = mat4.create();
 const scratchMat4b = mat4.create();
 
-const enum SpawnState {
+enum SpawnState {
     FetchingResources,
     ReadyForSpawn,
     Spawned,
@@ -889,7 +889,7 @@ function angleVec(dstForward: vec3 | null, dstRight: vec3 | null, dstUp: vec3 | 
     getMatrixAxis(dstForward, dstRight, dstUp, scratchMat4a);
 }
 
-const enum ToggleState {
+enum ToggleState {
     Top, Bottom, GoingToTop, GoingToBottom,
 }
 
@@ -1047,7 +1047,7 @@ abstract class BaseDoor extends BaseToggle {
         const spawnpos = Number(fallbackUndefined(this.entity.spawnpos, '0'));
         this.wait = Number(fallbackUndefined(this.entity.wait, '-1'));
 
-        const enum SpawnFlags {
+        enum SpawnFlags {
             START_OPEN_OBSOLETE = 0x01,
             NO_AUTO_RETURN      = 0x20,
         };
@@ -1234,7 +1234,7 @@ class func_door_rotating extends BaseDoor {
     public override spawn(entitySystem: EntitySystem): void {
         super.spawn(entitySystem);
 
-        const enum SpawnFlags {
+        enum SpawnFlags {
             ROTATE_BACKWARDS = 0x02,
             ROTATE_ROLL      = 0x40,
             ROTATE_PITCH     = 0x80,
@@ -1325,7 +1325,7 @@ class func_rotating extends BaseEntity {
         if (this.maxSpeed === 0)
             this.maxSpeed = 100;
 
-        const enum SpawnFlags {
+        enum SpawnFlags {
             ROTATE_START_ON  = 0x01,
             ROTATE_BACKWARDS = 0x02,
             ROTATE_Z_AXIS    = 0x04,
@@ -1476,7 +1476,7 @@ class path_track extends BaseEntity {
     public override spawn(entitySystem: EntitySystem): void {
         super.spawn(entitySystem);
 
-        const enum SpawnFlags {
+        enum SpawnFlags {
             DISABLED      = 0x0001,
             ALTREVERSE    = 0x0004,
             DISABLE_TRAIN = 0x0008,
@@ -1762,7 +1762,7 @@ class logic_relay extends BaseEntity {
     constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
         super(entitySystem, renderContext, bspRenderer, entity);
 
-        const enum SpawnFlags {
+        enum SpawnFlags {
             RemoveOnFire = 0x01,
             AllowFastRetrigger = 0x02,
         };
@@ -2161,7 +2161,7 @@ class math_remap extends BaseEntity {
         this.output_outValue.parse(this.entity.outvalue);
         this.registerInput('invalue', this.input_invalue.bind(this));
 
-        const enum SpawnFlags {
+        enum SpawnFlags {
             IgnoreOutOfRange   = 0x01,
             ClampOutputToRange = 0x02,
         }
@@ -2224,7 +2224,7 @@ class math_colorblend extends BaseEntity {
         this.output_outColor.parse(this.entity.outcolor);
         this.registerInput('invalue', this.input_invalue.bind(this));
 
-        const enum SpawnFlags {
+        enum SpawnFlags {
             IgnoreOutOfRange   = 0x01,
         }
         const spawnflags: SpawnFlags = Number(fallbackUndefined(this.entity.spawnflags, '0'));
@@ -2470,7 +2470,7 @@ class env_fog_controller extends BaseEntity {
     constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
         super(entitySystem, renderContext, bspRenderer, entity);
 
-        const enum SpawnFlags {
+        enum SpawnFlags {
             IsMaster = 0x01,
         }
         const spawnflags: SpawnFlags = Number(fallbackUndefined(this.entity.spawnflags, '0'));
@@ -2751,7 +2751,7 @@ class color_correction extends BaseEntity {
         this.minfalloff = Number(fallbackUndefined(this.entity.minfalloff, '-1'));
         this.maxfalloff = Number(fallbackUndefined(this.entity.maxfalloff, '-1'));
 
-        const enum SpawnFlags {
+        enum SpawnFlags {
             Master = 0x01,
             ClientSide = 0x02,
         };
@@ -2823,7 +2823,7 @@ abstract class BaseLight extends BaseEntity {
             this.localAngles[0] = pitch;
         }
 
-        const enum SpawnFlags {
+        enum SpawnFlags {
             StartOff = 0x01,
         };
         const spawnflags: SpawnFlags = Number(fallbackUndefined(this.entity.spawnflags, '0'));
@@ -2968,7 +2968,7 @@ class point_template extends BaseEntity {
     public override spawn(entitySystem: EntitySystem): void {
         super.spawn(entitySystem);
 
-        const enum SpawnFlags {
+        enum SpawnFlags {
             DontRemoveTemplateEntities = 0x01,
             PreserveNames              = 0x02,
         };
@@ -3173,7 +3173,7 @@ class env_steam extends BaseEntity {
         if (initialstate !== 0)
             this.shouldEmit = true;
 
-        const enum Type {
+        enum Type {
             HEATWAVE = 0x01,
         };
         const type: Type = Number(fallbackUndefined(this.entity.type, '0'));
@@ -3298,7 +3298,7 @@ class env_steam extends BaseEntity {
     }
 }
 
-const enum env_citadel_energy_core_state { Idle, Charging, Discharging }
+enum env_citadel_energy_core_state { Idle, Charging, Discharging }
 class env_citadel_energy_core extends BaseEntity {
     public static classname = `env_citadel_energy_core`;
 
@@ -3328,7 +3328,7 @@ class env_citadel_energy_core extends BaseEntity {
 
         this.bindMaterials(renderContext);
 
-        const enum SpawnFlags {
+        enum SpawnFlags {
             NO_PARTICLES = 0x01,
             START_ON     = 0x02,
         };
@@ -3590,7 +3590,7 @@ class env_sprite extends BaseEntity {
         const sprite = assertExists(this.modelSprite);
         this.maxframe = sprite.materialInstance.getNumFrames();
 
-        const enum SpawnFlags {
+        enum SpawnFlags {
             StartOn = 0x01,
             Once    = 0x02,
         };
@@ -3757,7 +3757,7 @@ export class env_projectedtexture extends BaseEntity {
         this.brightnessScale = Number(entity.brightnessscale);
         this.style = vmtParseNumber(entity.style, -1);
 
-        const enum SpawnFlags {
+        enum SpawnFlags {
             ENABLED = 0x01,
         };
         const spawnflags: SpawnFlags = Number(entity.spawnflags);

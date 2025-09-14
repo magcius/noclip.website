@@ -30,7 +30,7 @@ const scratchVec3b = vec3.create();
 
 // Framework'd actors
 
-export const enum dProcName_e {
+export enum dProcName_e {
     d_s_play            = 0x000B,
     d_kankyo            = 0x0013,
     d_envse             = 0x0014,

@@ -76,7 +76,7 @@ const scratchMat4b = mat4.create();
 
 // These need to match, because some operator data relies on field indices
 // https://github.com/ValveSoftware/source-sdk-2013/blob/master/mp/src/public/particles/particles.h#L62-L115
-const enum StreamMask {
+enum StreamMask {
     None          = 0,
     Position      = 1 << 0,
     Lifetime      = 1 << 1,
@@ -1490,7 +1490,7 @@ interface Controller {
     controlPoints: ParticleControlPoint[];
 }
 
-const enum OperatePhase {
+enum OperatePhase {
     BeforeEmit,
     AfterEmit,
 }

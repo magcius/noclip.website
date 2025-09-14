@@ -50,7 +50,7 @@ export interface Sampler {
     wrapT: GX.WrapMode;
 }
 
-export const enum MaterialLayer {
+export enum MaterialLayer {
     Opaque = 0x00,
     AlphaTest = 0x01,
     Blend = 0x02,
@@ -78,11 +78,11 @@ export interface SceneGraphPart {
     batch: Batch;
 }
 
-export const enum DrawModeFlags {
+export enum DrawModeFlags {
     IsDecal = 0x10,
 }
 
-export const enum CollisionFlags {
+export enum CollisionFlags {
     None                 = 0,
     WalkSlow             = 0x00000100,
     HazardRespawnEnabled = 0x40000000,
@@ -801,7 +801,7 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
                 assert(isVersion102);
                 assert(modelVcdTableOffs === vcd_tableOffs);
 
-                const enum VcdBitFlags {
+                enum VcdBitFlags {
                     POS  = 1 << 0,
                     NRM  = 1 << 1,
                     CLR0 = 1 << 2,
@@ -1047,7 +1047,7 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
     return { information, textureNameTable, fogData, rootNode, materials, animations };
 }
 
-export const enum LoopMode {
+export enum LoopMode {
     ONCE = 0,
     REPEAT = 2,
     MIRRORED_ONCE = 3,

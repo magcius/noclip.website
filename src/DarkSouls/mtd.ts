@@ -4,7 +4,7 @@ import { assert, align, decodeString } from "../util.js";
 
 // Dark Souls MTD (Material Data)
 
-export const enum MTDParamType {
+export enum MTDParamType {
     Bool   = "bool",
     Float  = "float",
     Float2 = "float2",
@@ -33,7 +33,7 @@ export interface MTD {
     textures: MTDTexture[];
 }
 
-const enum DataType {
+enum DataType {
     Chunk = 0x01,
     ChunkArray = 0x03,
     ChunkOptional = 0x04,
@@ -158,7 +158,7 @@ class DataReader {
     }
 }
 
-const enum MTDChunkID {
+enum MTDChunkID {
     Root = 0,
     FileInfo = 1,
     Material = 2,

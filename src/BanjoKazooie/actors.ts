@@ -14,7 +14,7 @@ export class ClankerTooth extends GeometryRenderer {
     }
 }
 
-const enum BoltState {
+enum BoltState {
     InClanker,
     Rising,
     AtPeak,
@@ -155,7 +155,7 @@ export class SnowballChunk extends GeometryRenderer {
     }
 }
 
-const enum SnowballState {
+enum SnowballState {
     Dead,
     Aiming,
     Flying,
@@ -241,7 +241,7 @@ function turnTowards(mat: mat4, delta: number, cap: number): void {
     mat4.rotateY(mat, mat, delta);
 }
 
-const enum SirSlushState {
+enum SirSlushState {
     Idle,
     Throwing,
     // there is also a third, unanimated state for when the player is far away
@@ -332,7 +332,7 @@ interface RailLerp {
     speed?: [number, number];
 }
 
-const enum AngleUpdate {
+enum AngleUpdate {
     None,
     Rail,
     Lerp,
@@ -809,7 +809,7 @@ export class RailRider extends GeometryRenderer {
     }
 }
 
-const enum GloopState {
+enum GloopState {
     Swim,
     Bubble,
 }
@@ -838,7 +838,7 @@ class Gloop extends RailRider {
     }
 }
 
-const enum CarpetState {
+enum CarpetState {
     Normal,
     Disappearing,
     Hidden,

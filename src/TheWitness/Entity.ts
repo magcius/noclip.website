@@ -97,7 +97,7 @@ export class Lightmap_Table {
     }
 }
 
-const enum Entity_Flags {
+enum Entity_Flags {
     LodsToNothing   = 0x00001000,
     Invisible       = 0x00008000,
     DoNotCull       = 0x20000000,

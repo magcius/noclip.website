@@ -94,8 +94,8 @@ export class NPCDirector {
     }
 }
 
-const enum InitConnectToSceneType { None = -1, Npc, NpcMovement, IndirectNpc, }
-const enum InitShadowType { None = -1, CSV, Sphere }
+enum InitConnectToSceneType { None = -1, Npc, NpcMovement, IndirectNpc, }
+enum InitShadowType { None = -1, CSV, Sphere }
 
 class NPCActorCaps<TNerve extends number> {
     public initConnectToSceneType = InitConnectToSceneType.Npc;
@@ -481,7 +481,7 @@ class NPCActor<TNerve extends number = number> extends LiveActor<TNerve> {
     }
 }
 
-const enum ButlerNrv { Wait }
+enum ButlerNrv { Wait }
 export class Butler extends NPCActor<ButlerNrv> {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
@@ -509,7 +509,7 @@ export class Butler extends NPCActor<ButlerNrv> {
     }
 }
 
-const enum RosettaNrv { Wait }
+enum RosettaNrv { Wait }
 export class Rosetta extends NPCActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
@@ -553,7 +553,7 @@ export class Rosetta extends NPCActor {
     }
 }
 
-const enum TicoNrv { Wait, Reaction, Delight }
+enum TicoNrv { Wait, Reaction, Delight }
 export class Tico extends NPCActor<TicoNrv> {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
@@ -640,7 +640,7 @@ export class TicoAstro extends Tico {
     // TicoAstro checks current number of green stars against arg2 and shows/hides respectively...
 }
 
-const enum KinopioNrv { Wait, Mount, Reaction }
+enum KinopioNrv { Wait, Mount, Reaction }
 export class Kinopio extends NPCActor<KinopioNrv> {
     private mapObjConnector: MapObjConnector | null = null;
 
@@ -803,7 +803,7 @@ export class KinopioAstro extends Kinopio {
     // but we don't need that too much here...
 }
 
-const enum PeachNrv { Wait }
+enum PeachNrv { Wait }
 export class Peach extends NPCActor<PeachNrv> {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
@@ -974,7 +974,7 @@ class RemovableTurtle {
     }
 }
 
-const enum PenguinNrv { Wait, Dive, Reaction }
+enum PenguinNrv { Wait, Dive, Reaction }
 export class Penguin extends NPCActor<PenguinNrv> {
     private mode: number;
     private diveCounter: number = 0;
@@ -1154,7 +1154,7 @@ export class PenguinRacer extends NPCActor {
     }
 }
 
-const enum TicoCometNrv { Wait }
+enum TicoCometNrv { Wait }
 export class TicoComet extends NPCActor<TicoCometNrv> {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
@@ -1201,7 +1201,7 @@ export class TicoComet extends NPCActor<TicoCometNrv> {
     }
 }
 
-const enum SignBoardNrv { Wait }
+enum SignBoardNrv { Wait }
 export class SignBoard extends NPCActor<SignBoardNrv> {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
@@ -1218,7 +1218,7 @@ export class SignBoard extends NPCActor<SignBoardNrv> {
     }
 }
 
-const enum TicoRailNrv { Wait, LookAround, MoveSignAndTurn, MoveSign, Move, Stop, TalkStart, Talk, TalkCancel, GoodBye }
+enum TicoRailNrv { Wait, LookAround, MoveSignAndTurn, MoveSign, Move, Stop, TalkStart, Talk, TalkCancel, GoodBye }
 export class TicoRail extends LiveActor<TicoRailNrv> {
     public direction = vec3.create();
     private talkingActor: LiveActor | null = null;
@@ -1456,7 +1456,7 @@ export class TicoRail extends LiveActor<TicoRailNrv> {
     }
 }
 
-const enum StrayTicoNrv { Wait }
+enum StrayTicoNrv { Wait }
 class StrayTico extends LiveActor<StrayTicoNrv> {
     private poseQuat = quat.create();
     private axisZ = vec3.create();
@@ -1537,7 +1537,7 @@ class StrayTico extends LiveActor<StrayTicoNrv> {
     }
 }
 
-const enum CollectTicoNrv { Wait }
+enum CollectTicoNrv { Wait }
 export class CollectTico extends LiveActor<CollectTicoNrv> {
     private strayTico: StrayTico[] = [];
 
@@ -1567,7 +1567,7 @@ export class CollectTico extends LiveActor<CollectTicoNrv> {
     }
 }
 
-const enum HoneyBeeNrv { Wait, Fly, JumpLecture, FlyLectureA, FlyLectureB, DropLecture }
+enum HoneyBeeNrv { Wait, Fly, JumpLecture, FlyLectureA, FlyLectureB, DropLecture }
 export class HoneyBee extends NPCActor<HoneyBeeNrv> {
     private currentRailPointNo = -1;
 
@@ -1692,7 +1692,7 @@ export class RosettaChair extends LiveActor {
     }
 }
 
-const enum CaretakerNrv { Talk, Reaction }
+enum CaretakerNrv { Talk, Reaction }
 export class Caretaker extends NPCActor<CaretakerNrv> {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, 'Caretaker');
@@ -1812,7 +1812,7 @@ export class Caretaker extends NPCActor<CaretakerNrv> {
     }
 }
 
-const enum LuigiNPCNrv { Wait, AfraidWait, ArrestedWait, }
+enum LuigiNPCNrv { Wait, AfraidWait, ArrestedWait, }
 export class LuigiNPC extends NPCActor<LuigiNPCNrv> {
     private mode = 0;
 

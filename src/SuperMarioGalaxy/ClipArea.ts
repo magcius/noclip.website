@@ -241,7 +241,7 @@ function calcNerveEaseOutValue(actor: LiveActor, maxStep: number, minValue: numb
     return getEaseOutValue(t, minValue, maxValue);
 }
 
-const enum ClipAreaDropNrv { Wait }
+enum ClipAreaDropNrv { Wait }
 class ClipAreaDrop extends ClipArea<ClipAreaDropNrv> {
     private baseSize: number;
     private sphere: ClipAreaShapeSphere;
@@ -324,7 +324,7 @@ function moveCoordAndCheckPassPointNo(actor: LiveActor, speed: number): number {
     return -1;
 }
 
-const enum ClipAreaDropLaserNrv { Wait, Move }
+enum ClipAreaDropLaserNrv { Wait, Move }
 export class ClipAreaDropLaser extends LiveActor<ClipAreaDropLaserNrv> {
     private moveSpeed: number;
     private drawCount: number = 0;

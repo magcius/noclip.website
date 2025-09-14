@@ -35,9 +35,9 @@ function calcCameraDistanceZ(sceneObjHolder: SceneObjHolder, pos: vec3, scratch 
     return vec3.distance(scratch, pos);
 }
 
-const enum DropType { Normal, Surface }
-const enum CalcCollisionMode { Off, On, OneTime }
-const enum CalcDropGravityMode { Off, On, OneTime, PrivateOff, PrivateOn, PrivateOneTime }
+enum DropType { Normal, Surface }
+enum CalcCollisionMode { Off, On, OneTime }
+enum CalcDropGravityMode { Off, On, OneTime, PrivateOff, PrivateOn, PrivateOneTime }
 
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();

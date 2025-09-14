@@ -50,12 +50,12 @@ export enum GfxBlendMode {
     ReverseSubtract  = WebGLRenderingContext.FUNC_REVERSE_SUBTRACT,
 }
 
-export const enum GfxWrapMode { Clamp, Repeat, Mirror }
-export const enum GfxTexFilterMode { Point, Bilinear }
-export const enum GfxMipFilterMode { Nearest, Linear }
-export const enum GfxPrimitiveTopology { Triangles, Lines }
+export enum GfxWrapMode { Clamp, Repeat, Mirror }
+export enum GfxTexFilterMode { Point, Bilinear }
+export enum GfxMipFilterMode { Nearest, Linear }
+export enum GfxPrimitiveTopology { Triangles, Lines }
 
-export const enum GfxBufferUsage {
+export enum GfxBufferUsage {
     Index   = 0b00001,
     Vertex  = 0b00010,
     Uniform = 0b00100,
@@ -64,27 +64,27 @@ export const enum GfxBufferUsage {
     // All buffers are implicitly CopyDst so they can be filled by the CPU... maybe they shouldn't be...
 }
 
-export const enum GfxBufferFrequencyHint {
+export enum GfxBufferFrequencyHint {
     Static  = 0x01,
     Dynamic = 0x02,
 }
 
-export const enum GfxVertexBufferFrequency {
+export enum GfxVertexBufferFrequency {
     PerVertex   = 0x01,
     PerInstance = 0x02,
     Constant    = 0x03,
 }
 
-export const enum GfxTextureDimension {
+export enum GfxTextureDimension {
     n2D, n2DArray, n3D, Cube,
 }
 
-export const enum GfxTextureUsage {
+export enum GfxTextureUsage {
     Sampled      = 0x01,
     RenderTarget = 0x02,
 }
 
-export const enum GfxChannelWriteMask {
+export enum GfxChannelWriteMask {
     None        = 0x00,
     Red         = 0x01,
     Green       = 0x02,
@@ -173,7 +173,7 @@ export interface GfxSamplerBinding {
     lateBinding: string | null;
 }
 
-export const enum GfxSamplerFormatKind {
+export enum GfxSamplerFormatKind {
     Float,
     UnfilterableFloat,
     Uint,
@@ -205,7 +205,7 @@ export interface GfxRenderProgramDescriptor {
     preprocessedFrag: string | null;
 }
 
-export const enum GfxShadingLanguage {
+export enum GfxShadingLanguage {
     WGSL,
     GLSL,
 }
@@ -318,12 +318,12 @@ export interface GfxStatisticsGroup {
     triangleCount: number;
 }
 
-export const enum GfxViewportOrigin {
+export enum GfxViewportOrigin {
     LowerLeft,
     UpperLeft,
 }
 
-export const enum GfxClipSpaceNearZ {
+export enum GfxClipSpaceNearZ {
     NegativeOne = -1.0,
     Zero = 0.0,
 }
@@ -339,7 +339,7 @@ export interface GfxVendorInfo {
 
 export type GfxPlatformFramebuffer = WebGLFramebuffer;
 
-export const enum GfxQueryPoolType {
+export enum GfxQueryPoolType {
     OcclusionConservative,
 }
 

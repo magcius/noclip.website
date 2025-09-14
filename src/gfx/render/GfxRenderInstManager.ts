@@ -54,7 +54,7 @@ import type { GfxRenderDynamicUniformBuffer } from "./GfxRenderDynamicUniformBuf
 // bitflag. It's special as it changes the behavior of the generic sort key functions like makeSortKey and
 // setSortKeyDepth.
 
-export const enum GfxRendererLayer {
+export enum GfxRendererLayer {
     BACKGROUND  = 0x00,
     ALPHA_TEST  = 0x10,
     OPAQUE      = 0x20,
@@ -551,7 +551,7 @@ export function gfxRenderInstCompareSortKey(a: GfxRenderInst, b: GfxRenderInst):
     return a.sortKey - b.sortKey;
 }
 
-export const enum GfxRenderInstExecutionOrder {
+export enum GfxRenderInstExecutionOrder {
     Forwards,
     Backwards,
 }

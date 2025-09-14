@@ -17,7 +17,7 @@ import { load_entities } from "./Entity_Types.js";
 import { Stream, Stream_read_Color, Stream_read_Vector2, Stream_read_Vector3, Stream_read_Vector4 } from "./Stream.js";
 import { createBufferFromSlice } from "../gfx/helpers/BufferHelpers.js";
 
-export const enum Asset_Type {
+export enum Asset_Type {
     Texture,
     Lightmap,
     Bitmap,
@@ -34,7 +34,7 @@ export const enum Asset_Type {
     Cataloged_Raw,
 }
 
-const enum Asset_Format {
+enum Asset_Format {
     Raw, LZ4
 }
 
@@ -46,14 +46,14 @@ type AssetT<T extends Asset_Type> =
     T extends Asset_Type.World ? Entity[] :
     never;
 
-const enum Texture_Asset_Flags {
+enum Texture_Asset_Flags {
     Is_sRGB         = 0x01,
     Has_Alpha_Mask  = 0x02,
     No_Skip_Mipmaps = 0x04,
     Is_Cube         = 0x08,
 }
 
-const enum D3DFormat {
+enum D3DFormat {
     DXT1 = 0x31545844,
     DXT5 = 0x35545844,
     ATI1 = 0x31495441,
@@ -297,7 +297,7 @@ function Stream_read_Bounding_Sphere(stream: Stream): Bounding_Sphere {
     return { center, radius };
 }
 
-export const enum Material_Type {
+export enum Material_Type {
     Standard, Deprecated_Terrain, Foliage, Lake, Reflective, Video, Gadget, Blended, Distant,
     Video_Window, Refract, Distant_Foliage, Translucent, Pool, Panel_Face, Shadow_Only, Grate,
     Blocker, Giant_Panel, Hedge, Blended3, Tinted, Decal, Deprecated_Blended_Decal, Vegetation,
@@ -308,7 +308,7 @@ export const enum Material_Type {
     Sky, // noclip extension
 }
 
-export const enum Material_Flags {
+export enum Material_Flags {
     Dynamic_Substitute                       = 0x00000001,
     Casts_Shadow                             = 0x00000002,
     Two_Sided_Deprecated                     = 0x00000002,
@@ -381,7 +381,7 @@ function unpack_Array<T>(stream: Stream, unpack_func: (stream: Stream) => T): T[
     return nArray(count, () => unpack_func(stream));
 }
 
-const enum VertexAttributeFlags {
+enum VertexAttributeFlags {
     BYTE_PACKED_POSITION            = 0x00000001,
     WORD_PACKED_POSITION            = 0x00000002,
     HALF_PACKED_POSITION            = 0x00000004,

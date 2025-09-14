@@ -1,7 +1,7 @@
 import { HICamera } from "./HICamera.js";
 import { RwBlendFunction, RwCullMode, RwEngine, RwShadeMode, RwTextureAddressMode, RwTextureFilterMode } from "./rw/rwcore.js";
 
-export const enum HIRenderState {
+export enum HIRenderState {
     Unknown,
     Default,
     OpaqueModels,

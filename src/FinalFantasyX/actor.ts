@@ -10,12 +10,12 @@ import { Emitter, EMITTER_DONE_TIMER, LevelParticles, ParticleContext, ParticleD
 import { GfxDevice, GfxFormat, GfxTexture, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform.js";
 import { SkinningMode, Animation, ActorModel } from "./bin.js";
 
-export const enum ActorFlags {
+export enum ActorFlags {
     IGNORE_GROUND = 0x80,
     ALLOW_TURNING = 0x400,
 }
 
-const enum RefPointID {
+enum RefPointID {
     Head = 1,
     Eyes = 2,
     Center = 6,
@@ -23,20 +23,20 @@ const enum RefPointID {
     RightFoot = 8,
 }
 
-const enum Speed {
+enum Speed {
     STOPPED,
     WALKING,
     RUNNING,
 }
 
-export const enum FloorMode {
+export enum FloorMode {
     AIR,
     GROUND,
     WATER,
 }
 
 
-const enum ValueType {
+enum ValueType {
     Angle,
     Pos,
     Scale,
@@ -758,7 +758,7 @@ function rawData(n: number): basicParser {
     }
 }
 
-const enum PosMode {
+enum PosMode {
     DEFAULT,
     RADIAL = 2,
     BONE = 4,
@@ -1088,7 +1088,7 @@ interface MagicThread {
     render: boolean;
 }
 
-const enum VecOp {
+enum VecOp {
     DEFAULT = 0,
     ANGLE = 3,
 }

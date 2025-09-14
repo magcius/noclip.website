@@ -150,7 +150,7 @@ class d_a_grass extends fopAc_ac_c {
     ];
 
     public override subload(globals: dGlobals): cPhs__Status {
-        const enum FoliageType {
+        enum FoliageType {
             Grass,
             Tree,
             WhiteFlower,
@@ -776,7 +776,7 @@ class d_a_vrbox2 extends fopAc_ac_c {
     }
 }
 
-const enum Kytag00EffectMode {
+enum Kytag00EffectMode {
     None = 0x00,
     Rain = 0x01,
     Snow = 0x02,
@@ -3268,7 +3268,7 @@ function dLib_pathMove(dst: vec3, pointIdxCurr: number, path: dPath, speed: numb
     return pointIdxCurr;
 }
 
-const enum d_a_obj_ikada_mode { wait, stopTerry, pathMoveTerry }
+enum d_a_obj_ikada_mode { wait, stopTerry, pathMoveTerry }
 class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mode> {
     public static PROCESS_NAME = dProcName_e.d_a_obj_ikada;
 
@@ -3673,7 +3673,7 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
     }
 }
 
-const enum d_a_oship_mode { wait, attack, damage, delete, rangeA, rangeB, rangeC, rangeD }
+enum d_a_oship_mode { wait, attack, damage, delete, rangeA, rangeB, rangeC, rangeD }
 class d_a_oship extends fopAc_ac_c implements ModeFuncExec<d_a_oship_mode> {
     public static PROCESS_NAME = dProcName_e.d_a_oship;
 
@@ -4151,8 +4151,8 @@ class d_a_obj_wood extends fopAc_ac_c {
     }
 }
 
-const enum d_a_obj_flame_mode { wait, wait2, l_before, l_u, u, u_l, l_after }
-const enum d_a_obj_em_state { Off, TurnOn, On, TurnOff }
+enum d_a_obj_flame_mode { wait, wait2, l_before, l_u, u, u_l, l_after }
+enum d_a_obj_em_state { Off, TurnOn, On, TurnOff }
 class d_a_obj_flame extends fopAc_ac_c {
     public static PROCESS_NAME = dProcName_e.d_a_obj_flame;
 
@@ -5098,7 +5098,7 @@ class d_a_npc_zl1 extends fopNpc_npc_c {
     }
 }
 
-const enum LkAnim {
+enum LkAnim {
     WAITS = 0x00,
     WALK = 0x01,
     DASH = 0x02,
@@ -5134,7 +5134,7 @@ interface LkFootData {
     heelPos: vec3,
 }
 
-const enum ItemNo {
+enum ItemNo {
     HerosSword = 0x38,
     MasterSwordPowerless = 0x39,
     MasterSwordHalfPower = 0x3A,
@@ -5142,19 +5142,19 @@ const enum ItemNo {
     InvalidItem = 0xFF,
 }
 
-const enum LkEquipItem {
+enum LkEquipItem {
     None = 0x100,
     Sword = 0x103,
 }
 
-const enum LkHandStyle {
+enum LkHandStyle {
     Idle = 0,
     HoldSword = 3,
     HoldWindWaker = 5,
     HoldShield = 8,
 }
 
-const enum LkJoint {
+enum LkJoint {
     HandL = 0x08,
     HandR = 0x0D,
     Head = 0x0F,
@@ -5163,7 +5163,7 @@ const enum LkJoint {
     FootR = 0x27,
 }
 
-const enum LkModelShape {
+enum LkModelShape {
     Chest = 0,
     Arms = 1,
     Face = 2,
@@ -5190,7 +5190,7 @@ const enum LkModelShape {
     Buckle = 23,
 }
 
-const enum d_a_py_lk_mode { unk, wait, tool }
+enum d_a_py_lk_mode { unk, wait, tool }
 class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
     public static PROCESS_NAME = dProcName_e.d_a_py_lk;
     private static ARC_NAME = "Link";
@@ -5786,7 +5786,7 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
     }
 }
 
-const enum TitlePane {
+enum TitlePane {
     MainTitle,
     JapanSubtitle,
     PressStart,
@@ -6108,14 +6108,14 @@ class br_s {
     }
 }
 
-const enum BridgeFlags {
+enum BridgeFlags {
     IsMetal = 1 << 0,
     ConnectToPartner = 1 << 1,
     NoRopes = 1 << 2,
     UseDarkRopeTex = 1 << 3,
 }
 
-const enum BridgeType {
+enum BridgeType {
     Wood = 0,
     Metal = 1
 }

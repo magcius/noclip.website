@@ -678,7 +678,7 @@ class DrawCallInstance {
     }
 }
 
-export const enum AnimationTrackType {
+export enum AnimationTrackType {
     RotationX,
     RotationY,
     RotationZ,
@@ -969,7 +969,7 @@ class GeoNodeRenderer {
     }
 }
 
-const enum ObjectFlags {
+enum ObjectFlags {
     FinalLayer   = 0x00400000,
     Translucent  = 0x00020000,
     EarlyOpaque  = 0x00000400,
@@ -978,7 +978,7 @@ const enum ObjectFlags {
     Blink        = 0x00000100,
 }
 
-export const enum BKLayer {
+export enum BKLayer {
     Early,
     Opaque,
     LevelXLU,
@@ -997,7 +997,7 @@ export function layerFromFlags(flags: number): BKLayer {
     return BKLayer.Opaque;
 }
 
-const enum BlinkState {
+enum BlinkState {
     Open,
     Closing,
     Opening,
@@ -1056,7 +1056,7 @@ class TextureAnimator {
     }
 }
 
-export const enum AnimationMode {
+export enum AnimationMode {
     None,
     Once,
     Loop,

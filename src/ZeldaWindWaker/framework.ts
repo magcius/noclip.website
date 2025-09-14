@@ -42,7 +42,7 @@ export class fGlobals {
 }
 
 //#region cPhs
-export const enum cPhs__Status {
+export enum cPhs__Status {
     Started,
     Loading,
     Next,

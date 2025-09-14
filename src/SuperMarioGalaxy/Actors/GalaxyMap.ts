@@ -43,7 +43,7 @@ function setLayoutScalePosAtPaneScaleTrans(dst: LayoutActor, src: LayoutActor, p
     vec2.copy(dstPane.scale, srcPane.scale);
 }
 
-const enum GalaxyMapIconStatus { Hidden, CanOpen, Opened, Completed }
+enum GalaxyMapIconStatus { Hidden, CanOpen, Opened, Completed }
 class GalaxyMapIcon extends LayoutActor {
     constructor(sceneObjHolder: SceneObjHolder, private galaxyName: string, private parent: LayoutActor, private mapPaneName: string) {
         super(sceneObjHolder, 'GalaxyMapIcon');
@@ -210,7 +210,7 @@ class GalaxyMapMarioIcon extends LayoutActor {
     }
 }
 
-const enum GalaxyMapNrv { Idle, FadeinAstroMap, FadeinGalaxyMap }
+enum GalaxyMapNrv { Idle, FadeinAstroMap, FadeinGalaxyMap }
 class GalaxyMap extends LayoutActor<GalaxyMapNrv> {
     private galaxyMapIcon: GalaxyMapIcon[] = [];
     private galaxyMapMarioIcon: GalaxyMapMarioIcon;
@@ -350,7 +350,7 @@ const scratchMatrix = mat4.create();
 const scratchDrawInfo = new LayoutDrawInfo();
 const sceneParams = new SceneParams();
 
-const enum GalaxyMapControllerNrv { Wait }
+enum GalaxyMapControllerNrv { Wait }
 export class GalaxyMapController extends LayoutActor<GalaxyMapControllerNrv> {
     private renderInstList = new GfxRenderInstList();
     private galaxyMapBackground: GalaxyMapBackground;

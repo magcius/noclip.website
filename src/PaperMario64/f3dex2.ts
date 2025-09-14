@@ -133,7 +133,7 @@ export class RSPState {
     }
 }
 
-const enum F3DEX2_GBI {
+enum F3DEX2_GBI {
     // DMA
     G_VTX               = 0x01,
     G_MODIFYVTX         = 0x02,

@@ -137,13 +137,13 @@ export class View {
     }
 }
 
-const enum CullingState {
+enum CullingState {
     Running,
     Paused,
     OneShot,
 };
 
-const enum CameraState {
+enum CameraState {
     Frozen,
     Running,
 };

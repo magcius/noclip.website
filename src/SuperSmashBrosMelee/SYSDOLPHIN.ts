@@ -191,7 +191,7 @@ export interface HSD_TlutDesc {
     paletteFormat: GX.TexPalette;
 }
 
-export const enum HSD_TObjFlags {
+export enum HSD_TObjFlags {
     COORD_UV            = 0 << 0,
     COORD_REFLECTION    = 1 << 0,
     COORD_HILIGHT       = 2 << 0,
@@ -232,7 +232,7 @@ export const enum HSD_TObjFlags {
     BUMP                = 1 << 24,
 }
 
-export const enum HSD_TObjTevColorIn {
+export enum HSD_TObjTevColorIn {
     // Some bits are from GX.CombineColorInput
     ZERO      = GX.CC.ZERO,
     ONE       = GX.CC.ONE,
@@ -250,7 +250,7 @@ export const enum HSD_TObjTevColorIn {
     TEX1_AAA  = 0x88,
 }
 
-export const enum HSD_TObjTevAlphaIn {
+export enum HSD_TObjTevAlphaIn {
     // Some bits are from GX.CombineColorInput
     ZERO      = GX.CA.ZERO,
     TEXA      = GX.CA.TEXA,
@@ -262,7 +262,7 @@ export const enum HSD_TObjTevAlphaIn {
     TEX1_A    = 0x45,
 }
 
-export const enum HSD_TObjTevActive {
+export enum HSD_TObjTevActive {
     KONST_R   = 1 << 0,
     KONST_G   = 1 << 1,
     KONST_B   = 1 << 2,
@@ -449,7 +449,7 @@ function HSD_TObjLoadDesc(tobj: HSD_TObj[], ctx: HSD_LoadContext, buffer: ArrayB
 //#endregion
 
 //#region MObj
-export const enum HSD_RenderModeFlags {
+export enum HSD_RenderModeFlags {
     DIFFUSE_MODE_MAT0 = 0x00 << 0,
     DIFFUSE_MODE_MAT  = 0x01 << 0,
     DIFFUSE_MODE_VTX  = 0x02 << 0,
@@ -471,7 +471,7 @@ export const enum HSD_RenderModeFlags {
     XLU               = 0x01 << 30,
 }
 
-export const enum HSD_PEFlags {
+export enum HSD_PEFlags {
     NONE           = 0,
     ENABLE_COMPARE = 1 << 4,
     ENABLE_ZUPDATE = 1 << 5,
@@ -631,7 +631,7 @@ interface HSD_PObjShapeAnim extends HSD_PObjBase {
 
 export type HSD_PObj = HSD_PObjRigid | HSD_PObjEnvelope | HSD_PObjShapeAnim;
 
-export const enum HSD_PObjFlags {
+export enum HSD_PObjFlags {
     OBJTYPE_SKIN      = 0 << 12,
     OBJTYPE_SHAPEANIM = 1 << 12,
     OBJTYPE_ENVELOPE  = 2 << 12,
@@ -789,7 +789,7 @@ interface HSD_JObjDObj extends HSD_JObjBase {
 
 export type HSD_JObj = HSD_JObjNone | HSD_JObjDObj;
 
-export const enum HSD_JObjFlags {
+export enum HSD_JObjFlags {
     SKELETON            = 1 <<  0,
     SKELETON_ROOT       = 1 <<  1,
     ENVELOPE            = 1 <<  2,
@@ -968,7 +968,7 @@ export interface HSD_FObj {
     keyframes: HSD_FObj__Keyframe[];
 }
 
-export const enum HSD_AObjFlags {
+export enum HSD_AObjFlags {
     ANIM_LOOP = 1 << 29,
 }
 
@@ -979,7 +979,7 @@ export interface HSD_AObj {
     objID: number;
 }
 
-const enum FObjFmt {
+enum FObjFmt {
     FLOAT,
     S16,
     U16,
@@ -987,7 +987,7 @@ const enum FObjFmt {
     U8,
 }
 
-const enum FObjOpcode {
+enum FObjOpcode {
     NONE,
     CON,
     LIN,
@@ -997,7 +997,7 @@ const enum FObjOpcode {
     KEY,
 }
 
-export const enum HSD_JObjAnmType {
+export enum HSD_JObjAnmType {
     ROTX = 1,
     ROTY,
     ROTZ,
@@ -1012,7 +1012,7 @@ export const enum HSD_JObjAnmType {
     BRANCH,
 }
 
-export const enum HSD_MObjAnmType {
+export enum HSD_MObjAnmType {
     AMBIENT_R = 1,
     AMBIENT_G,
     AMBIENT_B,
@@ -1028,7 +1028,7 @@ export const enum HSD_MObjAnmType {
     PE_DSTALPHA,
 }
 
-export const enum HSD_TObjAnmType {
+export enum HSD_TObjAnmType {
     TIMG = 1,
     TRAU,
     TRAV,

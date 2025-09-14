@@ -11,7 +11,7 @@ import * as CRC32 from 'crc-32';
 // https://github.com/open-ead/sead/blob/master/include/hostio/seadHostIOCurve.h
 // https://github.com/open-ead/agl/blob/master/include/agl/Utils/aglParameterCurve.hpp
 
-export const enum CurveType {
+export enum CurveType {
     Linear,
     Hermite,
     Step,
@@ -31,7 +31,7 @@ export class Curve {
     public coef: number[] = [];
 }
 
-const enum ParameterType {
+enum ParameterType {
     Bool = 0,
     F32,
     Int,

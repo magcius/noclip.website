@@ -246,7 +246,7 @@ class WindWakerRoom {
     public setVisible(v: boolean) { this.visible = v; }
 }
 
-const enum EffectDrawGroup {
+enum EffectDrawGroup {
     Main = 0,
     Indirect = 1,
 }

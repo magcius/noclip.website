@@ -39,7 +39,7 @@ export class Joint {
     public modelMatrix: mat4;
 }
 
-export const enum TexCoordMode { NONE, TEXCOORD, NORMAL, POSITION }
+export enum TexCoordMode { NONE, TEXCOORD, NORMAL, POSITION }
 
 function parseJoint(bmd: BMD, buffer: ArrayBufferSlice, idx: number) {
     const offs = bmd.modelOffsBase + idx * 0x40;

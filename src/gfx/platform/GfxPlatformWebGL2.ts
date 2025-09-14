@@ -39,7 +39,7 @@ interface GfxSamplerP_GL extends GfxSampler {
     gl_sampler: WebGLSampler;
 }
 
-const enum GfxProgramCompileStateP_GL {
+enum GfxProgramCompileStateP_GL {
     NeedsCompile,
     Compiling,
     NeedsBind,

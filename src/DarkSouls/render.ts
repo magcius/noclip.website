@@ -225,14 +225,14 @@ export class FLVERData {
     }
 }
 
-const enum LightingType {
+enum LightingType {
     Off = -1,
     None = 0,
     HemDirDifSpcx3 = 1,
     HemEnvDifSpc = 3,
 }
 
-const enum BlendMode {
+enum BlendMode {
     Normal,
     TexEdge,
     Blend,
@@ -335,7 +335,7 @@ function linkTextureParameter(textureMapping: TextureMapping, textureHolder: DDS
         textureHolder.fillTextureMapping(textureMapping, textureName);
 }
 
-const enum LateBindingTexture {
+enum LateBindingTexture {
     FramebufferColor = `framebuffer-color`,
     WaterReflection  = `water-reflection`,
     WaterHeight      = `water-height`,

@@ -57,7 +57,7 @@ export interface ModelPoint {
     offset: vec3;
 }
 
-export const enum GeoFlags {
+export enum GeoFlags {
     RGBA16Mipmaps   = 0x002,
     ComputeLookAt   = 0x004,
     ExtraSegments   = 0x040,
@@ -80,7 +80,7 @@ export interface Geometry<N extends GeoNode> {
     morphs?: Morph[];
 }
 
-export const enum VertexEffectType {
+export enum VertexEffectType {
     // id mapping is different from game table index (in comment)
     // names in the comment are from bt files
     FlowingWater      = 1,  // 1 scroll
@@ -714,7 +714,7 @@ function runGeoLayout<N extends GeoNode>(context: GeoContext<N>, geoIdx_: number
     }
 }
 
-export const enum RenderZMode {
+export enum RenderZMode {
     None = 0,
     OPA = 1,
     XLU = 2,

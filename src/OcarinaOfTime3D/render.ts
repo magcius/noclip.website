@@ -32,7 +32,7 @@ interface DMPMaterialHacks {
     vertexColorsEnabled: boolean;
 }
 
-const enum MatLutType {
+enum MatLutType {
     Distribution0,
     Distribution1,
     Fresnel,

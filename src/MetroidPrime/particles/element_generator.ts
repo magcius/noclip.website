@@ -503,19 +503,19 @@ export function GetChildGeneratorDesc(stream: InputStream, resourceSystem: Resou
     return part.description;
 }
 
-export const enum ModelOrientationType {
+export enum ModelOrientationType {
     Normal,
     One
 }
 
-export const enum LightType {
+export enum LightType {
     None,
     Custom,
     Directional,
     Spot,
 }
 
-export const enum FalloffType {
+export enum FalloffType {
     Constant,
     Linear,
     Quadratic

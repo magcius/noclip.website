@@ -585,7 +585,7 @@ const scratchMat4a = mat4.create();
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
 
-const enum PatchNeighborEdge {
+enum PatchNeighborEdge {
     // Blue-to-purple
     Top,
     // Blue-to-cyan
@@ -596,12 +596,12 @@ const enum PatchNeighborEdge {
     Bottom,
 }
 
-const enum PatchChild {
+enum PatchChild {
     TopLeft, TopRight,
     BottomLeft, BottomRight,
 }
 
-const enum PatchTransformMode {
+enum PatchTransformMode {
     Plane,
     Sphere,
 }
@@ -612,7 +612,7 @@ interface PatchShaderParam {
     showTess: boolean;
 }
 
-const enum PatchState {
+enum PatchState {
     Undecided,
     Branch,
     Leaf,
@@ -810,7 +810,7 @@ interface TessObject {
     prepareToRender(renderInstManager: GfxRenderInstManager, patchLibrary: PatchLibrary, viewerInput: ViewerRenderInput): void;
 }
 
-const enum TessCubeFace {
+enum TessCubeFace {
     Top, Bottom, Left, Right, Front, Back,
 }
 

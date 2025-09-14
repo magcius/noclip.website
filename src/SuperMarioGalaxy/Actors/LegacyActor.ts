@@ -18,7 +18,7 @@ import { initShadowFromCSV } from "../Shadow.js";
 // The old actor code, before we started emulating things natively.
 // Mostly used for SMG2 as we do not have symbols.
 
-const enum SceneGraphTag {
+enum SceneGraphTag {
     Skybox = 0,
     Normal = 1,
     Bloom = 2,
@@ -44,9 +44,9 @@ interface AnimOptions {
     brk?: string;
 }
 
-const enum RotateAxis { X, Y, Z };
+enum RotateAxis { X, Y, Z };
 
-const enum NoclipLegacyActorNrv { Wait }
+enum NoclipLegacyActorNrv { Wait }
 
 export class NoclipLegacyActor extends LiveActor<NoclipLegacyActorNrv> {
     private rotateSpeed = 0;

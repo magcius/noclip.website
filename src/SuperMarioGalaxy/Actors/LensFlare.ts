@@ -220,7 +220,7 @@ class TriggerChecker {
     }
 }
 
-const enum LensFlareModelNrv { Kill, Show, Hide, FadeIn, FadeOut }
+enum LensFlareModelNrv { Kill, Show, Hide, FadeIn, FadeOut }
 
 abstract class LensFlareModel extends LiveActor<LensFlareModelNrv> {
     public brightness = 0.0;

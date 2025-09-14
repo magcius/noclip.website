@@ -4,7 +4,7 @@ import { HIEvent } from "./HIEvent.js";
 import { HIScene } from "./HIScene.js";
 import { RwStream } from "./rw/rwcore.js";
 
-export const enum HIPlatformType {
+export enum HIPlatformType {
     ER,
     Orbit,
     Spline,

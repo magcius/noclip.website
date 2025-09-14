@@ -153,7 +153,7 @@ export class RSPOutput {
     }
 }
 
-export const enum OtherModeH_Layout {
+export enum OtherModeH_Layout {
     G_MDSFT_BLENDMASK   = 0,
     G_MDSFT_ALPHADITHER = 4,
     G_MDSFT_RGBDITHER   = 6,
@@ -169,7 +169,7 @@ export const enum OtherModeH_Layout {
     G_MDSFT_PIPELINE    = 23,
 }
 
-export const enum OtherModeH_CycleType {
+export enum OtherModeH_CycleType {
     G_CYC_1CYCLE = 0x00,
     G_CYC_2CYCLE = 0x01,
     G_CYC_COPY   = 0x02,

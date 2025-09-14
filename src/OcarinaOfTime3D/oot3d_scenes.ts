@@ -755,7 +755,7 @@ function stringifyActorId(actorId: ActorId): string {
 
 // Some objects do special magic based on which scene they are loaded into.
 // This is a rough descriptor of the "current scene" -- feel free to expand as needed.
-const enum Scene {
+enum Scene {
     DekuTree,
     DodongosCavern,
     JabuJabusBelly,
@@ -1000,7 +1000,7 @@ class SceneDesc implements Viewer.SceneDesc {
 
             const b = buildModel(zar, `model/tr_box.cmb`, 0.005); // default scale for small chests
 
-            const enum Chest { BOSS, SMALL_WOODEN, LARGE_WOODEN };
+            enum Chest { BOSS, SMALL_WOODEN, LARGE_WOODEN };
             function setChest(chest: Chest) {
                 b.shapeInstances[0].visible = chest === Chest.BOSS;
                 b.shapeInstances[1].visible = chest === Chest.SMALL_WOODEN || chest === Chest.LARGE_WOODEN;

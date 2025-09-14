@@ -82,7 +82,7 @@ export class HitInfo extends Triangle {
     }
 }
 
-export const enum CollisionKeeperCategory {
+export enum CollisionKeeperCategory {
     Map = 0,
     Sunshade = 1,
     WaterSurface = 2,
@@ -867,7 +867,7 @@ export function calcMapGround(sceneObjHolder: SceneObjHolder, dst: vec3, p0: Rea
     return getFirstPolyOnLineCategory(sceneObjHolder, dst, null, p0, scratchVec3d, null, null, CollisionKeeperCategory.Map);
 }
 
-export const enum CollisionScaleType {
+export enum CollisionScaleType {
     AutoEqualScale,
     AutoEqualScaleOne,
     AutoScale,
@@ -963,7 +963,7 @@ function isWallPolygon(normal: vec3, gravityVector: vec3): boolean {
     return !isNearZeroVec3(normal, 0.001) && isWallPolygonAngle(vec3.dot(normal, gravityVector));
 }
 
-const enum BinderFindBindedPositionRet {
+enum BinderFindBindedPositionRet {
     NoCollide, Collide, MoveAlongHittedPlanes,
 }
 

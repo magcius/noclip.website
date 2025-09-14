@@ -40,20 +40,20 @@ const BindingLayouts: GfxBindingLayoutDescriptor[] = [
     ] },
 ];
 
-export const enum StaticLightingMode {
+export enum StaticLightingMode {
     None,
     StudioVertexLighting,
     StudioVertexLighting3,
     StudioAmbientCube,
 }
 
-export const enum SkinningMode {
+export enum SkinningMode {
     None,
     Rigid,
     Smooth,
 };
 
-export const enum LateBindingTexture {
+export enum LateBindingTexture {
     Camera              = `camera`,
     FramebufferColor    = `framebuffer-color`,
     FramebufferDepth    = `framebuffer-depth`,
@@ -62,7 +62,7 @@ export const enum LateBindingTexture {
 }
 
 // https://github.com/ValveSoftware/source-sdk-2013/blob/master/sp/src/public/const.h#L340-L387
-export const enum RenderMode {
+export enum RenderMode {
     Normal = 0,
     TransColor,
     TransTexture,
@@ -340,7 +340,7 @@ export class EntityMaterialParameters {
     public randomNumber = Math.random();
 }
 
-export const enum AlphaBlendMode {
+export enum AlphaBlendMode {
     None, Blend, Add, Glow,
 }
 

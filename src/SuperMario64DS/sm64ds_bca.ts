@@ -4,7 +4,7 @@ import { mat4 } from "gl-matrix";
 import { computeModelMatrixSRT, lerp, lerpAngle } from "../MathHelpers.js";
 import AnimationController from "../AnimationController.js";
 
-export const enum LoopMode {
+export enum LoopMode {
     ONCE = 0,
     REPEAT = 1,
 }

@@ -52,7 +52,7 @@ export class CheckCollideResult {
 const searchBlockScratch = new SearchBlockResult();
 const prismHitScratch = new KC_PrismHit();
 
-export const enum KCHitSphereClassification {
+export enum KCHitSphereClassification {
     None    = 0,
     Plane   = 1,
     Edge1   = 2,

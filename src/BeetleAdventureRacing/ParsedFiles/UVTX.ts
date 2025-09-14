@@ -547,7 +547,7 @@ export class UVTXRenderHelper {
 }
 
 //TODO: check this
-const enum TexCM {
+enum TexCM {
     WRAP = 0x00,
     MIRROR = 0x01,
     CLAMP = 0x02,

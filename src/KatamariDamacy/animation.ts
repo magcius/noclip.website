@@ -5,7 +5,7 @@ import { align, assert } from "../util.js";
 import { Endianness } from "../endian.js";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 
-const enum CurveKind {
+enum CurveKind {
     Spline,
     Linear,
     Sparse,
@@ -163,7 +163,7 @@ function parseAnimation(data: ArrayBufferSlice, fps: number, curveIndex: number)
     return { fps, frameInterval, segmentCount, isRelative, curves };
 }
 
-const enum CurveFlag {
+enum CurveFlag {
     COMPONENT_MASK  = 0x03,
     ROTATION        = 0x08,
     POSITION        = 0x0C,

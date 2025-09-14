@@ -91,7 +91,7 @@ export class MIPTEXData {
     }
 }
 
-const enum TextureCacheType {
+enum TextureCacheType {
     MIPTEX,
 }
 

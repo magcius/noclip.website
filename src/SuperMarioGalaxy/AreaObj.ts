@@ -16,7 +16,7 @@ interface AreaFormBase {
     debugDraw(sceneObjHolder: SceneObjHolder): void;
 }
 
-export const enum AreaFormType {
+export enum AreaFormType {
     CenterOriginCube,
     BaseOriginCube,
     Sphere,

@@ -9,7 +9,7 @@ import { computeModelMatrixSRT, lerpAngle, lerp, MathConstants } from "../MathHe
 
 // CSAB (CTR Skeletal Animation Binary)
 
-const enum AnimationTrackType {
+enum AnimationTrackType {
     CONSTANT = 0x00,
     LINEAR = 0x01,
     HERMITE = 0x02,
@@ -41,7 +41,7 @@ interface AnimationTrackHermite {
 
 type AnimationTrack = AnimationTrackLinear | AnimationTrackHermite;
 
-const enum LoopMode {
+enum LoopMode {
     ONCE, REPEAT,
 }
 

@@ -7,7 +7,7 @@ import { readString, assert, nArray, assertExists } from "../util.js";
 import { TextureMapping } from "../TextureHolder.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 
-const enum ImageFormat {
+enum ImageFormat {
     RGBA8888      = 0x00,
     ABGR8888      = 0x01,
     RGB888        = 0x02,
@@ -205,7 +205,7 @@ function imageFormatConvertData(device: GfxDevice, fmt: ImageFormat, data: Array
     }
 }
 
-export const enum VTFFlags {
+export enum VTFFlags {
     NONE          = 0,
     POINTSAMPLE   = 1 << 0,
     TRILINEAR     = 1 << 1,

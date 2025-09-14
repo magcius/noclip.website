@@ -54,7 +54,7 @@ function sampleANF1AnimationData(frames: number[], animFrame: number): number {
     return frames[animFrame];
 }
 
-export const enum J3DFrameCtrl__UpdateFlags {
+export enum J3DFrameCtrl__UpdateFlags {
     None       = 0,
     HasStopped = 0b0001,
     HasLooped  = 0b0010,

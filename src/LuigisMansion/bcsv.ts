@@ -6,7 +6,7 @@ function readStringSJIS(buffer: ArrayBufferSlice, offs: number): string {
     return readString(buffer, offs, -1, true, 'sjis');
 }
 
-export const enum BcsvFieldType {
+export enum BcsvFieldType {
     S32 = 0,
     // TODO(jstpierre): Verify
     STRING = 1,

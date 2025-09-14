@@ -201,7 +201,7 @@ function makeDataList(strings: string[]): HTMLDataListElement {
     return datalist;
 }
 
-const enum EfGroup { Main, Indirect }
+enum EfGroup { Main, Indirect }
 
 const clearPass = makeAttachmentClearDescriptor(colorNewFromRGBA(0.2, 0.2, 0.2, 1.0));
 const scratchVec3 = vec3.create();

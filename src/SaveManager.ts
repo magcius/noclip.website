@@ -7,7 +7,7 @@ interface SaveStateMap {
     [k: string]: string;
 }
 
-export const enum SaveStateLocation {
+export enum SaveStateLocation {
     LocalStorage,
     SessionStorage,
     Defaults,

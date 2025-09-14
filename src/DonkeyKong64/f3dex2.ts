@@ -8,7 +8,7 @@ import { vec4 } from 'gl-matrix';
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
 
 // Interpreter for N64 F3DEX2 microcode.
-export const enum RSP_Geometry {
+export enum RSP_Geometry {
     G_ZBUFFER            = 1 << 0,
     G_SHADE              = 1 << 2,
     G_CULL_FRONT         = 1 << 9,

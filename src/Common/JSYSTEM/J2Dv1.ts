@@ -22,7 +22,7 @@ import { BTIData } from "./JUTTexture.js";
 const materialParams = new MaterialParams();
 const drawParams = new DrawParams();
 
-export const enum JUTResType {
+export enum JUTResType {
     TIMG, TLUT, FONT,
 }
 
@@ -70,7 +70,7 @@ export enum J2DAnchorPos {
  * For instance, if the texture is 200 pixels wide, but the quad is 100 pixels wide and Right is not set, the texture 
  * will be clipped by half. If both Left and Right are set, the texture will be squashed to fit within the quad.
  */
-const enum J2DUVBinding {
+enum J2DUVBinding {
     Bottom = (1 << 0),
     Top = (1 << 1),
     Right = (1 << 2),

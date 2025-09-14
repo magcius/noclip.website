@@ -388,7 +388,7 @@ const FIELDS: any = {
     },
 }
 
-const enum Opcode {
+enum Opcode {
     SetShader   = 1,
     CallDL      = 2,
     SetVCD      = 3,

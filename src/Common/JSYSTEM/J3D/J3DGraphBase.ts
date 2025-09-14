@@ -296,7 +296,7 @@ interface TexNoCalc {
     calcTextureIndex(): number;
 }
 
-const enum ColorRegType { S10, U8, }
+enum ColorRegType { S10, U8, }
 
 const materialParams = new MaterialParams();
 const scratchMat4a = mat4.create(), scratchMat4b = mat4.create(), scratchMat4c = mat4.create();

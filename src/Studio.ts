@@ -22,7 +22,7 @@ const MAX_ANIMATION_LENGTH_SEC = 300;
 const MAX_ZOOM_LEVEL = 5;
 const ZOOM_STEP = 0.25;
 
-const enum InterpolationType {
+enum InterpolationType {
     Ease,
     Linear,
     Hold
@@ -74,13 +74,13 @@ export interface CameraAnimation {
     loop: boolean;
 }
 
-const enum TimelineMode {
+enum TimelineMode {
     Consolidated,
     Position_LookAt_Bank,
     Full
 }
 
-const enum KeyframeTrackType {
+enum KeyframeTrackType {
     posXTrack    = 0b0000001,
     posYTrack    = 0b0000010,
     posZTrack    = 0b0000100,
@@ -175,7 +175,7 @@ class KeyframeTrack {
  * in looping animations. End keyframes have the same values as the Start keyframes, and can be repositioned on
  * the timeline to change the speed or curve shape when moving from the last regular keyframe back to the start position.
  */
-const enum KeyframeIconType {
+enum KeyframeIconType {
     Default,
     Start,
     Loop_End,

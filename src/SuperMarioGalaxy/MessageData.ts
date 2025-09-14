@@ -6,7 +6,7 @@ import { assert, assertExists, hexzero0x, readString } from "../util.js";
 import { createCsvParser } from "./JMapInfo.js";
 import { SceneObjHolder } from "./Main.js";
 
-export const enum JUTMesgFlowNodeType { Message = 1, Branch = 2, Event = 3 }
+export enum JUTMesgFlowNodeType { Message = 1, Branch = 2, Event = 3 }
 
 export interface JUTMesgFlowNodeMessage {
     type: JUTMesgFlowNodeType.Message;

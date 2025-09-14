@@ -76,7 +76,7 @@ export interface ParticleSystem {
     particleTextures: RDP.Texture[][];
 }
 
-const enum Flags {
+enum Flags {
     Gravity         = 0x0001,
     Drag            = 0x0002,
     Orbit           = 0x0004,
@@ -94,7 +94,7 @@ const enum Flags {
     StorePosition   = 0x8000,
 }
 
-const enum InstrFlags {
+enum InstrFlags {
     IncVec = 0x08,
     UseVel = 0x10,
     SetEnv = 0x10,

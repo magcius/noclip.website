@@ -4,7 +4,7 @@ import { HIScene } from "./HIScene.js";
 import { RwEngine, RwStream } from "./rw/rwcore.js";
 
 // BFBB
-const enum SB_model_index {
+enum SB_model_index {
     body = 4,
     arm_l = 3,
     arm_r = 2,

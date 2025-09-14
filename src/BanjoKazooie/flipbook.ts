@@ -4,7 +4,7 @@ import { RSPSharedOutput, Vertex } from "./f3dex.js";
 import { align, assert } from "../util.js";
 import { ImageSize, decodeTex_RGBA16, decodeTex_RGBA32, decodeTex_CI4, parseTLUT, TextureLUT, decodeTex_I8 } from "../Common/N64/Image.js";
 
-const enum Flags {
+enum Flags {
     CI4 = 0x001,
     CI8 = 0x004,
     I8 = 0X040,
@@ -12,7 +12,7 @@ const enum Flags {
     RGBA32 = 0x800,
 }
 
-export const enum LoopMode {
+export enum LoopMode {
     None = 0,
     ReverseAndMirror = 1,
     Reverse = 2,
@@ -20,20 +20,20 @@ export const enum LoopMode {
     Mirror = 4,
 }
 
-export const enum ReverseMode {
+export enum ReverseMode {
     Never = 0,
     FromPhase = 1,
     Always = 2,
     IfMirrored = 3,
 }
 
-export const enum MirrorMode {
+export enum MirrorMode {
     Constant = 0,
     FromPhase = 1,
     Always = 2,
 }
 
-export const enum FlipbookMode {
+export enum FlipbookMode {
     Opaque,
     Translucent,
     AlphaTest,

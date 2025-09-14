@@ -2,7 +2,7 @@
 import { assert } from "../../util.js";
 import { texturePadWidth } from "./RDP.js";
 
-export const enum ImageFormat {
+export enum ImageFormat {
     G_IM_FMT_RGBA = 0x00,
     G_IM_FMT_YUV  = 0x01,
     G_IM_FMT_CI   = 0x02,
@@ -10,24 +10,24 @@ export const enum ImageFormat {
     G_IM_FMT_I    = 0x04,
 }
 
-export const enum ImageSize {
+export enum ImageSize {
     G_IM_SIZ_4b   = 0x00,
     G_IM_SIZ_8b   = 0x01,
     G_IM_SIZ_16b  = 0x02,
     G_IM_SIZ_32b  = 0x03,
 }
 
-export const enum TextureLUT {
+export enum TextureLUT {
     G_TT_NONE     = 0x00,
     G_TT_RGBA16   = 0x02,
     G_TT_IA16     = 0x03,
 }
 
-export const enum TexCM {
+export enum TexCM {
     WRAP = 0x00, MIRROR = 0x01, CLAMP = 0x02, MIRROR_CLAMP = 0x03,
 }
 
-export const enum TextFilt {
+export enum TextFilt {
     G_TF_POINT   = 0x00,
     G_TF_AVERAGE = 0x03,
     G_TF_BILERP  = 0x02,

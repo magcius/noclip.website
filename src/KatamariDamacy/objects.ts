@@ -89,7 +89,7 @@ function reduceAngle(t: number): number {
 
 const speedTable: number[] = [0.3, 1, 2, 4, 6, 8, 10, 15, 20, 40, 200, 0];
 
-const enum AnimationType {
+enum AnimationType {
     IDLE = 0,
     MOVING = 1,
     WRIGGLE = 2,
@@ -115,7 +115,7 @@ function objectDist(viewerInput: ViewerRenderInput, objectToWorld: mat4): number
     return Math.hypot(cameraMat[12] - objectToWorld[12], cameraMat[13] - objectToWorld[13], cameraMat[14] - objectToWorld[14]);
 }
 
-export const enum KDLayer {
+export enum KDLayer {
     OBJECTS,
     TRANSLUCENT_OBJECTS,
     TRANSLUCENT_LEVEL,
@@ -669,7 +669,7 @@ function getZone(pos: vec3, zones: CollisionList[], depth: number): number {
     return scratchTri.zone;
 }
 
-const enum Axis { X, Y, Z }
+enum Axis { X, Y, Z }
 
 function rotateObject(modelInstance: BINModelInstance, deltaTimeFrames: number, axis: Axis, value: number): void {
     const angle = (value / -60.0) * deltaTimeFrames;
@@ -707,7 +707,7 @@ function oscillateTexture(modelInstance: BINModelInstance, deltaTimeFrames: numb
         modelInstance.uvState = 0;
 }
 
-const enum ObjectId {
+enum ObjectId {
     DENQ_B          = 0x0016,
     BARBER_D        = 0x001E,
     HUKUBIKI_C      = 0x0023,
@@ -1886,7 +1886,7 @@ function motion_WaitForPlayer_Update(object: ObjectRenderer, motion: MotionState
     motion.useAltMotion = motion_conditionMet(motion, object.prevPosition, gameState);
 }
 
-const enum FlyInCirclesState {
+enum FlyInCirclesState {
     WAITING,
     TURNING,
     TAKEOFF,
@@ -1995,7 +1995,7 @@ function motion_FlyInCircles_Update(object: ObjectRenderer, deltaTimeFrames: num
 
 const turnAngles = [45, -45, 90, -90, 135, -135, 180];
 
-const enum ZoneHopState {
+enum ZoneHopState {
     Hop,
     Wait,
     ChooseDirection,
@@ -2145,7 +2145,7 @@ function motion_attemptForwardStep(object: ObjectRenderer, deltaTimeFrames: numb
     return false;
 }
 
-const enum RandomWalkState {
+enum RandomWalkState {
     Walk,
     Pause,
     ChooseDirection,
@@ -2386,7 +2386,7 @@ function motion_OneTimePath_update(object: ObjectRenderer, motion: MotionState, 
     }
 }
 
-const enum ZonePathState {
+enum ZonePathState {
     Move,
     AtEnd,
     Turn,
@@ -2493,7 +2493,7 @@ function motion_ZonePath_update(object: ObjectRenderer, motion: MotionState, del
     }
 }
 
-const enum BackAndForthState {
+enum BackAndForthState {
     Move,
     TargetNext,
     Turn,

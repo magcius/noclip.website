@@ -18,7 +18,7 @@ import { AVTpl } from "./AVTpl.js";
 
 const SHAPE_BASE_SIZE = 0x60;
 
-export const enum MaterialFlags {
+export enum MaterialFlags {
     Unlit = 1 << 0,
     DoubleSided = 1 << 1, // Draw front and back sides of tris/quads
     NoFog = 1 << 2,
@@ -29,7 +29,7 @@ export const enum MaterialFlags {
     VertColors = 1 << 8, // Set at runtime based on vtx attrs?
 }
 
-export const enum DlistFlags {
+export enum DlistFlags {
     HasDlist0 = 1 << 0, // Display list 0 present, cull front faces by default
     HasDlist1 = 1 << 1, // Display list 1 present, cull back faces by default
     // Extra display lists (always both present or neither?)
@@ -92,7 +92,7 @@ export type Shape = {
     size: number; // Total size of shape in bytes
 };
 
-export const enum TevLayerFlags {
+export enum TevLayerFlags {
     // A TEV layer is one of five types. If none of the "TYPE" flags are set it's the first type:
     // standard diffuse lighting (light * texture dotted with normals etc.)
 
@@ -132,7 +132,7 @@ export type TevLayer = {
     swappable: boolean;
 };
 
-export const enum ModelFlags {
+export enum ModelFlags {
     // Uses VAT with compressed 16-bit vert pos/norm/texcoord instead of floats
     Vat16Bit = 0x01,
     // Skinned meshes with one bone per vertex (what GX hardware supports). Uses tristrips

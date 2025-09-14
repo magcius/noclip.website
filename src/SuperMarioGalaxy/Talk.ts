@@ -25,7 +25,7 @@ function getJMapInfoMessageID(infoIter: JMapInfoIter): number | null {
     return infoIter.getValueNumber('MessageId');
 }
 
-const enum TalkType {
+enum TalkType {
     Short = 1,
     Event = 2,
     Flow = 4,
@@ -36,7 +36,7 @@ function isNodeEventContinue(node: JUTMesgFlowNodeEvent): boolean {
     return false;
 }
 
-const enum BranchType {
+enum BranchType {
     None = 0,
     User = 1,
     IsNearPlayer = 2,
@@ -187,7 +187,7 @@ class TalkNodeCtrl {
     }
 }
 
-const enum TalkState {
+enum TalkState {
     None,
     Entry,
     EnableStart,
@@ -417,7 +417,7 @@ function calcScreenPosition(dst: vec3, v: ReadonlyVec3, viewerInput: ViewerRende
     dst[2] = 0.0;
 }
 
-const enum TalkBalloonShortNrv { Wait, Open, Talk, Close }
+enum TalkBalloonShortNrv { Wait, Open, Talk, Close }
 class TalkBalloonShort extends TalkBalloon<TalkBalloonShortNrv> {
     constructor(sceneObjHolder: SceneObjHolder) {
         super(sceneObjHolder, 'TalkBalloonStretch', true, false);

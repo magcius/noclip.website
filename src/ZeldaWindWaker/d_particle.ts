@@ -40,7 +40,7 @@ export abstract class dPa_levelEcallBack extends JPAEmitterCallBack {
     }
 }
 
-export const enum ParticleGroup {
+export enum ParticleGroup {
     Normal,
     NormalP1,
     Toon,

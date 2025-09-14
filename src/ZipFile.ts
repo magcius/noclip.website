@@ -8,7 +8,7 @@ import { readString, assert } from './util.js';
 import * as Deflate from './Common/Compression/Deflate.js';
 import * as LZMA from './Common/Compression/LZMA.js';
 
-export const enum ZipCompressionMethod {
+export enum ZipCompressionMethod {
     None = 0,
     DEFLATE = 8,
     LZMA = 14,

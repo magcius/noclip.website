@@ -58,7 +58,7 @@ interface RLYTTextureBinding {
     kind: number;
 }
 
-const enum RLYTPaneKind {
+enum RLYTPaneKind {
     Pane     = 'pan1',
     Picture  = 'pic1',
     Textbox  = 'txt1',
@@ -66,13 +66,13 @@ const enum RLYTPaneKind {
     Bounding = 'bnd1',
 }
 
-const enum RLYTPaneFlags {
+enum RLYTPaneFlags {
     Visible        = 0b0001,
     PropagateAlpha = 0b0010,
     AspectAdjust   = 0b0100,
 }
 
-const enum RLYTBasePosition {
+enum RLYTBasePosition {
     TopLeft, TopMiddle, TopRight,
     CenterLeft, CenterMiddle, CenterRight,
     BottomLeft, BottomMiddle, BottomRight,
@@ -105,7 +105,7 @@ interface RLYTPicture extends RLYTPaneBase, RLYTWindowContent {
     kind: RLYTPaneKind.Picture;
 }
 
-const enum RLYTTextAlignment { Justify, Left, Center, Right }
+enum RLYTTextAlignment { Justify, Left, Center, Right }
 
 interface RLYTTextbox extends RLYTPaneBase {
     kind: RLYTPaneKind.Textbox;
@@ -123,7 +123,7 @@ interface RLYTTextbox extends RLYTPaneBase {
     str: string;
 }
 
-const enum RLYTTextureFlip {
+enum RLYTTextureFlip {
     None, FlipH, FlipV, Rotate90, Rotate180, Rotate270,
 }
 
@@ -661,12 +661,12 @@ export function parseBRLYT(buffer: ArrayBufferSlice): RLYT {
 //#endregion
 
 //#region BRLAN
-const enum RLANAnimationType {
+enum RLANAnimationType {
     Pane, Material,
 }
 
 // Combined track type enum
-const enum RLANAnimationTrackType {
+enum RLANAnimationTrackType {
     _PaneTransform_First = 0x000,
     PaneTransform_TranslationX = _PaneTransform_First,
     PaneTransform_TranslationY,
@@ -852,7 +852,7 @@ export function parseBRLAN(buffer: ArrayBufferSlice): RLAN {
                         const targetType = view.getUint8(trackOffs + 0x01);
                         const type: RLANAnimationTrackType = trackTypeBase + targetType;
 
-                        const enum CurveType { Constant, Step, Hermite }
+                        enum CurveType { Constant, Step, Hermite }
                         const curveType: CurveType = view.getUint8(trackOffs + 0x02);
 
                         // Ensure the curve type matches our track type.

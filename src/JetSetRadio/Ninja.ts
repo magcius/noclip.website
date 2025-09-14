@@ -4,7 +4,7 @@ import { vec2, vec3, vec4 } from "gl-matrix";
 import { Color, colorNewFromRGBA, TransparentBlack, White } from "../Color.js";
 import { hexzero0x } from "../util.js";
 
-const enum ROTATION_TYPE {
+enum ROTATION_TYPE {
     INVALID = -1,
     EULER_32,
     QUATERNION,
@@ -46,7 +46,7 @@ const rotationTypes: ROTATION_TYPE[] = [
     ROTATION_TYPE.INVALID,    // 31
 ]
 
-export const enum FILTER_MODE {
+export enum FILTER_MODE {
     POINT,
     BILINEAR,
     TRILINEAR,
@@ -64,7 +64,7 @@ interface NJS_TEXTURE {
     superSample:  number;
 }
 
-export const enum NJS_BLENDALPHA {
+export enum NJS_BLENDALPHA {
     ZERO = 0,
     ONE,
     OTHER_COLOR,
@@ -94,7 +94,7 @@ export interface NJS_VERTS {
 	specular:  Color[];
 }
 
-export const enum NJS_ATTRIBUTE_FLAGS {
+export enum NJS_ATTRIBUTE_FLAGS {
     IGNORE_LIGHT    = (1 << 0),
     IGNORE_SPECULAR = (1 << 1),
     IGNORE_AMBIENT  = (1 << 2),
@@ -135,7 +135,7 @@ export interface NJS_MODEL {
     bounds:   vec4;
 }
 
-export const enum NJS_EVALFLAGS {
+export enum NJS_EVALFLAGS {
     EVAL_UNIT_POS   = (1 << 0),
     EVAL_UNIT_ROT   = (1 << 1),
     EVAL_UNIT_SCL   = (1 << 2),
@@ -285,7 +285,7 @@ function parseOffset(offset: number, baseOffset: number): number {
     return (adjustedOffset < 0) ? -1 : adjustedOffset;
 }
 
-const enum CNK_TYPE {
+enum CNK_TYPE {
     CNK_NULL  =   0,
     CNK_BITS  =   1,
     CNK_TINY  =   8,

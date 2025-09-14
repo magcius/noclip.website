@@ -107,7 +107,7 @@ function isDigitStringTail(s: string): boolean {
     return !!s.match(/\d+$/);
 }
 
-const enum SRTFlags {
+enum SRTFlags {
     None = 0, S = 1, R = 2, T = 4,
 }
 
@@ -186,7 +186,7 @@ class ParticleEmitter {
     }
 }
 
-const enum EmitterLoopMode {
+enum EmitterLoopMode {
     OneTime, Forever,
 }
 

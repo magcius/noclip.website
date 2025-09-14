@@ -388,7 +388,7 @@ export class BezierRail {
     }
 }
 
-export const enum RailDirection { TowardsEnd, TowardsStart }
+export enum RailDirection { TowardsEnd, TowardsStart }
 const scratchVec3c = vec3.create();
 export class RailRider {
     public bezierRail: BezierRail;

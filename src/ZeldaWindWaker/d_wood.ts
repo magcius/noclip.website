@@ -26,14 +26,14 @@ import { mDoMtx_XrotM, mDoMtx_YrotM, mDoMtx_YrotS, MtxTrans } from './m_do_mtx.j
 //-----------------------------------------
 // Types
 //-----------------------------------------
-const enum UnitState_e {
+enum UnitState_e {
     Inactive = 0,
     Active = 1 << 0,
     IsFrustumCulled = 1 << 1,
     IsCut = 1 << 2,
 }
 
-const enum AnimMode_e {
+enum AnimMode_e {
     Cut = 0,      // Chopping down
     PushInto = 1, // Attacked or collided with, but not chopped
     PushBack = 2, // Second half of PushInto, returning to normal
@@ -44,7 +44,7 @@ const enum AnimMode_e {
     _Max
 };
 
-const enum AttrSway_e {
+enum AttrSway_e {
     Light,
     Medium,
     Strong,

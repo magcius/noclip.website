@@ -39,7 +39,7 @@ const noclipSpaceFromHaloSpace = mat4.fromValues(
 
 const scratchVec3a = vec3.create();
 
-const enum SortKey {
+enum SortKey {
     Translucent = GfxRendererLayer.TRANSLUCENT + 2,
     Skybox = GfxRendererLayer.TRANSLUCENT + 1,
 }

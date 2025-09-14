@@ -148,7 +148,7 @@ class dDemo_camera_c extends TCamera {
     }
 }
 
-export const enum EDemoActorFlags {
+export enum EDemoActorFlags {
     HasData = 1 << 0,
     HasPos = 1 << 1,
     HasScale = 1 << 2,

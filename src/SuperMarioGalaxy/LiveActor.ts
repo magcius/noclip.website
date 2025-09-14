@@ -615,7 +615,7 @@ export function resetPosition(sceneObjHolder: SceneObjHolder, actor: LiveActor):
     // requestCalcActorShadowAppear
 }
 
-export const enum LayerId {
+export enum LayerId {
     Common = -1,
     LayerA = 0,
     LayerB,
@@ -643,7 +643,7 @@ export interface ZoneAndLayer {
 
 export const dynamicSpawnZoneAndLayer: ZoneAndLayer = { zoneId: -1, layerId: LayerId.Common };
 
-export const enum MessageType {
+export enum MessageType {
     Player_Punch                             = 0x01,
     Player_Trample                           = 0x02,
     Player_HitDrop                           = 0x03,

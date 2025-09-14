@@ -1037,7 +1037,7 @@ void mainPS() {
     }
 }
 
-const enum GenericShaderType {
+enum GenericShaderType {
     LightmappedGeneric, VertexLitGeneric, UnlitGeneric, WorldVertexTransition, Skin, Black, DecalModulate, Sprite, Unknown,
 };
 

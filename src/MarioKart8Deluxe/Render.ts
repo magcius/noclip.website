@@ -1039,7 +1039,7 @@ function calcTexMtx_XSI(dst: mat4, scaleS: number, scaleT: number, rotation: num
     dst[13] = (scaleT * -cosR) - (scaleT * sinR * translationS) + (scaleT * cosR * translationT) + 1.0;
 }
 
-const enum TexSRTMode { Maya, Max, XSI }
+enum TexSRTMode { Maya, Max, XSI }
 class TexSRT {
     public mode = TexSRTMode.Maya;
     public scaleS = 1.0;

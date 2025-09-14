@@ -7,7 +7,7 @@ import { hexzero, assert, nArray, assertExists } from "../util.js";
 import { ViewerRenderInput } from "../viewer.js";
 import { LevelGlobals } from "./actor.js";
 
-const enum MotionFuncs {
+enum MotionFuncs {
     PathPoint       = 0x01FCA4,
     NodePos         = 0x0A5E98,
     FindGround      = 0x0E41D8,
@@ -82,7 +82,7 @@ export class MotionData {
     }
 }
 
-const enum PathStart {
+enum PathStart {
     Begin,
     Random,
     Resume,
@@ -144,7 +144,7 @@ interface RandomCircle {
     maxTurn: number;
 }
 
-export const enum Direction {
+export enum Direction {
     Forward,
     Backward,
     Constant,
@@ -176,13 +176,13 @@ interface Linear {
     matchTarget: boolean;
 }
 
-const enum ApproachGoal {
+enum ApproachGoal {
     AtPoint,
     GoodGround,
     Radius,
 }
 
-const enum Destination {
+enum Destination {
     Custom,
     PathStart,
     Target,
@@ -209,7 +209,7 @@ export interface Forward {
     stopIfBlocked: boolean;
 }
 
-export const enum BasicMotionKind {
+export enum BasicMotionKind {
     Custom, // by default, just wait
     Wait,
     Song,
@@ -763,7 +763,7 @@ function fixupMotion(addr: number, blocks: Motion[]): void {
     }
 }
 
-export const enum MoveFlags {
+export enum MoveFlags {
     Ground      = 0x01,
     SnapTurn    = 0x02,
     Update      = 0x02,
@@ -900,7 +900,7 @@ function groundOkay(collision: CollisionTree | null, x: number, z: number): bool
     return true;
 }
 
-export const enum MotionResult {
+export enum MotionResult {
     None,
     Update,
     Done,

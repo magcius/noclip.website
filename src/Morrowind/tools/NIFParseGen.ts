@@ -614,7 +614,7 @@ class Enum implements Type {
     }
 
     public generateBody(): string {
-        return `export const enum ${this.name} {
+        return `export enum ${this.name} {
 ${this.value.map((v) => {
     return `    ${v.name} = ${v.value},`
 }).join('\n')}

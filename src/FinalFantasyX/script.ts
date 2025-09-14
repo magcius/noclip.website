@@ -125,7 +125,7 @@ class Stack {
     }
 }
 
-const enum RotationFlags {
+enum RotationFlags {
     NONE          = 0,
     CONST         = 1,
     EASE          = 2,
@@ -321,7 +321,7 @@ class RotationState {
     }
 }
 
-const enum MotionFlags {
+enum MotionFlags {
     NONE            = 0,
     TARGET_HORIZ    = 1,
     TARGET          = 2,
@@ -602,7 +602,7 @@ interface PosState {
     otherRadius: number;
 }
 
-const enum ThreadWaitType {
+enum ThreadWaitType {
     NONE,
     ACK,
     DELETE,
@@ -668,14 +668,14 @@ class Thread {
     }
 }
 
-const enum SignalType {
+enum SignalType {
     NO_ACK,
     ON_START,
     ON_END,
     ACK,
 }
 
-const enum SignalStatus {
+enum SignalStatus {
     NEW,
     OLD,
     PROCESSED,
@@ -702,7 +702,7 @@ function shouldCleanup(signal: Signal, cutoff: number, mode: SignalStatus): bool
     return signal.status !== SignalStatus.PROCESSED;
 }
 
-const enum WorkerFlags {
+enum WorkerFlags {
     NONE                = 0x00,
     ACTIVE              = 0x02,
     ERROR               = 0x08, // the opposite in game
@@ -713,7 +713,7 @@ const enum WorkerFlags {
     UPDATE_HIGH         = 0x10000000,
 }
 
-const enum PuppetType {
+enum PuppetType {
     NONE,
     ACTOR,
     CAMERA,
@@ -1149,7 +1149,7 @@ export interface RenderFlags {
     debugParticles: boolean;
 }
 
-const enum ButtonPress {
+enum ButtonPress {
     NONE = 0,
     UP = 0x1000,
     RIGHT = 0x2000,
@@ -1157,7 +1157,7 @@ const enum ButtonPress {
     LEFT = 0x8000,
 }
 
-const enum TrialsLevel {
+enum TrialsLevel {
     DJOSE,
     MACALANIA,
 }
@@ -1388,7 +1388,7 @@ export function activateEffect(level: LevelObjectHolder, partIndex: number, effe
     console.warn("could not activate effect", effectIndex, "on part", partIndex);
 }
 
-const enum Global {
+enum Global {
     HaveTinder = 0x180,
     HaveFlint = 0x181,
     GameMoment = 0xA00,
@@ -1690,7 +1690,7 @@ const funcArgCounts = new Map<number, number>([
     [0xC02F, 2], // some camera threshold height
 ]);
 
-const enum BlitzballAction {
+enum BlitzballAction {
     PASS,
     SHOOT,
     DRIBBLE,
@@ -5079,7 +5079,7 @@ export function charLabel(id: number): string {
     return `${charCategories[(id >>> 12) & 0xF]}:${hexzero(id & 0xFFF, 3)}`;
 }
 
-const enum ButtonType {
+enum ButtonType {
     DEFAULT = 0,
     ONE_TIME = 1,
     ACTOR = 2,
@@ -5102,7 +5102,7 @@ function isTrial(name: string): boolean {
     return false;
 }
 
-const enum WallNorm {
+enum WallNorm {
     NONE,
     POSX,
     POSZ,

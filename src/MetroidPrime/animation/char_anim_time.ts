@@ -1,7 +1,7 @@
 import { clamp } from '../../MathHelpers.js';
 import { InputStream } from '../stream.js';
 
-export const enum AnimTimeState {
+export enum AnimTimeState {
     NonZero,
     ZeroIncreasing,
     ZeroSteady,

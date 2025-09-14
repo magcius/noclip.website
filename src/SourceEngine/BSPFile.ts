@@ -57,7 +57,7 @@ export interface BSPSurface {
     bbox: AABB;
 }
 
-const enum TexinfoFlags {
+enum TexinfoFlags {
     SKY2D     = 0x0002,
     SKY       = 0x0004,
     TRANS     = 0x0010,
@@ -97,7 +97,7 @@ export interface BSPLeafAmbientSample {
     pos: vec3;
 }
 
-const enum BSPLeafContents {
+enum BSPLeafContents {
     Solid     = 0x001,
     Water     = 0x010,
     TestWater = 0x100,
@@ -125,7 +125,7 @@ export interface Model {
     surfaces: number[];
 }
 
-export const enum WorldLightType {
+export enum WorldLightType {
     Surface,
     Point,
     Spotlight,
@@ -134,7 +134,7 @@ export const enum WorldLightType {
     SkyAmbient,
 }
 
-export const enum WorldLightFlags {
+export enum WorldLightFlags {
     InAmbientCube = 0x01,
 }
 
@@ -906,7 +906,7 @@ export class LightmapPacker {
 
 //#region Parsing and Misc. Utils
 
-const enum LumpType {
+enum LumpType {
     ENTITIES                  = 0,
     PLANES                    = 1,
     TEXDATA                   = 2,
@@ -1173,7 +1173,7 @@ export class BSPFile {
             for (let i = 0; i < lumpCount; i++) {
                 const lumpmagic = game_lump.getUint32(idx + 0x00, true);
                 if (lumpmagic === needle) {
-                    const enum GameLumpFlags { COMPRESSED = 0x01, }
+                    enum GameLumpFlags { COMPRESSED = 0x01, }
                     const flags: GameLumpFlags = game_lump.getUint16(idx + 0x04, true);
                     const version = game_lump.getUint16(idx + 0x06, true);
                     const fileofs = game_lump.getUint32(idx + 0x08, true);

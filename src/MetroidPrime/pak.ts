@@ -5,7 +5,7 @@ import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { assert, readString, align } from "../util.js";
 import { InputStream } from "./stream.js";
 
-export const enum CompressionMethod {
+export enum CompressionMethod {
     NONE,
     ZLIB,
     CMPD_ZLIB,

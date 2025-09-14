@@ -21,7 +21,7 @@ import { mDoExt_btkAnm, mDoExt_modelUpdateDL } from "./m_do_ext.js";
 import { cPhs__Status, fGlobals, fopKyM_Create, fpc_bs__Constructor, fpcPf__Register, kankyo_class } from "../ZeldaWindWaker/framework.js";
 import { dProcName_e } from "./d_a.js";
 
-export const enum LightType {
+export enum LightType {
     UNK_0 = 0,
     UNK_1 = 1,
     UNK_2 = 2,
@@ -306,7 +306,7 @@ export class EF_THUNDER {
     public influence = new LIGHT_INFLUENCE();
 }
 
-const enum LightMode {
+enum LightMode {
     BG,
     Actor,
     BGwithPlight,
@@ -356,7 +356,7 @@ enum DiceWeatherMode {
     Done = 0xFF,
 }
 
-const enum DiceWeatherState {
+enum DiceWeatherState {
     Uninitialized = 0,
     Init,
     Execute,

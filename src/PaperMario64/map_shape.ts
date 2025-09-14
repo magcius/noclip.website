@@ -15,7 +15,7 @@ export interface MapShapeBinary {
 
 const ramAddrBase = 0x80210000;
 
-const enum InternalType {
+enum InternalType {
     LEAF = 0x02,
     GROUP = 0x05,
     ROOT = 0x07,
@@ -44,7 +44,7 @@ export interface ModelTreeLeaf extends ModelTreeNodeBase {
 
 export type ModelTreeNode = ModelTreeGroup | ModelTreeLeaf;
 
-export const enum PropertyType { INT, FLOAT, STRING }
+export enum PropertyType { INT, FLOAT, STRING }
 
 interface PropertyNumber {
     id: number;

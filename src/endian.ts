@@ -1,5 +1,5 @@
 
-export const enum Endianness {
+export enum Endianness {
     LITTLE_ENDIAN,
     BIG_ENDIAN,
 }

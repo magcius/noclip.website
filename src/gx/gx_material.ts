@@ -1538,21 +1538,21 @@ export function parseTexGens(r: DisplayListRegisters, numTexGens: number): TexGe
     for (let i = 0; i < numTexGens; i++) {
         const v = r.xfg(GX.XFRegister.XF_TEX0_ID + i);
 
-        const enum TexProjection {
+        enum TexProjection {
             ST = 0x00,
             STQ = 0x01,
         }
-        const enum TexForm {
+        enum TexForm {
             AB11 = 0x00,
             ABC1 = 0x01,
         }
-        const enum TexGenType {
+        enum TexGenType {
             REGULAR = 0x00,
             EMBOSS_MAP = 0x01,
             COLOR_STRGBC0 = 0x02,
             COLOR_STRGBC1 = 0x02,
         }
-        const enum TexSourceRow {
+        enum TexSourceRow {
             GEOM = 0x00,
             NRM = 0x01,
             CLR = 0x02,

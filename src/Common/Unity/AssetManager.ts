@@ -110,7 +110,7 @@ export interface AssetObjectData {
 
 // An AssetFile is a single serialized asset file in the filesystem, aka sharedassets or a level file.
 
-export const enum UnityAssetResourceType {
+export enum UnityAssetResourceType {
     Mesh,
     Texture2D,
     Material,
