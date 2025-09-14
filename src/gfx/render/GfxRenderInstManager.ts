@@ -209,7 +209,7 @@ export class GfxRenderInst {
             if (obd.bindingLayout !== null)
                 this._setBindingLayout(i, obd.bindingLayout);
             for (let j = 0; j < Math.min(tbd.uniformBufferBindings.length, obd.uniformBufferBindings.length); j++)
-                tbd.uniformBufferBindings[j].wordCount = obd.uniformBufferBindings[j].wordCount;
+                tbd.uniformBufferBindings[j].byteSize = obd.uniformBufferBindings[j].byteSize;
             this.setSamplerBindingsFromTextureMappings(obd.samplerBindings);
         }
         for (let i = 0; i < o._dynamicUniformBufferByteOffsets.length; i++)
@@ -269,7 +269,7 @@ export class GfxRenderInst {
         bindingDescriptor.bindingLayout = bindingLayout;
 
         for (let j = bindingDescriptor.uniformBufferBindings.length; j < bindingLayout.numUniformBuffers; j++)
-            bindingDescriptor.uniformBufferBindings.push({ buffer: null!, wordCount: 0 });
+            bindingDescriptor.uniformBufferBindings.push({ buffer: null!, byteSize: 0 });
         for (let j = bindingDescriptor.samplerBindings.length; j < bindingLayout.numSamplers; j++)
             bindingDescriptor.samplerBindings.push({ gfxSampler: null, gfxTexture: null, lateBinding: null });
     }
@@ -323,11 +323,12 @@ export class GfxRenderInst {
     public allocateUniformBuffer(bufferIndex: number, wordCount: number): number {
         assert(this._bindingDescriptors[0].bindingLayout.numUniformBuffers <= this._dynamicUniformBufferByteOffsets.length);
         assert(bufferIndex < this._bindingDescriptors[0].bindingLayout.numUniformBuffers);
-        this._dynamicUniformBufferByteOffsets[bufferIndex] = this._uniformBuffer.allocateChunk(wordCount) << 2;
+        const wordOffset = this._uniformBuffer.allocateChunk(wordCount);
+        this._dynamicUniformBufferByteOffsets[bufferIndex] = wordOffset << 2;
 
         const dst = this._bindingDescriptors[0].uniformBufferBindings[bufferIndex];
-        dst.wordCount = wordCount;
-        return this._dynamicUniformBufferByteOffsets[bufferIndex] >>> 2;
+        dst.byteSize = wordCount << 2;
+        return wordOffset;
     }
 
     /**
@@ -348,7 +349,7 @@ export class GfxRenderInst {
         this._dynamicUniformBufferByteOffsets[bufferIndex] = wordOffset << 2;
 
         const dst = this._bindingDescriptors[0].uniformBufferBindings[bufferIndex];
-        dst.wordCount = wordCount;
+        dst.byteSize = wordCount << 2;
     }
 
     /**

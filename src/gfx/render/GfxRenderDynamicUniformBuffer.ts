@@ -26,9 +26,9 @@ export class GfxRenderDynamicUniformBuffer {
 
     public allocateChunk(wordCount: number): number {
         wordCount = alignNonPowerOfTwo(wordCount, this.uniformBufferByteAlignment);
-        assert(wordCount <= this.uniformBufferMaxPageByteSize);
 
         const byteSize = wordCount * 4;
+        assert(byteSize <= this.uniformBufferMaxPageByteSize);
         let byteOffset = this.currentByteOffset;
 
         // If we straddle the page, then put it at the start of the next one.

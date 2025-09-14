@@ -165,7 +165,7 @@ export interface GfxRenderTargetDescriptor {
 
 export interface GfxBufferBinding {
     buffer: GfxBuffer;
-    wordCount: number;
+    byteSize: number;
 }
 
 export interface GfxSamplerBinding {

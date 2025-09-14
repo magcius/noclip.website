@@ -1960,12 +1960,12 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
         for (let i = 0; i < bindingLayoutTable.numUniformBuffers; i++) {
             const binding = uniformBufferBindings[i];
-            if (binding.wordCount === 0)
+            if (binding.byteSize === 0)
                 continue;
             const index = bindingLayoutTable.firstUniformBuffer + i;
             const buffer = binding.buffer as GfxBufferP_GL;
             const byteOffset = dynamicByteOffsets[i];
-            const byteSize = (binding.wordCount * 4);
+            const byteSize = binding.byteSize;
             if (buffer !== this._currentUniformBuffers[index] || byteOffset !== this._currentUniformBufferByteOffsets[index] || byteSize !== this._currentUniformBufferByteSizes[index]) {
                 const platformBufferByteOffset = byteOffset % buffer.pageByteSize;
                 const platformBuffer = buffer.gl_buffer_pages[(byteOffset / buffer.pageByteSize) | 0];
