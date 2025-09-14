@@ -727,6 +727,7 @@ class MaterialInstance {
 
             const [minFilter, mipFilter] = this.translateTextureFilter(binding.minFilter);
             const [magFilter] = this.translateTextureFilter(binding.magFilter);
+            const isNoMip = binding.minFilter === CMB.TextureFilter.LINEAR || binding.minFilter === CMB.TextureFilter.NEAREST;
 
             const gfxSampler = cache.createSampler({
                 wrapS: this.translateWrapMode(binding.wrapS),
@@ -735,7 +736,7 @@ class MaterialInstance {
                 minFilter,
                 mipFilter,
                 minLOD: 0,
-                maxLOD: 100,
+                maxLOD: isNoMip ? 0 : 100,
             });
             this.gfxSamplers.push(gfxSampler);
 
@@ -751,7 +752,8 @@ class MaterialInstance {
             wrapT: GfxWrapMode.Clamp,
             minFilter: GfxTexFilterMode.Bilinear,
             magFilter: GfxTexFilterMode.Bilinear,
-            mipFilter: GfxMipFilterMode.NoMip,
+            mipFilter: GfxMipFilterMode.Nearest,
+            minLOD: 0, maxLOD: 0,
         });
         this.gfxSamplers.push(lutSampler);
         this.textureMappings[3].gfxSampler = lutSampler;
@@ -968,9 +970,9 @@ class MaterialInstance {
     private translateTextureFilter(filter: CMB.TextureFilter): [GfxTexFilterMode, GfxMipFilterMode] {
         switch (filter) {
         case CMB.TextureFilter.LINEAR:
-            return [GfxTexFilterMode.Bilinear, GfxMipFilterMode.NoMip];
+            return [GfxTexFilterMode.Bilinear, GfxMipFilterMode.Nearest];
         case CMB.TextureFilter.NEAREST:
-            return [GfxTexFilterMode.Bilinear, GfxMipFilterMode.NoMip];
+            return [GfxTexFilterMode.Bilinear, GfxMipFilterMode.Nearest];
         case CMB.TextureFilter.LINEAR_MIPMAP_LINEAR:
             return [GfxTexFilterMode.Bilinear, GfxMipFilterMode.Linear];
         case CMB.TextureFilter.LINEAR_MIPMAP_NEAREST:

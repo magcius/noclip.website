@@ -546,7 +546,8 @@ export class AnimGroupData {
     }
 }
 
-function translateSampler(device: GfxDevice, cache: GfxRenderCache, sampler: TEX1_SamplerSub, wrapS: GX.WrapMode, wrapT: GX.WrapMode): GfxSampler {
+function translateSampler(cache: GfxRenderCache, sampler: TEX1_SamplerSub, wrapS: GX.WrapMode, wrapT: GX.WrapMode): GfxSampler {
+    const isNoMip = sampler.minFilter === GX.TexFilter.LINEAR || sampler.minFilter === GX.TexFilter.NEAR;
     const [minFilter, mipFilter] = translateTexFilterGfx(sampler.minFilter);
     const [magFilter]            = translateTexFilterGfx(sampler.magFilter);
 
@@ -555,7 +556,7 @@ function translateSampler(device: GfxDevice, cache: GfxRenderCache, sampler: TEX
         wrapT: translateWrapModeGfx(wrapT),
         minFilter, mipFilter, magFilter,
         minLOD: sampler.minLOD,
-        maxLOD: sampler.maxLOD,
+        maxLOD: isNoMip ? sampler.minLOD : sampler.maxLOD,
     });
 
     return gfxSampler;
@@ -693,7 +694,7 @@ class AnimGroupInstance_Shape {
                 if (texBase.wrapFlags >= 0) {
                     const wrapS = !!(texBase.wrapFlags & 0x04) ? GX.WrapMode.MIRROR : !!(texBase.wrapFlags & 0x01) ? GX.WrapMode.REPEAT : GX.WrapMode.CLAMP;
                     const wrapT = !!(texBase.wrapFlags & 0x08) ? GX.WrapMode.MIRROR : !!(texBase.wrapFlags & 0x02) ? GX.WrapMode.REPEAT : GX.WrapMode.CLAMP;
-                    materialParams.m_TextureMapping[j].gfxSampler = translateSampler(device, renderInstManager.gfxRenderCache, this.animGroupData.textureData[texArcIdx].btiTexture, wrapS, wrapT);
+                    materialParams.m_TextureMapping[j].gfxSampler = translateSampler(renderInstManager.gfxRenderCache, this.animGroupData.textureData[texArcIdx].btiTexture, wrapS, wrapT);
                 }
             }
 

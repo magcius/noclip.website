@@ -264,20 +264,20 @@ function convertRwTextureFilterMode(filter: RwTextureFilterMode): GfxTexFilterMo
 
 function convertRwTextureFilterModeMip(filter: RwTextureFilterMode): GfxMipFilterMode {
     switch (filter) {
-    case RwTextureFilterMode.NEAREST:          return GfxMipFilterMode.NoMip;
-    case RwTextureFilterMode.LINEAR:           return GfxMipFilterMode.NoMip;
+    case RwTextureFilterMode.NEAREST:          return GfxMipFilterMode.Nearest;
+    case RwTextureFilterMode.LINEAR:           return GfxMipFilterMode.Nearest;
     case RwTextureFilterMode.MIPNEAREST:       return GfxMipFilterMode.Nearest;
     case RwTextureFilterMode.MIPLINEAR:        return GfxMipFilterMode.Nearest;
     case RwTextureFilterMode.LINEARMIPNEAREST: return GfxMipFilterMode.Linear;
     case RwTextureFilterMode.LINEARMIPLINEAR:  return GfxMipFilterMode.Linear;
-    default:                                   return GfxMipFilterMode.NoMip;
+    default:                                   return GfxMipFilterMode.Nearest;
     }
 }
 
-function convertGfxFilterModes(texFilter: GfxTexFilterMode, mipFilter: GfxMipFilterMode): RwTextureFilterMode {
-    switch (texFilter | (mipFilter << 8)) {
-    case (GfxTexFilterMode.Point | (GfxMipFilterMode.NoMip << 8)):      return RwTextureFilterMode.NEAREST;
-    case (GfxTexFilterMode.Bilinear | (GfxMipFilterMode.NoMip << 8)):   return RwTextureFilterMode.LINEAR;
+function convertGfxFilterModes(texFilter: GfxTexFilterMode, mipFilter: GfxMipFilterMode, isNoMip: boolean): RwTextureFilterMode {
+    switch (texFilter | (mipFilter << 8) | (isNoMip ? (1 << 16) : 0)) {
+    case (GfxTexFilterMode.Point | (1 << 16)):                          return RwTextureFilterMode.NEAREST;
+    case (GfxTexFilterMode.Bilinear | (1 << 16)):                       return RwTextureFilterMode.LINEAR;
     case (GfxTexFilterMode.Point | (GfxMipFilterMode.Nearest << 8)):    return RwTextureFilterMode.MIPNEAREST;
     case (GfxTexFilterMode.Bilinear | (GfxMipFilterMode.Nearest << 8)): return RwTextureFilterMode.MIPLINEAR;
     case (GfxTexFilterMode.Point | (GfxMipFilterMode.Linear << 8)):     return RwTextureFilterMode.LINEARMIPNEAREST;
@@ -398,9 +398,11 @@ export class RwGfx {
     private samplerDescriptor: GfxSamplerDescriptor = {
         magFilter: GfxTexFilterMode.Point,
         minFilter: GfxTexFilterMode.Point,
-        mipFilter: GfxMipFilterMode.NoMip,
+        mipFilter: GfxMipFilterMode.Nearest,
         wrapS: GfxWrapMode.Repeat,
         wrapT: GfxWrapMode.Repeat,
+        minLOD: 0,
+        maxLOD: 0,
     };
 
     private fogEnabled = false;
@@ -786,10 +788,12 @@ export class RwGfx {
         this.samplerDescriptor.magFilter = convertRwTextureFilterMode(filter);
         this.samplerDescriptor.minFilter = this.samplerDescriptor.magFilter;
         this.samplerDescriptor.mipFilter = convertRwTextureFilterModeMip(filter);
+        const isNoMip = filter === RwTextureFilterMode.NEAREST || filter === RwTextureFilterMode.LINEAR;
+        this.samplerDescriptor.maxLOD = isNoMip ? 0 : 100;
     }
 
     public getTextureFilter() {
-        return convertGfxFilterModes(this.samplerDescriptor.magFilter, this.samplerDescriptor.mipFilter);
+        return convertGfxFilterModes(this.samplerDescriptor.magFilter, this.samplerDescriptor.mipFilter, this.samplerDescriptor.maxLOD === 0);
     }
 
     public setTextureAddressU(address: RwTextureAddressMode) {

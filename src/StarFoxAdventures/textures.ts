@@ -1,6 +1,8 @@
+
 import { hexzero } from '../util.js';
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import * as GX_Texture from '../gx/gx_texture.js';
+import * as GX from '../gx/gx_enum.js';
 import { loadTextureFromMipChain, translateWrapModeGfx, translateTexFilterGfx } from '../gx/gx_render.js';
 import { GfxDevice, GfxMipFilterMode, GfxTexture, GfxSampler, GfxFormat, makeTextureDescriptor2D, GfxWrapMode, GfxTexFilterMode } from '../gfx/platform/GfxPlatform.js';
 import { DataFetcher } from '../DataFetcher.js';
@@ -95,6 +97,7 @@ function loadTexture(cache: GfxRenderCache, texData: ArrayBufferSlice, isBeta: b
     const loadedTexture = loadTextureFromMipChain(cache.device, mipChain);
     
     // GL texture is bound by loadTextureFromMipChain.
+    const isNoMip = fields.minFilt === GX.TexFilter.LINEAR || fields.minFilt === GX.TexFilter.NEAR;
     const [minFilter, mipFilter] = translateTexFilterGfx(fields.minFilt);
     const gfxSampler = cache.createSampler({
         wrapS: translateWrapModeGfx(fields.wrapS),
@@ -103,7 +106,7 @@ function loadTexture(cache: GfxRenderCache, texData: ArrayBufferSlice, isBeta: b
         magFilter: translateTexFilterGfx(fields.magFilt)[0],
         mipFilter: mipFilter,
         minLOD: 0,
-        maxLOD: 100,
+        maxLOD: isNoMip ? 0 : 100,
     });
 
     const texture = new SFATexture(

@@ -231,18 +231,22 @@ function translateWrapMode(wrapMode: GfxWrapMode): GLenum {
     }
 }
 
-function translateFilterMode(filter: GfxTexFilterMode, mipFilter: GfxMipFilterMode): GLenum {
-    if (mipFilter === GfxMipFilterMode.Linear && filter === GfxTexFilterMode.Bilinear)
+function translateMinFilter(texFilter: GfxTexFilterMode, mipFilter: GfxMipFilterMode): GLenum {
+    if (mipFilter === GfxMipFilterMode.Linear && texFilter === GfxTexFilterMode.Bilinear)
         return WebGL2RenderingContext.LINEAR_MIPMAP_LINEAR;
-    if (mipFilter === GfxMipFilterMode.Linear && filter === GfxTexFilterMode.Point)
+    if (mipFilter === GfxMipFilterMode.Linear && texFilter === GfxTexFilterMode.Point)
         return WebGL2RenderingContext.NEAREST_MIPMAP_LINEAR;
-    if (mipFilter === GfxMipFilterMode.Nearest && filter === GfxTexFilterMode.Bilinear)
+    if (mipFilter === GfxMipFilterMode.Nearest && texFilter === GfxTexFilterMode.Bilinear)
         return WebGL2RenderingContext.LINEAR_MIPMAP_NEAREST;
-    if (mipFilter === GfxMipFilterMode.Nearest && filter === GfxTexFilterMode.Point)
+    if (mipFilter === GfxMipFilterMode.Nearest && texFilter === GfxTexFilterMode.Point)
         return WebGL2RenderingContext.NEAREST_MIPMAP_NEAREST;
-    if (mipFilter === GfxMipFilterMode.NoMip && filter === GfxTexFilterMode.Bilinear)
+    throw new Error(`Unknown texture filter mode`);
+}
+
+function translateMagFilter(texFilter: GfxTexFilterMode): GLenum {
+    if (texFilter === GfxTexFilterMode.Bilinear)
         return WebGL2RenderingContext.LINEAR;
-    if (mipFilter === GfxMipFilterMode.NoMip && filter === GfxTexFilterMode.Point)
+    else if (texFilter === GfxTexFilterMode.Point)
         return WebGL2RenderingContext.NEAREST;
     throw new Error(`Unknown texture filter mode`);
 }
@@ -959,8 +963,8 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         gl.samplerParameteri(gl_sampler, gl.TEXTURE_WRAP_S, translateWrapMode(descriptor.wrapS));
         gl.samplerParameteri(gl_sampler, gl.TEXTURE_WRAP_T, translateWrapMode(descriptor.wrapT));
         gl.samplerParameteri(gl_sampler, gl.TEXTURE_WRAP_R, translateWrapMode(descriptor.wrapQ ?? descriptor.wrapS));
-        gl.samplerParameteri(gl_sampler, gl.TEXTURE_MIN_FILTER, translateFilterMode(descriptor.minFilter, descriptor.mipFilter));
-        gl.samplerParameteri(gl_sampler, gl.TEXTURE_MAG_FILTER, translateFilterMode(descriptor.magFilter, GfxMipFilterMode.NoMip));
+        gl.samplerParameteri(gl_sampler, gl.TEXTURE_MIN_FILTER, translateMinFilter(descriptor.minFilter, descriptor.mipFilter));
+        gl.samplerParameteri(gl_sampler, gl.TEXTURE_MAG_FILTER, translateMagFilter(descriptor.magFilter));
 
         if (descriptor.minLOD !== undefined)
             gl.samplerParameterf(gl_sampler, gl.TEXTURE_MIN_LOD, descriptor.minLOD);

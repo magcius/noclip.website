@@ -207,9 +207,9 @@ function translateDepthCompareMode(cmp: GSDepthCompareMode): GfxCompareMode {
 function translateTextureFilter(filter: GSTextureFilter): [GfxTexFilterMode, GfxMipFilterMode] {
     switch (filter) {
     case GSTextureFilter.NEAREST:
-        return [GfxTexFilterMode.Point,    GfxMipFilterMode.NoMip];
+        return [GfxTexFilterMode.Point,    GfxMipFilterMode.Nearest];
     case GSTextureFilter.LINEAR:
-        return [GfxTexFilterMode.Bilinear, GfxMipFilterMode.NoMip];
+        return [GfxTexFilterMode.Bilinear, GfxMipFilterMode.Nearest];
     case GSTextureFilter.NEAREST_MIPMAP_NEAREST:
         return [GfxTexFilterMode.Point,    GfxMipFilterMode.Nearest];
     case GSTextureFilter.NEAREST_MIPMAP_LINEAR:
@@ -271,6 +271,7 @@ export class BINModelPartInstance {
         const texMinFilter: GSTextureFilter = (gsConfiguration.tex1_1_data0 >>> 6) & 0x07;
         const [magFilter]            = translateTextureFilter(texMagFilter);
         const [minFilter, mipFilter] = translateTextureFilter(texMinFilter);
+        const isNoMip = texMinFilter === GSTextureFilter.LINEAR || texMinFilter === GSTextureFilter.NEAREST;
 
         const wms = (gsConfiguration.clamp_1_data0 >>> 0) & 0x03;
         const wmt = (gsConfiguration.clamp_1_data0 >>> 2) & 0x03;
@@ -280,7 +281,8 @@ export class BINModelPartInstance {
         this.textureMapping[0].gfxSampler = cache.createSampler({
             minFilter, magFilter, mipFilter,
             wrapS, wrapT,
-            minLOD: 0, maxLOD: 100,
+            minLOD: 0,
+            maxLOD: isNoMip ? 0 : 100,
         });
     }
 

@@ -123,8 +123,6 @@ function translateMipFilter(mipFilter: GfxMipFilterMode): GPUFilterMode {
         return 'linear';
     else if (mipFilter === GfxMipFilterMode.Nearest)
         return 'nearest';
-    else if (mipFilter === GfxMipFilterMode.NoMip)
-        return 'nearest';
     else
         throw "whoops";
 }
@@ -1160,7 +1158,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
 
     public createSampler(descriptor: GfxSamplerDescriptor): GfxSampler {
         const lodMinClamp = descriptor.minLOD;
-        const lodMaxClamp = descriptor.mipFilter === GfxMipFilterMode.NoMip ? descriptor.minLOD : descriptor.maxLOD;
+        const lodMaxClamp = descriptor.maxLOD;
 
         let maxAnisotropy = descriptor.maxAnisotropy ?? 1;
         if (maxAnisotropy > 1)

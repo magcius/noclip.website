@@ -76,6 +76,7 @@ export interface TEX1_SamplerSub {
 }
 
 export function translateSampler(device: GfxDevice, cache: GfxRenderCache, sampler: TEX1_SamplerSub): GfxSampler {
+    const isNoMip = sampler.minFilter === GX.TexFilter.LINEAR || sampler.minFilter === GX.TexFilter.NEAR;
     const [minFilter, mipFilter] = translateTexFilterGfx(sampler.minFilter);
     const [magFilter]            = translateTexFilterGfx(sampler.magFilter);
 
@@ -84,7 +85,7 @@ export function translateSampler(device: GfxDevice, cache: GfxRenderCache, sampl
         wrapT: translateWrapModeGfx(sampler.wrapT),
         minFilter, mipFilter, magFilter,
         minLOD: sampler.minLOD,
-        maxLOD: sampler.maxLOD,
+        maxLOD: isNoMip ? 0 : sampler.maxLOD,
         maxAnisotropy: translateMaxAnisotropy(sampler.maxAnisotropy),
     });
 

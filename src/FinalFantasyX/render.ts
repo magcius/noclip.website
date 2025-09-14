@@ -730,9 +730,9 @@ export class ActorModelData {
         this.vertexTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.F32_RGBA, model.texWidth, 2, 1));
         device.uploadTextureData(this.vertexTexture, 0, [model.vertexData]);
         this.vertexSampler = cache.createSampler({
-            minFilter: GfxTexFilterMode.Point, magFilter: GfxTexFilterMode.Point, mipFilter: GfxMipFilterMode.NoMip,
+            minFilter: GfxTexFilterMode.Point, magFilter: GfxTexFilterMode.Point, mipFilter: GfxMipFilterMode.Nearest,
             wrapS: GfxWrapMode.Clamp, wrapT: GfxWrapMode.Clamp,
-            minLOD: 0, maxLOD: 100,
+            minLOD: 0, maxLOD: 0,
         });
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
@@ -829,9 +829,9 @@ function translateDepthCompareMode(cmp: GSDepthCompareMode): GfxCompareMode {
 function translateTextureFilter(filter: GSTextureFilter): [GfxTexFilterMode, GfxMipFilterMode] {
     switch (filter) {
         case GSTextureFilter.NEAREST:
-            return [GfxTexFilterMode.Point, GfxMipFilterMode.NoMip];
+            return [GfxTexFilterMode.Point, GfxMipFilterMode.Nearest];
         case GSTextureFilter.LINEAR:
-            return [GfxTexFilterMode.Bilinear, GfxMipFilterMode.NoMip];
+            return [GfxTexFilterMode.Bilinear, GfxMipFilterMode.Nearest];
         case GSTextureFilter.NEAREST_MIPMAP_NEAREST:
             return [GfxTexFilterMode.Point, GfxMipFilterMode.Nearest];
         case GSTextureFilter.NEAREST_MIPMAP_LINEAR:
@@ -886,13 +886,13 @@ class ActorDrawCallInstance {
         if (drawCall.textureIndex >= 0) {
             program.defines.set("TEXTURE", "1");
 
-            const [magFilter] = translateTextureFilter(GSTextureFilter.LINEAR);
-            const [minFilter, mipFilter] = translateTextureFilter(GSTextureFilter.LINEAR);
             this.textureMappings.push(new TextureMapping());
             this.textureMappings[0].gfxSampler = cache.createSampler({
-                minFilter, magFilter, mipFilter,
+                minFilter: GfxTexFilterMode.Bilinear,
+                magFilter: GfxTexFilterMode.Bilinear,
+                mipFilter: GfxMipFilterMode.Nearest,
                 wrapS: GfxWrapMode.Repeat, wrapT: GfxWrapMode.Repeat,
-                minLOD: 0, maxLOD: 100,
+                minLOD: 0, maxLOD: 0,
             });
             const tex = textures[drawCall.textureIndex];
             this.textureMappings[0].gfxTexture = tex.gfxTexture;
@@ -1013,8 +1013,9 @@ export class LevelDrawCallInstance {
 
             const texMagFilter: GSTextureFilter = (gsConfiguration.tex1_1_data0 >>> 5) & 0x01;
             const texMinFilter: GSTextureFilter = (gsConfiguration.tex1_1_data0 >>> 6) & 0x07;
-            const [magFilter] = translateTextureFilter(texMagFilter);
             const [minFilter, mipFilter] = translateTextureFilter(texMinFilter);
+            const [magFilter] = translateTextureFilter(texMagFilter);
+            const isNoMip = texMagFilter === GSTextureFilter.LINEAR || texMagFilter === GSTextureFilter.NEAREST;
 
             const wrapS = translateWrapMode(gsConfiguration.clamp.wms);
             const wrapT = translateWrapMode(gsConfiguration.clamp.wmt);
@@ -1023,7 +1024,8 @@ export class LevelDrawCallInstance {
             this.textureMappings[0].gfxSampler = cache.createSampler({
                 minFilter, magFilter, mipFilter,
                 wrapS, wrapT,
-                minLOD: 0, maxLOD: 100,
+                minLOD: 0,
+                maxLOD: isNoMip ? 0 : 100,
             });
             const tex = textures[drawCall.textureIndex];
             this.textureMappings[0].gfxTexture = tex.gfxTexture;
@@ -1105,9 +1107,9 @@ export class ActorPartInstance {
 
         this.envMapTexMapping.gfxTexture = envMap.gfxTexture;
         this.envMapTexMapping.gfxSampler = cache.createSampler({
-            minFilter: GfxTexFilterMode.Bilinear, magFilter: GfxTexFilterMode.Bilinear, mipFilter: GfxMipFilterMode.NoMip,
+            minFilter: GfxTexFilterMode.Bilinear, magFilter: GfxTexFilterMode.Bilinear, mipFilter: GfxMipFilterMode.Nearest,
             wrapS: GfxWrapMode.Clamp, wrapT: GfxWrapMode.Clamp,
-            minLOD: 0, maxLOD: 100,
+            minLOD: 0, maxLOD: 0,
         });
     }
 
@@ -1577,9 +1579,9 @@ class ParticleDrawCallInstance {
             this.textureMappings[0].gfxSampler = cache.createSampler({
                 minFilter: GfxTexFilterMode.Bilinear,
                 magFilter: GfxTexFilterMode.Bilinear,
-                mipFilter: GfxMipFilterMode.NoMip,
+                mipFilter: GfxMipFilterMode.Nearest,
                 wrapS: wrapMode, wrapT: wrapMode,
-                minLOD: 0, maxLOD: 100,
+                minLOD: 0, maxLOD: 0,
             });
         }
 
@@ -1628,17 +1630,17 @@ class ShatterDrawCallInstance {
         this.textureMappings[0].gfxSampler = cache.createSampler({
             minFilter: GfxTexFilterMode.Bilinear,
             magFilter: GfxTexFilterMode.Bilinear,
-            mipFilter: GfxMipFilterMode.NoMip,
+            mipFilter: GfxMipFilterMode.Nearest,
             wrapS: GfxWrapMode.Clamp, wrapT: GfxWrapMode.Clamp,
-            minLOD: 0, maxLOD: 100,
+            minLOD: 0, maxLOD: 0,
         });
         this.textureMappings[1].gfxTexture = texture.gfxTexture;
         this.textureMappings[1].gfxSampler = cache.createSampler({
             minFilter: GfxTexFilterMode.Bilinear,
             magFilter: GfxTexFilterMode.Bilinear,
-            mipFilter: GfxMipFilterMode.NoMip,
+            mipFilter: GfxMipFilterMode.Nearest,
             wrapS: GfxWrapMode.Repeat, wrapT: GfxWrapMode.Repeat,
-            minLOD: 0, maxLOD: 100,
+            minLOD: 0, maxLOD: 0,
         });
 
         this.shatterProgram = cache.createProgram(new ShatterProgram());

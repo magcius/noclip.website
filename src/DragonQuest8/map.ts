@@ -111,7 +111,7 @@ export function parseSkyCfg(cache: GfxRenderCache, buffer: ArrayBufferSlice): SK
                     const gfxSampler = cache.createSampler({
                         magFilter: GfxTexFilterMode.Bilinear,
                         minFilter: GfxTexFilterMode.Bilinear,
-                        mipFilter: GfxMipFilterMode.NoMip,
+                        mipFilter: GfxMipFilterMode.Nearest,
                         maxLOD: 0,
                         minLOD: 0,
                         wrapS: GfxWrapMode.Repeat,
@@ -360,7 +360,7 @@ export async function parse(cache: GfxRenderCache, buffer: ArrayBufferSlice, dat
         const gfxSampler = cache.createSampler({
             magFilter: GfxTexFilterMode.Bilinear,
             minFilter: GfxTexFilterMode.Bilinear,
-            mipFilter: GfxMipFilterMode.NoMip,
+            mipFilter: GfxMipFilterMode.Nearest,
             maxLOD: 0,
             minLOD: 0,
             wrapS: GfxWrapMode.Repeat,
@@ -430,7 +430,7 @@ export async function parse(cache: GfxRenderCache, buffer: ArrayBufferSlice, dat
                         const gfxSampler = cache.createSampler({
                             magFilter: GfxTexFilterMode.Bilinear,
                             minFilter: GfxTexFilterMode.Bilinear,
-                            mipFilter: GfxMipFilterMode.NoMip,
+                            mipFilter: GfxMipFilterMode.Nearest,
                             maxLOD: 0,
                             minLOD: 0,
                             wrapS: GfxWrapMode.Clamp,

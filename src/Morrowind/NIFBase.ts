@@ -503,7 +503,8 @@ class NiTriShape {
             wrapT: desc.clampMode & 1 ? GfxWrapMode.Repeat : GfxWrapMode.Clamp,
             magFilter: GfxTexFilterMode.Point,
             minFilter: GfxTexFilterMode.Point,
-            mipFilter: GfxMipFilterMode.NoMip,
+            mipFilter: GfxMipFilterMode.Nearest,
+            minLOD: 0, maxLOD: 0,
         };
         switch (desc.filterMode) {
         case NIFParse.TexFilterMode.FILTER_NEAREST:

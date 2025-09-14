@@ -23,6 +23,7 @@ class HSD_TObj_Data {
     public gfxSampler: GfxSampler;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, public tobj: HSD_TObj) {
+        const isNoMip = this.tobj.minFilt === GX.TexFilter.LINEAR || this.tobj.minFilt === GX.TexFilter.NEAR;
         const [minFilter, mipFilter] = translateTexFilterGfx(this.tobj.minFilt);
         const [magFilter]            = translateTexFilterGfx(this.tobj.magFilt);
 
@@ -31,7 +32,7 @@ class HSD_TObj_Data {
             wrapT: translateWrapModeGfx(this.tobj.wrapT),
             minFilter, mipFilter, magFilter,
             minLOD: this.tobj.imageDesc.minLOD,
-            maxLOD: this.tobj.imageDesc.maxLOD,
+            maxLOD: isNoMip ? this.tobj.imageDesc.minLOD : this.tobj.imageDesc.maxLOD,
         });
     }
 }

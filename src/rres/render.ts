@@ -13,7 +13,7 @@ import { arrayCopy } from '../gfx/platform/GfxPlatformObjUtil.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { GfxRendererLayer, GfxRenderInst, GfxRenderInstManager, makeSortKey, setSortKeyBias, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager.js";
 import { LoadedVertexDraw } from '../gx/gx_displaylist.js';
-import { TexMapID } from '../gx/gx_enum.js';
+import * as GX from '../gx/gx_enum.js';
 import * as GX_Material from '../gx/gx_material.js';
 import { ColorKind, DrawParams, GXMaterialHelperGfx, GXShapeHelperGfx, GXTextureHolder, loadedDataCoalescerComboGfx, loadTextureFromMipChain, MaterialParams, translateTexFilterGfx, translateWrapModeGfx } from "../gx/gx_render.js";
 import { calcMipChain } from '../gx/gx_texture.js';
@@ -81,6 +81,7 @@ class MaterialData {
             if (!sampler)
                 continue;
 
+            const isNoMip = sampler.minFilter === GX.TexFilter.LINEAR || sampler.minFilter === GX.TexFilter.NEAR;
             const [minFilter, mipFilter] = translateTexFilterGfx(sampler.minFilter);
             const [magFilter]            = translateTexFilterGfx(sampler.magFilter);
 
@@ -91,7 +92,7 @@ class MaterialData {
                 wrapT: translateWrapModeGfx(sampler.wrapT),
                 minFilter, mipFilter, magFilter,
                 minLOD: 0,
-                maxLOD: 100,
+                maxLOD: isNoMip ? 0 : 100,
             });
 
             this.textureMappings[i].gfxSampler = gfxSampler;
@@ -251,7 +252,7 @@ function lightChannelCopy(o: Readonly<GX_Material.LightChannelControl>): GX_Mate
     return { colorChannel, alphaChannel };
 }
 
-function findAnimationData_PAT0(pat0: BRRES.PAT0, materialName: string, texMapID: TexMapID) {
+function findAnimationData_PAT0(pat0: BRRES.PAT0, materialName: string, texMapID: GX.TexMapID) {
     const matData = pat0.matAnimations.find((m) => m.materialName === materialName);
     if (matData === undefined)
         return null;

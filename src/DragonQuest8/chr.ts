@@ -165,7 +165,7 @@ export function parse(cache: GfxRenderCache, buffer: ArrayBufferSlice, name: str
             const gfxSampler = cache.createSampler({
                 magFilter: GfxTexFilterMode.Bilinear,
                 minFilter: GfxTexFilterMode.Bilinear,
-                mipFilter: GfxMipFilterMode.NoMip,
+                mipFilter: GfxMipFilterMode.Nearest,
                 maxLOD: 0,
                 minLOD: 0,
                 wrapS: GfxWrapMode.Clamp,
@@ -187,7 +187,7 @@ export function parse(cache: GfxRenderCache, buffer: ArrayBufferSlice, name: str
             const gfxSampler = cache.createSampler({
                 magFilter: GfxTexFilterMode.Bilinear,
                 minFilter: GfxTexFilterMode.Bilinear,
-                mipFilter: GfxMipFilterMode.NoMip,
+                mipFilter: GfxMipFilterMode.Nearest,
                 maxLOD: 0,
                 minLOD: 0,
                 wrapS: GfxWrapMode.Clamp,

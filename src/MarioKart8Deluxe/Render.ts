@@ -98,10 +98,9 @@ function translateMipFilterMode(filterMode: FilterMode): GfxMipFilterMode {
     switch (filterMode) {
     case FilterMode.Linear:
         return GfxMipFilterMode.Linear;
+    case 0:
     case FilterMode.Point:
         return GfxMipFilterMode.Nearest;
-    case 0:
-        return GfxMipFilterMode.NoMip;
     default:
         throw "whoops";
     }

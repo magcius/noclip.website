@@ -231,9 +231,9 @@ export function translateWrapModeGfx(wrapMode: GX.WrapMode): GfxWrapMode {
 export function translateTexFilterGfx(texFilter: GX.TexFilter): [GfxTexFilterMode, GfxMipFilterMode] {
     switch (texFilter) {
     case GX.TexFilter.LINEAR:
-        return [ GfxTexFilterMode.Bilinear, GfxMipFilterMode.NoMip ];
+        return [ GfxTexFilterMode.Bilinear, GfxMipFilterMode.Nearest ];
     case GX.TexFilter.NEAR:
-        return [ GfxTexFilterMode.Point, GfxMipFilterMode.NoMip ];
+        return [ GfxTexFilterMode.Point, GfxMipFilterMode.Nearest ];
     case GX.TexFilter.LIN_MIP_LIN:
         return [ GfxTexFilterMode.Bilinear, GfxMipFilterMode.Linear ];
     case GX.TexFilter.NEAR_MIP_LIN:

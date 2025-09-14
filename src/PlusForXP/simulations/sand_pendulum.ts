@@ -301,14 +301,14 @@ export default class SandPendulum extends Simulation {
             blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
         });
 
-        const samplerDescriptor = {
+        this.sampler = cache.createSampler({
             wrapS: GfxWrapMode.Clamp,
             wrapT: GfxWrapMode.Clamp,
             minFilter: GfxTexFilterMode.Point,
             magFilter: GfxTexFilterMode.Point,
-            mipFilter: GfxMipFilterMode.NoMip,
-        };
-        this.sampler = cache.createSampler(samplerDescriptor);
+            mipFilter: GfxMipFilterMode.Nearest,
+            minLOD: 0, maxLOD: 0,
+        });
 
         if (this.isGrotto) {
             const sand = world.sceneNodesByName.get("Pendulum_Sand.scx/Sand New")!;

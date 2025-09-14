@@ -122,8 +122,7 @@ export default class Renderer implements SceneGfx {
     private renderInstListMain = new GfxRenderInstList();
     private program: GfxRenderProgramDescriptor;
     private gfxProgram: GfxProgram;
-    private diffuseSampler: GfxSampler;
-    private envSampler: GfxSampler;
+    private sampler: GfxSampler;
 
     private world: World;
 
@@ -175,15 +174,14 @@ export default class Renderer implements SceneGfx {
         });
         this.program = preprocessProgramObj_GLSL(device, new StandardProgram());
         this.gfxProgram = cache.createProgramSimple(this.program);
-        const samplerDescriptor = {
+        this.sampler = cache.createSampler({
             wrapS: GfxWrapMode.Repeat,
             wrapT: GfxWrapMode.Repeat,
             minFilter: GfxTexFilterMode.Bilinear,
             magFilter: GfxTexFilterMode.Bilinear,
-            mipFilter: GfxMipFilterMode.NoMip,
-        };
-        this.diffuseSampler = cache.createSampler(samplerDescriptor);
-        this.envSampler = cache.createSampler(samplerDescriptor);
+            mipFilter: GfxMipFilterMode.Nearest,
+            minLOD: 0, maxLOD: 0,
+        });
     }
 
     public adjustCameraController(c: CameraController) {
@@ -358,12 +356,12 @@ export default class Renderer implements SceneGfx {
                 renderInst.setSamplerBindingsFromTextureMappings([
                     {
                         gfxTexture: mesh.material.gfxTexture ?? this.world.defaultTexture,
-                        gfxSampler: this.diffuseSampler,
+                        gfxSampler: this.sampler,
                         lateBinding: null,
                     },
                     {
                         gfxTexture: envMap.texture,
-                        gfxSampler: this.envSampler,
+                        gfxSampler: this.sampler,
                         lateBinding: null,
                     },
                 ]);
