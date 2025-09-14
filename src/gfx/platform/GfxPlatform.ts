@@ -351,7 +351,7 @@ export interface GfxSwapChain {
     getDevice(): GfxDevice;
     getCanvas(): HTMLCanvasElement | OffscreenCanvas;
     getOnscreenTexture(): GfxTexture;
-    createWebXRLayer(webXRSession: XRSession): PromiseLike<XRLayer>;
+    createWebXRLayer(webXRSession: XRSession): PromiseLike<XRWebGLLayer>;
 }
 
 export interface GfxRenderPass {
