@@ -1,34 +1,36 @@
 
-import { ModelCache, SceneObjHolder } from "./Main.js";
-import { CalcAnimType, DrawBufferType, DrawType, MovementType, NameObj } from "./NameObj.js";
-import { Spine } from "./Spine.js";
-import { RLYT, RLAN, parseBRLYT, parseBRLAN, Layout, LayoutDrawInfo, LayoutAnimation, LayoutPane, LayoutTextbox } from "../Common/NW4R/lyt/Layout.js";
-import { JKRArchive } from "../Common/JSYSTEM/JKRArchive.js";
-import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
-import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
-import { initEachResTable } from "./LiveActor.js";
-import { getRes } from "./Animation.js";
-import { assert, assertExists } from "../util.js";
-import { BTIData } from "../Common/JSYSTEM/JUTTexture.js";
-import * as TPL from "../PaperMarioTTYD/tpl.js";
-import { TextureMapping } from "../TextureHolder.js";
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
+import { vec4 } from "gl-matrix";
+import { colorCopy, colorNewCopy, colorNewFromRGBA8, TransparentBlack, White } from "../Color.js";
 import { J3DFrameCtrl } from "../Common/JSYSTEM/J3D/J3DGraphAnimator.js";
 import { LoopMode as J3DLoopMode } from "../Common/JSYSTEM/J3D/J3DLoader.js";
-import { LoopMode as NW4RLoopMode } from "../rres/brres.js";
+import { JKRArchive } from "../Common/JSYSTEM/JKRArchive.js";
+import { BTIData } from "../Common/JSYSTEM/JUTTexture.js";
 import { CharWriter, parseBRFNT, ResFont, TagProcessor } from "../Common/NW4R/lyt/Font.js";
-import { vec3, vec4 } from "gl-matrix";
-import { connectToScene } from "./ActorUtil.js";
-import { getLayoutMessageDirect } from "./MessageData.js";
-import { ViewerRenderInput } from "../viewer.js";
+import { Layout, LayoutAnimation, LayoutDrawInfo, LayoutPane, LayoutTextbox, parseBRLAN, parseBRLYT, RLAN, RLYT } from "../Common/NW4R/lyt/Layout.js";
+import * as TPL from "../PaperMarioTTYD/tpl.js";
+import { TextureMapping } from "../TextureHolder.js";
+import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import { GX_Program } from "../gx/gx_material.js";
 import { ub_SceneParamsBufferSize } from "../gx/gx_render.js";
-import { Color, colorCopy, colorNewCopy, colorNewFromRGBA8, OpaqueBlack, TransparentBlack, White } from "../Color.js";
+import { LoopMode as NW4RLoopMode } from "../rres/brres.js";
+import { assert, assertExists } from "../util.js";
+import { ViewerRenderInput } from "../viewer.js";
+import { connectToScene } from "./ActorUtil.js";
+import { getRes } from "./Animation.js";
+import { initEachResTable } from "./LiveActor.js";
+import { ModelCache, SceneObjHolder } from "./Main.js";
+import { getLayoutMessageDirect } from "./MessageData.js";
+import { CalcAnimType, DrawBufferType, DrawType, MovementType, NameObj } from "./NameObj.js";
+import { Spine } from "./Spine.js";
+import { Texture } from "../viewer.js";
 
 export class LayoutHolder {
     public rlytTable = new Map<string, RLYT>();
     public rlanTable = new Map<string, RLAN>();
     public timgTable = new Map<string, BTIData>();
+    public viewerTextures: Texture[];
 
     constructor(device: GfxDevice, cache: GfxRenderCache, private gameSystemFontHolder: GameSystemFontHolder, private layoutName: string, public arc: JKRArchive) {
         initEachResTable(this.arc, this.rlytTable, ['.brlyt'], (file) => parseBRLYT(file.buffer));
@@ -36,9 +38,14 @@ export class LayoutHolder {
         initEachResTable(this.arc, this.timgTable, ['.tpl'], (file) => {
             const tplArchive = TPL.parse(file.buffer, [file.name]);
             assert(tplArchive.textures.length === 1);
-            const tpl = tplArchive.textures[0]
+            const tpl = tplArchive.textures[0];
             return new BTIData(device, cache, tpl);
         }, true);
+
+        this.viewerTextures = [...this.timgTable.values()].map((bti) => {
+            bti.viewerTexture.name = `${this.arc.name}/${bti.viewerTexture.name}`;
+            return bti.viewerTexture;
+        });
     }
 
     public fillTextureByName(m: TextureMapping, name: string): void {

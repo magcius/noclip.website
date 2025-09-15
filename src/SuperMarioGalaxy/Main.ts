@@ -996,6 +996,7 @@ export class ModelCache {
         const arc = this.getLayoutData(layoutName);
         const gameSystemFontHolder = this.ensureGameSystemFontHolder();
         const layoutHolder = new LayoutHolder(this.device, this.renderCache, gameSystemFontHolder, layoutName, arc);
+        this.textureListHolder.addTextures(layoutHolder.viewerTextures);
         this.archiveLayoutHolder.set(layoutName, layoutHolder);
         return layoutHolder;
     }
