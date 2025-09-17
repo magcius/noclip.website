@@ -1043,6 +1043,24 @@ const vanillaSceneDescs = [
 ];
 
 const bcSceneDescs = [
+    "Outland",
+    new ContinentSceneDesc("The Dark Portal, Hellfire Peninsula", 828395, 29, 32, 530),
+    new ContinentSceneDesc("Cenarion Refuge, Zangarmarsh", 828395, 21, 32, 530),
+    new ContinentSceneDesc("Area 52, Netherstorm", 828395, 25, 26, 530),
+    new ContinentSceneDesc("Telaar, Nagrand", 828395, 18, 36, 530),
+    new ContinentSceneDesc("Black Temple, Shadowmoon Valley", 828395, 30, 38, 530),
+    new ContinentSceneDesc("Shattrath, Terokkar Forest", 828395, 22, 35, 530),
+
+    "Quel'thalas",
+    new ContinentSceneDesc("Silvermoon City, Eversong Woods", 828395, 45, 14, 530),
+    new ContinentSceneDesc("Tranquillien, Ghostlands", 828395, 44, 17, 530),
+    new ContinentSceneDesc("Sunspire, Sunstrider Isle", 828395, 43, 12, 530),
+
+    "Azuremist Isles",
+    new ContinentSceneDesc("Exodar, Azuremist Isles", 828395, 54, 39, 530),
+    new ContinentSceneDesc("Ammen Vale, Azuremist Isles", 828395, 58, 39, 530),
+    new ContinentSceneDesc("Blood Watch, Azuremist Isles", 828395, 54, 35, 530),
+
     "Instances",
     new WdtSceneDesc("Hellfire Citadel: The Shattered Halls", 831277, 540),
     new WdtSceneDesc("Hellfire Citadel: The Blood Furnace", 830642, 542),
@@ -1075,27 +1093,24 @@ const bcSceneDescs = [
     new WdtSceneDesc("Eye of the Storm", 788893, 566),
     new WdtSceneDesc("Arena: Nagrand", 790469, 559),
     new WdtSceneDesc("Arena: Blade's Edge", 780261, 562),
-
-    "Outland",
-    new ContinentSceneDesc("The Dark Portal, Hellfire Peninsula", 828395, 29, 32, 530),
-    new ContinentSceneDesc("Cenarion Refuge, Zangarmarsh", 828395, 21, 32, 530),
-    new ContinentSceneDesc("Area 52, Netherstorm", 828395, 25, 26, 530),
-    new ContinentSceneDesc("Telaar, Nagrand", 828395, 18, 36, 530),
-    new ContinentSceneDesc("Black Temple, Shadowmoon Valley", 828395, 30, 38, 530),
-    new ContinentSceneDesc("Shattrath, Terokkar Forest", 828395, 22, 35, 530),
-
-    "Quel'thalas",
-    new ContinentSceneDesc("Silvermoon City, Eversong Woods", 828395, 45, 14, 530),
-    new ContinentSceneDesc("Tranquillien, Ghostlands", 828395, 44, 17, 530),
-    new ContinentSceneDesc("Sunspire, Sunstrider Isle", 828395, 43, 12, 530),
-
-    "Azuremist Isles",
-    new ContinentSceneDesc("Exodar, Azuremist Isles", 828395, 54, 39, 530),
-    new ContinentSceneDesc("Ammen Vale, Azuremist Isles", 828395, 58, 39, 530),
-    new ContinentSceneDesc("Blood Watch, Azuremist Isles", 828395, 54, 35, 530),
 ];
 
 const wotlkSceneDescs = [
+    "Northrend",
+    new ContinentSceneDesc("Icecrown Citadel, Icecrown", 822688, 27, 20, 571),
+    new ContinentSceneDesc("Dalaran, Crystalsong Forest", 822688, 31, 21, 571),
+    new ContinentSceneDesc("Grizzlemaw, Grizzly Hills", 822688, 39, 24, 571),
+    new ContinentSceneDesc("Gundrak, Zul'Drak", 822688, 40, 19, 571),
+    new ContinentSceneDesc("River's Heart, Sholazar Basin", 822688, 22, 21, 571),
+    new ContinentSceneDesc("Terrace of the Makers, The Storm Peaks", 822688, 34, 17, 571),
+    new ContinentSceneDesc("The Nexus, Coldarra", 822688, 19, 25, 571),
+    new ContinentSceneDesc("Ulduar, The Storm Peaks", 822688, 33, 15, 571),
+    new ContinentSceneDesc("Utgarde Keep, Howling Fjord", 822688, 41, 30, 571),
+    new ContinentSceneDesc("Valiance Keep, Borean Tundra", 822688, 21, 27, 571),
+    new ContinentSceneDesc("Warsong Hold, Borean Tundra", 822688, 20, 27, 571),
+    new ContinentSceneDesc("Wintergrasp Fortress, Wintergrasp", 822688, 26, 22, 571),
+    new ContinentSceneDesc("Wyrmrest Temple, Dragonblight", 822688, 31, 24, 571),
+
     "Instances",
     new WdtSceneDesc("Ebon Hold", 818210, 609),
     new WdtSceneDesc("Utgarde Keep", 825743, 574),
@@ -1129,21 +1144,6 @@ const wotlkSceneDescs = [
     new WdtSceneDesc("Isle of Conquest", 821811, 0), // map id is actually 628
     new WdtSceneDesc("Arena: Dalaran Sewers", 780309, 617),
     new WdtSceneDesc("Arena: The Ring of Valor", 789925, 618),
-
-    "Northrend",
-    new ContinentSceneDesc("Icecrown Citadel, Icecrown", 822688, 27, 20, 571),
-    new ContinentSceneDesc("Dalaran, Crystalsong Forest", 822688, 31, 21, 571),
-    new ContinentSceneDesc("Grizzlemaw, Grizzly Hills", 822688, 39, 24, 571),
-    new ContinentSceneDesc("Gundrak, Zul'Drak", 822688, 40, 19, 571),
-    new ContinentSceneDesc("River's Heart, Sholazar Basin", 822688, 22, 21, 571),
-    new ContinentSceneDesc("Terrace of the Makers, The Storm Peaks", 822688, 34, 17, 571),
-    new ContinentSceneDesc("The Nexus, Coldarra", 822688, 19, 25, 571),
-    new ContinentSceneDesc("Ulduar, The Storm Peaks", 822688, 33, 15, 571),
-    new ContinentSceneDesc("Utgarde Keep, Howling Fjord", 822688, 41, 30, 571),
-    new ContinentSceneDesc("Valiance Keep, Borean Tundra", 822688, 21, 27, 571),
-    new ContinentSceneDesc("Warsong Hold, Borean Tundra", 822688, 20, 27, 571),
-    new ContinentSceneDesc("Wintergrasp Fortress, Wintergrasp", 822688, 26, 22, 571),
-    new ContinentSceneDesc("Wyrmrest Temple, Dragonblight", 822688, 31, 24, 571),
 ];
 
 export const vanillaSceneGroup: Viewer.SceneGroup = {
