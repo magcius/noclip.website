@@ -7,12 +7,12 @@ import * as Textures from './textures.js';
 import { mat4, vec3 } from "gl-matrix";
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import { F3DEX_Program } from "../BanjoKazooie/render.js";
-import { computeViewMatrix } from '../Camera.js';
+import { computeViewMatrix, computeViewMatrixSkybox } from '../Camera.js';
 import { ImageFormat, ImageSize, getSizBitsPerPixel } from "../Common/N64/Image.js";
 import { CalcBillboardFlags, calcBillboardMatrix } from '../MathHelpers.js';
 import { DeviceProgram } from "../Program.js";
 import { TextureMapping } from '../TextureHolder.js';
-import { fillMatrix4x2, fillMatrix4x3, fillVec4 } from '../gfx/helpers/UniformBufferHelpers.js';
+import { fillMatrix4x2, fillMatrix4x3, fillVec3v, fillVec4 } from '../gfx/helpers/UniformBufferHelpers.js';
 import { GfxBindingLayoutDescriptor, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFormat, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxMegaStateDescriptor, GfxProgram, GfxSampler, GfxTexture, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
@@ -519,6 +519,7 @@ export class DrawCall {
     }
 }
 
+const vec3Scratch: vec3 = vec3.create();
 export class DrawCallInstance {
     static viewMatrixScratch = mat4.create();
     static modelViewScratch = mat4.create();
@@ -644,7 +645,15 @@ export class DrawCallInstance {
         renderInst.setMegaStateFlags(this.megaStateFlags);
         renderInst.setDrawCount(this.drawCall.vertexCount);
 
-        let offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_DrawParams, 12*2 + 8*2);
+        let offs;
+
+        if(this.sceneLights !== null) {
+            offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_DrawParams, (12*2 + 8*2 + this.sceneLights.diffuseColor.length * 8 + 4))
+        }
+        else {
+            offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_DrawParams, 12*2 + 8*2)
+        }
+
         const mappedF32 = renderInst.mapUniformBufferF32(F3DEX_Program.ub_DrawParams);
 
         if (!isSkybox) {
@@ -666,12 +675,29 @@ export class DrawCallInstance {
         this.computeTextureMatrix(DrawCallInstance.texMatrixScratch, 1);
         offs += fillMatrix4x2(mappedF32, offs, DrawCallInstance.texMatrixScratch);
 
+        if(this.sceneLights !== null) {
+            const n_lights = this.sceneLights.diffuseColor.length;
+            computeViewMatrixSkybox(DrawCallInstance.viewMatrixScratch, viewerInput.camera);
+            
+            for (let i = 0; i < n_lights; i++) {
+                offs += fillVec3v(mappedF32, offs, this.sceneLights.diffuseColor[i]);
+            }
+            
+            for (let i = 0; i < n_lights; i++) {
+                vec3.transformMat4(vec3Scratch, this.sceneLights.diffuseDirection[i], DrawCallInstance.viewMatrixScratch);
+                offs += fillVec3v(mappedF32, offs, vec3Scratch);
+            }
+
+            offs += fillVec3v(mappedF32, offs, this.sceneLights.ambientColor);
+        }
+
         const primColor = this.drawCall.DP_PrimColor;
         offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_CombineParams, 8);
         const comb = renderInst.mapUniformBufferF32(F3DEX_Program.ub_CombineParams);
         offs += fillVec4(comb, offs, primColor.r, primColor.g, primColor.b, primColor.a);
         // TODO: set this properly:
         offs += fillVec4(comb, offs, 1, 1, 1, this.envAlpha);   // environment color
+
         renderInstManager.submitRenderInst(renderInst);
     }
 }

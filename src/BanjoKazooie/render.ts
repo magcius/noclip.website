@@ -35,6 +35,7 @@ export class F3DEX_Program extends DeviceProgram {
 precision mediump float;
 
 ${GfxShaderLibrary.MatrixLibrary}
+${GfxShaderLibrary.saturate}
 
 layout(std140) uniform ub_SceneParams {
     Mat4x4 u_Projection;
@@ -42,17 +43,21 @@ layout(std140) uniform ub_SceneParams {
     #ifdef TEXTURE_GEN
         vec4 u_LookAtVectors[2];
     #endif
-    #ifdef PARAMETERIZED_LIGHTING
-        vec4 u_DiffuseColor[${this.G_MW_NUMLIGHT}];
-        vec4 u_DiffuseDirection[${this.G_MW_NUMLIGHT}];
-        vec4 u_AmbientColor;
-    #endif
 #endif
 };
 
 layout(std140) uniform ub_DrawParams {
     Mat3x4 u_BoneMatrix[BONE_MATRIX_COUNT];
     Mat2x4 u_TexMatrix[2];
+#ifdef PARAMETERIZED_LIGHTING
+    vec4 u_DiffuseColor[${this.G_MW_NUMLIGHT}];
+    vec4 u_DiffuseDirection[${this.G_MW_NUMLIGHT}];
+    vec4 u_AmbientColor;
+#endif
+#ifdef USE_FOG
+    vec4 u_FogParam;
+    vec4 u_FogColor;
+#endif
 };
 
 layout(std140) uniform ub_CombineParameters {
@@ -65,9 +70,12 @@ layout(std140) uniform ub_CombineParameters {
 #endif
 };
 
+#define u_IsWireframeEnabled (u_MiscComb.w)
+
 uniform sampler2D u_Texture0;
 uniform sampler2D u_Texture1;
 
+varying float v_FogFactor;
 varying vec4 v_Color;
 varying vec4 v_TexCoord;
 
@@ -100,6 +108,10 @@ void main() {
     vec3 t_PositionView = t_BoneMatrix * vec4(a_Position.xyz, 1.0);
     gl_Position = UnpackMatrix(u_Projection) * vec4(t_PositionView, 1.0);
     v_Color = t_One;
+
+#ifdef USE_FOG
+    v_FogFactor = saturate(((-t_PositionView.z) - u_FogParam.x) / (u_FogParam.y - u_FogParam.x));
+#endif
 
 #ifdef USE_VERTEX_COLOR
     v_Color = a_Color;
@@ -201,7 +213,7 @@ void main() {
 
         if (alphaThreshold > 0) {
             return `
-    if (t_Color.a < ${alphaThreshold})
+    if (t_Color.a < ${alphaThreshold} && (u_IsWireframeEnabled == 0.0))
         discard;
 `;
         } else {
@@ -320,6 +332,14 @@ void main() {
 #endif
 
 ${this.generateAlphaTest()}
+
+#ifdef USE_FOG
+    t_Color.rgb = mix(t_Color.rgb, u_FogColor.xyz, v_FogFactor);
+#endif
+
+    if (u_IsWireframeEnabled > 0.0) {
+        t_Color.a = 1.0;
+    }
 
     gl_FragColor = t_Color;
 }
