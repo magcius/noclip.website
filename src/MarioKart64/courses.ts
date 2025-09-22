@@ -5867,7 +5867,7 @@ export class BansheeBoardwalkRenderer extends Mk64Renderer {
             }
         }
 
-        if ((this.fireplaceIsBatsSpawned) || (this.fireplaceBatTimer != 0)) {
+        if ((this.fireplaceIsBatsSpawned) || (this.fireplaceBatTimer !== 0)) {
             this.fireplaceNumBatsSpawned = 0;
             for (let i = 0; i < fireplaceMaxBats; i++) {
                 const object = this.gObjectParticle3[i];
