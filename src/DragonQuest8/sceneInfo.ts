@@ -14,45 +14,6 @@ export enum ENPCDayPeriod {
     LATENIGHT = 0x2 //1->6
 }
 
-export class SceneInfo {
-    //Lighting
-    public currentLightSet: MAP.LightSet | null;
-    public lightSets: MAP.LightSet[];
-    //Day periods 
-    public currentDayPeriodFlags: number;
-    public currentNPCDayPeriod: ENPCDayPeriod;
-    //Game hour
-    public currentHour: number;
-    //User hour
-    public currentUserHour: number;
-    //Progress
-    public currentGameProgress: number;
-    //Vcol
-    public bUseVColors: boolean;
-    //Wireframe
-    public bWireframe: boolean;
-
-    //Game progress breakdown (used by the scripts)
-    public stbMainProgress: number;
-    public stbSubProgress: number;
-    public stbEventFlags: number;
-
-    public reset() {
-        this.currentLightSet = null;
-        this.lightSets = [];
-        this.currentDayPeriodFlags = 1;
-        this.currentNPCDayPeriod = ENPCDayPeriod.DAY;
-        this.currentHour = 6.5;
-        this.currentGameProgress = 0;
-        this.bUseVColors = true;
-        this.stbMainProgress = 0x1;
-        this.stbSubProgress = 0x0;
-        this.stbEventFlags = 0x0;
-   }
-}
-
-export const gDQ8SINFO = new SceneInfo();
-
 function getDayPeriodFlags(h: number): number {
     if (6 < h && h < 9)
         return 1;
@@ -71,27 +32,47 @@ function getNPCDayPeriod(h: number): ENPCDayPeriod {
     return ENPCDayPeriod.EARLYNIGHT;
 }
 
-export function UpdateSceneInfo(sceneInfo: SceneInfo, deltaTime: number): void {
-    //Time update
-    if (sceneInfo.currentUserHour < 0) {
-        sceneInfo.currentHour += deltaTime / 2000;
-        while (sceneInfo.currentHour > 24)
-            sceneInfo.currentHour -= 24;
-    } else {
-        sceneInfo.currentHour = sceneInfo.currentUserHour;
+export class SceneInfo {
+    //Lighting
+    public currentLightSet: MAP.LightSet | null = null;
+    public lightSets: MAP.LightSet[] = [];
+    //Day periods 
+    public currentDayPeriodFlags: number = 1;
+    public currentNPCDayPeriod: ENPCDayPeriod = ENPCDayPeriod.DAY;
+    //Game hour
+    public currentHour: number = 6.5;
+    //User hour
+    public currentUserHour: number = 6.5;
+    //Progress
+    public currentGameProgress: number = 0;
+
+    //Game progress breakdown (used by the scripts)
+    public stbMainProgress: number = 1;
+    public stbSubProgress: number = 0;
+    public stbEventFlags: number = 0;
+
+    public update(deltaTime: number): void {
+        //Time update
+        if (this.currentUserHour < 0) {
+            this.currentHour += deltaTime / 2000;
+            while (this.currentHour > 24)
+                this.currentHour -= 24;
+        } else {
+            this.currentHour = this.currentUserHour;
+        }
+
+        //Light set update    
+        if (this.lightSets.length) {
+            let hour = this.currentHour - 9; //Not a hack, done like this ingame. Matches the day period approach too.
+            if (hour < 0)
+                hour += 24;
+            this.currentLightSet = this.lightSets[Math.floor(hour / (24 / this.lightSets.length)) % this.lightSets.length];
+        }
+
+        //Day schedule update
+        this.currentDayPeriodFlags = getDayPeriodFlags(this.currentHour);
+
+        //NPC schedule update
+        this.currentNPCDayPeriod = getNPCDayPeriod(this.currentHour);
     }
-
-    //Light set update    
-    if (sceneInfo.lightSets.length) {
-        let hour = sceneInfo.currentHour - 9; //Not a hack, done like this ingame. Matches the day period approach too.
-        if (hour < 0)
-            hour += 24;
-        sceneInfo.currentLightSet = sceneInfo.lightSets[Math.floor(hour / (24 / sceneInfo.lightSets.length)) % sceneInfo.lightSets.length];
-    }
-
-    //Day schedule update
-    sceneInfo.currentDayPeriodFlags = getDayPeriodFlags(sceneInfo.currentHour);
-
-    //NPC schedule update
-    sceneInfo.currentNPCDayPeriod = getNPCDayPeriod(sceneInfo.currentHour);
 }

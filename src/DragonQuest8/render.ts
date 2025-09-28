@@ -25,6 +25,7 @@ import * as SINFO from './sceneInfo.js';
 import * as STB from './stb.js';
 import { GfxShaderLibrary } from '../gfx/helpers/GfxShaderLibrary.js';
 import { createBufferFromData } from '../gfx/helpers/BufferHelpers.js';
+import { DQ8Renderer } from './scenes.js';
 
 export class DQ8Program extends DeviceProgram {
     public static ub_SceneParams = 0;
@@ -244,7 +245,7 @@ export class MDTSubmeshInstance {
         }
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, boneMatrices: mat4[], viewMatrix: mat4, inverseBindPoseMatrices: mat4[], modelMatrix: mat4 = scratchIDMatrix, bIsSkybox: boolean): void {
+    public prepareToRender(renderer: DQ8Renderer, renderInstManager: GfxRenderInstManager, boneMatrices: mat4[], viewMatrix: mat4, inverseBindPoseMatrices: mat4[], modelMatrix: mat4 = scratchIDMatrix, bIsSkybox: boolean): void {
         if (!this.bIsVisible)
             return;
 
@@ -336,9 +337,10 @@ export class MDTSubmeshInstance {
                 }
             }
 
-            offs += fillColor(d, offs, SINFO.gDQ8SINFO.currentLightSet ? SINFO.gDQ8SINFO.currentLightSet.bgcolor : colorNewFromRGBA(1, 0, 0, 1));
-            offs += fillColor(d, offs, SINFO.gDQ8SINFO.currentLightSet ? SINFO.gDQ8SINFO.currentLightSet.bgcolor2 : colorNewFromRGBA(0, 0, 1, 1));
-            offs += fillVec4(d, offs, jointPerVertCount, this.mdtData.mdt.parentMDS.materials[submesh.materialIdx].bIsAlphaTest ? 1 : 0, (bIsSkybox) ? 1 : 0, (SINFO.gDQ8SINFO.bUseVColors ? 1 : 0));
+            const currentLightSet = renderer.sceneInfo.currentLightSet;
+            offs += fillColor(d, offs, currentLightSet ? currentLightSet.bgcolor : colorNewFromRGBA(1, 0, 0, 1));
+            offs += fillColor(d, offs, currentLightSet ? currentLightSet.bgcolor2 : colorNewFromRGBA(0, 0, 1, 1));
+            offs += fillVec4(d, offs, jointPerVertCount, this.mdtData.mdt.parentMDS.materials[submesh.materialIdx].bIsAlphaTest ? 1 : 0, (bIsSkybox) ? 1 : 0, (renderer.useVertexColors ? 1 : 0));
             renderInstManager.submitRenderInst(renderInst);
         }
 
@@ -459,8 +461,9 @@ export class MDSInstance {
         return fallbackUndefined(this.mot.motionNameToMotion.get(motionName), null);
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
-        if (!this.bIsVisible || (this.ProgressFlags !== null && this.ProgressFlags !== SINFO.gDQ8SINFO.currentGameProgress) || (this.NPCDayPeriod !== null && !((this.NPCDayPeriod) & (1 << SINFO.gDQ8SINFO.currentNPCDayPeriod))) || (this.DayPeriodFlags !== null && !(this.DayPeriodFlags & SINFO.gDQ8SINFO.currentDayPeriodFlags)))
+    public prepareToRender(renderer: DQ8Renderer, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        const sceneInfo = renderer.sceneInfo;
+        if (!this.bIsVisible || (this.ProgressFlags !== null && this.ProgressFlags !== sceneInfo.currentGameProgress) || (this.NPCDayPeriod !== null && !((this.NPCDayPeriod) & (1 << sceneInfo.currentNPCDayPeriod))) || (this.DayPeriodFlags !== null && !(this.DayPeriodFlags & sceneInfo.currentDayPeriodFlags)))
             return;
 
         this.animationController.setTimeInMilliseconds(viewerInput.time);
@@ -503,11 +506,11 @@ export class MDSInstance {
             let bIsSkyHalfSphere = this.bIsSkybox;
             if (bIsSkyHalfSphere)
                 bIsSkyHalfSphere = this.mdsData.mds.joints[submesh.rigidJointId].name.startsWith("back");
-            submesh.prepareToRender(device, renderInstManager, this.jointMatrices, scratchViewMatrix, this.mdsData.inverseBindPoseMatrices, this.modelMatrix, bIsSkyHalfSphere);
+            submesh.prepareToRender(renderer, renderInstManager, this.jointMatrices, scratchViewMatrix, this.mdsData.inverseBindPoseMatrices, this.modelMatrix, bIsSkyHalfSphere);
             if (bIsSkyHalfSphere) {
                 mat4.rotateX(scratchMatrix, this.modelMatrix, 1.57);
                 mat4.translate(scratchMatrix, scratchMatrix, vec3.fromValues(0, -50, 0)); //Make sure there's no hole
-                submesh.prepareToRender(device, renderInstManager, this.jointMatrices, scratchViewMatrix, this.mdsData.inverseBindPoseMatrices, scratchMatrix, bIsSkyHalfSphere);
+                submesh.prepareToRender(renderer, renderInstManager, this.jointMatrices, scratchViewMatrix, this.mdsData.inverseBindPoseMatrices, scratchMatrix, bIsSkyHalfSphere);
             }
         }
     }
@@ -530,10 +533,10 @@ export class MDSInstance {
         this.script = script;
     }
 
-    public executeScript(): void {
+    public executeScript(sceneInfo: SINFO.SceneInfo): void {
         if (this.script === null || this.script === undefined)
             return;
-        this.script.processEntry(this);
+        this.script.processEntry(sceneInfo, this);
     }
 
     public bindTexAnim(texAnim: IMG.TexAnim, index: number): void {
@@ -583,8 +586,7 @@ export class CHRRenderer {
     public lastTick: number = 0;
     public tickRateMs: number = 1 / 30 * 1000;
 
-
-    constructor(cache: GfxRenderCache, public chrs: CHR.CHR[], public transforms: mat4[], public eulerRotations: vec3[], public chrNPCDayPeriods: (SINFO.ENPCDayPeriod | null)[], public chrDayPeriodFlags: (number | null)[], public stbs: (STB.STB | null)[] | null = null, public chrProgressFlags: (number | null)[]) {
+    constructor(sceneInfo: SINFO.SceneInfo, cache: GfxRenderCache, public chrs: CHR.CHR[], public transforms: mat4[], public eulerRotations: vec3[], public chrNPCDayPeriods: (SINFO.ENPCDayPeriod | null)[], public chrDayPeriodFlags: (number | null)[], public stbs: (STB.STB | null)[] | null = null, public chrProgressFlags: (number | null)[]) {
         this.name = "CHR renderers";
         for (let i = 0; i < chrs.length; i++) {
             const chr = chrs[i];
@@ -613,7 +615,7 @@ export class CHRRenderer {
 
             if (stbs !== null) {
                 mdsRenderer.bindScript(stbs[i]);
-                mdsRenderer.executeScript();
+                mdsRenderer.executeScript(sceneInfo);
             }
 
             this.MDSRenderers.push(mdsRenderer);
@@ -624,25 +626,24 @@ export class CHRRenderer {
         this.bIsVisible = v;
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+    public prepareToRender(renderer: DQ8Renderer, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        const sceneInfo = renderer.sceneInfo;
+
         if (!this.bIsVisible)
             return;
-        const templateRenderInst = renderInstManager.pushTemplate();
-        {
-            if (viewerInput.time > this.lastTick + this.tickRateMs) {
-                this.lastTick = viewerInput.time;
-                for (let i = 0; i < this.MDSRenderers.length; i++) {
-                    const mds = this.MDSRenderers[i];
-                    if (!mds.bIsVisible || (mds.ProgressFlags !== null && mds.ProgressFlags !== SINFO.gDQ8SINFO.currentGameProgress) || (mds.NPCDayPeriod !== null && !((mds.NPCDayPeriod) & (1 << SINFO.gDQ8SINFO.currentNPCDayPeriod))) || (mds.DayPeriodFlags !== null && !(mds.DayPeriodFlags & SINFO.gDQ8SINFO.currentDayPeriodFlags)))
-                        continue;
-                    mds.executeScript();
-                }
-            }
+
+        if (viewerInput.time > this.lastTick + this.tickRateMs) {
+            this.lastTick = viewerInput.time;
             for (let i = 0; i < this.MDSRenderers.length; i++) {
-                this.MDSRenderers[i].prepareToRender(device, renderInstManager, viewerInput);
+                const mds = this.MDSRenderers[i];
+                if (!mds.bIsVisible || (mds.ProgressFlags !== null && mds.ProgressFlags !== sceneInfo.currentGameProgress) || (mds.NPCDayPeriod !== null && !((mds.NPCDayPeriod) & (1 << renderer.sceneInfo.currentNPCDayPeriod))) || (mds.DayPeriodFlags !== null && !(mds.DayPeriodFlags & renderer.sceneInfo.currentDayPeriodFlags)))
+                    continue;
+                mds.executeScript(renderer.sceneInfo);
             }
         }
-        renderInstManager.popTemplate();
+
+        for (let i = 0; i < this.MDSRenderers.length; i++)
+            this.MDSRenderers[i].prepareToRender(renderer, renderInstManager, viewerInput);
     }
 
     public destroy(device: GfxDevice): void {
@@ -683,14 +684,12 @@ export class MAPRenderer {
         this.bIsVisible = v;
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+    public prepareToRender(renderer: DQ8Renderer, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         if (!this.bIsVisible)
             return;
 
-        const templateRenderInst = renderInstManager.pushTemplate();
         for (let i = 0; i < this.MDSRenderers.length; i++)
-            this.MDSRenderers[i].prepareToRender(device, renderInstManager, viewerInput);
-        renderInstManager.popTemplate();
+            this.MDSRenderers[i].prepareToRender(renderer, renderInstManager, viewerInput);
     }
 
     public destroy(device: GfxDevice): void {

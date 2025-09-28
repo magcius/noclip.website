@@ -111,50 +111,50 @@ function push(type: number, value: number, stack: number[], stackInfo: STBStackI
     stackInfo.currentStackPtr += 2;
 }
 
-function externalFunctionCall(buffer: ArrayBufferSlice, stb: STB, functionID: number, argvPtr: number, argc: number, stack: number[], stackInfo: STBStackInfo, mdsInstance: MDSInstance) {
+function externalFunctionCall(sceneInfo: SINFO.SceneInfo, buffer: ArrayBufferSlice, stb: STB, functionID: number, argvPtr: number, argc: number, stack: number[], stackInfo: STBStackInfo, mdsInstance: MDSInstance) {
     if (functionID === 0x2)
         //Copy vector
         func0x2(argvPtr, stack);
     else if (functionID === 0x4)
         //Sub vectors
-        func0x4(argvPtr, argc, stack);
+        func0x4(sceneInfo, argvPtr, argc, stack);
     else if (functionID === 0x7)
         //Vector magnitude
-        func0x7(argvPtr, argc, stack);
+        func0x7(sceneInfo, argvPtr, argc, stack);
     else if (functionID === 0x9)
         //Atan
-        func0x9(argvPtr, argc, stack);
+        func0x9(sceneInfo, argvPtr, argc, stack);
     else if (functionID === 0xA)
         //Compare angle, somewhat
-        func0xA(argvPtr, argc, stack);
+        func0xA(sceneInfo, argvPtr, argc, stack);
     else if (functionID === 0xB)
         //Wrap angle
-        func0xB(argvPtr, argc, stack);
+        func0xB(sceneInfo, argvPtr, argc, stack);
     else if (functionID === 0xC)
         //Get random value
-        func0xC(argvPtr, argc, stack);
+        func0xC(sceneInfo, argvPtr, argc, stack);
     else if (functionID === 0xD)
         //Move + coll check
-        func0xD(argvPtr, argc, stack);
+        func0xD(sceneInfo, argvPtr, argc, stack);
     else if (functionID === 0x14)
         //Set unknown field
-        func0x14(argvPtr, argc, stack);
+        func0x14(sceneInfo, argvPtr, argc, stack);
     else if (functionID === 0x15)
         //Get current progress data
-        func0x15(argvPtr, argc, stack);
+        func0x15(sceneInfo, argvPtr, argc, stack);
     else if (functionID === 0x16)
         //TODO, see moutain house
-        func0x16(argvPtr, argc, stack);
+        func0x16(sceneInfo, argvPtr, argc, stack);
     else if (functionID === 0x17)
         //TODO, see Neos house
-        func0x17(argvPtr, argc, stack);
+        func0x17(sceneInfo, argvPtr, argc, stack);
     else if (functionID === 0x19)
         //Somewhat similar to 0x15? Progress/Flags related too it seems, see royal huntings ground with Argon lizards
         //For now, pass it to 0x15
-        func0x15(argvPtr, argc, stack);
+        func0x15(sceneInfo, argvPtr, argc, stack);
     else if (functionID === 0x1D)
         //TODO, see moutain house
-        func0x1D(argvPtr, argc, stack);
+        func0x1D(sceneInfo, argvPtr, argc, stack);
     else if (functionID === 0x1F)
         //Get NPC id
         func0x1F(argvPtr, argc, stack, stackInfo);
@@ -181,21 +181,21 @@ function externalFunctionCall(buffer: ArrayBufferSlice, stb: STB, functionID: nu
         func0x37(buffer, stb, argvPtr, stack, mdsInstance);
     else if (functionID === 0x3A)
         //Related to joints attachement, ignored for now
-        func0x3A(argvPtr, argc, stack);
+        func0x3A(sceneInfo, argvPtr, argc, stack);
     else if (functionID === 0x3B)
         //Set motion speed rate ?
-        func0x3B(argvPtr, argc, stack);
+        func0x3B(sceneInfo, argvPtr, argc, stack);
     else if (functionID === 0x3D)
         //Need more investigation but doesn't seem to affect scripting behavior, just writing to game's flags
-        func0x3D(argvPtr, argc, stack);
+        func0x3D(sceneInfo, argvPtr, argc, stack);
     else if (functionID === 0x3E)
         //Same as 0x3D
-        func0x3E(argvPtr, argc, stack);
+        func0x3E(sceneInfo, argvPtr, argc, stack);
     else
         throw "unknown function id " + functionID.toString();
 }
 
-export function processInstruction(buffer: ArrayBufferSlice, stb: STB, stack: number[], callStack: number[], stackInfo: STBStackInfo, mdsInstance: MDSInstance): boolean {
+export function processInstruction(sceneInfo: SINFO.SceneInfo, buffer: ArrayBufferSlice, stb: STB, stack: number[], callStack: number[], stackInfo: STBStackInfo, mdsInstance: MDSInstance): boolean {
     const view = buffer.createDataView();
     const instructionID = view.getUint32(stackInfo.currentInstructionPtr, true);
     if (instructionID === 0x1) {
@@ -542,7 +542,7 @@ export function processInstruction(buffer: ArrayBufferSlice, stb: STB, stack: nu
             const functionID = stack[stackInfo.currentStackPtr + 1];
             if (functionID >= stackInfo.functionCount)
                 throw "function doesn't exist in table";
-            externalFunctionCall(buffer, stb, functionID, stackInfo.currentStackPtr + 2, data0 - 1, stack, stackInfo, mdsInstance);
+            externalFunctionCall(sceneInfo, buffer, stb, functionID, stackInfo.currentStackPtr + 2, data0 - 1, stack, stackInfo, mdsInstance);
         }
     }
     else if (instructionID === 0x16) {
@@ -647,8 +647,7 @@ export class STB {
     public stackInfo: STBStackInfo;
     public callStack: number[];
 
-    public processEntry(mdsInstance: MDSInstance) {
-
+    public processEntry(sceneInfo: SINFO.SceneInfo, mdsInstance: MDSInstance) {
         if (this.firstExec) {
             const entryID = this.currentEntry;
             if (!this.entries.has(entryID)) {
@@ -665,7 +664,7 @@ export class STB {
             this.firstExec = false;
         }
         for (let i = 0; i < 10000; i++) {
-            const res = processInstruction(this.buffer, this, this.stack, this.callStack, this.stackInfo, mdsInstance);
+            const res = processInstruction(sceneInfo, this.buffer, this, this.stack, this.callStack, this.stackInfo, mdsInstance);
             if (res)
                 return;
         }
@@ -701,7 +700,7 @@ function func0x2(argvPtr: number, stack: number[]) {
     stack[stack[argvPtr + 5] + 1] = stack[argvPtr + 11];
 }
 
-function func0x4(argvPtr: number, argc: number, stack: number[]) {
+function func0x4(sceneInfo: SINFO.SceneInfo, argvPtr: number, argc: number, stack: number[]) {
     if (argc === 9) {
         stack[stack[argvPtr + 1] + 1] = stack[argvPtr + 7] - stack[argvPtr + 13];
         stack[stack[argvPtr + 3] + 1] = stack[argvPtr + 9] - stack[argvPtr + 15];
@@ -711,7 +710,7 @@ function func0x4(argvPtr: number, argc: number, stack: number[]) {
         throw "Unexpected func0x4 argument count";
 }
 
-function func0x7(argvPtr: number, argc: number, stack: number[]) {
+function func0x7(sceneInfo: SINFO.SceneInfo, argvPtr: number, argc: number, stack: number[]) {
     if (argc === 7) {
         const a = stack[argvPtr + 7] - stack[argvPtr + 1];
         const b = stack[argvPtr + 9] - stack[argvPtr + 3];
@@ -728,7 +727,7 @@ function func0x7(argvPtr: number, argc: number, stack: number[]) {
         throw "Unexpected func0x7 argument count";
 }
 
-function func0x9(argvPtr: number, argc: number, stack: number[]) {
+function func0x9(sceneInfo: SINFO.SceneInfo, argvPtr: number, argc: number, stack: number[]) {
     if (argc === 3) {
         const a = stack[argvPtr + 1];
         const b = stack[argvPtr + 3];
@@ -738,7 +737,7 @@ function func0x9(argvPtr: number, argc: number, stack: number[]) {
         throw "Unexpected func0x9 argument count";
 }
 
-function func0xA(argvPtr: number, argc: number, stack: number[]) {
+function func0xA(sceneInfo: SINFO.SceneInfo, argvPtr: number, argc: number, stack: number[]) {
     //Seen in Brain's house
     if (argc === 4) {
         let a = stack[argvPtr + 1];
@@ -766,7 +765,7 @@ function func0xA(argvPtr: number, argc: number, stack: number[]) {
         throw "Unexpected func0xA argument count";
 }
 
-function func0xB(argvPtr: number, argc: number, stack: number[]) {
+function func0xB(sceneInfo: SINFO.SceneInfo, argvPtr: number, argc: number, stack: number[]) {
     if (argc === 1) {
         if (stack[argvPtr] === 3) {
             let angle = stack[stack[argvPtr + 1] + 1];
@@ -787,7 +786,7 @@ function func0xB(argvPtr: number, argc: number, stack: number[]) {
         throw "Unexpected func0xB argument count";
 }
 
-function func0xC(argvPtr: number, argc: number, stack: number[]) {
+function func0xC(sceneInfo: SINFO.SceneInfo, argvPtr: number, argc: number, stack: number[]) {
     if (argc === 2) {
         const v = stack[argvPtr + 1] * Math.random();
         if (stack[argvPtr] === 1) {
@@ -800,7 +799,7 @@ function func0xC(argvPtr: number, argc: number, stack: number[]) {
         throw "Unexpected func0xC argument count";
 }
 
-function func0xD(argvPtr: number, argc: number, stack: number[]) {
+function func0xD(sceneInfo: SINFO.SceneInfo, argvPtr: number, argc: number, stack: number[]) {
     if (argc === 9) {
         stack[stack[argvPtr + 13] + 1] = stack[argvPtr + 1] + stack[argvPtr + 7];
         stack[stack[argvPtr + 15] + 1] = stack[argvPtr + 3] + stack[argvPtr + 9];
@@ -810,7 +809,7 @@ function func0xD(argvPtr: number, argc: number, stack: number[]) {
         throw "Unexpected func0xD argument count";
 }
 
-function func0x14(argvPtr: number, argc: number, stack: number[]) {
+function func0x14(sceneInfo: SINFO.SceneInfo, argvPtr: number, argc: number, stack: number[]) {
     if (argc === 1) {
         if (stack[argvPtr] === 3) {
             const outPtr = stack[argvPtr + 1];
@@ -824,11 +823,11 @@ function func0x14(argvPtr: number, argc: number, stack: number[]) {
         throw "Unexpected func0x14 argument count";
 }
 
-function func0x15(argvPtr: number, argc: number, stack: number[]) {
+function func0x15(sceneInfo: SINFO.SceneInfo, argvPtr: number, argc: number, stack: number[]) {
     if (argc === 2) {
         if (stack[argvPtr + 1] === 0 && stack[argvPtr + 2] === 3) {
             const outPtr = stack[argvPtr + 3];
-            stack[outPtr + 1] = SINFO.gDQ8SINFO.stbMainProgress;
+            stack[outPtr + 1] = sceneInfo.stbMainProgress;
             return;
         }
         else
@@ -838,13 +837,13 @@ function func0x15(argvPtr: number, argc: number, stack: number[]) {
         if (stack[argvPtr + 1] === 1 && stack[argvPtr + 4] === 3) //block not completely accurate for convenience, should be enough for now
         {
             const outPtr = stack[argvPtr + 5];
-            stack[outPtr + 1] = SINFO.gDQ8SINFO.stbSubProgress;
+            stack[outPtr + 1] = sceneInfo.stbSubProgress;
             return;
         }
         else if (stack[argvPtr + 1] === 2 && stack[argvPtr + 4] === 3) //same here
         {
             const outPtr = stack[argvPtr + 5];
-            stack[outPtr + 1] = SINFO.gDQ8SINFO.stbEventFlags & (1 << (stack[argvPtr + 3] & 0x1F));
+            stack[outPtr + 1] = sceneInfo.stbEventFlags & (1 << (stack[argvPtr + 3] & 0x1F));
             return;
         }
     }
@@ -852,15 +851,15 @@ function func0x15(argvPtr: number, argc: number, stack: number[]) {
         throw "Unexpected func0x15 argument count";
 }
 
-function func0x16(argvPtr: number, argc: number, stack: number[]) {
+function func0x16(sceneInfo: SINFO.SceneInfo, argvPtr: number, argc: number, stack: number[]) {
     return;
 }
 
-function func0x17(argvPtr: number, argc: number, stack: number[]) {
+function func0x17(sceneInfo: SINFO.SceneInfo, argvPtr: number, argc: number, stack: number[]) {
     return;
 }
 
-function func0x1D(argvPtr: number, argc: number, stack: number[]) {
+function func0x1D(sceneInfo: SINFO.SceneInfo, argvPtr: number, argc: number, stack: number[]) {
     return;
 }
 
@@ -1001,20 +1000,20 @@ function func0x37(buffer: ArrayBufferSlice, stb: STB, argvPtr: number, stack: nu
     }
 }
 
-function func0x3A(argvPtr: number, argc: number, stack: number[]) {
+function func0x3A(sceneInfo: SINFO.SceneInfo, argvPtr: number, argc: number, stack: number[]) {
     //Seen in Farebury first npc layout, c006aw. Joint attachement it seems, see later.
     return;
 }
 
-function func0x3B(argvPtr: number, argc: number, stack: number[]) {
+function func0x3B(sceneInfo: SINFO.SceneInfo, argvPtr: number, argc: number, stack: number[]) {
     //The motion speed rate logic needs more work (several rates multiplied around). Just keep the default one for now and move on.
     return;
 }
 
-function func0x3D(argvPtr: number, argc: number, stack: number[]) {
+function func0x3D(sceneInfo: SINFO.SceneInfo, argvPtr: number, argc: number, stack: number[]) {
     return;
 }
 
-function func0x3E(argvPtr: number, argc: number, stack: number[]) {
+function func0x3E(sceneInfo: SINFO.SceneInfo, argvPtr: number, argc: number, stack: number[]) {
     return;
 }
