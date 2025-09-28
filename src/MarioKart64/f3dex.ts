@@ -261,7 +261,7 @@ export class MkRSPState implements F3DEX.RSPStateInterface {
     }
 
     public gDPSetFogColor(rgba8: number): void {
-        colorFromRGBA8(this.DP_FogColor, rgba8)
+        colorFromRGBA8(this.DP_FogColor, rgba8);
         this.stateChanged = true;
     }
 

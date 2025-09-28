@@ -13,7 +13,7 @@ import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { CourseId } from './scenes.js';
 import { drawWorldSpaceCircle, drawWorldSpaceText, getDebugOverlayCanvas2D } from '../DebugJunk.js';
 import { Green, White } from '../Color.js';
-import { Collision } from './collision.js';
+import { ObjectCollision } from './collision.js';
 import { BinAngleToRad, calcModelMatrix, IsTargetInRangeXYZ } from './utils.js';
 import { Mk64Globals, Mk64Renderer } from './courses.js';
 import { assert } from '../util.js';
@@ -101,9 +101,10 @@ export class Actor {
     public rot: vec3 = vec3.create();
     public velocity: vec3 = vec3.create();
 
-    public collision: Collision = new Collision();
+    public collision: ObjectCollision;
 
-    constructor(public type: ActorType, startingPos: ReadonlyVec3, startingRot: ReadonlyVec3) {
+    constructor(globals: Mk64Globals, public type: ActorType, startingPos: ReadonlyVec3, startingRot: ReadonlyVec3) {
+        this.collision = new ObjectCollision(globals);
         //this.unk_04 = 0;
         this.state = 0;
         //this.unk_08 = 0.0;
@@ -323,7 +324,7 @@ export class ActorItemBox extends Actor {
     private mainBoxMdl: BasicRspRenderer;
 
     private questionMarkMdl: BasicRspRenderer;
-    private boxShardModels: BasicRspRenderer[] = []
+    private boxShardModels: BasicRspRenderer[] = [];
     private static readonly boxShardVectors: vec3[] = [
         vec3.fromValues(0.0, 2.0, 1.0),
         vec3.fromValues(0.8, 2.3, 0.5),
@@ -870,7 +871,7 @@ export class ActorFallingRock extends Actor {
         }
 
         if (this.collision.hasCollisionY) {
-            const height = this.collision.calculateSurfaceHeight(this.pos[0], this.pos[1], this.pos[2], this.collision.nearestTriIndexY);
+            const height = this.collision.calculateSurfaceHeight(this.pos[0], this.pos[1], this.pos[2], this.collision.nearestTriIdxY);
 
             vec3.set(scratchPos, this.pos[0], height + 2, this.pos[2]);
             vec3.set(scratchRot, 0, 0, 0);

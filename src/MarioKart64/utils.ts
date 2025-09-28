@@ -1,4 +1,3 @@
-import { Collision } from './collision.js';
 import { vec3, mat4, ReadonlyVec3 } from 'gl-matrix';
 import { hashCodeNumberFinish, hashCodeNumberUpdate } from '../HashMap.js';
 import { computeModelMatrixSRT, MathConstants, Vec3Zero } from '../MathHelpers.js';
@@ -6,6 +5,7 @@ import { DELTA_TIME } from './courses.js';
 import { interpS16 } from '../StarFoxAdventures/util.js';
 import { Mk64ActorSpawnData, Mk64Point } from './course_data.js';
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
+import { ObjectCollision } from './collision.js';
 
 export const RadToBinAngle = 0x8000 / Math.PI;
 export const BinAngleToRad = Math.PI / 0x8000;
@@ -179,16 +179,6 @@ export function func_80041724(x: number, z: number, binAngle: number): number {
     return (Math.cos(angle) * z) + (Math.sin(angle) * x);
 }
 
-/**
- * Rotates a position around a pivot point in the XZ plane by a given yaw angle.
- * 
- *func_80041658
- *
- * @param position The point to be rotated.
- * @param pivot The center point of rotation.
- * @param yaw The yaw angle.
- * @param isMirrored Mirror mode flag.
- */
 export function rotatePositionAroundPivot(position: vec3, pivot: vec3, yaw: number, isMirrorMode: boolean): void {
     if (isMirrorMode) {
         yaw = -yaw;
@@ -209,7 +199,7 @@ export function rotatePositionAroundPivot(position: vec3, pivot: vec3, yaw: numb
     position[2] = pivot[2] + rotatedZ;
 }
 
-export function setShadowSurfaceAngle(dst: vec3, col: Collision): void {
+export function setShadowSurfaceAngle(dst: vec3, col: ObjectCollision): void {
     if (!col.hasCollisionY) {
         vec3.set(dst, 0x4000, 0, 0);
         return;
@@ -217,17 +207,6 @@ export function setShadowSurfaceAngle(dst: vec3, col: Collision): void {
 
     dst[0] = 0x4000 + (Math.atan2(col.normalY[2], col.normalY[1]) * RadToBinAngle);
     dst[2] = (-Math.atan2(col.normalY[0], col.normalY[1])) * RadToBinAngle;
-}
-
-//func_80041924
-export function isSurfaceUnderneath(col: Collision, pos: vec3): boolean {
-    col.checkBoundingCollision(10, pos);
-
-    if (col.hasCollisionY) {
-        return true;
-    }
-
-    return false;
 }
 
 export function product2D(pX1: number, pY1: number, pX2: number, pY2: number, pX3: number, pY3: number): number {

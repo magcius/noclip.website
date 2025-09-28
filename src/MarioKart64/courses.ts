@@ -16,9 +16,9 @@ import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { NumberHolder } from '../MetroidPrime/particles/base_generator.js';
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import { makeMtxFrontUpPos } from '../SuperMarioGalaxy/ActorUtil.js';
-import { Collision } from './collision.js';
+import { CollisionGrid, ObjectCollision } from './collision.js';
 import { Actor, ActorBowsersCastleBush, ActorCactus1, ActorCactus2, ActorCactus3, ActorCow, ActorCrossbuck, ActorFallingRock, ActorFlags, ActorItemBox, ActorJungleTree, ActorLuigiTree, ActorMarioSign, ActorMarioTree, ActorMooMooFarmTree, ActorPalmTree, ActorPeachCastleTree, ActorPiranhaPlant, ActorRoyalRacewayTree, ActorSnowTree, ActorType, ActorWarioSign, ActorWaterBanshee, ActorYoshiEgg, ActorYoshiTree, DebugActor } from './actors.js';
-import { rotatePositionAroundPivot, setShadowSurfaceAngle, calcPitch, stepTowardsAngle, calcTargetAngleY, hashFromValues, kmToSpeed, random_int, random_u16, rotateVectorXY, IsTargetInRangeXZ, calcModelMatrix, crossedTime, IsTargetInRangeXYZ, lerpBinAngle, BinAngleToRad, RadToBinAngle, readActorSpawnData, readPathData, isSurfaceUnderneath, normalizeAngle } from './utils.js';
+import { rotatePositionAroundPivot, setShadowSurfaceAngle, calcPitch, stepTowardsAngle, calcTargetAngleY, hashFromValues, kmToSpeed, random_int, random_u16, rotateVectorXY, IsTargetInRangeXZ, calcModelMatrix, crossedTime, IsTargetInRangeXYZ, lerpBinAngle, BinAngleToRad, RadToBinAngle, readActorSpawnData, readPathData, normalizeAngle } from './utils.js';
 import { drawWorldSpaceLine, drawWorldSpaceLocator, getDebugOverlayCanvas2D } from '../DebugJunk.js';
 import { Color, colorNewFromRGBA8, Green, Yellow } from '../Color.js';
 import { assert, mod } from '../util.js';
@@ -44,6 +44,7 @@ const scratchMtx2 = mat4.create();
 
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
+const scratchVec3c = vec3.create();
 const scratchVec2a = vec2.create();
 const Vec2Zero: ReadonlyVec2 = vec2.fromValues(0, 0);
 
@@ -1567,13 +1568,13 @@ class Entity {
     }
 
     /**func_800886F4*/
-    public setSurfaceFromCollision(col: Collision): void {
+    public setSurfaceFromCollision(col: ObjectCollision): void {
 
         col.checkBoundingCollision(10.0, [this.pos[0], 20, this.pos[2]]);
 
         if (col.hasCollisionY) {
             this.setFlags(EntityFlags.IsOnSurface);
-            this.surfaceHeight = col.calculateSurfaceHeight(this.pos[0], 0.0, this.pos[2], col.nearestTriIndexY);
+            this.surfaceHeight = col.calculateSurfaceHeight(this.pos[0], 0.0, this.pos[2], col.nearestTriIdxY);
             setShadowSurfaceAngle(this.shadowDir, col);
             return;
         }
@@ -1589,7 +1590,7 @@ class Entity {
     * func_80088538
     * @returns  True if a valid surface is detected below the object.
     */
-    public checkSurfaceContact(col: Collision): boolean {
+    public checkSurfaceContact(col: ObjectCollision): boolean {
         let result = false;
 
         this.clearFlags(EntityFlags.IsOnSurface);
@@ -1600,7 +1601,7 @@ class Entity {
                 result = true;
             }
 
-            this.surfaceHeight = col.calculateSurfaceHeight(this.pos[0], 0.0, this.pos[2], col.nearestTriIndexY);
+            this.surfaceHeight = col.calculateSurfaceHeight(this.pos[0], 0.0, this.pos[2], col.nearestTriIdxY);
             setShadowSurfaceAngle(this.shadowDir, col);
         }
 
@@ -1608,7 +1609,7 @@ class Entity {
     }
 
     /**func_8008861C*/
-    public checkSurfaceContactAlt(col: Collision): boolean {
+    public checkSurfaceContactAlt(col: ObjectCollision): boolean {
         let result = false;
 
         this.clearFlags(EntityFlags.IsOnSurface);
@@ -1620,7 +1621,7 @@ class Entity {
                 result = true;
             }
 
-            this.surfaceHeight = col.calculateSurfaceHeight(this.pos[0], 0.0, this.pos[2], col.nearestTriIndexY);
+            this.surfaceHeight = col.calculateSurfaceHeight(this.pos[0], 0.0, this.pos[2], col.nearestTriIdxY);
             vec3.copy(this.targetPos, col.normalY);
         }
         return result;
@@ -1695,7 +1696,7 @@ class Entity {
     /**func_8004A870*/
     public setShadowMatrix(dst: mat4, scale: number): void {
         if (this.isFlagActive(EntityFlags.HasShadow) && this.isFlagActive(EntityFlags.IsOnSurface)) {
-            const up = vec3.normalize(scratchVec3a, this.targetPos);
+            const up = vec3.normalize(scratchVec3c, this.targetPos);
             const unit = Math.abs(up[1]) < 0.999 ? Vec3UnitY : Vec3UnitX;
             const right = vec3.normalize(scratchVec3a, vec3.cross(scratchVec3a, unit, up));
             const front = vec3.normalize(scratchVec3b, vec3.cross(scratchVec3b, right, up));
@@ -1721,6 +1722,7 @@ export class Mk64Globals {
     public waterVelocity = -0.1;
     public nearestTrackSectionId = 0;
     public nearestPathPointIdx = 0;
+    public colGrid: CollisionGrid;
 
     public hasCameraMoved: boolean = false;
     public cameraPos: vec3 = vec3.create();
@@ -1737,6 +1739,8 @@ export class Mk64Globals {
 
         this.commonShadowMdl = this.initRendererFromDL(0x0D007B20);
         this.commonShadowMdl.setPrimColor8(20, 20, 20, 0);
+
+        this.colGrid = new CollisionGrid(this);
     }
 
     public getGfxTexture(dramAddr: number, dramPalAddr: number, tile: RDP.TileState): GfxTexture {
@@ -1801,13 +1805,13 @@ export class Mk64Renderer implements Viewer.SceneGfx {
 
     // Actors & Objects
     public actors: Actor[] = [];
-
-    public collision: Collision = new Collision();
     public cloudObjects: Entity[] = [];
     public gObjectParticle1: Entity[] = nArray(1024, () => new Entity(0));
     public gObjectParticle2: Entity[] = nArray(255, () => new Entity(0));
     public gObjectParticle3: Entity[] = nArray(150, () => new Entity(0));
 
+    public dummyObjCol: ObjectCollision;// Obj collision to be reused for various calculations
+    
     public flagPos: vec3 = vec3.create();
     public xOrientation = 1.0; //TODO (M-1): Handle mirror mode
     public trackOffsetPosition: vec3 = vec3.create();
@@ -1823,9 +1827,11 @@ export class Mk64Renderer implements Viewer.SceneGfx {
     public vehiclePath2DLength = 0;
 
     constructor(public globals: Mk64Globals) {
+        this.dummyObjCol = new ObjectCollision(globals);
+
         const courseId = globals.courseId;
         const courseInfo = dCourseData[courseId];
-
+        
         const topColor = colorNewFromRGBA8(dMapSkyColors[courseId].top);
         const bottomColor = colorNewFromRGBA8(dMapSkyColors[courseId].bottom);
 
@@ -1894,9 +1900,6 @@ export class Mk64Renderer implements Viewer.SceneGfx {
             this.initClouds(courseInfo.clouds, courseInfo.cloudTex);
         }
 
-        // Generate collision grid
-        Collision.initCourseCollision(globals);
-
         //actor light
         rspState.setLight1(Light1.InitLight(255, 255, 255, 115, 115, 115, 0, 0, 120));
 
@@ -1941,7 +1944,7 @@ export class Mk64Renderer implements Viewer.SceneGfx {
 
         if (courseInfo.itemBoxes) {
             this.spawnActorList(courseInfo.itemBoxes, ActorType.ItemBox, (actor: ActorItemBox, spawnData: Mk64ActorSpawnData) => {
-                const height = this.collision.getSurfaceHeight(spawnData.pos[0], spawnData.pos[1] + 10, spawnData.pos[2]);
+                const height = globals.colGrid.getSurfaceHeight(spawnData.pos[0], spawnData.pos[1] + 10, spawnData.pos[2]);
                 vec3.set(actor.rot, random_u16(), random_u16(), random_u16());
                 actor.resetDistance = height;
                 actor.origY = spawnData.pos[1];
@@ -1981,7 +1984,7 @@ export class Mk64Renderer implements Viewer.SceneGfx {
         globals.cameraYaw = Math.atan2(cameraForward[0], cameraForward[2]);
         globals.cameraSpeed = vec3.length(viewerInput.camera.linearVelocity) / DELTA_TIME;
 
-        globals.nearestTrackSectionId = this.collision.getNearestTrackSectionId(camPos);
+        globals.nearestTrackSectionId = this.globals.colGrid.getNearestTrackSectionId(camPos);
         globals.nearestPathPointIdx = this.getNearestTrackPathPoint(camPos, globals.nearestTrackSectionId);
 
 
@@ -2230,33 +2233,33 @@ export class Mk64Renderer implements Viewer.SceneGfx {
         let actor: Actor;
 
         switch (actorType) {
-            case ActorType.TreeMarioRaceway: actor = new ActorMarioTree(actorType, position, rotation); break;
+            case ActorType.TreeMarioRaceway: actor = new ActorMarioTree(this.globals, actorType, position, rotation); break;
             case ActorType.HotAirBalloonItemBox:
-            case ActorType.ItemBox: actor = new ActorItemBox(actorType, position, rotation); break;
-            case ActorType.MarioSign: actor = new ActorMarioSign(actorType, position, rotation); break;
-            case ActorType.TreeMooMooFarm: actor = new ActorMooMooFarmTree(actorType, position, rotation); break;
-            case ActorType.TreeLuigiRaceway: actor = new ActorLuigiTree(actorType, position, rotation); break;
-            case ActorType.PiranhaPlant: actor = new ActorPiranhaPlant(actorType, position, rotation); break;
-            case ActorType.Cow: actor = new ActorCow(actorType, position, rotation); break;
-            case ActorType.PalmTree: actor = new ActorPalmTree(actorType, position, rotation); break;
-            case ActorType.Cactus1KalamariDesert: actor = new ActorCactus1(actorType, position, rotation); break;
-            case ActorType.Cactus2KalamariDesert: actor = new ActorCactus2(actorType, position, rotation); break;
-            case ActorType.Cactus3KalamariDesert: actor = new ActorCactus3(actorType, position, rotation); break;
-            case ActorType.TreeFrappeSnowland: actor = new ActorSnowTree(actorType, position, rotation); break;
-            case ActorType.TreeRoyalRaceway: actor = new ActorRoyalRacewayTree(actorType, position, rotation); break;
-            case ActorType.TreePeachesCastle: actor = new ActorPeachCastleTree(actorType, position, rotation); break;
-            case ActorType.BushBowsersCastle: actor = new ActorBowsersCastleBush(actorType, position, rotation); break;
-            case ActorType.TreeYoshiValley: actor = new ActorYoshiTree(actorType, position, rotation); break;
-            case ActorType.YoshiEgg: actor = new ActorYoshiEgg(actorType, position, rotation); break;
-            case ActorType.RailroadCrossing: actor = new ActorCrossbuck(actorType, position, rotation); break;
-            case ActorType.WarioSign: actor = new ActorWarioSign(actorType, position, rotation); break;
-            case ActorType.FallingRock: actor = new ActorFallingRock(actorType, position, rotation); break;
+            case ActorType.ItemBox: actor = new ActorItemBox(this.globals, actorType, position, rotation); break;
+            case ActorType.MarioSign: actor = new ActorMarioSign(this.globals, actorType, position, rotation); break;
+            case ActorType.TreeMooMooFarm: actor = new ActorMooMooFarmTree(this.globals, actorType, position, rotation); break;
+            case ActorType.TreeLuigiRaceway: actor = new ActorLuigiTree(this.globals, actorType, position, rotation); break;
+            case ActorType.PiranhaPlant: actor = new ActorPiranhaPlant(this.globals, actorType, position, rotation); break;
+            case ActorType.Cow: actor = new ActorCow(this.globals, actorType, position, rotation); break;
+            case ActorType.PalmTree: actor = new ActorPalmTree(this.globals, actorType, position, rotation); break;
+            case ActorType.Cactus1KalamariDesert: actor = new ActorCactus1(this.globals, actorType, position, rotation); break;
+            case ActorType.Cactus2KalamariDesert: actor = new ActorCactus2(this.globals, actorType, position, rotation); break;
+            case ActorType.Cactus3KalamariDesert: actor = new ActorCactus3(this.globals, actorType, position, rotation); break;
+            case ActorType.TreeFrappeSnowland: actor = new ActorSnowTree(this.globals, actorType, position, rotation); break;
+            case ActorType.TreeRoyalRaceway: actor = new ActorRoyalRacewayTree(this.globals, actorType, position, rotation); break;
+            case ActorType.TreePeachesCastle: actor = new ActorPeachCastleTree(this.globals, actorType, position, rotation); break;
+            case ActorType.BushBowsersCastle: actor = new ActorBowsersCastleBush(this.globals, actorType, position, rotation); break;
+            case ActorType.TreeYoshiValley: actor = new ActorYoshiTree(this.globals, actorType, position, rotation); break;
+            case ActorType.YoshiEgg: actor = new ActorYoshiEgg(this.globals, actorType, position, rotation); break;
+            case ActorType.RailroadCrossing: actor = new ActorCrossbuck(this.globals, actorType, position, rotation); break;
+            case ActorType.WarioSign: actor = new ActorWarioSign(this.globals, actorType, position, rotation); break;
+            case ActorType.FallingRock: actor = new ActorFallingRock(this.globals, actorType, position, rotation); break;
 
-            case ActorType.JungleTree: actor = new ActorJungleTree(actorType, position, rotation); break;
-            case ActorType.WaterBansheeBoardwalk: actor = new ActorWaterBanshee(actorType, position, rotation); break;
+            case ActorType.JungleTree: actor = new ActorJungleTree(this.globals, actorType, position, rotation); break;
+            case ActorType.WaterBansheeBoardwalk: actor = new ActorWaterBanshee(this.globals, actorType, position, rotation); break;
             default:
                 console.log(`unknown actor type: ${ActorType[actorType]}`);
-                actor = new DebugActor(actorType, position, rotation);
+                actor = new DebugActor(this.globals, actorType, position, rotation);
                 break;
         }
 
@@ -2326,7 +2329,7 @@ export class Mk64Renderer implements Viewer.SceneGfx {
 
             actor.collision.checkBoundingCollision(5, actor.pos);
             if (actor.collision.surfaceDistY < 0) {
-                actor.pos[1] = actor.collision.calculateSurfaceHeight(actor.pos[0], actor.pos[1], actor.pos[2], actor.collision.nearestTriIndexY);
+                actor.pos[1] = actor.collision.calculateSurfaceHeight(actor.pos[0], actor.pos[1], actor.pos[2], actor.collision.nearestTriIdxY);
             }
 
             setShadowSurfaceAngle(actor.rot, actor.collision);
@@ -2634,9 +2637,9 @@ export class Mk64Renderer implements Viewer.SceneGfx {
 
     /**func_8000D24C*/
     private getPathPointFromNearestSection(pos: vec3): number {
-        this.collision.checkBoundingCollision(10.0, pos);
+        this.dummyObjCol.checkBoundingCollision(10.0, pos);
 
-        return this.getNearestTrackPathPoint(pos, this.collision.getTrackSectionId(this.collision.nearestTriIndexY));
+        return this.getNearestTrackPathPoint(pos, this.globals.colGrid.getTrackSectionId(this.dummyObjCol.nearestTriIdxY));
     }
 
     /**func_8000D2B4*/
@@ -4947,7 +4950,7 @@ export class LuigiRacewayRenderer extends Mk64Renderer {
         balloon.setOriginPosition(this.xOrientation * -176, 0, -2323);
         balloon.setOffset(0, 300, 0);
         balloon.setPositionOriginX();
-        balloon.setSurfaceFromCollision(this.collision);
+        balloon.setSurfaceFromCollision(this.dummyObjCol);
         balloon.initActionState();
         balloon.velocity[1] = -2.0;
         balloon.advanceState();
@@ -5102,7 +5105,6 @@ export class YoshiValleyRenderer extends Mk64Renderer {
                 hedgehog.setShadowMatrix(scratchMtx1, 0.7);
                 this.hedgehogShadowMdl.prepareToRender(renderInstManager, viewerInput, scratchMtx1);
 
-
                 calcModelMatrix(scratchMtx1, hedgehog.pos, hedgehog.orientation, hedgehog.scale.value);
 
                 if (hedgehog.texIndex !== 0) {
@@ -5191,7 +5193,7 @@ export class YoshiValleyRenderer extends Mk64Renderer {
 
         if (object.isFlagActive(EntityFlags.IsAnyPlayerNear)) {
             if (object.isFlagActive(EntityFlags.IsCollisionCheckOn)) {
-                object.checkSurfaceContactAlt(this.collision);
+                object.checkSurfaceContactAlt(this.dummyObjCol);
             }
             object.pos[1] = object.surfaceHeight + 6.0;
         }
@@ -5452,7 +5454,7 @@ export class KoopaBeachRenderer extends Mk64Renderer {
         object.updatePosition();
 
         //if (object.isFlagActive(ObjectFlags.IsVisible)) {
-        object.checkSurfaceContact(this.collision);
+        object.checkSurfaceContact(this.dummyObjCol);
         object.pos[1] = (object.surfaceHeight + 2.5);
         //}
     }
@@ -5550,12 +5552,12 @@ export class BansheeBoardwalkRenderer extends Mk64Renderer {
         // Render shadows first. The game doesn't do this, but this looks better
         for (const boo of this.booObjs) {
             if (boo.state >= 2) {
-                if (boo.isFlagActive(EntityFlags.HasShadow) && isSurfaceUnderneath(this.collision, boo.pos)) {
+                if (boo.isFlagActive(EntityFlags.HasShadow) && this.dummyObjCol.isSurfaceUnderneath(boo.pos)) {
                     scratchVec3a[0] = boo.pos[0];
-                    scratchVec3a[1] = 0.8 + this.collision.calculateSurfaceHeight(boo.pos[0], 0, boo.pos[2], this.collision.nearestTriIndexY);
+                    scratchVec3a[1] = 0.8 + this.dummyObjCol.calculateSurfaceHeight(boo.pos[0], 0, boo.pos[2], this.dummyObjCol.nearestTriIdxY);
                     scratchVec3a[2] = boo.pos[2];
 
-                    calcModelMatrix(scratchMtx1, scratchVec3a, this.collision.normalY, 0.4);
+                    calcModelMatrix(scratchMtx1, scratchVec3a, this.dummyObjCol.normalY, 0.4);
                     this.booShadowMdl.prepareToRender(renderInstManager, viewerInput, scratchMtx1);
                 }
             }
@@ -6974,7 +6976,7 @@ export class KalamariDesertRenderer extends Mk64Renderer {
         this.generate2DPath(path);
 
         const firstPathPoint = this.vehiclePath2D[0];
-        const trainSurfaceheight = this.collision.getSurfaceHeight(firstPathPoint[0], 2000.0, firstPathPoint[1]);
+        const trainSurfaceheight = this.globals.colGrid.getSurfaceHeight(firstPathPoint[0], 2000.0, firstPathPoint[1]);
 
         for (let i = 0; i < 2; i++) {
             const train = new Train();
@@ -7696,14 +7698,14 @@ export class MooMooFarmRenderer extends Mk64Renderer {
             molehill.pos[2] = posZ;
             molehill.setScale(0.7);
 
-            this.collision.checkBoundingCollision(10, [posX, 20, posZ]);
+            this.dummyObjCol.checkBoundingCollision(10, [posX, 20, posZ]);
 
-            if (this.collision.hasCollisionY) {
+            if (this.dummyObjCol.hasCollisionY) {
                 molehill.setFlags(EntityFlags.IsOnSurface);
-                molehill.surfaceHeight = this.collision.calculateSurfaceHeight(posX, 0, posZ, this.collision.nearestTriIndexY);
+                molehill.surfaceHeight = this.dummyObjCol.calculateSurfaceHeight(posX, 0, posZ, this.dummyObjCol.nearestTriIdxY);
 
-                vec3.copy(molehill.velocity, this.collision.normalY);
-                setShadowSurfaceAngle(molehill.velocity, this.collision);
+                vec3.copy(molehill.velocity, this.dummyObjCol.normalY);
+                setShadowSurfaceAngle(molehill.velocity, this.dummyObjCol);
                 molehill.velocity[0] -= 0x4000;
             }
 
