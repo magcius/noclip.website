@@ -188,7 +188,7 @@ export class GloverRSPState implements F3DEX.RSPStateInterface {
     private stateChanged: boolean = false;
 
     public textureCache: RDP.TextureCache = new RDP.TextureCache();
-    private vertexCache: F3DEX.Vertex[] = [];
+    private vertexCache: F3DEX.Vertex[] = nArray(64, () => new F3DEX.Vertex());
 
     private SP_GeometryMode: number = 0;
     private SP_TextureState = new F3DEX.TextureState();
@@ -204,9 +204,6 @@ export class GloverRSPState implements F3DEX.RSPStateInterface {
     private DP_TMemTracker = new Map<number, number>();
 
     constructor(public segmentBuffers: ArrayBufferSlice[], private textures: Textures.GloverTextureHolder) {
-        for (let i = 0; i < 64; i++) {
-            this.vertexCache.push(new F3DEX.Vertex());
-        }
     }
 
     public finish(): GloverRSPOutput | null {
