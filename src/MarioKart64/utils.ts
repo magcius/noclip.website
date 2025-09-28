@@ -103,10 +103,6 @@ export function hashFromValues(a: number[]): number {
     return hashCodeNumberFinish(hash);
 }
 
-export function mod(val: number, n: number): number {
-    return ((val % n) + n) % n;
-}
-
 export function normalizeAngle(x: number): number {
     x = x % MathConstants.TAU;
     if (x > Math.PI)
