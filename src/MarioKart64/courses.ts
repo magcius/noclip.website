@@ -2948,6 +2948,7 @@ export class Mk64Renderer implements Viewer.SceneGfx {
         this.globals.modelCache.clear();
         this.globals.gfxTextureCache.clear();
 
+        this.sceneTexture.destroy(device);
         this.globals.renderHelper.destroy();
     }
 }
