@@ -84,7 +84,7 @@ export class MkRSPState implements F3DEX.RSPStateInterface {
     private outputDrawCalls: MkDrawCall[] = [];
     private currentDrawCall = new MkDrawCall();
 
-    private vertexCache: F3DEX.Vertex[] = [];
+    private vertexCache: F3DEX.Vertex[] = nArray(64, () => new F3DEX.Vertex());;
     public textureCache: RDP.TextureCache = new RDP.TextureCache();
 
     private SP_Light: Light1 = new Light1();
@@ -107,9 +107,6 @@ export class MkRSPState implements F3DEX.RSPStateInterface {
     private DP_TMemTracker = new Map<number, number>();
 
     constructor(public segmentBuffers: ArrayBufferSlice[]) {
-        for (let i = 0; i < 64; i++) {
-            this.vertexCache.push(new F3DEX.Vertex());
-        }
     }
 
     public initStateMk64(): void {
@@ -119,7 +116,7 @@ export class MkRSPState implements F3DEX.RSPStateInterface {
         this.gsDPSetTextureFilter(TextFilt.G_TF_BILERP);
     }
 
-    private clear(): void {
+    public clear(): void {
         this.stateChanged = true;
         this.outputDrawCalls = [];
         this.currentDrawCall = new MkDrawCall();

@@ -18,14 +18,14 @@ import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import { makeMtxFrontUpPos } from '../SuperMarioGalaxy/ActorUtil.js';
 import { Collision } from './collision.js';
 import { Actor, ActorBowsersCastleBush, ActorCactus1, ActorCactus2, ActorCactus3, ActorCow, ActorCrossbuck, ActorFallingRock, ActorFlags, ActorItemBox, ActorJungleTree, ActorLuigiTree, ActorMarioSign, ActorMarioTree, ActorMooMooFarmTree, ActorPalmTree, ActorPeachCastleTree, ActorPiranhaPlant, ActorRoyalRacewayTree, ActorSnowTree, ActorType, ActorWarioSign, ActorWaterBanshee, ActorYoshiEgg, ActorYoshiTree, DebugActor } from './actors.js';
-import { rotatePositionAroundPivot, setShadowSurfaceAngle, calcPitch, stepTowardsAngle, calcTargetAngleY, hashFromValues, kmToSpeed, mod, random_int, random_u16, rotateVectorXY, IsTargetInRangeXZ, calcModelMatrix, isNearFrameTime, IsTargetInRangeXYZ, lerpBinAngle, BinAngleToRad, RadToBinAngle, readActorSpawnData, readPathData, isSurfaceUnderneath, normalizeAngle } from './utils.js';
+import { rotatePositionAroundPivot, setShadowSurfaceAngle, calcPitch, stepTowardsAngle, calcTargetAngleY, hashFromValues, kmToSpeed, random_int, random_u16, rotateVectorXY, IsTargetInRangeXZ, calcModelMatrix, crossedTime, IsTargetInRangeXYZ, lerpBinAngle, BinAngleToRad, RadToBinAngle, readActorSpawnData, readPathData, isSurfaceUnderneath, normalizeAngle, mod } from './utils.js';
 import { drawWorldSpaceLine, drawWorldSpaceLocator, getDebugOverlayCanvas2D } from '../DebugJunk.js';
 import { Color, colorNewFromRGBA8, Green, Yellow } from '../Color.js';
 import { assert } from '../util.js';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
 import { GfxrAttachmentSlot, GfxrTemporalTexture } from '../gfx/render/GfxRenderGraph.js';
 import { TextureHolder, TextureMapping } from '../TextureHolder.js';
-import { CameraController, computeViewMatrix } from '../Camera.js';
+import { Camera, CameraController, computeViewMatrix } from '../Camera.js';
 import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor, opaqueBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { CourseId } from './scenes.js';
 import { getTimeInFrames } from '../AnimationController.js';
@@ -38,7 +38,7 @@ export let IS_WIREFRAME: boolean = false;
 export let DELTA_TIME: number = 1.0;
 let SCENE_TIME: number = 1.0;
 
-const lastViewMtx = mat4.create();
+const lastCamWorldMtx = mat4.create();
 const scratchMtx1 = mat4.create();
 const scratchMtx2 = mat4.create();
 
@@ -61,7 +61,7 @@ class SkelAnimController {
     private boneMatrices: mat4[] = [];
     private animations: Mk64Anim[];
 
-    constructor(private renderCache: GfxRenderCache, private rspState: MkRSPState, setupDL: number, skeletonOffs: number, animListOffs: number, animCount: number) {
+    constructor(private globals: Mk64Globals, setupDL: number, skeletonOffs: number, animListOffs: number, animCount: number) {
         this.bones = this.getSkeleton(skeletonOffs, setupDL);
         this.animations = this.getAnimations(animListOffs, animCount);
         this.curAnim = 0;
@@ -71,7 +71,7 @@ class SkelAnimController {
     private getSkeleton(segOffset: number, setupDL: number): Mk64Bone[] {
         const skeleton: Mk64Bone[] = [];
 
-        const buffer = this.rspState.segmentBuffers[(segOffset >>> 24)];
+        const buffer = this.globals.segmentBuffers[(segOffset >>> 24)];
         const view = buffer.createDataView();
 
         let offs = segOffset & 0x00FFFFFF;
@@ -79,7 +79,7 @@ class SkelAnimController {
 
         this.boneMatrices = nArray(boneCount, () => mat4.create());
 
-        F3DEX.runDL_F3DEX(this.rspState, setupDL);
+        F3DEX.runDL_F3DEX(this.globals.rspState, setupDL);
 
         for (let i = 0; i < boneCount; i++) {
             const bone = new Mk64Bone();
@@ -96,7 +96,7 @@ class SkelAnimController {
             vec3.set(bone.pos, posX, posY, posZ);
 
             if (dl !== 0) {
-                bone.mesh = initRendererFromDL(this.renderCache, this.rspState, dl);
+                bone.mesh = this.globals.initRendererFromDL(dl);
             }
 
             offs += 0x18;
@@ -110,7 +110,7 @@ class SkelAnimController {
 
     private getAnimations(animsSegOffset: number, animCount: number): Mk64Anim[] {
         const animations: Mk64Anim[] = [];
-        const buffer = this.rspState.segmentBuffers[(animsSegOffset >>> 24)];
+        const buffer = this.globals.segmentBuffers[(animsSegOffset >>> 24)];
         const view = buffer.createDataView();
 
         const animListOffs = (animsSegOffset & 0xFFFFFF);
@@ -218,9 +218,9 @@ class SkelAnimController {
             computeModelMatrixSRT(boneMtx, 1, 1, 1, rotX, rotY, rotZ, bone.pos[0], bone.pos[1], bone.pos[2]);
 
             if (i === 0) {
-                this.boneMatrices[1][12] += getTrackFrameValue(anim.translationTrack.x);
-                this.boneMatrices[1][13] += getTrackFrameValue(anim.translationTrack.y);
-                this.boneMatrices[1][14] += getTrackFrameValue(anim.translationTrack.z);
+                boneMtx[12] += getTrackFrameValue(anim.translationTrack.x);
+                boneMtx[13] += getTrackFrameValue(anim.translationTrack.y);
+                boneMtx[14] += getTrackFrameValue(anim.translationTrack.z);
             }
 
             const parentBoneMatrix = bone.parentIndex >= 0 ? this.boneMatrices[bone.parentIndex] : this.boneMatrices[0];
@@ -1656,23 +1656,21 @@ class Entity {
     }
 
 
-    public updateTextures(renderCache: GfxRenderCache, rspState: MkRSPState, dramAddr: number, dramPalAddr: number): void {
+    public updateTextures(globals: Mk64Globals, dramAddr: number, dramPalAddr: number): void {
         assert(this.modelInst !== undefined);
-
-        const cacheKey = hashFromValues([dramAddr, dramPalAddr]);
 
         for (const drawCallInst of this.modelInst.drawCallInstances) {
             const tex0 = drawCallInst.textureEntry[0];
 
             if (tex0 !== undefined && tex0.dramAddr === this.textureListAddr && tex0.dramPalAddr === this.texLutListAddr) {
-                const texture = getGfxTexture(renderCache, cacheKey, rspState, dramAddr, dramPalAddr, tex0.tile);
+                const texture = globals.getGfxTexture(dramAddr, dramPalAddr, tex0.tile);
 
                 drawCallInst.textureMappings[0].gfxTexture = texture;
             }
         }
     }
 
-    public updateTextures2D(renderCache: GfxRenderCache, rspState: MkRSPState, fullHeight: number, fullWidth: number, heightDivisor: number): void {
+    public updateTextures2D(globals: Mk64Globals, fullHeight: number, fullWidth: number, heightDivisor: number): void {
         assert(this.modelInst !== undefined);
         assert((fullHeight / heightDivisor) === this.modelInst.drawCallInstances.length);
 
@@ -1683,10 +1681,9 @@ class Entity {
             const drawCallInst = this.modelInst.drawCallInstances[i];
 
             const tex0 = drawCallInst.textureEntry[0];
-            const cacheKey = hashFromValues([dramAddr, dramPalAddr]);
 
             if (tex0 !== undefined) {
-                const texture = getGfxTexture(renderCache, cacheKey, rspState, dramAddr, dramPalAddr, tex0.tile);
+                const texture = globals.getGfxTexture(dramAddr, dramPalAddr, tex0.tile);
 
                 drawCallInst.textureMappings[0].gfxTexture = texture;
             }
@@ -1709,52 +1706,92 @@ class Entity {
     }
 }
 
+export class Mk64Globals {
+    public gfxTextureCache: Map<string, GfxTexture> = new Map();
+    public modelCache = new Map<number, BasicRspRenderer>();
+
+    public renderHelper: GfxRenderHelper;
+    public renderCache: GfxRenderCache;
+
+    public rspState: MkRSPState;
+    public commonShadowMdl: BasicRspRenderer;
+
+    public isMirrorMode = false;
+    public waterLevel = 0;
+    public waterVelocity = -0.1;
+    public nearestTrackSectionId = 0;
+    public nearestPathPointIdx = 0;
+
+    public hasCameraMoved: boolean = false;
+    public cameraPos: vec3 = vec3.create();
+    public cameraFwd: vec3 = vec3.create();
+    public cameraYaw: number = 0.0;
+    public cameraSpeed: number = 0.0;
+
+    constructor(device: GfxDevice, public segmentBuffers: ArrayBufferSlice[], public courseId: CourseId) {
+        this.rspState = new MkRSPState(segmentBuffers);
+        this.rspState.initStateMk64();
+
+        this.renderHelper = new GfxRenderHelper(device);
+        this.renderCache = this.renderHelper.renderCache;
+
+        this.commonShadowMdl = this.initRendererFromDL(0x0D007B20);
+        this.commonShadowMdl.setPrimColor8(20, 20, 20, 0);
+    }
+
+    public getGfxTexture(dramAddr: number, dramPalAddr: number, tile: RDP.TileState): GfxTexture {
+        const cacheKey = `${dramAddr}_${dramPalAddr}`;
+        if (this.gfxTextureCache.has(cacheKey)) {
+            return this.gfxTextureCache.get(cacheKey)!;
+        }
+
+        const textureCache = this.rspState.textureCache;
+
+        const texIndex = textureCache.translateTileTexture(this.segmentBuffers, dramAddr, dramPalAddr, tile, false);
+        const gfxTexture = RDP.translateToGfxTexture(this.renderCache.device, textureCache.textures[texIndex]);
+
+        this.gfxTextureCache.set(cacheKey, gfxTexture);
+
+        return gfxTexture;
+    }
+
+    // M-1: Yay! We can get away with a horrible cache method in this game
+    public initRendererFromDL(dl: number, isBillboard: boolean = false, renderLayer: Mk64RenderLayer = 0): BasicRspRenderer {
+        if (this.modelCache.has(dl)) {
+            //Clear in case any DLs have been run
+            this.rspState.clear();
+            return this.modelCache.get(dl)!;
+        }
+
+        F3DEX.runDL_F3DEX(this.rspState, dl);
+        const renderer = new BasicRspRenderer(this.renderCache, this.rspState.finish(), isBillboard, renderLayer);
+
+        this.modelCache.set(dl, renderer);
+
+        return renderer;
+    }
+}
+
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [
     { numUniformBuffers: 3, numSamplers: 2, },
 ];
 
 export class Mk64Renderer implements Viewer.SceneGfx {
-    public static courseId: CourseId;
-    public static gfxTextureCache: Map<number, GfxTexture> = new Map();
-    public static modelCache = new Map<number, BasicRspRenderer>();
-
-    private commonShadow: BasicRspRenderer;
-    private flagMdl: BasicRspRenderer;
-
-    public nearestTrackSection = 0;
-    public nearestPathPointIdx = 0;
-    public driveInReverse: boolean = false;
-    public trackOffsetPosition: vec3 = vec3.create();
-
-
-    // Camera junk... I didn't expect to need all this
-    public hasCameraMoved: boolean = false;
-    public screenSize: vec2 = vec2.create();
-    public cameraPos: vec3 = vec3.create();
-    public cameraForward: vec3 = vec3.create();
-    public cameraFovY: number = 0.0;
-    public cameraYaw: number = 0.0;
-    public cameraSpeed: number = 0.0;
-
     private renderStartBanner = true;
     private isCloudsEnabled = false;
     private isFogEnabled = false;
-    public isMirrorMode = false;
-
 
     // Render hacks
     private enableActors: boolean = true;
     private enableObjects: boolean = true;
     public enableUnusedGfx: boolean = false;
 
-    public textureHolder: TextureHolder<any>
-    public renderHelper: GfxRenderHelper;
-    public renderCache: GfxRenderCache;
-    public rspState: MkRSPState;
+    public textureHolder: TextureHolder<any>;
 
     private skyRenderer: Mk64SkyRenderer;
     private courseInstOpa: BasicRspRenderer | null;
     private courseInstXlu: BasicRspRenderer | null;
+    private flagMdl: BasicRspRenderer;
 
     private renderInstListSky = new GfxRenderInstList();
     private renderInstListMain = new GfxRenderInstList();
@@ -1764,7 +1801,6 @@ export class Mk64Renderer implements Viewer.SceneGfx {
 
     // Actors & Objects
     public actors: Actor[] = [];
-    public itemBoxActors: Actor[] = [];
 
     public collision: Collision = new Collision();
     public cloudObjects: Entity[] = [];
@@ -1772,58 +1808,44 @@ export class Mk64Renderer implements Viewer.SceneGfx {
     public gObjectParticle2: Entity[] = nArray(255, () => new Entity(0));
     public gObjectParticle3: Entity[] = nArray(150, () => new Entity(0));
 
+    public flagPos: vec3 = vec3.create();
     public xOrientation = 1.0; //TODO (M-1): Handle mirror mode
-
-    /**D_80165834*/
-    public lightDirection = vec3.create();
-
-    /**D_80165760*/
-    private splineControlX = vec4.create();
-    /**D_80165770*/
-    private splineControlY = vec4.create();
-    /**D_80165770*/
-    private splineControlZ = vec4.create();
+    public trackOffsetPosition: vec3 = vec3.create();
+    /**D_80165834*/ public lightDirection = vec3.create();
+    /**D_80165760*/ private splineControlX = vec4.create();
+    /**D_80165770*/ private splineControlY = vec4.create();
+    /**D_80165770*/ private splineControlZ = vec4.create();
 
     public trackPath: Mk64Point[] = [];
     public trackPathLeft: Mk64Point[];
     public trackPathRight: Mk64Point[];
-    public gVehicle2DPathPoint: vec2[] = [];
-    public gVehicle2DPathLength = 0;
-    public flagPos: vec3 = vec3.create();
+    public vehiclePath2D: vec2[] = [];
+    public vehiclePath2DLength = 0;
 
-    public waterLevel = 0;
-    public waterVelocity = -0.1;
-
-    private lastFrameAdvance = 0;
-
-    constructor(device: GfxDevice, private segmentBuffers: ArrayBufferSlice[]) {
-        this.renderHelper = new GfxRenderHelper(device);
-        this.renderCache = this.renderHelper.renderCache;
-
-        const courseId = Mk64Renderer.courseId;
+    constructor(public globals: Mk64Globals) {
+        const courseId = globals.courseId;
         const courseInfo = dCourseData[courseId];
 
         const topColor = colorNewFromRGBA8(dMapSkyColors[courseId].top);
         const bottomColor = colorNewFromRGBA8(dMapSkyColors[courseId].bottom);
 
-        this.skyRenderer = new Mk64SkyRenderer(this.renderCache, topColor, bottomColor);
+        this.skyRenderer = new Mk64SkyRenderer(globals.renderCache, topColor, bottomColor);
 
         if (courseInfo.trackPath) {
-            this.trackPath = readPathData(this.segmentBuffers, courseInfo.trackPath);
+            this.trackPath = readPathData(globals.segmentBuffers, courseInfo.trackPath);
             this.calculateTrackBoundaries();
 
             const flagPos = this.trackPath[0].pos;
             vec3.set(this.flagPos, flagPos[0], (flagPos[1] - 15), flagPos[2]);
 
             if (courseId === CourseId.ToadsTurnpike) {
-                this.flagPos[0] = (this.isMirrorMode) ? (flagPos[0] + 138) : (flagPos[0] - 138);
+                this.flagPos[0] = (globals.isMirrorMode) ? (flagPos[0] + 138) : (flagPos[0] - 138);
             } else if (courseId === CourseId.WarioStadium) {
-                this.flagPos[0] = (this.isMirrorMode) ? (flagPos[0] + 12) : (flagPos[0] - 12);
+                this.flagPos[0] = (globals.isMirrorMode) ? (flagPos[0] + 12) : (flagPos[0] - 12);
             }
         }
 
-        const rspState = this.rspState = new MkRSPState(this.segmentBuffers);
-        rspState.initStateMk64();
+        const rspState = globals.rspState;
 
         //course light
         rspState.setLight1(Light1.InitLight(255, 255, 255, 175, 175, 175, 0, 0, 120));
@@ -1855,12 +1877,12 @@ export class Mk64Renderer implements Viewer.SceneGfx {
                 drawCall.textureIndices[0] |= 0x0F000000;
             }
 
-            this.courseInstOpa = new BasicRspRenderer(this.renderCache, baseOutputOpa);
-            Mk64Renderer.modelCache.set(courseInfo.courseOpa, this.courseInstOpa);
+            this.courseInstOpa = new BasicRspRenderer(globals.renderCache, baseOutputOpa);
+            globals.modelCache.set(courseInfo.courseOpa, this.courseInstOpa);
         }
 
         if (courseInfo.courseXlu) {
-            this.courseInstXlu = this.initRendererFromDL(courseInfo.courseXlu, false, Mk64RenderLayer.Xlu);
+            this.courseInstXlu = globals.initRendererFromDL(courseInfo.courseXlu, false, Mk64RenderLayer.Xlu);
 
             //HACK! Render after item boxes. The game doesn't do this, but we can look at courses from a new perspective now
             if (courseId === CourseId.WarioStadium)
@@ -1873,7 +1895,7 @@ export class Mk64Renderer implements Viewer.SceneGfx {
         }
 
         // Generate collision grid
-        this.waterLevel = Collision.initCourseCollision(courseId, segmentBuffers);
+        Collision.initCourseCollision(globals);
 
         //actor light
         rspState.setLight1(Light1.InitLight(255, 255, 255, 115, 115, 115, 0, 0, 120));
@@ -1927,16 +1949,13 @@ export class Mk64Renderer implements Viewer.SceneGfx {
             });
         }
 
-        if (this.isMirrorMode)
+        if (globals.isMirrorMode)
             this.xOrientation = -1.0;
 
-        this.commonShadow = this.initRendererFromDL(0x0D007B20);
-        this.commonShadow.setPrimColor8(20, 20, 20, 0x00);
-
         if (this.isFogEnabled)
-            this.flagMdl = this.initRendererFromDL(0x0D05BBA0);
+            this.flagMdl = globals.initRendererFromDL(0x0D05BBA0);
         else
-            this.flagMdl = this.initRendererFromDL(0x0D05BBC0);
+            this.flagMdl = globals.initRendererFromDL(0x0D05BBC0);
 
         if (courseId === CourseId.BigDonut || courseId === CourseId.BlockFort ||
             courseId === CourseId.Skyscraper || courseId === CourseId.DoubleDeck
@@ -1947,33 +1966,26 @@ export class Mk64Renderer implements Viewer.SceneGfx {
     }
 
     public prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
+        const globals = this.globals;
         const isPaused = viewerInput.deltaTime === 0;
-        const renderInstManager = this.renderHelper.renderInstManager;
-
-        let update = false;
-        this.lastFrameAdvance += viewerInput.deltaTime;
-        if (this.lastFrameAdvance >= (1 / 60) * 1000) {
-            this.lastFrameAdvance = 0;
-            update = true;
-        }
+        const renderHelper = globals.renderHelper;
+        const renderInstManager = renderHelper.renderInstManager;
 
         SCENE_TIME = viewerInput.time;
         DELTA_TIME = clamp(getTimeInFrames(viewerInput.deltaTime, 30), 0, 1.5);
 
         computeViewMatrix(scratchMtx1, viewerInput.camera);
-        const camPos = mat4.getTranslation(this.cameraPos, viewerInput.camera.worldMatrix);
-        const cameraForward = vec3.set(this.cameraForward, scratchMtx1[8], scratchMtx1[9], -scratchMtx1[10]);
+        const camPos = mat4.getTranslation(globals.cameraPos, viewerInput.camera.worldMatrix);
+        const cameraForward = vec3.set(globals.cameraFwd, scratchMtx1[8], scratchMtx1[9], -scratchMtx1[10]);
 
-        this.cameraFovY = viewerInput.camera.fovY;
-        this.cameraYaw = Math.atan2(cameraForward[0], cameraForward[2]);
-        this.screenSize = [viewerInput.backbufferWidth, viewerInput.backbufferHeight];
-        this.cameraSpeed = vec3.length(viewerInput.camera.linearVelocity) / DELTA_TIME;
+        globals.cameraYaw = Math.atan2(cameraForward[0], cameraForward[2]);
+        globals.cameraSpeed = vec3.length(viewerInput.camera.linearVelocity) / DELTA_TIME;
 
-        this.nearestTrackSection = this.collision.getNearestTrackSectionId(camPos);
-        this.nearestPathPointIdx = this.getNearestTrackPathPoint(camPos, this.nearestTrackSection);
+        globals.nearestTrackSectionId = this.collision.getNearestTrackSectionId(camPos);
+        globals.nearestPathPointIdx = this.getNearestTrackPathPoint(camPos, globals.nearestTrackSectionId);
 
 
-        const template = this.renderHelper.pushTemplateRenderInst();
+        const template = renderHelper.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
 
         const skyProjMtx = mat4.ortho(scratchMtx2, 0, viewerInput.backbufferWidth, viewerInput.backbufferHeight, 0, -1, 1);
@@ -1983,13 +1995,13 @@ export class Mk64Renderer implements Viewer.SceneGfx {
 
         // Sky, clouds, stars
         renderInstManager.setCurrentList(this.renderInstListSky);
-        this.skyRenderer.prepareToRender(renderInstManager, viewerInput);
+        this.skyRenderer.prepareToRender(renderInstManager);
 
         // Set wireframe after because I don't want the sky to be wireframe
         template.setMegaStateFlags({ wireframe: IS_WIREFRAME });
 
         if (this.isCloudsEnabled) {
-            this.updateClouds();
+            this.updateClouds(viewerInput);
             this.renderClouds(renderInstManager, viewerInput);
         }
 
@@ -2029,16 +2041,16 @@ export class Mk64Renderer implements Viewer.SceneGfx {
             if (!isPaused) {
                 this.updateObjects();
             }
-            this.prepareToRenderObjects(this.renderCache, renderInstManager, viewerInput);
+            this.prepareToRenderObjects(renderInstManager, viewerInput);
         }
 
         //Collision.drawDebug(viewerInput);
 
         renderInstManager.popTemplate();
-        this.renderHelper.prepareToRender();
+        renderHelper.prepareToRender();
 
-        this.hasCameraMoved = !mat4.equals(lastViewMtx, viewerInput.camera.worldMatrix);
-        mat4.copy(lastViewMtx, viewerInput.camera.worldMatrix);
+        globals.hasCameraMoved = !mat4.equals(lastCamWorldMtx, viewerInput.camera.worldMatrix);
+        mat4.copy(lastCamWorldMtx, viewerInput.camera.worldMatrix);
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
@@ -2047,7 +2059,8 @@ export class Mk64Renderer implements Viewer.SceneGfx {
 
         this.sceneTexture.setDescription(device, mainColorDesc);
 
-        const builder = this.renderHelper.renderGraph.newGraphBuilder();
+        const renderHelper = this.globals.renderHelper;
+        const builder = renderHelper.renderGraph.newGraphBuilder();
 
         const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
         builder.pushPass((pass) => {
@@ -2058,7 +2071,7 @@ export class Mk64Renderer implements Viewer.SceneGfx {
             pass.exec((passRenderer) => {
                 this.framebufferTextureMapping.gfxTexture = this.sceneTexture.getTextureForSampling();
                 this.renderInstListMain.resolveLateSamplerBinding('framebuffer', this.framebufferTextureMapping);
-                this.renderInstListSky.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
+                this.renderInstListSky.drawOnPassRenderer(this.globals.renderCache, passRenderer);
             });
         });
         const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
@@ -2067,10 +2080,10 @@ export class Mk64Renderer implements Viewer.SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
+                this.renderInstListMain.drawOnPassRenderer(this.globals.renderCache, passRenderer);
             });
         });
-        this.renderHelper.antialiasingSupport.pushPasses(builder, viewerInput, mainColorTargetID);
+        renderHelper.antialiasingSupport.pushPasses(builder, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         builder.pushPass((pass) => {
@@ -2080,14 +2093,14 @@ export class Mk64Renderer implements Viewer.SceneGfx {
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, this.sceneTexture.getTextureForResolving());
 
         this.prepareToRender(device, viewerInput);
-        this.renderHelper.renderGraph.execute(builder);
+        renderHelper.renderGraph.execute(builder);
         this.renderInstListSky.reset();
         this.renderInstListMain.reset();
     }
 
     public renderCourseAnimatedMdls(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void { }
 
-    public prepareToRenderObjects(cache: GfxRenderCache, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void { }
+    public prepareToRenderObjects(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void { }
 
     public updateCourseAnims(deltaTime: number): void { }
 
@@ -2099,6 +2112,7 @@ export class Mk64Renderer implements Viewer.SceneGfx {
 
     public createPanels(): UI.Panel[] {
         const renderHacksPanel = new UI.Panel();
+        const globals = this.globals;
 
         renderHacksPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
         renderHacksPanel.setTitle(UI.RENDER_HACKS_ICON, 'Render Hacks');
@@ -2115,7 +2129,7 @@ export class Mk64Renderer implements Viewer.SceneGfx {
         enableVertexColorsCheckbox.onchanged = () => {
             const checked = enableVertexColorsCheckbox.checked;
 
-            Mk64Renderer.modelCache.forEach(o => o.setVertexColorsEnabled(checked));
+            globals.modelCache.forEach(o => o.setVertexColorsEnabled(checked));
         };
         renderHacksPanel.contents.appendChild(enableVertexColorsCheckbox.elem);
 
@@ -2123,16 +2137,16 @@ export class Mk64Renderer implements Viewer.SceneGfx {
         enableTextures.onchanged = () => {
             const checked = enableTextures.checked;
 
-            Mk64Renderer.modelCache.forEach(o => o.setTexturesEnabled(checked));
+            globals.modelCache.forEach(o => o.setTexturesEnabled(checked));
         };
         renderHacksPanel.contents.appendChild(enableTextures.elem);
 
-        if (Mk64Renderer.courseId === CourseId.ToadsTurnpike || Mk64Renderer.courseId === CourseId.ChocoMountain) {
+        if (globals.courseId === CourseId.ToadsTurnpike || globals.courseId === CourseId.ChocoMountain) {
             const enableFog = new UI.Checkbox('Enable Fog', true);
             enableFog.onchanged = () => {
                 const checked = enableFog.checked;
 
-                Mk64Renderer.modelCache.forEach(o => o.setFogEnabled(checked));
+                globals.modelCache.forEach(o => o.setFogEnabled(checked));
             };
             renderHacksPanel.contents.appendChild(enableFog.elem);
         }
@@ -2145,7 +2159,7 @@ export class Mk64Renderer implements Viewer.SceneGfx {
 
         const enableCullingCheckbox = new UI.Checkbox('Enable Culling', true);
         enableCullingCheckbox.onchanged = () => {
-            Mk64Renderer.modelCache.forEach(o => o.setBackfaceCullingEnabled(enableCullingCheckbox.checked));
+            globals.modelCache.forEach(o => o.setBackfaceCullingEnabled(enableCullingCheckbox.checked));
 
             // HACK! I want to keep this one on
             this.flagMdl.setBackfaceCullingEnabled(true);
@@ -2155,13 +2169,13 @@ export class Mk64Renderer implements Viewer.SceneGfx {
         const enableAlphaVisualizer = new UI.Checkbox('Visualize Vertex Alpha', false);
         enableAlphaVisualizer.onchanged = () => {
             const checked = enableAlphaVisualizer.checked;
-            Mk64Renderer.modelCache.forEach(o => o.setAlphaVisualizerEnabled(checked));
+            globals.modelCache.forEach(o => o.setAlphaVisualizerEnabled(checked));
         };
         renderHacksPanel.contents.appendChild(enableAlphaVisualizer.elem);
 
-        if (Mk64Renderer.courseId === CourseId.BowserCastle ||
-            Mk64Renderer.courseId === CourseId.KoopaBeach ||
-            Mk64Renderer.courseId === CourseId.DkJungle
+        if (globals.courseId === CourseId.BowserCastle ||
+            globals.courseId === CourseId.KoopaBeach ||
+            globals.courseId === CourseId.DkJungle
         ) {
             const enableUnusedGfx = new UI.Checkbox('Enable Unused Graphics', false);
             enableUnusedGfx.onchanged = () => { this.enableUnusedGfx = enableUnusedGfx.checked; };
@@ -2186,7 +2200,7 @@ export class Mk64Renderer implements Viewer.SceneGfx {
     }
 
     private calculateTrackBoundaries(): void {
-        const pathWidth = dCourseCpuMaxSeparation[Mk64Renderer.courseId];
+        const pathWidth = dCourseCpuMaxSeparation[this.globals.courseId];
         const pointCount = this.trackPath.length;
         this.trackPathLeft = [];
         this.trackPathRight = [];
@@ -2246,7 +2260,7 @@ export class Mk64Renderer implements Viewer.SceneGfx {
                 break;
         }
 
-        actor.init(this.renderCache, this.rspState);
+        actor.init(this.globals);
 
         this.actors.push(actor);
         return actor;
@@ -2258,7 +2272,7 @@ export class Mk64Renderer implements Viewer.SceneGfx {
         if (actorType === ActorType.JungleTree)
             isDkJungleTrees = true;
 
-        const actorSpawns = readActorSpawnData(this.segmentBuffers[6], actorTableOffset, isDkJungleTrees);
+        const actorSpawns = readActorSpawnData(this.globals.segmentBuffers[6], actorTableOffset, isDkJungleTrees);
 
         for (let i = 0; i < actorSpawns.length; i++) {
             const spawnData = actorSpawns[i];
@@ -2273,10 +2287,10 @@ export class Mk64Renderer implements Viewer.SceneGfx {
     private spawnFoliage(actorTableOffset: number): void {
         let actorType: ActorType = ActorType.Unused0x01;
 
-        const actorSpawns = readActorSpawnData(this.segmentBuffers[6], actorTableOffset);
+        const actorSpawns = readActorSpawnData(this.globals.segmentBuffers[6], actorTableOffset);
 
         for (let i = 0; i < actorSpawns.length; i++) {
-            switch (Mk64Renderer.courseId) {
+            switch (this.globals.courseId) {
                 case CourseId.MarioRaceway: actorType = ActorType.TreeMarioRaceway; break;
                 case CourseId.BowserCastle: actorType = ActorType.BushBowsersCastle; break;
                 case CourseId.YoshiValley: actorType = ActorType.TreeYoshiValley; break;
@@ -2320,7 +2334,7 @@ export class Mk64Renderer implements Viewer.SceneGfx {
     }
 
     public generate2DPath(pathSrc: Mk64Point[]): void {
-        this.gVehicle2DPathPoint = [];
+        this.vehiclePath2D = [];
         const numPathPoints = pathSrc.length;
 
         let lastX = pathSrc[0].pos[0];
@@ -2360,14 +2374,14 @@ export class Mk64Renderer implements Viewer.SceneGfx {
 
                 const isFirstPoint = (i === 0 && t === 0.0);
                 if (distanceSum > 20.0 || isFirstPoint) {
-                    const finalX = this.isMirrorMode ? -interpX : interpX;
-                    this.gVehicle2DPathPoint.push(vec2.fromValues(finalX, interpZ));
+                    const finalX = this.globals.isMirrorMode ? -interpX : interpX;
+                    this.vehiclePath2D.push(vec2.fromValues(finalX, interpZ));
                     distanceSum = 0.0;
                 }
             }
         }
 
-        this.gVehicle2DPathLength = this.gVehicle2DPathPoint.length;
+        this.vehiclePath2DLength = this.vehiclePath2D.length;
     }
 
     public initClouds(cloudList: Mk64Cloud[], cloudTex: number): void {
@@ -2387,13 +2401,13 @@ export class Mk64Renderer implements Viewer.SceneGfx {
                 cloud.activeTexture = cloudTex + (cloudData.subType * 0x400);
                 cloud.setTextureVtx(64, 32, 0x0D005FB0);
 
-                cloud.modelInst = this.initRendererFromDL(0x0D05BB48);
+                cloud.modelInst = this.globals.initRendererFromDL(0x0D05BB48);
 
             } else {
                 cloud.objectType = EntityType.Star;
                 cloud.activeTexture = 0x0D0293D8;
                 cloud.setTextureVtx(16, 16, 0x0D005FB0);
-                cloud.modelInst = this.initRendererFromDL(0x0D05BAF0);
+                cloud.modelInst = this.globals.initRendererFromDL(0x0D05BAF0);
             }
 
             cloud.modelInst.isOrthographic = true;
@@ -2402,13 +2416,13 @@ export class Mk64Renderer implements Viewer.SceneGfx {
         }
     }
 
-    public updateClouds(): void {
-        const screenW = this.screenSize[0];
-        const screenH = this.screenSize[1];
+    public updateClouds(viewerInput: Viewer.ViewerRenderInput): void {
+        const screenW = viewerInput.backbufferWidth;
+        const screenH = viewerInput.backbufferHeight;
         const aspectRatio = screenW / screenH;
         const screenCenterX = screenW / 2;
 
-        const fovX = 2 * Math.atan(Math.tan(this.cameraFovY / 2) * aspectRatio);
+        const fovX = 2 * Math.atan(Math.tan(viewerInput.camera.fovY / 2) * aspectRatio);
 
         const halfFovX = fovX / 2;
 
@@ -2425,7 +2439,7 @@ export class Mk64Renderer implements Viewer.SceneGfx {
                 }
             }
 
-            let deltaAngle = normalizeAngle(cloudObj.direction[1] + this.cameraYaw);
+            let deltaAngle = normalizeAngle(cloudObj.direction[1] + this.globals.cameraYaw);
 
             if (Math.abs(deltaAngle) <= fovX) {
 
@@ -2446,18 +2460,20 @@ export class Mk64Renderer implements Viewer.SceneGfx {
                 const drawCallInst = cloudObj.modelInst.drawCallInstances[0];
                 const tex0 = drawCallInst.textureEntry[0];
 
-                const texture = getGfxTexture(this.renderCache, cloudObj.activeTexture, this.rspState, cloudObj.activeTexture, 0, tex0.tile);
+                const texture = this.globals.getGfxTexture(cloudObj.activeTexture, 0, tex0.tile);
 
                 drawCallInst.textureMappings[0].gfxTexture = texture;
             }
 
             //Default = 0.8
             //MooMoo and Yoshi = 0.7333
-            const verticalScale = 1;
+            //const verticalScale = 1;
 
-            const scale = cloudObj.scale.value * this.screenSize[1];
+            const screenH = viewerInput.backbufferHeight;
+            const scale = cloudObj.scale.value * screenH;
+
             const x = cloudObj.splineTargetX;
-            const y = (this.screenSize[1] / 2) - (cloudObj.splineTargetZ * (this.screenSize[1] * verticalScale));
+            const y = (screenH / 2) - (cloudObj.splineTargetZ * screenH);
 
             computeModelMatrixSRT(scratchMtx1, scale, scale, 0, 0, 0, 0, x, y, 0);
 
@@ -2475,8 +2491,8 @@ export class Mk64Renderer implements Viewer.SceneGfx {
         const posXZ = vec2.set(scratchVec2a, pos[0], pos[2]);
 
         for (let i = pathPointIndex - 2; i < pathPointIndex + 7; i++) {
-            const pointIdx = mod(i, this.gVehicle2DPathLength);
-            const distanceSq = vec2.sqrDist(this.gVehicle2DPathPoint[pointIdx], posXZ);
+            const pointIdx = mod(i, this.vehiclePath2DLength);
+            const distanceSq = vec2.sqrDist(this.vehiclePath2D[pointIdx], posXZ);
 
             if (distanceSq < minimumDistance) {
                 minimumDistance = distanceSq;
@@ -2497,11 +2513,11 @@ export class Mk64Renderer implements Viewer.SceneGfx {
         const nearestIndex = this.findNearestPathPoint2D(originalPos, pathPointIndex.value);
         pathPointIndex.value = nearestIndex;
 
-        const pathPointIdx1 = mod(nearestIndex + 3, this.gVehicle2DPathLength);
-        const pathPointIdx2 = mod(nearestIndex + 4, this.gVehicle2DPathLength);
+        const pathPointIdx1 = mod(nearestIndex + 3, this.vehiclePath2DLength);
+        const pathPointIdx2 = mod(nearestIndex + 4, this.vehiclePath2DLength);
 
-        const pathPoint1 = this.gVehicle2DPathPoint[pathPointIdx1];
-        const pathPoint2 = this.gVehicle2DPathPoint[pathPointIdx2];
+        const pathPoint1 = this.vehiclePath2D[pathPointIdx1];
+        const pathPoint2 = this.vehiclePath2D[pathPointIdx2];
 
         const targetX = (pathPoint1[0] + pathPoint2[0]) * 0.5;
         const targetZ = (pathPoint1[1] + pathPoint2[1]) * 0.5;
@@ -2714,7 +2730,7 @@ export class Mk64Renderer implements Viewer.SceneGfx {
     public calcPathTargetYaw(p0: vec3, p1: vec3): number {
         const yaw = calcTargetAngleY(p0, p1);
 
-        if (this.isMirrorMode) {
+        if (this.globals.isMirrorMode) {
             return -yaw;
         }
         return yaw;
@@ -2834,7 +2850,7 @@ export class Mk64Renderer implements Viewer.SceneGfx {
 
     //func_8008A8B0
     public isPlayerInTrackSection(min: number, max: number): boolean {
-        if (this.nearestTrackSection >= min && this.nearestTrackSection <= max) {
+        if (this.globals.nearestTrackSectionId >= min && this.globals.nearestTrackSectionId <= max) {
             return true;
         }
 
@@ -2853,19 +2869,19 @@ export class Mk64Renderer implements Viewer.SceneGfx {
     }
 
     public IsFacingCamera(objectYaw: number, tolerance: number): boolean {
-        const yawBinAngle = this.cameraYaw * RadToBinAngle;
+        const yawBinAngle = this.globals.cameraYaw * RadToBinAngle;
         const angleDiff = (yawBinAngle - objectYaw + (tolerance >> 1)) & 0xFFFF;
 
         return angleDiff <= tolerance;
     }
 
     public IsBehindCamera(pos: vec3): boolean {
+        const globals = this.globals;
 
-        const yawRad = this.cameraYaw;
-        const dx = pos[0] - this.cameraPos[0];
-        const dz = pos[2] - this.cameraPos[2];
+        const dx = pos[0] - globals.cameraPos[0];
+        const dz = pos[2] - globals.cameraPos[2];
 
-        return (dx * Math.sin(yawRad) + dz * Math.cos(yawRad)) < 0;
+        return vec2.dot([globals.cameraFwd[0], globals.cameraFwd[2]], [dx, dz]) < 0;
     }
 
     /**func_8004A7AC*/
@@ -2875,7 +2891,7 @@ export class Mk64Renderer implements Viewer.SceneGfx {
 
             calcModelMatrix(scratchMtx1, scratchVec3b, [0x4000, 0, 0], scale);
 
-            this.commonShadow.prepareToRender(renderInstManager, viewerInput, scratchMtx1);
+            this.globals.commonShadowMdl.prepareToRender(renderInstManager, viewerInput, scratchMtx1);
         }
     }
 
@@ -2884,92 +2900,58 @@ export class Mk64Renderer implements Viewer.SceneGfx {
         if (obj.isFlagActive(EntityFlags.HasShadow) && obj.isFlagActive(EntityFlags.IsOnSurface)) {
             vec3.set(scratchVec3b, obj.pos[0], obj.surfaceHeight + 0.8, obj.pos[2]);
             calcModelMatrix(scratchMtx1, scratchVec3b, obj.shadowDir, scale);
-            this.commonShadow.prepareToRender(renderInstManager, viewerInput, scratchMtx1);
+            this.globals.commonShadowMdl.prepareToRender(renderInstManager, viewerInput, scratchMtx1);
         }
-    }
-
-    // M-1: Yay! We can get away with a horrible cache method in this game
-    public initRendererFromDL(dl: number, isBillboard: boolean = false, renderLayer: Mk64RenderLayer = 0): BasicRspRenderer {
-        return initRendererFromDL(this.renderCache, this.rspState, dl, isBillboard, renderLayer);
     }
 
     public initRenderer2D(tlut: number, dramAddr: number, vertices: number, setupDL: number, fullHeight: number, fullWidth: number, heightDivisor: number, texMask: number = -1): BasicRspRenderer {
         const hash = hashFromValues([tlut, dramAddr, vertices, fullHeight, fullWidth, heightDivisor]);
+        const globals = this.globals;
 
-        if (Mk64Renderer.modelCache.has(hash)) {
-            return Mk64Renderer.modelCache.get(hash)!;
+        if (this.globals.modelCache.has(hash)) {
+            return this.globals.modelCache.get(hash)!;
         }
 
-        F3DEX.runDL_F3DEX(this.rspState, setupDL);
+        F3DEX.runDL_F3DEX(globals.rspState, setupDL);
 
-        this.rspState.gDPLoadTLUT_pal256(tlut);
+        globals.rspState.gDPLoadTLUT_pal256(tlut);
         for (let i = 0; i < fullHeight / heightDivisor; i++) {
 
             if (texMask >= 0) {
-                this.rspState.rsp_load_texture_mask(dramAddr, fullWidth, heightDivisor, texMask);
+                globals.rspState.rsp_load_texture_mask(dramAddr, fullWidth, heightDivisor, texMask);
             }
             else {
-                this.rspState.rsp_load_texture(dramAddr, fullWidth, heightDivisor);
+                globals.rspState.rsp_load_texture(dramAddr, fullWidth, heightDivisor);
             }
 
-            this.rspState.gSPVertex(vertices, 4, 0);
-            F3DEX.runDL_F3DEX(this.rspState, 0x0D006940);//common rectangle disp
+            globals.rspState.gSPVertex(vertices, 4, 0);
+            F3DEX.runDL_F3DEX(globals.rspState, 0x0D006940);
 
             dramAddr += fullWidth * (heightDivisor - 1);
             vertices += 4 * 0x10;
         }
 
-        const renderer = new BasicRspRenderer(this.renderCache, this.rspState.finish(), true);
+        const renderer = new BasicRspRenderer(globals.renderCache, globals.rspState.finish(), true);
 
-        Mk64Renderer.modelCache.set(hash, renderer);
+        this.globals.modelCache.set(hash, renderer);
 
         return renderer;
     }
 
     public destroy(device: GfxDevice): void {
-        this.actors.forEach(o => o.destroy(device));
+        this.globals.modelCache.forEach(o => o.destroy(device));
+        this.globals.gfxTextureCache.forEach(o => device.destroyTexture(o));
 
-        Mk64Renderer.modelCache.forEach(o => o.destroy(device));
-        Mk64Renderer.gfxTextureCache.forEach(o => device.destroyTexture(o));
+        this.globals.modelCache.clear();
+        this.globals.gfxTextureCache.clear();
 
-        Mk64Renderer.modelCache.clear();
-        Mk64Renderer.gfxTextureCache.clear();
-
-        this.renderHelper.destroy();
-        this.renderCache.destroy();
+        this.globals.renderHelper.destroy();
     }
-}
-
-// Ugly.....
-function getGfxTexture(cache: GfxRenderCache, texCacheKey: number, rspState: MkRSPState, dramAddr: number, dramPalAddr: number, tile: RDP.TileState): GfxTexture {
-    if (Mk64Renderer.gfxTextureCache.has(texCacheKey)) {
-        return Mk64Renderer.gfxTextureCache.get(texCacheKey)!;
-    }
-
-    const texIndex = rspState.textureCache.translateTileTexture(rspState.segmentBuffers, dramAddr, dramPalAddr, tile, false);
-    const gfxTexture = RDP.translateToGfxTexture(cache.device, rspState.textureCache.textures[texIndex]);
-
-    Mk64Renderer.gfxTextureCache.set(texCacheKey, gfxTexture);
-
-    return gfxTexture;
-}
-
-function initRendererFromDL(renderCache: GfxRenderCache, rspState: MkRSPState, dl: number, isBillboard: boolean = false, renderLayer: Mk64RenderLayer = 0): BasicRspRenderer {
-    if (Mk64Renderer.modelCache.has(dl)) {
-        return Mk64Renderer.modelCache.get(dl)!;
-    }
-
-    F3DEX.runDL_F3DEX(rspState, dl);
-    const renderer = new BasicRspRenderer(renderCache, rspState.finish(), isBillboard, renderLayer);
-
-    Mk64Renderer.modelCache.set(dl, renderer);
-
-    return renderer;
 }
 
 export class MarioRacewayRenderer extends Mk64Renderer {
-    constructor(device: GfxDevice, segmentBuffers: ArrayBufferSlice[]) {
-        super(device, segmentBuffers);
+    constructor(globals: Mk64Globals) {
+        super(globals);
 
         const sign0 = this.spawnActor(ActorType.MarioSign, [150, 40, -1300]);
         const sign1 = this.spawnActor(ActorType.MarioSign, [2520, 0, 1240]);
@@ -2979,8 +2961,8 @@ export class MarioRacewayRenderer extends Mk64Renderer {
 }
 
 export class WarioStadiumRenderer extends Mk64Renderer {
-    constructor(device: GfxDevice, segmentBuffers: ArrayBufferSlice[]) {
-        super(device, segmentBuffers);
+    constructor(globals: Mk64Globals) {
+        super(globals);
 
         const warioSign0 = this.spawnActor(ActorType.WarioSign, [-131, 83, 286]);
         const warioSign1 = this.spawnActor(ActorType.WarioSign, [-2353, 72, -1608]);
@@ -2992,10 +2974,10 @@ export class RoyalRacewayRenderer extends Mk64Renderer {
     private ramps: BasicRspRenderer;
     private rampUlt = 0;
 
-    constructor(device: GfxDevice, segmentBuffers: ArrayBufferSlice[]) {
-        super(device, segmentBuffers);
+    constructor(globals: Mk64Globals) {
+        super(globals);
 
-        this.ramps = this.initRendererFromDL(0x0600E0E0);
+        this.ramps = this.globals.initRendererFromDL(0x0600E0E0);
     }
 
     public override renderCourseAnimatedMdls(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
@@ -3046,16 +3028,16 @@ export class BowsersCastleRenderer extends Mk64Renderer {
     private fireBreathMdl: BasicRspRenderer;
     private firePillarMdl: BasicRspRenderer;
 
-    constructor(device: GfxDevice, segmentBuffers: ArrayBufferSlice[]) {
-        super(device, segmentBuffers);
+    constructor(globals: Mk64Globals) {
+        super(globals);
 
-        const thwompMdl = this.initRendererFromDL(0x06009500);
-        this.thwompShard = this.initRendererFromDL(0x06009688);
+        const thwompMdl = globals.initRendererFromDL(0x06009500);
+        this.thwompShard = globals.initRendererFromDL(0x06009688);
         this.thwompShard.setLight(dThwompLights[2]);
 
-        this.dustMdl = this.initRendererFromDL(0x06009560, true);
-        this.fireBreathMdl = this.initRendererFromDL(0x06009600, true);
-        this.firePillarMdl = this.initRendererFromDL(0x060095B0, true);
+        this.dustMdl = globals.initRendererFromDL(0x06009560, true);
+        this.fireBreathMdl = globals.initRendererFromDL(0x06009600, true);
+        this.firePillarMdl = globals.initRendererFromDL(0x060095B0, true);
 
         for (const spawnData of dThwompSpawns150CC) {
             const obj: Entity = new Entity(0);
@@ -3088,7 +3070,7 @@ export class BowsersCastleRenderer extends Mk64Renderer {
         }
     }
 
-    override prepareToRenderObjects(cache: GfxRenderCache, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+    override prepareToRenderObjects(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
 
         this.calcThwompLightDir(dThwompLights[0].direction, this.lightDirection);
 
@@ -3100,7 +3082,7 @@ export class BowsersCastleRenderer extends Mk64Renderer {
 
                 calcModelMatrix(scratchMtx1, object.pos, object.orientation, object.scale.value);
 
-                object.updateTextures(this.renderCache, this.rspState, object.activeTexture, object.activeTLUT);
+                object.updateTextures(this.globals, object.activeTexture, object.activeTLUT);
                 object.modelInst.setLight(light);
                 object.modelInst.prepareToRender(renderInstManager, viewerInput, scratchMtx1);
             }
@@ -3203,7 +3185,7 @@ export class BowsersCastleRenderer extends Mk64Renderer {
                 }
             }
 
-            if (thwomp.isFlagActive(EntityFlags.IsCollisionActive) && IsTargetInRangeXYZ(thwomp.pos, this.cameraPos, 25.0)) {
+            if (thwomp.isFlagActive(EntityFlags.IsCollisionActive) && IsTargetInRangeXYZ(thwomp.pos, this.globals.cameraPos, 25.0)) {
                 this.spawnThwompShards(thwomp.pos);
                 thwomp.clearFlags(EntityFlags.IsCollisionActive);
                 thwomp.setEventFlags(ThwompEventFlags.IsKilled);
@@ -3224,9 +3206,9 @@ export class BowsersCastleRenderer extends Mk64Renderer {
 
             if (thwomp.isEventFlagActive(ThwompEventFlags.IsFalling)) {
 
-                const verticalDist = Math.abs(thwomp.pos[1] - this.cameraPos[1]);
+                const verticalDist = Math.abs(thwomp.pos[1] - this.globals.cameraPos[1]);
 
-                if ((verticalDist <= 17.5) && IsTargetInRangeXZ(thwomp.pos, this.cameraPos, 50.0)) {
+                if ((verticalDist <= 17.5) && IsTargetInRangeXZ(thwomp.pos, this.globals.cameraPos, 50.0)) {
                     thwomp.setEventFlags(ThwompEventFlags.HasCrushedPlayer);
                 }
             }
@@ -3333,7 +3315,7 @@ export class BowsersCastleRenderer extends Mk64Renderer {
 
     /**func_8007F75C*/
     private setupChaserEvent(): void {
-        const nearestPoint = this.nearestPathPointIdx;
+        const nearestPoint = this.globals.nearestPathPointIdx;
 
         if ((nearestPoint >= 0xAA) && (nearestPoint < 0xB5)) {
             const zigzagTimer = random_int(0x32) + 0x32;
@@ -3356,7 +3338,7 @@ export class BowsersCastleRenderer extends Mk64Renderer {
                     thwomp.setEventFlags(ThwompEventFlags.IsChasingPlayer);
                     thwomp.initActionState();
                     thwomp.actionBehaviorType = 2;
-                    thwomp.targetPos[0] = this.cameraPos[0] - thwomp.originPos[0];
+                    thwomp.targetPos[0] = this.globals.cameraPos[0] - thwomp.originPos[0];
                     thwomp.nearestPlayerId = 0;
                 }
             }
@@ -3522,7 +3504,7 @@ export class BowsersCastleRenderer extends Mk64Renderer {
         object.originPos[1] = 0;
         object.setOffset(0, 0, 0);
 
-        if (this.isMirrorMode) {
+        if (this.globals.isMirrorMode) {
             object.setDirection(0, 0x4000, 0);
             object.setOrientation(0, 0x4000, 0);
         } else {
@@ -3558,7 +3540,7 @@ export class BowsersCastleRenderer extends Mk64Renderer {
                 break;
             case 4:
                 if (object.isEventFlagInactive(ThwompEventFlags.IsTurningAround) &&
-                    IsTargetInRangeXZ(object.pos, this.cameraPos, 300.0) &&
+                    IsTargetInRangeXZ(object.pos, this.globals.cameraPos, 300.0) &&
                     !this.IsBehindCamera(object.pos) &&
                     this.IsFacingCamera(object.direction[1], 0x1555)) {
                     object.setEventFlags(ThwompEventFlags.IsTurningAround);
@@ -3591,7 +3573,7 @@ export class BowsersCastleRenderer extends Mk64Renderer {
         object.originPos[1] = 0;
         object.setOffset(0, 20, 0);
         object.targetPos[1] = 20;
-        if (this.isMirrorMode) {
+        if (this.globals.isMirrorMode) {
             object.setDirection(0, 0x4000, 0);
             object.setOrientation(0, 0x4000, 0);
         } else {
@@ -3810,7 +3792,7 @@ export class BowsersCastleRenderer extends Mk64Renderer {
         object.originPos[1] = 0;
         object.setOffset(0, 0, 0);
         object.setDirection(0, 0, 0);
-        if (this.isMirrorMode) {
+        if (this.globals.isMirrorMode) {
             object.setOrientation(0, 0xC000, 0);
         } else {
             object.setOrientation(0, 0x4000, 0);
@@ -3872,15 +3854,15 @@ export class BowsersCastleRenderer extends Mk64Renderer {
                 break;
             case 2:
 
-                if (IsTargetInRangeXZ(object.pos, this.cameraPos, 100)) {
-                    object.velocity[0] = this.cameraSpeed * DELTA_TIME * (this.xOrientation * 1.25);
+                if (IsTargetInRangeXZ(object.pos, this.globals.cameraPos, 100)) {
+                    object.velocity[0] = this.globals.cameraSpeed * DELTA_TIME * (this.xOrientation * 1.25);
                 }
                 else {
                     object.velocity[0] = 1.25 * DELTA_TIME;
                 }
 
                 if (object.userTimer >= object.actionTimer) {
-                    if (isNearFrameTime(object.actionTimer, object.userTimer)) {
+                    if (crossedTime(object.actionTimer, object.userTimer)) {
                         if (Math.floor(SCENE_TIME) % 2 === 1) {
                             object.velocity[2] = 1.5;
                         } else {
@@ -3903,13 +3885,13 @@ export class BowsersCastleRenderer extends Mk64Renderer {
                 if (object.actionTimer < 101) {
                     object.orientation[1] = stepTowardsAngle(object.orientation[1], (object.direction[1] + 0x8000));
 
-                    if (isNearFrameTime(object.actionTimer, 100)) {
+                    if (crossedTime(object.actionTimer, 100)) {
                         object.texIndex = 1;
                     }
                 }
 
                 let isOutOfBounds: boolean = false;
-                if (this.isMirrorMode) {
+                if (this.globals.isMirrorMode) {
                     if (object.offset[0] <= -1000.0) {
                         isOutOfBounds = true;
                     }
@@ -3978,7 +3960,7 @@ export class BowsersCastleRenderer extends Mk64Renderer {
         object.originPos[1] = 0;
         object.setOffset(0, 0, 0);
         object.targetPos[1] = 30.0;
-        if (this.isMirrorMode) {
+        if (this.globals.isMirrorMode) {
             object.setOrientation(0, 0x4000, 0);
         } else {
             object.setOrientation(0, 0xC000, 0);
@@ -4035,7 +4017,7 @@ export class BowsersCastleRenderer extends Mk64Renderer {
         object.surfaceHeight = 0.0;
         object.originPos[1] = 0.0;
         object.targetPos[1] = 10.0;
-        if (this.isMirrorMode) {
+        if (this.globals.isMirrorMode) {
             object.setOrientation(0, 0x4000, 0);
         } else {
             object.setOrientation(0, 0xC000, 0);
@@ -4055,7 +4037,7 @@ export class BowsersCastleRenderer extends Mk64Renderer {
                 this.initCagedThwomp(object);
                 break;
             case 2:
-                object.updateVisibilityFlags(this.cameraPos, 100.0);
+                object.updateVisibilityFlags(this.globals.cameraPos, 100.0);
                 if (object.isFlagActive(EntityFlags.IsVisible)) {
                     //func_800C98B8(object.pos, object.velocity, SOUND_ARG_LOAD(0x19, 0x01, 0x80, 0x45));
                     object.advanceState();
@@ -4095,7 +4077,7 @@ export class BowsersCastleRenderer extends Mk64Renderer {
         object.setDirection(0, 0, 0);
         object.actionBehaviorType = 2;
 
-        if (this.isMirrorMode) {
+        if (this.globals.isMirrorMode) {
             object.setOrientation(0, 0xC000, 0);
         } else {
             object.setOrientation(0, 0x4000, 0);
@@ -4304,7 +4286,7 @@ export class BowsersCastleRenderer extends Mk64Renderer {
 
         if (rootS.timer <= 0) {
 
-            rootS.updateVisibilityFlags(this.cameraPos, 700.0);
+            rootS.updateVisibilityFlags(this.globals.cameraPos, 700.0);
 
             if ((rootS.isFlagActive(EntityFlags.IsVisible)) && (rootS.isEventFlagInactive(FireBreathFlags.HasFireStarted))) {
 
@@ -4350,7 +4332,7 @@ export class BowsersCastleRenderer extends Mk64Renderer {
         // }
 
         if (rootF.timer <= 0) {
-            rootF.updateVisibilityFlags(this.cameraPos, 750);
+            rootF.updateVisibilityFlags(this.globals.cameraPos, 750);
             if ((rootF.isFlagActive(EntityFlags.IsVisible)) && rootF.isEventFlagInactive(FireBreathFlags.HasFireStarted)) {
                 rootF.setEventFlags(FireBreathFlags.HasFireStarted);
                 this.spawnFireBreathLarge(rootF.pos, 1.0);
@@ -4408,7 +4390,7 @@ export class BowsersCastleRenderer extends Mk64Renderer {
             object.setScale(1);
             vec3.copy(object.originPos, spawnPos);
             object.setDirection(0x0C00, 0x2100, 0);
-            if (this.isMirrorMode) {
+            if (this.globals.isMirrorMode) {
                 object.direction[1] += -0x4000;
             }
             object.userValB.value = 0x00FF;
@@ -4580,8 +4562,8 @@ export class FrappeSnowlandRenderer extends Mk64Renderer {
     private snowmanBodyMdl: BasicRspRenderer;
     private snowmanHeadMdl: BasicRspRenderer;
 
-    constructor(device: GfxDevice, segmentBuffers: ArrayBufferSlice[]) {
-        super(device, segmentBuffers);
+    constructor(globals: Mk64Globals) {
+        super(globals);
 
         for (const spawnData of dSnowmanSpawns) {
             const snowmanHead = new Entity(0);
@@ -4603,11 +4585,11 @@ export class FrappeSnowlandRenderer extends Mk64Renderer {
         this.snowmanHeadMdl = this.initRenderer2D(snowmanTexLUT, snowmanHeadTex, 0x0D05C2B0, 0x0D007D78, 64, 64, 32);
         this.snowmanBodyMdl = this.initRenderer2D(snowmanTexLUT, snowmanBodyTex, 0x0D05C2B0, 0x0D007D78, 64, 64, 32);
 
-        this.snowMdl = this.initRendererFromDL(0x06007B20, true);
-        this.snowFlakeMdl = this.initRendererFromDL(0x06007BD0, true);
+        this.snowMdl = globals.initRendererFromDL(0x06007B20, true);
+        this.snowFlakeMdl = globals.initRendererFromDL(0x06007BD0, true);
     }
 
-    override prepareToRenderObjects(cache: GfxRenderCache, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+    override prepareToRenderObjects(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         for (let i = 0; i < dSnowmanSpawns.length; i++) {
             const bodyObj = this.snowmanBodyObjs[i];
             const headObj = this.snowmanHeadObjs[i];
@@ -4635,7 +4617,7 @@ export class FrappeSnowlandRenderer extends Mk64Renderer {
             }
         }
 
-        if (this.cameraPos[1] > this.waterLevel) {
+        if (this.globals.cameraPos[1] > this.globals.waterLevel) {
             for (let i = 0; i < snowflakeParticleMax; i++) {
                 const snowflakeObj = this.snowflakeObjs[i];
 
@@ -4671,7 +4653,7 @@ export class FrappeSnowlandRenderer extends Mk64Renderer {
 
             if (bodyObj.isFlagInactive(EntityFlags.HasBeenHit)) {
 
-                if ((this.cameraPos[1] > 0 && this.cameraPos[1] < 15) && IsTargetInRangeXZ(bodyObj.pos, this.cameraPos, bodyObj.boundingBoxSize)) {
+                if ((this.globals.cameraPos[1] > 0 && this.globals.cameraPos[1] < 15) && IsTargetInRangeXZ(bodyObj.pos, this.globals.cameraPos, bodyObj.boundingBoxSize)) {
                     bodyObj.setFlags(EntityFlags.HasBeenHit);
                     bodyObj.clearFlags(EntityFlags.IsRenderingActive);
 
@@ -4721,11 +4703,11 @@ export class FrappeSnowlandRenderer extends Mk64Renderer {
             case 1:
                 const heightOffset = random_int(200) - 100;
                 const forwardOffset = random_int(200) + 0x1E;
-                const yaw = this.cameraYaw + Math.random() * 2 * Math.PI;
+                const yaw = this.globals.cameraYaw + Math.random() * 2 * Math.PI;
 
-                object.originPos[0] = this.cameraPos[0] + Math.sin(yaw) * forwardOffset;
-                object.originPos[1] = this.cameraPos[1] + heightOffset;
-                object.originPos[2] = this.cameraPos[2] + Math.cos(yaw) * forwardOffset;
+                object.originPos[0] = this.globals.cameraPos[0] + Math.sin(yaw) * forwardOffset;
+                object.originPos[1] = this.globals.cameraPos[1] + heightOffset;
+                object.originPos[2] = this.globals.cameraPos[2] + Math.cos(yaw) * forwardOffset;
 
                 object.directionStep = (random_int(0x0400) + 0x100);
                 object.targetPos[0] = ((random_int(0x0064) * 0.03) + 2.0);
@@ -4734,8 +4716,8 @@ export class FrappeSnowlandRenderer extends Mk64Renderer {
                 object.offset[1] = 0.0;
                 object.advanceActionState();
 
-                object.primAlpha.value = this.hasCameraMoved ? 50 : 0; // alpha
-                object.userValA.value = this.hasCameraMoved ? 50 : 20; // alpha step
+                object.primAlpha.value = this.globals.hasCameraMoved ? 50 : 0; // alpha
+                object.userValA.value = this.globals.hasCameraMoved ? 50 : 20; // alpha step
                 break;
             case 2:
 
@@ -4750,11 +4732,9 @@ export class FrappeSnowlandRenderer extends Mk64Renderer {
 
                 object.updatePosition();
 
-                if (object.pos[1] < this.waterLevel || this.IsBehindCamera(object.pos) || !IsTargetInRangeXYZ(object.pos, this.cameraPos, 250)) {
+                if (object.pos[1] < this.globals.waterLevel || this.IsBehindCamera(object.pos) || !IsTargetInRangeXYZ(object.pos, this.globals.cameraPos, 250)) {
                     object.advanceActionState();
                 }
-
-                object.orientation[1] = Math.atan2(object.pos[0] - this.cameraPos[0], object.pos[2] - this.cameraPos[2]) * RadToBinAngle;//angle_between_object_camera(camera1);
                 break;
             case 3:
                 object.resetAllActionStates();
@@ -4955,8 +4935,8 @@ export class LuigiRacewayRenderer extends Mk64Renderer {
     private actor: ActorItemBox;
     private balloonObj: Entity;
 
-    constructor(device: GfxDevice, segmentBuffers: ArrayBufferSlice[]) {
-        super(device, segmentBuffers);
+    constructor(globals: Mk64Globals) {
+        super(globals);
 
         this.actor = this.spawnActor(ActorType.HotAirBalloonItemBox) as ActorItemBox;
 
@@ -4971,10 +4951,10 @@ export class LuigiRacewayRenderer extends Mk64Renderer {
         balloon.initActionState();
         balloon.velocity[1] = -2.0;
         balloon.advanceState();
-        balloon.modelInst = this.initRendererFromDL(0x060102B0);
+        balloon.modelInst = globals.initRendererFromDL(0x060102B0);
     }
 
-    override prepareToRenderObjects(cache: GfxRenderCache, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+    override prepareToRenderObjects(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         const balloon = this.balloonObj;
 
         if (balloon.state >= 2) {
@@ -5066,12 +5046,12 @@ export class YoshiValleyRenderer extends Mk64Renderer {
 
     private flagFrameTime: number = 0;
 
-    constructor(device: GfxDevice, segmentBuffers: ArrayBufferSlice[]) {
-        super(device, segmentBuffers);
+    constructor(globals: Mk64Globals) {
+        super(globals);
 
         const egg = this.spawnActor(ActorType.YoshiEgg, [-2300, 0, 634]);
 
-        this.flagAnimCtrl = new SkelAnimController(this.renderCache, this.rspState, 0x0D0077A0, 0x060185E0, 0x06014794, 1);
+        this.flagAnimCtrl = new SkelAnimController(globals, 0x0D0077A0, 0x060185E0, 0x06014794, 1);
 
         for (let i = 0; i < dFlagPoleSpawns.length; i++) {
             const flagSpawn = dFlagPoleSpawns[i];
@@ -5095,7 +5075,7 @@ export class YoshiValleyRenderer extends Mk64Renderer {
         this.hedgehogMdl = this.initRenderer2D(0x06014908, 0x06014B08, 0x0D0060B0, 0x0D007D78, 64, 64, 32);
         this.hedgehogMdlMirrored = this.initRenderer2D(0x06014908, 0x06014B08, 0x0D006130, 0x0D007D78, 64, 64, 32);
 
-        this.hedgehogShadowMdl = this.initRendererFromDL(0x0D007B98);
+        this.hedgehogShadowMdl = globals.initRendererFromDL(0x0D007B98);
         this.hedgehogShadowMdl.setPrimColor8(20, 20, 20, 0);
 
         for (let i = 0; i < dHedgehogSpawns.length; i++) {
@@ -5114,7 +5094,7 @@ export class YoshiValleyRenderer extends Mk64Renderer {
         }
     }
 
-    override prepareToRenderObjects(cache: GfxRenderCache, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+    override prepareToRenderObjects(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
 
         for (const hedgehog of this.hedgehogObjs) {
             if (hedgehog.isFlagActive(EntityFlags.IsVisible)) {
@@ -5232,16 +5212,16 @@ export class KoopaBeachRenderer extends Mk64Renderer {
     private crabObjs: Entity[] = [];
     private seagullObjs: Entity[] = [];
 
-    constructor(device: GfxDevice, segmentBuffers: ArrayBufferSlice[]) {
-        super(device, segmentBuffers);
+    constructor(globals: Mk64Globals) {
+        super(globals);
 
         const itemBoxOnShell = this.spawnActor(ActorType.HotAirBalloonItemBox, [328, 70, 2541]);
 
-        this.waterfallMdl = this.initRendererFromDL(0x06019A1C, false, Mk64RenderLayer.Water);
-        this.waterMainMdl = this.initRendererFromDL(0x06019888, false, Mk64RenderLayer.Water);
-        this.waterSplashMdl = this.initRendererFromDL(0x06019A44, false, Mk64RenderLayer.Water);//Unused
+        this.waterfallMdl = globals.initRendererFromDL(0x06019A1C, false, Mk64RenderLayer.Water);
+        this.waterMainMdl = globals.initRendererFromDL(0x06019888, false, Mk64RenderLayer.Water);
+        this.waterSplashMdl = globals.initRendererFromDL(0x06019A44, false, Mk64RenderLayer.Water);//Unused
 
-        this.seagullAnimCtrl = new SkelAnimController(this.renderCache, this.rspState, 0x0D0077D0, 0x06019910, 0x06016B60, 1);
+        this.seagullAnimCtrl = new SkelAnimController(globals, 0x0D0077D0, 0x06019910, 0x06016B60, 1);
 
         const crabMdl = this.initRenderer2D(0x0600D628, 0x0600D828, 0x0D05C2B0, 0x0D007D78, 64, 64, 32);
 
@@ -5301,19 +5281,20 @@ export class KoopaBeachRenderer extends Mk64Renderer {
             this.waterSplashMdl.prepareToRender(renderInstManager, viewerInput);
         }
 
-        vec3.set(scratchVec3a, 0, this.waterLevel, 0);
+        vec3.set(scratchVec3a, 0, this.globals.waterLevel, 0);
         calcModelMatrix(scratchMtx1, scratchVec3a);
         this.waterMainMdl.prepareToRender(renderInstManager, viewerInput, scratchMtx1);
     }
 
     override updateCourseAnims(deltaTime: number): void {
-        if ((this.waterVelocity < 0 && this.waterLevel <= -20) ||
-            (this.waterVelocity > 0 && this.waterLevel >= 0)) {
-            this.waterVelocity *= -1;
+        const globals = this.globals;
+        if ((globals.waterVelocity < 0 && globals.waterLevel <= -20) ||
+            (globals.waterVelocity > 0 && globals.waterLevel >= 0)) {
+            globals.waterVelocity *= -1;
         }
 
-        this.waterLevel += this.waterVelocity * deltaTime;
-        this.waterLevel = clamp(this.waterLevel, -20, 0.01);
+        globals.waterLevel += globals.waterVelocity * deltaTime;
+        globals.waterLevel = clamp(globals.waterLevel, -20, 0.01);
 
         this.waterfallUlt = mod(this.waterfallUlt + (9 * deltaTime), 256);
         this.waterpoolUlt = mod(this.waterpoolUlt + (3 * deltaTime), 256);
@@ -5327,7 +5308,7 @@ export class KoopaBeachRenderer extends Mk64Renderer {
         }
     }
 
-    override prepareToRenderObjects(cache: GfxRenderCache, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+    override prepareToRenderObjects(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
 
         let numCrabs = this.enableUnusedGfx ? this.crabObjs.length : 10;
 
@@ -5336,7 +5317,7 @@ export class KoopaBeachRenderer extends Mk64Renderer {
 
             if (crab.state >= 2) {
                 this.renderShadowOnSurface(crab, renderInstManager, viewerInput, 0.5);
-                crab.updateTextures2D(cache, this.rspState, 64, 64, 32);
+                crab.updateTextures2D(this.globals, 64, 64, 32);
 
                 calcModelMatrix(scratchMtx1, crab.pos, crab.orientation, crab.scale.value);
                 crab.modelInst.prepareToRender(renderInstManager, viewerInput, scratchMtx1);
@@ -5510,8 +5491,8 @@ export class BansheeBoardwalkRenderer extends Mk64Renderer {
     private IsBooGroupASpawned: boolean = false;//D_8018CFF0
     private IsBooGroupBSpawned: boolean = false;//D_8018D048
 
-    constructor(device: GfxDevice, segmentBuffers: ArrayBufferSlice[]) {
-        super(device, segmentBuffers);
+    constructor(globals: Mk64Globals) {
+        super(globals);
 
         const bat = this.batObj = new Entity(0);
         this.coffinObj = new Entity(0);
@@ -5520,22 +5501,22 @@ export class BansheeBoardwalkRenderer extends Mk64Renderer {
 
         // Boo is at 0x03009000 + (0x0780 * i)
 
-        this.coffinObj.modelInst = this.initRendererFromDL(0x0600B840);
+        this.coffinObj.modelInst = globals.initRendererFromDL(0x0600B840);
 
         bat.setTextureList(0x06007BB8, 0x06007DB8, 32, 64);
         bat.setOrientation(0, 0, 0x8000);
         bat.updateActiveTexture();
-        bat.modelInst = this.initRendererFromDL(0x0600B7D8, true);
+        bat.modelInst = globals.initRendererFromDL(0x0600B7D8, true);
 
         this.booMdlA = this.initRenderer2D(0x06005C80, 0x03009000, 0x0D005D70, 0x0600B858, 40, 48, 40);//D_800E44B0
         this.booMdlB = this.initRenderer2D(0x06005C80, 0x03009000, 0x0D005D30, 0x0600B858, 40, 48, 40);//D_800E4470
-        this.booShadowMdl = this.initRendererFromDL(0x0D007B98);
+        this.booShadowMdl = globals.initRendererFromDL(0x0D007B98);
         this.booShadowMdl.setPrimColor8(20, 20, 20, 0);
 
-        this.cheepCheepObj.modelInst = this.initRendererFromDL(0x0600B768);
+        this.cheepCheepObj.modelInst = globals.initRendererFromDL(0x0600B768);
     }
 
-    override prepareToRenderObjects(cache: GfxRenderCache, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+    override prepareToRenderObjects(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         const coffin = this.coffinObj;
 
         if (coffin.state >= 2) {
@@ -5544,7 +5525,7 @@ export class BansheeBoardwalkRenderer extends Mk64Renderer {
         }
 
         const batObj = this.batObj;
-        batObj.updateTextures(cache, this.rspState, batObj.activeTexture, batObj.activeTLUT);
+        batObj.updateTextures(this.globals, batObj.activeTexture, batObj.activeTLUT);
 
         const renderBats = (particles: Entity[], count: number): void => {
             for (let i = 0; i < count; i++) {
@@ -5571,7 +5552,7 @@ export class BansheeBoardwalkRenderer extends Mk64Renderer {
             if (boo.state >= 2) {
                 if (boo.isFlagActive(EntityFlags.HasShadow) && isSurfaceUnderneath(this.collision, boo.pos)) {
                     scratchVec3a[0] = boo.pos[0];
-                    scratchVec3a[1] = 0.8 + this.collision.calculateSurfaceHeight(boo.pos[0], 0, boo.pos[2], this.collision.nearestTriIndexY)
+                    scratchVec3a[1] = 0.8 + this.collision.calculateSurfaceHeight(boo.pos[0], 0, boo.pos[2], this.collision.nearestTriIndexY);
                     scratchVec3a[2] = boo.pos[2];
 
                     calcModelMatrix(scratchMtx1, scratchVec3a, this.collision.normalY, 0.4);
@@ -5585,7 +5566,7 @@ export class BansheeBoardwalkRenderer extends Mk64Renderer {
 
                 calcModelMatrix(scratchMtx1, boo.pos, boo.orientation, boo.scale.value);
 
-                boo.updateTextures2D(this.renderCache, this.rspState, 40, 48, 40);
+                boo.updateTextures2D(this.globals, 40, 48, 40);
                 boo.modelInst.setPrimColor8(0xFF, 0xFF, 0xFF, boo.primAlpha.value);
                 boo.modelInst.prepareToRender(renderInstManager, viewerInput, scratchMtx1);
             }
@@ -5622,21 +5603,21 @@ export class BansheeBoardwalkRenderer extends Mk64Renderer {
                 this.updateBoo(boo);
                 this.tryMoveObjectAlongPath(boo);
 
-                const camForwardX = this.cameraForward[0];
-                const camForwardZ = this.cameraForward[2];
+                const camForwardX = this.globals.cameraFwd[0];
+                const camForwardZ = this.globals.cameraFwd[2];
                 const forwardOffsetX = camForwardX * 60;
                 const forwardOffsetZ = camForwardZ * 60;
 
-                const cosY = Math.cos(Math.PI - this.cameraYaw);
-                const sinY = Math.sin(Math.PI - this.cameraYaw);
+                const cosY = Math.cos(Math.PI - this.globals.cameraYaw);
+                const sinY = Math.sin(Math.PI - this.globals.cameraYaw);
 
                 const x = boo.originPos[0] + boo.offset[0];
                 const y = boo.originPos[1] + boo.offset[1];
                 const z = boo.originPos[2] + boo.offset[2];
 
-                boo.pos[0] = this.cameraPos[0] + ((cosY * x) - (sinY * z)) + forwardOffsetX;
-                boo.pos[1] = -10.4 + this.cameraPos[1] + y;
-                boo.pos[2] = this.cameraPos[2] + ((sinY * x) + (cosY * z)) + forwardOffsetZ;
+                boo.pos[0] = this.globals.cameraPos[0] + ((cosY * x) - (sinY * z)) + forwardOffsetX;
+                boo.pos[1] = -10.4 + this.globals.cameraPos[1] + y;
+                boo.pos[2] = this.globals.cameraPos[2] + ((sinY * x) + (cosY * z)) + forwardOffsetZ;
 
                 this.updateBooYaw(boo);
 
@@ -5685,7 +5666,7 @@ export class BansheeBoardwalkRenderer extends Mk64Renderer {
 
     /**func_8007CA70*/
     private checkBooSection(): void {
-        const pathPoint = this.nearestPathPointIdx;
+        const pathPoint = this.globals.nearestPathPointIdx;
 
         if (!this.IsBooGroupASpawned) {
             if ((pathPoint >= 0xC9) && (pathPoint < 0xD2)) {
@@ -5938,7 +5919,7 @@ export class BansheeBoardwalkRenderer extends Mk64Renderer {
                 // }
 
                 if (batType === BatType.Coffin) {
-                    if (this.isMirrorMode) {
+                    if (this.globals.isMirrorMode) {
                         if (object.pos[0] >= 2540.0) {
                             object.resetAllStates();
                         }
@@ -5946,7 +5927,7 @@ export class BansheeBoardwalkRenderer extends Mk64Renderer {
                         object.resetAllStates();
                     }
                 }
-                else if (this.isMirrorMode) {
+                else if (this.globals.isMirrorMode) {
                     if (object.pos[0] >= 2150.0) {
                         object.resetAllStates();
                     }
@@ -6027,7 +6008,7 @@ export class BansheeBoardwalkRenderer extends Mk64Renderer {
         object.timer = 0;
         object.historyStack[7] = 0;
         object.setOrientation(0, 0, 0);
-        if (this.isMirrorMode) {
+        if (this.globals.isMirrorMode) {
             object.pos[0] = 1765;
             object.pos[2] = 195;
             object.orientation[1] = 0x8000;
@@ -6106,7 +6087,7 @@ export class BansheeBoardwalkRenderer extends Mk64Renderer {
 
         if (object.timer <= 0) {
 
-            object.updateVisibilityFlags(this.cameraPos, distance);
+            object.updateVisibilityFlags(this.globals.cameraPos, distance);
 
             if ((object.isFlagActive(EntityFlags.IsVisible)) && (object.isEventFlagInactive(CoffinEventFlags.IsBatsSpawning))) {
 
@@ -6133,7 +6114,7 @@ export class BansheeBoardwalkRenderer extends Mk64Renderer {
 
     /**func_8007BD04*/
     private trySpawnCheepCheep(object: Entity): void {
-        if (object.state === 0 && this.nearestPathPointIdx >= 0xA0 && this.nearestPathPointIdx < 0xAB) {
+        if (object.state === 0 && this.globals.nearestPathPointIdx >= 0xA0 && this.globals.nearestPathPointIdx < 0xAB) {
             object.setOriginPosition(-1650.0 * this.xOrientation, -200.0, -1650.0);
             object.init(1);
         }
@@ -6148,7 +6129,7 @@ export class BansheeBoardwalkRenderer extends Mk64Renderer {
                 object.objectType = 0;
                 break;
             case 2:
-                if (this.isMirrorMode) {
+                if (this.globals.isMirrorMode) {
                     object.applyDirectionalVelocity(18.0, 0.7, 25.0, -0x5800, 300);
                 } else {
                     object.applyDirectionalVelocity(18.0, 0.7, 25.0, 0x5800, 300);
@@ -6194,16 +6175,16 @@ export class DkJungleRenderer extends Mk64Renderer {
     private waterUlt = 0;
     private rampUlt = 0;
 
-    constructor(device: GfxDevice, segmentBuffers: ArrayBufferSlice[]) {
-        super(device, segmentBuffers);
+    constructor(globals: Mk64Globals) {
+        super(globals);
 
-        this.water = this.initRendererFromDL(0x06014878);
-        this.ramp = this.initRendererFromDL(0x060147A0);
+        this.water = globals.initRendererFromDL(0x06014878);
+        this.ramp = globals.initRendererFromDL(0x060147A0);
 
-        this.paddleBoatMdl = this.initRendererFromDL(0x060148A0);
-        this.paddleWheelMdl = this.initRendererFromDL(0x060148C0);
+        this.paddleBoatMdl = globals.initRendererFromDL(0x060148A0);
+        this.paddleWheelMdl = globals.initRendererFromDL(0x060148C0);
 
-        this.ferryPath = readPathData(segmentBuffers, 0x06007520);
+        this.ferryPath = readPathData(this.globals.segmentBuffers, 0x06007520);
         this.generate2DPath(this.ferryPath);
 
         for (let i = 0; i < 2; i++) {
@@ -6211,9 +6192,9 @@ export class DkJungleRenderer extends Mk64Renderer {
 
             const pathIndex = (0xB4 * i);
 
-            boat.position[0] = this.gVehicle2DPathPoint[pathIndex][0];
+            boat.position[0] = this.vehiclePath2D[pathIndex][0];
             boat.position[1] = -40;
-            boat.position[2] = this.gVehicle2DPathPoint[pathIndex][1];
+            boat.position[2] = this.vehiclePath2D[pathIndex][1];
             boat.pathPointIndex.value = pathIndex;
 
             vec3.set(boat.velocity, 0, 0, 0);
@@ -6252,10 +6233,10 @@ export class DkJungleRenderer extends Mk64Renderer {
         }
 
         this.torchObjHandler.setTextureList(0, 0x0D02BC58, 32, 32);
-        this.torchObjHandler.modelInst = this.initRendererFromDL(0x060147C8, true);
+        this.torchObjHandler.modelInst = globals.initRendererFromDL(0x060147C8, true);
         this.torchObjHandler.updateActiveTexture();
 
-        this.boatSmokeMdl = this.initRendererFromDL(0x06014820, true, Mk64RenderLayer.Smoke);
+        this.boatSmokeMdl = globals.initRendererFromDL(0x06014820, true, Mk64RenderLayer.Smoke);
     }
 
     override renderCourseAnimatedMdls(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
@@ -6271,7 +6252,7 @@ export class DkJungleRenderer extends Mk64Renderer {
         this.rampUlt = mod(this.rampUlt - (20 * deltaTime), 256);
     }
 
-    override prepareToRenderObjects(cache: GfxRenderCache, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+    override prepareToRenderObjects(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
 
         const renderSmokeParticles = (object: Entity) => {
             if (object.state >= 2 && object.objectType === EntityType.FerrySmoke) {
@@ -6292,7 +6273,7 @@ export class DkJungleRenderer extends Mk64Renderer {
             const torchMdl = torchObj.modelInst;
 
             if (torchPtcl.state >= 2) {
-                this.torchObjHandler.updateTextures(cache, this.rspState, torchObj.activeTexture, torchObj.activeTLUT);
+                this.torchObjHandler.updateTextures(this.globals, torchObj.activeTexture, torchObj.activeTLUT);
 
                 calcModelMatrix(scratchMtx1, torchPtcl.pos, torchPtcl.orientation, torchPtcl.scale.value);
 
@@ -6433,12 +6414,12 @@ export class DkJungleRenderer extends Mk64Renderer {
                         paddleBoat.position[1] + 180.0,
                         paddleBoat.position[2] + 45.0
                     );
-                    rotatePositionAroundPivot(prevPosition, paddleBoat.position, paddleBoat.rotY, this.isMirrorMode);
+                    rotatePositionAroundPivot(prevPosition, paddleBoat.position, paddleBoat.rotY, this.globals.isMirrorMode);
                     this.trySpawnFerrySmoke(prevPosition, 1.1, i);
                 }
             }
 
-            const targetPoint = this.gVehicle2DPathPoint[mod(paddleBoat.pathPointIndex.value + 5, this.gVehicle2DPathLength)];
+            const targetPoint = this.vehiclePath2D[mod(paddleBoat.pathPointIndex.value + 5, this.vehiclePath2DLength)];
             const targetPathPos: vec3 = [targetPoint[0], -40, targetPoint[1]];
             const targetYaw = this.calcPathTargetYaw(prevPosition, targetPathPos);
 
@@ -6469,7 +6450,7 @@ export class DkJungleRenderer extends Mk64Renderer {
             paddleBoat.wheelRot += 0x38E * DELTA_TIME;
             vec3.sub(paddleBoat.velocity, paddleBoat.position, prevPosition);
 
-            if (this.isMirrorMode) {
+            if (this.globals.isMirrorMode) {
                 paddleBoat.rotY = -paddleBoat.rotY;
             }
         }
@@ -6522,13 +6503,13 @@ export class RainbowRoadRenderer extends Mk64Renderer {
     private chainChompAnimCtrl: SkelAnimController;
     private chainChompPathIndex: NumberHolder = { value: 0 };
 
-    constructor(device: GfxDevice, segmentBuffers: ArrayBufferSlice[]) {
-        super(device, segmentBuffers);
+    constructor(globals: Mk64Globals) {
+        super(globals);
 
-        this.chainChompAnimCtrl = new SkelAnimController(this.renderCache, this.rspState, 0x0D0077D0, 0x06016578, 0x0601610C, 1);
+        this.chainChompAnimCtrl = new SkelAnimController(globals, 0x0D0077D0, 0x06016578, 0x0601610C, 1);
     }
 
-    override prepareToRenderObjects(cache: GfxRenderCache, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+    override prepareToRenderObjects(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         for (let i = 0; i < this.neonSignsObjs.length; i++) {
             const object = this.neonSignsObjs[i];
             if (object.state >= 2 && object.isFlagInactive(EntityFlags.IsHidden)) {
@@ -6536,7 +6517,7 @@ export class RainbowRoadRenderer extends Mk64Renderer {
                     object.modelInst = this.initRenderer2D(object.activeTLUT, object.activeTexture, 0x0D05C2B0, 0x0D007D78, 64, 64, 32);
                 }
 
-                object.updateTextures2D(cache, this.rspState, 64, 64, 32);
+                object.updateTextures2D(this.globals, 64, 64, 32);
 
                 calcModelMatrix(scratchMtx1, object.pos, object.orientation, object.scale.value);
                 object.modelInst.prepareToRender(renderInstManager, viewerInput, scratchMtx1);
@@ -6779,8 +6760,8 @@ export class ToadsTurnpikeRenderer extends Mk64Renderer {
     public gTankerTruckList: Vehicle[] = [];
     public gCarList: Vehicle[] = [];
 
-    constructor(device: GfxDevice, segmentBuffers: ArrayBufferSlice[]) {
-        super(device, segmentBuffers);
+    constructor(globals: Mk64Globals) {
+        super(globals);
 
         const speed150cc = kmToSpeed(10);
         const speedA = speed150cc + kmToSpeed(55);
@@ -6811,7 +6792,7 @@ export class ToadsTurnpikeRenderer extends Mk64Renderer {
                 const ogPosX = veh.position[0];
                 const ogPosz = veh.position[2];
 
-                if (this.driveInReverse) {
+                if (this.globals.isMirrorMode) {
                     veh.rotation[1] = this.moveAlongPathReverse(veh.position, veh.pathPointIndex, veh.speed, veh.trackOffsetX);
                 } else {
                     veh.rotation[1] = this.moveAlongPath(veh.position, veh.pathPointIndex, veh.speed, veh.trackOffsetX, 3);
@@ -6828,12 +6809,12 @@ export class ToadsTurnpikeRenderer extends Mk64Renderer {
             return vehicleList;
         }
 
-        this.boxTruckMdl0 = this.initRendererFromDL(0x06023CC0);
-        this.boxTruckMdl1 = this.initRendererFromDL(0x06023D20);
-        this.boxTruckMdl2 = this.initRendererFromDL(0x06023D78);
-        this.carMdl = this.initRendererFromDL(0x06023DD0);
-        this.schoolBusMdl = this.initRendererFromDL(0x06023E18);
-        this.tankerMdl = this.initRendererFromDL(0x06023E58);
+        this.boxTruckMdl0 = globals.initRendererFromDL(0x06023CC0);
+        this.boxTruckMdl1 = globals.initRendererFromDL(0x06023D20);
+        this.boxTruckMdl2 = globals.initRendererFromDL(0x06023D78);
+        this.carMdl = globals.initRendererFromDL(0x06023DD0);
+        this.schoolBusMdl = globals.initRendererFromDL(0x06023E18);
+        this.tankerMdl = globals.initRendererFromDL(0x06023E58);
 
         this.gBoxTruckList = initVehicles(7, 0);
         this.gCarList = initVehicles(7, 25);
@@ -6841,7 +6822,7 @@ export class ToadsTurnpikeRenderer extends Mk64Renderer {
         this.gSchoolBusList = initVehicles(7, 75);
     }
 
-    override prepareToRenderObjects(cache: GfxRenderCache, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+    override prepareToRenderObjects(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         for (const truck of this.gBoxTruckList) {
 
             calcModelMatrix(scratchMtx1, truck.position, truck.rotation);
@@ -6872,19 +6853,19 @@ export class ToadsTurnpikeRenderer extends Mk64Renderer {
 
     override updateObjects(): void {
         for (const truck of this.gBoxTruckList) {
-            this.updateVehicleFollowPathPoint(truck);
+            this.updateVehicleFollowPath(truck);
         }
 
         for (const bus of this.gSchoolBusList) {
-            this.updateVehicleFollowPathPoint(bus);
+            this.updateVehicleFollowPath(bus);
         }
 
         for (const bus of this.gTankerTruckList) {
-            this.updateVehicleFollowPathPoint(bus);
+            this.updateVehicleFollowPath(bus);
         }
 
         for (const bus of this.gCarList) {
-            this.updateVehicleFollowPathPoint(bus);
+            this.updateVehicleFollowPath(bus);
         }
     }
 
@@ -6901,7 +6882,7 @@ export class ToadsTurnpikeRenderer extends Mk64Renderer {
         }
     }
 
-    private updateVehicleFollowPathPoint(vehicle: Vehicle): void {
+    private updateVehicleFollowPath(vehicle: Vehicle): void {
         const previousPos = vec3.clone(vehicle.position);
         const pitchOrigin = vec3.fromValues(vehicle.position[1], 0, 0);
         const targetOffsetX = this.getVehicleOffsetX(vehicle.laneIndex, vehicle.pathPointIndex.value);
@@ -6915,7 +6896,7 @@ export class ToadsTurnpikeRenderer extends Mk64Renderer {
 
         let angleToTarget;
 
-        if (this.driveInReverse) {
+        if (this.globals.isMirrorMode) {
             angleToTarget = this.moveAlongPathReverse(vehicle.position, vehicle.pathPointIndex, vehicle.speed, vehicle.trackOffsetX);
         }
         else {
@@ -6934,7 +6915,7 @@ export class ToadsTurnpikeRenderer extends Mk64Renderer {
 
         vec3.subtract(vehicle.velocity, vehicle.position, previousPos);
 
-        if (this.isMirrorMode) {
+        if (this.globals.isMirrorMode) {
             vehicle.rotation[1] = -vehicle.rotation[1];
         }
     }
@@ -6971,8 +6952,8 @@ export class KalamariDesertRenderer extends Mk64Renderer {
     private smallWheelMdl: BasicRspRenderer;
     private bigWheelMdl: BasicRspRenderer;
 
-    constructor(device: GfxDevice, segmentBuffers: ArrayBufferSlice[]) {
-        super(device, segmentBuffers);
+    constructor(globals: Mk64Globals) {
+        super(globals);
 
         this.crossbucks.push(this.spawnActor(ActorType.RailroadCrossing, [-1680, 2, 35]) as ActorCrossbuck);
         this.crossbucks.push(this.spawnActor(ActorType.RailroadCrossing, [-1600, 2, 35]) as ActorCrossbuck);
@@ -6981,26 +6962,26 @@ export class KalamariDesertRenderer extends Mk64Renderer {
         this.crossbucks.push(this.spawnActor(ActorType.RailroadCrossing, [-2459, 2, 2263], scratchVec3a) as ActorCrossbuck);
         this.crossbucks.push(this.spawnActor(ActorType.RailroadCrossing, [-2467, 2, 2375], scratchVec3a) as ActorCrossbuck);
 
-        this.trainTenderMdl = this.initRendererFromDL(0x060233A0);
-        this.trainCarMdl = this.initRendererFromDL(0x060233B8);
-        this.trainEngineMdl = this.initRendererFromDL(0x060233D0);
+        this.trainTenderMdl = globals.initRendererFromDL(0x060233A0);
+        this.trainCarMdl = globals.initRendererFromDL(0x060233B8);
+        this.trainEngineMdl = globals.initRendererFromDL(0x060233D0);
 
-        this.smallWheelMdl = this.initRendererFromDL(0x060233E8);
-        this.bigWheelMdl = this.initRendererFromDL(0x06023408);
-        this.smokeMdl = this.initRendererFromDL(0x06023420, true, Mk64RenderLayer.Smoke);
+        this.smallWheelMdl = globals.initRendererFromDL(0x060233E8);
+        this.bigWheelMdl = globals.initRendererFromDL(0x06023408);
+        this.smokeMdl = globals.initRendererFromDL(0x06023420, true, Mk64RenderLayer.Smoke);
 
-        const path = readPathData(segmentBuffers, 0x06006C60);
+        const path = readPathData(this.globals.segmentBuffers, 0x06006C60);
         this.generate2DPath(path);
 
-        const firstPathPoint = this.gVehicle2DPathPoint[0];
+        const firstPathPoint = this.vehiclePath2D[0];
         const trainSurfaceheight = this.collision.getSurfaceHeight(firstPathPoint[0], 2000.0, firstPathPoint[1]);
 
         for (let i = 0; i < 2; i++) {
             const train = new Train();
-            let pathPointOffset = Math.floor((((i * this.gVehicle2DPathLength) / 2) + 160) % this.gVehicle2DPathLength);
+            let pathPointOffset = Math.floor((((i * this.vehiclePath2DLength) / 2) + 160) % this.vehiclePath2DLength);
 
             const setVehiclePathPoint = (railcar: TrainCar) => {
-                const pos = this.gVehicle2DPathPoint[pathPointOffset];
+                const pos = this.vehiclePath2D[pathPointOffset];
 
                 railcar.pathPointIndex.value = pathPointOffset;
                 vec3.set(railcar.position, pos[0], trainSurfaceheight, pos[1]);
@@ -7041,7 +7022,7 @@ export class KalamariDesertRenderer extends Mk64Renderer {
         }
     }
 
-    override prepareToRenderObjects(cache: GfxRenderCache, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+    override prepareToRenderObjects(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
 
         for (let i = 0; i < this.trains.length; i++) {
             const train = this.trains[i];
@@ -7129,7 +7110,7 @@ export class KalamariDesertRenderer extends Mk64Renderer {
 
     override updateObjects(): void {
 
-        this.trainSmokeTimer += DELTA_TIME
+        this.trainSmokeTimer += DELTA_TIME;
         this.crossbucks.forEach(o => o.isTrainNearby = false);
 
         for (let i = 0; i < this.trains.length; i++) {
@@ -7148,7 +7129,7 @@ export class KalamariDesertRenderer extends Mk64Renderer {
                     locomotive.position[2] + 25.0
                 ];
 
-                rotatePositionAroundPivot(smokePos, locomotive.position, locomotive.rotation[1], this.isMirrorMode);
+                rotatePositionAroundPivot(smokePos, locomotive.position, locomotive.rotation[1], this.globals.isMirrorMode);
                 this.spawnSmokeParticle(i, smokePos, 1.1);
             }
 
@@ -7179,7 +7160,7 @@ export class KalamariDesertRenderer extends Mk64Renderer {
             }
 
             const isTrainInZone = (zoneCenter: number): boolean => {
-                const nrmPathPos = locomotive.pathPointIndex.value / this.gVehicle2DPathLength;
+                const nrmPathPos = locomotive.pathPointIndex.value / this.vehiclePath2DLength;
                 const zoneStart = zoneCenter - 0.1;
                 const zoneEnd = (train.numCars * 0.01) + zoneCenter + 0.01;
                 return nrmPathPos > zoneStart && nrmPathPos < zoneEnd;
@@ -7285,13 +7266,13 @@ export class SherbetLandRenderer extends Mk64Renderer {
     private penguinAnimCtrl: SkelAnimController;
     private penguinObjs: Entity[] = nArray(15, () => new Entity(0));
 
-    constructor(device: GfxDevice, segmentBuffers: ArrayBufferSlice[]) {
-        super(device, segmentBuffers);
+    constructor(globals: Mk64Globals) {
+        super(globals);
 
-        this.penguinAnimCtrl = new SkelAnimController(this.renderCache, this.rspState, 0x0D0077D0, 0x06009DF0, 0x06009AC8, 3);
+        this.penguinAnimCtrl = new SkelAnimController(globals, 0x0D0077D0, 0x06009DF0, 0x06009AC8, 3);
     }
 
-    override prepareToRenderObjects(cache: GfxRenderCache, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+    override prepareToRenderObjects(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
 
         for (let i = 0; i < this.penguinObjs.length; i++) {
             const penguin = this.penguinObjs[i];
@@ -7337,7 +7318,7 @@ export class SherbetLandRenderer extends Mk64Renderer {
             }
 
             if (obj.isEventFlagInactive(PenguinEventFlags.IsPenguinHit)) {
-                if (IsTargetInRangeXYZ(obj.pos, this.cameraPos, obj.boundingBoxSize)) {
+                if (IsTargetInRangeXYZ(obj.pos, this.globals.cameraPos, obj.boundingBoxSize)) {
                     obj.setFlags(EntityFlags.IsHitByStar);
                 }
             }
@@ -7408,7 +7389,7 @@ export class SherbetLandRenderer extends Mk64Renderer {
                         object.setScale(0.15);
                     }
                     object.targetDirection.value = 0x9000;
-                    if (this.isMirrorMode) {
+                    if (this.globals.isMirrorMode) {
                         object.targetDirection.value -= 0x4000;
                     }
                     object.actionBehaviorType = 3;
@@ -7416,7 +7397,7 @@ export class SherbetLandRenderer extends Mk64Renderer {
                 case 10:
                     object.setOriginPosition(this.xOrientation * 380.0, 0.0, -766.0);
                     object.targetDirection.value = 0x5000;
-                    if (this.isMirrorMode) {
+                    if (this.globals.isMirrorMode) {
                         object.targetDirection.value += 0x8000;
                     }
                     object.actionBehaviorType = 4;
@@ -7425,7 +7406,7 @@ export class SherbetLandRenderer extends Mk64Renderer {
                     object.setOriginPosition(this.xOrientation * -2300.0, 0.0, -210.0);
                     object.targetDirection.value = 0xC000;
                     object.actionBehaviorType = 6;
-                    if (this.isMirrorMode) {
+                    if (this.globals.isMirrorMode) {
                         object.targetDirection.value += 0x8000;
                     }
                     break;
@@ -7433,7 +7414,7 @@ export class SherbetLandRenderer extends Mk64Renderer {
                     object.setOriginPosition(this.xOrientation * -2500.0, 0.0, -250.0);
                     object.targetDirection.value = 0x4000;
                     object.actionBehaviorType = 6;
-                    if (this.isMirrorMode) {
+                    if (this.globals.isMirrorMode) {
                         object.targetDirection.value += 0x8000;
                     }
                     break;
@@ -7441,7 +7422,7 @@ export class SherbetLandRenderer extends Mk64Renderer {
                     object.setOriginPosition(this.xOrientation * -535.0, 0.0, 875.0);
                     object.targetDirection.value = 0x8000;
                     object.actionBehaviorType = 6;
-                    if (this.isMirrorMode) {
+                    if (this.globals.isMirrorMode) {
                         object.targetDirection.value -= 0x4000;
                     }
                     break;
@@ -7449,7 +7430,7 @@ export class SherbetLandRenderer extends Mk64Renderer {
                     object.setOriginPosition(this.xOrientation * -250.0, 0.0, 953.0);
                     object.targetDirection.value = 0x9000;
                     object.actionBehaviorType = 6;
-                    if (this.isMirrorMode) {
+                    if (this.globals.isMirrorMode) {
                         object.targetDirection.value -= 0x4000;
                     }
                     break;
@@ -7697,13 +7678,13 @@ export class MooMooFarmRenderer extends Mk64Renderer {
     private mGroupObjsC: Entity[] = nArray(12, () => new Entity(0, false));
     private molehillObjs: Entity[] = [];
 
-    constructor(device: GfxDevice, segmentBuffers: ArrayBufferSlice[]) {
-        super(device, segmentBuffers);
+    constructor(globals: Mk64Globals) {
+        super(globals);
 
-        this.molehillMdl = this.initRendererFromDL(0x0D007C10);
+        this.molehillMdl = globals.initRendererFromDL(0x0D007C10);
         this.molehillMdl.setPrimColor8(30, 10, 0, 200);
 
-        this.dirtParticleMdl = this.initRendererFromDL(0x06014720, true);
+        this.dirtParticleMdl = globals.initRendererFromDL(0x06014720, true);
 
         for (let i = 0; i < dMoleSpawns.length; i++) {
             const molehill = new Entity(0);
@@ -7730,7 +7711,7 @@ export class MooMooFarmRenderer extends Mk64Renderer {
         }
     }
 
-    override prepareToRenderObjects(cache: GfxRenderCache, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+    override prepareToRenderObjects(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         const renderMoleGroup = (objs: Entity[]): void => {
             for (const mole of objs) {
                 if (mole.state >= 3) {
@@ -7741,7 +7722,7 @@ export class MooMooFarmRenderer extends Mk64Renderer {
 
                     calcModelMatrix(scratchMtx1, mole.pos, mole.orientation, mole.scale.value);
 
-                    mole.updateTextures2D(cache, this.rspState, 64, 32, 64);
+                    mole.updateTextures2D(this.globals, 64, 32, 64);
                     mole.modelInst.prepareToRender(renderInstManager, viewerInput, scratchMtx1);
                 }
             }
@@ -7944,12 +7925,12 @@ export class MooMooFarmRenderer extends Mk64Renderer {
 
         if (object.isFlagActive(EntityFlags.IsCollisionActive)) {
 
-            const verticalDist = Math.abs(object.pos[1] - this.cameraPos[1]);
+            const verticalDist = Math.abs(object.pos[1] - this.globals.cameraPos[1]);
 
-            if ((verticalDist < 10) && IsTargetInRangeXZ(object.pos, this.cameraPos, object.boundingBoxSize)) {
-                object.direction[1] = calcTargetAngleY(this.cameraPos, object.pos);
-                object.velocity[1] = (this.cameraSpeed / 2) + 3.0;
-                object.speed.value = this.cameraSpeed + 1.0;
+            if ((verticalDist < 10) && IsTargetInRangeXZ(object.pos, this.globals.cameraPos, object.boundingBoxSize)) {
+                object.direction[1] = calcTargetAngleY(this.globals.cameraPos, object.pos);
+                object.velocity[1] = (this.globals.cameraSpeed / 2) + 3.0;
+                object.speed.value = this.globals.cameraSpeed + 1.0;
 
                 if (object.velocity[1] >= 5.0) {
                     object.velocity[1] = 5.0;

@@ -4,7 +4,7 @@ import * as Viewer from "../viewer.js";
 import { SceneContext } from "../SceneBase.js";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
-import { Mk64Renderer, MarioRacewayRenderer, BowsersCastleRenderer, BansheeBoardwalkRenderer, YoshiValleyRenderer, FrappeSnowlandRenderer, KoopaBeachRenderer, RoyalRacewayRenderer, LuigiRacewayRenderer, ToadsTurnpikeRenderer, KalamariDesertRenderer, SherbetLandRenderer, RainbowRoadRenderer, WarioStadiumRenderer, DkJungleRenderer, MooMooFarmRenderer } from "./courses.js";
+import { Mk64Renderer, MarioRacewayRenderer, BowsersCastleRenderer, BansheeBoardwalkRenderer, YoshiValleyRenderer, FrappeSnowlandRenderer, KoopaBeachRenderer, RoyalRacewayRenderer, LuigiRacewayRenderer, ToadsTurnpikeRenderer, KalamariDesertRenderer, SherbetLandRenderer, RainbowRoadRenderer, WarioStadiumRenderer, DkJungleRenderer, MooMooFarmRenderer, Mk64Globals } from "./courses.js";
 import { FakeTextureHolder } from "../TextureHolder.js";
 import { textureToCanvas } from "../BanjoKazooie/render.js";
 
@@ -39,7 +39,7 @@ export class SceneDesc implements Viewer.SceneDesc {
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const dataFetcher = context.dataFetcher;
-        const gCurrentCourseId = Mk64Renderer.courseId = this.courceId;
+        const gCurrentCourseId = this.courceId;
 
         const segTreeLuts = await dataFetcher.fetchData(`${pathBase}/TreeLuts.bin`);
         const segCommonTextures = await dataFetcher.fetchData(`${pathBase}/Segment_3_${gCurrentCourseId}.bin`);
@@ -57,38 +57,40 @@ export class SceneDesc implements Viewer.SceneDesc {
         segmentBuffers[0x6] = segCourseData;
         segmentBuffers[0x7] = segUnpackedDL;
         segmentBuffers[0xD] = segCommonData;
+        
+        const globals = new Mk64Globals(device, segmentBuffers, gCurrentCourseId);
 
         let renderer: Mk64Renderer;
 
         switch (gCurrentCourseId) {
-            case CourseId.MarioRaceway: renderer = new MarioRacewayRenderer(device, segmentBuffers); break;
-            case CourseId.BowserCastle: renderer = new BowsersCastleRenderer(device, segmentBuffers); break;
-            case CourseId.BansheeBoardwalk: renderer = new BansheeBoardwalkRenderer(device, segmentBuffers); break;
-            case CourseId.YoshiValley: renderer = new YoshiValleyRenderer(device, segmentBuffers); break;
-            case CourseId.FrappeSnowland: renderer = new FrappeSnowlandRenderer(device, segmentBuffers); break;
-            case CourseId.KoopaBeach: renderer = new KoopaBeachRenderer(device, segmentBuffers); break;
-            case CourseId.RoyalRaceway: renderer = new RoyalRacewayRenderer(device, segmentBuffers); break;
-            case CourseId.LuigiRaceway: renderer = new LuigiRacewayRenderer(device, segmentBuffers); break;
-            case CourseId.MooMooFarm: renderer = new MooMooFarmRenderer(device, segmentBuffers); break;
-            case CourseId.ToadsTurnpike: renderer = new ToadsTurnpikeRenderer(device, segmentBuffers); break;
-            case CourseId.KalamariDesert: renderer = new KalamariDesertRenderer(device, segmentBuffers); break;
-            case CourseId.SherbetLand: renderer = new SherbetLandRenderer(device, segmentBuffers); break;
-            case CourseId.RainbowRoad: renderer = new RainbowRoadRenderer(device, segmentBuffers); break;
-            case CourseId.WarioStadium: renderer = new WarioStadiumRenderer(device, segmentBuffers); break;
-            case CourseId.DkJungle: renderer = new DkJungleRenderer(device, segmentBuffers); break;
+            case CourseId.MarioRaceway: renderer = new MarioRacewayRenderer(globals); break;
+            case CourseId.BowserCastle: renderer = new BowsersCastleRenderer(globals); break;
+            case CourseId.BansheeBoardwalk: renderer = new BansheeBoardwalkRenderer(globals); break;
+            case CourseId.YoshiValley: renderer = new YoshiValleyRenderer(globals); break;
+            case CourseId.FrappeSnowland: renderer = new FrappeSnowlandRenderer(globals); break;
+            case CourseId.KoopaBeach: renderer = new KoopaBeachRenderer(globals); break;
+            case CourseId.RoyalRaceway: renderer = new RoyalRacewayRenderer(globals); break;
+            case CourseId.LuigiRaceway: renderer = new LuigiRacewayRenderer(globals); break;
+            case CourseId.MooMooFarm: renderer = new MooMooFarmRenderer(globals); break;
+            case CourseId.ToadsTurnpike: renderer = new ToadsTurnpikeRenderer(globals); break;
+            case CourseId.KalamariDesert: renderer = new KalamariDesertRenderer(globals); break;
+            case CourseId.SherbetLand: renderer = new SherbetLandRenderer(globals); break;
+            case CourseId.RainbowRoad: renderer = new RainbowRoadRenderer(globals); break;
+            case CourseId.WarioStadium: renderer = new WarioStadiumRenderer(globals); break;
+            case CourseId.DkJungle: renderer = new DkJungleRenderer(globals); break;
 
             case CourseId.ChocoMountain:
             case CourseId.BlockFort:
             case CourseId.Skyscraper:
             case CourseId.DoubleDeck:
             case CourseId.BigDonut:
-                renderer = new Mk64Renderer(device, segmentBuffers);
+                renderer = new Mk64Renderer(globals);
                 break;
         }
 
         const viewerTextures: Viewer.Texture[] = [];
 
-        for (const texture of renderer!.rspState.textureCache.textures) {
+        for (const texture of globals.rspState.textureCache.textures) {
             viewerTextures.push(textureToCanvas(texture));
         }
 

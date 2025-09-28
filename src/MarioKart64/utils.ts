@@ -57,8 +57,8 @@ export function readActorSpawnData(slice: ArrayBufferSlice, actorTableOffset: nu
     return spawnData;
 }
 
-export function isNearFrameTime(timer: number, targetFrame: number, threshold: number = 0.5): boolean {
-    return Math.abs(timer - targetFrame) < threshold;
+export function crossedTime(oldTime: number, newTime: number, thresh: number = 0.5): boolean {
+    return oldTime <= thresh && newTime > thresh;
 }
 
 export function calcModelMatrix(dst: mat4, pos: ReadonlyVec3, rot: ReadonlyVec3 = Vec3Zero, scale: number = 1.0): mat4 {
@@ -71,20 +71,16 @@ export function calcModelMatrix(dst: mat4, pos: ReadonlyVec3, rot: ReadonlyVec3 
     return dst;
 }
 
-const defaultLightDir: vec3 = [0, 0, (120 / 0x7F)];
+const defaultLightZ = 120 / 0x7F;
 export function rotateVectorXY(dst: vec3, rot: vec3): void {
-    const x = defaultLightDir[0];
-    const y = defaultLightDir[1];
-    const z = defaultLightDir[2];
-
     const sinX = Math.sin(rot[0] * BinAngleToRad);
     const cosX = Math.cos(rot[0] * BinAngleToRad);
     const sinY = Math.sin(rot[1] * BinAngleToRad);
     const cosY = Math.cos(rot[1] * BinAngleToRad);
 
-    dst[0] = x * cosY - z * sinY;
-    dst[1] = x * sinX * sinY + y * cosX + z * sinX * cosY;
-    dst[2] = x * cosX * sinY - y * sinX + z * cosX * cosY;
+    dst[0] = -defaultLightZ * sinY;
+    dst[1] = defaultLightZ * sinX * cosY;
+    dst[2] = defaultLightZ * cosX * cosY;
 }
 
 export function IsTargetInRangeXZ(targetPos: vec3, cameraPos: vec3, distance: number): boolean {
@@ -95,11 +91,7 @@ export function IsTargetInRangeXZ(targetPos: vec3, cameraPos: vec3, distance: nu
 }
 
 export function IsTargetInRangeXYZ(targetPos: vec3, cameraPos: vec3, distance: number): boolean {
-    const dx = targetPos[0] - cameraPos[0];
-    const dy = targetPos[1] - cameraPos[1];
-    const dz = targetPos[2] - cameraPos[2];
-
-    return (dx * dx + dy * dy + dz * dz) <= (distance * distance);
+    return vec3.squaredDistance(targetPos, cameraPos) <= distance ** 2;
 }
 
 

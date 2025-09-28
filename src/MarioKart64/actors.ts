@@ -15,7 +15,7 @@ import { drawWorldSpaceCircle, drawWorldSpaceText, getDebugOverlayCanvas2D } fro
 import { Green, White } from '../Color.js';
 import { Collision } from './collision.js';
 import { BinAngleToRad, calcModelMatrix, IsTargetInRangeXYZ } from './utils.js';
-import { Mk64Renderer } from './courses.js';
+import { Mk64Globals, Mk64Renderer } from './courses.js';
 import { assert } from '../util.js';
 
 export enum ActorType {
@@ -83,8 +83,6 @@ export enum ActorFlags {
     IsCollisionActive = 1 << 14,
     IsActive = 1 << 15,
 }
-
-const commonShadowModel = 0x0D007B20;
 
 const scratchVec3a = vec3.create();
 const scratchRot = vec3.create();
@@ -213,33 +211,18 @@ export class Actor {
         }
     }
 
-    public init(renderCache: GfxRenderCache, rspState: MkRSPState): void { }
+    public init(globals: Mk64Globals): void { }
 
     public update(deltaTimeFrames: number): void { }
 
     public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void { }
 
-    public destroy(device: GfxDevice): void { }
-
-    public setShadowMatrix(dst: mat4, scale: number, pos: vec3 = this.pos, rot: vec3 = this.rot): void {
-        this.pos[1] += 2;
+    public setShadowMtx(dst: mat4, scale: number, pos: vec3 = this.pos, rot: vec3 = this.rot): void {
+        pos[1] += 2;
 
         calcModelMatrix(dst, pos, rot, scale);
 
-        this.pos[1] -= 2;
-    }
-
-    public initRendererFromDL(dl: number, renderCache: GfxRenderCache, rspState: MkRSPState, isBillboard = false, renderLayer: Mk64RenderLayer = Mk64RenderLayer.Opa): BasicRspRenderer {
-        if (Mk64Renderer.modelCache.has(dl)) {
-            return Mk64Renderer.modelCache.get(dl)!;
-        }
-
-        F3DEX.runDL_F3DEX(rspState, dl);
-        const renderer = new BasicRspRenderer(renderCache, rspState.finish(), isBillboard, renderLayer);
-
-        Mk64Renderer.modelCache.set(dl, renderer);
-
-        return renderer;
+        pos[1] -= 2;
     }
 }
 
@@ -250,19 +233,17 @@ abstract class ActorTree extends Actor {
     protected abstract treeMeshOffs: number;
     protected abstract shadowScale: number;
 
-    public override init(renderCache: GfxRenderCache, rspState: MkRSPState): void {
+    public override init(globals: Mk64Globals): void {
 
         // Load palette
-        F3DEX.runDL_F3DEX(rspState, 0x0D05BAC8);
+        F3DEX.runDL_F3DEX(globals.rspState, 0x0D05BAC8);
 
-        this.tree = this.initRendererFromDL(this.treeMeshOffs, renderCache, rspState, true);
-
-        this.treeShadow = this.initRendererFromDL(commonShadowModel, renderCache, rspState);
-        this.treeShadow.setPrimColor8(0x14, 0x14, 0x14, 0x00);
+        this.tree = globals.initRendererFromDL(this.treeMeshOffs, true);
+        this.treeShadow = globals.commonShadowMdl;
     }
 
     public override prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
-        this.setShadowMatrix(scratchMtx1, this.shadowScale);
+        this.setShadowMtx(scratchMtx1, this.shadowScale);
         this.treeShadow.prepareToRender(renderInstManager, viewerInput, scratchMtx1);
 
         calcModelMatrix(scratchMtx1, this.pos, [0, 0, 0]);
@@ -342,7 +323,7 @@ export class ActorItemBox extends Actor {
     private mainBoxMdl: BasicRspRenderer;
 
     private questionMarkMdl: BasicRspRenderer;
-    private static boxShardModels: BasicRspRenderer[] = []
+    private boxShardModels: BasicRspRenderer[] = []
     private static readonly boxShardVectors: vec3[] = [
         vec3.fromValues(0.0, 2.0, 1.0),
         vec3.fromValues(0.8, 2.3, 0.5),
@@ -355,28 +336,26 @@ export class ActorItemBox extends Actor {
     private gfxRenderModeOpa: Partial<GfxMegaStateDescriptor>;
     private gfxRenderModeCld: Partial<GfxMegaStateDescriptor>;
 
-    public override init(renderCache: GfxRenderCache, rspState: MkRSPState): void {
+    public override init(globals: Mk64Globals): void {
 
         this.gfxRenderModeCld = RDP.translateRenderMode(RDP.RENDER_MODES.G_RM_ZB_CLD_SURF | RDP.RENDER_MODES.G_RM_ZB_CLD_SURF2);
         this.gfxRenderModeOpa = RDP.translateRenderMode(RDP.RENDER_MODES.G_RM_AA_ZB_OPA_SURF | RDP.RENDER_MODES.G_RM_AA_ZB_OPA_SURF2);
 
-        rspState.gSPSetGeometryMode(RSP_Geometry.G_SHADE | RSP_Geometry.G_SHADING_SMOOTH);
+        globals.rspState.gSPSetGeometryMode(RSP_Geometry.G_SHADE | RSP_Geometry.G_SHADING_SMOOTH);
 
-        this.questionMarkMdl = this.initRendererFromDL(0x0D003008, renderCache, rspState, false, Mk64RenderLayer.ItemBoxes);
-        this.shadowMdl = this.initRendererFromDL(0x0D002EE8, renderCache, rspState, false, Mk64RenderLayer.ItemBoxes);
-        this.mainBoxMdl = this.initRendererFromDL(0x0D003090, renderCache, rspState, false, Mk64RenderLayer.ItemBoxes);
+        this.questionMarkMdl = globals.initRendererFromDL(0x0D003008, false, Mk64RenderLayer.ItemBoxes);
+        this.shadowMdl = globals.initRendererFromDL(0x0D002EE8, false, Mk64RenderLayer.ItemBoxes);
+        this.mainBoxMdl = globals.initRendererFromDL(0x0D003090, false, Mk64RenderLayer.ItemBoxes);
 
-        rspState.gSPClearGeometryMode(RSP_Geometry.G_CULL_BACK | RSP_Geometry.G_CULL_FRONT);
-        if (ActorItemBox.boxShardModels.length === 0) {
-            ActorItemBox.boxShardModels = [
-                this.initRendererFromDL(0x0D003158, renderCache, rspState),
-                this.initRendererFromDL(0x0D0031B8, renderCache, rspState),
-                this.initRendererFromDL(0x0D003128, renderCache, rspState),
-                this.initRendererFromDL(0x0D0031E8, renderCache, rspState),
-                this.initRendererFromDL(0x0D003188, renderCache, rspState),
-                this.initRendererFromDL(0x0D0030F8, renderCache, rspState)
-            ];
-        }
+        globals.rspState.gSPClearGeometryMode(RSP_Geometry.G_CULL_BACK | RSP_Geometry.G_CULL_FRONT);
+        this.boxShardModels = [
+            globals.initRendererFromDL(0x0D003158, false, Mk64RenderLayer.ItemBoxes),
+            globals.initRendererFromDL(0x0D0031B8, false, Mk64RenderLayer.ItemBoxes),
+            globals.initRendererFromDL(0x0D003128, false, Mk64RenderLayer.ItemBoxes),
+            globals.initRendererFromDL(0x0D0031E8, false, Mk64RenderLayer.ItemBoxes),
+            globals.initRendererFromDL(0x0D003188, false, Mk64RenderLayer.ItemBoxes),
+            globals.initRendererFromDL(0x0D0030F8, false, Mk64RenderLayer.ItemBoxes)
+        ];
     }
 
     public override prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
@@ -425,8 +404,8 @@ export class ActorItemBox extends Actor {
             }
             scaleMatrix(baseMtx, baseMtx, scale);
             mat4.copy(scratchMtx2, baseMtx);
-            for (let i = 0; i < ActorItemBox.boxShardModels.length; i++) {
-                const shardModel = ActorItemBox.boxShardModels[i];
+            for (let i = 0; i < this.boxShardModels.length; i++) {
+                const shardModel = this.boxShardModels[i];
                 const posScale = ActorItemBox.boxShardVectors[i];
                 shardModel.setRenderMode(renderMode);
 
@@ -513,17 +492,13 @@ export class ActorItemBox extends Actor {
             }
         }
     }
-
-    public override destroy(): void {
-        ActorItemBox.boxShardModels = [];
-    }
 }
 
 export class ActorMarioSign extends Actor {
     private signModel: BasicRspRenderer;
 
-    public override init(renderCache: GfxRenderCache, rspState: MkRSPState): void {
-        this.signModel = this.initRendererFromDL(0x06009820, renderCache, rspState, false);
+    public override init(globals: Mk64Globals): void {
+        this.signModel = globals.initRendererFromDL(0x06009820, false);
     }
 
     public override prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
@@ -554,39 +529,33 @@ export class ActorMarioSign extends Actor {
 
 export class ActorPiranhaPlant extends Actor {
     private piranhaPlantMesh: BasicRspRenderer;
-    public isPlaying: boolean = false;
 
-    public timer: number = 0;
-    public isPlayerNearby: boolean = false;
-    public static GfxTextures: GfxTexture[] = [];
+    private timer: number = 0;
+    private isPlayerNearby: boolean = false;
+    private gfxAnimTextures: GfxTexture[] = [];
 
-    public override init(renderCache: GfxRenderCache, rspState: MkRSPState): void {
+    public override init(globals: Mk64Globals): void {
 
-        const isMarioRaceway = Mk64Renderer.courseId === CourseId.MarioRaceway;
+        const isMarioRaceway = globals.courseId === CourseId.MarioRaceway;
 
         if (isMarioRaceway) {
-            this.piranhaPlantMesh = this.initRendererFromDL(0x06009840, renderCache, rspState, true);
+            this.piranhaPlantMesh = globals.initRendererFromDL(0x06009840, true);
         }
         else {
-            this.piranhaPlantMesh = this.initRendererFromDL(0x0600E108, renderCache, rspState, true);
+            this.piranhaPlantMesh = globals.initRendererFromDL(0x0600E108, true);
         }
 
+        const baseTexAddr = isMarioRaceway ? 0x9800 : 0xA000;
+        const dramPalAddr = isMarioRaceway ? 0x06006750 : 0x0600D610;
 
-        if (ActorPiranhaPlant.GfxTextures.length === 0) {
-            const baseTexAddr = isMarioRaceway ? 0x9800 : 0xA000;
-            const dramPalAddr = isMarioRaceway ? 0x06006750 : 0x0600D610;
+        const drawCallInst = this.piranhaPlantMesh.drawCallInstances[0];
+        const tex0 = drawCallInst.textureEntry[0];
 
-            for (let i = 0; i < 9; i++) {
+        for (let i = 0; i < 9; i++) {
 
-                const dramAddr = 0x03000000 + (baseTexAddr + (i << 0xB));
+            const dramAddr = 0x03000000 + (baseTexAddr + (i << 0xB));
 
-                const tileState = rspState.DP_TileState[0];
-                const texIndex = rspState.textureCache.translateTileTexture(rspState.segmentBuffers, dramAddr, dramPalAddr, tileState, false);
-
-                const gfxTexture = RDP.translateToGfxTexture(renderCache.device, rspState.textureCache.textures[texIndex]);
-
-                ActorPiranhaPlant.GfxTextures.push(gfxTexture);
-            }
+            this.gfxAnimTextures.push(globals.getGfxTexture(dramAddr, dramPalAddr, tex0.tile));
         }
     }
 
@@ -595,7 +564,7 @@ export class ActorPiranhaPlant extends Actor {
             return;
         }
 
-        let animationFrame: number = 0;
+        let animFrame: number = 0;
 
         mat4.getTranslation(scratchPos, viewerInput.camera.worldMatrix);
         const distToCamera: number = vec3.sqrDist(scratchPos, this.pos);
@@ -603,16 +572,16 @@ export class ActorPiranhaPlant extends Actor {
         if (distToCamera < 90000) {
 
             this.isPlayerNearby = true;
-            animationFrame = Math.floor(this.timer / 6);
+            animFrame = Math.floor(this.timer / 6);
 
-            if (animationFrame > 8) {
-                animationFrame = 8;
+            if (animFrame > 8) {
+                animFrame = 8;
             }
         } else {
             this.isPlayerNearby = false;
         }
 
-        this.setTexture(animationFrame);
+        this.setAnimTexture(animFrame);
         calcModelMatrix(scratchMtx1, this.pos, this.rot);
         this.piranhaPlantMesh.prepareToRender(renderInstManager, viewerInput, scratchMtx1);
     }
@@ -637,105 +606,90 @@ export class ActorPiranhaPlant extends Actor {
         }
     }
 
-    private setTexture(texIndex: number): void {
-        assert(texIndex < ActorPiranhaPlant.GfxTextures.length);
-
+    private setAnimTexture(texIndex: number): void {
         for (const drawcall of this.piranhaPlantMesh.drawCallInstances) {
-            drawcall.textureMappings[0].gfxTexture = ActorPiranhaPlant.GfxTextures[texIndex];
+            drawcall.textureMappings[0].gfxTexture = this.gfxAnimTextures[texIndex];
         }
-    }
-
-    public override destroy(device: GfxDevice): void {
-        ActorPiranhaPlant.GfxTextures = [];
     }
 }
 
 export class ActorCow extends Actor {
-    private static cowModels: BasicRspRenderer[] = [];
+    private cowModels: BasicRspRenderer[] = [];
     public cowType: number = 0;
 
-    public override init(renderCache: GfxRenderCache, rspState: MkRSPState): void {
-        if (ActorCow.cowModels.length === 0) {
-            const cowMdlOffsets: number[] = [0x13C00, 0x13CA0, 0x13D20, 0x13DA0, 0x13E20];
-            for (let i = 0; i < cowMdlOffsets.length; i++) {
-                ActorCow.cowModels.push(this.initRendererFromDL(0x06000000 + cowMdlOffsets[i], renderCache, rspState, true));
-            }
+    public override init(globals: Mk64Globals): void {
+
+        const cowMdlOffsets: number[] = [0x13C00, 0x13CA0, 0x13D20, 0x13DA0, 0x13E20];
+
+        for (let i = 0; i < cowMdlOffsets.length; i++) {
+            this.cowModels.push(globals.initRendererFromDL(0x06000000 + cowMdlOffsets[i], true));
         }
     }
 
     public override prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
-        if (this.cowType >= ActorCow.cowModels.length) {
+        if (this.cowType >= this.cowModels.length) {
             return;
         }
 
         calcModelMatrix(scratchMtx1, this.pos, this.rot);
-        ActorCow.cowModels[this.cowType].prepareToRender(renderInstManager, viewerInput, scratchMtx1);
-    }
-
-    public override destroy(device: GfxDevice): void {
-        ActorCow.cowModels = [];
+        this.cowModels[this.cowType].prepareToRender(renderInstManager, viewerInput, scratchMtx1);
     }
 }
 
 export class ActorPalmTree extends Actor {
     public treeType: number = 0;
     public treeShadow: BasicRspRenderer;
-    private static treeVariants: BasicRspRenderer[] = [];
+
+    private treeVariants: BasicRspRenderer[] = [];
+
     private static readonly trunkOffsets: number[] = [0x186B8, 0x18A08, 0x18D58];
     private static readonly frondsOffsets: number[] = [0x185F8, 0x18948, 0x18C98];
 
-    public override init(renderCache: GfxRenderCache, rspState: MkRSPState): void {
-        if (ActorPalmTree.treeVariants.length === 0) {
-            for (let i = 0; i < ActorPalmTree.trunkOffsets.length; i++) {
+    public override init(globals: Mk64Globals): void {
+        const rspState = globals.rspState;
 
-                rspState.gSPClearGeometryMode(RSP_Geometry.G_SHADE);
-                rspState.gSPSetGeometryMode(RSP_Geometry.G_LIGHTING | RSP_Geometry.G_CULL_BACK);
-                F3DEX.runDL_F3DEX(rspState, 0x06000000 + ActorPalmTree.trunkOffsets[i]);
+        for (let i = 0; i < 3; i++) {
 
-                rspState.gSPClearGeometryMode(RSP_Geometry.G_SHADE | RSP_Geometry.G_CULL_BACK);
-                rspState.gSPSetGeometryMode(RSP_Geometry.G_LIGHTING);
-                ActorPalmTree.treeVariants.push(this.initRendererFromDL(0x06000000 + ActorPalmTree.frondsOffsets[i], renderCache, rspState));
-            }
+            rspState.gSPClearGeometryMode(RSP_Geometry.G_SHADE);
+            rspState.gSPSetGeometryMode(RSP_Geometry.G_LIGHTING | RSP_Geometry.G_CULL_BACK);
+            F3DEX.runDL_F3DEX(rspState, 0x06000000 + ActorPalmTree.trunkOffsets[i]);
+
+            rspState.gSPClearGeometryMode(RSP_Geometry.G_SHADE | RSP_Geometry.G_CULL_BACK);
+            rspState.gSPSetGeometryMode(RSP_Geometry.G_LIGHTING);
+            this.treeVariants.push(globals.initRendererFromDL(0x06000000 + ActorPalmTree.frondsOffsets[i]));
         }
 
-        this.treeShadow = this.initRendererFromDL(commonShadowModel, renderCache, rspState);
-        this.treeShadow.setPrimColor8(20, 20, 20, 0);
+        this.treeShadow = globals.commonShadowMdl;
     }
 
     public override prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
-        if (this.treeType >= ActorPalmTree.treeVariants.length) {
+        if (this.treeType >= this.treeVariants.length) {
             return;
         }
 
-        this.setShadowMatrix(scratchMtx1, 2);
+        this.setShadowMtx(scratchMtx1, 2);
         this.treeShadow.prepareToRender(renderInstManager, viewerInput, scratchMtx1);
 
         vec3.zero(scratchRot);
         calcModelMatrix(scratchMtx1, this.pos, scratchRot);
-        ActorPalmTree.treeVariants[this.treeType].prepareToRender(renderInstManager, viewerInput, scratchMtx1);
-    }
-
-    public override destroy(device: GfxDevice): void {
-        ActorPalmTree.treeVariants = [];
+        this.treeVariants[this.treeType].prepareToRender(renderInstManager, viewerInput, scratchMtx1);
     }
 }
 
 export class ActorJungleTree extends Actor {
     public treeType: number = 0;
     public treeShadow: BasicRspRenderer;
-    private static treeVariants: BasicRspRenderer[] = [];
+    private treeVariants: BasicRspRenderer[] = [];
 
-    public override init(renderCache: GfxRenderCache, rspState: MkRSPState): void {
-        if (ActorJungleTree.treeVariants.length === 0) {
-            const treeOffsets: number[] = [0x10CC0, 0x11DC8, 0x12EF0, 0x138D0];
+    public override init(globals: Mk64Globals): void {
+        const treeOffsets: number[] = [0x10CC0, 0x11DC8, 0x12EF0, 0x138D0];
 
-            rspState.gSPTexture(true, 0, 0, 0xFFFF, 0xFFFF);
-            rspState.gDPSetCombine(0xFC127E24, 0xFFFFF3F9);//G_CC_MODULATEIDECALA
-            rspState.gDPSetRenderMode(RDP.RENDER_MODES.G_RM_AA_ZB_TEX_EDGE, RDP.RENDER_MODES.G_RM_AA_ZB_TEX_EDGE2);
+        globals.rspState.gSPTexture(true, 0, 0, 0xFFFF, 0xFFFF);
+        globals.rspState.gDPSetCombine(0xFC127E24, 0xFFFFF3F9);//G_CC_MODULATEIDECALA
+        globals.rspState.gDPSetRenderMode(RDP.RENDER_MODES.G_RM_AA_ZB_TEX_EDGE, RDP.RENDER_MODES.G_RM_AA_ZB_TEX_EDGE2);
 
-            for (let i = 0; i < treeOffsets.length; i++) {
-                ActorJungleTree.treeVariants[i] = this.initRendererFromDL(0x06000000 + treeOffsets[i], renderCache, rspState, true);
-            }
+        for (let i = 0; i < treeOffsets.length; i++) {
+            this.treeVariants[i] = globals.initRendererFromDL(0x06000000 + treeOffsets[i], true);
         }
     }
 
@@ -749,16 +703,16 @@ export class ActorJungleTree extends Actor {
 
         switch (this.treeType & 0xF) {
             case 0:
-                ActorJungleTree.treeVariants[0].prepareToRender(renderInstManager, viewerInput, scratchMtx1);
+                this.treeVariants[0].prepareToRender(renderInstManager, viewerInput, scratchMtx1);
                 break;
             case 4:
-                ActorJungleTree.treeVariants[1].prepareToRender(renderInstManager, viewerInput, scratchMtx1);
+                this.treeVariants[1].prepareToRender(renderInstManager, viewerInput, scratchMtx1);
                 break;
             case 5:
-                ActorJungleTree.treeVariants[2].prepareToRender(renderInstManager, viewerInput, scratchMtx1);
+                this.treeVariants[2].prepareToRender(renderInstManager, viewerInput, scratchMtx1);
                 break;
             case 6:
-                ActorJungleTree.treeVariants[3].prepareToRender(renderInstManager, viewerInput, scratchMtx1);
+                this.treeVariants[3].prepareToRender(renderInstManager, viewerInput, scratchMtx1);
                 break;
         }
     }
@@ -771,10 +725,6 @@ export class ActorJungleTree extends Actor {
             }
         }
     }
-
-    public override destroy(device: GfxDevice): void {
-        ActorJungleTree.treeVariants = [];
-    }
 }
 
 export class ActorYoshiEgg extends Actor {
@@ -785,26 +735,25 @@ export class ActorYoshiEgg extends Actor {
     private pathRot: number = 0;
     private pathCenter: vec3 = vec3.create();
 
-    public override init(renderCache: GfxRenderCache, rspState: MkRSPState): void {
-        rspState.gSPSetGeometryMode(RSP_Geometry.G_LIGHTING | RSP_Geometry.G_SHADING_SMOOTH);
+    public override init(globals: Mk64Globals): void {
+        globals.rspState.gSPSetGeometryMode(RSP_Geometry.G_LIGHTING | RSP_Geometry.G_SHADING_SMOOTH);
         this.eggRot = this.rot[1];
         this.pathCenter = this.velocity;
 
         const eggLight = Light1.InitLight(255, 254, 254, 100, 100, 100, 0, 0, 120);
         eggLight.setLightDirectionFromAngles(-0x38F0, 0x1C70);
 
-        this.eggModel = this.initRendererFromDL(0x06000000 + 0x16D70, renderCache, rspState, false);
+        this.eggModel = globals.initRendererFromDL(0x06000000 + 0x16D70);
         this.eggModel.setLight(eggLight);
 
-        this.eggShadow = this.initRendererFromDL(commonShadowModel, renderCache, rspState);
-        this.eggShadow.setPrimColor8(20, 20, 20, 0);
+        this.eggShadow = globals.commonShadowMdl;
     }
 
     public override prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         vec3.set(scratchVec3a, this.pos[0], 3, this.pos[2]);
         vec3.set(scratchRot, 0x4000, 0, 0);
 
-        this.setShadowMatrix(scratchMtx1, 10, scratchVec3a, scratchRot);
+        this.setShadowMtx(scratchMtx1, 10, scratchVec3a, scratchRot);
         this.eggShadow.prepareToRender(renderInstManager, viewerInput, scratchMtx1);
 
         vec3.set(scratchRot, 0, this.eggRot, 0);
@@ -848,10 +797,10 @@ export class ActorCrossbuck extends Actor {
     public isTrainNearby: boolean = false;
     private timer = 0;
 
-    public override init(renderCache: GfxRenderCache, rspState: MkRSPState): void {
-        this.rightLightActiveMdl = this.initRendererFromDL(0x06023478, renderCache, rspState);
-        this.leftLightActiveMdl = this.initRendererFromDL(0x060234A8, renderCache, rspState);
-        this.bothLightInactiveMdl = this.initRendererFromDL(0x060234D8, renderCache, rspState);
+    public override init(globals: Mk64Globals): void {
+        this.rightLightActiveMdl = globals.initRendererFromDL(0x06023478);
+        this.leftLightActiveMdl = globals.initRendererFromDL(0x060234A8);
+        this.bothLightInactiveMdl = globals.initRendererFromDL(0x060234D8);
     }
 
     public override prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
@@ -883,8 +832,8 @@ export class ActorCrossbuck extends Actor {
 export class ActorWarioSign extends Actor {
     private signModel: BasicRspRenderer;
 
-    public override init(renderCache: GfxRenderCache, rspState: MkRSPState): void {
-        this.signModel = this.initRendererFromDL(0x0600CD38, renderCache, rspState);
+    public override init(globals: Mk64Globals): void {
+        this.signModel = globals.initRendererFromDL(0x0600CD38);
     }
 
     public override prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
@@ -908,11 +857,11 @@ export class ActorFallingRock extends Actor {
     private rockModel: BasicRspRenderer;
     private shadowModel: BasicRspRenderer;
 
-    public override init(renderCache: GfxRenderCache, rspState: MkRSPState): void {
-        this.rockModel = this.initRendererFromDL(0x06006FE0, renderCache, rspState, false);
+    public override init(globals: Mk64Globals): void {
+        this.rockModel = globals.initRendererFromDL(0x06006FE0);
 
-        rspState.gSPSetGeometryMode(RSP_Geometry.G_FOG);
-        this.shadowModel = this.initRendererFromDL(0x06006F88, renderCache, rspState, false);
+        globals.rspState.gSPSetGeometryMode(RSP_Geometry.G_FOG);
+        this.shadowModel = globals.initRendererFromDL(0x06006F88);
     }
 
     public override prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
@@ -1013,7 +962,7 @@ export class ActorFallingRock extends Actor {
 
 export class DebugActor extends Actor {
 
-    public override init(renderCache: GfxRenderCache, rspState: MkRSPState): void {
+    public override init(globals: Mk64Globals): void {
     }
 
     public override prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
@@ -1025,11 +974,11 @@ export class DebugActor extends Actor {
 export class ActorWaterBanshee extends Actor {
     private signModel: BasicRspRenderer;
 
-    public override init(renderCache: GfxRenderCache, rspState: MkRSPState): void {
-        rspState.gDPSetCombine(0xFC121624, 0xff2fffff);
-        rspState.gDPSetRenderMode(RDP.RENDER_MODES.G_RM_AA_ZB_TEX_EDGE, RDP.RENDER_MODES.G_RM_AA_ZB_TEX_EDGE2);
+    public override init(globals: Mk64Globals): void {
+        //globals.rspState.gDPSetCombine(0xFC121624, 0xff2fffff);
+        //globals.rspState.gDPSetRenderMode(RDP.RENDER_MODES.G_RM_AA_ZB_TEX_EDGE, RDP.RENDER_MODES.G_RM_AA_ZB_TEX_EDGE2);
 
-        this.signModel = this.initRendererFromDL(0x0600B278, renderCache, rspState, false);
+        this.signModel = globals.initRendererFromDL(0x0600B278);
         vec3.set(this.pos, -1500, 70, -300);//map center
     }
 

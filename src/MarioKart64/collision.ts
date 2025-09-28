@@ -5,6 +5,7 @@ import ArrayBufferSlice from "../ArrayBufferSlice";
 import { Vec3Zero } from '../MathHelpers.js';
 import { CourseId } from './scenes.js';
 import { product2D } from './utils.js';
+import { Mk64Globals } from "./courses.js";
 
 export enum ColSurfaceType {
     SurfaceDefault = -1,   // Default surface
@@ -101,8 +102,8 @@ export class Collision {
     /* 0x24 */ public normalX: vec3 = vec3.fromValues(1, 0, 0);
     /* 0x30 */ public normalY: vec3 = vec3.fromValues(0, 1, 0);
 
-    public static initCourseCollision(courseId: CourseId, segmentBuffers: ArrayBufferSlice[]): number {
-        assert(segmentBuffers[4] !== undefined);
+    public static initCourseCollision(globals: Mk64Globals): void {
+        assert(globals.segmentBuffers[4] !== undefined);
 
         Collision.collisionTris = [];
         Collision.collisionVertices = [];
@@ -110,6 +111,8 @@ export class Collision {
         Collision.gCollisionIndices = [];
         vec3.set(Collision.courseMin, 0, 0, 0);
         vec3.set(Collision.courseMax, 0, 0, 0);
+        
+        const segmentBuffers = globals.segmentBuffers;
 
         const vertexView = segmentBuffers[4].createDataView();
         for (let offs = 0; offs < segmentBuffers[4].byteLength; offs += 0x10) {
@@ -121,105 +124,103 @@ export class Collision {
             Collision.collisionVertices.push(scratchVertex);
         }
 
-        let waterLevel;
-
-        switch (courseId) {
+        switch (globals.courseId) {
             case CourseId.MarioRaceway:
                 this.genCollisionFromDL(segmentBuffers, 0x07001140); // Mushroom
                 this.genCollisionFromDL(segmentBuffers, 0x070008E8); // Pipe
                 this.parseTrackSections(segmentBuffers, 0x06009650);
-                waterLevel = Collision.courseMin[1] - 10;
+                globals.waterLevel = Collision.courseMin[1] - 10;
                 break;
 
             case CourseId.ChocoMountain:
                 this.parseTrackSections(segmentBuffers, 0x060072D0);
-                waterLevel = -80;
+                globals.waterLevel = -80;
                 break;
 
             case CourseId.BowserCastle:
                 this.parseTrackSections(segmentBuffers, 0x060093D8);
-                waterLevel = -50;
+                globals.waterLevel = -50;
                 break;
 
             case CourseId.BansheeBoardwalk:
                 this.parseTrackSections(segmentBuffers, 0x0600B458);
-                waterLevel = -80;
+                globals.waterLevel = -80;
                 break;
 
             case CourseId.YoshiValley:
                 this.parseTrackSections(segmentBuffers, 0x06018240);
-                waterLevel = Collision.courseMin[1] - 10;
+                globals.waterLevel = Collision.courseMin[1] - 10;
                 break;
 
             case CourseId.FrappeSnowland:
                 this.parseTrackSections(segmentBuffers, 0x060079A0);
-                waterLevel = -50;
+                globals.waterLevel = -50;
                 break;
 
             case CourseId.KoopaBeach:
                 this.parseTrackSections(segmentBuffers, 0x06018FD8);
-                waterLevel = 0;
+                globals.waterLevel = 0;
                 break;
 
             case CourseId.RoyalRaceway:
                 this.parseTrackSections(segmentBuffers, 0x0600DC28);
-                waterLevel = -60;
+                globals.waterLevel = -60;
                 break;
 
             case CourseId.LuigiRaceway:
                 this.parseTrackSections(segmentBuffers, 0x0600FF28);
-                waterLevel = Collision.courseMin[1] - 10;
+                globals.waterLevel = Collision.courseMin[1] - 10;
                 break;
 
             case CourseId.MooMooFarm:
                 this.parseTrackSections(segmentBuffers, 0x060144B8);
-                waterLevel = Collision.courseMin[1] - 10;
+                globals.waterLevel = Collision.courseMin[1] - 10;
                 break;
 
             case CourseId.ToadsTurnpike:
                 this.parseTrackSections(segmentBuffers, 0x06023B68);
-                waterLevel = Collision.courseMin[1] - 10;
+                globals.waterLevel = Collision.courseMin[1] - 10;
                 break;
 
             case CourseId.KalamariDesert:
                 this.parseTrackSections(segmentBuffers, 0x06023070);
-                waterLevel = Collision.courseMin[1] - 10;
+                globals.waterLevel = Collision.courseMin[1] - 10;
                 break;
 
             case CourseId.SherbetLand:
                 this.parseTrackSections(segmentBuffers, 0x06009C20);
-                waterLevel = -18;
+                globals.waterLevel = -18;
                 break;
 
             case CourseId.RainbowRoad:
                 this.parseTrackSections(segmentBuffers, 0x06016440);
-                waterLevel = 0;
+                globals.waterLevel = 0;
                 break;
 
             case CourseId.WarioStadium:
                 this.parseTrackSections(segmentBuffers, 0x0600CC38);
-                waterLevel = Collision.courseMin[1] - 10;
+                globals.waterLevel = Collision.courseMin[1] - 10;
                 break;
 
             case CourseId.BlockFort:
                 this.genCollisionFromDL(segmentBuffers, 0x070015C0, ColSurfaceType.Asphalt);
-                waterLevel = Collision.courseMin[1] - 10;
+                globals.waterLevel = Collision.courseMin[1] - 10;
                 break;
 
             case CourseId.Skyscraper:
                 this.genCollisionFromDL(segmentBuffers, 0x07001110, ColSurfaceType.Asphalt);
                 this.genCollisionFromDL(segmentBuffers, 0x07000258, ColSurfaceType.Asphalt);
-                waterLevel = -480;
+                globals.waterLevel = -480;
                 break;
 
             case CourseId.DoubleDeck:
                 this.genCollisionFromDL(segmentBuffers, 0x07000738, ColSurfaceType.Asphalt);
-                waterLevel = Collision.courseMin[1] - 10;
+                globals.waterLevel = Collision.courseMin[1] - 10;
                 break;
 
             case CourseId.DkJungle:
                 this.parseTrackSections(segmentBuffers, 0x06014338);
-                waterLevel = -475;
+                globals.waterLevel = -475;
                 break;
 
             case CourseId.BigDonut:
@@ -228,14 +229,12 @@ export class Collision {
                 this.genCollisionFromDL(segmentBuffers, 0x07000AC0, ColSurfaceType.Bridge);
                 this.genCollisionFromDL(segmentBuffers, 0x07000B58, ColSurfaceType.Bridge);
                 this.genCollisionFromDL(segmentBuffers, 0x07000230, ColSurfaceType.Bridge);
-                waterLevel = 100;
+                globals.waterLevel = 100;
                 break;
         }
 
         this.generateGrid();
         Collision.collisionVertices = [];
-
-        return waterLevel;
     }
 
     private static generateGrid() {

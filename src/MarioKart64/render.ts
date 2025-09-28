@@ -42,36 +42,23 @@ class Mk64SkyProgram extends DeviceProgram {
 ${GfxShaderLibrary.saturate}
 
 layout(std140) uniform ub_Params {
-    vec4 u_Params;
     vec4 u_SkyColorTop;
     vec4 u_SkyColorBottom;
 };
-
-#define u_HalfScreenHeight (u_Params.x)
 `;
 
-    public override vert: string = `
-
-void main() {
-    vec2 p;
-    p.x = (gl_VertexID == 1) ? 2.0 : 0.0;
-    p.y = (gl_VertexID == 2) ? 2.0 : 0.0;
-    gl_Position.xy = p * vec2(2) - vec2(1);
-    gl_Position.zw = vec2(${reverseDepthForDepthOffset(1)}, 1);
-
-#if GFX_CLIPSPACE_NEAR_ZERO()
-    gl_Position.z = (gl_Position.z + gl_Position.w) * 0.5;
-#endif
-}
-`;
+    public override vert = GfxShaderLibrary.makeFullscreenVS(`-1`, `1`);
 
     public override frag: string = `
 
-void main() {
-    float y = gl_FragCoord.y;
+in vec2 v_TexCoord;
 
-    if (y >= u_HalfScreenHeight) {
-        float t = saturate((y - u_HalfScreenHeight) / u_HalfScreenHeight);
+void main() {
+    float y = v_TexCoord.y;
+    float t_HalfScreenHeight = 0.5;
+
+    if (y >= t_HalfScreenHeight) {
+        float t = saturate((y - t_HalfScreenHeight) / t_HalfScreenHeight);
         gl_FragColor = vec4(mix(u_SkyColorBottom.rgb, u_SkyColorTop.rgb, t), 1.0);
     } else {
         gl_FragColor = u_SkyColorBottom;
@@ -79,6 +66,8 @@ void main() {
 }
 `;
 }
+
+const skyBindingLayouts: GfxBindingLayoutDescriptor[] = [{numUniformBuffers: 1, numSamplers: 0}];
 
 export class Mk64SkyRenderer {
     private program = new Mk64SkyProgram();
@@ -88,25 +77,23 @@ export class Mk64SkyRenderer {
         this.gfxProgram = renderCache.createProgram(this.program);
     }
 
-    public prepareToRender(renderInstManager: GfxRenderInstManager, renderInput: Viewer.ViewerRenderInput): void {
+    public prepareToRender(renderInstManager: GfxRenderInstManager): void {
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setDrawCount(3);
         renderInst.sortKey = makeSortKeyOpaque(GfxRendererLayer.BACKGROUND, this.gfxProgram.ResourceUniqueId);
         renderInst.setVertexInput(null, null, null);
-        renderInst.setBindingLayouts([{ numUniformBuffers: 1, numSamplers: 0 }]);
+        renderInst.setBindingLayouts(skyBindingLayouts);
         renderInst.setGfxProgram(this.gfxProgram);
 
-        const d = renderInst.allocateUniformBufferF32(Mk64SkyProgram.ub_Params, 4 * 3);
+        const d = renderInst.allocateUniformBufferF32(Mk64SkyProgram.ub_Params, 8);
         let offs = 0;
 
-        offs += fillVec4(d, offs, renderInput.backbufferHeight / 2);
         offs += fillColor(d, offs, this.ColorTop);
         offs += fillColor(d, offs, this.ColorBottom);
         renderInstManager.submitRenderInst(renderInst);
     }
 
     public destroy(device: GfxDevice): void {
-        device.destroyProgram(this.gfxProgram);
     }
 }
 
