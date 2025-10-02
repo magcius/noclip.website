@@ -33,30 +33,43 @@ export enum CourseId {
     BigDonut,
 }
 
+export class Mk64CommonData {
+    public commonData: ArrayBufferSlice;
+    public treeLuts: ArrayBufferSlice;
+
+    public destroy(): void {
+    }
+}
+
 export class SceneDesc implements Viewer.SceneDesc {
-    constructor(public id: string, public name: string, public courceId: number, private base: string = pathBase) {
+    constructor(public id: string, public name: string, public courceId: number) {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const dataFetcher = context.dataFetcher;
         const gCurrentCourseId = this.courceId;
 
-        const segTreeLuts = await dataFetcher.fetchData(`${pathBase}/TreeLuts.bin`);
-        const segCommonTextures = await dataFetcher.fetchData(`${pathBase}/Segment_3_${gCurrentCourseId}.bin`);
-        const segVertexBuffer = await dataFetcher.fetchData(`${pathBase}/Segment_4_${gCurrentCourseId}.bin`);
-        const segCourseTextureBuffer = await dataFetcher.fetchData(`${pathBase}/Segment_5_${gCurrentCourseId}.bin`);
-        const segCourseData = await dataFetcher.fetchData(`${pathBase}/Segment_6_${gCurrentCourseId}.bin`);
-        const segUnpackedDL = await dataFetcher.fetchData(`${pathBase}/Segment_7_${gCurrentCourseId}.bin`);
-        const segCommonData = await dataFetcher.fetchData(`${pathBase}/Segment_D.bin`);
+        const shareData = await context.dataShare.ensureObject(pathBase, async () => {
+            const common = new Mk64CommonData();
+            common.commonData = await dataFetcher.fetchData(`${pathBase}/Segment_D.bin`)!;
+            common.treeLuts = await dataFetcher.fetchData(`${pathBase}/TreeLuts.bin`)!;
+            return common;
+        });
+
+        const courseCommonTextures = await dataFetcher.fetchData(`${pathBase}/Segment_3_${gCurrentCourseId}.bin`);
+        const courseVertexBuffer = await dataFetcher.fetchData(`${pathBase}/Segment_4_${gCurrentCourseId}.bin`);
+        const courseTextureBuffer = await dataFetcher.fetchData(`${pathBase}/Segment_5_${gCurrentCourseId}.bin`);
+        const courseData = await dataFetcher.fetchData(`${pathBase}/Segment_6_${gCurrentCourseId}.bin`);
+        const courseUnpackedDL = await dataFetcher.fetchData(`${pathBase}/Segment_7_${gCurrentCourseId}.bin`);
 
         const segmentBuffers: ArrayBufferSlice[] = [];
-        segmentBuffers[0x1] = segTreeLuts;
-        segmentBuffers[0x3] = segCommonTextures;
-        segmentBuffers[0x4] = segVertexBuffer;
-        segmentBuffers[0x5] = segCourseTextureBuffer;
-        segmentBuffers[0x6] = segCourseData;
-        segmentBuffers[0x7] = segUnpackedDL;
-        segmentBuffers[0xD] = segCommonData;
+        segmentBuffers[0x1] = shareData.treeLuts;
+        segmentBuffers[0x3] = courseCommonTextures;
+        segmentBuffers[0x4] = courseVertexBuffer;
+        segmentBuffers[0x5] = courseTextureBuffer;
+        segmentBuffers[0x6] = courseData;
+        segmentBuffers[0x7] = courseUnpackedDL;
+        segmentBuffers[0xD] = shareData.commonData;
         
         const globals = new Mk64Globals(device, segmentBuffers, gCurrentCourseId);
 

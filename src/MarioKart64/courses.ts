@@ -1943,6 +1943,9 @@ export class Mk64Renderer implements Viewer.SceneGfx {
         }
 
         if (courseInfo.itemBoxes) {
+            if(this.isFogEnabled) {
+                globals.rspState.gSPSetGeometryMode(RSP_Geometry.G_FOG);
+            }
             this.spawnActorList(courseInfo.itemBoxes, ActorType.ItemBox, (actor: ActorItemBox, spawnData: Mk64ActorSpawnData) => {
                 const height = globals.colGrid.getSurfaceHeight(spawnData.pos[0], spawnData.pos[1] + 10, spawnData.pos[2]);
                 vec3.set(actor.rot, random_u16(), random_u16(), random_u16());
@@ -6181,7 +6184,7 @@ export class DkJungleRenderer extends Mk64Renderer {
     constructor(globals: Mk64Globals) {
         super(globals);
 
-        this.water = globals.initRendererFromDL(0x06014878);
+        this.water = globals.initRendererFromDL(0x06014878, false, Mk64RenderLayer.Water);
         this.ramp = globals.initRendererFromDL(0x060147A0);
 
         this.paddleBoatMdl = globals.initRendererFromDL(0x060148A0);
