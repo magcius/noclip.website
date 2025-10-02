@@ -1482,7 +1482,7 @@ float TevPack24(vec3 a) { return dot(a, vec3(1.0, 256.0, 256.0 * 256.0)); }
 float TevPerCompGT(float a, float b) { return float(a >  b); }
 float TevPerCompEQ(float a, float b) { return float(a == b); }
 vec3 TevPerCompGT(vec3 a, vec3 b) { return vec3(greaterThan(a, b)); }
-vec3 TevPerCompEQ(vec3 a, vec3 b) { return vec3(greaterThan(a, b)); }
+vec3 TevPerCompEQ(vec3 a, vec3 b) { return vec3(equal(a, b)); }
 float TevMask(float n, int mask) { return float(int((n * 255.0)) & mask) / 255.0; }
 
 ${this.generateExtraPixelGlobal()}
