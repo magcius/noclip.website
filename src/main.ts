@@ -97,6 +97,7 @@ import * as Scenes_NeonWhite from './NeonWhite/Scenes.js';
 import * as Scenes_OuterWilds from './OuterWilds/Scenes.js';
 import * as Scenes_CrashWarped from './CrashWarped/scenes.js';
 import * as Scenes_PlusForXP from './PlusForXP/scenes.js';
+import * as Scenes_MarioKart64 from './MarioKart64/scenes.js';
 
 import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_FileDrops.js';
 
@@ -167,6 +168,7 @@ const sceneGroups: (string | SceneGroup)[] = [
     Scenes_Pilotwings64.sceneGroup,
     Scenes_PokemonSnap.sceneGroup,
     Scenes_Zelda_OcarinaOfTime.sceneGroup,
+    Scenes_MarioKart64.sceneGroup,
     "PlayStation 2",
     Scenes_DragonQuest8.sceneGroup,
     Scenes_FFX.sceneGroup,

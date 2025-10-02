@@ -307,8 +307,6 @@ export class GloverActorRenderer implements Shadows.Collidable, Shadows.ShadowCa
 
     // Render state
 
-    private allocateLightingBuffer: boolean;
-
     public modelMatrix: mat4 = mat4.create();
 
     public visible: boolean = true;
@@ -369,13 +367,6 @@ export class GloverActorRenderer implements Shadows.Collidable, Shadows.ShadowCa
                 this.greatestExtent = Math.max(this.greatestExtent, extent);
             }
         });
-
-        this.allocateLightingBuffer = false;
-        this.rootMesh.forEachMesh((node) => {
-            if ((node.mesh.renderMode & 0x8) === 0) {
-                this.allocateLightingBuffer = true;
-            }
-        })
 
         if (overlay) {
             this.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT + Render.GloverRendererLayer.OVERLAY);
@@ -549,28 +540,10 @@ export class GloverActorRenderer implements Shadows.Collidable, Shadows.ShadowCa
         }
 
 
-        if (this.allocateLightingBuffer) {
-            const n_lights = this.sceneLights.diffuseColor.length;
-            const sceneParamsSize = 16 + n_lights * 8 + 4;
-            let offs = template.allocateUniformBuffer(F3DEX_Program.ub_SceneParams, sceneParamsSize);
-            const mappedF32 = template.mapUniformBufferF32(F3DEX_Program.ub_SceneParams);
-            offs += fillMatrix4x4(mappedF32, offs, viewerInput.camera.projectionMatrix);
-
-            for (let i = 0; i < n_lights; i++) {
-                offs += fillVec3v(mappedF32, offs, this.sceneLights.diffuseColor[i]);
-            }
-            for (let i = 0; i < n_lights; i++) {
-                computeViewMatrixSkybox(Render.DrawCallInstance.viewMatrixScratch, viewerInput.camera);
-                vec3.transformMat4(this.vec3Scratch, this.sceneLights.diffuseDirection[i], Render.DrawCallInstance.viewMatrixScratch);
-                offs += fillVec3v(mappedF32, offs, this.vec3Scratch);
-            }
-            offs += fillVec3v(mappedF32, offs, this.sceneLights.ambientColor);
-        } else {
-            const sceneParamsSize = 16;
-            let offs = template.allocateUniformBuffer(F3DEX_Program.ub_SceneParams, sceneParamsSize);
-            const mappedF32 = template.mapUniformBufferF32(F3DEX_Program.ub_SceneParams);
-            offs += fillMatrix4x4(mappedF32, offs, viewerInput.camera.projectionMatrix);            
-        }
+        const sceneParamsSize = 16;
+        let offs = template.allocateUniformBuffer(F3DEX_Program.ub_SceneParams, sceneParamsSize);
+        const mappedF32 = template.mapUniformBufferF32(F3DEX_Program.ub_SceneParams);
+        offs += fillMatrix4x4(mappedF32, offs, viewerInput.camera.projectionMatrix);
 
         this.rootMesh.prepareToRender(device, renderInstManager, viewerInput, this.currentAnimTime, this.modelMatrix);
 

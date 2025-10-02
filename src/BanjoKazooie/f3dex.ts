@@ -174,6 +174,7 @@ export interface RSPStateInterface {
     gDPSetOtherModeL(sft: number, len: number, w1: number): void;
     gDPSetOtherModeH(sft: number, len: number, w1: number): void;
     gDPSetCombine(w0: number, w1: number): void;
+    gMoveMem?(w0: number, w1: number): void;
 }
 
 
@@ -572,6 +573,10 @@ export function runDL_F3DEX(state: RSPStateInterface, addr: number): void {
             const vtx =   ((w0 >>>  0) & 0xFFFF) / 2;
             const val =    (w1 >>>  0) & 0xFFFFFFFF;
             state.gSPModifyVertex(vtx, where, val);
+        } break;
+
+        case F3DEX_GBI.G_MOVEMEM: {
+            state.gMoveMem?.(w0, w1);
         } break;
 
         case F3DEX_GBI.G_CULLDL:
