@@ -246,33 +246,6 @@ enum SaveStatesAction {
     Delete
 };
 
-class AnimationLoop implements ViewerUpdateInfo {
-    public time: number = 0;
-    public webXRContext: WebXRContext | null = null;
-
-    public onupdate: ((updateInfo: ViewerUpdateInfo) => void);
-
-    // https://hackmd.io/lvtOckAtSrmIpZAwgtXptw#Use-requestPostAnimationFrame-not-requestAnimationFrame
-    // https://github.com/WICG/requestPostAnimationFrame
-    // https://github.com/gpuweb/gpuweb/issues/596#issuecomment-596769356
-
-    // XXX(jstpierre): Disabled for now. https://bugs.chromium.org/p/chromium/issues/detail?id=1065012
-    public useRequestPostAnimationFrame = false;
-
-    private _timeoutCallback = (): void => {
-        this.onupdate(this);
-    };
-
-    // Call this from within your requestAnimationFrame handler.
-    public requestPostAnimationFrame = (): void => {
-        this.time = window.performance.now();
-        if (this.useRequestPostAnimationFrame)
-            setTimeout(this._timeoutCallback, 0);
-        else
-            this.onupdate(this);
-    };
-}
-
 class SceneDatabase {
     private sceneDescToGroup = new Map<SceneDesc, SceneGroup>();
     private sceneDescToId = new Map<SceneDesc, string>();
@@ -330,6 +303,33 @@ class SceneDatabase {
 
 type TimeState = { isPlaying: boolean, sceneTimeScale: number, sceneTime: number };
 
+class AnimationLoop {
+    public time: number = 0.0;
+    public fpsLimit: number = -1;
+
+    // Callback that will be called when we should render a frame.
+    public onupdate!: () => void;
+
+    // Call when a frame is requested from the underlying API.
+    public frameRequested = (): void => {
+        const newTime = window.performance.now();
+
+        if (this.fpsLimit > 0) {
+            const millisecondsPerFrame = 1000 / this.fpsLimit;
+            const millisecondsSinceLastFrame = newTime - this.time;
+
+            // Allow up to half a frame early.
+            const minNextFrameTime = millisecondsPerFrame / 2;
+
+            if (millisecondsSinceLastFrame < minNextFrameTime)
+                return;
+        }
+
+        this.time = newTime;
+        this.onupdate();
+    };
+}
+
 class Main {
     public toplevel: HTMLElement;
     public canvas: HTMLCanvasElement;
@@ -348,9 +348,13 @@ class Main {
     private dataFetcher: DataFetcher;
     private lastUpdatedURLTimeSeconds: number = -1;
 
-    private postAnimFrameCanvas = new AnimationLoop();
-    private postAnimFrameWebXR = new AnimationLoop();
     private webXRContext: WebXRContext;
+    private animationLoop = new AnimationLoop();
+
+    private updateInfo: ViewerUpdateInfo = {
+        time: 0.0,
+        webXRContext: null,
+    };
 
     public sceneTimeScale = 1.0;
     private isPlaying = false;
@@ -389,15 +393,10 @@ class Main {
             return;
         }
 
+        this.animationLoop.onupdate = this.animationLoopOnUpdate.bind(this);
+
         this.webXRContext = new WebXRContext(this.viewer.gfxSwapChain);
-        this.webXRContext.onframe = this.postAnimFrameWebXR.requestPostAnimationFrame;
-
-        this.postAnimFrameCanvas.onupdate = this._onPostAnimFrameUpdate;
-
-        // requestPostAnimationFrame breaks WebXR.
-        this.postAnimFrameWebXR.webXRContext = this.webXRContext;
-        this.postAnimFrameWebXR.useRequestPostAnimationFrame = false;
-        this.postAnimFrameWebXR.onupdate = this._onPostAnimFrameUpdate;
+        this.webXRContext.onframe = this.animationLoop.frameRequested;
 
         this.toplevel.ondragover = (e) => {
             if (!e.dataTransfer || !e.dataTransfer.types.includes('Files'))
@@ -442,7 +441,7 @@ class Main {
             this.ui.sceneSelect.setExpanded(true);
         }
 
-        this._onRequestAnimationFrameCanvas();
+        this._onRequestAnimationFrame();
     }
 
     private setIsPlaying(v: boolean): void {
@@ -562,41 +561,44 @@ class Main {
         }
     }
 
-    private _onPostAnimFrameUpdate = (updateInfo: ViewerUpdateInfo): void => {
+    private animationLoopOnUpdate(): void {
         this._checkKeyShortcuts();
 
         prepareFrameDebugOverlayCanvas2D();
 
-        // Needs to be called before this.viewer.update()
-        const shouldTakeScreenshot = this.viewer.inputManager.isKeyDownEventTriggered('Numpad7') || this.viewer.inputManager.isKeyDownEventTriggered('BracketRight');
-
-        let sceneTimeScale = this.sceneTimeScale;
-        if (this.isFrameStep) {
-            sceneTimeScale /= 4.0;
-            this.isFrameStep = false;
-        } else if (!this.isPlaying) {
-            sceneTimeScale = 0.0;
-        }
-
         if (!this.viewer.externalControl) {
-            this.viewer.sceneTimeScale = sceneTimeScale;
-            this.viewer.update(updateInfo);
-        }
+            this.updateInfo.time = this.animationLoop.time;
+            this.updateInfo.webXRContext = this.webXRContext.xrSession !== null ? this.webXRContext : null;
 
-        if (shouldTakeScreenshot)
-            this._takeScreenshot();
+            // Needs to be called before this.viewer.update()
+            const shouldTakeScreenshot = this.viewer.inputManager.isKeyDownEventTriggered('Numpad7') || this.viewer.inputManager.isKeyDownEventTriggered('BracketRight');
+
+            let sceneTimeScale = this.sceneTimeScale;
+            if (this.isFrameStep) {
+                sceneTimeScale /= 4.0;
+                this.isFrameStep = false;
+            } else if (!this.isPlaying) {
+                sceneTimeScale = 0.0;
+            }
+
+            this.viewer.sceneTimeScale = sceneTimeScale;
+            this.viewer.update(this.updateInfo);
+
+            if (shouldTakeScreenshot)
+                this._takeScreenshot();
+        }
 
         this.ui.update();
     };
 
-    private _onRequestAnimationFrameCanvas = (): void => {
+    private _onRequestAnimationFrame = (): void => {
         if (this.webXRContext.xrSession !== null) {
             // Currently presenting to XR. Skip the canvas render.
         } else {
-            this.postAnimFrameCanvas.requestPostAnimationFrame();
+            this.animationLoop.frameRequested();
         }
 
-        window.requestAnimationFrame(this._onRequestAnimationFrameCanvas);
+        window.requestAnimationFrame(this._onRequestAnimationFrame);
     };
 
     private async _onDrop(e: DragEvent) {
