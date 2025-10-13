@@ -17,7 +17,7 @@ import type { MaterialCache } from "./MaterialCache.js";
 import * as P from "./MaterialParameters.js";
 import { ProjectedLight, ShaderWorldLightType } from "./WorldLight.js";
 
-//#region Generic (LightmappedGeneric, UnlitGeneric, VertexLightingGeneric, WorldVertexTransition)
+//#region Generic (LightmappedGeneric, UnlitGeneric, VertexLitGeneric, WorldVertexTransition)
 export class ShaderTemplate_Generic extends MaterialShaderTemplateBase {
     public static ub_ObjectParams = 2;
 
@@ -354,16 +354,13 @@ void mainVS() {
     v_DiffuseLighting0.rgb += AmbientLight(t_NormalWorld);
 #endif
 
-    bool t_HalfLambert = false;
-#if defined USE_HALF_LAMBERT
-    t_HalfLambert = true;
-#endif
+    bool use_half_lambert = ${MaterialUtil.getDefineBool(m, 'USE_HALF_LAMBERT')};
 
     DiffuseLightInput t_DiffuseLightInput;
     t_DiffuseLightInput.PositionWorld = t_PositionWorld.xyz;
     t_DiffuseLightInput.NormalWorld = t_NormalWorld.xyz;
     t_DiffuseLightInput.LightAttenuation = t_LightAtten.xyzw;
-    t_DiffuseLightInput.HalfLambert = t_HalfLambert;
+    t_DiffuseLightInput.HalfLambert = use_half_lambert;
     vec3 t_DiffuseLighting = WorldLightCalcAllDiffuse(t_DiffuseLightInput);
     v_DiffuseLighting0.rgb += t_DiffuseLighting;
 #endif

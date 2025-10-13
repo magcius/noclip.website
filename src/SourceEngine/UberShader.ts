@@ -210,20 +210,23 @@ export class UberShaderInstanceBasic extends UberShaderInstance<DefinesMap> {
     }
 
     public setDefineString(name: string, v: string | null): boolean {
+        if (v !== null) {
+            if (this.variantSettings.get(name) === v)
+                return false;
+        } else {
+            if (!this.variantSettings.has(name))
+                return false;
+        }
+
         if (this.gfxProgram !== null) {
             this.invalidate();
             this.variantSettings = new Map<string, string>(this.variantSettings);
         }
 
-        if (v !== null) {
-            if (this.variantSettings.get(name) === v)
-                return false;
+        if (v !== null)
             this.variantSettings.set(name, v);
-        } else {
-            if (!this.variantSettings.has(name))
-                return false;
+        else
             this.variantSettings.delete(name);
-        }
 
         return true;
     }

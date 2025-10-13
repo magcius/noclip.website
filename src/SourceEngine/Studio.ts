@@ -2187,8 +2187,12 @@ export class StudioModelInstance {
         const depth = computeViewSpaceDepthFromWorldSpacePoint(renderContext.currentView.viewFromWorldMatrix, scratchVec3a);
 
         const lodIndex = this.getLODModelIndex(renderContext);
-        for (let i = 0; i < this.bodyPartInstance.length; i++)
-            this.bodyPartInstance[i].getLODInstance(lodIndex).prepareToRender(renderContext, renderInstManager, this.modelMatrix, this.worldFromPoseMatrix, scratchAABB, depth);
+        for (let i = 0; i < this.bodyPartInstance.length; i++) {
+            const bodyPartInstance = this.bodyPartInstance[i];
+            if (!bodyPartInstance.visible)
+                continue;
+            bodyPartInstance.getLODInstance(lodIndex).prepareToRender(renderContext, renderInstManager, this.modelMatrix, this.worldFromPoseMatrix, scratchAABB, depth);
+        }
     }
 
     public destroy(device: GfxDevice): void {
