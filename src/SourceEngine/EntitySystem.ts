@@ -1930,12 +1930,18 @@ class logic_case extends BaseEntity {
     }
 
     private input_pickrandom(entitySystem: EntitySystem, activator: BaseEntity): void {
+        if (this.connectedOutputs.length === 0)
+            return;
+
         const index = (Math.random() * this.connectedOutputs.length) | 0;
         const c = this.connectedOutputs[index];
         this.output_oncaseNN[c].fire(entitySystem, this, activator);
     }
 
     private input_pickrandomshuffle(entitySystem: EntitySystem, activator: BaseEntity): void {
+        if (this.connectedOutputs.length === 0)
+            return;
+
         if (this.shuffled.length === 0)
             this.shuffled = shuffle(this.connectedOutputs);
         const c = this.shuffled.pop()!;
