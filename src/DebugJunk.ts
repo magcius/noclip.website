@@ -3,7 +3,7 @@
 import { ReadonlyMat4, ReadonlyVec3, ReadonlyVec4, mat4, vec3, vec4 } from "gl-matrix";
 import ArrayBufferSlice from "./ArrayBufferSlice.js";
 import { divideByW } from "./Camera.js";
-import { Blue, Color, Green, Magenta, OpaqueBlack, Red, colorToCSS } from "./Color.js";
+import { Blue, Color, Green, Magenta, OpaqueBlack, Red, colorFromHSL, colorFromHex, colorFromRGBA, colorFromRGBA8, colorToCSS } from "./Color.js";
 import { downloadBuffer, downloadBufferSlice } from "./DownloadUtils.js";
 import { AABB } from "./Geometry.js";
 import { MathConstants, Vec3UnitX, Vec3UnitY, Vec3UnitZ, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, lerp, transformVec3Mat4w0, vec3FromBasis2 } from "./MathHelpers.js";
@@ -463,4 +463,10 @@ export const debugJunk: any = {
     magicstr,
     ghidraDecode,
     downloadBuffer: downloadBufferAny,
+    colorUtils: {
+        colorFromRGBA,
+        colorFromRGBA8,
+        colorFromHex,
+        colorFromHSL,
+    },
 };
