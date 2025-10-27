@@ -10,7 +10,7 @@ import * as Viewer from '../viewer.js';
 import * as UI from '../ui.js';
 
 import { TextureMapping } from '../TextureHolder.js';
-import { TransparentBlack } from '../Color.js';
+import { colorNewCopy, TransparentBlack } from '../Color.js';
 import { GfxDevice, GfxRenderPass, GfxTexture, GfxFormat, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxClipSpaceNearZ } from '../gfx/platform/GfxPlatform.js';
 import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
@@ -160,6 +160,8 @@ export class SMGRenderer implements Viewer.SceneGfx {
     private maskDesc = new GfxrRenderTargetDescription(GfxFormat.U8_R_NORM);
 
     constructor(private renderHelper: GXRenderHelperGfx, private spawner: SMGSpawner, private sceneObjHolder: SceneObjHolder) {
+        this.mainColorDesc.clearColor = colorNewCopy(TransparentBlack);
+
         this.textureHolder = this.sceneObjHolder.modelCache.textureListHolder;
 
         if (this.sceneObjHolder.sceneDesc.scenarioOverride !== null)
@@ -480,7 +482,6 @@ export class SMGRenderer implements Viewer.SceneGfx {
         renderInstManager.popTemplate();
 
         setBackbufferDescSimple(this.mainColorDesc, viewerInput);
-        this.mainColorDesc.clearColor = TransparentBlack;
 
         this.mainDepthDesc.copyDimensions(this.mainColorDesc);
         this.mainDepthDesc.clearDepth = standardFullClearRenderPassDescriptor.clearDepth!;
