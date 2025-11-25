@@ -350,7 +350,7 @@ interface ViewerOut {
 export enum InitErrorCode {
     SUCCESS,
     NO_WEBGL2_GENERIC,
-    GARBAGE_WEBGL2_GENERIC,
+    NO_WEBGPU_GENERIC,
     GARBAGE_WEBGL2_SWIFTSHADER,
     MISSING_MISC_WEB_APIS,
 }
@@ -384,30 +384,40 @@ async function initializeViewerWebGPU(out: ViewerOut, canvas: HTMLCanvasElement)
 
     const gfxSwapChain = await createSwapChainForWebGPU(canvas, config);
     if (gfxSwapChain === null)
-        return InitErrorCode.MISSING_MISC_WEB_APIS;
+        return InitErrorCode.NO_WEBGPU_GENERIC;
 
     out.viewer = new Viewer(gfxSwapChain, canvas);
     return InitErrorCode.SUCCESS;
 }
 
-function getPlatformBackend(): 'WebGPU' | 'WebGL2' {
-    if (location.search.includes('webgpu'))
-        return 'WebGPU';
-    else if (location.search.includes('webgl2'))
-        return 'WebGL2';
-
-    const platformBackend = GlobalSaveManager.loadSetting<string>('PlatformBackend', 'WebGL2');
-    if (platformBackend === 'WebGPU')
-        return 'WebGPU';
-    else
-        return 'WebGL2';
-}
-
 export async function initializeViewer(out: ViewerOut, canvas: HTMLCanvasElement): Promise<InitErrorCode> {
-    if (getPlatformBackend() === 'WebGPU')
-        return initializeViewerWebGPU(out, canvas);
-    else
-        return initializeViewerWebGL2(out, canvas);
+    let forcedBackend: GfxPlatform | null = null;
+    if (location.search.includes('webgpu'))
+        forcedBackend = GfxPlatform.WebGPU;
+    else if (location.search.includes('webgl2'))
+        forcedBackend = GfxPlatform.WebGL2;
+
+    const defaultBackend = GlobalSaveManager.loadSetting<string>('PlatformBackend', 'WebGL2') === 'WebGL2' ? GfxPlatform.WebGL2 : GfxPlatform.WebGPU;
+
+    const backendsToTry = [];
+    if (forcedBackend !== null) {
+        backendsToTry.push(forcedBackend);
+    } else {
+        backendsToTry.push(defaultBackend);
+        backendsToTry.push(defaultBackend === GfxPlatform.WebGPU ? GfxPlatform.WebGL2 : GfxPlatform.WebGPU);
+    }
+
+    let ret: InitErrorCode = InitErrorCode.MISSING_MISC_WEB_APIS;
+    for (let i = 0; i < backendsToTry.length; i++) {
+        const backend = backendsToTry[i];
+        ret = backend === GfxPlatform.WebGL2 ?
+            await initializeViewerWebGL2(out, canvas) :
+            await initializeViewerWebGPU(out, canvas);
+        if (ret === InitErrorCode.SUCCESS)
+            break;
+        console.warn(`Init: ${GfxPlatform[backend]}, ErrorCode: ${InitErrorCode[ret]}`);
+    }
+    return ret;
 }
 
 export function makeErrorMessageUI(message: string): DocumentFragment {
@@ -430,20 +440,20 @@ export function makeErrorUI(errorCode: InitErrorCode): DocumentFragment {
         return makeErrorMessageUI(`
 <p>Your browser does not appear to have WebGL 2 support.
 <p>If <a href="http://webglreport.com/?v=2">WebGL Report</a> says your browser supports WebGL 2, please open a <a href="https://github.com/magcius/noclip.website/issues/new?template=tech_support.md">GitHub issue</a> with as much as information as possible.
-<p style="text-align: right">Thanks, Jasper.
+<p style="text-align: right">Thank you.
+`);
+    else if (errorCode === InitErrorCode.NO_WEBGPU_GENERIC)
+        return makeErrorMessageUI(`
+<p>Your browser does not appear to have WebGL 2 support.
+<p>If <a href="https://webgpureport.org/">WebGPU</a> says your browser supports WebGPU, please open a <a href="https://github.com/magcius/noclip.website/issues/new?template=tech_support.md">GitHub issue</a> with as much as information as possible.
+<p style="text-align: right">Thank you.
 `);
     else if (errorCode === InitErrorCode.GARBAGE_WEBGL2_SWIFTSHADER)
         return makeErrorMessageUI(`
 <p>This application requires hardware acceleration to be enabled.
 <p>Please enable hardware acceleration in your's browser settings.
 <p>If you have enabled hardware acceleration and are still getting this error message, try restarting your browser and computer.
-<p style="text-align: right">Thanks, Jasper.
-`);
-    else if (errorCode === InitErrorCode.GARBAGE_WEBGL2_GENERIC)
-        return makeErrorMessageUI(`
-<p>This browser has a non-functioning version of WebGL 2 that I have not seen before.
-<p>If <a href="http://webglreport.com/?v=2">WebGL Report</a> says your browser supports WebGL 2, please open a <a href="https://github.com/magcius/noclip.website/issues/new?template=tech_support.md">GitHub issue</a> with as much as information as possible.
-<p style="text-align: right">Thanks, Jasper.
+<p style="text-align: right">Thank you.
 `);
     else if (errorCode === InitErrorCode.MISSING_MISC_WEB_APIS)
         return makeErrorMessageUI(`
