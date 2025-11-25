@@ -444,7 +444,7 @@ export function makeErrorUI(errorCode: InitErrorCode): DocumentFragment {
 `);
     else if (errorCode === InitErrorCode.NO_WEBGPU_GENERIC)
         return makeErrorMessageUI(`
-<p>Your browser does not appear to have WebGL 2 support.
+<p>Your browser does not appear to have WebGPU support.
 <p>If <a href="https://webgpureport.org/">WebGPU</a> says your browser supports WebGPU, please open a <a href="https://github.com/magcius/noclip.website/issues/new?template=tech_support.md">GitHub issue</a> with as much as information as possible.
 <p style="text-align: right">Thank you.
 `);
