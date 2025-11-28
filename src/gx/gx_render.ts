@@ -454,12 +454,7 @@ export class GXMaterialHelperGfx {
         if (materialHacks)
             Object.assign(this.materialHacks, materialHacks);
 
-        this.materialInvalidated();
-    }
-
-    public autoOptimizeMaterial(): void {
-        autoOptimizeMaterial(this.material);
-        this.materialInvalidated();
+        this.invalidateMaterial();
     }
 
     private checkValid(): boolean {
@@ -469,15 +464,17 @@ export class GXMaterialHelperGfx {
         return true;
     }
 
-    public materialInvalidated(): void {
+    public invalidateMaterial(): void {
         this.valid = this.checkValid();
         if (!this.valid)
             return;
 
+        autoOptimizeMaterial(this.material);
         this.megaStateFlags = translateGfxMegaState(this.material);
 
         this.materialParamsBufferSize = GX_Material.getMaterialParamsBlockSize(this.material);
         this.drawParamsBufferSize = GX_Material.getDrawParamsBlockSize(this.material);
+        this.program = null;
     }
 
     public cacheProgram(cache: GfxRenderCache): void {

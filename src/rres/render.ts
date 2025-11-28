@@ -520,7 +520,7 @@ class MaterialInstance {
                 lightSet.calcAmbColorCopy(materialParams.u_Color[ColorKind.AMB0], lightSetting);
                 if (lightSet.calcLightSetLitMask(this.materialHelper.material.lightChannels, lightSetting)) {
                     this.materialHelper.material.hasLightsBlock = undefined;
-                    this.materialHelper.autoOptimizeMaterial();
+                    this.materialHelper.invalidateMaterial();
                 }
             }
         }

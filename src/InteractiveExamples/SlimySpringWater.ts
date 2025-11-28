@@ -214,7 +214,7 @@ class FakeWaterModelInstance {
         material.alphaTest.compareB = GX.CompareType.LEQUAL;
 
         material.hasDynamicAlphaTest = true;
-        materialHelper.materialInvalidated();
+        materialHelper.invalidateMaterial();
 
         this.k3.r = materialHelper.material.alphaTest.referenceA;
         this.k3.g = materialHelper.material.alphaTest.referenceB;
