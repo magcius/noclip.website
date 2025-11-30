@@ -1347,6 +1347,7 @@ class FVTXData {
                     let attribBufferIndex = fvtxVertexBufferMap[fvtxBufferIndex];
                     if (attribBufferIndex === undefined) {
                         attribBufferIndex = nextBufferIndex++;
+                        fvtxVertexBufferMap[fvtxBufferIndex] = attribBufferIndex;
 
                         this.inputBufferDescriptors[attribBufferIndex] = {
                             byteStride: vertexBuffer.stride,
