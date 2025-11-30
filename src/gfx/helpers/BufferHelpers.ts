@@ -111,5 +111,5 @@ export function createBufferFromData(device: GfxDevice, usage: GfxBufferUsage, h
 }
 
 export function createBufferFromSlice(device: GfxDevice, usage: GfxBufferUsage, hint: GfxBufferFrequencyHint, data: ArrayBufferSlice): GfxBuffer {
-    return device.createBuffer(data.byteLength, usage, GfxBufferFrequencyHint.Static, data.createTypedArray(Uint8Array));
+    return device.createBuffer(data.byteLength, usage, hint, data.createTypedArray(Uint8Array));
 }

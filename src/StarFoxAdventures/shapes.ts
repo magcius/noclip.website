@@ -16,6 +16,7 @@ import { MaterialRenderContext, SFAMaterial, StandardMapMaterial } from './mater
 import { ModelRenderContext } from './models.js';
 import { setGXMaterialOnRenderInst } from './render.js';
 import { LightType } from './WorldLights.js';
+import { createBufferFromData } from '../gfx/helpers/BufferHelpers.js';
 
 export interface ShapeRenderContext {
     modelCtx: ModelRenderContext;
@@ -29,31 +30,24 @@ class MyShapeHelper {
     private vertexBuffers: GfxBuffer[] = [];
     private indexBuffer: GfxBuffer;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, public loadedVertexLayout: LoadedVertexLayout, public loadedVertexData: LoadedVertexData, dynamicVertices: boolean, dynamicIndices: boolean) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, public loadedVertexLayout: LoadedVertexLayout, public loadedVertexData: LoadedVertexData, dynamicVertices: boolean) {
         for (let i = 0; i < loadedVertexData.vertexBuffers.length; i++) {
-            const vertexBuffer = device.createBuffer(loadedVertexData.vertexBuffers[i].byteLength, GfxBufferUsage.Vertex,
-                dynamicVertices ? GfxBufferFrequencyHint.Dynamic : GfxBufferFrequencyHint.Static);
+            const vertexBuffer = createBufferFromData(device, GfxBufferUsage.Vertex,
+                dynamicVertices ? GfxBufferFrequencyHint.Dynamic : GfxBufferFrequencyHint.Static,
+                loadedVertexData.vertexBuffers[i]);
             this.vertexBuffers.push(vertexBuffer);
             this.vertexBufferDescriptors.push({ buffer: vertexBuffer });
         }
 
         this.inputLayout = createInputLayout(cache, loadedVertexLayout);
 
-        this.indexBuffer = device.createBuffer(loadedVertexData.indexData.byteLength, GfxBufferUsage.Index,
-            dynamicIndices ? GfxBufferFrequencyHint.Dynamic : GfxBufferFrequencyHint.Static);
-
+        this.indexBuffer = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, loadedVertexData.indexData);
         this.indexBufferDescriptor = { buffer: this.indexBuffer };
-        this.uploadData(device, true, true);
     }
 
-    public uploadData(device: GfxDevice, uploadVertices: boolean, uploadIndices: boolean) {
-        if (uploadVertices) {
-            for (let i = 0; i < this.loadedVertexData.vertexBuffers.length; i++)
-                device.uploadBufferData(this.vertexBuffers[i], 0, new Uint8Array(this.loadedVertexData.vertexBuffers[i]));
-        }
-
-        if (uploadIndices)
-            device.uploadBufferData(this.indexBuffer, 0, new Uint8Array(this.loadedVertexData.indexData));
+    public uploadVertexData(device: GfxDevice) {
+        for (let i = 0; i < this.loadedVertexData.vertexBuffers.length; i++)
+            device.uploadBufferData(this.vertexBuffers[i], 0, new Uint8Array(this.loadedVertexData.vertexBuffers[i]));
     }
 
     public setOnRenderInst(renderInst: GfxRenderInst, draw: LoadedVertexDraw | null = null): void {
@@ -126,12 +120,12 @@ export class ShapeGeometry {
     {
         if (this.shapeHelper === null) {
             this.shapeHelper = new MyShapeHelper(device, renderInstManager.gfxRenderCache,
-                this.vtxLoader.loadedVertexLayout, this.loadedVertexData, this.isDynamic, false);
+                this.vtxLoader.loadedVertexLayout, this.loadedVertexData, this.isDynamic);
             this.verticesDirty = false;
         }
         
         if (this.verticesDirty) {
-            this.shapeHelper.uploadData(device, true, false);
+            this.shapeHelper.uploadVertexData(device);
             this.verticesDirty = false;
         }
 
