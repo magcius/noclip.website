@@ -3,25 +3,28 @@
 import { mat4, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { transformVec3Mat4w1 } from "../MathHelpers.js";
-import { GfxBufferCoalescerCombo } from "../gfx/helpers/BufferHelpers.js";
-import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
+import { GfxBufferCoalescerCombo, GfxCoalescedBuffersCombo } from "../gfx/helpers/BufferHelpers.js";
+import { GfxDevice, GfxInputLayout } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import {
     GX_Array,
     GX_VtxAttrFmt,
     GX_VtxDesc,
     LoadedVertexData,
+    LoadedVertexLayout,
     VtxLoader,
     compileVtxLoaderMultiVat
 } from "../gx/gx_displaylist.js";
 import * as GX from "../gx/gx_enum.js";
 import { GXMaterialHacks } from "../gx/gx_material.js";
-import { DrawParams, GXShapeHelperGfx, loadedDataCoalescerComboGfx } from "../gx/gx_render.js";
+import { createInputLayout, DrawParams, loadedDataCoalescerComboGfx } from "../gx/gx_render.js";
 import * as Gma from "./Gma.js";
 import { MaterialInst } from "./Material.js";
 import { RenderParams, RenderSort } from "./Model.js";
 import { RenderContext } from "./Render.js";
 import { TevLayerInst } from "./TevLayer.js";
+import { GfxRenderInst } from "../gfx/render/GfxRenderInstManager.js";
+import { assert } from "../util.js";
 
 function fillVatFormat(vtxType: GX.CompType, isNBT: boolean): GX_VtxAttrFmt[] {
     const vatFormat: GX_VtxAttrFmt[] = [];
@@ -56,10 +59,21 @@ function generateLoadedVertexData(dlist: ArrayBufferSlice, loader: VtxLoader): L
 }
 
 // Each display list needs its own material as different GXCullMode's may need to be set
-type SubShapeInst = {
-    shapeHelper: GXShapeHelperGfx;
-    material: MaterialInst;
-};
+class SubShapeInst {
+    public inputLayout: GfxInputLayout;
+
+    constructor(cache: GfxRenderCache, public material: MaterialInst, loadedVertexLayout: LoadedVertexLayout, public loadedVertexData: LoadedVertexData, public buffers: GfxCoalescedBuffersCombo) {
+        this.inputLayout = createInputLayout(cache, loadedVertexLayout);
+        assert(this.loadedVertexData.draws.length === 1);
+    }
+
+    public setOnRenderInst(cache: GfxRenderCache, renderInst: GfxRenderInst, drawParams: DrawParams, renderParams: RenderParams): void {
+        this.material.setOnRenderInst(cache, renderInst, drawParams, renderParams);
+        renderInst.setVertexInput(this.inputLayout, this.buffers.vertexBuffers, this.buffers.indexBuffer);
+        const draw = this.loadedVertexData.draws[0];
+        renderInst.setDrawCount(draw.indexCount, draw.indexOffset);
+    }
+}
 
 const scratchDrawParams = new DrawParams();
 const scratchVec3a = vec3.create();
@@ -100,16 +114,8 @@ export class ShapeInst {
         this.bufferCoalescer = loadedDataCoalescerComboGfx(device, loadedVertexDatas);
         this.subShapes = shapeData.dlists.map((dlist, i) => {
             const buf = this.bufferCoalescer.coalescedBuffers[i];
-            const shapeHelper = new GXShapeHelperGfx(
-                device,
-                renderCache,
-                buf.vertexBuffers,
-                buf.indexBuffer,
-                loadedVertexLayout,
-                loadedVertexDatas[i]
-            );
             const material = new MaterialInst(shapeData.material, modelTevLayers, translucent, dlist.cullMode);
-            return { shapeHelper, material };
+            return new SubShapeInst(renderCache, material, loadedVertexLayout, loadedVertexDatas[i], buf);
         });
     }
 
@@ -124,15 +130,9 @@ export class ShapeInst {
         mat4.copy(drawParams.u_PosMtx[0], renderParams.viewFromModel);
 
         for (let i = 0; i < this.subShapes.length; i++) {
-            const inst = ctx.renderInstManager.newRenderInst();
-            this.subShapes[i].material.setOnRenderInst(
-                ctx.device,
-                ctx.renderInstManager.gfxRenderCache,
-                inst,
-                drawParams,
-                renderParams
-            );
-            this.subShapes[i].shapeHelper.setOnRenderInst(inst);
+            const renderInst = ctx.renderInstManager.newRenderInst();
+            const subShape = this.subShapes[i];
+            subShape.setOnRenderInst(ctx.renderInstManager.gfxRenderCache, renderInst, drawParams, renderParams);
 
             if (
                 (this.translucent && renderParams.sort === RenderSort.Translucent) ||
@@ -140,18 +140,15 @@ export class ShapeInst {
             ) {
                 const originViewSpace = scratchVec3a;
                 transformVec3Mat4w1(originViewSpace, renderParams.viewFromModel, this.shapeData.origin);
-                inst.sortKey = -(vec3.len(originViewSpace) + renderParams.depthOffset);
-                ctx.translucentInstList.submitRenderInst(inst);
+                renderInst.sortKey = -(vec3.len(originViewSpace) + renderParams.depthOffset);
+                ctx.translucentInstList.submitRenderInst(renderInst);
             } else {
-                ctx.opaqueInstList.submitRenderInst(inst);
+                ctx.opaqueInstList.submitRenderInst(renderInst);
             }
         }
     }
 
     public destroy(device: GfxDevice): void {
-        for (let i = 0; i < this.subShapes.length; i++) {
-            this.subShapes[i].shapeHelper.destroy(device);
-        }
         this.bufferCoalescer.destroy(device);
     }
 }

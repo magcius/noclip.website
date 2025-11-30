@@ -240,7 +240,6 @@ export class MaterialInst {
     }
 
     public setOnRenderInst(
-        device: GfxDevice,
         renderCache: GfxRenderCache,
         inst: GfxRenderInst,
         drawParams: DrawParams,

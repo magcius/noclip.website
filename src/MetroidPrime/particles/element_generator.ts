@@ -18,7 +18,7 @@ import { PART } from '../part.js';
 import { AABB } from '../../Geometry.js';
 import { getMatrixAxisZ, getMatrixTranslation, MathConstants, transformVec3Mat4w0, transformVec3Mat4w1, Vec3UnitZ, Vec3Zero } from '../../MathHelpers.js';
 import { GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxDevice, GfxInputLayout, GfxMipFilterMode, GfxTexFilterMode, GfxWrapMode } from '../../gfx/platform/GfxPlatform.js';
-import { ColorKind, createInputLayout, DrawParams, GXMaterialHelperGfx, GXShapeHelperGfx, MaterialParams } from '../../gx/gx_render.js';
+import { ColorKind, createInputLayout, DrawParams, GXMaterialHelperGfx, MaterialParams } from '../../gx/gx_render.js';
 import { computeViewMatrix } from '../../Camera.js';
 import { GfxRendererLayer, GfxRenderInst, makeSortKey } from '../../gfx/render/GfxRenderInstManager.js';
 import { Color, colorCopy, colorEqual, colorFromRGBA, colorNewFromRGBA, colorScale, colorToRGBA8, OpaqueBlack, White } from '../../Color.js';

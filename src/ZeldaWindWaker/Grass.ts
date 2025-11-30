@@ -11,9 +11,8 @@ import { BTIData, BTI_Texture } from '../Common/JSYSTEM/JUTTexture.js';
 import { GX_Array, GX_VtxAttrFmt, GX_VtxDesc, compileVtxLoader, getAttributeByteSize } from '../gx/gx_displaylist.js';
 import { parseMaterial, GXMaterial } from '../gx/gx_material.js';
 import { DisplayListRegisters, displayListRegistersRun, displayListRegistersInitGX } from '../gx/gx_displaylist.js';
-import { GfxBufferCoalescerCombo } from '../gfx/helpers/BufferHelpers.js';
-import { ColorKind, DrawParams, MaterialParams, loadedDataCoalescerComboGfx } from "../gx/gx_render.js";
-import { GXShapeHelperGfx, GXMaterialHelperGfx } from '../gx/gx_render.js';
+import { ColorKind, DrawParams, MaterialParams } from "../gx/gx_render.js";
+import { GXMaterialHelperGfx } from '../gx/gx_render.js';
 import { TextureMapping } from '../TextureHolder.js';
 import { GfxRenderInstManager, makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderInstManager.js';
 import { ViewerRenderInput } from '../viewer.js';
@@ -21,6 +20,7 @@ import { colorCopy, colorFromRGBA } from '../Color.js';
 import { dKy_GxFog_set } from './d_kankyo.js';
 import { dBgS_GndChk } from './d_bg.js';
 import { cM_s2rad } from './SComponent.js';
+import { dDlst_BasicShape_c } from './d_drawlist.js';
 
 function createMaterialHelper(material: GXMaterial): GXMaterialHelperGfx {
     // Patch material.
@@ -159,7 +159,7 @@ interface FlowerAnim {
 class DynamicModel {
     public textureMapping = nArray(1, () => new TextureMapping());
     public materialHelper: GXMaterialHelperGfx;
-    public shapes: GXShapeHelperGfx[] = [];
+    public shapes: dDlst_BasicShape_c[] = [];
 
     constructor(public textureData: BTIData, material: GXMaterial) {
         this.textureData.fillTextureMapping(this.textureMapping[0]);
@@ -177,8 +177,6 @@ class FlowerModel {
     public pink: DynamicModel;
     public white: DynamicModel;
     public bessou: DynamicModel;
-
-    public bufferCoalescer: GfxBufferCoalescerCombo;
 
     constructor(globals: dGlobals) {
         const device = globals.modelCache.device, cache = globals.renderer.renderCache;
@@ -255,22 +253,15 @@ class FlowerModel {
         const lBessouUncut = loadVerts(l_pos3, l_color3, l_texCoord3, l_QbsfwDL);
         const lBessouCut = loadVerts(l_pos3, l_color3, l_texCoord3, l_QbsafDL);
 
-        // Coalesce all VBs and IBs into single buffers and upload to the GPU
-        this.bufferCoalescer = loadedDataCoalescerComboGfx(device, [ lWhiteUncut, lWhiteCut, lPinkUncut, lPinkCut, lBessouUncut, lBessouCut ]);
-
-        const b = this.bufferCoalescer.coalescedBuffers;
-
-        // Build an input layout and input state from the vertex layout and data
-        this.white.shapes.push(new GXShapeHelperGfx(device, cache, b[0].vertexBuffers, b[0].indexBuffer, vtxLoader.loadedVertexLayout, lWhiteUncut));
-        this.white.shapes.push(new GXShapeHelperGfx(device, cache, b[1].vertexBuffers, b[1].indexBuffer, vtxLoader.loadedVertexLayout, lWhiteCut));
-        this.pink.shapes.push(new GXShapeHelperGfx(device, cache, b[2].vertexBuffers, b[2].indexBuffer, vtxLoader.loadedVertexLayout, lPinkUncut));
-        this.pink.shapes.push(new GXShapeHelperGfx(device, cache, b[3].vertexBuffers, b[3].indexBuffer, vtxLoader.loadedVertexLayout, lPinkCut));
-        this.bessou.shapes.push(new GXShapeHelperGfx(device, cache, b[4].vertexBuffers, b[4].indexBuffer, vtxLoader.loadedVertexLayout, lBessouUncut));
-        this.bessou.shapes.push(new GXShapeHelperGfx(device, cache, b[5].vertexBuffers, b[5].indexBuffer, vtxLoader.loadedVertexLayout, lBessouCut));
+        this.white.shapes.push(new dDlst_BasicShape_c(cache, vtxLoader.loadedVertexLayout, lWhiteUncut));
+        this.white.shapes.push(new dDlst_BasicShape_c(cache, vtxLoader.loadedVertexLayout, lWhiteCut));
+        this.pink.shapes.push(new dDlst_BasicShape_c(cache, vtxLoader.loadedVertexLayout, lPinkUncut));
+        this.pink.shapes.push(new dDlst_BasicShape_c(cache, vtxLoader.loadedVertexLayout, lPinkCut));
+        this.bessou.shapes.push(new dDlst_BasicShape_c(cache, vtxLoader.loadedVertexLayout, lBessouUncut));
+        this.bessou.shapes.push(new dDlst_BasicShape_c(cache, vtxLoader.loadedVertexLayout, lBessouCut));
     }
 
     public destroy(device: GfxDevice): void {
-        this.bufferCoalescer.destroy(device);
         this.white.destroy(device);
         this.pink.destroy(device);
         this.bessou.destroy(device);
@@ -457,8 +448,6 @@ class TreeModel {
     public shadow: DynamicModel;
     public main: DynamicModel;
 
-    public bufferCoalescer: GfxBufferCoalescerCombo;
-
     constructor(globals: dGlobals) {
         const device = globals.modelCache.device, cache = globals.renderer.renderCache;
 
@@ -477,9 +466,9 @@ class TreeModel {
         // @HACK: The tex coord array is being read as all zero. Hardcode it.
         const l_shadowTexCoord = new ArrayBufferSlice(new Uint8Array([0, 0, 1, 0, 1, 1, 0, 1]).buffer);
 
-        const l_Oba_swood_noneDL = globals.findExtraSymbolData('d_tree.o', 'l_Oba_swood_noneDL');
-        const l_Oba_swood_a_cuttDL = globals.findExtraSymbolData('d_tree.o', 'l_Oba_swood_a_cuttDL');
-        const l_Oba_swood_a_cutuDL = globals.findExtraSymbolData('d_tree.o', 'l_Oba_swood_a_cutuDL');
+        // const l_Oba_swood_noneDL = globals.findExtraSymbolData('d_tree.o', 'l_Oba_swood_noneDL');
+        // const l_Oba_swood_a_cuttDL = globals.findExtraSymbolData('d_tree.o', 'l_Oba_swood_a_cuttDL');
+        // const l_Oba_swood_a_cutuDL = globals.findExtraSymbolData('d_tree.o', 'l_Oba_swood_a_cutuDL');
         const l_Oba_swood_a_hapaDL = globals.findExtraSymbolData('d_tree.o', 'l_Oba_swood_a_hapaDL');
         const l_Oba_swood_a_mikiDL = globals.findExtraSymbolData('d_tree.o', 'l_Oba_swood_a_mikiDL');
         const g_dTree_Oba_kage_32DL = globals.findExtraSymbolData('d_tree.o', 'g_dTree_Oba_kage_32DL');
@@ -524,24 +513,18 @@ class TreeModel {
         vtxArrays[GX.Attr.CLR0] = { buffer: l_color, offs: 0, stride: getAttributeByteSize(vatFormat, GX.Attr.CLR0) };
         vtxArrays[GX.Attr.TEX0] = { buffer: l_texCoord, offs: 0, stride: getAttributeByteSize(vatFormat, GX.Attr.TEX0) };
 
-        // // const vtx_l_Oba_swood_noneDL = vtxLoader.runVertices(vtxArrays, l_Oba_swood_noneDL);
+        // const vtx_l_Oba_swood_noneDL = vtxLoader.runVertices(vtxArrays, l_Oba_swood_noneDL);
         const vtx_l_Oba_swood_a_hapaDL = vtxLoader.runVertices(vtxArrays, l_Oba_swood_a_hapaDL);
         const vtx_l_Oba_swood_a_mikiDL = vtxLoader.runVertices(vtxArrays, l_Oba_swood_a_mikiDL);
-        // // const vtx_l_Oba_swood_a_cuttDL = vtxLoader.runVertices(vtxArrays, l_Oba_swood_a_cuttDL);
-        // // const vtx_l_Oba_swood_a_cutuDL = vtxLoader.runVertices(vtxArrays, l_Oba_swood_a_cutuDL);
+        // const vtx_l_Oba_swood_a_cuttDL = vtxLoader.runVertices(vtxArrays, l_Oba_swood_a_cuttDL);
+        // const vtx_l_Oba_swood_a_cutuDL = vtxLoader.runVertices(vtxArrays, l_Oba_swood_a_cutuDL);
 
-        // Coalesce all VBs and IBs into single buffers and upload to the GPU
-        this.bufferCoalescer = loadedDataCoalescerComboGfx(device, [ vtx_l_Oba_swood_a_mikiDL, vtx_l_Oba_swood_a_hapaDL, vtx_l_shadowDL ]);
-
-        // Build an input layout and input state from the vertex layout and data
-        const b = this.bufferCoalescer.coalescedBuffers;
-        this.main.shapes.push(new GXShapeHelperGfx(device, cache, b[0].vertexBuffers, b[0].indexBuffer, vtxLoader.loadedVertexLayout, vtx_l_Oba_swood_a_hapaDL));
-        this.main.shapes.push( new GXShapeHelperGfx(device, cache, b[1].vertexBuffers, b[1].indexBuffer, vtxLoader.loadedVertexLayout, vtx_l_Oba_swood_a_mikiDL));
-        this.shadow.shapes.push(new GXShapeHelperGfx(device, cache, b[2].vertexBuffers, b[2].indexBuffer, shadowVtxLoader.loadedVertexLayout, vtx_l_shadowDL));
+        this.main.shapes.push(new dDlst_BasicShape_c(cache, vtxLoader.loadedVertexLayout, vtx_l_Oba_swood_a_hapaDL));
+        this.main.shapes.push( new dDlst_BasicShape_c(cache, vtxLoader.loadedVertexLayout, vtx_l_Oba_swood_a_mikiDL));
+        this.shadow.shapes.push(new dDlst_BasicShape_c(cache, shadowVtxLoader.loadedVertexLayout, vtx_l_shadowDL));
     }
 
     public destroy(device: GfxDevice): void {
-        this.bufferCoalescer.destroy(device);
         this.shadow.destroy(device);
         this.main.destroy(device);
     }
@@ -824,8 +807,6 @@ class GrassModel {
     public main: DynamicModel;
     public vmori: DynamicModel;
 
-    public bufferCoalescer: GfxBufferCoalescerCombo;
-
     constructor(globals: dGlobals) {
         const device = globals.modelCache.device, cache = globals.renderer.renderCache;
 
@@ -878,17 +859,11 @@ class GrassModel {
         const vtx_l_Oba_kusa_aDL = loadVerts(l_pos, l_color, l_texCoord, l_Oba_kusa_aDL);
         const vtx_l_Vmori_00DL = loadVerts(l_Vmori_pos, l_Vmori_color, l_Vmori_texCoord, l_Vmori_00DL);
 
-        // Coalesce all VBs and IBs into single buffers and upload to the GPU
-        this.bufferCoalescer = loadedDataCoalescerComboGfx(device, [ vtx_l_Oba_kusa_aDL, vtx_l_Vmori_00DL ]);
-
-        // Build an input layout and input state from the vertex layout and data
-        const b = this.bufferCoalescer.coalescedBuffers;
-        this.main.shapes.push(new GXShapeHelperGfx(device, cache, b[0].vertexBuffers, b[0].indexBuffer, vtxLoader.loadedVertexLayout, vtx_l_Oba_kusa_aDL));
-        this.vmori.shapes.push(new GXShapeHelperGfx(device, cache, b[1].vertexBuffers, b[1].indexBuffer, vtxLoader.loadedVertexLayout, vtx_l_Oba_kusa_aDL));
+        this.main.shapes.push(new dDlst_BasicShape_c(cache, vtxLoader.loadedVertexLayout, vtx_l_Oba_kusa_aDL));
+        this.vmori.shapes.push(new dDlst_BasicShape_c(cache, vtxLoader.loadedVertexLayout, vtx_l_Vmori_00DL));
     }
 
     public destroy(device: GfxDevice): void {
-        this.bufferCoalescer.destroy(device);
         this.main.destroy(device);
         this.vmori.destroy(device);
     }

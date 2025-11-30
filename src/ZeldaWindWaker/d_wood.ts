@@ -6,14 +6,13 @@ import { BTI_Texture, BTIData } from '../Common/JSYSTEM/JUTTexture.js';
 import { scaleMatrix, setMatrixAxis, setMatrixTranslation } from '../MathHelpers.js';
 import { TextureMapping } from '../TextureHolder.js';
 import { Endianness } from '../endian.js';
-import { GfxBufferCoalescerCombo } from '../gfx/helpers/BufferHelpers.js';
 import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
 import { nArray } from '../gfx/platform/GfxPlatformUtil.js';
 import { GfxRendererLayer, GfxRenderInstManager, makeSortKey } from '../gfx/render/GfxRenderInstManager.js';
 import { compileVtxLoader, DisplayListRegisters, displayListRegistersInitGX, displayListRegistersRun, getAttributeByteSize, GX_Array, GX_VtxAttrFmt, GX_VtxDesc } from '../gx/gx_displaylist.js';
 import * as GX from '../gx/gx_enum.js';
 import { parseMaterial } from '../gx/gx_material.js';
-import { ColorKind, DrawParams, GXMaterialHelperGfx, GXShapeHelperGfx, loadedDataCoalescerComboGfx, MaterialParams } from '../gx/gx_render.js';
+import { ColorKind, DrawParams, GXMaterialHelperGfx, MaterialParams } from '../gx/gx_render.js';
 import { assert } from '../util.js';
 import { ViewerRenderInput } from '../viewer.js';
 import { dGlobals } from './Main.js';
@@ -22,6 +21,7 @@ import { dBgS_GndChk } from './d_bg.js';
 import { dKy_GxFog_set } from './d_kankyo.js';
 import { dKyw_get_wind_pow, dKyw_get_wind_vec } from './d_kankyo_wether.js';
 import { mDoMtx_XrotM, mDoMtx_YrotM, mDoMtx_YrotS, MtxTrans } from './m_do_mtx.js';
+import { dDlst_BasicShape_c } from './d_drawlist.js';
 
 //-----------------------------------------
 // Types
@@ -217,11 +217,9 @@ class WoodModel {
     public bushTextureData: BTIData;
     public bushMaterial: GXMaterialHelperGfx;
 
-    public shapeMain: GXShapeHelperGfx;
-    public shapeTrunk: GXShapeHelperGfx;
-    public shapeShadow: GXShapeHelperGfx;
-
-    public bufferCoalescer: GfxBufferCoalescerCombo;
+    public shapeMain: dDlst_BasicShape_c;
+    public shapeTrunk: dDlst_BasicShape_c;
+    public shapeShadow: dDlst_BasicShape_c;
 
     constructor(globals: dGlobals) {
         const device = globals.modelCache.device, cache = globals.renderer.renderCache;
@@ -302,20 +300,15 @@ class WoodModel {
         const vtx_l_Oba_swood_bDL = vtxLoader.runVertices(vtxArrays, l_Oba_swood_bDL);
         const vtx_l_Oba_swood_b_cutDL = vtxLoader.runVertices(vtxArrays, l_Oba_swood_b_cutDL);
 
-        // Coalesce all VBs and IBs into single buffers and upload to the GPU
-        this.bufferCoalescer = loadedDataCoalescerComboGfx(device, [vtx_l_Oba_swood_bDL, vtx_l_Oba_swood_b_cutDL, vtx_l_shadowDL]);
-
-        // Build an input layout and input state from the vertex layout and data
-        const b = this.bufferCoalescer.coalescedBuffers;
-
-        // Build an input layout and input state from the vertex layout and data
-        this.shapeMain = new GXShapeHelperGfx(device, cache, b[0].vertexBuffers, b[0].indexBuffer, vtxLoader.loadedVertexLayout, vtx_l_Oba_swood_bDL);
-        this.shapeTrunk = new GXShapeHelperGfx(device, cache, b[1].vertexBuffers, b[1].indexBuffer, vtxLoader.loadedVertexLayout, vtx_l_Oba_swood_b_cutDL);
-        this.shapeShadow = new GXShapeHelperGfx(device, cache, b[2].vertexBuffers, b[2].indexBuffer, shadowVtxLoader.loadedVertexLayout, vtx_l_shadowDL);
+        this.shapeMain = new dDlst_BasicShape_c(cache, vtxLoader.loadedVertexLayout, vtx_l_Oba_swood_bDL);
+        this.shapeTrunk = new dDlst_BasicShape_c(cache, vtxLoader.loadedVertexLayout, vtx_l_Oba_swood_b_cutDL);
+        this.shapeShadow = new dDlst_BasicShape_c(cache, shadowVtxLoader.loadedVertexLayout, vtx_l_shadowDL);
     }
 
     public destroy(device: GfxDevice): void {
-        this.bufferCoalescer.destroy(device);
+        this.shapeMain.destroy(device);
+        this.shapeTrunk.destroy(device);
+        this.shapeShadow.destroy(device);
         this.shadowTextureData.destroy(device);
         this.bushTextureData.destroy(device);
     }
