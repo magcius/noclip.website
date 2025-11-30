@@ -7,7 +7,6 @@ import { CameraController, Camera, XRCameraController, CameraUpdateResult } from
 import { GfxDevice, GfxSwapChain, GfxStatisticsGroup, GfxTexture, makeTextureDescriptor2D, GfxFormat, GfxPlatform } from './gfx/platform/GfxPlatform.js';
 import { createSwapChainForWebGL2, gfxDeviceGetImpl_GL, GfxPlatformWebGL2Config } from './gfx/platform/GfxPlatformWebGL2.js';
 import { createSwapChainForWebGPU, GfxPlatformWebGPUConfig } from './gfx/platform/GfxPlatformWebGPU.js';
-import { downloadFrontBufferToCanvas } from './Screenshot.js';
 import { RenderStatistics, RenderStatisticsTracker } from './RenderStatistics.js';
 import { AntialiasingMode } from './gfx/helpers/RenderGraphHelpers.js';
 import { WebXRContext } from './WebXR.js';
@@ -320,24 +319,6 @@ export class Viewer {
 
         // Reset the delta for next frame.
         this.viewerRenderInput.deltaTime = 0;
-    }
-
-    public takeScreenshotToCanvas(opaque: boolean): HTMLCanvasElement {
-        const canvas = document.createElement('canvas');
-
-        // TODO(jstpierre)
-        // Reading the resolved color texture gives us fringes, because the standard box filter will
-        // add the clear color just like the standard texture sample fringes... in order to get a
-        // nice-looking screenshot, we'd need to do a custom resolve of the MSAA render target.
-
-        if (this.scene !== null) {
-            // TODO(jstpierre): Implement in Gfx somehow.
-            const gl = gfxDeviceGetImpl_GL(this.gfxDevice).gl;
-            const width = gl.drawingBufferWidth, height = gl.drawingBufferHeight;
-            downloadFrontBufferToCanvas(gl, width, height, canvas, opaque);
-        }
-
-        return canvas;
     }
 }
 

@@ -28,7 +28,6 @@ Hold `\` | Make camera move slower
 `1`/`2`/`3`/`4`/`5`/`6`/`7`/`8`/`9` | Load savestate
 `Shift`+`1`/`2`/`3`/`4`/`5`/`6`/`7`/`8`/`9` | Save savestate
 `Numpad 3` | Export save states
-`Numpad 7` or `[` | Take screenshot
 `.` | Freeze/unfreeze time
 `,` | Hold to slowly move through time
 `F9` | Reload current scene

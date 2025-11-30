@@ -15,7 +15,6 @@ import { fillMatrix4x3, fillMatrix4x4, fillColor, fillVec4 } from '../gfx/helper
 import { mat4 } from 'gl-matrix';
 import { computeModelMatrixSRT, clamp } from '../MathHelpers.js';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
-import { captureSceneToZip } from '../CaptureHelpers.js';
 import { downloadBuffer } from '../DownloadUtils.js';
 import { makeZipFile } from '../ZipFile.js';
 import { GridPlane } from './GridPlane.js';
@@ -460,32 +459,6 @@ class SceneRenderer implements SceneGfx {
         this.prepareToRender(device, viewerInput);
         this.renderHelper.renderGraph.execute(builder);
         this.renderInstListMain.reset();
-    }
-
-    public async film() {
-        const width = 1920, height = 1080;
-        const scene0 = await captureSceneToZip(window.main.viewer, {
-            width, height,
-            opaque: false,
-            frameCount: 12,
-            filenamePrefix: 'scene0/scene0',
-            setupCallback: (viewer, t, i) => {
-                const orbit = (viewer.cameraController as OrbitCameraController);
-                orbit.shouldOrbit = false;
-                orbit.x = -Math.PI / 2;
-                orbit.y = 2;
-                orbit.z = -150;
-
-                const obj = this.fur;
-                obj.magnitude = t;
-                return true;
-            },
-        });
-
-        const zipFile = makeZipFile([
-            ... scene0,
-        ]);
-        downloadBuffer('FoxFur.zip', zipFile);
     }
 
     public destroy(device: GfxDevice) {

@@ -235,10 +235,6 @@ const sceneGroups: (string | SceneGroup)[] = [
     Scenes_OuterWilds.sceneGroup,
 ];
 
-function convertCanvasToPNG(canvas: HTMLCanvasElement): Promise<Blob> {
-    return new Promise((resolve) => canvas.toBlob((b) => resolve(assertExists(b)), 'image/png'));
-}
-
 enum SaveStatesAction {
     Load,
     LoadDefault,
@@ -570,9 +566,6 @@ class Main {
             this.updateInfo.time = this.animationLoop.time;
             this.updateInfo.webXRContext = this.webXRContext.xrSession !== null ? this.webXRContext : null;
 
-            // Needs to be called before this.viewer.update()
-            const shouldTakeScreenshot = this.viewer.inputManager.isKeyDownEventTriggered('Numpad7') || this.viewer.inputManager.isKeyDownEventTriggered('BracketRight');
-
             let sceneTimeScale = this.sceneTimeScale;
             if (this.isFrameStep) {
                 sceneTimeScale /= 4.0;
@@ -583,9 +576,6 @@ class Main {
 
             this.viewer.sceneTimeScale = sceneTimeScale;
             this.viewer.update(this.updateInfo);
-
-            if (shouldTakeScreenshot)
-                this._takeScreenshot();
         }
 
         this.ui.update();
@@ -950,12 +940,6 @@ class Main {
         const sceneId = this.currentSceneDesc!.id;
         const date = new Date();
         return `${sceneGroup.id}_${sceneId}_${date.toISOString()}`;
-    }
-
-    private _takeScreenshot(opaque: boolean = true) {
-        const canvas = this.viewer.takeScreenshotToCanvas(opaque);
-        const filename = `${this._getSceneDownloadPrefix()}.png`;
-        convertCanvasToPNG(canvas).then((blob) => downloadBlob(filename, blob));
     }
 
     // Hooks for people who want to mess with stuff.
