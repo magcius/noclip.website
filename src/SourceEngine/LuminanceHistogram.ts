@@ -527,8 +527,8 @@ class ImplCompute {
 
                 pass.setPipeline(this.computePipeline);
                 pass.setBindings(0, bindGroup, dynamicByteOffsets);
-                const dispatchX = align(desc.width, 8) / 8;
-                const dispatchY = align(desc.height, 8) / 8;
+                const dispatchX = align(this.viewport[2], 8) / 8;
+                const dispatchY = align(this.viewport[3], 8) / 8;
                 pass.dispatch(dispatchX, dispatchY, 1);
             });
 
