@@ -82,7 +82,7 @@ interface GfxrPassBase {
     /**
      * Set the debug name of a given pass. Strongly encouraged.
      */
-     setDebugName(debugName: string): void;
+    setDebugName(debugName: string): void;
 
     /**
      * Attach the resolve texture ID to the given pass. All resolve textures used within the pass

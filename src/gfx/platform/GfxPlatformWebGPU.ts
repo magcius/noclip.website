@@ -1432,8 +1432,10 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         const depthStencil = translateDepthStencilState(descriptor.depthStencilAttachmentFormat, descriptor.megaStateDescriptor);
 
         let buffers: GPUVertexBufferLayout[] | undefined = undefined;
-        if (descriptor.inputLayout !== null)
+        if (descriptor.inputLayout !== null) {
             buffers = (descriptor.inputLayout as GfxInputLayoutP_WebGPU).buffers;
+            assert(buffers.length <= 8);
+        }
         const sampleCount = descriptor.sampleCount;
 
         renderPipeline.isCreatingAsync = true;
@@ -1447,6 +1449,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         }
 
         const gpuRenderPipelineDescriptor: GPURenderPipelineDescriptor = {
+            label: renderPipeline.ResourceName,
             layout,
             vertex: {
                 ...vertexStage,
@@ -1470,9 +1473,6 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         } else {
             renderPipeline.gpuRenderPipeline = this.device.createRenderPipeline(gpuRenderPipelineDescriptor);
         }
-
-        if (renderPipeline.ResourceName !== undefined)
-            renderPipeline.gpuRenderPipeline.label = renderPipeline.ResourceName;
 
         renderPipeline.isCreatingAsync = false;
     }

@@ -1312,58 +1312,79 @@ class FVTXData {
     public vertexBufferDescriptors: GfxVertexBufferDescriptor[] = [];
 
     constructor(device: GfxDevice, public fvtx: FVTX) {
-        let nextBufferIndex = fvtx.vertexBuffers.length;
+        let nextBufferIndex = 0;
 
-        for (let i = 0; i < fvtx.vertexAttributes.length; i++) {
-            const vertexAttribute = fvtx.vertexAttributes[i];
-            const bufferIndex = vertexAttribute.bufferIndex;
+        let zeroBufferIndex = -1;
+        const fvtxVertexBufferMap: number[] = [];
+        for (let i = 0; i < TurboUBER.a_Orders.length; i++) {
+            const attribName = TurboUBER.a_Orders[i];
+            const attribLocation = i;
 
-            if (this.inputBufferDescriptors[bufferIndex] === undefined)
-                this.inputBufferDescriptors[bufferIndex] = null;
+            const vertexAttribute = fvtx.vertexAttributes.find((attrib) => attrib.name === attribName);
+            if (vertexAttribute !== undefined) {
+                const fvtxBufferIndex = vertexAttribute.bufferIndex;
+                const vertexBuffer = fvtx.vertexBuffers[fvtxBufferIndex];
+                const convertedAttribute = this.convertVertexAttribute(device, vertexAttribute, vertexBuffer);
+                if (convertedAttribute !== null) {
+                    const attribBufferIndex = nextBufferIndex++;
 
-            const attribLocation = TurboUBER.a_Orders.indexOf(vertexAttribute.name);
-            if (attribLocation < 0)
-                continue;
+                    this.vertexAttributeDescriptors.push({
+                        location: attribLocation,
+                        format: convertedAttribute.format,
+                        bufferIndex: attribBufferIndex,
+                        // When we convert the buffer we remove the byte offset.
+                        bufferByteOffset: 0,
+                    });
 
-            const vertexBuffer = fvtx.vertexBuffers[bufferIndex];
-            const convertedAttribute = this.convertVertexAttribute(device, vertexAttribute, vertexBuffer);
-            if (convertedAttribute !== null) {
-                const attribBufferIndex = nextBufferIndex++;
-
-                this.vertexAttributeDescriptors.push({
-                    location: attribLocation,
-                    format: convertedAttribute.format,
-                    bufferIndex: attribBufferIndex,
-                    // When we convert the buffer we remove the byte offset.
-                    bufferByteOffset: 0,
-                });
-
-                this.inputBufferDescriptors[attribBufferIndex] = {
-                    byteStride: convertedAttribute.stride,
-                    frequency: GfxVertexBufferFrequency.PerVertex,
-                };
-
-                const gfxBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, convertedAttribute.data);
-                this.vertexBufferDescriptors[attribBufferIndex] = { buffer: gfxBuffer };
-            } else {
-                // Can use buffer data directly.
-                this.vertexAttributeDescriptors.push({
-                    location: attribLocation,
-                    format: translateAttributeFormat(vertexAttribute.format),
-                    bufferIndex: bufferIndex,
-                    bufferByteOffset: vertexAttribute.offset,
-                });
-
-                if (!this.vertexBufferDescriptors[bufferIndex]) {
-                    const gfxBuffer = createBufferFromSlice(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, vertexBuffer.data);
-
-                    this.inputBufferDescriptors[bufferIndex] = {
-                        byteStride: vertexBuffer.stride,
+                    this.inputBufferDescriptors[attribBufferIndex] = {
+                        byteStride: convertedAttribute.stride,
                         frequency: GfxVertexBufferFrequency.PerVertex,
                     };
 
-                    this.vertexBufferDescriptors[bufferIndex] = { buffer: gfxBuffer };
+                    const gfxBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, convertedAttribute.data);
+                    this.vertexBufferDescriptors[attribBufferIndex] = { buffer: gfxBuffer };
+                } else {
+                    let attribBufferIndex = fvtxVertexBufferMap[fvtxBufferIndex];
+                    if (attribBufferIndex === undefined) {
+                        attribBufferIndex = nextBufferIndex++;
+
+                        this.inputBufferDescriptors[attribBufferIndex] = {
+                            byteStride: vertexBuffer.stride,
+                            frequency: GfxVertexBufferFrequency.PerVertex,
+                        };
+
+                        const gfxBuffer = createBufferFromSlice(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, vertexBuffer.data);
+                        this.vertexBufferDescriptors[attribBufferIndex] = { buffer: gfxBuffer };
+                    }
+
+                    // Can use buffer data directly.
+                    this.vertexAttributeDescriptors.push({
+                        location: attribLocation,
+                        format: translateAttributeFormat(vertexAttribute.format),
+                        bufferIndex: attribBufferIndex,
+                        bufferByteOffset: vertexAttribute.offset,
+                    });
                 }
+            } else {
+                if (zeroBufferIndex < 0) {
+                    zeroBufferIndex = nextBufferIndex++;
+
+                    this.inputBufferDescriptors[zeroBufferIndex] = {
+                        byteStride: 0,
+                        frequency: GfxVertexBufferFrequency.Constant,
+                    };
+
+                    // TODO(jstpierre): Share zero buffers between FSHPData's.
+                    const gfxBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, new Uint8Array(32).buffer);
+                    this.vertexBufferDescriptors[zeroBufferIndex] = { buffer: gfxBuffer };
+                }
+
+                this.vertexAttributeDescriptors.push({
+                    location: attribLocation,
+                    format: GfxFormat.F32_RGBA,
+                    bufferIndex: zeroBufferIndex,
+                    bufferByteOffset: 0,
+                });
             }
         }
     }
@@ -1440,7 +1461,7 @@ export class FSHPMeshData {
     public inputLayout: GfxInputLayout;
     public indexBuffer: GfxBuffer;
 
-    constructor(cache: GfxRenderCache, public mesh: FSHP_Mesh, fvtxData: FVTXData) {
+    constructor(cache: GfxRenderCache, public mesh: FSHP_Mesh, private fvtxData: FVTXData) {
         const indexBufferFormat = translateIndexFormat(mesh.indexFormat);
         this.inputLayout = cache.createInputLayout({
             indexBufferFormat,
@@ -1528,9 +1549,6 @@ class FSHPInstance {
 
         if (!this.fmatInstance.inColorPass)
             return;
-
-        if (this.fmatInstance.fmat.name === 'fc_RoadOther2')
-            debugger;
 
         // TODO(jstpierre): Joints.
         const template = renderInstManager.pushTemplate();
