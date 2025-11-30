@@ -518,6 +518,8 @@ class Main {
 
         const sceneSaveState = this._getSceneSaveState();
 
+        this._destroyScene();
+
         // Wipe DataShare, since the data in there might be for the existing device/platform/
         this.dataShare.pruneOldObjects(this.viewer.gfxDevice, 0);
 
