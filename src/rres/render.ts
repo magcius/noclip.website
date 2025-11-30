@@ -15,7 +15,7 @@ import { GfxRendererLayer, GfxRenderInst, GfxRenderInstManager, makeSortKey, set
 import { LoadedVertexData, LoadedVertexDraw, LoadedVertexLayout } from '../gx/gx_displaylist.js';
 import * as GX from '../gx/gx_enum.js';
 import * as GX_Material from '../gx/gx_material.js';
-import { ColorKind, createInputLayout, DrawParams, GXMaterialHelperGfx, GXShapeHelperGfx, GXTextureHolder, loadedDataCoalescerComboGfx, loadTextureFromMipChain, MaterialParams, translateTexFilterGfx, translateWrapModeGfx } from "../gx/gx_render.js";
+import { ColorKind, createInputLayout, DrawParams, GXMaterialHelperGfx, GXTextureHolder, loadedDataCoalescerComboGfx, loadTextureFromMipChain, MaterialParams, translateTexFilterGfx, translateWrapModeGfx } from "../gx/gx_render.js";
 import { calcMipChain } from '../gx/gx_texture.js';
 import { CalcBillboardFlags, calcBillboardMatrix, computeNormalMatrix, getMatrixAxisY, texEnvMtx } from '../MathHelpers.js';
 import { TextureMapping } from "../TextureHolder.js";

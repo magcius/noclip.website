@@ -4,20 +4,20 @@ import * as UI from '../ui.js';
 import { BIN, Batch, Material, SceneGraphNode, SceneGraphPart } from "./bin.js";
 
 import * as GX_Texture from '../gx/gx_texture.js';
-import { MaterialParams, DrawParams, loadTextureFromMipChain, translateWrapModeGfx, loadedDataCoalescerComboGfx, BasicGXRendererHelper, GXMaterialHelperGfx, GXRenderHelperGfx, GXShapeHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render.js';
+import { MaterialParams, DrawParams, loadTextureFromMipChain, translateWrapModeGfx, loadedDataCoalescerComboGfx, BasicGXRendererHelper, GXMaterialHelperGfx, GXRenderHelperGfx, fillSceneParamsDataOnTemplate, createInputLayout } from '../gx/gx_render.js';
 import { assert } from "../util.js";
 import { mat4 } from "gl-matrix";
 import { AABB } from "../Geometry.js";
-import { GfxTexture, GfxDevice, GfxSampler, GfxTexFilterMode, GfxMipFilterMode } from "../gfx/platform/GfxPlatform.js";
+import { GfxTexture, GfxDevice, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxInputLayout } from "../gfx/platform/GfxPlatform.js";
 import { GfxBufferCoalescerCombo, GfxCoalescedBuffersCombo } from "../gfx/helpers/BufferHelpers.js";
 import { Camera, computeViewMatrix, CameraController } from "../Camera.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
+import { GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 
-class Command_Material {
+class MaterialData {
     public materialHelper: GXMaterialHelperGfx;
 
-    constructor(public binCommand: Command_Bin, public material: Material) {
+    constructor(public binData: BinData, public material: Material) {
         this.materialHelper = new GXMaterialHelperGfx(material.gxMaterial);
     }
 
@@ -27,21 +27,38 @@ class Command_Material {
             const samplerIndex = this.material.samplerIndexes[i];
             materialParams.m_TextureMapping[i].reset();
             if (samplerIndex >= 0) {
-                materialParams.m_TextureMapping[i].gfxTexture = this.binCommand.gfxTextures[samplerIndex];
-                materialParams.m_TextureMapping[i].gfxSampler = this.binCommand.gfxSamplers[samplerIndex];
+                materialParams.m_TextureMapping[i].gfxTexture = this.binData.gfxTextures[samplerIndex];
+                materialParams.m_TextureMapping[i].gfxSampler = this.binData.gfxSamplers[samplerIndex];
             }
         }
+    }
+}
+
+class ShapeData {
+    private inputLayout: GfxInputLayout;
+    private indexCount: number;
+
+    constructor(cache: GfxRenderCache, private coalescedBuffers: GfxCoalescedBuffersCombo, batch: Batch ) {
+        this.inputLayout = createInputLayout(cache, batch.loadedVertexLayout);
+        assert(batch.loadedVertexData.draws.length === 1);
+        assert(batch.loadedVertexData.draws[0].indexOffset === 0);
+        this.indexCount = batch.loadedVertexData.draws[0].indexCount;
+    }
+
+    public setOnRenderInst(renderInst: GfxRenderInst): void {
+        renderInst.setVertexInput(this.inputLayout, this.coalescedBuffers.vertexBuffers, this.coalescedBuffers.indexBuffer);
+        renderInst.setDrawCount(this.indexCount);
     }
 }
 
 const bboxScratch = new AABB();
 const materialParams = new MaterialParams();
 const drawParams = new DrawParams();
-class Command_Batch {
-    private shapeHelper: GXShapeHelperGfx;
+class BatchData {
+    private shapeData: ShapeData;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, private materialCommand: Command_Material, private sceneGraphNode: SceneGraphNode, batch: Batch, coalescedBuffers: GfxCoalescedBuffersCombo) {
-        this.shapeHelper = new GXShapeHelperGfx(device, cache, coalescedBuffers.vertexBuffers, coalescedBuffers.indexBuffer, batch.loadedVertexLayout, batch.loadedVertexData);
+    constructor(cache: GfxRenderCache, private materialCommand: MaterialData, private sceneGraphNode: SceneGraphNode, batch: Batch, coalescedBuffers: GfxCoalescedBuffersCombo) {
+        this.shapeData = new ShapeData(cache, coalescedBuffers, batch);
     }
 
     private computeModelView(dst: mat4, camera: Camera): void {
@@ -57,7 +74,7 @@ class Command_Batch {
         }
 
         const renderInst = renderInstManager.newRenderInst();
-        this.shapeHelper.setOnRenderInst(renderInst);
+        this.shapeData.setOnRenderInst(renderInst);
         this.materialCommand.fillMaterialParams(materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
         this.materialCommand.materialHelper.setOnRenderInst(renderInstManager.gfxRenderCache, renderInst);
@@ -66,17 +83,13 @@ class Command_Batch {
         this.materialCommand.materialHelper.allocateDrawParamsDataOnInst(renderInst, drawParams);
         renderInstManager.submitRenderInst(renderInst);
     }
-
-    public destroy(device: GfxDevice): void {
-        this.shapeHelper.destroy(device);
-    }
 }
 
-class Command_Bin {
+class BinData {
     public name: string;
 
-    private batchCommands: Command_Batch[] = [];
-    private materialCommands: Command_Material[] = [];
+    private batchData: BatchData[] = [];
+    private materialData: MaterialData[] = [];
     private bufferCoalescer: GfxBufferCoalescerCombo;
     private batches: Batch[];
 
@@ -92,8 +105,8 @@ class Command_Bin {
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         if (!this.visible)
             return;
-        for (let i = 0; i < this.batchCommands.length; i++)
-            this.batchCommands[i].prepareToRender(device, renderInstManager, viewerInput);
+        for (let i = 0; i < this.batchData.length; i++)
+            this.batchData[i].prepareToRender(device, renderInstManager, viewerInput);
     }
 
     public setVisible(visible: boolean) {
@@ -102,28 +115,26 @@ class Command_Bin {
 
     public destroy(device: GfxDevice): void {
         this.gfxTextures.forEach((t) => device.destroyTexture(t));
-        this.batchCommands.forEach((t) => t.destroy(device));
         this.bufferCoalescer.destroy(device);
     }
 
-    private translatePart(device: GfxDevice, renderHelper: GXRenderHelperGfx, node: SceneGraphNode, part: SceneGraphPart): void {
-        const materialCommand = new Command_Material(this, part.material);
-        this.materialCommands.push(materialCommand);
+    private translatePart(cache: GfxRenderCache, node: SceneGraphNode, part: SceneGraphPart): void {
+        const materialCommand = new MaterialData(this, part.material);
+        this.materialData.push(materialCommand);
         const batch = part.batch;
         const batchIndex = this.batches.indexOf(batch);
         assert(batchIndex >= 0);
 
-        const cache = renderHelper.renderInstManager.gfxRenderCache;
-        const batchCommand = new Command_Batch(device, cache, materialCommand, node, batch, this.bufferCoalescer.coalescedBuffers[batchIndex]);
+        const batchCommand = new BatchData(cache, materialCommand, node, batch, this.bufferCoalescer.coalescedBuffers[batchIndex]);
 
-        this.batchCommands.push(batchCommand);
+        this.batchData.push(batchCommand);
     }
 
-    private translateSceneGraph(device: GfxDevice, renderHelper: GXRenderHelperGfx, node: SceneGraphNode): void {
+    private translateSceneGraph(cache: GfxRenderCache, node: SceneGraphNode): void {
         for (const part of node.parts)
-            this.translatePart(device, renderHelper, node, part);
+            this.translatePart(cache, node, part);
         for (const child of node.children)
-            this.translateSceneGraph(device, renderHelper, child);
+            this.translateSceneGraph(cache, child);
     }
 
     private collectBatches(batches: Batch[], node: SceneGraphNode): void {
@@ -161,17 +172,17 @@ class Command_Bin {
 
         // Coalesce buffers.
         this.bufferCoalescer = loadedDataCoalescerComboGfx(device, this.batches.map((batch) => batch.loadedVertexData));
-        this.translateSceneGraph(device, renderHelper, bin.rootNode);
+        this.translateSceneGraph(renderHelper.renderCache, bin.rootNode);
     }
 }
 
 export class LuigisMansionRenderer extends BasicGXRendererHelper {
-    private binCommands: Command_Bin[] = [];
+    private binCommands: BinData[] = [];
 
     constructor(device: GfxDevice, private bins: BIN[]) {
         super(device);
         for (let i = 0; i < bins.length; i++)
-            this.binCommands.push(new Command_Bin(device, this.renderHelper, bins[i]));
+            this.binCommands.push(new BinData(device, this.renderHelper, bins[i]));
     }
 
     public adjustCameraController(c: CameraController) {

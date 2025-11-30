@@ -580,7 +580,7 @@ class AnimGroupData_ShapeDraw {
 }
 
 class AnimGroupInstance_Shape {
-    private shapeHelper: AnimGroupData_ShapeDraw[];
+    private shapeDraw: AnimGroupData_ShapeDraw[];
     private materialHelper: GXMaterialHelperGfx[];
     private renderLayers: GfxRendererLayer[] = [];
     private vtxBuffer: GfxBuffer;
@@ -597,7 +597,7 @@ class AnimGroupInstance_Shape {
         this.idxBuffer = device.createBuffer(idxByteCount, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static);
 
         let vtxByteOffset = 0, idxByteOffset = 0;
-        this.shapeHelper = this.shape.draws.map((draw, i) => {
+        this.shapeDraw = this.shape.draws.map((draw, i) => {
             const vertexBuffer: GfxVertexBufferDescriptor = { buffer: this.vtxBuffer, byteOffset: vtxByteOffset };
             const indexBuffer: GfxIndexBufferDescriptor = { buffer: this.idxBuffer, byteOffset: idxByteOffset };
             device.uploadBufferData(this.vtxBuffer, vtxByteOffset, new Uint8Array(draw.loadedVertexData));
@@ -670,11 +670,11 @@ class AnimGroupInstance_Shape {
     
         for (let i = 0; i < this.shape.draws.length; i++) {
             const draw = this.shape.draws[i];
-            const shapeHelper = this.shapeHelper[i];
+            const shapeDraw = this.shapeDraw[i];
             const materialHelper = this.materialHelper[i];
 
             const renderInst = renderInstManager.newRenderInst();
-            shapeHelper.setOnRenderInst(renderInst);
+            shapeDraw.setOnRenderInst(renderInst);
             materialHelper.setOnRenderInst(renderInstManager.gfxRenderCache, renderInst);
 
             mat4.mul(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix, modelMatrix);

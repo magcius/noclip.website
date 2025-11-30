@@ -1,23 +1,23 @@
 
-import { HSD_TObj, HSD_MObj, HSD_DObj, HSD_JObj, HSD_JObjRoot, HSD_PEFlags, HSD_JObjFlags, HSD_TObjFlags, HSD_AnimJointRoot, HSD_MatAnimJointRoot, HSD_ShapeAnimJointRoot, HSD_AnimJoint, HSD_MatAnimJoint, HSD_ShapeAnimJoint, HSD_AObj, HSD_FObj, HSD_JObjAnmType, HSD_AObjFlags, HSD_RenderModeFlags, HSD_TObjTevActive, HSD_TObjTevColorIn, HSD_TObjTevAlphaIn, HSD_MatAnim, HSD_TexAnim, HSD_MObjAnmType, HSD_TObjAnmType, HSD_ImageDesc, HSD_TlutDesc, HSD_PObj, HSD_PObjFlags } from "./SYSDOLPHIN.js";
-import { GXShapeHelperGfx, loadedDataCoalescerComboGfx, GXMaterialHelperGfx, DrawParams, loadTextureFromMipChain, MaterialParams, translateTexFilterGfx, translateWrapModeGfx, ColorKind } from "../gx/gx_render.js";
-import { GfxDevice, GfxTexture, GfxSampler, GfxCullMode } from "../gfx/platform/GfxPlatform.js";
-import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
-import { GfxBufferCoalescerCombo, GfxCoalescedBuffersCombo } from "../gfx/helpers/BufferHelpers.js";
-import { LoadedVertexData } from "../gx/gx_displaylist.js";
-import { GfxRenderInstManager, GfxRenderInst, setSortKeyLayer, GfxRendererLayer } from "../gfx/render/GfxRenderInstManager.js";
-import { ViewerRenderInput, Texture } from "../viewer.js";
-import { vec3, mat4, ReadonlyVec3 } from "gl-matrix";
-import { computeModelMatrixSRT, lerp, saturate, MathConstants, Vec3One, computeModelMatrixR, computeModelMatrixS } from "../MathHelpers.js";
-import { GXMaterialBuilder } from "../gx/GXMaterialBuilder.js";
-import * as GX from "../gx/gx_enum.js";
-import { TextureMapping } from "../TextureHolder.js";
-import { calcMipChain, TextureInputGX } from "../gx/gx_texture.js";
-import { assert, hexzero, assertExists } from "../util.js";
+import { mat4, ReadonlyVec3, vec3 } from "gl-matrix";
 import { Camera } from "../Camera.js";
+import { Color, colorCopy, colorNewCopy, White } from "../Color.js";
+import { computeModelMatrixR, computeModelMatrixS, computeModelMatrixSRT, lerp, MathConstants, saturate, Vec3One } from "../MathHelpers.js";
 import { getPointHermite } from "../Spline.js";
-import { HSD_TExp, HSD_TExpList, HSD_TExpTev, HSD_TExpColorIn, HSD_TExpColorOp, HSD_TExpAlphaIn, HSD_TExpAlphaOp, HSD_TExpOrder, HSD_TEInput, HSD_TExpCnst, HSD_TExpCnstVal, HSD_TEXP_TEX, HSD_TEXP_RAS, HSD_TExpCnstTObj, HSD_TExpGetType, HSD_TExpType, HSD_TExpCompile } from "./SYSDOLPHIN_TExp.js";
-import { colorNewCopy, White, Color, colorCopy } from "../Color.js";
+import { TextureMapping } from "../TextureHolder.js";
+import { GfxBufferCoalescerCombo, GfxCoalescedBuffersCombo } from "../gfx/helpers/BufferHelpers.js";
+import { GfxCullMode, GfxDevice, GfxInputLayout, GfxSampler, GfxTexture } from "../gfx/platform/GfxPlatform.js";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
+import { GfxRendererLayer, GfxRenderInst, GfxRenderInstManager, setSortKeyLayer } from "../gfx/render/GfxRenderInstManager.js";
+import { GXMaterialBuilder } from "../gx/GXMaterialBuilder.js";
+import { LoadedVertexData } from "../gx/gx_displaylist.js";
+import * as GX from "../gx/gx_enum.js";
+import { ColorKind, createInputLayout, DrawParams, GXMaterialHelperGfx, loadedDataCoalescerComboGfx, loadTextureFromMipChain, MaterialParams, translateTexFilterGfx, translateWrapModeGfx } from "../gx/gx_render.js";
+import { calcMipChain, TextureInputGX } from "../gx/gx_texture.js";
+import { assert, assertExists, hexzero } from "../util.js";
+import { Texture, ViewerRenderInput } from "../viewer.js";
+import { HSD_AnimJoint, HSD_AnimJointRoot, HSD_AObj, HSD_AObjFlags, HSD_DObj, HSD_FObj, HSD_ImageDesc, HSD_JObj, HSD_JObjAnmType, HSD_JObjFlags, HSD_JObjRoot, HSD_MatAnim, HSD_MatAnimJoint, HSD_MatAnimJointRoot, HSD_MObj, HSD_MObjAnmType, HSD_PEFlags, HSD_PObj, HSD_PObjFlags, HSD_RenderModeFlags, HSD_ShapeAnimJoint, HSD_ShapeAnimJointRoot, HSD_TexAnim, HSD_TlutDesc, HSD_TObj, HSD_TObjAnmType, HSD_TObjFlags, HSD_TObjTevActive, HSD_TObjTevAlphaIn, HSD_TObjTevColorIn } from "./SYSDOLPHIN.js";
+import { HSD_TEInput, HSD_TExp, HSD_TEXP_RAS, HSD_TEXP_TEX, HSD_TExpAlphaIn, HSD_TExpAlphaOp, HSD_TExpCnst, HSD_TExpCnstTObj, HSD_TExpCnstVal, HSD_TExpColorIn, HSD_TExpColorOp, HSD_TExpCompile, HSD_TExpGetType, HSD_TExpList, HSD_TExpOrder, HSD_TExpTev, HSD_TExpType } from "./SYSDOLPHIN_TExp.js";
 
 class HSD_TObj_Data {
     public gfxSampler: GfxSampler;
@@ -46,8 +46,25 @@ class HSD_MObj_Data {
     }
 }
 
+class HSD_PObj_Data {
+    private inputLayout: GfxInputLayout;
+    private indexCount: number;
+
+    constructor(cache: GfxRenderCache, private coalescedBuffers: GfxCoalescedBuffersCombo, pobj: HSD_PObj) {
+        this.inputLayout = createInputLayout(cache, pobj.loadedVertexLayout);
+        assert(pobj.loadedVertexData.draws.length === 1);
+        assert(pobj.loadedVertexData.draws[0].indexOffset === 0);
+        this.indexCount = pobj.loadedVertexData.draws[0].indexCount;
+    }
+
+    public setOnRenderInst(renderInst: GfxRenderInst): void {
+        renderInst.setVertexInput(this.inputLayout, this.coalescedBuffers.vertexBuffers, this.coalescedBuffers.indexBuffer);
+        renderInst.setDrawCount(this.indexCount);
+    }
+}
+
 class HSD_DObj_Data {
-    public shapeHelpers: GXShapeHelperGfx[] = [];
+    public pobj: HSD_PObj_Data[] = [];
     public mobj: HSD_MObj_Data | null = null;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, coalescedBufferss: GfxCoalescedBuffersCombo[], public dobj: HSD_DObj) {
@@ -57,13 +74,8 @@ class HSD_DObj_Data {
         for (let i = 0; i < this.dobj.pobj.length; i++) {
             const pobj = this.dobj.pobj[i];
             const coalescedBuffers = coalescedBufferss.shift()!;
-            this.shapeHelpers.push(new GXShapeHelperGfx(device, cache, coalescedBuffers.vertexBuffers, coalescedBuffers.indexBuffer, pobj.loadedVertexLayout, pobj.loadedVertexData));
+            this.pobj.push(new HSD_PObj_Data(cache, coalescedBuffers, pobj));
         }
-    }
-
-    public destroy(device: GfxDevice): void {
-        for (let i = 0; i < this.shapeHelpers.length; i++)
-            this.shapeHelpers[i].destroy(device);
     }
 }
 
@@ -78,13 +90,6 @@ class HSD_JObj_Data {
 
         for (let i = 0; i < this.jobj.children.length; i++)
             this.children.push(new HSD_JObj_Data(device, cache, coalescedBuffers, this.jobj.children[i]));
-    }
-
-    public destroy(device: GfxDevice): void {
-        for (let i = 0; i < this.dobj.length; i++)
-            this.dobj[i].destroy(device);
-        for (let i = 0; i < this.children.length; i++)
-            this.children[i].destroy(device);
     }
 }
 
@@ -174,7 +179,6 @@ export class HSD_JObjRoot_Data {
 
     public destroy(device: GfxDevice): void {
         this.coalescedBuffers.destroy(device);
-        this.rootData.destroy(device);
         this.texImageDataCache.destroy(device);
     }
 }
@@ -1125,7 +1129,7 @@ class HSD_DObj_Instance {
 
         for (let i = 0; i < this.data.dobj.pobj.length; i++) {
             const pobj = this.data.dobj.pobj[i];
-            const shapeHelper = this.data.shapeHelpers[i];
+            const pobjData = this.data.pobj[i];
 
             // Calculate the draw matrices.
 
@@ -1187,7 +1191,7 @@ class HSD_DObj_Instance {
             else
                 throw "whoops";
 
-            shapeHelper.setOnRenderInst(renderInst);
+            pobjData.setOnRenderInst(renderInst);
             this.mobj.materialHelper.allocateDrawParamsDataOnInst(renderInst, drawParams);
             renderInstManager.submitRenderInst(renderInst);
         }

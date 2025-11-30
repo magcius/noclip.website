@@ -566,32 +566,6 @@ export function createInputLayout(cache: GfxRenderCache, loadedVertexLayout: Loa
     });
 }
 
-export class GXShapeHelperGfx {
-    public inputLayout: GfxInputLayout;
-    public vertexBufferDescriptors: GfxVertexBufferDescriptor[];
-
-    constructor(device: GfxDevice, cache: GfxRenderCache, vertexBuffers: GfxVertexBufferDescriptor[], public indexBufferDescriptor: GfxIndexBufferDescriptor, public loadedVertexLayout: LoadedVertexLayout, public loadedVertexData: LoadedVertexData) {
-        this.vertexBufferDescriptors = vertexBuffers.slice();
-        this.inputLayout = createInputLayout(cache, loadedVertexLayout);
-    }
-
-    public setOnRenderInst(renderInst: GfxRenderInst, draw: LoadedVertexDraw | null = null): void {
-        renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor);
-
-        if (draw === null) {
-            // Legacy API -- render a single draw.
-            const loadedVertexData = assertExists(this.loadedVertexData);
-            assert(loadedVertexData.draws.length === 1);
-            draw = loadedVertexData.draws[0];
-        }
-
-        renderInst.setDrawCount(draw.indexCount, draw.indexOffset);
-    }
-
-    public destroy(device: GfxDevice): void {
-    }
-}
-
 export const gxBindingLayouts: GfxBindingLayoutDescriptor[] = [
     { numUniformBuffers: 3, numSamplers: 8, },
 ];
@@ -624,12 +598,10 @@ export abstract class BasicGXRendererHelper implements Viewer.SceneGfx {
     protected abstract prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void;
 
     public getCache(): GfxRenderCache {
-        return this.renderHelper.renderInstManager.gfxRenderCache;
+        return this.renderHelper.renderCache;
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
-        const renderInstManager = this.renderHelper.renderInstManager;
-
         const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, this.clearRenderPassDescriptor);
         const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, this.clearRenderPassDescriptor);
 
