@@ -482,7 +482,6 @@ export interface GfxDevice {
 
     // Debugging.
     setResourceName(o: GfxResource, s: string): void;
-    setResourceLeakCheck(o: GfxResource, v: boolean): void;
     checkForLeaks(): void;
     programPatched(o: GfxProgram, descriptor: GfxRenderProgramDescriptor): void;
     setStatisticsGroup(statisticsGroup: GfxStatisticsGroup | null): void;

@@ -909,13 +909,6 @@ class ResourceCreationTracker {
         for (const o of this.liveObjects.values())
             console.warn("Object leaked:", o, "Creation stack:", this.creationStacks.get(o));
     }
-
-    public setResourceLeakCheck(o: GfxResource, v: boolean): void {
-        if (v)
-            this.liveObjects.add(o);
-        else
-            this.liveObjects.delete(o);
-    }
 }
 
 export class GfxPlatformWebGPUConfig {
@@ -1918,11 +1911,6 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             if (r.fragmentStage !== null)
                 r.fragmentStage.module.label = s;
         }
-    }
-
-    public setResourceLeakCheck(o: GfxResource, v: boolean): void {
-        if (this._resourceCreationTracker !== null)
-            this._resourceCreationTracker.setResourceLeakCheck(o, v);
     }
 
     public checkForLeaks(): void {
