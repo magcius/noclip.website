@@ -570,7 +570,7 @@ export class GXShapeHelperGfx {
     public inputLayout: GfxInputLayout;
     public vertexBufferDescriptors: GfxVertexBufferDescriptor[];
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, vertexBuffers: GfxVertexBufferDescriptor[], public indexBufferDescriptor: GfxIndexBufferDescriptor, public loadedVertexLayout: LoadedVertexLayout, public loadedVertexData: LoadedVertexData | null = null) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, vertexBuffers: GfxVertexBufferDescriptor[], public indexBufferDescriptor: GfxIndexBufferDescriptor, public loadedVertexLayout: LoadedVertexLayout, public loadedVertexData: LoadedVertexData) {
         this.vertexBufferDescriptors = vertexBuffers.slice();
         this.inputLayout = createInputLayout(cache, loadedVertexLayout);
     }

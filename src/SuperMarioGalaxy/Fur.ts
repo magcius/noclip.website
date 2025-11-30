@@ -17,7 +17,7 @@ import { connectToScene, isHiddenModel, isValidDraw } from "./ActorUtil.js";
 import { randomRangeFloat } from '../MathHelpers.js';
 import { TextureMapping } from "../TextureHolder.js";
 import { Shape } from "../Common/JSYSTEM/J3D/J3DLoader.js";
-import { GXShapeHelperGfx, GXMaterialHelperGfx, MaterialParams, DrawParams, ColorKind } from "../gx/gx_render.js";
+import { GXMaterialHelperGfx, MaterialParams, DrawParams, ColorKind } from "../gx/gx_render.js";
 import { coalesceBuffer } from "../gfx/helpers/BufferHelpers.js";
 import { GfxRenderInstManager, GfxRenderInst } from "../gfx/render/GfxRenderInstManager.js";
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder.js";

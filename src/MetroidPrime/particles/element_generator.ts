@@ -17,8 +17,8 @@ import { assert, assertExists, nArray } from '../../util.js';
 import { PART } from '../part.js';
 import { AABB } from '../../Geometry.js';
 import { getMatrixAxisZ, getMatrixTranslation, MathConstants, transformVec3Mat4w0, transformVec3Mat4w1, Vec3UnitZ, Vec3Zero } from '../../MathHelpers.js';
-import { GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxDevice, GfxMipFilterMode, GfxTexFilterMode, GfxWrapMode } from '../../gfx/platform/GfxPlatform.js';
-import { ColorKind, DrawParams, GXMaterialHelperGfx, GXShapeHelperGfx, MaterialParams } from '../../gx/gx_render.js';
+import { GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxDevice, GfxInputLayout, GfxMipFilterMode, GfxTexFilterMode, GfxWrapMode } from '../../gfx/platform/GfxPlatform.js';
+import { ColorKind, createInputLayout, DrawParams, GXMaterialHelperGfx, GXShapeHelperGfx, MaterialParams } from '../../gx/gx_render.js';
 import { computeViewMatrix } from '../../Camera.js';
 import { GfxRendererLayer, GfxRenderInst, makeSortKey } from '../../gfx/render/GfxRenderInstManager.js';
 import { Color, colorCopy, colorEqual, colorFromRGBA, colorNewFromRGBA, colorScale, colorToRGBA8, OpaqueBlack, White } from '../../Color.js';
@@ -1733,7 +1733,7 @@ export class ElementGeneratorMaterialHelper {
 }
 
 export class ElementGeneratorShapeHelper {
-    public shapeHelper: GXShapeHelperGfx;
+    private readonly inputLayout: GfxInputLayout;
     private readonly shadowBuffer: DataView;
     private readonly vertexBuffer: GfxBuffer;
     private readonly indexBuffer: GfxBuffer;
@@ -1748,7 +1748,7 @@ export class ElementGeneratorShapeHelper {
         const indexData = makeTriangleIndexBuffer(GfxTopology.Quads, 0, maxElementCount * 4);
         this.indexBuffer = createBufferFromData(renderer.device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, indexData.buffer);
 
-        this.shapeHelper = new GXShapeHelperGfx(renderer.device, renderer.renderCache, [{ buffer: this.vertexBuffer }], { buffer: this.indexBuffer }, vertexLayout);
+        this.inputLayout = createInputLayout(renderer.renderCache, vertexLayout);
     }
 
     static createTex(renderer: RetroSceneRenderer, maxElementCount: number): ElementGeneratorShapeHelper {
@@ -1771,7 +1771,8 @@ export class ElementGeneratorShapeHelper {
     }
 
     public setOnRenderInst(renderInst: GfxRenderInst, elementCount: number): void {
-        this.shapeHelper.setOnRenderInst(renderInst, { indexOffset: 0, indexCount: Math.min(elementCount, this.maxElementCount) * 6, texMatrixTable: [], posMatrixTable: [] });
+        renderInst.setVertexInput(this.inputLayout, [{ buffer: this.vertexBuffer }], { buffer: this.indexBuffer });
+        renderInst.setDrawCount(Math.min(elementCount, this.maxElementCount) * 6);
     }
 
     public setTexVertex(idx: number, posX: number, posY: number, posZ: number, color: Color, uvX: number, uvY: number): void {
@@ -1811,7 +1812,6 @@ export class ElementGeneratorShapeHelper {
     }
 
     public destroy(device: GfxDevice): void {
-        this.shapeHelper.destroy(device);
         device.destroyBuffer(this.vertexBuffer);
         device.destroyBuffer(this.indexBuffer);
     }
