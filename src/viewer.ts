@@ -325,7 +325,8 @@ export class Viewer {
 export type { SceneDesc, SceneGroup };
 
 interface ViewerOut {
-    viewer: Viewer;
+    error: InitErrorCode;
+    viewer?: Viewer;
 }
 
 export enum InitErrorCode {
@@ -336,69 +337,39 @@ export enum InitErrorCode {
     MISSING_MISC_WEB_APIS,
 }
 
-async function initializeViewerWebGL2(out: ViewerOut, canvas: HTMLCanvasElement): Promise<InitErrorCode> {
+export async function initializeViewerWebGL2(canvas: HTMLCanvasElement): Promise<ViewerOut> {
     const gl = canvas.getContext("webgl2", { antialias: false, preserveDrawingBuffer: false, depth: false, stencil: false });
     // For debugging purposes, add a hook for this.
     (window as any).gl = gl;
     if (!gl)
-        return InitErrorCode.NO_WEBGL2_GENERIC;
+        return { error: InitErrorCode.NO_WEBGL2_GENERIC };
 
     // SwiftShader is slow, and gives a poor experience.
     const WEBGL_debug_renderer_info = gl.getExtension('WEBGL_debug_renderer_info');
     if (WEBGL_debug_renderer_info && gl.getParameter(WEBGL_debug_renderer_info.UNMASKED_RENDERER_WEBGL).includes('SwiftShader'))
-        return InitErrorCode.GARBAGE_WEBGL2_SWIFTSHADER;
+        return { error: InitErrorCode.GARBAGE_WEBGL2_SWIFTSHADER };
 
     const config = new GfxPlatformWebGL2Config();
     config.trackResources = IS_DEVELOPMENT;
     config.shaderDebug = IS_DEVELOPMENT;
 
     const gfxSwapChain = createSwapChainForWebGL2(gl, config);
-    out.viewer = new Viewer(gfxSwapChain, canvas);
+    const viewer = new Viewer(gfxSwapChain, canvas);
 
-    return InitErrorCode.SUCCESS;
+    return { viewer, error: InitErrorCode.SUCCESS };
 }
 
-async function initializeViewerWebGPU(out: ViewerOut, canvas: HTMLCanvasElement): Promise<InitErrorCode> {
+export async function initializeViewerWebGPU(canvas: HTMLCanvasElement): Promise<ViewerOut> {
     const config = new GfxPlatformWebGPUConfig();
     config.trackResources = IS_DEVELOPMENT;
     config.shaderDebug = IS_DEVELOPMENT;
 
     const gfxSwapChain = await createSwapChainForWebGPU(canvas, config);
     if (gfxSwapChain === null)
-        return InitErrorCode.NO_WEBGPU_GENERIC;
+        return { error: InitErrorCode.NO_WEBGPU_GENERIC };
 
-    out.viewer = new Viewer(gfxSwapChain, canvas);
-    return InitErrorCode.SUCCESS;
-}
-
-export async function initializeViewer(out: ViewerOut, canvas: HTMLCanvasElement): Promise<InitErrorCode> {
-    let forcedBackend: GfxPlatform | null = null;
-    if (location.search.includes('webgpu'))
-        forcedBackend = GfxPlatform.WebGPU;
-    else if (location.search.includes('webgl2'))
-        forcedBackend = GfxPlatform.WebGL2;
-
-    const defaultBackend = GlobalSaveManager.loadSetting<string>('PlatformBackend', 'WebGL2') === 'WebGL2' ? GfxPlatform.WebGL2 : GfxPlatform.WebGPU;
-
-    const backendsToTry = [];
-    if (forcedBackend !== null) {
-        backendsToTry.push(forcedBackend);
-    } else {
-        backendsToTry.push(defaultBackend);
-        backendsToTry.push(defaultBackend === GfxPlatform.WebGPU ? GfxPlatform.WebGL2 : GfxPlatform.WebGPU);
-    }
-
-    let ret: InitErrorCode = InitErrorCode.MISSING_MISC_WEB_APIS;
-    for (let i = 0; i < backendsToTry.length; i++) {
-        const backend = backendsToTry[i];
-        ret = backend === GfxPlatform.WebGL2 ?
-            await initializeViewerWebGL2(out, canvas) :
-            await initializeViewerWebGPU(out, canvas);
-        if (ret === InitErrorCode.SUCCESS)
-            break;
-        console.warn(`Init: ${GfxPlatform[backend]}, ErrorCode: ${InitErrorCode[ret]}`);
-    }
-    return ret;
+    const viewer = new Viewer(gfxSwapChain, canvas);
+    return { viewer, error: InitErrorCode.SUCCESS };
 }
 
 export function makeErrorMessageUI(message: string): DocumentFragment {

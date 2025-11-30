@@ -1286,10 +1286,11 @@ export class StudioPanel extends FloatingPanel {
     private selectedNumericInput: HTMLInputElement | undefined;
 
     private videoRecorder: VideoRecorder | null = null;
+    private viewer: Viewer.Viewer;
 
     private useDirectRecording = true;
 
-    constructor(private ui: UI, private viewer: Viewer.Viewer) {
+    constructor(private ui: UI) {
         super();
 
         this.mainPanel.parentElement!.style.minWidth = '100%';
@@ -1343,6 +1344,10 @@ export class StudioPanel extends FloatingPanel {
         this.studioPanelContents = this.contents.querySelector('#studioPanelContents') as HTMLElement;
 
         this.setWidth('100%');
+    }
+
+    public setViewer(viewer: Viewer.Viewer): void {
+        this.viewer = viewer;
     }
 
     public show(): void {

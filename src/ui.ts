@@ -940,7 +940,7 @@ class SceneSelect extends Panel {
     public loadProgress: number;
     public onscenedescselected: (sceneDesc: SceneDesc) => void;
 
-    constructor(public viewer: Viewer.Viewer) {
+    constructor() {
         super();
         this.setTitle(OPEN_ICON, 'Games');
 
@@ -1530,13 +1530,10 @@ export class RadioButtons implements Widget {
     public onselectedchange: ((() => void) | null) = null;
     public options: HTMLElement[] = [];
 
-    constructor(title: string, optionNames: string[]) {
+    constructor(private title: string, optionNames: string[]) {
         this.elem = document.createElement('div');
 
         this.elem.style.display = 'grid';
-
-        const fr = (title.length ? `${optionNames.length}fr ` : ``) + `${optionNames.map(() => '1fr').join(' ')}`;
-        this.elem.style.gridTemplateColumns = fr;
         this.elem.style.alignItems = 'center';
 
         if (title.length) {
@@ -1545,6 +1542,13 @@ export class RadioButtons implements Widget {
             header.textContent = title;
             this.elem.appendChild(header);
         }
+
+        this.setOptions(optionNames);
+    }
+
+    public setOptions(optionNames: string[]): void {
+        const fr = (this.title.length ? `${optionNames.length}fr ` : ``) + `${optionNames.map(() => '1fr').join(' ')}`;
+        this.elem.style.gridTemplateColumns = fr;
 
         optionNames.forEach((optionName, i) => {
             const option = document.createElement('div');
@@ -1592,8 +1596,9 @@ class ViewerSettings extends Panel {
     private invertYCheckbox: Checkbox;
     private invertXCheckbox: Checkbox;
     private antialiasingRadioButtons: RadioButtons;
+    private viewer: Viewer.Viewer;
 
-    constructor(private ui: UI, private viewer: Viewer.Viewer) {
+    constructor(private ui: UI) {
         super();
 
         this.setTitle(FRUSTUM_ICON, 'Viewer Settings');
@@ -1622,16 +1627,7 @@ class ViewerSettings extends Panel {
         this.camSpeedSlider.onvalue = this.updateCameraSpeedFromSlider.bind(this);
         this.contents.appendChild(this.camSpeedSlider.elem);
 
-        this.viewer.addKeyMoveSpeedListener(this.onKeyMoveSpeedChanged.bind(this));
-        this.viewer.inputManager.addScrollListener(this.onScrollWheel.bind(this));
-
-        const limits = this.viewer.gfxDevice.queryLimits();
-
-        const aaModes = ['None', 'FXAA'];
-        if (limits.supportedSampleCounts.includes(4))
-            aaModes.push('4x MSAA');
-
-        this.antialiasingRadioButtons = new RadioButtons('Antialiasing', aaModes);
+        this.antialiasingRadioButtons = new RadioButtons('Antialiasing', []);
         this.antialiasingRadioButtons.onselectedchange = () => { GlobalSaveManager.saveSetting(`AntialiasingMode`, this.antialiasingRadioButtons.selectedIndex); };
         this.contents.appendChild(this.antialiasingRadioButtons.elem);
         GlobalSaveManager.addSettingListener('AntialiasingMode', this.antialiasingChanged.bind(this));
@@ -1645,6 +1641,18 @@ class ViewerSettings extends Panel {
         this.invertXCheckbox.onchanged = () => { GlobalSaveManager.saveSetting(`InvertX`, this.invertXCheckbox.checked); };
         this.contents.appendChild(this.invertXCheckbox.elem);
         GlobalSaveManager.addSettingListener('InvertX', this.invertXChanged.bind(this));
+    }
+
+    public setViewer(viewer: Viewer.Viewer): void {
+        this.viewer = viewer;
+        this.viewer.addKeyMoveSpeedListener(this.onKeyMoveSpeedChanged.bind(this));
+        this.viewer.inputManager.addScrollListener(this.onScrollWheel.bind(this));
+
+        const limits = this.viewer.gfxDevice.queryLimits();
+
+        const aaModes = ['None', 'FXAA'];
+        if (limits.supportedSampleCounts.includes(4))
+            aaModes.push('4x MSAA');
     }
 
     public setCameraControllerIndex(idx: number) {
@@ -1836,7 +1844,7 @@ class StatisticsPanel extends Panel {
     private fpsPoints: number[] = [];
     private fpsColor: Color = { r: 0.4, g: 0.9, b: 0.6, a: 1.0 };
 
-    constructor(private viewer: Viewer.Viewer) {
+    constructor() {
         super();
         this.setTitle(STATISTICS_ICON, 'Statistics');
 
@@ -2546,16 +2554,19 @@ export class UI {
         this.bottomBar.addWidgets(BottomBarArea.Right, this.shareButton);
         this.bottomBar.addWidgets(BottomBarArea.Right, this.fullscreenButton);
 
-        this.sceneSelect = new SceneSelect(viewer);
+        this.sceneSelect = new SceneSelect();
         this.textureViewer = new TextureViewer();
-        this.viewerSettings = new ViewerSettings(this, viewer);
+        this.viewerSettings = new ViewerSettings(this);
         this.xrSettings = new XRSettings(this, viewer);
-        this.statisticsPanel = new StatisticsPanel(viewer);
+        this.statisticsPanel = new StatisticsPanel();
         this.about = new About();
 
         this.studioSidePanel = new StudioSidePanel(this);
-        this.studioPanel = new StudioPanel(this, viewer);
+        this.studioPanel = new StudioPanel(this);
         this.toplevel.appendChild(this.studioPanel.elem);
+
+        this.viewerSettings.setViewer(viewer);
+        this.studioPanel.setViewer(viewer);
 
         window.onmousemove = () => {
             this.setMouseActive();
@@ -2565,6 +2576,17 @@ export class UI {
         this.setScenePanels(null);
 
         this.elem = this.toplevel;
+    }
+
+    public setViewer(viewer: Viewer.Viewer): void {
+        if (this.viewer === viewer)
+            return;
+
+        this.viewer = viewer;
+        this.viewerSettings.setViewer(this.viewer);
+        this.studioPanel.setViewer(this.viewer);
+
+        this.xrSettings = new XRSettings(this, this.viewer);
     }
 
     public setIsPlaying(v: boolean): void {

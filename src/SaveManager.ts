@@ -139,14 +139,6 @@ export class SaveManager {
     public export(): string {
         return JSON.stringify(Object.assign({}, window.localStorage), null, 4);
     }
-
-    public setUseWebGPU(v: boolean) {
-        if (v)
-            this.saveSetting('PlatformBackend', 'WebGPU');
-        else
-            this.deleteState(this.getSettingKey('PlatformBackend'));
-        window.location.reload();
-    }
 }
 
 export const GlobalSaveManager = new SaveManager();

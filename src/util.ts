@@ -102,6 +102,12 @@ export function fallbackUndefined<T>(v: T | null | undefined, fallback: T): T {
     return (v !== null && v !== undefined) ? v : fallback;
 }
 
+export function arraySwap<T>(L: T[], ia: number, ib: number): void {
+    const tmp: T = L[ia];
+    L[ia] = L[ib];
+    L[ib] = tmp;
+}
+
 export function arrayRemove<T>(L: T[], n: T): number {
     const idx = L.indexOf(n);
     assert(idx >= 0);

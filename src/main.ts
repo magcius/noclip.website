@@ -1,7 +1,7 @@
 
 /* @preserve The source code to this website is under the MIT license and can be found at https://github.com/magcius/noclip.website */
 
-import { Viewer, SceneGfx, InitErrorCode, initializeViewer, makeErrorUI, resizeCanvas, ViewerUpdateInfo } from './viewer.js';
+import { Viewer, SceneGfx, InitErrorCode, makeErrorUI, resizeCanvas, ViewerUpdateInfo, initializeViewerWebGL2, initializeViewerWebGPU } from './viewer.js';
 
 import * as Scenes_BanjoKazooie from './BanjoKazooie/scenes.js';
 import * as Scenes_ZeldaTwilightPrincess from './ZeldaTwilightPrincess/Main.js';
@@ -103,7 +103,7 @@ import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_F
 
 import { UI, Panel } from './ui.js';
 import { serializeCamera, deserializeCamera, FPSCameraController } from './Camera.js';
-import { assertExists, assert } from './util.js';
+import { assertExists, assert, arrayRemoveIfExist } from './util.js';
 import { loadRustLib } from './rustlib.js';
 import { DataFetcher } from './DataFetcher.js';
 import { atob, btoa } from './Ascii85.js';
@@ -121,6 +121,7 @@ import InputManager from './InputManager.js';
 import { WebXRContext } from './WebXR.js';
 import { debugJunk } from './DebugJunk.js';
 import { IS_DEVELOPMENT } from './BuildVersion.js';
+import { GfxPlatform } from './gfx/platform/GfxPlatform.js';
 
 const sceneGroups: (string | SceneGroup)[] = [
     "Wii",
@@ -333,6 +334,8 @@ class Main {
     public ui: UI;
     public saveManager = GlobalSaveManager;
 
+    private preferredPlatforms: GfxPlatform[] = [];
+
     private droppedFileGroup: SceneGroup;
     private sceneDatabase = new SceneDatabase(sceneGroups);
 
@@ -372,28 +375,6 @@ class Main {
         this.toplevel = document.createElement('div');
         document.body.appendChild(this.toplevel);
 
-        this.canvas = document.createElement('canvas');
-        this.canvas.style.imageRendering = 'pixelated';
-        this.canvas.style.outline = 'none';
-        this.canvas.style.touchAction = 'none';
-
-        this.toplevel.appendChild(this.canvas);
-        window.onresize = this._onResize.bind(this);
-        this._onResize();
-
-        await loadRustLib();
-
-        const errorCode = await initializeViewer(this, this.canvas);
-        if (errorCode !== InitErrorCode.SUCCESS) {
-            this.toplevel.appendChild(makeErrorUI(errorCode));
-            return;
-        }
-
-        this.animationLoop.onupdate = this.animationLoopOnUpdate.bind(this);
-
-        this.webXRContext = new WebXRContext(this.viewer.gfxSwapChain);
-        this.webXRContext.onframe = this.animationLoop.frameRequested;
-
         this.toplevel.ondragover = (e) => {
             if (!e.dataTransfer || !e.dataTransfer.types.includes('Files'))
                 return;
@@ -406,15 +387,16 @@ class Main {
         };
         this.toplevel.ondrop = this._onDrop.bind(this);
 
-        this.viewer.onstatistics = (statistics: RenderStatistics): void => {
-            this.ui.statisticsPanel.addRenderStatistics(statistics);
-        };
-        this.viewer.oncamerachanged = (force: boolean) => {
-            this._autoSaveState(force);
-        };
-        this.viewer.inputManager.ondraggingmodechanged = () => {
-            this.ui.setDraggingMode(this.viewer.inputManager.getDraggingMode());
-        };
+        await loadRustLib();
+
+        this.initializePlatforms();
+        if (!await this.initializeViewer()) {
+            return;
+        }
+
+        window.onresize = this._onResize.bind(this);
+
+        this.animationLoop.onupdate = this.animationLoopOnUpdate.bind(this);
 
         this._makeUI();
 
@@ -438,6 +420,113 @@ class Main {
         }
 
         this._onRequestAnimationFrame();
+    }
+
+    private _reloadCurrentSceneDesc(sceneSaveState: string | null = null): void {
+        if (sceneSaveState === null)
+            sceneSaveState = this._getSceneSaveState();
+        if (this.currentSceneDesc !== null)
+            this._loadSceneDesc(this.currentSceneDesc, sceneSaveState, true);
+    }
+
+    private initializePlatforms(): void {
+        let defaultPlatform = GfxPlatform.WebGL2;
+        if (location.search.includes('webgpu'))
+            defaultPlatform = GfxPlatform.WebGPU;
+
+        this.preferredPlatforms = [];
+        this.preferredPlatforms.push(defaultPlatform);
+        this.preferredPlatforms.push(defaultPlatform === GfxPlatform.WebGPU ? GfxPlatform.WebGL2 : GfxPlatform.WebGPU);
+    }
+
+    private async initializeViewer(): Promise<boolean> {
+        const platformsToTry = this.preferredPlatforms;
+        assert(platformsToTry.length !== 0);
+
+        // Create a new canvas.
+        const canvas = document.createElement('canvas');
+        const currentPlatform = this.viewer !== undefined ? this.viewer.gfxDevice.queryVendorInfo().platform : null;
+
+        // No sense in trying to recreate the current platform.
+        let error = InitErrorCode.SUCCESS;
+        for (let i = 0; i < platformsToTry.length; i++) {
+            const platform = platformsToTry[i];
+
+            // Already good.
+            if (platform === currentPlatform)
+                return true;
+
+            const ret = platform === GfxPlatform.WebGL2 ?
+                await initializeViewerWebGL2(canvas) :
+                await initializeViewerWebGPU(canvas);
+
+            error = ret.error;
+            if (error !== InitErrorCode.SUCCESS)
+                continue;
+
+            // Success; initialize.
+            if (this.canvas !== undefined)
+                this.toplevel.removeChild(this.canvas);
+
+            this.canvas = canvas;
+            this.canvas.style.imageRendering = 'pixelated';
+            this.canvas.style.outline = 'none';
+            this.canvas.style.touchAction = 'none';
+
+            // Immediately resize the canvas.
+            this._onResize();
+
+            this.toplevel.appendChild(this.canvas);
+
+            if (this.viewer !== undefined)
+                this._destroyScene();
+
+            assert(ret.viewer !== undefined);
+            this.viewer = ret.viewer;
+
+            this.webXRContext = new WebXRContext(this.viewer.gfxSwapChain);
+            this.webXRContext.onframe = this.animationLoop.frameRequested;
+            this.webXRContext.onsupportedchanged = this._syncWebXRSettingsVisible.bind(this);
+
+            this.viewer.onstatistics = (statistics: RenderStatistics): void => {
+                this.ui.statisticsPanel.addRenderStatistics(statistics);
+            };
+            this.viewer.oncamerachanged = (force: boolean) => {
+                this._autoSaveState(force);
+            };
+            this.viewer.inputManager.ondraggingmodechanged = () => {
+                this.ui.setDraggingMode(this.viewer.inputManager.getDraggingMode());
+            };
+
+            // HACK(jstpierre): Change the initialization here.
+            if (this.ui !== undefined) {
+                this.ui.setViewer(this.viewer);
+                this._syncWebXRSettingsVisible();
+            }
+
+            return true;
+        }
+
+        assert(error !== InitErrorCode.SUCCESS);
+        this.toplevel.appendChild(makeErrorUI(error));
+        return false;
+    }
+
+    private async _swapPlatforms() {
+        if (this.preferredPlatforms.length <= 1)
+            return;
+
+        const sceneSaveState = this._getSceneSaveState();
+
+        // Wipe DataShare, since the data in there might be for the existing device/platform/
+        this.dataShare.pruneOldObjects(this.viewer.gfxDevice, 0);
+
+        // Shuffle around.
+        const platform = this.preferredPlatforms.shift()!;
+        this.preferredPlatforms.push(platform);
+        await this.initializeViewer();
+
+        this._reloadCurrentSceneDesc(sceneSaveState);
     }
 
     private setIsPlaying(v: boolean): void {
@@ -530,8 +619,10 @@ class Main {
             this.setIsPlaying(false);
             this.isFrameStep = true;
         }
+        if (inputManager.isKeyDownEventTriggered('F4'))
+            this._swapPlatforms();
         if (inputManager.isKeyDownEventTriggered('F9'))
-            this._loadSceneDesc(this.currentSceneDesc!, this._getSceneSaveState(), true);
+            this._reloadCurrentSceneDesc();
     }
 
     private async _onWebXRStateRequested(state: boolean) {
@@ -833,12 +924,7 @@ class Main {
         this.saveManager.saveSetting("LoadSceneDelta", v);
     }
 
-    private _loadSceneDesc(sceneDesc: SceneDesc, sceneStateStr: string | null = null, force: boolean = false): void {
-        if (this.currentSceneDesc === sceneDesc && !force) {
-            this._loadSceneSaveState(sceneStateStr);
-            return;
-        }
-
+    private _destroyScene(): void {
         const device = this.viewer.gfxDevice;
 
         // Tear down old scene.
@@ -851,7 +937,15 @@ class Main {
         for (let i = 0; i < this.destroyablePool.length; i++)
             this.destroyablePool[i].destroy(device);
         this.destroyablePool.length = 0;
+    }
 
+    private _loadSceneDesc(sceneDesc: SceneDesc, sceneStateStr: string | null = null, force: boolean = false): void {
+        if (this.currentSceneDesc === sceneDesc && !force) {
+            this._loadSceneSaveState(sceneStateStr);
+            return;
+        }
+
+        this._destroyScene();
         const sceneGroup = this.sceneDatabase.getSceneDescGroup(sceneDesc);
 
         // Unhide any hidden scene groups upon being loaded.
@@ -863,9 +957,10 @@ class Main {
 
         this.ui.sceneSelect.setProgress(0);
 
-        const dataShare = this.dataShare;
+        const device = this.viewer.gfxDevice;
         const dataFetcher = this.dataFetcher;
         dataFetcher.reset();
+        const dataShare = this.dataShare;
         const uiContainer: HTMLElement = document.createElement('div');
         this.ui.sceneUIContainer.appendChild(uiContainer);
         const destroyablePool: Destroyable[] = this.destroyablePool;
@@ -920,10 +1015,6 @@ class Main {
         this.ui.sceneSelect.onscenedescselected = this._onSceneDescSelected.bind(this);
         this.ui.xrSettings.onWebXRStateRequested = this._onWebXRStateRequested.bind(this);
         this.ui.playPauseButton.onplaypause = this.setIsPlaying.bind(this);
-
-        this.webXRContext.onsupportedchanged = () => {
-            this._syncWebXRSettingsVisible();
-        };
         this._syncWebXRSettingsVisible();
     }
 
