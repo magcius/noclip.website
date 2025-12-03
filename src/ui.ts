@@ -1817,6 +1817,10 @@ export class TimeOfDayPanel extends Panel {
         this.useSystemTime = v;
         this.useSystemTimeCheckbox.setChecked(v);
     }
+
+    public setCheckboxLabel(label: string): void {
+        this.useSystemTimeCheckbox.setLabel(label);
+    }
 }
 
 export class RadioButtons implements Widget {
