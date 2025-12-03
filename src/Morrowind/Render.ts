@@ -2,6 +2,7 @@
 import { ReadonlyVec3, mat4, vec3 } from "gl-matrix";
 import { Camera } from "../Camera.js";
 import { White, colorCopy, colorFromRGBA8, colorLerp, colorNewCopy } from "../Color.js";
+import * as UI from "../ui.js";
 import * as DDS from "../DarkSouls/dds.js";
 import { NamedArrayBufferSlice } from "../DataFetcher.js";
 import { AABB, Frustum } from "../Geometry.js";
@@ -995,16 +996,47 @@ export class MorrowindRenderer implements SceneGfx {
     private worldManager: WorldManager;
     private skyManager: SkyManager;
 
+    // Time of day control
+    private timeOfDayPanel: UI.TimeOfDayPanel | null = null;
+    private useSystemTime: boolean = true;
+    private readonly defaultTimeAdv: number = 0.005;
+
     constructor(context: SceneContext, private globals: Globals) {
         this.renderHelper = new GfxRenderHelper(context.device, context, this.globals.modelCache.renderCache);
         this.worldManager = new WorldManager(this.globals);
         this.skyManager = new SkyManager(this.globals);
     }
 
+    public createPanels(): UI.Panel[] {
+        this.timeOfDayPanel = new UI.TimeOfDayPanel();
+        this.timeOfDayPanel.setTimeRange(0, 24);
+        this.timeOfDayPanel.setTime(this.globals.time);
+
+        this.timeOfDayPanel.onvaluechange = (time: number, useSystemTime: boolean) => {
+            this.useSystemTime = useSystemTime;
+            if (useSystemTime) {
+                // Re-enable system time: restore time advance rate and sync to current hour
+                this.globals.timeAdv = this.defaultTimeAdv;
+                this.globals.time = new Date().getHours();
+            } else {
+                // Freeze time at the selected value
+                this.globals.timeAdv = 0;
+                this.globals.time = time;
+            }
+        };
+
+        return [this.timeOfDayPanel];
+    }
+
     private prepareToRender(device: GfxDevice, viewerInput: ViewerRenderInput): void {
         const globals = this.globals;
 
         globals.time += globals.timeAdv * (viewerInput.deltaTime / 1000 * 30);
+
+        // Update time-of-day panel display
+        if (this.timeOfDayPanel !== null && this.useSystemTime) {
+            this.timeOfDayPanel.setTime(globals.time);
+        }
 
         globals.weatherManager.update(globals);
         globals.view.setupFromCamera(viewerInput.camera);

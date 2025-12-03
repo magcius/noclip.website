@@ -1524,6 +1524,301 @@ export class Slider implements Widget {
     }
 }
 
+const SUN_ICON_PATH = `M12 2L13.09 8.26L18 5L14.74 9.91L21 11L14.74 12.09L18 17L13.09 13.74L12 20L10.91 13.74L6 17L9.26 12.09L3 11L9.26 9.91L6 5L10.91 8.26L12 2Z`;
+const MOON_ICON_PATH = `M12 3c.132 0 .263.004.393.012a7 7 0 1 0 8.595 8.595A8 8 0 1 1 12 3z`;
+
+export class CircularTimeSlider implements Widget {
+    public elem: HTMLElement;
+    public onvalue: ((value: number) => void) | null = null;
+    public onmanualchange: (() => void) | null = null;
+
+    private svg: SVGSVGElement;
+    private thumb: SVGCircleElement;
+    private timeLabel: HTMLElement;
+    private value: number = 0;
+    private min: number = 0;
+    private max: number = 360;
+    private isDragging: boolean = false;
+
+    // Dial dimensions
+    private readonly size = 120;
+    private readonly cx = 60;
+    private readonly cy = 60;
+    private readonly radius = 45;
+    private readonly thumbRadius = 8;
+
+    constructor() {
+        const toplevel = document.createElement('div');
+        toplevel.style.display = 'flex';
+        toplevel.style.flexDirection = 'column';
+        toplevel.style.alignItems = 'center';
+        toplevel.style.padding = '8px';
+        toplevel.style.userSelect = 'none';
+
+        // Create SVG dial
+        this.svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        this.svg.setAttribute('width', `${this.size}`);
+        this.svg.setAttribute('height', `${this.size}`);
+        this.svg.setAttribute('viewBox', `0 0 ${this.size} ${this.size}`);
+        this.svg.style.cursor = 'pointer';
+
+        // Background circle (track)
+        const track = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        track.setAttribute('cx', `${this.cx}`);
+        track.setAttribute('cy', `${this.cy}`);
+        track.setAttribute('r', `${this.radius}`);
+        track.setAttribute('fill', 'none');
+        track.setAttribute('stroke', '#333');
+        track.setAttribute('stroke-width', '12');
+        this.svg.appendChild(track);
+
+        // Day arc (top half - yellow/orange gradient)
+        const dayArc = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        const dayPath = this.describeArc(this.cx, this.cy, this.radius, -90, 90);
+        dayArc.setAttribute('d', dayPath);
+        dayArc.setAttribute('fill', 'none');
+        dayArc.setAttribute('stroke', '#e8a430');
+        dayArc.setAttribute('stroke-width', '10');
+        dayArc.setAttribute('stroke-linecap', 'round');
+        this.svg.appendChild(dayArc);
+
+        // Night arc (bottom half - blue/purple)
+        const nightArc = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        const nightPath = this.describeArc(this.cx, this.cy, this.radius, 90, 270);
+        nightArc.setAttribute('d', nightPath);
+        nightArc.setAttribute('fill', 'none');
+        nightArc.setAttribute('stroke', '#2a3a5a');
+        nightArc.setAttribute('stroke-width', '10');
+        nightArc.setAttribute('stroke-linecap', 'round');
+        this.svg.appendChild(nightArc);
+
+        // Sun icon at top (noon position)
+        const sunGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        sunGroup.setAttribute('transform', `translate(${this.cx - 8}, ${this.cy - this.radius - 8}) scale(0.7)`);
+        const sunPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        sunPath.setAttribute('d', SUN_ICON_PATH);
+        sunPath.setAttribute('fill', '#ffd700');
+        sunGroup.appendChild(sunPath);
+        this.svg.appendChild(sunGroup);
+
+        // Moon icon at bottom (midnight position)
+        const moonGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        moonGroup.setAttribute('transform', `translate(${this.cx - 6}, ${this.cy + this.radius - 6}) scale(0.5)`);
+        const moonPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        moonPath.setAttribute('d', MOON_ICON_PATH);
+        moonPath.setAttribute('fill', '#aaccff');
+        moonGroup.appendChild(moonPath);
+        this.svg.appendChild(moonGroup);
+
+        // Thumb (draggable indicator)
+        this.thumb = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        this.thumb.setAttribute('r', `${this.thumbRadius}`);
+        this.thumb.setAttribute('fill', HIGHLIGHT_COLOR);
+        this.thumb.setAttribute('stroke', 'white');
+        this.thumb.setAttribute('stroke-width', '2');
+        this.thumb.style.cursor = 'grab';
+        this.svg.appendChild(this.thumb);
+
+        toplevel.appendChild(this.svg);
+
+        // Time label below dial
+        this.timeLabel = document.createElement('div');
+        this.timeLabel.style.marginTop = '8px';
+        this.timeLabel.style.fontSize = '14px';
+        this.timeLabel.style.fontWeight = 'bold';
+        this.timeLabel.style.color = 'white';
+        toplevel.appendChild(this.timeLabel);
+
+        this.elem = toplevel;
+
+        // Set up event handlers
+        this.svg.addEventListener('mousedown', this.onMouseDown.bind(this));
+        document.addEventListener('mousemove', this.onMouseMove.bind(this));
+        document.addEventListener('mouseup', this.onMouseUp.bind(this));
+
+        // Initial position
+        this.updateThumbPosition();
+        this.updateTimeLabel();
+    }
+
+    private describeArc(x: number, y: number, radius: number, startAngle: number, endAngle: number): string {
+        const start = this.polarToCartesian(x, y, radius, endAngle);
+        const end = this.polarToCartesian(x, y, radius, startAngle);
+        const largeArcFlag = endAngle - startAngle <= 180 ? '0' : '1';
+        return `M ${start.x} ${start.y} A ${radius} ${radius} 0 ${largeArcFlag} 0 ${end.x} ${end.y}`;
+    }
+
+    private polarToCartesian(cx: number, cy: number, radius: number, angleDegrees: number): { x: number, y: number } {
+        const angleRadians = (angleDegrees - 90) * Math.PI / 180;
+        return {
+            x: cx + radius * Math.cos(angleRadians),
+            y: cy + radius * Math.sin(angleRadians),
+        };
+    }
+
+    private timeToAngle(time: number): number {
+        // Convert time value to angle in degrees (for SVG, 0° = right, 90° = down)
+        const t = (time - this.min) / (this.max - this.min);
+        return 90 + (t * 360);
+    }
+
+    private angleToTime(angleDegrees: number): number {
+        // Inverse of timeToAngle
+        let t = (angleDegrees - 90) / 360;
+        // Normalize to [0, 1)
+        while (t < 0) t += 1;
+        while (t >= 1) t -= 1;
+        return this.min + t * (this.max - this.min);
+    }
+
+    private updateThumbPosition(): void {
+        const angle = this.timeToAngle(this.value);
+        const pos = this.polarToCartesian(this.cx, this.cy, this.radius, angle + 90);
+        this.thumb.setAttribute('cx', `${pos.x}`);
+        this.thumb.setAttribute('cy', `${pos.y}`);
+    }
+
+    private updateTimeLabel(): void {
+        // Convert value to hours and minutes for display
+        const totalHours = (this.value / this.max) * 24;
+        const hours24 = Math.floor(totalHours) % 24;
+        const minutes = Math.floor((totalHours - Math.floor(totalHours)) * 60);
+
+        const hours12 = hours24 % 12 || 12;
+        const ampm = hours24 < 12 ? 'AM' : 'PM';
+        const minuteStr = minutes.toString().padStart(2, '0');
+
+        this.timeLabel.textContent = `${hours12}:${minuteStr} ${ampm}`;
+    }
+
+    private onMouseDown(e: MouseEvent): void {
+        this.isDragging = true;
+        this.thumb.style.cursor = 'grabbing';
+        this.updateValueFromMouse(e);
+        e.preventDefault();
+    }
+
+    private onMouseMove(e: MouseEvent): void {
+        if (!this.isDragging) return;
+        this.updateValueFromMouse(e);
+    }
+
+    private onMouseUp(): void {
+        if (this.isDragging) {
+            this.isDragging = false;
+            this.thumb.style.cursor = 'grab';
+        }
+    }
+
+    private updateValueFromMouse(e: MouseEvent): void {
+        const rect = this.svg.getBoundingClientRect();
+        const x = e.clientX - rect.left - this.cx;
+        const y = e.clientY - rect.top - this.cy;
+
+        // Calculate angle from center to mouse position
+        let angleDegrees = Math.atan2(y, x) * 180 / Math.PI;
+
+        const newValue = this.angleToTime(angleDegrees);
+
+        if (newValue !== this.value) {
+            this.value = newValue;
+            this.updateThumbPosition();
+            this.updateTimeLabel();
+
+            if (this.onmanualchange !== null)
+                this.onmanualchange();
+
+            if (this.onvalue !== null)
+                this.onvalue(this.value);
+        }
+    }
+
+    public setRange(min: number, max: number): void {
+        this.min = min;
+        this.max = max;
+        this.updateThumbPosition();
+        this.updateTimeLabel();
+    }
+
+    public getValue(): number {
+        return this.value;
+    }
+
+    public setValue(v: number, triggerCallback: boolean = false): void {
+        this.value = clamp(v, this.min, this.max);
+        this.updateThumbPosition();
+        this.updateTimeLabel();
+
+        if (triggerCallback && this.onvalue !== null)
+            this.onvalue(this.value);
+    }
+}
+
+export class TimeOfDayPanel extends Panel {
+    public onvaluechange: ((time: number, useSystemTime: boolean) => void) | null = null;
+
+    private slider: CircularTimeSlider;
+    private useSystemTimeCheckbox: Checkbox;
+    private useSystemTime: boolean = true;
+
+    constructor() {
+        super();
+
+        this.setTitle(TIME_OF_DAY_ICON, 'Time of Day');
+        this.customHeaderBackgroundColor = COOL_BLUE_COLOR;
+        this.syncHeaderStyle();
+
+        // "Use System Time" checkbox
+        this.useSystemTimeCheckbox = new Checkbox('Use System Time', true);
+        this.useSystemTimeCheckbox.onchanged = () => {
+            this.useSystemTime = this.useSystemTimeCheckbox.checked;
+            if (this.onvaluechange !== null)
+                this.onvaluechange(this.slider.getValue(), this.useSystemTime);
+        };
+        this.contents.appendChild(this.useSystemTimeCheckbox.elem);
+
+        // Circular time slider
+        this.slider = new CircularTimeSlider();
+        this.slider.setRange(0, 360);
+
+        // When user manually changes the slider, disable system time
+        this.slider.onmanualchange = () => {
+            if (this.useSystemTime) {
+                this.useSystemTime = false;
+                this.useSystemTimeCheckbox.setChecked(false);
+            }
+        };
+
+        this.slider.onvalue = (value: number) => {
+            if (this.onvaluechange !== null)
+                this.onvaluechange(value, this.useSystemTime);
+        };
+
+        this.contents.appendChild(this.slider.elem);
+    }
+
+    public setTimeRange(min: number, max: number): void {
+        this.slider.setRange(min, max);
+    }
+
+    public setTime(time: number): void {
+        this.slider.setValue(time);
+    }
+
+    public getTime(): number {
+        return this.slider.getValue();
+    }
+
+    public isUsingSystemTime(): boolean {
+        return this.useSystemTime;
+    }
+
+    public setUsingSystemTime(v: boolean): void {
+        this.useSystemTime = v;
+        this.useSystemTimeCheckbox.setChecked(v);
+    }
+}
+
 export class RadioButtons implements Widget {
     public elem: HTMLElement;
     public selectedIndex: number = -1;
