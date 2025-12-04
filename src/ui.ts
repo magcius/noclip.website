@@ -745,6 +745,11 @@ export class Panel implements Widget {
     public mainPanel: HTMLElement;
     public contents: HTMLElement;
 
+    // FourCC for save state
+    public serializePanelId: string | null = null;
+    // Called when serializable state changes
+    public onstatechanged: (() => void) | null = null;
+
     constructor() {
         this.toplevel = document.createElement('div');
         this.toplevel.style.color = 'white';
@@ -890,6 +895,15 @@ export class Panel implements Widget {
                 this.ignoreAutoCloseTimeout = 0;
             }, 250);
         }
+    }
+
+    // Override in subclasses to serialize panel state. Returns number of bytes written.
+    public serializeSaveState(dst: DataView, offs: number): number {
+        return 0;
+    }
+
+    // Override in subclasses to deserialize panel state.
+    public deserializeSaveState(src: DataView, offs: number, byteLength: number): void {
     }
 }
 
@@ -1764,6 +1778,7 @@ export class TimeOfDayPanel extends Panel {
     constructor() {
         super();
 
+        this.serializePanelId = 'TODP';
         this.setTitle(TIME_OF_DAY_ICON, 'Time of Day');
         this.customHeaderBackgroundColor = COOL_BLUE_COLOR;
         this.syncHeaderStyle();
@@ -1774,6 +1789,8 @@ export class TimeOfDayPanel extends Panel {
             this.useSystemTime = this.useSystemTimeCheckbox.checked;
             if (this.onvaluechange !== null)
                 this.onvaluechange(this.slider.getValue(), this.useSystemTime);
+            if (this.onstatechanged !== null)
+                this.onstatechanged();
         };
         this.contents.appendChild(this.useSystemTimeCheckbox.elem);
 
@@ -1787,6 +1804,8 @@ export class TimeOfDayPanel extends Panel {
                 this.useSystemTime = false;
                 this.useSystemTimeCheckbox.setChecked(false);
             }
+            if (this.onstatechanged !== null)
+                this.onstatechanged();
         };
 
         this.slider.onvalue = (value: number) => {
@@ -1820,6 +1839,27 @@ export class TimeOfDayPanel extends Panel {
 
     public setCheckboxLabel(label: string): void {
         this.useSystemTimeCheckbox.setLabel(label);
+    }
+
+    public override serializeSaveState(dst: DataView, offs: number): number {
+        dst.setUint8(offs, this.useSystemTime ? 1 : 0);
+        dst.setFloat32(offs + 1, this.slider.getValue(), true);
+        return 5;
+    }
+
+    public override deserializeSaveState(src: DataView, offs: number, byteLength: number): void {
+        if (byteLength < 5)
+            return;
+
+        const useSystemTime = src.getUint8(offs) !== 0;
+        const time = src.getFloat32(offs + 1, true);
+
+        this.setUsingSystemTime(useSystemTime);
+        this.setTime(time);
+
+        // Trigger the callback to sync the scene state
+        if (this.onvaluechange !== null)
+            this.onvaluechange(time, useSystemTime);
     }
 }
 
