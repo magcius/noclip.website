@@ -1009,10 +1009,9 @@ export class MorrowindRenderer implements SceneGfx {
 
     public createPanels(): UI.Panel[] {
         this.timeOfDayPanel = new UI.TimeOfDayPanel();
-        this.timeOfDayPanel.setTimeRange(0, 24);
-        this.timeOfDayPanel.setTime(this.globals.time);
+        this.timeOfDayPanel.setTime(this.globals.time / 24);
 
-        this.timeOfDayPanel.onvaluechange = (time: number, useSystemTime: boolean) => {
+        this.timeOfDayPanel.onvaluechange = (t: number, useSystemTime: boolean) => {
             this.useSystemTime = useSystemTime;
             if (useSystemTime) {
                 // Re-enable system time: restore time advance rate and sync to current hour
@@ -1021,7 +1020,7 @@ export class MorrowindRenderer implements SceneGfx {
             } else {
                 // Freeze time at the selected value
                 this.globals.timeAdv = 0;
-                this.globals.time = time;
+                this.globals.time = t * 24;
             }
         };
 
@@ -1035,7 +1034,7 @@ export class MorrowindRenderer implements SceneGfx {
 
         // Update time-of-day panel display
         if (this.timeOfDayPanel !== null && this.useSystemTime) {
-            this.timeOfDayPanel.setTime(globals.time);
+            this.timeOfDayPanel.setTime(globals.time / 24);
         }
 
         globals.weatherManager.update(globals);

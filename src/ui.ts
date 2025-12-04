@@ -9,7 +9,7 @@ import { GITHUB_REVISION_URL, GITHUB_URL, GIT_SHORT_REVISION, IS_DEVELOPMENT } f
 import { SaveManager, GlobalSaveManager } from "./SaveManager.js";
 import { RenderStatistics } from './RenderStatistics.js';
 import { GlobalGrabManager } from './GrabManager.js';
-import { clamp, invlerp, lerp } from './MathHelpers.js';
+import { clamp, invlerp, lerp, MathConstants } from './MathHelpers.js';
 import { DebugFloaterHolder } from './DebugFloaters.js';
 import { DraggingMode } from './InputManager.js';
 import { CLAPBOARD_ICON, StudioPanel } from './Studio.js';
@@ -1550,8 +1550,6 @@ export class CircularTimeSlider implements Widget {
     private thumb: SVGCircleElement;
     private timeLabel: HTMLElement;
     private value: number = 0;
-    private min: number = 0;
-    private max: number = 360;
     private isDragging: boolean = false;
 
     // Dial dimensions
@@ -1586,9 +1584,9 @@ export class CircularTimeSlider implements Widget {
         track.setAttribute('stroke-width', '12');
         this.svg.appendChild(track);
 
-        // Day arc (top half - yellow/orange gradient)
+        // Day arc (top half)
         const dayArc = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        const dayPath = this.describeArc(this.cx, this.cy, this.radius, -90, 90);
+        const dayPath = this.describeArc(this.cx, this.cy, this.radius, Math.PI, MathConstants.TAU);
         dayArc.setAttribute('d', dayPath);
         dayArc.setAttribute('fill', 'none');
         dayArc.setAttribute('stroke', '#e8a430');
@@ -1596,9 +1594,9 @@ export class CircularTimeSlider implements Widget {
         dayArc.setAttribute('stroke-linecap', 'round');
         this.svg.appendChild(dayArc);
 
-        // Night arc (bottom half - blue/purple)
+        // Night arc (bottom half)
         const nightArc = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        const nightPath = this.describeArc(this.cx, this.cy, this.radius, 90, 270);
+        const nightPath = this.describeArc(this.cx, this.cy, this.radius, 0, Math.PI);
         nightArc.setAttribute('d', nightPath);
         nightArc.setAttribute('fill', 'none');
         nightArc.setAttribute('stroke', '#2a3a5a');
@@ -1658,43 +1656,36 @@ export class CircularTimeSlider implements Widget {
     private describeArc(x: number, y: number, radius: number, startAngle: number, endAngle: number): string {
         const start = this.polarToCartesian(x, y, radius, endAngle);
         const end = this.polarToCartesian(x, y, radius, startAngle);
-        const largeArcFlag = endAngle - startAngle <= 180 ? '0' : '1';
+        const largeArcFlag = (endAngle - startAngle) <= Math.PI ? '0' : '1';
         return `M ${start.x} ${start.y} A ${radius} ${radius} 0 ${largeArcFlag} 0 ${end.x} ${end.y}`;
     }
 
-    private polarToCartesian(cx: number, cy: number, radius: number, angleDegrees: number): { x: number, y: number } {
-        const angleRadians = (angleDegrees - 90) * Math.PI / 180;
+    private polarToCartesian(cx: number, cy: number, radius: number, angle: number): { x: number, y: number } {
         return {
-            x: cx + radius * Math.cos(angleRadians),
-            y: cy + radius * Math.sin(angleRadians),
+            x: cx + radius * Math.cos(angle),
+            y: cy + radius * Math.sin(angle),
         };
     }
 
-    private timeToAngle(time: number): number {
-        // Convert time value to angle in degrees (for SVG, 0° = right, 90° = down)
-        const t = (time - this.min) / (this.max - this.min);
-        return 90 + (t * 360);
+    // Convert normalized time (0-1) to angle in radians.
+    private timeToAngle(t: number): number {
+        return MathConstants.TAU * (t + 0.25);
     }
 
-    private angleToTime(angleDegrees: number): number {
-        // Inverse of timeToAngle
-        let t = (angleDegrees - 90) / 360;
-        // Normalize to [0, 1)
-        while (t < 0) t += 1;
-        while (t >= 1) t -= 1;
-        return this.min + t * (this.max - this.min);
+    // Convert angle in radians to normalized time (0-1).
+    private angleToTime(angle: number): number {
+        return (angle / MathConstants.TAU + 0.75) % 1;
     }
 
     private updateThumbPosition(): void {
         const angle = this.timeToAngle(this.value);
-        const pos = this.polarToCartesian(this.cx, this.cy, this.radius, angle + 90);
+        const pos = this.polarToCartesian(this.cx, this.cy, this.radius, angle);
         this.thumb.setAttribute('cx', `${pos.x}`);
         this.thumb.setAttribute('cy', `${pos.y}`);
     }
 
     private updateTimeLabel(): void {
-        // Convert value to hours and minutes for display
-        const totalHours = (this.value / this.max) * 24;
+        const totalHours = this.value * 24;
         const hours24 = Math.floor(totalHours) % 24;
         const minutes = Math.floor((totalHours - Math.floor(totalHours)) * 60);
 
@@ -1730,9 +1721,8 @@ export class CircularTimeSlider implements Widget {
         const y = e.clientY - rect.top - this.cy;
 
         // Calculate angle from center to mouse position
-        let angleDegrees = Math.atan2(y, x) * 180 / Math.PI;
-
-        const newValue = this.angleToTime(angleDegrees);
+        const angle = Math.atan2(y, x);
+        const newValue = this.angleToTime(angle);
 
         if (newValue !== this.value) {
             this.value = newValue;
@@ -1747,19 +1737,12 @@ export class CircularTimeSlider implements Widget {
         }
     }
 
-    public setRange(min: number, max: number): void {
-        this.min = min;
-        this.max = max;
-        this.updateThumbPosition();
-        this.updateTimeLabel();
-    }
-
     public getValue(): number {
         return this.value;
     }
 
     public setValue(v: number, triggerCallback: boolean = false): void {
-        this.value = clamp(v, this.min, this.max);
+        this.value = clamp(v, 0, 1);
         this.updateThumbPosition();
         this.updateTimeLabel();
 
@@ -1796,7 +1779,6 @@ export class TimeOfDayPanel extends Panel {
 
         // Circular time slider
         this.slider = new CircularTimeSlider();
-        this.slider.setRange(0, 360);
 
         // When user manually changes the slider, disable system time
         this.slider.onmanualchange = () => {
@@ -1816,14 +1798,12 @@ export class TimeOfDayPanel extends Panel {
         this.contents.appendChild(this.slider.elem);
     }
 
-    public setTimeRange(min: number, max: number): void {
-        this.slider.setRange(min, max);
-    }
-
+    // Set normalized time (0-1)
     public setTime(time: number): void {
         this.slider.setValue(time);
     }
 
+    // Get normalized time (0-1)
     public getTime(): number {
         return this.slider.getValue();
     }

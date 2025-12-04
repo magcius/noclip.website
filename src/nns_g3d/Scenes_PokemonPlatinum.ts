@@ -307,17 +307,16 @@ export class PlatinumMapRenderer implements Viewer.SceneGfx {
     public createPanels(): UI.Panel[] {
         // Time of Day panel
         this.timeOfDayPanel = new UI.TimeOfDayPanel();
-        this.timeOfDayPanel.setTimeRange(0, this.maxTime);
-        this.timeOfDayPanel.setTime(this.currentTime);
+        this.timeOfDayPanel.setTime(this.currentTime / this.maxTime);
 
-        this.timeOfDayPanel.onvaluechange = (time: number, useSystemTime: boolean) => {
+        this.timeOfDayPanel.onvaluechange = (t: number, useSystemTime: boolean) => {
             this.useSystemTime = useSystemTime;
             if (useSystemTime) {
                 // Re-enable system time: sync to current hour
                 this.currentTime = new Date().getHours() * 60 * 30;
             } else {
                 // Freeze time at the selected value
-                this.currentTime = time;
+                this.currentTime = t * this.maxTime;
             }
         };
 
@@ -333,7 +332,7 @@ export class PlatinumMapRenderer implements Viewer.SceneGfx {
 
             // Update panel display
             if (this.timeOfDayPanel !== null)
-                this.timeOfDayPanel.setTime(this.currentTime);
+                this.timeOfDayPanel.setTime(this.currentTime / this.maxTime);
         }
 
         blendLightSetting(this.lightSetting, this.lightSettings, this.currentTime);

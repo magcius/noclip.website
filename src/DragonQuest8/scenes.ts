@@ -80,7 +80,7 @@ export class DQ8Renderer implements Viewer.SceneGfx {
 
         // Update time-of-day panel display when using dynamic time
         if (this.timeOfDayPanel !== null && this.useDynamicTime) {
-            this.timeOfDayPanel.setTime(this.sceneInfo.currentHour);
+            this.timeOfDayPanel.setTime(this.sceneInfo.currentHour / 24);
         }
 
         if (this.sceneInfo.currentLightSet)
@@ -124,23 +124,23 @@ export class DQ8Renderer implements Viewer.SceneGfx {
 
     private createDayHourPanel(): UI.TimeOfDayPanel {
         this.timeOfDayPanel = new UI.TimeOfDayPanel();
-        this.timeOfDayPanel.setTimeRange(0, 24);
-        this.timeOfDayPanel.setTime(this.sceneInfo.currentHour);
+        this.timeOfDayPanel.setTime(this.sceneInfo.currentHour / 24);
         this.timeOfDayPanel.setCheckboxLabel('Dynamic Time');
 
         // Default to dynamic time
         this.sceneInfo.currentUserHour = -1;
         this.useDynamicTime = true;
 
-        this.timeOfDayPanel.onvaluechange = (time: number, useDynamicTime: boolean) => {
+        this.timeOfDayPanel.onvaluechange = (t: number, useDynamicTime: boolean) => {
             this.useDynamicTime = useDynamicTime;
             if (useDynamicTime) {
                 // Re-enable dynamic time
                 this.sceneInfo.currentUserHour = -1;
             } else {
                 // Freeze time at the selected value
-                this.sceneInfo.currentUserHour = time;
-                this.sceneInfo.currentHour = time;
+                const hour = t * 24;
+                this.sceneInfo.currentUserHour = hour;
+                this.sceneInfo.currentHour = hour;
             }
         };
 

@@ -822,7 +822,7 @@ export class WdtScene implements Viewer.SceneGfx {
         this.updateCurrentAdt();
 
         if (this.timeOfDayPanel !== null && !this.mainView.freezeTime) {
-            this.timeOfDayPanel.setTime(this.mainView.time);
+            this.timeOfDayPanel.setTime(this.mainView.time / 2880);
         }
 
         const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, standardFullClearRenderPassDescriptor);
@@ -867,16 +867,15 @@ export class WdtScene implements Viewer.SceneGfx {
         }
 
         this.timeOfDayPanel = new UI.TimeOfDayPanel();
-        this.timeOfDayPanel.setTimeRange(0, 2880);
-        this.timeOfDayPanel.setTime(this.mainView.time);
+        this.timeOfDayPanel.setTime(this.mainView.time / 2880);
         this.timeOfDayPanel.setCheckboxLabel('Dynamic Time');
 
-        this.timeOfDayPanel.onvaluechange = (time: number, useDynamicTime: boolean) => {
+        this.timeOfDayPanel.onvaluechange = (t: number, useDynamicTime: boolean) => {
             if (useDynamicTime) {
                 this.mainView.freezeTime = false;
             } else {
                 this.mainView.freezeTime = true;
-                this.mainView.frozenTime = time;
+                this.mainView.frozenTime = t * 2880;
             }
         };
 

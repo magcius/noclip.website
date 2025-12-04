@@ -394,10 +394,9 @@ export class TwilightPrincessRenderer implements Viewer.SceneGfx {
 
         // Time of Day panel
         this.timeOfDayPanel = new UI.TimeOfDayPanel();
-        this.timeOfDayPanel.setTimeRange(0, 360);
-        this.timeOfDayPanel.setTime(this.globals.g_env_light.curTime);
+        this.timeOfDayPanel.setTime(this.globals.g_env_light.curTime / 360);
 
-        this.timeOfDayPanel.onvaluechange = (time: number, useSystemTime: boolean) => {
+        this.timeOfDayPanel.onvaluechange = (t: number, useSystemTime: boolean) => {
             this.useSystemTime = useSystemTime;
             if (useSystemTime) {
                 // Re-enable system time: restore time advance rate and sync to current hour
@@ -406,7 +405,7 @@ export class TwilightPrincessRenderer implements Viewer.SceneGfx {
             } else {
                 // Freeze time at the selected value
                 this.globals.g_env_light.timeAdv = 0;
-                this.globals.g_env_light.curTime = time;
+                this.globals.g_env_light.curTime = t * 360;
             }
         };
 
@@ -462,7 +461,7 @@ export class TwilightPrincessRenderer implements Viewer.SceneGfx {
 
         // Update time-of-day panel display
         if (this.timeOfDayPanel !== null && this.useSystemTime) {
-            this.timeOfDayPanel.setTime(globals.g_env_light.curTime);
+            this.timeOfDayPanel.setTime(globals.g_env_light.curTime / 360);
         }
 
         if (!this.cameraFrozen) {
