@@ -719,32 +719,8 @@ class Main {
         if (this.viewer.scene !== null && this.viewer.scene.serializeSaveState)
             byteOffs = this.viewer.scene.serializeSaveState(this._saveStateTmp.buffer as ArrayBuffer, byteOffs);
 
-        // Serialize panel state
-        byteOffs = this._serializePanelState(byteOffs);
-
         const s = btoa(this._saveStateTmp, byteOffs);
         return `ShareData=${s}`;
-    }
-
-    private _serializePanelState(byteOffs: number): number {
-        for (const panel of this.ui.panels) {
-            if (panel.serializePanelId === null)
-                continue;
-
-            // Write panel ID (4 bytes)
-            for (let i = 0; i < 4; i++)
-                this._saveStateView.setUint8(byteOffs + i, panel.serializePanelId.charCodeAt(i));
-            byteOffs += 4;
-
-            // Reserve space for data size (2 bytes), write panel data, then fill in size
-            const sizeOffs = byteOffs;
-            byteOffs += 2;
-
-            const dataSize = panel.serializeSaveState(this._saveStateView, byteOffs);
-            this._saveStateView.setUint16(sizeOffs, dataSize, true);
-            byteOffs += dataSize;
-        }
-        return byteOffs;
     }
 
     private _loadSceneSaveStateVersion2(state: string): boolean {
@@ -775,42 +751,10 @@ class Main {
         if (this.viewer.scene !== null && this.viewer.scene.deserializeSaveState)
             byteOffs = this.viewer.scene.deserializeSaveState(this._saveStateTmp.buffer as ArrayBuffer, byteOffs, byteLength);
 
-        // Deserialize panel state
-        this._deserializePanelState(byteOffs, byteLength);
-
         if (this.viewer.cameraController !== null)
             this.viewer.cameraController.cameraUpdateForced();
 
         return true;
-    }
-
-    private _deserializePanelState(byteOffs: number, byteLength: number): void {
-        // Build a map of panel ID -> panel for quick lookup
-        const panelMap = new Map<string, Panel>();
-        for (const panel of this.ui.panels) {
-            if (panel.serializePanelId !== null)
-                panelMap.set(panel.serializePanelId, panel);
-        }
-
-        // Read panel blocks: [ID: 4 bytes][size: 2 bytes][data: N bytes]
-        while (byteOffs + 6 <= byteLength) {
-            // Read panel ID
-            let panelId = '';
-            for (let i = 0; i < 4; i++)
-                panelId += String.fromCharCode(this._saveStateView.getUint8(byteOffs + i));
-            byteOffs += 4;
-
-            // Read data size
-            const dataSize = this._saveStateView.getUint16(byteOffs, true);
-            byteOffs += 2;
-
-            // Find panel and deserialize, or skip if not found
-            const panel = panelMap.get(panelId);
-            if (panel !== undefined)
-                panel.deserializeSaveState(this._saveStateView, byteOffs, dataSize);
-
-            byteOffs += dataSize;
-        }
     }
 
     private _tryLoadSceneSaveState(state: string): boolean {
@@ -919,15 +863,6 @@ class Main {
         let scenePanels: Panel[] = [];
         if (scene.createPanels)
             scenePanels = scene.createPanels();
-
-        // Hook up panel state change callbacks for URL persistence
-        for (const panel of scenePanels) {
-            if (panel.serializePanelId !== null) {
-                panel.onstatechanged = () => {
-                    this._saveStateAndUpdateURL();
-                };
-            }
-        }
 
         this.ui.setScenePanels(scenePanels);
 
