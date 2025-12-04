@@ -396,10 +396,10 @@ export class TwilightPrincessRenderer implements Viewer.SceneGfx {
         this.timeOfDayPanel = new UI.TimeOfDayPanel();
         this.timeOfDayPanel.setTime(this.globals.g_env_light.curTime / 360);
 
-        this.timeOfDayPanel.onvaluechange = (t: number, useSystemTime: boolean) => {
-            this.useSystemTime = useSystemTime;
-            if (useSystemTime) {
-                // Re-enable system time: restore time advance rate and sync to current hour
+        this.timeOfDayPanel.onvaluechange = (t: number, useDynamicTime: boolean) => {
+            this.useSystemTime = useDynamicTime;
+            if (useDynamicTime) {
+                // Re-enable dynamic time: restore time advance rate and sync to current hour
                 this.globals.g_env_light.timeAdv = this.defaultTimeAdv;
                 this.globals.g_env_light.curTime = 15 * new Date().getHours();
             } else {

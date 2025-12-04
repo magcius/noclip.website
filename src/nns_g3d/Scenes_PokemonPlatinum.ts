@@ -309,10 +309,10 @@ export class PlatinumMapRenderer implements Viewer.SceneGfx {
         this.timeOfDayPanel = new UI.TimeOfDayPanel();
         this.timeOfDayPanel.setTime(this.currentTime / this.maxTime);
 
-        this.timeOfDayPanel.onvaluechange = (t: number, useSystemTime: boolean) => {
-            this.useSystemTime = useSystemTime;
-            if (useSystemTime) {
-                // Re-enable system time: sync to current hour
+        this.timeOfDayPanel.onvaluechange = (t: number, useDynamicTime: boolean) => {
+            this.useSystemTime = useDynamicTime;
+            if (useDynamicTime) {
+                // Re-enable dynamic time: sync to current hour
                 this.currentTime = new Date().getHours() * 60 * 30;
             } else {
                 // Freeze time at the selected value

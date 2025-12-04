@@ -868,7 +868,6 @@ export class WdtScene implements Viewer.SceneGfx {
 
         this.timeOfDayPanel = new UI.TimeOfDayPanel();
         this.timeOfDayPanel.setTime(this.mainView.time / 2880);
-        this.timeOfDayPanel.setCheckboxLabel('Dynamic Time');
 
         this.timeOfDayPanel.onvaluechange = (t: number, useDynamicTime: boolean) => {
             if (useDynamicTime) {

@@ -1738,11 +1738,11 @@ export class CircularTimeSlider implements Widget {
 }
 
 export class TimeOfDayPanel extends Panel {
-    public onvaluechange: ((time: number, useSystemTime: boolean) => void) | null = null;
+    public onvaluechange: ((time: number, useDynamicTime: boolean) => void) | null = null;
 
     private slider: CircularTimeSlider;
-    private useSystemTimeCheckbox: Checkbox;
-    private useSystemTime: boolean = true;
+    private dynamicTimeCheckbox: Checkbox;
+    private useDynamicTime: boolean = true;
 
     constructor() {
         super();
@@ -1751,29 +1751,29 @@ export class TimeOfDayPanel extends Panel {
         this.customHeaderBackgroundColor = COOL_BLUE_COLOR;
         this.syncHeaderStyle();
 
-        // "Use System Time" checkbox
-        this.useSystemTimeCheckbox = new Checkbox('Use System Time', true);
-        this.useSystemTimeCheckbox.onchanged = () => {
-            this.useSystemTime = this.useSystemTimeCheckbox.checked;
+        // "Dynamic Time" checkbox
+        this.dynamicTimeCheckbox = new Checkbox('Dynamic Time', true);
+        this.dynamicTimeCheckbox.onchanged = () => {
+            this.useDynamicTime = this.dynamicTimeCheckbox.checked;
             if (this.onvaluechange !== null)
-                this.onvaluechange(this.slider.getValue(), this.useSystemTime);
+                this.onvaluechange(this.slider.getValue(), this.useDynamicTime);
         };
-        this.contents.appendChild(this.useSystemTimeCheckbox.elem);
+        this.contents.appendChild(this.dynamicTimeCheckbox.elem);
 
         // Circular time slider
         this.slider = new CircularTimeSlider();
 
-        // When user manually changes the slider, disable system time
+        // When user manually changes the slider, disable dynamic time
         this.slider.onmanualchange = () => {
-            if (this.useSystemTime) {
-                this.useSystemTime = false;
-                this.useSystemTimeCheckbox.setChecked(false);
+            if (this.useDynamicTime) {
+                this.useDynamicTime = false;
+                this.dynamicTimeCheckbox.setChecked(false);
             }
         };
 
         this.slider.onvalue = (value: number) => {
             if (this.onvaluechange !== null)
-                this.onvaluechange(value, this.useSystemTime);
+                this.onvaluechange(value, this.useDynamicTime);
         };
 
         this.contents.appendChild(this.slider.elem);
@@ -1782,24 +1782,6 @@ export class TimeOfDayPanel extends Panel {
     // Set normalized time (0-1)
     public setTime(time: number): void {
         this.slider.setValue(time);
-    }
-
-    // Get normalized time (0-1)
-    public getTime(): number {
-        return this.slider.getValue();
-    }
-
-    public isUsingSystemTime(): boolean {
-        return this.useSystemTime;
-    }
-
-    public setUsingSystemTime(v: boolean): void {
-        this.useSystemTime = v;
-        this.useSystemTimeCheckbox.setChecked(v);
-    }
-
-    public setCheckboxLabel(label: string): void {
-        this.useSystemTimeCheckbox.setLabel(label);
     }
 }
 

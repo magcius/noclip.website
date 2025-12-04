@@ -1011,10 +1011,10 @@ export class MorrowindRenderer implements SceneGfx {
         this.timeOfDayPanel = new UI.TimeOfDayPanel();
         this.timeOfDayPanel.setTime(this.globals.time / 24);
 
-        this.timeOfDayPanel.onvaluechange = (t: number, useSystemTime: boolean) => {
-            this.useSystemTime = useSystemTime;
-            if (useSystemTime) {
-                // Re-enable system time: restore time advance rate and sync to current hour
+        this.timeOfDayPanel.onvaluechange = (t: number, useDynamicTime: boolean) => {
+            this.useSystemTime = useDynamicTime;
+            if (useDynamicTime) {
+                // Re-enable dynamic time: restore time advance rate and sync to current hour
                 this.globals.timeAdv = this.defaultTimeAdv;
                 this.globals.time = new Date().getHours();
             } else {

@@ -863,7 +863,6 @@ class Main {
         let scenePanels: Panel[] = [];
         if (scene.createPanels)
             scenePanels = scene.createPanels();
-
         this.ui.setScenePanels(scenePanels);
 
         // Force time to play when loading a map.

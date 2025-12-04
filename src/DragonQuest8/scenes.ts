@@ -125,7 +125,6 @@ export class DQ8Renderer implements Viewer.SceneGfx {
     private createDayHourPanel(): UI.TimeOfDayPanel {
         this.timeOfDayPanel = new UI.TimeOfDayPanel();
         this.timeOfDayPanel.setTime(this.sceneInfo.currentHour / 24);
-        this.timeOfDayPanel.setCheckboxLabel('Dynamic Time');
 
         // Default to dynamic time
         this.sceneInfo.currentUserHour = -1;
