@@ -252,6 +252,11 @@ export class TwilightPrincessRenderer implements Viewer.SceneGfx {
 
     public time: number; // In milliseconds, affected by pause and time scaling
 
+    // Time of day control
+    private timeOfDayPanel: UI.TimeOfDayPanel | null = null;
+    private useSystemTime: boolean = true;
+    private readonly defaultTimeAdv: number = 0.012;
+
     public onstatechanged!: () => void;
 
     constructor(device: GfxDevice, public globals: dGlobals) {
@@ -387,7 +392,24 @@ export class TwilightPrincessRenderer implements Viewer.SceneGfx {
         };
         environmentPanel.contents.appendChild(this.bgAmbRatioSlider.elem);
 
-        return [roomsPanel, scenarioPanel, renderHacksPanel, environmentPanel];
+        // Time of Day panel
+        this.timeOfDayPanel = new UI.TimeOfDayPanel();
+        this.timeOfDayPanel.setTime(this.globals.g_env_light.curTime / 360);
+
+        this.timeOfDayPanel.onvaluechange = (t: number, useDynamicTime: boolean) => {
+            this.useSystemTime = useDynamicTime;
+            if (useDynamicTime) {
+                // Re-enable dynamic time: restore time advance rate and sync to current hour
+                this.globals.g_env_light.timeAdv = this.defaultTimeAdv;
+                this.globals.g_env_light.curTime = 15 * new Date().getHours();
+            } else {
+                // Freeze time at the selected value
+                this.globals.g_env_light.timeAdv = 0;
+                this.globals.g_env_light.curTime = t * 360;
+            }
+        };
+
+        return [roomsPanel, scenarioPanel, renderHacksPanel, environmentPanel, this.timeOfDayPanel];
     }
 
     // For people to play around with.
@@ -436,6 +458,11 @@ export class TwilightPrincessRenderer implements Viewer.SceneGfx {
 
         this.time = viewerInput.time;
         globals.counter += viewerInput.deltaTime / 30.0;
+
+        // Update time-of-day panel display
+        if (this.timeOfDayPanel !== null && this.useSystemTime) {
+            this.timeOfDayPanel.setTime(globals.g_env_light.curTime / 360);
+        }
 
         if (!this.cameraFrozen) {
             mat4.getTranslation(this.globals.cameraPosition, viewerInput.camera.worldMatrix);

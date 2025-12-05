@@ -35,6 +35,10 @@ export class DQ8Renderer implements Viewer.SceneGfx {
     public useVertexColors = true;
     public sceneInfo = new SINFO.SceneInfo();
 
+    // Time of day control
+    private timeOfDayPanel: UI.TimeOfDayPanel | null = null;
+    private useDynamicTime: boolean = true;
+
     constructor(device: GfxDevice, public textureHolder: TextureHolder<any>, public sceneDesc: SceneDesc, public texNameToTextureData: Map<string, IMG.TextureData>) {
         this.renderHelper = new GfxRenderHelper(device);
     }
@@ -73,6 +77,11 @@ export class DQ8Renderer implements Viewer.SceneGfx {
         let clearColor = colorNewFromRGBA(1, 0, 0);
 
         this.sceneInfo.update(viewerInput.deltaTime);
+
+        // Update time-of-day panel display when using dynamic time
+        if (this.timeOfDayPanel !== null && this.useDynamicTime) {
+            this.timeOfDayPanel.setTime(this.sceneInfo.currentHour / 24);
+        }
 
         if (this.sceneInfo.currentLightSet)
             clearColor = this.sceneInfo.currentLightSet!.bgcolor;
@@ -113,19 +122,28 @@ export class DQ8Renderer implements Viewer.SceneGfx {
         return progressPanel;
     }
 
-    private createDayHourPanel(): UI.Panel {
-        const hourPanel = new UI.Panel();
-        hourPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
-        hourPanel.setTitle(UI.TIME_OF_DAY_ICON, 'Time Of Day');
-        const hourSelect = new UI.SingleSelect();
-        const indexToUserHour = [-1, 1.5, 6.5, 9.5, 17.5, 18.5, 19.5];
-        hourSelect.setStrings(["Dynamic", "1:30", "6:30", "9:30", "17:30", "18:30", "19:30"]);
-        hourSelect.onselectionchange = (strIndex: number) => {
-            this.sceneInfo.currentUserHour = indexToUserHour[strIndex];
+    private createDayHourPanel(): UI.TimeOfDayPanel {
+        this.timeOfDayPanel = new UI.TimeOfDayPanel();
+        this.timeOfDayPanel.setTime(this.sceneInfo.currentHour / 24);
+
+        // Default to dynamic time
+        this.sceneInfo.currentUserHour = -1;
+        this.useDynamicTime = true;
+
+        this.timeOfDayPanel.onvaluechange = (t: number, useDynamicTime: boolean) => {
+            this.useDynamicTime = useDynamicTime;
+            if (useDynamicTime) {
+                // Re-enable dynamic time
+                this.sceneInfo.currentUserHour = -1;
+            } else {
+                // Freeze time at the selected value
+                const hour = t * 24;
+                this.sceneInfo.currentUserHour = hour;
+                this.sceneInfo.currentHour = hour;
+            }
         };
-        hourSelect.selectItem(0);
-        hourPanel.contents.appendChild(hourSelect.elem);
-        return hourPanel;
+
+        return this.timeOfDayPanel;
     }
 
     private createRenderHackPanel(): UI.Panel {

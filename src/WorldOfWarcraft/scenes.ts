@@ -11,6 +11,7 @@ import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
 import { gfxRenderInstCompareNone, GfxRenderInstExecutionOrder, GfxRenderInstList } from "../gfx/render/GfxRenderInstManager.js";
 import { rust } from "../rustlib.js";
 import { assert } from "../util.js";
+import * as UI from "../ui.js";
 import * as Viewer from "../viewer.js";
 import { AdtCoord, AdtData, Database, DoodadData, LazyWorldData, ModelData, WmoData, WmoDefinition, WorldData, WowCache } from "./data.js";
 import { BaseProgram, LoadingAdtProgram, ModelProgram, ParticleProgram, SkyboxProgram, TerrainProgram, WaterProgram, WmoProgram } from "./program.js";
@@ -66,6 +67,7 @@ export class View {
     public secondsPerGameDay = 90;
     public fogEnabled = true;
     public freezeTime = false;
+    public frozenTime = 800;
 
     constructor() {}
 
@@ -126,7 +128,7 @@ export class View {
         this.cullingFrustum.updateClipFrustum(clipFromWorldMatrixCull, GfxClipSpaceNearZ.NegativeOne);
 
         if (this.freezeTime) {
-            this.time = 800;
+            this.time = this.frozenTime;
         } else {
             this.time = (viewerInput.time / this.secondsPerGameDay + this.timeOffset) % 2880;
         }
@@ -317,6 +319,8 @@ export class WdtScene implements Viewer.SceneGfx {
     private frozenFrameData: FrameData | null = null;
     private modelCamera = vec3.create();
     private modelFrustum: ConvexHull;
+
+    private timeOfDayPanel: UI.TimeOfDayPanel | null = null;
 
     constructor(private device: GfxDevice, public world: WorldData | LazyWorldData, public renderHelper: GfxRenderHelper, private db: Database) {
         console.time("WdtScene construction");
@@ -817,6 +821,10 @@ export class WdtScene implements Viewer.SceneGfx {
         this.mainView.setupFromViewerInput(viewerInput);
         this.updateCurrentAdt();
 
+        if (this.timeOfDayPanel !== null && !this.mainView.freezeTime) {
+            this.timeOfDayPanel.setTime(this.mainView.time / 2880);
+        }
+
         const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, standardFullClearRenderPassDescriptor);
         const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, standardFullClearRenderPassDescriptor);
 
@@ -850,6 +858,27 @@ export class WdtScene implements Viewer.SceneGfx {
         this.renderHelper.renderGraph.execute(builder);
         this.renderInstListMain.reset();
         this.renderInstListSky.reset();
+    }
+
+    public createPanels(): UI.Panel[] {
+        // Don't show time panel for interior WMO scenes
+        if (this.mainView.freezeTime) {
+            return [];
+        }
+
+        this.timeOfDayPanel = new UI.TimeOfDayPanel();
+        this.timeOfDayPanel.setTime(this.mainView.time / 2880);
+
+        this.timeOfDayPanel.onvaluechange = (t: number, useDynamicTime: boolean) => {
+            if (useDynamicTime) {
+                this.mainView.freezeTime = false;
+            } else {
+                this.mainView.freezeTime = true;
+                this.mainView.frozenTime = t * 2880;
+            }
+        };
+
+        return [this.timeOfDayPanel];
     }
 
     public destroy(device: GfxDevice): void {

@@ -3,6 +3,7 @@
 
 import * as Viewer from '../viewer.js';
 import * as NARC from './narc.js';
+import * as UI from '../ui.js';
 
 import { ReadonlyVec3, mat4, vec3 } from 'gl-matrix';
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
@@ -282,6 +283,12 @@ export class PlatinumMapRenderer implements Viewer.SceneGfx {
     public lightSetting: LightSetting = new LightSetting();
     public currentTime: number = 0;
 
+    // Time of day control
+    private readonly maxTime: number = 24 * 60 * 30; // 43200
+    private timeOfDayPanel: UI.TimeOfDayPanel | null = null;
+    private useSystemTime: boolean = true;
+    private readonly defaultTimeRate: number = 300; // Time units per second
+
     constructor(device: GfxDevice) {
         this.renderHelper = new GfxRenderHelper(device);
 
@@ -297,10 +304,36 @@ export class PlatinumMapRenderer implements Viewer.SceneGfx {
         c.setSceneMoveSpeedMult(10);
     }
 
+    public createPanels(): UI.Panel[] {
+        // Time of Day panel
+        this.timeOfDayPanel = new UI.TimeOfDayPanel();
+        this.timeOfDayPanel.setTime(this.currentTime / this.maxTime);
+
+        this.timeOfDayPanel.onvaluechange = (t: number, useDynamicTime: boolean) => {
+            this.useSystemTime = useDynamicTime;
+            if (useDynamicTime) {
+                // Re-enable dynamic time: sync to current hour
+                this.currentTime = new Date().getHours() * 60 * 30;
+            } else {
+                // Freeze time at the selected value
+                this.currentTime = t * this.maxTime;
+            }
+        };
+
+        return [this.timeOfDayPanel];
+    }
+
     public prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
-        this.currentTime += (viewerInput.deltaTime / 1000) * 300;
-        if (this.currentTime > 24*60*30)
-            this.currentTime = 0;
+        // Update time
+        if (this.useSystemTime) {
+            this.currentTime += (viewerInput.deltaTime / 1000) * this.defaultTimeRate;
+            if (this.currentTime > this.maxTime)
+                this.currentTime = 0;
+
+            // Update panel display
+            if (this.timeOfDayPanel !== null)
+                this.timeOfDayPanel.setTime(this.currentTime / this.maxTime);
+        }
 
         blendLightSetting(this.lightSetting, this.lightSettings, this.currentTime);
 

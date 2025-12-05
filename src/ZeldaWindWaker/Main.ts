@@ -266,6 +266,11 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
     public time: number; // In milliseconds, affected by pause and time scaling
     public roomLayerMask: number = 0;
 
+    // Time of day control
+    private timeOfDayPanel: UI.TimeOfDayPanel | null = null;
+    private useSystemTime: boolean = true;
+    private readonly defaultTimeAdv: number = 0.02;
+
     public onstatechanged!: () => void;
 
     constructor(public device: GfxDevice, public globals: dGlobals) {
@@ -341,7 +346,24 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
             renderHacksPanel.contents.appendChild(wireframe.elem);
         }
 
-        return [roomsPanel, scenarioPanel, renderHacksPanel];
+        // Time of Day panel
+        this.timeOfDayPanel = new UI.TimeOfDayPanel();
+        this.timeOfDayPanel.setTime(this.globals.g_env_light.curTime / 360);
+
+        this.timeOfDayPanel.onvaluechange = (t: number, useDynamicTime: boolean) => {
+            this.useSystemTime = useDynamicTime;
+            if (useDynamicTime) {
+                // Re-enable dynamic time: restore time advance rate and sync to current hour
+                this.globals.g_env_light.timeAdv = this.defaultTimeAdv;
+                this.globals.g_env_light.curTime = 15 * new Date().getHours();
+            } else {
+                // Freeze time at the selected value
+                this.globals.g_env_light.timeAdv = 0;
+                this.globals.g_env_light.curTime = t * 360;
+            }
+        };
+
+        return [roomsPanel, scenarioPanel, renderHacksPanel, this.timeOfDayPanel];
     }
 
     private getRoomStatus(ac: fopAc_ac_c): dStage_roomStatus_c | null {
@@ -367,6 +389,11 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         const globals = this.globals;
 
         this.time = viewerInput.time;
+
+        // Update time-of-day panel display
+        if (this.timeOfDayPanel !== null && this.useSystemTime) {
+            this.timeOfDayPanel.setTime(globals.g_env_light.curTime / 360);
+        }
 
         // noclip hack: if only one room is visible, make it the mStayNo
         const singleRoomVisibleNo = this.getSingleRoomVisible();

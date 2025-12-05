@@ -9,7 +9,7 @@ import { GITHUB_REVISION_URL, GITHUB_URL, GIT_SHORT_REVISION, IS_DEVELOPMENT } f
 import { SaveManager, GlobalSaveManager } from "./SaveManager.js";
 import { RenderStatistics } from './RenderStatistics.js';
 import { GlobalGrabManager } from './GrabManager.js';
-import { clamp, invlerp, lerp } from './MathHelpers.js';
+import { clamp, invlerp, lerp, MathConstants } from './MathHelpers.js';
 import { DebugFloaterHolder } from './DebugFloaters.js';
 import { DraggingMode } from './InputManager.js';
 import { CLAPBOARD_ICON, StudioPanel } from './Studio.js';
@@ -1521,6 +1521,267 @@ export class Slider implements Widget {
     public setT(t: number): void {
         const v = lerp(+this.sliderInput.min, +this.sliderInput.max, t);
         this.setValue(v);
+    }
+}
+
+const SUN_ICON_PATH = `M12 2L13.09 8.26L18 5L14.74 9.91L21 11L14.74 12.09L18 17L13.09 13.74L12 20L10.91 13.74L6 17L9.26 12.09L3 11L9.26 9.91L6 5L10.91 8.26L12 2Z`;
+const MOON_ICON_PATH = `M12 3c.132 0 .263.004.393.012a7 7 0 1 0 8.595 8.595A8 8 0 1 1 12 3z`;
+
+export class CircularTimeSlider implements Widget {
+    public elem: HTMLElement;
+    public onvalue: ((value: number) => void) | null = null;
+    public onmanualchange: (() => void) | null = null;
+
+    private svg: SVGSVGElement;
+    private thumb: SVGCircleElement;
+    private timeLabel: HTMLElement;
+    private value: number = 0;
+    private isDragging: boolean = false;
+
+    // Dial dimensions
+    private readonly size = 120;
+    private readonly cx = 60;
+    private readonly cy = 60;
+    private readonly radius = 45;
+    private readonly thumbRadius = 8;
+
+    constructor() {
+        const toplevel = document.createElement('div');
+        toplevel.style.display = 'flex';
+        toplevel.style.flexDirection = 'column';
+        toplevel.style.alignItems = 'center';
+        toplevel.style.padding = '8px';
+        toplevel.style.userSelect = 'none';
+
+        // Create SVG dial
+        this.svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        this.svg.setAttribute('width', `${this.size}`);
+        this.svg.setAttribute('height', `${this.size}`);
+        this.svg.setAttribute('viewBox', `0 0 ${this.size} ${this.size}`);
+        this.svg.style.cursor = 'pointer';
+
+        // Background circle (track)
+        const track = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        track.setAttribute('cx', `${this.cx}`);
+        track.setAttribute('cy', `${this.cy}`);
+        track.setAttribute('r', `${this.radius}`);
+        track.setAttribute('fill', 'none');
+        track.setAttribute('stroke', '#333');
+        track.setAttribute('stroke-width', '12');
+        this.svg.appendChild(track);
+
+        // Day arc (top half)
+        const dayArc = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        const dayPath = this.describeArc(this.cx, this.cy, this.radius, Math.PI, MathConstants.TAU);
+        dayArc.setAttribute('d', dayPath);
+        dayArc.setAttribute('fill', 'none');
+        dayArc.setAttribute('stroke', '#e8a430');
+        dayArc.setAttribute('stroke-width', '10');
+        dayArc.setAttribute('stroke-linecap', 'round');
+        this.svg.appendChild(dayArc);
+
+        // Night arc (bottom half)
+        const nightArc = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        const nightPath = this.describeArc(this.cx, this.cy, this.radius, 0, Math.PI);
+        nightArc.setAttribute('d', nightPath);
+        nightArc.setAttribute('fill', 'none');
+        nightArc.setAttribute('stroke', '#2a3a5a');
+        nightArc.setAttribute('stroke-width', '10');
+        nightArc.setAttribute('stroke-linecap', 'round');
+        this.svg.appendChild(nightArc);
+
+        // Sun icon at top (noon position)
+        const sunGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        sunGroup.setAttribute('transform', `translate(${this.cx - 8}, ${this.cy - this.radius - 8}) scale(0.7)`);
+        const sunPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        sunPath.setAttribute('d', SUN_ICON_PATH);
+        sunPath.setAttribute('fill', '#ffd700');
+        sunGroup.appendChild(sunPath);
+        this.svg.appendChild(sunGroup);
+
+        // Moon icon at bottom (midnight position)
+        const moonGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        moonGroup.setAttribute('transform', `translate(${this.cx - 6}, ${this.cy + this.radius - 6}) scale(0.5)`);
+        const moonPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        moonPath.setAttribute('d', MOON_ICON_PATH);
+        moonPath.setAttribute('fill', '#aaccff');
+        moonGroup.appendChild(moonPath);
+        this.svg.appendChild(moonGroup);
+
+        // Thumb (draggable indicator)
+        this.thumb = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        this.thumb.setAttribute('r', `${this.thumbRadius}`);
+        this.thumb.setAttribute('fill', HIGHLIGHT_COLOR);
+        this.thumb.setAttribute('stroke', 'white');
+        this.thumb.setAttribute('stroke-width', '2');
+        this.thumb.style.cursor = 'grab';
+        this.svg.appendChild(this.thumb);
+
+        toplevel.appendChild(this.svg);
+
+        // Time label below dial
+        this.timeLabel = document.createElement('div');
+        this.timeLabel.style.marginTop = '8px';
+        this.timeLabel.style.fontSize = '14px';
+        this.timeLabel.style.fontWeight = 'bold';
+        this.timeLabel.style.color = 'white';
+        toplevel.appendChild(this.timeLabel);
+
+        this.elem = toplevel;
+
+        // Set up event handlers
+        this.svg.addEventListener('mousedown', this.onMouseDown.bind(this));
+        document.addEventListener('mousemove', this.onMouseMove.bind(this));
+        document.addEventListener('mouseup', this.onMouseUp.bind(this));
+
+        // Initial position
+        this.updateThumbPosition();
+        this.updateTimeLabel();
+    }
+
+    private describeArc(x: number, y: number, radius: number, startAngle: number, endAngle: number): string {
+        const start = this.polarToCartesian(x, y, radius, endAngle);
+        const end = this.polarToCartesian(x, y, radius, startAngle);
+        const largeArcFlag = (endAngle - startAngle) <= Math.PI ? '0' : '1';
+        return `M ${start.x} ${start.y} A ${radius} ${radius} 0 ${largeArcFlag} 0 ${end.x} ${end.y}`;
+    }
+
+    private polarToCartesian(cx: number, cy: number, radius: number, angle: number): { x: number, y: number } {
+        return {
+            x: cx + radius * Math.cos(angle),
+            y: cy + radius * Math.sin(angle),
+        };
+    }
+
+    // Convert normalized time (0-1) to angle in radians.
+    private timeToAngle(t: number): number {
+        return MathConstants.TAU * (t + 0.25);
+    }
+
+    // Convert angle in radians to normalized time (0-1).
+    private angleToTime(angle: number): number {
+        return (angle / MathConstants.TAU + 0.75) % 1;
+    }
+
+    private updateThumbPosition(): void {
+        const angle = this.timeToAngle(this.value);
+        const pos = this.polarToCartesian(this.cx, this.cy, this.radius, angle);
+        this.thumb.setAttribute('cx', `${pos.x}`);
+        this.thumb.setAttribute('cy', `${pos.y}`);
+    }
+
+    private updateTimeLabel(): void {
+        const totalHours = this.value * 24;
+        const hours24 = Math.floor(totalHours) % 24;
+        const minutes = Math.floor((totalHours - Math.floor(totalHours)) * 60);
+
+        const hours12 = hours24 % 12 || 12;
+        const ampm = hours24 < 12 ? 'AM' : 'PM';
+        const minuteStr = minutes.toString().padStart(2, '0');
+
+        this.timeLabel.textContent = `${hours12}:${minuteStr} ${ampm}`;
+    }
+
+    private onMouseDown(e: MouseEvent): void {
+        this.isDragging = true;
+        this.thumb.style.cursor = 'grabbing';
+        this.updateValueFromMouse(e);
+        e.preventDefault();
+    }
+
+    private onMouseMove(e: MouseEvent): void {
+        if (!this.isDragging) return;
+        this.updateValueFromMouse(e);
+    }
+
+    private onMouseUp(): void {
+        if (this.isDragging) {
+            this.isDragging = false;
+            this.thumb.style.cursor = 'grab';
+        }
+    }
+
+    private updateValueFromMouse(e: MouseEvent): void {
+        const rect = this.svg.getBoundingClientRect();
+        const x = e.clientX - rect.left - this.cx;
+        const y = e.clientY - rect.top - this.cy;
+
+        // Calculate angle from center to mouse position
+        const angle = Math.atan2(y, x);
+        const newValue = this.angleToTime(angle);
+
+        if (newValue !== this.value) {
+            this.value = newValue;
+            this.updateThumbPosition();
+            this.updateTimeLabel();
+
+            if (this.onmanualchange !== null)
+                this.onmanualchange();
+
+            if (this.onvalue !== null)
+                this.onvalue(this.value);
+        }
+    }
+
+    public getValue(): number {
+        return this.value;
+    }
+
+    public setValue(v: number, triggerCallback: boolean = false): void {
+        this.value = clamp(v, 0, 1);
+        this.updateThumbPosition();
+        this.updateTimeLabel();
+
+        if (triggerCallback && this.onvalue !== null)
+            this.onvalue(this.value);
+    }
+}
+
+export class TimeOfDayPanel extends Panel {
+    public onvaluechange: ((time: number, useDynamicTime: boolean) => void) | null = null;
+
+    private slider: CircularTimeSlider;
+    private dynamicTimeCheckbox: Checkbox;
+    private useDynamicTime: boolean = true;
+
+    constructor() {
+        super();
+
+        this.setTitle(TIME_OF_DAY_ICON, 'Time of Day');
+        this.customHeaderBackgroundColor = COOL_BLUE_COLOR;
+        this.syncHeaderStyle();
+
+        // "Dynamic Time" checkbox
+        this.dynamicTimeCheckbox = new Checkbox('Dynamic Time', true);
+        this.dynamicTimeCheckbox.onchanged = () => {
+            this.useDynamicTime = this.dynamicTimeCheckbox.checked;
+            if (this.onvaluechange !== null)
+                this.onvaluechange(this.slider.getValue(), this.useDynamicTime);
+        };
+        this.contents.appendChild(this.dynamicTimeCheckbox.elem);
+
+        // Circular time slider
+        this.slider = new CircularTimeSlider();
+
+        // When user manually changes the slider, disable dynamic time
+        this.slider.onmanualchange = () => {
+            if (this.useDynamicTime) {
+                this.useDynamicTime = false;
+                this.dynamicTimeCheckbox.setChecked(false);
+            }
+        };
+
+        this.slider.onvalue = (value: number) => {
+            if (this.onvaluechange !== null)
+                this.onvaluechange(value, this.useDynamicTime);
+        };
+
+        this.contents.appendChild(this.slider.elem);
+    }
+
+    // Set normalized time (0-1)
+    public setTime(time: number): void {
+        this.slider.setValue(time);
     }
 }
 
