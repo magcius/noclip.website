@@ -581,7 +581,7 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
             // Scan add for non-zero nodes
             // if non-zero -> merge into main using the same name
             chrAdd.nodeAnimations.forEach( animNode => {
-                if (animNode.scaleX === undefined) {
+                if (animNode.scaleX === null) {
                     const mainAnimNode = chrMain.nodeAnimations.findIndex((node) => node.nodeName === animNode.nodeName);
                     if (mainAnimNode !== -1)
                         chrMain.nodeAnimations[mainAnimNode] = animNode;
