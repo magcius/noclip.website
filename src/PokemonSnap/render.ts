@@ -201,7 +201,7 @@ class DrawCallInstance {
         let primLOD = this.drawCall.DP_PrimLOD;
         if (this.material && this.material.data.flags & (MaterialFlags.PrimLOD | MaterialFlags.Special))
             primLOD = this.material.getPrimLOD();
-        comb[offs] = primLOD;
+        fillVec4(comb, offs, primLOD);
         return 1;
     }
 
