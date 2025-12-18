@@ -21,6 +21,7 @@ import { makeVertexBufferData } from '../Glover/render.js';
 import { IS_WIREFRAME } from './courses.js';
 import { GfxShaderLibrary } from '../gfx/helpers/GfxShaderLibrary.js';
 import { createBufferFromData } from '../gfx/helpers/BufferHelpers.js';
+import { gfxDeviceNeedsFlipY } from '../gfx/helpers/GfxDeviceHelpers.js';
 
 const viewMtxScratch = mat4.create();
 const modelViewScratch = mat4.create();
@@ -226,6 +227,8 @@ class DrawCallInstance {
 
     //TODO: Instancing
     public prepareToRender(renderInstManager: GfxRenderInstManager, drawMatrix: ReadonlyMat4, isBillboard: boolean, isOrthographic: boolean): void {
+        const device = renderInstManager.gfxRenderCache.device;
+
         if (this.gfxProgram === null)
             this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(this.program);
 
@@ -256,7 +259,7 @@ class DrawCallInstance {
         offs += fillMatrix4x3(mappedF32, offs, modelViewScratch);
 
         this.computeTextureMatrix(texMtxScratch, 0);
-        if (this.textureMappings[0].lateBinding) {
+        if (this.textureMappings[0].lateBinding && gfxDeviceNeedsFlipY(device)) {
             texMtxScratch[5] *= -1;
             texMtxScratch[13] += 1;
         }

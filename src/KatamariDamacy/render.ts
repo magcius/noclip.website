@@ -17,6 +17,7 @@ import { convertToCanvas } from "../gfx/helpers/TextureConversionHelpers.js";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
 import { createBufferFromData } from "../gfx/helpers/BufferHelpers.js";
+import { gfxDeviceNeedsFlipY } from "../gfx/helpers/GfxDeviceHelpers.js";
 
 export class KatamariDamacyProgram extends DeviceProgram {
     public static a_Position = 0;
@@ -287,13 +288,15 @@ export class BINModelPartInstance {
     }
 
     public prepareToRender(renderInstManager: GfxRenderInstManager, modelMatrices: ReadonlyMat4[], textureMatrix: ReadonlyMat4, currentPalette: number): void {
+        const device = renderInstManager.gfxRenderCache.device;
+
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setGfxProgram(this.gfxProgram);
         renderInst.setMegaStateFlags(this.megaStateFlags);
 
         mat4.copy(scratchTextureMatrix, textureMatrix);
         if (this.binModelPart.textureIndex !== null)
-            this.sectorData.textureData[this.binModelPart.textureIndex].fillTextureMapping(this.textureMapping[0], scratchTextureMatrix, currentPalette);
+            this.sectorData.textureData[this.binModelPart.textureIndex].fillTextureMapping(device, this.textureMapping[0], scratchTextureMatrix, currentPalette);
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
 
         renderInst.setDrawCount(this.binModelPart.indexCount, this.binModelPart.indexOffset);
@@ -392,11 +395,13 @@ class BINTextureData {
         }
     }
 
-    public fillTextureMapping(m: TextureMapping, dstMtx: mat4, paletteIndex: number = 0): void {
+    public fillTextureMapping(device: GfxDevice, m: TextureMapping, dstMtx: mat4, paletteIndex: number = 0): void {
         if (this.texture.pixels[paletteIndex] === 'framebuffer') {
             m.lateBinding = 'framebuffer';
-            dstMtx[5] *= -1;
-            dstMtx[13] += 1;
+            if (gfxDeviceNeedsFlipY(device)) {
+                dstMtx[5] *= -1;
+                dstMtx[13] += 1;
+            }
         } else {
             m.gfxTexture = this.gfxTexture[paletteIndex];
         }

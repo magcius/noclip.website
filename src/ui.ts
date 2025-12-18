@@ -1825,6 +1825,8 @@ export class RadioButtons implements Widget {
             this.elem.appendChild(option);
             this.options.push(option);
         });
+
+        this.selectedIndex = -1;
     }
 
     public setVisible(v: boolean) {
@@ -1914,6 +1916,8 @@ class ViewerSettings extends Panel {
         const aaModes = ['None', 'FXAA'];
         if (limits.supportedSampleCounts.includes(4))
             aaModes.push('4x MSAA');
+        this.antialiasingRadioButtons.setOptions(aaModes);
+        GlobalSaveManager.callSettingsListener('AntialiasingMode');
     }
 
     public setCameraControllerIndex(idx: number) {
