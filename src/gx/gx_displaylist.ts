@@ -412,7 +412,7 @@ function translateSourceVatLayout(vatFormat: GX_VtxAttrFmt[], vcd: GX_VtxDesc[])
         // Describes format of pointed-to data.
         const vtxAttrFmt = vatFormat[vtxAttrib];
 
-        if (!vtxAttrDesc || vtxAttrDesc.type === GX.AttrType.NONE)
+        if (!vtxAttrDesc || vtxAttrDesc.type === GX.AttrType.NONE || vtxAttrDesc.type === GX.AttrType.ZERO)
             continue;
 
         const srcIndexComponentCount = getIndexNumComponents(vtxAttrib, vtxAttrFmt);
@@ -752,6 +752,20 @@ function generateRunVertices(loadedVertexLayout: LoadedVertexLayout, vatLayout: 
             }
         }
 
+        function compileZero(): string {
+            let S = ``;
+
+            const dstComponentSize = getFormatCompByteSize(dstFormat);
+            const dstComponentCount = getFormatComponentCount(dstFormat);
+            for (let i = 0; i < dstComponentCount; i++) {
+                const dstOffs = dstBaseOffs + (i * dstComponentSize);
+                S += `
+    ${compileWriteOneComponent(dstOffs, '0.0')};`
+            }
+
+            return S;
+        }
+
         function compileOneIndex(viewName: string, readIndex: string, drawCallIdxIncr: number, uniqueSuffix: string = ''): string {
             if (outputMode === GX_VtxDescOutputMode.VertexData) {
                 const stride = `vtxArrayStrides[${vtxAttrib}]`;
@@ -790,17 +804,20 @@ function generateRunVertices(loadedVertexLayout: LoadedVertexLayout, vatLayout: 
             }
         }
 
-        switch (vtxAttrDesc.type) {
-        case GX.AttrType.DIRECT:
+        if (vtxAttrDesc.type === GX.AttrType.DIRECT) {
             return `
     // ${getAttrName(vtxAttrib)}
     ${compileOneAttrib(`dlView`, `drawCallIdx`)}
     drawCallIdx += ${srcAttrByteSize};`;
-        case GX.AttrType.INDEX8:
+        } else if (vtxAttrDesc.type === GX.AttrType.INDEX8) {
             return compileAttribIndex(compileVtxArrayViewName(vtxAttrib), `dlView.getUint8(drawCallIdx)`, 1);
-        case GX.AttrType.INDEX16:
+        } else if (vtxAttrDesc.type === GX.AttrType.INDEX16) {
             return compileAttribIndex(compileVtxArrayViewName(vtxAttrib), `dlView.getUint16(drawCallIdx)`, 2);
-        default:
+        } else if (vtxAttrDesc.type === GX.AttrType.ZERO) {
+            return `
+    // ${getAttrName(vtxAttrib)} - ZERO
+    ${compileZero()}`;
+        } else {
             throw "whoops";
         }
     }

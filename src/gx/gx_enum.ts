@@ -480,6 +480,7 @@ export enum AttrType {
     DIRECT = 1,
     INDEX8 = 2,
     INDEX16 = 3,
+    ZERO = 4, // Noclip extension, means that it's missing in the original data but we want to output a zero value for it.
 }
 
 export enum TexMapID {

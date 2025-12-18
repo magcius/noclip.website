@@ -834,10 +834,22 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
                     workingBits &= ~VcdBitFlags.NRM;
                 }
 
+                const usesColorChannelVtx = (ch: GX_Material.ColorChannelControl) => {
+                    return ch.matColorSource === GX.ColorSrc.VTX || ch.ambColorSource === GX.ColorSrc.VTX;
+                };
+                const usesLightChannelVtx = (ch: GX_Material.LightChannelControl | undefined) => {
+                    if (ch === undefined)
+                        return false;
+                    return usesColorChannelVtx(ch.colorChannel) || usesColorChannelVtx(ch.alphaChannel);
+                };
+
                 if ((workingBits & VcdBitFlags.CLR0) !== 0) {
                     vat[GX.Attr.CLR0] = { compType: GX.CompType.RGBA8, compCnt: GX.CompCnt.CLR_RGBA, compShift: 0 };
                     vcd[GX.Attr.CLR0] = { type: GX.AttrType.INDEX16 };
                     workingBits &= ~VcdBitFlags.CLR0;
+                } else if (usesLightChannelVtx(material.gxMaterial.lightChannels[0])) {
+                    vat[GX.Attr.CLR0] = { compType: GX.CompType.RGBA8, compCnt: GX.CompCnt.CLR_RGBA, compShift: 0 };
+                    vcd[GX.Attr.CLR0] = { type: GX.AttrType.ZERO };
                 }
 
                 if ((workingBits & VcdBitFlags.TEX0) !== 0) {
