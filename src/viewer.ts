@@ -9,7 +9,7 @@ import { createSwapChainForWebGL2, gfxDeviceGetImpl_GL, GfxPlatformWebGL2Config 
 import { createSwapChainForWebGPU, GfxPlatformWebGPUConfig } from './gfx/platform/GfxPlatformWebGPU.js';
 import { RenderStatistics, RenderStatisticsTracker } from './RenderStatistics.js';
 import { AntialiasingMode } from './gfx/helpers/RenderGraphHelpers.js';
-import { WebXRContext } from './WebXR.js';
+import { WebXRContext, WebXRInputManager } from './WebXR.js';
 import { IS_DEVELOPMENT } from './BuildVersion.js';
 import { GlobalSaveManager } from './SaveManager.js';
 import { mat4 } from 'gl-matrix';
@@ -83,6 +83,8 @@ export function resizeCanvas(canvas: HTMLCanvasElement, width: number, height: n
 
 export class Viewer {
     public inputManager: InputManager;
+    public xrInputManager: WebXRInputManager = new WebXRInputManager();
+
     public cameraController: CameraController | null = null;
     public xrCameraController: XRCameraController = new XRCameraController();
 
@@ -309,7 +311,8 @@ export class Viewer {
         this.sceneTime += deltaTime;
 
         if (updateInfo.webXRContext !== null && updateInfo.webXRContext.views && updateInfo.webXRContext.xrSession) {
-            this.xrCameraController.update(updateInfo.webXRContext);
+            this.xrInputManager.afterFrame(updateInfo.webXRContext);
+            this.xrCameraController.update(updateInfo.webXRContext, this.xrInputManager);
             this.renderWebXR(updateInfo.webXRContext);
         } else {
             this.render();
