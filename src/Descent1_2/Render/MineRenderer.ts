@@ -1,0 +1,456 @@
+import { mat2, ReadonlyMat2, vec2, vec3 } from "gl-matrix";
+import { createBufferFromData } from "../../gfx/helpers/BufferHelpers.js";
+import { GfxShaderLibrary } from "../../gfx/helpers/GfxShaderLibrary.js";
+import {
+    fillMatrix4x3,
+    fillMatrix4x4,
+} from "../../gfx/helpers/UniformBufferHelpers.js";
+import {
+    GfxBindingLayoutDescriptor,
+    GfxBuffer,
+    GfxBufferFrequencyHint,
+    GfxBufferUsage,
+    GfxCullMode,
+    GfxDevice,
+    GfxFormat,
+    GfxFrontFaceMode,
+    GfxIndexBufferDescriptor,
+    GfxInputLayout,
+    GfxInputLayoutBufferDescriptor,
+    GfxMegaStateDescriptor,
+    GfxMipFilterMode,
+    GfxProgram,
+    GfxSampler,
+    GfxTexFilterMode,
+    GfxVertexAttributeDescriptor,
+    GfxVertexBufferDescriptor,
+    GfxVertexBufferFrequency,
+    GfxWrapMode,
+} from "../../gfx/platform/GfxPlatform.js";
+import { GfxRenderCache } from "../../gfx/render/GfxRenderCache.js";
+import { GfxRenderInstManager } from "../../gfx/render/GfxRenderInstManager.js";
+import { DeviceProgram } from "../../Program.js";
+import { TextureMapping } from "../../TextureHolder.js";
+import * as Viewer from "../../viewer.js";
+import { DescentAssetCache } from "../Common/AssetCache.js";
+import { DescentSide, WALL_TYPE_OPEN } from "../Common/LevelTypes.js";
+import { DescentTextureList, ResolvedTexture } from "../Common/TextureList.js";
+import { MultiMap } from "../Common/Util.js";
+import { Descent1Level } from "../D1/D1Level.js";
+import { Descent2Level } from "../D2/D2Level.js";
+import { DescentRenderParameters } from "./RenderParameters.js";
+
+class DescentMineProgram extends DeviceProgram {
+    public static bindingLayouts: GfxBindingLayoutDescriptor[] = [
+        { numUniformBuffers: 2, numSamplers: 2 },
+    ];
+
+    public static a_xyz = 0;
+    public static a_uvl = 1;
+
+    public static ub_SceneParams = 0;
+    public static ub_TextureParams = 1;
+
+    public override both = `
+${GfxShaderLibrary.MatrixLibrary}
+precision mediump float;
+
+layout(std140) uniform ub_SceneParams {
+    Mat4x4 u_matProjection;
+    Mat3x4 u_matView;
+    float u_minLight;
+    float u_slideTime;
+};
+
+layout(std140) uniform ub_TextureParams {
+    vec4 u_overlayRot;
+    vec2 u_texSlide;
+};
+
+layout(binding = 0) uniform sampler2D u_sampler_base;
+layout(binding = 1) uniform sampler2D u_sampler_overlay;
+`;
+
+    public override vert = `
+layout (location = ${DescentMineProgram.a_xyz}) in vec3 a_xyz;
+layout (location = ${DescentMineProgram.a_uvl}) in vec3 a_uvl;
+
+out vec3 v_uvl;
+
+void main() {
+    vec3 t_xyz = UnpackMatrix(u_matView) * vec4(a_xyz, 1.0);
+    gl_Position = UnpackMatrix(u_matProjection) * vec4(t_xyz, 1.0);
+    v_uvl = a_uvl;
+}
+`;
+
+    public override frag = `
+in vec3 v_uvl;
+
+mat2 mat2_from_vec4(vec4 v) {
+    return mat2(v.x, v.y, v.z, v.w);
+}
+
+void main() {
+    // Semitransparency is alpha ~0.5 on overlay
+    // 0 selects base, 1 selects overlay
+    // overlay alpha 0.0 -> 0
+    // overlay alpha 0.5 -> 1
+    // overlay alpha 1.0 -> 1
+    vec2 u_pos = v_uvl.xy + u_texSlide;
+    mat2 u_overlayRotMat = mat2_from_vec4(u_overlayRot);
+    vec4 t_color_overlay = texture(SAMPLER_2D(u_sampler_overlay), u_overlayRotMat * u_pos);
+    float t_select = step(0.25, t_color_overlay.a);
+
+    vec4 t_color_base = texture(SAMPLER_2D(u_sampler_base), u_pos).rgba;
+    vec4 t_color_final = mix(t_color_base, t_color_overlay, t_select).rgba;
+    if (t_color_final.a < 0.75) discard;
+    gl_FragColor = t_color_final * clamp(mix(1.0/33.0, 1.0, v_uvl.z), u_minLight, 1.0);
+}
+`;
+
+    constructor() {
+        super();
+    }
+}
+
+type MineMeshCall = {
+    indexOffset: number;
+    indexCount: number;
+    baseTexture: ResolvedTexture;
+    overlayTexture: ResolvedTexture | null;
+    overlayRotation: number;
+};
+
+type MineMesh = {
+    vertices: Float32Array;
+    indices: Uint16Array;
+    calls: MineMeshCall[];
+};
+
+function computeNormal(a: vec3, b: vec3, c: vec3): vec3 {
+    const ab = vec3.create();
+    const ac = vec3.create();
+    const n = vec3.create();
+    vec3.sub(ab, b, a);
+    vec3.sub(ac, c, a);
+    vec3.cross(n, ab, ac);
+    vec3.normalize(n, n);
+    return n;
+}
+
+function buildSegmentSideMesh(
+    bufVertex: number[][],
+    bufIndex: number[],
+    level: Descent1Level | Descent2Level,
+    side: DescentSide,
+) {
+    const sideVertices = side.vertices;
+    const normal = computeNormal(
+        sideVertices[0],
+        sideVertices[1],
+        sideVertices[2],
+    );
+    const tmp = vec3.create();
+    vec3.sub(tmp, sideVertices[3], sideVertices[1]);
+    const dot = vec3.dot(normal, tmp);
+
+    const indexBase = bufVertex.length;
+    for (let i = 0; i < 4; ++i) {
+        const xyz = sideVertices[i];
+        const uvl = side.uvl[i];
+        bufVertex.push([xyz[0], xyz[1], -xyz[2], ...uvl]);
+    }
+
+    if (dot > 0) {
+        // Triangulate 012 230
+        bufIndex.push(indexBase + 0);
+        bufIndex.push(indexBase + 1);
+        bufIndex.push(indexBase + 2);
+        bufIndex.push(indexBase + 2);
+        bufIndex.push(indexBase + 3);
+        bufIndex.push(indexBase + 0);
+    } else {
+        // Triangulate 013 123
+        bufIndex.push(indexBase + 0);
+        bufIndex.push(indexBase + 1);
+        bufIndex.push(indexBase + 3);
+        bufIndex.push(indexBase + 1);
+        bufIndex.push(indexBase + 2);
+        bufIndex.push(indexBase + 3);
+    }
+}
+
+function makeSideKey(side: DescentSide) {
+    return (
+        side.baseTextureIndex |
+        (side.overlayTextureIndex << 16) |
+        (side.overlayRotation << 30)
+    );
+}
+
+function extractSideKey(sideKey: number) {
+    const baseTextureId = sideKey & 0xffff;
+    const overlayTextureId = (sideKey >> 16) & 0x3fff;
+    const overlayRotation = (sideKey >> 30) & 3;
+    return [baseTextureId, overlayTextureId, overlayRotation];
+}
+
+function buildMineMesh(
+    level: Descent1Level | Descent2Level,
+    textureList: DescentTextureList,
+    assetCache: DescentAssetCache,
+): MineMesh {
+    // First, group sides to render by texture.
+    const sidesByTexture = new MultiMap<number, DescentSide>();
+    for (const segment of level.segments) {
+        for (const side of segment.sides) {
+            if (side.mayBeRendered) {
+                const sideWall =
+                    side.wallNum == null
+                        ? null
+                        : (level.walls[side.wallNum] ?? null);
+                const isRendered =
+                    sideWall == null || sideWall.type !== WALL_TYPE_OPEN;
+
+                if (isRendered) {
+                    sidesByTexture.add(makeSideKey(side), side);
+                }
+            }
+        }
+    }
+
+    // Then, load in textures as needed.
+    const vertices: number[][] = [];
+    const indices: number[] = [];
+    const calls: MineMeshCall[] = [];
+
+    for (const [sideKey, sides] of sidesByTexture.entries()) {
+        const [baseTextureId, overlayTextureId, overlayRotation] =
+            extractSideKey(sideKey);
+        const baseTexture = textureList.resolveTmapToTexture(baseTextureId);
+        if (baseTexture == null) continue;
+
+        const overlayTexture =
+            overlayTextureId > 0
+                ? (textureList.resolveTmapToTexture(overlayTextureId) ?? null)
+                : null;
+
+        const indexOffset = indices.length;
+        for (const side of sides)
+            buildSegmentSideMesh(vertices, indices, level, side);
+
+        const indexCount = indices.length - indexOffset;
+        const call: MineMeshCall = {
+            indexOffset,
+            indexCount,
+            baseTexture,
+            overlayTexture,
+            overlayRotation,
+        };
+        calls.push(call);
+    }
+
+    return {
+        vertices: new Float32Array(vertices.flat()),
+        indices: new Uint16Array(indices),
+        calls,
+    };
+}
+
+const megaStateFlags: Partial<GfxMegaStateDescriptor> = {
+    cullMode: GfxCullMode.Back,
+    frontFace: GfxFrontFaceMode.CW,
+};
+
+function getRotationMatrix(rot: number): ReadonlyMat2 {
+    const arr: [number, number, number, number] = [0, 0, 0, 0];
+    if (rot & 1) {
+        arr[1] = rot & 2 ? 1.0 : -1.0;
+        arr[2] = -arr[1];
+        arr[0] = arr[3] = 0.0;
+    } else {
+        arr[0] = arr[3] = rot > 0 ? -1.0 : 1.0;
+        arr[1] = arr[2] = 0.0;
+    }
+    return mat2.fromValues(...arr);
+}
+
+function fillMatrix2x2(d: Float32Array, offs: number, m: ReadonlyMat2): number {
+    d[offs + 0] = m[0];
+    d[offs + 1] = m[2];
+    d[offs + 2] = m[1];
+    d[offs + 3] = m[3];
+    return 2 * 2;
+}
+
+export class DescentMineRenderer {
+    private vertexBuffer: GfxBuffer;
+    private indexBuffer: GfxBuffer;
+    private vertexBufferDescriptors: GfxVertexBufferDescriptor[];
+    private indexBufferDescriptor: GfxIndexBufferDescriptor;
+    private inputLayout: GfxInputLayout;
+    private gfxProgram: GfxProgram;
+    private mineMeshCalls: MineMeshCall[];
+    private gfxSampler: GfxSampler;
+    private textureMapping: TextureMapping[];
+    public mineMesh: MineMesh;
+
+    constructor(
+        device: GfxDevice,
+        private level: Descent1Level | Descent2Level,
+        private assetCache: DescentAssetCache,
+        private textureList: DescentTextureList,
+        private cache: GfxRenderCache,
+        private renderParameters: DescentRenderParameters,
+    ) {
+        this.gfxProgram = cache.createProgram(new DescentMineProgram());
+
+        this.mineMesh = buildMineMesh(level, this.textureList, assetCache);
+        const { vertices, indices, calls } = this.mineMesh;
+        this.vertexBuffer = createBufferFromData(
+            device,
+            GfxBufferUsage.Vertex,
+            GfxBufferFrequencyHint.Static,
+            vertices.buffer,
+        );
+        this.indexBuffer = createBufferFromData(
+            device,
+            GfxBufferUsage.Index,
+            GfxBufferFrequencyHint.Static,
+            indices.buffer,
+        );
+        this.mineMeshCalls = calls;
+
+        const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
+            {
+                location: DescentMineProgram.a_xyz,
+                bufferIndex: 0,
+                bufferByteOffset: 0 * 0x04,
+                format: GfxFormat.F32_RGB,
+            },
+            {
+                location: DescentMineProgram.a_uvl,
+                bufferIndex: 0,
+                bufferByteOffset: 3 * 0x04,
+                format: GfxFormat.F32_RGB,
+            },
+        ];
+        const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
+            {
+                byteStride: 6 * 0x04,
+                frequency: GfxVertexBufferFrequency.PerVertex,
+            },
+        ];
+        const indexBufferFormat = GfxFormat.U16_R;
+
+        this.inputLayout = cache.createInputLayout({
+            vertexAttributeDescriptors,
+            vertexBufferDescriptors,
+            indexBufferFormat,
+        });
+        this.vertexBufferDescriptors = [{ buffer: this.vertexBuffer }];
+        this.indexBufferDescriptor = { buffer: this.indexBuffer };
+
+        this.gfxSampler = this.cache.createSampler({
+            wrapS: GfxWrapMode.Repeat,
+            wrapT: GfxWrapMode.Repeat,
+            minFilter: GfxTexFilterMode.Point,
+            magFilter: GfxTexFilterMode.Point,
+            mipFilter: GfxMipFilterMode.Nearest,
+            minLOD: 0,
+            maxLOD: 100,
+        });
+        this.textureMapping = [new TextureMapping(), new TextureMapping()];
+        this.textureMapping[0].gfxSampler = this.gfxSampler;
+        this.textureMapping[1].gfxSampler = this.gfxSampler;
+    }
+
+    public prepareToRender(
+        renderInstManager: GfxRenderInstManager,
+        viewerInput: Viewer.ViewerRenderInput,
+    ): void {
+        const template = renderInstManager.pushTemplate();
+        const time = viewerInput.time * 0.001;
+        template.setGfxProgram(this.gfxProgram);
+        template.setBindingLayouts(DescentMineProgram.bindingLayouts);
+        template.setVertexInput(
+            this.inputLayout,
+            this.vertexBufferDescriptors,
+            this.indexBufferDescriptor,
+        );
+        template.setMegaStateFlags(megaStateFlags);
+
+        let offset = template.allocateUniformBuffer(
+            DescentMineProgram.ub_SceneParams,
+            32,
+        );
+        const mappedScene = template.mapUniformBufferF32(
+            DescentMineProgram.ub_SceneParams,
+        );
+        offset += fillMatrix4x4(
+            mappedScene,
+            offset,
+            viewerInput.camera.projectionMatrix,
+        );
+        offset += fillMatrix4x3(
+            mappedScene,
+            offset,
+            viewerInput.camera.viewMatrix,
+        );
+        mappedScene[offset++] = this.renderParameters.enableShading ? 0.0 : 1.0;
+
+        for (const call of this.mineMeshCalls) {
+            const renderInst = renderInstManager.newRenderInst();
+            renderInst.setDrawCount(call.indexCount, call.indexOffset);
+            this.textureMapping[0].gfxTexture = this.textureList.pickTexture(
+                call.baseTexture,
+                time,
+                false,
+            );
+            this.textureMapping[1].gfxTexture = this.textureList.pickTexture(
+                call.overlayTexture,
+                time,
+                true,
+            );
+
+            let offset = renderInst.allocateUniformBuffer(
+                DescentMineProgram.ub_TextureParams,
+                10,
+            );
+            const mapped = renderInst.mapUniformBufferF32(
+                DescentMineProgram.ub_TextureParams,
+            );
+            offset += fillMatrix2x2(
+                mapped,
+                offset,
+                getRotationMatrix(call.overlayRotation),
+            );
+
+            if (
+                call.baseTexture.slide[0] !== 0 ||
+                call.baseTexture.slide[1] !== 0
+            ) {
+                const slideOffset = vec2.create();
+                vec2.scale(slideOffset, call.baseTexture.slide, time);
+                mapped[offset++] = slideOffset[0] % 1.0;
+                mapped[offset++] = slideOffset[1] % 1.0;
+            } else {
+                mapped[offset++] = 0;
+                mapped[offset++] = 0;
+            }
+
+            renderInst.setSamplerBindingsFromTextureMappings(
+                this.textureMapping,
+            );
+            renderInstManager.submitRenderInst(renderInst);
+        }
+
+        renderInstManager.popTemplate();
+    }
+
+    public destroy(device: GfxDevice): void {
+        device.destroyBuffer(this.vertexBuffer);
+        device.destroyBuffer(this.indexBuffer);
+    }
+}

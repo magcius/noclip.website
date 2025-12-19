@@ -1,0 +1,291 @@
+import { CameraController } from "../../Camera.js";
+import {
+    makeBackbufferDescSimple,
+    opaqueBlackFullClearRenderPassDescriptor,
+} from "../../gfx/helpers/RenderGraphHelpers.js";
+import { GfxDevice } from "../../gfx/platform/GfxPlatform.js";
+import { GfxrAttachmentSlot } from "../../gfx/render/GfxRenderGraph.js";
+import { GfxRenderHelper } from "../../gfx/render/GfxRenderHelper.js";
+import {
+    GfxRenderInstList,
+    GfxRenderInstManager,
+} from "../../gfx/render/GfxRenderInstManager.js";
+import { TextureHolder } from "../../TextureHolder.js";
+import * as UI from "../../ui.js";
+import * as Viewer from "../../viewer.js";
+import { DescentAssetCache } from "../Common/AssetCache.js";
+import {
+    DescentBitmapSource,
+    DescentGameDataSource,
+} from "../Common/AssetSource.js";
+import { DescentPalette } from "../Common/AssetTypes.js";
+import postprocessLevel from "../Common/LevelUtils.js";
+import { DescentTextureList } from "../Common/TextureList.js";
+import { Descent1Level } from "../D1/D1Level.js";
+import { Descent2Level } from "../D2/D2Level.js";
+import { DescentHostageRenderer } from "./HostageRenderer.js";
+import { DescentMineRenderer } from "./MineRenderer.js";
+import { DescentPolymodelRenderer } from "./PolymodelRenderer.js";
+import { DescentPowerupRenderer } from "./PowerupRenderer.js";
+import { DescentRenderParameters } from "./RenderParameters.js";
+
+export class DescentRenderer implements Viewer.SceneGfx {
+    public renderHelper: GfxRenderHelper;
+    private renderInstListMain = new GfxRenderInstList();
+    public textureHolder: TextureHolder<any>;
+
+    public mineMesh: DescentMineRenderer;
+    public powerupRenderer: DescentPowerupRenderer;
+    public hostageRenderer: DescentHostageRenderer;
+    public polymodelRenderer: DescentPolymodelRenderer;
+    public assetCache: DescentAssetCache;
+    public textureList: DescentTextureList;
+    public renderParameters: DescentRenderParameters;
+
+    constructor(
+        device: GfxDevice,
+        private level: Descent1Level | Descent2Level,
+        private palette: DescentPalette,
+        pig: DescentBitmapSource,
+        ham: DescentGameDataSource,
+    ) {
+        this.renderHelper = new GfxRenderHelper(device);
+        const renderCache = this.renderHelper.renderCache;
+        this.assetCache = new DescentAssetCache(palette, pig, ham);
+        this.textureList = new DescentTextureList(device, this.assetCache);
+        this.renderParameters = {
+            enableShading: true,
+            showPolymodels: true,
+            showHostages: true,
+            showPowerups: true,
+        };
+        postprocessLevel(this.level, this.assetCache);
+        this.mineMesh = new DescentMineRenderer(
+            device,
+            level,
+            this.assetCache,
+            this.textureList,
+            renderCache,
+            this.renderParameters,
+        );
+        this.powerupRenderer = new DescentPowerupRenderer(
+            device,
+            level,
+            this.assetCache,
+            this.textureList,
+            renderCache,
+            this.renderParameters,
+        );
+        this.hostageRenderer = new DescentHostageRenderer(
+            device,
+            level,
+            this.assetCache,
+            this.textureList,
+            renderCache,
+            this.renderParameters,
+        );
+        this.polymodelRenderer = new DescentPolymodelRenderer(
+            device,
+            level,
+            this.assetCache,
+            this.textureList,
+            renderCache,
+            this.renderParameters,
+        );
+    }
+
+    public adjustCameraController(c: CameraController) {
+        c.setSceneMoveSpeedMult(0.015);
+    }
+
+    public createPanels(): UI.Panel[] {
+        const renderHacksPanel = new UI.Panel();
+        renderHacksPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
+        renderHacksPanel.setTitle(UI.RENDER_HACKS_ICON, "Render Hacks");
+
+        const enableShading = new UI.Checkbox("Enable Shading", true);
+        enableShading.onchanged = () =>
+            (this.renderParameters.enableShading = enableShading.checked);
+        renderHacksPanel.contents.appendChild(enableShading.elem);
+
+        const showPolymodels = new UI.Checkbox("Show Polymodels", true);
+        showPolymodels.onchanged = () =>
+            (this.renderParameters.showPolymodels = showPolymodels.checked);
+        renderHacksPanel.contents.appendChild(showPolymodels.elem);
+
+        const showPowerups = new UI.Checkbox("Show Powerups", true);
+        showPowerups.onchanged = () =>
+            (this.renderParameters.showPowerups = showPowerups.checked);
+        renderHacksPanel.contents.appendChild(showPowerups.elem);
+
+        const showHostages = new UI.Checkbox("Show Hostages", true);
+        showHostages.onchanged = () =>
+            (this.renderParameters.showHostages = showHostages.checked);
+        renderHacksPanel.contents.appendChild(showHostages.elem);
+
+        return [renderHacksPanel];
+    }
+
+    private prepareToRender(
+        renderInstManager: GfxRenderInstManager,
+        viewerInput: Viewer.ViewerRenderInput,
+    ): void {
+        this.renderHelper.pushTemplateRenderInst();
+
+        viewerInput.camera.setClipPlanes(0.1);
+        renderInstManager.setCurrentList(this.renderInstListMain);
+        this.mineMesh.prepareToRender(renderInstManager, viewerInput);
+        if (this.renderParameters.showPowerups)
+            this.powerupRenderer.prepareToRender(
+                renderInstManager,
+                viewerInput,
+            );
+        if (this.renderParameters.showHostages)
+            this.hostageRenderer.prepareToRender(
+                renderInstManager,
+                viewerInput,
+            );
+        if (this.renderParameters.showPolymodels)
+            this.polymodelRenderer.prepareToRender(
+                renderInstManager,
+                viewerInput,
+            );
+
+        renderInstManager.popTemplate();
+        this.renderHelper.prepareToRender();
+
+        /*
+        // HACKY CODE! don't run this!
+        if (this.setToSpawn) {
+            // Find player spawn
+            const spawn = this.level.objects.find(
+                (obj) => obj.type === 4 && obj.subtypeId === 0,
+            );
+            if (spawn != null) {
+                const right = vec3.fromValues(
+                    spawn.orientation[0],
+                    spawn.orientation[1],
+                    spawn.orientation[2],
+                );
+                const up = vec3.fromValues(
+                    spawn.orientation[3],
+                    spawn.orientation[4],
+                    spawn.orientation[5],
+                );
+                const forward = vec3.fromValues(
+                    spawn.orientation[6],
+                    spawn.orientation[7],
+                    spawn.orientation[8],
+                );
+                vec3.normalize(right, right);
+                vec3.normalize(up, up);
+                vec3.normalize(forward, forward);
+                viewerInput.camera.worldMatrix = mat4.fromValues(
+                    right[0],
+                    right[1],
+                    -right[2],
+                    0,
+                    up[0],
+                    up[1],
+                    -up[2],
+                    0,
+                    -forward[0],
+                    -forward[1],
+                    forward[2],
+                    0,
+                    spawn.position[0],
+                    spawn.position[1],
+                    -spawn.position[2],
+                    1,
+                );
+                viewerInput.camera.worldMatrixUpdated();
+                window.main._saveStateAndUpdateURL();
+            }
+
+            this.setToSpawn = false;
+        }*/
+
+        /*
+        const canvas = getDebugOverlayCanvas2D();
+        drawWorldSpaceText(canvas, viewerInput.camera.clipFromWorldMatrix, vec3.fromValues(0, 0, 0), "abc");
+        const vertices = this.mineMesh.mineMesh.vertices;
+        const indices = this.mineMesh.mineMesh.indices;
+        for (let i = 0; i < Math.min(100, vertices.length); ++i) {
+            const offset = i * 6;
+            drawWorldSpaceText(canvas, viewerInput.camera.clipFromWorldMatrix,
+                vec3.fromValues(vertices[offset], vertices[offset + 1], vertices[offset + 2]),
+                `v${i}`);
+        }
+        for (let i = 0; i < Math.min(99, indices.length); i += 3) {
+            const i0 = indices[i];
+            const i1 = indices[i + 1];
+            const i2 = indices[i + 2];
+            const v0 = vec3.fromValues(vertices[6 * i0], vertices[6 * i0 + 1], vertices[6 * i0 + 2]);
+            const v1 = vec3.fromValues(vertices[6 * i1], vertices[6 * i1 + 1], vertices[6 * i1 + 2]);
+            const v2 = vec3.fromValues(vertices[6 * i2], vertices[6 * i2 + 1], vertices[6 * i2 + 2]);
+            drawWorldSpaceLine(canvas, viewerInput.camera.clipFromWorldMatrix, v0, v1);
+            drawWorldSpaceLine(canvas, viewerInput.camera.clipFromWorldMatrix, v1, v2);
+            drawWorldSpaceLine(canvas, viewerInput.camera.clipFromWorldMatrix, v2, v0);
+        }
+        */
+    }
+
+    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
+        const renderInstManager = this.renderHelper.renderInstManager;
+        const builder = this.renderHelper.renderGraph.newGraphBuilder();
+
+        const mainColorDesc = makeBackbufferDescSimple(
+            GfxrAttachmentSlot.Color0,
+            viewerInput,
+            opaqueBlackFullClearRenderPassDescriptor,
+        );
+        const mainDepthDesc = makeBackbufferDescSimple(
+            GfxrAttachmentSlot.DepthStencil,
+            viewerInput,
+            opaqueBlackFullClearRenderPassDescriptor,
+        );
+
+        const mainColorTargetID = builder.createRenderTargetID(
+            mainColorDesc,
+            "Main Color",
+        );
+        const mainDepthTargetID = builder.createRenderTargetID(
+            mainDepthDesc,
+            "Main Depth",
+        );
+        builder.pushPass((pass) => {
+            pass.setDebugName("Main");
+            pass.attachRenderTargetID(
+                GfxrAttachmentSlot.Color0,
+                mainColorTargetID,
+            );
+            pass.attachRenderTargetID(
+                GfxrAttachmentSlot.DepthStencil,
+                mainDepthTargetID,
+            );
+            pass.exec((passRenderer) => {
+                this.renderInstListMain.drawOnPassRenderer(
+                    this.renderHelper.renderCache,
+                    passRenderer,
+                );
+            });
+        });
+        builder.resolveRenderTargetToExternalTexture(
+            mainColorTargetID,
+            viewerInput.onscreenTexture,
+        );
+
+        this.prepareToRender(renderInstManager, viewerInput);
+        this.renderHelper.renderGraph.execute(builder);
+        this.renderInstListMain.reset();
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.renderHelper.destroy();
+        this.mineMesh.destroy(device);
+        this.powerupRenderer.destroy(device);
+        this.hostageRenderer.destroy(device);
+        this.polymodelRenderer.destroy(device);
+        this.textureList.destroy(device);
+    }
+}
