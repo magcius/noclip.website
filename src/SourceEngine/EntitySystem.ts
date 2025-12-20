@@ -4202,8 +4202,11 @@ class infodecal extends BaseEntity {
         const decalResult = this.bspRenderer.bsp.buildDecal(scratchVec3a, halfWidth, halfHeight);
 
         const device = renderContext.renderCache.device;
+        const debugName = `Decal ${this.materialInstance.vmt._Filename}`;
         this.vertexBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, decalResult.vertexData);
+        device.setResourceName(this.vertexBuffer, debugName);
         this.indexBuffer = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, decalResult.indexData);
+        device.setResourceName(this.indexBuffer, `${debugName} (IB)`);
         this.surfaces = decalResult.surfaces;
 
         for (let i = 0; i < this.surfaces.length; i++)

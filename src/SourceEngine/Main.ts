@@ -285,6 +285,8 @@ export class SkyboxRenderer {
 
         this.vertexBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, vertexData.buffer);
         this.indexBuffer = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, indexData.buffer);
+        device.setResourceName(this.vertexBuffer, `Skybox ${skyname}`);
+        device.setResourceName(this.indexBuffer, `Skybox ${skyname} (IB)`);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: MaterialShaderTemplateBase.a_Position,   bufferIndex: 0, bufferByteOffset: 0*0x04, format: GfxFormat.F32_RGB, },
@@ -647,6 +649,9 @@ export class BSPRenderer {
         this.vertexBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, this.bsp.vertexData);
         this.indexBuffer = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, this.bsp.indexData);
 
+        device.setResourceName(this.vertexBuffer, `BSP ${this.bsp.mapname}`);
+        device.setResourceName(this.indexBuffer, `BSP ${this.bsp.mapname} (IB)`);
+
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: MaterialShaderTemplateBase.a_Position,   bufferIndex: 0, bufferByteOffset: 0*0x04, format: GfxFormat.F32_RGB, },
             { location: MaterialShaderTemplateBase.a_Normal,     bufferIndex: 0, bufferByteOffset: 3*0x04, format: GfxFormat.F32_RGBA, },
@@ -858,6 +863,7 @@ export class SourceColorCorrection {
             pixelFormat: GfxFormat.U8_RGBA_NORM,
             width, height, depthOrArrayLayers: depth, numLevels: 1, usage: GfxTextureUsage.Sampled,
         });
+        device.setResourceName(this.gfxTexture, `SourceColorCorrection LUT`);
 
         this.gfxSampler = cache.createSampler({
             wrapS: GfxWrapMode.Clamp,
@@ -1355,6 +1361,8 @@ export class SourceWorldViewRenderer {
 
         const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, `${this.name} - Main Color (sRGB)`);
 
+        builder.pushDebugGroup(this.name);
+
         builder.pushPass((pass) => {
             pass.setDebugName('Skybox');
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
@@ -1433,6 +1441,8 @@ export class SourceWorldViewRenderer {
             });
         }
         builder.pushDebugThumbnail(mainColorTargetID, `${this.name}\nFinal Output`);
+
+        builder.popDebugGroup();
 
         this.outputColorTargetID = mainColorTargetID;
         this.outputColorTextureID = null;

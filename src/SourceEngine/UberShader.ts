@@ -153,9 +153,17 @@ export class UberShaderTemplateBasic extends UberShaderTemplate<DefinesMap> {
         return { preprocessedVert, preprocessedFrag };
     }
 
+    private getDebugName(variantSettings: DefinesMap): string {
+        const entriesStr = [...variantSettings.entries()].map(([k, v]) => `${k}=${v}`).join(' ');
+        return `${this.constructor.name} ${entriesStr}`;
+    }
+
     protected override createGfxProgram(cache: GfxRenderCache, variantSettings: DefinesMap): GfxProgram {
         // We do our own caching here; no need to use the render cache for this.
-        return cache.device.createProgram(this.createGfxProgramDescriptor(cache, variantSettings));
+        const gfxProgram = cache.device.createProgram(this.createGfxProgramDescriptor(cache, variantSettings));
+        const debugName = this.getDebugName(variantSettings);
+        cache.device.setResourceName(gfxProgram, debugName);
+        return gfxProgram;
     }
 
     public override destroy(device: GfxDevice): void {

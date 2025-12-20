@@ -401,11 +401,13 @@ class ImplCompute {
 
         const program = device.createComputeProgram({ shadingLanguage: GfxShadingLanguage.WGSL, preprocessedComp: histogramProgram });
         this.computePipeline = device.createComputePipeline({ program, pipelineLayout });
+        device.setResourceName(this.computePipeline, `LuminanceHistogram Compute`);
 
         const bucketCount = this.histogram.bucketCount;
         this.results = new Uint32Array(bucketCount);
 
         this.bucketBuffer = device.createBuffer(this.results.byteLength, GfxBufferUsage.Storage | GfxBufferUsage.CopySrc, GfxBufferFrequencyHint.Dynamic);
+        device.setResourceName(this.bucketBuffer, `LuminanceHistogram Bucket Buffer`);
     }
 
     public debugDraw(ctx: CanvasRenderingContext2D): void {

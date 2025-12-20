@@ -732,12 +732,16 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
         this.gpuRenderPassEncoder!.endOcclusionQuery();
     }
 
-    public beginDebugGroup(name: string): void {
+    public pushDebugGroup(name: string): void {
         this.gpuRenderPassEncoder!.pushDebugGroup(name);
     }
 
-    public endDebugGroup(): void {
+    public popDebugGroup(): void {
         this.gpuRenderPassEncoder!.popDebugGroup();
+    }
+
+    public insertDebugMarker(marker: string): void {
+        this.gpuRenderPassEncoder!.insertDebugMarker(marker);
     }
 
     private copyAttachment(dst: GfxTextureSharedP_WebGPU, dstView: GfxRenderAttachmentView, src: GfxTextureSharedP_WebGPU, srcView: GfxRenderAttachmentView): void {
@@ -807,12 +811,16 @@ class GfxComputePassP_WebGPU implements GfxComputePass {
         this.gpuComputePassEncoder!.dispatchWorkgroups(x, y, z);
     }
 
-    public beginDebugGroup(name: string): void {
+    public pushDebugGroup(name: string): void {
         this.gpuComputePassEncoder!.pushDebugGroup(name);
     }
 
-    public endDebugGroup(): void {
+    public popDebugGroup(): void {
         this.gpuComputePassEncoder!.popDebugGroup();
+    }
+
+    public insertDebugMarker(marker: string): void {
+        this.gpuComputePassEncoder!.insertDebugMarker(marker);
     }
 
     public finish(): void {
@@ -875,7 +883,7 @@ function getFormatBlockSize(format: GfxFormat): number {
     return 1;
 }
 
-function translateImageLayout(size: GPUExtent3DDictStrict, layout: GPUImageDataLayout, format: GfxFormat, mipWidth: number, mipHeight: number): void {
+function translateTexelCopyBufferLayout(size: GPUExtent3DDictStrict, layout: GPUTexelCopyBufferLayout, format: GfxFormat, mipWidth: number, mipHeight: number): void {
     const blockSize = getFormatBlockSize(format);
 
     size.width = align(mipWidth, blockSize);
@@ -942,6 +950,7 @@ fn main_ps() -> @location(0) vec4f { return vec4f(0.0f, 0.0f, 0.0f, 1.0f); }
     private async create(device: GPUDevice, swapChainFormat: GPUTextureFormat) {
         const shaderModule = await device.createShaderModule({ code: this.code, label: 'GfxPlatformWebGPU FullscreenClear' });
         this.pipeline = await device.createRenderPipeline({
+            label: 'GfxPlatformWebGPU FullscreenClear',
             vertex: { module: shaderModule, entryPoint: 'main_vs' },
             fragment: { module: shaderModule, entryPoint: 'main_ps', targets: [{ format: swapChainFormat, writeMask: GPUColorWrite.ALPHA }] },
             layout: 'auto',
@@ -1249,9 +1258,9 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
 
         if (program.ResourceName !== undefined) {
             if (program.vertexStage !== null)
-                program.vertexStage.module.label = program.ResourceName;
+                program.vertexStage.module.label = `${program.ResourceName}.vs`;
             if (program.fragmentStage !== null)
-                program.fragmentStage.module.label = program.ResourceName;
+                program.fragmentStage.module.label = `${program.ResourceName}.ps`;
         }
     }
 
@@ -1448,8 +1457,9 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             };
         }
 
+        const label = renderPipeline.ResourceName ?? program.ResourceName;
         const gpuRenderPipelineDescriptor: GPURenderPipelineDescriptor = {
-            label: renderPipeline.ResourceName,
+            label,
             layout,
             vertex: {
                 ...vertexStage,
@@ -1506,7 +1516,9 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
 
         computePipeline.isCreatingAsync = true;
 
+        const label = computePipeline.ResourceName ?? program.ResourceName;
         const gpuComputePipelineDescriptor: GPUComputePipelineDescriptor = {
+            label,
             layout,
             compute,
         };
@@ -1521,9 +1533,6 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         } else {
             computePipeline.gpuComputePipeline = this.device.createComputePipeline(gpuComputePipelineDescriptor);
         }
-
-        if (computePipeline.ResourceName !== undefined)
-            computePipeline.gpuComputePipeline.label = computePipeline.ResourceName;
 
         computePipeline.isCreatingAsync = false;
     }
@@ -1783,7 +1792,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             const mipWidth = texture.width >>> mipLevel;
             const mipHeight = texture.height >>> mipLevel;
 
-            translateImageLayout(size, layout, texture.pixelFormat, mipWidth, mipHeight);
+            translateTexelCopyBufferLayout(size, layout, texture.pixelFormat, mipWidth, mipHeight);
             this.device.queue.writeTexture(destination, levelDatas[i] as GPUAllowSharedBufferSource, layout, size);
         }
     }
@@ -1899,6 +1908,13 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             const r = o as GfxRenderPipelineP_WebGPU;
             if (r.gpuRenderPipeline !== null)
                 r.gpuRenderPipeline.label = s;
+        } else if (o._T === _T.ComputePipeline) {
+            const r = o as GfxComputePipelineP_WebGPU;
+            if (r.gpuComputePipeline !== null)
+                r.gpuComputePipeline.label = s;
+        } else if (o._T === _T.Readback) {
+            const r = o as GfxReadbackP_WebGPU;
+            r.cpuBuffer.label = `${s} Readback CPU Buffer`;
         } else if (o._T === _T.QueryPool) {
             const r = o as GfxQueryPoolP_WebGPU;
             r.querySet.label = `${s} QuerySet`;
@@ -1939,6 +1955,18 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
 
     public setStatisticsGroup(statisticsGroup: GfxStatisticsGroup | null): void {
         this._currentStatisticsGroup = statisticsGroup;
+    }
+
+    public pushDebugGroup(name: string): void {
+        this._frameCommandEncoder!.pushDebugGroup(name);
+    }
+
+    public popDebugGroup(): void {
+        this._frameCommandEncoder!.popDebugGroup();
+    }
+
+    public insertDebugMarker(marker: string): void {
+        this._frameCommandEncoder!.insertDebugMarker(marker);
     }
 }
 

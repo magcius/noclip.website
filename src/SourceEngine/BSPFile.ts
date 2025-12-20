@@ -1,7 +1,7 @@
 
 // Source Engine BSP.
 
-import { ReadonlyMat4, ReadonlyVec2, ReadonlyVec3, ReadonlyVec4, vec2, vec3, vec4 } from "gl-matrix";
+import { ReadonlyVec2, ReadonlyVec3, ReadonlyVec4, vec2, vec3, vec4 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import BitMap from "../BitMap.js";
 import { IS_DEVELOPMENT } from "../BuildVersion.js";
@@ -16,7 +16,6 @@ import { unpackColorRGBExp32 } from "./Materials/Lightmap.js";
 import { deserializeGameLump_dprp, deserializeGameLump_sprp, DetailObjects, StaticObjects } from "./StaticDetailObject.js";
 import { pairs2obj, ValveKeyValueParser, VKFPair } from "./VMT.js";
 import { drawWorldSpaceLine, drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk.js";
-import { SourceRenderer } from "./Main.js";
 
 //#region Data Structures
 export interface FaceLightmapData {
@@ -1074,7 +1073,7 @@ export class BSPFile {
     public indexData: ArrayBuffer;
     public vertexData: ArrayBuffer;
 
-    constructor(buffer: ArrayBufferSlice, mapname: string, private variant: BSPFileVariant = BSPFileVariant.Default) {
+    constructor(buffer: ArrayBufferSlice, public mapname: string, private variant: BSPFileVariant = BSPFileVariant.Default) {
         assert(readString(buffer, 0x00, 0x04) === 'VBSP');
         const view = buffer.createDataView();
         this.version = view.getUint32(0x04, true);
