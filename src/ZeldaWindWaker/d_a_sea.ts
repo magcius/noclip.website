@@ -212,7 +212,7 @@ export class d_a_sea extends fopAc_ac_c {
     private heightTable = new Float32Array(65*65);
     private animCounter = 0;
 
-    private ddraw = new TDDraw();
+    private ddraw = new TDDraw('d_a_sea');
     private materialHelper: GXMaterialHelperGfx;
 
     public override subload(globals: dGlobals): cPhs__Status {

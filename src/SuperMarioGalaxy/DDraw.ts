@@ -47,7 +47,7 @@ abstract class TDDrawBase {
     protected currentPrimVertex: number;
     protected currentPrim: GX.Command;
 
-    constructor() {
+    constructor(protected name: string) {
         for (let i = GX.Attr.POS; i <= GX.Attr.TEX7; i++) {
             this.vcd[i] = { type: GX.AttrType.NONE };
         }
@@ -168,8 +168,8 @@ export class TDDraw extends TDDrawBase {
 
     private startIndex: number;
 
-    constructor() {
-        super();
+    constructor(name: string = '') {
+        super(name);
         this.vertexData = new DataView(new ArrayBuffer(0x400));
         this.indexData = new Uint16Array(0x100);
     }
@@ -211,6 +211,7 @@ export class TDDraw extends TDDrawBase {
             if (this.vertexBuffer !== null)
                 device.destroyBuffer(this.vertexBuffer);
             this.vertexBuffer = device.createBuffer(this.vertexData.byteLength, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Dynamic);
+            device.setResourceName(this.vertexBuffer, `TDDraw ${this.name}`);
             this.vertexBufferDescriptors[0].buffer = this.vertexBuffer;
             this.recreateVertexBuffer = false;
         }
@@ -219,6 +220,7 @@ export class TDDraw extends TDDrawBase {
             if (this.indexBuffer !== null)
                 device.destroyBuffer(this.indexBuffer);
             this.indexBuffer = device.createBuffer(this.indexData.byteLength, GfxBufferUsage.Index, GfxBufferFrequencyHint.Dynamic);
+            device.setResourceName(this.indexBuffer, `TDDraw ${this.name} (IB)`);
             this.indexBufferDescriptor.buffer = this.indexBuffer;
             this.recreateIndexBuffer = false;
         }
@@ -271,8 +273,8 @@ export class TDDraw extends TDDrawBase {
 // Static Draw helper for places where we might want to make TDDraw into a buffer
 // that does not change very much.
 export class TSDraw extends TDDrawBase {
-    constructor() {
-        super();
+    constructor(name: string = '') {
+        super(name);
         this.vertexData = new DataView(new ArrayBuffer(0x400));
         this.indexData = new Uint16Array(0x100);
     }
@@ -307,8 +309,10 @@ export class TSDraw extends TDDrawBase {
     private flushDeviceObjects(cache: GfxRenderCache): void {
         const device = cache.device;
         this.vertexBuffer = device.createBuffer(this.vertexData.byteLength, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static);
+        device.setResourceName(this.vertexBuffer, `TSDraw ${this.name}`);
         this.vertexBufferDescriptors[0].buffer = this.vertexBuffer;
         this.indexBuffer = device.createBuffer(this.indexData.byteLength, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static);
+        device.setResourceName(this.indexBuffer, `TSDraw ${this.name} (IB)`);
         this.indexBufferDescriptor.buffer = this.indexBuffer;
     }
 

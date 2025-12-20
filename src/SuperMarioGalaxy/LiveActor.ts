@@ -323,7 +323,7 @@ export class ResourceHolder {
         initEachResTable(this.arc, this.modelTable, ['.bdl', '.bmd'], (file, ext, filenameWithoutExtension) => {
             const bmd = BMD.parse(file.buffer);
             patchBMD(bmd);
-            const modelData = new J3DModelData(device, cache, bmd);
+            const modelData = new J3DModelData(device, cache, bmd, file.name);
             patchModelData(modelData);
             this.addTEX1(modelData.modelMaterialData.tex1Data, objectName, filenameWithoutExtension);
             return modelData;

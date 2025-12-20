@@ -1829,24 +1829,25 @@ class LayoutMaterial {
 }
 
 export class Layout {
-    private ddraw = new TDDraw();
+    private ddraw: TDDraw;
     public fontNames: string[];
     public materials: LayoutMaterial[];
     public rootPane: LayoutPane;
     public charWriter = new CharWriter();
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, rlyt: RLYT, public resourceCollection: LayoutResourceCollection) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, rlyt: RLYT, public resourceCollection: LayoutResourceCollection, name: string = '') {
         this.materials = rlyt.mat1.map((material) => new LayoutMaterial(device, cache, material, rlyt.txl1, resourceCollection));
         this.fontNames = rlyt.fnl1.map((font) => font.filename);
         this.rootPane = LayoutPane.parse(rlyt.rootPane, this);
+
+        this.ddraw = new TDDraw(`Layout ${name}`);
 
         const ddraw = this.ddraw;
         ddraw.setVtxDesc(GX.Attr.POS, true);
         ddraw.setVtxDesc(GX.Attr.CLR0, true);
 
-        for (let i = 0; i < MaxTexCoordChan; i++) {
+        for (let i = 0; i < MaxTexCoordChan; i++)
             ddraw.setVtxDesc(GX.Attr.TEX0 + i, true);
-        }
     }
 
     public findMaterialByName(name: string): LayoutMaterial | null {

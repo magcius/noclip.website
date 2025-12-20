@@ -93,7 +93,7 @@ function connectToSceneImageEffect(sceneObjHolder: SceneObjHolder, nameObj: Name
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [
     { numUniformBuffers: 1, numSamplers: 2, samplerEntries: [
         { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float, },
-        { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Depth, },
+        { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.UnfilterableFloat, },
     ] },
 ];
 
@@ -278,6 +278,8 @@ export class BloomEffect extends ImageEffectBase {
         this.allocateParameterBuffer(renderInst);
         renderInst.setDrawCount(3);
 
+        builder.pushDebugGroup('Bloom');
+
         // Downsample and threshold.
         builder.pushPass((pass) => {
             pass.setDebugName('Bloom Downsample 1/2');
@@ -379,6 +381,8 @@ export class BloomEffect extends ImageEffectBase {
                 renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);
             });
         });
+
+        builder.popDebugGroup();
     }
 }
 
@@ -516,6 +520,8 @@ export class BloomEffectSimple extends ImageEffectBase {
         renderInst.setDrawCount(3);
 
         // Downsample and threshold.
+        builder.pushDebugGroup('Bloom Simple');
+
         builder.pushPass((pass) => {
             pass.setDebugName('Bloom Simple Downsample');
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, downsampleColorTargetID);
@@ -548,6 +554,8 @@ export class BloomEffectSimple extends ImageEffectBase {
                 renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);
             });
         });
+
+        builder.popDebugGroup();
     }
 }
 
@@ -678,6 +686,8 @@ export class DepthOfFieldBlur extends ImageEffectBase {
         let targetDesc = builder.getRenderTargetDescription(mainColorTargetID);
         let downsampleColorTargetID: GfxrRenderTargetID;
 
+        builder.pushDebugGroup('Depth of Field');
+
         for (let i = 0; i < 2; i++) {
             const targetWidth = targetDesc.width >> 1;
             const targetHeight = targetDesc.height >> 1;
@@ -727,6 +737,8 @@ export class DepthOfFieldBlur extends ImageEffectBase {
                 renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);
             });
         });
+
+        builder.popDebugGroup();
     }
 }
 

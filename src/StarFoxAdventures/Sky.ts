@@ -22,7 +22,7 @@ const scratchVec0 = vec3.create();
 const scratchSceneParams = new SceneParams();
 
 export class Sky {
-    private skyddraw = new TDDraw();
+    private skyddraw = new TDDraw('Sky');
     private materialHelperSky: GXMaterialHelperGfx;
 
     constructor(private world: World) {

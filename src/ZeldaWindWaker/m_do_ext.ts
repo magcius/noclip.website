@@ -136,7 +136,7 @@ export interface mDoExt_3DlineMat_c {
 
 export class mDoExt_3DlineMat1_c implements mDoExt_3DlineMat_c {
     public lines: mDoExt_3Dline_c[];
-    private ddraw = new TDDraw();
+    private ddraw = new TDDraw('mDoExt_3DlineMat1_c');
 
     private tex: BTIData;
     private color: Color;

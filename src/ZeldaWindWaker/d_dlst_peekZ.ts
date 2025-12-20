@@ -24,6 +24,7 @@ class PeekZFrame {
     constructor(device: GfxDevice, maxCount: number) {
         const byteCount = maxCount * 0x04;
         this.readback = device.createReadback(byteCount);
+        device.setResourceName(this.readback, 'd_dlst_peekZ PeekZFrame Readback');
         this.entryX = new Float32Array(maxCount);
         this.entryY = new Float32Array(maxCount);
     }

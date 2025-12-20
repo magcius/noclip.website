@@ -104,6 +104,7 @@ class SpecialTextureBinder {
         this.registerSpecialTextureType(SpecialTextureType.MarioShadowTexture, this.clampSampler);
 
         this.transparentTexture = makeSolidColorTexture2D(device, TransparentBlack);
+        device.setResourceName(this.transparentTexture, 'MarioShadowTexture Dummy');
         this.lateBindTexture(SpecialTextureType.MarioShadowTexture, this.transparentTexture);
 
         this.needsFlipY = gfxDeviceNeedsFlipY(device);

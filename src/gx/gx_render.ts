@@ -160,11 +160,11 @@ export function calcLODBias(viewportWidth: number, viewportHeight: number): numb
     return textureLODBias;
 }
 
-export function loadedDataCoalescerComboGfx(device: GfxDevice, loadedVertexDatas: LoadedVertexData[]): GfxBufferCoalescerCombo {
+export function loadedDataCoalescerComboGfx(device: GfxDevice, loadedVertexDatas: LoadedVertexData[], name: string = ''): GfxBufferCoalescerCombo {
     return new GfxBufferCoalescerCombo(device,
         loadedVertexDatas.map((data) => data.vertexBuffers.map((buffer) => new ArrayBufferSlice(buffer))),
         loadedVertexDatas.map((data) => new ArrayBufferSlice(data.indexData))
-    );
+    , name);
 }
 
 export class GXViewerTexture implements Viewer.Texture {

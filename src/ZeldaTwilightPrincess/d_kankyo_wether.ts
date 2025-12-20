@@ -280,7 +280,7 @@ const scratchVec3e = vec3.create();
 
 export class dKankyo_sun_Packet {
     // Shared
-    private ddraw = new TDDraw();
+    private ddraw = new TDDraw('dKankyo_sun_Packet');
 
     // Sun/Moon
     private moonTexture0: BTIData;
@@ -706,7 +706,7 @@ export class dKankyo_vrkumo_Packet {
     public strength: number = 0;
     public instances: VRKUMO_EFF[] = nArray(100, () => new VRKUMO_EFF());
     public bounceAnimTimer: number = 0;
-    private ddraw = new TDDraw();
+    private ddraw = new TDDraw('dKankyo_vrkumo_Packet');
     private textures: BTIData[] = [];
     private materialHelper: GXMaterialHelperGfx;
     public cloudScrollX: number = 0;
@@ -950,7 +950,7 @@ export class dKankyo_housi_Packet {
     public count = 0;
     public rot = 0.0;
     
-    private ddraw = new TDDraw();
+    private ddraw = new TDDraw('dKankyo_housi_Packet');
     private materialHelper: GXMaterialHelperGfx;
 
     private texData: BTIData;
@@ -1068,7 +1068,7 @@ class RAIN_EFF {
 
 export class dKankyo_rain_Packet {
     private ringTexture: BTIData;
-    private ddraw = new TDDraw();
+    private ddraw = new TDDraw('dKankyo_rain_Packet');
     private materialHelperRain: GXMaterialHelperGfx;
     private materialHelperSibuki: GXMaterialHelperGfx;
     private sibukiAlpha: number = 0.0;
@@ -1323,7 +1323,7 @@ export class dKankyo_star_Packet {
         colorNewFromRGBA8(0xFFFFFFC8),
     ];
 
-    private ddraw = new TDDraw();
+    private ddraw = new TDDraw('dKankyo_star_Packet');
     private materialHelper: GXMaterialHelperGfx;
 
     public renderInMain = false;

@@ -264,6 +264,7 @@ export class EggDrawPathBloom {
         this.textureMapping[0].gfxTexture = null;
         this.textureMapping[1].gfxTexture = null;
 
+        builder.pushDebugGroup('Bloom');
         builder.pushPass((pass) => {
             pass.setDebugName('Bloom Threshold & Downsample 1/2');
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, downsample2ColorTargetID);
@@ -363,6 +364,7 @@ export class EggDrawPathBloom {
                 renderInst.drawOnPass(cache, passRenderer);
             });
         });
+        builder.popDebugGroup();
     }
 }
 

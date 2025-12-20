@@ -71,7 +71,7 @@ class dDlst_alphaModel_c {
 
     private materialHelperDrawAlpha: GXMaterialHelperGfx;
     private orthoSceneParams = new SceneParams();
-    private orthoQuad = new TSDraw();
+    private orthoQuad = new TSDraw('dDlst_alphaModel_c');
 
     constructor(device: GfxDevice, cache: GfxRenderCache, symbolMap: SymbolMap) {
         const bonboriPos = symbolMap.findSymbolData(`d_drawlist.o`, `l_bonboriPos`);

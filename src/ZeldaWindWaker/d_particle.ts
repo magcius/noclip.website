@@ -392,7 +392,7 @@ export class dPa_waveEcallBack extends dPa_levelEcallBack {
     private rot: ReadonlyVec3;
     private rotMtx = mat4.create();
 
-    private ddraw = new TDDraw();
+    private ddraw = new TDDraw('dPa_waveEcallBack');
 
     constructor(protected override globals: dGlobals) {
         super(globals);
@@ -491,7 +491,7 @@ export class dPa_trackEcallBack extends dPa_levelEcallBack {
     private rot: ReadonlyVec3;
     private alpha: number = 1.0;
 
-    private ddraw = new TDDraw();
+    private ddraw = new TDDraw('dPa_trackEcallBack');
 
     public vel: number = 0.0;
     public minVel: number = 3.0;

@@ -346,7 +346,7 @@ function drawCircle(ddraw: TDDraw, pos: ReadonlyVec3, axis: ReadonlyVec3, radius
 
 class ShadowSurfaceCircle extends ShadowSurfaceDrawer {
     // TODO(jstpierre): TSDraw and a matrix if we ever find a place this is used.
-    private ddraw: TDDraw = new TDDraw();
+    private ddraw: TDDraw = new TDDraw('ShadowSurfaceCircle');
     public radius: number = 100.0;
 
     constructor(sceneObjHolder: SceneObjHolder, controller: ShadowController) {
@@ -644,13 +644,10 @@ class ShadowVolumeCylinder extends ShadowVolumeModel {
     }
 }
 
-function makeVtxFromAxes(dst: vec3, base: ReadonlyVec3, x: ReadonlyVec3, y: ReadonlyVec3, z: ReadonlyVec3, mx: 1 | -1, my: 1 | -1, mz: 1 | -1): void {
-}
-
 class ShadowVolumeBox extends ShadowVolumeDrawer {
     public size = vec3.fromValues(100.0, 100.0, 100.0);
 
-    private ddraw = new TDDraw();
+    private ddraw = new TDDraw('ShadowVolumeBox');
     private vtx: vec3[] = nArray(14, () => vec3.create());
 
     constructor(sceneObjHolder: SceneObjHolder, controller: ShadowController) {
@@ -841,7 +838,7 @@ class ShadowVolumeLine extends ShadowVolumeDrawer {
     public fromWidth: number = 100.0;
     public toWidth: number = 100.0;
 
-    private ddraw = new TDDraw();
+    private ddraw = new TDDraw('ShadowVolumeLine');
     private vtx: vec3[] = nArray(8, () => vec3.create());
 
     constructor(sceneObjHolder: SceneObjHolder, controller: ShadowController) {
@@ -1019,7 +1016,7 @@ class ShadowVolumeFlatModel extends ShadowVolumeModel {
 class AlphaShadow extends NameObj {
     private materialHelperDrawAlpha: GXMaterialHelperGfx;
     private orthoSceneParams = new SceneParams();
-    private orthoQuad = new TSDraw();
+    private orthoQuad = new TSDraw('AlphaShadow OrthoQuad');
     private textureMapping = new TextureMapping();
 
     constructor(sceneObjHolder: SceneObjHolder) {

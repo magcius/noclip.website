@@ -483,6 +483,7 @@ export class GfxrTemporalTexture {
             return;
 
         this.outputTexture = new SingleSampledTexture(device, desc);
+        device.setResourceName(this.outputTexture.texture, 'GfxrTemporalTexture');
         if (this.inputTexture === null)
             this.inputTexture = this.outputTexture;
     }
@@ -992,6 +993,7 @@ export class GfxrRenderGraphImpl implements GfxrRenderGraph, GfxrGraphBuilder, G
         assert(this.renderTargetOutputCount.length === 0);
         assert(this.renderTargetResolveCount.length === 0);
         assert(this.resolveTextureUseCount.length === 0);
+        assert(this.debugGroups.length === 0);
 
         // Go through and increment the age of everything in our dead pools to mark that it's old.
         for (let i = 0; i < this.renderTargetDeadPool.length; i++)

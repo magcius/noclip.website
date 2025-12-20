@@ -165,6 +165,7 @@ export class OceanBowl extends LiveActor {
         this.positionDataF32 = new Float32Array(pointCount * 3);
         this.positionDataU8 = new Uint8Array(this.positionDataF32.buffer);
         this.positionBuffer = device.createBuffer(this.positionDataU8.byteLength, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Dynamic);
+        device.setResourceName(this.positionBuffer, 'OceanBowl (POS)');
 
         const colorData = new Uint8Array(pointCount * 4);
         let colorIdx = 0;
@@ -175,6 +176,7 @@ export class OceanBowl extends LiveActor {
             colorData[colorIdx++] = this.points[i].heightScale * 0xFF;
         }
         this.colorBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, colorData.buffer);
+        device.setResourceName(this.colorBuffer, 'OceanBowl (CLR0)');
 
         // Texture coordinate buffer
         const texCoordData = new Int16Array(this.points.length * 2);
@@ -186,6 +188,7 @@ export class OceanBowl extends LiveActor {
             }
         }
         this.texCoord0Buffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, texCoordData.buffer);
+        device.setResourceName(this.texCoord0Buffer, 'OceanBowl (TEX0)');
         assert(texCoordIdx === texCoordData.length);
 
         // Create the index buffer. We have (N-1)*(N-1) quads, N being gridAxisPointCount, and we have 6 indices per quad...
@@ -216,6 +219,7 @@ export class OceanBowl extends LiveActor {
         assert(indexIdx === indexBufferCount);
 
         this.indexBuffer = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, indexData.buffer);
+        device.setResourceName(this.indexBuffer, 'OceanBowl (IB)');
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: getVertexInputLocation(VertexAttributeInput.POS), format: GfxFormat.F32_RGB, bufferIndex: 0, bufferByteOffset: 0, },

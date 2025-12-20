@@ -331,7 +331,7 @@ export class ClipAreaDropLaser extends LiveActor<ClipAreaDropLaserNrv> {
     private headPointIndex: number = 0;
     private gapPoint: number = 0;
 
-    private ddraw = new TDDraw();
+    private ddraw = new TDDraw('ClipAreaDropLaser');
     private materialLaser: GXMaterialHelperGfx;
     private points: vec3[] = nArray(64, () => vec3.create());
 

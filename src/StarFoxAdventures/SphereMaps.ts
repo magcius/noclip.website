@@ -122,7 +122,7 @@ interface RenderedSphereMap {
 export class SphereMapManager {
     private targetDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
     private params: SphereMapParams[] = nArray(6, () => { return { type: SphereMapType.HemisphericProbe, attenFactors: [0, 0], matColorFactors: [0, 0] }; });
-    private ddraw = new TSDraw();
+    private ddraw = new TSDraw('SphereMaps');
     private hemisphericMaterial: SFAMaterialBuilder<World>;
     private reflectiveMaterial: SFAMaterialBuilder;
     

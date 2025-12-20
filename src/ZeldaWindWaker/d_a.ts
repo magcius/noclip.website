@@ -1473,7 +1473,7 @@ const drawParams = new DrawParams();
 
 // Simple quad shape & input.
 export class dDlst_2DStatic_c {
-    private ddraw = new TSDraw();
+    private ddraw = new TSDraw('dDlst_2DStatic_c');
 
     constructor(device: GfxDevice, cache: GfxRenderCache) {
         this.ddraw.setVtxDesc(GX.Attr.POS, true);
@@ -2042,7 +2042,7 @@ class dCloth_packet_c {
     private globalWind = vec3.clone(Vec3UnitZ);
     private scale = vec3.clone(Vec3One);
     private wave = 0;
-    private ddraw = new TDDraw();
+    private ddraw = new TDDraw('dCloth_packet_c');
     private materialHelper: GXMaterialHelperGfx;
     private materialHelperBack: GXMaterialHelperGfx;
 
@@ -2558,7 +2558,7 @@ class d_a_majuu_flag extends fopAc_ac_c {
     private toonTex: BTIData;
     private rawTex: BTIData | null = null;
 
-    private ddraw = new TDDraw();
+    private ddraw = new TDDraw('d_a_majuu_flag');
     private materialHelper: GXMaterialHelperGfx;
     private materialHelperBack: GXMaterialHelperGfx;
 
