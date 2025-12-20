@@ -189,6 +189,7 @@ class PassImpl implements GfxrPass {
 
     public setDebugName(debugName: string): void {
         this.debugName = debugName;
+        this.debugGroups.push(debugName);
     }
 
     public setViewport(x: number, y: number, w: number, h: number): void {
@@ -574,15 +575,15 @@ export class GfxrRenderGraphImpl implements GfxrRenderGraph, GfxrGraphBuilder, G
 
     public pushPass(setupFunc: PassSetupFunc): void {
         const pass = new PassImpl('render');
-        setupFunc(pass);
         pass.debugGroups = this.debugGroups.slice();
+        setupFunc(pass);
         this.currentGraph!.passes.push(pass);
     }
 
     public pushComputePass(setupFunc: ComputePassSetupFunc): void {
         const pass = new PassImpl('compute');
-        setupFunc(pass as GfxrComputePass);
         pass.debugGroups = this.debugGroups.slice();
+        setupFunc(pass as GfxrComputePass);
         this.currentGraph!.passes.push(pass);
     }
 
@@ -661,7 +662,8 @@ export class GfxrRenderGraphImpl implements GfxrRenderGraph, GfxrGraphBuilder, G
 
         if (debugLabel === undefined) {
             const renderTargetDebugName = this.currentGraph!.renderTargetDebugNames[renderTargetID];
-            debugLabel = `${renderPass.debugName}\n${renderTargetDebugName}`;
+            const debugGroups = renderPass.debugGroups.length !== 0 ? renderPass.debugGroups.join('\n') + '\n' : '';
+            debugLabel = `${debugGroups}${renderPass.debugName}\n${renderTargetDebugName}`;
         }
 
         this.currentGraph!.debugThumbnails.push(new GfxrDebugThumbnailDesc(renderTargetID, renderPass, attachmentSlot, debugLabel));
@@ -1056,7 +1058,7 @@ export class GfxrRenderGraphImpl implements GfxrRenderGraph, GfxrGraphBuilder, G
 
     //#region Execution
     private currentDebugGroups: string[] = [];
-    private adjustDebugGroups(debugCommands: GfxRenderPass | GfxComputePass | GfxDevice, debugGroups: string[]): void {
+    private adjustDebugGroups(debugCommands: GfxDevice, debugGroups: string[]): void {
         // Pop existing debug groups
         for (let i = this.currentDebugGroups.length - 1; i >= 0; i--) {
             if (this.currentDebugGroups[i] !== debugGroups[i]) {
@@ -1077,11 +1079,9 @@ export class GfxrRenderGraphImpl implements GfxrRenderGraph, GfxrGraphBuilder, G
     private execRenderPass(pass: PassImpl): void {
         this.adjustDebugGroups(this.device, pass.debugGroups);
         const renderPass = this.device.createRenderPass(pass.descriptor);
-        renderPass.pushDebugGroup(pass.debugName);
         renderPass.setViewport(pass.viewportX, pass.viewportY, pass.viewportW, pass.viewportH);
         if (pass.execFunc !== null)
             (pass.execFunc as PassExecFunc)(renderPass, this);
-        renderPass.popDebugGroup();
         this.device.submitPass(renderPass);
         if (pass.postFunc !== null)
             pass.postFunc(this);
@@ -1090,10 +1090,8 @@ export class GfxrRenderGraphImpl implements GfxrRenderGraph, GfxrGraphBuilder, G
     private execComputePass(pass: PassImpl): void {
         this.adjustDebugGroups(this.device, pass.debugGroups);
         const computePass = this.device.createComputePass();
-        computePass.pushDebugGroup(pass.debugName);
         if (pass.execFunc !== null)
             (pass.execFunc as ComputePassExecFunc)(computePass, this);
-        computePass.popDebugGroup();
         this.device.submitPass(computePass);
         if (pass.postFunc !== null)
             pass.postFunc(this);

@@ -1930,6 +1930,8 @@ export class SourceRenderer implements SceneGfx {
         downsampleColorDesc.setDimensions(mainColorTargetDesc.width >>> 2, mainColorTargetDesc.height >>> 2, 1);
         const downsampleColorTargetID = builder.createRenderTargetID(downsampleColorDesc, 'Bloom Buffer');
 
+        builder.pushDebugGroup('Bloom');
+
         builder.pushPass((pass) => {
             pass.setDebugName('Bloom Downsample');
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, downsampleColorTargetID);
@@ -1983,6 +1985,7 @@ export class SourceRenderer implements SceneGfx {
         });
         builder.pushDebugThumbnail(downsampleColorTargetID);
 
+        builder.popDebugGroup();
         return downsampleColorTargetID;
     }
 

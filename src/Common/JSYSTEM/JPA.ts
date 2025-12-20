@@ -999,7 +999,7 @@ export class JPAEmitterWorkData {
 
     public materialParams = new MaterialParams();
     public drawParams = new DrawParams();
-    public dataTexture: DataTexture;
+    public dataTexture: DataTexture | null = null;
     public dataTextureOffs = 0;
     public aliveParticleNum = 0;
     public materialHelper: GXMaterialHelperGfx;
@@ -1050,7 +1050,8 @@ export class JPAEmitterWorkData {
         if (this.materialHelper.material.hasDynamicAlphaTest)
             materialOffs += fillVec4(d, materialOffs, this.baseEmitter.globalColorPrm.a);
 
-        materialParams.m_TextureMapping[15].gfxTexture = this.dataTexture.texture;
+        if (this.dataTexture !== null)
+            materialParams.m_TextureMapping[15].gfxTexture = this.dataTexture.texture;
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
     }
 
@@ -2455,10 +2456,11 @@ export class JPABaseEmitter {
         renderInst.setDrawCount(isCross(sp1.shapeType) ? 12 : 6);
 
         workData.aliveParticleNum = 0;
-        workData.dataTexture = this.emitterManager.dataTextureManager.allocateTexture(device, n);
-        workData.dataTextureOffs = 0;
-        if (workData.usingInstancing)
+        if (workData.usingInstancing) {
+            workData.dataTexture = this.emitterManager.dataTextureManager.allocateTexture(device, n);
+            workData.dataTextureOffs = 0;
             workData.fillEmitterRenderInst(renderInstManager, renderInst);
+        }
 
         const isDrawFwdAhead = this.resData.res.bsp1.isDrawFwdAhead;
         for (let i = 0; i < n; i++) {
@@ -2474,7 +2476,7 @@ export class JPABaseEmitter {
                 renderInst.setInstanceCount(workData.aliveParticleNum);
                 renderInstManager.submitRenderInst(renderInst);
             } else {
-                this.emitterManager.dataTextureManager.returnTexture(workData.dataTexture);
+                this.emitterManager.dataTextureManager.returnTexture(workData.dataTexture!);
             }
         } else {
             renderInstManager.popTemplate();
@@ -3620,7 +3622,7 @@ export class JPABaseParticle {
     }
 
     private fillDataTexture(workData: JPAEmitterWorkData): void {
-        const d = workData.dataTexture.data;
+        const d = workData.dataTexture!.data;
         let offs = workData.dataTextureOffs;
         offs += fillMatrix4x3(d, offs, workData.drawParams.u_PosMtx[0]);
         offs += fillMatrix4x3(d, offs, workData.materialParams.u_TexMtx[0]);
