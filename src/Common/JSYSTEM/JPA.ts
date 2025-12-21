@@ -515,14 +515,13 @@ export class JPAResourceData {
     public supportedParticle: boolean = true;
     public supportedChild: boolean = true;
     public resourceId: number;
-    public name: string;
     public materialHelperP: GXMaterialHelperGfx;
     public materialHelperC: GXMaterialHelperGfx | null = null;
     public usingInstancingP = false;
     public usingInstancingC = false;
     public textureIds: number[] = [];
 
-    constructor(cache: GfxRenderCache, public jpacData: JPACData, resRaw: JPAResourceRaw) {
+    constructor(cache: GfxRenderCache, public jpacData: JPACData, resRaw: JPAResourceRaw, public name: string | null = null) {
         this.res = parseResource(this.jpacData.jpac.version, resRaw);
         this.resourceId = resRaw.resourceId;
 
@@ -575,7 +574,7 @@ export class JPAResourceData {
         const ssp1 = this.res.ssp1;
 
         // Material.
-        const mb = new GXMaterialBuilder(`JPA Material`);
+        const mb = new GXMaterialBuilder(`JPA Material ${this.name}`);
         mb.setBlendMode(
             st_bm[(bsp1.blendModeFlags >>> 0) & 0x03],
             st_bf[(bsp1.blendModeFlags >>> 2) & 0x0F],
@@ -657,7 +656,7 @@ export class JPAResourceData {
 
         // Disable instancing on WebGPU since our shader relies on non-uniform texture sampling, which errors out right now...
         // https://github.com/gpuweb/gpuweb/issues/2482
-        const useInstancing = USE_INSTANCING && device.queryVendorInfo().platform !== GfxPlatform.WebGPU;
+        const useInstancing = USE_INSTANCING;
 
         this.usingInstancingP = useInstancing && !isStripe(bsp1.shapeType);
 
@@ -1642,8 +1641,11 @@ v_TexIdx = data.mTexIdx;
 ${JPAInstancingProgram.Common}
 flat in int v_TexIdx;
 
+#if GFX_PLATFORM_WEBGPU()
+#pragma diagnostic(off, derivative_uniformity);
+#endif
+
 // TODO(jstpierre): This should really be using something like NURI.
-// It also breaks in WebGPU because we can't easily forward the workgroupLoadUniform across through Naga.
 vec4 SampleTextureIdx(int t_TexIdx, vec2 t_TexCoord, float t_LODBias) {
     if (t_TexIdx == 0)       return texture(SAMPLER_2D(u_Texture0), t_TexCoord, t_LODBias);
     else if (t_TexIdx == 1)  return texture(SAMPLER_2D(u_Texture1), t_TexCoord, t_LODBias);

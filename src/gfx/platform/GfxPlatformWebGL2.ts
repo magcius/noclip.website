@@ -5,7 +5,7 @@ import { GfxBindings, GfxComputePipeline, GfxInputLayout, GfxProgram, GfxQueryPo
 import { GfxBuffer } from "./GfxPlatform.js";
 
 import { copyAttachmentState, copyMegaState, defaultMegaState } from '../helpers/GfxMegaStateDescriptorHelpers.js';
-import { assert, assertExists, leftPad, nArray, nullify } from './GfxPlatformUtil.js';
+import { assert, assertExists, findall, leftPad, nArray, nullify } from './GfxPlatformUtil.js';
 import { gfxRenderAttachmentViewEquals } from './GfxPlatformObjUtil.js';
 
 // This is a workaround for ANGLE not supporting UBOs greater than 64kb (the limit of D3D).
@@ -317,17 +317,6 @@ function createBindingLayouts(bindingLayouts: GfxBindingLayoutDescriptor[]): Gfx
         firstSampler += numSamplers;
     }
     return { numUniformBuffers: firstUniformBuffer, numSamplers: firstSampler, bindingLayoutTables };
-}
-
-function findall(haystack: string, needle: RegExp): RegExpExecArray[] {
-    const results: RegExpExecArray[] = [];
-    while (true) {
-        const result = needle.exec(haystack);
-        if (!result)
-            break;
-        results.push(result);
-    }
-    return results;
 }
 
 function isBlendStateNone(blendState: GfxChannelBlendState): boolean {

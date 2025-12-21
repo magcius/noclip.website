@@ -5,7 +5,7 @@ import { rust } from "../../rustlib.js";
 import { GfxAttachmentState, GfxBindingLayoutDescriptor, GfxBindingLayoutSamplerDescriptor, GfxBindings, GfxBindingsDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxChannelBlendState, GfxClipSpaceNearZ, GfxCompareMode, GfxComputePass, GfxComputePipelineDescriptor, GfxComputeProgramDescriptor, GfxCullMode, GfxStatisticsGroup, GfxDevice, GfxDeviceLimits, GfxFormat, GfxFrontFaceMode, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutDescriptor, GfxMegaStateDescriptor, GfxMipFilterMode, GfxPass, GfxPrimitiveTopology, GfxProgram, GfxQueryPoolType, GfxRenderPass, GfxRenderPassDescriptor, GfxRenderPipeline, GfxRenderPipelineDescriptor, GfxRenderTarget, GfxRenderTargetDescriptor, GfxSampler, GfxSamplerDescriptor, GfxSamplerFormatKind, GfxShadingLanguage, GfxSwapChain, GfxTexFilterMode, GfxTexture, GfxTextureDescriptor, GfxTextureDimension, GfxTextureUsage, GfxVendorInfo, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxViewportOrigin, GfxWrapMode, GfxRenderAttachmentView, GfxRenderProgramDescriptor, GfxColor, GfxPlatform } from "./GfxPlatform.js";
 import { FormatFlags, FormatTypeFlags, getFormatByteSize, getFormatFlags, getFormatSamplerKind, getFormatTypeFlags } from "./GfxPlatformFormat.js";
 import { GfxComputePipeline, GfxQueryPool, GfxReadback, GfxResource, GfxTextureImpl, _T, defaultBindingLayoutSamplerDescriptor, isFormatSamplerKindCompatible } from "./GfxPlatformImpl.js";
-import { align, assert, assertExists, leftPad } from "./GfxPlatformUtil.js";
+import { align, assert, assertExists, findall, leftPad } from "./GfxPlatformUtil.js";
 import { gfxBindingLayoutDescriptorEqual } from './GfxPlatformObjUtil.js';
 
 interface GfxBufferP_WebGPU extends GfxBuffer {
@@ -1215,21 +1215,26 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         return renderTarget;
     }
 
-    private _createShaderStageGLSL(sourceText: string, shaderStage: 'vertex' | 'fragment' | 'compute'): GPUProgrammableStage {
+    private _createShaderStageGLSL(origSource: string, shaderStage: 'vertex' | 'fragment' | 'compute'): GPUProgrammableStage {
         const validationEnabled = false;
+
+        let glslSource = origSource;
+        glslSource = glslSource.replace(/^#pragma .*$/gm, '');
 
         let code: string;
         try {
-            code = this.glsl_compile(sourceText, shaderStage, validationEnabled);
+            code = this.glsl_compile(glslSource, shaderStage, validationEnabled);
         } catch (e) {
-            console.error(prependLineNo(sourceText));
+            console.error(prependLineNo(origSource));
             throw new Error("Invalid code");
         }
+
+        code = findall(origSource, /^#pragma (.*)$/gm).map(([substr, pragma]) => pragma).join('\n') + code;
 
         const shaderModule = this.device.createShaderModule({ code });
         const stage = { module: shaderModule, entryPoint: 'main' };
         if (this._shaderDebug) {
-            (stage as any).sourceText = sourceText;
+            (stage as any).sourceText = origSource;
             (stage as any).code = code;
         }
         return stage;

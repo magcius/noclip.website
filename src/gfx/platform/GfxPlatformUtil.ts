@@ -50,3 +50,14 @@ export function alignNonPowerOfTwo(n: number, multiple: number): number {
 export function fallbackUndefined<T>(v: T | null | undefined, fallback: T): T {
     return (v !== null && v !== undefined) ? v : fallback;
 }
+
+export function findall(haystack: string, needle: RegExp): RegExpExecArray[] {
+    const results: RegExpExecArray[] = [];
+    while (true) {
+        const result = needle.exec(haystack);
+        if (!result)
+            break;
+        results.push(result);
+    }
+    return results;
+}

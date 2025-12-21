@@ -300,20 +300,22 @@ export class SMGRenderer implements Viewer.SceneGfx {
         effectSystem.prepareToRender(device);
     }
 
-    private executeOnPass(passRenderer: GfxRenderPass, list: GfxRenderInstList | null): void {
-        if (list === null)
+    private executeOnPass(passRenderer: GfxRenderPass, list: GfxRenderInstList | null, name: string): void {
+        if (list === null || list.renderInsts.length === 0)
             return;
         this.sceneObjHolder.specialTextureBinder.resolveLateBindTexture(list);
         const cache = this.renderHelper.renderInstManager.gfxRenderCache;
+        passRenderer.pushDebugGroup(name);
         list.drawOnPassRenderer(cache, passRenderer);
+        passRenderer.popDebugGroup();
     }
 
     private drawOpa(passRenderer: GfxRenderPass, drawBufferType: DrawBufferType): void {
-        this.executeOnPass(passRenderer, this.sceneObjHolder.sceneNameObjListExecutor.getRenderInstListOpa(drawBufferType));
+        this.executeOnPass(passRenderer, this.sceneObjHolder.sceneNameObjListExecutor.getRenderInstListOpa(drawBufferType), `${DrawBufferType[drawBufferType]} Opa`);
     }
 
     private drawXlu(passRenderer: GfxRenderPass, drawBufferType: DrawBufferType): void {
-        this.executeOnPass(passRenderer, this.sceneObjHolder.sceneNameObjListExecutor.getRenderInstListXlu(drawBufferType));
+        this.executeOnPass(passRenderer, this.sceneObjHolder.sceneNameObjListExecutor.getRenderInstListXlu(drawBufferType), `${DrawBufferType[drawBufferType]} Xlu`);
     }
 
     private hasAnyRenderInstList(renderInstList: GfxRenderInstList | null): boolean {
@@ -332,7 +334,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
     }
 
     private execute(passRenderer: GfxRenderPass, drawType: DrawType): void {
-        this.executeOnPass(passRenderer, this.sceneObjHolder.sceneNameObjListExecutor.getRenderInstListExecute(drawType));
+        this.executeOnPass(passRenderer, this.sceneObjHolder.sceneNameObjListExecutor.getRenderInstListExecute(drawType), `${DrawType[drawType]} Exec`);
     }
 
     private executeMovementList(): void {
@@ -601,7 +603,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
         });
 
         builder.pushPass((pass) => {
-            pass.setDebugName('Main Opaque');
+            pass.setDebugName('Main');
             const shadowColorTextureID = builder.resolveRenderTarget(shadowColorTargetID);
             pass.attachResolveTexture(shadowColorTextureID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
