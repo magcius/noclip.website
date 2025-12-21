@@ -4875,7 +4875,7 @@ export class Trapeze extends LiveActor {
 
         vec3.set(scratchVec3, this.translation[0], this.translation[1] - this.height, this.translation[2]);
         this.swingRopePoint = new SwingRopePoint(scratchVec3);
-        this.swingRopePoint.updatePosAndAxis(this.axisZ, 0.995, sceneObjHolder.deltaTimeFrames);
+        this.swingRopePoint.updatePosAndAxis(this.axisZ, 0.995, 1.0);
 
         // I think this is a bug in the original game -- it uses ENEMY rather than RIDE?
         this.stick = new PartsModel(sceneObjHolder, 'TrapezeStick', 'Trapeze', this, DrawBufferType.Enemy, this.stickMtx);
