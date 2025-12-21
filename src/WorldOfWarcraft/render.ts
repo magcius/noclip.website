@@ -460,7 +460,7 @@ class BoneTexture {
     private texture: GfxTexture;
     private textureMapping = new TextureMapping();
 
-    constructor(device: GfxDevice, private maxBones: number) {
+    constructor(device: GfxDevice, maxBones: number) {
         this.texture = device.createTexture(makeTextureDescriptor2D(
             GfxFormat.F32_RGBA,
             BoneTexture.RGBA_WIDTH,
@@ -468,6 +468,7 @@ class BoneTexture {
             1,
         ));
         this.textureMapping.gfxTexture = this.texture;
+        device.setResourceName(this.texture, 'BoneTexture');
     }
 
     public uploadMatrices(device: GfxDevice, bones: BoneData[]) {
@@ -509,6 +510,8 @@ export class WmoRenderer {
         this.inputLayout = this.getInputLayout(renderHelper.renderCache);
         this.gfxVertexBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, this.wmo.vertexBuffer.buffer);
         this.gfxIndexBuffer = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, this.wmo.indexBuffer.buffer);
+        device.setResourceName(this.gfxVertexBuffer, `WMO ${this.wmo.fileId}`);
+        device.setResourceName(this.gfxIndexBuffer, `WMO ${this.wmo.fileId} (IB)`);
 
         for (let fileID of this.wmo.wmo.group_file_ids) {
             const groupDescriptor = this.wmo.wmo.get_group_descriptor(fileID);
@@ -1210,6 +1213,7 @@ export class SkyboxRenderer {
                 skyboxVertices.buffer,
             ),
         };
+        device.setResourceName(this.vertexBuffer.buffer, 'Skybox');
         const convertedIndices = convertToTriangleIndexBuffer(GfxTopology.TriStrips, skyboxIndices);
         this.numIndices = convertedIndices.length;
         this.indexBuffer = {
@@ -1220,6 +1224,7 @@ export class SkyboxRenderer {
                 convertedIndices.buffer,
             ),
         };
+        device.setResourceName(this.indexBuffer.buffer, 'Skybox (IB)');
     }
 
     public prepareToRenderSkybox(renderInstManager: GfxRenderInstManager) {

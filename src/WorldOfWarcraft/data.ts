@@ -473,6 +473,7 @@ export class ParticleEmitter {
     private ensureTexture(device: GfxDevice) {
         if (this.dataTexture === undefined) {
             this.dataTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.F32_RGBA, this.texWidth, this.texHeight, 1));
+            device.setResourceName(this.dataTexture, `Particle DataTexture`);
         }
     }
 
@@ -1729,6 +1730,8 @@ export class AdtData {
                 this.indexBuffer.buffer,
             ),
         };
+        device.setResourceName(vertexBuffer.buffer, `Terrain`);
+        device.setResourceName(indexBuffer.buffer, `Terrain (IB)`);
         return [vertexBuffer, indexBuffer];
     }
 

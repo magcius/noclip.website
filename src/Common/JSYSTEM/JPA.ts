@@ -1219,6 +1219,7 @@ class DataTexture {
 
     constructor(device: GfxDevice, public maxParticles: number) {
         this.texture = device.createTexture(makeTextureDescriptor2D(GfxFormat.F32_RGBA, DataTexture.WIDTH, this.maxParticles, 1));
+        device.setResourceName(this.texture, 'JPA DynamicTexture');
         this.data = new Float32Array(4 * DataTexture.WIDTH * this.maxParticles);
     }
 

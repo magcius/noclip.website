@@ -8,7 +8,7 @@ import { buildEnvMtx, J3DModelInstance } from '../../Common/JSYSTEM/J3D/J3DGraph
 import * as RARC from '../../Common/JSYSTEM/JKRArchive.js';
 import { BTIData } from '../../Common/JSYSTEM/JUTTexture.js';
 import { dfRange, dfShow } from '../../DebugFloaters.js';
-import { drawWorldSpaceBasis, drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from '../../DebugJunk.js';
+import { drawWorldSpaceAABB, drawWorldSpaceBasis, drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from '../../DebugJunk.js';
 import { AABB } from '../../Geometry.js';
 import { getTriangleIndexCountForTopologyIndexCount, GfxTopology } from '../../gfx/helpers/TopologyHelpers.js';
 import { GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency } from '../../gfx/platform/GfxPlatform.js';
@@ -4268,6 +4268,7 @@ export class WaterPlant extends LiveActor {
     private height: number;
     private plantData: WaterPlantData[] = [];
     private ddraw = new TDDraw('WaterPlant');
+    private aabb = new AABB();
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
@@ -4307,7 +4308,7 @@ export class WaterPlant extends LiveActor {
 
             vec3.copy(plantData.axisZ, axisZ);
 
-            plantData.height = randomRangeFloat(this.height, 2.0 * this.height);
+            plantData.height = randomRangeFloat(this.height, this.height * 2.0);
             plantData.swingPosIdx0 = swingPosIdx + 6;
             plantData.swingPosIdx1 = swingPosIdx + 3;
             plantData.swingPosIdx2 = swingPosIdx;
@@ -4316,6 +4317,10 @@ export class WaterPlant extends LiveActor {
             vec3.transformMat4(axisZ, axisZ, scratchMatrix);
 
             this.plantData.push(plantData);
+
+            this.aabb.unionPoint(plantData.position);
+            vec3.scaleAndAdd(scratchVec3a, plantData.position, Vec3UnitY, plantData.height);
+            this.aabb.unionPoint(scratchVec3a);
         }
     }
 
@@ -4330,6 +4335,9 @@ export class WaterPlant extends LiveActor {
         super.draw(sceneObjHolder, renderInstManager, viewerInput);
 
         if (!isValidDraw(this))
+            return;
+
+        if (!sceneObjHolder.viewerInput.camera.frustum.contains(this.aabb))
             return;
 
         const waterPlantDrawInit = sceneObjHolder.waterPlantDrawInit!;
