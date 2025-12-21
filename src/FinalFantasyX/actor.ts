@@ -673,7 +673,8 @@ export class Actor {
     public destroy(device: GfxDevice) {
         if (this.vtxTextures) {
             for (let tex of this.vtxTextures)
-                device.destroyTexture(tex);
+                if (tex !== undefined)
+                    device.destroyTexture(tex);
         }
         if (this.textureCopies) {
             for (let tex of this.textureCopies)
