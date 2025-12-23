@@ -1,7 +1,7 @@
 
 import { mat4, vec3 } from "gl-matrix";
 import { White, colorCopy, colorNewCopy } from "../Color.js";
-import { projectionMatrixForCuboid } from '../MathHelpers.js';
+import { projectionMatrixForCuboid, saturate } from '../MathHelpers.js';
 import { TSDraw } from "../SuperMarioGalaxy/DDraw.js";
 import { createBufferFromData } from "../gfx/helpers/BufferHelpers.js";
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers.js';
@@ -261,8 +261,41 @@ class dDlst_shadowSimple_c {
         // TODO: Implementation
     }
 
-    public set(pos: vec3, floorY: number, scaleXZ: number, floorNrm: vec3, angle: number, scaleZ: number, pTexObj: BTI_Texture | null): void {
-        // TODO: Implementation
+    public set(globals: dGlobals, pos: vec3, floorY: number, scaleXZ: number, floorNrm: vec3, angle: number, scaleZ: number, tex: BTI_Texture | null): void {
+        const offsetY = scaleXZ * 16.0 * (1.0 - floorNrm[1]) + 1.0;
+        
+        // Build modelViewMtx
+        mat4.fromTranslation(this.modelViewMtx, [pos[0], floorY + offsetY, pos[2]]);
+        mat4.rotateY(this.modelViewMtx, this.modelViewMtx, angle);
+        mat4.scale(this.modelViewMtx, this.modelViewMtx, [scaleXZ, offsetY + offsetY + 16.0, scaleXZ * scaleZ]);
+        mat4.mul(this.modelViewMtx, globals.camera.viewFromWorldMatrix, this.modelViewMtx);
+
+        // Build texMtx
+        const xs = Math.sqrt(1.0 - floorNrm[0] * floorNrm[0]);
+        let yy: number;
+        let zz: number;
+        if (xs !== 0.0) {
+            yy = floorNrm[1] * xs;
+            zz = -floorNrm[2] * xs;
+        } else {
+            yy = 0.0;
+            zz = 0.0;
+        }
+
+        mat4.set(this.texMtx,
+            xs, floorNrm[0], 0.0, 0.0,
+            -floorNrm[0] * yy, floorNrm[1], zz, 0.0,
+            floorNrm[0] * zz, floorNrm[2], yy, 0.0,
+            pos[0], floorY, pos[2], 1.0
+        );
+
+        mat4.rotateY(this.texMtx, this.texMtx, angle);
+        mat4.scale(this.texMtx, this.texMtx, [scaleXZ, 1.0, scaleXZ * scaleZ]);
+        mat4.mul(this.texMtx, globals.camera.viewFromWorldMatrix, this.texMtx);
+
+        let opacity = 1.0 - saturate((pos[1] - floorY) * 0.0007);
+        this.alpha = opacity * 64.0;
+        this.tex = tex;
     }
 }
 
@@ -302,12 +335,12 @@ class dDlst_shadowControl_c {
         return false;
     }
 
-    public setSimple(pPos: vec3, groundY: number, scaleXZ: number, floorNrm: vec3, angle: number, scaleZ: number, pTexObj: BTI_Texture): boolean {
+    public setSimple(globals: dGlobals, pPos: vec3, groundY: number, scaleXZ: number, floorNrm: vec3, angle: number, scaleZ: number, pTexObj: BTI_Texture): boolean {
         if (floorNrm === null || this.simpleCount >= this.simples.length)
             return false;
 
         const simple = this.simples[this.simpleCount++];
-        simple.set(pPos, groundY, scaleXZ, floorNrm, angle, scaleZ, pTexObj);
+        simple.set(globals, pPos, groundY, scaleXZ, floorNrm, angle, scaleZ, pTexObj);
         return true;
     }
 }
@@ -316,7 +349,7 @@ export function dComIfGd_setSimpleShadow2(globals: dGlobals, i_pos: vec3, ground
     i_angle: number = 0, scaleZ: number = 1.0, i_tex: BTI_Texture = dDlst_shadowControl_c.defaultSimpleTex): boolean {
     if (i_floorPoly.ChkSetInfo() && groundY !== -1000000000.0) {
         const plane_p = globals.scnPlay.bgS.GetTriPla(i_floorPoly.bgIdx, i_floorPoly.triIdx);
-        return globals.dlst.shadowControl.setSimple(i_pos, groundY, scaleXZ, plane_p.n, i_angle, scaleZ, i_tex);
+        return globals.dlst.shadowControl.setSimple(globals, i_pos, groundY, scaleXZ, plane_p.n, i_angle, scaleZ, i_tex);
     } else {
         return false;
     }
