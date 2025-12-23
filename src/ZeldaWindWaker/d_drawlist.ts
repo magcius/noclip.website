@@ -14,7 +14,7 @@ import { DisplayListRegisters, GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertex
 import * as GX from '../gx/gx_enum.js';
 import { GX_Program, parseMaterial } from '../gx/gx_material.js';
 import { ColorKind, DrawParams, GXMaterialHelperGfx, MaterialParams, SceneParams, createInputLayout, fillSceneParamsData, ub_SceneParamsBufferSize } from "../gx/gx_render.js";
-import { assert } from '../util.js';
+import { assert, nArray } from '../util.js';
 import { ViewerRenderInput } from '../viewer.js';
 import { SymbolMap, dGlobals } from './Main.js';
 import { PeekZManager } from "./d_dlst_peekZ.js";
@@ -267,19 +267,13 @@ class dDlst_shadowSimple_c {
 }
 
 class dDlst_shadowControl_c {
-    private simples: dDlst_shadowSimple_c[] = [];
-    // private mReal: dDlst_shadowReal_c[] = [];
-    private mNextID: number = 0;
+    private simples = nArray(128, () => new dDlst_shadowSimple_c());
+    // private mReal = nArray(8, () => new dDlst_shadowReal_c());
+    private nextID: number = 0;
+    private simpleCount = 0;
+    private realCount = 0;
 
     public static defaultSimpleTex: BTI_Texture;
-
-    constructor() {
-        // TODO:
-    }
-
-    public init(): void {
-        // TODO: Implementation
-    }
 
     public reset(): void {
         // TODO: Implementation
@@ -289,7 +283,7 @@ class dDlst_shadowControl_c {
         // TODO: Implementation
     }
 
-    public draw(mtx: mat4): void {
+    public draw(viewMtx: mat4): void {
         // TODO: Implementation
     }
 
@@ -308,18 +302,22 @@ class dDlst_shadowControl_c {
         return false;
     }
 
-    public setSimple(pPos: vec3, groundY: number, scaleXZ: number, floorNrm: vec3, angle: number, scaleZ: number, pTexObj: BTI_Texture): number {
-        // TODO: Implementation
-        return 0;
+    public setSimple(pPos: vec3, groundY: number, scaleXZ: number, floorNrm: vec3, angle: number, scaleZ: number, pTexObj: BTI_Texture): boolean {
+        if (floorNrm === null || this.simpleCount >= this.simples.length)
+            return false;
+
+        const simple = this.simples[this.simpleCount++];
+        simple.set(pPos, groundY, scaleXZ, floorNrm, angle, scaleZ, pTexObj);
+        return true;
     }
 }
 
 export function dComIfGd_setSimpleShadow2(globals: dGlobals, i_pos: vec3, groundY: number, scaleXZ: number, i_floorPoly: cBgS_PolyInfo,
-    i_angle: number = 0, scaleZ: number = 1.0, i_tex: BTI_Texture = dDlst_shadowControl_c.defaultSimpleTex): number {
+    i_angle: number = 0, scaleZ: number = 1.0, i_tex: BTI_Texture = dDlst_shadowControl_c.defaultSimpleTex): boolean {
     if (i_floorPoly.ChkSetInfo() && groundY !== -1000000000.0) {
         const plane_p = globals.scnPlay.bgS.GetTriPla(i_floorPoly.bgIdx, i_floorPoly.triIdx);
         return globals.dlst.shadowControl.setSimple(i_pos, groundY, scaleXZ, plane_p.n, i_angle, scaleZ, i_tex);
     } else {
-        return 0;
+        return false;
     }
 }

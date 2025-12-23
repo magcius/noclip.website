@@ -532,8 +532,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
 
                 this.executeList(passRenderer, dlst.sea);
                 this.executeListSet(passRenderer, dlst.bg);
-
-                // Execute our alpha model stuff.
+                dlst.shadowControl.draw(this.globals.camera.clipFromViewMatrix);
                 this.executeList(passRenderer, dlst.alphaModel);
 
                 this.executeList(passRenderer, dlst.effect[EffectDrawGroup.Main]);
