@@ -1,5 +1,5 @@
 
-import { mat4 } from "gl-matrix";
+import { mat4, vec3 } from "gl-matrix";
 import { White, colorCopy, colorNewCopy } from "../Color.js";
 import { projectionMatrixForCuboid } from '../MathHelpers.js';
 import { TSDraw } from "../SuperMarioGalaxy/DDraw.js";
@@ -18,6 +18,10 @@ import { assert } from '../util.js';
 import { ViewerRenderInput } from '../viewer.js';
 import { SymbolMap, dGlobals } from './Main.js';
 import { PeekZManager } from "./d_dlst_peekZ.js";
+import { cBgS_PolyInfo } from "./d_bg.js";
+import { BTI_Texture } from "../Common/JSYSTEM/JUTTexture.js";
+import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
+import { dKy_tevstr_c } from "./d_kankyo.js";
 
 export enum dDlst_alphaModel__Type {
     Bonbori,
@@ -84,7 +88,7 @@ class dDlst_alphaModel_c {
         const bonboriVtxLoader = compileVtxLoader(vat, vcd);
 
         const shadowVtxArrays: GX_Array[] = [];
-        shadowVtxArrays[GX.Attr.POS]  = { buffer: bonboriPos, offs: 0, stride: 0x0C };
+        shadowVtxArrays[GX.Attr.POS] = { buffer: bonboriPos, offs: 0, stride: 0x0C };
         const bonboriVertices = bonboriVtxLoader.runVertices(shadowVtxArrays, bonboriDL);
         this.bonboriShape = new dDlst_BasicShape_c(cache, bonboriVtxLoader.loadedVertexLayout, bonboriVertices);
 
@@ -235,6 +239,8 @@ export class dDlst_list_c {
     public peekZ = new PeekZManager(128);
     public alphaModel0: dDlst_alphaModel_c;
 
+    public shadowControl = new dDlst_shadowControl_c();
+
     constructor(device: GfxDevice, cache: GfxRenderCache, symbolMap: SymbolMap) {
         this.alphaModel0 = new dDlst_alphaModel_c(device, cache, symbolMap);
     }
@@ -242,5 +248,78 @@ export class dDlst_list_c {
     public destroy(device: GfxDevice): void {
         this.peekZ.destroy(device);
         this.alphaModel0.destroy(device);
+    }
+}
+
+class dDlst_shadowSimple_c {
+    public alpha: number = 0; // 0-255
+    public tex: BTI_Texture | null = null;
+    public modelViewMtx = mat4.create();
+    public texMtx = mat4.create();
+
+    public draw(): void {
+        // TODO: Implementation
+    }
+
+    public set(pos: vec3, floorY: number, scaleXZ: number, floorNrm: vec3, angle: number, scaleZ: number, pTexObj: BTI_Texture | null): void {
+        // TODO: Implementation
+    }
+}
+
+class dDlst_shadowControl_c {
+    private simples: dDlst_shadowSimple_c[] = [];
+    // private mReal: dDlst_shadowReal_c[] = [];
+    private mNextID: number = 0;
+
+    public static defaultSimpleTex: BTI_Texture;
+
+    constructor() {
+        // TODO:
+    }
+
+    public init(): void {
+        // TODO: Implementation
+    }
+
+    public reset(): void {
+        // TODO: Implementation
+    }
+
+    public imageDraw(mtx: mat4): void {
+        // TODO: Implementation
+    }
+
+    public draw(mtx: mat4): void {
+        // TODO: Implementation
+    }
+
+    public setReal(id: number, param2: number, pModel: J3DModelInstance, pPos: vec3, param5: number, param6: number, pTevStr: dKy_tevstr_c): number {
+        // TODO: Implementation
+        return 0;
+    }
+
+    public setReal2(id: number, param2: number, pModel: J3DModelInstance, pPos: vec3, param5: number, param6: number, pTevStr: dKy_tevstr_c): number {
+        // TODO: Implementation
+        return 0;
+    }
+
+    public addReal(id: number, pModel: J3DModelInstance): boolean {
+        // TODO: Implementation
+        return false;
+    }
+
+    public setSimple(pPos: vec3, groundY: number, scaleXZ: number, floorNrm: vec3, angle: number, scaleZ: number, pTexObj: BTI_Texture): number {
+        // TODO: Implementation
+        return 0;
+    }
+}
+
+export function dComIfGd_setSimpleShadow2(globals: dGlobals, i_pos: vec3, groundY: number, scaleXZ: number, i_floorPoly: cBgS_PolyInfo,
+    i_angle: number = 0, scaleZ: number = 1.0, i_tex: BTI_Texture = dDlst_shadowControl_c.defaultSimpleTex): number {
+    if (i_floorPoly.ChkSetInfo() && groundY !== -1000000000.0) {
+        const plane_p = globals.scnPlay.bgS.GetTriPla(i_floorPoly.bgIdx, i_floorPoly.triIdx);
+        return globals.dlst.shadowControl.setSimple(i_pos, groundY, scaleXZ, plane_p.n, i_angle, scaleZ, i_tex);
+    } else {
+        return 0;
     }
 }
