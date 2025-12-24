@@ -430,6 +430,9 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
 
         const dlst = globals.dlst;
 
+        renderInstManager.setCurrentList(dlst.shadow);
+        dlst.shadowControl.draw(globals, renderInstManager, globals.camera.clipFromViewMatrix);
+
         renderInstManager.setCurrentList(dlst.alphaModel);
         dlst.alphaModel0.draw(globals, renderInstManager, viewerInput);
 
@@ -532,7 +535,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
 
                 this.executeList(passRenderer, dlst.sea);
                 this.executeListSet(passRenderer, dlst.bg);
-                dlst.shadowControl.draw(this.globals.camera.clipFromViewMatrix);
+                this.executeList(passRenderer, dlst.shadow);
                 this.executeList(passRenderer, dlst.alphaModel);
 
                 this.executeList(passRenderer, dlst.effect[EffectDrawGroup.Main]);
@@ -811,7 +814,7 @@ class SceneDesc {
         modelCache.fetchObjectData(`Always`);
         modelCache.fetchStageData(`Stage`);
 
-        modelCache.fetchFileData(`extra.crg1_arc`, 11);
+        modelCache.fetchFileData(`extra.crg1_arc`, 12);
         modelCache.fetchFileData(`f_pc_profiles.crg1_arc`);
 
         const particleArchives = [

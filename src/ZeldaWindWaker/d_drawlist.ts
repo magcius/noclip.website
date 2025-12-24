@@ -1,6 +1,6 @@
 
 import { mat4, vec3 } from "gl-matrix";
-import { White, colorCopy, colorNewCopy } from "../Color.js";
+import { White, colorCopy, colorFromRGBA, colorNewCopy } from "../Color.js";
 import { projectionMatrixForCuboid, saturate } from '../MathHelpers.js';
 import { TSDraw } from "../SuperMarioGalaxy/DDraw.js";
 import { createBufferFromData } from "../gfx/helpers/BufferHelpers.js";
@@ -22,6 +22,8 @@ import { cBgS_PolyInfo } from "./d_bg.js";
 import { BTI_Texture } from "../Common/JSYSTEM/JUTTexture.js";
 import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
 import { dKy_tevstr_c } from "./d_kankyo.js";
+import { mDoMtx_YrotM } from "./m_do_mtx.js";
+import { cM_s2rad } from "./SComponent.js";
 
 export enum dDlst_alphaModel__Type {
     Bonbori,
@@ -236,18 +238,20 @@ export class dDlst_list_c {
     public particle2DFore = new GfxRenderInstList(gfxRenderInstCompareNone, GfxRenderInstExecutionOrder.Forwards);
 
     public alphaModel = new GfxRenderInstList(gfxRenderInstCompareNone, GfxRenderInstExecutionOrder.Forwards);
+    public shadow = new GfxRenderInstList(gfxRenderInstCompareNone, GfxRenderInstExecutionOrder.Forwards);
     public peekZ = new PeekZManager(128);
     public alphaModel0: dDlst_alphaModel_c;
-
-    public shadowControl = new dDlst_shadowControl_c();
+    public shadowControl: dDlst_shadowControl_c;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, symbolMap: SymbolMap) {
         this.alphaModel0 = new dDlst_alphaModel_c(device, cache, symbolMap);
+        this.shadowControl = new dDlst_shadowControl_c(device, cache, symbolMap);
     }
 
     public destroy(device: GfxDevice): void {
         this.peekZ.destroy(device);
         this.alphaModel0.destroy(device);
+        this.shadowControl.destroy(device);
     }
 }
 
@@ -257,16 +261,126 @@ class dDlst_shadowSimple_c {
     public modelViewMtx = mat4.create();
     public texMtx = mat4.create();
 
-    public draw(): void {
-        // TODO: Implementation
+    private static shadowVolumeShape: dDlst_BasicShape_c;
+    private static shadowSealShape: dDlst_BasicShape_c;
+
+    private static frontMat: GXMaterialHelperGfx;
+    private static backSubMat: GXMaterialHelperGfx;
+    private static sealMat: GXMaterialHelperGfx;
+    private static clearMat: GXMaterialHelperGfx;
+
+    static compileDL(device: GfxDevice, cache: GfxRenderCache, symbolMap: SymbolMap) {
+        const vat: GX_VtxAttrFmt[] = [];
+        vat[GX.Attr.POS] = { compType: GX.CompType.F32, compCnt: GX.CompCnt.POS_XYZ, compShift: 0 };
+        vat[GX.Attr.TEX0] = { compType: GX.CompType.S8, compCnt: GX.CompCnt.TEX_ST, compShift: 0 };
+        
+        const vcd: GX_VtxDesc[] = [];
+        vcd[GX.Attr.POS] = { type: GX.AttrType.INDEX8 };
+        const shadowVtxLoader = compileVtxLoader(vat, vcd);
+
+        // The `l_shadowSealDL` display list contains both register setting commands and draws. Split it up.
+        const shadowSealMat = symbolMap.findSymbolData(`d_drawlist.o`, `l_shadowSealDL`).slice(0, 0x42);
+        const shadowSealDrw = symbolMap.findSymbolData(`d_drawlist.o`, `l_shadowSealDL`).slice(0x42, 0);
+
+        // A simple box shadow volume, providing verts within a [-1, 1] cube.
+        const simpleShadowPos = symbolMap.findSymbolData(`d_drawlist.o`, `l_simpleShadowPos`);
+        const shadowVtxArrays: GX_Array[] = [];
+        shadowVtxArrays[GX.Attr.POS] = { buffer: simpleShadowPos, offs: 0, stride: 0x0C };
+
+        // Construct a basic box shape representing the "simple" shadow volume.
+        const shadowVolumeDL = symbolMap.findSymbolData(`d_drawlist.o`, `l_shadowVolumeDL`)
+        const shadowVolVerts = shadowVtxLoader.runVertices(shadowVtxArrays, shadowVolumeDL);
+        this.shadowVolumeShape = new dDlst_BasicShape_c(cache, shadowVtxLoader.loadedVertexLayout, shadowVolVerts);
+
+        // Construct the "seal" shape using the same pos-only verts.
+        const shadowSealVerts = shadowVtxLoader.runVertices(shadowVtxArrays, shadowSealDrw);
+        this.shadowSealShape = new dDlst_BasicShape_c(cache, shadowVtxLoader.loadedVertexLayout, shadowSealVerts);
+        
+        // TODO: Construct shapes which use a gobo texture
+        vcd[GX.Attr.TEX0] = { type: GX.AttrType.DIRECT };
+        const shadowTexVtxLoader = compileVtxLoader(vat, vcd);
+
+        // Construct materials
+        {
+            const matRegisters = new DisplayListRegisters();
+            displayListRegistersInitGX(matRegisters);
+
+            // Writes GX_TEVREG0.a (0x40) on every front face that passes the depth test 
+            // These are the first draw calls to write alpha each frame, so it assumes the alpha channel is empty
+            displayListRegistersRun(matRegisters, symbolMap.findSymbolData(`d_drawlist.o`, `l_frontMat`));
+            this.frontMat = new GXMaterialHelperGfx(parseMaterial(matRegisters, `dDlst_shadowSimple_c l_frontMat`));
+            
+            // Subtract GX_TEVREG0.a (0x40)on every back face that passes the depth test
+            // The result after frontMat and backMat are rendered is 0x40 written everywhere the shadow should be drawn
+            displayListRegistersRun(matRegisters, symbolMap.findSymbolData(`d_drawlist.o`, `l_backSubMat`));
+            this.backSubMat = new GXMaterialHelperGfx(parseMaterial(matRegisters, `dDlst_shadowSimple_c l_backSubMat`));
+
+            // Lerp from DstAlpha GX_TEVREG2.a (0xFF) -> (1.0 - DstAlpha) * DstAlpha + DstAlpha
+            // Draws a quad using texMtx without depth testing.
+            displayListRegistersRun(matRegisters, shadowSealMat);
+            this.sealMat = new GXMaterialHelperGfx(parseMaterial(matRegisters, `dDlst_shadowSimple_c l_shadowSealDL`));
+
+            // Write GX_TEVREG1.a (0x00) to everywhere the shadow volume was drawn 
+            // Clears the alpha channel for future transparent object rendering
+            displayListRegistersRun(matRegisters, symbolMap.findSymbolData(`d_drawlist.o`, `l_clearMat`));
+            this.clearMat = new GXMaterialHelperGfx(parseMaterial(matRegisters, `dDlst_shadowSimple_c l_clearMat`));
+        }
     }
 
-    public set(globals: dGlobals, pos: vec3, floorY: number, scaleXZ: number, floorNrm: vec3, angle: number, scaleZ: number, tex: BTI_Texture | null): void {
+    static destroy(device: GfxDevice): void {
+        this.shadowVolumeShape.destroy(device);
+        this.shadowSealShape.destroy(device);
+    }
+
+    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager): void {
+        const cache = globals.modelCache.cache;
+
+        mat4.copy(drawParams.u_PosMtx[0], this.modelViewMtx);
+        mat4.copy(drawParams.u_PosMtx[1], this.texMtx);
+        colorFromRGBA(materialParams.u_Color[ColorKind.C0], 0, 0, 0, 0x40 / 0xFF);
+        colorFromRGBA(materialParams.u_Color[ColorKind.C1], 0, 0, 0, 0);
+        colorFromRGBA(materialParams.u_Color[ColorKind.C2], 1, 1, 1, 1);
+
+        const template = renderInstManager.pushTemplate();
+        dDlst_shadowSimple_c.shadowVolumeShape.setOnRenderInst(template);
+        dDlst_shadowSimple_c.frontMat.allocateDrawParamsDataOnInst(template, drawParams);
+        dDlst_shadowSimple_c.frontMat.allocateMaterialParamsDataOnInst(template, materialParams);
+
+        // Draw shadow volume front faces
+        const front = renderInstManager.newRenderInst()
+        dDlst_shadowSimple_c.frontMat.setOnRenderInst(cache, front);
+        renderInstManager.submitRenderInst(front);
+
+        // Draw shadow volume back faces
+        const back = renderInstManager.newRenderInst()
+        dDlst_shadowSimple_c.backSubMat.setOnRenderInst(cache, back);
+        renderInstManager.submitRenderInst(back);
+
+        // Draw shadow seal
+        if (this.tex) {
+            // TODO
+        }
+
+        // const seal = renderInstManager.newRenderInst()
+        // dDlst_shadowSimple_c.sealMat.setOnRenderInst(cache, seal);
+        // dDlst_shadowSimple_c.shadowSealShape.setOnRenderInst(seal);
+        // renderInstManager.submitRenderInst(seal);
+
+        const clear = renderInstManager.newRenderInst()
+        dDlst_shadowSimple_c.clearMat.setOnRenderInst(cache, clear);
+        dDlst_shadowSimple_c.shadowVolumeShape.setOnRenderInst(clear);
+        renderInstManager.submitRenderInst(clear);
+
+        renderInstManager.popTemplate();
+        
+    }
+
+    public set(globals: dGlobals, pos: vec3, floorY: number, scaleXZ: number, floorNrm: vec3, rotY: number, scaleZ: number, tex: BTI_Texture | null): void {
         const offsetY = scaleXZ * 16.0 * (1.0 - floorNrm[1]) + 1.0;
         
         // Build modelViewMtx
         mat4.fromTranslation(this.modelViewMtx, [pos[0], floorY + offsetY, pos[2]]);
-        mat4.rotateY(this.modelViewMtx, this.modelViewMtx, angle);
+        mat4.rotateY(this.modelViewMtx, this.modelViewMtx, cM_s2rad(rotY));
         mat4.scale(this.modelViewMtx, this.modelViewMtx, [scaleXZ, offsetY + offsetY + 16.0, scaleXZ * scaleZ]);
         mat4.mul(this.modelViewMtx, globals.camera.viewFromWorldMatrix, this.modelViewMtx);
 
@@ -289,7 +403,7 @@ class dDlst_shadowSimple_c {
             pos[0], floorY, pos[2], 1.0
         );
 
-        mat4.rotateY(this.texMtx, this.texMtx, angle);
+        mat4.rotateY(this.texMtx, this.texMtx, rotY);
         mat4.scale(this.texMtx, this.texMtx, [scaleXZ, 1.0, scaleXZ * scaleZ]);
         mat4.mul(this.texMtx, globals.camera.viewFromWorldMatrix, this.texMtx);
 
@@ -308,16 +422,32 @@ class dDlst_shadowControl_c {
 
     public static defaultSimpleTex: BTI_Texture;
 
+    constructor(device: GfxDevice, cache: GfxRenderCache, symbolMap: SymbolMap) {
+        dDlst_shadowSimple_c.compileDL(device, cache, symbolMap);
+    }
+
+    destroy(device: GfxDevice): void {
+        dDlst_shadowSimple_c.destroy(device);
+    }
+
     public reset(): void {
-        // TODO: Implementation
+        // TODO: Reset real
+        this.simpleCount = 0;
     }
 
     public imageDraw(mtx: mat4): void {
         // TODO: Implementation
     }
 
-    public draw(viewMtx: mat4): void {
-        // TODO: Implementation
+    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewMtx: mat4): void {
+        // dKy_GxFog_set();
+    
+        // Draw simple shadows
+        for (let i = 0; i < this.simpleCount; i++) {
+            this.simples[i].draw(globals, renderInstManager);
+        }
+
+        this.reset();
     }
 
     public setReal(id: number, param2: number, pModel: J3DModelInstance, pPos: vec3, param5: number, param6: number, pTevStr: dKy_tevstr_c): number {
@@ -335,7 +465,7 @@ class dDlst_shadowControl_c {
         return false;
     }
 
-    public setSimple(globals: dGlobals, pPos: vec3, groundY: number, scaleXZ: number, floorNrm: vec3, angle: number, scaleZ: number, pTexObj: BTI_Texture): boolean {
+    public setSimple(globals: dGlobals, pPos: vec3, groundY: number, scaleXZ: number, floorNrm: vec3, angle: number, scaleZ: number, pTexObj: BTI_Texture | null): boolean {
         if (floorNrm === null || this.simpleCount >= this.simples.length)
             return false;
 
@@ -345,11 +475,11 @@ class dDlst_shadowControl_c {
     }
 }
 
-export function dComIfGd_setSimpleShadow2(globals: dGlobals, i_pos: vec3, groundY: number, scaleXZ: number, i_floorPoly: cBgS_PolyInfo,
-    i_angle: number = 0, scaleZ: number = 1.0, i_tex: BTI_Texture = dDlst_shadowControl_c.defaultSimpleTex): boolean {
-    if (i_floorPoly.ChkSetInfo() && groundY !== -1000000000.0) {
-        const plane_p = globals.scnPlay.bgS.GetTriPla(i_floorPoly.bgIdx, i_floorPoly.triIdx);
-        return globals.dlst.shadowControl.setSimple(globals, i_pos, groundY, scaleXZ, plane_p.n, i_angle, scaleZ, i_tex);
+export function dComIfGd_setSimpleShadow2(globals: dGlobals, pos: vec3, groundY: number, scaleXZ: number, floorPoly: cBgS_PolyInfo,
+    rotY: number = 0, scaleZ: number = 1.0, i_tex: BTI_Texture | null = dDlst_shadowControl_c.defaultSimpleTex): boolean {
+    if (floorPoly.ChkSetInfo() && groundY !== -Infinity) {
+        const plane_p = globals.scnPlay.bgS.GetTriPla(floorPoly.bgIdx, floorPoly.triIdx);
+        return globals.dlst.shadowControl.setSimple(globals, pos, groundY, scaleXZ, plane_p.n, rotY, scaleZ, i_tex);
     } else {
         return false;
     }
