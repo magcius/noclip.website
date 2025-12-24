@@ -315,8 +315,7 @@ class dDlst_shadowSimple_c {
             displayListRegistersRun(matRegisters, symbolMap.findSymbolData(`d_drawlist.o`, `l_backSubMat`));
             this.backSubMat = new GXMaterialHelperGfx(parseMaterial(matRegisters, `dDlst_shadowSimple_c l_backSubMat`));
 
-            // Lerp from DstAlpha GX_TEVREG2.a (0xFF) -> (1.0 - DstAlpha) * DstAlpha + DstAlpha
-            // Draws a quad using texMtx without depth testing.
+            // Multiply buffer color by the alpha channel
             displayListRegistersRun(matRegisters, shadowSealMat);
             this.sealMat = new GXMaterialHelperGfx(parseMaterial(matRegisters, `dDlst_shadowSimple_c l_shadowSealDL`));
 
@@ -324,6 +323,22 @@ class dDlst_shadowSimple_c {
             // Clears the alpha channel for future transparent object rendering
             displayListRegistersRun(matRegisters, symbolMap.findSymbolData(`d_drawlist.o`, `l_clearMat`));
             this.clearMat = new GXMaterialHelperGfx(parseMaterial(matRegisters, `dDlst_shadowSimple_c l_clearMat`));
+
+            // TODO: Disable Alpha test via matRegisters so that it affects all above materials (instead of doing it manually here)
+            this.sealMat.material.alphaTest.op = GX.AlphaOp.OR;
+            this.sealMat.material.alphaTest.compareA = GX.CompareType.ALWAYS;
+            this.sealMat.invalidateMaterial();
+            this.frontMat.material.alphaTest.op = GX.AlphaOp.OR;
+            this.frontMat.material.alphaTest.compareA = GX.CompareType.ALWAYS;
+            this.frontMat.invalidateMaterial();
+            this.backSubMat.material.alphaTest.op = GX.AlphaOp.OR;
+            this.backSubMat.material.alphaTest.compareA = GX.CompareType.ALWAYS;
+            this.backSubMat.invalidateMaterial();
+
+            // TODO: Why is the color write enabled and alpha disabled by the above display lists? Are we parsing them wrong? Same for AlphaModel
+            setAttachmentStateSimple(this.frontMat.megaStateFlags, { channelWriteMask: GfxChannelWriteMask.Alpha });
+            setAttachmentStateSimple(this.backSubMat.megaStateFlags, { channelWriteMask: GfxChannelWriteMask.Alpha });
+            setAttachmentStateSimple(this.clearMat.megaStateFlags, { channelWriteMask: GfxChannelWriteMask.Alpha });
         }
     }
 
@@ -346,26 +361,28 @@ class dDlst_shadowSimple_c {
         dDlst_shadowSimple_c.frontMat.allocateDrawParamsDataOnInst(template, drawParams);
         dDlst_shadowSimple_c.frontMat.allocateMaterialParamsDataOnInst(template, materialParams);
 
-        // Draw shadow volume front faces
+        // Front face shadow volume (add 0.25 to alpha channel for front faces)
         const front = renderInstManager.newRenderInst()
         dDlst_shadowSimple_c.frontMat.setOnRenderInst(cache, front);
         renderInstManager.submitRenderInst(front);
 
-        // Draw shadow volume back faces
+        // Back face shadow volume (subtract 0.25 from alpha channel for back faces)
         const back = renderInstManager.newRenderInst()
         dDlst_shadowSimple_c.backSubMat.setOnRenderInst(cache, back);
         renderInstManager.submitRenderInst(back);
 
-        // Draw shadow seal
         if (this.tex) {
-            // TODO
+            // TODO: Modify alpha via gobo texture
         }
 
-        // const seal = renderInstManager.newRenderInst()
-        // dDlst_shadowSimple_c.sealMat.setOnRenderInst(cache, seal);
+        // Multiply color by the alpha channel
+        const seal = renderInstManager.newRenderInst()
+        dDlst_shadowSimple_c.sealMat.setOnRenderInst(cache, seal);
+        // TODO: Why doesn't this just use the volume shape? Should we just do a fullscreen seal & clear pass like AlphaModel?
         // dDlst_shadowSimple_c.shadowSealShape.setOnRenderInst(seal);
-        // renderInstManager.submitRenderInst(seal);
+        renderInstManager.submitRenderInst(seal);
 
+        // Clear the alpha channel for future transparent object rendering
         const clear = renderInstManager.newRenderInst()
         dDlst_shadowSimple_c.clearMat.setOnRenderInst(cache, clear);
         dDlst_shadowSimple_c.shadowVolumeShape.setOnRenderInst(clear);
