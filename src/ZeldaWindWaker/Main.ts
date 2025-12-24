@@ -164,7 +164,7 @@ export class dGlobals {
 
         this.quadStatic = new dDlst_2DStatic_c(modelCache.device, modelCache.cache);
 
-        this.dlst = new dDlst_list_c(modelCache.device, modelCache.cache, extraSymbolData);
+        this.dlst = new dDlst_list_c(modelCache.device, modelCache.cache, modelCache.resCtrl, extraSymbolData);
     }
 
     public dStage_searchName(name: string): dStage__ObjectNameTableEntry | null {

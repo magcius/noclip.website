@@ -19,11 +19,12 @@ import { ViewerRenderInput } from '../viewer.js';
 import { SymbolMap, dGlobals } from './Main.js';
 import { PeekZManager } from "./d_dlst_peekZ.js";
 import { cBgS_PolyInfo } from "./d_bg.js";
-import { BTI_Texture } from "../Common/JSYSTEM/JUTTexture.js";
+import { BTI, BTI_Texture, BTIData } from "../Common/JSYSTEM/JUTTexture.js";
 import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
 import { dKy_tevstr_c } from "./d_kankyo.js";
 import { mDoMtx_YrotM } from "./m_do_mtx.js";
 import { cM_s2rad } from "./SComponent.js";
+import { dRes_control_c, ResType } from "./d_resorce.js";
 
 export enum dDlst_alphaModel__Type {
     Bonbori,
@@ -240,9 +241,9 @@ export class dDlst_list_c {
     public alphaModel0: dDlst_alphaModel_c;
     public shadowControl: dDlst_shadowControl_c;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, symbolMap: SymbolMap) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, resCtrl: dRes_control_c, symbolMap: SymbolMap) {
         this.alphaModel0 = new dDlst_alphaModel_c(device, cache, symbolMap);
-        this.shadowControl = new dDlst_shadowControl_c(device, cache, symbolMap);
+        this.shadowControl = new dDlst_shadowControl_c(device, cache, resCtrl, symbolMap);
     }
 
     public destroy(device: GfxDevice): void {
@@ -254,7 +255,7 @@ export class dDlst_list_c {
 
 class dDlst_shadowSimple_c {
     public alpha: number = 0; // 0-255
-    public tex: BTI_Texture | null = null;
+    public tex: BTIData | null = null;
     public modelViewMtx = mat4.create();
     public texMtx = mat4.create();
 
@@ -384,7 +385,7 @@ class dDlst_shadowSimple_c {
         
     }
 
-    public set(globals: dGlobals, pos: vec3, floorY: number, scaleXZ: number, floorNrm: vec3, rotY: number, scaleZ: number, tex: BTI_Texture | null): void {
+    public set(globals: dGlobals, pos: vec3, floorY: number, scaleXZ: number, floorNrm: vec3, rotY: number, scaleZ: number, tex: BTIData | null): void {
         const offsetY = scaleXZ * 16.0 * (1.0 - floorNrm[1]) + 1.0;
         
         // Build modelViewMtx
@@ -393,7 +394,7 @@ class dDlst_shadowSimple_c {
         mat4.scale(this.modelViewMtx, this.modelViewMtx, [scaleXZ, offsetY + offsetY + 16.0, scaleXZ * scaleZ]);
         mat4.mul(this.modelViewMtx, globals.camera.viewFromWorldMatrix, this.modelViewMtx);
 
-        // Build texMtx
+        // Build texMtx (oriented to the floor plane)
         const xs = Math.sqrt(1.0 - floorNrm[0] * floorNrm[0]);
         let yy: number;
         let zz: number;
@@ -412,7 +413,7 @@ class dDlst_shadowSimple_c {
             pos[0], floorY, pos[2], 1.0
         );
 
-        mat4.rotateY(this.texMtx, this.texMtx, rotY);
+        mat4.rotateY(this.texMtx, this.texMtx, cM_s2rad(rotY));
         mat4.scale(this.texMtx, this.texMtx, [scaleXZ, 1.0, scaleXZ * scaleZ]);
         mat4.mul(this.texMtx, globals.camera.viewFromWorldMatrix, this.texMtx);
 
@@ -429,10 +430,31 @@ class dDlst_shadowControl_c {
     private simpleCount = 0;
     private realCount = 0;
 
-    public static defaultSimpleTex: BTI_Texture;
+    public static defaultSimpleTex: BTIData;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, symbolMap: SymbolMap) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, resCtrl: dRes_control_c, symbolMap: SymbolMap) {
         dDlst_shadowSimple_c.compileDL(device, cache, symbolMap);
+        
+        const img = resCtrl.getObjectRes(ResType.Raw, `Always`, 0x71); // ALWAYS_I4_BALL128B
+        const bti: BTI_Texture = {
+            name: img.name,
+            format: GX.TexFormat.I4,
+            width: 128,
+            height: 128,
+            data: img,
+            mipCount: 1,
+            wrapS: GX.WrapMode.CLAMP,
+            wrapT: GX.WrapMode.CLAMP,
+            minFilter: GX.TexFilter.LINEAR,
+            magFilter: GX.TexFilter.LINEAR,
+            minLOD: 0,
+            maxLOD: 0,
+            lodBias: 0,
+            maxAnisotropy: GX.Anisotropy._1,
+            paletteFormat: 0,
+            paletteData: null,
+        };
+        dDlst_shadowControl_c.defaultSimpleTex = new BTIData(device, cache, bti);
     }
 
     destroy(device: GfxDevice): void {
@@ -474,7 +496,7 @@ class dDlst_shadowControl_c {
         return false;
     }
 
-    public setSimple(globals: dGlobals, pPos: vec3, groundY: number, scaleXZ: number, floorNrm: vec3, angle: number, scaleZ: number, pTexObj: BTI_Texture | null): boolean {
+    public setSimple(globals: dGlobals, pPos: vec3, groundY: number, scaleXZ: number, floorNrm: vec3, angle: number, scaleZ: number, pTexObj: BTIData | null): boolean {
         if (floorNrm === null || this.simpleCount >= this.simples.length)
             return false;
 
@@ -485,7 +507,7 @@ class dDlst_shadowControl_c {
 }
 
 export function dComIfGd_setSimpleShadow2(globals: dGlobals, pos: vec3, groundY: number, scaleXZ: number, floorPoly: cBgS_PolyInfo,
-    rotY: number = 0, scaleZ: number = 1.0, i_tex: BTI_Texture | null = dDlst_shadowControl_c.defaultSimpleTex): boolean {
+    rotY: number = 0, scaleZ: number = 1.0, i_tex: BTIData | null = dDlst_shadowControl_c.defaultSimpleTex): boolean {
     if (floorPoly.ChkSetInfo() && groundY !== -Infinity) {
         const plane_p = globals.scnPlay.bgS.GetTriPla(floorPoly.bgIdx, floorPoly.triIdx);
         return globals.dlst.shadowControl.setSimple(globals, pos, groundY, scaleXZ, plane_p.n, rotY, scaleZ, i_tex);

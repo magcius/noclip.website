@@ -24,7 +24,7 @@ import { mDoExt_McaMorf, mDoExt_modelEntryDL, mDoExt_modelUpdateDL } from './m_d
 import { MtxTrans, calc_mtx, mDoMtx_ZXYrotM } from './m_do_mtx.js';
 import { WindWakerRenderer, ZWWExtraTextures, dGlobals } from "./Main.js";
 import { dComIfGd_setSimpleShadow2 } from './d_drawlist.js';
-import { BTI_Texture } from '../Common/JSYSTEM/JUTTexture.js';
+import { BTI_Texture, BTIData } from '../Common/JSYSTEM/JUTTexture.js';
 
 const scratchMat4a = mat4.create();
 const scratchVec3a = vec3.create();
@@ -51,7 +51,7 @@ class d_a_noclip_legacy extends fopAc_ac_c {
     public morf: mDoExt_McaMorf;
     public shadowChk: dBgS_GndChk;
     public shadowScaleXZ: number = 0;
-    public shadowTex?: BTI_Texture | null;
+    public shadowTex?: BTIData | null;
     public objectRenderers: BMDObjectRenderer[] = [];
     public isDemoActor = false;
 
@@ -207,7 +207,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         dstMatrix[13] = y;
     }
 
-    function setShadowSimple(scaleXZ: number, scaleZ: number = 1.0, tex?: BTI_Texture | null): void {
+    function setShadowSimple(scaleXZ: number, scaleZ: number = 1.0, tex?: BTIData | null): void {
         legacy.shadowChk = new dBgS_GndChk();
         vec3.scaleAndAdd(legacy.shadowChk.pos, legacy.pos, Vec3UnitY, 40.0);
         globals.scnPlay.bgS.GroundCross(legacy.shadowChk);
