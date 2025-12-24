@@ -11,7 +11,7 @@ import { JPABaseEmitter } from '../Common/JSYSTEM/JPA.js';
 import { AABB } from '../Geometry.js';
 import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
 import { GfxRenderInstManager, GfxRendererLayer } from '../gfx/render/GfxRenderInstManager.js';
-import { computeModelMatrixSRT, scaleMatrix } from '../MathHelpers.js';
+import { computeModelMatrixSRT, scaleMatrix, Vec3UnitY } from '../MathHelpers.js';
 import { assertExists, hexzero, leftPad } from '../util.js';
 import { dBgS_GndChk } from './d_bg.js';
 import { dDemo_setDemoData } from './d_demo.js';
@@ -23,6 +23,8 @@ import { cPhs__Status, fGlobals, fpcPf__RegisterFallback } from './framework.js'
 import { mDoExt_McaMorf, mDoExt_modelEntryDL, mDoExt_modelUpdateDL } from './m_do_ext.js';
 import { MtxTrans, calc_mtx, mDoMtx_ZXYrotM } from './m_do_mtx.js';
 import { WindWakerRenderer, ZWWExtraTextures, dGlobals } from "./Main.js";
+import { dComIfGd_setSimpleShadow2 } from './d_drawlist.js';
+import { BTI_Texture } from '../Common/JSYSTEM/JUTTexture.js';
 
 const scratchMat4a = mat4.create();
 const scratchVec3a = vec3.create();
@@ -47,6 +49,9 @@ const chk = new dBgS_GndChk();
 class d_a_noclip_legacy extends fopAc_ac_c {
     private phase = cPhs__Status.Started;
     public morf: mDoExt_McaMorf;
+    public shadowChk: dBgS_GndChk;
+    public shadowScaleXZ: number = 0;
+    public shadowTex?: BTI_Texture | null;
     public objectRenderers: BMDObjectRenderer[] = [];
     public isDemoActor = false;
 
@@ -100,6 +105,10 @@ class d_a_noclip_legacy extends fopAc_ac_c {
             return;
 
         const device = globals.modelCache.device;
+            
+        if (this.shadowChk) {
+            dComIfGd_setSimpleShadow2(globals, this.pos, this.shadowChk.retY, this.shadowScaleXZ, this.shadowChk.polyInfo, this.rot[1], 1.0, this.shadowTex);
+        }
 
         renderInstManager.setCurrentList(globals.dlst.bg[0]);
         for (let i = 0; i < this.objectRenderers.length; i++)
@@ -196,6 +205,14 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         // if (y === -Infinity)
         //     debugger;
         dstMatrix[13] = y;
+    }
+
+    function setShadowSimple(scaleXZ: number, scaleZ: number = 1.0, tex?: BTI_Texture | null): void {
+        legacy.shadowChk = new dBgS_GndChk();
+        vec3.scaleAndAdd(legacy.shadowChk.pos, legacy.pos, Vec3UnitY, 40.0);
+        globals.scnPlay.bgS.GroundCross(legacy.shadowChk);
+        legacy.shadowScaleXZ = scaleXZ;
+        legacy.shadowTex = tex;
     }
 
     function parseBCK(rarc: RARC.JKRArchive, path: string) {
@@ -998,7 +1015,12 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     // Breakable shelves
     else if (actorName === 'Otana') fetchArchive(`Otana`).then((rarc) => buildModel(rarc, `bdl/otana.bdl`));
     // Mailbox
-    else if (actorName === 'Tpost') fetchArchive(`Toripost`).then((rarc) => buildModel(rarc, `bdl/vpost.bdl`).bindANK1(parseBCK(rarc, `bcks/post_wait.bck`)));
+    else if (actorName === 'Tpost') {
+        fetchArchive(`Toripost`).then((rarc) => {
+            buildModel(rarc, `bdl/vpost.bdl`).bindANK1(parseBCK(rarc, `bcks/post_wait.bck`));
+            setShadowSimple(40.0, 1.0, null);
+        });
+    }
     // Sign
     else if (actorName === 'Kanban') fetchArchive(`Kanban`).then((rarc) => {
         const b = buildModel(rarc, `bdl/kanban.bdl`);
