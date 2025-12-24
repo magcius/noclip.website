@@ -887,6 +887,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     ) {
         const type = (actor.parameters & 0x0F000000) >> 24;
         let model;
+        let squareShadow = false;
         switch (type) {
         case 0:
             // Small Pot
@@ -950,6 +951,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
                 model = buildModel(rarc, `bdl/hbox2.bdl`);
                 setToNearestFloor(model.modelMatrix, model.modelMatrix);
             });
+            squareShadow = true;
             break;
         case 13:
             // Seed
@@ -971,6 +973,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
                 model = buildModel(rarc, `bdl/kkiba_00.bdl`);
                 setToNearestFloor(model.modelMatrix, model.modelMatrix);
             });
+            squareShadow = true;
             break;
         default:
             // Blue Tower of the Gods Pillar Statue
@@ -980,6 +983,11 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
             });
             break;
         }
+
+        if (squareShadow)
+            setShadowSimple(actor.scale![0] * 40, 1.0, null);
+        else 
+            setShadowSimple(actor.scale![0] * 40, 1.0);
     }
     // Outset Island: Jabun's barrier (six parts)
     else if (actorName === 'Ajav') fetchArchive(`Ajav`).then((rarc) => {
@@ -1551,10 +1559,20 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     });
     else if (actorName === 'MKoppu') fetchArchive(`Mshokki`).then((rarc) => buildModel(rarc, `bdl/koppu.bdl`));
     else if (actorName === 'MOsara') fetchArchive(`Mshokki`).then((rarc) => buildModel(rarc, `bdl/osara.bdl`));
-    else if (actorName === 'MPot') fetchArchive(`Mshokki`).then((rarc) => buildModel(rarc, `bdl/pot.bdl`));
+    else if (actorName === 'MPot') 
+        fetchArchive(`Mshokki`).then((rarc) => {
+            buildModel(rarc, `bdl/pot.bdl`);
+            setShadowSimple(40, 1.0, null);
+    });
     else if (actorName === 'Branch') fetchArchive(`Kwood_00`).then((rarc) => buildModel(rarc, `bmdc/ws.bmd`));
-    else if (actorName === 'Otble') fetchArchive(`Okmono`).then((rarc) => buildModel(rarc, `bdl/otable.bdl`));
-    else if (actorName === 'OtbleL') fetchArchive(`Okmono`).then((rarc) => buildModel(rarc, `bdl/otablel.bdl`));
+    else if (actorName === 'Otble') fetchArchive(`Okmono`).then((rarc) => {
+        buildModel(rarc, `bdl/otable.bdl`);
+        setShadowSimple(100, (actor.parameters & 0xFF) ? 2.0 : 1.0, null);
+    });
+    else if (actorName === 'OtbleL') fetchArchive(`Okmono`).then((rarc) => {
+        buildModel(rarc, `bdl/otablel.bdl`);
+        setShadowSimple(100, (actor.parameters & 0xFF) ? 2.0 : 1.0, null);
+    });
     else if (actorName === 'AjavW') {
         fetchArchive(`AjavW`).then(rarc => {
             const m = buildModel(rarc, `bdlm/ajavw.bdl`);
@@ -1576,10 +1594,14 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     else if (actorName === 'Pbka') fetchArchive(`Pbka`).then((rarc) => buildModel(rarc, `bdl/pbka.bdl`));
     else if (actorName === 'Plant') fetchArchive(`Plant`).then((rarc) => buildModel(rarc, `bdl/yrmwd.bdl`));
     else if (actorName === 'Table') fetchArchive(`Table`).then((rarc) => {
-        if ((actor.parameters & 0xFF) === 0)
+        if ((actor.parameters & 0xFF) === 0) {
             buildModel(rarc, `bdl/ytble.bdl`);
-        else
+            setShadowSimple( 120, 1.0, null );
+        }
+        else {
             buildModel(rarc, `bdl/qcfis.bdl`);
+            setShadowSimple( 40, 1.0, null );
+        }
     });
     else if (actorName === 'Ppos') fetchArchive(`Ppos`).then((rarc) => buildModel(rarc, `bdl/ppos.bdl`));
     else if (actorName === 'Rflw') fetchArchive(`Rflw`).then((rarc) => buildModel(rarc, `bdl/phana.bdl`));
