@@ -1796,6 +1796,9 @@ export function parseRopInfo(r: DisplayListRegisters): RopInfo {
     const cm0 = r.bp[GX.BPRegister.PE_CMODE0_ID];
     const bmboe = (cm0 >>> 0) & 0x01;
     const bmloe = (cm0 >>> 1) & 0x01;
+    // bit 2 = dither
+    const colorUpdate = !!((cm0 >>> 3) & 0x01);
+    const alphaUpdate = !!((cm0 >>> 4) & 0x01);
     const bmbop = (cm0 >>> 11) & 0x01;
 
     const blendMode: GX.BlendMode =
@@ -1810,8 +1813,6 @@ export function parseRopInfo(r: DisplayListRegisters): RopInfo {
     const depthTest = !!((zm >>> 0) & 0x01);
     const depthFunc = (zm >>> 1) & 0x07;
     const depthWrite = !!((zm >>> 4) & 0x01);
-
-    const colorUpdate = true, alphaUpdate = false;
 
     const ropInfo: RopInfo = {
         fogType, fogAdjEnabled,

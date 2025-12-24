@@ -108,9 +108,6 @@ class dDlst_alphaModel_c {
         frontZ.ropInfo.depthFunc = GX.CompareType.GREATER;
         this.materialHelperFrontZ = new GXMaterialHelperGfx(frontZ);
 
-        setAttachmentStateSimple(this.materialHelperBackRevZ.megaStateFlags, { channelWriteMask: GfxChannelWriteMask.Alpha });
-        setAttachmentStateSimple(this.materialHelperFrontZ.megaStateFlags, { channelWriteMask: GfxChannelWriteMask.Alpha });
-
         assert(this.materialHelperBackRevZ.materialParamsBufferSize === this.materialHelperFrontZ.materialParamsBufferSize);
 
         const mb = new GXMaterialBuilder(`dDlst_alphaModel_c drawAlphaBuffer`);
@@ -334,11 +331,6 @@ class dDlst_shadowSimple_c {
             this.backSubMat.material.alphaTest.op = GX.AlphaOp.OR;
             this.backSubMat.material.alphaTest.compareA = GX.CompareType.ALWAYS;
             this.backSubMat.invalidateMaterial();
-
-            // TODO: Why is the color write enabled and alpha disabled by the above display lists? Are we parsing them wrong? Same for AlphaModel
-            setAttachmentStateSimple(this.frontMat.megaStateFlags, { channelWriteMask: GfxChannelWriteMask.Alpha });
-            setAttachmentStateSimple(this.backSubMat.megaStateFlags, { channelWriteMask: GfxChannelWriteMask.Alpha });
-            setAttachmentStateSimple(this.clearMat.megaStateFlags, { channelWriteMask: GfxChannelWriteMask.Alpha });
         }
     }
 
