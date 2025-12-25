@@ -25,6 +25,7 @@ import { dKy_tevstr_c } from "./d_kankyo.js";
 import { mDoMtx_YrotM } from "./m_do_mtx.js";
 import { cM_s2rad } from "./SComponent.js";
 import { dRes_control_c, ResType } from "./d_resorce.js";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
 
 export enum dDlst_alphaModel__Type {
     Bonbori,
@@ -323,7 +324,14 @@ class dDlst_shadowSimple_c {
 
             // Zero the alpha channel anywhere that the shadow texture is transparent
             displayListRegistersRun(matRegisters, shadowSealTexMat);
-            this.sealTexMat = new GXMaterialHelperGfx(parseMaterial(matRegisters, `dDlst_shadowSimple_c shadowSealTexMat`));
+            const tempMat = parseMaterial(matRegisters, `dDlst_shadowSimple_c shadowSealTexMat`)
+            tempMat.alphaTest.op = GX.AlphaOp.OR;
+            tempMat.alphaTest.compareA = GX.CompareType.ALWAYS;
+            tempMat.ropInfo.colorUpdate = true;
+            tempMat.tevStages[0].colorInD = GX.CC.TEXC;
+            tempMat.ropInfo.blendMode = 0;
+            // tempMat.texGens[0] = { type: GX.TexGenType.MTX2x4, source: GX.TexGenSrc.TEX0, matrix: GX.TexGenMatrix.IDENTITY, normalize: true, postMatrix: GX.PostTexGenMatrix.PTIDENTITY };
+            this.sealTexMat = new GXMaterialHelperGfx(tempMat);
 
             // Multiply buffer color by the alpha channel
             displayListRegistersRun(matRegisters, shadowSealMat);
@@ -344,9 +352,6 @@ class dDlst_shadowSimple_c {
             this.backSubMat.material.alphaTest.op = GX.AlphaOp.OR;
             this.backSubMat.material.alphaTest.compareA = GX.CompareType.ALWAYS;
             this.backSubMat.invalidateMaterial();
-            this.sealTexMat.material.alphaTest.op = GX.AlphaOp.OR;
-            this.sealTexMat.material.alphaTest.compareA = GX.CompareType.ALWAYS;
-            this.sealTexMat.invalidateMaterial();
         }
     }
 
@@ -366,27 +371,30 @@ class dDlst_shadowSimple_c {
         mat4.identity(materialParams.u_PostTexMtx[0]);
         if (this.tex) this.tex.fillTextureMapping(materialParams.m_TextureMapping[0]);
 
-        const template = renderInstManager.pushTemplate();
-        dDlst_shadowSimple_c.shadowVolumeShape.setOnRenderInst(template);
-        dDlst_shadowSimple_c.frontMat.allocateDrawParamsDataOnInst(template, drawParams);
-        dDlst_shadowSimple_c.sealTexMat.allocateMaterialParamsDataOnInst(template, materialParams);
+        // const template = renderInstManager.pushTemplate();
+        // dDlst_shadowSimple_c.shadowVolumeShape.setOnRenderInst(template);
+        // dDlst_shadowSimple_c.frontMat.allocateDrawParamsDataOnInst(template, drawParams);
+        // dDlst_shadowSimple_c.sealTexMat.allocateMaterialParamsDataOnInst(template, materialParams);
 
         // Front face shadow volume (add 0.25 to alpha channel for front faces)
-        const front = renderInstManager.newRenderInst()
-        dDlst_shadowSimple_c.frontMat.setOnRenderInst(cache, front);
-        renderInstManager.submitRenderInst(front);
+        // const front = renderInstManager.newRenderInst()
+        // dDlst_shadowSimple_c.frontMat.setOnRenderInst(cache, front);
+        // renderInstManager.submitRenderInst(front);
 
-        // Back face shadow volume (subtract 0.25 from alpha channel for back faces)
-        const back = renderInstManager.newRenderInst()
-        dDlst_shadowSimple_c.backSubMat.setOnRenderInst(cache, back);
-        renderInstManager.submitRenderInst(back);
+        // // Back face shadow volume (subtract 0.25 from alpha channel for back faces)
+        // const back = renderInstManager.newRenderInst()
+        // dDlst_shadowSimple_c.backSubMat.setOnRenderInst(cache, back);
+        // renderInstManager.submitRenderInst(back);
 
         // If a texture is set, clear the alpha channel where the texture is transparent
         if (this.tex) {
             // TODO: This doesn't seem to be reading the texture
             const texSeal = renderInstManager.newRenderInst()
             mat4.copy(drawParams.u_PosMtx[0], this.texMtx);
+            mat4.identity(materialParams.u_PostTexMtx[0]);
+            this.tex.fillTextureMapping(materialParams.m_TextureMapping[0]);
             dDlst_shadowSimple_c.sealTexMat.allocateDrawParamsDataOnInst(texSeal, drawParams);
+            dDlst_shadowSimple_c.sealTexMat.allocateMaterialParamsDataOnInst(texSeal, materialParams);
             dDlst_shadowSimple_c.sealTexMat.setOnRenderInst(cache, texSeal);
             dDlst_shadowSimple_c.shadowSealTexShape.setOnRenderInst(texSeal)
             renderInstManager.submitRenderInst(texSeal);
@@ -396,19 +404,19 @@ class dDlst_shadowSimple_c {
         }
 
         // Multiply color by the alpha channel
-        const seal = renderInstManager.newRenderInst()
-        dDlst_shadowSimple_c.sealMat.setOnRenderInst(cache, seal);
-        // TODO: Why doesn't this just use the volume shape? Should we just do a fullscreen seal & clear pass like AlphaModel?
-        // dDlst_shadowSimple_c.shadowSealShape.setOnRenderInst(seal);
-        renderInstManager.submitRenderInst(seal);
+        // const seal = renderInstManager.newRenderInst()
+        // dDlst_shadowSimple_c.sealMat.setOnRenderInst(cache, seal);
+        // // TODO: Why doesn't this just use the volume shape? Should we just do a fullscreen seal & clear pass like AlphaModel?
+        // // dDlst_shadowSimple_c.shadowSealShape.setOnRenderInst(seal);
+        // renderInstManager.submitRenderInst(seal);
 
-        // Clear the alpha channel for future transparent object rendering
-        const clear = renderInstManager.newRenderInst()
-        dDlst_shadowSimple_c.clearMat.setOnRenderInst(cache, clear);
-        dDlst_shadowSimple_c.shadowVolumeShape.setOnRenderInst(clear);
-        renderInstManager.submitRenderInst(clear);
+        // // Clear the alpha channel for future transparent object rendering
+        // const clear = renderInstManager.newRenderInst()
+        // dDlst_shadowSimple_c.clearMat.setOnRenderInst(cache, clear);
+        // dDlst_shadowSimple_c.shadowVolumeShape.setOnRenderInst(clear);
+        // renderInstManager.submitRenderInst(clear);
 
-        renderInstManager.popTemplate();
+        // renderInstManager.popTemplate();
         
     }
 
