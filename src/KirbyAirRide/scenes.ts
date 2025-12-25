@@ -55,7 +55,6 @@ function Kirby_Load_grModel(ctx: HSD_LoadContext, buffer: ArrayBufferSlice): Kir
     const grMainModelObjRoot = assertExists(HSD_JObjLoadJoint(ctx, HSD_LoadContext__ResolvePtr(ctx, grMainModel.createDataView().getUint32(0x00), 0x40)));
 
     const grSkyboxOffset = view.getUint32(0x04);
-    // const grSkyboxOffset = 0;
     if (grSkyboxOffset == 0) {
         return {
             mainModel: grMainModelObjRoot,
@@ -118,9 +117,6 @@ const sceneDescs = [
     new KirbyMapDesc("GrMachine2Model.dat", "Machine Passage"),
     new KirbyMapDesc("GrCheck2Model.dat", "Checker Knights"),
     new KirbyMapDesc("GrSpace2Model.dat", "Nebula Belt"),
-
-    // "Top Ride",
-    new KirbyMapDesc("EfPtclDesert.dat", "Aa"),
 
     "City Trial",
     new KirbyMapDesc("GrCity1Model.dat", "City Trial"),
