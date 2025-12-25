@@ -2,7 +2,7 @@ import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { HSD_JObjRoot_Instance } from "../SYSDOLPHIN/SYSDOLPHIN_Render";
 import { SceneGfx, SceneGroup } from "../viewer.js";
 import { SceneContext, SceneDesc } from "../SceneBase.js";
-import { HSD_Archive, HSD_Archive__ResolvePtr, HSD_ArchiveParse, HSD_JObjLoadJoint, HSD_JObjRoot, HSD_LoadContext, HSD_LoadContext__ResolvePtr } from "../SYSDOLPHIN/SYSDOLPHIN";
+import { HSD_AnimJointRoot, HSD_AObjLoadAnimJoint, HSD_AObjLoadMatAnimJoint, HSD_Archive, HSD_Archive__ResolvePtr, HSD_ArchiveParse, HSD_JObjLoadJoint, HSD_JObjRoot, HSD_LoadContext, HSD_LoadContext__ResolvePtr, HSD_MatAnimJointRoot } from "../SYSDOLPHIN/SYSDOLPHIN";
 import { assertExists } from "../util.js";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { MeleeRenderer } from "../SuperSmashBrosMelee/Scenes_SuperSmashBrosMelee.js";
@@ -17,12 +17,25 @@ class KirbyMapDesc implements SceneDesc {
         const dataFetcher = context.dataFetcher;
         const arc = HSD_ArchiveParse(await dataFetcher.fetchData(`${pathBase}/${this.id}`));
         const ctx = new HSD_LoadContext(arc);
+
         const modelRootNode = HSD_Archive_Find_Model(arc);
-        const map = Kirby_Load_Map_Definition(ctx, assertExists(modelRootNode));
+        const map = Kirby_Load_grModel(ctx, assertExists(modelRootNode));
 
         const scene = new MeleeRenderer(device);
 
-        scene.jobjRoots.push(new HSD_JObjRoot_Instance(scene.modelCache.loadJObjRoot(assertExists(map.mainModel))));
+        const mainRoot = new HSD_JObjRoot_Instance(scene.modelCache.loadJObjRoot(assertExists(map.mainModel)));
+        scene.jobjRoots.push(mainRoot);
+
+        const grModelMotion = HSD_Archive_Find_ModelMotion(arc);
+        if (grModelMotion) {
+            const modelMotion = Kirby_Load_grModelMotion(ctx, assertExists(grModelMotion));
+            mainRoot.addAnimAll(
+                modelMotion.animJoint,
+                modelMotion.matAnimJoint,
+                null,
+            )
+        }
+
         if (map.skyboxModel) {
             scene.jobjRoots.push(new HSD_JObjRoot_Instance(scene.modelCache.loadJObjRoot(map.skyboxModel)));
         }
@@ -36,7 +49,7 @@ interface KirbyMapGrModel {
     skyboxModel: HSD_JObjRoot | null,
 }
 
-function Kirby_Load_Map_Definition(ctx: HSD_LoadContext, buffer: ArrayBufferSlice): KirbyMapGrModel {
+function Kirby_Load_grModel(ctx: HSD_LoadContext, buffer: ArrayBufferSlice): KirbyMapGrModel {
     let view = buffer.createDataView();
     const grMainModel = HSD_LoadContext__ResolvePtr(ctx, view.getUint32(0x00), 0x14);
     const grMainModelObjRoot = assertExists(HSD_JObjLoadJoint(ctx, HSD_LoadContext__ResolvePtr(ctx, grMainModel.createDataView().getUint32(0x00), 0x40)));
@@ -56,10 +69,37 @@ function Kirby_Load_Map_Definition(ctx: HSD_LoadContext, buffer: ArrayBufferSlic
             skyboxModel: grSkyboxModelObjRoot,
         };
     }
-
 }
+
+interface KirbyMapGrModelMotion {
+    animJoint: HSD_AnimJointRoot | null,
+    matAnimJoint: HSD_MatAnimJointRoot | null,
+}
+
+function Kirby_Load_grModelMotion(ctx: HSD_LoadContext, buffer: ArrayBufferSlice): KirbyMapGrModelMotion {
+    const view = buffer.createDataView();
+    const animJointPtr = view.getUint32(0x00);
+    const animJoint = animJointPtr != 0 ? HSD_AObjLoadAnimJoint(ctx, HSD_LoadContext__ResolvePtr(ctx, animJointPtr)) : null;
+
+    const matAnimJointPtr = view.getUint32(0x04);
+    const matAnimJoint = matAnimJointPtr != 0 ? HSD_AObjLoadMatAnimJoint(ctx, HSD_LoadContext__ResolvePtr(ctx, matAnimJointPtr)) : null;
+
+    return {
+        animJoint,
+        matAnimJoint,
+    }
+}
+
 function HSD_Archive_Find_Model(arc: HSD_Archive): ArrayBufferSlice | null {
     const obj = arc.publics.find((sym) => sym.name.startsWith("grModel") && !sym.name.startsWith("grModelMotion"));
+    if (obj !== undefined)
+        return HSD_Archive__ResolvePtr(arc, obj.offset);
+    else
+        return null;
+}
+
+function HSD_Archive_Find_ModelMotion(arc: HSD_Archive): ArrayBufferSlice | null {
+    const obj = arc.publics.find((sym) => sym.name.startsWith("grModelMotion"));
     if (obj !== undefined)
         return HSD_Archive__ResolvePtr(arc, obj.offset);
     else
