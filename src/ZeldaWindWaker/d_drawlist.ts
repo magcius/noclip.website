@@ -261,9 +261,11 @@ class dDlst_shadowSimple_c {
 
     private static shadowVolumeShape: dDlst_BasicShape_c;
     private static shadowSealShape: dDlst_BasicShape_c;
+    private static shadowSealTexShape: dDlst_BasicShape_c;
 
     private static frontMat: GXMaterialHelperGfx;
     private static backSubMat: GXMaterialHelperGfx;
+    private static sealTexMat: GXMaterialHelperGfx;
     private static sealMat: GXMaterialHelperGfx;
     private static clearMat: GXMaterialHelperGfx;
 
@@ -279,6 +281,10 @@ class dDlst_shadowSimple_c {
         // The `l_shadowSealDL` display list contains both register setting commands and draws. Split it up.
         const shadowSealMat = symbolMap.findSymbolData(`d_drawlist.o`, `l_shadowSealDL`).slice(0, 0x42);
         const shadowSealDrw = symbolMap.findSymbolData(`d_drawlist.o`, `l_shadowSealDL`).slice(0x42, 0);
+        
+        // Same for `l_shadowSealTexDL` ...
+        const shadowSealTexMat = symbolMap.findSymbolData(`d_drawlist.o`, `l_shadowSealTexDL`).slice(0, 0x26);
+        const shadowSealTexDrw = symbolMap.findSymbolData(`d_drawlist.o`, `l_shadowSealTexDL`).slice(0x26, 0);
 
         // A simple box shadow volume, providing verts within a [-1, 1] cube.
         const simpleShadowPos = symbolMap.findSymbolData(`d_drawlist.o`, `l_simpleShadowPos`);
@@ -294,9 +300,11 @@ class dDlst_shadowSimple_c {
         const shadowSealVerts = shadowVtxLoader.runVertices(shadowVtxArrays, shadowSealDrw);
         this.shadowSealShape = new dDlst_BasicShape_c(cache, shadowVtxLoader.loadedVertexLayout, shadowSealVerts);
         
-        // TODO: Construct shapes which use a gobo texture
+        // Construct the gobo seal shape which only applies alpha to the color buffer where the texture is opaque.
         vcd[GX.Attr.TEX0] = { type: GX.AttrType.DIRECT };
-        const shadowTexVtxLoader = compileVtxLoader(vat, vcd);
+        const shadowTexVtxLoader = compileVtxLoader(vat, vcd)
+        const shadowSealTexVerts = shadowTexVtxLoader.runVertices(shadowVtxArrays, shadowSealTexDrw);
+        this.shadowSealTexShape = new dDlst_BasicShape_c(cache, shadowTexVtxLoader.loadedVertexLayout, shadowSealTexVerts);
 
         // Construct materials
         {
@@ -312,6 +320,10 @@ class dDlst_shadowSimple_c {
             // The result after frontMat and backMat are rendered is 0x40 written everywhere the shadow should be drawn
             displayListRegistersRun(matRegisters, symbolMap.findSymbolData(`d_drawlist.o`, `l_backSubMat`));
             this.backSubMat = new GXMaterialHelperGfx(parseMaterial(matRegisters, `dDlst_shadowSimple_c l_backSubMat`));
+
+            // Zero the alpha channel anywhere that the shadow texture is transparent
+            displayListRegistersRun(matRegisters, shadowSealTexMat);
+            this.sealTexMat = new GXMaterialHelperGfx(parseMaterial(matRegisters, `dDlst_shadowSimple_c shadowSealTexMat`));
 
             // Multiply buffer color by the alpha channel
             displayListRegistersRun(matRegisters, shadowSealMat);
@@ -332,6 +344,9 @@ class dDlst_shadowSimple_c {
             this.backSubMat.material.alphaTest.op = GX.AlphaOp.OR;
             this.backSubMat.material.alphaTest.compareA = GX.CompareType.ALWAYS;
             this.backSubMat.invalidateMaterial();
+            this.sealTexMat.material.alphaTest.op = GX.AlphaOp.OR;
+            this.sealTexMat.material.alphaTest.compareA = GX.CompareType.ALWAYS;
+            this.sealTexMat.invalidateMaterial();
         }
     }
 
@@ -348,11 +363,13 @@ class dDlst_shadowSimple_c {
         colorFromRGBA(materialParams.u_Color[ColorKind.C0], 0, 0, 0, 0x40 / 0xFF);
         colorFromRGBA(materialParams.u_Color[ColorKind.C1], 0, 0, 0, 0);
         colorFromRGBA(materialParams.u_Color[ColorKind.C2], 1, 1, 1, 1);
+        mat4.identity(materialParams.u_PostTexMtx[0]);
+        if (this.tex) this.tex.fillTextureMapping(materialParams.m_TextureMapping[0]);
 
         const template = renderInstManager.pushTemplate();
         dDlst_shadowSimple_c.shadowVolumeShape.setOnRenderInst(template);
         dDlst_shadowSimple_c.frontMat.allocateDrawParamsDataOnInst(template, drawParams);
-        dDlst_shadowSimple_c.frontMat.allocateMaterialParamsDataOnInst(template, materialParams);
+        dDlst_shadowSimple_c.sealTexMat.allocateMaterialParamsDataOnInst(template, materialParams);
 
         // Front face shadow volume (add 0.25 to alpha channel for front faces)
         const front = renderInstManager.newRenderInst()
@@ -364,8 +381,18 @@ class dDlst_shadowSimple_c {
         dDlst_shadowSimple_c.backSubMat.setOnRenderInst(cache, back);
         renderInstManager.submitRenderInst(back);
 
+        // If a texture is set, clear the alpha channel where the texture is transparent
         if (this.tex) {
-            // TODO: Modify alpha via gobo texture
+            // TODO: This doesn't seem to be reading the texture
+            const texSeal = renderInstManager.newRenderInst()
+            mat4.copy(drawParams.u_PosMtx[0], this.texMtx);
+            dDlst_shadowSimple_c.sealTexMat.allocateDrawParamsDataOnInst(texSeal, drawParams);
+            dDlst_shadowSimple_c.sealTexMat.setOnRenderInst(cache, texSeal);
+            dDlst_shadowSimple_c.shadowSealTexShape.setOnRenderInst(texSeal)
+            renderInstManager.submitRenderInst(texSeal);
+
+            // @TODO: Handle non square shadows
+            //        GXCallDisplayList(l_shadowSealTex2DL, 0x40);
         }
 
         // Multiply color by the alpha channel
