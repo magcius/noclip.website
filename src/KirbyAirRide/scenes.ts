@@ -23,6 +23,10 @@ class KirbyMapDesc implements SceneDesc {
 
         const scene = new MeleeRenderer(device);
 
+        if (map.skyboxModel) {
+            scene.jobjRoots.push(new HSD_JObjRoot_Instance(scene.modelCache.loadJObjRoot(map.skyboxModel)));
+        }
+
         const mainRoot = new HSD_JObjRoot_Instance(scene.modelCache.loadJObjRoot(assertExists(map.mainModel)));
         scene.jobjRoots.push(mainRoot);
 
@@ -34,10 +38,6 @@ class KirbyMapDesc implements SceneDesc {
                 modelMotion.matAnimJoint,
                 null,
             )
-        }
-
-        if (map.skyboxModel) {
-            scene.jobjRoots.push(new HSD_JObjRoot_Instance(scene.modelCache.loadJObjRoot(map.skyboxModel)));
         }
 
         return scene;
@@ -55,6 +55,7 @@ function Kirby_Load_grModel(ctx: HSD_LoadContext, buffer: ArrayBufferSlice): Kir
     const grMainModelObjRoot = assertExists(HSD_JObjLoadJoint(ctx, HSD_LoadContext__ResolvePtr(ctx, grMainModel.createDataView().getUint32(0x00), 0x40)));
 
     const grSkyboxOffset = view.getUint32(0x04);
+    // const grSkyboxOffset = 0;
     if (grSkyboxOffset == 0) {
         return {
             mainModel: grMainModelObjRoot,
@@ -119,7 +120,7 @@ const sceneDescs = [
     new KirbyMapDesc("GrSpace2Model.dat", "Nebula Belt"),
 
     // "Top Ride",
-    // ???
+    new KirbyMapDesc("EfPtclDesert.dat", "Aa"),
 
     "City Trial",
     new KirbyMapDesc("GrCity1Model.dat", "City Trial"),
