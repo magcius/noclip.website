@@ -18,25 +18,32 @@ class KirbyMapDesc implements SceneDesc {
         const arc = HSD_ArchiveParse(await dataFetcher.fetchData(`${pathBase}/${this.id}`));
         const ctx = new HSD_LoadContext(arc);
         const modelRootNode = HSD_Archive_Find_Model(arc);
-        // TODO(kaze-xiv): parse skybox
-        const jobjRoot = Kirby_map_load_JObjRoot(ctx, assertExists(modelRootNode));
+        const map = Kirby_Load_Map_Definition(ctx, assertExists(modelRootNode));
+
         const scene = new MeleeRenderer(device);
 
-        const model = new HSD_JObjRoot_Instance(scene.modelCache.loadJObjRoot(assertExists(jobjRoot)));
-        scene.jobjRoots.push(model);
+        scene.jobjRoots.push(new HSD_JObjRoot_Instance(scene.modelCache.loadJObjRoot(assertExists(map.mainModel))));
+        scene.jobjRoots.push(new HSD_JObjRoot_Instance(scene.modelCache.loadJObjRoot(assertExists(map.skyboxModel))));
 
         return scene;
     }
 }
 
-export function Kirby_map_load_JObjRoot(ctx: HSD_LoadContext, buffer: ArrayBufferSlice): HSD_JObjRoot | null {
-    let view = buffer.createDataView();
-    const grMainModel = HSD_LoadContext__ResolvePtr(ctx, view.getUint32(0x00), 0x14);
-    view = grMainModel.createDataView();
-
-    return HSD_JObjLoadJoint(ctx, HSD_LoadContext__ResolvePtr(ctx, view.getUint32(0x00), 0x40));
+interface KirbyMapGrModel {
+    mainModel: HSD_JObjRoot,
+    skyboxModel: HSD_JObjRoot,
 }
 
+function Kirby_Load_Map_Definition(ctx: HSD_LoadContext, buffer: ArrayBufferSlice): KirbyMapGrModel {
+    let view = buffer.createDataView();
+    const grMainModel = HSD_LoadContext__ResolvePtr(ctx, view.getUint32(0x00), 0x14);
+    const grSkyboxModel = HSD_LoadContext__ResolvePtr(ctx, view.getUint32(0x04), 0x14);
+
+    return {
+        mainModel: assertExists(HSD_JObjLoadJoint(ctx, HSD_LoadContext__ResolvePtr(ctx, grMainModel.createDataView().getUint32(0x00), 0x40))),
+        skyboxModel: assertExists(HSD_JObjLoadJoint(ctx, HSD_LoadContext__ResolvePtr(ctx, grSkyboxModel.createDataView().getUint32(0x00), 0x40))),
+    };
+}
 function HSD_Archive_Find_Model(arc: HSD_Archive): ArrayBufferSlice | null {
     const obj = arc.publics.find((sym) => sym.name.startsWith("grModel") && !sym.name.startsWith("grModelMotion"));
     if (obj !== undefined)
