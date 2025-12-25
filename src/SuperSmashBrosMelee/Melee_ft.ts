@@ -1,6 +1,6 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
-import { HSD_LoadContext, HSD_LoadContext__ResolvePtrAutoSize, HSD_Archive, HSD_ArchiveSymbol, HSD_LoadContext__ResolvePtr, HSD_LoadContext__ResolvePtrString, HSD_ArchiveParse, HSD_FObj, HSD_FObjLoadKeyframes, HSD_AObj, HSD_AObjFlags } from "./SYSDOLPHIN.js";
+import { HSD_LoadContext, HSD_LoadContext__ResolvePtrAutoSize, HSD_Archive, HSD_ArchiveSymbol, HSD_LoadContext__ResolvePtr, HSD_LoadContext__ResolvePtrString, HSD_ArchiveParse, HSD_FObj, HSD_FObjLoadKeyframes, HSD_AObj, HSD_AObjFlags } from "../SYSDOLPHIN/SYSDOLPHIN.js";
 import { readString, assert } from "../util.js";
 
 // ft = Fighter
