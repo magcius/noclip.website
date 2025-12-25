@@ -398,6 +398,7 @@ class ObjectDataFinder extends MIPS.NaiveInterpreter {
     public spawnFunc = 0;
     public dataAddress = 0;
     public globalRef = 0
+    public override preferStructAddressesToOffsets = false;
 
     public override reset(): void {
         super.reset();
@@ -1555,6 +1556,7 @@ class StateParser extends MIPS.NaiveInterpreter {
     public stateIndex = -1;
     public recentRandom = 0;
     public loadAddress = 0;
+    public override preferStructAddressesToOffsets = false;
 
     constructor(public dataMap: DataMap, startAddress: number, public allStates: State[], public animationAddresses: number[]) {
         super();
@@ -2201,6 +2203,7 @@ class SpawnParser extends MIPS.NaiveInterpreter {
     public dataMap: DataMap;
     public data: SpawnData;
     public foundSpawn = false;
+    public override preferStructAddressesToOffsets = false;
 
     public override reset(): void {
         super.reset();

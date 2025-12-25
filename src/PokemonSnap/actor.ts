@@ -97,14 +97,8 @@ export class LevelGlobals {
         if (this.lastThrow < 0)
             this.lastThrow = viewerInput.time + 2000; // extra wait before the first throw
 
-        let shouldThrow = false;
-        if (this.throwBalls) {
-            if (viewerInput.time > this.lastThrow + 2500)
-                shouldThrow = true;
-
-            if (this.context.inputManager.isKeyDownEventTriggered('KeyF'))
-                shouldThrow = true;
-        }
+        const shouldThrow = (this.throwBalls && viewerInput.time > this.lastThrow + 2500) ||
+            this.context.inputManager.isKeyDownEventTriggered('KeyF');
 
         if (shouldThrow) {
             // if we're above ground, throw the next type of projectile
