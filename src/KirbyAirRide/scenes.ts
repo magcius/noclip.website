@@ -23,7 +23,9 @@ class KirbyMapDesc implements SceneDesc {
         const scene = new MeleeRenderer(device);
 
         scene.jobjRoots.push(new HSD_JObjRoot_Instance(scene.modelCache.loadJObjRoot(assertExists(map.mainModel))));
-        scene.jobjRoots.push(new HSD_JObjRoot_Instance(scene.modelCache.loadJObjRoot(assertExists(map.skyboxModel))));
+        if (map.skyboxModel) {
+            scene.jobjRoots.push(new HSD_JObjRoot_Instance(scene.modelCache.loadJObjRoot(map.skyboxModel)));
+        }
 
         return scene;
     }
@@ -31,18 +33,30 @@ class KirbyMapDesc implements SceneDesc {
 
 interface KirbyMapGrModel {
     mainModel: HSD_JObjRoot,
-    skyboxModel: HSD_JObjRoot,
+    skyboxModel: HSD_JObjRoot | null,
 }
 
 function Kirby_Load_Map_Definition(ctx: HSD_LoadContext, buffer: ArrayBufferSlice): KirbyMapGrModel {
     let view = buffer.createDataView();
     const grMainModel = HSD_LoadContext__ResolvePtr(ctx, view.getUint32(0x00), 0x14);
-    const grSkyboxModel = HSD_LoadContext__ResolvePtr(ctx, view.getUint32(0x04), 0x14);
+    const grMainModelObjRoot = assertExists(HSD_JObjLoadJoint(ctx, HSD_LoadContext__ResolvePtr(ctx, grMainModel.createDataView().getUint32(0x00), 0x40)));
 
-    return {
-        mainModel: assertExists(HSD_JObjLoadJoint(ctx, HSD_LoadContext__ResolvePtr(ctx, grMainModel.createDataView().getUint32(0x00), 0x40))),
-        skyboxModel: assertExists(HSD_JObjLoadJoint(ctx, HSD_LoadContext__ResolvePtr(ctx, grSkyboxModel.createDataView().getUint32(0x00), 0x40))),
-    };
+    const grSkyboxOffset = view.getUint32(0x04);
+    if (grSkyboxOffset == 0) {
+        return {
+            mainModel: grMainModelObjRoot,
+            skyboxModel: null,
+        };
+    } else {
+        const grSkyboxModel = HSD_LoadContext__ResolvePtr(ctx, grSkyboxOffset, 0x14);
+        const grSkyboxModelObjRoot = assertExists(HSD_JObjLoadJoint(ctx, HSD_LoadContext__ResolvePtr(ctx, grSkyboxModel.createDataView().getUint32(0x00), 0x40)));
+
+        return {
+            mainModel: grMainModelObjRoot,
+            skyboxModel: grSkyboxModelObjRoot,
+        };
+    }
+
 }
 function HSD_Archive_Find_Model(arc: HSD_Archive): ArrayBufferSlice | null {
     const obj = arc.publics.find((sym) => sym.name.startsWith("grModel") && !sym.name.startsWith("grModelMotion"));
