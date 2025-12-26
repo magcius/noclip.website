@@ -1,3 +1,4 @@
+import { mat4, vec3 } from "gl-matrix";
 import { CameraController } from "../../Camera.js";
 import {
     makeBackbufferDescSimple,
@@ -95,7 +96,7 @@ export class DescentRenderer implements Viewer.SceneGfx {
     }
 
     public adjustCameraController(c: CameraController) {
-        c.setSceneMoveSpeedMult(0.015);
+        c.setSceneMoveSpeedMult(0.016);
     }
 
     public createPanels(): UI.Panel[] {
@@ -153,81 +154,54 @@ export class DescentRenderer implements Viewer.SceneGfx {
 
         renderInstManager.popTemplate();
         this.renderHelper.prepareToRender();
+    }
 
-        /*
-        // HACKY CODE! don't run this!
-        if (this.setToSpawn) {
-            // Find player spawn
-            const spawn = this.level.objects.find(
-                (obj) => obj.type === 4 && obj.subtypeId === 0,
+    public getDefaultWorldMatrix(dst: mat4): void {
+        // Find player spawn
+        const spawn = this.level.objects.find(
+            (obj) => obj.type === 4 && obj.subtypeId === 0,
+        );
+        if (spawn != null) {
+            // Spawn found, extract matrix from it
+            const right = vec3.fromValues(
+                spawn.orientation[0],
+                spawn.orientation[1],
+                spawn.orientation[2],
             );
-            if (spawn != null) {
-                const right = vec3.fromValues(
-                    spawn.orientation[0],
-                    spawn.orientation[1],
-                    spawn.orientation[2],
-                );
-                const up = vec3.fromValues(
-                    spawn.orientation[3],
-                    spawn.orientation[4],
-                    spawn.orientation[5],
-                );
-                const forward = vec3.fromValues(
-                    spawn.orientation[6],
-                    spawn.orientation[7],
-                    spawn.orientation[8],
-                );
-                vec3.normalize(right, right);
-                vec3.normalize(up, up);
-                vec3.normalize(forward, forward);
-                viewerInput.camera.worldMatrix = mat4.fromValues(
-                    right[0],
-                    right[1],
-                    -right[2],
-                    0,
-                    up[0],
-                    up[1],
-                    -up[2],
-                    0,
-                    -forward[0],
-                    -forward[1],
-                    forward[2],
-                    0,
-                    spawn.position[0],
-                    spawn.position[1],
-                    -spawn.position[2],
-                    1,
-                );
-                viewerInput.camera.worldMatrixUpdated();
-                window.main._saveStateAndUpdateURL();
-            }
-
-            this.setToSpawn = false;
-        }*/
-
-        /*
-        const canvas = getDebugOverlayCanvas2D();
-        drawWorldSpaceText(canvas, viewerInput.camera.clipFromWorldMatrix, vec3.fromValues(0, 0, 0), "abc");
-        const vertices = this.mineMesh.mineMesh.vertices;
-        const indices = this.mineMesh.mineMesh.indices;
-        for (let i = 0; i < Math.min(100, vertices.length); ++i) {
-            const offset = i * 6;
-            drawWorldSpaceText(canvas, viewerInput.camera.clipFromWorldMatrix,
-                vec3.fromValues(vertices[offset], vertices[offset + 1], vertices[offset + 2]),
-                `v${i}`);
+            const up = vec3.fromValues(
+                spawn.orientation[3],
+                spawn.orientation[4],
+                spawn.orientation[5],
+            );
+            const forward = vec3.fromValues(
+                spawn.orientation[6],
+                spawn.orientation[7],
+                spawn.orientation[8],
+            );
+            vec3.normalize(right, right);
+            vec3.normalize(up, up);
+            vec3.normalize(forward, forward);
+            // Must invert Z coordinate!
+            mat4.set(
+                dst,
+                right[0],
+                right[1],
+                -right[2],
+                0,
+                up[0],
+                up[1],
+                -up[2],
+                0,
+                -forward[0],
+                -forward[1],
+                forward[2],
+                0,
+                spawn.position[0],
+                spawn.position[1],
+                -spawn.position[2],
+                1,
+            );
         }
-        for (let i = 0; i < Math.min(99, indices.length); i += 3) {
-            const i0 = indices[i];
-            const i1 = indices[i + 1];
-            const i2 = indices[i + 2];
-            const v0 = vec3.fromValues(vertices[6 * i0], vertices[6 * i0 + 1], vertices[6 * i0 + 2]);
-            const v1 = vec3.fromValues(vertices[6 * i1], vertices[6 * i1 + 1], vertices[6 * i1 + 2]);
-            const v2 = vec3.fromValues(vertices[6 * i2], vertices[6 * i2 + 1], vertices[6 * i2 + 2]);
-            drawWorldSpaceLine(canvas, viewerInput.camera.clipFromWorldMatrix, v0, v1);
-            drawWorldSpaceLine(canvas, viewerInput.camera.clipFromWorldMatrix, v1, v2);
-            drawWorldSpaceLine(canvas, viewerInput.camera.clipFromWorldMatrix, v2, v0);
-        }
-        */
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
