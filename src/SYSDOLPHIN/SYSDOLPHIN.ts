@@ -676,9 +676,12 @@ function runVertices(ctx: HSD_LoadContext, vtxDescBuffer: ArrayBufferSlice, dlBu
         const stride = view.getUint16(idx + 0x12);
         const arrayOffs = view.getUint32(idx + 0x14);
 
-        vcd[attr] = { type: attrType };
-        vatFormat[attr] = { compType, compCnt, compShift };
-        arrays[attr] = { buffer: HSD_LoadContext__ResolvePtr(ctx, arrayOffs), offs: 0, stride: stride };
+        const buf = HSD_LoadContext__ResolvePtrNullable(ctx, arrayOffs) ?? new ArrayBufferSlice(new ArrayBuffer());
+
+        vcd[attr] = {type: attrType};
+        vatFormat[attr] = {compType, compCnt, compShift};
+        arrays[attr] = {buffer: buf, offs: 0, stride: stride};
+
 
         idx += 0x18;
     }
@@ -1303,21 +1306,25 @@ function HSD_AObjLoadTexAnim(texAnims: HSD_TexAnim[], ctx: HSD_LoadContext, buff
         aobj = HSD_AObjLoadDesc(ctx, HSD_LoadContext__ResolvePtr(ctx, aobjDescOffs));
 
     const imageDescs: HSD_ImageDesc[] = [];
-    const imageDescView = HSD_LoadContext__ResolvePtr(ctx, imageDescTblOffs).createDataView();
-    let imageDescTblIdx = 0x00;
-    for (let i = 0; i < imageDescTblCount; i++) {
-        const imageDescOffs = imageDescView.getUint32(imageDescTblIdx + 0x00);
-        imageDescs.push(HSD_LoadImageDesc(ctx, HSD_LoadContext__ResolvePtr(ctx, imageDescOffs)));
-        imageDescTblIdx += 0x04;
+    const imageDescView = HSD_LoadContext__ResolvePtrNullable(ctx, imageDescTblOffs)?.createDataView();
+    if (imageDescView) {
+        let imageDescTblIdx = 0x00;
+        for (let i = 0; i < imageDescTblCount; i++) {
+            const imageDescOffs = imageDescView.getUint32(imageDescTblIdx + 0x00);
+            imageDescs.push(HSD_LoadImageDesc(ctx, HSD_LoadContext__ResolvePtr(ctx, imageDescOffs)));
+            imageDescTblIdx += 0x04;
+        }
     }
 
     const tlutDescs: HSD_TlutDesc[] = [];
-    const tlutDescView = HSD_LoadContext__ResolvePtr(ctx, tlutDescTblOffs).createDataView();
+    const tlutDescView = HSD_LoadContext__ResolvePtrNullable(ctx, tlutDescTblOffs)?.createDataView();
     let tlutDescTblIdx = 0x00;
-    for (let i = 0; i < tlutDescTblCount; i++) {
-        const tlutDescOffs = tlutDescView.getUint32(tlutDescTblIdx + 0x00);
-        tlutDescs.push(HSD_LoadTlutDesc(ctx, HSD_LoadContext__ResolvePtr(ctx, tlutDescOffs)));
-        tlutDescTblIdx += 0x04;
+    if (tlutDescView) {
+        for (let i = 0; i < tlutDescTblCount; i++) {
+            const tlutDescOffs = tlutDescView.getUint32(tlutDescTblIdx + 0x00);
+            tlutDescs.push(HSD_LoadTlutDesc(ctx, HSD_LoadContext__ResolvePtr(ctx, tlutDescOffs)));
+            tlutDescTblIdx += 0x04;
+        }
     }
 
     texAnims.push({ animID, aobj, imageDescs, tlutDescs });
