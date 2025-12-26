@@ -542,3 +542,18 @@ export function dComIfGd_setSimpleShadow2(globals: dGlobals, pos: vec3, groundY:
         return false;
     }
 }
+
+export function dComIfGd_setShadow(globals: dGlobals, id: number, shouldFade: boolean, pModel: J3DModelInstance, pPos: vec3, casterSize: number, scaleXZ: number, 
+    y: number, groundY: number, pFloorPoly: cBgS_PolyInfo, pTevStr: dKy_tevstr_c, rotY = 0.0, scaleZ = 1.0, pTexObj: BTIData | null = dDlst_shadowControl_c.defaultSimpleTex
+): number {
+    if (groundY <= -Infinity) {
+        return 0;
+    }
+
+    const sid = globals.dlst.shadowControl.setReal(id, shouldFade ? 1 : 0, pModel, pPos, casterSize, y - groundY, pTevStr);
+    if (sid === 0) {
+        const pos: vec3 = [pPos[0], y, pPos[2]];
+        dComIfGd_setSimpleShadow2(globals, pos, groundY, scaleXZ, pFloorPoly, rotY, scaleZ, pTexObj);
+    }
+    return sid;
+}
