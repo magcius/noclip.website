@@ -366,7 +366,6 @@ class dDlst_shadowSimple_c {
         colorFromRGBA(materialParams.u_Color[ColorKind.C0], 0, 0, 0, 0x40 / 0xFF);
         colorFromRGBA(materialParams.u_Color[ColorKind.C1], 0, 0, 0, 0);
         colorFromRGBA(materialParams.u_Color[ColorKind.C2], 1, 1, 1, 1);
-        mat4.identity(materialParams.u_PostTexMtx[0]);
         if (this.tex) this.tex.fillTextureMapping(materialParams.m_TextureMapping[0]);
 
         const template = renderInstManager.pushTemplate();
@@ -393,9 +392,7 @@ class dDlst_shadowSimple_c {
             dDlst_shadowSimple_c.shadowSealTexShape.setOnRenderInst(texSeal);
             texSeal.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
             renderInstManager.submitRenderInst(texSeal);
-
-            // @TODO: Handle non square shadows
-            //        GXCallDisplayList(l_shadowSealTex2DL, 0x40);
+            // NOTE: Non-square textures are only used by the Tingle Tuner shadow, so unnecessary for our purposes
         }
 
         // Multiply color by the alpha channel
@@ -413,7 +410,6 @@ class dDlst_shadowSimple_c {
         renderInstManager.submitRenderInst(clear);
 
         renderInstManager.popTemplate();
-
     }
 
     public set(globals: dGlobals, pos: vec3, floorY: number, scaleXZ: number, floorNrm: vec3, rotY: number, scaleZ: number, tex: BTIData | null): void {
