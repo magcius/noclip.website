@@ -1,4 +1,4 @@
-import { HSD_AnimJointRoot, HSD_AObjLoadAnimJoint, HSD_AObjLoadMatAnimJoint, HSD_Archive, HSD_Archive__ResolvePtr, HSD_ArchiveParse, HSD_JObjLoadJoint, HSD_JObjRoot, HSD_LoadContext, HSD_LoadContext__ResolvePtr, HSD_LoadContext__ResolveSymbol, HSD_MatAnimJointRoot } from "../SYSDOLPHIN/SYSDOLPHIN.js";
+import { HSD_AnimJointRoot, HSD_AObjLoadAnimJoint, HSD_AObjLoadMatAnimJoint, HSD_Archive, HSD_Archive__ResolvePtr, HSD_ArchiveParse, HSD_JObjLoadJoint, HSD_JObjRoot, HSD_LoadContext, HSD_LoadContext__ResolvePtr, HSD_LoadContext__ResolvePtrNullable, HSD_LoadContext__ResolveSymbol, HSD_MatAnimJointRoot } from "../SYSDOLPHIN/SYSDOLPHIN.js";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { assertExists } from "../util.js";
 import { SceneContext, SceneDesc } from "../SceneBase.js";
@@ -194,11 +194,24 @@ interface KirbyMapGrModelMotion {
 
 function Kirby_Load_grModelMotion(ctx: HSD_LoadContext, buffer: ArrayBufferSlice): KirbyMapGrModelMotion {
     const view = buffer.createDataView();
-    const animJointPtr = view.getUint32(0x00);
-    const animJoint = animJointPtr != 0 ? HSD_AObjLoadAnimJoint(ctx, HSD_LoadContext__ResolvePtr(ctx, animJointPtr)) : null;
+    // the test maps don't have valid modelmotion data, so we catch loading errors
 
-    const matAnimJointPtr = view.getUint32(0x04);
-    const matAnimJoint = matAnimJointPtr != 0 ? HSD_AObjLoadMatAnimJoint(ctx, HSD_LoadContext__ResolvePtr(ctx, matAnimJointPtr)) : null;
+    let animJoint: HSD_AnimJointRoot | null = null;
+
+    try {
+        const animJointPtr = HSD_LoadContext__ResolvePtrNullable(ctx, view.getUint32(0x00));
+        animJoint = animJointPtr ? HSD_AObjLoadAnimJoint(ctx, animJointPtr) : null;
+    } catch (e) {
+        console.warn(e);
+    }
+
+    let matAnimJoint: HSD_MatAnimJointRoot | null = null;
+    try {
+        const matAnimJointPtr = HSD_LoadContext__ResolvePtrNullable(ctx, view.getUint32(0x04));
+        matAnimJoint = matAnimJointPtr ? HSD_AObjLoadMatAnimJoint(ctx, matAnimJointPtr) : null;
+    } catch (e) {
+        console.warn(e);
+    }
 
     return {
         animJoint,
