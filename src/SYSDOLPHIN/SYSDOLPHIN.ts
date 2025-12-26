@@ -120,7 +120,15 @@ function HSD_Archive__GetStructOffset(arc: HSD_Archive, buffer: ArrayBufferSlice
 
 export function HSD_Archive__ResolvePtr(arc: HSD_Archive, offs: number, size?: number): ArrayBufferSlice {
     // Ensure that this is somewhere within our relocation table.
-    assert(arc.validOffsets.indexOf(offs) >= 0);
+    assert(arc.validOffsets.indexOf(offs) >= 0, `${offs} was not a valid offset`);
+    return arc.dataBuffer.subarray(offs, size);
+}
+
+export function HSD_Archive__ResolvePtrNullable(arc: HSD_Archive, offs: number, size?: number): ArrayBufferSlice | null {
+    // Ensure that this is somewhere within our relocation table.
+    if (arc.validOffsets.indexOf(offs) < 0) {
+        return null;
+    }
     return arc.dataBuffer.subarray(offs, size);
 }
 
@@ -145,6 +153,10 @@ export function HSD_LoadContext__ResolvePtrAutoSize(ctx: HSD_LoadContext, offs: 
 
 export function HSD_LoadContext__ResolvePtr(ctx: HSD_LoadContext, offs: number, size?: number): ArrayBufferSlice {
     return HSD_Archive__ResolvePtr(ctx.archive, offs, size);
+}
+
+export function HSD_LoadContext__ResolvePtrNullable(ctx: HSD_LoadContext, offs: number, size?: number): ArrayBufferSlice | null {
+    return HSD_Archive__ResolvePtrNullable(ctx.archive, offs, size);
 }
 
 export function HSD_LoadContext__ResolvePtrString(ctx: HSD_LoadContext, offs: number): string {
