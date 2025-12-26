@@ -44,7 +44,7 @@ export interface map_headData {
     gobj: map_gobjData[];
 }
 
-function HSD_LoadStructArray<T>(ctx: HSD_LoadContext, buffer: ArrayBufferSlice, offset: number, structSize: number, loadFunc: (ctx: HSD_LoadContext, buffer: ArrayBufferSlice) => T): T[] {
+export function HSD_LoadStructArray<T>(ctx: HSD_LoadContext, buffer: ArrayBufferSlice, offset: number, structSize: number, loadFunc: (ctx: HSD_LoadContext, buffer: ArrayBufferSlice) => T): T[] {
     const view = buffer.createDataView();
 
     const L: T[] = [];
