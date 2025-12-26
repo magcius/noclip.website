@@ -14,8 +14,8 @@ class KirbyMapDesc implements SceneDesc {
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
         const dataFetcher = context.dataFetcher;
-        const arc = HSD_ArchiveParse(await dataFetcher.fetchData(`${pathBase}/${this.id}`));
-        const renderer = new KirbyMapRenderer(device, arc);
+        const modelArchive = HSD_ArchiveParse(await dataFetcher.fetchData(`${pathBase}/${this.id}Model.dat`));
+        const renderer = new KirbyMapRenderer(device, modelArchive);
         return renderer;
     }
 }
@@ -113,41 +113,41 @@ function HSD_Archive_Find_ModelMotion(arc: HSD_Archive): ArrayBufferSlice | null
 
 export const maps = [
     "Air Ride",
-    new KirbyMapDesc("GrPlants1Model.dat", "Fantasy Meadows"),
-    new KirbyMapDesc("GrValley2Model.dat", "Celestial Valley"),
-    new KirbyMapDesc("GrDesert1Model.dat", "Sky Sands"),
-    new KirbyMapDesc("GrIce1Model.dat", "Frozen Hillside"),
-    new KirbyMapDesc("GrHeat2Model.dat", "Magma Flows"),
-    new KirbyMapDesc("GrSky2Model.dat", "Beanstalk Park"),
-    new KirbyMapDesc("GrMachine2Model.dat", "Machine Passage"),
-    new KirbyMapDesc("GrCheck2Model.dat", "Checker Knights"),
-    new KirbyMapDesc("GrSpace2Model.dat", "Nebula Belt"),
+    new KirbyMapDesc("GrPlants1", "Fantasy Meadows"),
+    new KirbyMapDesc("GrValley2", "Celestial Valley"),
+    new KirbyMapDesc("GrDesert1", "Sky Sands"),
+    new KirbyMapDesc("GrIce1", "Frozen Hillside"),
+    new KirbyMapDesc("GrHeat2", "Magma Flows"),
+    new KirbyMapDesc("GrSky2", "Beanstalk Park"),
+    new KirbyMapDesc("GrMachine2", "Machine Passage"),
+    new KirbyMapDesc("GrCheck2", "Checker Knights"),
+    new KirbyMapDesc("GrSpace2", "Nebula Belt"),
 
     "City Trial",
-    new KirbyMapDesc("GrCity1Model.dat", "City Trial"),
+    new KirbyMapDesc("GrCity1", "City Trial"),
 
     "City Trial Stadiums",
-    new KirbyMapDesc("GrJump1Model.dat", "High Jump"),
-    new KirbyMapDesc("GrJump2Model.dat", "Target Flight"),
-    new KirbyMapDesc("GrJump3Model.dat", "Air Glider"),
+    new KirbyMapDesc("GrJump1", "High Jump"),
+    new KirbyMapDesc("GrJump2", "Target Flight"),
+    new KirbyMapDesc("GrJump3", "Air Glider"),
 
-    new KirbyMapDesc("GrZeroyon5Model.dat", "Drag Race 1"),
-    new KirbyMapDesc("GrZeroyon3Model.dat", "Drag Race 2"),
-    new KirbyMapDesc("GrZeroyon1Model.dat", "Drag Race 3"),
-    new KirbyMapDesc("GrZeroyon4Model.dat", "Drag Race 4"),
+    new KirbyMapDesc("GrZeroyon5", "Drag Race 1"),
+    new KirbyMapDesc("GrZeroyon3", "Drag Race 2"),
+    new KirbyMapDesc("GrZeroyon1", "Drag Race 3"),
+    new KirbyMapDesc("GrZeroyon4", "Drag Race 4"),
 
-    new KirbyMapDesc("GrColosseum1Model.dat", "Dustup Derby 1"),
-    new KirbyMapDesc("GrColosseum3Model.dat", "Dustup Derby 2"),
+    new KirbyMapDesc("GrColosseum1", "Dustup Derby 1"),
+    new KirbyMapDesc("GrColosseum3", "Dustup Derby 2"),
 
-    new KirbyMapDesc("GrPasture1Model.dat", "Kirby Melee 1"),
-    new KirbyMapDesc("GrColosseum5Model.dat", "Kirby Melee 2"),
+    new KirbyMapDesc("GrPasture1", "Kirby Melee 1"),
+    new KirbyMapDesc("GrColosseum5", "Kirby Melee 2"),
 
-    new KirbyMapDesc("GrDedede1Model.dat", "VS. King Dedede"),
+    new KirbyMapDesc("GrDedede1", "VS. King Dedede"),
 
     "Test",
-    new KirbyMapDesc("GrTest6Model.dat", "Test6Model"),
-    new KirbyMapDesc("GrTest7Model.dat", "Test7Model"),
-    new KirbyMapDesc("GrTestModel.dat", "TestModel"),
-    new KirbyMapDesc("GrSimple2Model.dat", "Simple2Model"),
-    new KirbyMapDesc("GrSimpleModel.dat", "SimpleModel"),
+    new KirbyMapDesc("GrTest6", "Test6Model"),
+    new KirbyMapDesc("GrTest7", "Test7Model"),
+    new KirbyMapDesc("GrTest", "TestModel"),
+    new KirbyMapDesc("GrSimple2", "Simple2Model"),
+    new KirbyMapDesc("GrSimple", "SimpleModel"),
 ]
