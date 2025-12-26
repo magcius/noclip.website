@@ -450,12 +450,52 @@ class dDlst_shadowSimple_c {
     }
 }
 
+class dDlst_shadowReal_c {
+    public state = 0; // 0: unallocated, 1: ready, 2: pendingDelete
+    private models: J3DModelInstance[] = [];
+    
+    constructor(public id: number = 0) {
+        // TODO: Implement init logic
+    }
+
+    public reset(): void {
+        if( this.state === 1 ) {
+            this.state = 2; // This shadow will be freed next frame if not set() again 
+        } else {
+            this.state = 0;
+        }
+        this.models.length = 0;
+    }
+
+    public imageDraw(mtx: mat4): void {
+        // TODO: Implement imageDraw logic
+    }
+
+    public draw(): void {
+        // TODO: Implement draw logic
+    }
+
+    public set(key: number, param2: number, pModel: any, pPos: vec3, param5: number, param6: number, pTevStr: any): number {
+        // TODO: Implement set logic
+        return this.id;
+    }
+
+    public set2(key: number, param2: number, pModel: any, pPos: vec3, param5: number, param6: number, pTevStr: any): number {
+        // TODO: Implement set2 logic
+        return this.id;
+    }
+
+    public add(pModel: any): boolean {
+        // TODO: Implement add logic
+        return false;
+    }
+}
+
 class dDlst_shadowControl_c {
     private simples = nArray(128, () => new dDlst_shadowSimple_c());
-    // private mReal = nArray(8, () => new dDlst_shadowReal_c());
-    private nextID: number = 0;
+    private reals = nArray(8, () => new dDlst_shadowReal_c());
+    private latestId: number = 0;
     private simpleCount = 0;
-    private realCount = 0;
 
     public static defaultSimpleTex: BTIData;
 
@@ -489,8 +529,10 @@ class dDlst_shadowControl_c {
     }
 
     public reset(): void {
-        // TODO: Reset real
         this.simpleCount = 0;
+        for( let i = 0; i < this.reals.length; i++) {
+            this.reals[i].reset();
+        }
     }
 
     public imageDraw(mtx: mat4): void {
@@ -508,14 +550,14 @@ class dDlst_shadowControl_c {
         this.reset();
     }
 
-    public setReal(id: number, param2: number, pModel: J3DModelInstance, pPos: vec3, param5: number, param6: number, pTevStr: dKy_tevstr_c): number {
-        // TODO: Implementation
-        return 0;
+    public setReal(id: number, shouldFade: number, pModel: J3DModelInstance, pPos: vec3, casterSize: number, heightAgl: number, pTevStr: dKy_tevstr_c): number {
+        let real = this.getOrAllocate(id);
+        return real ? real.set(id, shouldFade, pModel, pPos, casterSize, heightAgl, pTevStr) : 0;
     }
 
-    public setReal2(id: number, param2: number, pModel: J3DModelInstance, pPos: vec3, param5: number, param6: number, pTevStr: dKy_tevstr_c): number {
-        // TODO: Implementation
-        return 0;
+    public setReal2(id: number, shouldFade: number, pModel: J3DModelInstance, pPos: vec3, casterSize: number, heightAgl: number, pTevStr: dKy_tevstr_c): number {
+        let real = this.getOrAllocate(id);
+        return real ? real.set2(id, shouldFade, pModel, pPos, casterSize, heightAgl, pTevStr) : 0;
     }
 
     public addReal(id: number, pModel: J3DModelInstance): boolean {
@@ -531,6 +573,19 @@ class dDlst_shadowControl_c {
         simple.set(globals, pPos, groundY, scaleXZ, floorNrm, angle, scaleZ, pTexObj);
         return true;
     }
+
+    private getOrAllocate(id: number): dDlst_shadowReal_c | null {
+        let real = id ? this.reals.find(r => r.id === id) : undefined;
+        if (!real) {
+            const freeIdx = this.reals.findIndex(r => r.state === 0);
+            if(freeIdx >= 0) {
+                real = this.reals[freeIdx];
+                real.id = ++this.latestId;
+            }
+            else return null;
+        }
+        return real;
+    }
 }
 
 export function dComIfGd_setSimpleShadow2(globals: dGlobals, pos: vec3, groundY: number, scaleXZ: number, floorPoly: cBgS_PolyInfo,
@@ -543,14 +598,14 @@ export function dComIfGd_setSimpleShadow2(globals: dGlobals, pos: vec3, groundY:
     }
 }
 
-export function dComIfGd_setShadow(globals: dGlobals, id: number, shouldFade: boolean, pModel: J3DModelInstance, pPos: vec3, casterSize: number, scaleXZ: number, 
+export function dComIfGd_setShadow(globals: dGlobals, id: number, shouldFade: boolean, pModel: J3DModelInstance, pPos: vec3, casterSize: number, scaleXZ: number,
     y: number, groundY: number, pFloorPoly: cBgS_PolyInfo, pTevStr: dKy_tevstr_c, rotY = 0.0, scaleZ = 1.0, pTexObj: BTIData | null = dDlst_shadowControl_c.defaultSimpleTex
 ): number {
     if (groundY <= -Infinity) {
         return 0;
     }
 
-    const sid = globals.dlst.shadowControl.setReal(id, shouldFade ? 1 : 0, pModel, pPos, casterSize, y - groundY, pTevStr);
+    const sid = globals.dlst.shadowControl.setReal2(id, shouldFade ? 1 : 0, pModel, pPos, casterSize, y - groundY, pTevStr);
     if (sid === 0) {
         const pos: vec3 = [pPos[0], y, pPos[2]];
         dComIfGd_setSimpleShadow2(globals, pos, groundY, scaleXZ, pFloorPoly, rotY, scaleZ, pTexObj);
