@@ -50,6 +50,7 @@ class DescentMineProgram extends DeviceProgram {
 
     public static a_xyz = 0;
     public static a_uvl = 1;
+    public static a_quadl = 2;
 
     public static ub_SceneParams = 0;
     public static ub_TextureParams = 1;
@@ -77,18 +78,32 @@ layout(binding = 1) uniform sampler2D u_sampler_overlay;
     public override vert = `
 layout (location = ${DescentMineProgram.a_xyz}) in vec3 a_xyz;
 layout (location = ${DescentMineProgram.a_uvl}) in vec3 a_uvl;
+layout (location = ${DescentMineProgram.a_quadl}) in vec4 a_quadl;
 
 out vec3 v_uvl;
+out vec4 v_quadl;
+out vec2 v_quadxy;
+
+const vec2 QUAD_XY[] = vec2[4](
+    vec2(0.0, 0.0),
+    vec2(1.0, 0.0),
+    vec2(1.0, 1.0),
+    vec2(0.0, 1.0)
+);
 
 void main() {
     vec3 t_xyz = UnpackMatrix(u_matView) * vec4(a_xyz, 1.0);
     gl_Position = UnpackMatrix(u_matProjection) * vec4(t_xyz, 1.0);
     v_uvl = a_uvl;
+    v_quadl = a_quadl;
+    v_quadxy = QUAD_XY[gl_VertexID & 3];
 }
 `;
 
     public override frag = `
 in vec3 v_uvl;
+in vec4 v_quadl;
+in vec2 v_quadxy;
 
 mat2 mat2_from_vec4(vec4 v) {
     return mat2(v.x, v.y, v.z, v.w);
@@ -102,13 +117,20 @@ void main() {
     // overlay alpha 1.0 -> 1
     vec2 u_pos = v_uvl.xy + u_texSlide;
     mat2 u_overlayRotMat = mat2_from_vec4(u_overlayRot);
-    vec4 t_color_overlay = texture(SAMPLER_2D(u_sampler_overlay), u_overlayRotMat * u_pos);
-    float t_select = step(0.25, t_color_overlay.a);
+    vec4 t_colorOverlay = texture(SAMPLER_2D(u_sampler_overlay), u_overlayRotMat * u_pos);
+    float t_select = step(0.25, t_colorOverlay.a);
 
-    vec4 t_color_base = texture(SAMPLER_2D(u_sampler_base), u_pos).rgba;
-    vec4 t_color_final = mix(t_color_base, t_color_overlay, t_select).rgba;
-    if (t_color_final.a < 0.75) discard;
-    gl_FragColor = t_color_final * clamp(mix(1.0/33.0, 1.0, clamp(v_uvl.z, 0.0, 1.0)), u_minLight, 1.0);
+    // Mix vertex light and interpolated quad light
+    float t_quadLight = (v_quadl.x * (1.0 - v_quadxy.x) * (1.0 - v_quadxy.y))
+                      + (v_quadl.y * (      v_quadxy.x) * (1.0 - v_quadxy.y))
+                      + (v_quadl.z * (      v_quadxy.x) * (      v_quadxy.y))
+                      + (v_quadl.w * (1.0 - v_quadxy.x) * (      v_quadxy.y));
+    float t_mixLight = v_uvl.z + t_quadLight;
+
+    vec4 t_colorBase = texture(SAMPLER_2D(u_sampler_base), u_pos).rgba;
+    vec4 t_colorFinal = mix(t_colorBase, t_colorOverlay, t_select).rgba;
+    if (t_colorFinal.a < 0.75) discard;
+    gl_FragColor = t_colorFinal * clamp(mix(1.0/33.0, 1.0, clamp(t_mixLight, 0.0, 1.0)), u_minLight, 1.0);
 }
 `;
 
@@ -159,11 +181,24 @@ function buildSegmentSideMesh(
     vec3.sub(tmp, sideVertices[3], sideVertices[1]);
     const dot = vec3.dot(normal, tmp);
 
+    // If the side is a quad, pass quad lights only
+    // If the side is not a quad, pass tri lights for each vertex
+
     const indexBase = bufVertex.length;
+    const isQuad = Math.abs(dot) < 0.05;
+    const vertexLights = side.uvl.map((uvl) => (isQuad ? uvl[2] : 0));
     for (let i = 0; i < 4; ++i) {
         const xyz = sideVertices[i];
         const uvl = side.uvl[i];
-        bufVertex.push([xyz[0], xyz[1], -xyz[2], ...uvl]);
+        bufVertex.push([
+            xyz[0],
+            xyz[1],
+            -xyz[2],
+            uvl[0],
+            uvl[1],
+            isQuad ? 0 : uvl[2],
+            ...vertexLights,
+        ]);
     }
 
     if (dot > 0) {
@@ -191,9 +226,14 @@ function modifyVertexBufferLight(
     factor: number,
     deltas: number[],
 ) {
-    let floatOffset = offset * 6 + 5;
-    for (let i = 0; i < deltas.length; ++i)
-        vbuf[floatOffset + 6 * i] += factor * deltas[i];
+    let floatOffset = offset * 10 + 5;
+    for (let i = 0; i < deltas.length; ++i) {
+        vbuf[floatOffset + 10 * i] += factor * deltas[i];
+        vbuf[floatOffset + 10 * i + 1] += factor * deltas[0];
+        vbuf[floatOffset + 10 * i + 2] += factor * deltas[1];
+        vbuf[floatOffset + 10 * i + 3] += factor * deltas[2];
+        vbuf[floatOffset + 10 * i + 4] += factor * deltas[3];
+    }
 }
 
 function makeSideTextureKey(side: DescentSide) {
@@ -362,10 +402,16 @@ export class DescentMineRenderer {
                 bufferByteOffset: 3 * 0x04,
                 format: GfxFormat.F32_RGB,
             },
+            {
+                location: DescentMineProgram.a_quadl,
+                bufferIndex: 0,
+                bufferByteOffset: 6 * 0x04,
+                format: GfxFormat.F32_RGBA,
+            },
         ];
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
             {
-                byteStride: 6 * 0x04,
+                byteStride: 10 * 0x04,
                 frequency: GfxVertexBufferFrequency.PerVertex,
             },
         ];

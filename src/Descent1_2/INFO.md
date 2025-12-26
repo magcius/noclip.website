@@ -72,7 +72,7 @@ licensed as follows:
 
 ## Stretch goodies
 
-- [ ] Use proper quad lighting interpolation when the two tris for a side are roughly planar. This is what the original game does, but it's tricky to do in GL with tri primitives.
+- [x] Use proper quad lighting interpolation when the two tris for a side are roughly planar
 - [ ] Animate doors when camera gets close (open when close, close when far away)?
 - [ ] Animate robots when camera gets close?
 - [ ] Implement triggers for opening/closing doors, etc.?
