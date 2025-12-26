@@ -51,7 +51,6 @@ class d_a_noclip_legacy extends fopAc_ac_c {
     public morf: mDoExt_McaMorf;
     public shadowChk: dBgS_GndChk;
     public shadowScaleXZ: number = 0;
-    public shadowCasterSize: number = 0;
     public shadowTex?: BTIData | null;
     public shadowId: number = 0;
     public objectRenderers: BMDObjectRenderer[] = [];
@@ -217,11 +216,6 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         legacy.shadowTex = tex;
     }
 
-    function setShadow(casterSize: number, scaleXZ: number, scaleZ: number = 1.0, tex?: BTIData | null) {
-        setShadowSimple(scaleXZ, scaleZ, tex);
-        legacy.shadowCasterSize = casterSize;
-    }
-    
     function parseBCK(rarc: RARC.JKRArchive, path: string) {
         const resInfo = assertExists(resCtrl.findResInfoByArchive(rarc, resCtrl.resObj));
         const g = resInfo.lazyLoadResource(ResType.Bck, assertExists(resInfo.res.find((res) => path.endsWith(res.file.name))));
@@ -367,10 +361,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     // Salvatore
     else if (actorName === 'Kg1' || actorName === 'Kg2') fetchArchive(`Kg`).then((rarc) => buildModel(rarc, `bdlm/kg.bdl`).bindANK1(parseBCK(rarc, `bcks/kg_wait01.bck`)));
     // Orca
-    else if (actorName === 'Ji1') fetchArchive(`Ji`).then((rarc) => {
-        buildModel(rarc, `bdlm/ji.bdl`).bindANK1(parseBCK(rarc, `bck/ji_wait01.bck`));
-        setShadow(800, 20);
-    });
+    else if (actorName === 'Ji1') fetchArchive(`Ji`).then((rarc) => buildModel(rarc, `bdlm/ji.bdl`).bindANK1(parseBCK(rarc, `bck/ji_wait01.bck`)));
     // Medli
     else if (actorName === 'Md1') {
         fetchArchive(`Md`).then(rarc => {
