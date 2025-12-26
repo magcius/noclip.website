@@ -20,11 +20,11 @@ import { dProcName_e } from './d_procname.js';
 import { ResAssetType, ResEntry, ResType } from './d_resorce.js';
 import { fopAcM_prm_class, fopAc_ac_c } from './f_op_actor.js';
 import { cPhs__Status, fGlobals, fpcPf__RegisterFallback } from './framework.js';
-import { mDoExt_McaMorf, mDoExt_modelEntryDL, mDoExt_modelUpdateDL } from './m_do_ext.js';
+import { mDoExt_McaMorf, mDoExt_modelUpdateDL } from './m_do_ext.js';
 import { MtxTrans, calc_mtx, mDoMtx_ZXYrotM } from './m_do_mtx.js';
-import { WindWakerRenderer, ZWWExtraTextures, dGlobals } from "./Main.js";
-import { dComIfGd_setShadow, dComIfGd_setSimpleShadow2 } from './d_drawlist.js';
-import { BTI_Texture, BTIData } from '../Common/JSYSTEM/JUTTexture.js';
+import { WindWakerRenderer, dGlobals } from "./Main.js";
+import { dComIfGd_setSimpleShadow2 } from './d_drawlist.js';
+import { BTIData } from '../Common/JSYSTEM/JUTTexture.js';
 
 const scratchMat4a = mat4.create();
 const scratchVec3a = vec3.create();
@@ -109,13 +109,7 @@ class d_a_noclip_legacy extends fopAc_ac_c {
         const device = globals.modelCache.device;
             
         if (this.shadowChk) {
-            if( this.shadowCasterSize > 0 ) {
-                vec3.scaleAndAdd(this.shadowChk.pos, this.pos, Vec3UnitY, 40.0);
-                globals.scnPlay.bgS.GroundCross(this.shadowChk);
-                this.shadowId = dComIfGd_setShadow(globals, this.shadowId, true, this.morf.model, this.pos, this.shadowCasterSize, this.shadowScaleXZ, this.pos[1], this.shadowChk.retY, this.shadowChk.polyInfo, this.objectRenderers[0].tevstr, this.rot[1], 1.0, this.shadowTex);
-            } else {
-                dComIfGd_setSimpleShadow2(globals, this.pos, this.shadowChk.retY, this.shadowScaleXZ, this.shadowChk.polyInfo, this.rot[1], 1.0, this.shadowTex);
-            }
+            dComIfGd_setSimpleShadow2(globals, this.pos, this.shadowChk.retY, this.shadowScaleXZ, this.shadowChk.polyInfo, this.rot[1], 1.0, this.shadowTex);
         }
 
         renderInstManager.setCurrentList(globals.dlst.bg[0]);

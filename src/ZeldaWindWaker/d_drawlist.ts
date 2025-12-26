@@ -251,7 +251,6 @@ export class dDlst_list_c {
     }
 }
 
-
 // Renders a simple cube-shaped shadow volume directly below an object (light position is ignored). Optionally, use a 
 // textured quad (defaults to a cirle) oriented to the ground normal to "cut out" the shadow volume (i.e. a gobo texture).
 class dDlst_shadowSimple_c {
@@ -451,87 +450,8 @@ class dDlst_shadowSimple_c {
     }
 }
 
-class dDlst_shadowRealPoly_c {
-    // TODO:
-}
-
-// Similar to shadowSimple, but instead of using a static texture as the gobo, we render a 128x128 shadow map from the light's POV.
-class dDlst_shadowReal_c {
-    public state = 0; // 0: unallocated, 1: ready, 2: pendingDelete
-
-    private models: J3DModelInstance[] = [];
-    private alpha: number = 0; // 0-255
-    private viewMtx = mat4.create();
-    private renderProjMtx = mat4.create();
-    private receiverProjMtx = mat4.create();
-    private shadowRealPoly = new dDlst_shadowRealPoly_c();
-
-    constructor(public id: number = 0) {
-        // TODO: Implement init logic
-    }
-
-    public reset(): void {
-        if (this.state === 1) {
-            this.state = 2; // This shadow will be freed next frame if not set() again 
-        } else {
-            this.state = 0;
-        }
-        this.models.length = 0;
-    }
-
-    public imageDraw(mtx: mat4): void {
-        // TODO: Implement imageDraw logic
-    }
-
-    public draw(): void {
-        // TODO: Implement draw logic
-    }
-
-    // Evaluates the model immediately, adds to renderlist. Only works for a single model. 
-    public set(shouldFade: number, model: J3DModelInstance, pos: vec3, casterSize: number, heightAgl: number, tevStr: dKy_tevstr_c): number {
-        // TODO: Implement set logic
-        return this.id;
-    }
-
-    // Defer evaluation of model(s) until render time. Call add() to include additional models in the shadowmap. 
-    public set2(shouldFade: number, model: J3DModelInstance, pos: vec3, casterSize: number, heightAgl: number, tevStr: dKy_tevstr_c): number {
-        if (this.models.length === 0) {
-            assertExists(tevStr); // The game allows passing a null tevStr (uses player's light pos), we do not.
-            const lightPos = tevStr.lightObj.Position;
-            this.alpha = dDlst_shadowReal_c.setShadowRealMtx(this.viewMtx, this.renderProjMtx, this.receiverProjMtx, lightPos, pos, casterSize, heightAgl,
-                this.shadowRealPoly, shouldFade == 0 ? 0.0 : heightAgl * 0.0007);
-
-            if (this.alpha === 0)
-                return 0;
-
-            this.state = 1;
-            this.models.length = 0;
-        }
-
-        this.models.push(model);
-        return this.id;
-    }
-
-    public add(model: J3DModelInstance): boolean {
-        if (this.models.length === 0) {
-            return false;
-        }
-
-        this.models.push(model);
-        return true;
-    }
-
-    private static setShadowRealMtx(viewMtx: mat4, renderProjMtx: mat4, receiverProjMtx: mat4, lightPos: vec3, pos: vec3,
-        casterSize: number, heightAgl: number, shadowPoly: dDlst_shadowRealPoly_c, heightFade: number): number {
-        // TODO: Implement shadow matrix calculation logic.
-        return 64; // Example: return default alpha value
-    }
-}
-
 class dDlst_shadowControl_c {
     private simples = nArray(128, () => new dDlst_shadowSimple_c());
-    private reals = nArray(8, () => new dDlst_shadowReal_c());
-    private latestId: number = 0;
     private simpleCount = 0;
 
     public static defaultSimpleTex: BTIData;
@@ -567,9 +487,6 @@ class dDlst_shadowControl_c {
 
     public reset(): void {
         this.simpleCount = 0;
-        for (let i = 0; i < this.reals.length; i++) {
-            this.reals[i].reset();
-        }
     }
 
     public imageDraw(mtx: mat4): void {
@@ -588,13 +505,13 @@ class dDlst_shadowControl_c {
     }
 
     public setReal(id: number, shouldFade: number, model: J3DModelInstance, pos: vec3, casterSize: number, heightAgl: number, tevStr: dKy_tevstr_c): number {
-        let real = this.getOrAllocate(id);
-        return real ? real.set(shouldFade, model, pos, casterSize, heightAgl, tevStr) : 0;
+        // TODO: Implementation
+        return 0;
     }
 
     public setReal2(id: number, shouldFade: number, model: J3DModelInstance, pos: vec3, casterSize: number, heightAgl: number, tevStr: dKy_tevstr_c): number {
-        let real = this.getOrAllocate(id);
-        return real ? real.set2(shouldFade, model, pos, casterSize, heightAgl, tevStr) : 0;
+        // TODO: Implementation
+        return 0;
     }
 
     public addReal(id: number, model: J3DModelInstance): boolean {
@@ -610,19 +527,6 @@ class dDlst_shadowControl_c {
         simple.set(globals, pos, groundY, scaleXZ, floorNrm, angle, scaleZ, pTexObj);
         return true;
     }
-
-    private getOrAllocate(id: number): dDlst_shadowReal_c | null {
-        let real = id ? this.reals.find(r => r.id === id) : undefined;
-        if (!real) {
-            const freeIdx = this.reals.findIndex(r => r.state === 0);
-            if (freeIdx >= 0) {
-                real = this.reals[freeIdx];
-                real.id = ++this.latestId;
-            }
-            else return null;
-        }
-        return real;
-    }
 }
 
 export function dComIfGd_setSimpleShadow2(globals: dGlobals, pos: vec3, groundY: number, scaleXZ: number, floorPoly: cBgS_PolyInfo,
@@ -633,19 +537,4 @@ export function dComIfGd_setSimpleShadow2(globals: dGlobals, pos: vec3, groundY:
     } else {
         return false;
     }
-}
-
-export function dComIfGd_setShadow(globals: dGlobals, id: number, shouldFade: boolean, model: J3DModelInstance, pos: vec3, casterSize: number, scaleXZ: number,
-    y: number, groundY: number, pFloorPoly: cBgS_PolyInfo, tevStr: dKy_tevstr_c, rotY = 0.0, scaleZ = 1.0, pTexObj: BTIData | null = dDlst_shadowControl_c.defaultSimpleTex
-): number {
-    if (groundY <= -Infinity) {
-        return 0;
-    }
-
-    const sid = globals.dlst.shadowControl.setReal2(id, shouldFade ? 1 : 0, model, pos, casterSize, y - groundY, tevStr);
-    if (sid === 0) {
-        const posAdj: vec3 = [pos[0], y, pos[2]];
-        dComIfGd_setSimpleShadow2(globals, posAdj, groundY, scaleXZ, pFloorPoly, rotY, scaleZ, pTexObj);
-    }
-    return sid;
 }
