@@ -226,13 +226,13 @@ function modifyVertexBufferLight(
     factor: number,
     deltas: number[],
 ) {
+    // UVL l at vertex offset 5, quad l's follow immediately
     let floatOffset = offset * 10 + 5;
     for (let i = 0; i < deltas.length; ++i) {
-        vbuf[floatOffset + 10 * i] += factor * deltas[i];
-        vbuf[floatOffset + 10 * i + 1] += factor * deltas[0];
-        vbuf[floatOffset + 10 * i + 2] += factor * deltas[1];
-        vbuf[floatOffset + 10 * i + 3] += factor * deltas[2];
-        vbuf[floatOffset + 10 * i + 4] += factor * deltas[3];
+        const finalOffset = floatOffset + 10 * i;
+        vbuf[finalOffset] += factor * deltas[i];
+        for (let j = 0; j < Math.min(4, deltas.length); ++j)
+            vbuf[finalOffset + j + 1] += factor * deltas[j];
     }
 }
 
