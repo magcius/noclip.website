@@ -1,4 +1,4 @@
-import { vec2, vec3 } from "gl-matrix";
+import { vec2 } from "gl-matrix";
 import { createBufferFromData } from "../../gfx/helpers/BufferHelpers.js";
 import { GfxShaderLibrary } from "../../gfx/helpers/GfxShaderLibrary.js";
 import { fillMatrix4x4 } from "../../gfx/helpers/UniformBufferHelpers.js";
@@ -110,24 +110,6 @@ type BillboardCollection = {
     indices: Uint16Array;
     calls: BillboardCall[];
 };
-
-function makeMeshVertex(
-    bufVertex: number[],
-    xyz: vec3,
-    u: number,
-    v: number,
-    l: number,
-    scale: vec2,
-) {
-    bufVertex.push(xyz[0]);
-    bufVertex.push(xyz[1]);
-    bufVertex.push(-xyz[2]);
-    bufVertex.push(u);
-    bufVertex.push(v);
-    bufVertex.push(l);
-    bufVertex.push(scale[0]);
-    bufVertex.push(scale[1]);
-}
 
 const BILLBOARD_UV: [number, number][] = [
     [0.0, 0.0],

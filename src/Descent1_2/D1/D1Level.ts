@@ -55,7 +55,7 @@ export class Descent1Level extends DescentLevel {
             this.vertices.push(reader.readFixVector());
         }
         for (let i = 0; i < segmentCount; ++i) {
-            this.segments.push(new DescentSegment());
+            this.segments.push(new DescentSegment(i));
         }
         let segmentIndex = 0;
         for (const segment of this.segments) {

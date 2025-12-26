@@ -96,11 +96,11 @@ export function readSegmentSpecial(
     }
 
     segment.special = reader.readUint8();
-    segment.matcen_num = reader.readUint8();
+    segment.matcenNum = reader.readUint8();
 
     if (levelVersion > 5) {
         reader.offset += 1;
-        segment.flags_value = reader.readUint8();
+        segment.flagsValue = reader.readUint8();
         segment.light = reader.readFix();
     } else {
         reader.offset += 2;
@@ -222,4 +222,8 @@ export function readWall(reader: DescentDataReader, gameInfoVersion: number) {
         keys,
         cloak_opacity,
     );
+}
+
+export function makeSegmentSideKey(segNum: number, sideNum: number) {
+    return segNum * 6 + sideNum;
 }

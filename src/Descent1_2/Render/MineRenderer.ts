@@ -33,6 +33,9 @@ import { DeviceProgram } from "../../Program.js";
 import { TextureMapping } from "../../TextureHolder.js";
 import * as Viewer from "../../viewer.js";
 import { DescentAssetCache } from "../Common/AssetCache.js";
+import { applySegmentLight } from "../Common/FlickeringLight.js";
+import { DescentFlickeringLight } from "../Common/Level.js";
+import { makeSegmentSideKey } from "../Common/LevelReaders.js";
 import { DescentSide, WALL_TYPE_OPEN } from "../Common/LevelTypes.js";
 import { DescentTextureList, ResolvedTexture } from "../Common/TextureList.js";
 import { MultiMap } from "../Common/Util.js";
@@ -105,7 +108,7 @@ void main() {
     vec4 t_color_base = texture(SAMPLER_2D(u_sampler_base), u_pos).rgba;
     vec4 t_color_final = mix(t_color_base, t_color_overlay, t_select).rgba;
     if (t_color_final.a < 0.75) discard;
-    gl_FragColor = t_color_final * clamp(mix(1.0/33.0, 1.0, v_uvl.z), u_minLight, 1.0);
+    gl_FragColor = t_color_final * clamp(mix(1.0/33.0, 1.0, clamp(v_uvl.z, 0.0, 1.0)), u_minLight, 1.0);
 }
 `;
 
@@ -126,6 +129,7 @@ type MineMesh = {
     vertices: Float32Array;
     indices: Uint16Array;
     calls: MineMeshCall[];
+    segmentSideVertexOffsets: Map<number, number>;
 };
 
 function computeNormal(a: vec3, b: vec3, c: vec3): vec3 {
@@ -181,7 +185,18 @@ function buildSegmentSideMesh(
     }
 }
 
-function makeSideKey(side: DescentSide) {
+function modifyVertexBufferLight(
+    vbuf: Float32Array,
+    offset: number,
+    factor: number,
+    deltas: number[],
+) {
+    let floatOffset = offset * 6 + 5;
+    for (let i = 0; i < deltas.length; ++i)
+        vbuf[floatOffset + 6 * i] += factor * deltas[i];
+}
+
+function makeSideTextureKey(side: DescentSide) {
     return (
         side.baseTextureIndex |
         (side.overlayTextureIndex << 16) |
@@ -189,7 +204,7 @@ function makeSideKey(side: DescentSide) {
     );
 }
 
-function extractSideKey(sideKey: number) {
+function extractSideTextureKey(sideKey: number) {
     const baseTextureId = sideKey & 0xffff;
     const overlayTextureId = (sideKey >> 16) & 0x3fff;
     const overlayRotation = (sideKey >> 30) & 3;
@@ -214,7 +229,7 @@ function buildMineMesh(
                     sideWall == null || sideWall.type !== WALL_TYPE_OPEN;
 
                 if (isRendered) {
-                    sidesByTexture.add(makeSideKey(side), side);
+                    sidesByTexture.add(makeSideTextureKey(side), side);
                 }
             }
         }
@@ -224,10 +239,11 @@ function buildMineMesh(
     const vertices: number[][] = [];
     const indices: number[] = [];
     const calls: MineMeshCall[] = [];
+    const segmentSideVertexOffsets: Map<number, number> = new Map();
 
     for (const [sideKey, sides] of sidesByTexture.entries()) {
         const [baseTextureId, overlayTextureId, overlayRotation] =
-            extractSideKey(sideKey);
+            extractSideTextureKey(sideKey);
         const baseTexture = textureList.resolveTmapToTexture(baseTextureId);
         if (baseTexture == null) continue;
 
@@ -237,8 +253,13 @@ function buildMineMesh(
                 : null;
 
         const indexOffset = indices.length;
-        for (const side of sides)
+        for (const side of sides) {
+            segmentSideVertexOffsets.set(
+                makeSegmentSideKey(side.segment.segmentNum, side.sideNum),
+                vertices.length,
+            );
             buildSegmentSideMesh(vertices, indices, level, side);
+        }
 
         const indexCount = indices.length - indexOffset;
         const call: MineMeshCall = {
@@ -255,6 +276,7 @@ function buildMineMesh(
         vertices: new Float32Array(vertices.flat()),
         indices: new Uint16Array(indices),
         calls,
+        segmentSideVertexOffsets,
     };
 }
 
@@ -295,9 +317,11 @@ export class DescentMineRenderer {
     private gfxSampler: GfxSampler;
     private textureMapping: TextureMapping[];
     public mineMesh: MineMesh;
+    private segmentSideVertexOffsets: Map<number, number>;
+    private meshVertices: Float32Array;
 
     constructor(
-        device: GfxDevice,
+        private device: GfxDevice,
         private level: Descent1Level | Descent2Level,
         private assetCache: DescentAssetCache,
         private textureList: DescentTextureList,
@@ -307,7 +331,10 @@ export class DescentMineRenderer {
         this.gfxProgram = cache.createProgram(new DescentMineProgram());
 
         this.mineMesh = buildMineMesh(level, this.textureList, assetCache);
-        const { vertices, indices, calls } = this.mineMesh;
+        const { vertices, indices, calls, segmentSideVertexOffsets } =
+            this.mineMesh;
+        this.segmentSideVertexOffsets = segmentSideVertexOffsets;
+        this.meshVertices = vertices;
         this.vertexBuffer = createBufferFromData(
             device,
             GfxBufferUsage.Vertex,
@@ -364,6 +391,107 @@ export class DescentMineRenderer {
         this.textureMapping = [new TextureMapping(), new TextureMapping()];
         this.textureMapping[0].gfxSampler = this.gfxSampler;
         this.textureMapping[1].gfxSampler = this.gfxSampler;
+    }
+
+    public applyFlicker(
+        lightsOn: DescentFlickeringLight[],
+        lightsOff: DescentFlickeringLight[],
+    ) {
+        let modifiedVertexBuffer = false;
+        const sidesOn: DescentSide[] = [];
+        const sidesOff: DescentSide[] = [];
+
+        for (const light of lightsOn) {
+            const lightSide =
+                this.level.segments[light.segmentNum]?.sides[light.sideNum];
+            if (lightSide != null) sidesOn.push(lightSide);
+            for (const delta of light.deltas) {
+                modifiedVertexBuffer = true;
+                const segment = this.level.segments[delta.segmentNum];
+                const side = segment?.sides[delta.sideNum];
+                const target = makeSegmentSideKey(
+                    delta.segmentNum,
+                    delta.sideNum,
+                );
+                const vertexOffset = this.segmentSideVertexOffsets.get(target);
+                if (side != null && vertexOffset != null) {
+                    for (let i = 0; i < 4; ++i)
+                        vec3.add(
+                            side.uvl[i],
+                            side.uvl[i],
+                            vec3.fromValues(0, 0, delta.vertexLightDeltas[i]),
+                        );
+                    modifyVertexBufferLight(
+                        this.meshVertices,
+                        vertexOffset,
+                        1,
+                        delta.vertexLightDeltas,
+                    );
+                    modifiedVertexBuffer = true;
+                }
+            }
+        }
+
+        for (const light of lightsOff) {
+            const lightSide =
+                this.level.segments[light.segmentNum]?.sides[light.sideNum];
+            if (lightSide != null) sidesOff.push(lightSide);
+            for (const delta of light.deltas) {
+                modifiedVertexBuffer = true;
+                const segment = this.level.segments[delta.segmentNum];
+                const side = segment?.sides[delta.sideNum];
+                const target = makeSegmentSideKey(
+                    delta.segmentNum,
+                    delta.sideNum,
+                );
+                const vertexOffset = this.segmentSideVertexOffsets.get(target);
+                if (side != null && vertexOffset != null) {
+                    for (let i = 0; i < 4; ++i)
+                        vec3.sub(
+                            side.uvl[i],
+                            side.uvl[i],
+                            vec3.fromValues(0, 0, delta.vertexLightDeltas[i]),
+                        );
+                    modifyVertexBufferLight(
+                        this.meshVertices,
+                        vertexOffset,
+                        -1,
+                        delta.vertexLightDeltas,
+                    );
+                    modifiedVertexBuffer = true;
+                }
+            }
+        }
+
+        if (modifiedVertexBuffer) {
+            const u8 = new Uint8Array(this.meshVertices.buffer);
+            this.device.uploadBufferData(
+                this.vertexBuffer,
+                0,
+                u8,
+                0,
+                u8.byteLength,
+            );
+        }
+
+        // Recompute segment light for segments that changed
+        for (const side of sidesOn) {
+            const sideLight =
+                this.assetCache.getTmapLight(side.baseTextureIndex) +
+                (side.overlayTextureIndex > 0
+                    ? this.assetCache.getTmapLight(side.overlayTextureIndex)
+                    : 0);
+            if (sideLight > 0) applySegmentLight(side.segment, null, sideLight);
+        }
+        for (const side of sidesOff) {
+            const sideLight =
+                this.assetCache.getTmapLight(side.baseTextureIndex) +
+                (side.overlayTextureIndex > 0
+                    ? this.assetCache.getTmapLight(side.overlayTextureIndex)
+                    : 0);
+            if (sideLight > 0)
+                applySegmentLight(side.segment, null, -sideLight);
+        }
     }
 
     public prepareToRender(

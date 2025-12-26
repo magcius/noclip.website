@@ -20,6 +20,7 @@ import {
     DescentGameDataSource,
 } from "../Common/AssetSource.js";
 import { DescentPalette } from "../Common/AssetTypes.js";
+import { flickerLights } from "../Common/FlickeringLight.js";
 import postprocessLevel from "../Common/LevelUtils.js";
 import { DescentTextureList } from "../Common/TextureList.js";
 import { Descent1Level } from "../D1/D1Level.js";
@@ -56,6 +57,7 @@ export class DescentRenderer implements Viewer.SceneGfx {
         this.textureList = new DescentTextureList(device, this.assetCache);
         this.renderParameters = {
             enableShading: true,
+            enableDynamicLights: false, // disable by default, some Vertigo levels have strobing lights
             showPolymodels: true,
             showHostages: true,
             showPowerups: true,
@@ -104,22 +106,43 @@ export class DescentRenderer implements Viewer.SceneGfx {
         renderHacksPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
         renderHacksPanel.setTitle(UI.RENDER_HACKS_ICON, "Render Hacks");
 
-        const enableShading = new UI.Checkbox("Enable Shading", true);
+        const enableShading = new UI.Checkbox(
+            "Enable Shading",
+            this.renderParameters.enableShading,
+        );
         enableShading.onchanged = () =>
             (this.renderParameters.enableShading = enableShading.checked);
         renderHacksPanel.contents.appendChild(enableShading.elem);
 
-        const showPolymodels = new UI.Checkbox("Show Polymodels", true);
+        const enableDynamicLights = new UI.Checkbox(
+            "Enable Dynamic Lights",
+            this.renderParameters.enableDynamicLights,
+        );
+        enableDynamicLights.onchanged = () =>
+            (this.renderParameters.enableDynamicLights =
+                enableDynamicLights.checked);
+        renderHacksPanel.contents.appendChild(enableDynamicLights.elem);
+
+        const showPolymodels = new UI.Checkbox(
+            "Show Polymodels",
+            this.renderParameters.showPolymodels,
+        );
         showPolymodels.onchanged = () =>
             (this.renderParameters.showPolymodels = showPolymodels.checked);
         renderHacksPanel.contents.appendChild(showPolymodels.elem);
 
-        const showPowerups = new UI.Checkbox("Show Powerups", true);
+        const showPowerups = new UI.Checkbox(
+            "Show Powerups",
+            this.renderParameters.showPowerups,
+        );
         showPowerups.onchanged = () =>
             (this.renderParameters.showPowerups = showPowerups.checked);
         renderHacksPanel.contents.appendChild(showPowerups.elem);
 
-        const showHostages = new UI.Checkbox("Show Hostages", true);
+        const showHostages = new UI.Checkbox(
+            "Show Hostages",
+            this.renderParameters.showHostages,
+        );
         showHostages.onchanged = () =>
             (this.renderParameters.showHostages = showHostages.checked);
         renderHacksPanel.contents.appendChild(showHostages.elem);
@@ -135,6 +158,22 @@ export class DescentRenderer implements Viewer.SceneGfx {
 
         viewerInput.camera.setClipPlanes(0.1);
         renderInstManager.setCurrentList(this.renderInstListMain);
+
+        if (this.renderParameters.enableDynamicLights) {
+            const flicker = flickerLights(
+                this.level,
+                viewerInput.deltaTime * 0.001,
+            );
+            this.mineMesh.applyFlicker(flicker.on, flicker.off);
+        } else {
+            // Make sure all lights are on
+            const lightsOff = this.level.flickeringLights.filter(
+                (light) => !light.isOn,
+            );
+            for (const light of lightsOff) light.isOn = true;
+            this.mineMesh.applyFlicker(lightsOff, []);
+        }
+
         this.mineMesh.prepareToRender(renderInstManager, viewerInput);
         if (this.renderParameters.showPowerups)
             this.powerupRenderer.prepareToRender(

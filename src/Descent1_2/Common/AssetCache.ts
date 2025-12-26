@@ -70,6 +70,13 @@ export class DescentAssetCache {
         };
     }
 
+    /** Returns light data for a TMAP index, or null if there isn't any. */
+    public getTmapLight(tmapIndex: number): number {
+        const tmap = this.gameDataSource.tmaps[tmapIndex];
+        if (tmap == null) return 0;
+        return tmap.lighting;
+    }
+
     /** Returns texture slide data for a TMAP index. */
     public getTmapSlide(tmapIndex: number): [number, number] {
         const tmap = this.gameDataSource.tmaps[tmapIndex];

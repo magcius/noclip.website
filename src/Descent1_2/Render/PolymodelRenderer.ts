@@ -142,7 +142,7 @@ type MeshObjectCall = {
     indexOffset: number;
     indexCount: number;
     modelMatrix: MeshObjectMatrices;
-    segmentLight: number;
+    segmentNum: number;
     isCloaked: boolean;
     glow: number;
     position: vec3;
@@ -280,8 +280,6 @@ function buildMeshCollection(
                     const render =
                         object.renderType as DescentObjectRenderTypePolyobj;
 
-                    const segmentLight =
-                        level.segments[object.segmentNum].light ?? 1.0;
                     let objectMatrix = objectMatrices.get(object);
                     if (objectMatrix == null)
                         objectMatrices.set(
@@ -304,7 +302,7 @@ function buildMeshCollection(
                         indexOffset,
                         indexCount,
                         modelMatrix: objectMatrix,
-                        segmentLight: segmentLight,
+                        segmentNum: object.segmentNum,
                         isCloaked,
                         glow,
                         position: vec3.fromValues(
@@ -542,7 +540,8 @@ export class DescentPolymodelRenderer {
                     offsetObject,
                     objectCall.modelMatrix.current,
                 );
-                mappedObject[offsetObject++] = objectCall.segmentLight;
+                mappedObject[offsetObject++] =
+                    this.level.segments[objectCall.segmentNum].light ?? 1.0;
                 mappedObject[offsetObject++] = objectCall.glow;
                 mappedObject[offsetObject++] =
                     pickedTexture != null ? 1.0 : 0.0;

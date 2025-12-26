@@ -2,13 +2,24 @@ import { vec3 } from "gl-matrix";
 import { DescentObject, DescentObjectType } from "./LevelObject";
 import { DescentSegment, DescentWall } from "./LevelTypes";
 
+export class DescentLightDelta {
+    constructor(
+        public segmentNum: number,
+        public sideNum: number,
+        public vertexLightDeltas: [number, number, number, number],
+    ) {}
+}
+
 export class DescentFlickeringLight {
+    public deltas: DescentLightDelta[] = [];
+
     constructor(
         public segmentNum: number,
         public sideNum: number,
         public mask: number,
         public timer: number,
         public delay: number,
+        public isOn: boolean,
     ) {}
 }
 

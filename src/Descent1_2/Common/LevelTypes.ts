@@ -39,12 +39,12 @@ export class DescentSide {
 export class DescentSegment {
     public sides: DescentSide[] = [];
     public special: number = 0;
-    public matcen_num: number = 0;
-    public flags_value: number = 0;
+    public matcenNum: number = 0;
+    public flagsValue: number = 0;
     public light: number = 0;
     public vertices: vec3[] = [];
 
-    constructor() {
+    constructor(public segmentNum: number) {
         for (let i = 0; i < 6; ++i) this.sides.push(new DescentSide(this, i));
     }
 }

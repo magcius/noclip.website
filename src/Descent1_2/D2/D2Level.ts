@@ -1,10 +1,15 @@
 import { mat3, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../../ArrayBufferSlice";
-import { assert } from "../../util";
+import { assert, nArray } from "../../util";
 import { DescentDataReader } from "../Common/DataReader";
-import { DescentFlickeringLight, DescentLevel } from "../Common/Level";
+import {
+    DescentFlickeringLight,
+    DescentLevel,
+    DescentLightDelta,
+} from "../Common/Level";
 import { DescentObject, readObject } from "../Common/LevelObject";
 import {
+    makeSegmentSideKey,
     readLevelGameInfo,
     readSegmentConnections,
     readSegmentSpecial,
@@ -69,6 +74,7 @@ export class Descent2Level extends DescentLevel {
                         mask,
                         timer,
                         delay,
+                        true,
                     ),
                 );
             }
@@ -89,7 +95,7 @@ export class Descent2Level extends DescentLevel {
             this.vertices.push(reader.readFixVector());
         }
         for (let i = 0; i < segmentCount; ++i) {
-            this.segments.push(new DescentSegment());
+            this.segments.push(new DescentSegment(i));
         }
         let segmentIndex = 0;
         for (const segment of this.segments) {
@@ -153,6 +159,55 @@ export class Descent2Level extends DescentLevel {
             reader.offset = gameInfo.wallsOffset;
             for (let i = 0; i < gameInfo.wallsCount; ++i) {
                 this.walls.push(readWall(reader, gameInfo.version));
+            }
+        }
+        const lightDeltas: DescentLightDelta[] = [];
+        if (gameInfo.deltaLightsOffset !== -1) {
+            reader.offset = gameInfo.deltaLightsOffset;
+            for (let i = 0; i < gameInfo.deltaLightsCount; ++i) {
+                const segNum = reader.readInt16();
+                const sideNum = reader.readUint8();
+                reader.readUint8();
+                lightDeltas.push(
+                    new DescentLightDelta(
+                        segNum,
+                        sideNum,
+                        nArray(4, () => reader.readUint8() / 32) as [
+                            number,
+                            number,
+                            number,
+                            number,
+                        ],
+                    ),
+                );
+            }
+        }
+        if (gameInfo.deltaLightIndicesOffset !== -1) {
+            const flickeringLightsBySegSide = new Map<
+                number,
+                DescentFlickeringLight
+            >();
+            for (const flickeringLight of this.flickeringLights)
+                flickeringLightsBySegSide.set(
+                    makeSegmentSideKey(
+                        flickeringLight.segmentNum,
+                        flickeringLight.sideNum,
+                    ),
+                    flickeringLight,
+                );
+            reader.offset = gameInfo.deltaLightIndicesOffset;
+            for (let i = 0; i < gameInfo.deltaLightIndicesCount; ++i) {
+                const segNum = reader.readInt16();
+                const sideNum = reader.readUint8();
+                const count = reader.readUint8();
+                const index = reader.readInt16();
+                const flickeringLight = flickeringLightsBySegSide.get(
+                    makeSegmentSideKey(segNum, sideNum),
+                );
+
+                if (flickeringLight != null)
+                    for (let i = index; i < index + count; ++i)
+                        flickeringLight.deltas.push(lightDeltas[i]);
             }
         }
     }
