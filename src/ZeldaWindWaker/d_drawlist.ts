@@ -25,7 +25,6 @@ import { dKy_tevstr_c } from "./d_kankyo.js";
 import { mDoMtx_YrotM } from "./m_do_mtx.js";
 import { cM_s2rad } from "./SComponent.js";
 import { dRes_control_c, ResType } from "./d_resorce.js";
-import ArrayBufferSlice from "../ArrayBufferSlice.js";
 
 export enum dDlst_alphaModel__Type {
     Bonbori,
@@ -274,7 +273,7 @@ class dDlst_shadowSimple_c {
         const vat: GX_VtxAttrFmt[] = [];
         vat[GX.Attr.POS] = { compType: GX.CompType.F32, compCnt: GX.CompCnt.POS_XYZ, compShift: 0 };
         vat[GX.Attr.TEX0] = { compType: GX.CompType.S8, compCnt: GX.CompCnt.TEX_ST, compShift: 0 };
-        
+
         const vcd: GX_VtxDesc[] = [];
         vcd[GX.Attr.POS] = { type: GX.AttrType.INDEX8 };
         const shadowVtxLoader = compileVtxLoader(vat, vcd);
@@ -282,7 +281,7 @@ class dDlst_shadowSimple_c {
         // The `l_shadowSealDL` display list contains both register setting commands and draws. Split it up.
         const shadowSealMat = symbolMap.findSymbolData(`d_drawlist.o`, `l_shadowSealDL`).slice(0, 0x42);
         const shadowSealDrw = symbolMap.findSymbolData(`d_drawlist.o`, `l_shadowSealDL`).slice(0x42, 0);
-        
+
         // Same for `l_shadowSealTexDL` ...
         const shadowSealTexMat = symbolMap.findSymbolData(`d_drawlist.o`, `l_shadowSealTexDL`).slice(0, 0x26);
         const shadowSealTexDrw = symbolMap.findSymbolData(`d_drawlist.o`, `l_shadowSealTexDL`).slice(0x26, 0);
@@ -300,7 +299,7 @@ class dDlst_shadowSimple_c {
         // Construct the "seal" shape using the same pos-only verts.
         const shadowSealVerts = shadowVtxLoader.runVertices(shadowVtxArrays, shadowSealDrw);
         this.shadowSealShape = new dDlst_BasicShape_c(cache, shadowVtxLoader.loadedVertexLayout, shadowSealVerts);
-        
+
         // Construct the gobo seal shape which only applies alpha to the color buffer where the texture is opaque.
         vcd[GX.Attr.TEX0] = { type: GX.AttrType.DIRECT };
         const shadowTexVtxLoader = compileVtxLoader(vat, vcd)
@@ -316,7 +315,7 @@ class dDlst_shadowSimple_c {
             // These are the first draw calls to write alpha each frame, so it assumes the alpha channel is empty
             displayListRegistersRun(matRegisters, symbolMap.findSymbolData(`d_drawlist.o`, `l_frontMat`));
             this.frontMat = new GXMaterialHelperGfx(parseMaterial(matRegisters, `dDlst_shadowSimple_c l_frontMat`));
-            
+
             // Subtract GX_TEVREG0.a (0x40)on every back face that passes the depth test
             // The result after frontMat and backMat are rendered is 0x40 written everywhere the shadow should be drawn
             displayListRegistersRun(matRegisters, symbolMap.findSymbolData(`d_drawlist.o`, `l_backSubMat`));
@@ -324,14 +323,10 @@ class dDlst_shadowSimple_c {
 
             // Zero the alpha channel anywhere that the shadow texture is transparent
             displayListRegistersRun(matRegisters, shadowSealTexMat);
-            const tempMat = parseMaterial(matRegisters, `dDlst_shadowSimple_c shadowSealTexMat`)
-            tempMat.alphaTest.op = GX.AlphaOp.OR;
-            tempMat.alphaTest.compareA = GX.CompareType.ALWAYS;
-            tempMat.ropInfo.colorUpdate = true;
-            tempMat.tevStages[0].colorInD = GX.CC.TEXC;
-            tempMat.ropInfo.blendMode = 0;
-            // tempMat.texGens[0] = { type: GX.TexGenType.MTX2x4, source: GX.TexGenSrc.TEX0, matrix: GX.TexGenMatrix.IDENTITY, normalize: true, postMatrix: GX.PostTexGenMatrix.PTIDENTITY };
-            this.sealTexMat = new GXMaterialHelperGfx(tempMat);
+            const tempMaterial = parseMaterial(matRegisters, `dDlst_shadowSimple_c shadowSealTexMat`);
+            tempMaterial.tevStages[0] = { ...tempMaterial.tevStages[0], alphaOp: GX.TevOp.COMP_RGB8_GT, alphaInA: GX.CA.TEXA, alphaInB: GX.CA.ZERO, alphaInC: GX.CA.A2, alphaInD: GX.CA.ZERO };
+            tempMaterial.texGens[0] = { type: GX.TexGenType.MTX2x4, source: GX.TexGenSrc.TEX0, matrix: GX.TexGenMatrix.IDENTITY, normalize: false, postMatrix: GX.PostTexGenMatrix.PTIDENTITY };
+            this.sealTexMat = new GXMaterialHelperGfx(tempMaterial);
 
             // Multiply buffer color by the alpha channel
             displayListRegistersRun(matRegisters, shadowSealMat);
@@ -352,6 +347,9 @@ class dDlst_shadowSimple_c {
             this.backSubMat.material.alphaTest.op = GX.AlphaOp.OR;
             this.backSubMat.material.alphaTest.compareA = GX.CompareType.ALWAYS;
             this.backSubMat.invalidateMaterial();
+            this.sealTexMat.material.alphaTest.op = GX.AlphaOp.OR;
+            this.sealTexMat.material.alphaTest.compareA = GX.CompareType.ALWAYS;
+            this.sealTexMat.invalidateMaterial();
         }
     }
 
@@ -371,32 +369,29 @@ class dDlst_shadowSimple_c {
         mat4.identity(materialParams.u_PostTexMtx[0]);
         if (this.tex) this.tex.fillTextureMapping(materialParams.m_TextureMapping[0]);
 
-        // const template = renderInstManager.pushTemplate();
-        // dDlst_shadowSimple_c.shadowVolumeShape.setOnRenderInst(template);
-        // dDlst_shadowSimple_c.frontMat.allocateDrawParamsDataOnInst(template, drawParams);
-        // dDlst_shadowSimple_c.sealTexMat.allocateMaterialParamsDataOnInst(template, materialParams);
+        const template = renderInstManager.pushTemplate();
+        dDlst_shadowSimple_c.shadowVolumeShape.setOnRenderInst(template);
+        dDlst_shadowSimple_c.frontMat.allocateDrawParamsDataOnInst(template, drawParams);
+        dDlst_shadowSimple_c.sealTexMat.allocateMaterialParamsDataOnInst(template, materialParams);
 
         // Front face shadow volume (add 0.25 to alpha channel for front faces)
-        // const front = renderInstManager.newRenderInst()
-        // dDlst_shadowSimple_c.frontMat.setOnRenderInst(cache, front);
-        // renderInstManager.submitRenderInst(front);
+        const front = renderInstManager.newRenderInst()
+        dDlst_shadowSimple_c.frontMat.setOnRenderInst(cache, front);
+        renderInstManager.submitRenderInst(front);
 
-        // // Back face shadow volume (subtract 0.25 from alpha channel for back faces)
-        // const back = renderInstManager.newRenderInst()
-        // dDlst_shadowSimple_c.backSubMat.setOnRenderInst(cache, back);
-        // renderInstManager.submitRenderInst(back);
+        // Back face shadow volume (subtract 0.25 from alpha channel for back faces)
+        const back = renderInstManager.newRenderInst()
+        dDlst_shadowSimple_c.backSubMat.setOnRenderInst(cache, back);
+        renderInstManager.submitRenderInst(back);
 
         // If a texture is set, clear the alpha channel where the texture is transparent
         if (this.tex) {
-            // TODO: This doesn't seem to be reading the texture
             const texSeal = renderInstManager.newRenderInst()
             mat4.copy(drawParams.u_PosMtx[0], this.texMtx);
-            mat4.identity(materialParams.u_PostTexMtx[0]);
-            this.tex.fillTextureMapping(materialParams.m_TextureMapping[0]);
             dDlst_shadowSimple_c.sealTexMat.allocateDrawParamsDataOnInst(texSeal, drawParams);
-            dDlst_shadowSimple_c.sealTexMat.allocateMaterialParamsDataOnInst(texSeal, materialParams);
             dDlst_shadowSimple_c.sealTexMat.setOnRenderInst(cache, texSeal);
-            dDlst_shadowSimple_c.shadowSealTexShape.setOnRenderInst(texSeal)
+            dDlst_shadowSimple_c.shadowSealTexShape.setOnRenderInst(texSeal);
+            texSeal.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
             renderInstManager.submitRenderInst(texSeal);
 
             // @TODO: Handle non square shadows
@@ -404,25 +399,26 @@ class dDlst_shadowSimple_c {
         }
 
         // Multiply color by the alpha channel
-        // const seal = renderInstManager.newRenderInst()
-        // dDlst_shadowSimple_c.sealMat.setOnRenderInst(cache, seal);
-        // // TODO: Why doesn't this just use the volume shape? Should we just do a fullscreen seal & clear pass like AlphaModel?
-        // // dDlst_shadowSimple_c.shadowSealShape.setOnRenderInst(seal);
-        // renderInstManager.submitRenderInst(seal);
+        const seal = renderInstManager.newRenderInst()
+        mat4.copy(drawParams.u_PosMtx[0], this.texMtx);
+        dDlst_shadowSimple_c.sealMat.allocateDrawParamsDataOnInst(seal, drawParams);
+        dDlst_shadowSimple_c.sealMat.setOnRenderInst(cache, seal);
+        dDlst_shadowSimple_c.shadowSealShape.setOnRenderInst(seal);
+        renderInstManager.submitRenderInst(seal);
 
-        // // Clear the alpha channel for future transparent object rendering
-        // const clear = renderInstManager.newRenderInst()
-        // dDlst_shadowSimple_c.clearMat.setOnRenderInst(cache, clear);
-        // dDlst_shadowSimple_c.shadowVolumeShape.setOnRenderInst(clear);
-        // renderInstManager.submitRenderInst(clear);
+        // Clear the alpha channel for future transparent object rendering
+        const clear = renderInstManager.newRenderInst()
+        dDlst_shadowSimple_c.clearMat.setOnRenderInst(cache, clear);
+        dDlst_shadowSimple_c.shadowVolumeShape.setOnRenderInst(clear);
+        renderInstManager.submitRenderInst(clear);
 
-        // renderInstManager.popTemplate();
-        
+        renderInstManager.popTemplate();
+
     }
 
     public set(globals: dGlobals, pos: vec3, floorY: number, scaleXZ: number, floorNrm: vec3, rotY: number, scaleZ: number, tex: BTIData | null): void {
         const offsetY = scaleXZ * 16.0 * (1.0 - floorNrm[1]) + 1.0;
-        
+
         // Build modelViewMtx
         mat4.fromTranslation(this.modelViewMtx, [pos[0], floorY + offsetY, pos[2]]);
         mat4.rotateY(this.modelViewMtx, this.modelViewMtx, cM_s2rad(rotY));
@@ -469,7 +465,7 @@ class dDlst_shadowControl_c {
 
     constructor(device: GfxDevice, cache: GfxRenderCache, resCtrl: dRes_control_c, symbolMap: SymbolMap) {
         dDlst_shadowSimple_c.compileDL(device, cache, symbolMap);
-        
+
         const img = resCtrl.getObjectRes(ResType.Raw, `Always`, 0x71); // ALWAYS_I4_BALL128B
         const bti: BTI_Texture = {
             name: img.name,
@@ -507,7 +503,7 @@ class dDlst_shadowControl_c {
 
     public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewMtx: mat4): void {
         // dKy_GxFog_set();
-    
+
         // Draw simple shadows
         for (let i = 0; i < this.simpleCount; i++) {
             this.simples[i].draw(globals, renderInstManager);
