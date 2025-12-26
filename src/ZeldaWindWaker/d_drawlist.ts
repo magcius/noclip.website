@@ -253,6 +253,9 @@ export class dDlst_list_c {
     }
 }
 
+
+// Renders a simple cube-shaped shadow volume directly below an object (light position is ignored). Optionally, use a 
+// textured quad (defaults to a cirle) oriented to the ground normal to "cut out" the shadow volume (i.e. a gobo texture).
 class dDlst_shadowSimple_c {
     public alpha: number = 0; // 0-255
     public tex: BTIData | null = null;
@@ -453,6 +456,8 @@ class dDlst_shadowSimple_c {
 class dDlst_shadowRealPoly_c {
     // TODO:
 }
+
+// Similar to shadowSimple, but instead of using a static texture as the gobo, we render a 128x128 shadow map from the light's POV.
 class dDlst_shadowReal_c {
     public state = 0; // 0: unallocated, 1: ready, 2: pendingDelete
 
@@ -484,11 +489,13 @@ class dDlst_shadowReal_c {
         // TODO: Implement draw logic
     }
 
+    // Evaluates the model immediately, adds to renderlist. Only works for a single model. 
     public set(shouldFade: number, model: J3DModelInstance, pos: vec3, casterSize: number, heightAgl: number, tevStr: dKy_tevstr_c): number {
         // TODO: Implement set logic
         return this.id;
     }
 
+    // Defer evaluation of model(s) until render time. Call add() to include additional models in the shadowmap. 
     public set2(shouldFade: number, model: J3DModelInstance, pos: vec3, casterSize: number, heightAgl: number, tevStr: dKy_tevstr_c): number {
         if (this.models.length === 0) {
             assertExists(tevStr); // The game allows passing a null tevStr (uses player's light pos), we do not.
