@@ -15,21 +15,29 @@ class KirbyMapDesc implements SceneDesc {
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
         const dataFetcher = context.dataFetcher;
         const arc = HSD_ArchiveParse(await dataFetcher.fetchData(`${pathBase}/${this.id}`));
-        const ctx = new HSD_LoadContext(arc);
+        const renderer = new KirbyMapRenderer(device, arc);
+        return renderer;
+    }
+}
 
-        const modelRootNode = HSD_Archive_Find_Model(arc);
+class KirbyMapRenderer extends MeleeRenderer {
+
+    constructor(device: GfxDevice, public modelArchive: HSD_Archive) {
+        super(device);
+        const ctx = new HSD_LoadContext(modelArchive);
+
+        const modelRootNode = HSD_Archive_Find_Model(ctx.archive);
         const map = Kirby_Load_grModel(ctx, assertExists(modelRootNode));
 
-        const scene = new MeleeRenderer(device);
 
         if (map.skyboxModel) {
-            scene.jobjRoots.push(new HSD_JObjRoot_Instance(scene.modelCache.loadJObjRoot(map.skyboxModel)));
+            this.jobjRoots.push(new HSD_JObjRoot_Instance(this.modelCache.loadJObjRoot(map.skyboxModel)));
         }
 
-        const mainRoot = new HSD_JObjRoot_Instance(scene.modelCache.loadJObjRoot(assertExists(map.mainModel)));
-        scene.jobjRoots.push(mainRoot);
+        const mainRoot = new HSD_JObjRoot_Instance(this.modelCache.loadJObjRoot(assertExists(map.mainModel)));
+        this.jobjRoots.push(mainRoot);
 
-        const grModelMotion = HSD_Archive_Find_ModelMotion(arc);
+        const grModelMotion = HSD_Archive_Find_ModelMotion(ctx.archive);
         if (grModelMotion) {
             const modelMotion = Kirby_Load_grModelMotion(ctx, assertExists(grModelMotion));
             mainRoot.addAnimAll(
@@ -38,8 +46,6 @@ class KirbyMapDesc implements SceneDesc {
                 null,
             )
         }
-
-        return scene;
     }
 }
 
