@@ -384,6 +384,46 @@ void main() {
 }
 
 const scratchMat4 = mat4.create();
+class dDlst_shadowReal_c {
+    public state = 0; // 0: unallocated, 1: ready, 2: pendingDelete
+    private models: J3DModelInstance[] = [];
+    
+    constructor(public id: number = 0) {
+        // TODO: Implement init logic
+    }
+
+    public reset(): void {
+        if( this.state === 1 ) {
+            this.state = 2; // This shadow will be freed next frame if not set() again 
+        } else {
+            this.state = 0;
+        }
+        this.models.length = 0;
+    }
+
+    public imageDraw(mtx: mat4): void {
+        // TODO: Implement imageDraw logic
+    }
+
+    public draw(): void {
+        // TODO: Implement draw logic
+    }
+
+    public set(key: number, param2: number, pModel: any, pPos: vec3, param5: number, param6: number, pTevStr: any): number {
+        // TODO: Implement set logic
+        return this.id;
+    }
+
+    public set2(key: number, param2: number, pModel: any, pPos: vec3, param5: number, param6: number, pTevStr: any): number {
+        // TODO: Implement set2 logic
+        return this.id;
+    }
+
+    public add(pModel: any): boolean {
+        // TODO: Implement add logic
+        return false;
+    }
+}
 
 class dDlst_shadowSimple_c_Cache {
     public program: GfxProgram;
@@ -544,14 +584,12 @@ class dDlst_shadowControl_c {
     private simples = nArray(128, () => new dDlst_shadowSimple_c());
     private simpleCount = 0;
     private simpleCache: dDlst_shadowSimple_c_Cache;
+    private reals = nArray(8, () => new dDlst_shadowReal_c());
+    private latestId: number = 0;
 
     public get defaultSimpleTex(): BTIData {
         return this.simpleCache.defaultSimpleTex;
     }
-
-    // TODO: Real shadows
-    // private reals = nArray(8, () => new dDlst_shadowSimple_c());
-    // private realCache: dDlst_shadowReal_c_DLCache;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, resCtrl: dRes_control_c) {
         this.simpleCache = new dDlst_shadowSimple_c_Cache(resCtrl, cache);
@@ -563,6 +601,9 @@ class dDlst_shadowControl_c {
 
     public reset(): void {
         this.simpleCount = 0;
+        for( let i = 0; i < this.reals.length; i++) {
+            this.reals[i].reset();
+        }
     }
 
     public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
@@ -618,13 +659,13 @@ class dDlst_shadowControl_c {
     }
 
     public setReal(id: number, shouldFade: number, model: J3DModelInstance, pos: vec3, casterSize: number, heightAgl: number, tevStr: dKy_tevstr_c): number {
-        // TODO: Implementation
-        return 0;
+        let real = this.getOrAllocate(id);
+        return real ? real.set(id, shouldFade, model, pos, casterSize, heightAgl, tevStr) : 0;
     }
 
     public setReal2(id: number, shouldFade: number, model: J3DModelInstance, pos: vec3, casterSize: number, heightAgl: number, tevStr: dKy_tevstr_c): number {
-        // TODO: Implementation
-        return 0;
+        let real = this.getOrAllocate(id);
+        return real ? real.set2(id, shouldFade, model, pos, casterSize, heightAgl, tevStr) : 0;
     }
 
     public addReal(id: number, model: J3DModelInstance): boolean {
@@ -640,6 +681,19 @@ class dDlst_shadowControl_c {
         simple.set(pos, groundY, scaleXZ, floorNrm, angle, scaleZ, tex ? tex : this.simpleCache.whiteTex);
         return true;
     }
+
+    private getOrAllocate(id: number): dDlst_shadowReal_c | null {
+        let real = id ? this.reals.find(r => r.id === id) : undefined;
+        if (!real) {
+            const freeIdx = this.reals.findIndex(r => r.state === 0);
+            if(freeIdx >= 0) {
+                real = this.reals[freeIdx];
+                real.id = ++this.latestId;
+            }
+            else return null;
+        }
+        return real;
+    }
 }
 
 export function dComIfGd_setSimpleShadow2(globals: dGlobals, pos: vec3, groundY: number, scaleXZ: number, floorPoly: cBgS_PolyInfo,
@@ -650,4 +704,19 @@ export function dComIfGd_setSimpleShadow2(globals: dGlobals, pos: vec3, groundY:
     } else {
         return false;
     }
+}
+
+export function dComIfGd_setShadow(globals: dGlobals, id: number, shouldFade: boolean, model: J3DModelInstance, pos: vec3, casterSize: number, scaleXZ: number,
+    y: number, groundY: number, pFloorPoly: cBgS_PolyInfo, pTevStr: dKy_tevstr_c, rotY = 0.0, scaleZ = 1.0, pTexObj: BTIData | null = globals.dlst.shadowControl.defaultSimpleTex
+): number {
+    if (groundY <= -Infinity) {
+        return 0;
+    }
+
+    const sid = globals.dlst.shadowControl.setReal2(id, shouldFade ? 1 : 0, model, pos, casterSize, y - groundY, pTevStr);
+    if (sid === 0) {
+        const simplePos: vec3 = [pos[0], y, pos[2]];
+        dComIfGd_setSimpleShadow2(globals, simplePos, groundY, scaleXZ, pFloorPoly, rotY, scaleZ, pTexObj);
+    }
+    return sid;
 }
