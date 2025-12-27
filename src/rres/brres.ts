@@ -411,6 +411,8 @@ function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice, version: number): MDL
     // Now combine the whole thing.
     const gxMaterial = parseMaterialEntry(r, index, name, numTexGens, numTevs, numInds);
     gxMaterial.cullMode = cullMode;
+    gxMaterial.ropInfo.colorUpdate = true;
+    gxMaterial.ropInfo.alphaUpdate = false;
 
     const indTexMatrices: Float32Array[] = [];
     for (let i = 0; i < 3; i++) {
