@@ -99,6 +99,9 @@ import * as Scenes_CrashWarped from './CrashWarped/scenes.js';
 import * as Scenes_PlusForXP from './PlusForXP/scenes.js';
 import * as Scenes_MarioKart64 from './MarioKart64/scenes.js';
 import * as Scenes_KirbyAirRide from './KirbyAirRide/scenes.js';
+import * as Scenes_Descent1 from './Descent1_2/Scenes_Descent1.js';
+import * as Scenes_Descent2 from './Descent1_2/Scenes_Descent2.js';
+import * as Scenes_Descent2Vertigo from './Descent1_2/Scenes_Descent2Vertigo.js';
 
 import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_FileDrops.js';
 
@@ -236,6 +239,9 @@ const sceneGroups: (string | SceneGroup)[] = [
     Scenes_AShortHike.sceneGroup,
     Scenes_NeonWhite.sceneGroup,
     Scenes_OuterWilds.sceneGroup,
+    Scenes_Descent1.sceneGroup,
+    Scenes_Descent2.sceneGroup,
+    Scenes_Descent2Vertigo.sceneGroup,
 ];
 
 enum SaveStatesAction {
