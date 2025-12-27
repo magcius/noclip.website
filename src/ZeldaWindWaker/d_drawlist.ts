@@ -318,41 +318,44 @@ class dDlst_shadowSimple_c {
         const sealTexShape = new dDlst_BasicShape_c(cache, shadowTexVtxLoader.loadedVertexLayout, sealTexVerts);
 
         // Construct materials
+        const matBuilder = new GXMaterialBuilder();
         const matRegisters = new DisplayListRegisters();
         displayListRegistersInitGX(matRegisters);
-        
-        // The game calls GXSetAlphaCompare with these values before these display lists are executed
-        const patchMaterial = (mat: GXMaterial) => {
-            mat.alphaTest.op = GX.AlphaOp.OR;
-            mat.alphaTest.compareA = GX.CompareType.ALWAYS;
-            return mat;
-        };
 
         // Writes GX_TEVREG0.a (0x40) on every front face that passes the depth test 
         // These are the first draw calls to write alpha each frame, so it assumes the alpha channel is empty
         displayListRegistersRun(matRegisters, symbolMap.findSymbolData(`d_drawlist.o`, `l_frontMat`));
-        const frontMat = new GXMaterialHelperGfx(patchMaterial(parseMaterial(matRegisters, `dDlst_shadowSimple_c l_frontMat`)));
+        matBuilder.setFromRegisters(matRegisters);
+        matBuilder.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.OR, GX.CompareType.ALWAYS, 0);
+        const frontMat = new GXMaterialHelperGfx(matBuilder.finish(`dDlst_shadowSimple_c l_frontMat`));
 
         // Subtract GX_TEVREG0.a (0x40)on every back face that passes the depth test
         // The result after frontMat and backMat are rendered is 0x40 written everywhere the shadow should be drawn
         displayListRegistersRun(matRegisters, symbolMap.findSymbolData(`d_drawlist.o`, `l_backSubMat`));
-        const backSubMat = new GXMaterialHelperGfx(patchMaterial(parseMaterial(matRegisters, `dDlst_shadowSimple_c l_backSubMat`)));
+        matBuilder.setFromRegisters(matRegisters);
+        matBuilder.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.OR, GX.CompareType.ALWAYS, 0);
+        const backSubMat = new GXMaterialHelperGfx(matBuilder.finish(`dDlst_shadowSimple_c l_backSubMat`));
 
         // Zero the alpha channel anywhere that the shadow texture is transparent
         displayListRegistersRun(matRegisters, shadowSealTexMat);
-        const tempMaterial = patchMaterial(parseMaterial(matRegisters, `dDlst_shadowSimple_c shadowSealTexMat`));
-        tempMaterial.tevStages[0] = { ...tempMaterial.tevStages[0], alphaOp: GX.TevOp.COMP_RGB8_GT, alphaInA: GX.CA.TEXA, alphaInB: GX.CA.ZERO, alphaInC: GX.CA.A2, alphaInD: GX.CA.ZERO };
-        tempMaterial.texGens[0] = { type: GX.TexGenType.MTX2x4, source: GX.TexGenSrc.TEX0, matrix: GX.TexGenMatrix.IDENTITY, normalize: false, postMatrix: GX.PostTexGenMatrix.PTIDENTITY };
-        const sealTexMat = new GXMaterialHelperGfx(tempMaterial);
+        matBuilder.setFromRegisters(matRegisters);
+        matBuilder.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.OR, GX.CompareType.ALWAYS, 0);
+        matBuilder.setTevAlphaOp(0, GX.TevOp.COMP_RGB8_GT, GX.TevBias.ZERO, GX.TevScale.SCALE_1, false, GX.Register.PREV);
+        matBuilder.setTevAlphaIn(0, GX.CA.TEXA, GX.CA.ZERO, GX.CA.A2, GX.CA.ZERO);
+        matBuilder.setTexCoordGen(0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY, false, GX.PostTexGenMatrix.PTIDENTITY);
+        const sealTexMat = new GXMaterialHelperGfx(matBuilder.finish(`dDlst_shadowSimple_c l_sealTexMat`));
 
         // Multiply buffer color by the alpha channel
         displayListRegistersRun(matRegisters, shadowSealMat);
-        const sealMat = new GXMaterialHelperGfx(patchMaterial(parseMaterial(matRegisters, `dDlst_shadowSimple_c l_shadowSealDL`)));
+        matBuilder.setFromRegisters(matRegisters);
+        matBuilder.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.OR, GX.CompareType.ALWAYS, 0);
+        const sealMat = new GXMaterialHelperGfx(matBuilder.finish(`dDlst_shadowSimple_c l_shadowSealDL`));
 
         // Write GX_TEVREG1.a (0x00) to everywhere the shadow volume was drawn 
         // Clears the alpha channel for future transparent object rendering
         displayListRegistersRun(matRegisters, symbolMap.findSymbolData(`d_drawlist.o`, `l_clearMat`));
-        const clearMat = new GXMaterialHelperGfx(parseMaterial(matRegisters, `dDlst_shadowSimple_c l_clearMat`));
+        matBuilder.setFromRegisters(matRegisters);
+        const clearMat = new GXMaterialHelperGfx(matBuilder.finish(`dDlst_shadowSimple_c l_clearMat`));
 
         return { volumeShape, sealShape, sealTexShape, frontMat, backSubMat, sealTexMat, sealMat, clearMat };
     }
