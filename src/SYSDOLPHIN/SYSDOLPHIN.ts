@@ -666,7 +666,9 @@ function runVertices(ctx: HSD_LoadContext, vtxDescBuffer: ArrayBufferSlice, dlBu
 
         vcd[attr] = { type: attrType };
         vatFormat[attr] = { compType, compCnt, compShift };
-        arrays[attr] = { buffer: HSD_LoadContext__ResolvePtr(ctx, arrayOffs), offs: 0, stride: stride };
+
+        if (attrType === GX.AttrType.INDEX8 || attrType === GX.AttrType.INDEX16)
+            arrays[attr] = { buffer: HSD_LoadContext__ResolvePtr(ctx, arrayOffs), offs: 0, stride: stride };
 
         idx += 0x18;
     }
