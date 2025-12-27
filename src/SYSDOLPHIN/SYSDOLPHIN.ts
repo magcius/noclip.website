@@ -674,12 +674,11 @@ function runVertices(ctx: HSD_LoadContext, vtxDescBuffer: ArrayBufferSlice, dlBu
         const stride = view.getUint16(idx + 0x12);
         const arrayOffs = view.getUint32(idx + 0x14);
 
-        const buf = HSD_LoadContext__ResolvePtrNullable(ctx, arrayOffs) ?? new ArrayBufferSlice(new ArrayBuffer());
+        vcd[attr] = { type: attrType };
+        vatFormat[attr] = { compType, compCnt, compShift };
 
-        vcd[attr] = {type: attrType};
-        vatFormat[attr] = {compType, compCnt, compShift};
-        arrays[attr] = {buffer: buf, offs: 0, stride: stride};
-
+        if (attrType === GX.AttrType.INDEX8 || attrType === GX.AttrType.INDEX16)
+            arrays[attr] = { buffer: HSD_LoadContext__ResolvePtr(ctx, arrayOffs), offs: 0, stride: stride };
 
         idx += 0x18;
     }

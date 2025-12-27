@@ -576,18 +576,18 @@ export function calcBillboardMatrix(dst: mat4, m: ReadonlyMat4, flags: CalcBillb
 
     // General calculation:
     //
-    //   GlobalX = { 1, 0, 0 }, GlobalY = { 0, 1, 0 }, GlobalZ = { 0, 0, 1 }
+    //   UnitX = { 1, 0, 0 }, UnitY = { 0, 1, 0 }, UnitZ = { 0, 0, 1 }
     //   MatrixX = { m[0], m[1], m[2] }
     //   MatrixY = axisY || { m[4], m[5], m[6] }
     //   MatrixZ = { m[8], m[9], m[10] }
     //
     // Pick InputZ:
-    //   UseZPlane: GlobalZ
+    //   UseZPlane: UnitZ
     //   UseZSphere: { -m[12], -m[13], -m[14] }
     //
     // Pick InputYRoll:
     //   UseRollLocal: MatrixY
-    //   UseRollGlobal: GlobalY
+    //   UseRollGlobal: UnitY
     //
     // Calculate:
     //   Z = InputZ

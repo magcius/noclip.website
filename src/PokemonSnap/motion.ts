@@ -238,6 +238,7 @@ export class MotionParser extends MIPS.NaiveInterpreter {
     private movingYaw = 0;
     private positionOffset = vec3.create();
     private yawOffset = 0;
+    public override preferStructAddressesToOffsets = false;
 
     public override reset(): void {
         super.reset();

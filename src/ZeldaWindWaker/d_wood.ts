@@ -11,7 +11,6 @@ import { nArray } from '../gfx/platform/GfxPlatformUtil.js';
 import { GfxRendererLayer, GfxRenderInstManager, makeSortKey } from '../gfx/render/GfxRenderInstManager.js';
 import { compileVtxLoader, DisplayListRegisters, displayListRegistersInitGX, displayListRegistersRun, getAttributeByteSize, GX_Array, GX_VtxAttrFmt, GX_VtxDesc } from '../gx/gx_displaylist.js';
 import * as GX from '../gx/gx_enum.js';
-import { parseMaterial } from '../gx/gx_material.js';
 import { ColorKind, DrawParams, GXMaterialHelperGfx, MaterialParams } from '../gx/gx_render.js';
 import { assert } from '../util.js';
 import { ViewerRenderInput } from '../viewer.js';
@@ -22,6 +21,7 @@ import { dKy_GxFog_set } from './d_kankyo.js';
 import { dKyw_get_wind_pow, dKyw_get_wind_vec } from './d_kankyo_wether.js';
 import { mDoMtx_XrotM, mDoMtx_YrotM, mDoMtx_YrotS, MtxTrans } from './m_do_mtx.js';
 import { dDlst_BasicShape_c } from './d_drawlist.js';
+import { GXMaterialBuilder } from '../gx/GXMaterialBuilder.js';
 
 //-----------------------------------------
 // Types
@@ -245,12 +245,15 @@ class WoodModel {
 
         const matRegisters = new DisplayListRegisters();
 
+        const matBuilder = new GXMaterialBuilder();
+        matBuilder.setFog(GX.FogType.PERSP_LIN, true);
+
         // Shadow material
         displayListRegistersInitGX(matRegisters);
         displayListRegistersRun(matRegisters, l_shadowMatDL);
-        const shadowMat = parseMaterial(matRegisters, 'd_tree::l_shadowMatDL');
+        matBuilder.setFromRegisters(matRegisters);
 
-        this.shadowMaterial = new GXMaterialHelperGfx(shadowMat);
+        this.shadowMaterial = new GXMaterialHelperGfx(matBuilder.finish('d_tree::l_shadowMatDL'));
         const shadowTexture = createTexture(matRegisters, l_Txa_kage_32TEX, 'l_Txa_kage_32TEX');
         this.shadowTextureData = new BTIData(device, cache, shadowTexture);
         this.shadowTextureData.fillTextureMapping(this.shadowTextureMapping[0]);
@@ -269,18 +272,10 @@ class WoodModel {
         // Bush material
         displayListRegistersInitGX(matRegisters);
         displayListRegistersRun(matRegisters, l_matDL);
-
-        const material = parseMaterial(matRegisters, 'd_tree::l_matDL');
-        material.alphaTest.op = GX.AlphaOp.OR;
-        material.alphaTest.compareA = GX.CompareType.GREATER;
-        material.alphaTest.compareB = GX.CompareType.GREATER;
-        material.alphaTest.referenceA = kAlphaCutoff;
-        material.alphaTest.referenceB = kAlphaCutoff;
-        material.hasDynamicAlphaTest = true;
-        material.ropInfo.fogType = GX.FogType.PERSP_LIN;
-        material.ropInfo.fogAdjEnabled = true;
-        material.hasFogBlock = true;
-        this.bushMaterial = new GXMaterialHelperGfx(material);
+        matBuilder.setFromRegisters(matRegisters);
+        matBuilder.setAlphaCompare(GX.CompareType.GREATER, kAlphaCutoff, GX.AlphaOp.OR, GX.CompareType.GREATER, kAlphaCutoff);
+        matBuilder.setDynamicAlphaTest(true);
+        this.bushMaterial = new GXMaterialHelperGfx(matBuilder.finish('d_tree::l_matDL'));
 
         const bushTexture = createTexture(matRegisters, l_Txa_swood_bTEX, 'l_Txa_swood_bTEX');
         this.bushTextureData = new BTIData(device, cache, bushTexture);

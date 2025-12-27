@@ -587,7 +587,7 @@ export class JPAResourceData {
         );
 
         if (bsp1.isEnableAnmTone) {
-            mb.setDynamicAlphaCompare(true);
+            mb.setDynamicAlphaTest(true);
             mb.setAlphaCompare(GX.CompareType.GEQUAL, 0, GX.AlphaOp.OR, GX.CompareType.NEVER, 0);
         } else {
             mb.setAlphaCompare(
