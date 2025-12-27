@@ -489,6 +489,8 @@ class TreeModel {
         // Shadow material
         displayListRegistersInitGX(matRegisters);
         displayListRegistersRun(matRegisters, l_shadowMatDL);
+        matBuilder.reset();
+        matBuilder.setFog(GX.FogType.PERSP_LIN, true);
         matBuilder.setFromRegisters(matRegisters);
 
         const shadowTextureData = new BTIData(device, cache, createTexture(matRegisters, l_Txa_kage_32TEX, 'l_Txa_kage_32TEX'));
