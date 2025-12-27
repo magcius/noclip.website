@@ -2,7 +2,7 @@
 import { mat4, ReadonlyVec3, vec3 } from "gl-matrix";
 import { Camera } from "../Camera.js";
 import { Color, colorCopy, colorNewCopy, White } from "../Color.js";
-import { computeModelMatrixR, computeModelMatrixS, computeModelMatrixSRT, lerp, MathConstants, saturate, Vec3One } from "../MathHelpers.js";
+import { CalcBillboardFlags, calcBillboardMatrix, computeModelMatrixR, computeModelMatrixS, computeModelMatrixSRT, lerp, MathConstants, saturate, scaleMatrix, setMatrixTranslation, Vec3One } from "../MathHelpers.js";
 import { getPointHermite } from "../Spline.js";
 import { TextureMapping } from "../TextureHolder.js";
 import { GfxBufferCoalescerCombo, GfxCoalescedBuffersCombo } from "../gfx/helpers/BufferHelpers.js";
@@ -1088,6 +1088,8 @@ function mkEnvelopeModelNodeMtx(dst: mat4, jobj: HSD_JObj_Instance): void {
     }
 }
 
+const scratchVec3a = vec3.create();
+const scratchVec3b = vec3.create();
 const scratchMatrixEnv = mat4.create();
 const scratchMatrixNd = mat4.create();
 
@@ -1138,6 +1140,32 @@ class HSD_DObj_Instance {
                 assert(pobj.jointReferenceID === 0);
 
                 mat4.mul(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix, jobj.jointMtx);
+
+                const billboardFlags = jobj.data.jobj.flags & HSD_JObjFlags.BILLBOARD_MASK;
+                // TODO(jstpierre): pbillboard affects position?
+                if (billboardFlags & HSD_JObjFlags.BILLBOARD) {
+                    // X = Y ^ UnitZ
+                    // Y = UnitZ ^ X
+                    calcBillboardMatrix(drawParams.u_PosMtx[0], drawParams.u_PosMtx[0], CalcBillboardFlags.UseZPlane | CalcBillboardFlags.PriorityZ | CalcBillboardFlags.UseRollLocal);
+                } else if (billboardFlags & HSD_JObjFlags.VBILLBOARD) {
+                    // X = Y ^ Z
+                    // Z = X ^ Y
+                    calcBillboardMatrix(drawParams.u_PosMtx[0], drawParams.u_PosMtx[0], CalcBillboardFlags.UseZSphere | CalcBillboardFlags.PriorityY | CalcBillboardFlags.UseRollLocal);
+                } else if (billboardFlags & HSD_JObjFlags.HBILLBOARD) {
+                    // TODO(jstpierre): HBILLBOARD
+                    // Z = X ^ Y
+                    // Y = Z ^ X
+                } else if (billboardFlags & HSD_JObjFlags.RBILLBOARD) {
+                    // Throw out most of the src except the scaling and position.
+                    const m = drawParams.u_PosMtx[0];
+                    mat4.getScaling(scratchVec3a, m);
+                    mat4.getTranslation(scratchVec3b, m);
+
+                    mat4.identity(m);
+                    mat4.rotateZ(m, m, jobj.rotation[2]);
+                    mat4.scale(m, m, scratchVec3a);
+                    setMatrixTranslation(m, scratchVec3b);
+                }
             } else if (pobj.kind === 'Envelope') {
                 mkEnvelopeModelNodeMtx(scratchMatrixNd, jobj);
 
@@ -1200,13 +1228,13 @@ class HSD_DObj_Instance {
     }
 }
 
-function applyMayaSSC(dst: mat4, parentScaleX: number, parentScaleY: number, parentScaleZ: number): void {
-    dst[1] *= (parentScaleX / parentScaleY);
-    dst[2] *= (parentScaleX / parentScaleZ);
-    dst[4] *= (parentScaleY / parentScaleX);
-    dst[6] *= (parentScaleY / parentScaleZ);
-    dst[8] *= (parentScaleZ / parentScaleX);
-    dst[9] *= (parentScaleZ / parentScaleY);
+function applyMayaSSC(dst: mat4, parentScale: ReadonlyVec3): void {
+    dst[1] *= (parentScale[0] / parentScale[1]);
+    dst[2] *= (parentScale[0] / parentScale[2]);
+    dst[4] *= (parentScale[1] / parentScale[0]);
+    dst[6] *= (parentScale[1] / parentScale[2]);
+    dst[8] *= (parentScale[2] / parentScale[0]);
+    dst[9] *= (parentScale[2] / parentScale[1]);
 }
 
 class HSD_JObj_Instance {
@@ -1324,7 +1352,7 @@ class HSD_JObj_Instance {
             this.scale[0], this.scale[1], this.scale[2],
             this.rotation[0], this.rotation[1], this.rotation[2],
             this.translation[0], this.translation[1], this.translation[2]);
-        applyMayaSSC(this.jointMtx, this.parentScale[0], this.parentScale[1], this.parentScale[2]);
+        applyMayaSSC(this.jointMtx, this.parentScale);
 
         if (parentJointMtx !== null)
             mat4.mul(this.jointMtx, parentJointMtx, this.jointMtx);
@@ -1355,6 +1383,7 @@ export class HSD_JObjRoot_Instance {
 
     private rootInst: HSD_JObj_Instance;
     private allJObjsByID = new Map<number, HSD_JObj_Instance>();
+    public visible = true;
 
     constructor(public data: HSD_JObjRoot_Data) {
         this.rootInst = new HSD_JObj_Instance(this.data.rootData, this.data.texImageDataCache);
