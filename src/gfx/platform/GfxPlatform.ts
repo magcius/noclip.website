@@ -453,6 +453,7 @@ export interface GfxDevice {
 
     // Copying.
     copySubTexture2D(dst: GfxTexture, dstX: number, dstY: number, src: GfxTexture, srcX: number, srcY: number): void;
+    copyCanvasToTexture(dst: GfxTexture, dstZ: number, src: HTMLCanvasElement): void;
 
     // Data submission
     zeroBuffer(buffer: GfxBuffer, dstByteOffset: number, byteCount: number): void;
