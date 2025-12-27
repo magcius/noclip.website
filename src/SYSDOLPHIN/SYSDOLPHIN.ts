@@ -4,7 +4,7 @@
 // https://github.com/PsiLupan/FRAY/
 
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
-import { readString, assert } from "../util.js";
+import { readString, assert, assertExists } from "../util.js";
 import { vec3, mat4 } from "gl-matrix";
 import * as GX from "../gx/gx_enum.js";
 import { compileVtxLoader, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, GX_Array, LoadedVertexLayout } from "../gx/gx_displaylist.js";
@@ -119,9 +119,7 @@ function HSD_Archive__GetStructOffset(arc: HSD_Archive, buffer: ArrayBufferSlice
 }
 
 export function HSD_Archive__ResolvePtr(arc: HSD_Archive, offs: number, size?: number): ArrayBufferSlice {
-    // Ensure that this is somewhere within our relocation table.
-    assert(arc.validOffsets.indexOf(offs) >= 0, `${offs} was not a valid offset`);
-    return arc.dataBuffer.subarray(offs, size);
+    return assertExists(HSD_Archive__ResolvePtrNullable(arc, offs, size));
 }
 
 export function HSD_Archive__ResolvePtrNullable(arc: HSD_Archive, offs: number, size?: number): ArrayBufferSlice | null {
