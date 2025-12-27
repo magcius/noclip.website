@@ -436,8 +436,8 @@ function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice, version: number): MDL
     const colorRegisters: Color[] = [];
     const colorConstants: Color[] = [];
     for (let i = 0; i < 8; i++) {
-        const vl = r.kc[i * 2 + 0];
-        const vh = r.kc[i * 2 + 1];
+        const vl = r.tevKColor[i * 2 + 0];
+        const vh = r.tevKColor[i * 2 + 1];
 
         const cr = ((vl >>>  0) & 0x7FF) / 0xFF;
         const ca = ((vl >>> 12) & 0x7FF) / 0xFF;
@@ -476,8 +476,8 @@ function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice, version: number): MDL
         const chanCtrlA = view.getUint32(lightChannelTableIdx + 0x10);
 
         if (i < numChans) {
-            r.xfs(GX.XFRegister.XF_COLOR0CNTRL_ID + i, 0, chanCtrlC);
-            r.xfs(GX.XFRegister.XF_ALPHA0CNTRL_ID + i, 0, chanCtrlA);
+            r.xfSet(GX.XFRegister.XF_COLOR0CNTRL_ID + i, 0, chanCtrlC);
+            r.xfSet(GX.XFRegister.XF_ALPHA0CNTRL_ID + i, 0, chanCtrlA);
             mb.setColorChannelFromRegisters(r, i);
         }
 
