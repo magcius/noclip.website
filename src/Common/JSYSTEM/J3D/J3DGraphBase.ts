@@ -248,10 +248,6 @@ function J3DGetTextureMtx(dst: mat4, srt: ReadonlyMat4): void {
     dst[14] = 0;
 }
 
-function J3DGetTextureMtxOld(dst: mat4, srt: ReadonlyMat4): void {
-    mat4.copy(dst, srt);
-}
-
 const flipYMatrix = mat4.create();
 function mtxFlipY(dst: mat4, flipY: boolean): void {
     if (flipY) {
@@ -762,13 +758,13 @@ export class J3DModelData {
 
     public bbox = new AABB();
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, public bmd: BMD) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, public bmd: BMD, name: string = '') {
         // Load shape data.
         const loadedVertexDatas = [];
         for (let i = 0; i < bmd.shp1.shapes.length; i++)
             for (let j = 0; j < bmd.shp1.shapes[i].mtxGroups.length; j++)
                 loadedVertexDatas.push(bmd.shp1.shapes[i].mtxGroups[j].loadedVertexData);
-        this.bufferCoalescer = loadedDataCoalescerComboGfx(device, loadedVertexDatas);
+        this.bufferCoalescer = loadedDataCoalescerComboGfx(device, loadedVertexDatas, name);
 
         for (let i = 0; i < bmd.shp1.shapes.length; i++) {
             const shp1 = bmd.shp1.shapes[i];

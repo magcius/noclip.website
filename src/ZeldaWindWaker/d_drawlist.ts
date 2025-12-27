@@ -11,7 +11,7 @@ import { GfxRenderInst, GfxRenderInstExecutionOrder, GfxRenderInstList, GfxRende
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder.js';
 import { DisplayListRegisters, GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, LoadedVertexLayout, compileVtxLoader, displayListRegistersInitGX, displayListRegistersRun } from "../gx/gx_displaylist.js";
 import * as GX from '../gx/gx_enum.js';
-import { GX_Program, GXMaterial, parseMaterial } from '../gx/gx_material.js';
+import { GX_Program } from '../gx/gx_material.js';
 import { ColorKind, DrawParams, GXMaterialHelperGfx, MaterialParams, SceneParams, createInputLayout, fillSceneParamsData, ub_SceneParamsBufferSize } from "../gx/gx_render.js";
 import { assert, assertExists, nArray } from '../util.js';
 import { ViewerRenderInput } from '../viewer.js';
@@ -76,7 +76,7 @@ class dDlst_alphaModel_c {
 
     private materialHelperDrawAlpha: GXMaterialHelperGfx;
     private orthoSceneParams = new SceneParams();
-    private orthoQuad = new TSDraw();
+    private orthoQuad = new TSDraw('dDlst_alphaModel_c');
 
     constructor(device: GfxDevice, cache: GfxRenderCache, symbolMap: SymbolMap) {
         const bonboriPos = symbolMap.findSymbolData(`d_drawlist.o`, `l_bonboriPos`);
@@ -100,11 +100,20 @@ class dDlst_alphaModel_c {
 
         // Original game uses three different materials -- two add, one sub. We can reduce this to two draws.
         displayListRegistersRun(matRegisters, symbolMap.findSymbolData(`d_drawlist.o`, `l_backRevZMat`));
-        this.materialHelperBackRevZ = new GXMaterialHelperGfx(parseMaterial(matRegisters, `dDlst_alphaModel_c l_backRevZMat`));
+
+        const matBuilder = new GXMaterialBuilder();
+        matBuilder.setFromRegisters(matRegisters);
+
+        this.materialHelperBackRevZ = new GXMaterialHelperGfx(matBuilder.finish(`dDlst_alphaModel_c l_backRevZMat`));
+
         displayListRegistersRun(matRegisters, symbolMap.findSymbolData(`d_drawlist.o`, `l_frontZMat`));
-        const frontZ = parseMaterial(matRegisters, `dDlst_alphaModel_c l_frontZMat`);
+        matBuilder.setFromRegisters(matRegisters);
+
+        const frontZ = matBuilder.finish(`dDlst_alphaModel_c l_frontZMat`);
+        // TODO(jstpierre): Do this with GXMatBuilder
         frontZ.ropInfo.blendMode = GX.BlendMode.SUBTRACT;
         frontZ.ropInfo.depthFunc = GX.CompareType.GREATER;
+
         this.materialHelperFrontZ = new GXMaterialHelperGfx(frontZ);
 
         assert(this.materialHelperBackRevZ.materialParamsBufferSize === this.materialHelperFrontZ.materialParamsBufferSize);

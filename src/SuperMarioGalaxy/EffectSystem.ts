@@ -55,8 +55,7 @@ export class ParticleResourceHolder {
 
         if (!this.resourceDatas.has(idx)) {
             const cache = sceneObjHolder.modelCache.renderCache;
-            const resData = new JPA.JPAResourceData(cache, this.jpacData, this.jpac.effects[idx]);
-            resData.name = name;
+            const resData = new JPA.JPAResourceData(cache, this.jpacData, this.jpac.effects[idx], name);
             this.addTexturesForResource(sceneObjHolder, resData);
             this.resourceDatas.set(idx, resData);
         }
@@ -1030,7 +1029,7 @@ export class ParticleEmitterHolder {
         const countMap = new Map<string, number>();
         for (let i = 0; i < this.particleEmitters.length; i++) {
             const emitter = this.particleEmitters[i].baseEmitter;
-            const name = emitter !== null ? emitter.resData.name : `!Free`;
+            const name = emitter !== null ? emitter.resData.name! : `!Free`;
             countMap.set(name, fallbackUndefined(countMap.get(name), 0) + 1);
         }
         const entries = [...countMap.entries()];

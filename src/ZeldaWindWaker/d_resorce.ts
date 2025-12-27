@@ -233,7 +233,7 @@ export class dRes_info_c {
         if (type === `BMD ` || type === `BMDM` || type === `BMDC` || type === `BMDS` || type === `BSMD` ||
             type === `BDL ` || type === `BDLM` || type === `BDLC` || type === `BDLI`) {
             // J3D models.
-            const res = new J3DModelData(device, cache, BMD.parse(file.buffer));
+            const res = new J3DModelData(device, cache, BMD.parse(file.buffer), file.name);
             this.destroyables.push(res);
             resEntry.res = res;
         } else if (type === `BMT ` || type === `BMTM`) {

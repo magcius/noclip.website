@@ -129,10 +129,13 @@ class StudioModelMeshData {
     public indexBufferDescriptor: GfxIndexBufferDescriptor;
     public eyeballIndex: number | null = null;
 
-    constructor(cache: GfxRenderCache, public stripGroupData: StudioModelStripGroupData[], public materialNames: string[], private flags: StudioModelMeshDataFlags, vertexData: ArrayBufferLike, indexData: ArrayBufferLike, public vertexCount: number) {
+    constructor(cache: GfxRenderCache, name: string, public stripGroupData: StudioModelStripGroupData[], public materialNames: string[], private flags: StudioModelMeshDataFlags, vertexData: ArrayBufferLike, indexData: ArrayBufferLike, public vertexCount: number) {
         const device = cache.device;
         this.vertexBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, vertexData);
         this.indexBuffer = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, indexData);
+
+        device.setResourceName(this.vertexBuffer, name);
+        device.setResourceName(this.indexBuffer, `${name} (IB)`);
 
         // Create our base input state.
         [this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor] = this.createVertexInput(cache, StaticLightingMode.None);
@@ -1515,7 +1518,8 @@ export class StudioModelData {
                             meshFirstIdx += numIndices;
                         }
 
-                        const meshData = new StudioModelMeshData(cache, stripGroupDatas, materialNames, meshDataFlags, meshVtxData.buffer, meshIdxData.buffer, meshNumVertices);
+                        const meshDataName = `${this.name}/${mdlSubmodelName}/${bodyPartName}/LOD ${lod}`;
+                        const meshData = new StudioModelMeshData(cache, meshDataName, stripGroupDatas, materialNames, meshDataFlags, meshVtxData.buffer, meshIdxData.buffer, meshNumVertices);
                         if (materialtype === 1)
                             meshData.eyeballIndex = materialparam;
                         lodData.meshData.push(meshData);
@@ -1604,7 +1608,7 @@ export class HardwareVertData {
     public mesh: HardwareVertDataMesh[] = [];
     public vertexSize: number;
 
-    constructor(renderContext: SourceRenderContext, buffer: ArrayBufferSlice) {
+    constructor(renderContext: SourceRenderContext, buffer: ArrayBufferSlice, name: string) {
         const view = buffer.createDataView();
 
         const version = view.getUint32(0x00, true);
@@ -1661,7 +1665,9 @@ export class HardwareVertData {
             meshHeaderIdx += 0x1C;
         }
 
-        this.buffer = createBufferFromData(renderContext.device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, vertexData.buffer);
+        const device = renderContext.device;
+        this.buffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, vertexData.buffer);
+        device.setResourceName(this.buffer, `${name} (HardwareVertData)`)
     }
 
     public destroy(device: GfxDevice): void {

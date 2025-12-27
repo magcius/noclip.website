@@ -118,7 +118,7 @@ function HSD_Archive__GetStructOffset(arc: HSD_Archive, buffer: ArrayBufferSlice
     return buffer.byteOffset - arc.dataBuffer.byteOffset;
 }
 
-function HSD_Archive__ResolvePtr(arc: HSD_Archive, offs: number, size?: number): ArrayBufferSlice {
+export function HSD_Archive__ResolvePtr(arc: HSD_Archive, offs: number, size?: number): ArrayBufferSlice {
     // Ensure that this is somewhere within our relocation table.
     assert(arc.validOffsets.indexOf(offs) >= 0);
     return arc.dataBuffer.subarray(offs, size);

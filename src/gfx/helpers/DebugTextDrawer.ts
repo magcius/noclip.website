@@ -26,7 +26,7 @@ const sceneParams = new SceneParams();
 
 export class DebugTextDrawer {
     private charWriter = new CharWriter();
-    private ddraw = new TDDraw();
+    private ddraw = new TDDraw('DebugTextDrawer');
     private renderCache: GfxRenderCache;
 
     public textColor = colorNewCopy(White);

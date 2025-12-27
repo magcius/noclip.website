@@ -1216,7 +1216,6 @@ export class Material_Generic extends BaseMaterial {
     private recacheProgram(cache: GfxRenderCache): void {
         if (this.gfxProgram === null) {
             this.gfxProgram = this.shaderInstance.getGfxProgram(cache);
-            cache.device.setResourceName(this.gfxProgram, this.vmt._Filename);
             this.sortKeyBase = setSortKeyProgramKey(this.sortKeyBase, this.gfxProgram.ResourceUniqueId);
         }
     }

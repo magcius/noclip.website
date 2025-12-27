@@ -45,7 +45,7 @@ export class GfxBufferCoalescerCombo {
     public vertexBuffer: GfxBuffer | null = null;
     private indexBuffer: GfxBuffer | null = null;
 
-    constructor(device: GfxDevice, vertexDatas: ArrayBufferSlice[][], indexDatas: ArrayBufferSlice[]) {
+    constructor(device: GfxDevice, vertexDatas: ArrayBufferSlice[][], indexDatas: ArrayBufferSlice[], name: string = '') {
         assert(vertexDatas.length === indexDatas.length);
 
         // Don't do anything if we have no data to care about.
@@ -96,6 +96,9 @@ export class GfxBufferCoalescerCombo {
         this.coalescedBuffers = coalescedBuffers;
         this.vertexBuffer = this.coalescedBuffers[0].vertexBuffers[0].buffer;
         this.indexBuffer = this.coalescedBuffers[0].indexBuffer.buffer;
+
+        device.setResourceName(this.vertexBuffer, name);
+        device.setResourceName(this.indexBuffer, `${name} (IB)`);
     }
 
     public destroy(device: GfxDevice): void {

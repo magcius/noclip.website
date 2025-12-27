@@ -15,7 +15,7 @@ class LightmapPage {
     public data: Uint8Array;
     public uploadDirty = false;
 
-    constructor(device: GfxDevice, public page: LightmapPackerPage) {
+    constructor(device: GfxDevice, public page: LightmapPackerPage, name: string) {
         const width = this.page.width, height = this.page.height, numSlices = 4;
 
         // RGBM seems to be good enough for all devices
@@ -31,6 +31,7 @@ class LightmapPage {
             depthOrArrayLayers: numSlices,
             numLevels: 1,
         });
+        device.setResourceName(this.gfxTexture, name);
 
         const fillEmptySpaceWithPink = false;
         if (fillEmptySpaceWithPink) {
@@ -86,7 +87,7 @@ export class LightmapManager {
     public appendPackerPages(manager: LightmapPacker): number {
         const startPage = this.lightmapPages.length;
         for (let i = 0; i < manager.pages.length; i++)
-            this.lightmapPages.push(new LightmapPage(this.device, manager.pages[i]));
+            this.lightmapPages.push(new LightmapPage(this.device, manager.pages[i], `LightmapPacker Page ${i}`));
         return startPage;
     }
 

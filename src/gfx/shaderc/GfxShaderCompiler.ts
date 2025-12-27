@@ -1,7 +1,7 @@
 
-import { GfxVendorInfo, GfxDevice, GfxViewportOrigin, GfxClipSpaceNearZ, GfxRenderProgramDescriptor } from "../platform/GfxPlatform.js";
+import { GfxVendorInfo, GfxDevice, GfxViewportOrigin, GfxClipSpaceNearZ, GfxRenderProgramDescriptor, GfxPlatform } from "../platform/GfxPlatform.js";
 import { assert } from "../platform/GfxPlatformUtil.js";
-import { GfxShaderLibrary, glslGenerateFloat } from "../helpers/GfxShaderLibrary.js";
+import { glslGenerateFloat } from "../helpers/GfxShaderLibrary.js";
 
 // Shader preprocessor / compiler infrastructure for GLSL.
 
@@ -55,6 +55,7 @@ export function preprocessShader_GLSL(vendorInfo: GfxVendorInfo, type: 'vert' | 
 #define GFX_CLIPSPACE_NEAR_Z()     (${glslGenerateFloat(vendorInfo.clipSpaceNearZ)})
 #define GFX_CLIPSPACE_NEAR_ZERO()  (${vendorInfo.clipSpaceNearZ === GfxClipSpaceNearZ.Zero ? '1' : '0'})
 #define GFX_VIEWPORT_ORIGIN_TL()   (${vendorInfo.viewportOrigin === GfxViewportOrigin.UpperLeft ? '1' : '0'})
+#define GFX_PLATFORM_WEBGPU()      (${vendorInfo.platform === GfxPlatform.WebGPU ? '1' : '0'})
 `;
 
     if (vendorInfo.explicitBindingLocations) {

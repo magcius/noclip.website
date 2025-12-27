@@ -144,6 +144,12 @@ export function parseOpcode(instr: number): Opcode {
     return op;
 }
 
+function plausibleFloat(v: number): boolean {
+    if (v === 0)
+        return true;
+    return Math.abs(v) > 1e-10 && Math.abs(v) < 1e10;
+}
+
 // A simple MIPS interpreter that can only handle mostly-linear functions
 // A very small amount of information is kept about branches, and no attempt
 // is made to handle loops, nested conditionals, or most register modification
@@ -156,6 +162,12 @@ export class NaiveInterpreter {
     protected valid = true;
     public lastInstr = 0;
     public littleEndian = false;
+    // ughhhh so for pokemon snap there aren't too many different relevant pointers for most functions,
+    // so you can get by with guessing things based on just the load/store offset
+    // for ffx, I could be a lot more certain of how data was moving around and decided to retain the full address as best we know
+    // these are both awful and would be solved by actually storing structured data in the registers rather than a flat value
+    // but for now, a terrible and inscrutable toggle
+    public preferStructAddressesToOffsets = true;
     public view: DataView
 
     public reset(): void {
@@ -284,12 +296,13 @@ export class NaiveInterpreter {
                 case Opcode.LHU:
                 case Opcode.LWC1: {
                     const target = op === Opcode.LWC1 ? this.fregs[rt] : this.regs[rt];
+                    // we're barely handling memory interactions, so just try to keep some meaningful record
                     if (imm === 0)
                         target.value = this.guessValue(rs);
-                    else //if ((this.regs[rs].value & 0xFFFF) === 0)
-                        target.value = this.guessValue(rs) + imm;
-                    // else
-                    //     target.value = imm;
+                    else if ((this.regs[rs].value & 0xFFFF) === 0 || this.preferStructAddressesToOffsets)
+                        target.value = this.guessValue(rs) + imm; // filling in a load after a LUI - keep the address
+                    else
+                        target.value = imm; // looks like a struct access: preserve the offset and assume we can infer from context
 
                     target.lastOp = op;
                 } break;
@@ -367,12 +380,19 @@ export class NaiveInterpreter {
                     const left = bitsAsFloat32(this.fregs[rd].value);
                     const right = bitsAsFloat32(this.fregs[rt].value);
                     let res = 0;
-                    if (op === Opcode.SUBS)
-                        res = left - right;
-                    else if (op === Opcode.ADDS)
-                        res = left + right;
-                    else if (op === Opcode.MULS)
-                        res = left * right;
+                    // if we loaded these from memory, just preserve one of the values, don't try to do math
+                    if (!plausibleFloat(left)) {
+                        res = right;
+                    } else if (!plausibleFloat(right)) {
+                        res = left;
+                    } else {
+                        if (op === Opcode.SUBS)
+                            res = left - right;
+                        else if (op === Opcode.ADDS)
+                            res = left + right;
+                        else if (op === Opcode.MULS)
+                            res = left * right;
+                    }
                     this.fregs[frd].value = float32AsBits(res);
                 } break;
                 case Opcode.MOVS: {

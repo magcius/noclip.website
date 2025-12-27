@@ -1,11 +1,11 @@
 
-import { ReadonlyMat4, ReadonlyVec3, vec3 } from "gl-matrix";
-import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetID } from "../render/GfxRenderGraph.js";
+import { ReadonlyMat4, ReadonlyVec3, vec2, vec3 } from "gl-matrix";
+import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetID, GfxrResolveTextureID } from "../render/GfxRenderGraph.js";
 import { GfxRenderInst } from "../render/GfxRenderInstManager.js";
 import { GfxRenderDynamicUniformBuffer } from "../render/GfxRenderDynamicUniformBuffer.js";
 import { fillColor, fillMatrix4x3, fillMatrix4x4, fillVec4 } from "./UniformBufferHelpers.js";
 import { Blue, Color, Green, Red } from "../../Color.js";
-import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxCompareMode, GfxDevice, GfxFormat, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxMipFilterMode, GfxPrimitiveTopology, GfxProgram, GfxSampler, GfxSamplerFormatKind, GfxTexFilterMode, GfxTextureDimension, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxWrapMode } from "../platform/GfxPlatform.js";
+import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxColor, GfxCompareMode, GfxDevice, GfxFormat, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxMipFilterMode, GfxPrimitiveTopology, GfxProgram, GfxSampler, GfxSamplerFormatKind, GfxTexFilterMode, GfxTextureDimension, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxWrapMode } from "../platform/GfxPlatform.js";
 import { align, nArray } from "../../util.js";
 import { GfxRenderCache } from "../render/GfxRenderCache.js";
 import { preprocessProgram_GLSL } from "../shaderc/GfxShaderCompiler.js";
@@ -19,22 +19,23 @@ import { GfxShaderLibrary } from "./GfxShaderLibrary.js";
 
 // TODO(jstpierre):
 //  - Integrate text renderer?
-//  - More primitive types
-//  - Support view-space and screen-space primitives
-
-interface DebugDrawOptions {
-    flags?: DebugDrawFlags;
-};
-
 export enum DebugDrawFlags {
     WorldSpace = 0,
     ViewSpace = 1 << 0,
     ScreenSpace = 1 << 1,
 
-    DepthTint = 1 << 3,
+    DepthTint = 1 << 2,
 
     Default = DepthTint,
 };
+
+interface DebugDrawOptions {
+    flags: DebugDrawFlags;
+};
+
+const defaultOptions: DebugDrawOptions = { flags: DebugDrawFlags.Default };
+
+const SpaceMask = DebugDrawFlags.WorldSpace | DebugDrawFlags.ViewSpace | DebugDrawFlags.ScreenSpace;
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [
     { numUniformBuffers: 1, numSamplers: 1, samplerEntries: [
@@ -63,7 +64,15 @@ flat out uint v_Flags;
 
 void main() {
     uint t_Flags = uint(a_Color.a);
-    gl_Position = UnpackMatrix(u_ClipFromView) * vec4(UnpackMatrix(u_ViewFromWorld) * vec4(a_Position.xyz, 1.0), 1.0);
+
+    uint t_Space = t_Flags & ${SpaceMask};
+    if (t_Space == ${DebugDrawFlags.WorldSpace}) {
+        gl_Position = UnpackMatrix(u_ClipFromView) * vec4(UnpackMatrix(u_ViewFromWorld) * vec4(a_Position.xyz, 1.0), 1.0);
+    } else if (t_Space == ${DebugDrawFlags.ViewSpace}) {
+        gl_Position = UnpackMatrix(u_ClipFromView) * vec4(a_Position.xyz, 1.0);
+    } else if (t_Space == ${DebugDrawFlags.ScreenSpace}) {
+        gl_Position = vec4(a_Position.xy, 0.1, 1.0);
+    }
 
     if (gl_InstanceID >= 1) {
         uint t_LineIndex = uint(gl_InstanceID - 1);
@@ -116,8 +125,13 @@ function fillVec3p(d: Float32Array, offs: number, v: ReadonlyVec3): number {
 
 enum BehaviorType {
     Lines,
-    Opaque,
-    Transparent,
+    LinesDepthWrite,
+    LinesDepthTint,
+    Solid,
+    SolidDepthWrite,
+    SolidDepthTint,
+    Font,
+    Count,
 };
 
 class BufferPage {
@@ -140,9 +154,11 @@ class BufferPage {
 
         this.vertexData = new Float32Array(vertexCount * this.vertexStride);
         this.vertexBuffer = device.createBuffer(this.vertexData.byteLength, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Dynamic);
+        device.setResourceName(this.vertexBuffer, 'DebugDraw BufferPage');
 
         this.indexData = new Uint16Array(align(indexCount, 2));
         this.indexBuffer = device.createBuffer(this.indexData.byteLength, GfxBufferUsage.Index, GfxBufferFrequencyHint.Dynamic);
+        device.setResourceName(this.indexBuffer, 'DebugDraw BufferPage (IB)');
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: 0, format: GfxFormat.F32_RGB, bufferIndex: 0, bufferByteOffset: 0 },
@@ -162,6 +178,7 @@ class BufferPage {
     public getCurrentVertexID() { return (this.vertexDataOffs / this.vertexStride) >>> 0; }
     private remainVertex() { return this.vertexData.length - this.vertexDataOffs; }
     private remainIndex() { return this.indexData.length - this.indexDataOffs; }
+    public getDrawCount() { return this.indexDataOffs; }
 
     public canAllocVertices(vertexCount: number, indexCount: number): boolean {
         return (vertexCount * this.vertexStride) <= this.remainVertex() && indexCount <= this.remainIndex();
@@ -194,18 +211,23 @@ class BufferPage {
 
         this.renderInst.copyFrom(templateRenderInst);
 
-        this.renderInst.setPrimitiveTopology(this.behaviorType === BehaviorType.Lines ? GfxPrimitiveTopology.Lines : GfxPrimitiveTopology.Triangles);
         this.renderInst.setVertexInput(this.inputLayout, [
             { buffer: this.vertexBuffer },
         ], { buffer: this.indexBuffer });
 
+        const isLines = this.behaviorType === BehaviorType.LinesDepthWrite || this.behaviorType === BehaviorType.LinesDepthTint;
+        const isDepthWrite = this.behaviorType === BehaviorType.LinesDepthWrite || this.behaviorType === BehaviorType.SolidDepthWrite;
+        const isDepthTint = this.behaviorType === BehaviorType.LinesDepthTint || this.behaviorType === BehaviorType.SolidDepthTint;
+
+        this.renderInst.setPrimitiveTopology(isLines ? GfxPrimitiveTopology.Lines : GfxPrimitiveTopology.Triangles);
+
         setAttachmentStateSimple(this.renderInst.getMegaStateFlags(), { blendMode: GfxBlendMode.Add, blendSrcFactor: GfxBlendFactor.One, blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha });
-        if (this.behaviorType === BehaviorType.Lines) {
-            this.renderInst.setMegaStateFlags({ depthCompare: GfxCompareMode.Always, depthWrite: false });
+        if (isLines)
             this.renderInst.setInstanceCount(1 + (this.lineThickness - 1) * 4);
-        } else if (this.behaviorType === BehaviorType.Transparent) {
-            this.renderInst.setMegaStateFlags({ depthWrite: false });
-        }
+
+        this.renderInst.setMegaStateFlags({ depthWrite: isDepthWrite });
+        if (isDepthTint)
+            this.renderInst.setMegaStateFlags({ depthCompare: GfxCompareMode.Always });
 
         this.renderInst.setDrawCount(this.indexDataOffs);
 
@@ -251,6 +273,14 @@ export class DebugDraw {
         this.templateRenderInst.setBindingLayouts(bindingLayouts);
     }
 
+    private getBehaviorType(isLines: boolean, isOpaque: boolean, options: DebugDrawOptions) {
+        const isDepthTint = options.flags & DebugDrawFlags.DepthTint;
+        if (isLines)
+            return isDepthTint ? BehaviorType.LinesDepthTint : isOpaque ? BehaviorType.LinesDepthWrite : BehaviorType.Lines;
+        else
+            return isDepthTint ? BehaviorType.SolidDepthTint : isOpaque ? BehaviorType.SolidDepthWrite : BehaviorType.Lines;
+    }
+
     public beginFrame(clipFromViewMatrix: ReadonlyMat4, viewFromWorldMatrix: ReadonlyMat4, width: number, height: number): void {
         let offs = this.templateRenderInst.allocateUniformBuffer(0, 16 + 12 + 4);
         const d = this.templateRenderInst.mapUniformBufferF32(0);
@@ -264,8 +294,9 @@ export class DebugDraw {
         this.currentPage = this.findPage(behaviorType, vertexCount, indexCount);
     }
 
-    public beginBatchLine(numSegments: number): void {
-        this.beginBatch(BehaviorType.Lines, numSegments * 2, numSegments * 2);
+    public beginBatchLine(numSegments: number, opaque: boolean = true, options: DebugDrawOptions = defaultOptions): void {
+        const behaviorType = this.getBehaviorType(true, opaque, options);
+        this.beginBatch(behaviorType, numSegments * 2, numSegments * 2);
     }
 
     public endBatch(): void {
@@ -293,8 +324,8 @@ export class DebugDraw {
         return page;
     }
 
-    public drawLine(p0: ReadonlyVec3, p1: ReadonlyVec3, color0: Color, color1 = color0, options: DebugDrawOptions = { flags: DebugDrawFlags.Default }): void {
-        const page = this.findPage(BehaviorType.Lines, 2, 2);
+    public drawLine(p0: ReadonlyVec3, p1: ReadonlyVec3, color0: Color, color1 = color0, options: DebugDrawOptions = defaultOptions): void {
+        const page = this.findPage(this.getBehaviorType(true, color0.a >= 1.0 && color1.a >= 1.0, options), 2, 2);
 
         const baseVertex = page.getCurrentVertexID();
         page.vertexPCF(p0, color0, options);
@@ -304,13 +335,13 @@ export class DebugDraw {
             page.index(baseVertex + i);
     }
 
-    public drawVector(p0: ReadonlyVec3, dir: ReadonlyVec3, mag: number, color0: Color, color1 = color0, options: DebugDrawOptions = { flags: DebugDrawFlags.Default }): void {
+    public drawVector(p0: ReadonlyVec3, dir: ReadonlyVec3, mag: number, color0: Color, color1 = color0, options: DebugDrawOptions = defaultOptions): void {
         vec3.scaleAndAdd(DebugDraw.scratchVec3[0], p0, dir, mag);
         this.drawLine(p0, DebugDraw.scratchVec3[0], color0, color1, options);
     }
 
-    public drawBasis(m: ReadonlyMat4, mag = 100, options: DebugDrawOptions = { flags: DebugDrawFlags.Default }): void {
-        const page = this.findPage(BehaviorType.Lines, 6, 6);
+    public drawBasis(m: ReadonlyMat4, mag = 100, options: DebugDrawOptions = defaultOptions): void {
+        const page = this.findPage(this.getBehaviorType(true, true, options), 6, 6);
 
         const baseVertex = page.getCurrentVertexID();
         getMatrixTranslation(DebugDraw.scratchVec3[0], m);
@@ -337,13 +368,31 @@ export class DebugDraw {
             page.index(baseVertex + i);
     }
 
-    public drawDiscLineN(center: ReadonlyVec3, n: ReadonlyVec3, r: number, color: Color, sides = 32, options: DebugDrawOptions = { flags: DebugDrawFlags.Default }): void {
+    public drawLocator(center: ReadonlyVec3, mag: number, color: GfxColor, options: DebugDrawOptions = { flags: DebugDrawFlags.Default }): void {
+        const page = this.findPage(this.getBehaviorType(true, color.a >= 1.0, options), 6, 6);
+
+        const baseVertex = page.getCurrentVertexID();
+        for (let i = 0; i < 3; i++) {
+            vec3.copy(DebugDraw.scratchVec3[0], center);
+            vec3.copy(DebugDraw.scratchVec3[1], center);
+            DebugDraw.scratchVec3[0][i] -= mag;
+            DebugDraw.scratchVec3[1][i] += mag;
+
+            page.vertexPCF(DebugDraw.scratchVec3[0], color, options);
+            page.vertexPCF(DebugDraw.scratchVec3[1], color, options);
+        }
+
+        for (let i = 0; i < 6; i++)
+            page.index(baseVertex + i);
+    }
+
+    public drawDiscLineN(center: ReadonlyVec3, n: ReadonlyVec3, r: number, color: Color, sides = 32, options: DebugDrawOptions = defaultOptions): void {
         branchlessONB(DebugDraw.scratchVec3[0], DebugDraw.scratchVec3[1], n);
         this.drawDiscLineRU(center, DebugDraw.scratchVec3[0], DebugDraw.scratchVec3[1], r, color, sides, options);
     }
 
-    public drawDiscLineRU(center: ReadonlyVec3, right: ReadonlyVec3, up: ReadonlyVec3, r: number, color: Color, sides = 32, options: DebugDrawOptions = { flags: DebugDrawFlags.Default }): void {
-        const page = this.findPage(BehaviorType.Lines, sides, sides * 2);
+    public drawDiscLineRU(center: ReadonlyVec3, right: ReadonlyVec3, up: ReadonlyVec3, r: number, color: Color, sides = 32, options: DebugDrawOptions = defaultOptions): void {
+        const page = this.findPage(this.getBehaviorType(true, color.a >= 1.0, options), sides, sides * 2);
 
         const baseVertex = page.getCurrentVertexID();
         const s = DebugDraw.scratchVec3[2];
@@ -360,20 +409,19 @@ export class DebugDraw {
         }
     }
 
-    public drawSphereLine(center: ReadonlyVec3, r: number, color: Color, sides = 32, options: DebugDrawOptions = { flags: DebugDrawFlags.Default }) {
+    public drawSphereLine(center: ReadonlyVec3, r: number, color: Color, sides = 32, options: DebugDrawOptions = defaultOptions) {
         this.drawDiscLineRU(center, Vec3UnitX, Vec3UnitY, r, color, sides, options);
         this.drawDiscLineRU(center, Vec3UnitX, Vec3UnitZ, r, color, sides, options);
         this.drawDiscLineRU(center, Vec3UnitY, Vec3UnitZ, r, color, sides, options);
     }
 
-    public drawDiscSolidN(center: ReadonlyVec3, n: ReadonlyVec3, r: number, color: Color, sides = 32, options: DebugDrawOptions = { flags: DebugDrawFlags.Default }): void {
+    public drawDiscSolidN(center: ReadonlyVec3, n: ReadonlyVec3, r: number, color: Color, sides = 32, options: DebugDrawOptions = defaultOptions): void {
         branchlessONB(DebugDraw.scratchVec3[0], DebugDraw.scratchVec3[1], n);
         this.drawDiscSolidRU(center, DebugDraw.scratchVec3[0], DebugDraw.scratchVec3[1], r, color, sides, options);
     }
 
-    public drawDiscSolidRU(center: ReadonlyVec3, right: ReadonlyVec3, up: ReadonlyVec3, r: number, color: Color, sides = 32, options: DebugDrawOptions = { flags: DebugDrawFlags.Default }): void {
-        const behaviorType = color.a < 1.0 ? BehaviorType.Transparent : BehaviorType.Opaque;
-        const page = this.findPage(behaviorType, sides + 1, sides * 3);
+    public drawDiscSolidRU(center: ReadonlyVec3, right: ReadonlyVec3, up: ReadonlyVec3, r: number, color: Color, sides = 32, options: DebugDrawOptions = defaultOptions): void {
+        const page = this.findPage(this.getBehaviorType(false, color.a >= 1.0, options), sides + 1, sides * 3);
 
         const baseVertex = page.getCurrentVertexID();
         page.vertexPCF(center, color, options);
@@ -409,9 +457,8 @@ export class DebugDraw {
         }
     }
 
-    public drawTriSolidP(p0: ReadonlyVec3, p1: ReadonlyVec3, p2: ReadonlyVec3, color: Color, options: DebugDrawOptions = { flags: DebugDrawFlags.Default }): void {
-        const behaviorType = color.a < 1.0 ? BehaviorType.Transparent : BehaviorType.Opaque;
-        const page = this.findPage(behaviorType, 3, 3);
+    public drawTriSolidP(p0: ReadonlyVec3, p1: ReadonlyVec3, p2: ReadonlyVec3, color: Color, options: DebugDrawOptions = defaultOptions): void {
+        const page = this.findPage(this.getBehaviorType(false, color.a >= 1.0, options), 3, 3);
 
         const baseVertex = page.getCurrentVertexID();
         page.vertexPCF(p0, color, options);
@@ -422,8 +469,8 @@ export class DebugDraw {
             page.index(baseVertex + i);
     }
 
-    public drawRectLineP(p0: ReadonlyVec3, p1: ReadonlyVec3, p2: ReadonlyVec3, p3: ReadonlyVec3, color: Color, options: DebugDrawOptions = { flags: DebugDrawFlags.Default }): void {
-        const page = this.findPage(BehaviorType.Lines, 4, 8);
+    public drawRectLineP(p0: ReadonlyVec3, p1: ReadonlyVec3, p2: ReadonlyVec3, p3: ReadonlyVec3, color: Color, options: DebugDrawOptions = defaultOptions): void {
+        const page = this.findPage(this.getBehaviorType(true, color.a >= 1.0, options), 4, 8);
 
         const baseVertex = page.getCurrentVertexID();
         page.vertexPCF(p0, color, options);
@@ -437,14 +484,13 @@ export class DebugDraw {
         }
     }
 
-    public drawRectLineRU(center: ReadonlyVec3, right: ReadonlyVec3, up: ReadonlyVec3, rightMag: number, upMag: number, color: Color, options: DebugDrawOptions = { flags: DebugDrawFlags.Default }): void {
+    public drawRectLineRU(center: ReadonlyVec3, right: ReadonlyVec3, up: ReadonlyVec3, rightMag: number, upMag: number, color: Color, options: DebugDrawOptions = defaultOptions): void {
         this.rectCorner(DebugDraw.scratchVec3, center, right, up, rightMag, upMag);
         this.drawRectLineP(DebugDraw.scratchVec3[0], DebugDraw.scratchVec3[1], DebugDraw.scratchVec3[2], DebugDraw.scratchVec3[3], color, options);
     }
 
-    public drawRectSolidP(p0: ReadonlyVec3, p1: ReadonlyVec3, p2: ReadonlyVec3, p3: ReadonlyVec3, color: Color, options: DebugDrawOptions = { flags: DebugDrawFlags.Default }): void {
-        const behaviorType = color.a < 1.0 ? BehaviorType.Transparent : BehaviorType.Opaque;
-        const page = this.findPage(behaviorType, 4, 6);
+    public drawRectSolidP(p0: ReadonlyVec3, p1: ReadonlyVec3, p2: ReadonlyVec3, p3: ReadonlyVec3, color: Color, options: DebugDrawOptions = defaultOptions): void {
+        const page = this.findPage(this.getBehaviorType(false, color.a >= 1.0, options), 4, 6);
 
         const baseVertex = page.getCurrentVertexID();
         page.vertexPCF(p0, color, options);
@@ -455,26 +501,26 @@ export class DebugDraw {
         page.indexDataOffs += convertToTrianglesRange(page.indexData, page.indexDataOffs, GfxTopology.Quads, baseVertex, 4);
     }
 
-    public drawRectSolidRU(center: ReadonlyVec3, right: ReadonlyVec3, up: ReadonlyVec3, rightMag: number, upMag: number, color: Color, options: DebugDrawOptions = { flags: DebugDrawFlags.Default }): void {
+    public drawRectSolidRU(center: ReadonlyVec3, right: ReadonlyVec3, up: ReadonlyVec3, rightMag: number, upMag: number, color: Color, options: DebugDrawOptions = defaultOptions): void {
         this.rectCorner(DebugDraw.scratchVec3, center, right, up, rightMag, upMag);
         this.drawRectSolidP(DebugDraw.scratchVec3[0], DebugDraw.scratchVec3[1], DebugDraw.scratchVec3[2], DebugDraw.scratchVec3[3], color, options);
     }
 
-    private endFrame(): boolean {
+    private endFrame(): number {
         const device = this.renderCache.device;
-        let hasAnyDraws = false;
+        let behaviorTypesMask = 0;
         for (let i = 0; i < this.pages.length; i++) {
             const page = this.pages[i];
             if (!page.endFrame(device, this.templateRenderInst))
                 this.pages.splice(i--, 1);
-            hasAnyDraws = true;
+            behaviorTypesMask |= 1 << page.behaviorType;
         }
-        return hasAnyDraws;
+        return behaviorTypesMask;
     }
 
     public pushPasses(builder: GfxrGraphBuilder, mainColorTargetID: GfxrRenderTargetID, mainDepthTargetID: GfxrRenderTargetID): void {
-        const hasAnyDraws = this.endFrame();
-        if (!hasAnyDraws)
+        const behaviorTypes = this.endFrame();
+        if (behaviorTypes === 0)
             return;
 
         builder.pushPass((pass) => {
@@ -482,18 +528,22 @@ export class DebugDraw {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
 
-            // TODO(jstpierre): Only bother making the depth resolve texture if we have something using depth-tint (should depth-tint be the default?)
-            // Also, when using WebGPU, can we use RODS here instead of resolving? (might require some finagling on sample count...)
-            const depthResolveTextureID = builder.resolveRenderTarget(mainDepthTargetID);
-            pass.attachResolveTexture(depthResolveTextureID);
+            // TODO: When using WebGPU, can we use RODS here instead of resolving? (if the sample count matches...)
+            let depthResolveTextureID: GfxrResolveTextureID | null = null;
+            if (behaviorTypes & ((1 << BehaviorType.LinesDepthTint) | (1 << BehaviorType.SolidDepthTint))) {
+                depthResolveTextureID = builder.resolveRenderTarget(mainDepthTargetID);
+                pass.attachResolveTexture(depthResolveTextureID);
+            }
 
             pass.exec((passRenderer, scope) => {
                 for (let i = 0; i < this.pages.length; i++) {
                     const page = this.pages[i];
-                    if (page.renderInst.getDrawCount() > 0) {
-                        page.renderInst.setSamplerBindings(0, [{ gfxTexture: scope.getResolveTextureForID(depthResolveTextureID), gfxSampler: this.depthSampler, lateBinding: null }]);
-                        page.renderInst.drawOnPass(this.renderCache, passRenderer);
-                    }
+                    if (page.renderInst.getDrawCount() <= 0)
+                        continue;
+
+                    const depthTexture = depthResolveTextureID !== null ? scope.getResolveTextureForID(depthResolveTextureID) : null;
+                    page.renderInst.setSamplerBindings(0, [{ gfxTexture: depthTexture, gfxSampler: this.depthSampler, lateBinding: null }]);
+                    page.renderInst.drawOnPass(this.renderCache, passRenderer);
                 }
             });
         });

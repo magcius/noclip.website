@@ -176,11 +176,11 @@ export class OceanSphere extends LiveActor<OceanSphereNrv> {
 
     private materialHelperXluBack: GXMaterialHelperGfx;
     private materialHelperXluFront: GXMaterialHelperGfx;
-    private ddrawXlu = new TDDraw();
+    private ddrawXlu = new TDDraw('OceanSphere Xlu');
 
     private materialHelperEnvBack: GXMaterialHelperGfx;
     private materialHelperEnvFront: GXMaterialHelperGfx;
-    private ddrawEnv = new TDDraw();
+    private ddrawEnv = new TDDraw('OceanSphere Opa');
 
     private tevReg1Front = colorNewFromRGBA8(0x0051706F);
     private tevReg1Back = colorNewFromRGBA8(0x0051706F);

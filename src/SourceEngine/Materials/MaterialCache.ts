@@ -54,11 +54,14 @@ class StaticQuad {
             0, n1, n0, 0, 0, 1, 1, 1, 1,
             0, n1, n1, 0, 1, 1, 1, 1, 1,
         ]).buffer);
+        device.setResourceName(this.vertexBufferQuad, `Static Quad`);
         this.indexBufferQuad = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, new Uint16Array([
             0, 1, 2, 2, 1, 3,
         ]).buffer);
+        device.setResourceName(this.vertexBufferQuad, `Static Quad (IB)`);
 
         this.zeroVertexBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, new ArrayBuffer(16));
+        device.setResourceName(this.vertexBufferQuad, `Zero VB`);
 
         this.vertexBufferDescriptorsQuad = [
             { buffer: this.vertexBufferQuad },

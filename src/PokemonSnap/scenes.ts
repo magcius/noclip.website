@@ -77,7 +77,7 @@ class SnapRenderer implements Viewer.SceneGfx {
         const controlsPanel = new UI.Panel();
         controlsPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
         controlsPanel.setTitle(UI.TIME_OF_DAY_ICON, 'Interactions');
-        const throwBalls = new UI.Checkbox('Throw Balls', true);
+        const throwBalls = new UI.Checkbox('Throw Balls Automatically', true);
         throwBalls.onchanged = () => {
             this.globals.throwBalls = throwBalls.checked;
         };

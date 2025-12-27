@@ -1528,6 +1528,7 @@ const funcArgCounts = new Map<number, number>([
     [0x0188, 1],
     [0x0194, 1],
     [0x01A8, 1],
+    [0x01B5, 0],
     [0x01BA, 2], // something with a character
     [0x01BD, 1],
     [0x01BF, 0],

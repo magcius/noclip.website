@@ -178,7 +178,7 @@ export class FFXRenderer implements Viewer.SceneGfx {
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
-        const renderInstManager = this.renderHelper.renderInstManager;
+        viewerInput.camera.setClipPlanes(.1);
         this.renderHelper.debugDraw.beginFrame(viewerInput.camera.projectionMatrix, viewerInput.camera.viewMatrix, viewerInput.backbufferHeight, viewerInput.backbufferHeight);
 
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
@@ -233,7 +233,6 @@ export class FFXRenderer implements Viewer.SceneGfx {
     }
 
     public prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
-        viewerInput.camera.setClipPlanes(.1);
         this.renderHelper.renderInstManager.setCurrentList(this.renderInstListMain);
         if (this.subScene) {
             this.subScene.levelObjects.renderFlags.textures = this.levelObjects.renderFlags.textures;

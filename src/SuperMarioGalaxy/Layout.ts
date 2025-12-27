@@ -313,7 +313,7 @@ class LayoutManager {
         this.layoutHolder = sceneObjHolder.modelCache.getLayoutHolder(layoutName);
 
         const layoutRes = assertExists(getRes(this.layoutHolder.rlytTable, layoutName));
-        this.layout = new Layout(device, cache, layoutRes, this.layoutHolder);
+        this.layout = new Layout(device, cache, layoutRes, this.layoutHolder, layoutName);
         this.layoutHolder.rlanTable.forEach((rlan, key) => {
             this.animations.set(key, new LayoutAnimation(this.layout, rlan));
         });

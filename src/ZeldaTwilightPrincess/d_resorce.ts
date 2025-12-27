@@ -209,7 +209,7 @@ export class dRes_info_c {
             // Sometimes there are J3D2bmd2 files we can't parse, like Ff.arc / ff.bmd. Skip over these.
             const j3d = new JSystemFileReaderHelper(file.buffer);
             if (j3d.magic === 'J3D2bmd3' || j3d.magic === 'J3D2bdl4') {
-                const res = new J3DModelData(device, cache, BMD.parseReader(j3d));
+                const res = new J3DModelData(device, cache, BMD.parseReader(j3d), file.name);
                 this.destroyables.push(res);
                 resEntry.res = res;
             }

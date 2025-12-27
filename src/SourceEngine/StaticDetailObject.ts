@@ -227,11 +227,13 @@ export class DetailPropLeafRenderer {
         const numSprites = this.spriteEntries.length;
         const numVertices = numSprites * 4;
         this.vertexData = new Float32Array(numVertices * 9);
+        this.vertexBuffer = device.createBuffer(this.vertexData.byteLength, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Dynamic);
+        device.setResourceName(this.vertexBuffer, `StaticDetail ${detailMaterial}`);
 
         const indexData = makeTriangleIndexBuffer(GfxTopology.Quads, 0, numVertices);
         this.indexBuffer = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, indexData.buffer);
+        device.setResourceName(this.indexBuffer, `StaticDetail ${detailMaterial} (IB)`);
 
-        this.vertexBuffer = device.createBuffer(this.vertexData.byteLength, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Dynamic);
         this.vertexBufferDescriptors = [
             { buffer: this.vertexBuffer },
             { buffer: renderContext.materialCache.staticResources.zeroVertexBuffer },
@@ -560,9 +562,10 @@ export class StaticPropRenderer {
 
         // Bind static lighting data, if we have it...
         const spPrefix = this.bspRenderer.bsp.usingHDR ? `sp_hdr` : `sp`;
-        const staticLightingData = await renderContext.filesystem.fetchFileData(`${spPrefix}_${this.staticProp.index}.vhv`);
+        const filename = `${spPrefix}_${this.staticProp.index}.vhv`;
+        const staticLightingData = await renderContext.filesystem.fetchFileData(filename);
         if (staticLightingData !== null) {
-            const colorMeshData = new HardwareVertData(renderContext, staticLightingData);
+            const colorMeshData = new HardwareVertData(renderContext, staticLightingData, filename);
             // Only support static lighting 1 right now, not static lighting 3 (HL2 basis)
             this.colorMeshData = colorMeshData;
             this.studioModelInstance.setColorMeshData(renderContext.renderCache, this.colorMeshData);

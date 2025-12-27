@@ -15,9 +15,9 @@ import { TDDraw } from "../SuperMarioGalaxy/DDraw.js";
 import { ColorKind, DrawParams, GXMaterialHelperGfx, MaterialParams } from "../gx/gx_render.js";
 import * as GX from '../gx/gx_enum.js';
 import { DisplayListRegisters, displayListRegistersInitGX, displayListRegistersRun } from "../gx/gx_displaylist.js";
-import { parseMaterial } from "../gx/gx_material.js";
 import { normToLength } from "../MathHelpers.js";
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
+import { GXMaterialBuilder } from "../gx/GXMaterialBuilder.js";
 
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
@@ -136,7 +136,7 @@ export interface mDoExt_3DlineMat_c {
 
 export class mDoExt_3DlineMat1_c implements mDoExt_3DlineMat_c {
     public lines: mDoExt_3Dline_c[];
-    private ddraw = new TDDraw();
+    private ddraw = new TDDraw('mDoExt_3DlineMat1_c');
 
     private tex: BTIData;
     private color: Color;
@@ -167,11 +167,10 @@ export class mDoExt_3DlineMat1_c implements mDoExt_3DlineMat_c {
             const matRegisters = new DisplayListRegisters();
             displayListRegistersInitGX(matRegisters);
             displayListRegistersRun(matRegisters, dl);
-            const material = parseMaterial(matRegisters, `mDoExt_3DlineMat1_c: ${dlName}`);
-            material.ropInfo.fogType = GX.FogType.PERSP_LIN;
-            material.ropInfo.fogAdjEnabled = true;
-            material.hasFogBlock = true;
-            this.material = new GXMaterialHelperGfx(material);
+            const matBuilder = new GXMaterialBuilder();
+            matBuilder.setFog(GX.FogType.PERSP_LIN, true);
+            matBuilder.setFromRegisters(matRegisters);
+            this.material = new GXMaterialHelperGfx(matBuilder.finish(`mDoExt_3DlineMat1_c: ${dlName}`));
         }
     }
 

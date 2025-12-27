@@ -373,8 +373,9 @@ export interface GfxRenderPass {
     endOcclusionQuery(): void;
 
     // Debug.
-    beginDebugGroup(name: string): void;
-    endDebugGroup(): void;
+    pushDebugGroup(name: string): void;
+    popDebugGroup(): void;
+    insertDebugMarker(marker: string): void;
 };
 
 export interface GfxComputePass {
@@ -386,8 +387,9 @@ export interface GfxComputePass {
     dispatch(x: number, y: number, z: number): void;
 
     // Debug.
-    beginDebugGroup(name: string): void;
-    endDebugGroup(): void;
+    pushDebugGroup(name: string): void;
+    popDebugGroup(): void;
+    insertDebugMarker(marker: string): void;
 }
 
 export type GfxPass = GfxRenderPass | GfxComputePass;
@@ -443,6 +445,7 @@ export interface GfxDevice {
     // Command submission.
     createRenderPass(renderPassDescriptor: GfxRenderPassDescriptor): GfxRenderPass;
     createComputePass(): GfxComputePass;
+
     // Consumes and destroys the pass.
     submitPass(o: GfxPass): void;
     beginFrame(): void;
@@ -480,11 +483,15 @@ export interface GfxDevice {
     queryRenderPass(o: GfxRenderPass): Readonly<GfxRenderPassDescriptor>;
     queryRenderTarget(o: GfxRenderTarget): Readonly<GfxRenderTargetDescriptor>;
 
-    // Debugging.
+    // Debug.
     setResourceName(o: GfxResource, s: string): void;
     checkForLeaks(): void;
     programPatched(o: GfxProgram, descriptor: GfxRenderProgramDescriptor): void;
     setStatisticsGroup(statisticsGroup: GfxStatisticsGroup | null): void;
+
+    pushDebugGroup(name: string): void;
+    popDebugGroup(): void;
+    insertDebugMarker(marker: string): void;
 }
 
 export type { GfxBuffer, GfxTexture, GfxRenderTarget, GfxSampler, GfxProgram, GfxInputLayout, GfxRenderPipeline, GfxBindings, GfxComputePipeline, GfxQueryPool, GfxReadback };

@@ -126,7 +126,7 @@ uniform sampler2D u_Splat3;
 
 #ifdef VERT
 void mainVS() {
-    Mat4x3 t_WorldFromLocalMatrix = CalcWorldFromLocalMatrix();
+    mat4x3 t_WorldFromLocalMatrix = CalcWorldFromLocalMatrix();
     vec3 t_PositionWorld = t_WorldFromLocalMatrix * vec4(a_Position, 1.0);
     vec3 t_LightDirection = normalize(vec3(.2, -1, .5));
     vec3 normal = MulNormalMatrix(t_WorldFromLocalMatrix, normalize(a_Normal));

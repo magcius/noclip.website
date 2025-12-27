@@ -8,7 +8,7 @@ import { buildEnvMtx, J3DModelInstance } from '../../Common/JSYSTEM/J3D/J3DGraph
 import * as RARC from '../../Common/JSYSTEM/JKRArchive.js';
 import { BTIData } from '../../Common/JSYSTEM/JUTTexture.js';
 import { dfRange, dfShow } from '../../DebugFloaters.js';
-import { drawWorldSpaceBasis, drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from '../../DebugJunk.js';
+import { drawWorldSpaceAABB, drawWorldSpaceBasis, drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from '../../DebugJunk.js';
 import { AABB } from '../../Geometry.js';
 import { getTriangleIndexCountForTopologyIndexCount, GfxTopology } from '../../gfx/helpers/TopologyHelpers.js';
 import { GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency } from '../../gfx/platform/GfxPlatform.js';
@@ -2849,7 +2849,7 @@ class SpinDriverShootPath {
 enum SpinDriverColor { Normal, Green, Pink }
 
 class SpinDriverPathDrawer extends LiveActor {
-    private ddraw: TDDraw = new TDDraw();
+    private ddraw: TDDraw = new TDDraw('SpinDriverPathDrawer');
     private coords: number[] = [];
     private positions: vec3[] = [];
     private axisRights: vec3[] = [];
@@ -3901,7 +3901,7 @@ function compareVec3(a: vec3, b: vec3): number {
 class WarpPodPathDrawer {
     private testColor: BTIData;
     private materialHelper: GXMaterialHelperGfx;
-    private ddraw = new TDDraw();
+    private ddraw = new TDDraw('WarpPodPathDrawer');
 
     constructor(sceneObjHolder: SceneObjHolder, arc: RARC.JKRArchive, private points: vec3[], private color: Color) {
         this.testColor = loadBTIData(sceneObjHolder, arc, `TestColor.bti`);
@@ -4267,7 +4267,8 @@ export class WaterPlant extends LiveActor {
     private plantType: number;
     private height: number;
     private plantData: WaterPlantData[] = [];
-    private ddraw = new TDDraw();
+    private ddraw = new TDDraw('WaterPlant');
+    private aabb = new AABB();
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
@@ -4307,7 +4308,7 @@ export class WaterPlant extends LiveActor {
 
             vec3.copy(plantData.axisZ, axisZ);
 
-            plantData.height = randomRangeFloat(this.height, 2.0 * this.height);
+            plantData.height = randomRangeFloat(this.height, this.height * 2.0);
             plantData.swingPosIdx0 = swingPosIdx + 6;
             plantData.swingPosIdx1 = swingPosIdx + 3;
             plantData.swingPosIdx2 = swingPosIdx;
@@ -4316,6 +4317,10 @@ export class WaterPlant extends LiveActor {
             vec3.transformMat4(axisZ, axisZ, scratchMatrix);
 
             this.plantData.push(plantData);
+
+            this.aabb.unionPoint(plantData.position);
+            vec3.scaleAndAdd(scratchVec3a, plantData.position, Vec3UnitY, plantData.height);
+            this.aabb.unionPoint(scratchVec3a);
         }
     }
 
@@ -4330,6 +4335,9 @@ export class WaterPlant extends LiveActor {
         super.draw(sceneObjHolder, renderInstManager, viewerInput);
 
         if (!isValidDraw(this))
+            return;
+
+        if (!sceneObjHolder.viewerInput.camera.frustum.contains(this.aabb))
             return;
 
         const waterPlantDrawInit = sceneObjHolder.waterPlantDrawInit!;
@@ -4708,7 +4716,7 @@ const swingRopeColorMinusX = colorNewFromRGBA8(0xFFFFFFFF);
 export class SwingRope extends LiveActor {
     private pos = vec3.create();
     private height: number;
-    private ddraw = new TDDraw();
+    private ddraw = new TDDraw('SwingRope');
     private swingRopePoints: SwingRopePoint[] = [];
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
@@ -4858,7 +4866,7 @@ export class Trapeze extends LiveActor {
     private swingRopePoint: SwingRopePoint;
     private stick: PartsModel;
     private stickMtx = mat4.create();
-    private ddraw = new TDDraw();
+    private ddraw = new TDDraw('Trapeze');
     private height: number;
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
@@ -4875,7 +4883,7 @@ export class Trapeze extends LiveActor {
 
         vec3.set(scratchVec3, this.translation[0], this.translation[1] - this.height, this.translation[2]);
         this.swingRopePoint = new SwingRopePoint(scratchVec3);
-        this.swingRopePoint.updatePosAndAxis(this.axisZ, 0.995, sceneObjHolder.deltaTimeFrames);
+        this.swingRopePoint.updatePosAndAxis(this.axisZ, 0.995, 1.0);
 
         // I think this is a bug in the original game -- it uses ENEMY rather than RIDE?
         this.stick = new PartsModel(sceneObjHolder, 'TrapezeStick', 'Trapeze', this, DrawBufferType.Enemy, this.stickMtx);
@@ -5083,7 +5091,7 @@ const creeperColorPlusZ = colorNewFromRGBA8(0xFFFFFFFF);
 const creeperColorPlusX = colorNewFromRGBA8(0x969696FF);
 const creeperColorMinusX = colorNewFromRGBA8(0xC8C8C8FF);
 export class Creeper extends LiveActor {
-    private ddraw = new TDDraw();
+    private ddraw = new TDDraw('Creeper');
     private materialHelper: GXMaterialHelperGfx;
     private creeperPoints: CreeperPoint[] = [];
     private creeperLeaf: PartsModel;
@@ -5269,7 +5277,7 @@ class WaterPoint {
 }
 
 class OceanRingDrawer {
-    private ddraw = new TDDraw();
+    private ddraw = new TDDraw('OceanRingDrawer');
     private materialHelper: GXMaterialHelperGfx;
     private water: BTIData;
     private waterIndirect: BTIData;
@@ -5734,7 +5742,10 @@ class OceanRingPipe extends LiveActor {
         }
 
         this.vertexBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, vertexData.buffer);
+        device.setResourceName(this.vertexBuffer, 'OceanRingPipe');
+
         this.indexBuffer = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, indexData.buffer);
+        device.setResourceName(this.indexBuffer, 'OceanRingPipe (IB)');
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: getVertexInputLocation(VertexAttributeInput.POS), format: GfxFormat.F32_RGB, bufferIndex: 0, bufferByteOffset: 0*0x04, },
@@ -6039,7 +6050,7 @@ export class Flag extends LiveActor {
     private dragMin: number = 0.6;
     private dragMax: number = 1.0;
 
-    private ddraw = new TDDraw();
+    private ddraw = new TDDraw('Flag');
     private materialHelper: GXMaterialHelperGfx;
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter | null, objectName: string | null = null) {
@@ -6544,7 +6555,7 @@ export class ElectricRail extends LiveActor implements ElectricRailBase {
     private separators: ElectricRailSeparator[] = [];
     private useGlobalGravity: boolean = false;
     private size = 30.0;
-    private ddraw = new TSDraw();
+    private ddraw = new TSDraw('ElectricRail');
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, 'ElectricRail');
@@ -6747,7 +6758,7 @@ export class ElectricRailMoving extends LiveActor implements ElectricRailBase {
     private separators: vec3[] = [];
     private points: ElectricRailMovingPoint[] = [];
     private size = 30.0;
-    private ddraw = new TSDraw();
+    private ddraw = new TSDraw('EletricRailMoving');
     @dfShow()
     private coordPhaseAnim: number = 0.0;
     private alpha: number = 1.0;
@@ -8044,8 +8055,8 @@ class AstroDomeOrbit extends LiveActor {
     private curCoord: number = 0;
 
     private materialHelper: GXMaterialHelperGfx;
-    private ddraw = new TDDraw();
-    private ddrawBloom = new TDDraw();
+    private ddraw = new TDDraw('AstroDomeOrbit');
+    private ddrawBloom = new TDDraw('AstroDomeOrbit Bloom');
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder) {
         super(zoneAndLayer, sceneObjHolder, 'AstroDomeOrbit');
@@ -8927,7 +8938,7 @@ export class WhirlPoolAccelerator extends LiveActor {
     private center = vec3.create();
     private points: WhirlPoolPoint[] = [];
     private materialHelper: GXMaterialHelperGfx;
-    private ddraw = new TDDraw();
+    private ddraw = new TDDraw('WhirlPoolAccelerator');
     private texCoordS = 0;
     private texCoordT = 0;
     private rotY = 0;

@@ -515,14 +515,13 @@ export class JPAResourceData {
     public supportedParticle: boolean = true;
     public supportedChild: boolean = true;
     public resourceId: number;
-    public name: string;
     public materialHelperP: GXMaterialHelperGfx;
     public materialHelperC: GXMaterialHelperGfx | null = null;
     public usingInstancingP = false;
     public usingInstancingC = false;
     public textureIds: number[] = [];
 
-    constructor(cache: GfxRenderCache, public jpacData: JPACData, resRaw: JPAResourceRaw) {
+    constructor(cache: GfxRenderCache, public jpacData: JPACData, resRaw: JPAResourceRaw, public name: string | null = null) {
         this.res = parseResource(this.jpacData.jpac.version, resRaw);
         this.resourceId = resRaw.resourceId;
 
@@ -575,7 +574,7 @@ export class JPAResourceData {
         const ssp1 = this.res.ssp1;
 
         // Material.
-        const mb = new GXMaterialBuilder(`JPA Material`);
+        const mb = new GXMaterialBuilder(`JPA Material ${this.name}`);
         mb.setBlendMode(
             st_bm[(bsp1.blendModeFlags >>> 0) & 0x03],
             st_bf[(bsp1.blendModeFlags >>> 2) & 0x0F],
@@ -588,7 +587,7 @@ export class JPAResourceData {
         );
 
         if (bsp1.isEnableAnmTone) {
-            mb.setDynamicAlphaCompare(true);
+            mb.setDynamicAlphaTest(true);
             mb.setAlphaCompare(GX.CompareType.GEQUAL, 0, GX.AlphaOp.OR, GX.CompareType.NEVER, 0);
         } else {
             mb.setAlphaCompare(
@@ -657,7 +656,7 @@ export class JPAResourceData {
 
         // Disable instancing on WebGPU since our shader relies on non-uniform texture sampling, which errors out right now...
         // https://github.com/gpuweb/gpuweb/issues/2482
-        const useInstancing = USE_INSTANCING && device.queryVendorInfo().platform !== GfxPlatform.WebGPU;
+        const useInstancing = USE_INSTANCING;
 
         this.usingInstancingP = useInstancing && !isStripe(bsp1.shapeType);
 
@@ -914,10 +913,13 @@ class JPAGlobalRes {
             0, n0, n1, 0, 0,
             0, n1, n1, 0, 1,
         ]).buffer);
+        device.setResourceName(this.vertexBufferQuad, 'JPA Quad');
+
         this.indexBufferQuad = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, new Uint16Array([
             0, 1, 2, 2, 1, 3,
             4, 5, 6, 6, 5, 7,
         ]).buffer);
+        device.setResourceName(this.indexBufferQuad, 'JPA Quad (IB)');
 
         this.inputVertexQuad = [{ buffer: this.vertexBufferQuad }];
         this.inputIndexQuad = { buffer: this.indexBufferQuad };
@@ -996,7 +998,7 @@ export class JPAEmitterWorkData {
 
     public materialParams = new MaterialParams();
     public drawParams = new DrawParams();
-    public dataTexture: DataTexture;
+    public dataTexture: DataTexture | null = null;
     public dataTextureOffs = 0;
     public aliveParticleNum = 0;
     public materialHelper: GXMaterialHelperGfx;
@@ -1047,7 +1049,8 @@ export class JPAEmitterWorkData {
         if (this.materialHelper.material.hasDynamicAlphaTest)
             materialOffs += fillVec4(d, materialOffs, this.baseEmitter.globalColorPrm.a);
 
-        materialParams.m_TextureMapping[15].gfxTexture = this.dataTexture.texture;
+        if (this.dataTexture !== null)
+            materialParams.m_TextureMapping[15].gfxTexture = this.dataTexture.texture;
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
     }
 
@@ -1123,6 +1126,7 @@ class StripeEntry {
         this.shadowBufferF32 = new Float32Array(wordCount);
         this.shadowBufferU8 = new Uint8Array(this.shadowBufferF32.buffer);
         this.buffer = device.createBuffer(this.shadowBufferF32.byteLength, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Dynamic);
+        device.setResourceName(this.buffer, 'JPA StripeBuffer');
         this.vertexBufferDescriptors = [{ buffer: this.buffer }];
     }
 
@@ -1161,6 +1165,7 @@ class StripeBufferManager {
     constructor(device: GfxDevice, public inputLayout: GfxInputLayout) {
         const tristripIndexData = makeTriangleIndexBuffer(GfxTopology.TriStrips, 0, MAX_STRIPE_VERTEX_COUNT);
         this.indexBuffer = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, tristripIndexData.buffer);
+        device.setResourceName(this.indexBuffer, 'JPA StripeBuffer (IB)');
         this.indexBufferDescriptor = { buffer: this.indexBuffer };
     }
 
@@ -1214,6 +1219,7 @@ class DataTexture {
 
     constructor(device: GfxDevice, public maxParticles: number) {
         this.texture = device.createTexture(makeTextureDescriptor2D(GfxFormat.F32_RGBA, DataTexture.WIDTH, this.maxParticles, 1));
+        device.setResourceName(this.texture, 'JPA DynamicTexture');
         this.data = new Float32Array(4 * DataTexture.WIDTH * this.maxParticles);
     }
 
@@ -1636,8 +1642,11 @@ v_TexIdx = data.mTexIdx;
 ${JPAInstancingProgram.Common}
 flat in int v_TexIdx;
 
+#if GFX_PLATFORM_WEBGPU()
+#pragma diagnostic(off, derivative_uniformity);
+#endif
+
 // TODO(jstpierre): This should really be using something like NURI.
-// It also breaks in WebGPU because we can't easily forward the workgroupLoadUniform across through Naga.
 vec4 SampleTextureIdx(int t_TexIdx, vec2 t_TexCoord, float t_LODBias) {
     if (t_TexIdx == 0)       return texture(SAMPLER_2D(u_Texture0), t_TexCoord, t_LODBias);
     else if (t_TexIdx == 1)  return texture(SAMPLER_2D(u_Texture1), t_TexCoord, t_LODBias);
@@ -2450,10 +2459,11 @@ export class JPABaseEmitter {
         renderInst.setDrawCount(isCross(sp1.shapeType) ? 12 : 6);
 
         workData.aliveParticleNum = 0;
-        workData.dataTexture = this.emitterManager.dataTextureManager.allocateTexture(device, n);
-        workData.dataTextureOffs = 0;
-        if (workData.usingInstancing)
+        if (workData.usingInstancing) {
+            workData.dataTexture = this.emitterManager.dataTextureManager.allocateTexture(device, n);
+            workData.dataTextureOffs = 0;
             workData.fillEmitterRenderInst(renderInstManager, renderInst);
+        }
 
         const isDrawFwdAhead = this.resData.res.bsp1.isDrawFwdAhead;
         for (let i = 0; i < n; i++) {
@@ -2469,7 +2479,7 @@ export class JPABaseEmitter {
                 renderInst.setInstanceCount(workData.aliveParticleNum);
                 renderInstManager.submitRenderInst(renderInst);
             } else {
-                this.emitterManager.dataTextureManager.returnTexture(workData.dataTexture);
+                this.emitterManager.dataTextureManager.returnTexture(workData.dataTexture!);
             }
         } else {
             renderInstManager.popTemplate();
@@ -3615,7 +3625,7 @@ export class JPABaseParticle {
     }
 
     private fillDataTexture(workData: JPAEmitterWorkData): void {
-        const d = workData.dataTexture.data;
+        const d = workData.dataTexture!.data;
         let offs = workData.dataTextureOffs;
         offs += fillMatrix4x3(d, offs, workData.drawParams.u_PosMtx[0]);
         offs += fillMatrix4x3(d, offs, workData.materialParams.u_TexMtx[0]);

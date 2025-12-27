@@ -343,7 +343,10 @@ export class VTF {
 
         for (let i = 0; i < this.numFrames; i++) {
             const texture = device.createTexture(descriptor);
-            device.setResourceName(texture, `${this.name} frame ${i}`);
+            if (this.numFrames === 1)
+                device.setResourceName(texture, this.name);
+            else
+                device.setResourceName(texture, `${this.name} [${i}]`);
             this.gfxTextures.push(texture);
         }
 
