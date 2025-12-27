@@ -1474,20 +1474,14 @@ function GX_BITFIELD_SET(field: number, pos: number, size: number, value: number
 }
 
 export function GXSetAlphaCompare(r: DisplayListRegisters, comp0: GX.CompareType, ref0: number, op: GX.AlphaOp, comp1: GX.CompareType, ref1: number): void {
-    let reg = GX.BPRegister.TEV_ALPHAFUNC_ID << 24;
-
-    // GX_SET_REG(reg, ref0, 24, 31);
-    // GX_SET_REG(reg, ref1, 16, 23);
-    // GX_SET_REG(reg, comp0, 13, 15);
-    // GX_SET_REG(reg, comp1, 10, 12);
-    // GX_SET_REG(reg, op, 8, 9);
+    let reg = 0;
     reg = GX_BITFIELD_SET(reg, 24, 8, ref0);
     reg = GX_BITFIELD_SET(reg, 16, 8, ref1);
     reg = GX_BITFIELD_SET(reg, 13, 3, comp0);
     reg = GX_BITFIELD_SET(reg, 10, 3, comp1);
     reg = GX_BITFIELD_SET(reg, 8, 2, op);
 
-    r.bps(reg);
+    r.bps(setBPReg( GX.BPRegister.TEV_ALPHAFUNC_ID, reg));
 }
 
 //#region Utilities
