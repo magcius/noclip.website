@@ -9,7 +9,7 @@ import { GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxChannelWriteMask,
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { GfxRenderInst, GfxRenderInstExecutionOrder, GfxRenderInstList, GfxRenderInstManager, gfxRenderInstCompareNone, gfxRenderInstCompareSortKey } from "../gfx/render/GfxRenderInstManager.js";
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder.js';
-import { DisplayListRegisters, GXSetAlphaCompare, GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, LoadedVertexLayout, compileVtxLoader, displayListRegistersInitGX, displayListRegistersRun } from "../gx/gx_displaylist.js";
+import { DisplayListRegisters, GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, LoadedVertexLayout, compileVtxLoader, displayListRegistersInitGX, displayListRegistersRun } from "../gx/gx_displaylist.js";
 import * as GX from '../gx/gx_enum.js';
 import { GX_Program, parseMaterial } from '../gx/gx_material.js';
 import { ColorKind, DrawParams, GXMaterialHelperGfx, MaterialParams, SceneParams, createInputLayout, fillSceneParamsData, ub_SceneParamsBufferSize } from "../gx/gx_render.js";
@@ -302,8 +302,6 @@ class dDlst_shadowSimple_c {
             const matRegisters = new DisplayListRegisters();
             displayListRegistersInitGX(matRegisters);
 
-            GXSetAlphaCompare(matRegisters, GX.CompareType.ALWAYS, 0, GX.AlphaOp.OR, GX.CompareType.ALWAYS, 0);
-
             // Writes GX_TEVREG0.a (0x40) on every front face that passes the depth test 
             // These are the first draw calls to write alpha each frame, so it assumes the alpha channel is empty
             displayListRegistersRun(matRegisters, symbolMap.findSymbolData(`d_drawlist.o`, `l_frontMat`));
@@ -329,6 +327,20 @@ class dDlst_shadowSimple_c {
             // Clears the alpha channel for future transparent object rendering
             displayListRegistersRun(matRegisters, symbolMap.findSymbolData(`d_drawlist.o`, `l_clearMat`));
             matCache.clearMat = new GXMaterialHelperGfx(parseMaterial(matRegisters, `dDlst_shadowSimple_c l_clearMat`));
+
+            // TODO: Disable Alpha test via matRegisters so that it affects all above materials (instead of doing it manually here)
+            matCache.sealMat.material.alphaTest.op = GX.AlphaOp.OR;
+            matCache.sealMat.material.alphaTest.compareA = GX.CompareType.ALWAYS;
+            matCache.sealMat.invalidateMaterial();
+            matCache.frontMat.material.alphaTest.op = GX.AlphaOp.OR;
+            matCache.frontMat.material.alphaTest.compareA = GX.CompareType.ALWAYS;
+            matCache.frontMat.invalidateMaterial();
+            matCache.backSubMat.material.alphaTest.op = GX.AlphaOp.OR;
+            matCache.backSubMat.material.alphaTest.compareA = GX.CompareType.ALWAYS;
+            matCache.backSubMat.invalidateMaterial();
+            matCache.sealTexMat.material.alphaTest.op = GX.AlphaOp.OR;
+            matCache.sealTexMat.material.alphaTest.compareA = GX.CompareType.ALWAYS;
+            matCache.sealTexMat.invalidateMaterial();
         }
     }
 

@@ -1465,25 +1465,6 @@ export function displayListRegistersInitGX(r: DisplayListRegisters): void {
 }
 //#endregion
 
-//#region Register Manipulation
-function GX_BITFIELD_SET(field: number, pos: number, size: number, value: number): number {
-    const offset = 31 - pos - size + 1;
-    const mask = (1 << size) - 1;
-    const cleared = field & ~(mask << offset);
-    return cleared | (value << offset);
-}
-
-export function GXSetAlphaCompare(r: DisplayListRegisters, comp0: GX.CompareType, ref0: number, op: GX.AlphaOp, comp1: GX.CompareType, ref1: number): void {
-    let reg = 0;
-    reg = GX_BITFIELD_SET(reg, 24, 8, ref0);
-    reg = GX_BITFIELD_SET(reg, 16, 8, ref1);
-    reg = GX_BITFIELD_SET(reg, 13, 3, comp0);
-    reg = GX_BITFIELD_SET(reg, 10, 3, comp1);
-    reg = GX_BITFIELD_SET(reg, 8, 2, op);
-
-    r.bps(setBPReg( GX.BPRegister.TEV_ALPHAFUNC_ID, reg));
-}
-
 //#region Utilities
 function canMergeDraws(a: LoadedVertexDraw, b: LoadedVertexDraw): boolean {
     if (a.indexOffset !== b.indexOffset)
