@@ -1,5 +1,6 @@
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { assert, readString } from "../util.js";
+import { GfxFormat } from '../gfx/platform/GfxPlatform.js';
 
 export enum AttributeFormat
 {
@@ -26,6 +27,56 @@ export enum AttributeFormat
     float_32_32_32_32 = 0x813,
 }
 
+function translateAttributeFormat(attributeFormat: AttributeFormat): GfxFormat {
+    switch (attributeFormat) {
+    case AttributeFormat.unorm_8:
+        return GfxFormat.U8_R_NORM;
+    case AttributeFormat.unorm_8_8:
+        return GfxFormat.U8_RG_NORM;
+    case AttributeFormat.unorm_16_16:
+        return GfxFormat.U16_RG_NORM;
+    case AttributeFormat.unorm_8_8_8_8:
+        return GfxFormat.U8_RGBA_NORM;
+    case AttributeFormat.uint_8:
+        return GfxFormat.U8_R;
+    case AttributeFormat.uint_8_8:
+        return GfxFormat.U8_RG;
+    case AttributeFormat.uint_8_8_8_8:
+        return GfxFormat.U8_RGBA;
+    case AttributeFormat.snorm_8:
+        return GfxFormat.S8_R_NORM;
+    case AttributeFormat.snorm_8_8:
+        return GfxFormat.S8_RG_NORM;
+    case AttributeFormat.snorm_16_16:
+        return GfxFormat.S16_R_NORM;
+    case AttributeFormat.snorm_8_8_8_8:
+        return GfxFormat.S8_RGBA_NORM;
+    // case AttributeFormat.snorm_10_10_10_2:
+    //     return GfxFormat.;
+    case AttributeFormat.sint_8:
+        return GfxFormat.S8_R;
+    // case AttributeFormat.sint_8_8:
+    //     return GfxFormat.;
+    // case AttributeFormat.sint_8_8_8_8:
+    //     return GfxFormat.;
+    case AttributeFormat.float_32:
+        return GfxFormat.F32_R;
+    case AttributeFormat.float_16_16:
+        return GfxFormat.F16_RG;
+    case AttributeFormat.float_32_32:
+        return GfxFormat.F32_RG;
+    case AttributeFormat.float_16_16_16_16:
+        return GfxFormat.F16_RGBA;
+    case AttributeFormat.float_32_32_32:
+        return GfxFormat.F32_RGB;
+    case AttributeFormat.float_32_32_32_32:
+        return GfxFormat.F32_RGBA;
+    default:
+        console.error(`attribute format ${attributeFormat} not found`);
+        throw "whoops";
+    }
+}
+
 export interface FVTX_VertexAttribute
 {
     name: string;
@@ -36,8 +87,8 @@ export interface FVTX_VertexAttribute
 
 export interface FVTX_VertexBuffer
 {
-    data: ArrayBufferSlice;
     stride: number;
+    data: ArrayBufferSlice;
 }
 
 export interface FVTX
@@ -130,6 +181,7 @@ export function parse(buffer: ArrayBufferSlice): FRES
                 // TODO: does this offset need to be adjusted like all the other bfres offsets?
                 const bufferOffset = view.getUint16(attribute_entry_offset + 0x6);
                 const format = view.getUint32(attribute_entry_offset + 0x8);
+                const test = translateAttributeFormat(format);
 
                 vertexAttributes.push({ name, bufferIndex, bufferOffset, format });
                 attribute_entry_offset += 0xC;
@@ -144,7 +196,7 @@ export function parse(buffer: ArrayBufferSlice): FRES
                 const data_offset = read_bfres_offset(view, buffer_entry_offset + 0x14);
                 const data = buffer.subarray(data_offset, size);
 
-                vertexBuffers.push({ data, stride });
+                vertexBuffers.push({ stride, data });
                 buffer_entry_offset += 0x18;
             }
 

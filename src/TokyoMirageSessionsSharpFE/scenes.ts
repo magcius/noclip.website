@@ -5,6 +5,11 @@ import * as BFRES from "./bfres.js";
 
 class TMSFEScene implements SceneGfx
 {
+    constructor(device: GfxDevice)
+    {
+
+    }
+
     public render(device: GfxDevice, viewerInput: ViewerRenderInput): void
     {
     }
@@ -24,7 +29,7 @@ class TMSFESceneDesc implements SceneDesc
         const dataFetcher = context.dataFetcher;
         const apak = dataFetcher.fetchData(`TokyoMirageSessionsSharpFE/maps/${this.id}/model.apak`);
         const bfres = BFRES.parse(await dataFetcher.fetchData("TokyoMirageSessionsSharpFE/d008_01.bfres"));
-        return new TMSFEScene();
+        return new TMSFEScene(device);
     }
 }
 
