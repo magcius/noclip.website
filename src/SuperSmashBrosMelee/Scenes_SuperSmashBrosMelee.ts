@@ -104,7 +104,7 @@ class HSDDesc implements SceneDesc {
     }
 }
 
-function BindFigATree(root: HSD_JObjRoot_Instance, figatree: figatree): void {
+export function BindFigATree(root: HSD_JObjRoot_Instance, figatree: figatree): void {
     assert(figatree.kind === 'Anim');
     assert(figatree.aobj.length === root.allJObjs.length);
 
