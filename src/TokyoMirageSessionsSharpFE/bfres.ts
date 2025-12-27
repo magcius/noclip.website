@@ -1,6 +1,30 @@
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { assert, readString } from "../util.js";
-import { AttributeFormat } from "../fres_nx/nngfx_enum.js";
+
+export enum AttributeFormat
+{
+    unorm_8           = 0x0,
+    unorm_8_8         = 0x4,
+    unorm_16_16       = 0x7,
+    unorm_8_8_8_8     = 0xA,
+    uint_8            = 0x100,
+    uint_8_8          = 0x104,
+    uint_8_8_8_8      = 0x10A,
+    snorm_8           = 0x200,
+    snorm_8_8         = 0x204,
+    snorm_16_16       = 0x207,
+    snorm_8_8_8_8     = 0x20A,
+    snorm_10_10_10_2  = 0x20B,
+    sint_8            = 0x300,
+    sint_8_8          = 0x304,
+    sint_8_8_8_8      = 0x30A,
+    float_32          = 0x806,
+    float_16_16       = 0x808,
+    float_32_32       = 0x80D,
+    float_16_16_16_16 = 0x80F,
+    float_32_32_32    = 0x811,
+    float_32_32_32_32 = 0x813,
+}
 
 export interface FVTX_VertexAttribute
 {
