@@ -5,7 +5,7 @@ import { projectionMatrixForCuboid, saturate } from '../MathHelpers.js';
 import { TSDraw } from "../SuperMarioGalaxy/DDraw.js";
 import { createBufferFromData } from "../gfx/helpers/BufferHelpers.js";
 import { projectionMatrixConvertClipSpaceNearZ } from '../gfx/helpers/ProjectionHelpers.js';
-import { GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxChannelWriteMask, GfxClipSpaceNearZ, GfxDevice, GfxInputLayout } from "../gfx/platform/GfxPlatform.js";
+import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxChannelWriteMask, GfxClipSpaceNearZ, GfxDevice, GfxFormat, GfxInputLayout, GfxProgram, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { GfxRenderInst, GfxRenderInstExecutionOrder, GfxRenderInstList, GfxRenderInstManager, gfxRenderInstCompareNone, gfxRenderInstCompareSortKey } from "../gfx/render/GfxRenderInstManager.js";
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder.js';
@@ -23,6 +23,11 @@ import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
 import { dKy_tevstr_c } from "./d_kankyo.js";
 import { cM_s2rad } from "./SComponent.js";
 import { dRes_control_c, ResType } from "./d_resorce.js";
+import { DeviceProgram } from "../Program.js";
+import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
+import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
+import { fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers.js";
+import { preprocessProgramObj_GLSL } from "../gfx/shaderc/GfxShaderCompiler.js";
 
 export enum dDlst_alphaModel__Type {
     Bonbori,
@@ -270,7 +275,55 @@ interface dDlst_shadowSimple_c_DLCache {
     sealTexMat: GXMaterialHelperGfx;
     sealMat: GXMaterialHelperGfx;
     clearMat: GXMaterialHelperGfx; 
+
+    program: GfxProgram;
+    inputLayout: GfxInputLayout;
+    positionBuffer: GfxBuffer;
+    indexBuffer: GfxBuffer;
 }
+
+class SimpleShadowProgram extends DeviceProgram {
+    public static bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 1, numSamplers: 0 }];
+    
+    public override both = `
+${GfxShaderLibrary.MatrixLibrary}
+
+layout(std140) uniform ub_Params {
+    Mat4x4 u_ClipFromLocal;
+    Mat4x4 u_LocalFromScreen;
+};
+
+// layout(location = 0) sampler2D u_TextureShadow;
+// layout(location = 1) sampler2D u_TextureFramebufferDepth; // Depth buffer
+
+#if defined VERT
+layout(location = 0) in vec3 a_Position; // Unit cube coordinates (-1 to 1).
+
+void main() {
+    gl_Position = UnpackMatrix(u_ClipFromLocal) * vec4(a_Position.xyz, 1.0);
+}
+#elif defined FRAG
+void main() {
+    // vec3 t_ScreenPos;
+    // t_ScreenPos.xy = gl_FragCoord.xy;
+    // // Tap the depth buffer to find the intersection point.
+    // t_ScreenPos.z = texelFetch(SAMPLER_2D(u_TextureFramebufferDepth), ivec2(gl_FragCoord.xy), 0).r;
+    // // Project back into local object space.
+    // vec4 t_ObjectPos = UnpackMatrix(u_LocalFromScreen) * t_ScreenPos;
+    // t_ObjectPos.xyz /= t_WorldPos.www;
+    // // Now that we have our object-space position, remove any samples outside of the box.
+    // if (any(lessThan(t_ObjectPos.xyz, vec3(-1)) || any(greaterThan(t_ObjectPos.xyz), vec3(1)))
+    //     discard;
+    // // Top-down project our shadow texture. Our local space is between -1 and 1, we want to move into 0.0 to 1.0.
+    // vec2 t_ShadowTexCoord = t_ObjectPos.xz * vec2(0.5) + vec2(0.5);
+    // gl_FragColor = texture(SAMPLER_2D(u_TextureShadow), t_ShadowTexCoord);
+    gl_FragColor = vec4(1, 0, 0, 1);
+}
+#endif
+`;
+}
+
+const scratchMat4 = mat4.create();
 
 // Renders a simple cube-shaped shadow volume directly below an object (light position is ignored). Optionally, use a 
 // textured quad (defaults to a circle) oriented to the ground normal to stencil out the shadow volume (i.e. a gobo texture).
@@ -281,6 +334,56 @@ class dDlst_shadowSimple_c {
     public texMtx = mat4.create();
 
     static compileDLs(cache: GfxRenderCache, symbolMap: SymbolMap): dDlst_shadowSimple_c_DLCache {
+        const dlCache: dDlst_shadowSimple_c_DLCache = {} as any;
+        
+        // Compile our custom shader
+        const glsl = preprocessProgramObj_GLSL(cache.device, new SimpleShadowProgram());
+        dlCache.program = cache.createProgramSimple( glsl );
+        dlCache.inputLayout = cache.createInputLayout({
+            indexBufferFormat: GfxFormat.U16_R,
+            vertexAttributeDescriptors: [
+                { location: 0, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0 }, // position
+            ],
+            vertexBufferDescriptors: [
+                { byteStride: 4 * 3, frequency: GfxVertexBufferFrequency.PerVertex },
+            ],
+        });
+        dlCache.positionBuffer = createBufferFromData(
+            cache.device,
+            GfxBufferUsage.Vertex,
+            GfxBufferFrequencyHint.Static,
+            new Float32Array([
+                [-1, -1, -1],
+                [ 1, -1, -1],
+                [ 1,  1, -1],
+                [-1,  1, -1],
+                [-1, -1,  1],
+                [ 1, -1,  1],
+                [ 1,  1,  1],
+                [-1,  1,  1],
+            ].flat()).buffer,
+        );
+
+        dlCache.indexBuffer = createBufferFromData(
+            cache.device,
+            GfxBufferUsage.Index,
+            GfxBufferFrequencyHint.Static,
+            new Uint16Array([
+                0, 1, 2,
+                2, 3, 0,
+                4, 5, 6,
+                6, 7, 4,
+                0, 1, 5,
+                5, 4, 0,
+                2, 3, 7,
+                7, 6, 2,
+                1, 2, 6,
+                6, 5, 1,
+                3, 0, 4,
+                4, 7, 3,
+            ]).buffer,
+        );
+
         const vat: GX_VtxAttrFmt[] = [];
         vat[GX.Attr.POS] = { compType: GX.CompType.F32, compCnt: GX.CompCnt.POS_XYZ, compShift: 0 };
         vat[GX.Attr.TEX0] = { compType: GX.CompType.S8, compCnt: GX.CompCnt.TEX_ST, compShift: 0 };
@@ -305,17 +408,17 @@ class dDlst_shadowSimple_c {
         // Construct a basic box shape representing the "simple" shadow volume.
         const volumeDL = symbolMap.findSymbolData(`d_drawlist.o`, `l_shadowVolumeDL`)
         const volumeVerts = shadowVtxLoader.runVertices(shadowVtxArrays, volumeDL);
-        const volumeShape = new dDlst_BasicShape_c(cache, shadowVtxLoader.loadedVertexLayout, volumeVerts);
+        dlCache.volumeShape = new dDlst_BasicShape_c(cache, shadowVtxLoader.loadedVertexLayout, volumeVerts);
 
         // Construct the "seal" shape using the same pos-only verts.
         const sealVerts = shadowVtxLoader.runVertices(shadowVtxArrays, shadowSealDrw);
-        const sealShape = new dDlst_BasicShape_c(cache, shadowVtxLoader.loadedVertexLayout, sealVerts);
+        dlCache.sealShape = new dDlst_BasicShape_c(cache, shadowVtxLoader.loadedVertexLayout, sealVerts);
 
         // Construct the gobo seal shape which only applies alpha to the color buffer where the texture is opaque.
         vcd[GX.Attr.TEX0] = { type: GX.AttrType.DIRECT };
         const shadowTexVtxLoader = compileVtxLoader(vat, vcd)
         const sealTexVerts = shadowTexVtxLoader.runVertices(shadowVtxArrays, shadowSealTexDrw);
-        const sealTexShape = new dDlst_BasicShape_c(cache, shadowTexVtxLoader.loadedVertexLayout, sealTexVerts);
+        dlCache.sealTexShape = new dDlst_BasicShape_c(cache, shadowTexVtxLoader.loadedVertexLayout, sealTexVerts);
 
         // Construct materials
         const matBuilder = new GXMaterialBuilder();
@@ -328,13 +431,13 @@ class dDlst_shadowSimple_c {
         // These are the first draw calls to write alpha each frame, so it assumes the alpha channel is empty
         displayListRegistersRun(matRegisters, symbolMap.findSymbolData(`d_drawlist.o`, `l_frontMat`));
         matBuilder.setFromRegisters(matRegisters);
-        const frontMat = new GXMaterialHelperGfx(matBuilder.finish(`dDlst_shadowSimple_c l_frontMat`));
+        dlCache.frontMat = new GXMaterialHelperGfx(matBuilder.finish(`dDlst_shadowSimple_c l_frontMat`));
 
         // Subtract GX_TEVREG0.a (0x40)on every back face that passes the depth test
         // The result after frontMat and backMat are rendered is 0x40 written everywhere the shadow should be drawn
         displayListRegistersRun(matRegisters, symbolMap.findSymbolData(`d_drawlist.o`, `l_backSubMat`));
         matBuilder.setFromRegisters(matRegisters);
-        const backSubMat = new GXMaterialHelperGfx(matBuilder.finish(`dDlst_shadowSimple_c l_backSubMat`));
+        dlCache.backSubMat = new GXMaterialHelperGfx(matBuilder.finish(`dDlst_shadowSimple_c l_backSubMat`));
 
         // Zero the alpha channel anywhere that the shadow texture is transparent
         displayListRegistersRun(matRegisters, shadowSealTexMat);
@@ -342,20 +445,20 @@ class dDlst_shadowSimple_c {
         matBuilder.setTevAlphaOp(0, GX.TevOp.COMP_RGB8_GT, GX.TevBias.ZERO, GX.TevScale.SCALE_1, false, GX.Register.PREV);
         matBuilder.setTevAlphaIn(0, GX.CA.TEXA, GX.CA.ZERO, GX.CA.A2, GX.CA.ZERO);
         matBuilder.setTexCoordGen(0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY, false, GX.PostTexGenMatrix.PTIDENTITY);
-        const sealTexMat = new GXMaterialHelperGfx(matBuilder.finish(`dDlst_shadowSimple_c l_sealTexMat`));
+        dlCache.sealTexMat = new GXMaterialHelperGfx(matBuilder.finish(`dDlst_shadowSimple_c l_sealTexMat`));
 
         // Multiply buffer color by the alpha channel
         displayListRegistersRun(matRegisters, shadowSealMat);
         matBuilder.setFromRegisters(matRegisters);
-        const sealMat = new GXMaterialHelperGfx(matBuilder.finish(`dDlst_shadowSimple_c l_shadowSealDL`));
+        dlCache.sealMat = new GXMaterialHelperGfx(matBuilder.finish(`dDlst_shadowSimple_c l_shadowSealDL`));
 
         // Write GX_TEVREG1.a (0x00) to everywhere the shadow volume was drawn 
         // Clears the alpha channel for future transparent object rendering
         displayListRegistersRun(matRegisters, symbolMap.findSymbolData(`d_drawlist.o`, `l_clearMat`));
         matBuilder.setFromRegisters(matRegisters);
-        const clearMat = new GXMaterialHelperGfx(matBuilder.finish(`dDlst_shadowSimple_c l_clearMat`));
+        dlCache.clearMat = new GXMaterialHelperGfx(matBuilder.finish(`dDlst_shadowSimple_c l_clearMat`));
 
-        return { volumeShape, sealShape, sealTexShape, frontMat, backSubMat, sealTexMat, sealMat, clearMat };
+        return dlCache;
     }
 
     static destroy(cache: dDlst_shadowSimple_c_DLCache, device: GfxDevice): void {
@@ -366,6 +469,33 @@ class dDlst_shadowSimple_c {
 
     public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, dlCache: dDlst_shadowSimple_c_DLCache): void {
         const cache = globals.modelCache.cache;
+
+        // Draw with our custom shader
+        {
+            const template = renderInstManager.pushTemplate();
+            
+            // renderInstManager.setCurrentList(this.renderInstListSand);
+    
+            template.setBindingLayouts(SimpleShadowProgram.bindingLayouts);
+            template.setGfxProgram(dlCache.program);
+            template.setMegaStateFlags(setAttachmentStateSimple({}, {
+                blendMode: GfxBlendMode.Add,
+                blendSrcFactor: GfxBlendFactor.SrcAlpha,
+                blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
+            }));
+    
+            let offset = template.allocateUniformBuffer(0, 4 * 16 * 2);
+            const buf = template.mapUniformBufferF32(0);
+            offset += fillMatrix4x4(buf, offset, mat4.mul(scratchMat4, globals.camera.clipFromViewMatrix, this.modelViewMtx));
+            // offset += fillVec4(buf, offset, this.fade, this.numParticles);
+            // template.setSamplerBindingsFromTextureMappings([{ gfxTexture: this.originalSandTexture.gfxTexture!, gfxSampler: this.sampler, lateBinding: null }]);
+    
+            const renderInst = renderInstManager.newRenderInst();
+            renderInst.setVertexInput(dlCache.inputLayout, [{ buffer: dlCache.positionBuffer }], { buffer: dlCache.indexBuffer });
+            renderInst.setDrawCount(36);
+            renderInstManager.submitRenderInst(renderInst);
+            renderInstManager.popTemplate();
+        }
 
         mat4.copy(drawParams.u_PosMtx[0], this.modelViewMtx);
         mat4.copy(drawParams.u_PosMtx[1], this.texMtx);
