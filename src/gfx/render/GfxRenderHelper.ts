@@ -7,6 +7,7 @@ import { GfxrRenderGraph, GfxrRenderGraphImpl } from "./GfxRenderGraph.js";
 import { DebugThumbnailDrawer, TextDrawer } from "../helpers/DebugThumbnailHelpers.js";
 import { DebugDraw } from "../helpers/DebugDraw.js";
 import { AntialiasingSupport } from "../helpers/RenderGraphHelpers.js";
+import { DebugTextDrawer2 } from "../helpers/DebugTextDrawer2.js";
 
 class GfxRenderHelperBase {
     public renderCache: GfxRenderCache;
@@ -16,6 +17,7 @@ class GfxRenderHelperBase {
     public debugThumbnails: DebugThumbnailDrawer;
     public debugDraw: DebugDraw;
     public antialiasingSupport: AntialiasingSupport;
+    public debugTextDrawer2: DebugTextDrawer2;
 
     private renderCacheOwn: GfxRenderCache | null = null;
 
@@ -31,6 +33,7 @@ class GfxRenderHelperBase {
         this.renderInstManager = new GfxRenderInstManager(this.renderCache);
         this.uniformBuffer = new GfxRenderDynamicUniformBuffer(this.device);
         this.debugDraw = new DebugDraw(this.renderCache, this.uniformBuffer);
+        this.debugTextDrawer2 = new DebugTextDrawer2(this.renderCache);
         this.debugThumbnails = new DebugThumbnailDrawer(this as unknown as GfxRenderHelper);
         this.antialiasingSupport = new AntialiasingSupport(this as unknown as GfxRenderHelper);
     }
@@ -52,16 +55,19 @@ class GfxRenderHelperBase {
         this.uniformBuffer.destroy();
         this.renderGraph.destroy();
         this.debugDraw.destroy();
+        this.debugTextDrawer2.destroy(this.device);
+        this.debugThumbnails.destroy();
     }
 
     public getDebugTextDrawer(): TextDrawer | null {
-        return null;
+        return this.debugTextDrawer2;
+        // return null;
     }
 }
 
 // Debug Thumbnails
 import { SceneContext } from "../../SceneBase.js";
-import type { DebugTextDrawer } from "../helpers/DebugTextDrawer.js";
+import { DebugTextDrawer } from "../helpers/DebugTextDrawer.js";
 
 class PromiseWithSavedValue<T> {
     public value: T | null = null;
@@ -99,12 +105,9 @@ export class GfxRenderHelper extends GfxRenderHelperBase {
         });
     }
 
-    public override getDebugTextDrawer(): TextDrawer | null {
-        return this.debugTextDrawer.getValueOrStart();
-    }
-
     public override destroy(): void {
         super.destroy();
-        this.debugThumbnails.destroy();
+        if (this.debugTextDrawer.value !== null)
+            this.debugTextDrawer.value.destroy(this.device);
     }
 }

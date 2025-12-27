@@ -44,7 +44,7 @@ export interface TextDrawer {
     textColor: GfxColor;
     setFontScale(v: number): void;
     getScaledLineHeight(): number;
-    beginDraw(): void;
+    beginDraw(renderInstManager: GfxRenderInstManager): void;
     endDraw(renderInstManager: GfxRenderInstManager): void;
     reserveString(numChars: number, strokeNum?: number): void;
     drawString(renderInstManager: GfxRenderInstManager, vw: number, vh: number, str: string, x: number, y: number, strokeWidth?: number, strokeNum?: number): void;
@@ -185,7 +185,7 @@ void main() {
                 textDrawer.textColor.a = lerp(0.6, 1.0, t);
                 textDrawer.setFontScale(lerp(0.5, 1.0, t));
                 const y = lerp(5, 20, t) + textDrawer.getScaledLineHeight() * i;
-                textDrawer.drawString(renderInstManager, vw, vh, thumbnailDebugLabels[i], vw / 2, vh - y);
+                textDrawer.drawString(renderInstManager, vw, vh, thumbnailDebugLabels[i], vw / 2, y);
             }
 
             renderInstManager.popTemplate();
@@ -238,7 +238,7 @@ void main() {
 
                 let textLists: GfxRenderInstList[] = [];
                 if (textDrawer !== null) {
-                    textDrawer.beginDraw();
+                    textDrawer.beginDraw(renderInstManager);
 
                     const totalNumChar = debugThumbnails.map((tex) => tex.debugLabel.length).reduce((a, b) => a + b);
                     textDrawer.reserveString(totalNumChar);
