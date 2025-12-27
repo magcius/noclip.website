@@ -1,10 +1,9 @@
 
-import { mat4 } from "gl-matrix";
-import { White, colorCopy, colorNewCopy } from "../Color.js";
-import { projectionMatrixForCuboid } from '../MathHelpers.js';
+import { mat4, vec3 } from "gl-matrix";
+import { White, colorCopy, colorFromRGBA, colorNewCopy } from "../Color.js";
+import { projectionMatrixForCuboid, saturate } from '../MathHelpers.js';
 import { TSDraw } from "../SuperMarioGalaxy/DDraw.js";
 import { createBufferFromData } from "../gfx/helpers/BufferHelpers.js";
-import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers.js';
 import { projectionMatrixConvertClipSpaceNearZ } from '../gfx/helpers/ProjectionHelpers.js';
 import { GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxChannelWriteMask, GfxClipSpaceNearZ, GfxDevice, GfxInputLayout } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
@@ -14,10 +13,16 @@ import { DisplayListRegisters, GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertex
 import * as GX from '../gx/gx_enum.js';
 import { GX_Program } from '../gx/gx_material.js';
 import { ColorKind, DrawParams, GXMaterialHelperGfx, MaterialParams, SceneParams, createInputLayout, fillSceneParamsData, ub_SceneParamsBufferSize } from "../gx/gx_render.js";
-import { assert } from '../util.js';
+import { assert, assertExists, nArray } from '../util.js';
 import { ViewerRenderInput } from '../viewer.js';
 import { SymbolMap, dGlobals } from './Main.js';
 import { PeekZManager } from "./d_dlst_peekZ.js";
+import { cBgS_PolyInfo } from "./d_bg.js";
+import { BTI_Texture, BTIData } from "../Common/JSYSTEM/JUTTexture.js";
+import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
+import { dKy_tevstr_c } from "./d_kankyo.js";
+import { cM_s2rad } from "./SComponent.js";
+import { dRes_control_c, ResType } from "./d_resorce.js";
 
 export enum dDlst_alphaModel__Type {
     Bonbori,
@@ -84,7 +89,7 @@ class dDlst_alphaModel_c {
         const bonboriVtxLoader = compileVtxLoader(vat, vcd);
 
         const shadowVtxArrays: GX_Array[] = [];
-        shadowVtxArrays[GX.Attr.POS]  = { buffer: bonboriPos, offs: 0, stride: 0x0C };
+        shadowVtxArrays[GX.Attr.POS] = { buffer: bonboriPos, offs: 0, stride: 0x0C };
         const bonboriVertices = bonboriVtxLoader.runVertices(shadowVtxArrays, bonboriDL);
         this.bonboriShape = new dDlst_BasicShape_c(cache, bonboriVtxLoader.loadedVertexLayout, bonboriVertices);
 
@@ -110,9 +115,6 @@ class dDlst_alphaModel_c {
         frontZ.ropInfo.depthFunc = GX.CompareType.GREATER;
 
         this.materialHelperFrontZ = new GXMaterialHelperGfx(frontZ);
-
-        setAttachmentStateSimple(this.materialHelperBackRevZ.megaStateFlags, { channelWriteMask: GfxChannelWriteMask.Alpha });
-        setAttachmentStateSimple(this.materialHelperFrontZ.megaStateFlags, { channelWriteMask: GfxChannelWriteMask.Alpha });
 
         assert(this.materialHelperBackRevZ.materialParamsBufferSize === this.materialHelperFrontZ.materialParamsBufferSize);
 
@@ -241,15 +243,309 @@ export class dDlst_list_c {
     public particle2DFore = new GfxRenderInstList(gfxRenderInstCompareNone, GfxRenderInstExecutionOrder.Forwards);
 
     public alphaModel = new GfxRenderInstList(gfxRenderInstCompareNone, GfxRenderInstExecutionOrder.Forwards);
+    public shadow = new GfxRenderInstList(gfxRenderInstCompareNone, GfxRenderInstExecutionOrder.Forwards);
     public peekZ = new PeekZManager(128);
     public alphaModel0: dDlst_alphaModel_c;
+    public shadowControl: dDlst_shadowControl_c;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, symbolMap: SymbolMap) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, resCtrl: dRes_control_c, symbolMap: SymbolMap) {
         this.alphaModel0 = new dDlst_alphaModel_c(device, cache, symbolMap);
+        this.shadowControl = new dDlst_shadowControl_c(device, cache, resCtrl, symbolMap);
     }
 
     public destroy(device: GfxDevice): void {
         this.peekZ.destroy(device);
         this.alphaModel0.destroy(device);
+        this.shadowControl.destroy(device);
+    }
+}
+
+interface dDlst_shadowSimple_c_DLCache {
+    volumeShape: dDlst_BasicShape_c;
+    sealShape: dDlst_BasicShape_c;
+    sealTexShape: dDlst_BasicShape_c;
+
+    frontMat: GXMaterialHelperGfx;
+    backSubMat: GXMaterialHelperGfx;
+    sealTexMat: GXMaterialHelperGfx;
+    sealMat: GXMaterialHelperGfx;
+    clearMat: GXMaterialHelperGfx; 
+}
+
+// Renders a simple cube-shaped shadow volume directly below an object (light position is ignored). Optionally, use a 
+// textured quad (defaults to a circle) oriented to the ground normal to stencil out the shadow volume (i.e. a gobo texture).
+class dDlst_shadowSimple_c {
+    public alpha: number = 0; // 0-255
+    public tex: BTIData | null = null;
+    public modelViewMtx = mat4.create();
+    public texMtx = mat4.create();
+
+    static compileDLs(cache: GfxRenderCache, symbolMap: SymbolMap): dDlst_shadowSimple_c_DLCache {
+        const vat: GX_VtxAttrFmt[] = [];
+        vat[GX.Attr.POS] = { compType: GX.CompType.F32, compCnt: GX.CompCnt.POS_XYZ, compShift: 0 };
+        vat[GX.Attr.TEX0] = { compType: GX.CompType.S8, compCnt: GX.CompCnt.TEX_ST, compShift: 0 };
+
+        const vcd: GX_VtxDesc[] = [];
+        vcd[GX.Attr.POS] = { type: GX.AttrType.INDEX8 };
+        const shadowVtxLoader = compileVtxLoader(vat, vcd);
+
+        // The `l_shadowSealDL` display list contains both register setting commands and draws. Split it up.
+        const shadowSealMat = symbolMap.findSymbolData(`d_drawlist.o`, `l_shadowSealDL`).slice(0, 0x42);
+        const shadowSealDrw = symbolMap.findSymbolData(`d_drawlist.o`, `l_shadowSealDL`).slice(0x42, 0);
+
+        // Same for `l_shadowSealTexDL` ...
+        const shadowSealTexMat = symbolMap.findSymbolData(`d_drawlist.o`, `l_shadowSealTexDL`).slice(0, 0x26);
+        const shadowSealTexDrw = symbolMap.findSymbolData(`d_drawlist.o`, `l_shadowSealTexDL`).slice(0x26, 0);
+
+        // A simple box shadow volume, providing verts within a [-1, 1] cube.
+        const simpleShadowPos = symbolMap.findSymbolData(`d_drawlist.o`, `l_simpleShadowPos`);
+        const shadowVtxArrays: GX_Array[] = [];
+        shadowVtxArrays[GX.Attr.POS] = { buffer: simpleShadowPos, offs: 0, stride: 0x0C };
+
+        // Construct a basic box shape representing the "simple" shadow volume.
+        const volumeDL = symbolMap.findSymbolData(`d_drawlist.o`, `l_shadowVolumeDL`)
+        const volumeVerts = shadowVtxLoader.runVertices(shadowVtxArrays, volumeDL);
+        const volumeShape = new dDlst_BasicShape_c(cache, shadowVtxLoader.loadedVertexLayout, volumeVerts);
+
+        // Construct the "seal" shape using the same pos-only verts.
+        const sealVerts = shadowVtxLoader.runVertices(shadowVtxArrays, shadowSealDrw);
+        const sealShape = new dDlst_BasicShape_c(cache, shadowVtxLoader.loadedVertexLayout, sealVerts);
+
+        // Construct the gobo seal shape which only applies alpha to the color buffer where the texture is opaque.
+        vcd[GX.Attr.TEX0] = { type: GX.AttrType.DIRECT };
+        const shadowTexVtxLoader = compileVtxLoader(vat, vcd)
+        const sealTexVerts = shadowTexVtxLoader.runVertices(shadowVtxArrays, shadowSealTexDrw);
+        const sealTexShape = new dDlst_BasicShape_c(cache, shadowTexVtxLoader.loadedVertexLayout, sealTexVerts);
+
+        // Construct materials
+        const matBuilder = new GXMaterialBuilder();
+        const matRegisters = new DisplayListRegisters();
+        displayListRegistersInitGX(matRegisters);
+        
+        matBuilder.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.OR, GX.CompareType.ALWAYS, 0);
+
+        // Writes GX_TEVREG0.a (0x40) on every front face that passes the depth test 
+        // These are the first draw calls to write alpha each frame, so it assumes the alpha channel is empty
+        displayListRegistersRun(matRegisters, symbolMap.findSymbolData(`d_drawlist.o`, `l_frontMat`));
+        matBuilder.setFromRegisters(matRegisters);
+        const frontMat = new GXMaterialHelperGfx(matBuilder.finish(`dDlst_shadowSimple_c l_frontMat`));
+
+        // Subtract GX_TEVREG0.a (0x40)on every back face that passes the depth test
+        // The result after frontMat and backMat are rendered is 0x40 written everywhere the shadow should be drawn
+        displayListRegistersRun(matRegisters, symbolMap.findSymbolData(`d_drawlist.o`, `l_backSubMat`));
+        matBuilder.setFromRegisters(matRegisters);
+        const backSubMat = new GXMaterialHelperGfx(matBuilder.finish(`dDlst_shadowSimple_c l_backSubMat`));
+
+        // Zero the alpha channel anywhere that the shadow texture is transparent
+        displayListRegistersRun(matRegisters, shadowSealTexMat);
+        matBuilder.setFromRegisters(matRegisters);
+        matBuilder.setTevAlphaOp(0, GX.TevOp.COMP_RGB8_GT, GX.TevBias.ZERO, GX.TevScale.SCALE_1, false, GX.Register.PREV);
+        matBuilder.setTevAlphaIn(0, GX.CA.TEXA, GX.CA.ZERO, GX.CA.A2, GX.CA.ZERO);
+        matBuilder.setTexCoordGen(0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY, false, GX.PostTexGenMatrix.PTIDENTITY);
+        const sealTexMat = new GXMaterialHelperGfx(matBuilder.finish(`dDlst_shadowSimple_c l_sealTexMat`));
+
+        // Multiply buffer color by the alpha channel
+        displayListRegistersRun(matRegisters, shadowSealMat);
+        matBuilder.setFromRegisters(matRegisters);
+        const sealMat = new GXMaterialHelperGfx(matBuilder.finish(`dDlst_shadowSimple_c l_shadowSealDL`));
+
+        // Write GX_TEVREG1.a (0x00) to everywhere the shadow volume was drawn 
+        // Clears the alpha channel for future transparent object rendering
+        displayListRegistersRun(matRegisters, symbolMap.findSymbolData(`d_drawlist.o`, `l_clearMat`));
+        matBuilder.setFromRegisters(matRegisters);
+        const clearMat = new GXMaterialHelperGfx(matBuilder.finish(`dDlst_shadowSimple_c l_clearMat`));
+
+        return { volumeShape, sealShape, sealTexShape, frontMat, backSubMat, sealTexMat, sealMat, clearMat };
+    }
+
+    static destroy(cache: dDlst_shadowSimple_c_DLCache, device: GfxDevice): void {
+        cache.volumeShape.destroy(device);
+        cache.sealShape.destroy(device);
+        cache.sealTexShape.destroy(device);
+    }
+
+    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, dlCache: dDlst_shadowSimple_c_DLCache): void {
+        const cache = globals.modelCache.cache;
+
+        mat4.copy(drawParams.u_PosMtx[0], this.modelViewMtx);
+        mat4.copy(drawParams.u_PosMtx[1], this.texMtx);
+        colorFromRGBA(materialParams.u_Color[ColorKind.C0], 0, 0, 0, 0x40 / 0xFF);
+        colorFromRGBA(materialParams.u_Color[ColorKind.C1], 0, 0, 0, 0);
+        colorFromRGBA(materialParams.u_Color[ColorKind.C2], 1, 1, 1, 1);
+        if (this.tex) this.tex.fillTextureMapping(materialParams.m_TextureMapping[0]);
+
+        const template = renderInstManager.pushTemplate();
+        dlCache.volumeShape.setOnRenderInst(template);
+        dlCache.frontMat.allocateDrawParamsDataOnInst(template, drawParams);
+        dlCache.sealTexMat.allocateMaterialParamsDataOnInst(template, materialParams);
+
+        // Front face shadow volume (add 0.25 to alpha channel for front faces)
+        const front = renderInstManager.newRenderInst()
+        dlCache.frontMat.setOnRenderInst(cache, front);
+        renderInstManager.submitRenderInst(front);
+
+        // Back face shadow volume (subtract 0.25 from alpha channel for back faces)
+        const back = renderInstManager.newRenderInst()
+        dlCache.backSubMat.setOnRenderInst(cache, back);
+        renderInstManager.submitRenderInst(back);
+
+        // If a texture is set, clear the alpha channel where the texture is transparent
+        if (this.tex) {
+            const texSeal = renderInstManager.newRenderInst()
+            mat4.copy(drawParams.u_PosMtx[0], this.texMtx);
+            dlCache.sealTexMat.allocateDrawParamsDataOnInst(texSeal, drawParams);
+            dlCache.sealTexMat.setOnRenderInst(cache, texSeal);
+            dlCache.sealTexShape.setOnRenderInst(texSeal);
+            texSeal.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
+            renderInstManager.submitRenderInst(texSeal);
+            // NOTE: Non-square textures are only used by the Tingle Tuner shadow, so unnecessary for our purposes
+        }
+
+        // Multiply color by the alpha channel
+        const seal = renderInstManager.newRenderInst()
+        mat4.copy(drawParams.u_PosMtx[0], this.texMtx);
+        dlCache.sealMat.allocateDrawParamsDataOnInst(seal, drawParams);
+        dlCache.sealMat.setOnRenderInst(cache, seal);
+        dlCache.sealShape.setOnRenderInst(seal);
+        renderInstManager.submitRenderInst(seal);
+
+        // Clear the alpha channel for future transparent object rendering
+        const clear = renderInstManager.newRenderInst()
+        dlCache.clearMat.setOnRenderInst(cache, clear);
+        dlCache.volumeShape.setOnRenderInst(clear);
+        renderInstManager.submitRenderInst(clear);
+
+        renderInstManager.popTemplate();
+    }
+
+    public set(globals: dGlobals, pos: vec3, floorY: number, scaleXZ: number, floorNrm: vec3, rotY: number, scaleZ: number, tex: BTIData | null): void {
+        const offsetY = scaleXZ * 16.0 * (1.0 - floorNrm[1]) + 1.0;
+
+        // Build modelViewMtx
+        mat4.fromTranslation(this.modelViewMtx, [pos[0], floorY + offsetY, pos[2]]);
+        mat4.rotateY(this.modelViewMtx, this.modelViewMtx, cM_s2rad(rotY));
+        mat4.scale(this.modelViewMtx, this.modelViewMtx, [scaleXZ, offsetY + offsetY + 16.0, scaleXZ * scaleZ]);
+        mat4.mul(this.modelViewMtx, globals.camera.viewFromWorldMatrix, this.modelViewMtx);
+
+        // Build texMtx (oriented to the floor plane)
+        const xs = Math.sqrt(1.0 - floorNrm[0] * floorNrm[0]);
+        let yy: number;
+        let zz: number;
+        if (xs !== 0.0) {
+            yy = floorNrm[1] * xs;
+            zz = -floorNrm[2] * xs;
+        } else {
+            yy = 0.0;
+            zz = 0.0;
+        }
+
+        mat4.set(this.texMtx,
+            xs, floorNrm[0], 0.0, 0.0,
+            -floorNrm[0] * yy, floorNrm[1], zz, 0.0,
+            floorNrm[0] * zz, floorNrm[2], yy, 0.0,
+            pos[0], floorY, pos[2], 1.0
+        );
+
+        mat4.rotateY(this.texMtx, this.texMtx, cM_s2rad(rotY));
+        mat4.scale(this.texMtx, this.texMtx, [scaleXZ, 1.0, scaleXZ * scaleZ]);
+        mat4.mul(this.texMtx, globals.camera.viewFromWorldMatrix, this.texMtx);
+
+        let opacity = 1.0 - saturate((pos[1] - floorY) * 0.0007);
+        this.alpha = opacity * 64.0;
+        this.tex = tex;
+    }
+}
+
+class dDlst_shadowControl_c {
+    private simples = nArray(128, () => new dDlst_shadowSimple_c());
+    private simpleCount = 0;
+    private simpleCache: dDlst_shadowSimple_c_DLCache;
+
+    // TODO: Real shadows
+    // private reals = nArray(8, () => new dDlst_shadowSimple_c());
+    // private realCache: dDlst_shadowReal_c_DLCache;
+
+    public defaultSimpleTex: BTIData;
+
+    constructor(device: GfxDevice, cache: GfxRenderCache, resCtrl: dRes_control_c, symbolMap: SymbolMap) {
+        this.simpleCache = dDlst_shadowSimple_c.compileDLs(cache, symbolMap);
+
+        const img = resCtrl.getObjectRes(ResType.Raw, `Always`, 0x71); // ALWAYS_I4_BALL128B
+        const bti: BTI_Texture = {
+            name: img.name,
+            format: GX.TexFormat.I4,
+            width: 128,
+            height: 128,
+            data: img,
+            mipCount: 1,
+            wrapS: GX.WrapMode.CLAMP,
+            wrapT: GX.WrapMode.CLAMP,
+            minFilter: GX.TexFilter.LINEAR,
+            magFilter: GX.TexFilter.LINEAR,
+            minLOD: 0,
+            maxLOD: 0,
+            lodBias: 0,
+            maxAnisotropy: GX.Anisotropy._1,
+            paletteFormat: 0,
+            paletteData: null,
+        };
+        this.defaultSimpleTex = new BTIData(device, cache, bti);
+    }
+
+    destroy(device: GfxDevice): void {
+        dDlst_shadowSimple_c.destroy(this.simpleCache, device);
+    }
+
+    public reset(): void {
+        this.simpleCount = 0;
+    }
+
+    public imageDraw(mtx: mat4): void {
+        // TODO: Implementation
+    }
+
+    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewMtx: mat4): void {
+        // dKy_GxFog_set();
+
+        // Draw simple shadows
+        for (let i = 0; i < this.simpleCount; i++) {
+            this.simples[i].draw(globals, renderInstManager, this.simpleCache);
+        }
+
+        this.reset();
+    }
+
+    public setReal(id: number, shouldFade: number, model: J3DModelInstance, pos: vec3, casterSize: number, heightAgl: number, tevStr: dKy_tevstr_c): number {
+        // TODO: Implementation
+        return 0;
+    }
+
+    public setReal2(id: number, shouldFade: number, model: J3DModelInstance, pos: vec3, casterSize: number, heightAgl: number, tevStr: dKy_tevstr_c): number {
+        // TODO: Implementation
+        return 0;
+    }
+
+    public addReal(id: number, model: J3DModelInstance): boolean {
+        // TODO: Implementation
+        return false;
+    }
+
+    public setSimple(globals: dGlobals, pos: vec3, groundY: number, scaleXZ: number, floorNrm: vec3, angle: number, scaleZ: number, pTexObj: BTIData | null): boolean {
+        if (floorNrm === null || this.simpleCount >= this.simples.length)
+            return false;
+
+        const simple = this.simples[this.simpleCount++];
+        simple.set(globals, pos, groundY, scaleXZ, floorNrm, angle, scaleZ, pTexObj);
+        return true;
+    }
+}
+
+export function dComIfGd_setSimpleShadow2(globals: dGlobals, pos: vec3, groundY: number, scaleXZ: number, floorPoly: cBgS_PolyInfo,
+    rotY: number = 0, scaleZ: number = 1.0, i_tex: BTIData | null = globals.dlst.shadowControl.defaultSimpleTex): boolean {
+    if (floorPoly.ChkSetInfo() && groundY !== -Infinity) {
+        const plane_p = globals.scnPlay.bgS.GetTriPla(floorPoly.bgIdx, floorPoly.triIdx);
+        return globals.dlst.shadowControl.setSimple(globals, pos, groundY, scaleXZ, plane_p.n, rotY, scaleZ, i_tex);
+    } else {
+        return false;
     }
 }

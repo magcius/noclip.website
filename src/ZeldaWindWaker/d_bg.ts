@@ -180,11 +180,15 @@ class cBgW_NodeTree {
     public aabb = new AABB();
 }
 
-class cBgS_PolyInfo {
+export class cBgS_PolyInfo {
     public triIdx: number = -1;
     public bgIdx: number = -1;
     public bgW: cBgW | null = null;
     public processId: number = -1;
+
+    public ChkSetInfo(): boolean {
+        return !(this.triIdx == 0xFFFF || this.bgIdx == 0x100);
+    }
 
     public Reset(): void {
         this.triIdx = -1;

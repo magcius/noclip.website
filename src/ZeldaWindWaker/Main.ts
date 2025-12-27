@@ -164,7 +164,7 @@ export class dGlobals {
 
         this.quadStatic = new dDlst_2DStatic_c(modelCache.device, modelCache.cache);
 
-        this.dlst = new dDlst_list_c(modelCache.device, modelCache.cache, extraSymbolData);
+        this.dlst = new dDlst_list_c(modelCache.device, modelCache.cache, modelCache.resCtrl, extraSymbolData);
     }
 
     public dStage_searchName(name: string): dStage__ObjectNameTableEntry | null {
@@ -430,6 +430,9 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
 
         const dlst = globals.dlst;
 
+        renderInstManager.setCurrentList(dlst.shadow);
+        dlst.shadowControl.draw(globals, renderInstManager, globals.camera.clipFromViewMatrix);
+
         renderInstManager.setCurrentList(dlst.alphaModel);
         dlst.alphaModel0.draw(globals, renderInstManager, viewerInput);
 
@@ -532,8 +535,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
 
                 this.executeList(passRenderer, dlst.sea);
                 this.executeListSet(passRenderer, dlst.bg);
-
-                // Execute our alpha model stuff.
+                this.executeList(passRenderer, dlst.shadow);
                 this.executeList(passRenderer, dlst.alphaModel);
 
                 this.executeList(passRenderer, dlst.effect[EffectDrawGroup.Main]);
@@ -812,7 +814,7 @@ class SceneDesc {
         modelCache.fetchObjectData(`Always`);
         modelCache.fetchStageData(`Stage`);
 
-        modelCache.fetchFileData(`extra.crg1_arc`, 11);
+        modelCache.fetchFileData(`extra.crg1_arc`, 15);
         modelCache.fetchFileData(`f_pc_profiles.crg1_arc`);
 
         const particleArchives = [

@@ -337,9 +337,17 @@ function extractExtra(binaries: Binary[]) {
     extractSymbol(datas, framework, `d_drawlist.o`, `l_matDL$5108`);
     extractSymbol(datas, framework, `d_drawlist.o`, `l_bonboriPos`);
     extractSymbol(datas, framework, `d_drawlist.o`, `l_bonboriDL`);
+    extractSymbol(datas, framework, `d_drawlist.o`, `l_backSubMat`);
     extractSymbol(datas, framework, `d_drawlist.o`, `l_backRevZMat`);
+    extractSymbol(datas, framework, `d_drawlist.o`, `l_frontMat`);
     extractSymbol(datas, framework, `d_drawlist.o`, `l_frontZMat`);
     extractSymbol(datas, framework, `d_drawlist.o`, `l_frontNoZSubMat`);
+    extractSymbol(datas, framework, `d_drawlist.o`, `l_shadowVolumeDL`);
+    extractSymbol(datas, framework, `d_drawlist.o`, `l_shadowSealDL`);
+    extractSymbol(datas, framework, `d_drawlist.o`, `l_shadowSealTexDL`);
+    extractSymbol(datas, framework, `d_drawlist.o`, `l_shadowSealTex2DL`);
+    extractSymbol(datas, framework, `d_drawlist.o`, `l_simpleShadowPos`);
+    extractSymbol(datas, framework, `d_drawlist.o`, `l_clearMat`);
 
     // main.dol : d_a_player_main.o 
     extractSymbol(datas, framework, `d_a_player_main.o`, `mAnmDataTable__9daPy_lk_c`);
