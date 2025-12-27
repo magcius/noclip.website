@@ -367,7 +367,7 @@ export class GXMaterialBuilder {
     }
 
     public setTexGenFromRegisters(r: DisplayListRegisters, i: number): void {
-        const v = r.xfg(GX.XFRegister.XF_TEX0_ID + i);
+        const v = r.xfGet(GX.XFRegister.XF_TEX0_ID + i);
 
         enum TexProjection {
             ST = 0x00,
@@ -444,7 +444,7 @@ export class GXMaterialBuilder {
         // TODO(jstpierre): XF_MATRIXINDEX0_ID
         const matrix: GX.TexGenMatrix = GX.TexGenMatrix.IDENTITY;
 
-        const dv = r.xfg(GX.XFRegister.XF_DUALTEX0_ID + i);
+        const dv = r.xfGet(GX.XFRegister.XF_DUALTEX0_ID + i);
         const postMatrix: GX.PostTexGenMatrix = ((dv >>> 0) & 0xFF) + GX.PostTexGenMatrix.PTTEXMTX0;
         const normalize: boolean = !!((dv >>> 8) & 0x01);
 
@@ -452,8 +452,8 @@ export class GXMaterialBuilder {
     }
 
     public setColorChannelFromRegisters(r: DisplayListRegisters, i: number): void {
-        const colorCntrl = r.xfg(GX.XFRegister.XF_COLOR0CNTRL_ID + i);
-        const alphaCntrl = r.xfg(GX.XFRegister.XF_ALPHA0CNTRL_ID + i);
+        const colorCntrl = r.xfGet(GX.XFRegister.XF_COLOR0CNTRL_ID + i);
+        const alphaCntrl = r.xfGet(GX.XFRegister.XF_ALPHA0CNTRL_ID + i);
 
         const setChanCtrl = (dst: ColorChannelControl, chanCtrl: number) => {
             const matColorSource: GX.ColorSrc =           (chanCtrl >>>  0) & 0x01;
@@ -597,45 +597,54 @@ export class GXMaterialBuilder {
         const fogAdjEnabled = false;
     
         // Blend mode.
-        const cm0 = r.bp[GX.BPRegister.PE_CMODE0_ID];
-        const bmboe = (cm0 >>> 0) & 0x01;
-        const bmloe = (cm0 >>> 1) & 0x01;
-        // bit 2 = dither
-        const colorUpdate = !!((cm0 >>> 3) & 0x01);
-        const alphaUpdate = !!((cm0 >>> 4) & 0x01);
-        this.setColorUpdate(colorUpdate);
-        this.setAlphaUpdate(alphaUpdate);
-        const bmbop = (cm0 >>> 11) & 0x01;
+        if (r.bpRegIsSet(GX.BPRegister.PE_CMODE0_ID)) {
+            const cm0 = r.bp[GX.BPRegister.PE_CMODE0_ID];
+            const bmboe = (cm0 >>> 0) & 0x01;
+            const bmloe = (cm0 >>> 1) & 0x01;
+            // bit 2 = dither
+            const colorUpdate = !!((cm0 >>> 3) & 0x01);
+            const alphaUpdate = !!((cm0 >>> 4) & 0x01);
+            this.setColorUpdate(colorUpdate);
+            this.setAlphaUpdate(alphaUpdate);
+            const bmbop = (cm0 >>> 11) & 0x01;
     
-        const blendMode: GX.BlendMode =
-            bmboe ? (bmbop ? GX.BlendMode.SUBTRACT : GX.BlendMode.BLEND) :
-            bmloe ? GX.BlendMode.LOGIC : GX.BlendMode.NONE;;
-        const blendDstFactor: GX.BlendFactor = (cm0 >>> 5) & 0x07;
-        const blendSrcFactor: GX.BlendFactor = (cm0 >>> 8) & 0x07;
-        const blendLogicOp: GX.LogicOp = (cm0 >>> 12) & 0x0F;
-        this.setBlendMode(blendMode, blendSrcFactor, blendDstFactor, blendLogicOp);
+            const blendMode: GX.BlendMode =
+                bmboe ? (bmbop ? GX.BlendMode.SUBTRACT : GX.BlendMode.BLEND) :
+                bmloe ? GX.BlendMode.LOGIC : GX.BlendMode.NONE;;
+            const blendDstFactor: GX.BlendFactor = (cm0 >>> 5) & 0x07;
+            const blendSrcFactor: GX.BlendFactor = (cm0 >>> 8) & 0x07;
+            const blendLogicOp: GX.LogicOp = (cm0 >>> 12) & 0x0F;
+            this.setBlendMode(blendMode, blendSrcFactor, blendDstFactor, blendLogicOp);
+        }
     
         // Depth state.
-        const zm = r.bp[GX.BPRegister.PE_ZMODE_ID];
-        const depthTest = !!((zm >>> 0) & 0x01);
-        const depthFunc = (zm >>> 1) & 0x07;
-        const depthWrite = !!((zm >>> 4) & 0x01);
-        this.setZMode(depthTest, depthFunc, depthWrite);
+        if (r.bpRegIsSet(GX.BPRegister.PE_ZMODE_ID)) {
+            const zm = r.bp[GX.BPRegister.PE_ZMODE_ID];
+            const depthTest = !!((zm >>> 0) & 0x01);
+            const depthFunc = (zm >>> 1) & 0x07;
+            const depthWrite = !!((zm >>> 4) & 0x01);
+            this.setZMode(depthTest, depthFunc, depthWrite);
+        }
         //#endregion
 
         //#region Alpha Test
-        const ap = r.bp[GX.BPRegister.TEV_ALPHAFUNC_ID];
-        const refA = (ap >>>  0) & 0xFF;
-        const refB = (ap >>>  8) & 0xFF;
-        const compareA = (ap >>> 16) & 0x07;
-        const compareB = (ap >>> 19) & 0x07;
-        const op = (ap >>> 22) & 0x07;
-        this.setAlphaCompare(compareA, refA, op, compareB, refB);
+        if (r.bpRegIsSet(GX.BPRegister.TEV_ALPHAFUNC_ID)) {
+            const ap = r.bp[GX.BPRegister.TEV_ALPHAFUNC_ID];
+            const refA = (ap >>>  0) & 0xFF;
+            const refB = (ap >>>  8) & 0xFF;
+            const compareA = (ap >>> 16) & 0x07;
+            const compareB = (ap >>> 19) & 0x07;
+            const op = (ap >>> 22) & 0x07;
+            this.setAlphaCompare(compareA, refA, op, compareB, refB);
+        }
+        //#endregion
 
-        const genMode = r.bp[GX.BPRegister.GEN_MODE_ID];
-        const hw2cm: GX.CullMode[] = [ GX.CullMode.NONE, GX.CullMode.BACK, GX.CullMode.FRONT, GX.CullMode.ALL ];
-        const cullMode = hw2cm[((genMode >>> 14)) & 0x03];
-        this.setCullMode(cullMode);
+        if (r.bpRegIsSet(GX.BPRegister.GEN_MODE_ID)) {
+            const genMode = r.bp[GX.BPRegister.GEN_MODE_ID];
+            const hw2cm: GX.CullMode[] = [ GX.CullMode.NONE, GX.CullMode.BACK, GX.CullMode.FRONT, GX.CullMode.ALL ];
+            const cullMode = hw2cm[((genMode >>> 14)) & 0x03];
+            this.setCullMode(cullMode);
+        }
     }
 
     public setFromRegisters(r: DisplayListRegisters): void {
@@ -653,7 +662,7 @@ export class GXMaterialBuilder {
         for (let i = 0; i < numInds; i++)
             this.setIndTexStageFromRegisters(r, i);
 
-        const numColors = r.xfg(GX.XFRegister.XF_NUMCOLORS_ID);
+        const numColors = r.xfGet(GX.XFRegister.XF_NUMCOLORS_ID);
         for (let i = 0; i < numColors; i++)
             this.setColorChannelFromRegisters(r, i);
 
