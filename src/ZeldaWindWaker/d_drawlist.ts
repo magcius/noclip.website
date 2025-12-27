@@ -11,7 +11,7 @@ import { GfxRenderInst, GfxRenderInstExecutionOrder, GfxRenderInstList, GfxRende
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder.js';
 import { DisplayListRegisters, GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, LoadedVertexLayout, compileVtxLoader, displayListRegistersInitGX, displayListRegistersRun } from "../gx/gx_displaylist.js";
 import * as GX from '../gx/gx_enum.js';
-import { GX_Program, parseMaterial } from '../gx/gx_material.js';
+import { GX_Program, GXMaterial, parseMaterial } from '../gx/gx_material.js';
 import { ColorKind, DrawParams, GXMaterialHelperGfx, MaterialParams, SceneParams, createInputLayout, fillSceneParamsData, ub_SceneParamsBufferSize } from "../gx/gx_render.js";
 import { assert, assertExists, nArray } from '../util.js';
 import { ViewerRenderInput } from '../viewer.js';
@@ -311,46 +311,39 @@ class dDlst_shadowSimple_c {
         // Construct materials
         const matRegisters = new DisplayListRegisters();
         displayListRegistersInitGX(matRegisters);
+        
+        // The game calls GXSetAlphaCompare with these values before these display lists are executed
+        const patchMaterial = (mat: GXMaterial) => {
+            mat.alphaTest.op = GX.AlphaOp.OR;
+            mat.alphaTest.compareA = GX.CompareType.ALWAYS;
+            return mat;
+        };
 
         // Writes GX_TEVREG0.a (0x40) on every front face that passes the depth test 
         // These are the first draw calls to write alpha each frame, so it assumes the alpha channel is empty
         displayListRegistersRun(matRegisters, symbolMap.findSymbolData(`d_drawlist.o`, `l_frontMat`));
-        const frontMat = new GXMaterialHelperGfx(parseMaterial(matRegisters, `dDlst_shadowSimple_c l_frontMat`));
+        const frontMat = new GXMaterialHelperGfx(patchMaterial(parseMaterial(matRegisters, `dDlst_shadowSimple_c l_frontMat`)));
 
         // Subtract GX_TEVREG0.a (0x40)on every back face that passes the depth test
         // The result after frontMat and backMat are rendered is 0x40 written everywhere the shadow should be drawn
         displayListRegistersRun(matRegisters, symbolMap.findSymbolData(`d_drawlist.o`, `l_backSubMat`));
-        const backSubMat = new GXMaterialHelperGfx(parseMaterial(matRegisters, `dDlst_shadowSimple_c l_backSubMat`));
+        const backSubMat = new GXMaterialHelperGfx(patchMaterial(parseMaterial(matRegisters, `dDlst_shadowSimple_c l_backSubMat`)));
 
         // Zero the alpha channel anywhere that the shadow texture is transparent
         displayListRegistersRun(matRegisters, shadowSealTexMat);
-        const tempMaterial = parseMaterial(matRegisters, `dDlst_shadowSimple_c shadowSealTexMat`);
+        const tempMaterial = patchMaterial(parseMaterial(matRegisters, `dDlst_shadowSimple_c shadowSealTexMat`));
         tempMaterial.tevStages[0] = { ...tempMaterial.tevStages[0], alphaOp: GX.TevOp.COMP_RGB8_GT, alphaInA: GX.CA.TEXA, alphaInB: GX.CA.ZERO, alphaInC: GX.CA.A2, alphaInD: GX.CA.ZERO };
         tempMaterial.texGens[0] = { type: GX.TexGenType.MTX2x4, source: GX.TexGenSrc.TEX0, matrix: GX.TexGenMatrix.IDENTITY, normalize: false, postMatrix: GX.PostTexGenMatrix.PTIDENTITY };
         const sealTexMat = new GXMaterialHelperGfx(tempMaterial);
 
         // Multiply buffer color by the alpha channel
         displayListRegistersRun(matRegisters, shadowSealMat);
-        const sealMat = new GXMaterialHelperGfx(parseMaterial(matRegisters, `dDlst_shadowSimple_c l_shadowSealDL`));
+        const sealMat = new GXMaterialHelperGfx(patchMaterial(parseMaterial(matRegisters, `dDlst_shadowSimple_c l_shadowSealDL`)));
 
         // Write GX_TEVREG1.a (0x00) to everywhere the shadow volume was drawn 
         // Clears the alpha channel for future transparent object rendering
         displayListRegistersRun(matRegisters, symbolMap.findSymbolData(`d_drawlist.o`, `l_clearMat`));
         const clearMat = new GXMaterialHelperGfx(parseMaterial(matRegisters, `dDlst_shadowSimple_c l_clearMat`));
-
-        // TODO: Disable Alpha test via matRegisters so that it affects all above materials (instead of doing it manually here)
-        sealMat.material.alphaTest.op = GX.AlphaOp.OR;
-        sealMat.material.alphaTest.compareA = GX.CompareType.ALWAYS;
-        sealMat.invalidateMaterial();
-        frontMat.material.alphaTest.op = GX.AlphaOp.OR;
-        frontMat.material.alphaTest.compareA = GX.CompareType.ALWAYS;
-        frontMat.invalidateMaterial();
-        backSubMat.material.alphaTest.op = GX.AlphaOp.OR;
-        backSubMat.material.alphaTest.compareA = GX.CompareType.ALWAYS;
-        backSubMat.invalidateMaterial();
-        sealTexMat.material.alphaTest.op = GX.AlphaOp.OR;
-        sealTexMat.material.alphaTest.compareA = GX.CompareType.ALWAYS;
-        sealTexMat.invalidateMaterial();
 
         return { volumeShape, sealShape, sealTexShape, frontMat, backSubMat, sealTexMat, sealMat, clearMat };
     }
