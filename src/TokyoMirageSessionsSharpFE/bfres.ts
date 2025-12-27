@@ -1,35 +1,135 @@
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { assert, readString } from "../util.js";
+import { AttributeFormat } from "../fres_nx/nngfx_enum.js";
+
+export interface FVTX_VertexAttribute
+{
+    name: string;
+    bufferIndex: number;
+    bufferOffset: number;
+    format: AttributeFormat;
+}
+
+export interface FVTX_VertexBuffer
+{
+    data: ArrayBufferSlice;
+    stride: number;
+}
+
+export interface FVTX
+{
+    vertexAttributes: FVTX_VertexAttribute[];
+    vertexBuffers: FVTX_VertexBuffer[];
+}
+
+export interface FMDL
+{
+    name: string;
+    // fskl: FSKL;
+    fvtx: FVTX[];
+    // fshp: FSHP[];
+    // fmat: FMAT[];
+}
 
 export interface FRES
 {
-    // fmdl: FMDL[];
+    fmdl: FMDL[];
+}
+
+// offsets are in relation to themselves, not the start of the file.
+// for example, reading an offset of 0x4C from location 0x20 actually points to 0x6C in the file
+// offset_location: location of the offset from the start of the file
+// returns the offset relative to the start of the file
+function read_bfres_offset(view: DataView<ArrayBufferLike>, offset_location: number): number
+{
+    return offset_location + view.getUint32(offset_location, false);
 }
 
 export function parse(buffer: ArrayBufferSlice): FRES
 {
     // assert(readString(buffer, 0x00, 0x04) === 'FRES');
 
-    // offsets are in relation to themselves, not the start of the file.
-    // for example, reading an offset of 0x4C from location 0x20 actually points to 0x6C in the file
     const view = buffer.createDataView();
+    
+    // parse FMDL data
 
-    // parse FMDL files
-    const fmdl_group_offset = 0x20 + view.getUint32(0x20, false);
+    const fmdl_group_offset = read_bfres_offset(view, 0x20);
     const fmdl_count = view.getUint32(fmdl_group_offset + 0x4, false);
 
     // header is length 0x8, each entry is length 0x10 but the first entry is empty so the data really starts 0x18 in
     let entry_offset = fmdl_group_offset + 0x18;
-    const names: string[] = [];
-    const data_offsets: number[] = [];
+    const fmdl_header_offsets: number[] = [];
+
     for (let i = 0; i < fmdl_count; i++)
     {
-        const name_offset = entry_offset + 0x8;
-        names.push(readString(buffer, name_offset + view.getUint32(name_offset, false), 0xFF, true));
-        const data_offset = entry_offset + 0xC;
-        data_offsets.push(data_offset + view.getUint32(data_offset, false));
-        entry_offset += 0xC;
+        fmdl_header_offsets.push(read_bfres_offset(view, entry_offset + 0xC));
+        entry_offset += 0x10;
     }
 
-    return {};
+    const fmdl: FMDL[] = [];
+    for (let i = 0; i < fmdl_header_offsets.length; i++)
+    {
+        // assert(readString(buffer, fmdl_header_offsets[i], 0x04) === 'FMDL');
+        const fmdl_name_offset = read_bfres_offset(view, fmdl_header_offsets[i] + 0x4);
+        const name = readString(buffer, fmdl_name_offset, 0xFF, true)
+        const fskl_header_offset = read_bfres_offset(view, fmdl_header_offsets[i] + 0xC);
+        const fvtx_array_offset = read_bfres_offset(view, fmdl_header_offsets[i] + 0x10);
+        const fshp_array_offset = read_bfres_offset(view, fmdl_header_offsets[i] + 0x14);
+        const fmat_array_offset = read_bfres_offset(view, fmdl_header_offsets[i] + 0x18);
+        const user_data_array_offset = read_bfres_offset(view, fmdl_header_offsets[i] + 0x1C);
+        const fvtx_count = view.getUint16(fmdl_header_offsets[i] + 0x20, false);
+        const fshp_count = view.getUint16(fmdl_header_offsets[i] + 0x22, false);
+        const fmat_count = view.getUint16(fmdl_header_offsets[i] + 0x24, false);
+        const user_data_count = view.getUint16(fmdl_header_offsets[i] + 0x26, false);
+        const vertex_total = view.getUint32(fmdl_header_offsets[i] + 0x28, false);
+
+        // TODO fskl
+
+        // parse fvtx data
+        let fvtx_entry_offset = fvtx_array_offset;
+        const fvtx: FVTX[] = [];
+        for (let i = 0; i < fvtx_count; i++)
+        {
+            // assert(readString(buffer, fvtx_entry_offset, 0x04) === 'FVTX');
+            const attribute_count = view.getUint8(fvtx_entry_offset + 0x4);
+            const buffer_count = view.getUint8(fvtx_entry_offset + 0x5);
+            const attribute_array_offset = read_bfres_offset(view, fvtx_entry_offset + 0x10);
+            const buffer_array_offset = read_bfres_offset(view, fvtx_entry_offset + 0x18);
+
+            const vertexAttributes: FVTX_VertexAttribute[] = [];
+            let attribute_entry_offset = attribute_array_offset;
+            for (let i = 0; i < attribute_count; i++)
+            {
+                const attribute_name_offset = read_bfres_offset(view, attribute_entry_offset);
+                const name = readString(buffer, attribute_name_offset, 0xFF, true)
+                const bufferIndex = view.getUint8(attribute_entry_offset + 0x4);
+                // TODO: does this offset need to be adjusted like all the other bfres offsets?
+                const bufferOffset = view.getUint16(attribute_entry_offset + 0x6);
+                const format = view.getUint32(attribute_entry_offset + 0x8);
+
+                vertexAttributes.push({ name, bufferIndex, bufferOffset, format });
+                attribute_entry_offset += 0xC;
+            }
+
+            const vertexBuffers: FVTX_VertexBuffer[] = [];
+            let buffer_entry_offset = buffer_array_offset;
+            for (let i = 0; i < buffer_count; i++)
+            {
+                const size = view.getUint32(buffer_entry_offset + 0x4);
+                const stride = view.getUint16(buffer_entry_offset + 0xC);
+                const data_offset = read_bfres_offset(view, buffer_entry_offset + 0x14);
+                const data = buffer.subarray(data_offset, size);
+
+                vertexBuffers.push({ data, stride });
+                buffer_entry_offset += 0x18;
+            }
+
+            fvtx.push({ vertexAttributes, vertexBuffers });
+            fvtx_entry_offset += 0x20;
+        }
+
+        fmdl.push({ name, fvtx })
+    }
+    console.log(fmdl);
+    return { fmdl };
 }
