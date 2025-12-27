@@ -400,7 +400,6 @@ function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice, version: number): MDL
     mb.setCullMode(cullMode);
     mb.setColorUpdate(true);
     mb.setAlphaUpdate(false);
-    mb.setUsePnMtxIdx(false);
 
     const indTexMatrices: Float32Array[] = [];
     for (let i = 0; i < 3; i++) {
