@@ -22,8 +22,8 @@ class TMSFESceneDesc implements SceneDesc
     {
         // Load the map file
         const dataFetcher = context.dataFetcher;
-        const apak = dataFetcher.fetchData(`TokyoMirageSessionsSharpFE/${this.id}/model.apak`);
-        // const bfres = BFRES.parse(await dataFetcher.fetchData("TokyoMirageSessionsSharpFE/d008_01.bfres"));
+        const apak = dataFetcher.fetchData(`TokyoMirageSessionsSharpFE/maps/${this.id}/model.apak`);
+        const bfres = BFRES.parse(await dataFetcher.fetchData("TokyoMirageSessionsSharpFE/d008_01.bfres"));
         return new TMSFEScene();
     }
 }
