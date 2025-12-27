@@ -321,25 +321,24 @@ class dDlst_shadowSimple_c {
         const matBuilder = new GXMaterialBuilder();
         const matRegisters = new DisplayListRegisters();
         displayListRegistersInitGX(matRegisters);
+        
+        matBuilder.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.OR, GX.CompareType.ALWAYS, 0);
 
         // Writes GX_TEVREG0.a (0x40) on every front face that passes the depth test 
         // These are the first draw calls to write alpha each frame, so it assumes the alpha channel is empty
         displayListRegistersRun(matRegisters, symbolMap.findSymbolData(`d_drawlist.o`, `l_frontMat`));
         matBuilder.setFromRegisters(matRegisters);
-        matBuilder.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.OR, GX.CompareType.ALWAYS, 0);
         const frontMat = new GXMaterialHelperGfx(matBuilder.finish(`dDlst_shadowSimple_c l_frontMat`));
 
         // Subtract GX_TEVREG0.a (0x40)on every back face that passes the depth test
         // The result after frontMat and backMat are rendered is 0x40 written everywhere the shadow should be drawn
         displayListRegistersRun(matRegisters, symbolMap.findSymbolData(`d_drawlist.o`, `l_backSubMat`));
         matBuilder.setFromRegisters(matRegisters);
-        matBuilder.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.OR, GX.CompareType.ALWAYS, 0);
         const backSubMat = new GXMaterialHelperGfx(matBuilder.finish(`dDlst_shadowSimple_c l_backSubMat`));
 
         // Zero the alpha channel anywhere that the shadow texture is transparent
         displayListRegistersRun(matRegisters, shadowSealTexMat);
         matBuilder.setFromRegisters(matRegisters);
-        matBuilder.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.OR, GX.CompareType.ALWAYS, 0);
         matBuilder.setTevAlphaOp(0, GX.TevOp.COMP_RGB8_GT, GX.TevBias.ZERO, GX.TevScale.SCALE_1, false, GX.Register.PREV);
         matBuilder.setTevAlphaIn(0, GX.CA.TEXA, GX.CA.ZERO, GX.CA.A2, GX.CA.ZERO);
         matBuilder.setTexCoordGen(0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY, false, GX.PostTexGenMatrix.PTIDENTITY);
@@ -348,7 +347,6 @@ class dDlst_shadowSimple_c {
         // Multiply buffer color by the alpha channel
         displayListRegistersRun(matRegisters, shadowSealMat);
         matBuilder.setFromRegisters(matRegisters);
-        matBuilder.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.OR, GX.CompareType.ALWAYS, 0);
         const sealMat = new GXMaterialHelperGfx(matBuilder.finish(`dDlst_shadowSimple_c l_shadowSealDL`));
 
         // Write GX_TEVREG1.a (0x00) to everywhere the shadow volume was drawn 
