@@ -259,7 +259,7 @@ class dDlst_shadowSimple_c {
     public modelViewMtx = mat4.create();
     public texMtx = mat4.create();
 
-    static compileDL(matCache: Record<string, GXMaterialHelperGfx>, shapeCache: Record<string, dDlst_BasicShape_c>,
+    static compileDLs(matCache: Record<string, GXMaterialHelperGfx>, shapeCache: Record<string, dDlst_BasicShape_c>,
         cache: GfxRenderCache, symbolMap: SymbolMap) {
         const vat: GX_VtxAttrFmt[] = [];
         vat[GX.Attr.POS] = { compType: GX.CompType.F32, compCnt: GX.CompCnt.POS_XYZ, compShift: 0 };
@@ -285,16 +285,17 @@ class dDlst_shadowSimple_c {
         // Construct a basic box shape representing the "simple" shadow volume.
         const shadowVolumeDL = symbolMap.findSymbolData(`d_drawlist.o`, `l_shadowVolumeDL`)
         const shadowVolVerts = shadowVtxLoader.runVertices(shadowVtxArrays, shadowVolumeDL);
-        shapeCache.shadowVolumeShape = new dDlst_BasicShape_c(cache, shadowVtxLoader.loadedVertexLayout, shadowVolVerts);
+        shapeCache.volume = new dDlst_BasicShape_c(cache, shadowVtxLoader.loadedVertexLayout, shadowVolVerts);
 
         // Construct the "seal" shape using the same pos-only verts.
         const shadowSealVerts = shadowVtxLoader.runVertices(shadowVtxArrays, shadowSealDrw);
-        shapeCache.shadowSealShape = new dDlst_BasicShape_c(cache, shadowVtxLoader.loadedVertexLayout, shadowSealVerts);
+        shapeCache.seal = new dDlst_BasicShape_c(cache, shadowVtxLoader.loadedVertexLayout, shadowSealVerts);
+
         // Construct the gobo seal shape which only applies alpha to the color buffer where the texture is opaque.
         vcd[GX.Attr.TEX0] = { type: GX.AttrType.DIRECT };
         const shadowTexVtxLoader = compileVtxLoader(vat, vcd)
         const shadowSealTexVerts = shadowTexVtxLoader.runVertices(shadowVtxArrays, shadowSealTexDrw);
-        shapeCache.shadowSealTexShape = new dDlst_BasicShape_c(cache, shadowTexVtxLoader.loadedVertexLayout, shadowSealTexVerts);
+        shapeCache.sealTex = new dDlst_BasicShape_c(cache, shadowTexVtxLoader.loadedVertexLayout, shadowSealTexVerts);
 
         // Construct materials
         {
@@ -358,7 +359,7 @@ class dDlst_shadowSimple_c {
         if (this.tex) this.tex.fillTextureMapping(materialParams.m_TextureMapping[0]);
 
         const template = renderInstManager.pushTemplate();
-        shapeCache.shadowVolumeShape.setOnRenderInst(template);
+        shapeCache.volume.setOnRenderInst(template);
         matCache.frontMat.allocateDrawParamsDataOnInst(template, drawParams);
         matCache.sealTexMat.allocateMaterialParamsDataOnInst(template, materialParams);
 
@@ -378,7 +379,7 @@ class dDlst_shadowSimple_c {
             mat4.copy(drawParams.u_PosMtx[0], this.texMtx);
             matCache.sealTexMat.allocateDrawParamsDataOnInst(texSeal, drawParams);
             matCache.sealTexMat.setOnRenderInst(cache, texSeal);
-            shapeCache.shadowSealTexShape.setOnRenderInst(texSeal);
+            shapeCache.sealTex.setOnRenderInst(texSeal);
             texSeal.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
             renderInstManager.submitRenderInst(texSeal);
             // NOTE: Non-square textures are only used by the Tingle Tuner shadow, so unnecessary for our purposes
@@ -389,13 +390,13 @@ class dDlst_shadowSimple_c {
         mat4.copy(drawParams.u_PosMtx[0], this.texMtx);
         matCache.sealMat.allocateDrawParamsDataOnInst(seal, drawParams);
         matCache.sealMat.setOnRenderInst(cache, seal);
-        shapeCache.shadowSealShape.setOnRenderInst(seal);
+        shapeCache.seal.setOnRenderInst(seal);
         renderInstManager.submitRenderInst(seal);
 
         // Clear the alpha channel for future transparent object rendering
         const clear = renderInstManager.newRenderInst()
         matCache.clearMat.setOnRenderInst(cache, clear);
-        shapeCache.shadowVolumeShape.setOnRenderInst(clear);
+        shapeCache.volume.setOnRenderInst(clear);
         renderInstManager.submitRenderInst(clear);
 
         renderInstManager.popTemplate();
@@ -448,7 +449,7 @@ class dDlst_shadowControl_c {
     public static defaultSimpleTex: BTIData;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, resCtrl: dRes_control_c, symbolMap: SymbolMap) {
-        dDlst_shadowSimple_c.compileDL(this.simpleMatCache, this.simpleShapeCache, cache, symbolMap);
+        dDlst_shadowSimple_c.compileDLs(this.simpleMatCache, this.simpleShapeCache, cache, symbolMap);
 
         const img = resCtrl.getObjectRes(ResType.Raw, `Always`, 0x71); // ALWAYS_I4_BALL128B
         const bti: BTI_Texture = {
