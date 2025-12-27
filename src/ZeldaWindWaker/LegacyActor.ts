@@ -916,6 +916,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
             fetchArchive(`Ktaru_01`).then((rarc) => {
                 model = buildModel(rarc, `bdl/ktaru_01.bdl`);
                 setToNearestFloor(model.modelMatrix, model.modelMatrix);
+                setShadowSimple(60);
             });
             break;
         case 4:
@@ -1019,7 +1020,10 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     });
     else if (actorName === 'Vyasi') fetchArchive(`Vyasi`).then((rarc) => buildModel(rarc, `bdl/vyasi.bdl`));
     // Barrels
-    else if (actorName === 'Ktarux') fetchArchive(`Ktaru_01`).then((rarc) => buildModel(rarc, `bdl/ktaru_01.bdl`));
+    else if (actorName === 'Ktarux') fetchArchive(`Ktaru_01`).then((rarc) => {
+        buildModel(rarc, `bdl/ktaru_01.bdl`);
+        setShadowSimple(60);
+    });
     else if (actorName === 'Ktaruo') fetchArchive(`Ktaru_01`).then((rarc) => buildModel(rarc, `bdl/ktaru_01.bdl`));
     // Breakable shelves
     else if (actorName === 'Otana') fetchArchive(`Otana`).then((rarc) => buildModel(rarc, `bdl/otana.bdl`));
@@ -1055,7 +1059,10 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     // Holes you can fall into
     else if (actorName === 'Pitfall') fetchArchive(`Aana`).then((rarc) => buildModel(rarc, `bdl/aana.bdl`));
     // Warp Pot
-    else if (actorName === 'Warpt' || actorName === 'Warpnt' || actorName === 'Warpts1' || actorName === 'Warpts2' || actorName === 'Warpts3') fetchArchive(`ltubw`).then((rarc) => buildModel(rarc, `bdl/itubw.bdl`));
+    else if (actorName === 'Warpt' || actorName === 'Warpnt' || actorName === 'Warpts1' || actorName === 'Warpts2' || actorName === 'Warpts3') fetchArchive(`ltubw`).then((rarc) => {
+         buildModel(rarc, `bdl/itubw.bdl`);
+         setShadowSimple(80.0);
+    });
     else if (actorName === 'Warpgm') fetchArchive(`Gmjwp`).then((rarc) => {
         const m = buildModel(rarc, `bdlm/gmjwp00.bdl`);
         m.bindANK1(parseBCK(rarc, `bck/gmjwp01.bck`));
@@ -1087,7 +1094,10 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         buildModel(rarc, `bdl/hhbot2.bdl`);
     });
     // Spike Trap
-    else if (actorName === 'Trap') fetchArchive(`Trap`).then((rarc) => buildModel(rarc, `bdlm/htora1.bdl`));
+    else if (actorName === 'Trap') fetchArchive(`Trap`).then((rarc) => {
+        buildModel(rarc, `bdlm/htora1.bdl`);
+        setShadowSimple(150.0);
+    });
     // Floor Spikes
     else if (actorName === 'Htoge1') fetchArchive(`Htoge1`).then((rarc) => buildModel(rarc, `bdl/htoge1.bdl`));
     // Grapple Point
@@ -1163,7 +1173,10 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         }
     }
     // Korok Tree
-    else if (actorName === 'FTree') fetchArchive(`Vmr`).then((rarc) => buildModel(rarc, `bdlm/vmrty.bdl`).bindANK1(parseBCK(rarc, `bck/vmrty.bck`)));
+    else if (actorName === 'FTree') fetchArchive(`Vmr`).then((rarc) => {
+        buildModel(rarc, `bdlm/vmrty.bdl`).bindANK1(parseBCK(rarc, `bck/vmrty.bck`));
+        setShadowSimple(75.0);
+    });
     // Animals
     else if (actorName === 'DmKmm') fetchArchive(`Demo_Kmm`).then((rarc) => buildModel(rarc, `bmd/ka.bmd`).bindANK1(parseBCK(rarc, `bcks/ka_wait1.bck`)));
     // else if (actorName === 'Kamome') fetchArchive(`Kamome`).then((rarc) => buildModel(rarc, `bdl/ka.bdl`).bindANK1(parseBCK(rarc, `bck/ka_wait2.bck`)));
@@ -1477,11 +1490,11 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     else if (actorName === 'ikada_u') fetchArchive(`IkadaH`).then((rarc) => buildModel(rarc, `bdl/vtsp2.bdl`));
     // The Great Sea
     else if (actorName === 'Svsp') fetchArchive(`IkadaH`).then((rarc) => buildModel(rarc, `bdl/vsvsp.bdl`));
-    else if (actorName === 'Vtil1') fetchArchive(`Vtil`).then((rarc) => buildModel(rarc, `bdl/vtil1.bdl`));
-    else if (actorName === 'Vtil2') fetchArchive(`Vtil`).then((rarc) => buildModel(rarc, `bdl/vtil2.bdl`));
-    else if (actorName === 'Vtil3') fetchArchive(`Vtil`).then((rarc) => buildModel(rarc, `bdl/vtil3.bdl`));
-    else if (actorName === 'Vtil4') fetchArchive(`Vtil`).then((rarc) => buildModel(rarc, `bdl/vtil4.bdl`));
-    else if (actorName === 'Vtil5') fetchArchive(`Vtil`).then((rarc) => buildModel(rarc, `bdl/vtil5.bdl`));
+    else if (actorName === 'Vtil1') fetchArchive(`Vtil`).then((rarc) => { buildModel(rarc, `bdl/vtil1.bdl`); setShadowSimple(57.0); });
+    else if (actorName === 'Vtil2') fetchArchive(`Vtil`).then((rarc) => { buildModel(rarc, `bdl/vtil2.bdl`); setShadowSimple(57.0); });
+    else if (actorName === 'Vtil3') fetchArchive(`Vtil`).then((rarc) => { buildModel(rarc, `bdl/vtil3.bdl`); setShadowSimple(57.0); });
+    else if (actorName === 'Vtil4') fetchArchive(`Vtil`).then((rarc) => { buildModel(rarc, `bdl/vtil4.bdl`); setShadowSimple(57.0); });
+    else if (actorName === 'Vtil5') fetchArchive(`Vtil`).then((rarc) => { buildModel(rarc, `bdl/vtil5.bdl`); setShadowSimple(57.0); });
     else if (actorName === 'Ekskz') fetchArchive(`Ekskz`).then((rarc) => {
         buildModel(rarc, `bdl/ekskz.bdl`);
         const yocwd00 = buildModel(rarc, `bdlm/yocwd00.bdl`);
@@ -1611,7 +1624,10 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     // Pirate stuff
     else if (actorName === 'Pirates') fetchArchive(`Kaizokusen`).then((rarc) => buildModel(rarc, `bdl/oba_kaizoku_a.bdl`));
     else if (actorName === 'Ashut') fetchArchive(`Ashut`).then((rarc) => buildModel(rarc, `bdl/ashut.bdl`));
-    else if (actorName === 'Ospbox') fetchArchive(`Ospbox`).then((rarc) => buildModel(rarc, `bdl/ospbox.bdl`));
+    else if (actorName === 'Ospbox') fetchArchive(`Ospbox`).then((rarc) => {
+        buildModel(rarc, `bdl/ospbox.bdl`);
+        setShadowSimple(90.0, 1.0, null);
+    });
     // The platforms in the pirate ship which go up and down.
     else if (actorName === 'Hlift') fetchArchive(`Hlift`).then((rarc) => {
         const m = buildModel(rarc, `bdl/hlift.bdl`);
@@ -1746,7 +1762,10 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     // Hyrule.
     else if (actorName === 'YLzou') fetchArchive(`YLzou`).then((rarc) => buildModel(rarc, `bdl/ylzou.bdl`));
     else if (actorName === 'MtryB') fetchArchive(`MtryB`).then((rarc) => buildModel(rarc, `bdl/mtryb.bdl`));
-    else if (actorName === 'zouK' || actorName === 'zouK1' || actorName === 'zouK2' || actorName === 'zouK3' || actorName === 'zouK4') fetchArchive(`VzouK`).then((rarc) => buildModel(rarc, `bdl/vzouk.bdl`));
+    else if (actorName === 'zouK' || actorName === 'zouK1' || actorName === 'zouK2' || actorName === 'zouK3' || actorName === 'zouK4') fetchArchive(`VzouK`).then((rarc) => {
+        buildModel(rarc, `bdl/vzouk.bdl`)
+        setShadowSimple(388.0);
+    });
     else if (actorName === 'VmsDZ') fetchArchive(`VmsDZ`).then((rarc) => buildModel(rarc, `bdl/vmsdz.bdl`));
     else if (actorName === 'VmsMS') fetchArchive(`VmsMS`).then((rarc) => buildModel(rarc, `bdl/vmsms.bdl`));
     else if (actorName === 'Yswdr00') fetchArchive(`Yswdr00`).then((rarc) => buildModel(rarc, `bdlm/yswdr00.bdl`).bindTTK1(parseBTK(rarc, `btk/yswdr00.btk`)));
