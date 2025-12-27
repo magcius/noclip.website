@@ -251,6 +251,18 @@ export class dDlst_list_c {
     }
 }
 
+interface dDlst_shadowSimple_c_DLCache {
+    volumeShape: dDlst_BasicShape_c;
+    sealShape: dDlst_BasicShape_c;
+    sealTexShape: dDlst_BasicShape_c;
+
+    frontMat: GXMaterialHelperGfx;
+    backSubMat: GXMaterialHelperGfx;
+    sealTexMat: GXMaterialHelperGfx;
+    sealMat: GXMaterialHelperGfx;
+    clearMat: GXMaterialHelperGfx; 
+}
+
 // Renders a simple cube-shaped shadow volume directly below an object (light position is ignored). Optionally, use a 
 // textured quad (defaults to a circle) oriented to the ground normal to stencil out the shadow volume (i.e. a gobo texture).
 class dDlst_shadowSimple_c {
@@ -259,8 +271,7 @@ class dDlst_shadowSimple_c {
     public modelViewMtx = mat4.create();
     public texMtx = mat4.create();
 
-    static compileDLs(matCache: Record<string, GXMaterialHelperGfx>, shapeCache: Record<string, dDlst_BasicShape_c>,
-        cache: GfxRenderCache, symbolMap: SymbolMap) {
+    static compileDLs(cache: GfxRenderCache, symbolMap: SymbolMap): dDlst_shadowSimple_c_DLCache {
         const vat: GX_VtxAttrFmt[] = [];
         vat[GX.Attr.POS] = { compType: GX.CompType.F32, compCnt: GX.CompCnt.POS_XYZ, compShift: 0 };
         vat[GX.Attr.TEX0] = { compType: GX.CompType.S8, compCnt: GX.CompCnt.TEX_ST, compShift: 0 };
@@ -283,72 +294,74 @@ class dDlst_shadowSimple_c {
         shadowVtxArrays[GX.Attr.POS] = { buffer: simpleShadowPos, offs: 0, stride: 0x0C };
 
         // Construct a basic box shape representing the "simple" shadow volume.
-        const shadowVolumeDL = symbolMap.findSymbolData(`d_drawlist.o`, `l_shadowVolumeDL`)
-        const shadowVolVerts = shadowVtxLoader.runVertices(shadowVtxArrays, shadowVolumeDL);
-        shapeCache.volume = new dDlst_BasicShape_c(cache, shadowVtxLoader.loadedVertexLayout, shadowVolVerts);
+        const volumeDL = symbolMap.findSymbolData(`d_drawlist.o`, `l_shadowVolumeDL`)
+        const volumeVerts = shadowVtxLoader.runVertices(shadowVtxArrays, volumeDL);
+        const volumeShape = new dDlst_BasicShape_c(cache, shadowVtxLoader.loadedVertexLayout, volumeVerts);
 
         // Construct the "seal" shape using the same pos-only verts.
-        const shadowSealVerts = shadowVtxLoader.runVertices(shadowVtxArrays, shadowSealDrw);
-        shapeCache.seal = new dDlst_BasicShape_c(cache, shadowVtxLoader.loadedVertexLayout, shadowSealVerts);
+        const sealVerts = shadowVtxLoader.runVertices(shadowVtxArrays, shadowSealDrw);
+        const sealShape = new dDlst_BasicShape_c(cache, shadowVtxLoader.loadedVertexLayout, sealVerts);
 
         // Construct the gobo seal shape which only applies alpha to the color buffer where the texture is opaque.
         vcd[GX.Attr.TEX0] = { type: GX.AttrType.DIRECT };
         const shadowTexVtxLoader = compileVtxLoader(vat, vcd)
-        const shadowSealTexVerts = shadowTexVtxLoader.runVertices(shadowVtxArrays, shadowSealTexDrw);
-        shapeCache.sealTex = new dDlst_BasicShape_c(cache, shadowTexVtxLoader.loadedVertexLayout, shadowSealTexVerts);
+        const sealTexVerts = shadowTexVtxLoader.runVertices(shadowVtxArrays, shadowSealTexDrw);
+        const sealTexShape = new dDlst_BasicShape_c(cache, shadowTexVtxLoader.loadedVertexLayout, sealTexVerts);
 
         // Construct materials
-        {
-            const matRegisters = new DisplayListRegisters();
-            displayListRegistersInitGX(matRegisters);
+        const matRegisters = new DisplayListRegisters();
+        displayListRegistersInitGX(matRegisters);
 
-            // Writes GX_TEVREG0.a (0x40) on every front face that passes the depth test 
-            // These are the first draw calls to write alpha each frame, so it assumes the alpha channel is empty
-            displayListRegistersRun(matRegisters, symbolMap.findSymbolData(`d_drawlist.o`, `l_frontMat`));
-            matCache.frontMat = new GXMaterialHelperGfx(parseMaterial(matRegisters, `dDlst_shadowSimple_c l_frontMat`));
+        // Writes GX_TEVREG0.a (0x40) on every front face that passes the depth test 
+        // These are the first draw calls to write alpha each frame, so it assumes the alpha channel is empty
+        displayListRegistersRun(matRegisters, symbolMap.findSymbolData(`d_drawlist.o`, `l_frontMat`));
+        const frontMat = new GXMaterialHelperGfx(parseMaterial(matRegisters, `dDlst_shadowSimple_c l_frontMat`));
 
-            // Subtract GX_TEVREG0.a (0x40)on every back face that passes the depth test
-            // The result after frontMat and backMat are rendered is 0x40 written everywhere the shadow should be drawn
-            displayListRegistersRun(matRegisters, symbolMap.findSymbolData(`d_drawlist.o`, `l_backSubMat`));
-            matCache.backSubMat = new GXMaterialHelperGfx(parseMaterial(matRegisters, `dDlst_shadowSimple_c l_backSubMat`));
+        // Subtract GX_TEVREG0.a (0x40)on every back face that passes the depth test
+        // The result after frontMat and backMat are rendered is 0x40 written everywhere the shadow should be drawn
+        displayListRegistersRun(matRegisters, symbolMap.findSymbolData(`d_drawlist.o`, `l_backSubMat`));
+        const backSubMat = new GXMaterialHelperGfx(parseMaterial(matRegisters, `dDlst_shadowSimple_c l_backSubMat`));
 
-            // Zero the alpha channel anywhere that the shadow texture is transparent
-            displayListRegistersRun(matRegisters, shadowSealTexMat);
-            const tempMaterial = parseMaterial(matRegisters, `dDlst_shadowSimple_c shadowSealTexMat`);
-            tempMaterial.tevStages[0] = { ...tempMaterial.tevStages[0], alphaOp: GX.TevOp.COMP_RGB8_GT, alphaInA: GX.CA.TEXA, alphaInB: GX.CA.ZERO, alphaInC: GX.CA.A2, alphaInD: GX.CA.ZERO };
-            tempMaterial.texGens[0] = { type: GX.TexGenType.MTX2x4, source: GX.TexGenSrc.TEX0, matrix: GX.TexGenMatrix.IDENTITY, normalize: false, postMatrix: GX.PostTexGenMatrix.PTIDENTITY };
-            matCache.sealTexMat = new GXMaterialHelperGfx(tempMaterial);
+        // Zero the alpha channel anywhere that the shadow texture is transparent
+        displayListRegistersRun(matRegisters, shadowSealTexMat);
+        const tempMaterial = parseMaterial(matRegisters, `dDlst_shadowSimple_c shadowSealTexMat`);
+        tempMaterial.tevStages[0] = { ...tempMaterial.tevStages[0], alphaOp: GX.TevOp.COMP_RGB8_GT, alphaInA: GX.CA.TEXA, alphaInB: GX.CA.ZERO, alphaInC: GX.CA.A2, alphaInD: GX.CA.ZERO };
+        tempMaterial.texGens[0] = { type: GX.TexGenType.MTX2x4, source: GX.TexGenSrc.TEX0, matrix: GX.TexGenMatrix.IDENTITY, normalize: false, postMatrix: GX.PostTexGenMatrix.PTIDENTITY };
+        const sealTexMat = new GXMaterialHelperGfx(tempMaterial);
 
-            // Multiply buffer color by the alpha channel
-            displayListRegistersRun(matRegisters, shadowSealMat);
-            matCache.sealMat = new GXMaterialHelperGfx(parseMaterial(matRegisters, `dDlst_shadowSimple_c l_shadowSealDL`));
+        // Multiply buffer color by the alpha channel
+        displayListRegistersRun(matRegisters, shadowSealMat);
+        const sealMat = new GXMaterialHelperGfx(parseMaterial(matRegisters, `dDlst_shadowSimple_c l_shadowSealDL`));
 
-            // Write GX_TEVREG1.a (0x00) to everywhere the shadow volume was drawn 
-            // Clears the alpha channel for future transparent object rendering
-            displayListRegistersRun(matRegisters, symbolMap.findSymbolData(`d_drawlist.o`, `l_clearMat`));
-            matCache.clearMat = new GXMaterialHelperGfx(parseMaterial(matRegisters, `dDlst_shadowSimple_c l_clearMat`));
+        // Write GX_TEVREG1.a (0x00) to everywhere the shadow volume was drawn 
+        // Clears the alpha channel for future transparent object rendering
+        displayListRegistersRun(matRegisters, symbolMap.findSymbolData(`d_drawlist.o`, `l_clearMat`));
+        const clearMat = new GXMaterialHelperGfx(parseMaterial(matRegisters, `dDlst_shadowSimple_c l_clearMat`));
 
-            // TODO: Disable Alpha test via matRegisters so that it affects all above materials (instead of doing it manually here)
-            matCache.sealMat.material.alphaTest.op = GX.AlphaOp.OR;
-            matCache.sealMat.material.alphaTest.compareA = GX.CompareType.ALWAYS;
-            matCache.sealMat.invalidateMaterial();
-            matCache.frontMat.material.alphaTest.op = GX.AlphaOp.OR;
-            matCache.frontMat.material.alphaTest.compareA = GX.CompareType.ALWAYS;
-            matCache.frontMat.invalidateMaterial();
-            matCache.backSubMat.material.alphaTest.op = GX.AlphaOp.OR;
-            matCache.backSubMat.material.alphaTest.compareA = GX.CompareType.ALWAYS;
-            matCache.backSubMat.invalidateMaterial();
-            matCache.sealTexMat.material.alphaTest.op = GX.AlphaOp.OR;
-            matCache.sealTexMat.material.alphaTest.compareA = GX.CompareType.ALWAYS;
-            matCache.sealTexMat.invalidateMaterial();
-        }
+        // TODO: Disable Alpha test via matRegisters so that it affects all above materials (instead of doing it manually here)
+        sealMat.material.alphaTest.op = GX.AlphaOp.OR;
+        sealMat.material.alphaTest.compareA = GX.CompareType.ALWAYS;
+        sealMat.invalidateMaterial();
+        frontMat.material.alphaTest.op = GX.AlphaOp.OR;
+        frontMat.material.alphaTest.compareA = GX.CompareType.ALWAYS;
+        frontMat.invalidateMaterial();
+        backSubMat.material.alphaTest.op = GX.AlphaOp.OR;
+        backSubMat.material.alphaTest.compareA = GX.CompareType.ALWAYS;
+        backSubMat.invalidateMaterial();
+        sealTexMat.material.alphaTest.op = GX.AlphaOp.OR;
+        sealTexMat.material.alphaTest.compareA = GX.CompareType.ALWAYS;
+        sealTexMat.invalidateMaterial();
+
+        return { volumeShape, sealShape, sealTexShape, frontMat, backSubMat, sealTexMat, sealMat, clearMat };
     }
 
-    static destroy(shapeCache: Record<string, dDlst_BasicShape_c>, device: GfxDevice): void {
-        Object.values(shapeCache).forEach(shape => shape.destroy(device));
+    static destroy(cache: dDlst_shadowSimple_c_DLCache, device: GfxDevice): void {
+        cache.volumeShape.destroy(device);
+        cache.sealShape.destroy(device);
+        cache.sealTexShape.destroy(device);
     }
 
-    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, matCache: Record<string, GXMaterialHelperGfx>, shapeCache: Record<string, dDlst_BasicShape_c>): void {
+    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, dlCache: dDlst_shadowSimple_c_DLCache): void {
         const cache = globals.modelCache.cache;
 
         mat4.copy(drawParams.u_PosMtx[0], this.modelViewMtx);
@@ -359,27 +372,27 @@ class dDlst_shadowSimple_c {
         if (this.tex) this.tex.fillTextureMapping(materialParams.m_TextureMapping[0]);
 
         const template = renderInstManager.pushTemplate();
-        shapeCache.volume.setOnRenderInst(template);
-        matCache.frontMat.allocateDrawParamsDataOnInst(template, drawParams);
-        matCache.sealTexMat.allocateMaterialParamsDataOnInst(template, materialParams);
+        dlCache.volumeShape.setOnRenderInst(template);
+        dlCache.frontMat.allocateDrawParamsDataOnInst(template, drawParams);
+        dlCache.sealTexMat.allocateMaterialParamsDataOnInst(template, materialParams);
 
         // Front face shadow volume (add 0.25 to alpha channel for front faces)
         const front = renderInstManager.newRenderInst()
-        matCache.frontMat.setOnRenderInst(cache, front);
+        dlCache.frontMat.setOnRenderInst(cache, front);
         renderInstManager.submitRenderInst(front);
 
         // Back face shadow volume (subtract 0.25 from alpha channel for back faces)
         const back = renderInstManager.newRenderInst()
-        matCache.backSubMat.setOnRenderInst(cache, back);
+        dlCache.backSubMat.setOnRenderInst(cache, back);
         renderInstManager.submitRenderInst(back);
 
         // If a texture is set, clear the alpha channel where the texture is transparent
         if (this.tex) {
             const texSeal = renderInstManager.newRenderInst()
             mat4.copy(drawParams.u_PosMtx[0], this.texMtx);
-            matCache.sealTexMat.allocateDrawParamsDataOnInst(texSeal, drawParams);
-            matCache.sealTexMat.setOnRenderInst(cache, texSeal);
-            shapeCache.sealTex.setOnRenderInst(texSeal);
+            dlCache.sealTexMat.allocateDrawParamsDataOnInst(texSeal, drawParams);
+            dlCache.sealTexMat.setOnRenderInst(cache, texSeal);
+            dlCache.sealTexShape.setOnRenderInst(texSeal);
             texSeal.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
             renderInstManager.submitRenderInst(texSeal);
             // NOTE: Non-square textures are only used by the Tingle Tuner shadow, so unnecessary for our purposes
@@ -388,15 +401,15 @@ class dDlst_shadowSimple_c {
         // Multiply color by the alpha channel
         const seal = renderInstManager.newRenderInst()
         mat4.copy(drawParams.u_PosMtx[0], this.texMtx);
-        matCache.sealMat.allocateDrawParamsDataOnInst(seal, drawParams);
-        matCache.sealMat.setOnRenderInst(cache, seal);
-        shapeCache.seal.setOnRenderInst(seal);
+        dlCache.sealMat.allocateDrawParamsDataOnInst(seal, drawParams);
+        dlCache.sealMat.setOnRenderInst(cache, seal);
+        dlCache.sealShape.setOnRenderInst(seal);
         renderInstManager.submitRenderInst(seal);
 
         // Clear the alpha channel for future transparent object rendering
         const clear = renderInstManager.newRenderInst()
-        matCache.clearMat.setOnRenderInst(cache, clear);
-        shapeCache.volume.setOnRenderInst(clear);
+        dlCache.clearMat.setOnRenderInst(cache, clear);
+        dlCache.volumeShape.setOnRenderInst(clear);
         renderInstManager.submitRenderInst(clear);
 
         renderInstManager.popTemplate();
@@ -443,13 +456,16 @@ class dDlst_shadowSimple_c {
 class dDlst_shadowControl_c {
     private simples = nArray(128, () => new dDlst_shadowSimple_c());
     private simpleCount = 0;
-    private simpleMatCache: Record<string, GXMaterialHelperGfx> = {};
-    private simpleShapeCache: Record<string, dDlst_BasicShape_c> = {};
+    private simpleCache: dDlst_shadowSimple_c_DLCache;
 
-    public static defaultSimpleTex: BTIData;
+    // TODO: Real shadows
+    // private reals = nArray(8, () => new dDlst_shadowSimple_c());
+    // private realCache: dDlst_shadowReal_c_DLCache;
+
+    public defaultSimpleTex: BTIData;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, resCtrl: dRes_control_c, symbolMap: SymbolMap) {
-        dDlst_shadowSimple_c.compileDLs(this.simpleMatCache, this.simpleShapeCache, cache, symbolMap);
+        this.simpleCache = dDlst_shadowSimple_c.compileDLs(cache, symbolMap);
 
         const img = resCtrl.getObjectRes(ResType.Raw, `Always`, 0x71); // ALWAYS_I4_BALL128B
         const bti: BTI_Texture = {
@@ -470,11 +486,11 @@ class dDlst_shadowControl_c {
             paletteFormat: 0,
             paletteData: null,
         };
-        dDlst_shadowControl_c.defaultSimpleTex = new BTIData(device, cache, bti);
+        this.defaultSimpleTex = new BTIData(device, cache, bti);
     }
 
     destroy(device: GfxDevice): void {
-        dDlst_shadowSimple_c.destroy(this.simpleShapeCache, device);
+        dDlst_shadowSimple_c.destroy(this.simpleCache, device);
     }
 
     public reset(): void {
@@ -490,7 +506,7 @@ class dDlst_shadowControl_c {
 
         // Draw simple shadows
         for (let i = 0; i < this.simpleCount; i++) {
-            this.simples[i].draw(globals, renderInstManager, this.simpleMatCache, this.simpleShapeCache);
+            this.simples[i].draw(globals, renderInstManager, this.simpleCache);
         }
 
         this.reset();
@@ -522,7 +538,7 @@ class dDlst_shadowControl_c {
 }
 
 export function dComIfGd_setSimpleShadow2(globals: dGlobals, pos: vec3, groundY: number, scaleXZ: number, floorPoly: cBgS_PolyInfo,
-    rotY: number = 0, scaleZ: number = 1.0, i_tex: BTIData | null = dDlst_shadowControl_c.defaultSimpleTex): boolean {
+    rotY: number = 0, scaleZ: number = 1.0, i_tex: BTIData | null = globals.dlst.shadowControl.defaultSimpleTex): boolean {
     if (floorPoly.ChkSetInfo() && groundY !== -Infinity) {
         const plane_p = globals.scnPlay.bgS.GetTriPla(floorPoly.bgIdx, floorPoly.triIdx);
         return globals.dlst.shadowControl.setSimple(globals, pos, groundY, scaleXZ, plane_p.n, rotY, scaleZ, i_tex);
