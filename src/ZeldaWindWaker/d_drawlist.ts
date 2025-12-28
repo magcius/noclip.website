@@ -311,9 +311,9 @@ void main() {
     vec4 t_ObjectPos = UnpackMatrix(u_LocalFromClip) * vec4(t_ClipPos, 1.0);
     t_ObjectPos.xyz /= t_ObjectPos.w;
 
-    // TODO: Now that we have our object-space position, remove any samples outside of the box.
-    // if (any(lessThan(t_ObjectPos.xyz, vec3(-1)) || any(greaterThan(t_ObjectPos.xyz), vec3(1)))
-    //     discard;
+    // Now that we have our object-space position, remove any samples outside of the box.
+    if (any(lessThan(t_ObjectPos.xyz, vec3(-1))) || any(greaterThan(t_ObjectPos.xyz, vec3(1))))
+        discard;
     
     // Top-down project our shadow texture. Our local space is between -1 and 1, we want to move into 0.0 to 1.0.
     vec2 t_ShadowTexCoord = t_ObjectPos.xz * vec2(0.5) + vec2(0.5);
