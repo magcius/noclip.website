@@ -1,7 +1,7 @@
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { SceneGfx, SceneGroup, ViewerRenderInput } from "../viewer.js";
 import { SceneContext, SceneDesc } from "../SceneBase.js";
-import * as BFRES from "./bfres.js";
+import * as BFRES from "./bfres_wiiu.js";
 
 class TMSFEScene implements SceneGfx
 {

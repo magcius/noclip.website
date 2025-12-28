@@ -181,7 +181,6 @@ export function parse(buffer: ArrayBufferSlice): FRES
                 // TODO: does this offset need to be adjusted like all the other bfres offsets?
                 const bufferOffset = view.getUint16(attribute_entry_offset + 0x6);
                 const format = view.getUint32(attribute_entry_offset + 0x8);
-                const test = translateAttributeFormat(format);
 
                 vertexAttributes.push({ name, bufferIndex, bufferOffset, format });
                 attribute_entry_offset += 0xC;
