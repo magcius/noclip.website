@@ -98,6 +98,7 @@ import * as Scenes_OuterWilds from './OuterWilds/Scenes.js';
 import * as Scenes_CrashWarped from './CrashWarped/scenes.js';
 import * as Scenes_PlusForXP from './PlusForXP/scenes.js';
 import * as Scenes_MarioKart64 from './MarioKart64/scenes.js';
+import * as Scenes_CrazyTaxi from './CrazyTaxi/scenes.js';
 
 import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_FileDrops.js';
 
@@ -137,6 +138,7 @@ const sceneGroups: (string | SceneGroup)[] = [
     Scenes_WiiSports.sceneGroup,
     Scenes_WiiSportsResort.sceneGroup,
     "GameCube",
+    Scenes_CrazyTaxi.sceneGroup,
     Scenes_LuigisMansion.sceneGroup,
     Scenes_MarioKartDoubleDash.sceneGroup,
     Scenes_MetroidPrime.sceneGroupMP1,
