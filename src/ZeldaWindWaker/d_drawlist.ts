@@ -409,29 +409,17 @@ class dDlst_shadowSimple_c {
         device.destroySampler(cache.sampler);
     }
     
-    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        const cache = globals.modelCache.cache;
-
-        mat4.copy(drawParams.u_PosMtx[0], this.modelViewMtx);
-        mat4.copy(drawParams.u_PosMtx[1], this.texMtx);
-        colorFromRGBA(materialParams.u_Color[ColorKind.C0], 0, 0, 0, 0x40 / 0xFF);
-        colorFromRGBA(materialParams.u_Color[ColorKind.C1], 0, 0, 0, 0);
-        colorFromRGBA(materialParams.u_Color[ColorKind.C2], 1, 1, 1, 1);
+    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {   
+        const renderInst = renderInstManager.newRenderInst();  
+        let offset = renderInst.allocateUniformBuffer(0, 4 * 16 * 2);
+        const buf = renderInst.mapUniformBufferF32(0);
+        offset += fillVec4(buf, offset, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+        offset += fillMatrix4x4(buf, offset, mat4.mul(scratchMat4, globals.camera.clipFromViewMatrix, this.modelViewMtx));
+        offset += fillMatrix4x4(buf, offset, mat4.invert(scratchMat4, scratchMat4));
         if (this.tex) this.tex.fillTextureMapping(materialParams.m_TextureMapping[0]);
-
-        // Draw with our custom shader
-        {              
-            // TODO: Keep a permanent renderinst, just call drawOnPass each frame.
-            const renderInst = renderInstManager.newRenderInst();  
-            let offset = renderInst.allocateUniformBuffer(0, 4 * 16 * 2);
-            const buf = renderInst.mapUniformBufferF32(0);
-            offset += fillVec4(buf, offset, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
-            offset += fillMatrix4x4(buf, offset, mat4.mul(scratchMat4, globals.camera.clipFromViewMatrix, this.modelViewMtx));
-            offset += fillMatrix4x4(buf, offset, mat4.invert(scratchMat4, scratchMat4));
-            materialParams.m_TextureMapping[1].lateBinding = 'depth-target';
-            renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
-            renderInstManager.submitRenderInst(renderInst);
-        }
+        materialParams.m_TextureMapping[1].lateBinding = 'depth-target';
+        renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
+        renderInstManager.submitRenderInst(renderInst);
     }
 
     public set(globals: dGlobals, pos: vec3, floorY: number, scaleXZ: number, floorNrm: vec3, rotY: number, scaleZ: number, tex: BTIData | null): void {
