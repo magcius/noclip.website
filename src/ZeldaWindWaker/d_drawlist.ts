@@ -504,19 +504,12 @@ class dDlst_shadowSimple_c {
         {              
             // TODO: Keep a permanent renderinst, just call drawOnPass each frame.
             const renderInst = renderInstManager.newRenderInst();  
-            renderInst.setBindingLayouts(SimpleShadowProgram.bindingLayouts);
-            renderInst.setGfxProgram(dlCache.program);
-            renderInst.setMegaStateFlags(setAttachmentStateSimple({}, {}));
-        
             let offset = renderInst.allocateUniformBuffer(0, 4 * 16 * 2);
             const buf = renderInst.mapUniformBufferF32(0);
             offset += fillMatrix4x4(buf, offset, mat4.mul(scratchMat4, globals.camera.clipFromViewMatrix, this.modelViewMtx));
             // offset += fillVec4(buf, offset, this.fade, this.numParticles);
             materialParams.m_TextureMapping[1].lateBinding = 'depth-target';
             renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
-
-            renderInst.setVertexInput(dlCache.inputLayout, [{ buffer: dlCache.positionBuffer }], { buffer: dlCache.indexBuffer });
-            renderInst.setDrawCount(36);
             renderInstManager.submitRenderInst(renderInst);
         }
 
@@ -654,9 +647,16 @@ class dDlst_shadowControl_c {
         // dKy_GxFog_set();
 
         // Draw simple shadows
+        const template = renderInstManager.pushTemplate();
+        template.setBindingLayouts(SimpleShadowProgram.bindingLayouts);
+        template.setGfxProgram(this.simpleCache.program);
+        template.setMegaStateFlags(setAttachmentStateSimple({}, {}));
+        template.setVertexInput(this.simpleCache.inputLayout, [{ buffer: this.simpleCache.positionBuffer }], { buffer: this.simpleCache.indexBuffer });
+        template.setDrawCount(36);
         for (let i = 0; i < this.simpleCount; i++) {
             this.simples[i].draw(globals, renderInstManager, this.simpleCache);
         }
+        renderInstManager.popTemplate();
     }
 
     public imageDraw(mtx: mat4): void {
@@ -664,8 +664,6 @@ class dDlst_shadowControl_c {
     }
 
     public pushPasses(globals: dGlobals, renderInstManager: GfxRenderInstManager, builder: GfxrGraphBuilder, mainDepthTargetID: GfxrRenderTargetID, mainColorTargetID: GfxrRenderTargetID): void {        
-        renderInstManager.popTemplate();
-
         builder.pushPass((pass) => {
             pass.setDebugName('Shadows');
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
