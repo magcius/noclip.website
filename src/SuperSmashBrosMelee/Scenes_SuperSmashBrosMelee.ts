@@ -1,11 +1,11 @@
 
 import { BasicGXRendererHelper, fillSceneParamsDataOnTemplate } from "../gx/gx_render.js";
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
-import { HSD_JObjRoot_Instance, HSD_JObjRoot_Data, HSD_AObj_Instance } from "./SYSDOLPHIN_Render.js";
+import { HSD_JObjRoot_Instance, HSD_JObjRoot_Data, HSD_AObj_Instance } from "../SYSDOLPHIN/SYSDOLPHIN_Render.js";
 import { ViewerRenderInput, SceneGfx, SceneGroup } from "../viewer.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { SceneDesc, SceneContext } from "../SceneBase.js";
-import { HSD_ArchiveParse, HSD_JObjLoadJoint, HSD_JObjRoot, HSD_Archive_FindPublic, HSD_AObjLoadAnimJoint, HSD_AObjLoadMatAnimJoint, HSD_AObjLoadShapeAnimJoint, HSD_Archive, HSD_LoadContext, HSD_LoadContext__ResolvePtr, HSD_LoadContext__ResolveSymbol } from "./SYSDOLPHIN.js";
+import { HSD_ArchiveParse, HSD_JObjLoadJoint, HSD_JObjRoot, HSD_Archive_FindPublic, HSD_AObjLoadAnimJoint, HSD_AObjLoadMatAnimJoint, HSD_AObjLoadShapeAnimJoint, HSD_Archive, HSD_LoadContext, HSD_LoadContext__ResolvePtr, HSD_LoadContext__ResolveSymbol } from "../SYSDOLPHIN/SYSDOLPHIN.js";
 import { colorNewFromRGBA8 } from "../Color.js";
 import { assertExists, assert, nullify } from "../util.js";
 import { Melee_ftData_Load, Melee_SplitDataAJ, Melee_figatree_Load, figatree, ftData } from "./Melee_ft.js";
@@ -104,7 +104,7 @@ class HSDDesc implements SceneDesc {
     }
 }
 
-function BindFigATree(root: HSD_JObjRoot_Instance, figatree: figatree): void {
+export function BindFigATree(root: HSD_JObjRoot_Instance, figatree: figatree): void {
     assert(figatree.kind === 'Anim');
     assert(figatree.aobj.length === root.allJObjs.length);
 

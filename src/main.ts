@@ -98,6 +98,7 @@ import * as Scenes_OuterWilds from './OuterWilds/Scenes.js';
 import * as Scenes_CrashWarped from './CrashWarped/scenes.js';
 import * as Scenes_PlusForXP from './PlusForXP/scenes.js';
 import * as Scenes_MarioKart64 from './MarioKart64/scenes.js';
+import * as Scenes_KirbyAirRide from './KirbyAirRide/scenes.js';
 import * as Scenes_Spyro1 from './Spyro1/scenes.js';
 
 import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_FileDrops.js';
@@ -211,6 +212,7 @@ const sceneGroups: (string | SceneGroup)[] = [
     Scenes_SonicColors.sceneGroup,
     Scenes_SuperMarioOdyssey.sceneGroup,
     Scenes_SuperSmashBrosMelee.sceneGroup,
+    Scenes_KirbyAirRide.sceneGroup,
     Scenes_WiiUTransferTool.sceneGroup,
     Scenes_GoldenEye007.sceneGroup,
     Scenes_Test.sceneGroup,

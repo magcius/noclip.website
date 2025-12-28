@@ -111,7 +111,7 @@ class MarioKartWiiRenderer {
     public wireframe = false;
 
     public textureHolder = new RRESTextureHolder();
-    public animationController = new AnimationController();
+    public animationController = new AnimationController(60);
 
     public eggBloom: EggDrawPathBloom | null = null;
     public eggDOF: EggDrawPathDOF | null = null;

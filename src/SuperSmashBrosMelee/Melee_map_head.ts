@@ -1,7 +1,7 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { assert } from "../util.js";
-import { HSD_AnimJointRoot, HSD_AObjLoadAnimJoint, HSD_AObjLoadMatAnimJoint, HSD_AObjLoadShapeAnimJoint, HSD_JObjRoot, HSD_JObjLoadJoint, HSD_LoadContext, HSD_LoadContext__ResolvePtrAutoSize, HSD_MatAnimJointRoot, HSD_ShapeAnimJointRoot } from "./SYSDOLPHIN.js";
+import { HSD_AnimJointRoot, HSD_AObjLoadAnimJoint, HSD_AObjLoadMatAnimJoint, HSD_AObjLoadShapeAnimJoint, HSD_JObjRoot, HSD_JObjLoadJoint, HSD_LoadContext, HSD_LoadContext__ResolvePtrAutoSize, HSD_MatAnimJointRoot, HSD_ShapeAnimJointRoot } from "../SYSDOLPHIN/SYSDOLPHIN.js";
 
 export interface map_gobjData {
     jobj: HSD_JObjRoot | null;
@@ -44,7 +44,7 @@ export interface map_headData {
     gobj: map_gobjData[];
 }
 
-function HSD_LoadStructArray<T>(ctx: HSD_LoadContext, buffer: ArrayBufferSlice, offset: number, structSize: number, loadFunc: (ctx: HSD_LoadContext, buffer: ArrayBufferSlice) => T): T[] {
+export function HSD_LoadStructArray<T>(ctx: HSD_LoadContext, buffer: ArrayBufferSlice, offset: number, structSize: number, loadFunc: (ctx: HSD_LoadContext, buffer: ArrayBufferSlice) => T): T[] {
     const view = buffer.createDataView();
 
     const L: T[] = [];

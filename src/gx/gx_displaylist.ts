@@ -1282,14 +1282,22 @@ export class DisplayListRegisters {
 
     // TEV colors are weird and are two things under the hood
     // with the same register address.
-    public kc: Uint32Array = new Uint32Array(4 * 2 * 2);
+    public tevKColor: Uint32Array = new Uint32Array(4 * 2 * 2);
 
     constructor() {
         // Initialize defaults.
         this.bp[GX.BPRegister.SS_MASK] = 0x00FFFFFF;
     }
 
-    public bps(regBag: number): void {
+    public bpRegIsSet(regAddr: number): boolean {
+        return !!(this.bp[regAddr] & (1 << 31));
+    }
+
+    public bpGet(regAddr: number): number {
+        return this.bp[regAddr];
+    }
+
+    public bpSet(regBag: number): void {
         // First byte has register address, other 3 have value.
         const regAddr  = regBag >>> 24;
 
@@ -1300,23 +1308,23 @@ export class DisplayListRegisters {
         if (regAddr !== GX.BPRegister.SS_MASK) 
             this.bp[GX.BPRegister.SS_MASK] = 0x00FFFFFF;
         // Set new value.
-        this.bp[regAddr] = regValue;
+        this.bp[regAddr] = (1 << 31) | regValue;
 
         // Copy TEV colors internally.
         if (regAddr >= GX.BPRegister.TEV_REGISTERL_0_ID && regAddr <= GX.BPRegister.TEV_REGISTERL_0_ID + 4 * 2) {
             const kci = regAddr - GX.BPRegister.TEV_REGISTERL_0_ID;
             const bank = (regValue >>> 23) & 0x01;
-            this.kc[bank * 4 * 2 + kci] = regValue;
+            this.tevKColor[bank * 4 * 2 + kci] = regValue;
         }
     }
 
-    public xfs(idx: GX.XFRegister, sub: number, v: number): void {
+    public xfSet(idx: GX.XFRegister, sub: number, v: number): void {
         assert(idx >= 0x1000);
         idx -= 0x1000;
         this.xf[idx * 0x10 + sub] = v;
     }
 
-    public xfg(idx: GX.XFRegister, sub: number = 0): number {
+    public xfGet(idx: GX.XFRegister, sub: number = 0): number {
         assert(idx >= 0x1000);
         idx -= 0x1000;
         return this.xf[idx * 0x10 + sub];
@@ -1411,7 +1419,7 @@ export function displayListRegistersRun(r: DisplayListRegisters, buffer: ArrayBu
         case GX.Command.LOAD_BP_REG: {
             const regBag = view.getUint32(i);
             i += 4;
-            r.bps(regBag);
+            r.bpSet(regBag);
             break;
         }
 
@@ -1433,13 +1441,13 @@ export function displayListRegistersRun(r: DisplayListRegisters, buffer: ArrayBu
             i += 2;
 
             for (let j = 0; j < len; j++) {
-                r.xfs(regAddr, j, view.getUint32(i));
+                r.xfSet(regAddr, j, view.getUint32(i));
                 i += 4;
             }
 
             // Clear out the other values.
             for (let j = len; j < 16; j++) {
-                r.xfs(regAddr, j, 0);
+                r.xfSet(regAddr, j, 0);
             }
 
             break;
@@ -1459,8 +1467,8 @@ function setBPReg(addr: number, value: number): number {
 export function displayListRegistersInitGX(r: DisplayListRegisters): void {
     // Init swap tables.
     for (let i = 0; i < 8; i += 2) {
-        r.bps(setBPReg(GX.BPRegister.TEV_KSEL_0_ID + i + 0, 0b0100));
-        r.bps(setBPReg(GX.BPRegister.TEV_KSEL_0_ID + i + 1, 0b1110));
+        r.bpSet(setBPReg(GX.BPRegister.TEV_KSEL_0_ID + i + 0, 0b0100));
+        r.bpSet(setBPReg(GX.BPRegister.TEV_KSEL_0_ID + i + 1, 0b1110));
     }
 }
 //#endregion
