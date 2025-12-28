@@ -1,17 +1,38 @@
 import * as Viewer from '../viewer.js';
 import { GfxDevice, GfxInputLayout, GfxProgram } from '../gfx/platform/GfxPlatform.js';
 import { SceneContext } from '../SceneBase.js';
-import { IVRenderer } from '../DarkSoulsCollisionData/render.js';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
 import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
 import { rust } from '../rustlib.js';
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
+import * as GX from '../gx/gx_enum.js';
+import * as GXTexture from '../gx/gx_texture.js';
+import { NamedArrayBufferSlice } from '../DataFetcher.js';
+import { GXTextureHolder } from '../gx/gx_render.js';
+import { hexdump } from '../DebugJunk.js';
+
+function parseTex(name: string, buffer: ArrayBufferSlice): GXTexture.TextureInputGX {
+    const view = buffer.createDataView();
+    const width = view.getUint32(0x00, false);
+    const height = view.getUint32(0x04, false);
+    const unk = view.getUint32(0x08, false);
+    const format: GX.TexFormat = view.getUint32(0x0C, false);
+    const mipCount = 1; // ???
+    const data = buffer.slice(0x60);
+
+    return {
+        name,
+        width, height, mipCount,
+        format, data,
+    };
+}
 
 export class Scene implements Viewer.SceneGfx {
     private inputLayout: GfxInputLayout;
     private program: GfxProgram;
-    private ivRenderers: IVRenderer[] = [];
     private renderHelper: GfxRenderHelper;
     private renderInstListMain = new GfxRenderInstList();
+    public textureHolder = new GXTextureHolder();
 
     constructor(device: GfxDevice) {
         this.renderHelper = new GfxRenderHelper(device);
@@ -46,8 +67,17 @@ class SceneDesc implements Viewer.SceneDesc {
         }
         console.log(fileManager.list_files(".shp"));
         console.log(fileManager.list_files(".tex"));
-        console.log(fileManager.get_file("TY_psgAL_shoe1.tex"));
-        return new Scene(gfxDevice);
+        const textures: GXTexture.TextureInputGX[] = [];
+        for (const filename of fileManager.list_files(".tex")) {
+            const texData = new ArrayBufferSlice(fileManager.get_file(filename)!.buffer);
+            console.log(texData, texData.byteLength);
+            hexdump(texData);
+            const tex = parseTex(filename, texData);
+            textures.push(tex);
+        }
+        const scene = new Scene(gfxDevice);
+        scene.textureHolder.addTextures(gfxDevice, textures);
+        return scene;
     }
 }
 
