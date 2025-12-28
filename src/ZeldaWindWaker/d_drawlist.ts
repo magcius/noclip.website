@@ -5,7 +5,7 @@ import { projectionMatrixForCuboid, saturate } from '../MathHelpers.js';
 import { TSDraw } from "../SuperMarioGalaxy/DDraw.js";
 import { createBufferFromData } from "../gfx/helpers/BufferHelpers.js";
 import { projectionMatrixConvertClipSpaceNearZ } from '../gfx/helpers/ProjectionHelpers.js';
-import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxChannelWriteMask, GfxClipSpaceNearZ, GfxDevice, GfxFormat, GfxInputLayout, GfxProgram, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform.js";
+import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxChannelWriteMask, GfxClipSpaceNearZ, GfxDevice, GfxFormat, GfxInputLayout, GfxMipFilterMode, GfxProgram, GfxRenderPass, GfxSamplerFormatKind, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxVertexBufferFrequency, GfxWrapMode } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { GfxRenderInst, GfxRenderInstExecutionOrder, GfxRenderInstList, GfxRenderInstManager, gfxRenderInstCompareNone, gfxRenderInstCompareSortKey } from "../gfx/render/GfxRenderInstManager.js";
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder.js';
@@ -28,6 +28,8 @@ import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
 import { fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers.js";
 import { preprocessProgramObj_GLSL } from "../gfx/shaderc/GfxShaderCompiler.js";
+import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetID } from "../gfx/render/GfxRenderGraph.js";
+import { GfxRenderDynamicUniformBuffer } from "../gfx/render/GfxRenderDynamicUniformBuffer.js";
 
 export enum dDlst_alphaModel__Type {
     Bonbori,
@@ -266,6 +268,7 @@ export class dDlst_list_c {
 }
 
 interface dDlst_shadowSimple_c_DLCache {
+    sampler: import("/Users/mike/Code/noclip/src/gfx/platform/GfxPlatformImpl").GfxSampler;
     volumeShape: dDlst_BasicShape_c;
     sealShape: dDlst_BasicShape_c;
     sealTexShape: dDlst_BasicShape_c;
@@ -283,7 +286,10 @@ interface dDlst_shadowSimple_c_DLCache {
 }
 
 class SimpleShadowProgram extends DeviceProgram {
-    public static bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 1, numSamplers: 0 }];
+    public static bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 1, numSamplers: 2, samplerEntries: [
+            { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float, },
+            { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.UnfilterableFloat, },
+        ] }];
     
     public override both = `
 ${GfxShaderLibrary.MatrixLibrary}
@@ -293,16 +299,20 @@ layout(std140) uniform ub_Params {
     Mat4x4 u_LocalFromScreen;
 };
 
-// layout(location = 0) sampler2D u_TextureShadow;
-// layout(location = 1) sampler2D u_TextureFramebufferDepth; // Depth buffer
+layout(location = 0) uniform sampler2D u_TextureShadow;
+layout(location = 1) uniform sampler2D u_TextureFramebufferDepth; // Depth buffer
+
+varying vec2 v_UV;
 
 #if defined VERT
 layout(location = 0) in vec3 a_Position; // Unit cube coordinates (-1 to 1).
 
 void main() {
+    v_UV = a_Position.xz * vec2(0.5) + vec2(0.5);
     gl_Position = UnpackMatrix(u_ClipFromLocal) * vec4(a_Position.xyz, 1.0);
 }
 #elif defined FRAG
+
 void main() {
     // vec3 t_ScreenPos;
     // t_ScreenPos.xy = gl_FragCoord.xy;
@@ -316,8 +326,12 @@ void main() {
     //     discard;
     // // Top-down project our shadow texture. Our local space is between -1 and 1, we want to move into 0.0 to 1.0.
     // vec2 t_ShadowTexCoord = t_ObjectPos.xz * vec2(0.5) + vec2(0.5);
-    // gl_FragColor = texture(SAMPLER_2D(u_TextureShadow), t_ShadowTexCoord);
-    gl_FragColor = vec4(1, 0, 0, 1);
+
+    float t_DepthSample = texture(SAMPLER_2D(u_TextureFramebufferDepth), v_UV).r;
+    vec4 t_ColorSample = texture(SAMPLER_2D(u_TextureShadow), v_UV);
+    gl_FragColor = vec4(t_DepthSample, 1, 1, 1);
+
+    // gl_FragColor = vec4(v_UV, 0, 1);
 }
 #endif
 `;
@@ -383,6 +397,15 @@ class dDlst_shadowSimple_c {
                 4, 7, 3,
             ]).buffer,
         );
+
+        dlCache.sampler = cache.createSampler({
+            wrapS: GfxWrapMode.Clamp,
+            wrapT: GfxWrapMode.Clamp,
+            minFilter: GfxTexFilterMode.Point,
+            magFilter: GfxTexFilterMode.Point,
+            mipFilter: GfxMipFilterMode.Nearest,
+            minLOD: 0, maxLOD: 0,
+        });
 
         const vat: GX_VtxAttrFmt[] = [];
         vat[GX.Attr.POS] = { compType: GX.CompType.F32, compCnt: GX.CompCnt.POS_XYZ, compShift: 0 };
@@ -466,36 +489,9 @@ class dDlst_shadowSimple_c {
         cache.sealShape.destroy(device);
         cache.sealTexShape.destroy(device);
     }
-
-    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, dlCache: dDlst_shadowSimple_c_DLCache): void {
+    
+    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, dlCache: dDlst_shadowSimple_c_DLCache, passRenderer: GfxRenderPass, depthTex: GfxTexture): void {
         const cache = globals.modelCache.cache;
-
-        // Draw with our custom shader
-        {
-            const template = renderInstManager.pushTemplate();
-            
-            // renderInstManager.setCurrentList(this.renderInstListSand);
-    
-            template.setBindingLayouts(SimpleShadowProgram.bindingLayouts);
-            template.setGfxProgram(dlCache.program);
-            template.setMegaStateFlags(setAttachmentStateSimple({}, {
-                blendMode: GfxBlendMode.Add,
-                blendSrcFactor: GfxBlendFactor.SrcAlpha,
-                blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
-            }));
-    
-            let offset = template.allocateUniformBuffer(0, 4 * 16 * 2);
-            const buf = template.mapUniformBufferF32(0);
-            offset += fillMatrix4x4(buf, offset, mat4.mul(scratchMat4, globals.camera.clipFromViewMatrix, this.modelViewMtx));
-            // offset += fillVec4(buf, offset, this.fade, this.numParticles);
-            // template.setSamplerBindingsFromTextureMappings([{ gfxTexture: this.originalSandTexture.gfxTexture!, gfxSampler: this.sampler, lateBinding: null }]);
-    
-            const renderInst = renderInstManager.newRenderInst();
-            renderInst.setVertexInput(dlCache.inputLayout, [{ buffer: dlCache.positionBuffer }], { buffer: dlCache.indexBuffer });
-            renderInst.setDrawCount(36);
-            renderInstManager.submitRenderInst(renderInst);
-            renderInstManager.popTemplate();
-        }
 
         mat4.copy(drawParams.u_PosMtx[0], this.modelViewMtx);
         mat4.copy(drawParams.u_PosMtx[1], this.texMtx);
@@ -504,48 +500,69 @@ class dDlst_shadowSimple_c {
         colorFromRGBA(materialParams.u_Color[ColorKind.C2], 1, 1, 1, 1);
         if (this.tex) this.tex.fillTextureMapping(materialParams.m_TextureMapping[0]);
 
-        const template = renderInstManager.pushTemplate();
-        dlCache.volumeShape.setOnRenderInst(template);
-        dlCache.frontMat.allocateDrawParamsDataOnInst(template, drawParams);
-        dlCache.sealTexMat.allocateMaterialParamsDataOnInst(template, materialParams);
+        // Draw with our custom shader
+        {              
+            // TODO: Keep a permanent renderinst, just call drawOnPass each frame.
+            const renderInst = renderInstManager.newRenderInst();  
+            renderInst.setBindingLayouts(SimpleShadowProgram.bindingLayouts);
+            renderInst.setGfxProgram(dlCache.program);
+            renderInst.setMegaStateFlags(setAttachmentStateSimple({}, {}));
+        
+            let offset = renderInst.allocateUniformBuffer(0, 4 * 16 * 2);
+            const buf = renderInst.mapUniformBufferF32(0);
+            offset += fillMatrix4x4(buf, offset, mat4.mul(scratchMat4, globals.camera.clipFromViewMatrix, this.modelViewMtx));
+            // offset += fillVec4(buf, offset, this.fade, this.numParticles);
+            materialParams.m_TextureMapping[1].gfxTexture = depthTex;
+            materialParams.m_TextureMapping[1].gfxSampler = dlCache.sampler;
+            renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
 
-        // Front face shadow volume (add 0.25 to alpha channel for front faces)
-        const front = renderInstManager.newRenderInst()
-        dlCache.frontMat.setOnRenderInst(cache, front);
-        renderInstManager.submitRenderInst(front);
-
-        // Back face shadow volume (subtract 0.25 from alpha channel for back faces)
-        const back = renderInstManager.newRenderInst()
-        dlCache.backSubMat.setOnRenderInst(cache, back);
-        renderInstManager.submitRenderInst(back);
-
-        // If a texture is set, clear the alpha channel where the texture is transparent
-        if (this.tex) {
-            const texSeal = renderInstManager.newRenderInst()
-            mat4.copy(drawParams.u_PosMtx[0], this.texMtx);
-            dlCache.sealTexMat.allocateDrawParamsDataOnInst(texSeal, drawParams);
-            dlCache.sealTexMat.setOnRenderInst(cache, texSeal);
-            dlCache.sealTexShape.setOnRenderInst(texSeal);
-            texSeal.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
-            renderInstManager.submitRenderInst(texSeal);
-            // NOTE: Non-square textures are only used by the Tingle Tuner shadow, so unnecessary for our purposes
+            renderInst.setVertexInput(dlCache.inputLayout, [{ buffer: dlCache.positionBuffer }], { buffer: dlCache.indexBuffer });
+            renderInst.setDrawCount(36);
+            renderInstManager.submitRenderInst(renderInst);
         }
 
-        // Multiply color by the alpha channel
-        const seal = renderInstManager.newRenderInst()
-        mat4.copy(drawParams.u_PosMtx[0], this.texMtx);
-        dlCache.sealMat.allocateDrawParamsDataOnInst(seal, drawParams);
-        dlCache.sealMat.setOnRenderInst(cache, seal);
-        dlCache.sealShape.setOnRenderInst(seal);
-        renderInstManager.submitRenderInst(seal);
+        // const template = renderInstManager.pushTemplate();
+        // dlCache.volumeShape.setOnRenderInst(template);
+        // dlCache.frontMat.allocateDrawParamsDataOnInst(template, drawParams);
+        // dlCache.sealTexMat.allocateMaterialParamsDataOnInst(template, materialParams);
 
-        // Clear the alpha channel for future transparent object rendering
-        const clear = renderInstManager.newRenderInst()
-        dlCache.clearMat.setOnRenderInst(cache, clear);
-        dlCache.volumeShape.setOnRenderInst(clear);
-        renderInstManager.submitRenderInst(clear);
+        // // Front face shadow volume (add 0.25 to alpha channel for front faces)
+        // const front = renderInstManager.newRenderInst()
+        // dlCache.frontMat.setOnRenderInst(cache, front);
+        // renderInstManager.submitRenderInst(front);
 
-        renderInstManager.popTemplate();
+        // // Back face shadow volume (subtract 0.25 from alpha channel for back faces)
+        // const back = renderInstManager.newRenderInst()
+        // dlCache.backSubMat.setOnRenderInst(cache, back);
+        // renderInstManager.submitRenderInst(back);
+
+        // // If a texture is set, clear the alpha channel where the texture is transparent
+        // if (this.tex) {
+        //     const texSeal = renderInstManager.newRenderInst()
+        //     mat4.copy(drawParams.u_PosMtx[0], this.texMtx);
+        //     dlCache.sealTexMat.allocateDrawParamsDataOnInst(texSeal, drawParams);
+        //     dlCache.sealTexMat.setOnRenderInst(cache, texSeal);
+        //     dlCache.sealTexShape.setOnRenderInst(texSeal);
+        //     texSeal.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
+        //     renderInstManager.submitRenderInst(texSeal);
+        //     // NOTE: Non-square textures are only used by the Tingle Tuner shadow, so unnecessary for our purposes
+        // }
+
+        // // Multiply color by the alpha channel
+        // const seal = renderInstManager.newRenderInst()
+        // mat4.copy(drawParams.u_PosMtx[0], this.texMtx);
+        // dlCache.sealMat.allocateDrawParamsDataOnInst(seal, drawParams);
+        // dlCache.sealMat.setOnRenderInst(cache, seal);
+        // dlCache.sealShape.setOnRenderInst(seal);
+        // renderInstManager.submitRenderInst(seal);
+
+        // // Clear the alpha channel for future transparent object rendering
+        // const clear = renderInstManager.newRenderInst()
+        // dlCache.clearMat.setOnRenderInst(cache, clear);
+        // dlCache.volumeShape.setOnRenderInst(clear);
+        // renderInstManager.submitRenderInst(clear);
+
+        // renderInstManager.popTemplate();
     }
 
     public set(globals: dGlobals, pos: vec3, floorY: number, scaleXZ: number, floorNrm: vec3, rotY: number, scaleZ: number, tex: BTIData | null): void {
@@ -590,6 +607,7 @@ class dDlst_shadowControl_c {
     private simples = nArray(128, () => new dDlst_shadowSimple_c());
     private simpleCount = 0;
     private simpleCache: dDlst_shadowSimple_c_DLCache;
+    private uniformBuffer: GfxRenderDynamicUniformBuffer;
 
     // TODO: Real shadows
     // private reals = nArray(8, () => new dDlst_shadowSimple_c());
@@ -620,10 +638,13 @@ class dDlst_shadowControl_c {
             paletteData: null,
         };
         this.defaultSimpleTex = new BTIData(device, cache, bti);
+
+        this.uniformBuffer = new GfxRenderDynamicUniformBuffer(device);
     }
 
     destroy(device: GfxDevice): void {
         dDlst_shadowSimple_c.destroy(this.simpleCache, device);
+        this.defaultSimpleTex.destroy(device);
     }
 
     public reset(): void {
@@ -634,15 +655,35 @@ class dDlst_shadowControl_c {
         // TODO: Implementation
     }
 
-    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewMtx: mat4): void {
-        // dKy_GxFog_set();
+    public pushPasses(globals: dGlobals, renderInstManager: GfxRenderInstManager, builder: GfxrGraphBuilder, mainDepthTargetID: GfxrRenderTargetID, mainColorTargetID: GfxrRenderTargetID): void {        
+        builder.pushPass((pass) => {
+            pass.setDebugName('Shadows');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
+            const mainDepthResolveTextureID = builder.resolveRenderTarget(mainDepthTargetID);
+            pass.attachResolveTexture(mainDepthResolveTextureID);
+            pass.exec((passRenderer, scope) => {
+                globals.camera.applyScissor(passRenderer);
+                const depthTex = scope.getResolveTextureForID(mainDepthResolveTextureID);
+                
+                const template = renderInstManager.pushTemplate();
 
-        // Draw simple shadows
-        for (let i = 0; i < this.simpleCount; i++) {
-            this.simples[i].draw(globals, renderInstManager, this.simpleCache);
-        }
+                // TODO: Avoid managing our own uniform buffer
+                template.setUniformBuffer( this.uniformBuffer );
+                renderInstManager.setCurrentList(globals.dlst.shadow);
+                
+                // TODO: Move that display into this class
+                for (let i = 0; i < this.simpleCount; i++) {
+                    this.simples[i].draw(globals, renderInstManager, this.simpleCache, passRenderer, depthTex);
+                }
 
-        this.reset();
+                this.uniformBuffer.prepareToRender();
+                globals.dlst.shadow.drawOnPassRenderer(renderInstManager.gfxRenderCache, passRenderer);
+                this.reset();
+            });
+        });
+
+        renderInstManager.popTemplate();
     }
 
     public setReal(id: number, shouldFade: number, model: J3DModelInstance, pos: vec3, casterSize: number, heightAgl: number, tevStr: dKy_tevstr_c): number {

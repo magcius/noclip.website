@@ -430,9 +430,6 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
 
         const dlst = globals.dlst;
 
-        renderInstManager.setCurrentList(dlst.shadow);
-        dlst.shadowControl.draw(globals, renderInstManager, globals.camera.clipFromViewMatrix);
-
         renderInstManager.setCurrentList(dlst.alphaModel);
         dlst.alphaModel0.draw(globals, renderInstManager, viewerInput);
 
@@ -526,17 +523,25 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         const mainDepthTargetID = builder.createRenderTargetID(this.mainDepthDesc, 'Main Depth');
 
         builder.pushPass((pass) => {
-            pass.setDebugName('Main');
-
+            pass.setDebugName('BG');
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
                 this.globals.camera.applyScissor(passRenderer);
-
                 this.executeList(passRenderer, dlst.sea);
                 this.executeListSet(passRenderer, dlst.bg);
-                this.executeList(passRenderer, dlst.shadow);
-                this.executeList(passRenderer, dlst.alphaModel);
+            });
+        });
+
+        // Shadows expect depth from the BG/Sea, but nothing else. Must be applied before other alpha objects.
+        dlst.shadowControl.pushPasses(this.globals, renderInstManager, builder, mainDepthTargetID, mainColorTargetID);
+
+        builder.pushPass((pass) => {
+            pass.setDebugName('Main');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
+            pass.exec((passRenderer) => {
+                this.globals.camera.applyScissor(passRenderer);
 
                 this.executeList(passRenderer, dlst.effect[EffectDrawGroup.Main]);
                 this.executeList(passRenderer, dlst.wetherEffect);
