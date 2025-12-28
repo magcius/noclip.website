@@ -105,6 +105,7 @@ import * as Scenes_Descent1 from './Descent1_2/Scenes_Descent1.js';
 import * as Scenes_Descent2 from './Descent1_2/Scenes_Descent2.js';
 import * as Scenes_Descent2Vertigo from './Descent1_2/Scenes_Descent2Vertigo.js';
 import * as Scenes_Spyro1 from './Spyro1/scenes.js';
+import * as Scenes_CrazyTaxi from './CrazyTaxi/scenes.js';
 
 import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_FileDrops.js';
 
@@ -145,6 +146,7 @@ const sceneGroups: (string | SceneGroup)[] = [
     Scenes_WiiSportsResort.sceneGroup,
     "GameCube",
     Scenes_KirbyAirRide.sceneGroup,
+    Scenes_CrazyTaxi.sceneGroup,
     Scenes_LuigisMansion.sceneGroup,
     Scenes_MarioKartDoubleDash.sceneGroup,
     Scenes_MetroidPrime.sceneGroupMP1,
