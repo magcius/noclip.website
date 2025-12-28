@@ -431,7 +431,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         const dlst = globals.dlst;
 
         renderInstManager.setCurrentList(dlst.shadow);
-        dlst.shadowControl.draw(globals, renderInstManager, globals.camera.clipFromViewMatrix);
+        dlst.shadowControl.draw(globals, renderInstManager, viewerInput);
 
         renderInstManager.setCurrentList(dlst.alphaModel);
         dlst.alphaModel0.draw(globals, renderInstManager, viewerInput);

@@ -26,7 +26,7 @@ import { dRes_control_c, ResType } from "./d_resorce.js";
 import { DeviceProgram } from "../Program.js";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
-import { fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers.js";
+import { fillMatrix4x4, fillVec3v, fillVec4 } from "../gfx/helpers/UniformBufferHelpers.js";
 import { preprocessProgramObj_GLSL } from "../gfx/shaderc/GfxShaderCompiler.js";
 import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetID } from "../gfx/render/GfxRenderGraph.js";
 import { GfxRenderDynamicUniformBuffer } from "../gfx/render/GfxRenderDynamicUniformBuffer.js";
@@ -285,8 +285,9 @@ class SimpleShadowProgram extends DeviceProgram {
 ${GfxShaderLibrary.MatrixLibrary}
 
 layout(std140) uniform ub_Params {
+    vec4 u_viewportSize;
     Mat4x4 u_ClipFromLocal;
-    Mat4x4 u_LocalFromScreen;
+    Mat4x4 u_LocalFromClip;
 };
 
 layout(location = 0) uniform sampler2D u_TextureShadow;
@@ -304,24 +305,25 @@ void main() {
 #elif defined FRAG
 
 void main() {
-    // vec3 t_ScreenPos;
-    // t_ScreenPos.xy = gl_FragCoord.xy;
-    // // Tap the depth buffer to find the intersection point.
-    // t_ScreenPos.z = texelFetch(SAMPLER_2D(u_TextureFramebufferDepth), ivec2(gl_FragCoord.xy), 0).r;
-    // // Project back into local object space.
-    // vec4 t_ObjectPos = UnpackMatrix(u_LocalFromScreen) * t_ScreenPos;
-    // t_ObjectPos.xyz /= t_WorldPos.www;
-    // // Now that we have our object-space position, remove any samples outside of the box.
+    vec3 t_ClipPos;
+    t_ClipPos.xy = (gl_FragCoord.xy / u_viewportSize.xy) * 2.0 - vec2(1.0);
+    t_ClipPos.z = texelFetch(SAMPLER_2D(u_TextureFramebufferDepth), ivec2(gl_FragCoord.xy), 0).r;
+    vec4 t_ObjectPos = UnpackMatrix(u_LocalFromClip) * vec4(t_ClipPos, 1.0);
+    t_ObjectPos.xyz /= t_ObjectPos.w;
+
+    // TODO: Now that we have our object-space position, remove any samples outside of the box.
     // if (any(lessThan(t_ObjectPos.xyz, vec3(-1)) || any(greaterThan(t_ObjectPos.xyz), vec3(1)))
     //     discard;
-    // // Top-down project our shadow texture. Our local space is between -1 and 1, we want to move into 0.0 to 1.0.
-    // vec2 t_ShadowTexCoord = t_ObjectPos.xz * vec2(0.5) + vec2(0.5);
+    
+    // Top-down project our shadow texture. Our local space is between -1 and 1, we want to move into 0.0 to 1.0.
+    vec2 t_ShadowTexCoord = t_ObjectPos.xz * vec2(0.5) + vec2(0.5);
+    float t_ShadowColor = texture(SAMPLER_2D(u_TextureShadow), t_ShadowTexCoord).r;
+    t_ShadowColor = step(1.0, 1.0 - t_ShadowColor); // Discard if outside of shadow.
 
-    float t_DepthSample = texture(SAMPLER_2D(u_TextureFramebufferDepth), v_UV).r;
-    vec4 t_ColorSample = texture(SAMPLER_2D(u_TextureShadow), v_UV);
-    gl_FragColor = vec4(t_DepthSample, 0, 0, 1);
+    if( t_ShadowColor > 0.0 )
+        discard;
 
-    // gl_FragColor = vec4(v_UV, 0, 1);
+    gl_FragColor = vec4(0, 0, 0, 0.75);
 }
 #endif
 `;
@@ -407,7 +409,7 @@ class dDlst_shadowSimple_c {
         device.destroySampler(cache.sampler);
     }
     
-    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, dlCache: dDlst_shadowSimple_c_DLCache): void {
+    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         const cache = globals.modelCache.cache;
 
         mat4.copy(drawParams.u_PosMtx[0], this.modelViewMtx);
@@ -423,8 +425,9 @@ class dDlst_shadowSimple_c {
             const renderInst = renderInstManager.newRenderInst();  
             let offset = renderInst.allocateUniformBuffer(0, 4 * 16 * 2);
             const buf = renderInst.mapUniformBufferF32(0);
+            offset += fillVec4(buf, offset, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
             offset += fillMatrix4x4(buf, offset, mat4.mul(scratchMat4, globals.camera.clipFromViewMatrix, this.modelViewMtx));
-            // offset += fillVec4(buf, offset, this.fade, this.numParticles);
+            offset += fillMatrix4x4(buf, offset, mat4.invert(scratchMat4, scratchMat4));
             materialParams.m_TextureMapping[1].lateBinding = 'depth-target';
             renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
             renderInstManager.submitRenderInst(renderInst);
@@ -514,18 +517,23 @@ class dDlst_shadowControl_c {
         this.simpleCount = 0;
     }
 
-    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewMtx: mat4): void {
+    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         // dKy_GxFog_set();
 
         // Draw simple shadows
         const template = renderInstManager.pushTemplate();
         template.setBindingLayouts(SimpleShadowProgram.bindingLayouts);
         template.setGfxProgram(this.simpleCache.program);
-        template.setMegaStateFlags(setAttachmentStateSimple({}, {}));
+        template.setMegaStateFlags(setAttachmentStateSimple({}, {
+            channelWriteMask: GfxChannelWriteMask.RGB,
+            blendMode: GfxBlendMode.Add,
+            blendSrcFactor: GfxBlendFactor.Zero,
+            blendDstFactor: GfxBlendFactor.SrcAlpha,
+        }));
         template.setVertexInput(this.simpleCache.inputLayout, [{ buffer: this.simpleCache.positionBuffer }], { buffer: this.simpleCache.indexBuffer });
         template.setDrawCount(36);
         for (let i = 0; i < this.simpleCount; i++) {
-            this.simples[i].draw(globals, renderInstManager, this.simpleCache);
+            this.simples[i].draw(globals, renderInstManager, viewerInput);
         }
         renderInstManager.popTemplate();
     }
