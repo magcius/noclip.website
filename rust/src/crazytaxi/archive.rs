@@ -60,7 +60,6 @@ impl<'a> Iterator for ArchiveReader<'a> {
             // entries are aligned to 0x20 sized blocks
             let diff = 0x20 - (self.offset % 0x20);
             entry_offset += diff;
-            entry_size -= diff;
         }
 
         self.item_idx += 1;
@@ -106,7 +105,7 @@ mod test {
             }
         }
     }
-
+    
     #[test]
     pub fn test_shps() {
         let files = &[
