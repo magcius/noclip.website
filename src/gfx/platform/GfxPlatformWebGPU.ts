@@ -142,6 +142,12 @@ function translateTextureFormat(format: GfxFormat): GPUTextureFormat {
         return 'rgba8unorm-srgb';
     else if (format === GfxFormat.S8_R_NORM)
         return 'r8snorm';
+    else if (format === GfxFormat.S8_R)
+        return 'r8sint';
+    else if (format === GfxFormat.S8_RG)
+        return 'rg8sint';
+    else if (format === GfxFormat.S8_RGBA)
+        return 'rgba8sint';
     else if (format === GfxFormat.S8_RG_NORM)
         return 'rg8snorm';
     else if (format === GfxFormat.S8_RGBA_NORM)
@@ -415,6 +421,12 @@ function translateVertexFormat(format: GfxFormat): GPUVertexFormat {
         return 'unorm8x2';
     else if (format === GfxFormat.U8_RGBA_NORM)
         return 'unorm8x4';
+    else if (format === GfxFormat.S8_R)
+        return 'sint8';
+    else if (format === GfxFormat.S8_RG)
+        return 'sint8x2';
+    else if (format === GfxFormat.S8_RGBA)
+        return 'sint8x4';
     else if (format === GfxFormat.S8_RGB_NORM)
         return 'snorm8x4';
     else if (format === GfxFormat.S8_RGBA_NORM)

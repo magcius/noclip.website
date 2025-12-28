@@ -4,7 +4,7 @@
 // https://github.com/PsiLupan/FRAY/
 
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
-import { readString, assert } from "../util.js";
+import { readString, assert, assertExists } from "../util.js";
 import { vec3, mat4 } from "gl-matrix";
 import * as GX from "../gx/gx_enum.js";
 import { compileVtxLoader, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, GX_Array, LoadedVertexLayout } from "../gx/gx_displaylist.js";
@@ -119,8 +119,14 @@ function HSD_Archive__GetStructOffset(arc: HSD_Archive, buffer: ArrayBufferSlice
 }
 
 export function HSD_Archive__ResolvePtr(arc: HSD_Archive, offs: number, size?: number): ArrayBufferSlice {
+    return assertExists(HSD_Archive__ResolvePtrNullable(arc, offs, size));
+}
+
+export function HSD_Archive__ResolvePtrNullable(arc: HSD_Archive, offs: number, size?: number): ArrayBufferSlice | null {
     // Ensure that this is somewhere within our relocation table.
-    assert(arc.validOffsets.indexOf(offs) >= 0);
+    if (arc.validOffsets.indexOf(offs) < 0) {
+        return null;
+    }
     return arc.dataBuffer.subarray(offs, size);
 }
 
@@ -145,6 +151,10 @@ export function HSD_LoadContext__ResolvePtrAutoSize(ctx: HSD_LoadContext, offs: 
 
 export function HSD_LoadContext__ResolvePtr(ctx: HSD_LoadContext, offs: number, size?: number): ArrayBufferSlice {
     return HSD_Archive__ResolvePtr(ctx.archive, offs, size);
+}
+
+export function HSD_LoadContext__ResolvePtrNullable(ctx: HSD_LoadContext, offs: number, size?: number): ArrayBufferSlice | null {
+    return HSD_Archive__ResolvePtrNullable(ctx.archive, offs, size);
 }
 
 export function HSD_LoadContext__ResolvePtrString(ctx: HSD_LoadContext, offs: number): string {
@@ -666,7 +676,9 @@ function runVertices(ctx: HSD_LoadContext, vtxDescBuffer: ArrayBufferSlice, dlBu
 
         vcd[attr] = { type: attrType };
         vatFormat[attr] = { compType, compCnt, compShift };
-        arrays[attr] = { buffer: HSD_LoadContext__ResolvePtr(ctx, arrayOffs), offs: 0, stride: stride };
+
+        if (attrType === GX.AttrType.INDEX8 || attrType === GX.AttrType.INDEX16)
+            arrays[attr] = { buffer: HSD_LoadContext__ResolvePtr(ctx, arrayOffs), offs: 0, stride: stride };
 
         idx += 0x18;
     }
@@ -1291,21 +1303,25 @@ function HSD_AObjLoadTexAnim(texAnims: HSD_TexAnim[], ctx: HSD_LoadContext, buff
         aobj = HSD_AObjLoadDesc(ctx, HSD_LoadContext__ResolvePtr(ctx, aobjDescOffs));
 
     const imageDescs: HSD_ImageDesc[] = [];
-    const imageDescView = HSD_LoadContext__ResolvePtr(ctx, imageDescTblOffs).createDataView();
-    let imageDescTblIdx = 0x00;
-    for (let i = 0; i < imageDescTblCount; i++) {
-        const imageDescOffs = imageDescView.getUint32(imageDescTblIdx + 0x00);
-        imageDescs.push(HSD_LoadImageDesc(ctx, HSD_LoadContext__ResolvePtr(ctx, imageDescOffs)));
-        imageDescTblIdx += 0x04;
+    const imageDescView = HSD_LoadContext__ResolvePtrNullable(ctx, imageDescTblOffs)?.createDataView();
+    if (imageDescView) {
+        let imageDescTblIdx = 0x00;
+        for (let i = 0; i < imageDescTblCount; i++) {
+            const imageDescOffs = imageDescView.getUint32(imageDescTblIdx + 0x00);
+            imageDescs.push(HSD_LoadImageDesc(ctx, HSD_LoadContext__ResolvePtr(ctx, imageDescOffs)));
+            imageDescTblIdx += 0x04;
+        }
     }
 
     const tlutDescs: HSD_TlutDesc[] = [];
-    const tlutDescView = HSD_LoadContext__ResolvePtr(ctx, tlutDescTblOffs).createDataView();
+    const tlutDescView = HSD_LoadContext__ResolvePtrNullable(ctx, tlutDescTblOffs)?.createDataView();
     let tlutDescTblIdx = 0x00;
-    for (let i = 0; i < tlutDescTblCount; i++) {
-        const tlutDescOffs = tlutDescView.getUint32(tlutDescTblIdx + 0x00);
-        tlutDescs.push(HSD_LoadTlutDesc(ctx, HSD_LoadContext__ResolvePtr(ctx, tlutDescOffs)));
-        tlutDescTblIdx += 0x04;
+    if (tlutDescView) {
+        for (let i = 0; i < tlutDescTblCount; i++) {
+            const tlutDescOffs = tlutDescView.getUint32(tlutDescTblIdx + 0x00);
+            tlutDescs.push(HSD_LoadTlutDesc(ctx, HSD_LoadContext__ResolvePtr(ctx, tlutDescOffs)));
+            tlutDescTblIdx += 0x04;
+        }
     }
 
     texAnims.push({ animID, aobj, imageDescs, tlutDescs });
