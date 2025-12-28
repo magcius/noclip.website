@@ -329,7 +329,7 @@ void main() {
 
     float t_DepthSample = texture(SAMPLER_2D(u_TextureFramebufferDepth), v_UV).r;
     vec4 t_ColorSample = texture(SAMPLER_2D(u_TextureShadow), v_UV);
-    gl_FragColor = vec4(t_DepthSample, 1, 1, 1);
+    gl_FragColor = vec4(t_DepthSample, 0, 0, 1);
 
     // gl_FragColor = vec4(v_UV, 0, 1);
 }
@@ -490,7 +490,7 @@ class dDlst_shadowSimple_c {
         cache.sealTexShape.destroy(device);
     }
     
-    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, dlCache: dDlst_shadowSimple_c_DLCache, passRenderer: GfxRenderPass, depthTex: GfxTexture): void {
+    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, dlCache: dDlst_shadowSimple_c_DLCache): void {
         const cache = globals.modelCache.cache;
 
         mat4.copy(drawParams.u_PosMtx[0], this.modelViewMtx);
@@ -512,8 +512,7 @@ class dDlst_shadowSimple_c {
             const buf = renderInst.mapUniformBufferF32(0);
             offset += fillMatrix4x4(buf, offset, mat4.mul(scratchMat4, globals.camera.clipFromViewMatrix, this.modelViewMtx));
             // offset += fillVec4(buf, offset, this.fade, this.numParticles);
-            materialParams.m_TextureMapping[1].gfxTexture = depthTex;
-            materialParams.m_TextureMapping[1].gfxSampler = dlCache.sampler;
+            materialParams.m_TextureMapping[1].lateBinding = 'depth-target';
             renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
 
             renderInst.setVertexInput(dlCache.inputLayout, [{ buffer: dlCache.positionBuffer }], { buffer: dlCache.indexBuffer });
@@ -651,11 +650,22 @@ class dDlst_shadowControl_c {
         this.simpleCount = 0;
     }
 
+    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewMtx: mat4): void {
+        // dKy_GxFog_set();
+
+        // Draw simple shadows
+        for (let i = 0; i < this.simpleCount; i++) {
+            this.simples[i].draw(globals, renderInstManager, this.simpleCache);
+        }
+    }
+
     public imageDraw(mtx: mat4): void {
         // TODO: Implementation
     }
 
     public pushPasses(globals: dGlobals, renderInstManager: GfxRenderInstManager, builder: GfxrGraphBuilder, mainDepthTargetID: GfxrRenderTargetID, mainColorTargetID: GfxrRenderTargetID): void {        
+        renderInstManager.popTemplate();
+
         builder.pushPass((pass) => {
             pass.setDebugName('Shadows');
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
@@ -665,25 +675,11 @@ class dDlst_shadowControl_c {
             pass.exec((passRenderer, scope) => {
                 globals.camera.applyScissor(passRenderer);
                 const depthTex = scope.getResolveTextureForID(mainDepthResolveTextureID);
-                
-                const template = renderInstManager.pushTemplate();
-
-                // TODO: Avoid managing our own uniform buffer
-                template.setUniformBuffer( this.uniformBuffer );
-                renderInstManager.setCurrentList(globals.dlst.shadow);
-                
-                // TODO: Move that display into this class
-                for (let i = 0; i < this.simpleCount; i++) {
-                    this.simples[i].draw(globals, renderInstManager, this.simpleCache, passRenderer, depthTex);
-                }
-
-                this.uniformBuffer.prepareToRender();
+                globals.dlst.shadow.resolveLateSamplerBinding('depth-target', { gfxTexture: depthTex, gfxSampler: this.simpleCache.sampler, lateBinding: null });
                 globals.dlst.shadow.drawOnPassRenderer(renderInstManager.gfxRenderCache, passRenderer);
                 this.reset();
             });
         });
-
-        renderInstManager.popTemplate();
     }
 
     public setReal(id: number, shouldFade: number, model: J3DModelInstance, pos: vec3, casterSize: number, heightAgl: number, tevStr: dKy_tevstr_c): number {
