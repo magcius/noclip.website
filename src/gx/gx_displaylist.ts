@@ -155,6 +155,7 @@ export interface LoadedVertexData {
     totalVertexCount: number;
     vertexId: number;
     draws: LoadedVertexDraw[];
+    endOffs: number | null;
 
     // Internal. Used for re-running vertices.
     dlView: DataView | null;
@@ -841,7 +842,7 @@ return function() {
 
     const generator = new Function(fullSource);
     const func = generator() as T;
-    return func; 
+    return func;
 }
 
 function compileSingleVtxLoader(loadedVertexLayout: LoadedVertexLayout, srcLayout: SourceVatLayout): SingleVtxLoaderFunc {
@@ -1113,7 +1114,7 @@ class VtxLoaderImpl implements VtxLoader {
         const vertexBuffers: ArrayBuffer[] = [dstVertexData];
 
         const indexData = dstIndexData.buffer;
-        return { indexData, totalIndexCount, totalVertexCount, draws, vertexId: baseVertex, vertexBuffers, dlView, drawCalls };
+        return { indexData, totalIndexCount, totalVertexCount, draws, vertexId: baseVertex, vertexBuffers, dlView, drawCalls, endOffs: drawCallIdx };
     }
 
     public loadVertexDataInto(dst: DataView, dstOffs: number, loadedVertexData: LoadedVertexData, vtxArrays: GX_Array[]): void {
@@ -1305,7 +1306,7 @@ export class DisplayListRegisters {
         // Retrieve existing value, overwrite w/ mask.
         const regValue = (this.bp[regAddr] & ~regWMask) | (regBag & regWMask);
         // The mask resets after use.
-        if (regAddr !== GX.BPRegister.SS_MASK) 
+        if (regAddr !== GX.BPRegister.SS_MASK)
             this.bp[GX.BPRegister.SS_MASK] = 0x00FFFFFF;
         // Set new value.
         this.bp[regAddr] = (1 << 31) | regValue;
@@ -1362,12 +1363,12 @@ export function displayListToString(buffer: ArrayBufferSlice) {
         case GX.Command.LOAD_BP_REG: {
             const regBag = view.getUint32(i);
             i += 4;
-            
+
             const regAddr  = regBag >>> 24 as GX.BPRegister;
             const regValue = regBag & ssMask;
             if (regAddr !== GX.BPRegister.SS_MASK) { ssMask = 0x00FFFFFF; }
             else { ssMask = regValue; }
-            
+
             dlString += toDlString(RegisterBlock.BP, regAddr, regValue);
             break;
         }
@@ -1535,6 +1536,7 @@ export function coalesceLoadedDatas(loadedDatas: LoadedVertexData[]): LoadedVert
         totalIndexCount,
         totalVertexCount,
         vertexId: 0,
+        endOffs: null,
         draws,
         drawCalls: null,
         dlView: null,
