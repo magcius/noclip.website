@@ -82,7 +82,7 @@ class SceneDesc implements Viewer.SceneDesc {
             const canvas = descentGfxTextureToCanvas(texture);
             if (canvas != null) viewerTextures.push(canvas);
         }
-        renderer!.textureHolder = new FakeTextureHolder(viewerTextures);
+        renderer.textureHolder = new FakeTextureHolder(viewerTextures);
         return renderer;
     }
 }

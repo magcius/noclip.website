@@ -1,6 +1,6 @@
 export type DescentRenderParameters = {
     enableShading: boolean;
-    enableDynamicLights: boolean;
+    enableFlickeringLights: boolean;
     showPolymodels: boolean;
     showPowerups: boolean;
     showHostages: boolean;

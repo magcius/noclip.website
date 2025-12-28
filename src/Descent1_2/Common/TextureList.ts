@@ -1,5 +1,7 @@
 import { vec2 } from "gl-matrix";
 import ArrayBufferSlice from "../../ArrayBufferSlice";
+import { TransparentBlack } from "../../Color";
+import { makeSolidColorTexture2D } from "../../gfx/helpers/TextureHelpers";
 import {
     GfxDevice,
     GfxFormat,
@@ -52,11 +54,14 @@ export class DescentTextureList implements Destroyable {
         new CacheMap();
     private objBitmapToTextureIdCache: CacheMap<number, ResolvedTexture> =
         new CacheMap();
+    private palette: DescentPalette;
 
     constructor(
         private gfxDevice: GfxDevice,
         private assetCache: DescentAssetCache,
-    ) {}
+    ) {
+        this.palette = this.assetCache.palette;
+    }
 
     /** Returns a default fallback texture. */
     public getFallbackTexture(): GfxTexture {
@@ -67,12 +72,16 @@ export class DescentTextureList implements Destroyable {
         );
         const rgbaData = new Uint8Array(64 * 64 * 4);
         let dstOut = 0;
-        for (let i = 0; i < 64 * 64; i++) {
-            const c = !!(i & 32) !== !!(i & 2048) ? 255 : 0;
-            rgbaData[dstOut++] = c;
-            rgbaData[dstOut++] = 0;
-            rgbaData[dstOut++] = c;
-            rgbaData[dstOut++] = 0;
+        for (let i = 0; i < 64; i++) {
+            for (let j = 0; j < 64; j++) {
+                // Original game uses a crossed out X texture
+                const paletteIndex = i === j || i === 63 - j ? 193 : 65;
+                const rgb = this.palette.data[paletteIndex];
+                rgbaData[dstOut++] = rgb[0];
+                rgbaData[dstOut++] = rgb[1];
+                rgbaData[dstOut++] = rgb[2];
+                rgbaData[dstOut++] = 255;
+            }
         }
         this.gfxDevice.uploadTextureData(gfxTexture, 0, [rgbaData]);
         this.gpuFallbackTexture = gfxTexture;
@@ -83,28 +92,16 @@ export class DescentTextureList implements Destroyable {
     public getTransparentTexture(): GfxTexture {
         if (this.gpuTransparentTexture != null)
             return this.gpuTransparentTexture;
-
-        const gfxTexture = this.gfxDevice.createTexture(
-            makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, 64, 64, 1),
+        const texture = makeSolidColorTexture2D(
+            this.gfxDevice,
+            TransparentBlack,
         );
-        const rgbaData = new Uint8Array(64 * 64 * 4);
-        let dstOut = 0;
-        for (let i = 0; i < 64 * 64; i++) {
-            rgbaData[dstOut++] = 0;
-            rgbaData[dstOut++] = 0;
-            rgbaData[dstOut++] = 0;
-            rgbaData[dstOut++] = 0;
-        }
-        this.gfxDevice.uploadTextureData(gfxTexture, 0, [rgbaData]);
-        this.gpuTransparentTexture = gfxTexture;
-        return gfxTexture;
+        this.gpuTransparentTexture = texture;
+        return texture;
     }
 
     /** Load and page in bitmap data as a GPU texture. Returns `null` if bitmap not found. */
-    public getBitmapAsTexture(
-        bitmapId: number,
-        palette: DescentPalette,
-    ): DescentGfxTexture | null {
+    public getBitmapAsTexture(bitmapId: number): DescentGfxTexture | null {
         const resultBitmap = this.assetCache.getBitmap(bitmapId);
         if (resultBitmap == null) return null;
 
@@ -114,7 +111,7 @@ export class DescentTextureList implements Destroyable {
         let dstOut = 0;
         for (let i = 0; i < palettizedData.length; i++) {
             const byte = palettizedData[i];
-            const rgb = palette.data[byte];
+            const rgb = this.palette.data[byte];
 
             if (byte === 255 && bitmap.flags & BITMAP_FLAG_TRANSPARENT) {
                 // Transparency
@@ -160,10 +157,8 @@ export class DescentTextureList implements Destroyable {
         return this.pagedBitmapToTextureIndexCache.computeIfAbsent(
             bitmapId,
             (_: any) => {
-                let texture: DescentGfxTexture | null = this.getBitmapAsTexture(
-                    bitmapId,
-                    this.assetCache.palette,
-                );
+                let texture: DescentGfxTexture | null =
+                    this.getBitmapAsTexture(bitmapId);
                 if (texture == null) return -1; // constructor pushes fallback texture to this.texture
 
                 const newTextureIndex = this.gfxTextures.length;

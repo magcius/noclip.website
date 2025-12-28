@@ -57,7 +57,7 @@ export class DescentRenderer implements Viewer.SceneGfx {
         this.textureList = new DescentTextureList(device, this.assetCache);
         this.renderParameters = {
             enableShading: true,
-            enableDynamicLights: false, // disable by default, some Vertigo levels have strobing lights
+            enableFlickeringLights: false, // Disable by default. Only Vertigo uses these, and they are all 'strobe' lights.
             showPolymodels: true,
             showHostages: true,
             showPowerups: true,
@@ -114,14 +114,17 @@ export class DescentRenderer implements Viewer.SceneGfx {
             (this.renderParameters.enableShading = enableShading.checked);
         renderHacksPanel.contents.appendChild(enableShading.elem);
 
-        const enableDynamicLights = new UI.Checkbox(
-            "Enable Dynamic Lights",
-            this.renderParameters.enableDynamicLights,
-        );
-        enableDynamicLights.onchanged = () =>
-            (this.renderParameters.enableDynamicLights =
-                enableDynamicLights.checked);
-        renderHacksPanel.contents.appendChild(enableDynamicLights.elem);
+        // D1 has no flickering lights at all
+        if (this.level.gameVersion > 1) {
+            const enableFlickeringLights = new UI.Checkbox(
+                "Enable Flickering Lights",
+                this.renderParameters.enableFlickeringLights,
+            );
+            enableFlickeringLights.onchanged = () =>
+                (this.renderParameters.enableFlickeringLights =
+                    enableFlickeringLights.checked);
+            renderHacksPanel.contents.appendChild(enableFlickeringLights.elem);
+        }
 
         const showPolymodels = new UI.Checkbox(
             "Show Polymodels",
@@ -159,7 +162,7 @@ export class DescentRenderer implements Viewer.SceneGfx {
         viewerInput.camera.setClipPlanes(0.1);
         renderInstManager.setCurrentList(this.renderInstListMain);
 
-        if (this.renderParameters.enableDynamicLights) {
+        if (this.renderParameters.enableFlickeringLights) {
             const flicker = flickerLights(
                 this.level,
                 viewerInput.deltaTime * 0.001,
