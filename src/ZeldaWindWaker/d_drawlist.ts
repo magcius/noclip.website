@@ -420,6 +420,9 @@ class dDlst_shadowSimple_c_Cache {
     destroy(device: GfxDevice): void {
         this.whiteTex.destroy(device);
         this.defaultSimpleTex.destroy(device);
+        
+        device.destroyBuffer(this.indexBuffer);
+        device.destroyBuffer(this.positionBuffer);
 
         // Everything else is managed by the cache, and will be destroyed when the cache is destroyed.
     }
