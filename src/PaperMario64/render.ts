@@ -15,7 +15,7 @@ import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, Gf
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { GfxRendererLayer, GfxRenderInstManager, makeSortKeyOpaque, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager.js";
 import { DeviceProgram } from "../Program.js";
-import { LoadedTexture, TextureHolder, TextureMapping } from "../TextureHolder.js";
+import { TextureHolder, TextureMapping } from "../TextureHolder.js";
 import { assert, assertExists, nArray, setBitFlagEnabled } from "../util.js";
 import * as Viewer from '../viewer.js';
 import { RSPOutput, Vertex } from "./f3dex2.js";

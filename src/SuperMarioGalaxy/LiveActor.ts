@@ -24,7 +24,7 @@ import { Spine } from "./Spine.js";
 import { createStageSwitchCtrl, StageSwitchCtrl } from "./Switch.js";
 import * as GX from '../gx/gx_enum.js';
 import { ANK1, BCK, BMD, BPK, BRK, BTK, BTP, BVA, ShapeMtxType, TexMtxMapMode, TPT1, TRK1, TTK1, VAF1 } from "../Common/JSYSTEM/J3D/J3DLoader.js";
-import { MaterialParams, DrawParams } from "../gx/gx_render.js";
+import { MaterialParams, DrawParams, GXViewerTexture } from "../gx/gx_render.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { JKRArchive, RARCFile } from "../Common/JSYSTEM/JKRArchive.js";
 import { GX_Program } from "../gx/gx_material.js";
@@ -317,7 +317,7 @@ export class ResourceHolder {
     public brkTable = new Map<string, TRK1>();
     public bvaTable = new Map<string, VAF1>();
     public banmtTable = new Map<string, BckCtrl>();
-    public viewerTextures: Viewer.Texture[] = [];
+    public viewerTextures: GXViewerTexture[] = [];
 
     constructor(device: GfxDevice, cache: GfxRenderCache, objectName: string, public arc: JKRArchive) {
         initEachResTable(this.arc, this.modelTable, ['.bdl', '.bmd'], (file, ext, filenameWithoutExtension) => {

@@ -12,7 +12,7 @@ import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import { GX_Program } from "../gx/gx_material.js";
-import { GXTextureMapping, ub_SceneParamsBufferSize } from "../gx/gx_render.js";
+import { GXTextureMapping, GXViewerTexture, ub_SceneParamsBufferSize } from "../gx/gx_render.js";
 import { LoopMode as NW4RLoopMode } from "../rres/brres.js";
 import { assert, assertExists } from "../util.js";
 import { ViewerRenderInput } from "../viewer.js";
@@ -23,13 +23,12 @@ import { ModelCache, SceneObjHolder } from "./Main.js";
 import { getLayoutMessageDirect } from "./MessageData.js";
 import { CalcAnimType, DrawBufferType, DrawType, MovementType, NameObj } from "./NameObj.js";
 import { Spine } from "./Spine.js";
-import { Texture } from "../viewer.js";
 
 export class LayoutHolder {
     public rlytTable = new Map<string, RLYT>();
     public rlanTable = new Map<string, RLAN>();
     public timgTable = new Map<string, BTIData>();
-    public viewerTextures: Texture[];
+    public viewerTextures: GXViewerTexture[];
 
     constructor(device: GfxDevice, cache: GfxRenderCache, private gameSystemFontHolder: GameSystemFontHolder, private layoutName: string, public arc: JKRArchive) {
         initEachResTable(this.arc, this.rlytTable, ['.brlyt'], (file) => parseBRLYT(file.buffer));

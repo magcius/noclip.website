@@ -11,7 +11,7 @@ import * as Viewer from '../viewer.js';
 import { assert, nArray, setBitFlagEnabled } from '../util.js';
 import { LoadedVertexData, LoadedVertexLayout, VertexAttributeInput } from './gx_displaylist.js';
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
-import { TextureHolder, LoadedTexture, TextureMapping } from '../TextureHolder.js';
+import { TextureHolder, TextureMapping } from '../TextureHolder.js';
 
 import { GfxBufferCoalescerCombo } from '../gfx/helpers/BufferHelpers.js';
 import { fillColor, fillMatrix4x3, fillVec4, fillMatrix4x4, fillVec3v, fillMatrix4x2 } from '../gfx/helpers/UniformBufferHelpers.js';
@@ -25,6 +25,7 @@ import { AttachmentStateSimple, setAttachmentStateSimple } from '../gfx/helpers/
 import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers.js';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 import { convertToCanvasData } from '../gfx/helpers/TextureConversionHelpers.js';
+import { TextureListHolder } from '../ui.js';
 
 export enum ColorKind {
     MAT0, MAT1, AMB0, AMB1,
@@ -192,7 +193,7 @@ export function loadedDataCoalescerComboGfx(device: GfxDevice, loadedVertexDatas
     , name);
 }
 
-class GXViewerTexture implements Viewer.Texture {
+export class GXViewerTexture implements Viewer.Texture {
     public surfaces: HTMLCanvasElement[] = [];
 
     constructor(public mipChain: GX_Texture.MipChain, public extraInfo: Map<string, string> | null = null, public name: string = mipChain.name) {
@@ -218,6 +219,11 @@ class GXViewerTexture implements Viewer.Texture {
 
         return Promise.all(promises) as any as Promise<void>;
     }
+}
+
+interface LoadedTexture {
+    gfxTexture: GfxTexture;
+    viewerTexture: GXViewerTexture;
 }
 
 export function loadTextureFromMipChain(device: GfxDevice, mipChain: GX_Texture.MipChain): LoadedTexture {
@@ -292,15 +298,55 @@ interface TextureOverride {
     lateBinding?: string;
 }
 
-export class GXTextureHolder extends TextureHolder {
+export class GXTextureHolder implements TextureListHolder {
     private textureOverrides = new Map<string, TextureOverride>();
+    public onnewtextures: (() => void) | null = null;
     public textureEntries: GX_Texture.TextureInputGX[] = [];
+    public gfxTextures: GfxTexture[] = [];
+    public viewerTextures: GXViewerTexture[] = [];
 
     public setTextureOverride(name: string, textureOverride: TextureOverride): void {
         this.textureOverrides.set(name, textureOverride);
     }
 
-    public override fillTextureMapping(dst: GXTextureMapping, name: string): boolean {
+    public findTextureEntryIndex(name: string): number {
+        return this.textureEntries.findIndex((entry) => entry.name === name);
+    }
+
+    public get textureNames(): string[] {
+        return this.textureEntries.map((entry) => entry.name);
+    }
+
+    public async getViewerTexture(i: number): Promise<Viewer.Texture> {
+        const tex = this.viewerTextures[i];
+        if (tex.surfaces.length === 0)
+            await tex.activate();
+        return tex;
+    }
+
+    public hasTexture(name: string): boolean {
+        return this.findTextureEntryIndex(name) >= 0;
+    }
+
+    public addTexture(device: GfxDevice, texture: GX_Texture.TextureInputGX): void {
+        // Don't add textures without data.
+        if (texture.data === null)
+            return;
+
+        // Don't add duplicates.
+        if (this.textureEntries.find((entry) => entry.name === texture.name) !== undefined)
+            return;
+
+        const mipChain = GX_Texture.calcMipChain(texture, texture.mipCount);
+        const { viewerTexture, gfxTexture } = loadTextureFromMipChain(device, mipChain);
+        this.viewerTextures.push(viewerTexture);
+        this.gfxTextures.push(gfxTexture);
+        this.textureEntries.push(texture);
+        if (this.onnewtextures !== null)
+            this.onnewtextures();
+    }
+
+    public fillTextureMapping(dst: GXTextureMapping, name: string): boolean {
         const textureOverride = this.textureOverrides.get(name);
         if (textureOverride) {
             dst.gfxTexture = textureOverride.gfxTexture;
@@ -327,25 +373,12 @@ export class GXTextureHolder extends TextureHolder {
         return false;
     }
 
-    public addTexture(device: GfxDevice, texture: GX_Texture.TextureInputGX): void {
-        // Don't add textures without data.
-        if (texture.data === null)
-            return;
-
-        // Don't add duplicates.
-        if (this.textureEntries.find((entry) => entry.name === texture.name) !== undefined)
-            return;
-
-        const mipChain = GX_Texture.calcMipChain(texture, texture.mipCount);
-        const { viewerTexture, gfxTexture } = loadTextureFromMipChain(device, mipChain);
-        this.viewerTextures.push(viewerTexture);
-        this.gfxTextures.push(gfxTexture);
-        this.textureEntries.push(texture);
-        this.textureNames.push(texture.name);
-    }
-
-    public override destroy(device: GfxDevice): void {
-        super.destroy(device);
+    public destroy(device: GfxDevice): void {
+        for (let i = 0; i < this.gfxTextures.length; i++)
+            device.destroyTexture(this.gfxTextures[i]);
+        this.viewerTextures.length = 0;
+        this.gfxTextures.length = 0;
+        this.textureEntries.length = 0;
         this.textureOverrides.clear();
     }
 }

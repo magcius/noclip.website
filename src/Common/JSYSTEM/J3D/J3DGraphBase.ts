@@ -4,7 +4,7 @@ import { mat4, ReadonlyMat4, ReadonlyVec3, vec3 } from 'gl-matrix';
 import { BMD, MaterialEntry, Shape, ShapeMtxType, DRW1MatrixKind, TEX1, INF1, HierarchyNodeType, TexMtx, MAT3, TexMtxMapMode, JointTransformInfo, MtxGroup } from './J3DLoader.js';
 
 import * as GX_Material from '../../../gx/gx_material.js';
-import { DrawParams, ColorKind, loadTextureFromMipChain, loadedDataCoalescerComboGfx, MaterialParams, fillIndTexMtx, setChanWriteEnabled, createInputLayout, GXTextureMapping } from '../../../gx/gx_render.js';
+import { DrawParams, ColorKind, loadTextureFromMipChain, loadedDataCoalescerComboGfx, MaterialParams, fillIndTexMtx, setChanWriteEnabled, createInputLayout, GXTextureMapping, GXViewerTexture } from '../../../gx/gx_render.js';
 import { GXMaterialHelperGfx } from '../../../gx/gx_render.js';
 
 import { computeViewSpaceDepthFromWorldSpaceAABB, texProjCameraSceneTex } from '../../../Camera.js';
@@ -12,7 +12,6 @@ import { nArray, assert, assertExists } from '../../../util.js';
 import { AABB, Frustum } from '../../../Geometry.js';
 import { GfxDevice, GfxSampler, GfxTexture, GfxChannelWriteMask, GfxFormat, GfxInputLayout, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from '../../../gfx/platform/GfxPlatform.js';
 import { GfxCoalescedBuffersCombo, GfxBufferCoalescerCombo } from '../../../gfx/helpers/BufferHelpers.js';
-import { Texture } from '../../../viewer.js';
 import { GfxRenderInst, GfxRenderInstManager, setSortKeyDepth, GfxRendererLayer, setSortKeyBias, setSortKeyLayer } from '../../../gfx/render/GfxRenderInstManager.js';
 import { colorCopy, Color, colorClamp, colorClampLDR, White } from '../../../Color.js';
 import { texEnvMtx, computeModelMatrixS, calcBillboardMatrix, CalcBillboardFlags, computeMatrixWithoutTranslation } from '../../../MathHelpers.js';
@@ -656,7 +655,7 @@ export class TEX1Data {
 
     private gfxSamplers: GfxSampler[] = [];
     private gfxTextures: (GfxTexture | null)[] = [];
-    public viewerTextures: (Texture | null)[] = [];
+    public viewerTextures: (GXViewerTexture | null)[] = [];
 
     constructor(device: GfxDevice, cache: GfxRenderCache, public tex1: TEX1) {
         for (let i = 0; i < this.tex1.samplers.length; i++) {

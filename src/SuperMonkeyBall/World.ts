@@ -84,10 +84,6 @@ export class World {
         this.background.prepareToRender(this.worldState, ctx);
     }
 
-    public getTextureCache(): TextureCache {
-        return this.worldState.modelCache.getTextureCache();
-    }
-
     public getClearColor(): Color {
         return this.stageData.stageInfo.bgInfo.clearColor;
     }

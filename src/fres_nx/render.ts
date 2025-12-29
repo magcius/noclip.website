@@ -1,7 +1,7 @@
 
 import * as UI from '../ui.js';
 import * as Viewer from '../viewer.js';
-import { TextureHolder, LoadedTexture, TextureMapping } from '../TextureHolder.js';
+import { TextureHolder, TextureMapping } from '../TextureHolder.js';
 
 import { GfxDevice, GfxSampler, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode, GfxCullMode, GfxCompareMode, GfxInputLayout, GfxBuffer, GfxBufferUsage, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxProgram, GfxMegaStateDescriptor, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D, GfxBufferFrequencyHint } from '../gfx/platform/GfxPlatform.js';
 

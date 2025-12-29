@@ -14,7 +14,7 @@ import {
     getTLUTSize,
     parseTLUT
 } from "../Common/N64/Image.js";
-import { LoadedTexture, TextureHolder } from "../TextureHolder.js";
+import { TextureHolder } from "../TextureHolder.js";
 import { convertToCanvas } from '../gfx/helpers/TextureConversionHelpers.js';
 import { GfxDevice, GfxFormat, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform.js";
 

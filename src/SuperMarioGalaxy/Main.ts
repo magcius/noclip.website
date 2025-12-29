@@ -18,7 +18,7 @@ import { setBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '
 import { gfxDeviceNeedsFlipY } from '../gfx/helpers/GfxDeviceHelpers.js';
 import { projectionMatrixConvertClipSpaceNearZ } from '../gfx/helpers/ProjectionHelpers.js';
 
-import { SceneParams,  ub_SceneParamsBufferSize, fillSceneParamsData, calcLODBias, GXTextureMapping } from '../gx/gx_render.js';
+import { SceneParams,  ub_SceneParamsBufferSize, fillSceneParamsData, calcLODBias, GXTextureMapping, GXViewerTexture } from '../gx/gx_render.js';
 import { EFB_WIDTH, EFB_HEIGHT, GX_Program } from '../gx/gx_material.js';
 import { GXRenderHelperGfx } from '../gx/gx_render.js';
 
@@ -856,7 +856,7 @@ function getLayerDirName(index: LayerId) {
 }
 
 class TextureListHolder implements UI.TextureListHolder {
-    private viewerTextures: Viewer.Texture[] = [];
+    private viewerTextures: GXViewerTexture[] = [];
     public onnewtextures: (() => void) | null = null;
 
     public get textureNames(): string[] {
@@ -870,7 +870,7 @@ class TextureListHolder implements UI.TextureListHolder {
         return tex;
     }
 
-    public addTextures(textures: Viewer.Texture[]): void {
+    public addTextures(textures: GXViewerTexture[]): void {
         let changed = false;
         for (let i = 0; i < textures.length; i++) {
             if (this.viewerTextures.find((texture) => textures[i].name === texture.name) === undefined) {

@@ -1,5 +1,5 @@
 
-import { TextureHolder, LoadedTexture, TextureMapping } from "../TextureHolder.js";
+import { TextureHolder, TextureMapping } from "../TextureHolder.js";
 import { PPAK_Texture, TextureFormat, getTextureFormatName } from "./ppf.js";
 import { GfxDevice, GfxFormat, GfxBufferUsage, GfxBuffer, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxInputLayout, GfxVertexBufferDescriptor, GfxBufferFrequencyHint, GfxBindingLayoutDescriptor, GfxProgram, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxTextureDimension, GfxRenderPass, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D, GfxMegaStateDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxFrontFaceMode } from "../gfx/platform/GfxPlatform.js";
 import * as Viewer from "../viewer.js";

@@ -27,11 +27,6 @@ export class TextureMapping {
     }
 }
 
-export interface LoadedTexture {
-    gfxTexture: GfxTexture;
-    viewerTexture: Viewer.Texture;
-}
-
 // TODO(jstpierre): TextureHolder needs to die.
 export class TextureHolder implements TextureListHolder {
     public gfxTextures: GfxTexture[] = [];
@@ -44,27 +39,11 @@ export class TextureHolder implements TextureListHolder {
     }
 
     public async getViewerTexture(i: number) {
-        const tex = this.viewerTextures[i];
-        if (tex.surfaces.length === 0 && tex.activate !== undefined)
-            await tex.activate();
-        return tex;
-    }
-
-    public findTextureEntryIndex(name: string): number {
-        for (let i = 0; i < this.textureNames.length; i++) {
-            if (this.textureNames[i] === name)
-                return i;
-        }
-
-        return -1;
-    }
-
-    public hasTexture(name: string): boolean {
-        return this.findTextureEntryIndex(name) >= 0;
+        return this.viewerTextures[i];
     }
 
     public fillTextureMapping(dst: TextureMapping, name: string): boolean {
-        const textureEntryIndex = this.findTextureEntryIndex(name);
+        const textureEntryIndex = this.textureNames.indexOf(name);
         if (textureEntryIndex >= 0) {
             dst.gfxTexture = this.gfxTextures[textureEntryIndex];
             return true;

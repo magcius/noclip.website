@@ -4,7 +4,7 @@ import { convertToCanvas } from "../gfx/helpers/TextureConversionHelpers.js";
 import { GfxBindingLayoutDescriptor, GfxDevice, GfxFormat, makeTextureDescriptor2D, GfxTexture } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
 import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase.js";
-import { LoadedTexture, TextureHolder, TextureMapping } from "../TextureHolder.js";
+import { TextureHolder, TextureMapping } from "../TextureHolder.js";
 import { assert, assertExists, hexzero0x, readString } from "../util.js";
 import { SceneGfx, ViewerRenderInput } from "../viewer.js";
 import * as AFS from './AFS.js';
