@@ -55,10 +55,10 @@ function translateAttributeFormat(attributeFormat: AttributeFormat): GfxFormat {
     //     return GfxFormat.;
     case AttributeFormat.sint_8:
         return GfxFormat.S8_R;
-    // case AttributeFormat.sint_8_8:
-    //     return GfxFormat.;
-    // case AttributeFormat.sint_8_8_8_8:
-    //     return GfxFormat.;
+    case AttributeFormat.sint_8_8:
+        return GfxFormat.S8_RG;
+    case AttributeFormat.sint_8_8_8_8:
+        return GfxFormat.S8_RGBA;
     case AttributeFormat.float_32:
         return GfxFormat.F32_R;
     case AttributeFormat.float_16_16:
@@ -178,7 +178,6 @@ export function parse(buffer: ArrayBufferSlice): FRES
                 const attribute_name_offset = read_bfres_offset(view, attribute_entry_offset);
                 const name = readString(buffer, attribute_name_offset, 0xFF, true)
                 const bufferIndex = view.getUint8(attribute_entry_offset + 0x4);
-                // TODO: does this offset need to be adjusted like all the other bfres offsets?
                 const bufferOffset = view.getUint16(attribute_entry_offset + 0x6);
                 const format = view.getUint32(attribute_entry_offset + 0x8);
 

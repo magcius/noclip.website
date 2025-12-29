@@ -1,13 +1,17 @@
-import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
+import { GfxDevice, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor } from "../gfx/platform/GfxPlatform.js";
 import { SceneGfx, SceneGroup, ViewerRenderInput } from "../viewer.js";
 import { SceneContext, SceneDesc } from "../SceneBase.js";
-import * as BFRES from "./bfres_wiiu.js";
+// import * as BFRES from "./bfres_wiiu.js";
+import * as BFRES from "./bfres_switch.js";
 
 class TMSFEScene implements SceneGfx
 {
+    // public fmdls: BFRES.FMDL[] = [];
+    // public vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [];
+    // public vertexBufferDescriptors: GfxVertexBufferDescriptor[] = [];
+
     constructor(device: GfxDevice)
     {
-
     }
 
     public render(device: GfxDevice, viewerInput: ViewerRenderInput): void
@@ -27,14 +31,18 @@ class TMSFESceneDesc implements SceneDesc
     {
         // Load the map file
         const dataFetcher = context.dataFetcher;
-        const apak = dataFetcher.fetchData(`TokyoMirageSessionsSharpFE/maps/${this.id}/model.apak`);
-        const bfres = BFRES.parse(await dataFetcher.fetchData("TokyoMirageSessionsSharpFE/d008_01.bfres"));
-        return new TMSFEScene(device);
+        // const apak = dataFetcher.fetchData(`TokyoMirageSessionsSharpFE/maps/${this.id}/model.apak`);
+        // const bfres = BFRES.parse(await dataFetcher.fetchData("TokyoMirageSessionsSharpFE/d008_01.bfres"));
+        const bfres = BFRES.parse(await dataFetcher.fetchData("TokyoMirageSessionsSharpFE/b016_01.bfres"));
+        let renderer = new TMSFEScene(device);
+        // TODO: push all of the fmdls
+        // renderer.fmdls.push(bfres.fmdl[0]);
+        return renderer;
     }
 }
 
 const id = `TokyoMirageSessionsSharpFE`;
-const name = "Tokyo Mirage Sessions ♯FE";
+const name = "MOVE THIS LATER Tokyo Mirage Sessions ♯FE";
 const sceneDescs =
 [
     "Illusory Daitama",

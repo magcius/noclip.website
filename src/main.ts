@@ -127,6 +127,7 @@ import { GfxPlatform } from './gfx/platform/GfxPlatform.js';
 
 const sceneGroups: (string | SceneGroup)[] = [
     "Wii",
+    Scenes_TokyoMirageSessionsSharpFE.sceneGroup,
     Scenes_MarioKartWii.sceneGroup,
     Scenes_KirbysReturnToDreamLand.sceneGroup,
     Scenes_Klonoa.sceneGroup,
@@ -237,7 +238,6 @@ const sceneGroups: (string | SceneGroup)[] = [
     Scenes_AShortHike.sceneGroup,
     Scenes_NeonWhite.sceneGroup,
     Scenes_OuterWilds.sceneGroup,
-    Scenes_TokyoMirageSessionsSharpFE.sceneGroup,
 ];
 
 enum SaveStatesAction {
