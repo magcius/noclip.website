@@ -277,48 +277,75 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     else if (actorName === 'item') {
         // Item table provided with the help of the incredible LagoLunatic <3.
         const itemId = (actor.parameters & 0x000000FF);
+        let shadowSize = 15.0;
 
         // Heart
-        if (itemId === 0x00) fetchArchive(`Always`).then((rarc) => buildModel(rarc, `bdl/vhrtl.bdl`));
+        if (itemId === 0x00) fetchArchive(`Always`).then((rarc) => {
+            buildModel(rarc, `bdl/vhrtl.bdl`)
+            shadowSize = 15.0;
+        });
         // Rupee (Green)
         else if (itemId === 0x01) fetchArchive(`Always`).then((rarc) => {
             const m = buildModel(rarc, `bdlm/vlupl.bdl`);
             m.bindTRK1(parseBRK(rarc, `brk/vlupl.brk`), animFrame(0));
             m.bindTTK1(parseBTK(rarc, `btk/vlupl.btk`));
+            shadowSize = 25.0;
         });
         // Rupee (Blue)
         else if (itemId === 0x02) fetchArchive(`Always`).then((rarc) => {
             const m = buildModel(rarc, `bdlm/vlupl.bdl`);
             m.bindTRK1(parseBRK(rarc, `brk/vlupl.brk`), animFrame(1));
             m.bindTTK1(parseBTK(rarc, `btk/vlupl.btk`));
+            shadowSize = 25.0;
         });
         // Rupee (Yellow)
         else if (itemId === 0x03) fetchArchive(`Always`).then((rarc) => {
             const m = buildModel(rarc, `bdlm/vlupl.bdl`);
             m.bindTRK1(parseBRK(rarc, `brk/vlupl.brk`), animFrame(2));
             m.bindTTK1(parseBTK(rarc, `btk/vlupl.btk`));
+            shadowSize = 25.0;
         });
         // Rupee (Red)
         else if (itemId === 0x04) fetchArchive(`Always`).then((rarc) => {
             const m = buildModel(rarc, `bdlm/vlupl.bdl`);
             m.bindTRK1(parseBRK(rarc, `brk/vlupl.brk`), animFrame(3));
             m.bindTTK1(parseBTK(rarc, `btk/vlupl.btk`));
+            shadowSize = 25.0;
         });
         // Rupee (Purple)
         else if (itemId === 0x05) fetchArchive(`Always`).then((rarc) => {
             const m = buildModel(rarc, `bdlm/vlupl.bdl`);
             m.bindTRK1(parseBRK(rarc, `brk/vlupl.brk`), animFrame(4));
             m.bindTTK1(parseBTK(rarc, `btk/vlupl.btk`));
+            shadowSize = 25.0;
         });
         // Small magic jar
-        else if (itemId === 0x09) fetchArchive(`Always`).then((rarc) => buildModel(rarc, `bdlm/mpoda.bdl`));
+        else if (itemId === 0x09) fetchArchive(`Always`).then((rarc) => {
+            buildModel(rarc, `bdlm/mpoda.bdl`)
+            shadowSize = 20.0;
+        });
         // Large magic jar
-        else if (itemId === 0x0A) fetchArchive(`Always`).then((rarc) => buildModel(rarc, `bdlm/mpodb.bdl`));
+        else if (itemId === 0x0A) fetchArchive(`Always`).then((rarc) => {
+            buildModel(rarc, `bdlm/mpodb.bdl`)
+            shadowSize = 25.0;
+        });
         // Small key
-        else if (itemId === 0x15) fetchArchive(`Always`).then((rarc) => buildModel(rarc, `bdl/vkeyl.bdl`));
+        else if (itemId === 0x15) fetchArchive(`Always`).then((rarc) => {
+            buildModel(rarc, `bdl/vkeyl.bdl`)
+            shadowSize = 20.0;
+        });
         // Joy pendant
-        else if (itemId === 0x1F) fetchArchive(`Always`).then((rarc) => buildModel(rarc, `bdl/vhapl.bdl`));
+        else if (itemId === 0x1F) fetchArchive(`Always`).then((rarc) => {
+            buildModel(rarc, `bdl/vhapl.bdl`)
+            shadowSize = 25.0;
+        });
         else console.warn(`Unknown item: ${hexzero(itemId, 2)}`);
+
+        if (!(itemId & 0x10)) {
+            setShadowSimple( shadowSize * legacy.scale[0] );
+        } else {
+            // TODO: setShadowReal( ... )
+        }
     }
     // Heart Container
     else if (actorName === 'Bitem') fetchArchive(`Always`).then((rarc) => buildModel(rarc, `bdlm/vhutl.bdl`).bindTTK1(parseBTK(rarc, `btk/vhutl.btk`)));
