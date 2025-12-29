@@ -163,7 +163,7 @@ export class dGlobals {
 
         this.quadStatic = new dDlst_2DStatic_c(modelCache.device, modelCache.cache);
 
-        this.dlst = new dDlst_list_c(modelCache.device, modelCache.cache, extraSymbolData);
+        this.dlst = new dDlst_list_c(modelCache.device, modelCache.cache, modelCache.resCtrl, extraSymbolData);
     }
 
     public dStage_searchName(name: string): dStage__ObjectNameTableEntry | null {
@@ -429,6 +429,9 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
 
         const dlst = globals.dlst;
 
+        renderInstManager.setCurrentList(dlst.shadow);
+        dlst.shadowControl.draw(globals, renderInstManager, viewerInput);
+
         renderInstManager.setCurrentList(dlst.alphaModel);
         dlst.alphaModel0.draw(globals, renderInstManager, viewerInput);
 
@@ -522,18 +525,25 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         const mainDepthTargetID = builder.createRenderTargetID(this.mainDepthDesc, 'Main Depth');
 
         builder.pushPass((pass) => {
-            pass.setDebugName('Main');
-
+            pass.setDebugName('BG');
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
                 this.globals.camera.applyScissor(passRenderer);
-
                 this.executeList(passRenderer, dlst.sea);
                 this.executeListSet(passRenderer, dlst.bg);
+            });
+        });
 
-                // Execute our alpha model stuff.
-                this.executeList(passRenderer, dlst.alphaModel);
+        // Shadows expect depth from the BG/Sea, but nothing else. Must be applied before other alpha objects.
+        dlst.shadowControl.pushPasses(this.globals, renderInstManager, builder, mainDepthTargetID, mainColorTargetID);
+
+        builder.pushPass((pass) => {
+            pass.setDebugName('Main');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
+            pass.exec((passRenderer) => {
+                this.globals.camera.applyScissor(passRenderer);
 
                 this.executeList(passRenderer, dlst.effect[EffectDrawGroup.Main]);
                 this.executeList(passRenderer, dlst.wetherEffect);
@@ -811,7 +821,7 @@ class SceneDesc {
         modelCache.fetchObjectData(`Always`);
         modelCache.fetchStageData(`Stage`);
 
-        modelCache.fetchFileData(`extra.crg1_arc`, 11);
+        modelCache.fetchFileData(`extra.crg1_arc`, 15);
         modelCache.fetchFileData(`f_pc_profiles.crg1_arc`);
 
         const particleArchives = [

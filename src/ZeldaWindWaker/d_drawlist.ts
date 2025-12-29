@@ -1,12 +1,11 @@
 
-import { mat4 } from "gl-matrix";
+import { mat4, vec3 } from "gl-matrix";
 import { White, colorCopy, colorNewCopy } from "../Color.js";
-import { projectionMatrixForCuboid } from '../MathHelpers.js';
+import { projectionMatrixForCuboid, saturate } from '../MathHelpers.js';
 import { TSDraw } from "../SuperMarioGalaxy/DDraw.js";
 import { createBufferFromData } from "../gfx/helpers/BufferHelpers.js";
-import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers.js';
 import { projectionMatrixConvertClipSpaceNearZ } from '../gfx/helpers/ProjectionHelpers.js';
-import { GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxChannelWriteMask, GfxClipSpaceNearZ, GfxDevice, GfxInputLayout } from "../gfx/platform/GfxPlatform.js";
+import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxChannelWriteMask, GfxClipSpaceNearZ, GfxCullMode, GfxDevice, GfxFormat, GfxInputLayout, GfxMipFilterMode, GfxProgram, GfxRenderPass, GfxSampler, GfxSamplerFormatKind, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxVertexBufferFrequency, GfxWrapMode } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { GfxRenderInst, GfxRenderInstExecutionOrder, GfxRenderInstList, GfxRenderInstManager, gfxRenderInstCompareNone, gfxRenderInstCompareSortKey } from "../gfx/render/GfxRenderInstManager.js";
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder.js';
@@ -14,10 +13,23 @@ import { DisplayListRegisters, GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertex
 import * as GX from '../gx/gx_enum.js';
 import { GX_Program } from '../gx/gx_material.js';
 import { ColorKind, DrawParams, GXMaterialHelperGfx, MaterialParams, SceneParams, createInputLayout, fillSceneParamsData, ub_SceneParamsBufferSize } from "../gx/gx_render.js";
-import { assert } from '../util.js';
+import { assert, nArray } from '../util.js';
 import { ViewerRenderInput } from '../viewer.js';
 import { SymbolMap, dGlobals } from './Main.js';
 import { PeekZManager } from "./d_dlst_peekZ.js";
+import { cBgS_PolyInfo } from "./d_bg.js";
+import { BTI_Texture, BTIData } from "../Common/JSYSTEM/JUTTexture.js";
+import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
+import { dKy_tevstr_c } from "./d_kankyo.js";
+import { cM_s2rad } from "./SComponent.js";
+import { dRes_control_c, ResType } from "./d_resorce.js";
+import { DeviceProgram } from "../Program.js";
+import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
+import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
+import { fillMatrix4x4, fillVec4 } from "../gfx/helpers/UniformBufferHelpers.js";
+import { preprocessProgramObj_GLSL } from "../gfx/shaderc/GfxShaderCompiler.js";
+import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetID } from "../gfx/render/GfxRenderGraph.js";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
 
 export enum dDlst_alphaModel__Type {
     Bonbori,
@@ -84,7 +96,7 @@ class dDlst_alphaModel_c {
         const bonboriVtxLoader = compileVtxLoader(vat, vcd);
 
         const shadowVtxArrays: GX_Array[] = [];
-        shadowVtxArrays[GX.Attr.POS]  = { buffer: bonboriPos, offs: 0, stride: 0x0C };
+        shadowVtxArrays[GX.Attr.POS] = { buffer: bonboriPos, offs: 0, stride: 0x0C };
         const bonboriVertices = bonboriVtxLoader.runVertices(shadowVtxArrays, bonboriDL);
         this.bonboriShape = new dDlst_BasicShape_c(cache, bonboriVtxLoader.loadedVertexLayout, bonboriVertices);
 
@@ -110,9 +122,6 @@ class dDlst_alphaModel_c {
         frontZ.ropInfo.depthFunc = GX.CompareType.GREATER;
 
         this.materialHelperFrontZ = new GXMaterialHelperGfx(frontZ);
-
-        setAttachmentStateSimple(this.materialHelperBackRevZ.megaStateFlags, { channelWriteMask: GfxChannelWriteMask.Alpha });
-        setAttachmentStateSimple(this.materialHelperFrontZ.megaStateFlags, { channelWriteMask: GfxChannelWriteMask.Alpha });
 
         assert(this.materialHelperBackRevZ.materialParamsBufferSize === this.materialHelperFrontZ.materialParamsBufferSize);
 
@@ -241,15 +250,336 @@ export class dDlst_list_c {
     public particle2DFore = new GfxRenderInstList(gfxRenderInstCompareNone, GfxRenderInstExecutionOrder.Forwards);
 
     public alphaModel = new GfxRenderInstList(gfxRenderInstCompareNone, GfxRenderInstExecutionOrder.Forwards);
+    public shadow = new GfxRenderInstList(gfxRenderInstCompareNone, GfxRenderInstExecutionOrder.Forwards);
     public peekZ = new PeekZManager(128);
     public alphaModel0: dDlst_alphaModel_c;
+    public shadowControl: dDlst_shadowControl_c;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, symbolMap: SymbolMap) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, resCtrl: dRes_control_c, symbolMap: SymbolMap) {
         this.alphaModel0 = new dDlst_alphaModel_c(device, cache, symbolMap);
+        this.shadowControl = new dDlst_shadowControl_c(device, cache, resCtrl);
     }
 
     public destroy(device: GfxDevice): void {
         this.peekZ.destroy(device);
         this.alphaModel0.destroy(device);
+        this.shadowControl.destroy(device);
+    }
+}
+
+class SimpleShadowProgram extends DeviceProgram {
+    public static bindingLayouts: GfxBindingLayoutDescriptor[] = [{
+        numUniformBuffers: 1, numSamplers: 2, samplerEntries: [
+            { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float, },
+            { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.UnfilterableFloat, },
+        ]
+    }];
+
+    public override both = `
+${GfxShaderLibrary.MatrixLibrary}
+
+layout(std140) uniform ub_Params {
+    vec4 u_viewportSize;
+    Mat4x4 u_ClipFromLocal;
+    Mat4x4 u_LocalFromClip;
+};
+
+layout(location = 0) uniform sampler2D u_TextureShadow;
+layout(location = 1) uniform sampler2D u_TextureFramebufferDepth; // Depth buffer
+
+#if defined VERT
+layout(location = 0) in vec3 a_Position; // Cube coordinates (-1 to 1).
+
+void main() {
+    gl_Position = UnpackMatrix(u_ClipFromLocal) * vec4(a_Position.xyz, 1.0);
+}
+#elif defined FRAG
+
+void main() {
+    vec3 t_ClipPos;
+    t_ClipPos.xy = (gl_FragCoord.xy / u_viewportSize.xy) * 2.0 - vec2(1.0);
+    t_ClipPos.z = texelFetch(SAMPLER_2D(u_TextureFramebufferDepth), ivec2(gl_FragCoord.xy), 0).r;
+    vec4 t_ObjectPos = UnpackMatrix(u_LocalFromClip) * vec4(t_ClipPos, 1.0);
+    t_ObjectPos.xyz /= t_ObjectPos.w;
+
+    // Now that we have our object-space position, remove any samples outside of the box.
+    if (any(lessThan(t_ObjectPos.xyz, vec3(-1))) || any(greaterThan(t_ObjectPos.xyz, vec3(1))))
+        discard;
+    
+    // Top-down project our shadow texture. Our local space is between -1 and 1, we want to move into 0.0 to 1.0.
+    vec2 t_ShadowTexCoord = t_ObjectPos.xz * vec2(0.5) + vec2(0.5);
+    float t_ShadowColor = texture(SAMPLER_2D(u_TextureShadow), t_ShadowTexCoord).r;
+    if( t_ShadowColor == 0.0 )
+        discard;
+
+    gl_FragColor = vec4(0, 0, 0, 0.75);
+}
+#endif
+`;
+}
+
+const scratchMat4 = mat4.create();
+
+class dDlst_shadowSimple_c_Cache {
+    public program: GfxProgram;
+    public inputLayout: GfxInputLayout;
+    public positionBuffer: GfxBuffer;
+    public indexBuffer: GfxBuffer;
+    public sampler: GfxSampler;
+
+    public defaultSimpleTex: BTIData;
+    public whiteTex: BTIData;
+
+    constructor(resCtrl: dRes_control_c, cache: GfxRenderCache) {
+        const glsl = preprocessProgramObj_GLSL(cache.device, new SimpleShadowProgram());
+        this.program = cache.createProgramSimple(glsl);
+        this.inputLayout = cache.createInputLayout({
+            indexBufferFormat: GfxFormat.U16_R,
+            vertexAttributeDescriptors: [
+                { location: 0, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0 }, // position
+            ],
+            vertexBufferDescriptors: [
+                { byteStride: 4 * 3, frequency: GfxVertexBufferFrequency.PerVertex },
+            ],
+        });
+        this.positionBuffer = createBufferFromData(
+            cache.device,
+            GfxBufferUsage.Vertex,
+            GfxBufferFrequencyHint.Static,
+            new Float32Array([
+                [-1, -1, -1],
+                [1, -1, -1],
+                [1, 1, -1],
+                [-1, 1, -1],
+                [-1, -1, 1],
+                [1, -1, 1],
+                [1, 1, 1],
+                [-1, 1, 1],
+            ].flat()).buffer,
+        );
+
+        this.indexBuffer = createBufferFromData(
+            cache.device,
+            GfxBufferUsage.Index,
+            GfxBufferFrequencyHint.Static,
+            new Uint16Array([
+                0, 2, 1,
+                0, 3, 2,
+                4, 5, 6,
+                4, 6, 7,
+                0, 1, 5,
+                0, 5, 4,
+                2, 3, 7,
+                2, 7, 6,
+                1, 2, 6,
+                1, 6, 5,
+                3, 0, 4,
+                3, 4, 7,
+            ]).buffer,
+        );
+
+        this.sampler = cache.createSampler({
+            wrapS: GfxWrapMode.Clamp,
+            wrapT: GfxWrapMode.Clamp,
+            minFilter: GfxTexFilterMode.Point,
+            magFilter: GfxTexFilterMode.Point,
+            mipFilter: GfxMipFilterMode.Nearest,
+            minLOD: 0, maxLOD: 0,
+        });
+
+        const img = resCtrl.getObjectRes(ResType.Raw, `Always`, 0x71); // ALWAYS_I4_BALL128B
+        const bti: BTI_Texture = {
+            name: img.name,
+            format: GX.TexFormat.I4,
+            width: 128,
+            height: 128,
+            data: img,
+            mipCount: 1,
+            wrapS: GX.WrapMode.CLAMP,
+            wrapT: GX.WrapMode.CLAMP,
+            minFilter: GX.TexFilter.LINEAR,
+            magFilter: GX.TexFilter.LINEAR,
+            minLOD: 0,
+            maxLOD: 0,
+            lodBias: 0,
+            maxAnisotropy: GX.Anisotropy._1,
+            paletteFormat: 0,
+            paletteData: null,
+        };
+        this.defaultSimpleTex = new BTIData(cache.device, cache, bti);
+
+        bti.name = "whiteTex";
+        bti.width = 1;
+        bti.height = 1;
+        bti.data = new ArrayBufferSlice(new Uint8Array(32).fill(0xFF).buffer);
+        this.whiteTex = new BTIData(cache.device, cache, bti);
+
+        return this;
+    }
+
+    destroy(device: GfxDevice): void {
+        this.whiteTex.destroy(device);
+        this.defaultSimpleTex.destroy(device);
+        
+        device.destroyBuffer(this.indexBuffer);
+        device.destroyBuffer(this.positionBuffer);
+
+        // Everything else is managed by the cache, and will be destroyed when the cache is destroyed.
+    }
+}
+
+// Renders a simple cube-shaped shadow volume directly below an object (light position is ignored). Optionally, use a 
+// texture (defaults to a circle) oriented to the ground normal to stencil out the shadow volume (i.e. a gobo texture).
+class dDlst_shadowSimple_c {
+    public alpha: number = 0; // 0-255
+    public tex: BTIData;
+    public modelMtx = mat4.create();
+
+    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        const renderInst = renderInstManager.newRenderInst();
+        let offset = renderInst.allocateUniformBuffer(0, 4 + 16 * 2);
+        const buf = renderInst.mapUniformBufferF32(0);
+        offset += fillVec4(buf, offset, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+        offset += fillMatrix4x4(buf, offset, mat4.mul(scratchMat4, globals.camera.clipFromWorldMatrix, this.modelMtx));
+        offset += fillMatrix4x4(buf, offset, mat4.invert(scratchMat4, scratchMat4));
+        this.tex.fillTextureMapping(materialParams.m_TextureMapping[0]);
+        materialParams.m_TextureMapping[1].lateBinding = 'depth-target';
+        renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
+        renderInstManager.submitRenderInst(renderInst);
+    }
+
+    public set(pos: vec3, floorY: number, scaleXZ: number, floorNrm: vec3, rotY: number, scaleZ: number, tex: BTIData): void {
+        const offsetY = scaleXZ * 16.0 * (1.0 - floorNrm[1]) + 1.0;
+
+        // Build the matrix which will transform a [-1, 1] cube into our shadow volume oriented to the floor plane
+        // A physically accurate drop shadow would use a vertical box to project the shadow texture straight down, but the original 
+        // game chooses to use this approach which always keeps the shape of the shadow consistent, regardless of ground geometry.
+        const xs = Math.sqrt(1.0 - floorNrm[0] * floorNrm[0]);
+        const yy = xs !== 0.0 ? floorNrm[1] * xs : 0.0;
+        const zz = xs !== 0.0 ? -floorNrm[2] * xs : 0.0;
+
+        mat4.set(this.modelMtx,
+            xs, -floorNrm[0] * yy, floorNrm[0] * zz, 0.0,
+            floorNrm[0], floorNrm[1], floorNrm[2], 0.0,
+            0.0, zz, yy, 0.0,
+            pos[0], floorY, pos[2], 1.0
+        );
+
+        mat4.rotateY(this.modelMtx, this.modelMtx, cM_s2rad(rotY));
+        mat4.scale(this.modelMtx, this.modelMtx, [scaleXZ, offsetY + offsetY + 16.0, scaleXZ * scaleZ]);
+
+        let opacity = 1.0 - saturate((pos[1] - floorY) * 0.0007);
+        this.alpha = opacity * 64.0;
+        this.tex = tex;
+    }
+}
+
+class dDlst_shadowControl_c {
+    private simples = nArray(128, () => new dDlst_shadowSimple_c());
+    private simpleCount = 0;
+    private simpleCache: dDlst_shadowSimple_c_Cache;
+
+    public get defaultSimpleTex(): BTIData {
+        return this.simpleCache.defaultSimpleTex;
+    }
+
+    // TODO: Real shadows
+    // private reals = nArray(8, () => new dDlst_shadowSimple_c());
+    // private realCache: dDlst_shadowReal_c_DLCache;
+
+    constructor(device: GfxDevice, cache: GfxRenderCache, resCtrl: dRes_control_c) {
+        this.simpleCache = new dDlst_shadowSimple_c_Cache(resCtrl, cache);
+    }
+
+    destroy(device: GfxDevice): void {
+        this.simpleCache.destroy(device);
+    }
+
+    public reset(): void {
+        this.simpleCount = 0;
+    }
+
+    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        // Draw simple shadows
+        // noclip modification: The game's original shadowing uses many draw calls which is inefficient on modern hardware. It works as follows:
+        // 1. For each shadow, create a box directly under the object. Its Y rotation matches the caster. It's height is based on the ground slope.
+        // 2. Render the front faces of the box, adding 0.25 to the empty alpha buffer. Depth testing is enabled. Similar to shadow volumes.
+        // 3. Render the back faces of the box, subtracting 0.25 from the empty alpha buffer. Now alpha is filled only where the box interesects the ground. 
+        // 4. If the shadow has a texture (defaults to a circle): Render a textured quad oriented to the ground normal, clear the alpha where texture is 0.
+        // 5. Render the box, multiplying the color buffer by (1.0 - alpha). This darkens the areas where the shadow is visible.
+        // 6. Render the box, clearing the alpha to 0. This same framebuffer is used to render other shadows, and then alpha objects.
+        const template = renderInstManager.pushTemplate();
+        template.setBindingLayouts(SimpleShadowProgram.bindingLayouts);
+        template.setGfxProgram(this.simpleCache.program);
+        template.setMegaStateFlags({
+            cullMode: GfxCullMode.Back,
+            ...setAttachmentStateSimple({}, {
+                channelWriteMask: GfxChannelWriteMask.RGB,
+                blendMode: GfxBlendMode.Add,
+                blendSrcFactor: GfxBlendFactor.Zero,
+                blendDstFactor: GfxBlendFactor.SrcAlpha,
+            })
+        });
+        template.setVertexInput(this.simpleCache.inputLayout, [{ buffer: this.simpleCache.positionBuffer }], { buffer: this.simpleCache.indexBuffer });
+        template.setDrawCount(36);
+        for (let i = 0; i < this.simpleCount; i++) {
+            this.simples[i].draw(globals, renderInstManager, viewerInput);
+        }
+        renderInstManager.popTemplate();
+    }
+
+    public imageDraw(mtx: mat4): void {
+        // TODO: Implementation
+    }
+
+    public pushPasses(globals: dGlobals, renderInstManager: GfxRenderInstManager, builder: GfxrGraphBuilder, mainDepthTargetID: GfxrRenderTargetID, mainColorTargetID: GfxrRenderTargetID): void {
+        builder.pushPass((pass) => {
+            pass.setDebugName('Shadows');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
+            const mainDepthResolveTextureID = builder.resolveRenderTarget(mainDepthTargetID);
+            pass.attachResolveTexture(mainDepthResolveTextureID);
+            pass.exec((passRenderer, scope) => {
+                globals.camera.applyScissor(passRenderer);
+                const depthTex = scope.getResolveTextureForID(mainDepthResolveTextureID);
+                globals.dlst.shadow.resolveLateSamplerBinding('depth-target', { gfxTexture: depthTex, gfxSampler: this.simpleCache.sampler, lateBinding: null });
+                globals.dlst.shadow.drawOnPassRenderer(renderInstManager.gfxRenderCache, passRenderer);
+                this.reset();
+            });
+        });
+    }
+
+    public setReal(id: number, shouldFade: number, model: J3DModelInstance, pos: vec3, casterSize: number, heightAgl: number, tevStr: dKy_tevstr_c): number {
+        // TODO: Implementation
+        return 0;
+    }
+
+    public setReal2(id: number, shouldFade: number, model: J3DModelInstance, pos: vec3, casterSize: number, heightAgl: number, tevStr: dKy_tevstr_c): number {
+        // TODO: Implementation
+        return 0;
+    }
+
+    public addReal(id: number, model: J3DModelInstance): boolean {
+        // TODO: Implementation
+        return false;
+    }
+
+    public setSimple(globals: dGlobals, pos: vec3, groundY: number, scaleXZ: number, floorNrm: vec3, angle: number, scaleZ: number, tex: BTIData | null): boolean {
+        if (floorNrm === null || this.simpleCount >= this.simples.length)
+            return false;
+
+        const simple = this.simples[this.simpleCount++];
+        simple.set(pos, groundY, scaleXZ, floorNrm, angle, scaleZ, tex ? tex : this.simpleCache.whiteTex);
+        return true;
+    }
+}
+
+export function dComIfGd_setSimpleShadow2(globals: dGlobals, pos: vec3, groundY: number, scaleXZ: number, floorPoly: cBgS_PolyInfo,
+    rotY: number = 0, scaleZ: number = 1.0, i_tex: BTIData | null = globals.dlst.shadowControl.defaultSimpleTex): boolean {
+    if (floorPoly.ChkSetInfo() && groundY !== -Infinity) {
+        const plane_p = globals.scnPlay.bgS.GetTriPla(floorPoly.bgIdx, floorPoly.triIdx);
+        return globals.dlst.shadowControl.setSimple(globals, pos, groundY, scaleXZ, plane_p.n, rotY, scaleZ, i_tex);
+    } else {
+        return false;
     }
 }
