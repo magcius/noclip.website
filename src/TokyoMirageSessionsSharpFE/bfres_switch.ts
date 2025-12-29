@@ -58,6 +58,10 @@ export function parse(buffer: ArrayBufferSlice): FRES
     // only switch bfres files have this
     assert(view.getUint32(0x4, true) === 0x20202020);
 
+    // find the gpu region of the file
+    const memory_pool_info_offset = view.getUint32(0xB0, true);
+    const memory_pool_data_offset = view.getUint32(memory_pool_info_offset + 8, true);
+
     // parse fmdl
 
     const fmdl_array_offset = view.getUint32(0x28, true);
@@ -104,9 +108,11 @@ export function parse(buffer: ArrayBufferSlice): FRES
 
             const buffer_size_array_offset = view.getUint32(fvtx_entry_offset + 0x30, true);
             const buffer_stride_array_offset = view.getUint32(fvtx_entry_offset + 0x38, true);
-            let buffer_offset = view.getUint32(fvtx_entry_offset + 0x48, true);
+            const buffer_offset = view.getUint32(fvtx_entry_offset + 0x48, true);
             const buffer_count = view.getUint8(fvtx_entry_offset + 0x4D);
 
+            // the buffer offset is relative to the start of the gpu region
+            let start_of_buffer = memory_pool_data_offset + buffer_offset;
             const vertexBuffers: FVTX_VertexBuffer[] = [];
             for (let i = 0; i < buffer_count; i++)
             {
@@ -116,8 +122,7 @@ export function parse(buffer: ArrayBufferSlice): FRES
                 const size_offset = buffer_size_array_offset + (i * 0x10);
                 const size = view.getUint32(size_offset, true);
                 const data = buffer.subarray(buffer_offset, size);
-                // TODO: not sure if it's necessary to align this
-                buffer_offset = align(buffer_offset + size, 8);
+                start_of_buffer = align(start_of_buffer + size, 8);
 
                 vertexBuffers.push({ stride, data });
             }
