@@ -266,14 +266,6 @@ export class dDlst_list_c {
     }
 }
 
-interface dDlst_shadowSimple_c_DLCache {
-    program: GfxProgram;
-    inputLayout: GfxInputLayout;
-    positionBuffer: GfxBuffer;
-    indexBuffer: GfxBuffer;
-    sampler: GfxSampler;
-}
-
 class SimpleShadowProgram extends DeviceProgram {
     public static bindingLayouts: GfxBindingLayoutDescriptor[] = [{
         numUniformBuffers: 1, numSamplers: 2, samplerEntries: [
@@ -327,20 +319,17 @@ void main() {
 
 const scratchMat4 = mat4.create();
 
-// Renders a simple cube-shaped shadow volume directly below an object (light position is ignored). Optionally, use a 
-// textured quad (defaults to a circle) oriented to the ground normal to stencil out the shadow volume (i.e. a gobo texture).
-class dDlst_shadowSimple_c {
-    public alpha: number = 0; // 0-255
-    public tex: BTIData | null = null;
-    public modelMtx = mat4.create();
+class dDlst_shadowSimple_c_Cache {
+    program: GfxProgram;
+    inputLayout: GfxInputLayout;
+    positionBuffer: GfxBuffer;
+    indexBuffer: GfxBuffer;
+    sampler: GfxSampler;
 
-    static compileDLs(cache: GfxRenderCache, symbolMap: SymbolMap): dDlst_shadowSimple_c_DLCache {
-        const dlCache: dDlst_shadowSimple_c_DLCache = {} as any;
-
-        // Compile our custom shader
+    constructor(device: GfxDevice, cache: GfxRenderCache) {
         const glsl = preprocessProgramObj_GLSL(cache.device, new SimpleShadowProgram());
-        dlCache.program = cache.createProgramSimple(glsl);
-        dlCache.inputLayout = cache.createInputLayout({
+        this.program = cache.createProgramSimple(glsl);
+        this.inputLayout = cache.createInputLayout({
             indexBufferFormat: GfxFormat.U16_R,
             vertexAttributeDescriptors: [
                 { location: 0, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0 }, // position
@@ -349,7 +338,7 @@ class dDlst_shadowSimple_c {
                 { byteStride: 4 * 3, frequency: GfxVertexBufferFrequency.PerVertex },
             ],
         });
-        dlCache.positionBuffer = createBufferFromData(
+        this.positionBuffer = createBufferFromData(
             cache.device,
             GfxBufferUsage.Vertex,
             GfxBufferFrequencyHint.Static,
@@ -365,7 +354,7 @@ class dDlst_shadowSimple_c {
             ].flat()).buffer,
         );
 
-        dlCache.indexBuffer = createBufferFromData(
+        this.indexBuffer = createBufferFromData(
             cache.device,
             GfxBufferUsage.Index,
             GfxBufferFrequencyHint.Static,
@@ -385,7 +374,7 @@ class dDlst_shadowSimple_c {
             ]).buffer,
         );
 
-        dlCache.sampler = cache.createSampler({
+        this.sampler = cache.createSampler({
             wrapS: GfxWrapMode.Clamp,
             wrapT: GfxWrapMode.Clamp,
             minFilter: GfxTexFilterMode.Point,
@@ -394,19 +383,28 @@ class dDlst_shadowSimple_c {
             minLOD: 0, maxLOD: 0,
         });
 
-        return dlCache;
+        return this;
     }
 
-    static destroy(cache: dDlst_shadowSimple_c_DLCache, device: GfxDevice): void {
-        device.destroyProgram(cache.program);
-        device.destroyBuffer(cache.positionBuffer);
-        device.destroyBuffer(cache.indexBuffer);
-        device.destroySampler(cache.sampler);
+    destroy(device: GfxDevice): void {
+        device.destroyProgram(this.program);
+        device.destroyInputLayout(this.inputLayout);
+        device.destroyBuffer(this.positionBuffer);
+        device.destroyBuffer(this.indexBuffer);
+        device.destroySampler(this.sampler);
     }
+}
+
+// Renders a simple cube-shaped shadow volume directly below an object (light position is ignored). Optionally, use a 
+// texture (defaults to a circle) oriented to the ground normal to stencil out the shadow volume (i.e. a gobo texture).
+class dDlst_shadowSimple_c {
+    public alpha: number = 0; // 0-255
+    public tex: BTIData | null = null;
+    public modelMtx = mat4.create();
 
     public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         const renderInst = renderInstManager.newRenderInst();
-        let offset = renderInst.allocateUniformBuffer(0, 4 * 16 * 2);
+        let offset = renderInst.allocateUniformBuffer(0, 4 + 16 * 2);
         const buf = renderInst.mapUniformBufferF32(0);
         offset += fillVec4(buf, offset, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
         offset += fillMatrix4x4(buf, offset, mat4.mul(scratchMat4, globals.camera.clipFromWorldMatrix, this.modelMtx));
@@ -418,7 +416,7 @@ class dDlst_shadowSimple_c {
         renderInstManager.submitRenderInst(renderInst);
     }
 
-    public set(globals: dGlobals, pos: vec3, floorY: number, scaleXZ: number, floorNrm: vec3, rotY: number, scaleZ: number, tex: BTIData | null): void {
+    public set(pos: vec3, floorY: number, scaleXZ: number, floorNrm: vec3, rotY: number, scaleZ: number, tex: BTIData | null): void {
         const offsetY = scaleXZ * 16.0 * (1.0 - floorNrm[1]) + 1.0;
 
         // Build the matrix which will transform a [-1, 1] cube into our shadow volume oriented to the floor plane
@@ -447,7 +445,7 @@ class dDlst_shadowSimple_c {
 class dDlst_shadowControl_c {
     private simples = nArray(128, () => new dDlst_shadowSimple_c());
     private simpleCount = 0;
-    private simpleCache: dDlst_shadowSimple_c_DLCache;
+    private simpleCache: dDlst_shadowSimple_c_Cache;
 
     // TODO: Real shadows
     // private reals = nArray(8, () => new dDlst_shadowSimple_c());
@@ -456,7 +454,7 @@ class dDlst_shadowControl_c {
     public defaultSimpleTex: BTIData;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, resCtrl: dRes_control_c, symbolMap: SymbolMap) {
-        this.simpleCache = dDlst_shadowSimple_c.compileDLs(cache, symbolMap);
+        this.simpleCache = new dDlst_shadowSimple_c_Cache(device, cache);
 
         const img = resCtrl.getObjectRes(ResType.Raw, `Always`, 0x71); // ALWAYS_I4_BALL128B
         const bti: BTI_Texture = {
@@ -481,7 +479,7 @@ class dDlst_shadowControl_c {
     }
 
     destroy(device: GfxDevice): void {
-        dDlst_shadowSimple_c.destroy(this.simpleCache, device);
+        this.simpleCache.destroy(device);
         this.defaultSimpleTex.destroy(device);
     }
 
@@ -490,8 +488,6 @@ class dDlst_shadowControl_c {
     }
 
     public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        // dKy_GxFog_set();
-
         // Draw simple shadows
         // noclip modification: The game's original shadowing uses many draw calls which is inefficient on modern hardware. It works as follows:
         // 1. For each shadow, create a box directly under the object. Its Y rotation matches the caster. It's height is based on the ground slope.
@@ -561,7 +557,7 @@ class dDlst_shadowControl_c {
             return false;
 
         const simple = this.simples[this.simpleCount++];
-        simple.set(globals, pos, groundY, scaleXZ, floorNrm, angle, scaleZ, pTexObj);
+        simple.set(pos, groundY, scaleXZ, floorNrm, angle, scaleZ, pTexObj);
         return true;
     }
 }
