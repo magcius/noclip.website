@@ -111,7 +111,7 @@ class d_a_noclip_legacy extends fopAc_ac_c {
             dComIfGd_setSimpleShadow2(globals, this.pos, this.shadowChk.retY, this.shadowScaleXZ, this.shadowChk.polyInfo, this.rot[1], 1.0, this.shadowTex);
         }
 
-        renderInstManager.setCurrentList(globals.dlst.bg[0]);
+        renderInstManager.setCurrentList(globals.dlst.main[0]);
         for (let i = 0; i < this.objectRenderers.length; i++)
             this.objectRenderers[i].prepareToRender(globals, this.isDemoActor ? this.morf : null, device, renderInstManager, viewerInput);
     }
