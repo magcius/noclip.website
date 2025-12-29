@@ -36,8 +36,12 @@ export interface LoadedTexture {
 export class TextureHolder implements TextureListHolder {
     public gfxTextures: GfxTexture[] = [];
     public viewerTextures: Viewer.Texture[] = [];
-    public textureNames: string[] = [];
+    public _textureNames: string[] = [];
     public onnewtextures: (() => void) | null = null;
+
+    public get textureNames(): string[] {
+        return this.textureNames;
+    }
 
     public async getViewerTexture(i: number) {
         const tex = this.viewerTextures[i];
@@ -81,5 +85,9 @@ export class FakeTextureHolder extends TextureHolder {
     constructor(viewerTextures: Viewer.Texture[]) {
         super();
         this.viewerTextures = viewerTextures;
+    }
+
+    public override get textureNames(): string[] {
+        return this.viewerTextures.map((tex) => tex.name);
     }
 }
