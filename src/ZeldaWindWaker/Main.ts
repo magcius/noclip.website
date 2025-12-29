@@ -924,6 +924,8 @@ class SceneDesc {
             // noclip modification: We pass in roomNo so it's attached to the room.
             fopAcM_create(framework, dProcName_e.d_a_bg, roomNo, null, roomNo, null, null, 0xFF, -1);
 
+            fopAcM_create(globals.frameworkGlobals, 0x01CB as dProcName_e, 0, vec3.fromValues(-205948, 772, 318128), 44, vec3.fromValues(0,0,0), vec3.fromValues(1,1,1), 0x00, -1);
+
             const dzr = assertExists(resCtrl.getStageResByName(ResType.Dzs, `Room${roomNo}`, `room.dzr`));
             dStage_dt_c_roomLoader(globals, globals.roomCtrl.status[roomNo].data, dzr);
             dStage_dt_c_roomReLoader(globals, globals.roomCtrl.status[roomNo].data, dzr);

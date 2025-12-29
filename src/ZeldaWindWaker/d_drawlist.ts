@@ -412,7 +412,7 @@ class dDlst_shadowSimple_c {
         let offset = renderInst.allocateUniformBuffer(0, 4 * 16 * 2);
         const buf = renderInst.mapUniformBufferF32(0);
         offset += fillVec4(buf, offset, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
-        offset += fillMatrix4x4(buf, offset, mat4.mul(scratchMat4, globals.camera.clipFromViewMatrix, this.modelViewMtx));
+        offset += fillMatrix4x4(buf, offset, mat4.mul(scratchMat4, globals.camera.clipFromViewMatrix, this.texMtx));
         offset += fillMatrix4x4(buf, offset, mat4.invert(scratchMat4, scratchMat4));
         // TODO: Handle shadows with no texture 
         if (this.tex) this.tex.fillTextureMapping(materialParams.m_TextureMapping[0]);
@@ -430,27 +430,22 @@ class dDlst_shadowSimple_c {
         mat4.scale(this.modelViewMtx, this.modelViewMtx, [scaleXZ, offsetY + offsetY + 16.0, scaleXZ * scaleZ]);
         mat4.mul(this.modelViewMtx, globals.camera.viewFromWorldMatrix, this.modelViewMtx);
 
-        // Build texMtx (oriented to the floor plane)
+        // Build the matrix which will transform a [-1, 1] cube into our shadow volume oriented to the floor plane
+        // A physically accurate drop shadow would use a vertical box to project the shadow texture straight down,
+        // but the original game chooses to use this approach which always keeps the shape of the shadow consistent, regardless of ground geometry.
         const xs = Math.sqrt(1.0 - floorNrm[0] * floorNrm[0]);
-        let yy: number;
-        let zz: number;
-        if (xs !== 0.0) {
-            yy = floorNrm[1] * xs;
-            zz = -floorNrm[2] * xs;
-        } else {
-            yy = 0.0;
-            zz = 0.0;
-        }
+        const yy = xs !== 0.0 ? floorNrm[1] * xs : 0.0;
+        const zz = xs !== 0.0 ? -floorNrm[2] * xs : 0.0;
 
         mat4.set(this.texMtx,
-            xs, floorNrm[0], 0.0, 0.0,
-            -floorNrm[0] * yy, floorNrm[1], zz, 0.0,
-            floorNrm[0] * zz, floorNrm[2], yy, 0.0,
+            xs, -floorNrm[0] * yy, floorNrm[0] * zz, 0.0,
+            floorNrm[0], floorNrm[1], floorNrm[2], 0.0,
+            0.0, zz, yy, 0.0,
             pos[0], floorY, pos[2], 1.0
         );
 
         mat4.rotateY(this.texMtx, this.texMtx, cM_s2rad(rotY));
-        mat4.scale(this.texMtx, this.texMtx, [scaleXZ, 1.0, scaleXZ * scaleZ]);
+        mat4.scale(this.texMtx, this.texMtx, [scaleXZ, offsetY + offsetY + 16.0, scaleXZ * scaleZ]);
         mat4.mul(this.texMtx, globals.camera.viewFromWorldMatrix, this.texMtx);
 
         let opacity = 1.0 - saturate((pos[1] - floorY) * 0.0007);
