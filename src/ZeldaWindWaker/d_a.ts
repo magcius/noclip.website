@@ -5936,7 +5936,6 @@ class d_a_title extends fopAc_ac_c {
     }
 
     private model_draw(globals: dGlobals, renderInstManager: GfxRenderInstManager) {
-
         if (this.btkSubtitle.frameCtrl.getFrame() != 0.0) {
             this.btkShimmer.entry(this.modelSubtitleShimmer)
             mDoExt_modelUpdateDL(globals, this.modelSubtitleShimmer, renderInstManager, globals.dlst.ui);
@@ -6080,6 +6079,11 @@ class d_a_title extends fopAc_ac_c {
             this.shipOffsetX = (this.shipFrameCounter * this.shipFrameCounter) * 0.1;
             this.bpkShip.frameCtrl.setFrame(100.0 - (this.shipFrameCounter * 2));
         }
+    }
+
+    public override delete(globals: dGlobals): void {
+        super.delete(globals);
+        this.screen.destroy(globals.modelCache.device);
     }
 }
 
