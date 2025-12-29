@@ -41,18 +41,6 @@ export class TextureMapping {
         this.flipY = false;
     }
 
-    public fillFromTextureOverride(textureOverride: TextureOverride): boolean {
-        this.gfxTexture = textureOverride.gfxTexture;
-        if (textureOverride.gfxSampler)
-            this.gfxSampler = textureOverride.gfxSampler;
-        this.width = textureOverride.width;
-        this.height = textureOverride.height;
-        this.flipY = textureOverride.flipY;
-        if (textureOverride.lateBinding)
-            this.lateBinding = textureOverride.lateBinding;
-        return true;
-    }
-
     public copy(other: TextureMapping): void {
         this.gfxTexture = other.gfxTexture;
         this.gfxSampler = other.gfxSampler;
@@ -101,24 +89,27 @@ export class TextureHolder implements TextureListHolder {
         return this.findTextureEntryIndex(name) >= 0;
     }
 
-    protected fillTextureMappingFromEntry(textureMapping: TextureMapping, i: number): void {
-        textureMapping.gfxTexture = this.gfxTextures[i];
-        const texEntry = this.textureEntries[i];
-        textureMapping.width = texEntry.width;
-        textureMapping.height = texEntry.height;
-        textureMapping.flipY = false;
-    }
-
-    public fillTextureMapping(textureMapping: TextureMapping, name: string): boolean {
+    public fillTextureMapping(dst: TextureMapping, name: string): boolean {
         const textureOverride = this.textureOverrides.get(name);
         if (textureOverride) {
-            textureMapping.fillFromTextureOverride(textureOverride);
+            dst.gfxTexture = textureOverride.gfxTexture;
+            if (textureOverride.gfxSampler)
+                dst.gfxSampler = textureOverride.gfxSampler;
+            dst.width = textureOverride.width;
+            dst.height = textureOverride.height;
+            dst.flipY = textureOverride.flipY;
+            if (textureOverride.lateBinding)
+                dst.lateBinding = textureOverride.lateBinding;
             return true;
         }
 
         const textureEntryIndex = this.findTextureEntryIndex(name);
         if (textureEntryIndex >= 0) {
-            this.fillTextureMappingFromEntry(textureMapping, textureEntryIndex);
+            dst.gfxTexture = this.gfxTextures[textureEntryIndex];
+            const texEntry = this.textureEntries[textureEntryIndex];
+            dst.width = texEntry.width;
+            dst.height = texEntry.height;
+            dst.flipY = false;
             return true;
         }
 

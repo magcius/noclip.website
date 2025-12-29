@@ -3,7 +3,7 @@ import { hexzero } from '../util.js';
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import * as GX_Texture from '../gx/gx_texture.js';
 import * as GX from '../gx/gx_enum.js';
-import { loadTextureFromMipChain, translateWrapModeGfx, translateTexFilterGfx } from '../gx/gx_render.js';
+import { loadTextureFromMipChain, translateWrapModeGfx, translateTexFilterGfx, GXTextureMapping } from '../gx/gx_render.js';
 import { GfxDevice, GfxMipFilterMode, GfxTexture, GfxSampler, GfxFormat, makeTextureDescriptor2D, GfxWrapMode, GfxTexFilterMode } from '../gfx/platform/GfxPlatform.js';
 import { DataFetcher } from '../DataFetcher.js';
 import * as UI from '../ui.js';
@@ -12,7 +12,6 @@ import { GameInfo } from './scenes.js';
 import { loadRes } from './resource.js';
 import { readUint32 } from './util.js';
 import * as Viewer from '../viewer.js';
-import { TextureMapping } from '../TextureHolder.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 
 export class SFATexture {
@@ -41,7 +40,7 @@ export class SFATexture {
         device.destroyTexture(this.gfxTexture);
     }
 
-    public setOnTextureMapping(mapping: TextureMapping) {
+    public setOnTextureMapping(mapping: GXTextureMapping) {
         mapping.reset();
         mapping.gfxTexture = this.gfxTexture;
         mapping.gfxSampler = this.gfxSampler;

@@ -10,14 +10,13 @@ import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import { EFB_HEIGHT, EFB_WIDTH } from "../gx/gx_material.js";
 import { computeModelMatrixR, saturate, transformVec3Mat4w0 } from "../MathHelpers.js";
 import { TDDraw } from "../SuperMarioGalaxy/DDraw.js";
-import { TextureMapping } from "../TextureHolder.js";
 import { nArray } from "../util.js";
 import { ViewerRenderInput } from "../viewer.js";
 import { dKy_get_seacolor } from "./d_kankyo.js";
 import { cLib_addCalc2, cM_s2rad } from "./SComponent.js";
 import { dGlobals } from "./Main.js";
 import * as GX from '../gx/gx_enum.js';
-import { ColorKind } from "../gx/gx_render.js";
+import { ColorKind, GXTextureMapping } from "../gx/gx_render.js";
 import { gfxDeviceNeedsFlipY } from "../gfx/helpers/GfxDeviceHelpers.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 
@@ -54,7 +53,7 @@ export enum ParticleGroup {
     TwoDmenuBack,
 }
 
-function setTextureMappingIndirect(m: TextureMapping, flipY: boolean): void {
+function setTextureMappingIndirect(m: GXTextureMapping, flipY: boolean): void {
     m.width = EFB_WIDTH;
     m.height = EFB_HEIGHT;
     m.flipY = flipY;

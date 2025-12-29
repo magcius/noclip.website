@@ -8,10 +8,9 @@ import * as UI from '../ui.js';
 
 import * as JPA from '../Common/JSYSTEM/JPA.js';
 import * as RARC from '../Common/JSYSTEM/JKRArchive.js';
-import { TextureMapping } from '../TextureHolder.js';
 import { readString, leftPad, assertExists, assert, nArray, hexzero } from '../util.js';
 import { GfxDevice, GfxRenderPass, GfxFormat } from '../gfx/platform/GfxPlatform.js';
-import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render.js';
+import { GXRenderHelperGfx, GXTextureMapping, fillSceneParamsDataOnTemplate } from '../gx/gx_render.js';
 import { setBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { SceneContext } from '../SceneBase.js';
@@ -237,7 +236,7 @@ const scratchMatrix = mat4.create();
 export class TwilightPrincessRenderer implements Viewer.SceneGfx {
     private mainColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
     private mainDepthDesc = new GfxrRenderTargetDescription(GfxFormat.D32F);
-    private opaqueSceneTextureMapping = new TextureMapping();
+    private opaqueSceneTextureMapping = new GXTextureMapping();
 
     private scenarioSelect: UI.SingleSelect | null = null;
     public currentLayer: number = -1;

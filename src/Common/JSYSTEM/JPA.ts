@@ -23,7 +23,7 @@ import { GfxDevice, GfxInputLayout, GfxBuffer, GfxFormat, GfxVertexAttributeDesc
 import { getPointHermite } from "../../Spline.js";
 import { getVertexInputLocation, GX_Program } from "../../gx/gx_material.js";
 import { type Color, colorNewFromRGBA, colorCopy, colorNewCopy, White, colorFromRGBA8, colorLerp, colorMult, colorNewFromRGBA8, colorToRGBA8 } from "../../Color.js";
-import { MaterialParams, ColorKind, DrawParams, fillIndTexMtx, fillTextureSize, fillTextureBias } from "../../gx/gx_render.js";
+import { MaterialParams, ColorKind, DrawParams, fillIndTexMtx, fillTextureSize, fillTextureBias, GXTextureMapping } from "../../gx/gx_render.js";
 import { GXMaterialHelperGfx } from "../../gx/gx_render.js";
 import { computeModelMatrixSRT, computeModelMatrixR, lerp, MathConstants, normToLengthAndAdd, normToLength, isNearZeroVec3, transformVec3Mat4w1, transformVec3Mat4w0, setMatrixTranslation, setMatrixAxis, Vec3Zero, vec3SetAll, bitsAsFloat32, isNearZero } from "../../MathHelpers.js";
 import { GfxRenderInst, GfxRenderInstManager, makeSortKeyTranslucent, GfxRendererLayer, setSortKeyBias, setSortKeyDepth } from "../../gfx/render/GfxRenderInstManager.js";
@@ -31,7 +31,6 @@ import { fillMatrix4x3, fillColor, fillMatrix4x2, fillVec4 } from "../../gfx/hel
 import { computeViewSpaceDepthFromWorldSpacePoint } from "../../Camera.js";
 import { makeTriangleIndexBuffer, GfxTopology, getTriangleIndexCountForTopologyIndexCount } from "../../gfx/helpers/TopologyHelpers.js";
 import { GfxRenderCache } from "../../gfx/render/GfxRenderCache.js";
-import { TextureMapping } from "../../TextureHolder.js";
 import { GXMaterialBuilder } from "../../gx/GXMaterialBuilder.js";
 import { BTIData, BTI, BTI_Texture } from "./JUTTexture.js";
 import { VertexAttributeInput } from "../../gx/gx_displaylist.js";
@@ -440,7 +439,7 @@ export class JPACData {
     // TODO(jstpierre): Use a global JPAResourceManager for textures.
 
     public texData: BTIData[] = [];
-    public textureMapping: TextureMapping[] = [];
+    public textureMapping: GXTextureMapping[] = [];
 
     constructor(public jpac: JPAC) {
     }
@@ -481,17 +480,17 @@ export class JPACData {
         }
 
         if (this.textureMapping[index] === undefined) {
-            this.textureMapping[index] = new TextureMapping();
+            this.textureMapping[index] = new GXTextureMapping();
             this.texData[index].fillTextureMapping(this.textureMapping[index]);
         }
     }
 
-    public getTextureMappingReference(name: string): TextureMapping | null {
+    public getTextureMappingReference(name: string): GXTextureMapping | null {
         for (let i = 0; i < this.jpac.textures.length; i++) {
             const bti = this.jpac.textures[i];
             if (bti.texture.name === name) {
                 if (this.textureMapping[i] === undefined)
-                    this.textureMapping[i] = new TextureMapping();
+                    this.textureMapping[i] = new GXTextureMapping();
                 return this.textureMapping[i];
             }
         }
@@ -499,7 +498,7 @@ export class JPACData {
         return null;
     }
 
-    public fillTextureMapping(m: TextureMapping, index: number): void {
+    public fillTextureMapping(m: GXTextureMapping, index: number): void {
         m.copy(this.textureMapping[index]);
     }
 
@@ -690,7 +689,7 @@ export class JPAResourceData {
         this.ensureTexture(cache, idx);
     }
 
-    public fillTextureMapping(m: TextureMapping, idx: number): void {
+    public fillTextureMapping(m: GXTextureMapping, idx: number): void {
         if (this.textureIds[idx] !== undefined)
             this.jpacData.fillTextureMapping(m, this.textureIds[idx]);
     }
@@ -1005,7 +1004,7 @@ export class JPAEmitterWorkData {
 
     constructor() {
         // HACK for instancing
-        this.materialParams.m_TextureMapping = nArray(16, () => new TextureMapping());
+        this.materialParams.m_TextureMapping = nArray(16, () => new GXTextureMapping());
     }
 
     public fillEmitterRenderInst(renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst): void {
@@ -3465,7 +3464,7 @@ export class JPABaseParticle {
         return false;
     }
 
-    private loadTexMtx(dst: mat4, textureMapping: TextureMapping, workData: JPAEmitterWorkData, posMtx: mat4): void {
+    private loadTexMtx(dst: mat4, textureMapping: GXTextureMapping, workData: JPAEmitterWorkData, posMtx: mat4): void {
         if (workData.forceTexMtxIdentity)
             return;
 

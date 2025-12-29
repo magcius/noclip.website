@@ -10,9 +10,8 @@ import { GXMaterial, SwapTable, TevDefaultSwapTables, getRasColorChannelID, GX_P
 import { GfxRenderInst, GfxRenderInstManager } from "../../../gfx/render/GfxRenderInstManager.js";
 import { GfxDevice, GfxSampler } from "../../../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from "../../../gfx/render/GfxRenderCache.js";
-import { TextureMapping } from "../../../TextureHolder.js";
 import { TDDraw } from "../../../SuperMarioGalaxy/DDraw.js";
-import { ColorKind, GXMaterialHelperGfx, MaterialParams } from "../../../gx/gx_render.js";
+import { ColorKind, GXMaterialHelperGfx, GXTextureMapping, MaterialParams } from "../../../gx/gx_render.js";
 import { TEX1_SamplerSub, translateSampler } from "../../JSYSTEM/JUTTexture.js";
 import { getPointHermite } from "../../../Spline.js";
 import { arrayCopy } from '../../../gfx/platform/GfxPlatformObjUtil.js';
@@ -957,14 +956,14 @@ export class LayoutDrawInfo {
 }
 
 interface LayoutResourceCollection {
-    fillTextureByName(dst: TextureMapping, name: string): void;
+    fillTextureByName(dst: GXTextureMapping, name: string): void;
     getFontByName(name: string): ResFont | null;
 }
 
 export class LayoutResourceCollectionBasic {
     public textureHolder = new TPLTextureHolder();
 
-    public fillTextureByName(dst: TextureMapping, name: string): void {
+    public fillTextureByName(dst: GXTextureMapping, name: string): void {
         this.textureHolder.fillTextureMapping(dst, name);
     }
 

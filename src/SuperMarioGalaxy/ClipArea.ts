@@ -2,14 +2,13 @@
 import { mat4, ReadonlyMat4, ReadonlyVec3, vec3 } from "gl-matrix";
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder.js";
 import * as GX from "../gx/gx_enum.js";
-import { ColorKind, DrawParams, GXMaterialHelperGfx, MaterialParams } from "../gx/gx_render.js";
+import { ColorKind, DrawParams, GXMaterialHelperGfx, GXTextureMapping, MaterialParams } from "../gx/gx_render.js";
 
 import { Camera } from "../Camera.js";
 import { colorFromRGBA8, colorNewFromRGBA8 } from "../Color.js";
 import { J3DModelData } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
 import { invlerp, saturate, setMatrixTranslation, Vec3Zero } from "../MathHelpers.js";
 import { DeviceProgram } from "../Program.js";
-import { TextureMapping } from "../TextureHolder.js";
 import { fullscreenMegaState, makeMegaState, setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
 import { GfxShaderLibrary, glslGenerateFloat } from "../gfx/helpers/GfxShaderLibrary.js";
 import { reverseDepthForDepthOffset } from "../gfx/helpers/ReversedDepthHelpers.js";
@@ -662,7 +661,7 @@ export class FallOutFieldDraw extends NameObj {
         depthCompare: GfxCompareMode.Always,
     }, fullscreenMegaState);
 
-    private textureMapping: TextureMapping[] = nArray(1, () => new TextureMapping());
+    private textureMapping: GXTextureMapping[] = nArray(1, () => new GXTextureMapping());
 
     private target2ColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_R_NORM);
     private target4ColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_R_NORM);

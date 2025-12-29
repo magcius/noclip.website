@@ -2,14 +2,13 @@ import { mat4, ReadonlyMat4, ReadonlyVec3, vec3 } from 'gl-matrix';
 
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import { assert, assertExists, nArray } from '../util.js';
-import { ColorKind, createInputLayout, DrawParams, GXMaterialHelperGfx, GXTextureHolder, MaterialParams } from '../gx/gx_render.js';
+import { ColorKind, createInputLayout, DrawParams, GXMaterialHelperGfx, GXTextureHolder, GXTextureMapping, MaterialParams } from '../gx/gx_render.js';
 
 import { AreaLight, AreaLightType, Material, MaterialSet, MREA, Surface, UVAnimationType } from './mrea.js';
 import * as Viewer from '../viewer.js';
 import { AABB, squaredDistanceFromPointToAABB } from '../Geometry.js';
 import { TXTR } from './txtr.js';
 import { CMDL } from './cmdl.js';
-import { TextureMapping } from '../TextureHolder.js';
 import { GfxDevice, GfxFormat, GfxInputLayout, GfxMipFilterMode, GfxSampler, GfxTexFilterMode, GfxVertexBufferDescriptor, GfxWrapMode } from '../gfx/platform/GfxPlatform.js';
 import { GfxBufferCoalescerCombo, GfxCoalescedBuffersCombo } from '../gfx/helpers/BufferHelpers.js';
 import { GfxRendererLayer, GfxRenderInst, makeSortKey, setSortKeyBias, setSortKeyDepthKey } from '../gfx/render/GfxRenderInstManager.js';
@@ -390,7 +389,7 @@ class MaterialGroupInstance {
 
 class MaterialInstance {
     public textureKey: number;
-    public textureMappings = nArray(8, () => new TextureMapping());
+    public textureMappings = nArray(8, () => new GXTextureMapping());
     public visible = true;
 
     constructor(private materialGroup: MaterialGroupInstance, public material: Material, materialSet: MaterialSet, textureHolder: GXTextureHolder<TXTR>) {

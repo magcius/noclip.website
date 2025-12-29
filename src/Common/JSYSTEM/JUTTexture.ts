@@ -4,9 +4,8 @@ import * as GX from '../../gx/gx_enum.js';
 import { assert } from "../../util.js";
 import { GfxSampler, GfxTexture, GfxDevice } from "../../gfx/platform/GfxPlatform.js";
 import { Texture } from "../../viewer.js";
-import { TextureMapping } from "../../TextureHolder.js";
 import { GfxRenderCache } from "../../gfx/render/GfxRenderCache.js";
-import { translateTexFilterGfx, translateWrapModeGfx, loadTextureFromMipChain, translateMaxAnisotropy } from "../../gx/gx_render.js";
+import { translateTexFilterGfx, translateWrapModeGfx, loadTextureFromMipChain, translateMaxAnisotropy, GXTextureMapping } from "../../gx/gx_render.js";
 import { calcMipChain, TextureInputGX } from "../../gx/gx_texture.js";
 
 export interface BTI_Texture extends TextureInputGX {
@@ -105,7 +104,7 @@ export class BTIData {
         this.viewerTexture = viewerTexture;
     }
 
-    public fillTextureMapping(m: TextureMapping): void {
+    public fillTextureMapping(m: GXTextureMapping): void {
         m.lateBinding = null;
         m.gfxTexture = this.gfxTexture;
         m.gfxSampler = this.gfxSampler;

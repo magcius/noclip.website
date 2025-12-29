@@ -19,13 +19,12 @@ import * as JPA from '../Common/JSYSTEM/JPA.js';
 import { BTIData } from '../Common/JSYSTEM/JUTTexture.js';
 import { computeModelMatrixT, range } from '../MathHelpers.js';
 import { SceneContext } from '../SceneBase.js';
-import { TextureMapping } from '../TextureHolder.js';
 import { setBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { GfxDevice, GfxFormat, GfxMipFilterMode, GfxRenderPass, GfxTexFilterMode, GfxWrapMode } from '../gfx/platform/GfxPlatform.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { GfxrAttachmentSlot, GfxrRenderTargetDescription } from '../gfx/render/GfxRenderGraph.js';
 import { GfxRenderInstList, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
-import { GXRenderHelperGfx } from '../gx/gx_render.js';
+import { GXRenderHelperGfx, GXTextureMapping } from '../gx/gx_render.js';
 import { FlowerPacket, GrassPacket, TreePacket } from './Grass.js';
 import { LegacyActor__RegisterFallbackConstructor } from './LegacyActor.js';
 import { dDlst_2DStatic_c, d_a__RegisterConstructors } from './d_a.js';
@@ -202,7 +201,7 @@ export class dGlobals {
 }
 
 export class ZWWExtraTextures {
-    public textureMapping: TextureMapping[] = nArray(2, () => new TextureMapping());
+    public textureMapping = nArray(2, () => new GXTextureMapping());
 
     constructor(device: GfxDevice, ZAtoon: BTIData, ZBtoonEX: BTIData) {
         ZAtoon.fillTextureMapping(this.textureMapping[0]);
@@ -255,7 +254,7 @@ const scratchMatrix = mat4.create();
 export class WindWakerRenderer implements Viewer.SceneGfx {
     private mainColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
     private mainDepthDesc = new GfxrRenderTargetDescription(GfxFormat.D32F);
-    private opaqueSceneTextureMapping = new TextureMapping();
+    private opaqueSceneTextureMapping = new GXTextureMapping();
 
     public renderHelper: GXRenderHelperGfx;
 

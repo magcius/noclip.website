@@ -9,7 +9,6 @@ import { BTIData } from "../Common/JSYSTEM/JUTTexture.js";
 import { Vec3One, Vec3UnitY, Vec3UnitZ, Vec3Zero, clamp, computeMatrixWithoutTranslation, computeModelMatrixR, computeModelMatrixS, lerp, saturate, scaleMatrix, transformVec3Mat4w0, transformVec3Mat4w1 } from "../MathHelpers.js";
 import { GlobalSaveManager } from "../SaveManager.js";
 import { TDDraw, TSDraw } from "../SuperMarioGalaxy/DDraw.js";
-import { TextureMapping } from "../TextureHolder.js";
 import { Endianness } from "../endian.js";
 import { compareDepthValues } from "../gfx/helpers/ReversedDepthHelpers.js";
 import { GfxClipSpaceNearZ, GfxCompareMode, GfxDevice } from "../gfx/platform/GfxPlatform.js";
@@ -18,7 +17,7 @@ import { GfxRenderInst, GfxRenderInstManager, GfxRendererLayer } from "../gfx/re
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder.js";
 import * as GX from '../gx/gx_enum.js';
 import { TevDefaultSwapTables } from "../gx/gx_material.js";
-import { ColorKind, DrawParams, GXMaterialHelperGfx, MaterialParams } from "../gx/gx_render.js";
+import { ColorKind, DrawParams, GXMaterialHelperGfx, GXTextureMapping, MaterialParams } from "../gx/gx_render.js";
 import { arrayRemove, assert, assertExists, nArray } from "../util.js";
 import { ViewerRenderInput } from "../viewer.js";
 import { dGlobals } from "./Main.js";
@@ -5215,9 +5214,9 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
     private gndChk = new dBgS_GndChk()
 
     private isWearingCasualClothes = false;
-    private texMappingClothes: TextureMapping;
-    private texMappingCasualClothes: TextureMapping = new TextureMapping();
-    private texMappingHeroClothes: TextureMapping = new TextureMapping();
+    private texMappingClothes: GXTextureMapping;
+    private texMappingCasualClothes = new GXTextureMapping();
+    private texMappingHeroClothes = new GXTextureMapping();
 
     private anmDataTable: LkAnimData[] = [];
     private anmBck = new mDoExt_bckAnm(); // Joint animation

@@ -15,10 +15,9 @@ import { GfxRendererLayer, GfxRenderInst, GfxRenderInstManager, makeSortKey, set
 import { LoadedVertexData, LoadedVertexDraw, LoadedVertexLayout } from '../gx/gx_displaylist.js';
 import * as GX from '../gx/gx_enum.js';
 import * as GX_Material from '../gx/gx_material.js';
-import { ColorKind, createInputLayout, DrawParams, GXMaterialHelperGfx, GXTextureHolder, loadedDataCoalescerComboGfx, loadTextureFromMipChain, MaterialParams, translateTexFilterGfx, translateWrapModeGfx } from "../gx/gx_render.js";
+import { ColorKind, createInputLayout, DrawParams, GXMaterialHelperGfx, GXTextureHolder, GXTextureMapping, loadedDataCoalescerComboGfx, loadTextureFromMipChain, MaterialParams, translateTexFilterGfx, translateWrapModeGfx } from "../gx/gx_render.js";
 import { calcMipChain } from '../gx/gx_texture.js';
 import { CalcBillboardFlags, calcBillboardMatrix, computeNormalMatrix, getMatrixAxisY, texEnvMtx } from '../MathHelpers.js';
-import { TextureMapping } from "../TextureHolder.js";
 import { assert, assertExists, nArray } from '../util.js';
 import { ViewerRenderInput } from "../viewer.js";
 
@@ -72,10 +71,10 @@ export class ResFileData {
 
 const matrixScratch = mat4.create();
 class MaterialData {
-    public textureMappings: TextureMapping[];
+    public textureMappings: GXTextureMapping[];
 
     constructor(cache: GfxRenderCache, public material: BRRES.MDL0_MaterialEntry, public materialHacks?: GX_Material.GXMaterialHacks) {
-        this.textureMappings = nArray(8, () => new TextureMapping());
+        this.textureMappings = nArray(8, () => new GXTextureMapping());
 
         for (let i = 0; i < this.textureMappings.length; i++) {
             const sampler = this.material.samplers[i];

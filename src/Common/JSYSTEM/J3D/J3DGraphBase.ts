@@ -4,11 +4,10 @@ import { mat4, ReadonlyMat4, ReadonlyVec3, vec3 } from 'gl-matrix';
 import { BMD, MaterialEntry, Shape, ShapeMtxType, DRW1MatrixKind, TEX1, INF1, HierarchyNodeType, TexMtx, MAT3, TexMtxMapMode, JointTransformInfo, MtxGroup } from './J3DLoader.js';
 
 import * as GX_Material from '../../../gx/gx_material.js';
-import { DrawParams, ColorKind, loadTextureFromMipChain, loadedDataCoalescerComboGfx, MaterialParams, fillIndTexMtx, setChanWriteEnabled, createInputLayout } from '../../../gx/gx_render.js';
+import { DrawParams, ColorKind, loadTextureFromMipChain, loadedDataCoalescerComboGfx, MaterialParams, fillIndTexMtx, setChanWriteEnabled, createInputLayout, GXTextureMapping } from '../../../gx/gx_render.js';
 import { GXMaterialHelperGfx } from '../../../gx/gx_render.js';
 
-import { Camera, computeViewSpaceDepthFromWorldSpaceAABB, texProjCameraSceneTex } from '../../../Camera.js';
-import { TextureMapping } from '../../../TextureHolder.js';
+import { computeViewSpaceDepthFromWorldSpaceAABB, texProjCameraSceneTex } from '../../../Camera.js';
 import { nArray, assert, assertExists } from '../../../util.js';
 import { AABB, Frustum } from '../../../Geometry.js';
 import { GfxDevice, GfxSampler, GfxTexture, GfxChannelWriteMask, GfxFormat, GfxInputLayout, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from '../../../gfx/platform/GfxPlatform.js';
@@ -176,7 +175,7 @@ export class ShapeInstance {
 
 export class MaterialInstanceState {
     public lights = nArray(8, () => new GX_Material.Light());
-    public textureMappings: TextureMapping[];
+    public textureMappings: GXTextureMapping[];
 }
 
 function J3DMtxProjConcat(dst: mat4, a: ReadonlyMat4, b: ReadonlyMat4): void {
@@ -679,7 +678,7 @@ export class TEX1Data {
         }
     }
 
-    public fillTextureMappingFromIndex(m: TextureMapping, samplerIndex: number): boolean {
+    public fillTextureMappingFromIndex(m: GXTextureMapping, samplerIndex: number): boolean {
         const sampler = this.tex1.samplers[samplerIndex];
 
         if (this.gfxTextures[sampler.textureDataIndex] === null) {
@@ -729,9 +728,9 @@ export class J3DModelMaterialData {
             this.tex1Data = new TEX1Data(device, cache, tex1);
     }
 
-    public createDefaultTextureMappings(): TextureMapping[] {
+    public createDefaultTextureMappings(): GXTextureMapping[] {
         const tex1Data = assertExists(this.tex1Data);
-        const textureMappings = nArray(tex1Data.tex1.samplers.length, () => new TextureMapping());
+        const textureMappings = nArray(tex1Data.tex1.samplers.length, () => new GXTextureMapping());
         for (let i = 0; i < tex1Data.tex1.samplers.length; i++)
             tex1Data.fillTextureMappingFromIndex(textureMappings[i], i);
         return textureMappings;
@@ -988,19 +987,15 @@ export class J3DModelInstance {
     }
 
     /**
-     * Returns the {@link TextureMapping} for the given sampler referenced by the name
+     * Returns the {@link GXTextureMapping} for the given sampler referenced by the name
      * {@param samplerName}. Manipulating this mapping will affect the texture's usage
      * across all materials. You can use this to bind missing or extra "system" textures,
      * to set up texture overrides for framebuffer-referencing effects, and more.
      *
-     * To reset the texture mapping back to the default, you can use
-     * {@method fillDefaultTextureMapping} to fill a texture mapping back to its default
-     * state.
-     *
      * This object is not a copy; setting parameters on this object will directly affect
      * the render for the next frame.
      */
-    public getTextureMappingReference(samplerName: string): TextureMapping | null {
+    public getTextureMappingReference(samplerName: string): GXTextureMapping | null {
         // Find the correct slot for the texture name.
         const samplers = this.tex1Data.tex1.samplers;
         for (let i = 0; i < samplers.length; i++)

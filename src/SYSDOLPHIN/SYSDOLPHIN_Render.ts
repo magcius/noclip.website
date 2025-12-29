@@ -4,7 +4,6 @@ import { Camera } from "../Camera.js";
 import { Color, colorCopy, colorNewCopy, White } from "../Color.js";
 import { CalcBillboardFlags, calcBillboardMatrix, computeModelMatrixR, computeModelMatrixS, computeModelMatrixSRT, lerp, MathConstants, saturate, scaleMatrix, setMatrixTranslation, Vec3One } from "../MathHelpers.js";
 import { getPointHermite } from "../Spline.js";
-import { TextureMapping } from "../TextureHolder.js";
 import { GfxBufferCoalescerCombo, GfxCoalescedBuffersCombo } from "../gfx/helpers/BufferHelpers.js";
 import { GfxCullMode, GfxDevice, GfxInputLayout, GfxSampler, GfxTexture } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
@@ -12,7 +11,7 @@ import { GfxRendererLayer, GfxRenderInst, GfxRenderInstManager, setSortKeyLayer 
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder.js";
 import { LoadedVertexData } from "../gx/gx_displaylist.js";
 import * as GX from "../gx/gx_enum.js";
-import { ColorKind, createInputLayout, DrawParams, GXMaterialHelperGfx, loadedDataCoalescerComboGfx, loadTextureFromMipChain, MaterialParams, translateTexFilterGfx, translateWrapModeGfx } from "../gx/gx_render.js";
+import { ColorKind, createInputLayout, DrawParams, GXMaterialHelperGfx, GXTextureMapping, loadedDataCoalescerComboGfx, loadTextureFromMipChain, MaterialParams, translateTexFilterGfx, translateWrapModeGfx } from "../gx/gx_render.js";
 import { calcMipChain, TextureInputGX } from "../gx/gx_texture.js";
 import { assert, assertExists, hexzero } from "../util.js";
 import { Texture, ViewerRenderInput } from "../viewer.js";
@@ -115,7 +114,7 @@ class HSD__TexImageData {
         this.viewerTexture = viewerTexture;
     }
 
-    public fillTextureMapping(m: TextureMapping): boolean {
+    public fillTextureMapping(m: GXTextureMapping): boolean {
         m.gfxTexture = this.gfxTexture;
         m.width = this.imageDesc.width;
         m.height = this.imageDesc.height;
@@ -634,7 +633,7 @@ export class HSD_TObj_Instance {
         }
     }
 
-    public fillTextureMapping(device: GfxDevice, m: TextureMapping): void {
+    public fillTextureMapping(device: GfxDevice, m: GXTextureMapping): void {
         const texImage = this.texImageDataCache.getImageData(device, this.imageDesc, this.tlutDesc);
         texImage.fillTextureMapping(m);
         m.gfxSampler = this.data.gfxSampler;

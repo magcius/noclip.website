@@ -10,7 +10,6 @@ import { GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderInst
 import { GXShaderLibrary } from "../gx/gx_material.js";
 import { getMatrixTranslation } from "../MathHelpers.js";
 import { DeviceProgram } from "../Program.js";
-import { TextureMapping } from "../TextureHolder.js";
 import { assert, fallback, nArray } from "../util.js";
 import { connectToScene, getAreaObj } from "./ActorUtil.js";
 import { AreaFormType, AreaObj, AreaObjMgr } from "./AreaObj.js";
@@ -18,6 +17,7 @@ import { JMapInfoIter, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMa
 import { ZoneAndLayer } from "./LiveActor.js";
 import { SceneObj, SceneObjHolder } from "./Main.js";
 import { CalcAnimType, MovementType, NameObj } from "./NameObj.js";
+import { GXTextureMapping } from "../gx/gx_render.js";
 
 const scratchVec3 = vec3.create();
 
@@ -213,7 +213,7 @@ export class BloomEffect extends ImageEffectBase {
         blendDstFactor: GfxBlendFactor.One,
     }), fullscreenMegaState);
 
-    private textureMapping: TextureMapping[] = nArray(1, () => new TextureMapping());
+    private textureMapping: GXTextureMapping[] = nArray(1, () => new GXTextureMapping());
 
     private target2ColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
     private target4ColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
@@ -465,7 +465,7 @@ export class BloomEffectSimple extends ImageEffectBase {
         blendDstFactor: GfxBlendFactor.One,
     }), fullscreenMegaState);
 
-    private textureMapping: TextureMapping[] = nArray(1, () => new TextureMapping());
+    private textureMapping: GXTextureMapping[] = nArray(1, () => new GXTextureMapping());
 
     private targetColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
 
@@ -617,7 +617,7 @@ export class DepthOfFieldBlur extends ImageEffectBase {
     public blurMaxDist: number | null = null;
     public blurMinDist: number | null = null;
 
-    private textureMapping: TextureMapping[] = nArray(2, () => new TextureMapping());
+    private textureMapping: GXTextureMapping[] = nArray(2, () => new GXTextureMapping());
 
     private combineMegaState: GfxMegaStateDescriptor = makeMegaState(setAttachmentStateSimple({}, {
         blendMode: GfxBlendMode.Add,

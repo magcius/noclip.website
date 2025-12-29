@@ -1,9 +1,8 @@
 import { GfxDevice, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode } from '../gfx/platform/GfxPlatform.js';
 import * as GX from '../gx/gx_enum.js';
 import { SwapTable } from '../gx/gx_material.js';
-import { GXMaterialHelperGfx, MaterialParams } from '../gx/gx_render.js';
+import { GXMaterialHelperGfx, GXTextureMapping, MaterialParams } from '../gx/gx_render.js';
 import { GfxFormat, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform.js';
-import { TextureMapping } from '../TextureHolder.js';
 import { texProjCameraSceneTex } from '../Camera.js';
 
 import { SFATexture, TextureFetcher } from './textures.js';
@@ -85,14 +84,14 @@ export enum ShaderFlags {
 
 export function makeMaterialTexture(texture: SFATexture | null): TexFunc<any> {
     if (texture !== null) {
-        return (mapping: TextureMapping) => texture.setOnTextureMapping(mapping);
+        return (mapping: GXTextureMapping) => texture.setOnTextureMapping(mapping);
     } else {
-        return (mapping: TextureMapping) => mapping.reset();
+        return (mapping: GXTextureMapping) => mapping.reset();
     }
 }
 
 export function makeOpaqueColorTextureDownscale2x(): TexFunc<any> {
-    return (mapping: TextureMapping) => {
+    return (mapping: GXTextureMapping) => {
         mapping.reset();
         mapping.lateBinding = 'opaque-color-texture-downscale-2x';
         mapping.width = 320;
@@ -101,7 +100,7 @@ export function makeOpaqueColorTextureDownscale2x(): TexFunc<any> {
 }
 
 export function makeOpaqueDepthTextureDownscale2x(): TexFunc<any> {
-    return (mapping: TextureMapping) => {
+    return (mapping: GXTextureMapping) => {
         mapping.reset();
         mapping.lateBinding = 'opaque-depth-texture-downscale-2x';
         mapping.width = 320;
@@ -110,7 +109,7 @@ export function makeOpaqueDepthTextureDownscale2x(): TexFunc<any> {
 }
 
 export function makeTemporalTextureDownscale8x(): TexFunc<any> {
-    return  (mapping: TextureMapping) => {
+    return (mapping: GXTextureMapping) => {
         mapping.reset();
         mapping.lateBinding = 'temporal-texture-downscale-8x';
         mapping.width = 80;
@@ -119,7 +118,7 @@ export function makeTemporalTextureDownscale8x(): TexFunc<any> {
 }
 
 export function makeHemisphericProbeTexture(): TexFunc<MaterialRenderContext> {
-    return  (mapping: TextureMapping, ctx: MaterialRenderContext) => {
+    return (mapping: GXTextureMapping, ctx: MaterialRenderContext) => {
         mapping.reset();
         mapping.lateBinding = `sphere-map-${5 - ctx.ambienceIdx}`;
         mapping.width = 32;
@@ -128,7 +127,7 @@ export function makeHemisphericProbeTexture(): TexFunc<MaterialRenderContext> {
 }
 
 export function makeReflectiveProbeTexture(idx: number): TexFunc<any> {
-    return  (mapping: TextureMapping) => {
+    return (mapping: GXTextureMapping) => {
         mapping.reset();
         mapping.lateBinding = `sphere-map-${idx}`;
         mapping.width = 32;
@@ -137,7 +136,7 @@ export function makeReflectiveProbeTexture(idx: number): TexFunc<any> {
 }
 
 function makeFurMapMaterialTexture(factory: MaterialFactory): TexFunc<MaterialRenderContext> {
-    return (mapping: TextureMapping, matCtx: MaterialRenderContext) => {
+    return (mapping: GXTextureMapping, matCtx: MaterialRenderContext) => {
         mapping.reset();
         const furMap = factory.getFurFactory().getLayer(matCtx.furLayer);
         mapping.gfxTexture = furMap.gfxTexture;
@@ -273,7 +272,7 @@ export abstract class StandardMaterial extends MaterialBase {
                 ctx.sceneCtx.world.envfxMan.getFogColor(dst, ctx.ambienceIdx);
         });
 
-        const texMap0 = this.mb.genTexMap((dst: TextureMapping, ctx: MaterialRenderContext) => {
+        const texMap0 = this.mb.genTexMap((dst: GXTextureMapping, ctx: MaterialRenderContext) => {
             if (ctx.sceneCtx.world?.envfxMan.enableFog && ctx.sceneCtx.world?.envfxMan.mistEnable) {
                 ctx.sceneCtx.world.envfxMan.getMistTexture().setOnTextureMapping(dst);
             } else {

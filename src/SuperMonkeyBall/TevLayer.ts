@@ -3,8 +3,8 @@
 import { GfxDevice, GfxMipFilterMode, GfxSampler, GfxTexFilterMode } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import * as GX from "../gx/gx_enum.js";
-import { translateWrapModeGfx } from "../gx/gx_render.js";
-import { LoadedTexture, TextureMapping } from "../TextureHolder.js";
+import { GXTextureMapping, translateWrapModeGfx } from "../gx/gx_render.js";
+import { LoadedTexture } from "../TextureHolder.js";
 import * as Gma from "./Gma.js";
 import { TextureCache } from "./ModelCache.js";
 
@@ -45,7 +45,7 @@ export class TevLayerInst {
         });
     }
 
-    public fillTextureMapping(mapping: TextureMapping): void {
+    public fillTextureMapping(mapping: GXTextureMapping): void {
         mapping.gfxTexture = this.loadedTex.gfxTexture;
         mapping.gfxSampler = this.gfxSampler;
     }

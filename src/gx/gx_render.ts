@@ -8,10 +8,10 @@ import * as GX_Material from './gx_material.js';
 import * as GX_Texture from './gx_texture.js';
 import * as Viewer from '../viewer.js';
 
-import { assert, nArray, assertExists, setBitFlagEnabled } from '../util.js';
-import { LoadedVertexData, LoadedVertexDraw, LoadedVertexLayout, VertexAttributeInput } from './gx_displaylist.js';
+import { assert, nArray, setBitFlagEnabled } from '../util.js';
+import { LoadedVertexData, LoadedVertexLayout, VertexAttributeInput } from './gx_displaylist.js';
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
-import { TextureMapping, TextureHolder, LoadedTexture } from '../TextureHolder.js';
+import { TextureHolder, LoadedTexture, TextureMapping } from '../TextureHolder.js';
 
 import { GfxBufferCoalescerCombo } from '../gfx/helpers/BufferHelpers.js';
 import { fillColor, fillMatrix4x3, fillVec4, fillMatrix4x4, fillVec3v, fillMatrix4x2 } from '../gfx/helpers/UniformBufferHelpers.js';
@@ -40,8 +40,27 @@ export class SceneParams {
     public u_SceneTextureLODBias: number = 0;
 }
 
+export class GXTextureMapping extends TextureMapping {
+    // TODO(jstpierre): Move width/height/lodBias into here from TextureMapping.
+
+    public override reset(): void {
+        super.reset();
+        this.width = 0;
+        this.height = 0;
+        this.lodBias = 0;
+        this.flipY = false;
+    }
+
+    public override copy(other: GXTextureMapping): void {
+        super.copy(other);
+        this.gfxTexture = other.gfxTexture;
+        this.gfxSampler = other.gfxSampler;
+        this.lateBinding = other.lateBinding;
+    }
+}
+
 export class MaterialParams {
-    public m_TextureMapping: TextureMapping[] = nArray(8, () => new TextureMapping());
+    public m_TextureMapping: GXTextureMapping[] = nArray(8, () => new GXTextureMapping());
     public u_Color: Color[] = nArray(ColorKind.COUNT, () => colorNewCopy(TransparentBlack));
     public u_TexMtx: mat4[] = nArray(10, () => mat4.create());     // mat4x3
     public u_PostTexMtx: mat4[] = nArray(20, () => mat4.create()); // mat4x3
@@ -102,13 +121,13 @@ export function fillFogBlock(d: Float32Array, offs: number, fog: Readonly<GX_Mat
     return 4*5;
 }
 
-export function fillTextureSize(d: Float32Array, offs: number, m: TextureMapping): number {
+export function fillTextureSize(d: Float32Array, offs: number, m: GXTextureMapping): number {
     d[offs++] = m.width;
     d[offs++] = m.height * (m.flipY ? -1 : 1);
     return 2;
 }
 
-export function fillTextureBias(d: Float32Array, offs: number, m: TextureMapping): number {
+export function fillTextureBias(d: Float32Array, offs: number, m: GXTextureMapping): number {
     d[offs++] = m.lodBias;
     return 1;
 }

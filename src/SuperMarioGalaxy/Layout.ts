@@ -8,12 +8,11 @@ import { BTIData } from "../Common/JSYSTEM/JUTTexture.js";
 import { CharWriter, parseBRFNT, ResFont, TagProcessor } from "../Common/NW4R/lyt/Font.js";
 import { Layout, LayoutAnimation, LayoutDrawInfo, LayoutPane, LayoutTextbox, parseBRLAN, parseBRLYT, RLAN, RLYT } from "../Common/NW4R/lyt/Layout.js";
 import * as TPL from "../PaperMarioTTYD/tpl.js";
-import { TextureMapping } from "../TextureHolder.js";
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import { GX_Program } from "../gx/gx_material.js";
-import { ub_SceneParamsBufferSize } from "../gx/gx_render.js";
+import { GXTextureMapping, ub_SceneParamsBufferSize } from "../gx/gx_render.js";
 import { LoopMode as NW4RLoopMode } from "../rres/brres.js";
 import { assert, assertExists } from "../util.js";
 import { ViewerRenderInput } from "../viewer.js";
@@ -48,7 +47,7 @@ export class LayoutHolder {
         });
     }
 
-    public fillTextureByName(m: TextureMapping, name: string): void {
+    public fillTextureByName(m: GXTextureMapping, name: string): void {
         this.timgTable.get(name.toLowerCase())!.fillTextureMapping(m);
     }
 
