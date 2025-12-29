@@ -1,25 +1,157 @@
-import { GfxDevice, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor } from "../gfx/platform/GfxPlatform.js";
+import { GfxDevice, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxInputLayoutBufferDescriptor,
+         GfxVertexBufferFrequency, GfxInputLayout, GfxFormat, GfxProgram, GfxBufferFrequencyHint,
+         GfxBufferUsage, GfxBindingLayoutDescriptor, GfxCullMode } from "../gfx/platform/GfxPlatform.js";
 import { SceneGfx, SceneGroup, ViewerRenderInput } from "../viewer.js";
 import { SceneContext, SceneDesc } from "../SceneBase.js";
 // import * as BFRES from "./bfres_wiiu.js";
 import * as BFRES from "./bfres_switch.js";
+import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
+import { DeviceProgram } from '../Program.js';
+import { GfxShaderLibrary } from '../gfx/helpers/GfxShaderLibrary.js';
+import { GfxRenderInstList, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
+import { createBufferFromData, createBufferFromSlice } from "../gfx/helpers/BufferHelpers.js";
+
+class TMSFEProgram extends DeviceProgram {
+    public static a_Position = 0;
+    public static a_Color = 1;
+    public static a_TexCoord0 = 2;
+    public static a_TexCoord1 = 3;
+
+    public static ub_SceneParams = 0;
+    public static ub_MeshFragParams = 1;
+
+    public override both = `
+precision mediump float;
+
+${GfxShaderLibrary.MatrixLibrary}
+
+// Expected to be constant across the entire scene.
+layout(std140) uniform ub_SceneParams {
+    Mat4x4 u_Projection;
+};
+
+layout(std140) uniform ub_MeshFragParams {
+    Mat3x4 u_BoneMatrix[1];
+    vec4 u_MaterialColor;
+    vec4 u_TexCoordOffs;
+};
+
+uniform sampler2D u_Texture;
+uniform sampler2D u_TextureDetail;
+uniform sampler2D u_TextureLightmap;
+
+varying vec4 v_Color;
+varying vec4 v_TexCoord;
+
+#ifdef VERT
+layout(location = ${TMSFEProgram.a_Position}) in vec3 a_Position;
+layout(location = ${TMSFEProgram.a_Color}) in vec4 a_Color;
+layout(location = ${TMSFEProgram.a_TexCoord0}) in vec2 a_TexCoord0;
+layout(location = ${TMSFEProgram.a_TexCoord1}) in vec2 a_TexCoord1;
+
+void main() {
+    vec3 t_PositionView = UnpackMatrix(u_BoneMatrix[0]) * vec4(a_Position, 1.0);
+    gl_Position = UnpackMatrix(u_Projection) * vec4(t_PositionView, 1.0);
+    v_Color = a_Color;
+    v_TexCoord.xy = a_TexCoord0 + u_TexCoordOffs.xy;
+    v_TexCoord.zw = a_TexCoord1;
+}
+#endif
+
+#ifdef FRAG
+void main() {
+    vec4 t_Color = vec4(1.0);
+
+#ifdef USE_TEXTURE
+    t_Color *= texture(SAMPLER_2D(u_Texture), v_TexCoord.xy);
+#endif
+
+#ifdef USE_LIGHTMAP
+    t_Color.rgb *= texture(SAMPLER_2D(u_TextureLightmap), v_TexCoord.zw).rgb;
+#endif
+
+#ifdef USE_VERTEX_COLOR
+    // TODO(jstpierre): How is the vertex color buffer used?
+    t_Color.rgb *= clamp(v_Color.rgb * 4.0, 0.0, 1.0);
+    t_Color.a *= v_Color.a;
+#endif
+
+#ifdef USE_ALPHA_TEST
+    // TODO(jstpierre): Configurable alpha ref?
+    if (t_Color.a < 0.5)
+        discard;
+#endif
+
+    gl_FragColor = t_Color;
+}
+#endif
+`;
+}
+
+const bindingLayouts: GfxBindingLayoutDescriptor[] = [
+    { numUniformBuffers: 2, numSamplers: 0 },
+];
 
 class TMSFEScene implements SceneGfx
 {
-    // public fmdls: BFRES.FMDL[] = [];
-    // public vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [];
-    // public vertexBufferDescriptors: GfxVertexBufferDescriptor[] = [];
+    private renderHelper: GfxRenderHelper;
+    private program: GfxProgram;
+    private inputLayout: GfxInputLayout;
+    private vertexBufferDescriptors: (GfxVertexBufferDescriptor | null)[];
+    private renderInstListMain = new GfxRenderInstList();
 
-    constructor(device: GfxDevice)
+    constructor(device: GfxDevice, fmdl: BFRES.FMDL)
     {
+        console.log(fmdl)
+        
+        this.renderHelper = new GfxRenderHelper(device);
+        this.program = this.renderHelper.renderCache.createProgram(new TMSFEProgram());
+
+        const fvtx = fmdl.fvtx[0];
+        const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] =
+        [
+            { location: 0, format: fvtx.vertexAttributes[0].format, bufferIndex: fvtx.vertexAttributes[0].bufferIndex, bufferByteOffset: fvtx.vertexAttributes[0].bufferOffset},
+        ];
+        console.log(vertexAttributeDescriptors);
+
+        const layoutBufferDescriptors: GfxInputLayoutBufferDescriptor[] =
+        [
+            { byteStride: fvtx.vertexBuffers[0].stride, frequency: GfxVertexBufferFrequency.PerVertex },
+        ];
+        console.log(layoutBufferDescriptors);
+
+        const indexBufferFormat: GfxFormat | null = null;
+        const cache = this.renderHelper.renderCache;
+        this.inputLayout = cache.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors: layoutBufferDescriptors, indexBufferFormat });
+
+        
+        const gfx_buffer = createBufferFromSlice(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, fvtx.vertexBuffers[0].data);
+        this.vertexBufferDescriptors =
+        [
+            { buffer: gfx_buffer },
+        ];
+
     }
 
     public render(device: GfxDevice, viewerInput: ViewerRenderInput): void
     {
+        const template = this.renderHelper.pushTemplateRenderInst();
+        template.setBindingLayouts(bindingLayouts);
+        template.setGfxProgram(this.program);
+        template.setMegaStateFlags({ cullMode: GfxCullMode.Back });
+
+        const renderInst = this.renderHelper.renderInstManager.newRenderInst();
+        renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, null);
+        renderInst.setDrawCount(3022);
+
+        this.renderHelper.renderInstManager.setCurrentList(this.renderInstListMain);
+
+        this.renderHelper.renderInstManager.submitRenderInst(renderInst);
     }
 
     public destroy(device: GfxDevice): void
     {
+        this.renderHelper.destroy();
     }
 }
 
@@ -34,9 +166,7 @@ class TMSFESceneDesc implements SceneDesc
         // const apak = dataFetcher.fetchData(`TokyoMirageSessionsSharpFE/maps/${this.id}/model.apak`);
         // const bfres = BFRES.parse(await dataFetcher.fetchData("TokyoMirageSessionsSharpFE/d008_01.bfres"));
         const bfres = BFRES.parse(await dataFetcher.fetchData("TokyoMirageSessionsSharpFE/b016_01.bfres"));
-        let renderer = new TMSFEScene(device);
-        // TODO: push all of the fmdls
-        // renderer.fmdls.push(bfres.fmdl[0]);
+        let renderer = new TMSFEScene(device, bfres.fmdl[0]);
         return renderer;
     }
 }
