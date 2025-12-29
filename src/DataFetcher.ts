@@ -116,7 +116,7 @@ class DataFetcherRequest {
         this.started = true;
 
         if (this.cache !== null) {
-            const match = await this.cache.match(this.request);
+            const match = await this.cache.match(this.request).catch(console.warn);
             if (match !== undefined) {
                 const arrayBuffer = await match.arrayBuffer();
                 this.resolveArrayBuffer(arrayBuffer);
