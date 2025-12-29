@@ -243,7 +243,7 @@ export class GloverTextureHolder extends TextureHolder {
         const viewerTexture: Viewer.Texture = textureToCanvas(texture);
         this.gfxTextures.push(gfxTexture);
         this.viewerTextures.push(viewerTexture);
-        this.textureEntries.push(texture);
+        this.textureNames.push(texture.name);
     }
 }
 

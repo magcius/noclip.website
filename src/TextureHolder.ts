@@ -3,15 +3,6 @@ import * as Viewer from './viewer.js';
 import { GfxSampler, GfxTexture, GfxDevice } from './gfx/platform/GfxPlatform.js';
 import { TextureListHolder } from './ui.js';
 
-export interface TextureOverride {
-    gfxTexture: GfxTexture | null;
-    gfxSampler?: GfxSampler;
-    width: number;
-    height: number;
-    flipY: boolean;
-    lateBinding?: string;
-}
-
 export interface TextureBase {
     name: string;
     width: number;
@@ -43,15 +34,10 @@ export interface LoadedTexture {
 
 // TODO(jstpierre): TextureHolder needs to die.
 export class TextureHolder implements TextureListHolder {
-    public viewerTextures: Viewer.Texture[] = [];
     public gfxTextures: GfxTexture[] = [];
-    public textureEntries: TextureBase[] = [];
-    public textureOverrides = new Map<string, TextureOverride>();
+    public viewerTextures: Viewer.Texture[] = [];
+    public textureNames: string[] = [];
     public onnewtextures: (() => void) | null = null;
-
-    public get textureNames(): string[] {
-        return this.viewerTextures.map((texture) => texture.name);
-    }
 
     public async getViewerTexture(i: number) {
         const tex = this.viewerTextures[i];
@@ -61,8 +47,8 @@ export class TextureHolder implements TextureListHolder {
     }
 
     public findTextureEntryIndex(name: string): number {
-        for (let i = 0; i < this.textureEntries.length; i++) {
-            if (this.textureEntries[i].name === name)
+        for (let i = 0; i < this.textureNames.length; i++) {
+            if (this.textureNames[i] === name)
                 return i;
         }
 
@@ -74,16 +60,6 @@ export class TextureHolder implements TextureListHolder {
     }
 
     public fillTextureMapping(dst: TextureMapping, name: string): boolean {
-        const textureOverride = this.textureOverrides.get(name);
-        if (textureOverride) {
-            dst.gfxTexture = textureOverride.gfxTexture;
-            if (textureOverride.gfxSampler)
-                dst.gfxSampler = textureOverride.gfxSampler;
-            if (textureOverride.lateBinding)
-                dst.lateBinding = textureOverride.lateBinding;
-            return true;
-        }
-
         const textureEntryIndex = this.findTextureEntryIndex(name);
         if (textureEntryIndex >= 0) {
             dst.gfxTexture = this.gfxTextures[textureEntryIndex];
@@ -93,16 +69,11 @@ export class TextureHolder implements TextureListHolder {
         return false;
     }
 
-    public setTextureOverride(name: string, textureOverride: TextureOverride): void {
-        this.textureOverrides.set(name, textureOverride);
-    }
-
     public destroy(device: GfxDevice): void {
         this.gfxTextures.forEach((texture) => device.destroyTexture(texture));
-        this.viewerTextures.length = 0;
         this.gfxTextures.length = 0;
-        this.textureEntries.length = 0;
-        this.textureOverrides.clear();
+        this.viewerTextures.length = 0;
+        this.textureNames.length = 0;
     }
 }
 

@@ -15,7 +15,7 @@ import { TextureHolder, LoadedTexture, TextureMapping } from '../TextureHolder.j
 
 import { GfxBufferCoalescerCombo } from '../gfx/helpers/BufferHelpers.js';
 import { fillColor, fillMatrix4x3, fillVec4, fillMatrix4x4, fillVec3v, fillMatrix4x2 } from '../gfx/helpers/UniformBufferHelpers.js';
-import { GfxFormat, GfxDevice, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxBindingLayoutDescriptor, GfxVertexBufferDescriptor, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxBuffer, GfxInputLayout, GfxMegaStateDescriptor, GfxProgram, GfxVertexBufferFrequency, GfxRenderPass, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D, GfxChannelWriteMask, GfxCullMode, GfxBlendFactor, GfxCompareMode, GfxFrontFaceMode, GfxBlendMode } from '../gfx/platform/GfxPlatform.js';
+import { GfxFormat, GfxDevice, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxBindingLayoutDescriptor, GfxVertexBufferDescriptor, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxBuffer, GfxInputLayout, GfxMegaStateDescriptor, GfxProgram, GfxVertexBufferFrequency, GfxRenderPass, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D, GfxChannelWriteMask, GfxCullMode, GfxBlendFactor, GfxCompareMode, GfxFrontFaceMode, GfxBlendMode, GfxTexture, GfxSampler } from '../gfx/platform/GfxPlatform.js';
 import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { GfxRenderInst, GfxRenderInstList, GfxRenderInstManager, setSortKeyProgramKey } from '../gfx/render/GfxRenderInstManager.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
@@ -282,7 +282,23 @@ export function translateMaxAnisotropy(anisotropy: GX.Anisotropy): number {
     }
 }
 
+export interface TextureOverride {
+    gfxTexture: GfxTexture | null;
+    gfxSampler?: GfxSampler;
+    width: number;
+    height: number;
+    flipY: boolean;
+    lateBinding?: string;
+}
+
 export class GXTextureHolder<TextureType extends GX_Texture.TextureInputGX = GX_Texture.TextureInputGX> extends TextureHolder {
+    public textureOverrides = new Map<string, TextureOverride>();
+    public textureEntries: TextureType[] = [];
+
+    public setTextureOverride(name: string, textureOverride: TextureOverride): void {
+        this.textureOverrides.set(name, textureOverride);
+    }
+
     public override fillTextureMapping(dst: GXTextureMapping, name: string): boolean {
         const textureOverride = this.textureOverrides.get(name);
         if (textureOverride) {
@@ -324,6 +340,12 @@ export class GXTextureHolder<TextureType extends GX_Texture.TextureInputGX = GX_
         this.viewerTextures.push(viewerTexture);
         this.gfxTextures.push(gfxTexture);
         this.textureEntries.push(texture);
+        this.textureNames.push(texture.name);
+    }
+
+    public override destroy(device: GfxDevice): void {
+        super.destroy(device);
+        this.textureOverrides.clear();
     }
 }
 

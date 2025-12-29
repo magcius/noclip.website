@@ -80,7 +80,7 @@ export class PsychonautsTextureHolder extends TextureHolder {
 
         this.gfxTextures.push(gfxTexture);
         this.viewerTextures.push(viewerTexture);
-        this.textureEntries.push(texture);
+        this.textureNames.push(texture.name);
     }
 }
 

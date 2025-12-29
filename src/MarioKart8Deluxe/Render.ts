@@ -47,7 +47,7 @@ export class BRTITextureHolder extends TextureHolder {
 
     public addTexture(device: GfxDevice, textureEntry: BNTX.BRTI): void {
         // Don't add duplicates.
-        if (this.textureEntries.find((entry) => entry.name === textureEntry.name) !== undefined)
+        if (this.textureNames.includes(textureEntry.name))
             return;
 
         const gfxTexture = device.createTexture(makeTextureDescriptor2D(translateImageFormat(textureEntry.imageFormat), textureEntry.width, textureEntry.height, textureEntry.mipBuffers.length));
@@ -80,7 +80,7 @@ export class BRTITextureHolder extends TextureHolder {
         const viewerTexture: Viewer.Texture = { name: textureEntry.name, surfaces: canvases, extraInfo };
         this.gfxTextures.push(gfxTexture);
         this.viewerTextures.push(viewerTexture);
-        this.textureEntries.push(textureEntry);
+        this.textureNames.push(textureEntry.name);
     }
 }
 
