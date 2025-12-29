@@ -259,7 +259,7 @@ class d_a_ep extends fopAc_ac_c {
         if (this.type === 0 || this.type === 3) {
             settingTevStruct(globals, LightType.BG0, this.pos, this.tevStr);
             setLightTevColorType(globals, this.model, this.tevStr, globals.camera);
-            mDoExt_modelUpdateDL(globals, this.model, renderInstManager);
+            mDoExt_modelUpdateDL(globals, this.model, renderInstManager, globals.dlst.bg);
 
             // TODO(jstpierre): ga
         }
@@ -530,7 +530,7 @@ class d_a_bg extends fopAc_ac_c {
             settingTevStruct(globals, LightType.BG0 + i, null, this.bgTevStr[i]!);
             setLightTevColorType(globals, this.bgModel[i]!, this.bgTevStr[i]!, globals.camera);
             // this is actually mDoExt_modelEntryDL
-            mDoExt_modelUpdateDL(globals, this.bgModel[i]!, renderInstManager);
+            mDoExt_modelUpdateDL(globals, this.bgModel[i]!, renderInstManager, globals.dlst.bg);
         }
 
         const roomNo = this.parameters;
@@ -1278,7 +1278,7 @@ class d_a_obj_zouK extends fopAc_ac_c {
         setLightTevColorType(globals, this.model, this.tevStr, globals.camera);
         this.setEffectMtx(globals, this.pos, 0.5);
         this.bckAnm.entry(this.model);
-        mDoExt_modelUpdateDL(globals, this.model, renderInstManager);
+        mDoExt_modelUpdateDL(globals, this.model, renderInstManager, globals.dlst.bg);
     }
 }
 
@@ -3463,7 +3463,7 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
             // update bck
         }
 
-        mDoExt_modelUpdateDL(globals, this.model, renderInstManager);
+        mDoExt_modelUpdateDL(globals, this.model, renderInstManager, globals.dlst.bg);
 
         if (this.isSv()) {
             // rope, rope end
@@ -6474,7 +6474,7 @@ class d_a_bridge extends fopAc_ac_c {
 
         for (let plank of this.planks) {
             setLightTevColorType(globals, plank.model, this.tevStr, globals.camera);
-            mDoExt_modelUpdateDL(globals, plank.model, renderInstManager);
+            mDoExt_modelUpdateDL(globals, plank.model, renderInstManager, globals.dlst.bg);
 
             if (plank.flags & 4) {
                 if (this.flags & BridgeFlags.IsMetal) {
