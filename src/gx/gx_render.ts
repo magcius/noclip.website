@@ -58,9 +58,10 @@ export class GXTextureMapping extends TextureMapping {
 
     public override copy(other: GXTextureMapping): void {
         super.copy(other);
-        this.gfxTexture = other.gfxTexture;
-        this.gfxSampler = other.gfxSampler;
-        this.lateBinding = other.lateBinding;
+        this.width = other.width;
+        this.height = other.height;
+        this.lodBias = other.lodBias;
+        this.flipY = other.flipY;
     }
 }
 
