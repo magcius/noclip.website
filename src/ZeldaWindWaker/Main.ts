@@ -545,6 +545,8 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
             pass.exec((passRenderer) => {
                 this.globals.camera.applyScissor(passRenderer);
 
+                this.executeList(passRenderer, dlst.alphaModel);
+                
                 this.executeList(passRenderer, dlst.effect[EffectDrawGroup.Main]);
                 this.executeList(passRenderer, dlst.wetherEffect);
 
