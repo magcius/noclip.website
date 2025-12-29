@@ -275,11 +275,13 @@ interface dDlst_shadowSimple_c_DLCache {
 }
 
 class SimpleShadowProgram extends DeviceProgram {
-    public static bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 1, numSamplers: 2, samplerEntries: [
+    public static bindingLayouts: GfxBindingLayoutDescriptor[] = [{
+        numUniformBuffers: 1, numSamplers: 2, samplerEntries: [
             { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float, },
             { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.UnfilterableFloat, },
-        ] }];
-    
+        ]
+    }];
+
     public override both = `
 ${GfxShaderLibrary.MatrixLibrary}
 
@@ -334,10 +336,10 @@ class dDlst_shadowSimple_c {
 
     static compileDLs(cache: GfxRenderCache, symbolMap: SymbolMap): dDlst_shadowSimple_c_DLCache {
         const dlCache: dDlst_shadowSimple_c_DLCache = {} as any;
-        
+
         // Compile our custom shader
         const glsl = preprocessProgramObj_GLSL(cache.device, new SimpleShadowProgram());
-        dlCache.program = cache.createProgramSimple( glsl );
+        dlCache.program = cache.createProgramSimple(glsl);
         dlCache.inputLayout = cache.createInputLayout({
             indexBufferFormat: GfxFormat.U16_R,
             vertexAttributeDescriptors: [
@@ -353,13 +355,13 @@ class dDlst_shadowSimple_c {
             GfxBufferFrequencyHint.Static,
             new Float32Array([
                 [-1, -1, -1],
-                [ 1, -1, -1],
-                [ 1,  1, -1],
-                [-1,  1, -1],
-                [-1, -1,  1],
-                [ 1, -1,  1],
-                [ 1,  1,  1],
-                [-1,  1,  1],
+                [1, -1, -1],
+                [1, 1, -1],
+                [-1, 1, -1],
+                [-1, -1, 1],
+                [1, -1, 1],
+                [1, 1, 1],
+                [-1, 1, 1],
             ].flat()).buffer,
         );
 
@@ -401,9 +403,9 @@ class dDlst_shadowSimple_c {
         device.destroyBuffer(cache.indexBuffer);
         device.destroySampler(cache.sampler);
     }
-    
-    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {   
-        const renderInst = renderInstManager.newRenderInst();  
+
+    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        const renderInst = renderInstManager.newRenderInst();
         let offset = renderInst.allocateUniformBuffer(0, 4 * 16 * 2);
         const buf = renderInst.mapUniformBufferF32(0);
         offset += fillVec4(buf, offset, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
@@ -504,11 +506,12 @@ class dDlst_shadowControl_c {
         template.setMegaStateFlags({
             cullMode: GfxCullMode.Back,
             ...setAttachmentStateSimple({}, {
-            channelWriteMask: GfxChannelWriteMask.RGB,
-            blendMode: GfxBlendMode.Add,
-            blendSrcFactor: GfxBlendFactor.Zero,
-            blendDstFactor: GfxBlendFactor.SrcAlpha,
-        })});
+                channelWriteMask: GfxChannelWriteMask.RGB,
+                blendMode: GfxBlendMode.Add,
+                blendSrcFactor: GfxBlendFactor.Zero,
+                blendDstFactor: GfxBlendFactor.SrcAlpha,
+            })
+        });
         template.setVertexInput(this.simpleCache.inputLayout, [{ buffer: this.simpleCache.positionBuffer }], { buffer: this.simpleCache.indexBuffer });
         template.setDrawCount(36);
         for (let i = 0; i < this.simpleCount; i++) {
@@ -521,7 +524,7 @@ class dDlst_shadowControl_c {
         // TODO: Implementation
     }
 
-    public pushPasses(globals: dGlobals, renderInstManager: GfxRenderInstManager, builder: GfxrGraphBuilder, mainDepthTargetID: GfxrRenderTargetID, mainColorTargetID: GfxrRenderTargetID): void {        
+    public pushPasses(globals: dGlobals, renderInstManager: GfxRenderInstManager, builder: GfxrGraphBuilder, mainDepthTargetID: GfxrRenderTargetID, mainColorTargetID: GfxrRenderTargetID): void {
         builder.pushPass((pass) => {
             pass.setDebugName('Shadows');
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
