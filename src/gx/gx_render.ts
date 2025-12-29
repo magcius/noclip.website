@@ -41,7 +41,12 @@ export class SceneParams {
 }
 
 export class GXTextureMapping extends TextureMapping {
-    // TODO(jstpierre): Move width/height/lodBias into here from TextureMapping.
+    public width: number = 0;
+    public height: number = 0;
+    public lodBias: number = 0;
+    // GL sucks. This is a convenience when building texture matrices.
+    // The core renderer does not use this code at all.
+    public flipY: boolean = false;
 
     public override reset(): void {
         super.reset();
@@ -278,6 +283,33 @@ export function translateMaxAnisotropy(anisotropy: GX.Anisotropy): number {
 }
 
 export class GXTextureHolder<TextureType extends GX_Texture.TextureInputGX = GX_Texture.TextureInputGX> extends TextureHolder {
+    public override fillTextureMapping(dst: GXTextureMapping, name: string): boolean {
+        const textureOverride = this.textureOverrides.get(name);
+        if (textureOverride) {
+            dst.gfxTexture = textureOverride.gfxTexture;
+            if (textureOverride.gfxSampler)
+                dst.gfxSampler = textureOverride.gfxSampler;
+            dst.width = textureOverride.width;
+            dst.height = textureOverride.height;
+            dst.flipY = textureOverride.flipY;
+            if (textureOverride.lateBinding)
+                dst.lateBinding = textureOverride.lateBinding;
+            return true;
+        }
+
+        const textureEntryIndex = this.findTextureEntryIndex(name);
+        if (textureEntryIndex >= 0) {
+            dst.gfxTexture = this.gfxTextures[textureEntryIndex];
+            const texEntry = this.textureEntries[textureEntryIndex];
+            dst.width = texEntry.width;
+            dst.height = texEntry.height;
+            dst.flipY = false;
+            return true;
+        }
+
+        return false;
+    }
+
     public addTexture(device: GfxDevice, texture: TextureType): void {
         // Don't add textures without data.
         if (texture.data === null)

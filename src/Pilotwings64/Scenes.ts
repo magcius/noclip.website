@@ -1792,38 +1792,40 @@ const scratchMatrix = mat4.create();
 const texMatrixScratch = mat4.create();
 class MaterialInstance {
     public program: F3DEX_Program;
-    private hasTexture = false;
-    private hasPairedTexture = false;
+    private mainTextureData: TextureData | null = null;
+    private pairedTextureData: TextureData | null = null;
     private textureMappings: TextureMapping[] = nArray(2, () => new TextureMapping());
-    private uvtx: UVTX;
     private decodedMaterial: DecodeMaterialResult;
     private stateFlags: Partial<GfxMegaStateDescriptor>;
     private visible = true;
     private gfxProgram: GfxProgram | null = null;
 
     constructor(private materialData: MaterialData, texturePalette: TexturePalette, isEnv?: boolean, private isBillboard?: boolean) {
-        this.hasTexture = materialData.textureIndex < 0x0FFF;
+        const hasTexture = materialData.textureIndex < 0x0FFF;
         let modeInfo = materialData.rspModeInfo;
         if (!!isEnv)
             modeInfo &= ~PilotwingsRSPFlag.ZBUFFER;
-        if (this.hasTexture) {
-            const mainTextureData = texturePalette.get(materialData.textureIndex);
-            this.uvtx = mainTextureData.uvtx;
-            mainTextureData.fillTextureMapping(this.textureMappings[0]);
-            if (this.uvtx.pairedIndex !== undefined) {
-                this.hasPairedTexture = true;
-                assert(this.uvtx.levels.length > 1);
-                texturePalette.get(this.uvtx.pairedIndex).fillTextureMapping(this.textureMappings[1]);
-                if (this.uvtx.levels[0].usesPaired) {
+        if (hasTexture) {
+            this.mainTextureData = texturePalette.get(materialData.textureIndex);
+            this.mainTextureData.fillTextureMapping(this.textureMappings[0]);
+
+            const uvtx = this.mainTextureData.uvtx;
+            if (uvtx.pairedIndex !== undefined) {
+                assert(uvtx.levels.length > 1);
+                this.pairedTextureData = texturePalette.get(uvtx.pairedIndex);
+                this.pairedTextureData.fillTextureMapping(this.textureMappings[1]);
+
+                if (uvtx.levels[0].usesPaired) {
                     // the paired texture is actually loaded into the first tile,
                     // so swap the underlying texture and sampler
-                    assert(!this.uvtx.levels[1].usesPaired);
-                    this.textureMappings.reverse()
+                    assert(!uvtx.levels[1].usesPaired);
+                    this.textureMappings.reverse();
                 }
             }
-            this.decodedMaterial = decodeMaterial(modeInfo, true, this.uvtx.cutOutTransparent, this.uvtx.otherModeLByte);
-            const chosenCombine = (this.decodedMaterial.combineOverride) ? this.decodedMaterial.combineOverride : this.uvtx.combine;
-            this.program = new F3DEX_Program(this.uvtx.otherModeH, this.decodedMaterial.renderMode, chosenCombine);
+
+            this.decodedMaterial = decodeMaterial(modeInfo, true, uvtx.cutOutTransparent, uvtx.otherModeLByte);
+            const chosenCombine = (this.decodedMaterial.combineOverride) ? this.decodedMaterial.combineOverride : uvtx.combine;
+            this.program = new F3DEX_Program(uvtx.otherModeH, this.decodedMaterial.renderMode, chosenCombine);
         } else {
             this.decodedMaterial = decodeMaterial(modeInfo, false, true, 0);
             // const chosenCombine = (this.decodedMaterial.combineOverride) ? this.decodedMaterial.combineOverride : this.uvtx.combine;
@@ -1834,7 +1836,8 @@ class MaterialInstance {
         this.stateFlags.cullMode = translateCullMode(this.decodedMaterial.geoMode);
         this.program.defines.set('BONE_MATRIX_COUNT', '1');
         this.program.defines.set("USE_VERTEX_COLOR", "1");
-        if (this.hasTexture)
+
+        if (this.mainTextureData !== null)
             this.program.defines.set('USE_TEXTURE', '1');
         else // game actually sets 2 cycle mode for some reason, and enables shading
             this.program.defines.set('ONLY_VERTEX_COLOR', '1');
@@ -1863,10 +1866,11 @@ class MaterialInstance {
         } else
             offs += fillMatrix4x3(d, offs, modelMatrix);
 
-        if (this.hasTexture) {
+        if (this.mainTextureData !== null) {
+            const uvtx = this.mainTextureData.uvtx;
             renderInst.setSamplerBindingsFromTextureMappings(this.textureMappings);
-            let scaleS0 = calcTextureScaleForShift(this.uvtx.levels[0].shiftS);
-            let scaleT0 = calcTextureScaleForShift(this.uvtx.levels[0].shiftT);
+            let scaleS0 = calcTextureScaleForShift(uvtx.levels[0].shiftS);
+            let scaleT0 = calcTextureScaleForShift(uvtx.levels[0].shiftT);
             // should maybe be careful here because the G_TEXTURE command is overridden,
             // which could affect which tiles get used
             if (this.decodedMaterial.scaleOverride) {
@@ -1874,31 +1878,31 @@ class MaterialInstance {
                 scaleT0 /= this.decodedMaterial.scaleOverride;
             }
             mat4.fromScaling(texMatrixScratch,
-                [scaleS0 / this.textureMappings[0].width, scaleT0 / this.textureMappings[0].height, 1]);
-            if (this.uvtx.uvScroll) {
-                scrollTexture(texMatrixScratch, viewerInput.time, this.uvtx.uvScroll)
-            }
+                [scaleS0 / uvtx.width, scaleT0 / uvtx.height, 1]);
+            if (uvtx.uvScroll)
+                scrollTexture(texMatrixScratch, viewerInput.time, uvtx.uvScroll);
             offs += fillMatrix4x2(d, offs, texMatrixScratch);
 
-            if (this.hasPairedTexture) {
-                const scaleS1 = calcTextureScaleForShift(this.uvtx.levels[1].shiftS);
-                const scaleT1 = calcTextureScaleForShift(this.uvtx.levels[1].shiftT);
+            if (this.pairedTextureData !== null) {
+                const uvtx2 = this.pairedTextureData.uvtx;
+                const scaleS1 = calcTextureScaleForShift(uvtx.levels[1].shiftS);
+                const scaleT1 = calcTextureScaleForShift(uvtx.levels[1].shiftT);
                 mat4.fromScaling(texMatrixScratch,
-                    [scaleS1 / this.textureMappings[1].width, scaleT1 / this.textureMappings[1].height, 1]);
-                if (this.uvtx.combineScroll) {
-                    scrollTexture(texMatrixScratch, viewerInput.time, this.uvtx.combineScroll)
-                }
+                    [scaleS1 / uvtx2.width, scaleT1 / uvtx2.height, 1]);
+                if (uvtx.combineScroll)
+                    scrollTexture(texMatrixScratch, viewerInput.time, uvtx.combineScroll);
                 offs += fillMatrix4x2(d, offs, texMatrixScratch);
             }
         }
 
         offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_CombineParams, 8);
         const comb = renderInst.mapUniformBufferF32(F3DEX_Program.ub_CombineParams);
-        if (this.hasTexture) {
-            if (this.uvtx.primitive)
-                fillVec4v(comb, offs + 0x00, this.uvtx.primitive);
-            if (this.uvtx.environment)
-                fillVec4v(comb, offs + 0x04, this.uvtx.environment);
+        if (this.mainTextureData !== null) {
+            const uvtx = this.mainTextureData.uvtx;
+            if (uvtx.primitive)
+                fillVec4v(comb, offs + 0x00, uvtx.primitive);
+            if (uvtx.environment)
+                fillVec4v(comb, offs + 0x04, uvtx.environment);
         }
 
         if (this.gfxProgram === null)
@@ -1970,9 +1974,6 @@ class TextureData {
     public fillTextureMapping(m: TextureMapping): void {
         m.gfxTexture = this.gfxTexture;
         m.gfxSampler = this.gfxSampler;
-        m.width = this.uvtx.width;
-        m.height = this.uvtx.height;
-        m.lodBias = 0;
     }
 
     public destroy(device: GfxDevice): void {

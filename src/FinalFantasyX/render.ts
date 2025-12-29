@@ -2,7 +2,7 @@ import * as BIN from "./bin.js";
 import { GfxDevice, GfxBuffer, GfxInputLayout, GfxFormat, GfxVertexBufferFrequency, GfxVertexAttributeDescriptor, GfxBufferUsage, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxCullMode, GfxCompareMode, makeTextureDescriptor2D, GfxProgram, GfxMegaStateDescriptor, GfxBlendMode, GfxBlendFactor, GfxInputLayoutBufferDescriptor, GfxTexture, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxSampler, GfxTextureDimension, GfxSamplerFormatKind, GfxTextureUsage } from "../gfx/platform/GfxPlatform.js";
 import { DeviceProgram } from "../Program.js";
 import * as Viewer from "../viewer.js";
-import { mat4, ReadonlyMat4, ReadonlyVec3, ReadonlyVec4, vec3, vec4 } from "gl-matrix";
+import { mat4, ReadonlyMat4, ReadonlyVec3, ReadonlyVec4, vec2, vec3, vec4 } from "gl-matrix";
 import { fillMatrix4x3, fillMatrix4x2, fillVec3v, fillVec4v, fillVec4 } from "../gfx/helpers/UniformBufferHelpers.js";
 import { TextureMapping } from "../TextureHolder.js";
 import { assert, assertExists, hexzero, nArray } from "../util.js";
@@ -1553,6 +1553,7 @@ export const prevFrameBinding = "prevFrame";
 class ParticleDrawCallInstance {
     private gfxProgram: GfxProgram;
     private waterProgram: GfxProgram;
+    private textureSize = vec2.create();
     public textureMappings: TextureMapping[] = [];
     public textureMatrix = mat4.create();
 
@@ -1570,8 +1571,7 @@ class ParticleDrawCallInstance {
             if (dc.texIndex >= 0) {
                 const tex = textures[dc.texIndex];
                 this.textureMappings[0].gfxTexture = tex.gfxTexture;
-                this.textureMappings[0].width = tex.data.width;
-                this.textureMappings[0].height = tex.data.height;
+                vec2.set(this.textureSize, tex.data.width, tex.data.height);
             } else {
                 this.textureMappings[0].lateBinding = geo.lateBindingTex!;
                 wrapMode = GfxWrapMode.Clamp;
@@ -1599,8 +1599,8 @@ class ParticleDrawCallInstance {
 
         if (this.textureMappings.length > 0) {
             if (!this.textureMappings[0].lateBinding) {
-                this.textureMatrix[12] = uShift / this.textureMappings[0].width;
-                this.textureMatrix[13] = vShift / this.textureMappings[0].height;
+                this.textureMatrix[12] = uShift / this.textureSize[0];
+                this.textureMatrix[13] = vShift / this.textureSize[1];
             }
         }
 

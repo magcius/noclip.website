@@ -22,33 +22,17 @@ export class TextureMapping {
     public gfxTexture: GfxTexture | null = null;
     public gfxSampler: GfxSampler | null = null;
     public lateBinding: string | null = null;
-    // These are not used when binding to samplers, and are conveniences for custom behavior.
-    // TODO(jstpierre): Are any of these really worth anything?
-    public width: number = 0;
-    public height: number = 0;
-    public lodBias: number = 0;
-    // GL sucks. This is a convenience when building texture matrices.
-    // The core renderer does not use this code at all.
-    public flipY: boolean = false;
 
     public reset(): void {
         this.gfxTexture = null;
         this.gfxSampler = null;
         this.lateBinding = null;
-        this.width = 0;
-        this.height = 0;
-        this.lodBias = 0;
-        this.flipY = false;
     }
 
     public copy(other: TextureMapping): void {
         this.gfxTexture = other.gfxTexture;
         this.gfxSampler = other.gfxSampler;
         this.lateBinding = other.lateBinding;
-        this.width = other.width;
-        this.height = other.height;
-        this.lodBias = other.lodBias;
-        this.flipY = other.flipY;
     }
 }
 
@@ -95,9 +79,6 @@ export class TextureHolder implements TextureListHolder {
             dst.gfxTexture = textureOverride.gfxTexture;
             if (textureOverride.gfxSampler)
                 dst.gfxSampler = textureOverride.gfxSampler;
-            dst.width = textureOverride.width;
-            dst.height = textureOverride.height;
-            dst.flipY = textureOverride.flipY;
             if (textureOverride.lateBinding)
                 dst.lateBinding = textureOverride.lateBinding;
             return true;
@@ -106,10 +87,6 @@ export class TextureHolder implements TextureListHolder {
         const textureEntryIndex = this.findTextureEntryIndex(name);
         if (textureEntryIndex >= 0) {
             dst.gfxTexture = this.gfxTextures[textureEntryIndex];
-            const texEntry = this.textureEntries[textureEntryIndex];
-            dst.width = texEntry.width;
-            dst.height = texEntry.height;
-            dst.flipY = false;
             return true;
         }
 

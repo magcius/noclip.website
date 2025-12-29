@@ -654,9 +654,6 @@ export class RwGfx {
         this.device.uploadTextureData(raster.gfxTexture, 0, raster.levels);
 
         const mapping = raster.textureMapping[0];
-        mapping.width = raster.width;
-        mapping.height = raster.height;
-        mapping.flipY = false;
         mapping.gfxTexture = raster.gfxTexture;
     }
 
@@ -1098,12 +1095,8 @@ export class RwGfx {
     private bindTexture(renderInst: GfxRenderInst) {
         if (this.textureRaster && this.textureRaster.gfxRaster.gfxTexture) {
             const mapping = this.textureMapping[0];
-            mapping.width = this.textureRaster.width;
-            mapping.height = this.textureRaster.height;
-            mapping.flipY = false;
             mapping.gfxTexture = this.textureRaster.gfxRaster.gfxTexture;
             mapping.gfxSampler = this.renderHelper.renderCache.createSampler(this.samplerDescriptor);
-
             renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
         }
     }
