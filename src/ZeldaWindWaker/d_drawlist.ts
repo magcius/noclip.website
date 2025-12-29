@@ -5,7 +5,7 @@ import { projectionMatrixForCuboid, saturate } from '../MathHelpers.js';
 import { TSDraw } from "../SuperMarioGalaxy/DDraw.js";
 import { createBufferFromData } from "../gfx/helpers/BufferHelpers.js";
 import { projectionMatrixConvertClipSpaceNearZ } from '../gfx/helpers/ProjectionHelpers.js';
-import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxChannelWriteMask, GfxClipSpaceNearZ, GfxCullMode, GfxDevice, GfxFormat, GfxInputLayout, GfxMipFilterMode, GfxProgram, GfxRenderPass, GfxSampler, GfxSamplerFormatKind, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxVertexBufferFrequency, GfxWrapMode } from "../gfx/platform/GfxPlatform.js";
+import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxChannelWriteMask, GfxClipSpaceNearZ, GfxCompareMode, GfxCullMode, GfxDevice, GfxFormat, GfxInputLayout, GfxMipFilterMode, GfxProgram, GfxRenderPass, GfxSampler, GfxSamplerFormatKind, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxVertexBufferFrequency, GfxWrapMode } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { GfxRenderInst, GfxRenderInstExecutionOrder, GfxRenderInstList, GfxRenderInstManager, gfxRenderInstCompareNone, gfxRenderInstCompareSortKey } from "../gfx/render/GfxRenderInstManager.js";
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder.js';
@@ -298,21 +298,25 @@ void main() {
 void main() {
     vec3 t_ClipPos;
     t_ClipPos.xy = (gl_FragCoord.xy / u_viewportSize.xy) * 2.0 - vec2(1.0);
+#if GFX_VIEWPORT_ORIGIN_TL()
+    t_ClipPos.y *= -1.0;
+#endif
     t_ClipPos.z = texelFetch(SAMPLER_2D(u_TextureFramebufferDepth), ivec2(gl_FragCoord.xy), 0).r;
+#if !GFX_CLIPSPACE_NEAR_ZERO()
+    t_ClipPos.z = t_ClipPos.z * 2.0 - 1.0;
+#endif
     vec4 t_ObjectPos = UnpackMatrix(u_LocalFromClip) * vec4(t_ClipPos, 1.0);
     t_ObjectPos.xyz /= t_ObjectPos.w;
 
     // Now that we have our object-space position, remove any samples outside of the box.
     if (any(lessThan(t_ObjectPos.xyz, vec3(-1))) || any(greaterThan(t_ObjectPos.xyz, vec3(1))))
         discard;
-    
+
     // Top-down project our shadow texture. Our local space is between -1 and 1, we want to move into 0.0 to 1.0.
     vec2 t_ShadowTexCoord = t_ObjectPos.xz * vec2(0.5) + vec2(0.5);
     float t_ShadowColor = texture(SAMPLER_2D(u_TextureShadow), t_ShadowTexCoord).r;
-    if( t_ShadowColor == 0.0 )
-        discard;
-
-    gl_FragColor = vec4(0, 0, 0, 0.75);
+    float t_Alpha = smoothstep(0.0, 0.1, t_ShadowColor);
+    gl_FragColor = vec4(0, 0, 0, 0.25 * t_Alpha);
 }
 #endif
 `;
@@ -512,12 +516,13 @@ class dDlst_shadowControl_c {
         template.setBindingLayouts(SimpleShadowProgram.bindingLayouts);
         template.setGfxProgram(this.simpleCache.program);
         template.setMegaStateFlags({
-            cullMode: GfxCullMode.Back,
+            depthCompare: GfxCompareMode.Always,
+            cullMode: GfxCullMode.Front,
             ...setAttachmentStateSimple({}, {
                 channelWriteMask: GfxChannelWriteMask.RGB,
                 blendMode: GfxBlendMode.Add,
                 blendSrcFactor: GfxBlendFactor.Zero,
-                blendDstFactor: GfxBlendFactor.SrcAlpha,
+                blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
             })
         });
         template.setVertexInput(this.simpleCache.inputLayout, [{ buffer: this.simpleCache.positionBuffer }], { buffer: this.simpleCache.indexBuffer });
