@@ -777,10 +777,7 @@ class d_s_play extends fopScn {
 }
 
 class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
-    public id: string;
-
-    constructor(public name: string, public stageDir: string, public rooms: number[] = [0]) {
-        this.id = this.stageDir;
+    constructor(public name: string, public stageDir: string, public rooms: number[] = [0], public id = this.stageDir) {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
@@ -847,9 +844,8 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
         for (let i = 0; i < particleArchives.length; i++)
             modelCache.fetchFileData(particleArchives[i]);
 
-        // XXX(jstpierre): This is really terrible code.
         for (let i = 0; i < this.rooms.length; i++) {
-            const roomIdx = Math.abs(this.rooms[i]);
+            const roomIdx = this.rooms[i];
             modelCache.fetchStageData(`R${leftPad(''+roomIdx, 2)}_00`);
         }
 
@@ -900,7 +896,7 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
 
         // If this is a single-room scene, then set mStayNo.
         if (this.rooms.length === 1)
-            globals.mStayNo = Math.abs(this.rooms[0]);
+            globals.mStayNo = this.rooms[0];
 
         const vrbox = resCtrl.getStageResByName(ResType.Model, `STG_00`, `vrbox_sora.bmd`);
         if (vrbox !== null) {
@@ -909,7 +905,7 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
         }
 
         for (let i = 0; i < this.rooms.length; i++) {
-            const roomNo = Math.abs(this.rooms[i]);
+            const roomNo = this.rooms[i];
 
             const visible = this.rooms[i] >= 0;
             renderer.rooms.push(new TwilightPrincessRoom(roomNo, visible));
@@ -938,21 +934,21 @@ const sceneDescs = [
 
     "Ordon",
     new TwilightPrincessSceneDesc("Ordon Village", "F_SP103"),
-    new TwilightPrincessSceneDesc("Outside Link's House", "F_SP103", [1]),
+    new TwilightPrincessSceneDesc("Outside Link's House", "F_SP103", [1], "F_SP103_1"),
     new TwilightPrincessSceneDesc("Ordon Ranch", "F_SP00"),
     new TwilightPrincessSceneDesc("Ordon Spring", "F_SP104", [1]),
     new TwilightPrincessSceneDesc("Bo's House", "R_SP01", [0]),
-    new TwilightPrincessSceneDesc("Sera's Sundries", "R_SP01", [1]),
-    new TwilightPrincessSceneDesc("Jaggle's House", "R_SP01", [2]),
-    new TwilightPrincessSceneDesc("Link's House", "R_SP01", [4, 7]),
-    new TwilightPrincessSceneDesc("Rusl's House", "R_SP01", [5]),
+    new TwilightPrincessSceneDesc("Sera's Sundries", "R_SP01", [1], "R_SP01_1"),
+    new TwilightPrincessSceneDesc("Jaggle's House", "R_SP01", [2], "R_SP01_2"),
+    new TwilightPrincessSceneDesc("Link's House", "R_SP01", [4, 7], "R_SP01_4"),
+    new TwilightPrincessSceneDesc("Rusl's House", "R_SP01", [5], "R_SP01_5"),
 
     "Faron",
     new TwilightPrincessSceneDesc("South Faron Woods", "F_SP108", [0, 1, 2, 3, 4, 5, 8, 11, 14]),
-    new TwilightPrincessSceneDesc("North Faron Woods", "F_SP108", [6]),
+    new TwilightPrincessSceneDesc("North Faron Woods", "F_SP108", [6], "F_SP108"),
     new TwilightPrincessSceneDesc("Lost Woods", "F_SP117", [3]),
-    new TwilightPrincessSceneDesc("Sacred Grove", "F_SP117", [1]),
-    new TwilightPrincessSceneDesc("Temple of Time (Past)", "F_SP117", [2]),
+    new TwilightPrincessSceneDesc("Sacred Grove", "F_SP117", [1], "F_SP117_1"),
+    new TwilightPrincessSceneDesc("Temple of Time (Past)", "F_SP117", [2], "F_SP117_2"),
     new TwilightPrincessSceneDesc("Faron Woods Cave", "D_SB10"),
     new TwilightPrincessSceneDesc("Coro's House", "R_SP108"),
 
@@ -963,23 +959,23 @@ const sceneDescs = [
     new TwilightPrincessSceneDesc("Hidden Village", "F_SP128"),
     new TwilightPrincessSceneDesc("Renado's Sanctuary", "R_SP109", [0]),
     new TwilightPrincessSceneDesc("Sanctuary Basement", "R_SP209", [7]),
-    new TwilightPrincessSceneDesc("Barnes' Bombs", "R_SP109", [1]),
-    new TwilightPrincessSceneDesc("Elde Inn", "R_SP109", [2]),
-    new TwilightPrincessSceneDesc("Malo Mart", "R_SP109", [3]),
-    new TwilightPrincessSceneDesc("Lookout Tower", "R_SP109", [4]),
-    new TwilightPrincessSceneDesc("Bomb Warehouse", "R_SP109", [5]),
-    new TwilightPrincessSceneDesc("Abandoned House", "R_SP109", [6]),
+    new TwilightPrincessSceneDesc("Barnes' Bombs", "R_SP109", [1], "R_SP109_1"),
+    new TwilightPrincessSceneDesc("Elde Inn", "R_SP109", [2], "R_SP109_2"),
+    new TwilightPrincessSceneDesc("Malo Mart", "R_SP109", [3], "R_SP109_3"),
+    new TwilightPrincessSceneDesc("Lookout Tower", "R_SP109", [4], "R_SP109_4"),
+    new TwilightPrincessSceneDesc("Bomb Warehouse", "R_SP109", [5], "R_SP109_5"),
+    new TwilightPrincessSceneDesc("Abandoned House", "R_SP109", [6], "R_SP109_6"),
     new TwilightPrincessSceneDesc("Goron Elder's Hall", "R_SP110"),
 
     "Lanayru",
     new TwilightPrincessSceneDesc("Outside Castle Town - West", "F_SP122", [8]),
-    new TwilightPrincessSceneDesc("Outside Castle Town - South", "F_SP122", [16]),
-    new TwilightPrincessSceneDesc("Outside Castle Town - East", "F_SP122", [17]),
+    new TwilightPrincessSceneDesc("Outside Castle Town - South", "F_SP122", [16], "F_SP122_16"),
+    new TwilightPrincessSceneDesc("Outside Castle Town - East", "F_SP122", [17], "F_SP122_17"),
     new TwilightPrincessSceneDesc("Castle Town", "F_SP116", [0, 1, 2, 3, 4]),
     new TwilightPrincessSceneDesc("Zora's River", "F_SP112", [1]),
     new TwilightPrincessSceneDesc("Zora's Domain", "F_SP113", [0, 1]),
     new TwilightPrincessSceneDesc("Lake Hylia", "F_SP115"),
-    new TwilightPrincessSceneDesc("Lanayru Spring", "F_SP115", [1]),
+    new TwilightPrincessSceneDesc("Lanayru Spring", "F_SP115", [1], "F_SP115_1"),
     new TwilightPrincessSceneDesc("Upper Zora's River", "F_SP126", [0]),
     new TwilightPrincessSceneDesc("Fishing Pond", "F_SP127", [0]),
     new TwilightPrincessSceneDesc("Castle Town Sewers", "R_SP107", [0, 1, 2, 3]),
@@ -987,16 +983,16 @@ const sceneDescs = [
     new TwilightPrincessSceneDesc("Hena's Cabin", "R_SP127", [0]),
     new TwilightPrincessSceneDesc("Impaz's House", "R_SP128", [0]),
     new TwilightPrincessSceneDesc("Malo Mart", "R_SP160", [0]),
-    new TwilightPrincessSceneDesc("Fanadi's Palace", "R_SP160", [1]),
-    new TwilightPrincessSceneDesc("Medical Clinic", "R_SP160", [2]),
-    new TwilightPrincessSceneDesc("Agitha's Castle", "R_SP160", [3]),
-    new TwilightPrincessSceneDesc("Goron Shop", "R_SP160", [4]),
-    new TwilightPrincessSceneDesc("Jovani's House", "R_SP160", [5]),
+    new TwilightPrincessSceneDesc("Fanadi's Palace", "R_SP160", [1], "R_SP160_1"),
+    new TwilightPrincessSceneDesc("Medical Clinic", "R_SP160", [2], "R_SP160_2"),
+    new TwilightPrincessSceneDesc("Agitha's Castle", "R_SP160", [3], "R_SP160_3"),
+    new TwilightPrincessSceneDesc("Goron Shop", "R_SP160", [4], "R_SP160_4"),
+    new TwilightPrincessSceneDesc("Jovani's House", "R_SP160", [5], "R_SP160_5"),
     new TwilightPrincessSceneDesc("STAR Tent", "R_SP161", [7]),
 
     "Gerudo Desert",
     new TwilightPrincessSceneDesc("Bulblin Camp", "F_SP118", [0, 1, 3]),
-    new TwilightPrincessSceneDesc("Bulblin Camp Beta Room", "F_SP118", [2]),
+    new TwilightPrincessSceneDesc("Bulblin Camp Beta Room", "F_SP118", [2], "F_SP118_2"),
     new TwilightPrincessSceneDesc("Gerudo Desert", "F_SP124", [0]),
     new TwilightPrincessSceneDesc("Mirror Chamber", "F_SP125", [4]),
 
