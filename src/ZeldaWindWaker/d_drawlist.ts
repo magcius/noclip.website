@@ -318,9 +318,7 @@ void main() {
     // Top-down project our shadow texture. Our local space is between -1 and 1, we want to move into 0.0 to 1.0.
     vec2 t_ShadowTexCoord = t_ObjectPos.xz * vec2(0.5) + vec2(0.5);
     float t_ShadowColor = texture(SAMPLER_2D(u_TextureShadow), t_ShadowTexCoord).r;
-    t_ShadowColor = step(1.0, 1.0 - t_ShadowColor); // Discard if outside of shadow.
-
-    if( t_ShadowColor > 0.0 )
+    if( t_ShadowColor == 0.0 )
         discard;
 
     gl_FragColor = vec4(0, 0, 0, 0.75);
