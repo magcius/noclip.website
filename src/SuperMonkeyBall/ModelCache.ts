@@ -15,11 +15,22 @@ import { GXMaterialHacks } from "../gx/gx_material.js";
 // everything at once but oh well.
 
 export class TextureCache implements UI.TextureListHolder {
-    public viewerTextures: Viewer.Texture[] = [];
-    public onnewtextures: (() => void) | null = null;
+    private viewerTextures: Viewer.Texture[] = [];
     private cache: Map<string, LoadedTexture> = new Map();
+    public onnewtextures: (() => void) | null = null;
 
-    getTexture(device: GfxDevice, gxTexture: TextureInputGX): LoadedTexture {
+    public get textureNames(): string[] {
+        return this.viewerTextures.map((texture) => texture.name);
+    }
+
+    public async getViewerTexture(i: number) {
+        const tex = this.viewerTextures[i];
+        if (tex.surfaces.length === 0 && tex.activate !== undefined)
+            await tex.activate();
+        return tex;
+    }
+
+    public getTexture(device: GfxDevice, gxTexture: TextureInputGX): LoadedTexture {
         const loadedTex = this.cache.get(gxTexture.name);
         if (loadedTex === undefined) {
             const mipChain = calcMipChain(gxTexture, gxTexture.mipCount);

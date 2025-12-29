@@ -1,6 +1,7 @@
 
 import * as Viewer from './viewer.js';
 import { GfxSampler, GfxTexture, GfxDevice } from './gfx/platform/GfxPlatform.js';
+import { TextureListHolder } from './ui.js';
 
 export interface TextureOverride {
     gfxTexture: GfxTexture | null;
@@ -69,22 +70,25 @@ export interface LoadedTexture {
 }
 
 // TODO(jstpierre): TextureHolder needs to die.
-export abstract class TextureHolder<TextureType extends TextureBase> {
+export abstract class TextureHolder<TextureType extends TextureBase> implements TextureListHolder {
     public viewerTextures: Viewer.Texture[] = [];
     public gfxTextures: GfxTexture[] = [];
     public textureEntries: TextureType[] = [];
     public textureOverrides = new Map<string, TextureOverride>();
     public onnewtextures: (() => void) | null = null;
 
-    public destroy(device: GfxDevice): void {
-        this.gfxTextures.forEach((texture) => device.destroyTexture(texture));
-        this.viewerTextures.length = 0;
-        this.gfxTextures.length = 0;
-        this.textureEntries.length = 0;
-        this.textureOverrides.clear();
+    public get textureNames(): string[] {
+        return this.viewerTextures.map((texture) => texture.name);
     }
 
-    protected searchTextureEntryIndex(name: string): number {
+    public async getViewerTexture(i: number) {
+        const tex = this.viewerTextures[i];
+        if (tex.surfaces.length === 0 && tex.activate !== undefined)
+            await tex.activate();
+        return tex;
+    }
+
+    public findTextureEntryIndex(name: string): number {
         for (let i = 0; i < this.textureEntries.length; i++) {
             if (this.textureEntries[i].name === name)
                 return i;
@@ -93,19 +97,15 @@ export abstract class TextureHolder<TextureType extends TextureBase> {
         return -1;
     }
 
-    public findTextureEntryIndex(name: string): number {
-        return this.searchTextureEntryIndex(name);
-    }
-
     public hasTexture(name: string): boolean {
         return this.findTextureEntryIndex(name) >= 0;
     }
 
-    protected fillTextureMappingFromEntry(textureMapping: TextureMapping, textureEntryIndex: number): void {
-        textureMapping.gfxTexture = this.gfxTextures[textureEntryIndex];
-        const tex0Entry = this.textureEntries[textureEntryIndex];
-        textureMapping.width = tex0Entry.width;
-        textureMapping.height = tex0Entry.height;
+    protected fillTextureMappingFromEntry(textureMapping: TextureMapping, i: number): void {
+        textureMapping.gfxTexture = this.gfxTextures[i];
+        const texEntry = this.textureEntries[i];
+        textureMapping.width = texEntry.width;
+        textureMapping.height = texEntry.height;
         textureMapping.flipY = false;
     }
 
@@ -126,20 +126,13 @@ export abstract class TextureHolder<TextureType extends TextureBase> {
         return false;
     }
 
-    public findTexture(name: string): TextureType | null {
-        const textureEntryIndex = this.findTextureEntryIndex(name);
-        if (textureEntryIndex >= 0)
-            return this.textureEntries[textureEntryIndex];
-        return null;
-    }
-
     public setTextureOverride(name: string, textureOverride: TextureOverride): void {
         this.textureOverrides.set(name, textureOverride);
     }
 
     protected abstract loadTexture(device: GfxDevice, textureEntry: TextureType): LoadedTexture | null;
 
-    public addTextures(device: GfxDevice, textureEntries: (TextureType | null)[], overwrite: boolean = false): void {
+    public addTextures(device: GfxDevice, textureEntries: (TextureType | null)[]): void {
         for (let i = 0; i < textureEntries.length; i++) {
             const texture = textureEntries[i];
             if (texture === null)
@@ -147,7 +140,7 @@ export abstract class TextureHolder<TextureType extends TextureBase> {
 
             let index = this.textureEntries.findIndex((entry) => entry.name === texture.name);
             // Don't add dupes for the same name.
-            if (index >= 0 && !overwrite)
+            if (index >= 0)
                 continue;
             if (index < 0)
                 index = this.textureEntries.length;
@@ -164,6 +157,14 @@ export abstract class TextureHolder<TextureType extends TextureBase> {
 
         if (this.onnewtextures !== null)
             this.onnewtextures();
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.gfxTextures.forEach((texture) => device.destroyTexture(texture));
+        this.viewerTextures.length = 0;
+        this.gfxTextures.length = 0;
+        this.textureEntries.length = 0;
+        this.textureOverrides.clear();
     }
 }
 

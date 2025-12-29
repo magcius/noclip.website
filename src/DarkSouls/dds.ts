@@ -228,16 +228,3 @@ export function createTexture(device: GfxDevice, dds: DDS): GfxTexture {
     device.uploadTextureData(tex, 0, levelDatas);
     return tex;
 }
-
-export class DDSTextureHolder extends TextureHolder<DDS> {
-    public loadTexture(device: GfxDevice, dds: DDS): LoadedTexture {
-        const surfaces: HTMLCanvasElement[] = [];
-
-        const extraInfo = new Map<string, string>();
-        extraInfo.set('Format', dds.format);
-        const viewerTexture: Viewer.Texture = { name: dds.name, surfaces, extraInfo };
-
-        const gfxTexture = createTexture(device, dds);
-        return { viewerTexture, gfxTexture };
-    }
-}

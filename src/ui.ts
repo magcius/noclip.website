@@ -1244,7 +1244,9 @@ function cloneCanvas(dst: HTMLCanvasElement, src: HTMLCanvasElement): void {
 const CHECKERBOARD_IMAGE = 'url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAAGElEQVQYlWNgYGCQwoKxgqGgcJA5h3yFAAs8BRWVSwooAAAAAElFTkSuQmCC")';
 
 export interface TextureListHolder {
-    viewerTextures: Viewer.Texture[];
+    textureNames: string[];
+    getViewerTexture(i: number): Promise<Viewer.Texture>;
+
     onnewtextures: (() => void) | null;
 }
 
@@ -1281,8 +1283,8 @@ export class TextureViewer extends Panel {
     private surfaceView: HTMLElement;
     private fullSurfaceView: HTMLElement;
     private properties: HTMLElement;
-    private textureList: Viewer.Texture[] = [];
     private newTexturesDebouncer = new FrameDebouncer();
+    private textureList: TextureListHolder | null = null;
 
     constructor() {
         super();
@@ -1323,14 +1325,14 @@ export class TextureViewer extends Panel {
         this.fullSurfaceView.style.backgroundColor = 'rgba(0, 0, 0, 0.2)';
         this.fullSurfaceView.style.padding = '20px';
         this.extraRack.appendChild(this.fullSurfaceView);
-    }
 
-    public async getViewerTextureList(): Promise<Viewer.Texture[]> {
-        const promises: Promise<void>[] = [];
-        for (let i = 0; i < this.textureList.length; i++)
-            promises.push(this.maybeActivateTexture(this.textureList[i]));
-        await Promise.all(promises);
-        return this.textureList;
+        this.newTexturesDebouncer.callback = () => {
+            if (this.textureList !== null)
+                this.scrollList.setStrings(this.textureList.textureNames);
+            else
+                this.scrollList.setStrings([]);
+        };
+        this.setTextureList(null);
     }
 
     private showInSurfaceView(surface: HTMLCanvasElement) {
@@ -1355,23 +1357,12 @@ export class TextureViewer extends Panel {
         }
     }
 
-    private async maybeActivateTexture(texture: Viewer.Texture): Promise<void> {
-        if (texture.surfaces.length === 0 && texture.activate !== undefined) {
+    private async selectTexture(i: number) {
+        const texture = await this.textureList!.getViewerTexture(i);
+
+        // TODO(jstpierre): Remove activate() callback in favor of moving that into getViewerTexture.
+        if (texture.surfaces.length === 0 && texture.activate !== undefined)
             await texture.activate();
-        } else {
-            // We're good.
-        }
-    }
-
-    private selectTexture(i: number): void {
-        const texture: Viewer.Texture = this.textureList[i];
-
-        if (texture.surfaces.length === 0 && texture.activate !== undefined) {
-            texture.activate().then(() => {
-                this.selectTexture(i);
-            });
-            return;
-        }
 
         this.scrollList.setHighlighted(i);
 
@@ -1404,30 +1395,20 @@ export class TextureViewer extends Panel {
         this.showInFullSurfaceView(texture.surfaces);
     }
 
-    public setThingList(things: { viewerTexture: Viewer.Texture }[]) {
-        this.setTextureList(things.map((thing) => thing.viewerTexture));
-    }
+    public setTextureList(textureList: TextureListHolder | null = null): void {
+        this.textureList = textureList;
 
-    public setTextureList(textures: Viewer.Texture[]) {
-        textures = textures.filter((tex) => tex.surfaces.length > 0 || tex.activate !== undefined);
-
-        this.setVisible(textures.length > 0);
-        if (textures.length === 0)
-            return;
-
-        const strings = textures.map((texture) => texture.name);
-        this.scrollList.setStrings(strings);
-        this.textureList = textures;
-    }
-
-    public setTextureHolder(textureHolder: TextureListHolder): void {
-        this.newTexturesDebouncer.callback = () => {
-            this.setTextureList(textureHolder.viewerTextures);
-        };
-        textureHolder.onnewtextures = () => {
+        if (this.textureList !== null) {
+            this.textureList.onnewtextures = () => {
+                this.newTexturesDebouncer.trigger();
+            };
             this.newTexturesDebouncer.trigger();
-        };
-        this.newTexturesDebouncer.trigger();
+            this.setVisible(true);
+        } else {
+            this.newTexturesDebouncer.clear();
+            this.scrollList.setStrings([]);
+            this.setVisible(false);
+        }
     }
 }
 
@@ -2855,9 +2836,9 @@ export class UI {
         if (this.viewer.scene !== null) {
             const scene = this.viewer.scene;
             if (scene.textureHolder !== undefined)
-                this.textureViewer.setTextureHolder(scene.textureHolder);
+                this.textureViewer.setTextureList(scene.textureHolder);
             else
-                this.textureViewer.setTextureList([]);
+                this.textureViewer.setTextureList(null);
         }
 
         if (this.studioModeEnabled)

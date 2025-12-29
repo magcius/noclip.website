@@ -323,15 +323,28 @@ class SubdirTextureFiles {
     }
 }
 
+class TextureListHolder implements UI.TextureListHolder {
+    public viewerTextures: Viewer.Texture[] = [];
+    public onnewtextures: (() => void) | null;
+
+    public get textureNames(): string[] {
+        return this.viewerTextures.map((texture) => texture.name);
+    }
+
+    public async getViewerTexture(i: number) {
+        const tex = this.viewerTextures[i];
+        if (tex.surfaces.length === 0 && tex.activate !== undefined)
+            await tex.activate();
+        return tex;
+    }
+}
+
 export class SFATextureFetcher extends TextureFetcher {
     private textableBin: DataView;
     private texpre: TextureFile | null;
     private subdirTextureFiles: {[subdir: string]: SubdirTextureFiles} = {};
     private fakes: FakeTextureFetcher = new FakeTextureFetcher();
-    public textureHolder: UI.TextureListHolder = {
-        viewerTextures: [],
-        onnewtextures: null,
-    };
+    public textureHolder = new TextureListHolder();
 
     private constructor(private gameInfo: GameInfo, private isBeta: boolean) {
         super();

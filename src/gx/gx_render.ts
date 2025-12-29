@@ -167,7 +167,7 @@ export function loadedDataCoalescerComboGfx(device: GfxDevice, loadedVertexDatas
     , name);
 }
 
-export class GXViewerTexture implements Viewer.Texture {
+class GXViewerTexture implements Viewer.Texture {
     public surfaces: HTMLCanvasElement[] = [];
 
     constructor(public mipChain: GX_Texture.MipChain, public extraInfo: Map<string, string> | null = null, public name: string = mipChain.name) {

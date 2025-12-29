@@ -856,9 +856,20 @@ function getLayerDirName(index: LayerId) {
     }
 }
 
-class TextureListHolder {
-    public viewerTextures: Viewer.Texture[] = [];
+class TextureListHolder implements UI.TextureListHolder {
+    private viewerTextures: Viewer.Texture[] = [];
     public onnewtextures: (() => void) | null = null;
+
+    public get textureNames(): string[] {
+        return this.viewerTextures.map((texture) => texture.name);
+    }
+
+    public async getViewerTexture(i: number) {
+        const tex = this.viewerTextures[i];
+        if (tex.surfaces.length === 0 && tex.activate !== undefined)
+            await tex.activate();
+        return tex;
+    }
 
     public addTextures(textures: Viewer.Texture[]): void {
         let changed = false;
