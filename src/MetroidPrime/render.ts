@@ -392,7 +392,7 @@ class MaterialInstance {
     public textureMappings = nArray(8, () => new GXTextureMapping());
     public visible = true;
 
-    constructor(private materialGroup: MaterialGroupInstance, public material: Material, materialSet: MaterialSet, textureHolder: GXTextureHolder<TXTR>) {
+    constructor(private materialGroup: MaterialGroupInstance, public material: Material, materialSet: MaterialSet, textureHolder: GXTextureHolder) {
         this.textureKey = 0;
         for (let i = 0; i < material.textureIndexes.length; i++) {
             const textureIndex = material.textureIndexes[i];

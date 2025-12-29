@@ -27,7 +27,7 @@ import * as Viewer from '../viewer.js';
 import { AnimGroupDataCache, AnimGroupInstance } from './AnimGroup.js';
 import { evtmgr } from './evt.js';
 
-export class TPLTextureHolder extends GXTextureHolder<TPL.TPLTexture> {
+export class TPLTextureHolder extends GXTextureHolder {
     public addTPLTextures(device: GfxDevice, tpl: TPL.TPL): void {
         for (let i = 0; i < tpl.textures.length; i++)
             this.addTexture(device, tpl.textures[i]);

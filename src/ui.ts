@@ -1359,10 +1359,7 @@ export class TextureViewer extends Panel {
 
     private async selectTexture(i: number) {
         const texture = await this.textureList!.getViewerTexture(i);
-
-        // TODO(jstpierre): Remove activate() callback in favor of moving that into getViewerTexture.
-        if (texture.surfaces.length === 0 && texture.activate !== undefined)
-            await texture.activate();
+        assert(texture.surfaces.length > 0);
 
         this.scrollList.setHighlighted(i);
 

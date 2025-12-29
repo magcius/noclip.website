@@ -282,7 +282,7 @@ export function translateMaxAnisotropy(anisotropy: GX.Anisotropy): number {
     }
 }
 
-export interface TextureOverride {
+interface TextureOverride {
     gfxTexture: GfxTexture | null;
     gfxSampler?: GfxSampler;
     width: number;
@@ -291,9 +291,9 @@ export interface TextureOverride {
     lateBinding?: string;
 }
 
-export class GXTextureHolder<TextureType extends GX_Texture.TextureInputGX = GX_Texture.TextureInputGX> extends TextureHolder {
-    public textureOverrides = new Map<string, TextureOverride>();
-    public textureEntries: TextureType[] = [];
+export class GXTextureHolder extends TextureHolder {
+    private textureOverrides = new Map<string, TextureOverride>();
+    public textureEntries: GX_Texture.TextureInputGX[] = [];
 
     public setTextureOverride(name: string, textureOverride: TextureOverride): void {
         this.textureOverrides.set(name, textureOverride);
@@ -326,7 +326,7 @@ export class GXTextureHolder<TextureType extends GX_Texture.TextureInputGX = GX_
         return false;
     }
 
-    public addTexture(device: GfxDevice, texture: TextureType): void {
+    public addTexture(device: GfxDevice, texture: GX_Texture.TextureInputGX): void {
         // Don't add textures without data.
         if (texture.data === null)
             return;

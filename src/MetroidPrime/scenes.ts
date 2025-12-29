@@ -43,7 +43,7 @@ export class RetroSceneRenderer implements Viewer.SceneGfx {
     private renderInstListMain = new GfxRenderInstList();
     public renderCache: GfxRenderCache;
     public modelCache = new ModelCache();
-    public textureHolder = new GXTextureHolder<TXTR>();
+    public textureHolder = new GXTextureHolder();
     public generatorMaterialHelpers = new GeneratorMaterialHelpers();
     public areaRenderers: MREARenderer[] = [];
     public defaultSkyRenderer: CMDLRenderer | null = null;

@@ -21,7 +21,7 @@ import { CalcBillboardFlags, calcBillboardMatrix, computeNormalMatrix, getMatrix
 import { assert, assertExists, nArray } from '../util.js';
 import { ViewerRenderInput } from "../viewer.js";
 
-export class RRESTextureHolder extends GXTextureHolder<BRRES.TEX0> {
+export class RRESTextureHolder extends GXTextureHolder {
     public addRRESTextures(device: GfxDevice, rres: BRRES.RRES): void {
         for (let i = 0; i < rres.tex0.length; i++)
             this.addTexture(device, rres.tex0[i]);

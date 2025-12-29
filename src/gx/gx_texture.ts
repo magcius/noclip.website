@@ -114,36 +114,20 @@ function decode_Dummy(texture: TextureInputGX): DecodedTexture {
 }
 
 function getPaletteFormatName(paletteFormat: GX.TexPalette | undefined | null): string {
-    switch (assertExists(paletteFormat)) {
-    case GX.TexPalette.IA8:
-        return "IA8";
-    case GX.TexPalette.RGB565:
-        return "RGB565";
-    case GX.TexPalette.RGB5A3:
-        return "RGB5A3";
-    default:
-        return "invalid";
-    }
+    return GX.TexPalette[assertExists(paletteFormat)];
 }
 
 export function getFormatName(format: GX.TexFormat, paletteFormat?: GX.TexPalette | null): string {
     switch (format) {
     case GX.TexFormat.I4:
-        return "I4";
     case GX.TexFormat.I8:
-        return "I8";
     case GX.TexFormat.IA4:
-        return "IA4";
     case GX.TexFormat.IA8:
-        return "IA8";
     case GX.TexFormat.RGB565:
-        return "RGB565";
     case GX.TexFormat.RGB5A3:
-        return "RGB5A3";
     case GX.TexFormat.RGBA8:
-        return "RGBA8";
     case GX.TexFormat.CMPR:
-        return "CMPR";
+        return GX.TexFormat[format];
     case GX.TexFormat.C4:
         return `C4 (${getPaletteFormatName(paletteFormat)})`;
     case GX.TexFormat.C8:
