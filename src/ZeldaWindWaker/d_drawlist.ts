@@ -334,8 +334,7 @@ const scratchMat4 = mat4.create();
 class dDlst_shadowSimple_c {
     public alpha: number = 0; // 0-255
     public tex: BTIData | null = null;
-    public modelViewMtx = mat4.create();
-    public texMtx = mat4.create();
+    public modelMtx = mat4.create();
 
     static compileDLs(cache: GfxRenderCache, symbolMap: SymbolMap): dDlst_shadowSimple_c_DLCache {
         const dlCache: dDlst_shadowSimple_c_DLCache = {} as any;
@@ -412,7 +411,7 @@ class dDlst_shadowSimple_c {
         let offset = renderInst.allocateUniformBuffer(0, 4 * 16 * 2);
         const buf = renderInst.mapUniformBufferF32(0);
         offset += fillVec4(buf, offset, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
-        offset += fillMatrix4x4(buf, offset, mat4.mul(scratchMat4, globals.camera.clipFromViewMatrix, this.texMtx));
+        offset += fillMatrix4x4(buf, offset, mat4.mul(scratchMat4, globals.camera.clipFromWorldMatrix, this.modelMtx));
         offset += fillMatrix4x4(buf, offset, mat4.invert(scratchMat4, scratchMat4));
         // TODO: Handle shadows with no texture 
         if (this.tex) this.tex.fillTextureMapping(materialParams.m_TextureMapping[0]);
@@ -424,29 +423,22 @@ class dDlst_shadowSimple_c {
     public set(globals: dGlobals, pos: vec3, floorY: number, scaleXZ: number, floorNrm: vec3, rotY: number, scaleZ: number, tex: BTIData | null): void {
         const offsetY = scaleXZ * 16.0 * (1.0 - floorNrm[1]) + 1.0;
 
-        // Build modelViewMtx
-        mat4.fromTranslation(this.modelViewMtx, [pos[0], floorY + offsetY, pos[2]]);
-        mat4.rotateY(this.modelViewMtx, this.modelViewMtx, cM_s2rad(rotY));
-        mat4.scale(this.modelViewMtx, this.modelViewMtx, [scaleXZ, offsetY + offsetY + 16.0, scaleXZ * scaleZ]);
-        mat4.mul(this.modelViewMtx, globals.camera.viewFromWorldMatrix, this.modelViewMtx);
-
         // Build the matrix which will transform a [-1, 1] cube into our shadow volume oriented to the floor plane
-        // A physically accurate drop shadow would use a vertical box to project the shadow texture straight down,
-        // but the original game chooses to use this approach which always keeps the shape of the shadow consistent, regardless of ground geometry.
+        // A physically accurate drop shadow would use a vertical box to project the shadow texture straight down, but the original 
+        // game chooses to use this approach which always keeps the shape of the shadow consistent, regardless of ground geometry.
         const xs = Math.sqrt(1.0 - floorNrm[0] * floorNrm[0]);
         const yy = xs !== 0.0 ? floorNrm[1] * xs : 0.0;
         const zz = xs !== 0.0 ? -floorNrm[2] * xs : 0.0;
 
-        mat4.set(this.texMtx,
+        mat4.set(this.modelMtx,
             xs, -floorNrm[0] * yy, floorNrm[0] * zz, 0.0,
             floorNrm[0], floorNrm[1], floorNrm[2], 0.0,
             0.0, zz, yy, 0.0,
             pos[0], floorY, pos[2], 1.0
         );
 
-        mat4.rotateY(this.texMtx, this.texMtx, cM_s2rad(rotY));
-        mat4.scale(this.texMtx, this.texMtx, [scaleXZ, offsetY + offsetY + 16.0, scaleXZ * scaleZ]);
-        mat4.mul(this.texMtx, globals.camera.viewFromWorldMatrix, this.texMtx);
+        mat4.rotateY(this.modelMtx, this.modelMtx, cM_s2rad(rotY));
+        mat4.scale(this.modelMtx, this.modelMtx, [scaleXZ, offsetY + offsetY + 16.0, scaleXZ * scaleZ]);
 
         let opacity = 1.0 - saturate((pos[1] - floorY) * 0.0007);
         this.alpha = opacity * 64.0;
