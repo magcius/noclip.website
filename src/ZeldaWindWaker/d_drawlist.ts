@@ -256,7 +256,7 @@ export class dDlst_list_c {
 
     constructor(device: GfxDevice, cache: GfxRenderCache, resCtrl: dRes_control_c, symbolMap: SymbolMap) {
         this.alphaModel0 = new dDlst_alphaModel_c(device, cache, symbolMap);
-        this.shadowControl = new dDlst_shadowControl_c(device, cache, resCtrl, symbolMap);
+        this.shadowControl = new dDlst_shadowControl_c(device, cache, resCtrl);
     }
 
     public destroy(device: GfxDevice): void {
@@ -326,7 +326,7 @@ class dDlst_shadowSimple_c_Cache {
     indexBuffer: GfxBuffer;
     sampler: GfxSampler;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache) {
+    constructor(cache: GfxRenderCache) {
         const glsl = preprocessProgramObj_GLSL(cache.device, new SimpleShadowProgram());
         this.program = cache.createProgramSimple(glsl);
         this.inputLayout = cache.createInputLayout({
@@ -387,11 +387,7 @@ class dDlst_shadowSimple_c_Cache {
     }
 
     destroy(device: GfxDevice): void {
-        device.destroyProgram(this.program);
-        device.destroyInputLayout(this.inputLayout);
-        device.destroyBuffer(this.positionBuffer);
-        device.destroyBuffer(this.indexBuffer);
-        device.destroySampler(this.sampler);
+        // Everything is managed by the cache, and will be destroyed when the cache is destroyed.
     }
 }
 
@@ -453,8 +449,8 @@ class dDlst_shadowControl_c {
 
     public defaultSimpleTex: BTIData;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, resCtrl: dRes_control_c, symbolMap: SymbolMap) {
-        this.simpleCache = new dDlst_shadowSimple_c_Cache(device, cache);
+    constructor(device: GfxDevice, cache: GfxRenderCache, resCtrl: dRes_control_c) {
+        this.simpleCache = new dDlst_shadowSimple_c_Cache(cache);
 
         const img = resCtrl.getObjectRes(ResType.Raw, `Always`, 0x71); // ALWAYS_I4_BALL128B
         const bti: BTI_Texture = {
