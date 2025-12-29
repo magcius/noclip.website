@@ -416,6 +416,7 @@ class dDlst_shadowSimple_c {
         offset += fillVec4(buf, offset, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
         offset += fillMatrix4x4(buf, offset, mat4.mul(scratchMat4, globals.camera.clipFromViewMatrix, this.modelViewMtx));
         offset += fillMatrix4x4(buf, offset, mat4.invert(scratchMat4, scratchMat4));
+        // TODO: Handle shadows with no texture 
         if (this.tex) this.tex.fillTextureMapping(materialParams.m_TextureMapping[0]);
         materialParams.m_TextureMapping[1].lateBinding = 'depth-target';
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
@@ -509,6 +510,13 @@ class dDlst_shadowControl_c {
         // dKy_GxFog_set();
 
         // Draw simple shadows
+        // noclip modification: The game's original shadowing uses many draw calls which is inefficient on modern hardware. It works as follows:
+        // 1. For each shadow, create a box directly under the object. Its Y rotation matches the caster. It's height is based on the ground slope.
+        // 2. Render the front faces of the box, adding 0.25 to the empty alpha buffer. Depth testing is enabled. Similar to shadow volumes.
+        // 3. Render the back faces of the box, subtracting 0.25 from the empty alpha buffer. Now alpha is filled only where the box interesects the ground. 
+        // 4. If the shadow has a texture (defaults to a circle): Render a textured quad oriented to the ground normal, clear the alpha where texture is 0.
+        // 5. Render the box, multiplying the color buffer by (1.0 - alpha). This darkens the areas where the shadow is visible.
+        // 6. Render the box, clearing the alpha to 0. This same framebuffer is used to render other shadows, and then alpha objects.
         const template = renderInstManager.pushTemplate();
         template.setBindingLayouts(SimpleShadowProgram.bindingLayouts);
         template.setGfxProgram(this.simpleCache.program);
