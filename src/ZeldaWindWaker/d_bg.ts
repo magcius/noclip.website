@@ -187,7 +187,7 @@ export class cBgS_PolyInfo {
     public processId: number = -1;
 
     public ChkSetInfo(): boolean {
-        return !(this.triIdx == 0xFFFF || this.bgIdx == 0x100);
+        return !(this.triIdx === 0xFFFF || this.bgIdx === 0x100);
     }
 
     public Reset(): void {

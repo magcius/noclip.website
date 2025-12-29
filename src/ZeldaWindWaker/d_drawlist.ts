@@ -1,6 +1,6 @@
 
 import { mat4, vec3 } from "gl-matrix";
-import { White, colorCopy, colorFromRGBA, colorNewCopy } from "../Color.js";
+import { White, colorCopy, colorNewCopy } from "../Color.js";
 import { projectionMatrixForCuboid, saturate } from '../MathHelpers.js';
 import { TSDraw } from "../SuperMarioGalaxy/DDraw.js";
 import { createBufferFromData } from "../gfx/helpers/BufferHelpers.js";
@@ -13,7 +13,7 @@ import { DisplayListRegisters, GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertex
 import * as GX from '../gx/gx_enum.js';
 import { GX_Program } from '../gx/gx_material.js';
 import { ColorKind, DrawParams, GXMaterialHelperGfx, MaterialParams, SceneParams, createInputLayout, fillSceneParamsData, ub_SceneParamsBufferSize } from "../gx/gx_render.js";
-import { assert, assertExists, nArray } from '../util.js';
+import { assert, nArray } from '../util.js';
 import { ViewerRenderInput } from '../viewer.js';
 import { SymbolMap, dGlobals } from './Main.js';
 import { PeekZManager } from "./d_dlst_peekZ.js";
@@ -26,10 +26,9 @@ import { dRes_control_c, ResType } from "./d_resorce.js";
 import { DeviceProgram } from "../Program.js";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
-import { fillMatrix4x4, fillVec3v, fillVec4 } from "../gfx/helpers/UniformBufferHelpers.js";
+import { fillMatrix4x4, fillVec4 } from "../gfx/helpers/UniformBufferHelpers.js";
 import { preprocessProgramObj_GLSL } from "../gfx/shaderc/GfxShaderCompiler.js";
 import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetID } from "../gfx/render/GfxRenderGraph.js";
-import { GfxRenderDynamicUniformBuffer } from "../gfx/render/GfxRenderDynamicUniformBuffer.js";
 
 export enum dDlst_alphaModel__Type {
     Bonbori,
@@ -293,13 +292,10 @@ layout(std140) uniform ub_Params {
 layout(location = 0) uniform sampler2D u_TextureShadow;
 layout(location = 1) uniform sampler2D u_TextureFramebufferDepth; // Depth buffer
 
-varying vec2 v_UV;
-
 #if defined VERT
-layout(location = 0) in vec3 a_Position; // Unit cube coordinates (-1 to 1).
+layout(location = 0) in vec3 a_Position; // Cube coordinates (-1 to 1).
 
 void main() {
-    v_UV = a_Position.xz * vec2(0.5) + vec2(0.5);
     gl_Position = UnpackMatrix(u_ClipFromLocal) * vec4(a_Position.xyz, 1.0);
 }
 #elif defined FRAG
