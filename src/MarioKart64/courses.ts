@@ -1790,7 +1790,7 @@ export class Mk64Renderer implements Viewer.SceneGfx {
     private enableObjects: boolean = true;
     public enableUnusedGfx: boolean = false;
 
-    public textureHolder: TextureHolder<any>;
+    public textureHolder: TextureHolder;
 
     private skyRenderer: Mk64SkyRenderer;
     private courseInstOpa: BasicRspRenderer | null;

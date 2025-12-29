@@ -30,7 +30,8 @@ import { evtmgr } from './evt.js';
 
 export class TPLTextureHolder extends GXTextureHolder<TPL.TPLTexture> {
     public addTPLTextures(device: GfxDevice, tpl: TPL.TPL): void {
-        this.addTextures(device, tpl.textures);
+        for (let i = 0; i < tpl.textures.length; i++)
+            this.addTexture(device, tpl.textures[i]);
     }
 }
 

@@ -277,7 +277,8 @@ export class RetroSceneRenderer implements Viewer.SceneGfx {
     }
 
     public addTextures(textures: TXTR[]): void {
-        this.textureHolder.addTextures(this.device, textures);
+        for (let i = 0; i < textures.length; i++)
+            this.textureHolder.addTexture(this.device, textures[i]);
     }
 
     public addMaterialSetTextures(materialSet: MaterialSet): void {

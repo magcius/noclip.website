@@ -70,10 +70,10 @@ export interface LoadedTexture {
 }
 
 // TODO(jstpierre): TextureHolder needs to die.
-export abstract class TextureHolder<TextureType extends TextureBase> implements TextureListHolder {
+export class TextureHolder implements TextureListHolder {
     public viewerTextures: Viewer.Texture[] = [];
     public gfxTextures: GfxTexture[] = [];
-    public textureEntries: TextureType[] = [];
+    public textureEntries: TextureBase[] = [];
     public textureOverrides = new Map<string, TextureOverride>();
     public onnewtextures: (() => void) | null = null;
 
@@ -122,41 +122,11 @@ export abstract class TextureHolder<TextureType extends TextureBase> implements 
             return true;
         }
 
-        // throw new Error(`Cannot find texture ${name}`);
         return false;
     }
 
     public setTextureOverride(name: string, textureOverride: TextureOverride): void {
         this.textureOverrides.set(name, textureOverride);
-    }
-
-    protected abstract loadTexture(device: GfxDevice, textureEntry: TextureType): LoadedTexture | null;
-
-    public addTextures(device: GfxDevice, textureEntries: (TextureType | null)[]): void {
-        for (let i = 0; i < textureEntries.length; i++) {
-            const texture = textureEntries[i];
-            if (texture === null)
-                continue;
-
-            let index = this.textureEntries.findIndex((entry) => entry.name === texture.name);
-            // Don't add dupes for the same name.
-            if (index >= 0)
-                continue;
-            if (index < 0)
-                index = this.textureEntries.length;
-
-            const loadedTexture = this.loadTexture(device, texture);
-            if (loadedTexture === null)
-                continue;
-
-            const { gfxTexture, viewerTexture } = loadedTexture;
-            this.textureEntries[index] = texture;
-            this.gfxTextures[index] = gfxTexture;
-            this.viewerTextures[index] = viewerTexture;
-        }
-
-        if (this.onnewtextures !== null)
-            this.onnewtextures();
     }
 
     public destroy(device: GfxDevice): void {
@@ -168,14 +138,9 @@ export abstract class TextureHolder<TextureType extends TextureBase> implements 
     }
 }
 
-export class FakeTextureHolder extends TextureHolder<any> {
+export class FakeTextureHolder extends TextureHolder {
     constructor(viewerTextures: Viewer.Texture[]) {
         super();
         this.viewerTextures = viewerTextures;
-    }
-
-    // Not allowed.
-    public loadTexture(device: GfxDevice, entry: any): LoadedTexture {
-        throw new Error();
     }
 }

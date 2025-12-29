@@ -24,7 +24,8 @@ import { ViewerRenderInput } from "../viewer.js";
 
 export class RRESTextureHolder extends GXTextureHolder<BRRES.TEX0> {
     public addRRESTextures(device: GfxDevice, rres: BRRES.RRES): void {
-        this.addTextures(device, rres.tex0);
+        for (let i = 0; i < rres.tex0.length; i++)
+            this.addTexture(device, rres.tex0[i]);
     }
 }
 

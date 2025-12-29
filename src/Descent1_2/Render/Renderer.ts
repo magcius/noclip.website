@@ -34,7 +34,7 @@ import { DescentRenderParameters } from "./RenderParameters.js";
 export class DescentRenderer implements Viewer.SceneGfx {
     public renderHelper: GfxRenderHelper;
     private renderInstListMain = new GfxRenderInstList();
-    public textureHolder: TextureHolder<any>;
+    public textureHolder: TextureHolder;
 
     public mineMesh: DescentMineRenderer;
     public powerupRenderer: DescentPowerupRenderer;

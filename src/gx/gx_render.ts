@@ -258,14 +258,21 @@ export function translateMaxAnisotropy(anisotropy: GX.Anisotropy): number {
     }
 }
 
-export class GXTextureHolder<TextureType extends GX_Texture.TextureInputGX = GX_Texture.TextureInputGX> extends TextureHolder<TextureType> {
-    protected loadTexture(device: GfxDevice, texture: TextureType): LoadedTexture | null {
+export class GXTextureHolder<TextureType extends GX_Texture.TextureInputGX = GX_Texture.TextureInputGX> extends TextureHolder {
+    public addTexture(device: GfxDevice, texture: TextureType): void {
         // Don't add textures without data.
         if (texture.data === null)
-            return null;
+            return;
+
+        // Don't add duplicates.
+        if (this.textureEntries.find((entry) => entry.name === texture.name) !== undefined)
+            return;
 
         const mipChain = GX_Texture.calcMipChain(texture, texture.mipCount);
-        return loadTextureFromMipChain(device, mipChain);
+        const { viewerTexture, gfxTexture } = loadTextureFromMipChain(device, mipChain);
+        this.viewerTextures.push(viewerTexture);
+        this.gfxTextures.push(gfxTexture);
+        this.textureEntries.push(texture);
     }
 }
 

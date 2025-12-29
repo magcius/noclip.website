@@ -39,7 +39,7 @@ export class DQ8Renderer implements Viewer.SceneGfx {
     private timeOfDayPanel: UI.TimeOfDayPanel | null = null;
     private useDynamicTime: boolean = true;
 
-    constructor(device: GfxDevice, public textureHolder: TextureHolder<any>, public sceneDesc: SceneDesc, public texNameToTextureData: Map<string, IMG.TextureData>) {
+    constructor(device: GfxDevice, public textureHolder: TextureHolder, public sceneDesc: SceneDesc, public texNameToTextureData: Map<string, IMG.TextureData>) {
         this.renderHelper = new GfxRenderHelper(device);
     }
 

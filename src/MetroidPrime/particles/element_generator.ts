@@ -709,7 +709,7 @@ export class ElementGenerator extends BaseGenerator {
 
         if (this.genDesc.TEXR) {
             const texr = this.genDesc.TEXR.GetValueTexture(0, defaultParticleGlobals)!;
-            renderer.textureHolder.addTextures(renderer.device, [texr]);
+            renderer.textureHolder.addTexture(renderer.device, texr);
             renderer.textureHolder.fillTextureMapping(this.textureMapping, texr.name);
             this.textureMapping.gfxSampler = renderer.renderCache.createSampler({
                 minFilter: GfxTexFilterMode.Bilinear,
