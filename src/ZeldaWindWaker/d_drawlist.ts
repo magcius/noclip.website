@@ -5,7 +5,7 @@ import { projectionMatrixForCuboid, saturate } from '../MathHelpers.js';
 import { TSDraw } from "../SuperMarioGalaxy/DDraw.js";
 import { createBufferFromData } from "../gfx/helpers/BufferHelpers.js";
 import { projectionMatrixConvertClipSpaceNearZ } from '../gfx/helpers/ProjectionHelpers.js';
-import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxChannelWriteMask, GfxClipSpaceNearZ, GfxDevice, GfxFormat, GfxInputLayout, GfxMipFilterMode, GfxProgram, GfxRenderPass, GfxSampler, GfxSamplerFormatKind, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxVertexBufferFrequency, GfxWrapMode } from "../gfx/platform/GfxPlatform.js";
+import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxChannelWriteMask, GfxClipSpaceNearZ, GfxCullMode, GfxDevice, GfxFormat, GfxInputLayout, GfxMipFilterMode, GfxProgram, GfxRenderPass, GfxSampler, GfxSamplerFormatKind, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxVertexBufferFrequency, GfxWrapMode } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { GfxRenderInst, GfxRenderInstExecutionOrder, GfxRenderInstList, GfxRenderInstManager, gfxRenderInstCompareNone, gfxRenderInstCompareSortKey } from "../gfx/render/GfxRenderInstManager.js";
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder.js';
@@ -368,18 +368,18 @@ class dDlst_shadowSimple_c {
             GfxBufferUsage.Index,
             GfxBufferFrequencyHint.Static,
             new Uint16Array([
-                0, 1, 2,
-                2, 3, 0,
+                0, 2, 1,
+                0, 3, 2,
                 4, 5, 6,
-                6, 7, 4,
+                4, 6, 7,
                 0, 1, 5,
-                5, 4, 0,
+                0, 5, 4,
                 2, 3, 7,
-                7, 6, 2,
+                2, 7, 6,
                 1, 2, 6,
-                6, 5, 1,
+                1, 6, 5,
                 3, 0, 4,
-                4, 7, 3,
+                3, 4, 7,
             ]).buffer,
         );
 
@@ -501,12 +501,14 @@ class dDlst_shadowControl_c {
         const template = renderInstManager.pushTemplate();
         template.setBindingLayouts(SimpleShadowProgram.bindingLayouts);
         template.setGfxProgram(this.simpleCache.program);
-        template.setMegaStateFlags(setAttachmentStateSimple({}, {
+        template.setMegaStateFlags({
+            cullMode: GfxCullMode.Back,
+            ...setAttachmentStateSimple({}, {
             channelWriteMask: GfxChannelWriteMask.RGB,
             blendMode: GfxBlendMode.Add,
             blendSrcFactor: GfxBlendFactor.Zero,
             blendDstFactor: GfxBlendFactor.SrcAlpha,
-        }));
+        })});
         template.setVertexInput(this.simpleCache.inputLayout, [{ buffer: this.simpleCache.positionBuffer }], { buffer: this.simpleCache.indexBuffer });
         template.setDrawCount(36);
         for (let i = 0; i < this.simpleCount; i++) {
