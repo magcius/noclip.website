@@ -5,7 +5,7 @@ import { projectionMatrixForCuboid, saturate } from '../MathHelpers.js';
 import { TSDraw } from "../SuperMarioGalaxy/DDraw.js";
 import { createBufferFromData } from "../gfx/helpers/BufferHelpers.js";
 import { projectionMatrixConvertClipSpaceNearZ } from '../gfx/helpers/ProjectionHelpers.js';
-import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxChannelWriteMask, GfxClipSpaceNearZ, GfxCullMode, GfxDevice, GfxFormat, GfxInputLayout, GfxMipFilterMode, GfxProgram, GfxRenderPass, GfxSampler, GfxSamplerFormatKind, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxVertexBufferFrequency, GfxWrapMode } from "../gfx/platform/GfxPlatform.js";
+import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxChannelWriteMask, GfxClipSpaceNearZ, GfxCullMode, GfxDevice, GfxFormat, GfxInputLayout, GfxMipFilterMode, GfxProgram, GfxRenderPass, GfxSampler, GfxSamplerFormatKind, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxVertexBufferFrequency, GfxWrapMode } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { GfxRenderInst, GfxRenderInstExecutionOrder, GfxRenderInstList, GfxRenderInstManager, gfxRenderInstCompareNone, gfxRenderInstCompareSortKey } from "../gfx/render/GfxRenderInstManager.js";
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder.js';
@@ -29,6 +29,7 @@ import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorH
 import { fillMatrix4x4, fillVec4 } from "../gfx/helpers/UniformBufferHelpers.js";
 import { preprocessProgramObj_GLSL } from "../gfx/shaderc/GfxShaderCompiler.js";
 import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetID } from "../gfx/render/GfxRenderGraph.js";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
 
 export enum dDlst_alphaModel__Type {
     Bonbori,
@@ -320,13 +321,16 @@ void main() {
 const scratchMat4 = mat4.create();
 
 class dDlst_shadowSimple_c_Cache {
-    program: GfxProgram;
-    inputLayout: GfxInputLayout;
-    positionBuffer: GfxBuffer;
-    indexBuffer: GfxBuffer;
-    sampler: GfxSampler;
+    public program: GfxProgram;
+    public inputLayout: GfxInputLayout;
+    public positionBuffer: GfxBuffer;
+    public indexBuffer: GfxBuffer;
+    public sampler: GfxSampler;
 
-    constructor(cache: GfxRenderCache) {
+    public defaultSimpleTex: BTIData;
+    public whiteTex: BTIData;
+
+    constructor(resCtrl: dRes_control_c, cache: GfxRenderCache) {
         const glsl = preprocessProgramObj_GLSL(cache.device, new SimpleShadowProgram());
         this.program = cache.createProgramSimple(glsl);
         this.inputLayout = cache.createInputLayout({
@@ -383,11 +387,41 @@ class dDlst_shadowSimple_c_Cache {
             minLOD: 0, maxLOD: 0,
         });
 
+        const img = resCtrl.getObjectRes(ResType.Raw, `Always`, 0x71); // ALWAYS_I4_BALL128B
+        const bti: BTI_Texture = {
+            name: img.name,
+            format: GX.TexFormat.I4,
+            width: 128,
+            height: 128,
+            data: img,
+            mipCount: 1,
+            wrapS: GX.WrapMode.CLAMP,
+            wrapT: GX.WrapMode.CLAMP,
+            minFilter: GX.TexFilter.LINEAR,
+            magFilter: GX.TexFilter.LINEAR,
+            minLOD: 0,
+            maxLOD: 0,
+            lodBias: 0,
+            maxAnisotropy: GX.Anisotropy._1,
+            paletteFormat: 0,
+            paletteData: null,
+        };
+        this.defaultSimpleTex = new BTIData(cache.device, cache, bti);
+
+        bti.name = "whiteTex";
+        bti.width = 1;
+        bti.height = 1;
+        bti.data = new ArrayBufferSlice(new Uint8Array(32).fill(0xFF).buffer);
+        this.whiteTex = new BTIData(cache.device, cache, bti);
+
         return this;
     }
 
     destroy(device: GfxDevice): void {
-        // Everything is managed by the cache, and will be destroyed when the cache is destroyed.
+        this.whiteTex.destroy(device);
+        this.defaultSimpleTex.destroy(device);
+
+        // Everything else is managed by the cache, and will be destroyed when the cache is destroyed.
     }
 }
 
@@ -395,7 +429,7 @@ class dDlst_shadowSimple_c_Cache {
 // texture (defaults to a circle) oriented to the ground normal to stencil out the shadow volume (i.e. a gobo texture).
 class dDlst_shadowSimple_c {
     public alpha: number = 0; // 0-255
-    public tex: BTIData | null = null;
+    public tex: BTIData;
     public modelMtx = mat4.create();
 
     public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
@@ -405,14 +439,13 @@ class dDlst_shadowSimple_c {
         offset += fillVec4(buf, offset, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
         offset += fillMatrix4x4(buf, offset, mat4.mul(scratchMat4, globals.camera.clipFromWorldMatrix, this.modelMtx));
         offset += fillMatrix4x4(buf, offset, mat4.invert(scratchMat4, scratchMat4));
-        // TODO: Handle shadows with no texture 
-        if (this.tex) this.tex.fillTextureMapping(materialParams.m_TextureMapping[0]);
+        this.tex.fillTextureMapping(materialParams.m_TextureMapping[0]);
         materialParams.m_TextureMapping[1].lateBinding = 'depth-target';
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
         renderInstManager.submitRenderInst(renderInst);
     }
 
-    public set(pos: vec3, floorY: number, scaleXZ: number, floorNrm: vec3, rotY: number, scaleZ: number, tex: BTIData | null): void {
+    public set(pos: vec3, floorY: number, scaleXZ: number, floorNrm: vec3, rotY: number, scaleZ: number, tex: BTIData): void {
         const offsetY = scaleXZ * 16.0 * (1.0 - floorNrm[1]) + 1.0;
 
         // Build the matrix which will transform a [-1, 1] cube into our shadow volume oriented to the floor plane
@@ -443,40 +476,20 @@ class dDlst_shadowControl_c {
     private simpleCount = 0;
     private simpleCache: dDlst_shadowSimple_c_Cache;
 
+    public get defaultSimpleTex(): BTIData {
+        return this.simpleCache.defaultSimpleTex;
+    }
+
     // TODO: Real shadows
     // private reals = nArray(8, () => new dDlst_shadowSimple_c());
     // private realCache: dDlst_shadowReal_c_DLCache;
 
-    public defaultSimpleTex: BTIData;
-
     constructor(device: GfxDevice, cache: GfxRenderCache, resCtrl: dRes_control_c) {
-        this.simpleCache = new dDlst_shadowSimple_c_Cache(cache);
-
-        const img = resCtrl.getObjectRes(ResType.Raw, `Always`, 0x71); // ALWAYS_I4_BALL128B
-        const bti: BTI_Texture = {
-            name: img.name,
-            format: GX.TexFormat.I4,
-            width: 128,
-            height: 128,
-            data: img,
-            mipCount: 1,
-            wrapS: GX.WrapMode.CLAMP,
-            wrapT: GX.WrapMode.CLAMP,
-            minFilter: GX.TexFilter.LINEAR,
-            magFilter: GX.TexFilter.LINEAR,
-            minLOD: 0,
-            maxLOD: 0,
-            lodBias: 0,
-            maxAnisotropy: GX.Anisotropy._1,
-            paletteFormat: 0,
-            paletteData: null,
-        };
-        this.defaultSimpleTex = new BTIData(device, cache, bti);
+        this.simpleCache = new dDlst_shadowSimple_c_Cache(resCtrl, cache);
     }
 
     destroy(device: GfxDevice): void {
         this.simpleCache.destroy(device);
-        this.defaultSimpleTex.destroy(device);
     }
 
     public reset(): void {
@@ -548,12 +561,12 @@ class dDlst_shadowControl_c {
         return false;
     }
 
-    public setSimple(globals: dGlobals, pos: vec3, groundY: number, scaleXZ: number, floorNrm: vec3, angle: number, scaleZ: number, pTexObj: BTIData | null): boolean {
+    public setSimple(globals: dGlobals, pos: vec3, groundY: number, scaleXZ: number, floorNrm: vec3, angle: number, scaleZ: number, tex: BTIData | null): boolean {
         if (floorNrm === null || this.simpleCount >= this.simples.length)
             return false;
 
         const simple = this.simples[this.simpleCount++];
-        simple.set(pos, groundY, scaleXZ, floorNrm, angle, scaleZ, pTexObj);
+        simple.set(pos, groundY, scaleXZ, floorNrm, angle, scaleZ, tex ? tex : this.simpleCache.whiteTex);
         return true;
     }
 }
