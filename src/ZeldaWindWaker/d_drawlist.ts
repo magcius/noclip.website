@@ -384,6 +384,8 @@ void main() {
 }
 
 const scratchMat4 = mat4.create();
+const scratchVec3a = vec3.create();
+const scratchVec3b = vec3.create();
 class dDlst_shadowRealPoly_c {
     // TODO:
 }
@@ -452,8 +454,67 @@ class dDlst_shadowReal_c {
 
     private static setShadowRealMtx(viewMtx: mat4, renderProjMtx: mat4, receiverProjMtx: mat4, lightPos: vec3, pos: vec3,
         casterSize: number, heightAgl: number, shadowPoly: dDlst_shadowRealPoly_c, heightFade: number): number {
-        // TODO: Implement shadow matrix calculation logic.
-        return 64; // Example: return default alpha value
+        // shadowPoly->reset();
+        if (heightFade >= 1.0) {
+            return 0;
+        }
+
+        let opacity = Math.min(1.0, 1.0 - heightFade);
+        let alpha = Math.floor(200.0 * opacity);
+
+        // Calculate light vector
+        const lightVec = scratchVec3a;
+        vec3.sub(lightVec, lightPos, pos);
+
+        // The higher off the ground a shadow caster is, the weaker the shadow's horizontal components become
+        // This cheats the light vec to be more vertical when the caster is in the air, a la platforming drop shadows
+        // At 50 units above ground, the shadow is fully vertical
+        lightVec[1] += heightAgl;
+        let xzScale = Math.max( 0.0, 0.02 * (50.0 - heightAgl));
+        lightVec[0] *= xzScale;
+        lightVec[2] *= xzScale;
+
+        // Place the light pos / shadowmap camera just outside of the caster radius
+        let lightDist = vec3.length(lightVec);
+        if (lightDist !== 0.0) {
+            let tmp3 = (lightVec[1] / lightDist);
+            if (tmp3 < 1.5) {
+                lightVec[1] = 1.5 * lightDist;
+                lightDist = vec3.length(lightVec);
+            }
+            lightDist = (casterSize * 0.5) / lightDist;
+        }
+        vec3.scale(lightVec, lightVec, lightDist);
+        vec3.add(lightVec, lightVec, pos);
+
+        // Calculate caster radius and ray direction
+        const casterRadius = casterSize * 0.4;
+        const rayDir = vec3.create();
+        vec3.sub(rayDir, pos, lightVec);
+        if (vec3.squaredLength(rayDir) === 0.0) {
+            rayDir[1] = -1.0;
+            lightVec[1] = pos[1] + 1.0;
+        } else {
+            vec3.normalize(rayDir, rayDir);
+        }
+
+        // TODO: Implement realPolygonCheck equivalent in JS/TS
+        // if (!realPolygonCheck(pos, casterRadius, heightAgl, rayDir, shadowPoly)) {
+        //     return 0;
+        // }
+
+        // Build view matrix (lookAt)
+        mat4.targetTo(viewMtx, lightVec, pos, [0, 1, 0]);
+        mat4.ortho(renderProjMtx, -casterRadius, casterRadius, -casterRadius, casterRadius, 1.0, 10000.0);
+
+        // TODO: Build receiver projection matrix
+        // Similar to mat4.ortho above, but with uv scale built in
+        // mat4.ortho(receiverProjMtx, -casterRadius, casterRadius, -casterRadius, casterRadius, -0.5, 0.5);
+
+        // Concatenate receiverProjMtx and viewMtx
+        mat4.multiply(receiverProjMtx, receiverProjMtx, viewMtx);
+
+        return alpha;
     }
 }
 
