@@ -36,17 +36,20 @@ export class ModelCache {
         return parse<T>(this.fezTypeReaderManager, data);
     }
 
-    private async fetchTrilesetInternal(device: GfxDevice, path: string): Promise<void> {
+    private async fetchTrilesetInternal(path: string): Promise<void> {
+        const device = this.renderCache.device;
         const data = await this.fetchXNB<Fez_TrileSet>(`xnb/trile sets/${path}.xnb`);
         this.trilesetDatas.push(new TrilesetData(device, this.renderCache, path, data));
     }
 
-    private async fetchArtObjectInternal(device: GfxDevice, path: string): Promise<void> {
+    private async fetchArtObjectInternal(path: string): Promise<void> {
+        const device = this.renderCache.device;
         const xnb = await this.fetchXNB<Fez_ArtObject>(`xnb/art objects/${path}.xnb`);
         this.artObjectDatas.push(new ArtObjectData(device, this.renderCache, path, xnb));
     }
 
-    private async fetchBackgroundPlaneInternal(device: GfxDevice, path: string, isAnimated: boolean): Promise<void> {
+    private async fetchBackgroundPlaneInternal(path: string, isAnimated: boolean): Promise<void> {
+        const device = this.renderCache.device;
         if (isAnimated) {
             const data = await this.fetchXNB<Fez_AnimatedTexture>(`xnb/background planes/${path}.xnb`);
             this.backgroundPlaneDatas.push(new BackgroundPlaneData(device, path, data.texture, data));
@@ -56,32 +59,33 @@ export class ModelCache {
         }
     }
 
-    private async fetchSkyDataInternal(device: GfxDevice, path: string): Promise<void> {
+    private async fetchSkyDataInternal(path: string): Promise<void> {
+        const device = this.renderCache.device;
         this.skyDatas.push(await fetchSkyData(this, device, this.renderCache, path));
     }
 
-    public fetchTrileset(device: GfxDevice, path: string): void {
+    public fetchTrileset(path: string): void {
         const key = `trile sets/${path}`;
         if (!this.promiseCache.has(key))
-            this.promiseCache.set(key, this.fetchTrilesetInternal(device, path));
+            this.promiseCache.set(key, this.fetchTrilesetInternal(path));
     }
 
-    public fetchArtObject(device: GfxDevice, path: string): void {
+    public fetchArtObject(path: string): void {
         const key = `art objects/${path}`;
         if (!this.promiseCache.has(key))
-            this.promiseCache.set(key, this.fetchArtObjectInternal(device, path));
+            this.promiseCache.set(key, this.fetchArtObjectInternal(path));
     }
 
-    public fetchBackgroundPlane(device: GfxDevice, path: string, isAnimated: boolean): void {
+    public fetchBackgroundPlane(path: string, isAnimated: boolean): void {
         const key = `background planes/${path}`;
         if (!this.promiseCache.has(key))
-            this.promiseCache.set(key, this.fetchBackgroundPlaneInternal(device, path, isAnimated));
+            this.promiseCache.set(key, this.fetchBackgroundPlaneInternal(path, isAnimated));
     }
 
-    public fetchSky(device: GfxDevice, path: string): void {
+    public fetchSky(path: string): void {
         const key = `skies/${path}`;
         if (!this.promiseCache.has(key))
-            this.promiseCache.set(key, this.fetchSkyDataInternal(device, path));
+            this.promiseCache.set(key, this.fetchSkyDataInternal(path));
     }
 
     public destroy(device: GfxDevice): void {
@@ -108,14 +112,14 @@ class FezSceneDesc implements Viewer.SceneDesc {
 
         const level = await cache.fetchXNB<Fez_Level>(`xnb/levels/${this.id}.xnb`);
 
-        cache.fetchTrileset(device, level.trileSetName);
-        cache.fetchSky(device, level.skyName);
+        cache.fetchTrileset(level.trileSetName);
+        cache.fetchSky(level.skyName);
 
         for (const artObject of level.artObjects.values())
-            cache.fetchArtObject(device, artObject.name);
+            cache.fetchArtObject(artObject.name);
 
         for (const backgroundPlane of level.backgroundPlanes.values())
-            cache.fetchBackgroundPlane(device, backgroundPlane.textureName, backgroundPlane.animated);
+            cache.fetchBackgroundPlane(backgroundPlane.textureName, backgroundPlane.animated);
 
         await cache.waitForLoad();
 
