@@ -97,22 +97,27 @@ class TMSFEScene implements SceneGfx
 
     public render(device: GfxDevice, viewerInput: ViewerRenderInput): void
     {
+        this.renderHelper.pushTemplateRenderInst();
+
         const renderInst = this.renderHelper.renderInstManager.newRenderInst();
+        
         renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, null);
         renderInst.setDrawCount(3022);
         renderInst.setBindingLayouts(bindingLayouts);
         renderInst.setGfxProgram(this.program);
         renderInst.setMegaStateFlags({ cullMode: GfxCullMode.Back });
-
+        
         let offs = renderInst.allocateUniformBuffer(TMSFEProgram.ub_SceneParams, 32);
         const mapped = renderInst.mapUniformBufferF32(TMSFEProgram.ub_SceneParams);
         offs += fillMatrix4x4(mapped, offs, viewerInput.camera.projectionMatrix);
         offs += fillMatrix4x3(mapped, offs, viewerInput.camera.viewMatrix);
-
+        
         this.renderHelper.renderInstManager.setCurrentList(this.renderInstListMain);
-
+        
         this.renderHelper.renderInstManager.submitRenderInst(renderInst);
         
+        this.renderHelper.renderInstManager.popTemplate();
+
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
         const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, standardFullClearRenderPassDescriptor);
         const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, standardFullClearRenderPassDescriptor);
