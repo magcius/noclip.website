@@ -337,6 +337,13 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         };
         renderHacksPanel.contents.appendChild(enableObjects.elem);
 
+        const showDebugThumbnails = new UI.Checkbox('Show Debug Thumbnails', false);
+        showDebugThumbnails.onchanged = () => {
+            const v = showDebugThumbnails.checked;
+            this.renderHelper.debugThumbnails.enabled = v;
+        };
+        renderHacksPanel.contents.appendChild(showDebugThumbnails.elem);
+
         if (this.renderHelper.device.queryLimits().wireframeSupported) {
             const wireframe = new UI.Checkbox('Wireframe', false);
             wireframe.onchanged = () => {
@@ -564,6 +571,8 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
 
         dlst.peekZ.pushPasses(renderInstManager, builder, mainDepthTargetID);
         dlst.peekZ.peekData(device);
+
+        this.renderHelper.debugThumbnails.pushPasses(builder, renderInstManager, mainColorTargetID, viewerInput.mouseLocation);
 
         builder.pushPass((pass) => {
             pass.setDebugName('Indirect');
