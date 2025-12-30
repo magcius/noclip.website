@@ -35,7 +35,7 @@ export class TextureHolder implements TextureListHolder {
     public onnewtextures: (() => void) | null = null;
 
     public get textureNames(): string[] {
-        return this.textureNames;
+        return this._textureNames;
     }
 
     public async getViewerTexture(i: number) {
