@@ -43,7 +43,7 @@ void mainVS()
 #ifdef FRAG
 void mainPS()
 {
-    gl_FragColor = u_Color + vec4(0.0, 0.0, 1.0, 0.0);
+    gl_FragColor = vec4(0.0, 0.0, 1.0, 0.0);
 }
 #endif
 `;
@@ -51,7 +51,7 @@ void mainPS()
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] =
 [
-    { numUniformBuffers: 1, numSamplers: 0 },
+    { numUniformBuffers: 2, numSamplers: 0 },
 ];
 
 class TMSFEScene implements SceneGfx
@@ -100,7 +100,6 @@ class TMSFEScene implements SceneGfx
         this.renderHelper.pushTemplateRenderInst();
 
         const renderInst = this.renderHelper.renderInstManager.newRenderInst();
-        
         renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, null);
         renderInst.setDrawCount(3022);
         renderInst.setBindingLayouts(bindingLayouts);
@@ -113,10 +112,9 @@ class TMSFEScene implements SceneGfx
         offs += fillMatrix4x3(mapped, offs, viewerInput.camera.viewMatrix);
         
         this.renderHelper.renderInstManager.setCurrentList(this.renderInstListMain);
-        
         this.renderHelper.renderInstManager.submitRenderInst(renderInst);
-        
         this.renderHelper.renderInstManager.popTemplate();
+        this.renderHelper.prepareToRender();
 
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
         const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, standardFullClearRenderPassDescriptor);
