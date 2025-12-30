@@ -10,86 +10,48 @@ import { DeviceProgram } from '../Program.js';
 import { GfxShaderLibrary } from '../gfx/helpers/GfxShaderLibrary.js';
 import { GfxRenderInstList, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
 import { createBufferFromData, createBufferFromSlice } from "../gfx/helpers/BufferHelpers.js";
+import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
+import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
+import { fillColor, fillMatrix4x3, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers.js';
 
 class TMSFEProgram extends DeviceProgram {
     public static a_Position = 0;
-    public static a_Color = 1;
-    public static a_TexCoord0 = 2;
-    public static a_TexCoord1 = 3;
 
     public static ub_SceneParams = 0;
-    public static ub_MeshFragParams = 1;
+    public static ub_ObjectParams = 1;
 
     public override both = `
 precision mediump float;
 
 ${GfxShaderLibrary.MatrixLibrary}
 
-// Expected to be constant across the entire scene.
 layout(std140) uniform ub_SceneParams {
     Mat4x4 u_Projection;
+    Mat3x4 u_ModelView;
 };
-
-layout(std140) uniform ub_MeshFragParams {
-    Mat3x4 u_BoneMatrix[1];
-    vec4 u_MaterialColor;
-    vec4 u_TexCoordOffs;
-};
-
-uniform sampler2D u_Texture;
-uniform sampler2D u_TextureDetail;
-uniform sampler2D u_TextureLightmap;
-
-varying vec4 v_Color;
-varying vec4 v_TexCoord;
 
 #ifdef VERT
-layout(location = ${TMSFEProgram.a_Position}) in vec3 a_Position;
-layout(location = ${TMSFEProgram.a_Color}) in vec4 a_Color;
-layout(location = ${TMSFEProgram.a_TexCoord0}) in vec2 a_TexCoord0;
-layout(location = ${TMSFEProgram.a_TexCoord1}) in vec2 a_TexCoord1;
+layout(location = ${TMSFEProgram.a_Position}) attribute vec3 a_Position;
 
-void main() {
-    vec3 t_PositionView = UnpackMatrix(u_BoneMatrix[0]) * vec4(a_Position, 1.0);
-    gl_Position = UnpackMatrix(u_Projection) * vec4(t_PositionView, 1.0);
-    v_Color = a_Color;
-    v_TexCoord.xy = a_TexCoord0 + u_TexCoordOffs.xy;
-    v_TexCoord.zw = a_TexCoord1;
+void mainVS()
+{
+    vec3 t_PositionWorld = UnpackMatrix(u_ModelView) * vec4(a_Position, 1.0);
+    gl_Position = UnpackMatrix(u_Projection) * vec4(t_PositionWorld, 1.0);
 }
 #endif
 
 #ifdef FRAG
-void main() {
-    vec4 t_Color = vec4(1.0);
-
-#ifdef USE_TEXTURE
-    t_Color *= texture(SAMPLER_2D(u_Texture), v_TexCoord.xy);
-#endif
-
-#ifdef USE_LIGHTMAP
-    t_Color.rgb *= texture(SAMPLER_2D(u_TextureLightmap), v_TexCoord.zw).rgb;
-#endif
-
-#ifdef USE_VERTEX_COLOR
-    // TODO(jstpierre): How is the vertex color buffer used?
-    t_Color.rgb *= clamp(v_Color.rgb * 4.0, 0.0, 1.0);
-    t_Color.a *= v_Color.a;
-#endif
-
-#ifdef USE_ALPHA_TEST
-    // TODO(jstpierre): Configurable alpha ref?
-    if (t_Color.a < 0.5)
-        discard;
-#endif
-
-    gl_FragColor = t_Color;
+void mainPS()
+{
+    gl_FragColor = u_Color + vec4(0.0, 0.0, 1.0, 0.0);
 }
 #endif
 `;
 }
 
-const bindingLayouts: GfxBindingLayoutDescriptor[] = [
-    { numUniformBuffers: 2, numSamplers: 0 },
+const bindingLayouts: GfxBindingLayoutDescriptor[] =
+[
+    { numUniformBuffers: 1, numSamplers: 0 },
 ];
 
 class TMSFEScene implements SceneGfx
@@ -114,15 +76,15 @@ class TMSFEScene implements SceneGfx
         ];
         console.log(vertexAttributeDescriptors);
 
-        const layoutBufferDescriptors: GfxInputLayoutBufferDescriptor[] =
+        const inputLayoutBufferDescriptors: GfxInputLayoutBufferDescriptor[] =
         [
             { byteStride: fvtx.vertexBuffers[0].stride, frequency: GfxVertexBufferFrequency.PerVertex },
         ];
-        console.log(layoutBufferDescriptors);
+        console.log(inputLayoutBufferDescriptors);
 
         const indexBufferFormat: GfxFormat | null = null;
         const cache = this.renderHelper.renderCache;
-        this.inputLayout = cache.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors: layoutBufferDescriptors, indexBufferFormat });
+        this.inputLayout = cache.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors: inputLayoutBufferDescriptors, indexBufferFormat });
 
         
         const gfx_buffer = createBufferFromSlice(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, fvtx.vertexBuffers[0].data);
@@ -135,18 +97,41 @@ class TMSFEScene implements SceneGfx
 
     public render(device: GfxDevice, viewerInput: ViewerRenderInput): void
     {
-        const template = this.renderHelper.pushTemplateRenderInst();
-        template.setBindingLayouts(bindingLayouts);
-        template.setGfxProgram(this.program);
-        template.setMegaStateFlags({ cullMode: GfxCullMode.Back });
-
         const renderInst = this.renderHelper.renderInstManager.newRenderInst();
         renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, null);
         renderInst.setDrawCount(3022);
+        renderInst.setBindingLayouts(bindingLayouts);
+        renderInst.setGfxProgram(this.program);
+        renderInst.setMegaStateFlags({ cullMode: GfxCullMode.Back });
+
+        let offs = renderInst.allocateUniformBuffer(TMSFEProgram.ub_SceneParams, 32);
+        const mapped = renderInst.mapUniformBufferF32(TMSFEProgram.ub_SceneParams);
+        offs += fillMatrix4x4(mapped, offs, viewerInput.camera.projectionMatrix);
+        offs += fillMatrix4x3(mapped, offs, viewerInput.camera.viewMatrix);
 
         this.renderHelper.renderInstManager.setCurrentList(this.renderInstListMain);
 
         this.renderHelper.renderInstManager.submitRenderInst(renderInst);
+        
+        const builder = this.renderHelper.renderGraph.newGraphBuilder();
+        const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, standardFullClearRenderPassDescriptor);
+        const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, standardFullClearRenderPassDescriptor);
+
+        const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
+        const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
+        builder.pushPass((pass) => {
+            pass.setDebugName('Main');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
+            pass.exec((passRenderer) => {
+                this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
+            });
+        });
+        this.renderHelper.antialiasingSupport.pushPasses(builder, viewerInput, mainColorTargetID);
+        builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
+
+        this.renderHelper.renderGraph.execute(builder);
+        this.renderInstListMain.reset();
     }
 
     public destroy(device: GfxDevice): void
