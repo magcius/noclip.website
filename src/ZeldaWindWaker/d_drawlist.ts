@@ -280,14 +280,45 @@ class SimpleShadowProgram extends DeviceProgram {
         ]
     }];
 
+    private generateFogZCoord() {
+        const isDepthReversed = IsDepthReversed;
+        if (isDepthReversed)
+            return `(1.0 - gl_FragCoord.z)`;
+        else
+            return `gl_FragCoord.z`;
+    }
+
+    private generateFogBase() {
+        // We allow switching between orthographic & perspective at runtime for the benefit of camera controls.
+        // const ropInfo = this.material.ropInfo;
+        // const proj = !!(ropInfo.fogType >>> 3);
+        // const isProjection = (proj === 0);
+        const isProjection = `(u_FogBlock.Param.y != 0.0)`;
+
+        const A = `u_FogBlock.Param.x`;
+        const B = `u_FogBlock.Param.y`;
+        const z = this.generateFogZCoord();
+
+        return `(${isProjection}) ? (${A} / (${B} - ${z})) : (${A} * ${z})`;
+    }
+
+    private generateFogAdj(base: string) {
+        // TODO(jstpierre): Fog adj
+        return ``;
+    }
+
+    public generateFog() {
+        const C = `u_FogBlock.Param.z`;
+        return `
+    float t_FogBase = ${this.generateFogBase()};
+    ${this.generateFogAdj(`t_FogBase`)}
+    float t_FogZ = saturate(t_FogBase - ${C});
+    t_PixelOut.rgb = mix(t_PixelOut.rgb, u_FogBlock.Color.rgb, t_FogZ);
+`;
+    }
+
     constructor() {
         super();
-
-        const mb = new GXMaterialBuilder('SimpleShadow');
-        mb.setFog(GX.FogType.ORTHO_LIN, true );
-        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0);
-        const mat = mb.finish();
-        const gx = new GX_Program(mat);
 
         this.both = `
 ${GfxShaderLibrary.MatrixLibrary}
@@ -343,7 +374,7 @@ void main() {
     float t_Alpha = smoothstep(0.0, 0.1, t_ShadowColor);
     vec4 t_PixelOut = vec4(0, 0, 0, 0.25 * t_Alpha);
 
-    ${gx.generateFog()}
+    ${this.generateFog()}
 
     gl_FragColor = t_PixelOut;
 }
