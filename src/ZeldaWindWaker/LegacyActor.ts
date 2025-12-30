@@ -23,7 +23,7 @@ import { cPhs__Status, fGlobals, fpcPf__RegisterFallback } from './framework.js'
 import { mDoExt_McaMorf, mDoExt_modelUpdateDL } from './m_do_ext.js';
 import { MtxTrans, calc_mtx, mDoMtx_ZXYrotM } from './m_do_mtx.js';
 import { WindWakerRenderer, dGlobals } from "./Main.js";
-import { dComIfGd_setSimpleShadow2 } from './d_drawlist.js';
+import { dComIfGd_setShadow, dComIfGd_setSimpleShadow2 } from './d_drawlist.js';
 import { BTIData } from '../Common/JSYSTEM/JUTTexture.js';
 
 const scratchMat4a = mat4.create();
@@ -52,6 +52,7 @@ class d_a_noclip_legacy extends fopAc_ac_c {
     public shadowChk: dBgS_GndChk;
     public shadowScaleXZ: number = 0;
     public shadowTex?: BTIData | null;
+    public shadowRealSize: number = 0;
     public shadowId: number = 0;
     public objectRenderers: BMDObjectRenderer[] = [];
     public isDemoActor = false;
@@ -108,7 +109,11 @@ class d_a_noclip_legacy extends fopAc_ac_c {
         const device = globals.modelCache.device;
             
         if (this.shadowChk) {
-            dComIfGd_setSimpleShadow2(globals, this.pos, this.shadowChk.retY, this.shadowScaleXZ, this.shadowChk.polyInfo, this.rot[1], 1.0, this.shadowTex);
+            if (this.shadowRealSize > 0)
+                this.shadowId = dComIfGd_setShadow(globals, this.shadowId, true, this.objectRenderers[0].modelInstance, this.pos, this.shadowRealSize,
+                    this.shadowScaleXZ, this.pos[1], this.shadowChk.retY, this.shadowChk.polyInfo, this.tevStr, this.rot[1], 1.0, this.shadowTex);
+            else
+                dComIfGd_setSimpleShadow2(globals, this.pos, this.shadowChk.retY, this.shadowScaleXZ, this.shadowChk.polyInfo, this.rot[1], 1.0, this.shadowTex);
         }
 
         renderInstManager.setCurrentList(globals.dlst.main[0]);
@@ -209,11 +214,16 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     }
 
     function setShadowSimple(scaleXZ: number, scaleZ: number = 1.0, tex?: BTIData | null): void {
+        setShadow(0, scaleXZ, scaleZ, tex);
+    }
+
+    function setShadow(realSize: number, scaleXZ: number, scaleZ: number = 1.0, tex?: BTIData | null): void {
         legacy.shadowChk = new dBgS_GndChk();
         vec3.scaleAndAdd(legacy.shadowChk.pos, legacy.pos, Vec3UnitY, 40.0);
         globals.scnPlay.bgS.GroundCross(legacy.shadowChk);
         legacy.shadowScaleXZ = scaleXZ;
         legacy.shadowTex = tex;
+        legacy.shadowRealSize = realSize;
     }
 
     function parseBCK(rarc: RARC.JKRArchive, path: string) {
@@ -578,6 +588,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         const m = buildModel(rarc, `bdlm/ko.bdl`);
         buildChildModel(rarc, `bdlm/kohead01.bdl`).setParentJoint(m, `head`);
         m.bindANK1(parseBCK(rarc, `bcks/ko_wait01.bck`));
+        setShadow(800.0, 40.0, 1.0);
     });
     // Joel
     else if (actorName === 'Ko2') fetchArchive(`Ko`).then((rarc) => {
