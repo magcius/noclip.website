@@ -1299,7 +1299,7 @@ varying vec4 v_Color1;
         }
     }
 
-    private generateFog() {
+    public generateFog() {
         const ropInfo = this.material.ropInfo;
         if (ropInfo.fogType === GX.FogType.NONE)
             return "";
