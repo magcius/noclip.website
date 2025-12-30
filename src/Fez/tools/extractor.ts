@@ -1,13 +1,8 @@
 
-import ArrayBufferSlice from "../../ArrayBufferSlice.js";
-import * as BYML from "../../byml.js";
-import * as Yaz0 from '../../Common/Compression/Yaz0.js';
-import * as JKRArchive from "../../Common/JSYSTEM/JKRArchive.js";
-import { openSync, readSync, closeSync, readFileSync, writeFileSync, readdirSync, mkdirSync, cpSync } from "fs";
-import { assertExists, hexzero, assert, readString } from "../../util.js";
-import { Endianness } from "../../endian.js";
-import { loadRustLib } from "../../rustlib.js";
+import { mkdirSync, readFileSync, writeFileSync } from "fs";
 import path from "path";
+import ArrayBufferSlice from "../../ArrayBufferSlice.js";
+import { readString } from "../../util.js";
 
 // Standalone tool designed for node to extract data.
 

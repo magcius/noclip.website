@@ -3,7 +3,7 @@ import * as Viewer from '../viewer.js';
 import { GfxDevice, GfxBindingLayoutDescriptor, GfxMegaStateDescriptor, GfxCullMode, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxRenderProgramDescriptor } from "../gfx/platform/GfxPlatform.js";
 import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
-import { GfxRenderInstList, GfxRenderInstManager, GfxRendererLayer, makeSortKeyOpaque } from "../gfx/render/GfxRenderInstManager.js";
+import { GfxRenderInstList, GfxRenderInstManager, GfxRendererLayer, makeSortKey, makeSortKeyOpaque } from "../gfx/render/GfxRenderInstManager.js";
 import { fillMatrix4x4, fillMatrix4x3, fillVec4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers.js";
 import { mat4, vec3, vec2, vec4 } from "gl-matrix";
 import { computeViewMatrix, CameraController } from "../Camera.js";
@@ -129,7 +129,7 @@ export class FezRenderer implements Viewer.SceneGfx {
     public backgroundPlaneRenderers: BackgroundPlaneRenderer[] = [];
     public lightDirection = vec4.fromValues(1, 1, 1, 0);
 
-    constructor(device: GfxDevice, modelCache: ModelCache, level: Fez_Level) {
+    constructor(device: GfxDevice, private modelCache: ModelCache, private level: Fez_Level) {
         this.renderHelper = new GfxRenderHelper(device);
         this.program = preprocessProgramObj_GLSL(device, new FezProgram());
 
@@ -285,6 +285,9 @@ export class FezObjectRenderer {
     }
 
     public prepareToRender(levelRenderData: FezLevelRenderData, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput) {
+        if (this.geometryData.indexCount === 0)
+            return;
+
         bboxScratch.transform(this.geometryData.bbox, this.modelMatrix);
         if (!viewerInput.camera.frustum.contains(bboxScratch))
             return;
@@ -319,11 +322,13 @@ export class BackgroundPlaneRenderer {
     private textureMapping = new TextureMapping();
     private megaStateFlags: Partial<GfxMegaStateDescriptor> = {};
     private rawScale = vec2.create();
-    private xTextureRepeat = false;
-    private yTextureRepeat = false;
     private sampler: GfxSampler;
+    private visible = true;
+    private name: string;
 
-    constructor(cache: GfxRenderCache, backgroundPlane: Fez_BackgroundPlane, private planeData: BackgroundPlaneData, private staticData: BackgroundPlaneStaticData) {
+    constructor(cache: GfxRenderCache, private backgroundPlane: Fez_BackgroundPlane, private planeData: BackgroundPlaneData, private staticData: BackgroundPlaneStaticData) {
+        this.name = this.planeData.name;
+
         const position = vec3.clone(backgroundPlane.position);
         position[0] -= 0.5;
         position[1] -= 0.5;
@@ -348,25 +353,33 @@ export class BackgroundPlaneRenderer {
 
         this.megaStateFlags.frontFace = GfxFrontFaceMode.CW;
 
-        if (backgroundPlane.doubleSided)
+        if (this.backgroundPlane.doubleSided)
             this.megaStateFlags.cullMode = GfxCullMode.None;
         else
             this.megaStateFlags.cullMode = GfxCullMode.Back;
 
-        this.xTextureRepeat = backgroundPlane.xTextureRepeat;
-        this.yTextureRepeat = backgroundPlane.yTextureRepeat;
+        if (this.backgroundPlane.lightMap) {
+            setAttachmentStateSimple(this.megaStateFlags, {
+                blendMode: GfxBlendMode.Add,
+                blendSrcFactor: GfxBlendFactor.One,
+                blendDstFactor: GfxBlendFactor.One,
+            });
+        } else {
+            setAttachmentStateSimple(this.megaStateFlags, {
+                blendMode: GfxBlendMode.Add,
+                blendSrcFactor: GfxBlendFactor.SrcAlpha,
+                blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
+            });
+        }
 
-        setAttachmentStateSimple(this.megaStateFlags, {
-            blendMode: GfxBlendMode.Add,
-            blendSrcFactor: GfxBlendFactor.SrcAlpha,
-            blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
-        });
+        const texFilter: GfxTexFilterMode = this.backgroundPlane.lightMap && !this.backgroundPlane.pixelatedLightmap ?
+            GfxTexFilterMode.Bilinear : GfxTexFilterMode.Point;
 
         this.sampler = cache.createSampler({
-            wrapS: this.xTextureRepeat ? GfxWrapMode.Repeat : GfxWrapMode.Clamp,
-            wrapT: this.yTextureRepeat ? GfxWrapMode.Repeat : GfxWrapMode.Clamp,
-            minFilter: GfxTexFilterMode.Point,
-            magFilter: GfxTexFilterMode.Point,
+            wrapS: this.backgroundPlane.xTextureRepeat ? GfxWrapMode.Repeat : GfxWrapMode.Clamp,
+            wrapT: this.backgroundPlane.yTextureRepeat ? GfxWrapMode.Repeat : GfxWrapMode.Clamp,
+            minFilter: texFilter,
+            magFilter: texFilter,
             mipFilter: GfxMipFilterMode.Nearest,
             minLOD: 0, maxLOD: 0,
         });
@@ -378,6 +391,9 @@ export class BackgroundPlaneRenderer {
     }
 
     public prepareToRender(levelRenderData: FezLevelRenderData, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput) {
+        if (!this.visible)
+            return;
+
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setVertexInput(this.staticData.inputLayout, this.staticData.vertexBufferDescriptors, this.staticData.indexBufferDescriptor);
         textureMappingScratch[0].copy(this.textureMapping);
@@ -401,6 +417,8 @@ export class BackgroundPlaneRenderer {
         offs += fillVec4(d, offs, levelRenderData.baseDiffuse, levelRenderData.baseAmbient, 0, 0);
 
         renderInst.setDrawCount(this.staticData.indexCount);
+        if (this.backgroundPlane.fullbright)
+            renderInst.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT);
         renderInstManager.submitRenderInst(renderInst);
     }
 
