@@ -1,6 +1,6 @@
 
 import { mat4, vec3 } from "gl-matrix";
-import { White, colorCopy, colorNewCopy } from "../Color.js";
+import { OpaqueBlack, Red, TransparentBlack, White, colorCopy, colorNewCopy } from "../Color.js";
 import { projectionMatrixForCuboid, saturate } from '../MathHelpers.js';
 import { TSDraw } from "../SuperMarioGalaxy/DDraw.js";
 import { createBufferFromData } from "../gfx/helpers/BufferHelpers.js";
@@ -14,7 +14,7 @@ import * as GX from '../gx/gx_enum.js';
 import { GX_Program } from '../gx/gx_material.js';
 import { ColorKind, DrawParams, GXMaterialHelperGfx, MaterialParams, SceneParams, createInputLayout, fillFogBlock, fillSceneParamsData, ub_SceneParamsBufferSize } from "../gx/gx_render.js";
 import { assert, assertExists, nArray } from '../util.js';
-import { ViewerRenderInput } from '../viewer.js';
+import { Viewer, ViewerRenderInput } from '../viewer.js';
 import { SymbolMap, dGlobals } from './Main.js';
 import { PeekZManager } from "./d_dlst_peekZ.js";
 import { cBgS_PolyInfo } from "./d_bg.js";
@@ -28,8 +28,10 @@ import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
 import { fillMatrix4x4, fillVec4 } from "../gfx/helpers/UniformBufferHelpers.js";
 import { preprocessProgramObj_GLSL } from "../gfx/shaderc/GfxShaderCompiler.js";
-import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetID } from "../gfx/render/GfxRenderGraph.js";
+import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription, GfxrRenderTargetID } from "../gfx/render/GfxRenderGraph.js";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { Frustum } from "../Geometry.js";
+import { standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
 import { IsDepthReversed } from "../gfx/helpers/ReversedDepthHelpers.js";
 
 export enum dDlst_alphaModel__Type {
@@ -386,21 +388,48 @@ void main() {
 const scratchMat4 = mat4.create();
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
+
+class dDlst_shadowReal_c_Cache {
+    public program: GfxProgram;
+    public shadowmapDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
+    public shadowmapDepthDesc = new GfxrRenderTargetDescription(GfxFormat.D32F);
+    
+    constructor(device: GfxDevice, cache: GfxRenderCache) {
+        this.shadowmapDesc.setDimensions(128, 128, 1);
+        this.shadowmapDesc.clearColor = colorNewCopy(OpaqueBlack);
+        this.shadowmapDepthDesc.copyDimensions(this.shadowmapDesc);
+        this.shadowmapDepthDesc.clearDepth = standardFullClearRenderPassDescriptor.clearDepth;
+    }
+
+    destroy(device: GfxDevice): void {
+        
+    }
+}
 class dDlst_shadowRealPoly_c {
     // TODO:
 }
 class dDlst_shadowReal_c {
     public state = 0; // 0: unallocated, 1: ready, 2: pendingDelete
+    public id: number = 0;
 
     private models: J3DModelInstance[] = [];
+    private shadowmapTex: GfxTexture;
     private alpha: number = 0; // 0-255
     private viewMtx = mat4.create();
     private renderProjMtx = mat4.create();
     private receiverProjMtx = mat4.create();
     private shadowRealPoly = new dDlst_shadowRealPoly_c();
 
-    constructor(public id: number = 0) {
-        // TODO: Implement init logic
+    constructor(device: GfxDevice, cache: GfxRenderCache) {
+        this.shadowmapTex = device.createTexture({
+            dimension: GfxTextureDimension.n2D,
+            width: 128,
+            height: 128,
+            depthOrArrayLayers: 1,
+            numLevels: 1,
+            pixelFormat: GfxFormat.U8_RGBA_RT,
+            usage: GfxTextureUsage.Sampled | GfxTextureUsage.RenderTarget,
+        });
     }
 
     public reset(): void {
@@ -412,8 +441,18 @@ class dDlst_shadowReal_c {
         this.models.length = 0;
     }
 
-    public imageDraw(mtx: mat4): void {
-        // TODO: Implement imageDraw logic
+    public imageDraw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        for( let i = 0; i < this.models.length; i++) {
+            const model = this.models[i];
+            model.shapeInstances
+            model.calcView(this.viewMtx, null);
+
+            if (!model.isAnyShapeVisible())
+                return;
+
+            model.drawOpa(renderInstManager, this.renderProjMtx);
+            model.drawXlu(renderInstManager, this.renderProjMtx);
+        }
     }
 
     public draw(): void {
@@ -677,8 +716,11 @@ class dDlst_shadowControl_c {
     private simples = nArray(128, () => new dDlst_shadowSimple_c());
     private simpleCount = 0;
     private simpleCache: dDlst_shadowSimple_c_Cache;
-    private reals = nArray(8, () => new dDlst_shadowReal_c());
+
+    private reals: dDlst_shadowReal_c[];
     private latestId: number = 0;
+    private realCache: dDlst_shadowReal_c_Cache;
+    private realCasterInstList = new GfxRenderInstList(gfxRenderInstCompareNone, GfxRenderInstExecutionOrder.Forwards);
 
     public get defaultSimpleTex(): BTIData {
         return this.simpleCache.defaultSimpleTex;
@@ -686,6 +728,8 @@ class dDlst_shadowControl_c {
 
     constructor(device: GfxDevice, cache: GfxRenderCache, resCtrl: dRes_control_c) {
         this.simpleCache = new dDlst_shadowSimple_c_Cache(resCtrl, cache);
+        this.realCache = new dDlst_shadowReal_c_Cache(device, cache);
+        this.reals = nArray(32, (i) => new dDlst_shadowReal_c(device, cache));
     }
 
     destroy(device: GfxDevice): void {
@@ -708,10 +752,10 @@ class dDlst_shadowControl_c {
         // 4. If the shadow has a texture (defaults to a circle): Render a textured quad oriented to the ground normal, clear the alpha where texture is 0.
         // 5. Render the box, multiplying the color buffer by (1.0 - alpha). This darkens the areas where the shadow is visible.
         // 6. Render the box, clearing the alpha to 0. This same framebuffer is used to render other shadows, and then alpha objects.
-        const template = renderInstManager.pushTemplate();
-        template.setBindingLayouts(SimpleShadowProgram.bindingLayouts);
-        template.setGfxProgram(this.simpleCache.program);
-        template.setMegaStateFlags({
+        const simpleTemplate = renderInstManager.pushTemplate();
+        simpleTemplate.setBindingLayouts(SimpleShadowProgram.bindingLayouts);
+        simpleTemplate.setGfxProgram(this.simpleCache.program);
+        simpleTemplate.setMegaStateFlags({
             depthCompare: GfxCompareMode.Always,
             cullMode: GfxCullMode.Front,
             ...setAttachmentStateSimple({}, {
@@ -722,12 +766,38 @@ class dDlst_shadowControl_c {
             })
         });
         dKy_GxFog_set(globals.g_env_light, materialParams.u_FogBlock, globals.camera);
-        template.setVertexInput(this.simpleCache.inputLayout, [{ buffer: this.simpleCache.positionBuffer }], { buffer: this.simpleCache.indexBuffer });
-        template.setDrawCount(36);
+        simpleTemplate.setVertexInput(this.simpleCache.inputLayout, [{ buffer: this.simpleCache.positionBuffer }], { buffer: this.simpleCache.indexBuffer });
+        simpleTemplate.setDrawCount(36);
         for (let i = 0; i < this.simpleCount; i++) {
             this.simples[i].draw(globals, renderInstManager, viewerInput);
         }
         renderInstManager.popTemplate();
+        
+        // Draw "real" shadows
+        // noclip modification: The game's original real shadowing uses many draw calls which is inefficient on modern hardware. It works as follows:
+        // 1. Compute a bounding box for the shadow, gather any bg triangles that intersect it. These will be the shadow receivers.
+        // 2. Cull any shadow receiver bounding boxes that are outside of the camera frustum.
+        // 3. Generate a 128x128 shadow map by rendering all shadow casters from the light's point of view into a texture.
+        // 4. Render the front/back faces of the bounding box into the alpha buffer, adding/subtracting just like simple shadows 2. & 3.
+        // 5. Render all of the bg triangles gathered in step 1, sampling from the shadow map by reprojecting from the light's point of view.
+        // 6. Render the bounding box, clearing the alpha to 0. This same framebuffer is used to render other shadows, and then alpha objects.
+        renderInstManager.setCurrentList(this.realCasterInstList);
+        const realTemplate = renderInstManager.pushTemplate();
+        realTemplate.setMegaStateFlags({
+            depthCompare: GfxCompareMode.Always,
+            cullMode: GfxCullMode.Back,
+            ...setAttachmentStateSimple({}, {
+                channelWriteMask: GfxChannelWriteMask.RGB,
+                blendMode: GfxBlendMode.Add,
+                blendSrcFactor: GfxBlendFactor.One,
+                blendDstFactor: GfxBlendFactor.Zero,
+            })
+        });
+        for (let i = 0; i < this.reals.length; i++) {
+            this.reals[i].imageDraw(globals, renderInstManager, viewerInput);
+        }
+        renderInstManager.popTemplate();
+
     }
 
     public imageDraw(mtx: mat4): void {
@@ -735,8 +805,20 @@ class dDlst_shadowControl_c {
     }
 
     public pushPasses(globals: dGlobals, renderInstManager: GfxRenderInstManager, builder: GfxrGraphBuilder, mainDepthTargetID: GfxrRenderTargetID, mainColorTargetID: GfxrRenderTargetID): void {
+        const shadowmapColorTargetID = builder.createRenderTargetID(this.realCache.shadowmapDesc, 'Shadowmap');
+        const shadowmapDepthTargetID = builder.createRenderTargetID(this.realCache.shadowmapDepthDesc, 'Shadowmap Depth');
+        
         builder.pushPass((pass) => {
-            pass.setDebugName('Shadows');
+            pass.setDebugName('Shadowmaps');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, shadowmapColorTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, shadowmapDepthTargetID);
+            pass.exec((passRenderer) => {
+                this.realCasterInstList.drawOnPassRenderer(renderInstManager.gfxRenderCache, passRenderer);
+            });
+        });
+
+        builder.pushPass((pass) => {
+            pass.setDebugName('Simple Shadows');
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             const mainDepthResolveTextureID = builder.resolveRenderTarget(mainDepthTargetID);
@@ -746,9 +828,26 @@ class dDlst_shadowControl_c {
                 const depthTex = scope.getResolveTextureForID(mainDepthResolveTextureID);
                 globals.dlst.shadow.resolveLateSamplerBinding('depth-target', { gfxTexture: depthTex, gfxSampler: this.simpleCache.sampler, lateBinding: null });
                 globals.dlst.shadow.drawOnPassRenderer(renderInstManager.gfxRenderCache, passRenderer);
+                // TODO: Where does this belong
                 this.reset();
             });
         });
+
+        builder.pushPass((pass) => {
+            pass.setDebugName('Real Shadows');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
+            const shadowmapResolveTextureID = builder.resolveRenderTarget(shadowmapColorTargetID);
+            pass.attachResolveTexture(shadowmapResolveTextureID);
+            pass.exec((passRenderer, scope) => {
+                globals.camera.applyScissor(passRenderer);
+                
+                const shadowmap = scope.getResolveTextureForID(shadowmapResolveTextureID);
+                // TODO: Render shadow receivers using the shadowmap
+            });
+        });
+
+        builder.pushDebugThumbnail(shadowmapColorTargetID);
     }
 
     public setReal(id: number, shouldFade: number, model: J3DModelInstance, pos: vec3, casterSize: number, heightAgl: number, tevStr: dKy_tevstr_c): number {
