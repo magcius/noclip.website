@@ -1035,7 +1035,11 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         const jf = buildModel(rarc, `bdl/ajavf.bdl`);
         jf.modelInstance.getTextureMappingReference('dmTxa_jav_a')!.copy(txa);
     });
-    else if (actorName === 'koisi1') fetchArchive(`Always`).then((rarc) => buildModel(rarc, `bdl/obm_koisi1.bdl`));
+    // Small liftable rock
+    else if (actorName === 'koisi1') fetchArchive(`Always`).then((rarc) => {
+        buildModel(rarc, `bdl/obm_koisi1.bdl`);
+        setShadowSimple(35.0);
+    });
     // Bigger trees
     else if (actorName === 'lwood') fetchArchive(`Lwood`).then((rarc) => {
         const b = buildModel(rarc, `bdl/alwd.bdl`);
