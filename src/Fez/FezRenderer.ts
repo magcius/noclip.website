@@ -275,6 +275,7 @@ export class FezObjectRenderer {
     public textureMatrix = mat4.create();
     private textureMapping = new TextureMapping();
     private megaStateFlags: Partial<GfxMegaStateDescriptor> = {};
+    private visible = true;
 
     constructor(textureData: (ArtObjectData | TrilesetData), private geometryData: GeometryData) {
         this.textureMapping.gfxTexture = textureData.texture;
@@ -285,6 +286,9 @@ export class FezObjectRenderer {
     }
 
     public prepareToRender(levelRenderData: FezLevelRenderData, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput) {
+        if (!this.visible)
+            return;
+
         if (this.geometryData.indexCount === 0)
             return;
 
