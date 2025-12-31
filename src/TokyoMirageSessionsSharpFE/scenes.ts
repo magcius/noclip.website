@@ -6,7 +6,7 @@ import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { SceneGfx, SceneGroup } from "../viewer.js";
 import { SceneContext, SceneDesc } from "../SceneBase.js";
 // import * as BFRES from "./bfres_wiiu.js";
-import * as BFRES from "./bfres_switch.js";
+import * as BFRES from "./bfres/bfres_switch.js";
 import { TMSFEScene } from "./render.js"
 
 // Defines a single level from Tokyo Mirage Sessions ♯FE

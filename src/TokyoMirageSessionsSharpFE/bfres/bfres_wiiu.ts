@@ -1,6 +1,6 @@
-import ArrayBufferSlice from "../ArrayBufferSlice.js";
-import { assert, readString } from "../util.js";
-import { GfxFormat } from '../gfx/platform/GfxPlatform.js';
+import ArrayBufferSlice from "../../ArrayBufferSlice.js";
+import { assert, readString } from "../../util.js";
+import { GfxFormat } from '../../gfx/platform/GfxPlatform.js';
 
 export enum AttributeFormat
 {
