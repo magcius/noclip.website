@@ -15,7 +15,7 @@ import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, Gf
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { GfxRendererLayer, GfxRenderInstManager, makeSortKeyOpaque, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager.js";
 import { DeviceProgram } from "../Program.js";
-import { LoadedTexture, TextureHolder, TextureMapping } from "../TextureHolder.js";
+import { TextureHolder, TextureMapping } from "../TextureHolder.js";
 import { assert, assertExists, nArray, setBitFlagEnabled } from "../util.js";
 import * as Viewer from '../viewer.js';
 import { RSPOutput, Vertex } from "./f3dex2.js";
@@ -237,20 +237,25 @@ function textureToCanvas(texture: Tex.Image): Viewer.Texture {
     return { name: texture.name, extraInfo, surfaces };
 }
 
-export class PaperMario64TextureHolder extends TextureHolder<Tex.Image> {
+export class PaperMario64TextureHolder extends TextureHolder {
     public addTextureArchive(device: GfxDevice, texArc: Tex.TextureArchive): void {
-        for (let i = 0; i < texArc.textureEnvironments.length; i++)
-            this.addTextures(device, texArc.textureEnvironments[i].images);
+        for (let i = 0; i < texArc.textureEnvironments.length; i++) {
+            const env = texArc.textureEnvironments[i];
+            for (let j = 0; j < env.images.length; j++)
+                this.addTexture(device, env.images[j]);
+        }
     }
 
-    public loadTexture(device: GfxDevice, texture: Tex.Image): LoadedTexture {
+    public addTexture(device: GfxDevice, texture: Tex.Image): void {
         const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, texture.width, texture.height, texture.levels.length));
         device.setResourceName(gfxTexture, texture.name);
 
         device.uploadTextureData(gfxTexture, 0, texture.levels);
 
         const viewerTexture: Viewer.Texture = textureToCanvas(texture);
-        return { gfxTexture, viewerTexture };
+        this.gfxTextures.push(gfxTexture);
+        this.viewerTextures.push(viewerTexture);
+        this.textureNames.push(texture.name);
     }
 }
 

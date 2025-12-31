@@ -7,10 +7,9 @@ import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrPass, GfxrPassScope, GfxrRend
 import { GfxRenderInstList, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
 import * as GX from '../gx/gx_enum.js';
 import * as GX_Material from '../gx/gx_material.js';
-import { ColorKind, DrawParams, fillSceneParamsData, gxBindingLayouts, GXRenderHelperGfx, MaterialParams, SceneParams, ub_SceneParamsBufferSize } from '../gx/gx_render.js';
+import { ColorKind, DrawParams, fillSceneParamsData, gxBindingLayouts, GXRenderHelperGfx, GXTextureMapping, MaterialParams, SceneParams, ub_SceneParamsBufferSize } from '../gx/gx_render.js';
 import { projectionMatrixForCuboid, setMatrixTranslation, Vec3Zero } from '../MathHelpers.js';
 import { TSDraw } from "../SuperMarioGalaxy/DDraw.js";
-import { TextureMapping } from '../TextureHolder.js';
 import { nArray } from '../util.js';
 import { SFAMaterialBuilder } from './MaterialBuilder.js';
 import { makeMaterialTexture, MaterialFactory } from './materials.js';
@@ -114,7 +113,7 @@ function createReflectiveProbeMaterial(materialFactory: MaterialFactory, texFetc
 }
 
 interface RenderedSphereMap {
-    textureMapping: TextureMapping;
+    textureMapping: GXTextureMapping;
     targetID: GfxrRenderTargetID;
     resolveID: GfxrResolveTextureID;
 }
@@ -129,7 +128,7 @@ export class SphereMapManager {
     private sphereMapSampler?: GfxSampler;
     private sphereMaps: RenderedSphereMap[] = nArray<RenderedSphereMap>(6, () => {
         return {
-            textureMapping: new TextureMapping(),
+            textureMapping: new GXTextureMapping(),
             targetID: 0 as GfxrRenderTargetID,
             resolveID: 0 as GfxrResolveTextureID,
         };

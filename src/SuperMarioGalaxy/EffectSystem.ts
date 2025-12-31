@@ -11,13 +11,12 @@ import { colorNewCopy, White, colorCopy, Color } from "../Color.js";
 import { computeModelMatrixR, getMatrixTranslation, vec3SetAll } from "../MathHelpers.js";
 import { DrawType, NameObj } from "./NameObj.js";
 import { LiveActor } from './LiveActor.js';
-import { TextureMapping } from '../TextureHolder.js';
 import { XanimePlayer } from './Animation.js';
 import { getJointMtxByName } from './ActorUtil.js';
-import { Texture } from '../viewer.js';
 import { Binder, Triangle, getFloorCodeIndex, FloorCode } from './Collision.js';
 import { Frustum } from '../Geometry.js';
 import { LoopMode } from '../Common/JSYSTEM/J3D/J3DLoader.js';
+import { GXTextureMapping, GXViewerTexture } from '../gx/gx_render.js';
 
 export class ParticleResourceHolder {
     private effectNameToIndex = new Map<string, number>();
@@ -64,7 +63,7 @@ export class ParticleResourceHolder {
     }
 
     private addTexturesForResource(sceneObjHolder: SceneObjHolder, resData: JPA.JPAResourceData): void {
-        const viewerTextures: Texture[] = [];
+        const viewerTextures: GXViewerTexture[] = [];
         for (let i = 0; i < resData.textureIds.length; i++) {
             const textureId = resData.textureIds[i];
             if (textureId === undefined)
@@ -81,7 +80,7 @@ export class ParticleResourceHolder {
         sceneObjHolder.modelCache.textureListHolder.addTextures(viewerTextures);
     }
 
-    public getTextureMappingReference(name: string): TextureMapping | null {
+    public getTextureMappingReference(name: string): GXTextureMapping | null {
         return this.jpacData.getTextureMappingReference(name);
     }
 

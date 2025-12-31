@@ -9,7 +9,6 @@ import { BTIData, BTI_Texture } from "../Common/JSYSTEM/JUTTexture.js";
 import { MathConstants, computeMatrixWithoutTranslation, invlerp, saturate } from "../MathHelpers.js";
 import { DeviceProgram } from "../Program.js";
 import { TDDraw } from "../SuperMarioGalaxy/DDraw.js";
-import { TextureMapping } from "../TextureHolder.js";
 import { cLib_addCalc, cM_rndF, cM_rndFX, cM_s2rad } from "../ZeldaWindWaker/SComponent.js";
 import { PeekZManager, PeekZResult } from "../ZeldaWindWaker/d_dlst_peekZ.js";
 import { cPhs__Status, fGlobals, fopKyM_Delete, fopKyM_create, fpcPf__Register, fpc_bs__Constructor, kankyo_class } from "../ZeldaWindWaker/framework.js";
@@ -25,7 +24,7 @@ import { GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderInst
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder.js";
 import * as GX from '../gx/gx_enum.js';
 import { GXShaderLibrary } from "../gx/gx_material.js";
-import { ColorKind, DrawParams, GXMaterialHelperGfx, MaterialParams } from "../gx/gx_render.js";
+import { ColorKind, DrawParams, GXMaterialHelperGfx, GXTextureMapping, MaterialParams } from "../gx/gx_render.js";
 import { assert, assertExists, nArray } from "../util.js";
 import { ViewerRenderInput } from "../viewer.js";
 import { dGlobals } from "./Main.js";
@@ -2327,7 +2326,7 @@ export class mDoGph_bloom_c {
     private thresholdProgram: GfxProgram;
     private blurProgram: GfxProgram;
     private combineProgram: GfxProgram;
-    private textureMapping: TextureMapping[] = nArray(1, () => new TextureMapping());
+    private textureMapping: GXTextureMapping[] = nArray(1, () => new GXTextureMapping());
 
     constructor(globals: dGlobals) {
         const cache = globals.modelCache.renderCache;

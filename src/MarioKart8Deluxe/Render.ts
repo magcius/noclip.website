@@ -1,5 +1,5 @@
 
-import { LoadedTexture, TextureHolder, TextureMapping } from '../TextureHolder.js';
+import { TextureHolder, TextureMapping } from '../TextureHolder.js';
 import * as Viewer from '../viewer.js';
 
 import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxChannelWriteMask, GfxCompareMode, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxMegaStateDescriptor, GfxMipFilterMode, GfxProgram, GfxSampler, GfxTexFilterMode, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxWrapMode, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform.js';
@@ -32,7 +32,7 @@ import * as AGLEnv from './AGLParameter_Env.js';
 import * as AGLLightMap from './AGLParameter_LightMap.js';
 import { createBufferFromData, createBufferFromSlice } from '../gfx/helpers/BufferHelpers.js';
 
-export class BRTITextureHolder extends TextureHolder<BNTX.BRTI> {
+export class BRTITextureHolder extends TextureHolder {
     public addFRESTextures(device: GfxDevice, fres: FRES): void {
         const bntxFile = fres.externalFiles.find((f) => f.name === 'textures.bntx');
         if (bntxFile !== undefined)
@@ -41,10 +41,15 @@ export class BRTITextureHolder extends TextureHolder<BNTX.BRTI> {
 
     public addBNTXFile(device: GfxDevice, buffer: ArrayBufferSlice): void {
         const bntx = BNTX.parse(buffer);
-        this.addTextures(device, bntx.textures);
+        for (let i = 0; i < bntx.textures.length; i++)
+            this.addTexture(device, bntx.textures[i]);
     }
 
-    public loadTexture(device: GfxDevice, textureEntry: BNTX.BRTI): LoadedTexture | null {
+    public addTexture(device: GfxDevice, textureEntry: BNTX.BRTI): void {
+        // Don't add duplicates.
+        if (this.textureNames.includes(textureEntry.name))
+            return;
+
         const gfxTexture = device.createTexture(makeTextureDescriptor2D(translateImageFormat(textureEntry.imageFormat), textureEntry.width, textureEntry.height, textureEntry.mipBuffers.length));
         const canvases: HTMLCanvasElement[] = [];
 
@@ -62,7 +67,7 @@ export class BRTITextureHolder extends TextureHolder<BNTX.BRTI> {
                 const rgbaTexture = decompress({ ...textureEntry, width, height, depth }, deswizzled);
                 const rgbaPixels = rgbaTexture.pixels;
                 device.uploadTextureData(gfxTexture, mipLevel, [rgbaPixels]);
-
+    
                 const canvas = document.createElement('canvas');
                 surfaceToCanvas(canvas, rgbaTexture);
                 canvases.push(canvas);
@@ -73,7 +78,9 @@ export class BRTITextureHolder extends TextureHolder<BNTX.BRTI> {
         extraInfo.set('Format', getImageFormatString(textureEntry.imageFormat));
 
         const viewerTexture: Viewer.Texture = { name: textureEntry.name, surfaces: canvases, extraInfo };
-        return { viewerTexture, gfxTexture };
+        this.gfxTextures.push(gfxTexture);
+        this.viewerTextures.push(viewerTexture);
+        this.textureNames.push(textureEntry.name);
     }
 }
 

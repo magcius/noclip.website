@@ -16,7 +16,7 @@ import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
 import { makeBackbufferDescSimple, setBackbufferDescSimple, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
 import { GfxTopology, convertToTriangleIndexBuffer, filterDegenerateTriangleIndexBuffer } from "../gfx/helpers/TopologyHelpers.js";
 import { fillColor, fillMatrix4x3, fillMatrix4x4, fillVec3v, fillVec4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers.js";
-import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferUsage, GfxChannelWriteMask, GfxClipSpaceNearZ, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxMegaStateDescriptor, GfxMipFilterMode, GfxProgram, GfxSamplerFormatKind, GfxTexFilterMode, GfxTextureDimension, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxWrapMode } from "../gfx/platform/GfxPlatform.js";
+import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferUsage, GfxChannelWriteMask, GfxClipSpaceNearZ, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxMegaStateDescriptor, GfxMipFilterMode, GfxProgram, GfxSamplerFormatKind, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxWrapMode } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription, GfxrRenderTargetID } from "../gfx/render/GfxRenderGraph.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
@@ -25,12 +25,13 @@ import { LayerPanel, Panel } from "../ui.js";
 import { assert, assertExists, leftPad, nArray } from "../util.js";
 import * as Viewer from "../viewer.js";
 import * as BND3 from "./bnd3.js";
-import { DDSTextureHolder } from "./dds.js";
+import { createTexture, DDS } from "./dds.js";
 import { Batch, FLVER, InputLayout, Material, Primitive, VertexAttribute, VertexInputSemantic } from "./flver.js";
 import { MSB, Part } from "./msb.js";
 import { MTD, MTDTexture } from './mtd.js';
 import { ParamFile, parseParamDef } from "./param.js";
 import { MaterialDataHolder, ModelHolder, ResourceSystem } from "./scenes.js";
+import { TPF } from "./tpf.js";
 
 function shouldRenderPrimitive(primitive: Primitive): boolean {
     return primitive.flags === 0;
@@ -108,6 +109,49 @@ function translateDataType(dataType: number): GfxFormat {
         return GfxFormat.F32_RGBA;
     default:
         throw "whoops";
+    }
+}
+
+class TPFData {
+    public gfxTexture: GfxTexture[] = [];
+
+    constructor(device: GfxDevice, private tpf: TPF) {
+        for (let i = 0; i < tpf.textures.length; i++)
+            this.gfxTexture.push(createTexture(device, tpf.textures[i]));
+    }
+
+    public fillTextureMapping(dst: TextureMapping, name: string): boolean {
+        const idx = this.tpf.textures.findIndex((dds) => dds.name === name);
+        if (idx < 0)
+            return false;
+
+        dst.gfxTexture = this.gfxTexture[idx];
+        return true;
+    }
+
+    public destroy(device: GfxDevice): void {
+        for (let i = 0; i < this.gfxTexture.length; i++)
+            device.destroyTexture(this.gfxTexture[i]);
+    }
+}
+
+export class TextureHolder {
+    public tpf: TPFData[] = [];
+
+    public addTPF(device: GfxDevice, tpf: TPF): void {
+        this.tpf.push(new TPFData(device, tpf));
+    }
+
+    public fillTextureMapping(dst: TextureMapping, name: string): boolean {
+        for (let i = 0; i < this.tpf.length; i++)
+            if (this.tpf[i].fillTextureMapping(dst, name))
+                return true;
+        return false;
+    }
+
+    public destroy(device: GfxDevice): void {
+        for (let i = 0; i < this.tpf.length; i++)
+            this.tpf[i].destroy(device);
     }
 }
 
@@ -325,14 +369,13 @@ function lookupTextureParameter(material: Material, paramName: string): string |
     return param.value.split('\\').pop()!.replace(/\.tga|\.psd/, '');
 }
 
-function linkTextureParameter(textureMapping: TextureMapping, textureHolder: DDSTextureHolder, material: Material, mtd: MTD, name: string): void {
+function linkTextureParameter(textureMapping: TextureMapping, textureHolder: TextureHolder, material: Material, mtd: MTD, name: string): void {
     const texDef = mtd.textures.find((t) => t.name === name);
     if (texDef === undefined)
         return;
 
     const textureName = assertExists(lookupTextureParameter(material, name)).toLowerCase();
-    if (textureHolder.hasTexture(textureName))
-        textureHolder.fillTextureMapping(textureMapping, textureName);
+    textureHolder.fillTextureMapping(textureMapping, textureName);
 }
 
 enum LateBindingTexture {
@@ -887,7 +930,7 @@ class MaterialInstance_Phn {
     private gfxProgram: GfxProgram;
     private sortKey: number;
 
-    constructor(cache: GfxRenderCache, private material: Material, private mtd: MTD, textureHolder: DDSTextureHolder, inputLayout: InputLayout) {
+    constructor(cache: GfxRenderCache, private material: Material, private mtd: MTD, textureHolder: TextureHolder, inputLayout: InputLayout) {
         const program = new MaterialProgram_Phn(mtd);
 
         if (inputLayout.vertexAttributes.some((vertexAttribute) => vertexAttribute.semantic === VertexInputSemantic.Tangent1))
@@ -1273,7 +1316,7 @@ class MaterialInstance_Water {
     private gfxProgramWaterHeight: GfxProgram;
     private sortKey: number;
 
-    constructor(cache: GfxRenderCache, private material: Material, private mtd: MTD, textureHolder: DDSTextureHolder, inputLayout: InputLayout) {
+    constructor(cache: GfxRenderCache, private material: Material, private mtd: MTD, textureHolder: TextureHolder, inputLayout: InputLayout) {
         for (let i = 0; i < 3; i++) {
             getMaterialParamVec2(this.texScroll[i], mtd, `g_TexScroll_${i}`);
             this.tileScale[i] = getMaterialParamF32(mtd, `g_TileScale_${i}`);
@@ -1397,7 +1440,7 @@ class BatchInstance {
     private visible = true;
     private materialInstance: MaterialInstance_Phn | MaterialInstance_Water;
 
-    constructor(cache: GfxRenderCache, private flverData: FLVERData, private batchData: BatchData, textureHolder: DDSTextureHolder, private material: Material, private mtd: MTD) {
+    constructor(cache: GfxRenderCache, private flverData: FLVERData, private batchData: BatchData, textureHolder: TextureHolder, private material: Material, private mtd: MTD) {
         const inputState = flverData.flver.inputStates[batchData.batch.inputStateIndex];
         const inputLayout = flverData.flver.inputLayouts[inputState.inputLayoutIndex];
 
@@ -1799,7 +1842,7 @@ export class PartInstance {
     public name: string;
     public materialDrawConfig = new MaterialDrawConfig();
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, textureHolder: DDSTextureHolder, materialDataHolder: MaterialDataHolder, drawParamBank: DrawParamBank, public flverData: FLVERData, public part: Part) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, textureHolder: TextureHolder, materialDataHolder: MaterialDataHolder, drawParamBank: DrawParamBank, public flverData: FLVERData, public part: Part) {
         drawParamBankCalcMaterialDrawConfig(this.materialDrawConfig, this.part, drawParamBank);
 
         for (let i = 0; i < this.flverData.flver.batches.length; i++) {
@@ -1869,7 +1912,7 @@ const noclipSpaceFromDarkSoulsSpace = mat4.fromValues(
 class RenderContext {
     public globalTime = 0.0;
     public cameraView: CameraView;
-    public textureHolder: DDSTextureHolder;
+    public textureHolder = new TextureHolder();
 
     public mainList = new GfxRenderInstList();
     public waterHeightList = new GfxRenderInstList();
@@ -1919,7 +1962,7 @@ export class MSBRenderer {
     public flverInstances: PartInstance[] = [];
     public sceneDrawConfig = new SceneDrawConfig();
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, private textureHolder: DDSTextureHolder, private modelHolder: ModelHolder, private materialDataHolder: MaterialDataHolder, private drawParamBank: DrawParamBank, private msb: MSB) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, private textureHolder: TextureHolder, private modelHolder: ModelHolder, private materialDataHolder: MaterialDataHolder, private drawParamBank: DrawParamBank, private msb: MSB) {
         let sceneDrawConfigSetup = false;
 
         for (let i = 0; i < msb.parts.length; i++) {
@@ -2816,19 +2859,18 @@ class ToneCorrect {
 
 export class DarkSoulsRenderer implements Viewer.SceneGfx {
     public msbRenderers: MSBRenderer[] = [];
+    public renderContext = new RenderContext();
     private renderHelper: GfxRenderHelper;
     private depthOfField: DepthOfField;
     private bloom: Bloom;
     private toneCorrect: ToneCorrect;
     private cameraView = new CameraView();
-    private renderContext = new RenderContext();
     private textureMapping = nArray(1, () => new TextureMapping());
 
-    constructor(sceneContext: SceneContext, public textureHolder: DDSTextureHolder) {
+    constructor(sceneContext: SceneContext) {
         this.renderHelper = new GfxRenderHelper(sceneContext.device, sceneContext);
 
         this.renderContext.cameraView = this.cameraView;
-        this.renderContext.textureHolder = this.textureHolder;
 
         const cache = this.renderHelper.renderCache;
         this.depthOfField = new DepthOfField(cache);
@@ -2956,6 +2998,6 @@ export class DarkSoulsRenderer implements Viewer.SceneGfx {
         this.renderHelper.destroy();
         for (let i = 0; i < this.msbRenderers.length; i++)
             this.msbRenderers[i].destroy(device);
-        this.textureHolder.destroy(device);
+        this.renderContext.textureHolder.destroy(device);
     }
 }

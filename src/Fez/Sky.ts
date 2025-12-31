@@ -1,6 +1,6 @@
 
 import { GfxDevice, GfxTexture, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxProgram, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor } from "../gfx/platform/GfxPlatform.js";
-import { GfxRenderInstManager, makeSortKeyOpaque, GfxRendererLayer, GfxRenderInst } from "../gfx/render/GfxRenderInstManager.js";
+import { GfxRenderInstManager, makeSortKeyOpaque, GfxRendererLayer, GfxRenderInst, setSortKeyLayer } from "../gfx/render/GfxRenderInstManager.js";
 import { ViewerRenderInput } from "../viewer.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { ModelCache } from "./Scenes_Fez.js";
@@ -8,7 +8,7 @@ import { makeTextureFromXNA_Texture2D } from "./Texture.js";
 import { DeviceProgram } from "../Program.js";
 import { reverseDepthForDepthOffset } from "../gfx/helpers/ReversedDepthHelpers.js";
 import { TextureMapping } from "../TextureHolder.js";
-import { nArray, assert } from "../util.js";
+import { nArray, assert, assertExists } from "../util.js";
 import { fillVec4 } from "../gfx/helpers/UniformBufferHelpers.js";
 import { invlerp, MathConstants } from "../MathHelpers.js";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
@@ -72,10 +72,20 @@ export class SkyData {
     public shadowsTexture: GfxTexture | null;
     public shadowsTextureMapping: TextureMapping[] = nArray(1, () => new TextureMapping());
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, public name: string, backgroundImage: XNA_Texture2D, starsImage: XNA_Texture2D | null, shadowsImage: XNA_Texture2D | null) {
+    public layerTexture: GfxTexture[] = [];
+
+    constructor(modelCache: ModelCache, public name: string, public sky: Fez_Sky) {
+        const cache = modelCache.renderCache, device = cache.device;
         this.backgroundProgram = cache.createProgram(new SkyBackgroundProgram());
 
-        this.backgroundTexture = makeTextureFromXNA_Texture2D(device, backgroundImage);
+        const skyPath = `xnb/skies/${this.name}`;
+        const getTexture = (path: string | null) => {
+            if (path !== null)
+                return modelCache.getTexture(`${skyPath}/${path.toLowerCase()}.xnb`);
+            return null;
+        };
+
+        this.backgroundTexture = assertExists(getTexture(sky.background));
         this.backgroundTextureMapping[0].gfxTexture = this.backgroundTexture;
         this.backgroundTextureMapping[0].gfxSampler = cache.createSampler({
             wrapS: GfxWrapMode.Repeat,
@@ -86,7 +96,7 @@ export class SkyData {
             minLOD: 0, maxLOD: 0,
         });
 
-        this.starsTexture = starsImage !== null ? makeTextureFromXNA_Texture2D(device, starsImage) : null;
+        this.starsTexture = getTexture(sky.stars);
         this.starsTextureMapping[0].gfxTexture = this.starsTexture;
         this.starsTextureMapping[0].gfxSampler = cache.createSampler({
             wrapS: GfxWrapMode.Repeat,
@@ -97,7 +107,7 @@ export class SkyData {
             minLOD: 0, maxLOD: 0,
         });
 
-        this.shadowsTexture = shadowsImage !== null ? makeTextureFromXNA_Texture2D(device, shadowsImage) : null;
+        this.shadowsTexture = getTexture(sky.shadows);
         this.shadowsTextureMapping[0].gfxTexture = this.shadowsTexture;
         this.shadowsTextureMapping[0].gfxSampler = cache.createSampler({
             wrapS: GfxWrapMode.Repeat,
@@ -107,14 +117,32 @@ export class SkyData {
             mipFilter: GfxMipFilterMode.Nearest,
             minLOD: 0, maxLOD: 0,
         });
+
+        // for (let i = 0; i < this.sky.layers.length; i++)
+        //     this.layerTexture.push(assertExists(getTexture(this.sky.layers[i].name)));
+    }
+
+    public static async fetch(modelCache: ModelCache, skyName: string): Promise<SkyData> {
+        const skyPath = `xnb/skies/${skyName}`;
+        const sky = await modelCache.fetchXNB<Fez_Sky>(`xnb/skies/${skyName}.xnb`);
+
+        let promises: Promise<void>[] = [];
+        const requestTexture = (path: string | null) => {
+            if (path !== null)
+                promises.push(modelCache.requestTexture(`${skyPath}/${path.toLowerCase()}.xnb`));
+        };
+
+        requestTexture(sky.background);
+        requestTexture(sky.shadows);
+        requestTexture(sky.stars);
+        // for (let i = 0; i < sky.layers.length; i++)
+        //     requestTexture(sky.layers[i].name);
+        await Promise.all(promises);
+
+        return new SkyData(modelCache, skyName, sky);
     }
 
     public destroy(device: GfxDevice): void {
-        device.destroyTexture(this.backgroundTexture);
-        if (this.starsTexture !== null)
-            device.destroyTexture(this.starsTexture);
-        if (this.shadowsTexture !== null)
-            device.destroyTexture(this.shadowsTexture);
     }
 }
 
@@ -209,7 +237,7 @@ export class SkyRenderer {
             const starsOpacity = getPhaseContribution(DayPhase.Night, dayFraction);
             if (starsOpacity > 0.0) {
                 const renderInst = renderInstManager.newRenderInst();
-                renderInst.sortKey = makeSortKeyOpaque(GfxRendererLayer.BACKGROUND + 1, this.skyData.backgroundProgram.ResourceUniqueId);
+                renderInst.sortKey = setSortKeyLayer(renderInst.sortKey, GfxRendererLayer.BACKGROUND + 1);
                 setAttachmentStateSimple(renderInst.getMegaStateFlags(), { blendMode: GfxBlendMode.Add, blendSrcFactor: GfxBlendFactor.SrcAlpha, blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha });
                 renderInst.setSamplerBindingsFromTextureMappings(this.skyData.starsTextureMapping);
 
@@ -221,17 +249,27 @@ export class SkyRenderer {
             }
         }
 
+        /*
+        const sky = this.skyData.sky;
+        for (let i = 0; i < sky.layers.length; i++) {
+            const layer = sky.layers[i];
+            const gfxTexture = this.skyData.layerTexture[i];
+            const renderInst = renderInstManager.newRenderInst();
+            renderInst.sortKey = setSortKeyLayer(renderInst.sortKey, GfxRendererLayer.BACKGROUND + 2 + i);
+
+            setAttachmentStateSimple(renderInst.getMegaStateFlags(), { blendMode: GfxBlendMode.Add, blendSrcFactor: GfxBlendFactor.SrcAlpha, blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha });
+            renderInst.setSamplerBindings(0, [{ gfxTexture, gfxSampler: this.skyData.starsTextureMapping[0].gfxSampler, lateBinding: null }]);
+
+            const view = viewerInput.camera.viewMatrix;
+            const o = (Math.atan2(-view[2], view[0]) / MathConstants.TAU) * 4;
+
+            fillBackgroundParams(renderInst, viewerInput, 0.5, 0.5, o, 0, layer.opacity);
+            renderInstManager.submitRenderInst(renderInst);
+            break;
+        }
+        */
+
         renderInstManager.submitRenderInst(renderInst);
         renderInstManager.popTemplate();
     }
-}
-
-export async function fetchSkyData(modelCache: ModelCache, device: GfxDevice, cache: GfxRenderCache, path: string): Promise<SkyData> {
-    const skyPath = `xnb/skies/${path}`;
-    const sky = await modelCache.fetchXNB<Fez_Sky>(`xnb/skies/${path}.xnb`);
-    const background = sky.background.toLowerCase();
-    const backgroundImage = await modelCache.fetchXNB<XNA_Texture2D>(`${skyPath}/${background}.xnb`);
-    const starsImage = sky.stars !== null ? await modelCache.fetchXNB<XNA_Texture2D>(`${skyPath}/${sky.stars.toLowerCase()}.xnb`) : null;
-    const shadowsImage = sky.shadows !== null ? await modelCache.fetchXNB<XNA_Texture2D>(`${skyPath}/${sky.shadows.toLowerCase()}.xnb`) : null;
-    return new SkyData(device, cache, path, backgroundImage, starsImage, shadowsImage);
 }

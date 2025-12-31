@@ -692,7 +692,7 @@ export class KingdomHeartsIIRenderer implements Viewer.SceneGfx {
     private mapRenderer: SceneRenderer;
     private mapData: MapData;
 
-    constructor(device: GfxDevice, public textureHolder: TextureHolder<any>, map: MAP.KingdomHeartsIIMap) {
+    constructor(device: GfxDevice, public textureHolder: TextureHolder, map: MAP.KingdomHeartsIIMap) {
         this.renderHelper = new GfxRenderHelper(device);
 
         this.mapData = new MapData(device, this.renderHelper.renderCache, map);

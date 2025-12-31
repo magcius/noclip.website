@@ -4,8 +4,8 @@ import { GfxBindingLayoutDescriptor, GfxDevice, GfxFormat, GfxMipFilterMode, Gfx
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { GfxrAttachmentSlot, GfxrRenderTargetDescription, GfxrGraphBuilder, GfxrRenderTargetID } from "../gfx/render/GfxRenderGraph.js";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
+import { GXTextureMapping } from "../gx/gx_render.js";
 import { DeviceProgram } from "../Program.js";
-import { TextureMapping } from "../TextureHolder.js";
 
 /**
  * A program to transfer the depth buffer to a texture.
@@ -35,7 +35,7 @@ const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 0, nu
 
 export class DepthResampler {
     private program: GfxProgram;
-    private textureMapping = new TextureMapping();
+    private textureMapping = new GXTextureMapping();
     private targetDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT); // FIXME: use R-only format intead?
 
     constructor(device: GfxDevice, cache: GfxRenderCache) {

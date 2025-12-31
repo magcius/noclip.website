@@ -258,7 +258,7 @@ export function mDoExt_modelEntryDL(globals: dGlobals, modelInstance: J3DModelIn
         return;
 
     if (drawListSet === null)
-        drawListSet = globals.dlst.bg;
+        drawListSet = globals.dlst.main;
 
     // NOTE(jstpierre): This is custom to noclip, normally the toon textures are set in setToonTex during res loading.
     globals.renderer.extraTextures.fillExtraTextures(modelInstance);

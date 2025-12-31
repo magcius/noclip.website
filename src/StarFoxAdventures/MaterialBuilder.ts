@@ -2,8 +2,7 @@ import { mat4 } from 'gl-matrix';
 import * as GX from '../gx/gx_enum.js';
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder.js";
 import { GXMaterial, SwapTable } from '../gx/gx_material.js';
-import { MaterialParams, ColorKind, GXMaterialHelperGfx } from '../gx/gx_render.js';
-import { TextureMapping } from '../TextureHolder.js';
+import { MaterialParams, ColorKind, GXMaterialHelperGfx, GXTextureMapping } from '../gx/gx_render.js';
 
 import { Color, colorCopy, TransparentBlack, White } from '../Color.js';
 import { nArray } from '../util.js';
@@ -64,7 +63,7 @@ export function getGXKonstAlphaSel(kcolor: KonstColor): GX.KonstAlphaSel {
     return GX.KonstAlphaSel.KASEL_K0_A + kcolor;
 }
 
-export type TexFunc<RenderContext> = ((dst: TextureMapping, ctx: RenderContext) => void) | undefined;
+export type TexFunc<RenderContext> = ((dst: GXTextureMapping, ctx: RenderContext) => void) | undefined;
 export type MtxFunc<RenderContext> = ((dst: mat4, ctx: RenderContext) => void) | undefined;
 export type ColorFunc<RenderContext> = ((dst: Color, ctx: RenderContext) => void) | undefined;
 

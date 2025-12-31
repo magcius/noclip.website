@@ -1,17 +1,17 @@
 
-import { GfxDevice, makeTextureDescriptor2D, GfxFormat } from '../gfx/platform/GfxPlatform.js';
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
+import { CameraController } from '../Camera.js';
+import { Green } from '../Color.js';
+import { SceneContext } from '../SceneBase.js';
+import { makeSolidColorTexture2D } from '../gfx/helpers/TextureHelpers.js';
+import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
 import * as Viewer from '../viewer.js';
+import * as AnimGroup from './AnimGroup.js';
+import { linkREL } from './REL.js';
+import { evt_handler_ttyd, evtmgr, rommap } from './evt.js';
 import { TPLTextureHolder, WorldRenderer } from './render.js';
 import * as TPL from './tpl.js';
 import * as World from './world.js';
-import { SceneContext } from '../SceneBase.js';
-import ArrayBufferSlice from '../ArrayBufferSlice.js';
-import { CameraController } from '../Camera.js';
-import { linkREL } from './REL.js';
-import { evtmgr, evt_disasm_ctx, evt_handler_ttyd, rommap } from './evt.js';
-import * as AnimGroup from './AnimGroup.js';
-import { makeSolidColorTexture2D } from '../gfx/helpers/TextureHelpers.js';
-import { Green, Magenta } from '../Color.js';
 
 const pathBase = `PaperMarioTTYD`;
 

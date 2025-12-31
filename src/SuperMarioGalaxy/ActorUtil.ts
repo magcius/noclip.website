@@ -21,8 +21,8 @@ import { SceneObj, SceneObjHolder } from "./Main.js";
 import { CalcAnimType, DrawBufferType, DrawType, MovementType, NameObj } from "./NameObj.js";
 import { RailDirection } from "./RailRider.js";
 import { addSleepControlForLiveActor, getSwitchWatcherHolder, isExistStageSwitchA, isExistStageSwitchAppear, isExistStageSwitchB, isExistStageSwitchDead, StageSwitchCtrl, SwitchCallback, SwitchFunctorEventListener } from "./Switch.js";
-import { TextureMapping } from "../TextureHolder.js";
 import { LoopMode } from "../Common/JSYSTEM/J3D/J3DLoader.js";
+import { GXTextureMapping } from "../gx/gx_render.js";
 
 const scratchVec3 = vec3.create();
 const scratchVec3a = vec3.create();
@@ -901,7 +901,7 @@ export function isValidDraw(actor: LiveActor): boolean {
     return actor.visibleAlive && actor.visibleScenario && actor.visibleModel;
 }
 
-export function loadTexProjectionMtx(m: mat4, textureMapping: TextureMapping, camera: Camera): void {
+export function loadTexProjectionMtx(m: mat4, textureMapping: GXTextureMapping, camera: Camera): void {
     const flipYScale = textureMapping.flipY ? -1 : 1;
     texProjCameraSceneTex(m, camera.projectionMatrix, flipYScale);
     mat4.mul(m, m, camera.viewMatrix);

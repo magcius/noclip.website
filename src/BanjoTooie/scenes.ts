@@ -33,7 +33,7 @@ class BTRenderer implements Viewer.SceneGfx {
     public renderInstListSky = new GfxRenderInstList();
     public renderInstListMain = new GfxRenderInstList();
 
-    constructor(device: GfxDevice, public textureHolder: TextureHolder<any>, public modelCache: ModelCache, public id: string) {
+    constructor(device: GfxDevice, public textureHolder: TextureHolder, public modelCache: ModelCache, public id: string) {
         this.renderHelper = new GfxRenderHelper(device);
     }
 

@@ -1,5 +1,5 @@
 
-import { BasicGXRendererHelper, calcLODBias, ColorKind, createInputLayout, DrawParams, fillSceneParamsData, fillSceneParamsDataOnTemplate, GXMaterialHelperGfx, GXTextureHolder, loadedDataCoalescerComboGfx, MaterialParams, SceneParams, translateWrapModeGfx, ub_SceneParamsBufferSize } from '../gx/gx_render.js';
+import { BasicGXRendererHelper, calcLODBias, ColorKind, createInputLayout, DrawParams, fillSceneParamsData, fillSceneParamsDataOnTemplate, GXMaterialHelperGfx, GXTextureHolder, GXTextureMapping, loadedDataCoalescerComboGfx, MaterialParams, SceneParams, translateWrapModeGfx, ub_SceneParamsBufferSize } from '../gx/gx_render.js';
 
 import * as TPL from './tpl.js';
 import { AnimationEntry, Batch, bindMaterialAnimator, bindMeshAnimator, CollisionFlags, DrawModeFlags, Material, MaterialAnimator, MaterialLayer, MeshAnimator, Sampler, SceneGraphNode, SceneGraphPart, TTYDWorld } from './world.js';
@@ -21,16 +21,16 @@ import { GX_Program, GXMaterialHacks } from '../gx/gx_material.js';
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder.js';
 import { computeModelMatrixT, MathConstants, scaleMatrix } from '../MathHelpers.js';
 import { DeviceProgram } from '../Program.js';
-import { TextureMapping } from '../TextureHolder.js';
 import * as UI from '../ui.js';
 import { assert, nArray, setBitFlagEnabled } from '../util.js';
 import * as Viewer from '../viewer.js';
 import { AnimGroupDataCache, AnimGroupInstance } from './AnimGroup.js';
 import { evtmgr } from './evt.js';
 
-export class TPLTextureHolder extends GXTextureHolder<TPL.TPLTexture> {
+export class TPLTextureHolder extends GXTextureHolder {
     public addTPLTextures(device: GfxDevice, tpl: TPL.TPL): void {
-        this.addTextures(device, tpl.textures);
+        for (let i = 0; i < tpl.textures.length; i++)
+            this.addTexture(device, tpl.textures[i]);
     }
 }
 
@@ -77,7 +77,7 @@ const backgroundBillboardBindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUn
 class BackgroundBillboardRenderer {
     private program = new BackgroundBillboardProgram();
     private gfxProgram: GfxProgram;
-    private textureMappings = nArray(1, () => new TextureMapping());
+    private textureMappings = nArray(1, () => new GXTextureMapping());
     public scroll: boolean = false;
 
     constructor(cache: GfxRenderCache, public textureHolder: TPLTextureHolder, public textureName: string) {

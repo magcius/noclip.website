@@ -403,8 +403,6 @@ export class VTF {
             m.gfxTexture = assertExists(this.gfxTextures[frame]);
         }
         m.gfxSampler = this.gfxSampler;
-        m.width = this.width;
-        m.height = this.height;
         m.lateBinding = this.lateBinding;
     }
 

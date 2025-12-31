@@ -4,14 +4,13 @@ import * as GX from '../../../gx/gx_enum.js';
 import { calcMipChain, TextureInputGX } from '../../../gx/gx_texture.js';
 import { NamedArrayBufferSlice } from "../../../DataFetcher.js";
 import { GfxDevice, GfxMipFilterMode, GfxTexFilterMode, GfxTexture, GfxWrapMode } from "../../../gfx/platform/GfxPlatform.js";
-import { ColorKind, GXMaterialHelperGfx, loadTextureFromMipChain, MaterialParams } from "../../../gx/gx_render.js";
+import { ColorKind, GXMaterialHelperGfx, GXTextureMapping, loadTextureFromMipChain, MaterialParams } from "../../../gx/gx_render.js";
 import { Texture } from "../../../viewer.js";
 import { GXMaterialBuilder } from "../../../gx/GXMaterialBuilder.js";
 import { TDDraw } from "../../../SuperMarioGalaxy/DDraw.js";
 import { Color, colorCopy, colorNewCopy, TransparentBlack, White } from "../../../Color.js";
 import { vec3, vec4 } from "gl-matrix";
 import { GfxRenderInst, GfxRenderInstManager } from "../../../gfx/render/GfxRenderInstManager.js";
-import { TextureMapping } from "../../../TextureHolder.js";
 import { GfxRenderCache } from "../../../gfx/render/GfxRenderCache.js";
 
 enum RFNTGlyphType {
@@ -282,7 +281,7 @@ export class CharWriter {
 
     public materialChanged = false;
 
-    private textureMapping = nArray(1, () => new TextureMapping());
+    private textureMapping = nArray(1, () => new GXTextureMapping());
 
     public setFont(font: ResFont, charSpacing: number | null = null, lineHeight: number | null = null, fontWidth: number | null = null, fontHeight: number | null = null): void {
         this.font = font;

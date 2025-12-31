@@ -24,16 +24,12 @@ export type RenderContext = {
 export class Renderer implements Viewer.SceneGfx {
     private renderHelper: GXRenderHelperGfx;
     private world: World;
-    public textureCache: UI.TextureListHolder;
     private opaqueInstList = new GfxRenderInstList();
     private translucentInstList = new GfxRenderInstList();
 
     constructor(device: GfxDevice, private stageData: StageData) {
         this.renderHelper = new GXRenderHelperGfx(device);
         this.world = new World(device, this.renderHelper.renderCache, stageData);
-        const textureCache = this.world.getTextureCache();
-        this.textureCache = textureCache;
-        textureCache.updateViewerTextures();
     }
 
     public createPanels(): UI.Panel[] {

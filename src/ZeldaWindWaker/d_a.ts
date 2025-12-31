@@ -9,7 +9,6 @@ import { BTIData } from "../Common/JSYSTEM/JUTTexture.js";
 import { Vec3One, Vec3UnitY, Vec3UnitZ, Vec3Zero, clamp, computeMatrixWithoutTranslation, computeModelMatrixR, computeModelMatrixS, lerp, saturate, scaleMatrix, transformVec3Mat4w0, transformVec3Mat4w1 } from "../MathHelpers.js";
 import { GlobalSaveManager } from "../SaveManager.js";
 import { TDDraw, TSDraw } from "../SuperMarioGalaxy/DDraw.js";
-import { TextureMapping } from "../TextureHolder.js";
 import { Endianness } from "../endian.js";
 import { compareDepthValues } from "../gfx/helpers/ReversedDepthHelpers.js";
 import { GfxClipSpaceNearZ, GfxCompareMode, GfxDevice } from "../gfx/platform/GfxPlatform.js";
@@ -18,7 +17,7 @@ import { GfxRenderInst, GfxRenderInstManager, GfxRendererLayer } from "../gfx/re
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder.js";
 import * as GX from '../gx/gx_enum.js';
 import { TevDefaultSwapTables } from "../gx/gx_material.js";
-import { ColorKind, DrawParams, GXMaterialHelperGfx, MaterialParams } from "../gx/gx_render.js";
+import { ColorKind, DrawParams, GXMaterialHelperGfx, GXTextureMapping, MaterialParams } from "../gx/gx_render.js";
 import { arrayRemove, assert, assertExists, nArray } from "../util.js";
 import { ViewerRenderInput } from "../viewer.js";
 import { dGlobals } from "./Main.js";
@@ -260,7 +259,7 @@ class d_a_ep extends fopAc_ac_c {
         if (this.type === 0 || this.type === 3) {
             settingTevStruct(globals, LightType.BG0, this.pos, this.tevStr);
             setLightTevColorType(globals, this.model, this.tevStr, globals.camera);
-            mDoExt_modelUpdateDL(globals, this.model, renderInstManager);
+            mDoExt_modelUpdateDL(globals, this.model, renderInstManager, globals.dlst.bg);
 
             // TODO(jstpierre): ga
         }
@@ -531,7 +530,7 @@ class d_a_bg extends fopAc_ac_c {
             settingTevStruct(globals, LightType.BG0 + i, null, this.bgTevStr[i]!);
             setLightTevColorType(globals, this.bgModel[i]!, this.bgTevStr[i]!, globals.camera);
             // this is actually mDoExt_modelEntryDL
-            mDoExt_modelUpdateDL(globals, this.bgModel[i]!, renderInstManager);
+            mDoExt_modelUpdateDL(globals, this.bgModel[i]!, renderInstManager, globals.dlst.bg);
         }
 
         const roomNo = this.parameters;
@@ -1279,7 +1278,7 @@ class d_a_obj_zouK extends fopAc_ac_c {
         setLightTevColorType(globals, this.model, this.tevStr, globals.camera);
         this.setEffectMtx(globals, this.pos, 0.5);
         this.bckAnm.entry(this.model);
-        mDoExt_modelUpdateDL(globals, this.model, renderInstManager);
+        mDoExt_modelUpdateDL(globals, this.model, renderInstManager, globals.dlst.bg);
     }
 }
 
@@ -3464,7 +3463,7 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
             // update bck
         }
 
-        mDoExt_modelUpdateDL(globals, this.model, renderInstManager);
+        mDoExt_modelUpdateDL(globals, this.model, renderInstManager, globals.dlst.bg);
 
         if (this.isSv()) {
             // rope, rope end
@@ -5215,9 +5214,9 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
     private gndChk = new dBgS_GndChk()
 
     private isWearingCasualClothes = false;
-    private texMappingClothes: TextureMapping;
-    private texMappingCasualClothes: TextureMapping = new TextureMapping();
-    private texMappingHeroClothes: TextureMapping = new TextureMapping();
+    private texMappingClothes: GXTextureMapping;
+    private texMappingCasualClothes = new GXTextureMapping();
+    private texMappingHeroClothes = new GXTextureMapping();
 
     private anmDataTable: LkAnimData[] = [];
     private anmBck = new mDoExt_bckAnm(); // Joint animation
@@ -5937,7 +5936,6 @@ class d_a_title extends fopAc_ac_c {
     }
 
     private model_draw(globals: dGlobals, renderInstManager: GfxRenderInstManager) {
-
         if (this.btkSubtitle.frameCtrl.getFrame() != 0.0) {
             this.btkShimmer.entry(this.modelSubtitleShimmer)
             mDoExt_modelUpdateDL(globals, this.modelSubtitleShimmer, renderInstManager, globals.dlst.ui);
@@ -6081,6 +6079,11 @@ class d_a_title extends fopAc_ac_c {
             this.shipOffsetX = (this.shipFrameCounter * this.shipFrameCounter) * 0.1;
             this.bpkShip.frameCtrl.setFrame(100.0 - (this.shipFrameCounter * 2));
         }
+    }
+
+    public override delete(globals: dGlobals): void {
+        super.delete(globals);
+        this.screen.destroy(globals.modelCache.device);
     }
 }
 
@@ -6471,7 +6474,7 @@ class d_a_bridge extends fopAc_ac_c {
 
         for (let plank of this.planks) {
             setLightTevColorType(globals, plank.model, this.tevStr, globals.camera);
-            mDoExt_modelUpdateDL(globals, plank.model, renderInstManager);
+            mDoExt_modelUpdateDL(globals, plank.model, renderInstManager, globals.dlst.bg);
 
             if (plank.flags & 4) {
                 if (this.flags & BridgeFlags.IsMetal) {

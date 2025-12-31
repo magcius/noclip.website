@@ -1,5 +1,5 @@
 
-import { TextureHolder, LoadedTexture, TextureMapping } from "../TextureHolder.js";
+import { TextureHolder, TextureMapping } from "../TextureHolder.js";
 import { PPAK_Texture, TextureFormat, getTextureFormatName } from "./ppf.js";
 import { GfxDevice, GfxFormat, GfxBufferUsage, GfxBuffer, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxInputLayout, GfxVertexBufferDescriptor, GfxBufferFrequencyHint, GfxBindingLayoutDescriptor, GfxProgram, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxTextureDimension, GfxRenderPass, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D, GfxMegaStateDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxFrontFaceMode } from "../gfx/platform/GfxPlatform.js";
 import * as Viewer from "../viewer.js";
@@ -39,16 +39,16 @@ function decodeTextureData(format: TextureFormat, width: number, height: number,
     }
 }
 
-export class PsychonautsTextureHolder extends TextureHolder<PPAK_Texture> {
+export class PsychonautsTextureHolder extends TextureHolder {
     private ppakTextures: PPAK_Texture[] = [];
 
     public findPPAKTexture(name: string): PPAK_Texture {
         return assertExists(this.ppakTextures.find((t) => t.name === name));
     }
 
-    public loadTexture(device: GfxDevice, texture: PPAK_Texture): LoadedTexture | null {
+    public addTexture(device: GfxDevice, texture: PPAK_Texture): void {
         if (texture.mipData.length === 0)
-            return null;
+            return;
 
         const levelDatas: Uint8Array[] = [];
         const surfaces: HTMLCanvasElement[] = [];
@@ -78,7 +78,9 @@ export class PsychonautsTextureHolder extends TextureHolder<PPAK_Texture> {
 
         this.ppakTextures.push(texture);
 
-        return { gfxTexture, viewerTexture };
+        this.gfxTextures.push(gfxTexture);
+        this.viewerTextures.push(viewerTexture);
+        this.textureNames.push(texture.name);
     }
 }
 
@@ -309,11 +311,8 @@ class MeshFragInstance {
         const fillTextureReference = (dst: TextureMapping, textureId: number) => {
             const textureReference = scene.textureReferences[textureId];
 
-            if (textureHolder.hasTexture(textureReference.textureName)) {
-                textureHolder.fillTextureMapping(dst, textureReference.textureName);
-            } else {
+            if (!textureHolder.fillTextureMapping(dst, textureReference.textureName))
                 dst.gfxTexture = null;
-            }
 
             dst.gfxSampler = gfxSampler;
         };

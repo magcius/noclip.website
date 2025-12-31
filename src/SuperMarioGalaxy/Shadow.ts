@@ -1,6 +1,6 @@
 
 import * as GX from "../gx/gx_enum.js";
-import { DrawParams, MaterialParams, GXMaterialHelperGfx, ColorKind, SceneParams, ub_SceneParamsBufferSize, fillSceneParamsData } from "../gx/gx_render.js";
+import { DrawParams, MaterialParams, GXMaterialHelperGfx, ColorKind, SceneParams, ub_SceneParamsBufferSize, fillSceneParamsData, GXTextureMapping } from "../gx/gx_render.js";
 
 import { LiveActor } from "./LiveActor.js";
 import { SceneObjHolder, SceneObj, SpecialTextureType } from "./Main.js";
@@ -22,7 +22,6 @@ import { TSDraw, TDDraw } from "./DDraw.js";
 import { GX_Program } from "../gx/gx_material.js";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { colorFromRGBA } from "../Color.js";
-import { TextureMapping } from "../TextureHolder.js";
 import { GfxClipSpaceNearZ, GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { projectionMatrixConvertClipSpaceNearZ } from "../gfx/helpers/ProjectionHelpers.js";
 import { AABB } from "../Geometry.js";
@@ -1037,7 +1036,7 @@ class AlphaShadow extends NameObj {
     private materialHelperDrawAlpha: GXMaterialHelperGfx;
     private orthoSceneParams = new SceneParams();
     private orthoQuad = new TSDraw('AlphaShadow OrthoQuad');
-    private textureMapping = new TextureMapping();
+    private textureMapping = new GXTextureMapping();
 
     constructor(sceneObjHolder: SceneObjHolder) {
         super(sceneObjHolder, 'AlphaShadow');

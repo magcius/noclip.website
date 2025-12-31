@@ -19,13 +19,12 @@ import * as JPA from '../Common/JSYSTEM/JPA.js';
 import { BTIData } from '../Common/JSYSTEM/JUTTexture.js';
 import { computeModelMatrixT, range } from '../MathHelpers.js';
 import { SceneContext } from '../SceneBase.js';
-import { TextureMapping } from '../TextureHolder.js';
 import { setBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { GfxDevice, GfxFormat, GfxMipFilterMode, GfxRenderPass, GfxTexFilterMode, GfxWrapMode } from '../gfx/platform/GfxPlatform.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { GfxrAttachmentSlot, GfxrRenderTargetDescription } from '../gfx/render/GfxRenderGraph.js';
 import { GfxRenderInstList, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
-import { GXRenderHelperGfx } from '../gx/gx_render.js';
+import { GXRenderHelperGfx, GXTextureMapping } from '../gx/gx_render.js';
 import { FlowerPacket, GrassPacket, TreePacket } from './Grass.js';
 import { LegacyActor__RegisterFallbackConstructor } from './LegacyActor.js';
 import { dDlst_2DStatic_c, d_a__RegisterConstructors } from './d_a.js';
@@ -164,7 +163,7 @@ export class dGlobals {
 
         this.quadStatic = new dDlst_2DStatic_c(modelCache.device, modelCache.cache);
 
-        this.dlst = new dDlst_list_c(modelCache.device, modelCache.cache, extraSymbolData);
+        this.dlst = new dDlst_list_c(modelCache.device, modelCache.cache, modelCache.resCtrl, extraSymbolData);
     }
 
     public dStage_searchName(name: string): dStage__ObjectNameTableEntry | null {
@@ -202,7 +201,7 @@ export class dGlobals {
 }
 
 export class ZWWExtraTextures {
-    public textureMapping: TextureMapping[] = nArray(2, () => new TextureMapping());
+    public textureMapping = nArray(2, () => new GXTextureMapping());
 
     constructor(device: GfxDevice, ZAtoon: BTIData, ZBtoonEX: BTIData) {
         ZAtoon.fillTextureMapping(this.textureMapping[0]);
@@ -255,7 +254,7 @@ const scratchMatrix = mat4.create();
 export class WindWakerRenderer implements Viewer.SceneGfx {
     private mainColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
     private mainDepthDesc = new GfxrRenderTargetDescription(GfxFormat.D32F);
-    private opaqueSceneTextureMapping = new TextureMapping();
+    private opaqueSceneTextureMapping = new GXTextureMapping();
 
     public renderHelper: GXRenderHelperGfx;
 
@@ -430,6 +429,9 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
 
         const dlst = globals.dlst;
 
+        renderInstManager.setCurrentList(dlst.shadow);
+        dlst.shadowControl.draw(globals, renderInstManager, viewerInput);
+
         renderInstManager.setCurrentList(dlst.alphaModel);
         dlst.alphaModel0.draw(globals, renderInstManager, viewerInput);
 
@@ -523,19 +525,33 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         const mainDepthTargetID = builder.createRenderTargetID(this.mainDepthDesc, 'Main Depth');
 
         builder.pushPass((pass) => {
-            pass.setDebugName('Main');
+            pass.setDebugName('BG');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
+            pass.exec((passRenderer) => {
+                this.globals.camera.applyScissor(passRenderer);
+                this.executeList(passRenderer, dlst.sea);
+                this.executeList(passRenderer, dlst.bg[0]);
+            });
+        });
 
+        // Shadows expect depth from the BG/Sea, but nothing else. Must be applied before other alpha objects.
+        dlst.shadowControl.pushPasses(this.globals, renderInstManager, builder, mainDepthTargetID, mainColorTargetID);
+
+        builder.pushPass((pass) => {
+            pass.setDebugName('Main');
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
                 this.globals.camera.applyScissor(passRenderer);
 
-                this.executeList(passRenderer, dlst.sea);
-                this.executeListSet(passRenderer, dlst.bg);
-
-                // Execute our alpha model stuff.
                 this.executeList(passRenderer, dlst.alphaModel);
 
+                this.executeList(passRenderer, dlst.main[0]);
+                
+                this.executeList(passRenderer, dlst.bg[1]);
+                this.executeList(passRenderer, dlst.main[1]);
+                
                 this.executeList(passRenderer, dlst.effect[EffectDrawGroup.Main]);
                 this.executeList(passRenderer, dlst.wetherEffect);
 
@@ -812,7 +828,7 @@ class SceneDesc {
         modelCache.fetchObjectData(`Always`);
         modelCache.fetchStageData(`Stage`);
 
-        modelCache.fetchFileData(`extra.crg1_arc`, 11);
+        modelCache.fetchFileData(`extra.crg1_arc`, 15);
         modelCache.fetchFileData(`f_pc_profiles.crg1_arc`);
 
         const particleArchives = [

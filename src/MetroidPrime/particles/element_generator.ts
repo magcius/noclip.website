@@ -18,7 +18,7 @@ import { PART } from '../part.js';
 import { AABB } from '../../Geometry.js';
 import { getMatrixAxisZ, getMatrixTranslation, MathConstants, transformVec3Mat4w0, transformVec3Mat4w1, Vec3UnitZ, Vec3Zero } from '../../MathHelpers.js';
 import { GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxDevice, GfxInputLayout, GfxMipFilterMode, GfxTexFilterMode, GfxWrapMode } from '../../gfx/platform/GfxPlatform.js';
-import { ColorKind, createInputLayout, DrawParams, GXMaterialHelperGfx, MaterialParams } from '../../gx/gx_render.js';
+import { ColorKind, createInputLayout, DrawParams, GXMaterialHelperGfx, GXTextureMapping, MaterialParams } from '../../gx/gx_render.js';
 import { computeViewMatrix } from '../../Camera.js';
 import { GfxRendererLayer, GfxRenderInst, makeSortKey } from '../../gfx/render/GfxRenderInstManager.js';
 import { Color, colorCopy, colorEqual, colorFromRGBA, colorNewFromRGBA, colorScale, colorToRGBA8, OpaqueBlack, White } from '../../Color.js';
@@ -26,7 +26,6 @@ import { GXMaterialBuilder } from '../../gx/GXMaterialBuilder.js';
 import { compileLoadedVertexLayout, GX_VtxDesc, LoadedVertexLayout } from '../../gx/gx_displaylist.js';
 import { GX_Program, lightSetSpot } from '../../gx/gx_material.js';
 import * as GX from '../../gx/gx_enum.js';
-import { TextureMapping } from '../../TextureHolder.js';
 import * as Viewer from '../../viewer.js';
 import * as GX_Material from '../../gx/gx_material.js';
 import { RetroSceneRenderer } from '../scenes.js';
@@ -601,7 +600,7 @@ export class ElementGenerator extends BaseGenerator {
 
     material: GXMaterialHelperGfx;
     materialPmus: GXMaterialHelperGfx;
-    textureMapping: TextureMapping = new TextureMapping();
+    textureMapping: GXTextureMapping = new GXTextureMapping();
     shapeData: ElementGeneratorShapeData;
 
     constructor(private genDesc: GenDescription, private orientationType: ModelOrientationType,
@@ -709,7 +708,7 @@ export class ElementGenerator extends BaseGenerator {
 
         if (this.genDesc.TEXR) {
             const texr = this.genDesc.TEXR.GetValueTexture(0, defaultParticleGlobals)!;
-            renderer.textureHolder.addTextures(renderer.device, [texr]);
+            renderer.textureHolder.addTexture(renderer.device, texr);
             renderer.textureHolder.fillTextureMapping(this.textureMapping, texr.name);
             this.textureMapping.gfxSampler = renderer.renderCache.createSampler({
                 minFilter: GfxTexFilterMode.Bilinear,

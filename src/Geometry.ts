@@ -163,7 +163,7 @@ export class AABB {
         for (let i = 0; i < points.length; i++) {
             const p = points[i];
             vec3.min(this.min, this.min, p);
-            vec3.min(this.max, this.max, p);
+            vec3.max(this.max, this.max, p);
         }
     }
 

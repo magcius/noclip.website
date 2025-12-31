@@ -133,9 +133,9 @@ function translateTextureFormat(format: GfxFormat): GPUTextureFormat {
     else if (format === GfxFormat.U8_RG_NORM)
         return 'rg8unorm';
     else if (format === GfxFormat.U8_RGBA_RT)
-        return 'bgra8unorm';
+        return navigator.gpu.getPreferredCanvasFormat();
     else if (format === GfxFormat.U8_RGBA_RT_SRGB)
-        return 'bgra8unorm-srgb';
+        return navigator.gpu.getPreferredCanvasFormat() === 'bgra8unorm' ? 'bgra8unorm-srgb' : 'rgba8unorm-srgb';
     else if (format === GfxFormat.U8_RGBA_NORM)
         return 'rgba8unorm';
     else if (format === GfxFormat.U8_RGBA_SRGB)

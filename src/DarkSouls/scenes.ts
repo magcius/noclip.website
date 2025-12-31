@@ -14,9 +14,8 @@ import { SceneContext } from "../SceneBase.js";
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { assert, assertExists } from "../util.js";
-import { DDSTextureHolder } from "./dds.js";
 import * as MTD from "./mtd.js";
-import { DarkSoulsRenderer, DrawParamBank, FLVERData, MSBRenderer } from "./render.js";
+import { DarkSoulsRenderer, DrawParamBank, FLVERData, MSBRenderer, TextureHolder } from "./render.js";
 
 interface CRG1Arc {
     Files: { [filename: string]: ArrayBufferSlice };
@@ -100,14 +99,14 @@ class DKSSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {
     }
 
-    private loadTextureTPFDCX(device: GfxDevice, textureHolder: DDSTextureHolder, resourceSystem: ResourceSystem, baseName: string): void {
+    private loadTextureTPFDCX(device: GfxDevice, textureHolder: TextureHolder, resourceSystem: ResourceSystem, baseName: string): void {
         const buffer = assertExists(resourceSystem.lookupFile(`${baseName}.tpf.dcx`));
         const decompressed = DCX.decompressBuffer(buffer);
         const tpf = TPF.parse(decompressed);
-        textureHolder.addTextures(device, tpf.textures);
+        textureHolder.addTPF(device, tpf);
     }
 
-    private loadTextureBHD(device: GfxDevice, textureHolder: DDSTextureHolder, resourceSystem: ResourceSystem, baseName: string): void {
+    private loadTextureBHD(device: GfxDevice, textureHolder: TextureHolder, resourceSystem: ResourceSystem, baseName: string): void {
         const bhdBuffer = assertExists(resourceSystem.lookupFile(`${baseName}.tpfbhd`));
         const bdtBuffer = assertExists(resourceSystem.lookupFile(`${baseName}.tpfbdt`));
         const bhd = BND3.parse(bhdBuffer, bdtBuffer);
@@ -120,7 +119,7 @@ class DKSSceneDesc implements Viewer.SceneDesc {
             const key1 = r.name.replace(/\\/g, '').replace('.tpf.dcx', '').toLowerCase();
             const key2 = tpf.textures[0].name.toLowerCase();
             assert(key1 === key2);
-            textureHolder.addTextures(device, tpf.textures);
+            textureHolder.addTPF(device, tpf);
         }
     }
 
@@ -136,8 +135,9 @@ class DKSSceneDesc implements Viewer.SceneDesc {
         DrawParamBank.fetchResources(resourceSystem, areaID);
         await dataFetcher.waitForLoad();
 
-        const textureHolder = new DDSTextureHolder();
-        const renderer = new DarkSoulsRenderer(context, textureHolder);
+        const renderer = new DarkSoulsRenderer(context);
+        const renderContext = renderer.renderContext;
+        const textureHolder = renderContext.textureHolder;
 
         const msbPath = `/map/MapStudio/${this.id}.msb`;
         const msbBuffer = assertExists(resourceSystem.lookupFile(msbPath));
