@@ -11,6 +11,9 @@ import { createBufferFromData, createBufferFromSlice } from "../gfx/helpers/Buff
 import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 import { fillColor, fillMatrix4x3, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers.js';
+import { drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk";
+import { mat4, vec2, vec3 } from 'gl-matrix';
+import { Color, colorNewFromRGBA } from "../Color";
 
 class TMSFEProgram extends DeviceProgram {
     public static a_Position = 0;
@@ -60,6 +63,8 @@ export class TMSFEScene implements SceneGfx
     private inputLayout: GfxInputLayout;
     private vertexBufferDescriptors: (GfxVertexBufferDescriptor | null)[];
     private renderInstListMain = new GfxRenderInstList();
+    private vertexCount: number;
+    private fmdl: BFRES.FMDL;
 
     constructor(device: GfxDevice, fmdl: BFRES.FMDL)
     {
@@ -109,10 +114,15 @@ export class TMSFEScene implements SceneGfx
             -10.0, 10.0, 0,
             10.0, 10, 0,
             10, -10, 0,
-            // -0.8, 0.4, 0,
-            // 0.8, -0.4, 0,
-            // -0.8, -0.4, 0
+            -10, 10, 0,
+            10, -10, 0,
+            -10, -10, 0,
+            // -198.0884, -647.991, -242.2954,
+            // -194.6871, -645.1612, -238.2419,
+            // -189.0081, -671.5596, -231.4739,
 		];
+
+        this.vertexCount = positions.length / 3;
 
         const vertexData = new Float32Array(positions.length);
         for (let i = 0; i < positions.length; i++)
@@ -121,20 +131,50 @@ export class TMSFEScene implements SceneGfx
         }
         console.log(vertexData);
 
-        const vertexBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, vertexData.buffer);
+        // const vertexBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, vertexData.buffer);
+        // this.vertexBufferDescriptors =
+        // [
+        //     { buffer: vertexBuffer },
+        // ];
+
+        // try reading my vertex data
+        const fvtx = fmdl.fvtx[0];
+        this.fmdl = fmdl;
+        const data = fvtx.vertexBuffers[0].data;
+        this.vertexCount = fvtx.vertexCount;
+        // console.log(fvtx);
+        // console.log(this.vertexCount);
+        // const view = data.createDataView();
+        // const x = view.getFloat32(0, true);
+        // console.log(x);
+        const gfx_buffer = createBufferFromSlice(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, data);
         this.vertexBufferDescriptors =
         [
-            { buffer: vertexBuffer },
+            { buffer: gfx_buffer },
         ];
+    }
+
+
+    public debugDrawVertices(viewerInput: ViewerRenderInput)
+    {
+        const fvtx = this.fmdl.fvtx[0];
+        const vertexData = fvtx.vertexBuffers[0].data;
+        const view = vertexData.createDataView();
+        const vec = vec3.create();
+
+        for (let i = 0; i < this.vertexCount * 3 ; i += 3) {
+            vec3.set(vec, view.getFloat32(i * 4 + 0, true), view.getFloat32(i * 4 + 4, true), view.getFloat32(i * 4 + 8, true));
+            drawWorldSpacePoint(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, vec, colorNewFromRGBA(0.0, 1.0, 0.0, 1.0));
+        }
     }
 
     public render(device: GfxDevice, viewerInput: ViewerRenderInput): void
     {
+        this.debugDrawVertices(viewerInput);
         this.renderHelper.pushTemplateRenderInst();
-
         const renderInst = this.renderHelper.renderInstManager.newRenderInst();
         renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, null);
-        renderInst.setDrawCount(3);
+        renderInst.setDrawCount(this.vertexCount);
         renderInst.setBindingLayouts(bindingLayouts);
         renderInst.setGfxProgram(this.program);
         renderInst.setMegaStateFlags({ cullMode: GfxCullMode.Back });

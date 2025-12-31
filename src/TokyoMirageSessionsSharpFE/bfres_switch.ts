@@ -31,6 +31,7 @@ export interface FVTX
 {
     vertexAttributes: FVTX_VertexAttribute[];
     vertexBuffers: FVTX_VertexBuffer[];
+    vertexCount: number;
 }
 
 export interface FMDL
@@ -95,6 +96,7 @@ export function parse(buffer: ArrayBufferSlice): FRES
             const buffer_stride_array_offset = view.getUint32(fvtx_entry_offset + 0x38, true);
             const buffer_offset = view.getUint32(fvtx_entry_offset + 0x48, true);
             const buffer_count = view.getUint8(fvtx_entry_offset + 0x4D);
+            const vertexCount = view.getUint32(fvtx_entry_offset + 0x50, true);
 
             // the buffer offset is relative to the start of the gpu region
             let start_of_buffer = memory_pool_data_offset + buffer_offset;
@@ -107,7 +109,7 @@ export function parse(buffer: ArrayBufferSlice): FRES
                 const size_offset = buffer_size_array_offset + (i * 0x10);
                 const size = view.getUint32(size_offset, true);
 
-                const data = buffer.subarray(buffer_offset, size);
+                const data = buffer.subarray(start_of_buffer, size);
                 start_of_buffer = align(start_of_buffer + size, 8);
 
                 vertexBuffers.push({ stride, data });
@@ -192,7 +194,7 @@ export function parse(buffer: ArrayBufferSlice): FRES
                 attribute_entry_offset += 0x10;
             }
 
-            fvtx.push({ vertexAttributes, vertexBuffers });
+            fvtx.push({ vertexAttributes, vertexBuffers, vertexCount });
             fvtx_entry_offset += 0x58;
         }
 

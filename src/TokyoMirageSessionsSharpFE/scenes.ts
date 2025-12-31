@@ -12,7 +12,7 @@ import { TMSFEScene } from "./render.js"
 // Defines a single level from Tokyo Mirage Sessions ♯FE
 class TMSFESceneDesc implements SceneDesc
 {
-    // id: Identifier for each map. Used for loading files.
+    // id: Identifier for each map. Displayed in the URL. Also used for loading files.
     // name: The map's display name in the UI 
     constructor(public id: string, public name: string) {}
 
