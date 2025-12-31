@@ -537,14 +537,14 @@ class dDlst_shadowReal_c {
             vec3.normalize(rayDir, rayDir);
         }
 
-        // TODO: Implement realPolygonCheck equivalent in JS/TS
+        // TODO: Implement realPolygonCheck equivalent in TS
         // if (!realPolygonCheck(pos, casterRadius, heightAgl, rayDir, shadowPoly)) {
         //     return 0;
         // }
 
         // Build view matrix (lookAt)
-        mat4.targetTo(viewMtx, lightVec, pos, [0, 1, 0]);
-        mat4.ortho(renderProjMtx, -casterRadius, casterRadius, -casterRadius, casterRadius, 1.0, 10000.0);
+        mat4.lookAt(viewMtx, lightVec, pos, [0, 1, 0]);
+        mat4.orthoZO(renderProjMtx, -casterRadius, casterRadius, -casterRadius, casterRadius, 1.0, 10000.0);
 
         // TODO: Build receiver projection matrix
         // Similar to mat4.ortho above, but with uv scale built in
