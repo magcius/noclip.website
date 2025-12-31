@@ -907,6 +907,7 @@ export function dComIfGd_setSimpleShadow2(globals: dGlobals, pos: vec3, groundY:
 export function dComIfGd_setShadow(globals: dGlobals, id: number, shouldFade: boolean, model: J3DModelInstance, pos: vec3, casterSize: number, scaleXZ: number,
     y: number, groundY: number, pFloorPoly: cBgS_PolyInfo, pTevStr: dKy_tevstr_c, rotY = 0.0, scaleZ = 1.0, pTexObj: BTIData | null = globals.dlst.shadowControl.defaultSimpleTex
 ): number {
+    assert(vec3.sqrLen(pTevStr.lightObj.Position) > 0, "Invalid light position in tevStr. Make sure to call settingTevStruct() before calling setShadow()");
     if (groundY <= -Infinity) {
         return 0;
     }

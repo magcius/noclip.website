@@ -107,21 +107,20 @@ class d_a_noclip_legacy extends fopAc_ac_c {
             return;
 
         const device = globals.modelCache.device;
+
+        renderInstManager.setCurrentList(globals.dlst.main[0]);
+        for (let i = 0; i < this.objectRenderers.length; i++)
+            this.objectRenderers[i].prepareToRender(globals, this.isDemoActor ? this.morf : null, device, renderInstManager, viewerInput);
             
         if (this.shadowChk) {
             if (this.shadowRealSize > 0) {
-
                 this.shadowId = dComIfGd_setShadow(globals, this.shadowId, true, this.objectRenderers[0].modelInstance, this.shadowChk.pos, this.shadowRealSize,
-                    this.shadowScaleXZ, this.pos[1], this.shadowChk.retY, this.shadowChk.polyInfo, this.tevStr, this.rot[1], 1.0, this.shadowTex);
+                    this.shadowScaleXZ, this.pos[1], this.shadowChk.retY, this.shadowChk.polyInfo, this.objectRenderers[0].tevstr, this.rot[1], 1.0, this.shadowTex);
                 this.objectRenderers[0].addShadows(globals, this.shadowId);
             }
             else
                 dComIfGd_setSimpleShadow2(globals, this.pos, this.shadowChk.retY, this.shadowScaleXZ, this.shadowChk.polyInfo, this.rot[1], 1.0, this.shadowTex);
         }
-
-        renderInstManager.setCurrentList(globals.dlst.main[0]);
-        for (let i = 0; i < this.objectRenderers.length; i++)
-            this.objectRenderers[i].prepareToRender(globals, this.isDemoActor ? this.morf : null, device, renderInstManager, viewerInput);
     }
 
     public override delete(globals: dGlobals): void {
