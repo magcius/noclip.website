@@ -1,36 +1,19 @@
 import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase.js";
 import { SceneGfx, ViewerRenderInput } from "../viewer.js";
-import { GfxDevice, GfxFormat, GfxTexture, GfxTextureDimension, GfxTextureUsage } from "../gfx/platform/GfxPlatform.js";
+import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
-import { Spyro1LevelData, Spyro1LevelRenderer } from "./render.js"
+import { buildCombinedAtlas, buildLevelData, parseTileGroups, PsxVram, Spyro1LevelData } from "./bin.js"
+import { Spyro1LevelRenderer } from "./render.js"
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
 import { GfxRenderInstList } from "../gfx/render/GfxRenderInstManager.js";
 import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
-
-function decodeVRAMToRGBA(vram: Uint16Array): Uint8Array {
-    const TABLE32 = [0, 8, 16, 24, 33, 41, 49, 57, 66, 74, 82, 90, 99, 107, 115, 123,
-                     132, 140, 148, 156, 165, 173, 181, 189, 198, 206, 214, 222, 231, 239, 247, 255];
-
-    const out = new Uint8Array(512 * 512 * 4);
-    for (let i = 0; i < 512 * 512; i++) {
-        const word = vram[i];
-        const r = TABLE32[(word >> 0) & 0x1F];
-        const g = TABLE32[(word >> 5) & 0x1F];
-        const b = TABLE32[(word >> 10) & 0x1F];
-        out[i * 4 + 0] = r;
-        out[i * 4 + 1] = g;
-        out[i * 4 + 2] = b;
-        out[i * 4 + 3] = 255;
-    }
-    return out;
-}
 
 export class Spyro1Renderer implements SceneGfx {
     private renderHelper: GfxRenderHelper;
     private renderInstListMain = new GfxRenderInstList();
     private levelRenderer: Spyro1LevelRenderer;
 
-    constructor(device: GfxDevice, levelData: Spyro1LevelData, vram: GfxTexture) {
+    constructor(device: GfxDevice, levelData: Spyro1LevelData) {
         this.renderHelper = new GfxRenderHelper(device);
         this.levelRenderer = new Spyro1LevelRenderer(device, levelData);
     }
@@ -79,20 +62,12 @@ class Spyro1Scene implements SceneDesc {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
-        const levelJSON = await context.dataFetcher.fetchData(`Spyro1/extract/sf${this.subFileID}_export.json`);
+        const levelFile = await context.dataFetcher.fetchData(`Spyro1/extract/sf${this.subFileID}_ground.bin`);
         const vram = await context.dataFetcher.fetchData(`Spyro1/extract/sf${this.subFileID}_vram.bin`);
-        const texture = device.createTexture({
-            dimension: GfxTextureDimension.n2D,
-            pixelFormat: GfxFormat.U8_RGBA_NORM,
-            width: 512,
-            height: 512,
-            numLevels: 1,
-            usage: GfxTextureUsage.Sampled,
-            depthOrArrayLayers: 1,
-        });
-        const rgba = decodeVRAMToRGBA(new Uint16Array(vram.copyToBuffer()));
-        device.uploadTextureData(texture, 0, [rgba]);
-        const renderer = new Spyro1Renderer(device, JSON.parse(new TextDecoder().decode(levelJSON.createDataView())), texture);
+        const textureList = await context.dataFetcher.fetchData(`Spyro1/extract/sf${this.subFileID}_list.bin`);
+        const tileGroups = parseTileGroups(textureList.createDataView());
+        const combinedAtlas = buildCombinedAtlas(new PsxVram(vram.copyToBuffer()), tileGroups);
+        const renderer = new Spyro1Renderer(device, buildLevelData(levelFile.createDataView(), combinedAtlas));
         return renderer;
     }
 }
@@ -113,7 +88,39 @@ const sceneDescs = [
     new Spyro1Scene(27, "Cliff Town"),
     new Spyro1Scene(29, "Ice Cavern"),
     new Spyro1Scene(33, "Night Flight"),
-    new Spyro1Scene(31, "Doctor Shemp")
+    new Spyro1Scene(31, "Doctor Shemp"),
+    "Magic Crafters",
+    new Spyro1Scene(35, "Magic Crafters Homeworld"),
+    new Spyro1Scene(37, "Alpine Ridge"),
+    new Spyro1Scene(39, "High Caves"),
+    new Spyro1Scene(41, "Wizard Peak"),
+    new Spyro1Scene(45, "Crystal Flight"),
+    new Spyro1Scene(43, "Blowhard"),
+    "Beast Makers",
+    new Spyro1Scene(47, "Beast Makers Homeworld"),
+    new Spyro1Scene(49, "Terrace Village"),
+    new Spyro1Scene(51, "Misty Bog"),
+    new Spyro1Scene(53, "Tree Tops"),
+    new Spyro1Scene(57, "Wild Flight"),
+    new Spyro1Scene(55, "Metalhead"),
+    "Dream Weavers",
+    new Spyro1Scene(59, "Dream Weavers Homeworld"),
+    new Spyro1Scene(61, "Dark Passage"),
+    new Spyro1Scene(63, "Lofty Castle"),
+    new Spyro1Scene(65, "Haunted Towers"),
+    new Spyro1Scene(69, "Icy Flight"),
+    new Spyro1Scene(67, "Jacques"),
+    "Gnorc Gnexus",
+    new Spyro1Scene(71, "Gnorc Gnexus Homeworld"),
+    new Spyro1Scene(73, "Gnorc Cove"),
+    new Spyro1Scene(75, "Twilight Harbor"),
+    new Spyro1Scene(77, "Gnasty Gnorc"),
+    new Spyro1Scene(79, "Gnasty's Loot"),
+    "Cutscenes",
+    new Spyro1Scene(4, "Cutscene 1"),
+    new Spyro1Scene(5, "Cutscene 2"),
+    new Spyro1Scene(6, "Cutscene 3"),
+    new Spyro1Scene(7, "Cutscene 4"),
 ];
 
 export const sceneGroup: SceneGroup = { id, name, sceneDescs };
