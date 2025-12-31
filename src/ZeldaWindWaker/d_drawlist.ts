@@ -371,7 +371,7 @@ void main() {
         discard;
 
     // Top-down project our shadow texture. Our local space is between -1 and 1, we want to move into 0.0 to 1.0.
-    vec2 t_ShadowTexCoord = t_ObjectPos.xz * vec2(0.5) + vec2(0.5);
+    vec2 t_ShadowTexCoord = t_ObjectPos.xy * vec2(0.5) + vec2(0.5);
     float t_ShadowColor = texture(SAMPLER_2D(u_TextureShadow), t_ShadowTexCoord).r;
     float t_Alpha = smoothstep(0.0, 0.1, t_ShadowColor);
     vec4 t_PixelOut = vec4(0, 0, 0, 0.25 * t_Alpha);
@@ -539,22 +539,12 @@ class dDlst_shadowReal_c {
         mat4.lookAt(viewMtx, lightVec, pos, [0, 1, 0]);
         mat4.orthoZO(renderProjMtx, -casterRadius, casterRadius, -casterRadius, casterRadius, 1.0, 10000.0);
 
-        // noclip modification: build a model matrix to transform a [-1, 1] cube into a shadow receiver volume
+        // noclip modification: build a model matrix to transform a [-1, 1] cube into a shadow receiver volume oriented with Y toward the light direction.
+        // This corresponds to the shadowmap's ortho frustum. The XZ position within the cube (normalized to [0-1]) is used to sample the shadowmap. 
         // TODO: Set proper volume size based on agl, casterSize, and light angle
-        // mat4.targetTo(receiverProjMtx, pos, vec3.sub(scratchVec3b, pos, rayDir), [0, 1, 0]);
-        // mat4.scale(receiverProjMtx, receiverProjMtx, [casterRadius, casterRadius, 300]);
-        // TODO: Y rotation and scale are wrong
-        vec3.negate(rayDir, rayDir);
-        const xs = Math.sqrt(1.0 - rayDir[0] * rayDir[0]);
-        const yy = xs !== 0.0 ? rayDir[1] * xs : 0.0;
-        const zz = xs !== 0.0 ? -rayDir[2] * xs : 0.0;
-        mat4.set(receiverProjMtx,
-            xs, -rayDir[0] * yy, rayDir[0] * zz, 0.0,
-            rayDir[0], rayDir[1], rayDir[2], 0.0,
-            0.0, zz, yy, 0.0,
-            pos[0], pos[1], pos[2], 1.0
-        );
-        mat4.scale(receiverProjMtx, receiverProjMtx, [casterRadius, 300, casterRadius]);
+        const view = mat4.lookAt(mat4.create(), pos, vec3.add(scratchVec3a, pos, rayDir), [0, 1, 0]);
+        const proj = mat4.orthoNO(mat4.create(), -casterRadius, casterRadius, -casterRadius, casterRadius, -10, 200);
+        mat4.invert(receiverProjMtx, mat4.mul(scratchMat4, proj, view));
 
         return alpha;
     }
@@ -595,22 +585,12 @@ class dDlst_shadowSimple_c {
     public set(pos: vec3, floorY: number, scaleXZ: number, floorNrm: vec3, rotY: number, scaleZ: number, tex: BTIData): void {
         const offsetY = scaleXZ * 16.0 * (1.0 - floorNrm[1]) + 1.0;
 
-        // Build the matrix which will transform a [-1, 1] cube into our shadow volume oriented to the floor plane
+        // Build the matrix which will transform a [-1, 1] cube into our shadow volume oriented to the floor plane (floor normal becomes Z+).
         // A physically accurate drop shadow would use a vertical box to project the shadow texture straight down, but the original 
         // game chooses to use this approach which always keeps the shape of the shadow consistent, regardless of ground geometry.
-        const xs = Math.sqrt(1.0 - floorNrm[0] * floorNrm[0]);
-        const yy = xs !== 0.0 ? floorNrm[1] * xs : 0.0;
-        const zz = xs !== 0.0 ? -floorNrm[2] * xs : 0.0;
-
-        mat4.set(this.modelMtx,
-            xs, -floorNrm[0] * yy, floorNrm[0] * zz, 0.0,
-            floorNrm[0], floorNrm[1], floorNrm[2], 0.0,
-            0.0, zz, yy, 0.0,
-            pos[0], floorY, pos[2], 1.0
-        );
-
-        mat4.rotateY(this.modelMtx, this.modelMtx, cM_s2rad(rotY));
-        mat4.scale(this.modelMtx, this.modelMtx, [scaleXZ, offsetY + offsetY + 16.0, scaleXZ * scaleZ]);
+        const yVec = vec3.rotateY(scratchVec3a, [1, 0, 0], [0,0,0], cM_s2rad(rotY));
+        mat4.targetTo(this.modelMtx, [pos[0], floorY, pos[2]], vec3.add(vec3.create(), pos, floorNrm), yVec);
+        mat4.scale(this.modelMtx, this.modelMtx, [scaleXZ, scaleXZ * scaleZ, offsetY + offsetY + 16.0]);
 
         let opacity = 1.0 - saturate((pos[1] - floorY) * 0.0007);
         this.alpha = opacity * 64.0;
