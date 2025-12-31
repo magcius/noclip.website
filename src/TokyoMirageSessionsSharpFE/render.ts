@@ -1,0 +1,143 @@
+import { GfxDevice, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxInputLayoutBufferDescriptor,
+         GfxVertexBufferFrequency, GfxInputLayout, GfxFormat, GfxProgram, GfxBufferFrequencyHint,
+         GfxBufferUsage, GfxBindingLayoutDescriptor, GfxCullMode } from "../gfx/platform/GfxPlatform.js";
+import { SceneGfx, SceneGroup, ViewerRenderInput } from "../viewer.js";
+import * as BFRES from "./bfres_switch.js";
+import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
+import { DeviceProgram } from '../Program.js';
+import { GfxShaderLibrary } from '../gfx/helpers/GfxShaderLibrary.js';
+import { GfxRenderInstList, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
+import { createBufferFromData, createBufferFromSlice } from "../gfx/helpers/BufferHelpers.js";
+import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
+import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
+import { fillColor, fillMatrix4x3, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers.js';
+
+class TMSFEProgram extends DeviceProgram {
+    public static a_Position = 0;
+
+    public static ub_SceneParams = 0;
+    public static ub_ObjectParams = 1;
+
+    public override both = `
+precision mediump float;
+
+${GfxShaderLibrary.MatrixLibrary}
+
+layout(std140) uniform ub_SceneParams
+{
+    Mat4x4 u_Projection;
+    Mat3x4 u_ModelView;
+};
+
+#ifdef VERT
+layout(location = ${TMSFEProgram.a_Position}) attribute vec3 a_Position;
+
+void mainVS()
+{
+    vec3 t_PositionWorld = UnpackMatrix(u_ModelView) * vec4(a_Position, 1.0);
+    gl_Position = UnpackMatrix(u_Projection) * vec4(t_PositionWorld, 1.0);
+}
+#endif
+
+#ifdef FRAG
+void mainPS()
+{
+    gl_FragColor = vec4(0.0, 0.0, 1.0, 0.0);
+}
+#endif
+`;
+}
+
+const bindingLayouts: GfxBindingLayoutDescriptor[] =
+[
+    { numUniformBuffers: 2, numSamplers: 0 },
+];
+
+export class TMSFEScene implements SceneGfx
+{
+    private renderHelper: GfxRenderHelper;
+    private program: GfxProgram;
+    private inputLayout: GfxInputLayout;
+    private vertexBufferDescriptors: (GfxVertexBufferDescriptor | null)[];
+    private renderInstListMain = new GfxRenderInstList();
+
+    constructor(device: GfxDevice, fmdl: BFRES.FMDL)
+    {
+        console.log(fmdl)
+        
+        this.renderHelper = new GfxRenderHelper(device);
+        this.program = this.renderHelper.renderCache.createProgram(new TMSFEProgram());
+
+        const fvtx = fmdl.fvtx[0];
+        const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] =
+        [
+            { location: 0, format: fvtx.vertexAttributes[0].format, bufferIndex: fvtx.vertexAttributes[0].bufferIndex, bufferByteOffset: fvtx.vertexAttributes[0].bufferOffset},
+        ];
+        console.log(vertexAttributeDescriptors);
+
+        const inputLayoutBufferDescriptors: GfxInputLayoutBufferDescriptor[] =
+        [
+            { byteStride: fvtx.vertexBuffers[0].stride, frequency: GfxVertexBufferFrequency.PerVertex },
+        ];
+        console.log(inputLayoutBufferDescriptors);
+
+        const indexBufferFormat: GfxFormat | null = null;
+        const cache = this.renderHelper.renderCache;
+        this.inputLayout = cache.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors: inputLayoutBufferDescriptors, indexBufferFormat });
+
+        
+        const gfx_buffer = createBufferFromSlice(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, fvtx.vertexBuffers[0].data);
+        this.vertexBufferDescriptors =
+        [
+            { buffer: gfx_buffer },
+        ];
+
+    }
+
+    public render(device: GfxDevice, viewerInput: ViewerRenderInput): void
+    {
+        this.renderHelper.pushTemplateRenderInst();
+
+        const renderInst = this.renderHelper.renderInstManager.newRenderInst();
+        renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, null);
+        renderInst.setDrawCount(3022);
+        renderInst.setBindingLayouts(bindingLayouts);
+        renderInst.setGfxProgram(this.program);
+        renderInst.setMegaStateFlags({ cullMode: GfxCullMode.Back });
+        
+        let offs = renderInst.allocateUniformBuffer(TMSFEProgram.ub_SceneParams, 32);
+        const mapped = renderInst.mapUniformBufferF32(TMSFEProgram.ub_SceneParams);
+        offs += fillMatrix4x4(mapped, offs, viewerInput.camera.projectionMatrix);
+        offs += fillMatrix4x3(mapped, offs, viewerInput.camera.viewMatrix);
+        
+        this.renderHelper.renderInstManager.setCurrentList(this.renderInstListMain);
+        this.renderHelper.renderInstManager.submitRenderInst(renderInst);
+        this.renderHelper.renderInstManager.popTemplate();
+        this.renderHelper.prepareToRender();
+
+        const builder = this.renderHelper.renderGraph.newGraphBuilder();
+        const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, standardFullClearRenderPassDescriptor);
+        const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, standardFullClearRenderPassDescriptor);
+
+        const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
+        const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
+        builder.pushPass((pass) => {
+            pass.setDebugName('Main');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
+            pass.exec((passRenderer) => {
+                this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
+            });
+        });
+        this.renderHelper.antialiasingSupport.pushPasses(builder, viewerInput, mainColorTargetID);
+        builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
+
+        this.renderHelper.renderGraph.execute(builder);
+        this.renderInstListMain.reset();
+    }
+
+    public destroy(device: GfxDevice): void
+    {
+        this.renderHelper.destroy();
+    }
+}

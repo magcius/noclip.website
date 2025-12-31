@@ -126,8 +126,8 @@ import { IS_DEVELOPMENT } from './BuildVersion.js';
 import { GfxPlatform } from './gfx/platform/GfxPlatform.js';
 
 const sceneGroups: (string | SceneGroup)[] = [
-    "Wii",
     Scenes_TokyoMirageSessionsSharpFE.sceneGroup,
+    "Wii",
     Scenes_MarioKartWii.sceneGroup,
     Scenes_KirbysReturnToDreamLand.sceneGroup,
     Scenes_Klonoa.sceneGroup,
