@@ -861,7 +861,10 @@ class dDlst_shadowControl_c {
     }
 
     public addReal(id: number, model: J3DModelInstance): boolean {
-        // TODO: Implementation
+        let real = this.reals.find(r => r.id === id);
+        if (real) 
+            return real.add(model);
+
         return false;
     }
 
@@ -911,4 +914,8 @@ export function dComIfGd_setShadow(globals: dGlobals, id: number, shouldFade: bo
         dComIfGd_setSimpleShadow2(globals, simplePos, groundY, scaleXZ, pFloorPoly, rotY, scaleZ, pTexObj);
     }
     return sid;
+}
+
+export function dComIfGd_addRealShadow(globals: dGlobals, id: number, model: J3DModelInstance): boolean {
+    return globals.dlst.shadowControl.addReal(id, model);
 }

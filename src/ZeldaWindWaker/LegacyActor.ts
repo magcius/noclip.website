@@ -23,7 +23,7 @@ import { cPhs__Status, fGlobals, fpcPf__RegisterFallback } from './framework.js'
 import { mDoExt_McaMorf, mDoExt_modelUpdateDL } from './m_do_ext.js';
 import { MtxTrans, calc_mtx, mDoMtx_ZXYrotM } from './m_do_mtx.js';
 import { WindWakerRenderer, dGlobals } from "./Main.js";
-import { dComIfGd_setShadow, dComIfGd_setSimpleShadow2 } from './d_drawlist.js';
+import { dComIfGd_addRealShadow, dComIfGd_setShadow, dComIfGd_setSimpleShadow2 } from './d_drawlist.js';
 import { BTIData } from '../Common/JSYSTEM/JUTTexture.js';
 
 const scratchMat4a = mat4.create();
@@ -109,9 +109,12 @@ class d_a_noclip_legacy extends fopAc_ac_c {
         const device = globals.modelCache.device;
             
         if (this.shadowChk) {
-            if (this.shadowRealSize > 0)
+            if (this.shadowRealSize > 0) {
+
                 this.shadowId = dComIfGd_setShadow(globals, this.shadowId, true, this.objectRenderers[0].modelInstance, this.pos, this.shadowRealSize,
                     this.shadowScaleXZ, this.pos[1], this.shadowChk.retY, this.shadowChk.polyInfo, this.tevStr, this.rot[1], 1.0, this.shadowTex);
+                this.objectRenderers[0].addShadows(globals, this.shadowId);
+            }
             else
                 dComIfGd_setSimpleShadow2(globals, this.pos, this.shadowChk.retY, this.shadowScaleXZ, this.shadowChk.polyInfo, this.rot[1], 1.0, this.shadowTex);
         }
@@ -1951,6 +1954,14 @@ class BMDObjectRenderer {
     public setParentJoint(o: BMDObjectRenderer, jointName: string): void {
         this.parentJointMatrix = o.modelInstance.getJointToWorldMatrixReference(jointName);
         o.childObjects.push(this);
+    }
+
+    public addShadows(globals: dGlobals, shadowId: number): boolean {
+        let allValid = true;
+        for (let i = 0; i < this.childObjects.length; i++) {
+            allValid = allValid && dComIfGd_addRealShadow(globals, shadowId, this.childObjects[i].modelInstance);
+        }
+        return allValid;
     }
 
     public setMaterialColorWriteEnabled(materialName: string, v: boolean): void {
