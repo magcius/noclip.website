@@ -12,11 +12,11 @@ import { TMSFEScene } from "./render.js"
 // Defines a single level from Tokyo Mirage Sessions ♯FE
 class TMSFESceneDesc implements SceneDesc
 {
-    // id: The filename of the current map
+    // id: Identifier for each map. Used for loading files.
     // name: The map's display name in the UI 
     constructor(public id: string, public name: string) {}
 
-    // When a map is selected from the list, load the map file and create the scene
+    // When a map is selected from the list, load the map's data and create the scene
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx>
     {
         // Load the map file
@@ -33,7 +33,7 @@ class TMSFESceneDesc implements SceneDesc
 // Collection of all the levels
 // id: Identifier for this game. It is displayed in the URL.
 // name: The game's display name in the UI
-// sceneDescs: List of all the levels that are a part of this game. They are also separated into multiple categories
+// sceneDescs: List of all the levels that are a part of this game. They are grouped into separate categories
 const id = `TokyoMirageSessionsSharpFE`;
 const name = "MOVE THIS LATER Tokyo Mirage Sessions ♯FE";
 const sceneDescs =

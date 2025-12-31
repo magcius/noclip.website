@@ -63,11 +63,9 @@ export class TMSFEScene implements SceneGfx
 
     constructor(device: GfxDevice, fmdl: BFRES.FMDL)
     {
-        console.log(fmdl)
-        
         this.renderHelper = new GfxRenderHelper(device);
         this.program = this.renderHelper.renderCache.createProgram(new TMSFEProgram());
-
+        /*
         const fvtx = fmdl.fvtx[0];
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] =
         [
@@ -91,7 +89,43 @@ export class TMSFEScene implements SceneGfx
         [
             { buffer: gfx_buffer },
         ];
+        */
+       // test render a triangle
+        const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] =
+        [
+            { location: 0, format: GfxFormat.F32_RGB, bufferIndex: 0, bufferByteOffset: 0 },
+        ];
+        const inputLayoutBufferDescriptors: GfxInputLayoutBufferDescriptor[] =
+        [
+            { byteStride: 0xC, frequency: GfxVertexBufferFrequency.PerVertex },
+        ];
+        const indexBufferFormat: GfxFormat | null = null;
+        const cache = this.renderHelper.renderCache;
+        this.inputLayout = cache.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors: inputLayoutBufferDescriptors, indexBufferFormat });
 
+        // make vertex buffer
+        var positions =
+        [
+            -10.0, 10.0, 0,
+            10.0, 10, 0,
+            10, -10, 0,
+            // -0.8, 0.4, 0,
+            // 0.8, -0.4, 0,
+            // -0.8, -0.4, 0
+		];
+
+        const vertexData = new Float32Array(positions.length);
+        for (let i = 0; i < positions.length; i++)
+        {
+            vertexData[i] = positions[i];
+        }
+        console.log(vertexData);
+
+        const vertexBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, vertexData.buffer);
+        this.vertexBufferDescriptors =
+        [
+            { buffer: vertexBuffer },
+        ];
     }
 
     public render(device: GfxDevice, viewerInput: ViewerRenderInput): void
@@ -100,7 +134,7 @@ export class TMSFEScene implements SceneGfx
 
         const renderInst = this.renderHelper.renderInstManager.newRenderInst();
         renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, null);
-        renderInst.setDrawCount(3022);
+        renderInst.setDrawCount(3);
         renderInst.setBindingLayouts(bindingLayouts);
         renderInst.setGfxProgram(this.program);
         renderInst.setMegaStateFlags({ cullMode: GfxCullMode.Back });
