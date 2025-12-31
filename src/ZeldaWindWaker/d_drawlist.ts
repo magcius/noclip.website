@@ -747,6 +747,7 @@ class dDlst_shadowControl_c {
         simpleTemplate.setGfxProgram(this.simpleCache.program);
         simpleTemplate.setMegaStateFlags({
             depthCompare: GfxCompareMode.Always,
+            depthWrite: false,
             cullMode: GfxCullMode.Front,
             ...setAttachmentStateSimple({}, {
                 channelWriteMask: GfxChannelWriteMask.RGB,
