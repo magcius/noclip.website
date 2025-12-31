@@ -111,7 +111,7 @@ class d_a_noclip_legacy extends fopAc_ac_c {
         if (this.shadowChk) {
             if (this.shadowRealSize > 0) {
 
-                this.shadowId = dComIfGd_setShadow(globals, this.shadowId, true, this.objectRenderers[0].modelInstance, this.pos, this.shadowRealSize,
+                this.shadowId = dComIfGd_setShadow(globals, this.shadowId, true, this.objectRenderers[0].modelInstance, this.shadowChk.pos, this.shadowRealSize,
                     this.shadowScaleXZ, this.pos[1], this.shadowChk.retY, this.shadowChk.polyInfo, this.tevStr, this.rot[1], 1.0, this.shadowTex);
                 this.objectRenderers[0].addShadows(globals, this.shadowId);
             }
@@ -217,12 +217,12 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     }
 
     function setShadowSimple(scaleXZ: number, scaleZ: number = 1.0, tex?: BTIData | null): void {
-        setShadow(0, scaleXZ, scaleZ, tex);
+        setShadow(0, 40, scaleXZ, scaleZ, tex);
     }
 
-    function setShadow(realSize: number, scaleXZ: number, scaleZ: number = 1.0, tex?: BTIData | null): void {
+    function setShadow(realSize: number, centerYOffset: number, scaleXZ: number, scaleZ: number = 1.0, tex?: BTIData | null): void {
         legacy.shadowChk = new dBgS_GndChk();
-        vec3.scaleAndAdd(legacy.shadowChk.pos, legacy.pos, Vec3UnitY, 40.0);
+        vec3.scaleAndAdd(legacy.shadowChk.pos, legacy.pos, Vec3UnitY, centerYOffset);
         globals.scnPlay.bgS.GroundCross(legacy.shadowChk);
         legacy.shadowScaleXZ = scaleXZ;
         legacy.shadowTex = tex;
@@ -591,7 +591,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         const m = buildModel(rarc, `bdlm/ko.bdl`);
         buildChildModel(rarc, `bdlm/kohead01.bdl`).setParentJoint(m, `head`);
         m.bindANK1(parseBCK(rarc, `bcks/ko_wait01.bck`));
-        setShadow(800.0, 40.0, 1.0);
+        setShadow(800.0, 150, 40.0, 1.0);
     });
     // Joel
     else if (actorName === 'Ko2') fetchArchive(`Ko`).then((rarc) => {
