@@ -389,25 +389,6 @@ const scratchMat4 = mat4.create();
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
 
-class dDlst_shadowReal_c_Cache {
-    public program: GfxProgram;
-    public shadowmapDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
-    public shadowmapDepthDesc = new GfxrRenderTargetDescription(GfxFormat.D32F);
-    
-    constructor(device: GfxDevice, cache: GfxRenderCache) {
-        this.shadowmapDesc.setDimensions(128, 128, 1);
-        this.shadowmapDesc.clearColor = colorNewCopy(OpaqueBlack);
-        this.shadowmapDepthDesc.copyDimensions(this.shadowmapDesc);
-        this.shadowmapDepthDesc.clearDepth = standardFullClearRenderPassDescriptor.clearDepth;
-    }
-
-    destroy(device: GfxDevice): void {
-        
-    }
-}
-class dDlst_shadowRealPoly_c {
-    // TODO:
-}
 class dDlst_shadowReal_c {
     public state = 0; // 0: unallocated, 1: ready, 2: pendingDelete
     public id: number = 0;
@@ -417,10 +398,6 @@ class dDlst_shadowReal_c {
     private viewMtx = mat4.create();
     private renderProjMtx = mat4.create();
     private receiverProjMtx = mat4.create();
-    private shadowRealPoly = new dDlst_shadowRealPoly_c();
-
-    constructor(device: GfxDevice, cache: GfxRenderCache) {
-    }
 
     public reset(): void {
         if (this.state === 1) {
@@ -481,7 +458,7 @@ class dDlst_shadowReal_c {
             assertExists(tevStr); // The game allows passing a null tevStr (uses player's light pos), we do not.
             const lightPos = tevStr.lightObj.Position;
             this.alpha = dDlst_shadowReal_c.setShadowRealMtx(this.viewMtx, this.renderProjMtx, this.receiverProjMtx, lightPos, pos, casterSize, heightAgl,
-                this.shadowRealPoly, shouldFade == 0 ? 0.0 : heightAgl * 0.0007);
+                shouldFade == 0 ? 0.0 : heightAgl * 0.0007);
 
             if (this.alpha === 0)
                 return 0;
@@ -504,7 +481,7 @@ class dDlst_shadowReal_c {
     }
 
     private static setShadowRealMtx(viewMtx: mat4, renderProjMtx: mat4, receiverProjMtx: mat4, lightPos: vec3, pos: vec3,
-        casterSize: number, heightAgl: number, shadowPoly: dDlst_shadowRealPoly_c, heightFade: number): number {
+        casterSize: number, heightAgl: number, heightFade: number): number {
         // shadowPoly->reset();
         if (heightFade >= 1.0) {
             return 0;
@@ -551,7 +528,9 @@ class dDlst_shadowReal_c {
 
         // TODO: The numbers for casterSize seem to be about 4x to large. Is there a scale in here that I'm missing?
 
-        // TODO: Implement realPolygonCheck equivalent in TS
+        // noclip modification: 
+        // The game uses realPolygonCheck to gather a list of bg polygons that intersect the shadow's bounding volume.
+        // These are then renderered to sample the shadow map. Instead, we sample the shadowmap directly from the volume.
         // if (!realPolygonCheck(pos, casterRadius, heightAgl, rayDir, shadowPoly)) {
         //     return 0;
         // }
@@ -581,7 +560,65 @@ class dDlst_shadowReal_c {
     }
 }
 
-class dDlst_shadowSimple_c_Cache {
+// Renders a simple cube-shaped shadow volume directly below an object (light position is ignored). Optionally, use a 
+// texture (defaults to a circle) oriented to the ground normal to stencil out the shadow volume (i.e. a gobo texture).
+class dDlst_shadowSimple_c {
+    public alpha: number = 0; // 0-255
+    public tex: BTIData;
+    public modelMtx = mat4.create();
+
+    // noclip modification: The game's original shadowing uses many draw calls which is inefficient on modern hardware. It works as follows:
+    // 1. For each shadow, create a box directly under the object. Its Y rotation matches the caster. It's height is based on the ground slope.
+    // 2. Render the front faces of the box, adding 0.25 to the empty alpha buffer. Depth testing is enabled. Similar to shadow volumes.
+    // 3. Render the back faces of the box, subtracting 0.25 from the empty alpha buffer. Now alpha is filled only where the box interesects the ground. 
+    // 4. If the shadow has a texture (defaults to a circle): Render a textured quad oriented to the ground normal, clear the alpha where texture is 0.
+    // 5. Render the box, multiplying the color buffer by (1.0 - alpha). This darkens the areas where the shadow is visible.
+    // 6. Render the box, clearing the alpha to 0. This same framebuffer is used to render other shadows, and then alpha objects.
+    // We take a different approach, blending each shadow directly into the color buffer with a single draw call using a deferred decal technique. 
+    // The results are very similar, with a few exceptions:
+    // - For overlapping shadows, the game multiples color by (1.0 - 0.25 * N). We multiply by 0.75 ^ N. Similar results for 2 shadows, but at 3 ours will be lighter.
+    // - For shadows overlapping ledges, the game's textured-quad approach will appear to hang over the edge. Ours will project the shadow down to the lower level. 
+    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        const renderInst = renderInstManager.newRenderInst();
+        let offset = renderInst.allocateUniformBuffer(0, 4 + 16 * 2 + 20);
+        const buf = renderInst.mapUniformBufferF32(0);
+        offset += fillVec4(buf, offset, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+        offset += fillMatrix4x4(buf, offset, mat4.mul(scratchMat4, globals.camera.clipFromWorldMatrix, this.modelMtx));
+        offset += fillMatrix4x4(buf, offset, mat4.invert(scratchMat4, scratchMat4));
+        offset += fillFogBlock(buf, offset, materialParams.u_FogBlock);
+        this.tex.fillTextureMapping(materialParams.m_TextureMapping[0]);
+        materialParams.m_TextureMapping[1].lateBinding = 'depth-target';
+        renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
+        renderInstManager.submitRenderInst(renderInst);
+    }
+
+    public set(pos: vec3, floorY: number, scaleXZ: number, floorNrm: vec3, rotY: number, scaleZ: number, tex: BTIData): void {
+        const offsetY = scaleXZ * 16.0 * (1.0 - floorNrm[1]) + 1.0;
+
+        // Build the matrix which will transform a [-1, 1] cube into our shadow volume oriented to the floor plane
+        // A physically accurate drop shadow would use a vertical box to project the shadow texture straight down, but the original 
+        // game chooses to use this approach which always keeps the shape of the shadow consistent, regardless of ground geometry.
+        const xs = Math.sqrt(1.0 - floorNrm[0] * floorNrm[0]);
+        const yy = xs !== 0.0 ? floorNrm[1] * xs : 0.0;
+        const zz = xs !== 0.0 ? -floorNrm[2] * xs : 0.0;
+
+        mat4.set(this.modelMtx,
+            xs, -floorNrm[0] * yy, floorNrm[0] * zz, 0.0,
+            floorNrm[0], floorNrm[1], floorNrm[2], 0.0,
+            0.0, zz, yy, 0.0,
+            pos[0], floorY, pos[2], 1.0
+        );
+
+        mat4.rotateY(this.modelMtx, this.modelMtx, cM_s2rad(rotY));
+        mat4.scale(this.modelMtx, this.modelMtx, [scaleXZ, offsetY + offsetY + 16.0, scaleXZ * scaleZ]);
+
+        let opacity = 1.0 - saturate((pos[1] - floorY) * 0.0007);
+        this.alpha = opacity * 64.0;
+        this.tex = tex;
+    }
+}
+
+class dDlst_shadowControl_c_Cache {
     public program: GfxProgram;
     public inputLayout: GfxInputLayout;
     public positionBuffer: GfxBuffer;
@@ -591,6 +628,9 @@ class dDlst_shadowSimple_c_Cache {
     public defaultSimpleTex: BTIData;
     public whiteTex: BTIData;
 
+    public shadowmapDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
+    public shadowmapDepthDesc = new GfxrRenderTargetDescription(GfxFormat.D32F);
+    
     constructor(resCtrl: dRes_control_c, cache: GfxRenderCache) {
         const glsl = preprocessProgramObj_GLSL(cache.device, new SimpleShadowProgram());
         this.program = cache.createProgramSimple(glsl);
@@ -675,6 +715,11 @@ class dDlst_shadowSimple_c_Cache {
         bti.data = new ArrayBufferSlice(new Uint8Array(32).fill(0xFF).buffer);
         this.whiteTex = new BTIData(cache.device, cache, bti);
 
+        this.shadowmapDesc.setDimensions(128, 128, 1);
+        this.shadowmapDesc.clearColor = colorNewCopy(OpaqueBlack);
+        this.shadowmapDepthDesc.copyDimensions(this.shadowmapDesc);
+        this.shadowmapDepthDesc.clearDepth = standardFullClearRenderPassDescriptor.clearDepth;
+
         return this;
     }
 
@@ -689,87 +734,27 @@ class dDlst_shadowSimple_c_Cache {
     }
 }
 
-// Renders a simple cube-shaped shadow volume directly below an object (light position is ignored). Optionally, use a 
-// texture (defaults to a circle) oriented to the ground normal to stencil out the shadow volume (i.e. a gobo texture).
-class dDlst_shadowSimple_c {
-    public alpha: number = 0; // 0-255
-    public tex: BTIData;
-    public modelMtx = mat4.create();
-
-    // noclip modification: The game's original shadowing uses many draw calls which is inefficient on modern hardware. It works as follows:
-    // 1. For each shadow, create a box directly under the object. Its Y rotation matches the caster. It's height is based on the ground slope.
-    // 2. Render the front faces of the box, adding 0.25 to the empty alpha buffer. Depth testing is enabled. Similar to shadow volumes.
-    // 3. Render the back faces of the box, subtracting 0.25 from the empty alpha buffer. Now alpha is filled only where the box interesects the ground. 
-    // 4. If the shadow has a texture (defaults to a circle): Render a textured quad oriented to the ground normal, clear the alpha where texture is 0.
-    // 5. Render the box, multiplying the color buffer by (1.0 - alpha). This darkens the areas where the shadow is visible.
-    // 6. Render the box, clearing the alpha to 0. This same framebuffer is used to render other shadows, and then alpha objects.
-    // We take a different approach, blending each shadow directly into the color buffer with a single draw call using a deferred decal technique. 
-    // The results are very similar, with a few exceptions:
-    // - For overlapping shadows, the game multiples color by (1.0 - 0.25 * N). We multiply by 0.75 ^ N. Similar results for 2 shadows, but at 3 ours will be lighter.
-    // - For shadows overlapping ledges, the game's textured-quad approach will appear to hang over the edge. Ours will project the shadow down to the lower level. 
-    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        const renderInst = renderInstManager.newRenderInst();
-        let offset = renderInst.allocateUniformBuffer(0, 4 + 16 * 2 + 20);
-        const buf = renderInst.mapUniformBufferF32(0);
-        offset += fillVec4(buf, offset, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
-        offset += fillMatrix4x4(buf, offset, mat4.mul(scratchMat4, globals.camera.clipFromWorldMatrix, this.modelMtx));
-        offset += fillMatrix4x4(buf, offset, mat4.invert(scratchMat4, scratchMat4));
-        offset += fillFogBlock(buf, offset, materialParams.u_FogBlock);
-        this.tex.fillTextureMapping(materialParams.m_TextureMapping[0]);
-        materialParams.m_TextureMapping[1].lateBinding = 'depth-target';
-        renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
-        renderInstManager.submitRenderInst(renderInst);
-    }
-
-    public set(pos: vec3, floorY: number, scaleXZ: number, floorNrm: vec3, rotY: number, scaleZ: number, tex: BTIData): void {
-        const offsetY = scaleXZ * 16.0 * (1.0 - floorNrm[1]) + 1.0;
-
-        // Build the matrix which will transform a [-1, 1] cube into our shadow volume oriented to the floor plane
-        // A physically accurate drop shadow would use a vertical box to project the shadow texture straight down, but the original 
-        // game chooses to use this approach which always keeps the shape of the shadow consistent, regardless of ground geometry.
-        const xs = Math.sqrt(1.0 - floorNrm[0] * floorNrm[0]);
-        const yy = xs !== 0.0 ? floorNrm[1] * xs : 0.0;
-        const zz = xs !== 0.0 ? -floorNrm[2] * xs : 0.0;
-
-        mat4.set(this.modelMtx,
-            xs, -floorNrm[0] * yy, floorNrm[0] * zz, 0.0,
-            floorNrm[0], floorNrm[1], floorNrm[2], 0.0,
-            0.0, zz, yy, 0.0,
-            pos[0], floorY, pos[2], 1.0
-        );
-
-        mat4.rotateY(this.modelMtx, this.modelMtx, cM_s2rad(rotY));
-        mat4.scale(this.modelMtx, this.modelMtx, [scaleXZ, offsetY + offsetY + 16.0, scaleXZ * scaleZ]);
-
-        let opacity = 1.0 - saturate((pos[1] - floorY) * 0.0007);
-        this.alpha = opacity * 64.0;
-        this.tex = tex;
-    }
-}
-
 class dDlst_shadowControl_c {
     private simples = nArray(128, () => new dDlst_shadowSimple_c());
     private simpleCount = 0;
-    private simpleCache: dDlst_shadowSimple_c_Cache;
 
-    private reals: dDlst_shadowReal_c[];
+    private reals = nArray(8, (i) => new dDlst_shadowReal_c());
     private latestId: number = 0;
-    private realCache: dDlst_shadowReal_c_Cache;
     private realCasterInstList = new GfxRenderInstList(gfxRenderInstCompareNone, GfxRenderInstExecutionOrder.Forwards);
     private realInstList = new GfxRenderInstList(gfxRenderInstCompareNone, GfxRenderInstExecutionOrder.Forwards);
 
+    private cache: dDlst_shadowControl_c_Cache;
+
     public get defaultSimpleTex(): BTIData {
-        return this.simpleCache.defaultSimpleTex;
+        return this.cache.defaultSimpleTex;
     }
 
     constructor(device: GfxDevice, cache: GfxRenderCache, resCtrl: dRes_control_c) {
-        this.simpleCache = new dDlst_shadowSimple_c_Cache(resCtrl, cache);
-        this.realCache = new dDlst_shadowReal_c_Cache(device, cache);
-        this.reals = nArray(32, (i) => new dDlst_shadowReal_c(device, cache));
+        this.cache = new dDlst_shadowControl_c_Cache(resCtrl, cache);
     }
 
     destroy(device: GfxDevice): void {
-        this.simpleCache.destroy(device);
+        this.cache.destroy(device);
     }
 
     public reset(): void {
@@ -790,8 +775,8 @@ class dDlst_shadowControl_c {
         // boxes bounding the shadow receivers. Simple shadows sample a predefined texture, real shadows sample the shadowmap.
         const shadowVolTemplate = renderInstManager.pushTemplate();
         shadowVolTemplate.setBindingLayouts(SimpleShadowProgram.bindingLayouts);
-        shadowVolTemplate.setGfxProgram(this.simpleCache.program);
-        shadowVolTemplate.setVertexInput(this.simpleCache.inputLayout, [{ buffer: this.simpleCache.positionBuffer }], { buffer: this.simpleCache.indexBuffer });
+        shadowVolTemplate.setGfxProgram(this.cache.program);
+        shadowVolTemplate.setVertexInput(this.cache.inputLayout, [{ buffer: this.cache.positionBuffer }], { buffer: this.cache.indexBuffer });
         shadowVolTemplate.setDrawCount(36);
         shadowVolTemplate.setMegaStateFlags({
             depthCompare: GfxCompareMode.Always,
@@ -820,8 +805,8 @@ class dDlst_shadowControl_c {
     }
 
     public pushPasses(globals: dGlobals, renderInstManager: GfxRenderInstManager, builder: GfxrGraphBuilder, mainDepthTargetID: GfxrRenderTargetID, mainColorTargetID: GfxrRenderTargetID): void {
-        const shadowmapColorTargetID = builder.createRenderTargetID(this.realCache.shadowmapDesc, 'Shadowmap');
-        const shadowmapDepthTargetID = builder.createRenderTargetID(this.realCache.shadowmapDepthDesc, 'Shadowmap Depth');
+        const shadowmapColorTargetID = builder.createRenderTargetID(this.cache.shadowmapDesc, 'Shadowmap');
+        const shadowmapDepthTargetID = builder.createRenderTargetID(this.cache.shadowmapDepthDesc, 'Shadowmap Depth');
         
         builder.pushPass((pass) => {
             pass.setDebugName('Shadowmaps');
@@ -841,7 +826,7 @@ class dDlst_shadowControl_c {
             pass.exec((passRenderer, scope) => {
                 globals.camera.applyScissor(passRenderer);
                 const depthTex = scope.getResolveTextureForID(mainDepthResolveTextureID);
-                globals.dlst.shadow.resolveLateSamplerBinding('depth-target', { gfxTexture: depthTex, gfxSampler: this.simpleCache.sampler, lateBinding: null });
+                globals.dlst.shadow.resolveLateSamplerBinding('depth-target', { gfxTexture: depthTex, gfxSampler: this.cache.sampler, lateBinding: null });
                 globals.dlst.shadow.drawOnPassRenderer(renderInstManager.gfxRenderCache, passRenderer);
                 // TODO: Where does this belong
                 this.reset();
@@ -860,8 +845,8 @@ class dDlst_shadowControl_c {
                 globals.camera.applyScissor(passRenderer);
                 const shadowmap = scope.getResolveTextureForID(shadowmapResolveTextureID);
                 const depthTex = scope.getResolveTextureForID(mainDepthResolveTextureID);
-                this.realInstList.resolveLateSamplerBinding('depth-target', { gfxTexture: depthTex, gfxSampler: this.simpleCache.sampler, lateBinding: null });
-                this.realInstList.resolveLateSamplerBinding('shadowmap-target', { gfxTexture: shadowmap, gfxSampler: this.simpleCache.sampler, lateBinding: null });
+                this.realInstList.resolveLateSamplerBinding('depth-target', { gfxTexture: depthTex, gfxSampler: this.cache.sampler, lateBinding: null });
+                this.realInstList.resolveLateSamplerBinding('shadowmap-target', { gfxTexture: shadowmap, gfxSampler: this.cache.sampler, lateBinding: null });
                 this.realInstList.drawOnPassRenderer(renderInstManager.gfxRenderCache, passRenderer);
             });
         });
@@ -892,7 +877,7 @@ class dDlst_shadowControl_c {
             return false;
 
         const simple = this.simples[this.simpleCount++];
-        simple.set(pos, groundY, scaleXZ, floorNrm, angle, scaleZ, tex ? tex : this.simpleCache.whiteTex);
+        simple.set(pos, groundY, scaleXZ, floorNrm, angle, scaleZ, tex ? tex : this.cache.whiteTex);
         return true;
     }
 
