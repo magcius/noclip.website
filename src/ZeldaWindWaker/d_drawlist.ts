@@ -413,7 +413,6 @@ class dDlst_shadowReal_c {
     public id: number = 0;
 
     private models: J3DModelInstance[] = [];
-    private shadowmapTex: GfxTexture;
     private alpha: number = 0; // 0-255
     private viewMtx = mat4.create();
     private renderProjMtx = mat4.create();
@@ -421,15 +420,6 @@ class dDlst_shadowReal_c {
     private shadowRealPoly = new dDlst_shadowRealPoly_c();
 
     constructor(device: GfxDevice, cache: GfxRenderCache) {
-        this.shadowmapTex = device.createTexture({
-            dimension: GfxTextureDimension.n2D,
-            width: 128,
-            height: 128,
-            depthOrArrayLayers: 1,
-            numLevels: 1,
-            pixelFormat: GfxFormat.U8_RGBA_RT,
-            usage: GfxTextureUsage.Sampled | GfxTextureUsage.RenderTarget,
-        });
     }
 
     public reset(): void {
@@ -779,7 +769,7 @@ class dDlst_shadowControl_c {
         // 2. Cull any shadow receiver bounding boxes that are outside of the camera frustum.
         // 3. Generate a 128x128 shadow map by rendering all shadow casters from the light's point of view into a texture.
         // 4. Render the front/back faces of the bounding box into the alpha buffer, adding/subtracting just like simple shadows 2. & 3.
-        // 5. Render all of the bg triangles gathered in step 1, sampling from the shadow map by reprojecting from the light's point of view.
+        // 5. Render all of the bg triangles gathered in step 1, sampling from the shadow map, clear the alpha where texture not > 0.
         // 6. Render the bounding box, clearing the alpha to 0. This same framebuffer is used to render other shadows, and then alpha objects.
         renderInstManager.setCurrentList(this.realCasterInstList);
         const realTemplate = renderInstManager.pushTemplate();
