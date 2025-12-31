@@ -801,7 +801,8 @@ class dDlst_shadowControl_c {
             this.reals[i].draw(globals, renderInstManager, viewerInput);
         }
 
-        renderInstManager.popTemplate();
+        renderInstManager.popTemplate()
+        this.reset();
     }
 
     public pushPasses(globals: dGlobals, renderInstManager: GfxRenderInstManager, builder: GfxrGraphBuilder, mainDepthTargetID: GfxrRenderTargetID, mainColorTargetID: GfxrRenderTargetID): void {
@@ -828,8 +829,6 @@ class dDlst_shadowControl_c {
                 const depthTex = scope.getResolveTextureForID(mainDepthResolveTextureID);
                 globals.dlst.shadow.resolveLateSamplerBinding('depth-target', { gfxTexture: depthTex, gfxSampler: this.cache.sampler, lateBinding: null });
                 globals.dlst.shadow.drawOnPassRenderer(renderInstManager.gfxRenderCache, passRenderer);
-                // TODO: Where does this belong
-                this.reset();
             });
         });
 
