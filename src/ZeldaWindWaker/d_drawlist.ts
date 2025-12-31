@@ -12,7 +12,7 @@ import { GXMaterialBuilder } from '../gx/GXMaterialBuilder.js';
 import { DisplayListRegisters, GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, LoadedVertexLayout, compileVtxLoader, displayListRegistersInitGX, displayListRegistersRun } from "../gx/gx_displaylist.js";
 import * as GX from '../gx/gx_enum.js';
 import { GX_Program } from '../gx/gx_material.js';
-import { ColorKind, DrawParams, GXMaterialHelperGfx, MaterialParams, SceneParams, createInputLayout, fillSceneParamsData, ub_SceneParamsBufferSize } from "../gx/gx_render.js";
+import { ColorKind, DrawParams, GXMaterialHelperGfx, MaterialParams, SceneParams, createInputLayout, fillFogBlock, fillSceneParamsData, ub_SceneParamsBufferSize } from "../gx/gx_render.js";
 import { assert, nArray } from '../util.js';
 import { ViewerRenderInput } from '../viewer.js';
 import { SymbolMap, dGlobals } from './Main.js';
@@ -20,7 +20,7 @@ import { PeekZManager } from "./d_dlst_peekZ.js";
 import { cBgS_PolyInfo } from "./d_bg.js";
 import { BTI_Texture, BTIData } from "../Common/JSYSTEM/JUTTexture.js";
 import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
-import { dKy_tevstr_c } from "./d_kankyo.js";
+import { dKy_GxFog_set, dKy_tevstr_c } from "./d_kankyo.js";
 import { cM_s2rad } from "./SComponent.js";
 import { dRes_control_c, ResType } from "./d_resorce.js";
 import { DeviceProgram } from "../Program.js";
@@ -30,6 +30,7 @@ import { fillMatrix4x4, fillVec4 } from "../gfx/helpers/UniformBufferHelpers.js"
 import { preprocessProgramObj_GLSL } from "../gfx/shaderc/GfxShaderCompiler.js";
 import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetID } from "../gfx/render/GfxRenderGraph.js";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { IsDepthReversed } from "../gfx/helpers/ReversedDepthHelpers.js";
 
 export enum dDlst_alphaModel__Type {
     Bonbori,
@@ -279,13 +280,64 @@ class SimpleShadowProgram extends DeviceProgram {
         ]
     }];
 
-    public override both = `
+    private generateFogZCoord() {
+        const isDepthReversed = IsDepthReversed;
+        if (isDepthReversed)
+            return `(1.0 - gl_FragCoord.z)`;
+        else
+            return `gl_FragCoord.z`;
+    }
+
+    private generateFogBase() {
+        // We allow switching between orthographic & perspective at runtime for the benefit of camera controls.
+        // const ropInfo = this.material.ropInfo;
+        // const proj = !!(ropInfo.fogType >>> 3);
+        // const isProjection = (proj === 0);
+        const isProjection = `(u_FogBlock.Param.y != 0.0)`;
+
+        const A = `u_FogBlock.Param.x`;
+        const B = `u_FogBlock.Param.y`;
+        const z = this.generateFogZCoord();
+
+        return `(${isProjection}) ? (${A} / (${B} - ${z})) : (${A} * ${z})`;
+    }
+
+    private generateFogAdj(base: string) {
+        // TODO(jstpierre): Fog adj
+        return ``;
+    }
+
+    public generateFog() {
+        const C = `u_FogBlock.Param.z`;
+        return `
+    float t_FogBase = ${this.generateFogBase()};
+    ${this.generateFogAdj(`t_FogBase`)}
+    float t_FogZ = saturate(t_FogBase - ${C});
+    t_PixelOut.rgb = mix(t_PixelOut.rgb, u_FogBlock.Color.rgb, t_FogZ);
+`;
+    }
+
+    constructor() {
+        super();
+
+        this.both = `
 ${GfxShaderLibrary.MatrixLibrary}
+${GfxShaderLibrary.saturate}
+
+struct FogBlock {
+    // A, B, C, Center
+    vec4 Param;
+    // 10 items
+    vec4 AdjTable[3];
+    // Fog color is RGB
+    vec4 Color;
+};
 
 layout(std140) uniform ub_Params {
     vec4 u_viewportSize;
     Mat4x4 u_ClipFromLocal;
     Mat4x4 u_LocalFromClip;
+    FogBlock u_FogBlock;
 };
 
 layout(location = 0) uniform sampler2D u_TextureShadow;
@@ -320,10 +372,15 @@ void main() {
     vec2 t_ShadowTexCoord = t_ObjectPos.xz * vec2(0.5) + vec2(0.5);
     float t_ShadowColor = texture(SAMPLER_2D(u_TextureShadow), t_ShadowTexCoord).r;
     float t_Alpha = smoothstep(0.0, 0.1, t_ShadowColor);
-    gl_FragColor = vec4(0, 0, 0, 0.25 * t_Alpha);
+    vec4 t_PixelOut = vec4(0, 0, 0, 0.25 * t_Alpha);
+
+    ${this.generateFog()}
+
+    gl_FragColor = t_PixelOut;
 }
 #endif
 `;
+    }
 }
 
 const scratchMat4 = mat4.create();
@@ -445,11 +502,12 @@ class dDlst_shadowSimple_c {
 
     public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         const renderInst = renderInstManager.newRenderInst();
-        let offset = renderInst.allocateUniformBuffer(0, 4 + 16 * 2);
+        let offset = renderInst.allocateUniformBuffer(0, 4 + 16 * 2 + 20);
         const buf = renderInst.mapUniformBufferF32(0);
         offset += fillVec4(buf, offset, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
         offset += fillMatrix4x4(buf, offset, mat4.mul(scratchMat4, globals.camera.clipFromWorldMatrix, this.modelMtx));
         offset += fillMatrix4x4(buf, offset, mat4.invert(scratchMat4, scratchMat4));
+        offset += fillFogBlock(buf, offset, materialParams.u_FogBlock);
         this.tex.fillTextureMapping(materialParams.m_TextureMapping[0]);
         materialParams.m_TextureMapping[1].lateBinding = 'depth-target';
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
@@ -525,10 +583,11 @@ class dDlst_shadowControl_c {
             ...setAttachmentStateSimple({}, {
                 channelWriteMask: GfxChannelWriteMask.RGB,
                 blendMode: GfxBlendMode.Add,
-                blendSrcFactor: GfxBlendFactor.Zero,
+                blendSrcFactor: GfxBlendFactor.SrcAlpha,
                 blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
             })
         });
+        dKy_GxFog_set(globals.g_env_light, materialParams.u_FogBlock, globals.camera);
         template.setVertexInput(this.simpleCache.inputLayout, [{ buffer: this.simpleCache.positionBuffer }], { buffer: this.simpleCache.indexBuffer });
         template.setDrawCount(36);
         for (let i = 0; i < this.simpleCount; i++) {
