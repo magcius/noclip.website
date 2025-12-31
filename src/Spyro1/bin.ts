@@ -186,21 +186,16 @@ export function buildLevelData(view: DataView, atlas: CombinedAtlas): Spyro1Leve
     const colors: number[][] = [];
     const faces: Spyro1GroundFace[] = [];
     const uvs: number[][] = [];
-
     let offs = 0;
-
     const partcnt = view.getUint32(offs, true);
     offs += 4;
-
     const start = 8;
     let vertBase = 0;
     for (let part = 0; part < partcnt; part++) {
         const offset = view.getUint32(offs, true);
         offs += 4;
-
         const abs = offset + start;
         let p = abs;
-
         const header = new HeaderGround(view, p);
         p += HeaderGround.size;
 
@@ -210,11 +205,9 @@ export function buildLevelData(view: DataView, atlas: CombinedAtlas): Spyro1Leve
         for (let i = 0; i < header.v1; i++) {
             const v = new VertexGround(view, p);
             p += 4;
-
             const z = (v.b1 | ((v.b2 & 3) << 8)) + header.z;
             const y = ((v.b2 >> 2) | ((v.b3 & 31) << 6)) + header.y;
             const x = ((v.b3 >> 5) | (v.b4 << 3)) + header.x;
-
             vertices.push([x, y, z]);
         }
 
@@ -294,131 +287,68 @@ export function buildLevelData(view: DataView, atlas: CombinedAtlas): Spyro1Leve
         for (let i = 0; i < header.p2; i++) {
             const poly = new Poly2Ground(view, p);
             p += 16;
-
             const a = mdlVertStart + poly.v1;
             const b = mdlVertStart + poly.v2;
             const cIdx = mdlVertStart + poly.v3;
             const d = mdlVertStart + poly.v4;
-
             const tileIndex = poly.t & 0x7F;
-            const rot = poly.r & 0x03;
             if (atlas && tileIndex >= 0 && tileIndex < atlas.lodUVs.length) {
                 const rect = atlas.lodUVs[tileIndex];
 
-                const cornersA: [number, number][] = [
-                    [rect.u0, rect.v1], // BL
-                    [rect.u1, rect.v1], // BR
-                    [rect.u1, rect.v0], // TR
-                    [rect.u0, rect.v0], // TL
-                ];
+                const uvBL: [number, number] = [rect.u0, rect.v1];
+                const uvBR: [number, number] = [rect.u1, rect.v1];
+                const uvTR: [number, number] = [rect.u1, rect.v0];
+                const uvTL: [number, number] = [rect.u0, rect.v0];
 
-                const cornersB: [number, number][] = [
-                    [rect.u0, rect.v0], // TL
-                    [rect.u1, rect.v0], // TR
-                    [rect.u1, rect.v1], // BR
-                    [rect.u0, rect.v1], // BL
-                ];
-
-                function rotateCorners(
-                    arr: [number, number][],
-                    steps: number
-                ): [number, number][] {
-                    const n = arr.length;
-                    const out = new Array<[number, number]>(n);
-                    for (let i = 0; i < n; i++) {
-                        out[i] = arr[(i + steps) % n];
-                    }
-                    return out;
-                }
-
-                const stepLUT0 = [0, 1, 2, 3]; // direct
-                const stepLUT1 = [0, 3, 2, 1]; // reverse
-                const stepLUT2 = [0, 2, 1, 3]; // swap 1<->2
-                const stepLUT3 = [0, 1, 3, 2]; // swap 2<->3
-
-                let steps = stepLUT2[rot];
-                let baseCorners = cornersA;
-
-                switch (rot) {
-                    case 0:
-                        // rot=0 → cornersB, no rotation
-                        baseCorners = cornersB;
-                        steps = 0;
-                        break;
-
-                    case 1:
-                        // rot=1 → cornersA + LUT2
-                        // baseCorners = cornersA;
-                        steps = stepLUT2[rot]; // or just steps = 2
-                        break;
-
-                    case 2:
-                        // rot=2 → cornersA + LUT0 (or LUT1)
-                        // baseCorners = cornersA;
-                        steps = stepLUT0[rot]; // or steps = 2
-                        break;
-
-                    case 3:
-                        // rot=3 → cornersA + LUT3
-                        // baseCorners = cornersA;
-                        steps = stepLUT3[rot];
-                        break;
-                }
-
-                const rc = rotateCorners(baseCorners, steps);
-
-                // v1 = top-right, v2 = top-left, v3 = bottom-left, v4 = bottom-right
-
-                const uvA = uvs.push(rc[2]) - 1; // v1 → TR
-                const uvB = uvs.push(rc[3]) - 1; // v2 → TL
-                const uvC = uvs.push(rc[0]) - 1; // v3 → BL
-                const uvD = uvs.push(rc[1]) - 1; // v4 → BR
+                const uv1 = uvBL; // tex1
+                const uv2 = uvBR; // tex2
+                const uv3 = uvTR; // tex3
+                const uv4 = uvTL; // tex4
 
                 if (poly.v1 === poly.v2) {
-                    // triangle: D-C-B
+                    const tl: [number, number] = [rect.u0, rect.v0];
+                    const tr: [number, number] = [rect.u1, rect.v0];
+                    const br: [number, number] = [rect.u1, rect.v1];
+                    const bl: [number, number] = [rect.u0, rect.v1];
+                    const rr = poly.r & 3;
+                    const base = [bl, br, tr, tl]; // tex1, tex2, tex3, tex4
+                    const perms = [
+                        [0, 1, 2, 3], // r=0
+                        [3, 0, 1, 2], // r=1
+                        [2, 3, 0, 1], // r=2
+                        [1, 2, 3, 0], // r=3
+                    ];
+                    const p = perms[rr];
+                    const tex1 = base[p[0]];
+                    const tex2 = base[p[1]];
+                    const tex3 = base[p[2]];
+                    const tex4 = base[p[3]];
+                    const uv0 = uvs.push(tex4) - 1; // v4
+                    const uv1 = uvs.push(tex3) - 1; // v3
+                    const uv2 = uvs.push(tex1) - 1; // v2
                     faces.push({
                         indices:   [d, cIdx, b],
-                        uvIndices: [uvD, uvC, uvB],
+                        uvIndices: [uv0, uv1, uv2],
                         texture: tileIndex,
-                        rotation: rot,
-                    });
-                } else if (poly.v2 === poly.v3) {
-                    // triangle: A-C-D
-                    faces.push({
-                        indices:   [a, cIdx, d],
-                        uvIndices: [uvA, uvC, uvD],
-                        texture: tileIndex,
-                        rotation: rot,
-                    });
-                } else if (poly.v3 === poly.v4) {
-                    // triangle: A-B-D
-                    faces.push({
-                        indices:   [a, b, d],
-                        uvIndices: [uvA, uvB, uvD],
-                        texture: tileIndex,
-                        rotation: rot,
-                    });
-                } else if (poly.v4 === poly.v1) {
-                    // triangle: A-B-C
-                    faces.push({
-                        indices:   [a, b, cIdx],
-                        uvIndices: [uvA, uvB, uvC],
-                        texture: tileIndex,
-                        rotation: rot,
+                        rotation: rr
                     });
                 } else {
-                    // general quad → two tris: (A,B,C) and (A,C,D)
+                    // v1 -> tex1, v2 -> tex2, v3 -> tex3, v4 -> tex4
+                    const uvA = uvs.push(uv1) - 1; // v1
+                    const uvB = uvs.push(uv2) - 1; // v2
+                    const uvC = uvs.push(uv3) - 1; // v3
+                    const uvD = uvs.push(uv4) - 1; // v4
                     faces.push({
-                        indices:   [a, b, cIdx],
+                        indices: [a, b, cIdx],  // v1, v2, v3
                         uvIndices: [uvA, uvB, uvC],
                         texture: tileIndex,
-                        rotation: rot,
+                        rotation: 0
                     });
                     faces.push({
-                        indices:   [a, cIdx, d],
+                        indices: [a, cIdx, d],  // v1, v3, v4
                         uvIndices: [uvA, uvC, uvD],
                         texture: tileIndex,
-                        rotation: rot,
+                        rotation: 0
                     });
                 }
             } else {
@@ -430,18 +360,13 @@ export function buildLevelData(view: DataView, atlas: CombinedAtlas): Spyro1Leve
                 });
             }
         }
-        
+
         vertBase = vertices.length;
     }
-
     return { vertices, colors, faces, uvs, atlas };
 }
 
-export function applyTileRotationRGBA(
-    rgba: Uint8Array,
-    tex: SpyroTile,
-    size: number = 32
-): Uint8Array {
+export function applyTileRotationRGBA(rgba: Uint8Array, tex: SpyroTile, size: number = 32): Uint8Array {
     const r = tex.r & 3; // only lowest 2 bits matter
     let out = rgba;
 
@@ -472,13 +397,12 @@ export function applyTileRotationRGBA(
 }
 
 export class PsxVram {
-    private vram16: Uint16Array; // length = 512 * 512 words
+    private vram16: Uint16Array;
 
     constructor(buffer: ArrayBuffer) {
-        this.vram16 = new Uint16Array(buffer); // 524288 bytes
+        this.vram16 = new Uint16Array(buffer);
     }
 
-    // (wordX, wordY) coordinates, like Pascal's tx,ty
     getWord(wordX: number, wordY: number): number {
         if (wordX < 0 || wordX >= 512 || wordY < 0 || wordY >= 512) {
             console.warn('VRAM OOB', { x: wordX, y: wordY });
@@ -488,7 +412,6 @@ export class PsxVram {
         return this.vram16[index];
     }
 
-    // linear word index (for CLUT)
     getWordByIndex(wordIndex: number): number {
         if (wordIndex < 0 || wordIndex >= this.vram16.length) {
             console.warn('VRAM OOB (index)', { index: wordIndex });
@@ -499,86 +422,54 @@ export class PsxVram {
 }
 
 export function ps1ColorToRGBA(word: number): [number, number, number, number] {
-    const r5 = (word      ) & 0x1F;
-    const g5 = (word >>  5) & 0x1F;
+    const r5 = (word) & 0x1F;
+    const g5 = (word >> 5) & 0x1F;
     const b5 = (word >> 10) & 0x1F;
     const stp = (word >> 15) & 0x01; // transparency bit
-
     const r = (r5 * 255 / 31) | 0;
     const g = (g5 * 255 / 31) | 0;
     const b = (b5 * 255 / 31) | 0;
     const a = stp ? 0 : 255; // many engines treat stp=1 as transparent
-
     return [r, g, b, a];
 }
 
-export function readClut4bpp(
-    vram: PsxVram,
-    px: number,
-    py: number
-): [number, number, number, number][] {
-
+export function readClut4bpp(vram: PsxVram, px: number, py: number): [number, number, number, number][] {
     const palette: [number, number, number, number][] = [];
-
-    // Pascal: y := tex.py * 512 + tex.px;
-    const baseWordIndex = py * 512 + px;  // 512 words per VRAM row
-
+    const baseWordIndex = py * 512 + px;
     for (let i = 0; i < 16; i++) {
         const wordIndex = baseWordIndex + i;
-
-        // Read the 15‑bit PS1 color
         const word = vram.getWordByIndex(wordIndex);
-
         const [r, g, b, a] = ps1ColorToRGBA(word);
         palette.push([r, g, b, a]);
     }
-
     return palette;
 }
 
-export function readClut8bpp(
-    vram: PsxVram,
-    px: number,
-    py: number
-): [number, number, number, number][] {
+export function readClut8bpp(vram: PsxVram, px: number, py: number): [number, number, number, number][] {
     const palette: [number, number, number, number][] = [];
-
-    const baseWordIndex = py * 512 + px;  // 512 words per row
-
+    const baseWordIndex = py * 512 + px;
     for (let i = 0; i < 256; i++) {
         const wordIndex = baseWordIndex + i;
         const word = vram.getWordByIndex(wordIndex);
         const [r, g, b, a] = ps1ColorToRGBA(word);
         palette.push([r, g, b, a]);
     }
-
     return palette;
 }
 
-export function decode4bppTile(
-    vram: PsxVram,
-    tileX: number,
-    tileY: number,
-    width: number,
-    height: number,
-    palette: [number, number, number, number][]
-): Uint8Array {
+export function decode4bppTile(vram: PsxVram, tileX: number, tileY: number, width: number, height: number, palette: [number, number, number, number][]): Uint8Array {
     const out = new Uint8Array(width * height * 4);
-
     for (let y = 0; y < height; y++) {
         for (let xWord = 0; xWord < width / 4; xWord++) {
             const vramX = tileX + xWord;
             const vramY = tileY + y;
             const word = vram.getWord(vramX, vramY);
-
             for (let nib = 0; nib < 4; nib++) {
                 const texX = xWord * 4 + nib;
                 const texY = y;
                 const dst = (texY * width + texX) * 4;
-
                 const index = (word >> (nib * 4)) & 0x0F;
                 const [r, g, b, a] = palette[index];
-
                 out[dst + 0] = r;
                 out[dst + 1] = g;
                 out[dst + 2] = b;
@@ -586,18 +477,10 @@ export function decode4bppTile(
             }
         }
     }
-
     return out;
 }
 
-export function decode8bppTile(
-    vram: PsxVram,
-    tileX: number,
-    tileY: number,
-    width: number,
-    height: number,
-    palette: [number, number, number, number][],
-): Uint8Array {
+export function decode8bppTile(vram: PsxVram, tileX: number, tileY: number, width: number, height: number, palette: [number, number, number, number][]): Uint8Array {
     const out = new Uint8Array(width * height * 4);
 
     for (let y = 0; y < height; y++) {
@@ -606,8 +489,8 @@ export function decode8bppTile(
             const vramY = tileY + y;
             const word = vram.getWord(vramX, vramY);
 
-            const index0 =  word        & 0xFF;
-            const index1 = (word >> 8)  & 0xFF;
+            const index0 = word & 0xFF;
+            const index1 = (word >> 8) & 0xFF;
 
             // texel 0
             {
@@ -638,15 +521,9 @@ export function decode8bppTile(
     return out;
 }
 
-export function decodeTileToRGBA(
-    vram: PsxVram,
-    tex: SpyroTile,
-    width: number = tex.w,
-    height: number = tex.w,
-): Uint8Array {
+export function decodeTileToRGBA(vram: PsxVram, tex: SpyroTile, width: number = tex.w, height: number = tex.w): Uint8Array {
     let x4 = tex.x4;
     const y4 = tex.y4;
-
     if (tex.m === 4) {
         x4 = x4 >> 2;
         const palette = readClut4bpp(vram, tex.px, tex.py);
@@ -658,7 +535,6 @@ export function decodeTileToRGBA(
     } else {
         const out = new Uint8Array(width * height * 4);
         const wordX = tex.x4;
-
         for (let y = 0; y < height; y++) {
             for (let x = 0; x < width; x++) {
                 const word = vram.getWord(wordX + x, y4 + y);
@@ -670,7 +546,6 @@ export function decodeTileToRGBA(
                 out[dst + 3] = a;
             }
         }
-
         return out;
     }
 }
@@ -711,17 +586,12 @@ export interface CombinedAtlas {
     cor4UVs: { u0: number; v0: number; u1: number; v1: number }[];
 }
 
-export function buildCombinedAtlas(
-    vram: PsxVram,
-    groups: SpyroTileGroups,
-    tilesPerRow: number = 8,
-    slotSize: number = 32
-): CombinedAtlas {
+export function buildCombinedAtlas(vram: PsxVram, groups: SpyroTileGroups, tilesPerRow: number = 8, slotSize: number = 32): CombinedAtlas {
     const tileCount = groups.lod.length;
 
     const rowsPerGroup = Math.ceil(tileCount / tilesPerRow);
     const atlasWidth = tilesPerRow * slotSize;
-    const atlasHeight = rowsPerGroup * slotSize * 5; // 5 groups stacked
+    const atlasHeight = rowsPerGroup * slotSize * 5;
 
     const atlasData = new Uint8Array(atlasWidth * atlasHeight * 4);
 
@@ -731,11 +601,7 @@ export function buildCombinedAtlas(
     const cor3UVs: { u0: number; v0: number; u1: number; v1: number }[] = [];
     const cor4UVs: { u0: number; v0: number; u1: number; v1: number }[] = [];
 
-    function blitGroup(
-        tiles: SpyroTile[],
-        groupIndex: number,
-        outUVs: { u0: number; v0: number; u1: number; v1: number }[]
-    ) {
+    function blitGroup(tiles: SpyroTile[], groupIndex: number, outUVs: { u0: number; v0: number; u1: number; v1: number }[]) {
         const groupYOffset = groupIndex * rowsPerGroup * slotSize;
 
         for (let i = 0; i < tileCount; i++) {
@@ -853,16 +719,4 @@ function readTile(view: DataView, offs: number): SpyroTile {
         y1:0,y2:0,y3:0,y4:0,
         r:0,s:0,off:offs,f:false
     };
-}
-
-function debugShowAtlas(atlas: TileAtlas) {
-    const canvas = document.createElement('canvas');
-    canvas.width = atlas.atlasWidth;
-    canvas.height = atlas.atlasHeight;
-    document.body.appendChild(canvas);
-
-    const ctx = canvas.getContext('2d')!;
-    const imageData = ctx.createImageData(atlas.atlasWidth, atlas.atlasHeight);
-    imageData.data.set(atlas.atlasData);
-    ctx.putImageData(imageData, 0, 0);
 }

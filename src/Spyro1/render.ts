@@ -115,9 +115,6 @@ export class Spyro1LevelRenderer {
         let runningIndex = 0;
 
         for (const face of faces) {
-            // if (face.rotation !== 0) {
-            //     continue;
-            // }
             const { indices, uvIndices } = face;
 
             for (let k = 0; k < indices.length; k++) {
@@ -242,5 +239,3 @@ function debugShowAtlas(atlas: CombinedAtlas) {
     imageData.data.set(atlas.atlasData);
     ctx.putImageData(imageData, 0, 0);
 }
-
-
