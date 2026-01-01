@@ -1,8 +1,13 @@
-import { AttributeFormat } from "../../fres_nx/nngfx_enum.js";
+// fvtx.ts
+// Handles FVTX (caFe VerTeX) data, which are vertices for a model
+
 import { GfxFormat } from "../../gfx/platform/GfxPlatform.js";
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { align, assert, readString } from "../../util.js";
 import { read_bfres_string } from "./bfres_switch.js";
+
+const FVTX_ENTRY_SIZE = 0x58;
+const ATTRIBUTE_ENTRY_SIZE = 0x10;
 
 // reads from a bfres file and returns an array of FVTX objects
 // buffer: the bfres file
@@ -47,19 +52,19 @@ export function parseFVTX(buffer: ArrayBufferSlice, offset: number, count: numbe
         let attribute_entry_offset = attribute_array_offset;
         for (let i = 0; i < attribute_count; i++)
         {
-            const attribute_name_offset = view.getUint32(attribute_entry_offset, true);
-            const name = read_bfres_string(buffer, attribute_name_offset, true);
+            const name_offset = view.getUint32(attribute_entry_offset, true);
+            const name = read_bfres_string(buffer, name_offset, true);
             const original_format = view.getUint32(attribute_entry_offset + 0x8, true);
-            const format =convert_attribute_format(original_format);
+            const format = convert_attribute_format(original_format);
             const bufferOffset = view.getUint16(attribute_entry_offset + 0xC, true);
             const bufferIndex = view.getUint16(attribute_entry_offset + 0xE, true);
 
             vertexAttributes.push({ name, format, bufferOffset, bufferIndex });
-            attribute_entry_offset += 0x10;
+            attribute_entry_offset += ATTRIBUTE_ENTRY_SIZE;
         }
 
         fvtx_array.push({ vertexAttributes, vertexBuffers, vertexCount });
-        fvtx_entry_offset += 0x58;
+        fvtx_entry_offset += FVTX_ENTRY_SIZE;
     }
 
     return fvtx_array;
@@ -113,6 +118,23 @@ function convert_attribute_format(format: AttributeFormat)
             console.error(`attribute format ${format} not found`);
             throw "whoops";
     }
+}
+
+// vertex attribute format numbers that bfres files use
+enum AttributeFormat
+{
+    _8_8_Unorm         = 2305,
+    _8_8_Snorm         = 2306,
+    _8_8_Uint          = 2307,
+    _8_8_8_8_Unorm     = 2817,
+    _8_8_8_8_Snorm     = 2818,
+    _10_10_10_2_Snorm  = 3586,
+    _16_16_Unorm       = 4609,
+    _16_16_Snorm       = 4610,
+    _16_16_Float       = 4613,
+    _16_16_16_16_Float = 5381,
+    _32_32_Float       = 5893,
+    _32_32_32_Float    = 6149,
 }
 
 export interface FVTX_VertexAttribute

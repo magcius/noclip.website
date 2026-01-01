@@ -1,4 +1,3 @@
-
 // scene.ts
 // Handles all the levels in Tokyo Mirage Sessions ♯FE
 

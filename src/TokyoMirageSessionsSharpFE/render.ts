@@ -71,6 +71,7 @@ export class TMSFEScene implements SceneGfx
         this.renderHelper = new GfxRenderHelper(device);
         this.program = this.renderHelper.renderCache.createProgram(new TMSFEProgram());
         this.fmdl = fmdl;
+        console.log(this.fmdl);
 
         const fvtx = fmdl.fvtx[0];
         this.vertexCount = fvtx.vertexCount;
@@ -78,13 +79,11 @@ export class TMSFEScene implements SceneGfx
         [
             { location: 0, format: fvtx.vertexAttributes[0].format, bufferIndex: fvtx.vertexAttributes[0].bufferIndex, bufferByteOffset: fvtx.vertexAttributes[0].bufferOffset},
         ];
-        console.log(vertexAttributeDescriptors);
 
         const inputLayoutBufferDescriptors: GfxInputLayoutBufferDescriptor[] =
         [
             { byteStride: fvtx.vertexBuffers[0].stride, frequency: GfxVertexBufferFrequency.PerVertex },
         ];
-        console.log(inputLayoutBufferDescriptors);
 
         const indexBufferFormat: GfxFormat | null = null;
         const cache = this.renderHelper.renderCache;
