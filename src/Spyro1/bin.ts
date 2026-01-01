@@ -1,4 +1,4 @@
-export interface Spyro1GroundFace {
+export interface GroundFace {
     indices: number[];
     uvIndices: number[] | null;
     colorIndices: number[] | null;
@@ -6,86 +6,53 @@ export interface Spyro1GroundFace {
     rotation: number | null;
 }
 
-function textureCompute(tex: SpyroTile, filePos: number): void {
-    tex.f = false;
-    tex.off = filePos;
-
-    // Wrong markers
-    if ((tex.ff & 0x0E) > 0) tex.f = true;
-    if ((tex.ss & 0x08) === 0) tex.f = true;
-    if ((tex.ss & 0x60) > 0) tex.f = true;
-    if (tex.y0 !== tex.yy) tex.f = true;
-
-    // Width: bit 7 of FF
-    if ((tex.ff & 0x80) > 0) tex.w = 32;
-    else tex.w = 16;
-
-    if ((tex.x0 + tex.w - 1) !== tex.xx) tex.f = true;
-    if (tex.x0 > (256 - tex.w)) tex.f = true;
-    if (tex.y0 > (256 - tex.w)) tex.f = true;
-
-    // Mode: t bit in FF, c bit in SS
-    if ((tex.ff & 0x01) > 0) tex.m = 15;
-    else {
-        if ((tex.ss & 0x80) > 0) tex.m = 8;
-        else tex.m = 4;
-    }
-
-    // Sector X offset (in pixels) based on m
-    tex.s = tex.ss & 0x07;
-    if (tex.m === 4) tex.s = 256 * tex.s;
-    if (tex.m === 8) tex.s = 128 * tex.s;
-    if (tex.m === 15) tex.s = 64 * tex.s;
-
-    // Corner coords in VRAM (pixels)
-    tex.x4 = tex.x0 + tex.s;
-    tex.x3 = tex.xx + tex.s;
-    tex.x1 = tex.x4;
-    tex.x2 = tex.x4 + tex.w;
-
-    tex.y4 = tex.y0;
-    if ((tex.ss & 0x10) > 0) tex.y4 += 256;
-    tex.y3 = tex.y4;
-    tex.y1 = tex.y4 + tex.w;
-    tex.y2 = tex.y4 + tex.w;
-
-    // Palette position
-    tex.px = (tex.p1 & 31) * 16;
-    tex.py = (tex.p1 >> 6) | (tex.p2 << 2);
-
-    // Rotation index
-    tex.r = (tex.ff & 127) >> 4;
-
-    // File offset of this 8‑byte tex record
-    tex.off = filePos - 8;
+export interface SkyboxFace {
+    indices: [number, number, number];
+    colorIndices: [number, number, number];
 }
 
-export interface SpyroTileTable {
-    j1: number;
-    tileCount: number;
-    tiles: SpyroTile[];
+export interface SkyboxData {
+    backgroundColor: [number, number, number];
+    vertices: [number, number, number][];
+    colors: [number, number, number][]; 
+    faces: SkyboxFace[];
 }
 
-export interface TileCorners {
-    x1: number; y1: number;
-    x2: number; y2: number;
-    x3: number; y3: number;
-    x4: number; y4: number;
+export interface Tile {
+    x0: number; y0: number; p1: number; p2: number;
+    xx: number; yy: number; ss: number; ff: number;
+    px: number; py: number; m: 4 | 8 | 15; w: number;
+    x1: number; x2: number; x3: number; x4: number;
+    y1: number; y2: number; y3: number; y4: number;
+    r: number; s: number; off: number; f: boolean;
 }
 
-export interface TileUVs {
-    u1: number; v1: number;
-    u2: number; v2: number;
-    u3: number; v3: number;
-    u4: number; v4: number;
+export interface TileGroups {
+    lod: Tile[];
+    cor1: Tile[];
+    cor2: Tile[];
+    cor3: Tile[];
+    cor4: Tile[];
 }
 
-export type Spyro1LevelData = {
+export interface TileAtlas {
+    atlasData: Uint8Array;
+    atlasWidth: number;
+    atlasHeight: number;
+
+    lodUVs:  { u0: number; v0: number; u1: number; v1: number }[];
+    cor1UVs: { u0: number; v0: number; u1: number; v1: number }[];
+    cor2UVs: { u0: number; v0: number; u1: number; v1: number }[];
+    cor3UVs: { u0: number; v0: number; u1: number; v1: number }[];
+    cor4UVs: { u0: number; v0: number; u1: number; v1: number }[];
+}
+
+export type LevelData = {
   vertices: number[][];
   colors: number[][];
-  faces: Spyro1GroundFace[];
+  faces: GroundFace[];
   uvs: number[][];
-  atlas: CombinedAtlas;
+  atlas: TileAtlas;
 };
 
 class HeaderGround {
@@ -182,10 +149,65 @@ class Poly2Ground {
     }
 }
 
-export function buildLevelData(view: DataView, atlas: CombinedAtlas): Spyro1LevelData {
+export class VRAM {
+    private vram16: Uint16Array;
+
+    constructor(buffer: ArrayBuffer) {
+        this.vram16 = new Uint16Array(buffer);
+    }
+
+    getWord(wordX: number, wordY: number): number {
+        if (wordX < 0 || wordX >= 512 || wordY < 0 || wordY >= 512) {
+            return 0;
+        }
+        const index = wordY * 512 + wordX;
+        return this.vram16[index];
+    }
+
+    getWordByIndex(wordIndex: number): number {
+        if (wordIndex < 0 || wordIndex >= this.vram16.length) {
+            return 0;
+        }
+        return this.vram16[wordIndex];
+    }
+}
+
+export function buildSkybox(view: DataView): SkyboxData {
+    const size = view.byteLength;
+    let p = 0;
+    const bgR = view.getUint8(p + 0);
+    const bgG = view.getUint8(p + 1);
+    const bgB = view.getUint8(p + 2);
+    // const bgI = view.getUint8(p + 3);
+    p += 4;
+    const backgroundColor: [number, number, number] = [bgR, bgG, bgB];
+    const partOffsets: number[] = [];
+    while (p + 4 <= size) {
+        const ptr = view.getUint32(p, true);
+        p += 4;
+        if (ptr === 0) break;
+        if (ptr >= size) break;
+        partOffsets.push(ptr);
+    }
+    const uniqueOffsets = Array.from(new Set(partOffsets)).sort((a, b) => a - b);
+    const vertices: [number, number, number][] = [];
+    const colors: [number, number, number][] = [];
+    const faces: SkyboxFace[] = [];
+    for (const partOffset of uniqueOffsets) {
+        parseSkyboxPart(view, size, partOffset, vertices, colors, faces);
+    }
+    return {
+        backgroundColor,
+        vertices,
+        colors,
+        faces,
+    };
+}
+
+export function buildLevelData(view: DataView, atlas: TileAtlas): LevelData {
     const vertices: number[][] = [];
     const colors: number[][] = [];
-    const faces: Spyro1GroundFace[] = [];
+    const faces: GroundFace[] = [];
     const uvs: number[][] = [];
     let offs = 0;
     const partcnt = view.getUint32(offs, true);
@@ -376,7 +398,7 @@ export function buildLevelData(view: DataView, atlas: CombinedAtlas): Spyro1Leve
     return { vertices, colors, faces, uvs, atlas };
 }
 
-export function applyTileRotationRGBA(rgba: Uint8Array, tex: SpyroTile, size: number = 32): Uint8Array {
+export function applyTileRotationRGBA(rgba: Uint8Array, tex: Tile, size: number = 32): Uint8Array {
     const r = tex.r & 3; // only lowest 2 bits matter
     let out = rgba;
 
@@ -406,31 +428,6 @@ export function applyTileRotationRGBA(rgba: Uint8Array, tex: SpyroTile, size: nu
     return out;
 }
 
-export class PsxVram {
-    private vram16: Uint16Array;
-
-    constructor(buffer: ArrayBuffer) {
-        this.vram16 = new Uint16Array(buffer);
-    }
-
-    getWord(wordX: number, wordY: number): number {
-        if (wordX < 0 || wordX >= 512 || wordY < 0 || wordY >= 512) {
-            console.warn('VRAM OOB', { x: wordX, y: wordY });
-            return 0;
-        }
-        const index = wordY * 512 + wordX;
-        return this.vram16[index];
-    }
-
-    getWordByIndex(wordIndex: number): number {
-        if (wordIndex < 0 || wordIndex >= this.vram16.length) {
-            console.warn('VRAM OOB (index)', { index: wordIndex });
-            return 0;
-        }
-        return this.vram16[wordIndex];
-    }
-}
-
 export function ps1ColorToRGBA(word: number): [number, number, number, number] {
     const r5 = (word) & 0x1F;
     const g5 = (word >> 5) & 0x1F;
@@ -443,7 +440,7 @@ export function ps1ColorToRGBA(word: number): [number, number, number, number] {
     return [r, g, b, a];
 }
 
-export function readClut4bpp(vram: PsxVram, px: number, py: number): [number, number, number, number][] {
+export function readClut4bpp(vram: VRAM, px: number, py: number): [number, number, number, number][] {
     const palette: [number, number, number, number][] = [];
     const baseWordIndex = py * 512 + px;
     for (let i = 0; i < 16; i++) {
@@ -455,7 +452,7 @@ export function readClut4bpp(vram: PsxVram, px: number, py: number): [number, nu
     return palette;
 }
 
-export function readClut8bpp(vram: PsxVram, px: number, py: number): [number, number, number, number][] {
+export function readClut8bpp(vram: VRAM, px: number, py: number): [number, number, number, number][] {
     const palette: [number, number, number, number][] = [];
     const baseWordIndex = py * 512 + px;
     for (let i = 0; i < 256; i++) {
@@ -467,7 +464,7 @@ export function readClut8bpp(vram: PsxVram, px: number, py: number): [number, nu
     return palette;
 }
 
-export function decode4bppTile(vram: PsxVram, tileX: number, tileY: number, width: number, height: number, palette: [number, number, number, number][]): Uint8Array {
+export function decode4bppTile(vram: VRAM, tileX: number, tileY: number, width: number, height: number, palette: [number, number, number, number][]): Uint8Array {
     const out = new Uint8Array(width * height * 4);
     for (let y = 0; y < height; y++) {
         for (let xWord = 0; xWord < width / 4; xWord++) {
@@ -490,7 +487,7 @@ export function decode4bppTile(vram: PsxVram, tileX: number, tileY: number, widt
     return out;
 }
 
-export function decode8bppTile(vram: PsxVram, tileX: number, tileY: number, width: number, height: number, palette: [number, number, number, number][]): Uint8Array {
+export function decode8bppTile(vram: VRAM, tileX: number, tileY: number, width: number, height: number, palette: [number, number, number, number][]): Uint8Array {
     const out = new Uint8Array(width * height * 4);
 
     for (let y = 0; y < height; y++) {
@@ -531,7 +528,7 @@ export function decode8bppTile(vram: PsxVram, tileX: number, tileY: number, widt
     return out;
 }
 
-export function decodeTileToRGBA(vram: PsxVram, tex: SpyroTile, width: number = tex.w, height: number = tex.w): Uint8Array {
+export function decodeTileToRGBA(vram: VRAM, tex: Tile, width: number = tex.w, height: number = tex.w): Uint8Array {
     let x4 = tex.x4;
     const y4 = tex.y4;
     if (tex.m === 4) {
@@ -560,43 +557,7 @@ export function decodeTileToRGBA(vram: PsxVram, tex: SpyroTile, width: number = 
     }
 }
 
-export interface TileAtlas {
-    atlasData: Uint8Array;
-    atlasWidth: number;
-    atlasHeight: number;
-    tileUV: { u0: number, v0: number, u1: number, v1: number }[];
-}
-
-export interface SpyroTile {
-    x0: number; y0: number; p1: number; p2: number;
-    xx: number; yy: number; ss: number; ff: number;
-    px: number; py: number; m: 4 | 8 | 15; w: number;
-    x1: number; x2: number; x3: number; x4: number;
-    y1: number; y2: number; y3: number; y4: number;
-    r: number; s: number; off: number; f: boolean;
-}
-
-export interface SpyroTileGroups {
-    lod: SpyroTile[];
-    cor1: SpyroTile[];
-    cor2: SpyroTile[];
-    cor3: SpyroTile[];
-    cor4: SpyroTile[];
-}
-
-export interface CombinedAtlas {
-    atlasData: Uint8Array;
-    atlasWidth: number;
-    atlasHeight: number;
-
-    lodUVs:  { u0: number; v0: number; u1: number; v1: number }[];
-    cor1UVs: { u0: number; v0: number; u1: number; v1: number }[];
-    cor2UVs: { u0: number; v0: number; u1: number; v1: number }[];
-    cor3UVs: { u0: number; v0: number; u1: number; v1: number }[];
-    cor4UVs: { u0: number; v0: number; u1: number; v1: number }[];
-}
-
-export function buildCombinedAtlas(vram: PsxVram, groups: SpyroTileGroups, tilesPerRow: number = 8, slotSize: number = 32): CombinedAtlas {
+export function buildCombinedAtlas(vram: VRAM, groups: TileGroups, tilesPerRow: number = 8, slotSize: number = 32): TileAtlas {
     const tileCount = groups.lod.length;
 
     const rowsPerGroup = Math.ceil(tileCount / tilesPerRow);
@@ -611,7 +572,7 @@ export function buildCombinedAtlas(vram: PsxVram, groups: SpyroTileGroups, tiles
     const cor3UVs: { u0: number; v0: number; u1: number; v1: number }[] = [];
     const cor4UVs: { u0: number; v0: number; u1: number; v1: number }[] = [];
 
-    function blitGroup(tiles: SpyroTile[], groupIndex: number, outUVs: { u0: number; v0: number; u1: number; v1: number }[]) {
+    function blitGroup(tiles: Tile[], groupIndex: number, outUVs: { u0: number; v0: number; u1: number; v1: number }[]) {
         const groupYOffset = groupIndex * rowsPerGroup * slotSize;
 
         for (let i = 0; i < tileCount; i++) {
@@ -665,17 +626,17 @@ export function buildCombinedAtlas(vram: PsxVram, groups: SpyroTileGroups, tiles
     };
 }
 
-export function parseTileGroups(view: DataView): SpyroTileGroups {
+export function parseTileGroups(view: DataView): TileGroups {
     let offs = 0;
 
     const offset = view.getUint32(offs, true); offs += 4;
     const count = view.getUint32(offs, true); offs += 4;
 
-    const lod: SpyroTile[] = [];
-    const cor1: SpyroTile[] = [];
-    const cor2: SpyroTile[] = [];
-    const cor3: SpyroTile[] = [];
-    const cor4: SpyroTile[] = [];
+    const lod: Tile[] = [];
+    const cor1: Tile[] = [];
+    const cor2: Tile[] = [];
+    const cor3: Tile[] = [];
+    const cor4: Tile[] = [];
 
     // --- LOD tiles ---
     for (let i = 0; i < count; i++) {
@@ -714,7 +675,7 @@ export function parseTileGroups(view: DataView): SpyroTileGroups {
     return { lod, cor1, cor2, cor3, cor4 };
 }
 
-function readTile(view: DataView, offs: number): SpyroTile {
+function readTile(view: DataView, offs: number): Tile {
     return {
         x0: view.getUint8(offs + 0),
         y0: view.getUint8(offs + 1),
@@ -729,4 +690,144 @@ function readTile(view: DataView, offs: number): SpyroTile {
         y1:0,y2:0,y3:0,y4:0,
         r:0,s:0,off:offs,f:false
     };
+}
+
+function parseSkyboxPart(view: DataView, size: number, partOffset: number, vertices: [number, number, number][], colors: [number, number, number][], faces: SkyboxFace[]): void {
+    let p = partOffset;
+    if (p + 24 > size) return;
+    // --- header_sky1_ (24 bytes) ---
+    p += 8;
+    const globalY = view.getInt16(p + 0, true);
+    const globalZ = view.getInt16(p + 2, true);
+    const vCount  = view.getUint16(p + 4, true);
+    const globalX = view.getInt16(p + 6, true);
+    const pCount  = view.getUint16(p + 8, true);
+    const cCount  = view.getUint16(p + 10, true);
+    // const flag  = view.getUint32(p + 12, true); // 0xFFFFFFFF
+    p += 16;
+    const baseVertexIndex = vertices.length;
+    const baseColorIndex  = colors.length;
+
+    // --- Vertices block: vCount * 4 bytes ---
+    for (let i = 0; i < vCount; i++) {
+        if (p + 4 > size) break;
+        const b1 = view.getUint8(p + 0);
+        const b2 = view.getUint8(p + 1);
+        const b3 = view.getUint8(p + 2);
+        const b4 = view.getUint8(p + 3);
+        p += 4;
+        const packedZ = (b1 | ((b2 & 0x03) << 8));
+        const packedY = ((b2 >> 2) | ((b3 & 0x1F) << 6));
+        const packedX = ((b3 >> 5) | (b4 << 3));
+        const z = packedZ - globalZ;
+        const y = packedY - globalY;
+        const x = packedX + globalX;
+        vertices.push([x, y, z]);
+    }
+
+    // --- Colors block: cCount * 4 bytes ---
+    for (let i = 0; i < cCount; i++) {
+        if (p + 4 > size) break;
+        const r = view.getUint8(p + 0);
+        const g = view.getUint8(p + 1);
+        const b = view.getUint8(p + 2);
+        // const n = view.getUint8(p + 3);
+        p += 4;
+
+        colors.push([r, g, b]);
+    }
+
+    // --- Polys block: pCount * 8 bytes ---
+    for (let i = 0; i < pCount; i++) {
+        if (p + 8 > size) break;
+
+        const v1_packed1 = view.getUint8(p + 0);
+        const v1_packed2 = view.getUint8(p + 1);
+        const v1_packed3 = view.getUint8(p + 2);
+        const v1_packed4 = view.getUint8(p + 3);
+
+        const c1_packed1 = view.getUint8(p + 4);
+        const c1_packed2 = view.getUint8(p + 5);
+        const c1_packed3 = view.getUint8(p + 6);
+        const c1_packed4 = view.getUint8(p + 7);
+
+        p += 8;
+
+        const [vi1, vi2, vi3] = unpackSkyIndex(v1_packed1, v1_packed2, v1_packed3, v1_packed4);
+        const [ci1, ci2, ci3] = unpackSkyIndex(c1_packed1, c1_packed2, c1_packed3, c1_packed4);
+
+        if (
+            vi1 < vCount && vi2 < vCount && vi3 < vCount &&
+            ci1 < cCount && ci2 < cCount && ci3 < cCount
+        ) {
+            faces.push({
+                indices: [
+                    baseVertexIndex + vi1,
+                    baseVertexIndex + vi2,
+                    baseVertexIndex + vi3,
+                ],
+                colorIndices: [
+                    baseColorIndex + ci1,
+                    baseColorIndex + ci2,
+                    baseColorIndex + ci3,
+                ],
+            });
+        } else {
+            // console.warn('Skybox index out of range', { vi1, vi2, vi3, vCount, ci1, ci2, ci3, cCount });
+        }
+    }
+}
+
+function unpackSkyIndex(b1: number, b2: number, b3: number, b4: number): [number, number, number] {
+    const i1 = (b1 >> 2) | ((b2 & 0x0F) << 6);
+    const i2 = (b2 >> 4) | ((b3 & 0x3F) << 4);
+    const i3 = (b3 >> 6) | (b4 << 2);
+    return [i1, i2, i3];
+}
+
+function textureCompute(tex: Tile, filePos: number): void {
+    tex.f = false;
+    tex.off = filePos;
+
+    // Wrong markers
+    if ((tex.ff & 0x0E) > 0) tex.f = true;
+    if ((tex.ss & 0x08) === 0) tex.f = true;
+    if ((tex.ss & 0x60) > 0) tex.f = true;
+    if (tex.y0 !== tex.yy) tex.f = true;
+
+    if ((tex.ff & 0x80) > 0) tex.w = 32;
+    else tex.w = 16;
+
+    if ((tex.x0 + tex.w - 1) !== tex.xx) tex.f = true;
+    if (tex.x0 > (256 - tex.w)) tex.f = true;
+    if (tex.y0 > (256 - tex.w)) tex.f = true;
+
+    if ((tex.ff & 0x01) > 0) tex.m = 15;
+    else {
+        if ((tex.ss & 0x80) > 0) tex.m = 8;
+        else tex.m = 4;
+    }
+
+    tex.s = tex.ss & 0x07;
+    if (tex.m === 4) tex.s = 256 * tex.s;
+    if (tex.m === 8) tex.s = 128 * tex.s;
+    if (tex.m === 15) tex.s = 64 * tex.s;
+
+    tex.x4 = tex.x0 + tex.s;
+    tex.x3 = tex.xx + tex.s;
+    tex.x1 = tex.x4;
+    tex.x2 = tex.x4 + tex.w;
+
+    tex.y4 = tex.y0;
+    if ((tex.ss & 0x10) > 0) tex.y4 += 256;
+    tex.y3 = tex.y4;
+    tex.y1 = tex.y4 + tex.w;
+    tex.y2 = tex.y4 + tex.w;
+
+    tex.px = (tex.p1 & 31) * 16;
+    tex.py = (tex.p1 >> 6) | (tex.p2 << 2);
+
+    tex.r = (tex.ff & 127) >> 4;
+
+    tex.off = filePos - 8;
 }

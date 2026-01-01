@@ -2,8 +2,8 @@ import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase.js";
 import { SceneGfx, ViewerRenderInput } from "../viewer.js";
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
-import { buildCombinedAtlas, buildLevelData, parseTileGroups, PsxVram, Spyro1LevelData } from "./bin.js"
-import { Spyro1LevelRenderer } from "./render.js"
+import { buildCombinedAtlas, buildLevelData, buildSkybox, parseTileGroups, VRAM, SkyboxData, LevelData } from "./bin.js"
+import { LevelRenderer, SkyboxRenderer } from "./render.js"
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
 import { GfxRenderInstList } from "../gfx/render/GfxRenderInstManager.js";
 import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
@@ -11,17 +11,22 @@ import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor } fr
 export class Spyro1Renderer implements SceneGfx {
     private renderHelper: GfxRenderHelper;
     private renderInstListMain = new GfxRenderInstList();
-    private levelRenderer: Spyro1LevelRenderer;
+    private levelRenderer: LevelRenderer;
+    private skyboxRenderer: SkyboxRenderer;
+    private clearColor;
 
-    constructor(device: GfxDevice, levelData: Spyro1LevelData) {
+    constructor(device: GfxDevice, levelData: LevelData, skybox: SkyboxData) {
         this.renderHelper = new GfxRenderHelper(device);
-        this.levelRenderer = new Spyro1LevelRenderer(device, levelData);
+        this.levelRenderer = new LevelRenderer(device, levelData);
+        this.skyboxRenderer = new SkyboxRenderer(device, skybox);
+        this.clearColor = skybox.backgroundColor;
     }
 
     protected prepareToRender(device: GfxDevice, viewerInput: ViewerRenderInput): void {
         this.renderHelper.pushTemplateRenderInst();
         const renderInstManager = this.renderHelper.renderInstManager;
         renderInstManager.setCurrentList(this.renderInstListMain);
+        this.skyboxRenderer.prepareToRender(device, this.renderHelper, viewerInput);
         this.levelRenderer.prepareToRender(device, this.renderHelper, viewerInput);
         renderInstManager.popTemplate();
         this.renderHelper.prepareToRender();
@@ -30,6 +35,7 @@ export class Spyro1Renderer implements SceneGfx {
     public render(device: GfxDevice, viewerInput: ViewerRenderInput): void {
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
         const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, opaqueBlackFullClearRenderPassDescriptor);
+        mainColorDesc.clearColor = {r: this.clearColor[0] / 255, g: this.clearColor[1] / 255, b: this.clearColor[2] / 255, a: 1};
         const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, opaqueBlackFullClearRenderPassDescriptor);
         const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
         const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
@@ -50,6 +56,7 @@ export class Spyro1Renderer implements SceneGfx {
 
     public destroy(device: GfxDevice): void {
         this.renderHelper.destroy();
+        this.skyboxRenderer.destroy(device);
         this.levelRenderer.destroy(device);
     }
 }
@@ -65,9 +72,10 @@ class Spyro1Scene implements SceneDesc {
         const levelFile = await context.dataFetcher.fetchData(`Spyro1/extract/sf${this.subFileID}_ground.bin`);
         const vram = await context.dataFetcher.fetchData(`Spyro1/extract/sf${this.subFileID}_vram.bin`);
         const textureList = await context.dataFetcher.fetchData(`Spyro1/extract/sf${this.subFileID}_list.bin`);
+        const skyFile = await context.dataFetcher.fetchData(`Spyro1/extract/sf${this.subFileID}_sky1.bin`);
         const tileGroups = parseTileGroups(textureList.createDataView());
-        const combinedAtlas = buildCombinedAtlas(new PsxVram(vram.copyToBuffer()), tileGroups);
-        const renderer = new Spyro1Renderer(device, buildLevelData(levelFile.createDataView(), combinedAtlas));
+        const combinedAtlas = buildCombinedAtlas(new VRAM(vram.copyToBuffer()), tileGroups);
+        const renderer = new Spyro1Renderer(device, buildLevelData(levelFile.createDataView(), combinedAtlas), buildSkybox(skyFile.createDataView()));
         return renderer;
     }
 }
