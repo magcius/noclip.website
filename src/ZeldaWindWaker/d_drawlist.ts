@@ -278,7 +278,7 @@ export class dDlst_list_c {
 class SimpleShadowProgram extends DeviceProgram {
     public static bindingLayouts: GfxBindingLayoutDescriptor[] = [{
         numUniformBuffers: 1, numSamplers: 2, samplerEntries: [
-            { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float, },
+            { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.UnfilterableFloat, },
             { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.UnfilterableFloat, },
         ]
     }];
@@ -337,7 +337,8 @@ struct FogBlock {
 };
 
 layout(std140) uniform ub_Params {
-    vec4 u_viewportSize;
+    vec2 u_ViewportSize;
+    vec2 u_Params;
     Mat4x4 u_ClipFromLocal;
     Mat4x4 u_LocalFromClip;
     FogBlock u_FogBlock;
@@ -356,7 +357,7 @@ void main() {
 
 void main() {
     vec3 t_ClipPos;
-    t_ClipPos.xy = (gl_FragCoord.xy / u_viewportSize.xy) * 2.0 - vec2(1.0);
+    t_ClipPos.xy = (gl_FragCoord.xy / u_ViewportSize.xy) * 2.0 - vec2(1.0);
 #if GFX_VIEWPORT_ORIGIN_TL()
     t_ClipPos.y *= -1.0;
 #endif
@@ -374,7 +375,11 @@ void main() {
     // Top-down project our shadow texture. Our local space is between -1 and 1, we want to move into 0.0 to 1.0.
     vec2 t_ShadowTexCoord = t_ObjectPos.xy * vec2(0.5) + vec2(0.5);
     float t_ShadowColor = texture(SAMPLER_2D(u_TextureShadow), t_ShadowTexCoord).r;
-    float t_Alpha = smoothstep(0.0, 0.1, t_ShadowColor);
+    
+    // If sampling from a predefined texture, smooth the shadow edges
+    float smoothFactor = u_Params.x;
+    float t_Alpha = smoothstep(0.0, smoothFactor, t_ShadowColor);
+    
     vec4 t_PixelOut = vec4(0, 0, 0, 0.25 * t_Alpha);
 
     ${this.generateFog()}
@@ -444,7 +449,7 @@ class dDlst_shadowReal_c {
         const renderInst = renderInstManager.newRenderInst();
         let offset = renderInst.allocateUniformBuffer(0, 4 + 16 * 2 + 20);
         const buf = renderInst.mapUniformBufferF32(0);
-        offset += fillVec4(buf, offset, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+        offset += fillVec4(buf, offset, viewerInput.backbufferWidth, viewerInput.backbufferHeight, 0.0);
         offset += fillMatrix4x4(buf, offset, mat4.mul(scratchMat4, globals.camera.clipFromWorldMatrix, this.receiverProjMtx));
         offset += fillMatrix4x4(buf, offset, mat4.invert(scratchMat4, scratchMat4));
         offset += fillFogBlock(buf, offset, materialParams.u_FogBlock);
@@ -581,7 +586,7 @@ class dDlst_shadowSimple_c {
         const renderInst = renderInstManager.newRenderInst();
         let offset = renderInst.allocateUniformBuffer(0, 4 + 16 * 2 + 20);
         const buf = renderInst.mapUniformBufferF32(0);
-        offset += fillVec4(buf, offset, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+        offset += fillVec4(buf, offset, viewerInput.backbufferWidth, viewerInput.backbufferHeight, 0.1);
         offset += fillMatrix4x4(buf, offset, mat4.mul(scratchMat4, globals.camera.clipFromWorldMatrix, this.modelMtx));
         offset += fillMatrix4x4(buf, offset, mat4.invert(scratchMat4, scratchMat4));
         offset += fillFogBlock(buf, offset, materialParams.u_FogBlock);
@@ -800,6 +805,8 @@ class dDlst_shadowControl_c {
         
         builder.pushPass((pass) => {
             pass.setDebugName('Shadowmaps');
+            // TODO: Don't bind a color target, we don't need it. (Currently using it for debug thumbnails).
+            // TODO: Setup one rt to handle 8+ shadowmaps atlas-style
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, shadowmapColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, shadowmapDepthTargetID);
             pass.exec((passRenderer) => {
@@ -826,7 +833,7 @@ class dDlst_shadowControl_c {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             const mainDepthResolveTextureID = builder.resolveRenderTarget(mainDepthTargetID);
-            const shadowmapResolveTextureID = builder.resolveRenderTarget(shadowmapColorTargetID);
+            const shadowmapResolveTextureID = builder.resolveRenderTarget(shadowmapDepthTargetID);
             pass.attachResolveTexture(shadowmapResolveTextureID);
             pass.attachResolveTexture(mainDepthResolveTextureID);
             pass.exec((passRenderer, scope) => {
