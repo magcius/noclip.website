@@ -76,6 +76,7 @@ export class dDlst_BasicShape_c {
 
 const drawParams = new DrawParams();
 const materialParams = new MaterialParams();
+const sceneParams = new SceneParams();
 class dDlst_alphaModel_c {
     public color = colorNewCopy(White);
     private datas: dDlst_alphaModelData_c[] = [];
@@ -409,6 +410,10 @@ class dDlst_shadowReal_c {
     }
 
     public imageDraw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        const template = renderInstManager.pushTemplate();
+        mat4.copy(sceneParams.u_Projection, this.renderProjMtx);
+        const d = template.allocateUniformBufferF32(GX_Program.ub_SceneParams, ub_SceneParamsBufferSize);
+        fillSceneParamsData(d, 0, sceneParams);
         for( let i = 0; i < this.models.length; i++) {
             const model = this.models[i];
             model.shapeInstances
@@ -421,6 +426,7 @@ class dDlst_shadowReal_c {
             model.drawOpa(renderInstManager, this.renderProjMtx);
             model.drawXlu(renderInstManager, this.renderProjMtx);
         }
+        renderInstManager.popTemplate();
     }
 
     // Draw "real" shadows
