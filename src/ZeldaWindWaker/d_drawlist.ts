@@ -488,13 +488,16 @@ class dDlst_shadowReal_c {
 
     private static setShadowRealMtx(viewMtx: mat4, renderProjMtx: mat4, receiverProjMtx: mat4, lightPos: vec3, pos: vec3,
         casterSize: number, heightAgl: number, heightFade: number): number {
-        // shadowPoly->reset();
         if (heightFade >= 1.0) {
             return 0;
         }
 
         let opacity = Math.min(1.0, 1.0 - heightFade);
         let alpha = Math.floor(200.0 * opacity);
+
+        // TODO: Unclear why this is necessary, but it seems to match the game's behavior.
+        //       This is likely due to differences in the ortho matrices generated below.
+        casterSize *= 0.5;
 
         // Calculate light vector
         const lightVec = scratchVec3a;
