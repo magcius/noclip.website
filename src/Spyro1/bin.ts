@@ -1,6 +1,7 @@
 export interface Spyro1GroundFace {
     indices: number[];
     uvIndices: number[] | null;
+    colorIndices: number[] | null;
     texture: number | null;
     rotation: number | null;
 }
@@ -270,6 +271,7 @@ export function buildLevelData(view: DataView, atlas: CombinedAtlas): Spyro1Leve
         //
         // --- MDL colors ---
         //
+        const mdlColorStart = colors.length;
         for (let i = 0; i < header.c2; i++) {
             const c = new ColorGround(view, p);
             p += 4;
@@ -304,6 +306,10 @@ export function buildLevelData(view: DataView, atlas: CombinedAtlas): Spyro1Leve
                 const uv2 = uvBR; // tex2
                 const uv3 = uvTR; // tex3
                 const uv4 = uvTL; // tex4
+                const ca = mdlColorStart + poly.c1;
+                const cb = mdlColorStart + poly.c2;
+                const cc = mdlColorStart + poly.c3;
+                const cd = mdlColorStart + poly.c4;
 
                 if (poly.v1 === poly.v2) {
                     const tl: [number, number] = [rect.u0, rect.v0];
@@ -329,6 +335,7 @@ export function buildLevelData(view: DataView, atlas: CombinedAtlas): Spyro1Leve
                     faces.push({
                         indices:   [d, cIdx, b],
                         uvIndices: [uv0, uv1, uv2],
+                        colorIndices: [cd, cc, ca],
                         texture: tileIndex,
                         rotation: rr
                     });
@@ -341,12 +348,14 @@ export function buildLevelData(view: DataView, atlas: CombinedAtlas): Spyro1Leve
                     faces.push({
                         indices: [a, b, cIdx],  // v1, v2, v3
                         uvIndices: [uvA, uvB, uvC],
+                        colorIndices:[ca, cb, cc],
                         texture: tileIndex,
                         rotation: 0
                     });
                     faces.push({
                         indices: [a, cIdx, d],  // v1, v3, v4
                         uvIndices: [uvA, uvC, uvD],
+                        colorIndices:[ca, cc, cd],
                         texture: tileIndex,
                         rotation: 0
                     });
@@ -355,6 +364,7 @@ export function buildLevelData(view: DataView, atlas: CombinedAtlas): Spyro1Leve
                 faces.push({
                     indices: [a, b, cIdx],
                     uvIndices: null,
+                    colorIndices: null,
                     texture: poly.t,
                     rotation: poly.r,
                 });

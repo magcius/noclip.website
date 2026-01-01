@@ -5,7 +5,7 @@ import { GfxBuffer } from "../gfx/platform/GfxPlatformImpl";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { DeviceProgram } from "../Program";
 import { ViewerRenderInput } from "../viewer";
-import { CombinedAtlas, Spyro1LevelData } from "./bin";
+import { Spyro1LevelData } from "./bin";
 
 export class Spyro1Program extends DeviceProgram {
     public static ub_SceneParams = 0;
@@ -41,9 +41,27 @@ void main() {
 
 #ifdef FRAG
 void main() {
-    // Use the engine’s sampler macro, just like KH2
     vec4 texColor = texture(SAMPLER_2D(u_Texture), v_TexCoord);
-    gl_FragColor = texColor;
+
+    vec3 tex5 = floor(texColor.rgb * 31.0) / 31.0;
+    vec3 col5 = floor(v_Color * 31.0) / 31.0;
+
+    vec3 lit = tex5 * col5;
+
+    float bayer4x4[16] = float[16](
+        0.0, 8.0, 2.0, 10.0,
+        12.0, 4.0, 14.0, 6.0,
+        3.0, 11.0, 1.0, 9.0,
+        15.0, 7.0, 13.0, 5.0
+    );
+    int xi = int(mod(gl_FragCoord.x, 4.0));
+    int yi = int(mod(gl_FragCoord.y, 4.0));
+    float threshold = (bayer4x4[yi * 4 + xi] / 16.0) * 0.1;
+
+    vec3 dithered = lit + threshold;
+    vec3 final5 = floor(dithered * 31.0) / 31.0;
+
+    gl_FragColor = vec4(final5 * 1.6, texColor.a);
 }
 #endif
     `;
@@ -69,7 +87,6 @@ export class Spyro1LevelRenderer {
 
     constructor(device: GfxDevice, levelData: Spyro1LevelData) {
         const atlas = levelData.atlas;
-        // debugShowAtlas(atlas);
         this.texture = device.createTexture({
             width: atlas.atlasWidth,
             height: atlas.atlasHeight,
@@ -115,7 +132,7 @@ export class Spyro1LevelRenderer {
         let runningIndex = 0;
 
         for (const face of faces) {
-            const { indices, uvIndices } = face;
+            const { indices, uvIndices, colorIndices } = face;
 
             for (let k = 0; k < indices.length; k++) {
                 const vertIndex = indices[k];
@@ -125,7 +142,17 @@ export class Spyro1LevelRenderer {
                 expandedPos.push(v[0], v[1], v[2]);
 
                 // Color — this assumes color index == vertex index; if not, adjust.
-                const c = colors[vertIndex] ?? [1, 1, 1];
+                // const c = colors[vertIndex] ?? [1, 1, 1];
+                // expandedCol.push(c[0] / 255, c[1] / 255, c[2] / 255);
+                // Color: use per-corner color index if present
+                let c: number[];
+                if (colorIndices) {
+                    const colorIndex = colorIndices[k];
+                    c = colors[colorIndex] ?? [255, 255, 255];
+                } else {
+                    // fallback: white or some lod color if you want
+                    c = [255, 255, 255];
+                }
                 expandedCol.push(c[0] / 255, c[1] / 255, c[2] / 255);
 
                 // UV
@@ -226,16 +253,4 @@ export class Spyro1LevelRenderer {
         device.destroyBuffer(this.colorBuffer);
         device.destroyBuffer(this.indexBuffer);
     }
-}
-
-function debugShowAtlas(atlas: CombinedAtlas) {
-    const canvas = document.createElement('canvas');
-    canvas.width = atlas.atlasWidth;
-    canvas.height = atlas.atlasHeight;
-    document.body.appendChild(canvas);
-
-    const ctx = canvas.getContext('2d')!;
-    const imageData = ctx.createImageData(atlas.atlasWidth, atlas.atlasHeight);
-    imageData.data.set(atlas.atlasData);
-    ctx.putImageData(imageData, 0, 0);
 }
