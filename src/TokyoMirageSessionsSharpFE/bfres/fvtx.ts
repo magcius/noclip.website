@@ -6,9 +6,6 @@ import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { align, assert, readString } from "../../util.js";
 import { read_bfres_string } from "./bfres_switch.js";
 
-const FVTX_ENTRY_SIZE = 0x58;
-const ATTRIBUTE_ENTRY_SIZE = 0x10;
-
 // reads from a bfres file and returns an array of FVTX objects
 // buffer: the bfres file
 // offset: start of the fvtx array
@@ -70,6 +67,9 @@ export function parseFVTX(buffer: ArrayBufferSlice, offset: number, count: numbe
     return fvtx_array;
 }
 
+const FVTX_ENTRY_SIZE = 0x58;
+const ATTRIBUTE_ENTRY_SIZE = 0x10;
+
 // Convert the format numbers used by FVTX data into a format number that noclip.website understands
 // format: FVTX attribute format number to convert
 function convert_attribute_format(format: AttributeFormat)
@@ -123,18 +123,18 @@ function convert_attribute_format(format: AttributeFormat)
 // vertex attribute format numbers that bfres files use
 enum AttributeFormat
 {
-    _8_8_Unorm         = 2305,
-    _8_8_Snorm         = 2306,
-    _8_8_Uint          = 2307,
-    _8_8_8_8_Unorm     = 2817,
-    _8_8_8_8_Snorm     = 2818,
-    _10_10_10_2_Snorm  = 3586,
-    _16_16_Unorm       = 4609,
-    _16_16_Snorm       = 4610,
-    _16_16_Float       = 4613,
-    _16_16_16_16_Float = 5381,
-    _32_32_Float       = 5893,
-    _32_32_32_Float    = 6149,
+    _8_8_Unorm         = 0x0901,
+    _8_8_Snorm         = 0x0902,
+    _8_8_Uint          = 0x0903,
+    _8_8_8_8_Unorm     = 0x0B01,
+    _8_8_8_8_Snorm     = 0x0B02,
+    _10_10_10_2_Snorm  = 0x0E02,
+    _16_16_Unorm       = 0x1201,
+    _16_16_Snorm       = 0x1202,
+    _16_16_Float       = 0x1205,
+    _16_16_16_16_Float = 0x1505,
+    _32_32_Float       = 0x1705,
+    _32_32_32_Float    = 0x1805,
 }
 
 export interface FVTX_VertexAttribute

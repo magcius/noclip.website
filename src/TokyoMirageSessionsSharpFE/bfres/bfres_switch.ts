@@ -42,13 +42,14 @@ export function parse(buffer: ArrayBufferSlice): FRES
         const fmat_count = view.getUint16(fmdl_entry_offset + 0x6C, true);
         // TODO: where is user data?
 
-
         fmdl.push({ name: fmdl_name, fvtx: fvtx_array, fshp: fshp_array });
-        fmdl_entry_offset += 0x78; // TODO: not sure if this is the correct size for fmdl headers
+        fmdl_entry_offset += FMDL_ENTRY_SIZE;
     }
     
     return { fmdl };
 }
+
+const FMDL_ENTRY_SIZE = 0x78; // TODO: not sure if this is the correct size
 
 export function read_bfres_string(buffer: ArrayBufferSlice, offs: number, littleEndian: boolean): string
 {

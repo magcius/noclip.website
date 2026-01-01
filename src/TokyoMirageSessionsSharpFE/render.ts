@@ -1,6 +1,6 @@
 import { GfxDevice, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxInputLayoutBufferDescriptor,
          GfxVertexBufferFrequency, GfxInputLayout, GfxFormat, GfxProgram, GfxBufferFrequencyHint,
-         GfxBufferUsage, GfxBindingLayoutDescriptor, GfxCullMode } from "../gfx/platform/GfxPlatform.js";
+         GfxBufferUsage, GfxBindingLayoutDescriptor, GfxCullMode, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform.js";
 import { SceneGfx, SceneGroup, ViewerRenderInput } from "../viewer.js";
 import * as BFRES from "./bfres/bfres_switch.js";
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
@@ -62,39 +62,55 @@ export class TMSFEScene implements SceneGfx
     private program: GfxProgram;
     private inputLayout: GfxInputLayout;
     private vertexBufferDescriptors: (GfxVertexBufferDescriptor | null)[];
+    private indexBufferDescriptor: GfxIndexBufferDescriptor;
     private renderInstListMain = new GfxRenderInstList();
-    private vertexCount: number;
-    private fmdl: BFRES.FMDL;
+    private indexCount: number;
+    private fres: BFRES.FRES;
 
-    constructor(device: GfxDevice, fmdl: BFRES.FMDL)
+    constructor(device: GfxDevice, fres: BFRES.FRES)
     {
         this.renderHelper = new GfxRenderHelper(device);
         this.program = this.renderHelper.renderCache.createProgram(new TMSFEProgram());
-        this.fmdl = fmdl;
-        console.log(this.fmdl);
-
-        const fvtx = fmdl.fvtx[0];
-        this.vertexCount = fvtx.vertexCount;
-        const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] =
-        [
-            { location: 0, format: fvtx.vertexAttributes[0].format, bufferIndex: fvtx.vertexAttributes[0].bufferIndex, bufferByteOffset: fvtx.vertexAttributes[0].bufferOffset},
-        ];
-
-        const inputLayoutBufferDescriptors: GfxInputLayoutBufferDescriptor[] =
-        [
-            { byteStride: fvtx.vertexBuffers[0].stride, frequency: GfxVertexBufferFrequency.PerVertex },
-        ];
-
-        const indexBufferFormat: GfxFormat | null = null;
-        const cache = this.renderHelper.renderCache;
-        this.inputLayout = cache.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors: inputLayoutBufferDescriptors, indexBufferFormat });
-
+        this.fres = fres;
         
-        const gfx_buffer = createBufferFromSlice(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, fvtx.vertexBuffers[0].data);
-        this.vertexBufferDescriptors =
-        [
-            { buffer: gfx_buffer },
-        ];
+        const fmdl = this.fres.fmdl[0];
+        console.log(fmdl);
+        const shapes = fmdl.fshp;
+        // for (let i = 0; i < shapes.length; i++)
+        for (let i = 0; i < 1; i++)
+        {
+            i = 36;
+            console.log(shapes[i].name);
+            const fvtx = fmdl.fvtx[shapes[i].fvtx_index];
+            
+            const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] =
+            [
+                { location: 0, format: fvtx.vertexAttributes[0].format, bufferIndex: fvtx.vertexAttributes[0].bufferIndex, bufferByteOffset: fvtx.vertexAttributes[0].bufferOffset},
+            ];
+            
+            const inputLayoutBufferDescriptors: GfxInputLayoutBufferDescriptor[] =
+            [
+                { byteStride: fvtx.vertexBuffers[0].stride, frequency: GfxVertexBufferFrequency.PerVertex },
+            ];
+            
+            const indexBufferFormat = shapes[i].mesh[0].index_buffer_format;
+            // const indexBufferFormat: GfxFormat | null = null;
+            const cache = this.renderHelper.renderCache;
+            this.inputLayout = cache.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors: inputLayoutBufferDescriptors, indexBufferFormat });
+            
+            
+            const gfx_buffer = createBufferFromSlice(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, fvtx.vertexBuffers[0].data);
+            this.vertexBufferDescriptors =
+            [
+                { buffer: gfx_buffer },
+            ];
+
+            const index_buffer = createBufferFromSlice(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, shapes[i].mesh[0].index_buffer_data);
+            this.indexBufferDescriptor = { buffer: index_buffer };
+
+            this.indexCount = shapes[i].mesh[0].index_count;
+        }
+
 
         /*
        // test render a triangle
@@ -146,7 +162,7 @@ export class TMSFEScene implements SceneGfx
     {
         for (let fvtx_index = 0; fvtx_index < 1; fvtx_index++)
         {
-            const fvtx = this.fmdl.fvtx[fvtx_index];
+            const fvtx = this.fres.fmdl[0].fvtx[fvtx_index];
             const vertexData = fvtx.vertexBuffers[0].data;
             const view = vertexData.createDataView();
             const vec = vec3.create();
@@ -160,11 +176,11 @@ export class TMSFEScene implements SceneGfx
 
     public render(device: GfxDevice, viewerInput: ViewerRenderInput): void
     {
-        this.debugDrawVertices(viewerInput);
+        // this.debugDrawVertices(viewerInput);
         this.renderHelper.pushTemplateRenderInst();
         const renderInst = this.renderHelper.renderInstManager.newRenderInst();
-        renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, null);
-        renderInst.setDrawCount(this.vertexCount);
+        renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor);
+        renderInst.setDrawCount(this.indexCount);
         renderInst.setBindingLayouts(bindingLayouts);
         renderInst.setGfxProgram(this.program);
         renderInst.setMegaStateFlags({ cullMode: GfxCullMode.Back });
@@ -203,5 +219,6 @@ export class TMSFEScene implements SceneGfx
     public destroy(device: GfxDevice): void
     {
         this.renderHelper.destroy();
+        // TODO: destroy vertex buffer, index buffer, etc
     }
 }

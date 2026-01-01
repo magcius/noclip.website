@@ -4,6 +4,7 @@
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { assert, readString } from "../../util.js";
 import { read_bfres_string } from "./bfres_switch.js";
+import { GfxFormat } from "../../gfx/platform/GfxPlatform.js";
 
 // reads from a bfres file and returns an array of FSHP objects
 // buffer: the bfres file
@@ -32,8 +33,9 @@ export function parseFSHP(buffer: ArrayBufferSlice, offset: number, count: numbe
             const primitive_topology = view.getUint32(mesh_entry_offset + 0x24, true);
             assert(primitive_topology === 3); // triangle list
 
-            const index_buffer_format = view.getUint32(mesh_entry_offset + 0x28, true);
-
+            const original_format = view.getUint32(mesh_entry_offset + 0x28, true);
+            const index_buffer_format = convert_index_format(original_format);
+            
             const index_buffer_info_offset = view.getUint32(mesh_entry_offset + 0x18, true);
             const index_buffer_size = view.getUint32(index_buffer_info_offset, true);
             const index_buffer_offset = gpu_region_offset + view.getUint32(mesh_entry_offset + 0x20, true);
@@ -55,9 +57,30 @@ export function parseFSHP(buffer: ArrayBufferSlice, offset: number, count: numbe
 const FSHP_ENTRY_SIZE = 0x60;
 const MESH_ENTRY_SIZE = 0x38;
 
+// Convert the format numbers used by index buffers into a format number that noclip.website understands
+// format: FVTX attribute format number to convert
+function convert_index_format(format: IndexFormat)
+{
+    switch (format)
+    {
+        case IndexFormat.Uint8:
+            return GfxFormat.U8_R;
+
+        case IndexFormat.Uint16:
+            return GfxFormat.U16_R;
+
+        case IndexFormat.Uint32:
+            return GfxFormat.U32_R;
+
+        default:
+            console.error(`index format ${format} not found`);
+            throw "whoops";
+    }
+}
+
 interface fshp_mesh
 {
-    index_buffer_format: IndexFormat;
+    index_buffer_format: GfxFormat;
     index_buffer_data: ArrayBufferSlice;
     index_count: number;
 }
