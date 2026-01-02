@@ -452,16 +452,16 @@ class dDlst_shadowReal_c {
                 return;
 
             // Ensure model always draws a non-black color to the buffer (Depth is harder to debug and downsample)
-            // TODO: Can we make this cheaper? No need for shading.
-            model.setColorOverride(ColorKind.AMB0, White);
-            model.setColorOverride(ColorKind.AMB1, White);
-            model.setColorOverride(ColorKind.K0, White);
-            model.setColorOverride(ColorKind.K1, White);
-            model.setColorOverride(ColorKind.K2, White);
-            model.setColorOverride(ColorKind.K3, White);
+            model.setVertexColorsEnabled(false);
+            model.setLightingEnabled(false);
+            model.setTexturesEnabled(false);
 
             model.drawOpa(renderInstManager, this.lightProjMtx);
             model.drawXlu(renderInstManager, this.lightProjMtx);
+
+            model.setVertexColorsEnabled(globals.renderHacks.vertexColorsEnabled);
+            model.setLightingEnabled(true);
+            model.setTexturesEnabled(globals.renderHacks.texturesEnabled);
         }
         renderInstManager.popTemplate();
     }
