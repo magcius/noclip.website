@@ -422,7 +422,8 @@ class dDlst_shadowReal_c {
     private alpha: number = 0; // 0-255
     private lightViewMtx = mat4.create();
     private lightProjMtx = mat4.create();
-    private clipFromVolume = mat4.create();
+    private modelMtx = mat4.create();
+    private volumeFromWorld = mat4.create();
     private atlasOffset = vec2.create();
 
     constructor(private index: number) {
@@ -479,13 +480,15 @@ class dDlst_shadowReal_c {
         if (this.state !== 1)
             return;
 
+        const worldFromClip = mat4.invert(scratchMat4, globals.camera.clipFromWorldMatrix);
+
         const renderInst = renderInstManager.newRenderInst();
         let offset = renderInst.allocateUniformBuffer(0, 8 + 16 * 2 + 20);
         const buf = renderInst.mapUniformBufferF32(0);
         offset += fillVec4(buf, offset, viewerInput.backbufferWidth, viewerInput.backbufferHeight, 0.5, 0.0);
         offset += fillVec4(buf, offset, shadowAtlasInvDim[0], shadowAtlasInvDim[1], this.atlasOffset[0] * shadowAtlasInvDim[0], this.atlasOffset[1] * shadowAtlasInvDim[1]);
-        offset += fillMatrix4x4(buf, offset, this.clipFromVolume);
-        offset += fillMatrix4x4(buf, offset, mat4.invert(scratchMat4, this.clipFromVolume));
+        offset += fillMatrix4x4(buf, offset, this.modelMtx);
+        offset += fillMatrix4x4(buf, offset, mat4.mul(scratchMat4, this.volumeFromWorld, worldFromClip));
         offset += fillFogBlock(buf, offset, materialParams.u_FogBlock);
         materialParams.m_TextureMapping[0].lateBinding = 'shadowmap-target';
         materialParams.m_TextureMapping[1].lateBinding = 'depth-target';
@@ -502,7 +505,7 @@ class dDlst_shadowReal_c {
         if (this.models.length === 0) {
             assertExists(tevStr); // The game allows passing a null tevStr (uses player's light pos), we do not.
             const lightPos = tevStr.lightObj.Position;
-            this.alpha = this.setShadowRealMtx(globals, this.lightViewMtx, this.lightProjMtx, this.clipFromVolume, lightPos, casterCenter, casterSize, heightAgl,
+            this.alpha = this.setShadowRealMtx(globals, this.lightViewMtx, this.lightProjMtx, this.modelMtx, lightPos, casterCenter, casterSize, heightAgl,
                 shouldFade == 0 ? 0.0 : heightAgl * 0.0007);
 
             if (this.alpha === 0)
@@ -525,7 +528,7 @@ class dDlst_shadowReal_c {
         return true;
     }
 
-    private setShadowRealMtx(globals: dGlobals, lightViewMtx: mat4, lightProjMtx: mat4, clipFromVolume: mat4, lightPos: vec3, casterCenter: vec3,
+    private setShadowRealMtx(globals: dGlobals, lightViewMtx: mat4, lightProjMtx: mat4, modelMtx: mat4, lightPos: vec3, casterCenter: vec3,
         casterSize: number, heightAgl: number, heightFade: number): number {
         if (heightFade >= 1.0) {
             return 0;
@@ -597,17 +600,19 @@ class dDlst_shadowReal_c {
         const volZEnd = casterSize / Math.sin( lightAngle ) + heightAgl;
         const volZStart = -10;
 
-        // noclip modification: build a model matrix to transform a [-1, 1] cube into a shadow receiver volume oriented with Z toward the light direction.
-        // This corresponds to the shadowmap's ortho frustum. The XY position within the cube (normalized to [0-1]) is used to sample the shadowmap. 
-        // TODO: Set proper volume size based on agl, casterSize, and light angle
+        // Build a matrix to transform a world space position into the shadowmap's ortho frustum. The xy position can then be used to sample the shadowmap.
         const view = mat4.lookAt(mat4.create(), casterCenter, vec3.add(scratchVec3a, casterCenter, rayDir), [0, 1, 0]);
         const proj = mat4.orthoNO(mat4.create(), -casterRadius, casterRadius, -casterRadius, casterRadius, volZStart, volZEnd);
-        mat4.invert(clipFromVolume, mat4.mul(scratchMat4, proj, view));
-        mat4.mul(clipFromVolume, globals.camera.clipFromWorldMatrix, clipFromVolume);
+        mat4.mul(this.volumeFromWorld, proj, view);
+
+        // TODO: Defer this until image draw. There, compute a bounding box in light frustum space. Manipulate the z range, and that is our tight shadow volume.
+        const worldFromVolume = mat4.invert(scratchMat4, this.volumeFromWorld);
+        mat4.scale(worldFromVolume, worldFromVolume, [0.5, 0.5, 1.0]);
+        mat4.mul(this.modelMtx, globals.camera.clipFromWorldMatrix, worldFromVolume);
 
         // Cull the shadow receiver volume. If culled for two frames, this id will be freed.
         scratchAABB.set(-1, -1, -1, 1, 1, 1);
-        scratchAABB.transform(scratchAABB, clipFromVolume);
+        scratchAABB.transform(scratchAABB, this.modelMtx);
         if (globals.camera.frustum.contains(scratchAABB))
             return 0.0;
 
