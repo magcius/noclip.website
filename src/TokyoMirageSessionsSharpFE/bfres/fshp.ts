@@ -1,5 +1,6 @@
 // fshp.ts
 // Handles FSHP(caFe SHaPe) data, which are meshes for a model
+// Meshes have an index buffer, which specifies which vertices in the vertex buffer to use for each triangle in the mesh.
 
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { assert, readString } from "../../util.js";
@@ -83,13 +84,14 @@ interface fshp_mesh
     index_buffer_format: GfxFormat;
     index_buffer_data: ArrayBufferSlice;
     index_count: number;
+    // note: technically this supports sub meshes, but I haven't seen them used yet.
 }
 
 export interface FSHP
 {
     name: string;
     mesh: fshp_mesh[];
-    fvtx_index: number;
+    fvtx_index: number; // the index into this fmdl's fvtx array of the set of vertices to use for this mesh
 }
 
 enum IndexFormat

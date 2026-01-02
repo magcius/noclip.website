@@ -1,7 +1,7 @@
 import { GfxDevice, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxInputLayoutBufferDescriptor,
          GfxVertexBufferFrequency, GfxInputLayout, GfxFormat, GfxProgram, GfxBufferFrequencyHint,
          GfxBufferUsage, GfxBindingLayoutDescriptor, GfxCullMode, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform.js";
-import { SceneGfx, SceneGroup, ViewerRenderInput } from "../viewer.js";
+import { SceneGfx, ViewerRenderInput } from "../viewer.js";
 import * as BFRES from "./bfres/bfres_switch.js";
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
 import { GfxRenderInstList, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
@@ -9,13 +9,7 @@ import { createBufferFromData, createBufferFromSlice } from "../gfx/helpers/Buff
 import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 import { fillColor, fillMatrix4x3, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers.js';
-import { drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk";
 import { TMSFEProgram } from './shader.js';
-
-const bindingLayouts: GfxBindingLayoutDescriptor[] =
-[
-    { numUniformBuffers: 2, numSamplers: 0 },
-];
 
 export class TMSFEScene implements SceneGfx
 {
@@ -36,7 +30,7 @@ export class TMSFEScene implements SceneGfx
         const shapes = fmdl.fshp;
         for (let i = 0; i < 5; i++)
         {
-            // the template is apparently required to set uniform buffers
+            // the template is apparently required to use uniform buffers
             this.renderHelper.pushTemplateRenderInst();
 
             const renderInst = this.renderHelper.renderInstManager.newRenderInst();
@@ -74,11 +68,13 @@ export class TMSFEScene implements SceneGfx
             // set shader
             const program = this.renderHelper.renderCache.createProgram(new TMSFEProgram());
             renderInst.setGfxProgram(program);
-
-            // define uniforms and samplers for the shader
-            renderInst.setBindingLayouts(bindingLayouts);
             
             // create uniform buffers for the shader
+            const bindingLayouts: GfxBindingLayoutDescriptor[] =
+            [
+                { numUniformBuffers: 1, numSamplers: 0 },
+            ];
+            renderInst.setBindingLayouts(bindingLayouts);
             let uniform_buffer_offset = renderInst.allocateUniformBuffer(TMSFEProgram.ub_SceneParams, 32);
             const mapped = renderInst.mapUniformBufferF32(TMSFEProgram.ub_SceneParams);
             uniform_buffer_offset += fillMatrix4x4(mapped, uniform_buffer_offset, viewerInput.camera.projectionMatrix);
@@ -101,14 +97,22 @@ export class TMSFEScene implements SceneGfx
 
         const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
         const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
-        builder.pushPass((pass) => {
-            pass.setDebugName('Main');
-            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
-            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
-            pass.exec((passRenderer) => {
-                this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
-            });
-        });
+        builder.pushPass
+        (
+            (pass) =>
+            {
+                pass.setDebugName('Main');
+                pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+                pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
+                pass.exec
+                (
+                    (passRenderer) =>
+                    {
+                        this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
+                    }
+                );
+            }
+        );
         this.renderHelper.antialiasingSupport.pushPasses(builder, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
