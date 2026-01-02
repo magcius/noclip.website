@@ -591,11 +591,17 @@ class dDlst_shadowReal_c {
         mat4.scale(scratchMat4, scratchMat4, [shadowAtlasInvDim[0], shadowAtlasInvDim[1], 1]);
         mat4.mul(lightProjMtx, vpMtx, lightProjMtx);
 
+        // Compute the end caps for the oriented shadow volume. Ideally we want the start cap to be just above ground level, and end cap to be fully below.
+        const hMag = Math.sqrt(rayDir[0] * rayDir[0] + rayDir[2] * rayDir[2]);
+        const lightAngle = Math.atan2(-rayDir[1], hMag);
+        const volZEnd = casterSize / Math.sin( lightAngle ) + heightAgl;
+        const volZStart = -10;
+
         // noclip modification: build a model matrix to transform a [-1, 1] cube into a shadow receiver volume oriented with Z toward the light direction.
         // This corresponds to the shadowmap's ortho frustum. The XY position within the cube (normalized to [0-1]) is used to sample the shadowmap. 
         // TODO: Set proper volume size based on agl, casterSize, and light angle
         const view = mat4.lookAt(mat4.create(), casterCenter, vec3.add(scratchVec3a, casterCenter, rayDir), [0, 1, 0]);
-        const proj = mat4.orthoNO(mat4.create(), -casterRadius, casterRadius, -casterRadius, casterRadius, -10, 200);
+        const proj = mat4.orthoNO(mat4.create(), -casterRadius, casterRadius, -casterRadius, casterRadius, volZStart, volZEnd);
         mat4.invert(clipFromVolume, mat4.mul(scratchMat4, proj, view));
         mat4.mul(clipFromVolume, globals.camera.clipFromWorldMatrix, clipFromVolume);
 
