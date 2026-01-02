@@ -280,7 +280,7 @@ class DownsampleProgram extends DeviceProgram {
     public override frag = GfxShaderLibrary.fullscreenBlitOneTexPS;
 }
 
-class SimpleShadowProgram extends DeviceProgram {
+class ShadowVolumeProgram extends DeviceProgram {
     public static bindingLayouts: GfxBindingLayoutDescriptor[] = [{
         numUniformBuffers: 1, numSamplers: 2, samplerEntries: [
             { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float, },
@@ -472,9 +472,9 @@ class dDlst_shadowReal_c {
     // 2. Cull any shadow receiver bounding boxes that are outside of the camera frustum.
     // 3. Generate a 256x256 shadow map by rendering the shadow caster from the light's point of view into a texture.
     // 4. Downsample the shadowmap into a 128x128 4bpp texture, and generate mipmaps. 
-    // 4. Render the front/back faces of the bounding box into the alpha buffer, adding/subtracting just like simple shadows 2. & 3.
-    // 5. Render all of the bg triangles gathered in step 1, sampling from the shadow map, clear the alpha where texture not > 0.
-    // 6. Render the bounding box, clearing the alpha to 0. This same framebuffer is used to render other shadows, and then alpha objects.
+    // 5. Render the front/back faces of the bounding box into the alpha buffer, adding/subtracting just like simple shadows 2. & 3.
+    // 6. Render all of the bg triangles gathered in step 1, sampling from the shadow map, clear the alpha where texture not > 0.
+    // 7. Render the bounding box, clearing the alpha to 0. This same framebuffer is used to render other shadows, and then alpha objects.
     public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         if (this.state !== 1)
             return;
@@ -675,7 +675,7 @@ class dDlst_shadowControl_c_Cache {
     public downsampleProgram: GfxProgram;
 
     constructor(resCtrl: dRes_control_c, cache: GfxRenderCache) {
-        const glsl = preprocessProgramObj_GLSL(cache.device, new SimpleShadowProgram());
+        const glsl = preprocessProgramObj_GLSL(cache.device, new ShadowVolumeProgram());
         this.program = cache.createProgramSimple(glsl);
         this.inputLayout = cache.createInputLayout({
             indexBufferFormat: GfxFormat.U16_R,
@@ -830,7 +830,7 @@ class dDlst_shadowControl_c {
         // Then, render shadow volumes for simple and real shadows. These are [-1, 1] cubes tranformed into oriented 
         // boxes bounding the shadow receivers. Simple shadows sample a predefined texture, real shadows sample the shadowmap.
         const shadowVolTemplate = renderInstManager.pushTemplate();
-        shadowVolTemplate.setBindingLayouts(SimpleShadowProgram.bindingLayouts);
+        shadowVolTemplate.setBindingLayouts(ShadowVolumeProgram.bindingLayouts);
         shadowVolTemplate.setGfxProgram(this.cache.program);
         shadowVolTemplate.setVertexInput(this.cache.inputLayout, [{ buffer: this.cache.positionBuffer }], { buffer: this.cache.indexBuffer });
         shadowVolTemplate.setDrawCount(36);
