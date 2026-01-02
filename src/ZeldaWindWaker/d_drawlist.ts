@@ -382,8 +382,9 @@ void main() {
     float t_ShadowColor = texture(SAMPLER_2D(u_TextureShadow), t_ShadowTexCoord).r;
     
     // If sampling from a predefined texture, smooth the shadow edges
-    float smoothFactor = u_Params.x;
-    float t_Alpha = smoothstep(0.0, smoothFactor, t_ShadowColor);
+    float shadowStep =  u_Params.x;
+    float smoothFactor = u_Params.y;
+    float t_Alpha = smoothstep(shadowStep, shadowStep + smoothFactor, t_ShadowColor);
     
     vec4 t_PixelOut = vec4(0, 0, 0, 0.25 * t_Alpha);
 
@@ -463,7 +464,7 @@ class dDlst_shadowReal_c {
         const renderInst = renderInstManager.newRenderInst();
         let offset = renderInst.allocateUniformBuffer(0, 4 + 16 * 2 + 20);
         const buf = renderInst.mapUniformBufferF32(0);
-        offset += fillVec4(buf, offset, viewerInput.backbufferWidth, viewerInput.backbufferHeight, 0.1);
+        offset += fillVec4(buf, offset, viewerInput.backbufferWidth, viewerInput.backbufferHeight, 0.5, 0.0);
         offset += fillMatrix4x4(buf, offset, mat4.mul(scratchMat4, globals.camera.clipFromWorldMatrix, this.receiverProjMtx));
         offset += fillMatrix4x4(buf, offset, mat4.invert(scratchMat4, scratchMat4));
         offset += fillFogBlock(buf, offset, materialParams.u_FogBlock);
@@ -514,8 +515,9 @@ class dDlst_shadowReal_c {
         let opacity = Math.min(1.0, 1.0 - heightFade);
         let alpha = Math.floor(200.0 * opacity);
 
-        // TODO: Unclear why this is necessary, but it seems to match the game's behavior
-        // TODO: The numbers for casterSize seem to be about 4x to large. Is there a scale in here that I'm missing?
+        // noclip modification: casterSize values for most actors are way too large, and result in poor shadowmap fitting. This change results 
+        // in higher effective resolution for most shadows, but still keeps the linear-shadowmap-sample look while looking better at modern resolutions.
+        // NOTE: If casterSize is too small, the shadow will be clipped. Modify the casterSize passed to dComIfGd_setShadow() in that case.
         casterSize *= 0.5;
 
         // Calculate light vector
@@ -600,7 +602,7 @@ class dDlst_shadowSimple_c {
         const renderInst = renderInstManager.newRenderInst();
         let offset = renderInst.allocateUniformBuffer(0, 4 + 16 * 2 + 20);
         const buf = renderInst.mapUniformBufferF32(0);
-        offset += fillVec4(buf, offset, viewerInput.backbufferWidth, viewerInput.backbufferHeight, 0.1);
+        offset += fillVec4(buf, offset, viewerInput.backbufferWidth, viewerInput.backbufferHeight, 0.0, 0.1);
         offset += fillMatrix4x4(buf, offset, mat4.mul(scratchMat4, globals.camera.clipFromWorldMatrix, this.modelMtx));
         offset += fillMatrix4x4(buf, offset, mat4.invert(scratchMat4, scratchMat4));
         offset += fillFogBlock(buf, offset, materialParams.u_FogBlock);
