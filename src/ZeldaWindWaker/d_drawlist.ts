@@ -726,8 +726,8 @@ class dDlst_shadowControl_c_Cache {
         });
 
         this.linearSampler = cache.createSampler({
-            wrapS: GfxWrapMode.Clamp,
-            wrapT: GfxWrapMode.Clamp,
+            wrapS: GfxWrapMode.Repeat,
+            wrapT: GfxWrapMode.Repeat,
             minFilter: GfxTexFilterMode.Bilinear,
             magFilter: GfxTexFilterMode.Bilinear,
             mipFilter: GfxMipFilterMode.Nearest,
@@ -863,7 +863,6 @@ class dDlst_shadowControl_c {
         builder.pushPass((pass) => {
             pass.setDebugName('Shadowmaps');
             // TODO: Don't bind a color target, we don't need it. (Currently using it for debug thumbnails).
-            // TODO: Setup one rt to handle 8+ shadowmaps atlas-style
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, shadowmapColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, shadowmapDepthTargetID);
             pass.exec((passRenderer) => {
