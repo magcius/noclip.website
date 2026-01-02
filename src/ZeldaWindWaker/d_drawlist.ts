@@ -432,7 +432,15 @@ class dDlst_shadowReal_c {
             if (!model.isAnyShapeVisible())
                 return;
 
+            // Ensure model always draws a non-black color to the buffer (Depth is harder to debug and downsample)
             // TODO: Can we make this cheaper? No need for shading.
+            model.setColorOverride(ColorKind.AMB0, White);
+            model.setColorOverride(ColorKind.AMB1, White);
+            model.setColorOverride(ColorKind.K0, White);
+            model.setColorOverride(ColorKind.K1, White);
+            model.setColorOverride(ColorKind.K2, White);
+            model.setColorOverride(ColorKind.K3, White);
+
             model.drawOpa(renderInstManager, this.renderProjMtx);
             model.drawXlu(renderInstManager, this.renderProjMtx);
         }
@@ -827,7 +835,7 @@ class dDlst_shadowControl_c {
             });
         });
 
-        // Downsample the 256x256 shadowmaps into 128x128 textures (TODO: with mips?).
+        // Downsample the 256x256 shadowmaps into 128x128 textures (Softens the edges, gives more samples per tap).
         builder.pushPass((pass) => {
             pass.setDebugName(`Shadowmap Downsample`);
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, shadowmapDownColorTargetID);
