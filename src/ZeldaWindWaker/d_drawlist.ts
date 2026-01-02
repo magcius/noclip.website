@@ -32,6 +32,7 @@ import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription, Gfxr
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
 import { IsDepthReversed } from "../gfx/helpers/ReversedDepthHelpers.js";
+import { AABB } from "../Geometry.js";
 
 export enum dDlst_alphaModel__Type {
     Bonbori,
@@ -400,7 +401,7 @@ void main() {
 
 const scratchMat4 = mat4.create();
 const scratchVec3a = vec3.create();
-const scratchVec3b = vec3.create();
+const scratchAABB = new AABB();
 
 const realShadowCount = 8;
 const shadowAtlasDim = getAtlasDimensions(realShadowCount);
@@ -419,9 +420,9 @@ class dDlst_shadowReal_c {
 
     private models: J3DModelInstance[] = [];
     private alpha: number = 0; // 0-255
-    private viewMtx = mat4.create();
-    private renderProjMtx = mat4.create();
-    private receiverProjMtx = mat4.create();
+    private lightViewMtx = mat4.create();
+    private lightProjMtx = mat4.create();
+    private clipFromVolume = mat4.create();
     private atlasOffset = vec2.create();
 
     constructor( private index: number ) {
@@ -439,13 +440,13 @@ class dDlst_shadowReal_c {
 
     public imageDraw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         const template = renderInstManager.pushTemplate();
-        mat4.copy(sceneParams.u_Projection, this.renderProjMtx);
+        mat4.copy(sceneParams.u_Projection, this.lightProjMtx);
         const d = template.allocateUniformBufferF32(GX_Program.ub_SceneParams, ub_SceneParamsBufferSize);
         fillSceneParamsData(d, 0, sceneParams);
         for( let i = 0; i < this.models.length; i++) {
             const model = this.models[i];
             model.shapeInstances
-            model.calcView(this.viewMtx, null);
+            model.calcView(this.lightViewMtx, null);
 
             if (!model.isAnyShapeVisible())
                 return;
@@ -459,8 +460,8 @@ class dDlst_shadowReal_c {
             model.setColorOverride(ColorKind.K2, White);
             model.setColorOverride(ColorKind.K3, White);
 
-            model.drawOpa(renderInstManager, this.renderProjMtx);
-            model.drawXlu(renderInstManager, this.renderProjMtx);
+            model.drawOpa(renderInstManager, this.lightProjMtx);
+            model.drawXlu(renderInstManager, this.lightProjMtx);
         }
         renderInstManager.popTemplate();
     }
@@ -483,8 +484,8 @@ class dDlst_shadowReal_c {
         const buf = renderInst.mapUniformBufferF32(0);
         offset += fillVec4(buf, offset, viewerInput.backbufferWidth, viewerInput.backbufferHeight, 0.5, 0.0);
         offset += fillVec4(buf, offset, shadowAtlasInvDim[0], shadowAtlasInvDim[1], this.atlasOffset[0] * shadowAtlasInvDim[0], this.atlasOffset[1] * shadowAtlasInvDim[1]);
-        offset += fillMatrix4x4(buf, offset, mat4.mul(scratchMat4, globals.camera.clipFromWorldMatrix, this.receiverProjMtx));
-        offset += fillMatrix4x4(buf, offset, mat4.invert(scratchMat4, scratchMat4));
+        offset += fillMatrix4x4(buf, offset, this.clipFromVolume);
+        offset += fillMatrix4x4(buf, offset, mat4.invert(scratchMat4, this.clipFromVolume));
         offset += fillFogBlock(buf, offset, materialParams.u_FogBlock);
         materialParams.m_TextureMapping[0].lateBinding = 'shadowmap-target';
         materialParams.m_TextureMapping[1].lateBinding = 'depth-target';
@@ -497,11 +498,11 @@ class dDlst_shadowReal_c {
         return this.id;
     }
 
-    public set2(shouldFade: number, model: J3DModelInstance, casterCenter: vec3, casterSize: number, heightAgl: number, tevStr: dKy_tevstr_c): number {
+    public set2(globals: dGlobals, shouldFade: number, model: J3DModelInstance, casterCenter: vec3, casterSize: number, heightAgl: number, tevStr: dKy_tevstr_c): number {
         if (this.models.length === 0) {
             assertExists(tevStr); // The game allows passing a null tevStr (uses player's light pos), we do not.
             const lightPos = tevStr.lightObj.Position;
-            this.alpha = this.setShadowRealMtx(this.viewMtx, this.renderProjMtx, this.receiverProjMtx, lightPos, casterCenter, casterSize, heightAgl,
+            this.alpha = this.setShadowRealMtx(globals, this.lightViewMtx, this.lightProjMtx, this.clipFromVolume, lightPos, casterCenter, casterSize, heightAgl,
                 shouldFade == 0 ? 0.0 : heightAgl * 0.0007);
 
             if (this.alpha === 0)
@@ -524,7 +525,7 @@ class dDlst_shadowReal_c {
         return true;
     }
 
-    private setShadowRealMtx(viewMtx: mat4, renderProjMtx: mat4, receiverProjMtx: mat4, lightPos: vec3, casterCenter: vec3,
+    private setShadowRealMtx(globals: dGlobals, lightViewMtx: mat4, lightProjMtx: mat4, clipFromVolume: mat4, lightPos: vec3, casterCenter: vec3,
         casterSize: number, heightAgl: number, heightFade: number): number {
         if (heightFade >= 1.0) {
             return 0;
@@ -581,23 +582,28 @@ class dDlst_shadowReal_c {
         //     return 0;
         // }
 
-        // TODO: Clip the shadow receivers here, return 0.0 if none are visible.
-
         // Build view matrix (lookAt)
-        mat4.lookAt(viewMtx, lightVec, casterCenter, [0, 1, 0]);
-        mat4.orthoZO(renderProjMtx, -casterRadius, casterRadius, -casterRadius, casterRadius, 1.0, 10000.0);
+        mat4.lookAt(lightViewMtx, lightVec, casterCenter, [0, 1, 0]);
+        mat4.orthoZO(lightProjMtx, -casterRadius, casterRadius, -casterRadius, casterRadius, 1.0, 10000.0);
 
         // Scale and bias the projection to fit into our slot in the shadowmap atlas
         const vpMtx = mat4.fromTranslation(scratchMat4, [shadowAtlasInvDim[0] * (1 + 2 * this.atlasOffset[0]) - 1.0, shadowAtlasInvDim[1] * (1 + 2 * this.atlasOffset[1]) - 1.0, 0]);
         mat4.scale(scratchMat4, scratchMat4, [shadowAtlasInvDim[0], shadowAtlasInvDim[1], 1]);
-        mat4.mul(renderProjMtx, vpMtx, renderProjMtx);
+        mat4.mul(lightProjMtx, vpMtx, lightProjMtx);
 
-        // noclip modification: build a model matrix to transform a [-1, 1] cube into a shadow receiver volume oriented with Y toward the light direction.
-        // This corresponds to the shadowmap's ortho frustum. The XZ position within the cube (normalized to [0-1]) is used to sample the shadowmap. 
+        // noclip modification: build a model matrix to transform a [-1, 1] cube into a shadow receiver volume oriented with Z toward the light direction.
+        // This corresponds to the shadowmap's ortho frustum. The XY position within the cube (normalized to [0-1]) is used to sample the shadowmap. 
         // TODO: Set proper volume size based on agl, casterSize, and light angle
         const view = mat4.lookAt(mat4.create(), casterCenter, vec3.add(scratchVec3a, casterCenter, rayDir), [0, 1, 0]);
         const proj = mat4.orthoNO(mat4.create(), -casterRadius, casterRadius, -casterRadius, casterRadius, -10, 200);
-        mat4.invert(receiverProjMtx, mat4.mul(scratchMat4, proj, view));
+        mat4.invert(clipFromVolume, mat4.mul(scratchMat4, proj, view));
+        mat4.mul(clipFromVolume, globals.camera.clipFromWorldMatrix, clipFromVolume);
+
+        // Cull the shadow receiver volume. If culled for two frames, this id will be freed.
+        scratchAABB.set(-1, -1, -1, 1, 1, 1);
+        scratchAABB.transform(scratchAABB, clipFromVolume);
+        if(globals.camera.frustum.contains(scratchAABB))
+            return 0.0;
 
         return alpha;
     }
@@ -931,9 +937,9 @@ class dDlst_shadowControl_c {
         return real ? real.set(shouldFade, model, pos, casterSize, heightAgl, tevStr) : 0;
     }
 
-    public setReal2(id: number, shouldFade: number, model: J3DModelInstance, casterCenter: vec3, casterSize: number, heightAgl: number, tevStr: dKy_tevstr_c): number {
+    public setReal2(globals: dGlobals, id: number, shouldFade: number, model: J3DModelInstance, casterCenter: vec3, casterSize: number, heightAgl: number, tevStr: dKy_tevstr_c): number {
         let real = this.getOrAllocate(id);
-        return real ? real.set2(shouldFade, model, casterCenter, casterSize, heightAgl, tevStr) : 0;
+        return real ? real.set2(globals, shouldFade, model, casterCenter, casterSize, heightAgl, tevStr) : 0;
     }
 
     public addReal(id: number, model: J3DModelInstance): boolean {
@@ -985,7 +991,7 @@ export function dComIfGd_setShadow(globals: dGlobals, id: number, shouldFade: bo
         return 0;
     }
 
-    const sid = globals.dlst.shadowControl.setReal2(id, shouldFade ? 1 : 0, model, casterCenter, casterSize, casterY - groundY, pTevStr);
+    const sid = globals.dlst.shadowControl.setReal2(globals, id, shouldFade ? 1 : 0, model, casterCenter, casterSize, casterY - groundY, pTevStr);
     if (sid === 0) {
         const simplePos: vec3 = [casterCenter[0], casterY, casterCenter[2]];
         dComIfGd_setSimpleShadow2(globals, simplePos, groundY, scaleXZ, pFloorPoly, rotY, scaleZ, pTexObj);
