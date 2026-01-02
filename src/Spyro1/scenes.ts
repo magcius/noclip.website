@@ -61,6 +61,20 @@ export class Spyro1Renderer implements SceneGfx {
     }
 }
 
+/*
+TODO
+
+Scrolling textures (ex. see waterfall in Artisans)
+Better level shader. It's close enough to PS1 but could be better.
+More default save states
+
+Nice to have
+
+Gems, dragon statues, NPCs, etc. rendered on each level
+    The format for these will need to be figured out. They're likely in other "sub-subfiles" like the ground models and skybox.
+Read directly from WAD.WAD by offset instead of extracting subfiles
+*/
+
 class Spyro1Scene implements SceneDesc {
     public id: string;
 
@@ -125,10 +139,31 @@ const sceneDescs = [
     new Spyro1Scene(77, "Gnasty Gnorc"),
     new Spyro1Scene(79, "Gnasty's Loot"),
     "Cutscenes",
-    new Spyro1Scene(4, "Cutscene 1"),
-    new Spyro1Scene(5, "Cutscene 2"),
-    new Spyro1Scene(6, "Cutscene 3"),
-    new Spyro1Scene(7, "Cutscene 4"),
+    new Spyro1Scene(4, "Title Screen"),
+    new Spyro1Scene(5, "Introduction"),
+    new Spyro1Scene(6, "Ending"),
+    new Spyro1Scene(7, "Ending (Full Completion)"),
+    "Credits Flyover",
+    new Spyro1Scene(83, "Artisans Homeworld"),
+    new Spyro1Scene(84, "Stone Hill"),
+    new Spyro1Scene(85, "Town Square"),
+    new Spyro1Scene(92, "Toasty"),
+    new Spyro1Scene(86, "Peace Keepers Homeworld"),
+    new Spyro1Scene(87, "Cliff Town"),
+    new Spyro1Scene(88, "Doctor Shemp"),
+    new Spyro1Scene(89, "Magic Crafters Homeworld"),
+    new Spyro1Scene(90, "High Caves"),
+    new Spyro1Scene(91, "Wizard Peak"),
+    new Spyro1Scene(93, "Terrace Village"),
+    new Spyro1Scene(97, "Wild Flight"),
+    new Spyro1Scene(94, "Metalhead"),
+    new Spyro1Scene(95, "Dark Passage"),
+    new Spyro1Scene(96, "Haunted Towers"),
+    new Spyro1Scene(99, "Icy Flight"),
+    new Spyro1Scene(102, "Jacques"),
+    new Spyro1Scene(98, "Gnorc Cove"),
+    new Spyro1Scene(101, "Twilight Harbor"),
+    new Spyro1Scene(100, "Gnasty Gnorc"),
 ];
 
 export const sceneGroup: SceneGroup = { id, name, sceneDescs };

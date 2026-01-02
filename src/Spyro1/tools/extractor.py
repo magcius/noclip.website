@@ -2,8 +2,7 @@
 
 import os
 import mmap
-from build_level import extract_level
-from build_ground import export_ground_json
+from extract_level import extract_level
 
 header_bytes = 8
 sf_index = 0
@@ -36,17 +35,19 @@ with open(wad_path, "rb") as f:
                     extension = "cutscene"
                 elif 82 <= sf_index <= 101:
                     extension = "starring"
-                print(f"Subfile {sf_index + 1}: offset={sf_offset}, size={sf_size}, type={extension}")
-                with open(f"{extract_path}/sf{sf_index + 1}.{extension}", "wb") as sf:
-                    sf.write(wad[sf_offset:sf_offset+sf_size])
+                if extension != "bin": # skip non-level subfiles
+                    print(f"Subfile {sf_index + 1}: offset={sf_offset}, size={sf_size}, type={extension}")
+                    with open(f"{extract_path}/sf{sf_index + 1}.{extension}", "wb") as sf:
+                        sf.write(wad[sf_offset:sf_offset+sf_size])
             sf_index += 1
 
-# Extract sub-subfiles from levels and cutscenes
+to_remove = []
+# Extract sub-subfiles from levels
 for file in os.listdir(extract_path):
-    if ".level" in file or ".cutscene" in file:
+    if ".level" in file or ".cutscene" in file or ".starring" in file:
         extract_level(f"{extract_path}/{file}")
+        to_remove.append(file)
 
-# Export model data from ground sub-subfiles
-for file in os.listdir(extract_path):
-    if "_ground" in file:
-        export_ground_json(f"{extract_path}/{file}")
+# Delete leftover level subfiles
+for file in to_remove:
+    os.remove(extract_path + "/" + file)

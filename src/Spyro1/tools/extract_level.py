@@ -92,32 +92,32 @@ def extract_level(level_subfile):
 
             extraction_success = True
 
-            sky_index = 1
-            while True:
-                sky_index += 1
-                while True:
-                    if stream.tell() - start_offset > list_size - 4:
-                        raise RuntimeError("End of sky")
-                    sky_offset = struct.unpack("<I", stream.read(4))[0]
-                    if sky_offset == 0xFFFFFFFF:
-                        break
-                while True:
-                    if stream.tell() - start_offset > list_size - 4:
-                        raise RuntimeError("End of sky")
-                    sky_offset = struct.unpack("<I", stream.read(4))[0]
-                    if sky_offset == 0:
-                        break
-                while True:
-                    if stream.tell() - start_offset > list_size - 4:
-                        raise RuntimeError("End of sky")
-                    sky_offset = struct.unpack("<I", stream.read(4))[0]
-                    if sky_offset != 0:
-                        break
-                if (stream.tell() - start_offset + sky_offset - 8) > list_size or sky_offset < 4:
-                    raise RuntimeError("Bad sky offset")
-                sky_name = sky_pattern.replace("*", str(sky_index))
-                with open(sky_name, "wb") as out_sky:
-                    copy_from(out_sky, stream, sky_offset - 4)
+            # sky_index = 1
+            # while True:
+            #     sky_index += 1
+            #     while True:
+            #         if stream.tell() - start_offset > list_size - 4:
+            #             raise RuntimeError("End of sky")
+            #         sky_offset = struct.unpack("<I", stream.read(4))[0]
+            #         if sky_offset == 0xFFFFFFFF:
+            #             break
+            #     while True:
+            #         if stream.tell() - start_offset > list_size - 4:
+            #             raise RuntimeError("End of sky")
+            #         sky_offset = struct.unpack("<I", stream.read(4))[0]
+            #         if sky_offset == 0:
+            #             break
+            #     while True:
+            #         if stream.tell() - start_offset > list_size - 4:
+            #             raise RuntimeError("End of sky")
+            #         sky_offset = struct.unpack("<I", stream.read(4))[0]
+            #         if sky_offset != 0:
+            #             break
+            #     if (stream.tell() - start_offset + sky_offset - 8) > list_size or sky_offset < 4:
+            #         raise RuntimeError("Bad sky offset")
+            #     sky_name = sky_pattern.replace("*", str(sky_index))
+            #     with open(sky_name, "wb") as out_sky:
+            #         copy_from(out_sky, stream, sky_offset - 4)
     except Exception as e:
         if not extraction_success:
             print(f"Exception: {e}")
