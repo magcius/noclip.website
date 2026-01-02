@@ -1,6 +1,6 @@
 
-import { mat4, vec3 } from "gl-matrix";
-import { OpaqueBlack, Red, TransparentBlack, White, colorCopy, colorNewCopy } from "../Color.js";
+import { mat4, vec2, vec3 } from "gl-matrix";
+import { OpaqueBlack, White, colorCopy, colorNewCopy } from "../Color.js";
 import { projectionMatrixForCuboid, saturate } from '../MathHelpers.js';
 import { TSDraw } from "../SuperMarioGalaxy/DDraw.js";
 import { createBufferFromData } from "../gfx/helpers/BufferHelpers.js";
@@ -14,7 +14,7 @@ import * as GX from '../gx/gx_enum.js';
 import { GX_Program } from '../gx/gx_material.js';
 import { ColorKind, DrawParams, GXMaterialHelperGfx, MaterialParams, SceneParams, createInputLayout, fillFogBlock, fillSceneParamsData, ub_SceneParamsBufferSize } from "../gx/gx_render.js";
 import { assert, assertExists, nArray } from '../util.js';
-import { Viewer, ViewerRenderInput } from '../viewer.js';
+import { ViewerRenderInput } from '../viewer.js';
 import { SymbolMap, dGlobals } from './Main.js';
 import { PeekZManager } from "./d_dlst_peekZ.js";
 import { cBgS_PolyInfo } from "./d_bg.js";
@@ -30,7 +30,6 @@ import { fillMatrix4x4, fillVec4 } from "../gfx/helpers/UniformBufferHelpers.js"
 import { preprocessProgramObj_GLSL } from "../gfx/shaderc/GfxShaderCompiler.js";
 import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription, GfxrRenderTargetID } from "../gfx/render/GfxRenderGraph.js";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
-import { Frustum } from "../Geometry.js";
 import { standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
 import { IsDepthReversed } from "../gfx/helpers/ReversedDepthHelpers.js";
 
@@ -344,6 +343,7 @@ struct FogBlock {
 layout(std140) uniform ub_Params {
     vec2 u_ViewportSize;
     vec2 u_Params;
+    vec4 u_AtlasScaleBias;
     Mat4x4 u_ClipFromLocal;
     Mat4x4 u_LocalFromClip;
     FogBlock u_FogBlock;
@@ -379,6 +379,7 @@ void main() {
 
     // Top-down project our shadow texture. Our local space is between -1 and 1, we want to move into 0.0 to 1.0.
     vec2 t_ShadowTexCoord = t_ObjectPos.xy * vec2(0.5) + vec2(0.5);
+    t_ShadowTexCoord = t_ShadowTexCoord * u_AtlasScaleBias.xy + u_AtlasScaleBias.zw;
     float t_ShadowColor = texture(SAMPLER_2D(u_TextureShadow), t_ShadowTexCoord).r;
     
     // If sampling from a predefined texture, smooth the shadow edges
@@ -401,6 +402,17 @@ const scratchMat4 = mat4.create();
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
 
+const realShadowCount = 8;
+const shadowAtlasDim = getAtlasDimensions(realShadowCount);
+const shadowAtlasInvDim = [1.0 / shadowAtlasDim[0], 1.0 / shadowAtlasDim[1]];
+
+function getAtlasDimensions( count: number ): [number, number] {
+    let dimMin = Math.floor(Math.sqrt(count));
+    while (count % dimMin !== 0) { dimMin--; }
+    const dimMax = count / dimMin;
+    return [dimMax, dimMin];
+}
+
 class dDlst_shadowReal_c {
     public state = 0; // 0: unallocated, 1: ready, 2: pendingDelete
     public id: number = 0;
@@ -410,6 +422,11 @@ class dDlst_shadowReal_c {
     private viewMtx = mat4.create();
     private renderProjMtx = mat4.create();
     private receiverProjMtx = mat4.create();
+    private atlasOffset = vec2.create();
+
+    constructor( private index: number ) {
+        this.atlasOffset = [this.index % shadowAtlasDim[0], Math.floor(this.index / shadowAtlasDim[0])];
+    }
 
     public reset(): void {
         if (this.state === 1) {
@@ -462,9 +479,10 @@ class dDlst_shadowReal_c {
             return;
 
         const renderInst = renderInstManager.newRenderInst();
-        let offset = renderInst.allocateUniformBuffer(0, 4 + 16 * 2 + 20);
+        let offset = renderInst.allocateUniformBuffer(0, 8 + 16 * 2 + 20);
         const buf = renderInst.mapUniformBufferF32(0);
         offset += fillVec4(buf, offset, viewerInput.backbufferWidth, viewerInput.backbufferHeight, 0.5, 0.0);
+        offset += fillVec4(buf, offset, shadowAtlasInvDim[0], shadowAtlasInvDim[1], this.atlasOffset[0] * shadowAtlasInvDim[0], this.atlasOffset[1] * shadowAtlasInvDim[1]);
         offset += fillMatrix4x4(buf, offset, mat4.mul(scratchMat4, globals.camera.clipFromWorldMatrix, this.receiverProjMtx));
         offset += fillMatrix4x4(buf, offset, mat4.invert(scratchMat4, scratchMat4));
         offset += fillFogBlock(buf, offset, materialParams.u_FogBlock);
@@ -483,7 +501,7 @@ class dDlst_shadowReal_c {
         if (this.models.length === 0) {
             assertExists(tevStr); // The game allows passing a null tevStr (uses player's light pos), we do not.
             const lightPos = tevStr.lightObj.Position;
-            this.alpha = dDlst_shadowReal_c.setShadowRealMtx(this.viewMtx, this.renderProjMtx, this.receiverProjMtx, lightPos, pos, casterSize, heightAgl,
+            this.alpha = this.setShadowRealMtx(this.viewMtx, this.renderProjMtx, this.receiverProjMtx, lightPos, pos, casterSize, heightAgl,
                 shouldFade == 0 ? 0.0 : heightAgl * 0.0007);
 
             if (this.alpha === 0)
@@ -506,7 +524,7 @@ class dDlst_shadowReal_c {
         return true;
     }
 
-    private static setShadowRealMtx(viewMtx: mat4, renderProjMtx: mat4, receiverProjMtx: mat4, lightPos: vec3, pos: vec3,
+    private setShadowRealMtx(viewMtx: mat4, renderProjMtx: mat4, receiverProjMtx: mat4, lightPos: vec3, pos: vec3,
         casterSize: number, heightAgl: number, heightFade: number): number {
         if (heightFade >= 1.0) {
             return 0;
@@ -569,6 +587,11 @@ class dDlst_shadowReal_c {
         mat4.lookAt(viewMtx, lightVec, pos, [0, 1, 0]);
         mat4.orthoZO(renderProjMtx, -casterRadius, casterRadius, -casterRadius, casterRadius, 1.0, 10000.0);
 
+        // Scale and bias the projection to fit into our slot in the shadowmap atlas
+        const vpMtx = mat4.fromTranslation(scratchMat4, [shadowAtlasInvDim[0] * (1 + 2 * this.atlasOffset[0]) - 1.0, shadowAtlasInvDim[1] * (1 + 2 * this.atlasOffset[1]) - 1.0, 0]);
+        mat4.scale(scratchMat4, scratchMat4, [shadowAtlasInvDim[0], shadowAtlasInvDim[1], 1]);
+        mat4.mul(renderProjMtx, vpMtx, renderProjMtx);
+
         // noclip modification: build a model matrix to transform a [-1, 1] cube into a shadow receiver volume oriented with Y toward the light direction.
         // This corresponds to the shadowmap's ortho frustum. The XZ position within the cube (normalized to [0-1]) is used to sample the shadowmap. 
         // TODO: Set proper volume size based on agl, casterSize, and light angle
@@ -600,9 +623,10 @@ class dDlst_shadowSimple_c {
     // - For shadows overlapping ledges, the game's textured-quad approach will appear to hang over the edge. Ours will project the shadow down to the lower level. 
     public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         const renderInst = renderInstManager.newRenderInst();
-        let offset = renderInst.allocateUniformBuffer(0, 4 + 16 * 2 + 20);
+        let offset = renderInst.allocateUniformBuffer(0, 8 + 16 * 2 + 20);
         const buf = renderInst.mapUniformBufferF32(0);
         offset += fillVec4(buf, offset, viewerInput.backbufferWidth, viewerInput.backbufferHeight, 0.0, 0.1);
+        offset += fillVec4(buf, offset, 1.0, 1.0, 0.0, 0.0);
         offset += fillMatrix4x4(buf, offset, mat4.mul(scratchMat4, globals.camera.clipFromWorldMatrix, this.modelMtx));
         offset += fillMatrix4x4(buf, offset, mat4.invert(scratchMat4, scratchMat4));
         offset += fillFogBlock(buf, offset, materialParams.u_FogBlock);
@@ -737,11 +761,11 @@ class dDlst_shadowControl_c_Cache {
         bti.data = new ArrayBufferSlice(new Uint8Array(32).fill(0xFF).buffer);
         this.whiteTex = new BTIData(cache.device, cache, bti);
 
-        this.shadowmapDesc.setDimensions(256, 256, 1);
+        this.shadowmapDesc.setDimensions(256 * shadowAtlasDim[0], 256 * shadowAtlasDim[1], 1);
         this.shadowmapDesc.clearColor = colorNewCopy(OpaqueBlack);
         this.shadowmapDepthDesc.copyDimensions(this.shadowmapDesc);
         this.shadowmapDepthDesc.clearDepth = standardFullClearRenderPassDescriptor.clearDepth;
-        this.shadowmapDownDesc.setDimensions(128, 128, 1);
+        this.shadowmapDownDesc.setDimensions(128 * shadowAtlasDim[0], 128 * shadowAtlasDim[1], 1);
         this.shadowmapDownDesc.clearColor = colorNewCopy(OpaqueBlack);
         
         this.downsampleProgram = cache.createProgram(new DownsampleProgram());
@@ -764,7 +788,7 @@ class dDlst_shadowControl_c {
     private simples = nArray(128, () => new dDlst_shadowSimple_c());
     private simpleCount = 0;
 
-    private reals = nArray(8, (i) => new dDlst_shadowReal_c());
+    private reals = nArray(realShadowCount, (i) => new dDlst_shadowReal_c(i));
     private latestId: number = 0;
     private realCasterInstList = new GfxRenderInstList(gfxRenderInstCompareNone, GfxRenderInstExecutionOrder.Forwards);
     private realInstList = new GfxRenderInstList(gfxRenderInstCompareNone, GfxRenderInstExecutionOrder.Forwards);
@@ -823,7 +847,7 @@ class dDlst_shadowControl_c {
         }
 
         renderInstManager.setCurrentList(this.realInstList);
-        for (let i = 0; i < 8; i++) {
+        for (let i = 0; i < this.reals.length; i++) {
             this.reals[i].draw(globals, renderInstManager, viewerInput);
         }
 
