@@ -4,52 +4,13 @@ import { GfxDevice, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, Gfx
 import { SceneGfx, SceneGroup, ViewerRenderInput } from "../viewer.js";
 import * as BFRES from "./bfres/bfres_switch.js";
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
-import { DeviceProgram } from '../Program.js';
-import { GfxShaderLibrary } from '../gfx/helpers/GfxShaderLibrary.js';
 import { GfxRenderInstList, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
 import { createBufferFromData, createBufferFromSlice } from "../gfx/helpers/BufferHelpers.js";
 import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 import { fillColor, fillMatrix4x3, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers.js';
 import { drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk";
-import { mat4, vec2, vec3 } from 'gl-matrix';
-import { Color, colorNewFromRGBA } from "../Color";
-
-class TMSFEProgram extends DeviceProgram {
-    public static a_Position = 0;
-
-    public static ub_SceneParams = 0;
-    public static ub_ObjectParams = 1;
-
-    public override both = `
-precision mediump float;
-
-${GfxShaderLibrary.MatrixLibrary}
-
-layout(std140) uniform ub_SceneParams
-{
-    Mat4x4 u_Projection;
-    Mat3x4 u_ModelView;
-};
-
-#ifdef VERT
-layout(location = ${TMSFEProgram.a_Position}) attribute vec3 a_Position;
-
-void mainVS()
-{
-    vec3 t_PositionWorld = UnpackMatrix(u_ModelView) * vec4(a_Position, 1.0);
-    gl_Position = UnpackMatrix(u_Projection) * vec4(t_PositionWorld, 1.0);
-}
-#endif
-
-#ifdef FRAG
-void mainPS()
-{
-    gl_FragColor = vec4(0.0, 0.0, 1.0, 0.0);
-}
-#endif
-`;
-}
+import { TMSFEProgram } from './shader.js';
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] =
 [
@@ -75,7 +36,9 @@ export class TMSFEScene implements SceneGfx
         const shapes = fmdl.fshp;
         for (let i = 0; i < 5; i++)
         {
+            // the template is apparently required to set uniform buffers
             this.renderHelper.pushTemplateRenderInst();
+
             const renderInst = this.renderHelper.renderInstManager.newRenderInst();
 
             // create vertex buffers
@@ -108,23 +71,25 @@ export class TMSFEScene implements SceneGfx
             renderInst.setVertexInput(inputLayout, vertexBufferDescriptors, indexBufferDescriptor);
             renderInst.setDrawCount(shapes[i].mesh[0].index_count);
 
-            // define uniform and samplers
-            renderInst.setBindingLayouts(bindingLayouts);
-
             // set shader
             const program = this.renderHelper.renderCache.createProgram(new TMSFEProgram());
             renderInst.setGfxProgram(program);
 
+            // define uniforms and samplers for the shader
+            renderInst.setBindingLayouts(bindingLayouts);
+            
+            // create uniform buffers for the shader
+            let uniform_buffer_offset = renderInst.allocateUniformBuffer(TMSFEProgram.ub_SceneParams, 32);
+            const mapped = renderInst.mapUniformBufferF32(TMSFEProgram.ub_SceneParams);
+            uniform_buffer_offset += fillMatrix4x4(mapped, uniform_buffer_offset, viewerInput.camera.projectionMatrix);
+            uniform_buffer_offset += fillMatrix4x3(mapped, uniform_buffer_offset, viewerInput.camera.viewMatrix);
+
             renderInst.setMegaStateFlags({ cullMode: GfxCullMode.Back });
             
-            // create uniform buffers for use by the shader
-            let offs = renderInst.allocateUniformBuffer(TMSFEProgram.ub_SceneParams, 32);
-            const mapped = renderInst.mapUniformBufferF32(TMSFEProgram.ub_SceneParams);
-            offs += fillMatrix4x4(mapped, offs, viewerInput.camera.projectionMatrix);
-            offs += fillMatrix4x3(mapped, offs, viewerInput.camera.viewMatrix);
-            
+            // submit the draw call
             this.renderHelper.renderInstManager.setCurrentList(this.renderInstListMain);
             this.renderHelper.renderInstManager.submitRenderInst(renderInst);
+
             this.renderHelper.renderInstManager.popTemplate();
         }
 
