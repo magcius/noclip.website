@@ -577,7 +577,7 @@ class dDlst_shadowReal_c {
 
         // noclip modification: 
         // The game uses realPolygonCheck to gather a list of bg polygons that intersect the shadow's bounding volume.
-        // These are then renderered to sample the shadow map. Instead, we sample the shadowmap directly from the volume.
+        // These are then renderered to sample the shadow map. Instead, we render an oriented box (the shadow volume) and sample the shadowmap there.
         // if (!realPolygonCheck(casterCenter, casterRadius, heightAgl, rayDir, shadowPoly)) {
         //     return 0;
         // }
