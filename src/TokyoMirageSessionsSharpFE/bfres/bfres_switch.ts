@@ -40,9 +40,13 @@ export function parse(buffer: ArrayBufferSlice): FRES
         
         const fmat_array_offset = view.getUint32(fmdl_entry_offset + 0x38, true);
         const fmat_count = view.getUint16(fmdl_entry_offset + 0x6C, true);
-        // TODO: where is user data?
+        
+        const user_data_array_offset = view.getUint32(fmdl_entry_offset + 0x50, true);
+        const user_data_array_count = view.getUint16(fmdl_entry_offset + 0x70, true);
+        const user_data_array: user_data[] = parse_user_data(buffer, user_data_array_offset, user_data_array_count);
+        console.log(user_data_array);
 
-        fmdl.push({ name: fmdl_name, fvtx: fvtx_array, fshp: fshp_array });
+        fmdl.push({ name: fmdl_name, fvtx: fvtx_array, fshp: fshp_array, user_data: user_data_array });
         fmdl_entry_offset += FMDL_ENTRY_SIZE;
     }
     
@@ -50,11 +54,77 @@ export function parse(buffer: ArrayBufferSlice): FRES
 }
 
 const FMDL_ENTRY_SIZE = 0x78; // TODO: not sure if this is the correct size
+const FMDL_USER_DATA_ENTRY_SIZE = 0x40;
 
 export function read_bfres_string(buffer: ArrayBufferSlice, offs: number, littleEndian: boolean): string
 {
     // first two bytes are the size
     return readString(buffer, offs + 0x02, 0xFF, true);
+}
+
+function parse_user_data(buffer: ArrayBufferSlice, offset: number, count: number): user_data[]
+{
+    const view = buffer.createDataView();
+
+    let user_data_array: user_data[] = [];
+    let user_data_entry_offset = offset;
+    for (let i = 0; i < count; i++)
+    {
+        const name_offset = view.getUint32(user_data_entry_offset, true);
+        const name = read_bfres_string(buffer, name_offset, true);
+        
+        const data_offset = view.getUint32(user_data_entry_offset + 0x8, true);
+        if (data_offset == null)
+        {
+            continue;
+        }
+        const data_count = view.getUint32(user_data_entry_offset + 0x10, true);
+        const data_type = view.getUint8(user_data_entry_offset + 0x14);
+        let data_numbers: number[] = [];
+        let data_strings: string[] = [];
+        switch (data_type)
+        {
+            case 0:
+                // s32
+                for (let j = 0; j < data_count; j++)
+                {
+                    data_numbers.push(view.getInt32(data_offset + (j * 0x4), true));
+                }
+                break;
+            
+            case 1:
+                // float
+                for (let j = 0; j < data_count; j++)
+                {
+                    data_numbers.push(view.getFloat32(data_offset + (j * 0x4), true));
+                }
+                break;
+            
+            case 2:
+                // string
+                // TODO
+                break;
+            
+            case 3:
+                // byte
+                for (let j = 0; j < data_count; j++)
+                {
+                    // TODO is this signed or unsigned?
+                    data_numbers.push(view.getInt8(data_offset + (j * 0x1)));
+                }
+                break;
+        }
+        user_data_array.push({ name, numbers: data_numbers, strings: data_strings });
+        user_data_entry_offset += FMDL_USER_DATA_ENTRY_SIZE;
+    }
+    return user_data_array;
+}
+
+interface user_data
+{
+    name: string;
+    numbers: number[];
+    strings: string[];
 }
 
 export interface FMDL
@@ -64,6 +134,7 @@ export interface FMDL
     fvtx: FVTX[];
     fshp: FSHP[];
     // fmat: FMAT[];
+    user_data: user_data[];
 }
 
 export interface FRES
