@@ -843,7 +843,7 @@ class dDlst_shadowControl_c {
         shadowVolTemplate.setMegaStateFlags({
             depthCompare: GfxCompareMode.Always,
             depthWrite: false,
-            cullMode: GfxCullMode.Front,
+            cullMode: GfxCullMode.Back,
             ...setAttachmentStateSimple({}, {
                 channelWriteMask: GfxChannelWriteMask.RGB,
                 blendMode: GfxBlendMode.Add,
