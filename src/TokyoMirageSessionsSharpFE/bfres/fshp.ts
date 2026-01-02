@@ -35,7 +35,7 @@ export function parseFSHP(buffer: ArrayBufferSlice, offset: number, count: numbe
 
             const original_format = view.getUint32(mesh_entry_offset + 0x28, true);
             const index_buffer_format = convert_index_format(original_format);
-            
+
             const index_buffer_info_offset = view.getUint32(mesh_entry_offset + 0x18, true);
             const index_buffer_size = view.getUint32(index_buffer_info_offset, true);
             const index_buffer_offset = gpu_region_offset + view.getUint32(mesh_entry_offset + 0x20, true);
@@ -58,7 +58,7 @@ const FSHP_ENTRY_SIZE = 0x60;
 const MESH_ENTRY_SIZE = 0x38;
 
 // Convert the format numbers used by index buffers into a format number that noclip.website understands
-// format: FVTX attribute format number to convert
+// format: index format number to convert
 function convert_index_format(format: IndexFormat)
 {
     switch (format)

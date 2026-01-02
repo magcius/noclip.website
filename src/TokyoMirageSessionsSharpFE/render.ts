@@ -58,29 +58,27 @@ const bindingLayouts: GfxBindingLayoutDescriptor[] =
 
 export class TMSFEScene implements SceneGfx
 {
-    private renderHelper: GfxRenderHelper;
-    private program: GfxProgram;
-    private inputLayout: GfxInputLayout;
-    private vertexBufferDescriptors: (GfxVertexBufferDescriptor | null)[];
-    private indexBufferDescriptor: GfxIndexBufferDescriptor;
-    private renderInstListMain = new GfxRenderInstList();
-    private indexCount: number;
     private fres: BFRES.FRES;
+    private renderHelper: GfxRenderHelper;
+    private renderInstListMain = new GfxRenderInstList();
 
     constructor(device: GfxDevice, fres: BFRES.FRES)
     {
-        this.renderHelper = new GfxRenderHelper(device);
-        this.program = this.renderHelper.renderCache.createProgram(new TMSFEProgram());
         this.fres = fres;
-        
+        this.renderHelper = new GfxRenderHelper(device);
+    }
+
+    public render(device: GfxDevice, viewerInput: ViewerRenderInput): void
+    {
+        // create a draw call for every mesh in the fmdl
         const fmdl = this.fres.fmdl[0];
-        console.log(fmdl);
         const shapes = fmdl.fshp;
-        // for (let i = 0; i < shapes.length; i++)
-        for (let i = 0; i < 1; i++)
+        for (let i = 0; i < 5; i++)
         {
-            i = 36;
-            console.log(shapes[i].name);
+            this.renderHelper.pushTemplateRenderInst();
+            const renderInst = this.renderHelper.renderInstManager.newRenderInst();
+
+            // create vertex buffers
             const fvtx = fmdl.fvtx[shapes[i].fvtx_index];
             
             const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] =
@@ -94,105 +92,42 @@ export class TMSFEScene implements SceneGfx
             ];
             
             const indexBufferFormat = shapes[i].mesh[0].index_buffer_format;
-            // const indexBufferFormat: GfxFormat | null = null;
             const cache = this.renderHelper.renderCache;
-            this.inputLayout = cache.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors: inputLayoutBufferDescriptors, indexBufferFormat });
+            const inputLayout = cache.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors: inputLayoutBufferDescriptors, indexBufferFormat });
             
             
             const gfx_buffer = createBufferFromSlice(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, fvtx.vertexBuffers[0].data);
-            this.vertexBufferDescriptors =
+            const vertexBufferDescriptors =
             [
                 { buffer: gfx_buffer },
             ];
 
             const index_buffer = createBufferFromSlice(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, shapes[i].mesh[0].index_buffer_data);
-            this.indexBufferDescriptor = { buffer: index_buffer };
+            const indexBufferDescriptor = { buffer: index_buffer };
 
-            this.indexCount = shapes[i].mesh[0].index_count;
+            renderInst.setVertexInput(inputLayout, vertexBufferDescriptors, indexBufferDescriptor);
+            renderInst.setDrawCount(shapes[i].mesh[0].index_count);
+
+            // define uniform and samplers
+            renderInst.setBindingLayouts(bindingLayouts);
+
+            // set shader
+            const program = this.renderHelper.renderCache.createProgram(new TMSFEProgram());
+            renderInst.setGfxProgram(program);
+
+            renderInst.setMegaStateFlags({ cullMode: GfxCullMode.Back });
+            
+            // create uniform buffers for use by the shader
+            let offs = renderInst.allocateUniformBuffer(TMSFEProgram.ub_SceneParams, 32);
+            const mapped = renderInst.mapUniformBufferF32(TMSFEProgram.ub_SceneParams);
+            offs += fillMatrix4x4(mapped, offs, viewerInput.camera.projectionMatrix);
+            offs += fillMatrix4x3(mapped, offs, viewerInput.camera.viewMatrix);
+            
+            this.renderHelper.renderInstManager.setCurrentList(this.renderInstListMain);
+            this.renderHelper.renderInstManager.submitRenderInst(renderInst);
+            this.renderHelper.renderInstManager.popTemplate();
         }
 
-
-        /*
-       // test render a triangle
-        const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] =
-        [
-            { location: 0, format: GfxFormat.F32_RGB, bufferIndex: 0, bufferByteOffset: 0 },
-        ];
-        const inputLayoutBufferDescriptors: GfxInputLayoutBufferDescriptor[] =
-        [
-            { byteStride: 0xC, frequency: GfxVertexBufferFrequency.PerVertex },
-        ];
-        const indexBufferFormat: GfxFormat | null = null;
-        const cache = this.renderHelper.renderCache;
-        this.inputLayout = cache.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors: inputLayoutBufferDescriptors, indexBufferFormat });
-
-        // make vertex buffer
-        var positions =
-        [
-            -10.0, 10.0, 0,
-            10.0, 10, 0,
-            10, -10, 0,
-            -10, 10, 0,
-            10, -10, 0,
-            -10, -10, 0,
-            // -198.0884, -647.991, -242.2954,
-            // -194.6871, -645.1612, -238.2419,
-            // -189.0081, -671.5596, -231.4739,
-		];
-
-        this.vertexCount = positions.length / 3;
-
-        const vertexData = new Float32Array(positions.length);
-        for (let i = 0; i < positions.length; i++)
-        {
-            vertexData[i] = positions[i];
-        }
-        console.log(vertexData);
-
-        const vertexBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, vertexData.buffer);
-        this.vertexBufferDescriptors =
-        [
-            { buffer: vertexBuffer },
-        ];
-        */
-    }
-
-
-    public debugDrawVertices(viewerInput: ViewerRenderInput)
-    {
-        for (let fvtx_index = 0; fvtx_index < 1; fvtx_index++)
-        {
-            const fvtx = this.fres.fmdl[0].fvtx[fvtx_index];
-            const vertexData = fvtx.vertexBuffers[0].data;
-            const view = vertexData.createDataView();
-            const vec = vec3.create();
-
-            for (let i = 0; i < fvtx.vertexCount * 3 ; i += 3) {
-                vec3.set(vec, view.getFloat32(i * 4 + 0, true), view.getFloat32(i * 4 + 4, true), view.getFloat32(i * 4 + 8, true));
-                drawWorldSpacePoint(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, vec, colorNewFromRGBA(0.0, 0.0, 1.0, 1.0));
-            }
-        }
-    }
-
-    public render(device: GfxDevice, viewerInput: ViewerRenderInput): void
-    {
-        // this.debugDrawVertices(viewerInput);
-        this.renderHelper.pushTemplateRenderInst();
-        const renderInst = this.renderHelper.renderInstManager.newRenderInst();
-        renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor);
-        renderInst.setDrawCount(this.indexCount);
-        renderInst.setBindingLayouts(bindingLayouts);
-        renderInst.setGfxProgram(this.program);
-        renderInst.setMegaStateFlags({ cullMode: GfxCullMode.Back });
-        
-        let offs = renderInst.allocateUniformBuffer(TMSFEProgram.ub_SceneParams, 32);
-        const mapped = renderInst.mapUniformBufferF32(TMSFEProgram.ub_SceneParams);
-        offs += fillMatrix4x4(mapped, offs, viewerInput.camera.projectionMatrix);
-        offs += fillMatrix4x3(mapped, offs, viewerInput.camera.viewMatrix);
-        
-        this.renderHelper.renderInstManager.setCurrentList(this.renderInstListMain);
-        this.renderHelper.renderInstManager.submitRenderInst(renderInst);
-        this.renderHelper.renderInstManager.popTemplate();
         this.renderHelper.prepareToRender();
 
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
