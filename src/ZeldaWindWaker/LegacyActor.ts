@@ -603,6 +603,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         const m = buildModel(rarc, `bdl/yw.bdl`);
         buildChildModel(rarc, `bdlm/ywhead01.bdl`).setParentJoint(m, `head`);
         m.bindANK1(parseBCK(rarc, `bcks/wait01.bck`));
+        setShadow(800.0, 150, 40.0, 1.0);
     });
     // Gonzo
     else if (actorName === 'P1a') fetchArchive(`P1`).then((rarc) => {
