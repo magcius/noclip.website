@@ -2,6 +2,7 @@ import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { assert, readString } from "../../util.js";
 import { FVTX, parseFVTX } from "./fvtx.js";
 import { FSHP, parseFSHP } from "./fshp.js";
+import { FMAT, parseFMAT } from "./fmat.js";
 
 export function parse(buffer: ArrayBufferSlice): FRES
 {
@@ -40,13 +41,13 @@ export function parse(buffer: ArrayBufferSlice): FRES
         
         const fmat_array_offset = view.getUint32(fmdl_entry_offset + 0x38, true);
         const fmat_count = view.getUint16(fmdl_entry_offset + 0x6C, true);
+        const fmat_array: FMAT[] = parseFMAT(buffer, fmat_array_offset, fmat_count);
         
         const user_data_array_offset = view.getUint32(fmdl_entry_offset + 0x50, true);
         const user_data_array_count = view.getUint16(fmdl_entry_offset + 0x70, true);
         const user_data_array: user_data[] = parse_user_data(buffer, user_data_array_offset, user_data_array_count);
-        console.log(user_data_array);
 
-        fmdl.push({ name: fmdl_name, fvtx: fvtx_array, fshp: fshp_array, user_data: user_data_array });
+        fmdl.push({ name: fmdl_name, fvtx: fvtx_array, fshp: fshp_array, fmat: fmat_array, user_data: user_data_array });
         fmdl_entry_offset += FMDL_ENTRY_SIZE;
     }
     
@@ -133,7 +134,7 @@ export interface FMDL
     // fskl: FSKL;
     fvtx: FVTX[];
     fshp: FSHP[];
-    // fmat: FMAT[];
+    fmat: FMAT[];
     user_data: user_data[];
 }
 

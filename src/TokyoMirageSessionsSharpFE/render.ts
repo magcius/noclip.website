@@ -21,12 +21,14 @@ export class TMSFEScene implements SceneGfx
     {
         this.fres = fres;
         this.renderHelper = new GfxRenderHelper(device);
+        console.log(this.fres.fmdl[0]);
     }
 
     public render(device: GfxDevice, viewerInput: ViewerRenderInput): void
     {
         // create a draw call for every mesh in the fmdl
         const fmdl = this.fres.fmdl[0];
+        /*
         const shapes = fmdl.fshp;
         for (let i = 0; i < 5; i++)
         {
@@ -88,7 +90,7 @@ export class TMSFEScene implements SceneGfx
 
             this.renderHelper.renderInstManager.popTemplate();
         }
-
+        */
         this.renderHelper.prepareToRender();
 
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
