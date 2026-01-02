@@ -407,7 +407,7 @@ const realShadowCount = 8;
 const shadowAtlasDim = getAtlasDimensions(realShadowCount);
 const shadowAtlasInvDim = [1.0 / shadowAtlasDim[0], 1.0 / shadowAtlasDim[1]];
 
-function getAtlasDimensions( count: number ): [number, number] {
+function getAtlasDimensions(count: number): [number, number] {
     let dimMin = Math.floor(Math.sqrt(count));
     while (count % dimMin !== 0) { dimMin--; }
     const dimMax = count / dimMin;
@@ -425,7 +425,7 @@ class dDlst_shadowReal_c {
     private clipFromVolume = mat4.create();
     private atlasOffset = vec2.create();
 
-    constructor( private index: number ) {
+    constructor(private index: number) {
         this.atlasOffset = [this.index % shadowAtlasDim[0], Math.floor(this.index / shadowAtlasDim[0])];
     }
 
@@ -443,7 +443,7 @@ class dDlst_shadowReal_c {
         mat4.copy(sceneParams.u_Projection, this.lightProjMtx);
         const d = template.allocateUniformBufferF32(GX_Program.ub_SceneParams, ub_SceneParamsBufferSize);
         fillSceneParamsData(d, 0, sceneParams);
-        for( let i = 0; i < this.models.length; i++) {
+        for (let i = 0; i < this.models.length; i++) {
             const model = this.models[i];
             model.shapeInstances
             model.calcView(this.lightViewMtx, null);
@@ -476,7 +476,7 @@ class dDlst_shadowReal_c {
     // 5. Render all of the bg triangles gathered in step 1, sampling from the shadow map, clear the alpha where texture not > 0.
     // 6. Render the bounding box, clearing the alpha to 0. This same framebuffer is used to render other shadows, and then alpha objects.
     public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        if( this.state !== 1)
+        if (this.state !== 1)
             return;
 
         const renderInst = renderInstManager.newRenderInst();
@@ -547,7 +547,7 @@ class dDlst_shadowReal_c {
         // This cheats the light vec to be more vertical when the caster is in the air, a la platforming drop shadows
         // At 50 units above ground, the shadow is fully vertical
         lightVec[1] += heightAgl;
-        let xzScale = Math.max( 0.0, 0.02 * (50.0 - heightAgl));
+        let xzScale = Math.max(0.0, 0.02 * (50.0 - heightAgl));
         lightVec[0] *= xzScale;
         lightVec[2] *= xzScale;
 
@@ -602,7 +602,7 @@ class dDlst_shadowReal_c {
         // Cull the shadow receiver volume. If culled for two frames, this id will be freed.
         scratchAABB.set(-1, -1, -1, 1, 1, 1);
         scratchAABB.transform(scratchAABB, clipFromVolume);
-        if(globals.camera.frustum.contains(scratchAABB))
+        if (globals.camera.frustum.contains(scratchAABB))
             return 0.0;
 
         return alpha;
@@ -648,7 +648,7 @@ class dDlst_shadowSimple_c {
         // Build the matrix which will transform a [-1, 1] cube into our shadow volume oriented to the floor plane (floor normal becomes Z+).
         // A physically accurate drop shadow would use a vertical box to project the shadow texture straight down, but the original 
         // game chooses to use this approach which always keeps the shape of the shadow consistent, regardless of ground geometry.
-        const yVec = vec3.rotateY(scratchVec3a, [1, 0, 0], [0,0,0], cM_s2rad(rotY));
+        const yVec = vec3.rotateY(scratchVec3a, [1, 0, 0], [0, 0, 0], cM_s2rad(rotY));
         mat4.targetTo(this.modelMtx, [pos[0], floorY, pos[2]], vec3.add(vec3.create(), pos, floorNrm), yVec);
         mat4.scale(this.modelMtx, this.modelMtx, [scaleXZ, scaleXZ * scaleZ, offsetY + offsetY + 16.0]);
 
@@ -673,7 +673,7 @@ class dDlst_shadowControl_c_Cache {
     public shadowmapDepthDesc = new GfxrRenderTargetDescription(GfxFormat.D32F);
     public shadowmapDownDesc = new GfxrRenderTargetDescription(GfxFormat.U8_R_NORM);
     public downsampleProgram: GfxProgram;
-    
+
     constructor(resCtrl: dRes_control_c, cache: GfxRenderCache) {
         const glsl = preprocessProgramObj_GLSL(cache.device, new SimpleShadowProgram());
         this.program = cache.createProgramSimple(glsl);
@@ -773,7 +773,7 @@ class dDlst_shadowControl_c_Cache {
         this.shadowmapDepthDesc.clearDepth = standardFullClearRenderPassDescriptor.clearDepth;
         this.shadowmapDownDesc.setDimensions(128 * shadowAtlasDim[0], 128 * shadowAtlasDim[1], 1);
         this.shadowmapDownDesc.clearColor = colorNewCopy(OpaqueBlack);
-        
+
         this.downsampleProgram = cache.createProgram(new DownsampleProgram());
 
         return this;
@@ -865,7 +865,7 @@ class dDlst_shadowControl_c {
         const shadowmapColorTargetID = builder.createRenderTargetID(this.cache.shadowmapDesc, 'Shadowmap');
         const shadowmapDepthTargetID = builder.createRenderTargetID(this.cache.shadowmapDepthDesc, 'Shadowmap Depth');
         const shadowmapDownColorTargetID = builder.createRenderTargetID(this.cache.shadowmapDownDesc, 'Shadowmap');
-        
+
         builder.pushPass((pass) => {
             pass.setDebugName('Shadowmaps');
             // TODO: Don't bind a color target, we don't need it. (Currently using it for debug thumbnails).
@@ -944,7 +944,7 @@ class dDlst_shadowControl_c {
 
     public addReal(id: number, model: J3DModelInstance): boolean {
         let real = this.reals.find(r => r.id === id);
-        if (real) 
+        if (real)
             return real.add(model);
 
         return false;
