@@ -497,11 +497,11 @@ class dDlst_shadowReal_c {
         return this.id;
     }
 
-    public set2(shouldFade: number, model: J3DModelInstance, pos: vec3, casterSize: number, heightAgl: number, tevStr: dKy_tevstr_c): number {
+    public set2(shouldFade: number, model: J3DModelInstance, casterCenter: vec3, casterSize: number, heightAgl: number, tevStr: dKy_tevstr_c): number {
         if (this.models.length === 0) {
             assertExists(tevStr); // The game allows passing a null tevStr (uses player's light pos), we do not.
             const lightPos = tevStr.lightObj.Position;
-            this.alpha = this.setShadowRealMtx(this.viewMtx, this.renderProjMtx, this.receiverProjMtx, lightPos, pos, casterSize, heightAgl,
+            this.alpha = this.setShadowRealMtx(this.viewMtx, this.renderProjMtx, this.receiverProjMtx, lightPos, casterCenter, casterSize, heightAgl,
                 shouldFade == 0 ? 0.0 : heightAgl * 0.0007);
 
             if (this.alpha === 0)
@@ -524,7 +524,7 @@ class dDlst_shadowReal_c {
         return true;
     }
 
-    private setShadowRealMtx(viewMtx: mat4, renderProjMtx: mat4, receiverProjMtx: mat4, lightPos: vec3, pos: vec3,
+    private setShadowRealMtx(viewMtx: mat4, renderProjMtx: mat4, receiverProjMtx: mat4, lightPos: vec3, casterCenter: vec3,
         casterSize: number, heightAgl: number, heightFade: number): number {
         if (heightFade >= 1.0) {
             return 0;
@@ -540,7 +540,7 @@ class dDlst_shadowReal_c {
 
         // Calculate light vector
         const lightVec = scratchVec3a;
-        vec3.sub(lightVec, lightPos, pos);
+        vec3.sub(lightVec, lightPos, casterCenter);
 
         // The higher off the ground a shadow caster is, the weaker the shadow's horizontal components become
         // This cheats the light vec to be more vertical when the caster is in the air, a la platforming drop shadows
@@ -561,15 +561,15 @@ class dDlst_shadowReal_c {
             lightDist = (casterSize * 0.5) / lightDist;
         }
         vec3.scale(lightVec, lightVec, lightDist);
-        vec3.add(lightVec, lightVec, pos);
+        vec3.add(lightVec, lightVec, casterCenter);
 
         // Calculate caster radius and ray direction
         const casterRadius = casterSize * 0.4;
         const rayDir = vec3.create();
-        vec3.sub(rayDir, pos, lightVec);
+        vec3.sub(rayDir, casterCenter, lightVec);
         if (vec3.squaredLength(rayDir) === 0.0) {
             rayDir[1] = -1.0;
-            lightVec[1] = pos[1] + 1.0;
+            lightVec[1] = casterCenter[1] + 1.0;
         } else {
             vec3.normalize(rayDir, rayDir);
         }
@@ -577,14 +577,14 @@ class dDlst_shadowReal_c {
         // noclip modification: 
         // The game uses realPolygonCheck to gather a list of bg polygons that intersect the shadow's bounding volume.
         // These are then renderered to sample the shadow map. Instead, we sample the shadowmap directly from the volume.
-        // if (!realPolygonCheck(pos, casterRadius, heightAgl, rayDir, shadowPoly)) {
+        // if (!realPolygonCheck(casterCenter, casterRadius, heightAgl, rayDir, shadowPoly)) {
         //     return 0;
         // }
 
         // TODO: Clip the shadow receivers here, return 0.0 if none are visible.
 
         // Build view matrix (lookAt)
-        mat4.lookAt(viewMtx, lightVec, pos, [0, 1, 0]);
+        mat4.lookAt(viewMtx, lightVec, casterCenter, [0, 1, 0]);
         mat4.orthoZO(renderProjMtx, -casterRadius, casterRadius, -casterRadius, casterRadius, 1.0, 10000.0);
 
         // Scale and bias the projection to fit into our slot in the shadowmap atlas
@@ -595,7 +595,7 @@ class dDlst_shadowReal_c {
         // noclip modification: build a model matrix to transform a [-1, 1] cube into a shadow receiver volume oriented with Y toward the light direction.
         // This corresponds to the shadowmap's ortho frustum. The XZ position within the cube (normalized to [0-1]) is used to sample the shadowmap. 
         // TODO: Set proper volume size based on agl, casterSize, and light angle
-        const view = mat4.lookAt(mat4.create(), pos, vec3.add(scratchVec3a, pos, rayDir), [0, 1, 0]);
+        const view = mat4.lookAt(mat4.create(), casterCenter, vec3.add(scratchVec3a, casterCenter, rayDir), [0, 1, 0]);
         const proj = mat4.orthoNO(mat4.create(), -casterRadius, casterRadius, -casterRadius, casterRadius, -10, 200);
         mat4.invert(receiverProjMtx, mat4.mul(scratchMat4, proj, view));
 
@@ -931,9 +931,9 @@ class dDlst_shadowControl_c {
         return real ? real.set(shouldFade, model, pos, casterSize, heightAgl, tevStr) : 0;
     }
 
-    public setReal2(id: number, shouldFade: number, model: J3DModelInstance, pos: vec3, casterSize: number, heightAgl: number, tevStr: dKy_tevstr_c): number {
+    public setReal2(id: number, shouldFade: number, model: J3DModelInstance, casterCenter: vec3, casterSize: number, heightAgl: number, tevStr: dKy_tevstr_c): number {
         let real = this.getOrAllocate(id);
-        return real ? real.set2(shouldFade, model, pos, casterSize, heightAgl, tevStr) : 0;
+        return real ? real.set2(shouldFade, model, casterCenter, casterSize, heightAgl, tevStr) : 0;
     }
 
     public addReal(id: number, model: J3DModelInstance): boolean {
@@ -977,17 +977,17 @@ export function dComIfGd_setSimpleShadow2(globals: dGlobals, pos: vec3, groundY:
     }
 }
 
-export function dComIfGd_setShadow(globals: dGlobals, id: number, shouldFade: boolean, model: J3DModelInstance, pos: vec3, casterSize: number, scaleXZ: number,
-    y: number, groundY: number, pFloorPoly: cBgS_PolyInfo, pTevStr: dKy_tevstr_c, rotY = 0.0, scaleZ = 1.0, pTexObj: BTIData | null = globals.dlst.shadowControl.defaultSimpleTex
+export function dComIfGd_setShadow(globals: dGlobals, id: number, shouldFade: boolean, model: J3DModelInstance, casterCenter: vec3, casterSize: number, scaleXZ: number,
+    casterY: number, groundY: number, pFloorPoly: cBgS_PolyInfo, pTevStr: dKy_tevstr_c, rotY = 0.0, scaleZ = 1.0, pTexObj: BTIData | null = globals.dlst.shadowControl.defaultSimpleTex
 ): number {
     assert(vec3.sqrLen(pTevStr.lightObj.Position) > 0, "Invalid light position in tevStr. Make sure to call settingTevStruct() before calling setShadow()");
     if (groundY <= -Infinity) {
         return 0;
     }
 
-    const sid = globals.dlst.shadowControl.setReal2(id, shouldFade ? 1 : 0, model, pos, casterSize, y - groundY, pTevStr);
+    const sid = globals.dlst.shadowControl.setReal2(id, shouldFade ? 1 : 0, model, casterCenter, casterSize, casterY - groundY, pTevStr);
     if (sid === 0) {
-        const simplePos: vec3 = [pos[0], y, pos[2]];
+        const simplePos: vec3 = [casterCenter[0], casterY, casterCenter[2]];
         dComIfGd_setSimpleShadow2(globals, simplePos, groundY, scaleXZ, pFloorPoly, rotY, scaleZ, pTexObj);
     }
     return sid;
