@@ -534,10 +534,10 @@ class dDlst_shadowReal_c {
         let opacity = Math.min(1.0, 1.0 - heightFade);
         let alpha = Math.floor(200.0 * opacity);
 
-        // noclip modification: casterSize values for most actors are way too large, and result in poor shadowmap fitting. This change results 
-        // in higher effective resolution for most shadows, but still keeps the linear-shadowmap-sample look while looking better at modern resolutions.
-        // NOTE: If casterSize is too small, the shadow will be clipped. Modify the casterSize passed to dComIfGd_setShadow() in that case.
-        casterSize *= 0.5;
+        // NOTE(mikelester): The game uses the same values for casterSize and center Y offset for almost all actors (800 and 150).
+        //       This results in poor shadowmap fitting, however it does keep the shadow detail consistent across actors.
+        //       I think this was a conscious design choice, so I'm going to leave it. We're judging the shadows at a much
+        //       higher resolution than the original hardware, so if an actor looks particularly bad we can tweak its casterSize and y offset. 
 
         // Calculate light vector
         const lightVec = scratchVec3a;
