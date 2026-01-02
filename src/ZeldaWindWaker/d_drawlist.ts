@@ -463,7 +463,7 @@ class dDlst_shadowReal_c {
         const renderInst = renderInstManager.newRenderInst();
         let offset = renderInst.allocateUniformBuffer(0, 4 + 16 * 2 + 20);
         const buf = renderInst.mapUniformBufferF32(0);
-        offset += fillVec4(buf, offset, viewerInput.backbufferWidth, viewerInput.backbufferHeight, 0.0);
+        offset += fillVec4(buf, offset, viewerInput.backbufferWidth, viewerInput.backbufferHeight, 0.1);
         offset += fillMatrix4x4(buf, offset, mat4.mul(scratchMat4, globals.camera.clipFromWorldMatrix, this.receiverProjMtx));
         offset += fillMatrix4x4(buf, offset, mat4.invert(scratchMat4, scratchMat4));
         offset += fillFogBlock(buf, offset, materialParams.u_FogBlock);
@@ -632,6 +632,7 @@ class dDlst_shadowControl_c_Cache {
     public positionBuffer: GfxBuffer;
     public indexBuffer: GfxBuffer;
     public pointSampler: GfxSampler;
+    public linearSampler: GfxSampler;
 
     public defaultSimpleTex: BTIData;
     public whiteTex: BTIData;
@@ -694,6 +695,15 @@ class dDlst_shadowControl_c_Cache {
             wrapT: GfxWrapMode.Clamp,
             minFilter: GfxTexFilterMode.Point,
             magFilter: GfxTexFilterMode.Point,
+            mipFilter: GfxMipFilterMode.Nearest,
+            minLOD: 0, maxLOD: 0,
+        });
+
+        this.linearSampler = cache.createSampler({
+            wrapS: GfxWrapMode.Clamp,
+            wrapT: GfxWrapMode.Clamp,
+            minFilter: GfxTexFilterMode.Bilinear,
+            magFilter: GfxTexFilterMode.Bilinear,
             mipFilter: GfxMipFilterMode.Nearest,
             minLOD: 0, maxLOD: 0,
         });
@@ -882,7 +892,7 @@ class dDlst_shadowControl_c {
                 const shadowmap = scope.getResolveTextureForID(shadowmapResolveTextureID);
                 const depthTex = scope.getResolveTextureForID(mainDepthResolveTextureID);
                 this.realInstList.resolveLateSamplerBinding('depth-target', { gfxTexture: depthTex, gfxSampler: this.cache.pointSampler, lateBinding: null });
-                this.realInstList.resolveLateSamplerBinding('shadowmap-target', { gfxTexture: shadowmap, gfxSampler: this.cache.pointSampler, lateBinding: null });
+                this.realInstList.resolveLateSamplerBinding('shadowmap-target', { gfxTexture: shadowmap, gfxSampler: this.cache.linearSampler, lateBinding: null });
                 this.realInstList.drawOnPassRenderer(renderInstManager.gfxRenderCache, passRenderer);
             });
         });
