@@ -440,6 +440,9 @@ class dDlst_shadowReal_c {
     }
 
     public imageDraw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        if (this.state !== 1)
+            return;
+        
         const template = renderInstManager.pushTemplate();
         mat4.copy(sceneParams.u_Projection, this.lightProjMtx);
         const d = template.allocateUniformBufferF32(GX_Program.ub_SceneParams, ub_SceneParamsBufferSize);
