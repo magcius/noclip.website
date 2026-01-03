@@ -2,13 +2,13 @@ import * as Viewer from '../viewer.js';
 import { GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxDevice, GfxIndexBufferDescriptor, GfxInputLayout, GfxProgram, GfxVertexBufferDescriptor } from '../gfx/platform/GfxPlatform.js';
 import { SceneContext } from '../SceneBase.js';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
-import { GfxRenderInst, GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
+import { GfxRenderInst, GfxRenderInstList, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
 import { rust } from '../rustlib.js';
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import * as GX from '../gx/gx_enum.js';
 import * as GXTexture from '../gx/gx_texture.js';
 import { DataFetcher, NamedArrayBufferSlice } from '../DataFetcher.js';
-import { createInputLayout, GXTextureHolder } from '../gx/gx_render.js';
+import { createInputLayout, DrawParams, fillSceneParamsData, fillSceneParamsDataOnTemplate, GXMaterialHelperGfx, GXRenderHelperGfx, GXTextureHolder, MaterialParams } from '../gx/gx_render.js';
 import { hexdump } from '../DebugJunk.js';
 import { CTFileLoc, CTFileStore, CTShape } from '../../rust/pkg/noclip_support.js';
 import { compileVtxLoaderMultiVat, getAttributeByteSize, GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, LoadedVertexDraw, LoadedVertexLayout, VtxLoader } from '../gx/gx_displaylist.js';
@@ -17,6 +17,8 @@ import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 import { assert } from '../util.js';
+import { GXMaterialBuilder } from '../gx/GXMaterialBuilder.js';
+import { mat4 } from 'gl-matrix';
 
 interface GX {
     vat: GX_VtxAttrFmt[][];
@@ -51,14 +53,18 @@ interface Shape {
     textures: string[],
 }
 
+const materialParams = new MaterialParams();
+const drawParams = new DrawParams();
+
 class ShapeRenderer {
     public vertexBufferDescriptors: GfxVertexBufferDescriptor[] = [];
     public indexBufferDescriptors: GfxIndexBufferDescriptor[] = [];
     public inputLayout: GfxInputLayout;
     private vertexBuffers: GfxBuffer[] = [];
     private indexBuffers: GfxBuffer[] = [];
+    private materialHelper: GXMaterialHelperGfx;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, public loadedVertexLayout: LoadedVertexLayout, public loadedVertexData: LoadedVertexData[]) {
+    constructor(device: GfxDevice, private cache: GfxRenderCache, public loadedVertexLayout: LoadedVertexLayout, public loadedVertexData: LoadedVertexData[]) {
         for (const data of this.loadedVertexData) {
             for (let i = 0; i < data.vertexBuffers.length; i++) {
                 const vertexBuffer = createBufferFromData(device, GfxBufferUsage.Vertex,
@@ -74,12 +80,27 @@ class ShapeRenderer {
         }
 
         this.inputLayout = createInputLayout(cache, loadedVertexLayout);
+
+        const mb = new GXMaterialBuilder();
+        mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.VTX, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0);
+        mb.setTevColorIn(0, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.RASC);
+        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, false, GX.Register.PREV);
+        mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.RASA);
+        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, false, GX.Register.PREV);
+        this.materialHelper = new GXMaterialHelperGfx(mb.finish());
     }
 
-    public setOnRenderInst(renderInst: GfxRenderInst): void {
+    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         for (let i = 0; i < this.indexBuffers.length; i++) {
+            const renderInst = renderInstManager.newRenderInst();
+            this.materialHelper.setOnRenderInst(this.cache, renderInst);
+            mat4.copy(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
+            this.materialHelper.allocateDrawParamsDataOnInst(renderInst, drawParams);
+            this.materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
             renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptors[i]);
             renderInst.setDrawCount(this.loadedVertexData[i].totalIndexCount);
+            renderInstManager.submitRenderInst(renderInst);
         }
     }
 
@@ -93,21 +114,20 @@ class ShapeRenderer {
 }
 
 export class Scene implements Viewer.SceneGfx {
-    private inputLayout: GfxInputLayout;
-    private program: GfxProgram;
     private gx: GX;
-    private renderHelper: GfxRenderHelper;
+    private renderHelper: GXRenderHelperGfx;
     private renderInstListMain = new GfxRenderInstList();
     public textureHolder = new GXTextureHolder();
 
     private shapes: ShapeRenderer[] = [];
 
     constructor(device: GfxDevice, private manager: FileManager) {
-        this.renderHelper = new GfxRenderHelper(device);
+        this.renderHelper = new GXRenderHelperGfx(device);
         this.gx = createVtxLoader();
         const shapeNames = [
             "ANIME_FUNSUI_001.shp",
         ];
+
         for (const name of shapeNames) {
             const shape = this.manager.createShape(name, this.gx);
             console.log(shape.vertexData);
@@ -118,11 +138,18 @@ export class Scene implements Viewer.SceneGfx {
 
     private prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
         const renderInstManager = this.renderHelper.renderInstManager;
+        renderInstManager.setCurrentList(this.renderInstListMain);
+
         const template = this.renderHelper.pushTemplateRenderInst();
 
-        for (const shape of this.shapes) {
-            shape.setOnRenderInst(template);
-        }
+        fillSceneParamsDataOnTemplate(template, viewerInput);
+
+        for (const shape of this.shapes)
+            shape.prepareToRender(renderInstManager, viewerInput);
+
+        renderInstManager.popTemplate();
+
+        this.renderHelper.prepareToRender();
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
