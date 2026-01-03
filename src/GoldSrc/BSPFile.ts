@@ -295,7 +295,10 @@ export class BSPFile {
                 pageIndex: 0, pagePosX: 0, pagePosY: 0,
                 styles, samples,
             };
-            assert(this.lightmapPackerPage.allocate(lightmapData));
+
+            // If there's no samples, there's no need to store anything in the lightmap.
+            if (lightmapData.samples !== null)
+                assert(this.lightmapPackerPage.allocate(lightmapData));
 
             // Fill in UV
             for (let j = 0; j < numedges; j++) {
@@ -310,15 +313,15 @@ export class BSPFile {
                 vertexData[offs++] = lightmapData.pagePosY + lightmapCoordT;
             }
 
-            const indexCount = getTriangleIndexCountForTopologyIndexCount(GfxTopology.TriFans, numedges);
-            convertToTrianglesRange(indexData, dstOffsIndex, GfxTopology.TriFans, dstIndexBase, numedges);
-
             let surface = mergeSurface;
 
             if (surface === null) {
                 surface = { texName: face.texName, startIndex: dstOffsIndex, indexCount: 0, lightmapData: [] };
                 this.surfaces.push(surface);
             }
+
+            const indexCount = getTriangleIndexCountForTopologyIndexCount(GfxTopology.TriFans, numedges);
+            convertToTrianglesRange(indexData, dstOffsIndex, GfxTopology.TriFans, dstIndexBase, numedges);
 
             const surfaceIndex = this.surfaces.length - 1;
 

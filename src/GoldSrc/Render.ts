@@ -19,6 +19,7 @@ import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
 import { LightmapPackerPage } from "../SourceEngine/BSPFile.js";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
 import { createBufferFromData } from "../gfx/helpers/BufferHelpers.js";
+import { TextureListHolder } from "../ui.js";
 
 function getMipTexName(buffer: ArrayBufferSlice): string {
     return readString(buffer, 0x00, 0x10, true);
@@ -54,6 +55,7 @@ export class MIPTEXData {
         const surfaces: HTMLCanvasElement[] = [];
 
         this.gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, this.width, this.height, numLevels));
+        device.setResourceName(this.gfxTexture, this.name);
         let mipW = this.width, mipH = this.height;
         for (let i = 0; i < numLevels; i++) {
             const mipData = new Uint8Array(mipW * mipH * 4);
@@ -101,11 +103,20 @@ interface TextureCacheData {
     data: ArrayBufferSlice;
 }
 
-export class TextureCache {
+export class TextureCache implements TextureListHolder {
     public mipTex: MIPTEXData[] = [];
     public data: TextureCacheData[] = [];
+    public onnewtextures: (() => void) | null = null;
 
     constructor(public cache: GfxRenderCache) {
+    }
+
+    public get textureNames(): string[] {
+        return this.mipTex.map((tex) => tex.name);
+    }
+
+    public async getViewerTexture(i: number): Promise<Texture> {
+        return this.mipTex[i].viewerTexture;
     }
 
     public addWAD(wad: WAD): void {
@@ -183,9 +194,14 @@ void main() {
         discard;
 
     vec2 t_TexCoordLightmap = v_TexCoord.zw / vec2(textureSize(TEXTURE(u_TextureLightmap), 0));
-    vec4 t_LightmapSample = texture(SAMPLER_2D(u_TextureLightmap), t_TexCoordLightmap.xy);
+    vec4 t_Color = t_DiffuseSample;
 
-    gl_FragColor = t_DiffuseSample.rgba * t_LightmapSample.rgba;
+#if defined USE_LIGHTMAP
+    vec4 t_LightmapSample = texture(SAMPLER_2D(u_TextureLightmap), t_TexCoordLightmap.xy);
+    t_Color *= t_LightmapSample;
+#endif
+
+    gl_FragColor = t_Color;
 }
 `;
 }
@@ -193,25 +209,34 @@ void main() {
 class BSPSurfaceRenderer {
     private textureMapping = nArray(2, () => new TextureMapping());
     private visible = true;
+    private gfxProgram: GfxProgram;
+    private sky = false;
 
-    constructor(textureCache: TextureCache, private surface: Surface) {
+    constructor(cache: GfxRenderCache, textureCache: TextureCache, private surface: Surface) {
         const miptex = textureCache.findMipTex(this.surface.texName);
         this.textureMapping[0].gfxTexture = miptex.gfxTexture;
 
         if (this.surface.texName.startsWith('sky'))
-            this.visible = false;
+            this.sky = true;
+
+        const program = new GoldSrcProgram();
+        program.setDefineBool('USE_LIGHTMAP', !this.sky);
+        this.gfxProgram = cache.createProgram(program);
     }
 
-    public prepareToRender(renderInstManager: GfxRenderInstManager, lightmapManager: LightmapManager): void {
+    public prepareToRender(renderInstManager: GfxRenderInstManager, lightmapManager: LightmapManager, view: View): void {
         if (!this.visible)
             return;
 
         this.textureMapping[1].gfxTexture = lightmapManager.gfxTexture;
 
         const renderInst = renderInstManager.newRenderInst();
+        renderInst.setGfxProgram(this.gfxProgram);
         renderInst.setDrawCount(this.surface.indexCount, this.surface.startIndex);
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
-        renderInstManager.submitRenderInst(renderInst);
+
+        const list = this.sky ? view.skyList : view.mainList;
+        list.submitRenderInst(renderInst);
     }
 }
 
@@ -234,6 +259,9 @@ class View {
     // aka projectionMatrix
     public clipFromViewMatrix = mat4.create();
 
+    public mainList = new GfxRenderInstList();
+    public skyList = new GfxRenderInstList();
+
     public finishSetup(): void {
         mat4.invert(this.worldFromViewMatrix, this.viewFromWorldMatrix);
         mat4.mul(this.clipFromWorldMatrix, this.clipFromViewMatrix, this.viewFromWorldMatrix);
@@ -243,6 +271,11 @@ class View {
         mat4.mul(this.viewFromWorldMatrix, camera.viewMatrix, noclipSpaceFromSourceEngineSpace);
         mat4.copy(this.clipFromViewMatrix, camera.projectionMatrix);
         this.finishSetup();
+    }
+
+    public reset(): void {
+        this.mainList.reset();
+        this.skyList.reset();
     }
 }
 
@@ -307,9 +340,6 @@ export class BSPRenderer {
 
     private lightmapManager: LightmapManager;
 
-    private gfxProgram: GfxProgram;
-    private mainView = new View();
-
     constructor(cache: GfxRenderCache, textureCache: TextureCache, private bsp: BSPFile) {
         const device = cache.device;
 
@@ -333,37 +363,31 @@ export class BSPRenderer {
 
         this.lightmapManager = new LightmapManager(device, this.bsp.lightmapPackerPage);
 
-        const program = new GoldSrcProgram();
-        this.gfxProgram = cache.createProgram(program);
-
         // TODO(jstpierre): Other models.
         const model = this.bsp.models[0]!;
         for (let i = 0; i < model.surfaces.length; i++) {
             const surface = this.bsp.surfaces[model.surfaces[i]];
-            this.surfaceRenderers.push(new BSPSurfaceRenderer(textureCache, surface));
+            this.surfaceRenderers.push(new BSPSurfaceRenderer(cache, textureCache, surface));
 
             for (let j = 0; j < surface.lightmapData.length; j++)
                 this.lightmapManager.addSurface(surface.lightmapData[j]);
         }
     }
 
-    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    public prepareToRender(renderInstManager: GfxRenderInstManager, view: View): void {
         this.lightmapManager.prepareToRender(renderInstManager.gfxRenderCache.device);
 
         const template = renderInstManager.pushTemplate();
-        template.setGfxProgram(this.gfxProgram);
         template.setBindingLayouts([{ numSamplers: 2, numUniformBuffers: 1 }]);
         template.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor);
         template.setMegaStateFlags({ cullMode: GfxCullMode.Back, frontFace: GfxFrontFaceMode.CW });
 
-        this.mainView.setupFromCamera(viewerInput.camera);
-
         let offs = template.allocateUniformBuffer(GoldSrcProgram.ub_SceneParams, 16);
         const d = template.mapUniformBufferF32(GoldSrcProgram.ub_SceneParams);
-        offs += fillMatrix4x4(d, offs, this.mainView.clipFromWorldMatrix);
+        offs += fillMatrix4x4(d, offs, view.clipFromWorldMatrix);
 
         for (let i = 0; i < this.surfaceRenderers.length; i++)
-            this.surfaceRenderers[i].prepareToRender(renderInstManager, this.lightmapManager);
+            this.surfaceRenderers[i].prepareToRender(renderInstManager, this.lightmapManager, view);
 
         renderInstManager.popTemplate();
     }
@@ -377,13 +401,16 @@ export class BSPRenderer {
 
 export class GoldSrcRenderer implements SceneGfx {
     public textureCache: TextureCache;
+    public textureHolder: TextureCache;
     public bspRenderers: BSPRenderer[] = [];
     public renderHelper: GfxRenderHelper;
-    private renderInstListMain = new GfxRenderInstList();
+
+    public mainView = new View();
 
     constructor(device: GfxDevice) {
         this.renderHelper = new GfxRenderHelper(device);
         this.textureCache = new TextureCache(this.renderHelper.renderCache);
+        this.textureHolder = this.textureCache;
     }
 
     public adjustCameraController(c: CameraController): void {
@@ -391,12 +418,12 @@ export class GoldSrcRenderer implements SceneGfx {
     } 
 
     private prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        this.mainView.setupFromCamera(viewerInput.camera);
+
         this.renderHelper.pushTemplateRenderInst();
 
-        this.renderHelper.renderInstManager.setCurrentList(this.renderInstListMain);
-
         for (let i = 0; i < this.bspRenderers.length; i++)
-            this.bspRenderers[i].prepareToRender(renderInstManager, viewerInput);
+            this.bspRenderers[i].prepareToRender(renderInstManager, this.mainView);
 
         renderInstManager.popTemplate();
         this.renderHelper.prepareToRender();
@@ -410,13 +437,22 @@ export class GoldSrcRenderer implements SceneGfx {
         const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, standardFullClearRenderPassDescriptor);
 
         const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
+        builder.pushPass((pass) => {
+            pass.setDebugName('Skybox');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            const skyboxDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Skybox Depth');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, skyboxDepthTargetID);
+            pass.exec((passRenderer) => {
+                this.mainView.skyList.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
+            });
+        });
         const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
         builder.pushPass((pass) => {
             pass.setDebugName('Main');
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
+                this.mainView.mainList.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
         this.renderHelper.antialiasingSupport.pushPasses(builder, viewerInput, mainColorTargetID);
@@ -424,7 +460,7 @@ export class GoldSrcRenderer implements SceneGfx {
 
         this.prepareToRender(renderInstManager, viewerInput);
         this.renderHelper.renderGraph.execute(builder);
-        this.renderInstListMain.reset();
+        this.mainView.reset();
     }
 
     public destroy(device: GfxDevice): void {
