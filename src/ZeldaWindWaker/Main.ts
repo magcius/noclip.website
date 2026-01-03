@@ -337,6 +337,14 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         };
         renderHacksPanel.contents.appendChild(enableObjects.elem);
 
+        const showDebugThumbnails = new UI.Checkbox('Show Debug Thumbnails', true);
+        this.renderHelper.debugThumbnails.enabled = true;
+        showDebugThumbnails.onchanged = () => {
+            const v = showDebugThumbnails.checked;
+            this.renderHelper.debugThumbnails.enabled = v;
+        };
+        renderHacksPanel.contents.appendChild(showDebugThumbnails.elem);
+
         if (this.renderHelper.device.queryLimits().wireframeSupported) {
             const wireframe = new UI.Checkbox('Wireframe', false);
             wireframe.onchanged = () => {
@@ -493,6 +501,8 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         const dlst = this.globals.dlst;
         dlst.peekZ.beginFrame(device);
 
+        this.renderHelper.debugDraw.beginFrame(viewerInput.camera.projectionMatrix, viewerInput.camera.viewMatrix, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+
         // From mDoGph_Painter,
         this.globals.scnPlay.currentGrafPort.setOrtho(-9.0, -21.0, 650.0, 503.0, 100000.0, -100000.0);
         this.globals.scnPlay.currentGrafPort.setPort(viewerInput.backbufferWidth, viewerInput.backbufferHeight);
@@ -579,7 +589,11 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
                 this.executeList(passRenderer, dlst.effect[EffectDrawGroup.Indirect]);
             });
         });
+
+        this.renderHelper.debugDraw.pushPasses(builder, mainColorTargetID, mainDepthTargetID);
+        this.renderHelper.debugThumbnails.pushPasses(builder, renderInstManager, mainColorTargetID, viewerInput.mouseLocation);
         this.renderHelper.antialiasingSupport.pushPasses(builder, viewerInput, mainColorTargetID);
+
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.renderHelper.prepareToRender();
