@@ -617,8 +617,8 @@ class dDlst_shadowReal_c {
 
         // Cull the shadow receiver volume. If culled for two frames, this id will be freed.
         scratchAABB.set(-1, -1, -1, 1, 1, 1);
-        scratchAABB.transform(scratchAABB, this.modelMtx);
-        if (globals.camera.frustum.contains(scratchAABB))
+        scratchAABB.transform(scratchAABB, worldFromVolume);
+        if (!globals.camera.frustum.contains(scratchAABB))
             return 0.0;
 
         return alpha;
