@@ -459,6 +459,7 @@ class dDlst_shadowReal_c {
             model.setVertexColorsEnabled(false);
             model.setLightingEnabled(false);
             model.setTexturesEnabled(false);
+            model.setColorOverride(ColorKind.K0, White);
 
             model.drawOpa(renderInstManager, this.lightProjMtx);
             model.drawXlu(renderInstManager, this.lightProjMtx);
@@ -466,6 +467,7 @@ class dDlst_shadowReal_c {
             model.setVertexColorsEnabled(globals.renderHacks.vertexColorsEnabled);
             model.setLightingEnabled(true);
             model.setTexturesEnabled(globals.renderHacks.texturesEnabled);
+            model.setColorOverride(ColorKind.K0, null);
         }
         renderInstManager.popTemplate();
     }
