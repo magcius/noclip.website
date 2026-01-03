@@ -1,7 +1,7 @@
 
-import { mat4, vec2, vec3 } from "gl-matrix";
+import { mat4, ReadonlyVec3, vec2, vec3 } from "gl-matrix";
 import { OpaqueBlack, White, colorCopy, colorNewCopy } from "../Color.js";
-import { getMatrixAxisZ, projectionMatrixForCuboid, saturate, Vec3UnitZ } from '../MathHelpers.js';
+import { getMatrixAxisZ, projectionMatrixForCuboid, saturate, Vec3UnitY, Vec3UnitZ } from '../MathHelpers.js';
 import { TSDraw } from "../SuperMarioGalaxy/DDraw.js";
 import { createBufferFromData } from "../gfx/helpers/BufferHelpers.js";
 import { projectionMatrixConvertClipSpaceNearZ } from '../gfx/helpers/ProjectionHelpers.js';
@@ -561,12 +561,12 @@ class dDlst_shadowReal_c {
         renderInstManager.submitRenderInst(renderInst);
     }
 
-    public set(shouldFade: number, model: J3DModelInstance, pos: vec3, casterSize: number, heightAboveGround: number, tevStr: dKy_tevstr_c): number {
+    public set(shouldFade: number, model: J3DModelInstance, pos: ReadonlyVec3, casterSize: number, heightAboveGround: number, tevStr: dKy_tevstr_c): number {
         // TODO: Implement set logic
         return this.id;
     }
 
-    public set2(globals: dGlobals, shouldFade: number, model: J3DModelInstance, casterCenter: vec3, casterSize: number, heightAboveGround: number, tevStr: dKy_tevstr_c): number {
+    public set2(globals: dGlobals, shouldFade: number, model: J3DModelInstance, casterCenter: ReadonlyVec3, casterSize: number, heightAboveGround: number, tevStr: dKy_tevstr_c): number {
         if (this.models.length === 0) {
             assertExists(tevStr); // The game allows passing a null tevStr (uses player's light pos), we do not.
             const lightPos = tevStr.lightObj.Position;
@@ -594,7 +594,7 @@ class dDlst_shadowReal_c {
         return true;
     }
 
-    private setShadowRealMtx(globals: dGlobals, lightViewMtx: mat4, lightProjMtx: mat4, lightPos: vec3, casterCenter: vec3,
+    private setShadowRealMtx(globals: dGlobals, lightViewMtx: mat4, lightProjMtx: mat4, lightPos: ReadonlyVec3, casterCenter: ReadonlyVec3,
         casterSize: number, heightAboveGround: number, heightFade: number): number {
         if (heightFade >= 1.0) {
             return 0;
@@ -653,7 +653,7 @@ class dDlst_shadowReal_c {
         // }
 
         // Build view matrix (lookAt)
-        mat4.lookAt(lightViewMtx, lightVec, casterCenter, [0, 1, 0]);
+        mat4.lookAt(lightViewMtx, lightVec, casterCenter, Vec3UnitY);
         projectionMatrixForCuboid(lightProjMtx, -casterRadius, casterRadius, -casterRadius, casterRadius, 1.0, 10000.0);
         projectionMatrixConvertClipSpaceNearZ(lightProjMtx, globals.camera.clipSpaceNearZ, GfxClipSpaceNearZ.NegativeOne);
 
@@ -704,7 +704,7 @@ class dDlst_shadowSimple_c {
         renderInstManager.submitRenderInst(renderInst);
     }
 
-    public set(pos: vec3, floorY: number, scaleXZ: number, floorNrm: vec3, rotY: number, scaleZ: number, tex: BTIData): void {
+    public set(pos: ReadonlyVec3, floorY: number, scaleXZ: number, floorNrm: ReadonlyVec3, rotY: number, scaleZ: number, tex: BTIData): void {
         const offsetY = scaleXZ * 16.0 * (1.0 - floorNrm[1]) + 1.0;
 
         // Build the matrix which will transform a [-1, 1] cube into our shadow volume oriented to the floor plane (floor normal becomes Z+).
@@ -1021,12 +1021,12 @@ class dDlst_shadowControl_c {
         builder.pushDebugThumbnail(shadowmapDownColorTargetID);
     }
 
-    public setReal(id: number, shouldFade: number, model: J3DModelInstance, pos: vec3, casterSize: number, heightAboveGround: number, tevStr: dKy_tevstr_c): number {
+    public setReal(id: number, shouldFade: number, model: J3DModelInstance, pos: ReadonlyVec3, casterSize: number, heightAboveGround: number, tevStr: dKy_tevstr_c): number {
         let real = this.getOrAllocate(id);
         return real ? real.set(shouldFade, model, pos, casterSize, heightAboveGround, tevStr) : 0;
     }
 
-    public setReal2(globals: dGlobals, id: number, shouldFade: number, model: J3DModelInstance, casterCenter: vec3, casterSize: number, heightAboveGround: number, tevStr: dKy_tevstr_c): number {
+    public setReal2(globals: dGlobals, id: number, shouldFade: number, model: J3DModelInstance, casterCenter: ReadonlyVec3, casterSize: number, heightAboveGround: number, tevStr: dKy_tevstr_c): number {
         let real = this.getOrAllocate(id);
         return real ? real.set2(globals, shouldFade, model, casterCenter, casterSize, heightAboveGround, tevStr) : 0;
     }
@@ -1039,7 +1039,7 @@ class dDlst_shadowControl_c {
         return false;
     }
 
-    public setSimple(globals: dGlobals, pos: vec3, groundY: number, scaleXZ: number, floorNrm: vec3, angle: number, scaleZ: number, tex: BTIData | null): boolean {
+    public setSimple(globals: dGlobals, pos: ReadonlyVec3, groundY: number, scaleXZ: number, floorNrm: ReadonlyVec3, angle: number, scaleZ: number, tex: BTIData | null): boolean {
         if (floorNrm === null || this.simpleCount >= this.simples.length)
             return false;
 
@@ -1062,7 +1062,7 @@ class dDlst_shadowControl_c {
     }
 }
 
-export function dComIfGd_setSimpleShadow2(globals: dGlobals, pos: vec3, groundY: number, scaleXZ: number, floorPoly: cBgS_PolyInfo,
+export function dComIfGd_setSimpleShadow2(globals: dGlobals, pos: ReadonlyVec3, groundY: number, scaleXZ: number, floorPoly: cBgS_PolyInfo,
     rotY: number = 0, scaleZ: number = 1.0, tex: BTIData | null = globals.dlst.shadowControl.defaultSimpleTex): boolean {
     if (floorPoly.ChkSetInfo() && groundY !== -Infinity) {
         const plane_p = globals.scnPlay.bgS.GetTriPla(floorPoly.bgIdx, floorPoly.triIdx);
@@ -1072,7 +1072,7 @@ export function dComIfGd_setSimpleShadow2(globals: dGlobals, pos: vec3, groundY:
     }
 }
 
-export function dComIfGd_setShadow(globals: dGlobals, id: number, shouldFade: boolean, model: J3DModelInstance, casterCenter: vec3, casterSize: number, scaleXZ: number,
+export function dComIfGd_setShadow(globals: dGlobals, id: number, shouldFade: boolean, model: J3DModelInstance, casterCenter: ReadonlyVec3, casterSize: number, scaleXZ: number,
     casterY: number, groundY: number, pFloorPoly: cBgS_PolyInfo, pTevStr: dKy_tevstr_c, rotY = 0.0, scaleZ = 1.0, pTexObj: BTIData | null = globals.dlst.shadowControl.defaultSimpleTex
 ): number {
     assert(vec3.sqrLen(pTevStr.lightObj.Position) > 0, "Invalid light position in tevStr. Make sure to call settingTevStruct() before calling setShadow()");
