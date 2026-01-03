@@ -19,14 +19,14 @@ import { SymbolMap, dGlobals } from './Main.js';
 import { PeekZManager } from "./d_dlst_peekZ.js";
 import { cBgS_PolyInfo } from "./d_bg.js";
 import { BTI_Texture, BTIData } from "../Common/JSYSTEM/JUTTexture.js";
-import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
+import { J3DModelInstance, prepareShapeMtxGroup } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
 import { dKy_GxFog_set, dKy_tevstr_c } from "./d_kankyo.js";
 import { cM_s2rad } from "./SComponent.js";
 import { dRes_control_c, ResType } from "./d_resorce.js";
 import { DeviceProgram } from "../Program.js";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
 import { fullscreenMegaState, setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
-import { fillMatrix4x4, fillVec4 } from "../gfx/helpers/UniformBufferHelpers.js";
+import { fillMatrix4x3, fillMatrix4x4, fillVec4 } from "../gfx/helpers/UniformBufferHelpers.js";
 import { preprocessProgramObj_GLSL } from "../gfx/shaderc/GfxShaderCompiler.js";
 import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription, GfxrRenderTargetID } from "../gfx/render/GfxRenderGraph.js";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
@@ -414,6 +414,34 @@ function getAtlasDimensions(count: number): [number, number] {
     return [dimMax, dimMin];
 }
 
+/** 
+ * Draw a J3DModelInstance without setting any materials. Culling is skipped. 
+ * materialParams and sceneParams must be set up prior to calling this function.
+ * TODO (mikelester): Find a home for this
+ */
+function drawSimpleModelInstance(renderInstManager: GfxRenderInstManager, model: J3DModelInstance, viewFromWorldMatrix: mat4): void {
+    // Update joint matrices into shapeInstanceState.drawViewMatrixArray
+    model.calcView(viewFromWorldMatrix, null);
+
+    const shapeData = model.modelData.shapeData;
+    for (let s = 0; s < shapeData.length; s++) {
+        const shape = shapeData[s];
+        for (let i = 0; i < shape.shape.mtxGroups.length; i++) {
+            const renderInst = renderInstManager.newRenderInst();
+            shape.setOnRenderInst(renderInst, shape.draws[i]);
+
+            // Copy the correct subset of drawViewMatrixArray into DrawParams
+            prepareShapeMtxGroup(drawParams, model.shapeInstanceState, shape.shape, shape.shape.mtxGroups[i]);
+            let offs = renderInst.allocateUniformBuffer(GX_Program.ub_DrawParams, 4*3 * 10);
+            const d = renderInst.mapUniformBufferF32(GX_Program.ub_DrawParams);
+            for (let i = 0; i < 10; i++)
+                offs += fillMatrix4x3(d, offs, drawParams.u_PosMtx[i]);
+
+            renderInstManager.submitRenderInst(renderInst);
+        }
+    }
+}
+
 class dDlst_shadowReal_c {
     public state = 0; // 0: unallocated, 1: ready, 2: pendingDelete
     public id: number = 0;
@@ -442,33 +470,16 @@ class dDlst_shadowReal_c {
     public imageDraw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         if (this.state !== 1)
             return;
-        
+
         const template = renderInstManager.pushTemplate();
         mat4.copy(sceneParams.u_Projection, this.lightProjMtx);
         const d = template.allocateUniformBufferF32(GX_Program.ub_SceneParams, ub_SceneParamsBufferSize);
         fillSceneParamsData(d, 0, sceneParams);
-        for (let i = 0; i < this.models.length; i++) {
-            const model = this.models[i];
-            model.shapeInstances
-            model.calcView(this.lightViewMtx, null);
 
-            if (!model.isAnyShapeVisible())
-                return;
-
-            // Ensure model always draws a non-black color to the buffer (Depth is harder to debug and downsample)
-            model.setVertexColorsEnabled(false);
-            model.setLightingEnabled(false);
-            model.setTexturesEnabled(false);
-            model.setColorOverride(ColorKind.K0, White);
-
-            model.drawOpa(renderInstManager, this.lightProjMtx);
-            model.drawXlu(renderInstManager, this.lightProjMtx);
-
-            model.setVertexColorsEnabled(globals.renderHacks.vertexColorsEnabled);
-            model.setLightingEnabled(true);
-            model.setTexturesEnabled(globals.renderHacks.texturesEnabled);
-            model.setColorOverride(ColorKind.K0, null);
+        for (let m = 0; m < this.models.length; m++) {
+            drawSimpleModelInstance(renderInstManager, this.models[m], this.lightViewMtx);
         }
+
         renderInstManager.popTemplate();
     }
 
@@ -684,6 +695,7 @@ class dDlst_shadowControl_c_Cache {
     public defaultSimpleTex: BTIData;
     public whiteTex: BTIData;
 
+    public shadowmapMat: GXMaterialHelperGfx;
     public shadowmapDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
     public shadowmapDepthDesc = new GfxrRenderTargetDescription(GfxFormat.D32F);
     public shadowmapDownDesc = new GfxrRenderTargetDescription(GfxFormat.U8_R_NORM);
@@ -782,6 +794,17 @@ class dDlst_shadowControl_c_Cache {
         bti.data = new ArrayBufferSlice(new Uint8Array(32).fill(0xFF).buffer);
         this.whiteTex = new BTIData(cache.device, cache, bti);
 
+
+        const mb = new GXMaterialBuilder();
+        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0);
+        mb.setTevColorIn(0, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.C0);
+        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.OR, GX.CompareType.ALWAYS, 0);
+        mb.setZMode(true, GX.CompareType.LEQUAL, true);
+        mb.setCullMode(GX.CullMode.FRONT);
+        mb.setUsePnMtxIdx(true);
+        this.shadowmapMat = new GXMaterialHelperGfx(mb.finish('ShadowVolumeDrawer Front'));
+
         this.shadowmapDesc.setDimensions(256 * shadowAtlasDim[0], 256 * shadowAtlasDim[1], 1);
         this.shadowmapDesc.clearColor = colorNewCopy(OpaqueBlack);
         this.shadowmapDepthDesc.copyDimensions(this.shadowmapDesc);
@@ -838,9 +861,14 @@ class dDlst_shadowControl_c {
     public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         // First, render our real shadow casters into the shadowmap
         renderInstManager.setCurrentList(this.realCasterInstList);
+        const shadowmapTemplate = renderInstManager.pushTemplate();
+        this.cache.shadowmapMat.setOnRenderInst(renderInstManager.gfxRenderCache, shadowmapTemplate);
+        materialParams.u_Color[ColorKind.C0] = White;
+        this.cache.shadowmapMat.allocateMaterialParamsDataOnInst(shadowmapTemplate, materialParams);
         for (let i = 0; i < this.reals.length; i++) {
             this.reals[i].imageDraw(globals, renderInstManager, viewerInput);
         }
+        renderInstManager.popTemplate();
 
         // Then, render shadow volumes for simple and real shadows. These are [-1, 1] cubes tranformed into oriented 
         // boxes bounding the shadow receivers. Simple shadows sample a predefined texture, real shadows sample the shadowmap.
