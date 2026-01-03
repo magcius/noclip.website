@@ -612,7 +612,6 @@ class dDlst_shadowReal_c {
 
         // TODO: Defer this until image draw. There, compute a bounding box in light frustum space. Manipulate the z range, and that is our tight shadow volume.
         const worldFromVolume = mat4.invert(scratchMat4, this.volumeFromWorld);
-        mat4.scale(worldFromVolume, worldFromVolume, [0.5, 0.5, 1.0]);
         mat4.mul(this.modelMtx, globals.camera.clipFromWorldMatrix, worldFromVolume);
 
         // Cull the shadow receiver volume. If culled for two frames, this id will be freed.
