@@ -1,25 +1,25 @@
 
-import { GfxDevice, GfxTexture, GfxFormat, makeTextureDescriptor2D, GfxInputLayout, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxBuffer, GfxBufferUsage, GfxProgram, GfxCullMode, GfxFrontFaceMode, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor, GfxBufferFrequencyHint } from "../gfx/platform/GfxPlatform.js";
-import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
-import { assert, assertExists, nArray, readString } from "../util.js";
-import ArrayBufferSlice from "../ArrayBufferSlice.js";
-import { convertToCanvas } from "../gfx/helpers/TextureConversionHelpers.js";
-import { SceneGfx, Texture, ViewerRenderInput } from "../viewer.js";
-import { DeviceProgram } from "../Program.js";
+import { GfxDevice, GfxTexture, GfxFormat, makeTextureDescriptor2D, GfxInputLayout, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxBuffer, GfxBufferUsage, GfxProgram, GfxCullMode, GfxFrontFaceMode, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor, GfxBufferFrequencyHint } from "../../gfx/platform/GfxPlatform.js";
+import { GfxRenderCache } from "../../gfx/render/GfxRenderCache.js";
+import { assert, assertExists, nArray, readString } from "../../util.js";
+import ArrayBufferSlice from "../../ArrayBufferSlice.js";
+import { convertToCanvas } from "../../gfx/helpers/TextureConversionHelpers.js";
+import { SceneGfx, Texture, ViewerRenderInput } from "../../viewer.js";
+import { DeviceProgram } from "../../Program.js";
 import { BSPFile, Surface, SurfaceLightmapData } from "./BSPFile.js";
-import { GfxRenderInstList, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
-import { TextureMapping } from "../TextureHolder.js";
+import { GfxRenderInstList, GfxRenderInstManager } from "../../gfx/render/GfxRenderInstManager.js";
+import { TextureMapping } from "../../TextureHolder.js";
 import { mat4 } from "gl-matrix";
-import { Camera, CameraController } from "../Camera.js";
-import { fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers.js";
-import { WAD, WADLumpType } from "./WAD.js";
-import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
-import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
-import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
-import { LightmapPackerPage } from "../SourceEngine/BSPFile.js";
-import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
-import { createBufferFromData } from "../gfx/helpers/BufferHelpers.js";
-import { TextureListHolder } from "../ui.js";
+import { Camera, CameraController } from "../../Camera.js";
+import { fillMatrix4x4 } from "../../gfx/helpers/UniformBufferHelpers.js";
+import { WAD, WAD2LumpType, WAD3LumpType } from "./WAD.js";
+import { GfxRenderHelper } from "../../gfx/render/GfxRenderHelper.js";
+import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from "../../gfx/helpers/RenderGraphHelpers.js";
+import { GfxrAttachmentSlot } from "../../gfx/render/GfxRenderGraph.js";
+import { LightmapPackerPage } from "../../SourceEngine/BSPFile.js";
+import { GfxShaderLibrary } from "../../gfx/helpers/GfxShaderLibrary.js";
+import { createBufferFromData } from "../../gfx/helpers/BufferHelpers.js";
+import { TextureListHolder } from "../../ui.js";
 
 function getMipTexName(buffer: ArrayBufferSlice): string {
     return readString(buffer, 0x00, 0x10, true);
@@ -33,7 +33,7 @@ export class MIPTEXData {
     public width: number;
     public height: number;
 
-    constructor(device: GfxDevice, buffer: ArrayBufferSlice) {
+    constructor(device: GfxDevice, buffer: ArrayBufferSlice, externalPalette: Uint8Array | null = null) {
         const view = buffer.createDataView();
         this.name = getMipTexName(buffer);
         this.width = view.getUint32(0x10, true);
@@ -45,12 +45,17 @@ export class MIPTEXData {
 
         const mipOffsets = nArray(numLevels, (i) => view.getUint32(0x18 + i * 4, true));
 
-        // Find the palette offset.
-        const palOffs = mipOffsets[3] + ((this.width * this.height) >>> 6);
-        const palSize = view.getUint16(palOffs + 0x00, true);
-        assert(palSize === 0x100);
-
-        const pal = buffer.createTypedArray(Uint8Array, palOffs + 0x02);
+        let pal: Uint8Array;
+        if (externalPalette !== null) {
+            // Quake uses a global shared palette
+            pal = externalPalette;
+        } else {
+            // Half-Life has per-texture embedded palettes
+            const palOffs = mipOffsets[3] + ((this.width * this.height) >>> 6);
+            const palSize = view.getUint16(palOffs + 0x00, true);
+            assert(palSize === 0x100);
+            pal = buffer.createTypedArray(Uint8Array, palOffs + 0x02);
+        }
 
         const surfaces: HTMLCanvasElement[] = [];
 
@@ -107,8 +112,13 @@ export class TextureCache implements TextureListHolder {
     public mipTex: MIPTEXData[] = [];
     public data: TextureCacheData[] = [];
     public onnewtextures: (() => void) | null = null;
+    public palette: Uint8Array | null = null;
 
     constructor(public cache: GfxRenderCache) {
+    }
+
+    public setPalette(palette: Uint8Array): void {
+        this.palette = palette;
     }
 
     public get textureNames(): string[] {
@@ -120,9 +130,10 @@ export class TextureCache implements TextureListHolder {
     }
 
     public addWAD(wad: WAD): void {
+        const miptexType = wad.version === 2 ? WAD2LumpType.MIPTEX : WAD3LumpType.MIPTEX;
         for (let i = 0; i < wad.lumps.length; i++) {
             const lump = wad.lumps[i];
-            if (lump.type === WADLumpType.MIPTEX) {
+            if (lump.type === miptexType) {
                 const name = getMipTexName(lump.data);
                 this.data.push({ name, type: TextureCacheType.MIPTEX, data: lump.data });
             }
@@ -141,7 +152,7 @@ export class TextureCache implements TextureListHolder {
         let mipTex = this.mipTex.find((texture) => texture.name === texName);
         if (mipTex === undefined) {
             const entry = assertExists(this.data.find((data) => data.name === texName));
-            mipTex = new MIPTEXData(this.cache.device, entry.data);
+            mipTex = new MIPTEXData(this.cache.device, entry.data, this.palette);
             this.mipTex.push(mipTex);
         }
         return mipTex;
@@ -198,7 +209,16 @@ void main() {
 
 #if defined USE_LIGHTMAP
     vec4 t_LightmapSample = texture(SAMPLER_2D(u_TextureLightmap), t_TexCoordLightmap.xy);
-    t_Color *= t_LightmapSample;
+    #if defined USE_QUAKE_ADJUSTMENTS
+        t_Color.rgb *= t_LightmapSample.rgb * 2.0;
+    #else
+        t_Color.rgb *= t_LightmapSample.rgb;
+    #endif
+#endif
+
+#if defined USE_QUAKE_ADJUSTMENTS
+    t_Color.rgb = t_Color.rgb * 1.4;  // Contrast
+    t_Color.rgb = pow(t_Color.rgb, vec3(0.9));  // Gamma
 #endif
 
     gl_FragColor = t_Color;
@@ -211,16 +231,20 @@ class BSPSurfaceRenderer {
     private visible = true;
     private gfxProgram: GfxProgram;
     private sky = false;
+    private water = false;
 
-    constructor(cache: GfxRenderCache, textureCache: TextureCache, private surface: Surface) {
+    constructor(cache: GfxRenderCache, textureCache: TextureCache, private surface: Surface, bspVersion: number) {
         const miptex = textureCache.findMipTex(this.surface.texName);
         this.textureMapping[0].gfxTexture = miptex.gfxTexture;
 
         if (this.surface.texName.startsWith('sky'))
             this.sky = true;
+        if (this.surface.texName.startsWith('*'))
+            this.water = true;
 
         const program = new GoldSrcProgram();
-        program.setDefineBool('USE_LIGHTMAP', !this.sky);
+        program.setDefineBool('USE_LIGHTMAP', !this.sky && !this.water);
+        program.setDefineBool('USE_QUAKE_ADJUSTMENTS', bspVersion === 29);
         this.gfxProgram = cache.createProgram(program);
     }
 
@@ -284,7 +308,7 @@ class LightmapManager {
     public lightmapData: SurfaceLightmapData[] = [];
     private lightmapDirty = false;
 
-    constructor(device: GfxDevice, private packerPage: LightmapPackerPage) {
+    constructor(device: GfxDevice, private packerPage: LightmapPackerPage, private bytesPerTexel: number) {
         this.gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, packerPage.width, packerPage.height, 1));
     }
 
@@ -306,15 +330,33 @@ class LightmapManager {
             if (lightmapData.samples === null)
                 continue;
 
-            // TODO(jstpierre): Add up light styles
             const src = lightmapData.samples;
-            let srcOffs = 0;
+            const numStyles = lightmapData.styles.length;
+            const styleSize = lightmapData.width * lightmapData.height * this.bytesPerTexel;
+
             for (let y = 0; y < lightmapData.height; y++) {
                 let dstOffs = (this.packerPage.width * (lightmapData.pagePosY + y) + lightmapData.pagePosX) * 4;
                 for (let x = 0; x < lightmapData.width; x++) {
-                    dst[dstOffs++] = src[srcOffs++];
-                    dst[dstOffs++] = src[srcOffs++];
-                    dst[dstOffs++] = src[srcOffs++];
+                    // Accumulate all light styles (using full brightness for static viewing)
+                    let r = 0, g = 0, b = 0;
+                    for (let style = 0; style < numStyles; style++) {
+                        const styleOffset = style * styleSize;
+                        if (this.bytesPerTexel === 1) {
+                            const pixelOffset = styleOffset + y * lightmapData.width + x;
+                            const gray = src[pixelOffset];
+                            r += gray;
+                            g += gray;
+                            b += gray;
+                        } else {
+                            const pixelOffset = styleOffset + (y * lightmapData.width + x) * 3;
+                            r += src[pixelOffset + 0];
+                            g += src[pixelOffset + 1];
+                            b += src[pixelOffset + 2];
+                        }
+                    }
+                    dst[dstOffs++] = r;
+                    dst[dstOffs++] = g;
+                    dst[dstOffs++] = b;
                     dst[dstOffs++] = 0xFF;
                 }
             }
@@ -361,13 +403,14 @@ export class BSPRenderer {
         ];
         this.indexBufferDescriptor = { buffer: this.indexBuffer };
 
-        this.lightmapManager = new LightmapManager(device, this.bsp.lightmapPackerPage);
+        const lightmapBytesPerTexel = this.bsp.version === 29 ? 1 : 3;
+        this.lightmapManager = new LightmapManager(device, this.bsp.lightmapPackerPage, lightmapBytesPerTexel);
 
         // TODO(jstpierre): Other models.
         const model = this.bsp.models[0]!;
         for (let i = 0; i < model.surfaces.length; i++) {
             const surface = this.bsp.surfaces[model.surfaces[i]];
-            this.surfaceRenderers.push(new BSPSurfaceRenderer(cache, textureCache, surface));
+            this.surfaceRenderers.push(new BSPSurfaceRenderer(cache, textureCache, surface, this.bsp.version));
 
             for (let j = 0; j < surface.lightmapData.length; j++)
                 this.lightmapManager.addSurface(surface.lightmapData[j]);
@@ -399,7 +442,7 @@ export class BSPRenderer {
     }
 }
 
-export class GoldSrcRenderer implements SceneGfx {
+export class IdTech2Renderer implements SceneGfx {
     public textureCache: TextureCache;
     public textureHolder: TextureCache;
     public bspRenderers: BSPRenderer[] = [];
@@ -415,7 +458,7 @@ export class GoldSrcRenderer implements SceneGfx {
 
     public adjustCameraController(c: CameraController): void {
         c.setSceneMoveSpeedMult(4/60);
-    } 
+    }
 
     private prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         this.mainView.setupFromCamera(viewerInput.camera);
