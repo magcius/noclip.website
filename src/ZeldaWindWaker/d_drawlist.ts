@@ -457,6 +457,7 @@ class dDlst_shadowReal_c {
     private modelMtx = mat4.create();
     private volumeFromWorld = mat4.create();
     private atlasOffset = vec2.create();
+    private heightAboveGround: number = 0;
 
     constructor(private index: number) {
         this.atlasOffset = [this.index % shadowAtlasDim[0], Math.floor(this.index / shadowAtlasDim[0])];
@@ -509,7 +510,7 @@ class dDlst_shadowReal_c {
         // Determine the near/far caps on the shadow volume based on light angle, ground slope, and height above ground.
         // TODO: Consider ground slope and height agl.
         const lightAngle = Math.atan2(lightDir[1],Math.sqrt(lightDir[0] * lightDir[0] + lightDir[2] * lightDir[2]));
-        lightAABB.min[2] = lightAABB.min[2] - 40 / Math.sin( lightAngle );
+        lightAABB.min[2] = lightAABB.min[2] - (40 + this.heightAboveGround) / Math.sin( lightAngle );
         lightAABB.max[2] = (lightAABB.max[2] + lightAABB.min[2]) * 0.5;
 
         // Generate the shadow volume geometry as an oriented box based on the light-space AABB:
@@ -539,7 +540,6 @@ class dDlst_shadowReal_c {
         if (this.state !== 1)
             return;
 
-
         const renderInst = renderInstManager.newRenderInst();
         let offset = renderInst.allocateUniformBuffer(0, 8 + 16 * 2 + 20);
         const buf = renderInst.mapUniformBufferF32(0);
@@ -555,23 +555,24 @@ class dDlst_shadowReal_c {
         renderInstManager.submitRenderInst(renderInst);
     }
 
-    public set(shouldFade: number, model: J3DModelInstance, pos: vec3, casterSize: number, heightAgl: number, tevStr: dKy_tevstr_c): number {
+    public set(shouldFade: number, model: J3DModelInstance, pos: vec3, casterSize: number, heightAboveGround: number, tevStr: dKy_tevstr_c): number {
         // TODO: Implement set logic
         return this.id;
     }
 
-    public set2(globals: dGlobals, shouldFade: number, model: J3DModelInstance, casterCenter: vec3, casterSize: number, heightAgl: number, tevStr: dKy_tevstr_c): number {
+    public set2(globals: dGlobals, shouldFade: number, model: J3DModelInstance, casterCenter: vec3, casterSize: number, heightAboveGround: number, tevStr: dKy_tevstr_c): number {
         if (this.models.length === 0) {
             assertExists(tevStr); // The game allows passing a null tevStr (uses player's light pos), we do not.
             const lightPos = tevStr.lightObj.Position;
-            this.alpha = this.setShadowRealMtx(globals, this.lightViewMtx, this.lightProjMtx, this.modelMtx, lightPos, casterCenter, casterSize, heightAgl,
-                shouldFade == 0 ? 0.0 : heightAgl * 0.0007);
+            this.alpha = this.setShadowRealMtx(globals, this.lightViewMtx, this.lightProjMtx, lightPos, casterCenter, casterSize, heightAboveGround,
+                shouldFade == 0 ? 0.0 : heightAboveGround * 0.0007);
 
             if (this.alpha === 0)
                 return 0;
 
             this.state = 1;
             this.models.length = 0;
+            this.heightAboveGround = heightAboveGround;
         }
 
         this.models.push(model);
@@ -587,8 +588,8 @@ class dDlst_shadowReal_c {
         return true;
     }
 
-    private setShadowRealMtx(globals: dGlobals, lightViewMtx: mat4, lightProjMtx: mat4, modelMtx: mat4, lightPos: vec3, casterCenter: vec3,
-        casterSize: number, heightAgl: number, heightFade: number): number {
+    private setShadowRealMtx(globals: dGlobals, lightViewMtx: mat4, lightProjMtx: mat4, lightPos: vec3, casterCenter: vec3,
+        casterSize: number, heightAboveGround: number, heightFade: number): number {
         if (heightFade >= 1.0) {
             return 0;
         }
@@ -608,8 +609,8 @@ class dDlst_shadowReal_c {
         // The higher off the ground a shadow caster is, the weaker the shadow's horizontal components become
         // This cheats the light vec to be more vertical when the caster is in the air, a la platforming drop shadows
         // At 50 units above ground, the shadow is fully vertical
-        lightVec[1] += heightAgl;
-        let xzScale = Math.max(0.0, 0.02 * (50.0 - heightAgl));
+        lightVec[1] += heightAboveGround;
+        let xzScale = Math.max(0.0, 0.02 * (50.0 - heightAboveGround));
         lightVec[0] *= xzScale;
         lightVec[2] *= xzScale;
 
@@ -641,7 +642,7 @@ class dDlst_shadowReal_c {
         // The game uses realPolygonCheck to gather a list of bg polygons that intersect the shadow's bounding volume.
         // These are then renderered to sample the shadow map. Instead, we render an oriented box (the shadow volume) and sample the shadowmap there.
         // This also culls this shadow if the receiver AABB is not visible. We do that in imageDraw() after the model pose has been evaluated.
-        // if (!realPolygonCheck(casterCenter, casterRadius, heightAgl, rayDir, shadowPoly)) {
+        // if (!realPolygonCheck(casterCenter, casterRadius, heightAboveGround, rayDir, shadowPoly)) {
         //     return 0;
         // }
 
@@ -651,8 +652,6 @@ class dDlst_shadowReal_c {
         projectionMatrixConvertClipSpaceNearZ(lightProjMtx, globals.camera.clipSpaceNearZ, GfxClipSpaceNearZ.NegativeOne);
 
         // Build a matrix to transform a world space position into the shadowmap's ortho frustum. The xy position can then be used to sample the shadowmap.
-        // const view = mat4.lookAt(lightViewMtx, lightVec, casterCenter, [0, 1, 0]);
-        // const proj = mat4.orthoNO(mat4.create(), -casterRadius, casterRadius, -casterRadius, casterRadius, -casterRadius, casterRadius);
         mat4.mul(this.volumeFromWorld, lightProjMtx, lightViewMtx);
 
         // Scale and bias the projection to fit into our slot in the shadowmap atlas
@@ -1008,14 +1007,14 @@ class dDlst_shadowControl_c {
         builder.pushDebugThumbnail(shadowmapDownColorTargetID);
     }
 
-    public setReal(id: number, shouldFade: number, model: J3DModelInstance, pos: vec3, casterSize: number, heightAgl: number, tevStr: dKy_tevstr_c): number {
+    public setReal(id: number, shouldFade: number, model: J3DModelInstance, pos: vec3, casterSize: number, heightAboveGround: number, tevStr: dKy_tevstr_c): number {
         let real = this.getOrAllocate(id);
-        return real ? real.set(shouldFade, model, pos, casterSize, heightAgl, tevStr) : 0;
+        return real ? real.set(shouldFade, model, pos, casterSize, heightAboveGround, tevStr) : 0;
     }
 
-    public setReal2(globals: dGlobals, id: number, shouldFade: number, model: J3DModelInstance, casterCenter: vec3, casterSize: number, heightAgl: number, tevStr: dKy_tevstr_c): number {
+    public setReal2(globals: dGlobals, id: number, shouldFade: number, model: J3DModelInstance, casterCenter: vec3, casterSize: number, heightAboveGround: number, tevStr: dKy_tevstr_c): number {
         let real = this.getOrAllocate(id);
-        return real ? real.set2(globals, shouldFade, model, casterCenter, casterSize, heightAgl, tevStr) : 0;
+        return real ? real.set2(globals, shouldFade, model, casterCenter, casterSize, heightAboveGround, tevStr) : 0;
     }
 
     public addReal(id: number, model: J3DModelInstance): boolean {
