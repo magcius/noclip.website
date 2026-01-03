@@ -215,11 +215,8 @@ void main() {
 
 #if defined USE_LIGHTMAP
     vec4 t_LightmapSample = texture(SAMPLER_2D(u_TextureLightmap), t_TexCoordLightmap.xy);
-    #if defined GAME_QUAKE
-        t_Color.rgb *= t_LightmapSample.rgb * 2.0;
-    #else
-        t_Color.rgb *= t_LightmapSample.rgb;
-    #endif
+
+    t_Color.rgb *= t_LightmapSample.rgb * 2.0;
 #endif
 
 #if defined GAME_QUAKE
