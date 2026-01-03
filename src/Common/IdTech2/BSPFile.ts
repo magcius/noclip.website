@@ -1,11 +1,11 @@
 
 import { ReadonlyVec4, vec4 } from "gl-matrix";
-import ArrayBufferSlice from "../ArrayBufferSlice.js";
-import { AABB } from "../Geometry.js";
-import { convertToTrianglesRange, getTriangleIndexCountForTopologyIndexCount, GfxTopology } from "../gfx/helpers/TopologyHelpers.js";
-import { LightmapPackerPage } from "../SourceEngine/BSPFile.js";
-import { pairs2obj, ValveKeyValueParser, VKFPair } from "../SourceEngine/VMT.js";
-import { assert, decodeString, ensureInList, readString } from "../util.js";
+import ArrayBufferSlice from "../../ArrayBufferSlice.js";
+import { AABB } from "../../Geometry.js";
+import { convertToTrianglesRange, getTriangleIndexCountForTopologyIndexCount, GfxTopology } from "../../gfx/helpers/TopologyHelpers.js";
+import { LightmapPackerPage } from "../../SourceEngine/BSPFile.js";
+import { pairs2obj, ValveKeyValueParser, VKFPair } from "../../SourceEngine/VMT.js";
+import { assert, decodeString, ensureInList, readString } from "../../util.js";
 
 enum LumpType {
     ENTITIES = 0,
@@ -88,11 +88,11 @@ export class BSPFile {
     public surfaces: Surface[] = [];
     public extraTexData: ArrayBufferSlice[] = [];
     public lightmapPackerPage = new LightmapPackerPage(2048, 2048);
-    
+
     constructor(buffer: ArrayBufferSlice) {
         const view = buffer.createDataView();
         this.version = view.getUint32(0x00, true);
-        assert(this.version === 30);
+        assert(this.version === 29 || this.version === 30);
 
         function getLumpData(lumpType: LumpType): ArrayBufferSlice {
             const lumpsStart = 0x04;
@@ -134,9 +134,14 @@ export class BSPFile {
         const nummiptex = texturesView.getUint32(0x00, true);
         const textureNames: string[] = [];
         for (let i = 0; i < nummiptex; i++) {
-            const miptexOffs = texturesView.getUint32(0x04 + i * 0x04, true);
+            const miptexOffs = texturesView.getInt32(0x04 + i * 0x04, true);
+            if (miptexOffs < 0) {
+                // e1m2 seems to have this weird negative offset thing
+                textureNames.push(`__invalid_${i}__`);
+                continue;
+            }
             const texName = readString(textures, miptexOffs + 0x00, 0x10, true);
-            const hasTextureData = texturesView.getUint32(miptexOffs + 0x18) !== 0;
+            const hasTextureData = texturesView.getUint32(miptexOffs + 0x18, true) !== 0;
             if (hasTextureData)
                 this.extraTexData.push(textures.slice(miptexOffs));
             textureNames.push(texName);
@@ -286,7 +291,8 @@ export class BSPFile {
             const surfaceW = Math.ceil((maxTexCoordS * lightmapScale)) - Math.floor(minTexCoordS * lightmapScale) + 1;
             const surfaceH = Math.ceil((maxTexCoordT * lightmapScale)) - Math.floor(minTexCoordT * lightmapScale) + 1;
 
-            const lightmapSamplesSize = (surfaceW * surfaceH * styles.length * 3);
+            const bytesPerTexel = this.version === 29 ? 1 : 3;
+            const lightmapSamplesSize = (surfaceW * surfaceH * styles.length * bytesPerTexel);
             const samples = lightofs !== 0xFFFFFFFF ? lighting.subarray(lightofs, lightmapSamplesSize).createTypedArray(Uint8Array) : null;
 
             const lightmapData: SurfaceLightmapData = {

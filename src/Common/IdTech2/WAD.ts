@@ -1,10 +1,16 @@
 
-import ArrayBufferSlice from "../ArrayBufferSlice.js";
-import { assert, readString } from "../util.js";
+import ArrayBufferSlice from "../../ArrayBufferSlice.js";
+import { assert, readString } from "../../util.js";
 
-export enum WADLumpType {
+export enum WAD2LumpType {
+    MIPTEX = 0x44,
+}
+
+export enum WAD3LumpType {
     MIPTEX = 0x43,
 }
+
+export type WADLumpType = WAD2LumpType | WAD3LumpType;
 
 export interface WADLump {
     name: string;
@@ -13,6 +19,7 @@ export interface WADLump {
 }
 
 export interface WAD {
+    version: 2 | 3;
     lumps: WADLump[];
 }
 
@@ -20,7 +27,8 @@ export function parseWAD(buffer: ArrayBufferSlice): WAD {
     const view = buffer.createDataView();
 
     const magic = readString(buffer, 0x00, 0x04);
-    assert(magic === 'WAD3');
+    assert(magic === 'WAD2' || magic === 'WAD3');
+    const version: 2 | 3 = magic === 'WAD2' ? 2 : 3;
 
     const numlumps = view.getUint32(0x04, true);
     const infotableofs = view.getUint32(0x08, true);
@@ -42,5 +50,5 @@ export function parseWAD(buffer: ArrayBufferSlice): WAD {
         lumps.push({ name, type, data });
     }
 
-    return { lumps };
+    return { version, lumps };
 }
