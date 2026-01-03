@@ -346,11 +346,18 @@ export class BSPFile {
     }
 
     public getWadList(): string[] {
-        const worldspawn = this.entities[0];
-        assert(worldspawn.classname === 'worldspawn');
+        // There should be only one worldspawn entity, but Half-Life's 'rapidcore' has multiple!,
+        // and also a weird wad list, which makes sense as it was a map made by a fan back in 2001,
+        // not by Valve: https://combineoverwiki.net/wiki/Rapidcore
+        const isWorldspawn = (e: BSPEntity) => {
+            const cls = e.classname;
+            return cls === 'worldspawn' || (Array.isArray(cls) && cls.includes('worldspawn'));
+        };
+        const worldspawn = this.entities.find(isWorldspawn);
+        assert(worldspawn !== undefined);
 
         const wad = worldspawn.wad;
-        return wad.split(';').map((v) => {
+        return wad.split(';').filter((v) => v !== '').map((v) => {
             // Replace the initial mount name.
             assert(v.startsWith('\\'));
             const x = v.split('\\');
