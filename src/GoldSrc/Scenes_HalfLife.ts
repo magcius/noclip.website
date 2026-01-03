@@ -30,6 +30,7 @@ export class HalfLifeSceneDesc implements SceneDesc {
         return renderer;
     }
 }
+
 // Map order based on http://www.svencoop.com/spmlist.shtml
 const sceneDescs = [
     "Deathmatch",
