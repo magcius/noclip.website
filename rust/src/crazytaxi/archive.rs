@@ -55,7 +55,7 @@ impl<'a> Iterator for ArchiveReader<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         let item = self.header.items.get(self.item_idx)?;
         let mut entry_offset = self.offset;
-        let mut entry_size = item.size as usize;
+        let entry_size = item.size as usize;
         if entry_offset % 0x20 != 0 {
             // entries are aligned to 0x20 sized blocks
             let diff = 0x20 - (self.offset % 0x20);
@@ -74,24 +74,24 @@ impl<'a> Iterator for ArchiveReader<'a> {
 
 #[cfg(test)]
 mod test {
-    use super::ArchiveReader;
+    use std::{fs::read_dir, io::Cursor, path::PathBuf};
 
-    fn filepath(p: &str) -> std::path::PathBuf {
-        let base_path = std::path::Path::new("../data/CrazyTaxi/files/ct/");
-        base_path.join(p)
-    }
+    use deku::{reader::Reader, DekuReader};
+
+    use super::ArchiveReader;
+    use crate::crazytaxi::{shp::ShpHeader, util::readfile};
 
     #[test]
     fn sanity_check_audio() {
         let files = &[
-            filepath("voice_a.all"),
-            filepath("voice_b.all"),
-            filepath("voice_c.all"),
-            filepath("voice_d.all"),
-            filepath("voices.all"),
+            "voice_a.all",
+            "voice_b.all",
+            "voice_c.all",
+            "voice_d.all",
+            "voices.all",
         ];
         for file in files {
-            let data = std::fs::read(file).unwrap();
+            let data = readfile(file);
             let reader = ArchiveReader::new(&data).unwrap();
 
             for entry in reader {
@@ -105,20 +105,50 @@ mod test {
             }
         }
     }
-    
+
+    #[test]
+    pub fn test_vtxfmt() {
+        let mut fmts = std::collections::HashMap::new();
+        for maybe_file in read_dir("../data/CrazyTaxi/files/ct").unwrap() {
+            let file = maybe_file.unwrap();
+            if let Some(file_ext) = file.path().extension() {
+                if !file_ext.eq("all") {
+                    continue;
+                }
+                let data = std::fs::read(file.path()).unwrap();
+                let archive = ArchiveReader::new(&data).unwrap();
+                for entry in archive {
+                    if entry.name.ends_with(".shp") {
+                        let mut reader = Reader::new(Cursor::new(entry.data));
+                        let shape = ShpHeader::from_reader_with_ctx(&mut reader, ()).unwrap();
+                        assert_ne!(shape.display_list_offset, 0);
+                        let offs = shape.display_list_offset as usize;
+                        let display_list = &entry.data[offs..];
+                        fmts.entry(display_list[0] & 0x07).or_insert(Vec::new()).push((file.path(), entry.name));
+                    }
+                }
+            }
+        }
+        for fmt in 0..7 {
+            let files = fmts.get(&fmt).unwrap();
+            let guys: Vec<&(PathBuf, String)> = files.iter().take(10).collect();
+            println!("{}: {:?} {}", fmt, guys, files.len());
+        }
+    }
+
     #[test]
     pub fn test_shps() {
         let files = &[
-            filepath("polDC0.all"),
-            filepath("poldc1.all"),
-            filepath("poldc1_stream.all"),
-            filepath("poldc2.all"),
-            filepath("poldc2_stream.all"),
-            filepath("poldc3.all"),
-            filepath("poldc3_stream.all"),
+            "polDC0.all",
+            "poldc1.all",
+            "poldc1_stream.all",
+            "poldc2.all",
+            "poldc2_stream.all",
+            "poldc3.all",
+            "poldc3_stream.all",
         ];
         for file in files {
-            let data = std::fs::read(file).unwrap();
+            let data = readfile(file);
             let reader = ArchiveReader::new(&data).unwrap();
             for entry in reader {
                 assert!(entry.name.ends_with(".shp"));

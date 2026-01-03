@@ -1018,7 +1018,7 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
                         texMatrixTable: Array(10).fill(0xFFFF),
                     };
                     const vertexBuffers: ArrayBuffer[] = [vertexData];
-                    loadedDatas.push({ indexData, draws: [draw], totalIndexCount, totalVertexCount, vertexBuffers, vertexId, drawCalls: null, dlView: null });
+                    loadedDatas.push({ indexData, draws: [draw], totalIndexCount, totalVertexCount, vertexBuffers, vertexId, drawCalls: null, dlView: null, endOffs: null });
                     displayListTableIdx += 0x04;
                 }
 
