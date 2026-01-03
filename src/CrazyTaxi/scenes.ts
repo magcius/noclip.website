@@ -1,5 +1,5 @@
 import * as Viewer from '../viewer.js';
-import { GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxDevice, GfxIndexBufferDescriptor, GfxInputLayout, GfxProgram, GfxVertexBufferDescriptor } from '../gfx/platform/GfxPlatform.js';
+import { GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxDevice, GfxIndexBufferDescriptor, GfxInputLayout, GfxProgram, GfxTexture, GfxVertexBufferDescriptor } from '../gfx/platform/GfxPlatform.js';
 import { SceneContext } from '../SceneBase.js';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
 import { GfxRenderInst, GfxRenderInstList, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
@@ -34,7 +34,7 @@ function createVtxLoader(): GX {
     vat[GX.VtxFmt.VTXFMT3] = [];
     vat[GX.VtxFmt.VTXFMT3][GX.Attr.POS] = { compCnt: GX.CompCnt.POS_XYZ, compType: GX.CompType.S16, compShift: 0 };
     vat[GX.VtxFmt.VTXFMT3][GX.Attr.CLR0] = { compCnt: GX.CompCnt.CLR_RGB, compType: GX.CompType.RGB8, compShift: 0 };
-    vat[GX.VtxFmt.VTXFMT3][GX.Attr.TEX0] = { compCnt: GX.CompCnt.TEX_ST, compType: GX.CompType.S8, compShift: 0 }; // ?
+    vat[GX.VtxFmt.VTXFMT3][GX.Attr.TEX0] = { compCnt: GX.CompCnt.TEX_ST, compType: GX.CompType.S8, compShift: 6 }; // ?
     // vat[GX.VtxFmt.VTXFMT4] = [];
     const vcd: GX_VtxDesc[] = [];
     vcd[GX.Attr.POS] = { type: GX.AttrType.INDEX16 };
@@ -64,7 +64,8 @@ class ShapeRenderer {
     private indexBuffers: GfxBuffer[] = [];
     private materialHelper: GXMaterialHelperGfx;
 
-    constructor(device: GfxDevice, private cache: GfxRenderCache, public loadedVertexLayout: LoadedVertexLayout, public loadedVertexData: LoadedVertexData[]) {
+    constructor(private cache: GfxRenderCache, private textureHolder: GXTextureHolder, private shape: Shape, public loadedVertexLayout: LoadedVertexLayout, public loadedVertexData: LoadedVertexData[]) {
+        const device = cache.device;
         for (const data of this.loadedVertexData) {
             for (let i = 0; i < data.vertexBuffers.length; i++) {
                 const vertexBuffer = createBufferFromData(device, GfxBufferUsage.Vertex,
@@ -82,12 +83,13 @@ class ShapeRenderer {
         this.inputLayout = createInputLayout(cache, loadedVertexLayout);
 
         const mb = new GXMaterialBuilder();
+        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
         mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.VTX, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
-        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0);
-        mb.setTevColorIn(0, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.RASC);
-        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, false, GX.Register.PREV);
-        mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.RASA);
-        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, false, GX.Register.PREV);
+        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR0A0);
+        mb.setTevColorIn(0, GX.CC.ZERO, GX.CC.TEXC, GX.CC.RASC, GX.CC.ZERO);
+        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.TEXA, GX.CA.RASA, GX.CA.ZERO);
+        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
         this.materialHelper = new GXMaterialHelperGfx(mb.finish());
     }
 
@@ -100,6 +102,8 @@ class ShapeRenderer {
             this.materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
             renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptors[i]);
             renderInst.setDrawCount(this.loadedVertexData[i].totalIndexCount);
+            this.textureHolder.fillTextureMapping(materialParams.m_TextureMapping[0], this.shape.textures[i]);
+            renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
             renderInstManager.submitRenderInst(renderInst);
         }
     }
@@ -131,7 +135,7 @@ export class Scene implements Viewer.SceneGfx {
         for (const name of shapeNames) {
             const shape = this.manager.createShape(name, this.gx);
             console.log(shape.vertexData);
-            const renderer = new ShapeRenderer(device, this.renderHelper.renderCache, shape.vertexLayout, shape.vertexData);
+            const renderer = new ShapeRenderer(this.renderHelper.renderCache, this.textureHolder, shape, shape.vertexLayout, shape.vertexData);
             this.shapes.push(renderer);
         }
     }
@@ -255,7 +259,7 @@ class FileManager {
 
         const vertexLayout = gx.vtxLoader.loadedVertexLayout;
         const scale = shape.scale();
-        const textures = shape.textures;
+        const textures = shape.textures.map((x) => x.slice(0, -1));
         return { vertexData, vertexLayout, scale, textures };
     }
 
