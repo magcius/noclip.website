@@ -498,7 +498,7 @@ class dDlst_shadowReal_c {
         getMatrixAxisZ(lightDir, worldFromLight);
 
         // Determine the near/far caps on the shadow volume based on light angle, ground slope, and height above ground.
-        // TODO: Consider ground slope and height agl.
+        // TODO: Consider ground slope.
         const lightAngle = Math.atan2(lightDir[1],Math.sqrt(lightDir[0] * lightDir[0] + lightDir[2] * lightDir[2]));
         lightAABB.min[2] = lightAABB.min[2] - (40 + this.heightAboveGround) / Math.sin( lightAngle );
         lightAABB.max[2] = (lightAABB.max[2] + lightAABB.min[2]) * 0.5;
@@ -958,7 +958,6 @@ class dDlst_shadowControl_c {
 
         builder.pushPass((pass) => {
             pass.setDebugName('Shadowmaps');
-            // TODO: Don't bind a color target, we don't need it. (Currently using it for debug thumbnails).
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, shadowmapColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, shadowmapDepthTargetID);
             pass.exec((passRenderer) => {
