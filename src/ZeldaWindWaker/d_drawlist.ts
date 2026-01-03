@@ -419,7 +419,6 @@ function getAtlasDimensions(count: number): [number, number] {
 /** 
  * Draw a J3DModelInstance without setting any materials. Culling is skipped. 
  * materialParams and sceneParams must be set up prior to calling this function.
- * TODO (mikelester): Find a home for this
  */
 function drawSimpleModelInstance(renderInstManager: GfxRenderInstManager, model: J3DModelInstance, viewFromWorldMatrix: mat4): void {
     // Update joint matrices into shapeInstanceState.drawViewMatrixArray
