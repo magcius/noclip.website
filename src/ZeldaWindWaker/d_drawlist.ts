@@ -472,20 +472,11 @@ class dDlst_shadowReal_c {
         this.models.length = 0;
     }
 
-    public imageDraw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        if (this.state !== 1)
-            return;
-
-        const template = renderInstManager.pushTemplate();
-        mat4.copy(sceneParams.u_Projection, this.lightProjMtx);
-        const d = template.allocateUniformBufferF32(GX_Program.ub_SceneParams, ub_SceneParamsBufferSize);
-        fillSceneParamsData(d, 0, sceneParams);
-
+    public generateShadowVolume(globals: dGlobals) {
         const lightAABB = new AABB();
-        for (let m = 0; m < this.models.length; m++) {
-            drawSimpleModelInstance(renderInstManager, this.models[m], this.lightViewMtx);
 
-            // build an AABB in the light's view space
+        // Build an AABB containing all models in the light's view space
+        for (let m = 0; m < this.models.length; m++) {
             const modelToLightMatrix = mat4.mul(scratchMat4, this.lightViewMtx, this.models[m].modelMatrix);
             scratchAABB.transform(this.models[m].modelData.bbox, modelToLightMatrix);
             lightAABB.union(lightAABB, scratchAABB);
@@ -501,7 +492,6 @@ class dDlst_shadowReal_c {
             //     lightAABB.union(lightAABB, scratchAABB);
             // }
         }
-        renderInstManager.popTemplate();
 
         const worldFromLight = mat4.invert(scratchMat4, this.lightViewMtx);
         const lightDir = scratchVec3a;
@@ -523,10 +513,26 @@ class dDlst_shadowReal_c {
         scratchAABB.set(0, 0, 0, 1, 1, 1);
         scratchAABB.transform(scratchAABB, this.modelMtx);
         if (!globals.camera.frustum.contains(scratchAABB))
-            this.state = 0;
+            return false;
+
+        return true;
+    }
+
+    public imageDraw(globals: dGlobals, renderInstManager: GfxRenderInstManager): void {
+        if (this.state !== 1)
+            return;
+
+        const template = renderInstManager.pushTemplate();
+        mat4.copy(sceneParams.u_Projection, this.lightProjMtx);
+        const d = template.allocateUniformBufferF32(GX_Program.ub_SceneParams, ub_SceneParamsBufferSize);
+        fillSceneParamsData(d, 0, sceneParams);
+
+        for (let m = 0; m < this.models.length; m++) {
+            drawSimpleModelInstance(renderInstManager, this.models[m], this.lightViewMtx);
+        }
+        renderInstManager.popTemplate();
     }
     
-
     // Draw "real" shadows
     // noclip modification: The game's original real shadowing uses many draw calls which is inefficient on modern hardware. It works as follows:
     // 1. Compute a bounding box for the shadow, gather any bg triangles that intersect it. These will be the shadow receivers.
@@ -891,6 +897,15 @@ class dDlst_shadowControl_c {
     }
 
     public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        // noclip modification: The game computes shadow receiver geometry in setShadowRealMtx() using a conservative AABB. 
+        // Instead, we wait until draw time to generate a tight light-space AABB from the animated model.
+        for (let i = 0; i < this.reals.length; i++) {
+            const visible = this.reals[i].generateShadowVolume(globals);
+            if( !visible ) {
+                this.reals[i].reset();
+            }
+        }
+        
         // First, render our real shadow casters into the shadowmap
         renderInstManager.setCurrentList(this.realCasterInstList);
         const shadowmapTemplate = renderInstManager.pushTemplate();
@@ -898,7 +913,7 @@ class dDlst_shadowControl_c {
         materialParams.u_Color[ColorKind.C0] = White;
         this.cache.shadowmapMat.allocateMaterialParamsDataOnInst(shadowmapTemplate, materialParams);
         for (let i = 0; i < this.reals.length; i++) {
-            this.reals[i].imageDraw(globals, renderInstManager, viewerInput);
+            this.reals[i].imageDraw(globals, renderInstManager);
         }
         renderInstManager.popTemplate();
 
