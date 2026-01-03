@@ -603,7 +603,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         const m = buildModel(rarc, `bdl/yw.bdl`);
         buildChildModel(rarc, `bdlm/ywhead01.bdl`).setParentJoint(m, `head`);
         m.bindANK1(parseBCK(rarc, `bcks/wait01.bck`));
-        setShadow(800.0, 150, 40.0, 1.0);
+        setShadow(200.0, 80, 40.0, 1.0);
     });
     // Gonzo
     else if (actorName === 'P1a') fetchArchive(`P1`).then((rarc) => {
@@ -1285,6 +1285,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         lanternModel.setParentJoint(mainModel, `j_bpw_item`);
         mat4.rotateZ(lanternModel.modelMatrix, lanternModel.modelMatrix, Math.PI);
         // TODO: add flame particle emitter to lantern
+        setShadow(1300, 400, 200);
     });
     // Molgera
     else if (actorName === 'Bwd') fetchArchive(`Bwd`).then((rarc) => {
@@ -1343,8 +1344,14 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         lanternModel.setParentJoint(mainModel, `j_pw_item_r1`);
         mat4.rotateX(lanternModel.modelMatrix, lanternModel.modelMatrix, Math.PI / 4);
     });
-    else if (actorName === 'Bb') fetchArchive(`Bb`).then((rarc) => buildModel(rarc, `bdlm/bb.bdl`).bindANK1(parseBCK(rarc, `bck/wait.bck`)));
-    else if (actorName === 'Bk') fetchArchive(`Bk`).then((rarc) => buildModel(rarc, `bdlm/bk.bdl`).bindANK1(parseBCK(rarc, `bck/bk_wait.bck`)));
+    else if (actorName === 'Bb') fetchArchive(`Bb`).then((rarc) => {
+        buildModel(rarc, `bdlm/bb.bdl`).bindANK1(parseBCK(rarc, `bck/wait.bck`))
+        setShadow(800, 150, 40);
+    });
+    else if (actorName === 'Bk') fetchArchive(`Bk`).then((rarc) => {
+        buildModel(rarc, `bdlm/bk.bdl`).bindANK1(parseBCK(rarc, `bck/bk_wait.bck`))
+        setShadow(800, 150, 40);
+    });
     else if (actorName === 'Oq') fetchArchive(`Oq`).then((rarc) => buildModel(rarc, `bmdm/oq.bmd`).bindANK1(parseBCK(rarc, `bck/nom_wait.bck`)));
     else if (actorName === 'Oqw') fetchArchive(`Oq`).then((rarc) => buildModel(rarc, `bmdm/red_oq.bmd`).bindANK1(parseBCK(rarc, `bck/umi_new_wait.bck`)));
     else if (actorName === 'Daiocta') fetchArchive(`Daiocta`).then((rarc) => buildModel(rarc, `bdlm/do_main1.bdl`).bindANK1(parseBCK(rarc, `bck/wait1.bck`)));
