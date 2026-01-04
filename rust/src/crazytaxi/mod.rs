@@ -17,7 +17,7 @@ fn s(err: anyhow::Error) -> String {
 
 #[wasm_bindgen(js_name = "CTFileLoc")]
 #[derive(Clone, Copy, Debug)]
-struct FileLoc {
+pub struct FileLoc {
     pub file_id: usize,
     pub offset: usize,
     pub length: usize,
@@ -25,7 +25,7 @@ struct FileLoc {
 
 #[wasm_bindgen(js_name = "CTFileStore")]
 #[derive(Default)]
-struct FileStore {
+pub struct FileStore {
     files: Vec<String>,
     shapes: HashMap<String, Shape>,
     textures: HashMap<String, Texture>,
@@ -39,36 +39,50 @@ impl FileStore {
         }
     }
 
+    pub fn append_file(&mut self, name: &str, data: &[u8]) -> Result<(), String> {
+        let file_id = self.files.len();
+        self.files.push(name.to_string());
+        self.insert_data(name.to_string(), file_id, 0, data)?;
+        Ok(())
+    }
+
+    fn insert_data(&mut self, name: String, file_id: usize, offset: usize, data: &[u8]) -> Result<(), String> {
+        let mut reader = Reader::new(Cursor::new(data));
+        let length = data.len();
+        if name.ends_with(".shp") {
+            let header = ShpHeader::from_reader_with_ctx(&mut reader, ())
+                .context("parsing ShpHeader")
+                .map_err(s)?;
+            let mut shape = Shape {
+                header,
+                file_id,
+                offset,
+                textures: Vec::new(),
+            };
+            shape.populate_textures(data).map_err(s)?;
+            self.shapes.insert(name, shape);
+        } else if name.ends_with(".tex") {
+            let header = TexHeader::from_reader_with_ctx(&mut reader, ())
+                .context("parsing TexHeader")
+                .map_err(s)?;
+            self.textures.insert(name, Texture {
+                header,
+                length,
+                file_id,
+                offset,
+            });
+        } else {
+            return Err(format!("unknown file format {}", name));
+        }
+        Ok(())
+    }
+
     pub fn append_archive(&mut self, name: &str, data: &[u8]) -> Result<(), String> {
         let file_id = self.files.len();
         self.files.push(name.to_string());
         let reader = archive::ArchiveReader::new(data).map_err(s)?;
         for entry in reader {
-            let mut reader = Reader::new(Cursor::new(entry.data));
-            let length = entry.data.len();
-            if entry.name.ends_with(".shp") {
-                let header = ShpHeader::from_reader_with_ctx(&mut reader, ())
-                    .context("parsing ShpHeader")
-                    .map_err(s)?;
-                let mut shape = Shape {
-                    header,
-                    file_id,
-                    offset: entry.offset,
-                    textures: Vec::new(),
-                };
-                shape.populate_textures(entry.data).map_err(s)?;
-                self.shapes.insert(entry.name, shape);
-            } else if entry.name.ends_with(".tex") {
-                let header = TexHeader::from_reader_with_ctx(&mut reader, ())
-                    .context("parsing TexHeader")
-                    .map_err(s)?;
-                self.textures.insert(entry.name, Texture {
-                    header,
-                    length,
-                    file_id,
-                    offset: entry.offset,
-                });
-            }
+            self.insert_data(entry.name, file_id, entry.offset, entry.data)?;
         }
         Ok(())
     }
