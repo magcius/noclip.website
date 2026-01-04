@@ -65,7 +65,7 @@ flat out uint v_Flags;
 void main() {
     uint t_Flags = uint(a_Color.a);
 
-    uint t_Space = t_Flags & ${SpaceMask};
+    int t_Space = int(t_Flags & ${SpaceMask}u);
     if (t_Space == ${DebugDrawFlags.WorldSpace}) {
         gl_Position = UnpackMatrix(u_ClipFromView) * vec4(UnpackMatrix(u_ViewFromWorld) * vec4(a_Position.xyz, 1.0), 1.0);
     } else if (t_Space == ${DebugDrawFlags.ViewSpace}) {
