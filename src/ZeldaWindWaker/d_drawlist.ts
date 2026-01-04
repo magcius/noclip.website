@@ -833,12 +833,9 @@ class dDlst_shadowControl_c_Cache {
 
 
         const mb = new GXMaterialBuilder();
-        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0);
         mb.setTevColorIn(0, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.C0);
-        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-        mb.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.OR, GX.CompareType.ALWAYS, 0);
         mb.setZMode(true, GX.CompareType.LEQUAL, true);
-        mb.setCullMode(GX.CullMode.FRONT);
+        mb.setCullMode(GX.CullMode.BACK);
         mb.setUsePnMtxIdx(true);
         this.shadowmapMat = new GXMaterialHelperGfx(mb.finish('ShadowVolumeDrawer Front'));
 
