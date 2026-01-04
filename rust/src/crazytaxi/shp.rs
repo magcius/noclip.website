@@ -67,9 +67,9 @@ impl Shape {
         assert_eq!(texture_names_data.len() / 44, self.header.num_textures as usize);
         let mut reader = Reader::new(Cursor::new(texture_names_data));
         for _ in 0..self.header.num_textures {
-            let name_data = TextureName::from_reader_with_ctx(&mut reader, ())
-                .context("parsing TextureName from block")?.name.bytes;
-            self.textures.push(String::from_utf8(name_data).context("converting TextureName to ASCII")?);
+            let tex_name = TextureName::from_reader_with_ctx(&mut reader, ())
+                .context("parsing TextureName from block")?;
+            self.textures.push(String::from(tex_name.name));
         }
         Ok(())
     }

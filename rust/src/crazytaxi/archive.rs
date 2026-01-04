@@ -1,8 +1,7 @@
-use std::{collections::HashMap, io::{Cursor, Seek}};
+use std::io::{Cursor, Seek};
 
 use deku::prelude::*;
 use anyhow::Result;
-use wasm_bindgen::prelude::*;
 
 use crate::unity::types::common::NullTerminatedAsciiString;
 
