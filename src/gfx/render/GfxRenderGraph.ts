@@ -663,7 +663,7 @@ export class GfxrRenderGraphImpl implements GfxrRenderGraph, GfxrGraphBuilder, G
         if (debugLabel === undefined) {
             const renderTargetDebugName = this.currentGraph!.renderTargetDebugNames[renderTargetID];
             const debugGroups = renderPass.debugGroups.length !== 0 ? renderPass.debugGroups.join('\n') + '\n' : '';
-            debugLabel = `${debugGroups}${renderPass.debugName}\n${renderTargetDebugName}`;
+            debugLabel = `${debugGroups}${renderTargetDebugName}`;
         }
 
         this.currentGraph!.debugThumbnails.push(new GfxrDebugThumbnailDesc(renderTargetID, renderPass, attachmentSlot, debugLabel));
