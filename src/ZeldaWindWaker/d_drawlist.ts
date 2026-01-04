@@ -560,11 +560,6 @@ class dDlst_shadowReal_c {
         renderInstManager.submitRenderInst(renderInst);
     }
 
-    public set(shouldFade: number, model: J3DModelInstance, pos: ReadonlyVec3, casterSize: number, heightAboveGround: number, tevStr: dKy_tevstr_c): number {
-        // TODO: Implement set logic
-        return this.id;
-    }
-
     public set2(globals: dGlobals, shouldFade: number, model: J3DModelInstance, casterCenter: ReadonlyVec3, casterSize: number, heightAboveGround: number, tevStr: dKy_tevstr_c): number {
         if (this.models.length === 0) {
             assertExists(tevStr); // The game allows passing a null tevStr (uses player's light pos), we do not.
@@ -1017,9 +1012,11 @@ class dDlst_shadowControl_c {
         builder.pushDebugThumbnail(shadowmapDownColorTargetID);
     }
 
-    public setReal(id: number, shouldFade: number, model: J3DModelInstance, pos: ReadonlyVec3, casterSize: number, heightAboveGround: number, tevStr: dKy_tevstr_c): number {
+    // noclip modification: The original game has a few actors that call this function directly, instead of using dComIfGd_setShadow() (Bdk, Bst, GM, Gp1, Km1, Pm1).
+    //     I believe this was the original implementation, and setReal2() was added later. They behave similar enough that I don't think its worth preserving both.
+    public setReal(globals: dGlobals, id: number, shouldFade: number, model: J3DModelInstance, casterCenter: ReadonlyVec3, casterSize: number, heightAboveGround: number, tevStr: dKy_tevstr_c): number {
         let real = this.getOrAllocate(id);
-        return real ? real.set(shouldFade, model, pos, casterSize, heightAboveGround, tevStr) : 0;
+        return real ? real.set2(globals, shouldFade, model, casterCenter, casterSize, heightAboveGround, tevStr) : 0;
     }
 
     public setReal2(globals: dGlobals, id: number, shouldFade: number, model: J3DModelInstance, casterCenter: ReadonlyVec3, casterSize: number, heightAboveGround: number, tevStr: dKy_tevstr_c): number {
