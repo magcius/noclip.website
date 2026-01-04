@@ -774,6 +774,9 @@ class JPAGlobalRes {
     private vertexBufferQuad: GfxBuffer;
     private indexBufferQuad: GfxBuffer;
 
+    private indexBufferStripe: GfxBuffer;
+    public inputIndexStripe: GfxIndexBufferDescriptor;
+
     constructor(cache: GfxRenderCache) {
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: getVertexInputLocation(VertexAttributeInput.POS),   format: GfxFormat.F32_RGB, bufferIndex: 0, bufferByteOffset: 0 },
@@ -922,11 +925,18 @@ class JPAGlobalRes {
 
         this.inputVertexQuad = [{ buffer: this.vertexBufferQuad }];
         this.inputIndexQuad = { buffer: this.indexBufferQuad };
+
+        // Stripe Data
+        const tristripIndexData = makeTriangleIndexBuffer(GfxTopology.TriStrips, 0, MAX_STRIPE_VERTEX_COUNT);
+        this.indexBufferStripe = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, tristripIndexData.buffer);
+        device.setResourceName(this.indexBufferStripe, 'JPA StripeBuffer (IB)');
+        this.inputIndexStripe = { buffer: this.indexBufferStripe };
     }
 
     public destroy(device: GfxDevice): void {
         device.destroyBuffer(this.vertexBufferQuad);
         device.destroyBuffer(this.indexBufferQuad);
+        device.destroyBuffer(this.indexBufferStripe);
     }
 }
 
@@ -1113,97 +1123,7 @@ export class JPADrawInfo {
     public frustum: Frustum | null = null;
 }
 
-class StripeEntry {
-    private static USED_AGE = 4;
-    public buffer: GfxBuffer;
-    public vertexBufferDescriptors: GfxVertexBufferDescriptor[];
-    public age = 0;
-    public shadowBufferF32: Float32Array;
-    public shadowBufferU8: Uint8Array;
-
-    constructor(device: GfxDevice, public wordCount: number, public indexBufferDescriptor: GfxIndexBufferDescriptor) {
-        this.shadowBufferF32 = new Float32Array(wordCount);
-        this.shadowBufferU8 = new Uint8Array(this.shadowBufferF32.buffer);
-        this.buffer = device.createBuffer(this.shadowBufferF32.byteLength, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Dynamic);
-        device.setResourceName(this.buffer, 'JPA StripeBuffer');
-        this.vertexBufferDescriptors = [{ buffer: this.buffer }];
-    }
-
-    public markInUse(): void {
-        this.age = StripeEntry.USED_AGE;
-    }
-
-    public markNotInUse(): void {
-        assert(this.age === StripeEntry.USED_AGE);
-        this.age--;
-    }
-
-    public canUse(wordCount: number) {
-        return this.age < StripeEntry.USED_AGE && this.wordCount >= wordCount;
-    }
-
-    public prepareToRender(device: GfxDevice): boolean {
-        if (this.age === StripeEntry.USED_AGE)
-            device.uploadBufferData(this.buffer, 0, this.shadowBufferU8);
-        return this.age-- > 0;
-    }
-
-    public destroy(device: GfxDevice): void {
-        device.destroyBuffer(this.buffer);
-    }
-}
-
 const MAX_STRIPE_VERTEX_COUNT = 65535;
-class StripeBufferManager {
-    public entry: StripeEntry[] = [];
-    private indexBuffer: GfxBuffer;
-
-    public vertexBufferDescriptors: GfxVertexBufferDescriptor[];
-    public indexBufferDescriptor: GfxIndexBufferDescriptor;
-
-    constructor(device: GfxDevice, public inputLayout: GfxInputLayout) {
-        const tristripIndexData = makeTriangleIndexBuffer(GfxTopology.TriStrips, 0, MAX_STRIPE_VERTEX_COUNT);
-        this.indexBuffer = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, tristripIndexData.buffer);
-        device.setResourceName(this.indexBuffer, 'JPA StripeBuffer (IB)');
-        this.indexBufferDescriptor = { buffer: this.indexBuffer };
-    }
-
-    public allocateVertexBuffer(device: GfxDevice, vertexCount: number): StripeEntry {
-        assert(vertexCount < MAX_STRIPE_VERTEX_COUNT);
-
-        // Allocate all buffers to max size for now.
-        const wordCount = MAX_STRIPE_VERTEX_COUNT * 5;
-
-        for (let i = 0; i < this.entry.length; i++) {
-            const entry = this.entry[i];
-            if (entry.canUse(wordCount)) {
-                entry.markInUse();
-                return entry;
-            }
-        }
-
-        const entry = new StripeEntry(device, wordCount, this.indexBufferDescriptor);
-        entry.markInUse();
-        this.entry.push(entry);
-        return entry;
-    }
-
-    public prepareToRender(device: GfxDevice): void {
-        for (let i = 0; i < this.entry.length; i++) {
-            if (!this.entry[i].prepareToRender(device)) {
-                this.entry[i].destroy(device);
-                this.entry.splice(i--, 1);
-            }
-        }
-    }
-
-    public destroy(device: GfxDevice): void {
-        for (let i = 0; i < this.entry.length; i++)
-            this.entry[i].destroy(device);
-        device.destroyBuffer(this.indexBuffer);
-    }
-}
-
 class DataTexture {
     // Layout:
     // 00  float4 mPosMtx[3];
@@ -1292,7 +1212,6 @@ export class JPAEmitterManager {
     public deadEmitterPool: JPABaseEmitter[] = [];
     public aliveEmitters: JPABaseEmitter[] = [];
     public globalRes: JPAGlobalRes;
-    public stripeBufferManager: StripeBufferManager;
     public dataTextureManager: DataTextureManager;
 
     constructor(public cache: GfxRenderCache, public maxParticleCount: number, public maxEmitterCount: number) {
@@ -1304,7 +1223,6 @@ export class JPAEmitterManager {
             this.deadParticlePool.push(new JPABaseParticle());
 
         this.globalRes = new JPAGlobalRes(cache);
-        this.stripeBufferManager = new StripeBufferManager(cache.device, this.globalRes.inputLayout);
         this.dataTextureManager = new DataTextureManager();
     }
 
@@ -1393,13 +1311,11 @@ export class JPAEmitterManager {
     }
 
     public prepareToRender(device: GfxDevice): void {
-        this.stripeBufferManager.prepareToRender(device);
         this.dataTextureManager.prepareToRender(device);
     }
 
     public destroy(device: GfxDevice): void {
         this.globalRes.destroy(device);
-        this.stripeBufferManager.destroy(device);
         this.dataTextureManager.destroy(device);
     }
 }
@@ -2343,8 +2259,7 @@ export class JPABaseEmitter {
 
         const oneStripVertexCount = particleCount * 2;
         const bufferVertexCount = isCross ? oneStripVertexCount * 2 : oneStripVertexCount;
-        const device = workData.emitterManager.cache.device;
-        const entry = workData.emitterManager.stripeBufferManager.allocateVertexBuffer(device, bufferVertexCount);
+        const data = new Float32Array(bufferVertexCount * 5);
 
         scratchMatrix[12] = 0;
         scratchMatrix[13] = 0;
@@ -2388,28 +2303,28 @@ export class JPABaseEmitter {
                 transformVec3Mat4w0(scratchVec3Points[j], scratchMatrix, scratchVec3Points[j]);
 
             const texT = i / (particleCount - 1);
-            entry.shadowBufferF32[stripe0Idx++] = scratchVec3Points[0][0] + p.position[0];
-            entry.shadowBufferF32[stripe0Idx++] = scratchVec3Points[0][1] + p.position[1];
-            entry.shadowBufferF32[stripe0Idx++] = scratchVec3Points[0][2] + p.position[2];
-            entry.shadowBufferF32[stripe0Idx++] = 0;
-            entry.shadowBufferF32[stripe0Idx++] = texT;
-            entry.shadowBufferF32[stripe0Idx++] = scratchVec3Points[1][0] + p.position[0];
-            entry.shadowBufferF32[stripe0Idx++] = scratchVec3Points[1][1] + p.position[1];
-            entry.shadowBufferF32[stripe0Idx++] = scratchVec3Points[1][2] + p.position[2];
-            entry.shadowBufferF32[stripe0Idx++] = 1;
-            entry.shadowBufferF32[stripe0Idx++] = texT;
+            data[stripe0Idx++] = scratchVec3Points[0][0] + p.position[0];
+            data[stripe0Idx++] = scratchVec3Points[0][1] + p.position[1];
+            data[stripe0Idx++] = scratchVec3Points[0][2] + p.position[2];
+            data[stripe0Idx++] = 0;
+            data[stripe0Idx++] = texT;
+            data[stripe0Idx++] = scratchVec3Points[1][0] + p.position[0];
+            data[stripe0Idx++] = scratchVec3Points[1][1] + p.position[1];
+            data[stripe0Idx++] = scratchVec3Points[1][2] + p.position[2];
+            data[stripe0Idx++] = 1;
+            data[stripe0Idx++] = texT;
 
             if (isCross) {
-                entry.shadowBufferF32[stripe1Idx++] = scratchVec3Points[2][0] + p.position[0];
-                entry.shadowBufferF32[stripe1Idx++] = scratchVec3Points[2][1] + p.position[1];
-                entry.shadowBufferF32[stripe1Idx++] = scratchVec3Points[2][2] + p.position[2];
-                entry.shadowBufferF32[stripe1Idx++] = 0;
-                entry.shadowBufferF32[stripe1Idx++] = texT;
-                entry.shadowBufferF32[stripe1Idx++] = scratchVec3Points[3][0] + p.position[0];
-                entry.shadowBufferF32[stripe1Idx++] = scratchVec3Points[3][1] + p.position[1];
-                entry.shadowBufferF32[stripe1Idx++] = scratchVec3Points[3][2] + p.position[2];
-                entry.shadowBufferF32[stripe1Idx++] = 1;
-                entry.shadowBufferF32[stripe1Idx++] = texT;
+                data[stripe1Idx++] = scratchVec3Points[2][0] + p.position[0];
+                data[stripe1Idx++] = scratchVec3Points[2][1] + p.position[1];
+                data[stripe1Idx++] = scratchVec3Points[2][2] + p.position[2];
+                data[stripe1Idx++] = 0;
+                data[stripe1Idx++] = texT;
+                data[stripe1Idx++] = scratchVec3Points[3][0] + p.position[0];
+                data[stripe1Idx++] = scratchVec3Points[3][1] + p.position[1];
+                data[stripe1Idx++] = scratchVec3Points[3][2] + p.position[2];
+                data[stripe1Idx++] = 1;
+                data[stripe1Idx++] = texT;
             }
 
             if (needsPrevPos)
@@ -2423,7 +2338,9 @@ export class JPABaseEmitter {
         const renderInst1 = renderInstManager.newRenderInst();
         renderInst1.setDrawCount(oneStripIndexCount);
         renderInst1.sortKey = workData.particleSortKey;
-        renderInst1.setVertexInput(globalRes.inputLayout, entry.vertexBufferDescriptors, entry.indexBufferDescriptor);
+        const cache = renderInstManager.gfxRenderCache;
+        const vertexBuffer = cache.dynamicBufferCache.allocateData(GfxBufferUsage.Vertex, new Uint8Array(data.buffer));
+        renderInst1.setVertexInput(globalRes.inputLayout, [vertexBuffer], globalRes.inputIndexStripe);
         workData.fillParticleRenderInst(renderInstManager, renderInst1);
         renderInstManager.submitRenderInst(renderInst1);
 

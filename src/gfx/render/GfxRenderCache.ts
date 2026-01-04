@@ -1,8 +1,8 @@
 
 import { hashCodeNumberFinish, hashCodeNumberUpdate, HashMap, nullHashFunc } from "../../HashMap.js";
-import { GfxAttachmentState, GfxBindingLayoutDescriptor, GfxBindings, GfxBindingsDescriptor, GfxChannelBlendState, GfxColor, GfxDevice, GfxInputLayout, GfxInputLayoutDescriptor, GfxMegaStateDescriptor, GfxProgram, GfxRenderProgramDescriptor, GfxRenderPipeline, GfxRenderPipelineDescriptor, GfxSampler, GfxSamplerDescriptor, GfxVendorInfo } from "../platform/GfxPlatform.js";
+import { GfxAttachmentState, GfxBindingLayoutDescriptor, GfxBindings, GfxBindingsDescriptor, GfxChannelBlendState, GfxColor, GfxDevice, GfxInputLayout, GfxInputLayoutDescriptor, GfxMegaStateDescriptor, GfxProgram, GfxRenderProgramDescriptor, GfxRenderPipeline, GfxRenderPipelineDescriptor, GfxSampler, GfxSamplerDescriptor, GfxVendorInfo, GfxBufferUsage, GfxBufferBinding, GfxVertexBufferDescriptor, GfxBuffer, GfxBufferFrequencyHint } from "../platform/GfxPlatform.js";
 import { gfxBindingsDescriptorCopy, gfxBindingsDescriptorEquals, gfxInputLayoutDescriptorCopy, gfxInputLayoutDescriptorEquals, gfxRenderPipelineDescriptorCopy, gfxRenderPipelineDescriptorEquals, gfxSamplerDescriptorEquals } from '../platform/GfxPlatformObjUtil.js';
-import { assert } from "../platform/GfxPlatformUtil.js";
+import { align, assert } from "../platform/GfxPlatformUtil.js";
 
 interface GfxProgramDescriptorPreproc extends GfxRenderProgramDescriptor {
     ensurePreprocessed(vendorInfo: GfxVendorInfo): void;
@@ -93,14 +93,88 @@ interface Expiry {
 
 interface ExpiryBindings extends GfxBindings, Expiry {}
 
+class DynamicBufferEntry {
+    public readonly buffer: GfxBuffer;
+    private allocOffs = 0;
+    private age = 0;
+
+    constructor(device: GfxDevice, public readonly byteCount: number, public readonly usage: GfxBufferUsage) {
+        this.buffer = device.createBuffer(byteCount, usage, GfxBufferFrequencyHint.Dynamic);
+    }
+
+    public allocate(device: GfxDevice, data: Uint8Array): number {
+        if (this.allocOffs + data.byteLength <= this.byteCount) {
+            let byteOffset = this.allocOffs;
+            device.uploadBufferData(this.buffer, byteOffset, data);
+            this.allocOffs += align(data.byteLength, 4);
+            this.age = 4;
+            return byteOffset;
+        } else {
+            return -1;
+        }
+    }
+
+    public prepareToRender(): boolean {
+        this.allocOffs = 0;
+        return this.age-- > 0;
+    }
+
+    public destroy(device: GfxDevice): void {
+        device.destroyBuffer(this.buffer);
+    }
+}
+
+export class GfxDynamicBufferCache {
+    private entry: DynamicBufferEntry[] = [];
+
+    constructor(private device: GfxDevice) {
+    }
+
+    public prepareToRender(): void {
+        for (let i = 0; i < this.entry.length; i++) {
+            if (!this.entry[i].prepareToRender()) {
+                this.entry[i].destroy(this.device);
+                this.entry.splice(i--, 1);
+            }
+        }
+    }
+
+    public allocateData(usage: GfxBufferUsage, data: Uint8Array): GfxVertexBufferDescriptor {
+        for (let i = 0; i < this.entry.length; i++) {
+            const entry = this.entry[i];
+            if (entry.usage !== usage)
+                continue;
+            const byteOffset = entry.allocate(this.device, data);
+            if (byteOffset >= 0)
+                return { buffer: entry.buffer, byteOffset };
+        }
+
+        // Round to the nearest 64.
+        const newBufferSize = align(data.byteLength, 64);
+        const entry = new DynamicBufferEntry(this.device, newBufferSize, usage);
+        this.entry.push(entry);
+        const byteOffset = entry.allocate(this.device, data);
+        assert(byteOffset === 0);
+        return { buffer: entry.buffer, byteOffset };
+    }
+
+    public destroy(): void {
+        for (let i = 0; i < this.entry.length; i++)
+            this.entry[i].destroy(this.device);
+        this.entry.length = 0;
+    }
+}
+
 export class GfxRenderCache {
     private gfxBindingsCache = new HashMap<GfxBindingsDescriptor, ExpiryBindings>(gfxBindingsDescriptorEquals, gfxBindingsDescriptorHash);
     private gfxRenderPipelinesCache = new HashMap<GfxRenderPipelineDescriptor, GfxRenderPipeline>(gfxRenderPipelineDescriptorEquals, gfxRenderPipelineDescriptorHash);
     private gfxInputLayoutsCache = new HashMap<GfxInputLayoutDescriptor, GfxInputLayout>(gfxInputLayoutDescriptorEquals, nullHashFunc);
     private gfxProgramCache = new HashMap<GfxRenderProgramDescriptor, GfxProgram>(gfxProgramDescriptorEquals, nullHashFunc);
     private gfxSamplerCache = new HashMap<GfxSamplerDescriptor, GfxSampler>(gfxSamplerDescriptorEquals, nullHashFunc);
+    public dynamicBufferCache: GfxDynamicBufferCache;
 
     constructor(public device: GfxDevice) {
+        this.dynamicBufferCache = new GfxDynamicBufferCache(device);
     }
 
     public createBindings(descriptor: GfxBindingsDescriptor): GfxBindings {
@@ -179,6 +253,8 @@ export class GfxRenderCache {
                 this.device.destroyBindings(value);
             }
         }
+
+        this.dynamicBufferCache.prepareToRender();
     }
 
     public destroy(): void {
@@ -197,5 +273,6 @@ export class GfxRenderCache {
         this.gfxInputLayoutsCache.clear();
         this.gfxProgramCache.clear();
         this.gfxSamplerCache.clear();
+        this.dynamicBufferCache.destroy();
     }
 }

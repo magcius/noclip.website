@@ -137,28 +137,17 @@ enum BehaviorType {
 class BufferPage {
     public vertexData: Float32Array;
     public indexData: Uint16Array;
-    public vertexBuffer: GfxBuffer;
-    public indexBuffer: GfxBuffer;
     public inputLayout: GfxInputLayout;
 
     public vertexDataOffs = 0;
     public vertexStride = 3+4;
     public indexDataOffs = 0;
 
-    public lifetime = 3;
-
     public renderInst = new GfxRenderInst();
 
     constructor(cache: GfxRenderCache, public behaviorType: BehaviorType, vertexCount: number, indexCount: number, private lineThickness: number) {
-        const device = cache.device;
-
         this.vertexData = new Float32Array(vertexCount * this.vertexStride);
-        this.vertexBuffer = device.createBuffer(this.vertexData.byteLength, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Dynamic);
-        device.setResourceName(this.vertexBuffer, 'DebugDraw BufferPage');
-
         this.indexData = new Uint16Array(align(indexCount, 2));
-        this.indexBuffer = device.createBuffer(this.indexData.byteLength, GfxBufferUsage.Index, GfxBufferFrequencyHint.Dynamic);
-        device.setResourceName(this.indexBuffer, 'DebugDraw BufferPage (IB)');
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: 0, format: GfxFormat.F32_RGB, bufferIndex: 0, bufferByteOffset: 0 },
@@ -196,24 +185,13 @@ class BufferPage {
         this.indexData[this.indexDataOffs++] = n;
     }
 
-    public endFrame(device: GfxDevice, templateRenderInst: GfxRenderInst): boolean {
-        if (this.vertexDataOffs === 0) {
-            if (--this.lifetime === 0) {
-                this.destroy(device);
-                return false;
-            } else {
-                return true;
-            }
-        }
-
-        device.uploadBufferData(this.vertexBuffer, 0, new Uint8Array(this.vertexData.buffer), 0, this.vertexDataOffs * 4);
-        device.uploadBufferData(this.indexBuffer, 0, new Uint8Array(this.indexData.buffer), 0, this.indexDataOffs * 2);
+    public endFrame(cache: GfxRenderCache, templateRenderInst: GfxRenderInst): void {
+        const vertexBuffer = cache.dynamicBufferCache.allocateData(GfxBufferUsage.Vertex, new Uint8Array(this.vertexData.buffer, 0, this.vertexDataOffs * 4));
+        const indexBuffer = cache.dynamicBufferCache.allocateData(GfxBufferUsage.Index, new Uint8Array(this.indexData.buffer, 0, this.indexDataOffs * 2));
 
         this.renderInst.copyFrom(templateRenderInst);
 
-        this.renderInst.setVertexInput(this.inputLayout, [
-            { buffer: this.vertexBuffer },
-        ], { buffer: this.indexBuffer });
+        this.renderInst.setVertexInput(this.inputLayout, [vertexBuffer], indexBuffer);
 
         const isLines = this.behaviorType === BehaviorType.LinesDepthWrite || this.behaviorType === BehaviorType.LinesDepthTint;
         const isDepthWrite = this.behaviorType === BehaviorType.LinesDepthWrite || this.behaviorType === BehaviorType.SolidDepthWrite;
@@ -233,14 +211,6 @@ class BufferPage {
 
         this.vertexDataOffs = 0;
         this.indexDataOffs = 0;
-        this.lifetime = 3;
-        return true;
-    }
-
-    public destroy(device: GfxDevice): void {
-        device.destroyBuffer(this.vertexBuffer);
-        if (this.indexBuffer !== null)
-            device.destroyBuffer(this.indexBuffer);
     }
 }
 
@@ -507,12 +477,10 @@ export class DebugDraw {
     }
 
     private endFrame(): number {
-        const device = this.renderCache.device;
         let behaviorTypesMask = 0;
         for (let i = 0; i < this.pages.length; i++) {
             const page = this.pages[i];
-            if (!page.endFrame(device, this.templateRenderInst))
-                this.pages.splice(i--, 1);
+            page.endFrame(this.renderCache, this.templateRenderInst);
             behaviorTypesMask |= 1 << page.behaviorType;
         }
         return behaviorTypesMask;
@@ -550,8 +518,5 @@ export class DebugDraw {
     }
 
     public destroy(): void {
-        const device = this.renderCache.device;
-        for (let i = 0; i < this.pages.length; i++)
-            this.pages[i].destroy(device);
     }
 }
