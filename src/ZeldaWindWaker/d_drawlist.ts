@@ -446,7 +446,6 @@ function drawSimpleModelInstance(renderInstManager: GfxRenderInstManager, model:
 //#region Real Shadows
 
 class dDlst_shadowReal_c {
-    public state = 0; // 0: unallocated, 1: ready, 2: pendingDelete
     public id: number = 0;
 
     private models: J3DModelInstance[] = [];
@@ -463,15 +462,19 @@ class dDlst_shadowReal_c {
     }
 
     public reset(): void {
-        if (this.state === 1) {
-            this.state = 2; // This shadow will be freed next frame if not set() again 
-        } else {
-            this.state = 0;
+        // Free this shadow if it was not set this frame
+        if (this.id !== 0 && this.models.length == 0) {
+            this.id = 0;
         }
+        
         this.models.length = 0;
     }
 
-    public generateShadowVolume(globals: dGlobals) {
+    public generateShadowVolume(globals: dGlobals): boolean
+    {
+        if (this.models.length === 0)
+            return false;
+
         const lightAABB = new AABB();
 
         // Build an AABB containing all models in the light's view space
@@ -479,17 +482,6 @@ class dDlst_shadowReal_c {
             const modelToLightMatrix = mat4.mul(scratchMat4, this.lightViewMtx, this.models[m].modelMatrix);
             scratchAABB.transform(this.models[m].modelData.bbox, modelToLightMatrix);
             lightAABB.union(lightAABB, scratchAABB);
-
-            // TODO: The bounding boxes computed this way are not positioned/sized correctly. Why? This matches the culling that calcView does.
-            // const jnt1 = this.models[m].modelData.bmd.jnt1;
-            // for (let i = 0; i < jnt1.joints.length; i++) {
-            //     if (jnt1.joints[i].bbox.isEmpty())
-            //         continue;
-            //     const jointToWorldMatrix = this.models[m].shapeInstanceState.jointToWorldMatrixArray[i];
-            //     const jointToLightMatrix = mat4.mul(scratchMat4, this.lightViewMtx, jointToWorldMatrix);
-            //     scratchAABB.transform(jnt1.joints[i].bbox, jointToWorldMatrix);
-            //     lightAABB.union(lightAABB, scratchAABB);
-            // }
         }
 
         const worldFromLight = mat4.invert(scratchMat4, this.lightViewMtx);
@@ -508,17 +500,18 @@ class dDlst_shadowReal_c {
         mat4.scale(lightFromVolume, lightFromVolume, vec3.sub(scratchVec3a, lightAABB.max, lightAABB.min));
         mat4.mul(this.modelMtx, worldFromLight, lightFromVolume);
 
-        // Cull the shadow receiver volume. If culled for two frames, this id will be freed.
+        // Cull the shadow receiver volume if out of view
         scratchAABB.set(0, 0, 0, 1, 1, 1);
         scratchAABB.transform(scratchAABB, this.modelMtx);
-        if (!globals.camera.frustum.contains(scratchAABB))
+        if (!globals.camera.frustum.contains(scratchAABB)) {
             return false;
+        }
 
         return true;
     }
 
     public imageDraw(globals: dGlobals, renderInstManager: GfxRenderInstManager): void {
-        if (this.state !== 1)
+        if (this.models.length === 0)
             return;
 
         const template = renderInstManager.pushTemplate();
@@ -542,7 +535,7 @@ class dDlst_shadowReal_c {
     // 6. Render all of the bg triangles gathered in step 1, sampling from the shadow map, clear the alpha where texture not > 0.
     // 7. Render the bounding box, clearing the alpha to 0. This same framebuffer is used to render other shadows, and then alpha objects.
     public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        if (this.state !== 1)
+        if (this.models.length === 0)
             return;
 
         const renderInst = renderInstManager.newRenderInst();
@@ -570,8 +563,6 @@ class dDlst_shadowReal_c {
             if (this.alpha === 0)
                 return 0;
 
-            this.state = 1;
-            this.models.length = 0;
             this.heightAboveGround = heightAboveGround;
         }
 
@@ -892,9 +883,7 @@ class dDlst_shadowControl_c {
         // Instead, we wait until draw time to generate a tight light-space AABB from the animated model.
         for (let i = 0; i < this.reals.length; i++) {
             const visible = this.reals[i].generateShadowVolume(globals);
-            if( !visible ) {
-                this.reals[i].reset();
-            }
+            // NOTE: Rely on actor culling instead of receiver culling. Otherwise we just thrash shadowIds.
         }
         
         // First, render our real shadow casters into the shadowmap
@@ -1044,7 +1033,7 @@ class dDlst_shadowControl_c {
     private getOrAllocate(id: number): dDlst_shadowReal_c | null {
         let real = id ? this.reals.find(r => r.id === id) : undefined;
         if (!real) {
-            const freeIdx = this.reals.findIndex(r => r.state === 0);
+            const freeIdx = this.reals.findIndex(r => r.id === 0);
             if (freeIdx >= 0) {
                 real = this.reals[freeIdx];
                 real.id = ++this.latestId;
