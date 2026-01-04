@@ -201,9 +201,33 @@ in vec4 v_TexCoord;
 
 void main() {
     vec2 t_TexCoordDiffuse = v_TexCoord.xy;
-#if defined GAME_HL1 && defined USE_WATER
-    t_TexCoordDiffuse.xy += sin(t_TexCoordDiffuse.xy * 0.125 + u_Time);
+
+#if defined GAME_HL1
+    t_TexCoordDiffuse *= 2.75;
 #endif
+
+#if defined USE_WATER
+    #if defined GAME_QUAKE
+        const float M_PI = 3.14159265;
+        const float TIME_SCALE = 128.0 / M_PI;
+
+        float angleS = mod(t_TexCoordDiffuse.y * 2.0 + u_Time * TIME_SCALE, 256.0);
+        float angleT = mod(t_TexCoordDiffuse.x * 2.0 + u_Time * TIME_SCALE, 256.0);
+
+        float warpS = 8.0 * sin(angleS * (M_PI / 128.0));
+        float warpT = 8.0 * sin(angleT * (M_PI / 128.0));
+
+        t_TexCoordDiffuse.x += warpS;
+        t_TexCoordDiffuse.y += warpT;
+    #else
+        float warpS = 10.0 * sin(t_TexCoordDiffuse.y * 0.03 + u_Time * 0.5);
+        float warpT = 10.0 * sin(t_TexCoordDiffuse.x * 0.03 + u_Time * 0.5);
+
+        t_TexCoordDiffuse.x += warpS;
+        t_TexCoordDiffuse.y += warpT;
+    #endif
+#endif
+
     t_TexCoordDiffuse.xy /= vec2(textureSize(TEXTURE(u_TextureDiffuse), 0));
     vec4 t_DiffuseSample = texture(SAMPLER_2D(u_TextureDiffuse), t_TexCoordDiffuse.xy);
 
