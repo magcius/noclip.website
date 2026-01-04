@@ -470,14 +470,13 @@ class dDlst_shadowReal_c {
         this.models.length = 0;
     }
 
-    public generateShadowVolume(globals: dGlobals): boolean
+    public generateShadowVolume(globals: dGlobals): void
     {
         if (this.models.length === 0)
-            return false;
-
-        const lightAABB = new AABB();
+            return;
 
         // Build an AABB containing all models in the light's view space
+        const lightAABB = new AABB();
         for (let m = 0; m < this.models.length; m++) {
             const modelToLightMatrix = mat4.mul(scratchMat4, this.lightViewMtx, this.models[m].modelMatrix);
             scratchAABB.transform(this.models[m].modelData.bbox, modelToLightMatrix);
@@ -499,15 +498,6 @@ class dDlst_shadowReal_c {
         const lightFromVolume = mat4.fromTranslation(mat4.create(), lightAABB.min);
         mat4.scale(lightFromVolume, lightFromVolume, vec3.sub(scratchVec3a, lightAABB.max, lightAABB.min));
         mat4.mul(this.modelMtx, worldFromLight, lightFromVolume);
-
-        // Cull the shadow receiver volume if out of view
-        scratchAABB.set(0, 0, 0, 1, 1, 1);
-        scratchAABB.transform(scratchAABB, this.modelMtx);
-        if (!globals.camera.frustum.contains(scratchAABB)) {
-            return false;
-        }
-
-        return true;
     }
 
     public imageDraw(globals: dGlobals, renderInstManager: GfxRenderInstManager): void {
@@ -534,6 +524,8 @@ class dDlst_shadowReal_c {
     // 5. Render the front/back faces of the bounding box into the alpha buffer, adding/subtracting just like simple shadows 2. & 3.
     // 6. Render all of the bg triangles gathered in step 1, sampling from the shadow map, clear the alpha where texture not > 0.
     // 7. Render the bounding box, clearing the alpha to 0. This same framebuffer is used to render other shadows, and then alpha objects.
+    // TODO: Fix simple shadow volume now that it is a unit cube
+    // TODO: Fix ID thrashing when setShadowRealMtx returns 0.0
     public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         if (this.models.length === 0)
             return;
@@ -632,10 +624,26 @@ class dDlst_shadowReal_c {
         // noclip modification: 
         // The game uses realPolygonCheck to gather a list of bg polygons that intersect the shadow's bounding volume.
         // These are then renderered to sample the shadow map. Instead, we render an oriented box (the shadow volume) and sample the shadowmap there.
-        // This also culls this shadow if the receiver AABB is not visible. We do that in imageDraw() after the model pose has been evaluated.
         // if (!realPolygonCheck(casterCenter, casterRadius, heightAboveGround, rayDir, shadowPoly)) {
         //     return 0;
         // }
+
+        // Generate a conservative shadow volume (from realPolygonCheck), and cull if not visible.
+        const receiverAABB = scratchAABB;
+        const tmp1 = casterRadius * casterRadius * 0.002;
+        const tmp2 = Math.max(tmp1, 120.0);
+        let groundDist = casterRadius + heightAboveGround - tmp2;
+        const xOffset = rayDir[0] * groundDist;
+        const zOffset = rayDir[2] * groundDist;
+        receiverAABB.min[1] = casterCenter[1] - groundDist;
+        receiverAABB.max[1] = casterCenter[1] + casterRadius * 0.4;
+        receiverAABB.min[0] = Math.min(casterCenter[0] + xOffset, casterCenter[0]) - casterRadius;
+        receiverAABB.max[0] = Math.max(casterCenter[0] + xOffset, casterCenter[0]) + casterRadius;
+        receiverAABB.min[2] = Math.min(casterCenter[2] + zOffset, casterCenter[2]) - casterRadius;
+        receiverAABB.max[2] = Math.max(casterCenter[2] + zOffset, casterCenter[2]) + casterRadius;
+        if (!globals.camera.frustum.contains(receiverAABB)) {
+            return 0.0;
+        }
 
         // Build view matrix (lookAt)
         mat4.lookAt(lightViewMtx, lightVec, casterCenter, Vec3UnitY);
@@ -882,8 +890,7 @@ class dDlst_shadowControl_c {
         // noclip modification: The game computes shadow receiver geometry in setShadowRealMtx() using a conservative AABB. 
         // Instead, we wait until draw time to generate a tight light-space AABB from the animated model.
         for (let i = 0; i < this.reals.length; i++) {
-            const visible = this.reals[i].generateShadowVolume(globals);
-            // NOTE: Rely on actor culling instead of receiver culling. Otherwise we just thrash shadowIds.
+            this.reals[i].generateShadowVolume(globals);
         }
         
         // First, render our real shadow casters into the shadowmap
