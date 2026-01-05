@@ -29,22 +29,13 @@ export interface Tile {
 
 export interface TileGroups {
     lod: Tile[];
-    cor1: Tile[];
-    cor2: Tile[];
-    cor3: Tile[];
-    cor4: Tile[];
 }
 
 export interface TileAtlas {
     atlasData: Uint8Array;
     atlasWidth: number;
     atlasHeight: number;
-
     lodUVs:  { u0: number; v0: number; u1: number; v1: number }[];
-    cor1UVs: { u0: number; v0: number; u1: number; v1: number }[];
-    cor2UVs: { u0: number; v0: number; u1: number; v1: number }[];
-    cor3UVs: { u0: number; v0: number; u1: number; v1: number }[];
-    cor4UVs: { u0: number; v0: number; u1: number; v1: number }[];
 }
 
 export type LevelData = {
@@ -428,7 +419,7 @@ export function applyTileRotationRGBA(rgba: Uint8Array, tex: Tile, size: number 
     return out;
 }
 
-export function ps1ColorToRGBA(word: number): [number, number, number, number] {
+export function colorBitsToRGBA(word: number): [number, number, number, number] {
     const r5 = (word) & 0x1F;
     const g5 = (word >> 5) & 0x1F;
     const b5 = (word >> 10) & 0x1F;
@@ -446,7 +437,7 @@ export function readClut4bpp(vram: VRAM, px: number, py: number): [number, numbe
     for (let i = 0; i < 16; i++) {
         const wordIndex = baseWordIndex + i;
         const word = vram.getWordByIndex(wordIndex);
-        const [r, g, b, a] = ps1ColorToRGBA(word);
+        const [r, g, b, a] = colorBitsToRGBA(word);
         palette.push([r, g, b, a]);
     }
     return palette;
@@ -458,7 +449,7 @@ export function readClut8bpp(vram: VRAM, px: number, py: number): [number, numbe
     for (let i = 0; i < 256; i++) {
         const wordIndex = baseWordIndex + i;
         const word = vram.getWordByIndex(wordIndex);
-        const [r, g, b, a] = ps1ColorToRGBA(word);
+        const [r, g, b, a] = colorBitsToRGBA(word);
         palette.push([r, g, b, a]);
     }
     return palette;
@@ -545,7 +536,7 @@ export function decodeTileToRGBA(vram: VRAM, tex: Tile, width: number = tex.w, h
         for (let y = 0; y < height; y++) {
             for (let x = 0; x < width; x++) {
                 const word = vram.getWord(wordX + x, y4 + y);
-                const [r, g, b, a] = ps1ColorToRGBA(word);
+                const [r, g, b, a] = colorBitsToRGBA(word);
                 const dst = (y * width + x) * 4;
                 out[dst + 0] = r;
                 out[dst + 1] = g;
@@ -567,27 +558,16 @@ export function buildCombinedAtlas(vram: VRAM, groups: TileGroups, tilesPerRow: 
     const atlasData = new Uint8Array(atlasWidth * atlasHeight * 4);
 
     const lodUVs:  { u0: number; v0: number; u1: number; v1: number }[] = [];
-    const cor1UVs: { u0: number; v0: number; u1: number; v1: number }[] = [];
-    const cor2UVs: { u0: number; v0: number; u1: number; v1: number }[] = [];
-    const cor3UVs: { u0: number; v0: number; u1: number; v1: number }[] = [];
-    const cor4UVs: { u0: number; v0: number; u1: number; v1: number }[] = [];
 
-    function blitGroup(tiles: Tile[], groupIndex: number, outUVs: { u0: number; v0: number; u1: number; v1: number }[]) {
-        const groupYOffset = groupIndex * rowsPerGroup * slotSize;
-
+    function blitGroup(tiles: Tile[], outUVs: { u0: number; v0: number; u1: number; v1: number }[]) {
         for (let i = 0; i < tileCount; i++) {
             const tex = tiles[i];
-
-            // Use tex.w for decode size but paste into a 32×32 slot
             const w = tex.w;
             const h = tex.w;
             let rgba = decodeTileToRGBA(vram, tex, w, h);
             rgba = applyTileRotationRGBA(rgba, tex, w);
-
             const atlasX = (i % tilesPerRow) * slotSize;
-            const atlasY = Math.floor(i / tilesPerRow) * slotSize + groupYOffset;
-
-            // Blit w×h into top-left of the slot
+            const atlasY = Math.floor(i / tilesPerRow) * slotSize;
             for (let y = 0; y < h; y++) {
                 for (let x = 0; x < w; x++) {
                     const src = (y * w + x) * 4;
@@ -598,7 +578,6 @@ export function buildCombinedAtlas(vram: VRAM, groups: TileGroups, tilesPerRow: 
                     atlasData[dst + 3] = rgba[src + 3];
                 }
             }
-
             outUVs.push({
                 u0: atlasX / atlasWidth,
                 v0: atlasY / atlasHeight,
@@ -608,21 +587,13 @@ export function buildCombinedAtlas(vram: VRAM, groups: TileGroups, tilesPerRow: 
         }
     }
 
-    blitGroup(groups.lod,  0, lodUVs);
-    blitGroup(groups.cor1, 1, cor1UVs);
-    blitGroup(groups.cor2, 2, cor2UVs);
-    blitGroup(groups.cor3, 3, cor3UVs);
-    blitGroup(groups.cor4, 4, cor4UVs);
+    blitGroup(groups.lod, lodUVs);
 
     return {
         atlasData,
         atlasWidth,
         atlasHeight,
-        lodUVs,
-        cor1UVs,
-        cor2UVs,
-        cor3UVs,
-        cor4UVs,
+        lodUVs
     };
 }
 
@@ -633,10 +604,6 @@ export function parseTileGroups(view: DataView): TileGroups {
     const count = view.getUint32(offs, true); offs += 4;
 
     const lod: Tile[] = [];
-    const cor1: Tile[] = [];
-    const cor2: Tile[] = [];
-    const cor3: Tile[] = [];
-    const cor4: Tile[] = [];
 
     // --- LOD tiles ---
     for (let i = 0; i < count; i++) {
@@ -647,32 +614,7 @@ export function parseTileGroups(view: DataView): TileGroups {
         lod.push(tex);
     }
 
-    // --- CORNER tiles ---
-    for (let i = 0; i < count; i++) {
-        offs += 8; // skip buf
-
-        let tex;
-
-        tex = readTile(view, offs); offs += 8;
-        textureCompute(tex, offs - 8);
-        cor1.push(tex);
-
-        tex = readTile(view, offs); offs += 8;
-        textureCompute(tex, offs - 8);
-        cor2.push(tex);
-
-        tex = readTile(view, offs); offs += 8;
-        textureCompute(tex, offs - 8);
-        cor3.push(tex);
-
-        tex = readTile(view, offs); offs += 8;
-        textureCompute(tex, offs - 8);
-        cor4.push(tex);
-
-        offs += 128; // skip padding
-    }
-
-    return { lod, cor1, cor2, cor3, cor4 };
+    return { lod };
 }
 
 function readTile(view: DataView, offs: number): Tile {

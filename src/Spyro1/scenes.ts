@@ -64,14 +64,15 @@ export class Spyro1Renderer implements SceneGfx {
 /*
 TODO
 
-Scrolling textures (ex. see waterfall in Artisans)
+Scrolling textures (ex. waterfall in Artisans)
+Water in some flight levels
 Better level shader. It's close enough to PS1 but could be better.
-More default save states
+Better default save states
 
 Nice to have
 
-Gems, dragon statues, NPCs, etc. rendered on each level
-    The format for these will need to be figured out. They're likely in other "sub-subfiles" like the ground models and skybox.
+Gems, level entities, NPCs, etc. on each level
+    The format for these will need to be figured out. They're in other "sub-subfiles" like the ground models and skybox.
 Read directly from WAD.WAD by offset instead of extracting subfiles
 */
 
@@ -79,7 +80,7 @@ class Spyro1Scene implements SceneDesc {
     public id: string;
 
     constructor(public subFileID: number, public name: string) {
-        this.id = subFileID.toString(16);
+        this.id = subFileID.toString();
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
