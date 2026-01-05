@@ -26,7 +26,7 @@ import { dLib_getWaterY, dLib_waveInit, dLib_waveRot, dLib_wave_c, d_a_sea } fro
 import { cBgW_Flags, dBgS_GndChk, dBgW } from "./d_bg.js";
 import { EDemoActorFlags, dDemo_setDemoData } from "./d_demo.js";
 import { PeekZResult } from "./d_dlst_peekZ.js";
-import { dDlst_alphaModel__Type } from "./d_drawlist.js";
+import { dComIfGd_setShadow, dDlst_alphaModel__Type } from "./d_drawlist.js";
 import { LIGHT_INFLUENCE, LightType, WAVE_INFO, dKy_change_colpat, dKy_checkEventNightStop, dKy_plight_cut, dKy_plight_set, dKy_setLight__OnMaterialParams, dKy_setLight__OnModelInstance, dKy_tevstr_c, dKy_tevstr_init, setLightTevColorType, settingTevStruct } from "./d_kankyo.js";
 import { ThunderMode, dKyr_get_vectle_calc, dKyw_get_AllWind_vecpow, dKyw_get_wind_pow, dKyw_get_wind_vec, dKyw_get_wind_vecpow, dKyw_rain_set, loadRawTexture } from "./d_kankyo_wether.js";
 import { dPa_splashEcallBack, dPa_trackEcallBack, dPa_waveEcallBack, ParticleGroup } from "./d_particle.js";
@@ -2983,6 +2983,7 @@ class d_a_kamome extends fopAc_ac_c {
     private morf: mDoExt_McaMorf;
     private noDraw: boolean = false;
     private origPos = vec3.create();
+    private shadowId: number = 0;
 
     private animState: number = 0;
     private moveState: number = 0;
@@ -3205,12 +3206,15 @@ class d_a_kamome extends fopAc_ac_c {
         settingTevStruct(globals, LightType.Actor, this.pos, this.tevStr);
         setLightTevColorType(globals, this.morf.model, this.tevStr, globals.camera);
         this.morf.entryDL(globals, renderInstManager);
+        
+        const chk = new dBgS_GndChk();
+        const casterCenter = vec3.scaleAndAdd(chk.pos, this.pos, Vec3UnitY, 10.0);
+        const groundY = globals.scnPlay.bgS.GroundCross(chk); // TODO: This should return non-inf when over the sea, a la ObjAcch
+        this.shadowId = dComIfGd_setShadow(globals, this.shadowId, true, this.morf.model, casterCenter, 500, 20, casterCenter[1], groundY, chk.polyInfo, this.tevStr); 
 
         // drawWorldSpaceLine(getDebugOverlayCanvas2D(), globals.camera.clipFromWorldMatrix, this.pos, this.targetPos, Green, 2);
         // drawWorldSpacePoint(getDebugOverlayCanvas2D(), globals.camera.clipFromWorldMatrix, this.pos, Magenta, 8);
         // drawWorldSpacePoint(getDebugOverlayCanvas2D(), globals.camera.clipFromWorldMatrix, this.targetPos, Yellow, 6);
-
-        // shadow
     }
 
     private nodeCallBack = (dst: mat4, modelData: J3DModelData, i: number) => {
