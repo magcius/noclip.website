@@ -39,7 +39,7 @@ jobs:
 
     - name: Deploy
       if: github.ref == 'refs/heads/main'
-      uses: burnett01/rsync-deployments@8.0.2
+      uses: burnett01/rsync-deployments@8.0.3
       with:
         switches: -va --delete-after --exclude=data/ --exclude=priv/ --exclude=.well-known/
         path: dist/
