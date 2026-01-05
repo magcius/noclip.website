@@ -472,44 +472,6 @@ class dDlst_shadowReal_c {
         this.models.length = 0;
     }
 
-    public generateShadowVolume(globals: dGlobals): void {
-        if (this.models.length === 0)
-            return;
-
-        // Build an AABB containing all models in the light's view space
-        const lightAABB = new AABB();
-        for (let m = 0; m < this.models.length; m++) {
-            const modelToLightMatrix = mat4.mul(scratchMat4, this.lightViewMtx, this.models[m].modelMatrix);
-            scratchAABB.transform(this.models[m].modelData.bbox, modelToLightMatrix);
-            lightAABB.union(lightAABB, scratchAABB);
-        }
-
-        const worldFromLight = mat4.invert(scratchMat4, this.lightViewMtx);
-        const lightDir = scratchVec3a;
-        getMatrixAxisZ(lightDir, worldFromLight);
-
-        // Determine the near/far caps on the shadow volume based on light angle, ground slope, and height above ground.
-        // TODO: Consider ground slope.
-        const lightAngle = Math.atan2(lightDir[1], Math.sqrt(lightDir[0] * lightDir[0] + lightDir[2] * lightDir[2]));
-        lightAABB.min[2] = lightAABB.min[2] - (this.casterSize * 0.06 + this.heightAboveGround) / Math.sin(lightAngle);
-        lightAABB.max[2] = (lightAABB.max[2] + lightAABB.min[2]) * 0.5;
-
-        // Generate the shadow volume geometry as an oriented box based on the light-space AABB:
-        // Transform a [-1, 1] cube into the light-space bounding volume computed above, then to world space.
-        const scale = vec3.scale(scratchVec3a, vec3.sub(scratchVec3a, lightAABB.max, lightAABB.min), 0.5);
-        const lightFromVolume = mat4.fromTranslation(mat4.create(), vec3.add(scratchVec3b, lightAABB.min, scale));
-        mat4.scale(lightFromVolume, lightFromVolume, scale);
-        mat4.mul(this.worldFromVolume, worldFromLight, lightFromVolume);
-        mat4.invert(this.volumeFromWorld, this.worldFromVolume);
-
-        // The shadow volume is contained within the shadowmap's ortho frustum. Create a mapping from volume space [-1, 1] to
-        // shadowmap space [-1, 1] so we can sample the texture at the correct coordinates.
-        const mapMax = vec3.transformMat4(scratchVec3a, lightAABB.max, this.lightProjMtx);
-        const mapMin = vec3.transformMat4(scratchVec3b, lightAABB.min, this.lightProjMtx);
-        const diff = vec3.sub(scratchVec3a, mapMax, mapMin);
-        vec4.set(this.shadowmapScaleBias, diff[0] * 0.5, diff[1] * 0.5, (mapMin[0] + diff[0] * 0.5), (mapMin[1] + diff[1] * 0.5));
-    }
-
     public imageDraw(globals: dGlobals, renderInstManager: GfxRenderInstManager): void {
         if (this.models.length === 0)
             return;
@@ -671,6 +633,44 @@ class dDlst_shadowReal_c {
         mat4.mul(lightProjMtx, vpMtx, lightProjMtx);
 
         return alpha;
+    }
+
+    public generateShadowVolume(globals: dGlobals): void {
+        if (this.models.length === 0)
+            return;
+
+        // Build an AABB containing all models in the light's view space
+        const lightAABB = new AABB();
+        for (let m = 0; m < this.models.length; m++) {
+            const modelToLightMatrix = mat4.mul(scratchMat4, this.lightViewMtx, this.models[m].modelMatrix);
+            scratchAABB.transform(this.models[m].modelData.bbox, modelToLightMatrix);
+            lightAABB.union(lightAABB, scratchAABB);
+        }
+
+        const worldFromLight = mat4.invert(scratchMat4, this.lightViewMtx);
+        const lightDir = scratchVec3a;
+        getMatrixAxisZ(lightDir, worldFromLight);
+
+        // Determine the near/far caps on the shadow volume based on light angle, ground slope, and height above ground.
+        // TODO: Consider ground slope.
+        const lightAngle = Math.atan2(lightDir[1], Math.sqrt(lightDir[0] * lightDir[0] + lightDir[2] * lightDir[2]));
+        lightAABB.min[2] = lightAABB.min[2] - (this.casterSize * 0.06 + this.heightAboveGround) / Math.sin(lightAngle);
+        lightAABB.max[2] = (lightAABB.max[2] + lightAABB.min[2]) * 0.5;
+
+        // Generate the shadow volume geometry as an oriented box based on the light-space AABB:
+        // Transform a [-1, 1] cube into the light-space bounding volume computed above, then to world space.
+        const scale = vec3.scale(scratchVec3a, vec3.sub(scratchVec3a, lightAABB.max, lightAABB.min), 0.5);
+        const lightFromVolume = mat4.fromTranslation(mat4.create(), vec3.add(scratchVec3b, lightAABB.min, scale));
+        mat4.scale(lightFromVolume, lightFromVolume, scale);
+        mat4.mul(this.worldFromVolume, worldFromLight, lightFromVolume);
+        mat4.invert(this.volumeFromWorld, this.worldFromVolume);
+
+        // The shadow volume is contained within the shadowmap's ortho frustum. Create a mapping from volume space [-1, 1] to
+        // shadowmap space [-1, 1] so we can sample the texture at the correct coordinates.
+        const mapMax = vec3.transformMat4(scratchVec3a, lightAABB.max, this.lightProjMtx);
+        const mapMin = vec3.transformMat4(scratchVec3b, lightAABB.min, this.lightProjMtx);
+        const diff = vec3.sub(scratchVec3a, mapMax, mapMin);
+        vec4.set(this.shadowmapScaleBias, diff[0] * 0.5, diff[1] * 0.5, (mapMin[0] + diff[0] * 0.5), (mapMin[1] + diff[1] * 0.5));
     }
 }
 
