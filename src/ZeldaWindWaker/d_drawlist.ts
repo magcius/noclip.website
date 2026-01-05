@@ -663,8 +663,8 @@ class dDlst_shadowReal_c {
                 
             // Determine the near/far caps on the shadow volume based on light angle, ground slope, and height above ground.
             // TODO: Consider ground slope.
-            lightAABB.min[2] = lightAABB.min[2] - groundYBias;
             lightAABB.max[2] = (lightAABB.max[2] + lightAABB.min[2]) * 0.5;
+            lightAABB.min[2] = lightAABB.min[2] - groundYBias;
         } else {
             // If the models bounding boxes don't actually bound the geometry, use a conservative volume based on the shadowmap frustum 
             const casterRadius = this.casterSize * 0.4;
