@@ -19,6 +19,7 @@ import { LightmapPackerPage } from "../../SourceEngine/BSPFile.js";
 import { GfxShaderLibrary } from "../../gfx/helpers/GfxShaderLibrary.js";
 import { createBufferFromData } from "../../gfx/helpers/BufferHelpers.js";
 import { TextureListHolder } from "../../ui.js";
+import { WorldLightingState } from "./WorldLightingState.js";
 
 function getMipTexName(buffer: ArrayBufferSlice): string {
     return readString(buffer, 0x00, 0x10, true);
@@ -319,24 +320,22 @@ class View {
 class LightmapManager {
     public gfxTexture: GfxTexture;
     public lightmapData: SurfaceLightmapData[] = [];
-    private lightmapDirty = false;
+    private lightmapPixelData: Uint8ClampedArray;
 
     constructor(device: GfxDevice, private packerPage: LightmapPackerPage, private bytesPerTexel: number) {
         this.gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, packerPage.width, packerPage.height, 1));
+        const numPixels = packerPage.width * packerPage.height;
+        this.lightmapPixelData = new Uint8ClampedArray(numPixels * 4);
     }
 
     public addSurface(lightmapData: SurfaceLightmapData): void {
         this.lightmapData.push(lightmapData);
-        this.lightmapDirty = true;
     }
 
-    public prepareToRender(device: GfxDevice): void {
-        if (!this.lightmapDirty)
-            return;
+    public prepareToRender(device: GfxDevice, worldLightingState: WorldLightingState): void {
+        const dst = this.lightmapPixelData;
+        dst.fill(0);
 
-        // Construct a new lightmap
-        const numPixels = this.packerPage.width * this.packerPage.height;
-        const dst = new Uint8ClampedArray(numPixels * 4);
         for (let i = 0; i < this.lightmapData.length; i++) {
             const lightmapData = this.lightmapData[i];
 
@@ -350,40 +349,39 @@ class LightmapManager {
             for (let y = 0; y < lightmapData.height; y++) {
                 let dstOffs = (this.packerPage.width * (lightmapData.pagePosY + y) + lightmapData.pagePosX) * 4;
                 for (let x = 0; x < lightmapData.width; x++) {
-                    // Accumulate all light styles (using full brightness for static viewing)
                     let r = 0, g = 0, b = 0;
-                    for (let style = 0; style < numStyles; style++) {
-                        const styleOffset = style * styleSize;
+                    for (let styleIdx = 0; styleIdx < numStyles; styleIdx++) {
+                        const styleNum = lightmapData.styles[styleIdx];
+                        const styleValue = worldLightingState.getValue(styleNum);
+                        const styleOffset = styleIdx * styleSize;
+
                         if (this.bytesPerTexel === 1) {
                             const pixelOffset = styleOffset + y * lightmapData.width + x;
-                            const gray = src[pixelOffset];
+                            const gray = src[pixelOffset] * styleValue;
                             r += gray;
                             g += gray;
                             b += gray;
                         } else {
                             const pixelOffset = styleOffset + (y * lightmapData.width + x) * 3;
-                            r += src[pixelOffset + 0];
-                            g += src[pixelOffset + 1];
-                            b += src[pixelOffset + 2];
+                            r += src[pixelOffset + 0] * styleValue;
+                            g += src[pixelOffset + 1] * styleValue;
+                            b += src[pixelOffset + 2] * styleValue;
                         }
                     }
-                    dst[dstOffs++] = r;
-                    dst[dstOffs++] = g;
-                    dst[dstOffs++] = b;
+                    dst[dstOffs++] = Math.min(255, r);
+                    dst[dstOffs++] = Math.min(255, g);
+                    dst[dstOffs++] = Math.min(255, b);
                     dst[dstOffs++] = 0xFF;
                 }
             }
         }
         device.uploadTextureData(this.gfxTexture, 0, [dst]);
-
-        this.lightmapDirty = false;
     }
 
     public destroy(device: GfxDevice): void {
         device.destroyTexture(this.gfxTexture);
     }
 }
-
 export class BSPRenderer {
     public surfaceRenderers: BSPSurfaceRenderer[] = [];
 
@@ -430,8 +428,8 @@ export class BSPRenderer {
         }
     }
 
-    public prepareToRender(renderInstManager: GfxRenderInstManager, view: View): void {
-        this.lightmapManager.prepareToRender(renderInstManager.gfxRenderCache.device);
+    public prepareToRender(renderInstManager: GfxRenderInstManager, view: View, worldLightingState: WorldLightingState): void {
+        this.lightmapManager.prepareToRender(renderInstManager.gfxRenderCache.device, worldLightingState);
 
         const template = renderInstManager.pushTemplate();
         template.setBindingLayouts([{ numSamplers: 2, numUniformBuffers: 1 }]);
@@ -461,6 +459,7 @@ export class IdTech2Renderer implements SceneGfx {
     public textureHolder: TextureCache;
     public bspRenderers: BSPRenderer[] = [];
     public renderHelper: GfxRenderHelper;
+    public worldLightingState: WorldLightingState;
 
     public mainView = new View();
 
@@ -468,6 +467,7 @@ export class IdTech2Renderer implements SceneGfx {
         this.renderHelper = new GfxRenderHelper(device);
         this.textureCache = new TextureCache(this.renderHelper.renderCache);
         this.textureHolder = this.textureCache;
+        this.worldLightingState = new WorldLightingState();
     }
 
     public adjustCameraController(c: CameraController): void {
@@ -478,10 +478,12 @@ export class IdTech2Renderer implements SceneGfx {
         this.mainView.time += viewerInput.deltaTime / 1000;
         this.mainView.setupFromCamera(viewerInput.camera);
 
+        this.worldLightingState.update(this.mainView.time);
+
         this.renderHelper.pushTemplateRenderInst();
 
         for (let i = 0; i < this.bspRenderers.length; i++)
-            this.bspRenderers[i].prepareToRender(renderInstManager, this.mainView);
+            this.bspRenderers[i].prepareToRender(renderInstManager, this.mainView, this.worldLightingState);
 
         renderInstManager.popTemplate();
         this.renderHelper.prepareToRender();
