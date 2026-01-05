@@ -202,10 +202,6 @@ in vec4 v_TexCoord;
 void main() {
     vec2 t_TexCoordDiffuse = v_TexCoord.xy;
 
-#if defined GAME_HL1
-    t_TexCoordDiffuse *= 2.75;
-#endif
-
 #if defined USE_WATER
     #if defined GAME_QUAKE
         const float M_PI = 3.14159265;
@@ -220,6 +216,10 @@ void main() {
         t_TexCoordDiffuse.x += warpS;
         t_TexCoordDiffuse.y += warpT;
     #else
+        // scale HL1 water to better match original engine,
+        // this 2.75 isn't a perfect value, but its close enough
+        t_TexCoordDiffuse *= 2.75;
+
         float warpS = 10.0 * sin(t_TexCoordDiffuse.y * 0.03 + u_Time * 0.5);
         float warpT = 10.0 * sin(t_TexCoordDiffuse.x * 0.03 + u_Time * 0.5);
 
