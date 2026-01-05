@@ -871,7 +871,7 @@ class dDlst_shadowControl_c {
     private simpleCount = 0;
 
     private reals = nArray(realShadowCount, (i) => new dDlst_shadowReal_c(i));
-    private latestId: number = 0;
+    private nextId: number = 1;
     private realCasterInstList = new GfxRenderInstList(gfxRenderInstCompareNone, GfxRenderInstExecutionOrder.Forwards);
     private realInstList = new GfxRenderInstList(gfxRenderInstCompareNone, GfxRenderInstExecutionOrder.Forwards);
 
@@ -1021,13 +1021,16 @@ class dDlst_shadowControl_c {
     // noclip modification: The original game has a few actors that call this function directly, instead of using dComIfGd_setShadow() (Bdk, Bst, GM, Gp1, Km1, Pm1).
     //     I believe this was the original implementation, and setReal2() was added later. They behave similar enough that I don't think its worth preserving both.
     public setReal(globals: dGlobals, id: number, shouldFade: number, model: J3DModelInstance, casterCenter: ReadonlyVec3, casterSize: number, heightAboveGround: number, tevStr: dKy_tevstr_c): number {
-        let real = this.getOrAllocate(id);
-        return real ? real.set2(globals, shouldFade, model, casterCenter, casterSize, heightAboveGround, tevStr) : 0;
+        return this.setReal2(globals, id, shouldFade, model, casterCenter, casterSize, heightAboveGround, tevStr);
     }
 
     public setReal2(globals: dGlobals, id: number, shouldFade: number, model: J3DModelInstance, casterCenter: ReadonlyVec3, casterSize: number, heightAboveGround: number, tevStr: dKy_tevstr_c): number {
         let real = this.getOrAllocate(id);
-        return real ? real.set2(globals, shouldFade, model, casterCenter, casterSize, heightAboveGround, tevStr) : 0;
+        const curId = real ? real.set2(globals, shouldFade, model, casterCenter, casterSize, heightAboveGround, tevStr) : 0;
+        if( curId == this.nextId ) {
+            this.nextId += 1;
+        }
+        return curId;
     }
 
     public addReal(id: number, model: J3DModelInstance): boolean {
@@ -1053,7 +1056,7 @@ class dDlst_shadowControl_c {
             const freeIdx = this.reals.findIndex(r => r.id === 0);
             if (freeIdx >= 0) {
                 real = this.reals[freeIdx];
-                real.id = ++this.latestId;
+                real.id = this.nextId;
             }
             else return null;
         }
