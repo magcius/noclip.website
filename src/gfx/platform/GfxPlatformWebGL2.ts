@@ -1713,26 +1713,29 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         program.compileState = GfxProgramCompileStateP_GL.Compiling;
     }
 
-    private _getTextureFramebufferTarget(texture_: GfxTexture, z: number): GLenum {
+    private _bindFramebufferAttachmentTexture(framebuffer: GLenum, binding: GLenum, texture_: GfxTexture, attachmentView: GfxRenderAttachmentView | null): void {
         const gl = this.gl;
-        const texture = texture_ as GfxTextureP_GL;
 
-        if (texture.gl_target === gl.TEXTURE_2D) {
+        const texture = texture_ as GfxTextureP_GL;
+        const gl_texture = texture.gl_texture, gl_target = texture.gl_target;
+
+        const level = attachmentView !== null ? attachmentView.level : 0;
+        const z = attachmentView !== null ? attachmentView.z : 0;
+
+        if (gl_target === gl.TEXTURE_2D) {
             assert(z === 0);
-            return gl.TEXTURE_2D;
-        } else if (texture.gl_target === gl.TEXTURE_CUBE_MAP) {
+            gl.framebufferTexture2D(framebuffer, binding, gl_target, gl_texture, level);
+        } else if (gl_target === gl.TEXTURE_CUBE_MAP) {
             assert(z < 6);
-            return gl.TEXTURE_CUBE_MAP_POSITIVE_X + z;
-        } else {
-            throw "whoops";
+            gl.framebufferTexture2D(framebuffer, binding, gl.TEXTURE_CUBE_MAP_POSITIVE_X + z, gl_texture, level);
+        } else if (gl_target === gl.TEXTURE_2D_ARRAY || gl_target === gl.TEXTURE_3D) {
+            assert(z < texture.depthOrArrayLayers);
+            gl.framebufferTextureLayer(framebuffer, binding, gl_texture, level, z);
         }
     }
 
     private _bindFramebufferAttachment(framebuffer: GLenum, binding: GLenum, attachment: GfxRenderTargetP_GL | GfxTextureP_GL | null, attachmentView: GfxRenderAttachmentView | null = null): void {
         const gl = this.gl;
-
-        const level = attachmentView !== null ? attachmentView.level : 0;
-        const z = attachmentView !== null ? attachmentView.z : 0;
 
         if (attachment === null) {
             gl.framebufferRenderbuffer(framebuffer, binding, gl.RENDERBUFFER, null);
@@ -1740,9 +1743,9 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             if (attachment.gl_renderbuffer !== null)
                 gl.framebufferRenderbuffer(framebuffer, binding, gl.RENDERBUFFER, attachment.gl_renderbuffer);
             else if (attachment.gfxTexture !== null)
-                gl.framebufferTexture2D(framebuffer, binding, this._getTextureFramebufferTarget(attachment.gfxTexture, z), getPlatformTexture(attachment.gfxTexture), level);
+                this._bindFramebufferAttachmentTexture(framebuffer, binding, attachment.gfxTexture, attachmentView);
         } else if (attachment._T === _T.Texture) {
-            gl.framebufferTexture2D(framebuffer, binding, this._getTextureFramebufferTarget(attachment, z), getPlatformTexture(attachment), level);
+            this._bindFramebufferAttachmentTexture(framebuffer, binding, attachment, attachmentView);
         }
     }
 
@@ -2383,8 +2386,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
                     } else {
                         gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this._resolveColorDrawFramebuffer);
                         if (this._resolveColorAttachmentsChanged) {
-                            const view = assertExists(this._currentColorResolveView[i]);
-                            gl.framebufferTexture2D(gl.DRAW_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, this._getTextureFramebufferTarget(colorResolveTo, view.z), colorResolveTo.gl_texture, view.level);
+                            this._bindFramebufferAttachmentTexture(gl.DRAW_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, colorResolveTo, this._currentColorResolveView[i]);
                         }
                     }
 

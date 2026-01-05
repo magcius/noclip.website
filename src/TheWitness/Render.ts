@@ -979,7 +979,7 @@ export class TheWitnessRenderer implements SceneGfx {
 
         viewerInput.camera.setClipPlanes(0.1);
 
-        this.renderHelper.debugDraw.beginFrame(globals.viewpoint.clipFromViewMatrix, globals.viewpoint.viewFromWorldMatrix, viewerInput.backbufferHeight, viewerInput.backbufferHeight);
+        this.renderHelper.debugDraw.beginFrame(globals.viewpoint.clipFromViewMatrix, globals.viewpoint.viewFromWorldMatrix, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
 
         const renderInstManager = this.renderHelper.renderInstManager;
         const builder = this.renderHelper.renderGraph.newGraphBuilder();

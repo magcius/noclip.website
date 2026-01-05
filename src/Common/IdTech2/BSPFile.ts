@@ -1,11 +1,11 @@
 
 import { ReadonlyVec4, vec4 } from "gl-matrix";
-import ArrayBufferSlice from "../ArrayBufferSlice.js";
-import { AABB } from "../Geometry.js";
-import { convertToTrianglesRange, getTriangleIndexCountForTopologyIndexCount, GfxTopology } from "../gfx/helpers/TopologyHelpers.js";
-import { LightmapPackerPage } from "../SourceEngine/BSPFile.js";
-import { pairs2obj, ValveKeyValueParser, VKFPair } from "../SourceEngine/VMT.js";
-import { assert, decodeString, ensureInList, readString } from "../util.js";
+import ArrayBufferSlice from "../../ArrayBufferSlice.js";
+import { AABB } from "../../Geometry.js";
+import { convertToTrianglesRange, getTriangleIndexCountForTopologyIndexCount, GfxTopology } from "../../gfx/helpers/TopologyHelpers.js";
+import { LightmapPackerPage } from "../../SourceEngine/BSPFile.js";
+import { pairs2obj, ValveKeyValueParser, VKFPair } from "../../SourceEngine/VMT.js";
+import { assert, decodeString, ensureInList, readString } from "../../util.js";
 
 enum LumpType {
     ENTITIES = 0,
@@ -88,11 +88,11 @@ export class BSPFile {
     public surfaces: Surface[] = [];
     public extraTexData: ArrayBufferSlice[] = [];
     public lightmapPackerPage = new LightmapPackerPage(2048, 2048);
-    
+
     constructor(buffer: ArrayBufferSlice) {
         const view = buffer.createDataView();
         this.version = view.getUint32(0x00, true);
-        assert(this.version === 30);
+        assert(this.version === 29 || this.version === 30);
 
         function getLumpData(lumpType: LumpType): ArrayBufferSlice {
             const lumpsStart = 0x04;
@@ -134,9 +134,14 @@ export class BSPFile {
         const nummiptex = texturesView.getUint32(0x00, true);
         const textureNames: string[] = [];
         for (let i = 0; i < nummiptex; i++) {
-            const miptexOffs = texturesView.getUint32(0x04 + i * 0x04, true);
+            const miptexOffs = texturesView.getInt32(0x04 + i * 0x04, true);
+            if (miptexOffs < 0) {
+                // e1m2 seems to have this weird negative offset thing
+                textureNames.push(`__invalid_${i}__`);
+                continue;
+            }
             const texName = readString(textures, miptexOffs + 0x00, 0x10, true);
-            const hasTextureData = texturesView.getUint32(miptexOffs + 0x18) !== 0;
+            const hasTextureData = texturesView.getUint32(miptexOffs + 0x18, true) !== 0;
             if (hasTextureData)
                 this.extraTexData.push(textures.slice(miptexOffs));
             textureNames.push(texName);
@@ -286,7 +291,8 @@ export class BSPFile {
             const surfaceW = Math.ceil((maxTexCoordS * lightmapScale)) - Math.floor(minTexCoordS * lightmapScale) + 1;
             const surfaceH = Math.ceil((maxTexCoordT * lightmapScale)) - Math.floor(minTexCoordT * lightmapScale) + 1;
 
-            const lightmapSamplesSize = (surfaceW * surfaceH * styles.length * 3);
+            const bytesPerTexel = this.version === 29 ? 1 : 3;
+            const lightmapSamplesSize = (surfaceW * surfaceH * styles.length * bytesPerTexel);
             const samples = lightofs !== 0xFFFFFFFF ? lighting.subarray(lightofs, lightmapSamplesSize).createTypedArray(Uint8Array) : null;
 
             const lightmapData: SurfaceLightmapData = {
@@ -295,7 +301,10 @@ export class BSPFile {
                 pageIndex: 0, pagePosX: 0, pagePosY: 0,
                 styles, samples,
             };
-            assert(this.lightmapPackerPage.allocate(lightmapData));
+
+            // If there's no samples, there's no need to store anything in the lightmap.
+            if (lightmapData.samples !== null)
+                assert(this.lightmapPackerPage.allocate(lightmapData));
 
             // Fill in UV
             for (let j = 0; j < numedges; j++) {
@@ -310,15 +319,15 @@ export class BSPFile {
                 vertexData[offs++] = lightmapData.pagePosY + lightmapCoordT;
             }
 
-            const indexCount = getTriangleIndexCountForTopologyIndexCount(GfxTopology.TriFans, numedges);
-            convertToTrianglesRange(indexData, dstOffsIndex, GfxTopology.TriFans, dstIndexBase, numedges);
-
             let surface = mergeSurface;
 
             if (surface === null) {
                 surface = { texName: face.texName, startIndex: dstOffsIndex, indexCount: 0, lightmapData: [] };
                 this.surfaces.push(surface);
             }
+
+            const indexCount = getTriangleIndexCountForTopologyIndexCount(GfxTopology.TriFans, numedges);
+            convertToTrianglesRange(indexData, dstOffsIndex, GfxTopology.TriFans, dstIndexBase, numedges);
 
             const surfaceIndex = this.surfaces.length - 1;
 
@@ -337,11 +346,18 @@ export class BSPFile {
     }
 
     public getWadList(): string[] {
-        const worldspawn = this.entities[0];
-        assert(worldspawn.classname === 'worldspawn');
+        // There should be only one worldspawn entity, but Half-Life's 'rapidcore' has multiple!,
+        // and also a weird wad list, which makes sense as it was a map made by a fan back in 2001,
+        // not by Valve: https://combineoverwiki.net/wiki/Rapidcore
+        const isWorldspawn = (e: BSPEntity) => {
+            const cls = e.classname;
+            return cls === 'worldspawn' || (Array.isArray(cls) && cls.includes('worldspawn'));
+        };
+        const worldspawn = this.entities.find(isWorldspawn);
+        assert(worldspawn !== undefined);
 
         const wad = worldspawn.wad;
-        return wad.split(';').map((v) => {
+        return wad.split(';').filter((v) => v !== '').map((v) => {
             // Replace the initial mount name.
             assert(v.startsWith('\\'));
             const x = v.split('\\');

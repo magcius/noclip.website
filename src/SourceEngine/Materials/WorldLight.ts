@@ -1,11 +1,12 @@
 
 import { ReadonlyVec3, vec3 } from "gl-matrix";
 import { colorNewCopy, TransparentBlack, colorCopy, colorScaleAndAdd, colorScale, Color, White, colorNewFromRGBA } from "../../Color.js";
+import { WorldLightingState } from "../../Common/IdTech2/WorldLightingState.js";
 import { drawWorldSpacePoint, getDebugOverlayCanvas2D, drawWorldSpaceLine } from "../../DebugJunk.js";
-import { Vec3NegX, Vec3NegY, Vec3NegZ, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero, invlerp, lerp } from "../../MathHelpers.js";
+import { Vec3NegX, Vec3NegY, Vec3NegZ, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero, invlerp } from "../../MathHelpers.js";
 import { fillVec4, fillVec3v, fillColor } from "../../gfx/helpers/UniformBufferHelpers.js";
 import { GfxrResolveTextureID } from "../../gfx/render/GfxRenderGraph.js";
-import { nArray, assert, assertExists } from "../../util.js";
+import { nArray, assertExists } from "../../util.js";
 import { BSPFile, Cubemap, WorldLight, WorldLightType, AmbientCube, BSPLeaf, WorldLightFlags } from "../BSPFile.js";
 import { BSPRenderer, SourceEngineView, SourceEngineViewType } from "../Main.js";
 import type { VTF } from "../VTF.js";
@@ -27,10 +28,6 @@ function findEnvCubemapTexture(bspfile: BSPFile, pos: ReadonlyVec3): Cubemap | n
         return null;
 
     return bspfile.cubemaps[bestIndex];
-}
-
-function worldLightInsideRadius(light: WorldLight, delta: ReadonlyVec3): boolean {
-    return light.radius <= 0.0 || vec3.squaredLength(delta) <= light.radius**2;
 }
 
 function worldLightDistanceFalloff(light: WorldLight, delta: ReadonlyVec3): number {
@@ -373,69 +370,6 @@ export class LightCache {
         for (let i = 0; i < this.worldLights.length; i++)
             offs += this.worldLights[i].fill(d, offs, worldLightingState);
         return offs - base;
-    }
-}
-//#endregion
-
-//#region Lightmap / Lighting data
-export class WorldLightingState {
-    public styleIntensities = new Float32Array(64);
-    public stylePatterns: string[] = [
-        'm',
-        'mmnmmommommnonmmonqnmmo',
-        'abcdefghijklmnopqrstuvwxyzyxwvutsrqponmlkjihgfedcba',
-        'mmmmmaaaaammmmmaaaaaabcdefgabcdefg',
-        'mamamamamama',
-        'jklmnopqrstuvwxyzyxwvutsrqponmlkj',
-        'nmonqnmomnmomomno',
-        'mmmaaaabcdefgmmmmaaaammmaamm',
-        'mmmaaammmaaammmabcdefaaaammmmabcdefmmmaaaa',
-        'aaaaaaaazzzzzzzz',
-        'mmamammmmammamamaaamammma',
-        'abcdefghijklmnopqrrqponmlkjihgfedcba',
-        'mmnnmmnnnmmnn',
-    ];
-    private smoothAnim = false;
-    private doUpdates = true;
-
-    constructor() {
-        this.styleIntensities.fill(1.0);
-    }
-
-    private styleIntensityFromChar(c: number): number {
-        const alpha = c - 0x61;
-        assert(alpha >= 0 && alpha <= 25);
-        return (alpha * 22) / 264.0;
-    }
-
-    private styleIntensityFromPattern(pattern: string, time: number): number {
-        const t = time % pattern.length;
-        const i0 = t | 0;
-        const p0 = this.styleIntensityFromChar(pattern.charCodeAt(i0));
-
-        if (this.smoothAnim) {
-            const i1 = (i0 + 1) % pattern.length;
-            const t01 = t - i0;
-
-            const p1 = this.styleIntensityFromChar(pattern.charCodeAt(i1));
-            return lerp(p0, p1, t01);
-        } else {
-            return p0;
-        }
-    }
-
-    public update(timeInSeconds: number): void {
-        if (!this.doUpdates)
-            return;
-
-       const time = (timeInSeconds * 10);
-        for (let i = 0; i < this.styleIntensities.length; i++) {
-            const pattern = this.stylePatterns[i];
-            if (pattern === undefined)
-                continue;
-
-            this.styleIntensities[i] = this.styleIntensityFromPattern(pattern, time);
-        }
     }
 }
 //#endregion

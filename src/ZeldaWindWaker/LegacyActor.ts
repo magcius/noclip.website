@@ -23,7 +23,7 @@ import { cPhs__Status, fGlobals, fpcPf__RegisterFallback } from './framework.js'
 import { mDoExt_McaMorf, mDoExt_modelUpdateDL } from './m_do_ext.js';
 import { MtxTrans, calc_mtx, mDoMtx_ZXYrotM } from './m_do_mtx.js';
 import { WindWakerRenderer, dGlobals } from "./Main.js";
-import { dComIfGd_setSimpleShadow2 } from './d_drawlist.js';
+import { dComIfGd_addRealShadow, dComIfGd_setShadow, dComIfGd_setSimpleShadow2 } from './d_drawlist.js';
 import { BTIData } from '../Common/JSYSTEM/JUTTexture.js';
 
 const scratchMat4a = mat4.create();
@@ -52,6 +52,7 @@ class d_a_noclip_legacy extends fopAc_ac_c {
     public shadowChk: dBgS_GndChk;
     public shadowScaleXZ: number = 0;
     public shadowTex?: BTIData | null;
+    public shadowRealSize: number = 0;
     public shadowId: number = 0;
     public objectRenderers: BMDObjectRenderer[] = [];
     public isDemoActor = false;
@@ -106,14 +107,20 @@ class d_a_noclip_legacy extends fopAc_ac_c {
             return;
 
         const device = globals.modelCache.device;
-            
-        if (this.shadowChk) {
-            dComIfGd_setSimpleShadow2(globals, this.pos, this.shadowChk.retY, this.shadowScaleXZ, this.shadowChk.polyInfo, this.rot[1], 1.0, this.shadowTex);
-        }
 
         renderInstManager.setCurrentList(globals.dlst.main[0]);
         for (let i = 0; i < this.objectRenderers.length; i++)
             this.objectRenderers[i].prepareToRender(globals, this.isDemoActor ? this.morf : null, device, renderInstManager, viewerInput);
+            
+        if (this.shadowChk) {
+            if (this.shadowRealSize > 0) {
+                this.shadowId = dComIfGd_setShadow(globals, this.shadowId, true, this.objectRenderers[0].modelInstance, this.shadowChk.pos, this.shadowRealSize,
+                    this.shadowScaleXZ, this.pos[1], this.shadowChk.retY, this.shadowChk.polyInfo, this.objectRenderers[0].tevstr, this.rot[1], 1.0, this.shadowTex);
+                this.objectRenderers[0].addShadows(globals, this.shadowId);
+            }
+            else
+                dComIfGd_setSimpleShadow2(globals, this.pos, this.shadowChk.retY, this.shadowScaleXZ, this.shadowChk.polyInfo, this.rot[1], 1.0, this.shadowTex);
+        }
     }
 
     public override delete(globals: dGlobals): void {
@@ -209,11 +216,16 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     }
 
     function setShadowSimple(scaleXZ: number, scaleZ: number = 1.0, tex?: BTIData | null): void {
+        setShadow(0, 40, scaleXZ, scaleZ, tex);
+    }
+
+    function setShadow(realSize: number, centerYOffset: number, scaleXZ: number, scaleZ: number = 1.0, tex?: BTIData | null): void {
         legacy.shadowChk = new dBgS_GndChk();
-        vec3.scaleAndAdd(legacy.shadowChk.pos, legacy.pos, Vec3UnitY, 40.0);
+        vec3.scaleAndAdd(legacy.shadowChk.pos, legacy.pos, Vec3UnitY, centerYOffset);
         globals.scnPlay.bgS.GroundCross(legacy.shadowChk);
         legacy.shadowScaleXZ = scaleXZ;
         legacy.shadowTex = tex;
+        legacy.shadowRealSize = realSize;
     }
 
     function parseBCK(rarc: RARC.JKRArchive, path: string) {
@@ -578,6 +590,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         const m = buildModel(rarc, `bdlm/ko.bdl`);
         buildChildModel(rarc, `bdlm/kohead01.bdl`).setParentJoint(m, `head`);
         m.bindANK1(parseBCK(rarc, `bcks/ko_wait01.bck`));
+        setShadow(800.0, 150, 40.0, 1.0);
     });
     // Joel
     else if (actorName === 'Ko2') fetchArchive(`Ko`).then((rarc) => {
@@ -590,6 +603,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         const m = buildModel(rarc, `bdl/yw.bdl`);
         buildChildModel(rarc, `bdlm/ywhead01.bdl`).setParentJoint(m, `head`);
         m.bindANK1(parseBCK(rarc, `bcks/wait01.bck`));
+        setShadow(800.0, 150, 40.0, 1.0);
     });
     // Gonzo
     else if (actorName === 'P1a') fetchArchive(`P1`).then((rarc) => {
@@ -795,11 +809,16 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     // Tott
     else if (actorName === 'Tt') fetchArchive(`Tt`).then((rarc) => buildModel(rarc, `bdlm/tt.bdl`).bindANK1(parseBCK(rarc, `bck/step01.bck`)));
     // Maggie's Father (Rich)
-    else if (actorName === 'Gp1') fetchArchive(`Gp`).then((rarc) => buildModel(rarc, `bdlm/gp.bdl`).bindANK1(parseBCK(rarc, `bcks/wait01.bck`)));
+    else if (actorName === 'Gp1') fetchArchive(`Gp`).then((rarc) => {
+        buildModel(rarc, `bdlm/gp.bdl`).bindANK1(parseBCK(rarc, `bcks/wait01.bck`))
+        setShadow(800, 150, 40);
+    });
     // Maggie's Father (Poor)
     else if (actorName === 'Pf1') fetchArchive(`Pf`).then((rarc) => buildModel(rarc, `bdlm/pf.bdl`).bindANK1(parseBCK(rarc, `bcks/wait01.bck`)));
     // Maggie (Rich)
-    else if (actorName === 'Kp1') fetchArchive(`Kp`).then((rarc) => buildModel(rarc, `bdlm/kp.bdl`).bindANK1(parseBCK(rarc, `bcks/wait01.bck`)));
+    else if (actorName === 'Kp1') fetchArchive(`Kp`).then((rarc) => {
+        buildModel(rarc, `bdlm/kp.bdl`).bindANK1(parseBCK(rarc, `bcks/wait01.bck`))
+    });
     // Mila (Poor)
     else if (actorName === 'Kk1') fetchArchive(`Kk`).then((rarc) => buildModel(rarc, `bdlm/kk.bdl`).bindANK1(parseBCK(rarc, `bcks/kk_wait01.bck`)));
     // Mila's Father (Rich)
@@ -1261,6 +1280,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
             buildModel(rarc, `bdlm/rhand.bdl`).bindTTK1(parseBTK(rarc, `btk/rhand.btk`))
             break;
         }
+        setShadow(2000, 100, 200);
     });
     // Jalhalla
     else if (actorName === 'big_pow') fetchArchive(`Bpw`).then((rarc) => {
@@ -1271,6 +1291,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         lanternModel.setParentJoint(mainModel, `j_bpw_item`);
         mat4.rotateZ(lanternModel.modelMatrix, lanternModel.modelMatrix, Math.PI);
         // TODO: add flame particle emitter to lantern
+        setShadow(1300, 400, 200);
     });
     // Molgera
     else if (actorName === 'Bwd') fetchArchive(`Bwd`).then((rarc) => {
@@ -1329,8 +1350,14 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         lanternModel.setParentJoint(mainModel, `j_pw_item_r1`);
         mat4.rotateX(lanternModel.modelMatrix, lanternModel.modelMatrix, Math.PI / 4);
     });
-    else if (actorName === 'Bb') fetchArchive(`Bb`).then((rarc) => buildModel(rarc, `bdlm/bb.bdl`).bindANK1(parseBCK(rarc, `bck/wait.bck`)));
-    else if (actorName === 'Bk') fetchArchive(`Bk`).then((rarc) => buildModel(rarc, `bdlm/bk.bdl`).bindANK1(parseBCK(rarc, `bck/bk_wait.bck`)));
+    else if (actorName === 'Bb') fetchArchive(`Bb`).then((rarc) => {
+        buildModel(rarc, `bdlm/bb.bdl`).bindANK1(parseBCK(rarc, `bck/wait.bck`))
+        setShadow(800, 150, 40);
+    });
+    else if (actorName === 'Bk') fetchArchive(`Bk`).then((rarc) => {
+        buildModel(rarc, `bdlm/bk.bdl`).bindANK1(parseBCK(rarc, `bck/bk_wait.bck`))
+        setShadow(800, 150, 40);
+    });
     else if (actorName === 'Oq') fetchArchive(`Oq`).then((rarc) => buildModel(rarc, `bmdm/oq.bmd`).bindANK1(parseBCK(rarc, `bck/nom_wait.bck`)));
     else if (actorName === 'Oqw') fetchArchive(`Oq`).then((rarc) => buildModel(rarc, `bmdm/red_oq.bmd`).bindANK1(parseBCK(rarc, `bck/umi_new_wait.bck`)));
     else if (actorName === 'Daiocta') fetchArchive(`Daiocta`).then((rarc) => buildModel(rarc, `bdlm/do_main1.bdl`).bindANK1(parseBCK(rarc, `bck/wait1.bck`)));
@@ -1940,6 +1967,14 @@ class BMDObjectRenderer {
     public setParentJoint(o: BMDObjectRenderer, jointName: string): void {
         this.parentJointMatrix = o.modelInstance.getJointToWorldMatrixReference(jointName);
         o.childObjects.push(this);
+    }
+
+    public addShadows(globals: dGlobals, shadowId: number): boolean {
+        let allValid = true;
+        for (let i = 0; i < this.childObjects.length; i++) {
+            allValid = allValid && dComIfGd_addRealShadow(globals, shadowId, this.childObjects[i].modelInstance);
+        }
+        return allValid;
     }
 
     public setMaterialColorWriteEnabled(materialName: string, v: boolean): void {

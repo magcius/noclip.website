@@ -36,7 +36,8 @@ import { LightmapManager, FaceLightmapUpdater } from "./Materials/Lightmap.js";
 import { BaseMaterial, MaterialShaderTemplateBase, fillSceneParamsOnRenderInst, FogParams, ToneMapParams, LateBindingTexture } from "./Materials/MaterialBase.js";
 import { MaterialCache } from "./Materials/MaterialCache.js";
 import { MaterialProxySystem } from "./Materials/MaterialParameters.js";
-import { ProjectedLight, WorldLightingState } from "./Materials/WorldLight.js";
+import { ProjectedLight } from "./Materials/WorldLight.js";
+import { WorldLightingState } from "../Common/IdTech2/WorldLightingState.js";
 import { createBufferFromData } from "../gfx/helpers/BufferHelpers.js";
 
 export class LooseMount {
