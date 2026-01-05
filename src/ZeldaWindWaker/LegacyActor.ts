@@ -1280,6 +1280,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
             buildModel(rarc, `bdlm/rhand.bdl`).bindTTK1(parseBTK(rarc, `btk/rhand.btk`))
             break;
         }
+        setShadow(2000, 100, 200);
     });
     // Jalhalla
     else if (actorName === 'big_pow') fetchArchive(`Bpw`).then((rarc) => {

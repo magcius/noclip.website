@@ -1,7 +1,7 @@
 
 import { mat4, ReadonlyVec3, vec2, vec3, vec4 } from "gl-matrix";
 import { OpaqueBlack, White, colorCopy, colorNewCopy } from "../Color.js";
-import { getMatrixAxisZ, projectionMatrixForCuboid, saturate, Vec3UnitY } from '../MathHelpers.js';
+import { getMatrixAxisZ, projectionMatrixForCuboid, saturate, Vec3UnitX, Vec3UnitY } from '../MathHelpers.js';
 import { TSDraw } from "../SuperMarioGalaxy/DDraw.js";
 import { createBufferFromData } from "../gfx/helpers/BufferHelpers.js";
 import { projectionMatrixConvertClipSpaceNearZ } from '../gfx/helpers/ProjectionHelpers.js';
@@ -661,7 +661,7 @@ class dDlst_shadowReal_c {
         }
 
         // Build the light view/proj matrices
-        mat4.lookAt(lightViewMtx, lightVec, casterCenter, Vec3UnitY);
+        mat4.lookAt(lightViewMtx, lightVec, casterCenter, Math.abs(rayDir[1]) == 1.0 ? Vec3UnitX : Vec3UnitY);
         projectionMatrixForCuboid(lightProjMtx, -casterRadius, casterRadius, -casterRadius, casterRadius, 1.0, 10000.0);
         projectionMatrixConvertClipSpaceNearZ(lightProjMtx, globals.camera.clipSpaceNearZ, GfxClipSpaceNearZ.NegativeOne);
 
