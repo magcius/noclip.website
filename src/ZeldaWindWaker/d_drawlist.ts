@@ -457,6 +457,7 @@ class dDlst_shadowReal_c {
     private atlasOffset = vec2.create();
     private shadowmapScaleBias = vec4.create();
     private heightAboveGround: number = 0;
+    private casterSize: number = 0;
 
     constructor(private index: number) {
         this.atlasOffset = [this.index % shadowAtlasDim[0], Math.floor(this.index / shadowAtlasDim[0])];
@@ -490,7 +491,7 @@ class dDlst_shadowReal_c {
         // Determine the near/far caps on the shadow volume based on light angle, ground slope, and height above ground.
         // TODO: Consider ground slope.
         const lightAngle = Math.atan2(lightDir[1], Math.sqrt(lightDir[0] * lightDir[0] + lightDir[2] * lightDir[2]));
-        lightAABB.min[2] = lightAABB.min[2] - (40 + this.heightAboveGround) / Math.sin(lightAngle);
+        lightAABB.min[2] = lightAABB.min[2] - (this.casterSize * 0.06 + this.heightAboveGround) / Math.sin(lightAngle);
         lightAABB.max[2] = (lightAABB.max[2] + lightAABB.min[2]) * 0.5;
 
         // Generate the shadow volume geometry as an oriented box based on the light-space AABB:
@@ -565,6 +566,7 @@ class dDlst_shadowReal_c {
             if (this.alpha === 0)
                 return 0;
 
+            this.casterSize = casterSize;
             this.heightAboveGround = heightAboveGround;
         }
 

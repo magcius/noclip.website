@@ -603,7 +603,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         const m = buildModel(rarc, `bdl/yw.bdl`);
         buildChildModel(rarc, `bdlm/ywhead01.bdl`).setParentJoint(m, `head`);
         m.bindANK1(parseBCK(rarc, `bcks/wait01.bck`));
-        setShadow(200.0, 80, 40.0, 1.0);
+        setShadow(800.0, 150, 40.0, 1.0);
     });
     // Gonzo
     else if (actorName === 'P1a') fetchArchive(`P1`).then((rarc) => {
@@ -809,11 +809,16 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     // Tott
     else if (actorName === 'Tt') fetchArchive(`Tt`).then((rarc) => buildModel(rarc, `bdlm/tt.bdl`).bindANK1(parseBCK(rarc, `bck/step01.bck`)));
     // Maggie's Father (Rich)
-    else if (actorName === 'Gp1') fetchArchive(`Gp`).then((rarc) => buildModel(rarc, `bdlm/gp.bdl`).bindANK1(parseBCK(rarc, `bcks/wait01.bck`)));
+    else if (actorName === 'Gp1') fetchArchive(`Gp`).then((rarc) => {
+        buildModel(rarc, `bdlm/gp.bdl`).bindANK1(parseBCK(rarc, `bcks/wait01.bck`))
+        setShadow(800, 150, 40);
+    });
     // Maggie's Father (Poor)
     else if (actorName === 'Pf1') fetchArchive(`Pf`).then((rarc) => buildModel(rarc, `bdlm/pf.bdl`).bindANK1(parseBCK(rarc, `bcks/wait01.bck`)));
     // Maggie (Rich)
-    else if (actorName === 'Kp1') fetchArchive(`Kp`).then((rarc) => buildModel(rarc, `bdlm/kp.bdl`).bindANK1(parseBCK(rarc, `bcks/wait01.bck`)));
+    else if (actorName === 'Kp1') fetchArchive(`Kp`).then((rarc) => {
+        buildModel(rarc, `bdlm/kp.bdl`).bindANK1(parseBCK(rarc, `bcks/wait01.bck`))
+    });
     // Mila (Poor)
     else if (actorName === 'Kk1') fetchArchive(`Kk`).then((rarc) => buildModel(rarc, `bdlm/kk.bdl`).bindANK1(parseBCK(rarc, `bcks/kk_wait01.bck`)));
     // Mila's Father (Rich)
