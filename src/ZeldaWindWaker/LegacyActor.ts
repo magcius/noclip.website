@@ -398,7 +398,10 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         }
     }
     // Salvatore
-    else if (actorName === 'Kg1' || actorName === 'Kg2') fetchArchive(`Kg`).then((rarc) => buildModel(rarc, `bdlm/kg.bdl`).bindANK1(parseBCK(rarc, `bcks/kg_wait01.bck`)));
+    else if (actorName === 'Kg1' || actorName === 'Kg2') fetchArchive(`Kg`).then((rarc) => {
+        buildModel(rarc, `bdlm/kg.bdl`).bindANK1(parseBCK(rarc, `bcks/kg_wait01.bck`))
+        setShadow(800, 150, 20);
+    });
     // Orca
     else if (actorName === 'Ji1') fetchArchive(`Ji`).then((rarc) => buildModel(rarc, `bdlm/ji.bdl`).bindANK1(parseBCK(rarc, `bck/ji_wait01.bck`)));
     // Medli
@@ -896,7 +899,10 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     // Manny
     else if (actorName === 'Mn') fetchArchive(`Mn`).then((rarc) => buildModel(rarc, `bdlm/mn.bdl`).bindANK1(parseBCK(rarc, `bcks/mn_wait01.bck`)));
     // Carlov
-    else if (actorName === 'Mt') fetchArchive(`Niten`).then((rarc) => buildModel(rarc, `bdlm/mt.bdl`).bindANK1(parseBCK(rarc, `bcks/mt_wait01.bck`)));
+    else if (actorName === 'Mt') fetchArchive(`Niten`).then((rarc) => {
+        buildModel(rarc, `bdlm/mt.bdl`).bindANK1(parseBCK(rarc, `bcks/mt_wait01.bck`))
+        setShadow(800, 150, 40);
+    });
     // Great Fairy
     else if (actorName === 'BigElf') fetchArchive(`bigelf`).then((rarc) => buildModel(rarc, `bdlm/dy.bdl`).bindANK1(parseBCK(rarc, `bcks/wait01.bck`)));
     // Fairy
@@ -1322,9 +1328,20 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
             lastModel = tailModel;
         }
     });
-    else if (actorName === 'keeth') fetchArchive(`Ki`).then((rarc) => buildModel(rarc, `bdlm/ki.bdl`).bindANK1(parseBCK(rarc, `bck/wait1.bck`)));
-    else if (actorName === 'Fkeeth') fetchArchive(`Ki`).then((rarc) => buildModel(rarc, `bdlm/fk.bdl`).bindANK1(parseBCK(rarc, `bck/wait1.bck`)));
-    else if (actorName === 'Puti') fetchArchive(`Pt`).then((rarc) => buildModel(rarc, `bdlm/pt.bdl`).bindANK1(parseBCK(rarc, `bck/wait.bck`)));
+    // Keese
+    else if (actorName === 'keeth') fetchArchive(`Ki`).then((rarc) => {
+        buildModel(rarc, `bdlm/ki.bdl`).bindANK1(parseBCK(rarc, `bck/wait1.bck`))
+        setShadow(800, 150, 40);
+    });
+    else if (actorName === 'Fkeeth') fetchArchive(`Ki`).then((rarc) => {
+        buildModel(rarc, `bdlm/fk.bdl`).bindANK1(parseBCK(rarc, `bck/wait1.bck`))
+        setShadow(800, 150, 40);
+    });
+    // Miniblin
+    else if (actorName === 'Puti') fetchArchive(`Pt`).then((rarc) => {
+        buildModel(rarc, `bdlm/pt.bdl`).bindANK1(parseBCK(rarc, `bck/wait.bck`));
+        setShadow(400, 100, 50);
+    });
     else if (actorName === 'Rdead1' || actorName === 'Rdead2') fetchArchive(`Rd`).then((rarc) => {
         const m = buildModel(rarc, `bdlm/rd.bdl`);
         const idleAnimType = (actor.parameters & 0x00000001);
@@ -1339,7 +1356,11 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         buildModel(rarc, `bdlm/gm.bdl`).bindANK1(parseBCK(rarc, `bck/fly.bck`))
         setShadow(900, 10, 80);
     });
-    else if (actorName === 'mo2') fetchArchive(`Mo2`).then((rarc) => buildModel(rarc, `bdlm/mo.bdl`).bindANK1(parseBCK(rarc, `bck/wait.bck`)));
+    // Moblin
+    else if (actorName === 'mo2') fetchArchive(`Mo2`).then((rarc) => {
+        buildModel(rarc, `bdlm/mo.bdl`).bindANK1(parseBCK(rarc, `bck/wait.bck`));
+        setShadow(1250, 2, 50);
+    });
     else if (actorName === 'pow') fetchArchive(`Pw`).then(async (rarc) => {
         let color = (actor.parameters & 0x0000FE00) >> 9;
         if (color > 5)
@@ -1448,6 +1469,8 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         if (equipmentType >= 5) { // Has a cape
             // TODO: Cape is procedurally animated. Also, the cape's textures are inside d_a_mant.rel.
         }
+
+        setShadow(1300, 300, 200);
     });
     // Stalfos
     else if (actorName === 'Stal') fetchArchive(`St`).then((rarc) => {
@@ -1479,6 +1502,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         buildChildModel(rarc, `bdlm/st_asir.bdl`).setParentJoint(skeletonModel, `asiR`);
         // Set a fake bbox for the main invisible skeleton model so it doesn't get culled when the camera isn't right on top of it.
         skeletonModel.modelInstance.modelData.bbox = new AABB(-80, -80, -80, 80, 80, 80);
+        setShadow(1000, 150, 50);
     });
     // Peahats and Seahats
     else if (actorName === 'p_hat') {
