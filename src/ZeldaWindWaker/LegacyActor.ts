@@ -1333,7 +1333,10 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         }
     });
     else if (actorName === 'wiz_r') fetchArchive(`Wz`).then((rarc) => buildModel(rarc, `bdlm/wz.bdl`).bindANK1(parseBCK(rarc, `bck/s_demo_wait1.bck`)));
-    else if (actorName === 'gmos') fetchArchive(`Gm`).then((rarc) => buildModel(rarc, `bdlm/gm.bdl`).bindANK1(parseBCK(rarc, `bck/fly.bck`)));
+    else if (actorName === 'gmos') fetchArchive(`Gm`).then((rarc) => {
+        buildModel(rarc, `bdlm/gm.bdl`).bindANK1(parseBCK(rarc, `bck/fly.bck`))
+        setShadow(900, 10, 80);
+    });
     else if (actorName === 'mo2') fetchArchive(`Mo2`).then((rarc) => buildModel(rarc, `bdlm/mo.bdl`).bindANK1(parseBCK(rarc, `bck/wait.bck`)));
     else if (actorName === 'pow') fetchArchive(`Pw`).then(async (rarc) => {
         let color = (actor.parameters & 0x0000FE00) >> 9;

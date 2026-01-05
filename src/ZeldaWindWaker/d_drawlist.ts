@@ -400,7 +400,8 @@ void main() {
     }
 }
 
-const scratchMat4 = mat4.create();
+const scratchMat4a = mat4.create();
+const scratchMat4b = mat4.create();
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
 const scratchAABB = new AABB();
@@ -502,7 +503,7 @@ class dDlst_shadowReal_c {
         if (this.models.length === 0)
             return;
 
-        const clipFromVolume = mat4.mul(scratchMat4, globals.camera.clipFromWorldMatrix, this.worldFromVolume)
+        const clipFromVolume = mat4.mul(scratchMat4a, globals.camera.clipFromWorldMatrix, this.worldFromVolume)
 
         const renderInst = renderInstManager.newRenderInst();
         let offset = renderInst.allocateUniformBuffer(0, 8 + 16 * 2 + 20);
@@ -510,7 +511,7 @@ class dDlst_shadowReal_c {
         offset += fillVec4(buf, offset, viewerInput.backbufferWidth, viewerInput.backbufferHeight, 0.5, 0.0);
         offset += fillVec4v(buf, offset, this.shadowmapScaleBias);
         offset += fillMatrix4x4(buf, offset, clipFromVolume);
-        offset += fillMatrix4x4(buf, offset, mat4.invert(scratchMat4, clipFromVolume));
+        offset += fillMatrix4x4(buf, offset, mat4.invert(scratchMat4a, clipFromVolume));
         offset += fillFogBlock(buf, offset, materialParams.u_FogBlock);
         materialParams.m_TextureMapping[0].lateBinding = 'shadowmap-target';
         materialParams.m_TextureMapping[1].lateBinding = 'depth-target';
@@ -628,8 +629,8 @@ class dDlst_shadowReal_c {
         projectionMatrixConvertClipSpaceNearZ(lightProjMtx, globals.camera.clipSpaceNearZ, GfxClipSpaceNearZ.NegativeOne);
 
         // Scale and bias the projection to fit into our slot in the shadowmap atlas
-        const vpMtx = mat4.fromTranslation(scratchMat4, [shadowAtlasInvDim[0] * (1 + 2 * this.atlasOffset[0]) - 1.0, shadowAtlasInvDim[1] * (1 + 2 * this.atlasOffset[1]) - 1.0, 0]);
-        mat4.scale(scratchMat4, scratchMat4, [shadowAtlasInvDim[0], shadowAtlasInvDim[1], 1]);
+        const vpMtx = mat4.fromTranslation(scratchMat4a, [shadowAtlasInvDim[0] * (1 + 2 * this.atlasOffset[0]) - 1.0, shadowAtlasInvDim[1] * (1 + 2 * this.atlasOffset[1]) - 1.0, 0]);
+        mat4.scale(scratchMat4a, scratchMat4a, [shadowAtlasInvDim[0], shadowAtlasInvDim[1], 1]);
         mat4.mul(lightProjMtx, vpMtx, lightProjMtx);
 
         return alpha;
@@ -639,23 +640,36 @@ class dDlst_shadowReal_c {
         if (this.models.length === 0)
             return;
 
-        // Build an AABB containing all models in the light's view space
-        const lightAABB = new AABB();
-        for (let m = 0; m < this.models.length; m++) {
-            const modelToLightMatrix = mat4.mul(scratchMat4, this.lightViewMtx, this.models[m].modelMatrix);
-            scratchAABB.transform(this.models[m].modelData.bbox, modelToLightMatrix);
-            lightAABB.union(lightAABB, scratchAABB);
-        }
-
-        const worldFromLight = mat4.invert(scratchMat4, this.lightViewMtx);
+        const worldFromLight = mat4.invert(scratchMat4a, this.lightViewMtx);
         const lightDir = scratchVec3a;
         getMatrixAxisZ(lightDir, worldFromLight);
-
-        // Determine the near/far caps on the shadow volume based on light angle, ground slope, and height above ground.
-        // TODO: Consider ground slope.
         const lightAngle = Math.atan2(lightDir[1], Math.sqrt(lightDir[0] * lightDir[0] + lightDir[2] * lightDir[2]));
-        lightAABB.min[2] = lightAABB.min[2] - (this.casterSize * 0.06 + this.heightAboveGround) / Math.sin(lightAngle);
-        lightAABB.max[2] = (lightAABB.max[2] + lightAABB.min[2]) * 0.5;
+        const groundYBias = (this.casterSize * 0.06 + this.heightAboveGround) / Math.sin(lightAngle)
+
+        // NOTE(mikelester): Almost all NPCs use a standard casterSize of 800, which is way to large for their actual geometry.
+        //     As an optimization, we'd like find the smallest volume that fits the models' bounding boxes in light space.
+        //     However, some actors (most bosses) have bounding boxes that do not actually bound their geometry, resulting in shadow clipping.
+        //     So, as a hacky compromise, we only do the tight fitting when the casterSize is 800.
+        const useBbox = this.casterSize == 800;
+
+        // Build an AABB containing all models in the light's view space
+        const lightAABB = new AABB();
+        if (useBbox) {
+            for (let m = 0; m < this.models.length; m++) {
+                const modelToLightMatrix = mat4.mul(scratchMat4b, this.lightViewMtx, this.models[m].modelMatrix);
+                scratchAABB.transform(this.models[m].modelData.bbox, modelToLightMatrix);
+                lightAABB.union(lightAABB, scratchAABB);
+            }
+                
+            // Determine the near/far caps on the shadow volume based on light angle, ground slope, and height above ground.
+            // TODO: Consider ground slope.
+            lightAABB.min[2] = lightAABB.min[2] - groundYBias;
+            lightAABB.max[2] = (lightAABB.max[2] + lightAABB.min[2]) * 0.5;
+        } else {
+            // If the models bounding boxes don't actually bound the geometry, use a conservative volume based on the shadowmap frustum 
+            const casterRadius = this.casterSize * 0.4;
+            lightAABB.set(-casterRadius, -casterRadius, -casterRadius, casterRadius, casterRadius, -2.0 * casterRadius - groundYBias);
+        }
 
         // Generate the shadow volume geometry as an oriented box based on the light-space AABB:
         // Transform a [-1, 1] cube into the light-space bounding volume computed above, then to world space.
@@ -700,8 +714,8 @@ class dDlst_shadowSimple_c {
         const buf = renderInst.mapUniformBufferF32(0);
         offset += fillVec4(buf, offset, viewerInput.backbufferWidth, viewerInput.backbufferHeight, 0.0, 0.1);
         offset += fillVec4(buf, offset, 1.0, 1.0, 0.0, 0.0);
-        offset += fillMatrix4x4(buf, offset, mat4.mul(scratchMat4, globals.camera.clipFromWorldMatrix, this.modelMtx));
-        offset += fillMatrix4x4(buf, offset, mat4.invert(scratchMat4, scratchMat4));
+        offset += fillMatrix4x4(buf, offset, mat4.mul(scratchMat4a, globals.camera.clipFromWorldMatrix, this.modelMtx));
+        offset += fillMatrix4x4(buf, offset, mat4.invert(scratchMat4a, scratchMat4a));
         offset += fillFogBlock(buf, offset, materialParams.u_FogBlock);
         this.tex.fillTextureMapping(materialParams.m_TextureMapping[0]);
         materialParams.m_TextureMapping[1].lateBinding = 'depth-target';
