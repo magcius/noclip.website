@@ -1,7 +1,7 @@
 
-import { mat4, ReadonlyVec3, vec2, vec3 } from "gl-matrix";
+import { mat4, ReadonlyVec3, vec2, vec3, vec4 } from "gl-matrix";
 import { OpaqueBlack, White, colorCopy, colorNewCopy } from "../Color.js";
-import { getMatrixAxisZ, projectionMatrixForCuboid, saturate, Vec3UnitY, Vec3UnitZ } from '../MathHelpers.js';
+import { getMatrixAxisZ, projectionMatrixForCuboid, saturate, Vec3UnitY } from '../MathHelpers.js';
 import { TSDraw } from "../SuperMarioGalaxy/DDraw.js";
 import { createBufferFromData } from "../gfx/helpers/BufferHelpers.js";
 import { projectionMatrixConvertClipSpaceNearZ } from '../gfx/helpers/ProjectionHelpers.js';
@@ -26,7 +26,7 @@ import { dRes_control_c, ResType } from "./d_resorce.js";
 import { DeviceProgram } from "../Program.js";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
 import { fullscreenMegaState, setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
-import { fillMatrix4x3, fillMatrix4x4, fillVec4 } from "../gfx/helpers/UniformBufferHelpers.js";
+import { fillMatrix4x3, fillMatrix4x4, fillVec4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers.js";
 import { preprocessProgramObj_GLSL } from "../gfx/shaderc/GfxShaderCompiler.js";
 import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription, GfxrRenderTargetID } from "../gfx/render/GfxRenderGraph.js";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
@@ -381,8 +381,7 @@ void main() {
         discard;
 
     // Top-down project our shadow texture. Our local space is between -1 and 1, we want to move into 0.0 to 1.0.
-    vec2 t_ShadowTexCoord = t_ObjectPos.xy * vec2(0.5) + vec2(0.5);
-    t_ShadowTexCoord = t_ShadowTexCoord * u_AtlasScaleBias.xy + u_AtlasScaleBias.zw;
+    vec2 t_ShadowTexCoord = (t_ObjectPos.xy * u_AtlasScaleBias.xy + u_AtlasScaleBias.zw) * 0.5 + 0.5;
     float t_ShadowColor = texture(SAMPLER_2D(u_TextureShadow), t_ShadowTexCoord).r;
     
     // If sampling from a predefined texture, smooth the shadow edges
@@ -403,6 +402,7 @@ void main() {
 
 const scratchMat4 = mat4.create();
 const scratchVec3a = vec3.create();
+const scratchVec3b = vec3.create();
 const scratchAABB = new AABB();
 
 const realShadowCount = 8;
@@ -433,7 +433,7 @@ function drawSimpleModelInstance(renderInstManager: GfxRenderInstManager, model:
 
             // Copy the correct subset of drawViewMatrixArray into DrawParams
             prepareShapeMtxGroup(drawParams, model.shapeInstanceState, shape.shape, shape.shape.mtxGroups[i]);
-            let offs = renderInst.allocateUniformBuffer(GX_Program.ub_DrawParams, 4*3 * 10);
+            let offs = renderInst.allocateUniformBuffer(GX_Program.ub_DrawParams, 4 * 3 * 10);
             const d = renderInst.mapUniformBufferF32(GX_Program.ub_DrawParams);
             for (let i = 0; i < 10; i++)
                 offs += fillMatrix4x3(d, offs, drawParams.u_PosMtx[i]);
@@ -452,9 +452,10 @@ class dDlst_shadowReal_c {
     private alpha: number = 0; // 0-255
     private lightViewMtx = mat4.create();
     private lightProjMtx = mat4.create();
-    private modelMtx = mat4.create();
+    private worldFromVolume = mat4.create();
     private volumeFromWorld = mat4.create();
     private atlasOffset = vec2.create();
+    private shadowmapScaleBias = vec4.create();
     private heightAboveGround: number = 0;
 
     constructor(private index: number) {
@@ -466,12 +467,11 @@ class dDlst_shadowReal_c {
         if (this.id !== 0 && this.models.length == 0) {
             this.id = 0;
         }
-        
+
         this.models.length = 0;
     }
 
-    public generateShadowVolume(globals: dGlobals): void
-    {
+    public generateShadowVolume(globals: dGlobals): void {
         if (this.models.length === 0)
             return;
 
@@ -489,15 +489,24 @@ class dDlst_shadowReal_c {
 
         // Determine the near/far caps on the shadow volume based on light angle, ground slope, and height above ground.
         // TODO: Consider ground slope.
-        const lightAngle = Math.atan2(lightDir[1],Math.sqrt(lightDir[0] * lightDir[0] + lightDir[2] * lightDir[2]));
-        lightAABB.min[2] = lightAABB.min[2] - (40 + this.heightAboveGround) / Math.sin( lightAngle );
+        const lightAngle = Math.atan2(lightDir[1], Math.sqrt(lightDir[0] * lightDir[0] + lightDir[2] * lightDir[2]));
+        lightAABB.min[2] = lightAABB.min[2] - (40 + this.heightAboveGround) / Math.sin(lightAngle);
         lightAABB.max[2] = (lightAABB.max[2] + lightAABB.min[2]) * 0.5;
 
         // Generate the shadow volume geometry as an oriented box based on the light-space AABB:
-        // Transform a unit cube into the light-space bounding volume computed above, then to world space.
-        const lightFromVolume = mat4.fromTranslation(mat4.create(), lightAABB.min);
-        mat4.scale(lightFromVolume, lightFromVolume, vec3.sub(scratchVec3a, lightAABB.max, lightAABB.min));
-        mat4.mul(this.modelMtx, worldFromLight, lightFromVolume);
+        // Transform a [-1, 1] cube into the light-space bounding volume computed above, then to world space.
+        const scale = vec3.scale(scratchVec3a, vec3.sub(scratchVec3a, lightAABB.max, lightAABB.min), 0.5);
+        const lightFromVolume = mat4.fromTranslation(mat4.create(), vec3.add(scratchVec3b, lightAABB.min, scale));
+        mat4.scale(lightFromVolume, lightFromVolume, scale);
+        mat4.mul(this.worldFromVolume, worldFromLight, lightFromVolume);
+        mat4.invert(this.volumeFromWorld, this.worldFromVolume);
+
+        // The shadow volume is contained within the shadowmap's ortho frustum. Create a mapping from volume space [-1, 1] to
+        // shadowmap space [-1, 1] so we can sample the texture at the correct coordinates.
+        const mapMax = vec3.transformMat4(scratchVec3a, lightAABB.max, this.lightProjMtx);
+        const mapMin = vec3.transformMat4(scratchVec3b, lightAABB.min, this.lightProjMtx);
+        const diff = vec3.sub(scratchVec3a, mapMax, mapMin);
+        vec4.set(this.shadowmapScaleBias, diff[0] * 0.5, diff[1] * 0.5, (mapMin[0] + diff[0] * 0.5), (mapMin[1] + diff[1] * 0.5));
     }
 
     public imageDraw(globals: dGlobals, renderInstManager: GfxRenderInstManager): void {
@@ -514,7 +523,7 @@ class dDlst_shadowReal_c {
         }
         renderInstManager.popTemplate();
     }
-    
+
     // Draw "real" shadows
     // noclip modification: The game's original real shadowing uses many draw calls which is inefficient on modern hardware. It works as follows:
     // 1. Compute a bounding box for the shadow, gather any bg triangles that intersect it. These will be the shadow receivers.
@@ -530,14 +539,15 @@ class dDlst_shadowReal_c {
         if (this.models.length === 0)
             return;
 
+        const clipFromVolume = mat4.mul(scratchMat4, globals.camera.clipFromWorldMatrix, this.worldFromVolume)
+
         const renderInst = renderInstManager.newRenderInst();
         let offset = renderInst.allocateUniformBuffer(0, 8 + 16 * 2 + 20);
         const buf = renderInst.mapUniformBufferF32(0);
         offset += fillVec4(buf, offset, viewerInput.backbufferWidth, viewerInput.backbufferHeight, 0.5, 0.0);
-        offset += fillVec4(buf, offset, shadowAtlasInvDim[0], shadowAtlasInvDim[1], this.atlasOffset[0] * shadowAtlasInvDim[0], this.atlasOffset[1] * shadowAtlasInvDim[1]);
-        offset += fillMatrix4x4(buf, offset, mat4.mul(scratchMat4, globals.camera.clipFromWorldMatrix, this.modelMtx));
-        const worldFromClip = mat4.invert(scratchMat4, globals.camera.clipFromWorldMatrix);
-        offset += fillMatrix4x4(buf, offset, mat4.mul(scratchMat4, this.volumeFromWorld, worldFromClip));
+        offset += fillVec4v(buf, offset, this.shadowmapScaleBias);
+        offset += fillMatrix4x4(buf, offset, clipFromVolume);
+        offset += fillMatrix4x4(buf, offset, mat4.invert(scratchMat4, clipFromVolume));
         offset += fillFogBlock(buf, offset, materialParams.u_FogBlock);
         materialParams.m_TextureMapping[0].lateBinding = 'shadowmap-target';
         materialParams.m_TextureMapping[1].lateBinding = 'depth-target';
@@ -623,7 +633,10 @@ class dDlst_shadowReal_c {
 
         // noclip modification: 
         // The game uses realPolygonCheck to gather a list of bg polygons that intersect the shadow's bounding volume.
-        // These are then renderered to sample the shadow map. Instead, we render an oriented box (the shadow volume) and sample the shadowmap there.
+        // These are then renderered to sample the shadow map. Instead, we generate an oriented box (the shadow volume),
+        // fit it to the light-space bounding box of the shadow casters, manipulate the z-axis caps to encapsulate the terrain,
+        // and render that box as the shadow receiver. See generateShadowVolume(). We must wait until draw time to do this,
+        // because dComIfGd_addRealShadow() may be called after this to add additional caster models.
         // if (!realPolygonCheck(casterCenter, casterRadius, heightAboveGround, rayDir, shadowPoly)) {
         //     return 0;
         // }
@@ -645,13 +658,10 @@ class dDlst_shadowReal_c {
             return 0.0;
         }
 
-        // Build view matrix (lookAt)
+        // Build the light view/proj matrices
         mat4.lookAt(lightViewMtx, lightVec, casterCenter, Vec3UnitY);
         projectionMatrixForCuboid(lightProjMtx, -casterRadius, casterRadius, -casterRadius, casterRadius, 1.0, 10000.0);
         projectionMatrixConvertClipSpaceNearZ(lightProjMtx, globals.camera.clipSpaceNearZ, GfxClipSpaceNearZ.NegativeOne);
-
-        // Build a matrix to transform a world space position into the shadowmap's ortho frustum. The xy position can then be used to sample the shadowmap.
-        mat4.mul(this.volumeFromWorld, lightProjMtx, lightViewMtx);
 
         // Scale and bias the projection to fit into our slot in the shadowmap atlas
         const vpMtx = mat4.fromTranslation(scratchMat4, [shadowAtlasInvDim[0] * (1 + 2 * this.atlasOffset[0]) - 1.0, shadowAtlasInvDim[1] * (1 + 2 * this.atlasOffset[1]) - 1.0, 0]);
@@ -749,14 +759,14 @@ class dDlst_shadowControl_c_Cache {
             GfxBufferUsage.Vertex,
             GfxBufferFrequencyHint.Static,
             new Float32Array([
-                [0, 0, 0],
-                [1, 0, 0],
-                [1, 1, 0],
-                [0, 1, 0],
-                [0, 0, 1],
-                [1, 0, 1],
+                [-1, -1, -1],
+                [1, -1, -1],
+                [1, 1, -1],
+                [-1, 1, -1],
+                [-1, -1, 1],
+                [1, -1, 1],
                 [1, 1, 1],
-                [0, 1, 1],
+                [-1, 1, 1],
             ].flat()).buffer,
         );
 
@@ -892,7 +902,7 @@ class dDlst_shadowControl_c {
         for (let i = 0; i < this.reals.length; i++) {
             this.reals[i].generateShadowVolume(globals);
         }
-        
+
         // First, render our real shadow casters into the shadowmap
         renderInstManager.setCurrentList(this.realCasterInstList);
         const shadowmapTemplate = renderInstManager.pushTemplate();
