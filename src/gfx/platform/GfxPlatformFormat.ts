@@ -194,6 +194,7 @@ export function getFormatByteSize(fmt: GfxFormat): number {
     case FormatTypeFlags.BC4_SNORM:
     case FormatTypeFlags.BC5_UNORM:
     case FormatTypeFlags.BC5_SNORM:
+    case FormatTypeFlags.BC7:
         throw "whoops"; // Not valid to call on compressed texture formats...
     default:
         const typeByteSize = getFormatTypeFlagsByteSize(typeFlags);

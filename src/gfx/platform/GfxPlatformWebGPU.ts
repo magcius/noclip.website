@@ -188,6 +188,10 @@ function translateTextureFormat(format: GfxFormat): GPUTextureFormat {
         return 'bc5-rg-snorm';
     else if (format === GfxFormat.BC5_UNORM)
         return 'bc5-rg-unorm';
+    else if (format === GfxFormat.BC7)
+        return 'bc7-rgba-unorm';
+    else if (format === GfxFormat.BC7_SRGB)
+        return 'bc7-rgba-unorm-srgb';
     else
         throw "whoops";
 }
@@ -854,6 +858,7 @@ function isFormatTextureCompressionBC(format: GfxFormat): boolean {
         case FormatTypeFlags.BC4_UNORM:
         case FormatTypeFlags.BC5_SNORM:
         case FormatTypeFlags.BC5_UNORM:
+        case FormatTypeFlags.BC7:
             return true;
     }
 
@@ -872,6 +877,7 @@ function getFormatByteSizePerBlock(format: GfxFormat): number {
         case FormatTypeFlags.BC3:
         case FormatTypeFlags.BC5_SNORM:
         case FormatTypeFlags.BC5_UNORM:
+        case FormatTypeFlags.BC7:
             return 16;
     }
 
@@ -889,6 +895,7 @@ function getFormatBlockSize(format: GfxFormat): number {
         case FormatTypeFlags.BC4_UNORM:
         case FormatTypeFlags.BC5_SNORM:
         case FormatTypeFlags.BC5_UNORM:
+        case FormatTypeFlags.BC7:
             return 4;
     }
 
