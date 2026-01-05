@@ -5,10 +5,10 @@ import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { convertToCanvas } from "../../gfx/helpers/TextureConversionHelpers.js";
 import { SceneGfx, Texture, ViewerRenderInput } from "../../viewer.js";
 import { DeviceProgram } from "../../Program.js";
-import { BSPFile, Surface, SurfaceLightmapData } from "./BSPFile.js";
+import { BSPEntity, BSPFile, Model, Surface, SurfaceLightmapData } from "./BSPFile.js";
 import { GfxRenderInstList, GfxRenderInstManager } from "../../gfx/render/GfxRenderInstManager.js";
 import { TextureMapping } from "../../TextureHolder.js";
-import { mat4 } from "gl-matrix";
+import { mat4, ReadonlyMat4 } from "gl-matrix";
 import { Camera, CameraController } from "../../Camera.js";
 import { fillMatrix4x4, fillVec4 } from "../../gfx/helpers/UniformBufferHelpers.js";
 import { WAD, WAD2LumpType, WAD3LumpType } from "./WAD.js";
@@ -166,7 +166,7 @@ export class TextureCache implements TextureListHolder {
 
 class GoldSrcProgram extends DeviceProgram {
     public static ub_SceneParams = 0;
-    public static ub_ShapeParams = 1;
+    public static ub_ModelParams = 1;
 
     public static a_Position = 0;
     public static a_TexCoord = 1;
@@ -177,6 +177,10 @@ ${GfxShaderLibrary.MatrixLibrary}
 layout(std140) uniform ub_SceneParams {
     Mat4x4 u_ProjectionView;
     vec4 u_Params[1];
+};
+
+layout(std140) uniform ub_ModelParams {
+    Mat4x4 u_ModelMatrix;
 };
 
 #define u_Time (u_Params[0].x)
@@ -192,7 +196,8 @@ layout(location = ${GoldSrcProgram.a_TexCoord}) in vec4 a_TexCoord;
 out vec4 v_TexCoord;
 
 void main() {
-    gl_Position = UnpackMatrix(u_ProjectionView) * vec4(a_Position, 1.0);
+    vec4 t_PositionWorld = UnpackMatrix(u_ModelMatrix) * vec4(a_Position, 1.0);
+    gl_Position = UnpackMatrix(u_ProjectionView) * t_PositionWorld;
     v_TexCoord = a_TexCoord;
 }
 `;
@@ -254,21 +259,42 @@ void main() {
 `;
 }
 
+function isToolTexture(texName: string): boolean {
+    const lower = texName.toLowerCase();
+    if (lower === 'trigger') return true;
+    if (lower === 'clip') return true;
+    if (lower === 'skip') return true;
+    if (lower === 'hint') return true;
+    if (lower === 'origin') return true;
+    if (lower === 'aaatrigger') return true;
+    if (lower === 'null') return true;
+    if (lower === 'nodraw') return true;
+    if (lower === 'invisible') return true;
+    if (lower.startsWith('tools/')) return true;
+    return false;
+}
+
 class BSPSurfaceRenderer {
     private textureMapping = nArray(2, () => new TextureMapping());
     private visible = true;
-    private gfxProgram: GfxProgram;
+    private gfxProgram: GfxProgram | null = null;
     private sky = false;
     private water = false;
 
     constructor(cache: GfxRenderCache, textureCache: TextureCache, private surface: Surface, bspVersion: number) {
+        const texName = this.surface.texName;
+
+        if (isToolTexture(texName)) {
+            this.visible = false;
+            return;
+        }
+
         const miptex = textureCache.findMipTex(this.surface.texName);
         this.textureMapping[0].gfxTexture = miptex.gfxTexture;
 
         const isGameQuake = bspVersion === 29;
         const isGameHL1 = bspVersion === 30;
 
-        const texName = this.surface.texName;
         if (texName.startsWith('sky'))
             this.sky = true;
         if ((texName.startsWith('*') && texName !== "*default") || texName.startsWith('!'))
@@ -284,8 +310,8 @@ class BSPSurfaceRenderer {
         this.gfxProgram = cache.createProgram(program);
     }
 
-    public prepareToRender(renderInstManager: GfxRenderInstManager, lightmapManager: LightmapManager, view: View): void {
-        if (!this.visible)
+    public prepareToRender(renderInstManager: GfxRenderInstManager, lightmapManager: LightmapManager, view: View, modelMatrix: ReadonlyMat4): void {
+        if (!this.visible || this.gfxProgram === null)
             return;
 
         this.textureMapping[1].gfxTexture = lightmapManager.gfxTexture;
@@ -295,8 +321,37 @@ class BSPSurfaceRenderer {
         renderInst.setDrawCount(this.surface.indexCount, this.surface.startIndex);
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
 
+        let offs = renderInst.allocateUniformBuffer(GoldSrcProgram.ub_ModelParams, 16);
+        const d = renderInst.mapUniformBufferF32(GoldSrcProgram.ub_ModelParams);
+        offs += fillMatrix4x4(d, offs, modelMatrix);
+
         const list = this.sky ? view.skyList : view.mainList;
         list.submitRenderInst(renderInst);
+    }
+}
+
+const identityMatrix = mat4.create();
+
+class BSPModelRenderer {
+    public visible: boolean = true;
+    public surfaceRenderers: BSPSurfaceRenderer[] = [];
+
+    constructor(cache: GfxRenderCache, textureCache: TextureCache, private model: Model, private surfaces: Surface[], private lightmapManager: LightmapManager, bspVersion: number) {
+        for (let i = 0; i < model.surfaces.length; i++) {
+            const surface = surfaces[model.surfaces[i]];
+            this.surfaceRenderers.push(new BSPSurfaceRenderer(cache, textureCache, surface, bspVersion));
+
+            for (let j = 0; j < surface.lightmapData.length; j++)
+                lightmapManager.addSurface(surface.lightmapData[j]);
+        }
+    }
+
+    public prepareToRender(renderInstManager: GfxRenderInstManager, view: View): void {
+        if (!this.visible)
+            return;
+
+        for (let i = 0; i < this.surfaceRenderers.length; i++)
+            this.surfaceRenderers[i].prepareToRender(renderInstManager, this.lightmapManager, view, identityMatrix);
     }
 }
 
@@ -406,8 +461,9 @@ class LightmapManager {
         device.destroyTexture(this.gfxTexture);
     }
 }
+
 export class BSPRenderer {
-    public surfaceRenderers: BSPSurfaceRenderer[] = [];
+    public modelRenderers: BSPModelRenderer[] = [];
 
     private inputLayout: GfxInputLayout;
     private vertexBuffer: GfxBuffer;
@@ -441,14 +497,49 @@ export class BSPRenderer {
         const lightmapBytesPerTexel = this.bsp.version === 29 ? 1 : 3;
         this.lightmapManager = new LightmapManager(device, this.bsp.lightmapPackerPage, lightmapBytesPerTexel);
 
-        // TODO(jstpierre): Other models.
-        const model = this.bsp.models[0]!;
-        for (let i = 0; i < model.surfaces.length; i++) {
-            const surface = this.bsp.surfaces[model.surfaces[i]];
-            this.surfaceRenderers.push(new BSPSurfaceRenderer(cache, textureCache, surface, this.bsp.version));
+        for (let i = 0; i < this.bsp.models.length; i++) {
+            const model = this.bsp.models[i];
+            const modelRenderer = new BSPModelRenderer(cache, textureCache, model, this.bsp.surfaces, this.lightmapManager, this.bsp.version);
+            // Model 0 (worldspawn) is always visible; others start invisible until linked to entities
+            modelRenderer.visible = (i === 0);
+            this.modelRenderers.push(modelRenderer);
+        }
 
-            for (let j = 0; j < surface.lightmapData.length; j++)
-                this.lightmapManager.addSurface(surface.lightmapData[j]);
+        this.processEntities(this.bsp.entities);
+    }
+
+    private processEntities(entities: BSPEntity[]): void {
+        const isQuake = this.bsp.version === 29;
+
+        for (const entity of entities) {
+            if (!entity.model || !entity.model.startsWith('*'))
+                continue;
+
+            const modelIndex = parseInt(entity.model.slice(1), 10);
+            if (modelIndex <= 0 || modelIndex >= this.modelRenderers.length)
+                continue;
+
+            const classname = entity.classname || '';
+
+            if (classname.startsWith('trigger_'))
+                continue;
+
+            // Quake-specific: Check spawnflags for difficulty-based visibility
+            // 256=Not Easy, 512=Not Normal, 1024=Not Hard, 2048=Not Deathmatch
+            if (isQuake) {
+                const spawnflags = parseInt(entity.spawnflags || '0', 10);
+
+                // Default to Normal difficulty (single-player) - skip if "Not Normal" (512) is set
+                const notNormal = (spawnflags & 512) !== 0;
+                // Skip deathmatch-only entities (all SP difficulty flags set)
+                const deathmatchOnly = (spawnflags & (256 + 512 + 1024)) === (256 + 512 + 1024);
+
+                if (notNormal || deathmatchOnly)
+                    continue;
+            }
+
+            const modelRenderer = this.modelRenderers[modelIndex];
+            modelRenderer.visible = true;
         }
     }
 
@@ -456,7 +547,7 @@ export class BSPRenderer {
         this.lightmapManager.prepareToRender(renderInstManager.gfxRenderCache.device, worldLightingState);
 
         const template = renderInstManager.pushTemplate();
-        template.setBindingLayouts([{ numSamplers: 2, numUniformBuffers: 1 }]);
+        template.setBindingLayouts([{ numSamplers: 2, numUniformBuffers: 2 }]);
         template.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor);
         template.setMegaStateFlags({ cullMode: GfxCullMode.Back, frontFace: GfxFrontFaceMode.CW });
 
@@ -465,8 +556,8 @@ export class BSPRenderer {
         offs += fillMatrix4x4(d, offs, view.clipFromWorldMatrix);
         offs += fillVec4(d, offs, view.time);
 
-        for (let i = 0; i < this.surfaceRenderers.length; i++)
-            this.surfaceRenderers[i].prepareToRender(renderInstManager, this.lightmapManager, view);
+        for (let i = 0; i < this.modelRenderers.length; i++)
+            this.modelRenderers[i].prepareToRender(renderInstManager, view);
 
         renderInstManager.popTemplate();
     }
