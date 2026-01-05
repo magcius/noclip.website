@@ -1088,6 +1088,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     else if (actorName === 'Kanban') fetchArchive(`Kanban`).then((rarc) => {
         const b = buildModel(rarc, `bdl/kanban.bdl`);
         b.lightTevColorType = LightType.BG0;
+        setShadow(800, 150, 40);
     });
     // Forsaken Fortress door
     else if (actorName === 'SMBdor') fetchArchive(`Mbdoor`).then((rarc) => {
@@ -1245,6 +1246,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         }
 
         model.bindANK1(parseBCK(rarc, `bck/wait1.bck`));
+        setShadow(800, 150, 40);
     });
     else if (actorName === 'kani') fetchArchive(`Kn`).then((rarc) => buildModel(rarc, `bdl/kn.bdl`).bindANK1(parseBCK(rarc, `bck/wait01.bck`)));
     else if (actorName === 'NpcSo') fetchArchive(`So`).then((rarc) => buildModel(rarc, `bdlm/so.bdl`).bindANK1(parseBCK(rarc, `bcks/so_wait01.bck`)));
@@ -1799,8 +1801,14 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     else if (actorName === 'Hdai1') fetchArchive(`Hdai1`).then((rarc) => buildModel(rarc, `bdlm/hdai1.bdl`));
     else if (actorName === 'Hdai2') fetchArchive(`Hdai1`).then((rarc) => buildModel(rarc, `bdlm/hdai1.bdl`));
     else if (actorName === 'Hdai3') fetchArchive(`Hdai1`).then((rarc) => buildModel(rarc, `bdlm/hdai1.bdl`));
-    else if (actorName === 'Hsh') fetchArchive(`Hsehi1`).then((rarc) => buildModel(rarc, `bdl/hsehi1.bdl`));
-    else if (actorName === 'Hsh2') fetchArchive(`Hsehi2`).then((rarc) => buildModel(rarc, `bdl/hsehi2.bdl`));
+    else if (actorName === 'Hsh') fetchArchive(`Hsehi1`).then((rarc) => {
+        buildModel(rarc, `bdl/hsehi1.bdl`)
+        setShadow(800, 0, 40);
+    });
+    else if (actorName === 'Hsh2') fetchArchive(`Hsehi2`).then((rarc) => {
+        buildModel(rarc, `bdl/hsehi2.bdl`)
+        setShadow(800, 0, 40);
+    });
     else if (actorName === 'Hyuf1') fetchArchive(`Hyuf1`).then((rarc) => buildModel(rarc, `bdlm/hyuf1.bdl`));
     else if (actorName === 'Hyuf2') fetchArchive(`Hyuf2`).then((rarc) => buildModel(rarc, `bdlm/hyuf2.bdl`));
     else if (actorName === 'Blift') fetchArchive(`Hten1`).then((rarc) => buildModel(rarc, `bdl/hten1.bdl`));
