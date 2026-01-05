@@ -524,17 +524,11 @@ export class BSPRenderer {
             if (classname.startsWith('trigger_'))
                 continue;
 
-            // Quake-specific: Check spawnflags for difficulty-based visibility
-            // 256=Not Easy, 512=Not Normal, 1024=Not Hard, 2048=Not Deathmatch
             if (isQuake) {
                 const spawnflags = parseInt(entity.spawnflags || '0', 10);
 
-                // Default to Normal difficulty (single-player) - skip if "Not Normal" (512) is set
-                const notNormal = (spawnflags & 512) !== 0;
-                // Skip deathmatch-only entities (all SP difficulty flags set)
-                const deathmatchOnly = (spawnflags & (256 + 512 + 1024)) === (256 + 512 + 1024);
-
-                if (notNormal || deathmatchOnly)
+                const difficultyFlags = spawnflags & 0xF00;
+                if (difficultyFlags & 0x100)
                     continue;
             }
 
