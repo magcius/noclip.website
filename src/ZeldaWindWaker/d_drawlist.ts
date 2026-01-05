@@ -276,6 +276,24 @@ export class dDlst_list_c {
 }
 
 //#region Shadows
+const visualizeShadowVolumes = false;
+
+const scratchMat4a = mat4.create();
+const scratchMat4b = mat4.create();
+const scratchVec3a = vec3.create();
+const scratchVec3b = vec3.create();
+const scratchAABB = new AABB();
+
+const realShadowCount = 8;
+const shadowAtlasDim = getAtlasDimensions(realShadowCount);
+const shadowAtlasInvDim = [1.0 / shadowAtlasDim[0], 1.0 / shadowAtlasDim[1]];
+
+function getAtlasDimensions(count: number): [number, number] {
+    let dimMin = Math.floor(Math.sqrt(count));
+    while (count % dimMin !== 0) { dimMin--; }
+    const dimMax = count / dimMin;
+    return [dimMax, dimMin];
+}
 
 class DownsampleProgram extends DeviceProgram {
     public override vert = GfxShaderLibrary.fullscreenVS;
@@ -376,9 +394,10 @@ void main() {
     vec4 t_ObjectPos = UnpackMatrix(u_LocalFromClip) * vec4(t_ClipPos, 1.0);
     t_ObjectPos.xyz /= t_ObjectPos.w;
 
-    // Now that we have our object-space position, remove any samples outside of the box.
+    ${ !visualizeShadowVolumes ? 
+`   // Now that we have our object-space position, remove any samples outside of the box.
     if (any(lessThan(t_ObjectPos.xyz, vec3(-1))) || any(greaterThan(t_ObjectPos.xyz, vec3(1))))
-        discard;
+        discard;` : ''}
 
     // Top-down project our shadow texture. Our local space is between -1 and 1, we want to move into 0.0 to 1.0.
     vec2 t_ShadowTexCoord = (t_ObjectPos.xy * u_AtlasScaleBias.xy + u_AtlasScaleBias.zw) * 0.5 + 0.5;
@@ -389,7 +408,7 @@ void main() {
     float smoothFactor = u_Params.y;
     float t_Alpha = smoothstep(shadowStep, shadowStep + smoothFactor, t_ShadowColor);
     
-    vec4 t_PixelOut = vec4(0, 0, 0, 0.25 * t_Alpha);
+    vec4 t_PixelOut = vec4(0, 0, 0, 0.25 * t_Alpha ${visualizeShadowVolumes ? '+ 0.25' : ''});
 
     ${this.generateFog()}
 
@@ -398,23 +417,6 @@ void main() {
 #endif
 `;
     }
-}
-
-const scratchMat4a = mat4.create();
-const scratchMat4b = mat4.create();
-const scratchVec3a = vec3.create();
-const scratchVec3b = vec3.create();
-const scratchAABB = new AABB();
-
-const realShadowCount = 8;
-const shadowAtlasDim = getAtlasDimensions(realShadowCount);
-const shadowAtlasInvDim = [1.0 / shadowAtlasDim[0], 1.0 / shadowAtlasDim[1]];
-
-function getAtlasDimensions(count: number): [number, number] {
-    let dimMin = Math.floor(Math.sqrt(count));
-    while (count % dimMin !== 0) { dimMin--; }
-    const dimMax = count / dimMin;
-    return [dimMax, dimMin];
 }
 
 /** 
