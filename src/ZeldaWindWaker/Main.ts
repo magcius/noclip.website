@@ -273,7 +273,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
     public onstatechanged!: () => void;
 
     constructor(public device: GfxDevice, public globals: dGlobals) {
-        this.renderHelper = new GXRenderHelperGfx(device);
+        this.renderHelper = new GXRenderHelperGfx(device, globals.sceneContext);
 
         this.renderCache = this.renderHelper.renderInstManager.gfxRenderCache;
 
