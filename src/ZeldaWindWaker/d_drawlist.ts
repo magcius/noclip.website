@@ -24,14 +24,14 @@ import { dKy_GxFog_set, dKy_tevstr_c } from "./d_kankyo.js";
 import { cM_s2rad } from "./SComponent.js";
 import { dRes_control_c, ResType } from "./d_resorce.js";
 import { DeviceProgram } from "../Program.js";
-import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
+import { GfxShaderLibrary, glslGenerateFloat } from "../gfx/helpers/GfxShaderLibrary.js";
 import { fullscreenMegaState, setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
 import { fillMatrix4x3, fillMatrix4x4, fillVec4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers.js";
 import { preprocessProgramObj_GLSL } from "../gfx/shaderc/GfxShaderCompiler.js";
 import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription, GfxrRenderTargetID } from "../gfx/render/GfxRenderGraph.js";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
-import { IsDepthReversed, reverseDepthForCompareMode } from "../gfx/helpers/ReversedDepthHelpers.js";
+import { IsDepthReversed, reverseDepthForClearValue, reverseDepthForCompareMode } from "../gfx/helpers/ReversedDepthHelpers.js";
 import { AABB } from "../Geometry.js";
 
 export enum dDlst_alphaModel__Type {
@@ -296,7 +296,16 @@ function getAtlasDimensions(count: number): [number, number] {
 
 class DownsampleProgram extends DeviceProgram {
     public override vert = GfxShaderLibrary.fullscreenVS;
-    public override frag = GfxShaderLibrary.fullscreenBlitOneTexPS;
+    public override frag = `
+uniform sampler2D u_TextureFramebufferDepth;
+in vec2 v_TexCoord;
+
+void main() {
+    float t_Depth = texelFetch(TEXTURE(u_TextureFramebufferDepth), ivec2(v_TexCoord.xy * vec2(textureSize(TEXTURE(u_TextureFramebufferDepth), 0))), 0).r;
+    bool t_HasAnything = (t_Depth != ${glslGenerateFloat(reverseDepthForClearValue(1.0))});
+    gl_FragColor = t_HasAnything ? vec4(1) : vec4(0);
+}
+`;
 }
 
 class ShadowVolumeProgram extends DeviceProgram {
@@ -386,7 +395,7 @@ void main() {
 #if GFX_VIEWPORT_ORIGIN_TL()
     t_ClipPos.y *= -1.0;
 #endif
-    t_ClipPos.z = texelFetch(SAMPLER_2D(u_TextureFramebufferDepth), ivec2(gl_FragCoord.xy), 0).r;
+    t_ClipPos.z = texelFetch(TEXTURE(u_TextureFramebufferDepth), ivec2(gl_FragCoord.xy), 0).r;
 #if !GFX_CLIPSPACE_NEAR_ZERO()
     t_ClipPos.z = t_ClipPos.z * 2.0 - 1.0;
 #endif
@@ -970,7 +979,6 @@ class dDlst_shadowControl_c {
 
         let hasReal = false;
         for (let i = 0; i < this.reals.length; i++) {
-            const shadowmapColorTargetID = builder.createRenderTargetID(this.cache.shadowmapDesc, 'Shadow Map Color');
             const shadowmapDepthTargetID = builder.createRenderTargetID(this.cache.shadowmapDepthDesc, 'Shadow Map Depth');
 
             const real = this.reals[i];
@@ -979,7 +987,6 @@ class dDlst_shadowControl_c {
 
             builder.pushPass((pass) => {
                 pass.setDebugName(`Shadow Map ${i}`);
-                pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, shadowmapColorTargetID);
                 pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, shadowmapDepthTargetID);
                 pass.exec((passRenderer) => {
                     real.casterInstList.drawOnPassRenderer(renderInstManager.gfxRenderCache, passRenderer);
@@ -991,7 +998,7 @@ class dDlst_shadowControl_c {
                 pass.setDebugName(`Shadow Map ${i} Downsample`);
                 pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, shadowmapDownColorTargetID);
 
-                const srcResolveTextureID = builder.resolveRenderTarget(shadowmapColorTargetID);
+                const srcResolveTextureID = builder.resolveRenderTarget(shadowmapDepthTargetID);
                 pass.attachResolveTexture(srcResolveTextureID);
 
                 pass.exec((passRenderer, scope) => {
@@ -1000,17 +1007,18 @@ class dDlst_shadowControl_c {
                     passRenderer.setViewport(atlasOffset[0] * w, atlasOffset[1] * h, w, h);
                     const renderInst = renderInstManager.newRenderInst();
                     renderInst.setGfxProgram(this.cache.downsampleProgram);
-                    renderInst.setBindingLayouts([{ numUniformBuffers: 0, numSamplers: 1 }]);
+                    renderInst.setBindingLayouts([{ numUniformBuffers: 0, numSamplers: 1, samplerEntries: [
+                        { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.UnfilterableFloat },
+                    ] }]);
                     renderInst.setMegaStateFlags(fullscreenMegaState);
                     materialParams.m_TextureMapping[0].gfxTexture = scope.getResolveTextureForID(srcResolveTextureID);
-                    materialParams.m_TextureMapping[0].gfxSampler = this.cache.linearSampler;
+                    materialParams.m_TextureMapping[0].gfxSampler = this.cache.pointSampler;
                     renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
                     renderInst.setDrawCount(3);
                     renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);
                 });
             });
 
-            builder.pushDebugThumbnail(shadowmapColorTargetID);
             hasReal = true;
         }
     
