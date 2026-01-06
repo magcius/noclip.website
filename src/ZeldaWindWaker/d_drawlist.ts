@@ -1,12 +1,23 @@
 
-import { mat4, ReadonlyVec3, vec2, vec3, vec4 } from "gl-matrix";
+import { ReadonlyVec3, mat4, vec3, vec4 } from "gl-matrix";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { OpaqueBlack, White, colorCopy, colorNewCopy } from "../Color.js";
-import { getMatrixAxisZ, projectionMatrixForCuboid, saturate, Vec3UnitX, Vec3UnitY } from '../MathHelpers.js';
+import { J3DModelInstance, prepareShapeMtxGroup } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
+import { BTIData, BTI_Texture } from "../Common/JSYSTEM/JUTTexture.js";
+import { AABB } from "../Geometry.js";
+import { Vec3UnitX, Vec3UnitY, getMatrixAxisZ, projectionMatrixForCuboid, saturate } from '../MathHelpers.js';
+import { DeviceProgram } from "../Program.js";
 import { TSDraw } from "../SuperMarioGalaxy/DDraw.js";
 import { createBufferFromData } from "../gfx/helpers/BufferHelpers.js";
+import { fullscreenMegaState, setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
+import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
 import { projectionMatrixConvertClipSpaceNearZ } from '../gfx/helpers/ProjectionHelpers.js';
-import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxChannelWriteMask, GfxClipSpaceNearZ, GfxCompareMode, GfxCullMode, GfxDevice, GfxFormat, GfxInputLayout, GfxMipFilterMode, GfxProgram, GfxRenderPass, GfxSampler, GfxSamplerFormatKind, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxVertexBufferFrequency, GfxWrapMode } from "../gfx/platform/GfxPlatform.js";
+import { standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
+import { IsDepthReversed, reverseDepthForCompareMode } from "../gfx/helpers/ReversedDepthHelpers.js";
+import { fillMatrix4x3, fillMatrix4x4, fillVec4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers.js";
+import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxChannelWriteMask, GfxClipSpaceNearZ, GfxCompareMode, GfxCullMode, GfxDevice, GfxFormat, GfxInputLayout, GfxMipFilterMode, GfxProgram, GfxSampler, GfxSamplerFormatKind, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxVertexBufferFrequency, GfxWrapMode } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
+import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription, GfxrRenderTargetID } from "../gfx/render/GfxRenderGraph.js";
 import { GfxRenderInst, GfxRenderInstExecutionOrder, GfxRenderInstList, GfxRenderInstManager, gfxRenderInstCompareNone, gfxRenderInstCompareSortKey } from "../gfx/render/GfxRenderInstManager.js";
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder.js';
 import { DisplayListRegisters, GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, LoadedVertexLayout, compileVtxLoader, displayListRegistersInitGX, displayListRegistersRun } from "../gx/gx_displaylist.js";
@@ -16,23 +27,11 @@ import { ColorKind, DrawParams, GXMaterialHelperGfx, MaterialParams, SceneParams
 import { assert, assertExists, nArray } from '../util.js';
 import { ViewerRenderInput } from '../viewer.js';
 import { SymbolMap, dGlobals } from './Main.js';
-import { PeekZManager } from "./d_dlst_peekZ.js";
-import { cBgS_PolyInfo } from "./d_bg.js";
-import { BTI_Texture, BTIData } from "../Common/JSYSTEM/JUTTexture.js";
-import { J3DModelInstance, prepareShapeMtxGroup } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
-import { dKy_GxFog_set, dKy_tevstr_c } from "./d_kankyo.js";
 import { cM_s2rad } from "./SComponent.js";
-import { dRes_control_c, ResType } from "./d_resorce.js";
-import { DeviceProgram } from "../Program.js";
-import { GfxShaderLibrary, glslGenerateFloat } from "../gfx/helpers/GfxShaderLibrary.js";
-import { fullscreenMegaState, setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
-import { fillMatrix4x3, fillMatrix4x4, fillVec4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers.js";
-import { preprocessProgramObj_GLSL } from "../gfx/shaderc/GfxShaderCompiler.js";
-import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription, GfxrRenderTargetID } from "../gfx/render/GfxRenderGraph.js";
-import ArrayBufferSlice from "../ArrayBufferSlice.js";
-import { standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
-import { IsDepthReversed, reverseDepthForClearValue, reverseDepthForCompareMode } from "../gfx/helpers/ReversedDepthHelpers.js";
-import { AABB } from "../Geometry.js";
+import { cBgS_PolyInfo } from "./d_bg.js";
+import { PeekZManager } from "./d_dlst_peekZ.js";
+import { dKy_GxFog_set, dKy_tevstr_c } from "./d_kankyo.js";
+import { ResType, dRes_control_c } from "./d_resorce.js";
 
 export enum dDlst_alphaModel__Type {
     Bonbori,
@@ -290,10 +289,23 @@ class DownsampleProgram extends DeviceProgram {
 uniform sampler2D u_TextureFramebufferDepth;
 in vec2 v_TexCoord;
 
+float FakeGather0(ivec2 offs) {
+    ivec2 coord = ivec2(v_TexCoord.xy * vec2(textureSize(TEXTURE(u_TextureFramebufferDepth), 0))) + offs;
+    return texelFetch(TEXTURE(u_TextureFramebufferDepth), coord, 0).r != 0.0 ? 1.0 : 0.0;
+}
+
+vec4 FakeGather() {
+    return vec4(
+        FakeGather0(ivec2(0, 0)),
+        FakeGather0(ivec2(1, 0)),
+        FakeGather0(ivec2(0, 1)),
+        FakeGather0(ivec2(1, 1))
+    );
+}
+
 void main() {
-    float t_Depth = texelFetch(TEXTURE(u_TextureFramebufferDepth), ivec2(v_TexCoord.xy * vec2(textureSize(TEXTURE(u_TextureFramebufferDepth), 0))), 0).r;
-    bool t_HasAnything = (t_Depth != ${glslGenerateFloat(reverseDepthForClearValue(1.0))});
-    gl_FragColor = t_HasAnything ? vec4(1) : vec4(0);
+    vec4 dt = FakeGather();
+    gl_FragColor = vec4(dot(dt, vec4(0.25)));
 }
 `;
 }
