@@ -648,7 +648,7 @@ class dDlst_shadowReal_c {
         // Generate a conservative shadow volume (from realPolygonCheck), and cull if not visible.
         const receiverAABB = scratchAABB;
         const tmp1 = casterRadius * casterRadius * 0.002;
-        const tmp2 = Math.max(tmp1, 120.0);
+        const tmp2 = Math.min(tmp1, 120.0);
         let groundDist = casterRadius + heightAboveGround - tmp2;
         const xOffset = rayDir[0] * groundDist;
         const zOffset = rayDir[2] * groundDist;
