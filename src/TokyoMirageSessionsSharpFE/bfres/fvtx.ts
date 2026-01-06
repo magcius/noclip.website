@@ -55,81 +55,16 @@ export function parseFVTX(buffer: ArrayBufferSlice, offset: number, count: numbe
             const name_offset = view.getUint32(attribute_entry_offset, true);
             const name = read_bfres_string(buffer, name_offset, true);
             const original_format = view.getUint32(attribute_entry_offset + 0x8, true);
-            let bufferOffset = view.getUint16(attribute_entry_offset + 0xC, true);
+            const bufferOffset = view.getUint16(attribute_entry_offset + 0xC, true);
             const bufferIndex = view.getUint16(attribute_entry_offset + 0xE, true);
             
             let format = -1;
             if (original_format === AttributeFormat._10_10_10_2_Snorm)
             {
-                // this format isn't supported by webgl, so convert this to S16_RGBA_NORM
+                // this format isn't supported by webgl, so convert this data to S16_RGB_NORM
                 normal_offset = bufferOffset;
                 normal_index = bufferIndex;
-                const element_count = vertexBuffers[bufferIndex].data.byteLength / vertexBuffers[bufferIndex].stride;
-                const before_count = bufferOffset;
-                const after_count = vertexBuffers[bufferIndex].stride - 4 - before_count;
-
-                // 10 10 10 2 is 4 bytes, 16 16 16 16 is 8 bytes, so add 4
-                const new_stride = vertexBuffers[bufferIndex].stride + 4;
-                vertexBuffers[bufferIndex].stride = new_stride;
-
-                const new_byte_length = element_count * new_stride * 4;
-                let new_buffer = new Uint8Array(new_byte_length)
-
-                let new_buffer_offset = 0;
-                let old_buffer_offset = 0;
-                const old_view = vertexBuffers[bufferIndex].data.createDataView();
-                for (let i = 0; i < element_count; i++)
-                {
-                    if (before_count > 0)
-                    {
-                        for (let j = 0; j < before_count; j++)
-                        {
-                            new_buffer[new_buffer_offset++] = old_view.getUint8(old_buffer_offset++);
-                        }
-                    }
-
-                    function convert_s10_to_s32(n: number): number
-                    {
-                        // first left shift so that the top bit of the s10 is moved to the top bit of this s32 number
-                        // then right shift back the same amount
-                        // right shifting copies the top bit
-                        // if it's positive they will all be 0s
-                        // if it's negative they will all be 1s
-                        return (n << 22) >> 22;
-                    }
-
-                    const n = old_view.getUint32(old_buffer_offset, true);
-                    old_buffer_offset += 4;
-
-                    const s10_x = (n >>>  0) & 0x3FF;
-                    const s10_y = (n >>> 10) & 0x3FF;
-                    const s10_z = (n >>> 20) & 0x3FF;
-                    
-                    const s32_x = convert_s10_to_s32(s10_x);
-                    const s32_y = convert_s10_to_s32(s10_y);
-                    const s32_z = convert_s10_to_s32(s10_z);
-
-                    // write the s16s in little endian format
-                    new_buffer[new_buffer_offset++] = s32_x;
-                    new_buffer[new_buffer_offset++] = s32_x >> 8;
-                    new_buffer[new_buffer_offset++] = s32_y;
-                    new_buffer[new_buffer_offset++] = s32_y >> 8;
-                    new_buffer[new_buffer_offset++] = s32_z;
-                    new_buffer[new_buffer_offset++] = s32_z >> 8;
-                    new_buffer[new_buffer_offset++] = 1;
-                    new_buffer[new_buffer_offset++] = 0;
-
-                    if (after_count > 0)
-                    {
-                        for (let j = 0; j < after_count; j++)
-                        {
-                            new_buffer[new_buffer_offset++] = old_view.getUint8(old_buffer_offset++);
-                        }
-                    }
-                }
-
-                vertexBuffers[bufferIndex].data = new ArrayBufferSlice(new_buffer.buffer);
-
+                convert_10_10_10_2_snorm(bufferOffset, bufferIndex, vertexBuffers);
                 format = GfxFormat.S16_RGBA_NORM;
             }
             else
@@ -142,7 +77,7 @@ export function parseFVTX(buffer: ArrayBufferSlice, offset: number, count: numbe
             attribute_entry_offset += ATTRIBUTE_ENTRY_SIZE;
         }
 
-        // in the event that a buffer had to be remade due to _10_10_10_2_Snorm needing to be converted
+        // in the event that a buffer had to be remade because of _10_10_10_2_Snorm data
         // update the offsets to account for it going from 4 bytes to 8 bytes
         for (let i = 0; i < vertexAttributes.length; i++)
         {
@@ -161,6 +96,79 @@ export function parseFVTX(buffer: ArrayBufferSlice, offset: number, count: numbe
 
 const FVTX_ENTRY_SIZE = 0x58;
 const ATTRIBUTE_ENTRY_SIZE = 0x10;
+
+// remakes a vertex buffer where _10_10_10_2_Snorm data is converted into S16_RGBA_NORM data.
+// buffer_offset: the _10_10_10_2_Snorm attribute's buffer offset
+// buffer_index: which buffer the _10_10_10_2_Snorm attribute is in
+// vertex_buffers: buffer to modify
+function convert_10_10_10_2_snorm(buffer_offset: number, buffer_index: number, vertex_buffers: FVTX_VertexBuffer[])
+{
+    const element_count = vertex_buffers[buffer_index].data.byteLength / vertex_buffers[buffer_index].stride;
+    const before_count = buffer_offset;
+    const after_count = vertex_buffers[buffer_index].stride - 4 - before_count;
+
+    // 10 10 10 2 is 4 bytes, 16 16 16 16 is 8 bytes, so add 4
+    const new_stride = vertex_buffers[buffer_index].stride + 4;
+    vertex_buffers[buffer_index].stride = new_stride;
+
+    const new_byte_length = element_count * new_stride * 4;
+    let new_buffer = new Uint8Array(new_byte_length)
+
+    let new_buffer_offset = 0;
+    let old_buffer_offset = 0;
+    const old_view = vertex_buffers[buffer_index].data.createDataView();
+    for (let i = 0; i < element_count; i++)
+    {
+        if (before_count > 0)
+        {
+            for (let j = 0; j < before_count; j++)
+            {
+                new_buffer[new_buffer_offset++] = old_view.getUint8(old_buffer_offset++);
+            }
+        }
+
+        const n = old_view.getUint32(old_buffer_offset, true);
+        old_buffer_offset += 4;
+
+        const s10_x = (n >>>  0) & 0x3FF;
+        const s10_y = (n >>> 10) & 0x3FF;
+        const s10_z = (n >>> 20) & 0x3FF;
+        
+        const s32_x = convert_s10_to_s32(s10_x);
+        const s32_y = convert_s10_to_s32(s10_y);
+        const s32_z = convert_s10_to_s32(s10_z);
+
+        // write the s16s in little endian format
+        new_buffer[new_buffer_offset++] = s32_x;
+        new_buffer[new_buffer_offset++] = s32_x >> 8;
+        new_buffer[new_buffer_offset++] = s32_y;
+        new_buffer[new_buffer_offset++] = s32_y >> 8;
+        new_buffer[new_buffer_offset++] = s32_z;
+        new_buffer[new_buffer_offset++] = s32_z >> 8;
+        new_buffer[new_buffer_offset++] = 1;
+        new_buffer[new_buffer_offset++] = 0;
+
+        if (after_count > 0)
+        {
+            for (let j = 0; j < after_count; j++)
+            {
+                new_buffer[new_buffer_offset++] = old_view.getUint8(old_buffer_offset++);
+            }
+        }
+    }
+
+    vertex_buffers[buffer_index].data = new ArrayBufferSlice(new_buffer.buffer);
+}
+
+function convert_s10_to_s32(n: number): number
+{
+    // first left shift so that the top bit of the s10 is moved to the top bit of this s32 number
+    // then right shift back the same amount
+    // right shifting copies the top bit
+    // if it's positive they will all be 0s
+    // if it's negative they will all be 1s
+    return (n << 22) >> 22;
+}
 
 // Convert the format numbers used by FVTX data into a format number that noclip.website understands
 // format: FVTX attribute format number to convert

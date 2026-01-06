@@ -43,6 +43,10 @@ export class TMSFEScene implements SceneGfx
         console.log(view.getInt16(0xA, true));
         console.log(view.getInt16(0xC, true));
         console.log(view.getInt16(0xE, true));
+        console.log(view.getUint16(0x10, true));
+        console.log(view.getUint16(0x12, true));
+        
+        console.log(view.getFloat32(0x14, true));
     }
 
     public render(device: GfxDevice, viewerInput: ViewerRenderInput): void
