@@ -62,6 +62,7 @@ export class MIPTEXData {
         this.gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, this.width, this.height, numLevels));
         device.setResourceName(this.gfxTexture, this.name);
         let mipW = this.width, mipH = this.height;
+        const mipDatas: Uint8Array[] = [];
         for (let i = 0; i < numLevels; i++) {
             const mipData = new Uint8Array(mipW * mipH * 4);
 
@@ -83,13 +84,14 @@ export class MIPTEXData {
                 }
             }
 
-            device.uploadTextureData(this.gfxTexture, i, [mipData]);
+            mipDatas.push(mipData);
             surfaces.push(convertToCanvas(new ArrayBufferSlice(mipData.buffer), mipW, mipH, GfxFormat.U8_RGBA_NORM));
 
             mipW >>= 1;
             mipH >>= 1;
         }
 
+        device.uploadTextureData(this.gfxTexture, 0, mipDatas);
         this.viewerTexture = { name: this.name, surfaces };
     }
 

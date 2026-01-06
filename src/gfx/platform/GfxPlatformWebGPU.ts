@@ -2,11 +2,11 @@
 import type { glsl_compile as glsl_compile_ } from "../../../rust/pkg/noclip_support";
 import { HashMap, nullHashFunc } from "../../HashMap.js";
 import { rust } from "../../rustlib.js";
-import { GfxAttachmentState, GfxBindingLayoutDescriptor, GfxBindingLayoutSamplerDescriptor, GfxBindings, GfxBindingsDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxChannelBlendState, GfxClipSpaceNearZ, GfxCompareMode, GfxComputePass, GfxComputePipelineDescriptor, GfxComputeProgramDescriptor, GfxCullMode, GfxStatisticsGroup, GfxDevice, GfxDeviceLimits, GfxFormat, GfxFrontFaceMode, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutDescriptor, GfxMegaStateDescriptor, GfxMipFilterMode, GfxPass, GfxPrimitiveTopology, GfxProgram, GfxQueryPoolType, GfxRenderPass, GfxRenderPassDescriptor, GfxRenderPipeline, GfxRenderPipelineDescriptor, GfxRenderTarget, GfxRenderTargetDescriptor, GfxSampler, GfxSamplerDescriptor, GfxSamplerFormatKind, GfxShadingLanguage, GfxSwapChain, GfxTexFilterMode, GfxTexture, GfxTextureDescriptor, GfxTextureDimension, GfxTextureUsage, GfxVendorInfo, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxViewportOrigin, GfxWrapMode, GfxRenderAttachmentView, GfxRenderProgramDescriptor, GfxColor, GfxPlatform } from "./GfxPlatform.js";
-import { FormatFlags, FormatTypeFlags, getFormatByteSize, getFormatFlags, getFormatSamplerKind, getFormatTypeFlags } from "./GfxPlatformFormat.js";
+import { GfxAttachmentState, GfxBindingLayoutDescriptor, GfxBindingLayoutSamplerDescriptor, GfxBindings, GfxBindingsDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxChannelBlendState, GfxClipSpaceNearZ, GfxColor, GfxCompareMode, GfxComputePass, GfxComputePipelineDescriptor, GfxComputeProgramDescriptor, GfxCullMode, GfxDevice, GfxDeviceLimits, GfxFormat, GfxFrontFaceMode, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutDescriptor, GfxMegaStateDescriptor, GfxMipFilterMode, GfxPass, GfxPlatform, GfxPrimitiveTopology, GfxProgram, GfxQueryPoolType, GfxRenderAttachmentView, GfxRenderPass, GfxRenderPassDescriptor, GfxRenderPipeline, GfxRenderPipelineDescriptor, GfxRenderProgramDescriptor, GfxRenderTarget, GfxRenderTargetDescriptor, GfxSampler, GfxSamplerDescriptor, GfxSamplerFormatKind, GfxShadingLanguage, GfxStatisticsGroup, GfxSwapChain, GfxTexFilterMode, GfxTexture, GfxTextureDescriptor, GfxTextureDimension, GfxTextureUsage, GfxVendorInfo, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxViewportOrigin, GfxWrapMode } from "./GfxPlatform.js";
+import { FormatFlags, getFormatBlockSizeInTexels, getFormatByteSize, getFormatByteSizePerBlock, getFormatFlags, getFormatSamplerKind, isFormatTextureCompressionBC } from "./GfxPlatformFormat.js";
 import { GfxComputePipeline, GfxQueryPool, GfxReadback, GfxResource, GfxTextureImpl, _T, defaultBindingLayoutSamplerDescriptor, isFormatSamplerKindCompatible } from "./GfxPlatformImpl.js";
-import { align, assert, assertExists, findall, leftPad } from "./GfxPlatformUtil.js";
 import { gfxBindingLayoutDescriptorEqual } from './GfxPlatformObjUtil.js';
+import { align, assert, assertExists, findall, leftPad } from "./GfxPlatformUtil.js";
 
 interface GfxBufferP_WebGPU extends GfxBuffer {
     gpuBuffer: GPUBuffer;
@@ -847,63 +847,8 @@ class GfxComputePassP_WebGPU implements GfxComputePass {
     }
 }
 
-function isFormatTextureCompressionBC(format: GfxFormat): boolean {
-    const formatTypeFlags = getFormatTypeFlags(format);
-
-    switch (formatTypeFlags) {
-        case FormatTypeFlags.BC1:
-        case FormatTypeFlags.BC2:
-        case FormatTypeFlags.BC3:
-        case FormatTypeFlags.BC4_SNORM:
-        case FormatTypeFlags.BC4_UNORM:
-        case FormatTypeFlags.BC5_SNORM:
-        case FormatTypeFlags.BC5_UNORM:
-        case FormatTypeFlags.BC7:
-            return true;
-    }
-
-    return false;
-}
-
-function getFormatByteSizePerBlock(format: GfxFormat): number {
-    const formatTypeFlags = getFormatTypeFlags(format);
-
-    switch (formatTypeFlags) {
-        case FormatTypeFlags.BC1:
-        case FormatTypeFlags.BC4_SNORM:
-        case FormatTypeFlags.BC4_UNORM:
-            return 8;
-        case FormatTypeFlags.BC2:
-        case FormatTypeFlags.BC3:
-        case FormatTypeFlags.BC5_SNORM:
-        case FormatTypeFlags.BC5_UNORM:
-        case FormatTypeFlags.BC7:
-            return 16;
-    }
-
-    return getFormatByteSize(format);
-}
-
-function getFormatBlockSize(format: GfxFormat): number {
-    const formatTypeFlags = getFormatTypeFlags(format);
-
-    switch (formatTypeFlags) {
-        case FormatTypeFlags.BC1:
-        case FormatTypeFlags.BC2:
-        case FormatTypeFlags.BC3:
-        case FormatTypeFlags.BC4_SNORM:
-        case FormatTypeFlags.BC4_UNORM:
-        case FormatTypeFlags.BC5_SNORM:
-        case FormatTypeFlags.BC5_UNORM:
-        case FormatTypeFlags.BC7:
-            return 4;
-    }
-
-    return 1;
-}
-
 function translateTexelCopyBufferLayout(size: GPUExtent3DDictStrict, layout: GPUTexelCopyBufferLayout, format: GfxFormat, mipWidth: number, mipHeight: number): void {
-    const blockSize = getFormatBlockSize(format);
+    const blockSize = getFormatBlockSizeInTexels(format);
 
     size.width = align(mipWidth, blockSize);
     size.height = align(mipHeight, blockSize);
@@ -1882,7 +1827,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             if (!this._featureTextureCompressionBC)
                 return false;
 
-            const bb = getFormatBlockSize(format);
+            const bb = getFormatBlockSizeInTexels(format);
             if ((width % bb) !== 0 || (height % bb) !== 0)
                 return false;
             return this._featureTextureCompressionBC;

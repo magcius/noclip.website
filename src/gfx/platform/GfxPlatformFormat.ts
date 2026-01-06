@@ -178,7 +178,7 @@ export function getFormatComponentCount(fmt: GfxFormat): number {
 }
 
 /**
- * 
+ * Returns the byte size of one element of the format {@param fmt}.
  */
 export function getFormatByteSize(fmt: GfxFormat): number {
     const typeFlags = getFormatTypeFlags(fmt);
@@ -228,4 +228,68 @@ export function getFormatSamplerKind(fmt: GfxFormat): GfxSamplerFormatKind {
         return GfxSamplerFormatKind.Sint;
     else
         throw "whoops";
+}
+
+export function isFormatTextureCompressionBC(fmt: GfxFormat): boolean {
+    const formatTypeFlags = getFormatTypeFlags(fmt);
+
+    switch (formatTypeFlags) {
+        case FormatTypeFlags.BC1:
+        case FormatTypeFlags.BC2:
+        case FormatTypeFlags.BC3:
+        case FormatTypeFlags.BC4_SNORM:
+        case FormatTypeFlags.BC4_UNORM:
+        case FormatTypeFlags.BC5_SNORM:
+        case FormatTypeFlags.BC5_UNORM:
+        case FormatTypeFlags.BC7:
+            return true;
+    }
+
+    return false;
+}
+
+/**
+ * Returns the byte size of one block of the texture format {@param fmt}.
+ * If {@param fmt} is not a block-compressed format, this returns the same value as {@see getFormatByteSizePerBlock}.
+ */
+export function getFormatByteSizePerBlock(fmt: GfxFormat): number {
+    const formatTypeFlags = getFormatTypeFlags(fmt);
+
+    switch (formatTypeFlags) {
+        case FormatTypeFlags.BC1:
+        case FormatTypeFlags.BC4_SNORM:
+        case FormatTypeFlags.BC4_UNORM:
+            return 8;
+        case FormatTypeFlags.BC2:
+        case FormatTypeFlags.BC3:
+        case FormatTypeFlags.BC5_SNORM:
+        case FormatTypeFlags.BC5_UNORM:
+        case FormatTypeFlags.BC7:
+            return 16;
+    }
+
+    return getFormatByteSize(fmt);
+}
+
+/**
+ * Returns the number of texels (in one direction), in one block of format {@param fmt}.
+ * This assumes all blocks in a block-compressed format are square (that is, the block width equals the block height).
+ * If {@param fmt} is not a block-compressed format, this always returns {@constant 1}.
+ */
+export function getFormatBlockSizeInTexels(fmt: GfxFormat): number {
+    const formatTypeFlags = getFormatTypeFlags(fmt);
+
+    switch (formatTypeFlags) {
+        case FormatTypeFlags.BC1:
+        case FormatTypeFlags.BC2:
+        case FormatTypeFlags.BC3:
+        case FormatTypeFlags.BC4_SNORM:
+        case FormatTypeFlags.BC4_UNORM:
+        case FormatTypeFlags.BC5_SNORM:
+        case FormatTypeFlags.BC5_UNORM:
+        case FormatTypeFlags.BC7:
+            return 4;
+    }
+
+    return 1;
 }
