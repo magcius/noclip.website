@@ -947,48 +947,56 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         const m = buildModel(rarc, `bdlm/bj.bdl`);
         buildChildModel(rarc, `bdl/bj2_face.bdl`).setParentJoint(m, `head`);
         m.bindANK1(parseBCK(rarc, `bcks/wait01.bck`))
+        setShadow(800, 150, 40);
     });
     // Oakin (Korok)
     else if (actorName === 'Bj3') fetchArchive(`Bj`).then((rarc) => {
         const m = buildModel(rarc, `bdlm/bj.bdl`);
         buildChildModel(rarc, `bdl/bj3_face.bdl`).setParentJoint(m, `head`);
         m.bindANK1(parseBCK(rarc, `bcks/wait01.bck`))
+        setShadow(800, 150, 40);
     });
     // Drona (Korok)
     else if (actorName === 'Bj4') fetchArchive(`Bj`).then((rarc) => {
         const m = buildModel(rarc, `bdlm/bj.bdl`);
         buildChildModel(rarc, `bdl/bj4_face.bdl`).setParentJoint(m, `head`);
         m.bindANK1(parseBCK(rarc, `bcks/wait01.bck`))
+        setShadow(800, 150, 40);
     });
     // Irch (Korok)
     else if (actorName === 'Bj5') fetchArchive(`Bj`).then((rarc) => {
         const m = buildModel(rarc, `bdlm/bj.bdl`);
         buildChildModel(rarc, `bdl/bj5_face.bdl`).setParentJoint(m, `head`);
         m.bindANK1(parseBCK(rarc, `bcks/wait01.bck`))
+        setShadow(800, 150, 40);
     });
     // Rown (Korok)
     else if (actorName === 'Bj6') fetchArchive(`Bj`).then((rarc) => {
         const m = buildModel(rarc, `bdlm/bj.bdl`);
         buildChildModel(rarc, `bdl/bj6_face.bdl`).setParentJoint(m, `head`);
         m.bindANK1(parseBCK(rarc, `bcks/wait01.bck`))
+        setShadow(800, 150, 40);
     });
     // Hollo (Korok)
     else if (actorName === 'Bj7') fetchArchive(`Bj`).then((rarc) => {
         const m = buildModel(rarc, `bdlm/bj.bdl`);
         buildChildModel(rarc, `bdl/bj7_face.bdl`).setParentJoint(m, `head`);
         m.bindANK1(parseBCK(rarc, `bcks/wait01.bck`))
+        setShadow(800, 150, 40);
     });
     // Elma (Korok)
     else if (actorName === 'Bj8') fetchArchive(`Bj`).then((rarc) => {
         const m = buildModel(rarc, `bdlm/bj.bdl`);
         buildChildModel(rarc, `bdl/bj8_face.bdl`).setParentJoint(m, `head`);
         m.bindANK1(parseBCK(rarc, `bcks/wait01.bck`))
+        setShadow(800, 150, 40);
     });
     // Linder (Korok)
     else if (actorName === 'Bj9') fetchArchive(`Bj`).then((rarc) => {
         const m = buildModel(rarc, `bdlm/bj.bdl`);
         buildChildModel(rarc, `bdl/bj9_face.bdl`).setParentJoint(m, `head`);
         m.bindANK1(parseBCK(rarc, `bcks/wait01.bck`));
+        setShadow(800, 150, 40);
     });
     // Manny
     else if (actorName === 'Mn') fetchArchive(`Mn`).then((rarc) => {

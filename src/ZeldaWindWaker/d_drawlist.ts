@@ -5,7 +5,7 @@ import { OpaqueBlack, White, colorCopy, colorNewCopy } from "../Color.js";
 import { J3DModelInstance, prepareShapeMtxGroup } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
 import { BTIData, BTI_Texture } from "../Common/JSYSTEM/JUTTexture.js";
 import { AABB } from "../Geometry.js";
-import { Vec3UnitX, Vec3UnitY, getMatrixAxisZ, projectionMatrixForCuboid, saturate } from '../MathHelpers.js';
+import { Vec3UnitX, Vec3UnitY, Vec3Zero, getMatrixAxisZ, projectionMatrixForCuboid, saturate } from '../MathHelpers.js';
 import { DeviceProgram } from "../Program.js";
 import { TSDraw } from "../SuperMarioGalaxy/DDraw.js";
 import { createBufferFromData } from "../gfx/helpers/BufferHelpers.js";
@@ -464,6 +464,8 @@ function drawSimpleModelInstance(renderInstManager: GfxRenderInstManager, dstLis
 
     const shapeData = model.modelData.shapeData;
     for (let s = 0; s < shapeData.length; s++) {
+        if (!model.shapeInstances[s].visible)
+            continue;
         const shape = shapeData[s];
         for (let i = 0; i < shape.shape.mtxGroups.length; i++) {
             const renderInst = renderInstManager.newRenderInst();
@@ -761,11 +763,14 @@ class dDlst_shadowSimple_c {
     public set(pos: ReadonlyVec3, floorY: number, scaleXZ: number, floorNrm: ReadonlyVec3, rotY: number, scaleZ: number, tex: BTIData): void {
         const offsetY = scaleXZ * 16.0 * (1.0 - floorNrm[1]) + 1.0;
 
+        // Avoid the rare case of the target position being exactly equal to the eye position
+        const normScale = (floorNrm[1] == 1 && (floorY - pos[1]) == 1) ? 2.0 : 1.0;
+
         // Build the matrix which will transform a [-1, 1] cube into our shadow volume oriented to the floor plane (floor normal becomes Z+).
         // A physically accurate drop shadow would use a vertical box to project the shadow texture straight down, but the original
         // game chooses to use this approach which always keeps the shape of the shadow consistent, regardless of ground geometry.
-        const yVec = vec3.rotateY(scratchVec3a, [1, 0, 0], [0, 0, 0], cM_s2rad(rotY));
-        mat4.targetTo(this.modelMtx, [pos[0], floorY, pos[2]], vec3.add(vec3.create(), pos, floorNrm), yVec);
+        const yVec = vec3.rotateY(scratchVec3a, Vec3UnitX, Vec3Zero, cM_s2rad(rotY));
+        mat4.targetTo(this.modelMtx, [pos[0], floorY, pos[2]], vec3.scaleAndAdd(vec3.create(), pos, floorNrm, normScale), yVec);
         mat4.scale(this.modelMtx, this.modelMtx, [scaleXZ, scaleXZ * scaleZ, offsetY + offsetY + 16.0]);
 
         let opacity = 1.0 - saturate((pos[1] - floorY) * 0.0007);
