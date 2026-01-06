@@ -31,7 +31,7 @@ import { preprocessProgramObj_GLSL } from "../gfx/shaderc/GfxShaderCompiler.js";
 import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription, GfxrRenderTargetID } from "../gfx/render/GfxRenderGraph.js";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
-import { IsDepthReversed } from "../gfx/helpers/ReversedDepthHelpers.js";
+import { IsDepthReversed, reverseDepthForCompareMode } from "../gfx/helpers/ReversedDepthHelpers.js";
 import { AABB } from "../Geometry.js";
 
 export enum dDlst_alphaModel__Type {
@@ -394,7 +394,7 @@ void main() {
     vec4 t_ObjectPos = UnpackMatrix(u_LocalFromClip) * vec4(t_ClipPos, 1.0);
     t_ObjectPos.xyz /= t_ObjectPos.w;
 
-    ${ !visualizeShadowVolumes ? 
+    ${ !visualizeShadowVolumes ?
 `   // Now that we have our object-space position, remove any samples outside of the box.
     if (any(lessThan(t_ObjectPos.xyz, vec3(-1))) || any(greaterThan(t_ObjectPos.xyz, vec3(1))))
         discard;` : ''}
@@ -402,12 +402,12 @@ void main() {
     // Top-down project our shadow texture. Our local space is between -1 and 1, we want to move into 0.0 to 1.0.
     vec2 t_ShadowTexCoord = (t_ObjectPos.xy * u_AtlasScaleBias.xy + u_AtlasScaleBias.zw) * 0.5 + 0.5;
     float t_ShadowColor = texture(SAMPLER_2D(u_TextureShadow), t_ShadowTexCoord).r;
-    
+
     // If sampling from a predefined texture, smooth the shadow edges
     float shadowStep =  u_Params.x;
     float smoothFactor = u_Params.y;
     float t_Alpha = smoothstep(shadowStep, shadowStep + smoothFactor, t_ShadowColor);
-    
+
     vec4 t_PixelOut = vec4(0, 0, 0, 0.25 * t_Alpha ${visualizeShadowVolumes ? '+ 0.25' : ''});
 
     ${this.generateFog()}
@@ -419,8 +419,8 @@ void main() {
     }
 }
 
-/** 
- * Draw a J3DModelInstance without setting any materials. Culling is skipped. 
+/**
+ * Draw a J3DModelInstance without setting any materials. Culling is skipped.
  * materialParams and sceneParams must be set up prior to calling this function.
  */
 function drawSimpleModelInstance(renderInstManager: GfxRenderInstManager, model: J3DModelInstance, viewFromWorldMatrix: mat4): void {
@@ -495,7 +495,7 @@ class dDlst_shadowReal_c {
     // 1. Compute a bounding box for the shadow, gather any bg triangles that intersect it. These will be the shadow receivers.
     // 2. Cull any shadow receiver bounding boxes that are outside of the camera frustum.
     // 3. Generate a 256x256 shadow map by rendering the shadow caster from the light's point of view into a texture.
-    // 4. Downsample the shadowmap into a 128x128 4bpp texture, and generate mipmaps. 
+    // 4. Downsample the shadowmap into a 128x128 4bpp texture, and generate mipmaps.
     // 5. Render the front/back faces of the bounding box into the alpha buffer, adding/subtracting just like simple shadows 2. & 3.
     // 6. Render all of the bg triangles gathered in step 1, sampling from the shadow map, clear the alpha where texture not > 0.
     // 7. Render the bounding box, clearing the alpha to 0. This same framebuffer is used to render other shadows, and then alpha objects.
@@ -560,7 +560,7 @@ class dDlst_shadowReal_c {
         // NOTE(mikelester): The game uses the same values for casterSize and center Y offset for almost all actors (800 and 150).
         //       This results in poor shadowmap fitting, however it does keep the shadow detail consistent across actors.
         //       I think this was a conscious design choice, so I'm going to leave it. We're judging the shadows at a much
-        //       higher resolution than the original hardware, so if an actor looks particularly bad we can tweak its casterSize and y offset. 
+        //       higher resolution than the original hardware, so if an actor looks particularly bad we can tweak its casterSize and y offset.
 
         // Calculate light vector
         const lightVec = scratchVec3a;
@@ -598,7 +598,7 @@ class dDlst_shadowReal_c {
             vec3.normalize(rayDir, rayDir);
         }
 
-        // noclip modification: 
+        // noclip modification:
         // The game uses realPolygonCheck to gather a list of bg polygons that intersect the shadow's bounding volume.
         // These are then renderered to sample the shadow map. Instead, we generate an oriented box (the shadow volume),
         // fit it to the light-space bounding box of the shadow casters, manipulate the z-axis caps to encapsulate the terrain,
@@ -662,13 +662,13 @@ class dDlst_shadowReal_c {
                 scratchAABB.transform(this.models[m].modelData.bbox, modelToLightMatrix);
                 lightAABB.union(lightAABB, scratchAABB);
             }
-                
+
             // Determine the near/far caps on the shadow volume based on light angle, ground slope, and height above ground.
             // TODO: Consider ground slope.
             lightAABB.max[2] = (lightAABB.max[2] + lightAABB.min[2]) * 0.5;
             lightAABB.min[2] = lightAABB.min[2] - groundYBias;
         } else {
-            // If the models bounding boxes don't actually bound the geometry, use a conservative volume based on the shadowmap frustum 
+            // If the models bounding boxes don't actually bound the geometry, use a conservative volume based on the shadowmap frustum
             const casterRadius = this.casterSize * 0.4;
             lightAABB.set(-casterRadius, -casterRadius, -casterRadius, casterRadius, casterRadius, -2.0 * casterRadius - groundYBias);
         }
@@ -692,7 +692,7 @@ class dDlst_shadowReal_c {
 
 //#region Simple Shadows
 
-// Renders a simple cube-shaped shadow volume directly below an object (light position is ignored). Optionally, use a 
+// Renders a simple cube-shaped shadow volume directly below an object (light position is ignored). Optionally, use a
 // texture (defaults to a circle) oriented to the ground normal to stencil out the shadow volume (i.e. a gobo texture).
 class dDlst_shadowSimple_c {
     public alpha: number = 0; // 0-255
@@ -702,14 +702,14 @@ class dDlst_shadowSimple_c {
     // noclip modification: The game's original shadowing uses many draw calls which is inefficient on modern hardware. It works as follows:
     // 1. For each shadow, create a box directly under the object. Its Y rotation matches the caster. It's height is based on the ground slope.
     // 2. Render the front faces of the box, adding 0.25 to the empty alpha buffer. Depth testing is enabled. Similar to shadow volumes.
-    // 3. Render the back faces of the box, subtracting 0.25 from the empty alpha buffer. Now alpha is filled only where the box interesects the ground. 
+    // 3. Render the back faces of the box, subtracting 0.25 from the empty alpha buffer. Now alpha is filled only where the box interesects the ground.
     // 4. If the shadow has a texture (defaults to a circle): Render a textured quad oriented to the ground normal, clear the alpha where texture is 0.
     // 5. Render the box, multiplying the color buffer by (1.0 - alpha). This darkens the areas where the shadow is visible.
     // 6. Render the box, clearing the alpha to 0. This same framebuffer is used to render other shadows, and then alpha objects.
-    // We take a different approach, blending each shadow directly into the color buffer with a single draw call using a deferred decal technique. 
+    // We take a different approach, blending each shadow directly into the color buffer with a single draw call using a deferred decal technique.
     // The results are very similar, with a few exceptions:
     // - For overlapping shadows, the game multiples color by (1.0 - 0.25 * N). We multiply by 0.75 ^ N. Similar results for 2 shadows, but at 3 ours will be lighter.
-    // - For shadows overlapping ledges, the game's textured-quad approach will appear to hang over the edge. Ours will project the shadow down to the lower level. 
+    // - For shadows overlapping ledges, the game's textured-quad approach will appear to hang over the edge. Ours will project the shadow down to the lower level.
     public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         const renderInst = renderInstManager.newRenderInst();
         let offset = renderInst.allocateUniformBuffer(0, 8 + 16 * 2 + 20);
@@ -729,7 +729,7 @@ class dDlst_shadowSimple_c {
         const offsetY = scaleXZ * 16.0 * (1.0 - floorNrm[1]) + 1.0;
 
         // Build the matrix which will transform a [-1, 1] cube into our shadow volume oriented to the floor plane (floor normal becomes Z+).
-        // A physically accurate drop shadow would use a vertical box to project the shadow texture straight down, but the original 
+        // A physically accurate drop shadow would use a vertical box to project the shadow texture straight down, but the original
         // game chooses to use this approach which always keeps the shape of the shadow consistent, regardless of ground geometry.
         const yVec = vec3.rotateY(scratchVec3a, [1, 0, 0], [0, 0, 0], cM_s2rad(rotY));
         mat4.targetTo(this.modelMtx, [pos[0], floorY, pos[2]], vec3.add(vec3.create(), pos, floorNrm), yVec);
@@ -915,7 +915,7 @@ class dDlst_shadowControl_c {
     }
 
     public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        // noclip modification: The game computes shadow receiver geometry in setShadowRealMtx() using a conservative AABB. 
+        // noclip modification: The game computes shadow receiver geometry in setShadowRealMtx() using a conservative AABB.
         // Instead, we wait until draw time to generate a tight light-space AABB from the animated model.
         for (let i = 0; i < this.reals.length; i++) {
             this.reals[i].generateShadowVolume(globals);
@@ -932,7 +932,7 @@ class dDlst_shadowControl_c {
         }
         renderInstManager.popTemplate();
 
-        // Then, render shadow volumes for simple and real shadows. These are [-1, 1] cubes tranformed into oriented 
+        // Then, render shadow volumes for simple and real shadows. These are [-1, 1] cubes tranformed into oriented
         // boxes bounding the shadow receivers. Simple shadows sample a predefined texture, real shadows sample the shadowmap.
         const shadowVolTemplate = renderInstManager.pushTemplate();
         shadowVolTemplate.setBindingLayouts(ShadowVolumeProgram.bindingLayouts);
@@ -940,9 +940,9 @@ class dDlst_shadowControl_c {
         shadowVolTemplate.setVertexInput(this.cache.inputLayout, [{ buffer: this.cache.positionBuffer }], { buffer: this.cache.indexBuffer });
         shadowVolTemplate.setDrawCount(36);
         shadowVolTemplate.setMegaStateFlags({
-            depthCompare: GfxCompareMode.Always,
+            depthCompare: reverseDepthForCompareMode(GfxCompareMode.GreaterEqual),
             depthWrite: false,
-            cullMode: GfxCullMode.Back,
+            cullMode: GfxCullMode.Front,
             ...setAttachmentStateSimple({}, {
                 channelWriteMask: GfxChannelWriteMask.RGB,
                 blendMode: GfxBlendMode.Add,
