@@ -358,12 +358,13 @@ export class BSPFile {
 
         const wad = worldspawn.wad;
         return wad.split(';').filter((v) => v !== '').map((v) => {
-            // Replace the initial mount name.
-            assert(v.startsWith('\\'));
-            const x = v.split('\\');
-            x.shift();
-            x.shift();
-            return x.join('/');
+            if (v.startsWith('\\')) {
+                const x = v.split('\\');
+                x.shift();
+                x.shift();
+                return x.join('/');
+            }
+            return v.replace(/\\/g, '/');
         }).filter((v) => {
             // remove non-existent files
             if (v === 'valve/sample.wad')
