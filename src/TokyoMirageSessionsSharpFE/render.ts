@@ -12,7 +12,6 @@ import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 import { fillColor, fillMatrix4x3, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers.js';
 import { TMSFEProgram } from './shader.js';
 import { FSHP } from "./bfres/fshp.js";
-import { NumberHolder } from "../MetroidPrime/particles/base_generator.js";
 
 export class TMSFEScene implements SceneGfx
 {
@@ -35,6 +34,15 @@ export class TMSFEScene implements SceneGfx
             const renderer = new fshp_renderer(device, this.renderHelper, fmdl, i);
             this.fshp_renderers.push(renderer);
         }
+
+        const fvtx = fmdl.fvtx[0];
+        const view = fvtx.vertexBuffers[1].data.createDataView();
+        console.log(view.getFloat32(0x0, true));
+        console.log(view.getFloat32(0x4, true));
+        console.log(view.getInt16(0x8, true));
+        console.log(view.getInt16(0xA, true));
+        console.log(view.getInt16(0xC, true));
+        console.log(view.getInt16(0xE, true));
     }
 
     public render(device: GfxDevice, viewerInput: ViewerRenderInput): void
@@ -87,8 +95,8 @@ export class TMSFEScene implements SceneGfx
 
 class fshp_renderer
 {
-    private vertex_buffer: GfxBuffer;
-    private vertex_buffer_descriptors: GfxVertexBufferDescriptor[];
+    private vertex_buffers: GfxBuffer[] = [];
+    private vertex_buffer_descriptors: GfxVertexBufferDescriptor[] = [];
     private index_buffer: GfxBuffer;
     private index_buffer_descriptor: GfxVertexBufferDescriptor;
     private index_count: number;
@@ -96,38 +104,60 @@ class fshp_renderer
 
     constructor(device: GfxDevice, renderHelper: GfxRenderHelper, fmdl: BFRES.FMDL, shape_index: number)
     {
-
         // create vertex buffers
         const fshp = fmdl.fshp[shape_index];
         const fvtx = fmdl.fvtx[fshp.fvtx_index];
         const mesh = fshp.mesh[0];
-        const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] =
-        [
-            { location: 0, format: fvtx.vertexAttributes[0].format, bufferIndex: fvtx.vertexAttributes[0].bufferIndex, bufferByteOffset: fvtx.vertexAttributes[0].bufferOffset},
-        ];
-            
-        const inputLayoutBufferDescriptors: GfxInputLayoutBufferDescriptor[] =
-        [
-            { byteStride: fvtx.vertexBuffers[0].stride, frequency: GfxVertexBufferFrequency.PerVertex },
-        ];
-        const indexBufferFormat = mesh.index_buffer_format;
-        const cache = renderHelper.renderCache;
-        this.input_layout = cache.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors: inputLayoutBufferDescriptors, indexBufferFormat });
-        this.vertex_buffer = createBufferFromSlice(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, fvtx.vertexBuffers[0].data);
-        this.vertex_buffer_descriptors =
-        [
-            { buffer: this.vertex_buffer },
-        ];
+
+        const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [];
+
+        for (let i = 0; i < fvtx.vertexAttributes.length; i++)
+        // for (let i = 0; i < 1; i++)
+        {
+            vertexAttributeDescriptors.push
+            ({
+                location: i,
+                format: fvtx.vertexAttributes[i].format,
+                bufferIndex: fvtx.vertexAttributes[i].bufferIndex,
+                bufferByteOffset: fvtx.vertexAttributes[i].bufferOffset
+            });
+        }
+
+        const inputLayoutBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [];
+
+        for (let i = 0; i < fvtx.vertexBuffers.length; i++)
+        // for (let i = 0; i < 1; i++)
+        {
+            inputLayoutBufferDescriptors.push
+            ({
+                byteStride: fvtx.vertexBuffers[i].stride,
+                frequency: GfxVertexBufferFrequency.PerVertex
+            });
+
+            const vertex_buffer = createBufferFromSlice(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, fvtx.vertexBuffers[i].data);
+            this.vertex_buffers.push(vertex_buffer);
+            this.vertex_buffer_descriptors.push({ buffer: this.vertex_buffers[i] });
+        }
+        
+        this.input_layout = renderHelper.renderCache.createInputLayout
+        ({
+            vertexAttributeDescriptors,
+            vertexBufferDescriptors: inputLayoutBufferDescriptors,
+            indexBufferFormat: mesh.index_buffer_format,
+        });
+
+        // create index buffer
         this.index_buffer = createBufferFromSlice(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, mesh.index_buffer_data);
         this.index_count = mesh.index_count;
         this.index_buffer_descriptor = { buffer: this.index_buffer };
     }
 
+    // produce a draw call for this mesh
     render(renderHelper: GfxRenderHelper, viewerInput: ViewerRenderInput, renderInstListMain: GfxRenderInstList): void
     {
         // the template is apparently necessary to use uniform buffers
         renderHelper.pushTemplateRenderInst();
-        
+
         const renderInst = renderHelper.renderInstManager.newRenderInst();
         renderInst.setVertexInput(this.input_layout, this.vertex_buffer_descriptors, this.index_buffer_descriptor);
         renderInst.setDrawCount(this.index_count);
@@ -158,7 +188,10 @@ class fshp_renderer
 
     destroy(device: GfxDevice): void
     {
-        device.destroyBuffer(this.vertex_buffer);
+        for (let i = 0; i < this.vertex_buffers.length; i++)
+        {
+            device.destroyBuffer(this.vertex_buffers[i]);
+        }
         device.destroyBuffer(this.index_buffer);
     }
 }

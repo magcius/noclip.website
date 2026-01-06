@@ -7,6 +7,10 @@ import { GfxShaderLibrary } from '../gfx/helpers/GfxShaderLibrary.js';
 export class TMSFEProgram extends DeviceProgram
 {
     public static a_Position = 0;
+    public static two = 1;
+    public static three = 2;
+    public static four = 3;
+    public static five = 4;
 
     public static ub_SceneParams = 0;
     public static ub_ObjectParams = 1;

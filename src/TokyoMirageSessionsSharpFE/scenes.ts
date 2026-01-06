@@ -46,7 +46,7 @@ const sceneDescs =
     new TMSFESceneDesc("d003_04", "4F"),
     new TMSFESceneDesc("d003_02", "5F to 7F"),
     new TMSFESceneDesc("d003_06", "Outside"),
-    new TMSFESceneDesc("d003_03", "B1 to B3"),
+    new TMSFESceneDesc("d003_03", "B1F to B3F"),
     new TMSFESceneDesc("d003_07", "B4F"),
     new TMSFESceneDesc("d003_08", "Outside 2"),
     "Illusory Shibuya",

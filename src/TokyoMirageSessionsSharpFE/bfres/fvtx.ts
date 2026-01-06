@@ -45,6 +45,9 @@ export function parseFVTX(buffer: ArrayBufferSlice, offset: number, count: numbe
         const attribute_array_offset = view.getUint32(fvtx_entry_offset + 0x8, true);
         const attribute_count = view.getUint8(fvtx_entry_offset + 0x4C);
         
+        let normal_offset = 0;
+        let normal_index = -1;
+
         const vertexAttributes: FVTX_VertexAttribute[] = [];
         let attribute_entry_offset = attribute_array_offset;
         for (let i = 0; i < attribute_count; i++)
@@ -52,12 +55,101 @@ export function parseFVTX(buffer: ArrayBufferSlice, offset: number, count: numbe
             const name_offset = view.getUint32(attribute_entry_offset, true);
             const name = read_bfres_string(buffer, name_offset, true);
             const original_format = view.getUint32(attribute_entry_offset + 0x8, true);
-            const format = convert_attribute_format(original_format);
-            const bufferOffset = view.getUint16(attribute_entry_offset + 0xC, true);
+            let bufferOffset = view.getUint16(attribute_entry_offset + 0xC, true);
             const bufferIndex = view.getUint16(attribute_entry_offset + 0xE, true);
+            
+            let format = -1;
+            if (original_format === AttributeFormat._10_10_10_2_Snorm)
+            {
+                // this format isn't supported by webgl, so convert this to S16_RGBA_NORM
+                normal_offset = bufferOffset;
+                normal_index = bufferIndex;
+                const element_count = vertexBuffers[bufferIndex].data.byteLength / vertexBuffers[bufferIndex].stride;
+                const before_count = bufferOffset;
+                const after_count = vertexBuffers[bufferIndex].stride - 4 - before_count;
+
+                // 10 10 10 2 is 4 bytes, 16 16 16 16 is 8 bytes, so add 4
+                const new_stride = vertexBuffers[bufferIndex].stride + 4;
+                vertexBuffers[bufferIndex].stride = new_stride;
+
+                const new_byte_length = element_count * new_stride * 4;
+                let new_buffer = new Uint8Array(new_byte_length)
+
+                let new_buffer_offset = 0;
+                let old_buffer_offset = 0;
+                const old_view = vertexBuffers[bufferIndex].data.createDataView();
+                for (let i = 0; i < element_count; i++)
+                {
+                    if (before_count > 0)
+                    {
+                        for (let j = 0; j < before_count; j++)
+                        {
+                            new_buffer[new_buffer_offset++] = old_view.getUint8(old_buffer_offset++);
+                        }
+                    }
+
+                    function convert_s10_to_s32(n: number): number
+                    {
+                        // first left shift so that the top bit of the s10 is moved to the top bit of this s32 number
+                        // then right shift back the same amount
+                        // right shifting copies the top bit
+                        // if it's positive they will all be 0s
+                        // if it's negative they will all be 1s
+                        return (n << 22) >> 22;
+                    }
+
+                    const n = old_view.getUint32(old_buffer_offset, true);
+                    old_buffer_offset += 4;
+
+                    const s10_x = (n >>>  0) & 0x3FF;
+                    const s10_y = (n >>> 10) & 0x3FF;
+                    const s10_z = (n >>> 20) & 0x3FF;
+                    
+                    const s32_x = convert_s10_to_s32(s10_x);
+                    const s32_y = convert_s10_to_s32(s10_y);
+                    const s32_z = convert_s10_to_s32(s10_z);
+
+                    // write the s16s in little endian format
+                    new_buffer[new_buffer_offset++] = s32_x;
+                    new_buffer[new_buffer_offset++] = s32_x >> 8;
+                    new_buffer[new_buffer_offset++] = s32_y;
+                    new_buffer[new_buffer_offset++] = s32_y >> 8;
+                    new_buffer[new_buffer_offset++] = s32_z;
+                    new_buffer[new_buffer_offset++] = s32_z >> 8;
+                    new_buffer[new_buffer_offset++] = 1;
+                    new_buffer[new_buffer_offset++] = 0;
+
+                    if (after_count > 0)
+                    {
+                        for (let j = 0; j < after_count; j++)
+                        {
+                            new_buffer[new_buffer_offset++] = old_view.getUint8(old_buffer_offset++);
+                        }
+                    }
+                }
+
+                vertexBuffers[bufferIndex].data = new ArrayBufferSlice(new_buffer.buffer);
+
+                format = GfxFormat.S16_RGBA_NORM;
+            }
+            else
+            {
+                format = convert_attribute_format(original_format);
+            }
 
             vertexAttributes.push({ name, format, bufferOffset, bufferIndex });
+            
             attribute_entry_offset += ATTRIBUTE_ENTRY_SIZE;
+        }
+
+        // in the event that a buffer had to be remade due to _10_10_10_2_Snorm needing to be converted
+        // update the offsets to account for it going from 4 bytes to 8 bytes
+        for (let i = 0; i < vertexAttributes.length; i++)
+        {
+            if (vertexAttributes[i].bufferIndex == normal_index && vertexAttributes[i].bufferOffset > normal_offset)
+            {
+                vertexAttributes[i].bufferOffset += 0x4;
+            }
         }
 
         fvtx_array.push({ vertexAttributes, vertexBuffers, vertexCount });
@@ -77,9 +169,11 @@ function convert_attribute_format(format: AttributeFormat)
     switch (format)
     {
         case AttributeFormat._8_8_Unorm:
+            // TODO this might need to be expanded to 
             return GfxFormat.U8_RG_NORM;
 
         case AttributeFormat._8_8_Snorm:
+            // TODO this might need to be converted
             return GfxFormat.S8_RG_NORM;
 
         case AttributeFormat._8_8_Uint:
@@ -90,11 +184,6 @@ function convert_attribute_format(format: AttributeFormat)
 
         case AttributeFormat._8_8_8_8_Snorm:
             return GfxFormat.S8_RGBA_NORM;
-        
-        case AttributeFormat._10_10_10_2_Snorm:
-            // not supported by webgl, so we need to convert this to S16_RGBA_NORM
-            // mk8 convertVertexAttribute
-            return -1; //temp for now
 
         case AttributeFormat._16_16_Unorm:
             return GfxFormat.U16_RG_NORM;
