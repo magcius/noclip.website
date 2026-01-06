@@ -3,7 +3,7 @@ import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase.js";
 import { SceneGfx } from "../viewer.js";
 import { BSPFile } from "../Common/IdTech2/BSPFile.js";
-import { BSPRenderer, IdTech2Renderer } from "../Common/IdTech2/Render.js";
+import { BSPRenderer, IdTech2Context, IdTech2Renderer } from "../Common/IdTech2/Render.js";
 import { parseWAD } from "../Common/IdTech2/WAD.js";
 
 const pathBase = `HalfLife`;
@@ -13,10 +13,12 @@ export class HalfLifeSceneDesc implements SceneDesc {
     }
 
     public async createScene(device: GfxDevice, sceneContext: SceneContext): Promise<SceneGfx> {
-        const renderer = new IdTech2Renderer(device);
-
         const bspData = await sceneContext.dataFetcher.fetchData(`${pathBase}/valve/maps/${this.id}.bsp`);
         const bspFile = new BSPFile(bspData);
+
+        const context = new IdTech2Context(bspFile.version);
+        const renderer = new IdTech2Renderer(device, context);
+
         renderer.textureCache.addBSP(bspFile);
 
         await Promise.all(bspFile.getWadList().map(async (v) => {
@@ -24,7 +26,7 @@ export class HalfLifeSceneDesc implements SceneDesc {
             renderer.textureCache.addWAD(wad);
         }));
 
-        const bspRenderer = new BSPRenderer(renderer.renderHelper.renderCache, renderer.textureCache, bspFile);
+        const bspRenderer = new BSPRenderer(context, renderer.renderHelper.renderCache, renderer.textureCache, bspFile);
         renderer.bspRenderers.push(bspRenderer);
 
         return renderer;
