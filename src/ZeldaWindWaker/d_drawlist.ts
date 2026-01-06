@@ -1007,18 +1007,26 @@ class dDlst_shadowControl_c {
         for (let i = 0; i < this.reals.length; i++) {
             const shadowmapDepthTargetID = builder.createRenderTargetID(this.cache.shadowmapDepthDesc, 'Shadow Map Depth');
 
+            const wantsThumbnails = globals.renderer.renderHelper.debugThumbnails.enabled;
+            const shadowmapColorTargetID = wantsThumbnails ? builder.createRenderTargetID(this.cache.shadowmapDesc, 'Shadow Map Color') : null;
+
             const real = this.reals[i];
             if (real.casterInstList.renderInsts.length === 0)
                 continue;
 
             builder.pushPass((pass) => {
                 pass.setDebugName(`Shadow Map ${i}`);
+                if (shadowmapColorTargetID !== null)
+                    pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, shadowmapColorTargetID);
                 pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, shadowmapDepthTargetID);
                 pass.exec((passRenderer) => {
                     real.casterInstList.drawOnPassRenderer(renderInstManager.gfxRenderCache, passRenderer);
                     real.casterInstList.reset();
                 });
             });
+
+            if (shadowmapColorTargetID !== null)
+                builder.pushDebugThumbnail(shadowmapColorTargetID);
 
             builder.pushPass((pass) => {
                 pass.setDebugName(`Shadow Map ${i} Downsample`);
