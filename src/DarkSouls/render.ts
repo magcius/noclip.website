@@ -2045,7 +2045,7 @@ uniform sampler2D u_TextureColor;
 uniform sampler2D u_Texture2;
 
 layout(std140) uniform ub_Params {
-    vec4 u_Misc[1];
+    vec4 u_Misc[3];
 };
 #define u_DispersionSq      (u_Misc[1].w)
 `;
