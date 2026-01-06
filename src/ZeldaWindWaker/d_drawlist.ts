@@ -702,7 +702,7 @@ class dDlst_shadowReal_c {
         } else {
             // If the models bounding boxes don't actually bound the geometry, use a conservative volume based on the shadowmap frustum
             const casterRadius = this.casterSize * 0.4;
-            lightAABB.set(-casterRadius, -casterRadius, -casterRadius, casterRadius, casterRadius, -2.0 * casterRadius - groundYBias);
+            lightAABB.set(-casterRadius, -casterRadius, -2.0 * casterRadius - groundYBias, casterRadius, casterRadius, -casterRadius);
         }
 
         // Generate the shadow volume geometry as an oriented box based on the light-space AABB:
@@ -977,7 +977,7 @@ class dDlst_shadowControl_c {
         shadowVolTemplate.setVertexInput(this.cache.inputLayout, [{ buffer: this.cache.positionBuffer }], { buffer: this.cache.indexBuffer });
         shadowVolTemplate.setDrawCount(36);
         shadowVolTemplate.setMegaStateFlags({
-            depthCompare: reverseDepthForCompareMode(GfxCompareMode.GreaterEqual),
+            depthCompare: visualizeShadowVolumes ? GfxCompareMode.Always : reverseDepthForCompareMode(GfxCompareMode.GreaterEqual),
             depthWrite: false,
             cullMode: GfxCullMode.Front,
             ...setAttachmentStateSimple({}, {
