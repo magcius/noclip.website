@@ -1293,7 +1293,10 @@ export class SourceWorldViewRenderer {
                 mat4.mul(this.skyboxView.viewFromWorldMatrix, this.skyboxView.viewFromWorldMatrix, skyCamera.modelMatrix);
                 this.skyboxView.finishSetup();
 
-                skyCamera.fillFogParams(this.skyboxView.fogParams);
+                if (renderer.renderContext.enableFog)
+                    skyCamera.fillFogParams(this.skyboxView.fogParams);
+                else
+                    this.skyboxView.fogParams.maxdensity = 0.0;
 
                 // If our skybox is not in a useful spot, then don't render it.
                 if (!this.skyboxView.calcPVS(bspRenderer.bsp, false, parentViewRenderer !== null ? parentViewRenderer.skyboxView : null))
