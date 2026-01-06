@@ -8,9 +8,10 @@ import { DeviceProgram } from "../../Program.js";
 import { BSPEntity, BSPFile, Model, Surface, SurfaceLightmapData } from "./BSPFile.js";
 import { GfxRenderInstList, GfxRenderInstManager } from "../../gfx/render/GfxRenderInstManager.js";
 import { TextureMapping } from "../../TextureHolder.js";
-import { mat4, ReadonlyMat4 } from "gl-matrix";
+import { mat4, ReadonlyMat4, vec3 } from "gl-matrix";
+import { getMatrixTranslation } from "../../MathHelpers.js";
 import { Camera, CameraController } from "../../Camera.js";
-import { fillMatrix4x4, fillVec4 } from "../../gfx/helpers/UniformBufferHelpers.js";
+import { fillMatrix4x4, fillVec3v } from "../../gfx/helpers/UniformBufferHelpers.js";
 import { WAD, WAD2LumpType, WAD3LumpType } from "./WAD.js";
 import { GfxRenderHelper } from "../../gfx/render/GfxRenderHelper.js";
 import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from "../../gfx/helpers/RenderGraphHelpers.js";
@@ -20,8 +21,26 @@ import { GfxShaderLibrary } from "../../gfx/helpers/GfxShaderLibrary.js";
 import { createBufferFromData } from "../../gfx/helpers/BufferHelpers.js";
 import { TextureListHolder } from "../../ui.js";
 import { WorldLightingState } from "./WorldLightingState.js";
+import { QuakeSkyTextureData, QuakeSkyProgram } from "./Quake.js";
 
-function getMipTexName(buffer: ArrayBufferSlice): string {
+export const IdTech2Games = ['Quake', 'GoldSrc'] as const;
+export type IdTech2Game = typeof IdTech2Games[number];
+
+export class IdTech2Context {
+    public readonly game: IdTech2Game;
+    public readonly isQuake: boolean;
+    public readonly isGoldSrc: boolean;
+    public readonly lightmapBytesPerTexel: number;
+
+    constructor(bspVersion: number) {
+        this.game = bspVersion === 29 ? 'Quake' : 'GoldSrc';
+        this.isQuake = this.game === 'Quake';
+        this.isGoldSrc = this.game === 'GoldSrc';
+        this.lightmapBytesPerTexel = this.isQuake ? 1 : 3;
+    }
+}
+
+export function getMipTexName(buffer: ArrayBufferSlice): string {
     return readString(buffer, 0x00, 0x10, true);
 }
 
@@ -112,6 +131,7 @@ interface TextureCacheData {
 
 export class TextureCache implements TextureListHolder {
     public mipTex: MIPTEXData[] = [];
+    public skyTex: QuakeSkyTextureData[] = [];
     public data: TextureCacheData[] = [];
     public onnewtextures: (() => void) | null = null;
     public palette: Uint8Array | null = null;
@@ -162,9 +182,26 @@ export class TextureCache implements TextureListHolder {
         return mipTex;
     }
 
+    public findSkyTex(texName: string): QuakeSkyTextureData | null {
+        if (this.palette === null)
+            return null;
+
+        let skyTex = this.skyTex.find((texture) => texture.name === texName);
+        if (skyTex === undefined) {
+            const entry = this.data.find((data) => data.name === texName);
+            if (entry === undefined)
+                return null;
+            skyTex = new QuakeSkyTextureData(this.cache.device, entry.data, this.palette);
+            this.skyTex.push(skyTex);
+        }
+        return skyTex;
+    }
+
     public destroy(device: GfxDevice): void {
         for (let i = 0; i < this.mipTex.length; i++)
             this.mipTex[i].destroy(device);
+        for (let i = 0; i < this.skyTex.length; i++)
+            this.skyTex[i].destroy(device);
     }
 }
 
@@ -180,14 +217,15 @@ ${GfxShaderLibrary.MatrixLibrary}
 
 layout(std140) uniform ub_SceneParams {
     Mat4x4 u_ProjectionView;
-    vec4 u_Params[1];
+    vec4 u_EyePosTime;
 };
 
 layout(std140) uniform ub_ModelParams {
     Mat4x4 u_ModelMatrix;
 };
 
-#define u_Time (u_Params[0].x)
+#define u_Time (u_EyePosTime.w)
+#define u_EyePosition (u_EyePosTime.xyz)
 
 uniform sampler2D u_TextureDiffuse;
 uniform sampler2D u_TextureLightmap;
@@ -285,37 +323,43 @@ class BSPSurfaceRenderer {
     private sky = false;
     private water = false;
 
-    constructor(cache: GfxRenderCache, textureCache: TextureCache, private surface: Surface, bspVersion: number) {
+    constructor(private context: IdTech2Context, cache: GfxRenderCache, textureCache: TextureCache, private surface: Surface) {
         const texName = this.surface.texName;
 
-        if (isToolTexture(texName)) {
+        if (isToolTexture(texName) || texName.startsWith('__invalid_')) {
             this.visible = false;
             return;
         }
-
-        const miptex = textureCache.findMipTex(this.surface.texName);
-        if (miptex === null) {
-            console.warn(`Missing texture: ${this.surface.texName}`);
-            this.visible = false;
-            return;
-        }
-        this.textureMapping[0].gfxTexture = miptex.gfxTexture;
-
-        const isGameQuake = bspVersion === 29;
-        const isGameHL1 = bspVersion === 30;
 
         if (texName.startsWith('sky'))
             this.sky = true;
         if ((texName.startsWith('*') && texName !== "*default") || texName.startsWith('!'))
             this.water = true;
-        if (isGameHL1 && texName.startsWith('water'))
+        if (context.isGoldSrc && texName.startsWith('water'))
             this.water = true;
+
+        if (this.sky && context.isQuake) {
+            const skyTex = textureCache.findSkyTex(texName);
+            if (skyTex !== null) {
+                this.textureMapping[0].gfxTexture = skyTex.solidTexture;
+                this.textureMapping[1].gfxTexture = skyTex.alphaTexture;
+
+                const program = new QuakeSkyProgram();
+                this.gfxProgram = cache.createProgram(program);
+                return;
+            }
+        }
+
+        const miptex = textureCache.findMipTex(this.surface.texName);
+        if (miptex === null)
+            return;
+        this.textureMapping[0].gfxTexture = miptex.gfxTexture;
 
         const program = new GoldSrcProgram();
         program.setDefineBool('USE_LIGHTMAP', !this.sky && !this.water);
         program.setDefineBool('USE_WATER', this.water);
-        program.setDefineBool('GAME_QUAKE', isGameQuake);
-        program.setDefineBool('GAME_HL1', isGameHL1);
+        program.setDefineBool('GAME_QUAKE', context.isQuake);
+        program.setDefineBool('GAME_GOLDSRC', context.isGoldSrc);
         this.gfxProgram = cache.createProgram(program);
     }
 
@@ -323,16 +367,25 @@ class BSPSurfaceRenderer {
         if (!this.visible || this.gfxProgram === null)
             return;
 
-        this.textureMapping[1].gfxTexture = lightmapManager.gfxTexture;
-
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setGfxProgram(this.gfxProgram);
         renderInst.setDrawCount(this.surface.indexCount, this.surface.startIndex);
-        renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
 
-        let offs = renderInst.allocateUniformBuffer(GoldSrcProgram.ub_ModelParams, 16);
-        const d = renderInst.mapUniformBufferF32(GoldSrcProgram.ub_ModelParams);
-        offs += fillMatrix4x4(d, offs, modelMatrix);
+        if (this.sky && this.context.isQuake) {
+            renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
+
+            let offs = renderInst.allocateUniformBuffer(QuakeSkyProgram.ub_ModelParams, 16);
+            const d = renderInst.mapUniformBufferF32(QuakeSkyProgram.ub_ModelParams);
+            offs += fillMatrix4x4(d, offs, modelMatrix);
+        } else {
+            // TODO(jackharrhy) HL1 cubemap skyboxes
+            this.textureMapping[1].gfxTexture = lightmapManager.gfxTexture;
+            renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
+
+            let offs = renderInst.allocateUniformBuffer(GoldSrcProgram.ub_ModelParams, 16);
+            const d = renderInst.mapUniformBufferF32(GoldSrcProgram.ub_ModelParams);
+            offs += fillMatrix4x4(d, offs, modelMatrix);
+        }
 
         const list = this.sky ? view.skyList : view.mainList;
         list.submitRenderInst(renderInst);
@@ -345,10 +398,10 @@ class BSPModelRenderer {
     public visible: boolean = true;
     public surfaceRenderers: BSPSurfaceRenderer[] = [];
 
-    constructor(cache: GfxRenderCache, textureCache: TextureCache, private model: Model, private surfaces: Surface[], private lightmapManager: LightmapManager, bspVersion: number) {
+    constructor(context: IdTech2Context, cache: GfxRenderCache, textureCache: TextureCache, private model: Model, private surfaces: Surface[], private lightmapManager: LightmapManager) {
         for (let i = 0; i < model.surfaces.length; i++) {
             const surface = surfaces[model.surfaces[i]];
-            this.surfaceRenderers.push(new BSPSurfaceRenderer(cache, textureCache, surface, bspVersion));
+            this.surfaceRenderers.push(new BSPSurfaceRenderer(context, cache, textureCache, surface));
 
             for (let j = 0; j < surface.lightmapData.length; j++)
                 lightmapManager.addSurface(surface.lightmapData[j]);
@@ -383,6 +436,9 @@ class View {
     // aka projectionMatrix
     public clipFromViewMatrix = mat4.create();
 
+    // eye position in world space
+    public eyePos = vec3.create();
+
     public time = 0;
 
     public mainList = new GfxRenderInstList();
@@ -391,6 +447,8 @@ class View {
     public finishSetup(): void {
         mat4.invert(this.worldFromViewMatrix, this.viewFromWorldMatrix);
         mat4.mul(this.clipFromWorldMatrix, this.clipFromViewMatrix, this.viewFromWorldMatrix);
+
+        getMatrixTranslation(this.eyePos, this.worldFromViewMatrix);
     }
 
     public setupFromCamera(camera: Camera): void {
@@ -482,7 +540,7 @@ export class BSPRenderer {
 
     private lightmapManager: LightmapManager;
 
-    constructor(cache: GfxRenderCache, textureCache: TextureCache, private bsp: BSPFile) {
+    constructor(private context: IdTech2Context, cache: GfxRenderCache, textureCache: TextureCache, private bsp: BSPFile) {
         const device = cache.device;
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
@@ -503,12 +561,11 @@ export class BSPRenderer {
         ];
         this.indexBufferDescriptor = { buffer: this.indexBuffer };
 
-        const lightmapBytesPerTexel = this.bsp.version === 29 ? 1 : 3;
-        this.lightmapManager = new LightmapManager(device, this.bsp.lightmapPackerPage, lightmapBytesPerTexel);
+        this.lightmapManager = new LightmapManager(device, this.bsp.lightmapPackerPage, context.lightmapBytesPerTexel);
 
         for (let i = 0; i < this.bsp.models.length; i++) {
             const model = this.bsp.models[i];
-            const modelRenderer = new BSPModelRenderer(cache, textureCache, model, this.bsp.surfaces, this.lightmapManager, this.bsp.version);
+            const modelRenderer = new BSPModelRenderer(context, cache, textureCache, model, this.bsp.surfaces, this.lightmapManager);
             // Model 0 (worldspawn) is always visible; others start invisible until linked to entities
             modelRenderer.visible = (i === 0);
             this.modelRenderers.push(modelRenderer);
@@ -518,8 +575,6 @@ export class BSPRenderer {
     }
 
     private processEntities(entities: BSPEntity[]): void {
-        const isQuake = this.bsp.version === 29;
-
         for (const entity of entities) {
             if (!entity.model || !entity.model.startsWith('*'))
                 continue;
@@ -533,7 +588,7 @@ export class BSPRenderer {
             if (classname.startsWith('trigger_'))
                 continue;
 
-            if (isQuake) {
+            if (this.context.isQuake) {
                 const spawnflags = parseInt(entity.spawnflags || '0', 10);
 
                 const difficultyFlags = spawnflags & 0xF00;
@@ -557,7 +612,7 @@ export class BSPRenderer {
         let offs = template.allocateUniformBuffer(GoldSrcProgram.ub_SceneParams, 16+4);
         const d = template.mapUniformBufferF32(GoldSrcProgram.ub_SceneParams);
         offs += fillMatrix4x4(d, offs, view.clipFromWorldMatrix);
-        offs += fillVec4(d, offs, view.time);
+        offs += fillVec3v(d, offs, view.eyePos, view.time);
 
         for (let i = 0; i < this.modelRenderers.length; i++)
             this.modelRenderers[i].prepareToRender(renderInstManager, view);
@@ -581,7 +636,7 @@ export class IdTech2Renderer implements SceneGfx {
 
     public mainView = new View();
 
-    constructor(device: GfxDevice) {
+    constructor(device: GfxDevice, public context: IdTech2Context) {
         this.renderHelper = new GfxRenderHelper(device);
         this.textureCache = new TextureCache(this.renderHelper.renderCache);
         this.textureHolder = this.textureCache;
