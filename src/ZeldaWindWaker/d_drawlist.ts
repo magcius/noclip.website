@@ -389,6 +389,9 @@ void main() {
 
     // Top-down project our shadow texture. Our local space is between -1 and 1, we want to move into 0.0 to 1.0.
     vec2 t_ShadowTexCoord = (t_ObjectPos.xy * u_TexScaleBias.xy + u_TexScaleBias.zw) * 0.5 + 0.5;
+#if GFX_VIEWPORT_ORIGIN_TL()
+    t_ShadowTexCoord.y = 1.0 - t_ShadowTexCoord.y;
+#endif
 
 #if defined SHADOWMAP
     t_ShadowStep = 0.5;
