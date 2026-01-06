@@ -150,10 +150,12 @@ export class TextureCache implements TextureListHolder {
         }
     }
 
-    public findMipTex(texName: string): MIPTEXData {
+    public findMipTex(texName: string): MIPTEXData | null {
         let mipTex = this.mipTex.find((texture) => texture.name === texName);
         if (mipTex === undefined) {
-            const entry = assertExists(this.data.find((data) => data.name === texName));
+            const entry = this.data.find((data) => data.name === texName);
+            if (entry === undefined)
+                return null;
             mipTex = new MIPTEXData(this.cache.device, entry.data, this.palette);
             this.mipTex.push(mipTex);
         }
@@ -292,6 +294,11 @@ class BSPSurfaceRenderer {
         }
 
         const miptex = textureCache.findMipTex(this.surface.texName);
+        if (miptex === null) {
+            console.warn(`Missing texture: ${this.surface.texName}`);
+            this.visible = false;
+            return;
+        }
         this.textureMapping[0].gfxTexture = miptex.gfxTexture;
 
         const isGameQuake = bspVersion === 29;
