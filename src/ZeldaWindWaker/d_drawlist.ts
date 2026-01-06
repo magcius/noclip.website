@@ -286,7 +286,6 @@ const scratchAABB = new AABB();
 
 const realShadowCount = 8;
 const shadowAtlasDim = getAtlasDimensions(realShadowCount);
-const shadowAtlasInvDim = [1.0 / shadowAtlasDim[0], 1.0 / shadowAtlasDim[1]];
 
 function getAtlasDimensions(count: number): [number, number] {
     let dimMin = Math.floor(Math.sqrt(count));
@@ -457,7 +456,7 @@ class dDlst_shadowReal_c {
     private lightProjMtx = mat4.create();
     private worldFromVolume = mat4.create();
     private volumeFromWorld = mat4.create();
-    private atlasOffset = vec2.create();
+    public atlasOffset = vec2.create();
     private shadowmapScaleBias = vec4.create();
     private heightAboveGround: number = 0;
     private casterSize: number = 0;
@@ -465,7 +464,7 @@ class dDlst_shadowReal_c {
     public casterInstList = new GfxRenderInstList(gfxRenderInstCompareNone, GfxRenderInstExecutionOrder.Forwards);
 
     constructor(private index: number) {
-        this.atlasOffset = [this.index % shadowAtlasDim[0], Math.floor(this.index / shadowAtlasDim[0])];
+        vec2.set(this.atlasOffset, this.index % shadowAtlasDim[0], Math.floor(this.index / shadowAtlasDim[0]));
     }
 
     public reset(): void {
@@ -633,11 +632,6 @@ class dDlst_shadowReal_c {
         projectionMatrixForCuboid(lightProjMtx, -casterRadius, casterRadius, -casterRadius, casterRadius, 1.0, 10000.0);
         projectionMatrixConvertClipSpaceNearZ(lightProjMtx, globals.camera.clipSpaceNearZ, GfxClipSpaceNearZ.NegativeOne);
 
-        // Scale and bias the projection to fit into our slot in the shadowmap atlas
-        const vpMtx = mat4.fromTranslation(scratchMat4a, [shadowAtlasInvDim[0] * (1 + 2 * this.atlasOffset[0]) - 1.0, shadowAtlasInvDim[1] * (1 + 2 * this.atlasOffset[1]) - 1.0, 0]);
-        mat4.scale(scratchMat4a, scratchMat4a, [shadowAtlasInvDim[0], shadowAtlasInvDim[1], 1]);
-        mat4.mul(lightProjMtx, vpMtx, lightProjMtx);
-
         return alpha;
     }
 
@@ -684,10 +678,18 @@ class dDlst_shadowReal_c {
         mat4.mul(this.worldFromVolume, worldFromLight, lightFromVolume);
         mat4.invert(this.volumeFromWorld, this.worldFromVolume);
 
+        // Scale and bias the projection to fit into our slot in the shadowmap atlas
+        mat4.identity(scratchMat4a);
+        scratchMat4a[0] = 1.0 / shadowAtlasDim[0];
+        scratchMat4a[5] = 1.0 / shadowAtlasDim[1];
+        scratchMat4a[12] = (1 + 2 * this.atlasOffset[0]) / shadowAtlasDim[0] - 1.0;
+        scratchMat4a[13] = (1 + 2 * this.atlasOffset[1]) / shadowAtlasDim[1] - 1.0;
+        mat4.mul(scratchMat4a, scratchMat4a, this.lightProjMtx);
+
         // The shadow volume is contained within the shadowmap's ortho frustum. Create a mapping from volume space [-1, 1] to
         // shadowmap space [-1, 1] so we can sample the texture at the correct coordinates.
-        const mapMax = vec3.transformMat4(scratchVec3a, lightAABB.max, this.lightProjMtx);
-        const mapMin = vec3.transformMat4(scratchVec3b, lightAABB.min, this.lightProjMtx);
+        const mapMax = vec3.transformMat4(scratchVec3a, lightAABB.max, scratchMat4a);
+        const mapMin = vec3.transformMat4(scratchVec3b, lightAABB.min, scratchMat4a);
         const diff = vec3.sub(scratchVec3a, mapMax, mapMin);
         vec4.set(this.shadowmapScaleBias, diff[0] * 0.5, diff[1] * 0.5, (mapMin[0] + diff[0] * 0.5), (mapMin[1] + diff[1] * 0.5));
     }
@@ -864,7 +866,7 @@ class dDlst_shadowControl_c_Cache {
         mb.setUsePnMtxIdx(true);
         this.shadowmapMat = new GXMaterialHelperGfx(mb.finish('ShadowVolumeDrawer Front'));
 
-        this.shadowmapDesc.setDimensions(256 * shadowAtlasDim[0], 256 * shadowAtlasDim[1], 1);
+        this.shadowmapDesc.setDimensions(256, 256, 1);
         this.shadowmapDesc.clearColor = colorNewCopy(OpaqueBlack);
         this.shadowmapDepthDesc.copyDimensions(this.shadowmapDesc);
         this.shadowmapDepthDesc.clearDepth = standardFullClearRenderPassDescriptor.clearDepth;
@@ -964,44 +966,54 @@ class dDlst_shadowControl_c {
     }
 
     public pushPasses(globals: dGlobals, renderInstManager: GfxRenderInstManager, builder: GfxrGraphBuilder, mainDepthTargetID: GfxrRenderTargetID, mainColorTargetID: GfxrRenderTargetID): void {
-        const shadowmapColorTargetID = builder.createRenderTargetID(this.cache.shadowmapDesc, 'Shadow Map Color');
-        const shadowmapDepthTargetID = builder.createRenderTargetID(this.cache.shadowmapDepthDesc, 'Shadow Map Depth');
         const shadowmapDownColorTargetID = builder.createRenderTargetID(this.cache.shadowmapDownDesc, 'Shadow Map Color (1/2)');
 
-        builder.pushPass((pass) => {
-            pass.setDebugName('Shadowmaps');
-            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, shadowmapColorTargetID);
-            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, shadowmapDepthTargetID);
-            pass.exec((passRenderer) => {
-                for (let i = 0; i < this.reals.length; i++) {
-                    const real = this.reals[i];
+        let hasReal = false;
+        for (let i = 0; i < this.reals.length; i++) {
+            const shadowmapColorTargetID = builder.createRenderTargetID(this.cache.shadowmapDesc, 'Shadow Map Color');
+            const shadowmapDepthTargetID = builder.createRenderTargetID(this.cache.shadowmapDepthDesc, 'Shadow Map Depth');
+
+            const real = this.reals[i];
+            if (real.casterInstList.renderInsts.length === 0)
+                continue;
+
+            builder.pushPass((pass) => {
+                pass.setDebugName(`Shadow Map ${i}`);
+                pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, shadowmapColorTargetID);
+                pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, shadowmapDepthTargetID);
+                pass.exec((passRenderer) => {
                     real.casterInstList.drawOnPassRenderer(renderInstManager.gfxRenderCache, passRenderer);
                     real.casterInstList.reset();
-                }
+                });
             });
-        });
 
-        // Downsample the 256x256 shadowmaps into 128x128 textures (Softens the edges, gives more samples per tap).
-        builder.pushPass((pass) => {
-            pass.setDebugName(`Shadowmap Downsample`);
-            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, shadowmapDownColorTargetID);
+            builder.pushPass((pass) => {
+                pass.setDebugName(`Shadow Map ${i} Downsample`);
+                pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, shadowmapDownColorTargetID);
 
-            const srcResolveTextureID = builder.resolveRenderTarget(shadowmapColorTargetID);
-            pass.attachResolveTexture(srcResolveTextureID);
+                const srcResolveTextureID = builder.resolveRenderTarget(shadowmapColorTargetID);
+                pass.attachResolveTexture(srcResolveTextureID);
 
-            pass.exec((passRenderer, scope) => {
-                const renderInst = renderInstManager.newRenderInst();
-                renderInst.setGfxProgram(this.cache.downsampleProgram);
-                renderInst.setBindingLayouts([{ numUniformBuffers: 0, numSamplers: 1 }]);
-                renderInst.setMegaStateFlags(fullscreenMegaState);
-                materialParams.m_TextureMapping[0].gfxTexture = scope.getResolveTextureForID(srcResolveTextureID);
-                materialParams.m_TextureMapping[0].gfxSampler = this.cache.linearSampler;
-                renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
-                renderInst.setDrawCount(3);
-                renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);
+                pass.exec((passRenderer, scope) => {
+                    const atlasOffset = real.atlasOffset;
+                    const w = 128, h = 128;
+                    passRenderer.setViewport(atlasOffset[0] * w, atlasOffset[1] * h, w, h);
+                    const renderInst = renderInstManager.newRenderInst();
+                    renderInst.setGfxProgram(this.cache.downsampleProgram);
+                    renderInst.setBindingLayouts([{ numUniformBuffers: 0, numSamplers: 1 }]);
+                    renderInst.setMegaStateFlags(fullscreenMegaState);
+                    materialParams.m_TextureMapping[0].gfxTexture = scope.getResolveTextureForID(srcResolveTextureID);
+                    materialParams.m_TextureMapping[0].gfxSampler = this.cache.linearSampler;
+                    renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
+                    renderInst.setDrawCount(3);
+                    renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);
+                });
             });
-        });
 
+            builder.pushDebugThumbnail(shadowmapColorTargetID);
+            hasReal = true;
+        }
+    
         builder.pushPass((pass) => {
             pass.setDebugName('Simple Shadows');
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
@@ -1016,26 +1028,27 @@ class dDlst_shadowControl_c {
             });
         });
 
-        builder.pushPass((pass) => {
-            pass.setDebugName('Real Shadows');
-            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
-            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
-            const mainDepthResolveTextureID = builder.resolveRenderTarget(mainDepthTargetID);
-            const shadowmapResolveTextureID = builder.resolveRenderTarget(shadowmapDownColorTargetID);
-            pass.attachResolveTexture(shadowmapResolveTextureID);
-            pass.attachResolveTexture(mainDepthResolveTextureID);
-            pass.exec((passRenderer, scope) => {
-                globals.camera.applyScissor(passRenderer);
-                const shadowmap = scope.getResolveTextureForID(shadowmapResolveTextureID);
-                const depthTex = scope.getResolveTextureForID(mainDepthResolveTextureID);
-                this.realVolumeInstList.resolveLateSamplerBinding('depth-target', { gfxTexture: depthTex, gfxSampler: this.cache.pointSampler, lateBinding: null });
-                this.realVolumeInstList.resolveLateSamplerBinding('shadowmap-target', { gfxTexture: shadowmap, gfxSampler: this.cache.linearSampler, lateBinding: null });
-                this.realVolumeInstList.drawOnPassRenderer(renderInstManager.gfxRenderCache, passRenderer);
-            });
-        });
+        if (hasReal) {
+            builder.pushDebugThumbnail(shadowmapDownColorTargetID);
 
-        builder.pushDebugThumbnail(shadowmapColorTargetID);
-        builder.pushDebugThumbnail(shadowmapDownColorTargetID);
+            builder.pushPass((pass) => {
+                pass.setDebugName('Real Shadows');
+                pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+                pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
+                const mainDepthResolveTextureID = builder.resolveRenderTarget(mainDepthTargetID);
+                const shadowmapResolveTextureID = builder.resolveRenderTarget(shadowmapDownColorTargetID);
+                pass.attachResolveTexture(shadowmapResolveTextureID);
+                pass.attachResolveTexture(mainDepthResolveTextureID);
+                pass.exec((passRenderer, scope) => {
+                    globals.camera.applyScissor(passRenderer);
+                    const shadowmap = scope.getResolveTextureForID(shadowmapResolveTextureID);
+                    const depthTex = scope.getResolveTextureForID(mainDepthResolveTextureID);
+                    this.realVolumeInstList.resolveLateSamplerBinding('depth-target', { gfxTexture: depthTex, gfxSampler: this.cache.pointSampler, lateBinding: null });
+                    this.realVolumeInstList.resolveLateSamplerBinding('shadowmap-target', { gfxTexture: shadowmap, gfxSampler: this.cache.linearSampler, lateBinding: null });
+                    this.realVolumeInstList.drawOnPassRenderer(renderInstManager.gfxRenderCache, passRenderer);
+                });
+            });
+        }
     }
 
     public setReal2(globals: dGlobals, id: number, shouldFade: number, model: J3DModelInstance, casterCenter: ReadonlyVec3, casterSize: number, heightAboveGround: number, tevStr: dKy_tevstr_c): number {
