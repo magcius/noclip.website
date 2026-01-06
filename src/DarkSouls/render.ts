@@ -2047,7 +2047,7 @@ uniform sampler2D u_Texture2;
 layout(std140) uniform ub_Params {
     vec4 u_Misc[1];
 };
-#define u_DispersionSq      (u_Misc[0].x)
+#define u_DispersionSq      (u_Misc[1].w)
 `;
 
     public override vert = `
@@ -2114,9 +2114,9 @@ uniform sampler2D u_TextureFramebufferDepth;
 layout(std140) uniform ub_Params {
     vec4 u_Misc[3];
 };
+#define u_UnprojectParams      (u_Misc[0].xyzw)
 #define u_NearParam            (u_Misc[1].xyz)
 #define u_FarParam             (u_Misc[2].xyz)
-#define u_UnprojectParams      vec4(u_Misc[0].zw, u_Misc[1].w, u_Misc[2].w)
 `;
 
     public override vert = `
@@ -2220,9 +2220,9 @@ class DepthOfField {
         const UnprojMtxWZ = invdet * -WZ;
         const UnprojMtxWW = invdet * ZZ;
 
-        offs += fillVec4(d, offs, params.dispersionSq, 0.0, UnprojMtxZZ, UnprojMtxZW);
-        offs += fillVec4(d, offs, params.nearDofBegin, params.nearDofEnd, params.nearDofMul, UnprojMtxWZ);
-        offs += fillVec4(d, offs, params.farDofBegin, params.farDofEnd, params.farDofMul, UnprojMtxWW);
+        offs += fillVec4(d, offs, UnprojMtxZZ, UnprojMtxZW, UnprojMtxWZ, UnprojMtxWW);
+        offs += fillVec4(d, offs, params.nearDofBegin, params.nearDofEnd, params.nearDofMul, params.dispersionSq);
+        offs += fillVec4(d, offs, params.farDofBegin, params.farDofEnd, params.farDofMul, 0.0);
     }
 
     public pushPasses(builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, srcColorTargetID: GfxrRenderTargetID, srcDepthTargetID: GfxrRenderTargetID, params: DofParams, cameraView: CameraView): void {
@@ -2320,9 +2320,9 @@ uniform sampler2D u_TextureFramebufferDepth;
 layout(std140) uniform ub_Params {
     vec4 u_Misc[3];
 };
-#define u_NearParam            (u_Misc[0].xyz)
-#define u_FarParam             (u_Misc[1].xyz)
-#define u_UnprojectParams      (u_Misc[2].xyzw)
+#define u_UnprojectParams      (u_Misc[0].xyzw)
+#define u_NearParam            (u_Misc[1].xyz)
+#define u_FarParam             (u_Misc[2].xyz)
 `;
 
     public override vert = `
@@ -2337,19 +2337,12 @@ ${GfxShaderLibrary.invlerp}
 
 in vec2 v_TexCoord;
 
-float UnprojectViewSpaceDepth(float t_DepthSample) {
-    float Viewport_Z = t_DepthSample;
-    float NDC_Z = Viewport_Z * 2.0 - 1.0; // Expand from 0..1 to -1..1
-
-    // To get the view-space depth from NDC depth, we calculate the inverse of the bottom-right quadrant
-    // of the projection matrix, and apply it here.
-    float UnprojMtxZZ = u_UnprojectParams[0];
-    float UnprojMtxZW = u_UnprojectParams[1];
-    float UnprojMtxWZ = u_UnprojectParams[2];
-    float UnprojMtxWW = u_UnprojectParams[3];
-
-    float ViewSpaceZ = (NDC_Z*UnprojMtxZZ + UnprojMtxZW) / (NDC_Z*UnprojMtxWZ + UnprojMtxWW);
-    return -ViewSpaceZ;
+float UnprojectViewSpaceDepth(float z) {
+#if !GFX_CLIPSPACE_NEAR_ZERO()
+    z = z * 2.0 - 1.0;
+#endif
+    vec4 v = u_UnprojectParams;
+    return -(z*v.x + v.y) / (z*v.z + v.w);
 }
 
 void main() {
@@ -2596,9 +2589,9 @@ class Bloom {
         const UnprojMtxWZ = invdet * -WZ;
         const UnprojMtxWW = invdet * ZZ;
 
+        offs += fillVec4(d, offs, UnprojMtxZZ, UnprojMtxZW, UnprojMtxWZ, UnprojMtxWW);
         offs += fillVec4(d, offs, params.bloomBegin, params.bloomMul, params.bloomNearDist, 0.0);
         offs += fillVec4(d, offs, params.bloomBeginFar, params.bloomMulFar, params.bloomFarDist, 0.0);
-        offs += fillVec4(d, offs, UnprojMtxZZ, UnprojMtxZW, UnprojMtxWZ, UnprojMtxWW);
     }
 
     public pushPasses(builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, srcColorTargetID: GfxrRenderTargetID, srcDepthTargetID: GfxrRenderTargetID, params: ToneMapParams, cameraView: CameraView): void {
