@@ -967,9 +967,9 @@ class dDlst_shadowControl_c {
     }
 
     public pushPasses(globals: dGlobals, renderInstManager: GfxRenderInstManager, builder: GfxrGraphBuilder, mainDepthTargetID: GfxrRenderTargetID, mainColorTargetID: GfxrRenderTargetID): void {
-        const shadowmapColorTargetID = builder.createRenderTargetID(this.cache.shadowmapDesc, 'Shadowmap');
-        const shadowmapDepthTargetID = builder.createRenderTargetID(this.cache.shadowmapDepthDesc, 'Shadowmap Depth');
-        const shadowmapDownColorTargetID = builder.createRenderTargetID(this.cache.shadowmapDownDesc, 'Shadowmap');
+        const shadowmapColorTargetID = builder.createRenderTargetID(this.cache.shadowmapDesc, 'Shadow Map Color');
+        const shadowmapDepthTargetID = builder.createRenderTargetID(this.cache.shadowmapDepthDesc, 'Shadow Map Depth');
+        const shadowmapDownColorTargetID = builder.createRenderTargetID(this.cache.shadowmapDownDesc, 'Shadow Map Color (1/2)');
 
         builder.pushPass((pass) => {
             pass.setDebugName('Shadowmaps');
@@ -994,6 +994,7 @@ class dDlst_shadowControl_c {
                 renderInst.setBindingLayouts([{ numUniformBuffers: 0, numSamplers: 1 }]);
                 renderInst.setMegaStateFlags(fullscreenMegaState);
                 materialParams.m_TextureMapping[0].gfxTexture = scope.getResolveTextureForID(srcResolveTextureID);
+                materialParams.m_TextureMapping[0].gfxSampler = this.cache.linearSampler;
                 renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
                 renderInst.setDrawCount(3);
                 renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);

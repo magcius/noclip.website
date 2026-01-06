@@ -337,8 +337,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         };
         renderHacksPanel.contents.appendChild(enableObjects.elem);
 
-        const showDebugThumbnails = new UI.Checkbox('Show Debug Thumbnails', true);
-        this.renderHelper.debugThumbnails.enabled = true;
+        const showDebugThumbnails = new UI.Checkbox('Show Debug Thumbnails', false);
         showDebugThumbnails.onchanged = () => {
             const v = showDebugThumbnails.checked;
             this.renderHelper.debugThumbnails.enabled = v;
