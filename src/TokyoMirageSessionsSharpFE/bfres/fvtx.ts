@@ -111,8 +111,8 @@ function convert_10_10_10_2_snorm(buffer_offset: number, buffer_index: number, v
     const new_stride = vertex_buffers[buffer_index].stride + 4;
     vertex_buffers[buffer_index].stride = new_stride;
 
-    const new_byte_length = element_count * new_stride * 4;
-    let new_buffer = new Uint8Array(new_byte_length)
+    const new_buffer_length = element_count * new_stride;
+    let new_buffer = new Uint8Array(new_buffer_length)
 
     let new_buffer_offset = 0;
     let old_buffer_offset = 0;

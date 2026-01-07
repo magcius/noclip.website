@@ -45,7 +45,7 @@ export class TMSFEScene implements SceneGfx
         console.log(view.getInt16(0xE, true));
         console.log(view.getUint16(0x10, true));
         console.log(view.getUint16(0x12, true));
-        
+
         console.log(view.getFloat32(0x14, true));
     }
 
@@ -116,7 +116,6 @@ class fshp_renderer
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [];
 
         for (let i = 0; i < fvtx.vertexAttributes.length; i++)
-        // for (let i = 0; i < 1; i++)
         {
             vertexAttributeDescriptors.push
             ({
@@ -130,7 +129,6 @@ class fshp_renderer
         const inputLayoutBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [];
 
         for (let i = 0; i < fvtx.vertexBuffers.length; i++)
-        // for (let i = 0; i < 1; i++)
         {
             inputLayoutBufferDescriptors.push
             ({
