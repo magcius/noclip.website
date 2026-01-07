@@ -5,6 +5,7 @@ import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { align, assert, readString } from "../../util.js";
 import { read_bfres_string } from "./bfres_switch.js";
 import { vec3 } from "gl-matrix";
+import { user_data, parse_user_data } from "./user_data.js";
 
 export function parseFSKL(buffer: ArrayBufferSlice, offset: number): FSKL
 {
@@ -23,6 +24,7 @@ export function parseFSKL(buffer: ArrayBufferSlice, offset: number): FSKL
         // TODO: user data
         const user_data_array_offset = view.getUint32(bone_entry_offset + 0x8, true);
         const user_data_count = view.getUint16(bone_entry_offset + 0x32, true);
+        const user_data_array: user_data[] = parse_user_data(buffer, user_data_array_offset, user_data_count);
 
         const parent_index = view.getInt16(bone_entry_offset + 0x2A, true);
 
@@ -41,7 +43,7 @@ export function parseFSKL(buffer: ArrayBufferSlice, offset: number): FSKL
         const translation_z = view.getFloat32(bone_entry_offset + 0x5C, true);
         const translation = vec3.fromValues(translation_x, translation_y, translation_z);
 
-        bone_array.push({ name, parent_index, scale, rotation, translation });
+        bone_array.push({ name, parent_index, scale, rotation, translation, user_data: user_data_array });
         bone_entry_offset += BONE_ENTRY_SIZE;
     }
 
@@ -62,4 +64,5 @@ export interface FSKL_Bone
     scale: vec3;
     rotation: vec3;
     translation: vec3;
+    user_data: user_data[];
 }

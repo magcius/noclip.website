@@ -152,6 +152,10 @@ class fshp_renderer
         this.index_buffer = createBufferFromSlice(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, mesh.index_buffer_data);
         this.index_count = mesh.index_count;
         this.index_buffer_descriptor = { buffer: this.index_buffer };
+
+        // bone
+        const bone = fmdl.fskl.bones[fshp.bone_index];
+        // TODO: transform mesh
     }
 
     // produce a draw call for this mesh

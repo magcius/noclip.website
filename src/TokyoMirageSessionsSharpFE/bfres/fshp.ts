@@ -24,7 +24,7 @@ export function parseFSHP(buffer: ArrayBufferSlice, offset: number, count: numbe
         const name = read_bfres_string(buffer, name_offset, true);
         
         const fmat_index = view.getUint16(fshp_entry_offset + 0x52, true);
-        const fskl_index = view.getUint16(fshp_entry_offset + 0x54, true);
+        const bone_index = view.getUint16(fshp_entry_offset + 0x54, true);
         const fvtx_index = view.getUint16(fshp_entry_offset + 0x56, true);
 
         const lod_mesh_array_offset = view.getUint32(fshp_entry_offset + 0x18, true);
@@ -50,7 +50,7 @@ export function parseFSHP(buffer: ArrayBufferSlice, offset: number, count: numbe
             mesh_entry_offset += MESH_ENTRY_SIZE;
         }
 
-        fshp_array.push({ name, mesh: mesh_array, fmat_index, fskl_index, fvtx_index });
+        fshp_array.push({ name, mesh: mesh_array, fmat_index, bone_index, fvtx_index });
         fshp_entry_offset += FSHP_ENTRY_SIZE;
     }
 
@@ -94,7 +94,7 @@ export interface FSHP
     name: string;
     mesh: fshp_mesh[];
     fmat_index: number; // the index into this fmdl's fmat array for the material to use for this mesh
-    fskl_index: number; // the index into this fmdl's fskl array for the bone to use for this mesh
+    bone_index: number; // the index into this fmdl's bone array for the bone to use for this mesh
     fvtx_index: number; // the index into this fmdl's fvtx array for the set of vertices to use for this mesh
 }
 
