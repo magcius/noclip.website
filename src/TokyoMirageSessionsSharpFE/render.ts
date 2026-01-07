@@ -13,6 +13,8 @@ import { fillColor, fillMatrix4x3, fillMatrix4x4 } from '../gfx/helpers/UniformB
 import { TMSFEProgram } from './shader.js';
 import { mat4, vec3 } from "gl-matrix";
 import { computeModelMatrixSRT } from "../MathHelpers.js";
+import { FVTX } from "./bfres/fvtx.js";
+import { FMAT } from "./bfres/fmat.js";
 
 export class TMSFEScene implements SceneGfx
 {
@@ -107,16 +109,20 @@ class fshp_renderer
     private index_count: number;
     private input_layout: GfxInputLayout;
     private transform_matrix: mat4 = mat4.create();
+    private fvtx: FVTX;
+    private fmat: FMAT;
 
     constructor(device: GfxDevice, renderHelper: GfxRenderHelper, fmdl: BFRES.FMDL, shape_index: number)
     {
         // create vertex buffers
         const fshp = fmdl.fshp[shape_index];
         const fvtx = fmdl.fvtx[fshp.fvtx_index];
+        this.fvtx = fvtx;
         const mesh = fshp.mesh[0];
+        this.fmat = fmdl.fmat[fshp.fmat_index];
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [];
-
+        const attribute_assign = new Map<string, string>();
         for (let i = 0; i < fvtx.vertexAttributes.length; i++)
         {
             vertexAttributeDescriptors.push
@@ -126,6 +132,8 @@ class fshp_renderer
                 bufferIndex: fvtx.vertexAttributes[i].bufferIndex,
                 bufferByteOffset: fvtx.vertexAttributes[i].bufferOffset
             });
+
+            // create a lookup map for the shader to know what attribute is what
         }
 
         const inputLayoutBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [];
@@ -177,7 +185,7 @@ class fshp_renderer
         renderInst.setDrawCount(this.index_count);
 
         // set shader
-        const program = renderHelper.renderCache.createProgram(new TMSFEProgram());
+        const program = renderHelper.renderCache.createProgram(new TMSFEProgram(this.fvtx, this.fmat));
         renderInst.setGfxProgram(program);
         
         // create uniform buffers for the shader

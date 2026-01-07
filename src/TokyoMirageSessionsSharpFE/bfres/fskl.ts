@@ -2,7 +2,7 @@
 // Handles FSKL (caFe SKeLeton) data, which is a skeleton for transforming meshes
 
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
-import { align, assert, readString } from "../../util.js";
+import { assert, readString } from "../../util.js";
 import { read_bfres_string } from "./bfres_switch.js";
 import { vec3 } from "gl-matrix";
 import { user_data, parse_user_data } from "./user_data.js";
