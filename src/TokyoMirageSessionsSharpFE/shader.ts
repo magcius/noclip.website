@@ -22,8 +22,9 @@ ${GfxShaderLibrary.MatrixLibrary}
 
 layout(std140) uniform ub_SceneParams
 {
-    Mat4x4 u_Projection;
-    Mat3x4 u_ModelView;
+    Mat4x4 u_ClipFromViewMatrix;
+    Mat3x4 u_ViewFromWorldMatrix;
+    Mat4x4 u_BoneTransformMatrix;
 };
 
 #ifdef VERT
@@ -31,8 +32,9 @@ layout(location = ${TMSFEProgram.a_Position}) attribute vec3 a_Position;
 
 void mainVS()
 {
-    vec3 t_PositionWorld = UnpackMatrix(u_ModelView) * vec4(a_Position, 1.0);
-    gl_Position = UnpackMatrix(u_Projection) * vec4(t_PositionWorld, 1.0);
+    vec4 WorldPosition = UnpackMatrix(u_BoneTransformMatrix) * vec4(a_Position, 1.0);
+    vec3 ViewPosition = UnpackMatrix(u_ViewFromWorldMatrix) * WorldPosition;
+    gl_Position = UnpackMatrix(u_ClipFromViewMatrix) * vec4(ViewPosition, 1.0);
 }
 #endif
 

@@ -11,7 +11,8 @@ import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from 
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 import { fillColor, fillMatrix4x3, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers.js';
 import { TMSFEProgram } from './shader.js';
-import { FSHP } from "./bfres/fshp.js";
+import { mat4, vec3 } from "gl-matrix";
+import { computeModelMatrixSRT } from "../MathHelpers.js";
 
 export class TMSFEScene implements SceneGfx
 {
@@ -35,18 +36,18 @@ export class TMSFEScene implements SceneGfx
             this.fshp_renderers.push(renderer);
         }
 
-        const fvtx = fmdl.fvtx[0];
-        const view = fvtx.vertexBuffers[1].data.createDataView();
-        console.log(view.getFloat32(0x0, true));
-        console.log(view.getFloat32(0x4, true));
-        console.log(view.getInt16(0x8, true));
-        console.log(view.getInt16(0xA, true));
-        console.log(view.getInt16(0xC, true));
-        console.log(view.getInt16(0xE, true));
-        console.log(view.getUint16(0x10, true));
-        console.log(view.getUint16(0x12, true));
+        // const fvtx = fmdl.fvtx[0];
+        // const view = fvtx.vertexBuffers[1].data.createDataView();
+        // console.log(view.getFloat32(0x0, true));
+        // console.log(view.getFloat32(0x4, true));
+        // console.log(view.getInt16(0x8, true));
+        // console.log(view.getInt16(0xA, true));
+        // console.log(view.getInt16(0xC, true));
+        // console.log(view.getInt16(0xE, true));
+        // console.log(view.getUint16(0x10, true));
+        // console.log(view.getUint16(0x12, true));
 
-        console.log(view.getFloat32(0x14, true));
+        // console.log(view.getFloat32(0x14, true));
     }
 
     public render(device: GfxDevice, viewerInput: ViewerRenderInput): void
@@ -105,6 +106,7 @@ class fshp_renderer
     private index_buffer_descriptor: GfxVertexBufferDescriptor;
     private index_count: number;
     private input_layout: GfxInputLayout;
+    private transform_matrix: mat4 = mat4.create();
 
     constructor(device: GfxDevice, renderHelper: GfxRenderHelper, fmdl: BFRES.FMDL, shape_index: number)
     {
@@ -153,9 +155,15 @@ class fshp_renderer
         this.index_count = mesh.index_count;
         this.index_buffer_descriptor = { buffer: this.index_buffer };
 
-        // bone
+        // setup transformation matrix
         const bone = fmdl.fskl.bones[fshp.bone_index];
-        // TODO: transform mesh
+        computeModelMatrixSRT
+        (
+            this.transform_matrix,
+            bone.scale[0], bone.scale[1], bone.scale[2],
+            bone.rotation[0], bone.rotation[1], bone.rotation[2],
+            bone.translation[0], bone.translation[1], bone.translation[2],
+        );
     }
 
     // produce a draw call for this mesh
@@ -178,10 +186,11 @@ class fshp_renderer
             { numUniformBuffers: 1, numSamplers: 0 },
         ];
         renderInst.setBindingLayouts(bindingLayouts);
-        let uniform_buffer_offset = renderInst.allocateUniformBuffer(TMSFEProgram.ub_SceneParams, 32);
+        let uniform_buffer_offset = renderInst.allocateUniformBuffer(TMSFEProgram.ub_SceneParams, 44);
         const mapped = renderInst.mapUniformBufferF32(TMSFEProgram.ub_SceneParams);
         uniform_buffer_offset += fillMatrix4x4(mapped, uniform_buffer_offset, viewerInput.camera.projectionMatrix);
         uniform_buffer_offset += fillMatrix4x3(mapped, uniform_buffer_offset, viewerInput.camera.viewMatrix);
+        uniform_buffer_offset += fillMatrix4x4(mapped, uniform_buffer_offset, this.transform_matrix);
 
         renderInst.setMegaStateFlags({ cullMode: GfxCullMode.Back });
         

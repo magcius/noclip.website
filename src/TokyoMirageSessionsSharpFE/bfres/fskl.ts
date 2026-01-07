@@ -21,7 +21,6 @@ export function parseFSKL(buffer: ArrayBufferSlice, offset: number): FSKL
         const name_offset = view.getUint32(bone_entry_offset, true);
         const name = read_bfres_string(buffer, name_offset, true);
         
-        // TODO: user data
         const user_data_array_offset = view.getUint32(bone_entry_offset + 0x8, true);
         const user_data_count = view.getUint16(bone_entry_offset + 0x32, true);
         const user_data_array: user_data[] = parse_user_data(buffer, user_data_array_offset, user_data_count);
