@@ -3,7 +3,8 @@ import { GfxDevice, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, Gfx
          GfxBufferUsage, GfxBindingLayoutDescriptor, GfxCullMode, GfxIndexBufferDescriptor, 
          GfxBuffer} from "../gfx/platform/GfxPlatform.js";
 import { SceneGfx, ViewerRenderInput } from "../viewer.js";
-import * as BFRES from "./bfres/bfres_switch.js";
+import { FRES } from "./bfres/bfres_switch.js";
+import { FMDL } from "./bfres/fmdl.js";
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
 import { GfxRenderInstList, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
 import { createBufferFromData, createBufferFromSlice } from "../gfx/helpers/BufferHelpers.js";
@@ -16,12 +17,12 @@ import { computeModelMatrixSRT } from "../MathHelpers.js";
 
 export class TMSFEScene implements SceneGfx
 {
-    private fres: BFRES.FRES;
+    private fres: FRES;
     private renderHelper: GfxRenderHelper;
     private renderInstListMain = new GfxRenderInstList();
     private fshp_renderers: fshp_renderer[] = [];
 
-    constructor(device: GfxDevice, fres: BFRES.FRES)
+    constructor(device: GfxDevice, fres: FRES)
     {
         this.fres = fres;
         this.renderHelper = new GfxRenderHelper(device);
@@ -109,7 +110,7 @@ class fshp_renderer
     private transform_matrix: mat4 = mat4.create();
     private program: TMSFEProgram;
 
-    constructor(device: GfxDevice, renderHelper: GfxRenderHelper, fmdl: BFRES.FMDL, shape_index: number)
+    constructor(device: GfxDevice, renderHelper: GfxRenderHelper, fmdl: FMDL, shape_index: number)
     {
         // create vertex buffers
         const fshp = fmdl.fshp[shape_index];

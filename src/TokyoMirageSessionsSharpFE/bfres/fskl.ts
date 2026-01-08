@@ -1,4 +1,4 @@
-// fvtx.ts
+// fskl.ts
 // Handles FSKL (caFe SKeLeton) data, which is a skeleton for transforming meshes
 
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
@@ -7,6 +7,9 @@ import { read_bfres_string } from "./bfres_switch.js";
 import { vec3 } from "gl-matrix";
 import { user_data, parse_user_data } from "./user_data.js";
 
+// reads from a bfres file and returns a FSKL object
+// buffer: the bfres file
+// offset: start of the fskl data
 export function parseFSKL(buffer: ArrayBufferSlice, offset: number): FSKL
 {
     const view = buffer.createDataView();

@@ -11,6 +11,7 @@ import { GfxFormat } from "../../gfx/platform/GfxPlatform.js";
 // buffer: the bfres file
 // offset: start of the fshp array
 // count: number of fshp objects in the array
+// gpu_region_offset: start of the gpu region in the bfres file. needed to access the index buffer data.
 export function parseFSHP(buffer: ArrayBufferSlice, offset: number, count: number, gpu_region_offset: number): FSHP[]
 {
     const view = buffer.createDataView();
