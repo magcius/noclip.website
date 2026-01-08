@@ -20,42 +20,44 @@ import { parseBNTX } from "./bntx.js";
 
 export class TMSFEScene implements SceneGfx
 {
-    private fres: FRES;
     private renderHelper: GfxRenderHelper;
     private renderInstListMain = new GfxRenderInstList();
     private fshp_renderers: fshp_renderer[] = [];
 
-    constructor(device: GfxDevice, fres: FRES)
+    constructor(device: GfxDevice, fres_files: FRES[])
     {
-        this.fres = fres;
-        this.renderHelper = new GfxRenderHelper(device);
-        console.log(this.fres.fmdl[0]);
-
-        // create all fshp_renderers
-        const fmdl = this.fres.fmdl[0];
-        const shapes = fmdl.fshp;
-        for (let i = 0; i < shapes.length; i++)
+        for(let i = 0; i < fres_files.length; i++)
         {
-            const renderer = new fshp_renderer(device, this.renderHelper, fmdl, i);
-            this.fshp_renderers.push(renderer);
+            const fres = fres_files[i];
+            this.renderHelper = new GfxRenderHelper(device);
+            console.log(fres.fmdl[0]);
+
+            // create all fshp_renderers
+            const fmdl = fres.fmdl[0];
+            const shapes = fmdl.fshp;
+            for (let i = 0; i < shapes.length; i++)
+            {
+                const renderer = new fshp_renderer(device, this.renderHelper, fmdl, i);
+                this.fshp_renderers.push(renderer);
+            }
+
+            // const fvtx = fmdl.fvtx[0];
+            // const view = fvtx.vertexBuffers[1].data.createDataView();
+            // console.log(view.getFloat32(0x0, true));
+            // console.log(view.getFloat32(0x4, true));
+            // console.log(view.getInt16(0x8, true));
+            // console.log(view.getInt16(0xA, true));
+            // console.log(view.getInt16(0xC, true));
+            // console.log(view.getInt16(0xE, true));
+            // console.log(view.getUint16(0x10, true));
+            // console.log(view.getUint16(0x12, true));
+
+            // console.log(view.getFloat32(0x14, true));
+
+            //bntx stuff
+            // const bntx = parseBNTX(fres.embedded_files[0].buffer);
+            // console.log(bntx);
         }
-
-        // const fvtx = fmdl.fvtx[0];
-        // const view = fvtx.vertexBuffers[1].data.createDataView();
-        // console.log(view.getFloat32(0x0, true));
-        // console.log(view.getFloat32(0x4, true));
-        // console.log(view.getInt16(0x8, true));
-        // console.log(view.getInt16(0xA, true));
-        // console.log(view.getInt16(0xC, true));
-        // console.log(view.getInt16(0xE, true));
-        // console.log(view.getUint16(0x10, true));
-        // console.log(view.getUint16(0x12, true));
-
-        // console.log(view.getFloat32(0x14, true));
-
-        //bntx stuff
-        const bntx = parseBNTX(fres.embedded_files[0].buffer);
-        console.log(bntx);
     }
 
     public render(device: GfxDevice, viewerInput: ViewerRenderInput): void

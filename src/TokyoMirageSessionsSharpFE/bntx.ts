@@ -4,6 +4,7 @@
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { assert, readString } from "../util.js";
 import { read_bfres_string } from "./bfres/bfres_switch.js";
+import { GfxFormat } from "../gfx/platform/GfxPlatform.js";
 
 export function parseBNTX(buffer: ArrayBufferSlice): BNTX
 {
@@ -58,6 +59,34 @@ export function parseBNTX(buffer: ArrayBufferSlice): BNTX
     }
 
     return { textures: texture_array };
+}
+
+function convert_image_format(format: ImageFormat): GfxFormat
+{
+    switch (format)
+    {
+        case ImageFormat.Bc1_Unorm:
+        case ImageFormat.Bc2_Unorm:
+        case ImageFormat.Bc3_Unorm:
+        case ImageFormat.Bc4_Unorm:
+        case ImageFormat.Bc5_Unorm:
+        case ImageFormat.R8_Unorm:
+        case ImageFormat.R8_G8_B8_A8_Unorm:
+            return GfxFormat.U8_RGBA_NORM;
+
+        case ImageFormat.Bc1_UnormSrgb:
+        case ImageFormat.Bc2_UnormSrgb:
+        case ImageFormat.Bc3_UnormSrgb:
+            return GfxFormat.U8_RGBA_SRGB;
+
+        case ImageFormat.Bc4_Snorm:
+        case ImageFormat.Bc5_Snorm:
+            return GfxFormat.S8_RGBA_NORM;
+        
+        default:
+            console.error(`image format ${format} not found`);
+            throw "whoops";
+    }
 }
 
 export interface BNTX
