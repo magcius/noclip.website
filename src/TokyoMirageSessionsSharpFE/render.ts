@@ -13,8 +13,6 @@ import { fillColor, fillMatrix4x3, fillMatrix4x4 } from '../gfx/helpers/UniformB
 import { TMSFEProgram } from './shader.js';
 import { mat4, vec3 } from "gl-matrix";
 import { computeModelMatrixSRT } from "../MathHelpers.js";
-import { FVTX } from "./bfres/fvtx.js";
-import { FMAT } from "./bfres/fmat.js";
 
 export class TMSFEScene implements SceneGfx
 {
@@ -109,17 +107,14 @@ class fshp_renderer
     private index_count: number;
     private input_layout: GfxInputLayout;
     private transform_matrix: mat4 = mat4.create();
-    private fvtx: FVTX;
-    private fmat: FMAT;
+    private program: TMSFEProgram;
 
     constructor(device: GfxDevice, renderHelper: GfxRenderHelper, fmdl: BFRES.FMDL, shape_index: number)
     {
         // create vertex buffers
         const fshp = fmdl.fshp[shape_index];
         const fvtx = fmdl.fvtx[fshp.fvtx_index];
-        this.fvtx = fvtx;
         const mesh = fshp.mesh[0];
-        this.fmat = fmdl.fmat[fshp.fmat_index];
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [];
         const attribute_assign = new Map<string, string>();
@@ -172,12 +167,16 @@ class fshp_renderer
             bone.rotation[0], bone.rotation[1], bone.rotation[2],
             bone.translation[0], bone.translation[1], bone.translation[2],
         );
+
+        // initialize shader
+        const fmat = fmdl.fmat[fshp.fmat_index];
+        this.program = new TMSFEProgram(fvtx, fmat);
     }
 
     // produce a draw call for this mesh
     render(renderHelper: GfxRenderHelper, viewerInput: ViewerRenderInput, renderInstListMain: GfxRenderInstList): void
     {
-        // the template is apparently necessary to use uniform buffers
+        // the template is necessary to use uniform buffers
         renderHelper.pushTemplateRenderInst();
 
         const renderInst = renderHelper.renderInstManager.newRenderInst();
@@ -185,14 +184,11 @@ class fshp_renderer
         renderInst.setDrawCount(this.index_count);
 
         // set shader
-        const program = renderHelper.renderCache.createProgram(new TMSFEProgram(this.fvtx, this.fmat));
+        const program = renderHelper.renderCache.createProgram(this.program);
         renderInst.setGfxProgram(program);
         
         // create uniform buffers for the shader
-        const bindingLayouts: GfxBindingLayoutDescriptor[] =
-        [
-            { numUniformBuffers: 1, numSamplers: 0 },
-        ];
+        const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 1, numSamplers: 0 }];
         renderInst.setBindingLayouts(bindingLayouts);
         let uniform_buffer_offset = renderInst.allocateUniformBuffer(TMSFEProgram.ub_SceneParams, 44);
         const mapped = renderInst.mapUniformBufferF32(TMSFEProgram.ub_SceneParams);

@@ -58,7 +58,8 @@ void mainPS()
 }
 #endif
 `;
-
+    // Meshes can have an arbitrary amount of vertex attributes, so it's necessary to define them in a dynamic way
+    // returns a string with the attribute definitions
     private define_inputs(): string
     {
         let lines = '';

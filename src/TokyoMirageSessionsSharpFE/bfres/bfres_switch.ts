@@ -26,7 +26,6 @@ export function parse(buffer: ArrayBufferSlice): FRES
     const gpu_region_offset = view.getUint32(memory_pool_info_offset + 8, true);
 
     // parse fmdl
-
     const fmdl_array_offset = view.getUint32(0x28, true);
     const fmdl_count = view.getUint16(0xDC, true);
 
@@ -61,11 +60,40 @@ export function parse(buffer: ArrayBufferSlice): FRES
         fmdl.push({ fskl, name: fmdl_name, fvtx: fvtx_array, fshp: fshp_array, fmat: fmat_array, user_data: user_data_array });
         fmdl_entry_offset += FMDL_ENTRY_SIZE;
     }
-    
-    return { fmdl };
+
+    // textures are stored in a .bntx file which is stored in the external files array
+    const external_file_count = view.getUint16(0xEC, true);
+
+    let external_file_names: string[] = [];
+    const external_file_dictionary_offset = view.getUint32(0xC0, true);
+    // the first entry is fake so add 0x18 to skip over it
+    const external_file_dictionary_entry_offset = external_file_dictionary_offset + 0x18;
+    for (let i = 0; i < external_file_count; i++)
+    {
+        const name_offset = view.getUint32(external_file_dictionary_entry_offset + 0x8, true);
+        const name = read_bfres_string(buffer, name_offset, true);
+        external_file_names.push(name);
+    }
+
+    const external_file_array_offset = view.getUint32(0xB8, true);
+    const external_file_array: ExternalFile[] = [];
+    let external_file_entry_offset = external_file_array_offset;
+    for (let i = 0; i < fmdl_count; i++)
+    {
+        const name = external_file_names[i];
+        const offset = view.getUint32(external_file_entry_offset, true);
+        const size = view.getUint32(external_file_entry_offset + 0x8, true);
+        const file_buffer = buffer.subarray(offset, size);
+
+        external_file_array.push({ name, buffer: file_buffer });
+        external_file_entry_offset += EXTERNAL_FILE_ENTRY_SIZE;
+    }
+
+    return { fmdl, external_files: external_file_array };
 }
 
 const FMDL_ENTRY_SIZE = 0x78; // TODO: not sure if this is the correct size
+const EXTERNAL_FILE_ENTRY_SIZE = 0xC;
 
 export function read_bfres_string(buffer: ArrayBufferSlice, offs: number, littleEndian: boolean): string
 {
@@ -86,4 +114,11 @@ export interface FMDL
 export interface FRES
 {
     fmdl: FMDL[];
+    external_files: ExternalFile[];
+}
+
+export interface ExternalFile
+{
+    name: string;
+    buffer: ArrayBufferSlice;
 }
