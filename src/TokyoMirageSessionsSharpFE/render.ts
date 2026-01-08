@@ -3,7 +3,7 @@ import { GfxDevice, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, Gfx
          GfxBufferUsage, GfxBindingLayoutDescriptor, GfxCullMode, GfxIndexBufferDescriptor, 
          GfxBuffer} from "../gfx/platform/GfxPlatform.js";
 import { SceneGfx, ViewerRenderInput } from "../viewer.js";
-import { FRES } from "./bfres/bfres_switch.js";
+import { FRES, read_bfres_string } from "./bfres/bfres_switch.js";
 import { FMDL } from "./bfres/fmdl.js";
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
 import { GfxRenderInstList, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
@@ -14,6 +14,9 @@ import { fillColor, fillMatrix4x3, fillMatrix4x4 } from '../gfx/helpers/UniformB
 import { TMSFEProgram } from './shader.js';
 import { mat4, vec3 } from "gl-matrix";
 import { computeModelMatrixSRT } from "../MathHelpers.js";
+import { assert, readString } from "../util.js";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { parseBNTX } from "./bntx.js";
 
 export class TMSFEScene implements SceneGfx
 {
@@ -49,6 +52,10 @@ export class TMSFEScene implements SceneGfx
         // console.log(view.getUint16(0x12, true));
 
         // console.log(view.getFloat32(0x14, true));
+
+        //bntx stuff
+        const bntx = parseBNTX(fres.embedded_files[0].buffer);
+        console.log(bntx);
     }
 
     public render(device: GfxDevice, viewerInput: ViewerRenderInput): void
