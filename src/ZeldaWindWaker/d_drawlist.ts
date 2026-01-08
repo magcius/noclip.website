@@ -382,6 +382,11 @@ void main() {
         // Now that we have our object-space position, remove any samples outside of the box.
         if (any(lessThan(t_ObjectPos.xyz, vec3(-1))) || any(greaterThan(t_ObjectPos.xyz, vec3(1))))
             discard;
+
+        // Don't apply shadows to surfaces facing away from the light (same math as the game)
+        vec3 normal = normalize(cross(dFdx(t_ObjectPos.xyz), dFdy(t_ObjectPos.xyz)));
+        if (dot(normal, vec3(0, 0, 1)) < 0.2)
+            discard;
     }
 
     float t_ShadowStep = 0.0;
@@ -766,12 +771,12 @@ class dDlst_shadowSimple_c {
         // Avoid the rare case of the target position being exactly equal to the eye position
         const normScale = (floorNrm[1] == 1 && (floorY - pos[1]) == 1) ? 2.0 : 1.0;
 
-        // Build the matrix which will transform a [-1, 1] cube into our shadow volume oriented to the floor plane (floor normal becomes Z+).
+        // Build the matrix which will transform a [-1, 1] cube into our shadow volume oriented to the floor plane (floor normal becomes Z-).
         // A physically accurate drop shadow would use a vertical box to project the shadow texture straight down, but the original
         // game chooses to use this approach which always keeps the shape of the shadow consistent, regardless of ground geometry.
         const yVec = vec3.rotateY(scratchVec3a, Vec3UnitX, Vec3Zero, cM_s2rad(rotY));
-        mat4.targetTo(this.modelMtx, [pos[0], floorY, pos[2]], vec3.scaleAndAdd(vec3.create(), pos, floorNrm, normScale), yVec);
-        mat4.scale(this.modelMtx, this.modelMtx, [scaleXZ, scaleXZ * scaleZ, offsetY + offsetY + 16.0]);
+        mat4.targetTo(this.modelMtx, [pos[0], floorY, pos[2]], vec3.scaleAndAdd(vec3.create(), pos, floorNrm, -normScale), yVec);
+        mat4.scale(this.modelMtx, this.modelMtx, [scaleXZ, scaleXZ * scaleZ, 2 * offsetY + 16.0]);
 
         let opacity = 1.0 - saturate((pos[1] - floorY) * 0.0007);
         this.alpha = opacity * 64.0;
