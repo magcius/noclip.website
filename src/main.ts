@@ -104,6 +104,7 @@ import * as Scenes_KirbyAirRide from './KirbyAirRide/scenes.js';
 import * as Scenes_Descent1 from './Descent1_2/Scenes_Descent1.js';
 import * as Scenes_Descent2 from './Descent1_2/Scenes_Descent2.js';
 import * as Scenes_Descent2Vertigo from './Descent1_2/Scenes_Descent2Vertigo.js';
+import * as Scenes_Toontown from './Toontown/scenes.js';
 
 import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_FileDrops.js';
 
@@ -246,6 +247,7 @@ const sceneGroups: (string | SceneGroup)[] = [
     Scenes_Descent1.sceneGroup,
     Scenes_Descent2.sceneGroup,
     Scenes_Descent2Vertigo.sceneGroup,
+    Scenes_Toontown.sceneGroup,
 ];
 
 enum SaveStatesAction {
