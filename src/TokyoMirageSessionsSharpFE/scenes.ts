@@ -24,10 +24,10 @@ class TMSFESceneDesc implements SceneDesc
         // const bfres = parseBFRES(await dataFetcher.fetchData("TokyoMirageSessionsSharpFE/d008_01.bfres"));
         const bfres_files: FRES[] = [];
         bfres_files.push(parseBFRES(await dataFetcher.fetchData("TokyoMirageSessionsSharpFE/b016_01.bfres")));
-        bfres_files.push(parseBFRES(await dataFetcher.fetchData("TokyoMirageSessionsSharpFE/obj01.bfres")));
-        bfres_files.push(parseBFRES(await dataFetcher.fetchData("TokyoMirageSessionsSharpFE/obj02.bfres")));
-        bfres_files.push(parseBFRES(await dataFetcher.fetchData("TokyoMirageSessionsSharpFE/obj03.bfres")));
-        bfres_files.push(parseBFRES(await dataFetcher.fetchData("TokyoMirageSessionsSharpFE/sky.bfres")));
+        // bfres_files.push(parseBFRES(await dataFetcher.fetchData("TokyoMirageSessionsSharpFE/obj01.bfres")));
+        // bfres_files.push(parseBFRES(await dataFetcher.fetchData("TokyoMirageSessionsSharpFE/obj02.bfres")));
+        // bfres_files.push(parseBFRES(await dataFetcher.fetchData("TokyoMirageSessionsSharpFE/obj03.bfres")));
+        // bfres_files.push(parseBFRES(await dataFetcher.fetchData("TokyoMirageSessionsSharpFE/sky.bfres")));
         let renderer = new TMSFEScene(device, bfres_files);
         return renderer;
     }

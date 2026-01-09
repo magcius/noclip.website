@@ -1,7 +1,7 @@
 import { GfxDevice, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxInputLayoutBufferDescriptor,
          GfxVertexBufferFrequency, GfxInputLayout, GfxFormat, GfxProgram, GfxBufferFrequencyHint,
          GfxBufferUsage, GfxBindingLayoutDescriptor, GfxCullMode, GfxIndexBufferDescriptor, 
-         GfxBuffer} from "../gfx/platform/GfxPlatform.js";
+         GfxBuffer, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform.js";
 import { SceneGfx, ViewerRenderInput } from "../viewer.js";
 import { FRES, read_bfres_string } from "./bfres/bfres_switch.js";
 import { FMDL } from "./bfres/fmdl.js";
@@ -55,8 +55,12 @@ export class TMSFEScene implements SceneGfx
             // console.log(view.getFloat32(0x14, true));
 
             //bntx stuff
-            // const bntx = parseBNTX(fres.embedded_files[0].buffer);
-            // console.log(bntx);
+            const bntx = parseBNTX(fres.embedded_files[0].buffer);
+            const texture = bntx.textures[0];
+            console.log(texture);
+            const texture_descriptor = makeTextureDescriptor2D(GfxFormat.BC1_SRGB, texture.width, texture.height, texture.mipmap_buffers.length);
+            const gfx_texture = device.createTexture(texture_descriptor);
+            device.uploadTextureData(gfx_texture, 0, texture.mipmap_buffers);
         }
     }
 

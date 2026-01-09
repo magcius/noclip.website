@@ -5,6 +5,7 @@ import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { assert, readString } from "../util.js";
 import { read_bfres_string } from "./bfres/bfres_switch.js";
 import { GfxFormat } from "../gfx/platform/GfxPlatform.js";
+import { calcMipLevelByteSize } from "../gfx/helpers/TextureHelpers.js";
 
 export function parseBNTX(buffer: ArrayBufferSlice): BNTX
 {
@@ -31,28 +32,29 @@ export function parseBNTX(buffer: ArrayBufferSlice): BNTX
         const width = view.getUint32(texture_info_offset + 0x24, true);
         const height = view.getUint32(texture_info_offset + 0x28, true);
         const depth = view.getUint32(texture_info_offset + 0x2C, true);
-        const format = view.getUint32(texture_info_offset + 0x1C, true);
+        const original_format = view.getUint32(texture_info_offset + 0x1C, true);
+        const format = convert_image_format(original_format);
         const mipmap_count = view.getUint16(texture_info_offset + 0x16, true);
         const mipmap_offset_array_offset = view.getUint32(texture_info_offset + 0x70, true);
-        // only the pointers to the start of each mipmap are in the file
-        // so we get slices from i to i+1
-        // but this doesn't work for the last one
-        const mipmap_buffers: ArrayBufferSlice[] = [];
+        const mipmap_buffers: Uint8Array[] = [];
         let mipmap_array_entry_offset = mipmap_offset_array_offset;
-        for(let i = 0; i < mipmap_count - 1; i++)
+        for(let i = 0; i < mipmap_count; i++)
         {
-            const start = view.getUint32(mipmap_array_entry_offset, true);
-            const end = view.getUint32(mipmap_array_entry_offset + 0x8, true);
-            const mipmap_buffer = buffer.slice(start, end);
+            // TODO: this might be a different calculation for different texture formats
+            const start_offset = view.getUint32(mipmap_array_entry_offset, true);
+            size = calcMipLevelByteSize
+            // const w = (width >>> i) / 4;
+            // const h = (height >>> i) / 4;
+            // let size = Math.floor(w * h * 8);
+            // if (size < 8)
+            // {
+            //     size = 8;
+            // }
+            let mipmap_buffer: Uint8Array = buffer.slice(start_offset, start_offset + size).createTypedArray(Uint8Array);
+
             mipmap_buffers.push(mipmap_buffer);
             mipmap_array_entry_offset += 0x8;
         }
-        // get last mipmap manually
-        const total_texture_size = view.getUint32(texture_info_offset + 0x50, true);
-        const start = view.getUint32(mipmap_offset_array_offset + (mipmap_count - 1) * 0x8, true);
-        const end = view.getUint32(mipmap_offset_array_offset, true) + total_texture_size;
-        const mipmap_buffer = buffer.slice(start, end);
-        mipmap_buffers.push(mipmap_buffer);
 
         texture_array.push({ name, format, width, height, depth, mipmap_buffers });
         texture_info_entry_offset += TEXTURE_INFO_ARRAY_ENTRY_SIZE;
@@ -61,27 +63,44 @@ export function parseBNTX(buffer: ArrayBufferSlice): BNTX
     return { textures: texture_array };
 }
 
+// Convert the format numbers used by BNTX textures into a format number that noclip.website understands
+// format: BNTX image format number to convert
 function convert_image_format(format: ImageFormat): GfxFormat
 {
     switch (format)
     {
         case ImageFormat.Bc1_Unorm:
-        case ImageFormat.Bc2_Unorm:
-        case ImageFormat.Bc3_Unorm:
-        case ImageFormat.Bc4_Unorm:
-        case ImageFormat.Bc5_Unorm:
-        case ImageFormat.R8_Unorm:
-        case ImageFormat.R8_G8_B8_A8_Unorm:
-            return GfxFormat.U8_RGBA_NORM;
+            return GfxFormat.BC1;
 
+        case ImageFormat.Bc2_Unorm:
+            return GfxFormat.BC2;
+
+        case ImageFormat.Bc3_Unorm:
+            return GfxFormat.BC3;
+
+        case ImageFormat.Bc4_Unorm:
+            return GfxFormat.BC4_UNORM;
+
+        case ImageFormat.Bc5_Unorm:
+            return GfxFormat.BC5_UNORM;
+
+        // case ImageFormat.R8_Unorm:
+        // case ImageFormat.R8_G8_B8_A8_Unorm:
+            
         case ImageFormat.Bc1_UnormSrgb:
+            return GfxFormat.BC1_SRGB;
+
         case ImageFormat.Bc2_UnormSrgb:
+            return GfxFormat.BC2_SRGB;
+
         case ImageFormat.Bc3_UnormSrgb:
-            return GfxFormat.U8_RGBA_SRGB;
+            return GfxFormat.BC3_SRGB;
 
         case ImageFormat.Bc4_Snorm:
+            return GfxFormat.BC4_SNORM;
+
         case ImageFormat.Bc5_Snorm:
-            return GfxFormat.S8_RGBA_NORM;
+            return GfxFormat.BC5_SNORM;
         
         default:
             console.error(`image format ${format} not found`);
@@ -101,7 +120,7 @@ export interface Texture
     width: number;
     height: number;
     depth: number;
-    mipmap_buffers: ArrayBufferSlice[]; // where the actual texture data is
+    mipmap_buffers: Uint8Array[]; // where the actual texture data is
 }
 
 export enum ImageFormat
