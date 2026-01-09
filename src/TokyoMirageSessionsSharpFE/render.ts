@@ -58,7 +58,7 @@ export class TMSFEScene implements SceneGfx
             const bntx = parseBNTX(fres.embedded_files[0].buffer);
             const texture = bntx.textures[0];
             console.log(texture);
-            const texture_descriptor = makeTextureDescriptor2D(GfxFormat.BC1_SRGB, texture.width, texture.height, texture.mipmap_buffers.length);
+            const texture_descriptor = makeTextureDescriptor2D(texture.format, texture.width, texture.height, texture.mipmap_buffers.length);
             const gfx_texture = device.createTexture(texture_descriptor);
             device.uploadTextureData(gfx_texture, 0, texture.mipmap_buffers);
         }

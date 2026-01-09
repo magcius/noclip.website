@@ -34,23 +34,20 @@ export function parseBNTX(buffer: ArrayBufferSlice): BNTX
         const depth = view.getUint32(texture_info_offset + 0x2C, true);
         const original_format = view.getUint32(texture_info_offset + 0x1C, true);
         const format = convert_image_format(original_format);
+        const total_texture_size = view.getUint32(texture_info_offset + 0x50, true);
+
         const mipmap_count = view.getUint16(texture_info_offset + 0x16, true);
         const mipmap_offset_array_offset = view.getUint32(texture_info_offset + 0x70, true);
         const mipmap_buffers: Uint8Array[] = [];
         let mipmap_array_entry_offset = mipmap_offset_array_offset;
-        for(let i = 0; i < mipmap_count; i++)
+        console.log(name);
+        for(let i = 0; i < mipmap_count - 1; i++)
         {
-            // TODO: this might be a different calculation for different texture formats
             const start_offset = view.getUint32(mipmap_array_entry_offset, true);
-            size = calcMipLevelByteSize
-            // const w = (width >>> i) / 4;
-            // const h = (height >>> i) / 4;
-            // let size = Math.floor(w * h * 8);
-            // if (size < 8)
-            // {
-            //     size = 8;
-            // }
-            let mipmap_buffer: Uint8Array = buffer.slice(start_offset, start_offset + size).createTypedArray(Uint8Array);
+            const mip_width = width >>> i;
+            const mip_height = height >>> i;
+            const size = calcMipLevelByteSize(format, mip_width, mip_height);
+            let mipmap_buffer: Uint8Array = buffer.subarray(start_offset, size).createTypedArray(Uint8Array);
 
             mipmap_buffers.push(mipmap_buffer);
             mipmap_array_entry_offset += 0x8;
@@ -116,7 +113,7 @@ export interface BNTX
 export interface Texture
 {
     name: string;
-    format: ImageFormat;
+    format: GfxFormat;
     width: number;
     height: number;
     depth: number;
