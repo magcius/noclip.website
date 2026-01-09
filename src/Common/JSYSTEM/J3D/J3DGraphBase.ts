@@ -14,7 +14,7 @@ import { GfxDevice, GfxSampler, GfxTexture, GfxChannelWriteMask, GfxFormat, GfxI
 import { GfxCoalescedBuffersCombo, GfxBufferCoalescerCombo } from '../../../gfx/helpers/BufferHelpers.js';
 import { GfxRenderInst, GfxRenderInstManager, setSortKeyDepth, GfxRendererLayer, setSortKeyBias, setSortKeyLayer } from '../../../gfx/render/GfxRenderInstManager.js';
 import { colorCopy, Color, colorClamp, colorClampLDR, White } from '../../../Color.js';
-import { texEnvMtx, computeModelMatrixS, calcBillboardMatrix, CalcBillboardFlags, computeMatrixWithoutTranslation } from '../../../MathHelpers.js';
+import { computeModelMatrixS, calcBillboardMatrix, CalcBillboardFlags, computeMatrixWithoutTranslation } from '../../../MathHelpers.js';
 import { calcMipChain } from '../../../gx/gx_texture.js';
 import { GfxRenderCache } from '../../../gfx/render/GfxRenderCache.js';
 import { translateSampler } from '../JUTTexture.js';
@@ -249,33 +249,32 @@ function J3DGetTextureMtx(dst: mat4, srt: ReadonlyMat4): void {
 const flipYMatrix = mat4.create();
 function mtxFlipY(dst: mat4, flipY: boolean): void {
     if (flipY) {
-        texEnvMtx(flipYMatrix, 1, 1, 0, 1);
+        mat4.set(flipYMatrix,
+            1, 0, 0, 0,
+            0, -1, 0, 0,
+            0, 0, 1, 0,
+            0, 1, 0, 1,
+        );
         mat4.mul(dst, flipYMatrix, dst);
     }
 }
 
 function buildEnvMtxOld(dst: mat4, flipYScale: number): void {
-    // Map from -1...1 range to 0...1 range.
-    texEnvMtx(dst, 0.5, 0.5 * flipYScale, 0.5, 0.5);
-    // texEnvMtx puts translation in fourth column, which is where we want it.
-    // We just need to punt the Z identity outta here.
-    dst[10] = 1.0;
-    dst[14] = 0.0;
+    mat4.set(dst,
+        0.5, 0.0, 0.0, 0.0,
+        0.0, -0.5 * flipYScale, 0.0, 0.0,
+        0.0, 0.0, 1.0, 0.0,
+        0.5, 0.5, 0.0, 0.0,
+    );
 }
 
 export function buildEnvMtx(dst: mat4, flipYScale: number): void {
-    // Map from -1...1 range to 0...1 range.
-    texEnvMtx(dst, 0.5, 0.5 * flipYScale, 0.5, 0.5);
-    // texEnvMtx puts translation in fourth column, so we need to swap.
-    const tx = dst[12];
-    dst[12] = dst[8];
-    dst[8] = tx;
-    const ty = dst[13];
-    dst[13] = dst[9];
-    dst[9] = ty;
-    const tz = dst[14];
-    dst[14] = dst[10];
-    dst[10] = tz;
+    mat4.set(dst,
+        0.5, 0.0, 0.0, 0.0,
+        0.0, -0.5 * flipYScale, 0.0, 0.0,
+        0.5, 0.5, 1.0, 0.0,
+        0.0, 0.0, 0.0, 0.0,
+    );
 }
 
 interface ColorCalc {
