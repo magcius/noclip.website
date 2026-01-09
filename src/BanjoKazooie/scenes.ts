@@ -36,7 +36,7 @@ class BKRenderer implements Viewer.SceneGfx {
     public renderInstListSky = new GfxRenderInstList();
     public renderInstListMain = new GfxRenderInstList();
 
-    constructor(device: GfxDevice, public textureHolder: TextureHolder<any>, public objectData: ObjectData) {
+    constructor(device: GfxDevice, public textureHolder: TextureHolder, public objectData: ObjectData) {
         this.renderHelper = new GfxRenderHelper(device);
         this.sceneEmitters = new SceneEmitterHolder(device, objectData);
     }

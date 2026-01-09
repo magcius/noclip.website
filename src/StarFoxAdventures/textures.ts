@@ -3,7 +3,7 @@ import { hexzero } from '../util.js';
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import * as GX_Texture from '../gx/gx_texture.js';
 import * as GX from '../gx/gx_enum.js';
-import { loadTextureFromMipChain, translateWrapModeGfx, translateTexFilterGfx } from '../gx/gx_render.js';
+import { loadTextureFromMipChain, translateWrapModeGfx, translateTexFilterGfx, GXTextureMapping, GXViewerTexture } from '../gx/gx_render.js';
 import { GfxDevice, GfxMipFilterMode, GfxTexture, GfxSampler, GfxFormat, makeTextureDescriptor2D, GfxWrapMode, GfxTexFilterMode } from '../gfx/platform/GfxPlatform.js';
 import { DataFetcher } from '../DataFetcher.js';
 import * as UI from '../ui.js';
@@ -11,12 +11,10 @@ import * as UI from '../ui.js';
 import { GameInfo } from './scenes.js';
 import { loadRes } from './resource.js';
 import { readUint32 } from './util.js';
-import * as Viewer from '../viewer.js';
-import { TextureMapping } from '../TextureHolder.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 
 export class SFATexture {
-    public viewerTexture?: Viewer.Texture;
+    public viewerTexture?: GXViewerTexture;
 
     constructor(public gfxTexture: GfxTexture, public gfxSampler: GfxSampler, public width: number, public height: number) {
     }
@@ -41,7 +39,7 @@ export class SFATexture {
         device.destroyTexture(this.gfxTexture);
     }
 
-    public setOnTextureMapping(mapping: TextureMapping) {
+    public setOnTextureMapping(mapping: GXTextureMapping) {
         mapping.reset();
         mapping.gfxTexture = this.gfxTexture;
         mapping.gfxSampler = this.gfxSampler;
@@ -323,15 +321,28 @@ class SubdirTextureFiles {
     }
 }
 
+class TextureListHolder implements UI.TextureListHolder {
+    public viewerTextures: GXViewerTexture[] = [];
+    public onnewtextures: (() => void) | null = null;
+
+    public get textureNames(): string[] {
+        return this.viewerTextures.map((texture) => texture.name);
+    }
+
+    public async getViewerTexture(i: number) {
+        const tex = this.viewerTextures[i];
+        if (tex.surfaces.length === 0)
+            await tex.activate();
+        return tex;
+    }
+}
+
 export class SFATextureFetcher extends TextureFetcher {
     private textableBin: DataView;
     private texpre: TextureFile | null;
     private subdirTextureFiles: {[subdir: string]: SubdirTextureFiles} = {};
     private fakes: FakeTextureFetcher = new FakeTextureFetcher();
-    public textureHolder: UI.TextureListHolder = {
-        viewerTextures: [],
-        onnewtextures: null,
-    };
+    public textureHolder = new TextureListHolder();
 
     private constructor(private gameInfo: GameInfo, private isBeta: boolean) {
         super();

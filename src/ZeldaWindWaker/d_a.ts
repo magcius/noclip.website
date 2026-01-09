@@ -6,10 +6,9 @@ import { J3DModelData, J3DModelInstance, buildEnvMtx } from "../Common/JSYSTEM/J
 import { JointTransformInfo, LoopMode, TRK1, TTK1 } from "../Common/JSYSTEM/J3D/J3DLoader.js";
 import { JPABaseEmitter, JPASetRMtxSTVecFromMtx } from "../Common/JSYSTEM/JPA.js";
 import { BTIData } from "../Common/JSYSTEM/JUTTexture.js";
-import { Vec3One, Vec3UnitY, Vec3UnitZ, Vec3Zero, clamp, computeMatrixWithoutTranslation, computeModelMatrixR, computeModelMatrixS, lerp, saturate, scaleMatrix, transformVec3Mat4w0, transformVec3Mat4w1 } from "../MathHelpers.js";
+import { Vec3One, Vec3UnitY, Vec3UnitZ, Vec3Zero, clamp, computeMatrixWithoutTranslation, computeModelMatrixR, computeModelMatrixS, getMatrixTranslation, lerp, saturate, scaleMatrix, transformVec3Mat4w0, transformVec3Mat4w1 } from "../MathHelpers.js";
 import { GlobalSaveManager } from "../SaveManager.js";
 import { TDDraw, TSDraw } from "../SuperMarioGalaxy/DDraw.js";
-import { TextureMapping } from "../TextureHolder.js";
 import { Endianness } from "../endian.js";
 import { compareDepthValues } from "../gfx/helpers/ReversedDepthHelpers.js";
 import { GfxClipSpaceNearZ, GfxCompareMode, GfxDevice } from "../gfx/platform/GfxPlatform.js";
@@ -18,7 +17,7 @@ import { GfxRenderInst, GfxRenderInstManager, GfxRendererLayer } from "../gfx/re
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder.js";
 import * as GX from '../gx/gx_enum.js';
 import { TevDefaultSwapTables } from "../gx/gx_material.js";
-import { ColorKind, DrawParams, GXMaterialHelperGfx, MaterialParams } from "../gx/gx_render.js";
+import { ColorKind, DrawParams, GXMaterialHelperGfx, GXTextureMapping, MaterialParams } from "../gx/gx_render.js";
 import { arrayRemove, assert, assertExists, nArray } from "../util.js";
 import { ViewerRenderInput } from "../viewer.js";
 import { dGlobals } from "./Main.js";
@@ -27,7 +26,7 @@ import { dLib_getWaterY, dLib_waveInit, dLib_waveRot, dLib_wave_c, d_a_sea } fro
 import { cBgW_Flags, dBgS_GndChk, dBgW } from "./d_bg.js";
 import { EDemoActorFlags, dDemo_setDemoData } from "./d_demo.js";
 import { PeekZResult } from "./d_dlst_peekZ.js";
-import { dDlst_alphaModel__Type } from "./d_drawlist.js";
+import { dComIfGd_addRealShadow, dComIfGd_setShadow, dDlst_alphaModel__Type } from "./d_drawlist.js";
 import { LIGHT_INFLUENCE, LightType, WAVE_INFO, dKy_change_colpat, dKy_checkEventNightStop, dKy_plight_cut, dKy_plight_set, dKy_setLight__OnMaterialParams, dKy_setLight__OnModelInstance, dKy_tevstr_c, dKy_tevstr_init, setLightTevColorType, settingTevStruct } from "./d_kankyo.js";
 import { ThunderMode, dKyr_get_vectle_calc, dKyw_get_AllWind_vecpow, dKyw_get_wind_pow, dKyw_get_wind_vec, dKyw_get_wind_vecpow, dKyw_rain_set, loadRawTexture } from "./d_kankyo_wether.js";
 import { dPa_splashEcallBack, dPa_trackEcallBack, dPa_waveEcallBack, ParticleGroup } from "./d_particle.js";
@@ -260,7 +259,7 @@ class d_a_ep extends fopAc_ac_c {
         if (this.type === 0 || this.type === 3) {
             settingTevStruct(globals, LightType.BG0, this.pos, this.tevStr);
             setLightTevColorType(globals, this.model, this.tevStr, globals.camera);
-            mDoExt_modelUpdateDL(globals, this.model, renderInstManager);
+            mDoExt_modelUpdateDL(globals, this.model, renderInstManager, globals.dlst.bg);
 
             // TODO(jstpierre): ga
         }
@@ -531,7 +530,7 @@ class d_a_bg extends fopAc_ac_c {
             settingTevStruct(globals, LightType.BG0 + i, null, this.bgTevStr[i]!);
             setLightTevColorType(globals, this.bgModel[i]!, this.bgTevStr[i]!, globals.camera);
             // this is actually mDoExt_modelEntryDL
-            mDoExt_modelUpdateDL(globals, this.bgModel[i]!, renderInstManager);
+            mDoExt_modelUpdateDL(globals, this.bgModel[i]!, renderInstManager, globals.dlst.bg);
         }
 
         const roomNo = this.parameters;
@@ -1279,7 +1278,7 @@ class d_a_obj_zouK extends fopAc_ac_c {
         setLightTevColorType(globals, this.model, this.tevStr, globals.camera);
         this.setEffectMtx(globals, this.pos, 0.5);
         this.bckAnm.entry(this.model);
-        mDoExt_modelUpdateDL(globals, this.model, renderInstManager);
+        mDoExt_modelUpdateDL(globals, this.model, renderInstManager, globals.dlst.bg);
     }
 }
 
@@ -2984,6 +2983,8 @@ class d_a_kamome extends fopAc_ac_c {
     private morf: mDoExt_McaMorf;
     private noDraw: boolean = false;
     private origPos = vec3.create();
+    private gndChk = new dBgS_GndChk();
+    private shadowId: number = 0;
 
     private animState: number = 0;
     private moveState: number = 0;
@@ -3206,12 +3207,14 @@ class d_a_kamome extends fopAc_ac_c {
         settingTevStruct(globals, LightType.Actor, this.pos, this.tevStr);
         setLightTevColorType(globals, this.morf.model, this.tevStr, globals.camera);
         this.morf.entryDL(globals, renderInstManager);
+        
+        const casterCenter = vec3.scaleAndAdd(this.gndChk.pos, this.pos, Vec3UnitY, 10.0);
+        const groundY = globals.scnPlay.bgS.GroundCross(this.gndChk); // TODO: This should return non-inf when over the sea, a la ObjAcch
+        this.shadowId = dComIfGd_setShadow(globals, this.shadowId, true, this.morf.model, casterCenter, 500, 20, casterCenter[1], groundY, this.gndChk.polyInfo, this.tevStr); 
 
         // drawWorldSpaceLine(getDebugOverlayCanvas2D(), globals.camera.clipFromWorldMatrix, this.pos, this.targetPos, Green, 2);
         // drawWorldSpacePoint(getDebugOverlayCanvas2D(), globals.camera.clipFromWorldMatrix, this.pos, Magenta, 8);
         // drawWorldSpacePoint(getDebugOverlayCanvas2D(), globals.camera.clipFromWorldMatrix, this.targetPos, Yellow, 6);
-
-        // shadow
     }
 
     private nodeCallBack = (dst: mat4, modelData: J3DModelData, i: number) => {
@@ -3464,7 +3467,7 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
             // update bck
         }
 
-        mDoExt_modelUpdateDL(globals, this.model, renderInstManager);
+        mDoExt_modelUpdateDL(globals, this.model, renderInstManager, globals.dlst.bg);
 
         if (this.isSv()) {
             // rope, rope end
@@ -4793,6 +4796,9 @@ class d_a_npc_ls1 extends fopNpc_npc_c {
     private btkFrame: number;
     private btpFrame: number;
 
+    private shadowId: number = 0;
+    private gndChk = new dBgS_GndChk();
+
     private static bckIdxTable = [5, 6, 7, 8, 9, 10, 11, 2, 4, 3, 1, 1, 1, 0]
     private static animParamsTable: anm_prm_c[] = [
         { anmIdx: 0xFF, nextPrmIdx: 0xFF, morf: 0.0, playSpeed: 0.0, loopMode: 0xFFFFFFFF, },
@@ -4844,7 +4850,7 @@ class d_a_npc_ls1 extends fopNpc_npc_c {
             mDoExt_modelEntryDL(globals, this.itemModel, renderInstManager);
         }
 
-        this.drawShadow();
+        this.drawShadow(globals);
     }
 
     public override execute(globals: dGlobals, deltaTimeFrames: number): void {
@@ -4981,8 +4987,14 @@ class d_a_npc_ls1 extends fopNpc_npc_c {
         }
     }
 
-    private drawShadow() {
-        // TODO
+    private drawShadow( globals: dGlobals ) {
+        const casterCenter = vec3.scaleAndAdd(this.gndChk.pos, this.pos, Vec3UnitY, 150.0);
+        const groundY = globals.scnPlay.bgS.GroundCross(this.gndChk);
+        this.shadowId = dComIfGd_setShadow(globals, this.shadowId, true, this.morf.model, casterCenter, 800, 40, this.pos[1], groundY, this.gndChk.polyInfo, this.tevStr); 
+
+        if(this.itemModel) {
+            dComIfGd_addRealShadow(globals, this.shadowId, this.itemModel);
+        }
     }
 
     private demo(globals: dGlobals, deltaTimeFrames: number) {
@@ -5031,6 +5043,8 @@ class d_a_npc_zl1 extends fopNpc_npc_c {
 
     private btkAnim = new mDoExt_btkAnm();
     private btpAnim = new mDoExt_btpAnm();
+    private gndChk = new dBgS_GndChk();
+    private shadowId: number;
 
     public override subload(globals: dGlobals): cPhs__Status {
         let status = dComIfG_resLoad(globals, this.arcName);
@@ -5069,6 +5083,10 @@ class d_a_npc_zl1 extends fopNpc_npc_c {
         if (this.btkAnim.anm) this.btkAnim.entry(this.morf.model);
 
         this.morf.entryDL(globals, renderInstManager);
+        
+        const casterCenter = vec3.scaleAndAdd(this.gndChk.pos, this.pos, Vec3UnitY, 150.0);
+        const groundY = globals.scnPlay.bgS.GroundCross(this.gndChk);
+        this.shadowId = dComIfGd_setShadow(globals, this.shadowId, true, this.morf.model, casterCenter, 800, 40, this.pos[1], groundY, this.gndChk.polyInfo, this.tevStr); 
     }
 
     public override execute(globals: dGlobals, deltaTimeFrames: number): void {
@@ -5212,12 +5230,13 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
 
     private demoMode: number = LinkDemoMode.None;
     private demoClampToGround = true;
-    private gndChk = new dBgS_GndChk()
+    private gndChk = new dBgS_GndChk();
+    private shadowId: number;
 
     private isWearingCasualClothes = false;
-    private texMappingClothes: TextureMapping;
-    private texMappingCasualClothes: TextureMapping = new TextureMapping();
-    private texMappingHeroClothes: TextureMapping = new TextureMapping();
+    private texMappingClothes: GXTextureMapping;
+    private texMappingCasualClothes = new GXTextureMapping();
+    private texMappingHeroClothes = new GXTextureMapping();
 
     private anmDataTable: LkAnimData[] = [];
     private anmBck = new mDoExt_bckAnm(); // Joint animation
@@ -5359,6 +5378,49 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
 
         setLightTevColorType(globals, this.model, this.tevStr, globals.camera);
         mDoExt_modelEntryDL(globals, this.model, renderInstManager);
+
+        // if (mCurProc != daPyProc_DEMO_CAUGHT_e && !dComIfGp_checkPlayerStatus0(0, daPyStts0_SHIP_RIDE_e)) {
+        this.drawShadow(globals);
+    }
+
+    private drawShadow(globals: dGlobals) {
+        let shadowmapSize = 0;
+        if (globals.stageName === "M_DaiB" || globals.stageName === "Xboss2") {
+            shadowmapSize = 1400.0;
+        } else {
+            shadowmapSize = 800; // TODO: m_HIO->mBasic.m.field_0x10;
+        }
+
+        // TODO:
+        // if (checkNoResetFlg1(daPyFlg1_CASUAL_CLOTHES)) {
+        //     J3DMaterial* mtl = link_root_joint->getMesh();
+        //     // Hide material:
+        //     // * "ear(3)" (hat)
+        //     for (int i = 0; i < 4; i++) {
+        //         mtl = mtl->getNext();
+        //     }
+        //     mtl->getShape()->hide();
+        // }
+
+        const casterPos = scratchVec3a;
+        getMatrixTranslation(casterPos, this.model.shapeInstanceState.jointToWorldMatrixArray[0]);
+        this.shadowId = dComIfGd_setShadow(globals, this.shadowId, false, this.model, casterPos, shadowmapSize, 30.0, this.pos[1],
+            this.gndChk.retY, this.gndChk.polyInfo, this.tevStr);
+
+        if (this.shadowId !== 0) {
+            // Add shadow for katsura (wig) if wearing casual clothes and not hiding shape
+            if (this.isWearingCasualClothes && this.modelKatsura && /* !checkCaughtShapeHide() */ true) {
+                dComIfGd_addRealShadow(globals, this.shadowId, this.modelKatsura);
+            }
+            // Add shadow for sword if equipped and not hidden by demo
+            if (this.equippedItem === LkEquipItem.Sword && this.equippedItemModel && /* !checkDemoSwordNoDraw(1) */ true) {
+                dComIfGd_addRealShadow(globals, this.shadowId, this.equippedItemModel);
+            }
+            // Add shadow for equipped item if not hidden by demo and not bow/guard
+            if (this.equippedItemModel && /* !checkDemoSwordNoDraw(0) */ true /* && (!checkBowItem(mEquipItem) || !checkPlayerGuard()) */) {
+                dComIfGd_addRealShadow(globals, this.shadowId, this.equippedItemModel);
+            }
+        }
     }
 
     private playerInit(globals: dGlobals) {
@@ -5937,7 +5999,6 @@ class d_a_title extends fopAc_ac_c {
     }
 
     private model_draw(globals: dGlobals, renderInstManager: GfxRenderInstManager) {
-
         if (this.btkSubtitle.frameCtrl.getFrame() != 0.0) {
             this.btkShimmer.entry(this.modelSubtitleShimmer)
             mDoExt_modelUpdateDL(globals, this.modelSubtitleShimmer, renderInstManager, globals.dlst.ui);
@@ -6081,6 +6142,11 @@ class d_a_title extends fopAc_ac_c {
             this.shipOffsetX = (this.shipFrameCounter * this.shipFrameCounter) * 0.1;
             this.bpkShip.frameCtrl.setFrame(100.0 - (this.shipFrameCounter * 2));
         }
+    }
+
+    public override delete(globals: dGlobals): void {
+        super.delete(globals);
+        this.screen.destroy(globals.modelCache.device);
     }
 }
 
@@ -6471,7 +6537,7 @@ class d_a_bridge extends fopAc_ac_c {
 
         for (let plank of this.planks) {
             setLightTevColorType(globals, plank.model, this.tevStr, globals.camera);
-            mDoExt_modelUpdateDL(globals, plank.model, renderInstManager);
+            mDoExt_modelUpdateDL(globals, plank.model, renderInstManager, globals.dlst.bg);
 
             if (plank.flags & 4) {
                 if (this.flags & BridgeFlags.IsMetal) {
@@ -6588,3 +6654,4 @@ export function d_a__RegisterConstructors(globals: fGlobals): void {
     R(d_a_title);
     R(d_a_bridge);
 }
+

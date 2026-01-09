@@ -600,7 +600,7 @@ export class KingdomHeartsRenderer implements Viewer.SceneGfx {
 
     private mapData: MapData;
 
-    constructor(device: GfxDevice, public textureHolder: TextureHolder<any>, bin: Bin.BIN) {
+    constructor(device: GfxDevice, public textureHolder: TextureHolder, bin: Bin.BIN) {
         this.renderHelper = new GfxRenderHelper(device);
 
         this.mapData = new MapData(device, this.renderHelper.renderCache, bin);

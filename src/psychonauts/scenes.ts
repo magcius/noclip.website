@@ -23,9 +23,12 @@ class PsychonautsSceneDesc implements Viewer.SceneDesc {
         const dataFetcher = context.dataFetcher;
         return Promise.all([this.fetchPPF('common', dataFetcher, false), this.fetchPPF(this.id, dataFetcher, true)]).then(([commonPPF, scenePPF]) => {
             const renderer = new PsychonautsRenderer(device);
+
             // TODO(jstpierre): Only translate the textures that are actually used.
-            renderer.textureHolder.addTextures(device, commonPPF.textures);
-            renderer.textureHolder.addTextures(device, scenePPF.textures);
+            for (let i = 0; i < commonPPF.textures.length; i++)
+                renderer.textureHolder.addTexture(device, commonPPF.textures[i]);
+            for (let i = 0; i < scenePPF.textures.length; i++)
+                renderer.textureHolder.addTexture(device, scenePPF.textures[i]);
 
             const sceneRenderer = new SceneRenderer(renderer.cache, renderer.textureHolder, assertExists(scenePPF.mainScene));
             renderer.sceneRenderers.push(sceneRenderer);

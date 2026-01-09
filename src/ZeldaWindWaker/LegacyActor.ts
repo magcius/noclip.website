@@ -11,7 +11,7 @@ import { JPABaseEmitter } from '../Common/JSYSTEM/JPA.js';
 import { AABB } from '../Geometry.js';
 import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
 import { GfxRenderInstManager, GfxRendererLayer } from '../gfx/render/GfxRenderInstManager.js';
-import { computeModelMatrixSRT, scaleMatrix } from '../MathHelpers.js';
+import { computeModelMatrixSRT, scaleMatrix, Vec3UnitY } from '../MathHelpers.js';
 import { assertExists, hexzero, leftPad } from '../util.js';
 import { dBgS_GndChk } from './d_bg.js';
 import { dDemo_setDemoData } from './d_demo.js';
@@ -20,9 +20,11 @@ import { dProcName_e } from './d_procname.js';
 import { ResAssetType, ResEntry, ResType } from './d_resorce.js';
 import { fopAcM_prm_class, fopAc_ac_c } from './f_op_actor.js';
 import { cPhs__Status, fGlobals, fpcPf__RegisterFallback } from './framework.js';
-import { mDoExt_McaMorf, mDoExt_modelEntryDL, mDoExt_modelUpdateDL } from './m_do_ext.js';
+import { mDoExt_McaMorf, mDoExt_modelUpdateDL } from './m_do_ext.js';
 import { MtxTrans, calc_mtx, mDoMtx_ZXYrotM } from './m_do_mtx.js';
-import { WindWakerRenderer, ZWWExtraTextures, dGlobals } from "./Main.js";
+import { WindWakerRenderer, dGlobals } from "./Main.js";
+import { dComIfGd_addRealShadow, dComIfGd_setShadow, dComIfGd_setSimpleShadow2 } from './d_drawlist.js';
+import { BTIData } from '../Common/JSYSTEM/JUTTexture.js';
 
 const scratchMat4a = mat4.create();
 const scratchVec3a = vec3.create();
@@ -47,6 +49,11 @@ const chk = new dBgS_GndChk();
 class d_a_noclip_legacy extends fopAc_ac_c {
     private phase = cPhs__Status.Started;
     public morf: mDoExt_McaMorf;
+    public shadowChk: dBgS_GndChk;
+    public shadowScaleXZ: number = 0;
+    public shadowTex?: BTIData | null;
+    public shadowRealSize: number = 0;
+    public shadowId: number = 0;
     public objectRenderers: BMDObjectRenderer[] = [];
     public isDemoActor = false;
 
@@ -101,9 +108,19 @@ class d_a_noclip_legacy extends fopAc_ac_c {
 
         const device = globals.modelCache.device;
 
-        renderInstManager.setCurrentList(globals.dlst.bg[0]);
+        renderInstManager.setCurrentList(globals.dlst.main[0]);
         for (let i = 0; i < this.objectRenderers.length; i++)
             this.objectRenderers[i].prepareToRender(globals, this.isDemoActor ? this.morf : null, device, renderInstManager, viewerInput);
+            
+        if (this.shadowChk) {
+            if (this.shadowRealSize > 0) {
+                this.shadowId = dComIfGd_setShadow(globals, this.shadowId, true, this.objectRenderers[0].modelInstance, this.shadowChk.pos, this.shadowRealSize,
+                    this.shadowScaleXZ, this.pos[1], this.shadowChk.retY, this.shadowChk.polyInfo, this.objectRenderers[0].tevstr, this.rot[1], 1.0, this.shadowTex);
+                this.objectRenderers[0].addShadows(globals, this.shadowId);
+            }
+            else
+                dComIfGd_setSimpleShadow2(globals, this.pos, this.shadowChk.retY, this.shadowScaleXZ, this.shadowChk.polyInfo, this.rot[1], 1.0, this.shadowTex);
+        }
     }
 
     public override delete(globals: dGlobals): void {
@@ -198,6 +215,19 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         dstMatrix[13] = y;
     }
 
+    function setShadowSimple(scaleXZ: number, scaleZ: number = 1.0, tex?: BTIData | null): void {
+        setShadow(0, 40, scaleXZ, scaleZ, tex);
+    }
+
+    function setShadow(realSize: number, centerYOffset: number, scaleXZ: number, scaleZ: number = 1.0, tex?: BTIData | null): void {
+        legacy.shadowChk = new dBgS_GndChk();
+        vec3.scaleAndAdd(legacy.shadowChk.pos, legacy.pos, Vec3UnitY, centerYOffset);
+        globals.scnPlay.bgS.GroundCross(legacy.shadowChk);
+        legacy.shadowScaleXZ = scaleXZ;
+        legacy.shadowTex = tex;
+        legacy.shadowRealSize = realSize;
+    }
+
     function parseBCK(rarc: RARC.JKRArchive, path: string) {
         const resInfo = assertExists(resCtrl.findResInfoByArchive(rarc, resCtrl.resObj));
         const g = resInfo.lazyLoadResource(ResType.Bck, assertExists(resInfo.res.find((res) => path.endsWith(res.file.name))));
@@ -259,48 +289,75 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     else if (actorName === 'item') {
         // Item table provided with the help of the incredible LagoLunatic <3.
         const itemId = (actor.parameters & 0x000000FF);
+        let shadowSize = 15.0;
 
         // Heart
-        if (itemId === 0x00) fetchArchive(`Always`).then((rarc) => buildModel(rarc, `bdl/vhrtl.bdl`));
+        if (itemId === 0x00) fetchArchive(`Always`).then((rarc) => {
+            buildModel(rarc, `bdl/vhrtl.bdl`)
+            shadowSize = 15.0;
+        });
         // Rupee (Green)
         else if (itemId === 0x01) fetchArchive(`Always`).then((rarc) => {
             const m = buildModel(rarc, `bdlm/vlupl.bdl`);
             m.bindTRK1(parseBRK(rarc, `brk/vlupl.brk`), animFrame(0));
             m.bindTTK1(parseBTK(rarc, `btk/vlupl.btk`));
+            shadowSize = 25.0;
         });
         // Rupee (Blue)
         else if (itemId === 0x02) fetchArchive(`Always`).then((rarc) => {
             const m = buildModel(rarc, `bdlm/vlupl.bdl`);
             m.bindTRK1(parseBRK(rarc, `brk/vlupl.brk`), animFrame(1));
             m.bindTTK1(parseBTK(rarc, `btk/vlupl.btk`));
+            shadowSize = 25.0;
         });
         // Rupee (Yellow)
         else if (itemId === 0x03) fetchArchive(`Always`).then((rarc) => {
             const m = buildModel(rarc, `bdlm/vlupl.bdl`);
             m.bindTRK1(parseBRK(rarc, `brk/vlupl.brk`), animFrame(2));
             m.bindTTK1(parseBTK(rarc, `btk/vlupl.btk`));
+            shadowSize = 25.0;
         });
         // Rupee (Red)
         else if (itemId === 0x04) fetchArchive(`Always`).then((rarc) => {
             const m = buildModel(rarc, `bdlm/vlupl.bdl`);
             m.bindTRK1(parseBRK(rarc, `brk/vlupl.brk`), animFrame(3));
             m.bindTTK1(parseBTK(rarc, `btk/vlupl.btk`));
+            shadowSize = 25.0;
         });
         // Rupee (Purple)
         else if (itemId === 0x05) fetchArchive(`Always`).then((rarc) => {
             const m = buildModel(rarc, `bdlm/vlupl.bdl`);
             m.bindTRK1(parseBRK(rarc, `brk/vlupl.brk`), animFrame(4));
             m.bindTTK1(parseBTK(rarc, `btk/vlupl.btk`));
+            shadowSize = 25.0;
         });
         // Small magic jar
-        else if (itemId === 0x09) fetchArchive(`Always`).then((rarc) => buildModel(rarc, `bdlm/mpoda.bdl`));
+        else if (itemId === 0x09) fetchArchive(`Always`).then((rarc) => {
+            buildModel(rarc, `bdlm/mpoda.bdl`)
+            shadowSize = 20.0;
+        });
         // Large magic jar
-        else if (itemId === 0x0A) fetchArchive(`Always`).then((rarc) => buildModel(rarc, `bdlm/mpodb.bdl`));
+        else if (itemId === 0x0A) fetchArchive(`Always`).then((rarc) => {
+            buildModel(rarc, `bdlm/mpodb.bdl`)
+            shadowSize = 25.0;
+        });
         // Small key
-        else if (itemId === 0x15) fetchArchive(`Always`).then((rarc) => buildModel(rarc, `bdl/vkeyl.bdl`));
+        else if (itemId === 0x15) fetchArchive(`Always`).then((rarc) => {
+            buildModel(rarc, `bdl/vkeyl.bdl`)
+            shadowSize = 20.0;
+        });
         // Joy pendant
-        else if (itemId === 0x1F) fetchArchive(`Always`).then((rarc) => buildModel(rarc, `bdl/vhapl.bdl`));
+        else if (itemId === 0x1F) fetchArchive(`Always`).then((rarc) => {
+            buildModel(rarc, `bdl/vhapl.bdl`)
+            shadowSize = 25.0;
+        });
         else console.warn(`Unknown item: ${hexzero(itemId, 2)}`);
+
+        if (!(itemId & 0x10)) {
+            setShadowSimple( shadowSize * legacy.scale[0] );
+        } else {
+            // TODO: setShadowReal( ... )
+        }
     }
     // Heart Container
     else if (actorName === 'Bitem') fetchArchive(`Always`).then((rarc) => buildModel(rarc, `bdlm/vhutl.bdl`).bindTTK1(parseBTK(rarc, `btk/vhutl.btk`)));
@@ -321,6 +378,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     else if (actorName === 'Bs1') fetchArchive(`Bs`).then((rarc) => {
         const m = buildModel(rarc, `bdlm/bs.bdl`);
         m.bindANK1(parseBCK(rarc, `bcks/bs_wait01.bck`));
+        setShadow(800, 150, 20);
     });
     // Beedle (this time with helmet)
     else if (actorName === 'Bs2') fetchArchive(`Bs`).then((rarc) => {
@@ -329,7 +387,10 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         m.bindANK1(parseBCK(rarc, `bcks/bs_wait01.bck`));
     });
     // Tingle
-    else if (actorName === 'Tc') fetchArchive(`Tc`).then((rarc) => buildModel(rarc, `bdlm/tc.bdl`).bindANK1(parseBCK(rarc, `bcks/wait01.bck`)));
+    else if (actorName === 'Tc') fetchArchive(`Tc`).then((rarc) => {
+        buildModel(rarc, `bdlm/tc.bdl`).bindANK1(parseBCK(rarc, `bcks/wait01.bck`));
+        setShadow(800, 150, 20);
+    });
     // Grandma
     else if (actorName === 'Ba1') {
         // Only allow the sleeping grandma through, because how else can you live in life...
@@ -339,11 +400,18 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
                 m.bindANK1(parseBCK(rarc, `bcks/wait02.bck`));
             });
         }
+        setShadow(800, 150, 40);
     }
     // Salvatore
-    else if (actorName === 'Kg1' || actorName === 'Kg2') fetchArchive(`Kg`).then((rarc) => buildModel(rarc, `bdlm/kg.bdl`).bindANK1(parseBCK(rarc, `bcks/kg_wait01.bck`)));
+    else if (actorName === 'Kg1' || actorName === 'Kg2') fetchArchive(`Kg`).then((rarc) => {
+        buildModel(rarc, `bdlm/kg.bdl`).bindANK1(parseBCK(rarc, `bcks/kg_wait01.bck`))
+        setShadow(800, 150, 20);
+    });
     // Orca
-    else if (actorName === 'Ji1') fetchArchive(`Ji`).then((rarc) => buildModel(rarc, `bdlm/ji.bdl`).bindANK1(parseBCK(rarc, `bck/ji_wait01.bck`)));
+    else if (actorName === 'Ji1') fetchArchive(`Ji`).then((rarc) => {
+        buildModel(rarc, `bdlm/ji.bdl`).bindANK1(parseBCK(rarc, `bck/ji_wait01.bck`));
+        setShadow(800, 150, 40);
+    });
     // Medli
     else if (actorName === 'Md1') {
         fetchArchive(`Md`).then(rarc => {
@@ -357,16 +425,21 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
             armR.bindANK1(parseBCK(rarc, `bcks/mdarm_wait01.bck`));
             armR.modelInstance.setShapeVisible(0, false);
             armR.setParentJoint(m, `armR`);
+            setShadow(800, 150, 20);
         });
     }
     // Makar
     else if (actorName === 'Cb1') fetchArchive(`Cb`).then((rarc) => {
         const m = buildModel(rarc, `bdl/cb.bdl`);
         buildChildModel(rarc, `bdl/cb_face.bdl`).setParentJoint(m, `backbone`);
-        m.bindANK1(parseBCK(rarc, `bcks/wait01.bck`))
+        m.bindANK1(parseBCK(rarc, `bcks/wait01.bck`));
+        setShadow(600, 80, 20);
     });
     // The King of Hyrule
-    else if (actorName === 'Hi1') fetchArchive(`Hi`).then((rarc) => buildModel(rarc, `bdlm/hi.bdl`).bindANK1(parseBCK(rarc, `bcks/hi_wait01.bck`)));
+    else if (actorName === 'Hi1') fetchArchive(`Hi`).then((rarc) => {
+        buildModel(rarc, `bdlm/hi.bdl`).bindANK1(parseBCK(rarc, `bcks/hi_wait01.bck`));
+        setShadow(800, 150, 40);
+    });
     // Princess Zelda
     else if (actorName === 'p_zelda') fetchArchive(`Pz`).then((rarc) => {
         const m = buildModel(rarc, `bdlm/pz.bdl`);
@@ -379,11 +452,15 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         m.setMaterialColorWriteEnabled("m_pz_mayuRdamA", false);
         m.setMaterialColorWriteEnabled("m_pz_mayuRdamB", false);
         m.bindANK1(parseBCK(rarc, `bcks/wait01.bck`));
+        setShadow(250, 100, 40);
     });
     // The Great Deku Tree
     else if (actorName === 'De1') fetchArchive(`De`).then((rarc) => buildModel(rarc, `bdl/de.bdl`).bindANK1(parseBCK(rarc, `bcks/wait01.bck`)));
-    // Prince Komali (Small Childe)
-    else if (actorName === 'Co1') fetchArchive(`Co`).then((rarc) => buildModel(rarc, `bdlm/co.bdl`).bindANK1(parseBCK(rarc, `bcks/co_wait00.bck`)));
+    // Prince Komali (Small Child)
+    else if (actorName === 'Co1') fetchArchive(`Co`).then((rarc) => {
+        buildModel(rarc, `bdlm/co.bdl`).bindANK1(parseBCK(rarc, `bcks/co_wait00.bck`));
+        setShadow(600, 80, 20);
+    });
     // Adult Komali
     else if (actorName === 'Ac1') fetchArchive(`Ac`).then((rarc) => {
         const m = buildModel(rarc, `bdlm/ac.bdl`);
@@ -394,20 +471,26 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         armR.setParentJoint(m, `armR`);
         armR.bindANK1(parseBCK(rarc, `bcks/acarm_wait01.bck`));
         m.bindANK1(parseBCK(rarc, `bcks/ac_wait01.bck`));
+        setShadow(800, 150, 40);
     });
     // Rito Chieftan
-    else if (actorName === 'Zk1') fetchArchive(`Zk`).then((rarc) => buildModel(rarc, `bdlm/zk.bdl`).bindANK1(parseBCK(rarc, `bcks/zk_wait01.bck`)));
+    else if (actorName === 'Zk1') fetchArchive(`Zk`).then((rarc) => {
+        buildModel(rarc, `bdlm/zk.bdl`).bindANK1(parseBCK(rarc, `bcks/zk_wait01.bck`));
+        setShadow(800, 150, 40);
+    });
     // Rose
     else if (actorName === 'Ob1') fetchArchive(`Ob`).then((rarc) => {
         const m = buildModel(rarc, `bdl/ob.bdl`);
         buildChildModel(rarc, `bdlm/oba_head.bdl`).setParentJoint(m, `head`);
         m.bindANK1(parseBCK(rarc, `bcks/wait.bck`));
+        setShadow(800, 150, 40);
     });
     // Mesa
     else if (actorName === 'Ym1') fetchArchive(`Ym`).then((rarc) => {
         const m = buildModel(rarc, `bdlm/ym.bdl`);
         buildChildModel(rarc, `bdlm/ymhead01.bdl`).setParentJoint(m, `head`);
         m.bindANK1(parseBCK(rarc, `bcks/wait01.bck`));
+        setShadow(800, 150, 40);
     });
     // Abe
     else if (actorName === 'Ym2') fetchArchive(`Ym`).then((rarc) => {
@@ -419,6 +502,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     else if (actorName === 'Aj1') fetchArchive(`Aj`).then((rarc) => {
         const m = buildModel(rarc, `bdlm/aj.bdl`);
         m.bindANK1(parseBCK(rarc, `bcks/wait01.bck`));
+        setShadow(800, 150, 40);
     });
     // Quill
     else if (actorName === 'Bm1') fetchArchive(`Bm`).then((rarc) => {
@@ -433,6 +517,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         armR.setParentJoint(m, `armR`);
         armR.bindANK1(parseBCK(rarc, `bcks/bmarm_wait01.bck`));
         m.bindANK1(parseBCK(rarc, `bcks/bm_wait01.bck`));
+        setShadow(800, 150, 40);
     });
     // (Unnamed Rito)
     else if (actorName === 'Bm2') fetchArchive(`Bm`).then((rarc) => {
@@ -447,6 +532,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         armR.setParentJoint(m, `armR`);
         armR.bindANK1(parseBCK(rarc, `bcks/bmarm_wait01.bck`));
         m.bindANK1(parseBCK(rarc, `bcks/bm_wait01.bck`));
+        setShadow(800, 150, 40);
     });
     // (Unnamed Rito)
     else if (actorName === 'Bm3') fetchArchive(`Bm`).then((rarc) => {
@@ -461,6 +547,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         armR.setParentJoint(m, `armR`);
         armR.bindANK1(parseBCK(rarc, `bcks/bmarm_wait01.bck`));
         m.bindANK1(parseBCK(rarc, `bcks/bm_wait01.bck`));
+        setShadow(800, 150, 40);
     });
     // (Unnamed Rito)
     else if (actorName === 'Bm4') fetchArchive(`Bm`).then((rarc) => {
@@ -475,6 +562,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         armR.setParentJoint(m, `armR`);
         armR.bindANK1(parseBCK(rarc, `bcks/bmarm_wait01.bck`));
         m.bindANK1(parseBCK(rarc, `bcks/bm_wait01.bck`));
+        setShadow(800, 150, 40);
     });
     // (Unnamed Rito)
     else if (actorName === 'Bm5') fetchArchive(`Bm`).then((rarc) => {
@@ -489,9 +577,13 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         armR.setParentJoint(m, `armR`);
         armR.bindANK1(parseBCK(rarc, `bcks/bmarm_wait01.bck`));
         m.bindANK1(parseBCK(rarc, `bcks/bm_wait01.bck`));
+        setShadow(800, 150, 40);
     });
     // Baito (Sorting Game)
-    else if (actorName === 'Btsw2') fetchArchive(`Btsw`).then((rarc) => buildModel(rarc, `bdlm/bn.bdl`).bindANK1(parseBCK(rarc, `bcks/bn_wait01.bck`)));
+    else if (actorName === 'Btsw2') fetchArchive(`Btsw`).then((rarc) => {
+        buildModel(rarc, `bdlm/bn.bdl`).bindANK1(parseBCK(rarc, `bcks/bn_wait01.bck`));
+        setShadow(800, 130, 20);
+    });
     // Koboli (Sorting Game)
     else if (actorName === 'Bmsw') fetchArchive(`Bmsw`).then((rarc) => {
         const m = buildModel(rarc, `bdlm/bm.bdl`);
@@ -501,8 +593,9 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         armL.bindANK1(parseBCK(rarc, `bcks/bmarm_wait01.bck`))
         const armR = buildChildModel(rarc, `bdlm/bmarm.bdl`);
         armR.setParentJoint(m, `armR`);
-        armR.bindANK1(parseBCK(rarc, `bcks/bmarm_wait01.bck`))
-        m.bindANK1(parseBCK(rarc, `bcks/bm_wait01.bck`))
+        armR.bindANK1(parseBCK(rarc, `bcks/bmarm_wait01.bck`));
+        m.bindANK1(parseBCK(rarc, `bcks/bm_wait01.bck`));
+        setShadow(800, 150, 20);
     });
     // Obli
     else if (actorName === 'Bmcon1') fetchArchive(`Bmcon1`).then((rarc) => {
@@ -515,6 +608,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         armR.setParentJoint(m, `armR`);
         armR.bindANK1(parseBCK(rarc, `bcks/bmarm_wait01.bck`))
         m.bindANK1(parseBCK(rarc, `bcks/bm_wait01.bck`));
+        setShadow(800, 150, 20);
     });
     // Obli
     else if (actorName === 'Bmcon2') fetchArchive(`Bmcon1`).then((rarc) => {
@@ -527,246 +621,312 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         armR.setParentJoint(m, `armR`);
         armR.bindANK1(parseBCK(rarc, `bcks/bmarm_wait01.bck`))
         m.bindANK1(parseBCK(rarc, `bcks/bm_wait01.bck`));
+        setShadow(800, 150, 20);
     });
     // Zill
     else if (actorName === 'Ko1') fetchArchive(`Ko`).then((rarc) => {
         const m = buildModel(rarc, `bdlm/ko.bdl`);
         buildChildModel(rarc, `bdlm/kohead01.bdl`).setParentJoint(m, `head`);
         m.bindANK1(parseBCK(rarc, `bcks/ko_wait01.bck`));
+        setShadow(800.0, 150, 40.0, 1.0);
     });
     // Joel
     else if (actorName === 'Ko2') fetchArchive(`Ko`).then((rarc) => {
         const m = buildModelBMT(rarc, `bdlm/ko.bdl`, `bmt/ko02.bmt`);
         buildChildModel(rarc, `bdlm/kohead02.bdl`).setParentJoint(m, `head`);
         m.bindANK1(parseBCK(rarc, `bcks/ko_wait01.bck`));
+        setShadow(800.0, 150, 40.0, 1.0);
     });
     // Sue-Belle
     else if (actorName === 'Yw1') fetchArchive(`Yw`).then((rarc) => {
         const m = buildModel(rarc, `bdl/yw.bdl`);
         buildChildModel(rarc, `bdlm/ywhead01.bdl`).setParentJoint(m, `head`);
         m.bindANK1(parseBCK(rarc, `bcks/wait01.bck`));
+        setShadow(800.0, 150, 40.0);
     });
     // Gonzo
     else if (actorName === 'P1a') fetchArchive(`P1`).then((rarc) => {
         const m = buildModel(rarc, `bdl/p1.bdl`);
         buildChildModel(rarc, `bdlm/p1a_head.bdl`).setParentJoint(m, `head`);
         m.bindANK1(parseBCK(rarc, `bcks/wait.bck`));
+        setShadow(800, 130, 20);
     });
     // Senza
     else if (actorName === 'P1b') fetchArchive(`P1`).then((rarc) => {
         const m = buildModelBMT(rarc, `bdl/p1.bdl`, `bmt/p1b_body.bmt`);
         buildChildModel(rarc, `bdlm/p1b_head.bdl`).setParentJoint(m, `head`);
         m.bindANK1(parseBCK(rarc, `bcks/wait.bck`));
+        setShadow(800, 130, 20);
     });
     // Nudge
     else if (actorName === 'P1c') fetchArchive(`P1`).then((rarc) => {
         const m = buildModelBMT(rarc, `bdl/p1.bdl`, `bmt/p1c_body.bmt`);
         buildChildModel(rarc, `bdlm/p1c_head.bdl`).setParentJoint(m, `head`);
         m.bindANK1(parseBCK(rarc, `bcks/wait.bck`));
+        setShadow(800, 130, 20);
     });
     // Zuko
     else if (actorName === 'P2a') fetchArchive(`P2`).then((rarc) => {
         const m = buildModel(rarc, `bdl/p2.bdl`);
         buildChildModel(rarc, `bdlm/p2head01.bdl`).setParentJoint(m, `head`);
         m.bindANK1(parseBCK(rarc, `bcks/p2_wait01.bck`));
+        setShadow(800, 150, 20);
     });
     // Niko
     else if (actorName === 'P2b') fetchArchive(`P2`).then((rarc) => {
         const m = buildModelBMT(rarc, `bdl/p2.bdl`, `bmt/p2b.bmt`);
         buildChildModel(rarc, `bdlm/p2head02.bdl`).setParentJoint(m, `head`);
         m.bindANK1(parseBCK(rarc, `bcks/p2_wait01.bck`));
+        setShadow(800, 150, 20);
     });
     // Mako
     else if (actorName === 'P2c') fetchArchive(`P2`).then((rarc) => {
         const m = buildModelBMT(rarc, `bdl/p2.bdl`, `bmt/p2c.bmt`);
         buildChildModel(rarc, `bdlm/p2head03.bdl`).setParentJoint(m, `head`);
         m.bindANK1(parseBCK(rarc, `bcks/p2_wait01.bck`));
+        setShadow(800, 150, 20);
     });
     // Old Man Ho-Ho
     else if (actorName === 'Ah') fetchArchive(`Ah`).then((rarc) => {
         const m = buildModel(rarc, `bdlm/ah.bdl`);
         m.bindANK1(parseBCK(rarc, `bcks/ah_wait01.bck`));
+        setShadow(800, 150, 20);
     });
     // Helmarock King
     else if (actorName === 'Dk') fetchArchive(`Dk`).then((rarc) => {
         const m = buildModel(rarc, `bdl/dk.bdl`);
         m.bindANK1(parseBCK(rarc, `bcks/fly1.bck`));
+        setShadow(2000, 150, 100);
     });
     // Zunari
     else if (actorName === 'Rsh1') fetchArchive(`Rsh`).then((rarc) => {
         const m = buildModel(rarc, `bdlm/rs.bdl`);
-        m.bindANK1(parseBCK(rarc, `bck/rs_wait01.bck`));
+        m.bindANK1(parseBCK(rarc, `bck/rs_wait01.bck`));;
+        setShadow(800, 120, 20);
     });
+    // NPC_People 
     // ???
     else if (actorName === 'Sa1') fetchArchive(`Sa`).then((rarc) => {
         const m = buildModel(rarc, `bdl/sa.bdl`);
         buildChildModel(rarc, `bdlm/sa01_head.bdl`).setParentJoint(m, `head`);
         m.bindANK1(parseBCK(rarc, `bcks/sa_wait01.bck`));
+        setShadow(800, 150, 20);
     });
     // Gummy
     else if (actorName === 'Sa2') fetchArchive(`Sa`).then((rarc) => {
         const m = buildModelBMT(rarc, `bdl/sa.bdl`, `bmt/sa02.bmt`);
         buildChildModel(rarc, `bdlm/sa02_head.bdl`).setParentJoint(m, `head`);
         m.bindANK1(parseBCK(rarc, `bcks/sa_wait01.bck`));
+        setShadow(800, 150, 20);
     });
     // Kane
     else if (actorName === 'Sa3') fetchArchive(`Sa`).then((rarc) => {
         const m = buildModelBMT(rarc, `bdl/sa.bdl`, `bmt/sa03.bmt`);
         buildChildModel(rarc, `bdlm/sa03_head.bdl`).setParentJoint(m, `head`);
         m.bindANK1(parseBCK(rarc, `bcks/sa_wait01.bck`));
+        setShadow(800, 150, 20);
     });
     // Candy
     else if (actorName === 'Sa4') fetchArchive(`Sa`).then((rarc) => {
         const m = buildModelBMT(rarc, `bdl/sa.bdl`, `bmt/sa04.bmt`);
         buildChildModel(rarc, `bdlm/sa04_head.bdl`).setParentJoint(m, `head`);
         m.bindANK1(parseBCK(rarc, `bcks/sa_wait01.bck`));
+        setShadow(800, 150, 20);
     });
     // Dampa
     else if (actorName === 'Sa5') fetchArchive(`Sa`).then((rarc) => {
         const m = buildModelBMT(rarc, `bdl/sa.bdl`, `bmt/sa05.bmt`);
         buildChildModel(rarc, `bdlm/sa05_head.bdl`).setParentJoint(m, `head`);
         m.bindANK1(parseBCK(rarc, `bcks/sa_wait01.bck`));
+        setShadow(800, 150, 20);
     });
     // Potova
     else if (actorName === 'Ug1') fetchArchive(`Ug`).then((rarc) => {
         const m = buildModel(rarc, `bdl/ug.bdl`);
         buildChildModel(rarc, `bdlm/ug01_head.bdl`).setParentJoint(m, `head`);
         m.bindANK1(parseBCK(rarc, `bcks/ug_wait01.bck`));
+        setShadow(800, 150, 20);
     });
     // Joanna
     else if (actorName === 'Ug2') fetchArchive(`Ug`).then((rarc) => {
         const m = buildModelBMT(rarc, `bdl/ug.bdl`, `bmt/ug02.bmt`);
         buildChildModel(rarc, `bdlm/ug02_head.bdl`).setParentJoint(m, `head`);
         m.bindANK1(parseBCK(rarc, `bcks/ug_wait01.bck`));
+        setShadow(800, 150, 20);
     });
     // Jin
     else if (actorName === 'UkB') fetchArchive(`Uk`).then((rarc) => {
         const m = buildModel(rarc, `bdlm/uk.bdl`);
         buildChildModel(rarc, `bdl/ukhead_b.bdl`).setParentJoint(m, `head`);
         m.bindANK1(parseBCK(rarc, `bcks/uk_wait.bck`));
+        setShadow(300, 50, 20);
     });
     // Jan
     else if (actorName === 'UkC') fetchArchive(`Uk`).then((rarc) => {
         const m = buildModelBMT(rarc, `bdlm/uk.bdl`, `bmt/uk_c.bmt`);
         buildChildModel(rarc, `bdlm/ukhead_c.bdl`).setParentJoint(m, `head`);
         m.bindANK1(parseBCK(rarc, `bcks/uk_wait.bck`));
+        setShadow(300, 50, 20);
     });
     // Jun-Roberto
     else if (actorName === 'UkD') fetchArchive(`Uk`).then((rarc) => {
         const m = buildModelBMT(rarc, `bdlm/uk.bdl`, `bmt/uk_d.bmt`);
         buildChildModel(rarc, `bdl/ukhead_d.bdl`).setParentJoint(m, `head`);
         m.bindANK1(parseBCK(rarc, `bcks/uk_wait.bck`));
+        setShadow(300, 50, 20);
     });
     // Gilligan
     else if (actorName === 'Uw1') fetchArchive(`Uw`).then((rarc) => {
         const m = buildModel(rarc, `bdl/uw.bdl`);
         buildChildModel(rarc, `bdlm/uw01_head.bdl`).setParentJoint(m, `head`);
         m.bindANK1(parseBCK(rarc, `bcks/uw_wait01.bck`));
+        setShadow(800, 150, 20);
     });
     // Linda
     else if (actorName === 'Uw2') fetchArchive(`Uw`).then((rarc) => {
         const m = buildModelBMT(rarc, `bdl/uw.bdl`, `bmt/uw02.bmt`);
         buildChildModel(rarc, `bdlm/uw02_head.bdl`).setParentJoint(m, `head`);
         m.bindANK1(parseBCK(rarc, `bcks/uw_wait01.bck`));
+        setShadow(800, 150, 20);
     });
     // Kreeb
     else if (actorName === 'Um1') fetchArchive(`Um`).then((rarc) => {
         const m = buildModelBMT(rarc, `bdl/um.bdl`, `bmt/um02.bmt`);
         buildChildModel(rarc, `bdlm/um02_head.bdl`).setParentJoint(m, `head`);
         m.bindANK1(parseBCK(rarc, `bcks/um_happy02.bck`));
+        setShadow(800, 150, 20);
     });
     // Anton
     else if (actorName === 'Um2') fetchArchive(`Um`).then((rarc) => {
         const m = buildModel(rarc, `bdl/um.bdl`);
         buildChildModel(rarc, `bdlm/um01_head.bdl`).setParentJoint(m, `head`);
         m.bindANK1(parseBCK(rarc, `bcks/um_walk.bck`));
+        setShadow(800, 150, 20);
     });
     // Kamo
     else if (actorName === 'Um3') fetchArchive(`Um`).then((rarc) => {
         const m = buildModelBMT(rarc, `bdl/um.bdl`, `bmt/um03.bmt`);
         buildChildModel(rarc, `bdlm/um03_head.bdl`).setParentJoint(m, `head`);
         m.bindANK1(parseBCK(rarc, `bcks/um_wait02.bck`));
+        setShadow(800, 150, 20);
     });
     // Sam
     else if (actorName === 'Uo1') fetchArchive(`Uo`).then((rarc) => {
         const m = buildModel(rarc, `bdl/uo.bdl`);
         buildChildModel(rarc, `bdlm/uo01_head.bdl`).setParentJoint(m, `head`);
         m.bindANK1(parseBCK(rarc, `bcks/uo_wait01.bck`));
+        setShadow(800, 150, 20);
     });
     // Gossack
     else if (actorName === 'Uo2') fetchArchive(`Uo`).then((rarc) => {
         const m = buildModelBMT(rarc, `bdl/uo.bdl`, `bmt/uo02.bmt`);
         buildChildModel(rarc, `bdlm/uo02_head.bdl`).setParentJoint(m, `head`);
         m.bindANK1(parseBCK(rarc, `bcks/uo_wait01.bck`));
+        setShadow(800, 150, 20);
     });
     // Garrickson
     else if (actorName === 'Uo3') fetchArchive(`Uo`).then((rarc) => {
         const m = buildModelBMT(rarc, `bdl/uo.bdl`, `bmt/uo03.bmt`);
         buildChildModel(rarc, `bdlm/uo03_head.bdl`).setParentJoint(m, `head`);
         m.bindANK1(parseBCK(rarc, `bcks/uo_wait01.bck`));
+        setShadow(800, 150, 20);
     });
     // Vera
     else if (actorName === 'Ub1') fetchArchive(`Ub`).then((rarc) => {
         const m = buildModel(rarc, `bdl/ub.bdl`);
         buildChildModel(rarc, `bdlm/ub01_head.bdl`).setParentJoint(m, `head`);
         m.bindANK1(parseBCK(rarc, `bcks/ub_wait01.bck`));
+        setShadow(800, 150, 20);
     });
     // Pompie
     else if (actorName === 'Ub2') fetchArchive(`Ub`).then((rarc) => {
         const m = buildModelBMT(rarc, `bdl/ub.bdl`, `bmt/ub02.bmt`);
         buildChildModel(rarc, `bdlm/ub02_head.bdl`).setParentJoint(m, `head`);
         m.bindANK1(parseBCK(rarc, `bcks/ub_wait01.bck`));
+        setShadow(800, 150, 20);
     });
     // Missy
     else if (actorName === 'Ub3') fetchArchive(`Ub`).then((rarc) => {
         const m = buildModelBMT(rarc, `bdl/ub.bdl`, `bmt/ub03.bmt`);
         buildChildModel(rarc, `bdlm/ub03_head.bdl`).setParentJoint(m, `head`);
         m.bindANK1(parseBCK(rarc, `bcks/ub_wait01.bck`));
+        setShadow(800, 150, 20);
     });
     // Mineco
     else if (actorName === 'Ub4') fetchArchive(`Ub`).then((rarc) => {
         const m = buildModelBMT(rarc, `bdl/ub.bdl`, `bmt/ub04.bmt`);
         buildChildModel(rarc, `bdlm/ub04_head.bdl`).setParentJoint(m, `head`);
         m.bindANK1(parseBCK(rarc, `bcks/ub_wait01.bck`));
+        setShadow(800, 150, 20);
     });
     // Bomb-Master Cannon (1)
     else if (actorName === 'Bms1') fetchArchive(`Bms`).then((rarc) => {
         const m = buildModel(rarc, `bdl/by1.bdl`);
         buildChildModel(rarc, `bdlm/by_head.bdl`).setParentJoint(m, `head`);
         m.bindANK1(parseBCK(rarc, `bcks/by1_wait01.bck`));
+        setShadow(800, 150, 20);
     });
     // Bomb-Master Cannon (1)
     else if (actorName === 'Bms2') fetchArchive(`Bms`).then((rarc) => {
         const m = buildModel(rarc, `bdl/by2.bdl`);
         buildChildModel(rarc, `bdlm/by_head.bdl`).setParentJoint(m, `head`);
         m.bindANK1(parseBCK(rarc, `bcks/by2_wait00.bck`));
+        setShadow(800, 150, 20);
     });
     // Mrs. Marie
     else if (actorName === 'Ho') fetchArchive(`Ho`).then((rarc) => {
         const m = buildModel(rarc, `bdlm/ho.bdl`);
         buildChildModel(rarc, `bdl/ho_pend.bdl`).setParentJoint(m, `backbone`);
-        m.bindANK1(parseBCK(rarc, `bcks/ho_wait01.bck`));
+        m.bindANK1(parseBCK(rarc, `bcks/ho_wait01.bck`));;
+        setShadow(420, 90, 20);
     });
     // Tott
-    else if (actorName === 'Tt') fetchArchive(`Tt`).then((rarc) => buildModel(rarc, `bdlm/tt.bdl`).bindANK1(parseBCK(rarc, `bck/step01.bck`)));
+    else if (actorName === 'Tt') fetchArchive(`Tt`).then((rarc) => {
+        buildModel(rarc, `bdlm/tt.bdl`).bindANK1(parseBCK(rarc, `bck/step01.bck`));
+        setShadow(450, 100, 20);
+    });
     // Maggie's Father (Rich)
-    else if (actorName === 'Gp1') fetchArchive(`Gp`).then((rarc) => buildModel(rarc, `bdlm/gp.bdl`).bindANK1(parseBCK(rarc, `bcks/wait01.bck`)));
+    else if (actorName === 'Gp1') fetchArchive(`Gp`).then((rarc) => {
+        buildModel(rarc, `bdlm/gp.bdl`).bindANK1(parseBCK(rarc, `bcks/wait01.bck`))
+        setShadow(800, 150, 40);
+    });
     // Maggie's Father (Poor)
-    else if (actorName === 'Pf1') fetchArchive(`Pf`).then((rarc) => buildModel(rarc, `bdlm/pf.bdl`).bindANK1(parseBCK(rarc, `bcks/wait01.bck`)));
+    else if (actorName === 'Pf1') fetchArchive(`Pf`).then((rarc) => {
+        buildModel(rarc, `bdlm/pf.bdl`).bindANK1(parseBCK(rarc, `bcks/wait01.bck`));
+        setShadow(800, 150, 40);
+    });
     // Maggie (Rich)
-    else if (actorName === 'Kp1') fetchArchive(`Kp`).then((rarc) => buildModel(rarc, `bdlm/kp.bdl`).bindANK1(parseBCK(rarc, `bcks/wait01.bck`)));
+    else if (actorName === 'Kp1') fetchArchive(`Kp`).then((rarc) => {
+        buildModel(rarc, `bdlm/kp.bdl`).bindANK1(parseBCK(rarc, `bcks/wait01.bck`));
+        setShadow(800, 150, 40);
+    });
     // Mila (Poor)
-    else if (actorName === 'Kk1') fetchArchive(`Kk`).then((rarc) => buildModel(rarc, `bdlm/kk.bdl`).bindANK1(parseBCK(rarc, `bcks/kk_wait01.bck`)));
+    else if (actorName === 'Kk1') fetchArchive(`Kk`).then((rarc) => {
+        buildModel(rarc, `bdlm/kk.bdl`).bindANK1(parseBCK(rarc, `bcks/kk_wait01.bck`));
+        setShadow(800, 150, 40);
+    });
     // Mila's Father (Rich)
-    else if (actorName === 'Kf1') fetchArchive(`Kf`).then((rarc) => buildModel(rarc, `bdlm/kf.bdl`).bindANK1(parseBCK(rarc, `bcks/kf_wait01.bck`)));
+    else if (actorName === 'Kf1') fetchArchive(`Kf`).then((rarc) => {
+        buildModel(rarc, `bdlm/kf.bdl`).bindANK1(parseBCK(rarc, `bcks/kf_wait01.bck`));
+        setShadow(800, 150, 40);
+    });
     // Mila's Father (Poor)
-    else if (actorName === 'Gk1') fetchArchive(`Gk`).then((rarc) => buildModel(rarc, `bdlm/gk.bdl`).bindANK1(parseBCK(rarc, `bcks/gk_wait01.bck`)));
+    else if (actorName === 'Gk1') fetchArchive(`Gk`).then((rarc) => { 
+        buildModel(rarc, `bdlm/gk.bdl`).bindANK1(parseBCK(rarc, `bcks/gk_wait01.bck`));
+        setShadow(800, 150, 40);
+    });
     // Ivan
-    else if (actorName === 'Mk') fetchArchive(`Mk`).then((rarc) => buildModel(rarc, `bdlm/mk.bdl`).bindANK1(parseBCK(rarc, `bcks/mk_wait.bck`)));
+    else if (actorName === 'Mk') fetchArchive(`Mk`).then((rarc) => {
+        buildModel(rarc, `bdlm/mk.bdl`).bindANK1(parseBCK(rarc, `bcks/mk_wait.bck`));
+        setShadow(800, 150, 40);
+    });
     // Lorenzo
     else if (actorName === 'Po') fetchArchive(`Po`).then((rarc) => buildModel(rarc, `bdlm/po.bdl`).bindANK1(parseBCK(rarc, `bcks/wait01.bck`)));
     // Doc Bandam
-    else if (actorName === 'Ds1') fetchArchive(`Ds`).then((rarc) => buildModel(rarc, `bdlm/ck.bdl`).bindANK1(parseBCK(rarc, `bcks/wait01.bck`)));
+    else if (actorName === 'Ds1') fetchArchive(`Ds`).then((rarc) => {
+        buildModel(rarc, `bdlm/ck.bdl`).bindANK1(parseBCK(rarc, `bcks/wait01.bck`));
+        setShadow(800, 130, 20);
+    });
     // Jabun
     else if (actorName === 'Jb1') fetchArchive(`Jb`).then((rarc) => buildModel(rarc, `bdlm/jb.bdl`).bindANK1(parseBCK(rarc, `bcks/jb_wait01.bck`)));
     // Zephos
@@ -779,60 +939,75 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     else if (actorName === 'Bj1') fetchArchive(`Bj`).then((rarc) => {
         const m = buildModel(rarc, `bdlm/bj.bdl`);
         buildChildModel(rarc, `bdl/bj1_face.bdl`).setParentJoint(m, `head`);
-        m.bindANK1(parseBCK(rarc, `bcks/wait01.bck`))
+        m.bindANK1(parseBCK(rarc, `bcks/wait01.bck`));
+        setShadow(800, 150, 40);
     });
     // Aldo (Korok)
     else if (actorName === 'Bj2') fetchArchive(`Bj`).then((rarc) => {
         const m = buildModel(rarc, `bdlm/bj.bdl`);
         buildChildModel(rarc, `bdl/bj2_face.bdl`).setParentJoint(m, `head`);
         m.bindANK1(parseBCK(rarc, `bcks/wait01.bck`))
+        setShadow(800, 150, 40);
     });
     // Oakin (Korok)
     else if (actorName === 'Bj3') fetchArchive(`Bj`).then((rarc) => {
         const m = buildModel(rarc, `bdlm/bj.bdl`);
         buildChildModel(rarc, `bdl/bj3_face.bdl`).setParentJoint(m, `head`);
         m.bindANK1(parseBCK(rarc, `bcks/wait01.bck`))
+        setShadow(800, 150, 40);
     });
     // Drona (Korok)
     else if (actorName === 'Bj4') fetchArchive(`Bj`).then((rarc) => {
         const m = buildModel(rarc, `bdlm/bj.bdl`);
         buildChildModel(rarc, `bdl/bj4_face.bdl`).setParentJoint(m, `head`);
         m.bindANK1(parseBCK(rarc, `bcks/wait01.bck`))
+        setShadow(800, 150, 40);
     });
     // Irch (Korok)
     else if (actorName === 'Bj5') fetchArchive(`Bj`).then((rarc) => {
         const m = buildModel(rarc, `bdlm/bj.bdl`);
         buildChildModel(rarc, `bdl/bj5_face.bdl`).setParentJoint(m, `head`);
         m.bindANK1(parseBCK(rarc, `bcks/wait01.bck`))
+        setShadow(800, 150, 40);
     });
     // Rown (Korok)
     else if (actorName === 'Bj6') fetchArchive(`Bj`).then((rarc) => {
         const m = buildModel(rarc, `bdlm/bj.bdl`);
         buildChildModel(rarc, `bdl/bj6_face.bdl`).setParentJoint(m, `head`);
         m.bindANK1(parseBCK(rarc, `bcks/wait01.bck`))
+        setShadow(800, 150, 40);
     });
     // Hollo (Korok)
     else if (actorName === 'Bj7') fetchArchive(`Bj`).then((rarc) => {
         const m = buildModel(rarc, `bdlm/bj.bdl`);
         buildChildModel(rarc, `bdl/bj7_face.bdl`).setParentJoint(m, `head`);
         m.bindANK1(parseBCK(rarc, `bcks/wait01.bck`))
+        setShadow(800, 150, 40);
     });
     // Elma (Korok)
     else if (actorName === 'Bj8') fetchArchive(`Bj`).then((rarc) => {
         const m = buildModel(rarc, `bdlm/bj.bdl`);
         buildChildModel(rarc, `bdl/bj8_face.bdl`).setParentJoint(m, `head`);
         m.bindANK1(parseBCK(rarc, `bcks/wait01.bck`))
+        setShadow(800, 150, 40);
     });
     // Linder (Korok)
     else if (actorName === 'Bj9') fetchArchive(`Bj`).then((rarc) => {
         const m = buildModel(rarc, `bdlm/bj.bdl`);
         buildChildModel(rarc, `bdl/bj9_face.bdl`).setParentJoint(m, `head`);
         m.bindANK1(parseBCK(rarc, `bcks/wait01.bck`));
+        setShadow(800, 150, 40);
     });
     // Manny
-    else if (actorName === 'Mn') fetchArchive(`Mn`).then((rarc) => buildModel(rarc, `bdlm/mn.bdl`).bindANK1(parseBCK(rarc, `bcks/mn_wait01.bck`)));
+    else if (actorName === 'Mn') fetchArchive(`Mn`).then((rarc) => {
+        buildModel(rarc, `bdlm/mn.bdl`).bindANK1(parseBCK(rarc, `bcks/mn_wait01.bck`));
+        setShadow(800, 150, 20);
+    });
     // Carlov
-    else if (actorName === 'Mt') fetchArchive(`Niten`).then((rarc) => buildModel(rarc, `bdlm/mt.bdl`).bindANK1(parseBCK(rarc, `bcks/mt_wait01.bck`)));
+    else if (actorName === 'Mt') fetchArchive(`Niten`).then((rarc) => {
+        buildModel(rarc, `bdlm/mt.bdl`).bindANK1(parseBCK(rarc, `bcks/mt_wait01.bck`))
+        setShadow(800, 150, 40);
+    });
     // Great Fairy
     else if (actorName === 'BigElf') fetchArchive(`bigelf`).then((rarc) => buildModel(rarc, `bdlm/dy.bdl`).bindANK1(parseBCK(rarc, `bcks/wait01.bck`)));
     // Fairy
@@ -842,16 +1017,19 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         const m = buildModel(rarc, `bdlm/ro.bdl`);
         buildChildModel(rarc, `bdl/ro_hat.bdl`).setParentJoint(m, `head`);
         m.bindANK1(parseBCK(rarc, `bcks/ro_wait01.bck`));
+        setShadow(800, 150, 20);
     });
     else if (actorName === 'RotenB') fetchArchive(`Ro`).then((rarc) => {
         const m = buildModel(rarc, `bdlm/ro.bdl`);
         buildChildModel(rarc, `bdl/ro_hat2.bdl`).setParentJoint(m, `head`);
         m.bindANK1(parseBCK(rarc, `bcks/ro_wait01.bck`));
+        setShadow(800, 150, 20);
     });
     else if (actorName === 'RotenC') fetchArchive(`Ro`).then((rarc) => {
         const m = buildModel(rarc, `bdlm/ro.bdl`);
         buildChildModel(rarc, `bdl/ro_hat3.bdl`).setParentJoint(m, `head`);
         m.bindANK1(parseBCK(rarc, `bcks/ro_wait01.bck`));
+        setShadow(800, 150, 20);
     });
     // Hyrule Ocean Warp
     else if (actorName === 'Ghrwp') fetchArchive(`Ghrwp`).then((rarc) => {
@@ -870,6 +1048,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     ) {
         const type = (actor.parameters & 0x0F000000) >> 24;
         let model;
+        let squareShadow = false;
         switch (type) {
         case 0:
             // Small Pot
@@ -897,6 +1076,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
             fetchArchive(`Ktaru_01`).then((rarc) => {
                 model = buildModel(rarc, `bdl/ktaru_01.bdl`);
                 setToNearestFloor(model.modelMatrix, model.modelMatrix);
+                setShadowSimple(60);
             });
             break;
         case 4:
@@ -933,6 +1113,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
                 model = buildModel(rarc, `bdl/hbox2.bdl`);
                 setToNearestFloor(model.modelMatrix, model.modelMatrix);
             });
+            squareShadow = true;
             break;
         case 13:
             // Seed
@@ -954,6 +1135,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
                 model = buildModel(rarc, `bdl/kkiba_00.bdl`);
                 setToNearestFloor(model.modelMatrix, model.modelMatrix);
             });
+            squareShadow = true;
             break;
         default:
             // Blue Tower of the Gods Pillar Statue
@@ -963,6 +1145,11 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
             });
             break;
         }
+
+        if (squareShadow)
+            setShadowSimple(actor.scale![0] * 40, 1.0, null);
+        else 
+            setShadowSimple(actor.scale![0] * 40, 1.0);
     }
     // Outset Island: Jabun's barrier (six parts)
     else if (actorName === 'Ajav') fetchArchive(`Ajav`).then((rarc) => {
@@ -981,7 +1168,11 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         const jf = buildModel(rarc, `bdl/ajavf.bdl`);
         jf.modelInstance.getTextureMappingReference('dmTxa_jav_a')!.copy(txa);
     });
-    else if (actorName === 'koisi1') fetchArchive(`Always`).then((rarc) => buildModel(rarc, `bdl/obm_koisi1.bdl`));
+    // Small liftable rock
+    else if (actorName === 'koisi1') fetchArchive(`Always`).then((rarc) => {
+        buildModel(rarc, `bdl/obm_koisi1.bdl`);
+        setShadowSimple(35.0);
+    });
     // Bigger trees
     else if (actorName === 'lwood') fetchArchive(`Lwood`).then((rarc) => {
         const b = buildModel(rarc, `bdl/alwd.bdl`);
@@ -993,16 +1184,25 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     });
     else if (actorName === 'Vyasi') fetchArchive(`Vyasi`).then((rarc) => buildModel(rarc, `bdl/vyasi.bdl`));
     // Barrels
-    else if (actorName === 'Ktarux') fetchArchive(`Ktaru_01`).then((rarc) => buildModel(rarc, `bdl/ktaru_01.bdl`));
+    else if (actorName === 'Ktarux') fetchArchive(`Ktaru_01`).then((rarc) => {
+        buildModel(rarc, `bdl/ktaru_01.bdl`);
+        setShadowSimple(60);
+    });
     else if (actorName === 'Ktaruo') fetchArchive(`Ktaru_01`).then((rarc) => buildModel(rarc, `bdl/ktaru_01.bdl`));
     // Breakable shelves
     else if (actorName === 'Otana') fetchArchive(`Otana`).then((rarc) => buildModel(rarc, `bdl/otana.bdl`));
     // Mailbox
-    else if (actorName === 'Tpost') fetchArchive(`Toripost`).then((rarc) => buildModel(rarc, `bdl/vpost.bdl`).bindANK1(parseBCK(rarc, `bcks/post_wait.bck`)));
+    else if (actorName === 'Tpost') {
+        fetchArchive(`Toripost`).then((rarc) => {
+            buildModel(rarc, `bdl/vpost.bdl`).bindANK1(parseBCK(rarc, `bcks/post_wait.bck`));
+            setShadowSimple(40.0, 1.0, null);
+        });
+    }
     // Sign
     else if (actorName === 'Kanban') fetchArchive(`Kanban`).then((rarc) => {
         const b = buildModel(rarc, `bdl/kanban.bdl`);
         b.lightTevColorType = LightType.BG0;
+        setShadow(800, 150, 40);
     });
     // Forsaken Fortress door
     else if (actorName === 'SMBdor') fetchArchive(`Mbdoor`).then((rarc) => {
@@ -1024,7 +1224,10 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     // Holes you can fall into
     else if (actorName === 'Pitfall') fetchArchive(`Aana`).then((rarc) => buildModel(rarc, `bdl/aana.bdl`));
     // Warp Pot
-    else if (actorName === 'Warpt' || actorName === 'Warpnt' || actorName === 'Warpts1' || actorName === 'Warpts2' || actorName === 'Warpts3') fetchArchive(`ltubw`).then((rarc) => buildModel(rarc, `bdl/itubw.bdl`));
+    else if (actorName === 'Warpt' || actorName === 'Warpnt' || actorName === 'Warpts1' || actorName === 'Warpts2' || actorName === 'Warpts3') fetchArchive(`ltubw`).then((rarc) => {
+         buildModel(rarc, `bdl/itubw.bdl`);
+         setShadowSimple(80.0);
+    });
     else if (actorName === 'Warpgm') fetchArchive(`Gmjwp`).then((rarc) => {
         const m = buildModel(rarc, `bdlm/gmjwp00.bdl`);
         m.bindANK1(parseBCK(rarc, `bck/gmjwp01.bck`));
@@ -1056,7 +1259,10 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         buildModel(rarc, `bdl/hhbot2.bdl`);
     });
     // Spike Trap
-    else if (actorName === 'Trap') fetchArchive(`Trap`).then((rarc) => buildModel(rarc, `bdlm/htora1.bdl`));
+    else if (actorName === 'Trap') fetchArchive(`Trap`).then((rarc) => {
+        buildModel(rarc, `bdlm/htora1.bdl`);
+        setShadowSimple(150.0);
+    });
     // Floor Spikes
     else if (actorName === 'Htoge1') fetchArchive(`Htoge1`).then((rarc) => buildModel(rarc, `bdl/htoge1.bdl`));
     // Grapple Point
@@ -1132,7 +1338,10 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         }
     }
     // Korok Tree
-    else if (actorName === 'FTree') fetchArchive(`Vmr`).then((rarc) => buildModel(rarc, `bdlm/vmrty.bdl`).bindANK1(parseBCK(rarc, `bck/vmrty.bck`)));
+    else if (actorName === 'FTree') fetchArchive(`Vmr`).then((rarc) => {
+        buildModel(rarc, `bdlm/vmrty.bdl`).bindANK1(parseBCK(rarc, `bck/vmrty.bck`));
+        setShadowSimple(75.0);
+    });
     // Animals
     else if (actorName === 'DmKmm') fetchArchive(`Demo_Kmm`).then((rarc) => buildModel(rarc, `bmd/ka.bmd`).bindANK1(parseBCK(rarc, `bcks/ka_wait1.bck`)));
     // else if (actorName === 'Kamome') fetchArchive(`Kamome`).then((rarc) => buildModel(rarc, `bdl/ka.bdl`).bindANK1(parseBCK(rarc, `bck/ka_wait2.bck`)));
@@ -1151,9 +1360,14 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         }
 
         model.bindANK1(parseBCK(rarc, `bck/wait1.bck`));
+        setShadow(800, 150, 40);
     });
     else if (actorName === 'kani') fetchArchive(`Kn`).then((rarc) => buildModel(rarc, `bdl/kn.bdl`).bindANK1(parseBCK(rarc, `bck/wait01.bck`)));
-    else if (actorName === 'NpcSo') fetchArchive(`So`).then((rarc) => buildModel(rarc, `bdlm/so.bdl`).bindANK1(parseBCK(rarc, `bcks/so_wait01.bck`)));
+    // Fishman (Blue Fish)
+    else if (actorName === 'NpcSo') fetchArchive(`So`).then((rarc) => {
+        buildModel(rarc, `bdlm/so.bdl`).bindANK1(parseBCK(rarc, `bcks/so_wait01.bck`));
+        setShadow(800, 150, 40);
+    });
     // Enemies
     // Phantom Ganon
     else if (actorName === 'Fganon') fetchArchive(`Fganon`).then((rarc) => buildModel(rarc, `bdlm/bpg.bdl`).bindANK1(parseBCK(rarc, `bck/wait1.bck`)));
@@ -1186,6 +1400,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
             buildModel(rarc, `bdlm/rhand.bdl`).bindTTK1(parseBTK(rarc, `btk/rhand.btk`))
             break;
         }
+        setShadow(2000, 100, 200);
     });
     // Jalhalla
     else if (actorName === 'big_pow') fetchArchive(`Bpw`).then((rarc) => {
@@ -1196,6 +1411,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         lanternModel.setParentJoint(mainModel, `j_bpw_item`);
         mat4.rotateZ(lanternModel.modelMatrix, lanternModel.modelMatrix, Math.PI);
         // TODO: add flame particle emitter to lantern
+        setShadow(1300, 400, 200);
     });
     // Molgera
     else if (actorName === 'Bwd') fetchArchive(`Bwd`).then((rarc) => {
@@ -1224,9 +1440,20 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
             lastModel = tailModel;
         }
     });
-    else if (actorName === 'keeth') fetchArchive(`Ki`).then((rarc) => buildModel(rarc, `bdlm/ki.bdl`).bindANK1(parseBCK(rarc, `bck/wait1.bck`)));
-    else if (actorName === 'Fkeeth') fetchArchive(`Ki`).then((rarc) => buildModel(rarc, `bdlm/fk.bdl`).bindANK1(parseBCK(rarc, `bck/wait1.bck`)));
-    else if (actorName === 'Puti') fetchArchive(`Pt`).then((rarc) => buildModel(rarc, `bdlm/pt.bdl`).bindANK1(parseBCK(rarc, `bck/wait.bck`)));
+    // Keese
+    else if (actorName === 'keeth') fetchArchive(`Ki`).then((rarc) => {
+        buildModel(rarc, `bdlm/ki.bdl`).bindANK1(parseBCK(rarc, `bck/wait1.bck`))
+        setShadow(800, 150, 40);
+    });
+    else if (actorName === 'Fkeeth') fetchArchive(`Ki`).then((rarc) => {
+        buildModel(rarc, `bdlm/fk.bdl`).bindANK1(parseBCK(rarc, `bck/wait1.bck`))
+        setShadow(800, 150, 40);
+    });
+    // Miniblin
+    else if (actorName === 'Puti') fetchArchive(`Pt`).then((rarc) => {
+        buildModel(rarc, `bdlm/pt.bdl`).bindANK1(parseBCK(rarc, `bck/wait.bck`));
+        setShadow(400, 100, 50);
+    });
     else if (actorName === 'Rdead1' || actorName === 'Rdead2') fetchArchive(`Rd`).then((rarc) => {
         const m = buildModel(rarc, `bdlm/rd.bdl`);
         const idleAnimType = (actor.parameters & 0x00000001);
@@ -1235,10 +1462,22 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         } else {
             m.bindANK1(parseBCK(rarc, `bcks/suwarip.bck`));
         }
+        setShadow(800, 150, 40);
     });
-    else if (actorName === 'wiz_r') fetchArchive(`Wz`).then((rarc) => buildModel(rarc, `bdlm/wz.bdl`).bindANK1(parseBCK(rarc, `bck/s_demo_wait1.bck`)));
-    else if (actorName === 'gmos') fetchArchive(`Gm`).then((rarc) => buildModel(rarc, `bdlm/gm.bdl`).bindANK1(parseBCK(rarc, `bck/fly.bck`)));
-    else if (actorName === 'mo2') fetchArchive(`Mo2`).then((rarc) => buildModel(rarc, `bdlm/mo.bdl`).bindANK1(parseBCK(rarc, `bck/wait.bck`)));
+    // Wizzrobe mini-boss
+    else if (actorName === 'wiz_r') fetchArchive(`Wz`).then((rarc) => {
+        buildModel(rarc, `bdlm/wz.bdl`).bindANK1(parseBCK(rarc, `bck/s_demo_wait1.bck`))
+        setShadow(400, 0, 40);
+    });
+    else if (actorName === 'gmos') fetchArchive(`Gm`).then((rarc) => {
+        buildModel(rarc, `bdlm/gm.bdl`).bindANK1(parseBCK(rarc, `bck/fly.bck`))
+        setShadow(900, 10, 80);
+    });
+    // Moblin
+    else if (actorName === 'mo2') fetchArchive(`Mo2`).then((rarc) => {
+        buildModel(rarc, `bdlm/mo.bdl`).bindANK1(parseBCK(rarc, `bck/wait.bck`));
+        setShadow(1250, 2, 50);
+    });
     else if (actorName === 'pow') fetchArchive(`Pw`).then(async (rarc) => {
         let color = (actor.parameters & 0x0000FE00) >> 9;
         if (color > 5)
@@ -1254,8 +1493,14 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         lanternModel.setParentJoint(mainModel, `j_pw_item_r1`);
         mat4.rotateX(lanternModel.modelMatrix, lanternModel.modelMatrix, Math.PI / 4);
     });
-    else if (actorName === 'Bb') fetchArchive(`Bb`).then((rarc) => buildModel(rarc, `bdlm/bb.bdl`).bindANK1(parseBCK(rarc, `bck/wait.bck`)));
-    else if (actorName === 'Bk') fetchArchive(`Bk`).then((rarc) => buildModel(rarc, `bdlm/bk.bdl`).bindANK1(parseBCK(rarc, `bck/bk_wait.bck`)));
+    else if (actorName === 'Bb') fetchArchive(`Bb`).then((rarc) => {
+        buildModel(rarc, `bdlm/bb.bdl`).bindANK1(parseBCK(rarc, `bck/wait.bck`))
+        setShadow(800, 150, 40);
+    });
+    else if (actorName === 'Bk') fetchArchive(`Bk`).then((rarc) => {
+        buildModel(rarc, `bdlm/bk.bdl`).bindANK1(parseBCK(rarc, `bck/bk_wait.bck`))
+        setShadow(800, 150, 40);
+    });
     else if (actorName === 'Oq') fetchArchive(`Oq`).then((rarc) => buildModel(rarc, `bmdm/oq.bmd`).bindANK1(parseBCK(rarc, `bck/nom_wait.bck`)));
     else if (actorName === 'Oqw') fetchArchive(`Oq`).then((rarc) => buildModel(rarc, `bmdm/red_oq.bmd`).bindANK1(parseBCK(rarc, `bck/umi_new_wait.bck`)));
     else if (actorName === 'Daiocta') fetchArchive(`Daiocta`).then((rarc) => buildModel(rarc, `bdlm/do_main1.bdl`).bindANK1(parseBCK(rarc, `bck/wait1.bck`)));
@@ -1266,7 +1511,11 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         // Move the hole just slightly up to prevent z-fighting with the ground.
         mat4.translate(holeModel.modelMatrix, holeModel.modelMatrix, [0, 0.1, 0]);
     });
-    else if (actorName === 'magtail') fetchArchive(`Mt`).then((rarc) => buildModel(rarc, `bdlm/mg_head.bdl`).bindANK1(parseBCK(rarc, `bck/wait1.bck`)));
+    // Magtail
+    else if (actorName === 'magtail') fetchArchive(`Mt`).then((rarc) => {
+        buildModel(rarc, `bdlm/mg_head.bdl`).bindANK1(parseBCK(rarc, `bck/wait1.bck`))
+        setShadow(800, 150, 20);
+    });
     // Red and Blue Bubbles
     else if (actorName === 'bable') fetchArchive(`Bl`).then((rarc) => {
         const m = buildModel(rarc, `bdlm/bl.bdl`);
@@ -1341,6 +1590,8 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         if (equipmentType >= 5) { // Has a cape
             // TODO: Cape is procedurally animated. Also, the cape's textures are inside d_a_mant.rel.
         }
+
+        setShadow(1300, 300, 200);
     });
     // Stalfos
     else if (actorName === 'Stal') fetchArchive(`St`).then((rarc) => {
@@ -1372,6 +1623,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         buildChildModel(rarc, `bdlm/st_asir.bdl`).setParentJoint(skeletonModel, `asiR`);
         // Set a fake bbox for the main invisible skeleton model so it doesn't get culled when the camera isn't right on top of it.
         skeletonModel.modelInstance.modelData.bbox = new AABB(-80, -80, -80, 80, 80, 80);
+        setShadow(1000, 150, 50);
     });
     // Peahats and Seahats
     else if (actorName === 'p_hat') {
@@ -1445,12 +1697,14 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     // Helmeted Beedle's Shop Ship
     else if (actorName === 'ikada_u') fetchArchive(`IkadaH`).then((rarc) => buildModel(rarc, `bdl/vtsp2.bdl`));
     // The Great Sea
+    // Salvage Corp group members
     else if (actorName === 'Svsp') fetchArchive(`IkadaH`).then((rarc) => buildModel(rarc, `bdl/vsvsp.bdl`));
-    else if (actorName === 'Vtil1') fetchArchive(`Vtil`).then((rarc) => buildModel(rarc, `bdl/vtil1.bdl`));
-    else if (actorName === 'Vtil2') fetchArchive(`Vtil`).then((rarc) => buildModel(rarc, `bdl/vtil2.bdl`));
-    else if (actorName === 'Vtil3') fetchArchive(`Vtil`).then((rarc) => buildModel(rarc, `bdl/vtil3.bdl`));
-    else if (actorName === 'Vtil4') fetchArchive(`Vtil`).then((rarc) => buildModel(rarc, `bdl/vtil4.bdl`));
-    else if (actorName === 'Vtil5') fetchArchive(`Vtil`).then((rarc) => buildModel(rarc, `bdl/vtil5.bdl`));
+    // Tingle Statues
+    else if (actorName === 'Vtil1') fetchArchive(`Vtil`).then((rarc) => { buildModel(rarc, `bdl/vtil1.bdl`); setShadowSimple(57.0); });
+    else if (actorName === 'Vtil2') fetchArchive(`Vtil`).then((rarc) => { buildModel(rarc, `bdl/vtil2.bdl`); setShadowSimple(57.0); });
+    else if (actorName === 'Vtil3') fetchArchive(`Vtil`).then((rarc) => { buildModel(rarc, `bdl/vtil3.bdl`); setShadowSimple(57.0); });
+    else if (actorName === 'Vtil4') fetchArchive(`Vtil`).then((rarc) => { buildModel(rarc, `bdl/vtil4.bdl`); setShadowSimple(57.0); });
+    else if (actorName === 'Vtil5') fetchArchive(`Vtil`).then((rarc) => { buildModel(rarc, `bdl/vtil5.bdl`); setShadowSimple(57.0); });
     else if (actorName === 'Ekskz') fetchArchive(`Ekskz`).then((rarc) => {
         buildModel(rarc, `bdl/ekskz.bdl`);
         const yocwd00 = buildModel(rarc, `bdlm/yocwd00.bdl`);
@@ -1488,7 +1742,11 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         buildModel(rarc, `bdlm/ytrnd00.bdl`).bindTTK1(parseBTK(rarc, `btk/ytrnd00.btk`));
         buildModel(rarc, `bdlm/ywuwt00.bdl`).bindTTK1(parseBTK(rarc, `btk/ywuwt00.btk`));
     });
-    else if (actorName === 'Sarace') fetchArchive(`Sarace`).then((rarc) => buildModel(rarc, `bdl/sa.bdl`));
+    // Loot the Sailor (Boating Course)
+    else if (actorName === 'Sarace') {
+        fetchArchive(`Sarace`).then((rarc) => buildModel(rarc, `bdl/sa.bdl`));;
+        setShadow(800, 130, 20);
+    }
     else if (actorName === 'Ocloud' || actorName === 'Rcloud') fetchArchive(`BVkumo`).then((rarc) => {
         const m = buildModel(rarc, `bdlm/bvkumo.bdl`);
         m.bindTTK1(parseBTK(rarc, `btk/bvkumo.btk`));
@@ -1529,10 +1787,20 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     });
     else if (actorName === 'MKoppu') fetchArchive(`Mshokki`).then((rarc) => buildModel(rarc, `bdl/koppu.bdl`));
     else if (actorName === 'MOsara') fetchArchive(`Mshokki`).then((rarc) => buildModel(rarc, `bdl/osara.bdl`));
-    else if (actorName === 'MPot') fetchArchive(`Mshokki`).then((rarc) => buildModel(rarc, `bdl/pot.bdl`));
+    else if (actorName === 'MPot') 
+        fetchArchive(`Mshokki`).then((rarc) => {
+            buildModel(rarc, `bdl/pot.bdl`);
+            setShadowSimple(40, 1.0, null);
+    });
     else if (actorName === 'Branch') fetchArchive(`Kwood_00`).then((rarc) => buildModel(rarc, `bmdc/ws.bmd`));
-    else if (actorName === 'Otble') fetchArchive(`Okmono`).then((rarc) => buildModel(rarc, `bdl/otable.bdl`));
-    else if (actorName === 'OtbleL') fetchArchive(`Okmono`).then((rarc) => buildModel(rarc, `bdl/otablel.bdl`));
+    else if (actorName === 'Otble') fetchArchive(`Okmono`).then((rarc) => {
+        buildModel(rarc, `bdl/otable.bdl`);
+        setShadowSimple(100, (actor.parameters & 0xFF) ? 2.0 : 1.0, null);
+    });
+    else if (actorName === 'OtbleL') fetchArchive(`Okmono`).then((rarc) => {
+        buildModel(rarc, `bdl/otablel.bdl`);
+        setShadowSimple(100, (actor.parameters & 0xFF) ? 2.0 : 1.0, null);
+    });
     else if (actorName === 'AjavW') {
         fetchArchive(`AjavW`).then(rarc => {
             const m = buildModel(rarc, `bdlm/ajavw.bdl`);
@@ -1554,10 +1822,14 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     else if (actorName === 'Pbka') fetchArchive(`Pbka`).then((rarc) => buildModel(rarc, `bdl/pbka.bdl`));
     else if (actorName === 'Plant') fetchArchive(`Plant`).then((rarc) => buildModel(rarc, `bdl/yrmwd.bdl`));
     else if (actorName === 'Table') fetchArchive(`Table`).then((rarc) => {
-        if ((actor.parameters & 0xFF) === 0)
+        if ((actor.parameters & 0xFF) === 0) {
             buildModel(rarc, `bdl/ytble.bdl`);
-        else
+            setShadowSimple( 120, 1.0, null );
+        }
+        else {
             buildModel(rarc, `bdl/qcfis.bdl`);
+            setShadowSimple( 40, 1.0, null );
+        }
     });
     else if (actorName === 'Ppos') fetchArchive(`Ppos`).then((rarc) => buildModel(rarc, `bdl/ppos.bdl`));
     else if (actorName === 'Rflw') fetchArchive(`Rflw`).then((rarc) => buildModel(rarc, `bdl/phana.bdl`));
@@ -1566,7 +1838,10 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     // Pirate stuff
     else if (actorName === 'Pirates') fetchArchive(`Kaizokusen`).then((rarc) => buildModel(rarc, `bdl/oba_kaizoku_a.bdl`));
     else if (actorName === 'Ashut') fetchArchive(`Ashut`).then((rarc) => buildModel(rarc, `bdl/ashut.bdl`));
-    else if (actorName === 'Ospbox') fetchArchive(`Ospbox`).then((rarc) => buildModel(rarc, `bdl/ospbox.bdl`));
+    else if (actorName === 'Ospbox') fetchArchive(`Ospbox`).then((rarc) => {
+        buildModel(rarc, `bdl/ospbox.bdl`);
+        setShadowSimple(90.0, 1.0, null);
+    });
     // The platforms in the pirate ship which go up and down.
     else if (actorName === 'Hlift') fetchArchive(`Hlift`).then((rarc) => {
         const m = buildModel(rarc, `bdl/hlift.bdl`);
@@ -1677,8 +1952,14 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     else if (actorName === 'Hdai1') fetchArchive(`Hdai1`).then((rarc) => buildModel(rarc, `bdlm/hdai1.bdl`));
     else if (actorName === 'Hdai2') fetchArchive(`Hdai1`).then((rarc) => buildModel(rarc, `bdlm/hdai1.bdl`));
     else if (actorName === 'Hdai3') fetchArchive(`Hdai1`).then((rarc) => buildModel(rarc, `bdlm/hdai1.bdl`));
-    else if (actorName === 'Hsh') fetchArchive(`Hsehi1`).then((rarc) => buildModel(rarc, `bdl/hsehi1.bdl`));
-    else if (actorName === 'Hsh2') fetchArchive(`Hsehi2`).then((rarc) => buildModel(rarc, `bdl/hsehi2.bdl`));
+    else if (actorName === 'Hsh') fetchArchive(`Hsehi1`).then((rarc) => {
+        buildModel(rarc, `bdl/hsehi1.bdl`)
+        setShadow(800, 0, 40);
+    });
+    else if (actorName === 'Hsh2') fetchArchive(`Hsehi2`).then((rarc) => {
+        buildModel(rarc, `bdl/hsehi2.bdl`)
+        setShadow(800, 0, 40);
+    });
     else if (actorName === 'Hyuf1') fetchArchive(`Hyuf1`).then((rarc) => buildModel(rarc, `bdlm/hyuf1.bdl`));
     else if (actorName === 'Hyuf2') fetchArchive(`Hyuf2`).then((rarc) => buildModel(rarc, `bdlm/hyuf2.bdl`));
     else if (actorName === 'Blift') fetchArchive(`Hten1`).then((rarc) => buildModel(rarc, `bdl/hten1.bdl`));
@@ -1701,7 +1982,10 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     // Hyrule.
     else if (actorName === 'YLzou') fetchArchive(`YLzou`).then((rarc) => buildModel(rarc, `bdl/ylzou.bdl`));
     else if (actorName === 'MtryB') fetchArchive(`MtryB`).then((rarc) => buildModel(rarc, `bdl/mtryb.bdl`));
-    else if (actorName === 'zouK' || actorName === 'zouK1' || actorName === 'zouK2' || actorName === 'zouK3' || actorName === 'zouK4') fetchArchive(`VzouK`).then((rarc) => buildModel(rarc, `bdl/vzouk.bdl`));
+    else if (actorName === 'zouK' || actorName === 'zouK1' || actorName === 'zouK2' || actorName === 'zouK3' || actorName === 'zouK4') fetchArchive(`VzouK`).then((rarc) => {
+        buildModel(rarc, `bdl/vzouk.bdl`)
+        setShadowSimple(388.0);
+    });
     else if (actorName === 'VmsDZ') fetchArchive(`VmsDZ`).then((rarc) => buildModel(rarc, `bdl/vmsdz.bdl`));
     else if (actorName === 'VmsMS') fetchArchive(`VmsMS`).then((rarc) => buildModel(rarc, `bdl/vmsms.bdl`));
     else if (actorName === 'Yswdr00') fetchArchive(`Yswdr00`).then((rarc) => buildModel(rarc, `bdlm/yswdr00.bdl`).bindTTK1(parseBTK(rarc, `btk/yswdr00.btk`)));
@@ -1845,6 +2129,14 @@ class BMDObjectRenderer {
     public setParentJoint(o: BMDObjectRenderer, jointName: string): void {
         this.parentJointMatrix = o.modelInstance.getJointToWorldMatrixReference(jointName);
         o.childObjects.push(this);
+    }
+
+    public addShadows(globals: dGlobals, shadowId: number): boolean {
+        let allValid = true;
+        for (let i = 0; i < this.childObjects.length; i++) {
+            allValid = allValid && dComIfGd_addRealShadow(globals, shadowId, this.childObjects[i].modelInstance);
+        }
+        return allValid;
     }
 
     public setMaterialColorWriteEnabled(materialName: string, v: boolean): void {

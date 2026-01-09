@@ -7,7 +7,7 @@
 import { mat4, vec2, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { Color, colorCopy, colorNewFromRGBA, colorNewFromRGBA8, colorScale } from "../Color.js";
-import { GfxDevice, GfxMipFilterMode, GfxSampler, GfxTexFilterMode, GfxWrapMode } from "../gfx/platform/GfxPlatform.js";
+import { GfxDevice, GfxMipFilterMode, GfxSampler, GfxTexFilterMode, GfxTexture, GfxWrapMode } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { GfxRenderInst } from "../gfx/render/GfxRenderInstManager.js";
 import * as GX from "../gx/gx_enum.js";
@@ -16,7 +16,6 @@ import { ColorKind, DrawParams, GXMaterialHelperGfx, MaterialParams } from "../g
 import { TextureInputGX } from "../gx/gx_texture.js";
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder.js";
 import { TSDraw } from "../SuperMarioGalaxy/DDraw.js";
-import { LoadedTexture } from "../TextureHolder.js";
 import { assertExists } from "../util.js";
 import { AVTpl } from "./AVTpl.js";
 import { RenderParams } from "./Model.js";
@@ -269,7 +268,7 @@ export function parseObj(nlObjBuffer: ArrayBufferSlice, tpl: AVTpl): Obj {
 
 const scratchMaterialParams = new MaterialParams();
 class MaterialInst {
-    private loadedTex: LoadedTexture | null; // Null if we're using TEXMAP_NULL
+    private loadedTex: GfxTexture | null; // null if we're using TEXMAP_NULL
     private gfxSampler: GfxSampler | null;
     private materialHelper: GXMaterialHelperGfx;
 
@@ -433,7 +432,7 @@ class MaterialInst {
         const materialParams = scratchMaterialParams;
         materialParams.clear();
         if (this.loadedTex !== null && this.gfxSampler !== null) {
-            materialParams.m_TextureMapping[0].gfxTexture = this.loadedTex.gfxTexture;
+            materialParams.m_TextureMapping[0].gfxTexture = this.loadedTex;
             materialParams.m_TextureMapping[0].gfxSampler = this.gfxSampler;
         }
 

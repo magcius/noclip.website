@@ -5,7 +5,6 @@ import AnimationController from '../AnimationController.js';
 import { CameraController } from '../Camera.js';
 import * as CX from '../Common/Compression/CX.js';
 import { SceneContext } from '../SceneBase.js';
-import { TextureOverride } from '../TextureHolder.js';
 import { gfxDeviceNeedsFlipY } from '../gfx/helpers/GfxDeviceHelpers.js';
 import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { GfxDevice } from '../gfx/platform/GfxPlatform.js';

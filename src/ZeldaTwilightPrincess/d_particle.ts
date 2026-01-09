@@ -11,10 +11,10 @@ import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import { EFB_HEIGHT, EFB_WIDTH } from "../gx/gx_material.js";
 import { computeModelMatrixR, getMatrixTranslation } from "../MathHelpers.js";
-import { TextureMapping } from "../TextureHolder.js";
 import { ViewerRenderInput } from "../viewer.js";
 import { cM_s2rad } from "../ZeldaWindWaker/SComponent.js";
 import { dGlobals } from "./Main.js";
+import { GXTextureMapping } from "../gx/gx_render.js";
 
 export abstract class dPa_levelEcallBack extends JPAEmitterCallBack {
     constructor(protected globals: dGlobals) {
@@ -30,7 +30,7 @@ enum EffectDrawGroup {
     Indirect = 1,
 }
 
-function setTextureMappingIndirect(m: TextureMapping, flipY: boolean): void {
+function setTextureMappingIndirect(m: GXTextureMapping, flipY: boolean): void {
     m.width = EFB_WIDTH;
     m.height = EFB_HEIGHT;
     m.flipY = flipY;

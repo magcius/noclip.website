@@ -3,11 +3,11 @@ import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
 import { GfxrAttachmentSlot, GfxrRenderTargetDescription, GfxrGraphBuilder, GfxrRenderTargetID, GfxrResolveTextureID } from "../gfx/render/GfxRenderGraph.js";
 import { GfxWrapMode, GfxTexture, GfxTexFilterMode, GfxBindingLayoutDescriptor, GfxMipFilterMode, GfxBlendMode, GfxBlendFactor, GfxMegaStateDescriptor, GfxFormat, GfxProgram } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
-import { TextureMapping } from "../TextureHolder.js";
 import { nArray } from "../util.js";
 import { fullscreenMegaState } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { fillVec4 } from "../gfx/helpers/UniformBufferHelpers.js";
+import { GXTextureMapping } from "../gx/gx_render.js";
 
 // A downsampler to create blurred images for water and reflection effects.
 //
@@ -87,7 +87,7 @@ export class BlurFilter {
     private target4Desc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
     private target8Desc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
 
-    private textureMapping: TextureMapping[] = nArray(1, () => new TextureMapping());
+    private textureMapping: GXTextureMapping[] = nArray(1, () => new GXTextureMapping());
 
     constructor(cache: GfxRenderCache) {
         this.blurDownProgram = cache.createProgram(new BlurDownProgram());

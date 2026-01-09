@@ -36,7 +36,8 @@ import { LightmapManager, FaceLightmapUpdater } from "./Materials/Lightmap.js";
 import { BaseMaterial, MaterialShaderTemplateBase, fillSceneParamsOnRenderInst, FogParams, ToneMapParams, LateBindingTexture } from "./Materials/MaterialBase.js";
 import { MaterialCache } from "./Materials/MaterialCache.js";
 import { MaterialProxySystem } from "./Materials/MaterialParameters.js";
-import { ProjectedLight, WorldLightingState } from "./Materials/WorldLight.js";
+import { ProjectedLight } from "./Materials/WorldLight.js";
+import { WorldLightingState } from "../Common/IdTech2/WorldLightingState.js";
 import { createBufferFromData } from "../gfx/helpers/BufferHelpers.js";
 
 export class LooseMount {
@@ -1292,7 +1293,10 @@ export class SourceWorldViewRenderer {
                 mat4.mul(this.skyboxView.viewFromWorldMatrix, this.skyboxView.viewFromWorldMatrix, skyCamera.modelMatrix);
                 this.skyboxView.finishSetup();
 
-                skyCamera.fillFogParams(this.skyboxView.fogParams);
+                if (renderer.renderContext.enableFog)
+                    skyCamera.fillFogParams(this.skyboxView.fogParams);
+                else
+                    this.skyboxView.fogParams.maxdensity = 0.0;
 
                 // If our skybox is not in a useful spot, then don't render it.
                 if (!this.skyboxView.calcPVS(bspRenderer.bsp, false, parentViewRenderer !== null ? parentViewRenderer.skyboxView : null))

@@ -14,7 +14,7 @@ import {
     getTLUTSize,
     parseTLUT
 } from "../Common/N64/Image.js";
-import { LoadedTexture, TextureHolder } from "../TextureHolder.js";
+import { TextureHolder } from "../TextureHolder.js";
 import { convertToCanvas } from '../gfx/helpers/TextureConversionHelpers.js';
 import { GfxDevice, GfxFormat, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform.js";
 
@@ -69,7 +69,7 @@ function textureToCanvas(texture: Image): Viewer.Texture {
 }
 
 
-export class GloverTextureHolder extends TextureHolder<Image> {
+export class GloverTextureHolder extends TextureHolder {
     private banks: GloverTexbank[] = [];
     private idToBank = new Map<number, number>();
     public idToTexture = new Map<number, GloverTexbank.Texture>();
@@ -78,10 +78,8 @@ export class GloverTextureHolder extends TextureHolder<Image> {
     public lastAnimationTick: number = 0;
 
     public addTextureBank(device: GfxDevice, bank: GloverTexbank) : void {
-        this.banks.push(bank)
-        let images = [];
+        this.banks.push(bank);
         for (let texture of bank.asset) {
-
             this.idToBank.set(texture.id, this.banks.length - 1);
             this.idToTexture.set(texture.id, texture);
 
@@ -138,14 +136,11 @@ export class GloverTextureHolder extends TextureHolder<Image> {
             else if (image.format === ImageFormat.G_IM_FMT_I    && image.siz === ImageSize.G_IM_SIZ_8b)  decodeTex_I8(dst, dataView, image.dataOffs, image.width, image.height);
             else console.warn(`Unknown texture format ${image.format} / ${image.siz}`);
 
-            images.push(image);
+            this.addTexture(device, image);
         }
-
-        this.addTextures(device, images);
     }
 
     public animatePalettes(viewerInput: Viewer.ViewerRenderInput) : void {
-
         // TODO: if you go to another level and then back to atlantis 1,
         //       textures stop animating. look into why.
 
@@ -225,8 +220,8 @@ export class GloverTextureHolder extends TextureHolder<Image> {
             return undefined;
         }
     }
-    public isDynamic(id: number) : boolean {
 
+    public isDynamic(id: number) : boolean {
         if (id === 0x0fe4919b) return true; // portal texture
         if (id === 0x6d9343f9) return true; // bubble texture
 
@@ -239,13 +234,16 @@ export class GloverTextureHolder extends TextureHolder<Image> {
         }
     }
 
-    public loadTexture(device: GfxDevice, texture: Image): LoadedTexture {
+    public addTexture(device: GfxDevice, texture: Image): void {
         const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, texture.width, texture.height, texture.levels.length));
         device.setResourceName(gfxTexture, texture.name);
+
         device.uploadTextureData(gfxTexture, 0, texture.levels);
 
         const viewerTexture: Viewer.Texture = textureToCanvas(texture);
-        return { gfxTexture, viewerTexture };
+        this.gfxTextures.push(gfxTexture);
+        this.viewerTextures.push(viewerTexture);
+        this.textureNames.push(texture.name);
     }
 }
 

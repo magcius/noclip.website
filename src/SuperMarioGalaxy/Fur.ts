@@ -15,9 +15,8 @@ import * as GX from "../gx/gx_enum.js";
 import { GfxDevice, GfxFormat, GfxBufferUsage, GfxBuffer, GfxVertexBufferDescriptor } from "../gfx/platform/GfxPlatform.js";
 import { connectToScene, isHiddenModel, isValidDraw } from "./ActorUtil.js";
 import { randomRangeFloat } from '../MathHelpers.js';
-import { TextureMapping } from "../TextureHolder.js";
 import { Shape } from "../Common/JSYSTEM/J3D/J3DLoader.js";
-import { GXMaterialHelperGfx, MaterialParams, DrawParams, ColorKind } from "../gx/gx_render.js";
+import { GXMaterialHelperGfx, MaterialParams, DrawParams, ColorKind, GXTextureMapping } from "../gx/gx_render.js";
 import { coalesceBuffer } from "../gfx/helpers/BufferHelpers.js";
 import { GfxRenderInstManager, GfxRenderInst } from "../gfx/render/GfxRenderInstManager.js";
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder.js";
@@ -304,7 +303,7 @@ class FurDrawer {
 
     public materialHelper: GXMaterialHelperGfx;
 
-    constructor(public numLayers: number, private bodyTexMapping: TextureMapping, private indirectMapData: BTIData | null,  private densityMapData: BTIData) {
+    constructor(public numLayers: number, private bodyTexMapping: GXTextureMapping, private indirectMapData: BTIData | null,  private densityMapData: BTIData) {
     }
 
     public compileMaterial(dynFurParam: DynamicFurParam): void {
@@ -431,7 +430,7 @@ class FurCtrl {
             densityMap = createFurDensityMap(this.param.mapDensity, this.param.mapThickness, this.param.mapMixingRatio);
         this.ownDensityMapData = new BTIData(device, cache, densityMap);
 
-        const bodyTextureMapping = new TextureMapping();
+        const bodyTextureMapping = new GXTextureMapping();
         assert(this.actor.modelInstance!.modelMaterialData.tex1Data!.fillTextureMappingFromIndex(bodyTextureMapping, bodyMapSamplerIndex));
 
         this.furDrawer = new FurDrawer(this.param.numLayers, bodyTextureMapping, this.ownIndirectMapData, this.ownDensityMapData);

@@ -16,15 +16,14 @@ import { GridPlane } from "./GridPlane.js";
 import { getDebugOverlayCanvas2D, drawWorldSpacePoint } from "../DebugJunk.js";
 import { createCsvParser } from "../SuperMarioGalaxy/JMapInfo.js";
 import { JKRArchive } from "../Common/JSYSTEM/JKRArchive.js";
-import { fillSceneParamsDataOnTemplate, ub_SceneParamsBufferSize, gxBindingLayouts } from "../gx/gx_render.js";
-import { TextureMapping } from "../TextureHolder.js";
+import { fillSceneParamsDataOnTemplate, ub_SceneParamsBufferSize, gxBindingLayouts, GXTextureMapping } from "../gx/gx_render.js";
 import { EFB_WIDTH, EFB_HEIGHT, GX_Program } from "../gx/gx_material.js";
 import { NamedArrayBufferSlice } from "../DataFetcher.js";
 import { FloatingPanel } from "../DebugFloaters.js";
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
 import { gfxDeviceNeedsFlipY } from "../gfx/helpers/GfxDeviceHelpers.js";
 
-function setLateTextureMapping(m: TextureMapping, lateBinding: string, flipY: boolean): void {
+function setLateTextureMapping(m: GXTextureMapping, lateBinding: string, flipY: boolean): void {
     m.lateBinding = lateBinding;
     m.width = EFB_WIDTH;
     m.height = EFB_HEIGHT;

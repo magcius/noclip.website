@@ -17,6 +17,22 @@ import type { MaterialCache } from "./MaterialCache.js";
 import * as P from "./MaterialParameters.js";
 import { ProjectedLight, ShaderWorldLightType } from "./WorldLight.js";
 
+enum DetailBlendMode {
+    MulDetail2 = 0,
+    RgbAdditive = 1,
+    DetailOverBase = 2,
+    Fade = 3,
+    BaseOverDetail = 4,
+    RgbAdditiveSelfIllum = 5,
+    RgbAdditiveSelfIllumThresholdFade = 6,
+    Mod2xSelectTwoPatterns = 7,
+    Multiply = 8,
+    MaskByDetailAlpha = 9,
+    SsbumpBump = 10,
+    SsbumpNobump = 11,
+    AlphaMaskBaseTexture = 12,
+}
+
 //#region Generic (LightmappedGeneric, UnlitGeneric, VertexLitGeneric, WorldVertexTransition)
 export class ShaderTemplate_Generic extends MaterialShaderTemplateBase {
     public static ub_ObjectParams = 2;
@@ -397,19 +413,6 @@ void mainVS() {
 
 #if defined FRAG
 
-#define DETAIL_BLEND_MODE_MUL_DETAIL2                             (0)
-#define DETAIL_BLEND_MODE_RGB_ADDITIVE                            (1)
-#define DETAIL_BLEND_MODE_DETAIL_OVER_BASE                        (2)
-#define DETAIL_BLEND_MODE_FADE                                    (3)
-#define DETAIL_BLEND_MODE_BASE_OVER_DETAIL                        (4)
-#define DETAIL_BLEND_MODE_RGB_ADDITIVE_SELFILLUM                  (5)
-#define DETAIL_BLEND_MODE_RGB_ADDITIVE_SELFILLUM_THRESHOLD_FADE   (6)
-#define DETAIL_BLEND_MODE_MOD2X_SELECT_TWO_PATTERNS               (7)
-#define DETAIL_BLEND_MODE_MULTIPLY                                (8)
-#define DETAIL_BLEND_MODE_MASK_BASE_BY_DETAIL_ALPHA               (9)
-#define DETAIL_BLEND_MODE_SSBUMP_BUMP                             (10)
-#define DETAIL_BLEND_MODE_SSBUMP_NOBUMP                           (11)
-
 vec4 CalcDetail(in vec4 t_BaseTexture, in vec4 t_DetailTexture) {
     bool use_detail = ${MaterialUtil.getDefineBool(m, 'USE_DETAIL')};
     if (!use_detail)
@@ -418,29 +421,32 @@ vec4 CalcDetail(in vec4 t_BaseTexture, in vec4 t_DetailTexture) {
     int t_BlendMode = ${MaterialUtil.getDefineString(m, 'DETAIL_BLEND_MODE')};
     float t_BlendFactor = u_DetailBlendFactor;
 
-    if (t_BlendMode == DETAIL_BLEND_MODE_MUL_DETAIL2) {
+    if (t_BlendMode == ${DetailBlendMode.MulDetail2}) {
         return t_BaseTexture * mix(vec4(1.0), t_DetailTexture * 2.0, t_BlendFactor);
-    } else if (t_BlendMode == DETAIL_BLEND_MODE_RGB_ADDITIVE) {
+    } else if (t_BlendMode == ${DetailBlendMode.RgbAdditive}) {
         return t_BaseTexture + t_DetailTexture * t_BlendFactor;
-    } else if (t_BlendMode == DETAIL_BLEND_MODE_DETAIL_OVER_BASE) {
+    } else if (t_BlendMode == ${DetailBlendMode.DetailOverBase}) {
         return vec4(mix(t_BaseTexture.rgb, t_DetailTexture.rgb, t_BlendFactor * t_DetailTexture.a), t_BaseTexture.a);
-    } else if (t_BlendMode == DETAIL_BLEND_MODE_FADE) {
+    } else if (t_BlendMode == ${DetailBlendMode.Fade}) {
         return mix(t_BaseTexture, t_DetailTexture, t_BlendFactor);
-    } else if (t_BlendMode == DETAIL_BLEND_MODE_BASE_OVER_DETAIL) {
+    } else if (t_BlendMode == ${DetailBlendMode.BaseOverDetail}) {
         return vec4(mix(t_BaseTexture.rgb, t_DetailTexture.rgb, (t_BlendFactor * (1.0 - t_BaseTexture.a))), t_DetailTexture.a);
-    } else if (t_BlendMode == DETAIL_BLEND_MODE_MULTIPLY) {
+    } else if (t_BlendMode == ${DetailBlendMode.Multiply}) {
         return mix(t_BaseTexture, t_BaseTexture * t_DetailTexture, t_BlendFactor);
-    } else if (t_BlendMode == DETAIL_BLEND_MODE_MOD2X_SELECT_TWO_PATTERNS) {
+    } else if (t_BlendMode == ${DetailBlendMode.Mod2xSelectTwoPatterns}) {
         vec4 t_DetailPattern = vec4(mix(t_DetailTexture.r, t_DetailTexture.a, t_BaseTexture.a));
         return t_BaseTexture * mix(vec4(1.0), t_DetailPattern * 2.0, t_BlendFactor);
-    } else if (t_BlendMode == DETAIL_BLEND_MODE_RGB_ADDITIVE_SELFILLUM || t_BlendMode == DETAIL_BLEND_MODE_RGB_ADDITIVE_SELFILLUM_THRESHOLD_FADE) {
+    } else if (t_BlendMode == ${DetailBlendMode.RgbAdditiveSelfIllum} || t_BlendMode == ${DetailBlendMode.RgbAdditiveSelfIllumThresholdFade}) {
         // Done in Post-Lighting.
         return t_BaseTexture;
-    } else if (t_BlendMode == DETAIL_BLEND_MODE_SSBUMP_BUMP) {
+    } else if (t_BlendMode == ${DetailBlendMode.SsbumpBump}) {
         // Done as part of bumpmapping.
         return t_BaseTexture;
-    } else if (t_BlendMode == DETAIL_BLEND_MODE_SSBUMP_NOBUMP) {
+    } else if (t_BlendMode == ${DetailBlendMode.SsbumpNobump}) {
         return vec4(t_BaseTexture.rgb * dot(t_DetailTexture.rgb, vec3(2.0 / 3.0)), t_BaseTexture.a);
+    } else if (t_BlendMode == ${DetailBlendMode.AlphaMaskBaseTexture}) {
+        t_BaseTexture.rgb = saturate(saturate(t_BaseTexture.rgb * 2.0) * t_DetailTexture.a + (1.0 - t_DetailTexture.a)) * t_DetailTexture.rgb;
+        return t_BaseTexture;
     }
 
     // Unknown.
@@ -455,9 +461,9 @@ vec3 CalcDetailPostLighting(in vec3 t_DiffuseColor, in vec3 t_DetailTexture) {
     int t_BlendMode = ${MaterialUtil.getDefineString(m, 'DETAIL_BLEND_MODE')};
     float t_BlendFactor = u_DetailBlendFactor;
 
-    if (t_BlendMode == DETAIL_BLEND_MODE_RGB_ADDITIVE_SELFILLUM) {
+    if (t_BlendMode == ${DetailBlendMode.RgbAdditiveSelfIllum}) {
         return t_DiffuseColor.rgb + t_DetailTexture.rgb * t_BlendFactor;
-    } else if (t_BlendMode == DETAIL_BLEND_MODE_RGB_ADDITIVE_SELFILLUM_THRESHOLD_FADE) {
+    } else if (t_BlendMode == ${DetailBlendMode.RgbAdditiveSelfIllumThresholdFade}) {
         // Remap.
         if (t_BlendFactor >= 0.5) {
             float t_Mult = (1.0 / t_BlendFactor);
@@ -738,7 +744,7 @@ void mainPS() {
                 // SSBUMP precomputes the elements of t_Influence (calculated below) offline.
                 t_Influence = t_BumpmapSample.rgb;
 
-                if (DETAIL_BLEND_MODE == DETAIL_BLEND_MODE_SSBUMP_BUMP) {
+                if (DETAIL_BLEND_MODE == ${DetailBlendMode.SsbumpBump}) {
                     t_Influence.xyz *= mix(vec3(1.0), 2.0 * t_DetailTexture.rgb, t_BaseTexture.a);
                     t_Albedo.a = 1.0; // Reset alpha
                 }
@@ -750,7 +756,7 @@ void mainPS() {
                 t_Influence.y = saturate(dot(t_BumpmapNormal, g_RNBasis1));
                 t_Influence.z = saturate(dot(t_BumpmapNormal, g_RNBasis2));
 
-                if (DETAIL_BLEND_MODE == DETAIL_BLEND_MODE_SSBUMP_BUMP) {
+                if (DETAIL_BLEND_MODE == ${DetailBlendMode.SsbumpBump}) {
                     t_Influence.xyz *= t_DetailTexture.rgb * 2.0;
                 }
             }
@@ -1035,7 +1041,7 @@ void mainPS() {
 }
 
 enum GenericShaderType {
-    LightmappedGeneric, VertexLitGeneric, UnlitGeneric, WorldVertexTransition, Skin, Black, DecalModulate, Sprite, Unknown,
+    LightmappedGeneric, VertexLitGeneric, UnlitGeneric, WorldVertexTransition, WorldTwoTextureBlend, Skin, Black, DecalModulate, Sprite, Unknown,
 };
 
 export class Material_Generic extends BaseMaterial {
@@ -1121,6 +1127,8 @@ export class Material_Generic extends BaseMaterial {
             this.shaderType = GenericShaderType.UnlitGeneric;
         else if (shaderTypeStr === 'worldvertextransition' || shaderTypeStr === 'sdk_worldvertextransition')
             this.shaderType = GenericShaderType.WorldVertexTransition;
+        else if (shaderTypeStr === 'worldtwotextureblend')
+            this.shaderType = GenericShaderType.WorldTwoTextureBlend;
         else if (shaderTypeStr === 'black')
             this.shaderType = GenericShaderType.Black;
         else if (shaderTypeStr === 'decalmodulate')
@@ -1150,6 +1158,7 @@ export class Material_Generic extends BaseMaterial {
         p['$detailtint']                   = new P.ParameterColor(1, 1, 1);
         p['$detailscale']                  = new P.ParameterNumber(4);
         p['$detailtexturetransform']       = new P.ParameterMatrix();
+        p['$detail_alpha_mask_base_texture'] = new P.ParameterBoolean(false, false);
         p['$bumpmap']                      = new P.ParameterTexture();             // Generic
         p['$bumpframe']                    = new P.ParameterNumber(0);
         p['$bumptransform']                = new P.ParameterMatrix();
@@ -1245,7 +1254,7 @@ export class Material_Generic extends BaseMaterial {
 
         this.shaderInstance = new UberShaderInstanceBasic(materialCache.shaderTemplates.Generic);
 
-        if (this.shaderType === GenericShaderType.LightmappedGeneric || this.shaderType === GenericShaderType.WorldVertexTransition) {
+        if (this.shaderType === GenericShaderType.LightmappedGeneric || this.shaderType === GenericShaderType.WorldVertexTransition || this.shaderType === GenericShaderType.WorldTwoTextureBlend) {
             this.wantsLightmap = true;
             this.shaderInstance.setDefineBool('USE_LIGHTMAP', true);
         }
@@ -1253,6 +1262,9 @@ export class Material_Generic extends BaseMaterial {
         if (this.shaderType === GenericShaderType.WorldVertexTransition) {
             this.wantsBaseTexture2 = true;
             this.shaderInstance.setDefineBool('USE_BASETEXTURE2', true);
+        } else if (this.shaderType === GenericShaderType.WorldTwoTextureBlend) {
+            const blendMode = this.paramGetBoolean('$detail_alpha_mask_base_texture') ? DetailBlendMode.AlphaMaskBaseTexture : DetailBlendMode.DetailOverBase;
+            this.paramSetNumber('$detailblendmode', blendMode);
         }
 
         if (this.wantsBaseTexture2 && this.paramGetVTF('$blendmodulatetexture') !== null) {
@@ -1561,9 +1573,12 @@ export class Material_Generic extends BaseMaterial {
             offs += this.paramFillTextureMatrix(d, offs, '$bumptransform2');
 
         if (this.wantsDetail) {
-            const detailTextureTransform = this.paramGetMatrix('$detailtexturetransform');
+            let p = this.param['$detailtexturetransform'] as P.ParameterMatrix;
+            if (!p.defined)
+                p = this.param['$basetexturetransform'] as P.ParameterMatrix;
             const detailScale = this.paramGetNumber('$detailscale');
-            scaleMatrix(MaterialUtil.scratchMat4a, detailTextureTransform, detailScale, detailScale);
+            scaleMatrix(MaterialUtil.scratchMat4a, p.matrix, detailScale);
+            scaleMatrix(MaterialUtil.scratchMat4a, MaterialUtil.scratchMat4a, this.texCoord0Scale[0], this.texCoord0Scale[1]);
             offs += fillMatrix4x2(d, offs, MaterialUtil.scratchMat4a);
         }
 

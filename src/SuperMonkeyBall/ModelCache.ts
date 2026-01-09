@@ -1,9 +1,8 @@
 import { ModelInst } from "./Model.js";
 import * as Gma from "./Gma.js";
 import { calcMipChain, TextureInputGX } from "../gx/gx_texture.js";
-import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
+import { GfxDevice, GfxTexture } from "../gfx/platform/GfxPlatform.js";
 import { assertExists } from "../util.js";
-import { LoadedTexture } from "../TextureHolder.js";
 import { loadTextureFromMipChain } from "../gx/gx_render.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { StageData } from "./World.js";
@@ -14,34 +13,23 @@ import { GXMaterialHacks } from "../gx/gx_material.js";
 // Cache loaded models by name and textures by unique name. Not much advantage over loading
 // everything at once but oh well.
 
-export class TextureCache implements UI.TextureListHolder {
-    public viewerTextures: Viewer.Texture[] = [];
-    public onnewtextures: (() => void) | null = null;
-    private cache: Map<string, LoadedTexture> = new Map();
+export class TextureCache {
+    private cache: Map<string, GfxTexture> = new Map();
 
-    getTexture(device: GfxDevice, gxTexture: TextureInputGX): LoadedTexture {
+    public getTexture(device: GfxDevice, gxTexture: TextureInputGX): GfxTexture {
         const loadedTex = this.cache.get(gxTexture.name);
         if (loadedTex === undefined) {
             const mipChain = calcMipChain(gxTexture, gxTexture.mipCount);
             const freshTex = loadTextureFromMipChain(device, mipChain);
-            this.cache.set(gxTexture.name, freshTex);
-            return freshTex;
+            this.cache.set(gxTexture.name, freshTex.gfxTexture);
+            return freshTex.gfxTexture;
         }
         return loadedTex;
     }
 
-    public updateViewerTextures(): void {
-        const nameList = Array.from(this.cache.keys()).sort();
-        this.viewerTextures = nameList.map((name) => assertExists(this.cache.get(name)).viewerTexture);
-        if (this.onnewtextures !== null) {
-            this.onnewtextures();
-        }
-    }
-
     public destroy(device: GfxDevice): void {
-        for (const loadedTex of this.cache.values()) {
-            device.destroyTexture(loadedTex.gfxTexture);
-        }
+        for (const loadedTex of this.cache.values())
+            device.destroyTexture(loadedTex);
     }
 }
 
@@ -158,10 +146,6 @@ export class ModelCache {
 
     public getBumperModel(): ModelInst | null {
         return this.bumperModel;
-    }
-
-    public getTextureCache(): TextureCache {
-        return this.textureCache;
     }
 
     public setMaterialHacks(hacks: GXMaterialHacks): void {

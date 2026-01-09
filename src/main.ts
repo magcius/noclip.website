@@ -88,6 +88,8 @@ import * as Scenes_Halo1 from './Halo1/scenes.js';
 import * as Scenes_WorldOfWarcraft from './WorldOfWarcraft/scenes.js';
 import * as Scenes_Glover from './Glover/scenes.js';
 import * as Scenes_HalfLife from './GoldSrc/Scenes_HalfLife.js';
+import * as Scenes_CounterStrike from './GoldSrc/Scenes_CounterStrike.js';
+import * as Scenes_Quake from './Quake/Scenes_Quake.js';
 import * as Scenes_SuperMonkeyBall from './SuperMonkeyBall/Scenes_SuperMonkeyBall.js';
 import * as Scenes_DragonQuest8 from './DragonQuest8/scenes.js';
 import * as Scenes_Morrowind from './Morrowind/Scenes.js';
@@ -99,6 +101,9 @@ import * as Scenes_CrashWarped from './CrashWarped/scenes.js';
 import * as Scenes_PlusForXP from './PlusForXP/scenes.js';
 import * as Scenes_MarioKart64 from './MarioKart64/scenes.js';
 import * as Scenes_KirbyAirRide from './KirbyAirRide/scenes.js';
+import * as Scenes_Descent1 from './Descent1_2/Scenes_Descent1.js';
+import * as Scenes_Descent2 from './Descent1_2/Scenes_Descent2.js';
+import * as Scenes_Descent2Vertigo from './Descent1_2/Scenes_Descent2Vertigo.js';
 import * as Scenes_TokyoMirageSessionsSharpFE from './TokyoMirageSessionsSharpFE/scenes.js';
 
 import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_FileDrops.js';
@@ -231,6 +236,8 @@ const sceneGroups: (string | SceneGroup)[] = [
     Scenes_Infra.sceneGroup,
     Scenes_JetSetRadio.sceneGroup,
     Scenes_HalfLife.sceneGroup,
+    Scenes_CounterStrike.sceneGroup,
+    Scenes_Quake.sceneGroup,
     Scenes_Left4Dead2.sceneGroup,
     Scenes_NeoTokyo.sceneGroup,
     Scenes_Morrowind.sceneGroup,
@@ -238,6 +245,9 @@ const sceneGroups: (string | SceneGroup)[] = [
     Scenes_AShortHike.sceneGroup,
     Scenes_NeonWhite.sceneGroup,
     Scenes_OuterWilds.sceneGroup,
+    Scenes_Descent1.sceneGroup,
+    Scenes_Descent2.sceneGroup,
+    Scenes_Descent2Vertigo.sceneGroup,
 ];
 
 enum SaveStatesAction {

@@ -4,14 +4,13 @@ import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import { colorCopy, colorFromRGBA } from '../Color.js';
 import { BTI_Texture, BTIData } from '../Common/JSYSTEM/JUTTexture.js';
 import { scaleMatrix, setMatrixAxis, setMatrixTranslation } from '../MathHelpers.js';
-import { TextureMapping } from '../TextureHolder.js';
 import { Endianness } from '../endian.js';
 import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
 import { nArray } from '../gfx/platform/GfxPlatformUtil.js';
 import { GfxRendererLayer, GfxRenderInstManager, makeSortKey } from '../gfx/render/GfxRenderInstManager.js';
 import { compileVtxLoader, DisplayListRegisters, displayListRegistersInitGX, displayListRegistersRun, getAttributeByteSize, GX_Array, GX_VtxAttrFmt, GX_VtxDesc } from '../gx/gx_displaylist.js';
 import * as GX from '../gx/gx_enum.js';
-import { ColorKind, DrawParams, GXMaterialHelperGfx, MaterialParams } from '../gx/gx_render.js';
+import { ColorKind, DrawParams, GXMaterialHelperGfx, GXTextureMapping, MaterialParams } from '../gx/gx_render.js';
 import { assert } from '../util.js';
 import { ViewerRenderInput } from '../viewer.js';
 import { dGlobals } from './Main.js';
@@ -209,11 +208,11 @@ function createTexture(r: DisplayListRegisters, data: ArrayBufferSlice, name: st
 }
 
 class WoodModel {
-    public shadowTextureMapping = nArray(1, () => new TextureMapping());
+    public shadowTextureMapping = nArray(1, () => new GXTextureMapping());
     public shadowTextureData: BTIData;
     public shadowMaterial: GXMaterialHelperGfx;
 
-    public bushTextureMapping = new TextureMapping();
+    public bushTextureMapping = new GXTextureMapping();
     public bushTextureData: BTIData;
     public bushMaterial: GXMaterialHelperGfx;
 

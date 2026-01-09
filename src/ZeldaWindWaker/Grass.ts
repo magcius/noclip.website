@@ -11,9 +11,8 @@ import { BTIData, BTI_Texture } from '../Common/JSYSTEM/JUTTexture.js';
 import { GX_Array, GX_VtxAttrFmt, GX_VtxDesc, compileVtxLoader, getAttributeByteSize } from '../gx/gx_displaylist.js';
 import { GXMaterial } from '../gx/gx_material.js';
 import { DisplayListRegisters, displayListRegistersRun, displayListRegistersInitGX } from '../gx/gx_displaylist.js';
-import { ColorKind, DrawParams, MaterialParams } from "../gx/gx_render.js";
+import { ColorKind, DrawParams, GXTextureMapping, MaterialParams } from "../gx/gx_render.js";
 import { GXMaterialHelperGfx } from '../gx/gx_render.js';
-import { TextureMapping } from '../TextureHolder.js';
 import { GfxRenderInstManager, makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderInstManager.js';
 import { ViewerRenderInput } from '../viewer.js';
 import { colorCopy, colorFromRGBA } from '../Color.js';
@@ -149,7 +148,7 @@ interface FlowerAnim {
 }
 
 class DynamicModel {
-    public textureMapping = nArray(1, () => new TextureMapping());
+    public textureMapping = nArray(1, () => new GXTextureMapping());
     public materialHelper: GXMaterialHelperGfx;
     public shapes: dDlst_BasicShape_c[] = [];
 

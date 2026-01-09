@@ -4,7 +4,7 @@ import { convertToCanvas } from "../gfx/helpers/TextureConversionHelpers.js";
 import { GfxBindingLayoutDescriptor, GfxDevice, GfxFormat, makeTextureDescriptor2D, GfxTexture } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
 import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase.js";
-import { LoadedTexture, TextureHolder } from "../TextureHolder.js";
+import { TextureHolder, TextureMapping } from "../TextureHolder.js";
 import { assert, assertExists, hexzero0x, readString } from "../util.js";
 import { SceneGfx, ViewerRenderInput } from "../viewer.js";
 import * as AFS from './AFS.js';
@@ -36,17 +36,35 @@ function textureToCanvas(texture: PVRT.PVR_Texture) {
     return { name: texture.name, surfaces, extraInfo };
 }
 
-export class PVRTextureHolder extends TextureHolder<PVRT.PVR_Texture> {
+export class PVRTextureHolder extends TextureHolder {
+    public texMappingMagenta = new TextureMapping();
+    public texMappingWhite = new TextureMapping();
+
     public getTextureName(id: number): string {
         return hexzero0x(id, 4);
     }
 
-    protected loadTexture(device: GfxDevice, textureEntry: PVRT.PVR_Texture): LoadedTexture | null {
+    public override fillTextureMapping(dst: TextureMapping, name: string): boolean {
+        // XXX(jstpierre): Missing texture hacks.
+        if (name === '_magenta') {
+            dst.copy(this.texMappingMagenta);
+            return true;
+        } else if (name === '_white') {
+            dst.copy(this.texMappingWhite);
+            return true;
+        } else {
+            return super.fillTextureMapping(dst, name);
+        }
+    }
+
+    public addTexture(device: GfxDevice, textureEntry: PVRT.PVR_Texture): void {
         const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_SRGB, textureEntry.width, textureEntry.height, textureEntry.levels.length));
         device.setResourceName(gfxTexture, textureEntry.name);
         device.uploadTextureData(gfxTexture, 0, textureEntry.levels.reverse().map((level) => level.data));
         const viewerTexture = textureToCanvas(textureEntry);
-        return { gfxTexture, viewerTexture };
+        this.gfxTextures.push(gfxTexture);
+        this.viewerTextures.push(viewerTexture);
+        this.textureNames.push(textureEntry.name);
     }
 }
 
@@ -198,8 +216,9 @@ class ModelCache {
 
         this.texOpaqueMagenta = makeSolidColorTexture2D(device, Magenta);
         this.texOpaqueWhite = makeSolidColorTexture2D(device, White);
-        this.textureHolder.setTextureOverride('_magenta', { gfxTexture: this.texOpaqueMagenta, width: 1, height: 1, flipY: false });
-        this.textureHolder.setTextureOverride('_white', { gfxTexture: this.texOpaqueWhite, width: 1, height: 1, flipY: false });
+
+        this.textureHolder.texMappingMagenta.gfxTexture = this.texOpaqueMagenta;
+        this.textureHolder.texMappingWhite.gfxTexture = this.texOpaqueWhite;
     }
 
     public waitForLoad(): Promise<void> {
@@ -248,7 +267,7 @@ class ModelCache {
             const texData = this.stageData.TexlistData.Textures[textureIndex];
             const txpData = this.getAFSRef(texData);
             const tex = parseTXPTex(txpData, texData.Offset, textureIndex);
-            this.textureHolder.addTextures(this.device, [tex]);
+            this.textureHolder.addTexture(this.device, tex);
         }
     }
 

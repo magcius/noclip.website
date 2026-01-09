@@ -161,9 +161,6 @@ export class TextureArray extends TextureMapping {
         device.uploadTextureData(gfxTexture, 0, mipmaps);
 
         this.gfxTexture = gfxTexture;
-        this.width = width;
-        this.height = height;
-        this.flipY = false;
         this.transparent = transparent;
 
         this.gfxSampler = cache.createSampler({

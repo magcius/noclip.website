@@ -145,7 +145,7 @@ export default class Renderer implements SceneGfx {
     constructor(
         device: GfxDevice,
         worldData: WorldData,
-        public textureHolder: TextureHolder<TextureBase>,
+        public textureHolder: TextureHolder,
     ) {
         this.setupGraphics(device);
         this.world = new World(device, worldData);

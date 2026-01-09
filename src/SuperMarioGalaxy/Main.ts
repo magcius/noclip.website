@@ -9,7 +9,6 @@ import { SceneContext } from '../SceneBase.js';
 import * as Viewer from '../viewer.js';
 import * as UI from '../ui.js';
 
-import { TextureMapping } from '../TextureHolder.js';
 import { colorNewCopy, TransparentBlack } from '../Color.js';
 import { GfxDevice, GfxRenderPass, GfxTexture, GfxFormat, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxClipSpaceNearZ } from '../gfx/platform/GfxPlatform.js';
 import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
@@ -19,7 +18,7 @@ import { setBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '
 import { gfxDeviceNeedsFlipY } from '../gfx/helpers/GfxDeviceHelpers.js';
 import { projectionMatrixConvertClipSpaceNearZ } from '../gfx/helpers/ProjectionHelpers.js';
 
-import { SceneParams,  ub_SceneParamsBufferSize, fillSceneParamsData, calcLODBias } from '../gx/gx_render.js';
+import { SceneParams,  ub_SceneParamsBufferSize, fillSceneParamsData, calcLODBias, GXTextureMapping, GXViewerTexture } from '../gx/gx_render.js';
 import { EFB_WIDTH, EFB_HEIGHT, GX_Program } from '../gx/gx_material.js';
 import { GXRenderHelperGfx } from '../gx/gx_render.js';
 
@@ -84,7 +83,7 @@ export enum SpecialTextureType {
 
 class SpecialTextureBinder {
     private clampSampler: GfxSampler;
-    private textureMapping = new Map<SpecialTextureType, TextureMapping>();
+    private textureMapping = new Map<SpecialTextureType, GXTextureMapping>();
     private needsFlipY = false;
     private transparentTexture: GfxTexture;
 
@@ -111,12 +110,12 @@ class SpecialTextureBinder {
     }
 
     private registerSpecialTextureType(textureType: SpecialTextureType, gfxSampler: GfxSampler): void {
-        const m = new TextureMapping();
+        const m = new GXTextureMapping();
         m.gfxSampler = gfxSampler;
         this.textureMapping.set(textureType, m);
     }
 
-    public registerTextureMapping(m: TextureMapping, textureType: SpecialTextureType): void {
+    public registerTextureMapping(m: GXTextureMapping, textureType: SpecialTextureType): void {
         m.width = EFB_WIDTH;
         m.height = EFB_HEIGHT;
         m.flipY = this.needsFlipY;
@@ -468,7 +467,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
         // Prepare all of our NameObjs.
         executor.calcViewAndEntry(sceneObjHolder, DrawCameraType.DrawCameraType_3D, viewerInput);
         executor.calcViewAndEntry(sceneObjHolder, DrawCameraType.DrawCameraType_2D, viewerInput);
-        sceneObjHolder.debugDraw.beginFrame(viewerInput.camera.projectionMatrix, viewerInput.camera.viewMatrix, viewerInput.backbufferHeight, viewerInput.backbufferHeight);
+        sceneObjHolder.debugDraw.beginFrame(viewerInput.camera.projectionMatrix, viewerInput.camera.viewMatrix, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
 
         // Draw our render insts.
         const template = renderInstManager.pushTemplate();
@@ -856,11 +855,22 @@ function getLayerDirName(index: LayerId) {
     }
 }
 
-class TextureListHolder {
-    public viewerTextures: Viewer.Texture[] = [];
+class TextureListHolder implements UI.TextureListHolder {
+    private viewerTextures: GXViewerTexture[] = [];
     public onnewtextures: (() => void) | null = null;
 
-    public addTextures(textures: Viewer.Texture[]): void {
+    public get textureNames(): string[] {
+        return this.viewerTextures.map((texture) => texture.name);
+    }
+
+    public async getViewerTexture(i: number) {
+        const tex = this.viewerTextures[i];
+        if (tex.surfaces.length === 0 && tex.activate !== undefined)
+            await tex.activate();
+        return tex;
+    }
+
+    public addTextures(textures: GXViewerTexture[]): void {
         let changed = false;
         for (let i = 0; i < textures.length; i++) {
             if (this.viewerTextures.find((texture) => textures[i].name === texture.name) === undefined) {

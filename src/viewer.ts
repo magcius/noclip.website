@@ -23,7 +23,6 @@ export interface Texture {
     name: string;
     surfaces: HTMLCanvasElement[];
     extraInfo?: Map<string, string> | null;
-    activate?: () => Promise<void>;
 }
 
 interface MouseLocation {

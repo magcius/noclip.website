@@ -12,14 +12,13 @@ import { GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, compileVtxLoader
 import { mat4, vec3 } from 'gl-matrix';
 import { Endianness } from '../endian.js';
 import { AABB } from '../Geometry.js';
-import { TextureMapping } from '../TextureHolder.js';
 import AnimationController from '../AnimationController.js';
 import { getFormatCompFlagsComponentCount } from '../gfx/platform/GfxPlatformFormat.js';
 import { getPointHermite } from '../Spline.js';
 import { colorToRGBA8, colorFromRGBA8, colorNewCopy, White, Color, colorNewFromRGBA, colorCopy } from '../Color.js';
 import { computeModelMatrixSRT, MathConstants, lerp, Vec3UnitY } from '../MathHelpers.js';
 import BitMap from '../BitMap.js';
-import { autoOptimizeMaterial } from '../gx/gx_render.js';
+import { GXTextureMapping } from '../gx/gx_render.js';
 import { Camera } from '../Camera.js';
 import { MDL0ModelInstance } from './render.js';
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder.js';
@@ -1888,15 +1887,15 @@ function findFrameData<T extends { frame: number }>(frames: T[], frame: number):
 }
 
 export class PAT0TexAnimator {
-    private textureMappings: TextureMapping[];
+    private textureMappings: GXTextureMapping[];
     constructor(public animationController: AnimationController, public pat0: PAT0, public texData: PAT0_TexData, modelInstance: MDL0ModelInstance) {
         // XXX(jstpierre): Not all of these textures are necessarily used by this specific material, maybe something to fix later...
-        this.textureMappings = nArray(this.pat0.texNames.length, () => new TextureMapping());
+        this.textureMappings = nArray(this.pat0.texNames.length, () => new GXTextureMapping());
         for (let i = 0; i < this.textureMappings.length; i++)
             modelInstance.textureHolder!.fillTextureMapping(this.textureMappings[i], this.pat0.texNames[i]);
     }
 
-    public fillTextureMapping(dst: TextureMapping): void {
+    public fillTextureMapping(dst: GXTextureMapping): void {
         const texData = this.texData;
         if (!texData.texIndexValid)
             return;

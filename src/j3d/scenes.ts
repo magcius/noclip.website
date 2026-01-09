@@ -160,10 +160,11 @@ function createScenesFromBuffer(device: GfxDevice, renderer: BasicRenderer, buff
                 if (basename.includes('_sky'))
                     modelInstance.isSkybox = true;
                 renderer.addModelInstance(modelInstance);
-                renderer.textureHolder.addTextures(device, modelInstance.modelMaterialData.tex1Data!.tex1.textureDatas);
+                for (const tex of modelInstance.modelMaterialData.tex1Data!.tex1.textureDatas)
+                    renderer.textureHolder.addTexture(device, tex);
             } else if (file.name.endsWith('.bti')) {
                 const texture = readBTI_Texture(file.buffer, file.name);
-                renderer.textureHolder.addTextures(device, [texture]);
+                renderer.textureHolder.addTexture(device, texture);
             }
         }
     }
@@ -173,7 +174,8 @@ function createScenesFromBuffer(device: GfxDevice, renderer: BasicRenderer, buff
         const bmdModel = new J3DModelData(device, renderer.renderHelper.renderInstManager.gfxRenderCache, bmd);
         const modelInstance = new J3DModelInstanceSimple(bmdModel);
         renderer.addModelInstance(modelInstance);
-        renderer.textureHolder.addTextures(device, modelInstance.modelMaterialData.tex1Data!.tex1.textureDatas);
+        for (const tex of modelInstance.modelMaterialData.tex1Data!.tex1.textureDatas)
+            renderer.textureHolder.addTexture(device, tex);
     }
 }
 

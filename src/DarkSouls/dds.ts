@@ -1,8 +1,6 @@
 
-import * as Viewer from '../viewer.js';
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { assert, readString } from "../util.js";
-import { TextureHolder, LoadedTexture } from "../TextureHolder.js";
 import { GfxDevice, GfxFormat, GfxTexture, GfxTextureDescriptor, GfxTextureDimension, GfxTextureUsage, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform.js";
 import { decompressBC, DecodedSurfaceSW } from "../Common/bc_texture.js";
 
@@ -227,17 +225,4 @@ export function createTexture(device: GfxDevice, dds: DDS): GfxTexture {
     device.setResourceName(tex, dds.name);
     device.uploadTextureData(tex, 0, levelDatas);
     return tex;
-}
-
-export class DDSTextureHolder extends TextureHolder<DDS> {
-    public loadTexture(device: GfxDevice, dds: DDS): LoadedTexture {
-        const surfaces: HTMLCanvasElement[] = [];
-
-        const extraInfo = new Map<string, string>();
-        extraInfo.set('Format', dds.format);
-        const viewerTexture: Viewer.Texture = { name: dds.name, surfaces, extraInfo };
-
-        const gfxTexture = createTexture(device, dds);
-        return { viewerTexture, gfxTexture };
-    }
 }
