@@ -431,7 +431,7 @@ class MaterialInstance {
                 0.5, 0.0, 0.0, 0.0,
                 0.0, -0.5 * flipYScale, 0.0, 0.0,
                 0.0, 0.0, 0.0, 0.0,
-                0.5, 0.5, 0.0, 1.0,
+                0.5, 0.5, 1.0, 1.0,
             );
 
             // Apply effect matrix.
