@@ -1,7 +1,7 @@
 import { GfxDevice, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxInputLayoutBufferDescriptor,
          GfxVertexBufferFrequency, GfxInputLayout, GfxFormat, GfxProgram, GfxBufferFrequencyHint,
          GfxBufferUsage, GfxBindingLayoutDescriptor, GfxCullMode, GfxIndexBufferDescriptor, 
-         GfxBuffer, makeTextureDescriptor2D, GfxSamplerDescriptor } from "../gfx/platform/GfxPlatform.js";
+         GfxBuffer, makeTextureDescriptor2D, GfxSamplerDescriptor, GfxSamplerBinding} from "../gfx/platform/GfxPlatform.js";
 import { SceneGfx, ViewerRenderInput } from "../viewer.js";
 import { FRES, read_bfres_string } from "./bfres/bfres_switch.js";
 import { FMDL } from "./bfres/fmdl.js";
@@ -16,7 +16,7 @@ import { mat4, vec3 } from "gl-matrix";
 import { computeModelMatrixSRT } from "../MathHelpers.js";
 import { assert, readString } from "../util.js";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
-import { parseBNTX } from "./bntx.js";
+import { BNTX, parseBNTX } from "./bntx.js";
 
 export class TMSFEScene implements SceneGfx
 {
@@ -43,13 +43,13 @@ export class TMSFEScene implements SceneGfx
                 texture.gfx_texture = gfx_texture;
             }
 
-
             // create all fshp_renderers
             const fmdl = fres.fmdl[0];
             const shapes = fmdl.fshp;
             for (let i = 0; i < shapes.length; i++)
+            // for (let i = 0; i < 1; i++)
             {
-                const renderer = new fshp_renderer(device, this.renderHelper, fmdl, i);
+                const renderer = new fshp_renderer(device, this.renderHelper, fmdl, i, bntx);
                 this.fshp_renderers.push(renderer);
             }
 
@@ -126,8 +126,9 @@ class fshp_renderer
     private input_layout: GfxInputLayout;
     private transform_matrix: mat4 = mat4.create();
     private program: TMSFEProgram;
+    private sampler_bindings: GfxSamplerBinding[] = [];
 
-    constructor(device: GfxDevice, renderHelper: GfxRenderHelper, fmdl: FMDL, shape_index: number)
+    constructor(device: GfxDevice, renderHelper: GfxRenderHelper, fmdl: FMDL, shape_index: number, bntx: BNTX)
     {
         // create vertex buffers
         const fshp = fmdl.fshp[shape_index];
@@ -145,8 +146,6 @@ class fshp_renderer
                 bufferIndex: fvtx.vertexAttributes[i].bufferIndex,
                 bufferByteOffset: fvtx.vertexAttributes[i].bufferOffset
             });
-
-            // create a lookup map for the shader to know what attribute is what
         }
 
         const inputLayoutBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [];
@@ -188,8 +187,25 @@ class fshp_renderer
 
         // setup sampler
         const fmat = fmdl.fmat[fshp.fmat_index];
-
-        const sampler = renderHelper.renderCache.createSampler(sampler_descriptor);
+        // for (let i = 0; i < fmat.texture_names.length; i++)
+        for (let i = 0; i < 1; i++)
+        {
+            const texture_name = fmat.texture_names[i];
+            const texture = bntx.textures.find((f) => f.name === texture_name);
+            if (texture !== undefined)
+            {
+                console.log(texture.name);
+                console.log(texture.format);
+                const gfx_texture = texture.gfx_texture;
+                const sampler_descriptor = fmat.sampler_descriptors[i];
+                const gfx_sampler = renderHelper.renderCache.createSampler(sampler_descriptor);
+                this.sampler_bindings.push({ gfxTexture: gfx_texture, gfxSampler: gfx_sampler, lateBinding: null })
+            }
+            else
+            {
+                throw("texture not found");
+            }
+        }
 
         // initialize shader
         this.program = new TMSFEProgram(fvtx, fmat);
@@ -209,6 +225,9 @@ class fshp_renderer
         const program = renderHelper.renderCache.createProgram(this.program);
         renderInst.setGfxProgram(program);
         
+        // set sampler
+        renderInst.setSamplerBindingsFromTextureMappings(this.sampler_bindings);
+
         // create uniform buffers for the shader
         const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 1, numSamplers: 0 }];
         renderInst.setBindingLayouts(bindingLayouts);

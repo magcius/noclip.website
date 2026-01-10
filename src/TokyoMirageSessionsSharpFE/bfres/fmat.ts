@@ -39,7 +39,7 @@ export function parseFMAT(buffer: ArrayBufferSlice, offset: number, count: numbe
 
         const sampler_info_array_offset = view.getUint32(fmat_entry_offset + 0x40, true);
         const sampler_info_count = view.getUint8(fmat_entry_offset + 0x9C);
-        let samplers: GfxSamplerDescriptor[] = [];
+        let sampler_descriptors: GfxSamplerDescriptor[] = [];
         let sampler_info_entry_offset = sampler_info_array_offset;
         for (let i = 0; i < sampler_info_count; i++)
         {
@@ -50,7 +50,8 @@ export function parseFMAT(buffer: ArrayBufferSlice, offset: number, count: numbe
             const original_wrap_q = view.getUint8(sampler_info_entry_offset + 0x2);
             const wrap_q = convert_wrap_mode(original_wrap_q);
 
-            const depth_compare: GfxCompareMode = view.getUint8(sampler_info_entry_offset + 0x3);
+            const original_depth_compare = view.getUint8(sampler_info_entry_offset + 0x3);
+            const depth_compare = convert_depth_compare_mode(original_depth_compare);
             // const border_color = view.getUint8(sampler_info_entry_offset + 0x4);
             const max_anisotropy = view.getUint8(sampler_info_entry_offset + 0x5);
             const filters = view.getUint16(sampler_info_entry_offset + 0x6, true);
@@ -66,7 +67,7 @@ export function parseFMAT(buffer: ArrayBufferSlice, offset: number, count: numbe
             const lod_max = view.getFloat32(sampler_info_entry_offset + 0xC, true);
             // const lod_bias = view.getFloat32(sampler_info_entry_offset + 0x10, true);
 
-            samplers.push
+            sampler_descriptors.push
             ({
                 wrapS: wrap_s,
                 wrapT: wrap_t,
@@ -76,17 +77,18 @@ export function parseFMAT(buffer: ArrayBufferSlice, offset: number, count: numbe
                 mipFilter: mipmap_filter,
                 minLOD: lod_min,
                 maxLOD: lod_max,
+                maxAnisotropy: max_anisotropy,
                 compareMode: depth_compare,
             });
             sampler_info_entry_offset += SAMPLER_INFO_ENTRY_SIZE;
         }
+        console.log(sampler_descriptors);
 
         const user_data_array_offset = view.getUint32(fmat_entry_offset + 0x68, true);
         const user_data_count = view.getUint16(fmat_entry_offset + 0xA6, true);
         const user_data_array: user_data[] = parse_user_data(buffer, user_data_array_offset, user_data_count);
         
-
-        fmat_array.push({ name, texture_names: texture_name_array, samplers, user_data: user_data_array });
+        fmat_array.push({ name, texture_names: texture_name_array, sampler_descriptors, user_data: user_data_array });
         fmat_entry_offset += FMAT_ENTRY_SIZE;
     }
 
@@ -101,7 +103,7 @@ export interface FMAT
 {
     name: string;
     texture_names: string[];
-    samplers: GfxSamplerDescriptor[];
+    sampler_descriptors: GfxSamplerDescriptor[];
     user_data: user_data[];
 }
 
@@ -140,7 +142,7 @@ export enum FilterMode
     Linear,
 }
 
-// Convert the filter mode number to the correspoding noclip.website one
+// Convert the texture filter mode number to the corresponding noclip.website one
 // input: filter mode number to convert
 function convert_tex_filter_mode(input: FilterMode)
 {
@@ -158,6 +160,8 @@ function convert_tex_filter_mode(input: FilterMode)
     }
 }
 
+// Convert the mipmap filter mode number to the corresponding noclip.website one
+// input: filter mode number to convert
 function convert_mip_filter_mode(input: FilterMode)
 {
     switch(input)
@@ -170,6 +174,54 @@ function convert_mip_filter_mode(input: FilterMode)
 
         default:
             console.error(`mip filter mode ${input} not found`);
+            throw "whoops";
+    }
+}
+
+export enum DepthCompare
+{
+    Never,
+    Less,
+    Equal,
+    LessOrEqual,
+    Greater,
+    NotEqual,
+    GreaterOrEqual,
+    Always,
+}
+
+// Convert the depth compare number to the corresponding noclip.website one
+// input: depth compare number to convert
+function convert_depth_compare_mode(input: DepthCompare)
+{
+    switch(input)
+    {
+        case DepthCompare.Never:
+            return GfxCompareMode.Never;
+        
+        case DepthCompare.Less:
+            return GfxCompareMode.Less;
+
+        case DepthCompare.Equal:
+            return GfxCompareMode.Equal;
+
+         case DepthCompare.LessOrEqual:
+            return GfxCompareMode.LessEqual;
+
+         case DepthCompare.Greater:
+            return GfxCompareMode.Greater;
+
+         case DepthCompare.NotEqual:
+            return GfxCompareMode.NotEqual;
+
+         case DepthCompare.GreaterOrEqual:
+            return GfxCompareMode.GreaterEqual;
+
+         case DepthCompare.Always:
+            return GfxCompareMode.Always;
+
+        default:
+            console.error(`depth compare mode ${input} not found`);
             throw "whoops";
     }
 }
