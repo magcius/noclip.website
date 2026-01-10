@@ -511,8 +511,8 @@ class TerrainProgram extends DeviceProgram {
     public static a_Color = 2;
 
     public override both = `
-precision mediump float;
-precision mediump sampler2DArray;
+precision highp float;
+precision highp sampler2DArray;
 
 ${GfxShaderLibrary.MatrixLibrary}
 

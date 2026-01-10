@@ -326,8 +326,8 @@ class ShadowVolumeProgram extends DeviceProgram {
         this.setDefineBool('SHADOWMAP', shadowMap);
 
         this.both = `
-precision mediump sampler2DArray;
-precision mediump float;
+precision highp sampler2DArray;
+precision highp float;
 
 ${GfxShaderLibrary.MatrixLibrary}
 ${GfxShaderLibrary.saturate}

@@ -41,9 +41,9 @@ export class ShaderTemplate_Generic extends MaterialShaderTemplateBase {
 
     public override generateProgramString(m: Map<string, string>): string {
         return `
-precision mediump float;
-precision mediump sampler2DArray;
-precision mediump sampler2DShadow;
+precision highp float;
+precision highp sampler2DArray;
+precision highp sampler2DShadow;
 
 ${MaterialShaderTemplateBase.Common}
 

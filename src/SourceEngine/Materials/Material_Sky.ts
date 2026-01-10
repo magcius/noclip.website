@@ -17,7 +17,7 @@ export class ShaderTemplate_Sky extends MaterialShaderTemplateBase {
     public static ub_ObjectParams = 2;
 
     public override program = `
-precision mediump float;
+precision highp float;
 
 ${MaterialShaderTemplateBase.Common}
 
@@ -53,7 +53,7 @@ export class ShaderTemplate_SkyHDRCompressed extends MaterialShaderTemplateBase 
     public static ub_ObjectParams = 2;
 
     public override program = `
-precision mediump float;
+precision highp float;
 
 ${MaterialShaderTemplateBase.Common}
 

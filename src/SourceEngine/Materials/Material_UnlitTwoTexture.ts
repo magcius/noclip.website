@@ -14,7 +14,7 @@ export class ShaderTemplate_UnlitTwoTexture extends MaterialShaderTemplateBase {
     public static ub_ObjectParams = 2;
 
     public override program = `
-precision mediump float;
+precision highp float;
 
 ${MaterialShaderTemplateBase.Common}
 

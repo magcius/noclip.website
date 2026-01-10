@@ -16,7 +16,7 @@ export class ShaderTemplate_SolidEnergy extends MaterialShaderTemplateBase {
     public static ub_ObjectParams = 2;
 
     public override program = `
-precision mediump float;
+precision highp float;
 
 ${MaterialShaderTemplateBase.Common}
 
