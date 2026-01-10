@@ -489,7 +489,7 @@ export default class CodeEditor {
         let match;
 
         // Colors taken from the railscasts color scheme.
-        const keywords = (/\b(function|for|while|if|else|break|continue|in|out|attribute|uniform|varying|return|struct|layout|precision|highp|lowp|highp|discard)\b/g);
+        const keywords = (/\b(function|for|while|if|else|break|continue|in|out|attribute|uniform|varying|return|struct|layout|precision|mediump|lowp|highp|discard)\b/g);
         while ((match = keywords.exec(chars)) !== null)
             syntaxRuns.push({ start: match.index, end: match.index + match[0].length, color: '#c26230' });
         const types = (/\b(void|bool|float|[ui]?vec[234]|mat[234]|mat[234]x[234]|[u]?int|sampler[23]D)\b/g);
