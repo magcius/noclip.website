@@ -47,7 +47,6 @@ export class TMSFEScene implements SceneGfx
             const fmdl = fres.fmdl[0];
             const shapes = fmdl.fshp;
             for (let i = 0; i < shapes.length; i++)
-            // for (let i = 0; i < 1; i++)
             {
                 const renderer = new fshp_renderer(device, this.renderHelper, fmdl, i, bntx);
                 this.fshp_renderers.push(renderer);
@@ -194,8 +193,6 @@ class fshp_renderer
             const texture = bntx.textures.find((f) => f.name === texture_name);
             if (texture !== undefined)
             {
-                console.log(texture.name);
-                console.log(texture.format);
                 const gfx_texture = texture.gfx_texture;
                 const sampler_descriptor = fmat.sampler_descriptors[i];
                 const gfx_sampler = renderHelper.renderCache.createSampler(sampler_descriptor);
@@ -224,18 +221,19 @@ class fshp_renderer
         // set shader
         const program = renderHelper.renderCache.createProgram(this.program);
         renderInst.setGfxProgram(program);
-        
-        // set sampler
-        renderInst.setSamplerBindingsFromTextureMappings(this.sampler_bindings);
 
+        const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 1, numSamplers: this.sampler_bindings.length }];
+        
         // create uniform buffers for the shader
-        const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 1, numSamplers: 0 }];
         renderInst.setBindingLayouts(bindingLayouts);
         let uniform_buffer_offset = renderInst.allocateUniformBuffer(TMSFEProgram.ub_SceneParams, 44);
         const mapped = renderInst.mapUniformBufferF32(TMSFEProgram.ub_SceneParams);
         uniform_buffer_offset += fillMatrix4x4(mapped, uniform_buffer_offset, viewerInput.camera.projectionMatrix);
         uniform_buffer_offset += fillMatrix4x3(mapped, uniform_buffer_offset, viewerInput.camera.viewMatrix);
         uniform_buffer_offset += fillMatrix4x4(mapped, uniform_buffer_offset, this.transform_matrix);
+
+        // set sampler
+        renderInst.setSamplerBindingsFromTextureMappings(this.sampler_bindings);
 
         renderInst.setMegaStateFlags({ cullMode: GfxCullMode.Back });
         

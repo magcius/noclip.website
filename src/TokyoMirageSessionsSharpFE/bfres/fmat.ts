@@ -82,7 +82,6 @@ export function parseFMAT(buffer: ArrayBufferSlice, offset: number, count: numbe
             });
             sampler_info_entry_offset += SAMPLER_INFO_ENTRY_SIZE;
         }
-        console.log(sampler_descriptors);
 
         const user_data_array_offset = view.getUint32(fmat_entry_offset + 0x68, true);
         const user_data_count = view.getUint16(fmat_entry_offset + 0xA6, true);
@@ -144,7 +143,7 @@ export enum FilterMode
 
 // Convert the texture filter mode number to the corresponding noclip.website one
 // input: filter mode number to convert
-function convert_tex_filter_mode(input: FilterMode)
+function convert_tex_filter_mode(input: FilterMode): GfxTexFilterMode
 {
     switch(input)
     {
@@ -162,7 +161,7 @@ function convert_tex_filter_mode(input: FilterMode)
 
 // Convert the mipmap filter mode number to the corresponding noclip.website one
 // input: filter mode number to convert
-function convert_mip_filter_mode(input: FilterMode)
+function convert_mip_filter_mode(input: FilterMode): GfxMipFilterMode
 {
     switch(input)
     {
@@ -192,12 +191,12 @@ export enum DepthCompare
 
 // Convert the depth compare number to the corresponding noclip.website one
 // input: depth compare number to convert
-function convert_depth_compare_mode(input: DepthCompare)
+function convert_depth_compare_mode(input: DepthCompare): GfxCompareMode | undefined
 {
     switch(input)
     {
         case DepthCompare.Never:
-            return GfxCompareMode.Never;
+            return undefined;
         
         case DepthCompare.Less:
             return GfxCompareMode.Less;
