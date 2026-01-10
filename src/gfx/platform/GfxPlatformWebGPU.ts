@@ -431,6 +431,8 @@ function translateVertexFormat(format: GfxFormat): GPUVertexFormat {
         return 'sint8x2';
     else if (format === GfxFormat.S8_RGBA)
         return 'sint8x4';
+    else if (format === GfxFormat.S8_RG_NORM)
+        return 'snorm8x2';
     else if (format === GfxFormat.S8_RGB_NORM)
         return 'snorm8x4';
     else if (format === GfxFormat.S8_RGBA_NORM)
