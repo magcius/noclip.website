@@ -1,55 +1,38 @@
 import type { BAMFile } from "../bam";
 import type { DataStream } from "../common";
 import { BAMObject, registerBAMObject } from "./base";
-import {
-  type DebugInfo,
-  dbgArray,
-  dbgEnum,
-  dbgNum,
-  dbgRef,
-} from "./debug";
+import { type DebugInfo, dbgArray, dbgEnum, dbgNum, dbgRef } from "./debug";
+import { GeomVertexArrayData } from "./GeomVertexArrayData";
 import { NumericType, ShadeModel, UsageHint } from "./geomEnums";
 
 export class GeomPrimitive extends BAMObject {
-  public shadeModel: ShadeModel;
-  public firstVertex: number;
-  public numVertices: number;
-  public indexType: NumericType;
-  public usageHint: UsageHint;
-  public verticesRef: number | null = null;
-  public ends: number[] | null = null;
+  public shadeModel = ShadeModel.Uniform;
+  public firstVertex = 0;
+  public numVertices = 0;
+  public indexType = NumericType.U8;
+  public usageHint = UsageHint.Static;
+  public vertices: GeomVertexArrayData | null = null;
+  public ends: Int32Array = new Int32Array();
 
-  constructor(objectId: number, file: BAMFile, data: DataStream) {
-    super(objectId, file, data);
-
-    // Cycler data
+  override load(file: BAMFile, data: DataStream) {
     this.shadeModel = data.readUint8() as ShadeModel;
     this.firstVertex = data.readInt32();
     this.numVertices = data.readInt32();
     this.indexType = data.readUint8() as NumericType;
     this.usageHint = data.readUint8() as UsageHint;
+    this.vertices = file.getTyped(data.readObjectId(), GeomVertexArrayData);
+    this.ends = data.readPtaInt32();
+  }
 
-    // Vertices reference (optional)
-    const vertRef = data.readObjectId();
-    if (vertRef !== 0) {
-      this.verticesRef = vertRef;
-    }
-
-    // PTA for ends (tristrip end indices)
-    // PTA IDs use the same dynamic format as object IDs (u16/u32)
-    // Note: The array data (size + elements) is always written inline when:
-    // - ptaId is 0 (NULL pointer) - size will be 0
-    // - ptaId is a new ID we haven't seen before - size will be actual count
-    // When ptaId references an already-registered array, no additional data is read.
-    // For simplicity, we always read inline since we don't track PTA references.
-    const _ptaId = data.readObjectId();
-    const size = data.readUint32();
-    if (size > 0) {
-      this.ends = [];
-      for (let i = 0; i < size; i++) {
-        this.ends.push(data.readInt32());
-      }
-    }
+  override copyTo(target: this): void {
+    super.copyTo(target);
+    target.shadeModel = this.shadeModel;
+    target.firstVertex = this.firstVertex;
+    target.numVertices = this.numVertices;
+    target.indexType = this.indexType;
+    target.usageHint = this.usageHint;
+    target.vertices = this.vertices; // Shared
+    target.ends = this.ends; // Shared
   }
 
   override getDebugInfo(): DebugInfo {
@@ -59,24 +42,25 @@ export class GeomPrimitive extends BAMObject {
     info.set("numVertices", dbgNum(this.numVertices));
     info.set("indexType", dbgEnum(this.indexType, NumericType));
     info.set("usageHint", dbgEnum(this.usageHint, UsageHint));
-
-    if (this.verticesRef !== null) {
-      info.set("verticesRef", dbgRef(this.verticesRef));
-    }
-
-    if (this.ends !== null) {
-      info.set("ends", dbgArray(this.ends.map(dbgNum)));
-    }
-
+    info.set("vertices", dbgRef(this.vertices));
+    info.set("ends", dbgArray(Array.from(this.ends, dbgNum)));
     return info;
   }
 }
 
+export class GeomTristrips extends GeomPrimitive {}
+export class GeomTriangles extends GeomPrimitive {}
+export class GeomTrifans extends GeomPrimitive {}
+export class GeomLines extends GeomPrimitive {}
+export class GeomLinestrips extends GeomPrimitive {}
+export class GeomPoints extends GeomPrimitive {}
+export class GeomPatches extends GeomPrimitive {}
+
 registerBAMObject("GeomPrimitive", GeomPrimitive);
-registerBAMObject("GeomTristrips", GeomPrimitive);
-registerBAMObject("GeomTriangles", GeomPrimitive);
-registerBAMObject("GeomTrifans", GeomPrimitive);
-registerBAMObject("GeomLines", GeomPrimitive);
-registerBAMObject("GeomLinestrips", GeomPrimitive);
-registerBAMObject("GeomPoints", GeomPrimitive);
-registerBAMObject("GeomPatches", GeomPrimitive);
+registerBAMObject("GeomTristrips", GeomTristrips);
+registerBAMObject("GeomTriangles", GeomTriangles);
+registerBAMObject("GeomTrifans", GeomTrifans);
+registerBAMObject("GeomLines", GeomLines);
+registerBAMObject("GeomLinestrips", GeomLinestrips);
+registerBAMObject("GeomPoints", GeomPoints);
+registerBAMObject("GeomPatches", GeomPatches);

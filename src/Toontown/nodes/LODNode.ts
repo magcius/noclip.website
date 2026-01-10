@@ -1,3 +1,4 @@
+import { vec3 } from "gl-matrix";
 import type { BAMFile } from "../bam";
 import { AssetVersion, type DataStream } from "../common";
 import { registerBAMObject } from "./base";
@@ -10,8 +11,6 @@ export interface LODSwitch {
 }
 
 /**
- * LODNode - Level of Detail node
- *
  * Switches between child nodes based on distance from camera.
  *
  * Version differences:
@@ -19,11 +18,11 @@ export interface LODSwitch {
  * - BAM >= 4.13: Stores actual distances
  */
 export class LODNode extends PandaNode {
-  public center: [number, number, number] = [0, 0, 0];
+  public center = vec3.create();
   public switches: LODSwitch[] = [];
 
-  constructor(objectId: number, file: BAMFile, data: DataStream) {
-    super(objectId, file, data);
+  override load(file: BAMFile, data: DataStream) {
+    super.load(file, data);
 
     // CData::fillin
     this.center = data.readVec3();
@@ -34,7 +33,7 @@ export class LODNode extends PandaNode {
       const outDist = data.readFloat32();
 
       // BAM < 4.13 stored squared distances
-      if (file.header.version.compare(new AssetVersion(4, 13)) < 0) {
+      if (this._version.compare(new AssetVersion(4, 13)) < 0) {
         this.switches.push({
           in: Math.sqrt(inDist),
           out: Math.sqrt(outDist),
@@ -43,6 +42,12 @@ export class LODNode extends PandaNode {
         this.switches.push({ in: inDist, out: outDist });
       }
     }
+  }
+
+  override copyTo(target: this): void {
+    super.copyTo(target);
+    vec3.copy(target.center, this.center);
+    target.switches = this.switches; // Shared
   }
 
   override getDebugInfo(): DebugInfo {

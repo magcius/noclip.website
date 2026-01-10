@@ -1,28 +1,18 @@
+import { mat4, vec2 } from "gl-matrix";
 import type { BAMFile } from "../bam";
 import { AssetVersion, type DataStream } from "../common";
-import { BAMObject, registerBAMObject } from "./base";
+import { registerBAMObject } from "./base";
+import { CollisionPlane } from "./CollisionPlane";
 import {
   type DebugInfo,
   dbgArray,
   dbgBool,
   dbgEnum,
   dbgFields,
-  dbgFlags,
   dbgMat4,
-  dbgNum,
   dbgObject,
   dbgVec2,
-  dbgVec3,
-  dbgVec4,
 } from "./debug";
-
-// CollisionSolid flags
-const F_EFFECTIVE_NORMAL = 1 << 1;
-
-const CollisionSolidFlags = {
-  Tangible: 1 << 0,
-  EffectiveNormal: F_EFFECTIVE_NORMAL,
-};
 
 // Axis type for pre-5.0 format
 enum AxisType {
@@ -31,37 +21,19 @@ enum AxisType {
   YZ = 2,
 }
 
-export class CollisionPolygon extends BAMObject {
-  // CollisionSolid fields
-  public flags: number;
-  public effectiveNormal: [number, number, number] = [0, 0, 0];
+export class CollisionPolygon extends CollisionPlane {
+  // BAM 5.0+ format
+  public points: Array<{ point: vec2; vector?: vec2 }> = [];
+  public to2dMatrix = mat4.create();
 
-  // CollisionPlane fields
-  public plane: [number, number, number, number];
+  // Pre-5.0 format
+  public median = vec2.create();
+  public axis = AxisType.XY;
+  public reversed = false;
 
-  // CollisionPolygon fields (BAM 5.0+ format)
-  public points: Array<{ point: [number, number]; vector?: [number, number] }> =
-    [];
-  public to2dMatrix: number[] = [];
+  override load(file: BAMFile, data: DataStream) {
+    super.load(file, data);
 
-  // CollisionPolygon fields (pre-5.0 format)
-  public median: [number, number] = [0, 0];
-  public axis: AxisType = AxisType.XY;
-  public reversed: boolean = false;
-
-  constructor(objectId: number, file: BAMFile, data: DataStream) {
-    super(objectId, file, data);
-
-    // Read CollisionSolid base
-    this.flags = data.readUint8();
-    if (this.flags & F_EFFECTIVE_NORMAL) {
-      this.effectiveNormal = data.readVec3();
-    }
-
-    // Read CollisionPlane data
-    this.plane = data.readVec4();
-
-    // Read CollisionPolygon data
     const pointCount = data.readUint16();
 
     if (this._version.compare(new AssetVersion(5, 0)) >= 0) {
@@ -84,13 +56,17 @@ export class CollisionPolygon extends BAMObject {
     }
   }
 
+  override copyTo(target: this): void {
+    super.copyTo(target);
+    target.points = this.points; // Shared
+    mat4.copy(target.to2dMatrix, this.to2dMatrix);
+    vec2.copy(target.median, this.median);
+    target.axis = this.axis;
+    target.reversed = this.reversed;
+  }
+
   override getDebugInfo(): DebugInfo {
     const info = super.getDebugInfo();
-    info.set("flags", dbgFlags(this.flags, CollisionSolidFlags));
-    if (this.flags & F_EFFECTIVE_NORMAL) {
-      info.set("effectiveNormal", dbgVec3(this.effectiveNormal));
-    }
-    info.set("plane", dbgVec4(this.plane));
     info.set(
       "points",
       dbgArray(
@@ -99,7 +75,7 @@ export class CollisionPolygon extends BAMObject {
             return dbgObject(
               dbgFields([
                 ["point", dbgVec2(p.point)],
-                ["vector", dbgVec2(p.vector as [number, number])],
+                ["vector", dbgVec2(p.vector as vec2)],
               ]),
               true,
             );

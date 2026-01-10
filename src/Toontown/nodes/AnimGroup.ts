@@ -1,38 +1,44 @@
 import type { BAMFile } from "../bam";
 import type { DataStream } from "../common";
-import { BAMObject, registerBAMObject } from "./base";
+import type { AnimBundle } from "./AnimBundle";
+import { BAMObject, readTypedRefs, registerBAMObject } from "./base";
 import { type DebugInfo, dbgRefs, dbgStr } from "./debug";
 
 /**
- * AnimGroup - Base class for animation hierarchy nodes
+ * Base class for animation hierarchy nodes
  *
- * AnimGroup is the base for animation data:
+ * Child classes:
  * - AnimBundle (extends AnimGroup with fps/frames)
  * - AnimChannelBase (extends AnimGroup with channel data)
  */
 export class AnimGroup extends BAMObject {
-	public name: string = "";
-	public rootRef: number = 0; // Reference to containing AnimBundle
-	public childRefs: number[] = [];
+  public name = "";
+  public root: AnimBundle | null = null; // Reference to containing AnimBundle
+  public children: AnimGroup[] = [];
 
-	constructor(objectId: number, file: BAMFile, data: DataStream) {
-		super(objectId, file, data);
+  override load(file: BAMFile, data: DataStream) {
+    super.load(file, data);
 
-		this.name = data.readString();
-		this.rootRef = data.readObjectId();
+    this.name = data.readString();
+    data.readObjectId(); // rootRef; parent will set root on load
 
-		const numChildren = data.readUint16();
-		for (let i = 0; i < numChildren; i++) {
-			this.childRefs.push(data.readObjectId());
-		}
-	}
+    const numChildren = data.readUint16();
+    this.children = readTypedRefs(file, data, numChildren, AnimGroup);
+  }
 
-	override getDebugInfo(): DebugInfo {
-		const info = super.getDebugInfo();
-		info.set("name", dbgStr(this.name));
-		info.set("children", dbgRefs(this.childRefs));
-		return info;
-	}
+  override copyTo(target: this): void {
+    super.copyTo(target);
+    target.name = this.name;
+    // target.root = ?
+    target.children = this.children.map((child) => child.clone());
+  }
+
+  override getDebugInfo(): DebugInfo {
+    const info = super.getDebugInfo();
+    info.set("name", dbgStr(this.name));
+    info.set("children", dbgRefs(this.children));
+    return info;
+  }
 }
 
 registerBAMObject("AnimGroup", AnimGroup);

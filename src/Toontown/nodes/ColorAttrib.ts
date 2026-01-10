@@ -1,57 +1,58 @@
+import { vec4 } from "gl-matrix";
 import type { BAMFile } from "../bam";
 import type { DataStream } from "../common";
-import { BAMObject, registerBAMObject } from "./base";
+import { registerBAMObject } from "./base";
 import { type DebugInfo, dbgColor, dbgEnum } from "./debug";
+import { RenderAttrib } from "./RenderState";
 
 export enum ColorType {
-	Vertex = 0,
-	Flat = 1,
-	Off = 2,
+  Vertex = 0,
+  Flat = 1,
+  Off = 2,
 }
 
-export class ColorAttrib extends BAMObject {
-	public colorType: ColorType;
-	public color: [number, number, number, number];
+export class ColorAttrib extends RenderAttrib {
+  public colorType = ColorType.Vertex;
+  public color = vec4.create();
 
-	constructor(objectId: number, file: BAMFile, data: DataStream) {
-		super(objectId, file, data);
+  override load(file: BAMFile, data: DataStream) {
+    super.load(file, data);
+    this.colorType = data.readUint8() as ColorType;
+    this.color = data.readVec4();
+    this.quantizeColor();
+  }
 
-		this.colorType = data.readUint8() as ColorType;
-		this.color = data.readVec4();
+  override copyTo(target: this): void {
+    super.copyTo(target);
+    target.colorType = this.colorType;
+    vec4.copy(target.color, this.color);
+  }
 
-		// Quantize color based on type
-		this.quantizeColor();
-	}
+  override getDebugInfo(): DebugInfo {
+    const info = super.getDebugInfo();
+    info.set("colorType", dbgEnum(this.colorType, ColorType));
+    info.set("color", dbgColor(this.color));
+    return info;
+  }
 
-	private quantizeColor(): void {
-		switch (this.colorType) {
-			case ColorType.Vertex:
-				this.color = [0, 0, 0, 0];
-				break;
-			case ColorType.Flat: {
-				const SCALE = 1024.0;
-				this.color = [
-					Math.floor(this.color[0] * SCALE + 0.5) / SCALE,
-					Math.floor(this.color[1] * SCALE + 0.5) / SCALE,
-					Math.floor(this.color[2] * SCALE + 0.5) / SCALE,
-					Math.floor(this.color[3] * SCALE + 0.5) / SCALE,
-				];
-				break;
-			}
-			case ColorType.Off:
-				this.color = [1, 1, 1, 1];
-				break;
-		}
-	}
+  private quantizeColor(): void {
+    if (this.colorType === ColorType.Flat) {
+      const SCALE = 1024.0;
+      this.color = [
+        Math.floor(this.color[0] * SCALE + 0.5) / SCALE,
+        Math.floor(this.color[1] * SCALE + 0.5) / SCALE,
+        Math.floor(this.color[2] * SCALE + 0.5) / SCALE,
+        Math.floor(this.color[3] * SCALE + 0.5) / SCALE,
+      ];
+    }
+  }
 
-	override getDebugInfo(): DebugInfo {
-		const info = super.getDebugInfo();
-		info.set("colorType", dbgEnum(this.colorType, ColorType));
-		if (this.colorType === ColorType.Flat) {
-			info.set("color", dbgColor(this.color));
-		}
-		return info;
-	}
+  static flat(color: vec4): ColorAttrib {
+    const attrib = new ColorAttrib();
+    attrib.colorType = ColorType.Flat;
+    vec4.copy(attrib.color, color);
+    return attrib;
+  }
 }
 
 registerBAMObject("ColorAttrib", ColorAttrib);

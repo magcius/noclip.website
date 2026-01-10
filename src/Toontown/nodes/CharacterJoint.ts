@@ -1,64 +1,69 @@
+import { mat4 } from "gl-matrix";
 import type { BAMFile } from "../bam";
 import { AssetVersion, type DataStream } from "../common";
-import { registerBAMObject } from "./base";
-import { type DebugInfo, dbgRef, dbgRefs, dbgStr } from "./debug";
+import { type BAMObject, registerBAMObject } from "./base";
+import { type DebugInfo, dbgNum, dbgRefs, dbgStr } from "./debug";
 import { MovingPartMatrix } from "./MovingPartMatrix";
 
 /**
- * CharacterJoint - BAM character joint
- *
- * This extends MovingPartMatrix, which extends MovingPartBase, which extends PartGroup.
- * The inheritance chain is:
- *   CharacterJoint -> MovingPartMatrix -> MovingPartBase -> PartGroup
- *
- * CharacterJoint stores transform matrices for skeletal animation.
+ * Stores transform matrices for skeletal animation.
  *
  * Version differences:
  * - BAM 6.4+: extra pointer to Character before net_nodes
  */
 export class CharacterJoint extends MovingPartMatrix {
-  // CharacterJoint fields
-  public characterRef: number = 0; // 6.4+ only
-  public netNodeRefs: number[] = [];
-  public localNodeRefs: number[] = [];
-  public initialNetTransformInverse: Float32Array = new Float32Array(16);
+  public characterRef = 0; // 6.4+ only TODO circular ref
+  public netNodes: BAMObject[] = [];
+  public localNodes: BAMObject[] = [];
+  public initialNetTransformInverse = mat4.create();
 
-  constructor(objectId: number, file: BAMFile, data: DataStream) {
-    // Parent reads: PartGroup (name, freeze-joint, children), MovingPartBase (forcedChannelRef),
-    // MovingPartMatrix (value, initialValue)
-    super(objectId, file, data);
+  override load(file: BAMFile, data: DataStream) {
+    super.load(file, data);
 
-    // CharacterJoint::fillin
-    // In BAM 6.4+, there's a pointer to Character
     if (this._version.compare(new AssetVersion(6, 4)) >= 0) {
       this.characterRef = data.readObjectId();
     }
 
     const numNetNodes = data.readUint16();
-    this.netNodeRefs = new Array(numNetNodes);
+    this.netNodes = new Array(numNetNodes);
     for (let i = 0; i < numNetNodes; i++) {
-      this.netNodeRefs[i] = data.readObjectId();
+      const ref = data.readObjectId();
+      const obj = file.getObject(ref);
+      if (!obj) throw new Error(`CharacterJoint: Invalid net node ref @${ref}`);
+      this.netNodes[i] = obj;
     }
 
     const numLocalNodes = data.readUint16();
-    this.localNodeRefs = new Array(numLocalNodes);
+    this.localNodes = new Array(numLocalNodes);
     for (let i = 0; i < numLocalNodes; i++) {
-      this.localNodeRefs[i] = data.readObjectId();
+      const ref = data.readObjectId();
+      const obj = file.getObject(ref);
+      if (!obj)
+        throw new Error(`CharacterJoint: Invalid local node ref @${ref}`);
+      this.localNodes[i] = obj;
     }
 
-    // LMatrix4f for initial_net_transform_inverse
-    for (let i = 0; i < 16; i++) {
-      this.initialNetTransformInverse[i] = data.readFloat32();
-    }
+    this.initialNetTransformInverse = data.readMat4();
+  }
+
+  override copyTo(target: this): void {
+    super.copyTo(target);
+    // target.characterRef = this.characterRef; TODO
+    target.netNodes = this.netNodes.map((n) => n.clone());
+    target.localNodes = this.localNodes.map((n) => n.clone());
+    mat4.copy(
+      target.initialNetTransformInverse,
+      this.initialNetTransformInverse,
+    );
   }
 
   override getDebugInfo(): DebugInfo {
     const info = super.getDebugInfo();
     if (this._version.compare(new AssetVersion(6, 4)) >= 0) {
-      info.set("characterRef", dbgRef(this.characterRef));
+      info.set("characterRef", dbgNum(this.characterRef));
     }
-    info.set("netNodes", dbgRefs(this.netNodeRefs));
-    info.set("localNodes", dbgRefs(this.localNodeRefs));
+    info.set("netNodes", dbgRefs(this.netNodes));
+    info.set("localNodes", dbgRefs(this.localNodes));
     info.set(
       "initialNetTransformInverse",
       dbgStr(`[${Array.from(this.initialNetTransformInverse).join(", ")}]`),

@@ -1,14 +1,12 @@
 import type { BAMFile } from "../bam";
 import { AssetVersion, type DataStream } from "../common";
-import { registerBAMObject } from "./base";
-import { type DebugInfo, dbgArray, dbgRef, dbgRefs, dbgVec3 } from "./debug";
-import { LegacyGeom } from "./LegacyGeom";
-import { PandaNode } from "./PandaNode";
+import { type BAMObject, registerBAMObject } from "./base";
+import { ComputedVertices } from "./ComputedVertices";
+import { type DebugInfo, dbgRef, dbgRefs, dbgTypedArray } from "./debug";
+import { PartBundleNode } from "./PartBundleNode";
 
 /**
- * Character - BAM animated character
- *
- * This extends PartBundleNode (which extends PandaNode).
+ * Animated character.
  *
  * Pre-5.0 format:
  *   Character contains DynamicVertices inline (not as a separate object)
@@ -17,68 +15,62 @@ import { PandaNode } from "./PandaNode";
  *
  * 5.0+ format:
  *   No DynamicVertices or ComputedVertices. Just PartBundleNode + parts pointers.
- *
- * The inheritance chain is:
- *   Character -> PartBundleNode -> PandaNode
  */
-export class Character extends PandaNode {
-  // PartBundleNode fields
-  public bundleRef: number = 0;
-
+export class Character extends PartBundleNode {
   // DynamicVertices inline data (pre-5.0 only) - these PTAs are shared with Geoms
-  public dynamicCoords: Array<[number, number, number]> = [];
-  public dynamicNorms: Array<[number, number, number]> = [];
-  public dynamicColors: Array<[number, number, number, number]> = [];
-  public dynamicTexcoords: Array<[number, number]> = [];
+  public dynamicCoords: Float32Array = new Float32Array(); // vec3
+  public dynamicNorms: Float32Array = new Float32Array(); // vec3
+  public dynamicColors: Float32Array = new Float32Array(); // vec4
+  public dynamicTexcoords: Float32Array = new Float32Array(); // vec2
 
   // Character fields
-  public computedVerticesRef: number = 0;
-  public partRefs: number[] = [];
+  public computedVertices: ComputedVertices | null = null;
+  public parts: BAMObject[] = [];
 
-  constructor(objectId: number, file: BAMFile, data: DataStream) {
-    // Read PandaNode fields
-    super(objectId, file, data);
-
-    // PartBundleNode::fillin - read pointer(s) to bundle(s)
-    // In BAM 6.5+, there can be multiple bundles
-    let numBundles = 1;
-    if (file.header.version.compare(new AssetVersion(6, 5)) >= 0) {
-      numBundles = data.readUint16();
-    }
-    this.bundleRef = data.readObjectId();
-    // Skip additional bundle pointers (we only store the first one)
-    for (let i = 1; i < numBundles; i++) {
-      data.readObjectId();
-    }
+  override load(file: BAMFile, data: DataStream) {
+    super.load(file, data);
 
     // Pre-5.0 format has DynamicVertices and ComputedVertices
-    if (file.header.version.compare(new AssetVersion(5, 0)) < 0) {
+    if (this._version.compare(new AssetVersion(5, 0)) < 0) {
       // DynamicVertices::fillin - read 4 PTAs
-      // These use the global PTA cache so they can be shared with LegacyGeom
-      this.dynamicCoords = LegacyGeom.readPtaVec3Global(data);
-      this.dynamicNorms = LegacyGeom.readPtaVec3Global(data);
-      this.dynamicColors = LegacyGeom.readPtaVec4Global(data);
-      this.dynamicTexcoords = LegacyGeom.readPtaVec2Global(data);
+      this.dynamicCoords = data.readPtaVec3();
+      this.dynamicNorms = data.readPtaVec3();
+      this.dynamicColors = data.readPtaVec4();
+      this.dynamicTexcoords = data.readPtaVec2();
 
-      // Character::fillin - read pointer to ComputedVertices
-      this.computedVerticesRef = data.readObjectId();
+      // Character::fillin
+      this.computedVertices = file.getTyped(
+        data.readObjectId(),
+        ComputedVertices,
+      );
     }
 
-    // Read parts array (both formats)
     const numParts = data.readUint16();
-    this.partRefs = [];
+    this.parts = [];
     for (let i = 0; i < numParts; i++) {
-      this.partRefs.push(data.readObjectId());
+      const ref = data.readObjectId();
+      const obj = file.getObject(ref);
+      if (!obj) throw new Error(`Character: Invalid part ref @${ref}`);
+      this.parts.push(obj);
     }
+  }
+
+  override copyTo(target: this): void {
+    super.copyTo(target);
+    target.dynamicCoords = this.dynamicCoords.slice();
+    target.dynamicNorms = this.dynamicNorms.slice();
+    target.dynamicColors = this.dynamicColors.slice();
+    target.dynamicTexcoords = this.dynamicTexcoords.slice();
+    target.computedVertices = this.computedVertices?.clone() ?? null;
+    target.parts = this.parts.map((p) => p.clone());
   }
 
   override getDebugInfo(): DebugInfo {
     const info = super.getDebugInfo();
-    info.set("bundleRef", dbgRef(this.bundleRef));
-    info.set("dynamicCoords", dbgArray(this.dynamicCoords.map(dbgVec3)));
-    info.set("dynamicNorms", dbgArray(this.dynamicNorms.map(dbgVec3)));
-    info.set("computedVerticesRef", dbgRef(this.computedVerticesRef));
-    info.set("parts", dbgRefs(this.partRefs));
+    info.set("dynamicCoords", dbgTypedArray(this.dynamicCoords, 3));
+    info.set("dynamicNorms", dbgTypedArray(this.dynamicNorms, 3));
+    info.set("computedVertices", dbgRef(this.computedVertices));
+    info.set("parts", dbgRefs(this.parts));
     return info;
   }
 }

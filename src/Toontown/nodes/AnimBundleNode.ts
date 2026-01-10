@@ -1,28 +1,39 @@
 import type { BAMFile } from "../bam";
 import type { DataStream } from "../common";
+import { AnimBundle } from "./AnimBundle";
 import { registerBAMObject } from "./base";
 import { type DebugInfo, dbgRef } from "./debug";
 import { PandaNode } from "./PandaNode";
 
 /**
- * AnimBundleNode - Node that holds an AnimBundle
+ * Node that holds an AnimBundle.
  *
  * This is a PandaNode that contains a reference to an AnimBundle,
  * allowing animation data to be part of the scene graph.
  */
 export class AnimBundleNode extends PandaNode {
-	public bundleRef: number = 0;
+  public animBundle: AnimBundle | null = null;
 
-	constructor(objectId: number, file: BAMFile, data: DataStream) {
-		super(objectId, file, data);
-		this.bundleRef = data.readObjectId();
-	}
+  override load(file: BAMFile, data: DataStream) {
+    super.load(file, data);
+    this.animBundle = file.getTyped(data.readObjectId(), AnimBundle);
+  }
 
-	override getDebugInfo(): DebugInfo {
-		const info = super.getDebugInfo();
-		info.set("bundleRef", dbgRef(this.bundleRef));
-		return info;
-	}
+  override copyTo(target: this) {
+    super.copyTo(target);
+    if (this.animBundle) {
+      target.animBundle = this.animBundle.clone();
+      // TODO root?
+    } else {
+      target.animBundle = null;
+    }
+  }
+
+  override getDebugInfo(): DebugInfo {
+    const info = super.getDebugInfo();
+    info.set("animBundle", dbgRef(this.animBundle));
+    return info;
+  }
 }
 
 registerBAMObject("AnimBundleNode", AnimBundleNode);

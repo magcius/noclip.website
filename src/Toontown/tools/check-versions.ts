@@ -8,7 +8,10 @@ const DATA_BASE = path.join(__dirname, "../../data");
 // BAM magic: pbj\0\n\r
 const BAM_MAGIC = Buffer.from([0x70, 0x62, 0x6a, 0x00, 0x0a, 0x0d]);
 
-function getMultifileBAMVersion(dataDir: string, bamPath: string): string | null {
+function getMultifileBAMVersion(
+  dataDir: string,
+  bamPath: string,
+): string | null {
   const manifestPath = path.join(dataDir, "manifest.json");
   const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf-8"));
   const entry = manifest[bamPath];
@@ -85,5 +88,7 @@ for (const dir of dirs) {
     return aMaj !== bMaj ? aMaj - bMaj : aMin - bMin;
   });
 
-  console.log(`${dir}: BAM ${versionList.join(", ")} (${bamFiles.length} files)`);
+  console.log(
+    `${dir}: BAM ${versionList.join(", ")} (${bamFiles.length} files)`,
+  );
 }

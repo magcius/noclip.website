@@ -1,6 +1,6 @@
 import type { BAMFile } from "../bam";
 import { AssetVersion, type DataStream } from "../common";
-import { registerBAMObject } from "./base";
+import { type BAMObject, readObjectRefs, registerBAMObject } from "./base";
 import { type DebugInfo, dbgFlags, dbgNum, dbgRefs } from "./debug";
 import { PandaNode } from "./PandaNode";
 
@@ -9,12 +9,12 @@ const CollisionNodeFlags = {
 };
 
 export class CollisionNode extends PandaNode {
-  public solidRefs: number[] = [];
-  public fromCollideMask: number = 0;
-  public collisionNodeFlags: number = 0;
+  public solids: BAMObject[] = [];
+  public fromCollideMask = 0;
+  public collisionNodeFlags = 0;
 
-  constructor(objectId: number, file: BAMFile, data: DataStream) {
-    super(objectId, file, data);
+  override load(file: BAMFile, data: DataStream) {
+    super.load(file, data);
 
     // Read number of solids (extended format added in 6.x)
     let numSolids = data.readUint16();
@@ -24,9 +24,7 @@ export class CollisionNode extends PandaNode {
     ) {
       numSolids = data.readUint32();
     }
-    for (let i = 0; i < numSolids; i++) {
-      this.solidRefs.push(data.readObjectId());
-    }
+    this.solids = readObjectRefs(file, data, numSolids);
 
     this.fromCollideMask = data.readUint32();
 
@@ -38,9 +36,16 @@ export class CollisionNode extends PandaNode {
     }
   }
 
+  override copyTo(target: this): void {
+    super.copyTo(target);
+    target.solids = this.solids.map((o) => o.clone());
+    target.fromCollideMask = this.fromCollideMask;
+    target.collisionNodeFlags = this.collisionNodeFlags;
+  }
+
   override getDebugInfo(): DebugInfo {
     const info = super.getDebugInfo();
-    info.set("solidRefs", dbgRefs(this.solidRefs));
+    info.set("solids", dbgRefs(this.solids));
     info.set("fromCollideMask", dbgNum(this.fromCollideMask));
     if (this._version.compare(new AssetVersion(4, 12)) < 0) {
       info.set(

@@ -1,6 +1,6 @@
 import type { BAMFile } from "../bam";
 import { AssetVersion, type DataStream } from "../common";
-import { BAMObject, registerBAMObject } from "./base";
+import { readTypedRefs, registerBAMObject } from "./base";
 import {
   type DebugInfo,
   dbgArray,
@@ -10,32 +10,33 @@ import {
   dbgRef,
   dbgRefs,
 } from "./debug";
+import { RenderAttrib } from "./RenderState";
 import { SamplerState } from "./SamplerState";
+import { Texture } from "./Texture";
+import { TextureStage } from "./TextureStage";
 
 export interface StageNode {
   sampler: SamplerState | null;
-  textureStageRef: number;
-  textureRef: number;
+  textureStage: TextureStage;
+  texture: Texture;
   priority: number;
   implicitSort: number;
 }
 
-export class TextureAttrib extends BAMObject {
+export class TextureAttrib extends RenderAttrib {
   public offAllStages: boolean = false;
-  public offStageRefs: number[] = [];
+  public offStageRefs: TextureStage[] = [];
   public onStages: StageNode[] = [];
 
   // Pre-5.0 format: single texture reference
-  public textureRef: number | null = null;
+  public texture: Texture | null = null;
 
-  constructor(objectId: number, file: BAMFile, data: DataStream) {
-    super(objectId, file, data);
+  override load(file: BAMFile, data: DataStream) {
+    super.load(file, data);
 
-    const version = file.header.version;
-
-    if (version.compare(new AssetVersion(4, 11)) < 0) {
+    if (this._version.compare(new AssetVersion(4, 11)) < 0) {
       // Pre-4.11 format: just a single texture pointer
-      this.textureRef = data.readObjectId();
+      this.texture = file.getTyped(data.readObjectId(), Texture);
       return;
     }
 
@@ -43,33 +44,41 @@ export class TextureAttrib extends BAMObject {
     this.offAllStages = data.readBool();
 
     const numOffStages = data.readUint16();
-    for (let i = 0; i < numOffStages; i++) {
-      this.offStageRefs.push(data.readObjectId());
-    }
+    this.offStageRefs = readTypedRefs(file, data, numOffStages, TextureStage);
 
     const numOnStages = data.readUint16();
     let nextImplicitSort = 0;
 
+    this.onStages = new Array(numOnStages);
     for (let n = 0; n < numOnStages; n++) {
       const textureStageRef = data.readObjectId();
+      const textureStage = file.getTyped(textureStageRef, TextureStage);
+      if (!textureStage)
+        throw new Error(
+          `TextureAttrib: TextureStage ref ${textureStageRef} not found`,
+        );
       const textureRef = data.readObjectId();
+      const texture = file.getTyped(textureRef, Texture);
+      if (!texture)
+        throw new Error(`TextureAttrib: Texture ref ${textureRef} not found`);
 
       let implicitSort = 0;
-      if (version.compare(new AssetVersion(6, 15)) >= 0) {
+      if (this._version.compare(new AssetVersion(6, 15)) >= 0) {
         implicitSort = data.readUint16();
       } else {
         implicitSort = n;
       }
 
       let priority = 0;
-      if (version.compare(new AssetVersion(6, 23)) >= 0) {
+      if (this._version.compare(new AssetVersion(6, 23)) >= 0) {
         priority = data.readInt32();
       }
 
       let sampler: SamplerState | null = null;
-      if (version.compare(new AssetVersion(6, 36)) >= 0) {
+      if (this._version.compare(new AssetVersion(6, 36)) >= 0) {
         if (data.readBool()) {
-          sampler = new SamplerState(file, data);
+          sampler = new SamplerState();
+          sampler.load(file, data);
         }
       }
 
@@ -78,22 +87,30 @@ export class TextureAttrib extends BAMObject {
       const actualSort = nextImplicitSort;
       nextImplicitSort += 1;
 
-      this.onStages.push({
+      this.onStages[n] = {
         sampler,
-        textureStageRef,
-        textureRef,
+        textureStage,
+        texture,
         priority,
         implicitSort: actualSort,
-      });
+      };
     }
+  }
+
+  override copyTo(target: this): void {
+    super.copyTo(target);
+    target.offAllStages = this.offAllStages;
+    target.offStageRefs = this.offStageRefs; // Shared
+    target.onStages = this.onStages; // Shared
+    target.texture = this.texture; // Shared
   }
 
   override getDebugInfo(): DebugInfo {
     const info = super.getDebugInfo();
 
     // Pre-5.0 format
-    if (this.textureRef !== null) {
-      info.set("textureRef", dbgRef(this.textureRef));
+    if (this.texture !== null) {
+      info.set("texture", dbgRef(this.texture));
       return info;
     }
 
@@ -112,13 +129,16 @@ export class TextureAttrib extends BAMObject {
         dbgArray(
           this.onStages.map((stage) => {
             const stageInfo: DebugInfo = new Map();
-            stageInfo.set("textureStageRef", dbgRef(stage.textureStageRef));
-            stageInfo.set("textureRef", dbgRef(stage.textureRef));
+            stageInfo.set("textureStage", dbgRef(stage.textureStage));
+            stageInfo.set("texture", dbgRef(stage.texture));
             if (stage.priority !== 0) {
               stageInfo.set("priority", dbgNum(stage.priority));
             }
             if (stage.sampler !== null) {
-              stageInfo.set("sampler", dbgObject(stage.sampler.getDebugInfo(), true));
+              stageInfo.set(
+                "sampler",
+                dbgObject(stage.sampler.getDebugInfo(), true),
+              );
             }
             return dbgObject(stageInfo);
           }),

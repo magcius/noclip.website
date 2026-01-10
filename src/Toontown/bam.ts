@@ -1,15 +1,14 @@
 import type ArrayBufferSlice from "../ArrayBufferSlice";
-import { AssetVersion, DataStream } from "./common";
+import { AssetVersion, DataStream, type DataStreamState } from "./common";
 import {
   type BAMObject,
   dbgBool,
+  dbgFields,
   dbgStr,
   formatDebugInfo,
   getBAMObjectFactory,
-  LegacyGeom,
-  dbgFields,
+  PandaNode,
 } from "./nodes";
-import type { DebugAccessor } from "./nodes/debug";
 
 const BAM_MAGIC = [0x70, 0x62, 0x6a, 0x00, 0x0a, 0x0d]; // pbj\0\n\r
 
@@ -32,10 +31,16 @@ export interface BAMFileOptions {
   debug?: boolean;
 }
 
-export class BAMFile implements DebugAccessor {
+interface UnparsedObject {
+  typeName: string;
+  data: ArrayBufferSlice;
+}
+
+export class BAMFile {
   private _typeRegistry: Map<number, string>;
   private _objects: Map<number, BAMObject>;
-  private _objectTypes: Map<number, string>;
+  private _objectData: Map<number, UnparsedObject>;
+  private _streamState: DataStreamState;
   private _debug: boolean;
 
   public header: BAMHeader;
@@ -43,60 +48,85 @@ export class BAMFile implements DebugAccessor {
   constructor(data: ArrayBufferSlice, options: BAMFileOptions = {}) {
     this._typeRegistry = new Map();
     this._objects = new Map();
-    this._objectTypes = new Map();
+    this._objectData = new Map();
     this._debug = options.debug ?? false;
 
-    // Reset the global PTA cache for legacy BAM files
-    LegacyGeom.resetPtaCache();
-
     const stream = new DataStream(data);
+    this._streamState = stream.state;
     this.header = this._readHeader(stream);
 
-    let nestingLevel = 0;
     while (stream.remaining() > 0) {
       const datagram = this._readDatagram(stream);
-      let bamObject: BAMObject | undefined;
       if (this.header.version.compare(new AssetVersion(6, 21)) >= 0) {
         const objectCode = datagram.readUint8();
         if (
           objectCode === BAMObjectCode.Push ||
           objectCode === BAMObjectCode.Adjunct
         ) {
-          bamObject = this._readObject(datagram, nestingLevel);
-        }
-        if (objectCode === BAMObjectCode.Push) {
-          nestingLevel++;
-        } else if (objectCode === BAMObjectCode.Pop) {
-          nestingLevel--;
+          this._readObjectHeader(datagram);
         }
       } else {
-        bamObject = this._readObject(datagram, nestingLevel);
-      }
-      if (bamObject) {
-        this._objects.set(bamObject.objectId, bamObject);
+        this._readObjectHeader(datagram);
       }
     }
 
-    if (this._debug) {
-      for (const object of this._objects.values()) {
-        const debugInfo = object.getDebugInfo();
-        console.log(
-          `${object.getTypeName()} #${object.objectId} ${formatDebugInfo(debugInfo, nestingLevel, this)}`,
-        );
+    // Read the root object
+    const root = this.getObject(1);
+    if (root && this._debug) {
+      console.log(
+        `${root.constructor.name} #1 ${formatDebugInfo(root.getDebugInfo(), 0)}`,
+      );
+    }
+
+    // Check if any objects remain unprocessed
+    if (this._objectData.size > 0) {
+      for (const [objectId, { typeName }] of this._objectData) {
+        console.warn(`${typeName} #${objectId} was not processed`);
       }
+      this._objectData.clear();
     }
   }
 
-  getObject(objectId: number): BAMObject | undefined {
-    return this._objects.get(objectId);
+  getRoot(): PandaNode {
+    const root = this.getTyped(1, PandaNode);
+    if (!root) throw new Error("Root node not found");
+    return root;
+  }
+
+  findNode(name: string): PandaNode | null {
+    const root = this.getRoot();
+    if (!root) return null;
+    return root.findNode(name);
+  }
+
+  getObject(objectId: number): BAMObject | null {
+    if (objectId === 0) return null;
+    const obj = this._objects.get(objectId);
+    if (obj) return obj;
+    const object = this._readObject(objectId);
+    if (!object) return null;
+    this._objects.set(objectId, object);
+    return object;
+  }
+
+  getTyped<T extends BAMObject>(
+    objectId: number,
+    // biome-ignore lint/suspicious/noExplicitAny: it's fine
+    clazz: new (...args: any[]) => T,
+  ): T | null {
+    if (objectId === 0) return null;
+    const object = this.getObject(objectId);
+    if (!object) throw new Error(`Object not found: ${objectId}`);
+    if (!(object instanceof clazz)) {
+      throw new Error(
+        `Expected object of type ${clazz.name}, got ${object.constructor.name}`,
+      );
+    }
+    return object;
   }
 
   getObjects(): IterableIterator<BAMObject> {
     return this._objects.values();
-  }
-
-  getTypeName(objectId: number): string | undefined {
-    return this._objectTypes.get(objectId);
   }
 
   private _readHeader(data: DataStream): BAMHeader {
@@ -186,10 +216,7 @@ export class BAMFile implements DebugAccessor {
     return typeIndex;
   }
 
-  private _readObject(
-    data: DataStream,
-    nestingLevel: number,
-  ): BAMObject | undefined {
+  private _readObjectHeader(data: DataStream) {
     const typeIndex = this._readTypeHandle(data);
     const objectId = data.readObjectId();
     if (typeIndex === 0) {
@@ -199,29 +226,28 @@ export class BAMFile implements DebugAccessor {
     if (!typeName) {
       throw new Error(`Unknown type index ${typeIndex}`);
     }
-    this._objectTypes.set(objectId, typeName);
+    this._objectData.set(objectId, { typeName, data: data.subarray() });
+  }
+
+  private _readObject(objectId: number) {
+    const result = this._objectData.get(objectId);
+    if (!result) return null;
+    const { typeName, data } = result;
+    this._objectData.delete(objectId);
+    const stream = new DataStream(data);
+    stream.state = this._streamState;
     const factory = getBAMObjectFactory(typeName);
     if (!factory) {
-      const indent = "  ".repeat(nestingLevel);
-      console.warn(`${indent}${typeName} #${objectId} (unhandled)`);
+      console.warn(`${typeName} #${objectId} (unhandled)`);
       return;
     }
-    const obj = new factory(objectId, this, data);
-
-    // if (this._debug) {
-    //   const indent = "  ".repeat(nestingLevel);
-    //   const debugInfo = obj.getDebugInfo();
-    //   console.log(
-    //     `${indent}${typeName} #${objectId} ${formatDebugInfo(debugInfo, nestingLevel, this)}`,
-    //   );
-    // }
-    if (data.remaining() > 0) {
-      const indent = "  ".repeat(nestingLevel);
+    const obj = new factory();
+    obj.load(this, stream);
+    if (stream.remaining() > 0) {
       console.warn(
-        `${indent}${typeName} #${objectId} Unexpected data remaining: ${data.remaining()}`,
+        `${typeName} #${objectId} Unexpected data remaining: ${stream.remaining()}`,
       );
     }
-
     return obj;
   }
 }

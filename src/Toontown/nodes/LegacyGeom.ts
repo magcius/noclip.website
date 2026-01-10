@@ -2,14 +2,15 @@ import type { BAMFile } from "../bam";
 import { AssetVersion, type DataStream } from "../common";
 import { BAMObject, registerBAMObject } from "./base";
 import { type DebugInfo, dbgEnum, dbgNum } from "./debug";
+import { TexCoordName } from "./InternalName";
 
 // GeomBindType from old Panda3D
 export enum GeomBindType {
-	Off = 0,
-	Overall = 1,
-	PerPrim = 2,
-	PerComponent = 3,
-	PerVertex = 4,
+  Off = 0,
+  Overall = 1,
+  PerPrim = 2,
+  PerComponent = 3,
+  PerVertex = 4,
 }
 
 // GeomAttrType indices
@@ -22,9 +23,9 @@ const G_TEXCOORD = 3;
  * TexCoordDef - texture coordinate set for multitexture (BAM 4.11+)
  */
 export interface TexCoordDef {
-	nameRef: number; // Reference to TexCoordName object
-	texcoords: Array<[number, number]>;
-	tindex: number[];
+  name: TexCoordName | null;
+  texcoords: Float32Array; // vec2
+  tindex: Uint16Array;
 }
 
 /**
@@ -39,206 +40,126 @@ export interface TexCoordDef {
  * - BAM >= 4.11: Multiple named texture coordinate sets (multitexture)
  */
 export class LegacyGeom extends BAMObject {
-	// Vertex attribute arrays
-	public coords: Array<[number, number, number]> = [];
-	public norms: Array<[number, number, number]> = [];
-	public colors: Array<[number, number, number, number]> = [];
-	public texcoords: Array<[number, number]> = []; // Default texcoords (for < 4.11 or default set)
+  // Vertex attribute arrays
+  public coords: Float32Array = new Float32Array(); // vec3
+  public norms: Float32Array = new Float32Array(); // vec3
+  public colors: Float32Array = new Float32Array(); // vec4
+  public texcoords: Float32Array = new Float32Array(); // vec2 // Default texcoords (for < 4.11 or default set)
 
-	// Index arrays
-	public vindex: number[] = [];
-	public nindex: number[] = [];
-	public cindex: number[] = [];
-	public tindex: number[] = []; // Default tindex (for < 4.11 or default set)
+  // Index arrays
+  public vindex: Uint16Array = new Uint16Array();
+  public nindex: Uint16Array = new Uint16Array();
+  public cindex: Uint16Array = new Uint16Array();
+  public tindex: Uint16Array = new Uint16Array(); // Default tindex (for < 4.11 or default set)
 
-	// Multitexture support (BAM 4.11+)
-	public texcoordSets: TexCoordDef[] = [];
+  // Multitexture support (BAM 4.11+)
+  public texcoordSets: TexCoordDef[] = [];
 
-	// Primitive info
-	public numPrims: number = 0;
-	public primLengths: number[] = [];
+  // Primitive info
+  public numPrims = 0;
+  public primLengths: Int32Array = new Int32Array();
 
-	// Bindings for each attribute type
-	public bindings: [GeomBindType, GeomBindType, GeomBindType, GeomBindType] = [
-		GeomBindType.Off,
-		GeomBindType.Off,
-		GeomBindType.Off,
-		GeomBindType.Off,
-	];
+  // Bindings for each attribute type
+  public bindings: [GeomBindType, GeomBindType, GeomBindType, GeomBindType] = [
+    GeomBindType.Off,
+    GeomBindType.Off,
+    GeomBindType.Off,
+    GeomBindType.Off,
+  ];
 
-	// Global PTA cache shared across all objects in the BAM file
-	// This is necessary because PTAs can be shared between objects
-	// (e.g., ComputedVertices shares coords with Geom)
-	private static _ptaCache: Map<number, unknown> = new Map();
+  override load(file: BAMFile, data: DataStream) {
+    super.load(file, data);
 
-	/**
-	 * Reset the global PTA cache. Should be called at the start of parsing a new BAM file.
-	 */
-	static resetPtaCache(): void {
-		LegacyGeom._ptaCache.clear();
-	}
+    const isMultitexture = this._version.compare(new AssetVersion(4, 11)) >= 0;
 
-	constructor(objectId: number, file: BAMFile, data: DataStream) {
-		super(objectId, file, data);
+    this.coords = data.readPtaVec3();
+    this.norms = data.readPtaVec3();
+    this.colors = data.readPtaVec4();
 
-		const isMultitexture =
-			file.header.version.compare(new AssetVersion(4, 11)) >= 0;
+    if (!isMultitexture) {
+      // BAM < 4.11: Single texcoords PTA
+      this.texcoords = data.readPtaVec2();
+    } else {
+      // BAM 4.11+: Multiple named texture coordinate sets
+      const numTexcoordSets = data.readUint8();
+      for (let i = 0; i < numTexcoordSets; i++) {
+        const name = file.getTyped(data.readObjectId(), TexCoordName);
+        const texcoords = data.readPtaVec2();
+        const tindex = data.readPtaUint16();
+        this.texcoordSets.push({ name, texcoords, tindex });
+      }
+      // Use first set as default texcoords for compatibility
+      if (this.texcoordSets.length > 0) {
+        this.texcoords = this.texcoordSets[0].texcoords;
+        this.tindex = this.texcoordSets[0].tindex;
+      }
+    }
 
-		// Read coords PTA (Vec3[])
-		this.coords = LegacyGeom.readPtaVec3Global(data);
+    this.vindex = data.readPtaUint16();
+    this.nindex = data.readPtaUint16();
+    this.cindex = data.readPtaUint16();
 
-		// Read norms PTA (Vec3[])
-		this.norms = LegacyGeom.readPtaVec3Global(data);
+    // BAM < 4.11: tindex comes after cindex
+    // BAM >= 4.11: tindex is part of each texcoord set (already read above)
+    if (!isMultitexture) {
+      this.tindex = data.readPtaUint16();
+    }
 
-		// Read colors PTA (Vec4[])
-		this.colors = LegacyGeom.readPtaVec4Global(data);
+    this.numPrims = data.readUint16();
+    this.primLengths = data.readPtaInt32();
 
-		// Read texture coordinates
-		if (!isMultitexture) {
-			// BAM < 4.11: Single texcoords PTA
-			this.texcoords = LegacyGeom.readPtaVec2Global(data);
-		} else {
-			// BAM 4.11+: Multiple named texture coordinate sets
-			const numTexcoordSets = data.readUint8();
-			for (let i = 0; i < numTexcoordSets; i++) {
-				const nameRef = data.readObjectId();
-				const texcoords = LegacyGeom.readPtaVec2Global(data);
-				const tindex = LegacyGeom.readPtaUshortGlobal(data);
-				this.texcoordSets.push({ nameRef, texcoords, tindex });
-			}
-			// Use first set as default texcoords for compatibility
-			if (this.texcoordSets.length > 0) {
-				this.texcoords = this.texcoordSets[0].texcoords;
-				this.tindex = this.texcoordSets[0].tindex;
-			}
-		}
+    // Read bindings (4 x uint8)
+    this.bindings = [
+      data.readUint8() as GeomBindType, // G_COORD
+      data.readUint8() as GeomBindType, // G_COLOR
+      data.readUint8() as GeomBindType, // G_NORMAL
+      data.readUint8() as GeomBindType, // G_TEXCOORD
+    ];
+  }
 
-		// Read index arrays (ushort[])
-		this.vindex = LegacyGeom.readPtaUshortGlobal(data);
-		this.nindex = LegacyGeom.readPtaUshortGlobal(data);
-		this.cindex = LegacyGeom.readPtaUshortGlobal(data);
+  override copyTo(target: this): void {
+    super.copyTo(target);
+    target.coords = this.coords; // Shared
+    target.norms = this.norms; // Shared
+    target.colors = this.colors; // Shared
+    target.texcoords = this.texcoords; // Shared
+    target.vindex = this.vindex; // Shared
+    target.nindex = this.nindex; // Shared
+    target.cindex = this.cindex; // Shared
+    target.tindex = this.tindex; // Shared
+    target.texcoordSets = this.texcoordSets; // Shared
+    target.numPrims = this.numPrims;
+    target.primLengths = this.primLengths; // Shared
+    target.bindings = this.bindings; // Shared
+  }
 
-		// BAM < 4.11: tindex comes after cindex
-		// BAM >= 4.11: tindex is part of each texcoord set (already read above)
-		if (!isMultitexture) {
-			this.tindex = LegacyGeom.readPtaUshortGlobal(data);
-		}
-
-		// Read numprims
-		this.numPrims = data.readUint16();
-
-		// Read primlengths PTA (int32[])
-		this.primLengths = LegacyGeom.readPtaIntGlobal(data);
-
-		// Read bindings (4 x uint8)
-		this.bindings = [
-			data.readUint8() as GeomBindType, // G_COORD
-			data.readUint8() as GeomBindType, // G_COLOR
-			data.readUint8() as GeomBindType, // G_NORMAL
-			data.readUint8() as GeomBindType, // G_TEXCOORD
-		];
-	}
-
-	static readPtaVec3Global(data: DataStream): Array<[number, number, number]> {
-		const ptaId = data.readUint16();
-		if (ptaId !== 0 && LegacyGeom._ptaCache.has(ptaId)) {
-			return LegacyGeom._ptaCache.get(ptaId) as Array<[number, number, number]>;
-		}
-		const size = data.readUint32();
-		const result: Array<[number, number, number]> = [];
-		for (let i = 0; i < size; i++) {
-			result.push(data.readVec3());
-		}
-		if (ptaId !== 0) {
-			LegacyGeom._ptaCache.set(ptaId, result);
-		}
-		return result;
-	}
-
-	static readPtaVec4Global(data: DataStream): Array<[number, number, number, number]> {
-		const ptaId = data.readUint16();
-		if (ptaId !== 0 && LegacyGeom._ptaCache.has(ptaId)) {
-			return LegacyGeom._ptaCache.get(ptaId) as Array<[number, number, number, number]>;
-		}
-		const size = data.readUint32();
-		const result: Array<[number, number, number, number]> = [];
-		for (let i = 0; i < size; i++) {
-			result.push(data.readVec4());
-		}
-		if (ptaId !== 0) {
-			LegacyGeom._ptaCache.set(ptaId, result);
-		}
-		return result;
-	}
-
-	static readPtaVec2Global(data: DataStream): Array<[number, number]> {
-		const ptaId = data.readUint16();
-		if (ptaId !== 0 && LegacyGeom._ptaCache.has(ptaId)) {
-			return LegacyGeom._ptaCache.get(ptaId) as Array<[number, number]>;
-		}
-		const size = data.readUint32();
-		const result: Array<[number, number]> = [];
-		for (let i = 0; i < size; i++) {
-			result.push(data.readVec2());
-		}
-		if (ptaId !== 0) {
-			LegacyGeom._ptaCache.set(ptaId, result);
-		}
-		return result;
-	}
-
-	static readPtaUshortGlobal(data: DataStream): number[] {
-		const ptaId = data.readUint16();
-		if (ptaId !== 0 && LegacyGeom._ptaCache.has(ptaId)) {
-			return LegacyGeom._ptaCache.get(ptaId) as number[];
-		}
-		const size = data.readUint32();
-		const result: number[] = [];
-		for (let i = 0; i < size; i++) {
-			result.push(data.readUint16());
-		}
-		if (ptaId !== 0) {
-			LegacyGeom._ptaCache.set(ptaId, result);
-		}
-		return result;
-	}
-
-	static readPtaIntGlobal(data: DataStream): number[] {
-		const ptaId = data.readUint16();
-		if (ptaId !== 0 && LegacyGeom._ptaCache.has(ptaId)) {
-			return LegacyGeom._ptaCache.get(ptaId) as number[];
-		}
-		const size = data.readUint32();
-		const result: number[] = [];
-		for (let i = 0; i < size; i++) {
-			result.push(data.readInt32());
-		}
-		if (ptaId !== 0) {
-			LegacyGeom._ptaCache.set(ptaId, result);
-		}
-		return result;
-	}
-
-	override getDebugInfo(): DebugInfo {
-		const info = super.getDebugInfo();
-		info.set("coords", dbgNum(this.coords.length));
-		info.set("norms", dbgNum(this.norms.length));
-		info.set("colors", dbgNum(this.colors.length));
-		info.set("texcoords", dbgNum(this.texcoords.length));
-		info.set("numPrims", dbgNum(this.numPrims));
-		info.set("coordBind", dbgEnum(this.bindings[G_COORD], GeomBindType));
-		info.set("colorBind", dbgEnum(this.bindings[G_COLOR], GeomBindType));
-		info.set("normalBind", dbgEnum(this.bindings[G_NORMAL], GeomBindType));
-		info.set("texcoordBind", dbgEnum(this.bindings[G_TEXCOORD], GeomBindType));
-		return info;
-	}
+  override getDebugInfo(): DebugInfo {
+    const info = super.getDebugInfo();
+    info.set("coords", dbgNum(this.coords.length));
+    info.set("norms", dbgNum(this.norms.length));
+    info.set("colors", dbgNum(this.colors.length));
+    info.set("texcoords", dbgNum(this.texcoords.length));
+    info.set("numPrims", dbgNum(this.numPrims));
+    info.set("coordBind", dbgEnum(this.bindings[G_COORD], GeomBindType));
+    info.set("colorBind", dbgEnum(this.bindings[G_COLOR], GeomBindType));
+    info.set("normalBind", dbgEnum(this.bindings[G_NORMAL], GeomBindType));
+    info.set("texcoordBind", dbgEnum(this.bindings[G_TEXCOORD], GeomBindType));
+    return info;
+  }
 }
 
-// Register all old-style Geom types
-registerBAMObject("GeomTri", LegacyGeom);
-registerBAMObject("GeomTristrip", LegacyGeom);
-registerBAMObject("GeomTrifan", LegacyGeom);
-registerBAMObject("GeomLine", LegacyGeom);
-registerBAMObject("GeomLinestrip", LegacyGeom);
-registerBAMObject("GeomPoint", LegacyGeom);
-registerBAMObject("GeomSprite", LegacyGeom);
+export class GeomTri extends LegacyGeom {}
+export class GeomTristrip extends LegacyGeom {}
+export class GeomTrifan extends LegacyGeom {}
+export class GeomLine extends LegacyGeom {}
+export class GeomLinestrip extends LegacyGeom {}
+export class GeomPoint extends LegacyGeom {}
+export class GeomSprite extends LegacyGeom {}
+
+registerBAMObject("GeomTri", GeomTri);
+registerBAMObject("GeomTristrip", GeomTristrip);
+registerBAMObject("GeomTrifan", GeomTrifan);
+registerBAMObject("GeomLine", GeomLine);
+registerBAMObject("GeomLinestrip", GeomLinestrip);
+registerBAMObject("GeomPoint", GeomPoint);
+registerBAMObject("GeomSprite", GeomSprite);

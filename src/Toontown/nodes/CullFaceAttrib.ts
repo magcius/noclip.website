@@ -1,7 +1,8 @@
 import type { BAMFile } from "../bam";
 import { AssetVersion, type DataStream } from "../common";
-import { BAMObject, registerBAMObject } from "./base";
+import { registerBAMObject } from "./base";
 import { type DebugInfo, dbgBool, dbgEnum } from "./debug";
+import { RenderAttrib } from "./RenderState";
 
 export enum CullFaceMode {
   CullNone = 0,
@@ -11,22 +12,28 @@ export enum CullFaceMode {
 }
 
 /**
- * CullFaceAttrib - Controls face culling
+ * Controls face culling.
  *
  * Version differences:
  * - BAM 4.1+: Added reverse field
  */
-export class CullFaceAttrib extends BAMObject {
-  public mode: CullFaceMode = CullFaceMode.CullClockwise;
-  public reverse: boolean = false;
+export class CullFaceAttrib extends RenderAttrib {
+  public mode = CullFaceMode.CullClockwise;
+  public reverse = false;
 
-  constructor(objectId: number, file: BAMFile, data: DataStream) {
-    super(objectId, file, data);
+  override load(file: BAMFile, data: DataStream) {
+    super.load(file, data);
 
     this.mode = data.readUint8() as CullFaceMode;
     if (this._version.compare(new AssetVersion(4, 1)) >= 0) {
       this.reverse = data.readBool();
     }
+  }
+
+  override copyTo(target: this): void {
+    super.copyTo(target);
+    target.mode = this.mode;
+    target.reverse = this.reverse;
   }
 
   override getDebugInfo(): DebugInfo {

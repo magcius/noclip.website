@@ -1,46 +1,55 @@
 import type { BAMFile } from "../bam";
 import type { DataStream } from "../common";
-import { BAMObject, registerBAMObject } from "./base";
+import { BAMObject, readTypedRefs, registerBAMObject } from "./base";
 import { type DebugInfo, dbgEnum, dbgRef, dbgRefs, dbgStr } from "./debug";
+import { GeomVertexArrayData } from "./GeomVertexArrayData";
+import { GeomVertexFormat } from "./GeomVertexFormat";
 import { UsageHint } from "./geomEnums";
 
 export class GeomVertexData extends BAMObject {
-  public name: string;
-  public formatRef: number;
-  public usageHint: UsageHint;
-  public arrayRefs: number[] = [];
-  public transformTableRef: number;
-  public transformBlendTableRef: number;
-  public sliderTableRef: number;
+  public name = "";
+  public format: GeomVertexFormat | null = null;
+  public usageHint = UsageHint.Static;
+  public arrays: GeomVertexArrayData[] = [];
+  public transformTable: BAMObject | null = null;
+  public transformBlendTable: BAMObject | null = null;
+  public sliderTable: BAMObject | null = null;
 
-  constructor(objectId: number, file: BAMFile, data: DataStream) {
-    super(objectId, file, data);
+  override load(file: BAMFile, data: DataStream) {
+    super.load(file, data);
 
     this.name = data.readString();
-
-    // Cycler data
-    this.formatRef = data.readObjectId();
+    this.format = file.getTyped(data.readObjectId(), GeomVertexFormat);
     this.usageHint = data.readUint8() as UsageHint;
 
     const numArrays = data.readUint16();
-    for (let i = 0; i < numArrays; i++) {
-      this.arrayRefs.push(data.readObjectId());
-    }
+    this.arrays = readTypedRefs(file, data, numArrays, GeomVertexArrayData);
 
-    this.transformTableRef = data.readObjectId();
-    this.transformBlendTableRef = data.readObjectId();
-    this.sliderTableRef = data.readObjectId();
+    this.transformTable = file.getObject(data.readObjectId());
+    this.transformBlendTable = file.getObject(data.readObjectId());
+    this.sliderTable = file.getObject(data.readObjectId());
+  }
+
+  override copyTo(target: this): void {
+    super.copyTo(target);
+    target.name = this.name;
+    target.format = this.format; // Shared
+    target.usageHint = this.usageHint;
+    target.arrays = this.arrays; // Shared
+    target.transformTable = this.transformTable; // Shared
+    target.transformBlendTable = this.transformBlendTable; // Shared
+    target.sliderTable = this.sliderTable; // Shared
   }
 
   override getDebugInfo(): DebugInfo {
     const info = super.getDebugInfo();
     info.set("name", dbgStr(this.name));
-    info.set("formatRef", dbgRef(this.formatRef));
+    info.set("format", dbgRef(this.format));
     info.set("usageHint", dbgEnum(this.usageHint, UsageHint));
-    info.set("arrayRefs", dbgRefs(this.arrayRefs));
-    info.set("transformTableRef", dbgRef(this.transformTableRef));
-    info.set("transformBlendTableRef", dbgRef(this.transformBlendTableRef));
-    info.set("sliderTableRef", dbgRef(this.sliderTableRef));
+    info.set("arrays", dbgRefs(this.arrays));
+    info.set("transformTable", dbgRef(this.transformTable));
+    info.set("transformBlendTable", dbgRef(this.transformBlendTable));
+    info.set("sliderTable", dbgRef(this.sliderTable));
     return info;
   }
 }

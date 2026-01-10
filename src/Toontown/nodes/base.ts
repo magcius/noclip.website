@@ -1,22 +1,18 @@
 import type { BAMFile } from "../bam";
-import type { AssetVersion, DataStream } from "../common";
-import { type DebugInfo, dbgFields, dbgNum } from "./debug";
+import { AssetVersion, type DataStream } from "../common";
+import type { DebugInfo } from "./debug";
 
-export type BAMObjectFactory<T extends BAMObject = BAMObject> = new (
-  objectId: number,
-  file: BAMFile,
-  data: DataStream,
-) => T;
+export type BAMObjectFactory<T extends BAMObject = BAMObject> = new () => T;
 
 // Central registry for BAM object factories.
 // Node modules register themselves by calling registerBAMObject().
 const objectFactories = new Map<string, BAMObjectFactory>();
 
-export function registerBAMObject(
+export function registerBAMObject<T extends BAMObject>(
   name: string,
-  factory: BAMObjectFactory,
+  factory: BAMObjectFactory<T>,
 ): void {
-  objectFactories.set(name, factory);
+  objectFactories.set(name, factory as unknown as BAMObjectFactory);
 }
 
 export function registerBAMObjectAlias(
@@ -38,17 +34,24 @@ export function getBAMObjectFactory(
   return objectFactories.get(name);
 }
 
-export class BAMObject {
-  protected _version: AssetVersion;
-  protected _typeName: string;
+const DEFAULT_VERSION = new AssetVersion(0, 0);
 
-  constructor(
-    public objectId: number,
-    file: BAMFile,
-    _data: DataStream,
-  ) {
+export class BAMObject {
+  protected _version = DEFAULT_VERSION;
+
+  load(file: BAMFile, _data: DataStream) {
     this._version = file.header.version;
-    this._typeName = file.getTypeName(this.objectId) ?? "Unknown";
+  }
+
+  copyTo(target: this) {
+    target._version = this._version;
+  }
+
+  clone(): this {
+    // biome-ignore lint/suspicious/noExplicitAny: no other way to do this
+    const target = new (this.constructor as any)();
+    this.copyTo(target);
+    return target;
   }
 
   /**
@@ -56,13 +59,38 @@ export class BAMObject {
    * Subclasses should override to include their specific fields.
    */
   getDebugInfo(): DebugInfo {
-    return dbgFields([["objectId", dbgNum(this.objectId)]]);
+    return new Map();
   }
+}
 
-  /**
-   * Returns the BAM type name for this object from the file's type registry.
-   */
-  getTypeName(): string {
-    return this._typeName;
+export function readObjectRefs(
+  file: BAMFile,
+  data: DataStream,
+  numRefs: number,
+): BAMObject[] {
+  const refs: BAMObject[] = [];
+  for (let i = 0; i < numRefs; i++) {
+    const ref = data.readObjectId();
+    const obj = file.getObject(ref);
+    if (!obj) throw new Error(`Object reference @${ref} not found`);
+    refs.push(obj);
   }
+  return refs;
+}
+
+export function readTypedRefs<T extends BAMObject>(
+  file: BAMFile,
+  data: DataStream,
+  numRefs: number,
+  // biome-ignore lint/suspicious/noExplicitAny: it's fine
+  clazz: new (...args: any[]) => T,
+): T[] {
+  const refs: T[] = [];
+  for (let i = 0; i < numRefs; i++) {
+    const ref = data.readObjectId();
+    const obj = file.getTyped(ref, clazz);
+    if (!obj) throw new Error(`Object reference @${ref} not found`);
+    refs.push(obj);
+  }
+  return refs;
 }

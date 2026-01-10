@@ -11,26 +11,27 @@ import {
   dbgRef,
 } from "./debug";
 import { Contents, NumericType } from "./geomEnums";
+import { InternalName } from "./InternalName";
 
 const VERTEX_COLUMN_ALIGNMENT = 4;
 
 export class GeomVertexColumn {
-  public nameRef: number;
-  public numComponents: number;
-  public numericType: NumericType;
-  public contents: Contents;
-  public start: number;
-  public columnAlignment: number;
+  public name: InternalName | null = null;
+  public numComponents = 0;
+  public numericType = NumericType.U8;
+  public contents = Contents.Other;
+  public start = 0;
+  public columnAlignment = 1;
 
   // Computed fields
-  public numElements: number = 0;
-  public elementStride: number = 0;
-  public numValues: number = 0;
-  public componentBytes: number = 0;
-  public totalBytes: number = 0;
+  public numElements = 0;
+  public elementStride = 0;
+  public numValues = 0;
+  public componentBytes = 0;
+  public totalBytes = 0;
 
-  constructor(file: BAMFile, data: DataStream) {
-    this.nameRef = data.readObjectId();
+  load(file: BAMFile, data: DataStream) {
+    this.name = file.getTyped(data.readObjectId(), InternalName);
     this.numComponents = data.readUint8();
     this.numericType = data.readUint8() as NumericType;
     this.contents = data.readUint8() as Contents;
@@ -111,7 +112,7 @@ export class GeomVertexColumn {
 
   getDebugInfo(): DebugInfo {
     return dbgFields([
-      ["nameRef", dbgRef(this.nameRef)],
+      ["name", dbgRef(this.name)],
       ["numComponents", dbgNum(this.numComponents)],
       ["numericType", dbgEnum(this.numericType, NumericType)],
       ["contents", dbgEnum(this.contents, Contents)],
@@ -122,14 +123,14 @@ export class GeomVertexColumn {
 }
 
 export class GeomVertexArrayFormat extends BAMObject {
-  public stride: number;
-  public totalBytes: number;
-  public padTo: number;
-  public divisor: number;
+  public stride = 0;
+  public totalBytes = 0;
+  public padTo = 0;
+  public divisor = 0;
   public columns: GeomVertexColumn[] = [];
 
-  constructor(objectId: number, file: BAMFile, data: DataStream) {
-    super(objectId, file, data);
+  override load(file: BAMFile, data: DataStream) {
+    super.load(file, data);
 
     this.stride = data.readUint16();
     this.totalBytes = data.readUint16();
@@ -143,8 +144,19 @@ export class GeomVertexArrayFormat extends BAMObject {
 
     const numColumns = data.readUint16();
     for (let i = 0; i < numColumns; i++) {
-      this.columns.push(new GeomVertexColumn(file, data));
+      const column = new GeomVertexColumn();
+      column.load(file, data);
+      this.columns.push(column);
     }
+  }
+
+  override copyTo(target: this): void {
+    super.copyTo(target);
+    target.stride = this.stride;
+    target.totalBytes = this.totalBytes;
+    target.padTo = this.padTo;
+    target.divisor = this.divisor;
+    target.columns = this.columns; // Shared
   }
 
   override getDebugInfo(): DebugInfo {

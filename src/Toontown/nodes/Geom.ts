@@ -1,27 +1,26 @@
 import type { BAMFile } from "../bam";
 import { AssetVersion, type DataStream } from "../common";
-import { BAMObject, registerBAMObject } from "./base";
+import { BAMObject, readTypedRefs, registerBAMObject } from "./base";
 import { type DebugInfo, dbgEnum, dbgNum, dbgRef, dbgRefs } from "./debug";
+import { GeomPrimitive } from "./GeomPrimitive";
+import { GeomVertexData } from "./GeomVertexData";
 import { BoundsType, PrimitiveType, ShadeModel } from "./geomEnums";
 
 export class Geom extends BAMObject {
-  public dataRef: number;
-  public primitiveRefs: number[] = [];
-  public primitiveType: PrimitiveType;
-  public shadeModel: ShadeModel;
-  public geomRendering: number;
-  public boundsType: BoundsType;
+  public data: GeomVertexData | null = null;
+  public primitives: GeomPrimitive[] = [];
+  public primitiveType = PrimitiveType.None;
+  public shadeModel = ShadeModel.Uniform;
+  public geomRendering = 0;
+  public boundsType = BoundsType.Default;
 
-  constructor(objectId: number, file: BAMFile, data: DataStream) {
-    super(objectId, file, data);
+  override load(file: BAMFile, data: DataStream) {
+    super.load(file, data);
 
-    // Cycler data
-    this.dataRef = data.readObjectId();
+    this.data = file.getTyped(data.readObjectId(), GeomVertexData);
 
     const numPrimitives = data.readUint16();
-    for (let i = 0; i < numPrimitives; i++) {
-      this.primitiveRefs.push(data.readObjectId());
-    }
+    this.primitives = readTypedRefs(file, data, numPrimitives, GeomPrimitive);
 
     this.primitiveType = data.readUint8() as PrimitiveType;
     this.shadeModel = data.readUint8() as ShadeModel;
@@ -34,10 +33,20 @@ export class Geom extends BAMObject {
     }
   }
 
+  override copyTo(target: this): void {
+    super.copyTo(target);
+    target.data = this.data; // Shared
+    target.primitives = this.primitives; // Shared
+    target.primitiveType = this.primitiveType;
+    target.shadeModel = this.shadeModel;
+    target.geomRendering = this.geomRendering;
+    target.boundsType = this.boundsType;
+  }
+
   override getDebugInfo(): DebugInfo {
     const info = super.getDebugInfo();
-    info.set("dataRef", dbgRef(this.dataRef));
-    info.set("primitiveRefs", dbgRefs(this.primitiveRefs));
+    info.set("data", dbgRef(this.data));
+    info.set("primitives", dbgRefs(this.primitives));
     info.set("primitiveType", dbgEnum(this.primitiveType, PrimitiveType));
     info.set("shadeModel", dbgEnum(this.shadeModel, ShadeModel));
     info.set("geomRendering", dbgNum(this.geomRendering));

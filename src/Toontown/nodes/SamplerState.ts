@@ -1,29 +1,33 @@
+import { vec4 } from "gl-matrix";
 import type { BAMFile } from "../bam";
 import { AssetVersion, type DataStream } from "../common";
 import { type DebugInfo, dbgColor, dbgEnum, dbgNum } from "./debug";
 import { FilterType, WrapMode } from "./textureEnums";
 
 export class SamplerState {
-  public wrapU: WrapMode;
-  public wrapV: WrapMode;
-  public wrapW: WrapMode;
-  public minFilter: FilterType;
-  public magFilter: FilterType;
-  public anisoDegree: number;
-  public borderColor: [number, number, number, number];
-  public minLod: number = -1000.0;
+  public wrapU = WrapMode.Repeat;
+  public wrapV = WrapMode.Repeat;
+  public wrapW = WrapMode.Repeat;
+  public minFilter = FilterType.LinearMipmapLinear;
+  public magFilter = FilterType.Linear;
+  public anisoDegree = 1;
+  public borderColor = vec4.create();
+  public minLod: number = 0.0;
   public maxLod: number = 1000.0;
   public lodBias: number = 0.0;
 
-  constructor(file: BAMFile, data: DataStream) {
+  load(file: BAMFile, data: DataStream) {
     this.wrapU = data.readUint8() as WrapMode;
     this.wrapV = data.readUint8() as WrapMode;
-    this.wrapW = data.readUint8() as WrapMode;
+    if (file.header.version.compare(new AssetVersion(5, 0)) >= 0) {
+      this.wrapW = data.readUint8() as WrapMode;
+    }
     this.minFilter = data.readUint8() as FilterType;
     this.magFilter = data.readUint8() as FilterType;
     this.anisoDegree = data.readInt16();
-    this.borderColor = data.readVec4();
-
+    if (file.header.version.compare(new AssetVersion(5, 0)) >= 0) {
+      this.borderColor = data.readVec4();
+    }
     if (file.header.version.compare(new AssetVersion(6, 36)) >= 0) {
       this.minLod = data.readStdFloat();
       this.maxLod = data.readStdFloat();
@@ -46,7 +50,7 @@ export class SamplerState {
     info.set("minFilter", dbgEnum(this.minFilter, FilterType));
     info.set("magFilter", dbgEnum(this.magFilter, FilterType));
 
-    if (this.anisoDegree !== 0 && this.anisoDegree !== 1) {
+    if (this.anisoDegree !== 1) {
       info.set("anisoDegree", dbgNum(this.anisoDegree));
     }
 

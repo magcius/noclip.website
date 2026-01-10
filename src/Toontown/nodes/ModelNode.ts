@@ -8,14 +8,20 @@ export class ModelNode extends PandaNode {
   public preserveTransform = 0;
   public preserveAttributes = 0;
 
-  constructor(objectId: number, file: BAMFile, data: DataStream) {
-    super(objectId, file, data);
+  override load(file: BAMFile, data: DataStream) {
+    super.load(file, data);
     if (this._version.compare(new AssetVersion(3, 2)) >= 0) {
       this.preserveTransform = data.readUint8();
     }
     if (this._version.compare(new AssetVersion(5, 3)) >= 0) {
       this.preserveAttributes = data.readUint16();
     }
+  }
+
+  override copyTo(target: this): void {
+    super.copyTo(target);
+    target.preserveTransform = this.preserveTransform;
+    target.preserveAttributes = this.preserveAttributes;
   }
 
   override getDebugInfo(): DebugInfo {
@@ -30,5 +36,7 @@ export class ModelNode extends PandaNode {
   }
 }
 
+export class ModelRoot extends ModelNode {}
+
 registerBAMObject("ModelNode", ModelNode);
-registerBAMObject("ModelRoot", ModelNode);
+registerBAMObject("ModelRoot", ModelRoot);

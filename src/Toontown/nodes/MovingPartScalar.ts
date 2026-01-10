@@ -5,22 +5,22 @@ import { type DebugInfo, dbgNum } from "./debug";
 import { MovingPartBase } from "./MovingPartBase";
 
 /**
- * MovingPartScalar - Animated scalar part
- *
- * Stores a single floating-point value that animates.
- * Hierarchy: MovingPartScalar -> MovingPartBase -> PartGroup
+ * Animated scalar part
  */
 export class MovingPartScalar extends MovingPartBase {
-  // MovingPart<ACScalarSwitchType> fields - two float values
-  public value: number = 0;
-  public initialValue: number = 0;
+  public value = 0;
+  public initialValue = 0;
 
-  constructor(objectId: number, file: BAMFile, data: DataStream) {
-    super(objectId, file, data);
-
-    // MovingPart<ACScalarSwitchType>::fillin reads value and initial_value
+  override load(file: BAMFile, data: DataStream) {
+    super.load(file, data);
     this.value = data.readFloat32();
     this.initialValue = data.readFloat32();
+  }
+
+  override copyTo(target: this): void {
+    super.copyTo(target);
+    target.value = this.value;
+    target.initialValue = this.initialValue;
   }
 
   override getDebugInfo(): DebugInfo {

@@ -1,23 +1,20 @@
+import { vec3 } from "gl-matrix";
 import type { BAMFile } from "../bam";
 import type { DataStream } from "../common";
 import { BAMObject, registerBAMObject } from "./base";
 import { type DebugInfo, dbgFlags, dbgVec3 } from "./debug";
 
-// CollisionSolid flags
-const F_TANGIBLE = 1 << 0;
-const F_EFFECTIVE_NORMAL = 1 << 1;
-
-const CollisionSolidFlags = {
-  Tangible: F_TANGIBLE,
-  EffectiveNormal: F_EFFECTIVE_NORMAL,
+export const CollisionSolidFlags = {
+  Tangible: 1 << 0,
+  EffectiveNormal: 1 << 1,
 };
 
 export class CollisionSolid extends BAMObject {
-  public flags: number;
-  public effectiveNormal: [number, number, number] = [0, 0, 0];
+  public flags = 0;
+  public effectiveNormal = vec3.create();
 
-  constructor(objectId: number, file: BAMFile, data: DataStream) {
-    super(objectId, file, data);
+  override load(file: BAMFile, data: DataStream) {
+    super.load(file, data);
 
     this.flags = data.readUint8();
     if (this.hasEffectiveNormal) {
@@ -25,12 +22,18 @@ export class CollisionSolid extends BAMObject {
     }
   }
 
+  override copyTo(target: this): void {
+    super.copyTo(target);
+    target.flags = this.flags;
+    vec3.copy(target.effectiveNormal, this.effectiveNormal);
+  }
+
   get isTangible(): boolean {
-    return (this.flags & F_TANGIBLE) !== 0;
+    return (this.flags & CollisionSolidFlags.Tangible) !== 0;
   }
 
   get hasEffectiveNormal(): boolean {
-    return (this.flags & F_EFFECTIVE_NORMAL) !== 0;
+    return (this.flags & CollisionSolidFlags.EffectiveNormal) !== 0;
   }
 
   override getDebugInfo(): DebugInfo {

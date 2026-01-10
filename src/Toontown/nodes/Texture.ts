@@ -1,3 +1,4 @@
+import { vec3, type vec4 } from "gl-matrix";
 import type { BAMFile } from "../bam";
 import { AssetVersion, type DataStream } from "../common";
 import { BAMObject, registerBAMObject } from "./base";
@@ -18,16 +19,14 @@ import {
   AutoTextureScale,
   ComponentType,
   CompressionMode,
-  FilterType,
   Format,
   QualityLevel,
   TextureType,
-  WrapMode,
 } from "./textureEnums";
 
 export interface TextureData {
-  size: [number, number, number];
-  padSize: [number, number, number];
+  size: vec3;
+  padSize: vec3;
   numViews: number;
   componentType: ComponentType;
   componentWidth: number;
@@ -37,43 +36,38 @@ export interface TextureData {
 }
 
 export class Texture extends BAMObject {
-  public name: string;
-  public filename: string;
-  public alphaFilename: string;
-  public colorNumChannels: number = 0;
-  public alphaNumChannels: number = 0;
-  public textureType: TextureType = TextureType.Texture2D;
-  public hasReadMipmaps: boolean = false;
+  public name = "";
+  public filename = "";
+  public alphaFilename = "";
+  public colorNumChannels = 0;
+  public alphaNumChannels = 0;
+  public textureType = TextureType.Texture2D;
+  public hasReadMipmaps = false;
 
   // Body (5.0+ format)
-  public defaultSampler: SamplerState | null = null;
-  public format: Format = Format.RGB;
-  public compression: CompressionMode = CompressionMode.Default;
-  public usageHint: UsageHint = UsageHint.Unspecified;
-  public qualityLevel: QualityLevel = QualityLevel.Default;
-  public autoTextureScale: AutoTextureScale = AutoTextureScale.Unspecified;
-  public numComponents: number = 0;
-  public origFileXSize: number = 0;
-  public origFileYSize: number = 0;
-  public simpleXSize: number = 0;
-  public simpleYSize: number = 0;
-  public simpleImageDateGenerated: number = 0;
+  public defaultSampler = new SamplerState();
+  public format = Format.RGB;
+  public compression = CompressionMode.Default;
+  public usageHint = UsageHint.Unspecified;
+  public qualityLevel = QualityLevel.Default;
+  public autoTextureScale = AutoTextureScale.Unspecified;
+  public numComponents = 0;
+  public origFileXSize = 0;
+  public origFileYSize = 0;
+  public simpleXSize = 0;
+  public simpleYSize = 0;
+  public simpleImageDateGenerated = 0;
   public simpleImage: Uint8Array | null = null;
-  public clearColor: [number, number, number, number] | null = null;
+  public clearColor: vec4 | null = null;
 
   // Pre-5.0 format fields
-  public wrapU: WrapMode = WrapMode.Repeat;
-  public wrapV: WrapMode = WrapMode.Repeat;
-  public minFilter: FilterType = FilterType.Default;
-  public magFilter: FilterType = FilterType.Default;
-  public anisoDegree: number = 1;
   public pbufferFormat: Format | null = null;
 
   // Raw texture data (optional)
   public rawData: TextureData | null = null;
 
-  constructor(objectId: number, file: BAMFile, data: DataStream) {
-    super(objectId, file, data);
+  override load(file: BAMFile, data: DataStream) {
+    super.load(file, data);
 
     this.name = data.readString();
     this.filename = data.readString();
@@ -93,12 +87,7 @@ export class Texture extends BAMObject {
         hasRawdata = data.readBool();
       }
 
-      // Read sampler properties directly (no SamplerState object)
-      this.wrapU = data.readUint8() as WrapMode;
-      this.wrapV = data.readUint8() as WrapMode;
-      this.minFilter = data.readUint8() as FilterType;
-      this.magFilter = data.readUint8() as FilterType;
-      this.anisoDegree = data.readInt16();
+      this.defaultSampler.load(file, data);
 
       // Optional PixelBuffer data
       const hasPbuffer = data.readBool();
@@ -110,8 +99,8 @@ export class Texture extends BAMObject {
           // Read raw pixel buffer data
           const xsize = data.readInt32();
           const ysize = data.readInt32();
-          const imageType = data.readUint8();
-          const numComponents = data.readUint8();
+          const imageType = data.readUint8() as ComponentType;
+          data.readUint8(); // numComponents (again)
           const componentWidth = data.readUint8();
           const imageSize = data.readUint32();
           const imageData = data.readUint8Array(imageSize);
@@ -149,8 +138,7 @@ export class Texture extends BAMObject {
       this.hasReadMipmaps = data.readBool();
     }
 
-    // Read body
-    this.defaultSampler = new SamplerState(file, data);
+    this.defaultSampler.load(file, data);
 
     if (this._version.compare(new AssetVersion(6, 1)) >= 0) {
       this.compression = data.readUint8() as CompressionMode;
@@ -199,15 +187,45 @@ export class Texture extends BAMObject {
     }
   }
 
+  override copyTo(target: this): void {
+    super.copyTo(target);
+    target.name = this.name;
+    target.filename = this.filename;
+    target.alphaFilename = this.alphaFilename;
+    target.colorNumChannels = this.colorNumChannels;
+    target.alphaNumChannels = this.alphaNumChannels;
+    target.textureType = this.textureType;
+    target.hasReadMipmaps = this.hasReadMipmaps;
+    target.defaultSampler = this.defaultSampler; // Shared
+    target.format = this.format;
+    target.compression = this.compression;
+    target.usageHint = this.usageHint;
+    target.qualityLevel = this.qualityLevel;
+    target.autoTextureScale = this.autoTextureScale;
+    target.numComponents = this.numComponents;
+    target.origFileXSize = this.origFileXSize;
+    target.origFileYSize = this.origFileYSize;
+    target.simpleXSize = this.simpleXSize;
+    target.simpleYSize = this.simpleYSize;
+    target.simpleImageDateGenerated = this.simpleImageDateGenerated;
+    target.simpleImage = this.simpleImage; // Shared
+    target.clearColor = this.clearColor; // Shared
+    target.pbufferFormat = this.pbufferFormat;
+    target.rawData = this.rawData; // Shared
+  }
+
   private readTextureData(data: DataStream): TextureData {
     const sizeX = data.readUint32();
     const sizeY = data.readUint32();
     const sizeZ = data.readUint32();
-    const size: [number, number, number] = [sizeX, sizeY, sizeZ];
+    const size = vec3.fromValues(sizeX, sizeY, sizeZ);
 
-    let padSize: [number, number, number] = [0, 0, 0];
+    let padSize = vec3.create();
     if (this._version.compare(new AssetVersion(6, 30)) >= 0) {
-      padSize = [data.readUint32(), data.readUint32(), data.readUint32()];
+      const padSizeX = data.readUint32();
+      const padSizeY = data.readUint32();
+      const padSizeZ = data.readUint32();
+      padSize = vec3.fromValues(padSizeX, padSizeY, padSizeZ);
     }
 
     let numViews = 1;
@@ -286,15 +304,7 @@ export class Texture extends BAMObject {
       );
     }
 
-    // Pre-5.0: show individual sampler properties, 5.0+: show SamplerState object
-    if (this.defaultSampler !== null) {
-      info.set("sampler", dbgObject(this.defaultSampler.getDebugInfo()));
-    } else {
-      info.set("wrapU", dbgEnum(this.wrapU, WrapMode));
-      info.set("wrapV", dbgEnum(this.wrapV, WrapMode));
-      info.set("minFilter", dbgEnum(this.minFilter, FilterType));
-      info.set("magFilter", dbgEnum(this.magFilter, FilterType));
-    }
+    info.set("sampler", dbgObject(this.defaultSampler.getDebugInfo()));
 
     if (this.simpleImage !== null) {
       info.set(

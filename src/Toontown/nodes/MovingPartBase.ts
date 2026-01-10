@@ -1,32 +1,31 @@
 import type { BAMFile } from "../bam";
 import { AssetVersion, type DataStream } from "../common";
-import { registerBAMObject } from "./base";
+import { type BAMObject, registerBAMObject } from "./base";
 import { type DebugInfo, dbgRef } from "./debug";
 import { PartGroup } from "./PartGroup";
 
 /**
- * MovingPartBase - Base class for animated parts
- *
- * Extends PartGroup with forced channel support (6.20+).
- * Hierarchy: MovingPartBase -> PartGroup
+ * Base class for animated parts
  */
 export class MovingPartBase extends PartGroup {
-  // MovingPartBase fields (6.20+)
-  public forcedChannelRef: number = 0;
+  public forcedChannel: BAMObject | null = null; // 6.20+
 
-  constructor(objectId: number, file: BAMFile, data: DataStream) {
-    super(objectId, file, data);
-
-    // MovingPartBase::fillin - in BAM 6.20+, read forced_channel pointer
+  override load(file: BAMFile, data: DataStream) {
+    super.load(file, data);
     if (this._version.compare(new AssetVersion(6, 20)) >= 0) {
-      this.forcedChannelRef = data.readObjectId();
+      this.forcedChannel = file.getObject(data.readObjectId());
     }
+  }
+
+  override copyTo(target: this): void {
+    super.copyTo(target);
+    target.forcedChannel = this.forcedChannel; // Shared
   }
 
   override getDebugInfo(): DebugInfo {
     const info = super.getDebugInfo();
     if (this._version.compare(new AssetVersion(6, 20)) >= 0) {
-      info.set("forcedChannelRef", dbgRef(this.forcedChannelRef));
+      info.set("forcedChannel", dbgRef(this.forcedChannel));
     }
     return info;
   }

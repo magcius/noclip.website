@@ -12,37 +12,40 @@ import { type DebugInfo, dbgRefs, dbgStr } from "./debug";
  * In BAM 6.11, there's freeze-joint info that was later removed.
  */
 export class PartGroup extends BAMObject {
-  public name: string = "";
-  public childRefs: number[] = [];
+  public name = "";
+  public children: BAMObject[] = [];
 
-  constructor(objectId: number, file: BAMFile, data: DataStream) {
-    super(objectId, file, data);
+  override load(file: BAMFile, data: DataStream) {
+    super.load(file, data);
 
     this.name = data.readString();
 
     // In BAM 6.11, skip freeze-joint info (no longer stored)
-    if (
-      this._version.compare(new AssetVersion(6, 11)) >= 0 &&
-      this._version.compare(new AssetVersion(6, 12)) < 0
-    ) {
+    if (this._version.compare(new AssetVersion(6, 11)) === 0) {
       data.readBool(); // freeze flag
-      // Skip LMatrix4f (16 floats)
-      for (let i = 0; i < 16; i++) {
-        data.readFloat32();
-      }
+      data.readMat4(); // LMatrix4f
     }
 
     const numChildren = data.readUint16();
-    this.childRefs = [];
+    this.children = new Array(numChildren);
     for (let i = 0; i < numChildren; i++) {
-      this.childRefs.push(data.readObjectId());
+      const ref = data.readObjectId();
+      const obj = file.getObject(ref);
+      if (!obj) throw new Error(`PartGroup: Invalid child ref ${ref}`);
+      this.children[i] = obj;
     }
+  }
+
+  override copyTo(target: this): void {
+    super.copyTo(target);
+    target.name = this.name;
+    target.children = this.children; // Shared
   }
 
   override getDebugInfo(): DebugInfo {
     const info = super.getDebugInfo();
     info.set("name", dbgStr(this.name));
-    info.set("children", dbgRefs(this.childRefs));
+    info.set("children", dbgRefs(this.children));
     return info;
   }
 }

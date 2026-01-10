@@ -1,37 +1,118 @@
+import type { vec3, vec4 } from "gl-matrix";
 import type { BAMFile } from "../bam";
 import { AssetVersion, type DataStream } from "../common";
 import { BAMObject, registerBAMObject } from "./base";
+import { ColorAttrib } from "./ColorAttrib";
 import {
   type DebugInfo,
   dbgArray,
   dbgEnum,
+  dbgFields,
   dbgNum,
   dbgObject,
   dbgRef,
   dbgStr,
 } from "./debug";
 import { BoundsType } from "./geomEnums";
+import { type RenderEffect, RenderEffects } from "./RenderEffects";
+import { type RenderAttrib, RenderState } from "./RenderState";
+import { TransformState } from "./TransformState";
 
 export class PandaNode extends BAMObject {
-  public name: string;
-  public stateRef: number;
-  public transformRef: number;
-  public effectsRef: number;
-  public drawControlMask: number;
-  public drawShowMask: number;
+  public name: string = "";
+  public state = new RenderState();
+  public transform = new TransformState();
+  public effects = new RenderEffects();
+  public drawControlMask = 0;
+  public drawShowMask = 0xffffffff;
   public intoCollideMask = 0;
-  public boundsType = 0;
+  public boundsType = BoundsType.Default;
   public tags = new Map<string, string>();
-  public parents: number[];
-  public children: [number, number][];
-  public stashed: [number, number][];
+  public parents: PandaNode[] = [];
+  public children: [PandaNode, number][] = [];
+  public stashed: [PandaNode, number][] = [];
 
-  constructor(objectId: number, file: BAMFile, data: DataStream) {
-    super(objectId, file, data);
+  addChild(child: PandaNode, sort: number = 0): void {
+    child.parents.push(this);
+    this.children.push([child, sort]);
+  }
+
+  removeChild(child: PandaNode): void {
+    const index = this.children.findIndex(([c, _]) => c === child);
+    if (index !== -1) {
+      this.children.splice(index, 1);
+    }
+    const parentIndex = child.parents.indexOf(this);
+    if (parentIndex !== -1) {
+      child.parents.splice(parentIndex, 1);
+    }
+  }
+
+  moveTo(target: PandaNode): void {
+    for (const parent of this.parents.slice()) {
+      parent.removeChild(this);
+    }
+    target.addChild(this);
+  }
+
+  findNode(name: string): PandaNode | null {
+    if (this.name === name) return this;
+    for (const [child, _] of this.children) {
+      const found = child.findNode(name);
+      if (found) return found;
+    }
+    return null;
+  }
+
+  // TODO replace with actual PandaNode queries
+  findNodeBySuffix(suffix: string): PandaNode | null {
+    if (this.name.endsWith(suffix)) return this;
+    for (const [child, _] of this.children) {
+      const found = child.findNodeBySuffix(suffix);
+      if (found) return found;
+    }
+    return null;
+  }
+
+  traverse(visitor: (node: PandaNode) => void): void {
+    visitor(this);
+    for (const [child, _] of this.children) {
+      child.traverse(visitor);
+    }
+  }
+
+  attachNewNode(name: string): PandaNode {
+    const node = PandaNode.create(name);
+    this.addChild(node);
+    return node;
+  }
+
+  setAttrib(attrib: RenderAttrib, priority = 0) {
+    this.state = this.state.withAttrib(attrib, priority);
+  }
+
+  setColor(color: vec4) {
+    this.setAttrib(ColorAttrib.flat(color));
+  }
+
+  setPosHprScale(pos: vec3, hpr: vec3, scale: vec3) {
+    this.transform = TransformState.fromPosHprScale(pos, hpr, scale);
+  }
+
+  setEffect(effect: RenderEffect) {
+    this.effects = this.effects.withEffect(effect);
+  }
+
+  override load(file: BAMFile, data: DataStream) {
+    super.load(file, data);
     this.name = data.readString();
-    this.stateRef = data.readObjectId();
-    this.transformRef = data.readObjectId();
-    this.effectsRef = data.readObjectId();
+
+    const state = file.getTyped(data.readObjectId(), RenderState);
+    if (state) this.state = state;
+    const transform = file.getTyped(data.readObjectId(), TransformState);
+    if (transform) this.transform = transform;
+    const effects = file.getTyped(data.readObjectId(), RenderEffects);
+    if (effects) this.effects = effects;
 
     // Draw mask handling
     if (this._version.compare(new AssetVersion(6, 2)) >= 0) {
@@ -60,7 +141,7 @@ export class PandaNode extends BAMObject {
 
     // bounds_type added in BAM 6.19
     if (this._version.compare(new AssetVersion(6, 19)) >= 0) {
-      this.boundsType = data.readUint8();
+      this.boundsType = data.readUint8() as BoundsType;
     }
 
     // In BAM 6.0+, tags come BEFORE parents/children/stashed
@@ -77,27 +158,30 @@ export class PandaNode extends BAMObject {
       }
     }
 
-    // Parents
+    // Parents will be registered later; read the IDs for now
     const numParents = data.readUint16();
-    this.parents = new Array<number>(numParents);
     for (let i = 0; i < numParents; i++) {
-      this.parents[i] = data.readObjectId();
+      data.readObjectId();
     }
 
     // Children
     const numChildren = data.readUint16();
-    this.children = new Array<[number, number]>(numChildren);
+    this.children = new Array(numChildren);
     for (let i = 0; i < numChildren; i++) {
-      const ref = data.readObjectId();
+      const ref = file.getTyped(data.readObjectId(), PandaNode);
+      if (!ref) throw new Error(`Child reference @${ref} not found in file`);
+      ref.parents.push(this);
       const sort = data.readUint32();
       this.children[i] = [ref, sort];
     }
 
     // Stashed
     const numStashed = data.readUint16();
-    this.stashed = new Array<[number, number]>(numStashed);
+    this.stashed = new Array(numStashed);
     for (let i = 0; i < numStashed; i++) {
-      const ref = data.readObjectId();
+      const ref = file.getTyped(data.readObjectId(), PandaNode);
+      if (!ref) throw new Error(`Stashed reference @${ref} not found in file`);
+      // if (ref instanceof PandaNode) ref.parents.push(this); ?
       const sort = data.readUint32();
       this.stashed[i] = [ref, sort];
     }
@@ -113,12 +197,33 @@ export class PandaNode extends BAMObject {
     }
   }
 
+  override copyTo(target: this) {
+    super.copyTo(target);
+    target.name = this.name;
+    target.state = this.state?.clone() ?? null;
+    target.transform = this.transform?.clone() ?? null;
+    target.effects = this.effects?.clone() ?? null;
+    target.drawControlMask = this.drawControlMask;
+    target.drawShowMask = this.drawShowMask;
+    target.intoCollideMask = this.intoCollideMask;
+    target.boundsType = this.boundsType;
+    target.tags = new Map(this.tags);
+  }
+
+  cloneSubgraph(): PandaNode {
+    const target = this.clone();
+    for (const [child, sort] of this.children) {
+      target.addChild(child.cloneSubgraph(), sort);
+    }
+    return target;
+  }
+
   override getDebugInfo(): DebugInfo {
     const info = super.getDebugInfo();
     info.set("name", dbgStr(this.name));
-    info.set("stateRef", dbgRef(this.stateRef));
-    info.set("transformRef", dbgRef(this.transformRef));
-    info.set("effectsRef", dbgRef(this.effectsRef));
+    info.set("state", dbgRef(this.state));
+    info.set("transform", dbgRef(this.transform));
+    info.set("effects", dbgRef(this.effects));
 
     if (this.drawControlMask !== 0 || this.drawShowMask !== 0xffffffff) {
       info.set("drawControlMask", dbgNum(this.drawControlMask));
@@ -145,12 +250,14 @@ export class PandaNode extends BAMObject {
       info.set(
         "children",
         dbgArray(
-          this.children.map(([ref, sort]) => {
-            const childInfo: DebugInfo = new Map();
-            childInfo.set("ref", dbgRef(ref));
-            childInfo.set("sort", dbgNum(sort));
-            return dbgObject(childInfo, true);
-          }),
+          this.children.map(([ref, sort]) =>
+            dbgObject(
+              dbgFields([
+                ["sort", dbgNum(sort)],
+                ["ref", dbgRef(ref)],
+              ]),
+            ),
+          ),
         ),
       );
     }
@@ -159,17 +266,25 @@ export class PandaNode extends BAMObject {
       info.set(
         "stashed",
         dbgArray(
-          this.stashed.map(([ref, sort]) => {
-            const stashInfo: DebugInfo = new Map();
-            stashInfo.set("ref", dbgRef(ref));
-            stashInfo.set("sort", dbgNum(sort));
-            return dbgObject(stashInfo, true);
-          }),
+          this.stashed.map(([ref, sort]) =>
+            dbgObject(
+              dbgFields([
+                ["sort", dbgNum(sort)],
+                ["ref", dbgRef(ref)],
+              ]),
+            ),
+          ),
         ),
       );
     }
 
     return info;
+  }
+
+  static create(name: string): PandaNode {
+    const node = new PandaNode();
+    node.name = name;
+    return node;
   }
 }
 

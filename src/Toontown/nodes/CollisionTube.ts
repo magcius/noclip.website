@@ -1,3 +1,4 @@
+import { vec3 } from "gl-matrix";
 import type { BAMFile } from "../bam";
 import type { DataStream } from "../common";
 import { registerBAMObject } from "./base";
@@ -10,25 +11,31 @@ import { type DebugInfo, dbgNum, dbgVec3 } from "./debug";
  * Renamed to CollisionCapsule in BAM 6.44, but the format is identical.
  */
 export class CollisionTube extends CollisionSolid {
-	public pointA: [number, number, number] = [0, 0, 0];
-	public pointB: [number, number, number] = [0, 0, 0];
-	public radius: number = 0;
+  public pointA = vec3.create();
+  public pointB = vec3.create();
+  public radius = 0;
 
-	constructor(objectId: number, file: BAMFile, data: DataStream) {
-		super(objectId, file, data);
+  override load(file: BAMFile, data: DataStream) {
+    super.load(file, data);
+    this.pointA = data.readVec3();
+    this.pointB = data.readVec3();
+    this.radius = data.readFloat32();
+  }
 
-		this.pointA = data.readVec3();
-		this.pointB = data.readVec3();
-		this.radius = data.readFloat32();
-	}
+  override copyTo(target: this): void {
+    super.copyTo(target);
+    vec3.copy(target.pointA, this.pointA);
+    vec3.copy(target.pointB, this.pointB);
+    target.radius = this.radius;
+  }
 
-	override getDebugInfo(): DebugInfo {
-		const info = super.getDebugInfo();
-		info.set("pointA", dbgVec3(this.pointA));
-		info.set("pointB", dbgVec3(this.pointB));
-		info.set("radius", dbgNum(this.radius));
-		return info;
-	}
+  override getDebugInfo(): DebugInfo {
+    const info = super.getDebugInfo();
+    info.set("pointA", dbgVec3(this.pointA));
+    info.set("pointB", dbgVec3(this.pointB));
+    info.set("radius", dbgNum(this.radius));
+    return info;
+  }
 }
 
 registerBAMObject("CollisionTube", CollisionTube);

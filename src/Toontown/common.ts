@@ -1,3 +1,4 @@
+import type { mat4, vec2, vec3, vec4 } from "gl-matrix";
 import type ArrayBufferSlice from "../ArrayBufferSlice";
 
 export class AssetVersion {
@@ -26,6 +27,8 @@ export class DataStreamState {
     public littleEndian = true,
     public useDouble = false,
     public longObjectIds = false,
+    // Global PTA cache shared across all objects in the BAM file
+    public ptaCache = new Map<number, unknown>(),
   ) {}
 }
 
@@ -89,11 +92,7 @@ export class DataStream {
   }
 
   readStdFloat(): number {
-    if (this.state.useDouble) {
-      return this.readFloat64();
-    } else {
-      return this.readFloat32();
-    }
+    return this.state.useDouble ? this.readFloat64() : this.readFloat32();
   }
 
   readUint8Array(length: number): Uint8Array {
@@ -102,39 +101,59 @@ export class DataStream {
     return value;
   }
 
+  readUint16Array(length: number): Uint16Array {
+    if (!this.state.littleEndian)
+      throw new Error("TODO readUint16Array big endian");
+    const value = new Uint16Array(
+      this.data.copyToBuffer(this.offs, length * 2),
+    );
+    this.offs += length * 2;
+    return value;
+  }
+
+  readInt32Array(length: number): Int32Array {
+    if (!this.state.littleEndian)
+      throw new Error("TODO readInt32Array big endian");
+    const value = new Int32Array(this.data.copyToBuffer(this.offs, length * 4));
+    this.offs += length * 4;
+    return value;
+  }
+
+  readFloat32Array(length: number): Float32Array {
+    if (!this.state.littleEndian)
+      throw new Error("TODO readFloat32Array big endian");
+    const value = new Float32Array(
+      this.data.copyToBuffer(this.offs, length * 4),
+    );
+    this.offs += length * 4;
+    return value;
+  }
+
   readBool(): boolean {
     return this.readUint8() !== 0;
   }
 
   readString(): string {
-    const stringLength = this.readUint16();
-    const stringBuffer = this.subarray(stringLength).copyToBuffer();
-    return new TextDecoder().decode(stringBuffer);
+    const length = this.readUint16();
+    const buffer = this.data.copyToBuffer(this.offs, length);
+    this.offs += length;
+    return new TextDecoder().decode(buffer);
   }
 
-  readVec2(): [number, number] {
-    return [this.readStdFloat(), this.readStdFloat()];
+  readVec2(): vec2 {
+    return this.readFloat32Array(2);
   }
 
-  readVec3(): [number, number, number] {
-    return [this.readStdFloat(), this.readStdFloat(), this.readStdFloat()];
+  readVec3(): vec3 {
+    return this.readFloat32Array(3);
   }
 
-  readVec4(): [number, number, number, number] {
-    return [
-      this.readStdFloat(),
-      this.readStdFloat(),
-      this.readStdFloat(),
-      this.readStdFloat(),
-    ];
+  readVec4(): vec4 {
+    return this.readFloat32Array(4);
   }
 
-  readMat4(): number[] {
-    const m = new Array<number>(16);
-    for (let i = 0; i < 16; i++) {
-      m[i] = this.readStdFloat();
-    }
-    return m;
+  readMat4(): mat4 {
+    return this.readFloat32Array(16);
   }
 
   readObjectId(): number {
@@ -150,7 +169,8 @@ export class DataStream {
     return value;
   }
 
-  subarray(length: number): ArrayBufferSlice {
+  subarray(length?: number): ArrayBufferSlice {
+    if (length === undefined) length = this.remaining();
     const value = this.data.subarray(this.offs, length);
     this.offs += length;
     return value;
@@ -171,4 +191,40 @@ export class DataStream {
   remaining(): number {
     return this.data.byteLength - this.offs;
   }
+
+  readPtaVec2(): Float32Array {
+    return this.readPtaInternal((size) => this.readFloat32Array(size * 2));
+  }
+
+  readPtaVec3(): Float32Array {
+    return this.readPtaInternal((size) => this.readFloat32Array(size * 3));
+  }
+
+  readPtaVec4(): Float32Array {
+    return this.readPtaInternal((size) => this.readFloat32Array(size * 4));
+  }
+
+  readPtaUint16(): Uint16Array {
+    return this.readPtaInternal((size) => this.readUint16Array(size));
+  }
+
+  readPtaInt32(): Int32Array {
+    return this.readPtaInternal((size) => this.readInt32Array(size));
+  }
+
+  private readPtaInternal<T>(cb: (size: number) => T): T {
+    const ptaId = this.readObjectId();
+    if (ptaId !== 0 && this.state.ptaCache.has(ptaId))
+      return this.state.ptaCache.get(ptaId) as T;
+    const result = cb(this.readUint32());
+    if (ptaId !== 0) this.state.ptaCache.set(ptaId, result);
+    return result;
+  }
+}
+
+export function enumName(
+  value: number,
+  enumObj: Record<number, string>,
+): string {
+  return enumObj[value] ?? `Unknown(${value})`;
 }

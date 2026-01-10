@@ -1,17 +1,23 @@
 import type { BAMFile } from "../bam";
 import type { DataStream } from "../common";
-import { BAMObject, registerBAMObject } from "./base";
+import { registerBAMObject } from "./base";
 import { type DebugInfo, dbgNum, dbgStr } from "./debug";
+import { RenderAttrib } from "./RenderState";
 
-export class CullBinAttrib extends BAMObject {
-  public binName: string;
-  public drawOrder: number;
+export class CullBinAttrib extends RenderAttrib {
+  public binName = "";
+  public drawOrder = 0;
 
-  constructor(objectId: number, file: BAMFile, data: DataStream) {
-    super(objectId, file, data);
-
+  override load(file: BAMFile, data: DataStream) {
+    super.load(file, data);
     this.binName = data.readString();
     this.drawOrder = data.readInt32();
+  }
+
+  override copyTo(target: this): void {
+    super.copyTo(target);
+    target.binName = this.binName;
+    target.drawOrder = this.drawOrder;
   }
 
   override getDebugInfo(): DebugInfo {

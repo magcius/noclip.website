@@ -61,7 +61,16 @@ export {
 // Geometry
 export { Geom } from "./Geom";
 export { GeomNode } from "./GeomNode";
-export { GeomPrimitive } from "./GeomPrimitive";
+export {
+  GeomLines,
+  GeomLinestrips,
+  GeomPatches,
+  GeomPoints,
+  GeomPrimitive,
+  GeomTriangles,
+  GeomTrifans,
+  GeomTristrips,
+} from "./GeomPrimitive";
 export { GeomBindType, LegacyGeom } from "./LegacyGeom";
 export { GeomVertexArrayData } from "./GeomVertexArrayData";
 export {
@@ -77,7 +86,7 @@ export { LODNode } from "./LODNode";
 export { PandaNode } from "./PandaNode";
 export { SequenceNode, PlayMode } from "./SequenceNode";
 export { InternalName } from "./InternalName";
-export { ModelNode } from "./ModelNode";
+export { ModelNode, ModelRoot } from "./ModelNode";
 
 // Curves
 export { CubicCurveseg } from "./CubicCurveseg";
@@ -89,14 +98,12 @@ export { PiecewiseCurve, type CurveSeg } from "./PiecewiseCurve";
 export { BillboardEffect } from "./BillboardEffect";
 export { CharacterJointEffect } from "./CharacterJointEffect";
 export { DecalEffect } from "./DecalEffect";
-export { RenderEffects } from "./RenderEffects";
+export { RenderEffects, RenderEffect } from "./RenderEffects";
 
 // Textures
 export { SamplerState } from "./SamplerState";
-export type { TextureData } from "./Texture";
-export { Texture } from "./Texture";
-export type { StageNode } from "./TextureAttrib";
-export { TextureAttrib } from "./TextureAttrib";
+export { type TextureData, Texture } from "./Texture";
+export { type StageNode, TextureAttrib } from "./TextureAttrib";
 export {
   CombineMode,
   CombineOperand,
@@ -107,6 +114,10 @@ export {
 export * from "./textureEnums";
 
 // Transform and render state
-export { RenderState } from "./RenderState";
+export {
+  RenderState,
+  RenderAttrib,
+  type RenderAttribEntry,
+} from "./RenderState";
 export { TransformState } from "./TransformState";
 export { TransparencyAttrib, TransparencyMode } from "./TransparencyAttrib";

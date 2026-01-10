@@ -1,6 +1,6 @@
 import type { BAMFile } from "../bam";
 import type { DataStream } from "../common";
-import { BAMObject, registerBAMObject } from "./base";
+import { BAMObject, readTypedRefs, registerBAMObject } from "./base";
 import {
   type DebugInfo,
   dbgBool,
@@ -9,14 +9,15 @@ import {
   dbgObject,
   dbgRefs,
 } from "./debug";
+import { GeomVertexArrayFormat } from "./GeomVertexArrayFormat";
 import { AnimationType } from "./geomEnums";
 
 export class GeomVertexAnimationSpec {
-  public animationType: AnimationType;
-  public numTransforms: number;
-  public indexedTransforms: boolean;
+  public animationType = AnimationType.None;
+  public numTransforms = 0;
+  public indexedTransforms = false;
 
-  constructor(data: DataStream) {
+  load(data: DataStream) {
     this.animationType = data.readUint8() as AnimationType;
     this.numTransforms = data.readUint16();
     this.indexedTransforms = data.readBool();
@@ -32,24 +33,28 @@ export class GeomVertexAnimationSpec {
 }
 
 export class GeomVertexFormat extends BAMObject {
-  public animation: GeomVertexAnimationSpec;
-  public arrayRefs: number[] = [];
+  public animation = new GeomVertexAnimationSpec();
+  public arrays: GeomVertexArrayFormat[] = [];
 
-  constructor(objectId: number, file: BAMFile, data: DataStream) {
-    super(objectId, file, data);
-
-    this.animation = new GeomVertexAnimationSpec(data);
-
+  override load(file: BAMFile, data: DataStream) {
+    super.load(file, data);
+    this.animation.load(data);
     const numArrays = data.readUint16();
-    for (let i = 0; i < numArrays; i++) {
-      this.arrayRefs.push(data.readObjectId());
-    }
+    this.arrays = readTypedRefs(file, data, numArrays, GeomVertexArrayFormat);
+  }
+
+  override copyTo(target: this): void {
+    super.copyTo(target);
+    target.animation = this.animation; // Shared
+    target.arrays = this.arrays; // Shared
   }
 
   override getDebugInfo(): DebugInfo {
     const info = super.getDebugInfo();
-    info.set("animation", dbgObject(this.animation.getDebugInfo()));
-    info.set("arrayRefs", dbgRefs(this.arrayRefs));
+    if (this.animation) {
+      info.set("animation", dbgObject(this.animation.getDebugInfo()));
+    }
+    info.set("arrays", dbgRefs(this.arrays));
     return info;
   }
 }

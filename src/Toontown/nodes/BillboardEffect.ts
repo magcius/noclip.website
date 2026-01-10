@@ -1,27 +1,29 @@
+import { vec3 } from "gl-matrix";
 import type { BAMFile } from "../bam";
 import { AssetVersion, type DataStream } from "../common";
-import { BAMObject, registerBAMObject } from "./base";
+import { registerBAMObject } from "./base";
 import { type DebugInfo, dbgBool, dbgNum, dbgRef, dbgVec3 } from "./debug";
+import { PandaNode } from "./PandaNode";
+import { RenderEffect } from "./RenderEffects";
 
 /**
- * BillboardEffect - Makes a node always face the camera
+ * Makes a node always face the camera.
  *
  * Version differences:
- * - BAM < 6.43: No look_at node or fixed_depth
- * - BAM >= 6.43: Has look_at NodePath and fixed_depth
+ * - BAM 6.43+: Added look_at NodePath and fixed_depth
  */
-export class BillboardEffect extends BAMObject {
-  public off: boolean = false;
-  public upVector: [number, number, number] = [0, 0, 1];
-  public eyeRelative: boolean = false;
-  public axialRotate: boolean = false;
-  public offset: number = 0;
-  public lookAtPoint: [number, number, number] = [0, 0, 0];
-  public lookAtRef: number = 0; // 6.43+
-  public fixedDepth: boolean = false; // 6.43+
+export class BillboardEffect extends RenderEffect {
+  public off = false;
+  public upVector = vec3.fromValues(0, 0, 1);
+  public eyeRelative = false;
+  public axialRotate = false;
+  public offset = 0;
+  public lookAtPoint = vec3.create();
+  public lookAt: PandaNode | null = null; // 6.43+ TODO should actually be a nodePath
+  public fixedDepth = false; // 6.43+
 
-  constructor(objectId: number, file: BAMFile, data: DataStream) {
-    super(objectId, file, data);
+  override load(file: BAMFile, data: DataStream) {
+    super.load(file, data);
 
     this.off = data.readBool();
     this.upVector = data.readVec3();
@@ -29,11 +31,22 @@ export class BillboardEffect extends BAMObject {
     this.axialRotate = data.readBool();
     this.offset = data.readFloat32();
     this.lookAtPoint = data.readVec3();
-
     if (this._version.compare(new AssetVersion(6, 43)) >= 0) {
-      this.lookAtRef = data.readObjectId();
+      this.lookAt = file.getTyped(data.readObjectId(), PandaNode);
       this.fixedDepth = data.readBool();
     }
+  }
+
+  override copyTo(target: this): void {
+    super.copyTo(target);
+    target.off = this.off;
+    vec3.copy(target.upVector, this.upVector);
+    target.eyeRelative = this.eyeRelative;
+    target.axialRotate = this.axialRotate;
+    target.offset = this.offset;
+    vec3.copy(target.lookAtPoint, this.lookAtPoint);
+    // target.lookAt = this.lookAt; TODO
+    target.fixedDepth = this.fixedDepth;
   }
 
   override getDebugInfo(): DebugInfo {
@@ -45,7 +58,7 @@ export class BillboardEffect extends BAMObject {
     info.set("offset", dbgNum(this.offset));
     info.set("lookAtPoint", dbgVec3(this.lookAtPoint));
     if (this._version.compare(new AssetVersion(6, 43)) >= 0) {
-      info.set("lookAtRef", dbgRef(this.lookAtRef));
+      info.set("lookAt", dbgRef(this.lookAt));
       info.set("fixedDepth", dbgBool(this.fixedDepth));
     }
     return info;

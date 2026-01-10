@@ -1,5 +1,21 @@
 // Structured debug representation for BAM objects
 
+import type { mat4, vec2, vec3, vec4 } from "gl-matrix";
+import type { BAMObject } from "./base";
+
+type TypedArray =
+  | Int8Array
+  | Uint8Array
+  | Uint8ClampedArray
+  | Int16Array
+  | Uint16Array
+  | Int32Array
+  | Uint32Array
+  | Float32Array
+  | Float64Array
+  | BigInt64Array
+  | BigUint64Array;
+
 /**
  * Types of debug values for structured representation
  */
@@ -7,30 +23,24 @@ export type DebugValue =
   | { type: "string"; value: string }
   | { type: "number"; value: number }
   | { type: "boolean"; value: boolean }
-  | { type: "ref"; objectId: number }
-  | { type: "refs"; objectIds: number[] }
-  | { type: "vec2"; value: [number, number] }
-  | { type: "vec3"; value: [number, number, number] }
-  | { type: "vec4"; value: [number, number, number, number] }
-  | { type: "mat4"; value: number[] }
-  | { type: "color"; value: [number, number, number, number] }
+  | { type: "ref"; obj: BAMObject | null }
+  | { type: "refs"; objs: (BAMObject | null)[] }
+  | { type: "vec2"; value: vec2 }
+  | { type: "vec3"; value: vec3 }
+  | { type: "vec4"; value: vec4 }
+  | { type: "mat4"; value: mat4 }
+  | { type: "color"; value: vec4 }
   | { type: "enum"; value: number; name: string }
   | { type: "flags"; value: number; names: string[] }
   | { type: "bytes"; length: number }
   | { type: "array"; items: DebugValue[]; compact?: boolean }
+  | { type: "typedArray"; value: TypedArray; components?: number }
   | { type: "object"; fields: DebugInfo; compact?: boolean };
 
 /**
  * A structured collection of named debug values
  */
 export type DebugInfo = Map<string, DebugValue>;
-
-/**
- * Accessor for extra debug info.
- */
-export interface DebugAccessor {
-  getTypeName(objectId: number): string | undefined;
-}
 
 // Helper functions to create DebugValue instances
 
@@ -46,31 +56,38 @@ export function dbgBool(value: boolean): DebugValue {
   return { type: "boolean", value };
 }
 
-export function dbgRef(objectId: number): DebugValue {
-  return { type: "ref", objectId };
+export function dbgRef(obj: BAMObject | null): DebugValue {
+  return { type: "ref", obj };
 }
 
-export function dbgRefs(objectIds: number[]): DebugValue {
-  return { type: "refs", objectIds };
+export function dbgRefs(objs: (BAMObject | null)[]): DebugValue {
+  return { type: "refs", objs };
 }
 
-export function dbgVec2(value: [number, number]): DebugValue {
+export function dbgVec2(value: vec2): DebugValue {
   return { type: "vec2", value };
 }
 
-export function dbgVec3(value: [number, number, number]): DebugValue {
+export function dbgVec3(value: vec3): DebugValue {
   return { type: "vec3", value };
 }
 
-export function dbgVec4(value: [number, number, number, number]): DebugValue {
+export function dbgTypedArray(
+  value: TypedArray,
+  components?: number,
+): DebugValue {
+  return { type: "typedArray", value, components: components };
+}
+
+export function dbgVec4(value: vec4): DebugValue {
   return { type: "vec4", value };
 }
 
-export function dbgMat4(value: number[]): DebugValue {
+export function dbgMat4(value: mat4): DebugValue {
   return { type: "mat4", value };
 }
 
-export function dbgColor(value: [number, number, number, number]): DebugValue {
+export function dbgColor(value: vec4): DebugValue {
   return { type: "color", value };
 }
 
@@ -120,23 +137,23 @@ function formatNumber(n: number): string {
   return n.toFixed(4).replace(/\.?0+$/, "");
 }
 
-function formatVec(values: number[]): string {
-  return `(${values.map(formatNumber).join(", ")})`;
+function formatVec(values: vec2 | vec3 | vec4): string {
+  return `(${Array.from(values, formatNumber).join(", ")})`;
 }
 
-function formatMat(values: number[]): string {
+function formatMat(values: mat4, pad: string, pad1: string): string {
   const rows = [];
   for (let i = 0; i < 4; i++) {
     const row = [];
     for (let j = 0; j < 4; j++) {
       row.push(formatNumber(values[i * 4 + j]));
     }
-    rows.push(`(${row.join(", ")})`);
+    rows.push(`${pad1}(${row.join(", ")})`);
   }
-  return `[${rows.join(", ")}]`;
+  return `[\n${rows.join(",\n")}\n${pad}]`;
 }
 
-function formatColor(rgba: [number, number, number, number]): string {
+function formatColor(rgba: vec4): string {
   const [r, g, b, a] = rgba.map((v) => Math.round(v * 255));
   if (a === 255) {
     return `rgb(${r}, ${g}, ${b})`;
@@ -144,10 +161,7 @@ function formatColor(rgba: [number, number, number, number]): string {
   return `rgba(${r}, ${g}, ${b}, ${formatNumber(rgba[3])})`;
 }
 
-function formatValueCompact(
-  value: DebugValue,
-  accessor?: DebugAccessor,
-): string {
+function formatValueCompact(value: DebugValue): string {
   switch (value.type) {
     case "string":
       return `"${value.value}"`;
@@ -155,32 +169,27 @@ function formatValueCompact(
       return formatNumber(value.value);
     case "boolean":
       return value.value ? "true" : "false";
-    case "ref": {
-      if (value.objectId === 0) return "null";
-      const typeName = accessor?.getTypeName(value.objectId);
-      return typeName
-        ? `@${value.objectId} (${typeName})`
-        : `@${value.objectId}`;
-    }
+    case "ref":
+      if (value.obj === null) return "null";
+      return `[${value.obj.constructor.name}]`;
     case "refs":
-      if (value.objectIds.length === 0) return "[]";
-      if (value.objectIds.length <= 4) {
-        const refs = value.objectIds
-          .map((id) => {
-            if (id === 0) return "null";
-            const typeName = accessor?.getTypeName(id);
-            return typeName ? `@${id} (${typeName})` : `@${id}`;
+      if (value.objs.length === 0) return "[]";
+      if (value.objs.length <= 4) {
+        const refs = value.objs
+          .map((obj) => {
+            if (obj === null) return "null";
+            return `[${obj.constructor.name}]`;
           })
           .join(", ");
         return `[${refs}]`;
       }
-      return `[${value.objectIds.length} refs]`;
+      return `[${value.objs.length} refs]`;
     case "vec2":
     case "vec3":
     case "vec4":
       return formatVec(value.value);
     case "mat4":
-      return formatMat(value.value);
+      return formatMat(value.value, "", "");
     case "color":
       return formatColor(value.value);
     case "enum":
@@ -192,17 +201,15 @@ function formatValueCompact(
       return `<${value.length} bytes>`;
     case "array":
       if (value.items.length === 0) return "[]";
-      return `[${value.items.map((i) => formatValueCompact(i, accessor)).join(", ")}]`;
+      return `[${value.items.map((i) => formatValueCompact(i)).join(", ")}]`;
+    case "typedArray":
+      return `<${value.value.length / (value.components || 1)} items>`;
     case "object":
-      return formatDebugInfoCompact(value.fields, accessor);
+      return formatDebugInfoCompact(value.fields);
   }
 }
 
-function formatValue(
-  value: DebugValue,
-  indent: number = 0,
-  accessor?: DebugAccessor,
-): string {
+function formatValue(value: DebugValue, indent: number = 0): string {
   const pad = "  ".repeat(indent);
   const pad1 = "  ".repeat(indent + 1);
 
@@ -214,32 +221,28 @@ function formatValue(
     case "boolean":
       return value.value ? "true" : "false";
     case "ref": {
-      if (value.objectId === 0) return "null";
-      const typeName = accessor?.getTypeName(value.objectId);
-      return typeName
-        ? `@${value.objectId} (${typeName})`
-        : `@${value.objectId}`;
+      if (value.obj === null) return "null";
+      return `${value.obj.constructor.name} ${formatDebugInfo(value.obj.getDebugInfo(), indent)}`;
     }
     case "refs": {
-      if (value.objectIds.length === 0) return "[]";
-      if (value.objectIds.length <= 4) {
-        const refs = value.objectIds
-          .map((id) => {
-            if (id === 0) return "null";
-            const typeName = accessor?.getTypeName(id);
-            return typeName ? `@${id} (${typeName})` : `@${id}`;
+      if (value.objs.length === 0) return "[]";
+      if (value.objs.length <= 4) {
+        const refs = value.objs
+          .map((obj) => {
+            if (obj === null) return "null";
+            return `${obj.constructor.name} ${formatDebugInfo(obj.getDebugInfo(), indent)}`;
           })
           .join(", ");
         return `[${refs}]`;
       }
-      return `[${value.objectIds.length} refs]`;
+      return `[${value.objs.length} refs]`;
     }
     case "vec2":
     case "vec3":
     case "vec4":
       return formatVec(value.value);
     case "mat4":
-      return formatMat(value.value);
+      return formatMat(value.value, pad, pad1);
     case "color":
       return formatColor(value.value);
     case "enum":
@@ -252,7 +255,7 @@ function formatValue(
     case "array":
       if (value.items.length === 0) return "[]";
       if (value.compact) {
-        return `[${value.items.map((i) => formatValueCompact(i, accessor)).join(", ")}]`;
+        return `[${value.items.map((i) => formatValueCompact(i)).join(", ")}]`;
       }
       if (
         value.items.length <= 3 &&
@@ -260,29 +263,28 @@ function formatValue(
       ) {
         return `[${value.items.map((i) => formatValue(i, 0)).join(", ")}]`;
       }
-      return `[\n${value.items.map((i) => `${pad1}${formatValue(i, indent + 1, accessor)}`).join(",\n")}\n${pad}]`;
+      return `[\n${value.items.map((i) => `${pad1}${formatValue(i, indent + 1)}`).join(",\n")}\n${pad}]`;
+    case "typedArray":
+      return `<${value.value.length / (value.components || 1)} items>`;
     case "object":
       if (value.compact) {
-        return formatDebugInfoCompact(value.fields, accessor);
+        return formatDebugInfoCompact(value.fields);
       }
-      return formatDebugInfo(value.fields, indent, accessor);
+      return formatDebugInfo(value.fields, indent);
   }
 }
 
 /**
  * Format a DebugInfo map as a compact single-line string
  */
-function formatDebugInfoCompact(
-  info: DebugInfo,
-  accessor?: DebugAccessor,
-): string {
+function formatDebugInfoCompact(info: DebugInfo): string {
   if (info.size === 0) {
     return "{}";
   }
 
   const parts: string[] = [];
   for (const [key, value] of info) {
-    parts.push(`${key}: ${formatValueCompact(value, accessor)}`);
+    parts.push(`${key}: ${formatValueCompact(value)}`);
   }
 
   return `{${parts.join(", ")}}`;
@@ -291,11 +293,7 @@ function formatDebugInfoCompact(
 /**
  * Format a DebugInfo map as a readable string
  */
-export function formatDebugInfo(
-  info: DebugInfo,
-  indent: number = 0,
-  accessor?: DebugAccessor,
-): string {
+export function formatDebugInfo(info: DebugInfo, indent: number = 0): string {
   const pad = "  ".repeat(indent);
   const pad1 = "  ".repeat(indent + 1);
 
@@ -305,7 +303,7 @@ export function formatDebugInfo(
 
   const lines: string[] = ["{"];
   for (const [key, value] of info) {
-    const formattedValue = formatValue(value, indent + 1, accessor);
+    const formattedValue = formatValue(value, indent + 1);
     lines.push(`${pad1}${key}: ${formattedValue}`);
   }
   lines.push(`${pad}}`);

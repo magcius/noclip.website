@@ -4,21 +4,26 @@ import { BAMObject, registerBAMObject } from "./base";
 import { type DebugInfo, dbgStr } from "./debug";
 
 export class InternalName extends BAMObject {
-	public name: string;
+  public name = "";
 
-	constructor(objectId: number, file: BAMFile, data: DataStream) {
-		super(objectId, file, data);
-		this.name = data.readString();
-	}
+  override load(file: BAMFile, data: DataStream) {
+    super.load(file, data);
+    this.name = data.readString();
+  }
 
-	override getDebugInfo(): DebugInfo {
-		const info = super.getDebugInfo();
-		info.set("name", dbgStr(this.name));
-		return info;
-	}
+  override copyTo(target: this): void {
+    super.copyTo(target);
+    target.name = this.name;
+  }
+
+  override getDebugInfo(): DebugInfo {
+    const info = super.getDebugInfo();
+    info.set("name", dbgStr(this.name));
+    return info;
+  }
 }
 
-registerBAMObject("InternalName", InternalName);
+export class TexCoordName extends InternalName {}
 
-// TexCoordName is identical to InternalName in older BAM versions
-registerBAMObject("TexCoordName", InternalName);
+registerBAMObject("InternalName", InternalName);
+registerBAMObject("TexCoordName", TexCoordName);

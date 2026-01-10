@@ -1,8 +1,8 @@
+import type { vec2, vec3, vec4 } from "gl-matrix";
 import type { BAMFile } from "../bam";
 import { AssetVersion, type DataStream } from "../common";
 import { BAMObject, registerBAMObject } from "./base";
-import { type DebugInfo, dbgNum } from "./debug";
-import { LegacyGeom } from "./LegacyGeom";
+import { type DebugInfo, dbgNum, dbgTypedArray } from "./debug";
 
 /**
  * VertexTransform - Transforms vertices by a joint
@@ -12,8 +12,8 @@ import { LegacyGeom } from "./LegacyGeom";
 export interface VertexTransform {
   jointIndex: number; // int16 - index into Character's joint list
   effect: number; // float32 - blend weight
-  vindex: number[]; // uint16[] - vertex indices affected by this joint
-  nindex: number[]; // uint16[] - normal indices affected by this joint
+  vindex: Uint16Array; // vertex indices affected by this joint
+  nindex: Uint16Array; // normal indices affected by this joint
 }
 
 /**
@@ -23,17 +23,17 @@ export interface VertexTransform {
  */
 export interface MorphValue2 {
   index: number; // uint16 - vertex index
-  vector: [number, number]; // Vec2 offset
+  vector: vec2; // offset
 }
 
 export interface MorphValue3 {
   index: number; // uint16 - vertex index
-  vector: [number, number, number]; // Vec3 offset
+  vector: vec3; // offset
 }
 
 export interface MorphValue4 {
   index: number; // uint16 - vertex index
-  vector: [number, number, number, number]; // Vec4 offset
+  vector: vec4; // offset
 }
 
 /**
@@ -83,18 +83,19 @@ export class ComputedVertices extends BAMObject {
   public colorMorphs: ColorMorph[] = [];
 
   // Original vertex data (shared with Geoms via PTAs)
-  public origCoords: Array<[number, number, number]> = [];
-  public origNorms: Array<[number, number, number]> = [];
-  public origColors: Array<[number, number, number, number]> = [];
-  public origTexcoords: Array<[number, number]> = [];
+  public origCoords: Float32Array = new Float32Array(); // vec3
+  public origNorms: Float32Array = new Float32Array(); // vec3
+  public origColors: Float32Array = new Float32Array(); // vec4
+  public origTexcoords: Float32Array = new Float32Array(); // vec2
 
-  constructor(objectId: number, file: BAMFile, data: DataStream) {
-    super(objectId, file, data);
+  override load(file: BAMFile, data: DataStream) {
+    super.load(file, data);
 
     // In BAM 4.10+, counts are uint32 instead of uint16
-    const useUint32 =
-      file.header.version.compare(new AssetVersion(4, 10)) >= 0;
-    const readCount = () => (useUint32 ? data.readUint32() : data.readUint16());
+    const useUint32 = this._version.compare(new AssetVersion(4, 10)) >= 0;
+    const readCount = useUint32
+      ? data.readUint32.bind(data)
+      : data.readUint16.bind(data);
 
     // Read vertex transforms
     const numTransforms = readCount();
@@ -126,12 +127,37 @@ export class ComputedVertices extends BAMObject {
       this.colorMorphs.push(this.readMorph4(data));
     }
 
-    // Read original vertex data PTAs - these are shared with Geoms
-    // Use the global PTA cache from LegacyGeom
-    this.origCoords = LegacyGeom.readPtaVec3Global(data);
-    this.origNorms = LegacyGeom.readPtaVec3Global(data);
-    this.origColors = LegacyGeom.readPtaVec4Global(data);
-    this.origTexcoords = LegacyGeom.readPtaVec2Global(data);
+    this.origCoords = data.readPtaVec3();
+    this.origNorms = data.readPtaVec3();
+    this.origColors = data.readPtaVec4();
+    this.origTexcoords = data.readPtaVec2();
+  }
+
+  override copyTo(target: this): void {
+    super.copyTo(target);
+    target.transforms = this.transforms; // Shared
+    target.vertexMorphs = this.vertexMorphs; // Shared
+    target.normalMorphs = this.normalMorphs; // Shared
+    target.texcoordMorphs = this.texcoordMorphs; // Shared
+    target.colorMorphs = this.colorMorphs; // Shared
+    target.origCoords = this.origCoords; // Shared
+    target.origNorms = this.origNorms; // Shared
+    target.origColors = this.origColors; // Shared
+    target.origTexcoords = this.origTexcoords; // Shared
+  }
+
+  override getDebugInfo(): DebugInfo {
+    const info = super.getDebugInfo();
+    info.set("transforms", dbgNum(this.transforms.length));
+    info.set("vertexMorphs", dbgNum(this.vertexMorphs.length));
+    info.set("normalMorphs", dbgNum(this.normalMorphs.length));
+    info.set("texcoordMorphs", dbgNum(this.texcoordMorphs.length));
+    info.set("colorMorphs", dbgNum(this.colorMorphs.length));
+    info.set("origCoords", dbgTypedArray(this.origCoords, 3));
+    info.set("origNorms", dbgTypedArray(this.origNorms, 3));
+    info.set("origColors", dbgTypedArray(this.origColors, 4));
+    info.set("origTexcoords", dbgTypedArray(this.origTexcoords, 2));
+    return info;
   }
 
   private readVertexTransform(data: DataStream): VertexTransform {
@@ -139,16 +165,10 @@ export class ComputedVertices extends BAMObject {
     const effect = data.readFloat32();
 
     const vindexSize = data.readUint16();
-    const vindex: number[] = [];
-    for (let i = 0; i < vindexSize; i++) {
-      vindex.push(data.readUint16());
-    }
+    const vindex = data.readUint16Array(vindexSize);
 
     const nindexSize = data.readUint16();
-    const nindex: number[] = [];
-    for (let i = 0; i < nindexSize; i++) {
-      nindex.push(data.readUint16());
-    }
+    const nindex = data.readUint16Array(nindexSize);
 
     return { jointIndex, effect, vindex, nindex };
   }
@@ -187,20 +207,6 @@ export class ComputedVertices extends BAMObject {
       morphs.push({ index, vector });
     }
     return { sliderIndex, morphs };
-  }
-
-  override getDebugInfo(): DebugInfo {
-    const info = super.getDebugInfo();
-    info.set("transforms", dbgNum(this.transforms.length));
-    info.set("vertexMorphs", dbgNum(this.vertexMorphs.length));
-    info.set("normalMorphs", dbgNum(this.normalMorphs.length));
-    info.set("texcoordMorphs", dbgNum(this.texcoordMorphs.length));
-    info.set("colorMorphs", dbgNum(this.colorMorphs.length));
-    info.set("origCoords", dbgNum(this.origCoords.length));
-    info.set("origNorms", dbgNum(this.origNorms.length));
-    info.set("origColors", dbgNum(this.origColors.length));
-    info.set("origTexcoords", dbgNum(this.origTexcoords.length));
-    return info;
   }
 }
 

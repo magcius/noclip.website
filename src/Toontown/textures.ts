@@ -160,12 +160,14 @@ export async function decodeImage(
   data: ArrayBufferSlice,
   format: ImageFormat,
 ): Promise<DecodedImage> {
+  let decoded: DecodedImage;
   if (format === "sgi") {
-    return decodeSGI(data);
+    decoded = decodeSGI(data);
   } else {
     const mimeType = format === "png" ? "image/png" : "image/jpeg";
-    return decodeImageCanvas(data, mimeType);
+    decoded = await decodeImageCanvas(data, mimeType);
   }
+  return decoded;
 }
 
 /**

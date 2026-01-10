@@ -20,24 +20,24 @@ export enum PlayMode {
  */
 export class SequenceNode extends PandaNode {
   // Pre-5.4 format
-  public cycleRate: number = 0;
-  public frameOffset: number = 0;
+  public cycleRate = 0;
+  public frameOffset = 0;
 
   // 5.4+ AnimInterface format
-  public numFrames: number = 0;
-  public frameRate: number = 0;
-  public playMode: PlayMode = PlayMode.Pose;
-  public startTime: number = 0;
-  public startFrame: number = 0;
-  public playFrames: number = 0;
-  public fromFrame: number = 0;
-  public toFrame: number = 0;
-  public playRate: number = 1;
-  public paused: boolean = true;
-  public pausedFrame: number = 0;
+  public numFrames = 0;
+  public frameRate = 0;
+  public playMode = PlayMode.Pose;
+  public startTime = 0;
+  public startFrame = 0;
+  public playFrames = 0;
+  public fromFrame = 0;
+  public toFrame = 0;
+  public playRate = 1;
+  public paused = true;
+  public pausedFrame = 0;
 
-  constructor(objectId: number, file: BAMFile, data: DataStream) {
-    super(objectId, file, data);
+  override load(file: BAMFile, data: DataStream) {
+    super.load(file, data);
 
     if (this._version.compare(new AssetVersion(5, 4)) < 0) {
       // Pre-5.4: SelectiveChildNode::fillin (just PandaNode) + CData
@@ -59,6 +59,23 @@ export class SequenceNode extends PandaNode {
       this.paused = data.readBool();
       this.pausedFrame = data.readFloat32();
     }
+  }
+
+  override copyTo(target: this): void {
+    super.copyTo(target);
+    target.cycleRate = this.cycleRate;
+    target.frameOffset = this.frameOffset;
+    target.numFrames = this.numFrames;
+    target.frameRate = this.frameRate;
+    target.playMode = this.playMode;
+    target.startTime = this.startTime;
+    target.startFrame = this.startFrame;
+    target.playFrames = this.playFrames;
+    target.fromFrame = this.fromFrame;
+    target.toFrame = this.toFrame;
+    target.playRate = this.playRate;
+    target.paused = this.paused;
+    target.pausedFrame = this.pausedFrame;
   }
 
   override getDebugInfo(): DebugInfo {

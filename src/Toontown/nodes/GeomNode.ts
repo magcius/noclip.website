@@ -8,35 +8,54 @@ import {
   dbgObject,
   dbgRef,
 } from "./debug";
+import { Geom } from "./Geom";
 import { PandaNode } from "./PandaNode";
+import { RenderState } from "./RenderState";
+
+export interface GeomEntry {
+  geom: Geom;
+  state: RenderState | null;
+}
 
 export class GeomNode extends PandaNode {
-  public geomRefs: [number, number][] = [];
+  public geoms: GeomEntry[] = [];
 
-  constructor(objectId: number, file: BAMFile, data: DataStream) {
-    super(objectId, file, data);
+  override load(file: BAMFile, data: DataStream) {
+    super.load(file, data);
 
     // Cycler data
     const numGeoms = data.readUint16();
+    this.geoms = new Array(numGeoms);
     for (let i = 0; i < numGeoms; i++) {
       const geomRef = data.readObjectId();
-      const renderStateRef = data.readObjectId();
-      this.geomRefs.push([geomRef, renderStateRef]);
+      const geom = file.getTyped(geomRef, Geom);
+      if (!geom)
+        throw new Error(`Geom reference @${geomRef} not found in file`);
+
+      const stateRef = data.readObjectId();
+      const state = file.getTyped(stateRef, RenderState);
+
+      this.geoms[i] = { geom, state };
     }
+  }
+
+  override copyTo(target: this): void {
+    super.copyTo(target);
+    target.geoms = this.geoms; // Shared
   }
 
   override getDebugInfo(): DebugInfo {
     const info = super.getDebugInfo();
     info.set(
-      "geomRefs",
+      "geoms",
       dbgArray(
-        this.geomRefs.map(([geomRef, stateRef]) =>
+        this.geoms.map(({ geom, state }) =>
           dbgObject(
             dbgFields([
-              ["geom", dbgRef(geomRef)],
-              ["state", dbgRef(stateRef)],
+              ["geom", dbgRef(geom)],
+              ["state", dbgRef(state)],
             ]),
-            true, // compact
+            // true, // compact
           ),
         ),
       ),
