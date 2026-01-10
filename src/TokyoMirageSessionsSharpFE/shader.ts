@@ -32,6 +32,8 @@ layout(std140) uniform ub_SceneParams
     Mat4x4 u_BoneTransformMatrix;
 };
 
+// uniform sampler2D s_diffuse;
+
 #ifdef VERT
 ${this.define_inputs()}
 
@@ -52,9 +54,13 @@ in vec2 v_TexCoord0;
 
 void mainPS()
 {
+    // vec2 t_DiffuseTexCoord = mod(v_TexCoord0, vec2(1.0, 1.0));
+    // vec4 t_DiffuseMapColor = texture(SAMPLER_2D(s_diffuse), t_DiffuseTexCoord.xy);
+    // gl_FragColor = t_DiffuseMapColor;
+
     vec2 f = v_TexCoord0 - floor(v_TexCoord0);
     gl_FragColor = ( (f.x < 0.5) ^^ (f.y < 0.5) ) ? vec4(1.0, 1.0, 1.0, 0.0) : vec4(0.0, 0.0, 0.0, 0.0);
-    // gl_FragColor = vec4(0.0, 0.0, 1.0, 0.0);
+
 }
 #endif
 `;

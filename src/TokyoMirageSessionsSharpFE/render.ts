@@ -32,6 +32,18 @@ export class TMSFEScene implements SceneGfx
             this.renderHelper = new GfxRenderHelper(device);
             console.log(fres.fmdl[0]);
 
+            //initialize textures
+            const bntx = parseBNTX(fres.embedded_files[0].buffer);
+            for (let i = 0; i < bntx.textures.length; i++)
+            {
+                const texture = bntx.textures[i];
+                const texture_descriptor = makeTextureDescriptor2D(texture.format, texture.width, texture.height, texture.mipmap_buffers.length);
+                const gfx_texture = device.createTexture(texture_descriptor);
+                device.uploadTextureData(gfx_texture, 0, texture.mipmap_buffers);
+                texture.gfx_texture = gfx_texture;
+            }
+
+
             // create all fshp_renderers
             const fmdl = fres.fmdl[0];
             const shapes = fmdl.fshp;
@@ -53,14 +65,6 @@ export class TMSFEScene implements SceneGfx
             // console.log(view.getUint16(0x12, true));
 
             // console.log(view.getFloat32(0x14, true));
-
-            //bntx stuff
-            const bntx = parseBNTX(fres.embedded_files[0].buffer);
-            const texture = bntx.textures[0];
-            console.log(texture);
-            const texture_descriptor = makeTextureDescriptor2D(texture.format, texture.width, texture.height, texture.mipmap_buffers.length);
-            const gfx_texture = device.createTexture(texture_descriptor);
-            device.uploadTextureData(gfx_texture, 0, texture.mipmap_buffers);
         }
     }
 

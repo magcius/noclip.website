@@ -6,6 +6,7 @@ import { assert, readString } from "../util.js";
 import { read_bfres_string } from "./bfres/bfres_switch.js";
 import { GfxFormat } from "../gfx/platform/GfxPlatform.js";
 import { calcMipLevelByteSize } from "../gfx/helpers/TextureHelpers.js";
+import { GfxTexture } from "../gfx/platform/GfxPlatform.js";
 
 export function parseBNTX(buffer: ArrayBufferSlice): BNTX
 {
@@ -40,20 +41,22 @@ export function parseBNTX(buffer: ArrayBufferSlice): BNTX
         const mipmap_offset_array_offset = view.getUint32(texture_info_offset + 0x70, true);
         const mipmap_buffers: Uint8Array[] = [];
         let mipmap_array_entry_offset = mipmap_offset_array_offset;
-        console.log(name);
-        for(let i = 0; i < mipmap_count - 1; i++)
+        for(let i = 0; i < mipmap_count; i++)
         {
             const start_offset = view.getUint32(mipmap_array_entry_offset, true);
-            const mip_width = width >>> i;
-            const mip_height = height >>> i;
-            const size = calcMipLevelByteSize(format, mip_width, mip_height);
+            
+            // divide by 2 per mip level, but also make sure each dimension is at least 1
+            const mip_width = Math.max(width >>> i, 1);
+            const mip_height = Math.max(height >>> i, 1);
+            
+            let size = calcMipLevelByteSize(format, mip_width, mip_height, depth);
             let mipmap_buffer: Uint8Array = buffer.subarray(start_offset, size).createTypedArray(Uint8Array);
 
             mipmap_buffers.push(mipmap_buffer);
             mipmap_array_entry_offset += 0x8;
         }
 
-        texture_array.push({ name, format, width, height, depth, mipmap_buffers });
+        texture_array.push({ name, format, width, height, depth, mipmap_buffers, gfx_texture: null });
         texture_info_entry_offset += TEXTURE_INFO_ARRAY_ENTRY_SIZE;
     }
 
@@ -118,6 +121,7 @@ export interface Texture
     height: number;
     depth: number;
     mipmap_buffers: Uint8Array[]; // where the actual texture data is
+    gfx_texture: GfxTexture | null;
 }
 
 export enum ImageFormat
