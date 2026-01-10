@@ -1,15 +1,15 @@
 # BAM Versions by Toontown Version
 
-Toontown: BAM 6.24 (3967 files)
-ToontownLegacy: BAM 4.3 (1720 files)
-Toontown_1.0.10.10: BAM 4.9 (2221 files)
-Toontown_1.0.13.21: BAM 4.9 (2277 files)
-Toontown_1.0.15.38: BAM 4.14 (2604 files)
-Toontown_1.0.38.34: BAM 6.15 (3368 files)
-Toontown_1.0.47.22: BAM 6.24 (3960 files)
-Toontown_1.0.47.31: BAM 6.24 (3967 files)
-Toontown_1.0.47.7: BAM 6.24 (3946 files)
-Toontown_1.0.7.12: BAM 4.6 (1821 files)
+Toontown 1.0.6.9: BAM 4.3 (1720 files)
+Toontown 1.0.7.12: BAM 4.6 (1821 files)
+Toontown 1.0.10.10: BAM 4.9 (2221 files)
+Toontown 1.0.13.21: BAM 4.9 (2277 files)
+Toontown 1.0.15.38: BAM 4.14 (2604 files)
+Toontown 1.0.38.34: BAM 6.15 (3368 files)
+Toontown 1.0.47.7: BAM 6.24 (3946 files)
+Toontown 1.0.47.22: BAM 6.24 (3960 files)
+Toontown 1.0.47.31: BAM 6.24 (3967 files)
+Toontown 1.0.47.38: BAM 6.24 (3967 files)
 
 # BAM Changelog
 

@@ -12,7 +12,7 @@ import { BAMFile } from "../bam";
 import { type DNAFile, parseDNA } from "../dna";
 
 // Usage: npx tsx src/Toontown/tools/cli.ts [model_path] [data_path]
-// Example: npx tsx src/Toontown/tools/cli.ts phase_4/models/props/anvil-mod.bam ToontownLegacy
+// Example: npx tsx src/Toontown/tools/cli.ts phase_4/models/props/anvil-mod.bam Toontown_1.0.6.9
 const dataArg = process.argv[3] || "Toontown";
 const DATA_PATH = path.join(__dirname, "../../../data", dataArg);
 

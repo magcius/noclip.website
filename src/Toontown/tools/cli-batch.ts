@@ -1,7 +1,7 @@
 #!/usr/bin/env npx tsx
 // Batch test for BAM and DNA parsing
 // Usage: npx tsx src/Toontown/tools/cli-batch.ts [count] [data_path] [type]
-// Example: npx tsx src/Toontown/tools/cli-batch.ts all ToontownLegacy bam
+// Example: npx tsx src/Toontown/tools/cli-batch.ts all Toontown_1.0.6.9 bam
 // Example: npx tsx src/Toontown/tools/cli-batch.ts all Toontown dna
 
 import * as fs from "node:fs";
