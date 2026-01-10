@@ -1,7 +1,7 @@
 import { GfxDevice, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxInputLayoutBufferDescriptor,
          GfxVertexBufferFrequency, GfxInputLayout, GfxFormat, GfxProgram, GfxBufferFrequencyHint,
          GfxBufferUsage, GfxBindingLayoutDescriptor, GfxCullMode, GfxIndexBufferDescriptor, 
-         GfxBuffer, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform.js";
+         GfxBuffer, makeTextureDescriptor2D, GfxSamplerDescriptor } from "../gfx/platform/GfxPlatform.js";
 import { SceneGfx, ViewerRenderInput } from "../viewer.js";
 import { FRES, read_bfres_string } from "./bfres/bfres_switch.js";
 import { FMDL } from "./bfres/fmdl.js";
@@ -186,8 +186,12 @@ class fshp_renderer
             bone.translation[0], bone.translation[1], bone.translation[2],
         );
 
-        // initialize shader
+        // setup sampler
         const fmat = fmdl.fmat[fshp.fmat_index];
+
+        const sampler = renderHelper.renderCache.createSampler(sampler_descriptor);
+
+        // initialize shader
         this.program = new TMSFEProgram(fvtx, fmat);
     }
 

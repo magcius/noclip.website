@@ -21,7 +21,7 @@ export class TMSFEProgram extends DeviceProgram
     }
 
     public override both = `
-precision mediump float;
+precision highp float;
 
 ${GfxShaderLibrary.MatrixLibrary}
 

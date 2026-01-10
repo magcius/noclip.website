@@ -121,7 +121,7 @@ export interface Texture
     height: number;
     depth: number;
     mipmap_buffers: Uint8Array[]; // where the actual texture data is
-    gfx_texture: GfxTexture | null;
+    gfx_texture: GfxTexture | null; // set at runtime
 }
 
 export enum ImageFormat
