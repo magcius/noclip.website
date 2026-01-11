@@ -37,6 +37,7 @@ const id = `TokyoMirageSessionsSharpFE`;
 const name = "MOVE THIS LATER Tokyo Mirage Sessions ♯FE";
 const sceneDescs =
 [
+    /*
     "Illusory Daitama",
     new TMSFESceneDesc("d002_01", "Illusory Daitama"),
     new TMSFESceneDesc("d002_02", "Blue Observatory"),
@@ -101,8 +102,10 @@ const sceneDescs =
     "Training Area",
     new TMSFESceneDesc("d015_01", "Training Area"),
     new TMSFESceneDesc("d015_02", "Fighter's Hall"),
+    */
     "Battle Maps",
-    new TMSFESceneDesc("b001_01", "b001_01"),
+    // new TMSFESceneDesc("b000_00", "b000_00"), wii u file
+    // new TMSFESceneDesc("b001_01", "b001_01"), wii u file
     new TMSFESceneDesc("b002_01", "b002_01"),
     new TMSFESceneDesc("b003_01", "b003_01"),
     new TMSFESceneDesc("b004_01", "b004_01"),
@@ -118,6 +121,7 @@ const sceneDescs =
     new TMSFESceneDesc("b014_01", "b014_01"),
     new TMSFESceneDesc("b015_01", "b015_01"),
     new TMSFESceneDesc("b016_01", "b016_01"),
+    /*
     "Tokyo",
     new TMSFESceneDesc("f003_02", "Fortuna Office"),
     new TMSFESceneDesc("f003_03", "Bloom Palace"),
@@ -154,6 +158,7 @@ const sceneDescs =
     new TMSFESceneDesc("f010_05", "Microwavin' with Mamorin Set"),
     new TMSFESceneDesc("f010_06", "Dressing Room"),
     new TMSFESceneDesc("f010_07", "Fashion Show Runway"),
+    */
 ];
 
 export const sceneGroup: SceneGroup = { id, name, sceneDescs };

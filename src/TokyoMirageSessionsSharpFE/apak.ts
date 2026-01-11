@@ -16,11 +16,8 @@ export function parseAPAK(buffer: ArrayBufferSlice): APAK
     for (let i = 0; i < file_count; i++)
     {
         const file_name = readString(buffer, file_info_entry_offset + 0x20, 0x20);
-        console.log(file_name);
         const data_offset = view.getUint32(file_info_entry_offset + 0x04, true);
         const data_size = view.getUint32(file_info_entry_offset + 0x08, true);
-        console.log(buffer.byteLength)
-        console.log(data_size);
         const data = buffer.subarray(data_offset, data_size);
 
         file_array.push({ name: file_name, data });

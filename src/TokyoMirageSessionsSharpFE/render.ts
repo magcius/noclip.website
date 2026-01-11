@@ -172,7 +172,6 @@ class fshp_renderer
         );
 
         // setup sampler
-        console.log(bntx);
         const fmat = fmdl.fmat[fshp.fmat_index];
         // for (let i = 0; i < fmat.texture_names.length; i++)
         // TODO: sometimes a cubemap isn't being found?? whats up with that

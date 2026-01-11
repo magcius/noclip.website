@@ -8,9 +8,9 @@ import { FMAT } from "./bfres/fmat.js";
 
 export class TMSFEProgram extends DeviceProgram
 {
-    public static vertex_attribute_codes = [ '_p0', '_c0', '_u0', '_u1', '_u2', '_u3', '_n0', '_t0' ];
-    public static vertex_attribute_names = [ 'a_Position', 'a_Color', 'a_TexCoord0', 'a_TexCoord1', 'a_TexCoord2', 'a_TexCoord3', 'a_Normal', 'a_Tangent' ];
-    public static vertex_attribute_types = [ 'vec3', 'vec4', 'vec2', 'vec2', 'vec2', 'vec2', 'vec4', 'vec4' ];
+    public static vertex_attribute_codes = [ '_p0', '_c0', '_u0', '_u1', '_u2', '_u3', '_u4', '_n0', '_t0' ];
+    public static vertex_attribute_names = [ 'a_Position', 'a_Color', 'a_TexCoord0', 'a_TexCoord1', 'a_TexCoord2', 'a_TexCoord3', 'a_TexCoord4', 'a_Normal', 'a_Tangent' ];
+    public static vertex_attribute_types = [ 'vec3', 'vec4', 'vec2', 'vec2', 'vec2', 'vec2', 'vec2', 'vec4', 'vec4' ];
 
     public static ub_SceneParams = 0;
 
