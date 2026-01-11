@@ -1,5 +1,5 @@
 // bfres_switch.ts
-// handles BFRES (Binary caFe RESources) files, which 3d graphics related resources
+// handles BFRES (Binary caFe RESources) files, which contain 3d graphics related data
 // In Tokyo Mirage Sessions ♯FE these usually contain a single model
 // Levels have a main bfres file that contains the level model, with a few pieces broken out into separate bfres files.
 // There are many versions of the BFRES format, and it was used for both Wii U and Switch games

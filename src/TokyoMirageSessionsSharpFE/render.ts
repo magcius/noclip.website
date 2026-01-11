@@ -1,7 +1,8 @@
 import { GfxDevice, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxInputLayoutBufferDescriptor,
          GfxVertexBufferFrequency, GfxInputLayout, GfxFormat, GfxProgram, GfxBufferFrequencyHint,
          GfxBufferUsage, GfxBindingLayoutDescriptor, GfxCullMode, GfxIndexBufferDescriptor, 
-         GfxBuffer, makeTextureDescriptor2D, GfxSamplerDescriptor, GfxSamplerBinding} from "../gfx/platform/GfxPlatform.js";
+         GfxBuffer, makeTextureDescriptor2D, GfxSamplerDescriptor, GfxSamplerBinding,
+         GfxTexture} from "../gfx/platform/GfxPlatform.js";
 import { SceneGfx, ViewerRenderInput } from "../viewer.js";
 import { FRES, read_bfres_string } from "./bfres/bfres_switch.js";
 import { FMDL } from "./bfres/fmdl.js";
@@ -16,7 +17,10 @@ import { mat4, vec3 } from "gl-matrix";
 import { computeModelMatrixSRT } from "../MathHelpers.js";
 import { assert, readString } from "../util.js";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
-import { BNTX, parseBNTX } from "./bntx.js";
+// import { BNTX, parseBNTX } from "./bntx.js";
+import * as BNTX from '../fres_nx/bntx.js';
+import { TypeFormat, getTypeFormat, ImageFormat, getChannelFormat } from "../fres_nx/nngfx_enum.js";
+import { deswizzle, decompress } from "../fres_nx/tegra_texture.js";
 
 export class TMSFEScene implements SceneGfx
 {
@@ -33,6 +37,7 @@ export class TMSFEScene implements SceneGfx
             console.log(fres.fmdl[0]);
 
             //initialize textures
+            /*
             const bntx = parseBNTX(fres.embedded_files[0].buffer);
             for (let i = 0; i < bntx.textures.length; i++)
             {
@@ -42,13 +47,58 @@ export class TMSFEScene implements SceneGfx
                 device.uploadTextureData(gfx_texture, 0, texture.mipmap_buffers);
                 texture.gfx_texture = gfx_texture;
             }
+            */
+            const gfx_texture_array: GfxTexture[] = [];
+            const bntx = BNTX.parse(fres.embedded_files[0].buffer);
+            for (let i = 0; i < bntx.textures.length; i++)
+            {
+                const texture = bntx.textures[i];
+                function translateImageFormat(imageFormat: ImageFormat): GfxFormat
+                {
+                    const typeFormat = getTypeFormat(imageFormat);
+                
+                    switch (typeFormat)
+                    {
+                    case TypeFormat.Unorm:
+                        return GfxFormat.U8_RGBA_NORM;
+                    case TypeFormat.UnormSrgb:
+                        return GfxFormat.U8_RGBA_SRGB;
+                    case TypeFormat.Snorm:
+                        return GfxFormat.S8_RGBA_NORM;
+                    default:
+                        throw "whoops";
+                    }
+                }
+                const new_format = translateImageFormat(texture.imageFormat);
+                const texture_descriptor = makeTextureDescriptor2D(new_format, texture.width, texture.height, texture.mipBuffers.length);
+                const gfx_texture = device.createTexture(texture_descriptor);
+                gfx_texture_array.push(gfx_texture);
+                // deswizzle
+                const channelFormat = getChannelFormat(texture.imageFormat);
+                for (let i = 0; i < texture.mipBuffers.length; i++)
+                {
+                    const mipLevel = i;
+        
+                    const buffer = texture.mipBuffers[i];
+                    const width = Math.max(texture.width >>> mipLevel, 1);
+                    const height = Math.max(texture.height >>> mipLevel, 1);
+                    const depth = 1;
+                    const blockHeightLog2 = texture.blockHeightLog2;
+                    deswizzle({ buffer, width, height, channelFormat, blockHeightLog2 }).then((deswizzled) => {
+                        const rgbaTexture = decompress({ ...texture, width, height, depth }, deswizzled);
+                        const rgbaPixels = rgbaTexture.pixels;
+                        device.uploadTextureData(gfx_texture, mipLevel, [rgbaPixels]);
+                    });
+                }
+
+            }
 
             // create all fshp_renderers
             const fmdl = fres.fmdl[0];
             const shapes = fmdl.fshp;
             for (let i = 0; i < shapes.length; i++)
             {
-                const renderer = new fshp_renderer(device, this.renderHelper, fmdl, i, bntx);
+                const renderer = new fshp_renderer(device, this.renderHelper, fmdl, i, bntx, gfx_texture_array);
                 this.fshp_renderers.push(renderer);
             }
 
@@ -127,7 +177,7 @@ class fshp_renderer
     private program: TMSFEProgram;
     private sampler_bindings: GfxSamplerBinding[] = [];
 
-    constructor(device: GfxDevice, renderHelper: GfxRenderHelper, fmdl: FMDL, shape_index: number, bntx: BNTX)
+    constructor(device: GfxDevice, renderHelper: GfxRenderHelper, fmdl: FMDL, shape_index: number, bntx: BNTX.BNTX, gfx_texture_array: GfxTexture[])
     {
         // create vertex buffers
         const fshp = fmdl.fshp[shape_index];
@@ -186,14 +236,14 @@ class fshp_renderer
 
         // setup sampler
         const fmat = fmdl.fmat[fshp.fmat_index];
-        // for (let i = 0; i < fmat.texture_names.length; i++)
-        for (let i = 0; i < 1; i++)
+        for (let i = 0; i < fmat.texture_names.length; i++)
         {
             const texture_name = fmat.texture_names[i];
             const texture = bntx.textures.find((f) => f.name === texture_name);
             if (texture !== undefined)
             {
-                const gfx_texture = texture.gfx_texture;
+                const texture_index = bntx.textures.indexOf(texture);
+                const gfx_texture = gfx_texture_array[texture_index];
                 const sampler_descriptor = fmat.sampler_descriptors[i];
                 const gfx_sampler = renderHelper.renderCache.createSampler(sampler_descriptor);
                 this.sampler_bindings.push({ gfxTexture: gfx_texture, gfxSampler: gfx_sampler, lateBinding: null })
