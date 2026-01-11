@@ -13,7 +13,7 @@ export class Spyro1Renderer implements SceneGfx {
     private renderInstListMain = new GfxRenderInstList();
     private levelRenderer: LevelRenderer;
     private skyboxRenderer: SkyboxRenderer;
-    private clearColor;
+    private clearColor: number[];
 
     constructor(device: GfxDevice, levelData: LevelData, skybox: SkyboxData) {
         this.renderHelper = new GfxRenderHelper(device);
@@ -23,12 +23,9 @@ export class Spyro1Renderer implements SceneGfx {
     }
 
     protected prepareToRender(device: GfxDevice, viewerInput: ViewerRenderInput): void {
-        this.renderHelper.pushTemplateRenderInst();
-        const renderInstManager = this.renderHelper.renderInstManager;
-        renderInstManager.setCurrentList(this.renderInstListMain);
+        this.renderHelper.renderInstManager.setCurrentList(this.renderInstListMain);
         this.skyboxRenderer.prepareToRender(device, this.renderHelper, viewerInput);
         this.levelRenderer.prepareToRender(device, this.renderHelper, viewerInput);
-        renderInstManager.popTemplate();
         this.renderHelper.prepareToRender();
     }
 
@@ -65,17 +62,21 @@ export class Spyro1Renderer implements SceneGfx {
 TODO
 
 Scrolling textures (ex. waterfall in Artisans)
-Water in some flight levels
-Better level shader. It's close enough to PS1 but could be better.
+Water in some flight levels doesn't render correctly
+Better level shader
 Better default save states
+Clean up functions in bin.ts
 
 Nice to have
 
-Gems, level entities, NPCs, etc. on each level
+Gems, level entities, NPCs, etc. rendered in each level
     The format for these will need to be figured out. They're in other "sub-subfiles" like the ground models and skybox.
 Read directly from WAD.WAD by offset instead of extracting subfiles
+    Pass the offset and size for the level's subfile instead of the subfile number
+    Convert Python extraction logic to TypeScript
 */
 
+const pathBase = "Spyro1";
 class Spyro1Scene implements SceneDesc {
     public id: string;
 
@@ -84,10 +85,10 @@ class Spyro1Scene implements SceneDesc {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
-        const levelFile = await context.dataFetcher.fetchData(`Spyro1/extract/sf${this.subFileID}_ground.bin`);
-        const vram = await context.dataFetcher.fetchData(`Spyro1/extract/sf${this.subFileID}_vram.bin`);
-        const textureList = await context.dataFetcher.fetchData(`Spyro1/extract/sf${this.subFileID}_list.bin`);
-        const skyFile = await context.dataFetcher.fetchData(`Spyro1/extract/sf${this.subFileID}_sky1.bin`);
+        const levelFile = await context.dataFetcher.fetchData(`${pathBase}/extract/sf${this.subFileID}_ground.bin`);
+        const vram = await context.dataFetcher.fetchData(`${pathBase}/extract/sf${this.subFileID}_vram.bin`);
+        const textureList = await context.dataFetcher.fetchData(`${pathBase}/extract/sf${this.subFileID}_list.bin`);
+        const skyFile = await context.dataFetcher.fetchData(`${pathBase}/extract/sf${this.subFileID}_sky1.bin`);
         const tileGroups = parseTileGroups(textureList.createDataView());
         const combinedAtlas = buildCombinedAtlas(new VRAM(vram.copyToBuffer()), tileGroups);
         const renderer = new Spyro1Renderer(device, buildLevelData(levelFile.createDataView(), combinedAtlas), buildSkybox(skyFile.createDataView()));

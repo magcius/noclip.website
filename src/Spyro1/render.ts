@@ -12,7 +12,7 @@ export class LevelProgram extends DeviceProgram {
     public static ub_SceneParams = 0;
 
     public override both = `
-precision mediump float;
+precision highp float;
 
 ${GfxShaderLibrary.MatrixLibrary}
 
@@ -99,19 +99,6 @@ export class LevelRenderer {
             depthOrArrayLayers: 1
         });
         device.uploadTextureData(this.texture, 0, [atlas.atlasData]);
-        const finalUVs: number[] = [];
-        for (const face of levelData.faces) {
-            if (face.uvIndices) {
-                for (const uvIdx of face.uvIndices) {
-                    const [u, v] = levelData.uvs[uvIdx];
-                    finalUVs.push(u, v);
-                }
-            } else {
-                for (let i = 0; i < face.indices.length; i++) {
-                    finalUVs.push(0, 0);
-                }
-            }
-        }
 
         const { vertices, colors, faces, uvs } = levelData;
         const xs = vertices.map(v => v[0]);
@@ -222,13 +209,6 @@ export class LevelRenderer {
             ],
             { buffer: this.indexBuffer, byteOffset: 0 },
         );
-        // template.setPrimitiveTopology(GfxPrimitiveTopology.Triangles);
-        // const megaState = makeMegaState({
-        //     cullMode: GfxCullMode.Back,
-        //     depthCompare: GfxCompareMode.LessEqual,
-        //     depthWrite: true,
-        // }, defaultMegaState);
-        // template.setMegaStateFlags(megaState);
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setDrawCount(this.indexCount);
         renderInstManager.submitRenderInst(renderInst);
@@ -246,7 +226,7 @@ export class SkyboxProgram extends DeviceProgram {
     public static ub_SceneParams = 0;
 
     public override both = `
-precision mediump float;
+precision highp float;
 
 ${GfxShaderLibrary.MatrixLibrary}
 
