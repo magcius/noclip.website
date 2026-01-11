@@ -11,7 +11,7 @@ import { DataFetcher, NamedArrayBufferSlice } from '../DataFetcher.js';
 import { createInputLayout, DrawParams, fillSceneParamsData, fillSceneParamsDataOnTemplate, GXMaterialHelperGfx, GXRenderHelperGfx, GXTextureHolder, MaterialParams } from '../gx/gx_render.js';
 import { hexdump } from '../DebugJunk.js';
 import { CTFileLoc, CTFileStore, CTShape } from '../../rust/pkg/noclip_support.js';
-import { compileVtxLoader, compileVtxLoaderMultiVat, getAttributeByteSize, GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, LoadedVertexDraw, LoadedVertexLayout, VtxLoader } from '../gx/gx_displaylist.js';
+import { compilePartialVtxLoader, compileVtxLoader, compileVtxLoaderMultiVat, getAttributeByteSize, GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, LoadedVertexDraw, LoadedVertexLayout, VtxLoader } from '../gx/gx_displaylist.js';
 import { createBufferFromData } from '../gfx/helpers/BufferHelpers.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
@@ -21,6 +21,7 @@ import { GXMaterialBuilder } from '../gx/GXMaterialBuilder.js';
 import { mat4, vec3 } from 'gl-matrix';
 import { TextureHolder } from '../TextureHolder.js';
 import { CameraController } from '../Camera.js';
+import { addVelocityAwayFromTarget } from '../SuperMarioGalaxy/ActorUtil.js';
 
 interface GX {
     vat: GX_VtxAttrFmt[][];
@@ -28,45 +29,107 @@ interface GX {
     vtxLoader: VtxLoader;
 }
 
+function addVAT(vats: GX_VtxAttrFmt[][], fmt: GX.VtxFmt, pos: GX_VtxAttrFmt, nrm: GX_VtxAttrFmt, clr0: GX_VtxAttrFmt, clr1: GX_VtxAttrFmt, tex0?: GX_VtxAttrFmt) {
+    let vat = [];
+    vat[GX.Attr.POS] = pos;
+    vat[GX.Attr.NRM] = nrm;
+    vat[GX.Attr.CLR0] = clr0;
+    vat[GX.Attr.CLR1] = clr1;
+    if (tex0)
+        vat[GX.Attr.TEX0] = tex0;
+    vats[fmt] = vat;
+}
+
 function createVATs(): GX_VtxAttrFmt[][] {
-    const vat: GX_VtxAttrFmt[][] = [];
+    const vats: GX_VtxAttrFmt[][] = [];
+    addVAT(
+        vats,
+        GX.VtxFmt.VTXFMT0,
+        { compCnt: GX.CompCnt.POS_XYZ, compType: GX.CompType.F32, compShift: 0 },
+        { compCnt: GX.CompCnt.NRM_XYZ, compType: GX.CompType.F32, compShift: 0 },
+        { compCnt: GX.CompCnt.CLR_RGB, compType: GX.CompType.RGB565, compShift: 0 },
+        { compCnt: GX.CompCnt.CLR_RGB, compType: GX.CompType.RGB565, compShift: 0 },
+        { compCnt: GX.CompCnt.TEX_ST, compType: GX.CompType.F32, compShift: 0 }
+    );
+
     // VTXFMT1-4 are used widely
-    vat[GX.VtxFmt.VTXFMT1] = [];
-    vat[GX.VtxFmt.VTXFMT1][GX.Attr.POS] = { compCnt: GX.CompCnt.POS_XYZ, compType: GX.CompType.F32, compShift: 0 };
-    vat[GX.VtxFmt.VTXFMT1][GX.Attr.NRM] = { compCnt: GX.CompCnt.NRM_XYZ, compType: GX.CompType.U8, compShift: 0 };
-    vat[GX.VtxFmt.VTXFMT1][GX.Attr.CLR0] = { compCnt: GX.CompCnt.CLR_RGB, compType: GX.CompType.RGB8, compShift: 0 };
-    vat[GX.VtxFmt.VTXFMT1][GX.Attr.CLR1] = { compCnt: GX.CompCnt.CLR_RGB, compType: GX.CompType.RGB565, compShift: 0 };
-    vat[GX.VtxFmt.VTXFMT1][GX.Attr.TEX0] = { compCnt: GX.CompCnt.TEX_ST, compType: GX.CompType.F32, compShift: 0 };
+    addVAT(
+        vats,
+        GX.VtxFmt.VTXFMT1,
+        { compCnt: GX.CompCnt.POS_XYZ, compType: GX.CompType.F32, compShift: 0 },
+        { compCnt: GX.CompCnt.NRM_XYZ, compType: GX.CompType.U8, compShift: 0 },
+        { compCnt: GX.CompCnt.CLR_RGB, compType: GX.CompType.RGB8, compShift: 0 },
+        { compCnt: GX.CompCnt.CLR_RGB, compType: GX.CompType.RGB565, compShift: 0 },
+        { compCnt: GX.CompCnt.TEX_ST, compType: GX.CompType.F32, compShift: 0 },
+    );
 
-    vat[GX.VtxFmt.VTXFMT2] = [];
-    vat[GX.VtxFmt.VTXFMT2][GX.Attr.POS] = { compCnt: GX.CompCnt.POS_XYZ, compType: GX.CompType.S16, compShift: 8 };
-    vat[GX.VtxFmt.VTXFMT2][GX.Attr.NRM] = { compCnt: GX.CompCnt.NRM_XYZ, compType: GX.CompType.S16, compShift: 0 };
-    vat[GX.VtxFmt.VTXFMT2][GX.Attr.CLR0] = { compCnt: GX.CompCnt.CLR_RGB, compType: GX.CompType.RGB565, compShift: 0 };
-    vat[GX.VtxFmt.VTXFMT2][GX.Attr.CLR1] = { compCnt: GX.CompCnt.CLR_RGB, compType: GX.CompType.RGB565, compShift: 0 };
-    vat[GX.VtxFmt.VTXFMT2][GX.Attr.TEX0] = { compCnt: GX.CompCnt.TEX_ST, compType: GX.CompType.S16, compShift: 7 };
+    addVAT(
+        vats,
+        GX.VtxFmt.VTXFMT2,
+        { compCnt: GX.CompCnt.POS_XYZ, compType: GX.CompType.S16, compShift: 8 },
+        { compCnt: GX.CompCnt.NRM_XYZ, compType: GX.CompType.S16, compShift: 0 },
+        { compCnt: GX.CompCnt.CLR_RGB, compType: GX.CompType.RGB565, compShift: 0 },
+        { compCnt: GX.CompCnt.CLR_RGB, compType: GX.CompType.RGB565, compShift: 0 },
+        { compCnt: GX.CompCnt.TEX_ST, compType: GX.CompType.S16, compShift: 7 },
+    );
 
-    vat[GX.VtxFmt.VTXFMT3] = [];
-    vat[GX.VtxFmt.VTXFMT3][GX.Attr.POS] = { compCnt: GX.CompCnt.POS_XYZ, compType: GX.CompType.S16, compShift: 14 };
-    vat[GX.VtxFmt.VTXFMT3][GX.Attr.NRM] = { compCnt: GX.CompCnt.NRM_XYZ, compType: GX.CompType.U8, compShift: 0 };
-    vat[GX.VtxFmt.VTXFMT3][GX.Attr.CLR0] = { compCnt: GX.CompCnt.CLR_RGB, compType: GX.CompType.RGB8, compShift: 0 };
-    vat[GX.VtxFmt.VTXFMT3][GX.Attr.CLR1] = { compCnt: GX.CompCnt.CLR_RGB, compType: GX.CompType.RGB565, compShift: 0 };
-    vat[GX.VtxFmt.VTXFMT3][GX.Attr.TEX0] = { compCnt: GX.CompCnt.TEX_ST, compType: GX.CompType.S16, compShift: 7 };
+    addVAT(
+        vats,
+        GX.VtxFmt.VTXFMT3,
+        { compCnt: GX.CompCnt.POS_XYZ, compType: GX.CompType.S16, compShift: 14 },
+        { compCnt: GX.CompCnt.NRM_XYZ, compType: GX.CompType.U8, compShift: 0 },
+        { compCnt: GX.CompCnt.CLR_RGB, compType: GX.CompType.RGB8, compShift: 0 },
+        { compCnt: GX.CompCnt.CLR_RGB, compType: GX.CompType.RGB565, compShift: 0 },
+        { compCnt: GX.CompCnt.TEX_ST, compType: GX.CompType.S16, compShift: 7 },
+    );
 
-    vat[GX.VtxFmt.VTXFMT4] = [];
-    vat[GX.VtxFmt.VTXFMT4][GX.Attr.POS] = { compCnt: GX.CompCnt.POS_XYZ, compType: GX.CompType.S16, compShift: 8 };
-    vat[GX.VtxFmt.VTXFMT4][GX.Attr.NRM] = { compCnt: GX.CompCnt.NRM_XYZ, compType: GX.CompType.U8, compShift: 0 };
-    vat[GX.VtxFmt.VTXFMT4][GX.Attr.CLR0] = { compCnt: GX.CompCnt.CLR_RGB, compType: GX.CompType.RGB565, compShift: 0 };
-    vat[GX.VtxFmt.VTXFMT4][GX.Attr.CLR1] = { compCnt: GX.CompCnt.CLR_RGB, compType: GX.CompType.RGB565, compShift: 0 };
-    vat[GX.VtxFmt.VTXFMT4][GX.Attr.TEX0] = { compCnt: GX.CompCnt.TEX_ST, compType: GX.CompType.S16, compShift: 7 }; // fake??
-    return vat;
+    addVAT(
+        vats,
+        GX.VtxFmt.VTXFMT4,
+        { compCnt: GX.CompCnt.POS_XYZ, compType: GX.CompType.S16, compShift: 8 },
+        { compCnt: GX.CompCnt.NRM_XYZ, compType: GX.CompType.U8, compShift: 0 },
+        { compCnt: GX.CompCnt.CLR_RGB, compType: GX.CompType.RGB565, compShift: 0 },
+        { compCnt: GX.CompCnt.CLR_RGB, compType: GX.CompType.RGB565, compShift: 0 },
+    );
+
+    addVAT(
+        vats,
+        GX.VtxFmt.VTXFMT5,
+        { compCnt: GX.CompCnt.POS_XYZ, compType: GX.CompType.F32, compShift: 0 },
+        { compCnt: GX.CompCnt.NRM_XYZ, compType: GX.CompType.U8, compShift: 0 },
+        { compCnt: GX.CompCnt.CLR_RGB, compType: GX.CompType.RGB565, compShift: 0 },
+        { compCnt: GX.CompCnt.CLR_RGB, compType: GX.CompType.RGB565, compShift: 0 },
+    );
+
+    addVAT(
+        vats,
+        GX.VtxFmt.VTXFMT6,
+        { compCnt: GX.CompCnt.POS_XYZ, compType: GX.CompType.S16, compShift: 6 },
+        { compCnt: GX.CompCnt.NRM_XYZ, compType: GX.CompType.S16, compShift: 0 },
+        { compCnt: GX.CompCnt.CLR_RGB, compType: GX.CompType.RGB565, compShift: 0 },
+        { compCnt: GX.CompCnt.CLR_RGB, compType: GX.CompType.RGB565, compShift: 0 },
+        { compCnt: GX.CompCnt.TEX_ST, compType: GX.CompType.S16, compShift: 8 },
+    );
+
+    addVAT(
+        vats,
+        GX.VtxFmt.VTXFMT7,
+        { compCnt: GX.CompCnt.POS_XYZ, compType: GX.CompType.S16, compShift: 6 },
+        { compCnt: GX.CompCnt.NRM_XYZ, compType: GX.CompType.S16, compShift: 0 },
+        { compCnt: GX.CompCnt.CLR_RGBA, compType: GX.CompType.RGBA8, compShift: 0 },
+        { compCnt: GX.CompCnt.CLR_RGB, compType: GX.CompType.RGB565, compShift: 0 },
+        { compCnt: GX.CompCnt.TEX_ST, compType: GX.CompType.F32, compShift: 0 },
+    );
+
+    return vats;
 }
 
 const VATS = createVATs();
 
 interface Shape {
     vertexData: LoadedVertexData[],
-    vertexLayout: LoadedVertexLayout,
-    vertexFormat: GX.VtxFmt,
+    vertexLayouts: LoadedVertexLayout[],
+    vertexFormats: Set<GX.VtxFmt>,
     scale: number,
     textures: string[],
 }
@@ -76,13 +139,13 @@ const drawParams = new DrawParams();
 class ShapeRenderer {
     public vertexBufferDescriptors: GfxVertexBufferDescriptor[] = [];
     public indexBufferDescriptors: GfxIndexBufferDescriptor[] = [];
-    public inputLayout: GfxInputLayout;
+    public inputLayouts: GfxInputLayout[] = [];
     private vertexBuffers: GfxBuffer[] = [];
     private indexBuffers: GfxBuffer[] = [];
     private materialHelper: GXMaterialHelperGfx;
     private materialParams = new MaterialParams();
 
-    constructor(private cache: GfxRenderCache, private textureHolder: GXTextureHolder, private shape: Shape, public loadedVertexLayout: LoadedVertexLayout, public loadedVertexData: LoadedVertexData[]) {
+    constructor(private cache: GfxRenderCache, private textureHolder: GXTextureHolder, private shape: Shape, public loadedVertexLayouts: LoadedVertexLayout[], public loadedVertexData: LoadedVertexData[]) {
         const device = cache.device;
         for (const data of this.loadedVertexData) {
             for (let i = 0; i < data.vertexBuffers.length; i++) {
@@ -98,7 +161,9 @@ class ShapeRenderer {
             this.indexBufferDescriptors.push({ buffer: indexBuffer });
         }
 
-        this.inputLayout = createInputLayout(cache, loadedVertexLayout);
+        for (const layout of this.loadedVertexLayouts) {
+            this.inputLayouts.push(createInputLayout(cache, layout));
+        }
 
         const mb = new GXMaterialBuilder();
         mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
@@ -113,6 +178,8 @@ class ShapeRenderer {
 
     public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         for (let i = 0; i < this.indexBuffers.length; i++) {
+            if (this.loadedVertexData[i].totalIndexCount === 0)
+                continue;
             const renderInst = renderInstManager.newRenderInst();
             this.materialHelper.setOnRenderInst(this.cache, renderInst);
             mat4.copy(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
@@ -120,7 +187,7 @@ class ShapeRenderer {
             this.materialHelper.allocateDrawParamsDataOnInst(renderInst, drawParams);
             this.materialHelper.allocateMaterialParamsDataOnInst(renderInst, this.materialParams);
             this.textureHolder.fillTextureMapping(this.materialParams.m_TextureMapping[0], this.shape.textures[i]);
-            renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptors[i]);
+            renderInst.setVertexInput(this.inputLayouts[i], this.vertexBufferDescriptors, this.indexBufferDescriptors[i]);
             renderInst.setDrawCount(this.loadedVertexData[i].totalIndexCount);
             renderInst.setSamplerBindingsFromTextureMappings(this.materialParams.m_TextureMapping);
             renderInstManager.submitRenderInst(renderInst);
@@ -145,13 +212,14 @@ export class Scene implements Viewer.SceneGfx {
     constructor(device: GfxDevice, private manager: FileManager, public textureHolder: GXTextureHolder) {
         this.renderHelper = new GXRenderHelperGfx(device);
         const shapeNames: string[] = [
+            "course_4b_055_a.shp",
             // "ANIME_FUNSUI_001.shp",
-            "Chair.shp",
+            // "Chair.shp",
         ];
 
         for (const name of shapeNames) {
             const shape = this.manager.createShape(name);
-            const renderer = new ShapeRenderer(this.renderHelper.renderCache, this.textureHolder, shape, shape.vertexLayout, shape.vertexData);
+            const renderer = new ShapeRenderer(this.renderHelper.renderCache, this.textureHolder, shape, shape.vertexLayouts, shape.vertexData);
             this.shapes.push(renderer);
         }
     }
@@ -173,7 +241,7 @@ export class Scene implements Viewer.SceneGfx {
     }
 
     public adjustCameraController(c: CameraController) {
-        c.setSceneMoveSpeedMult(0.01);
+        c.setSceneMoveSpeedMult(0.1);
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
@@ -256,9 +324,6 @@ class FileManager {
         let offs = 0;
         const vertexData: LoadedVertexData[] = [];
 
-        // assume it's the same VTXFMT for all displaylists?
-        const vertexFormat = (displayListData.createDataView().getUint8(0) & 0x07);
-        const fmtVat = VATS[vertexFormat];
         const attrs: [GX.Attr, CTFileLoc | undefined][] = [
             [GX.Attr.POS, shape.pos_loc()],
             [GX.Attr.NRM, shape.nrm_loc()],
@@ -273,22 +338,43 @@ class FileManager {
             [GX.Attr.TEX6, shape.tex_loc(6)],
             [GX.Attr.TEX7, shape.tex_loc(7)],
         ];
-        const vcd: GX_VtxDesc[] = [];
-        const vtxArrays: GX_Array[] = [];
-        for (const [attr, loc] of attrs) {
-            if (loc === undefined)
-                continue;
-            vcd[attr] = { type: GX.AttrType.INDEX16 };
-            vtxArrays[attr] = { buffer: this.getData(loc), offs: 0, stride: getAttributeByteSize(fmtVat, attr) };
-        }
-        const vtxLoader = compileVtxLoaderMultiVat(VATS, vcd);
+
+        const textures = shape.textures;
+        const filaIdx = textures.indexOf('TT_Fila_ad_tr.tex');
+        console.log(`fila ${filaIdx}`);
 
         // parse each display list
+        const vertexLayouts = [];
+        const vertexFormats: Set<GX.VtxFmt> = new Set();
         while (true) {
+            const vtxFormat = (displayListData.slice(offs).createDataView().getUint8(0) & 0x07);
+            vertexFormats.add(vtxFormat);
+            const fmtVat = VATS[vtxFormat];
+            const vcd: GX_VtxDesc[] = [];
+            const vtxArrays: GX_Array[] = [];
+            for (const [attr, loc] of attrs) {
+                if (loc === undefined)
+                    continue;
+                vcd[attr] = { type: GX.AttrType.INDEX16 };
+                vtxArrays[attr] = { buffer: this.getData(loc), offs: 0, stride: getAttributeByteSize(fmtVat, attr) };
+            }
+            // awkward hack
+            let foo = [];
+            foo[vtxFormat] = fmtVat;
+            const vtxLoader = compileVtxLoaderMultiVat(foo, vcd);
+            vertexLayouts.push(vtxLoader.loadedVertexLayout);
             const data = vtxLoader.runVertices(vtxArrays, displayListData.slice(offs));
-            const newFormat = (displayListData.slice(offs).createDataView().getUint8(0) & 0x07);
-            assert(newFormat === vertexFormat, `non-homogenous VTXFMTs in ${name}`);
+            // for (const [attr, loc] of attrs) {
+            //     if (loc === undefined)
+            //         continue;
+            //     const oldStride = vtxArrays[attr].stride;
+            //     const newStride = getAttributeByteSize(VATS[newFormat], attr);
+            //     assert(oldStride === newStride, 'difference in VTXFMT strides???')
+            // }
             vertexData.push(data);
+            if (vertexData.length - 1 === filaIdx) {
+                console.log(data);
+            }
             assert(data.endOffs !== null);
             offs += data.endOffs + (0x20 - (data.endOffs % 0x20));
             if (offs >= displayListData.byteLength) {
@@ -296,10 +382,8 @@ class FileManager {
             }
         }
 
-        const vertexLayout = vtxLoader.loadedVertexLayout;
         const scale = shape.scale();
-        const textures = shape.textures;
-        return { vertexData, vertexLayout, vertexFormat, scale, textures };
+        return { vertexData, vertexLayouts, vertexFormats, scale, textures };
     }
 
     public createTexture(name: string): GXTexture.TextureInputGX {
