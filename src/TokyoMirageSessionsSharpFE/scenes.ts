@@ -1,11 +1,12 @@
 // scene.ts
 // Handles all the levels in Tokyo Mirage Sessions ♯FE
 
-import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
-import { SceneGfx, SceneGroup } from "../viewer.js";
-import { SceneContext, SceneDesc } from "../SceneBase.js";
+import { get_files_of_type, parseAPAK } from "./apak.js";
 import { FRES, parseBFRES } from "./bfres/bfres_switch.js";
+import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { TMSFEScene } from "./render.js"
+import { SceneContext, SceneDesc } from "../SceneBase.js";
+import { SceneGfx, SceneGroup } from "../viewer.js";
 
 // Defines a single level from Tokyo Mirage Sessions ♯FE
 class TMSFESceneDesc implements SceneDesc
@@ -19,14 +20,10 @@ class TMSFESceneDesc implements SceneDesc
     {
         // Load the map file
         const dataFetcher = context.dataFetcher;
-        // const apak = dataFetcher.fetchData(`TokyoMirageSessionsSharpFE/maps/${this.id}/model.apak`);
-        const bfres_files: FRES[] = [];
-        bfres_files.push(parseBFRES(await dataFetcher.fetchData("TokyoMirageSessionsSharpFE/b016_01.bfres")));
-        bfres_files.push(parseBFRES(await dataFetcher.fetchData("TokyoMirageSessionsSharpFE/obj01.bfres")));
-        bfres_files.push(parseBFRES(await dataFetcher.fetchData("TokyoMirageSessionsSharpFE/obj02.bfres")));
-        bfres_files.push(parseBFRES(await dataFetcher.fetchData("TokyoMirageSessionsSharpFE/obj03.bfres")));
-        bfres_files.push(parseBFRES(await dataFetcher.fetchData("TokyoMirageSessionsSharpFE/sky.bfres")));
-        let renderer = new TMSFEScene(device, bfres_files);
+        const apak = parseAPAK(await dataFetcher.fetchData(`TokyoMirageSessionsSharpFE/maps/${this.id}/model.apak`));
+        console.log(apak);
+
+        let renderer = new TMSFEScene(device, apak);
         return renderer;
     }
 }

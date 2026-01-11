@@ -1,4 +1,5 @@
-import { FRES } from "./bfres/bfres_switch.js";
+import { APAK, get_files_of_type } from "./apak.js";
+import { FRES, parseBFRES } from "./bfres/bfres_switch.js";
 import * as BNTX from '../fres_nx/bntx.js';
 import { deswizzle_and_upload_bntx_textures } from "./bntx_helpers.js";
 import { createBufferFromSlice } from "../gfx/helpers/BufferHelpers.js";
@@ -22,8 +23,16 @@ export class TMSFEScene implements SceneGfx
     private renderInstListMain = new GfxRenderInstList();
     private fshp_renderers: fshp_renderer[] = [];
 
-    constructor(device: GfxDevice, fres_files: FRES[])
+    constructor(device: GfxDevice, apak: APAK)
     {
+        // get bfres files
+        const fres_files: FRES[] = [];
+        const bfres_buffers = get_files_of_type(apak, "bfres");
+        for (let i = 0; i < bfres_buffers.length; i++)
+        {
+            fres_files.push(parseBFRES(bfres_buffers[i]));
+        }
+
         for(let i = 0; i < fres_files.length; i++)
         {
             const fres = fres_files[i];
@@ -32,8 +41,7 @@ export class TMSFEScene implements SceneGfx
 
             //initialize textures
             const bntx = BNTX.parse(fres.embedded_files[0].buffer);
-            const bntx_buffer = fres.embedded_files[0].buffer;
-            const gfx_texture_array: GfxTexture[] = deswizzle_and_upload_bntx_textures(bntx_buffer, device);
+            const gfx_texture_array: GfxTexture[] = deswizzle_and_upload_bntx_textures(bntx, device);
 
             // create all fshp_renderers
             const fmdl = fres.fmdl[0];
@@ -164,8 +172,11 @@ class fshp_renderer
         );
 
         // setup sampler
+        console.log(bntx);
         const fmat = fmdl.fmat[fshp.fmat_index];
-        for (let i = 0; i < fmat.texture_names.length; i++)
+        // for (let i = 0; i < fmat.texture_names.length; i++)
+        // TODO: sometimes a cubemap isn't being found?? whats up with that
+        for (let i = 0; i < 1; i++)
         {
             const texture_name = fmat.texture_names[i];
             const texture = bntx.textures.find((f) => f.name === texture_name);
@@ -179,6 +190,7 @@ class fshp_renderer
             }
             else
             {
+                console.warn(`texture ${texture_name} not found`);
                 throw("texture not found");
             }
         }

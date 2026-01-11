@@ -7,8 +7,8 @@
 // Tokyo Mirage Sessions ♯FE Encore (Switch) uses v0.9.0.0
 
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
-import { assert, readString } from "../../util.js";
 import { FMDL, parseFMDL } from "./fmdl.js";
+import { assert, readString } from "../../util.js";
 
 // Reads from a BFRES file and returns a FRES object
 // buffer: the BFRES file

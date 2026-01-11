@@ -2,7 +2,6 @@
 // the fres_nx code supports version v0.4.0.0, which Tokyo Mirage Sessions ♯FE uses
 // these functions build off that code
 
-import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import * as BNTX from '../fres_nx/bntx.js';
 import { GfxDevice, makeTextureDescriptor2D, GfxTexture } from '../gfx/platform/GfxPlatform.js';
 import { getChannelFormat } from '../fres_nx/nngfx_enum.js';
@@ -12,11 +11,10 @@ import { deswizzle, decompress, translateImageFormat } from "../fres_nx/tegra_te
 // this is not supported, and if rendered as is, these textures will look garbled
 // so it's necessary to deswizzle the textures to get the original data back
 // the deswizzle function is asynchronous, so this function also handles uploading the textures as well
-// buffer: the bntx file
+// bntx: the bntx object containing all the textures
 // returns a GfxTexture array of the uploaded textures
-export function deswizzle_and_upload_bntx_textures(buffer: ArrayBufferSlice, device: GfxDevice): GfxTexture[]
+export function deswizzle_and_upload_bntx_textures(bntx: BNTX.BNTX, device: GfxDevice): GfxTexture[]
 {
-    const bntx = BNTX.parse(buffer);
     const gfx_texture_array: GfxTexture[] = [];
 
     for (let i = 0; i < bntx.textures.length; i++)
