@@ -11,15 +11,16 @@ import { DataFetcher, NamedArrayBufferSlice } from '../DataFetcher.js';
 import { createInputLayout, DrawParams, fillSceneParamsData, fillSceneParamsDataOnTemplate, GXMaterialHelperGfx, GXRenderHelperGfx, GXTextureHolder, MaterialParams } from '../gx/gx_render.js';
 import { hexdump } from '../DebugJunk.js';
 import { CTFileLoc, CTFileStore, CTShape } from '../../rust/pkg/noclip_support.js';
-import { compileVtxLoaderMultiVat, getAttributeByteSize, GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, LoadedVertexDraw, LoadedVertexLayout, VtxLoader } from '../gx/gx_displaylist.js';
+import { compileVtxLoader, compileVtxLoaderMultiVat, getAttributeByteSize, GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, LoadedVertexDraw, LoadedVertexLayout, VtxLoader } from '../gx/gx_displaylist.js';
 import { createBufferFromData } from '../gfx/helpers/BufferHelpers.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 import { assert } from '../util.js';
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder.js';
-import { mat4 } from 'gl-matrix';
+import { mat4, vec3 } from 'gl-matrix';
 import { TextureHolder } from '../TextureHolder.js';
+import { CameraController } from '../Camera.js';
 
 interface GX {
     vat: GX_VtxAttrFmt[][];
@@ -27,32 +28,45 @@ interface GX {
     vtxLoader: VtxLoader;
 }
 
-function createVtxLoader(): GX {
+function createVATs(): GX_VtxAttrFmt[][] {
     const vat: GX_VtxAttrFmt[][] = [];
     // VTXFMT1-4 are used widely
     vat[GX.VtxFmt.VTXFMT1] = [];
     vat[GX.VtxFmt.VTXFMT1][GX.Attr.POS] = { compCnt: GX.CompCnt.POS_XYZ, compType: GX.CompType.F32, compShift: 0 };
+    vat[GX.VtxFmt.VTXFMT1][GX.Attr.NRM] = { compCnt: GX.CompCnt.NRM_XYZ, compType: GX.CompType.U8, compShift: 0 };
     vat[GX.VtxFmt.VTXFMT1][GX.Attr.CLR0] = { compCnt: GX.CompCnt.CLR_RGB, compType: GX.CompType.RGB8, compShift: 0 };
+    vat[GX.VtxFmt.VTXFMT1][GX.Attr.CLR1] = { compCnt: GX.CompCnt.CLR_RGB, compType: GX.CompType.RGB565, compShift: 0 };
     vat[GX.VtxFmt.VTXFMT1][GX.Attr.TEX0] = { compCnt: GX.CompCnt.TEX_ST, compType: GX.CompType.F32, compShift: 0 };
-    // vat[GX.VtxFmt.VTXFMT2] = [];
+
+    vat[GX.VtxFmt.VTXFMT2] = [];
+    vat[GX.VtxFmt.VTXFMT2][GX.Attr.POS] = { compCnt: GX.CompCnt.POS_XYZ, compType: GX.CompType.S16, compShift: 8 };
+    vat[GX.VtxFmt.VTXFMT2][GX.Attr.NRM] = { compCnt: GX.CompCnt.NRM_XYZ, compType: GX.CompType.S16, compShift: 0 };
+    vat[GX.VtxFmt.VTXFMT2][GX.Attr.CLR0] = { compCnt: GX.CompCnt.CLR_RGB, compType: GX.CompType.RGB565, compShift: 0 };
+    vat[GX.VtxFmt.VTXFMT2][GX.Attr.CLR1] = { compCnt: GX.CompCnt.CLR_RGB, compType: GX.CompType.RGB565, compShift: 0 };
+    vat[GX.VtxFmt.VTXFMT2][GX.Attr.TEX0] = { compCnt: GX.CompCnt.TEX_ST, compType: GX.CompType.S16, compShift: 7 };
+
     vat[GX.VtxFmt.VTXFMT3] = [];
-    vat[GX.VtxFmt.VTXFMT3][GX.Attr.POS] = { compCnt: GX.CompCnt.POS_XYZ, compType: GX.CompType.S16, compShift: 0 };
+    vat[GX.VtxFmt.VTXFMT3][GX.Attr.POS] = { compCnt: GX.CompCnt.POS_XYZ, compType: GX.CompType.S16, compShift: 14 };
+    vat[GX.VtxFmt.VTXFMT3][GX.Attr.NRM] = { compCnt: GX.CompCnt.NRM_XYZ, compType: GX.CompType.U8, compShift: 0 };
     vat[GX.VtxFmt.VTXFMT3][GX.Attr.CLR0] = { compCnt: GX.CompCnt.CLR_RGB, compType: GX.CompType.RGB8, compShift: 0 };
-    vat[GX.VtxFmt.VTXFMT3][GX.Attr.TEX0] = { compCnt: GX.CompCnt.TEX_ST, compType: GX.CompType.S16, compShift: 8 };
-    // vat[GX.VtxFmt.VTXFMT4] = [];
-    const vcd: GX_VtxDesc[] = [];
-    vcd[GX.Attr.POS] = { type: GX.AttrType.INDEX16 };
-    vcd[GX.Attr.CLR0] = { type: GX.AttrType.INDEX16 };
-    vcd[GX.Attr.TEX0] = { type: GX.AttrType.INDEX16 };
-    return {
-        vcd, vat,
-        vtxLoader: compileVtxLoaderMultiVat(vat, vcd),
-    };
+    vat[GX.VtxFmt.VTXFMT3][GX.Attr.CLR1] = { compCnt: GX.CompCnt.CLR_RGB, compType: GX.CompType.RGB565, compShift: 0 };
+    vat[GX.VtxFmt.VTXFMT3][GX.Attr.TEX0] = { compCnt: GX.CompCnt.TEX_ST, compType: GX.CompType.S16, compShift: 7 };
+
+    vat[GX.VtxFmt.VTXFMT4] = [];
+    vat[GX.VtxFmt.VTXFMT4][GX.Attr.POS] = { compCnt: GX.CompCnt.POS_XYZ, compType: GX.CompType.S16, compShift: 8 };
+    vat[GX.VtxFmt.VTXFMT4][GX.Attr.NRM] = { compCnt: GX.CompCnt.NRM_XYZ, compType: GX.CompType.U8, compShift: 0 };
+    vat[GX.VtxFmt.VTXFMT4][GX.Attr.CLR0] = { compCnt: GX.CompCnt.CLR_RGB, compType: GX.CompType.RGB565, compShift: 0 };
+    vat[GX.VtxFmt.VTXFMT4][GX.Attr.CLR1] = { compCnt: GX.CompCnt.CLR_RGB, compType: GX.CompType.RGB565, compShift: 0 };
+    vat[GX.VtxFmt.VTXFMT4][GX.Attr.TEX0] = { compCnt: GX.CompCnt.TEX_ST, compType: GX.CompType.S16, compShift: 7 }; // fake??
+    return vat;
 }
+
+const VATS = createVATs();
 
 interface Shape {
     vertexData: LoadedVertexData[],
     vertexLayout: LoadedVertexLayout,
+    vertexFormat: GX.VtxFmt,
     scale: number,
     textures: string[],
 }
@@ -84,10 +98,6 @@ class ShapeRenderer {
             this.indexBufferDescriptors.push({ buffer: indexBuffer });
         }
 
-        for (let i = 0; i < this.shape.textures.length; i++) {
-            assert(this.textureHolder.fillTextureMapping(this.materialParams.m_TextureMapping[i], this.shape.textures[i]));
-        }
-
         this.inputLayout = createInputLayout(cache, loadedVertexLayout);
 
         const mb = new GXMaterialBuilder();
@@ -106,8 +116,10 @@ class ShapeRenderer {
             const renderInst = renderInstManager.newRenderInst();
             this.materialHelper.setOnRenderInst(this.cache, renderInst);
             mat4.copy(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
+            mat4.scale(drawParams.u_PosMtx[0], drawParams.u_PosMtx[0], vec3.fromValues(this.shape.scale, this.shape.scale, this.shape.scale));
             this.materialHelper.allocateDrawParamsDataOnInst(renderInst, drawParams);
             this.materialHelper.allocateMaterialParamsDataOnInst(renderInst, this.materialParams);
+            this.textureHolder.fillTextureMapping(this.materialParams.m_TextureMapping[0], this.shape.textures[i]);
             renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptors[i]);
             renderInst.setDrawCount(this.loadedVertexData[i].totalIndexCount);
             renderInst.setSamplerBindingsFromTextureMappings(this.materialParams.m_TextureMapping);
@@ -125,7 +137,6 @@ class ShapeRenderer {
 }
 
 export class Scene implements Viewer.SceneGfx {
-    private gx: GX;
     private renderHelper: GXRenderHelperGfx;
     private renderInstListMain = new GfxRenderInstList();
 
@@ -133,14 +144,13 @@ export class Scene implements Viewer.SceneGfx {
 
     constructor(device: GfxDevice, private manager: FileManager, public textureHolder: GXTextureHolder) {
         this.renderHelper = new GXRenderHelperGfx(device);
-        this.gx = createVtxLoader();
-        const shapeNames = [
-            "ANIME_FUNSUI_001.shp",
+        const shapeNames: string[] = [
+            // "ANIME_FUNSUI_001.shp",
+            "Chair.shp",
         ];
 
         for (const name of shapeNames) {
-            const shape = this.manager.createShape(name, this.gx);
-            console.log(shape.vertexData);
+            const shape = this.manager.createShape(name);
             const renderer = new ShapeRenderer(this.renderHelper.renderCache, this.textureHolder, shape, shape.vertexLayout, shape.vertexData);
             this.shapes.push(renderer);
         }
@@ -162,7 +172,12 @@ export class Scene implements Viewer.SceneGfx {
         this.renderHelper.prepareToRender();
     }
 
+    public adjustCameraController(c: CameraController) {
+        c.setSceneMoveSpeedMult(0.01);
+    }
+
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
+        viewerInput.camera.setClipPlanes(0.1);
         this.prepareToRender(device, viewerInput);
         const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, standardFullClearRenderPassDescriptor);
         const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, standardFullClearRenderPassDescriptor);
@@ -233,7 +248,7 @@ class FileManager {
         }
     }
 
-    public createShape(name: string, gx: GX): Shape {
+    public createShape(name: string): Shape {
         const shape = this.fileStore.get_shape(name)!;
         // each shape has several display lists concatenated together and
         // aligned on 0x20 blocks
@@ -243,16 +258,34 @@ class FileManager {
 
         // assume it's the same VTXFMT for all displaylists?
         const vertexFormat = (displayListData.createDataView().getUint8(0) & 0x07);
-        const fmtVat = gx.vat[vertexFormat];
+        const fmtVat = VATS[vertexFormat];
+        const attrs: [GX.Attr, CTFileLoc | undefined][] = [
+            [GX.Attr.POS, shape.pos_loc()],
+            [GX.Attr.NRM, shape.nrm_loc()],
+            [GX.Attr.CLR0, shape.clr_loc(0)],
+            [GX.Attr.CLR1, shape.clr_loc(1)],
+            [GX.Attr.TEX0, shape.tex_loc(0)],
+            [GX.Attr.TEX1, shape.tex_loc(1)],
+            [GX.Attr.TEX2, shape.tex_loc(2)],
+            [GX.Attr.TEX3, shape.tex_loc(3)],
+            [GX.Attr.TEX4, shape.tex_loc(4)],
+            [GX.Attr.TEX5, shape.tex_loc(5)],
+            [GX.Attr.TEX6, shape.tex_loc(6)],
+            [GX.Attr.TEX7, shape.tex_loc(7)],
+        ];
+        const vcd: GX_VtxDesc[] = [];
         const vtxArrays: GX_Array[] = [];
-        vtxArrays[GX.Attr.POS] = { buffer: this.getData(shape.pos_loc()), offs: 0, stride: getAttributeByteSize(fmtVat, GX.Attr.POS) };
-        vtxArrays[GX.Attr.CLR0] = { buffer: this.getData(shape.clr_loc(0)!), offs: 0, stride: getAttributeByteSize(fmtVat, GX.Attr.CLR0) };
-        vtxArrays[GX.Attr.TEX0] = { buffer: this.getData(shape.tex_loc(0)!), offs: 0, stride: getAttributeByteSize(fmtVat, GX.Attr.TEX0) };
+        for (const [attr, loc] of attrs) {
+            if (loc === undefined)
+                continue;
+            vcd[attr] = { type: GX.AttrType.INDEX16 };
+            vtxArrays[attr] = { buffer: this.getData(loc), offs: 0, stride: getAttributeByteSize(fmtVat, attr) };
+        }
+        const vtxLoader = compileVtxLoaderMultiVat(VATS, vcd);
 
         // parse each display list
         while (true) {
-            console.log(`parsing list ${vertexData.length}`);
-            const data = gx.vtxLoader.runVertices(vtxArrays, displayListData.slice(offs));
+            const data = vtxLoader.runVertices(vtxArrays, displayListData.slice(offs));
             const newFormat = (displayListData.slice(offs).createDataView().getUint8(0) & 0x07);
             assert(newFormat === vertexFormat, `non-homogenous VTXFMTs in ${name}`);
             vertexData.push(data);
@@ -263,10 +296,10 @@ class FileManager {
             }
         }
 
-        const vertexLayout = gx.vtxLoader.loadedVertexLayout;
+        const vertexLayout = vtxLoader.loadedVertexLayout;
         const scale = shape.scale();
         const textures = shape.textures;
-        return { vertexData, vertexLayout, scale, textures };
+        return { vertexData, vertexLayout, vertexFormat, scale, textures };
     }
 
     public createTexture(name: string): GXTexture.TextureInputGX {
@@ -309,17 +342,24 @@ class SceneDesc implements Viewer.SceneDesc {
         const manager = new FileManager(context.dataFetcher, [
             "polDC0.all",
             "texDC0.all",
-            "polDC1.all",
+            "poldc1.all",
+            "poldc1_stream.all",
             "texDC1.all",
+            "texDC2.all",
+            "texdc3.all",
             "cube0.shp",
             "white.tex",
         ]);
         await manager.fetch();
 
-        manager.debugShape('course_4_154.shp'); // FMT1
-        manager.debugShape('CT_train.shp'); // FMT2
-        manager.debugShape('ANIME_FUNSUI_001.shp'); // FMT3
-        manager.debugShape('course_4c_043.shp'); // FMT4
+        // manager.debugShape('course_4_154.shp'); // FMT1
+        // manager.debugShape('CT_train.shp'); // FMT2
+        // manager.debugShape('ANIME_FUNSUI_001.shp'); // FMT3
+        // manager.debugShape('course_4c_043.shp'); // FMT4
+
+        // FILA havers
+        // manager.debugShape('course_4b_055_a.shp');
+        // manager.debugShape('course_dc3b_031k.shp'); // in poldc2_stream.all
 
         const textures: GXTexture.TextureInputGX[] = [];
         for (const filename of manager.fileStore.list_textures()) {
