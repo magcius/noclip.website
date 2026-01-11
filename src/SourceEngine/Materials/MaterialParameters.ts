@@ -130,6 +130,7 @@ function findall(haystack: string, needle: RegExp): RegExpExecArray[] {
 const scratchMat4a = mat4.create();
 export class ParameterMatrix {
     public matrix = mat4.create();
+    public defined = false;
 
     public setMatrix(cx: number, cy: number, sx: number, sy: number, r: number, tx: number, ty: number): void {
         mat4.identity(this.matrix);
@@ -143,6 +144,7 @@ export class ParameterMatrix {
         scratchMat4a[12] = cx + tx;
         scratchMat4a[13] = cy + ty;
         mat4.mul(this.matrix, scratchMat4a, this.matrix);
+        this.defined = true;
     }
 
     public parse(S: string): void {

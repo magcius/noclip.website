@@ -388,7 +388,7 @@ class NfsProgram extends DeviceProgram {
     public static ub_ObjectParams = 1;
 
     public override both = `
-precision mediump float;
+precision highp float;
 
 ${GfxShaderLibrary.MatrixLibrary}
 

@@ -42,8 +42,8 @@ export class ShaderTemplate_Water extends MaterialShaderTemplateBase {
 
     public override generateProgramString(m: Map<string, string>): string {
         return `
-precision mediump float;
-precision mediump sampler2DArray;
+precision highp float;
+precision highp sampler2DArray;
 
 ${MaterialShaderTemplateBase.Common}
 

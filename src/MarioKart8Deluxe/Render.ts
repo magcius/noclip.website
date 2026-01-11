@@ -145,7 +145,7 @@ class TurboUBER extends DeviceProgram {
     }
 
     public static globalDefinitions = `
-precision mediump float;
+precision highp float;
 
 ${GfxShaderLibrary.MatrixLibrary}
 
@@ -303,7 +303,7 @@ void main() {
 
     public generateFrag() {
         return `
-precision mediump float;
+precision highp float;
 
 ${GfxShaderLibrary.saturate}
 

@@ -74,7 +74,7 @@ class TheWitnessShaderTemplate extends UberShaderTemplate<Render_Material> {
 
     public generateProgramString(m: Render_Material): string {
         return `
-precision mediump float;
+precision highp float;
 
 ${GfxShaderLibrary.MatrixLibrary}
 

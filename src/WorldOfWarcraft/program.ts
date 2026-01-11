@@ -107,7 +107,7 @@ vec2 envmapTexCoord(const vec3 viewSpacePos, const vec3 viewSpaceNormal) {
   `;
 
     public static commonDeclarations = `
-precision mediump float;
+precision highp float;
 
 ${GfxShaderLibrary.MatrixLibrary}
 

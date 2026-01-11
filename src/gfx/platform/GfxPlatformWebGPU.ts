@@ -2,11 +2,11 @@
 import type { glsl_compile as glsl_compile_ } from "../../../rust/pkg/noclip_support";
 import { HashMap, nullHashFunc } from "../../HashMap.js";
 import { rust } from "../../rustlib.js";
-import { GfxAttachmentState, GfxBindingLayoutDescriptor, GfxBindingLayoutSamplerDescriptor, GfxBindings, GfxBindingsDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxChannelBlendState, GfxClipSpaceNearZ, GfxCompareMode, GfxComputePass, GfxComputePipelineDescriptor, GfxComputeProgramDescriptor, GfxCullMode, GfxStatisticsGroup, GfxDevice, GfxDeviceLimits, GfxFormat, GfxFrontFaceMode, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutDescriptor, GfxMegaStateDescriptor, GfxMipFilterMode, GfxPass, GfxPrimitiveTopology, GfxProgram, GfxQueryPoolType, GfxRenderPass, GfxRenderPassDescriptor, GfxRenderPipeline, GfxRenderPipelineDescriptor, GfxRenderTarget, GfxRenderTargetDescriptor, GfxSampler, GfxSamplerDescriptor, GfxSamplerFormatKind, GfxShadingLanguage, GfxSwapChain, GfxTexFilterMode, GfxTexture, GfxTextureDescriptor, GfxTextureDimension, GfxTextureUsage, GfxVendorInfo, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxViewportOrigin, GfxWrapMode, GfxRenderAttachmentView, GfxRenderProgramDescriptor, GfxColor, GfxPlatform } from "./GfxPlatform.js";
-import { FormatFlags, FormatTypeFlags, getFormatByteSize, getFormatFlags, getFormatSamplerKind, getFormatTypeFlags } from "./GfxPlatformFormat.js";
+import { GfxAttachmentState, GfxBindingLayoutDescriptor, GfxBindingLayoutSamplerDescriptor, GfxBindings, GfxBindingsDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxChannelBlendState, GfxClipSpaceNearZ, GfxColor, GfxCompareMode, GfxComputePass, GfxComputePipelineDescriptor, GfxComputeProgramDescriptor, GfxCullMode, GfxDevice, GfxDeviceLimits, GfxFormat, GfxFrontFaceMode, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutDescriptor, GfxMegaStateDescriptor, GfxMipFilterMode, GfxPass, GfxPlatform, GfxPrimitiveTopology, GfxProgram, GfxQueryPoolType, GfxRenderAttachmentView, GfxRenderPass, GfxRenderPassDescriptor, GfxRenderPipeline, GfxRenderPipelineDescriptor, GfxRenderProgramDescriptor, GfxRenderTarget, GfxRenderTargetDescriptor, GfxSampler, GfxSamplerDescriptor, GfxSamplerFormatKind, GfxShadingLanguage, GfxStatisticsGroup, GfxSwapChain, GfxTexFilterMode, GfxTexture, GfxTextureDescriptor, GfxTextureDimension, GfxTextureUsage, GfxVendorInfo, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxViewportOrigin, GfxWrapMode } from "./GfxPlatform.js";
+import { FormatFlags, getFormatBlockSizeInTexels, getFormatByteSize, getFormatByteSizePerBlock, getFormatFlags, getFormatSamplerKind, isFormatTextureCompressionBC } from "./GfxPlatformFormat.js";
 import { GfxComputePipeline, GfxQueryPool, GfxReadback, GfxResource, GfxTextureImpl, _T, defaultBindingLayoutSamplerDescriptor, isFormatSamplerKindCompatible } from "./GfxPlatformImpl.js";
-import { align, assert, assertExists, findall, leftPad } from "./GfxPlatformUtil.js";
 import { gfxBindingLayoutDescriptorEqual } from './GfxPlatformObjUtil.js';
+import { align, assert, assertExists, findall, leftPad } from "./GfxPlatformUtil.js";
 
 interface GfxBufferP_WebGPU extends GfxBuffer {
     gpuBuffer: GPUBuffer;
@@ -431,6 +431,8 @@ function translateVertexFormat(format: GfxFormat): GPUVertexFormat {
         return 'sint8x2';
     else if (format === GfxFormat.S8_RGBA)
         return 'sint8x4';
+    else if (format === GfxFormat.S8_RG_NORM)
+        return 'snorm8x2';
     else if (format === GfxFormat.S8_RGB_NORM)
         return 'snorm8x4';
     else if (format === GfxFormat.S8_RGBA_NORM)
@@ -847,63 +849,8 @@ class GfxComputePassP_WebGPU implements GfxComputePass {
     }
 }
 
-function isFormatTextureCompressionBC(format: GfxFormat): boolean {
-    const formatTypeFlags = getFormatTypeFlags(format);
-
-    switch (formatTypeFlags) {
-        case FormatTypeFlags.BC1:
-        case FormatTypeFlags.BC2:
-        case FormatTypeFlags.BC3:
-        case FormatTypeFlags.BC4_SNORM:
-        case FormatTypeFlags.BC4_UNORM:
-        case FormatTypeFlags.BC5_SNORM:
-        case FormatTypeFlags.BC5_UNORM:
-        case FormatTypeFlags.BC7:
-            return true;
-    }
-
-    return false;
-}
-
-function getFormatByteSizePerBlock(format: GfxFormat): number {
-    const formatTypeFlags = getFormatTypeFlags(format);
-
-    switch (formatTypeFlags) {
-        case FormatTypeFlags.BC1:
-        case FormatTypeFlags.BC4_SNORM:
-        case FormatTypeFlags.BC4_UNORM:
-            return 8;
-        case FormatTypeFlags.BC2:
-        case FormatTypeFlags.BC3:
-        case FormatTypeFlags.BC5_SNORM:
-        case FormatTypeFlags.BC5_UNORM:
-        case FormatTypeFlags.BC7:
-            return 16;
-    }
-
-    return getFormatByteSize(format);
-}
-
-function getFormatBlockSize(format: GfxFormat): number {
-    const formatTypeFlags = getFormatTypeFlags(format);
-
-    switch (formatTypeFlags) {
-        case FormatTypeFlags.BC1:
-        case FormatTypeFlags.BC2:
-        case FormatTypeFlags.BC3:
-        case FormatTypeFlags.BC4_SNORM:
-        case FormatTypeFlags.BC4_UNORM:
-        case FormatTypeFlags.BC5_SNORM:
-        case FormatTypeFlags.BC5_UNORM:
-        case FormatTypeFlags.BC7:
-            return 4;
-    }
-
-    return 1;
-}
-
 function translateTexelCopyBufferLayout(size: GPUExtent3DDictStrict, layout: GPUTexelCopyBufferLayout, format: GfxFormat, mipWidth: number, mipHeight: number): void {
-    const blockSize = getFormatBlockSize(format);
+    const blockSize = getFormatBlockSizeInTexels(format);
 
     size.width = align(mipWidth, blockSize);
     size.height = align(mipHeight, blockSize);
@@ -1009,9 +956,13 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
 
     private _renderPassPool: GfxRenderPassP_WebGPU[] = [];
     private _computePassPool: GfxComputePassP_WebGPU[] = [];
-    private _featureTextureCompressionBC: boolean = false;
 
     private _bindGroupLayoutCache = new HashMap<GfxBindingLayoutDescriptor, GPUBindGroupLayout>(gfxBindingLayoutDescriptorEqual, nullHashFunc);
+
+    private _featureTextureCompressionBC = false;
+    private _featureFloat32Filterable = false;
+    private _featureTextureFormatsTier1 = false;
+    private _featureTextureFormatsTier2 = false;
 
     private _frameCommandEncoder: GPUCommandEncoder | null = null;
     private _readbacksSubmitted: GfxReadbackP_WebGPU[] = [];
@@ -1030,6 +981,9 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     public static readonly optionalFeatures: GPUFeatureName[] = [
         'depth32float-stencil8',
         'texture-compression-bc',
+        'float32-filterable',
+        'texture-formats-tier1',
+        'texture-formats-tier2',
     ];
 
     constructor(public adapter: GPUAdapter, public device: GPUDevice, private canvas: HTMLCanvasElement | OffscreenCanvas, private canvasContext: GPUCanvasContext, private glsl_compile: typeof glsl_compile_, configuration: GfxPlatformWebGPUConfig) {
@@ -1058,7 +1012,11 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         });
         this.setResourceName(this._fallbackSamplerFiltering, 'Fallback Sampler Comparison');
 
-        this._featureTextureCompressionBC = this.device.features.has('texture-compression-bc');
+        const features = this.device.features as ReadonlySet<GPUFeatureName>;
+        this._featureTextureCompressionBC = features.has('texture-compression-bc');
+        this._featureFloat32Filterable = features.has('float32-filterable');
+        this._featureTextureFormatsTier1 = features.has('texture-formats-tier1');
+        this._featureTextureFormatsTier2 = features.has('texture-formats-tier2');
 
         this.device.onuncapturederror = (event) => {
             console.error(event.error);
@@ -1882,7 +1840,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             if (!this._featureTextureCompressionBC)
                 return false;
 
-            const bb = getFormatBlockSize(format);
+            const bb = getFormatBlockSizeInTexels(format);
             if ((width % bb) !== 0 || (height % bb) !== 0)
                 return false;
             return this._featureTextureCompressionBC;
@@ -1890,8 +1848,8 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
 
         switch (format) {
         case GfxFormat.U16_RGB_565: return false;
-        case GfxFormat.U16_RGBA_NORM: return false;
-        case GfxFormat.F32_RGBA: return false; // unfilterable
+        case GfxFormat.U16_RGBA_NORM: return this._featureTextureFormatsTier1;
+        case GfxFormat.F32_RGBA: return this._featureFloat32Filterable;
         }
 
         return true;

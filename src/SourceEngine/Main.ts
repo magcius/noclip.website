@@ -1293,7 +1293,10 @@ export class SourceWorldViewRenderer {
                 mat4.mul(this.skyboxView.viewFromWorldMatrix, this.skyboxView.viewFromWorldMatrix, skyCamera.modelMatrix);
                 this.skyboxView.finishSetup();
 
-                skyCamera.fillFogParams(this.skyboxView.fogParams);
+                if (renderer.renderContext.enableFog)
+                    skyCamera.fillFogParams(this.skyboxView.fogParams);
+                else
+                    this.skyboxView.fogParams.maxdensity = 0.0;
 
                 // If our skybox is not in a useful spot, then don't render it.
                 if (!this.skyboxView.calcPVS(bspRenderer.bsp, false, parentViewRenderer !== null ? parentViewRenderer.skyboxView : null))
@@ -1504,8 +1507,8 @@ const bindingLayoutsPost: GfxBindingLayoutDescriptor[] = [
 
 class FullscreenPostProgram extends DeviceProgram {
     public override both = `
-precision mediump float;
-precision lowp sampler3D;
+precision highp float;
+precision highp sampler3D;
 
 uniform sampler2D u_FramebufferColor;
 uniform sampler3D u_ColorCorrectTexture;

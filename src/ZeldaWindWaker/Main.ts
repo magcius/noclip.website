@@ -273,7 +273,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
     public onstatechanged!: () => void;
 
     constructor(public device: GfxDevice, public globals: dGlobals) {
-        this.renderHelper = new GXRenderHelperGfx(device);
+        this.renderHelper = new GXRenderHelperGfx(device, globals.sceneContext);
 
         this.renderCache = this.renderHelper.renderInstManager.gfxRenderCache;
 
@@ -337,8 +337,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         };
         renderHacksPanel.contents.appendChild(enableObjects.elem);
 
-        const showDebugThumbnails = new UI.Checkbox('Show Debug Thumbnails', true);
-        this.renderHelper.debugThumbnails.enabled = true;
+        const showDebugThumbnails = new UI.Checkbox('Show Debug Thumbnails', false);
         showDebugThumbnails.onchanged = () => {
             const v = showDebugThumbnails.checked;
             this.renderHelper.debugThumbnails.enabled = v;
@@ -488,13 +487,15 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         globals.renderHacks.renderHacksChanged = false;
     }
 
-    private executeList(passRenderer: GfxRenderPass, list: GfxRenderInstList): void {
+    private executeList(passRenderer: GfxRenderPass, list: GfxRenderInstList, label: string): void {
+        passRenderer.pushDebugGroup(label);
         list.drawOnPassRenderer(this.renderCache, passRenderer);
+        passRenderer.popDebugGroup();
     }
 
-    private executeListSet(passRenderer: GfxRenderPass, listSet: dDlst_list_Set): void {
-        this.executeList(passRenderer, listSet[0]);
-        this.executeList(passRenderer, listSet[1]);
+    private executeListSet(passRenderer: GfxRenderPass, listSet: dDlst_list_Set, label: string): void {
+        this.executeList(passRenderer, listSet[0], `${label} (Opa)`);
+        this.executeList(passRenderer, listSet[1], `${label} (Xlu)`);
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
@@ -528,7 +529,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, skyboxDepthTargetID);
             pass.exec((passRenderer) => {
                 this.globals.camera.applyScissor(passRenderer);
-                this.executeListSet(passRenderer, dlst.sky);
+                this.executeListSet(passRenderer, dlst.sky, 'Sky');
             });
         });
 
@@ -540,8 +541,8 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
                 this.globals.camera.applyScissor(passRenderer);
-                this.executeList(passRenderer, dlst.sea);
-                this.executeList(passRenderer, dlst.bg[0]);
+                this.executeList(passRenderer, dlst.sea, 'Sea');
+                this.executeList(passRenderer, dlst.bg[0], 'BG (Opa)');
             });
         });
 
@@ -555,20 +556,20 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
             pass.exec((passRenderer) => {
                 this.globals.camera.applyScissor(passRenderer);
 
-                this.executeList(passRenderer, dlst.alphaModel);
+                this.executeList(passRenderer, dlst.alphaModel, 'AlphaModel');
 
-                this.executeList(passRenderer, dlst.main[0]);
+                this.executeList(passRenderer, dlst.main[0], 'Main (Opa)');
                 
-                this.executeList(passRenderer, dlst.bg[1]);
-                this.executeList(passRenderer, dlst.main[1]);
+                this.executeList(passRenderer, dlst.bg[1], 'BG (Xlu)');
+                this.executeList(passRenderer, dlst.main[1], 'Main (Xlu)');
                 
-                this.executeList(passRenderer, dlst.effect[EffectDrawGroup.Main]);
-                this.executeList(passRenderer, dlst.wetherEffect);
+                this.executeList(passRenderer, dlst.effect[EffectDrawGroup.Main], 'Effect (Main)');
+                this.executeList(passRenderer, dlst.wetherEffect, 'Effect (Wether)');
 
-                this.executeList(passRenderer, dlst.particle2DBack);
-                this.executeListSet(passRenderer, dlst.ui);
-                this.executeListSet(passRenderer, dlst.ui2D);
-                this.executeList(passRenderer, dlst.particle2DFore);
+                this.executeList(passRenderer, dlst.particle2DBack, 'Particle 2D Back');
+                this.executeListSet(passRenderer, dlst.ui, 'UI');
+                this.executeListSet(passRenderer, dlst.ui2D, 'UI 2D');
+                this.executeList(passRenderer, dlst.particle2DFore, 'Particle 2D Fore');
             });
         });
 
@@ -586,7 +587,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
             pass.exec((passRenderer, scope) => {
                 this.opaqueSceneTextureMapping.gfxTexture = scope.getResolveTextureForID(opaqueSceneTextureID);
                 dlst.effect[EffectDrawGroup.Indirect].resolveLateSamplerBinding('OpaqueSceneTexture', this.opaqueSceneTextureMapping);
-                this.executeList(passRenderer, dlst.effect[EffectDrawGroup.Indirect]);
+                this.executeList(passRenderer, dlst.effect[EffectDrawGroup.Indirect], 'Effect (Indirect)');
             });
         });
 
