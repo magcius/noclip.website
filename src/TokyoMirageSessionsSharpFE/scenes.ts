@@ -1,8 +1,7 @@
 // scene.ts
 // Handles all the levels in Tokyo Mirage Sessions ♯FE
 
-import { get_files_of_type, parseAPAK } from "./apak.js";
-import { FRES, parseBFRES } from "./bfres/bfres_switch.js";
+import { parseAPAK } from "./apak.js";
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { TMSFEScene } from "./render.js"
 import { SceneContext, SceneDesc } from "../SceneBase.js";
@@ -22,9 +21,8 @@ class TMSFESceneDesc implements SceneDesc
         const dataFetcher = context.dataFetcher;
         const apak = parseAPAK(await dataFetcher.fetchData(`TokyoMirageSessionsSharpFE/maps/${this.id}/model.apak`));
         // const apak = parseAPAK(await dataFetcher.fetchData(`TokyoMirageSessionsSharpFE/maps/d002_01/model.apak`));
-        console.log(apak);
 
-        let renderer = new TMSFEScene(device, apak);
+        let renderer = new TMSFEScene(device, this.id, apak);
         return renderer;
     }
 }
@@ -42,7 +40,6 @@ const sceneDescs =
     new TMSFESceneDesc("d002_01", "Illusory Daitama"),
     new TMSFESceneDesc("d002_02", "Blue Observatory"),
     new TMSFESceneDesc("d002_03", "Red Observatory"),
-    /*
     "Illusory 106",
     new TMSFESceneDesc("d003_01", "1F to 3F"),
     new TMSFESceneDesc("d003_04", "4F"),
@@ -103,7 +100,6 @@ const sceneDescs =
     "Training Area",
     new TMSFESceneDesc("d015_01", "Training Area"),
     new TMSFESceneDesc("d015_02", "Fighter's Hall"),
-    */
     "Battle Maps",
     // new TMSFESceneDesc("b000_00", "b000_00"), wii u file
     // new TMSFESceneDesc("b001_01", "b001_01"), wii u file
@@ -122,8 +118,7 @@ const sceneDescs =
     new TMSFESceneDesc("b014_01", "b014_01"),
     new TMSFESceneDesc("b015_01", "b015_01"),
     new TMSFESceneDesc("b016_01", "b016_01"),
-
-    // "Tokyo",
+    "Tokyo",
     new TMSFESceneDesc("f003_02", "Fortuna Office"),
     new TMSFESceneDesc("f003_03", "Bloom Palace"),
     new TMSFESceneDesc("f001_01", "Shibuya 1"),
@@ -155,7 +150,7 @@ const sceneDescs =
     new TMSFESceneDesc("f007_01", "Harajuku"),
     new TMSFESceneDesc("f007_02", "????"),
     new TMSFESceneDesc("f010_03", "Masqueraider Raiga"),
-    new TMSFESceneDesc("f010_04", "Hot Spring"),
+    // new TMSFESceneDesc("f010_04", "Hot Spring"), wii u file
     new TMSFESceneDesc("f010_05", "Microwavin' with Mamorin Set"),
     new TMSFESceneDesc("f010_06", "Dressing Room"),
     new TMSFESceneDesc("f010_07", "Fashion Show Runway"),

@@ -74,7 +74,7 @@ export function recursive_bone_transform(bone: FSKL_Bone, fskl: FSKL): mat4
     else
     {
         const new_matrix: mat4 = mat4.create();
-        mat4.multiply(new_matrix, transform_matrix, recursive_bone_transform(fskl.bones[bone.parent_index], fskl))
+        mat4.multiply(new_matrix, recursive_bone_transform(fskl.bones[bone.parent_index], fskl), transform_matrix)
         return new_matrix;
     }
 }

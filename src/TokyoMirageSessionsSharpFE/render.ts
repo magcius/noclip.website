@@ -12,6 +12,7 @@ import { GfxDevice, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, Gfx
          GfxVertexBufferFrequency, GfxInputLayout, GfxBufferFrequencyHint, GfxBufferUsage, GfxBindingLayoutDescriptor,
          GfxCullMode, GfxBuffer, GfxSamplerBinding, GfxTexture} from "../gfx/platform/GfxPlatform.js";
 import { mat4 } from "gl-matrix";
+import { get_level_bfres_names } from "./levels.js";
 import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { TMSFEProgram } from './shader.js';
 import { fillMatrix4x3, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers.js';
@@ -23,21 +24,35 @@ export class TMSFEScene implements SceneGfx
     private renderInstListMain = new GfxRenderInstList();
     private fshp_renderers: fshp_renderer[] = [];
 
-    constructor(device: GfxDevice, apak: APAK)
+    constructor(device: GfxDevice, level_id: string, apak: APAK)
     {
         // get bfres files
         const fres_files: FRES[] = [];
-        const bfres_buffers = get_files_of_type(apak, "bfres");
-        for (let i = 0; i < bfres_buffers.length; i++)
+        const level_file_names = get_level_bfres_names(level_id);
+        for (let i = 0; i < level_file_names.length; i++)
         {
-            fres_files.push(parseBFRES(bfres_buffers[i]));
+            const file_name = `${level_file_names[i]}.bfres`
+            const file = apak.files.find((f) => f.name === file_name);
+            if (file !== undefined)
+            {
+                fres_files.push(parseBFRES(file.data));
+            }
+            else
+            {
+                console.error(`file ${file_name} not found (level_id ${level_id})`);
+                throw("whoops");
+            }
         }
+        // const bfres_buffers = get_files_of_type(apak, "bfres");
+        // for (let i = 0; i < bfres_buffers.length; i++)
+        // {
+        //     fres_files.push(parseBFRES(bfres_buffers[i]));
+        // }
 
         for(let i = 0; i < fres_files.length; i++)
         {
             const fres = fres_files[i];
             this.renderHelper = new GfxRenderHelper(device);
-            console.log(fres.fmdl[0]);
 
             //initialize textures
             const bntx = BNTX.parse(fres.embedded_files[0].buffer);
@@ -164,7 +179,7 @@ class fshp_renderer
         // setup transformation matrix
         const bone = fmdl.fskl.bones[fshp.bone_index];
         this.transform_matrix = recursive_bone_transform(fmdl.fskl.bones[fshp.bone_index], fmdl.fskl);
-
+        
         // setup sampler
         const fmat = fmdl.fmat[fshp.fmat_index];
         // for (let i = 0; i < fmat.texture_names.length; i++)
@@ -172,7 +187,6 @@ class fshp_renderer
         for (let i = 0; i < 1; i++)
         {
             const texture_name = fmat.texture_names[i];
-            console.log(texture_name);
             const texture = bntx.textures.find((f) => f.name === texture_name);
             if (texture !== undefined)
             {
@@ -184,8 +198,8 @@ class fshp_renderer
             }
             else
             {
-                console.warn(`texture ${texture_name} not found`);
-                throw("texture not found");
+                console.error(`texture ${texture_name} not found (fmdl ${fmdl.name}`);
+                throw("whoops");
             }
         }
 
