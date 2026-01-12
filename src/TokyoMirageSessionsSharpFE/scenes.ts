@@ -54,7 +54,7 @@ const sceneDescs =
     new TMSFESceneDesc("d004_03", "Block 3"),
     new TMSFESceneDesc("d004_04", "Circular Square"),
     new TMSFESceneDesc("d004_05", "Central Square"),
-    new TMSFESceneDesc("d004_06", "Central Square 2"),
+    // new TMSFESceneDesc("d004_06", "Central Square 2"), wii u file
     "Illusory Daitou TV",
     new TMSFESceneDesc("d005_01", "Film Set A: Outdoors"),
     new TMSFESceneDesc("d005_03", "Film Set A: Indoors"),

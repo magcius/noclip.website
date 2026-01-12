@@ -134,6 +134,7 @@ class fshp_renderer
     private transform_matrix: mat4 = mat4.create();
     private program: TMSFEProgram;
     private sampler_bindings: GfxSamplerBinding[] = [];
+    private do_not_render: boolean = false;
 
     constructor(device: GfxDevice, renderHelper: GfxRenderHelper, fmdl: FMDL, shape_index: number, bntx: BNTX.BNTX, gfx_texture_array: GfxTexture[])
     {
@@ -193,6 +194,13 @@ class fshp_renderer
         for (let i = 0; i < 1; i++)
         {
             const texture_name = fmat.texture_names[i];
+            if (texture_name == undefined)
+            {
+                // TODO: not sure what to do if there's no texture
+                console.log(`fmat ${fmat.name} has an undefined texture`);
+                this.do_not_render = true;
+                continue;
+            }
             const texture = bntx.textures.find((f) => f.name === texture_name);
             if (texture !== undefined)
             {
@@ -204,7 +212,7 @@ class fshp_renderer
             }
             else
             {
-                console.error(`texture ${texture_name} not found (fmdl ${fmdl.name}`);
+                console.error(`texture ${texture_name} not found (fmdl ${fmdl.name} fshp ${fshp.name})`);
                 throw("whoops");
             }
         }
@@ -216,6 +224,10 @@ class fshp_renderer
     // produce a draw call for this mesh
     render(renderHelper: GfxRenderHelper, viewerInput: ViewerRenderInput, renderInstListMain: GfxRenderInstList): void
     {
+        if (this.do_not_render)
+        {
+            return;
+        }
         // the template is necessary to use uniform buffers
         renderHelper.pushTemplateRenderInst();
 
