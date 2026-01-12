@@ -1,4 +1,4 @@
-import { mat4, vec4 } from "gl-matrix";
+import { mat4, type ReadonlyMat4, vec3, vec4 } from "gl-matrix";
 import {
   type CameraController,
   computeViewSpaceDepthFromWorldSpaceAABB,
@@ -13,14 +13,11 @@ import {
 import { reverseDepthForCompareMode } from "../gfx/helpers/ReversedDepthHelpers.js";
 import {
   fillMatrix4x4,
-  fillVec4,
   fillVec4v,
 } from "../gfx/helpers/UniformBufferHelpers.js";
 import {
-  type GfxBindingLayoutDescriptor,
   GfxBlendFactor,
   GfxBlendMode,
-  GfxChannelWriteMask,
   GfxCompareMode,
   GfxCullMode,
   type GfxDevice,
@@ -41,47 +38,66 @@ import {
   GfxRendererLayer,
   type GfxRenderInst,
   GfxRenderInstList,
+  gfxRenderInstCompareNone,
   makeSortKey,
-  setSortKeyDepth,
 } from "../gfx/render/GfxRenderInstManager.js";
+import { BinCollector, CullableObject } from "./cullBin.js";
+import { HashMap, nullHashFunc } from "../HashMap.js";
 import { CalcBillboardFlags, calcBillboardMatrix } from "../MathHelpers.js";
 import { TextureMapping } from "../TextureHolder.js";
 import type * as Viewer from "../viewer.js";
+import { enumName } from "./common.js";
 import {
-  collectGeometry,
-  createGeometryData,
-  type DecalGroup,
-  type ToontownGeometryData,
+  type CachedGeometryData,
+  composeDrawMask,
+  createGeomData,
+  extractMaterial,
+  isNodeVisible,
+  type MaterialData,
 } from "./geom.js";
 import {
+  BoundsType,
   ColorType,
+  ColorWriteAttrib,
+  ColorWriteChannels,
+  CompassEffect,
   CompressionMode,
   CullFaceMode,
+  DecalEffect,
+  DepthWriteAttrib,
+  DepthWriteMode,
   FilterType,
+  type Geom,
   GeomNode,
+  MAX_PRIORITY,
+  PandaCompareFunc,
   type PandaNode,
+  type RenderState,
   type Texture,
   TextureAttrib,
   TransparencyMode,
   WrapMode,
 } from "./nodes";
-import { ToontownProgram } from "./program.js";
+import {
+  createProgramProps,
+  programPropsEqual,
+  ToontownProgram,
+  type ToontownProgramProps,
+} from "./program.js";
 import type { ToontownResourceLoader } from "./resources.js";
 import { expandToRGBA } from "./textures.js";
+import { GeomEntry } from "./nodes/GeomNode.js";
 
 export const pathBase = "Toontown";
 
 // Scratch AABB for frustum culling
 const scratchAABB = new AABB();
-
-// Binding layout: 2 uniform buffers (scene params, draw params), 1 sampler
-const bindingLayouts: GfxBindingLayoutDescriptor[] = [
-  { numUniformBuffers: 2, numSamplers: 1 },
-];
+// Scratch vec3 for sphere center transform
+const scratchSphereCenter = vec3.create();
 
 // Panda3D: +X right, +Y forward, +Z up
 // noclip:  +X right, +Y up, -Z forward
-const pandaToNoclip = mat4.fromValues(
+export const pandaToNoclip = mat4.fromValues(
   1,
   0,
   0,
@@ -99,34 +115,6 @@ const pandaToNoclip = mat4.fromValues(
   0,
   1,
 );
-
-/**
- * Processed decal group with GPU-ready geometry
- */
-interface ProcessedDecalGroup {
-  group: DecalGroup;
-  baseGeometryData: ToontownGeometryData[];
-  decalGeometryData: ToontownGeometryData[];
-}
-
-/**
- * Identifies which pass of three-pass decal rendering
- */
-enum DecalPass {
-  None = 0,
-  BaseFirst = 1, // Pass 1: Base geometry, depthWrite=OFF
-  Decals = 2, // Pass 2: Decal geometry, depthWrite=OFF
-  BaseSecond = 3, // Pass 3: Base geometry, colorWrite=OFF (depth fill)
-}
-
-// Decal layer constants between OPAQUE (0x20) and TRANSLUCENT (0x80)
-const DECAL_LAYER_BASE_FIRST = 0x30;
-const DECAL_LAYER_DECALS = 0x31;
-const DECAL_LAYER_BASE_SECOND = 0x32;
-
-// Alpha test thresholds for M_dual and M_binary transparency modes
-const ALPHA_DUAL_THRESHOLD = 252 / 256; // Accounts for DXT compression
-const ALPHA_BINARY_THRESHOLD = 0.5;
 
 /**
  * Convert Panda3D wrap mode to GfxWrapMode
@@ -189,42 +177,59 @@ function translateFilterType(filterType: FilterType): {
   }
 }
 
+/**
+ * Convert PandaCompareFunc to GfxCompareMode
+ */
+function translateDepthTestMode(func: PandaCompareFunc): GfxCompareMode {
+  switch (func) {
+    case PandaCompareFunc.None:
+    case PandaCompareFunc.Always:
+      return GfxCompareMode.Always;
+    case PandaCompareFunc.Never:
+      return GfxCompareMode.Never;
+    case PandaCompareFunc.Less:
+      return GfxCompareMode.Less;
+    case PandaCompareFunc.LessEqual:
+      return GfxCompareMode.LessEqual;
+    case PandaCompareFunc.Greater:
+      return GfxCompareMode.Greater;
+    case PandaCompareFunc.GreaterEqual:
+      return GfxCompareMode.GreaterEqual;
+    case PandaCompareFunc.Equal:
+      return GfxCompareMode.Equal;
+    case PandaCompareFunc.NotEqual:
+      return GfxCompareMode.NotEqual;
+  }
+}
+
+/**
+ * Result from setupGeometryRenderInst - includes both render insts and bin metadata
+ */
+interface GeometryRenderResult {
+  renderInsts: GfxRenderInst[];
+  cullBinName: string | null;
+  depth: number;
+  drawOrder: number;
+}
+
 export class ToontownRenderer implements Viewer.SceneGfx {
+  private scene: PandaNode;
   private renderHelper: GfxRenderHelper;
-  private renderInstListMain = new GfxRenderInstList();
-  private geometryData: ToontownGeometryData[] = [];
-  private decalGroups: ProcessedDecalGroup[] = [];
-  private gfxProgram: GfxProgram;
+  // Use insertion order - bin collector handles sorting
+  private renderInstListMain = new GfxRenderInstList(gfxRenderInstCompareNone);
+  private geomCache: Map<Geom, CachedGeometryData> = new Map();
+  private programCache: HashMap<ToontownProgramProps, GfxProgram> = new HashMap(
+    programPropsEqual,
+    nullHashFunc,
+  );
   private textureCache: Map<
     string,
     { texture: GfxTexture; sampler: GfxSampler }
   > = new Map();
-  private whiteTexture: GfxTexture;
-  private defaultSampler: GfxSampler;
 
-  private constructor(device: GfxDevice) {
+  private constructor(device: GfxDevice, scene: PandaNode) {
+    this.scene = scene;
     this.renderHelper = new GfxRenderHelper(device);
-    const cache = this.renderHelper.renderCache;
-
-    // Create shader program
-    const program = new ToontownProgram();
-    this.gfxProgram = cache.createProgram(program);
-
-    // Create white texture for when no texture is bound
-    this.whiteTexture = device.createTexture(
-      makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, 1, 1, 1),
-    );
-    const whiteData = new Uint8Array([255, 255, 255, 255]);
-    device.uploadTextureData(this.whiteTexture, 0, [whiteData]);
-
-    // Create default sampler
-    this.defaultSampler = cache.createSampler({
-      wrapS: GfxWrapMode.Repeat,
-      wrapT: GfxWrapMode.Repeat,
-      minFilter: GfxTexFilterMode.Bilinear,
-      magFilter: GfxTexFilterMode.Bilinear,
-      mipFilter: GfxMipFilterMode.Linear,
-    });
   }
 
   public adjustCameraController(c: CameraController) {
@@ -240,76 +245,18 @@ export class ToontownRenderer implements Viewer.SceneGfx {
     loader: ToontownResourceLoader,
     dataFetcher: DataFetcher,
   ): Promise<ToontownRenderer> {
-    const renderer = new ToontownRenderer(device);
-    const cache = renderer.renderHelper.renderCache;
-
+    const renderer = new ToontownRenderer(device, scene);
     // Load all textures used in the scene
-    await renderer.buildTextureCache(device, cache, scene, loader, dataFetcher);
-
-    // Collect geometry from the scene graph
-    const { regularGeometry, decalGroups } = collectGeometry(scene);
-
-    // Process regular geometry
-    for (const c of regularGeometry) {
-      const data = createGeometryData(device, cache, c, renderer.textureCache);
-      if (data) {
-        renderer.geometryData.push(data);
-      }
-    }
-
-    // Process decal groups
-    for (const group of decalGroups) {
-      const baseGeometryData: ToontownGeometryData[] = [];
-      const decalGeometryData: ToontownGeometryData[] = [];
-
-      for (const c of group.baseGeometries) {
-        const data = createGeometryData(
-          device,
-          cache,
-          c,
-          renderer.textureCache,
-        );
-        if (data) {
-          baseGeometryData.push(data);
-        }
-      }
-
-      for (const c of group.decalGeometries) {
-        const data = createGeometryData(
-          device,
-          cache,
-          c,
-          renderer.textureCache,
-        );
-        if (data) {
-          decalGeometryData.push(data);
-        }
-      }
-
-      if (baseGeometryData.length > 0) {
-        renderer.decalGroups.push({
-          group,
-          baseGeometryData,
-          decalGeometryData,
-        });
-      }
-    }
-
-    console.log(
-      `Created ${renderer.geometryData.length} GPU geometry objects, ${renderer.decalGroups.length} decal groups`,
-    );
+    await renderer.ensureTexturesLoaded(loader, dataFetcher);
     return renderer;
   }
 
-  private async buildTextureCache(
-    device: GfxDevice,
-    cache: GfxRenderCache,
-    scene: PandaNode,
+  private async ensureTexturesLoaded(
     loader: ToontownResourceLoader,
     dataFetcher: DataFetcher,
   ): Promise<void> {
     const allTextures = new Map<string, Texture>();
-    scene.traverse((node) => {
+    this.scene.traverse((node) => {
       if (!(node instanceof GeomNode)) return;
       for (const { state } of node.geoms) {
         if (!state) continue;
@@ -329,7 +276,7 @@ export class ToontownRenderer implements Viewer.SceneGfx {
 
     await Promise.all(
       Array.from(allTextures.values(), (texture) =>
-        this.buildTexture(device, cache, texture, loader, dataFetcher),
+        this.buildTexture(texture, loader, dataFetcher),
       ),
     );
     console.debug(
@@ -338,8 +285,6 @@ export class ToontownRenderer implements Viewer.SceneGfx {
   }
 
   private async buildTexture(
-    device: GfxDevice,
-    cache: GfxRenderCache,
     texture: Texture,
     loader: ToontownResourceLoader,
     dataFetcher: DataFetcher,
@@ -369,25 +314,20 @@ export class ToontownRenderer implements Viewer.SceneGfx {
       );
 
       // Create GPU texture
+      const device = this.renderHelper.device;
       const gfxTexture = device.createTexture(
         makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, width, height, 1),
       );
       device.uploadTextureData(gfxTexture, 0, [rgbaData]);
       device.setResourceName(gfxTexture, texture.name);
 
-      const gfxSampler = this.createSamplerForTexture(cache, texture);
+      const gfxSampler = this.createSamplerForTexture(texture);
       this.textureCache.set(texture.name, {
         texture: gfxTexture,
         sampler: gfxSampler,
       });
     } else if (texture.filename) {
-      await this.loadExternalTexture(
-        device,
-        cache,
-        texture,
-        loader,
-        dataFetcher,
-      );
+      await this.loadExternalTexture(texture, loader, dataFetcher);
     } else {
       throw new Error(
         `Failed to load texture ${texture.name}: no raw data or filename`,
@@ -396,8 +336,6 @@ export class ToontownRenderer implements Viewer.SceneGfx {
   }
 
   private async loadExternalTexture(
-    device: GfxDevice,
-    cache: GfxRenderCache,
     texture: Texture,
     loader: ToontownResourceLoader,
     dataFetcher: DataFetcher,
@@ -410,6 +348,7 @@ export class ToontownRenderer implements Viewer.SceneGfx {
       );
 
       // Create GPU texture
+      const device = this.renderHelper.device;
       const gfxTexture = device.createTexture(
         makeTextureDescriptor2D(
           GfxFormat.U8_RGBA_NORM,
@@ -421,7 +360,7 @@ export class ToontownRenderer implements Viewer.SceneGfx {
       device.uploadTextureData(gfxTexture, 0, [decoded.data]);
       device.setResourceName(gfxTexture, texture.name);
 
-      const gfxSampler = this.createSamplerForTexture(cache, texture);
+      const gfxSampler = this.createSamplerForTexture(texture);
       this.textureCache.set(texture.name, {
         texture: gfxTexture,
         sampler: gfxSampler,
@@ -434,14 +373,11 @@ export class ToontownRenderer implements Viewer.SceneGfx {
     }
   }
 
-  private createSamplerForTexture(
-    cache: GfxRenderCache,
-    texture: Texture,
-  ): GfxSampler {
+  private createSamplerForTexture(texture: Texture): GfxSampler {
     const sampler = texture.defaultSampler;
     const minF = translateFilterType(sampler.minFilter);
     const magF = translateFilterType(sampler.magFilter);
-    return cache.createSampler({
+    return this.renderHelper.renderCache.createSampler({
       wrapS: translateWrapMode(sampler.wrapU),
       wrapT: translateWrapMode(sampler.wrapV),
       wrapQ: translateWrapMode(sampler.wrapW),
@@ -455,45 +391,22 @@ export class ToontownRenderer implements Viewer.SceneGfx {
   }
 
   /**
-   * Create a sort key for decal rendering passes.
-   * Encodes layer and group ID to ensure proper ordering.
-   */
-  private makeDecalSortKey(layer: number, groupId: number): number {
-    // Layer in high byte, groupId in middle bytes
-    return ((layer & 0xff) << 24) | ((groupId & 0xffff) << 8);
-  }
-
-  /**
    * Set up common render instance properties for geometry.
-   * Returns the configured renderInst and metadata for further customization.
-   * @param alphaThreshold - Alpha test threshold (0 = disabled, >0 = discard pixels with alpha < threshold)
    */
   private setupGeometryRenderInst(
-    geomData: ToontownGeometryData,
-    viewMatrix: mat4,
-    alphaThreshold: number = 0,
-  ): {
-    renderInst: GfxRenderInst;
-    hasTexture: boolean;
-    isTransparent: boolean;
-    cullMode: GfxCullMode;
-    frontFace: GfxFrontFaceMode;
-  } {
+    geomNode: GeomNode,
+    geomData: CachedGeometryData,
+    renderState: RenderState,
+    netTransform: ReadonlyMat4,
+    viewMatrix: ReadonlyMat4,
+  ): GfxRenderInst {
     const renderInstManager = this.renderHelper.renderInstManager;
     const renderInst = renderInstManager.newRenderInst();
-    const { material } = geomData;
-    const isTransparent = material.transparencyMode !== TransparencyMode.None;
 
-    // Set vertex input
-    renderInst.setVertexInput(
-      geomData.inputLayout,
-      [{ buffer: geomData.vertexBuffer, byteOffset: 0 }],
-      geomData.indexBuffer
-        ? { buffer: geomData.indexBuffer, byteOffset: 0 }
-        : null,
-    );
-
-    // Determine culling
+    // Setup material properties
+    const material = extractMaterial(geomNode, renderState);
+    const depthWrite = material.depthWrite === DepthWriteMode.On;
+    const depthCompare = translateDepthTestMode(material.depthTestMode);
     let frontFace = GfxFrontFaceMode.CW;
     let cullMode = material.cullReverse ? GfxCullMode.Back : GfxCullMode.Front;
     switch (material.cullFaceMode) {
@@ -506,35 +419,53 @@ export class ToontownRenderer implements Viewer.SceneGfx {
         cullMode = GfxCullMode.None;
         break;
     }
+    renderInst.setMegaStateFlags({
+      depthWrite,
+      depthCompare: reverseDepthForCompareMode(depthCompare),
+      cullMode,
+      frontFace,
+    });
+    if (material.colorWriteChannels !== ColorWriteChannels.All) {
+      setAttachmentStateSimple(renderInst.getMegaStateFlags(), {
+        // This flagset happens to be the same
+        channelWriteMask: material.colorWriteChannels,
+      });
+    }
+    if (
+      material.transparencyMode === TransparencyMode.Alpha ||
+      material.transparencyMode === TransparencyMode.Dual
+    ) {
+      setAttachmentStateSimple(renderInst.getMegaStateFlags(), {
+        blendMode: GfxBlendMode.Add,
+        blendSrcFactor: GfxBlendFactor.SrcAlpha,
+        blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
+      });
+    }
+
+    // Set vertex input
+    renderInst.setVertexInput(
+      geomData.inputLayout,
+      [{ buffer: geomData.vertexBuffer, byteOffset: 0 }],
+      geomData.indexBuffer
+        ? { buffer: geomData.indexBuffer, byteOffset: 0 }
+        : null,
+    );
 
     // Set texture bindings
-    const hasTexture = geomData.textureMapping.gfxTexture !== null;
     const textureMapping = new TextureMapping();
-    if (hasTexture) {
-      textureMapping.gfxTexture = geomData.textureMapping.gfxTexture;
-      textureMapping.gfxSampler = geomData.textureMapping.gfxSampler;
+    if (material.texture !== null) {
+      const cached = this.textureCache.get(material.texture.name);
+      if (!cached)
+        throw new Error(`Texture ${material.texture.name} not found`);
+      textureMapping.gfxTexture = cached.texture;
+      textureMapping.gfxSampler = cached.sampler;
+      renderInst.setBindingLayouts([{ numUniformBuffers: 2, numSamplers: 1 }]);
+      renderInst.setSamplerBindingsFromTextureMappings([textureMapping]);
     } else {
-      textureMapping.gfxTexture = this.whiteTexture;
-      textureMapping.gfxSampler = this.defaultSampler;
-    }
-    renderInst.setSamplerBindingsFromTextureMappings([textureMapping]);
-
-    // Determine color based on ColorAttrib
-    let color = vec4.fromValues(1, 1, 1, 1);
-    let useVertexColors = geomData.hasColors;
-    switch (material.colorType) {
-      case ColorType.Flat:
-        color = material.flatColor;
-        useVertexColors = false;
-        break;
-      case ColorType.Off:
-        useVertexColors = false;
-        break;
-      default:
-        break;
+      renderInst.setBindingLayouts([{ numUniformBuffers: 2, numSamplers: 0 }]);
     }
 
-    const modelMatrix = mat4.clone(geomData.modelMatrix);
+    const modelMatrix = mat4.clone(netTransform);
 
     // Apply billboard effect if present
     if (material.billboardEffect && !material.billboardEffect.off) {
@@ -559,103 +490,36 @@ export class ToontownRenderer implements Viewer.SceneGfx {
       mat4.mul(modelMatrix, viewMatrixInv, modelMatrix);
     }
 
-    // Allocate draw params UBO
-    let offs = renderInst.allocateUniformBuffer(
-      ToontownProgram.ub_DrawParams,
-      16 + 4 + 4,
-    );
-    const drawParams = renderInst.mapUniformBufferF32(
-      ToontownProgram.ub_DrawParams,
-    );
-    offs += fillMatrix4x4(drawParams, offs, modelMatrix);
-    offs += fillVec4v(drawParams, offs, color);
-    offs += fillVec4(
-      drawParams,
-      offs,
-      hasTexture ? 1 : 0,
-      useVertexColors ? 1 : 0,
-      geomData.hasNormals ? 1 : 0,
-      alphaThreshold,
-    );
-
     renderInst.setDrawCount(geomData.indexCount);
 
-    return { renderInst, hasTexture, isTransparent, cullMode, frontFace };
+    this.setupProgram(renderInst, geomData, material);
+    setupDrawUniform(renderInst, material, modelMatrix);
+    return renderInst;
   }
 
-  /**
-   * Submit a render instance for decal geometry with the appropriate pass state.
-   */
-  private submitDecalRenderInst(
-    geomData: ToontownGeometryData,
-    viewMatrix: mat4,
-    pass: DecalPass,
-    groupId: number,
-  ): void {
-    const { renderInst, isTransparent, cullMode, frontFace } =
-      this.setupGeometryRenderInst(geomData, viewMatrix);
-
-    // Configure state based on pass
-    switch (pass) {
-      case DecalPass.BaseFirst:
-      case DecalPass.Decals:
-        // Pass 1 & 2: depthWrite=OFF, colorWrite=ON
-        renderInst.setMegaStateFlags({
-          cullMode,
-          frontFace,
-          depthWrite: false,
-          depthCompare: reverseDepthForCompareMode(GfxCompareMode.Less),
-        });
-        if (isTransparent) {
-          setAttachmentStateSimple(renderInst.getMegaStateFlags(), {
-            blendMode: GfxBlendMode.Add,
-            blendSrcFactor: GfxBlendFactor.SrcAlpha,
-            blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
-          });
-        }
-        break;
-
-      case DecalPass.BaseSecond:
-        // Pass 3: depthWrite=ON, colorWrite=OFF (depth fill only)
-        renderInst.setMegaStateFlags({
-          cullMode,
-          frontFace,
-          depthWrite: true,
-          depthCompare: reverseDepthForCompareMode(GfxCompareMode.Less),
-        });
-        setAttachmentStateSimple(renderInst.getMegaStateFlags(), {
-          channelWriteMask: GfxChannelWriteMask.None,
-        });
-        break;
+  private setupProgram(
+    renderInst: GfxRenderInst,
+    geomData: CachedGeometryData,
+    material: MaterialData,
+  ) {
+    const programProps = createProgramProps(geomData, material);
+    let program = this.programCache.get(programProps);
+    if (program === null) {
+      const programDesc = new ToontownProgram(programProps);
+      program = this.renderHelper.renderCache.createProgram(programDesc);
+      this.programCache.add(programProps, program);
     }
-
-    let layer = DECAL_LAYER_BASE_FIRST;
-    switch (pass) {
-      case DecalPass.Decals:
-        layer = DECAL_LAYER_DECALS;
-        break;
-      case DecalPass.BaseSecond:
-        layer = DECAL_LAYER_BASE_SECOND;
-        break;
-      default:
-        break;
-    }
-    renderInst.sortKey = this.makeDecalSortKey(layer, groupId);
-    this.renderInstListMain.submitRenderInst(renderInst);
+    renderInst.setGfxProgram(program);
+    return program;
   }
 
-  private prepareToRender(
-    _device: GfxDevice,
-    viewerInput: Viewer.ViewerRenderInput,
-  ): void {
+  private prepareToRender(viewerInput: Viewer.ViewerRenderInput): void {
     const renderInstManager = this.renderHelper.renderInstManager;
     const template = this.renderHelper.pushTemplateRenderInst();
-    template.setBindingLayouts(bindingLayouts);
-    template.setGfxProgram(this.gfxProgram);
-    template.setMegaStateFlags({
-      depthCompare: reverseDepthForCompareMode(GfxCompareMode.Less),
-      // wireframe: true,
-    });
+    template.setBindingLayouts([{ numUniformBuffers: 2, numSamplers: 0 }]);
+    // template.setMegaStateFlags({
+    //   wireframe: true,
+    // });
 
     // Allocate scene params UBO
     let offs = template.allocateUniformBuffer(
@@ -674,195 +538,237 @@ export class ToontownRenderer implements Viewer.SceneGfx {
     mat4.mul(viewMatrix, viewerInput.camera.viewMatrix, pandaToNoclip);
     offs += fillMatrix4x4(sceneParams, offs, viewMatrix);
 
-    // Create render instances for each geometry
-    const frustum = viewerInput.camera.frustum;
-    for (const geomData of this.geometryData) {
-      // Frustum culling: skip geometry that's not visible
-      // Transform AABB to view space for culling (account for Panda3D coordinate system)
-      scratchAABB.transform(geomData.worldAABB, pandaToNoclip);
-      if (!frustum.contains(scratchAABB)) {
-        continue;
-      }
+    // Update camera node position
+    const cameraNode = this.scene.findNode("camera");
+    if (!cameraNode) throw new Error("Camera node not found");
+    cameraNode.setPosHprScale(
+      vec3.fromValues(
+        viewerInput.camera.worldMatrix[12],
+        -viewerInput.camera.worldMatrix[14],
+        viewerInput.camera.worldMatrix[13],
+      ),
+      vec3.create(), // TODO
+      vec3.fromValues(1, 1, 1),
+    );
 
-      const { material } = geomData;
-      const drawOrder = material.drawOrder ?? 0;
-      let frontFace = GfxFrontFaceMode.CW;
-      let cullMode = material.cullReverse
-        ? GfxCullMode.Back
-        : GfxCullMode.Front;
-      switch (material.cullFaceMode) {
-        case CullFaceMode.CullClockwise:
-          break;
-        case CullFaceMode.CullCounterClockwise:
-          frontFace = GfxFrontFaceMode.CCW;
-          break;
-        case CullFaceMode.CullNone:
-          cullMode = GfxCullMode.None;
-          break;
-      }
+    const binCollector = new BinCollector(viewerInput.camera.viewMatrix);
 
-      // Handle M_dual: two-pass rendering for better depth sorting
-      if (material.transparencyMode === TransparencyMode.Dual) {
-        // Pass 1: Opaque parts (α ≥ 0.984) with depth writes
-        const opaqueResult = this.setupGeometryRenderInst(
-          geomData,
-          viewMatrix,
-          ALPHA_DUAL_THRESHOLD,
-        );
-        opaqueResult.renderInst.setMegaStateFlags({
-          depthWrite: true,
-          depthCompare: reverseDepthForCompareMode(GfxCompareMode.Less),
-          cullMode,
-          frontFace,
-        });
-        opaqueResult.renderInst.sortKey = makeSortKey(
-          GfxRendererLayer.OPAQUE,
-          drawOrder,
-        );
-        this.renderInstListMain.submitRenderInst(opaqueResult.renderInst);
-
-        // Pass 2: Transparent parts (all pixels) with blending, depth writes off
-        const transResult = this.setupGeometryRenderInst(
-          geomData,
-          viewMatrix,
-          0,
-        );
-        transResult.renderInst.setMegaStateFlags({
-          depthWrite: false,
-          depthCompare: reverseDepthForCompareMode(GfxCompareMode.Less),
-          cullMode,
-          frontFace,
-        });
-        setAttachmentStateSimple(transResult.renderInst.getMegaStateFlags(), {
-          blendMode: GfxBlendMode.Add,
-          blendSrcFactor: GfxBlendFactor.SrcAlpha,
-          blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
-        });
-        const depth = computeViewSpaceDepthFromWorldSpaceAABB(
-          viewerInput.camera.viewMatrix,
-          scratchAABB,
-        );
-        const sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT, drawOrder);
-        transResult.renderInst.sortKey = setSortKeyDepth(sortKey, depth);
-        this.renderInstListMain.submitRenderInst(transResult.renderInst);
-
-        continue;
-      }
-
-      // Handle M_binary: single pass with alpha test, no blending
-      if (material.transparencyMode === TransparencyMode.Binary) {
-        const result = this.setupGeometryRenderInst(
-          geomData,
-          viewMatrix,
-          ALPHA_BINARY_THRESHOLD,
-        );
-        result.renderInst.setMegaStateFlags({
-          depthWrite: true,
-          depthCompare: reverseDepthForCompareMode(GfxCompareMode.Less),
-          cullMode,
-          frontFace,
-        });
-        result.renderInst.sortKey = makeSortKey(
-          GfxRendererLayer.OPAQUE,
-          drawOrder,
-        );
-        this.renderInstListMain.submitRenderInst(result.renderInst);
-
-        continue;
-      }
-
-      // Normal handling for other transparency modes
-      const { renderInst, isTransparent } = this.setupGeometryRenderInst(
-        geomData,
-        viewMatrix,
+    // Traverse scene graph and submit render instructions
+    // decalCollector: When non-null, we're inside a decal group and should collect
+    // render results here instead of submitting to binCollector directly.
+    function traverse(
+      this: ToontownRenderer,
+      node: PandaNode,
+      parentTransform: ReadonlyMat4,
+      parentDrawMask: number,
+      parentState: RenderState,
+    ): void {
+      // Compose draw mask for this node
+      const runningDrawMask = composeDrawMask(
+        parentDrawMask,
+        node.drawControlMask,
+        node.drawShowMask,
       );
-      renderInst.setMegaStateFlags({
-        cullMode,
-        frontFace,
-        depthWrite: material.depthWrite,
-      });
 
-      // Handle transparency blending
-      if (isTransparent) {
-        setAttachmentStateSimple(renderInst.getMegaStateFlags(), {
-          blendMode: GfxBlendMode.Add,
-          blendSrcFactor: GfxBlendFactor.SrcAlpha,
-          blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
-        });
-        renderInst.setMegaStateFlags({ depthWrite: false });
+      // Check visibility against camera mask
+      if (!isNodeVisible(runningDrawMask)) {
+        return;
       }
 
-      // Set sort key
-      if (material.cullBinName === "background") {
-        renderInst.sortKey = makeSortKey(
-          GfxRendererLayer.BACKGROUND,
-          drawOrder,
+      const compassEffect = node.effects.effects.find(
+        (effect) => effect instanceof CompassEffect,
+      );
+      if (compassEffect?.reference) {
+        // TODO actually check CompassEffect properties
+        node.transform.position = vec3.clone(
+          compassEffect.reference.transform.position,
         );
-      } else if (isTransparent) {
-        // For transparent objects, compute depth for back-to-front sorting
-        // Use the transformed AABB (already in scratchAABB from frustum test)
-        // drawWorldSpaceAABB(
-        //   getDebugOverlayCanvas2D(),
-        //   viewerInput.camera.clipFromWorldMatrix,
-        //   scratchAABB,
-        // );
-        const depth = computeViewSpaceDepthFromWorldSpaceAABB(
-          viewerInput.camera.viewMatrix,
-          scratchAABB,
-        );
-        renderInst.sortKey = makeSortKey(
-          GfxRendererLayer.TRANSLUCENT,
-          drawOrder,
-        );
-        renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, depth);
-      } else {
-        renderInst.sortKey = makeSortKey(GfxRendererLayer.OPAQUE, drawOrder);
+        node.transform.flags &= ~1;
       }
-      this.renderInstListMain.submitRenderInst(renderInst);
+
+      // Accumulate transform
+      const localTransform = node.transform.getMatrix();
+      const netTransform = mat4.create();
+      mat4.multiply(netTransform, parentTransform, localTransform);
+
+      // Combine render states
+      const renderState = parentState.compose(node.state);
+
+      // If this is a GeomNode, collect its geometry
+      if (node instanceof GeomNode) {
+        // Check if this node is a decal base
+        if (
+          node.effects.effects.some((effect) => effect instanceof DecalEffect)
+        ) {
+          // Use AABB culling
+          scratchAABB.transform(node.getBoundingBox(), netTransform);
+          scratchAABB.transform(scratchAABB, pandaToNoclip);
+          if (!viewerInput.camera.frustum.contains(scratchAABB)) {
+            return;
+          }
+
+          binCollector.add({
+            geomNode: node,
+            geomData: null,
+            renderState,
+            modelMatrix: netTransform,
+          });
+          return; // Skip traversing children
+        }
+
+        for (const { geom, state } of node.geoms) {
+          const geomData = createGeomData(
+            geom,
+            this.renderHelper.renderCache,
+            this.geomCache,
+          );
+
+          // Frustum culling: skip geometry that's not visible
+          let culled = false;
+          if (geomData.boundsType === BoundsType.Box) {
+            // Use AABB culling
+            scratchAABB.transform(geomData.aabb, netTransform);
+            scratchAABB.transform(scratchAABB, pandaToNoclip);
+            culled = !viewerInput.camera.frustum.contains(scratchAABB);
+          } else {
+            // Use sphere culling (Sphere, Fastest, etc.)
+            vec3.transformMat4(
+              scratchSphereCenter,
+              geomData.sphereCenter,
+              netTransform,
+            );
+            vec3.transformMat4(
+              scratchSphereCenter,
+              scratchSphereCenter,
+              pandaToNoclip,
+            );
+
+            // Scale radius by max scale factor from transform
+            const scaleX = Math.hypot(
+              netTransform[0],
+              netTransform[1],
+              netTransform[2],
+            );
+            const scaleY = Math.hypot(
+              netTransform[4],
+              netTransform[5],
+              netTransform[6],
+            );
+            const scaleZ = Math.hypot(
+              netTransform[8],
+              netTransform[9],
+              netTransform[10],
+            );
+            const maxScale = Math.max(scaleX, scaleY, scaleZ);
+            const transformedRadius = geomData.sphereRadius * maxScale;
+
+            culled = !viewerInput.camera.frustum.containsSphere(
+              scratchSphereCenter,
+              transformedRadius,
+            );
+          }
+          if (culled) {
+            continue;
+          }
+
+          binCollector.add({
+            geomNode: node,
+            geomData,
+            renderState: renderState.compose(state),
+            modelMatrix: netTransform,
+          });
+        }
+      }
+
+      // Traverse children
+      for (const [child, _sort] of node.children) {
+        traverse.call(this, child, netTransform, runningDrawMask, renderState);
+      }
     }
 
-    // Render decal groups with three-pass technique
-    let decalGroupId = 0;
-    for (const { group, baseGeometryData, decalGeometryData } of this
-      .decalGroups) {
-      // Frustum cull the entire group
-      scratchAABB.transform(group.worldAABB, pandaToNoclip);
-      if (!frustum.contains(scratchAABB)) {
-        decalGroupId++;
-        continue;
-      }
+    // Start traversal from the found node with all bits on (default visibility)
+    traverse.call(
+      this,
+      this.scene,
+      mat4.create(),
+      0xffffffff,
+      this.scene.state,
+    );
 
-      // Pass 1: Base geometry with depthWrite=false
-      for (const geomData of baseGeometryData) {
-        this.submitDecalRenderInst(
-          geomData,
-          viewMatrix,
-          DecalPass.BaseFirst,
-          decalGroupId,
+    // Submit all collected render insts to the render list in correct bin order
+    for (const obj of binCollector.finish()) {
+      if (obj.geomData) {
+        // Regular render
+        this.renderInstListMain.submitRenderInst(
+          this.setupGeometryRenderInst(
+            obj.geomNode,
+            obj.geomData,
+            obj.renderState,
+            obj.modelMatrix,
+            viewMatrix,
+          ),
         );
-      }
-
-      // Pass 2: Decal geometry with depthWrite=false
-      for (const geomData of decalGeometryData) {
-        this.submitDecalRenderInst(
-          geomData,
-          viewMatrix,
-          DecalPass.Decals,
-          decalGroupId,
+      } else {
+        function doRender(
+          this: ToontownRenderer,
+          node: GeomNode,
+          { geom, state }: GeomEntry,
+          renderState: RenderState,
+          modelMatrix: ReadonlyMat4,
+        ) {
+          this.renderInstListMain.submitRenderInst(
+            this.setupGeometryRenderInst(
+              node,
+              createGeomData(
+                geom,
+                this.renderHelper.renderCache,
+                this.geomCache,
+              ),
+              renderState.compose(state),
+              modelMatrix,
+              viewMatrix,
+            ),
+          );
+        }
+        // Decal render
+        const baseState = obj.renderState.withAttrib(
+          DepthWriteAttrib.create(DepthWriteMode.Off),
+          MAX_PRIORITY,
         );
-      }
-
-      // Pass 3: Base geometry with colorWrite=false (depth fill)
-      for (const geomData of baseGeometryData) {
-        this.submitDecalRenderInst(
-          geomData,
-          viewMatrix,
-          DecalPass.BaseSecond,
-          decalGroupId,
+        // Draw base with depth write disabled
+        for (const entry of obj.geomNode.geoms) {
+          doRender.call(this, obj.geomNode, entry, baseState, obj.modelMatrix);
+        }
+        // Draw children with depth write disabled
+        function doRenderChild(
+          this: ToontownRenderer,
+          base: PandaNode,
+          renderState: RenderState,
+          parentTransform: ReadonlyMat4,
+        ) {
+          for (const [child, _sort] of base.children) {
+            const localTransform = child.transform.getMatrix();
+            const netTransform = mat4.create();
+            mat4.multiply(netTransform, parentTransform, localTransform);
+            const childState = renderState.compose(child.state);
+            if (child instanceof GeomNode) {
+              for (const entry of child.geoms) {
+                doRender.call(this, child, entry, childState, netTransform);
+              }
+            }
+            doRenderChild.call(this, child, childState, netTransform);
+          }
+        }
+        doRenderChild.call(this, obj.geomNode, baseState, obj.modelMatrix);
+        // Draw base with color write disabled
+        const finalState = obj.renderState.withAttrib(
+          ColorWriteAttrib.create(ColorWriteChannels.Off),
+          MAX_PRIORITY,
         );
+        for (const entry of obj.geomNode.geoms) {
+          doRender.call(this, obj.geomNode, entry, finalState, obj.modelMatrix);
+        }
       }
-
-      decalGroupId++;
     }
 
     renderInstManager.popTemplate();
@@ -870,7 +776,7 @@ export class ToontownRenderer implements Viewer.SceneGfx {
   }
 
   public render(
-    device: GfxDevice,
+    _device: GfxDevice,
     viewerInput: Viewer.ViewerRenderInput,
   ): void {
     const builder = this.renderHelper.renderGraph.newGraphBuilder();
@@ -881,6 +787,8 @@ export class ToontownRenderer implements Viewer.SceneGfx {
       viewerInput,
       standardFullClearRenderPassDescriptor,
     );
+    // mainColorDesc.clearColor = { r: 0.41, g: 0.41, b: 0.41, a: 1.0 }; // Panda3D default
+    mainColorDesc.clearColor = { r: 0.3, g: 0.3, b: 0.3, a: 1.0 }; // Toontown
     const mainDepthDesc = makeBackbufferDescSimple(
       GfxrAttachmentSlot.DepthStencil,
       viewerInput,
@@ -919,15 +827,13 @@ export class ToontownRenderer implements Viewer.SceneGfx {
     );
 
     // Prepare and execute
-    this.prepareToRender(device, viewerInput);
+    this.prepareToRender(viewerInput);
     this.renderHelper.renderGraph.execute(builder);
-
-    // Reset for next frame
     this.renderInstListMain.reset();
   }
 
   public destroy(device: GfxDevice): void {
-    for (const geomData of this.geometryData) {
+    for (const geomData of this.geomCache.values()) {
       device.destroyBuffer(geomData.vertexBuffer);
       if (geomData.indexBuffer) {
         device.destroyBuffer(geomData.indexBuffer);
@@ -936,7 +842,28 @@ export class ToontownRenderer implements Viewer.SceneGfx {
     for (const { texture } of this.textureCache.values()) {
       device.destroyTexture(texture);
     }
-    device.destroyTexture(this.whiteTexture);
     this.renderHelper.destroy();
   }
+}
+
+const whiteColor = vec4.fromValues(1, 1, 1, 1);
+
+function setupDrawUniform(
+  renderInst: GfxRenderInst,
+  material: MaterialData,
+  modelMatrix: mat4,
+) {
+  let offs = renderInst.allocateUniformBuffer(
+    ToontownProgram.ub_DrawParams,
+    16 + 4,
+  );
+  const drawParams = renderInst.mapUniformBufferF32(
+    ToontownProgram.ub_DrawParams,
+  );
+  offs += fillMatrix4x4(drawParams, offs, modelMatrix);
+  offs += fillVec4v(
+    drawParams,
+    offs,
+    material.colorType === ColorType.Flat ? material.flatColor : whiteColor,
+  );
 }

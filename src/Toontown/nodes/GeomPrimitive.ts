@@ -6,7 +6,7 @@ import { GeomVertexArrayData } from "./GeomVertexArrayData";
 import { NumericType, ShadeModel, UsageHint } from "./geomEnums";
 
 export class GeomPrimitive extends BAMObject {
-  public shadeModel = ShadeModel.Uniform;
+  public shadeModel = ShadeModel.Smooth;
   public firstVertex = 0;
   public numVertices = 0;
   public indexType = NumericType.U8;

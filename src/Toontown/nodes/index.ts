@@ -29,10 +29,20 @@ export { CollisionSolid } from "./CollisionSolid";
 export { CollisionSphere } from "./CollisionSphere";
 export { CollisionTube } from "./CollisionTube";
 
-// Attributes
+// Render state
+export {
+  RenderState,
+  type RenderAttribEntry,
+  MAX_PRIORITY,
+} from "./RenderState";
+export { TransparencyAttrib, TransparencyMode } from "./TransparencyAttrib";
+export { RenderAttrib, PandaCompareFunc } from "./RenderAttrib";
+export { AlphaTestAttrib } from "./AlphaTestAttrib";
 export { ColorAttrib, ColorType } from "./ColorAttrib";
+export { ColorWriteAttrib, ColorWriteChannels } from "./ColorWriteAttrib";
 export { CullBinAttrib } from "./CullBinAttrib";
 export { CullFaceAttrib, CullFaceMode } from "./CullFaceAttrib";
+export { DepthTestAttrib } from "./DepthTestAttrib";
 export { DepthWriteAttrib, DepthWriteMode } from "./DepthWriteAttrib";
 export { TextureApplyAttrib, TextureApplyMode } from "./TextureApplyAttrib";
 
@@ -99,6 +109,7 @@ export { BillboardEffect } from "./BillboardEffect";
 export { CharacterJointEffect } from "./CharacterJointEffect";
 export { DecalEffect } from "./DecalEffect";
 export { RenderEffects, RenderEffect } from "./RenderEffects";
+export { CompassEffect, CompassEffectProperties } from "./CompassEffect";
 
 // Textures
 export { SamplerState } from "./SamplerState";
@@ -113,11 +124,5 @@ export {
 } from "./TextureStage";
 export * from "./textureEnums";
 
-// Transform and render state
-export {
-  RenderState,
-  RenderAttrib,
-  type RenderAttribEntry,
-} from "./RenderState";
+// Transform state
 export { TransformState } from "./TransformState";
-export { TransparencyAttrib, TransparencyMode } from "./TransparencyAttrib";

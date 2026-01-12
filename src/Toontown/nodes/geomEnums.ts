@@ -35,10 +35,8 @@ export enum Contents {
 }
 
 export enum ShadeModel {
-  Uniform = 0,
+  Flat = 0,
   Smooth = 1,
-  FlatFirstVertex = 2,
-  FlatLastVertex = 3,
 }
 
 export enum PrimitiveType {

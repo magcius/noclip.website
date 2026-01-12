@@ -2,7 +2,7 @@ import type { BAMFile } from "../bam";
 import type { DataStream } from "../common";
 import { registerBAMObject } from "./base";
 import { type DebugInfo, dbgNum, dbgStr } from "./debug";
-import { RenderAttrib } from "./RenderState";
+import { RenderAttrib } from "./RenderAttrib";
 
 export class CullBinAttrib extends RenderAttrib {
   public binName = "";
@@ -25,6 +25,13 @@ export class CullBinAttrib extends RenderAttrib {
     info.set("binName", dbgStr(this.binName));
     info.set("drawOrder", dbgNum(this.drawOrder));
     return info;
+  }
+
+  static create(binName: string, drawOrder: number = 0): CullBinAttrib {
+    const attrib = new CullBinAttrib();
+    attrib.binName = binName;
+    attrib.drawOrder = drawOrder;
+    return attrib;
   }
 }
 

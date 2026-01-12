@@ -15,7 +15,8 @@ import {
 } from "./debug";
 import { BoundsType } from "./geomEnums";
 import { type RenderEffect, RenderEffects } from "./RenderEffects";
-import { type RenderAttrib, RenderState } from "./RenderState";
+import { RenderState } from "./RenderState";
+import type { RenderAttrib } from "./RenderAttrib";
 import { TransformState } from "./TransformState";
 
 export class PandaNode extends BAMObject {
@@ -35,6 +36,7 @@ export class PandaNode extends BAMObject {
   addChild(child: PandaNode, sort: number = 0): void {
     child.parents.push(this);
     this.children.push([child, sort]);
+    this.children.sort((a, b) => a[1] - b[1]);
   }
 
   removeChild(child: PandaNode): void {
@@ -48,11 +50,11 @@ export class PandaNode extends BAMObject {
     }
   }
 
-  moveTo(target: PandaNode): void {
+  reparentTo(target: PandaNode, sort: number = 0): void {
     for (const parent of this.parents.slice()) {
       parent.removeChild(this);
     }
-    target.addChild(this);
+    target.addChild(this, sort);
   }
 
   findNode(name: string): PandaNode | null {
@@ -174,6 +176,7 @@ export class PandaNode extends BAMObject {
       const sort = data.readUint32();
       this.children[i] = [ref, sort];
     }
+    this.children.sort((a, b) => a[1] - b[1]);
 
     // Stashed
     const numStashed = data.readUint16();

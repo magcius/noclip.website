@@ -311,7 +311,6 @@ export class DNASceneBuilder {
   /**
    * Visit a flat building node
    * Flat buildings are procedurally generated from walls, windows, doors, etc.
-   * For now, we'll skip them since they require geometry generation
    */
   private async visitFlatBuilding(
     node: DNAFlatBuilding,
@@ -368,7 +367,6 @@ export class DNASceneBuilder {
             `NoDecal node not found in cornice ${wall.cornice.code}`,
           );
         const clonedNoDecalNode = noDecalNode.cloneSubgraph();
-        console.log(clonedNoDecalNode.transform);
         clonedNoDecalNode.setPosHprScale(
           vec3.fromValues(0, 0, currHeight),
           vec3.create(),

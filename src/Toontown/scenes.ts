@@ -1,10 +1,19 @@
-import type { GfxDevice } from "../gfx/platform/GfxPlatform.js";
-import type { SceneContext } from "../SceneBase.js";
-import type * as Viewer from "../viewer.js";
-import { DNASceneBuilder } from "./dna/sceneBuilder.js";
-import { PandaNode } from "./nodes/PandaNode.js";
-import { ToontownRenderer } from "./render.js";
-import { pathBase, ToontownResourceLoader } from "./resources.js";
+import type { GfxDevice } from "../gfx/platform/GfxPlatform";
+import type { SceneContext } from "../SceneBase";
+import type * as Viewer from "../viewer";
+import { DNASceneBuilder } from "./dna/sceneBuilder";
+import {
+  CompassEffect,
+  CompassEffectProperties,
+  CullBinAttrib,
+  DepthTestAttrib,
+  DepthWriteAttrib,
+  DepthWriteMode,
+  PandaNode,
+  PandaCompareFunc,
+} from "./nodes";
+import { ToontownRenderer } from "./render";
+import { pathBase, ToontownResourceLoader } from "./resources";
 
 class ToontownSceneDesc implements Viewer.SceneDesc {
   constructor(
@@ -26,18 +35,16 @@ class ToontownSceneDesc implements Viewer.SceneDesc {
       },
     );
 
+    const scene = PandaNode.create("render");
+    const _cameraNode = scene.attachNewNode("camera");
+
     const bamFile = await loader.loadModel(
       this.modelPath,
       context.dataFetcher,
       true,
     );
-
-    return ToontownRenderer.create(
-      device,
-      bamFile.getRoot(),
-      loader,
-      context.dataFetcher,
-    );
+    scene.addChild(bamFile.getRoot().cloneSubgraph());
+    return ToontownRenderer.create(device, scene, loader, context.dataFetcher);
   }
 }
 
@@ -160,8 +167,8 @@ class ToontownDNASceneDesc implements Viewer.SceneDesc {
       context.dataFetcher,
     );
 
-    const scene = new PandaNode();
-    scene.name = "render";
+    const scene = PandaNode.create("render");
+    const cameraNode = scene.attachNewNode("camera");
 
     // Build the scene from DNA
     const sceneBuilder = new DNASceneBuilder(
@@ -182,7 +189,14 @@ class ToontownDNASceneDesc implements Viewer.SceneDesc {
     if (hood.skybox) {
       const model = await loader.loadModel(hood.skybox, context.dataFetcher);
       const instance = model.getRoot().cloneSubgraph();
-      instance.tags.set("sky", "Regular");
+      instance.setEffect(
+        CompassEffect.create(CompassEffectProperties.Position, cameraNode),
+      );
+      instance.setAttrib(CullBinAttrib.create("background", 100));
+      instance.setAttrib(DepthTestAttrib.create(PandaCompareFunc.None));
+      instance.setAttrib(DepthWriteAttrib.create(DepthWriteMode.Off));
+      // Ensure sky renders before clouds
+      instance.findNode("Sky")?.reparentTo(instance, -1);
       scene.addChild(instance);
     }
 
@@ -235,6 +249,27 @@ const sceneDescs = [
       "phase_8/dna/storage_DG_town.dna",
     ],
     sceneDNA: "phase_8/dna/daisys_garden_sz.dna",
+  }),
+  new ToontownDNASceneDesc("daisys_garden_5100", "Street 1", "DaisyGardens", {
+    storageDNA: [
+      "phase_8/dna/storage_DG_sz.dna",
+      "phase_8/dna/storage_DG_town.dna",
+    ],
+    sceneDNA: "phase_8/dna/daisys_garden_5100.dna",
+  }),
+  new ToontownDNASceneDesc("daisys_garden_5200", "Street 2", "DaisyGardens", {
+    storageDNA: [
+      "phase_8/dna/storage_DG_sz.dna",
+      "phase_8/dna/storage_DG_town.dna",
+    ],
+    sceneDNA: "phase_8/dna/daisys_garden_5200.dna",
+  }),
+  new ToontownDNASceneDesc("daisys_garden_5300", "Street 3", "DaisyGardens", {
+    storageDNA: [
+      "phase_8/dna/storage_DG_sz.dna",
+      "phase_8/dna/storage_DG_town.dna",
+    ],
+    sceneDNA: "phase_8/dna/daisys_garden_5300.dna",
   }),
   "The Brrrgh",
   new ToontownDNASceneDesc("the_burrrgh_sz", "Playground", "TheBrrrgh", {

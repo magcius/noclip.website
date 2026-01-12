@@ -10,7 +10,7 @@ import {
   dbgRef,
   dbgRefs,
 } from "./debug";
-import { RenderAttrib } from "./RenderState";
+import { RenderAttrib } from "./RenderAttrib";
 import { SamplerState } from "./SamplerState";
 import { Texture } from "./Texture";
 import { TextureStage } from "./TextureStage";

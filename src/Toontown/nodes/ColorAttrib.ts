@@ -3,7 +3,7 @@ import type { BAMFile } from "../bam";
 import type { DataStream } from "../common";
 import { registerBAMObject } from "./base";
 import { type DebugInfo, dbgColor, dbgEnum } from "./debug";
-import { RenderAttrib } from "./RenderState";
+import { RenderAttrib } from "./RenderAttrib";
 
 export enum ColorType {
   Vertex = 0,

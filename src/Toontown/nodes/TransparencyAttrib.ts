@@ -2,7 +2,7 @@ import type { BAMFile } from "../bam";
 import type { DataStream } from "../common";
 import { registerBAMObject } from "./base";
 import { type DebugInfo, dbgEnum } from "./debug";
-import { RenderAttrib } from "./RenderState";
+import { RenderAttrib } from "./RenderAttrib";
 
 export enum TransparencyMode {
   None = 0,
@@ -31,6 +31,14 @@ export class TransparencyAttrib extends RenderAttrib {
     const info = super.getDebugInfo();
     info.set("mode", dbgEnum(this.mode, TransparencyMode));
     return info;
+  }
+
+  static create(
+    mode: TransparencyMode = TransparencyMode.None,
+  ): TransparencyAttrib {
+    const attrib = new TransparencyAttrib();
+    attrib.mode = mode;
+    return attrib;
   }
 }
 

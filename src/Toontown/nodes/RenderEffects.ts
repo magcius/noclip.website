@@ -3,6 +3,10 @@ import type { DataStream } from "../common";
 import { BAMObject, readTypedRefs, registerBAMObject } from "./base";
 import { type DebugInfo, dbgRefs } from "./debug";
 
+interface RenderEffectConstructor<T extends RenderEffect> {
+  new (...args: any[]): T;
+}
+
 export class RenderEffects extends BAMObject {
   public effects: RenderEffect[] = [];
 
@@ -36,6 +40,13 @@ export class RenderEffects extends BAMObject {
     }
     result.effects.push(effect);
     return result;
+  }
+
+  get<T extends RenderEffect>(
+    attribType: RenderEffectConstructor<T>,
+  ): T | null {
+    const entry = this.effects.find((a) => a instanceof attribType);
+    return entry ? (entry as T) : null;
   }
 }
 

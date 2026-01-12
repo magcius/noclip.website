@@ -1,42 +1,45 @@
-import { mat4, type ReadonlyMat4, vec3, vec4 } from "gl-matrix";
+import { type mat4, type ReadonlyVec3, vec3, vec4 } from "gl-matrix";
 import { AABB } from "../Geometry";
 import {
   type GfxBuffer,
   GfxBufferFrequencyHint,
   GfxBufferUsage,
-  type GfxDevice,
   GfxFormat,
   type GfxInputLayout,
   type GfxInputLayoutBufferDescriptor,
-  type GfxSampler,
-  type GfxTexture,
   type GfxVertexAttributeDescriptor,
   GfxVertexBufferFrequency,
 } from "../gfx/platform/GfxPlatform";
 import type { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { TextureMapping } from "../TextureHolder";
 import { enumName } from "./common";
 import {
+  AlphaTestAttrib,
   BillboardEffect,
+  BoundsType,
   ColorAttrib,
   ColorType,
+  ColorWriteAttrib,
+  ColorWriteChannels,
   Contents,
   CullBinAttrib,
   CullFaceAttrib,
   CullFaceMode,
   DecalEffect,
+  DepthTestAttrib,
   DepthWriteAttrib,
   DepthWriteMode,
   type Geom,
-  GeomNode,
+  type GeomNode,
   GeomTriangles,
   GeomTrifans,
   GeomTristrips,
   type GeomVertexArrayFormat,
   type GeomVertexColumn,
   NumericType,
+  PandaCompareFunc,
   type PandaNode,
   type RenderAttribEntry,
+  type RenderState,
   type Texture,
   TextureAttrib,
   TransparencyAttrib,
@@ -46,7 +49,7 @@ import {
 /**
  * GPU-ready geometry data
  */
-export interface ToontownGeometryData {
+export interface CachedGeometryData {
   vertexBuffer: GfxBuffer;
   indexBuffer: GfxBuffer | null;
   inputLayout: GfxInputLayout;
@@ -55,16 +58,18 @@ export interface ToontownGeometryData {
   hasNormals: boolean;
   hasColors: boolean;
   hasTexCoords: boolean;
-  modelMatrix: mat4;
-  material: MaterialData;
-  textureMapping: TextureMapping;
-  worldAABB: AABB;
+  aabb: AABB;
+  // Bounding sphere (computed from AABB)
+  sphereCenter: ReadonlyVec3;
+  sphereRadius: number;
+  // Which bounds type to use for culling
+  boundsType: BoundsType;
 }
 
 /**
  * Material properties extracted from RenderState
  */
-interface MaterialData {
+export interface MaterialData {
   colorType: ColorType;
   flatColor: vec4;
   transparencyMode: TransparencyMode;
@@ -73,9 +78,13 @@ interface MaterialData {
   drawOrder: number | null;
   cullFaceMode: CullFaceMode;
   cullReverse: boolean;
-  depthWrite: boolean;
+  depthTestMode: PandaCompareFunc;
+  depthWrite: DepthWriteMode;
   isDecal: boolean;
   billboardEffect: BillboardEffect | null;
+  colorWriteChannels: number;
+  alphaTestMode: PandaCompareFunc;
+  alphaTestThreshold: number;
 }
 
 /**
@@ -84,30 +93,9 @@ interface MaterialData {
 export interface CollectedGeometry {
   node: GeomNode;
   geom: Geom;
-  netTransform: mat4;
+  modelMatrix: mat4;
   localAABB: AABB;
   attribs: RenderAttribEntry[];
-}
-
-/**
- * A group of base geometry and its associated decal geometry,
- * to be rendered using the three-pass decal technique.
- */
-export interface DecalGroup {
-  /** Base geometry (the parent GeomNode with DecalEffect) */
-  baseGeometries: CollectedGeometry[];
-  /** Decal geometries (children of the base GeomNode) */
-  decalGeometries: CollectedGeometry[];
-  /** Combined world AABB for frustum culling */
-  worldAABB: AABB;
-}
-
-/**
- * Result of collecting scene geometry
- */
-interface CollectedSceneData {
-  regularGeometry: CollectedGeometry[];
-  decalGroups: DecalGroup[];
 }
 
 // Draw mask constants for visibility culling
@@ -124,7 +112,7 @@ const CAMERA_MASK = MainCameraBitmask | EnviroCameraBitmask; // 0x21
  * Uncontrolled bits (control=0) pass through from parent.
  * Controlled bits (control=1) come from showMask.
  */
-function composeDrawMask(
+export function composeDrawMask(
   parentMask: number,
   controlMask: number,
   showMask: number,
@@ -136,14 +124,14 @@ function composeDrawMask(
  * Check if a node should be visible based on its composed draw mask.
  * Must pass both overall bit check and camera mask check.
  */
-function isNodeVisible(drawMask: number): boolean {
+export function isNodeVisible(drawMask: number): boolean {
   return (drawMask & OVERALL_BIT) !== 0 && (drawMask & CAMERA_MASK) !== 0;
 }
 
 /**
  * Combine new render attributes into existing attribute list based on priority.
  */
-function combineAttributes(
+export function combineAttributes(
   attribs: RenderAttribEntry[],
   newAttribs: RenderAttribEntry[],
 ): RenderAttribEntry[] {
@@ -162,167 +150,6 @@ function combineAttributes(
     }
   }
   return result;
-}
-
-/**
- * Collect geometry with optional node name filter
- * If nodeName is provided, only collect geometry from that node and its children
- */
-export function collectGeometry(scene: PandaNode): CollectedSceneData {
-  const regularGeometry: CollectedGeometry[] = [];
-  const decalGroups: DecalGroup[] = [];
-
-  // Recursive traversal function starting from the found node
-  function traverse(
-    node: PandaNode,
-    parentTransform: ReadonlyMat4,
-    parentDrawMask: number,
-    parentAttribs: RenderAttribEntry[],
-  ): void {
-    // Compose draw mask for this node
-    const runningDrawMask = composeDrawMask(
-      parentDrawMask,
-      node.drawControlMask,
-      node.drawShowMask,
-    );
-
-    // Check visibility against camera mask
-    if (!isNodeVisible(runningDrawMask)) {
-      return;
-    }
-
-    // Accumulate transform
-    const localTransform = node.transform.getMatrix();
-    const netTransform = mat4.create();
-    mat4.multiply(netTransform, parentTransform, localTransform);
-
-    // Combine render attributes
-    const attribs = combineAttributes(parentAttribs, node.state.attribs);
-
-    // If this is a GeomNode, collect its geometry normally
-    if (node instanceof GeomNode) {
-      // If this has a DecalEffect, handle as decal group
-      if (
-        // extra?.forceDecal ||
-        node.effects.effects.some((effect) => effect instanceof DecalEffect)
-      ) {
-        const group = collectDecalGroup(node, netTransform, attribs);
-        if (group) {
-          decalGroups.push(group);
-        }
-        return;
-      }
-
-      for (const { geom, state } of node.geoms) {
-        const localAABB = computeAABBFromGeom(geom);
-        let geomAttribs = attribs;
-        if (state) geomAttribs = combineAttributes(attribs, state.attribs);
-        regularGeometry.push({
-          node,
-          geom,
-          netTransform,
-          localAABB,
-          attribs: geomAttribs,
-        });
-      }
-    }
-
-    // Traverse children
-    for (const [child, _sort] of node.children) {
-      traverse(child, netTransform, runningDrawMask, attribs);
-    }
-  }
-
-  // Start traversal from the found node with all bits on (default visibility)
-  traverse(scene, mat4.create(), 0xffffffff, []);
-
-  return { regularGeometry, decalGroups };
-}
-
-/**
- * Collect a decal group starting from a GeomNode with DecalEffect.
- * The node's geoms become base geometry, and all children become decal geometry.
- */
-function collectDecalGroup(
-  baseNode: GeomNode,
-  netTransform: mat4,
-  baseAttribs: RenderAttribEntry[],
-): DecalGroup | null {
-  const baseGeometries: CollectedGeometry[] = [];
-  const decalGeometries: CollectedGeometry[] = [];
-  const combinedAABB = new AABB();
-
-  // Collect base geometry (the GeomNode with DecalEffect)
-  for (const { geom, state } of baseNode.geoms) {
-    const localAABB = computeAABBFromGeom(geom);
-    const worldAABB = new AABB();
-    worldAABB.transform(localAABB, netTransform);
-    combinedAABB.union(combinedAABB, worldAABB);
-
-    let attribs = baseAttribs;
-    if (state) attribs = combineAttributes(baseAttribs, state.attribs);
-
-    baseGeometries.push({
-      node: baseNode,
-      geom,
-      netTransform,
-      localAABB,
-      attribs,
-    });
-  }
-
-  // Recursively collect all children as decal geometry
-  function collectChildDecals(
-    node: PandaNode,
-    parentTransform: mat4,
-    parentAttribs: RenderAttribEntry[],
-  ): void {
-    const localTransform = node.transform.getMatrix();
-    const childNetTransform = mat4.create();
-    mat4.multiply(childNetTransform, parentTransform, localTransform);
-
-    // Combine render attributes
-    const attribs = combineAttributes(parentAttribs, node.state.attribs);
-
-    if (node instanceof GeomNode) {
-      for (const { geom, state } of node.geoms) {
-        const localAABB = computeAABBFromGeom(geom);
-        const worldAABB = new AABB();
-        worldAABB.transform(localAABB, childNetTransform);
-        combinedAABB.union(combinedAABB, worldAABB);
-
-        let geomAttribs = attribs;
-        if (state) geomAttribs = combineAttributes(attribs, state.attribs);
-
-        decalGeometries.push({
-          node,
-          geom,
-          netTransform: mat4.clone(childNetTransform),
-          localAABB,
-          attribs: geomAttribs,
-        });
-      }
-    }
-
-    // Continue recursing
-    for (const [child, _sort] of node.children) {
-      collectChildDecals(child, childNetTransform, attribs);
-    }
-  }
-
-  for (const [child, _sort] of baseNode.children) {
-    collectChildDecals(child, netTransform, baseAttribs);
-  }
-
-  if (baseGeometries.length === 0) {
-    return null;
-  }
-
-  return {
-    baseGeometries,
-    decalGeometries,
-    worldAABB: combinedAABB,
-  };
 }
 
 /**
@@ -387,19 +214,13 @@ function convertTriFanToTriangles(
   return new Uint32Array(triangles);
 }
 
-/**
- * Create GPU geometry from Panda3D Geom
- */
-export function createGeometryData(
-  device: GfxDevice,
-  cache: GfxRenderCache,
-  collected: CollectedGeometry,
-  textureCache: Map<string, { texture: GfxTexture; sampler: GfxSampler }>,
-): ToontownGeometryData | null {
-  const { node, geom, netTransform, localAABB, attribs } = collected;
-
-  // Extract material properties
-  const material = extractMaterial(node, attribs);
+export function createGeomData(
+  geom: Geom,
+  renderCache: GfxRenderCache,
+  geomCache: Map<Geom, CachedGeometryData>,
+): CachedGeometryData {
+  const cached = geomCache.get(geom);
+  if (cached) return cached;
 
   // Get vertex data
   const vertexData = geom.data;
@@ -418,7 +239,11 @@ export function createGeometryData(
   let hasTexCoords = false;
 
   // Process each array format
-  for (let arrayIdx = 0; arrayIdx < format.arrays.length; arrayIdx++) {
+  for (
+    let arrayIdx = 0;
+    arrayIdx < Math.min(format.arrays.length, 1);
+    arrayIdx++
+  ) {
     const arrayFormat = format.arrays[arrayIdx];
 
     vertexBufferDescriptors.push({
@@ -428,6 +253,7 @@ export function createGeometryData(
 
     for (const column of arrayFormat.columns) {
       const location = getAttributeLocation(column.contents);
+      if (location === null) continue;
       const gfxFormat = getGfxFormat(
         column.numericType,
         column.numComponents,
@@ -449,12 +275,12 @@ export function createGeometryData(
 
   // Get vertex buffer data
   if (vertexData.arrays.length === 0) {
-    console.warn("No vertex arrays");
-    return null;
+    throw new Error("No vertex arrays");
   }
 
   if (vertexData.arrays.length > 1) {
-    throw new Error("Multiple vertex arrays not yet supported");
+    // console.log(collected);
+    console.warn("Multiple vertex arrays not yet supported");
   }
 
   let buffer = vertexData.arrays[0].buffer;
@@ -471,6 +297,7 @@ export function createGeometryData(
   }
 
   // Create vertex buffer
+  const device = renderCache.device;
   const vertexBuffer = device.createBuffer(
     buffer.byteLength,
     GfxBufferUsage.Vertex,
@@ -566,9 +393,8 @@ export function createGeometryData(
   totalIndexCount = allIndices.length;
 
   if (totalIndexCount === 0) {
-    console.warn("No indices generated");
     device.destroyBuffer(vertexBuffer);
-    return null;
+    throw new Error("No indices generated");
   }
 
   // Create index buffer
@@ -581,28 +407,26 @@ export function createGeometryData(
   device.uploadBufferData(indexBuffer, 0, new Uint8Array(indexData.buffer));
 
   // Create input layout
-  const inputLayout = cache.createInputLayout({
+  const inputLayout = renderCache.createInputLayout({
     indexBufferFormat: GfxFormat.U32_R,
     vertexAttributeDescriptors,
     vertexBufferDescriptors,
   });
 
-  // Setup texture mapping
-  const textureMapping = new TextureMapping();
-  if (material.texture) {
-    const cached = textureCache.get(material.texture.name);
-    if (!cached) {
-      throw new Error(`Texture not cached: ${material.texture.name}`);
-    }
-    textureMapping.gfxTexture = cached.texture;
-    textureMapping.gfxSampler = cached.sampler;
+  const aabb = geom.getBoundingBox();
+  const { center: sphereCenter, radius: sphereRadius } =
+    computeBoundingSphereFromAABB(aabb);
+
+  // Resolve boundsType: Default/Best → Sphere (per Panda3D)
+  let effectiveBoundsType = geom.boundsType;
+  if (
+    effectiveBoundsType === BoundsType.Default ||
+    effectiveBoundsType === BoundsType.Best
+  ) {
+    effectiveBoundsType = BoundsType.Sphere;
   }
 
-  // Compute world-space AABB by transforming local AABB
-  const worldAABB = new AABB();
-  worldAABB.transform(localAABB, netTransform);
-
-  return {
+  const cachedGeometryData: CachedGeometryData = {
     vertexBuffer,
     indexBuffer,
     inputLayout,
@@ -611,11 +435,13 @@ export function createGeometryData(
     hasNormals,
     hasColors,
     hasTexCoords,
-    modelMatrix: netTransform,
-    material,
-    textureMapping,
-    worldAABB,
+    aabb,
+    sphereCenter,
+    sphereRadius,
+    boundsType: effectiveBoundsType,
   };
+  geomCache.set(geom, cachedGeometryData);
+  return cachedGeometryData;
 }
 
 /**
@@ -682,7 +508,7 @@ function getGfxFormat(
 /**
  * Get attribute location from InternalName
  */
-function getAttributeLocation(contents: Contents): number {
+function getAttributeLocation(contents: Contents): number | null {
   switch (contents) {
     case Contents.Point:
       return 0;
@@ -693,18 +519,19 @@ function getAttributeLocation(contents: Contents): number {
     case Contents.TexCoord:
       return 3;
     default:
-      throw new Error(
+      console.warn(
         `Unknown attribute contents: ${enumName(contents, Contents)}`,
       );
+      return null;
   }
 }
 
 /**
  * Extract material properties from RenderState
  */
-function extractMaterial(
+export function extractMaterial(
   node: PandaNode,
-  attribs: RenderAttribEntry[],
+  renderState: RenderState,
 ): MaterialData {
   const material: MaterialData = {
     colorType: ColorType.Vertex,
@@ -715,9 +542,13 @@ function extractMaterial(
     drawOrder: null,
     cullFaceMode: CullFaceMode.CullClockwise,
     cullReverse: false,
-    depthWrite: true,
+    depthTestMode: PandaCompareFunc.Less,
+    depthWrite: DepthWriteMode.On,
     isDecal: false,
     billboardEffect: null,
+    colorWriteChannels: ColorWriteChannels.All,
+    alphaTestMode: PandaCompareFunc.Always,
+    alphaTestThreshold: 1,
   };
 
   for (const effect of node.effects.effects) {
@@ -732,8 +563,11 @@ function extractMaterial(
     }
   }
 
-  for (const { attrib } of attribs) {
-    if (attrib instanceof ColorAttrib) {
+  for (const { attrib } of renderState.attribs) {
+    if (attrib instanceof AlphaTestAttrib) {
+      material.alphaTestMode = attrib.mode;
+      material.alphaTestThreshold = attrib.referenceAlpha;
+    } else if (attrib instanceof ColorAttrib) {
       material.colorType = attrib.colorType;
       material.flatColor = attrib.color;
     } else if (attrib instanceof TransparencyAttrib) {
@@ -760,8 +594,12 @@ function extractMaterial(
     } else if (attrib instanceof CullFaceAttrib) {
       material.cullFaceMode = attrib.mode;
       material.cullReverse = attrib.reverse;
+    } else if (attrib instanceof DepthTestAttrib) {
+      material.depthTestMode = attrib.mode;
     } else if (attrib instanceof DepthWriteAttrib) {
-      material.depthWrite = attrib.mode === DepthWriteMode.On;
+      material.depthWrite = attrib.mode;
+    } else if (attrib instanceof ColorWriteAttrib) {
+      material.colorWriteChannels = attrib.channels;
     } else {
       console.warn(
         `Unsupported RenderState attribute type: ${attrib.constructor.name}`,
@@ -769,127 +607,26 @@ function extractMaterial(
     }
   }
 
-  if (node.tags.has("sky")) {
-    // console.log("found sky!", material);
-    // material.depthWrite = false;
-    // material.cullBinName = "background";
-  }
-
   return material;
 }
 
 /**
- * Compute AABB from vertex data by reading vertex positions
+ * Compute bounding sphere from AABB (Panda3D algorithm).
+ * Center = AABB center, Radius = distance from center to farthest corner.
  */
-function computeAABBFromGeom(geom: Geom): AABB {
-  const aabb = new AABB();
+export function computeBoundingSphereFromAABB(aabb: AABB): {
+  center: vec3;
+  radius: number;
+} {
+  const center = vec3.create();
+  aabb.centerPoint(center);
 
-  const vertexData = geom.data;
-  if (!vertexData) throw new Error("Missing vertex data for geom");
+  // Radius = distance from center to corner (half diagonal)
+  const halfExtents = vec3.create();
+  vec3.sub(halfExtents, aabb.max, center);
+  const radius = vec3.length(halfExtents);
 
-  const format = vertexData.format;
-  if (!format) throw new Error("Missing vertex format");
-
-  // Find the vertex position column
-  let positionColumn: GeomVertexColumn | null = null;
-  let positionArrayIdx = -1;
-  let positionArrayFormat: GeomVertexArrayFormat | null = null;
-
-  for (let arrayIdx = 0; arrayIdx < format.arrays.length; arrayIdx++) {
-    const arrayFormat = format.arrays[arrayIdx];
-    for (const column of arrayFormat.columns) {
-      if (column.contents === Contents.Point) {
-        positionColumn = column;
-        positionArrayIdx = arrayIdx;
-        positionArrayFormat = arrayFormat;
-        break;
-      }
-    }
-    if (positionColumn) break;
-  }
-
-  if (!positionColumn || positionArrayIdx < 0 || !positionArrayFormat) {
-    return aabb;
-  }
-
-  // Get the vertex array data
-  if (positionArrayIdx >= vertexData.arrays.length) {
-    return aabb;
-  }
-
-  const arrayData = vertexData.arrays[positionArrayIdx];
-  const buffer = arrayData.buffer;
-  const stride = positionArrayFormat.stride;
-  const offset = positionColumn.start;
-  const numComponents = positionColumn.numComponents;
-  const numericType = positionColumn.numericType;
-
-  // Calculate number of vertices
-  const numVertices = Math.floor(buffer.byteLength / stride);
-  if (numVertices === 0) return aabb;
-
-  // Create a DataView for reading
-  const dataView = new DataView(
-    buffer.buffer,
-    buffer.byteOffset,
-    buffer.byteLength,
-  );
-
-  // Read vertex positions and expand AABB
-  const pos = vec3.create();
-  if (
-    numericType === NumericType.F32
-    // || (!file.header.useDouble && numericType === NumericType.StdFloat)
-  ) {
-    if (numComponents === 2) {
-      for (let i = 0; i < numVertices; i++) {
-        const baseOffset = i * stride + offset;
-        pos[0] = dataView.getFloat32(baseOffset, true);
-        pos[1] = dataView.getFloat32(baseOffset + 4, true);
-        aabb.unionPoint(pos);
-      }
-    } else if (numComponents === 3) {
-      for (let i = 0; i < numVertices; i++) {
-        const baseOffset = i * stride + offset;
-        pos[0] = dataView.getFloat32(baseOffset, true);
-        pos[1] = dataView.getFloat32(baseOffset + 4, true);
-        pos[2] = dataView.getFloat32(baseOffset + 8, true);
-        aabb.unionPoint(pos);
-      }
-    } else {
-      throw new Error(
-        `Unsupported number of components for vertex: ${numComponents}`,
-      );
-    }
-  } else if (
-    numericType === NumericType.F64
-    // || (file.header.useDouble && numericType === NumericType.StdFloat)
-  ) {
-    if (numComponents === 2) {
-      for (let i = 0; i < numVertices; i++) {
-        const baseOffset = i * stride + offset;
-        pos[0] = dataView.getFloat64(baseOffset, true);
-        pos[1] = dataView.getFloat64(baseOffset + 8, true);
-        aabb.unionPoint(pos);
-      }
-    } else if (numComponents === 3) {
-      for (let i = 0; i < numVertices; i++) {
-        const baseOffset = i * stride + offset;
-        pos[0] = dataView.getFloat64(baseOffset, true);
-        pos[1] = dataView.getFloat64(baseOffset + 8, true);
-        pos[2] = dataView.getFloat64(baseOffset + 16, true);
-        aabb.unionPoint(pos);
-      }
-    } else {
-      throw new Error(
-        `Unsupported number of components for vertex: ${numComponents}`,
-      );
-    }
-  } else {
-    throw new Error(`Unsupported numeric type for vertex: ${numericType}`);
-  }
-
-  return aabb;
+  return { center, radius };
 }
 
 function unpackPackedColor(

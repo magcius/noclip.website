@@ -2,19 +2,14 @@ import type { BAMFile } from "../bam";
 import type { DataStream } from "../common";
 import { registerBAMObject } from "./base";
 import { type DebugInfo, dbgEnum } from "./debug";
-import { RenderAttrib } from "./RenderAttrib";
+import { PandaCompareFunc, RenderAttrib } from "./RenderAttrib";
 
-export enum DepthWriteMode {
-  Off = 0,
-  On = 1,
-}
-
-export class DepthWriteAttrib extends RenderAttrib {
-  public mode = DepthWriteMode.On;
+export class DepthTestAttrib extends RenderAttrib {
+  public mode = PandaCompareFunc.Less;
 
   override load(file: BAMFile, data: DataStream) {
     super.load(file, data);
-    this.mode = data.readUint8() as DepthWriteMode;
+    this.mode = data.readUint8() as PandaCompareFunc;
   }
 
   override copyTo(target: this): void {
@@ -24,15 +19,17 @@ export class DepthWriteAttrib extends RenderAttrib {
 
   override getDebugInfo(): DebugInfo {
     const info = super.getDebugInfo();
-    info.set("mode", dbgEnum(this.mode, DepthWriteMode));
+    info.set("mode", dbgEnum(this.mode, PandaCompareFunc));
     return info;
   }
 
-  static create(mode: DepthWriteMode = DepthWriteMode.On): DepthWriteAttrib {
-    const attrib = new DepthWriteAttrib();
+  static create(
+    mode: PandaCompareFunc = PandaCompareFunc.Less,
+  ): DepthTestAttrib {
+    const attrib = new DepthTestAttrib();
     attrib.mode = mode;
     return attrib;
   }
 }
 
-registerBAMObject("DepthWriteAttrib", DepthWriteAttrib);
+registerBAMObject("DepthTestAttrib", DepthTestAttrib);

@@ -1,6 +1,8 @@
 import type { BAMFile } from "../bam";
 import type { DataStream } from "../common";
+import { AlphaTestAttrib } from "./AlphaTestAttrib";
 import { BAMObject, registerBAMObject } from "./base";
+import { DepthWriteAttrib, DepthWriteMode } from "./DepthWriteAttrib";
 import {
   type DebugInfo,
   dbgArray,
@@ -9,10 +11,18 @@ import {
   dbgObject,
   dbgRef,
 } from "./debug";
+import { PandaCompareFunc, RenderAttrib } from "./RenderAttrib";
+import { TransparencyAttrib, TransparencyMode } from "./TransparencyAttrib";
 
 export interface RenderAttribEntry {
   attrib: RenderAttrib;
   priority: number;
+}
+
+export const MAX_PRIORITY = 1000000000;
+
+interface RenderAttribConstructor<T extends RenderAttrib> {
+  new (...args: any[]): T;
 }
 
 export class RenderState extends BAMObject {
@@ -87,7 +97,10 @@ export class RenderState extends BAMObject {
    * Composes this RenderState with another, prioritizing the attributes of the other.
    * If an attribute is present in both states, the one with the higher priority is used.
    */
-  compose(other: RenderState) {
+  compose(other: RenderState | null) {
+    if (!other) {
+      return this;
+    }
     const result = this.clone();
     for (const entry of other.attribs) {
       const existing = result.attribs.findIndex(
@@ -101,8 +114,21 @@ export class RenderState extends BAMObject {
     }
     return result;
   }
-}
 
-export class RenderAttrib extends BAMObject {}
+  get<T extends RenderAttrib>(
+    attribType: RenderAttribConstructor<T>,
+  ): T | null {
+    const entry = this.attribs.find((a) => a.attrib instanceof attribType);
+    return entry ? (entry.attrib as T) : null;
+  }
+
+  static make(priority: number, ...attribs: RenderAttrib[]): RenderState {
+    const state = new RenderState();
+    for (const attrib of attribs) {
+      state.attribs.push({ attrib, priority });
+    }
+    return state;
+  }
+}
 
 registerBAMObject("RenderState", RenderState);

@@ -1,3 +1,4 @@
+import { AABB } from "../../Geometry";
 import type { BAMFile } from "../bam";
 import type { DataStream } from "../common";
 import { registerBAMObject } from "./base";
@@ -19,6 +20,8 @@ export interface GeomEntry {
 
 export class GeomNode extends PandaNode {
   public geoms: GeomEntry[] = [];
+
+  private _aabb: AABB | null = null;
 
   override load(file: BAMFile, data: DataStream) {
     super.load(file, data);
@@ -61,6 +64,16 @@ export class GeomNode extends PandaNode {
       ),
     );
     return info;
+  }
+
+  getBoundingBox(): AABB {
+    if (!this._aabb) {
+      this._aabb = new AABB();
+      for (const { geom } of this.geoms) {
+        this._aabb.union(this._aabb, geom.getBoundingBox());
+      }
+    }
+    return this._aabb;
   }
 }
 

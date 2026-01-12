@@ -2,7 +2,7 @@ import type { BAMFile } from "../bam";
 import { AssetVersion, type DataStream } from "../common";
 import { registerBAMObject } from "./base";
 import { type DebugInfo, dbgBool, dbgEnum } from "./debug";
-import { RenderAttrib } from "./RenderState";
+import { RenderAttrib } from "./RenderAttrib";
 
 export enum CullFaceMode {
   CullNone = 0,
