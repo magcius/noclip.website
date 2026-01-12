@@ -9,7 +9,7 @@ import * as GX from '../gx/gx_enum.js';
 import * as GXTexture from '../gx/gx_texture.js';
 import { DataFetcher, NamedArrayBufferSlice } from '../DataFetcher.js';
 import { createInputLayout, DrawParams, fillSceneParamsData, fillSceneParamsDataOnTemplate, GXMaterialHelperGfx, GXRenderHelperGfx, GXTextureHolder, MaterialParams } from '../gx/gx_render.js';
-import { hexdump } from '../DebugJunk.js';
+import { drawWorldSpacePoint, getDebugOverlayCanvas2D, hexdump } from '../DebugJunk.js';
 import { CTFileLoc, CTFileStore, CTShape } from '../../rust/pkg/noclip_support.js';
 import { compilePartialVtxLoader, compileVtxLoader, compileVtxLoaderMultiVat, getAttributeByteSize, GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, LoadedVertexDraw, LoadedVertexLayout, VtxLoader } from '../gx/gx_displaylist.js';
 import { createBufferFromData } from '../gfx/helpers/BufferHelpers.js';
@@ -145,7 +145,7 @@ class ShapeRenderer {
     private materialHelper: GXMaterialHelperGfx;
     private materialParams = new MaterialParams();
 
-    constructor(private cache: GfxRenderCache, private textureHolder: GXTextureHolder, private shape: Shape, public loadedVertexLayouts: LoadedVertexLayout[], public loadedVertexData: LoadedVertexData[]) {
+    constructor(private cache: GfxRenderCache, private textureHolder: GXTextureHolder, public shape: Shape, public loadedVertexLayouts: LoadedVertexLayout[], public loadedVertexData: LoadedVertexData[]) {
         const device = cache.device;
         for (const data of this.loadedVertexData) {
             for (let i = 0; i < data.vertexBuffers.length; i++) {
@@ -213,13 +213,20 @@ export class Scene implements Viewer.SceneGfx {
         this.renderHelper = new GXRenderHelperGfx(device);
         const shapeNames: string[] = [
             "course_4b_055_a.shp",
+            // "course_dc3b_031k.shp",
             // "ANIME_FUNSUI_001.shp",
             // "Chair.shp",
         ];
 
         for (const name of shapeNames) {
             const shape = this.manager.createShape(name);
-            const renderer = new ShapeRenderer(this.renderHelper.renderCache, this.textureHolder, shape, shape.vertexLayouts, shape.vertexData);
+            const renderer = new ShapeRenderer(
+                this.renderHelper.renderCache,
+                this.textureHolder,
+                shape,
+                shape.vertexLayouts,
+                shape.vertexData
+            );
             this.shapes.push(renderer);
         }
     }
@@ -232,8 +239,33 @@ export class Scene implements Viewer.SceneGfx {
 
         fillSceneParamsDataOnTemplate(template, viewerInput);
 
-        for (const shape of this.shapes)
+        for (const shape of this.shapes) {
             shape.prepareToRender(renderInstManager, viewerInput);
+
+            for (let i = 0; i < shape.shape.vertexData.length; i++) {
+                const data = shape.shape.vertexData[i];
+                const layout = shape.shape.vertexLayouts[i];
+                if (data.totalVertexCount === 217) {
+                    const stride = layout.vertexBufferStrides[0] / 4;
+                    const offs = layout.vertexAttributeOffsets[GX.Attr.POS];
+                    const buf = new Float32Array(data.vertexBuffers[0].slice(offs));
+                    for (let j = 0; j < 100; j++) {
+                        const v0 = buf[j * stride];
+                        const v1 = buf[j * stride + 1];
+                        const v2 = buf[j * stride + 2];
+                        const p = vec3.fromValues(v0, v1, v2);
+                        vec3.scale(p, p, shape.shape.scale);
+                        drawWorldSpacePoint(
+                            getDebugOverlayCanvas2D(),
+                            viewerInput.camera.clipFromWorldMatrix,
+                            p,
+                            undefined,
+                            10,
+                        );
+                    }
+                }
+            }
+        }
 
         renderInstManager.popTemplate();
 
@@ -372,9 +404,6 @@ class FileManager {
             //     assert(oldStride === newStride, 'difference in VTXFMT strides???')
             // }
             vertexData.push(data);
-            if (vertexData.length - 1 === filaIdx) {
-                console.log(data);
-            }
             assert(data.endOffs !== null);
             offs += data.endOffs + (0x20 - (data.endOffs % 0x20));
             if (offs >= displayListData.byteLength) {
@@ -425,9 +454,13 @@ class SceneDesc implements Viewer.SceneDesc {
     public async createScene(gfxDevice: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const manager = new FileManager(context.dataFetcher, [
             "polDC0.all",
-            "texDC0.all",
             "poldc1.all",
             "poldc1_stream.all",
+            "poldc2.all",
+            "poldc2_stream.all",
+            "poldc3.all",
+            "poldc3_stream.all",
+            "texDC0.all",
             "texDC1.all",
             "texDC2.all",
             "texdc3.all",
