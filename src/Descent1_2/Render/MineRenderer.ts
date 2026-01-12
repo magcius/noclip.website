@@ -57,7 +57,7 @@ class DescentMineProgram extends DeviceProgram {
 
     public override both = `
 ${GfxShaderLibrary.MatrixLibrary}
-precision mediump float;
+precision highp float;
 
 layout(std140) uniform ub_SceneParams {
     Mat4x4 u_matProjection;

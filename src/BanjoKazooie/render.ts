@@ -32,7 +32,7 @@ export class F3DEX_Program extends DeviceProgram {
     public static ub_CombineParams = 2;
 
     public override both = `
-precision mediump float;
+precision highp float;
 
 ${GfxShaderLibrary.MatrixLibrary}
 ${GfxShaderLibrary.saturate}

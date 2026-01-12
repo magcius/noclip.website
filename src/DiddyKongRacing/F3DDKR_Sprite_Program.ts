@@ -13,7 +13,7 @@ export class F3DDKR_Sprite_Program extends DeviceProgram {
     public static ub_TexParams = 2;
     
     public override both = `
-precision mediump float;
+precision highp float;
 
 ${GfxShaderLibrary.MatrixLibrary}
 
