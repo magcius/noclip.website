@@ -180,6 +180,10 @@ function convert_attribute_format(format: AttributeFormat)
         case AttributeFormat.idk:
             return GfxFormat.U8_RG;
 
+        // mannequinbig_01 in d003_01 has this
+        case AttributeFormat.idk2:
+            return GfxFormat.S8_RGBA_NORM;
+
         case AttributeFormat._8_8_Unorm:
             // TODO this might need to be expanded to 
             return GfxFormat.U8_RG_NORM;
@@ -230,6 +234,7 @@ enum AttributeFormat
     _8_8_Uint          = 0x0903,
     _8_8_8_8_Unorm     = 0x0B01,
     _8_8_8_8_Snorm     = 0x0B02,
+    idk2               = 0x0B03,
     _10_10_10_2_Snorm  = 0x0E02,
     _16_16_Unorm       = 0x1201,
     _16_16_Snorm       = 0x1202,
