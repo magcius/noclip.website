@@ -16,7 +16,7 @@ export function parseFSKL(buffer: ArrayBufferSlice, offset: number): FSKL
     assert(readString(buffer, offset, 0x04) === 'FSKL');
 
     const bone_array_offset = view.getUint32(offset + 0x10, true);
-    const bone_count = view.getUint32(offset + 0x38, true);
+    const bone_count = view.getUint16(offset + 0x38, true);
     const bone_array: FSKL_Bone[] = [];
     let bone_entry_offset = bone_array_offset;
     for (let i = 0; i < bone_count; i++)

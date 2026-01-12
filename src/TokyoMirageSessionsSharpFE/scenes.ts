@@ -21,6 +21,7 @@ class TMSFESceneDesc implements SceneDesc
         // Load the map file
         const dataFetcher = context.dataFetcher;
         const apak = parseAPAK(await dataFetcher.fetchData(`TokyoMirageSessionsSharpFE/maps/${this.id}/model.apak`));
+        // const apak = parseAPAK(await dataFetcher.fetchData(`TokyoMirageSessionsSharpFE/maps/d002_01/model.apak`));
         console.log(apak);
 
         let renderer = new TMSFEScene(device, apak);
@@ -37,11 +38,11 @@ const id = `TokyoMirageSessionsSharpFE`;
 const name = "MOVE THIS LATER Tokyo Mirage Sessions ♯FE";
 const sceneDescs =
 [
-    /*
     "Illusory Daitama",
     new TMSFESceneDesc("d002_01", "Illusory Daitama"),
     new TMSFESceneDesc("d002_02", "Blue Observatory"),
     new TMSFESceneDesc("d002_03", "Red Observatory"),
+    /*
     "Illusory 106",
     new TMSFESceneDesc("d003_01", "1F to 3F"),
     new TMSFESceneDesc("d003_04", "4F"),

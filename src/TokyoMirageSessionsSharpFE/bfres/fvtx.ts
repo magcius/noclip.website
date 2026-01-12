@@ -176,6 +176,10 @@ function convert_attribute_format(format: AttributeFormat)
 {
     switch (format)
     {
+        // warp_01.bfres in d002_01 has this, very confused
+        case AttributeFormat.idk:
+            return GfxFormat.U8_RG;
+
         case AttributeFormat._8_8_Unorm:
             // TODO this might need to be expanded to 
             return GfxFormat.U8_RG_NORM;
@@ -220,6 +224,7 @@ function convert_attribute_format(format: AttributeFormat)
 // vertex attribute format numbers that bfres files use
 enum AttributeFormat
 {
+    idk                = 0x0203,
     _8_8_Unorm         = 0x0901,
     _8_8_Snorm         = 0x0902,
     _8_8_Uint          = 0x0903,
