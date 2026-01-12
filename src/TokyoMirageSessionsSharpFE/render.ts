@@ -4,6 +4,7 @@ import * as BNTX from '../fres_nx/bntx.js';
 import { deswizzle_and_upload_bntx_textures } from "./bntx_helpers.js";
 import { createBufferFromSlice } from "../gfx/helpers/BufferHelpers.js";
 import { FMDL } from "./bfres/fmdl.js";
+import { recursive_bone_transform } from "./bfres/fskl.js";
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
 import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
@@ -11,7 +12,6 @@ import { GfxDevice, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, Gfx
          GfxVertexBufferFrequency, GfxInputLayout, GfxBufferFrequencyHint, GfxBufferUsage, GfxBindingLayoutDescriptor,
          GfxCullMode, GfxBuffer, GfxSamplerBinding, GfxTexture} from "../gfx/platform/GfxPlatform.js";
 import { mat4 } from "gl-matrix";
-import { computeModelMatrixSRT } from "../MathHelpers.js";
 import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { TMSFEProgram } from './shader.js';
 import { fillMatrix4x3, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers.js';
@@ -163,13 +163,7 @@ class fshp_renderer
 
         // setup transformation matrix
         const bone = fmdl.fskl.bones[fshp.bone_index];
-        computeModelMatrixSRT
-        (
-            this.transform_matrix,
-            bone.scale[0], bone.scale[1], bone.scale[2],
-            bone.rotation[0], bone.rotation[1], bone.rotation[2],
-            bone.translation[0], bone.translation[1], bone.translation[2],
-        );
+        this.transform_matrix = recursive_bone_transform(fmdl.fskl.bones[fshp.bone_index], fmdl.fskl);
 
         // setup sampler
         const fmat = fmdl.fmat[fshp.fmat_index];
@@ -178,6 +172,7 @@ class fshp_renderer
         for (let i = 0; i < 1; i++)
         {
             const texture_name = fmat.texture_names[i];
+            console.log(texture_name);
             const texture = bntx.textures.find((f) => f.name === texture_name);
             if (texture !== undefined)
             {

@@ -122,8 +122,8 @@ const sceneDescs =
     new TMSFESceneDesc("b014_01", "b014_01"),
     new TMSFESceneDesc("b015_01", "b015_01"),
     new TMSFESceneDesc("b016_01", "b016_01"),
-    /*
-    "Tokyo",
+
+    // "Tokyo",
     new TMSFESceneDesc("f003_02", "Fortuna Office"),
     new TMSFESceneDesc("f003_03", "Bloom Palace"),
     new TMSFESceneDesc("f001_01", "Shibuya 1"),
@@ -159,7 +159,7 @@ const sceneDescs =
     new TMSFESceneDesc("f010_05", "Microwavin' with Mamorin Set"),
     new TMSFESceneDesc("f010_06", "Dressing Room"),
     new TMSFESceneDesc("f010_07", "Fashion Show Runway"),
-    */
+
 ];
 
 export const sceneGroup: SceneGroup = { id, name, sceneDescs };

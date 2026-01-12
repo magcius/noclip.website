@@ -6,6 +6,8 @@ import { assert, readString } from "../../util.js";
 import { read_bfres_string } from "./bfres_switch.js";
 import { vec3 } from "gl-matrix";
 import { user_data, parse_user_data } from "./user_data.js";
+import { mat4 } from "gl-matrix";
+import { computeModelMatrixSRT } from "../../MathHelpers.js";
 
 // reads from a bfres file and returns a FSKL object
 // buffer: the bfres file
@@ -53,6 +55,29 @@ export function parseFSKL(buffer: ArrayBufferSlice, offset: number): FSKL
 }
 
 const BONE_ENTRY_SIZE = 0x60;
+
+// multiply a bone's transformation with all it's parents transformations to get the real transformation matrix
+export function recursive_bone_transform(bone: FSKL_Bone, fskl: FSKL): mat4
+{
+    let transform_matrix: mat4 = mat4.create();
+    computeModelMatrixSRT
+    (
+        transform_matrix,
+        bone.scale[0], bone.scale[1], bone.scale[2],
+        bone.rotation[0], bone.rotation[1], bone.rotation[2],
+        bone.translation[0], bone.translation[1], bone.translation[2],
+    );
+    if (bone.parent_index == -1)
+    {
+        return transform_matrix;
+    }
+    else
+    {
+        const new_matrix: mat4 = mat4.create();
+        mat4.multiply(new_matrix, transform_matrix, recursive_bone_transform(fskl.bones[bone.parent_index], fskl))
+        return new_matrix;
+    }
+}
 
 export interface FSKL
 {
