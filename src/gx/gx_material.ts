@@ -1412,7 +1412,7 @@ ${this.generateFogAdj(`t_FogBase`)}
 
         const both = `
 // ${this.material.name}
-precision mediump float;
+precision highp float;
 ${bindingsDefinition}
 ${GfxShaderLibrary.saturate}
 ${GXShaderLibrary.TevOverflow}
