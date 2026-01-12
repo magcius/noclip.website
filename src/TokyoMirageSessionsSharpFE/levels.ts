@@ -19,7 +19,7 @@ export function get_level_bfres_names(level_id: string): string[]
         
         case "d003_01":
             // return ["d003_01", "obj01", "obj02", "sky"];
-            return ["d003_01"];
+            return ["blockside_01"];
 
         default:
             console.error(`level id ${level_id} not found`);

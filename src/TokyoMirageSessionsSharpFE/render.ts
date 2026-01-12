@@ -2,6 +2,7 @@ import { APAK, get_files_of_type } from "./apak.js";
 import { FRES, parseBFRES } from "./bfres/bfres_switch.js";
 import * as BNTX from '../fres_nx/bntx.js';
 import { deswizzle_and_upload_bntx_textures } from "./bntx_helpers.js";
+import { CameraController } from "../Camera.js";
 import { createBufferFromSlice } from "../gfx/helpers/BufferHelpers.js";
 import { FMDL } from "./bfres/fmdl.js";
 import { recursive_bone_transform } from "./bfres/fskl.js";
@@ -67,6 +68,11 @@ export class TMSFEScene implements SceneGfx
                 this.fshp_renderers.push(renderer);
             }
         }
+    }
+
+    public adjustCameraController(c: CameraController)
+    {
+            c.setSceneMoveSpeedMult(2 / 60);
     }
 
     public render(device: GfxDevice, viewerInput: ViewerRenderInput): void
