@@ -105,8 +105,7 @@ export function get_level_bfres_names(level_id: string): string[]
             return ["d006_10", "obj01", "sky"];
 
         case "d007_01":
-            // return ["d007_01", "obj01", "obj02", "obj03", "sky"];
-            return ["d007_01", "obj03"];
+            return ["d007_01", "obj01", "obj02", "obj03", "sky"];
 
         case "d007_02":
             return ["d007_02", "obj01", "obj02", "obj03", "sky"];

@@ -17,6 +17,7 @@ import { get_level_bfres_names } from "./levels.js";
 import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { TMSFEProgram } from './shader.js';
 import { fillMatrix4x3, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers.js';
+import { assert } from "../util.js";
 import { SceneGfx, ViewerRenderInput } from "../viewer.js";
 
 export class TMSFEScene implements SceneGfx
@@ -194,6 +195,8 @@ class fshp_renderer
         }
         else
         {
+            assert(fskl.smooth_rigid_indices.length < BONE_MATRIX_LENGTH);
+
             this.use_skinning = true;
             this.bone_matrix_array = [];
             for (let i = 0; i < fskl.smooth_rigid_indices.length; i++)
@@ -202,35 +205,6 @@ class fshp_renderer
                 this.bone_matrix_array.push(transformation_matrix);
             }
         }
-
-
-
-        // const bone = fmdl.fskl.bones[fshp.bone_index];
-        // switch(bone.name)
-        // {
-        //     case "shadow_obj00":
-        //     case "shadow_obj02":
-        //     case "shadow_obj03":
-        //         this.bone_matrix = recursive_bone_transform(8, fmdl.fskl);
-        //         break;
-
-        //     case "tree_obj00":
-        //     case "tree_obj01":
-        //     case "tree_obj02":
-        //     case "tree_obj03":
-        //     case "tree_obj04":
-        //         // these ones seem to just use a blank transformation matrix
-        //         break;
-
-        //     case "shadow_obj01":
-        //     case "shadow_obj04":
-        //         this.bone_matrix = recursive_bone_transform(10, fmdl.fskl);
-        //         break;
-
-        //     default:
-        //         this.bone_matrix = recursive_bone_transform(fshp.bone_index, fmdl.fskl);
-        //         break;
-        // }
 
         // setup sampler
         const fmat = fmdl.fmat[fshp.fmat_index];

@@ -43,10 +43,19 @@ out vec2 v_TexCoord0;
 
 void mainVS()
 {
+    #if ${this.fshp.skin_bone_count} == 0
     vec3 WorldPosition = UnpackMatrix(u_BoneMatrix[0]) * vec4(a_Position, 1.0);
+
+    #elif ${this.fshp.skin_bone_count} == 1
+    vec3 WorldPosition = UnpackMatrix(u_BoneMatrix[a_BlendIndex0 + uint(1)]) * vec4(a_Position, 1.0);
+
+    #else
+    vec3 WorldPosition = a_Position;
+
+    #endif
+    
     vec3 ViewPosition = UnpackMatrix(u_ViewFromWorldMatrix) * vec4(WorldPosition, 1.0);
     gl_Position = UnpackMatrix(u_ClipFromViewMatrix) * vec4(ViewPosition, 1.0);
-
     v_TexCoord0 = a_TexCoord0.xy;
 }
 #endif
@@ -77,27 +86,56 @@ void mainPS()
             let attribute_index = TMSFEProgram.vertex_attribute_codes.indexOf(attribute_code);
             let attribute_name = TMSFEProgram.vertex_attribute_names[attribute_index]
             let type = TMSFEProgram.vertex_attribute_types[attribute_index];
-            // if (attribute_code == '_i0')
-            // {
-            //     switch(this.fshp.skin_bone_count)
-            //     {
-            //         case 1:
-            //             type = 'uint';
-            //             break;
+            if (attribute_code == '_i0')
+            {
+                switch(this.fshp.skin_bone_count)
+                {
+                    case 1:
+                        type = 'uint';
+                        break;
                     
-            //         case 2:
-            //             type = 'uint[2]';
-            //             break;
+                    case 2:
+                        type = 'uvec2';
+                        break;
                     
-            //         case 3:
-            //             type = 'uint[3]';
-            //             break;
+                    case 3:
+                        type = 'uvec3';
+                        break;
                     
-            //         case 4:
-            //             type = 'uint[4]';
-            //             break;
-            //     }
-            // }
+                    case 4:
+                        type = 'uvec4';
+                        break;
+                    
+                    default:
+                        console.error(`_i0 defintion has ${this.fshp.skin_bone_count} skin bones`);
+                        throw("whoops");
+                }
+            }
+            if (attribute_code == '_w0')
+            {
+                switch(this.fshp.skin_bone_count)
+                {
+                    case 1:
+                        type = 'float';
+                        break;
+                    
+                    case 2:
+                        type = 'vec2';
+                        break;
+                    
+                    case 3:
+                        type = 'vec3';
+                        break;
+                    
+                    case 4:
+                        type = 'vec4';
+                        break;
+
+                    default:
+                        console.error(`_w0 defintion has ${this.fshp.skin_bone_count} skin weights`);
+                        throw("whoops");
+                }
+            }
             lines += `layout(location = ${i}) in ${type} ${attribute_name};\n`;
         }
 
