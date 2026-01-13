@@ -5770,19 +5770,20 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
                 demoActor.animFrameMax = this.anmBck.frameCtrl.endFrame;
             }
         } else {
-            // TODO: How should LkD00 arc be loaded?
-            const bck = globals.resCtrl.getObjectIDRes(ResType.Bck, 'LkD00', anmBckId);
+            // The demo anim archive is toggled based on if Aryll has been rescued. See dComIfGp_getLkDemoAnmArchive() 
+            const arcName = (globals.scnPlay.linkDemoAnmNo == 1)  ? 'LkD01' : 'LkD00';
+            const bck = globals.resCtrl.getObjectIDRes(ResType.Bck, arcName, anmBckId);
             this.anmBck.init(this.model.modelData, bck, true, bck.loopMode, 1.0, 0, bck.duration);
             this.anmBck.frameCtrl.setFrame(anmFrame);
             this.anmBckId = anmBckId;
 
             if (anmBtpId !== 0xFFFF) {
-                const btp = globals.resCtrl.getObjectIDRes(ResType.Btp, 'LkD00', anmBtpId);
+                const btp = globals.resCtrl.getObjectIDRes(ResType.Btp, arcName, anmBtpId);
                 this.anmBtp.init(this.model.modelData, btp, true, btp.loopMode, 1.0, 0, btp.duration);
             }
 
             if (anmBtkId !== 0xFFFF) {
-                const btk = globals.resCtrl.getObjectIDRes(ResType.Btk, 'LkD00', anmBtkId);
+                const btk = globals.resCtrl.getObjectIDRes(ResType.Btk, arcName, anmBtkId);
                 this.anmBtk.init(this.model.modelData, btk, true, btk.loopMode, 1.0, 0, btk.duration);
             }
         }
