@@ -17,6 +17,9 @@ export function parseFSKL(buffer: ArrayBufferSlice, offset: number): FSKL
     const view = buffer.createDataView();
     assert(readString(buffer, offset, 0x04) === 'FSKL');
 
+    const flags = view.getUint32(offset + 0x4, true);
+    const scaling_mode = (flags >> 8) & 0xF;
+
     const bone_array_offset = view.getUint32(offset + 0x10, true);
     const bone_count = view.getUint16(offset + 0x38, true);
     const bone_array: FSKL_Bone[] = [];
@@ -51,14 +54,29 @@ export function parseFSKL(buffer: ArrayBufferSlice, offset: number): FSKL
         bone_entry_offset += BONE_ENTRY_SIZE;
     }
 
-    return { bones: bone_array };
+    const smooth_rigid_index_array_offset = view.getUint32(offset + 0x18, true);
+    const smooth_count = view.getUint16(offset + 0x3A, true);
+    const rigid_count = view.getUint16(offset + 0x3C, true);
+    let smooth_rigid_array: number[] = [];
+    let smooth_rigid_index_entry_offset = smooth_rigid_index_array_offset;
+    for (let i = 0; i < smooth_count + rigid_count; i++)
+    {
+        const bone_index = view.getUint16(smooth_rigid_index_entry_offset, true);
+
+        smooth_rigid_array.push(bone_index);
+        smooth_rigid_index_entry_offset += SMOOTH_RIGID_INDEX_ENTRY_SIZE;
+    }
+
+    return { bones: bone_array, smooth_rigid_indices: smooth_rigid_array, scaling_mode };
 }
 
 const BONE_ENTRY_SIZE = 0x60;
+const SMOOTH_RIGID_INDEX_ENTRY_SIZE = 0x2;
 
-// multiply a bone's transformation with all it's parents transformations to get the real transformation matrix
-export function recursive_bone_transform(bone: FSKL_Bone, fskl: FSKL): mat4
+// multiply a bone's transformation with all it's parent's transformations to get the real transformation matrix
+export function recursive_bone_transform(bone_index: number, fskl: FSKL): mat4
 {
+    const bone = fskl.bones[bone_index];
     let transform_matrix: mat4 = mat4.create();
     computeModelMatrixSRT
     (
@@ -74,7 +92,7 @@ export function recursive_bone_transform(bone: FSKL_Bone, fskl: FSKL): mat4
     else
     {
         const new_matrix: mat4 = mat4.create();
-        mat4.multiply(new_matrix, recursive_bone_transform(fskl.bones[bone.parent_index], fskl), transform_matrix)
+        mat4.multiply(new_matrix, recursive_bone_transform(bone.parent_index, fskl), transform_matrix)
         return new_matrix;
     }
 }
@@ -82,6 +100,8 @@ export function recursive_bone_transform(bone: FSKL_Bone, fskl: FSKL): mat4
 export interface FSKL
 {
     bones: FSKL_Bone[];
+    smooth_rigid_indices: number[];
+    scaling_mode: FSKL_Scaling_Mode
 }
 
 export interface FSKL_Bone
@@ -92,4 +112,10 @@ export interface FSKL_Bone
     rotation: vec3;
     translation: vec3;
     user_data: user_data[];
+}
+
+enum FSKL_Scaling_Mode
+{
+    Standard = 0x1,
+    Maya     = 0x2,
 }

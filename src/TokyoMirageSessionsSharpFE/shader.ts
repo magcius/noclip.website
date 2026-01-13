@@ -5,6 +5,7 @@ import { DeviceProgram } from '../Program.js';
 import { GfxShaderLibrary } from '../gfx/helpers/GfxShaderLibrary.js';
 import { FVTX } from "./bfres/fvtx.js";
 import { FMAT } from "./bfres/fmat.js";
+import { FSHP } from './bfres/fshp.js';
 
 export class TMSFEProgram extends DeviceProgram
 {
@@ -15,7 +16,7 @@ export class TMSFEProgram extends DeviceProgram
 
     public static ub_SceneParams = 0;
 
-    constructor(public fvtx: FVTX, public fmat: FMAT)
+    constructor(public fvtx: FVTX, public fmat: FMAT, public fshp: FSHP)
     {
         super();
         this.name = this.fmat.name;
@@ -30,7 +31,7 @@ layout(std140) uniform ub_SceneParams
 {
     Mat4x4 u_ClipFromViewMatrix;
     Mat3x4 u_ViewFromWorldMatrix;
-    Mat4x4 u_BoneTransformMatrix;
+    Mat3x4 u_BoneMatrix[16];
 };
 
 uniform sampler2D s_diffuse;
@@ -42,8 +43,8 @@ out vec2 v_TexCoord0;
 
 void mainVS()
 {
-    vec4 WorldPosition = UnpackMatrix(u_BoneTransformMatrix) * vec4(a_Position, 1.0);
-    vec3 ViewPosition = UnpackMatrix(u_ViewFromWorldMatrix) * WorldPosition;
+    vec3 WorldPosition = UnpackMatrix(u_BoneMatrix[0]) * vec4(a_Position, 1.0);
+    vec3 ViewPosition = UnpackMatrix(u_ViewFromWorldMatrix) * vec4(WorldPosition, 1.0);
     gl_Position = UnpackMatrix(u_ClipFromViewMatrix) * vec4(ViewPosition, 1.0);
 
     v_TexCoord0 = a_TexCoord0.xy;
@@ -76,6 +77,27 @@ void mainPS()
             let attribute_index = TMSFEProgram.vertex_attribute_codes.indexOf(attribute_code);
             let attribute_name = TMSFEProgram.vertex_attribute_names[attribute_index]
             let type = TMSFEProgram.vertex_attribute_types[attribute_index];
+            // if (attribute_code == '_i0')
+            // {
+            //     switch(this.fshp.skin_bone_count)
+            //     {
+            //         case 1:
+            //             type = 'uint';
+            //             break;
+                    
+            //         case 2:
+            //             type = 'uint[2]';
+            //             break;
+                    
+            //         case 3:
+            //             type = 'uint[3]';
+            //             break;
+                    
+            //         case 4:
+            //             type = 'uint[4]';
+            //             break;
+            //     }
+            // }
             lines += `layout(location = ${i}) in ${type} ${attribute_name};\n`;
         }
 

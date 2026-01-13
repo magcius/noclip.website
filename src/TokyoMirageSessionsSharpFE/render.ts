@@ -61,6 +61,7 @@ export class TMSFEScene implements SceneGfx
 
             // create all fshp_renderers
             const fmdl = fres.fmdl[0];
+            console.log(fmdl);
             const shapes = fmdl.fshp;
             for (let i = 0; i < shapes.length; i++)
             {
@@ -131,10 +132,11 @@ class fshp_renderer
     private index_buffer_descriptor: GfxVertexBufferDescriptor;
     private index_count: number;
     private input_layout: GfxInputLayout;
-    private transform_matrix: mat4 = mat4.create();
+    private bone_matrix_array: mat4[] = [];
     private program: TMSFEProgram;
     private sampler_bindings: GfxSamplerBinding[] = [];
     private do_not_render: boolean = false;
+    private use_skinning: boolean = false;
 
     constructor(device: GfxDevice, renderHelper: GfxRenderHelper, fmdl: FMDL, shape_index: number, bntx: BNTX.BNTX, gfx_texture_array: GfxTexture[])
     {
@@ -184,9 +186,52 @@ class fshp_renderer
         this.index_buffer_descriptor = { buffer: this.index_buffer };
 
         // setup transformation matrix
-        const bone = fmdl.fskl.bones[fshp.bone_index];
-        this.transform_matrix = recursive_bone_transform(fmdl.fskl.bones[fshp.bone_index], fmdl.fskl);
-        
+        const fskl = fmdl.fskl;
+        if (fshp.skin_bone_count == 0)
+        {
+            // mesh uses it's bone's transformation matrix
+            this.bone_matrix_array.push(recursive_bone_transform(fshp.bone_index, fskl));
+        }
+        else
+        {
+            this.use_skinning = true;
+            this.bone_matrix_array = [];
+            for (let i = 0; i < fskl.smooth_rigid_indices.length; i++)
+            {
+                const transformation_matrix = recursive_bone_transform(fskl.smooth_rigid_indices[i], fskl)
+                this.bone_matrix_array.push(transformation_matrix);
+            }
+        }
+
+
+
+        // const bone = fmdl.fskl.bones[fshp.bone_index];
+        // switch(bone.name)
+        // {
+        //     case "shadow_obj00":
+        //     case "shadow_obj02":
+        //     case "shadow_obj03":
+        //         this.bone_matrix = recursive_bone_transform(8, fmdl.fskl);
+        //         break;
+
+        //     case "tree_obj00":
+        //     case "tree_obj01":
+        //     case "tree_obj02":
+        //     case "tree_obj03":
+        //     case "tree_obj04":
+        //         // these ones seem to just use a blank transformation matrix
+        //         break;
+
+        //     case "shadow_obj01":
+        //     case "shadow_obj04":
+        //         this.bone_matrix = recursive_bone_transform(10, fmdl.fskl);
+        //         break;
+
+        //     default:
+        //         this.bone_matrix = recursive_bone_transform(fshp.bone_index, fmdl.fskl);
+        //         break;
+        // }
+
         // setup sampler
         const fmat = fmdl.fmat[fshp.fmat_index];
         // for (let i = 0; i < fmat.texture_names.length; i++)
@@ -218,7 +263,7 @@ class fshp_renderer
         }
 
         // initialize shader
-        this.program = new TMSFEProgram(fvtx, fmat);
+        this.program = new TMSFEProgram(fvtx, fmat, fshp);
     }
 
     // produce a draw call for this mesh
@@ -243,11 +288,38 @@ class fshp_renderer
         
         // create uniform buffers for the shader
         renderInst.setBindingLayouts(bindingLayouts);
-        let uniform_buffer_offset = renderInst.allocateUniformBuffer(TMSFEProgram.ub_SceneParams, 44);
+        // size 16 + 12 + (12 * 16)
+        let uniform_buffer_offset = renderInst.allocateUniformBuffer(TMSFEProgram.ub_SceneParams, 220);
         const mapped = renderInst.mapUniformBufferF32(TMSFEProgram.ub_SceneParams);
         uniform_buffer_offset += fillMatrix4x4(mapped, uniform_buffer_offset, viewerInput.camera.projectionMatrix);
         uniform_buffer_offset += fillMatrix4x3(mapped, uniform_buffer_offset, viewerInput.camera.viewMatrix);
-        uniform_buffer_offset += fillMatrix4x4(mapped, uniform_buffer_offset, this.transform_matrix);
+        
+        uniform_buffer_offset += fillMatrix4x3(mapped, uniform_buffer_offset, this.bone_matrix_array[0]);
+
+        if (this.use_skinning)
+        {
+            // place the bone matrix array and then fill the rest with emptty matrices
+            for (let i = 0; i < BONE_MATRIX_LENGTH; i++)
+            {
+                if (i < this.bone_matrix_array.length)
+                {
+                    uniform_buffer_offset += fillMatrix4x3(mapped, uniform_buffer_offset, this.bone_matrix_array[i]);
+                }
+                else
+                {
+                    uniform_buffer_offset += fillMatrix4x3(mapped, uniform_buffer_offset, mat4.create());
+                }
+            }
+        }
+        else
+        {
+            // place the bone's transformation matrix and then fill the rest with blank matrices
+            uniform_buffer_offset += fillMatrix4x3(mapped, uniform_buffer_offset, this.bone_matrix_array[0]);
+            for (let i = 0; i < BONE_MATRIX_LENGTH - 1; i++)
+            {
+                uniform_buffer_offset += fillMatrix4x3(mapped, uniform_buffer_offset, mat4.create());
+            }
+        }
 
         // set sampler
         renderInst.setSamplerBindingsFromTextureMappings(this.sampler_bindings);
@@ -270,3 +342,5 @@ class fshp_renderer
         device.destroyBuffer(this.index_buffer);
     }
 }
+
+const BONE_MATRIX_LENGTH = 16;

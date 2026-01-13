@@ -72,7 +72,7 @@ export function parseFVTX(buffer: ArrayBufferSlice, offset: number, count: numbe
                 format = convert_attribute_format(original_format);
             }
 
-            vertexAttributes.push({ name, format, bufferOffset, bufferIndex });
+            vertexAttributes.push({ name, original_format, format, bufferOffset, bufferIndex });
             
             attribute_entry_offset += ATTRIBUTE_ENTRY_SIZE;
         }
@@ -176,7 +176,7 @@ function convert_attribute_format(format: AttributeFormat)
 {
     switch (format)
     {
-        // warp_01.bfres in d002_01 has this, very confused
+        // used for blend index
         case AttributeFormat.idk:
             return GfxFormat.U8_RG;
 
@@ -247,6 +247,7 @@ enum AttributeFormat
 export interface FVTX_VertexAttribute
 {
     name: string;
+    original_format: AttributeFormat;
     format: GfxFormat;
     bufferOffset: number;
     bufferIndex: number;
