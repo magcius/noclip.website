@@ -6,6 +6,7 @@ import { GfxShaderLibrary } from '../gfx/helpers/GfxShaderLibrary.js';
 import { FVTX } from "./bfres/fvtx.js";
 import { FMAT } from "./bfres/fmat.js";
 import { FSHP } from './bfres/fshp.js';
+import { FSKL } from './bfres/fskl.js';
 
 export class TMSFEProgram extends DeviceProgram
 {
@@ -16,7 +17,7 @@ export class TMSFEProgram extends DeviceProgram
 
     public static ub_SceneParams = 0;
 
-    constructor(public fvtx: FVTX, public fmat: FMAT, public fshp: FSHP)
+    constructor(public fvtx: FVTX, public fmat: FMAT, public fshp: FSHP, public bone_matrix_array_length: number)
     {
         super();
         this.name = this.fmat.name;
@@ -31,7 +32,7 @@ layout(std140) uniform ub_SceneParams
 {
     Mat4x4 u_ClipFromViewMatrix;
     Mat3x4 u_ViewFromWorldMatrix;
-    Mat3x4 u_BoneMatrix[16];
+    Mat3x4 u_BoneMatrix[${this.bone_matrix_array_length}];
 };
 
 uniform sampler2D s_diffuse;
@@ -47,7 +48,7 @@ void mainVS()
     vec3 WorldPosition = UnpackMatrix(u_BoneMatrix[0]) * vec4(a_Position, 1.0);
 
     #elif ${this.fshp.skin_bone_count} == 1
-    vec3 WorldPosition = UnpackMatrix(u_BoneMatrix[a_BlendIndex0 + uint(1)]) * vec4(a_Position, 1.0);
+    vec3 WorldPosition = UnpackMatrix(u_BoneMatrix[a_BlendIndex0]) * vec4(a_Position, 1.0);
 
     #else
     vec3 WorldPosition = a_Position;
@@ -107,7 +108,7 @@ void mainPS()
                         break;
                     
                     default:
-                        console.error(`_i0 defintion has ${this.fshp.skin_bone_count} skin bones`);
+                        console.error(`fshp ${this.fshp.name} _i0 defintion has ${this.fshp.skin_bone_count} skin bones`);
                         throw("whoops");
                 }
             }

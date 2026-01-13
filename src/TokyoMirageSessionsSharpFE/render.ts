@@ -191,11 +191,12 @@ class fshp_renderer
         if (fshp.skin_bone_count == 0)
         {
             // mesh uses it's bone's transformation matrix
-            this.bone_matrix_array.push(recursive_bone_transform(fshp.bone_index, fskl));
+            const transformation_matrix = recursive_bone_transform(fshp.bone_index, fskl)
+            this.bone_matrix_array.push(transformation_matrix);
         }
         else
         {
-            assert(fskl.smooth_rigid_indices.length < BONE_MATRIX_LENGTH);
+            assert(fskl.smooth_rigid_indices.length < BONE_MATRIX_MAX_LENGTH);
 
             this.use_skinning = true;
             this.bone_matrix_array = [];
@@ -237,7 +238,7 @@ class fshp_renderer
         }
 
         // initialize shader
-        this.program = new TMSFEProgram(fvtx, fmat, fshp);
+        this.program = new TMSFEProgram(fvtx, fmat, fshp, this.bone_matrix_array.length);
     }
 
     // produce a draw call for this mesh
@@ -262,37 +263,15 @@ class fshp_renderer
         
         // create uniform buffers for the shader
         renderInst.setBindingLayouts(bindingLayouts);
-        // size 16 + 12 + (12 * 16)
-        let uniform_buffer_offset = renderInst.allocateUniformBuffer(TMSFEProgram.ub_SceneParams, 220);
+        // size 16 + 12 + (12 * bone count)
+        let uniform_buffer_offset = renderInst.allocateUniformBuffer(TMSFEProgram.ub_SceneParams, 28 + (12 * this.bone_matrix_array.length));
         const mapped = renderInst.mapUniformBufferF32(TMSFEProgram.ub_SceneParams);
         uniform_buffer_offset += fillMatrix4x4(mapped, uniform_buffer_offset, viewerInput.camera.projectionMatrix);
         uniform_buffer_offset += fillMatrix4x3(mapped, uniform_buffer_offset, viewerInput.camera.viewMatrix);
-        
-        uniform_buffer_offset += fillMatrix4x3(mapped, uniform_buffer_offset, this.bone_matrix_array[0]);
 
-        if (this.use_skinning)
+        for (let i = 0; i < this.bone_matrix_array.length; i++)
         {
-            // place the bone matrix array and then fill the rest with emptty matrices
-            for (let i = 0; i < BONE_MATRIX_LENGTH; i++)
-            {
-                if (i < this.bone_matrix_array.length)
-                {
-                    uniform_buffer_offset += fillMatrix4x3(mapped, uniform_buffer_offset, this.bone_matrix_array[i]);
-                }
-                else
-                {
-                    uniform_buffer_offset += fillMatrix4x3(mapped, uniform_buffer_offset, mat4.create());
-                }
-            }
-        }
-        else
-        {
-            // place the bone's transformation matrix and then fill the rest with blank matrices
-            uniform_buffer_offset += fillMatrix4x3(mapped, uniform_buffer_offset, this.bone_matrix_array[0]);
-            for (let i = 0; i < BONE_MATRIX_LENGTH - 1; i++)
-            {
-                uniform_buffer_offset += fillMatrix4x3(mapped, uniform_buffer_offset, mat4.create());
-            }
+            uniform_buffer_offset += fillMatrix4x3(mapped, uniform_buffer_offset, this.bone_matrix_array[i]);
         }
 
         // set sampler
@@ -317,4 +296,4 @@ class fshp_renderer
     }
 }
 
-const BONE_MATRIX_LENGTH = 16;
+const BONE_MATRIX_MAX_LENGTH = 209;

@@ -27,7 +27,7 @@ export function parseFSHP(buffer: ArrayBufferSlice, offset: number, count: numbe
         const fmat_index = view.getUint16(fshp_entry_offset + 0x52, true);
         const bone_index = view.getUint16(fshp_entry_offset + 0x54, true);
         const fvtx_index = view.getUint16(fshp_entry_offset + 0x56, true);
-        const skin_bone_count = view.getUint16(fshp_entry_offset + 0x58, true);
+        const skin_bone_count = view.getUint8(fshp_entry_offset + 0x5A);
 
         const lod_mesh_array_offset = view.getUint32(fshp_entry_offset + 0x18, true);
         const mesh_count = view.getUint8(fshp_entry_offset + 0x5B);
