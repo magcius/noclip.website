@@ -1,5 +1,6 @@
 import type { BAMFile } from "../bam";
 import { AssetVersion, type DataStream } from "../common";
+import type { MaterialData } from "../geom";
 import { registerBAMObject } from "./base";
 import { type DebugInfo, dbgBool, dbgEnum } from "./debug";
 import { RenderAttrib } from "./RenderAttrib";
@@ -43,6 +44,11 @@ export class CullFaceAttrib extends RenderAttrib {
       info.set("reverse", dbgBool(this.reverse));
     }
     return info;
+  }
+
+  override applyToMaterial(material: MaterialData): void {
+    material.cullFaceMode = this.mode;
+    material.cullReverse = this.reverse;
   }
 }
 

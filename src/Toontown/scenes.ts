@@ -9,8 +9,8 @@ import {
   DepthTestAttrib,
   DepthWriteAttrib,
   DepthWriteMode,
-  PandaNode,
   PandaCompareFunc,
+  PandaNode,
 } from "./nodes";
 import { ToontownRenderer } from "./render";
 import { pathBase, ToontownResourceLoader } from "./resources";
@@ -51,6 +51,7 @@ class ToontownSceneDesc implements Viewer.SceneDesc {
 interface NeighborhoodConfig {
   storageDNA: string | null; // Hood-wide storage (e.g., storage_TT.dna)
   skybox: string | null; // Hood-wide skybox (e.g., TT_sky.bam)
+  callback?: (scene: PandaNode) => void;
 }
 
 interface DNASceneConfig {
@@ -94,12 +95,16 @@ const Neighborhoods: Record<string, NeighborhoodConfig> = {
     skybox: "phase_3.5/models/props/TT_sky.bam",
   },
   Tutorial: {
-    storageDNA: null,
+    storageDNA: "phase_4/dna/storage_TT.dna",
     skybox: "phase_3.5/models/props/TT_sky.bam",
   },
   MyEstate: {
     storageDNA: "phase_5.5/dna/storage_estate.dna",
     skybox: "phase_3.5/models/props/TT_sky.bam",
+    callback: (scene) => {
+      // Ensure the foot path renders in ground cull bin
+      scene.find("**/Path")?.setAttrib(CullBinAttrib.create("ground", 10), 1);
+    },
   },
   SellbotHQ: {
     storageDNA: null,
@@ -112,10 +117,24 @@ const Neighborhoods: Record<string, NeighborhoodConfig> = {
   LawbotHQ: {
     storageDNA: null,
     skybox: null,
+    callback: (scene) => {
+      // Ensure the reflective floor renders in ground cull bin
+      scene
+        .find("**/underground")
+        ?.setAttrib(CullBinAttrib.create("ground", -10));
+    },
   },
   BossbotHQ: {
     storageDNA: null,
     skybox: null,
+  },
+  GolfZone: {
+    storageDNA: "phase_6/dna/storage_GZ.dna",
+    skybox: "phase_3.5/models/props/TT_sky.bam",
+  },
+  Party: {
+    storageDNA: "phase_13/dna/storage_party_sz.dna",
+    skybox: "phase_3.5/models/props/TT_sky.bam",
   },
 };
 
@@ -189,6 +208,7 @@ class ToontownDNASceneDesc implements Viewer.SceneDesc {
     if (hood.skybox) {
       const model = await loader.loadModel(hood.skybox, context.dataFetcher);
       const instance = model.getRoot().cloneSubgraph();
+      instance.tags.set("sky", "Regular");
       instance.setEffect(
         CompassEffect.create(CompassEffectProperties.Position, cameraNode),
       );
@@ -196,9 +216,12 @@ class ToontownDNASceneDesc implements Viewer.SceneDesc {
       instance.setAttrib(DepthTestAttrib.create(PandaCompareFunc.None));
       instance.setAttrib(DepthWriteAttrib.create(DepthWriteMode.Off));
       // Ensure sky renders before clouds
-      instance.findNode("Sky")?.reparentTo(instance, -1);
+      instance.find("**/Sky")?.reparentTo(instance, -1);
       scene.addChild(instance);
     }
+
+    // Run custom callback
+    hood.callback?.(scene);
 
     console.log(`Loaded scene with ${scene.children.length} nodes.`);
 
@@ -221,6 +244,46 @@ const sceneDescs = [
       sceneDNA: "phase_4/dna/toontown_central_sz.dna",
     },
   ),
+  new ToontownDNASceneDesc(
+    "toontown_central_2100",
+    "Silly Street",
+    "ToontownCentral",
+    {
+      storageDNA: [
+        "phase_4/dna/storage_TT_sz.dna",
+        "phase_5/dna/storage_TT_town.dna",
+      ],
+      sceneDNA: "phase_5/dna/toontown_central_2100.dna",
+    },
+  ),
+  new ToontownDNASceneDesc(
+    "toontown_central_2200",
+    "Loopy Lane",
+    "ToontownCentral",
+    {
+      storageDNA: [
+        "phase_4/dna/storage_TT_sz.dna",
+        "phase_5/dna/storage_TT_town.dna",
+      ],
+      sceneDNA: "phase_5/dna/toontown_central_2200.dna",
+    },
+  ),
+  new ToontownDNASceneDesc(
+    "toontown_central_2300",
+    "Punchline Place",
+    "ToontownCentral",
+    {
+      storageDNA: [
+        "phase_4/dna/storage_TT_sz.dna",
+        "phase_5/dna/storage_TT_town.dna",
+      ],
+      sceneDNA: "phase_5/dna/toontown_central_2300.dna",
+    },
+  ),
+  new ToontownDNASceneDesc("tutorial_street", "Tutorial Terrace", "Tutorial", {
+    storageDNA: ["phase_5/dna/storage_TT_town.dna"],
+    sceneDNA: "phase_3.5/dna/tutorial_street.dna",
+  }),
   "Donald's Dock",
   new ToontownDNASceneDesc("donalds_dock_sz", "Playground", "DonaldsDock", {
     storageDNA: [
@@ -229,6 +292,42 @@ const sceneDescs = [
     ],
     sceneDNA: "phase_6/dna/donalds_dock_sz.dna",
   }),
+  new ToontownDNASceneDesc(
+    "donalds_dock_1100",
+    "Barnacle Boulevard",
+    "DonaldsDock",
+    {
+      storageDNA: [
+        "phase_6/dna/storage_DD_sz.dna",
+        "phase_6/dna/storage_DD_town.dna",
+      ],
+      sceneDNA: "phase_6/dna/donalds_dock_1100.dna",
+    },
+  ),
+  new ToontownDNASceneDesc(
+    "donalds_dock_1200",
+    "Seaweed Street",
+    "DonaldsDock",
+    {
+      storageDNA: [
+        "phase_6/dna/storage_DD_sz.dna",
+        "phase_6/dna/storage_DD_town.dna",
+      ],
+      sceneDNA: "phase_6/dna/donalds_dock_1200.dna",
+    },
+  ),
+  new ToontownDNASceneDesc(
+    "donalds_dock_1300",
+    "Lighthouse Lane",
+    "DonaldsDock",
+    {
+      storageDNA: [
+        "phase_6/dna/storage_DD_sz.dna",
+        "phase_6/dna/storage_DD_town.dna",
+      ],
+      sceneDNA: "phase_6/dna/donalds_dock_1300.dna",
+    },
+  ),
   "Minnie's Melodyland",
   new ToontownDNASceneDesc(
     "minnies_melody_land_sz",
@@ -242,6 +341,42 @@ const sceneDescs = [
       sceneDNA: "phase_6/dna/minnies_melody_land_sz.dna",
     },
   ),
+  new ToontownDNASceneDesc(
+    "minnies_melody_land_4100",
+    "Alto Avenue",
+    "MinniesMelodyland",
+    {
+      storageDNA: [
+        "phase_6/dna/storage_MM_sz.dna",
+        "phase_6/dna/storage_MM_town.dna",
+      ],
+      sceneDNA: "phase_6/dna/minnies_melody_land_4100.dna",
+    },
+  ),
+  new ToontownDNASceneDesc(
+    "minnies_melody_land_4200",
+    "Baritone Boulevard",
+    "MinniesMelodyland",
+    {
+      storageDNA: [
+        "phase_6/dna/storage_MM_sz.dna",
+        "phase_6/dna/storage_MM_town.dna",
+      ],
+      sceneDNA: "phase_6/dna/minnies_melody_land_4200.dna",
+    },
+  ),
+  new ToontownDNASceneDesc(
+    "minnies_melody_land_4300",
+    "Tenor Terrace",
+    "MinniesMelodyland",
+    {
+      storageDNA: [
+        "phase_6/dna/storage_MM_sz.dna",
+        "phase_6/dna/storage_MM_town.dna",
+      ],
+      sceneDNA: "phase_6/dna/minnies_melody_land_4300.dna",
+    },
+  ),
   "Daisy Gardens",
   new ToontownDNASceneDesc("daisys_garden_sz", "Playground", "DaisyGardens", {
     storageDNA: [
@@ -250,21 +385,26 @@ const sceneDescs = [
     ],
     sceneDNA: "phase_8/dna/daisys_garden_sz.dna",
   }),
-  new ToontownDNASceneDesc("daisys_garden_5100", "Street 1", "DaisyGardens", {
+  new ToontownDNASceneDesc("daisys_garden_5100", "Elm Street", "DaisyGardens", {
     storageDNA: [
       "phase_8/dna/storage_DG_sz.dna",
       "phase_8/dna/storage_DG_town.dna",
     ],
     sceneDNA: "phase_8/dna/daisys_garden_5100.dna",
   }),
-  new ToontownDNASceneDesc("daisys_garden_5200", "Street 2", "DaisyGardens", {
-    storageDNA: [
-      "phase_8/dna/storage_DG_sz.dna",
-      "phase_8/dna/storage_DG_town.dna",
-    ],
-    sceneDNA: "phase_8/dna/daisys_garden_5200.dna",
-  }),
-  new ToontownDNASceneDesc("daisys_garden_5300", "Street 3", "DaisyGardens", {
+  new ToontownDNASceneDesc(
+    "daisys_garden_5200",
+    "Maple Street",
+    "DaisyGardens",
+    {
+      storageDNA: [
+        "phase_8/dna/storage_DG_sz.dna",
+        "phase_8/dna/storage_DG_town.dna",
+      ],
+      sceneDNA: "phase_8/dna/daisys_garden_5200.dna",
+    },
+  ),
+  new ToontownDNASceneDesc("daisys_garden_5300", "Oak Street", "DaisyGardens", {
     storageDNA: [
       "phase_8/dna/storage_DG_sz.dna",
       "phase_8/dna/storage_DG_town.dna",
@@ -279,6 +419,27 @@ const sceneDescs = [
     ],
     sceneDNA: "phase_8/dna/the_burrrgh_sz.dna",
   }),
+  new ToontownDNASceneDesc("the_burrrgh_3100", "Walrus Way", "TheBrrrgh", {
+    storageDNA: [
+      "phase_8/dna/storage_BR_sz.dna",
+      "phase_8/dna/storage_BR_town.dna",
+    ],
+    sceneDNA: "phase_8/dna/the_burrrgh_3100.dna",
+  }),
+  new ToontownDNASceneDesc("the_burrrgh_3200", "Sleet Street", "TheBrrrgh", {
+    storageDNA: [
+      "phase_8/dna/storage_BR_sz.dna",
+      "phase_8/dna/storage_BR_town.dna",
+    ],
+    sceneDNA: "phase_8/dna/the_burrrgh_3200.dna",
+  }),
+  new ToontownDNASceneDesc("the_burrrgh_3300", "Polar Place", "TheBrrrgh", {
+    storageDNA: [
+      "phase_8/dna/storage_BR_sz.dna",
+      "phase_8/dna/storage_BR_town.dna",
+    ],
+    sceneDNA: "phase_8/dna/the_burrrgh_3300.dna",
+  }),
   "Donald's Dreamland",
   new ToontownDNASceneDesc(
     "donalds_dreamland_sz",
@@ -292,45 +453,112 @@ const sceneDescs = [
       sceneDNA: "phase_8/dna/donalds_dreamland_sz.dna",
     },
   ),
+  new ToontownDNASceneDesc(
+    "donalds_dreamland_9100",
+    "Lullaby Lane",
+    "DonaldsDreamland",
+    {
+      storageDNA: [
+        "phase_8/dna/storage_DL_sz.dna",
+        "phase_8/dna/storage_DL_town.dna",
+      ],
+      sceneDNA: "phase_8/dna/donalds_dreamland_9100.dna",
+    },
+  ),
+  new ToontownDNASceneDesc(
+    "donalds_dreamland_9200",
+    "Pajama Place",
+    "DonaldsDreamland",
+    {
+      storageDNA: [
+        "phase_8/dna/storage_DL_sz.dna",
+        "phase_8/dna/storage_DL_town.dna",
+      ],
+      sceneDNA: "phase_8/dna/donalds_dreamland_9200.dna",
+    },
+  ),
   "Goofy Speedway",
-  new ToontownDNASceneDesc("goofy_speedway_sz", "Playground", "GoofySpeedway", {
-    storageDNA: ["phase_6/dna/storage_GS_sz.dna"],
-    sceneDNA: "phase_6/dna/goofy_speedway_sz.dna",
-  }),
+  new ToontownDNASceneDesc(
+    "goofy_speedway_sz",
+    "Goofy Speedway",
+    "GoofySpeedway",
+    {
+      storageDNA: ["phase_6/dna/storage_GS_sz.dna"],
+      sceneDNA: "phase_6/dna/goofy_speedway_sz.dna",
+    },
+  ),
   new ToontownSceneDesc(
     "KartShop_Interior",
     "Goofy's Auto Shop",
     "phase_6/models/karting/KartShop_Interior.bam",
   ),
   "Chip 'n Dale's Acorn Acres",
-  new ToontownDNASceneDesc("outdoor_zone_sz", "Playground", "OutdoorZone", {
-    storageDNA: ["phase_6/dna/storage_OZ_sz.dna"],
-    sceneDNA: "phase_6/dna/outdoor_zone_sz.dna",
-  }),
+  new ToontownDNASceneDesc(
+    "outdoor_zone_sz",
+    "Chip 'n Dale's Acorn Acres",
+    "OutdoorZone",
+    {
+      storageDNA: ["phase_6/dna/storage_OZ_sz.dna"],
+      sceneDNA: "phase_6/dna/outdoor_zone_sz.dna",
+    },
+  ),
+  new ToontownDNASceneDesc(
+    "golf_zone_sz",
+    "Chip 'n Dale's MiniGolf",
+    "GolfZone",
+    {
+      storageDNA: ["phase_6/dna/storage_GZ_sz.dna"],
+      sceneDNA: "phase_6/dna/golf_zone_sz.dna",
+    },
+  ),
   "Estate",
   new ToontownDNASceneDesc("estate", "Estate", "MyEstate", {
     storageDNA: [],
     sceneDNA: "phase_5.5/dna/estate_1.dna",
   }),
+  new ToontownDNASceneDesc("party_sz", "Party", "Party", {
+    storageDNA: [],
+    sceneDNA: "phase_13/dna/party_sz.dna",
+  }),
   "Sellbot HQ",
-  new ToontownDNASceneDesc("SellbotHQExterior", "Courtyard", "SellbotHQ", {
-    storageDNA: [],
-    sceneDNA: "phase_9/dna/cog_hq_sellbot_sz.dna",
-    extraModels: ["phase_9/models/cogHQ/SellbotHQExterior.bam"],
-  }),
+  new ToontownDNASceneDesc(
+    "SellbotHQExterior",
+    "Sellbot HQ Courtyard",
+    "SellbotHQ",
+    {
+      storageDNA: [],
+      sceneDNA: "phase_9/dna/cog_hq_sellbot_sz.dna",
+      extraModels: ["phase_9/models/cogHQ/SellbotHQExterior.bam"],
+    },
+  ),
+  new ToontownDNASceneDesc(
+    "SellbotHQExterior",
+    "Sellbot HQ Lobby",
+    "SellbotHQ",
+    {
+      storageDNA: [],
+      sceneDNA: "phase_9/dna/cog_hq_sellbot_sz.dna",
+      extraModels: ["phase_9/models/cogHQ/SellbotHQLobby.bam"],
+    },
+  ),
   "Cashbot HQ",
-  new ToontownDNASceneDesc("CashBotShippingStation", "Trainyard", "CashbotHQ", {
-    storageDNA: [],
-    sceneDNA: null,
-    extraModels: ["phase_10/models/cogHQ/CashBotShippingStation.bam"],
-  }),
-  new ToontownDNASceneDesc("VaultLobby", "Vault Lobby", "CashbotHQ", {
+  new ToontownDNASceneDesc(
+    "CashBotShippingStation",
+    "Cashbot Train Yard",
+    "CashbotHQ",
+    {
+      storageDNA: [],
+      sceneDNA: null,
+      extraModels: ["phase_10/models/cogHQ/CashBotShippingStation.bam"],
+    },
+  ),
+  new ToontownDNASceneDesc("VaultLobby", "Cashbot HQ Lobby", "CashbotHQ", {
     storageDNA: [],
     sceneDNA: null,
     extraModels: ["phase_10/models/cogHQ/VaultLobby.bam"],
   }),
   "Lawbot HQ",
-  new ToontownDNASceneDesc("LawbotPlaza", "Courtyard", "LawbotHQ", {
+  new ToontownDNASceneDesc("LawbotPlaza", "Lawbot HQ Courtyard", "LawbotHQ", {
     storageDNA: [],
     sceneDNA: null,
     extraModels: ["phase_11/models/lawbotHQ/LawbotPlaza.bam"],
@@ -340,32 +568,21 @@ const sceneDescs = [
     sceneDNA: null,
     extraModels: ["phase_11/models/lawbotHQ/LB_CH_Lobby.bam"],
   }),
-  new ToontownDNASceneDesc(
-    "LB_CH_Lobby",
-    "District Attorney's Office Lobby",
-    "LawbotHQ",
-    {
-      storageDNA: [],
-      sceneDNA: null,
-      extraModels: ["phase_11/models/lawbotHQ/LB_DA_Lobby.bam"],
-    },
-  ),
+  new ToontownDNASceneDesc("LB_CH_Lobby", "DA's Office Lobby", "LawbotHQ", {
+    storageDNA: [],
+    sceneDNA: null,
+    extraModels: ["phase_11/models/lawbotHQ/LB_DA_Lobby.bam"],
+  }),
   "Bossbot HQ",
   new ToontownDNASceneDesc("CogGolfHub", "Courtyard", "BossbotHQ", {
-    storageDNA: [],
+    storageDNA: [], // "phase_12/dna/storage_CC_sz.dna"
     sceneDNA: null,
     extraModels: ["phase_12/models/bossbotHQ/CogGolfHub.bam"],
   }),
-  // TODO
-  // new ToontownDNASceneDesc("CogGolfCourtyard", "Clubhouse", "BossbotHQ", {
-  //   storageDNA: [],
-  //   sceneDNA: null,
-  //   extraModels: ["phase_12/models/bossbotHQ/CogGolfCourtyard.bam"],
-  // }),
-  "Experimental",
-  new ToontownDNASceneDesc("tutorial_street", "Tutorial Street", "Tutorial", {
+  new ToontownDNASceneDesc("CogGolfCourtyard", "Clubhouse", "BossbotHQ", {
     storageDNA: [],
-    sceneDNA: "phase_3.5/dna/tutorial_street.dna",
+    sceneDNA: null,
+    extraModels: ["phase_12/models/bossbotHQ/CogGolfCourtyard.bam"],
   }),
 ];
 

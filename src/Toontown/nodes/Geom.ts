@@ -1,8 +1,14 @@
+import { vec3 } from "gl-matrix";
+import { AABB } from "../../Geometry";
 import type { BAMFile } from "../bam";
 import { AssetVersion, type DataStream } from "../common";
 import { BAMObject, readTypedRefs, registerBAMObject } from "./base";
 import { type DebugInfo, dbgEnum, dbgNum, dbgRef, dbgRefs } from "./debug";
 import { GeomPrimitive } from "./GeomPrimitive";
+import type {
+  GeomVertexArrayFormat,
+  GeomVertexColumn,
+} from "./GeomVertexArrayFormat";
 import { GeomVertexData } from "./GeomVertexData";
 import {
   BoundsType,
@@ -11,12 +17,6 @@ import {
   PrimitiveType,
   ShadeModel,
 } from "./geomEnums";
-import { AABB } from "../../Geometry";
-import { vec3 } from "gl-matrix";
-import {
-  GeomVertexArrayFormat,
-  GeomVertexColumn,
-} from "./GeomVertexArrayFormat";
 
 export class Geom extends BAMObject {
   public data: GeomVertexData | null = null;

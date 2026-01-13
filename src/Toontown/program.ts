@@ -98,6 +98,7 @@ layout(std140) uniform ub_SceneParams {
 layout(std140) uniform ub_DrawParams {
     Mat4x4 u_ModelMatrix;
     vec4 u_Color;
+    vec4 u_ColorScale;
 };
 
 #ifdef HAS_TEXTURE
@@ -161,6 +162,8 @@ void main() {
     vec4 t_TexColor = texture(SAMPLER_2D(u_Texture), v_TexCoord);
     t_Color *= t_TexColor;
 #endif
+
+    t_Color *= u_ColorScale;
 
 #ifdef HAS_ALPHA_TEST
     float a = t_Color.a;

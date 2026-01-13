@@ -28,8 +28,9 @@ function loadMultifileBuffer(filePath: string): ArrayBufferSlice {
 
 function generateManifest(dataDir: string): Manifest {
   // Find all .mf files in the directory
-  const files = fs.readdirSync(dataDir)
-    .filter(f => f.endsWith(".mf"))
+  const files = fs
+    .readdirSync(dataDir)
+    .filter((f) => f.endsWith(".mf"))
     .sort(); // Sort for consistent ordering
 
   const manifest: Manifest = {};
@@ -94,7 +95,9 @@ function main() {
   const json = JSON.stringify(sorted, null, 2);
   fs.writeFileSync(outputFile, json);
 
-  console.log(`Wrote manifest with ${Object.keys(manifest).length} entries to ${outputFile}`);
+  console.log(
+    `Wrote manifest with ${Object.keys(manifest).length} entries to ${outputFile}`,
+  );
 }
 
 main();

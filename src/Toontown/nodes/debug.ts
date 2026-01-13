@@ -1,6 +1,11 @@
 // Structured debug representation for BAM objects
 
-import type { mat4, vec2, vec3, vec4 } from "gl-matrix";
+import type {
+  ReadonlyMat4,
+  ReadonlyVec2,
+  ReadonlyVec3,
+  ReadonlyVec4,
+} from "gl-matrix";
 import type { BAMObject } from "./base";
 
 type TypedArray =
@@ -25,11 +30,11 @@ export type DebugValue =
   | { type: "boolean"; value: boolean }
   | { type: "ref"; obj: BAMObject | null }
   | { type: "refs"; objs: (BAMObject | null)[] }
-  | { type: "vec2"; value: vec2 }
-  | { type: "vec3"; value: vec3 }
-  | { type: "vec4"; value: vec4 }
-  | { type: "mat4"; value: mat4 }
-  | { type: "color"; value: vec4 }
+  | { type: "vec2"; value: ReadonlyVec2 }
+  | { type: "vec3"; value: ReadonlyVec3 }
+  | { type: "vec4"; value: ReadonlyVec4 }
+  | { type: "mat4"; value: ReadonlyMat4 }
+  | { type: "color"; value: ReadonlyVec4 }
   | { type: "enum"; value: number; name: string }
   | { type: "flags"; value: number; names: string[] }
   | { type: "bytes"; length: number }
@@ -64,11 +69,11 @@ export function dbgRefs(objs: (BAMObject | null)[]): DebugValue {
   return { type: "refs", objs };
 }
 
-export function dbgVec2(value: vec2): DebugValue {
+export function dbgVec2(value: ReadonlyVec2): DebugValue {
   return { type: "vec2", value };
 }
 
-export function dbgVec3(value: vec3): DebugValue {
+export function dbgVec3(value: ReadonlyVec3): DebugValue {
   return { type: "vec3", value };
 }
 
@@ -79,15 +84,15 @@ export function dbgTypedArray(
   return { type: "typedArray", value, components: components };
 }
 
-export function dbgVec4(value: vec4): DebugValue {
+export function dbgVec4(value: ReadonlyVec4): DebugValue {
   return { type: "vec4", value };
 }
 
-export function dbgMat4(value: mat4): DebugValue {
+export function dbgMat4(value: ReadonlyMat4): DebugValue {
   return { type: "mat4", value };
 }
 
-export function dbgColor(value: vec4): DebugValue {
+export function dbgColor(value: ReadonlyVec4): DebugValue {
   return { type: "color", value };
 }
 
@@ -137,11 +142,11 @@ function formatNumber(n: number): string {
   return n.toFixed(4).replace(/\.?0+$/, "");
 }
 
-function formatVec(values: vec2 | vec3 | vec4): string {
+function formatVec(values: ReadonlyVec2 | ReadonlyVec3 | ReadonlyVec4): string {
   return `(${Array.from(values, formatNumber).join(", ")})`;
 }
 
-function formatMat(values: mat4, pad: string, pad1: string): string {
+function formatMat(values: ReadonlyMat4, pad: string, pad1: string): string {
   const rows = [];
   for (let i = 0; i < 4; i++) {
     const row = [];
@@ -153,7 +158,7 @@ function formatMat(values: mat4, pad: string, pad1: string): string {
   return `[\n${rows.join(",\n")}\n${pad}]`;
 }
 
-function formatColor(rgba: vec4): string {
+function formatColor(rgba: ReadonlyVec4): string {
   const [r, g, b, a] = rgba.map((v) => Math.round(v * 255));
   if (a === 255) {
     return `rgb(${r}, ${g}, ${b})`;

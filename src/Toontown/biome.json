@@ -21,6 +21,16 @@
           "fix": "safe",
           "level": "info"
         }
+      },
+      "style": {
+        "noNonNullAssertion": {
+          "level": "off"
+        }
+      },
+      "suspicious": {
+        "noExplicitAny": {
+          "level": "off"
+        }
       }
     }
   },

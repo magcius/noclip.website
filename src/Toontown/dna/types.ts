@@ -126,7 +126,6 @@ export interface DNAProp extends DNAGroupBase, DNANodeTransform {
   type: "prop";
   code: string;
   color?: vec4;
-  sign?: DNASign;
 }
 
 export interface DNAAnimProp extends DNAGroupBase, DNANodeTransform {
@@ -134,7 +133,6 @@ export interface DNAAnimProp extends DNAGroupBase, DNANodeTransform {
   code: string;
   anim: string;
   color?: vec4;
-  sign?: DNASign;
 }
 
 export interface DNAInteractiveProp extends DNAGroupBase, DNANodeTransform {
@@ -143,7 +141,6 @@ export interface DNAInteractiveProp extends DNAGroupBase, DNANodeTransform {
   anim: string;
   cellId: number;
   color?: vec4;
-  sign?: DNASign;
 }
 
 export interface DNAStreet extends DNAGroupBase, DNANodeTransform {
@@ -161,18 +158,15 @@ export interface DNAFlatBuilding extends DNAGroupBase, DNANodeTransform {
   type: "flat_building";
   width: number;
   walls: DNAWall[];
-  props?: DNAProp[];
 }
 
-export interface DNAWall {
+export interface DNAWall extends DNAGroupBase {
   type: "wall";
   height: number;
   code: string;
   color: vec4;
   windows?: DNAWindows;
   cornice?: DNACornice;
-  flatDoor?: DNAFlatDoor;
-  props?: DNAProp[];
 }
 
 export interface DNAWindows {
@@ -188,13 +182,13 @@ export interface DNACornice {
   color: vec4;
 }
 
-export interface DNADoor {
+export interface DNADoor extends DNAGroupBase {
   type: "door";
   code: string;
   color: vec4;
 }
 
-export interface DNAFlatDoor {
+export interface DNAFlatDoor extends DNAGroupBase {
   type: "flat_door";
   code: string;
   color: vec4;
@@ -207,9 +201,6 @@ export interface DNALandmarkBuilding extends DNAGroupBase, DNANodeTransform {
   article?: string;
   title: string;
   wallColor?: vec4;
-  door?: DNADoor;
-  sign?: DNASign;
-  props?: DNAProp[];
 }
 
 export interface DNAAnimBuilding extends DNAGroupBase, DNANodeTransform {
@@ -220,16 +211,13 @@ export interface DNAAnimBuilding extends DNAGroupBase, DNANodeTransform {
   title: string;
   anim: string;
   wallColor?: vec4;
-  door?: DNADoor;
-  sign?: DNASign;
-  props?: DNAProp[];
 }
 
 // ============================================
 // Sign Types
 // ============================================
 
-export interface DNASign extends DNANodeTransform {
+export interface DNASign extends DNAGroupBase, DNANodeTransform {
   type: "sign";
   code?: string;
   color?: vec4;
@@ -280,7 +268,10 @@ export type DNANode =
   | DNAStreet
   | DNAFlatBuilding
   | DNALandmarkBuilding
-  | DNAAnimBuilding;
+  | DNAAnimBuilding
+  | DNADoor
+  | DNAFlatDoor
+  | DNASign;
 
 // ============================================
 // Top-Level File Structure

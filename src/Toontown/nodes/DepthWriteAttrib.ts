@@ -1,5 +1,6 @@
 import type { BAMFile } from "../bam";
 import type { DataStream } from "../common";
+import type { MaterialData } from "../geom";
 import { registerBAMObject } from "./base";
 import { type DebugInfo, dbgEnum } from "./debug";
 import { RenderAttrib } from "./RenderAttrib";
@@ -26,6 +27,10 @@ export class DepthWriteAttrib extends RenderAttrib {
     const info = super.getDebugInfo();
     info.set("mode", dbgEnum(this.mode, DepthWriteMode));
     return info;
+  }
+
+  override applyToMaterial(material: MaterialData): void {
+    material.depthWrite = this.mode;
   }
 
   static create(mode: DepthWriteMode = DepthWriteMode.On): DepthWriteAttrib {

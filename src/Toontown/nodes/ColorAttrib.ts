@@ -1,6 +1,7 @@
 import { vec4 } from "gl-matrix";
 import type { BAMFile } from "../bam";
 import type { DataStream } from "../common";
+import type { MaterialData } from "../geom";
 import { registerBAMObject } from "./base";
 import { type DebugInfo, dbgColor, dbgEnum } from "./debug";
 import { RenderAttrib } from "./RenderAttrib";
@@ -33,6 +34,11 @@ export class ColorAttrib extends RenderAttrib {
     info.set("colorType", dbgEnum(this.colorType, ColorType));
     info.set("color", dbgColor(this.color));
     return info;
+  }
+
+  override applyToMaterial(material: MaterialData): void {
+    material.colorType = this.colorType;
+    if (material.colorType === ColorType.Flat) material.flatColor = this.color;
   }
 
   private quantizeColor(): void {

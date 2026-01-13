@@ -48,8 +48,7 @@ export class BAMObject {
   }
 
   clone(): this {
-    // biome-ignore lint/suspicious/noExplicitAny: no other way to do this
-    const target = new (this.constructor as any)();
+    const target = new (this.constructor as new () => this)();
     this.copyTo(target);
     return target;
   }
@@ -82,7 +81,6 @@ export function readTypedRefs<T extends BAMObject>(
   file: BAMFile,
   data: DataStream,
   numRefs: number,
-  // biome-ignore lint/suspicious/noExplicitAny: it's fine
   clazz: new (...args: any[]) => T,
 ): T[] {
   const refs: T[] = [];

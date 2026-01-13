@@ -93,10 +93,11 @@ export class BAMFile {
     return root;
   }
 
-  findNode(name: string): PandaNode | null {
+  /** Find a node by name in the BAM file (searches entire subtree) */
+  find(query: string): PandaNode | null {
     const root = this.getRoot();
     if (!root) return null;
-    return root.findNode(name);
+    return root.find(query);
   }
 
   getObject(objectId: number): BAMObject | null {
@@ -111,7 +112,6 @@ export class BAMFile {
 
   getTyped<T extends BAMObject>(
     objectId: number,
-    // biome-ignore lint/suspicious/noExplicitAny: it's fine
     clazz: new (...args: any[]) => T,
   ): T | null {
     if (objectId === 0) return null;

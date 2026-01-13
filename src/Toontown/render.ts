@@ -1,8 +1,5 @@
-import { mat4, type ReadonlyMat4, vec3, vec4 } from "gl-matrix";
-import {
-  type CameraController,
-  computeViewSpaceDepthFromWorldSpaceAABB,
-} from "../Camera.js";
+import { mat4, type ReadonlyMat4, vec3 } from "gl-matrix";
+import type { CameraController } from "../Camera.js";
 import type { DataFetcher } from "../DataFetcher.js";
 import { AABB } from "../Geometry.js";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
@@ -31,22 +28,19 @@ import {
   GfxWrapMode,
   makeTextureDescriptor2D,
 } from "../gfx/platform/GfxPlatform.js";
-import type { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
 import {
-  GfxRendererLayer,
   type GfxRenderInst,
   GfxRenderInstList,
   gfxRenderInstCompareNone,
-  makeSortKey,
 } from "../gfx/render/GfxRenderInstManager.js";
-import { BinCollector, CullableObject } from "./cullBin.js";
 import { HashMap, nullHashFunc } from "../HashMap.js";
 import { CalcBillboardFlags, calcBillboardMatrix } from "../MathHelpers.js";
 import { TextureMapping } from "../TextureHolder.js";
+import * as UI from "../ui.js";
 import type * as Viewer from "../viewer.js";
-import { enumName } from "./common.js";
+import { BinCollector } from "./cullBin.js";
 import {
   type CachedGeometryData,
   composeDrawMask,
@@ -57,7 +51,6 @@ import {
 } from "./geom.js";
 import {
   BoundsType,
-  ColorType,
   ColorWriteAttrib,
   ColorWriteChannels,
   CompassEffect,
@@ -78,6 +71,8 @@ import {
   TransparencyMode,
   WrapMode,
 } from "./nodes";
+import type { GeomEntry } from "./nodes/GeomNode.js";
+import { HierarchicalProfiler } from "./profiler.js";
 import {
   createProgramProps,
   programPropsEqual,
@@ -85,8 +80,8 @@ import {
   type ToontownProgramProps,
 } from "./program.js";
 import type { ToontownResourceLoader } from "./resources.js";
+import { SceneGraphViewer } from "./SceneGraphViewer.js";
 import { expandToRGBA } from "./textures.js";
-import { GeomEntry } from "./nodes/GeomNode.js";
 
 export const pathBase = "Toontown";
 
@@ -202,21 +197,11 @@ function translateDepthTestMode(func: PandaCompareFunc): GfxCompareMode {
   }
 }
 
-/**
- * Result from setupGeometryRenderInst - includes both render insts and bin metadata
- */
-interface GeometryRenderResult {
-  renderInsts: GfxRenderInst[];
-  cullBinName: string | null;
-  depth: number;
-  drawOrder: number;
-}
-
 export class ToontownRenderer implements Viewer.SceneGfx {
   private scene: PandaNode;
   private renderHelper: GfxRenderHelper;
-  // Use insertion order - bin collector handles sorting
   private renderInstListMain = new GfxRenderInstList(gfxRenderInstCompareNone);
+  private globalDt: number = 0;
   private geomCache: Map<Geom, CachedGeometryData> = new Map();
   private programCache: HashMap<ToontownProgramProps, GfxProgram> = new HashMap(
     programPropsEqual,
@@ -226,14 +211,72 @@ export class ToontownRenderer implements Viewer.SceneGfx {
     string,
     { texture: GfxTexture; sampler: GfxSampler }
   > = new Map();
+  private profiler = new HierarchicalProfiler({
+    enabled: false,
+    historySize: 60,
+    printIntervalMs: 3000,
+  });
+  private debugPanel: UI.Panel | null = null;
+  private debugSceneGraphCheckbox: UI.Checkbox | null = null;
+  private sceneGraphViewer: SceneGraphViewer | null = null;
 
   private constructor(device: GfxDevice, scene: PandaNode) {
     this.scene = scene;
     this.renderHelper = new GfxRenderHelper(device);
+    this.toggleSceneGraphViewer();
   }
 
   public adjustCameraController(c: CameraController) {
     c.setSceneMoveSpeedMult(0.02);
+  }
+
+  createPanels(): UI.Panel[] {
+    this.debugPanel = new UI.Panel();
+    this.debugPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
+    this.debugPanel.setTitle(UI.RENDER_HACKS_ICON, "Debug");
+
+    this.debugSceneGraphCheckbox = new UI.Checkbox(
+      "Show Scene Graph",
+      this.sceneGraphViewer !== null,
+    );
+    this.debugSceneGraphCheckbox.onchanged = () => {
+      this.toggleSceneGraphViewer();
+    };
+    this.debugPanel.contents.appendChild(this.debugSceneGraphCheckbox.elem);
+
+    return [this.debugPanel];
+  }
+
+  /**
+   * Toggle the scene graph viewer panel
+   */
+  public toggleSceneGraphViewer(): void {
+    if (this.sceneGraphViewer === null) {
+      this.sceneGraphViewer = new SceneGraphViewer();
+      this.sceneGraphViewer.setScene(this.scene);
+      this.sceneGraphViewer.show();
+      this.sceneGraphViewer.onclose = () => {
+        this.sceneGraphViewer = null;
+        this.debugSceneGraphCheckbox?.setChecked(false);
+      };
+    } else {
+      this.sceneGraphViewer.close();
+      this.sceneGraphViewer = null;
+    }
+    if (this.debugSceneGraphCheckbox) {
+      this.debugSceneGraphCheckbox.setChecked(this.sceneGraphViewer !== null);
+    }
+  }
+
+  /**
+   * Get the scene graph viewer (creates one if it doesn't exist)
+   */
+  public getSceneGraphViewer(): SceneGraphViewer {
+    if (this.sceneGraphViewer === null) {
+      this.sceneGraphViewer = new SceneGraphViewer();
+      this.sceneGraphViewer.setScene(this.scene);
+    }
+    return this.sceneGraphViewer;
   }
 
   /**
@@ -259,9 +302,9 @@ export class ToontownRenderer implements Viewer.SceneGfx {
     this.scene.traverse((node) => {
       if (!(node instanceof GeomNode)) return;
       for (const { state } of node.geoms) {
-        if (!state) continue;
-        const entry = state.attribs.find(
-          ({ attrib }) => attrib instanceof TextureAttrib,
+        const renderState = node.state.compose(state);
+        const entry = renderState.attribs.find(
+          ({ attrib }) => attrib.constructor === TextureAttrib,
         );
         if (!entry) continue;
         const attrib = entry.attrib as TextureAttrib;
@@ -391,9 +434,9 @@ export class ToontownRenderer implements Viewer.SceneGfx {
   }
 
   /**
-   * Set up common render instance properties for geometry.
+   * Set up a render instance for a specific geom.
    */
-  private setupGeometryRenderInst(
+  private setupRenderInst(
     geomNode: GeomNode,
     geomData: CachedGeometryData,
     renderState: RenderState,
@@ -514,6 +557,9 @@ export class ToontownRenderer implements Viewer.SceneGfx {
   }
 
   private prepareToRender(viewerInput: Viewer.ViewerRenderInput): void {
+    this.profiler.beginFrame();
+    this.globalDt += viewerInput.deltaTime;
+
     const renderInstManager = this.renderHelper.renderInstManager;
     const template = this.renderHelper.pushTemplateRenderInst();
     template.setBindingLayouts([{ numUniformBuffers: 2, numSamplers: 0 }]);
@@ -539,7 +585,7 @@ export class ToontownRenderer implements Viewer.SceneGfx {
     offs += fillMatrix4x4(sceneParams, offs, viewMatrix);
 
     // Update camera node position
-    const cameraNode = this.scene.findNode("camera");
+    const cameraNode = this.scene.find("**/camera");
     if (!cameraNode) throw new Error("Camera node not found");
     cameraNode.setPosHprScale(
       vec3.fromValues(
@@ -550,6 +596,14 @@ export class ToontownRenderer implements Viewer.SceneGfx {
       vec3.create(), // TODO
       vec3.fromValues(1, 1, 1),
     );
+
+    // Rotate sky if present
+    const skyNode = this.scene.find("**/=sky");
+    if (skyNode) {
+      const h = this.globalDt * 0.00025;
+      skyNode.find("**/cloud1")?.setH(h);
+      skyNode.find("**/cloud2")?.setH(-h * 0.8);
+    }
 
     const binCollector = new BinCollector(viewerInput.camera.viewMatrix);
 
@@ -570,32 +624,33 @@ export class ToontownRenderer implements Viewer.SceneGfx {
         node.drawShowMask,
       );
 
-      // Check visibility against camera mask
-      if (!isNodeVisible(runningDrawMask)) {
-        return;
-      }
+      // Check if this node is visible (children may still be visible via showThrough)
+      const thisNodeVisible = isNodeVisible(runningDrawMask);
 
+      // CompassEffect handling (always - affects child transforms)
       const compassEffect = node.effects.effects.find(
         (effect) => effect instanceof CompassEffect,
       );
       if (compassEffect?.reference) {
         // TODO actually check CompassEffect properties
-        node.transform.position = vec3.clone(
-          compassEffect.reference.transform.position,
-        );
-        node.transform.flags &= ~1;
+        node.pos = compassEffect.reference.pos;
       }
 
       // Accumulate transform
-      const localTransform = node.transform.getMatrix();
-      const netTransform = mat4.create();
-      mat4.multiply(netTransform, parentTransform, localTransform);
+      let netTransform: ReadonlyMat4;
+      if (node.transform.isIdentity) {
+        netTransform = parentTransform;
+      } else {
+        const mtx = mat4.create();
+        mat4.multiply(mtx, parentTransform, node.transform.getMatrix());
+        netTransform = mtx;
+      }
 
       // Combine render states
       const renderState = parentState.compose(node.state);
 
-      // If this is a GeomNode, collect its geometry
-      if (node instanceof GeomNode) {
+      // Only render geometry if this node is visible
+      if (thisNodeVisible && node instanceof GeomNode) {
         // Check if this node is a decal base
         if (
           node.effects.effects.some((effect) => effect instanceof DecalEffect)
@@ -612,8 +667,9 @@ export class ToontownRenderer implements Viewer.SceneGfx {
             geomData: null,
             renderState,
             modelMatrix: netTransform,
+            drawMask: runningDrawMask,
           });
-          return; // Skip traversing children
+          return; // Skip traversing children (decal children rendered later)
         }
 
         for (const { geom, state } of node.geoms) {
@@ -676,17 +732,20 @@ export class ToontownRenderer implements Viewer.SceneGfx {
             geomData,
             renderState: renderState.compose(state),
             modelMatrix: netTransform,
+            drawMask: runningDrawMask,
           });
         }
       }
 
-      // Traverse children
+      // Always traverse children even if this node is hidden
+      // Children may use showThrough() to override parent visibility
       for (const [child, _sort] of node.children) {
         traverse.call(this, child, netTransform, runningDrawMask, renderState);
       }
     }
 
     // Start traversal from the found node with all bits on (default visibility)
+    this.profiler.begin("traverse");
     traverse.call(
       this,
       this.scene,
@@ -694,13 +753,21 @@ export class ToontownRenderer implements Viewer.SceneGfx {
       0xffffffff,
       this.scene.state,
     );
+    this.profiler.end("traverse");
 
     // Submit all collected render insts to the render list in correct bin order
-    for (const obj of binCollector.finish()) {
+    this.profiler.begin("submit");
+
+    this.profiler.begin("binFinish");
+    const sortedObjects = binCollector.finish();
+    this.profiler.end("binFinish");
+
+    this.profiler.begin("setupRenderInst");
+    for (const obj of sortedObjects) {
       if (obj.geomData) {
         // Regular render
         this.renderInstListMain.submitRenderInst(
-          this.setupGeometryRenderInst(
+          this.setupRenderInst(
             obj.geomNode,
             obj.geomData,
             obj.renderState,
@@ -717,7 +784,7 @@ export class ToontownRenderer implements Viewer.SceneGfx {
           modelMatrix: ReadonlyMat4,
         ) {
           this.renderInstListMain.submitRenderInst(
-            this.setupGeometryRenderInst(
+            this.setupRenderInst(
               node,
               createGeomData(
                 geom,
@@ -745,21 +812,50 @@ export class ToontownRenderer implements Viewer.SceneGfx {
           base: PandaNode,
           renderState: RenderState,
           parentTransform: ReadonlyMat4,
+          parentDrawMask: number,
         ) {
           for (const [child, _sort] of base.children) {
-            const localTransform = child.transform.getMatrix();
-            const netTransform = mat4.create();
-            mat4.multiply(netTransform, parentTransform, localTransform);
+            // Compose draw mask for this child
+            const runningDrawMask = composeDrawMask(
+              parentDrawMask,
+              child.drawControlMask,
+              child.drawShowMask,
+            );
+
+            let netTransform: ReadonlyMat4;
+            if (child.transform.isIdentity) {
+              netTransform = parentTransform;
+            } else {
+              const mtx = mat4.create();
+              mat4.multiply(mtx, parentTransform, child.transform.getMatrix());
+              netTransform = mtx;
+            }
             const childState = renderState.compose(child.state);
-            if (child instanceof GeomNode) {
+
+            // Only render if visible
+            if (isNodeVisible(runningDrawMask) && child instanceof GeomNode) {
               for (const entry of child.geoms) {
                 doRender.call(this, child, entry, childState, netTransform);
               }
             }
-            doRenderChild.call(this, child, childState, netTransform);
+
+            // Continue traversing children (for showThrough support)
+            doRenderChild.call(
+              this,
+              child,
+              childState,
+              netTransform,
+              runningDrawMask,
+            );
           }
         }
-        doRenderChild.call(this, obj.geomNode, baseState, obj.modelMatrix);
+        doRenderChild.call(
+          this,
+          obj.geomNode,
+          baseState,
+          obj.modelMatrix,
+          obj.drawMask,
+        );
         // Draw base with color write disabled
         const finalState = obj.renderState.withAttrib(
           ColorWriteAttrib.create(ColorWriteChannels.Off),
@@ -770,6 +866,12 @@ export class ToontownRenderer implements Viewer.SceneGfx {
         }
       }
     }
+    this.profiler.end("setupRenderInst");
+    this.profiler.end("submit");
+
+    // Output profiler info to debug console
+    viewerInput.debugConsole.addInfoLine(this.profiler.getInfoLine());
+    this.profiler.endFrame();
 
     renderInstManager.popTemplate();
     this.renderHelper.prepareToRender();
@@ -830,9 +932,22 @@ export class ToontownRenderer implements Viewer.SceneGfx {
     this.prepareToRender(viewerInput);
     this.renderHelper.renderGraph.execute(builder);
     this.renderInstListMain.reset();
+
+    // Draw scene graph viewer debug overlays
+    if (this.sceneGraphViewer !== null) {
+      this.sceneGraphViewer.drawHighlightedAABB(
+        viewerInput.camera.clipFromWorldMatrix,
+      );
+    }
   }
 
   public destroy(device: GfxDevice): void {
+    // Close scene graph viewer if open
+    if (this.sceneGraphViewer !== null) {
+      this.sceneGraphViewer.close();
+      this.sceneGraphViewer = null;
+    }
+
     for (const geomData of this.geomCache.values()) {
       device.destroyBuffer(geomData.vertexBuffer);
       if (geomData.indexBuffer) {
@@ -846,8 +961,6 @@ export class ToontownRenderer implements Viewer.SceneGfx {
   }
 }
 
-const whiteColor = vec4.fromValues(1, 1, 1, 1);
-
 function setupDrawUniform(
   renderInst: GfxRenderInst,
   material: MaterialData,
@@ -855,15 +968,12 @@ function setupDrawUniform(
 ) {
   let offs = renderInst.allocateUniformBuffer(
     ToontownProgram.ub_DrawParams,
-    16 + 4,
+    16 + 4 + 4,
   );
   const drawParams = renderInst.mapUniformBufferF32(
     ToontownProgram.ub_DrawParams,
   );
   offs += fillMatrix4x4(drawParams, offs, modelMatrix);
-  offs += fillVec4v(
-    drawParams,
-    offs,
-    material.colorType === ColorType.Flat ? material.flatColor : whiteColor,
-  );
+  offs += fillVec4v(drawParams, offs, material.flatColor);
+  offs += fillVec4v(drawParams, offs, material.colorScale);
 }

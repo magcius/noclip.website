@@ -1,5 +1,6 @@
 import type { BAMFile } from "../bam";
 import { AssetVersion, type DataStream } from "../common";
+import type { MaterialData } from "../geom";
 import { readTypedRefs, registerBAMObject } from "./base";
 import {
   type DebugInfo,
@@ -147,6 +148,26 @@ export class TextureAttrib extends RenderAttrib {
     }
 
     return info;
+  }
+
+  override applyToMaterial(material: MaterialData): void {
+    if (this.texture !== null) {
+      material.texture = this.texture;
+    } else {
+      if (this.offAllStages)
+        console.warn("TextureAttrib offAllStages unimplemented");
+      if (this.offStageRefs.length > 0)
+        console.warn(`TextureAttrib offStageRefs unimplemented`);
+      if (this.onStages.length > 0) {
+        if (this.onStages.length !== 1)
+          console.warn(
+            `Multiple texture stages unimplemented (${this.onStages.length})`,
+          );
+        if (!this.onStages[0].textureStage.isDefault)
+          console.warn(`Non-default TextureStage unimplemented`);
+        material.texture = this.onStages[0].texture;
+      }
+    }
   }
 }
 

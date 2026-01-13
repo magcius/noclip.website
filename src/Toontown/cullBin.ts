@@ -1,27 +1,28 @@
-import { mat4, ReadonlyMat4 } from "gl-matrix";
+import type { ReadonlyMat4 } from "gl-matrix";
+import { computeViewSpaceDepthFromWorldSpaceAABB } from "../Camera";
+import { AABB } from "../Geometry";
+import type { CachedGeometryData } from "./geom";
 import {
-  RenderState,
-  GeomNode,
-  CullBinAttrib,
-  TransparencyAttrib,
-  TransparencyMode,
   AlphaTestAttrib,
-  PandaCompareFunc,
+  CullBinAttrib,
+  DecalEffect,
   DepthWriteAttrib,
   DepthWriteMode,
+  type GeomNode,
   MAX_PRIORITY,
-  DecalEffect,
+  PandaCompareFunc,
+  RenderState,
+  TransparencyAttrib,
+  TransparencyMode,
 } from "./nodes";
-import { CachedGeometryData } from "./geom";
-import { AABB } from "../Geometry";
 import { pandaToNoclip } from "./render";
-import { computeViewSpaceDepthFromWorldSpaceAABB } from "../Camera";
 
 export type CullableObject = {
   geomNode: GeomNode;
   geomData: CachedGeometryData | null;
   renderState: RenderState;
-  modelMatrix: mat4;
+  modelMatrix: ReadonlyMat4;
+  drawMask: number;
 };
 
 abstract class CullBin {
@@ -131,6 +132,21 @@ function getCullBinName(obj: CullableObject): string {
   return "opaque";
 }
 
+function getTransparencyMode(obj: CullableObject): TransparencyMode {
+  const transparencyAttrib = obj.renderState.get(TransparencyAttrib);
+  if (transparencyAttrib) return transparencyAttrib.mode;
+  if (obj.geomData === null) {
+    // If we're sorting a node instead of a specific geom, check for any transparency on child geoms
+    const geom = obj.geomNode.geoms.find(
+      (geom) =>
+        (geom.state?.get(TransparencyAttrib)?.mode ?? TransparencyMode.None) !==
+        TransparencyMode.None,
+    );
+    if (geom) return geom.state!.get(TransparencyAttrib)!.mode;
+  }
+  return TransparencyMode.None;
+}
+
 const ALPHA_BINARY_LEVEL = 0.5;
 const ALPHA_DUAL_OPAQUE_LEVEL = 252.0 / 256.0;
 
@@ -192,8 +208,7 @@ export class BinCollector {
   }
 
   add(obj: CullableObject) {
-    let transparencyAttrib = obj.renderState.get(TransparencyAttrib);
-    switch (transparencyAttrib?.mode) {
+    switch (getTransparencyMode(obj)) {
       case TransparencyMode.Alpha:
         obj = {
           ...obj,

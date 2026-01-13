@@ -1,5 +1,6 @@
 import type { BAMFile } from "../bam";
 import type { DataStream } from "../common";
+import type { MaterialData } from "../geom";
 import { registerBAMObject } from "./base";
 import { type DebugInfo, dbgEnum, dbgNum } from "./debug";
 import { PandaCompareFunc, RenderAttrib } from "./RenderAttrib";
@@ -25,6 +26,11 @@ export class AlphaTestAttrib extends RenderAttrib {
     info.set("mode", dbgEnum(this.mode, PandaCompareFunc));
     info.set("referenceAlpha", dbgNum(this.referenceAlpha));
     return info;
+  }
+
+  override applyToMaterial(material: MaterialData): void {
+    material.alphaTestMode = this.mode;
+    material.alphaTestThreshold = this.referenceAlpha;
   }
 
   static create(

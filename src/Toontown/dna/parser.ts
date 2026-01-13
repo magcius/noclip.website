@@ -291,6 +291,12 @@ export class DNAParser {
         return this.parseLandmarkBuilding();
       case TokenType.ANIM_BUILDING:
         return this.parseAnimBuilding();
+      case TokenType.DOOR:
+        return this.parseDoor();
+      case TokenType.FLAT_DOOR:
+        return this.parseFlatDoor();
+      case TokenType.SIGN:
+        return this.parseSign();
       default:
         throw this.lexer.error(
           `Expected node type, got ${TokenType[token.type]}`,
@@ -429,9 +435,6 @@ export class DNAParser {
         case TokenType.COLOR:
           prop.color = this.parseColorBlock();
           break;
-        case TokenType.SIGN:
-          prop.sign = this.parseSign();
-          break;
         default:
           if (!this.tryParseTransform(prop)) {
             if (this.isNodeStart(token)) {
@@ -476,9 +479,6 @@ export class DNAParser {
           break;
         case TokenType.COLOR:
           prop.color = this.parseColorBlock();
-          break;
-        case TokenType.SIGN:
-          prop.sign = this.parseSign();
           break;
         default:
           if (!this.tryParseTransform(prop)) {
@@ -528,9 +528,6 @@ export class DNAParser {
           break;
         case TokenType.COLOR:
           prop.color = this.parseColorBlock();
-          break;
-        case TokenType.SIGN:
-          prop.sign = this.parseSign();
           break;
         default:
           if (!this.tryParseTransform(prop)) {
@@ -633,10 +630,6 @@ export class DNAParser {
         case TokenType.WALL:
           building.walls.push(this.parseWall());
           break;
-        case TokenType.PROP:
-          building.props = building.props || [];
-          building.props.push(this.parseProp());
-          break;
         default:
           if (!this.tryParseTransform(building)) {
             if (this.isNodeStart(token)) {
@@ -661,9 +654,11 @@ export class DNAParser {
 
     const wall: DNAWall = {
       type: "wall",
+      name: "",
       height: 0,
       code: "",
       color: vec4.fromValues(1, 1, 1, 1),
+      children: [],
     };
 
     while (this.lexer.peek().type !== TokenType.RBRACKET) {
@@ -685,17 +680,14 @@ export class DNAParser {
         case TokenType.CORNICE:
           wall.cornice = this.parseCornice();
           break;
-        case TokenType.FLAT_DOOR:
-          wall.flatDoor = this.parseFlatDoor();
-          break;
-        case TokenType.PROP:
-          wall.props = wall.props || [];
-          wall.props.push(this.parseProp());
-          break;
         default:
-          throw this.lexer.error(
-            `Unexpected token in wall: ${TokenType[token.type]}`,
-          );
+          if (this.isNodeStart(token)) {
+            wall.children.push(this.parseNode());
+          } else {
+            throw this.lexer.error(
+              `Unexpected token in wall: ${TokenType[token.type]}`,
+            );
+          }
       }
     }
 
@@ -778,8 +770,10 @@ export class DNAParser {
 
     const door: DNAFlatDoor = {
       type: "flat_door",
+      name: "",
       code: "",
       color: vec4.fromValues(1, 1, 1, 1),
+      children: [],
     };
 
     while (this.lexer.peek().type !== TokenType.RBRACKET) {
@@ -793,9 +787,13 @@ export class DNAParser {
           door.color = this.parseColorBlock();
           break;
         default:
-          throw this.lexer.error(
-            `Unexpected token in flat_door: ${TokenType[token.type]}`,
-          );
+          if (this.isNodeStart(token)) {
+            door.children.push(this.parseNode());
+          } else {
+            throw this.lexer.error(
+              `Unexpected token in flat_door: ${TokenType[token.type]}`,
+            );
+          }
       }
     }
 
@@ -836,16 +834,6 @@ export class DNAParser {
           break;
         case TokenType.COLOR:
           building.wallColor = this.parseColorBlock();
-          break;
-        case TokenType.DOOR:
-          building.door = this.parseDoor();
-          break;
-        case TokenType.SIGN:
-          building.sign = this.parseSign();
-          break;
-        case TokenType.PROP:
-          building.props = building.props || [];
-          building.props.push(this.parseProp());
           break;
         default:
           if (!this.tryParseTransform(building)) {
@@ -902,16 +890,6 @@ export class DNAParser {
         case TokenType.COLOR:
           building.wallColor = this.parseColorBlock();
           break;
-        case TokenType.DOOR:
-          building.door = this.parseDoor();
-          break;
-        case TokenType.SIGN:
-          building.sign = this.parseSign();
-          break;
-        case TokenType.PROP:
-          building.props = building.props || [];
-          building.props.push(this.parseProp());
-          break;
         default:
           if (!this.tryParseTransform(building)) {
             if (this.isNodeStart(token)) {
@@ -936,8 +914,10 @@ export class DNAParser {
 
     const door: DNADoor = {
       type: "door",
+      name: "",
       code: "",
       color: vec4.fromValues(1, 1, 1, 1),
+      children: [],
     };
 
     while (this.lexer.peek().type !== TokenType.RBRACKET) {
@@ -951,9 +931,13 @@ export class DNAParser {
           door.color = this.parseColorBlock();
           break;
         default:
-          throw this.lexer.error(
-            `Unexpected token in door: ${TokenType[token.type]}`,
-          );
+          if (this.isNodeStart(token)) {
+            door.children.push(this.parseNode());
+          } else {
+            throw this.lexer.error(
+              `Unexpected token in door: ${TokenType[token.type]}`,
+            );
+          }
       }
     }
 
@@ -968,7 +952,9 @@ export class DNAParser {
 
     const sign: DNASign = {
       type: "sign",
+      name: "",
       baselines: [],
+      children: [],
     };
 
     while (this.lexer.peek().type !== TokenType.RBRACKET) {
@@ -986,9 +972,13 @@ export class DNAParser {
           break;
         default:
           if (!this.tryParseTransform(sign)) {
-            throw this.lexer.error(
-              `Unexpected token in sign: ${TokenType[token.type]}`,
-            );
+            if (this.isNodeStart(token)) {
+              sign.children.push(this.parseNode());
+            } else {
+              throw this.lexer.error(
+                `Unexpected token in sign: ${TokenType[token.type]}`,
+              );
+            }
           }
       }
     }
@@ -1369,6 +1359,9 @@ export class DNAParser {
       case TokenType.FLAT_BUILDING:
       case TokenType.LANDMARK_BUILDING:
       case TokenType.ANIM_BUILDING:
+      case TokenType.DOOR:
+      case TokenType.FLAT_DOOR:
+      case TokenType.SIGN:
         return true;
       default:
         return false;

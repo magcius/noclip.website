@@ -185,7 +185,7 @@ export class GfxRenderInst {
      * Copies the fields from another render inst {@param o} to this render inst.
      */
     public copyFrom(o: GfxRenderInst): void {
-        setMegaStateFlags(this._renderPipelineDescriptor.megaStateDescriptor, o._renderPipelineDescriptor.megaStateDescriptor);
+        this._renderPipelineDescriptor.megaStateDescriptor = copyMegaState(o._renderPipelineDescriptor.megaStateDescriptor);
         this._renderPipelineDescriptor.program = o._renderPipelineDescriptor.program;
         this._renderPipelineDescriptor.inputLayout = o._renderPipelineDescriptor.inputLayout;
         this._renderPipelineDescriptor.topology = o._renderPipelineDescriptor.topology;
@@ -437,7 +437,7 @@ export class GfxRenderInst {
                         if (binding.gfxSampler !== null)
                             dst.gfxSampler = binding.gfxSampler;
                     }
-    
+
                     dst.lateBinding = null;
                 }
             }

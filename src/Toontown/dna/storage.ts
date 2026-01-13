@@ -168,6 +168,10 @@ export class DNAStorage {
     return paths;
   }
 
+  getRequiredTextures(): Set<string> {
+    return new Set<string>(this.textures.values());
+  }
+
   /**
    * Debug: Print storage contents
    */

@@ -1,6 +1,6 @@
 // Panda3D Multifile format parser
 
-import ArrayBufferSlice from "../../ArrayBufferSlice";
+import type ArrayBufferSlice from "../../ArrayBufferSlice";
 
 const MAGIC = new Uint8Array([0x70, 0x6d, 0x66, 0x00, 0x0a, 0x0d]); // "pmf\0\n\r"
 
@@ -70,7 +70,11 @@ export function readMultifile(data: ArrayBufferSlice): Multifile {
   offset += MAGIC.length;
   for (let i = 0; i < MAGIC.length; i++) {
     if (magic[i] !== MAGIC[i]) {
-      throw new Error(`Invalid multifile magic: ${Array.from(magic).map(b => b.toString(16)).join(" ")}`);
+      throw new Error(
+        `Invalid multifile magic: ${Array.from(magic)
+          .map((b) => b.toString(16))
+          .join(" ")}`,
+      );
     }
   }
 
@@ -82,7 +86,10 @@ export function readMultifile(data: ArrayBufferSlice): Multifile {
   const version: MultifileVersion = { major, minor };
 
   // Validate version (1.0 <= version <= 1.1)
-  if (!versionGte(version, { major: 1, minor: 0 }) || !versionLte(version, { major: 1, minor: 1 })) {
+  if (
+    !versionGte(version, { major: 1, minor: 0 }) ||
+    !versionLte(version, { major: 1, minor: 1 })
+  ) {
     throw new Error(`Unsupported multifile version: ${major}.${minor}`);
   }
 
@@ -118,7 +125,10 @@ export function readMultifile(data: ArrayBufferSlice): Multifile {
 
     // Read orig_length if compressed or encrypted
     let origLength: number;
-    if (attributes & (MultifileAttributes.Compressed | MultifileAttributes.Encrypted)) {
+    if (
+      attributes &
+      (MultifileAttributes.Compressed | MultifileAttributes.Encrypted)
+    ) {
       origLength = view.getUint32(offset, true);
       offset += 4;
     } else {

@@ -1,5 +1,11 @@
-import { type mat4, type ReadonlyVec3, vec3, vec4 } from "gl-matrix";
-import { AABB } from "../Geometry";
+import {
+  type mat4,
+  type ReadonlyVec3,
+  type ReadonlyVec4,
+  vec3,
+  vec4,
+} from "gl-matrix";
+import type { AABB } from "../Geometry";
 import {
   type GfxBuffer,
   GfxBufferFrequencyHint,
@@ -13,20 +19,13 @@ import {
 import type { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { enumName } from "./common";
 import {
-  AlphaTestAttrib,
   BillboardEffect,
   BoundsType,
-  ColorAttrib,
   ColorType,
-  ColorWriteAttrib,
   ColorWriteChannels,
   Contents,
-  CullBinAttrib,
-  CullFaceAttrib,
   CullFaceMode,
   DecalEffect,
-  DepthTestAttrib,
-  DepthWriteAttrib,
   DepthWriteMode,
   type Geom,
   type GeomNode,
@@ -41,8 +40,6 @@ import {
   type RenderAttribEntry,
   type RenderState,
   type Texture,
-  TextureAttrib,
-  TransparencyAttrib,
   TransparencyMode,
 } from "./nodes";
 
@@ -71,7 +68,8 @@ export interface CachedGeometryData {
  */
 export interface MaterialData {
   colorType: ColorType;
-  flatColor: vec4;
+  flatColor: ReadonlyVec4;
+  colorScale: ReadonlyVec4;
   transparencyMode: TransparencyMode;
   texture: Texture | null;
   cullBinName: string | null;
@@ -526,6 +524,25 @@ function getAttributeLocation(contents: Contents): number | null {
   }
 }
 
+const DEFAULT_MATERIAL: MaterialData = {
+  colorType: ColorType.Vertex,
+  flatColor: vec4.fromValues(1, 1, 1, 1),
+  colorScale: vec4.fromValues(1, 1, 1, 1),
+  transparencyMode: TransparencyMode.None,
+  texture: null,
+  cullBinName: null,
+  drawOrder: null,
+  cullFaceMode: CullFaceMode.CullClockwise,
+  cullReverse: false,
+  depthTestMode: PandaCompareFunc.Less,
+  depthWrite: DepthWriteMode.On,
+  isDecal: false,
+  billboardEffect: null,
+  colorWriteChannels: ColorWriteChannels.All,
+  alphaTestMode: PandaCompareFunc.Always,
+  alphaTestThreshold: 1,
+};
+
 /**
  * Extract material properties from RenderState
  */
@@ -533,78 +550,25 @@ export function extractMaterial(
   node: PandaNode,
   renderState: RenderState,
 ): MaterialData {
-  const material: MaterialData = {
-    colorType: ColorType.Vertex,
-    flatColor: vec4.fromValues(1, 1, 1, 1),
-    transparencyMode: TransparencyMode.None,
-    texture: null,
-    cullBinName: null,
-    drawOrder: null,
-    cullFaceMode: CullFaceMode.CullClockwise,
-    cullReverse: false,
-    depthTestMode: PandaCompareFunc.Less,
-    depthWrite: DepthWriteMode.On,
-    isDecal: false,
-    billboardEffect: null,
-    colorWriteChannels: ColorWriteChannels.All,
-    alphaTestMode: PandaCompareFunc.Always,
-    alphaTestThreshold: 1,
-  };
+  const material: MaterialData = { ...DEFAULT_MATERIAL };
 
   for (const effect of node.effects.effects) {
-    if (effect instanceof BillboardEffect) {
-      material.billboardEffect = effect;
-    } else if (effect instanceof DecalEffect) {
-      material.isDecal = true;
-    } else {
-      console.warn(
-        `Unsupported RenderEffects effect type: ${effect.constructor.name}`,
-      );
+    switch (effect.constructor) {
+      case BillboardEffect:
+        material.billboardEffect = effect as BillboardEffect;
+        break;
+      case DecalEffect:
+        material.isDecal = true;
+        break;
+      default:
+        console.warn(
+          `Unsupported RenderEffects effect type: ${effect.constructor.name}`,
+        );
     }
   }
 
   for (const { attrib } of renderState.attribs) {
-    if (attrib instanceof AlphaTestAttrib) {
-      material.alphaTestMode = attrib.mode;
-      material.alphaTestThreshold = attrib.referenceAlpha;
-    } else if (attrib instanceof ColorAttrib) {
-      material.colorType = attrib.colorType;
-      material.flatColor = attrib.color;
-    } else if (attrib instanceof TransparencyAttrib) {
-      material.transparencyMode = attrib.mode;
-    } else if (attrib instanceof TextureAttrib) {
-      if (attrib.offAllStages)
-        console.warn("TextureAttrib offAllStages unimplemented");
-      if (attrib.offStageRefs.length > 0)
-        console.warn(`TextureAttrib offStageRefs unimplemented`);
-      if (attrib.onStages.length > 0) {
-        if (attrib.onStages.length !== 1)
-          console.warn(
-            `Multiple texture stages unimplemented (${attrib.onStages.length})`,
-          );
-        if (!attrib.onStages[0].textureStage.isDefault)
-          console.warn(`Non-default TextureStage unimplemented`);
-        material.texture = attrib.onStages[0].texture;
-      } else if (attrib.texture !== null) {
-        material.texture = attrib.texture;
-      }
-    } else if (attrib instanceof CullBinAttrib) {
-      material.cullBinName = attrib.binName;
-      material.drawOrder = attrib.drawOrder;
-    } else if (attrib instanceof CullFaceAttrib) {
-      material.cullFaceMode = attrib.mode;
-      material.cullReverse = attrib.reverse;
-    } else if (attrib instanceof DepthTestAttrib) {
-      material.depthTestMode = attrib.mode;
-    } else if (attrib instanceof DepthWriteAttrib) {
-      material.depthWrite = attrib.mode;
-    } else if (attrib instanceof ColorWriteAttrib) {
-      material.colorWriteChannels = attrib.channels;
-    } else {
-      console.warn(
-        `Unsupported RenderState attribute type: ${attrib.constructor.name}`,
-      );
-    }
+    attrib.applyToMaterial(material);
   }
 
   return material;

@@ -18,7 +18,7 @@ export class RenderEffects extends BAMObject {
 
   override copyTo(target: this): void {
     super.copyTo(target);
-    target.effects = this.effects.map((o) => o.clone());
+    target.effects = this.effects.slice();
   }
 
   override getDebugInfo(): DebugInfo {
@@ -34,7 +34,7 @@ export class RenderEffects extends BAMObject {
   withEffect(effect: RenderEffect) {
     const result = new RenderEffects();
     for (const existing of this.effects) {
-      if (existing.constructor.name !== effect.constructor.name) {
+      if (existing.constructor !== effect.constructor) {
         result.effects.push(existing);
       }
     }
@@ -45,7 +45,7 @@ export class RenderEffects extends BAMObject {
   get<T extends RenderEffect>(
     attribType: RenderEffectConstructor<T>,
   ): T | null {
-    const entry = this.effects.find((a) => a instanceof attribType);
+    const entry = this.effects.find((a) => a.constructor === attribType);
     return entry ? (entry as T) : null;
   }
 }

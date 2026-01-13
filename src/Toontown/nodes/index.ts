@@ -39,6 +39,7 @@ export { TransparencyAttrib, TransparencyMode } from "./TransparencyAttrib";
 export { RenderAttrib, PandaCompareFunc } from "./RenderAttrib";
 export { AlphaTestAttrib } from "./AlphaTestAttrib";
 export { ColorAttrib, ColorType } from "./ColorAttrib";
+export { ColorScaleAttrib } from "./ColorScaleAttrib";
 export { ColorWriteAttrib, ColorWriteChannels } from "./ColorWriteAttrib";
 export { CullBinAttrib } from "./CullBinAttrib";
 export { CullFaceAttrib, CullFaceMode } from "./CullFaceAttrib";

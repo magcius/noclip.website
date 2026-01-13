@@ -1,8 +1,6 @@
 import type { BAMFile } from "../bam";
 import type { DataStream } from "../common";
-import { AlphaTestAttrib } from "./AlphaTestAttrib";
 import { BAMObject, registerBAMObject } from "./base";
-import { DepthWriteAttrib, DepthWriteMode } from "./DepthWriteAttrib";
 import {
   type DebugInfo,
   dbgArray,
@@ -11,8 +9,7 @@ import {
   dbgObject,
   dbgRef,
 } from "./debug";
-import { PandaCompareFunc, RenderAttrib } from "./RenderAttrib";
-import { TransparencyAttrib, TransparencyMode } from "./TransparencyAttrib";
+import { RenderAttrib } from "./RenderAttrib";
 
 export interface RenderAttribEntry {
   attrib: RenderAttrib;
@@ -26,29 +23,27 @@ interface RenderAttribConstructor<T extends RenderAttrib> {
 }
 
 export class RenderState extends BAMObject {
-  public attribs: RenderAttribEntry[] = [];
+  public attribs: ReadonlyArray<Readonly<RenderAttribEntry>> = [];
 
   override load(file: BAMFile, data: DataStream) {
     super.load(file, data);
 
     const numAttribs = data.readUint16();
-    this.attribs = new Array(numAttribs);
+    const attribs = new Array(numAttribs);
     for (let i = 0; i < numAttribs; i++) {
       const attribRef = data.readObjectId();
       const attrib = file.getTyped(attribRef, RenderAttrib);
       if (!attrib)
         throw new Error(`RenderState: Invalid attrib ref @${attribRef}`);
       const priority = data.readInt32();
-      this.attribs[i] = { attrib, priority };
+      attribs[i] = { attrib, priority };
     }
+    this.attribs = attribs;
   }
 
   override copyTo(target: this): void {
     super.copyTo(target);
-    target.attribs = this.attribs.map(({ attrib, priority }) => ({
-      attrib: attrib.clone(),
-      priority,
-    }));
+    target.attribs = this.attribs;
   }
 
   override getDebugInfo(): DebugInfo {
@@ -75,22 +70,24 @@ export class RenderState extends BAMObject {
    * Unconditionally overrides existing attributes of the same type, ignoring priority.
    */
   withAttrib(attrib: RenderAttrib, priority = 0) {
-    const result = new RenderState();
+    const result: RenderAttribEntry[] = [];
     let added = false;
     for (const entry of this.attribs) {
-      if (entry.attrib.constructor.name === attrib.constructor.name) {
+      if (entry.attrib.constructor === attrib.constructor) {
         if (!added) {
-          result.attribs.push({ attrib, priority });
+          result.push({ attrib, priority });
         }
         added = true;
       } else {
-        result.attribs.push(entry);
+        result.push(entry);
       }
     }
     if (!added) {
-      result.attribs.push({ attrib, priority });
+      result.push({ attrib, priority });
     }
-    return result;
+    const state = new RenderState();
+    state.attribs = result;
+    return state;
   }
 
   /**
@@ -98,35 +95,34 @@ export class RenderState extends BAMObject {
    * If an attribute is present in both states, the one with the higher priority is used.
    */
   compose(other: RenderState | null) {
-    if (!other) {
-      return this;
-    }
-    const result = this.clone();
+    if (!other || other.attribs.length === 0) return this;
+    if (this.attribs.length === 0) return other;
+    const result = this.attribs.slice();
     for (const entry of other.attribs) {
-      const existing = result.attribs.findIndex(
-        (a) => a.attrib.constructor.name === entry.attrib.constructor.name,
+      const existing = result.findIndex(
+        (a) => a.attrib.constructor === entry.attrib.constructor,
       );
       if (existing === -1) {
-        result.attribs.push(entry);
-      } else if (entry.priority >= result.attribs[existing].priority) {
-        result.attribs[existing] = entry;
+        result.push(entry);
+      } else if (entry.priority >= result[existing].priority) {
+        result[existing] = entry;
       }
     }
-    return result;
+    const state = new RenderState();
+    state.attribs = result;
+    return state;
   }
 
   get<T extends RenderAttrib>(
     attribType: RenderAttribConstructor<T>,
   ): T | null {
-    const entry = this.attribs.find((a) => a.attrib instanceof attribType);
+    const entry = this.attribs.find((a) => a.attrib.constructor === attribType);
     return entry ? (entry.attrib as T) : null;
   }
 
   static make(priority: number, ...attribs: RenderAttrib[]): RenderState {
     const state = new RenderState();
-    for (const attrib of attribs) {
-      state.attribs.push({ attrib, priority });
-    }
+    state.attribs = attribs.map((attrib) => ({ attrib, priority }));
     return state;
   }
 }

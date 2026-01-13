@@ -159,6 +159,7 @@ export class FloatingPanel implements Widget {
         this.mainPanel.appendChild(this.headerContainer);
 
         this.header = document.createElement('h1');
+        this.header.style.boxSizing = 'border-box';
         this.header.style.lineHeight = '28px';
         this.header.style.margin = '0';
         this.header.style.fontSize = '100%';
@@ -210,6 +211,7 @@ export class FloatingPanel implements Widget {
         this.headerContainer.appendChild(this.header);
 
         this.contents = document.createElement('div');
+        this.contents.style.boxSizing = 'border-box';
         this.contents.style.maxHeight = '50vh';
         this.contents.style.overflow = 'auto';
         this.mainPanel.appendChild(this.contents);
@@ -234,6 +236,11 @@ export class FloatingPanel implements Widget {
     public onMotion(dx: number, dy: number): void {
         this.toplevel.style.left = (parseFloat(this.toplevel.style.left!) + dx) + 'px';
         this.toplevel.style.top = (parseFloat(this.toplevel.style.top!) + dy) + 'px';
+    }
+
+    public setPosition(x: number, y: number): void {
+        this.toplevel.style.left = `${x}px`;
+        this.toplevel.style.top = `${y}px`;
     }
 
     public onGrabReleased(): void {

@@ -1,5 +1,6 @@
 import type { BAMFile } from "../bam";
 import type { DataStream } from "../common";
+import type { MaterialData } from "../geom";
 import { registerBAMObject } from "./base";
 import { type DebugInfo, dbgEnum } from "./debug";
 import { RenderAttrib } from "./RenderAttrib";
@@ -31,6 +32,10 @@ export class ColorWriteAttrib extends RenderAttrib {
     const info = super.getDebugInfo();
     info.set("channels", dbgEnum(this.channels, ColorWriteChannels));
     return info;
+  }
+
+  override applyToMaterial(material: MaterialData): void {
+    material.colorWriteChannels = this.channels;
   }
 
   static create(channels: number = ColorWriteChannels.All): ColorWriteAttrib {

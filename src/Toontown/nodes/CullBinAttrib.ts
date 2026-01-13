@@ -1,5 +1,6 @@
 import type { BAMFile } from "../bam";
 import type { DataStream } from "../common";
+import type { MaterialData } from "../geom";
 import { registerBAMObject } from "./base";
 import { type DebugInfo, dbgNum, dbgStr } from "./debug";
 import { RenderAttrib } from "./RenderAttrib";
@@ -25,6 +26,11 @@ export class CullBinAttrib extends RenderAttrib {
     info.set("binName", dbgStr(this.binName));
     info.set("drawOrder", dbgNum(this.drawOrder));
     return info;
+  }
+
+  override applyToMaterial(material: MaterialData): void {
+    material.cullBinName = this.binName;
+    material.drawOrder = this.drawOrder;
   }
 
   static create(binName: string, drawOrder: number = 0): CullBinAttrib {
