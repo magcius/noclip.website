@@ -1,5 +1,6 @@
 import type { BAMFile } from "../bam";
 import type { DataStream } from "../common";
+import { CopyContext } from "./base";
 import { type DebugInfo, dbgNum } from "./debug";
 import { ParametricCurve } from "./ParametricCurve";
 
@@ -25,8 +26,8 @@ export class PiecewiseCurve extends ParametricCurve {
     }
   }
 
-  override copyTo(target: this): void {
-    super.copyTo(target);
+  override copyTo(target: this, ctx: CopyContext): void {
+    super.copyTo(target, ctx);
     target.segments = this.segments; // Shared
   }
 

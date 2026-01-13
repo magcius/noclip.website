@@ -1,7 +1,7 @@
 import type { BAMFile } from "../bam";
 import type { DataStream } from "../common";
 import type { MaterialData } from "../geom";
-import { registerBAMObject } from "./base";
+import { CopyContext, registerBAMObject } from "./base";
 import { type DebugInfo, dbgEnum } from "./debug";
 import { RenderAttrib } from "./RenderAttrib";
 
@@ -23,8 +23,8 @@ export class TransparencyAttrib extends RenderAttrib {
     this.mode = data.readUint8() as TransparencyMode;
   }
 
-  override copyTo(target: this): void {
-    super.copyTo(target);
+  override copyTo(target: this, ctx: CopyContext): void {
+    super.copyTo(target, ctx);
     target.mode = this.mode;
   }
 

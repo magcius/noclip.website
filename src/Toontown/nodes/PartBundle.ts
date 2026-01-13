@@ -1,8 +1,8 @@
 import { mat4 } from "gl-matrix";
 import type { BAMFile } from "../bam";
 import { AssetVersion, type DataStream } from "../common";
-import { type BAMObject, registerBAMObject } from "./base";
-import { type DebugInfo, dbgBool, dbgNum, dbgRef, dbgStr } from "./debug";
+import { type BAMObject, CopyContext, registerBAMObject } from "./base";
+import { type DebugInfo, dbgBool, dbgMat4, dbgNum, dbgRef, dbgStr } from "./debug";
 import { PartGroup } from "./PartGroup";
 
 /**
@@ -13,7 +13,7 @@ import { PartGroup } from "./PartGroup";
  * In BAM 6.17+, has anim_preload pointer.
  */
 export class PartBundle extends PartGroup {
-  public animPreload: BAMObject | null = null;
+  public animPreload: BAMObject | null = null; // TODO AnimPreloadTable
   public blendType = 0;
   public animBlendFlag = false;
   public frameBlendFlag = false;
@@ -41,9 +41,9 @@ export class PartBundle extends PartGroup {
     }
   }
 
-  override copyTo(target: this): void {
-    super.copyTo(target);
-    target.animPreload = this.animPreload; // Shared
+  override copyTo(target: this, ctx: CopyContext): void {
+    super.copyTo(target, ctx);
+    target.animPreload = ctx.clone(this.animPreload);
     target.blendType = this.blendType;
     target.animBlendFlag = this.animBlendFlag;
     target.frameBlendFlag = this.frameBlendFlag;
@@ -59,11 +59,10 @@ export class PartBundle extends PartGroup {
       info.set("blendType", dbgNum(this.blendType));
       info.set("animBlendFlag", dbgBool(this.animBlendFlag));
       info.set("frameBlendFlag", dbgBool(this.frameBlendFlag));
-      info.set("rootXform", dbgStr(this.rootXform.toString()));
+      info.set("rootXform", dbgMat4(this.rootXform));
     }
     return info;
   }
 }
 
 registerBAMObject("PartBundle", PartBundle);
-registerBAMObject("CharacterJointBundle", PartBundle);

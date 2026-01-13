@@ -1,7 +1,7 @@
 import type { BAMFile } from "../bam";
 import type { DataStream } from "../common";
 import type { MaterialData } from "../geom";
-import { registerBAMObject } from "./base";
+import { CopyContext, registerBAMObject } from "./base";
 import { type DebugInfo, dbgEnum } from "./debug";
 import { RenderAttrib } from "./RenderAttrib";
 
@@ -23,8 +23,8 @@ export class ColorWriteAttrib extends RenderAttrib {
     this.channels = data.readUint8();
   }
 
-  override copyTo(target: this): void {
-    super.copyTo(target);
+  override copyTo(target: this, ctx: CopyContext): void {
+    super.copyTo(target, ctx);
     target.channels = this.channels;
   }
 

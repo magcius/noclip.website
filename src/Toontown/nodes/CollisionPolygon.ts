@@ -1,7 +1,7 @@
 import { mat4, vec2 } from "gl-matrix";
 import type { BAMFile } from "../bam";
 import { AssetVersion, type DataStream } from "../common";
-import { registerBAMObject } from "./base";
+import { CopyContext, registerBAMObject } from "./base";
 import { CollisionPlane } from "./CollisionPlane";
 import {
   type DebugInfo,
@@ -56,8 +56,8 @@ export class CollisionPolygon extends CollisionPlane {
     }
   }
 
-  override copyTo(target: this): void {
-    super.copyTo(target);
+  override copyTo(target: this, ctx: CopyContext): void {
+    super.copyTo(target, ctx);
     target.points = this.points; // Shared
     mat4.copy(target.to2dMatrix, this.to2dMatrix);
     vec2.copy(target.median, this.median);

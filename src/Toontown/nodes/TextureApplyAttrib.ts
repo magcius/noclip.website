@@ -1,6 +1,6 @@
 import type { BAMFile } from "../bam";
 import type { DataStream } from "../common";
-import { BAMObject, registerBAMObject } from "./base";
+import { BAMObject, CopyContext, registerBAMObject } from "./base";
 import { type DebugInfo, dbgEnum } from "./debug";
 
 /**
@@ -24,8 +24,8 @@ export class TextureApplyAttrib extends BAMObject {
     this.mode = data.readUint8() as TextureApplyMode;
   }
 
-  override copyTo(target: this): void {
-    super.copyTo(target);
+  override copyTo(target: this, ctx: CopyContext): void {
+    super.copyTo(target, ctx);
     target.mode = this.mode;
   }
 

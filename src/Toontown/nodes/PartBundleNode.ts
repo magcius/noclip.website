@@ -1,6 +1,6 @@
 import type { BAMFile } from "../bam";
 import { AssetVersion, type DataStream } from "../common";
-import { readTypedRefs, registerBAMObject } from "./base";
+import { CopyContext, readTypedRefs, registerBAMObject } from "./base";
 import { type DebugInfo, dbgRefs } from "./debug";
 import { PandaNode } from "./PandaNode";
 import { PartBundle } from "./PartBundle";
@@ -19,9 +19,9 @@ export class PartBundleNode extends PandaNode {
     this.partBundles = readTypedRefs(file, data, numBundles, PartBundle);
   }
 
-  override copyTo(target: this): void {
-    super.copyTo(target);
-    target.partBundles = this.partBundles; // Shared
+  override copyTo(target: this, ctx: CopyContext): void {
+    super.copyTo(target, ctx);
+    target.partBundles = ctx.cloneArray(this.partBundles);
   }
 
   override getDebugInfo(): DebugInfo {

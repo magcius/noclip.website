@@ -1,6 +1,6 @@
 import type { BAMFile } from "../bam";
 import type { DataStream } from "../common";
-import { registerBAMObject } from "./base";
+import { CopyContext, registerBAMObject } from "./base";
 import { type DebugInfo, dbgNum } from "./debug";
 import { MovingPartBase } from "./MovingPartBase";
 
@@ -17,8 +17,8 @@ export class MovingPartScalar extends MovingPartBase {
     this.initialValue = data.readFloat32();
   }
 
-  override copyTo(target: this): void {
-    super.copyTo(target);
+  override copyTo(target: this, ctx: CopyContext): void {
+    super.copyTo(target, ctx);
     target.value = this.value;
     target.initialValue = this.initialValue;
   }

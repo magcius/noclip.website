@@ -1,6 +1,12 @@
 import type { BAMFile } from "../bam";
 import { AssetVersion, type DataStream } from "../common";
-import { type BAMObject, readObjectRefs, registerBAMObject } from "./base";
+import {
+  CopyContext,
+  readObjectRefs,
+  readTypedRefs,
+  registerBAMObject,
+} from "./base";
+import { CollisionSolid } from "./CollisionSolid";
 import { type DebugInfo, dbgFlags, dbgNum, dbgRefs } from "./debug";
 import { PandaNode } from "./PandaNode";
 
@@ -9,7 +15,7 @@ const CollisionNodeFlags = {
 };
 
 export class CollisionNode extends PandaNode {
-  public solids: BAMObject[] = [];
+  public solids: CollisionSolid[] = [];
   public fromCollideMask = 0;
   public collisionNodeFlags = 0;
 
@@ -24,7 +30,7 @@ export class CollisionNode extends PandaNode {
     ) {
       numSolids = data.readUint32();
     }
-    this.solids = readObjectRefs(file, data, numSolids);
+    this.solids = readTypedRefs(file, data, numSolids, CollisionSolid);
 
     this.fromCollideMask = data.readUint32();
 
@@ -36,9 +42,9 @@ export class CollisionNode extends PandaNode {
     }
   }
 
-  override copyTo(target: this): void {
-    super.copyTo(target);
-    target.solids = this.solids.map((o) => o.clone());
+  override copyTo(target: this, ctx: CopyContext): void {
+    super.copyTo(target, ctx);
+    target.solids = ctx.cloneArray(this.solids);
     target.fromCollideMask = this.fromCollideMask;
     target.collisionNodeFlags = this.collisionNodeFlags;
   }

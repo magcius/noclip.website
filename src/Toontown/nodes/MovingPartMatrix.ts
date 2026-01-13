@@ -1,8 +1,8 @@
 import { mat4 } from "gl-matrix";
 import type { BAMFile } from "../bam";
 import type { DataStream } from "../common";
-import { registerBAMObject } from "./base";
-import { type DebugInfo, dbgStr } from "./debug";
+import { CopyContext, registerBAMObject } from "./base";
+import { type DebugInfo, dbgMat4, dbgStr } from "./debug";
 import { MovingPartBase } from "./MovingPartBase";
 
 /**
@@ -18,19 +18,16 @@ export class MovingPartMatrix extends MovingPartBase {
     this.initialValue = data.readMat4();
   }
 
-  override copyTo(target: this): void {
-    super.copyTo(target);
-    target.value = this.value; // Shared
-    target.initialValue = this.initialValue; // Shared
+  override copyTo(target: this, ctx: CopyContext): void {
+    super.copyTo(target, ctx);
+    mat4.copy(target.value, this.value);
+    mat4.copy(target.initialValue, this.initialValue);
   }
 
   override getDebugInfo(): DebugInfo {
     const info = super.getDebugInfo();
-    info.set("value", dbgStr(`[${Array.from(this.value).join(", ")}]`));
-    info.set(
-      "initialValue",
-      dbgStr(`[${Array.from(this.initialValue).join(", ")}]`),
-    );
+    info.set("value", dbgMat4(this.value));
+    info.set("initialValue", dbgMat4(this.initialValue));
     return info;
   }
 }

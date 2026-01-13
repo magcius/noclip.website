@@ -1,7 +1,7 @@
 import type { vec2, vec3, vec4 } from "gl-matrix";
 import type { BAMFile } from "../bam";
 import { AssetVersion, type DataStream } from "../common";
-import { BAMObject, registerBAMObject } from "./base";
+import { BAMObject, CopyContext, registerBAMObject } from "./base";
 import { type DebugInfo, dbgNum, dbgTypedArray } from "./debug";
 
 /**
@@ -133,8 +133,8 @@ export class ComputedVertices extends BAMObject {
     this.origTexcoords = data.readPtaVec2();
   }
 
-  override copyTo(target: this): void {
-    super.copyTo(target);
+  override copyTo(target: this, ctx: CopyContext): void {
+    super.copyTo(target, ctx);
     target.transforms = this.transforms; // Shared
     target.vertexMorphs = this.vertexMorphs; // Shared
     target.normalMorphs = this.normalMorphs; // Shared

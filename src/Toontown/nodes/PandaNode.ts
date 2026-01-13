@@ -4,6 +4,7 @@ import { AssetVersion, type DataStream } from "../common";
 import {
   BAMObject,
   type BAMObjectFactory,
+  CopyContext,
   getBAMObjectFactory,
   registerBAMObject,
 } from "./base";
@@ -283,6 +284,10 @@ export class PandaNode extends BAMObject {
     this.hpr = vec3.fromValues(h, this.transform.hpr[1], this.transform.hpr[2]);
   }
 
+  set p(pitch: number) {
+    this.hpr = vec3.fromValues(this.transform.hpr[0], pitch, this.transform.hpr[2]);
+  }
+
   set scale(scale: ReadonlyVec3) {
     this.setPosHprScale(this.transform.pos, this.transform.hpr, scale);
   }
@@ -313,7 +318,8 @@ export class PandaNode extends BAMObject {
   }
 
   show(): void {
-    this.drawControlMask &= ~(1 << 31);
+    this.drawControlMask = 0;
+    this.drawShowMask = 0xffffffff;
   }
 
   showThrough(): void {
@@ -442,12 +448,12 @@ export class PandaNode extends BAMObject {
     }
   }
 
-  override copyTo(target: this) {
-    super.copyTo(target);
+  override copyTo(target: this, ctx: CopyContext): void {
+    super.copyTo(target, ctx);
     target.name = this.name;
-    target.state = this.state?.clone() ?? null;
-    target.transform = this.transform?.clone() ?? null;
-    target.effects = this.effects?.clone() ?? null;
+    target.state = ctx.clone(this.state);
+    target.transform = ctx.clone(this.transform);
+    target.effects = ctx.clone(this.effects);
     target.drawControlMask = this.drawControlMask;
     target.drawShowMask = this.drawShowMask;
     target.intoCollideMask = this.intoCollideMask;
@@ -455,10 +461,10 @@ export class PandaNode extends BAMObject {
     target.tags = new Map(this.tags);
   }
 
-  cloneSubgraph(): PandaNode {
-    const target = this.clone();
+  override clone(ctx = new CopyContext()): this {
+    const target = super.clone(ctx);
     for (const [child, sort] of this.children) {
-      target.addChild(child.cloneSubgraph(), sort);
+      target.addChild(ctx.clone(child), sort);
     }
     return target;
   }

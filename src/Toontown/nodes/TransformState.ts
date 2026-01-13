@@ -9,7 +9,7 @@ import {
 } from "gl-matrix";
 import type { BAMFile } from "../bam";
 import { AssetVersion, type DataStream } from "../common";
-import { BAMObject, registerBAMObject } from "./base";
+import { BAMObject, CopyContext, registerBAMObject } from "./base";
 import {
   type DebugInfo,
   dbgBool,
@@ -125,8 +125,8 @@ export class TransformState extends BAMObject {
     }
   }
 
-  override copyTo(target: this): void {
-    super.copyTo(target);
+  override copyTo(target: this, ctx: CopyContext): void {
+    super.copyTo(target, ctx);
     target._flags = this._flags;
     vec3.copy(target._pos, this._pos);
     vec3.copy(target._hpr, this._hpr);
@@ -570,6 +570,23 @@ export class TransformState extends BAMObject {
     const state = new TransformState();
     state._flags = F_MAT_KNOWN;
     state._mat = mat4.clone(matrix);
+    return state;
+  }
+
+  static fromPos(pos: ReadonlyVec3): TransformState {
+    const state = new TransformState();
+    state._flags =
+      F_COMPONENTS_KNOWN |
+      F_HAS_COMPONENTS |
+      F_HPR_KNOWN |
+      F_QUAT_KNOWN |
+      F_UNIFORM_SCALE |
+      F_IDENTITY_SCALE;
+    vec3.copy(state._pos, pos);
+    // Check for identity
+    if (vec3.equals(state._pos, zeroVec3)) {
+      state._flags |= F_IS_IDENTITY;
+    }
     return state;
   }
 

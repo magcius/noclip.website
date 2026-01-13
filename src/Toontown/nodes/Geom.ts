@@ -2,7 +2,7 @@ import { vec3 } from "gl-matrix";
 import { AABB } from "../../Geometry";
 import type { BAMFile } from "../bam";
 import { AssetVersion, type DataStream } from "../common";
-import { BAMObject, readTypedRefs, registerBAMObject } from "./base";
+import { BAMObject, CopyContext, readTypedRefs, registerBAMObject } from "./base";
 import { type DebugInfo, dbgEnum, dbgNum, dbgRef, dbgRefs } from "./debug";
 import { GeomPrimitive } from "./GeomPrimitive";
 import type {
@@ -48,10 +48,10 @@ export class Geom extends BAMObject {
     }
   }
 
-  override copyTo(target: this): void {
-    super.copyTo(target);
-    target.data = this.data; // Shared
-    target.primitives = this.primitives; // Shared
+  override copyTo(target: this, ctx: CopyContext): void {
+    super.copyTo(target, ctx);
+    target.data = ctx.clone(this.data);
+    target.primitives = ctx.cloneArray(this.primitives);
     target.primitiveType = this.primitiveType;
     target.shadeModel = this.shadeModel;
     target.geomRendering = this.geomRendering;

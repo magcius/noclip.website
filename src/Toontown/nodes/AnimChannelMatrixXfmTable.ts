@@ -1,7 +1,7 @@
 import type { BAMFile } from "../bam";
 import { AssetVersion, type DataStream } from "../common";
 import { AnimChannelBase } from "./AnimChannelBase";
-import { registerBAMObject } from "./base";
+import { CopyContext, registerBAMObject } from "./base";
 import { type DebugInfo, dbgBool, dbgNum } from "./debug";
 
 // Matrix component indices (12 total for a 4x3 affine transform)
@@ -22,7 +22,7 @@ const NUM_MATRIX_COMPONENTS = 12;
  * - BAM >= 4.14: Has new_hpr flag for HPR format conversion
  */
 export class AnimChannelMatrixXfmTable extends AnimChannelBase {
-  public tables: Float32Array[] = [];
+  public tables: ReadonlyArray<Float32Array> = [];
   public compressed = false;
   public newHpr = false;
 
@@ -36,24 +36,21 @@ export class AnimChannelMatrixXfmTable extends AnimChannelBase {
       this.newHpr = data.readBool();
     }
 
-    if (!this.compressed) {
-      // Read uncompressed table data
+    if (this.compressed) {
+      throw new Error("Compressed animation channels not yet supported");
+    } else {
+      const tables = new Array<Float32Array>(NUM_MATRIX_COMPONENTS);
       for (let i = 0; i < NUM_MATRIX_COMPONENTS; i++) {
         const size = data.readUint16();
-        const table = new Float32Array(size);
-        for (let j = 0; j < size; j++) {
-          table[j] = data.readFloat32();
-        }
-        this.tables.push(table);
+        tables[i] = data.readFloat32Array(size);
       }
-    } else {
-      throw new Error("Compressed animation channels not yet supported");
+      this.tables = tables;
     }
   }
 
-  override copyTo(target: this): void {
-    super.copyTo(target);
-    target.tables = this.tables.map((t) => t.slice());
+  override copyTo(target: this, ctx: CopyContext): void {
+    super.copyTo(target, ctx);
+    target.tables = this.tables;
     target.compressed = this.compressed;
     target.newHpr = this.newHpr;
   }

@@ -1,6 +1,7 @@
 import type { BAMFile } from "../bam";
 import type { DataStream } from "../common";
 import { AnimGroup } from "./AnimGroup";
+import { CopyContext } from "./base";
 import { type DebugInfo, dbgNum } from "./debug";
 
 export class AnimChannelBase extends AnimGroup {
@@ -11,8 +12,8 @@ export class AnimChannelBase extends AnimGroup {
     this.lastFrame = data.readUint16();
   }
 
-  override copyTo(target: this): void {
-    super.copyTo(target);
+  override copyTo(target: this, ctx: CopyContext): void {
+    super.copyTo(target, ctx);
     target.lastFrame = this.lastFrame;
   }
 

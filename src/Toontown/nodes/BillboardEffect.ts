@@ -1,7 +1,7 @@
 import { vec3 } from "gl-matrix";
 import type { BAMFile } from "../bam";
 import { AssetVersion, type DataStream } from "../common";
-import { registerBAMObject } from "./base";
+import { CopyContext, registerBAMObject } from "./base";
 import { type DebugInfo, dbgBool, dbgNum, dbgRef, dbgVec3 } from "./debug";
 import { PandaNode } from "./PandaNode";
 import { RenderEffect } from "./RenderEffects";
@@ -19,7 +19,7 @@ export class BillboardEffect extends RenderEffect {
   public axialRotate = false;
   public offset = 0;
   public lookAtPoint = vec3.create();
-  public lookAt: PandaNode | null = null; // 6.43+ TODO should actually be a nodePath
+  public lookAt: PandaNode | null = null; // 6.43+
   public fixedDepth = false; // 6.43+
 
   override load(file: BAMFile, data: DataStream) {
@@ -37,15 +37,15 @@ export class BillboardEffect extends RenderEffect {
     }
   }
 
-  override copyTo(target: this): void {
-    super.copyTo(target);
+  override copyTo(target: this, ctx: CopyContext): void {
+    super.copyTo(target, ctx);
     target.off = this.off;
     vec3.copy(target.upVector, this.upVector);
     target.eyeRelative = this.eyeRelative;
     target.axialRotate = this.axialRotate;
     target.offset = this.offset;
     vec3.copy(target.lookAtPoint, this.lookAtPoint);
-    // target.lookAt = this.lookAt; TODO
+    target.lookAt = ctx.clone(this.lookAt);
     target.fixedDepth = this.fixedDepth;
   }
 

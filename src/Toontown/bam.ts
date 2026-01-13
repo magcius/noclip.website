@@ -104,10 +104,7 @@ export class BAMFile {
     if (objectId === 0) return null;
     const obj = this._objects.get(objectId);
     if (obj) return obj;
-    const object = this._readObject(objectId);
-    if (!object) return null;
-    this._objects.set(objectId, object);
-    return object;
+    return this._readObject(objectId);
   }
 
   getTyped<T extends BAMObject>(
@@ -239,9 +236,11 @@ export class BAMFile {
     const factory = getBAMObjectFactory(typeName);
     if (!factory) {
       console.warn(`${typeName} #${objectId} (unhandled)`);
-      return;
+      return null;
     }
     const obj = new factory();
+    // Add before loading to handle circular references
+    this._objects.set(objectId, obj);
     obj.load(this, stream);
     if (stream.remaining() > 0) {
       console.warn(

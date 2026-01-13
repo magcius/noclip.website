@@ -1,8 +1,8 @@
 import type { BAMFile } from "../bam";
 import type { DataStream } from "../common";
 import { AnimChannelBase } from "./AnimChannelBase";
-import { registerBAMObject } from "./base";
-import { type DebugInfo, dbgNum } from "./debug";
+import { CopyContext, registerBAMObject } from "./base";
+import { type DebugInfo, dbgNum, dbgTypedArray } from "./debug";
 
 /**
  * Scalar animation channel with value table.
@@ -25,15 +25,15 @@ export class AnimChannelScalarTable extends AnimChannelBase {
     }
   }
 
-  override copyTo(target: this): void {
-    super.copyTo(target);
-    target.table = this.table.slice();
+  override copyTo(target: this, ctx: CopyContext): void {
+    super.copyTo(target, ctx);
+    target.table = this.table;
     target.compressed = this.compressed;
   }
 
   override getDebugInfo(): DebugInfo {
     const info = super.getDebugInfo();
-    info.set("values", dbgNum(this.table.length));
+    info.set("values", dbgTypedArray(this.table));
     return info;
   }
 }

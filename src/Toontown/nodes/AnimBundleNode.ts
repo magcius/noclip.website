@@ -1,7 +1,7 @@
 import type { BAMFile } from "../bam";
 import type { DataStream } from "../common";
 import { AnimBundle } from "./AnimBundle";
-import { registerBAMObject } from "./base";
+import { CopyContext, registerBAMObject } from "./base";
 import { type DebugInfo, dbgRef } from "./debug";
 import { PandaNode } from "./PandaNode";
 
@@ -19,14 +19,9 @@ export class AnimBundleNode extends PandaNode {
     this.animBundle = file.getTyped(data.readObjectId(), AnimBundle);
   }
 
-  override copyTo(target: this) {
-    super.copyTo(target);
-    if (this.animBundle) {
-      target.animBundle = this.animBundle.clone();
-      // TODO root?
-    } else {
-      target.animBundle = null;
-    }
+  override copyTo(target: this, ctx: CopyContext): void {
+    super.copyTo(target, ctx);
+    target.animBundle = ctx.clone(this.animBundle);
   }
 
   override getDebugInfo(): DebugInfo {

@@ -1,6 +1,6 @@
 import type { BAMFile } from "../bam";
 import type { DataStream } from "../common";
-import { BAMObject, readTypedRefs, registerBAMObject } from "./base";
+import { BAMObject, CopyContext, readTypedRefs, registerBAMObject } from "./base";
 import {
   type DebugInfo,
   dbgBool,
@@ -43,10 +43,10 @@ export class GeomVertexFormat extends BAMObject {
     this.arrays = readTypedRefs(file, data, numArrays, GeomVertexArrayFormat);
   }
 
-  override copyTo(target: this): void {
-    super.copyTo(target);
+  override copyTo(target: this, ctx: CopyContext): void {
+    super.copyTo(target, ctx);
     target.animation = this.animation; // Shared
-    target.arrays = this.arrays; // Shared
+    target.arrays = ctx.cloneArray(this.arrays);
   }
 
   override getDebugInfo(): DebugInfo {

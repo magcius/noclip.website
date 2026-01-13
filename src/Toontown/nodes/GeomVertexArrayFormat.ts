@@ -1,6 +1,6 @@
 import type { BAMFile } from "../bam";
 import { AssetVersion, type DataStream } from "../common";
-import { BAMObject, registerBAMObject } from "./base";
+import { BAMObject, CopyContext, registerBAMObject } from "./base";
 import {
   type DebugInfo,
   dbgArray,
@@ -44,6 +44,26 @@ export class GeomVertexColumn {
     }
 
     this.setup(file);
+  }
+
+  copyTo(target: GeomVertexColumn, ctx: CopyContext): void {
+    target.name = ctx.clone(this.name);
+    target.numComponents = this.numComponents;
+    target.numericType = this.numericType;
+    target.contents = this.contents;
+    target.start = this.start;
+    target.columnAlignment = this.columnAlignment;
+    target.numElements = this.numElements;
+    target.elementStride = this.elementStride;
+    target.numValues = this.numValues;
+    target.componentBytes = this.componentBytes;
+    target.totalBytes = this.totalBytes;
+  }
+
+  clone(ctx: CopyContext): GeomVertexColumn {
+    const result = new GeomVertexColumn();
+    this.copyTo(result, ctx);
+    return result;
   }
 
   private setup(file: BAMFile): void {
@@ -150,13 +170,13 @@ export class GeomVertexArrayFormat extends BAMObject {
     }
   }
 
-  override copyTo(target: this): void {
-    super.copyTo(target);
+  override copyTo(target: this, ctx: CopyContext): void {
+    super.copyTo(target, ctx);
     target.stride = this.stride;
     target.totalBytes = this.totalBytes;
     target.padTo = this.padTo;
     target.divisor = this.divisor;
-    target.columns = this.columns; // Shared
+    target.columns = this.columns.map((c) => c.clone(ctx));
   }
 
   override getDebugInfo(): DebugInfo {

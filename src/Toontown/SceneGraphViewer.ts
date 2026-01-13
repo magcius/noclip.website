@@ -4,6 +4,7 @@ import { FloatingPanel } from "../DebugFloaters.js";
 import { drawWorldSpaceAABB, getDebugOverlayCanvas2D } from "../DebugJunk.js";
 import { AABB } from "../Geometry.js";
 import { LAYER_ICON } from "../ui.js";
+import { composeDrawMask, isNodeVisible } from "./geom.js";
 import type { DebugInfo, DebugValue } from "./nodes/debug.js";
 import { GeomNode } from "./nodes/GeomNode.js";
 import type { PandaNode } from "./nodes/PandaNode.js";
@@ -19,6 +20,7 @@ interface SceneGraphTreeNode {
   noclipTransform: mat4;
   depth: number;
   isExpanded: boolean;
+  isVisible: boolean;
   hasGeomDescendants: boolean;
   // Local AABB (in node's local space, computed from geometry or children)
   localAABB: AABB | null;
@@ -36,7 +38,9 @@ export class SceneGraphViewer {
   private rootNodes: SceneGraphTreeNode[] = [];
   private allNodes: SceneGraphTreeNode[] = [];
   private highlightedNode: SceneGraphTreeNode | null = null;
-  // private showAllNodes = false;
+  private filterQuery = "";
+  private matchingNodes: Set<SceneGraphTreeNode> = new Set();
+  private visibleNodes: Set<SceneGraphTreeNode> = new Set();
   private sceneRoot: PandaNode | null = null;
   public onclose: (() => void) | null = null;
 
@@ -73,31 +77,33 @@ export class SceneGraphViewer {
     toolbar.style.alignItems = "center";
     toolbar.style.gap = "8px";
 
-    // Show all nodes toggle
-    // const showAllLabel = document.createElement("label");
-    // showAllLabel.style.display = "flex";
-    // showAllLabel.style.alignItems = "center";
-    // showAllLabel.style.gap = "4px";
-    // showAllLabel.style.cursor = "pointer";
-
-    // const showAllCheckbox = document.createElement("input");
-    // showAllCheckbox.type = "checkbox";
-    // showAllCheckbox.checked = this.showAllNodes;
-    // showAllCheckbox.onchange = () => {
-    //   this.showAllNodes = showAllCheckbox.checked;
-    //   this.renderTree();
-    // };
-    // showAllLabel.appendChild(showAllCheckbox);
-    // showAllLabel.appendChild(document.createTextNode("Show all nodes"));
+    // Filter input
+    const filterInput = document.createElement("input");
+    filterInput.type = "text";
+    filterInput.placeholder = "Filter by name, type, or tag...";
+    filterInput.style.flex = "1";
+    filterInput.style.padding = "4px 8px";
+    filterInput.style.border = "1px solid #555";
+    filterInput.style.borderRadius = "3px";
+    filterInput.style.backgroundColor = "#333";
+    filterInput.style.color = "#fff";
+    filterInput.style.fontSize = "12px";
+    filterInput.style.fontFamily = "monospace";
+    filterInput.style.minWidth = "0";
+    filterInput.oninput = () => {
+      this.filterQuery = filterInput.value.trim();
+      this.applyFilter();
+      this.renderTree();
+    };
 
     // Refresh button
     const refreshBtn = document.createElement("button");
     refreshBtn.textContent = "Refresh";
-    refreshBtn.style.marginLeft = "auto";
     refreshBtn.style.cursor = "pointer";
+    refreshBtn.style.flexShrink = "0";
     refreshBtn.onclick = () => this.refresh();
 
-    // toolbar.appendChild(showAllLabel);
+    toolbar.appendChild(filterInput);
     toolbar.appendChild(refreshBtn);
     this.panel.contents.appendChild(toolbar);
 
@@ -122,7 +128,78 @@ export class SceneGraphViewer {
   refresh(): void {
     if (this.sceneRoot) {
       this.buildTree();
+      this.applyFilter();
       this.renderTree();
+    }
+  }
+
+  /**
+   * Apply the current filter query to find matching nodes.
+   * Case-insensitive fuzzy search across node type, name (contains), and tags.
+   */
+  private applyFilter(): void {
+    this.matchingNodes.clear();
+    this.visibleNodes.clear();
+
+    if (!this.filterQuery) {
+      return;
+    }
+
+    const query = this.filterQuery.toLowerCase();
+
+    // Check if a node matches the query
+    const nodeMatches = (node: PandaNode): boolean => {
+      // Match node type (constructor name)
+      if (node.constructor.name.toLowerCase().includes(query)) {
+        return true;
+      }
+
+      // Match node name (contains)
+      if (node.name.toLowerCase().includes(query)) {
+        return true;
+      }
+
+      // Match tag keys or values
+      for (const [key, value] of node.tags) {
+        if (key.toLowerCase().includes(query)) {
+          return true;
+        }
+        if (value.toLowerCase().includes(query)) {
+          return true;
+        }
+      }
+
+      return false;
+    };
+
+    // Collapse all nodes first
+    for (const treeNode of this.allNodes) {
+      treeNode.isExpanded = false;
+    }
+
+    // Find matching nodes and expand only their parent chains
+    for (const treeNode of this.allNodes) {
+      if (nodeMatches(treeNode.node)) {
+        this.matchingNodes.add(treeNode);
+        this.visibleNodes.add(treeNode);
+
+        // Expand and mark visible the parent chain
+        let parent = treeNode.parent;
+        while (parent) {
+          parent.isExpanded = true;
+          this.visibleNodes.add(parent);
+          parent = parent.parent;
+        }
+
+        // Mark all descendants as visible too
+        const addDescendants = (node: SceneGraphTreeNode) => {
+          for (const child of node.children) {
+            this.visibleNodes.add(child);
+            addDescendants(child);
+          }
+        };
+        addDescendants(treeNode);
+      }
     }
   }
 
@@ -169,6 +246,7 @@ export class SceneGraphViewer {
     const collectNode = (
       node: PandaNode,
       parentTransform: ReadonlyMat4,
+      parentDrawMask: number,
       depth: number,
       parent: SceneGraphTreeNode | null,
     ): SceneGraphTreeNode => {
@@ -189,12 +267,20 @@ export class SceneGraphViewer {
       const noclipTransform = mat4.create();
       mat4.multiply(noclipTransform, pandaToNoclip, worldTransform);
 
+      // Compute visibility from draw mask
+      const drawMask = composeDrawMask(
+        parentDrawMask,
+        node.drawControlMask,
+        node.drawShowMask,
+      );
+
       const treeNode: SceneGraphTreeNode = {
         node,
         worldTransform,
         noclipTransform,
         depth,
         isExpanded: depth < 2,
+        isVisible: isNodeVisible(drawMask),
         hasGeomDescendants: false,
         localAABB: null,
         parent,
@@ -207,6 +293,7 @@ export class SceneGraphViewer {
         const childTreeNode = collectNode(
           child,
           worldTransform,
+          drawMask,
           depth + 1,
           treeNode,
         );
@@ -246,7 +333,13 @@ export class SceneGraphViewer {
       return treeNode;
     };
 
-    const rootTreeNode = collectNode(this.sceneRoot, mat4.create(), 0, null);
+    const rootTreeNode = collectNode(
+      this.sceneRoot,
+      mat4.create(),
+      0xffffffff,
+      0,
+      null,
+    );
     this.rootNodes = [rootTreeNode];
   }
 
@@ -255,8 +348,14 @@ export class SceneGraphViewer {
    */
   private renderTree(): void {
     this.treeContainer.innerHTML = "";
+    const hasFilter = this.filterQuery.length > 0;
 
     const renderNode = (treeNode: SceneGraphTreeNode): void => {
+      // Skip non-visible nodes when filtering
+      if (hasFilter && !this.visibleNodes.has(treeNode)) {
+        return;
+      }
+
       const element = this.createNodeElement(treeNode);
       treeNode.element = element;
       this.treeContainer.appendChild(element);
@@ -279,6 +378,7 @@ export class SceneGraphViewer {
    */
   private createNodeElement(treeNode: SceneGraphTreeNode): HTMLElement {
     const container = document.createElement("div");
+    const isMatch = this.matchingNodes.has(treeNode);
 
     // Main row
     const row = document.createElement("div");
@@ -290,13 +390,27 @@ export class SceneGraphViewer {
     row.style.borderRadius = "2px";
     row.style.transition = "background-color 0.1s";
 
+    // Dim nodes that aren't visible (hidden via draw mask)
+    if (!treeNode.isVisible) {
+      row.style.opacity = "0.4";
+    }
+
+    // Highlight matching nodes
+    if (isMatch) {
+      row.style.backgroundColor = "rgba(100, 180, 255, 0.25)";
+      row.style.boxShadow = "inset 2px 0 0 #4af";
+    }
+
     // Hover effects
+    const defaultBg = isMatch ? "rgba(100, 180, 255, 0.25)" : "";
     row.onmouseenter = () => {
-      row.style.backgroundColor = "rgba(255, 255, 255, 0.1)";
+      row.style.backgroundColor = isMatch
+        ? "rgba(100, 180, 255, 0.4)"
+        : "rgba(255, 255, 255, 0.1)";
       this.onNodeHover(treeNode);
     };
     row.onmouseleave = () => {
-      row.style.backgroundColor = "";
+      row.style.backgroundColor = defaultBg;
       this.onNodeHoverEnd();
     };
 
@@ -415,6 +529,34 @@ export class SceneGraphViewer {
     panel.contents.style.fontFamily = "monospace";
     panel.contents.style.padding = "8px";
 
+    // Action buttons toolbar
+    const toolbar = document.createElement("div");
+    toolbar.style.display = "flex";
+    toolbar.style.gap = "8px";
+    toolbar.style.marginBottom = "8px";
+    toolbar.style.paddingBottom = "8px";
+    toolbar.style.borderBottom = "1px solid #444";
+
+    const hideBtn = document.createElement("button");
+    hideBtn.textContent = "Hide";
+    hideBtn.style.cursor = "pointer";
+    hideBtn.onclick = () => {
+      treeNode.node.hide();
+      treeNode.isVisible = false;
+    };
+    toolbar.appendChild(hideBtn);
+
+    const showBtn = document.createElement("button");
+    showBtn.textContent = "Show";
+    showBtn.style.cursor = "pointer";
+    showBtn.onclick = () => {
+      treeNode.node.show();
+      treeNode.isVisible = true;
+    };
+    toolbar.appendChild(showBtn);
+
+    panel.contents.appendChild(toolbar);
+
     // Get debug info
     const debugInfo = treeNode.node.getDebugInfo();
 
@@ -473,6 +615,7 @@ export class SceneGraphViewer {
     keySpan.textContent = `${key}: `;
     keySpan.style.color = "#8cf";
     keySpan.style.flexShrink = "0";
+    keySpan.style.whiteSpace = "pre";
     row.appendChild(keySpan);
 
     // Value

@@ -1,6 +1,6 @@
 import type { BAMFile } from "../bam";
 import { AssetVersion, type DataStream } from "../common";
-import { registerBAMObject } from "./base";
+import { CopyContext, registerBAMObject } from "./base";
 import { type DebugInfo, dbgBool, dbgEnum, dbgNum } from "./debug";
 import { PandaNode } from "./PandaNode";
 
@@ -61,8 +61,8 @@ export class SequenceNode extends PandaNode {
     }
   }
 
-  override copyTo(target: this): void {
-    super.copyTo(target);
+  override copyTo(target: this, ctx: CopyContext): void {
+    super.copyTo(target, ctx);
     target.cycleRate = this.cycleRate;
     target.frameOffset = this.frameOffset;
     target.numFrames = this.numFrames;

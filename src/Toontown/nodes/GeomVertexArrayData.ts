@@ -1,6 +1,6 @@
 import type { BAMFile } from "../bam";
 import { AssetVersion, type DataStream } from "../common";
-import { BAMObject, registerBAMObject } from "./base";
+import { BAMObject, CopyContext, registerBAMObject } from "./base";
 import { type DebugInfo, dbgBytes, dbgEnum, dbgRef } from "./debug";
 import { GeomVertexArrayFormat } from "./GeomVertexArrayFormat";
 import { UsageHint } from "./geomEnums";
@@ -29,9 +29,9 @@ export class GeomVertexArrayData extends BAMObject {
     }
   }
 
-  override copyTo(target: this): void {
-    super.copyTo(target);
-    target.arrayFormat = this.arrayFormat; // Shared
+  override copyTo(target: this, ctx: CopyContext): void {
+    super.copyTo(target, ctx);
+    target.arrayFormat = ctx.clone(this.arrayFormat);
     target.usageHint = this.usageHint;
     target.buffer = this.buffer; // Shared
   }

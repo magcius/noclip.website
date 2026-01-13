@@ -1,3 +1,4 @@
+import { ReadonlyVec3, vec3, vec4 } from "gl-matrix";
 import type { GfxDevice } from "../gfx/platform/GfxPlatform";
 import type { SceneContext } from "../SceneBase";
 import type * as Viewer from "../viewer";
@@ -11,6 +12,7 @@ import {
   DepthWriteMode,
   PandaCompareFunc,
   PandaNode,
+  TransformState,
 } from "./nodes";
 import { ToontownRenderer } from "./render";
 import { pathBase, ToontownResourceLoader } from "./resources";
@@ -43,7 +45,7 @@ class ToontownSceneDesc implements Viewer.SceneDesc {
       context.dataFetcher,
       true,
     );
-    scene.addChild(bamFile.getRoot().cloneSubgraph());
+    scene.addChild(bamFile.getRoot().clone());
     return ToontownRenderer.create(device, scene, loader, context.dataFetcher);
   }
 }
@@ -51,7 +53,12 @@ class ToontownSceneDesc implements Viewer.SceneDesc {
 interface NeighborhoodConfig {
   storageDNA: string | null; // Hood-wide storage (e.g., storage_TT.dna)
   skybox: string | null; // Hood-wide skybox (e.g., TT_sky.bam)
-  callback?: (scene: PandaNode) => void;
+  callback?: (
+    scene: PandaNode,
+    loader: ToontownResourceLoader,
+    context: SceneContext,
+    builder: DNASceneBuilder,
+  ) => Promise<void>;
 }
 
 interface DNASceneConfig {
@@ -101,9 +108,177 @@ const Neighborhoods: Record<string, NeighborhoodConfig> = {
   MyEstate: {
     storageDNA: "phase_5.5/dna/storage_estate.dna",
     skybox: "phase_3.5/models/props/TT_sky.bam",
-    callback: (scene) => {
+    callback: async (scene, loader, context, builder) => {
       // Ensure the foot path renders in ground cull bin
       scene.find("**/Path")?.setAttrib(CullBinAttrib.create("ground", 10), 1);
+
+      const houseModels = [
+        "phase_5.5/models/estate/houseA.bam",
+        "phase_5.5/models/estate/tt_m_ara_est_house_tiki.bam",
+        "phase_5.5/models/estate/tt_m_ara_est_house_tepee.bam",
+        "phase_5.5/models/estate/tt_m_ara_est_house_castle.bam",
+        "phase_5.5/models/estate/tt_m_ara_est_house_cupcake.bam",
+        "phase_5.5/models/estate/test_houseA.bam",
+      ];
+      const houseDrops: { pos: ReadonlyVec3; hpr: ReadonlyVec3 }[] = [
+        {
+          pos: vec3.fromValues(-56.7788, -42.8756, 4.06471),
+          hpr: vec3.fromValues(-90, 0, 0),
+        },
+        {
+          pos: vec3.fromValues(83.3909, -77.5085, 0.0708361),
+          hpr: vec3.fromValues(116.565, 0, 0),
+        },
+        {
+          pos: vec3.fromValues(-69.077, -119.496, 0.025),
+          hpr: vec3.fromValues(77.1957, 0, 0),
+        },
+        {
+          pos: vec3.fromValues(63.4545, 11.0656, 8.05158),
+          hpr: vec3.fromValues(356.6, 0, 0),
+        },
+        {
+          pos: vec3.fromValues(43.9315, 76.72, 0.0377455),
+          hpr: vec3.fromValues(248.962, 0, 0),
+        },
+        {
+          pos: vec3.fromValues(-36.9122, 36.3429, 2.49382),
+          hpr: vec3.fromValues(36.8699, 0, 0),
+        },
+      ];
+      const houseColors = [
+        vec4.fromValues(0.892, 0.453, 0.39, 1), // red
+        vec4.fromValues(0.276, 0.692, 0.539, 1), // green
+        vec4.fromValues(0.639, 0.624, 0.882, 1), // purple
+        vec4.fromValues(0.525, 0.78, 0.935, 1), // blue
+        vec4.fromValues(0.953, 0.545, 0.757, 1), // pink
+        vec4.fromValues(0.992, 0.843, 0.392, 1), // yellow
+      ];
+      const houseColors2 = [
+        vec4.fromValues(0.792, 0.353, 0.29, 1), // red
+        vec4.fromValues(0.176, 0.592, 0.439, 1), // green
+        vec4.fromValues(0.439, 0.424, 0.682, 1), // purple
+        vec4.fromValues(0.325, 0.58, 0.835, 1), // blue
+        vec4.fromValues(0.753, 0.345, 0.557, 1), // pink
+        vec4.fromValues(0.992, 0.843, 0.392, 1), // yellow
+      ];
+      const gardenDrops = [
+        vec3.fromValues(25, 68, 0),
+        vec3.fromValues(68, -6, 0),
+        vec3.fromValues(27, -59, 0),
+        vec3.fromValues(-54, -72, 1),
+        vec3.fromValues(-95, -29, 0),
+        vec3.fromValues(-30, 58, 0),
+      ];
+
+      const mailboxModel = await loader.loadModel(
+        "phase_5.5/models/estate/mailboxHouse.bam",
+        context.dataFetcher,
+      );
+      // const gardenModel = await loader.loadModel(
+      //   "phase_5.5/models/estate/planterC.bam",
+      //   context.dataFetcher,
+      // );
+
+      for (let i = 0; i < houseDrops.length; i++) {
+        const { pos, hpr } = houseDrops[i];
+        const baseNode = scene.attachNewNode(`esHouse_${i}`);
+        baseNode.setPosHprScale(pos, hpr, vec3.fromValues(1, 1, 1));
+
+        const modelPath = houseModels[0]; // Math.floor(Math.random() * houseModels.length)
+        const model = await loader.loadModel(modelPath, context.dataFetcher);
+        const house = model.getRoot().clone();
+        baseNode.addChild(house);
+
+        // Set wall color
+        const colorIndex = i;//Math.floor(Math.random() * houseColors.length);
+        const houseColor = houseColors[colorIndex];
+        const houseColorDark = vec4.fromValues(
+          houseColor[0] * 0.8,
+          houseColor[1] * 0.8,
+          houseColor[2] * 0.8,
+          1,
+        );
+        house.find("**/*back")?.setColor(houseColor);
+        house.find("**/*front")?.setColor(houseColor);
+        house.find("**/*right")?.setColor(houseColorDark);
+        house.find("**/*left")?.setColor(houseColorDark);
+
+        // Set attic color
+        house
+          .find("**/attic")
+          ?.setColor(vec4.fromValues(0.49, 0.314, 0.224, 1));
+
+        // Set chimney color
+        const chimneyColor = houseColors2[colorIndex];
+        house
+          .findAllMatches("**/chim*")
+          .forEach((n) => n.setColor(chimneyColor));
+
+        // Setup door
+        const doorOrigin = house.find("**/door_origin");
+        if (!doorOrigin) throw new Error("Door origin not found");
+        doorOrigin.setPosHprScale(
+          doorOrigin.pos,
+          vec3.fromValues(90, 0, 0),
+          vec3.fromValues(0.6, 0.6, 0.8),
+        );
+        doorOrigin.transform = doorOrigin.transform.compose(
+          TransformState.fromPos(vec3.fromValues(0.5, 0, 0)),
+        );
+        const doorModel = builder.addGeometryFromCode(
+          "door_double_round_ur",
+          doorOrigin,
+        );
+        if (doorModel) {
+          doorModel.setColor(vec4.fromValues(0.651, 0.376, 0.31, 1));
+        }
+
+        // Setup floor mat
+        house.find("**/mat")?.setColor(vec4.fromValues(0.4, 0.357, 0.259, 1));
+
+        // Setup mailbox
+        const mailbox = mailboxModel.getRoot().clone();
+        baseNode.addChild(mailbox);
+
+        let zOffset = 0;
+        if (i === 2) {
+          zOffset = 0.5;
+        } else if (i === 3) {
+          // This appears to not be necessary?
+          // zOffset = -1;
+        }
+        mailbox.transform = house.transform.compose(
+          TransformState.fromPosHprScale(
+            vec3.fromValues(19, -4, zOffset),
+            vec3.fromValues(90, 0, 0),
+            vec3.fromValues(1, 1, 1),
+          ),
+        );
+        const flag = mailbox.find("**/mailbox_flag");
+        if (flag) {
+          if (Math.floor(Math.random() * 2)) {
+            // Flag up
+            flag.p = 0;
+          } else {
+            // Flag down
+            flag.p = -70;
+          }
+        }
+
+        // Setup garden
+        // const gardenPos = gardenDrops[i];
+        // const garden = gardenModel.getRoot().clone();
+        // baseNode.addChild(garden);
+
+        // garden.transform = house.transform.compose(
+        //   TransformState.fromPosHprScale(
+        //     gardenPos,
+        //     vec3.fromValues(0, 0, 0),
+        //     vec3.fromValues(1, 1, 1),
+        //   ),
+        // );
+      }
     },
   },
   SellbotHQ: {
@@ -117,7 +292,7 @@ const Neighborhoods: Record<string, NeighborhoodConfig> = {
   LawbotHQ: {
     storageDNA: null,
     skybox: null,
-    callback: (scene) => {
+    callback: async (scene) => {
       // Ensure the reflective floor renders in ground cull bin
       scene
         .find("**/underground")
@@ -200,14 +375,14 @@ class ToontownDNASceneDesc implements Viewer.SceneDesc {
     if (this.sceneConfig.extraModels) {
       for (const modelPath of this.sceneConfig.extraModels) {
         const model = await loader.loadModel(modelPath, context.dataFetcher);
-        scene.addChild(model.getRoot().cloneSubgraph());
+        scene.addChild(model.getRoot().clone());
       }
     }
 
     const hood = Neighborhoods[this.neighborhood];
     if (hood.skybox) {
       const model = await loader.loadModel(hood.skybox, context.dataFetcher);
-      const instance = model.getRoot().cloneSubgraph();
+      const instance = model.getRoot().clone();
       instance.tags.set("sky", "Regular");
       instance.setEffect(
         CompassEffect.create(CompassEffectProperties.Position, cameraNode),
@@ -220,8 +395,14 @@ class ToontownDNASceneDesc implements Viewer.SceneDesc {
       scene.addChild(instance);
     }
 
+    // Remove overlapping door frames
+    scene.findAllMatches("**/doorFrameHoleLeft").forEach((node) => node.hide());
+    scene
+      .findAllMatches("**/doorFrameHoleRight")
+      .forEach((node) => node.hide());
+
     // Run custom callback
-    hood.callback?.(scene);
+    await hood.callback?.(scene, loader, context, sceneBuilder);
 
     console.log(`Loaded scene with ${scene.children.length} nodes.`);
 
@@ -531,16 +712,11 @@ const sceneDescs = [
       extraModels: ["phase_9/models/cogHQ/SellbotHQExterior.bam"],
     },
   ),
-  new ToontownDNASceneDesc(
-    "SellbotHQExterior",
-    "Sellbot HQ Lobby",
-    "SellbotHQ",
-    {
-      storageDNA: [],
-      sceneDNA: "phase_9/dna/cog_hq_sellbot_sz.dna",
-      extraModels: ["phase_9/models/cogHQ/SellbotHQLobby.bam"],
-    },
-  ),
+  new ToontownDNASceneDesc("SellbotHQLobby", "Sellbot HQ Lobby", "SellbotHQ", {
+    storageDNA: [],
+    sceneDNA: "phase_9/dna/cog_hq_sellbot_sz.dna",
+    extraModels: ["phase_9/models/cogHQ/SellbotHQLobby.bam"],
+  }),
   "Cashbot HQ",
   new ToontownDNASceneDesc(
     "CashBotShippingStation",

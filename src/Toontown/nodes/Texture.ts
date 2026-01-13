@@ -1,7 +1,7 @@
 import { vec3, type vec4 } from "gl-matrix";
 import type { BAMFile } from "../bam";
 import { AssetVersion, type DataStream } from "../common";
-import { BAMObject, registerBAMObject } from "./base";
+import { BAMObject, CopyContext, registerBAMObject } from "./base";
 import {
   type DebugInfo,
   dbgBytes,
@@ -187,8 +187,8 @@ export class Texture extends BAMObject {
     }
   }
 
-  override copyTo(target: this): void {
-    super.copyTo(target);
+  override copyTo(target: this, ctx: CopyContext): void {
+    super.copyTo(target, ctx);
     target.name = this.name;
     target.filename = this.filename;
     target.alphaFilename = this.alphaFilename;

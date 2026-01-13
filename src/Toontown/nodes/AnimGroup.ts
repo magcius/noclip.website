@@ -1,7 +1,7 @@
 import type { BAMFile } from "../bam";
 import type { DataStream } from "../common";
 import type { AnimBundle } from "./AnimBundle";
-import { BAMObject, readTypedRefs, registerBAMObject } from "./base";
+import { BAMObject, CopyContext, readTypedRefs, registerBAMObject } from "./base";
 import { type DebugInfo, dbgRefs, dbgStr } from "./debug";
 
 /**
@@ -26,11 +26,11 @@ export class AnimGroup extends BAMObject {
     this.children = readTypedRefs(file, data, numChildren, AnimGroup);
   }
 
-  override copyTo(target: this): void {
-    super.copyTo(target);
+  override copyTo(target: this, ctx: CopyContext): void {
+    super.copyTo(target, ctx);
     target.name = this.name;
-    // target.root = ?
-    target.children = this.children.map((child) => child.clone());
+    target.root = ctx.clone(this.root);
+    target.children = ctx.cloneArray(this.children);
   }
 
   override getDebugInfo(): DebugInfo {

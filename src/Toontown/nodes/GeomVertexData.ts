@@ -1,6 +1,11 @@
 import type { BAMFile } from "../bam";
 import type { DataStream } from "../common";
-import { BAMObject, readTypedRefs, registerBAMObject } from "./base";
+import {
+  BAMObject,
+  CopyContext,
+  readTypedRefs,
+  registerBAMObject,
+} from "./base";
 import { type DebugInfo, dbgEnum, dbgRef, dbgRefs, dbgStr } from "./debug";
 import { GeomVertexArrayData } from "./GeomVertexArrayData";
 import { GeomVertexFormat } from "./GeomVertexFormat";
@@ -11,9 +16,9 @@ export class GeomVertexData extends BAMObject {
   public format: GeomVertexFormat | null = null;
   public usageHint = UsageHint.Static;
   public arrays: GeomVertexArrayData[] = [];
-  public transformTable: BAMObject | null = null;
-  public transformBlendTable: BAMObject | null = null;
-  public sliderTable: BAMObject | null = null;
+  public transformTable: BAMObject | null = null; // TODO
+  public transformBlendTable: BAMObject | null = null; // TODO
+  public sliderTable: BAMObject | null = null; // TODO
 
   override load(file: BAMFile, data: DataStream) {
     super.load(file, data);
@@ -30,15 +35,15 @@ export class GeomVertexData extends BAMObject {
     this.sliderTable = file.getObject(data.readObjectId());
   }
 
-  override copyTo(target: this): void {
-    super.copyTo(target);
+  override copyTo(target: this, ctx: CopyContext): void {
+    super.copyTo(target, ctx);
     target.name = this.name;
-    target.format = this.format; // Shared
+    target.format = ctx.clone(this.format);
     target.usageHint = this.usageHint;
-    target.arrays = this.arrays; // Shared
-    target.transformTable = this.transformTable; // Shared
-    target.transformBlendTable = this.transformBlendTable; // Shared
-    target.sliderTable = this.sliderTable; // Shared
+    target.arrays = ctx.cloneArray(this.arrays);
+    target.transformTable = ctx.clone(this.transformTable);
+    target.transformBlendTable = ctx.clone(this.transformBlendTable);
+    target.sliderTable = ctx.clone(this.sliderTable);
   }
 
   override getDebugInfo(): DebugInfo {

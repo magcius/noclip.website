@@ -1,6 +1,6 @@
 import type { BAMFile } from "../bam";
 import { AssetVersion, type DataStream } from "../common";
-import { BAMObject, registerBAMObject } from "./base";
+import { BAMObject, CopyContext, registerBAMObject } from "./base";
 import { type DebugInfo, dbgEnum, dbgNum } from "./debug";
 import { TexCoordName } from "./InternalName";
 
@@ -117,8 +117,8 @@ export class LegacyGeom extends BAMObject {
     ];
   }
 
-  override copyTo(target: this): void {
-    super.copyTo(target);
+  override copyTo(target: this, ctx: CopyContext): void {
+    super.copyTo(target, ctx);
     target.coords = this.coords; // Shared
     target.norms = this.norms; // Shared
     target.colors = this.colors; // Shared
@@ -127,7 +127,13 @@ export class LegacyGeom extends BAMObject {
     target.nindex = this.nindex; // Shared
     target.cindex = this.cindex; // Shared
     target.tindex = this.tindex; // Shared
-    target.texcoordSets = this.texcoordSets; // Shared
+    target.texcoordSets = this.texcoordSets.map(
+      (set): TexCoordDef => ({
+        name: ctx.clone(set.name),
+        texcoords: set.texcoords,
+        tindex: set.tindex,
+      }),
+    );
     target.numPrims = this.numPrims;
     target.primLengths = this.primLengths; // Shared
     target.bindings = this.bindings; // Shared

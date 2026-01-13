@@ -1,7 +1,7 @@
 import type { vec4 } from "gl-matrix";
 import type { BAMFile } from "../bam";
 import type { DataStream } from "../common";
-import { registerBAMObject } from "./base";
+import { CopyContext, registerBAMObject } from "./base";
 import { type DebugInfo, dbgNum } from "./debug";
 import { PiecewiseCurve } from "./PiecewiseCurve";
 
@@ -30,8 +30,8 @@ export class NurbsCurve extends PiecewiseCurve {
     }
   }
 
-  override copyTo(target: this): void {
-    super.copyTo(target);
+  override copyTo(target: this, ctx: CopyContext): void {
+    super.copyTo(target, ctx);
     target.order = this.order;
     target.cvs = this.cvs;
   }

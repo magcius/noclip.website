@@ -1,6 +1,7 @@
 import type { BAMFile } from "../bam";
 import { AssetVersion, type DataStream } from "../common";
-import { type BAMObject, registerBAMObject } from "./base";
+import { AnimChannelBase } from "./AnimChannelBase";
+import { CopyContext, registerBAMObject } from "./base";
 import { type DebugInfo, dbgRef } from "./debug";
 import { PartGroup } from "./PartGroup";
 
@@ -8,18 +9,18 @@ import { PartGroup } from "./PartGroup";
  * Base class for animated parts
  */
 export class MovingPartBase extends PartGroup {
-  public forcedChannel: BAMObject | null = null; // 6.20+
+  public forcedChannel: AnimChannelBase | null = null; // 6.20+
 
   override load(file: BAMFile, data: DataStream) {
     super.load(file, data);
     if (this._version.compare(new AssetVersion(6, 20)) >= 0) {
-      this.forcedChannel = file.getObject(data.readObjectId());
+      this.forcedChannel = file.getTyped(data.readObjectId(), AnimChannelBase);
     }
   }
 
-  override copyTo(target: this): void {
-    super.copyTo(target);
-    target.forcedChannel = this.forcedChannel; // Shared
+  override copyTo(target: this, ctx: CopyContext): void {
+    super.copyTo(target, ctx);
+    target.forcedChannel = ctx.clone(this.forcedChannel);
   }
 
   override getDebugInfo(): DebugInfo {

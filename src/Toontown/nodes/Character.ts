@@ -1,6 +1,6 @@
 import type { BAMFile } from "../bam";
 import { AssetVersion, type DataStream } from "../common";
-import { type BAMObject, registerBAMObject } from "./base";
+import { type BAMObject, CopyContext, registerBAMObject } from "./base";
 import { ComputedVertices } from "./ComputedVertices";
 import { type DebugInfo, dbgRef, dbgRefs, dbgTypedArray } from "./debug";
 import { PartBundleNode } from "./PartBundleNode";
@@ -55,14 +55,14 @@ export class Character extends PartBundleNode {
     }
   }
 
-  override copyTo(target: this): void {
-    super.copyTo(target);
-    target.dynamicCoords = this.dynamicCoords.slice();
-    target.dynamicNorms = this.dynamicNorms.slice();
-    target.dynamicColors = this.dynamicColors.slice();
-    target.dynamicTexcoords = this.dynamicTexcoords.slice();
-    target.computedVertices = this.computedVertices?.clone() ?? null;
-    target.parts = this.parts.map((p) => p.clone());
+  override copyTo(target: this, ctx: CopyContext): void {
+    super.copyTo(target, ctx);
+    target.dynamicCoords = this.dynamicCoords; // Shared
+    target.dynamicNorms = this.dynamicNorms; // Shared
+    target.dynamicColors = this.dynamicColors; // Shared
+    target.dynamicTexcoords = this.dynamicTexcoords; // Shared
+    target.computedVertices = ctx.clone(this.computedVertices);
+    target.parts = ctx.cloneArray(this.parts);
   }
 
   override getDebugInfo(): DebugInfo {

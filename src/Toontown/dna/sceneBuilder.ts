@@ -428,7 +428,7 @@ export class DNASceneBuilder {
     const decalNode = corniceNode.find("**/*_d");
     if (!decalNode)
       throw new Error(`Decal node not found in cornice ${node.code}`);
-    const clonedDecalNode = decalNode.cloneSubgraph();
+    const clonedDecalNode = decalNode.clone();
     clonedDecalNode.setPosHprScale(
       vec3.fromValues(0, 0, 1),
       vec3.create(),
@@ -445,7 +445,7 @@ export class DNASceneBuilder {
     const noDecalNode = corniceNode.find("**/*_nd");
     if (!noDecalNode)
       throw new Error(`NoDecal node not found in cornice ${node.code}`);
-    const clonedNoDecalNode = noDecalNode.cloneSubgraph();
+    const clonedNoDecalNode = noDecalNode.clone();
     clonedNoDecalNode.setPosHprScale(
       vec3.fromValues(0, 0, currHeight + wall.height),
       vec3.create(),
@@ -707,11 +707,11 @@ export class DNASceneBuilder {
   /**
    * Add geometry from a code reference
    */
-  private addGeometryFromCode(code: string, node: PandaNode): PandaNode | null {
+  public addGeometryFromCode(code: string, node: PandaNode): PandaNode | null {
     if (!code) return null;
     const geomNode = this.getNodeByCode(code);
     if (!geomNode) return null;
-    const cloned = geomNode.cloneSubgraph();
+    const cloned = geomNode.clone();
     node.addChild(cloned);
     return cloned;
   }

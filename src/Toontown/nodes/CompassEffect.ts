@@ -1,6 +1,6 @@
 import type { BAMFile } from "../bam";
 import { AssetVersion, type DataStream } from "../common";
-import { registerBAMObject } from "./base";
+import { CopyContext, registerBAMObject } from "./base";
 import { type DebugInfo, dbgFlags, dbgRef } from "./debug";
 import { PandaNode } from "./PandaNode";
 import { RenderEffect } from "./RenderEffects";
@@ -20,7 +20,7 @@ export const CompassEffectProperties = {
 
 export class CompassEffect extends RenderEffect {
   public properties = 0;
-  public reference: PandaNode | null = null; // TODO should be a NodePath
+  public reference: PandaNode | null = null;
 
   override load(file: BAMFile, data: DataStream) {
     super.load(file, data);
@@ -31,10 +31,10 @@ export class CompassEffect extends RenderEffect {
     }
   }
 
-  override copyTo(target: this): void {
-    super.copyTo(target);
+  override copyTo(target: this, ctx: CopyContext): void {
+    super.copyTo(target, ctx);
     target.properties = this.properties;
-    target.reference = this.reference; // TODO should find the cloned node
+    target.reference = ctx.clone(this.reference);
   }
 
   override getDebugInfo(): DebugInfo {

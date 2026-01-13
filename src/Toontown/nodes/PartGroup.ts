@@ -1,6 +1,6 @@
 import type { BAMFile } from "../bam";
 import { AssetVersion, type DataStream } from "../common";
-import { BAMObject, registerBAMObject } from "./base";
+import { BAMObject, CopyContext, registerBAMObject } from "./base";
 import { type DebugInfo, dbgRefs, dbgStr } from "./debug";
 
 /**
@@ -13,7 +13,7 @@ import { type DebugInfo, dbgRefs, dbgStr } from "./debug";
  */
 export class PartGroup extends BAMObject {
   public name = "";
-  public children: BAMObject[] = [];
+  public children: PartGroup[] = [];
 
   override load(file: BAMFile, data: DataStream) {
     super.load(file, data);
@@ -30,16 +30,16 @@ export class PartGroup extends BAMObject {
     this.children = new Array(numChildren);
     for (let i = 0; i < numChildren; i++) {
       const ref = data.readObjectId();
-      const obj = file.getObject(ref);
+      const obj = file.getTyped(ref, PartGroup);
       if (!obj) throw new Error(`PartGroup: Invalid child ref ${ref}`);
       this.children[i] = obj;
     }
   }
 
-  override copyTo(target: this): void {
-    super.copyTo(target);
+  override copyTo(target: this, ctx: CopyContext): void {
+    super.copyTo(target, ctx);
     target.name = this.name;
-    target.children = this.children; // Shared
+    target.children = ctx.cloneArray(this.children);
   }
 
   override getDebugInfo(): DebugInfo {

@@ -1,7 +1,7 @@
 import { vec4 } from "gl-matrix";
 import type { BAMFile } from "../bam";
 import type { DataStream } from "../common";
-import { registerBAMObject } from "./base";
+import { CopyContext, registerBAMObject } from "./base";
 import { type DebugInfo, dbgBool, dbgVec4 } from "./debug";
 import { ParametricCurve } from "./ParametricCurve";
 
@@ -24,8 +24,8 @@ export class CubicCurveseg extends ParametricCurve {
     this.rational = data.readBool();
   }
 
-  override copyTo(target: this): void {
-    super.copyTo(target);
+  override copyTo(target: this, ctx: CopyContext): void {
+    super.copyTo(target, ctx);
     vec4.copy(target.Bx, this.Bx);
     vec4.copy(target.By, this.By);
     vec4.copy(target.Bz, this.Bz);

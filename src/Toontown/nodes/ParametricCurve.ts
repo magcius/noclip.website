@@ -1,5 +1,6 @@
 import type { BAMFile } from "../bam";
 import type { DataStream } from "../common";
+import { CopyContext } from "./base";
 import { type DebugInfo, dbgEnum, dbgNum } from "./debug";
 import { PandaNode } from "./PandaNode";
 
@@ -23,8 +24,8 @@ export class ParametricCurve extends PandaNode {
     this.numDimensions = data.readUint8();
   }
 
-  override copyTo(target: this): void {
-    super.copyTo(target);
+  override copyTo(target: this, ctx: CopyContext): void {
+    super.copyTo(target, ctx);
     target.curveType = this.curveType;
     target.numDimensions = this.numDimensions;
   }

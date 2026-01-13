@@ -1,7 +1,7 @@
 import type { BAMFile } from "../bam";
 import type { DataStream } from "../common";
 import type { MaterialData } from "../geom";
-import { registerBAMObject } from "./base";
+import { CopyContext, registerBAMObject } from "./base";
 import { type DebugInfo, dbgEnum, dbgNum } from "./debug";
 import { PandaCompareFunc, RenderAttrib } from "./RenderAttrib";
 
@@ -15,8 +15,8 @@ export class AlphaTestAttrib extends RenderAttrib {
     this.referenceAlpha = data.readFloat32();
   }
 
-  override copyTo(target: this): void {
-    super.copyTo(target);
+  override copyTo(target: this, ctx: CopyContext): void {
+    super.copyTo(target, ctx);
     target.mode = this.mode;
     target.referenceAlpha = this.referenceAlpha;
   }

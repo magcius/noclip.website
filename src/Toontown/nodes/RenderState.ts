@@ -1,6 +1,6 @@
 import type { BAMFile } from "../bam";
 import type { DataStream } from "../common";
-import { BAMObject, registerBAMObject } from "./base";
+import { BAMObject, CopyContext, registerBAMObject } from "./base";
 import {
   type DebugInfo,
   dbgArray,
@@ -23,7 +23,11 @@ interface RenderAttribConstructor<T extends RenderAttrib> {
 }
 
 export class RenderState extends BAMObject {
-  public attribs: ReadonlyArray<Readonly<RenderAttribEntry>> = [];
+  public _attribs: RenderAttribEntry[] = [];
+
+  get attribs(): ReadonlyArray<Readonly<RenderAttribEntry>> {
+    return this._attribs;
+  }
 
   override load(file: BAMFile, data: DataStream) {
     super.load(file, data);
@@ -38,12 +42,15 @@ export class RenderState extends BAMObject {
       const priority = data.readInt32();
       attribs[i] = { attrib, priority };
     }
-    this.attribs = attribs;
+    this._attribs = attribs;
   }
 
-  override copyTo(target: this): void {
-    super.copyTo(target);
-    target.attribs = this.attribs;
+  override copyTo(target: this, ctx: CopyContext): void {
+    super.copyTo(target, ctx);
+    target._attribs = this._attribs.map(({ attrib, priority }): RenderAttribEntry => ({
+      attrib: ctx.clone(attrib),
+      priority,
+    }));
   }
 
   override getDebugInfo(): DebugInfo {
@@ -86,7 +93,7 @@ export class RenderState extends BAMObject {
       result.push({ attrib, priority });
     }
     const state = new RenderState();
-    state.attribs = result;
+    state._attribs = result;
     return state;
   }
 
@@ -109,7 +116,7 @@ export class RenderState extends BAMObject {
       }
     }
     const state = new RenderState();
-    state.attribs = result;
+    state._attribs = result;
     return state;
   }
 
@@ -122,7 +129,7 @@ export class RenderState extends BAMObject {
 
   static make(priority: number, ...attribs: RenderAttrib[]): RenderState {
     const state = new RenderState();
-    state.attribs = attribs.map((attrib) => ({ attrib, priority }));
+    state._attribs = attribs.map((attrib) => ({ attrib, priority }));
     return state;
   }
 }

@@ -12,6 +12,9 @@ export function registerBAMObject<T extends BAMObject>(
   name: string,
   factory: BAMObjectFactory<T>,
 ): void {
+  if (objectFactories.has(name)) {
+    throw new Error(`Object type "${name}" is already registered`);
+  }
   objectFactories.set(name, factory as unknown as BAMObjectFactory);
 }
 
@@ -36,6 +39,32 @@ export function getBAMObjectFactory(
 
 const DEFAULT_VERSION = new AssetVersion(0, 0);
 
+export class CopyContext {
+  private _objects = new Map<BAMObject, BAMObject>();
+
+  // Overload signatures to match input nullability
+  clone<T extends BAMObject>(obj: T): T;
+  clone<T extends BAMObject>(obj: T | null): T | null;
+  clone<T extends BAMObject>(obj: T | null): T | null {
+    if (!obj) return null;
+    const existing = this._objects.get(obj);
+    if (existing) return existing as T;
+    return obj.clone(this);
+  }
+
+  cloneArray<T extends BAMObject>(arr: T[]): T[] {
+    return arr.map((item) => this.clone(item));
+  }
+
+  add<T extends BAMObject>(obj: T, clone: T) {
+    this._objects.set(obj, clone);
+  }
+
+  get<T extends BAMObject>(obj: T): T | null {
+    return (this._objects.get(obj) ?? null) as T | null;
+  }
+}
+
 export class BAMObject {
   protected _version = DEFAULT_VERSION;
 
@@ -43,13 +72,14 @@ export class BAMObject {
     this._version = file.header.version;
   }
 
-  copyTo(target: this) {
+  copyTo(target: this, _ctx: CopyContext) {
     target._version = this._version;
   }
 
-  clone(): this {
+  clone(ctx = new CopyContext()): this {
     const target = new (this.constructor as new () => this)();
-    this.copyTo(target);
+    ctx.add(this, target);
+    this.copyTo(target, ctx);
     return target;
   }
 

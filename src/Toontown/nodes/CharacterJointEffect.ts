@@ -1,7 +1,8 @@
 import type { BAMFile } from "../bam";
 import type { DataStream } from "../common";
-import { registerBAMObject } from "./base";
-import { type DebugInfo, dbgNum } from "./debug";
+import { CopyContext, registerBAMObject } from "./base";
+import { Character } from "./Character";
+import { type DebugInfo, dbgNum, dbgRef } from "./debug";
 import { RenderEffect } from "./RenderEffects";
 
 /**
@@ -11,22 +12,21 @@ import { RenderEffect } from "./RenderEffects";
  * joint transform updates during animation.
  */
 export class CharacterJointEffect extends RenderEffect {
-  public characterRef = 0; // TODO is this a circular ref?
+  public character: Character | null = null;
 
   override load(file: BAMFile, data: DataStream) {
     super.load(file, data);
-
-    this.characterRef = data.readObjectId();
+    this.character = file.getTyped(data.readObjectId(), Character);
   }
 
-  override copyTo(target: this): void {
-    super.copyTo(target);
-    // target.characterRef = ? TODO
+  override copyTo(target: this, ctx: CopyContext): void {
+    super.copyTo(target, ctx);
+    target.character = ctx.clone(this.character);
   }
 
   override getDebugInfo(): DebugInfo {
     const info = super.getDebugInfo();
-    info.set("characterRef", dbgNum(this.characterRef));
+    info.set("character", dbgRef(this.character));
     return info;
   }
 }

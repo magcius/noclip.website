@@ -13,6 +13,7 @@ export { AnimGroup } from "./AnimGroup";
 // Character animation (pre-5.0)
 export { Character } from "./Character";
 export { CharacterJoint } from "./CharacterJoint";
+export { CharacterJointBundle } from "./CharacterJointBundle";
 export { CharacterSlider } from "./CharacterSlider";
 export { ComputedVertices } from "./ComputedVertices";
 export { MovingPartBase } from "./MovingPartBase";

@@ -1,6 +1,6 @@
 import type { BAMFile } from "../bam";
 import type { DataStream } from "../common";
-import { BAMObject, registerBAMObject } from "./base";
+import { BAMObject, CopyContext, registerBAMObject } from "./base";
 import { type DebugInfo, dbgArray, dbgEnum, dbgNum, dbgRef } from "./debug";
 import { GeomVertexArrayData } from "./GeomVertexArrayData";
 import { NumericType, ShadeModel, UsageHint } from "./geomEnums";
@@ -24,14 +24,14 @@ export class GeomPrimitive extends BAMObject {
     this.ends = data.readPtaInt32();
   }
 
-  override copyTo(target: this): void {
-    super.copyTo(target);
+  override copyTo(target: this, ctx: CopyContext): void {
+    super.copyTo(target, ctx);
     target.shadeModel = this.shadeModel;
     target.firstVertex = this.firstVertex;
     target.numVertices = this.numVertices;
     target.indexType = this.indexType;
     target.usageHint = this.usageHint;
-    target.vertices = this.vertices; // Shared
+    target.vertices = ctx.clone(this.vertices);
     target.ends = this.ends; // Shared
   }
 

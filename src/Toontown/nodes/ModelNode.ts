@@ -1,6 +1,6 @@
 import type { BAMFile } from "../bam";
 import { AssetVersion, type DataStream } from "../common";
-import { registerBAMObject } from "./base";
+import { CopyContext, registerBAMObject } from "./base";
 import { type DebugInfo, dbgNum } from "./debug";
 import { PandaNode } from "./PandaNode";
 
@@ -18,8 +18,8 @@ export class ModelNode extends PandaNode {
     }
   }
 
-  override copyTo(target: this): void {
-    super.copyTo(target);
+  override copyTo(target: this, ctx: CopyContext): void {
+    super.copyTo(target, ctx);
     target.preserveTransform = this.preserveTransform;
     target.preserveAttributes = this.preserveAttributes;
   }

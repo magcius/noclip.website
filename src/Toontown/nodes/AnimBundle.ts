@@ -1,7 +1,7 @@
 import type { BAMFile } from "../bam";
 import type { DataStream } from "../common";
 import { AnimGroup } from "./AnimGroup";
-import { registerBAMObject } from "./base";
+import { CopyContext, registerBAMObject } from "./base";
 import { type DebugInfo, dbgNum } from "./debug";
 
 /**
@@ -24,8 +24,8 @@ export class AnimBundle extends AnimGroup {
     this.numFrames = data.readUint16();
   }
 
-  override copyTo(target: this) {
-    super.copyTo(target);
+  override copyTo(target: this, ctx: CopyContext): void {
+    super.copyTo(target, ctx);
     target.fps = this.fps;
     target.numFrames = this.numFrames;
   }

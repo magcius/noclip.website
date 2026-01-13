@@ -1,6 +1,6 @@
 import type { BAMFile } from "../bam";
 import type { DataStream } from "../common";
-import { BAMObject, readTypedRefs, registerBAMObject } from "./base";
+import { BAMObject, CopyContext, readTypedRefs, registerBAMObject } from "./base";
 import { type DebugInfo, dbgRefs } from "./debug";
 
 interface RenderEffectConstructor<T extends RenderEffect> {
@@ -16,9 +16,9 @@ export class RenderEffects extends BAMObject {
     this.effects = readTypedRefs(file, data, numEffects, RenderEffect);
   }
 
-  override copyTo(target: this): void {
-    super.copyTo(target);
-    target.effects = this.effects.slice();
+  override copyTo(target: this, ctx: CopyContext): void {
+    super.copyTo(target, ctx);
+    target.effects = ctx.cloneArray(this.effects);
   }
 
   override getDebugInfo(): DebugInfo {

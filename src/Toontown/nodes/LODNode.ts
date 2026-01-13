@@ -1,7 +1,7 @@
 import { vec3 } from "gl-matrix";
 import type { BAMFile } from "../bam";
 import { AssetVersion, type DataStream } from "../common";
-import { registerBAMObject } from "./base";
+import { CopyContext, registerBAMObject } from "./base";
 import { type DebugInfo, dbgArray, dbgStr, dbgVec3 } from "./debug";
 import { PandaNode } from "./PandaNode";
 
@@ -44,8 +44,8 @@ export class LODNode extends PandaNode {
     }
   }
 
-  override copyTo(target: this): void {
-    super.copyTo(target);
+  override copyTo(target: this, ctx: CopyContext): void {
+    super.copyTo(target, ctx);
     vec3.copy(target.center, this.center);
     target.switches = this.switches; // Shared
   }

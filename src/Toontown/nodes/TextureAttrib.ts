@@ -1,7 +1,7 @@
 import type { BAMFile } from "../bam";
 import { AssetVersion, type DataStream } from "../common";
 import type { MaterialData } from "../geom";
-import { readTypedRefs, registerBAMObject } from "./base";
+import { CopyContext, readTypedRefs, registerBAMObject } from "./base";
 import {
   type DebugInfo,
   dbgArray,
@@ -25,7 +25,7 @@ export interface StageNode {
 }
 
 export class TextureAttrib extends RenderAttrib {
-  public offAllStages: boolean = false;
+  public offAllStages = false;
   public offStageRefs: TextureStage[] = [];
   public onStages: StageNode[] = [];
 
@@ -98,12 +98,18 @@ export class TextureAttrib extends RenderAttrib {
     }
   }
 
-  override copyTo(target: this): void {
-    super.copyTo(target);
+  override copyTo(target: this, ctx: CopyContext): void {
+    super.copyTo(target, ctx);
     target.offAllStages = this.offAllStages;
-    target.offStageRefs = this.offStageRefs; // Shared
-    target.onStages = this.onStages; // Shared
-    target.texture = this.texture; // Shared
+    target.offStageRefs = ctx.cloneArray(this.offStageRefs);
+    target.onStages = this.onStages.map((stage) => ({
+      sampler: stage.sampler,
+      textureStage: ctx.clone(stage.textureStage),
+      texture: ctx.clone(stage.texture),
+      priority: stage.priority,
+      implicitSort: stage.implicitSort,
+    }));
+    target.texture = ctx.clone(this.texture);
   }
 
   override getDebugInfo(): DebugInfo {

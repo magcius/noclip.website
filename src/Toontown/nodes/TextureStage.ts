@@ -1,7 +1,7 @@
 import { vec4 } from "gl-matrix";
 import type { BAMFile } from "../bam";
 import { AssetVersion, type DataStream } from "../common";
-import { BAMObject, registerBAMObject } from "./base";
+import { BAMObject, CopyContext, registerBAMObject } from "./base";
 import {
   type DebugInfo,
   dbgBool,
@@ -161,12 +161,12 @@ export class TextureStage extends BAMObject {
     this.combineAlpha = readCombineConfig(data);
   }
 
-  override copyTo(target: this): void {
-    super.copyTo(target);
+  override copyTo(target: this, ctx: CopyContext): void {
+    super.copyTo(target, ctx);
     target.name = this.name;
     target.sort = this.sort;
     target.priority = this.priority;
-    target.texcoordName = this.texcoordName; // Shared
+    target.texcoordName = ctx.clone(this.texcoordName);
     target.mode = this.mode;
     vec4.copy(target.color, this.color);
     target.rgbScale = this.rgbScale;
@@ -175,6 +175,7 @@ export class TextureStage extends BAMObject {
     target.texViewOffset = this.texViewOffset;
     target.combineRgb = this.combineRgb; // Shared
     target.combineAlpha = this.combineAlpha; // Shared
+    target.isDefault = this.isDefault;
   }
 
   override getDebugInfo(): DebugInfo {

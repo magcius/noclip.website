@@ -1,7 +1,7 @@
 import { AABB } from "../../Geometry";
 import type { BAMFile } from "../bam";
 import type { DataStream } from "../common";
-import { registerBAMObject } from "./base";
+import { CopyContext, registerBAMObject } from "./base";
 import {
   type DebugInfo,
   dbgArray,
@@ -42,9 +42,12 @@ export class GeomNode extends PandaNode {
     }
   }
 
-  override copyTo(target: this): void {
-    super.copyTo(target);
-    target.geoms = this.geoms; // Shared
+  override copyTo(target: this, ctx: CopyContext): void {
+    super.copyTo(target, ctx);
+    target.geoms = this.geoms.map(({ geom, state }) => ({
+      geom: ctx.clone(geom),
+      state: ctx.clone(state),
+    }));
   }
 
   override getDebugInfo(): DebugInfo {
