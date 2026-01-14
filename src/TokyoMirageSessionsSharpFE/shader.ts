@@ -32,6 +32,7 @@ layout(std140) uniform ub_SceneParams
 {
     Mat4x4 u_ClipFromViewMatrix;
     Mat3x4 u_ViewFromWorldMatrix;
+    Mat3x4 u_TransformationMatrix;
     Mat3x4 u_BoneMatrix[${this.bone_matrix_array_length}];
 };
 
@@ -63,6 +64,8 @@ void mainVS()
 
     #endif
     
+    WorldPosition = UnpackMatrix(u_TransformationMatrix) * vec4(WorldPosition, 1.0);
+
     vec3 ViewPosition = UnpackMatrix(u_ViewFromWorldMatrix) * vec4(WorldPosition, 1.0);
     gl_Position = UnpackMatrix(u_ClipFromViewMatrix) * vec4(ViewPosition, 1.0);
     v_TexCoord0 = a_TexCoord0.xy;

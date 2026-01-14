@@ -10,7 +10,8 @@ import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
 import { GfxDevice, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxInputLayoutBufferDescriptor,
          GfxVertexBufferFrequency, GfxInputLayout, GfxBufferFrequencyHint, GfxBufferUsage, GfxBindingLayoutDescriptor,
          GfxCullMode, GfxBuffer, GfxSamplerBinding, GfxTexture} from "../gfx/platform/GfxPlatform.js";
-import { mat4 } from "gl-matrix";
+import { vec3, mat4 } from "gl-matrix";
+import { computeModelMatrixSRT } from '../MathHelpers.js';
 import { TMSFEProgram } from './shader.js';
 import { fillMatrix4x3, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers.js';
 import { assert } from "../util.js";
@@ -24,12 +25,24 @@ export class fshp_renderer
     private index_buffer_descriptor: GfxVertexBufferDescriptor;
     private index_count: number;
     private input_layout: GfxInputLayout;
+    private transform_matrix: mat4 = mat4.create();
     private bone_matrix_array: mat4[] = [];
     private program: TMSFEProgram;
     private sampler_bindings: GfxSamplerBinding[] = [];
     private do_not_render: boolean = false;
 
-    constructor(device: GfxDevice, renderHelper: GfxRenderHelper, fmdl: FMDL, shape_index: number, bntx: BNTX.BNTX, gfx_texture_array: GfxTexture[])
+    constructor
+    (
+        device: GfxDevice,
+        renderHelper: GfxRenderHelper,
+        fmdl: FMDL,
+        shape_index:number,
+        bntx: BNTX.BNTX,
+        gfx_texture_array: GfxTexture[],
+        position: vec3,
+        rotation: vec3,
+        scale: vec3,
+    )
     {
         // create vertex buffers
         const fshp = fmdl.fshp[shape_index];
@@ -77,6 +90,15 @@ export class fshp_renderer
         this.index_buffer_descriptor = { buffer: this.index_buffer };
 
         // setup transformation matrix
+        computeModelMatrixSRT
+        (
+            this.transform_matrix,
+            scale[0], scale[1], scale[2],
+            rotation[0], rotation[1], rotation[2],
+            position[0], position[1], position[2],
+        );
+
+        // setup bone transformation matrices
         const fskl = fmdl.fskl;
         if (fshp.skin_bone_count == 0)
         {
@@ -159,11 +181,12 @@ export class fshp_renderer
         
         // create uniform buffers for the shader
         renderInst.setBindingLayouts(bindingLayouts);
-        // size 16 + 12 + (12 * bone count)
-        let uniform_buffer_offset = renderInst.allocateUniformBuffer(TMSFEProgram.ub_SceneParams, 28 + (12 * this.bone_matrix_array.length));
+        // size 16 + 12 + 12 + (12 * bone count)
+        let uniform_buffer_offset = renderInst.allocateUniformBuffer(TMSFEProgram.ub_SceneParams, 40 + (12 * this.bone_matrix_array.length));
         const mapped = renderInst.mapUniformBufferF32(TMSFEProgram.ub_SceneParams);
         uniform_buffer_offset += fillMatrix4x4(mapped, uniform_buffer_offset, viewerInput.camera.projectionMatrix);
         uniform_buffer_offset += fillMatrix4x3(mapped, uniform_buffer_offset, viewerInput.camera.viewMatrix);
+        uniform_buffer_offset += fillMatrix4x3(mapped, uniform_buffer_offset, this.transform_matrix);
 
         for (let i = 0; i < this.bone_matrix_array.length; i++)
         {
