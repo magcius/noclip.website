@@ -58,6 +58,9 @@ void mainVS()
 
     vec3 WorldPosition = UnpackMatrix(u_BoneMatrix[0]) * vec4(a_Position, 1.0);
 
+    #elif ${this.fshp.skin_bone_count} == 3
+    vec3 WorldPosition = UnpackMatrix(u_BoneMatrix[0]) * vec4(a_Position, 1.0);
+
     #endif
     
     vec3 ViewPosition = UnpackMatrix(u_ViewFromWorldMatrix) * vec4(WorldPosition, 1.0);
