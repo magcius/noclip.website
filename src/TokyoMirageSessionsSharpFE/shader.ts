@@ -69,7 +69,7 @@ void mainPS()
     vec2 t_DiffuseTexCoord = mod(v_TexCoord0, vec2(1.0, 1.0));
     vec4 t_DiffuseMapColor = texture(SAMPLER_2D(s_diffuse), t_DiffuseTexCoord.xy);
     gl_FragColor = t_DiffuseMapColor;
-    if (gl_FragColor.a < 0.1)
+    if (gl_FragColor.a < 0.5)
     {
         discard;
     }

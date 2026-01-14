@@ -3,7 +3,7 @@
 // these functions build off that code
 
 import * as BNTX from '../fres_nx/bntx.js';
-import { GfxDevice, makeTextureDescriptor2D, GfxTexture } from '../gfx/platform/GfxPlatform.js';
+import { GfxDevice, makeTextureDescriptor2D, GfxTexture, GfxFormat } from '../gfx/platform/GfxPlatform.js';
 import { getChannelFormat } from '../fres_nx/nngfx_enum.js';
 import { deswizzle, decompress, translateImageFormat } from "../fres_nx/tegra_texture.js";
 
@@ -46,8 +46,18 @@ export function deswizzle_and_upload_bntx_textures(bntx: BNTX.BNTX, device: GfxD
                 {
                     const rgbaTexture = decompress({ ...texture, width, height, depth }, deswizzled);
                     const rgbaPixels = rgbaTexture.pixels;
+
                     // make a new buffer according to channel mapping
-                    let new_buffer:Uint8Array = new Uint8Array(rgbaPixels.byteLength)
+                    let new_buffer:Uint8Array | Int8Array;
+                    if (new_format == GfxFormat.S8_RGBA_NORM)
+                    {
+                        new_buffer = new Int8Array(rgbaPixels.byteLength);
+                    }
+                    else
+                    {
+                        new_buffer = new Uint8Array(rgbaPixels.byteLength);
+                    }
+
                     let new_buffer_offset = 0;
                     for (let i = 0; i < rgbaPixels.byteLength / 4; i++)
                     {
@@ -55,7 +65,7 @@ export function deswizzle_and_upload_bntx_textures(bntx: BNTX.BNTX, device: GfxD
                         const green = rgbaPixels[i * 4 + 1];
                         const blue = rgbaPixels[i * 4 + 2];
                         const alpha = rgbaPixels[i * 4 + 3];
-                        const array = [0, 1, red, green, blue, alpha];
+                        const array = [0, 0xFF, red, green, blue, alpha];
                         new_buffer[new_buffer_offset++] = array[texture.channelMapping[0]];
                         new_buffer[new_buffer_offset++] = array[texture.channelMapping[1]];
                         new_buffer[new_buffer_offset++] = array[texture.channelMapping[2]];
