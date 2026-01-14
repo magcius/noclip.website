@@ -19,6 +19,7 @@ export interface BRTI {
     arraySize: number;
     mipBuffers: ArrayBufferSlice[];
     blockHeightLog2: number;
+    channelMapping: number[];
 }
 
 function parseBRTI(buffer: ArrayBufferSlice, offs: number, littleEndian: boolean): BRTI | null {
@@ -49,7 +50,11 @@ function parseBRTI(buffer: ArrayBufferSlice, offs: number, littleEndian: boolean
 
     const textureDataSize = view.getUint32(offs + 0x50, littleEndian);
     const alignment = view.getUint32(offs + 0x54, littleEndian);
-    const channelMapping = view.getUint32(offs + 0x58, littleEndian);
+    let channelMapping: number[] = [];
+    channelMapping.push(view.getUint8(offs + 0x58));
+    channelMapping.push(view.getUint8(offs + 0x59));
+    channelMapping.push(view.getUint8(offs + 0x5A));
+    channelMapping.push(view.getUint8(offs + 0x5B));
     const imageDimension = view.getUint8(offs + 0x5C);
 
     const dataOffsets: number[] = [];
@@ -64,7 +69,7 @@ function parseBRTI(buffer: ArrayBufferSlice, offs: number, littleEndian: boolean
         mipBuffers.push(buffer.slice(dataOffsets[i], dataOffsets[i + 1]));
     mipBuffers.push(buffer.slice(dataOffsets[mipCount - 1], dataOffsets[0] + textureDataSize));
 
-    return { name, imageDimension, imageFormat, width, height, depth, arraySize, mipBuffers, blockHeightLog2 };
+    return { name, imageDimension, imageFormat, width, height, depth, arraySize, mipBuffers, blockHeightLog2, channelMapping };
 }
 
 export function parse(buffer: ArrayBufferSlice): BNTX {

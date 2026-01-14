@@ -216,19 +216,19 @@ export function get_level_bfres_names(level_id: string): string[]
             return ["f001_01", "obj01", "obj02", "obj10", "sky"];
 
         case "f001_02":
-            return ["f001_02", "obj01", "obj02", "obj10", "sky"];
+            return ["f001_02", "obj01", "obj02", "obj04", "obj10", "sky"];
 
         case "f001_03":
-            return ["f001_03", "obj01", "obj02", "obj10", "sky"];
+            return ["f001_03", "obj01", "obj02", "obj04", "obj10", "sky"];
 
         case "f001_04":
-            return ["f001_04", "obj01", "obj02", "obj10", "sky"];
+            return ["f001_04", "obj01", "obj02", "obj10", "obj11", "obj12", "sky"];
 
         case "f001_05":
             return ["f001_05", "obj01", "obj02", "obj10", "sky"];
 
         case "f001_06":
-            return ["f001_06", "obj01", "obj02", "obj10", "sky"];
+            return ["f001_06", "obj01", "obj02", "obj04", "obj10", "sky"];
 
         case "f001_07":
             return ["f001_07", "obj01", "obj02", "obj10", "sky"];
@@ -246,7 +246,8 @@ export function get_level_bfres_names(level_id: string): string[]
             return ["f003_01", "sky"];
 
         case "f003_02":
-            return ["f003_02", "obj10", "obj11", "obj12", "obj13", "obj14", "sky"];
+            // return ["f003_02", "obj10", "obj11", "obj12", "obj13", "obj14", "sky"];
+            return ["f003_02"];
 
         case "f003_03":
             return ["f003_03", "obj01", "sky"];

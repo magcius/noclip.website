@@ -46,7 +46,22 @@ export function deswizzle_and_upload_bntx_textures(bntx: BNTX.BNTX, device: GfxD
                 {
                     const rgbaTexture = decompress({ ...texture, width, height, depth }, deswizzled);
                     const rgbaPixels = rgbaTexture.pixels;
-                    device.uploadTextureData(gfx_texture, mipLevel, [rgbaPixels]);
+                    // make a new buffer according to channel mapping
+                    let new_buffer:Uint8Array = new Uint8Array(rgbaPixels.byteLength)
+                    let new_buffer_offset = 0;
+                    for (let i = 0; i < rgbaPixels.byteLength / 4; i++)
+                    {
+                        const red = rgbaPixels[i * 4];
+                        const green = rgbaPixels[i * 4 + 1];
+                        const blue = rgbaPixels[i * 4 + 2];
+                        const alpha = rgbaPixels[i * 4 + 3];
+                        const array = [0, 1, red, green, blue, alpha];
+                        new_buffer[new_buffer_offset++] = array[texture.channelMapping[0]];
+                        new_buffer[new_buffer_offset++] = array[texture.channelMapping[1]];
+                        new_buffer[new_buffer_offset++] = array[texture.channelMapping[2]];
+                        new_buffer[new_buffer_offset++] = array[texture.channelMapping[3]];
+                    }
+                    device.uploadTextureData(gfx_texture, mipLevel, [new_buffer]);
                 }
             );
         }
