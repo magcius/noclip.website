@@ -6,7 +6,7 @@ import { MathConstants, transformVec3Mat4w1 } from "../MathHelpers.js";
 import { assert } from "../util.js";
 import { dKy_tevstr_c, dKy_tevstr_init } from "./d_kankyo.js";
 import { dProcName_e } from "./d_procname.js";
-import { base_process_class, cPhs__Status, fGlobals, fopDwTg_DrawQTo, fopDwTg_ToDrawQ, fpcDt_Delete, fpcPc__IsVisible, fpcSCtRq_Request, leafdraw_class } from "./framework.js";
+import { base_process_class, cPhs__Status, fGlobals, fopDwTg_DrawQTo, fopDwTg_ToDrawQ, fpcDt_Delete, fpcFCtRq_Request, fpcPc__IsVisible, fpcSCtRq_Request, leafdraw_class } from "./framework.js";
 import { dGlobals } from "./Main.js";
 import { dCamera_c } from "./d_camera.js";
 
@@ -203,6 +203,20 @@ export function fopAcM_create(globals: fGlobals, pcName: dProcName_e, parameters
     };
 
     return fpcSCtRq_Request(globals, null, pcName, prm);
+}
+
+export function fopAcM_fastCreate(globals: dGlobals, pcName: string, parameters: number, pos: ReadonlyVec3 | null, roomNo: number, rot: ReadonlyVec3 | null, scale: ReadonlyVec3 | null, parentPcId: number): base_process_class | null {
+    const objName = globals.dStage_searchName(pcName);
+    if (objName == null)
+        return null;
+
+    // Create on current layer.
+    const prm: fopAcM_prm_class = {
+        parameters, pos, roomNo, rot, scale, subtype: objName.subtype, parentPcId,
+        enemyNo: -1, gbaName: 0x00, layer: -1,
+    };
+
+    return fpcFCtRq_Request(globals.frameworkGlobals, globals, null, objName.pcName, prm);
 }
 
 export function fopAcIt_JudgeByID<T extends base_process_class>(globals: fGlobals, pcId: number | null): T | null {

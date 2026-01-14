@@ -10,7 +10,7 @@ import { ResType } from "./d_resorce.js";
 import { mDoExt_McaMorf } from "./m_do_ext.js";
 import { dGlobals } from "./Main.js";
 import { cM_deg2s, cM_sht2d } from "./SComponent.js";
-import { fopAc_ac_c, fopAcM_searchFromName } from "./f_op_actor.js";
+import { fopAc_ac_c, fopAcM_fastCreate, fopAcM_searchFromName } from "./f_op_actor.js";
 
 export enum EDemoMode {
     None,
@@ -379,9 +379,8 @@ class dDemo_system_c implements TSystem {
             case JStage.EObject.PreExistingActor:
                 let actor = fopAcM_searchFromName(this.globals, objName, 0, 0);
                 if (!actor) {
-                    if (objType === JStage.EObject.Actor && objName === "d_act") {
-                        debugger; // Untested. Unimplemented
-                        actor = {} as fopAc_ac_c;
+                    if (objType === JStage.EObject.Actor && objName.startsWith("d_act")) {
+                        actor = fopAcM_fastCreate(this.globals, objName, 0, null, this.globals.mStayNo, null, null, -1) as fopAc_ac_c;
                     } else {
                         console.warn('Demo failed to find actor', objName);
                         return null;
