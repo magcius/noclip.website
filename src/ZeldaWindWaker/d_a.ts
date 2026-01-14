@@ -3207,10 +3207,10 @@ class d_a_kamome extends fopAc_ac_c {
         settingTevStruct(globals, LightType.Actor, this.pos, this.tevStr);
         setLightTevColorType(globals, this.morf.model, this.tevStr, globals.camera);
         this.morf.entryDL(globals, renderInstManager);
-        
+
         const casterCenter = vec3.scaleAndAdd(this.gndChk.pos, this.pos, Vec3UnitY, 10.0);
         const groundY = globals.scnPlay.bgS.GroundCross(this.gndChk); // TODO: This should return non-inf when over the sea, a la ObjAcch
-        this.shadowId = dComIfGd_setShadow(globals, this.shadowId, true, this.morf.model, casterCenter, 500, 20, casterCenter[1], groundY, this.gndChk.polyInfo, this.tevStr); 
+        this.shadowId = dComIfGd_setShadow(globals, this.shadowId, true, this.morf.model, casterCenter, 500, 20, casterCenter[1], groundY, this.gndChk.polyInfo, this.tevStr);
 
         // drawWorldSpaceLine(getDebugOverlayCanvas2D(), globals.camera.clipFromWorldMatrix, this.pos, this.targetPos, Green, 2);
         // drawWorldSpacePoint(getDebugOverlayCanvas2D(), globals.camera.clipFromWorldMatrix, this.pos, Magenta, 8);
@@ -4987,12 +4987,12 @@ class d_a_npc_ls1 extends fopNpc_npc_c {
         }
     }
 
-    private drawShadow( globals: dGlobals ) {
+    private drawShadow(globals: dGlobals) {
         const casterCenter = vec3.scaleAndAdd(this.gndChk.pos, this.pos, Vec3UnitY, 150.0);
         const groundY = globals.scnPlay.bgS.GroundCross(this.gndChk);
-        this.shadowId = dComIfGd_setShadow(globals, this.shadowId, true, this.morf.model, casterCenter, 800, 40, this.pos[1], groundY, this.gndChk.polyInfo, this.tevStr); 
+        this.shadowId = dComIfGd_setShadow(globals, this.shadowId, true, this.morf.model, casterCenter, 800, 40, this.pos[1], groundY, this.gndChk.polyInfo, this.tevStr);
 
-        if(this.itemModel) {
+        if (this.itemModel) {
             dComIfGd_addRealShadow(globals, this.shadowId, this.itemModel);
         }
     }
@@ -5083,10 +5083,10 @@ class d_a_npc_zl1 extends fopNpc_npc_c {
         if (this.btkAnim.anm) this.btkAnim.entry(this.morf.model);
 
         this.morf.entryDL(globals, renderInstManager);
-        
+
         const casterCenter = vec3.scaleAndAdd(this.gndChk.pos, this.pos, Vec3UnitY, 150.0);
         const groundY = globals.scnPlay.bgS.GroundCross(this.gndChk);
-        this.shadowId = dComIfGd_setShadow(globals, this.shadowId, true, this.morf.model, casterCenter, 800, 40, this.pos[1], groundY, this.gndChk.polyInfo, this.tevStr); 
+        this.shadowId = dComIfGd_setShadow(globals, this.shadowId, true, this.morf.model, casterCenter, 800, 40, this.pos[1], groundY, this.gndChk.polyInfo, this.tevStr);
     }
 
     public override execute(globals: dGlobals, deltaTimeFrames: number): void {
@@ -5771,7 +5771,7 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
             }
         } else {
             // The demo anim archive is toggled based on if Aryll has been rescued. See dComIfGp_getLkDemoAnmArchive() 
-            const arcName = (globals.scnPlay.linkDemoAnmNo == 1)  ? 'LkD01' : 'LkD00';
+            const arcName = (globals.scnPlay.linkDemoAnmNo == 1) ? 'LkD01' : 'LkD00';
             const bck = globals.resCtrl.getObjectIDRes(ResType.Bck, arcName, anmBckId);
             this.anmBck.init(this.model.modelData, bck, true, bck.loopMode, 1.0, 0, bck.duration);
             this.anmBck.frameCtrl.setFrame(anmFrame);
@@ -5870,8 +5870,8 @@ class d_a_title extends fopAc_ac_c {
     private btkSubtitle = new mDoExt_btkAnm();
     private btkShimmer = new mDoExt_btkAnm();
     private screen: J2DScreen;
-    private panes: J2DPane[] = []; 
-    
+    private panes: J2DPane[] = [];
+
     private cloudEmitter: JPABaseEmitter | null = null;
     private sparkleEmitter: JPABaseEmitter | null = null;
     private sparklePos = vec3.create();
@@ -6036,7 +6036,7 @@ class d_a_title extends fopAc_ac_c {
             this.enterMode = 1;
         }
 
-        const puffPos = vec3.set(scratchVec3a, 
+        const puffPos = vec3.set(scratchVec3a,
             ((this.panes[TitlePane.ShipParticles].data.x - 320.0) - this.shipOffsetX) + 85.0,
             (this.panes[TitlePane.ShipParticles].data.y - 240.0) + 5.0,
             0.0
@@ -6045,11 +6045,11 @@ class d_a_title extends fopAc_ac_c {
         if (this.enterMode == 0) {
             if (this.shipFrameCounter < 0) {
                 this.shipFrameCounter += deltaTimeFrames;
-            }            
+            }
 
             if (this.cloudEmitter === null) {
                 this.cloudEmitter = globals.particleCtrl.set(globals, ParticleGroup.TwoDback, 0x83F9, puffPos);
-            } else {    
+            } else {
                 this.cloudEmitter.setGlobalTranslation(puffPos);
             }
 
@@ -6069,7 +6069,7 @@ class d_a_title extends fopAc_ac_c {
                 //     mDoAud_seStart(JA_SE_TITLE_KIRA);
                 //     daTitle_Kirakira_Sound_flag = false;
                 // }
-    
+
                 const sparklePane = this.panes[TitlePane.ShipParticles];
                 vec3.set(this.sparklePos, sparklePane.data.x - 320.0, sparklePane.data.y - 240.0, 0.0);
                 this.sparkleEmitter = globals.particleCtrl.set(globals, ParticleGroup.TwoDfore, 0x83FB, this.sparklePos);
