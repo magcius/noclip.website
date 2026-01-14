@@ -16,7 +16,7 @@ export class fGlobals {
     // fpcDt
     public dtQueue: base_process_class[] = [];
     // fpcCt
-    public ctQueue: standard_create_request_class<any>[] = [];
+    public ctQueue: create_request_class<any>[] = [];
     // fpcLy
     public lyNextID: number = 1;
     public lyRoot = new layer_class(0);
@@ -123,17 +123,22 @@ export interface fpc_bs__Constructor {
     new(globalUserData: fGlobals, pcName: number, pcId: number, profile: DataView): base_process_class;
 }
 
-class standard_create_request_class<T = any> {
+abstract class create_request_class<T = any> {
+    abstract Handle(globals: fGlobals, globalUserData: GlobalUserData): cPhs__Status;
+
+    public process: base_process_class | null = null;
+    
+    constructor(public layer: layer_class, public pcName: number, public pcId: number, public konstructor: fpc_bs__Constructor, public profileBinary: ArrayBufferSlice, public userData: T) {
+    }
+}
+
+class standard_create_request_class<T = any> extends create_request_class {
     public phase = new request_of_phase_process_class<this>([
         // this.Load,
         this.CreateProcess,
         this.SubCreateProcess,
         this.ChildrenLoading,
     ]);
-    public process: base_process_class | null = null;
-
-    constructor(public layer: layer_class, public pcName: number, public pcId: number, public konstructor: fpc_bs__Constructor, public profileBinary: ArrayBufferSlice, public userData: T) {
-    }
 
     // fpcSCtRq_Handler
     public Handle(globals: fGlobals, globalUserData: GlobalUserData): cPhs__Status {
@@ -167,6 +172,14 @@ class standard_create_request_class<T = any> {
     }
 }
 
+class fast_create_request_class<T = any> extends create_request_class  {
+    public Handle(globals: fGlobals, globalUserData: GlobalUserData): cPhs__Status {
+        // The game also calls a user supplied callback here, and aborts if it returns 0.
+        // This is only ever used by one actor, daIball_c, which we don't implement, so don't bother.
+        return cPhs__Status.Complete;
+    }
+}
+
 export function fpcCt_Handler(globals: fGlobals, globalUserData: GlobalUserData): boolean {
     // fpcCtRq_Handler
     let hadAnyLoading = false;
@@ -197,7 +210,7 @@ export function fpcCt_Handler(globals: fGlobals, globalUserData: GlobalUserData)
     return hadAnyLoading;
 }
 
-function fpcCtRq_ToCreateQ(globals: fGlobals, rq: standard_create_request_class): void {
+function fpcCtRq_ToCreateQ(globals: fGlobals, rq: create_request_class): void {
     // fpcLy_CreatingMesg
     rq.layer.creatingCount++;
     // fpcCtTg_ToCreateQ
@@ -233,18 +246,19 @@ export function fpcFCtRq_Request<G>(globals: fGlobals, globalUserData: GlobalUse
     
     const binary = fpcPf_Get__ProfileBinary(globals, pcName);
     const pcId = fpcBs_MakeOfId(globals);
+    const rq = new fast_create_request_class(ly, pcName, pcId, constructor, binary, userData);
+       
+    fpcLy_SetCurrentLayer(globals, ly);
     const process = new constructor(globals, pcName, pcId, binary.createDataView());
     if (process) {
-        fpcLy_SetCurrentLayer(globals, ly);
         const status = process.load(globalUserData, userData);
-        if( status === cPhs__Status.Next || status === cPhs__Status.Complete ) {
-            // The game pushes this to the Ct queue so that a user supplied callback can be called()
-            // This is only ever used by one actor, daIball_c, which we don't currently implement.
-            // fpcCtRq_ToCreateQ(globals, rq);
+        rq.process = process;
+        rq.pcId = process.processId;
+        if( status === cPhs__Status.Next ) {
+            fpcCtRq_ToCreateQ(globals, rq);
             return process;
         }
     }
-    // fpcCtRq_Cancel(&request->base);
     return null;
 }
 
