@@ -46,36 +46,37 @@ export function deswizzle_and_upload_bntx_textures(bntx: BNTX.BNTX, device: GfxD
                 {
                     const rgbaTexture = decompress({ ...texture, width, height, depth }, deswizzled);
                     const rgbaPixels = rgbaTexture.pixels;
-
-                    // make a new buffer according to channel mapping
-                    let new_buffer:Uint8Array | Int8Array;
-                    if (new_format == GfxFormat.S8_RGBA_NORM)
-                    {
-                        new_buffer = new Int8Array(rgbaPixels.byteLength);
-                    }
-                    else
-                    {
-                        new_buffer = new Uint8Array(rgbaPixels.byteLength);
-                    }
-
-                    let new_buffer_offset = 0;
-                    for (let i = 0; i < rgbaPixels.byteLength / 4; i++)
-                    {
-                        const red = rgbaPixels[i * 4];
-                        const green = rgbaPixels[i * 4 + 1];
-                        const blue = rgbaPixels[i * 4 + 2];
-                        const alpha = rgbaPixels[i * 4 + 3];
-                        const array = [0, 0xFF, red, green, blue, alpha];
-                        new_buffer[new_buffer_offset++] = array[texture.channelMapping[0]];
-                        new_buffer[new_buffer_offset++] = array[texture.channelMapping[1]];
-                        new_buffer[new_buffer_offset++] = array[texture.channelMapping[2]];
-                        new_buffer[new_buffer_offset++] = array[texture.channelMapping[3]];
-                    }
-                    device.uploadTextureData(gfx_texture, mipLevel, [new_buffer]);
+                    const remapped_rgba_pixels = remap_channels(rgbaPixels, texture.channelMapping);
+                    device.uploadTextureData(gfx_texture, mipLevel, [remapped_rgba_pixels]);
                 }
             );
         }
     }
 
     return gfx_texture_array;
+}
+
+// textures can specify a mapping between each channel of the texture data and the final texture's channels
+// for example, a monochrome texture might use the red channel for RGB, and use the green channel for A
+// before uploading the texture to the gpu, we need to apply this mapping to get the final texture data
+// rgba_pixels: the texture data in RGBA format
+// channel_mapping: an array containing 4 numbers, each specifying which channel to use for the R, G, B, and A channel of the final texture
+// returns a remapped rgba_pixels array
+function remap_channels(rgba_pixels: Uint8Array | Int8Array, channel_mapping: number[]): Uint8Array | Int8Array
+{
+    let offset = 0;
+    for (let i = 0; i < rgba_pixels.byteLength / 4; i++)
+    {
+        const red = rgba_pixels[i * 4];
+        const green = rgba_pixels[i * 4 + 1];
+        const blue = rgba_pixels[i * 4 + 2];
+        const alpha = rgba_pixels[i * 4 + 3];
+        const array = [0, 0xFF, red, green, blue, alpha];
+        rgba_pixels[offset++] = array[channel_mapping[0]];
+        rgba_pixels[offset++] = array[channel_mapping[1]];
+        rgba_pixels[offset++] = array[channel_mapping[2]];
+        rgba_pixels[offset++] = array[channel_mapping[3]];
+    }
+
+    return rgba_pixels;
 }
