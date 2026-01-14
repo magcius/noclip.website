@@ -24,7 +24,7 @@ import { dGlobals } from "./Main.js";
 import { cLib_addCalc, cLib_addCalc0, cLib_addCalc2, cLib_addCalcAngleRad2, cLib_addCalcAngleS, cLib_addCalcAngleS2, cLib_addCalcPosXZ2, cLib_chasePosXZ, cLib_distanceSqXZ, cLib_distanceXZ, cLib_targetAngleX, cLib_targetAngleY, cM_atan2s, cM_rndF, cM_rndFX, cM_s2rad } from "./SComponent.js";
 import { dLib_getWaterY, dLib_waveInit, dLib_waveRot, dLib_wave_c, d_a_sea } from "./d_a_sea.js";
 import { cBgW_Flags, dBgS_GndChk, dBgW } from "./d_bg.js";
-import { EDemoActorFlags, dDemo_setDemoData } from "./d_demo.js";
+import { EDemoActorFlags, dDemo_actor_c, dDemo_setDemoData } from "./d_demo.js";
 import { PeekZResult } from "./d_dlst_peekZ.js";
 import { dComIfGd_addRealShadow, dComIfGd_setShadow, dDlst_alphaModel__Type } from "./d_drawlist.js";
 import { LIGHT_INFLUENCE, LightType, WAVE_INFO, dKy_change_colpat, dKy_checkEventNightStop, dKy_plight_cut, dKy_plight_set, dKy_setLight__OnMaterialParams, dKy_setLight__OnModelInstance, dKy_tevstr_c, dKy_tevstr_init, setLightTevColorType, settingTevStruct } from "./d_kankyo.js";
@@ -33,7 +33,7 @@ import { dPa_splashEcallBack, dPa_trackEcallBack, dPa_waveEcallBack, ParticleGro
 import { dProcName_e } from "./d_procname.js";
 import { ResType, dComIfG_resLoad } from "./d_resorce.js";
 import { dPath, dPath_GetRoomPath, dPath__Point, dStage_Multi_c, dStage_stagInfo_GetSTType } from "./d_stage.js";
-import { fopAcIt_JudgeByID, fopAcM_create, fopAcM_prm_class, fopAcM_searchFromName, fopAc_ac_c } from "./f_op_actor.js";
+import { fopAcIt_JudgeByID, fopAcM_create, fopAcM_delete, fopAcM_prm_class, fopAcM_searchFromName, fopAc_ac_c } from "./f_op_actor.js";
 import { base_process_class, cPhs__Status, fGlobals, fpcEx_Search, fpcPf__Register, fpcSCtRq_Request, fpc_bs__Constructor } from "./framework.js";
 import { mDoExt_3DlineMat1_c, mDoExt_McaMorf, mDoExt_bckAnm, mDoExt_brkAnm, mDoExt_btkAnm, mDoExt_btpAnm, mDoExt_modelEntryDL, mDoExt_modelUpdateDL } from "./m_do_ext.js";
 import { MtxPosition, MtxTrans, calc_mtx, mDoMtx_XYZrotM, mDoMtx_XrotM, mDoMtx_YrotM, mDoMtx_YrotS, mDoMtx_ZXYrotM, mDoMtx_ZrotM, mDoMtx_ZrotS, quatM } from "./m_do_mtx.js";
@@ -6618,18 +6618,79 @@ class d_a_bridge extends fopAc_ac_c {
     }
 }
 
+// Demo-only actors spawned during cutscenes
 class d_a_demo00 extends fopAc_ac_c {
     public static PROCESS_NAME = dProcName_e.d_a_demo00;
 
+    private actionFunc: (demoActor: dDemo_actor_c) => void = this.actStandby;
+
+    // daDemo00_model_c
+    private morf: mDoExt_McaMorf;
+    private model: J3DModelInstance;
+    private bck: mDoExt_bckAnm;
+    private btp: mDoExt_btpAnm;
+    private btk: mDoExt_brkAnm;
+    private brk: mDoExt_brkAnm;
+    // private plight: dDemo_plight_c;
+
+    // daDemo00_shadow_c
+    private shadowId: number = -1;
+    private shadowPos = vec3.create();
+
+    // daDemo00_resID_c
+    private nextModelId: number = -1;
+    private nextBckId: number = -1;
+    private nextPlightId: number = -1;
+
     public override subload(globals: dGlobals): cPhs__Status {
+        dKy_tevstr_init(this.tevStr, globals.mStayNo, 0xFF);
         return cPhs__Status.Next;
     }
 
     public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        // TODO:
     }
 
     public override execute(globals: dGlobals, deltaTimeFrames: number): void {
-        super.execute(globals, deltaTimeFrames);
+        const demoActor = globals.scnPlay.demo.getSystem().getActor(this.demoActorID);
+        if (!demoActor) {
+            fopAcM_delete(globals.frameworkGlobals, this);
+            return;
+        }
+
+        if (demoActor.checkEnable(EDemoActorFlags.HasShape)) {
+            this.nextModelId = demoActor.shapeId;
+        }
+        if (demoActor.checkEnable(EDemoActorFlags.HasAnim)) {
+            this.nextBckId = demoActor.bckId;
+        }
+        if (demoActor.checkEnable(EDemoActorFlags.HasData)) {
+            // TODO:
+        }
+
+        this.actionFunc(demoActor);
+    }
+
+    private actStandby(demoActor: dDemo_actor_c): void {
+        if (this.nextModelId != -1 || this.nextPlightId != -1) {
+
+            // createHeap
+            // TODO:
+
+            if (this.model != null) {
+                this.cullMtx = this.model.modelMatrix;
+                demoActor.model = this.model;
+                if (this.morf) {
+                    demoActor.animFrameMax = this.morf.frameCtrl.endFrame;
+                }
+            }
+
+            this.actionFunc = this.actPerformance;
+        }
+    }
+
+    private actPerformance(demoActor: dDemo_actor_c): void {
+        // TODO:
     }
 }
 
