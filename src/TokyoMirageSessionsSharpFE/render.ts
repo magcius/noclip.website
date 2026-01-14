@@ -137,7 +137,6 @@ class fshp_renderer
     private program: TMSFEProgram;
     private sampler_bindings: GfxSamplerBinding[] = [];
     private do_not_render: boolean = false;
-    private use_skinning: boolean = false;
 
     constructor(device: GfxDevice, renderHelper: GfxRenderHelper, fmdl: FMDL, shape_index: number, bntx: BNTX.BNTX, gfx_texture_array: GfxTexture[])
     {
@@ -191,20 +190,26 @@ class fshp_renderer
         if (fshp.skin_bone_count == 0)
         {
             // mesh uses it's bone's transformation matrix
-            const transformation_matrix = recursive_bone_transform(fshp.bone_index, fskl)
+            const transformation_matrix = recursive_bone_transform(fshp.bone_index, fskl);
             this.bone_matrix_array.push(transformation_matrix);
         }
-        else
+        if (fshp.skin_bone_count == 1)
         {
             assert(fskl.smooth_rigid_indices.length < BONE_MATRIX_MAX_LENGTH);
 
-            this.use_skinning = true;
             this.bone_matrix_array = [];
             for (let i = 0; i < fskl.smooth_rigid_indices.length; i++)
             {
                 const transformation_matrix = recursive_bone_transform(fskl.smooth_rigid_indices[i], fskl)
                 this.bone_matrix_array.push(transformation_matrix);
             }
+        }
+        if (fshp.skin_bone_count == 2)
+        {
+            // mesh uses it's bone's parent bone transformation matrix?? this seems incorrect but it works
+            const bone = fskl.bones[fshp.bone_index]
+            const transformation_matrix = recursive_bone_transform(bone.parent_index, fskl);
+            this.bone_matrix_array.push(transformation_matrix);
         }
 
         // setup sampler

@@ -50,8 +50,13 @@ void mainVS()
     #elif ${this.fshp.skin_bone_count} == 1
     vec3 WorldPosition = UnpackMatrix(u_BoneMatrix[a_BlendIndex0]) * vec4(a_Position, 1.0);
 
-    #else
-    vec3 WorldPosition = a_Position;
+    #elif ${this.fshp.skin_bone_count} == 2
+    // mat4x3 t_WorldFromLocalMatrix = mat4x3(0.0);
+    // t_WorldFromLocalMatrix += UnpackMatrix(u_BoneMatrix[a_BlendIndex0.x]) * a_BlendWeight0.x;
+    // t_WorldFromLocalMatrix += UnpackMatrix(u_BoneMatrix[a_BlendIndex0.y]) * a_BlendWeight0.y;
+    // vec3 WorldPosition = t_WorldFromLocalMatrix * vec4(a_Position, 1.0);
+
+    vec3 WorldPosition = UnpackMatrix(u_BoneMatrix[0]) * vec4(a_Position, 1.0);
 
     #endif
     

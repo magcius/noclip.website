@@ -71,11 +71,11 @@ function remap_channels(rgba_pixels: Uint8Array | Int8Array, channel_mapping: nu
         const green = rgba_pixels[i * 4 + 1];
         const blue = rgba_pixels[i * 4 + 2];
         const alpha = rgba_pixels[i * 4 + 3];
-        const array = [0, 0xFF, red, green, blue, alpha];
-        rgba_pixels[offset++] = array[channel_mapping[0]];
-        rgba_pixels[offset++] = array[channel_mapping[1]];
-        rgba_pixels[offset++] = array[channel_mapping[2]];
-        rgba_pixels[offset++] = array[channel_mapping[3]];
+        const channel_array = [0, 0xFF, red, green, blue, alpha];
+        rgba_pixels[offset++] = channel_array[channel_mapping[0]];
+        rgba_pixels[offset++] = channel_array[channel_mapping[1]];
+        rgba_pixels[offset++] = channel_array[channel_mapping[2]];
+        rgba_pixels[offset++] = channel_array[channel_mapping[3]];
     }
 
     return rgba_pixels;
