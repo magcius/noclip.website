@@ -1,11 +1,6 @@
 import type { BAMFile } from "../bam";
 import { AssetVersion, type DataStream } from "../common";
-import {
-  CopyContext,
-  readObjectRefs,
-  readTypedRefs,
-  registerBAMObject,
-} from "./base";
+import { type CopyContext, readTypedRefs, registerBAMObject } from "./base";
 import { CollisionSolid } from "./CollisionSolid";
 import { type DebugInfo, dbgFlags, dbgNum, dbgRefs } from "./debug";
 import { PandaNode } from "./PandaNode";

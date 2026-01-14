@@ -285,7 +285,11 @@ export class PandaNode extends BAMObject {
   }
 
   set p(pitch: number) {
-    this.hpr = vec3.fromValues(this.transform.hpr[0], pitch, this.transform.hpr[2]);
+    this.hpr = vec3.fromValues(
+      this.transform.hpr[0],
+      pitch,
+      this.transform.hpr[2],
+    );
   }
 
   set scale(scale: ReadonlyVec3) {
@@ -467,6 +471,12 @@ export class PandaNode extends BAMObject {
       target.addChild(ctx.clone(child), sort);
     }
     return target;
+  }
+
+  cloneTo(target: PandaNode): this {
+    const cloned = this.clone();
+    target.addChild(cloned);
+    return cloned;
   }
 
   override getDebugInfo(): DebugInfo {

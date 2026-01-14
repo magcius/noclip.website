@@ -231,16 +231,13 @@ function formatValue(value: DebugValue, indent: number = 0): string {
     }
     case "refs": {
       if (value.objs.length === 0) return "[]";
-      if (value.objs.length <= 4) {
-        const refs = value.objs
-          .map((obj) => {
-            if (obj === null) return "null";
-            return `${obj.constructor.name} ${formatDebugInfo(obj.getDebugInfo(), indent)}`;
-          })
-          .join(", ");
-        return `[${refs}]`;
-      }
-      return `[${value.objs.length} refs]`;
+      const refs = value.objs
+        .map((obj) => {
+          if (obj === null) return "null";
+          return `${obj.constructor.name} ${formatDebugInfo(obj.getDebugInfo(), indent)}`;
+        })
+        .join(", ");
+      return `[${refs}]`;
     }
     case "vec2":
     case "vec3":

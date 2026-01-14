@@ -1,8 +1,8 @@
 import { mat4 } from "gl-matrix";
 import type { BAMFile } from "../bam";
 import type { DataStream } from "../common";
-import { CopyContext, registerBAMObject } from "./base";
-import { type DebugInfo, dbgMat4, dbgStr } from "./debug";
+import { type CopyContext, registerBAMObject } from "./base";
+import { type DebugInfo, dbgMat4 } from "./debug";
 import { MovingPartBase } from "./MovingPartBase";
 
 /**

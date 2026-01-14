@@ -2,7 +2,12 @@ import { vec3 } from "gl-matrix";
 import { AABB } from "../../Geometry";
 import type { BAMFile } from "../bam";
 import { AssetVersion, type DataStream } from "../common";
-import { BAMObject, CopyContext, readTypedRefs, registerBAMObject } from "./base";
+import {
+  BAMObject,
+  type CopyContext,
+  readTypedRefs,
+  registerBAMObject,
+} from "./base";
 import { type DebugInfo, dbgEnum, dbgNum, dbgRef, dbgRefs } from "./debug";
 import { GeomPrimitive } from "./GeomPrimitive";
 import type {

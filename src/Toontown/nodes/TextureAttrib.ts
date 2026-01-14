@@ -1,7 +1,7 @@
 import type { BAMFile } from "../bam";
 import { AssetVersion, type DataStream } from "../common";
 import type { MaterialData } from "../geom";
-import { CopyContext, readTypedRefs, registerBAMObject } from "./base";
+import { type CopyContext, readTypedRefs, registerBAMObject } from "./base";
 import {
   type DebugInfo,
   dbgArray,

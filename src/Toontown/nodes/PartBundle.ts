@@ -1,8 +1,8 @@
 import { mat4 } from "gl-matrix";
 import type { BAMFile } from "../bam";
 import { AssetVersion, type DataStream } from "../common";
-import { type BAMObject, CopyContext, registerBAMObject } from "./base";
-import { type DebugInfo, dbgBool, dbgMat4, dbgNum, dbgRef, dbgStr } from "./debug";
+import { type BAMObject, type CopyContext, registerBAMObject } from "./base";
+import { type DebugInfo, dbgBool, dbgMat4, dbgNum, dbgRef } from "./debug";
 import { PartGroup } from "./PartGroup";
 
 /**

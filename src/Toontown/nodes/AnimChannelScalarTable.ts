@@ -1,8 +1,9 @@
 import type { BAMFile } from "../bam";
 import type { DataStream } from "../common";
+import { FFTCompressor } from "../FFTCompressor";
 import { AnimChannelBase } from "./AnimChannelBase";
-import { CopyContext, registerBAMObject } from "./base";
-import { type DebugInfo, dbgNum, dbgTypedArray } from "./debug";
+import { type CopyContext, registerBAMObject } from "./base";
+import { type DebugInfo, dbgTypedArray } from "./debug";
 
 /**
  * Scalar animation channel with value table.
@@ -18,7 +19,53 @@ export class AnimChannelScalarTable extends AnimChannelBase {
 
     this.compressed = data.readBool();
     if (this.compressed) {
-      throw new Error("Compressed animation channels not yet supported");
+      // Compressed channels can be either discrete (indexed) or continuous (FFT)
+      const indexLength = data.readUint8();
+
+      if (indexLength < 0xff) {
+        // Discrete values using lookup table
+        if (indexLength > 0) {
+          // Read the index table
+          const index = new Float32Array(indexLength);
+          for (let i = 0; i < indexLength; i++) {
+            index[i] = data.readFloat32();
+          }
+
+          // Read the channel values
+          const tableLength = data.readUint16();
+
+          if (indexLength === 1) {
+            // With only one index value, all values are the same
+            this.table = new Float32Array(tableLength);
+            this.table.fill(index[0]);
+          } else {
+            // Read nibble-packed index values
+            this.table = new Float32Array(tableLength);
+            let i = 0;
+            while (i < tableLength - 1) {
+              const num = data.readUint8();
+              const i1 = (num >> 4) & 0xf;
+              const i2 = num & 0xf;
+              this.table[i++] = index[i1];
+              this.table[i++] = index[i2];
+            }
+            // Handle odd last value
+            if (i < tableLength) {
+              const num = data.readUint8();
+              const i1 = (num >> 4) & 0xf;
+              this.table[i] = index[i1];
+            }
+          }
+        } else {
+          // Empty table
+          this.table = new Float32Array(0);
+        }
+      } else {
+        // Continuous channels using FFT compression
+        const compressor = new FFTCompressor();
+        compressor.readHeader(data);
+        this.table = compressor.readReals(data);
+      }
     } else {
       const size = data.readUint16();
       this.table = data.readFloat32Array(size);

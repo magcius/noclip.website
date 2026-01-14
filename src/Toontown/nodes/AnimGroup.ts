@@ -1,7 +1,12 @@
 import type { BAMFile } from "../bam";
 import type { DataStream } from "../common";
 import type { AnimBundle } from "./AnimBundle";
-import { BAMObject, CopyContext, readTypedRefs, registerBAMObject } from "./base";
+import {
+  BAMObject,
+  type CopyContext,
+  readTypedRefs,
+  registerBAMObject,
+} from "./base";
 import { type DebugInfo, dbgRefs, dbgStr } from "./debug";
 
 /**
@@ -13,14 +18,15 @@ import { type DebugInfo, dbgRefs, dbgStr } from "./debug";
  */
 export class AnimGroup extends BAMObject {
   public name = "";
-  public root: AnimBundle | null = null; // Reference to containing AnimBundle
+  public root: AnimBundle | null = null;
   public children: AnimGroup[] = [];
 
   override load(file: BAMFile, data: DataStream) {
     super.load(file, data);
 
     this.name = data.readString();
-    data.readObjectId(); // rootRef; parent will set root on load
+    // Can't use getTyped because of circular dependency
+    this.root = file.getObject(data.readObjectId()) as AnimBundle | null;
 
     const numChildren = data.readUint16();
     this.children = readTypedRefs(file, data, numChildren, AnimGroup);

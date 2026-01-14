@@ -1,7 +1,7 @@
 import type { BAMFile } from "../bam";
 import type { DataStream } from "../common";
 import { AnimGroup } from "./AnimGroup";
-import { CopyContext, registerBAMObject } from "./base";
+import { type CopyContext, registerBAMObject } from "./base";
 import { type DebugInfo, dbgNum } from "./debug";
 
 /**
@@ -12,11 +12,6 @@ import { type DebugInfo, dbgNum } from "./debug";
 export class AnimBundle extends AnimGroup {
   public fps = 0;
   public numFrames = 0;
-
-  constructor() {
-    super();
-    this.root = this;
-  }
 
   override load(file: BAMFile, data: DataStream) {
     super.load(file, data);

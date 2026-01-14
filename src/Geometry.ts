@@ -1,6 +1,6 @@
 
 import { vec3, ReadonlyVec3, ReadonlyMat4, vec4, ReadonlyVec4, mat4 } from "gl-matrix";
-import { GfxClipSpaceNearZ } from "./gfx/platform/GfxPlatform.js";
+import type { GfxClipSpaceNearZ } from "./gfx/platform/GfxPlatform.js";
 import { nArray } from "./util.js";
 import type { ConvexHull } from "../rust/pkg/noclip_support";
 import { rust } from "./rustlib.js";
@@ -325,9 +325,9 @@ export class Frustum {
         h.push_plane(m[3] - m[0], m[7] - m[4], m[11] - m[8], m[15] - m[12]); // Right
         h.push_plane(m[3] - m[1], m[7] - m[5], m[11] - m[9], m[15] - m[13]); // Bottom
 
-        if (clipSpaceNearZ === GfxClipSpaceNearZ.NegativeOne) {
+        if (clipSpaceNearZ === -1) {
             h.push_plane(m[3] + m[2], m[7] + m[6], m[11] + m[10], m[15] + m[14]); // Near
-        } else if (clipSpaceNearZ === GfxClipSpaceNearZ.Zero) {
+        } else if (clipSpaceNearZ === 0) {
             h.push_plane(m[2], m[6], m[10], m[14]); // Near
         }
 

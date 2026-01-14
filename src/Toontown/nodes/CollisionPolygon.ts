@@ -1,7 +1,7 @@
 import { mat4, vec2 } from "gl-matrix";
 import type { BAMFile } from "../bam";
 import { AssetVersion, type DataStream } from "../common";
-import { CopyContext, registerBAMObject } from "./base";
+import { type CopyContext, registerBAMObject } from "./base";
 import { CollisionPlane } from "./CollisionPlane";
 import {
   type DebugInfo,

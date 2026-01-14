@@ -9,6 +9,8 @@ import {
   DepthWriteAttrib,
   DepthWriteMode,
   GeomNode,
+  ModelNode,
+  PreserveTransform,
   Texture,
   TextureAttrib,
   TransformState,
@@ -199,10 +201,11 @@ export class DNASceneBuilder {
   }
 
   private visitVisGroup(node: DNAVisGroup, parentNode: PandaNode): void {
-    // TODO VisGroup handling
-
+    const thisNode = parentNode.attachNewNode(node.name);
+    thisNode.tags.set("DNAType", "DNAVisGroup"); // custom
+    // TODO rest of VisGroup handling
     for (const child of node.children) {
-      this.visitNode(child, parentNode);
+      this.visitNode(child, thisNode);
     }
   }
 
@@ -212,18 +215,17 @@ export class DNASceneBuilder {
   ): void {
     const thisNode = parentNode.attachNewNode(node.name);
     thisNode.transform = buildTransformState(node);
-
     for (const child of node.children) {
       this.visitNode(child, thisNode);
     }
   }
 
   private visitProp(node: DNAProp, parentNode: PandaNode): void {
-    const thisNode = parentNode.attachNewNode(node.name);
+    const thisNode = this.addGeometryFromCode(node.code, parentNode);
+    if (!thisNode) return;
+    thisNode.name = node.name;
     thisNode.transform = buildTransformState(node);
     if (node.color) thisNode.setColorScale(node.color);
-    this.addGeometryFromCode(node.code, thisNode);
-
     for (const child of node.children) {
       this.visitNode(child, thisNode);
     }
@@ -233,13 +235,12 @@ export class DNASceneBuilder {
    * Visit an animated prop node
    */
   private visitAnimProp(node: DNAAnimProp, parentNode: PandaNode): void {
-    const thisNode = parentNode.attachNewNode(node.name);
+    const thisNode = this.addGeometryFromCode(node.code, parentNode);
+    if (!thisNode) return;
+    thisNode.name = node.name;
     thisNode.transform = buildTransformState(node);
+    thisNode.tags.set("DNAAnim", node.anim);
     if (node.color) thisNode.setColorScale(node.color);
-    this.addGeometryFromCode(node.code, thisNode);
-
-    // TODO animation handling
-
     for (const child of node.children) {
       this.visitNode(child, thisNode);
     }
@@ -252,10 +253,13 @@ export class DNASceneBuilder {
     node: DNAInteractiveProp,
     parentNode: PandaNode,
   ): void {
-    const thisNode = parentNode.attachNewNode(node.name);
+    const thisNode = this.addGeometryFromCode(node.code, parentNode);
+    if (!thisNode) return;
+    thisNode.name = node.name;
     thisNode.transform = buildTransformState(node);
+    thisNode.tags.set("DNAAnim", node.anim);
+    thisNode.tags.set("DNACellIndex", node.cellId.toString());
     if (node.color) thisNode.setColorScale(node.color);
-    this.addGeometryFromCode(node.code, thisNode);
 
     // TODO animation handling
 
@@ -268,19 +272,16 @@ export class DNASceneBuilder {
    * Visit a street node
    */
   private visitStreet(node: DNAStreet, parentNode: PandaNode): void {
-    const thisNode = parentNode.attachNewNode(node.name);
+    const thisNode = this.addGeometryFromCode(node.code, parentNode);
+    if (!thisNode) return;
+    thisNode.name = node.name;
     thisNode.transform = buildTransformState(node);
-    const geomNode = this.addGeometryFromCode(node.code, thisNode);
-    if (!geomNode) {
-      console.error(`Failed to load geometry for street ${node.name}`);
-      return;
-    }
 
     const streetTexture = this.storage.findTexture(node.streetTexture);
     const sidewalkTexture = this.storage.findTexture(node.sidewalkTexture);
     const curbTexture = this.storage.findTexture(node.curbTexture as string);
 
-    const streetNode = geomNode.find("**/*_street");
+    const streetNode = thisNode.find("**/*_street");
     if (streetNode && streetTexture) {
       const attrib = new TextureAttrib();
       attrib.texture = new Texture();
@@ -290,7 +291,7 @@ export class DNASceneBuilder {
       if (node.streetColor) streetNode.setColorScale(node.streetColor);
     }
 
-    const sidewalkNode = geomNode.find("**/*_sidewalk");
+    const sidewalkNode = thisNode.find("**/*_sidewalk");
     if (sidewalkNode && sidewalkTexture) {
       const attrib = new TextureAttrib();
       attrib.texture = new Texture();
@@ -300,7 +301,7 @@ export class DNASceneBuilder {
       if (node.sidewalkColor) sidewalkNode.setColorScale(node.sidewalkColor);
     }
 
-    const curbNode = geomNode.find("**/*_curb");
+    const curbNode = thisNode.find("**/*_curb");
     if (curbNode && node.curbTexture && curbTexture) {
       const attrib = new TextureAttrib();
       attrib.texture = new Texture();
@@ -310,9 +311,7 @@ export class DNASceneBuilder {
       if (node.curbColor) curbNode.setColorScale(node.curbColor);
     }
 
-    for (const child of node.children) {
-      this.visitNode(child, thisNode);
-    }
+    // No children to visit
   }
 
   /**
@@ -322,11 +321,10 @@ export class DNASceneBuilder {
     node: DNALandmarkBuilding,
     parentNode: PandaNode,
   ): void {
-    const thisNode = parentNode.attachNewNode(node.name);
+    const thisNode = this.addGeometryFromCode(node.code, parentNode);
+    if (!thisNode) return;
+    thisNode.name = node.name;
     thisNode.transform = buildTransformState(node);
-    if (!this.addGeometryFromCode(node.code, thisNode)) {
-      return;
-    }
 
     // Hide overlapping doors for HQ buildings
     if (node.buildingType === "hq") {
@@ -347,11 +345,10 @@ export class DNASceneBuilder {
     node: DNAAnimBuilding,
     parentNode: PandaNode,
   ): void {
-    const thisNode = parentNode.attachNewNode(node.name);
+    const thisNode = this.addGeometryFromCode(node.code, parentNode);
+    if (!thisNode) return;
     thisNode.transform = buildTransformState(node);
-    if (!this.addGeometryFromCode(node.code, thisNode)) {
-      return;
-    }
+    thisNode.tags.set("DNAAnim", node.anim);
 
     for (const child of node.children) {
       this.visitNode(child, thisNode);
@@ -708,11 +705,42 @@ export class DNASceneBuilder {
    * Add geometry from a code reference
    */
   public addGeometryFromCode(code: string, node: PandaNode): PandaNode | null {
-    if (!code) return null;
-    const geomNode = this.getNodeByCode(code);
-    if (!geomNode) return null;
-    const cloned = geomNode.clone();
-    node.addChild(cloned);
+    if (code === "DCS") {
+      const result = ModelNode.create(code);
+      result.preserveTransform = PreserveTransform.Net;
+      node.addChild(result);
+      return result;
+    }
+
+    const nodeRef = this.storage.findNode(code);
+    if (!nodeRef) {
+      this.missingCodes.add(code);
+      return null;
+    }
+
+    const modelPath = `${nodeRef.modelPath}.bam`;
+    const bamFile = this.modelCache.get(modelPath);
+    if (!bamFile) {
+      console.warn(`Model not loaded: ${modelPath} for code ${code}`);
+      return null;
+    }
+
+    let geomNode: PandaNode;
+    if (nodeRef.nodeName) {
+      const found = bamFile.find(`**/${nodeRef.nodeName}`);
+      if (!found) {
+        console.warn(`Node not found: ${nodeRef.nodeName} in ${modelPath}`);
+        return null;
+      }
+      geomNode = found;
+    } else {
+      geomNode = bamFile.getRoot();
+    }
+
+    const cloned = geomNode.cloneTo(node);
+    cloned.tags.set("DNACode", code);
+    cloned.tags.set("DNARoot", nodeRef.category);
+    cloned.tags.set("DNAModel", nodeRef.modelPath); // custom
     return cloned;
   }
 

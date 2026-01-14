@@ -1,8 +1,8 @@
 import type { BAMFile } from "../bam";
 import type { DataStream } from "../common";
-import { CopyContext, registerBAMObject } from "./base";
+import { type CopyContext, registerBAMObject } from "./base";
 import { Character } from "./Character";
-import { type DebugInfo, dbgNum, dbgRef } from "./debug";
+import { type DebugInfo, dbgRef } from "./debug";
 import { RenderEffect } from "./RenderEffects";
 
 /**

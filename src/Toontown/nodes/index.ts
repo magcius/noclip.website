@@ -10,17 +10,21 @@ export { AnimChannelMatrixXfmTable } from "./AnimChannelMatrixXfmTable";
 export { AnimChannelScalarTable } from "./AnimChannelScalarTable";
 export { AnimGroup } from "./AnimGroup";
 
-// Character animation (pre-5.0)
+// Character animation
 export { Character } from "./Character";
 export { CharacterJoint } from "./CharacterJoint";
 export { CharacterJointBundle } from "./CharacterJointBundle";
 export { CharacterSlider } from "./CharacterSlider";
 export { ComputedVertices } from "./ComputedVertices";
+export { JointVertexTransform } from "./JointVertexTransform";
 export { MovingPartBase } from "./MovingPartBase";
 export { MovingPartMatrix } from "./MovingPartMatrix";
 export { MovingPartScalar } from "./MovingPartScalar";
 export { PartBundle } from "./PartBundle";
 export { PartGroup } from "./PartGroup";
+export { TransformBlend, type TransformEntry } from "./TransformBlend";
+export { TransformBlendTable } from "./TransformBlendTable";
+export { TransformTable } from "./TransformTable";
 
 // Collision
 export { CollisionNode } from "./CollisionNode";
@@ -98,7 +102,7 @@ export { LODNode } from "./LODNode";
 export { PandaNode } from "./PandaNode";
 export { SequenceNode, PlayMode } from "./SequenceNode";
 export { InternalName } from "./InternalName";
-export { ModelNode, ModelRoot } from "./ModelNode";
+export { ModelNode, ModelRoot, PreserveTransform } from "./ModelNode";
 
 // Curves
 export { CubicCurveseg } from "./CubicCurveseg";

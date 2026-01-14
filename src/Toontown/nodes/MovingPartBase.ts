@@ -1,7 +1,7 @@
 import type { BAMFile } from "../bam";
 import { AssetVersion, type DataStream } from "../common";
 import { AnimChannelBase } from "./AnimChannelBase";
-import { CopyContext, registerBAMObject } from "./base";
+import { type CopyContext, registerBAMObject } from "./base";
 import { type DebugInfo, dbgRef } from "./debug";
 import { PartGroup } from "./PartGroup";
 

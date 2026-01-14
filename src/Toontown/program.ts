@@ -3,11 +3,30 @@ import { DeviceProgram } from "../Program.js";
 import type { CachedGeometryData, MaterialData } from "./geom.js";
 import { ColorType, PandaCompareFunc } from "./nodes/index.js";
 
+/**
+ * Attribute locations for vertex shader inputs.
+ */
+export const AttributeLocation = {
+  Position: 0,
+  Normal: 1,
+  Color: 2,
+  TexCoord: 3,
+  BoneWeights: 4,
+  BoneIndices: 5,
+} as const;
+
+/**
+ * Maximum number of bone matrices per draw call.
+ * Arbitrary value, can be increased if needed.
+ */
+export const MAX_BONES = 17;
+
 export type ToontownProgramProps = {
   hasTexture: boolean;
   hasNormals: boolean;
   hasColors: boolean;
   useVertexColors: boolean;
+  hasSkinning: boolean;
   alphaTestMode: PandaCompareFunc;
   alphaTestThreshold: number;
 };
@@ -22,6 +41,7 @@ export function createProgramProps(
     hasColors: geomData.hasColors,
     useVertexColors:
       geomData.hasColors && material.colorType === ColorType.Vertex,
+    hasSkinning: geomData.skinningBuffer !== null,
     alphaTestMode: material.alphaTestMode,
     alphaTestThreshold: material.alphaTestThreshold,
   };
@@ -36,6 +56,7 @@ export function programPropsEqual(
     a.hasNormals === b.hasNormals &&
     a.hasColors === b.hasColors &&
     a.useVertexColors === b.useVertexColors &&
+    a.hasSkinning === b.hasSkinning &&
     a.alphaTestMode === b.alphaTestMode &&
     a.alphaTestThreshold === b.alphaTestThreshold
   );
@@ -44,6 +65,7 @@ export function programPropsEqual(
 export class ToontownProgram extends DeviceProgram {
   public static ub_SceneParams = 0;
   public static ub_DrawParams = 1;
+  public static ub_SkinningParams = 2;
 
   constructor(props: ToontownProgramProps) {
     super();
@@ -51,11 +73,13 @@ export class ToontownProgram extends DeviceProgram {
     this.setDefineBool("HAS_NORMAL", props.hasNormals);
     this.setDefineBool("HAS_COLOR", props.hasColors);
     this.setDefineBool("USE_VERTEX_COLORS", props.useVertexColors);
+    this.setDefineBool("HAS_SKINNING", props.hasSkinning);
     this.setDefineBool("HAS_ALPHA_TEST", props.alphaTestThreshold !== null);
     this.setDefineString(
       "ALPHA_THRESHOLD",
       (props.alphaTestThreshold ?? 0).toPrecision(3),
     );
+    this.setDefineString("MAX_BONES", MAX_BONES.toString());
     switch (props.alphaTestMode) {
       case PandaCompareFunc.None:
       case PandaCompareFunc.Always:
@@ -101,21 +125,31 @@ layout(std140) uniform ub_DrawParams {
     vec4 u_ColorScale;
 };
 
+#ifdef HAS_SKINNING
+layout(std140) uniform ub_SkinningParams {
+    Mat3x4 u_BoneMatrix[MAX_BONES];
+};
+#endif
+
 #ifdef HAS_TEXTURE
 uniform sampler2D u_Texture;
 #endif
 `;
 
   public override vert = `
-layout(location = 0) in vec3 a_Position;
+layout(location = ${AttributeLocation.Position}) in vec3 a_Position;
 #ifdef HAS_NORMAL
-layout(location = 1) in vec3 a_Normal;
+layout(location = ${AttributeLocation.Normal}) in vec3 a_Normal;
 #endif
 #ifdef HAS_COLOR
-layout(location = 2) in vec4 a_Color;
+layout(location = ${AttributeLocation.Color}) in vec4 a_Color;
 #endif
 #ifdef HAS_TEXTURE
-layout(location = 3) in vec2 a_TexCoord;
+layout(location = ${AttributeLocation.TexCoord}) in vec2 a_TexCoord;
+#endif
+#ifdef HAS_SKINNING
+layout(location = ${AttributeLocation.BoneWeights}) in vec4 a_BoneWeights;
+layout(location = ${AttributeLocation.BoneIndices}) in uvec4 a_BoneIndices;
 #endif
 
 #ifdef USE_VERTEX_COLORS
@@ -125,12 +159,37 @@ out vec4 v_Color;
 out vec2 v_TexCoord;
 #endif
 
+#ifdef HAS_SKINNING
+mat4x3 GetSkinMatrix() {
+    mat4x3 result = UnpackMatrix(u_BoneMatrix[a_BoneIndices.x]) * a_BoneWeights.x;
+    result += UnpackMatrix(u_BoneMatrix[a_BoneIndices.y]) * a_BoneWeights.y;
+    result += UnpackMatrix(u_BoneMatrix[a_BoneIndices.z]) * a_BoneWeights.z;
+    result += UnpackMatrix(u_BoneMatrix[a_BoneIndices.w]) * a_BoneWeights.w;
+    return result;
+}
+#endif
+
 void main() {
     mat4 t_ModelMatrix = UnpackMatrix(u_ModelMatrix);
     mat4 t_ViewMatrix = UnpackMatrix(u_ViewMatrix);
     mat4 t_Projection = UnpackMatrix(u_Projection);
 
-    vec4 t_WorldPos = t_ModelMatrix * vec4(a_Position, 1.0);
+    vec3 t_LocalPos = a_Position;
+#ifdef HAS_NORMAL
+    vec3 t_LocalNormal = a_Normal;
+#endif
+
+#ifdef HAS_SKINNING
+    // Apply skinning transformation in local space
+    mat4x3 t_SkinMatrix = GetSkinMatrix();
+    t_LocalPos = t_SkinMatrix * vec4(a_Position, 1.0);
+#ifdef HAS_NORMAL
+    // Transform normal (no translation, just rotation/scale)
+    t_LocalNormal = t_SkinMatrix * vec4(a_Normal, 0.0);
+#endif
+#endif
+
+    vec4 t_WorldPos = t_ModelMatrix * vec4(t_LocalPos, 1.0);
     vec4 t_ViewPos = t_ViewMatrix * t_WorldPos;
     gl_Position = t_Projection * t_ViewPos;
 

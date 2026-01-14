@@ -81,8 +81,6 @@ function countNodes(nodes: DNAFile["root"], counts: Map<string, number>): void {
           counts.set("windows", (counts.get("windows") || 0) + 1);
         if (wall.cornice)
           counts.set("cornice", (counts.get("cornice") || 0) + 1);
-        if (wall.flatDoor)
-          counts.set("flat_door", (counts.get("flat_door") || 0) + 1);
       }
     }
   }

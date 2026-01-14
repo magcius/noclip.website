@@ -1,16 +1,11 @@
 import { mat4 } from "gl-matrix";
 import type { BAMFile } from "../bam";
 import { AssetVersion, type DataStream } from "../common";
-import {
-  type BAMObject,
-  CopyContext,
-  readTypedRefs,
-  registerBAMObject,
-} from "./base";
-import { type DebugInfo, dbgNum, dbgRef, dbgRefs, dbgStr } from "./debug";
+import { type CopyContext, readTypedRefs, registerBAMObject } from "./base";
+import { Character } from "./Character";
+import { type DebugInfo, dbgMat4, dbgRef, dbgRefs } from "./debug";
 import { MovingPartMatrix } from "./MovingPartMatrix";
 import { PandaNode } from "./PandaNode";
-import { Character } from "./Character";
 
 /**
  * Stores transform matrices for skeletal animation.
@@ -19,10 +14,14 @@ import { Character } from "./Character";
  * - BAM 6.4+: extra pointer to Character before net_nodes
  */
 export class CharacterJoint extends MovingPartMatrix {
-  public character: Character | null = null; // 6.4+ only TODO circular ref
+  public character: Character | null = null; // 6.4+ only
   public netNodes: PandaNode[] = [];
   public localNodes: PandaNode[] = [];
   public initialNetTransformInverse = mat4.create();
+
+  // Runtime fields (not serialized, computed during animation)
+  /** World-space transform, computed by chaining value with parent's netTransform */
+  public netTransform = mat4.create();
 
   override load(file: BAMFile, data: DataStream) {
     super.load(file, data);
@@ -60,7 +59,7 @@ export class CharacterJoint extends MovingPartMatrix {
     info.set("localNodes", dbgRefs(this.localNodes));
     info.set(
       "initialNetTransformInverse",
-      dbgStr(`[${Array.from(this.initialNetTransformInverse).join(", ")}]`),
+      dbgMat4(this.initialNetTransformInverse),
     );
     return info;
   }

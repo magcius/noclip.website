@@ -1,7 +1,7 @@
 import { vec3 } from "gl-matrix";
 import type { BAMFile } from "../bam";
 import { AssetVersion, type DataStream } from "../common";
-import { CopyContext, registerBAMObject } from "./base";
+import { type CopyContext, registerBAMObject } from "./base";
 import { type DebugInfo, dbgArray, dbgStr, dbgVec3 } from "./debug";
 import { PandaNode } from "./PandaNode";
 
@@ -41,6 +41,12 @@ export class LODNode extends PandaNode {
       } else {
         this.switches.push({ in: inDist, out: outDist });
       }
+    }
+
+    // Hide all children except the first one (HACK)
+    // TODO implement proper LOD switching
+    for (let i = 1; i < this.children.length; i++) {
+      this.children[i][0].hide();
     }
   }
 

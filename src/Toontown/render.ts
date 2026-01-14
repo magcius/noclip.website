@@ -9,6 +9,7 @@ import {
 } from "../gfx/helpers/RenderGraphHelpers.js";
 import { reverseDepthForCompareMode } from "../gfx/helpers/ReversedDepthHelpers.js";
 import {
+  fillMatrix4x3,
   fillMatrix4x4,
   fillVec4v,
 } from "../gfx/helpers/UniformBufferHelpers.js";
@@ -40,6 +41,7 @@ import { CalcBillboardFlags, calcBillboardMatrix } from "../MathHelpers.js";
 import { TextureMapping } from "../TextureHolder.js";
 import * as UI from "../ui.js";
 import type * as Viewer from "../viewer.js";
+import type { AnimatedCharacter } from "./Animation/AnimatedCharacter.js";
 import { BinCollector } from "./cullBin.js";
 import {
   type CachedGeometryData,
@@ -62,6 +64,7 @@ import {
   FilterType,
   type Geom,
   GeomNode,
+  type JointVertexTransform,
   MAX_PRIORITY,
   PandaCompareFunc,
   type PandaNode,
@@ -71,10 +74,12 @@ import {
   TransparencyMode,
   WrapMode,
 } from "./nodes";
+import type { Character } from "./nodes/Character.js";
 import type { GeomEntry } from "./nodes/GeomNode.js";
 import { HierarchicalProfiler } from "./profiler.js";
 import {
   createProgramProps,
+  MAX_BONES,
   programPropsEqual,
   ToontownProgram,
   type ToontownProgramProps,
@@ -211,6 +216,7 @@ export class ToontownRenderer implements Viewer.SceneGfx {
     string,
     { texture: GfxTexture; sampler: GfxSampler }
   > = new Map();
+  private animatedCharacters: Map<Character, AnimatedCharacter> = new Map();
   private profiler = new HierarchicalProfiler({
     enabled: false,
     historySize: 60,
@@ -220,8 +226,13 @@ export class ToontownRenderer implements Viewer.SceneGfx {
   private debugSceneGraphCheckbox: UI.Checkbox | null = null;
   private sceneGraphViewer: SceneGraphViewer | null = null;
 
-  private constructor(device: GfxDevice, scene: PandaNode) {
+  private constructor(
+    device: GfxDevice,
+    scene: PandaNode,
+    animatedCharacters: Map<Character, AnimatedCharacter>,
+  ) {
     this.scene = scene;
+    this.animatedCharacters = animatedCharacters;
     this.renderHelper = new GfxRenderHelper(device);
     this.toggleSceneGraphViewer();
   }
@@ -287,8 +298,9 @@ export class ToontownRenderer implements Viewer.SceneGfx {
     scene: PandaNode,
     loader: ToontownResourceLoader,
     dataFetcher: DataFetcher,
+    animatedCharacters: Map<Character, AnimatedCharacter> = new Map(),
   ): Promise<ToontownRenderer> {
-    const renderer = new ToontownRenderer(device, scene);
+    const renderer = new ToontownRenderer(device, scene, animatedCharacters);
     // Load all textures used in the scene
     await renderer.ensureTexturesLoaded(loader, dataFetcher);
     return renderer;
@@ -486,13 +498,20 @@ export class ToontownRenderer implements Viewer.SceneGfx {
     }
 
     // Set vertex input
+    const vertexBuffers = [{ buffer: geomData.vertexBuffer, byteOffset: 0 }];
+    if (geomData.skinningBuffer !== null) {
+      vertexBuffers.push({ buffer: geomData.skinningBuffer, byteOffset: 0 });
+    }
     renderInst.setVertexInput(
       geomData.inputLayout,
-      [{ buffer: geomData.vertexBuffer, byteOffset: 0 }],
+      vertexBuffers,
       geomData.indexBuffer
         ? { buffer: geomData.indexBuffer, byteOffset: 0 }
         : null,
     );
+
+    // Determine number of uniform buffers needed
+    const numUniformBuffers = geomData.skinningBuffer !== null ? 3 : 2;
 
     // Set texture bindings
     const textureMapping = new TextureMapping();
@@ -502,10 +521,15 @@ export class ToontownRenderer implements Viewer.SceneGfx {
         throw new Error(`Texture ${material.texture.name} not found`);
       textureMapping.gfxTexture = cached.texture;
       textureMapping.gfxSampler = cached.sampler;
-      renderInst.setBindingLayouts([{ numUniformBuffers: 2, numSamplers: 1 }]);
+      renderInst.setBindingLayouts([{ numUniformBuffers, numSamplers: 1 }]);
       renderInst.setSamplerBindingsFromTextureMappings([textureMapping]);
     } else {
-      renderInst.setBindingLayouts([{ numUniformBuffers: 2, numSamplers: 0 }]);
+      renderInst.setBindingLayouts([{ numUniformBuffers, numSamplers: 0 }]);
+    }
+
+    // Setup skinning uniform buffer if needed
+    if (geomData.skinningBuffer !== null) {
+      setupSkinningUniform(renderInst, geomData.skinningTransforms);
     }
 
     const modelMatrix = mat4.clone(netTransform);
@@ -559,6 +583,11 @@ export class ToontownRenderer implements Viewer.SceneGfx {
   private prepareToRender(viewerInput: Viewer.ViewerRenderInput): void {
     this.profiler.beginFrame();
     this.globalDt += viewerInput.deltaTime;
+
+    // Update all animated characters
+    for (const animChar of this.animatedCharacters.values()) {
+      animChar.update(viewerInput.deltaTime);
+    }
 
     const renderInstManager = this.renderHelper.renderInstManager;
     const template = this.renderHelper.pushTemplateRenderInst();
@@ -976,4 +1005,32 @@ function setupDrawUniform(
   offs += fillMatrix4x4(drawParams, offs, modelMatrix);
   offs += fillVec4v(drawParams, offs, material.flatColor);
   offs += fillVec4v(drawParams, offs, material.colorScale);
+}
+
+function setupSkinningUniform(
+  renderInst: GfxRenderInst,
+  transforms: JointVertexTransform[],
+): void {
+  if (transforms.length > MAX_BONES) {
+    console.warn(
+      `Skinning transforms count ${transforms.length} exceeds maximum of ${MAX_BONES}`,
+    );
+  }
+  const numBones = Math.min(transforms.length, MAX_BONES);
+
+  // Allocate uniform buffer for skinning
+  const offs = renderInst.allocateUniformBuffer(
+    ToontownProgram.ub_SkinningParams,
+    MAX_BONES * 12,
+  );
+  const data = renderInst.mapUniformBufferF32(
+    ToontownProgram.ub_SkinningParams,
+  );
+
+  // Fill bone matrices
+  const tempMat = mat4.create();
+  for (let i = 0; i < numBones; i++) {
+    transforms[i].getSkinningMatrix(tempMat);
+    fillMatrix4x3(data, offs + i * 12, tempMat);
+  }
 }

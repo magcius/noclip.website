@@ -1,6 +1,6 @@
 import type { BAMFile } from "../bam";
 import { AssetVersion, type DataStream } from "../common";
-import { CopyContext, registerBAMObject } from "./base";
+import { type CopyContext, registerBAMObject } from "./base";
 import { type DebugInfo, dbgBool, dbgEnum, dbgNum } from "./debug";
 import { PandaNode } from "./PandaNode";
 

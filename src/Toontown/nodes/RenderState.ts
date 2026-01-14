@@ -1,6 +1,6 @@
 import type { BAMFile } from "../bam";
 import type { DataStream } from "../common";
-import { BAMObject, CopyContext, registerBAMObject } from "./base";
+import { BAMObject, type CopyContext, registerBAMObject } from "./base";
 import {
   type DebugInfo,
   dbgArray,
@@ -47,10 +47,12 @@ export class RenderState extends BAMObject {
 
   override copyTo(target: this, ctx: CopyContext): void {
     super.copyTo(target, ctx);
-    target._attribs = this._attribs.map(({ attrib, priority }): RenderAttribEntry => ({
-      attrib: ctx.clone(attrib),
-      priority,
-    }));
+    target._attribs = this._attribs.map(
+      ({ attrib, priority }): RenderAttribEntry => ({
+        attrib: ctx.clone(attrib),
+        priority,
+      }),
+    );
   }
 
   override getDebugInfo(): DebugInfo {

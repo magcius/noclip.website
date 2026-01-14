@@ -1,9 +1,13 @@
-import { ReadonlyVec3, vec3, vec4 } from "gl-matrix";
+import { type ReadonlyVec3, vec3, vec4 } from "gl-matrix";
 import type { GfxDevice } from "../gfx/platform/GfxPlatform";
 import type { SceneContext } from "../SceneBase";
 import type * as Viewer from "../viewer";
+import { AnimatedCharacter } from "./Animation/AnimatedCharacter";
+import type { BAMFile } from "./bam";
 import { DNASceneBuilder } from "./dna/sceneBuilder";
 import {
+  AnimBundleNode,
+  Character,
   CompassEffect,
   CompassEffectProperties,
   CullBinAttrib,
@@ -112,6 +116,7 @@ const Neighborhoods: Record<string, NeighborhoodConfig> = {
       // Ensure the foot path renders in ground cull bin
       scene.find("**/Path")?.setAttrib(CullBinAttrib.create("ground", 10), 1);
 
+      // Generate houses
       const houseModels = [
         "phase_5.5/models/estate/houseA.bam",
         "phase_5.5/models/estate/tt_m_ara_est_house_tiki.bam",
@@ -162,14 +167,6 @@ const Neighborhoods: Record<string, NeighborhoodConfig> = {
         vec4.fromValues(0.753, 0.345, 0.557, 1), // pink
         vec4.fromValues(0.992, 0.843, 0.392, 1), // yellow
       ];
-      const gardenDrops = [
-        vec3.fromValues(25, 68, 0),
-        vec3.fromValues(68, -6, 0),
-        vec3.fromValues(27, -59, 0),
-        vec3.fromValues(-54, -72, 1),
-        vec3.fromValues(-95, -29, 0),
-        vec3.fromValues(-30, 58, 0),
-      ];
 
       const mailboxModel = await loader.loadModel(
         "phase_5.5/models/estate/mailboxHouse.bam",
@@ -191,7 +188,7 @@ const Neighborhoods: Record<string, NeighborhoodConfig> = {
         baseNode.addChild(house);
 
         // Set wall color
-        const colorIndex = i;//Math.floor(Math.random() * houseColors.length);
+        const colorIndex = i; //Math.floor(Math.random() * houseColors.length);
         const houseColor = houseColors[colorIndex];
         const houseColorDark = vec4.fromValues(
           houseColor[0] * 0.8,
@@ -404,10 +401,99 @@ class ToontownDNASceneDesc implements Viewer.SceneDesc {
     // Run custom callback
     await hood.callback?.(scene, loader, context, sceneBuilder);
 
-    console.log(`Loaded scene with ${scene.children.length} nodes.`);
+    // Load animations
+    const animatedCharacters = new Map<Character, AnimatedCharacter>();
+    async function applyAnim(node: PandaNode, animPath: string) {
+      // console.log(`Loading animation ${animPath} for ${node.name}`);
+      let animModel: BAMFile;
+      try {
+        animModel = await loader.loadModel(animPath, context.dataFetcher);
+      } catch (e) {
+        console.warn(e);
+        return;
+      }
+      const animBundleNode = animModel.getRoot().findNodeByType(AnimBundleNode);
+      if (!animBundleNode) {
+        console.error(`Failed to load animation ${animPath} for ${node.name}`);
+        return;
+      }
+      const animBundle = animBundleNode.animBundle;
+      if (!animBundle) {
+        console.error(
+          `Failed to load animation bundle for ${animPath} for ${node.name}`,
+        );
+        return;
+      }
+      // console.log(
+      //   `${node.name} bundle: ${formatDebugInfo(animBundle.getDebugInfo())}`,
+      // );
+      const character = node.findNodeByType(Character);
+      if (!character) {
+        console.error(`Failed to find character for ${node.name}`);
+        return;
+      }
+      const animChar = new AnimatedCharacter(character);
+      const control = animChar.addAnimation(animBundle);
+      animChar.playAnimation(control);
+      animatedCharacters.set(character, animChar);
+    }
+
+    // Load animations from DNA tags
+    for (const node of scene.findAllMatches("**/=DNAAnim")) {
+      const anim = node.tags.get("DNAAnim");
+      const modelPath = node.tags.get("DNAModel") ?? "";
+      const path = modelPath.substring(0, modelPath.lastIndexOf("/"));
+      const animPath = `${path}/${anim}.bam`;
+      applyAnim(node, animPath);
+    }
+
+    // Load animations from node names
+    const animMap = new Map<string, string>();
+    animMap.set(
+      "HQTelescopeAnimatedProp",
+      "phase_3.5/models/props/HQ_telescope-chan.bam",
+    );
+    animMap.set(
+      "HQPeriscopeAnimatedProp",
+      "phase_3.5/models/props/HQ_periscope-chan.bam",
+    );
+    animMap.set(
+      "PetShopFishAnimatedProp",
+      "phase_4/models/props/exteriorfish-swim.bam",
+    );
+    for (const node of scene.findAllMatches("**/=DNACode")) {
+      const code = node.tags.get("DNACode");
+      if (!code) continue;
+      let extracted: string;
+      if (code.startsWith("interactive_prop_")) {
+        extracted = code.substring("interactive_prop_".length).split("__")[0];
+      } else if (code.startsWith("animated_prop_generic_")) {
+        extracted = code
+          .substring("animated_prop_generic_".length)
+          .split("__")[0];
+      } else if (code.startsWith("animated_prop_")) {
+        extracted = code.substring("animated_prop_".length).split("_")[0];
+      } else if (code.startsWith("animated_building_")) {
+        extracted = code.substring("animated_building_".length).split("__")[0];
+      } else {
+        continue;
+      }
+      // console.log(`Checking for animation ${extracted}`);
+      const path = animMap.get(extracted);
+      if (!path) continue;
+      applyAnim(node, path);
+    }
+
+    console.log(`Loaded DNA scene: ${this.name}`);
 
     // Create renderer from DNA instances
-    return ToontownRenderer.create(device, scene, loader, context.dataFetcher);
+    return ToontownRenderer.create(
+      device,
+      scene,
+      loader,
+      context.dataFetcher,
+      animatedCharacters,
+    );
   }
 }
 

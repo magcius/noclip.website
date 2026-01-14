@@ -1,6 +1,6 @@
 import type { BAMFile } from "../bam";
 import { AssetVersion, type DataStream } from "../common";
-import { type BAMObject, CopyContext, registerBAMObject } from "./base";
+import { type BAMObject, type CopyContext, registerBAMObject } from "./base";
 import { ComputedVertices } from "./ComputedVertices";
 import { type DebugInfo, dbgRef, dbgRefs, dbgTypedArray } from "./debug";
 import { PartBundleNode } from "./PartBundleNode";

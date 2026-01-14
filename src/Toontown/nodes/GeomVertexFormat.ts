@@ -1,6 +1,11 @@
 import type { BAMFile } from "../bam";
 import type { DataStream } from "../common";
-import { BAMObject, CopyContext, readTypedRefs, registerBAMObject } from "./base";
+import {
+  BAMObject,
+  type CopyContext,
+  readTypedRefs,
+  registerBAMObject,
+} from "./base";
 import {
   type DebugInfo,
   dbgBool,

@@ -1,7 +1,7 @@
 import { vec3 } from "gl-matrix";
 import type { BAMFile } from "../bam";
 import { AssetVersion, type DataStream } from "../common";
-import { CopyContext, registerBAMObject } from "./base";
+import { type CopyContext, registerBAMObject } from "./base";
 import { type DebugInfo, dbgBool, dbgNum, dbgRef, dbgVec3 } from "./debug";
 import { PandaNode } from "./PandaNode";
 import { RenderEffect } from "./RenderEffects";

@@ -61,6 +61,12 @@ export class DataStream {
     return value;
   }
 
+  readInt8(): number {
+    const value = this._view.getInt8(this.offs);
+    this.offs += 1;
+    return value;
+  }
+
   readInt16(): number {
     const value = this._view.getInt16(this.offs, this.state.littleEndian);
     this.offs += 2;

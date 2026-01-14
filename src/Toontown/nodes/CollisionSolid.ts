@@ -1,7 +1,7 @@
 import { vec3 } from "gl-matrix";
 import type { BAMFile } from "../bam";
 import type { DataStream } from "../common";
-import { BAMObject, CopyContext, registerBAMObject } from "./base";
+import { BAMObject, type CopyContext, registerBAMObject } from "./base";
 import { type DebugInfo, dbgFlags, dbgVec3 } from "./debug";
 
 export const CollisionSolidFlags = {

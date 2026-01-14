@@ -1,7 +1,7 @@
 import type { BAMFile } from "../bam";
 import type { DataStream } from "../common";
 import { AnimBundle } from "./AnimBundle";
-import { CopyContext, registerBAMObject } from "./base";
+import { type CopyContext, registerBAMObject } from "./base";
 import { type DebugInfo, dbgRef } from "./debug";
 import { PandaNode } from "./PandaNode";
 

@@ -9,7 +9,8 @@ import {
 } from "gl-matrix";
 import type { BAMFile } from "../bam";
 import { AssetVersion, type DataStream } from "../common";
-import { BAMObject, CopyContext, registerBAMObject } from "./base";
+import { fromPandaQuat, hprToQuat, quatToHpr } from "../Math";
+import { BAMObject, type CopyContext, registerBAMObject } from "./base";
 import {
   type DebugInfo,
   dbgBool,
@@ -97,27 +98,20 @@ export class TransformState extends BAMObject {
     }
 
     if (this._flags & F_COMPONENTS_GIVEN) {
-      this._pos = vec3.clone(data.readVec3() as vec3);
-
+      this._pos = data.readVec3();
       if (this._flags & F_QUAT_GIVEN) {
-        const pandaQuat = data.readVec4();
-        pandaQuatToGlQuat(this._quat, pandaQuat);
-        this._flags |= F_QUAT_KNOWN;
+        fromPandaQuat(this._quat, data.readVec4());
       } else {
-        this._hpr = vec3.clone(data.readVec3() as vec3);
-        this._flags |= F_HPR_GIVEN | F_HPR_KNOWN;
+        this._hpr = data.readVec3();
       }
-
-      this._scale = vec3.clone(data.readVec3() as vec3);
+      this._scale = data.readVec3();
 
       // Shear was added in BAM 4.6
       if (this._version.compare(new AssetVersion(4, 6)) >= 0) {
-        this._shear = vec3.clone(data.readVec3() as vec3);
+        this._shear = data.readVec3();
       }
 
-      this._flags |= F_COMPONENTS_KNOWN | F_HAS_COMPONENTS;
       this.checkUniformScale();
-      this.checkShear();
     }
 
     if (this._flags & F_MAT_KNOWN) {
@@ -416,6 +410,9 @@ export class TransformState extends BAMObject {
     );
 
     // TODO: Apply shear if non-zero
+    if (!vec3.equals(this._shear, vec3.create())) {
+      console.warn("Shear not implemented");
+    }
 
     this._flags |= F_MAT_KNOWN;
   }
@@ -679,79 +676,3 @@ export class TransformState extends BAMObject {
 }
 
 registerBAMObject("TransformState", TransformState);
-
-/**
- * Convert HPR (heading, pitch, roll) in degrees to quaternion.
- * Panda3D convention (Z-up):
- *   H = rotation around up (Z)
- *   P = rotation around right (X)
- *   R = rotation around forward (Y)
- * Quaternion order: R * P * H (apply H first, then P, then R)
- */
-function hprToQuat(out: quat, hpr: ReadonlyVec3): quat {
-  const h = ((hpr[0] * Math.PI) / 180) * 0.5;
-  const p = ((hpr[1] * Math.PI) / 180) * 0.5;
-  const r = ((hpr[2] * Math.PI) / 180) * 0.5;
-
-  // Create quaternions for each rotation
-  // quat = (w, x, y, z) in Panda3D, but gl-matrix uses (x, y, z, w)
-  // quat.set(c, v[0]*s, v[1]*s, v[2]*s) in Panda3D becomes:
-  // gl-matrix: [v[0]*s, v[1]*s, v[2]*s, c]
-
-  // Heading: rotation around Z (up)
-  const qH = quat.fromValues(0, 0, Math.sin(h), Math.cos(h));
-
-  // Pitch: rotation around X (right)
-  const qP = quat.fromValues(Math.sin(p), 0, 0, Math.cos(p));
-
-  // Roll: rotation around Y (forward)
-  const qR = quat.fromValues(0, Math.sin(r), 0, Math.cos(r));
-
-  // Panda3D order: quat_r * quat_p * quat_h
-  quat.multiply(out, qR, qP);
-  quat.multiply(out, out, qH);
-  return out;
-}
-
-/**
- * Convert quaternion to HPR (heading, pitch, roll) in degrees.
- */
-function quatToHpr(out: vec3, q: ReadonlyQuat): vec3 {
-  // Extract rotation angles from quaternion
-  // Based on Panda3D's decompose_matrix implementation
-  const mat = mat4.create();
-  mat4.fromQuat(mat, q);
-
-  // Extract HPR from rotation matrix
-  // Panda3D convention
-  const sp = -mat[2]; // -m02 (pitch sine)
-
-  if (sp >= 1.0 - EPSILON) {
-    // Gimbal lock at +90 degrees
-    out[1] = 90;
-    out[0] = Math.atan2(-mat[4], mat[5]) * (180 / Math.PI); // heading
-    out[2] = 0;
-  } else if (sp <= -1.0 + EPSILON) {
-    // Gimbal lock at -90 degrees
-    out[1] = -90;
-    out[0] = Math.atan2(-mat[4], mat[5]) * (180 / Math.PI);
-    out[2] = 0;
-  } else {
-    out[1] = Math.asin(sp) * (180 / Math.PI); // pitch
-    out[0] = Math.atan2(mat[1], mat[0]) * (180 / Math.PI); // heading
-    out[2] = Math.atan2(mat[6], mat[10]) * (180 / Math.PI); // roll
-  }
-
-  return out;
-}
-
-/**
- * Convert Panda3D quaternion format (w, x, y, z) to gl-matrix format (x, y, z, w)
- */
-function pandaQuatToGlQuat(out: quat, pandaQuat: ReadonlyVec4): quat {
-  out[0] = pandaQuat[1]; // x
-  out[1] = pandaQuat[2]; // y
-  out[2] = pandaQuat[3]; // z
-  out[3] = pandaQuat[0]; // w
-  return out;
-}

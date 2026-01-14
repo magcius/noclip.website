@@ -1,7 +1,7 @@
 import { AABB } from "../../Geometry";
 import type { BAMFile } from "../bam";
 import type { DataStream } from "../common";
-import { CopyContext, registerBAMObject } from "./base";
+import { type CopyContext, registerBAMObject } from "./base";
 import {
   type DebugInfo,
   dbgArray,

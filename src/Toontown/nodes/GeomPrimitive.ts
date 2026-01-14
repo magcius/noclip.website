@@ -1,6 +1,6 @@
 import type { BAMFile } from "../bam";
 import type { DataStream } from "../common";
-import { BAMObject, CopyContext, registerBAMObject } from "./base";
+import { BAMObject, type CopyContext, registerBAMObject } from "./base";
 import { type DebugInfo, dbgArray, dbgEnum, dbgNum, dbgRef } from "./debug";
 import { GeomVertexArrayData } from "./GeomVertexArrayData";
 import { NumericType, ShadeModel, UsageHint } from "./geomEnums";

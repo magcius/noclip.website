@@ -30,6 +30,9 @@
       "suspicious": {
         "noExplicitAny": {
           "level": "off"
+        },
+        "useIterableCallbackReturn": {
+          "level": "off"
         }
       }
     }

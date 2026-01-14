@@ -1,6 +1,6 @@
 import type { BAMFile } from "../bam";
 import type { DataStream } from "../common";
-import { CopyContext } from "./base";
+import type { CopyContext } from "./base";
 import { type DebugInfo, dbgNum } from "./debug";
 import { ParametricCurve } from "./ParametricCurve";
 

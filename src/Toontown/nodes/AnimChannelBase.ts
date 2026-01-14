@@ -1,11 +1,11 @@
 import type { BAMFile } from "../bam";
 import type { DataStream } from "../common";
 import { AnimGroup } from "./AnimGroup";
-import { CopyContext } from "./base";
+import type { CopyContext } from "./base";
 import { type DebugInfo, dbgNum } from "./debug";
 
 export class AnimChannelBase extends AnimGroup {
-  public lastFrame = 0;
+  public lastFrame = -1;
 
   override load(file: BAMFile, data: DataStream) {
     super.load(file, data);

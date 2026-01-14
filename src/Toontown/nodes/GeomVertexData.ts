@@ -2,7 +2,7 @@ import type { BAMFile } from "../bam";
 import type { DataStream } from "../common";
 import {
   BAMObject,
-  CopyContext,
+  type CopyContext,
   readTypedRefs,
   registerBAMObject,
 } from "./base";
@@ -10,15 +10,17 @@ import { type DebugInfo, dbgEnum, dbgRef, dbgRefs, dbgStr } from "./debug";
 import { GeomVertexArrayData } from "./GeomVertexArrayData";
 import { GeomVertexFormat } from "./GeomVertexFormat";
 import { UsageHint } from "./geomEnums";
+import { TransformBlendTable } from "./TransformBlendTable";
+import { TransformTable } from "./TransformTable";
 
 export class GeomVertexData extends BAMObject {
   public name = "";
   public format: GeomVertexFormat | null = null;
   public usageHint = UsageHint.Static;
   public arrays: GeomVertexArrayData[] = [];
-  public transformTable: BAMObject | null = null; // TODO
-  public transformBlendTable: BAMObject | null = null; // TODO
-  public sliderTable: BAMObject | null = null; // TODO
+  public transformTable: TransformTable | null = null;
+  public transformBlendTable: TransformBlendTable | null = null;
+  public sliderTable: BAMObject | null = null; // TODO SliderTable
 
   override load(file: BAMFile, data: DataStream) {
     super.load(file, data);
@@ -30,8 +32,11 @@ export class GeomVertexData extends BAMObject {
     const numArrays = data.readUint16();
     this.arrays = readTypedRefs(file, data, numArrays, GeomVertexArrayData);
 
-    this.transformTable = file.getObject(data.readObjectId());
-    this.transformBlendTable = file.getObject(data.readObjectId());
+    this.transformTable = file.getTyped(data.readObjectId(), TransformTable);
+    this.transformBlendTable = file.getTyped(
+      data.readObjectId(),
+      TransformBlendTable,
+    );
     this.sliderTable = file.getObject(data.readObjectId());
   }
 

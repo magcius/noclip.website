@@ -1,11 +1,19 @@
 import type { BAMFile } from "../bam";
 import { AssetVersion, type DataStream } from "../common";
-import { CopyContext, registerBAMObject } from "./base";
+import { type CopyContext, registerBAMObject } from "./base";
 import { type DebugInfo, dbgNum } from "./debug";
 import { PandaNode } from "./PandaNode";
 
+export enum PreserveTransform {
+  None,
+  Local,
+  Net,
+  DropNode,
+  NoTouch,
+}
+
 export class ModelNode extends PandaNode {
-  public preserveTransform = 0;
+  public preserveTransform = PreserveTransform.None;
   public preserveAttributes = 0;
 
   override load(file: BAMFile, data: DataStream) {
@@ -33,6 +41,12 @@ export class ModelNode extends PandaNode {
       info.set("preserveAttributes", dbgNum(this.preserveAttributes));
     }
     return info;
+  }
+
+  static override create(name: string): ModelNode {
+    const node = new ModelNode();
+    node.name = name;
+    return node;
   }
 }
 
