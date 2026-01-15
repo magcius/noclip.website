@@ -496,17 +496,17 @@ export function dDemo_setDemoData(globals: dGlobals, dtFrames: number, actor: fo
         return false;
 
     const enable = demoActor.checkEnable(flagMask);
-    if (enable & 2) {
+    if (enable & EDemoActorFlags.HasPos) {
         // actor.current.pos = demoActor.mTranslation;
         // actor.old.pos = actor.current.pos;
         vec3.copy(actor.pos, demoActor.translation);
     }
-    if (enable & 8) {
+    if (enable & EDemoActorFlags.HasRot) {
         // actor.shape_angle = demoActor.mRotation;
         // actor.current.angle = actor.shape_angle;
         vec3.copy(actor.rot, demoActor.rotation);
     }
-    if (enable & 4) {
+    if (enable & EDemoActorFlags.HasScale) {
         actor.scale = demoActor.scaling;
     }
 
@@ -515,22 +515,30 @@ export function dDemo_setDemoData(globals: dGlobals, dtFrames: number, actor: fo
 
     demoActor.model = morf.model;
 
-    if ((enable & 0x20) && (demoActor.nextBckId !== demoActor.bckId)) {
+    if ((enable & EDemoActorFlags.HasAnim) && (demoActor.nextBckId !== demoActor.bckId)) {
         const bckID = demoActor.nextBckId;
         if (bckID & 0x10000)
             arcName = globals.roomCtrl.demoArcName;
-        assert(!!arcName);
         demoActor.bckId = bckID;
 
-        const i_key = globals.resCtrl.getObjectIDRes(ResType.Bck, arcName, bckID);
-        assert(!!i_key);
+        // Most actors which requires their own demo arc have demo/anim logic more complex than LegacyActor can handle.
+        // If this branch is hit, it's likely a LegacyActor that needs to be converted to a full d_* Actor.
+        if( !arcName ) {
+            const name = globals.dStage__searchNameRev(actor.processName, actor.subtype);
+            console.warn(`dDemo_setDemoData: Actor ${name} needs to pass a valid arcName. Animation disabled`);
+            demoActor.flags &= ~EDemoActorFlags.HasAnim;
+            return true;
+        }
+
+        const bckAnim = globals.resCtrl.getObjectIDRes(ResType.Bck, arcName!, bckID);
+        assert(!!bckAnim);
 
         // void* i_sound = dDemo_getJaiPointer(a_name, bck, soundCount, soundIdxs);
-        morf.setAnm(i_key, -1 as LoopMode, demoActor.getMorfParam(), 1.0, 0.0, -1.0);
+        morf.setAnm(bckAnim, -1 as LoopMode, demoActor.getMorfParam(), 1.0, 0.0, -1.0);
         demoActor.animFrameMax = morf.frameCtrl.endFrame;
     }
 
-    if (enable & 0x40) {
+    if (enable & EDemoActorFlags.HasFrame) {
         if (demoActor.animFrame > dtFrames) {
             morf.frameCtrl.setFrame(demoActor.animFrame - dtFrames);
             morf.play(dtFrames);
