@@ -2,9 +2,10 @@
 // Handles all the levels in Tokyo Mirage Sessions ♯FE
 
 import { parseAPAK, get_file_by_name } from "./apak.js";
-import { create_common_gimmicks } from "./gimmick.js";
+import { create_common_gimmicks, create_gimmick } from "./gimmick.js";
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
-import { parseLayout } from "./maplayout.js";
+import { vec3 } from "gl-matrix";
+import { parseLayout, get_layout_point } from "./maplayout.js";
 import { TMSFEScene } from "./render.js"
 import { SceneContext, SceneDesc } from "../SceneBase.js";
 import { SceneGfx, SceneGroup } from "../viewer.js";
@@ -32,6 +33,48 @@ class TMSFESceneDesc implements SceneDesc
             const layout = parseLayout(maplayout_data);
             console.log(layout);
             renderer.gimmicks = await create_common_gimmicks(layout, this.id, dataFetcher, device);
+
+            // map specific gimmicks
+            if (this.id == "d003_01")
+            {
+                const swA1_POINT_MANNEQUIN = 1510;
+                const swA2_POINT_MANNEQUIN = 1511;
+                const swA_POINT_MANNEQUIN_BIG = 1550;
+                const swB1_POINT_MANNEQUIN = 1610;
+                const swB2_POINT_MANNEQUIN = 1611;
+                const swB_POINT_MANNEQUIN_BIG = 1650;
+
+                const mannequinbig_01_entry = get_layout_point(layout, swA_POINT_MANNEQUIN_BIG);
+                renderer.gimmicks.push
+                (
+                    await create_gimmick
+                    (
+                        mannequinbig_01_entry.position,
+                        mannequinbig_01_entry.rotation,
+                        vec3.fromValues(1.0, 1.0, 1.0),
+                        "TokyoMirageSessionsSharpFE/gimmick/d003/mannequinbig/skin/01/model.apak",
+                        "mannequinbig_01.bfres",
+                        dataFetcher,
+                        device
+                    )
+                );
+
+                const mannequinbig_02_entry = get_layout_point(layout, swB_POINT_MANNEQUIN_BIG);
+                renderer.gimmicks.push
+                (
+                    await create_gimmick
+                    (
+                        mannequinbig_02_entry.position,
+                        mannequinbig_02_entry.rotation,
+                        vec3.fromValues(1.0, 1.0, 1.0),
+                        "TokyoMirageSessionsSharpFE/gimmick/d003/mannequinbig/skin/02/model.apak",
+                        "mannequinbig_02.bfres",
+                        dataFetcher,
+                        device
+                    )
+                );
+
+            }
         }
 
         return renderer;

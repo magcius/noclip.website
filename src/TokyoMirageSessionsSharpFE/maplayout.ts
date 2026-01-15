@@ -18,6 +18,7 @@ export function parseLayout(buffer: ArrayBufferSlice): MapLayout
     const blockwall_entries: MapLayoutEntry[] = [];
     const warp_entries: MapLayoutEntry[] = [];
     const gate_entries: MapLayoutEntry[] = [];
+    const group_1: MapLayoutEntry[] = [];
     const entries: MapLayoutEntry[] = [];
     let entry_offset = ENTRY_START;
     for (let i = 0; i < entry_count; i++)
@@ -48,6 +49,10 @@ export function parseLayout(buffer: ArrayBufferSlice): MapLayout
         );
         switch (group_index)
         {
+            case 1:
+                group_1.push({ group_index, unk_04, id, position, rotation, unknown });
+                break;
+
             case GROUP_INDEX_TREASURE_BOX_01:
                 treasurebox_01_entries.push({ group_index, unk_04, id, position, rotation, unknown });
                 break;
@@ -80,7 +85,7 @@ export function parseLayout(buffer: ArrayBufferSlice): MapLayout
         entry_offset += ENTRY_SIZE;
     }
 
-    return { treasurebox_01_entries, treasurebox_02_entries, blockside_entries, blockwall_entries, warp_entries, gate_entries, entries };
+    return { treasurebox_01_entries, treasurebox_02_entries, blockside_entries, blockwall_entries, warp_entries, gate_entries, group_1, entries };
 }
 
 const ENTRY_START = 0x10;
@@ -92,6 +97,21 @@ const GROUP_INDEX_WARP = 17;
 const GROUP_INDEX_GATE = 18;
 const GROUP_INDEX_TREASURE_BOX_02 = 37;
 
+export function get_layout_point(layout: MapLayout, id: number): MapLayoutEntry
+{
+    for (let i = 0; i < layout.group_1.length; i++)
+    {
+        if (layout.group_1[i].id == id)
+        {
+            return layout.group_1[i];
+        }
+
+    }
+
+    console.error(`layout point with id ${id} not found`);
+    throw("whoops");
+}
+
 export interface MapLayout
 {
     treasurebox_01_entries: MapLayoutEntry[];
@@ -100,6 +120,7 @@ export interface MapLayout
     blockwall_entries: MapLayoutEntry[];
     warp_entries: MapLayoutEntry[];
     gate_entries: MapLayoutEntry[];
+    group_1: MapLayoutEntry[];
     entries: MapLayoutEntry[];
 }
 
