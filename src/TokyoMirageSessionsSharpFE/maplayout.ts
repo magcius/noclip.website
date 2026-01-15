@@ -2,8 +2,8 @@
 // handles data from maplayout.layout files, which contain the 3d coordinates of gimmicks and more
 
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
-import { vec3 } from "gl-matrix";
-import { MathConstants } from "../MathHelpers.js";
+import { mat4, vec3 } from "gl-matrix";
+import { MathConstants, computeModelMatrixSRT } from "../MathHelpers.js";
 import { assert, readString } from "../util.js";
 
 export function parseLayout(buffer: ArrayBufferSlice): MapLayout
@@ -97,13 +97,47 @@ const GROUP_INDEX_WARP = 17;
 const GROUP_INDEX_GATE = 18;
 const GROUP_INDEX_TREASURE_BOX_02 = 37;
 
-export function get_layout_point(layout: MapLayout, id: number): MapLayoutEntry
+export function get_layout_point(layout: MapLayout, id: number, offset_x: number, offset_y: number, offset_z: number): LayoutPoint
 {
     for (let i = 0; i < layout.group_1.length; i++)
     {
         if (layout.group_1[i].id == id)
         {
-            return layout.group_1[i];
+            const layout_point = layout.group_1[i];
+
+            if (offset_x == 0.0 && offset_y == 0.0 && offset_z == 0.0)
+            {
+                return { position: layout_point.position, rotation: layout_point.rotation };
+            }
+
+            let offset_matrix = mat4.create();
+            computeModelMatrixSRT
+            (
+                offset_matrix,
+                1.0, 1.0, 1.0,
+                0.0, 0.0, 0.0,
+                offset_x, offset_y, offset_z,
+            );
+            
+            let rotation_matrix = mat4.create();
+            computeModelMatrixSRT
+            (
+                rotation_matrix,
+                1.0, 1.0, 1.0,
+                layout_point.rotation[0], layout_point.rotation[1], layout_point.rotation[2],
+                0.0, 0.0, 0.0,
+            );
+
+            let new_offset_matrix = mat4.create();
+            mat4.multiply(new_offset_matrix, rotation_matrix, offset_matrix);
+
+            const new_position = vec3.fromValues
+            (
+                layout_point.position[0] + new_offset_matrix[12],
+                layout_point.position[1] + new_offset_matrix[13],
+                layout_point.position[2] + new_offset_matrix[14]
+            );
+            return{ position: new_position, rotation: layout_point.rotation };
         }
 
     }
@@ -132,4 +166,10 @@ export interface MapLayoutEntry
     position: vec3;
     rotation: vec3;
     unknown: vec3;
+}
+
+export interface LayoutPoint
+{
+    position: vec3;
+    rotation: vec3;
 }

@@ -139,7 +139,7 @@ export async function create_common_gimmicks(layout: MapLayout, level_id: string
                     entry.rotation,
                     scale,
                     "TokyoMirageSessionsSharpFE/gimmick/common/blockside/skin/01/model.apak",
-                    "blockside_01",
+                    "blockside_01.bfres",
                     data_fetcher,
                     device
                 )
@@ -181,7 +181,7 @@ export async function create_common_gimmicks(layout: MapLayout, level_id: string
                     entry.rotation,
                     vec3.fromValues(1.0, 1.0, 1.0),
                     "TokyoMirageSessionsSharpFE/gimmick/common/warp/skin/01/model.apak",
-                    "bfres.bfres",
+                    "warp_01.bfres",
                     data_fetcher,
                     device
                 )
