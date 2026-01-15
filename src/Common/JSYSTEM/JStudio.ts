@@ -214,7 +214,7 @@ abstract class TAdaptor {
     public adaptor_do_begin(obj: STBObject): void {};
     public adaptor_do_end(obj: STBObject): void {};
     public adaptor_do_update(obj: STBObject, frameCount: number): void {};
-    public adaptor_do_data(obj: STBObject, id: number, data: DataView): void {};
+    public adaptor_do_data(obj: STBObject, id: number | null, data: DataView): void {};
 
     // Set a single VariableValue update function, with the option of using FuncVals 
     public adaptor_setVariableValue(obj: STBObject, keyIdx: number, data: ParagraphData) {
@@ -323,7 +323,7 @@ abstract class STBObject {
         if (this.adaptor) this.adaptor.adaptor_updateVariableValue(this, frameCount);
         if (this.adaptor) this.adaptor.adaptor_do_update(this, frameCount);
     }
-    public do_data(id: number, data: DataView) { if (this.adaptor) this.adaptor.adaptor_do_data(this, id, data); }
+    public do_data(id: number | null, data: DataView) { if (this.adaptor) this.adaptor.adaptor_do_data(this, id, data); }
 
     public getStatus() { return this.status; }
     public getSuspendFrames(): number { return this.suspendFrames; }
@@ -481,7 +481,14 @@ abstract class STBObject {
             case 0x1: debugger; break;
             case 0x2: debugger; break;
             case 0x3: debugger; break;
-            case 0x80: debugger; break;
+
+            // Raw Data (no ID) 
+            case 0x80: 
+                const data = file.buffer.createDataView(dataOffset, dataSize);
+                this.do_data(null, data);
+                break;
+
+            // Data with ID
             case 0x81:
                 const idSize = file.view.getUint16(dataOffset + 2);
                 assert(idSize === 4);
@@ -639,9 +646,9 @@ class TActorAdaptor extends TAdaptor {
         this.object.JSGSetScaling(scale);
     }
 
-    public override adaptor_do_data(obj: STBObject, id: number, data: DataView): void {
+    public override adaptor_do_data(obj: STBObject, id: number | null, data: DataView): void {
         this.log(`SetData: ${id}`);
-        this.object.JSGSetData(id, data);
+        this.object.JSGSetData((id === null) ? 0xFFFFFFFF : id, data);
     }
 
     public adaptor_do_PARENT(data: ParagraphData): void {
@@ -916,7 +923,7 @@ class TCameraAdaptor extends TAdaptor {
         this.object.JSGSetViewTargetPosition(targetPos);
     }
 
-    public override adaptor_do_data(obj: STBObject, id: number, data: DataView): void {
+    public override adaptor_do_data(obj: STBObject, id: number | null, data: DataView): void {
         // This is not used by TWW. Untested.
         debugger;
     }
