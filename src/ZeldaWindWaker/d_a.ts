@@ -6915,7 +6915,11 @@ class d_a_demo00 extends fopAc_ac_c {
             mDoMtx_XYZrotM(this.model.modelMatrix, this.rot);
             this.model.baseScale = this.scale;
             this.cullMtx = this.model.modelMatrix;
-            this.model.calcAnim();
+            if (this.currIds.bckId !== -1) 
+                this.morf?.calc();
+            else
+                this.model.calcAnim();
+
 
             // Play animations
             if (!(demoActor.flags & EDemoActorFlags.HasAnimFrame)) {

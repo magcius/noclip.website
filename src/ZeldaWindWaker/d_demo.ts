@@ -545,7 +545,7 @@ export function dDemo_setDemoData(globals: dGlobals, dtFrames: number, actor: fo
         demoActor.animFrameMax = morf.frameCtrl.endFrame;
     }
 
-    if (enable & EDemoActorFlags.HasFrame) {
+    if (enable & EDemoActorFlags.HasAnimFrame) {
         if (demoActor.animFrame > dtFrames) {
             morf.frameCtrl.setFrame(demoActor.animFrame - dtFrames);
             morf.play(dtFrames);
