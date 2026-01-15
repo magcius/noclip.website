@@ -34,7 +34,7 @@ export class gimmick
     }
 }
 
-export async function create_common_gimmicks(layout: MapLayout, data_fetcher: DataFetcher, device: GfxDevice): Promise<gimmick[]>
+export async function create_common_gimmicks(layout: MapLayout, level_id: string, data_fetcher: DataFetcher, device: GfxDevice): Promise<gimmick[]>
 {
     let gimmicks: gimmick[] = [];
 
@@ -60,21 +60,25 @@ export async function create_common_gimmicks(layout: MapLayout, data_fetcher: Da
         }
     }
 
-    // blue treasure boxes
+    // blue treasure boxes in Illusory Area of Aspirations
     if (layout.treasurebox_02_entries.length > 0)
     {
         const apak = parseAPAK(await data_fetcher.fetchData(`TokyoMirageSessionsSharpFE/gimmick/common/treasurebox/skin/02/model.apak`));
-        const fres = parseBFRES(get_file_by_name(apak, "treasurebox_02.bfres"));
-        // red
-        // const treasure_box_03 = parseAPAK(await dataFetcher.fetchData(`TokyoMirageSessionsSharpFE/gimmick/common/treasurebox/skin/03/model.apak`));
+        const fres = parseBFRES(get_file_by_name(apak, "treasurebox_02.bfres"))
 
         for (let i = 0; i < layout.treasurebox_02_entries.length; i++)
         {
             const entry = layout.treasurebox_02_entries[i];
             let scale = vec3.fromValues(1.0, 1.0, 1.0);
-            if (entry.id == 1130)
+            // scale up the special chests at the end of each room
+            if
+            (
+                entry.id == 1130 ||
+                entry.id == 1230 ||
+                entry.id == 1430
+            )
             {
-                // TODO: not 100% sure 2.0 is the right scale value
+                // TODO: not 100% sure these are right
                 scale = vec3.fromValues(2.0, 2.0, 2.0);
             }
             const new_gimmick = new gimmick
@@ -99,11 +103,21 @@ export async function create_common_gimmicks(layout: MapLayout, data_fetcher: Da
         for (let i = 0; i < layout.blockside_entries.length; i++)
         {
             const entry = layout.blockside_entries[i];
+            let scale = vec3.fromValues(1.0, 1.0, 1.0);
+            let y_position = entry.position[1] - WALL_HEIGHT_OFFSET;
+            // this map has the models scaled down
+            if (level_id == "d018_03")
+            {
+                // TODO: not 100% sure these are right
+                const test = 0.75
+                scale = vec3.fromValues(test, test, test);
+                y_position = entry.position[1] - 20.0;
+            }
             const new_gimmick = new gimmick
             (
-                vec3.fromValues(entry.position[0], entry.position[1] - WALL_HEIGHT_OFFSET, entry.position[2]),
+                vec3.fromValues(entry.position[0], y_position, entry.position[2]),
                 entry.rotation,
-                vec3.fromValues(1.0, 1.0, 1.0),
+                scale,
                 fres,
                 device,
                 new GfxRenderHelper(device),

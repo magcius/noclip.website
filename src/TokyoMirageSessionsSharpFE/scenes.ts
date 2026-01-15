@@ -26,12 +26,12 @@ class TMSFESceneDesc implements SceneDesc
         let renderer = new TMSFEScene(device, this.id, apak);
 
         // load gimmicks
-        if (this.id == "d018_01")
+        if (this.id[0] == "d")
         {
             const maplayout_data = get_file_by_name(apak, "maplayout.layout");
             const layout = parseLayout(maplayout_data);
             console.log(layout);
-            renderer.gimmicks = await create_common_gimmicks(layout, dataFetcher, device);
+            renderer.gimmicks = await create_common_gimmicks(layout, this.id, dataFetcher, device);
         }
 
         return renderer;
