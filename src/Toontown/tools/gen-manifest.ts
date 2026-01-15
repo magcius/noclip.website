@@ -43,6 +43,16 @@ function generateManifest(dataDir: string): Manifest {
     const multifile = readMultifile(data);
 
     for (const entry of multifile.entries) {
+      if (
+        entry.attributes &
+        (MultifileAttributes.Deleted |
+          MultifileAttributes.IndexInvalid |
+          MultifileAttributes.DataInvalid |
+          MultifileAttributes.Signature)
+      ) {
+        continue;
+      }
+
       if (manifest[entry.name]) {
         throw new Error(
           `Duplicate entry for file ${entry.name}: ${manifest[entry.name].file} & ${fileName}`,

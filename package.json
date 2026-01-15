@@ -27,6 +27,7 @@
     "gl-matrix": "^3.4.3",
     "librw": "^0.4.0",
     "reflect-metadata": "^0.2.2",
+    "spessasynth_lib": "^4.0.20",
     "tiff": "^6.2.0"
   },
   "scripts": {

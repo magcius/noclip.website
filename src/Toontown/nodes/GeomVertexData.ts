@@ -10,6 +10,7 @@ import { type DebugInfo, dbgEnum, dbgRef, dbgRefs, dbgStr } from "./debug";
 import { GeomVertexArrayData } from "./GeomVertexArrayData";
 import { GeomVertexFormat } from "./GeomVertexFormat";
 import { UsageHint } from "./geomEnums";
+import { SliderTable } from "./SliderTable";
 import { TransformBlendTable } from "./TransformBlendTable";
 import { TransformTable } from "./TransformTable";
 
@@ -20,7 +21,7 @@ export class GeomVertexData extends BAMObject {
   public arrays: GeomVertexArrayData[] = [];
   public transformTable: TransformTable | null = null;
   public transformBlendTable: TransformBlendTable | null = null;
-  public sliderTable: BAMObject | null = null; // TODO SliderTable
+  public sliderTable: SliderTable | null = null;
 
   override load(file: BAMFile, data: DataStream) {
     super.load(file, data);
@@ -37,7 +38,7 @@ export class GeomVertexData extends BAMObject {
       data.readObjectId(),
       TransformBlendTable,
     );
-    this.sliderTable = file.getObject(data.readObjectId());
+    this.sliderTable = file.getTyped(data.readObjectId(), SliderTable);
   }
 
   override copyTo(target: this, ctx: CopyContext): void {

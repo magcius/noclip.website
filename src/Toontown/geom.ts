@@ -36,7 +36,6 @@ import {
   type GeomVertexArrayFormat,
   type GeomVertexColumn,
   type GeomVertexData,
-  JointVertexTransform,
   NumericType,
   PandaCompareFunc,
   type PandaNode,
@@ -44,6 +43,7 @@ import {
   type RenderState,
   type Texture,
   TransparencyMode,
+  VertexTransform,
 } from "./nodes";
 import { AttributeLocation } from "./program";
 
@@ -51,7 +51,7 @@ import { AttributeLocation } from "./program";
  * GPU-ready geometry data
  */
 export interface CachedGeometryData {
-  vertexBuffer: GfxBuffer;
+  vertexBuffers: GfxBuffer[];
   indexBuffer: GfxBuffer | null;
   inputLayout: GfxInputLayout;
   indexCount: number;
@@ -66,7 +66,7 @@ export interface CachedGeometryData {
   // Which bounds type to use for culling
   boundsType: BoundsType;
   skinningBuffer: GfxBuffer | null;
-  skinningTransforms: JointVertexTransform[];
+  skinningTransforms: VertexTransform[];
 }
 
 /**
@@ -160,7 +160,7 @@ export function combineAttributes(
  * Convert triangle strips to triangle list indices
  */
 function convertTriStripToTriangles(
-  indices: Uint16Array | Uint32Array,
+  indices: Uint8Array | Uint16Array | Uint32Array,
   count: number = -1,
   ends: Int32Array | null,
 ): Uint32Array {
@@ -206,7 +206,7 @@ function convertTriStripToTriangles(
  * Convert triangle fans to triangle list indices
  */
 function convertTriFanToTriangles(
-  indices: Uint16Array | Uint32Array,
+  indices: Uint8Array | Uint16Array | Uint32Array,
 ): Uint32Array {
   const triangles: number[] = [];
   const center = indices[0];
@@ -258,6 +258,8 @@ export function createGeomData(
   }
 
   // Process each array format
+  const referencedArrays = new Set<number>();
+  let currentBufferIndex = 0;
   for (let arrayIdx = 0; arrayIdx < format.arrays.length; arrayIdx++) {
     const arrayFormat = format.arrays[arrayIdx];
 
@@ -271,10 +273,16 @@ export function createGeomData(
         column.numComponents,
         column.contents,
       );
+      if (arrayIdx > 0) {
+        console.log(
+          `Found ${enumName(column.contents, Contents)} in array idx ${arrayIdx}`,
+          geom,
+        );
+      }
 
       vertexAttributeDescriptors.push({
         location,
-        bufferIndex: arrayIdx,
+        bufferIndex: currentBufferIndex,
         format: gfxFormat,
         bufferByteOffset: column.start,
       });
@@ -290,42 +298,41 @@ export function createGeomData(
         byteStride: arrayFormat.stride,
         frequency: GfxVertexBufferFrequency.PerVertex,
       });
+      referencedArrays.add(arrayIdx);
+      currentBufferIndex++;
     }
   }
 
   // Get vertex buffer data
-  if (vertexData.arrays.length === 0) {
+  if (referencedArrays.size === 0) {
     throw new Error("No vertex arrays");
   }
 
-  // Vertex array 0 is our vertex data, 1 is our skinning index data (if present)
-  if (vertexData.arrays.length > 2) {
-    console.warn(
-      `Expected at most 2 vertex arrays, got ${vertexData.arrays.length}`,
-    );
-  }
-
-  let buffer = vertexData.arrays[0].buffer;
-
-  // Unpack DABC if necessary
-  const arrayFormat = format.arrays[0];
-  for (const column of arrayFormat.columns) {
-    if (
-      column.contents === Contents.Color &&
-      column.numericType === NumericType.PackedDABC
-    ) {
-      buffer = unpackPackedColor(buffer, arrayFormat, column);
-    }
-  }
-
-  // Create vertex buffer
   const device = renderCache.device;
-  const vertexBuffer = device.createBuffer(
-    buffer.byteLength,
-    GfxBufferUsage.Vertex,
-    GfxBufferFrequencyHint.Static,
-  );
-  device.uploadBufferData(vertexBuffer, 0, buffer);
+  const vertexBuffers: GfxBuffer[] = [];
+  for (const arrayIdx of referencedArrays) {
+    let buffer = vertexData.arrays[arrayIdx].buffer;
+
+    // Unpack DABC if necessary
+    const arrayFormat = format.arrays[arrayIdx];
+    for (const column of arrayFormat.columns) {
+      if (
+        column.contents === Contents.Color &&
+        column.numericType === NumericType.PackedDABC
+      ) {
+        buffer = unpackPackedColor(buffer, arrayFormat, column);
+      }
+    }
+
+    // Create vertex buffer
+    const vertexBuffer = device.createBuffer(
+      buffer.byteLength,
+      GfxBufferUsage.Vertex,
+      GfxBufferFrequencyHint.Static,
+    );
+    device.uploadBufferData(vertexBuffer, 0, buffer);
+    vertexBuffers.push(vertexBuffer);
+  }
 
   // Process primitives
   let totalIndexCount = 0;
@@ -334,8 +341,10 @@ export function createGeomData(
   for (const primitive of geom.primitives) {
     // Get index data if present
     if (primitive.vertices) {
-      let indices: Uint16Array | Uint32Array;
-      if (primitive.indexType === NumericType.U16) {
+      let indices: Uint8Array | Uint16Array | Uint32Array;
+      if (primitive.indexType === NumericType.U8) {
+        indices = primitive.vertices.buffer;
+      } else if (primitive.indexType === NumericType.U16) {
         indices = new Uint16Array(
           primitive.vertices.buffer.buffer,
           primitive.vertices.buffer.byteOffset,
@@ -415,7 +424,6 @@ export function createGeomData(
   totalIndexCount = allIndices.length;
 
   if (totalIndexCount === 0) {
-    device.destroyBuffer(vertexBuffer);
     throw new Error("No indices generated");
   }
 
@@ -430,7 +438,7 @@ export function createGeomData(
 
   // Create skinning buffer if needed
   let skinningBuffer: GfxBuffer | null = null;
-  let skinningTransforms: JointVertexTransform[] = [];
+  let skinningTransforms: VertexTransform[] = [];
   if (transformBlendColumn) {
     const skinningResult = createSkinningBuffer(
       vertexData,
@@ -482,7 +490,7 @@ export function createGeomData(
   }
 
   const cachedGeometryData: CachedGeometryData = {
-    vertexBuffer,
+    vertexBuffers,
     indexBuffer,
     inputLayout,
     indexCount: totalIndexCount,
@@ -578,6 +586,9 @@ function getAttributeLocation(contents: Contents): number | null {
     case Contents.Index:
       // Index columns (like transform_blend) are handled separately
       // via skinning buffer, not as regular vertex attributes
+      return null;
+    case Contents.Vector:
+      // Tangent and binormal are currently unsupported
       return null;
     default:
       console.warn(
@@ -701,7 +712,7 @@ function createSkinningBuffer(
   blendArrayIndex: number,
   arrayFormat: GeomVertexArrayFormat,
   device: GfxDevice,
-): { buffer: GfxBuffer; stride: number; transforms: JointVertexTransform[] } {
+): { buffer: GfxBuffer; stride: number; transforms: VertexTransform[] } {
   const blendTable = vertexData.transformBlendTable!;
   const srcBuffer = vertexData.arrays[blendArrayIndex].buffer;
   const numVertices = srcBuffer.length / arrayFormat.stride;
@@ -709,28 +720,35 @@ function createSkinningBuffer(
   // Create skinning data: 8 bytes per vertex (4 weights + 4 indices)
   const skinningData = new Uint8Array(numVertices * SKINNING_BUFFER_STRIDE);
 
-  // Build a mapping from JointVertexTransform to bone index
+  // Build a mapping from VertexTransform to bone index
   // Use the TransformTable if available, otherwise build from unique transforms
-  const transformToIndex = new Map<JointVertexTransform, number>();
-  const transforms: JointVertexTransform[] = [];
+  const transformToIndex = new Map<VertexTransform, number>();
+  const transforms: VertexTransform[] = [];
+  const addTransform = (transform: VertexTransform): number => {
+    const existing = transformToIndex.get(transform);
+    if (existing !== undefined) return existing;
+    const index = transforms.length;
+    transformToIndex.set(transform, index);
+    transforms.push(transform);
+    return index;
+  };
   if (vertexData.transformTable) {
-    for (let i = 0; i < vertexData.transformTable.transforms.length; i++) {
-      const transform = vertexData.transformTable.transforms[i];
-      if (transform instanceof JointVertexTransform) {
+    const tableTransforms = vertexData.transformTable.transforms;
+    transforms.length = tableTransforms.length;
+    for (let i = 0; i < tableTransforms.length; i++) {
+      const transform = tableTransforms[i];
+      if (transform) {
         transformToIndex.set(transform, i);
         transforms[i] = transform;
+      } else {
+        transforms[i] = new VertexTransform();
       }
     }
   } else {
     // Build from unique transforms in blend table
-    let nextIndex = 0;
     for (const blend of blendTable.blends) {
       for (const entry of blend.entries) {
-        if (!transformToIndex.has(entry.transform)) {
-          transformToIndex.set(entry.transform, nextIndex);
-          transforms[nextIndex] = entry.transform;
-          nextIndex++;
-        }
+        addTransform(entry.transform);
       }
     }
   }
@@ -793,7 +811,8 @@ function createSkinningBuffer(
     for (let i = 0; i < MAX_BONES_PER_VERTEX; i++) {
       if (i < numEntries) {
         const entry = blend.entries[i];
-        const boneIndex = transformToIndex.get(entry.transform) ?? 0;
+        const boneIndex =
+          transformToIndex.get(entry.transform) ?? addTransform(entry.transform);
         writeBlend(entry.weight, boneIndex, i);
       } else {
         // Unused slot

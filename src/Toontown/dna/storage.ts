@@ -1,6 +1,11 @@
 // DNAStorage - Holds registered resources from DNA storage files
 // Resources are registered from storage DNA files and then looked up when loading scene DNA
 
+import type { DataFetcher } from "../../DataFetcher";
+import type { ToontownResourceLoader } from "../resources";
+import { DynamicTextFont } from "../text/DynamicTextFont";
+import { StaticTextFont } from "../text/StaticTextFont";
+import type { TextFont } from "../text/TextAssembler";
 import type {
   DNAFile,
   ModelDeclaration,
@@ -32,6 +37,7 @@ export class DNAStorage {
 
   // Code -> font filename
   private fonts: Map<string, string> = new Map();
+  private loadedFonts: Map<string, TextFont> = new Map();
 
   // Category -> Set of codes in that category
   private nodesByCategory: Map<string, Set<string>> = new Map();
@@ -85,6 +91,7 @@ export class DNAStorage {
    * Store a font
    */
   storeFont(font: StoredFont): void {
+    if (this.fonts.has(font.code)) return;
     this.fonts.set(font.code, font.filename);
 
     let category = this.fontsByCategory.get(font.category);
@@ -163,13 +170,43 @@ export class DNAStorage {
   getRequiredModelPaths(): Set<string> {
     const paths = new Set<string>();
     for (const ref of this.nodes.values()) {
-      paths.add(`${ref.modelPath}.bam`);
+      paths.add(ref.modelPath);
     }
     return paths;
   }
 
   getRequiredTextures(): Set<string> {
     return new Set<string>(this.textures.values());
+  }
+
+  getRequiredFontPaths(): string[] {
+    const paths: string[] = [];
+    for (const filename of this.fonts.values()) {
+      paths.push(filename);
+    }
+    return paths;
+  }
+
+  async loadFonts(loader: ToontownResourceLoader): Promise<void> {
+    for (const [code, filename] of this.fonts) {
+      if (this.loadedFonts.has(code)) continue;
+
+      try {
+        const font = await loader.loadFont(filename);
+        this.loadedFonts.set(code, font);
+      } catch (e) {
+        console.warn(`Failed to load font ${code}:`, e);
+      }
+    }
+  }
+
+  getFont(code: string): TextFont | null {
+    return this.loadedFonts.get(code) ?? null;
+  }
+
+  getAnyFont(): TextFont | null {
+    const iterator = this.loadedFonts.values().next();
+    return iterator.done ? null : iterator.value;
   }
 
   /**
@@ -186,5 +223,8 @@ export class DNAStorage {
       console.log(`    ${category}: ${codes.size} codes`);
     }
     console.log(`  Fonts: ${this.fonts.size}`);
+    for (const [category, codes] of this.fontsByCategory) {
+      console.log(`    ${category}: ${codes.size} codes`);
+    }
   }
 }

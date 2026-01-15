@@ -20,6 +20,9 @@ importers:
       reflect-metadata:
         specifier: ^0.2.2
         version: 0.2.2
+      spessasynth_lib:
+        specifier: ^4.0.20
+        version: 4.0.20
       tiff:
         specifier: ^6.2.0
         version: 6.2.0
@@ -729,6 +732,12 @@ packages:
     resolution: {integrity: sha512-7++dFhtcx3353uBaq8DDR4NuxBetBzC7ZQOhmTQInHEd6bSrXdiEyzCvG07Z44UYdLShWUyXt5M/yhz8ekcb1A==}
     engines: {node: '>=8'}
 
+  spessasynth_core@4.0.25:
+    resolution: {integrity: sha512-E2kmaUndlnTKfOhdEXDTaGTSC7gg61pVRsWCcGygdFwdaLO/htpZ0wYyxDoxFzaMn4HTGe9ZDpC+Zo+z7u2DJA==}
+
+  spessasynth_lib@4.0.20:
+    resolution: {integrity: sha512-y0Hm6Zpcn6R4l0jEvHoHhUdtGCCPiG32XFiDRqNcVgOIb/eILVd8fmzKqIjU5vqWnOGVcihY9mwGy5yXD2V6AA==}
+
   statuses@2.0.1:
     resolution: {integrity: sha512-RwNA9Z/7PrK06rYLIzFMlaF+l73iwpzsqRIFgbMLbTcLD6cOao82TaWefPXQvB2fOC4AjuYSEndS7N/mTCbkdQ==}
     engines: {node: '>= 0.8'}
@@ -1388,6 +1397,12 @@ snapshots:
       shebang-regex: 3.0.0
 
   shebang-regex@3.0.0: {}
+
+  spessasynth_core@4.0.25: {}
+
+  spessasynth_lib@4.0.20:
+    dependencies:
+      spessasynth_core: 4.0.25
 
   statuses@2.0.1: {}
 

@@ -7,9 +7,14 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as zlib from "node:zlib";
+import { DOMParser as XmldomParser } from "@xmldom/xmldom";
 import ArrayBufferSlice from "../../ArrayBufferSlice";
 import { BAMFile } from "../bam";
 import { parseDNA } from "../dna";
+
+if (typeof DOMParser === "undefined") {
+  (globalThis as any).DOMParser = XmldomParser;
+}
 
 // Default to Toontown, but allow override via command line
 const dataArg = process.argv[3] || "Toontown";
@@ -137,7 +142,9 @@ function main() {
   const countArg = process.argv[2] || "all";
 
   if (typeArg === "dna" || typeArg === "both") {
-    const dnaFiles = Object.keys(manifest).filter((f) => f.endsWith(".dna"));
+    const dnaFiles = Object.keys(manifest).filter(
+      (f) => f.endsWith(".dna") || f.endsWith(".xml"),
+    );
     console.log(`Found ${dnaFiles.length} DNA files`);
 
     const testCount =

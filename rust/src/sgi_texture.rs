@@ -66,7 +66,7 @@ pub fn decode_sgi(src: &[u8]) -> Result<Vec<u8>, String> {
                 result[i * 4 + 0] = v;
                 result[i * 4 + 1] = v;
                 result[i * 4 + 2] = v;
-                result[i * 4 + 3] = 255;
+                result[i * 4 + 3] = v;
             }
         }
         2 => {

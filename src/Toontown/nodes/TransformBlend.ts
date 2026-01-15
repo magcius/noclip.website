@@ -1,7 +1,7 @@
 import { mat4 } from "gl-matrix";
 import type { BAMFile } from "../bam";
 import type { DataStream } from "../common";
-import { JointVertexTransform } from "./JointVertexTransform";
+import { VertexTransform } from "./VertexTransform";
 
 /**
  * Represents weighted influence of multiple joints on a single vertex.
@@ -16,7 +16,7 @@ import { JointVertexTransform } from "./JointVertexTransform";
  *   - float32 weight
  */
 export interface TransformEntry {
-  transform: JointVertexTransform;
+  transform: VertexTransform;
   weight: number;
 }
 
@@ -33,11 +33,11 @@ export class TransformBlend {
 
     for (let i = 0; i < numEntries; i++) {
       const transformId = data.readObjectId();
-      const weight = data.readFloat32();
+      const weight = data.readStdFloat();
 
       // The transform will be resolved in complete_pointers
       // For now, store null and the weight
-      const transform = file.getTyped(transformId, JointVertexTransform);
+      const transform = file.getTyped(transformId, VertexTransform);
       if (transform) {
         this.entries.push({ transform, weight });
       }

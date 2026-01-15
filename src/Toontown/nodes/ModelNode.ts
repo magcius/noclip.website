@@ -50,7 +50,4 @@ export class ModelNode extends PandaNode {
   }
 }
 
-export class ModelRoot extends ModelNode {}
-
 registerBAMObject("ModelNode", ModelNode);
-registerBAMObject("ModelRoot", ModelRoot);

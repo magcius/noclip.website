@@ -19,7 +19,7 @@ export const AttributeLocation = {
  * Maximum number of bone matrices per draw call.
  * Arbitrary value, can be increased if needed.
  */
-export const MAX_BONES = 17;
+export const MAX_BONES = 46;
 
 export type ToontownProgramProps = {
   hasTexture: boolean;

@@ -41,7 +41,7 @@ import { CalcBillboardFlags, calcBillboardMatrix } from "../MathHelpers.js";
 import { TextureMapping } from "../TextureHolder.js";
 import * as UI from "../ui.js";
 import type * as Viewer from "../viewer.js";
-import type { AnimatedCharacter } from "./Animation/AnimatedCharacter.js";
+import { AnimatedCharacter } from "./Animation/AnimatedCharacter.js";
 import { BinCollector } from "./cullBin.js";
 import {
   type CachedGeometryData,
@@ -64,7 +64,6 @@ import {
   FilterType,
   type Geom,
   GeomNode,
-  type JointVertexTransform,
   MAX_PRIORITY,
   PandaCompareFunc,
   type PandaNode,
@@ -72,9 +71,10 @@ import {
   type Texture,
   TextureAttrib,
   TransparencyMode,
+  type VertexTransform,
   WrapMode,
 } from "./nodes";
-import type { Character } from "./nodes/Character.js";
+import { Character } from "./nodes/Character.js";
 import type { GeomEntry } from "./nodes/GeomNode.js";
 import { HierarchicalProfiler } from "./profiler.js";
 import {
@@ -87,6 +87,7 @@ import {
 import type { ToontownResourceLoader } from "./resources.js";
 import { SceneGraphViewer } from "./SceneGraphViewer.js";
 import { expandToRGBA } from "./textures.js";
+import { getVolume, setVolume, startPlayback, stopPlayback } from "./Audio.js";
 
 export const pathBase = "Toontown";
 
@@ -202,8 +203,9 @@ function translateDepthTestMode(func: PandaCompareFunc): GfxCompareMode {
   }
 }
 
+let musicEnabled = false;
+
 export class ToontownRenderer implements Viewer.SceneGfx {
-  private scene: PandaNode;
   private renderHelper: GfxRenderHelper;
   private renderInstListMain = new GfxRenderInstList(gfxRenderInstCompareNone);
   private globalDt: number = 0;
@@ -216,7 +218,6 @@ export class ToontownRenderer implements Viewer.SceneGfx {
     string,
     { texture: GfxTexture; sampler: GfxSampler }
   > = new Map();
-  private animatedCharacters: Map<Character, AnimatedCharacter> = new Map();
   private profiler = new HierarchicalProfiler({
     enabled: false,
     historySize: 60,
@@ -227,14 +228,17 @@ export class ToontownRenderer implements Viewer.SceneGfx {
   private sceneGraphViewer: SceneGraphViewer | null = null;
 
   private constructor(
-    device: GfxDevice,
-    scene: PandaNode,
-    animatedCharacters: Map<Character, AnimatedCharacter>,
+    private device: GfxDevice,
+    private scene: PandaNode,
+    private loader: ToontownResourceLoader,
+    private animatedCharacters: Map<Character, AnimatedCharacter>,
+    private musicFile: string | undefined,
   ) {
-    this.scene = scene;
-    this.animatedCharacters = animatedCharacters;
     this.renderHelper = new GfxRenderHelper(device);
     this.toggleSceneGraphViewer();
+    if (this.musicFile && musicEnabled) {
+      startPlayback(this.loader, this.musicFile);
+    }
   }
 
   public adjustCameraController(c: CameraController) {
@@ -254,6 +258,29 @@ export class ToontownRenderer implements Viewer.SceneGfx {
       this.toggleSceneGraphViewer();
     };
     this.debugPanel.contents.appendChild(this.debugSceneGraphCheckbox.elem);
+
+    if (this.musicFile) {
+      const playButton = new UI.Checkbox("Play");
+      playButton.setChecked(musicEnabled);
+      playButton.onchanged = async () => {
+        if (playButton.checked && this.musicFile) {
+          musicEnabled = true;
+          startPlayback(this.loader, this.musicFile);
+        } else {
+          stopPlayback();
+        }
+      };
+      this.debugPanel.contents.appendChild(playButton.elem);
+
+      const volumeSlider = new UI.Slider();
+      volumeSlider.setLabel("Volume");
+      volumeSlider.setRange(0, 1);
+      volumeSlider.setValue(getVolume());
+      volumeSlider.onvalue = async (value) => {
+        setVolume(value);
+      };
+      this.debugPanel.contents.appendChild(volumeSlider.elem);
+    }
 
     return [this.debugPanel];
   }
@@ -297,20 +324,42 @@ export class ToontownRenderer implements Viewer.SceneGfx {
     device: GfxDevice,
     scene: PandaNode,
     loader: ToontownResourceLoader,
-    dataFetcher: DataFetcher,
     animatedCharacters: Map<Character, AnimatedCharacter> = new Map(),
+    musicFile: string | undefined,
   ): Promise<ToontownRenderer> {
-    const renderer = new ToontownRenderer(device, scene, animatedCharacters);
+    const renderer = new ToontownRenderer(
+      device,
+      scene,
+      loader,
+      animatedCharacters,
+      musicFile,
+    );
     // Load all textures used in the scene
-    await renderer.ensureTexturesLoaded(loader, dataFetcher);
+    await renderer.ensureTexturesLoaded(loader);
     return renderer;
   }
 
   private async ensureTexturesLoaded(
     loader: ToontownResourceLoader,
-    dataFetcher: DataFetcher,
   ): Promise<void> {
     const allTextures = new Map<string, Texture>();
+    function addTexture(node: PandaNode, texture: Texture) {
+      // Resolve relative texture paths
+      if (texture.filename.includes("..")) {
+        let currNode: PandaNode | null = node;
+        while (currNode) {
+          const modelPath = currNode.tags.get("DNAModel");
+          if (modelPath) {
+            const baseUrl = new URL(modelPath, window.location.origin);
+            const resolved = new URL(texture.filename, baseUrl).pathname;
+            texture.filename = resolved.substring(1);
+            break;
+          }
+          currNode = currNode.parent;
+        }
+      }
+      allTextures.set(texture.name, texture);
+    }
     this.scene.traverse((node) => {
       if (!(node instanceof GeomNode)) return;
       for (const { state } of node.geoms) {
@@ -321,17 +370,17 @@ export class ToontownRenderer implements Viewer.SceneGfx {
         if (!entry) continue;
         const attrib = entry.attrib as TextureAttrib;
         for (const stage of attrib.onStages) {
-          allTextures.set(stage.texture.name, stage.texture);
+          addTexture(node, stage.texture);
         }
         if (attrib.texture) {
-          allTextures.set(attrib.texture.name, attrib.texture);
+          addTexture(node, attrib.texture);
         }
       }
     });
 
     await Promise.all(
       Array.from(allTextures.values(), (texture) =>
-        this.buildTexture(texture, loader, dataFetcher),
+        this.buildTexture(texture, loader),
       ),
     );
     console.debug(
@@ -339,11 +388,7 @@ export class ToontownRenderer implements Viewer.SceneGfx {
     );
   }
 
-  private async buildTexture(
-    texture: Texture,
-    loader: ToontownResourceLoader,
-    dataFetcher: DataFetcher,
-  ) {
+  private async buildTexture(texture: Texture, loader: ToontownResourceLoader) {
     if (this.textureCache.has(texture.name)) return;
 
     // Try to load embedded raw data first
@@ -369,12 +414,11 @@ export class ToontownRenderer implements Viewer.SceneGfx {
       );
 
       // Create GPU texture
-      const device = this.renderHelper.device;
-      const gfxTexture = device.createTexture(
+      const gfxTexture = this.device.createTexture(
         makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, width, height, 1),
       );
-      device.uploadTextureData(gfxTexture, 0, [rgbaData]);
-      device.setResourceName(gfxTexture, texture.name);
+      this.device.uploadTextureData(gfxTexture, 0, [rgbaData]);
+      this.device.setResourceName(gfxTexture, texture.name);
 
       const gfxSampler = this.createSamplerForTexture(texture);
       this.textureCache.set(texture.name, {
@@ -382,7 +426,7 @@ export class ToontownRenderer implements Viewer.SceneGfx {
         sampler: gfxSampler,
       });
     } else if (texture.filename) {
-      await this.loadExternalTexture(texture, loader, dataFetcher);
+      await this.loadExternalTexture(texture, loader);
     } else {
       throw new Error(
         `Failed to load texture ${texture.name}: no raw data or filename`,
@@ -393,18 +437,31 @@ export class ToontownRenderer implements Viewer.SceneGfx {
   private async loadExternalTexture(
     texture: Texture,
     loader: ToontownResourceLoader,
-    dataFetcher: DataFetcher,
   ): Promise<void> {
+    let filename = texture.filename;
+    if (
+      filename === "phase_4/models/maps/ttr_t_gui_gen_mickeyFontClassic1.rgb"
+    ) {
+      filename = "phase_3/fonts/ttr_t_gui_gen_mickeyFontClassic1.rgb";
+    } else if (
+      filename === "phase_4/models/maps/ttr_t_gui_gen_mickeyFontStandard1.rgb"
+    ) {
+      filename = "phase_3/fonts/ttr_t_gui_gen_mickeyFontStandard1.rgb";
+    } else if (filename.includes("ttr_t_gui_gen_mickeyFontMaximum1.rgb")) {
+      filename = "phase_3/fonts/ttr_t_gui_gen_mickeyFontMaximum1.rgb";
+    } else if (filename.includes("ttr_t_gui_gen_mickeyFontMaximum2.rgb")) {
+      filename = "phase_3/fonts/ttr_t_gui_gen_mickeyFontMaximum2.rgb";
+    }
+
     try {
       const decoded = await loader.loadTexture(
-        texture.filename,
+        filename,
         texture.alphaFilename,
-        dataFetcher,
+        texture.format,
       );
 
       // Create GPU texture
-      const device = this.renderHelper.device;
-      const gfxTexture = device.createTexture(
+      const gfxTexture = this.device.createTexture(
         makeTextureDescriptor2D(
           GfxFormat.U8_RGBA_NORM,
           decoded.width,
@@ -412,8 +469,8 @@ export class ToontownRenderer implements Viewer.SceneGfx {
           1,
         ),
       );
-      device.uploadTextureData(gfxTexture, 0, [decoded.data]);
-      device.setResourceName(gfxTexture, texture.name);
+      this.device.uploadTextureData(gfxTexture, 0, [decoded.data]);
+      this.device.setResourceName(gfxTexture, texture.name);
 
       const gfxSampler = this.createSamplerForTexture(texture);
       this.textureCache.set(texture.name, {
@@ -421,7 +478,7 @@ export class ToontownRenderer implements Viewer.SceneGfx {
         sampler: gfxSampler,
       });
       console.debug(
-        `Loaded external texture ${texture.name} from ${texture.filename} (${decoded.width}x${decoded.height})${texture.alphaFilename ? " with alpha" : ""}`,
+        `Loaded external texture ${texture.name} from ${filename} (${decoded.width}x${decoded.height})${texture.alphaFilename ? " with alpha" : ""}`,
       );
     } catch (e) {
       console.warn(`Failed to load external texture ${texture.name}:`, e);
@@ -498,7 +555,10 @@ export class ToontownRenderer implements Viewer.SceneGfx {
     }
 
     // Set vertex input
-    const vertexBuffers = [{ buffer: geomData.vertexBuffer, byteOffset: 0 }];
+    const vertexBuffers = geomData.vertexBuffers.map((buffer) => ({
+      buffer,
+      byteOffset: 0,
+    }));
     if (geomData.skinningBuffer !== null) {
       vertexBuffers.push({ buffer: geomData.skinningBuffer, byteOffset: 0 });
     }
@@ -677,6 +737,16 @@ export class ToontownRenderer implements Viewer.SceneGfx {
 
       // Combine render states
       const renderState = parentState.compose(node.state);
+
+      if (node instanceof Character) {
+        // If we don't have an animated character for this node,
+        // create one and reset its joint chain to the bind pose
+        if (!this.animatedCharacters.has(node)) {
+          const animChar = new AnimatedCharacter(node);
+          animChar.jointChain.resetToBindPose();
+          this.animatedCharacters.set(node, animChar);
+        }
+      }
 
       // Only render geometry if this node is visible
       if (thisNodeVisible && node instanceof GeomNode) {
@@ -971,6 +1041,9 @@ export class ToontownRenderer implements Viewer.SceneGfx {
   }
 
   public destroy(device: GfxDevice): void {
+    // Stop background music if playing
+    stopPlayback();
+
     // Close scene graph viewer if open
     if (this.sceneGraphViewer !== null) {
       this.sceneGraphViewer.close();
@@ -978,7 +1051,9 @@ export class ToontownRenderer implements Viewer.SceneGfx {
     }
 
     for (const geomData of this.geomCache.values()) {
-      device.destroyBuffer(geomData.vertexBuffer);
+      for (const vertexBuffer of geomData.vertexBuffers) {
+        device.destroyBuffer(vertexBuffer);
+      }
       if (geomData.indexBuffer) {
         device.destroyBuffer(geomData.indexBuffer);
       }
@@ -1009,7 +1084,7 @@ function setupDrawUniform(
 
 function setupSkinningUniform(
   renderInst: GfxRenderInst,
-  transforms: JointVertexTransform[],
+  transforms: VertexTransform[],
 ): void {
   if (transforms.length > MAX_BONES) {
     console.warn(

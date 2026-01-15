@@ -158,14 +158,14 @@ const ALPHA_STATE: RenderState = RenderState.make(
 
 // Render attributes for TransparencyMode.Binary
 const BINARY_STATE: RenderState = RenderState.make(
-  0,
+  MAX_PRIORITY,
   AlphaTestAttrib.create(PandaCompareFunc.GreaterEqual, ALPHA_BINARY_LEVEL),
   TransparencyAttrib.create(TransparencyMode.None),
 );
 
 // Render attributes for TransparencyMode.Dual (transparent pass)
 const DUAL_TRANSPARENT_STATE: RenderState = RenderState.make(
-  0,
+  MAX_PRIORITY,
   AlphaTestAttrib.create(PandaCompareFunc.Greater, 0),
   DepthWriteAttrib.create(DepthWriteMode.Off),
   TransparencyAttrib.create(TransparencyMode.Alpha),
@@ -174,14 +174,14 @@ const DUAL_TRANSPARENT_STATE: RenderState = RenderState.make(
 // Render attributes for TransparencyMode.Dual (transparent pass with decals)
 const DUAL_TRANSPARENT_STATE_DECALS: RenderState = RenderState.make(
   MAX_PRIORITY,
-  AlphaTestAttrib.create(PandaCompareFunc.Greater, ALPHA_DUAL_OPAQUE_LEVEL),
+  AlphaTestAttrib.create(PandaCompareFunc.Less, ALPHA_DUAL_OPAQUE_LEVEL),
   DepthWriteAttrib.create(DepthWriteMode.Off),
   TransparencyAttrib.create(TransparencyMode.Alpha),
 );
 
 // Render attributes for TransparencyMode.Dual (opaque pass)
 const DUAL_OPAQUE_STATE: RenderState = RenderState.make(
-  0,
+  MAX_PRIORITY,
   AlphaTestAttrib.create(
     PandaCompareFunc.GreaterEqual,
     ALPHA_DUAL_OPAQUE_LEVEL,

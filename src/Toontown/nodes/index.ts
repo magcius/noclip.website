@@ -15,6 +15,7 @@ export { Character } from "./Character";
 export { CharacterJoint } from "./CharacterJoint";
 export { CharacterJointBundle } from "./CharacterJointBundle";
 export { CharacterSlider } from "./CharacterSlider";
+export { CharacterVertexSlider } from "./CharacterVertexSlider";
 export { ComputedVertices } from "./ComputedVertices";
 export { JointVertexTransform } from "./JointVertexTransform";
 export { MovingPartBase } from "./MovingPartBase";
@@ -22,12 +23,17 @@ export { MovingPartMatrix } from "./MovingPartMatrix";
 export { MovingPartScalar } from "./MovingPartScalar";
 export { PartBundle } from "./PartBundle";
 export { PartGroup } from "./PartGroup";
+export { SliderTable } from "./SliderTable";
 export { TransformBlend, type TransformEntry } from "./TransformBlend";
 export { TransformBlendTable } from "./TransformBlendTable";
 export { TransformTable } from "./TransformTable";
+export { UserVertexTransform } from "./UserVertexTransform";
+export { VertexSlider } from "./VertexSlider";
+export { VertexTransform } from "./VertexTransform";
 
 // Collision
 export { CollisionNode } from "./CollisionNode";
+export { CollisionBox } from "./CollisionBox";
 export { CollisionPlane } from "./CollisionPlane";
 export { CollisionPolygon } from "./CollisionPolygon";
 export { CollisionSolid } from "./CollisionSolid";
@@ -44,12 +50,14 @@ export { TransparencyAttrib, TransparencyMode } from "./TransparencyAttrib";
 export { RenderAttrib, PandaCompareFunc } from "./RenderAttrib";
 export { AlphaTestAttrib } from "./AlphaTestAttrib";
 export { ColorAttrib, ColorType } from "./ColorAttrib";
+export { ColorBlendAttrib, ColorBlendMode, ColorBlendOperand } from "./ColorBlendAttrib";
 export { ColorScaleAttrib } from "./ColorScaleAttrib";
 export { ColorWriteAttrib, ColorWriteChannels } from "./ColorWriteAttrib";
 export { CullBinAttrib } from "./CullBinAttrib";
 export { CullFaceAttrib, CullFaceMode } from "./CullFaceAttrib";
 export { DepthTestAttrib } from "./DepthTestAttrib";
 export { DepthWriteAttrib, DepthWriteMode } from "./DepthWriteAttrib";
+export { MaterialAttrib } from "./MaterialAttrib";
 export { TextureApplyAttrib, TextureApplyMode } from "./TextureApplyAttrib";
 
 // Debug utilities
@@ -102,7 +110,10 @@ export { LODNode } from "./LODNode";
 export { PandaNode } from "./PandaNode";
 export { SequenceNode, PlayMode } from "./SequenceNode";
 export { InternalName } from "./InternalName";
-export { ModelNode, ModelRoot, PreserveTransform } from "./ModelNode";
+export { ModelNode, PreserveTransform } from "./ModelNode";
+export { ModelRoot } from "./ModelRoot";
+export { SheetNode } from "./SheetNode";
+export { UvScrollNode } from "./UvScrollNode";
 
 // Curves
 export { CubicCurveseg } from "./CubicCurveseg";

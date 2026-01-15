@@ -43,6 +43,7 @@ getrandom = { version = "0.2.15", features = ["js"] }
 noclip-macros = { version = "*", path = "./noclip-macros" }
 texture2ddecoder = { git = "https://github.com/wgreenberg/texture2ddecoder" }
 anyhow = "1.0.99"
+fontmesh = "0.3"
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(wasm_bindgen_unstable_test_coverage)'] }

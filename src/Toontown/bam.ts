@@ -37,7 +37,6 @@ interface UnparsedObject {
 }
 
 export class BAMFile {
-  private _typeRegistry: Map<number, string>;
   private _objects: Map<number, BAMObject>;
   private _objectData: Map<number, UnparsedObject>;
   private _streamState: DataStreamState;
@@ -46,7 +45,6 @@ export class BAMFile {
   public header: BAMHeader;
 
   constructor(data: ArrayBufferSlice, options: BAMFileOptions = {}) {
-    this._typeRegistry = new Map();
     this._objects = new Map();
     this._objectData = new Map();
     this._debug = options.debug ?? false;
@@ -200,26 +198,13 @@ export class BAMFile {
     return data.substream(datagramSize);
   }
 
-  private _readTypeHandle(data: DataStream): number {
-    const typeIndex = data.readUint16();
-    if (!this._typeRegistry.has(typeIndex)) {
-      const name = data.readString();
-      this._typeRegistry.set(typeIndex, name);
-      const parentCount = data.readUint8();
-      for (let i = 0; i < parentCount; i++) {
-        this._readTypeHandle(data);
-      }
-    }
-    return typeIndex;
-  }
-
   private _readObjectHeader(data: DataStream) {
-    const typeIndex = this._readTypeHandle(data);
+    const typeIndex = data.readTypeHandle();
     const objectId = data.readObjectId();
     if (typeIndex === 0) {
       return;
     }
-    const typeName = this._typeRegistry.get(typeIndex);
+    const typeName = this._streamState.typeRegistry.get(typeIndex);
     if (!typeName) {
       throw new Error(`Unknown type index ${typeIndex}`);
     }

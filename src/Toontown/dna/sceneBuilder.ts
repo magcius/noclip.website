@@ -1,7 +1,4 @@
-// DNASceneBuilder - Builds a renderable scene from DNA files
-// Traverses the DNA scene graph and loads referenced BAM models
-
-import { mat4, vec3, vec4 } from "gl-matrix";
+import { mat4, vec2, vec3, vec4 } from "gl-matrix";
 import type { DataFetcher } from "../../DataFetcher";
 import type { BAMFile } from "../bam";
 import {
@@ -16,12 +13,16 @@ import {
   TransformState,
 } from "../nodes";
 import type { PandaNode } from "../nodes/PandaNode";
+import { TextNode } from "../text";
+import type { TextFont } from "../text";
 import type { ToontownResourceLoader } from "../resources";
 import type { DecodedImage } from "../textures";
+import { DNASignBaseline } from "./DNASignBaseline";
 import type { DNAStorage } from "./storage";
 import type {
   DNAAnimBuilding,
   DNAAnimProp,
+  DNABaseline,
   DNACornice,
   DNADoor,
   DNAFile,
@@ -34,6 +35,8 @@ import type {
   DNANodeTransform,
   DNAProp,
   DNASign,
+  DNASignGraphic,
+  DNASignText,
   DNAStreet,
   DNAVisGroup,
   DNAWall,
@@ -62,7 +65,6 @@ export class DNASceneBuilder {
   constructor(
     private storage: DNAStorage,
     private loader: ToontownResourceLoader,
-    private dataFetcher: DataFetcher,
   ) {}
 
   /**
@@ -93,8 +95,9 @@ export class DNASceneBuilder {
   private async preloadModels(): Promise<void> {
     const modelPaths = this.storage.getRequiredModelPaths();
     const texturePaths = this.storage.getRequiredTextures();
+    const fontPaths = this.storage.getRequiredFontPaths();
     console.log(
-      `Preloading ${modelPaths.size} BAM models and ${texturePaths.size} textures`,
+      `Preloading ${modelPaths.size} BAM models, ${texturePaths.size} textures, ${fontPaths.length} fonts`,
     );
 
     const loadPromises: Promise<void>[] = [];
@@ -108,6 +111,9 @@ export class DNASceneBuilder {
         loadPromises.push(this.loadTexture(path));
       }
     }
+    if (fontPaths.length > 0) {
+      loadPromises.push(this.storage.loadFonts(this.loader));
+    }
 
     await Promise.all(loadPromises);
     console.log(
@@ -120,7 +126,7 @@ export class DNASceneBuilder {
    */
   private async loadModel(path: string): Promise<void> {
     try {
-      const bamFile = await this.loader.loadModel(path, this.dataFetcher);
+      const bamFile = await this.loader.loadModel(path);
       this.modelCache.set(path, bamFile);
     } catch (e) {
       console.warn(`Failed to load model ${path}:`, e);
@@ -132,11 +138,7 @@ export class DNASceneBuilder {
    */
   private async loadTexture(path: string): Promise<void> {
     try {
-      const texture = await this.loader.loadTexture(
-        path,
-        null,
-        this.dataFetcher,
-      );
+      const texture = await this.loader.loadTexture(path, null, null);
       this.textureCache.set(path, texture);
     } catch (e) {
       console.warn(`Failed to load texture ${path}:`, e);
@@ -348,7 +350,8 @@ export class DNASceneBuilder {
     const thisNode = this.addGeometryFromCode(node.code, parentNode);
     if (!thisNode) return;
     thisNode.transform = buildTransformState(node);
-    thisNode.tags.set("DNAAnim", node.anim);
+    // Building animations are never activated
+    // thisNode.tags.set("DNAAnim", node.anim);
 
     for (const child of node.children) {
       this.visitNode(child, thisNode);
@@ -627,6 +630,151 @@ export class DNASceneBuilder {
     parentNode.setEffect(new DecalEffect());
   }
 
+  private visitBaseline(baseline: DNABaseline, parentNode: PandaNode): void {
+    const baselineColor = baseline.color ?? vec4.fromValues(1, 1, 1, 1);
+    const baselineFlags = baseline.flags ?? "";
+
+    let font = baseline.code ? this.storage.getFont(baseline.code) : null;
+    if (!font && baseline.code) {
+      console.warn(`Unable to find baseline font: ${baseline.code}`);
+    }
+    if (!font) {
+      // Fallback to any font
+      font = this.storage.getAnyFont();
+    }
+
+    const baselineNode = parentNode.attachNewNode("baseline");
+    baselineNode.setColor(baselineColor);
+
+    const layout = new DNASignBaseline({
+      width: baseline.width ?? 0,
+      height: baseline.height ?? 0,
+      indent: baseline.indent ?? 0,
+      kern: baseline.kern ?? 0,
+      wiggle: baseline.wiggle ?? 0,
+      stumble: baseline.stumble ?? 0,
+      stomp: baseline.stomp ?? 0,
+      scale: baseline.scale
+        ? vec3.clone(baseline.scale)
+        : vec3.fromValues(1, 1, 1),
+    });
+    layout.reset();
+
+    const width = baseline.width ?? 0;
+    const height = baseline.height ?? 0;
+    const items =
+      width < 0 || height < 0 ? [...baseline.items].reverse() : baseline.items;
+
+    for (const item of items) {
+      if (item.type === "text") {
+        if (!font) {
+          console.warn(`No font available for sign text: "${item.letters}"`);
+          continue;
+        }
+        this.visitSignText(
+          item,
+          baselineColor,
+          baselineFlags,
+          layout,
+          font,
+          baselineNode,
+        );
+      } else if (item.type === "graphic") {
+        this.visitSignGraphic(item, baselineColor, layout, baselineNode);
+      }
+    }
+
+    const pos = baseline.pos ? vec3.clone(baseline.pos) : vec3.create();
+    const hpr = baseline.hpr ? vec3.clone(baseline.hpr) : vec3.create();
+    layout.center(pos, hpr);
+    baselineNode.setPosHprScale(pos, hpr, vec3.fromValues(1, 1, 1));
+  }
+
+  private visitSignText(
+    dnaText: DNASignText,
+    baselineColor: vec4,
+    baselineFlags: string,
+    layout: DNASignBaseline,
+    baselineFont: TextFont,
+    parentNode: PandaNode,
+  ): void {
+    const color = dnaText.color ?? baselineColor;
+
+    let font = baselineFont;
+    if (dnaText.code) {
+      const override = this.storage.getFont(dnaText.code);
+      if (override) {
+        font = override;
+      } else {
+        console.warn(`Unable to find sign text font: ${dnaText.code}`);
+      }
+    }
+
+    const textNode = new TextNode("sign");
+    textNode.font = font;
+    textNode.textColor = color;
+
+    let letters = dnaText.letters ?? "";
+    if (baselineFlags.includes("c")) {
+      letters = letters.toUpperCase();
+    }
+
+    if (baselineFlags.includes("d")) {
+      textNode.shadowColor = vec4.fromValues(
+        color[0] * 0.3,
+        color[1] * 0.3,
+        color[2] * 0.3,
+        color[3] * 0.7,
+      );
+      textNode.shadowOffset = vec2.fromValues(0.03, 0.03);
+    }
+
+    textNode.text = letters;
+
+    const pos = dnaText.pos ? vec3.clone(dnaText.pos) : vec3.create();
+    const hpr = dnaText.hpr ? vec3.clone(dnaText.hpr) : vec3.create();
+    const scale = dnaText.scale
+      ? vec3.clone(dnaText.scale)
+      : vec3.fromValues(1, 1, 1);
+
+    if (baselineFlags.includes("b") && layout.isFirstLetterOfWord(letters)) {
+      scale[0] *= 1.5;
+      scale[2] *= 1.5;
+    }
+
+    const textSize = vec3.fromValues(textNode.width, 0, textNode.height);
+    layout.nextPosHprScale(pos, hpr, scale, textSize);
+
+    const textGeom = textNode.generate();
+    parentNode.addChild(textGeom);
+    textGeom.setPosHprScale(pos, hpr, scale);
+  }
+
+  private visitSignGraphic(
+    dnaGraphic: DNASignGraphic,
+    baselineColor: vec4,
+    layout: DNASignBaseline,
+    parentNode: PandaNode,
+  ): void {
+    const graphicNode = this.addGeometryFromCode(dnaGraphic.code, parentNode);
+    if (!graphicNode) return;
+
+    const graphicSize = vec3.fromValues(
+      dnaGraphic.width ?? 0,
+      0,
+      dnaGraphic.height ?? 0,
+    );
+    const pos = dnaGraphic.pos ? vec3.clone(dnaGraphic.pos) : vec3.create();
+    const hpr = dnaGraphic.hpr ? vec3.clone(dnaGraphic.hpr) : vec3.create();
+    const scale = dnaGraphic.scale
+      ? vec3.clone(dnaGraphic.scale)
+      : vec3.fromValues(1, 1, 1);
+
+    layout.nextPosHprScale(pos, hpr, scale, graphicSize);
+    graphicNode.setPosHprScale(pos, hpr, scale);
+    graphicNode.setColor(dnaGraphic.color ?? baselineColor);
+  }
+
   private visitSign(node: DNASign, parentNode: PandaNode) {
     let buildingFront = parentNode.find("**/sign_decal");
     if (!buildingFront) {
@@ -648,6 +796,7 @@ export class DNASceneBuilder {
     }
     if (!signNode) return;
     signNode.setAttrib(DepthWriteAttrib.create(DepthWriteMode.Off));
+    signNode.setEffect(new DecalEffect());
 
     const signOrigin = parentNode.find("**/*sign_origin");
     if (!signOrigin) {
@@ -662,6 +811,10 @@ export class DNASceneBuilder {
       ),
     );
     if (node.color) signNode.setColor(node.color);
+
+    for (const baseline of node.baselines) {
+      this.visitBaseline(baseline, signNode);
+    }
 
     for (const child of node.children) {
       this.visitNode(child, signNode);
@@ -680,21 +833,24 @@ export class DNASceneBuilder {
       return null;
     }
 
-    const modelPath = `${nodeRef.modelPath}.bam`;
-    const bamFile = this.modelCache.get(modelPath);
+    const bamFile = this.modelCache.get(nodeRef.modelPath);
     if (!bamFile) {
-      console.warn(`Model not loaded: ${modelPath} for code ${code}`);
+      console.warn(`Model not loaded: ${nodeRef.modelPath} for code ${code}`);
       return null;
     }
 
     let geomNode: PandaNode;
     if (nodeRef.nodeName) {
       const found = bamFile.find(`**/${nodeRef.nodeName}`);
-      if (!found) {
-        console.warn(`Node not found: ${nodeRef.nodeName} in ${modelPath}`);
-        return null;
+      if (found) {
+        geomNode = found;
+      } else {
+        console.warn(
+          `Node not found: ${nodeRef.nodeName} in ${nodeRef.modelPath}`,
+          bamFile,
+        );
+        geomNode = bamFile.getRoot();
       }
-      geomNode = found;
     } else {
       geomNode = bamFile.getRoot();
     }
@@ -718,21 +874,24 @@ export class DNASceneBuilder {
       return null;
     }
 
-    const modelPath = `${nodeRef.modelPath}.bam`;
-    const bamFile = this.modelCache.get(modelPath);
+    const bamFile = this.modelCache.get(nodeRef.modelPath);
     if (!bamFile) {
-      console.warn(`Model not loaded: ${modelPath} for code ${code}`);
+      console.warn(`Model not loaded: ${nodeRef.modelPath} for code ${code}`);
       return null;
     }
 
     let geomNode: PandaNode;
     if (nodeRef.nodeName) {
       const found = bamFile.find(`**/${nodeRef.nodeName}`);
-      if (!found) {
-        console.warn(`Node not found: ${nodeRef.nodeName} in ${modelPath}`);
-        return null;
+      if (found) {
+        geomNode = found;
+      } else {
+        console.warn(
+          `Node not found: ${nodeRef.nodeName} in ${nodeRef.modelPath}`,
+          bamFile,
+        );
+        geomNode = bamFile.getRoot();
       }
-      geomNode = found;
     } else {
       geomNode = bamFile.getRoot();
     }

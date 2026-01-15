@@ -2,6 +2,7 @@
 
 import { vec3, vec4 } from "gl-matrix";
 import { Lexer, type Token, TokenType } from "./lexer";
+import { parseDNAXML } from "./xmlParser";
 import {
   type BattleCell,
   type DNAAnimBuilding,
@@ -1386,6 +1387,11 @@ export class DNAParser {
 }
 
 export function parseDNA(input: string): DNAFile {
+  const trimmed = input.trimStart().replace(/^\ufeff/, "");
+  if (trimmed.startsWith("<")) {
+    return parseDNAXML(trimmed);
+  }
+
   const parser = new DNAParser(input);
   return parser.parse();
 }

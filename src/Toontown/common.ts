@@ -29,6 +29,7 @@ export class DataStreamState {
     public longObjectIds = false,
     // Global PTA cache shared across all objects in the BAM file
     public ptaCache = new Map<number, unknown>(),
+    public typeRegistry = new Map<number, string>(),
   ) {}
 }
 
@@ -173,6 +174,20 @@ export class DataStream {
       }
     }
     return value;
+  }
+
+  readTypeHandle(): number {
+    const typeIndex = this.readUint16();
+    if (typeIndex === 0) return 0;
+    if (!this.state.typeRegistry.has(typeIndex)) {
+      const name = this.readString();
+      this.state.typeRegistry.set(typeIndex, name);
+      const parentCount = this.readUint8();
+      for (let i = 0; i < parentCount; i++) {
+        this.readTypeHandle();
+      }
+    }
+    return typeIndex;
   }
 
   subarray(length?: number): ArrayBufferSlice {

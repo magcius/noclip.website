@@ -7,9 +7,14 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as zlib from "node:zlib";
+import { DOMParser as XmldomParser } from "@xmldom/xmldom";
 import ArrayBufferSlice from "../../ArrayBufferSlice";
 import { BAMFile } from "../bam";
 import { type DNAFile, parseDNA } from "../dna";
+
+if (typeof DOMParser === "undefined") {
+  (globalThis as any).DOMParser = XmldomParser;
+}
 
 // Usage: npx tsx src/Toontown/tools/cli.ts [model_path] [data_path]
 // Example: npx tsx src/Toontown/tools/cli.ts phase_4/models/props/anvil-mod.bam Toontown_1.0.6.9
