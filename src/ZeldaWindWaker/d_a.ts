@@ -5691,7 +5691,7 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
 
         if (demoActor.flags & EDemoActorFlags.HasPos) { vec3.copy(this.pos, demoActor.translation); }
         if (demoActor.flags & EDemoActorFlags.HasRot) { this.rot[1] = demoActor.rotation[1]; }
-        if (demoActor.flags & EDemoActorFlags.HasFrame) { anmFrame = demoActor.animFrame; }
+        if (demoActor.flags & EDemoActorFlags.HasAnimFrame) { anmFrame = demoActor.animFrame; }
 
         if (demoActor.flags & EDemoActorFlags.HasData) {
             const status = demoActor.stbData.getUint8(0);
@@ -5764,7 +5764,7 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
         }
 
         if (anmBckId === 0xFFFF || this.anmBckId === anmBckId) {
-            if (demoActor.flags & EDemoActorFlags.HasFrame) {
+            if (demoActor.flags & EDemoActorFlags.HasAnimFrame) {
                 this.anmBck.frameCtrl.setFrame(this.anmBck.frameCtrl.applyLoopMode(anmFrame));
                 this.anmBtp.frameCtrl.setFrame(this.anmBtp.frameCtrl.applyLoopMode(anmFrame));
                 demoActor.animFrameMax = this.anmBck.frameCtrl.endFrame;
@@ -6618,29 +6618,40 @@ class d_a_bridge extends fopAc_ac_c {
     }
 }
 
-// Demo-only actors spawned during cutscenes
+// Demo-only actors which are controlled by the STB demo system
+class daDemo00_resID_c {
+    public modelId: number = -1;
+    public bckId: number = -1;
+    public btpId: number = -1;
+    public btkId: number = -1;
+    public brkId: number = -1;
+    public plightId: number = -1;
+    // shadowID;
+}
 class d_a_demo00 extends fopAc_ac_c {
     public static PROCESS_NAME = dProcName_e.d_a_demo00;
 
-    private actionFunc: (demoActor: dDemo_actor_c) => void = this.actStandby;
+    private actionFunc: (globals: dGlobals, deltaTimeFrames: number, demoActor: dDemo_actor_c) => void = this.actStandby;
 
     // daDemo00_model_c
-    private morf: mDoExt_McaMorf;
-    private model: J3DModelInstance;
-    private bck: mDoExt_bckAnm;
-    private btp: mDoExt_btpAnm;
-    private btk: mDoExt_brkAnm;
-    private brk: mDoExt_brkAnm;
+    private model: J3DModelInstance | null = null;
+    private morf: mDoExt_McaMorf | null = null;
+    private bck: mDoExt_bckAnm | null = null;
+    private btp: mDoExt_btpAnm | null = null;
+    private btk: mDoExt_btkAnm | null = null;
+    private brk: mDoExt_brkAnm | null = null;
     // private plight: dDemo_plight_c;
 
     // daDemo00_shadow_c
     private shadowId: number = -1;
     private shadowPos = vec3.create();
 
-    // daDemo00_resID_c
-    private nextModelId: number = -1;
-    private nextBckId: number = -1;
-    private nextPlightId: number = -1;
+    private currIds: daDemo00_resID_c = new daDemo00_resID_c();
+    private nextIds: daDemo00_resID_c = new daDemo00_resID_c();
+
+    private groundY: number = -Infinity;
+    private gndChk = new dBgS_GndChk();
+
 
     public override subload(globals: dGlobals): cPhs__Status {
         dKy_tevstr_init(this.tevStr, globals.mStayNo, 0xFF);
@@ -6648,10 +6659,90 @@ class d_a_demo00 extends fopAc_ac_c {
     }
 
     public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        // TODO:
+        if (this.model !== null) {
+            settingTevStruct(globals, LightType.Actor, this.pos, this.tevStr);
+            setLightTevColorType(globals, this.model, this.tevStr, globals.camera);
+
+            if (this.btp !== null) {
+                this.btp.entry(this.model);
+            }
+
+            if (this.btk !== null) {
+                this.btk.entry(this.model);
+            }
+
+            if (this.brk !== null) {
+                this.brk.entry(this.model);
+            }
+
+            // const invisibleModel = this.invisibleModel;
+            // if (invisibleModel === null) {
+            // Check for special stage handling
+            if (globals.stageName === "GTower") {
+                // TODO: Set special draw buffers for GTower
+            }
+
+            // if (this.stbDataID === 2) {
+            //     // TODO: Set invisible model mask off buffers
+            // } else if (this.stbDataID === 8) {
+            //     // TODO: Set special buffers
+            // }
+
+            if (this.morf === null) {
+                mDoExt_modelUpdateDL(globals, this.model, renderInstManager);
+            } else {
+                this.morf.entryDL(globals, renderInstManager);
+            }
+
+            // Restore buffers if needed
+            // if ((this.model.modelData.bmd.shp1.skinDeform !== null) || (this.stbDataID === 2) || (this.stbDataID === 8)) {
+            //     // TODO: Restore invisible model buffers
+            // }
+            // } else {
+            //     if (this.morf === null) {
+            //         invisibleModel.updateDL(this.model);
+            //     } else {
+            //         invisibleModel.updateDL(this.morf);
+            //     }
+            // }
+
+            // Handle shadow drawing
+            // if (this.shadowId >= 0) {
+            //     const shadowType = 0; // TODO: Get from this.resID.shadowID
+            //     if (shadowType === 0 || shadowType === 1) {
+            //         vec3.add(scratchVec3a, this.pos, this.shadowPos);
+            //         const casterCenter = vec3.copy(this.gndChk.pos, scratchVec3a);
+            //         const groundY = this.groundY;
+            //         const shadowSize = 800; // TODO: Get from shadow data
+            //         const shadowDepth = 40; // TODO: Get from shadow data
+            //         this.shadowId = dComIfGd_setShadow(globals, this.shadowId, shadowType === 1, this.model,
+            //             casterCenter, shadowSize, shadowDepth, this.pos[1], groundY, this.gndChk.polyInfo, this.tevStr);
+            //     } else {
+            //         // Simple shadow
+            //         vec3.copy(scratchVec3a, this.pos);
+            //         scratchVec3a[1] = globals.scnPlay.bgS.GroundCross(this.gndChk);
+            //         const shadowSize = 800; // TODO: Get from shadow data
+            //         // TODO: dComIfGd_setSimpleShadow2
+            //     }
+            // }
+
+            // Remove animators after drawing
+            // if (this.btp !== null) {
+            //     // Material table removeTexNoAnimator
+            // }
+
+            // if (this.btk !== null) {
+            //     // Material table removeTexMtxAnimator
+            // }
+
+            // if (this.brk !== null) {
+            //     // Material table removeTevRegAnimator
+            // }
+        }
     }
 
     public override execute(globals: dGlobals, deltaTimeFrames: number): void {
+        // TODO: This isn't execute because we're not adding it to the Ct queue, which then moves it to the Ex queue
         const demoActor = globals.scnPlay.demo.getSystem().getActor(this.demoActorID);
         if (!demoActor) {
             fopAcM_delete(globals.frameworkGlobals, this);
@@ -6659,23 +6750,87 @@ class d_a_demo00 extends fopAc_ac_c {
         }
 
         if (demoActor.checkEnable(EDemoActorFlags.HasShape)) {
-            this.nextModelId = demoActor.shapeId;
+            this.nextIds.modelId = demoActor.shapeId;
         }
         if (demoActor.checkEnable(EDemoActorFlags.HasAnim)) {
-            this.nextBckId = demoActor.bckId;
+            this.nextIds.bckId = demoActor.nextBckId;
         }
         if (demoActor.checkEnable(EDemoActorFlags.HasData)) {
             // TODO:
         }
 
-        this.actionFunc(demoActor);
+        this.actionFunc(globals, deltaTimeFrames, demoActor);
     }
 
-    private actStandby(demoActor: dDemo_actor_c): void {
-        if (this.nextModelId != -1 || this.nextPlightId != -1) {
+    // TODO: Move this directly into Standby
+    private createHeap(globals: dGlobals): void {
+        const demoArcName = globals.roomCtrl.demoArcName!;
 
-            // createHeap
-            // TODO:
+        if (this.nextIds.modelId !== -1) {
+            const modelData = globals.resCtrl.getObjectIDRes(ResType.Model, demoArcName, this.nextIds.modelId);
+
+            let modelFlags = 0x11000002;
+
+            // // Load BTP (texture pattern) animation if specified
+            // if (this.nextIds.btpId !== -1) {
+            //     const btpRes = globals.resCtrl.getObjectIDRes(ResType.Btp, demoArcName, this.nextIds.btpId);
+            //     if (btpRes === null)
+            //         return false;
+
+            //     this.btp = new mDoExt_btpAnm();
+            //     this.btp.init(pModelData, btpRes, true, LoopMode.Repeat, 1.0, 0, -1);
+            //     modelFlags |= 0x04020000;
+            // }
+
+            // // Load BTK (texture matrix) animation if specified
+            // const btkResID = this.nextIds.btkId; // TODO: Should be separate BTK ID
+            // if (btkResID !== -1) {
+            //     const btkRes = globals.resCtrl.getObjectIDRes(ResType.Btk, demoArcName, btkResID);
+            //     if (btkRes === null)
+            //         return false;
+
+            //     this.btk = new mDoExt_btkAnm();
+            //     this.btk.init(pModelData, btkRes, true, LoopMode.Repeat, 1.0, 0, -1);
+
+            //     if ((btkResID & 0x10000000) === 0)
+            //         modelFlags |= 0x200;
+            //     else
+            //         modelFlags |= 0x1200;
+            // }
+
+            // // Load BRK (color register) animation if specified
+            // const brkResID = this.nextIds.brkId; // TODO: Should be separate BRK ID
+            // if (brkResID !== -1) {
+            //     const brkRes = globals.resCtrl.getObjectIDRes(ResType.Brk, demoArcName, brkResID);
+            //     if (brkRes === null)
+            //         return false;
+
+            //     this.brk = new mDoExt_brkAnm();
+            //     this.brk.init(pModelData, brkRes, true, LoopMode.Repeat, 1.0, 0, -1);
+            // }
+
+            // Create model with or without BCK animation
+            if (this.nextIds.bckId === -1) {
+                this.morf = null;
+                this.model = new J3DModelInstance(modelData);
+            } else {
+                const bckRes = globals.resCtrl.getObjectIDRes(ResType.Bck, demoArcName, this.nextIds.bckId);
+                this.morf = new mDoExt_McaMorf(modelData, null, null, bckRes, LoopMode.Once, 1.0, 0, -1);
+                this.model = this.morf.model;
+            }
+
+            // TODO: Create invisible model if needed (stbDataID === 3)
+            // TODO: Setup shadow if shadowID !== -1
+            // TODO: Setup ground check
+        }
+
+        // TODO: Setup point light if plightResID !== -1
+    }
+
+    private actStandby(globals: dGlobals, deltaTimeFrames: number, demoActor: dDemo_actor_c): void {
+        if (this.nextIds.modelId !== -1 || this.nextIds.plightId !== -1) {
+            this.currIds = this.nextIds;
+            this.createHeap(globals);
 
             if (this.model != null) {
                 this.cullMtx = this.model.modelMatrix;
@@ -6689,8 +6844,172 @@ class d_a_demo00 extends fopAc_ac_c {
         }
     }
 
-    private actPerformance(demoActor: dDemo_actor_c): void {
-        // TODO:
+    private actPerformance(globals: dGlobals, deltaTimeFrames: number, demoActor: dDemo_actor_c): void {
+        // Check if model resources match current state
+        if (this.nextIds.modelId !== this.currIds.modelId && this.nextIds.plightId !== (this.currIds.plightId ?? -1)) {
+            this.actionFunc = this.actLeaving;
+            return;
+        }
+
+        if (this.model === null) {
+            // Handle point light only case
+            if (this.nextIds.plightId !== -1) {
+                // TODO: dDemo_setDemoData for point light only
+                // TODO: dKydm_demo_plight_execute
+            }
+        } else {
+            const arcName = globals.roomCtrl.demoArcName!;
+
+            // Reload BCK animation if changed
+            if (this.morf !== null && this.nextIds.bckId !== this.currIds.bckId) {
+                const bckRes = globals.resCtrl.getObjectIDRes(ResType.Bck, arcName, this.nextIds.bckId);
+                let morf = (demoActor.flags & EDemoActorFlags.HasAnimFrame) ? demoActor.animTransition : 0.0;
+                this.morf.setAnm(bckRes, -1 as LoopMode, morf, 1.0, 0.0, -1.0);
+                this.currIds.bckId = this.nextIds.bckId;
+            }
+
+            // Reload BTP animation if changed
+            if (this.currIds.btpId !== this.nextIds.btpId) {
+                const btpRes = globals.resCtrl.getObjectIDRes(ResType.Btp, arcName, this.nextIds.btpId);
+                this.btp!.init(this.model.modelData, btpRes, true, -1 as LoopMode, 1.0, 0, -1);
+                this.currIds.btpId = this.nextIds.btpId;
+            }
+
+            // Reload BTK animation if changed
+            if (this.currIds.btkId !== this.nextIds.btkId) {
+                const btkRes = globals.resCtrl.getObjectIDRes(ResType.Btk, arcName, this.nextIds.btkId);
+
+                const keepFrame = !!(this.nextIds.btkId & 0x10000000);
+                const startFrame = keepFrame ? this.btk!.frameCtrl.currentTimeInFrames : 0.0;
+                const loopMode = keepFrame ? LoopMode.Repeat : LoopMode.Once;
+
+                this.btk!.init(this.model.modelData, btkRes, true, loopMode, 1.0, startFrame, -1);
+                this.currIds.btkId = this.nextIds.btkId;
+            }
+
+            // Reload BRK animation if changed
+            if (this.currIds.brkId !== this.nextIds.brkId) {
+                const brkRes = globals.resCtrl.getObjectIDRes(ResType.Brk, arcName, this.nextIds.brkId);
+
+                const keepFrame = !!(this.nextIds.brkId & 0x10000000);
+                const startFrame = keepFrame ? this.brk!.frameCtrl.currentTimeInFrames : 0.0;
+                const loopMode = keepFrame ? LoopMode.Repeat : LoopMode.Once;
+
+                this.brk!.init(this.model.modelData, brkRes, true, loopMode, 1.0, startFrame, -1);
+                this.currIds.brkId = this.nextIds.brkId;
+            }
+
+            // Copy position and rotation from the demo to this actor
+            const channelMask = EDemoActorFlags.HasPos | EDemoActorFlags.HasRot | EDemoActorFlags.HasAnim;
+            assert(channelMask == 0x2a);
+            dDemo_setDemoData(globals, deltaTimeFrames, this, channelMask, null, null);
+
+            // Update ground check position
+            if (this.gndChk) {
+                vec3.set(this.gndChk.pos, this.pos[0], this.pos[1] + 100.0, this.pos[2]);
+                this.groundY = globals.scnPlay.bgS.GroundCross(this.gndChk);
+            }
+
+            // setBaseMtx()
+            MtxTrans(this.pos, false, this.model.modelMatrix);
+            mDoMtx_XYZrotM(this.model.modelMatrix, this.rot);
+            this.model.baseScale = this.scale;
+            this.cullMtx = this.model.modelMatrix;
+            this.model.calcAnim();
+
+            // Play animations
+            if (!(demoActor.flags & EDemoActorFlags.HasAnimFrame)) {
+                // Auto-advance animations
+                if (this.morf !== null) {
+                    this.morf.play(deltaTimeFrames);
+                } else {
+                    if (this.btp !== null)
+                        this.btp.play(deltaTimeFrames);
+                    if (this.btk !== null)
+                        this.btk.play(deltaTimeFrames);
+                    if (this.brk !== null)
+                        this.brk.play(deltaTimeFrames);
+                }
+            } else {
+                // Set explicit frame
+                // TODO: These frames seem to be 0-1.0, but our anim system to be frame numbers from 0 to endFrame 
+                const frame = demoActor.animFrame;
+
+                if (frame <= 1.0) {
+                    // Simple frame set
+                    if (this.morf !== null) this.morf.frameCtrl.setFrame(frame);
+                    if (this.btp !== null) this.btp.frameCtrl.setFrame(frame);
+                    if (this.btk !== null) {
+                        if (!(this.currIds.btkId & 0x10000000))
+                            this.btk.frameCtrl.setFrame(frame);
+                        else
+                            this.btk.play(deltaTimeFrames);
+                    }
+                    if (this.brk !== null) {
+                        if (!(this.currIds.brkId & 0x10000000))
+                            this.brk.frameCtrl.setFrame(frame);
+                        else
+                            this.brk.play(deltaTimeFrames);
+                    }
+                } else {
+                    // Frame with sound trigger
+                    const soundFrame = frame - 1.0;
+
+                    if (this.morf !== null) {
+                        this.morf.frameCtrl.setFrame(soundFrame);
+
+                        // Would play a sound if within 20 units of the ground
+                        const onGround = Math.abs(this.gndChk.retY - this.pos[1]) < 20.0;
+
+                        this.morf.play(deltaTimeFrames);
+                    }
+
+                    if (this.btp !== null) {
+                        this.btp.frameCtrl.setFrame(soundFrame);
+                        this.btp.play(deltaTimeFrames);
+                    }
+
+                    if (this.btk !== null) {
+                        if (!(this.nextIds.bckId & 0x10000000))
+                            this.btk.frameCtrl.setFrame(soundFrame);
+                        this.btk.play(deltaTimeFrames);
+                    }
+
+                    if (this.brk !== null) {
+                        if (!(this.nextIds.bckId & 0x10000000))
+                            this.brk.frameCtrl.setFrame(soundFrame);
+                        this.brk.play(deltaTimeFrames);
+                    }
+                }
+            }
+
+            // Apply scale from demo
+            if (demoActor.flags & EDemoActorFlags.HasScale) {
+                vec3.copy(this.scale, demoActor.scaling);
+            }
+
+            // Update point light if present
+            if (this.nextIds.plightId !== -1) {
+                const lightPos = vec3.copy(scratchVec3a, this.pos);
+
+                // TODO: Check light data table for position override
+                // If light is attached to a joint, get joint position
+
+                // TODO: dKydm_demo_plight_execute(plight, lightPos)
+            }
+        }
+
+    }
+
+    private actLeaving(globals: dGlobals, deltaTimeFrames: number, demoActor: dDemo_actor_c): void {
+        // Clean up resources
+        this.model = null;
+        this.morf = null;
+        this.bck = null;
+        this.btp = null;
+        this.btk = null;
+        this.brk = null;
+        this.actionFunc = this.actStandby;
     }
 }
 

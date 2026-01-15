@@ -155,7 +155,7 @@ export enum EDemoActorFlags {
     HasRot = 1 << 3,
     HasShape = 1 << 4,
     HasAnim = 1 << 5,
-    HasFrame = 1 << 6,
+    HasAnimFrame = 1 << 6,
     HasTexAnim = 1 << 7,
     HasTexFrame = 1 << 8,
 }
@@ -334,12 +334,12 @@ export class dDemo_actor_c extends TActor {
 
     public override JSGSetAnimationFrame(x: number): void {
         this.animFrame = x;
-        this.flags |= EDemoActorFlags.HasFrame;
+        this.flags |= EDemoActorFlags.HasAnimFrame;
     }
 
     public override JSGSetAnimationTransition(x: number): void {
         this.animTransition = x;
-        this.flags |= EDemoActorFlags.HasFrame;
+        this.flags |= EDemoActorFlags.HasAnimFrame;
     }
 
     public override JSGSetTextureAnimation(id: number): void {
