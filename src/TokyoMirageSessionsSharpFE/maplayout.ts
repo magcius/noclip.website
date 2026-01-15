@@ -12,11 +12,18 @@ export function parseLayout(buffer: ArrayBufferSlice): MapLayout
     const view = buffer.createDataView();
     const entry_count = view.getUint32(0x08, true);
 
+    const treasurebox_01_entries: MapLayoutEntry[] = [];
+    const treasurebox_02_entries: MapLayoutEntry[] = [];
+    const blockside_entries: MapLayoutEntry[] = [];
+    const blockwall_entries: MapLayoutEntry[] = [];
+    const warp_entries: MapLayoutEntry[] = [];
+    const gate_entries: MapLayoutEntry[] = [];
     const entries: MapLayoutEntry[] = [];
     let entry_offset = ENTRY_START;
     for (let i = 0; i < entry_count; i++)
     {
         const group_index = view.getUint32(entry_offset + 0x0, true);
+        const unk_04 = view.getUint32(entry_offset + 0x4, true);
         const id = view.getUint32(entry_offset + 0x08, true);
 
         const position_x = view.getFloat32(entry_offset + 0xC, true);
@@ -39,26 +46,67 @@ export function parseLayout(buffer: ArrayBufferSlice): MapLayout
             rotation_y * MathConstants.DEG_TO_RAD,
             rotation_z * MathConstants.DEG_TO_RAD
         );
+        switch (group_index)
+        {
+            case GROUP_INDEX_TREASURE_BOX_01:
+                treasurebox_01_entries.push({ group_index, unk_04, id, position, rotation, unknown });
+                break;
+            
+            case GROUP_INDEX_BLOCKSIDE:
+                blockside_entries.push({ group_index, unk_04, id, position, rotation, unknown });
+                break;
+            
+            case GROUP_INDEX_BLOCKWALL:
+                blockwall_entries.push({ group_index, unk_04, id, position, rotation, unknown });
+                break;
+            
+            case GROUP_INDEX_WARP:
+                warp_entries.push({ group_index, unk_04, id, position, rotation, unknown });
+                break;
+            
+            case GROUP_INDEX_GATE:
+                gate_entries.push({ group_index, unk_04, id, position, rotation, unknown });
+                break;
 
+            case GROUP_INDEX_TREASURE_BOX_02:
+                treasurebox_02_entries.push({ group_index, unk_04, id, position, rotation, unknown });
+                break;
 
-        entries.push({ group_index, id, position, rotation, unknown });
+            default:
+                entries.push({ group_index, unk_04, id, position, rotation, unknown });
+                break;
+            
+        }
         entry_offset += ENTRY_SIZE;
     }
 
-    return { entries };
+    return { treasurebox_01_entries, treasurebox_02_entries, blockside_entries, blockwall_entries, warp_entries, gate_entries, entries };
 }
 
 const ENTRY_START = 0x10;
 const ENTRY_SIZE = 0xA0;
+const GROUP_INDEX_TREASURE_BOX_01 = 8;
+const GROUP_INDEX_BLOCKSIDE = 9;
+const GROUP_INDEX_BLOCKWALL = 10;
+const GROUP_INDEX_WARP = 17;
+const GROUP_INDEX_GATE = 18;
+const GROUP_INDEX_TREASURE_BOX_02 = 37;
 
 export interface MapLayout
 {
+    treasurebox_01_entries: MapLayoutEntry[];
+    treasurebox_02_entries: MapLayoutEntry[];
+    blockside_entries: MapLayoutEntry[];
+    blockwall_entries: MapLayoutEntry[];
+    warp_entries: MapLayoutEntry[];
+    gate_entries: MapLayoutEntry[];
     entries: MapLayoutEntry[];
 }
 
 export interface MapLayoutEntry
 {
     group_index: number;
+    unk_04: number;
     id: number;
     position: vec3;
     rotation: vec3;

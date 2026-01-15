@@ -1,8 +1,10 @@
 // scene.ts
 // Handles all the levels in Tokyo Mirage Sessions ♯FE
 
-import { parseAPAK } from "./apak.js";
+import { parseAPAK, get_file_by_name } from "./apak.js";
+import { create_common_gimmicks } from "./gimmick.js";
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
+import { parseLayout } from "./maplayout.js";
 import { TMSFEScene } from "./render.js"
 import { SceneContext, SceneDesc } from "../SceneBase.js";
 import { SceneGfx, SceneGroup } from "../viewer.js";
@@ -20,9 +22,18 @@ class TMSFESceneDesc implements SceneDesc
         // Load the map file
         const dataFetcher = context.dataFetcher;
         const apak = parseAPAK(await dataFetcher.fetchData(`TokyoMirageSessionsSharpFE/maps/${this.id}/model.apak`));
-        // const apak = parseAPAK(await dataFetcher.fetchData(`TokyoMirageSessionsSharpFE/maps/d002_01/model.apak`));
 
         let renderer = new TMSFEScene(device, this.id, apak);
+
+        // load gimmicks
+        if (this.id == "d018_01")
+        {
+            const maplayout_data = get_file_by_name(apak, "maplayout.layout");
+            const layout = parseLayout(maplayout_data);
+            console.log(layout);
+            renderer.gimmicks = await create_common_gimmicks(layout, dataFetcher, device);
+        }
+
         return renderer;
     }
 }
