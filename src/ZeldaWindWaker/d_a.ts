@@ -1,6 +1,6 @@
 
 import { ReadonlyMat4, ReadonlyVec3, mat4, quat, vec2, vec3 } from "gl-matrix";
-import { TransparentBlack, White, colorCopy, colorFromRGBA8, colorNewCopy, colorNewFromRGBA, colorNewFromRGBA8 } from "../Color.js";
+import { OpaqueBlack, TransparentBlack, White, colorCopy, colorFromRGBA8, colorNewCopy, colorNewFromRGBA, colorNewFromRGBA8 } from "../Color.js";
 import { calcANK1JointAnimationTransform } from "../Common/JSYSTEM/J3D/J3DGraphAnimator.js";
 import { J3DModelData, J3DModelInstance, buildEnvMtx } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
 import { JointTransformInfo, LoopMode, TRK1, TTK1 } from "../Common/JSYSTEM/J3D/J3DLoader.js";
@@ -6626,7 +6626,7 @@ class daDemo00_resID_c {
     public btkId: number = -1;
     public brkId: number = -1;
     public plightId: number = -1;
-    // shadowID;
+    public shadowType: number = -1;
 }
 class d_a_demo00 extends fopAc_ac_c {
     public static PROCESS_NAME = dProcName_e.d_a_demo00;
@@ -6648,6 +6648,8 @@ class d_a_demo00 extends fopAc_ac_c {
 
     private currIds: daDemo00_resID_c = new daDemo00_resID_c();
     private nextIds: daDemo00_resID_c = new daDemo00_resID_c();
+    private dataId: number = -1;
+    private fadeType: number = -1;
 
     private groundY: number = -Infinity;
     private gndChk = new dBgS_GndChk();
@@ -6742,7 +6744,6 @@ class d_a_demo00 extends fopAc_ac_c {
     }
 
     public override execute(globals: dGlobals, deltaTimeFrames: number): void {
-        // TODO: This isn't execute because we're not adding it to the Ct queue, which then moves it to the Ex queue
         const demoActor = globals.scnPlay.demo.getSystem().getActor(this.demoActorID);
         if (!demoActor) {
             fopAcM_delete(globals.frameworkGlobals, this);
@@ -6756,7 +6757,86 @@ class d_a_demo00 extends fopAc_ac_c {
             this.nextIds.bckId = demoActor.nextBckId;
         }
         if (demoActor.checkEnable(EDemoActorFlags.HasData)) {
-            // TODO:
+            const oldDataId = this.dataId;
+            this.dataId = demoActor.stbDataId;
+
+            switch (this.dataId) {
+                case 4: // Event bit setting
+                    const l_eventBit = [];
+                    l_eventBit[1] = 0x2A80; // Acquire Hero's Clothes
+                    l_eventBit[5] = 0x2401; 
+                    l_eventBit[17] = 0x2110; 
+                    l_eventBit[22] = 0x2D01; // Aryll rescued from Forsaken Fortress
+                    l_eventBit[49] = 0x3E01; // Colors in Hyrule
+
+                    const eventIdx = demoActor.stbData.getUint8(0);
+                    assert(eventIdx < l_eventBit.length);
+                    if (l_eventBit[eventIdx] != 0xFFFF && this.dataId != oldDataId ) {
+                        // dComIfGs_onEventBit(l_eventBit[eventIdx]);
+                        console.log(`[d_act${this.subtype}] Setting event bit: 0x${l_eventBit[eventIdx].toString(16)}`);
+                    }
+                    break;
+                
+                case 5: // Acquire item
+                    console.log(`[d_act${this.subtype}] Acquiring item ID: ${demoActor.stbData.getUint8(0)}`);
+                    break; 
+                
+                case 6: // Monotone fading
+                    const fadeSpeed = demoActor.stbData.getUint8(0);
+                    console.log(`[d_act${this.subtype}] Set monotone fade speed: ${fadeSpeed}`);
+                    // TODO: mDoGph_gInf_c::setMonotoneRateSpeed(fadeSpeed); 
+                    break;
+
+                case 7: // Vibration
+                    const vibArg = demoActor.stbData.getUint8(0);
+                    if (vibArg < 100) {
+                        console.log(`[d_act${this.subtype}] Setting shock vibration: ${vibArg}`);
+                        // dComIfGp_getVibration().StartShock(vibArg, 1, cXyz(0.0f, 1.0f, 0.0f));
+                    } else if (vibArg != 0xFF) {
+                        console.log(`[d_act${this.subtype}] Setting quake vibration: ${vibArg - 100}`);
+                        // dComIfGp_getVibration().StartQuake(vibArg - 100, 1, cXyz(0.0f, 1.0f, 0.0f));
+                    } else {
+                        console.log(`[d_act${this.subtype}] Stopping vibration: ${vibArg - 100}`);
+                        // dComIfGp_getVibration().StopQuake(1);
+                    }
+                    break;
+                
+                case 9:
+                case 10: // Color fading
+                    const fadeType = demoActor.stbData.getUint8(0);
+                    const fadeTime = demoActor.stbData.byteLength > 1 ? demoActor.stbData.getUint8(1) : 0;
+                    if (this.dataId != oldDataId || fadeType != this.fadeType) {
+                        this.fadeType = fadeType;
+                        const fadeColor = (this.dataId === 9) ? OpaqueBlack : colorNewFromRGBA8(0xA0A0A0FF);
+                        if( fadeType === 0 ) {
+                            console.log(`[d_act${this.subtype}] Starting fade from ${this.dataId == 9 ? 'black' : 'white'} over ${fadeTime} seconds`);
+                            // TODO: dComIfGs_startColorFadeOut(fadeTime);
+                        } else {
+                            console.log(`[d_act${this.subtype}] Starting fade to ${this.dataId == 9 ? 'black' : 'white'} over ${fadeTime} seconds`);
+                            // TODO: dComIfGs_startColorFadeIn(fadeTime);
+                        }
+                        // TODO: mDoGph_gInf_c::setFadeColor(fadeColor);
+                    }
+                    break;
+                
+                default:
+                    for( let i = 0; i < demoActor.stbData.byteLength / 8; i++ ) {
+                        const idType = demoActor.stbData.getUint32(i * 4 + 0, true);
+                        const idVal = demoActor.stbData.getUint32(i * 4 + 4, true);
+                        switch( idType ) {
+                            case 0: this.nextIds.btpId = idVal; debugger; break; // TODO
+                            case 1: this.nextIds.btkId = idVal; debugger; break; // TODO
+                            case 2: this.nextIds.plightId = idVal; debugger; break; // TODO
+                            case 3: /* Unused */ break
+                            case 4: this.nextIds.brkId = idVal; debugger; break; // TODO
+                            case 5: this.nextIds.shadowType = idVal; debugger; break; // TODO
+                            case 6: this.nextIds.btkId = idVal | 0x10000000; debugger; break; // TODO
+                            case 7: this.nextIds.brkId = idVal | 0x10000000; debugger; break; // TODO
+                        }
+                    }
+                    break;
+
+            }
         }
 
         this.actionFunc(globals, deltaTimeFrames, demoActor);
@@ -6817,6 +6897,8 @@ class d_a_demo00 extends fopAc_ac_c {
                 const bckRes = globals.resCtrl.getObjectIDRes(ResType.Bck, demoArcName, this.nextIds.bckId);
                 this.morf = new mDoExt_McaMorf(modelData, null, null, bckRes, LoopMode.Once, 1.0, 0, -1);
                 this.model = this.morf.model;
+
+                // TODO: awaCheck()
             }
 
             // TODO: Create invisible model if needed (stbDataID === 3)
@@ -6936,7 +7018,6 @@ class d_a_demo00 extends fopAc_ac_c {
                 }
             } else {
                 // Set explicit frame
-                // TODO: These frames seem to be 0-1.0, but our anim system to be frame numbers from 0 to endFrame 
                 const frame = demoActor.animFrame;
 
                 if (frame <= 1.0) {
