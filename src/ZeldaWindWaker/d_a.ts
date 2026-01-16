@@ -38,6 +38,7 @@ import { base_process_class, cPhs__Status, fGlobals, fpcEx_Search, fpcPf__Regist
 import { mDoExt_3DlineMat1_c, mDoExt_McaMorf, mDoExt_bckAnm, mDoExt_brkAnm, mDoExt_btkAnm, mDoExt_btpAnm, mDoExt_modelEntryDL, mDoExt_modelUpdateDL } from "./m_do_ext.js";
 import { MtxPosition, MtxTrans, calc_mtx, mDoMtx_XYZrotM, mDoMtx_XrotM, mDoMtx_YrotM, mDoMtx_YrotS, mDoMtx_ZXYrotM, mDoMtx_ZrotM, mDoMtx_ZrotS, quatM } from "./m_do_mtx.js";
 import { J2DAnchorPos, J2DPane, J2DScreen } from "../Common/JSYSTEM/J2Dv1.js";
+import { parseTParagraphData, TParseData_fixed } from "../Common/JSYSTEM/JStudio.js";
 
 // Framework'd actors
 
@@ -6628,6 +6629,8 @@ class daDemo00_resID_c {
     public plightId: number = -1;
     public shadowType: number = -1;
 }
+
+const scratchDemoParagraphData: TParseData_fixed = { entryCount: 0, entrySize: 0, entryOffset: 0 };
 class d_a_demo00 extends fopAc_ac_c {
     public static PROCESS_NAME = dProcName_e.d_a_demo00;
 
@@ -6759,82 +6762,108 @@ class d_a_demo00 extends fopAc_ac_c {
         if (demoActor.checkEnable(EDemoActorFlags.HasData)) {
             const oldDataId = this.dataId;
             this.dataId = demoActor.stbDataId;
+            const stbData = demoActor.stbData;
 
             switch (this.dataId) {
-                case 4: // Event bit setting
+                case 4: { // Event bit setting
                     const l_eventBit = [];
                     l_eventBit[1] = 0x2A80; // Acquire Hero's Clothes
-                    l_eventBit[5] = 0x2401; 
-                    l_eventBit[17] = 0x2110; 
+                    l_eventBit[5] = 0x2401;
+                    l_eventBit[17] = 0x2110;
                     l_eventBit[22] = 0x2D01; // Aryll rescued from Forsaken Fortress
-                    l_eventBit[49] = 0x3E01; // Colors in Hyrule
+                    l_eventBit[49] = 0x3802; // Triggered during Grandma's Tale
 
-                    const eventIdx = demoActor.stbData.getUint8(0);
-                    assert(eventIdx < l_eventBit.length);
-                    if (l_eventBit[eventIdx] != 0xFFFF && this.dataId != oldDataId ) {
-                        // dComIfGs_onEventBit(l_eventBit[eventIdx]);
-                        console.log(`[d_act${this.subtype}] Setting event bit: 0x${l_eventBit[eventIdx].toString(16)}`);
+                    const data = parseTParagraphData(scratchDemoParagraphData, 49, stbData);
+                    if (data) {
+                        const eventIdx = demoActor.stbData.getUint8(data.entryOffset);
+                        assert(eventIdx < l_eventBit.length);
+                        if (l_eventBit[eventIdx] != 0xFFFF && this.dataId != oldDataId) {
+                            // dComIfGs_onEventBit(l_eventBit[eventIdx]);
+                            console.log(`[d_act${this.subtype}] Setting event bit: 0x${l_eventBit[eventIdx].toString(16)}`);
+                        }
                     }
                     break;
-                
-                case 5: // Acquire item
-                    console.log(`[d_act${this.subtype}] Acquiring item ID: ${demoActor.stbData.getUint8(0)}`);
-                    break; 
-                
-                case 6: // Monotone fading
-                    const fadeSpeed = demoActor.stbData.getUint8(0);
-                    console.log(`[d_act${this.subtype}] Set monotone fade speed: ${fadeSpeed}`);
-                    // TODO: mDoGph_gInf_c::setMonotoneRateSpeed(fadeSpeed); 
-                    break;
+                }
 
-                case 7: // Vibration
-                    const vibArg = demoActor.stbData.getUint8(0);
-                    if (vibArg < 100) {
-                        console.log(`[d_act${this.subtype}] Setting shock vibration: ${vibArg}`);
-                        // dComIfGp_getVibration().StartShock(vibArg, 1, cXyz(0.0f, 1.0f, 0.0f));
-                    } else if (vibArg != 0xFF) {
-                        console.log(`[d_act${this.subtype}] Setting quake vibration: ${vibArg - 100}`);
-                        // dComIfGp_getVibration().StartQuake(vibArg - 100, 1, cXyz(0.0f, 1.0f, 0.0f));
-                    } else {
-                        console.log(`[d_act${this.subtype}] Stopping vibration: ${vibArg - 100}`);
-                        // dComIfGp_getVibration().StopQuake(1);
+                case 5: { // Acquire item
+                    if (this.dataId != oldDataId) {
+                        const data = parseTParagraphData(scratchDemoParagraphData, 49, stbData);
+                        if (data)
+                            console.log(`[d_act${this.subtype}] Acquiring item ID: ${demoActor.stbData.getUint8(data.entryOffset)}`);
                     }
                     break;
-                
-                case 9:
-                case 10: // Color fading
-                    const fadeType = demoActor.stbData.getUint8(0);
-                    const fadeTime = demoActor.stbData.byteLength > 1 ? demoActor.stbData.getUint8(1) : 0;
-                    if (this.dataId != oldDataId || fadeType != this.fadeType) {
-                        this.fadeType = fadeType;
-                        const fadeColor = (this.dataId === 9) ? OpaqueBlack : colorNewFromRGBA8(0xA0A0A0FF);
-                        if( fadeType === 0 ) {
-                            console.log(`[d_act${this.subtype}] Starting fade from ${this.dataId == 9 ? 'black' : 'white'} over ${fadeTime} seconds`);
-                            // TODO: dComIfGs_startColorFadeOut(fadeTime);
+                }
+
+                case 6: { // Monotone fading
+                    const data = parseTParagraphData(scratchDemoParagraphData, 33, stbData);
+                    if (data) {
+                        const fadeSpeed = demoActor.stbData.getUint8(data.entryOffset);
+                        console.log(`[d_act${this.subtype}] Set monotone fade speed: ${fadeSpeed}`);
+                        // TODO: mDoGph_gInf_c::setMonotoneRateSpeed(fadeSpeed); 
+                    }
+                    break;
+                }
+
+                case 7: { // Vibration
+                    const data = parseTParagraphData(scratchDemoParagraphData, 49, stbData);
+                    if (data) {
+                        const vibArg = demoActor.stbData.getUint8(data.entryOffset);
+                        if (vibArg < 100) {
+                            console.log(`[d_act${this.subtype}] Setting shock vibration: ${vibArg}`);
+                            // dComIfGp_getVibration().StartShock(vibArg, 1, cXyz(0.0f, 1.0f, 0.0f));
+                        } else if (vibArg != 0xFF) {
+                            console.log(`[d_act${this.subtype}] Setting quake vibration: ${vibArg - 100}`);
+                            // dComIfGp_getVibration().StartQuake(vibArg - 100, 1, cXyz(0.0f, 1.0f, 0.0f));
                         } else {
-                            console.log(`[d_act${this.subtype}] Starting fade to ${this.dataId == 9 ? 'black' : 'white'} over ${fadeTime} seconds`);
-                            // TODO: dComIfGs_startColorFadeIn(fadeTime);
-                        }
-                        // TODO: mDoGph_gInf_c::setFadeColor(fadeColor);
-                    }
-                    break;
-                
-                default:
-                    for( let i = 0; i < demoActor.stbData.byteLength / 8; i++ ) {
-                        const idType = demoActor.stbData.getUint32(i * 4 + 0, true);
-                        const idVal = demoActor.stbData.getUint32(i * 4 + 4, true);
-                        switch( idType ) {
-                            case 0: this.nextIds.btpId = idVal; debugger; break; // TODO
-                            case 1: this.nextIds.btkId = idVal; debugger; break; // TODO
-                            case 2: this.nextIds.plightId = idVal; debugger; break; // TODO
-                            case 3: /* Unused */ break
-                            case 4: this.nextIds.brkId = idVal; debugger; break; // TODO
-                            case 5: this.nextIds.shadowType = idVal; debugger; break; // TODO
-                            case 6: this.nextIds.btkId = idVal | 0x10000000; debugger; break; // TODO
-                            case 7: this.nextIds.brkId = idVal | 0x10000000; debugger; break; // TODO
+                            console.log(`[d_act${this.subtype}] Stopping vibration: ${vibArg - 100}`);
+                            // dComIfGp_getVibration().StopQuake(1);
                         }
                     }
                     break;
+                }
+
+                case 9:
+                case 10: { // Color fading
+                    const data = parseTParagraphData(scratchDemoParagraphData, 33, stbData);
+                    if (data) {
+                        const fadeType = demoActor.stbData.getUint8(data.entryOffset);
+                        const fadeTime = demoActor.stbData.byteLength > 1 ? demoActor.stbData.getUint8(data.entryOffset + 1) : 0;
+                        if (this.dataId != oldDataId || fadeType != this.fadeType) {
+                            this.fadeType = fadeType;
+                            const fadeColor = (this.dataId === 9) ? OpaqueBlack : colorNewFromRGBA8(0xA0A0A0FF);
+                            if (fadeType === 0) {
+                                console.log(`[d_act${this.subtype}] Starting fade from ${this.dataId == 9 ? 'black' : 'white'} over ${fadeTime} seconds`);
+                                // TODO: dComIfGs_startColorFadeOut(fadeTime);
+                            } else {
+                                console.log(`[d_act${this.subtype}] Starting fade to ${this.dataId == 9 ? 'black' : 'white'} over ${fadeTime} seconds`);
+                                // TODO: dComIfGs_startColorFadeIn(fadeTime);
+                            }
+                            // TODO: mDoGph_gInf_c::setFadeColor(fadeColor);
+                        }
+                    }
+                    break;
+                }
+
+                default: {
+                    const data = parseTParagraphData(scratchDemoParagraphData, 51, stbData);
+                    if (data) {
+                        for (let i = 0; i < data.entryCount / 2; i++) {
+                            const idType = stbData.getUint32(data.entryOffset + i * 8 + 0);
+                            const idVal = stbData.getUint32(data.entryOffset + i * 8 + 4);
+                            switch (idType) {
+                                case 0: this.nextIds.btpId = idVal; break; // TODO
+                                case 1: this.nextIds.btkId = idVal; break; // TODO
+                                case 2: this.nextIds.plightId = idVal; break; // TODO
+                                case 3: /* Unused */ break
+                                case 4: this.nextIds.brkId = idVal; break; // TODO
+                                case 5: this.nextIds.shadowType = idVal; break; // TODO
+                                case 6: this.nextIds.btkId = idVal | 0x10000000; break; // TODO
+                                case 7: this.nextIds.brkId = idVal | 0x10000000; break; // TODO
+                            }
+                        }
+                    }
+                    break;
+                }
 
             }
         }
@@ -6997,7 +7026,7 @@ class d_a_demo00 extends fopAc_ac_c {
             mDoMtx_XYZrotM(this.model.modelMatrix, this.rot);
             this.model.baseScale = this.scale;
             this.cullMtx = this.model.modelMatrix;
-            if (this.currIds.bckId !== -1) 
+            if (this.currIds.bckId !== -1)
                 this.morf?.calc();
             else
                 this.model.calcAnim();

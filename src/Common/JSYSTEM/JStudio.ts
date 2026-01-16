@@ -1076,6 +1076,33 @@ class TParagraph {
     }
 }
 
+export interface TParseData_fixed {
+    entryCount: number;
+    entrySize: number;
+    entryOffset: number;
+}
+
+export function parseTParagraphData(dst: TParseData_fixed, checkType: number, data: DataView): TParseData_fixed | null {
+    let byteIdx = 0;
+
+    const check = data.getUint8(byteIdx++);
+    const type = check & ~0x8;
+    if (type !== checkType) {
+        return null;
+    }
+    
+    dst.entryCount = 1;
+    if ( check & 0x8 ) {
+        dst.entryCount = data.getUint8(byteIdx++);
+    }
+
+    const tParagraphDataSizes = [0x0, 0x1, 0x2, 0x4, 0x8, 0x10, 0x20, 0x40];
+    dst.entrySize = tParagraphDataSizes[check & 0x07];
+    
+    dst.entryOffset = byteIdx;
+    return dst;
+}
+
 //----------------------------------------------------------------------------------------------------------------------
 // FVB (Function Value Binary) Parsing
 // Although embedded in the STB file, the FVB section is treated and parsed like a separate file
