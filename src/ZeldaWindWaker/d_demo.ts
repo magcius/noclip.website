@@ -164,7 +164,7 @@ export class dDemo_actor_c extends TActor {
     public name: string;
     public flags: number;
     public translation = vec3.create();
-    public scaling = vec3.create();
+    public scaling = vec3.fromValues(1, 1, 1);
     public rotation = vec3.create();
     public shapeId: number;
     public nextBckId: number;
