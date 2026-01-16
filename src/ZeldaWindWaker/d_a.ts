@@ -5705,14 +5705,29 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
                 // Fall through
                 case 1:
                 case 5:
-                    const count = demoActor.stbData.getUint8(1);
-                    assert(count === 3)
-                    anmBckId = demoActor.stbData.getUint16(2);
-                    anmBtpId = demoActor.stbData.getUint16(4);
-                    anmBtkId = demoActor.stbData.getUint16(6);
+                    const data = parseTParagraphData(scratchDemoParagraphData, 50, demoActor.stbData)!;
+                    assert(data.entryCount === 3)
+                    
+                    anmBckId = demoActor.stbData.getUint16(data.entryOffset + 0);
+                    anmBtpId = demoActor.stbData.getUint16(data.entryOffset + 2);
+                    anmBtkId = demoActor.stbData.getUint16(data.entryOffset + 4);
 
+                    const handView = new DataView(demoActor.stbData.buffer, demoActor.stbData.byteOffset + 8)
+                    const handData = parseTParagraphData(scratchDemoParagraphData, 49, handView)!;
                     handIdxRight = demoActor.stbData.getUint8(9);
                     handIdxLeft = demoActor.stbData.getUint8(10);
+                    if (handData.entryCount == 3) {
+                        // TODO: const newOldFrameMorfCounter = demoActor.stbData.getUint8(handData.entryOffset + 2);
+                        // debugger;
+                    }
+
+                    if (demoActor.stbDataId == 3) {
+                        debugger;
+                        // TODO: UNK = 1
+                    } else if (demoActor.stbDataId == 5) {
+                        debugger;
+                        // TODO: yRotCamDiff = 1;
+                    }
                     break;
 
                 case 2:
@@ -5720,7 +5735,25 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
                 // Fall through
                 case 0:
                 case 4:
-                    anmBckId = demoActor.stbData.getUint16(1);
+                    const bckData = parseTParagraphData(scratchDemoParagraphData, 50, demoActor.stbData)!;
+                    anmBckId = demoActor.stbData.getUint16(bckData.entryOffset);
+
+                    const extraView = new DataView(demoActor.stbData.buffer, demoActor.stbData.byteOffset + 3);
+                    const extraData = parseTParagraphData(scratchDemoParagraphData, 49, extraView)!;
+                    handIdxLeft = demoActor.stbData.getUint8(extraData.entryOffset + 0);
+                    handIdxRight = demoActor.stbData.getUint8(extraData.entryOffset + 1);
+                    if (extraData.entryCount == 3) {
+                        // TODO: const newOldFrameMorfCounter = demoActor.stbData.getUint8(extraData.entryOffset + 2);
+                    }
+
+                    if (demoActor.stbDataId == 2) {
+                        debugger;
+                        // TODO: UNK = 1
+                    } else if (demoActor.stbDataId == 4) {
+                        debugger;
+                        // TODO: yRotCamDiff = 1;
+                    }
+
                     break;
 
                 default:
