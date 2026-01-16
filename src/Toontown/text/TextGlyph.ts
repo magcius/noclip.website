@@ -1,4 +1,4 @@
-import { Geom, RenderState } from "../nodes";
+import { type Geom, RenderState } from "../nodes";
 
 export class TextGlyph {
   public readonly state: RenderState;

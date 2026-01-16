@@ -1,8 +1,8 @@
-import type { BAMFile } from "../bam";
-import type { DataStream } from "../common";
-import type { CopyContext } from "./base";
+import type { BAMFile } from "../BAMFile";
+import type { DataStream } from "../Common";
 import { type DebugInfo, dbgEnum, dbgNum } from "./debug";
 import { PandaNode } from "./PandaNode";
+import type { CopyContext } from "./TypedObject";
 
 export enum CurveType {
   None = 0,

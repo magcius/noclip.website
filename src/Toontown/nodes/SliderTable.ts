@@ -1,9 +1,13 @@
-import type { BAMFile } from "../bam";
-import { AssetVersion, type DataStream } from "../common";
-import { BAMObject, type CopyContext, registerBAMObject } from "./base";
+import type { BAMFile } from "../BAMFile";
+import { AssetVersion, type DataStream } from "../Common";
 import { type DebugInfo, dbgNum, dbgRefs } from "./debug";
 import { InternalName } from "./InternalName";
 import { SparseArray } from "./SparseArray";
+import {
+  type CopyContext,
+  registerTypedObject,
+  TypedObject,
+} from "./TypedObject";
 import { VertexSlider } from "./VertexSlider";
 
 export interface SliderTableEntry {
@@ -12,7 +16,7 @@ export interface SliderTableEntry {
   rows: SparseArray;
 }
 
-export class SliderTable extends BAMObject {
+export class SliderTable extends TypedObject {
   public sliders: SliderTableEntry[] = [];
 
   override load(file: BAMFile, data: DataStream) {
@@ -47,12 +51,9 @@ export class SliderTable extends BAMObject {
   override getDebugInfo(): DebugInfo {
     const info = super.getDebugInfo();
     info.set("numSliders", dbgNum(this.sliders.length));
-    info.set(
-      "sliders",
-      dbgRefs(this.sliders.map((entry) => entry.slider)),
-    );
+    info.set("sliders", dbgRefs(this.sliders.map((entry) => entry.slider)));
     return info;
   }
 }
 
-registerBAMObject("SliderTable", SliderTable);
+registerTypedObject("SliderTable", SliderTable);

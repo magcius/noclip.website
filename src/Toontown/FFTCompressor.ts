@@ -1,5 +1,5 @@
 import { quat, vec3 } from "gl-matrix";
-import type { DataStream } from "./common";
+import type { DataStream } from "./Common";
 import { quatToHpr } from "./Math";
 
 /**

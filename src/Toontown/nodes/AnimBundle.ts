@@ -1,8 +1,8 @@
-import type { BAMFile } from "../bam";
-import type { DataStream } from "../common";
+import type { BAMFile } from "../BAMFile";
+import type { DataStream } from "../Common";
 import { AnimGroup } from "./AnimGroup";
-import { type CopyContext, registerBAMObject } from "./base";
 import { type DebugInfo, dbgNum } from "./debug";
+import { type CopyContext, registerTypedObject } from "./TypedObject";
 
 /**
  * Root of an animation hierarchy.
@@ -33,4 +33,4 @@ export class AnimBundle extends AnimGroup {
   }
 }
 
-registerBAMObject("AnimBundle", AnimBundle);
+registerTypedObject("AnimBundle", AnimBundle);

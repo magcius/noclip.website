@@ -16,12 +16,6 @@ import { MathConstants } from "../MathHelpers";
  * Quaternion order: R * P * H (apply H first, then P, then R)
  */
 export function hprToQuat(out: quat, hpr: ReadonlyVec3, newHpr = true): quat {
-  if (newHpr) {
-    // gl-matrix shortcut if we don't have to match the older Panda3D convention
-    quat.fromEuler(out, hpr[1], hpr[2], hpr[0]);
-    return out;
-  }
-
   const hRad = hpr[0] * (Math.PI / 360);
   const pRad = hpr[1] * (Math.PI / 360);
   const rRad = hpr[2] * (Math.PI / 360);

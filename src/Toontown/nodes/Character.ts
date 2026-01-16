@@ -1,9 +1,13 @@
-import type { BAMFile } from "../bam";
-import { AssetVersion, type DataStream } from "../common";
-import { type BAMObject, type CopyContext, registerBAMObject } from "./base";
+import type { BAMFile } from "../BAMFile";
+import { AssetVersion, type DataStream } from "../Common";
 import { ComputedVertices } from "./ComputedVertices";
 import { type DebugInfo, dbgRef, dbgRefs, dbgTypedArray } from "./debug";
 import { PartBundleNode } from "./PartBundleNode";
+import {
+  type CopyContext,
+  registerTypedObject,
+  type TypedObject,
+} from "./TypedObject";
 
 /**
  * Animated character.
@@ -25,7 +29,7 @@ export class Character extends PartBundleNode {
 
   // Character fields
   public computedVertices: ComputedVertices | null = null;
-  public parts: BAMObject[] = [];
+  public parts: TypedObject[] = [];
 
   override load(file: BAMFile, data: DataStream) {
     super.load(file, data);
@@ -75,4 +79,4 @@ export class Character extends PartBundleNode {
   }
 }
 
-registerBAMObject("Character", Character);
+registerTypedObject("Character", Character);

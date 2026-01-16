@@ -1,7 +1,5 @@
-// DNA module exports
-
-export { Lexer, type Token, TokenType } from "./lexer";
-export { DNAParser, parseDNA } from "./parser";
-export { DNASceneBuilder } from "./sceneBuilder";
-export { DNAStorage, type StoredNodeRef } from "./storage";
+export { Lexer, type Token, TokenType } from "./Lexer";
+export { DNAParser, parseDNA } from "./Parser";
+export { DNASceneBuilder } from "./SceneBuilder";
+export { DNAStorage, type StoredNodeRef } from "./Storage";
 export * from "./types";

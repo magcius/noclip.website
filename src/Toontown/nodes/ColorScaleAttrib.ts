@@ -1,10 +1,10 @@
 import { type ReadonlyVec4, vec4 } from "gl-matrix";
-import type { BAMFile } from "../bam";
-import type { DataStream } from "../common";
-import type { MaterialData } from "../geom";
-import { type CopyContext, registerBAMObject } from "./base";
+import type { BAMFile } from "../BAMFile";
+import type { DataStream } from "../Common";
+import type { MaterialData } from "../Geom";
 import { type DebugInfo, dbgBool, dbgColor } from "./debug";
 import { RenderAttrib } from "./RenderAttrib";
+import { type CopyContext, registerTypedObject } from "./TypedObject";
 
 const whiteColor = vec4.fromValues(1, 1, 1, 1);
 
@@ -93,4 +93,4 @@ export class ColorScaleAttrib extends RenderAttrib {
   }
 }
 
-registerBAMObject("ColorScaleAttrib", ColorScaleAttrib);
+registerTypedObject("ColorScaleAttrib", ColorScaleAttrib);

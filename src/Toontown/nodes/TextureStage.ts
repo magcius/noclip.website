@@ -1,7 +1,6 @@
 import { vec4 } from "gl-matrix";
-import type { BAMFile } from "../bam";
-import { AssetVersion, type DataStream } from "../common";
-import { BAMObject, type CopyContext, registerBAMObject } from "./base";
+import type { BAMFile } from "../BAMFile";
+import { AssetVersion, type DataStream } from "../Common";
 import {
   type DebugInfo,
   dbgBool,
@@ -13,6 +12,11 @@ import {
   dbgStr,
 } from "./debug";
 import { InternalName } from "./InternalName";
+import {
+  type CopyContext,
+  registerTypedObject,
+  TypedObject,
+} from "./TypedObject";
 
 export enum TextureStageMode {
   Modulate = 0,
@@ -112,7 +116,7 @@ function combineConfigDebugInfo(config: CombineConfig): DebugInfo {
   return info;
 }
 
-export class TextureStage extends BAMObject {
+export class TextureStage extends TypedObject {
   public name = "";
   public sort = 0;
   public priority = 0;
@@ -227,4 +231,4 @@ export class TextureStage extends BAMObject {
   }
 }
 
-registerBAMObject("TextureStage", TextureStage);
+registerTypedObject("TextureStage", TextureStage);

@@ -1,7 +1,7 @@
-import { vec3, vec4 } from "gl-matrix";
-import type { vec2 } from "gl-matrix";
+import type { ReadonlyVec2, ReadonlyVec4 } from "gl-matrix";
+import { vec3 } from "gl-matrix";
 import { GeomNode, PandaNode, TransformState } from "../nodes";
-import { TextGlyph } from "./TextGlyph";
+import type { TextGlyph } from "./TextGlyph";
 
 export enum TextAlignment {
   Left = 0,
@@ -11,7 +11,6 @@ export enum TextAlignment {
 
 /**
  * Common interface for text fonts (both static BAM-based and dynamic TTF-based).
- * Mirrors Panda3D's TextFont abstract interface.
  */
 export interface TextFont {
   /** Height of a line of text, in font units */
@@ -133,9 +132,9 @@ export class TextAssembler {
   }
 
   generateGeometry(
-    textColor: vec4,
-    shadowColor: vec4 | null = null,
-    shadowOffset: vec2 | null = null,
+    textColor: ReadonlyVec4,
+    shadowColor: ReadonlyVec4 | null = null,
+    shadowOffset: ReadonlyVec2 | null = null,
   ): PandaNode {
     const root = PandaNode.create("text");
 
@@ -218,7 +217,7 @@ export class TextAssembler {
     glyph: TextGlyph,
     x: number,
     y: number,
-    color: vec4,
+    color: ReadonlyVec4,
   ): GeomNode {
     const geomCopy = glyph.geom!.clone();
     const geomNode = new GeomNode();

@@ -1,6 +1,5 @@
 import { mat4, vec2, vec3, vec4 } from "gl-matrix";
-import type { DataFetcher } from "../../DataFetcher";
-import type { BAMFile } from "../bam";
+import type { BAMFile } from "../BAMFile";
 import {
   DecalEffect,
   DepthWriteAttrib,
@@ -13,12 +12,12 @@ import {
   TransformState,
 } from "../nodes";
 import type { PandaNode } from "../nodes/PandaNode";
-import { TextNode } from "../text";
+import type { ToontownResourceLoader } from "../Resources";
+import type { DecodedImage } from "../Textures";
 import type { TextFont } from "../text";
-import type { ToontownResourceLoader } from "../resources";
-import type { DecodedImage } from "../textures";
+import { TextNode } from "../text";
 import { DNASignBaseline } from "./DNASignBaseline";
-import type { DNAStorage } from "./storage";
+import type { DNAStorage } from "./Storage";
 import type {
   DNAAnimBuilding,
   DNAAnimProp,
@@ -589,7 +588,6 @@ export class DNASceneBuilder {
     leftDoor.setName("leftDoor");
 
     const doorFrame = doorNode.find("door_*_flat");
-    // if (doDebug) debugger;
     if (doorFrame) {
       doorFrameHoleLeft.reparentTo(doorFrame);
       doorFrameHoleRight.reparentTo(doorFrame);

@@ -1,8 +1,15 @@
-import { Contents, Geom, GeomNode, GeomPoints, PandaNode, RenderState } from "../nodes";
 import type {
   GeomVertexArrayFormat,
   GeomVertexColumn,
   GeomVertexData,
+} from "../nodes";
+import {
+  Contents,
+  type Geom,
+  GeomNode,
+  GeomPoints,
+  type PandaNode,
+  RenderState,
 } from "../nodes";
 import { TextGlyph } from "./TextGlyph";
 
@@ -17,7 +24,7 @@ export class StaticTextFont {
   private _lineHeight = 1.0;
   private _spaceAdvance = 0.25;
 
-  constructor(private fontRoot: PandaNode) {
+  constructor(fontRoot: PandaNode) {
     this.findCharacters(fontRoot, new RenderState());
   }
 
@@ -46,7 +53,10 @@ export class StaticTextFont {
 
       if (polygonGeom && pointsGeom) {
         const advance = this.extractAdvanceWidth(pointsGeom);
-        this.glyphs.set(charCode, new TextGlyph(charCode, polygonGeom, state, advance));
+        this.glyphs.set(
+          charCode,
+          new TextGlyph(charCode, polygonGeom, state, advance),
+        );
       }
     } else if (name === "ds") {
       const { pointsGeom } = this.findCharacterGsets(node, nextState);
@@ -131,12 +141,16 @@ export class StaticTextFont {
     const arrayData = vertexData.arrays[columnInfo.arrayIndex];
     if (!arrayData) return null;
 
-    const stride = columnInfo.arrayFormat.stride || columnInfo.column.totalBytes;
+    const stride =
+      columnInfo.arrayFormat.stride || columnInfo.column.totalBytes;
     if (!stride) return null;
 
     const vertexIndex = this.getFirstPointIndex(pointsGeom);
     const baseOffset = vertexIndex * stride + columnInfo.column.start;
-    if (baseOffset + columnInfo.column.componentBytes > arrayData.buffer.byteLength) {
+    if (
+      baseOffset + columnInfo.column.componentBytes >
+      arrayData.buffer.byteLength
+    ) {
       return null;
     }
 
@@ -170,17 +184,16 @@ export class StaticTextFont {
     return [x, y, z];
   }
 
-  private findPositionColumn(vertexData: GeomVertexData): VertexColumnInfo | null {
+  private findPositionColumn(
+    vertexData: GeomVertexData,
+  ): VertexColumnInfo | null {
     const format = vertexData.format;
     if (!format) return null;
 
     for (let arrayIndex = 0; arrayIndex < format.arrays.length; arrayIndex++) {
       const arrayFormat = format.arrays[arrayIndex];
       for (const column of arrayFormat.columns) {
-        if (
-          column.contents === Contents.Point ||
-          column.name?.name === "vertex"
-        ) {
+        if (column.contents === Contents.Point) {
           return { column, arrayFormat, arrayIndex };
         }
       }

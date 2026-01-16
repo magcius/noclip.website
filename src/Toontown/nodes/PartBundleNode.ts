@@ -1,9 +1,13 @@
-import type { BAMFile } from "../bam";
-import { AssetVersion, type DataStream } from "../common";
-import { type CopyContext, readTypedRefs, registerBAMObject } from "./base";
+import type { BAMFile } from "../BAMFile";
+import { AssetVersion, type DataStream } from "../Common";
 import { type DebugInfo, dbgRefs } from "./debug";
 import { PandaNode } from "./PandaNode";
 import { PartBundle } from "./PartBundle";
+import {
+  type CopyContext,
+  readTypedRefs,
+  registerTypedObject,
+} from "./TypedObject";
 
 export class PartBundleNode extends PandaNode {
   public partBundles: PartBundle[] = [];
@@ -31,4 +35,4 @@ export class PartBundleNode extends PandaNode {
   }
 }
 
-registerBAMObject("PartBundleNode", PartBundleNode);
+registerTypedObject("PartBundleNode", PartBundleNode);

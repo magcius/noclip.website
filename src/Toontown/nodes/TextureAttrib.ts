@@ -1,7 +1,6 @@
-import type { BAMFile } from "../bam";
-import { AssetVersion, type DataStream } from "../common";
-import type { MaterialData } from "../geom";
-import { type CopyContext, readTypedRefs, registerBAMObject } from "./base";
+import type { BAMFile } from "../BAMFile";
+import { AssetVersion, type DataStream } from "../Common";
+import type { MaterialData } from "../Geom";
 import {
   type DebugInfo,
   dbgArray,
@@ -15,6 +14,11 @@ import { RenderAttrib } from "./RenderAttrib";
 import { SamplerState } from "./SamplerState";
 import { Texture } from "./Texture";
 import { TextureStage } from "./TextureStage";
+import {
+  type CopyContext,
+  readTypedRefs,
+  registerTypedObject,
+} from "./TypedObject";
 
 export interface StageNode {
   sampler: SamplerState | null;
@@ -177,4 +181,4 @@ export class TextureAttrib extends RenderAttrib {
   }
 }
 
-registerBAMObject("TextureAttrib", TextureAttrib);
+registerTypedObject("TextureAttrib", TextureAttrib);

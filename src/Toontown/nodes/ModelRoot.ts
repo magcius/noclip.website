@@ -1,8 +1,8 @@
-import { BAMFile } from "../bam";
-import { AssetVersion, DataStream } from "../common";
-import { registerBAMObject } from "./base";
-import { dbgNum, DebugInfo } from "./debug";
+import type { BAMFile } from "../BAMFile";
+import { AssetVersion, type DataStream } from "../Common";
+import { type DebugInfo, dbgNum } from "./debug";
 import { ModelNode } from "./ModelNode";
+import { registerTypedObject } from "./TypedObject";
 
 export class ModelRoot extends ModelNode {
   public typeHandle: number | null = null;
@@ -23,4 +23,4 @@ export class ModelRoot extends ModelNode {
   }
 }
 
-registerBAMObject("ModelRoot", ModelRoot);
+registerTypedObject("ModelRoot", ModelRoot);

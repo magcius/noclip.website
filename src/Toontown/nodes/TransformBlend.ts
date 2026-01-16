@@ -1,6 +1,12 @@
-import { mat4 } from "gl-matrix";
-import type { BAMFile } from "../bam";
-import type { DataStream } from "../common";
+import type { BAMFile } from "../BAMFile";
+import type { DataStream } from "../Common";
+import {
+  type DebugInfo,
+  dbgArray,
+  dbgFields,
+  dbgNum,
+  dbgObject,
+} from "./debug";
 import { VertexTransform } from "./VertexTransform";
 
 /**
@@ -29,34 +35,15 @@ export class TransformBlend {
    */
   load(file: BAMFile, data: DataStream): number {
     const numEntries = data.readUint16();
-    this.entries = [];
-
+    this.entries = new Array(numEntries);
     for (let i = 0; i < numEntries; i++) {
-      const transformId = data.readObjectId();
+      const transform = file.getTyped(data.readObjectId(), VertexTransform);
+      if (!transform)
+        throw new Error("Missing VertexTransform in TransformBlend");
       const weight = data.readStdFloat();
-
-      // The transform will be resolved in complete_pointers
-      // For now, store null and the weight
-      const transform = file.getTyped(transformId, VertexTransform);
-      if (transform) {
-        this.entries.push({ transform, weight });
-      }
+      this.entries[i] = { transform, weight };
     }
-
-    return numEntries; // Number of pointers to resolve
-  }
-
-  /**
-   * Compute the blended skinning matrix from all entries.
-   * Result is: sum(transform.getSkinningMatrix() * weight) for all entries
-   */
-  getBlendedMatrix(out: mat4): void {
-    mat4.set(out, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
-    const temp = mat4.create();
-    for (const entry of this.entries) {
-      entry.transform.getSkinningMatrix(temp);
-      mat4.multiplyScalarAndAdd(out, out, temp, entry.weight);
-    }
+    return numEntries;
   }
 
   /**
@@ -64,5 +51,23 @@ export class TransformBlend {
    */
   get numTransforms(): number {
     return this.entries.length;
+  }
+
+  getDebugInfo(): DebugInfo {
+    const info: DebugInfo = new Map();
+    info.set(
+      "entries",
+      dbgArray(
+        this.entries.map((entry) =>
+          dbgObject(
+            dbgFields([
+              ["transform", dbgObject(entry.transform.getDebugInfo())],
+              ["weight", dbgNum(entry.weight)],
+            ]),
+          ),
+        ),
+      ),
+    );
+    return info;
   }
 }

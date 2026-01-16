@@ -1,4 +1,4 @@
-import type { DataStream } from "../common";
+import type { DataStream } from "../Common";
 
 /**
  * Represents a sparse set of integers as a collection of subranges.
@@ -20,12 +20,12 @@ export class SparseArray {
 
   load(data: DataStream): void {
     const numSubranges = data.readUint32();
-    this.subranges = [];
+    this.subranges = new Array(numSubranges);
 
     for (let i = 0; i < numSubranges; i++) {
       const begin = data.readInt32();
       const end = data.readInt32();
-      this.subranges.push({ begin, end });
+      this.subranges[i] = { begin, end };
     }
 
     this.inverse = data.readBool();

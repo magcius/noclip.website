@@ -1,9 +1,9 @@
 import { vec4 } from "gl-matrix";
-import type { BAMFile } from "../bam";
-import type { DataStream } from "../common";
-import { type CopyContext, registerBAMObject } from "./base";
+import type { BAMFile } from "../BAMFile";
+import type { DataStream } from "../Common";
 import { type DebugInfo, dbgBool, dbgVec4 } from "./debug";
 import { ParametricCurve } from "./ParametricCurve";
+import { type CopyContext, registerTypedObject } from "./TypedObject";
 
 /**
  * Cubic curve segment with 4 control points.
@@ -44,4 +44,4 @@ export class CubicCurveseg extends ParametricCurve {
   }
 }
 
-registerBAMObject("CubicCurveseg", CubicCurveseg);
+registerTypedObject("CubicCurveseg", CubicCurveseg);

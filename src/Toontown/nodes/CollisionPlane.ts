@@ -1,9 +1,9 @@
 import { vec4 } from "gl-matrix";
-import type { BAMFile } from "../bam";
-import type { DataStream } from "../common";
-import { type CopyContext, registerBAMObject } from "./base";
+import type { BAMFile } from "../BAMFile";
+import type { DataStream } from "../Common";
 import { CollisionSolid } from "./CollisionSolid";
 import { type DebugInfo, dbgVec4 } from "./debug";
+import { type CopyContext, registerTypedObject } from "./TypedObject";
 
 export class CollisionPlane extends CollisionSolid {
   public plane = vec4.create();
@@ -25,4 +25,4 @@ export class CollisionPlane extends CollisionSolid {
   }
 }
 
-registerBAMObject("CollisionPlane", CollisionPlane);
+registerTypedObject("CollisionPlane", CollisionPlane);

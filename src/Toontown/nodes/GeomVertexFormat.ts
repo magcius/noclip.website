@@ -1,11 +1,5 @@
-import type { BAMFile } from "../bam";
-import type { DataStream } from "../common";
-import {
-  BAMObject,
-  type CopyContext,
-  readTypedRefs,
-  registerBAMObject,
-} from "./base";
+import type { BAMFile } from "../BAMFile";
+import type { DataStream } from "../Common";
 import {
   type DebugInfo,
   dbgBool,
@@ -16,6 +10,12 @@ import {
 } from "./debug";
 import { GeomVertexArrayFormat } from "./GeomVertexArrayFormat";
 import { AnimationType } from "./geomEnums";
+import {
+  type CopyContext,
+  readTypedRefs,
+  registerTypedObject,
+  TypedObject,
+} from "./TypedObject";
 
 export class GeomVertexAnimationSpec {
   public animationType = AnimationType.None;
@@ -37,7 +37,7 @@ export class GeomVertexAnimationSpec {
   }
 }
 
-export class GeomVertexFormat extends BAMObject {
+export class GeomVertexFormat extends TypedObject {
   public animation = new GeomVertexAnimationSpec();
   public arrays: GeomVertexArrayFormat[] = [];
 
@@ -64,4 +64,4 @@ export class GeomVertexFormat extends BAMObject {
   }
 }
 
-registerBAMObject("GeomVertexFormat", GeomVertexFormat);
+registerTypedObject("GeomVertexFormat", GeomVertexFormat);

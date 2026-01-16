@@ -1,6 +1,6 @@
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
 import { DeviceProgram } from "../Program.js";
-import type { CachedGeometryData, MaterialData } from "./geom.js";
+import type { CachedGeometryData, MaterialData } from "./Geom.js";
 import { ColorType, PandaCompareFunc } from "./nodes/index.js";
 
 /**

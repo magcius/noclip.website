@@ -1,9 +1,13 @@
-import type { BAMFile } from "../bam";
-import { AssetVersion, type DataStream } from "../common";
-import { type CopyContext, readTypedRefs, registerBAMObject } from "./base";
+import type { BAMFile } from "../BAMFile";
+import { AssetVersion, type DataStream } from "../Common";
 import { CollisionSolid } from "./CollisionSolid";
 import { type DebugInfo, dbgFlags, dbgNum, dbgRefs } from "./debug";
 import { PandaNode } from "./PandaNode";
+import {
+  type CopyContext,
+  readTypedRefs,
+  registerTypedObject,
+} from "./TypedObject";
 
 const CollisionNodeFlags = {
   IntoCollideOff: 0x01,
@@ -58,4 +62,4 @@ export class CollisionNode extends PandaNode {
   }
 }
 
-registerBAMObject("CollisionNode", CollisionNode);
+registerTypedObject("CollisionNode", CollisionNode);

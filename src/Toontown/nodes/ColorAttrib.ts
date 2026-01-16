@@ -1,10 +1,10 @@
-import { vec4 } from "gl-matrix";
-import type { BAMFile } from "../bam";
-import type { DataStream } from "../common";
-import type { MaterialData } from "../geom";
-import { type CopyContext, registerBAMObject } from "./base";
+import { type ReadonlyVec4, vec4 } from "gl-matrix";
+import type { BAMFile } from "../BAMFile";
+import type { DataStream } from "../Common";
+import type { MaterialData } from "../Geom";
 import { type DebugInfo, dbgColor, dbgEnum } from "./debug";
 import { RenderAttrib } from "./RenderAttrib";
+import { type CopyContext, registerTypedObject } from "./TypedObject";
 
 export enum ColorType {
   Vertex = 0,
@@ -53,7 +53,7 @@ export class ColorAttrib extends RenderAttrib {
     }
   }
 
-  static flat(color: vec4): ColorAttrib {
+  static flat(color: ReadonlyVec4): ColorAttrib {
     const attrib = new ColorAttrib();
     attrib.colorType = ColorType.Flat;
     vec4.copy(attrib.color, color);
@@ -61,4 +61,4 @@ export class ColorAttrib extends RenderAttrib {
   }
 }
 
-registerBAMObject("ColorAttrib", ColorAttrib);
+registerTypedObject("ColorAttrib", ColorAttrib);

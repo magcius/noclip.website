@@ -1,12 +1,16 @@
-import type { BAMFile } from "../bam";
-import type { DataStream } from "../common";
-import type { MaterialData } from "../geom";
-import { type BAMObject, type CopyContext, registerBAMObject } from "./base";
+import type { BAMFile } from "../BAMFile";
+import type { DataStream } from "../Common";
+import type { MaterialData } from "../Geom";
 import { type DebugInfo, dbgRef } from "./debug";
 import { RenderAttrib } from "./RenderAttrib";
+import {
+  type CopyContext,
+  registerTypedObject,
+  type TypedObject,
+} from "./TypedObject";
 
 export class MaterialAttrib extends RenderAttrib {
-  public material: BAMObject | null = null;
+  public material: TypedObject | null = null;
 
   override load(file: BAMFile, data: DataStream) {
     super.load(file, data);
@@ -24,7 +28,9 @@ export class MaterialAttrib extends RenderAttrib {
     return info;
   }
 
-  override applyToMaterial(_material: MaterialData): void {}
+  override applyToMaterial(_material: MaterialData): void {
+    console.warn("MaterialAttrib.applyToMaterial not implemented");
+  }
 }
 
-registerBAMObject("MaterialAttrib", MaterialAttrib);
+registerTypedObject("MaterialAttrib", MaterialAttrib);

@@ -1,10 +1,10 @@
-import { mat4, quat, type ReadonlyVec3, vec3, vec4 } from "gl-matrix";
+import { type ReadonlyVec3, vec3, vec4 } from "gl-matrix";
 import type { GfxDevice } from "../gfx/platform/GfxPlatform";
 import type { SceneContext } from "../SceneBase";
 import type * as Viewer from "../viewer";
-import { AnimatedCharacter } from "./Animation/AnimatedCharacter";
-import type { BAMFile } from "./bam";
-import { DNASceneBuilder } from "./dna/sceneBuilder";
+import { AnimControl } from "./anim/AnimControl";
+import type { BAMFile } from "./BAMFile";
+import { DNASceneBuilder } from "./dna/SceneBuilder";
 import {
   AnimBundleNode,
   Character,
@@ -23,37 +23,8 @@ import {
   TransparencyAttrib,
   TransparencyMode,
 } from "./nodes";
-import { ToontownRenderer } from "./render";
-import { pathBase, ToontownResourceLoader } from "./resources";
-
-class ToontownModelSceneDesc implements Viewer.SceneDesc {
-  constructor(
-    public id: string,
-    public name: string,
-    public modelPath: string,
-  ) {}
-
-  public async createScene(
-    device: GfxDevice,
-    context: SceneContext,
-  ): Promise<Viewer.SceneGfx> {
-    const loader = await context.dataShare.ensureObject<ToontownResourceLoader>(
-      `${pathBase}/loader`,
-      async () => {
-        const loader = new ToontownResourceLoader(context.dataFetcher);
-        await loader.loadManifest();
-        return loader;
-      },
-    );
-
-    const scene = PandaNode.create("render");
-    const _cameraNode = scene.attachNewNode("camera");
-
-    const bamFile = await loader.loadModel(this.modelPath, true);
-    scene.addChild(bamFile.getRoot().clone());
-    return ToontownRenderer.create(device, scene, loader, undefined, undefined);
-  }
-}
+import { ToontownRenderer } from "./Render";
+import { pathBase, ToontownResourceLoader } from "./Resources";
 
 interface NeighborhoodConfig {
   storageDNA: string | null; // Hood-wide storage (e.g., storage_TT)
@@ -358,7 +329,7 @@ class ToontownDNASceneDesc implements Viewer.SceneDesc {
     console.log(`Loading DNA scene: ${this.name}`);
     console.log(`DNA load order:`, dnaFiles);
 
-    const { storage, sceneFile } = await loader.loadDNAWithStorage(dnaFiles);
+    const { storage, sceneFile } = await loader.loadDNA(dnaFiles);
 
     const scene = PandaNode.create("render");
     const cameraNode = scene.attachNewNode("camera");
@@ -401,7 +372,6 @@ class ToontownDNASceneDesc implements Viewer.SceneDesc {
     await this.sceneConfig.callback?.(scene, loader, sceneBuilder);
 
     // Load animations
-    const animatedCharacters = new Map<Character, AnimatedCharacter>();
     async function applyAnim(node: PandaNode, animPath: string) {
       // console.log(`Loading animation ${animPath} for ${node.name}`);
       let animModel: BAMFile;
@@ -423,18 +393,19 @@ class ToontownDNASceneDesc implements Viewer.SceneDesc {
         );
         return;
       }
-      // console.log(
-      //   `${node.name} bundle: ${formatDebugInfo(animBundle.getDebugInfo())}`,
-      // );
+      // console.log(`${node.name} bundle`, animBundle);
       const character = node.findNodeByType(Character);
       if (!character) {
         console.error(`Failed to find character for ${node.name}`);
         return;
       }
-      const animChar = new AnimatedCharacter(character);
-      const control = animChar.addAnimation(animBundle);
-      animChar.playAnimation(control);
-      animatedCharacters.set(character, animChar);
+      const partBundle = character.partBundles[0];
+      if (!partBundle) {
+        throw new Error("Character has no PartBundle");
+      }
+      const control = new AnimControl(partBundle);
+      partBundle.bindAnim(control, animBundle);
+      control.loop();
     }
 
     // Load animations from DNA tags
@@ -479,7 +450,10 @@ class ToontownDNASceneDesc implements Viewer.SceneDesc {
       }
       // console.log(`Checking for animation ${extracted}`);
       const path = animMap.get(extracted);
-      if (!path) continue;
+      if (!path) {
+        console.warn(`No animation found for code ${code}`);
+        continue;
+      }
       applyAnim(node, path);
     }
 
@@ -490,7 +464,6 @@ class ToontownDNASceneDesc implements Viewer.SceneDesc {
       device,
       scene,
       loader,
-      animatedCharacters,
       this.sceneConfig.musicFile,
     );
   }
@@ -506,7 +479,7 @@ const sceneDescs = [
       storageDNA: ["phase_4/dna/storage_TT_sz", "phase_5/dna/storage_TT_town"],
       sceneDNA: "phase_4/dna/toontown_central_sz",
       musicFile: "phase_4/audio/bgm/TC_nbrhood.mid",
-      callback: async (scene, loader, builder) => {
+      callback: async (scene, loader, _builder) => {
         const model = await loader.loadModel("phase_3/models/char/mickey-1200");
         const instance = model.getRoot().cloneTo(scene);
         instance.pos = vec3.fromValues(-27.5, -5.25, 0.0);
@@ -573,7 +546,7 @@ const sceneDescs = [
     storageDNA: ["phase_6/dna/storage_DD_sz", "phase_6/dna/storage_DD_town"],
     sceneDNA: "phase_6/dna/donalds_dock_sz",
     musicFile: "phase_6/audio/bgm/DD_nbrhood.mid",
-    callback: async (scene, loader, builder) => {
+    callback: async (scene, loader, _builder) => {
       const water = scene.find("**/water");
       if (water) {
         water.setAttrib(TransparencyAttrib.create(TransparencyMode.Alpha));
@@ -596,7 +569,9 @@ const sceneDescs = [
       if (westPier) westPier.hpr = vec3.fromValues(-90, 0.25, 0);
 
       // Spawn Donald
-      const donaldModel = await loader.loadModel("phase_6/models/char/donald-wheel-1000");
+      const donaldModel = await loader.loadModel(
+        "phase_6/models/char/donald-wheel-1000",
+      );
       const donald = donaldModel.getRoot().cloneTo(boat);
       donald.pos = vec3.fromValues(0, -1, 3.95);
       donald.tags.set("DNAAnim", "phase_6/models/char/donald-wheel-wheel");
@@ -679,6 +654,34 @@ const sceneDescs = [
     storageDNA: ["phase_8/dna/storage_DG_sz", "phase_8/dna/storage_DG_town"],
     sceneDNA: "phase_8/dna/daisys_garden_sz",
     musicFile: "phase_8/audio/bgm/DG_nbrhood.mid",
+    callback: async (scene, loader, _builder) => {
+      const flowerModel = await loader.loadModel(
+        "phase_8/models/props/DG_flower-mod",
+      );
+      const flower = flowerModel.getRoot().cloneTo(scene);
+      flower.pos = vec3.fromValues(1.39, 92.91, 2.0);
+      flower.scale = vec3.fromValues(2.5, 2.5, 2.5);
+
+      const model = await loader.loadModel(
+        "phase_4/models/char/daisyduck_1600",
+      );
+      const instance = model.getRoot().cloneTo(scene);
+      instance.pos = vec3.fromValues(5.482, 210.479, 10.03);
+      instance.setH(180);
+      instance.tags.set("DNAAnim", "phase_4/models/char/daisyduck_idle");
+
+      // Hide closed eyes
+      instance.find("**/eyesclose")?.hide();
+
+      // Add drop shadow
+      const shadowModel = await loader.loadModel(
+        "phase_3/models/props/drop_shadow",
+      );
+      const shadow = shadowModel.getRoot().cloneTo(instance);
+      shadow.pos = vec3.fromValues(0, 0, 0.025);
+      shadow.scale = vec3.fromValues(0.4, 0.4, 0.4);
+      shadow.setAttrib(ColorAttrib.flat(vec4.fromValues(0, 0, 0, 0.5)), 1);
+    },
   }),
   new ToontownDNASceneDesc("daisys_garden_5100", "Elm Street", "DaisyGardens", {
     storageDNA: ["phase_8/dna/storage_DG_sz", "phase_8/dna/storage_DG_town"],

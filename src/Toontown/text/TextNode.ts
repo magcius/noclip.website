@@ -1,4 +1,4 @@
-import { vec2, vec4 } from "gl-matrix";
+import { type ReadonlyVec2, type ReadonlyVec4, vec2, vec4 } from "gl-matrix";
 import { PandaNode } from "../nodes";
 import { TextAlignment, TextAssembler, type TextFont } from "./TextAssembler";
 
@@ -48,24 +48,24 @@ export class TextNode {
     this.dirty = true;
   }
 
-  get textColor(): vec4 {
+  get textColor(): ReadonlyVec4 {
     return this._textColor;
   }
-  set textColor(value: vec4) {
+  set textColor(value: ReadonlyVec4) {
     vec4.copy(this._textColor, value);
   }
 
-  get shadowColor(): vec4 | null {
+  get shadowColor(): ReadonlyVec4 | null {
     return this._shadowColor;
   }
-  set shadowColor(value: vec4 | null) {
+  set shadowColor(value: ReadonlyVec4 | null) {
     this._shadowColor = value ? vec4.clone(value) : null;
   }
 
-  get shadowOffset(): vec2 | null {
+  get shadowOffset(): ReadonlyVec2 | null {
     return this._shadowOffset;
   }
-  set shadowOffset(value: vec2 | null) {
+  set shadowOffset(value: ReadonlyVec2 | null) {
     this._shadowOffset = value ? vec2.clone(value) : null;
   }
 

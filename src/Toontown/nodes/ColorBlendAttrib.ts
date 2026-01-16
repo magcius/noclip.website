@@ -1,10 +1,10 @@
 import { vec4 } from "gl-matrix";
-import type { BAMFile } from "../bam";
-import { AssetVersion, type DataStream } from "../common";
-import type { MaterialData } from "../geom";
-import { type CopyContext, registerBAMObject } from "./base";
+import type { BAMFile } from "../BAMFile";
+import { AssetVersion, type DataStream } from "../Common";
+import type { MaterialData } from "../Geom";
 import { type DebugInfo, dbgColor, dbgEnum } from "./debug";
 import { RenderAttrib } from "./RenderAttrib";
+import { type CopyContext, registerTypedObject } from "./TypedObject";
 
 export enum ColorBlendMode {
   None = 0,
@@ -98,7 +98,9 @@ export class ColorBlendAttrib extends RenderAttrib {
     return info;
   }
 
-  override applyToMaterial(_material: MaterialData): void {}
+  override applyToMaterial(_material: MaterialData): void {
+    console.warn("ColorBlendAttrib.applyToMaterial not implemented");
+  }
 }
 
-registerBAMObject("ColorBlendAttrib", ColorBlendAttrib);
+registerTypedObject("ColorBlendAttrib", ColorBlendAttrib);

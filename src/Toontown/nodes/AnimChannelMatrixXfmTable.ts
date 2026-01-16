@@ -1,11 +1,11 @@
 import { mat4, quat, vec3 } from "gl-matrix";
-import type { BAMFile } from "../bam";
-import { AssetVersion, type DataStream } from "../common";
+import type { BAMFile } from "../BAMFile";
+import { AssetVersion, type DataStream } from "../Common";
 import { FFTCompressor } from "../FFTCompressor";
 import { applyShear, hprToQuat } from "../Math";
 import { AnimChannelBase } from "./AnimChannelBase";
-import { type CopyContext, registerBAMObject } from "./base";
 import { type DebugInfo, dbgArray, dbgBool, dbgTypedArray } from "./debug";
+import { type CopyContext, registerTypedObject } from "./TypedObject";
 
 // Matrix component indices (12 total for a 4x3 affine transform)
 // i, j, k = scale
@@ -27,7 +27,7 @@ const DEFAULTS = [1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0];
  * - BAM < 4.14: No new_hpr flag
  * - BAM >= 4.14: Has new_hpr flag for HPR format conversion
  */
-export class AnimChannelMatrixXfmTable extends AnimChannelBase {
+export class AnimChannelMatrixXfmTable extends AnimChannelBase<mat4> {
   public compressed = false;
   public newHpr = false;
   public tables: ReadonlyArray<Float32Array> = [];
@@ -76,7 +76,7 @@ export class AnimChannelMatrixXfmTable extends AnimChannelBase {
   /**
    * Compose a 4x4 matrix from the channel component tables.
    */
-  getValue(out: mat4, frame: number): mat4 {
+  override getValue(out: mat4, frame: number): mat4 {
     // Extract component values at this frame
     const sx = this.getComponentValue(0, frame);
     const sy = this.getComponentValue(1, frame);
@@ -132,4 +132,4 @@ export class AnimChannelMatrixXfmTable extends AnimChannelBase {
   }
 }
 
-registerBAMObject("AnimChannelMatrixXfmTable", AnimChannelMatrixXfmTable);
+registerTypedObject("AnimChannelMatrixXfmTable", AnimChannelMatrixXfmTable);

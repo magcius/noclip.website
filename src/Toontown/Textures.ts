@@ -1,6 +1,12 @@
-import type ArrayBufferSlice from "../ArrayBufferSlice.js";
-import { rust } from "../rustlib.js";
-import { Format } from "./nodes/textureEnums.js";
+import type ArrayBufferSlice from "../ArrayBufferSlice";
+import {
+  GfxMipFilterMode,
+  type GfxSamplerDescriptor,
+  GfxTexFilterMode,
+  GfxWrapMode,
+} from "../gfx/platform/GfxPlatform";
+import { rust } from "../rustlib";
+import { FilterType, Format, type Texture, WrapMode } from "./nodes";
 
 /**
  * Decoded image data in RGBA format
@@ -193,4 +199,82 @@ export function mergeAlphaChannel(
   for (let i = 0; i < pixelCount; i++) {
     mainImage.data[i * 4 + 3] = alphaImage.data[i * 4 + 0];
   }
+}
+
+/**
+ * Convert Panda3D wrap mode to GfxWrapMode
+ */
+function translateWrapMode(mode: WrapMode): GfxWrapMode {
+  switch (mode) {
+    case WrapMode.Clamp:
+    case WrapMode.BorderColor:
+      return GfxWrapMode.Clamp;
+    case WrapMode.Repeat:
+      return GfxWrapMode.Repeat;
+    case WrapMode.Mirror:
+    case WrapMode.MirrorOnce:
+      return GfxWrapMode.Mirror;
+    default:
+      return GfxWrapMode.Repeat;
+  }
+}
+
+/**
+ * Convert Panda3D filter type to GfxTexFilterMode and GfxMipFilterMode
+ */
+function translateFilterType(filterType: FilterType): {
+  texFilter: GfxTexFilterMode;
+  mipFilter: GfxMipFilterMode;
+} {
+  switch (filterType) {
+    case FilterType.Nearest:
+      return {
+        texFilter: GfxTexFilterMode.Point,
+        mipFilter: GfxMipFilterMode.Nearest,
+      };
+    case FilterType.Linear:
+      return {
+        texFilter: GfxTexFilterMode.Bilinear,
+        mipFilter: GfxMipFilterMode.Nearest,
+      };
+    case FilterType.NearestMipmapNearest:
+      return {
+        texFilter: GfxTexFilterMode.Point,
+        mipFilter: GfxMipFilterMode.Nearest,
+      };
+    case FilterType.LinearMipmapNearest:
+      return {
+        texFilter: GfxTexFilterMode.Bilinear,
+        mipFilter: GfxMipFilterMode.Nearest,
+      };
+    case FilterType.NearestMipmapLinear:
+      return {
+        texFilter: GfxTexFilterMode.Point,
+        mipFilter: GfxMipFilterMode.Linear,
+      };
+    // case FilterType.LinearMipmapLinear:
+    // case FilterType.Default:
+    default:
+      return {
+        texFilter: GfxTexFilterMode.Bilinear,
+        mipFilter: GfxMipFilterMode.Linear,
+      };
+  }
+}
+
+export function getSamplerDescriptor(texture: Texture): GfxSamplerDescriptor {
+  const sampler = texture.defaultSampler;
+  const minF = translateFilterType(sampler.minFilter);
+  const magF = translateFilterType(sampler.magFilter);
+  return {
+    wrapS: translateWrapMode(sampler.wrapU),
+    wrapT: translateWrapMode(sampler.wrapV),
+    wrapQ: translateWrapMode(sampler.wrapW),
+    minFilter: minF.texFilter,
+    magFilter: magF.texFilter,
+    mipFilter: minF.mipFilter,
+    minLOD: sampler.minLod,
+    maxLOD: sampler.maxLod,
+    maxAnisotropy: Math.max(sampler.anisoDegree, 1),
+  };
 }

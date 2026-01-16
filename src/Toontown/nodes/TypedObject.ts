@@ -1,71 +1,61 @@
-import type { BAMFile } from "../bam";
-import { AssetVersion, type DataStream } from "../common";
+import type { BAMFile } from "../BAMFile";
+import { AssetVersion, type DataStream } from "../Common";
 import type { DebugInfo } from "./debug";
 
-export type BAMObjectFactory<T extends BAMObject = BAMObject> = new () => T;
+export type TypedObjectFactory<T extends TypedObject = TypedObject> =
+  new () => T;
 
-// Central registry for BAM object factories.
-// Node modules register themselves by calling registerBAMObject().
-const objectFactories = new Map<string, BAMObjectFactory>();
+// Central registry for TypedObject factories.
+// Node modules register themselves by calling registerTypedObject().
+const objectFactories = new Map<string, TypedObjectFactory>();
 
-export function registerBAMObject<T extends BAMObject>(
+export function registerTypedObject<T extends TypedObject>(
   name: string,
-  factory: BAMObjectFactory<T>,
+  factory: TypedObjectFactory<T>,
 ): void {
   if (objectFactories.has(name)) {
     throw new Error(`Object type "${name}" is already registered`);
   }
-  objectFactories.set(name, factory as unknown as BAMObjectFactory);
+  objectFactories.set(name, factory as unknown as TypedObjectFactory);
 }
 
-export function registerBAMObjectAlias(
+export function getTypedObjectFactory(
   name: string,
-  aliasTarget: string,
-): void {
-  const factory = objectFactories.get(aliasTarget);
-  if (!factory) {
-    throw new Error(
-      `Cannot create alias "${name}": target "${aliasTarget}" not registered`,
-    );
-  }
-  objectFactories.set(name, factory);
-}
-
-export function getBAMObjectFactory(
-  name: string,
-): BAMObjectFactory | undefined {
+): TypedObjectFactory | undefined {
   return objectFactories.get(name);
 }
 
 const DEFAULT_VERSION = new AssetVersion(0, 0);
 
 export class CopyContext {
-  private _objects = new Map<BAMObject, BAMObject>();
+  private _objects = new Map<TypedObject, TypedObject>();
 
   // Overload signatures to match input nullability
-  clone<T extends BAMObject>(obj: T): T;
-  clone<T extends BAMObject>(obj: T | null): T | null;
-  clone<T extends BAMObject>(obj: T | null): T | null {
+  clone<T extends TypedObject>(obj: T): T;
+  clone<T extends TypedObject>(obj: T | null): T | null;
+  clone<T extends TypedObject>(obj: T | null): T | null {
     if (!obj) return null;
     const existing = this._objects.get(obj);
     if (existing) return existing as T;
     return obj.clone(this);
   }
 
-  cloneArray<T extends BAMObject>(arr: T[]): T[] {
+  cloneArray<T extends TypedObject>(obj: T[]): T[];
+  cloneArray<T extends TypedObject>(obj: (T | null)[]): (T | null)[];
+  cloneArray<T extends TypedObject>(arr: T[]): T[] {
     return arr.map((item) => this.clone(item));
   }
 
-  add<T extends BAMObject>(obj: T, clone: T) {
+  add<T extends TypedObject>(obj: T, clone: T) {
     this._objects.set(obj, clone);
   }
 
-  get<T extends BAMObject>(obj: T): T | null {
+  get<T extends TypedObject>(obj: T): T | null {
     return (this._objects.get(obj) ?? null) as T | null;
   }
 }
 
-export class BAMObject {
+export class TypedObject {
   protected _version = DEFAULT_VERSION;
 
   load(file: BAMFile, _data: DataStream) {
@@ -96,8 +86,8 @@ export function readObjectRefs(
   file: BAMFile,
   data: DataStream,
   numRefs: number,
-): BAMObject[] {
-  const refs: BAMObject[] = [];
+): TypedObject[] {
+  const refs: TypedObject[] = [];
   for (let i = 0; i < numRefs; i++) {
     const ref = data.readObjectId();
     const obj = file.getObject(ref);
@@ -107,7 +97,7 @@ export function readObjectRefs(
   return refs;
 }
 
-export function readTypedRefs<T extends BAMObject>(
+export function readTypedRefs<T extends TypedObject>(
   file: BAMFile,
   data: DataStream,
   numRefs: number,

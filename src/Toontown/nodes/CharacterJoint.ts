@@ -1,11 +1,19 @@
 import { mat4 } from "gl-matrix";
-import type { BAMFile } from "../bam";
-import { AssetVersion, type DataStream } from "../common";
-import { type CopyContext, readTypedRefs, registerBAMObject } from "./base";
+import type { BAMFile } from "../BAMFile";
+import { AssetVersion, type DataStream } from "../Common";
 import { Character } from "./Character";
 import { type DebugInfo, dbgMat4, dbgRef, dbgRefs } from "./debug";
 import { MovingPartMatrix } from "./MovingPartMatrix";
 import { PandaNode } from "./PandaNode";
+import type { PartBundle } from "./PartBundle";
+import type { PartGroup } from "./PartGroup";
+import { TransformState } from "./TransformState";
+import {
+  type CopyContext,
+  readTypedRefs,
+  registerTypedObject,
+} from "./TypedObject";
+import type { VertexTransform } from "./VertexTransform";
 
 /**
  * Stores transform matrices for skeletal animation.
@@ -22,6 +30,7 @@ export class CharacterJoint extends MovingPartMatrix {
   // Runtime fields (not serialized, computed during animation)
   /** World-space transform, computed by chaining value with parent's netTransform */
   public netTransform = mat4.create();
+  public vertexTransforms: VertexTransform[] = [];
 
   override load(file: BAMFile, data: DataStream) {
     super.load(file, data);
@@ -63,6 +72,50 @@ export class CharacterJoint extends MovingPartMatrix {
     );
     return info;
   }
+
+  protected override updateInternals(
+    root: PartBundle,
+    parent: PartGroup,
+    selfChanged: boolean,
+    parentChanged: boolean,
+  ): boolean {
+    let netChanged = false;
+    if (parent instanceof CharacterJoint) {
+      if (parentChanged || selfChanged) {
+        mat4.multiply(this.netTransform, parent.netTransform, this.value);
+        netChanged = true;
+      }
+    } else if (selfChanged) {
+      mat4.multiply(this.netTransform, root.rootXform, this.value);
+      netChanged = true;
+    }
+
+    let transform: TransformState | null = null;
+    if (netChanged) {
+      // Update any registered nodes to receive the new transform
+      if (this.netNodes.length > 0) {
+        transform = TransformState.fromMatrix(this.netTransform);
+        for (const node of this.netNodes) {
+          node.transform = transform;
+        }
+      }
+
+      // Inform vertex transforms of change
+      for (const transform of this.vertexTransforms) {
+        transform.markModified();
+      }
+    }
+
+    if (selfChanged && this.localNodes.length > 0) {
+      if (transform === null)
+        transform = TransformState.fromMatrix(this.netTransform);
+      for (const node of this.localNodes) {
+        node.transform = transform;
+      }
+    }
+
+    return selfChanged || netChanged;
+  }
 }
 
-registerBAMObject("CharacterJoint", CharacterJoint);
+registerTypedObject("CharacterJoint", CharacterJoint);

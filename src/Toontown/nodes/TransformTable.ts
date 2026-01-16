@@ -1,7 +1,12 @@
-import type { BAMFile } from "../bam";
-import type { DataStream } from "../common";
-import { BAMObject, type CopyContext, registerBAMObject } from "./base";
+import type { BAMFile } from "../BAMFile";
+import type { DataStream } from "../Common";
 import { type DebugInfo, dbgNum, dbgRefs } from "./debug";
+import {
+  type CopyContext,
+  readTypedRefs,
+  registerTypedObject,
+  TypedObject,
+} from "./TypedObject";
 import { VertexTransform } from "./VertexTransform";
 
 /**
@@ -13,25 +18,22 @@ import { VertexTransform } from "./VertexTransform";
  * - uint16 numTransforms
  * - For each: objectId (pointer to VertexTransform)
  */
-export class TransformTable extends BAMObject {
+export class TransformTable extends TypedObject {
   public transforms: Array<VertexTransform | null> = [];
 
   override load(file: BAMFile, data: DataStream) {
     super.load(file, data);
-
-    const numTransforms = data.readUint16();
-    this.transforms = new Array(numTransforms);
-
-    for (let i = 0; i < numTransforms; i++) {
-      const transformId = data.readObjectId();
-      const transform = file.getTyped(transformId, VertexTransform);
-      this.transforms[i] = transform;
-    }
+    this.transforms = readTypedRefs(
+      file,
+      data,
+      data.readUint16(),
+      VertexTransform,
+    );
   }
 
   override copyTo(target: this, ctx: CopyContext): void {
     super.copyTo(target, ctx);
-    target.transforms = this.transforms.map((t) => ctx.clone(t));
+    target.transforms = ctx.cloneArray(this.transforms);
   }
 
   /**
@@ -59,4 +61,4 @@ export class TransformTable extends BAMObject {
   }
 }
 
-registerBAMObject("TransformTable", TransformTable);
+registerTypedObject("TransformTable", TransformTable);

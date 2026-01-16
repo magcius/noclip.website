@@ -1,7 +1,7 @@
 import type { ReadonlyMat4 } from "gl-matrix";
 import { computeViewSpaceDepthFromWorldSpaceAABB } from "../Camera";
 import { AABB } from "../Geometry";
-import type { CachedGeometryData } from "./geom";
+import type { CachedGeometryData } from "./Geom";
 import {
   AlphaTestAttrib,
   CullBinAttrib,
@@ -15,7 +15,7 @@ import {
   TransparencyAttrib,
   TransparencyMode,
 } from "./nodes";
-import { pandaToNoclip } from "./render";
+import { pandaToNoclip } from "./Render";
 
 export type CullableObject = {
   geomNode: GeomNode;

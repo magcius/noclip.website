@@ -1,9 +1,20 @@
-import type { BAMFile } from "../bam";
-import { AssetVersion, type DataStream } from "../common";
-import { BAMObject, type CopyContext, registerBAMObject } from "./base";
-import { type DebugInfo, dbgBool, dbgNum } from "./debug";
+import type { BAMFile } from "../BAMFile";
+import { AssetVersion, type DataStream } from "../Common";
+import {
+  type DebugInfo,
+  dbgArray,
+  dbgBool,
+  dbgFields,
+  dbgNum,
+  dbgObject,
+} from "./debug";
 import { SparseArray } from "./SparseArray";
 import { TransformBlend } from "./TransformBlend";
+import {
+  type CopyContext,
+  registerTypedObject,
+  TypedObject,
+} from "./TypedObject";
 
 /**
  * Contains all unique blend combinations for a piece of geometry.
@@ -18,7 +29,7 @@ import { TransformBlend } from "./TransformBlend";
  * - SparseArray rows (BAM 6.7+)
  * - CData (ignored)
  */
-export class TransformBlendTable extends BAMObject {
+export class TransformBlendTable extends TypedObject {
   public blends: TransformBlend[] = [];
   public rows = new SparseArray();
 
@@ -29,13 +40,13 @@ export class TransformBlendTable extends BAMObject {
     super.load(file, data);
 
     const numBlends = data.readUint16();
-    this.blends = [];
+    this.blends = new Array(numBlends);
     this.maxSimultaneousTransforms = 0;
 
     for (let i = 0; i < numBlends; i++) {
       const blend = new TransformBlend();
       blend.load(file, data);
-      this.blends.push(blend);
+      this.blends[i] = blend;
 
       // Track max transforms per vertex
       if (blend.numTransforms > this.maxSimultaneousTransforms) {
@@ -78,15 +89,30 @@ export class TransformBlendTable extends BAMObject {
 
   override getDebugInfo(): DebugInfo {
     const info = super.getDebugInfo();
-    info.set("numBlends", dbgNum(this.blends.length));
+    info.set(
+      "blends",
+      dbgArray(this.blends.map((blend) => dbgObject(blend.getDebugInfo()))),
+    );
     info.set(
       "maxSimultaneousTransforms",
       dbgNum(this.maxSimultaneousTransforms),
     );
     info.set("rowsInverse", dbgBool(this.rows.inverse));
-    info.set("rowsSubranges", dbgNum(this.rows.subranges.length));
+    info.set(
+      "rowsSubranges",
+      dbgArray(
+        this.rows.subranges.map((range) =>
+          dbgObject(
+            dbgFields([
+              ["begin", dbgNum(range.begin)],
+              ["end", dbgNum(range.end)],
+            ]),
+          ),
+        ),
+      ),
+    );
     return info;
   }
 }
 
-registerBAMObject("TransformBlendTable", TransformBlendTable);
+registerTypedObject("TransformBlendTable", TransformBlendTable);

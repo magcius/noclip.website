@@ -1,16 +1,16 @@
-import type { BAMFile } from "../bam";
-import type { DataStream } from "../common";
+import type { BAMFile } from "../BAMFile";
+import type { DataStream } from "../Common";
 import { FFTCompressor } from "../FFTCompressor";
 import { AnimChannelBase } from "./AnimChannelBase";
-import { type CopyContext, registerBAMObject } from "./base";
 import { type DebugInfo, dbgTypedArray } from "./debug";
+import { type CopyContext, registerTypedObject } from "./TypedObject";
 
 /**
  * Scalar animation channel with value table.
  *
  * Stores per-frame scalar values (e.g., for morph sliders).
  */
-export class AnimChannelScalarTable extends AnimChannelBase {
+export class AnimChannelScalarTable extends AnimChannelBase<number> {
   public table: Float32Array = new Float32Array(0);
   public compressed = false;
 
@@ -83,6 +83,11 @@ export class AnimChannelScalarTable extends AnimChannelBase {
     info.set("values", dbgTypedArray(this.table));
     return info;
   }
+
+  override getValue(_out: number, frame: number): number {
+    if (this.table.length === 0) return 0;
+    return this.table[frame % this.table.length];
+  }
 }
 
-registerBAMObject("AnimChannelScalarTable", AnimChannelScalarTable);
+registerTypedObject("AnimChannelScalarTable", AnimChannelScalarTable);

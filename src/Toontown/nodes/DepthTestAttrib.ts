@@ -1,9 +1,9 @@
-import type { BAMFile } from "../bam";
-import type { DataStream } from "../common";
-import type { MaterialData } from "../geom";
-import { type CopyContext, registerBAMObject } from "./base";
+import type { BAMFile } from "../BAMFile";
+import type { DataStream } from "../Common";
+import type { MaterialData } from "../Geom";
 import { type DebugInfo, dbgEnum } from "./debug";
 import { PandaCompareFunc, RenderAttrib } from "./RenderAttrib";
+import { type CopyContext, registerTypedObject } from "./TypedObject";
 
 export class DepthTestAttrib extends RenderAttrib {
   public mode = PandaCompareFunc.Less;
@@ -37,4 +37,4 @@ export class DepthTestAttrib extends RenderAttrib {
   }
 }
 
-registerBAMObject("DepthTestAttrib", DepthTestAttrib);
+registerTypedObject("DepthTestAttrib", DepthTestAttrib);

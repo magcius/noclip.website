@@ -1,8 +1,12 @@
-import type { BAMFile } from "../bam";
-import { AssetVersion, type DataStream } from "../common";
-import { BAMObject, type CopyContext, registerBAMObject } from "./base";
+import type { BAMFile } from "../BAMFile";
+import { AssetVersion, type DataStream } from "../Common";
 import { type DebugInfo, dbgEnum, dbgNum } from "./debug";
 import { TexCoordName } from "./InternalName";
+import {
+  type CopyContext,
+  registerTypedObject,
+  TypedObject,
+} from "./TypedObject";
 
 // GeomBindType from old Panda3D
 export enum GeomBindType {
@@ -39,7 +43,7 @@ export interface TexCoordDef {
  * - BAM < 4.11: Single texcoords/tindex arrays
  * - BAM >= 4.11: Multiple named texture coordinate sets (multitexture)
  */
-export class LegacyGeom extends BAMObject {
+export class LegacyGeom extends TypedObject {
   // Vertex attribute arrays
   public coords: Float32Array = new Float32Array(); // vec3
   public norms: Float32Array = new Float32Array(); // vec3
@@ -162,10 +166,10 @@ export class GeomLinestrip extends LegacyGeom {}
 export class GeomPoint extends LegacyGeom {}
 export class GeomSprite extends LegacyGeom {}
 
-registerBAMObject("GeomTri", GeomTri);
-registerBAMObject("GeomTristrip", GeomTristrip);
-registerBAMObject("GeomTrifan", GeomTrifan);
-registerBAMObject("GeomLine", GeomLine);
-registerBAMObject("GeomLinestrip", GeomLinestrip);
-registerBAMObject("GeomPoint", GeomPoint);
-registerBAMObject("GeomSprite", GeomSprite);
+registerTypedObject("GeomTri", GeomTri);
+registerTypedObject("GeomTristrip", GeomTristrip);
+registerTypedObject("GeomTrifan", GeomTrifan);
+registerTypedObject("GeomLine", GeomLine);
+registerTypedObject("GeomLinestrip", GeomLinestrip);
+registerTypedObject("GeomPoint", GeomPoint);
+registerTypedObject("GeomSprite", GeomSprite);

@@ -1,5 +1,5 @@
-import type { MaterialData } from "../geom";
-import { BAMObject } from "./base";
+import type { MaterialData } from "../Geom";
+import { TypedObject } from "./TypedObject";
 
 export enum PandaCompareFunc {
   None = 0,
@@ -13,7 +13,7 @@ export enum PandaCompareFunc {
   Always = 8,
 }
 
-export class RenderAttrib extends BAMObject {
+export class RenderAttrib extends TypedObject {
   public applyToMaterial(_material: MaterialData) {
     throw new Error("Not implemented");
   }

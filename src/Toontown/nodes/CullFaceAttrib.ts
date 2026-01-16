@@ -1,9 +1,9 @@
-import type { BAMFile } from "../bam";
-import { AssetVersion, type DataStream } from "../common";
-import type { MaterialData } from "../geom";
-import { type CopyContext, registerBAMObject } from "./base";
+import type { BAMFile } from "../BAMFile";
+import { AssetVersion, type DataStream } from "../Common";
+import type { MaterialData } from "../Geom";
 import { type DebugInfo, dbgBool, dbgEnum } from "./debug";
 import { RenderAttrib } from "./RenderAttrib";
+import { type CopyContext, registerTypedObject } from "./TypedObject";
 
 export enum CullFaceMode {
   CullNone = 0,
@@ -52,4 +52,4 @@ export class CullFaceAttrib extends RenderAttrib {
   }
 }
 
-registerBAMObject("CullFaceAttrib", CullFaceAttrib);
+registerTypedObject("CullFaceAttrib", CullFaceAttrib);

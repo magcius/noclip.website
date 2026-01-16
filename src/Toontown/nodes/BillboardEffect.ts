@@ -1,10 +1,10 @@
 import { vec3 } from "gl-matrix";
-import type { BAMFile } from "../bam";
-import { AssetVersion, type DataStream } from "../common";
-import { type CopyContext, registerBAMObject } from "./base";
+import type { BAMFile } from "../BAMFile";
+import { AssetVersion, type DataStream } from "../Common";
 import { type DebugInfo, dbgBool, dbgNum, dbgRef, dbgVec3 } from "./debug";
 import { PandaNode } from "./PandaNode";
 import { RenderEffect } from "./RenderEffects";
+import { type CopyContext, registerTypedObject } from "./TypedObject";
 
 /**
  * Makes a node always face the camera.
@@ -65,4 +65,4 @@ export class BillboardEffect extends RenderEffect {
   }
 }
 
-registerBAMObject("BillboardEffect", BillboardEffect);
+registerTypedObject("BillboardEffect", BillboardEffect);

@@ -1,8 +1,8 @@
-import type { BAMFile } from "../bam";
-import { AssetVersion, type DataStream } from "../common";
-import { type CopyContext, registerBAMObject } from "./base";
+import type { BAMFile } from "../BAMFile";
+import { AssetVersion, type DataStream } from "../Common";
 import { type DebugInfo, dbgBool, dbgEnum, dbgNum } from "./debug";
 import { PandaNode } from "./PandaNode";
+import { type CopyContext, registerTypedObject } from "./TypedObject";
 
 export enum PlayMode {
   Pose = 0,
@@ -99,4 +99,4 @@ export class SequenceNode extends PandaNode {
   }
 }
 
-registerBAMObject("SequenceNode", SequenceNode);
+registerTypedObject("SequenceNode", SequenceNode);

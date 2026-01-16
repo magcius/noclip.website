@@ -1,9 +1,9 @@
 import type { vec4 } from "gl-matrix";
-import type { BAMFile } from "../bam";
-import type { DataStream } from "../common";
-import { type CopyContext, registerBAMObject } from "./base";
+import type { BAMFile } from "../BAMFile";
+import type { DataStream } from "../Common";
 import { type DebugInfo, dbgNum } from "./debug";
 import { PiecewiseCurve } from "./PiecewiseCurve";
+import { type CopyContext, registerTypedObject } from "./TypedObject";
 
 export interface NurbsCV {
   point: vec4;
@@ -44,5 +44,5 @@ export class NurbsCurve extends PiecewiseCurve {
   }
 }
 
-registerBAMObject("NurbsCurve", NurbsCurve);
-registerBAMObject("ClassicNurbsCurve", NurbsCurve);
+registerTypedObject("NurbsCurve", NurbsCurve);
+registerTypedObject("ClassicNurbsCurve", NurbsCurve);

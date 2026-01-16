@@ -1,15 +1,19 @@
 import { vec3 } from "gl-matrix";
-import type { BAMFile } from "../bam";
-import type { DataStream } from "../common";
-import { BAMObject, type CopyContext, registerBAMObject } from "./base";
+import type { BAMFile } from "../BAMFile";
+import type { DataStream } from "../Common";
 import { type DebugInfo, dbgFlags, dbgVec3 } from "./debug";
+import {
+  type CopyContext,
+  registerTypedObject,
+  TypedObject,
+} from "./TypedObject";
 
 export const CollisionSolidFlags = {
   Tangible: 1 << 0,
   EffectiveNormal: 1 << 1,
 };
 
-export class CollisionSolid extends BAMObject {
+export class CollisionSolid extends TypedObject {
   public flags = 0;
   public effectiveNormal = vec3.create();
 
@@ -46,4 +50,4 @@ export class CollisionSolid extends BAMObject {
   }
 }
 
-registerBAMObject("CollisionSolid", CollisionSolid);
+registerTypedObject("CollisionSolid", CollisionSolid);

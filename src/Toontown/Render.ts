@@ -1,18 +1,17 @@
 import { mat4, type ReadonlyMat4, vec3 } from "gl-matrix";
-import type { CameraController } from "../Camera.js";
-import type { DataFetcher } from "../DataFetcher.js";
-import { AABB } from "../Geometry.js";
-import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
+import type { CameraController } from "../Camera";
+import { AABB } from "../Geometry";
+import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import {
   makeBackbufferDescSimple,
   standardFullClearRenderPassDescriptor,
-} from "../gfx/helpers/RenderGraphHelpers.js";
-import { reverseDepthForCompareMode } from "../gfx/helpers/ReversedDepthHelpers.js";
+} from "../gfx/helpers/RenderGraphHelpers";
+import { reverseDepthForCompareMode } from "../gfx/helpers/ReversedDepthHelpers";
 import {
   fillMatrix4x3,
   fillMatrix4x4,
   fillVec4v,
-} from "../gfx/helpers/UniformBufferHelpers.js";
+} from "../gfx/helpers/UniformBufferHelpers";
 import {
   GfxBlendFactor,
   GfxBlendMode,
@@ -21,28 +20,26 @@ import {
   type GfxDevice,
   GfxFormat,
   GfxFrontFaceMode,
-  GfxMipFilterMode,
   type GfxProgram,
   type GfxSampler,
-  GfxTexFilterMode,
   type GfxTexture,
-  GfxWrapMode,
   makeTextureDescriptor2D,
-} from "../gfx/platform/GfxPlatform.js";
-import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
-import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
+} from "../gfx/platform/GfxPlatform";
+import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph";
+import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import {
   type GfxRenderInst,
   GfxRenderInstList,
   gfxRenderInstCompareNone,
-} from "../gfx/render/GfxRenderInstManager.js";
-import { HashMap, nullHashFunc } from "../HashMap.js";
-import { CalcBillboardFlags, calcBillboardMatrix } from "../MathHelpers.js";
-import { TextureMapping } from "../TextureHolder.js";
-import * as UI from "../ui.js";
-import type * as Viewer from "../viewer.js";
-import { AnimatedCharacter } from "./Animation/AnimatedCharacter.js";
-import { BinCollector } from "./cullBin.js";
+} from "../gfx/render/GfxRenderInstManager";
+import { HashMap, nullHashFunc } from "../HashMap";
+import { CalcBillboardFlags, calcBillboardMatrix } from "../MathHelpers";
+import { TextureMapping } from "../TextureHolder";
+import * as UI from "../ui";
+import type * as Viewer from "../viewer";
+import { getVolume, setVolume, startPlayback, stopPlayback } from "./Audio";
+import { addFrameTime, getFrameTime, resetFrameTime } from "./Common";
+import { BinCollector } from "./CullBin";
 import {
   type CachedGeometryData,
   composeDrawMask,
@@ -50,9 +47,10 @@ import {
   extractMaterial,
   isNodeVisible,
   type MaterialData,
-} from "./geom.js";
+} from "./Geom";
 import {
   BoundsType,
+  Character,
   ColorWriteAttrib,
   ColorWriteChannels,
   CompassEffect,
@@ -61,8 +59,8 @@ import {
   DecalEffect,
   DepthWriteAttrib,
   DepthWriteMode,
-  FilterType,
   type Geom,
+  type GeomEntry,
   GeomNode,
   MAX_PRIORITY,
   PandaCompareFunc,
@@ -72,24 +70,22 @@ import {
   TextureAttrib,
   TransparencyMode,
   type VertexTransform,
-  WrapMode,
 } from "./nodes";
-import { Character } from "./nodes/Character.js";
-import type { GeomEntry } from "./nodes/GeomNode.js";
-import { HierarchicalProfiler } from "./profiler.js";
+import { HierarchicalProfiler } from "./Profiler";
 import {
   createProgramProps,
   MAX_BONES,
   programPropsEqual,
   ToontownProgram,
   type ToontownProgramProps,
-} from "./program.js";
-import type { ToontownResourceLoader } from "./resources.js";
-import { SceneGraphViewer } from "./SceneGraphViewer.js";
-import { expandToRGBA } from "./textures.js";
-import { getVolume, setVolume, startPlayback, stopPlayback } from "./Audio.js";
+} from "./Program";
+import type { ToontownResourceLoader } from "./Resources";
+import { SceneGraphViewer } from "./SceneGraphViewer";
+import { expandToRGBA, getSamplerDescriptor } from "./Textures";
 
-export const pathBase = "Toontown";
+// Whether to open the scene graph viewer by default
+// (Useful for debugging)
+const DEFAULT_SCENE_GRAPH_OPEN = false;
 
 // Scratch AABB for frustum culling
 const scratchAABB = new AABB();
@@ -117,98 +113,11 @@ export const pandaToNoclip = mat4.fromValues(
   1,
 );
 
-/**
- * Convert Panda3D wrap mode to GfxWrapMode
- */
-function translateWrapMode(mode: WrapMode): GfxWrapMode {
-  switch (mode) {
-    case WrapMode.Clamp:
-    case WrapMode.BorderColor:
-      return GfxWrapMode.Clamp;
-    case WrapMode.Repeat:
-      return GfxWrapMode.Repeat;
-    case WrapMode.Mirror:
-    case WrapMode.MirrorOnce:
-      return GfxWrapMode.Mirror;
-    default:
-      return GfxWrapMode.Repeat;
-  }
-}
-
-/**
- * Convert Panda3D filter type to GfxTexFilterMode and GfxMipFilterMode
- */
-function translateFilterType(filterType: FilterType): {
-  texFilter: GfxTexFilterMode;
-  mipFilter: GfxMipFilterMode;
-} {
-  switch (filterType) {
-    case FilterType.Nearest:
-      return {
-        texFilter: GfxTexFilterMode.Point,
-        mipFilter: GfxMipFilterMode.Nearest,
-      };
-    case FilterType.Linear:
-      return {
-        texFilter: GfxTexFilterMode.Bilinear,
-        mipFilter: GfxMipFilterMode.Nearest,
-      };
-    case FilterType.NearestMipmapNearest:
-      return {
-        texFilter: GfxTexFilterMode.Point,
-        mipFilter: GfxMipFilterMode.Nearest,
-      };
-    case FilterType.LinearMipmapNearest:
-      return {
-        texFilter: GfxTexFilterMode.Bilinear,
-        mipFilter: GfxMipFilterMode.Nearest,
-      };
-    case FilterType.NearestMipmapLinear:
-      return {
-        texFilter: GfxTexFilterMode.Point,
-        mipFilter: GfxMipFilterMode.Linear,
-      };
-    // case FilterType.LinearMipmapLinear:
-    // case FilterType.Default:
-    default:
-      return {
-        texFilter: GfxTexFilterMode.Bilinear,
-        mipFilter: GfxMipFilterMode.Linear,
-      };
-  }
-}
-
-/**
- * Convert PandaCompareFunc to GfxCompareMode
- */
-function translateDepthTestMode(func: PandaCompareFunc): GfxCompareMode {
-  switch (func) {
-    case PandaCompareFunc.None:
-    case PandaCompareFunc.Always:
-      return GfxCompareMode.Always;
-    case PandaCompareFunc.Never:
-      return GfxCompareMode.Never;
-    case PandaCompareFunc.Less:
-      return GfxCompareMode.Less;
-    case PandaCompareFunc.LessEqual:
-      return GfxCompareMode.LessEqual;
-    case PandaCompareFunc.Greater:
-      return GfxCompareMode.Greater;
-    case PandaCompareFunc.GreaterEqual:
-      return GfxCompareMode.GreaterEqual;
-    case PandaCompareFunc.Equal:
-      return GfxCompareMode.Equal;
-    case PandaCompareFunc.NotEqual:
-      return GfxCompareMode.NotEqual;
-  }
-}
-
 let musicEnabled = false;
 
 export class ToontownRenderer implements Viewer.SceneGfx {
   private renderHelper: GfxRenderHelper;
   private renderInstListMain = new GfxRenderInstList(gfxRenderInstCompareNone);
-  private globalDt: number = 0;
   private geomCache: Map<Geom, CachedGeometryData> = new Map();
   private programCache: HashMap<ToontownProgramProps, GfxProgram> = new HashMap(
     programPropsEqual,
@@ -231,11 +140,14 @@ export class ToontownRenderer implements Viewer.SceneGfx {
     private device: GfxDevice,
     private scene: PandaNode,
     private loader: ToontownResourceLoader,
-    private animatedCharacters: Map<Character, AnimatedCharacter>,
+    // private animatedCharacters: Map<Character, AnimatedCharacter>,
     private musicFile: string | undefined,
   ) {
     this.renderHelper = new GfxRenderHelper(device);
-    this.toggleSceneGraphViewer();
+    resetFrameTime();
+    if (DEFAULT_SCENE_GRAPH_OPEN) {
+      this.toggleSceneGraphViewer();
+    }
     if (this.musicFile && musicEnabled) {
       startPlayback(this.loader, this.musicFile);
     }
@@ -260,8 +172,7 @@ export class ToontownRenderer implements Viewer.SceneGfx {
     this.debugPanel.contents.appendChild(this.debugSceneGraphCheckbox.elem);
 
     if (this.musicFile) {
-      const playButton = new UI.Checkbox("Play");
-      playButton.setChecked(musicEnabled);
+      const playButton = new UI.Checkbox("Play Music", musicEnabled);
       playButton.onchanged = async () => {
         if (playButton.checked && this.musicFile) {
           musicEnabled = true;
@@ -324,14 +235,14 @@ export class ToontownRenderer implements Viewer.SceneGfx {
     device: GfxDevice,
     scene: PandaNode,
     loader: ToontownResourceLoader,
-    animatedCharacters: Map<Character, AnimatedCharacter> = new Map(),
+    // animatedCharacters: Map<Character, AnimatedCharacter> = new Map(),
     musicFile: string | undefined,
   ): Promise<ToontownRenderer> {
     const renderer = new ToontownRenderer(
       device,
       scene,
       loader,
-      animatedCharacters,
+      // animatedCharacters,
       musicFile,
     );
     // Load all textures used in the scene
@@ -353,6 +264,19 @@ export class ToontownRenderer implements Viewer.SceneGfx {
             const baseUrl = new URL(modelPath, window.location.origin);
             const resolved = new URL(texture.filename, baseUrl).pathname;
             texture.filename = resolved.substring(1);
+            break;
+          }
+          currNode = currNode.parent;
+        }
+      }
+      if (texture.alphaFilename.includes("..")) {
+        let currNode: PandaNode | null = node;
+        while (currNode) {
+          const modelPath = currNode.tags.get("DNAModel");
+          if (modelPath) {
+            const baseUrl = new URL(modelPath, window.location.origin);
+            const resolved = new URL(texture.alphaFilename, baseUrl).pathname;
+            texture.alphaFilename = resolved.substring(1);
             break;
           }
           currNode = currNode.parent;
@@ -420,7 +344,9 @@ export class ToontownRenderer implements Viewer.SceneGfx {
       this.device.uploadTextureData(gfxTexture, 0, [rgbaData]);
       this.device.setResourceName(gfxTexture, texture.name);
 
-      const gfxSampler = this.createSamplerForTexture(texture);
+      const gfxSampler = this.renderHelper.renderCache.createSampler(
+        getSamplerDescriptor(texture),
+      );
       this.textureCache.set(texture.name, {
         texture: gfxTexture,
         sampler: gfxSampler,
@@ -439,6 +365,8 @@ export class ToontownRenderer implements Viewer.SceneGfx {
     loader: ToontownResourceLoader,
   ): Promise<void> {
     let filename = texture.filename;
+
+    // FIXME: TTR font texture fixups
     if (
       filename === "phase_4/models/maps/ttr_t_gui_gen_mickeyFontClassic1.rgb"
     ) {
@@ -448,9 +376,9 @@ export class ToontownRenderer implements Viewer.SceneGfx {
     ) {
       filename = "phase_3/fonts/ttr_t_gui_gen_mickeyFontStandard1.rgb";
     } else if (filename.includes("ttr_t_gui_gen_mickeyFontMaximum1.rgb")) {
-      filename = "phase_3/fonts/ttr_t_gui_gen_mickeyFontMaximum1.rgb";
+      filename = "phase_3/maps/ttr_t_gui_gen_mickeyFontMaximum1.rgb";
     } else if (filename.includes("ttr_t_gui_gen_mickeyFontMaximum2.rgb")) {
-      filename = "phase_3/fonts/ttr_t_gui_gen_mickeyFontMaximum2.rgb";
+      filename = "phase_3/maps/ttr_t_gui_gen_mickeyFontMaximum2.rgb";
     }
 
     try {
@@ -472,7 +400,9 @@ export class ToontownRenderer implements Viewer.SceneGfx {
       this.device.uploadTextureData(gfxTexture, 0, [decoded.data]);
       this.device.setResourceName(gfxTexture, texture.name);
 
-      const gfxSampler = this.createSamplerForTexture(texture);
+      const gfxSampler = this.renderHelper.renderCache.createSampler(
+        getSamplerDescriptor(texture),
+      );
       this.textureCache.set(texture.name, {
         texture: gfxTexture,
         sampler: gfxSampler,
@@ -483,23 +413,6 @@ export class ToontownRenderer implements Viewer.SceneGfx {
     } catch (e) {
       console.warn(`Failed to load external texture ${texture.name}:`, e);
     }
-  }
-
-  private createSamplerForTexture(texture: Texture): GfxSampler {
-    const sampler = texture.defaultSampler;
-    const minF = translateFilterType(sampler.minFilter);
-    const magF = translateFilterType(sampler.magFilter);
-    return this.renderHelper.renderCache.createSampler({
-      wrapS: translateWrapMode(sampler.wrapU),
-      wrapT: translateWrapMode(sampler.wrapV),
-      wrapQ: translateWrapMode(sampler.wrapW),
-      minFilter: minF.texFilter,
-      magFilter: magF.texFilter,
-      mipFilter: minF.mipFilter,
-      minLOD: sampler.minLod,
-      maxLOD: sampler.maxLod,
-      maxAnisotropy: Math.max(sampler.anisoDegree, 1),
-    });
   }
 
   /**
@@ -642,12 +555,7 @@ export class ToontownRenderer implements Viewer.SceneGfx {
 
   private prepareToRender(viewerInput: Viewer.ViewerRenderInput): void {
     this.profiler.beginFrame();
-    this.globalDt += viewerInput.deltaTime;
-
-    // Update all animated characters
-    for (const animChar of this.animatedCharacters.values()) {
-      animChar.update(viewerInput.deltaTime);
-    }
+    addFrameTime(viewerInput.deltaTime / 1000);
 
     const renderInstManager = this.renderHelper.renderInstManager;
     const template = this.renderHelper.pushTemplateRenderInst();
@@ -689,9 +597,17 @@ export class ToontownRenderer implements Viewer.SceneGfx {
     // Rotate sky if present
     const skyNode = this.scene.find("**/=sky");
     if (skyNode) {
-      const h = this.globalDt * 0.00025;
+      const h = getFrameTime() * 0.00025;
       skyNode.find("**/cloud1")?.setH(h);
       skyNode.find("**/cloud2")?.setH(-h * 0.8);
+    }
+
+    // Rotate DG flower if present
+    const flowerNode = this.scene.find("**/flower");
+    if (flowerNode) {
+      flowerNode.setH(
+        flowerNode.h + 1.25 * (viewerInput.deltaTime / (1000 / 15)),
+      );
     }
 
     const binCollector = new BinCollector(viewerInput.camera.viewMatrix);
@@ -739,13 +655,9 @@ export class ToontownRenderer implements Viewer.SceneGfx {
       const renderState = parentState.compose(node.state);
 
       if (node instanceof Character) {
-        // If we don't have an animated character for this node,
-        // create one and reset its joint chain to the bind pose
-        if (!this.animatedCharacters.has(node)) {
-          const animChar = new AnimatedCharacter(node);
-          animChar.jointChain.resetToBindPose();
-          this.animatedCharacters.set(node, animChar);
-        }
+        node.partBundles.forEach((bundle) => {
+          bundle.update();
+        });
       }
 
       // Only render geometry if this node is visible
@@ -1105,7 +1017,32 @@ function setupSkinningUniform(
   // Fill bone matrices
   const tempMat = mat4.create();
   for (let i = 0; i < numBones; i++) {
-    transforms[i].getSkinningMatrix(tempMat);
+    transforms[i].getMatrix(tempMat);
     fillMatrix4x3(data, offs + i * 12, tempMat);
+  }
+}
+
+/**
+ * Convert PandaCompareFunc to GfxCompareMode
+ */
+function translateDepthTestMode(func: PandaCompareFunc): GfxCompareMode {
+  switch (func) {
+    case PandaCompareFunc.None:
+    case PandaCompareFunc.Always:
+      return GfxCompareMode.Always;
+    case PandaCompareFunc.Never:
+      return GfxCompareMode.Never;
+    case PandaCompareFunc.Less:
+      return GfxCompareMode.Less;
+    case PandaCompareFunc.LessEqual:
+      return GfxCompareMode.LessEqual;
+    case PandaCompareFunc.Greater:
+      return GfxCompareMode.Greater;
+    case PandaCompareFunc.GreaterEqual:
+      return GfxCompareMode.GreaterEqual;
+    case PandaCompareFunc.Equal:
+      return GfxCompareMode.Equal;
+    case PandaCompareFunc.NotEqual:
+      return GfxCompareMode.NotEqual;
   }
 }

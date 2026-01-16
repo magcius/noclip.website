@@ -1,9 +1,9 @@
-import type { BAMFile } from "../bam";
-import { AssetVersion, type DataStream } from "../common";
-import { type CopyContext, registerBAMObject } from "./base";
+import type { BAMFile } from "../BAMFile";
+import { AssetVersion, type DataStream } from "../Common";
 import { type DebugInfo, dbgFlags, dbgRef } from "./debug";
 import { PandaNode } from "./PandaNode";
 import { RenderEffect } from "./RenderEffects";
+import { type CopyContext, registerTypedObject } from "./TypedObject";
 
 export const CompassEffectProperties = {
   X: 0x1,
@@ -54,4 +54,4 @@ export class CompassEffect extends RenderEffect {
   }
 }
 
-registerBAMObject("CompassEffect", CompassEffect);
+registerTypedObject("CompassEffect", CompassEffect);

@@ -1,7 +1,6 @@
 import { vec3, type vec4 } from "gl-matrix";
-import type { BAMFile } from "../bam";
-import { AssetVersion, type DataStream } from "../common";
-import { BAMObject, type CopyContext, registerBAMObject } from "./base";
+import type { BAMFile } from "../BAMFile";
+import { AssetVersion, type DataStream } from "../Common";
 import {
   type DebugInfo,
   dbgBytes,
@@ -15,6 +14,11 @@ import {
 } from "./debug";
 import { UsageHint } from "./geomEnums";
 import { SamplerState } from "./SamplerState";
+import {
+  type CopyContext,
+  registerTypedObject,
+  TypedObject,
+} from "./TypedObject";
 import {
   AutoTextureScale,
   ComponentType,
@@ -35,7 +39,7 @@ export interface TextureData {
   ramImages: Array<{ pageSize: number; data: Uint8Array }>;
 }
 
-export class Texture extends BAMObject {
+export class Texture extends TypedObject {
   public name = "";
   public filename = "";
   public alphaFilename = "";
@@ -340,4 +344,4 @@ export class Texture extends BAMObject {
   }
 }
 
-registerBAMObject("Texture", Texture);
+registerTypedObject("Texture", Texture);

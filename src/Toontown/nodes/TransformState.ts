@@ -7,10 +7,9 @@ import {
   type ReadonlyVec4,
   vec3,
 } from "gl-matrix";
-import type { BAMFile } from "../bam";
-import { AssetVersion, type DataStream } from "../common";
+import type { BAMFile } from "../BAMFile";
+import { AssetVersion, type DataStream } from "../Common";
 import { fromPandaQuat, hprToQuat, quatToHpr } from "../Math";
-import { BAMObject, type CopyContext, registerBAMObject } from "./base";
 import {
   type DebugInfo,
   dbgBool,
@@ -19,6 +18,11 @@ import {
   dbgVec3,
   dbgVec4,
 } from "./debug";
+import {
+  type CopyContext,
+  registerTypedObject,
+  TypedObject,
+} from "./TypedObject";
 
 // TransformState flags - matching Panda3D's flags
 const F_IS_IDENTITY = 0x00000001;
@@ -67,7 +71,7 @@ const oneVec3: ReadonlyVec3 = vec3.fromValues(1, 1, 1);
  * TransformState represents an immutable transformation with lazy computation.
  * Supports both componentwise (pos/hpr/scale) and matrix representations.
  */
-export class TransformState extends BAMObject {
+export class TransformState extends TypedObject {
   // Flags for state tracking
   private _flags = F_IS_IDENTITY;
 
@@ -675,4 +679,4 @@ export class TransformState extends BAMObject {
   }
 }
 
-registerBAMObject("TransformState", TransformState);
+registerTypedObject("TransformState", TransformState);

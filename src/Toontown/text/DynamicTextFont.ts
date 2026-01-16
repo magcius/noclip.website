@@ -31,8 +31,6 @@ export class DynamicTextFont {
 
   /**
    * Create a DynamicTextFont from TTF font data
-   * @param data - Raw TTF font file data
-   * @param scale - Scale factor to apply to font coordinates (default 1.0)
    */
   constructor(data: Uint8Array, scale = 1.0) {
     this.loader = new rust.FontMeshLoader(data);
@@ -63,10 +61,8 @@ export class DynamicTextFont {
    * Glyphs are cached after first generation.
    */
   getGlyph(charCode: number): TextGlyph | null {
-    // Check cache first
-    if (this.glyphCache.has(charCode)) {
-      return this.glyphCache.get(charCode)!;
-    }
+    const cached = this.glyphCache.get(charCode);
+    if (cached) return cached;
 
     // Handle whitespace characters
     if (
@@ -190,13 +186,11 @@ export class DynamicTextFont {
     triangles.indexType = indexType;
     triangles.vertices = indexArrayData;
 
-    // Create the final Geom
     const geom = new Geom();
     geom.data = vertexData;
     geom.primitives = [triangles];
     geom.primitiveType = PrimitiveType.Polygons;
     geom.shadeModel = ShadeModel.Flat;
-
     return geom;
   }
 

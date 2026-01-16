@@ -1,13 +1,7 @@
 import { vec3 } from "gl-matrix";
 import { AABB } from "../../Geometry";
-import type { BAMFile } from "../bam";
-import { AssetVersion, type DataStream } from "../common";
-import {
-  BAMObject,
-  type CopyContext,
-  readTypedRefs,
-  registerBAMObject,
-} from "./base";
+import type { BAMFile } from "../BAMFile";
+import { AssetVersion, type DataStream } from "../Common";
 import { type DebugInfo, dbgEnum, dbgNum, dbgRef, dbgRefs } from "./debug";
 import { GeomPrimitive } from "./GeomPrimitive";
 import type {
@@ -22,8 +16,14 @@ import {
   PrimitiveType,
   ShadeModel,
 } from "./geomEnums";
+import {
+  type CopyContext,
+  readTypedRefs,
+  registerTypedObject,
+  TypedObject,
+} from "./TypedObject";
 
-export class Geom extends BAMObject {
+export class Geom extends TypedObject {
   public data: GeomVertexData | null = null;
   public primitives: GeomPrimitive[] = [];
   public primitiveType = PrimitiveType.None;
@@ -84,7 +84,7 @@ export class Geom extends BAMObject {
   }
 }
 
-registerBAMObject("Geom", Geom);
+registerTypedObject("Geom", Geom);
 
 /**
  * Compute AABB from vertex data by reading vertex positions
@@ -164,6 +164,15 @@ export function computeAABBFromGeom(geom: Geom): AABB {
         pos[2] = dataView.getFloat32(baseOffset + 8, true);
         aabb.unionPoint(pos);
       }
+    } else if (numComponents === 4) {
+      for (let i = 0; i < numVertices; i++) {
+        const baseOffset = i * stride + offset;
+        const w = dataView.getFloat32(baseOffset + 12, true);
+        pos[0] = dataView.getFloat32(baseOffset, true) / w;
+        pos[1] = dataView.getFloat32(baseOffset + 4, true) / w;
+        pos[2] = dataView.getFloat32(baseOffset + 8, true) / w;
+        aabb.unionPoint(pos);
+      }
     } else {
       throw new Error(
         `Unsupported number of components for vertex: ${numComponents}`,
@@ -186,6 +195,15 @@ export function computeAABBFromGeom(geom: Geom): AABB {
         pos[0] = dataView.getFloat64(baseOffset, true);
         pos[1] = dataView.getFloat64(baseOffset + 8, true);
         pos[2] = dataView.getFloat64(baseOffset + 16, true);
+        aabb.unionPoint(pos);
+      }
+    } else if (numComponents === 4) {
+      for (let i = 0; i < numVertices; i++) {
+        const baseOffset = i * stride + offset;
+        const w = dataView.getFloat64(baseOffset + 24, true);
+        pos[0] = dataView.getFloat64(baseOffset, true) / w;
+        pos[1] = dataView.getFloat64(baseOffset + 8, true) / w;
+        pos[2] = dataView.getFloat64(baseOffset + 16, true) / w;
         aabb.unionPoint(pos);
       }
     } else {

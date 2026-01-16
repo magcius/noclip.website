@@ -18,7 +18,7 @@ import {
   GfxVertexBufferFrequency,
 } from "../gfx/platform/GfxPlatform";
 import type { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { enumName } from "./common";
+import { enumName } from "./Common";
 import {
   BillboardEffect,
   BoundsType,
@@ -28,6 +28,7 @@ import {
   CullFaceMode,
   DecalEffect,
   DepthWriteMode,
+  formatDebugInfo,
   type Geom,
   type GeomNode,
   GeomTriangles,
@@ -43,9 +44,10 @@ import {
   type RenderState,
   type Texture,
   TransparencyMode,
-  VertexTransform,
+  UserVertexTransform,
+  type VertexTransform,
 } from "./nodes";
-import { AttributeLocation } from "./program";
+import { AttributeLocation } from "./Program";
 
 /**
  * GPU-ready geometry data
@@ -130,30 +132,6 @@ export function composeDrawMask(
  */
 export function isNodeVisible(drawMask: number): boolean {
   return (drawMask & OVERALL_BIT) !== 0 && (drawMask & CAMERA_MASK) !== 0;
-}
-
-/**
- * Combine new render attributes into existing attribute list based on priority.
- */
-export function combineAttributes(
-  attribs: RenderAttribEntry[],
-  newAttribs: RenderAttribEntry[],
-): RenderAttribEntry[] {
-  if (newAttribs.length === 0) {
-    return attribs;
-  }
-  const result: RenderAttribEntry[] = attribs.slice();
-  for (const entry of newAttribs) {
-    const existing = result.findIndex(
-      (a) => a.attrib.constructor.name === entry.attrib.constructor.name,
-    );
-    if (existing === -1) {
-      result.push(entry);
-    } else if (entry.priority >= result[existing].priority) {
-      result[existing] = entry;
-    }
-  }
-  return result;
 }
 
 /**
@@ -248,7 +226,10 @@ export function createGeomData(
   for (let i = 0; i < format.arrays.length; i++) {
     const arrayFormat = format.arrays[i];
     for (const column of arrayFormat.columns) {
-      if (column.contents === Contents.Index) {
+      if (
+        column.contents === Contents.Index &&
+        column.name?.name === "transform_blend"
+      ) {
         transformBlendColumn = column;
         transformBlendArrayIndex = i;
         break;
@@ -265,7 +246,7 @@ export function createGeomData(
 
     let added = false;
     for (const column of arrayFormat.columns) {
-      const location = getAttributeLocation(column.contents);
+      const location = getAttributeLocation(column);
       if (location === null) continue;
 
       const gfxFormat = getGfxFormat(
@@ -273,13 +254,6 @@ export function createGeomData(
         column.numComponents,
         column.contents,
       );
-      if (arrayIdx > 0) {
-        console.log(
-          `Found ${enumName(column.contents, Contents)} in array idx ${arrayIdx}`,
-          geom,
-        );
-      }
-
       vertexAttributeDescriptors.push({
         location,
         bufferIndex: currentBufferIndex,
@@ -573,8 +547,8 @@ function getGfxFormat(
 /**
  * Get attribute location from InternalName
  */
-function getAttributeLocation(contents: Contents): number | null {
-  switch (contents) {
+function getAttributeLocation(column: GeomVertexColumn): number | null {
+  switch (column.contents) {
     case Contents.Point:
       return AttributeLocation.Position;
     case Contents.Normal:
@@ -584,18 +558,20 @@ function getAttributeLocation(contents: Contents): number | null {
     case Contents.TexCoord:
       return AttributeLocation.TexCoord;
     case Contents.Index:
-      // Index columns (like transform_blend) are handled separately
-      // via skinning buffer, not as regular vertex attributes
-      return null;
+      if (column.name?.name === "transform_blend") {
+        // Index columns (like transform_blend) are handled separately
+        // via skinning buffer, not as regular vertex attributes
+        return null;
+      }
+      break;
     case Contents.Vector:
       // Tangent and binormal are currently unsupported
       return null;
     default:
-      console.warn(
-        `Unknown attribute contents: ${enumName(contents, Contents)}`,
-      );
-      return null;
+      break;
   }
+  console.warn(`Unknown column: ${formatDebugInfo(column.getDebugInfo())}`);
+  return null;
 }
 
 const DEFAULT_MATERIAL: MaterialData = {
@@ -700,6 +676,11 @@ const MAX_BONES_PER_VERTEX = 4;
 const SKINNING_BUFFER_STRIDE = 20;
 
 /**
+ * Identity vertex transform (no-op)
+ */
+const IDENTITY_TRANSFORM = new UserVertexTransform();
+
+/**
  * Create a skinning buffer containing bone indices and weights for each vertex.
  *
  * The buffer layout per vertex is:
@@ -713,7 +694,13 @@ function createSkinningBuffer(
   arrayFormat: GeomVertexArrayFormat,
   device: GfxDevice,
 ): { buffer: GfxBuffer; stride: number; transforms: VertexTransform[] } {
-  const blendTable = vertexData.transformBlendTable!;
+  if (vertexData.transformTable !== null) {
+    throw new Error("TransformTable-based skinning not yet supported");
+  } else if (vertexData.transformBlendTable === null) {
+    throw new Error("Missing TransformBlendTable for skinning");
+  }
+
+  const blendTable = vertexData.transformBlendTable;
   const srcBuffer = vertexData.arrays[blendArrayIndex].buffer;
   const numVertices = srcBuffer.length / arrayFormat.stride;
 
@@ -721,7 +708,6 @@ function createSkinningBuffer(
   const skinningData = new Uint8Array(numVertices * SKINNING_BUFFER_STRIDE);
 
   // Build a mapping from VertexTransform to bone index
-  // Use the TransformTable if available, otherwise build from unique transforms
   const transformToIndex = new Map<VertexTransform, number>();
   const transforms: VertexTransform[] = [];
   const addTransform = (transform: VertexTransform): number => {
@@ -732,26 +718,6 @@ function createSkinningBuffer(
     transforms.push(transform);
     return index;
   };
-  if (vertexData.transformTable) {
-    const tableTransforms = vertexData.transformTable.transforms;
-    transforms.length = tableTransforms.length;
-    for (let i = 0; i < tableTransforms.length; i++) {
-      const transform = tableTransforms[i];
-      if (transform) {
-        transformToIndex.set(transform, i);
-        transforms[i] = transform;
-      } else {
-        transforms[i] = new VertexTransform();
-      }
-    }
-  } else {
-    // Build from unique transforms in blend table
-    for (const blend of blendTable.blends) {
-      for (const entry of blend.entries) {
-        addTransform(entry.transform);
-      }
-    }
-  }
 
   // Create a DataView for reading blend indices from source buffer
   const srcView = new DataView(
@@ -769,7 +735,7 @@ function createSkinningBuffer(
     let blendIndex: number;
     switch (blendColumn.numericType) {
       case NumericType.U8:
-        blendIndex = srcBuffer[srcOffset];
+        blendIndex = srcView.getUint8(srcOffset);
         break;
       case NumericType.U16:
         blendIndex = srcView.getUint16(srcOffset, true);
@@ -778,24 +744,40 @@ function createSkinningBuffer(
         blendIndex = srcView.getUint32(srcOffset, true);
         break;
       default:
-        blendIndex = 0;
+        throw new Error(
+          `Unsupported blend index type: ${enumName(
+            blendColumn.numericType,
+            NumericType,
+          )}`,
+        );
     }
 
     const outView = new DataView(skinningData.buffer, dstOffset);
-    function writeBlend(weight: number, index: number, blendIndex: number) {
+    function writeBlend(
+      weight: number,
+      transformIndex: number,
+      blendIndex: number,
+    ) {
       outView.setFloat32(blendIndex * 4, weight, true);
-      outView.setUint8(blendIndex + 16, index);
+      outView.setUint8(blendIndex + 16, transformIndex);
     }
 
     // Get the blend from the table
     const blend = blendTable.getBlend(blendIndex);
     if (!blend) {
-      // No blend - set to identity (bone 0, weight 1)
-      writeBlend(1, 0, 0);
-      writeBlend(0, 0, 1);
-      writeBlend(0, 0, 2);
-      writeBlend(0, 0, 3);
+      // No blend - set to identity
+      console.warn(
+        `Missing TransformBlend at index ${blendIndex}, using identity`,
+      );
+      const transformIndex = addTransform(IDENTITY_TRANSFORM);
+      writeBlend(1, transformIndex, 0);
+      writeBlend(0, transformIndex, 1);
+      writeBlend(0, transformIndex, 2);
+      writeBlend(0, transformIndex, 3);
       continue;
+    }
+    if (blend.entries.length === 0) {
+      console.warn("Empty blend");
     }
 
     if (blend.entries.length > MAX_BONES_PER_VERTEX) {
@@ -811,9 +793,8 @@ function createSkinningBuffer(
     for (let i = 0; i < MAX_BONES_PER_VERTEX; i++) {
       if (i < numEntries) {
         const entry = blend.entries[i];
-        const boneIndex =
-          transformToIndex.get(entry.transform) ?? addTransform(entry.transform);
-        writeBlend(entry.weight, boneIndex, i);
+        const transformIndex = addTransform(entry.transform);
+        writeBlend(entry.weight, transformIndex, i);
       } else {
         // Unused slot
         writeBlend(0, 0, i);

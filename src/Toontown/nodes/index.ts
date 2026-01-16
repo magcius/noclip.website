@@ -1,7 +1,11 @@
 /** biome-ignore-all assist/source/organizeImports: custom sorted */
 
 // Base types
-export { BAMObject, getBAMObjectFactory, registerBAMObject } from "./base";
+export {
+  TypedObject as BAMObject,
+  getTypedObjectFactory as getBAMObjectFactory,
+  registerTypedObject as registerBAMObject,
+} from "./TypedObject";
 
 // Animation
 export { AnimBundle } from "./AnimBundle";
@@ -50,7 +54,11 @@ export { TransparencyAttrib, TransparencyMode } from "./TransparencyAttrib";
 export { RenderAttrib, PandaCompareFunc } from "./RenderAttrib";
 export { AlphaTestAttrib } from "./AlphaTestAttrib";
 export { ColorAttrib, ColorType } from "./ColorAttrib";
-export { ColorBlendAttrib, ColorBlendMode, ColorBlendOperand } from "./ColorBlendAttrib";
+export {
+  ColorBlendAttrib,
+  ColorBlendMode,
+  ColorBlendOperand,
+} from "./ColorBlendAttrib";
 export { ColorScaleAttrib } from "./ColorScaleAttrib";
 export { ColorWriteAttrib, ColorWriteChannels } from "./ColorWriteAttrib";
 export { CullBinAttrib } from "./CullBinAttrib";
@@ -84,7 +92,7 @@ export {
 
 // Geometry
 export { Geom } from "./Geom";
-export { GeomNode } from "./GeomNode";
+export { GeomNode, type GeomEntry } from "./GeomNode";
 export {
   GeomLines,
   GeomLinestrips,

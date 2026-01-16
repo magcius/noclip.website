@@ -1,7 +1,11 @@
-import type { BAMFile } from "../bam";
-import type { DataStream } from "../common";
-import { BAMObject, type CopyContext, registerBAMObject } from "./base";
+import type { BAMFile } from "../BAMFile";
+import type { DataStream } from "../Common";
 import { type DebugInfo, dbgEnum } from "./debug";
+import {
+  type CopyContext,
+  registerTypedObject,
+  TypedObject,
+} from "./TypedObject";
 
 /**
  * TextureApplyAttrib - Legacy texture apply mode (pre-5.0)
@@ -16,7 +20,7 @@ export enum TextureApplyMode {
   Add = 4,
 }
 
-export class TextureApplyAttrib extends BAMObject {
+export class TextureApplyAttrib extends TypedObject {
   public mode = TextureApplyMode.Modulate;
 
   override load(file: BAMFile, data: DataStream) {
@@ -36,4 +40,4 @@ export class TextureApplyAttrib extends BAMObject {
   }
 }
 
-registerBAMObject("TextureApplyAttrib", TextureApplyAttrib);
+registerTypedObject("TextureApplyAttrib", TextureApplyAttrib);

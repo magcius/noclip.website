@@ -1,8 +1,8 @@
-import type { BAMFile } from "../bam";
-import type { DataStream } from "../common";
-import type { CopyContext } from "./base";
+import type { BAMFile } from "../BAMFile";
+import type { DataStream } from "../Common";
 import { type DebugInfo, dbgNum } from "./debug";
 import { ParametricCurve } from "./ParametricCurve";
+import type { CopyContext } from "./TypedObject";
 
 export interface CurveSeg {
   curveRef: number;

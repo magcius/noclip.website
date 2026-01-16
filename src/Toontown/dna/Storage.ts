@@ -1,10 +1,7 @@
 // DNAStorage - Holds registered resources from DNA storage files
 // Resources are registered from storage DNA files and then looked up when loading scene DNA
 
-import type { DataFetcher } from "../../DataFetcher";
-import type { ToontownResourceLoader } from "../resources";
-import { DynamicTextFont } from "../text/DynamicTextFont";
-import { StaticTextFont } from "../text/StaticTextFont";
+import type { ToontownResourceLoader } from "../Resources";
 import type { TextFont } from "../text/TextAssembler";
 import type {
   DNAFile,
@@ -207,24 +204,5 @@ export class DNAStorage {
   getAnyFont(): TextFont | null {
     const iterator = this.loadedFonts.values().next();
     return iterator.done ? null : iterator.value;
-  }
-
-  /**
-   * Debug: Print storage contents
-   */
-  debugPrint(): void {
-    console.log(`DNAStorage contents:`);
-    console.log(`  Nodes: ${this.nodes.size}`);
-    for (const [category, codes] of this.nodesByCategory) {
-      console.log(`    ${category}: ${codes.size} codes`);
-    }
-    console.log(`  Textures: ${this.textures.size}`);
-    for (const [category, codes] of this.texturesByCategory) {
-      console.log(`    ${category}: ${codes.size} codes`);
-    }
-    console.log(`  Fonts: ${this.fonts.size}`);
-    for (const [category, codes] of this.fontsByCategory) {
-      console.log(`    ${category}: ${codes.size} codes`);
-    }
   }
 }

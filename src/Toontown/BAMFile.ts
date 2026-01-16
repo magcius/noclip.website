@@ -1,5 +1,5 @@
 import type ArrayBufferSlice from "../ArrayBufferSlice";
-import { AssetVersion, DataStream, type DataStreamState } from "./common";
+import { AssetVersion, DataStream, type DataStreamState } from "./Common";
 import {
   type BAMObject,
   dbgBool,
@@ -107,7 +107,7 @@ export class BAMFile {
 
   getTyped<T extends BAMObject>(
     objectId: number,
-    clazz: new (...args: any[]) => T,
+    clazz: abstract new (...args: any[]) => T,
   ): T | null {
     if (objectId === 0) return null;
     const object = this.getObject(objectId);

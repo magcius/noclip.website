@@ -1,10 +1,14 @@
-import type { BAMFile } from "../bam";
-import type { DataStream } from "../common";
-import { BAMObject, type CopyContext, registerBAMObject } from "./base";
+import type { BAMFile } from "../BAMFile";
+import type { DataStream } from "../Common";
 import { type DebugInfo, dbgRef } from "./debug";
-import { InternalName } from "./InternalName";
+import type { InternalName } from "./InternalName";
+import {
+  type CopyContext,
+  registerTypedObject,
+  TypedObject,
+} from "./TypedObject";
 
-export class VertexSlider extends BAMObject {
+export class VertexSlider extends TypedObject {
   public name: InternalName | null = null;
 
   override load(file: BAMFile, data: DataStream) {
@@ -27,4 +31,4 @@ export class VertexSlider extends BAMObject {
   }
 }
 
-registerBAMObject("VertexSlider", VertexSlider);
+registerTypedObject("VertexSlider", VertexSlider);

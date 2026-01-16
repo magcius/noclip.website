@@ -1,9 +1,15 @@
 import { mat4 } from "gl-matrix";
-import type { BAMFile } from "../bam";
-import { AssetVersion, type DataStream } from "../common";
-import { type BAMObject, type CopyContext, registerBAMObject } from "./base";
+import type { AnimControl } from "../anim/AnimControl";
+import type { BAMFile } from "../BAMFile";
+import { AssetVersion, type DataStream } from "../Common";
+import type { AnimBundle } from ".";
 import { type DebugInfo, dbgBool, dbgMat4, dbgNum, dbgRef } from "./debug";
 import { PartGroup } from "./PartGroup";
+import {
+  type CopyContext,
+  registerTypedObject,
+  type TypedObject,
+} from "./TypedObject";
 
 /**
  * PartBundle - Animation bundle
@@ -13,11 +19,15 @@ import { PartGroup } from "./PartGroup";
  * In BAM 6.17+, has anim_preload pointer.
  */
 export class PartBundle extends PartGroup {
-  public animPreload: BAMObject | null = null; // TODO AnimPreloadTable
+  public animPreload: TypedObject | null = null; // TODO AnimPreloadTable
   public blendType = 0;
   public animBlendFlag = false;
   public frameBlendFlag = false;
   public rootXform = mat4.create();
+
+  // Map of AnimControl to blend amount
+  public blend = new Map<AnimControl, number>();
+  private _animChanged = true;
 
   override load(file: BAMFile, data: DataStream) {
     super.load(file, data);
@@ -63,6 +73,37 @@ export class PartBundle extends PartGroup {
     }
     return info;
   }
+
+  update(): boolean {
+    const anyChanged = this.doUpdate(this, null, false, this._animChanged);
+    for (const control of this.blend.keys()) {
+      control.markChannels(this.frameBlendFlag);
+    }
+    this._animChanged = false;
+    return anyChanged;
+  }
+
+  bindAnim(control: AnimControl, bundle: AnimBundle): void {
+    // TODO pickChannelIndex
+    const channelIndex = 0;
+    this.bindHeirarchy(bundle, channelIndex);
+    control.setupAnim(bundle, channelIndex);
+  }
+
+  setControlEffect(control: AnimControl, effect: number): void {
+    // TODO clear existing animation
+    if (effect === 0) this.blend.delete(control);
+    else this.blend.set(control, effect);
+    this._animChanged = true;
+  }
+
+  /**
+   * Called by AnimControl when an animation is started.
+   * If the animation is not blended, sets the control effect to 1.
+   */
+  controlActivated(control: AnimControl) {
+    if (!this.animBlendFlag) this.setControlEffect(control, 1);
+  }
 }
 
-registerBAMObject("PartBundle", PartBundle);
+registerTypedObject("PartBundle", PartBundle);

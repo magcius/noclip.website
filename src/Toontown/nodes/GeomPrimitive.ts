@@ -1,11 +1,15 @@
-import type { BAMFile } from "../bam";
-import type { DataStream } from "../common";
-import { BAMObject, type CopyContext, registerBAMObject } from "./base";
+import type { BAMFile } from "../BAMFile";
+import type { DataStream } from "../Common";
 import { type DebugInfo, dbgArray, dbgEnum, dbgNum, dbgRef } from "./debug";
 import { GeomVertexArrayData } from "./GeomVertexArrayData";
 import { NumericType, ShadeModel, UsageHint } from "./geomEnums";
+import {
+  type CopyContext,
+  registerTypedObject,
+  TypedObject,
+} from "./TypedObject";
 
-export class GeomPrimitive extends BAMObject {
+export class GeomPrimitive extends TypedObject {
   public shadeModel = ShadeModel.Smooth;
   public firstVertex = 0;
   public numVertices = -1;
@@ -56,11 +60,11 @@ export class GeomLinestrips extends GeomPrimitive {}
 export class GeomPoints extends GeomPrimitive {}
 export class GeomPatches extends GeomPrimitive {}
 
-registerBAMObject("GeomPrimitive", GeomPrimitive);
-registerBAMObject("GeomTristrips", GeomTristrips);
-registerBAMObject("GeomTriangles", GeomTriangles);
-registerBAMObject("GeomTrifans", GeomTrifans);
-registerBAMObject("GeomLines", GeomLines);
-registerBAMObject("GeomLinestrips", GeomLinestrips);
-registerBAMObject("GeomPoints", GeomPoints);
-registerBAMObject("GeomPatches", GeomPatches);
+registerTypedObject("GeomPrimitive", GeomPrimitive);
+registerTypedObject("GeomTristrips", GeomTristrips);
+registerTypedObject("GeomTriangles", GeomTriangles);
+registerTypedObject("GeomTrifans", GeomTrifans);
+registerTypedObject("GeomLines", GeomLines);
+registerTypedObject("GeomLinestrips", GeomLinestrips);
+registerTypedObject("GeomPoints", GeomPoints);
+registerTypedObject("GeomPatches", GeomPatches);

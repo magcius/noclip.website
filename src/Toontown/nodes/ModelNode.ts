@@ -1,8 +1,8 @@
-import type { BAMFile } from "../bam";
-import { AssetVersion, type DataStream } from "../common";
-import { type CopyContext, registerBAMObject } from "./base";
+import type { BAMFile } from "../BAMFile";
+import { AssetVersion, type DataStream } from "../Common";
 import { type DebugInfo, dbgNum } from "./debug";
 import { PandaNode } from "./PandaNode";
+import { type CopyContext, registerTypedObject } from "./TypedObject";
 
 export enum PreserveTransform {
   None,
@@ -50,4 +50,4 @@ export class ModelNode extends PandaNode {
   }
 }
 
-registerBAMObject("ModelNode", ModelNode);
+registerTypedObject("ModelNode", ModelNode);

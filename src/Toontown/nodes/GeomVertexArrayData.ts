@@ -1,11 +1,15 @@
-import type { BAMFile } from "../bam";
-import { AssetVersion, type DataStream } from "../common";
-import { BAMObject, type CopyContext, registerBAMObject } from "./base";
+import type { BAMFile } from "../BAMFile";
+import { AssetVersion, type DataStream } from "../Common";
 import { type DebugInfo, dbgBytes, dbgEnum, dbgRef } from "./debug";
 import { GeomVertexArrayFormat } from "./GeomVertexArrayFormat";
 import { UsageHint } from "./geomEnums";
+import {
+  type CopyContext,
+  registerTypedObject,
+  TypedObject,
+} from "./TypedObject";
 
-export class GeomVertexArrayData extends BAMObject {
+export class GeomVertexArrayData extends TypedObject {
   public arrayFormat: GeomVertexArrayFormat | null = null;
   public usageHint = UsageHint.Static;
   public buffer: Uint8Array = new Uint8Array(0);
@@ -45,4 +49,4 @@ export class GeomVertexArrayData extends BAMObject {
   }
 }
 
-registerBAMObject("GeomVertexArrayData", GeomVertexArrayData);
+registerTypedObject("GeomVertexArrayData", GeomVertexArrayData);

@@ -1,9 +1,9 @@
-import type { BAMFile } from "../bam";
-import type { DataStream } from "../common";
-import type { MaterialData } from "../geom";
-import { type CopyContext, registerBAMObject } from "./base";
+import type { BAMFile } from "../BAMFile";
+import type { DataStream } from "../Common";
+import type { MaterialData } from "../Geom";
 import { type DebugInfo, dbgEnum, dbgNum } from "./debug";
 import { PandaCompareFunc, RenderAttrib } from "./RenderAttrib";
+import { type CopyContext, registerTypedObject } from "./TypedObject";
 
 export class AlphaTestAttrib extends RenderAttrib {
   public mode = PandaCompareFunc.Always;
@@ -44,4 +44,4 @@ export class AlphaTestAttrib extends RenderAttrib {
   }
 }
 
-registerBAMObject("AlphaTestAttrib", AlphaTestAttrib);
+registerTypedObject("AlphaTestAttrib", AlphaTestAttrib);

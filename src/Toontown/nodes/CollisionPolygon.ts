@@ -1,7 +1,6 @@
 import { mat4, vec2 } from "gl-matrix";
-import type { BAMFile } from "../bam";
-import { AssetVersion, type DataStream } from "../common";
-import { type CopyContext, registerBAMObject } from "./base";
+import type { BAMFile } from "../BAMFile";
+import { AssetVersion, type DataStream } from "../Common";
 import { CollisionPlane } from "./CollisionPlane";
 import {
   type DebugInfo,
@@ -13,6 +12,7 @@ import {
   dbgObject,
   dbgVec2,
 } from "./debug";
+import { type CopyContext, registerTypedObject } from "./TypedObject";
 
 // Axis type for pre-5.0 format
 enum AxisType {
@@ -96,4 +96,4 @@ export class CollisionPolygon extends CollisionPlane {
   }
 }
 
-registerBAMObject("CollisionPolygon", CollisionPolygon);
+registerTypedObject("CollisionPolygon", CollisionPolygon);

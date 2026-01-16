@@ -1,5 +1,4 @@
-// Toontown DNA (Disney Neighborhood Architecture) format data types
-// Based on the original Panda3D DNA parser from Toontown Online
+// Toontown DNA format data types
 
 import type { vec3, vec4 } from "gl-matrix";
 

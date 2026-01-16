@@ -1,4 +1,4 @@
-// Panda3D Multifile format parser
+// Panda3D Multifile (.mf) format parser
 
 import type ArrayBufferSlice from "../../ArrayBufferSlice";
 
@@ -85,7 +85,7 @@ export function readMultifile(data: ArrayBufferSlice): Multifile {
   offset += 2;
   const version: MultifileVersion = { major, minor };
 
-  // Validate version (1.0 <= version <= 1.1)
+  // Validate version
   if (
     !versionGte(version, { major: 1, minor: 0 }) ||
     !versionLte(version, { major: 1, minor: 1 })

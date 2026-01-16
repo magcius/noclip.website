@@ -1,6 +1,6 @@
 import { vec4 } from "gl-matrix";
-import type { BAMFile } from "../bam";
-import { AssetVersion, type DataStream } from "../common";
+import type { BAMFile } from "../BAMFile";
+import { AssetVersion, type DataStream } from "../Common";
 import { type DebugInfo, dbgColor, dbgEnum, dbgNum } from "./debug";
 import { FilterType, WrapMode } from "./textureEnums";
 

@@ -1,6 +1,6 @@
-import { registerBAMObject } from "./base";
 import { PartBundle } from "./PartBundle";
+import { registerTypedObject } from "./TypedObject";
 
 export class CharacterJointBundle extends PartBundle {}
 
-registerBAMObject("CharacterJointBundle", CharacterJointBundle);
+registerTypedObject("CharacterJointBundle", CharacterJointBundle);

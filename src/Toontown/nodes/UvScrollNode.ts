@@ -1,8 +1,8 @@
-import type { BAMFile } from "../bam";
-import { AssetVersion, type DataStream } from "../common";
-import { type CopyContext, registerBAMObject } from "./base";
+import type { BAMFile } from "../BAMFile";
+import { AssetVersion, type DataStream } from "../Common";
 import { type DebugInfo, dbgNum } from "./debug";
 import { PandaNode } from "./PandaNode";
+import { type CopyContext, registerTypedObject } from "./TypedObject";
 
 export class UvScrollNode extends PandaNode {
   public uSpeed = 0;
@@ -44,4 +44,4 @@ export class UvScrollNode extends PandaNode {
   }
 }
 
-registerBAMObject("UvScrollNode", UvScrollNode);
+registerTypedObject("UvScrollNode", UvScrollNode);

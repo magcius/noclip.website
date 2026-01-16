@@ -1,13 +1,13 @@
-import type { BAMFile } from "../bam";
-import type { DataStream } from "../common";
+import type { BAMFile } from "../BAMFile";
+import type { DataStream } from "../Common";
 import type { AnimBundle } from "./AnimBundle";
+import { type DebugInfo, dbgRefs, dbgStr } from "./debug";
 import {
-  BAMObject,
   type CopyContext,
   readTypedRefs,
-  registerBAMObject,
-} from "./base";
-import { type DebugInfo, dbgRefs, dbgStr } from "./debug";
+  registerTypedObject,
+  TypedObject,
+} from "./TypedObject";
 
 /**
  * Base class for animation hierarchy nodes
@@ -16,7 +16,7 @@ import { type DebugInfo, dbgRefs, dbgStr } from "./debug";
  * - AnimBundle (extends AnimGroup with fps/frames)
  * - AnimChannelBase (extends AnimGroup with channel data)
  */
-export class AnimGroup extends BAMObject {
+export class AnimGroup extends TypedObject {
   public name = "";
   public root: AnimBundle | null = null;
   public children: AnimGroup[] = [];
@@ -47,4 +47,4 @@ export class AnimGroup extends BAMObject {
   }
 }
 
-registerBAMObject("AnimGroup", AnimGroup);
+registerTypedObject("AnimGroup", AnimGroup);

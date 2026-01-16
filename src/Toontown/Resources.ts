@@ -3,20 +3,27 @@ import { decompress } from "../Common/Compression/Deflate.js";
 import type { DataFetcher } from "../DataFetcher";
 import type { GfxDevice } from "../gfx/platform/GfxPlatform";
 import type { Destroyable } from "../SceneBase";
-import { BAMFile } from "./bam";
+import { BAMFile } from "./BAMFile";
 import { type DNAFile, parseDNA } from "./dna";
-import { DNAStorage } from "./dna/storage";
+import { DNAStorage } from "./dna/Storage";
 import { Format } from "./nodes";
-import { DynamicTextFont, StaticTextFont, TextFont } from "./text";
 import {
   type DecodedImage,
   decodeImage,
   getImageFormat,
   mergeAlphaChannel,
-} from "./textures";
+} from "./Textures";
+import { DynamicTextFont, StaticTextFont, type TextFont } from "./text";
 
 export const pathBase = "Toontown";
-const USE_HQ_FONTS = true;
+
+/// Load from multifiles directly via HTTP Range requests & manifest.json
+/// (manifest.json can be generated via tools/gen-manifest.ts)
+const USE_MULTIFILES = false;
+
+/// Use high-quality fonts extracted from Toontown Rewritten
+/// (Fonts must be in manifest or USE_MULTIFILES must be false)
+const USE_HQ_FONTS = false;
 
 type MultifileManifest = Record<string, MultifileManifestEntry>;
 
@@ -37,43 +44,51 @@ export class ToontownResourceLoader implements Destroyable {
   constructor(private dataFetcher: DataFetcher) {}
 
   public async loadManifest() {
-    const manifestData = await this.dataFetcher.fetchData(
-      `${pathBase}/manifest.json`,
-    );
-    const manifestString = new TextDecoder().decode(
-      manifestData.arrayBuffer as ArrayBuffer,
-    );
-    this.manifest = JSON.parse(manifestString) as MultifileManifest;
-    const numFiles = Object.keys(this.manifest).length;
-    console.log(`Loaded manifest with ${numFiles} files`);
+    if (USE_MULTIFILES) {
+      const manifestData = await this.dataFetcher.fetchData(
+        `${pathBase}/manifest.json`,
+      );
+      const manifestString = new TextDecoder().decode(
+        manifestData.arrayBuffer as ArrayBuffer,
+      );
+      this.manifest = JSON.parse(manifestString) as MultifileManifest;
+      const numFiles = Object.keys(this.manifest).length;
+      console.log(`Loaded manifest with ${numFiles} files`);
+    }
   }
 
   public async hasFile(name: string): Promise<boolean> {
-    const fileData = await this.dataFetcher.fetchData(`${pathBase}/${name}`, {
-      allow404: true,
-    });
-    return fileData.byteLength > 0;
-    // return name in this.manifest;
+    if (USE_MULTIFILES) {
+      return name in this.manifest;
+    } else {
+      const fileData = await this.dataFetcher.fetchData(`${pathBase}/${name}`, {
+        allow404: true,
+      });
+      return fileData.byteLength > 0;
+    }
   }
 
   public async loadFile(name: string): Promise<ArrayBufferSlice> {
-    let fileData = await this.dataFetcher.fetchData(`${pathBase}/${name}`);
-    // const entry = this.manifest[name];
-    // if (!entry) throw new Error(`File not found in manifest: ${name}`);
-    // let fileData: ArrayBufferSlice = await this.dataFetcher.fetchData(
-    //   `${pathBase}/${entry.file}`,
-    //   {
-    //     rangeStart: entry.offset,
-    //     rangeSize: entry.length,
-    //   },
-    // );
-    // if (entry.compressed) {
-    //   console.debug(
-    //     `Decompressing file ${name} with size ${fileData.byteLength}`,
-    //   );
-    //   fileData = decompress(fileData);
-    //   console.debug(`Decompressed file ${name} to size ${fileData.byteLength}`);
-    // }
+    let fileData: ArrayBufferSlice;
+    if (USE_MULTIFILES) {
+      const entry = this.manifest[name];
+      if (!entry) throw new Error(`File not found in manifest: ${name}`);
+      fileData = await this.dataFetcher.fetchData(`${pathBase}/${entry.file}`, {
+        rangeStart: entry.offset,
+        rangeSize: entry.length,
+      });
+      if (entry.compressed) {
+        console.debug(
+          `Decompressing file ${name} with size ${fileData.byteLength}`,
+        );
+        fileData = decompress(fileData);
+        console.debug(
+          `Decompressed file ${name} to size ${fileData.byteLength}`,
+        );
+      }
+    } else {
+      fileData = await this.dataFetcher.fetchData(`${pathBase}/${name}`);
+    }
     return fileData;
   }
 
@@ -94,7 +109,7 @@ export class ToontownResourceLoader implements Destroyable {
    * @param dnaFiles Array of DNA file paths to load in order
    * @returns DNAStorage populated with all resources, and the final scene DNAFile
    */
-  public async loadDNAWithStorage(
+  public async loadDNA(
     dnaFiles: string[],
   ): Promise<{ storage: DNAStorage; sceneFile: DNAFile }> {
     const storage = new DNAStorage();
@@ -148,27 +163,22 @@ export class ToontownResourceLoader implements Destroyable {
     }
 
     let sceneFile: DNAFile | null = null;
-
     for (const dnaPath of dnaFiles) {
-      const dnaFile = await this.loadDNA(dnaPath);
+      const dnaFile = await this.loadDNAInternal(dnaPath);
       storage.loadFromDNAFile(dnaFile);
-
       // The last file is the scene file
       sceneFile = dnaFile;
     }
-
     if (!sceneFile) {
       throw new Error("No DNA files provided");
     }
-
-    // storage.debugPrint();
     return { storage, sceneFile };
   }
 
-  private async loadDNA(name: string): Promise<DNAFile> {
+  private async loadDNAInternal(name: string): Promise<DNAFile> {
     const cached = this.dnaCache.get(name);
     if (cached) return cached;
-    let dnaPath = (await this.hasFile(`${name}.xml`))
+    const dnaPath = (await this.hasFile(`${name}.xml`))
       ? `${name}.xml`
       : `${name}.dna`;
     const dnaData = await this.loadFile(dnaPath);

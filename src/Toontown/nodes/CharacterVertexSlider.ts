@@ -1,8 +1,8 @@
-import type { BAMFile } from "../bam";
-import type { DataStream } from "../common";
-import { type CopyContext, registerBAMObject } from "./base";
-import { type DebugInfo, dbgRef } from "./debug";
+import type { BAMFile } from "../BAMFile";
+import type { DataStream } from "../Common";
 import { CharacterSlider } from "./CharacterSlider";
+import { type DebugInfo, dbgRef } from "./debug";
+import { type CopyContext, registerTypedObject } from "./TypedObject";
 import { VertexSlider } from "./VertexSlider";
 
 export class CharacterVertexSlider extends VertexSlider {
@@ -25,4 +25,4 @@ export class CharacterVertexSlider extends VertexSlider {
   }
 }
 
-registerBAMObject("CharacterVertexSlider", CharacterVertexSlider);
+registerTypedObject("CharacterVertexSlider", CharacterVertexSlider);

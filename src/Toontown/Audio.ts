@@ -1,5 +1,5 @@
 import { Sequencer, WorkletSynthesizer } from "spessasynth_lib";
-import { ToontownResourceLoader } from "./resources";
+import type { ToontownResourceLoader } from "./Resources";
 
 interface Player {
   ctx: AudioContext;
@@ -13,17 +13,26 @@ let currentVolume = 0.5;
 
 async function init(loader: ToontownResourceLoader): Promise<Player> {
   if (player) return player;
+  // Load the Microsoft GS Wavetable Synth SoundFont
   const sfont = await loader.loadFile("gm3.sf2");
   const ctx = new AudioContext();
+  // Gain node for volume control
   const gainNode = ctx.createGain();
   gainNode.gain.value = currentVolume;
   gainNode.connect(ctx.destination);
+  // Load the audio worklet
+  if (!ctx.audioWorklet) {
+    throw new Error(
+      "AudioWorklet unavailable (insecure context or unsupported browser)",
+    );
+  }
   await ctx.audioWorklet.addModule(
     new URL(
       "spessasynth_lib/dist/spessasynth_processor.min.js",
       import.meta.url,
     ),
   );
+  // Create the synthesizer and sequencer
   const synth = new WorkletSynthesizer(ctx);
   synth.connect(gainNode);
   await synth.soundBankManager.addSoundBank(
@@ -45,6 +54,7 @@ export async function startPlayback(
   const player = await init(loader);
   await player.synth.isReady;
   await player.ctx.resume();
+  // Load and play the MIDI file
   const midiData = await loader.loadFile(musicFile);
   player.sequencer.loadNewSongList([
     {

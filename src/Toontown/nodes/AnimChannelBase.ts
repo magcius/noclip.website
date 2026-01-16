@@ -1,10 +1,10 @@
-import type { BAMFile } from "../bam";
-import type { DataStream } from "../common";
+import type { BAMFile } from "../BAMFile";
+import type { DataStream } from "../Common";
 import { AnimGroup } from "./AnimGroup";
-import type { CopyContext } from "./base";
 import { type DebugInfo, dbgNum } from "./debug";
+import type { CopyContext } from "./TypedObject";
 
-export class AnimChannelBase extends AnimGroup {
+export abstract class AnimChannelBase<T> extends AnimGroup {
   public lastFrame = -1;
 
   override load(file: BAMFile, data: DataStream) {
@@ -21,5 +21,17 @@ export class AnimChannelBase extends AnimGroup {
     const info = super.getDebugInfo();
     info.set("lastFrame", dbgNum(this.lastFrame));
     return info;
+  }
+
+  abstract getValue(out: T, frame: number): T;
+
+  hasChanged(
+    lastFrame: number,
+    lastFrac: number,
+    frame: number,
+    frac: number,
+  ): boolean {
+    // TODO actually check if value has changed
+    return lastFrame !== frame || lastFrac !== frac;
   }
 }

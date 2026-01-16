@@ -6,7 +6,7 @@ import type {
   ReadonlyVec3,
   ReadonlyVec4,
 } from "gl-matrix";
-import type { BAMObject } from "./base";
+import type { TypedObject } from "./TypedObject";
 
 type TypedArray =
   | Int8Array
@@ -28,8 +28,8 @@ export type DebugValue =
   | { type: "string"; value: string }
   | { type: "number"; value: number }
   | { type: "boolean"; value: boolean }
-  | { type: "ref"; obj: BAMObject | null }
-  | { type: "refs"; objs: (BAMObject | null)[] }
+  | { type: "ref"; obj: TypedObject | null }
+  | { type: "refs"; objs: (TypedObject | null)[] }
   | { type: "vec2"; value: ReadonlyVec2 }
   | { type: "vec3"; value: ReadonlyVec3 }
   | { type: "vec4"; value: ReadonlyVec4 }
@@ -61,11 +61,11 @@ export function dbgBool(value: boolean): DebugValue {
   return { type: "boolean", value };
 }
 
-export function dbgRef(obj: BAMObject | null): DebugValue {
+export function dbgRef(obj: TypedObject | null): DebugValue {
   return { type: "ref", obj };
 }
 
-export function dbgRefs(objs: (BAMObject | null)[]): DebugValue {
+export function dbgRefs(objs: (TypedObject | null)[]): DebugValue {
   return { type: "refs", objs };
 }
 

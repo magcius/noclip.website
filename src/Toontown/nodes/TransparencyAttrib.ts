@@ -1,9 +1,9 @@
-import type { BAMFile } from "../bam";
-import type { DataStream } from "../common";
-import type { MaterialData } from "../geom";
-import { type CopyContext, registerBAMObject } from "./base";
+import type { BAMFile } from "../BAMFile";
+import type { DataStream } from "../Common";
+import type { MaterialData } from "../Geom";
 import { type DebugInfo, dbgEnum } from "./debug";
 import { RenderAttrib } from "./RenderAttrib";
+import { type CopyContext, registerTypedObject } from "./TypedObject";
 
 export enum TransparencyMode {
   None = 0,
@@ -47,4 +47,4 @@ export class TransparencyAttrib extends RenderAttrib {
   }
 }
 
-registerBAMObject("TransparencyAttrib", TransparencyAttrib);
+registerTypedObject("TransparencyAttrib", TransparencyAttrib);

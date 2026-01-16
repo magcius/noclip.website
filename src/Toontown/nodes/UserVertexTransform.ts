@@ -1,8 +1,8 @@
 import { mat4 } from "gl-matrix";
-import type { BAMFile } from "../bam";
-import type { DataStream } from "../common";
-import { type CopyContext, registerBAMObject } from "./base";
+import type { BAMFile } from "../BAMFile";
+import type { DataStream } from "../Common";
 import { type DebugInfo, dbgMat4 } from "./debug";
+import { type CopyContext, registerTypedObject } from "./TypedObject";
 import { VertexTransform } from "./VertexTransform";
 
 export class UserVertexTransform extends VertexTransform {
@@ -20,7 +20,7 @@ export class UserVertexTransform extends VertexTransform {
     mat4.copy(target.matrix, this.matrix);
   }
 
-  override getSkinningMatrix(out: mat4): void {
+  override getMatrix(out: mat4): void {
     mat4.copy(out, this.matrix);
   }
 
@@ -31,4 +31,4 @@ export class UserVertexTransform extends VertexTransform {
   }
 }
 
-registerBAMObject("UserVertexTransform", UserVertexTransform);
+registerTypedObject("UserVertexTransform", UserVertexTransform);

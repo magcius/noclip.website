@@ -1,7 +1,6 @@
 import { AABB } from "../../Geometry";
-import type { BAMFile } from "../bam";
-import type { DataStream } from "../common";
-import { type CopyContext, registerBAMObject } from "./base";
+import type { BAMFile } from "../BAMFile";
+import type { DataStream } from "../Common";
 import {
   type DebugInfo,
   dbgArray,
@@ -12,6 +11,7 @@ import {
 import { Geom } from "./Geom";
 import { PandaNode } from "./PandaNode";
 import { RenderState } from "./RenderState";
+import { type CopyContext, registerTypedObject } from "./TypedObject";
 
 export interface GeomEntry {
   geom: Geom;
@@ -80,4 +80,4 @@ export class GeomNode extends PandaNode {
   }
 }
 
-registerBAMObject("GeomNode", GeomNode);
+registerTypedObject("GeomNode", GeomNode);

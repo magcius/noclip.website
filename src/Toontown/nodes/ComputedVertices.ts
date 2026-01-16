@@ -1,8 +1,12 @@
 import type { vec2, vec3, vec4 } from "gl-matrix";
-import type { BAMFile } from "../bam";
-import { AssetVersion, type DataStream } from "../common";
-import { BAMObject, type CopyContext, registerBAMObject } from "./base";
+import type { BAMFile } from "../BAMFile";
+import { AssetVersion, type DataStream } from "../Common";
 import { type DebugInfo, dbgNum, dbgTypedArray } from "./debug";
+import {
+  type CopyContext,
+  registerTypedObject,
+  TypedObject,
+} from "./TypedObject";
 
 /**
  * VertexTransform - Transforms vertices by a joint
@@ -72,7 +76,7 @@ export interface ColorMorph {
  * - BAM < 4.10: counts are uint16
  * - BAM >= 4.10: counts are uint32
  */
-export class ComputedVertices extends BAMObject {
+export class ComputedVertices extends TypedObject {
   // Vertex transforms (joint-based animation)
   public transforms: VertexTransform[] = [];
 
@@ -210,4 +214,4 @@ export class ComputedVertices extends BAMObject {
   }
 }
 
-registerBAMObject("ComputedVertices", ComputedVertices);
+registerTypedObject("ComputedVertices", ComputedVertices);

@@ -140,6 +140,7 @@ function parseSuitPointType(value: string | null): SuitPointType {
     case "COGHQ_OUT_POINT":
       return SuitPointType.COGHQ_OUT_POINT;
     default:
+      console.warn(`Unknown SuitPointType: ${value}`);
       return SuitPointType.STREET_POINT;
   }
 }
@@ -172,6 +173,8 @@ function parseModel(element: Element): ModelDeclaration {
   for (const child of getElementChildren(element)) {
     if (child.tagName.toLowerCase() === "store_node") {
       nodes.push(parseStoreNode(child));
+    } else {
+      console.warn(`Unknown model child: ${child.tagName}`);
     }
   }
 
@@ -533,6 +536,7 @@ function parseWindows(element: Element): DNAWindows {
         windows.count = Number(getTrimmedText(child)) || windows.count;
         break;
       default:
+        console.warn(`Unknown windows child: ${child.tagName}`);
         break;
     }
   }
@@ -557,6 +561,7 @@ function parseCornice(element: Element): DNACornice {
         cornice.code = getTrimmedText(child);
         break;
       default:
+        console.warn(`Unknown cornice child: ${child.tagName}`);
         break;
     }
   }
@@ -924,6 +929,7 @@ function parseSignGraphic(element: Element): DNASignGraphic {
         graphic.code = getTrimmedText(child);
         break;
       default:
+        console.warn(`Unknown graphic child: ${child.tagName}`);
         break;
     }
   }
@@ -961,6 +967,7 @@ function parseNode(element: Element): DNANode | null {
     case "sign":
       return parseSign(element);
     default:
+      console.warn(`Unknown node type: ${element.tagName}`);
       return null;
   }
 }
@@ -988,6 +995,7 @@ function parseStorage(element: Element, file: DNAFile): void {
         file.storedFonts.push(parseStoreFont(child));
         break;
       default:
+        console.warn(`Unknown storage child: ${child.tagName}`);
         break;
     }
   }

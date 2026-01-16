@@ -1,13 +1,6 @@
-import { type ReadonlyVec3, vec3, type vec4 } from "gl-matrix";
-import type { BAMFile } from "../bam";
-import { AssetVersion, type DataStream } from "../common";
-import {
-  BAMObject,
-  type BAMObjectFactory,
-  CopyContext,
-  getBAMObjectFactory,
-  registerBAMObject,
-} from "./base";
+import { type ReadonlyVec3, type ReadonlyVec4, vec3 } from "gl-matrix";
+import type { BAMFile } from "../BAMFile";
+import { AssetVersion, type DataStream } from "../Common";
 import { ColorAttrib } from "./ColorAttrib";
 import { ColorScaleAttrib } from "./ColorScaleAttrib";
 import {
@@ -25,8 +18,15 @@ import type { RenderAttrib } from "./RenderAttrib";
 import { type RenderEffect, RenderEffects } from "./RenderEffects";
 import { RenderState } from "./RenderState";
 import { TransformState } from "./TransformState";
+import {
+  CopyContext,
+  getTypedObjectFactory,
+  registerTypedObject,
+  TypedObject,
+  type TypedObjectFactory,
+} from "./TypedObject";
 
-export class PandaNode extends BAMObject {
+export class PandaNode extends TypedObject {
   public name: string = "";
   public state = new RenderState();
   public transform = new TransformState();
@@ -260,11 +260,11 @@ export class PandaNode extends BAMObject {
     this.state = this.state.withAttrib(attrib, priority);
   }
 
-  setColor(color: vec4) {
+  setColor(color: ReadonlyVec4) {
     this.setAttrib(ColorAttrib.flat(color));
   }
 
-  setColorScale(scale: vec4) {
+  setColorScale(scale: ReadonlyVec4) {
     this.setAttrib(ColorScaleAttrib.make(scale));
   }
 
@@ -282,6 +282,10 @@ export class PandaNode extends BAMObject {
 
   setH(h: number) {
     this.hpr = vec3.fromValues(h, this.transform.hpr[1], this.transform.hpr[2]);
+  }
+
+  get h(): number {
+    return this.transform.hpr[0];
   }
 
   set p(pitch: number) {
@@ -549,7 +553,7 @@ export class PandaNode extends BAMObject {
   }
 }
 
-registerBAMObject("PandaNode", PandaNode);
+registerTypedObject("PandaNode", PandaNode);
 
 /**
  * Matches a string against a glob pattern with `*` and `?` wildcards.
@@ -614,7 +618,7 @@ interface QueryComponent {
   type: ComponentType;
   pattern?: string; // for name/glob matching
   typeName?: string; // for type matching
-  typeConstructor?: BAMObjectFactory; // resolved constructor for type matching
+  typeConstructor?: TypedObjectFactory; // resolved constructor for type matching
   tagKey?: string; // for tag matching
   tagValue?: string; // for tag value matching
   stashedOnly?: boolean; // @@ prefix - only match in stashed children
@@ -701,11 +705,11 @@ function parseQuery(query: string): ParsedQuery {
     } else if (part.startsWith("+")) {
       component.type = ComponentType.MatchType;
       component.typeName = part.slice(1);
-      component.typeConstructor = getBAMObjectFactory(component.typeName);
+      component.typeConstructor = getTypedObjectFactory(component.typeName);
     } else if (part.startsWith("-")) {
       component.type = ComponentType.MatchExactType;
       component.typeName = part.slice(1);
-      component.typeConstructor = getBAMObjectFactory(component.typeName);
+      component.typeConstructor = getTypedObjectFactory(component.typeName);
     } else if (part.startsWith("=")) {
       const equalsIdx = part.indexOf("=", 1);
       if (equalsIdx !== -1) {

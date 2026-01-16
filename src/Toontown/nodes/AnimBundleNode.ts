@@ -1,9 +1,9 @@
-import type { BAMFile } from "../bam";
-import type { DataStream } from "../common";
+import type { BAMFile } from "../BAMFile";
+import type { DataStream } from "../Common";
 import { AnimBundle } from "./AnimBundle";
-import { type CopyContext, registerBAMObject } from "./base";
 import { type DebugInfo, dbgRef } from "./debug";
 import { PandaNode } from "./PandaNode";
+import { type CopyContext, registerTypedObject } from "./TypedObject";
 
 /**
  * Node that holds an AnimBundle.
@@ -31,4 +31,4 @@ export class AnimBundleNode extends PandaNode {
   }
 }
 
-registerBAMObject("AnimBundleNode", AnimBundleNode);
+registerTypedObject("AnimBundleNode", AnimBundleNode);

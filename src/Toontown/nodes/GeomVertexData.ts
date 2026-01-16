@@ -1,11 +1,5 @@
-import type { BAMFile } from "../bam";
-import type { DataStream } from "../common";
-import {
-  BAMObject,
-  type CopyContext,
-  readTypedRefs,
-  registerBAMObject,
-} from "./base";
+import type { BAMFile } from "../BAMFile";
+import type { DataStream } from "../Common";
 import { type DebugInfo, dbgEnum, dbgRef, dbgRefs, dbgStr } from "./debug";
 import { GeomVertexArrayData } from "./GeomVertexArrayData";
 import { GeomVertexFormat } from "./GeomVertexFormat";
@@ -13,8 +7,14 @@ import { UsageHint } from "./geomEnums";
 import { SliderTable } from "./SliderTable";
 import { TransformBlendTable } from "./TransformBlendTable";
 import { TransformTable } from "./TransformTable";
+import {
+  type CopyContext,
+  readTypedRefs,
+  registerTypedObject,
+  TypedObject,
+} from "./TypedObject";
 
-export class GeomVertexData extends BAMObject {
+export class GeomVertexData extends TypedObject {
   public name = "";
   public format: GeomVertexFormat | null = null;
   public usageHint = UsageHint.Static;
@@ -65,4 +65,4 @@ export class GeomVertexData extends BAMObject {
   }
 }
 
-registerBAMObject("GeomVertexData", GeomVertexData);
+registerTypedObject("GeomVertexData", GeomVertexData);

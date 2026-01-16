@@ -1,5 +1,3 @@
-// DNA file lexer/tokenizer
-
 export enum TokenType {
   // Literals
   NUMBER,

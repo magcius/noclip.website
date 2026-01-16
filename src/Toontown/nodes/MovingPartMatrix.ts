@@ -1,14 +1,17 @@
 import { mat4 } from "gl-matrix";
-import type { BAMFile } from "../bam";
-import type { DataStream } from "../common";
-import { type CopyContext, registerBAMObject } from "./base";
+import type { AnimControl } from "../anim/AnimControl";
+import type { BAMFile } from "../BAMFile";
+import type { DataStream } from "../Common";
+import type { AnimChannelBase } from "./AnimChannelBase";
 import { type DebugInfo, dbgMat4 } from "./debug";
 import { MovingPartBase } from "./MovingPartBase";
+import type { PartBundle } from "./PartBundle";
+import { type CopyContext, registerTypedObject } from "./TypedObject";
 
 /**
  * Animated matrix part
  */
-export class MovingPartMatrix extends MovingPartBase {
+export class MovingPartMatrix extends MovingPartBase<mat4> {
   public value = mat4.create();
   public initialValue = mat4.create();
 
@@ -30,6 +33,30 @@ export class MovingPartMatrix extends MovingPartBase {
     info.set("initialValue", dbgMat4(this.initialValue));
     return info;
   }
+
+  override getBlendValue(root: PartBundle): void {
+    if (this.forcedChannel) {
+      this.forcedChannel.getValue(this.value, 0);
+    }
+
+    const effectiveChannels: [AnimControl, AnimChannelBase<mat4>][] = [];
+    for (const control of root.blend.keys()) {
+      const channel = this._channels[control.channelIndex];
+      if (channel) {
+        effectiveChannels.push([control, channel]);
+      }
+    }
+    if (effectiveChannels.length === 0) {
+      console.log("Copying initial value!", this);
+      mat4.copy(this.value, this.initialValue);
+    } else {
+      if (effectiveChannels.length > 1 || root.frameBlendFlag) {
+        throw new Error("Blended channels are not yet supported");
+      }
+      const [control, channel] = effectiveChannels[0];
+      channel.getValue(this.value, control.frame);
+    }
+  }
 }
 
-registerBAMObject("MovingPartMatrix", MovingPartMatrix);
+registerTypedObject("MovingPartMatrix", MovingPartMatrix);

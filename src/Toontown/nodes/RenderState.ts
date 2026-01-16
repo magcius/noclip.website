@@ -1,6 +1,5 @@
-import type { BAMFile } from "../bam";
-import type { DataStream } from "../common";
-import { BAMObject, type CopyContext, registerBAMObject } from "./base";
+import type { BAMFile } from "../BAMFile";
+import type { DataStream } from "../Common";
 import {
   type DebugInfo,
   dbgArray,
@@ -10,6 +9,11 @@ import {
   dbgRef,
 } from "./debug";
 import { RenderAttrib } from "./RenderAttrib";
+import {
+  type CopyContext,
+  registerTypedObject,
+  TypedObject,
+} from "./TypedObject";
 
 export interface RenderAttribEntry {
   attrib: RenderAttrib;
@@ -22,7 +26,7 @@ interface RenderAttribConstructor<T extends RenderAttrib> {
   new (...args: any[]): T;
 }
 
-export class RenderState extends BAMObject {
+export class RenderState extends TypedObject {
   public _attribs: RenderAttribEntry[] = [];
 
   get attribs(): ReadonlyArray<Readonly<RenderAttribEntry>> {
@@ -136,4 +140,4 @@ export class RenderState extends BAMObject {
   }
 }
 
-registerBAMObject("RenderState", RenderState);
+registerTypedObject("RenderState", RenderState);

@@ -4,11 +4,11 @@ import { FloatingPanel } from "../DebugFloaters.js";
 import { drawWorldSpaceAABB, getDebugOverlayCanvas2D } from "../DebugJunk.js";
 import { AABB } from "../Geometry.js";
 import { LAYER_ICON } from "../ui.js";
-import { composeDrawMask, isNodeVisible } from "./geom.js";
+import { composeDrawMask, isNodeVisible } from "./Geom.js";
 import type { DebugInfo, DebugValue } from "./nodes/debug.js";
 import { GeomNode } from "./nodes/GeomNode.js";
 import type { PandaNode } from "./nodes/PandaNode.js";
-import { pandaToNoclip } from "./render.js";
+import { pandaToNoclip } from "./Render.js";
 
 /**
  * Represents a node in the scene graph tree UI

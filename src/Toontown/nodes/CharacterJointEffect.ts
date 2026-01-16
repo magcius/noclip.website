@@ -1,9 +1,9 @@
-import type { BAMFile } from "../bam";
-import type { DataStream } from "../common";
-import { type CopyContext, registerBAMObject } from "./base";
+import type { BAMFile } from "../BAMFile";
+import type { DataStream } from "../Common";
 import { Character } from "./Character";
 import { type DebugInfo, dbgRef } from "./debug";
 import { RenderEffect } from "./RenderEffects";
+import { type CopyContext, registerTypedObject } from "./TypedObject";
 
 /**
  * CharacterJointEffect - Links a node to a Character for joint transforms
@@ -31,4 +31,4 @@ export class CharacterJointEffect extends RenderEffect {
   }
 }
 
-registerBAMObject("CharacterJointEffect", CharacterJointEffect);
+registerTypedObject("CharacterJointEffect", CharacterJointEffect);

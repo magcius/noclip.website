@@ -1,9 +1,9 @@
-import type { BAMFile } from "../bam";
-import type { DataStream } from "../common";
-import type { MaterialData } from "../geom";
-import { type CopyContext, registerBAMObject } from "./base";
+import type { BAMFile } from "../BAMFile";
+import type { DataStream } from "../Common";
+import type { MaterialData } from "../Geom";
 import { type DebugInfo, dbgEnum } from "./debug";
 import { RenderAttrib } from "./RenderAttrib";
+import { type CopyContext, registerTypedObject } from "./TypedObject";
 
 export const ColorWriteChannels = {
   Off: 0x0,
@@ -45,4 +45,4 @@ export class ColorWriteAttrib extends RenderAttrib {
   }
 }
 
-registerBAMObject("ColorWriteAttrib", ColorWriteAttrib);
+registerTypedObject("ColorWriteAttrib", ColorWriteAttrib);

@@ -1,8 +1,5 @@
-// DNA file parser
-
 import { vec3, vec4 } from "gl-matrix";
-import { Lexer, type Token, TokenType } from "./lexer";
-import { parseDNAXML } from "./xmlParser";
+import { Lexer, type Token, TokenType } from "./Lexer";
 import {
   type BattleCell,
   type DNAAnimBuilding,
@@ -35,6 +32,7 @@ import {
   type SuitPoint,
   SuitPointType,
 } from "./types";
+import { parseDNAXML } from "./XMLParser";
 
 export class DNAParser {
   private lexer: Lexer;

@@ -1,6 +1,5 @@
-import type { BAMFile } from "../bam";
-import { AssetVersion, type DataStream } from "../common";
-import { BAMObject, type CopyContext, registerBAMObject } from "./base";
+import type { BAMFile } from "../BAMFile";
+import { AssetVersion, type DataStream } from "../Common";
 import {
   type DebugInfo,
   dbgArray,
@@ -12,6 +11,11 @@ import {
 } from "./debug";
 import { Contents, NumericType } from "./geomEnums";
 import { InternalName } from "./InternalName";
+import {
+  type CopyContext,
+  registerTypedObject,
+  TypedObject,
+} from "./TypedObject";
 
 const VERTEX_COLUMN_ALIGNMENT = 4;
 
@@ -142,7 +146,7 @@ export class GeomVertexColumn {
   }
 }
 
-export class GeomVertexArrayFormat extends BAMObject {
+export class GeomVertexArrayFormat extends TypedObject {
   public stride = 0;
   public totalBytes = 0;
   public padTo = 0;
@@ -195,4 +199,4 @@ export class GeomVertexArrayFormat extends BAMObject {
   }
 }
 
-registerBAMObject("GeomVertexArrayFormat", GeomVertexArrayFormat);
+registerTypedObject("GeomVertexArrayFormat", GeomVertexArrayFormat);

@@ -249,3 +249,26 @@ export function enumName(
 ): string {
   return enumObj[value] ?? `Unknown(${value})`;
 }
+
+let globalTime = 0;
+
+/**
+ * Get the current frame time in seconds.
+ */
+export function getFrameTime(): number {
+  return globalTime;
+}
+
+/**
+ * Add seconds to the current frame time.
+ */
+export function addFrameTime(seconds: number): void {
+  globalTime += seconds;
+}
+
+/**
+ * Reset the current frame time to 0.
+ */
+export function resetFrameTime(): void {
+  globalTime = 0;
+}

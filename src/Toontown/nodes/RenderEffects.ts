@@ -1,18 +1,18 @@
-import type { BAMFile } from "../bam";
-import type { DataStream } from "../common";
+import type { BAMFile } from "../BAMFile";
+import type { DataStream } from "../Common";
+import { type DebugInfo, dbgRefs } from "./debug";
 import {
-  BAMObject,
   type CopyContext,
   readTypedRefs,
-  registerBAMObject,
-} from "./base";
-import { type DebugInfo, dbgRefs } from "./debug";
+  registerTypedObject,
+  TypedObject,
+} from "./TypedObject";
 
 interface RenderEffectConstructor<T extends RenderEffect> {
   new (...args: any[]): T;
 }
 
-export class RenderEffects extends BAMObject {
+export class RenderEffects extends TypedObject {
   public effects: RenderEffect[] = [];
 
   override load(file: BAMFile, data: DataStream) {
@@ -55,6 +55,6 @@ export class RenderEffects extends BAMObject {
   }
 }
 
-export class RenderEffect extends BAMObject {}
+export class RenderEffect extends TypedObject {}
 
-registerBAMObject("RenderEffects", RenderEffects);
+registerTypedObject("RenderEffects", RenderEffects);
