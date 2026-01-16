@@ -14,6 +14,7 @@ import { SceneGfx, SceneGroup } from "../viewer.js";
 
 import { create_d003_01_gimmicks } from "./maps/d003_01.js";
 import { create_d003_02_gimmicks } from "./maps/d003_02.js";
+import { create_d003_03_gimmicks } from "./maps/d003_03.js";
 
 /**
  * Defines a single level from Tokyo Mirage Sessions ♯FE
@@ -102,10 +103,10 @@ const sceneDescs =
     new TMSFESceneDesc("d003_01", "1F to 3F", ["d003_01", "obj01", "obj02", "sky"], create_d003_01_gimmicks, 2),
     new TMSFESceneDesc("d003_04", "4F", ["d003_04", "sky"]),
     new TMSFESceneDesc("d003_02", "5F to 7F", ["d003_02", "obj01", "sky"], create_d003_02_gimmicks),
-    new TMSFESceneDesc("d003_06", "Outside", ["d003_06", "obj02", "sky"]), // obj01 isn't normally there? not sure whats up with it
-    new TMSFESceneDesc("d003_03", "B1F to B3F", ["d003_03", "obj01", "sky"]),
+    new TMSFESceneDesc("d003_06", "Outside", ["d003_06", "obj01", "obj02", "sky"]),
+    new TMSFESceneDesc("d003_03", "B1F to B3F", ["d003_03", "obj01", "sky"], create_d003_03_gimmicks),
     new TMSFESceneDesc("d003_07", "B4F", ["d003_07", "sky"]),
-    new TMSFESceneDesc("d003_08", "Outside 2", ["d003_08", "obj02", "sky"]), //same as d003_06
+    new TMSFESceneDesc("d003_08", "Outside 2", ["d003_08", "obj01", "obj02", "sky"]),
     "Illusory Shibuya",
     new TMSFESceneDesc("d004_01", "Block 1", ["d004_01", "obj01", "sky"]),
     new TMSFESceneDesc("d004_02", "Block 2", ["d004_02", "obj01", "sky"]),
