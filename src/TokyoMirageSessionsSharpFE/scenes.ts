@@ -12,6 +12,7 @@ import { TMSFEScene } from "./render.js"
 import { SceneContext, SceneDesc } from "../SceneBase.js";
 import { SceneGfx, SceneGroup } from "../viewer.js";
 
+import { create_d002_01_gimmicks } from "./maps/d002_01.js";
 import { create_d003_01_gimmicks } from "./maps/d003_01.js";
 import { create_d003_02_gimmicks } from "./maps/d003_02.js";
 import { create_d003_03_gimmicks } from "./maps/d003_03.js";
@@ -96,7 +97,7 @@ const name = "MOVE THIS LATER Tokyo Mirage Sessions ♯FE";
 const sceneDescs =
 [
     "Illusory Daitama",
-    new TMSFESceneDesc("d002_01", "Illusory Daitama", ["d002_01", "obj01", "obj02", "obj03", "sky"]),
+    new TMSFESceneDesc("d002_01", "Illusory Daitama", ["d002_01", "obj01", "obj02", "obj03", "sky"], create_d002_01_gimmicks),
     new TMSFESceneDesc("d002_02", "Blue Observatory", ["d002_02", "sky"]),
     new TMSFESceneDesc("d002_03", "Red Observatory", ["d002_03", "sky"]),
     "Illusory 106",

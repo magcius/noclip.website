@@ -9,7 +9,7 @@ import { DataFetcher } from "../DataFetcher.js";
 import { GfxDevice, GfxTexture } from "../gfx/platform/GfxPlatform";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { vec3 } from "gl-matrix";
-import { MapLayout } from "./maplayout.js";
+import { MapLayout, get_point_from_group } from "./maplayout.js";
 import { fshp_renderer } from "./render_fshp";
 import { assert } from "../util.js";
 
@@ -234,3 +234,35 @@ const GATE_HEIGHT_OFFSET = 20.0;
 const D018_TREASURE_BOX_SCALE = 2.0;
 const D018_003_WALL_HEIGHT_OFFSET = 20.0;
 const D018_003_WALL_SCALE = 0.75;
+
+/**
+ * port of gimCreateElevator() from lua scripts.
+ * @param layout the map layout object for the current level
+ * @param layout_id1 layout id for the elevator start position
+ * @param layout_id2 layout id for the elevator end position
+ * @returns an elevator gimmick
+ */
+export async function create_elevator
+(
+    layout: MapLayout,
+    layout_id1: number,
+    layout_id2: number,
+    data_fetcher: DataFetcher,
+    device: GfxDevice
+): Promise<gimmick>
+{
+    const point = get_point_from_group(layout.elevator_entries, layout_id1);
+    const position = vec3.fromValues(point.position[0], point.position[1] - ELEVATOR_HEIGHT_OFFSET, point.position[2]);
+    return await create_gimmick
+    (
+        position,
+        point.rotation,
+        vec3.fromValues(1.0, 1.0, 1.0),
+        "TokyoMirageSessionsSharpFE/gimmick/d002/elevator/skin/01/model.apak",
+        "elevator_01.bfres",
+        data_fetcher,
+        device
+    )
+}
+
+const ELEVATOR_HEIGHT_OFFSET = 5.0;

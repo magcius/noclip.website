@@ -22,6 +22,7 @@ export function parseLayout(buffer: ArrayBufferSlice): MapLayout
     const blockwall_entries: MapLayoutEntry[] = [];
     const warp_entries: MapLayoutEntry[] = [];
     const gate_entries: MapLayoutEntry[] = [];
+    const elevator_entries: MapLayoutEntry[] = [];
     const group_1: MapLayoutEntry[] = [];
     const entries: MapLayoutEntry[] = [];
     let entry_offset = ENTRY_START;
@@ -77,6 +78,10 @@ export function parseLayout(buffer: ArrayBufferSlice): MapLayout
                 gate_entries.push({ group_index, unk_04, id, position, rotation, unknown });
                 break;
 
+            case GROUP_INDEX_ELEVATOR:
+                elevator_entries.push({ group_index, unk_04, id, position, rotation, unknown });
+                break;
+                
             case GROUP_INDEX_TREASURE_BOX_02:
                 treasurebox_02_entries.push({ group_index, unk_04, id, position, rotation, unknown });
                 break;
@@ -89,7 +94,7 @@ export function parseLayout(buffer: ArrayBufferSlice): MapLayout
         entry_offset += ENTRY_SIZE;
     }
 
-    return { treasurebox_01_entries, treasurebox_02_entries, blockside_entries, blockwall_entries, warp_entries, gate_entries, group_1, entries };
+    return { treasurebox_01_entries, treasurebox_02_entries, blockside_entries, blockwall_entries, warp_entries, gate_entries, elevator_entries, group_1, entries };
 }
 
 const ENTRY_START = 0x10;
@@ -99,6 +104,7 @@ const GROUP_INDEX_BLOCKSIDE = 9;
 const GROUP_INDEX_BLOCKWALL = 10;
 const GROUP_INDEX_WARP = 17;
 const GROUP_INDEX_GATE = 18;
+const GROUP_INDEX_ELEVATOR = 21;
 const GROUP_INDEX_TREASURE_BOX_02 = 37;
 
 /**
@@ -112,48 +118,58 @@ const GROUP_INDEX_TREASURE_BOX_02 = 37;
  */
 export function get_layout_point(layout: MapLayout, id: number, offset_x: number, offset_y: number, offset_z: number): LayoutPoint
 {
-    for (let i = 0; i < layout.group_1.length; i++)
+    const layout_point = get_point_from_group(layout.group_1, id);
+
+    if (offset_x == 0.0 && offset_y == 0.0 && offset_z == 0.0)
     {
-        if (layout.group_1[i].id == id)
+        return { position: layout_point.position, rotation: layout_point.rotation };
+    }
+
+    let offset_matrix = mat4.create();
+    computeModelMatrixSRT
+    (
+        offset_matrix,
+        1.0, 1.0, 1.0,
+        0.0, 0.0, 0.0,
+        offset_x, offset_y, offset_z,
+    );
+    
+    let rotation_matrix = mat4.create();
+    computeModelMatrixSRT
+    (
+        rotation_matrix,
+        1.0, 1.0, 1.0,
+        layout_point.rotation[0], layout_point.rotation[1], layout_point.rotation[2],
+        0.0, 0.0, 0.0,
+    );
+
+    let new_offset_matrix = mat4.create();
+    mat4.multiply(new_offset_matrix, rotation_matrix, offset_matrix);
+
+    const new_position = vec3.fromValues
+    (
+        layout_point.position[0] + new_offset_matrix[12],
+        layout_point.position[1] + new_offset_matrix[13],
+        layout_point.position[2] + new_offset_matrix[14]
+    );
+
+    return{ position: new_position, rotation: layout_point.rotation };
+}
+
+/**
+ * @param group the array of entries to check
+ * @param id the point's ID
+ * @returns the position and rotation of the layout point
+ */
+export function get_point_from_group(group: MapLayoutEntry[], id: number): LayoutPoint
+{
+    for (let i = 0; i < group.length; i++)
+    {
+        if (group[i].id == id)
         {
-            const layout_point = layout.group_1[i];
-
-            if (offset_x == 0.0 && offset_y == 0.0 && offset_z == 0.0)
-            {
-                return { position: layout_point.position, rotation: layout_point.rotation };
-            }
-
-            let offset_matrix = mat4.create();
-            computeModelMatrixSRT
-            (
-                offset_matrix,
-                1.0, 1.0, 1.0,
-                0.0, 0.0, 0.0,
-                offset_x, offset_y, offset_z,
-            );
-            
-            let rotation_matrix = mat4.create();
-            computeModelMatrixSRT
-            (
-                rotation_matrix,
-                1.0, 1.0, 1.0,
-                layout_point.rotation[0], layout_point.rotation[1], layout_point.rotation[2],
-                0.0, 0.0, 0.0,
-            );
-
-            let new_offset_matrix = mat4.create();
-            mat4.multiply(new_offset_matrix, rotation_matrix, offset_matrix);
-
-            const new_position = vec3.fromValues
-            (
-                layout_point.position[0] + new_offset_matrix[12],
-                layout_point.position[1] + new_offset_matrix[13],
-                layout_point.position[2] + new_offset_matrix[14]
-            );
-
-            return{ position: new_position, rotation: layout_point.rotation };
+            const layout_point = group[i];
+            return { position: layout_point.position, rotation: layout_point.rotation };
         }
-
     }
 
     console.error(`layout point with id ${id} not found`);
@@ -168,6 +184,7 @@ export interface MapLayout
     blockwall_entries: MapLayoutEntry[];
     warp_entries: MapLayoutEntry[];
     gate_entries: MapLayoutEntry[];
+    elevator_entries: MapLayoutEntry[];
     group_1: MapLayoutEntry[];
     entries: MapLayoutEntry[];
 }
