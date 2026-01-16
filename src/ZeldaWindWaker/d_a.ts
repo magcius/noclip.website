@@ -6909,6 +6909,7 @@ class d_a_demo00 extends fopAc_ac_c {
         const demoArcName = globals.roomCtrl.demoArcName!;
 
         if (this.nextIds.modelId !== -1) {
+            console.log(`[d_act${this.subtype}] Loading model ID: ${this.nextIds.modelId & 0xFFFF} from ${demoArcName}`);
             const modelData = globals.resCtrl.getObjectIDRes(ResType.Model, demoArcName, this.nextIds.modelId);
 
             let modelFlags = 0x11000002;
