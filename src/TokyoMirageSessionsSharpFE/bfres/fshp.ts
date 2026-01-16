@@ -7,11 +7,13 @@ import { assert, readString } from "../../util.js";
 import { read_bfres_string } from "./bfres_switch.js";
 import { GfxFormat } from "../../gfx/platform/GfxPlatform.js";
 
-// reads from a bfres file and returns an array of FSHP objects
-// buffer: the bfres file
-// offset: start of the fshp array
-// count: number of fshp objects in the array
-// gpu_region_offset: start of the gpu region in the bfres file. needed to access the index buffer data.
+/**
+ * reads from a bfres file and returns an array of FSHP objects
+ * @param buffer the bfres file
+ * @param offset start of the fshp array
+ * @param count number of fshp objects in the array
+ * @param gpu_region_offset start of the gpu region in the bfres file. needed to access the index buffer data.
+ */
 export function parseFSHP(buffer: ArrayBufferSlice, offset: number, count: number, gpu_region_offset: number): FSHP[]
 {
     const view = buffer.createDataView();
@@ -62,8 +64,10 @@ export function parseFSHP(buffer: ArrayBufferSlice, offset: number, count: numbe
 const FSHP_ENTRY_SIZE = 0x60;
 const MESH_ENTRY_SIZE = 0x38;
 
-// Convert the format numbers used by index buffers into a format number that noclip.website understands
-// format: index format number to convert
+/**
+ * Convert the format numbers used by index buffers into a format number that noclip.website understands
+ * @param format index format number to convert
+ */
 function convert_index_format(format: IndexFormat)
 {
     switch (format)

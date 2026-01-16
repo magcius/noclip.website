@@ -69,7 +69,15 @@ export async function create_gimmick
     }
 }
 
-export async function create_common_gimmicks(layout: MapLayout, level_id: string, gate_type:number, is_d018_03: boolean, data_fetcher: DataFetcher, device: GfxDevice): Promise<gimmick[]>
+/**
+ * These gimmicks are used in every dungeon, and are spawned by the executable instead of a lua script
+ * they each have a unique group index in the map layout file
+ * @param layout the map layout object for the current level
+ * @param gate_type it's currently unknown how the game chooses which gate model to use. currently just hard coding it
+ * @param is_d018_03 this map has some hardcoded behavior, and using a bool is faster than a string compare
+ * @returns an array of all the gimmick objects spawned
+ */
+export async function create_common_gimmicks(layout: MapLayout, gate_type:number, is_d018_03: boolean, data_fetcher: DataFetcher, device: GfxDevice): Promise<gimmick[]>
 {
     let gimmicks: gimmick[] = [];
 
@@ -104,9 +112,8 @@ export async function create_common_gimmicks(layout: MapLayout, level_id: string
             let scale = vec3.fromValues(1.0, 1.0, 1.0);
             // scale up the special chests at the end of each room
             if (entry.id == 1130 || entry.id == 1230 || entry.id == 1430)
-            {
-                // TODO: not 100% sure these are right
-                scale = vec3.fromValues(2.0, 2.0, 2.0);
+            {  
+                scale = vec3.fromValues(D018_TREASURE_BOX_SCALE, D018_TREASURE_BOX_SCALE, D018_TREASURE_BOX_SCALE);
             }
             gimmicks.push
             (
@@ -124,7 +131,6 @@ export async function create_common_gimmicks(layout: MapLayout, level_id: string
         }
     }
 
-    const WALL_HEIGHT_OFFSET = 30.0;
     if (layout.blockside_entries.length > 0)
     {
         for (let i = 0; i < layout.blockside_entries.length; i++)
@@ -132,13 +138,11 @@ export async function create_common_gimmicks(layout: MapLayout, level_id: string
             const entry = layout.blockside_entries[i];
             let scale = vec3.fromValues(1.0, 1.0, 1.0);
             let y_position = entry.position[1] - WALL_HEIGHT_OFFSET;
-            // this map has the models scaled down
+            // this map has the blockside walls scaled down
             if (is_d018_03)
             {
-                // TODO: not 100% sure these are right
-                const test = 0.75
-                scale = vec3.fromValues(test, test, test);
-                y_position = entry.position[1] - 20.0;
+                scale = vec3.fromValues(D018_003_WALL_SCALE, D018_003_WALL_SCALE, D018_003_WALL_SCALE);
+                y_position = entry.position[1] - D018_003_WALL_HEIGHT_OFFSET;
             }
             gimmicks.push
             (
@@ -202,7 +206,6 @@ export async function create_common_gimmicks(layout: MapLayout, level_id: string
     {
         let gate_types = [1, 2, 5, 6, 7];
         assert(gate_types.includes(gate_type));
-        const GATE_HEIGHT_OFFSET = 20.0;
         for (let i = 0; i < layout.gate_entries.length; i++)
         {
             const entry = layout.gate_entries[i];
@@ -224,3 +227,10 @@ export async function create_common_gimmicks(layout: MapLayout, level_id: string
 
     return gimmicks;
 }
+
+const WALL_HEIGHT_OFFSET = 30.0;
+const GATE_HEIGHT_OFFSET = 20.0;
+// TODO: not 100% sure these are right
+const D018_TREASURE_BOX_SCALE = 2.0;
+const D018_003_WALL_HEIGHT_OFFSET = 20.0;
+const D018_003_WALL_SCALE = 0.75;

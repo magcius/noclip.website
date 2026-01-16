@@ -6,11 +6,13 @@ import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { align, assert, readString } from "../../util.js";
 import { read_bfres_string } from "./bfres_switch.js";
 
-// reads from a bfres file and returns an array of FVTX objects
-// buffer: the bfres file
-// offset: start of the fvtx array
-// count: number of fvtx objects in the array
-// gpu_region_offset: start of the gpu region in the bfres file. needed to access the vertex buffer data.
+/**
+ * reads from a bfres file and returns an array of FVTX objects
+ * @param buffer the bfres file
+ * @param offset start of the fvtx array
+ * @param count number of fvtx objects in the array
+ * @param gpu_region_offset start of the gpu region in the bfres file. needed to access the vertex buffer data.
+ */
 export function parseFVTX(buffer: ArrayBufferSlice, offset: number, count: number, gpu_region_offset: number): FVTX[]
 {
     const view = buffer.createDataView();
@@ -97,10 +99,12 @@ export function parseFVTX(buffer: ArrayBufferSlice, offset: number, count: numbe
 const FVTX_ENTRY_SIZE = 0x58;
 const ATTRIBUTE_ENTRY_SIZE = 0x10;
 
-// remakes a vertex buffer where _10_10_10_2_Snorm data is converted into S16_RGBA_NORM data.
-// buffer_offset: the _10_10_10_2_Snorm attribute's buffer offset
-// buffer_index: which buffer the _10_10_10_2_Snorm attribute is in
-// vertex_buffers: buffer to modify
+/**
+ * remakes a vertex buffer where _10_10_10_2_Snorm data is converted into S16_RGBA_NORM data.
+ * @param buffer_offset the _10_10_10_2_Snorm attribute's buffer offset
+ * @param buffer_index which buffer the _10_10_10_2_Snorm attribute is in
+ * @param vertex_buffers buffer to modify
+ */
 function convert_10_10_10_2_snorm(buffer_offset: number, buffer_index: number, vertex_buffers: FVTX_VertexBuffer[])
 {
     const element_count = vertex_buffers[buffer_index].data.byteLength / vertex_buffers[buffer_index].stride;
@@ -170,22 +174,22 @@ function convert_s10_to_s32(n: number): number
     return (n << 22) >> 22;
 }
 
-// Convert the format numbers used by FVTX data into a format number that noclip.website understands
-// format: FVTX attribute format number to convert
+/**
+ * Convert the format numbers used by FVTX data into a format number that noclip.website understands
+ * @param format format: FVTX attribute format number to convert
+ */
 function convert_attribute_format(format: AttributeFormat)
 {
     switch (format)
     {
-        // used for blend index
-        case AttributeFormat.idk:
+        case AttributeFormat._8_8_Uint_dupe:
             return GfxFormat.U8_RG;
 
-        // mannequinbig_01 in d003_01 has this
-        case AttributeFormat.idk2:
-            return GfxFormat.S8_RGBA_NORM;
+        case AttributeFormat._8_8_8_8_Uint:
+            return GfxFormat.U8_RGBA;
 
         case AttributeFormat._8_8_Unorm:
-            // TODO this might need to be expanded to 
+            // TODO this might need to be expanded
             return GfxFormat.U8_RG_NORM;
 
         case AttributeFormat._8_8_Snorm:
@@ -225,23 +229,25 @@ function convert_attribute_format(format: AttributeFormat)
     }
 }
 
-// vertex attribute format numbers that bfres files use
+/**
+ * vertex attribute format numbers that bfres files use
+ */
 enum AttributeFormat
 {
-    idk                = 0x0203,
-    _8_8_Unorm         = 0x0901,
-    _8_8_Snorm         = 0x0902,
-    _8_8_Uint          = 0x0903,
-    _8_8_8_8_Unorm     = 0x0B01,
-    _8_8_8_8_Snorm     = 0x0B02,
-    idk2               = 0x0B03,
-    _10_10_10_2_Snorm  = 0x0E02,
-    _16_16_Unorm       = 0x1201,
-    _16_16_Snorm       = 0x1202,
-    _16_16_Float       = 0x1205,
-    _16_16_16_16_Float = 0x1505,
-    _32_32_Float       = 0x1705,
-    _32_32_32_Float    = 0x1805,
+    _8_8_Uint_dupe      = 0x0203, // used for blend index
+    _8_8_Unorm          = 0x0901,
+    _8_8_Snorm          = 0x0902,
+    _8_8_Uint           = 0x0903,
+    _8_8_8_8_Unorm      = 0x0B01,
+    _8_8_8_8_Snorm      = 0x0B02,
+    _8_8_8_8_Uint       = 0x0B03,
+    _10_10_10_2_Snorm   = 0x0E02,
+    _16_16_Unorm        = 0x1201,
+    _16_16_Snorm        = 0x1202,
+    _16_16_Float        = 0x1205,
+    _16_16_16_16_Float  = 0x1505,
+    _32_32_Float        = 0x1705,
+    _32_32_32_Float     = 0x1805,
 }
 
 export interface FVTX_VertexAttribute

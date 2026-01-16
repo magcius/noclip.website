@@ -5,6 +5,10 @@
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { assert, readString } from "../util.js";
 
+/**
+ * reads an APAK file and returns an APAK object
+ * @param buffer the APAK file
+ */
 export function parseAPAK(buffer: ArrayBufferSlice): APAK
 {
     assert(readString(buffer, 0x00, 0x04) === 'APAK');
@@ -30,8 +34,11 @@ export function parseAPAK(buffer: ArrayBufferSlice): APAK
 const FILE_INFO_ARRAY_START = 0x18;
 const FILE_INFO_ENTRY_SIZE = 0x40;
 
-// returns an ArrayBufferSlice array that has the contents of every file with an extension that matches type
-// type: the file extension to look for
+/**
+ * returns an array of all the files in an APAK file with a specified file extension
+ * @param apak the apak file
+ * @param type the file extension to look for
+ */
 export function get_files_of_type(apak: APAK, type: string)
 {
     let file_data_array: ArrayBufferSlice[] = [];
@@ -49,6 +56,11 @@ export function get_files_of_type(apak: APAK, type: string)
     return file_data_array;
 }
 
+/**
+ * returns a file that matches the specified filename
+ * @param apak the apak file
+ * @param name the file name
+ */
 export function get_file_by_name(apak: APAK, name: string): ArrayBufferSlice | undefined
 {
     const file = apak.files.find((f) => f.name === name);

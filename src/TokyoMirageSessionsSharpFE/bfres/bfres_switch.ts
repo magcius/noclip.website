@@ -10,8 +10,10 @@ import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { FMDL, parseFMDL } from "./fmdl.js";
 import { assert, readString } from "../../util.js";
 
-// Reads from a BFRES file and returns a FRES object
-// buffer: the BFRES file
+/**
+ * reads from a BFRES file and returns a FRES object
+ * @param buffer the BFRES file
+ */
 export function parseBFRES(buffer: ArrayBufferSlice): FRES
 {
     assert(readString(buffer, 0x00, 0x04) === 'FRES');
@@ -62,9 +64,12 @@ export function parseBFRES(buffer: ArrayBufferSlice): FRES
 const EMBEDDED_FILE_ENTRY_SIZE = 0xC;
 const RESOURCE_DICTIONARY_ENTRY_SIZE = 0x10;
 
+/**
+ * string tables in BFRES files have the length of the string as the first two bytes
+ * this reads a string starting two bytes after the specified offset
+ */
 export function read_bfres_string(buffer: ArrayBufferSlice, offs: number, littleEndian: boolean): string
 {
-    // first two bytes are the size
     return readString(buffer, offs + 0x02, 0xFF, true);
 }
 

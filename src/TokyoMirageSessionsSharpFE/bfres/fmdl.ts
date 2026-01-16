@@ -10,11 +10,13 @@ import { FSHP, parseFSHP } from "./fshp.js";
 import { FMAT, parseFMAT } from "./fmat.js";
 import { user_data, parse_user_data } from "./user_data.js";
 
-// reads from a bfres file and returns an array of FMDL objects
-// buffer: the bfres file
-// offset: start of the fmdl array
-// count: number of fmdl objects in the array
-// gpu_region_offset: start of the gpu region in the bfres file
+/**
+ * reads from a bfres file and returns an array of FMDL objects
+ * @param buffer the bfres file
+ * @param offset start of the fmdl array
+ * @param count number of fmdl objects in the array
+ * @param gpu_region_offset start of the gpu region in the bfres file.
+ */
 export function parseFMDL(buffer: ArrayBufferSlice, offset: number, count: number, gpu_region_offset: number): FMDL[]
 {
     const view = buffer.createDataView();

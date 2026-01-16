@@ -17,6 +17,9 @@ import { fillMatrix4x3, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelper
 import { assert } from "../util.js";
 import { ViewerRenderInput } from "../viewer.js";
 
+/**
+ * renders a single mesh from a model
+ */
 export class fshp_renderer
 {
     private vertex_buffers: GfxBuffer[] = [];
@@ -31,6 +34,15 @@ export class fshp_renderer
     private sampler_bindings: GfxSamplerBinding[] = [];
     private do_not_render: boolean = false;
 
+    /**
+     * @param fmdl the model that contains this mesh
+     * @param shape_index the index into fmdl's fshp array to render
+     * @param bntx the bntx storing the model's textures
+     * @param gfx_texture_array array returned by deswizzle_and_upload_bntx_textures()
+     * @param position translate this mesh
+     * @param rotation rotate this mesh
+     * @param scale scale this mesh
+     */
     constructor
     (
         device: GfxDevice,
@@ -159,7 +171,13 @@ export class fshp_renderer
         this.program = new TMSFEProgram(fvtx, fmat, fshp, this.bone_matrix_array.length);
     }
 
-    // produce a draw call for this mesh
+    /**
+     * produce a draw call for this mesh
+     * @param renderHelper 
+     * @param viewerInput 
+     * @param renderInstListMain 
+     * @returns 
+     */
     render(renderHelper: GfxRenderHelper, viewerInput: ViewerRenderInput, renderInstListMain: GfxRenderInstList): void
     {
         if (this.do_not_render)

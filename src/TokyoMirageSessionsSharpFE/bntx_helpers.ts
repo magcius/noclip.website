@@ -7,12 +7,14 @@ import { GfxDevice, makeTextureDescriptor2D, GfxTexture, GfxFormat } from '../gf
 import { getChannelFormat } from '../fres_nx/nngfx_enum.js';
 import { deswizzle, decompress, translateImageFormat } from "../fres_nx/tegra_texture.js";
 
-// textures in a bntx file are swizzled, where the texture data is rearranged for performance reasons
-// this is not supported, and if rendered as is, these textures will look garbled
-// so it's necessary to deswizzle the textures to get the original data back
-// the deswizzle function is asynchronous, so this function also handles uploading the textures as well
-// bntx: the bntx object containing all the textures
-// returns a GfxTexture array of the uploaded textures
+/**
+ * textures in a bntx file are swizzled, where the texture data is rearranged for performance reasons.
+ * this is not supported, and if rendered as is, these textures will look garbled.
+ * so it's necessary to deswizzle the textures to get the original data back.
+ * the deswizzle function is asynchronous, so this function also handles uploading the textures as well
+ * @param bntx the bntx object containing all the textures
+ * @returns a GfxTexture array of the uploaded textures
+ */
 export function deswizzle_and_upload_bntx_textures(bntx: BNTX.BNTX, device: GfxDevice): GfxTexture[]
 {
     const gfx_texture_array: GfxTexture[] = [];
@@ -56,12 +58,14 @@ export function deswizzle_and_upload_bntx_textures(bntx: BNTX.BNTX, device: GfxD
     return gfx_texture_array;
 }
 
-// textures can specify a mapping between each channel of the texture data and the final texture's channels
-// for example, a monochrome texture might use the red channel for RGB, and use the green channel for A
-// before uploading the texture to the gpu, we need to apply this mapping to get the final texture data
-// rgba_pixels: the texture data in RGBA format
-// channel_mapping: an array containing 4 numbers, each specifying which channel to use for the R, G, B, and A channel of the final texture
-// returns a remapped rgba_pixels array
+/**
+ * textures can specify a mapping between each channel of the texture data and the final texture's channels.
+ * for example, a monochrome texture might use the red channel for RGB, and use the green channel for A.
+ * before uploading the texture to the gpu, we need to apply this mapping to get the final texture data.
+ * @param rgba_pixels the texture data in RGBA format
+ * @param channel_mapping an array containing 4 numbers, each specifying which channel to use for the R, G, B, and A channel of the final texture
+ * @returns a remapped rgba_pixels array
+ */
 function remap_channels(rgba_pixels: Uint8Array | Int8Array, channel_mapping: number[]): Uint8Array | Int8Array
 {
     let offset = 0;

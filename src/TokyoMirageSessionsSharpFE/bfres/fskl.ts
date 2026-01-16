@@ -9,9 +9,11 @@ import { user_data, parse_user_data } from "./user_data.js";
 import { mat4 } from "gl-matrix";
 import { computeModelMatrixSRT } from "../../MathHelpers.js";
 
-// reads from a bfres file and returns a FSKL object
-// buffer: the bfres file
-// offset: start of the fskl data
+/**
+ * reads from a bfres file and returns a FSKL object
+ * @param buffer the bfres file
+ * @param offset start of the fskl data
+ */
 export function parseFSKL(buffer: ArrayBufferSlice, offset: number): FSKL
 {
     const view = buffer.createDataView();
@@ -73,7 +75,9 @@ export function parseFSKL(buffer: ArrayBufferSlice, offset: number): FSKL
 const BONE_ENTRY_SIZE = 0x60;
 const SMOOTH_RIGID_INDEX_ENTRY_SIZE = 0x2;
 
-// multiply a bone's transformation with all it's parent's transformations to get the real transformation matrix
+/**
+ * multiply a bone's transformation with all it's parent's transformations to get the real transformation matrix
+ */
 export function recursive_bone_transform(bone_index: number, fskl: FSKL): mat4
 {
     const bone = fskl.bones[bone_index];

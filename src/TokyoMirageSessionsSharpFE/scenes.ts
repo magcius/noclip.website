@@ -44,7 +44,7 @@ class TMSFESceneDesc implements SceneDesc
                 gate_type = 2;
             }
 
-            renderer.common_gimmicks = await create_common_gimmicks(layout, this.id, gate_type, is_d018_03, dataFetcher, device);
+            renderer.common_gimmicks = await create_common_gimmicks(layout, gate_type, is_d018_03, dataFetcher, device);
         }
 
         return renderer;

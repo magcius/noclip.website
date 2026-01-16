@@ -2,15 +2,17 @@
 // Handles FMAT (caFe MATerial) data, which are materials for a model
 
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
-import { assert, readString } from "../../util.js";
 import { read_bfres_string } from "./bfres_switch.js";
-import { user_data, parse_user_data } from "./user_data.js";
 import { GfxCompareMode, GfxMipFilterMode, GfxSamplerDescriptor, GfxTexFilterMode, GfxWrapMode } from "../../gfx/platform/GfxPlatform.js";
+import { user_data, parse_user_data } from "./user_data.js";
+import { assert, readString } from "../../util.js";
 
-// reads from a bfres file and returns an array of FMAT objects
-// buffer: the bfres file
-// offset: start of the fmat array
-// count: number of fmat objects in the array
+/**
+ * reads from a bfres file and returns an array of FMAT objects
+ * @param buffer the bfres file
+ * @param offset start of the fmat array
+ * @param count number of fmat objects in the array
+ */
 export function parseFMAT(buffer: ArrayBufferSlice, offset: number, count: number): FMAT[]
 {
     const view = buffer.createDataView();
@@ -113,11 +115,13 @@ enum WrapMode
     Clamp,
 }
 
-// Convert the wrap mode number to the correspoding noclip.website one
-// input: wrap mode number to convert
-function convert_wrap_mode(input: WrapMode)
+/**
+ * Convert the wrap mode number to the corresponding noclip.website one
+ * @param wrap_mode wrap mode number to convert
+ */
+function convert_wrap_mode(wrap_mode: WrapMode)
 {
-    switch(input)
+    switch(wrap_mode)
     {
         case WrapMode.Repeat:
             return GfxWrapMode.Repeat;
@@ -129,7 +133,7 @@ function convert_wrap_mode(input: WrapMode)
             return GfxWrapMode.Clamp;
 
         default:
-            console.error(`wrap mode ${input} not found`);
+            console.error(`wrap mode ${wrap_mode} not found`);
             throw "whoops";
     }
 }
@@ -141,11 +145,13 @@ export enum FilterMode
     Linear,
 }
 
-// Convert the texture filter mode number to the corresponding noclip.website one
-// input: filter mode number to convert
-function convert_tex_filter_mode(input: FilterMode): GfxTexFilterMode
+/**
+ * Convert the texture filter mode number to the corresponding noclip.website one
+ * @param texture_filter_mode filter mode number to convert
+ */
+function convert_tex_filter_mode(texture_filter_mode: FilterMode): GfxTexFilterMode
 {
-    switch(input)
+    switch(texture_filter_mode)
     {
         case FilterMode.Point:
             return GfxTexFilterMode.Point;
@@ -154,16 +160,18 @@ function convert_tex_filter_mode(input: FilterMode): GfxTexFilterMode
             return GfxTexFilterMode.Bilinear;
 
         default:
-            console.error(`texture filter mode ${input} not found`);
+            console.error(`texture filter mode ${texture_filter_mode} not found`);
             throw "whoops";
     }
 }
 
-// Convert the mipmap filter mode number to the corresponding noclip.website one
-// input: filter mode number to convert
-function convert_mip_filter_mode(input: FilterMode): GfxMipFilterMode
+/**
+ * Convert the mipmap filter mode number to the corresponding noclip.website one
+ * @param mip_filter_mode filter mode number to convert
+ */
+function convert_mip_filter_mode(mip_filter_mode: FilterMode): GfxMipFilterMode
 {
-    switch(input)
+    switch(mip_filter_mode)
     {
         case FilterMode.Point:
             return GfxMipFilterMode.Nearest;
@@ -172,7 +180,7 @@ function convert_mip_filter_mode(input: FilterMode): GfxMipFilterMode
             return GfxMipFilterMode.Linear;
 
         default:
-            console.error(`mip filter mode ${input} not found`);
+            console.error(`mip filter mode ${mip_filter_mode} not found`);
             throw "whoops";
     }
 }
@@ -189,11 +197,13 @@ export enum DepthCompare
     Always,
 }
 
-// Convert the depth compare number to the corresponding noclip.website one
-// input: depth compare number to convert
-function convert_depth_compare_mode(input: DepthCompare): GfxCompareMode | undefined
+/**
+ * Convert the depth compare number to the corresponding noclip.website one
+ * @param depth_compare_mode depth compare number to convert
+ */
+function convert_depth_compare_mode(depth_compare_mode: DepthCompare): GfxCompareMode | undefined
 {
-    switch(input)
+    switch(depth_compare_mode)
     {
         case DepthCompare.Never:
             return undefined;
@@ -220,7 +230,7 @@ function convert_depth_compare_mode(input: DepthCompare): GfxCompareMode | undef
             return GfxCompareMode.Always;
 
         default:
-            console.error(`depth compare mode ${input} not found`);
+            console.error(`depth compare mode ${depth_compare_mode} not found`);
             throw "whoops";
     }
 }

@@ -6,6 +6,10 @@ import { mat4, vec3 } from "gl-matrix";
 import { MathConstants, computeModelMatrixSRT } from "../MathHelpers.js";
 import { assert, readString } from "../util.js";
 
+/**
+ * reads from a maplayout.layout file and returns a MapLayout object
+ * @param buffer the maplayout.layout file
+ */
 export function parseLayout(buffer: ArrayBufferSlice): MapLayout
 {
     assert(readString(buffer, 0x0, 0x04) === 'LYTS');
@@ -97,6 +101,15 @@ const GROUP_INDEX_WARP = 17;
 const GROUP_INDEX_GATE = 18;
 const GROUP_INDEX_TREASURE_BOX_02 = 37;
 
+/**
+ * port of mapGetLayoutPoint() from lua scripts.
+ * @param layout the maplayout file to read from
+ * @param id the point's ID. all layout points are stored in group index 1.
+ * @param offset_x this offset is relative to the layout point's facing direction
+ * @param offset_y this offset is relative to the layout point's facing direction
+ * @param offset_z this offset is relative to the layout point's facing direction
+ * @returns the position and rotation of the layout point
+ */
 export function get_layout_point(layout: MapLayout, id: number, offset_x: number, offset_y: number, offset_z: number): LayoutPoint
 {
     for (let i = 0; i < layout.group_1.length; i++)
@@ -137,7 +150,7 @@ export function get_layout_point(layout: MapLayout, id: number, offset_x: number
                 layout_point.position[1] + new_offset_matrix[13],
                 layout_point.position[2] + new_offset_matrix[14]
             );
-            
+
             return{ position: new_position, rotation: layout_point.rotation };
         }
 

@@ -5,10 +5,12 @@
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { read_bfres_string } from "./bfres_switch.js";
 
-// reads from a bfres file and returns an array of user data objects
-// buffer: the bfres file
-// offset: start of the user data array
-// count: number of user data objects in the array
+/**
+ * reads from a bfres file and returns an array of user data objects
+ * @param buffer the bfres file
+ * @param offset ostart of the user data array
+ * @param count number of user data objects in the array
+ */
 export function parse_user_data(buffer: ArrayBufferSlice, offset: number, count: number): user_data[]
 {
     const view = buffer.createDataView();
