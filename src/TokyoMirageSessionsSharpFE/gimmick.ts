@@ -1,7 +1,7 @@
 // gimmick.ts
 // represents a dynamic or interactable object in levels, such as treasure boxes or warp pads
 
-import { parseAPAK, get_file_by_name, APAK } from "./apak.js";
+import { parseAPAK, get_file_by_name } from "./apak.js";
 import { FRES, parseBFRES } from "./bfres/bfres_switch.js";
 import * as BNTX from '../fres_nx/bntx.js';
 import { deswizzle_and_upload_bntx_textures } from "./bntx_helpers";
@@ -9,14 +9,15 @@ import { DataFetcher } from "../DataFetcher.js";
 import { GfxDevice, GfxTexture } from "../gfx/platform/GfxPlatform";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { vec3 } from "gl-matrix";
-import { MapLayout, get_layout_point } from "./maplayout.js";
+import { MapLayout } from "./maplayout.js";
 import { fshp_renderer } from "./render_fshp";
+import { assert } from "../util.js";
 
 export class gimmick
 {
     public fshp_renderers: fshp_renderer[] = [];
 
-    // rotation: euler XYZ rotation in degrees
+    // rotation: euler XYZ rotation in radians
     constructor (position: vec3, rotation: vec3, scale: vec3, fres: FRES, device: GfxDevice, renderHelper: GfxRenderHelper)
     {
         //initialize textures
@@ -46,21 +47,29 @@ export async function create_gimmick
 ): Promise<gimmick>
 {
     const apak = parseAPAK(await data_fetcher.fetchData(apak_path));
-    const fres = parseBFRES(get_file_by_name(apak, bfres_name));
-    const new_gimmick = new gimmick
-    (
-        position,
-        rotation,
-        scale,
-        fres,
-        device,
-        new GfxRenderHelper(device),
-    );
-
-    return new_gimmick;
+    const bfres = get_file_by_name(apak, bfres_name);
+    if (bfres == undefined)
+    {
+        console.error(`file ${bfres_name} not found`);
+        throw("whoops");
+    }
+    else
+    {
+        const fres = parseBFRES(bfres);
+        const new_gimmick = new gimmick
+        (
+            position,
+            rotation,
+            scale,
+            fres,
+            device,
+            new GfxRenderHelper(device),
+        );
+        return new_gimmick;
+    }
 }
 
-export async function create_common_gimmicks(layout: MapLayout, level_id: string, data_fetcher: DataFetcher, device: GfxDevice): Promise<gimmick[]>
+export async function create_common_gimmicks(layout: MapLayout, level_id: string, gate_type:number, is_d018_03: boolean, data_fetcher: DataFetcher, device: GfxDevice): Promise<gimmick[]>
 {
     let gimmicks: gimmick[] = [];
 
@@ -124,7 +133,7 @@ export async function create_common_gimmicks(layout: MapLayout, level_id: string
             let scale = vec3.fromValues(1.0, 1.0, 1.0);
             let y_position = entry.position[1] - WALL_HEIGHT_OFFSET;
             // this map has the models scaled down
-            if (level_id == "d018_03")
+            if (is_d018_03)
             {
                 // TODO: not 100% sure these are right
                 const test = 0.75
@@ -191,6 +200,8 @@ export async function create_common_gimmicks(layout: MapLayout, level_id: string
 
     if (layout.gate_entries.length > 0)
     {
+        let gate_types = [1, 2, 5, 6, 7];
+        assert(gate_types.includes(gate_type));
         const GATE_HEIGHT_OFFSET = 20.0;
         for (let i = 0; i < layout.gate_entries.length; i++)
         {
@@ -202,8 +213,8 @@ export async function create_common_gimmicks(layout: MapLayout, level_id: string
                     vec3.fromValues(entry.position[0], entry.position[1] - GATE_HEIGHT_OFFSET, entry.position[2]),
                     entry.rotation,
                     vec3.fromValues(1.0, 1.0, 1.0),
-                    "TokyoMirageSessionsSharpFE/gimmick/common/gate/skin/01/model.apak",
-                    "gate_01.bfres",
+                    `TokyoMirageSessionsSharpFE/gimmick/common/gate/skin/0${gate_type}/model.apak`,
+                    `gate_0${gate_type}.bfres`,
                     data_fetcher,
                     device
                 )

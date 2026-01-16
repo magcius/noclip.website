@@ -49,7 +49,7 @@ export function get_files_of_type(apak: APAK, type: string)
     return file_data_array;
 }
 
-export function get_file_by_name(apak: APAK, name: string): ArrayBufferSlice
+export function get_file_by_name(apak: APAK, name: string): ArrayBufferSlice | undefined
 {
     const file = apak.files.find((f) => f.name === name);
     if (file !== undefined)
@@ -58,8 +58,7 @@ export function get_file_by_name(apak: APAK, name: string): ArrayBufferSlice
     }
     else
     {
-        console.error(`file ${name} not found`);
-        throw("whoops");
+        return undefined;
     }
 }
 

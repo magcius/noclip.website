@@ -16,7 +16,8 @@ import { vec3 } from "gl-matrix";
 
 export class TMSFEScene implements SceneGfx
 {
-    public gimmicks: gimmick[] = [];
+    public common_gimmicks: gimmick[] = [];
+    public map_gimmicks: gimmick[] = [];
 
     private renderHelper: GfxRenderHelper;
     private renderInstListMain = new GfxRenderInstList();
@@ -24,8 +25,6 @@ export class TMSFEScene implements SceneGfx
 
     constructor(device: GfxDevice, level_id: string, apak: APAK)
     {
-        console.log(apak);
-        
         // get bfres files
         const fres_files: FRES[] = [];
         const level_file_names = get_level_bfres_names(level_id);
@@ -33,7 +32,14 @@ export class TMSFEScene implements SceneGfx
         {
             const file_name = `${level_file_names[i]}.bfres`
             const bfres_data = get_file_by_name(apak, file_name);
-            fres_files.push(parseBFRES(bfres_data));
+            if (bfres_data != undefined)
+            {
+                fres_files.push(parseBFRES(bfres_data));
+            }
+            else
+            {
+                console.error(`file ${file_name} not found`);
+            }
         }
 
         this.renderHelper = new GfxRenderHelper(device);
@@ -48,7 +54,6 @@ export class TMSFEScene implements SceneGfx
 
             // create all fshp_renderers
             const fmdl = fres.fmdl[0];
-            console.log(fmdl);
             const shapes = fmdl.fshp;
             for (let i = 0; i < shapes.length; i++)
             {
@@ -82,11 +87,19 @@ export class TMSFEScene implements SceneGfx
             this.fshp_renderers[i].render(this.renderHelper, viewerInput, this.renderInstListMain);
         }
 
-        for (let gimmick_index = 0; gimmick_index < this.gimmicks.length; gimmick_index++)
+        for (let gimmick_index = 0; gimmick_index < this.common_gimmicks.length; gimmick_index++)
         {
-            for (let fshp_index = 0; fshp_index < this.gimmicks[gimmick_index].fshp_renderers.length; fshp_index++)
+            for (let fshp_index = 0; fshp_index < this.common_gimmicks[gimmick_index].fshp_renderers.length; fshp_index++)
             {
-                this.gimmicks[gimmick_index].fshp_renderers[fshp_index].render(this.renderHelper, viewerInput, this.renderInstListMain);
+                this.common_gimmicks[gimmick_index].fshp_renderers[fshp_index].render(this.renderHelper, viewerInput, this.renderInstListMain);
+            }
+        }
+
+        for (let gimmick_index = 0; gimmick_index < this.map_gimmicks.length; gimmick_index++)
+        {
+            for (let fshp_index = 0; fshp_index < this.map_gimmicks[gimmick_index].fshp_renderers.length; fshp_index++)
+            {
+                this.map_gimmicks[gimmick_index].fshp_renderers[fshp_index].render(this.renderHelper, viewerInput, this.renderInstListMain);
             }
         }
 

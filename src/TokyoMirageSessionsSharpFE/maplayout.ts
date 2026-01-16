@@ -137,6 +137,7 @@ export function get_layout_point(layout: MapLayout, id: number, offset_x: number
                 layout_point.position[1] + new_offset_matrix[13],
                 layout_point.position[2] + new_offset_matrix[14]
             );
+            
             return{ position: new_position, rotation: layout_point.rotation };
         }
 
