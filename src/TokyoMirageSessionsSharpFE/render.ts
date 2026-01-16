@@ -1,5 +1,4 @@
-import { APAK, get_file_by_name } from "./apak.js";
-import { FRES, parseBFRES } from "./bfres/bfres_switch.js";
+import { FRES } from "./bfres/bfres_switch.js";
 import * as BNTX from '../fres_nx/bntx.js';
 import { deswizzle_and_upload_bntx_textures } from "./bntx_helpers.js";
 import { CameraController } from "../Camera.js";
@@ -8,7 +7,6 @@ import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 import { GfxDevice, GfxTexture} from "../gfx/platform/GfxPlatform.js";
 import { gimmick } from "./gimmick.js";
-import { get_level_bfres_names } from "./levels.js";
 import { fshp_renderer } from "./render_fshp.js";
 import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { SceneGfx, ViewerRenderInput } from "../viewer.js";
@@ -23,25 +21,8 @@ export class TMSFEScene implements SceneGfx
     private renderInstListMain = new GfxRenderInstList();
     private fshp_renderers: fshp_renderer[] = [];
 
-    constructor(device: GfxDevice, level_id: string, apak: APAK)
+    constructor(device: GfxDevice, fres_files: FRES[])
     {
-        // get bfres files
-        const fres_files: FRES[] = [];
-        const level_file_names = get_level_bfres_names(level_id);
-        for (let i = 0; i < level_file_names.length; i++)
-        {
-            const file_name = `${level_file_names[i]}.bfres`
-            const bfres_data = get_file_by_name(apak, file_name);
-            if (bfres_data != undefined)
-            {
-                fres_files.push(parseBFRES(bfres_data));
-            }
-            else
-            {
-                console.error(`file ${file_name} not found`);
-            }
-        }
-
         this.renderHelper = new GfxRenderHelper(device);
 
         for(let i = 0; i < fres_files.length; i++)
