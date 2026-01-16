@@ -1085,6 +1085,9 @@ export interface TParseData_fixed {
 export function parseTParagraphData(dst: TParseData_fixed, checkType: number, data: DataView): TParseData_fixed | null {
     let byteIdx = 0;
 
+    if (data.byteLength < 1)
+        return null;
+    
     const check = data.getUint8(byteIdx++);
     const type = check & ~0x8;
     if (type !== checkType) {

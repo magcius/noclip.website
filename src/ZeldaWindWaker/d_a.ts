@@ -5707,7 +5707,7 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
                 case 5:
                     const data = parseTParagraphData(scratchDemoParagraphData, 50, demoActor.stbData)!;
                     assert(data.entryCount === 3)
-                    
+
                     anmBckId = demoActor.stbData.getUint16(data.entryOffset + 0);
                     anmBtpId = demoActor.stbData.getUint16(data.entryOffset + 2);
                     anmBtkId = demoActor.stbData.getUint16(data.entryOffset + 4);
@@ -5722,10 +5722,10 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
                     }
 
                     if (demoActor.stbDataId == 3) {
-                        debugger;
+                        // debugger;
                         // TODO: UNK = 1
                     } else if (demoActor.stbDataId == 5) {
-                        debugger;
+                        // debugger;
                         // TODO: yRotCamDiff = 1;
                     }
                     break;
@@ -5747,10 +5747,10 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
                     }
 
                     if (demoActor.stbDataId == 2) {
-                        debugger;
+                        // debugger;
                         // TODO: UNK = 1
                     } else if (demoActor.stbDataId == 4) {
-                        debugger;
+                        // debugger;
                         // TODO: yRotCamDiff = 1;
                     }
 
@@ -6958,7 +6958,7 @@ class d_a_demo00 extends fopAc_ac_c {
                 this.model = new J3DModelInstance(modelData);
             } else {
                 const bckRes = globals.resCtrl.getObjectIDRes(ResType.Bck, demoArcName, this.nextIds.bckId);
-                this.morf = new mDoExt_McaMorf(modelData, null, null, bckRes, LoopMode.Once, 1.0, 0, -1);
+                this.morf = new mDoExt_McaMorf(modelData, null, null, bckRes, -1 as LoopMode, 1.0, 0, -1);
                 this.model = this.morf.model;
 
                 // TODO: awaCheck()
@@ -6974,7 +6974,7 @@ class d_a_demo00 extends fopAc_ac_c {
 
     private actStandby(globals: dGlobals, deltaTimeFrames: number, demoActor: dDemo_actor_c): void {
         if (this.nextIds.modelId !== -1 || this.nextIds.plightId !== -1) {
-            this.currIds = this.nextIds;
+            this.currIds = { ...this.nextIds };
             this.createHeap(globals);
 
             if (this.model != null) {
