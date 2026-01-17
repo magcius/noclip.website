@@ -6997,7 +6997,7 @@ class d_a_demo00 extends fopAc_ac_c {
 
     private actPerformance(globals: dGlobals, deltaTimeFrames: number, demoActor: dDemo_actor_c): void {
         // Check if model resources match current state
-        if (this.nextIds.modelId !== this.currIds.modelId && this.nextIds.plightId !== (this.currIds.plightId ?? -1)) {
+        if (this.nextIds.modelId !== this.currIds.modelId || this.nextIds.plightId !== (this.currIds.plightId ?? -1)) {
             this.actionFunc = this.actLeaving;
             return;
         }
