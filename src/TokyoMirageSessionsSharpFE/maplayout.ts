@@ -23,6 +23,7 @@ export function parseLayout(buffer: ArrayBufferSlice): MapLayout
     const warp_entries: MapLayoutEntry[] = [];
     const gate_entries: MapLayoutEntry[] = [];
     const elevator_entries: MapLayoutEntry[] = [];
+    const transparent_floor_entries: MapLayoutEntry[] = [];
     const group_0: MapLayoutEntry[] = [];
     const group_1: MapLayoutEntry[] = [];
     const entries: MapLayoutEntry[] = [];
@@ -86,7 +87,11 @@ export function parseLayout(buffer: ArrayBufferSlice): MapLayout
             case GROUP_INDEX_ELEVATOR:
                 elevator_entries.push({ group_index, unk_04, id, position, rotation, unknown });
                 break;
-                
+
+            case GROUP_INDEX_TRANSPARENT_FLOOR:
+                transparent_floor_entries.push({ group_index, unk_04, id, position, rotation, unknown });
+                break;
+
             case GROUP_INDEX_TREASURE_BOX_02:
                 treasurebox_02_entries.push({ group_index, unk_04, id, position, rotation, unknown });
                 break;
@@ -108,6 +113,7 @@ export function parseLayout(buffer: ArrayBufferSlice): MapLayout
         warp_entries,
         gate_entries,
         elevator_entries,
+        transparent_floor_entries,
         group_0,
         group_1,
         entries
@@ -123,6 +129,7 @@ const GROUP_INDEX_BLOCKWALL = 10;
 const GROUP_INDEX_WARP = 17;
 const GROUP_INDEX_GATE = 18;
 const GROUP_INDEX_ELEVATOR = 21;
+const GROUP_INDEX_TRANSPARENT_FLOOR = 31;
 const GROUP_INDEX_TREASURE_BOX_02 = 37;
 
 /**
@@ -203,6 +210,7 @@ export interface MapLayout
     warp_entries: MapLayoutEntry[];
     gate_entries: MapLayoutEntry[];
     elevator_entries: MapLayoutEntry[];
+    transparent_floor_entries: MapLayoutEntry[];
     group_0: MapLayoutEntry[]; // LAYOUT_EVENT
     group_1: MapLayoutEntry[];
     entries: MapLayoutEntry[];

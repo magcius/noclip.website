@@ -11,105 +11,47 @@ export async function create_d004_03_gimmicks(layout: MapLayout, data_fetcher: D
 {
     const gimmicks: gimmick[] = [];
 
-    const CameraFloorRed1 = 1600;
-    const CameraFloorRed2 = 1601;
-    const CameraFloorRed3 = 1602;
-    const CameraFloorRed4 = 1603;
-    const CameraFloorBlue1 = 1650;
-    const CameraFloorBlue2 = 1651;
+    const CameraFloorRed: number[] = [1600, 1601, 1602, 1603];
+    const CameraFloorBlue: number[] = [1650, 1651];
     const FloorButtonRed = 1610;
     const FloorButtonBlue = 1660;
     const RtPointArea03G = 1503;
 
-    const camera_floor_red_1_point = get_layout_point(layout, CameraFloorRed1, 0.0, 0.0, 0.0);
-    gimmicks.push
-    (
-        await create_gimmick
+    for (let i = 0; i < CameraFloorRed.length; i++)
+    {
+        const camera_floor_red_point = get_layout_point(layout, CameraFloorRed[i], 0.0, 0.0, 0.0);
+        gimmicks.push
         (
-            camera_floor_red_1_point.position,
-            camera_floor_red_1_point.rotation,
-            vec3.fromValues(1.0, 1.0, 1.0),
-            "TokyoMirageSessionsSharpFE/gimmick/d004/photofloor/skin/01/model.apak",
-            "photofloor_01.bfres",
-            data_fetcher,
-            device
-        )
-    );
+            await create_gimmick
+            (
+                camera_floor_red_point.position,
+                camera_floor_red_point.rotation,
+                vec3.fromValues(1.0, 1.0, 1.0),
+                "TokyoMirageSessionsSharpFE/gimmick/d004/photofloor/skin/01/model.apak",
+                "photofloor_01.bfres",
+                data_fetcher,
+                device
+            )
+        );
+    }
 
-    const camera_floor_red_2_point = get_layout_point(layout, CameraFloorRed2, 0.0, 0.0, 0.0);
-    gimmicks.push
-    (
-        await create_gimmick
+    for (let i = 0; i < CameraFloorBlue.length; i++)
+    {
+        const camera_floor_blue_point = get_layout_point(layout, CameraFloorBlue[i], 0.0, 0.0, 0.0);
+        gimmicks.push
         (
-            camera_floor_red_2_point.position,
-            camera_floor_red_2_point.rotation,
-            vec3.fromValues(1.0, 1.0, 1.0),
-            "TokyoMirageSessionsSharpFE/gimmick/d004/photofloor/skin/01/model.apak",
-            "photofloor_01.bfres",
-            data_fetcher,
-            device
-        )
-    );
-
-    const camera_floor_red_3_point = get_layout_point(layout, CameraFloorRed3, 0.0, 0.0, 0.0);
-    gimmicks.push
-    (
-        await create_gimmick
-        (
-            camera_floor_red_3_point.position,
-            camera_floor_red_3_point.rotation,
-            vec3.fromValues(1.0, 1.0, 1.0),
-            "TokyoMirageSessionsSharpFE/gimmick/d004/photofloor/skin/01/model.apak",
-            "photofloor_01.bfres",
-            data_fetcher,
-            device
-        )
-    );
-
-    const camera_floor_red_4_point = get_layout_point(layout, CameraFloorRed4, 0.0, 0.0, 0.0);
-    gimmicks.push
-    (
-        await create_gimmick
-        (
-            camera_floor_red_4_point.position,
-            camera_floor_red_4_point.rotation,
-            vec3.fromValues(1.0, 1.0, 1.0),
-            "TokyoMirageSessionsSharpFE/gimmick/d004/photofloor/skin/01/model.apak",
-            "photofloor_01.bfres",
-            data_fetcher,
-            device
-        )
-    );
-
-    const camera_floor_blue_1_point = get_layout_point(layout, CameraFloorBlue1, 0.0, 0.0, 0.0);
-    gimmicks.push
-    (
-        await create_gimmick
-        (
-            camera_floor_blue_1_point.position,
-            camera_floor_blue_1_point.rotation,
-            vec3.fromValues(1.0, 1.0, 1.0),
-            "TokyoMirageSessionsSharpFE/gimmick/d004/photofloor/skin/02/model.apak",
-            "photofloor_02.bfres",
-            data_fetcher,
-            device
-        )
-    );
-
-    const camera_floor_blue_2_point = get_layout_point(layout, CameraFloorBlue2, 0.0, 0.0, 0.0);
-    gimmicks.push
-    (
-        await create_gimmick
-        (
-            camera_floor_blue_2_point.position,
-            camera_floor_blue_2_point.rotation,
-            vec3.fromValues(1.0, 1.0, 1.0),
-            "TokyoMirageSessionsSharpFE/gimmick/d004/photofloor/skin/02/model.apak",
-            "photofloor_02.bfres",
-            data_fetcher,
-            device
-        )
-    );
+            await create_gimmick
+            (
+                camera_floor_blue_point.position,
+                camera_floor_blue_point.rotation,
+                vec3.fromValues(1.0, 1.0, 1.0),
+                "TokyoMirageSessionsSharpFE/gimmick/d004/photofloor/skin/02/model.apak",
+                "photofloor_02.bfres",
+                data_fetcher,
+                device
+            )
+        );
+    }
 
     const fallen_pictures_green_point = get_layout_point(layout, RtPointArea03G, 0.0, 0.0, 0.0);
     gimmicks.push

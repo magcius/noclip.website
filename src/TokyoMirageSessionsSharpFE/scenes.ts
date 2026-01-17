@@ -22,6 +22,7 @@ import { create_d004_03_gimmicks } from "./maps/d004_03.js";
 import { create_d005_03_gimmicks } from "./maps/d005_03.js";
 import { create_d005_04_gimmicks } from "./maps/d005_04.js";
 import { create_d007_01_gimmicks } from "./maps/d007_01.js";
+import { create_d007_02_gimmicks } from "./maps/d007_02.js";
 
 import { create_d010_01_gimmicks } from "./maps/d010_01.js";
 
@@ -150,7 +151,7 @@ const sceneDescs =
     "Illusory Dolhr",
     new TMSFESceneDesc("d007_01", "Altitude 48m to Altitude 54m", ["d007_01", "obj01", "obj02", "obj03", "sky"], create_d007_01_gimmicks),
     new TMSFESceneDesc("d007_05", "Altitude 88m", ["d007_05", "obj01", "obj02", "sky"]),
-    new TMSFESceneDesc("d007_02", "Altitude 122m to Altitude 146m", ["d007_02", "obj01", "obj02", "obj03", "sky"]),
+    new TMSFESceneDesc("d007_02", "Altitude 122m to Altitude 146m", ["d007_02", "obj01", "obj02", "obj03", "sky"], create_d007_02_gimmicks),
     new TMSFESceneDesc("d007_06", "Altitude 180m", ["d007_06", "obj01", "obj02", "sky"]),
     new TMSFESceneDesc("d007_03", "Altitude 232m to Altitude 238m", ["d007_03", "obj01", "obj02", "sky"]),
     new TMSFESceneDesc("d007_07", "Altitude 333m", ["d007_07", "obj01", "obj02", "sky"]),
@@ -209,8 +210,8 @@ const sceneDescs =
     new TMSFESceneDesc("f002_01", "Daitama Observatory 1", ["f002_01", "obj01", "obj02", "obj03", "sky"]),
     new TMSFESceneDesc("f002_02", "Daitama Observatory 2", ["f002_02", "obj01", "obj02", "obj03", "sky"]),
     new TMSFESceneDesc("f002_03", "Daitama Observatory 3", ["f002_03", "obj01", "obj02", "sky"]),
-    new TMSFESceneDesc("f004_01", "Daitou TV 1", ["f004_01", "sky"]),
-    new TMSFESceneDesc("f004_02", "Daitou TV 2", ["f004_02", "obj01", "sky"]),
+    new TMSFESceneDesc("f004_01", "Daitou TV 1", ["f004_01", "sky"], undefined, 5),
+    new TMSFESceneDesc("f004_02", "Daitou TV 2", ["f004_02", "obj01", "sky"], undefined, 5),
     new TMSFESceneDesc("f006_01", "Cosmic Egg 1", ["f006_01", "obj01", "obj02", "obj03", "sky"]),
     new TMSFESceneDesc("f006_02", "Cosmic Egg 2", ["f006_02", "sky"]),
     new TMSFESceneDesc("f010_01", "Toubu Rooftop", ["f010_01", "sky"]),

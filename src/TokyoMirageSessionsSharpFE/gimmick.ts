@@ -205,6 +205,11 @@ export async function create_common_gimmicks(layout: MapLayout, gate_type:number
     if (layout.gate_entries.length > 0)
     {
         let gate_types = [1, 2, 5, 6, 7];
+        // GIMMICK_GATE_L = "common/gate/skin/01"
+        // GIMMICK_GATE_M = "common/gate/skin/02"
+        // GIMMICK_GATE_F004 = "common/gate/skin/05" this model is offset slightly forward so that a wall in daitou TV doesn't clip through
+        // GIMMICK_GATE_BLOOM = "common/gate/skin/06"
+        // GIMMICK_GATE_DLC = "common/gate/skin/07"
         assert(gate_types.includes(gate_type));
         for (let i = 0; i < layout.gate_entries.length; i++)
         {
@@ -266,3 +271,35 @@ export async function create_elevator
 }
 
 const ELEVATOR_HEIGHT_OFFSET = 5.0;
+
+/**
+ * port of gimSetTransFloorFirst() from lua scripts
+ * @param layout the map layout object for the current level
+ * @param layout_id layout id for the transparent floor start position
+ * @returns a transparent floor gimmick
+ */
+export async function create_transparent_floor_first
+(
+    layout: MapLayout,
+    layout_id: number,
+    data_fetcher: DataFetcher,
+    device: GfxDevice
+): Promise<gimmick>
+{
+    const point = get_point_from_group(layout.transparent_floor_entries, layout_id);
+    const position = vec3.fromValues(point.position[0], point.position[1] - TRANSPARENT_FLOOR_HEIGHT_OFFSET, point.position[2]);
+    const scale = vec3.fromValues(TRANSPARENT_FLOOR_SCALE, TRANSPARENT_FLOOR_SCALE, TRANSPARENT_FLOOR_SCALE);
+    return await create_gimmick
+    (
+        position,
+        point.rotation,
+        scale,
+        "TokyoMirageSessionsSharpFE/gimmick/d007/transparentfloor/skin/01/model.apak",
+        "transparentfloor_01.bfres",
+        data_fetcher,
+        device
+    );
+}
+
+const TRANSPARENT_FLOOR_SCALE = 1.25;
+const TRANSPARENT_FLOOR_HEIGHT_OFFSET = 13.75;
