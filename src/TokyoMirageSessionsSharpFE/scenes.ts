@@ -19,6 +19,7 @@ import { create_d003_03_gimmicks } from "./maps/d003_03.js";
 import { create_d004_01_gimmicks } from "./maps/d004_01.js";
 import { create_d004_02_gimmicks } from "./maps/d004_02.js";
 import { create_d004_03_gimmicks } from "./maps/d004_03.js";
+import { create_d005_03_gimmicks } from "./maps/d005_03.js";
 
 /**
  * Defines a single level from Tokyo Mirage Sessions ♯FE
@@ -26,7 +27,7 @@ import { create_d004_03_gimmicks } from "./maps/d004_03.js";
 class TMSFESceneDesc implements SceneDesc
 {
     /**
-     * @param id Identifier for each map. Displayed in the URL. Also used for loading files.
+     * @param id Identifier for each map. Displayed in the URL.
      * @param name The map's display name in the UI
      * @param level_file_names which bfres files in model.apak to load
      * @param map_gimmick_function per map function that spawns interactable objects
@@ -120,7 +121,7 @@ const sceneDescs =
     // new TMSFESceneDesc("d004_06", "Central Square 2"), wii u file
     "Illusory Daitou TV",
     new TMSFESceneDesc("d005_01", "Film Set A: Outdoors", ["d005_01", "obj01", "sky"]),
-    new TMSFESceneDesc("d005_03", "Film Set A: Indoors", ["d005_03", "sky"]),
+    new TMSFESceneDesc("d005_03", "Film Set A: Indoors", ["d005_03", "sky"], create_d005_03_gimmicks),
     new TMSFESceneDesc("d005_02", "Film Set B: Outdoors", ["d005_02", "obj01", "sky"]),
     new TMSFESceneDesc("d005_04", "Film Set B: Indoors", ["d005_04", "sky"]),
     new TMSFESceneDesc("d005_05", "Main Stage 1", ["d005_05", "obj01", "sky"]),
