@@ -6618,6 +6618,21 @@ class d_a_bridge extends fopAc_ac_c {
     }
 }
 
+class d_a_demo00 extends fopAc_ac_c {
+    public static PROCESS_NAME = dProcName_e.d_a_demo00;
+
+    public override subload(globals: dGlobals): cPhs__Status {
+        return cPhs__Status.Next;
+    }
+
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    }
+
+    public override execute(globals: dGlobals, deltaTimeFrames: number): void {
+        super.execute(globals, deltaTimeFrames);
+    }
+}
+
 interface constructor extends fpc_bs__Constructor {
     PROCESS_NAME: dProcName_e;
 }
@@ -6654,5 +6669,6 @@ export function d_a__RegisterConstructors(globals: fGlobals): void {
     R(d_a_py_lk);
     R(d_a_title);
     R(d_a_bridge);
+    R(d_a_demo00);
 }
 

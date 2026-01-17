@@ -223,6 +223,30 @@ export function fpcSCtRq_Request<G>(globals: fGlobals, ly: layer_class | null, p
     return pcId;
 }
 
+export function fpcFCtRq_Request<G>(globals: fGlobals, globalUserData: GlobalUserData, ly: layer_class | null, pcName: number, userData: G): base_process_class | null {
+    const constructor = fpcPf_Get__Constructor(globals, pcName);
+    if (constructor === null)
+        return null;
+
+    if (ly === null)
+        ly = fpcLy_CurrentLayer(globals);
+    
+    const binary = fpcPf_Get__ProfileBinary(globals, pcName);
+    const pcId = fpcBs_MakeOfId(globals);
+    const process = new constructor(globals, pcName, pcId, binary.createDataView());
+    if (process) {
+        fpcLy_SetCurrentLayer(globals, ly);
+        const status = process.load(globalUserData, userData);
+        assert( status === cPhs__Status.Next, "Process failed to load" );
+        
+        // The game pushes this to the Ct queue so that a user supplied callback can be called()
+        // This is only ever used by one actor, daIball_c, which we don't currently implement.
+        fpcEx_ToExecuteQ(globals, process);
+        return process;
+    }
+    return null;
+}
+
 //#endregion
 
 //#region fpcLy (framework process layer)
