@@ -17,6 +17,7 @@ import { create_d003_01_gimmicks } from "./maps/d003_01.js";
 import { create_d003_02_gimmicks } from "./maps/d003_02.js";
 import { create_d003_03_gimmicks } from "./maps/d003_03.js";
 import { create_d004_01_gimmicks } from "./maps/d004_01.js";
+import { create_d004_02_gimmicks } from "./maps/d004_02.js";
 
 /**
  * Defines a single level from Tokyo Mirage Sessions ♯FE
@@ -111,7 +112,7 @@ const sceneDescs =
     new TMSFESceneDesc("d003_08", "Outside 2", ["d003_08", "obj01", "obj02", "sky"]),
     "Illusory Shibuya",
     new TMSFESceneDesc("d004_01", "Block 1", ["d004_01", "obj01", "sky"], create_d004_01_gimmicks),
-    new TMSFESceneDesc("d004_02", "Block 2", ["d004_02", "obj01", "sky"]),
+    new TMSFESceneDesc("d004_02", "Block 2", ["d004_02", "obj01", "sky"], create_d004_02_gimmicks),
     new TMSFESceneDesc("d004_03", "Block 3", ["d004_03", "obj01", "sky"]),
     new TMSFESceneDesc("d004_04", "Circular Square", ["d004_04", "obj01", "sky"]),
     new TMSFESceneDesc("d004_05", "Central Square", ["d004_05", "obj01", "obj02", "sky"]),
