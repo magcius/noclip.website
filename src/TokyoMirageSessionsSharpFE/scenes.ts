@@ -23,6 +23,7 @@ import { create_d005_03_gimmicks } from "./maps/d005_03.js";
 import { create_d005_04_gimmicks } from "./maps/d005_04.js";
 import { create_d007_01_gimmicks } from "./maps/d007_01.js";
 import { create_d007_02_gimmicks } from "./maps/d007_02.js";
+import { create_d007_03_gimmicks } from "./maps/d007_03.js";
 
 import { create_d010_01_gimmicks } from "./maps/d010_01.js";
 
@@ -153,7 +154,7 @@ const sceneDescs =
     new TMSFESceneDesc("d007_05", "Altitude 88m", ["d007_05", "obj01", "obj02", "sky"]),
     new TMSFESceneDesc("d007_02", "Altitude 122m to Altitude 146m", ["d007_02", "obj01", "obj02", "obj03", "sky"], create_d007_02_gimmicks),
     new TMSFESceneDesc("d007_06", "Altitude 180m", ["d007_06", "obj01", "obj02", "sky"]),
-    new TMSFESceneDesc("d007_03", "Altitude 232m to Altitude 238m", ["d007_03", "obj01", "obj02", "sky"]),
+    new TMSFESceneDesc("d007_03", "Altitude 232m to Altitude 238m", ["d007_03", "obj01", "obj02", "sky"], create_d007_03_gimmicks),
     new TMSFESceneDesc("d007_07", "Altitude 333m", ["d007_07", "obj01", "obj02", "sky"]),
     new TMSFESceneDesc("d007_04", "Altitude 428m to Altitude 434m", ["d007_04", "obj01", "obj02", "obj03", "sky"]),
     new TMSFESceneDesc("d007_08", "Altitude 525m", ["d007_08", "obj01", "obj02", "sky"]),
