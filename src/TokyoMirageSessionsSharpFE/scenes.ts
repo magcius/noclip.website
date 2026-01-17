@@ -21,6 +21,7 @@ import { create_d004_02_gimmicks } from "./maps/d004_02.js";
 import { create_d004_03_gimmicks } from "./maps/d004_03.js";
 import { create_d005_03_gimmicks } from "./maps/d005_03.js";
 import { create_d005_04_gimmicks } from "./maps/d005_04.js";
+import { create_d010_01_gimmicks } from "./maps/d010_01.js";
 
 /**
  * Defines a single level from Tokyo Mirage Sessions ♯FE
@@ -140,7 +141,7 @@ const sceneDescs =
     new TMSFESceneDesc("d006_08", "Film Location C", ["d006_08", "obj01", "sky"]),
     new TMSFESceneDesc("d006_09", "Film Location D", ["d006_09", "obj01", "sky"]),
     "Illusory Area of Memories",
-    new TMSFESceneDesc("d010_01", "Great Corridor", ["d010_01", "obj01", "obj02", "sky"]),
+    new TMSFESceneDesc("d010_01", "Great Corridor", ["d010_01", "obj01", "obj02", "sky"], create_d010_01_gimmicks),
     new TMSFESceneDesc("d010_02", "Warrior's Hall", ["d010_02", "sky"]),
     new TMSFESceneDesc("d010_03", "Leader's Hall", ["d010_03", "sky"]),
     new TMSFESceneDesc("d010_04", "Hero's Hall", ["d010_04", "sky"]),
