@@ -32,6 +32,8 @@ import { create_d007_08_gimmicks } from "./maps/d007_08.js";
 import { create_d007_09_gimmicks } from "./maps/d007_09.js";
 import { create_d010_01_gimmicks } from "./maps/d010_01.js";
 
+import { create_f003_08_gimmicks } from "./maps/f003_08.js";
+
 /**
  * Defines a single level from Tokyo Mirage Sessions ♯FE
  */
@@ -210,7 +212,7 @@ const sceneDescs =
     new TMSFESceneDesc("f003_06", "Café Seiren", ["f003_06", "sky"]),
     new TMSFESceneDesc("f003_10", "Café Seiren 2", ["f003_10", "sky"]),
     new TMSFESceneDesc("f003_07", "???", ["f003_07", "sky"]),
-    new TMSFESceneDesc("f003_08", "Anzu", ["f003_08", "sky"]),
+    new TMSFESceneDesc("f003_08", "Anzu", ["f003_08", "sky"], create_f003_08_gimmicks),
     new TMSFESceneDesc("f005_01", "Daiba Studio", ["f005_01", "sky"]),
     new TMSFESceneDesc("f005_02", "Daiba Studio 2", ["f005_02", "obj01", "sky"]),
     new TMSFESceneDesc("f002_01", "Daitama Observatory 1", ["f002_01", "obj01", "obj02", "obj03", "sky"]),
