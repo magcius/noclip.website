@@ -6931,32 +6931,26 @@ class d_a_demo00 extends fopAc_ac_c {
                 modelFlags |= 0x04020000;
             }
 
-            // // Load BTK (texture matrix) animation if specified
-            // const btkResID = this.nextIds.btkId; // TODO: Should be separate BTK ID
-            // if (btkResID !== -1) {
-            //     const btkRes = globals.resCtrl.getObjectIDRes(ResType.Btk, demoArcName, btkResID);
-            //     if (btkRes === null)
-            //         return false;
+            // Load BTK (texture matrix) animation if specified
+            const btkResID = this.nextIds.btkId; // TODO: Should be separate BTK ID
+            if (btkResID !== -1) {
+                const btkRes = globals.resCtrl.getObjectIDRes(ResType.Btk, demoArcName, btkResID);
+                this.btk = new mDoExt_btkAnm();
+                this.btk.init(modelData, btkRes, true, -1 as LoopMode, 1.0, 0, -1);
 
-            //     this.btk = new mDoExt_btkAnm();
-            //     this.btk.init(pModelData, btkRes, true, LoopMode.Repeat, 1.0, 0, -1);
+                if ((btkResID & 0x10000000) === 0)
+                    modelFlags |= 0x200;
+                else
+                    modelFlags |= 0x1200;
+            }
 
-            //     if ((btkResID & 0x10000000) === 0)
-            //         modelFlags |= 0x200;
-            //     else
-            //         modelFlags |= 0x1200;
-            // }
-
-            // // Load BRK (color register) animation if specified
-            // const brkResID = this.nextIds.brkId; // TODO: Should be separate BRK ID
-            // if (brkResID !== -1) {
-            //     const brkRes = globals.resCtrl.getObjectIDRes(ResType.Brk, demoArcName, brkResID);
-            //     if (brkRes === null)
-            //         return false;
-
-            //     this.brk = new mDoExt_brkAnm();
-            //     this.brk.init(pModelData, brkRes, true, LoopMode.Repeat, 1.0, 0, -1);
-            // }
+            // Load BRK (color register) animation if specified
+            const brkResID = this.nextIds.brkId; // TODO: Should be separate BRK ID
+            if (brkResID !== -1) {
+                const brkRes = globals.resCtrl.getObjectIDRes(ResType.Brk, demoArcName, brkResID);
+                this.brk = new mDoExt_brkAnm();
+                this.brk.init(modelData, brkRes, true, -1 as LoopMode, 1.0, 0, -1);
+            }
 
             // Create model with or without BCK animation
             if (this.nextIds.bckId === -1) {
