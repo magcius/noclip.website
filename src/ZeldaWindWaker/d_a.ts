@@ -6690,6 +6690,7 @@ class d_a_demo00 extends fopAc_ac_c {
     private groundY: number = -Infinity;
     private gndChk = new dBgS_GndChk();
 
+    private debugName: string;
 
     public override subload(globals: dGlobals): cPhs__Status {
         dKy_tevstr_init(this.tevStr, globals.mStayNo, 0xFF);
@@ -6905,17 +6906,24 @@ class d_a_demo00 extends fopAc_ac_c {
     }
 
     // TODO: Move this directly into Standby
-    private createHeap(globals: dGlobals): void {
+    private createHeap(globals: dGlobals, demoActor: dDemo_actor_c): void {
         const demoArcName = globals.roomCtrl.demoArcName!;
 
         if (this.nextIds.modelId !== -1) {
-            console.log(`[d_act${this.subtype}] Loading model ID: ${this.nextIds.modelId & 0xFFFF} from ${demoArcName}`);
-            const modelData = globals.resCtrl.getObjectIDRes(ResType.Model, demoArcName, this.nextIds.modelId);
+            const arcInfo = assertExists(globals.resCtrl.findResInfo(demoArcName, globals.resCtrl.resObj));
+            const modelData = arcInfo.getResByID(ResType.Model, this.nextIds.modelId & 0xFFFF);
+
+            // Set the debug name to the model's name from the demo rarc, to make it easier to identify
+            const resEntry = arcInfo.res.find(r => r.file.id === (this.nextIds.modelId & 0xFFFF))!;
+            this.debugName = resEntry.file.name.replace(/\.[^.]*$/, '');
+            demoActor.name = `d_act${this.subtype}: ` + this.debugName;
+            console.log(`[d_act${this.subtype}] Loading model: \"${this.debugName}\" from ${demoArcName}`);
+            
 
             // TODO:
             let modelFlags = 0x11000002;
 
-            // Load BTP (texture pattern) animation if specified
+            // Load BTP (texture pattern, typically facial textures) animation if specified
             if (this.nextIds.btpId !== -1) {
                 const btpRes = globals.resCtrl.getObjectIDRes(ResType.Btp, demoArcName, this.nextIds.btpId);
                 this.btp = new mDoExt_btpAnm();
@@ -6973,7 +6981,7 @@ class d_a_demo00 extends fopAc_ac_c {
     private actStandby(globals: dGlobals, deltaTimeFrames: number, demoActor: dDemo_actor_c): void {
         if (this.nextIds.modelId !== -1 || this.nextIds.plightId !== -1) {
             this.currIds = { ...this.nextIds };
-            this.createHeap(globals);
+            this.createHeap(globals, demoActor);
 
             if (this.model != null) {
                 this.cullMtx = this.model.modelMatrix;
