@@ -237,12 +237,12 @@ export function fpcFCtRq_Request<G>(globals: fGlobals, globalUserData: GlobalUse
     if (process) {
         fpcLy_SetCurrentLayer(globals, ly);
         const status = process.load(globalUserData, userData);
-        if( status === cPhs__Status.Next ) {
-            // The game pushes this to the Ct queue so that a user supplied callback can be called()
-            // This is only ever used by one actor, daIball_c, which we don't currently implement.
-            fpcEx_ToExecuteQ(globals, process);
-            return process;
-        }
+        assert( status === cPhs__Status.Next, "Process failed to load" );
+        
+        // The game pushes this to the Ct queue so that a user supplied callback can be called()
+        // This is only ever used by one actor, daIball_c, which we don't currently implement.
+        fpcEx_ToExecuteQ(globals, process);
+        return process;
     }
     return null;
 }
