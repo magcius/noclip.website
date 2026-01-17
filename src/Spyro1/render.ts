@@ -1,12 +1,15 @@
+import { mat4, vec3 } from "gl-matrix";
 import { defaultMegaState, makeMegaState } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary";
 import { fillMatrix4x4, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { GfxDevice, GfxBufferUsage, GfxBufferFrequencyHint, GfxFormat, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxTexFilterMode, GfxWrapMode, GfxMipFilterMode, GfxTextureUsage, GfxTextureDimension, GfxCompareMode, GfxCullMode } from "../gfx/platform/GfxPlatform";
-import { GfxBuffer } from "../gfx/platform/GfxPlatformImpl";
+import { GfxBuffer, GfxInputLayout, GfxTexture } from "../gfx/platform/GfxPlatformImpl";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { DeviceProgram } from "../Program";
 import { ViewerRenderInput } from "../viewer";
 import { SkyboxData, LevelData } from "./bin";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
+import { createBufferFromData } from "../gfx/helpers/BufferHelpers";
 
 export class LevelProgram extends DeviceProgram {
     public static ub_SceneParams = 0;
@@ -72,22 +75,31 @@ void main() {
     }
 }
 
-const bindingLayouts: GfxBindingLayoutDescriptor[] = [{numUniformBuffers: 1, numSamplers: 1}];
+const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 1, numSamplers: 1 }];
 const bindingLayoutsSky: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 1, numSamplers: 0 }];
 
-export class LevelRenderer {
-    private vertexBuffer;
-    private colorBuffer;
-    private indexBuffer;
-    private uvBuffer;
-    private indexCount;
-    private inputLayout;
-    private texture;
-    private levelMin;
-    private levelMax;
-    private levelCenter;
+const noclipSpaceFromSpyroSpace = mat4.fromValues(
+    1, 0, 0, 0,
+    0, 0, 1, 0,
+    0, 1, 0, 0,
+    0, 0, 0, 1,
+);
 
-    constructor(device: GfxDevice, levelData: LevelData) {
+const scratchMat4a = mat4.create();
+export class LevelRenderer {
+    private vertexBuffer: GfxBuffer;
+    private colorBuffer: GfxBuffer;
+    private indexBuffer: GfxBuffer;
+    private uvBuffer: GfxBuffer;
+    private indexCount: number;
+    private inputLayout: GfxInputLayout;
+    private texture: GfxTexture;
+    private levelMin: vec3;
+    private levelMax: vec3;
+    private levelCenter: vec3;
+
+    constructor(cache: GfxRenderCache, levelData: LevelData) {
+        const device = cache.device;
         const atlas = levelData.atlas;
         this.texture = device.createTexture({
             width: atlas.atlasWidth,
@@ -104,13 +116,13 @@ export class LevelRenderer {
         const xs = vertices.map(v => v[0]);
         const ys = vertices.map(v => v[1]);
         const zs = vertices.map(v => v[2]);
-        this.levelMin = [Math.min(...xs), Math.min(...ys), Math.min(...zs)];
-        this.levelMax = [Math.max(...xs), Math.max(...ys), Math.max(...zs)];
-        this.levelCenter = [
+        this.levelMin = vec3.fromValues(Math.min(...xs), Math.min(...ys), Math.min(...zs));
+        this.levelMax = vec3.fromValues(Math.max(...xs), Math.max(...ys), Math.max(...zs));
+        this.levelCenter = vec3.fromValues(
             (this.levelMin[0] + this.levelMax[0]) * 0.5,
             (this.levelMin[1] + this.levelMax[1]) * 0.5,
             (this.levelMin[2] + this.levelMax[2]) * 0.5,
-        ];
+        );
 
         const expandedPos: number[] = [];
         const expandedCol: number[] = [];
@@ -148,12 +160,12 @@ export class LevelRenderer {
         const uv  = new Float32Array(expandedUV);
         const idx = new Uint32Array(expandedIdx);
 
-        this.vertexBuffer = this.createStaticBuffer(device, GfxBufferUsage.Vertex, pos);
-        this.colorBuffer = this.createStaticBuffer(device, GfxBufferUsage.Vertex, col);
-        this.indexBuffer = this.createStaticBuffer(device, GfxBufferUsage.Index, idx);
-        this.uvBuffer = this.createStaticBuffer(device, GfxBufferUsage.Vertex, uv);
+        this.vertexBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, pos.buffer);
+        this.colorBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, col.buffer);
+        this.uvBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, uv.buffer);
+        this.indexBuffer = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, idx.buffer);
         this.indexCount = idx.length;
-        this.inputLayout = device.createInputLayout({
+        this.inputLayout = cache.createInputLayout({
             vertexAttributeDescriptors: [
                 { location: 0, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0 },  // a_Position
                 { location: 1, bufferIndex: 1, format: GfxFormat.F32_RGB, bufferByteOffset: 0 },  // a_Color
@@ -168,13 +180,7 @@ export class LevelRenderer {
         });
     }
 
-    createStaticBuffer(device: GfxDevice, usage: GfxBufferUsage, data: ArrayBufferView): GfxBuffer {
-        const buffer = device.createBuffer(data.byteLength, usage, GfxBufferFrequencyHint.Static);
-        device.uploadBufferData(buffer, 0, new Uint8Array(data.buffer, data.byteOffset, data.byteLength));
-        return buffer;
-    }
-
-    prepareToRender(device: GfxDevice, renderHelper: GfxRenderHelper, viewerInput: ViewerRenderInput) {
+    public prepareToRender(device: GfxDevice, renderHelper: GfxRenderHelper, viewerInput: ViewerRenderInput) {
         const renderInstManager = renderHelper.renderInstManager;
         const template = renderInstManager.pushTemplate();
         const program = renderHelper.renderCache.createProgram(new LevelProgram());
@@ -197,7 +203,8 @@ export class LevelRenderer {
 
         let offs = template.allocateUniformBuffer(LevelProgram.ub_SceneParams, 20);
         const buf = template.mapUniformBufferF32(LevelProgram.ub_SceneParams);
-        offs += fillMatrix4x4(buf, offs, viewerInput.camera.clipFromWorldMatrix);
+        mat4.mul(scratchMat4a, viewerInput.camera.clipFromWorldMatrix, noclipSpaceFromSpyroSpace);
+        offs += fillMatrix4x4(buf, offs, scratchMat4a);
         offs += fillVec4(buf, offs, this.levelCenter[0], this.levelCenter[1], this.levelCenter[2], 0);
 
         template.setVertexInput(
@@ -215,10 +222,12 @@ export class LevelRenderer {
         renderInstManager.popTemplate();
     }
 
-    destroy(device: GfxDevice) {
+    public destroy(device: GfxDevice) {
         device.destroyBuffer(this.vertexBuffer);
         device.destroyBuffer(this.colorBuffer);
+        device.destroyBuffer(this.uvBuffer);
         device.destroyBuffer(this.indexBuffer);
+        device.destroyTexture(this.texture);
     }
 }
 
@@ -265,9 +274,10 @@ export class SkyboxRenderer {
     private colorBuffer: GfxBuffer;
     private indexBuffer: GfxBuffer;
     private indexCount: number;
-    private inputLayout: any;
+    private inputLayout: GfxInputLayout;
 
-    constructor(device: GfxDevice, sky: SkyboxData) {
+    constructor(cache: GfxRenderCache, sky: SkyboxData) {
+        const device = cache.device;
         const { vertices, colors, faces } = sky;
         const expandedPos: number[] = [];
         const expandedCol: number[] = [];
@@ -288,11 +298,11 @@ export class SkyboxRenderer {
         const pos = new Float32Array(expandedPos);
         const col = new Float32Array(expandedCol);
         const idx = new Uint32Array(expandedIdx);
-        this.vertexBuffer = this.createStaticBuffer(device, GfxBufferUsage.Vertex, pos);
-        this.colorBuffer = this.createStaticBuffer(device, GfxBufferUsage.Vertex, col);
-        this.indexBuffer = this.createStaticBuffer(device, GfxBufferUsage.Index, idx);
+        this.vertexBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, pos.buffer);
+        this.colorBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, col.buffer);
+        this.indexBuffer = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, idx.buffer);
         this.indexCount = idx.length;
-        this.inputLayout = device.createInputLayout({
+        this.inputLayout = cache.createInputLayout({
             vertexAttributeDescriptors: [
                 { location: 0, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0 },
                 { location: 1, bufferIndex: 1, format: GfxFormat.F32_RGB, bufferByteOffset: 0 },
@@ -305,13 +315,7 @@ export class SkyboxRenderer {
         });
     }
 
-    private createStaticBuffer(device: GfxDevice, usage: GfxBufferUsage, data: ArrayBufferView): GfxBuffer {
-        const buffer = device.createBuffer(data.byteLength, usage, GfxBufferFrequencyHint.Static);
-        device.uploadBufferData(buffer, 0, new Uint8Array(data.buffer, data.byteOffset, data.byteLength));
-        return buffer;
-    }
-
-    prepareToRender(device: GfxDevice, renderHelper: GfxRenderHelper, viewerInput: ViewerRenderInput) {
+    public prepareToRender(device: GfxDevice, renderHelper: GfxRenderHelper, viewerInput: ViewerRenderInput) {
         const renderInstManager = renderHelper.renderInstManager;
         const template = renderInstManager.pushTemplate();
 
@@ -329,11 +333,12 @@ export class SkyboxRenderer {
 
         let offs = template.allocateUniformBuffer(SkyboxProgram.ub_SceneParams, 20);
         const buf = template.mapUniformBufferF32(SkyboxProgram.ub_SceneParams);
-        offs += fillMatrix4x4(buf, offs, viewerInput.camera.clipFromWorldMatrix);
+        mat4.mul(scratchMat4a, viewerInput.camera.clipFromWorldMatrix, noclipSpaceFromSpyroSpace);
+        offs += fillMatrix4x4(buf, offs, scratchMat4a);
         offs += fillVec4(buf, offs,
             viewerInput.camera.worldMatrix[12],
-            viewerInput.camera.worldMatrix[13],
             viewerInput.camera.worldMatrix[14],
+            viewerInput.camera.worldMatrix[13],
             0
         );
         template.setVertexInput(
@@ -350,7 +355,7 @@ export class SkyboxRenderer {
         renderInstManager.popTemplate();
     }
 
-    destroy(device: GfxDevice) {
+    public destroy(device: GfxDevice) {
         device.destroyBuffer(this.vertexBuffer);
         device.destroyBuffer(this.colorBuffer);
         device.destroyBuffer(this.indexBuffer);

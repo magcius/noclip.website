@@ -17,8 +17,9 @@ export class Spyro1Renderer implements SceneGfx {
 
     constructor(device: GfxDevice, levelData: LevelData, skybox: SkyboxData) {
         this.renderHelper = new GfxRenderHelper(device);
-        this.levelRenderer = new LevelRenderer(device, levelData);
-        this.skyboxRenderer = new SkyboxRenderer(device, skybox);
+        const cache = this.renderHelper.renderCache;
+        this.levelRenderer = new LevelRenderer(cache, levelData);
+        this.skyboxRenderer = new SkyboxRenderer(cache, skybox);
         this.clearColor = skybox.backgroundColor;
     }
 
@@ -85,10 +86,10 @@ class Spyro1Scene implements SceneDesc {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
-        const levelFile = await context.dataFetcher.fetchData(`${pathBase}/extract/sf${this.subFileID}_ground.bin`);
-        const vram = await context.dataFetcher.fetchData(`${pathBase}/extract/sf${this.subFileID}_vram.bin`);
-        const textureList = await context.dataFetcher.fetchData(`${pathBase}/extract/sf${this.subFileID}_list.bin`);
-        const skyFile = await context.dataFetcher.fetchData(`${pathBase}/extract/sf${this.subFileID}_sky1.bin`);
+        const levelFile = await context.dataFetcher.fetchData(`${pathBase}/sf${this.subFileID}_ground.bin`);
+        const vram = await context.dataFetcher.fetchData(`${pathBase}/sf${this.subFileID}_vram.bin`);
+        const textureList = await context.dataFetcher.fetchData(`${pathBase}/sf${this.subFileID}_list.bin`);
+        const skyFile = await context.dataFetcher.fetchData(`${pathBase}/sf${this.subFileID}_sky1.bin`);
         const tileGroups = parseTileGroups(textureList.createDataView());
         const combinedAtlas = buildCombinedAtlas(new VRAM(vram.copyToBuffer()), tileGroups);
         const renderer = new Spyro1Renderer(device, buildLevelData(levelFile.createDataView(), combinedAtlas), buildSkybox(skyFile.createDataView()));

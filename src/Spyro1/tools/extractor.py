@@ -9,8 +9,8 @@ sf_index = 0
 sf_no_header_strikes = 0
 wad_header_end = False
 
-extract_path = "../../../data/Spyro1/extract"
-wad_path = "../../../data/Spyro1/WAD.WAD"
+extract_path = "../../../data/Spyro1/"
+wad_path = "../../../data/Spyro1_raw/WAD.WAD"
 
 # Extract subfiles from WAD based on its header
 with open(wad_path, "rb") as f:
