@@ -954,8 +954,9 @@ class dDlst_shadowControl_c {
         });
     }
 
-    destroy(device: GfxDevice): void {
+    public destroy(device: GfxDevice): void {
         this.cache.destroy(device);
+        device.destroyTexture(this.shadowAtlas);
     }
 
     public reset(): void {
