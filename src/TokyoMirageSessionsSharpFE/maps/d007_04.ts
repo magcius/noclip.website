@@ -1,19 +1,20 @@
-// d007_03.ts
-// Illusory Dolhr Altitude 232m to Altitude 238m
+// d007_04.ts
+// Illusory Dolhr Altitude 428m to Altitude 434m
 
 import { DataFetcher } from "../../DataFetcher.js";
 import { GfxDevice } from "../../gfx/platform/GfxPlatform.js";
-import { gimmick, create_gimmick } from "./../gimmick.js";
+import { gimmick, create_gimmick, create_transparent_floor_first } from "./../gimmick.js";
 import { vec3 } from "gl-matrix";
 import { get_point_from_group, MapLayout } from "./../maplayout.js";
 
-export async function create_d007_03_gimmicks(layout: MapLayout, data_fetcher: DataFetcher, device: GfxDevice): Promise<gimmick[]>
+export async function create_d007_04_gimmicks(layout: MapLayout, data_fetcher: DataFetcher, device: GfxDevice): Promise<gimmick[]>
 {
     const gimmicks: gimmick[] = [];
 
     const Elevator_toBehind = 1600;
     const Elevator_toAhead = 1601;
-    const Floor_A: number[] = [1500, 1502, 1504];
+    const Floor_A: number[] = [1500, 1502, 1504, 1506];
+    const transparent_floor_start: number[] = [1000, 1100, 1200, 1300, 1700];
 
     const elevator_to_behind_point = get_point_from_group(layout.group_0, Elevator_toBehind);
     gimmicks.push
@@ -61,6 +62,11 @@ export async function create_d007_03_gimmicks(layout: MapLayout, data_fetcher: D
                 device
             )
         );
+    }
+
+    for (let i = 0; i < transparent_floor_start.length; i++)
+    {
+        gimmicks.push(await create_transparent_floor_first(layout, transparent_floor_start[i], data_fetcher, device));
     }
 
     return gimmicks;
