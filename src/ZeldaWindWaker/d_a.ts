@@ -6884,7 +6884,7 @@ class d_a_demo00 extends fopAc_ac_c {
                             const idType = stbData.getUint32(data.entryOffset + i * 8 + 0);
                             const idVal = stbData.getUint32(data.entryOffset + i * 8 + 4);
                             switch (idType) {
-                                case 0: this.nextIds.btpId = idVal; break; // TODO
+                                case 0: this.nextIds.btpId = idVal; break;
                                 case 1: this.nextIds.btkId = idVal; break; // TODO
                                 case 2: this.nextIds.plightId = idVal; break; // TODO
                                 case 3: /* Unused */ break
@@ -6912,18 +6912,16 @@ class d_a_demo00 extends fopAc_ac_c {
             console.log(`[d_act${this.subtype}] Loading model ID: ${this.nextIds.modelId & 0xFFFF} from ${demoArcName}`);
             const modelData = globals.resCtrl.getObjectIDRes(ResType.Model, demoArcName, this.nextIds.modelId);
 
+            // TODO:
             let modelFlags = 0x11000002;
 
-            // // Load BTP (texture pattern) animation if specified
-            // if (this.nextIds.btpId !== -1) {
-            //     const btpRes = globals.resCtrl.getObjectIDRes(ResType.Btp, demoArcName, this.nextIds.btpId);
-            //     if (btpRes === null)
-            //         return false;
-
-            //     this.btp = new mDoExt_btpAnm();
-            //     this.btp.init(pModelData, btpRes, true, LoopMode.Repeat, 1.0, 0, -1);
-            //     modelFlags |= 0x04020000;
-            // }
+            // Load BTP (texture pattern) animation if specified
+            if (this.nextIds.btpId !== -1) {
+                const btpRes = globals.resCtrl.getObjectIDRes(ResType.Btp, demoArcName, this.nextIds.btpId);
+                this.btp = new mDoExt_btpAnm();
+                this.btp.init(modelData, btpRes, true, -1 as LoopMode, 1.0, 0, -1);
+                modelFlags |= 0x04020000;
+            }
 
             // // Load BTK (texture matrix) animation if specified
             // const btkResID = this.nextIds.btkId; // TODO: Should be separate BTK ID
