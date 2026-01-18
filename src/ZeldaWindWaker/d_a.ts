@@ -26,7 +26,7 @@ import { dLib_getWaterY, dLib_waveInit, dLib_waveRot, dLib_wave_c, d_a_sea } fro
 import { cBgW_Flags, dBgS_GndChk, dBgW } from "./d_bg.js";
 import { EDemoActorFlags, dDemo_actor_c, dDemo_setDemoData } from "./d_demo.js";
 import { PeekZResult } from "./d_dlst_peekZ.js";
-import { dComIfGd_addRealShadow, dComIfGd_setShadow, dDlst_alphaModel__Type } from "./d_drawlist.js";
+import { dComIfGd_addRealShadow, dComIfGd_setShadow, dComIfGd_setSimpleShadow2, dDlst_alphaModel__Type } from "./d_drawlist.js";
 import { LIGHT_INFLUENCE, LightType, WAVE_INFO, dKy_change_colpat, dKy_checkEventNightStop, dKy_plight_cut, dKy_plight_set, dKy_setLight__OnMaterialParams, dKy_setLight__OnModelInstance, dKy_tevstr_c, dKy_tevstr_init, setLightTevColorType, settingTevStruct } from "./d_kankyo.js";
 import { ThunderMode, dKyr_get_vectle_calc, dKyw_get_AllWind_vecpow, dKyw_get_wind_pow, dKyw_get_wind_vec, dKyw_get_wind_vecpow, dKyw_rain_set, loadRawTexture } from "./d_kankyo_wether.js";
 import { dPa_splashEcallBack, dPa_trackEcallBack, dPa_waveEcallBack, ParticleGroup } from "./d_particle.js";
@@ -39,6 +39,7 @@ import { mDoExt_3DlineMat1_c, mDoExt_McaMorf, mDoExt_bckAnm, mDoExt_brkAnm, mDoE
 import { MtxPosition, MtxTrans, calc_mtx, mDoMtx_XYZrotM, mDoMtx_XrotM, mDoMtx_YrotM, mDoMtx_YrotS, mDoMtx_ZXYrotM, mDoMtx_ZrotM, mDoMtx_ZrotS, quatM } from "./m_do_mtx.js";
 import { J2DAnchorPos, J2DPane, J2DScreen } from "../Common/JSYSTEM/J2Dv1.js";
 import { parseTParagraphData, TParseData_fixed } from "../Common/JSYSTEM/JStudio.js";
+import { AABB } from "../Geometry.js";
 
 // Framework'd actors
 
@@ -50,6 +51,8 @@ const scratchVec3b = vec3.create();
 const scratchVec3c = vec3.create();
 const scratchVec3d = vec3.create();
 const scratchVec3e = vec3.create();
+const scratchBboxA = new AABB();
+const scratchBboxB = new AABB();
 
 class d_a_grass extends fopAc_ac_c {
     public static PROCESS_NAME = dProcName_e.d_a_grass;
@@ -6679,8 +6682,10 @@ class d_a_demo00 extends fopAc_ac_c {
     // private plight: dDemo_plight_c;
 
     // daDemo00_shadow_c
-    private shadowId: number = -1;
-    private shadowPos = vec3.create();
+    private shadowId: number | null = null;
+    private shadowOffset = vec3.create();
+    private shadowSimpleScale: number = 0;
+    private shadowCasterSize: number = 0;
 
     private currIds: daDemo00_resID_c = new daDemo00_resID_c();
     private nextIds: daDemo00_resID_c = new daDemo00_resID_c();
@@ -6746,24 +6751,17 @@ class d_a_demo00 extends fopAc_ac_c {
             // }
 
             // Handle shadow drawing
-            // if (this.shadowId >= 0) {
-            //     const shadowType = 0; // TODO: Get from this.resID.shadowID
-            //     if (shadowType === 0 || shadowType === 1) {
-            //         vec3.add(scratchVec3a, this.pos, this.shadowPos);
-            //         const casterCenter = vec3.copy(this.gndChk.pos, scratchVec3a);
-            //         const groundY = this.groundY;
-            //         const shadowSize = 800; // TODO: Get from shadow data
-            //         const shadowDepth = 40; // TODO: Get from shadow data
-            //         this.shadowId = dComIfGd_setShadow(globals, this.shadowId, shadowType === 1, this.model,
-            //             casterCenter, shadowSize, shadowDepth, this.pos[1], groundY, this.gndChk.polyInfo, this.tevStr);
-            //     } else {
-            //         // Simple shadow
-            //         vec3.copy(scratchVec3a, this.pos);
-            //         scratchVec3a[1] = globals.scnPlay.bgS.GroundCross(this.gndChk);
-            //         const shadowSize = 800; // TODO: Get from shadow data
-            //         // TODO: dComIfGd_setSimpleShadow2
-            //     }
-            // }
+            if (this.shadowId !== null) {
+                const shadowType = this.currIds.shadowType;
+                if (shadowType === 0 || shadowType === 1) {
+                    const pos = vec3.add(scratchVec3a, this.pos, this.shadowOffset);
+                    this.shadowId = dComIfGd_setShadow(globals, this.shadowId, shadowType === 1, this.model, pos,
+                        this.shadowCasterSize, this.shadowSimpleScale, this.pos[1], this.groundY, this.gndChk.polyInfo, this.tevStr);
+                } else {
+                    const simplePos = vec3.set(scratchVec3a, this.pos[0], this.groundY, this.pos[2]);
+                    dComIfGd_setSimpleShadow2(globals, simplePos, this.groundY, this.shadowSimpleScale, this.gndChk.polyInfo);
+                }
+            }
 
             // Remove animators after drawing
             // if (this.btp !== null) {
@@ -6886,11 +6884,11 @@ class d_a_demo00 extends fopAc_ac_c {
                             const idVal = stbData.getUint32(data.entryOffset + i * 8 + 4);
                             switch (idType) {
                                 case 0: this.nextIds.btpId = idVal; break;
-                                case 1: this.nextIds.btkId = idVal; break; // TODO
+                                case 1: this.nextIds.btkId = idVal; break;
                                 case 2: this.nextIds.plightId = idVal; break; // TODO
                                 case 3: /* Unused */ break
-                                case 4: this.nextIds.brkId = idVal; break; // TODO
-                                case 5: this.nextIds.shadowType = idVal; break; // TODO
+                                case 4: this.nextIds.brkId = idVal; break;
+                                case 5: this.nextIds.shadowType = idVal; break;
                                 case 6: this.nextIds.btkId = idVal | 0x10000000; break; // TODO
                                 case 7: this.nextIds.brkId = idVal | 0x10000000; break; // TODO
                             }
@@ -6905,7 +6903,26 @@ class d_a_demo00 extends fopAc_ac_c {
         this.actionFunc(globals, deltaTimeFrames, demoActor);
     }
 
-    // TODO: Move this directly into Standby
+    private setShadowSize(globals: dGlobals): void {
+        const modelData = this.model!.modelData;
+
+        scratchBboxB.reset();
+        const bbox = scratchBboxB;
+        for (let i = 0; i < modelData.bmd.jnt1.joints.length; i++) {
+            // TODO: only if (joint->getKind() == 0)
+            const joint = modelData.bmd.jnt1.joints[i];
+            const anmMtx = this.model!.shapeInstanceState.jointToWorldMatrixArray[i];
+            scratchBboxA.transform(joint.bbox, anmMtx);
+            bbox.union(bbox, scratchBboxA);
+        }
+
+        bbox.centerPoint(this.shadowOffset);
+
+        const extents = vec3.sub(scratchVec3a, bbox.max, bbox.min);
+        this.shadowCasterSize = vec3.length(extents) * 3.0;
+        this.shadowSimpleScale = Math.hypot(extents[0], extents[2]) * 0.25;
+    }
+
     private createHeap(globals: dGlobals, demoActor: dDemo_actor_c): void {
         const demoArcName = globals.roomCtrl.demoArcName!;
 
@@ -6918,7 +6935,6 @@ class d_a_demo00 extends fopAc_ac_c {
             this.debugName = resEntry.file.name.replace(/\.[^.]*$/, '');
             demoActor.name = `d_act${this.subtype}: ` + this.debugName;
             console.log(`[d_act${this.subtype}] Loading model: \"${this.debugName}\" from ${demoArcName}`);
-            
 
             // TODO:
             let modelFlags = 0x11000002;
@@ -6965,7 +6981,13 @@ class d_a_demo00 extends fopAc_ac_c {
             }
 
             // TODO: Create invisible model if needed (stbDataID === 3)
-            // TODO: Setup shadow if shadowID !== -1
+
+            if (this.nextIds.shadowType !== -1) {
+                this.shadowId = 0;
+                this.model.calcAnim();
+                this.setShadowSize(globals);
+            }
+
             // TODO: Setup ground check
         }
 
@@ -7157,6 +7179,7 @@ class d_a_demo00 extends fopAc_ac_c {
         this.btp = null;
         this.btk = null;
         this.brk = null;
+        this.shadowId = null;
         this.actionFunc = this.actStandby;
     }
 }
