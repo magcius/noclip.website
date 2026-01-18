@@ -1,5 +1,5 @@
 import * as Viewer from '../viewer.js';
-import { GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxDevice, GfxIndexBufferDescriptor, GfxInputLayout, GfxProgram, GfxTexture, GfxVertexBufferDescriptor } from '../gfx/platform/GfxPlatform.js';
+import { GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxProgram, GfxTexture, GfxVertexBufferDescriptor } from '../gfx/platform/GfxPlatform.js';
 import { SceneContext } from '../SceneBase.js';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
 import { GfxRenderInst, GfxRenderInstList, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
@@ -145,6 +145,7 @@ const drawParams = new DrawParams();
 class ShapeRenderer {
     public vertexBufferDescriptors: GfxVertexBufferDescriptor[] = [];
     public indexBufferDescriptors: GfxIndexBufferDescriptor[] = [];
+    public visible = true;
     public inputLayouts: GfxInputLayout[] = [];
     private vertexBuffers: GfxBuffer[] = [];
     private indexBuffers: GfxBuffer[] = [];
@@ -192,26 +193,19 @@ class ShapeRenderer {
     }
 
     public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
-        const aabb = new AABB(
-            this.shape.p0[0],
-            this.shape.p0[1],
-            this.shape.p0[2],
-            this.shape.p1[0],
-            this.shape.p1[1],
-            this.shape.p1[2],
-        )
+        if (!this.visible) return;
         // drawWorldSpaceAABB(
         //     getDebugOverlayCanvas2D(),
         //     viewerInput.camera.clipFromWorldMatrix,
         //     aabb
         // );
-        drawWorldSpacePoint(
-            getDebugOverlayCanvas2D(),
-            viewerInput.camera.clipFromWorldMatrix,
-            this.shape.p0,
-            undefined,
-            20
-        )
+        // drawWorldSpacePoint(
+        //     getDebugOverlayCanvas2D(),
+        //     viewerInput.camera.clipFromWorldMatrix,
+        //     this.shape.p0,
+        //     Red,
+        //     20
+        // )
         for (let i = 0; i < this.indexBuffers.length; i++) {
             if (this.loadedVertexData[i].totalIndexCount === 0)
                 continue;
@@ -219,11 +213,15 @@ class ShapeRenderer {
             this.materialHelper.setOnRenderInst(this.cache, renderInst);
             const m = mat4.create();
             setMatrixTranslation(m, this.shape.p0);
-            scaleMatrix(m, m, this.shape.scale);
+            if ([...this.shape.vertexFormats][0] !== GX.VtxFmt.VTXFMT1) {
+                scaleMatrix(m, m, this.shape.scale);
+            }
             mat4.mul(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix, m);
             this.materialHelper.allocateDrawParamsDataOnInst(renderInst, drawParams);
             this.materialHelper.allocateMaterialParamsDataOnInst(renderInst, this.materialParams);
-            this.textureHolder.fillTextureMapping(this.materialParams.m_TextureMapping[0], this.shape.textures[i + 1]);
+            if (!this.textureHolder.fillTextureMapping(this.materialParams.m_TextureMapping[0], this.shape.textures[i + 1])) {
+                continue;
+            };
             renderInst.setVertexInput(this.inputLayouts[i], [this.vertexBufferDescriptors[i]], this.indexBufferDescriptors[i]);
             renderInst.setDrawCount(this.loadedVertexData[i].totalIndexCount);
             renderInst.setSamplerBindingsFromTextureMappings(this.materialParams.m_TextureMapping);
@@ -303,7 +301,7 @@ export class Scene implements Viewer.SceneGfx {
             shape.prepareToRender(renderInstManager, viewerInput);
         }
 
-        this.drawDebugPoints(this.debugPos[0], viewerInput, Blue);
+        // this.drawDebugPoints(this.debugPos[0], viewerInput);
         // this.drawDebugPoints(this.debugPos[1], viewerInput, Blue, true);
         // this.drawDebugPoints(this.debugPos[2], viewerInput, Red);
         // this.debugDrawAxis(viewerInput);
@@ -422,8 +420,8 @@ class FileManager {
         const shape = this.fileStore.get_shape(name)!;
 
         let x = shape.get_aabb();
-        let p0 = vec3.fromValues(x[0], x[1], x[2]);
-        let p1 = vec3.fromValues(x[3], x[4], x[5]);
+        let p0 = vec3.fromValues(x[0], x[1], -x[2]);
+        let p1 = vec3.fromValues(x[3], x[4], -x[5]);
 
         // each shape has several display lists concatenated together and
         // aligned on 0x20 blocks
@@ -525,7 +523,7 @@ class SceneDesc implements Viewer.SceneDesc {
         const manager = new FileManager(context.dataFetcher, [
             // "polDC0.all",
             "poldc1.all",
-            // "poldc1_stream.all",
+            "poldc1_stream.all",
             // "poldc2.all",
             // "poldc2_stream.all",
             // "poldc3.all",
