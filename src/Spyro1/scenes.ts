@@ -65,7 +65,6 @@ TODO
 Scrolling textures (ex. waterfall in Artisans)
 Water in some flight levels doesn't render correctly
 Better level shader
-Better default save states
 Clean up functions in bin.ts
 
 Nice to have
