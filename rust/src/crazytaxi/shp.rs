@@ -141,6 +141,17 @@ impl Shape {
         }
     }
 
+    pub fn get_aabb(&self) -> Vec<f32> {
+        vec![
+            self.header.aabb_min_x,
+            self.header.aabb_min_y,
+            self.header.aabb_min_z,
+            self.header.aabb_max_x,
+            self.header.aabb_max_y,
+            self.header.aabb_max_z,
+        ]
+    }
+
     pub fn dbg_offs(&self) -> Vec<u32> {
         vec![
             self.header.pos_offset,
@@ -205,5 +216,41 @@ mod test {
             offset: 0,
         };
         dbg!(shape.display_list_loc());
+    }
+
+    #[test]
+    fn bruteforce_find_modelmat() {
+        let data = std::fs::read("../data/CrazyTaxi/sys/main.dol").unwrap();
+        let mut runs: Vec<Vec<(usize, f32)>> = Vec::new();
+        for i in 0..data.len() / 4 {
+            let offs = i*4;
+            let f = f32::from_be_bytes([
+                data[offs],
+                data[offs+1],
+                data[offs+2],
+                data[offs+3],
+            ]);
+            if f.is_nan() || (f.abs() < 0.0001 && f != 0.0) || f.abs() > 100_000.0 {
+                continue;
+            }
+            match runs.last_mut() {
+                Some(run) => {
+                    let (last_offs, _) = run.last().unwrap();
+                    if *last_offs == offs - 4 {
+                        run.push((offs, f));
+                    } else if f != 0.0 {
+                        runs.push(vec![(offs, f)]);
+                    }
+                },
+                None => {
+                    runs.push(vec![(offs, f)]);
+                }
+            }
+        }
+        runs.retain(|run| run.len() >= 10);
+        runs.sort_by_key(|run| run.len());
+        for run in runs {
+            println!("{:02x} ({:02x}): {:?}", run[0].0 + 0x80003000, run[0].0, run.len());
+        }
     }
 }

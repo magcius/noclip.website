@@ -2,6 +2,7 @@ use std::{collections::HashMap, io::Cursor};
 
 use anyhow::{Context, Result};
 use deku::{reader::Reader, DekuReader};
+use nalgebra_glm::normalize;
 use shp::{Shape, ShpHeader};
 use tex::{TexHeader, Texture};
 use wasm_bindgen::prelude::*;
@@ -49,7 +50,8 @@ impl FileStore {
     fn insert_data(&mut self, name: String, file_id: usize, offset: usize, data: &[u8]) -> Result<(), String> {
         let mut reader = Reader::new(Cursor::new(data));
         let length = data.len();
-        if name.ends_with(".shp") {
+        let normalized_name = name.to_lowercase();
+        if normalized_name.ends_with(".shp") {
             let header = ShpHeader::from_reader_with_ctx(&mut reader, ())
                 .context("parsing ShpHeader")
                 .map_err(s)?;
@@ -60,19 +62,19 @@ impl FileStore {
                 textures: Vec::new(),
             };
             shape.populate_textures(data).map_err(s)?;
-            self.shapes.insert(name, shape);
+            self.shapes.insert(normalized_name, shape);
         } else if name.ends_with(".tex") {
             let header = TexHeader::from_reader_with_ctx(&mut reader, ())
                 .context("parsing TexHeader")
                 .map_err(s)?;
-            self.textures.insert(name, Texture {
+            self.textures.insert(normalized_name, Texture {
                 header,
                 length,
                 file_id,
                 offset,
             });
         } else {
-            return Err(format!("unknown file format {}", name));
+            // return Err(format!("unknown file format {}", name));
         }
         Ok(())
     }
@@ -96,10 +98,10 @@ impl FileStore {
     }
 
     pub fn get_texture(&self, name: &str) -> Option<Texture> {
-        self.textures.get(name).cloned()
+        self.textures.get(&name.to_lowercase()).cloned()
     }
 
     pub fn get_shape(&self, name: &str) -> Option<Shape> {
-        self.shapes.get(name).cloned()
+        self.shapes.get(&name.to_lowercase()).cloned()
     }
 }
