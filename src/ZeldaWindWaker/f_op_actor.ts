@@ -229,7 +229,7 @@ export function fopAcIt_JudgeByID<T extends base_process_class>(globals: fGlobal
     return null;
 }
 
-export function fopAcM_searchFromName(globals: dGlobals, procName: string, paramMask: number, param: number): fopAc_ac_c | null {
+export function fopAcM_searchFromName(globals: dGlobals, procName: string, paramMask: number, param: number, layer: number = -1): fopAc_ac_c | null {
     const objName = globals.dStage_searchName(procName);
     if (!objName) { return null; }
 
@@ -238,6 +238,8 @@ export function fopAcM_searchFromName(globals: dGlobals, procName: string, param
         if (act.profName === objName.pcName
             && objName.subtype === act.subtype
             && (paramMask === 0 || param === (act.parameters & paramMask))
+            // noclip modification: multiple layers can be loaded, so allow filtering for actors in a specific layer 
+            && (layer === -1 || act.roomLayer === -1 || layer === act.roomLayer) 
         )
             return act;
     }

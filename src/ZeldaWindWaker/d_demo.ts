@@ -364,6 +364,7 @@ class dDemo_system_c implements TSystem {
     // private ambient: dDemo_ambient_c;
     // private lights: dDemo_light_c[];
     // private fog: dDemo_fog_c;
+    private demoLayer: number = -1;
 
     constructor(
         private globals: dGlobals
@@ -377,7 +378,7 @@ class dDemo_system_c implements TSystem {
 
             case JStage.EObject.Actor:
             case JStage.EObject.PreExistingActor:
-                let actor = fopAcM_searchFromName(this.globals, objName, 0, 0);
+                let actor = fopAcM_searchFromName(this.globals, objName, 0, 0, this.demoLayer);
                 if (!actor) {
                     if (objType === JStage.EObject.Actor && objName.startsWith("d_act")) {
                         actor = fopAcM_fastCreate(this.globals, objName, 0, null, this.globals.mStayNo, null, null, -1) as fopAc_ac_c;
@@ -404,6 +405,10 @@ class dDemo_system_c implements TSystem {
 
     public getCamera() { return this.activeCamera; }
     public getActor(actorID: number) { return this.actors[actorID]; }
+
+    public setLayer(layer: number) {
+        this.demoLayer = layer;
+    }
 
     public remove() {
         this.activeCamera = null;
@@ -435,9 +440,12 @@ export class dDemo_manager_c {
     public getMode() { return this.mode; }
     public getSystem() { return this.system; }
 
-    public create(name: string, data: ArrayBufferSlice, originPos?: vec3, rotYDeg?: number, startFrame?: number): boolean {
+    public create(name: string, data: ArrayBufferSlice, layer: number, originPos?: vec3, rotYDeg?: number, startFrame?: number): boolean {
         this.name = name;
         this.parser = new TParse(this.control);
+
+        // noclip modification: User has control over visible layers. Allow the demo to search for actors from only its layer.
+        this.system.setLayer(layer);
 
         if (!this.parser.parse(data, 0)) {
             console.error('Failed to parse demo data');

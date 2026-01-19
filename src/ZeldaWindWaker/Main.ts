@@ -263,7 +263,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
     public renderCache: GfxRenderCache;
 
     public time: number; // In milliseconds, affected by pause and time scaling
-    public roomLayerMask: number = 0;
+    public roomLayerMask: number = 1;
 
     // Time of day control
     private timeOfDayPanel: UI.TimeOfDayPanel | null = null;
@@ -306,8 +306,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
             this.setVisibleLayerMask(getScenarioMask());
         };
         scenarioSelect.setStrings(range(0, 12).map((i) => `Layer ${i}`));
-        scenarioSelect.setItemsSelected(range(0, 12).map((i) => i === 0));
-        this.setVisibleLayerMask(0x01);
+        scenarioSelect.setItemsSelected(range(0, 12).map((i) => (this.roomLayerMask & (1 << i)) !== 0));
         scenarioPanel.contents.append(scenarioSelect.elem);
 
         const roomsPanel = new UI.LayerPanel();
@@ -987,6 +986,9 @@ class DemoDesc extends SceneDesc implements Viewer.SceneDesc {
 
     async playDemo(globals: dGlobals) {
         globals.scnPlay.demo.remove();
+
+        // Set noclip layer visiblity based on demo's layer
+        globals.renderer.roomLayerMask = (1 << this.layer);
         
         // LkD00 and LkD01 archives contain Link's demo animations. Each demo requires only one of them to be loaded.
         // The file is LkD00 unless dComIfGs_isEventBit(0x2D01) is set, in which case it's LkD01. This bit is set 
@@ -1033,8 +1035,6 @@ class DemoDesc extends SceneDesc implements Viewer.SceneDesc {
             })();
         });
 
-        // @TODO: Set noclip layer visiblity based on this.layer
-
         // From dEvDtStaff_c::specialProcPackage()
         let demoData: ArrayBufferSlice | null = null;
         if (globals.roomCtrl.demoArcName)
@@ -1043,7 +1043,7 @@ class DemoDesc extends SceneDesc implements Viewer.SceneDesc {
             demoData = globals.modelCache.resCtrl.getStageResByName(ResType.Stb, "Stage", this.stbFilename);
 
         if (demoData !== null) {
-            globals.scnPlay.demo.create(this.id, demoData, this.offsetPos, this.rotY, this.startFrame);
+            globals.scnPlay.demo.create(this.id, demoData, this.layer, this.offsetPos, this.rotY, this.startFrame);
             globals.camera.setTrimHeight(this.id != 'title' ? CameraTrimHeight.Cinematic : CameraTrimHeight.Default)
             globals.camera.snapToCinematic();
         } else {
