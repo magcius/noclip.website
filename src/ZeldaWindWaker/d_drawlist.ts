@@ -769,7 +769,7 @@ class dDlst_shadowSimple_c {
         const offsetY = scaleXZ * 16.0 * (1.0 - floorNrm[1]) + 1.0;
 
         // Avoid the rare case of the target position being exactly equal to the eye position
-        const normScale = (floorNrm[1] == 1 && (floorY - pos[1]) == 1) ? 2.0 : 1.0;
+        const normScale = (floorNrm[1] == 1 && (pos[1] - floorY) == 1) ? 2.0 : 1.0;
 
         // Build the matrix which will transform a [-1, 1] cube into our shadow volume oriented to the floor plane (floor normal becomes Z-).
         // A physically accurate drop shadow would use a vertical box to project the shadow texture straight down, but the original
