@@ -6675,7 +6675,6 @@ class d_a_demo00 extends fopAc_ac_c {
     // daDemo00_model_c
     private model: J3DModelInstance | null = null;
     private morf: mDoExt_McaMorf | null = null;
-    private bck: mDoExt_bckAnm | null = null;
     private btp: mDoExt_btpAnm | null = null;
     private btk: mDoExt_btkAnm | null = null;
     private brk: mDoExt_brkAnm | null = null;
@@ -6719,36 +6718,13 @@ class d_a_demo00 extends fopAc_ac_c {
                 this.brk.entry(this.model);
             }
 
-            // const invisibleModel = this.invisibleModel;
-            // if (invisibleModel === null) {
-            // Check for special stage handling
-            if (globals.stageName === "GTower") {
-                // TODO: Set special draw buffers for GTower
-            }
-
-            // if (this.stbDataID === 2) {
-            //     // TODO: Set invisible model mask off buffers
-            // } else if (this.stbDataID === 8) {
-            //     // TODO: Set special buffers
-            // }
+            // TODO: Invisible model drawing
 
             if (this.morf === null) {
                 mDoExt_modelUpdateDL(globals, this.model, renderInstManager);
             } else {
                 this.morf.entryDL(globals, renderInstManager);
             }
-
-            // Restore buffers if needed
-            // if ((this.model.modelData.bmd.shp1.skinDeform !== null) || (this.stbDataID === 2) || (this.stbDataID === 8)) {
-            //     // TODO: Restore invisible model buffers
-            // }
-            // } else {
-            //     if (this.morf === null) {
-            //         invisibleModel.updateDL(this.model);
-            //     } else {
-            //         invisibleModel.updateDL(this.morf);
-            //     }
-            // }
 
             // Handle shadow drawing
             if (this.shadowId !== null) {
@@ -6762,19 +6738,6 @@ class d_a_demo00 extends fopAc_ac_c {
                     dComIfGd_setSimpleShadow2(globals, simplePos, this.groundY, this.shadowSimpleScale, this.gndChk.polyInfo);
                 }
             }
-
-            // Remove animators after drawing
-            // if (this.btp !== null) {
-            //     // Material table removeTexNoAnimator
-            // }
-
-            // if (this.btk !== null) {
-            //     // Material table removeTexMtxAnimator
-            // }
-
-            // if (this.brk !== null) {
-            //     // Material table removeTevRegAnimator
-            // }
         }
     }
 
@@ -6885,12 +6848,12 @@ class d_a_demo00 extends fopAc_ac_c {
                             switch (idType) {
                                 case 0: this.nextIds.btpId = idVal; break;
                                 case 1: this.nextIds.btkId = idVal; break;
-                                case 2: this.nextIds.plightId = idVal; break; // TODO
+                                case 2: this.nextIds.plightId = idVal; break;
                                 case 3: /* Unused */ break
                                 case 4: this.nextIds.brkId = idVal; break;
                                 case 5: this.nextIds.shadowType = idVal; break;
-                                case 6: this.nextIds.btkId = idVal | 0x10000000; break; // TODO
-                                case 7: this.nextIds.brkId = idVal | 0x10000000; break; // TODO
+                                case 6: this.nextIds.btkId = idVal | 0x10000000; break;
+                                case 7: this.nextIds.brkId = idVal | 0x10000000; break;
                             }
                         }
                     }
@@ -6936,7 +6899,7 @@ class d_a_demo00 extends fopAc_ac_c {
             demoActor.name = `d_act${this.subtype}: ` + this.debugName;
             console.log(`[d_act${this.subtype}] Loading model: \"${this.debugName}\" from ${demoArcName}`);
 
-            // TODO:
+            // TODO: These are used to modify the display list for model (DifferedDisplayList)
             let modelFlags = 0x11000002;
 
             // Load BTP (texture pattern, typically facial textures) animation if specified
@@ -6948,7 +6911,7 @@ class d_a_demo00 extends fopAc_ac_c {
             }
 
             // Load BTK (texture matrix) animation if specified
-            const btkResID = this.nextIds.btkId; // TODO: Should be separate BTK ID
+            const btkResID = this.nextIds.btkId;
             if (btkResID !== -1) {
                 const btkRes = globals.resCtrl.getObjectIDRes(ResType.Btk, demoArcName, btkResID);
                 this.btk = new mDoExt_btkAnm();
@@ -6961,7 +6924,7 @@ class d_a_demo00 extends fopAc_ac_c {
             }
 
             // Load BRK (color register) animation if specified
-            const brkResID = this.nextIds.brkId; // TODO: Should be separate BRK ID
+            const brkResID = this.nextIds.brkId;
             if (brkResID !== -1) {
                 const brkRes = globals.resCtrl.getObjectIDRes(ResType.Brk, demoArcName, brkResID);
                 this.brk = new mDoExt_brkAnm();
@@ -6987,8 +6950,6 @@ class d_a_demo00 extends fopAc_ac_c {
                 this.model.calcAnim();
                 this.setShadowSize(globals);
             }
-
-            // TODO: Setup ground check
         }
 
         // TODO: Setup point light if plightResID !== -1
@@ -7087,7 +7048,6 @@ class d_a_demo00 extends fopAc_ac_c {
             else
                 this.model.calcAnim();
 
-
             // Play animations
             if (!(demoActor.flags & EDemoActorFlags.HasAnimFrame)) {
                 // Auto-advance animations
@@ -7165,7 +7125,7 @@ class d_a_demo00 extends fopAc_ac_c {
                 // TODO: Check light data table for position override
                 // If light is attached to a joint, get joint position
 
-                // TODO: dKydm_demo_plight_execute(plight, lightPos)
+                // dKydm_demo_plight_execute(plight, lightPos)
             }
         }
 
@@ -7175,7 +7135,6 @@ class d_a_demo00 extends fopAc_ac_c {
         // Clean up resources
         this.model = null;
         this.morf = null;
-        this.bck = null;
         this.btp = null;
         this.btk = null;
         this.brk = null;
