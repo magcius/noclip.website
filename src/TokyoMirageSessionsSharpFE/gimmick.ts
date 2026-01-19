@@ -17,7 +17,9 @@ export class gimmick
 {
     public fshp_renderers: fshp_renderer[] = [];
 
-    // rotation: euler XYZ rotation in radians
+    /**
+     * @param rotation euler XYZ rotation in radians
+     */
     constructor (position: vec3, rotation: vec3, scale: vec3, fres: FRES, device: GfxDevice, renderHelper: GfxRenderHelper)
     {
         //initialize textures
@@ -82,7 +84,7 @@ export async function create_common_gimmicks(layout: MapLayout, gate_type:number
     let gimmicks: gimmick[] = [];
 
     // yellow treasure boxes
-    if (layout.treasurebox_01_entries.length > 0)
+    if (layout.treasurebox_01_entries.length > 0) // TODO can i remove these if statements?
     {
         for (let i = 0; i < layout.treasurebox_01_entries.length; i++)
         {

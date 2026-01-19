@@ -189,11 +189,9 @@ function convert_attribute_format(format: AttributeFormat)
             return GfxFormat.U8_RGBA;
 
         case AttributeFormat._8_8_Unorm:
-            // TODO this might need to be expanded
             return GfxFormat.U8_RG_NORM;
 
         case AttributeFormat._8_8_Snorm:
-            // TODO this might need to be converted
             return GfxFormat.S8_RG_NORM;
 
         case AttributeFormat._8_8_Uint:
