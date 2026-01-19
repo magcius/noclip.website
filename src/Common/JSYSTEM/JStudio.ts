@@ -1080,12 +1080,14 @@ export interface TParseData_fixed {
     entryCount: number;
     entrySize: number;
     entryOffset: number;
+    entryNext: number | null;
 }
 
-export function parseTParagraphData(dst: TParseData_fixed, checkType: number, data: DataView): TParseData_fixed | null {
-    let byteIdx = 0;
+export function parseTParagraphData(dst: TParseData_fixed, checkType: number, data: DataView, offset: number = 0): TParseData_fixed | null {
+    // From JStudio::stb::data::TParse_TParagraph_data::getData()
+    let byteIdx = offset;
 
-    if (data.byteLength < 1)
+    if (data.byteLength <= byteIdx)
         return null;
     
     const check = data.getUint8(byteIdx++);
@@ -1098,11 +1100,18 @@ export function parseTParagraphData(dst: TParseData_fixed, checkType: number, da
     if ( check & 0x8 ) {
         dst.entryCount = data.getUint8(byteIdx++);
     }
+    dst.entryOffset = byteIdx;
+
+    const sizeIdx = check & 0x7;
+    if( sizeIdx === 0 ) {
+        dst.entryNext = null;
+        dst.entrySize = 0;
+        return dst;
+    }
 
     const tParagraphDataSizes = [0x0, 0x1, 0x2, 0x4, 0x8, 0x10, 0x20, 0x40];
     dst.entrySize = tParagraphDataSizes[check & 0x07];
-    
-    dst.entryOffset = byteIdx;
+    dst.entryNext = dst.entryOffset + dst.entrySize * dst.entryCount;
     return dst;
 }
 

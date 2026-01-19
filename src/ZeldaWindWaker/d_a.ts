@@ -5120,6 +5120,8 @@ class d_a_npc_zl1 extends fopNpc_npc_c {
     }
 }
 
+const scratchDemoParagraphData: TParseData_fixed = { entryCount: 0, entrySize: 0, entryOffset: 0, entryNext: null };
+
 enum LkAnim {
     WAITS = 0x00,
     WALK = 0x01,
@@ -5710,25 +5712,20 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
                 case 5:
                     const data = parseTParagraphData(scratchDemoParagraphData, 50, demoActor.stbData)!;
                     assert(data.entryCount === 3)
-
                     anmBckId = demoActor.stbData.getUint16(data.entryOffset + 0);
                     anmBtpId = demoActor.stbData.getUint16(data.entryOffset + 2);
                     anmBtkId = demoActor.stbData.getUint16(data.entryOffset + 4);
 
-                    const handView = new DataView(demoActor.stbData.buffer, demoActor.stbData.byteOffset + 8)
-                    const handData = parseTParagraphData(scratchDemoParagraphData, 49, handView)!;
-                    handIdxRight = demoActor.stbData.getUint8(9);
-                    handIdxLeft = demoActor.stbData.getUint8(10);
+                    const handData = parseTParagraphData(scratchDemoParagraphData, 49, demoActor.stbData, assertExists(data.entryNext))!;
+                    handIdxRight = demoActor.stbData.getUint8(handData.entryOffset + 0);
+                    handIdxLeft = demoActor.stbData.getUint8(handData.entryOffset + 1);
                     if (handData.entryCount == 3) {
                         // TODO: const newOldFrameMorfCounter = demoActor.stbData.getUint8(handData.entryOffset + 2);
-                        // debugger;
                     }
 
                     if (demoActor.stbDataId == 3) {
-                        // debugger;
                         // TODO: UNK = 1
                     } else if (demoActor.stbDataId == 5) {
-                        // debugger;
                         // TODO: yRotCamDiff = 1;
                     }
                     break;
@@ -5741,8 +5738,7 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
                     const bckData = parseTParagraphData(scratchDemoParagraphData, 50, demoActor.stbData)!;
                     anmBckId = demoActor.stbData.getUint16(bckData.entryOffset);
 
-                    const extraView = new DataView(demoActor.stbData.buffer, demoActor.stbData.byteOffset + 3);
-                    const extraData = parseTParagraphData(scratchDemoParagraphData, 49, extraView)!;
+                    const extraData = parseTParagraphData(scratchDemoParagraphData, 49, demoActor.stbData, assertExists(bckData.entryNext))!;
                     handIdxLeft = demoActor.stbData.getUint8(extraData.entryOffset + 0);
                     handIdxRight = demoActor.stbData.getUint8(extraData.entryOffset + 1);
                     if (extraData.entryCount == 3) {
@@ -5750,13 +5746,10 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
                     }
 
                     if (demoActor.stbDataId == 2) {
-                        // debugger;
                         // TODO: UNK = 1
                     } else if (demoActor.stbDataId == 4) {
-                        // debugger;
                         // TODO: yRotCamDiff = 1;
                     }
-
                     break;
 
                 default:
@@ -6666,7 +6659,6 @@ class daDemo00_resID_c {
     public shadowType: number = -1;
 }
 
-const scratchDemoParagraphData: TParseData_fixed = { entryCount: 0, entrySize: 0, entryOffset: 0 };
 class d_a_demo00 extends fopAc_ac_c {
     public static PROCESS_NAME = dProcName_e.d_a_demo00;
 
