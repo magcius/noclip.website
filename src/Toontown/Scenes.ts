@@ -2,17 +2,12 @@ import { type ReadonlyVec3, vec3, vec4 } from "gl-matrix";
 import type { GfxDevice } from "../gfx/platform/GfxPlatform";
 import type { SceneContext } from "../SceneBase";
 import type * as Viewer from "../viewer";
-import { AnimControl } from "./anim/AnimControl";
-import type { BAMFile } from "./BAMFile";
 import { DNASceneBuilder } from "./dna/SceneBuilder";
+import { pathBase, ToontownLoader } from "./Loader";
 import {
-  AnimBundleNode,
-  Character,
-  ColorAttrib,
   CompassEffect,
   CompassEffectProperties,
   CullBinAttrib,
-  DecalEffect,
   DepthTestAttrib,
   DepthWriteAttrib,
   DepthWriteMode,
@@ -23,15 +18,23 @@ import {
   TransparencyAttrib,
   TransparencyMode,
 } from "./nodes";
+import {
+  type AnimatedProp,
+  animatedPropMap,
+  Char,
+  GenericAnimatedProp,
+  HydrantInteractiveProp,
+  MailboxInteractiveProp,
+  TrashcanInteractiveProp,
+} from "./objects";
 import { ToontownRenderer } from "./Render";
-import { pathBase, ToontownResourceLoader } from "./Resources";
 
 interface NeighborhoodConfig {
   storageDNA: string | null; // Hood-wide storage (e.g., storage_TT)
   skybox: string | null; // Hood-wide skybox (e.g., TT_sky)
   callback?: (
     scene: PandaNode,
-    loader: ToontownResourceLoader,
+    loader: ToontownLoader,
     builder: DNASceneBuilder,
   ) => Promise<void>;
 }
@@ -40,10 +43,11 @@ interface DNASceneConfig {
   storageDNA: string[]; // Area-specific storage (e.g., storage_TT_sz)
   sceneDNA: string | null; // Main scene DNA file (e.g., toontown_central_sz)
   extraModels?: string[]; // Additional models to load
+  cacheModels?: string[]; // Addition models to load (& not add to scene)
   musicFile?: string; // Background music file
   callback?: (
     scene: PandaNode,
-    loader: ToontownResourceLoader,
+    loader: ToontownLoader,
     builder: DNASceneBuilder,
   ) => Promise<void>;
 }
@@ -160,8 +164,7 @@ const Neighborhoods: Record<string, NeighborhoodConfig> = {
 
         const modelPath = houseModels[0]; // Math.floor(Math.random() * houseModels.length)
         const model = await loader.loadModel(modelPath);
-        const house = model.getRoot().clone();
-        baseNode.addChild(house);
+        const house = model.cloneTo(baseNode);
 
         // Set wall color
         const colorIndex = i; //Math.floor(Math.random() * houseColors.length);
@@ -184,9 +187,9 @@ const Neighborhoods: Record<string, NeighborhoodConfig> = {
 
         // Set chimney color
         const chimneyColor = houseColors2[colorIndex];
-        house
-          .findAllMatches("**/chim*")
-          .forEach((n) => n.setColor(chimneyColor));
+        house.findAllMatches("**/chim*").forEach((n) => {
+          n.setColor(chimneyColor);
+        });
 
         // Setup door
         const doorOrigin = house.find("**/door_origin");
@@ -211,8 +214,7 @@ const Neighborhoods: Record<string, NeighborhoodConfig> = {
         house.find("**/mat")?.setColor(vec4.fromValues(0.4, 0.357, 0.259, 1));
 
         // Setup mailbox
-        const mailbox = mailboxModel.getRoot().clone();
-        baseNode.addChild(mailbox);
+        const mailbox = mailboxModel.cloneTo(baseNode);
 
         let zOffset = 0;
         if (i === 2) {
@@ -315,10 +317,10 @@ class ToontownDNASceneDesc implements Viewer.SceneDesc {
     device: GfxDevice,
     context: SceneContext,
   ): Promise<Viewer.SceneGfx> {
-    const loader = await context.dataShare.ensureObject<ToontownResourceLoader>(
+    const loader = await context.dataShare.ensureObject<ToontownLoader>(
       `${pathBase}/loader`,
       async () => {
-        const loader = new ToontownResourceLoader(context.dataFetcher);
+        const loader = new ToontownLoader(context.dataFetcher);
         await loader.loadManifest();
         return loader;
       },
@@ -341,14 +343,14 @@ class ToontownDNASceneDesc implements Viewer.SceneDesc {
     if (this.sceneConfig.extraModels) {
       for (const modelPath of this.sceneConfig.extraModels) {
         const model = await loader.loadModel(modelPath);
-        scene.addChild(model.getRoot().clone());
+        model.cloneTo(scene);
       }
     }
 
     const hood = Neighborhoods[this.neighborhood];
     if (hood.skybox) {
       const model = await loader.loadModel(hood.skybox);
-      const instance = model.getRoot().clone();
+      const instance = model.cloneTo(scene);
       instance.tags.set("sky", "Regular");
       instance.setEffect(
         CompassEffect.create(CompassEffectProperties.Position, cameraNode),
@@ -358,104 +360,60 @@ class ToontownDNASceneDesc implements Viewer.SceneDesc {
       instance.setAttrib(DepthWriteAttrib.create(DepthWriteMode.Off));
       // Ensure sky renders before clouds
       instance.find("**/Sky")?.reparentTo(instance, -1);
-      scene.addChild(instance);
     }
 
     // Remove overlapping door frames
-    scene.findAllMatches("**/doorFrameHoleLeft").forEach((node) => node.hide());
-    scene
-      .findAllMatches("**/doorFrameHoleRight")
-      .forEach((node) => node.hide());
+    scene.findAllMatches("**/doorFrameHoleLeft").forEach((node) => {
+      node.hide();
+    });
+    scene.findAllMatches("**/doorFrameHoleRight").forEach((node) => {
+      node.hide();
+    });
 
     // Run custom callbacks
     await hood.callback?.(scene, loader, sceneBuilder);
     await this.sceneConfig.callback?.(scene, loader, sceneBuilder);
 
-    // Load animations
-    async function applyAnim(node: PandaNode, animPath: string) {
-      // console.log(`Loading animation ${animPath} for ${node.name}`);
-      let animModel: BAMFile;
-      try {
-        animModel = await loader.loadModel(animPath);
-      } catch (e) {
-        console.warn(e);
-        return;
-      }
-      const animBundleNode = animModel.getRoot().findNodeByType(AnimBundleNode);
-      if (!animBundleNode) {
-        console.error(`Failed to load animation ${animPath} for ${node.name}`);
-        return;
-      }
-      const animBundle = animBundleNode.animBundle;
-      if (!animBundle) {
-        console.error(
-          `Failed to load animation bundle for ${animPath} for ${node.name}`,
-        );
-        return;
-      }
-      // console.log(`${node.name} bundle`, animBundle);
-      const character = node.findNodeByType(Character);
-      if (!character) {
-        console.error(`Failed to find character for ${node.name}`);
-        return;
-      }
-      const partBundle = character.partBundles[0];
-      if (!partBundle) {
-        throw new Error("Character has no PartBundle");
-      }
-      const control = new AnimControl(partBundle);
-      partBundle.bindAnim(control, animBundle);
-      control.loop();
-    }
-
-    // Load animations from DNA tags
-    for (const node of scene.findAllMatches("**/=DNAAnim")) {
-      const anim = node.tags.get("DNAAnim");
-      const modelPath = node.tags.get("DNAModel") ?? "";
-      const path = modelPath.substring(0, modelPath.lastIndexOf("/"));
-      const animPath = `${path}/${anim}`;
-      applyAnim(node, animPath);
-    }
-
-    // Load animations from node names
-    const animMap = new Map<string, string>();
-    animMap.set(
-      "HQTelescopeAnimatedProp",
-      "phase_3.5/models/props/HQ_telescope-chan",
-    );
-    animMap.set(
-      "HQPeriscopeAnimatedProp",
-      "phase_3.5/models/props/HQ_periscope-chan",
-    );
-    animMap.set(
-      "PetShopFishAnimatedProp",
-      "phase_4/models/props/exteriorfish-swim",
-    );
-    for (const node of scene.findAllMatches("**/=DNACode")) {
-      const code = node.tags.get("DNACode");
-      if (!code) continue;
-      let extracted: string;
-      if (code.startsWith("interactive_prop_")) {
-        extracted = code.substring("interactive_prop_".length).split("__")[0];
-      } else if (code.startsWith("animated_prop_generic_")) {
-        extracted = code
-          .substring("animated_prop_generic_".length)
-          .split("__")[0];
-      } else if (code.startsWith("animated_prop_")) {
-        extracted = code.substring("animated_prop_".length).split("_")[0];
-      } else if (code.startsWith("animated_building_")) {
-        extracted = code.substring("animated_building_".length).split("__")[0];
+    // Create animated props
+    const animProps: AnimatedProp[] = [];
+    const animPropNodes = scene.findAllMatches("**/animated_prop_*");
+    for (const node of animPropNodes) {
+      let prop: AnimatedProp;
+      if (node.name.startsWith("animated_prop_generic")) {
+        prop = new GenericAnimatedProp(node);
       } else {
-        continue;
+        const className = node.name.substring(
+          "animated_prop_".length,
+          node.name.length - "_DNARoot".length,
+        );
+        const factory = animatedPropMap.get(className);
+        if (!factory) {
+          console.warn(`No factory found for class ${className}`);
+          continue;
+        }
+        prop = new factory(node);
       }
-      // console.log(`Checking for animation ${extracted}`);
-      const path = animMap.get(extracted);
-      if (!path) {
-        console.warn(`No animation found for code ${code}`);
-        continue;
-      }
-      applyAnim(node, path);
+      animProps.push(prop);
     }
+    const interactivePropNodes = scene.findAllMatches("**/interactive_prop_*");
+    for (const node of interactivePropNodes) {
+      if (node.name.includes("hydrant")) {
+        animProps.push(new HydrantInteractiveProp(node));
+      } else if (node.name.includes("trashcan")) {
+        animProps.push(new TrashcanInteractiveProp(node));
+      } else if (node.name.includes("mailbox")) {
+        animProps.push(new MailboxInteractiveProp(node));
+      } else {
+        animProps.push(new GenericAnimatedProp(node));
+      }
+    }
+    await Promise.all(
+      animProps.map(async (prop) => {
+        await prop.init();
+        prop.enter();
+      }),
+    );
+    // TODO: clean up after
 
     console.log(`Loaded DNA scene: ${this.name}`);
 
@@ -479,30 +437,11 @@ const sceneDescs = [
       storageDNA: ["phase_4/dna/storage_TT_sz", "phase_5/dna/storage_TT_town"],
       sceneDNA: "phase_4/dna/toontown_central_sz",
       musicFile: "phase_4/audio/bgm/TC_nbrhood.mid",
-      callback: async (scene, loader, _builder) => {
-        const model = await loader.loadModel("phase_3/models/char/mickey-1200");
-        const instance = model.getRoot().cloneTo(scene);
-        instance.pos = vec3.fromValues(-27.5, -5.25, 0.0);
-        instance.setH(90);
-        instance.tags.set("DNAAnim", "phase_3/models/char/mickey-wait");
-
-        // Fix pupil rendering
-        const eyes = instance.find("**/eyes");
-        if (eyes) {
-          instance.findAllMatches("**/joint_pupil?").forEach((pupil) => {
-            pupil.reparentTo(eyes);
-          });
-          eyes.setEffect(new DecalEffect());
-        }
-
-        // Add drop shadow
-        const shadowModel = await loader.loadModel(
-          "phase_3/models/props/drop_shadow",
-        );
-        const shadow = shadowModel.getRoot().cloneTo(instance);
-        shadow.pos = vec3.fromValues(0, 0, 0.025);
-        shadow.scale = vec3.fromValues(0.4, 0.4, 0.4);
-        shadow.setAttrib(ColorAttrib.flat(vec4.fromValues(0, 0, 0, 0.5)), 1);
+      callback: async (scene, _loader, _builder) => {
+        const char = new Char();
+        await char.generateChar("mk");
+        char.walkToNextPoint();
+        scene.addChild(char);
       },
     },
   ),
@@ -569,12 +508,10 @@ const sceneDescs = [
       if (westPier) westPier.hpr = vec3.fromValues(-90, 0.25, 0);
 
       // Spawn Donald
-      const donaldModel = await loader.loadModel(
-        "phase_6/models/char/donald-wheel-1000",
-      );
-      const donald = donaldModel.getRoot().cloneTo(boat);
+      const donald = new Char();
+      await donald.generateChar("dw");
       donald.pos = vec3.fromValues(0, -1, 3.95);
-      donald.tags.set("DNAAnim", "phase_6/models/char/donald-wheel-wheel");
+      boat.addChild(donald);
       boat.find("**/wheel")?.hide(); // Hide boat wheel since Donald has one
     },
   }),
@@ -617,6 +554,12 @@ const sceneDescs = [
       storageDNA: ["phase_6/dna/storage_MM_sz", "phase_6/dna/storage_MM_town"],
       sceneDNA: "phase_6/dna/minnies_melody_land_sz",
       musicFile: "phase_6/audio/bgm/MM_nbrhood.mid",
+      callback: async (scene) => {
+        const char = new Char();
+        await char.generateChar("mn");
+        char.walkToNextPoint();
+        scene.addChild(char);
+      },
     },
   ),
   new ToontownDNASceneDesc(
@@ -658,29 +601,14 @@ const sceneDescs = [
       const flowerModel = await loader.loadModel(
         "phase_8/models/props/DG_flower-mod",
       );
-      const flower = flowerModel.getRoot().cloneTo(scene);
+      const flower = flowerModel.cloneTo(scene);
       flower.pos = vec3.fromValues(1.39, 92.91, 2.0);
       flower.scale = vec3.fromValues(2.5, 2.5, 2.5);
 
-      const model = await loader.loadModel(
-        "phase_4/models/char/daisyduck_1600",
-      );
-      const instance = model.getRoot().cloneTo(scene);
-      instance.pos = vec3.fromValues(5.482, 210.479, 10.03);
-      instance.setH(180);
-      instance.tags.set("DNAAnim", "phase_4/models/char/daisyduck_idle");
-
-      // Hide closed eyes
-      instance.find("**/eyesclose")?.hide();
-
-      // Add drop shadow
-      const shadowModel = await loader.loadModel(
-        "phase_3/models/props/drop_shadow",
-      );
-      const shadow = shadowModel.getRoot().cloneTo(instance);
-      shadow.pos = vec3.fromValues(0, 0, 0.025);
-      shadow.scale = vec3.fromValues(0.4, 0.4, 0.4);
-      shadow.setAttrib(ColorAttrib.flat(vec4.fromValues(0, 0, 0, 0.5)), 1);
+      const daisy = new Char();
+      await daisy.generateChar("dd");
+      daisy.walkToNextPoint();
+      scene.addChild(daisy);
     },
   }),
   new ToontownDNASceneDesc("daisys_garden_5100", "Elm Street", "DaisyGardens", {
@@ -708,6 +636,12 @@ const sceneDescs = [
     storageDNA: ["phase_8/dna/storage_BR_sz", "phase_8/dna/storage_BR_town"],
     sceneDNA: "phase_8/dna/the_burrrgh_sz",
     musicFile: "phase_8/audio/bgm/TB_nbrhood.mid",
+    callback: async (scene) => {
+      const char = new Char();
+      await char.generateChar("p");
+      char.walkToNextPoint();
+      scene.addChild(char);
+    },
   }),
   new ToontownDNASceneDesc("the_burrrgh_3100", "Walrus Way", "TheBrrrgh", {
     storageDNA: ["phase_8/dna/storage_BR_sz", "phase_8/dna/storage_BR_town"],
@@ -733,6 +667,12 @@ const sceneDescs = [
       storageDNA: ["phase_8/dna/storage_DL_sz", "phase_8/dna/storage_DL_town"],
       sceneDNA: "phase_8/dna/donalds_dreamland_sz",
       musicFile: "phase_8/audio/bgm/DL_nbrhood.mid",
+      callback: async (scene) => {
+        const char = new Char();
+        await char.generateChar("d");
+        char.walkToNextPoint();
+        scene.addChild(char);
+      },
     },
   ),
   new ToontownDNASceneDesc(
@@ -764,6 +704,12 @@ const sceneDescs = [
       storageDNA: ["phase_6/dna/storage_GS_sz"],
       sceneDNA: "phase_6/dna/goofy_speedway_sz",
       musicFile: "phase_6/audio/bgm/GS_SZ.mid",
+      callback: async (scene) => {
+        const char = new Char();
+        await char.generateChar("g");
+        char.walkToNextPoint();
+        scene.addChild(char);
+      },
     },
   ),
   new ToontownDNASceneDesc(
@@ -786,6 +732,12 @@ const sceneDescs = [
       storageDNA: ["phase_6/dna/storage_OZ_sz"],
       sceneDNA: "phase_6/dna/outdoor_zone_sz",
       musicFile: "phase_6/audio/bgm/OZ_SZ.mid",
+      callback: async (scene) => {
+        const char = new Char();
+        await char.generateChar("ch");
+        char.walkToNextPoint();
+        scene.addChild(char);
+      },
     },
   ),
   new ToontownDNASceneDesc(

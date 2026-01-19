@@ -1,5 +1,5 @@
 import { mat4, vec2, vec3, vec4 } from "gl-matrix";
-import type { BAMFile } from "../BAMFile";
+import type { ToontownLoader } from "../Loader";
 import {
   DecalEffect,
   DepthWriteAttrib,
@@ -12,7 +12,6 @@ import {
   TransformState,
 } from "../nodes";
 import type { PandaNode } from "../nodes/PandaNode";
-import type { ToontownResourceLoader } from "../Resources";
 import type { DecodedImage } from "../Textures";
 import type { TextFont } from "../text";
 import { TextNode } from "../text";
@@ -57,13 +56,13 @@ function buildTransformState(transform: DNANodeTransform): TransformState {
  * DNASceneBuilder traverses DNA scene graph and collects geometry instances
  */
 export class DNASceneBuilder {
-  private modelCache: Map<string, BAMFile> = new Map();
+  private modelCache: Map<string, PandaNode> = new Map();
   private textureCache: Map<string, DecodedImage> = new Map();
   private missingCodes: Set<string> = new Set();
 
   constructor(
     private storage: DNAStorage,
-    private loader: ToontownResourceLoader,
+    private loader: ToontownLoader,
   ) {}
 
   /**
@@ -125,8 +124,8 @@ export class DNASceneBuilder {
    */
   private async loadModel(path: string): Promise<void> {
     try {
-      const bamFile = await this.loader.loadModel(path);
-      this.modelCache.set(path, bamFile);
+      const model = await this.loader.loadModel(path);
+      this.modelCache.set(path, model);
     } catch (e) {
       console.warn(`Failed to load model ${path}:`, e);
     }
@@ -831,28 +830,24 @@ export class DNASceneBuilder {
       return null;
     }
 
-    const bamFile = this.modelCache.get(nodeRef.modelPath);
-    if (!bamFile) {
+    let model = this.modelCache.get(nodeRef.modelPath);
+    if (!model) {
       console.warn(`Model not loaded: ${nodeRef.modelPath} for code ${code}`);
       return null;
     }
 
-    let geomNode: PandaNode;
     if (nodeRef.nodeName) {
-      const found = bamFile.find(`**/${nodeRef.nodeName}`);
+      const found = model.find(`**/${nodeRef.nodeName}`);
       if (found) {
-        geomNode = found;
+        model = found;
       } else {
         console.warn(
           `Node not found: ${nodeRef.nodeName} in ${nodeRef.modelPath}`,
-          bamFile,
+          model,
         );
-        geomNode = bamFile.getRoot();
       }
-    } else {
-      geomNode = bamFile.getRoot();
     }
-    return geomNode;
+    return model;
   }
 
   /**
@@ -872,29 +867,25 @@ export class DNASceneBuilder {
       return null;
     }
 
-    const bamFile = this.modelCache.get(nodeRef.modelPath);
-    if (!bamFile) {
+    let model = this.modelCache.get(nodeRef.modelPath);
+    if (!model) {
       console.warn(`Model not loaded: ${nodeRef.modelPath} for code ${code}`);
       return null;
     }
 
-    let geomNode: PandaNode;
     if (nodeRef.nodeName) {
-      const found = bamFile.find(`**/${nodeRef.nodeName}`);
+      const found = model.find(`**/${nodeRef.nodeName}`);
       if (found) {
-        geomNode = found;
+        model = found;
       } else {
         console.warn(
           `Node not found: ${nodeRef.nodeName} in ${nodeRef.modelPath}`,
-          bamFile,
+          model,
         );
-        geomNode = bamFile.getRoot();
       }
-    } else {
-      geomNode = bamFile.getRoot();
     }
 
-    const cloned = geomNode.cloneTo(node);
+    const cloned = model.cloneTo(node);
     cloned.tags.set("DNACode", code);
     cloned.tags.set("DNARoot", nodeRef.category);
     cloned.tags.set("DNAModel", nodeRef.modelPath); // custom

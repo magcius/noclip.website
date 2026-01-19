@@ -1,5 +1,6 @@
 import type { mat4, vec2, vec3, vec4 } from "gl-matrix";
 import type ArrayBufferSlice from "../ArrayBufferSlice";
+import type { ToontownLoader } from "./Loader";
 
 export class AssetVersion {
   constructor(
@@ -271,4 +272,15 @@ export function addFrameTime(seconds: number): void {
  */
 export function resetFrameTime(): void {
   globalTime = 0;
+}
+
+let globalLoader: ToontownLoader | null = null;
+
+export function getLoader(): ToontownLoader {
+  if (!globalLoader) throw new Error("Loader not initialized");
+  return globalLoader;
+}
+
+export function setLoader(loader: ToontownLoader | null): void {
+  globalLoader = loader;
 }

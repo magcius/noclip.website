@@ -433,16 +433,28 @@ export function createGeomData(
 
     // Add bone weights and indices descriptors
     vertexAttributeDescriptors.push({
-      location: AttributeLocation.BoneWeights,
+      location: AttributeLocation.BoneWeights1,
       bufferIndex,
       format: GfxFormat.F32_RGBA,
       bufferByteOffset: 0,
     });
     vertexAttributeDescriptors.push({
-      location: AttributeLocation.BoneIndices,
+      location: AttributeLocation.BoneWeights2,
+      bufferIndex,
+      format: GfxFormat.F32_RGBA,
+      bufferByteOffset: 16,
+    });
+    vertexAttributeDescriptors.push({
+      location: AttributeLocation.BoneIndices1,
       bufferIndex,
       format: GfxFormat.U8_RGBA,
-      bufferByteOffset: 16,
+      bufferByteOffset: 32,
+    });
+    vertexAttributeDescriptors.push({
+      location: AttributeLocation.BoneIndices2,
+      bufferIndex,
+      format: GfxFormat.U8_RGBA,
+      bufferByteOffset: 36,
     });
   }
 
@@ -668,12 +680,12 @@ function unpackPackedColor(
 /**
  * Maximum number of bone influences per vertex.
  */
-const MAX_BONES_PER_VERTEX = 4;
+const MAX_BONES_PER_VERTEX = 8;
 
 /**
- * Stride of skinning buffer: 16 bytes weights + 4 bytes indices = 20 bytes
+ * Stride of skinning buffer: 32 bytes weights + 8 bytes indices = 40 bytes
  */
-const SKINNING_BUFFER_STRIDE = 20;
+const SKINNING_BUFFER_STRIDE = 40;
 
 /**
  * Identity vertex transform (no-op)
@@ -684,8 +696,8 @@ const IDENTITY_TRANSFORM = new UserVertexTransform();
  * Create a skinning buffer containing bone indices and weights for each vertex.
  *
  * The buffer layout per vertex is:
- * - Bytes 0-15: Bone weights (4x F32)
- * - Bytes 16-19: Bone indices (4x U8)
+ * - Bytes 0-31: Bone weights (8x F32)
+ * - Bytes 32-39: Bone indices (8x U8)
  */
 function createSkinningBuffer(
   vertexData: GeomVertexData,
@@ -759,7 +771,7 @@ function createSkinningBuffer(
       blendIndex: number,
     ) {
       outView.setFloat32(blendIndex * 4, weight, true);
-      outView.setUint8(blendIndex + 16, transformIndex);
+      outView.setUint8(blendIndex + 32, transformIndex);
     }
 
     // Get the blend from the table
@@ -774,6 +786,10 @@ function createSkinningBuffer(
       writeBlend(0, transformIndex, 1);
       writeBlend(0, transformIndex, 2);
       writeBlend(0, transformIndex, 3);
+      writeBlend(0, transformIndex, 4);
+      writeBlend(0, transformIndex, 5);
+      writeBlend(0, transformIndex, 6);
+      writeBlend(0, transformIndex, 7);
       continue;
     }
     if (blend.entries.length === 0) {

@@ -48,6 +48,8 @@ import {
   isNodeVisible,
   type MaterialData,
 } from "./Geom";
+import { intervalManager } from "./interval";
+import type { ToontownLoader } from "./Loader";
 import {
   BoundsType,
   Character,
@@ -79,7 +81,6 @@ import {
   ToontownProgram,
   type ToontownProgramProps,
 } from "./Program";
-import type { ToontownResourceLoader } from "./Resources";
 import { SceneGraphViewer } from "./SceneGraphViewer";
 import { expandToRGBA, getSamplerDescriptor } from "./Textures";
 
@@ -139,12 +140,10 @@ export class ToontownRenderer implements Viewer.SceneGfx {
   private constructor(
     private device: GfxDevice,
     private scene: PandaNode,
-    private loader: ToontownResourceLoader,
-    // private animatedCharacters: Map<Character, AnimatedCharacter>,
+    private loader: ToontownLoader,
     private musicFile: string | undefined,
   ) {
     this.renderHelper = new GfxRenderHelper(device);
-    resetFrameTime();
     if (DEFAULT_SCENE_GRAPH_OPEN) {
       this.toggleSceneGraphViewer();
     }
@@ -234,25 +233,16 @@ export class ToontownRenderer implements Viewer.SceneGfx {
   public static async create(
     device: GfxDevice,
     scene: PandaNode,
-    loader: ToontownResourceLoader,
-    // animatedCharacters: Map<Character, AnimatedCharacter> = new Map(),
+    loader: ToontownLoader,
     musicFile: string | undefined,
   ): Promise<ToontownRenderer> {
-    const renderer = new ToontownRenderer(
-      device,
-      scene,
-      loader,
-      // animatedCharacters,
-      musicFile,
-    );
+    const renderer = new ToontownRenderer(device, scene, loader, musicFile);
     // Load all textures used in the scene
     await renderer.ensureTexturesLoaded(loader);
     return renderer;
   }
 
-  private async ensureTexturesLoaded(
-    loader: ToontownResourceLoader,
-  ): Promise<void> {
+  private async ensureTexturesLoaded(loader: ToontownLoader): Promise<void> {
     const allTextures = new Map<string, Texture>();
     function addTexture(node: PandaNode, texture: Texture) {
       // Resolve relative texture paths
@@ -312,7 +302,7 @@ export class ToontownRenderer implements Viewer.SceneGfx {
     );
   }
 
-  private async buildTexture(texture: Texture, loader: ToontownResourceLoader) {
+  private async buildTexture(texture: Texture, loader: ToontownLoader) {
     if (this.textureCache.has(texture.name)) return;
 
     // Try to load embedded raw data first
@@ -362,7 +352,7 @@ export class ToontownRenderer implements Viewer.SceneGfx {
 
   private async loadExternalTexture(
     texture: Texture,
-    loader: ToontownResourceLoader,
+    loader: ToontownLoader,
   ): Promise<void> {
     let filename = texture.filename;
 
@@ -556,6 +546,7 @@ export class ToontownRenderer implements Viewer.SceneGfx {
   private prepareToRender(viewerInput: Viewer.ViewerRenderInput): void {
     this.profiler.beginFrame();
     addFrameTime(viewerInput.deltaTime / 1000);
+    intervalManager.step();
 
     const renderInstManager = this.renderHelper.renderInstManager;
     const template = this.renderHelper.pushTemplateRenderInst();
@@ -955,6 +946,12 @@ export class ToontownRenderer implements Viewer.SceneGfx {
   public destroy(device: GfxDevice): void {
     // Stop background music if playing
     stopPlayback();
+
+    // Clear all active intervals without finishing them
+    intervalManager.pauseAll();
+
+    // Reset global frame time
+    resetFrameTime();
 
     // Close scene graph viewer if open
     if (this.sceneGraphViewer !== null) {

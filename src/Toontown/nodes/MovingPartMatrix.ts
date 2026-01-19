@@ -47,7 +47,6 @@ export class MovingPartMatrix extends MovingPartBase<mat4> {
       }
     }
     if (effectiveChannels.length === 0) {
-      console.log("Copying initial value!", this);
       mat4.copy(this.value, this.initialValue);
     } else {
       if (effectiveChannels.length > 1 || root.frameBlendFlag) {

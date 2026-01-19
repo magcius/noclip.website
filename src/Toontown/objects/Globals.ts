@@ -1,0 +1,72 @@
+export const HOOD_ID_DONALDS_DOCK = 1000;
+export const HOOD_ID_TOONTOWN_CENTRAL = 2000;
+export const HOOD_ID_THE_BRRRGH = 3000;
+export const HOOD_ID_MINNIES_MELODYLAND = 4000;
+export const HOOD_ID_DAISY_GARDENS = 5000;
+export const HOOD_ID_OUTDOOR_ZONE = 6000;
+export const HOOD_ID_FUNNY_FARM = 7000;
+export const HOOD_ID_GOOFY_SPEEDWAY = 8000;
+export const HOOD_ID_DONALDS_DREAMLAND = 9000;
+
+// Donald's Dock
+export const ZONE_ID_BARNACLE_BOULEVARD = 1100;
+export const ZONE_ID_SEAWEED_STREET = 1200;
+export const ZONE_ID_LIGHTHOUSE_LANE = 1300;
+
+// Toontown Central
+export const ZONE_ID_SILLY_STREET = 2100;
+export const ZONE_ID_LOOPY_LANE = 2200;
+export const ZONE_ID_PUNCHLINE_PLACE = 2300;
+
+// The Brrrgh
+export const ZONE_ID_WALRUS_WAY = 3100;
+export const ZONE_ID_SLEET_STREET = 3200;
+export const ZONE_ID_POLAR_PLACE = 3300;
+
+// Minnie's Melodyland
+export const ZONE_ID_ALTO_AVE = 4100;
+export const ZONE_ID_BARITONE_BOULEVARD = 4200;
+export const ZONE_ID_TENOR_TERRACE = 4300;
+
+// Daisy Gardens
+export const ZONE_ID_ELM_STREET = 5100;
+export const ZONE_ID_MAPLE_STREET = 5200;
+export const ZONE_ID_OAK_STREET = 5300;
+
+// Donald's Dreamland
+export const ZONE_ID_LULLABY_LANE = 9100;
+export const ZONE_ID_PAJAMA_PLACE = 9200;
+
+export const HOOD_HEIRARCHY: Record<number, number[]> = {
+  [HOOD_ID_TOONTOWN_CENTRAL]: [
+    ZONE_ID_SILLY_STREET,
+    ZONE_ID_LOOPY_LANE,
+    ZONE_ID_PUNCHLINE_PLACE,
+  ],
+  [HOOD_ID_DONALDS_DOCK]: [
+    ZONE_ID_BARNACLE_BOULEVARD,
+    ZONE_ID_SEAWEED_STREET,
+    ZONE_ID_LIGHTHOUSE_LANE,
+  ],
+  [HOOD_ID_THE_BRRRGH]: [
+    ZONE_ID_WALRUS_WAY,
+    ZONE_ID_SLEET_STREET,
+    ZONE_ID_POLAR_PLACE,
+  ],
+  [HOOD_ID_MINNIES_MELODYLAND]: [
+    ZONE_ID_ALTO_AVE,
+    ZONE_ID_BARITONE_BOULEVARD,
+    ZONE_ID_TENOR_TERRACE,
+  ],
+  [HOOD_ID_DAISY_GARDENS]: [
+    ZONE_ID_ELM_STREET,
+    ZONE_ID_MAPLE_STREET,
+    ZONE_ID_OAK_STREET,
+  ],
+  [HOOD_ID_DONALDS_DREAMLAND]: [ZONE_ID_LULLABY_LANE, ZONE_ID_PAJAMA_PLACE],
+  [HOOD_ID_GOOFY_SPEEDWAY]: [],
+};
+
+export function getHoodId(zoneId: number): number {
+  return zoneId - (zoneId % 1000);
+}

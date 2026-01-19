@@ -1,5 +1,5 @@
 import { Sequencer, WorkletSynthesizer } from "spessasynth_lib";
-import type { ToontownResourceLoader } from "./Resources";
+import type { ToontownLoader } from "./Loader";
 
 interface Player {
   ctx: AudioContext;
@@ -11,7 +11,7 @@ interface Player {
 let player: Player | null = null;
 let currentVolume = 0.5;
 
-async function init(loader: ToontownResourceLoader): Promise<Player> {
+async function init(loader: ToontownLoader): Promise<Player> {
   if (player) return player;
   // Load the Microsoft GS Wavetable Synth SoundFont
   const sfont = await loader.loadFile("gm3.sf2");
@@ -47,10 +47,7 @@ async function init(loader: ToontownResourceLoader): Promise<Player> {
   return player;
 }
 
-export async function startPlayback(
-  loader: ToontownResourceLoader,
-  musicFile: string,
-) {
+export async function startPlayback(loader: ToontownLoader, musicFile: string) {
   const player = await init(loader);
   await player.synth.isReady;
   await player.ctx.resume();

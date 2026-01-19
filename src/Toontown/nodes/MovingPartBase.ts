@@ -45,6 +45,9 @@ export abstract class MovingPartBase<T> extends PartGroup {
     if (anim !== null && !(anim instanceof AnimChannelBase)) {
       throw new Error(`Invalid animation type for channel ${channelIndex}`);
     }
+    if (this._channels[channelIndex]) {
+      throw new Error(`Channel ${channelIndex} is already bound`);
+    }
     this._channels[channelIndex] = anim;
     super.bindHeirarchy(anim, channelIndex);
   }

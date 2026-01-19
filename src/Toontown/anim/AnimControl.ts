@@ -151,6 +151,14 @@ export class AnimControl {
     return this.getFullFFrame() - this.getFullFrame(0);
   }
 
+  get frameRate(): number {
+    return this._frameRate;
+  }
+
+  get numFrames(): number {
+    return this._anim?.numFrames ?? 0;
+  }
+
   getFullFrame(increment: number): number {
     let frame = Math.floor(this.getFullFFrame()) + increment;
     if (this._playMode === PlayMode.Play) {

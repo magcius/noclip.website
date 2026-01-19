@@ -11,15 +11,17 @@ export const AttributeLocation = {
   Normal: 1,
   Color: 2,
   TexCoord: 3,
-  BoneWeights: 4,
-  BoneIndices: 5,
+  BoneWeights1: 4,
+  BoneWeights2: 5,
+  BoneIndices1: 6,
+  BoneIndices2: 7,
 } as const;
 
 /**
  * Maximum number of bone matrices per draw call.
  * Arbitrary value, can be increased if needed.
  */
-export const MAX_BONES = 46;
+export const MAX_BONES = 124;
 
 export type ToontownProgramProps = {
   hasTexture: boolean;
@@ -148,8 +150,10 @@ layout(location = ${AttributeLocation.Color}) in vec4 a_Color;
 layout(location = ${AttributeLocation.TexCoord}) in vec2 a_TexCoord;
 #endif
 #ifdef HAS_SKINNING
-layout(location = ${AttributeLocation.BoneWeights}) in vec4 a_BoneWeights;
-layout(location = ${AttributeLocation.BoneIndices}) in uvec4 a_BoneIndices;
+layout(location = ${AttributeLocation.BoneWeights1}) in vec4 a_BoneWeights1;
+layout(location = ${AttributeLocation.BoneWeights2}) in vec4 a_BoneWeights2;
+layout(location = ${AttributeLocation.BoneIndices1}) in uvec4 a_BoneIndices1;
+layout(location = ${AttributeLocation.BoneIndices2}) in uvec4 a_BoneIndices2;
 #endif
 
 #ifdef USE_VERTEX_COLORS
@@ -161,10 +165,14 @@ out vec2 v_TexCoord;
 
 #ifdef HAS_SKINNING
 mat4x3 GetSkinMatrix() {
-    mat4x3 result = UnpackMatrix(u_BoneMatrix[a_BoneIndices.x]) * a_BoneWeights.x;
-    result += UnpackMatrix(u_BoneMatrix[a_BoneIndices.y]) * a_BoneWeights.y;
-    result += UnpackMatrix(u_BoneMatrix[a_BoneIndices.z]) * a_BoneWeights.z;
-    result += UnpackMatrix(u_BoneMatrix[a_BoneIndices.w]) * a_BoneWeights.w;
+    mat4x3 result = UnpackMatrix(u_BoneMatrix[a_BoneIndices1.x]) * a_BoneWeights1.x;
+    result += UnpackMatrix(u_BoneMatrix[a_BoneIndices1.y]) * a_BoneWeights1.y;
+    result += UnpackMatrix(u_BoneMatrix[a_BoneIndices1.z]) * a_BoneWeights1.z;
+    result += UnpackMatrix(u_BoneMatrix[a_BoneIndices1.w]) * a_BoneWeights1.w;
+    result += UnpackMatrix(u_BoneMatrix[a_BoneIndices2.x]) * a_BoneWeights2.x;
+    result += UnpackMatrix(u_BoneMatrix[a_BoneIndices2.y]) * a_BoneWeights2.y;
+    result += UnpackMatrix(u_BoneMatrix[a_BoneIndices2.z]) * a_BoneWeights2.z;
+    result += UnpackMatrix(u_BoneMatrix[a_BoneIndices2.w]) * a_BoneWeights2.w;
     return result;
 }
 #endif

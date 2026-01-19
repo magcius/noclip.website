@@ -1,7 +1,7 @@
 // DNAStorage - Holds registered resources from DNA storage files
 // Resources are registered from storage DNA files and then looked up when loading scene DNA
 
-import type { ToontownResourceLoader } from "../Resources";
+import type { ToontownLoader } from "../Loader";
 import type { TextFont } from "../text/TextAssembler";
 import type {
   DNAFile,
@@ -184,7 +184,7 @@ export class DNAStorage {
     return paths;
   }
 
-  async loadFonts(loader: ToontownResourceLoader): Promise<void> {
+  async loadFonts(loader: ToontownLoader): Promise<void> {
     for (const [code, filename] of this.fonts) {
       if (this.loadedFonts.has(code)) continue;
 

@@ -4,9 +4,10 @@ import type { DataFetcher } from "../DataFetcher";
 import type { GfxDevice } from "../gfx/platform/GfxPlatform";
 import type { Destroyable } from "../SceneBase";
 import { BAMFile } from "./BAMFile";
+import { setLoader } from "./Common";
 import { type DNAFile, parseDNA } from "./dna";
 import { DNAStorage } from "./dna/Storage";
-import { Format } from "./nodes";
+import { Format, type PandaNode } from "./nodes";
 import {
   type DecodedImage,
   decodeImage,
@@ -34,14 +35,17 @@ type MultifileManifestEntry = {
   compressed: boolean;
 };
 
-export class ToontownResourceLoader implements Destroyable {
+export class ToontownLoader implements Destroyable {
   private manifest: MultifileManifest = {};
-  private modelCache: Map<string, BAMFile> = new Map();
+  private modelCache: Map<string, PandaNode> = new Map();
   private textureCache: Map<string, DecodedImage> = new Map();
   private dnaCache: Map<string, DNAFile> = new Map();
   private fontCache: Map<string, TextFont> = new Map();
 
-  constructor(private dataFetcher: DataFetcher) {}
+  constructor(private dataFetcher: DataFetcher) {
+    // Set singleton instance
+    setLoader(this);
+  }
 
   public async loadManifest() {
     if (USE_MULTIFILES) {
@@ -95,13 +99,20 @@ export class ToontownResourceLoader implements Destroyable {
   public async loadModel(
     name: string,
     debug: boolean = false,
-  ): Promise<BAMFile> {
+  ): Promise<PandaNode> {
     const cached = this.modelCache.get(name);
     if (cached) return cached;
     const modelData = await this.loadFile(`${name}.bam`);
-    const model = new BAMFile(modelData, { debug });
+    const file = new BAMFile(modelData, { debug });
+    const model = file.getRoot();
     this.modelCache.set(name, model);
     return model;
+  }
+
+  public loadModelCached(path: string): PandaNode {
+    const cached = this.modelCache.get(path);
+    if (cached) return cached;
+    throw new Error(`Model ${path} not loaded`);
   }
 
   /**
@@ -243,12 +254,12 @@ export class ToontownResourceLoader implements Destroyable {
 
     // Fall back to BAM
     const fontModel = await this.loadModel(filename);
-    const font = new StaticTextFont(fontModel.getRoot());
+    const font = new StaticTextFont(fontModel);
     this.fontCache.set(filename, font);
     return font;
   }
 
   destroy(_device: GfxDevice): void {
-    throw new Error("Method not implemented.");
+    setLoader(null);
   }
 }

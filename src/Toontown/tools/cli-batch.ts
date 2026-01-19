@@ -9,7 +9,7 @@ import * as path from "node:path";
 import * as zlib from "node:zlib";
 import { DOMParser as XmldomParser } from "@xmldom/xmldom";
 import ArrayBufferSlice from "../../ArrayBufferSlice";
-import { BAMFile } from "../bam";
+import { BAMFile } from "../BAMFile";
 import { parseDNA } from "../dna";
 
 if (typeof DOMParser === "undefined") {

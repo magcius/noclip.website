@@ -276,6 +276,10 @@ export class PandaNode extends TypedObject {
     this.setPosHprScale(pos, this.transform.hpr, this.transform.scale);
   }
 
+  get hpr(): ReadonlyVec3 {
+    return this.transform.hpr;
+  }
+
   set hpr(hpr: ReadonlyVec3) {
     this.setPosHprScale(this.transform.pos, hpr, this.transform.scale);
   }

@@ -28,6 +28,7 @@ export class PartBundle extends PartGroup {
   // Map of AnimControl to blend amount
   public blend = new Map<AnimControl, number>();
   private _animChanged = true;
+  private _nextChannel = 0;
 
   override load(file: BAMFile, data: DataStream) {
     super.load(file, data);
@@ -85,16 +86,26 @@ export class PartBundle extends PartGroup {
 
   bindAnim(control: AnimControl, bundle: AnimBundle): void {
     // TODO pickChannelIndex
-    const channelIndex = 0;
+    const channelIndex = this._nextChannel++;
     this.bindHeirarchy(bundle, channelIndex);
     control.setupAnim(bundle, channelIndex);
   }
 
   setControlEffect(control: AnimControl, effect: number): void {
-    // TODO clear existing animation
-    if (effect === 0) this.blend.delete(control);
-    else this.blend.set(control, effect);
-    this._animChanged = true;
+    if (effect === 0) {
+      this.blend.delete(control);
+      this._animChanged = true;
+    } else {
+      if (!this.animBlendFlag) this.clearAndStopIntersecting(control);
+      if (this.getControlEffect(control) !== effect) {
+        this.blend.set(control, effect);
+        this._animChanged = true;
+      }
+    }
+  }
+
+  getControlEffect(control: AnimControl): number {
+    return this.blend.get(control) ?? 0;
   }
 
   /**
@@ -103,6 +114,25 @@ export class PartBundle extends PartGroup {
    */
   controlActivated(control: AnimControl) {
     if (!this.animBlendFlag) this.setControlEffect(control, 1);
+  }
+
+  private clearAndStopIntersecting(control: AnimControl) {
+    let anyChanged = false;
+    const newBlend = new Map<AnimControl, number>();
+    for (const [otherControl, effect] of this.blend.entries()) {
+      if (otherControl === control) {
+        // TODO || (!has joints in common with)
+        newBlend.set(control, effect);
+      } else {
+        otherControl.stop();
+        anyChanged = true;
+      }
+    }
+    if (anyChanged) {
+      this.blend = newBlend;
+      this._animChanged = true;
+    }
+    return anyChanged;
   }
 }
 
