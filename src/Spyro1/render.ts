@@ -77,15 +77,16 @@ void main() {
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 1, numSamplers: 1 }];
 const bindingLayoutsSky: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 1, numSamplers: 0 }];
-
 const noclipSpaceFromSpyroSpace = mat4.fromValues(
     1, 0, 0, 0,
-    0, 0, 1, 0,
+    0, 0, -1, 0,
     0, 1, 0, 0,
     0, 0, 0, 1,
 );
-
 const scratchMat4a = mat4.create();
+const scratchViewNoTransform = mat4.create();
+const scratchClipFromWorldNoTransform = mat4.create();
+
 export class LevelRenderer {
     private vertexBuffer: GfxBuffer;
     private colorBuffer: GfxBuffer;
@@ -102,15 +103,15 @@ export class LevelRenderer {
         const device = cache.device;
         const atlas = levelData.atlas;
         this.texture = device.createTexture({
-            width: atlas.atlasWidth,
-            height: atlas.atlasHeight,
+            width: atlas.width,
+            height: atlas.height,
             numLevels: 1,
             pixelFormat: GfxFormat.U8_RGBA_NORM,
             usage: GfxTextureUsage.Sampled,
             dimension: GfxTextureDimension.n2D,
             depthOrArrayLayers: 1
         });
-        device.uploadTextureData(this.texture, 0, [atlas.atlasData]);
+        device.uploadTextureData(this.texture, 0, [atlas.data]);
 
         const { vertices, colors, faces, uvs } = levelData;
         const xs = vertices.map(v => v[0]);
@@ -128,25 +129,21 @@ export class LevelRenderer {
         const expandedCol: number[] = [];
         const expandedUV: number[] = [];
         const expandedIdx: number[] = [];
-
         let runningIndex = 0;
         for (const face of faces) {
             const { indices, uvIndices, colorIndices } = face;
             for (let k = 0; k < indices.length; k++) {
-                const vertIndex = indices[k];
-                const v = vertices[vertIndex];
+                const v = vertices[indices[k]];
                 expandedPos.push(v[0], v[1], v[2]);
                 let c: number[];
                 if (colorIndices) {
-                    const colorIndex = colorIndices[k];
-                    c = colors[colorIndex] ?? [255, 255, 255];
+                    c = colors[colorIndices[k]] ?? [255, 255, 255];
                 } else {
                     c = [255, 255, 255];
                 }
                 expandedCol.push(c[0] / 255, c[1] / 255, c[2] / 255);
                 if (uvIndices) {
-                    const uvIndex = uvIndices[k];
-                    const uvVal = uvs[uvIndex];
+                    const uvVal = uvs[uvIndices[k]];
                     expandedUV.push(uvVal[0], uvVal[1]);
                 } else {
                     expandedUV.push(0, 0);
@@ -155,14 +152,10 @@ export class LevelRenderer {
             }
         }
 
-        const pos = new Float32Array(expandedPos);
-        const col = new Float32Array(expandedCol);
-        const uv  = new Float32Array(expandedUV);
         const idx = new Uint32Array(expandedIdx);
-
-        this.vertexBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, pos.buffer);
-        this.colorBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, col.buffer);
-        this.uvBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, uv.buffer);
+        this.vertexBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, new Float32Array(expandedPos).buffer);
+        this.colorBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, new Float32Array(expandedCol).buffer);
+        this.uvBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, new Float32Array(expandedUV).buffer);
         this.indexBuffer = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, idx.buffer);
         this.indexCount = idx.length;
         this.inputLayout = cache.createInputLayout({
@@ -206,7 +199,6 @@ export class LevelRenderer {
         mat4.mul(scratchMat4a, viewerInput.camera.clipFromWorldMatrix, noclipSpaceFromSpyroSpace);
         offs += fillMatrix4x4(buf, offs, scratchMat4a);
         offs += fillVec4(buf, offs, this.levelCenter[0], this.levelCenter[1], this.levelCenter[2], 0);
-
         template.setVertexInput(
             this.inputLayout,
             [
@@ -241,7 +233,7 @@ ${GfxShaderLibrary.MatrixLibrary}
 
 layout(std140) uniform ub_SceneParams {
     Mat4x4 u_ProjectionView;
-    vec4 u_CameraPos;
+    vec4 u_Dummy;
 };
 
 varying vec3 v_Color;
@@ -252,8 +244,7 @@ layout(location = 1) in vec3 a_Color;
 
 void main() {
     v_Color = a_Color;
-    vec3 worldPos = a_Position + u_CameraPos.xyz;
-    gl_Position = UnpackMatrix(u_ProjectionView) * vec4(worldPos, 1.0);
+    gl_Position = UnpackMatrix(u_ProjectionView) * vec4(a_Position, 1.0);
 }
 #endif
 
@@ -286,20 +277,16 @@ export class SkyboxRenderer {
         for (const face of faces) {
             const { indices, colorIndices } = face;
             for (let k = 0; k < 3; k++) {
-                const vi = indices[k];
-                const ci = colorIndices[k];
-                const v = vertices[vi];
-                const c = colors[ci];
+                const v = vertices[indices[k]];
+                const c = colors[colorIndices[k]];
                 expandedPos.push(v[0], v[1], v[2]);
                 expandedCol.push(c[0] / 255, c[1] / 255, c[2] / 255);
                 expandedIdx.push(runningIndex++);
             }
         }
-        const pos = new Float32Array(expandedPos);
-        const col = new Float32Array(expandedCol);
         const idx = new Uint32Array(expandedIdx);
-        this.vertexBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, pos.buffer);
-        this.colorBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, col.buffer);
+        this.vertexBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, new Float32Array(expandedPos).buffer);
+        this.colorBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, new Float32Array(expandedCol).buffer);
         this.indexBuffer = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, idx.buffer);
         this.indexCount = idx.length;
         this.inputLayout = cache.createInputLayout({
@@ -333,14 +320,15 @@ export class SkyboxRenderer {
 
         let offs = template.allocateUniformBuffer(SkyboxProgram.ub_SceneParams, 20);
         const buf = template.mapUniformBufferF32(SkyboxProgram.ub_SceneParams);
-        mat4.mul(scratchMat4a, viewerInput.camera.clipFromWorldMatrix, noclipSpaceFromSpyroSpace);
+        mat4.copy(scratchViewNoTransform, viewerInput.camera.viewMatrix);
+        scratchViewNoTransform[12] = 0;
+        scratchViewNoTransform[13] = 0;
+        scratchViewNoTransform[14] = 0;
+        mat4.mul(scratchClipFromWorldNoTransform, viewerInput.camera.projectionMatrix, scratchViewNoTransform);
+        mat4.mul(scratchMat4a, scratchClipFromWorldNoTransform, noclipSpaceFromSpyroSpace);
         offs += fillMatrix4x4(buf, offs, scratchMat4a);
-        offs += fillVec4(buf, offs,
-            viewerInput.camera.worldMatrix[12],
-            viewerInput.camera.worldMatrix[14],
-            viewerInput.camera.worldMatrix[13],
-            0
-        );
+        offs += fillVec4(buf, offs, 0, 0, 0, 0);
+
         template.setVertexInput(
             this.inputLayout,
             [
