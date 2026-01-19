@@ -31,7 +31,7 @@ export class gimmick
         const shapes = fmdl.fshp;
         for (let i = 0; i < shapes.length; i++)
         {
-            const renderer = new fshp_renderer(device, renderHelper, fmdl, i, bntx, gfx_texture_array, position, rotation, scale);
+            const renderer = new fshp_renderer(device, renderHelper, fmdl, i, bntx, gfx_texture_array, position, rotation, scale, false);
             this.fshp_renderers.push(renderer);
         }
     }

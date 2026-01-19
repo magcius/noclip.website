@@ -19,10 +19,13 @@ export class TMSFEScene implements SceneGfx
 
     private renderHelper: GfxRenderHelper;
     private renderInstListMain = new GfxRenderInstList();
+    private renderInstListSkybox = new GfxRenderInstList();
     private fshp_renderers: fshp_renderer[] = [];
+    private special_skybox: boolean;
 
-    constructor(device: GfxDevice, fres_files: FRES[])
+    constructor(device: GfxDevice, fres_files: FRES[], special_skybox: boolean)
     {
+        this.special_skybox = special_skybox;
         this.renderHelper = new GfxRenderHelper(device);
 
         for(let i = 0; i < fres_files.length; i++)
@@ -38,6 +41,11 @@ export class TMSFEScene implements SceneGfx
             const shapes = fmdl.fshp;
             for (let i = 0; i < shapes.length; i++)
             {
+                let special_skybox_mesh: boolean = false;
+                if (this.special_skybox && fmdl.name == "sky")
+                {
+                    special_skybox_mesh = true;
+                }
                 const renderer = new fshp_renderer
                 (
                     device,
@@ -47,7 +55,8 @@ export class TMSFEScene implements SceneGfx
                     gfx_texture_array,
                     vec3.fromValues(0.0, 0.0, 0.0),
                     vec3.fromValues(0.0, 0.0, 0.0),
-                    vec3.fromValues(1.0, 1.0, 1.0)
+                    vec3.fromValues(1.0, 1.0, 1.0),
+                    special_skybox_mesh,
                 );
                 this.fshp_renderers.push(renderer);
             }
@@ -65,14 +74,14 @@ export class TMSFEScene implements SceneGfx
 
         for (let i = 0; i < this.fshp_renderers.length; i++)
         {
-            this.fshp_renderers[i].render(this.renderHelper, viewerInput, this.renderInstListMain);
+            this.fshp_renderers[i].render(this.renderHelper, viewerInput, this.renderInstListMain, this.renderInstListSkybox);
         }
 
         for (let gimmick_index = 0; gimmick_index < this.common_gimmicks.length; gimmick_index++)
         {
             for (let fshp_index = 0; fshp_index < this.common_gimmicks[gimmick_index].fshp_renderers.length; fshp_index++)
             {
-                this.common_gimmicks[gimmick_index].fshp_renderers[fshp_index].render(this.renderHelper, viewerInput, this.renderInstListMain);
+                this.common_gimmicks[gimmick_index].fshp_renderers[fshp_index].render(this.renderHelper, viewerInput, this.renderInstListMain, this.renderInstListSkybox);
             }
         }
 
@@ -80,24 +89,43 @@ export class TMSFEScene implements SceneGfx
         {
             for (let fshp_index = 0; fshp_index < this.map_gimmicks[gimmick_index].fshp_renderers.length; fshp_index++)
             {
-                this.map_gimmicks[gimmick_index].fshp_renderers[fshp_index].render(this.renderHelper, viewerInput, this.renderInstListMain);
+                this.map_gimmicks[gimmick_index].fshp_renderers[fshp_index].render(this.renderHelper, viewerInput, this.renderInstListMain, this.renderInstListSkybox);
             }
         }
 
         this.renderHelper.prepareToRender();
 
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
+
         const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, opaqueBlackFullClearRenderPassDescriptor);
         const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, opaqueBlackFullClearRenderPassDescriptor);
-
         const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
-        const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
+
+        // render skybox before everything else, also clear the depth buffer before rendering everything else
+        builder.pushPass
+        (
+            (pass) =>
+            {
+                pass.setDebugName('Skybox');
+                pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+                const skyboxDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Skybox Depth');
+                pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, skyboxDepthTargetID);
+                pass.exec
+                (
+                    (passRenderer) =>
+                    {
+                        this.renderInstListSkybox.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
+                    }
+                );
+            }
+        );
         builder.pushPass
         (
             (pass) =>
             {
                 pass.setDebugName('Main');
                 pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+                const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
                 pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
                 pass.exec
                 (
@@ -108,11 +136,13 @@ export class TMSFEScene implements SceneGfx
                 );
             }
         );
+
         this.renderHelper.antialiasingSupport.pushPasses(builder, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.renderHelper.renderGraph.execute(builder);
         this.renderInstListMain.reset();
+        this.renderInstListSkybox.reset();
     }
 
     public destroy(device: GfxDevice): void

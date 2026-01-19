@@ -3,6 +3,7 @@
 
 import * as BNTX from '../fres_nx/bntx.js';
 import { createBufferFromSlice } from "../gfx/helpers/BufferHelpers.js";
+import { computeViewMatrixSkybox } from '../Camera.js';
 import { FMDL } from "./bfres/fmdl.js";
 import { recursive_bone_transform } from "./bfres/fskl.js";
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
@@ -33,6 +34,7 @@ export class fshp_renderer
     private program: TMSFEProgram;
     private sampler_bindings: GfxSamplerBinding[] = [];
     private do_not_render: boolean = false;
+    private special_skybox_mesh: boolean;
 
     /**
      * @param fmdl the model that contains this mesh
@@ -42,6 +44,7 @@ export class fshp_renderer
      * @param position translate this mesh
      * @param rotation rotate this mesh
      * @param scale scale this mesh
+     * @param special_skybox_mesh this mesh is a smaller skybox that follows the camera
      */
     constructor
     (
@@ -54,15 +57,17 @@ export class fshp_renderer
         position: vec3,
         rotation: vec3,
         scale: vec3,
+        special_skybox_mesh: boolean,
     )
     {
+        this.special_skybox_mesh = special_skybox_mesh;
+
         // create vertex buffers
         const fshp = fmdl.fshp[shape_index];
         const fvtx = fmdl.fvtx[fshp.fvtx_index];
         const mesh = fshp.mesh[0];
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [];
-        const attribute_assign = new Map<string, string>();
         for (let i = 0; i < fvtx.vertexAttributes.length; i++)
         {
             vertexAttributeDescriptors.push
@@ -178,7 +183,7 @@ export class fshp_renderer
      * @param renderInstListMain 
      * @returns 
      */
-    render(renderHelper: GfxRenderHelper, viewerInput: ViewerRenderInput, renderInstListMain: GfxRenderInstList): void
+    render(renderHelper: GfxRenderHelper, viewerInput: ViewerRenderInput, renderInstListMain: GfxRenderInstList, renderInstListSkybox: GfxRenderInstList): void
     {
         if (this.do_not_render)
         {
@@ -203,7 +208,19 @@ export class fshp_renderer
         let uniform_buffer_offset = renderInst.allocateUniformBuffer(TMSFEProgram.ub_SceneParams, 40 + (12 * this.bone_matrix_array.length));
         const mapped = renderInst.mapUniformBufferF32(TMSFEProgram.ub_SceneParams);
         uniform_buffer_offset += fillMatrix4x4(mapped, uniform_buffer_offset, viewerInput.camera.projectionMatrix);
-        uniform_buffer_offset += fillMatrix4x3(mapped, uniform_buffer_offset, viewerInput.camera.viewMatrix);
+
+        if (this.special_skybox_mesh)
+        {
+            // a matrix without the camera's position, results in the skybox mesh following the camera
+            let skybox_view_matrix: mat4 = mat4.create();
+            computeViewMatrixSkybox(skybox_view_matrix, viewerInput.camera);
+            uniform_buffer_offset += fillMatrix4x3(mapped, uniform_buffer_offset, skybox_view_matrix);
+        }
+        else
+        {
+            uniform_buffer_offset += fillMatrix4x3(mapped, uniform_buffer_offset, viewerInput.camera.viewMatrix);
+        }
+        
         uniform_buffer_offset += fillMatrix4x3(mapped, uniform_buffer_offset, this.transform_matrix);
 
         for (let i = 0; i < this.bone_matrix_array.length; i++)
@@ -217,7 +234,14 @@ export class fshp_renderer
         renderInst.setMegaStateFlags({ cullMode: GfxCullMode.Back });
         
         // submit the draw call
-        renderHelper.renderInstManager.setCurrentList(renderInstListMain);
+        if (this.special_skybox_mesh)
+        {
+            renderHelper.renderInstManager.setCurrentList(renderInstListSkybox);
+        }
+        else
+        {
+            renderHelper.renderInstManager.setCurrentList(renderInstListMain);
+        }
         renderHelper.renderInstManager.submitRenderInst(renderInst);
 
         renderHelper.renderInstManager.popTemplate();

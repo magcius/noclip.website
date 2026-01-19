@@ -31,7 +31,6 @@ import { create_d007_07_gimmicks } from "./maps/d007_07.js";
 import { create_d007_08_gimmicks } from "./maps/d007_08.js";
 import { create_d007_09_gimmicks } from "./maps/d007_09.js";
 import { create_d010_01_gimmicks } from "./maps/d010_01.js";
-
 import { create_f003_08_gimmicks } from "./maps/f003_08.js";
 
 /**
@@ -46,6 +45,7 @@ class TMSFESceneDesc implements SceneDesc
      * @param map_gimmick_function per map function that spawns interactable objects
      * @param gate_type it's currently unknown how the game chooses which gate model to use. currently just hard coding it
      * @param is_d018_03 this map has some hardcoded behavior, and using a bool is faster than a string compare
+     * @param special_skybox this map has a small skybox mesh that follows the camera
      */
     constructor
     (
@@ -55,6 +55,7 @@ class TMSFESceneDesc implements SceneDesc
         public map_gimmick_function?: (layout: MapLayout, data_fetcher: DataFetcher, device: GfxDevice) => Promise<gimmick[]>,
         public gate_type?: number | undefined,
         public is_d018_03?: boolean | undefined,
+        public special_skybox?: boolean | undefined,
     ) {}
 
     /**
@@ -69,6 +70,7 @@ class TMSFESceneDesc implements SceneDesc
         let fres_files: FRES[] = [];
         if (this.gate_type == undefined) { this.gate_type = 1 };
         if (this.is_d018_03 == undefined) { this.is_d018_03 = false };
+        if (this.special_skybox == undefined) { this.special_skybox = false };
 
         // get bfres files
         for (let i = 0; i < this.level_file_names.length; i++)
@@ -85,7 +87,7 @@ class TMSFESceneDesc implements SceneDesc
             }
         }
 
-        let renderer = new TMSFEScene(device, fres_files);
+        let scene = new TMSFEScene(device, fres_files, this.special_skybox);
 
         // add gimmicks (only if this level has a maplayout.layout file)
         const maplayout_data = get_file_by_name(apak, "maplayout.layout");
@@ -93,14 +95,14 @@ class TMSFESceneDesc implements SceneDesc
         {
             const layout = parseLayout(maplayout_data);
             console.log(layout);
-            renderer.common_gimmicks = await create_common_gimmicks(layout, this.gate_type, this.is_d018_03, dataFetcher, device);
+            scene.common_gimmicks = await create_common_gimmicks(layout, this.gate_type, this.is_d018_03, dataFetcher, device);
             if (this.map_gimmick_function != undefined)
             {
-                renderer.map_gimmicks = await this.map_gimmick_function(layout, dataFetcher, device);
+                scene.map_gimmicks = await this.map_gimmick_function(layout, dataFetcher, device);
             }
         }
 
-        return renderer;
+        return scene;
     }
 }
 
@@ -131,7 +133,6 @@ const sceneDescs =
     new TMSFESceneDesc("d004_03", "Block 3", ["d004_03", "obj01", "sky"], create_d004_03_gimmicks),
     new TMSFESceneDesc("d004_04", "Circular Square", ["d004_04", "obj01", "sky"]),
     new TMSFESceneDesc("d004_05", "Central Square", ["d004_05", "obj01", "obj02", "sky"]),
-    // new TMSFESceneDesc("d004_06", "Central Square 2"), wii u file
     "Illusory Daitou TV",
     new TMSFESceneDesc("d005_01", "Film Set A: Outdoors", ["d005_01", "obj01", "sky"]),
     new TMSFESceneDesc("d005_03", "Film Set A: Indoors", ["d005_03"], create_d005_03_gimmicks),
@@ -157,29 +158,27 @@ const sceneDescs =
     new TMSFESceneDesc("d010_03", "Leader's Hall", ["d010_03"]),
     new TMSFESceneDesc("d010_04", "Hero's Hall", ["d010_04"]),
     "Illusory Dolhr",
-    new TMSFESceneDesc("d007_01", "Altitude 48m to Altitude 54m", ["d007_01", "obj01", "obj02", "obj03", "sky"], create_d007_01_gimmicks),
-    new TMSFESceneDesc("d007_05", "Altitude 88m", ["d007_05", "obj01", "obj02", "sky"], create_d007_05_gimmicks),
-    new TMSFESceneDesc("d007_02", "Altitude 122m to Altitude 146m", ["d007_02", "obj01", "obj02", "obj03", "sky"], create_d007_02_gimmicks),
-    new TMSFESceneDesc("d007_06", "Altitude 180m", ["d007_06", "obj01", "obj02", "sky"], create_d007_06_gimmicks),
-    new TMSFESceneDesc("d007_03", "Altitude 232m to Altitude 238m", ["d007_03", "obj01", "obj02", "sky"], create_d007_03_gimmicks),
-    new TMSFESceneDesc("d007_07", "Altitude 333m", ["d007_07", "obj01", "obj02", "sky"], create_d007_07_gimmicks),
-    new TMSFESceneDesc("d007_04", "Altitude 428m to Altitude 434m", ["d007_04", "obj01", "obj02", "obj03", "sky"], create_d007_04_gimmicks),
-    new TMSFESceneDesc("d007_08", "Altitude 525m", ["d007_08", "obj01", "obj02", "sky"], create_d007_08_gimmicks),
-    new TMSFESceneDesc("d007_09", "Altitude 634m", ["d007_09", "obj00", "obj01", "obj02", "obj03", "sky"], create_d007_09_gimmicks),
+    new TMSFESceneDesc("d007_01", "Altitude 48m to Altitude 54m", ["d007_01", "obj01", "obj02", "obj03", "sky"], create_d007_01_gimmicks, undefined, false, true),
+    new TMSFESceneDesc("d007_05", "Altitude 88m", ["d007_05", "obj01", "obj02", "sky"], create_d007_05_gimmicks, undefined, false, true),
+    new TMSFESceneDesc("d007_02", "Altitude 122m to Altitude 146m", ["d007_02", "obj01", "obj02", "obj03", "sky"], create_d007_02_gimmicks, undefined, false, true),
+    new TMSFESceneDesc("d007_06", "Altitude 180m", ["d007_06", "obj01", "obj02", "sky"], create_d007_06_gimmicks, undefined, false, true),
+    new TMSFESceneDesc("d007_03", "Altitude 232m to Altitude 238m", ["d007_03", "obj01", "obj02", "sky"], create_d007_03_gimmicks, undefined, false, true),
+    new TMSFESceneDesc("d007_07", "Altitude 333m", ["d007_07", "obj01", "obj02", "sky"], create_d007_07_gimmicks, undefined, false, true),
+    new TMSFESceneDesc("d007_04", "Altitude 428m to Altitude 434m", ["d007_04", "obj01", "obj02", "obj03", "sky"], create_d007_04_gimmicks, undefined, false, true),
+    new TMSFESceneDesc("d007_08", "Altitude 525m", ["d007_08", "obj01", "obj02", "sky"], create_d007_08_gimmicks, undefined, false, true),
+    new TMSFESceneDesc("d007_09", "Altitude 634m", ["d007_09", "obj00", "obj01", "obj02", "obj03", "sky"], create_d007_09_gimmicks, undefined, false, true),
     new TMSFESceneDesc("d007_10", "Shadow Stage", ["d007_10", "sky"]),
     "Illusory Urahara",
     new TMSFESceneDesc("d008_01", "Arena", ["d008_01", "obj01", "obj02", "obj03", "sky"]),
     "Illusory Area of Aspirations",
-    new TMSFESceneDesc("d018_01", "1F to 2F", ["d018_01", "obj01", "obj02", "sky"]),
-    new TMSFESceneDesc("d018_02", "3F", ["d018_02", "obj01", "obj02", "sky"]),
-    new TMSFESceneDesc("d018_03", "4F to 5F", ["d018_03", "obj01", "obj02", "sky"], undefined, 7, true),
-    new TMSFESceneDesc("d018_04", "The Nexus", ["d018_04", "obj01", "obj02", "sky"]),
+    new TMSFESceneDesc("d018_01", "1F to 2F", ["d018_01", "obj01", "obj02", "sky"], undefined, 7, false, true),
+    new TMSFESceneDesc("d018_02", "3F", ["d018_02", "obj01", "obj02", "sky"], undefined, undefined, false, true),
+    new TMSFESceneDesc("d018_03", "4F to 5F", ["d018_03", "obj01", "obj02", "sky"], undefined, undefined, true, true),
+    new TMSFESceneDesc("d018_04", "The Nexus", ["d018_04", "obj01", "obj02", "sky"], undefined, undefined, false, true),
     "Training Area",
     new TMSFESceneDesc("d015_01", "Training Area", ["d015_01", "obj01", "obj02", "obj03", "sky"]),
     new TMSFESceneDesc("d015_02", "Fighter's Hall", ["d015_02"]),
     "Battle Maps",
-    // new TMSFESceneDesc("b000_00", "b000_00"), wii u file
-    // new TMSFESceneDesc("b001_01", "b001_01"), wii u file
     new TMSFESceneDesc("b002_01", "b002_01", ["b002_01", "obj01", "obj02", "obj03", "sky"]),
     new TMSFESceneDesc("b003_01", "b003_01", ["b003_01", "obj01", "obj02", "obj03", "sky"]),
     new TMSFESceneDesc("b004_01", "b004_01", ["b004_01", "obj01", "obj02", "obj03", "sky"]),
@@ -205,14 +204,6 @@ const sceneDescs =
     new TMSFESceneDesc("f001_05", "Shibuya 5", ["f001_05", "obj01", "obj02", "obj10", "sky"]),
     new TMSFESceneDesc("f001_06", "Shibuya 6", ["f001_06", "obj01", "obj02", "obj04", "obj10", "sky"]),
     new TMSFESceneDesc("f001_07", "Shibuya 7", ["f001_07", "obj01", "obj02", "obj10", "sky"]),
-    new TMSFESceneDesc("f003_01", "Hee Ho Mart 1", ["f003_01", "sky"]),
-    new TMSFESceneDesc("f003_09", "Hee Ho Mart 2", ["f003_09", "sky"]),
-    new TMSFESceneDesc("f003_04", "Carabia", ["f003_04", "obj01", "sky"]),
-    new TMSFESceneDesc("f003_05", "Uzume Lesson Studio", ["f003_05", "sky"]),
-    new TMSFESceneDesc("f003_06", "Café Seiren", ["f003_06", "sky"]),
-    // new TMSFESceneDesc("f003_10", "Café Seiren 2", ["f003_10", "sky"]), // not a wii u file, but the map layout file is big endian, which causes it to fail to load. maybe load the wii u version instead?
-    new TMSFESceneDesc("f003_07", "???", ["f003_07", "sky"]),
-    new TMSFESceneDesc("f003_08", "Anzu", ["f003_08", "sky"], create_f003_08_gimmicks),
     new TMSFESceneDesc("f005_01", "Daiba Studio", ["f005_01", "sky"]),
     new TMSFESceneDesc("f005_02", "Daiba Studio 2", ["f005_02", "obj01", "sky"]),
     new TMSFESceneDesc("f002_01", "Daitama Observatory 1", ["f002_01", "obj01", "obj02", "obj03"]),
@@ -225,12 +216,26 @@ const sceneDescs =
     new TMSFESceneDesc("f010_01", "Toubu Rooftop", ["f010_01", "sky"]),
     new TMSFESceneDesc("f010_02", "Classroom Film Set", ["f010_02", "sky"]),
     new TMSFESceneDesc("f007_01", "Harajuku", ["f007_01", "sky"]),
-    new TMSFESceneDesc("f007_02", "????", ["f007_02", "sky"]),
+    "Shops",
+    new TMSFESceneDesc("f003_01", "Hee Ho Mart 1", ["f003_01", "sky"]),
+    new TMSFESceneDesc("f003_09", "Hee Ho Mart 2", ["f003_09", "sky"]),
+    new TMSFESceneDesc("f003_04", "Carabia", ["f003_04", "obj01", "sky"]),
+    new TMSFESceneDesc("f003_06", "Café Seiren", ["f003_06", "sky"]),
+    // new TMSFESceneDesc("f003_10", "Café Seiren 2", ["f003_10", "sky"]), // not a wii u file, but the map layout file is big endian, which causes it to fail to load. maybe load the wii u version instead?
+    new TMSFESceneDesc("f003_08", "Anzu", ["f003_08", "sky"], create_f003_08_gimmicks),
+    "Cutscene Maps",
+    new TMSFESceneDesc("f003_05", "Uzume Lesson Studio", ["f003_05", "sky"]),
     new TMSFESceneDesc("f010_03", "Masqueraider Raiga", ["f010_03", "sky"]),
     // new TMSFESceneDesc("f010_04", "Hot Spring"), wii u file
     new TMSFESceneDesc("f010_05", "Microwavin' with Mamorin Set", ["f010_05"]),
     new TMSFESceneDesc("f010_06", "Dressing Room", ["f010_06"]),
     new TMSFESceneDesc("f010_07", "Fashion Show Runway", ["f010_07", "f010_07_obj01", "f010_07_obj02"]),
+    "Extra",
+    // new TMSFESceneDesc("d004_06", "Central Square 2"), wii u file
+    // new TMSFESceneDesc("b000_00", "b000_00"), wii u file
+    // new TMSFESceneDesc("b001_01", "b001_01"), wii u file
+    new TMSFESceneDesc("f003_07", "???", ["f003_07", "sky"]),
+    new TMSFESceneDesc("f007_02", "????", ["f007_02", "sky"]),
 ];
 
 export const sceneGroup: SceneGroup = { id, name, sceneDescs };
