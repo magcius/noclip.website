@@ -959,6 +959,9 @@ export class ToontownRenderer implements Viewer.SceneGfx {
       if (geomData.indexBuffer) {
         device.destroyBuffer(geomData.indexBuffer);
       }
+      if (geomData.skinningBuffer) {
+        device.destroyBuffer(geomData.skinningBuffer);
+      }
     }
     for (const { texture } of this.textureCache.values()) {
       device.destroyTexture(texture);
