@@ -39,7 +39,7 @@ import * as UI from "../ui";
 import type * as Viewer from "../viewer";
 import { getVolume, setVolume, startPlayback, stopPlayback } from "./Audio";
 import { addFrameTime, getFrameTime, resetFrameTime } from "./Common";
-import { BinCollector } from "./CullBin";
+import { BinCollector, type CullableObject } from "./CullBin";
 import {
   type CachedGeometryData,
   composeDrawMask,
@@ -62,12 +62,11 @@ import {
   DepthWriteAttrib,
   DepthWriteMode,
   type Geom,
-  type GeomEntry,
   GeomNode,
   MAX_PRIORITY,
   PandaCompareFunc,
   type PandaNode,
-  type RenderState,
+  RenderState,
   type Texture,
   TextureAttrib,
   TransparencyMode,
@@ -114,6 +113,15 @@ export const pandaToNoclip = mat4.fromValues(
 );
 
 let musicEnabled = false;
+
+const DEPTH_WRITE_OFF = RenderState.make(
+  MAX_PRIORITY,
+  DepthWriteAttrib.create(DepthWriteMode.Off),
+);
+const COLOR_WRITE_OFF = RenderState.make(
+  MAX_PRIORITY,
+  ColorWriteAttrib.create(ColorWriteChannels.Off),
+);
 
 export class ToontownRenderer implements Viewer.SceneGfx {
   private renderHelper: GfxRenderHelper;
@@ -400,20 +408,20 @@ export class ToontownRenderer implements Viewer.SceneGfx {
   }
 
   /**
-   * Set up a render instance for a specific geom.
+   * Renders a cullable object to the main render instruction list.
    */
-  private setupRenderInst(
-    geomNode: GeomNode,
-    geomData: CachedGeometryData,
-    renderState: RenderState,
-    netTransform: ReadonlyMat4,
+  private drawCullableObject(
+    obj: CullableObject,
+    extraRenderState: RenderState | null,
     viewMatrix: ReadonlyMat4,
-  ): GfxRenderInst {
+  ): void {
     const renderInstManager = this.renderHelper.renderInstManager;
     const renderInst = renderInstManager.newRenderInst();
+    const geomData = obj.geomData;
 
     // Setup material properties
-    const material = extractMaterial(geomNode, renderState);
+    const renderState = obj.renderState.compose(extraRenderState);
+    const material = extractMaterial(obj.geomNode, renderState);
     const depthWrite = material.depthWrite === DepthWriteMode.On;
     const depthCompare = translateDepthTestMode(material.depthTestMode);
     let frontFace = GfxFrontFaceMode.CW;
@@ -489,9 +497,8 @@ export class ToontownRenderer implements Viewer.SceneGfx {
       setupSkinningUniform(renderInst, geomData.skinningTransforms);
     }
 
-    const modelMatrix = mat4.clone(netTransform);
-
     // Apply billboard effect if present
+    let modelMatrix = obj.modelMatrix;
     if (material.billboardEffect && !material.billboardEffect.off) {
       const modelViewMatrix = mat4.create();
       mat4.mul(modelViewMatrix, viewMatrix, modelMatrix);
@@ -504,21 +511,23 @@ export class ToontownRenderer implements Viewer.SceneGfx {
         flags |= CalcBillboardFlags.PriorityY;
       }
 
-      calcBillboardMatrix(modelMatrix, modelViewMatrix, flags);
-      modelMatrix[8] = modelViewMatrix[8];
-      modelMatrix[9] = modelViewMatrix[9];
-      modelMatrix[10] = modelViewMatrix[10];
+      const mtx = mat4.create();
+      calcBillboardMatrix(mtx, modelViewMatrix, flags);
+      mtx[8] = modelViewMatrix[8];
+      mtx[9] = modelViewMatrix[9];
+      mtx[10] = modelViewMatrix[10];
 
       const viewMatrixInv = mat4.create();
       mat4.invert(viewMatrixInv, viewMatrix);
-      mat4.mul(modelMatrix, viewMatrixInv, modelMatrix);
+      mat4.mul(mtx, viewMatrixInv, mtx);
+      modelMatrix = mtx;
     }
 
     renderInst.setDrawCount(geomData.indexCount);
 
     this.setupProgram(renderInst, geomData, material);
     setupDrawUniform(renderInst, material, modelMatrix);
-    return renderInst;
+    this.renderInstListMain.submitRenderInst(renderInst);
   }
 
   private setupProgram(
@@ -596,78 +605,76 @@ export class ToontownRenderer implements Viewer.SceneGfx {
 
     const binCollector = new BinCollector(viewerInput.camera.viewMatrix);
 
+    interface TraverserData {
+      node: PandaNode;
+      parentTransform: ReadonlyMat4;
+      parentDrawMask: number;
+      parentState: RenderState;
+      collectorOverride: CullableObject[] | null;
+    }
+
     // Traverse scene graph and submit render instructions
-    // decalCollector: When non-null, we're inside a decal group and should collect
-    // render results here instead of submitting to binCollector directly.
-    function traverse(
-      this: ToontownRenderer,
-      node: PandaNode,
-      parentTransform: ReadonlyMat4,
-      parentDrawMask: number,
-      parentState: RenderState,
-    ): void {
+    function traverse(this: ToontownRenderer, data: TraverserData): void {
       // Compose draw mask for this node
       const runningDrawMask = composeDrawMask(
-        parentDrawMask,
-        node.drawControlMask,
-        node.drawShowMask,
+        data.parentDrawMask,
+        data.node.drawControlMask,
+        data.node.drawShowMask,
       );
 
       // Check if this node is visible (children may still be visible via showThrough)
       const thisNodeVisible = isNodeVisible(runningDrawMask);
 
       // CompassEffect handling (always - affects child transforms)
-      const compassEffect = node.effects.effects.find(
-        (effect) => effect instanceof CompassEffect,
-      );
+      const compassEffect = data.node.effects.get(CompassEffect);
       if (compassEffect?.reference) {
         // TODO actually check CompassEffect properties
-        node.pos = compassEffect.reference.pos;
+        data.node.pos = compassEffect.reference.pos;
       }
 
       // Accumulate transform
       let netTransform: ReadonlyMat4;
-      if (node.transform.isIdentity) {
-        netTransform = parentTransform;
+      if (data.node.transform.isIdentity) {
+        netTransform = data.parentTransform;
       } else {
         const mtx = mat4.create();
-        mat4.multiply(mtx, parentTransform, node.transform.getMatrix());
+        mat4.multiply(
+          mtx,
+          data.parentTransform,
+          data.node.transform.getMatrix(),
+        );
         netTransform = mtx;
       }
 
       // Combine render states
-      const renderState = parentState.compose(node.state);
+      const renderState = data.parentState.compose(data.node.state);
 
-      if (node instanceof Character) {
-        node.partBundles.forEach((bundle) => {
+      // Update animations
+      if (data.node instanceof Character) {
+        data.node.partBundles.forEach((bundle) => {
           bundle.update();
         });
       }
 
+      // For decals: locally collect adjacent and child geometries
+      let collectorOverride = data.collectorOverride;
+      let childCollectorOverride = data.collectorOverride;
+
       // Only render geometry if this node is visible
-      if (thisNodeVisible && node instanceof GeomNode) {
+      let isDecalNode = false;
+      if (thisNodeVisible && data.node instanceof GeomNode) {
         // Check if this node is a decal base
         if (
-          node.effects.effects.some((effect) => effect instanceof DecalEffect)
+          // Nested decal effects are ignored
+          collectorOverride === null &&
+          data.node.effects.get(DecalEffect) !== null
         ) {
-          // Use AABB culling
-          scratchAABB.transform(node.getBoundingBox(), netTransform);
-          scratchAABB.transform(scratchAABB, pandaToNoclip);
-          if (!viewerInput.camera.frustum.contains(scratchAABB)) {
-            return;
-          }
-
-          binCollector.add({
-            geomNode: node,
-            geomData: null,
-            renderState,
-            modelMatrix: netTransform,
-            drawMask: runningDrawMask,
-          });
-          return; // Skip traversing children (decal children rendered later)
+          collectorOverride = [];
+          childCollectorOverride = [];
+          isDecalNode = true;
         }
 
-        for (const { geom, state } of node.geoms) {
+        for (const { geom, state } of data.node.geoms) {
           const geomData = createGeomData(
             geom,
             this.renderHelper.renderCache,
@@ -695,22 +702,9 @@ export class ToontownRenderer implements Viewer.SceneGfx {
             );
 
             // Scale radius by max scale factor from transform
-            const scaleX = Math.hypot(
-              netTransform[0],
-              netTransform[1],
-              netTransform[2],
-            );
-            const scaleY = Math.hypot(
-              netTransform[4],
-              netTransform[5],
-              netTransform[6],
-            );
-            const scaleZ = Math.hypot(
-              netTransform[8],
-              netTransform[9],
-              netTransform[10],
-            );
-            const maxScale = Math.max(scaleX, scaleY, scaleZ);
+            const scale = vec3.create();
+            mat4.getScaling(scale, netTransform);
+            const maxScale = Math.max(scale[0], scale[1], scale[2]);
             const transformedRadius = geomData.sphereRadius * maxScale;
 
             culled = !viewerInput.camera.frustum.containsSphere(
@@ -722,133 +716,76 @@ export class ToontownRenderer implements Viewer.SceneGfx {
             continue;
           }
 
-          binCollector.add({
-            geomNode: node,
+          const obj: CullableObject = {
+            geomNode: data.node,
             geomData,
             renderState: renderState.compose(state),
             modelMatrix: netTransform,
             drawMask: runningDrawMask,
-          });
+            isDecalBase: false,
+            adjacent: [],
+            children: [],
+          };
+          if (collectorOverride !== null) {
+            collectorOverride.push(obj);
+          } else {
+            binCollector.add(obj);
+          }
         }
       }
 
       // Always traverse children even if this node is hidden
       // Children may use showThrough() to override parent visibility
-      for (const [child, _sort] of node.children) {
-        traverse.call(this, child, netTransform, runningDrawMask, renderState);
+      for (const [child, _sort] of data.node.children) {
+        traverse.call(this, {
+          node: child,
+          parentTransform: netTransform,
+          parentDrawMask: runningDrawMask,
+          parentState: renderState,
+          collectorOverride: childCollectorOverride,
+        });
+      }
+
+      if (isDecalNode && collectorOverride && childCollectorOverride) {
+        // Use first geom as the root object
+        const obj = collectorOverride.shift();
+        if (!obj) return;
+        obj.isDecalBase = true;
+        obj.adjacent = collectorOverride;
+        obj.children = childCollectorOverride;
+        binCollector.add(obj);
       }
     }
 
-    // Start traversal from the found node with all bits on (default visibility)
-    traverse.call(
-      this,
-      this.scene,
-      mat4.create(),
-      0xffffffff,
-      this.scene.state,
-    );
+    // Start traversal from the root node with all bits on (default visibility)
+    traverse.call(this, {
+      node: this.scene,
+      parentTransform: mat4.create(),
+      parentDrawMask: 0xffffffff,
+      parentState: this.scene.state,
+      collectorOverride: null,
+    });
 
     for (const obj of binCollector.finish()) {
-      if (obj.geomData) {
+      if (!obj.isDecalBase) {
         // Regular render
-        this.renderInstListMain.submitRenderInst(
-          this.setupRenderInst(
-            obj.geomNode,
-            obj.geomData,
-            obj.renderState,
-            obj.modelMatrix,
-            viewMatrix,
-          ),
-        );
+        this.drawCullableObject(obj, null, viewMatrix);
       } else {
-        function doRender(
-          this: ToontownRenderer,
-          node: GeomNode,
-          { geom, state }: GeomEntry,
-          renderState: RenderState,
-          modelMatrix: ReadonlyMat4,
-        ) {
-          this.renderInstListMain.submitRenderInst(
-            this.setupRenderInst(
-              node,
-              createGeomData(
-                geom,
-                this.renderHelper.renderCache,
-                this.geomCache,
-              ),
-              renderState.compose(state),
-              modelMatrix,
-              viewMatrix,
-            ),
-          );
-        }
         // Decal render
-        const baseState = obj.renderState.withAttrib(
-          DepthWriteAttrib.create(DepthWriteMode.Off),
-          MAX_PRIORITY,
-        );
-        // Draw base with depth write disabled
-        for (const entry of obj.geomNode.geoms) {
-          doRender.call(this, obj.geomNode, entry, baseState, obj.modelMatrix);
+        // Draw base geometry with depth write disabled
+        this.drawCullableObject(obj, DEPTH_WRITE_OFF, viewMatrix);
+        for (const base of obj.adjacent) {
+          this.drawCullableObject(base, DEPTH_WRITE_OFF, viewMatrix);
         }
         // Draw children with depth write disabled
-        function doRenderChild(
-          this: ToontownRenderer,
-          base: PandaNode,
-          renderState: RenderState,
-          parentTransform: ReadonlyMat4,
-          parentDrawMask: number,
-        ) {
-          for (const [child, _sort] of base.children) {
-            // Compose draw mask for this child
-            const runningDrawMask = composeDrawMask(
-              parentDrawMask,
-              child.drawControlMask,
-              child.drawShowMask,
-            );
-
-            let netTransform: ReadonlyMat4;
-            if (child.transform.isIdentity) {
-              netTransform = parentTransform;
-            } else {
-              const mtx = mat4.create();
-              mat4.multiply(mtx, parentTransform, child.transform.getMatrix());
-              netTransform = mtx;
-            }
-            const childState = renderState.compose(child.state);
-
-            // Only render if visible
-            if (isNodeVisible(runningDrawMask) && child instanceof GeomNode) {
-              for (const entry of child.geoms) {
-                doRender.call(this, child, entry, childState, netTransform);
-              }
-            }
-
-            // Continue traversing children (for showThrough support)
-            doRenderChild.call(
-              this,
-              child,
-              childState,
-              netTransform,
-              runningDrawMask,
-            );
-          }
+        for (const child of obj.children) {
+          this.drawCullableObject(child, DEPTH_WRITE_OFF, viewMatrix);
         }
-        doRenderChild.call(
-          this,
-          obj.geomNode,
-          baseState,
-          obj.modelMatrix,
-          obj.drawMask,
-        );
-        // Draw base with color write disabled
-        const finalState = obj.renderState.withAttrib(
-          ColorWriteAttrib.create(ColorWriteChannels.Off),
-          MAX_PRIORITY,
-        );
-        for (const entry of obj.geomNode.geoms) {
-          doRender.call(this, obj.geomNode, entry, finalState, obj.modelMatrix);
+        // Draw base geometry with color write disabled (order reversed)
+        for (let i = obj.adjacent.length - 1; i >= 0; i--) {
+          this.drawCullableObject(obj.adjacent[i], COLOR_WRITE_OFF, viewMatrix);
         }
+        this.drawCullableObject(obj, COLOR_WRITE_OFF, viewMatrix);
       }
     }
 
@@ -973,7 +910,7 @@ export class ToontownRenderer implements Viewer.SceneGfx {
 function setupDrawUniform(
   renderInst: GfxRenderInst,
   material: MaterialData,
-  modelMatrix: mat4,
+  modelMatrix: ReadonlyMat4,
 ) {
   let offs = renderInst.allocateUniformBuffer(
     ToontownProgram.ub_DrawParams,

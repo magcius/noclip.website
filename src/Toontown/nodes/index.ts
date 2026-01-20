@@ -88,6 +88,7 @@ export {
   dbgVec4,
   dbgMat4,
   formatDebugInfo,
+  formatNumber,
 } from "./debug";
 
 // Geometry

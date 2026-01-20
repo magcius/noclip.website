@@ -81,7 +81,7 @@ export class PandaNode extends TypedObject {
    * - "-GeomNode" - match exact type only
    * - "=tagKey" - match nodes with tag
    * - "=tagKey=value" - match nodes with tag value
-   * - ";+i" - flags: +i (case insensitive), +s (include stashed)
+   * - ";+i" - flags: +i (case insensitive), +s (include stashed), -h (exclude hidden)
    *
    * @example
    * node.find("door_*_flat")      // direct child matching glob
@@ -129,14 +129,18 @@ export class PandaNode extends TypedObject {
       // Normal children (unless stashedOnly)
       if (!component?.stashedOnly) {
         for (const [child] of node.children) {
-          children.push(child);
+          if (flags.returnHidden || !child.isOverallHidden()) {
+            children.push(child);
+          }
         }
       }
 
       // Stashed children (if flag set or stashedOnly)
       if (flags.returnStashed || component?.stashedOnly) {
         for (const [child] of node.stashed) {
-          children.push(child);
+          if (flags.returnHidden || !child.isOverallHidden()) {
+            children.push(child);
+          }
         }
       }
 
@@ -327,6 +331,10 @@ export class PandaNode extends TypedObject {
   hide() {
     this.drawControlMask = 0xffffffff;
     this.drawShowMask = 0;
+  }
+
+  isOverallHidden(): boolean {
+    return ((this.drawShowMask | ~this.drawControlMask) & (1 << 31)) === 0;
   }
 
   show(): void {

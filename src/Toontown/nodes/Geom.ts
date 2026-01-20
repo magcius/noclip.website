@@ -2,7 +2,7 @@ import { vec3 } from "gl-matrix";
 import { AABB } from "../../Geometry";
 import type { BAMFile } from "../BAMFile";
 import { AssetVersion, type DataStream } from "../Common";
-import { type DebugInfo, dbgEnum, dbgFlags, dbgNum, dbgRef, dbgRefs } from "./debug";
+import { type DebugInfo, dbgEnum, dbgFlags, dbgRef, dbgRefs } from "./debug";
 import { GeomPrimitive } from "./GeomPrimitive";
 import type {
   GeomVertexArrayFormat,

@@ -30,16 +30,19 @@ export type DebugValue =
   | { type: "boolean"; value: boolean }
   | { type: "ref"; obj: TypedObject | null }
   | { type: "refs"; objs: (TypedObject | null)[] }
-  | { type: "vec2"; value: ReadonlyVec2 }
-  | { type: "vec3"; value: ReadonlyVec3 }
-  | { type: "vec4"; value: ReadonlyVec4 }
+  | { type: "vec"; value: Float32Array | readonly number[] }
   | { type: "mat4"; value: ReadonlyMat4 }
   | { type: "color"; value: ReadonlyVec4 }
   | { type: "enum"; value: number; name: string }
   | { type: "flags"; value: number; names: string[] }
   | { type: "bytes"; length: number }
   | { type: "array"; items: DebugValue[]; compact?: boolean }
-  | { type: "typedArray"; value: TypedArray; components?: number }
+  | {
+      type: "typedArray";
+      value: TypedArray;
+      components?: number;
+      compact?: boolean;
+    }
   | { type: "object"; fields: DebugInfo; compact?: boolean };
 
 /**
@@ -70,11 +73,11 @@ export function dbgRefs(objs: (TypedObject | null)[]): DebugValue {
 }
 
 export function dbgVec2(value: ReadonlyVec2): DebugValue {
-  return { type: "vec2", value };
+  return { type: "vec", value };
 }
 
 export function dbgVec3(value: ReadonlyVec3): DebugValue {
-  return { type: "vec3", value };
+  return { type: "vec", value };
 }
 
 export function dbgTypedArray(
@@ -85,7 +88,7 @@ export function dbgTypedArray(
 }
 
 export function dbgVec4(value: ReadonlyVec4): DebugValue {
-  return { type: "vec4", value };
+  return { type: "vec", value };
 }
 
 export function dbgMat4(value: ReadonlyMat4): DebugValue {
@@ -139,14 +142,14 @@ export function dbgFields(entries: [string, DebugValue][]): DebugInfo {
 
 // Formatting functions for console output
 
-function formatNumber(n: number): string {
+export function formatNumber(n: number): string {
   if (Number.isInteger(n)) {
     return n.toString();
   }
   return n.toFixed(4).replace(/\.?0+$/, "");
 }
 
-function formatVec(values: ReadonlyVec2 | ReadonlyVec3 | ReadonlyVec4): string {
+function formatVec(values: Float32Array | readonly number[]): string {
   return `(${Array.from(values, formatNumber).join(", ")})`;
 }
 
@@ -193,9 +196,7 @@ function formatValueCompact(value: DebugValue): string {
         return `[${refs}]`;
       }
       return `[${value.objs.length} refs]`;
-    case "vec2":
-    case "vec3":
-    case "vec4":
+    case "vec":
       return formatVec(value.value);
     case "mat4":
       return formatMat(value.value, "", "");
@@ -243,9 +244,7 @@ function formatValue(value: DebugValue, indent: number = 0): string {
         .join(", ");
       return `[${refs}]`;
     }
-    case "vec2":
-    case "vec3":
-    case "vec4":
+    case "vec":
       return formatVec(value.value);
     case "mat4":
       return formatMat(value.value, pad, pad1);
@@ -270,8 +269,27 @@ function formatValue(value: DebugValue, indent: number = 0): string {
         return `[${value.items.map((i) => formatValue(i, 0)).join(", ")}]`;
       }
       return `[\n${value.items.map((i) => `${pad1}${formatValue(i, indent + 1)}`).join(",\n")}\n${pad}]`;
-    case "typedArray":
-      return `<${value.value.length / (value.components || 1)} items>`;
+    case "typedArray": {
+      const numComponents = value.components || 1;
+      const numItems = value.value.length / numComponents;
+      if (numItems === 0) return "[]";
+      if (value.compact || numItems > 20) {
+        return `<${numItems} items>`;
+      }
+      let result = "[\n";
+      for (let i = 0; i < numItems; i++) {
+        const component = value.value.subarray(
+          i * numComponents,
+          (i + 1) * numComponents,
+        ) as Float32Array;
+        result += `${pad1}${formatVec(component)}`;
+        if (i < numItems - 1) {
+          result += ",\n";
+        }
+      }
+      result += `\n${pad}]`;
+      return result;
+    }
     case "object":
       if (value.compact) {
         return formatDebugInfoCompact(value.fields);

@@ -1,4 +1,4 @@
-import { mat4, vec2, vec3, vec4 } from "gl-matrix";
+import { vec2, vec3, vec4 } from "gl-matrix";
 import type { ToontownLoader } from "../Loader";
 import {
   DecalEffect,
@@ -347,9 +347,9 @@ export class DNASceneBuilder {
   ): void {
     const thisNode = this.addGeometryFromCode(node.code, parentNode);
     if (!thisNode) return;
+    thisNode.name = node.name;
     thisNode.transform = buildTransformState(node);
-    // Building animations are never activated
-    // thisNode.tags.set("DNAAnim", node.anim);
+    thisNode.tags.set("DNAAnim", node.anim);
 
     for (const child of node.children) {
       this.visitNode(child, thisNode);
@@ -788,24 +788,20 @@ export class DNASceneBuilder {
     let signNode: PandaNode | null = null;
     if (node.code) {
       signNode = this.addGeometryFromCode(node.code, buildingFront);
+      signNode?.setName("sign");
     } else {
       signNode = buildingFront.attachNewNode("sign");
     }
     if (!signNode) return;
     signNode.setAttrib(DepthWriteAttrib.create(DepthWriteMode.Off));
-    signNode.setEffect(new DecalEffect());
 
     const signOrigin = parentNode.find("**/*sign_origin");
     if (!signOrigin) {
       throw new Error(`No sign origin found for sign ${parentNode.name}`);
     }
 
-    signNode.transform = TransformState.fromMatrix(
-      mat4.multiply(
-        mat4.create(),
-        signOrigin.transform.getMatrix(),
-        buildTransformState(node).getMatrix(),
-      ),
+    signNode.transform = signOrigin.transform.compose(
+      buildTransformState(node),
     );
     if (node.color) signNode.setColor(node.color);
 

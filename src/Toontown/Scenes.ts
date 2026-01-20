@@ -407,6 +407,15 @@ class ToontownDNASceneDesc implements Viewer.SceneDesc {
         animProps.push(new GenericAnimatedProp(node));
       }
     }
+    // const animatedBuildingNodes = scene.findAllMatches("**/*:animated_building_*;-h");
+    // for (const node of animatedBuildingNodes) {
+    //   console.log("Creating GenericAnimatedBuilding", node.name);
+    //   animProps.push(new GenericAnimatedBuilding(node));
+    // }
+    // const meshFront = scene.find("**/ttc_B2_mesh_front");
+    // if (meshFront) {
+    //   meshFront.effects = new RenderEffects();
+    // }
     await Promise.all(
       animProps.map(async (prop) => {
         await prop.init();

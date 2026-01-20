@@ -19,10 +19,14 @@ import { pandaToNoclip } from "./Render";
 
 export type CullableObject = {
   geomNode: GeomNode;
-  geomData: CachedGeometryData | null;
+  geomData: CachedGeometryData;
   renderState: RenderState;
   modelMatrix: ReadonlyMat4;
   drawMask: number;
+  // Decal rendering
+  isDecalBase: boolean;
+  adjacent: CullableObject[]; // Subsequent Geoms in the same node
+  children: CullableObject[]; // Child Geoms (decals)
 };
 
 abstract class CullBin {
@@ -224,6 +228,10 @@ export class BinCollector {
       case TransparencyMode.Dual: {
         const cullBinAttrib = obj.renderState.get(CullBinAttrib);
         if (cullBinAttrib === null || cullBinAttrib.binName.length === 0) {
+          this.getBin("opaque").add({
+            ...obj,
+            renderState: obj.renderState.compose(DUAL_OPAQUE_STATE),
+          });
           const transparentState =
             obj.geomNode.effects.get(DecalEffect) !== null
               ? DUAL_TRANSPARENT_STATE_DECALS
@@ -231,10 +239,10 @@ export class BinCollector {
           this.getBin("transparent").add({
             ...obj,
             renderState: obj.renderState.compose(transparentState),
-          });
-          this.getBin("opaque").add({
-            ...obj,
-            renderState: obj.renderState.compose(DUAL_OPAQUE_STATE),
+            // Don't render decal children in transparent pass
+            isDecalBase: false,
+            adjacent: [],
+            children: [],
           });
           return;
         }

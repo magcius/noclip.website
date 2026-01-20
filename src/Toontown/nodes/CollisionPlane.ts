@@ -1,4 +1,4 @@
-import { vec4 } from "gl-matrix";
+import { type vec3, vec4 } from "gl-matrix";
 import type { BAMFile } from "../BAMFile";
 import type { DataStream } from "../Common";
 import { CollisionSolid } from "./CollisionSolid";
@@ -7,6 +7,14 @@ import { type CopyContext, registerTypedObject } from "./TypedObject";
 
 export class CollisionPlane extends CollisionSolid {
   public plane = vec4.create();
+
+  get normal(): vec3 {
+    return this.plane.slice(0, 3) as vec3;
+  }
+
+  get distance(): number {
+    return this.plane[3];
+  }
 
   override load(file: BAMFile, data: DataStream) {
     super.load(file, data);

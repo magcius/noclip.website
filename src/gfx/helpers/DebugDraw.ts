@@ -413,6 +413,20 @@ export class DebugDraw {
         this.drawLine(p0, DebugDraw.scratchVec3[0], color0, color1, options);
     }
 
+    public drawPolygonLine(points: ReadonlyVec3[], color: Readonly<Color>, options: DebugDrawOptions = defaultOptions): void {
+        const page = this.findPage(this.getBehaviorType(true, color.a >= 1.0, options), points.length, points.length * 2);
+
+        const baseVertex = page.getCurrentVertexID();
+        for (let i = 0; i < points.length; i++) {
+            page.vertexPCF(points[i], color, options);
+            page.index(baseVertex + i);
+            if (i < points.length - 1)
+              page.index(baseVertex + i + 1);
+            else
+              page.index(baseVertex);
+        }
+    }
+
     public drawBasis(m: ReadonlyMat4, mag = 100, options: DebugDrawOptions = defaultOptions): void {
         const page = this.findPage(this.getBehaviorType(true, true, options), 6, 6);
 
@@ -488,7 +502,7 @@ export class DebugDraw {
 
     public drawCapsuleLine(r: number, height: number, m: ReadonlyMat4, color: Readonly<Color>, sides = 32, options: DebugDrawOptions = defaultOptions): void {
         const numPoints = sides - 1;
-        const page = this.findPage(this.getBehaviorType(true, color.a >= 1.0, options), sides * 7, numPoints * 8 + sides * 6 + 4);
+        const page = this.findPage(this.getBehaviorType(true, color.a >= 1.0, options), sides * 7, numPoints * 8 + sides * 6 + 8);
 
         const center = DebugDraw.scratchVec3[0], right = DebugDraw.scratchVec3[1], up = DebugDraw.scratchVec3[2], cross = DebugDraw.scratchVec3[3];
         getMatrixTranslation(center, m);

@@ -2,6 +2,7 @@ export { Actor } from "./Actor";
 export { AnimatedProp, animatedPropMap } from "./AnimatedProp";
 export { Avatar } from "./Avatar";
 export { Char } from "./Char";
+export { GenericAnimatedBuilding } from "./GenericAnimatedBuilding";
 export { GenericAnimatedProp } from "./GenericAnimatedProp";
 export { HQPeriscopeAnimatedProp } from "./HQPeriscopeAnimatedProp";
 export { HQTelescopeAnimatedProp } from "./HQTelescopeAnimatedProp";
