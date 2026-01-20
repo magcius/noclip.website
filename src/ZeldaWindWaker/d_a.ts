@@ -5385,7 +5385,7 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
         setLightTevColorType(globals, this.model, this.tevStr, globals.camera);
         mDoExt_modelEntryDL(globals, this.model, renderInstManager);
 
-        // if (mCurProc != daPyProc_DEMO_CAUGHT_e && !dComIfGp_checkPlayerStatus0(0, daPyStts0_SHIP_RIDE_e)) {
+        // if (mCurProc !== daPyProc_DEMO_CAUGHT_e && !dComIfGp_checkPlayerStatus0(0, daPyStts0_SHIP_RIDE_e)) {
         this.drawShadow(globals);
     }
 
@@ -5719,13 +5719,13 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
                     const handData = parseTParagraphData(scratchDemoParagraphData, 49, demoActor.stbData, assertExists(data.entryNext))!;
                     handIdxRight = demoActor.stbData.getUint8(handData.entryOffset + 0);
                     handIdxLeft = demoActor.stbData.getUint8(handData.entryOffset + 1);
-                    if (handData.entryCount == 3) {
+                    if (handData.entryCount === 3) {
                         // TODO: const newOldFrameMorfCounter = demoActor.stbData.getUint8(handData.entryOffset + 2);
                     }
 
-                    if (demoActor.stbDataId == 3) {
+                    if (demoActor.stbDataId === 3) {
                         // TODO: UNK = 1
-                    } else if (demoActor.stbDataId == 5) {
+                    } else if (demoActor.stbDataId === 5) {
                         // TODO: yRotCamDiff = 1;
                     }
                     break;
@@ -5741,13 +5741,13 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
                     const extraData = parseTParagraphData(scratchDemoParagraphData, 49, demoActor.stbData, assertExists(bckData.entryNext))!;
                     handIdxLeft = demoActor.stbData.getUint8(extraData.entryOffset + 0);
                     handIdxRight = demoActor.stbData.getUint8(extraData.entryOffset + 1);
-                    if (extraData.entryCount == 3) {
+                    if (extraData.entryCount === 3) {
                         // TODO: const newOldFrameMorfCounter = demoActor.stbData.getUint8(extraData.entryOffset + 2);
                     }
 
-                    if (demoActor.stbDataId == 2) {
+                    if (demoActor.stbDataId === 2) {
                         // TODO: UNK = 1
-                    } else if (demoActor.stbDataId == 4) {
+                    } else if (demoActor.stbDataId === 4) {
                         // TODO: yRotCamDiff = 1;
                     }
                     break;
@@ -6764,7 +6764,7 @@ class d_a_demo00 extends fopAc_ac_c {
                     if (data) {
                         const eventIdx = demoActor.stbData.getUint8(data.entryOffset);
                         assert(eventIdx < l_eventBit.length);
-                        if (l_eventBit[eventIdx] !== undefined && this.dataId != oldDataId) {
+                        if (l_eventBit[eventIdx] !== undefined && this.dataId !== oldDataId) {
                             // dComIfGs_onEventBit(l_eventBit[eventIdx]);
                             console.log(`[d_act${this.subtype}] Setting event bit: 0x${l_eventBit[eventIdx].toString(16)}`);
                         }
@@ -6773,7 +6773,7 @@ class d_a_demo00 extends fopAc_ac_c {
                 }
 
                 case 5: { // Acquire item
-                    if (this.dataId != oldDataId) {
+                    if (this.dataId !== oldDataId) {
                         const data = parseTParagraphData(scratchDemoParagraphData, 49, stbData);
                         if (data)
                             console.log(`[d_act${this.subtype}] Acquiring item ID: ${demoActor.stbData.getUint8(data.entryOffset)}`);
@@ -6798,7 +6798,7 @@ class d_a_demo00 extends fopAc_ac_c {
                         if (vibArg < 100) {
                             console.log(`[d_act${this.subtype}] Setting shock vibration: ${vibArg}`);
                             // dComIfGp_getVibration().StartShock(vibArg, 1, cXyz(0.0f, 1.0f, 0.0f));
-                        } else if (vibArg != 0xFF) {
+                        } else if (vibArg !== 0xFF) {
                             console.log(`[d_act${this.subtype}] Setting quake vibration: ${vibArg - 100}`);
                             // dComIfGp_getVibration().StartQuake(vibArg - 100, 1, cXyz(0.0f, 1.0f, 0.0f));
                         } else {
@@ -6815,14 +6815,14 @@ class d_a_demo00 extends fopAc_ac_c {
                     if (data) {
                         const fadeType = demoActor.stbData.getUint8(data.entryOffset);
                         const fadeTime = demoActor.stbData.byteLength > 1 ? demoActor.stbData.getUint8(data.entryOffset + 1) : 0;
-                        if (this.dataId != oldDataId || fadeType != this.fadeType) {
+                        if (this.dataId !== oldDataId || fadeType !== this.fadeType) {
                             this.fadeType = fadeType;
                             const fadeColor = (this.dataId === 9) ? OpaqueBlack : colorNewFromRGBA8(0xA0A0A0FF);
                             if (fadeType === 0) {
-                                console.log(`[d_act${this.subtype}] Starting fade from ${this.dataId == 9 ? 'black' : 'white'} over ${fadeTime} seconds`);
+                                console.log(`[d_act${this.subtype}] Starting fade from ${this.dataId === 9 ? 'black' : 'white'} over ${fadeTime} seconds`);
                                 // TODO: dComIfGs_startColorFadeOut(fadeTime);
                             } else {
-                                console.log(`[d_act${this.subtype}] Starting fade to ${this.dataId == 9 ? 'black' : 'white'} over ${fadeTime} seconds`);
+                                console.log(`[d_act${this.subtype}] Starting fade to ${this.dataId === 9 ? 'black' : 'white'} over ${fadeTime} seconds`);
                                 // TODO: dComIfGs_startColorFadeIn(fadeTime);
                             }
                             // TODO: mDoGph_gInf_c::setFadeColor(fadeColor);
@@ -6864,7 +6864,7 @@ class d_a_demo00 extends fopAc_ac_c {
         scratchBboxB.reset();
         const bbox = scratchBboxB;
         for (let i = 0; i < modelData.bmd.jnt1.joints.length; i++) {
-            // TODO: only if (joint->getKind() == 0)
+            // TODO: only if (joint->getKind() === 0)
             const joint = modelData.bmd.jnt1.joints[i];
             const anmMtx = this.model!.shapeInstanceState.jointToWorldMatrixArray[i];
             scratchBboxA.transform(joint.bbox, anmMtx);
@@ -6952,7 +6952,7 @@ class d_a_demo00 extends fopAc_ac_c {
             this.currIds = { ...this.nextIds };
             this.createHeap(globals, demoActor);
 
-            if (this.model != null) {
+            if (this.model !== null) {
                 this.cullMtx = this.model.modelMatrix;
                 demoActor.model = this.model;
                 if (this.morf) {
@@ -7021,7 +7021,7 @@ class d_a_demo00 extends fopAc_ac_c {
 
             // Copy position and rotation from the demo to this actor
             const channelMask = EDemoActorFlags.HasPos | EDemoActorFlags.HasRot | EDemoActorFlags.HasAnim;
-            assert(channelMask == 0x2a);
+            assert(channelMask === 0x2a);
             dDemo_setDemoData(globals, deltaTimeFrames, this, channelMask, null, null);
 
             // Update ground check position

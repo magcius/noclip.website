@@ -2013,7 +2013,7 @@ export class TControl {
     }
 
     public createMessageObject(blockObj: TBlockObject): STBObject | null {
-        if (blockObj.type == 'JMSG') {
+        if (blockObj.type === 'JMSG') {
             const adaptor = new TMessageAdaptor(this.msgControl);
             const obj = new TMessageObject(this, blockObj, adaptor);
     
