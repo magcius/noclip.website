@@ -2,7 +2,7 @@
 import { ReadonlyMat4, ReadonlyVec3, mat4, vec2, vec3 } from "gl-matrix";
 import { Blue, Color, Green, Red } from "../../Color.js";
 import { branchlessONB } from "../../DebugJunk.js";
-import { MathConstants, Vec3UnitX, Vec3UnitY, Vec3UnitZ, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, scaleMatrix, setMatrixAxis, setMatrixTranslation, transformVec3Mat4w1, vec3FromBasis2 } from "../../MathHelpers.js";
+import { MathConstants, Vec3UnitX, Vec3UnitY, Vec3UnitZ, getMatrixAxis, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, lerp, scaleMatrix, setMatrixAxis, setMatrixTranslation, transformVec3Mat4w0, transformVec3Mat4w1, vec3FromBasis2, vec3FromBasis3 } from "../../MathHelpers.js";
 import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBufferUsage, GfxColor, GfxCompareMode, GfxDevice, GfxFormat, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxMipFilterMode, GfxPrimitiveTopology, GfxProgram, GfxSampler, GfxSamplerFormatKind, GfxTexFilterMode, GfxTextureDimension, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxWrapMode } from "../platform/GfxPlatform.js";
 import { align, assert, nArray } from "../platform/GfxPlatformUtil.js";
 import { GfxRenderCache } from "../render/GfxRenderCache.js";
@@ -16,6 +16,7 @@ import { IsDepthReversed } from "./ReversedDepthHelpers.js";
 import { GfxTopology, convertToTrianglesRange } from "./TopologyHelpers.js";
 import { fillColor, fillMatrix4x3, fillMatrix4x4, fillVec4 } from "./UniformBufferHelpers.js";
 import { FontTexture, FontTextureCache } from "./FontTexture.js";
+import { AABB } from "../../Geometry.js";
 
 // TODO(jstpierre):
 //  - Billboard text (world-space position, always faces user)
@@ -258,6 +259,7 @@ class BufferPage {
 
     public index(n: number): void {
         this.indexData[this.indexDataOffs++] = n;
+        assert(this.indexDataOffs <= this.indexData.length);
     }
 
     public endFrame(cache: GfxRenderCache, templateRenderInst: GfxRenderInst): void {
@@ -304,7 +306,7 @@ export class DebugDraw {
     private screenTextPosition = vec2.create();
     private screenTextOrigin = vec2.fromValues(128, 32);
 
-    public static scratchVec3 = nArray(4, () => vec3.create());
+    public static scratchVec3 = nArray(5, () => vec3.create());
     public static scratchMat4 = mat4.create();
 
     constructor(private renderCache: GfxRenderCache, uniformBuffer: GfxRenderDynamicUniformBuffer) {
@@ -470,9 +472,7 @@ export class DebugDraw {
         for (let i = 0; i < sides; i++) {
             const theta = i / sides * MathConstants.TAU;
             const sin = Math.sin(theta) * r, cos = Math.cos(theta) * r;
-            s[0] = center[0] + right[0] * cos + up[0] * sin;
-            s[1] = center[1] + right[1] * cos + up[1] * sin;
-            s[2] = center[2] + right[2] * cos + up[2] * sin;
+            vec3FromBasis2(s, center, right, cos, up, sin);
             page.vertexPCF(s, color, options);
 
             page.index(baseVertex + i);
@@ -484,6 +484,103 @@ export class DebugDraw {
         this.drawDiscLineRU(center, Vec3UnitX, Vec3UnitY, r, color, sides, options);
         this.drawDiscLineRU(center, Vec3UnitX, Vec3UnitZ, r, color, sides, options);
         this.drawDiscLineRU(center, Vec3UnitY, Vec3UnitZ, r, color, sides, options);
+    }
+
+    public drawCapsuleLine(r: number, height: number, m: ReadonlyMat4, color: Readonly<Color>, sides = 32, options: DebugDrawOptions = defaultOptions): void {
+        const numPoints = sides - 1;
+        const page = this.findPage(this.getBehaviorType(true, color.a >= 1.0, options), sides * 7, numPoints * 8 + sides * 6 + 4);
+
+        const center = DebugDraw.scratchVec3[0], right = DebugDraw.scratchVec3[1], up = DebugDraw.scratchVec3[2], cross = DebugDraw.scratchVec3[3];
+        getMatrixTranslation(center, m);
+        getMatrixAxis(right, up, cross, m);
+
+        const s = DebugDraw.scratchVec3[4];
+
+        const baseVertex = page.getCurrentVertexID();
+        for (let i = 0; i < sides; i++) {
+            const theta = i / numPoints * (MathConstants.TAU / 2);
+            const sin = Math.sin(theta) * r, cos = Math.cos(theta) * r;
+
+            // Lower cap points
+            vec3FromBasis2(s, center, right, cos, up, -(sin + height * 0.5));
+            page.vertexPCF(s, color, options);
+
+            vec3FromBasis2(s, center, cross, cos, up, -(sin + height * 0.5));
+            page.vertexPCF(s, color, options);
+
+            // Upper cap points
+            vec3FromBasis2(s, center, right, cos, up, sin + height * 0.5);
+            page.vertexPCF(s, color, options);
+
+            vec3FromBasis2(s, center, cross, cos, up, sin + height * 0.5);
+            page.vertexPCF(s, color, options);
+
+            // Lower caps
+            if (i < numPoints) {
+                const i0 = i, i1 = i + 1;
+                page.index(baseVertex + i0 * 4 + 0);
+                page.index(baseVertex + i1 * 4 + 0);
+                page.index(baseVertex + i0 * 4 + 1);
+                page.index(baseVertex + i1 * 4 + 1);
+
+                // Upper caps
+                page.index(baseVertex + i0 * 4 + 2);
+                page.index(baseVertex + i1 * 4 + 2);
+                page.index(baseVertex + i0 * 4 + 3);
+                page.index(baseVertex + i1 * 4 + 3);
+            }
+        }
+
+        const baseVertexCircles = baseVertex + sides * 4;
+        // Draw three circles surrounding the capsule equator.
+        for (let i = 0; i < sides; i++) {
+            const theta = i / numPoints * MathConstants.TAU;
+            const sin = Math.sin(theta) * r, cos = Math.cos(theta) * r;
+            vec3FromBasis3(s, center, right, sin, cross, cos, up, height * 0.5);
+            page.vertexPCF(s, color, options);
+            vec3FromBasis2(s, center, right, sin, cross, cos);
+            page.vertexPCF(s, color, options);
+            vec3FromBasis3(s, center, right, sin, cross, cos, up, -height * 0.5);
+            page.vertexPCF(s, color, options);
+
+            page.index(baseVertexCircles + i * 3);
+            page.index(baseVertexCircles + ((i === numPoints) ? 0 : (i + 1)) * 3);
+            page.index(baseVertexCircles + i * 3 + 1);
+            page.index(baseVertexCircles + ((i === numPoints) ? 0 : (i + 1)) * 3 + 1);
+            page.index(baseVertexCircles + i * 3 + 2);
+            page.index(baseVertexCircles + ((i === numPoints) ? 0 : (i + 1)) * 3 + 2);
+        }
+
+        // Connecting lines
+        page.index(baseVertex + 0); page.index(baseVertex + 2);
+        page.index(baseVertex + 1); page.index(baseVertex + 3);
+        page.index(baseVertex + numPoints * 4 + 0); page.index(baseVertex + numPoints * 4 + 2);
+        page.index(baseVertex + numPoints * 4 + 1); page.index(baseVertex + numPoints * 4 + 3);
+    }
+
+    public drawBoxLine(aabb: AABB, m: ReadonlyMat4, color: Readonly<Color>, options: DebugDrawOptions = defaultOptions): void {
+        const page = this.findPage(this.getBehaviorType(true, color.a >= 1.0, options), 8, 24);
+
+        const baseVertex = page.getCurrentVertexID();
+        const p = DebugDraw.scratchVec3[0];
+        for (let i = 0; i < 8; i++) {
+            aabb.cornerPoint(p, i);
+            transformVec3Mat4w1(p, m, p);
+            page.vertexPCF(p, color, options);
+        }
+
+        page.index(baseVertex + 0); page.index(baseVertex + 1);
+        page.index(baseVertex + 1); page.index(baseVertex + 3);
+        page.index(baseVertex + 3); page.index(baseVertex + 2);
+        page.index(baseVertex + 2); page.index(baseVertex + 0);
+        page.index(baseVertex + 4); page.index(baseVertex + 5);
+        page.index(baseVertex + 5); page.index(baseVertex + 7);
+        page.index(baseVertex + 7); page.index(baseVertex + 6);
+        page.index(baseVertex + 6); page.index(baseVertex + 4);
+        page.index(baseVertex + 0); page.index(baseVertex + 4);
+        page.index(baseVertex + 1); page.index(baseVertex + 5);
+        page.index(baseVertex + 2); page.index(baseVertex + 6);
+        page.index(baseVertex + 3); page.index(baseVertex + 7);
     }
 
     public drawDiscSolidN(center: ReadonlyVec3, n: ReadonlyVec3, r: number, color: Readonly<Color>, sides = 32, options: DebugDrawOptions = defaultOptions): void {
