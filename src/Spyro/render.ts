@@ -1,8 +1,8 @@
 import { mat4, vec3 } from "gl-matrix";
-import { defaultMegaState, makeMegaState } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
+import { defaultMegaState, makeMegaState, setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary";
 import { fillMatrix4x4, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
-import { GfxDevice, GfxBufferUsage, GfxBufferFrequencyHint, GfxFormat, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxTexFilterMode, GfxWrapMode, GfxMipFilterMode, GfxTextureUsage, GfxTextureDimension, GfxCompareMode, GfxCullMode } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxBufferUsage, GfxBufferFrequencyHint, GfxFormat, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxTexFilterMode, GfxWrapMode, GfxMipFilterMode, GfxTextureUsage, GfxTextureDimension, GfxCompareMode, GfxCullMode, GfxBlendMode, GfxBlendFactor, GfxChannelWriteMask } from "../gfx/platform/GfxPlatform";
 import { GfxBuffer, GfxInputLayout, GfxTexture } from "../gfx/platform/GfxPlatformImpl";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { DeviceProgram } from "../Program";
@@ -26,12 +26,12 @@ layout(std140) uniform ub_SceneParams {
 
 uniform sampler2D u_Texture;
 
-varying vec3 v_Color;
+varying vec4 v_Color;
 varying vec2 v_TexCoord;
 
 #ifdef VERT
 layout(location = 0) in vec3 a_Position;
-layout(location = 1) in vec3 a_Color;
+layout(location = 1) in vec4 a_Color;
 layout(location = 2) in vec2 a_UV;
 
 void main() {
@@ -48,7 +48,7 @@ void main() {
     vec4 texColor = texture(SAMPLER_2D(u_Texture), v_TexCoord);
 
     vec3 tex5 = floor(texColor.rgb * 31.0) / 31.0;
-    vec3 col5 = floor(v_Color * 31.0) / 31.0;
+    vec3 col5 = floor(v_Color.rgb * 31.0) / 31.0;
 
     vec3 lit = tex5 * col5;
 
@@ -65,7 +65,8 @@ void main() {
     vec3 dithered = lit + threshold;
     vec3 final5 = floor(dithered * 31.0) / 31.0;
 
-    gl_FragColor = vec4(final5 * 1.6, texColor.a);
+    float alpha = v_Color.a;
+    gl_FragColor = vec4(final5 * 1.6, alpha);
 }
 #endif
     `;
@@ -90,9 +91,11 @@ const scratchClipFromWorldNoTransform = mat4.create();
 export class LevelRenderer {
     private vertexBuffer: GfxBuffer;
     private colorBuffer: GfxBuffer;
-    private indexBuffer: GfxBuffer;
     private uvBuffer: GfxBuffer;
-    private indexCount: number;
+    private indexBufferOpaque: GfxBuffer;
+    private indexBufferWater: GfxBuffer;
+    private indexCountOpaque: number;
+    private indexCountWater: number;
     private inputLayout: GfxInputLayout;
     private texture: GfxTexture;
     private levelMin: vec3;
@@ -103,30 +106,16 @@ export class LevelRenderer {
         const device = cache.device;
         const atlas = levelData.atlas;
         
-        if (atlas !== null) {
-            this.texture = device.createTexture({
-                width: atlas.width,
-                height: atlas.height,
-                numLevels: 1,
-                pixelFormat: GfxFormat.U8_RGBA_NORM,
-                usage: GfxTextureUsage.Sampled,
-                dimension: GfxTextureDimension.n2D,
-                depthOrArrayLayers: 1
-            });
-            device.uploadTextureData(this.texture, 0, [atlas.data]);
-        } else {
-            const whitePixel = new Uint8Array([255, 255, 255, 255]);
-            this.texture = device.createTexture({
-                width: 1,
-                height: 1,
-                numLevels: 1,
-                pixelFormat: GfxFormat.U8_RGBA_NORM,
-                usage: GfxTextureUsage.Sampled,
-                dimension: GfxTextureDimension.n2D,
-                depthOrArrayLayers: 1,
-            });
-            device.uploadTextureData(this.texture, 0, [whitePixel]);
-        }
+        this.texture = device.createTexture({
+            width: atlas.width,
+            height: atlas.height,
+            numLevels: 1,
+            pixelFormat: GfxFormat.U8_RGBA_NORM,
+            usage: GfxTextureUsage.Sampled,
+            dimension: GfxTextureDimension.n2D,
+            depthOrArrayLayers: 1
+        });
+        device.uploadTextureData(this.texture, 0, [atlas.data]);
 
         const { vertices, colors, faces, uvs } = levelData;
         const xs = vertices.map(v => v[0]);
@@ -143,46 +132,61 @@ export class LevelRenderer {
         const expandedPos: number[] = [];
         const expandedCol: number[] = [];
         const expandedUV: number[] = [];
-        const expandedIdx: number[] = [];
+        const expandedIdxOpaque: number[] = [];
+        const expandedIdxWater: number[] = [];
         let runningIndex = 0;
+
         for (const face of faces) {
-            const { indices, uvIndices, colorIndices } = face;
+            const { indices, uvIndices, colorIndices, texture: tex } = face;
+            const isWater = (face as any).isWater === true;
             for (let k = 0; k < indices.length; k++) {
                 const v = vertices[indices[k]];
                 expandedPos.push(v[0], v[1], v[2]);
-                let c: number[];
-                if (colorIndices) {
-                    c = colors[colorIndices[k]] ?? [255, 255, 255];
+                let r: number, g: number, b: number;
+                if (isWater) {
+                    r = g = b = 1.0;
                 } else {
-                    c = [255, 255, 255];
+                    const c = colorIndices ? colors[colorIndices[k]] : [255, 255, 255];
+                    r = c[0] / 255;
+                    g = c[1] / 255;
+                    b = c[2] / 255;
                 }
-                expandedCol.push(c[0] / 255, c[1] / 255, c[2] / 255);
+                const alpha = isWater ? 0.5 : 1.0;
+                expandedCol.push(r, g, b, alpha);
                 if (uvIndices) {
                     const uvVal = uvs[uvIndices[k]];
                     expandedUV.push(uvVal[0], uvVal[1]);
                 } else {
                     expandedUV.push(0, 0);
                 }
-                expandedIdx.push(runningIndex++);
+                if (isWater) {
+                    expandedIdxWater.push(runningIndex);
+                } else {
+                    expandedIdxOpaque.push(runningIndex);
+                }
+                runningIndex++;
             }
         }
 
-        const idx = new Uint32Array(expandedIdx);
+        const idxOpaque = new Uint32Array(expandedIdxOpaque);
+        const idxWater  = new Uint32Array(expandedIdxWater);
         this.vertexBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, new Float32Array(expandedPos).buffer);
         this.colorBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, new Float32Array(expandedCol).buffer);
         this.uvBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, new Float32Array(expandedUV).buffer);
-        this.indexBuffer = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, idx.buffer);
-        this.indexCount = idx.length;
+        this.indexBufferOpaque = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, idxOpaque.buffer);
+        this.indexBufferWater = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, idxWater.buffer);
+        this.indexCountOpaque = idxOpaque.length;
+        this.indexCountWater = idxWater.length;
         this.inputLayout = cache.createInputLayout({
             vertexAttributeDescriptors: [
                 { location: 0, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0 },  // a_Position
-                { location: 1, bufferIndex: 1, format: GfxFormat.F32_RGB, bufferByteOffset: 0 },  // a_Color
+                { location: 1, bufferIndex: 1, format: GfxFormat.F32_RGBA, bufferByteOffset: 0 },  // a_Color
                 { location: 2, bufferIndex: 2, format: GfxFormat.F32_RG,  bufferByteOffset: 0 },  // a_UV
             ],
             vertexBufferDescriptors: [
-                { byteStride: 12, frequency: GfxVertexBufferFrequency.PerVertex }, // pos
-                { byteStride: 12, frequency: GfxVertexBufferFrequency.PerVertex }, // color
-                { byteStride: 8,  frequency: GfxVertexBufferFrequency.PerVertex }, // uv
+                { byteStride: 12, frequency: GfxVertexBufferFrequency.PerVertex }, // pos (x,y,z)
+                { byteStride: 16, frequency: GfxVertexBufferFrequency.PerVertex }, // color (r,g,b,a)
+                { byteStride: 8,  frequency: GfxVertexBufferFrequency.PerVertex }, // uv (u,v)
             ],
             indexBufferFormat: GfxFormat.U32_R,
         });
@@ -219,20 +223,59 @@ export class LevelRenderer {
             [
                 { buffer: this.vertexBuffer, byteOffset: 0 },
                 { buffer: this.colorBuffer, byteOffset: 0 },
-                { buffer: this.uvBuffer, byteOffset: 0 }
+                { buffer: this.uvBuffer, byteOffset: 0 },
             ],
-            { buffer: this.indexBuffer, byteOffset: 0 },
+            { buffer: this.indexBufferOpaque, byteOffset: 0 },
         );
-        const renderInst = renderInstManager.newRenderInst();
 
-        // Temporary Spyro 2 support: disable culling entirely
-        // (Spyro 2 has per-face culling rules; this is the simplest correct fallback)
-        const megaState = renderInst.getMegaStateFlags();
-        megaState.cullMode = GfxCullMode.None;
-        renderInst.setMegaStateFlags(megaState);
+        {
+            const renderInst = renderInstManager.newRenderInst();
+            const megaState = renderInst.getMegaStateFlags();
+            megaState.cullMode = GfxCullMode.None;
+            setAttachmentStateSimple(megaState, {
+                channelWriteMask: GfxChannelWriteMask.RGB,
+                blendMode: GfxBlendMode.Add,
+                blendSrcFactor: GfxBlendFactor.One,
+                blendDstFactor: GfxBlendFactor.Zero,
+            });
+            renderInst.setMegaStateFlags(megaState);
+            renderInst.setVertexInput(
+                this.inputLayout,
+                [
+                    { buffer: this.vertexBuffer, byteOffset: 0 },
+                    { buffer: this.colorBuffer, byteOffset: 0 },
+                    { buffer: this.uvBuffer, byteOffset: 0 },
+                ],
+                { buffer: this.indexBufferOpaque, byteOffset: 0 },
+            );
+            renderInst.setDrawCount(this.indexCountOpaque);
+            renderInstManager.submitRenderInst(renderInst);
+        }
 
-        renderInst.setDrawCount(this.indexCount);
-        renderInstManager.submitRenderInst(renderInst);
+        if (this.indexCountWater > 0) {
+            const renderInst = renderInstManager.newRenderInst();
+            const megaState = renderInst.getMegaStateFlags();
+            megaState.cullMode = GfxCullMode.None;
+            setAttachmentStateSimple(megaState, {
+                channelWriteMask: GfxChannelWriteMask.RGB,
+                blendMode: GfxBlendMode.Add,
+                blendSrcFactor: GfxBlendFactor.SrcAlpha,
+                blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
+            });
+            renderInst.setMegaStateFlags(megaState);
+            renderInst.setVertexInput(
+                this.inputLayout,
+                [
+                    { buffer: this.vertexBuffer, byteOffset: 0 },
+                    { buffer: this.colorBuffer, byteOffset: 0 },
+                    { buffer: this.uvBuffer, byteOffset: 0 },
+                ],
+                { buffer: this.indexBufferWater, byteOffset: 0 },
+            );
+            renderInst.setDrawCount(this.indexCountWater);
+            renderInstManager.submitRenderInst(renderInst);
+        }
+
         renderInstManager.popTemplate();
     }
 
@@ -240,7 +283,8 @@ export class LevelRenderer {
         device.destroyBuffer(this.vertexBuffer);
         device.destroyBuffer(this.colorBuffer);
         device.destroyBuffer(this.uvBuffer);
-        device.destroyBuffer(this.indexBuffer);
+        device.destroyBuffer(this.indexBufferOpaque);
+        device.destroyBuffer(this.indexBufferWater);
         device.destroyTexture(this.texture);
     }
 }

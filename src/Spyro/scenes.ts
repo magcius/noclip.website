@@ -2,7 +2,7 @@ import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase.js";
 import { SceneGfx, ViewerRenderInput } from "../viewer.js";
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
-import { buildCombinedAtlas, buildLevelData, buildSkybox, parseTileGroups, VRAM, SkyboxData, LevelData } from "./bin.js"
+import { buildCombinedAtlas, buildCombinedAtlas2, buildLevelData, buildSkybox, parseTileGroups, parseTileGroups2, VRAM, SkyboxData, LevelData } from "./bin.js"
 import { LevelRenderer, SkyboxRenderer } from "./render.js"
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
 import { GfxRenderInstList } from "../gfx/render/GfxRenderInstManager.js";
@@ -159,12 +159,14 @@ class Spyro2Scene implements SceneDesc {
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
         const ground = await context.dataFetcher.fetchData(`${pathBase2}/sf${this.subFileID}_ground.bin`);
-        // const vram = await context.dataFetcher.fetchData(`${pathBase2}/sf${this.subFileID}_vram.bin`);
-        // const textures = await context.dataFetcher.fetchData(`${pathBase2}/sf${this.subFileID}_list.bin`);
+        const vram = await context.dataFetcher.fetchData(`${pathBase2}/sf${this.subFileID}_vram.bin`);
+        const textures = await context.dataFetcher.fetchData(`${pathBase2}/sf${this.subFileID}_list.bin`);
         // const sky = await context.dataFetcher.fetchData(`${pathBase2}/sf${this.subFileID}_sky.bin`);
-        // const tileGroups = parseTileGroups(textures.createDataView());
-        // const combinedAtlas = buildCombinedAtlas(new VRAM(vram.copyToBuffer()), tileGroups);
-        const renderer = new Spyro2Renderer(device, buildLevelData(ground.createDataView(), null, 2));
+        const tileGroups = parseTileGroups2(textures.createDataView());
+        const vramObj = new VRAM(vram.copyToBuffer());
+        vramObj.applySpyro2FontStripFix();
+        const combinedAtlas = buildCombinedAtlas2(vramObj, tileGroups);
+        const renderer = new Spyro2Renderer(device, buildLevelData(ground.createDataView(), combinedAtlas, 2));
         return renderer;
     }
 }
@@ -247,7 +249,7 @@ const sceneDescs2 = [
     "Summer Forest",
     new Spyro2Scene(16, "Summer Forest Homeworld"),
     new Spyro2Scene(18, "Glimmer"),
-    new Spyro2Scene(999, "Idol Springs"),
+    new Spyro2Scene(20, "Idol Springs"),
     new Spyro2Scene(999, "Colossus"),
     new Spyro2Scene(999, "Hurricos"),
     new Spyro2Scene(999, "Sunny Beach"),
