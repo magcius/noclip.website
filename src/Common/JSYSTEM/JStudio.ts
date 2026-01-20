@@ -214,7 +214,7 @@ abstract class TAdaptor {
     public adaptor_do_begin(obj: STBObject): void {};
     public adaptor_do_end(obj: STBObject): void {};
     public adaptor_do_update(obj: STBObject, frameCount: number): void {};
-    public adaptor_do_data(obj: STBObject, id: number, data: DataView): void {};
+    public adaptor_do_data(obj: STBObject, id: number | null, data: DataView): void {};
 
     // Set a single VariableValue update function, with the option of using FuncVals 
     public adaptor_setVariableValue(obj: STBObject, keyIdx: number, data: ParagraphData) {
@@ -323,7 +323,7 @@ abstract class STBObject {
         if (this.adaptor) this.adaptor.adaptor_updateVariableValue(this, frameCount);
         if (this.adaptor) this.adaptor.adaptor_do_update(this, frameCount);
     }
-    public do_data(id: number, data: DataView) { if (this.adaptor) this.adaptor.adaptor_do_data(this, id, data); }
+    public do_data(id: number | null, data: DataView) { if (this.adaptor) this.adaptor.adaptor_do_data(this, id, data); }
 
     public getStatus() { return this.status; }
     public getSuspendFrames(): number { return this.suspendFrames; }
@@ -481,7 +481,14 @@ abstract class STBObject {
             case 0x1: debugger; break;
             case 0x2: debugger; break;
             case 0x3: debugger; break;
-            case 0x80: debugger; break;
+
+            // Raw Data (no ID) 
+            case 0x80: 
+                const data = file.buffer.createDataView(dataOffset, dataSize);
+                this.do_data(null, data);
+                break;
+
+            // Data with ID
             case 0x81:
                 const idSize = file.view.getUint16(dataOffset + 2);
                 assert(idSize === 4);
@@ -639,9 +646,9 @@ class TActorAdaptor extends TAdaptor {
         this.object.JSGSetScaling(scale);
     }
 
-    public override adaptor_do_data(obj: STBObject, id: number, data: DataView): void {
+    public override adaptor_do_data(obj: STBObject, id: number | null, data: DataView): void {
         this.log(`SetData: ${id}`);
-        this.object.JSGSetData(id, data);
+        this.object.JSGSetData((id === null) ? 0xFFFFFFFF : id, data);
     }
 
     public adaptor_do_PARENT(data: ParagraphData): void {
@@ -916,7 +923,7 @@ class TCameraAdaptor extends TAdaptor {
         this.object.JSGSetViewTargetPosition(targetPos);
     }
 
-    public override adaptor_do_data(obj: STBObject, id: number, data: DataView): void {
+    public override adaptor_do_data(obj: STBObject, id: number | null, data: DataView): void {
         // This is not used by TWW. Untested.
         debugger;
     }
@@ -1067,6 +1074,45 @@ class TParagraph {
             return { dataSize, type, dataOffset: byteIdx + offset, nextOffset: byteIdx + offset + align(dataSize, 4) };
         }
     }
+}
+
+export interface TParseData_fixed {
+    entryCount: number;
+    entrySize: number;
+    entryOffset: number;
+    entryNext: number | null;
+}
+
+export function parseTParagraphData(dst: TParseData_fixed, checkType: number, data: DataView, offset: number = 0): TParseData_fixed | null {
+    // From JStudio::stb::data::TParse_TParagraph_data::getData()
+    let byteIdx = offset;
+
+    if (data.byteLength <= byteIdx)
+        return null;
+    
+    const check = data.getUint8(byteIdx++);
+    const type = check & ~0x8;
+    if (type !== checkType) {
+        return null;
+    }
+    
+    dst.entryCount = 1;
+    if ( check & 0x8 ) {
+        dst.entryCount = data.getUint8(byteIdx++);
+    }
+    dst.entryOffset = byteIdx;
+
+    const sizeIdx = check & 0x7;
+    if( sizeIdx === 0 ) {
+        dst.entryNext = null;
+        dst.entrySize = 0;
+        return dst;
+    }
+
+    const tParagraphDataSizes = [0x0, 0x1, 0x2, 0x4, 0x8, 0x10, 0x20, 0x40];
+    dst.entrySize = tParagraphDataSizes[check & 0x07];
+    dst.entryNext = dst.entryOffset + dst.entrySize * dst.entryCount;
+    return dst;
 }
 
 //----------------------------------------------------------------------------------------------------------------------

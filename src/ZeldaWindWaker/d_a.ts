@@ -1,6 +1,6 @@
 
 import { ReadonlyMat4, ReadonlyVec3, mat4, quat, vec2, vec3 } from "gl-matrix";
-import { TransparentBlack, White, colorCopy, colorFromRGBA8, colorNewCopy, colorNewFromRGBA, colorNewFromRGBA8 } from "../Color.js";
+import { OpaqueBlack, TransparentBlack, White, colorCopy, colorFromRGBA8, colorNewCopy, colorNewFromRGBA, colorNewFromRGBA8 } from "../Color.js";
 import { calcANK1JointAnimationTransform } from "../Common/JSYSTEM/J3D/J3DGraphAnimator.js";
 import { J3DModelData, J3DModelInstance, buildEnvMtx } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
 import { JointTransformInfo, LoopMode, TRK1, TTK1 } from "../Common/JSYSTEM/J3D/J3DLoader.js";
@@ -24,20 +24,22 @@ import { dGlobals } from "./Main.js";
 import { cLib_addCalc, cLib_addCalc0, cLib_addCalc2, cLib_addCalcAngleRad2, cLib_addCalcAngleS, cLib_addCalcAngleS2, cLib_addCalcPosXZ2, cLib_chasePosXZ, cLib_distanceSqXZ, cLib_distanceXZ, cLib_targetAngleX, cLib_targetAngleY, cM_atan2s, cM_rndF, cM_rndFX, cM_s2rad } from "./SComponent.js";
 import { dLib_getWaterY, dLib_waveInit, dLib_waveRot, dLib_wave_c, d_a_sea } from "./d_a_sea.js";
 import { cBgW_Flags, dBgS_GndChk, dBgW } from "./d_bg.js";
-import { EDemoActorFlags, dDemo_setDemoData } from "./d_demo.js";
+import { EDemoActorFlags, dDemo_actor_c, dDemo_setDemoData } from "./d_demo.js";
 import { PeekZResult } from "./d_dlst_peekZ.js";
-import { dComIfGd_addRealShadow, dComIfGd_setShadow, dDlst_alphaModel__Type } from "./d_drawlist.js";
+import { dComIfGd_addRealShadow, dComIfGd_setShadow, dComIfGd_setSimpleShadow2, dDlst_alphaModel__Type } from "./d_drawlist.js";
 import { LIGHT_INFLUENCE, LightType, WAVE_INFO, dKy_change_colpat, dKy_checkEventNightStop, dKy_plight_cut, dKy_plight_set, dKy_setLight__OnMaterialParams, dKy_setLight__OnModelInstance, dKy_tevstr_c, dKy_tevstr_init, setLightTevColorType, settingTevStruct } from "./d_kankyo.js";
 import { ThunderMode, dKyr_get_vectle_calc, dKyw_get_AllWind_vecpow, dKyw_get_wind_pow, dKyw_get_wind_vec, dKyw_get_wind_vecpow, dKyw_rain_set, loadRawTexture } from "./d_kankyo_wether.js";
 import { dPa_splashEcallBack, dPa_trackEcallBack, dPa_waveEcallBack, ParticleGroup } from "./d_particle.js";
 import { dProcName_e } from "./d_procname.js";
 import { ResType, dComIfG_resLoad } from "./d_resorce.js";
 import { dPath, dPath_GetRoomPath, dPath__Point, dStage_Multi_c, dStage_stagInfo_GetSTType } from "./d_stage.js";
-import { fopAcIt_JudgeByID, fopAcM_create, fopAcM_prm_class, fopAcM_searchFromName, fopAc_ac_c } from "./f_op_actor.js";
+import { fopAcIt_JudgeByID, fopAcM_create, fopAcM_delete, fopAcM_prm_class, fopAcM_searchFromName, fopAc_ac_c } from "./f_op_actor.js";
 import { base_process_class, cPhs__Status, fGlobals, fpcEx_Search, fpcPf__Register, fpcSCtRq_Request, fpc_bs__Constructor } from "./framework.js";
 import { mDoExt_3DlineMat1_c, mDoExt_McaMorf, mDoExt_bckAnm, mDoExt_brkAnm, mDoExt_btkAnm, mDoExt_btpAnm, mDoExt_modelEntryDL, mDoExt_modelUpdateDL } from "./m_do_ext.js";
 import { MtxPosition, MtxTrans, calc_mtx, mDoMtx_XYZrotM, mDoMtx_XrotM, mDoMtx_YrotM, mDoMtx_YrotS, mDoMtx_ZXYrotM, mDoMtx_ZrotM, mDoMtx_ZrotS, quatM } from "./m_do_mtx.js";
 import { J2DAnchorPos, J2DPane, J2DScreen } from "../Common/JSYSTEM/J2Dv1.js";
+import { parseTParagraphData, TParseData_fixed } from "../Common/JSYSTEM/JStudio.js";
+import { AABB } from "../Geometry.js";
 
 // Framework'd actors
 
@@ -49,6 +51,8 @@ const scratchVec3b = vec3.create();
 const scratchVec3c = vec3.create();
 const scratchVec3d = vec3.create();
 const scratchVec3e = vec3.create();
+const scratchBboxA = new AABB();
+const scratchBboxB = new AABB();
 
 class d_a_grass extends fopAc_ac_c {
     public static PROCESS_NAME = dProcName_e.d_a_grass;
@@ -3207,10 +3211,10 @@ class d_a_kamome extends fopAc_ac_c {
         settingTevStruct(globals, LightType.Actor, this.pos, this.tevStr);
         setLightTevColorType(globals, this.morf.model, this.tevStr, globals.camera);
         this.morf.entryDL(globals, renderInstManager);
-        
+
         const casterCenter = vec3.scaleAndAdd(this.gndChk.pos, this.pos, Vec3UnitY, 10.0);
         const groundY = globals.scnPlay.bgS.GroundCross(this.gndChk); // TODO: This should return non-inf when over the sea, a la ObjAcch
-        this.shadowId = dComIfGd_setShadow(globals, this.shadowId, true, this.morf.model, casterCenter, 500, 20, casterCenter[1], groundY, this.gndChk.polyInfo, this.tevStr); 
+        this.shadowId = dComIfGd_setShadow(globals, this.shadowId, true, this.morf.model, casterCenter, 500, 20, casterCenter[1], groundY, this.gndChk.polyInfo, this.tevStr);
 
         // drawWorldSpaceLine(getDebugOverlayCanvas2D(), globals.camera.clipFromWorldMatrix, this.pos, this.targetPos, Green, 2);
         // drawWorldSpacePoint(getDebugOverlayCanvas2D(), globals.camera.clipFromWorldMatrix, this.pos, Magenta, 8);
@@ -4987,12 +4991,12 @@ class d_a_npc_ls1 extends fopNpc_npc_c {
         }
     }
 
-    private drawShadow( globals: dGlobals ) {
+    private drawShadow(globals: dGlobals) {
         const casterCenter = vec3.scaleAndAdd(this.gndChk.pos, this.pos, Vec3UnitY, 150.0);
         const groundY = globals.scnPlay.bgS.GroundCross(this.gndChk);
-        this.shadowId = dComIfGd_setShadow(globals, this.shadowId, true, this.morf.model, casterCenter, 800, 40, this.pos[1], groundY, this.gndChk.polyInfo, this.tevStr); 
+        this.shadowId = dComIfGd_setShadow(globals, this.shadowId, true, this.morf.model, casterCenter, 800, 40, this.pos[1], groundY, this.gndChk.polyInfo, this.tevStr);
 
-        if(this.itemModel) {
+        if (this.itemModel) {
             dComIfGd_addRealShadow(globals, this.shadowId, this.itemModel);
         }
     }
@@ -5083,10 +5087,10 @@ class d_a_npc_zl1 extends fopNpc_npc_c {
         if (this.btkAnim.anm) this.btkAnim.entry(this.morf.model);
 
         this.morf.entryDL(globals, renderInstManager);
-        
+
         const casterCenter = vec3.scaleAndAdd(this.gndChk.pos, this.pos, Vec3UnitY, 150.0);
         const groundY = globals.scnPlay.bgS.GroundCross(this.gndChk);
-        this.shadowId = dComIfGd_setShadow(globals, this.shadowId, true, this.morf.model, casterCenter, 800, 40, this.pos[1], groundY, this.gndChk.polyInfo, this.tevStr); 
+        this.shadowId = dComIfGd_setShadow(globals, this.shadowId, true, this.morf.model, casterCenter, 800, 40, this.pos[1], groundY, this.gndChk.polyInfo, this.tevStr);
     }
 
     public override execute(globals: dGlobals, deltaTimeFrames: number): void {
@@ -5115,6 +5119,8 @@ class d_a_npc_zl1 extends fopNpc_npc_c {
         this.morf.calc();
     }
 }
+
+const scratchDemoParagraphData: TParseData_fixed = { entryCount: 0, entrySize: 0, entryOffset: 0, entryNext: null };
 
 enum LkAnim {
     WAITS = 0x00,
@@ -5691,7 +5697,7 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
 
         if (demoActor.flags & EDemoActorFlags.HasPos) { vec3.copy(this.pos, demoActor.translation); }
         if (demoActor.flags & EDemoActorFlags.HasRot) { this.rot[1] = demoActor.rotation[1]; }
-        if (demoActor.flags & EDemoActorFlags.HasFrame) { anmFrame = demoActor.animFrame; }
+        if (demoActor.flags & EDemoActorFlags.HasAnimFrame) { anmFrame = demoActor.animFrame; }
 
         if (demoActor.flags & EDemoActorFlags.HasData) {
             const status = demoActor.stbData.getUint8(0);
@@ -5704,14 +5710,24 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
                 // Fall through
                 case 1:
                 case 5:
-                    const count = demoActor.stbData.getUint8(1);
-                    assert(count === 3)
-                    anmBckId = demoActor.stbData.getUint16(2);
-                    anmBtpId = demoActor.stbData.getUint16(4);
-                    anmBtkId = demoActor.stbData.getUint16(6);
+                    const data = parseTParagraphData(scratchDemoParagraphData, 50, demoActor.stbData)!;
+                    assert(data.entryCount === 3)
+                    anmBckId = demoActor.stbData.getUint16(data.entryOffset + 0);
+                    anmBtpId = demoActor.stbData.getUint16(data.entryOffset + 2);
+                    anmBtkId = demoActor.stbData.getUint16(data.entryOffset + 4);
 
-                    handIdxRight = demoActor.stbData.getUint8(9);
-                    handIdxLeft = demoActor.stbData.getUint8(10);
+                    const handData = parseTParagraphData(scratchDemoParagraphData, 49, demoActor.stbData, assertExists(data.entryNext))!;
+                    handIdxRight = demoActor.stbData.getUint8(handData.entryOffset + 0);
+                    handIdxLeft = demoActor.stbData.getUint8(handData.entryOffset + 1);
+                    if (handData.entryCount == 3) {
+                        // TODO: const newOldFrameMorfCounter = demoActor.stbData.getUint8(handData.entryOffset + 2);
+                    }
+
+                    if (demoActor.stbDataId == 3) {
+                        // TODO: UNK = 1
+                    } else if (demoActor.stbDataId == 5) {
+                        // TODO: yRotCamDiff = 1;
+                    }
                     break;
 
                 case 2:
@@ -5719,7 +5735,21 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
                 // Fall through
                 case 0:
                 case 4:
-                    anmBckId = demoActor.stbData.getUint16(1);
+                    const bckData = parseTParagraphData(scratchDemoParagraphData, 50, demoActor.stbData)!;
+                    anmBckId = demoActor.stbData.getUint16(bckData.entryOffset);
+
+                    const extraData = parseTParagraphData(scratchDemoParagraphData, 49, demoActor.stbData, assertExists(bckData.entryNext))!;
+                    handIdxLeft = demoActor.stbData.getUint8(extraData.entryOffset + 0);
+                    handIdxRight = demoActor.stbData.getUint8(extraData.entryOffset + 1);
+                    if (extraData.entryCount == 3) {
+                        // TODO: const newOldFrameMorfCounter = demoActor.stbData.getUint8(extraData.entryOffset + 2);
+                    }
+
+                    if (demoActor.stbDataId == 2) {
+                        // TODO: UNK = 1
+                    } else if (demoActor.stbDataId == 4) {
+                        // TODO: yRotCamDiff = 1;
+                    }
                     break;
 
                 default:
@@ -5764,7 +5794,7 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
         }
 
         if (anmBckId === 0xFFFF || this.anmBckId === anmBckId) {
-            if (demoActor.flags & EDemoActorFlags.HasFrame) {
+            if (demoActor.flags & EDemoActorFlags.HasAnimFrame) {
                 this.anmBck.frameCtrl.setFrame(this.anmBck.frameCtrl.applyLoopMode(anmFrame));
                 this.anmBtp.frameCtrl.setFrame(this.anmBtp.frameCtrl.applyLoopMode(anmFrame));
                 demoActor.animFrameMax = this.anmBck.frameCtrl.endFrame;
@@ -5870,8 +5900,8 @@ class d_a_title extends fopAc_ac_c {
     private btkSubtitle = new mDoExt_btkAnm();
     private btkShimmer = new mDoExt_btkAnm();
     private screen: J2DScreen;
-    private panes: J2DPane[] = []; 
-    
+    private panes: J2DPane[] = [];
+
     private cloudEmitter: JPABaseEmitter | null = null;
     private sparkleEmitter: JPABaseEmitter | null = null;
     private sparklePos = vec3.create();
@@ -6036,7 +6066,7 @@ class d_a_title extends fopAc_ac_c {
             this.enterMode = 1;
         }
 
-        const puffPos = vec3.set(scratchVec3a, 
+        const puffPos = vec3.set(scratchVec3a,
             ((this.panes[TitlePane.ShipParticles].data.x - 320.0) - this.shipOffsetX) + 85.0,
             (this.panes[TitlePane.ShipParticles].data.y - 240.0) + 5.0,
             0.0
@@ -6045,11 +6075,11 @@ class d_a_title extends fopAc_ac_c {
         if (this.enterMode === 0) {
             if (this.shipFrameCounter < 0) {
                 this.shipFrameCounter += deltaTimeFrames;
-            }            
+            }
 
             if (this.cloudEmitter === null) {
                 this.cloudEmitter = globals.particleCtrl.set(globals, ParticleGroup.TwoDback, 0x83F9, puffPos);
-            } else {    
+            } else {
                 this.cloudEmitter.setGlobalTranslation(puffPos);
             }
 
@@ -6069,7 +6099,7 @@ class d_a_title extends fopAc_ac_c {
                 //     mDoAud_seStart(JA_SE_TITLE_KIRA);
                 //     daTitle_Kirakira_Sound_flag = false;
                 // }
-    
+
                 const sparklePane = this.panes[TitlePane.ShipParticles];
                 vec3.set(this.sparklePos, sparklePane.data.x - 320.0, sparklePane.data.y - 240.0, 0.0);
                 this.sparkleEmitter = globals.particleCtrl.set(globals, ParticleGroup.TwoDfore, 0x83FB, this.sparklePos);
@@ -6618,18 +6648,490 @@ class d_a_bridge extends fopAc_ac_c {
     }
 }
 
+// Demo-only actors which are controlled by the STB demo system
+class daDemo00_resID_c {
+    public modelId: number = -1;
+    public bckId: number = -1;
+    public btpId: number = -1;
+    public btkId: number = -1;
+    public brkId: number = -1;
+    public plightId: number = -1;
+    public shadowType: number = -1;
+}
+
 class d_a_demo00 extends fopAc_ac_c {
     public static PROCESS_NAME = dProcName_e.d_a_demo00;
 
+    private actionFunc: (globals: dGlobals, deltaTimeFrames: number, demoActor: dDemo_actor_c) => void = this.actStandby;
+
+    // daDemo00_model_c
+    private model: J3DModelInstance | null = null;
+    private morf: mDoExt_McaMorf | null = null;
+    private btp: mDoExt_btpAnm | null = null;
+    private btk: mDoExt_btkAnm | null = null;
+    private brk: mDoExt_brkAnm | null = null;
+    // private plight: dDemo_plight_c;
+
+    // daDemo00_shadow_c
+    private shadowId: number | null = null;
+    private shadowOffset = vec3.create();
+    private shadowSimpleScale: number = 0;
+    private shadowCasterSize: number = 0;
+
+    private currIds: daDemo00_resID_c = new daDemo00_resID_c();
+    private nextIds: daDemo00_resID_c = new daDemo00_resID_c();
+    private dataId: number = -1;
+    private fadeType: number = -1;
+
+    private groundY: number = -Infinity;
+    private gndChk = new dBgS_GndChk();
+
+    private debugName: string;
+
     public override subload(globals: dGlobals): cPhs__Status {
+        dKy_tevstr_init(this.tevStr, globals.mStayNo, 0xFF);
         return cPhs__Status.Next;
     }
 
     public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        if (this.model !== null) {
+            settingTevStruct(globals, LightType.Actor, this.pos, this.tevStr);
+            setLightTevColorType(globals, this.model, this.tevStr, globals.camera);
+
+            if (this.btp !== null) {
+                this.btp.entry(this.model);
+            }
+
+            if (this.btk !== null) {
+                this.btk.entry(this.model);
+            }
+
+            if (this.brk !== null) {
+                this.brk.entry(this.model);
+            }
+
+            // TODO: Invisible model drawing
+
+            if (this.morf === null) {
+                mDoExt_modelUpdateDL(globals, this.model, renderInstManager);
+            } else {
+                this.morf.entryDL(globals, renderInstManager);
+            }
+
+            // Handle shadow drawing
+            if (this.shadowId !== null) {
+                const shadowType = this.currIds.shadowType;
+                if (shadowType === 0 || shadowType === 1) {
+                    const pos = vec3.add(scratchVec3a, this.pos, this.shadowOffset);
+                    this.shadowId = dComIfGd_setShadow(globals, this.shadowId, shadowType === 1, this.model, pos,
+                        this.shadowCasterSize, this.shadowSimpleScale, this.pos[1], this.groundY, this.gndChk.polyInfo, this.tevStr);
+                } else {
+                    const simplePos = vec3.set(scratchVec3a, this.pos[0], this.groundY, this.pos[2]);
+                    dComIfGd_setSimpleShadow2(globals, simplePos, this.groundY, this.shadowSimpleScale, this.gndChk.polyInfo);
+                }
+            }
+        }
     }
 
     public override execute(globals: dGlobals, deltaTimeFrames: number): void {
-        super.execute(globals, deltaTimeFrames);
+        const demoActor = globals.scnPlay.demo.getSystem().getActor(this.demoActorID);
+        if (!demoActor) {
+            fopAcM_delete(globals.frameworkGlobals, this);
+            return;
+        }
+
+        if (demoActor.checkEnable(EDemoActorFlags.HasShape)) {
+            this.nextIds.modelId = demoActor.shapeId;
+        }
+        if (demoActor.checkEnable(EDemoActorFlags.HasAnim)) {
+            this.nextIds.bckId = demoActor.nextBckId;
+        }
+        if (demoActor.checkEnable(EDemoActorFlags.HasData)) {
+            const oldDataId = this.dataId;
+            this.dataId = demoActor.stbDataId;
+            const stbData = demoActor.stbData;
+
+            switch (this.dataId) {
+                case 4: { // Event bit setting
+                    const l_eventBit = [];
+                    l_eventBit[1] = 0x2A80; // Acquire Hero's Clothes
+                    l_eventBit[5] = 0x2401;
+                    l_eventBit[17] = 0x2110;
+                    l_eventBit[23] = 0x2D01; // Aryll rescued from Forsaken Fortress
+                    l_eventBit[49] = 0x3802; // Triggered during Grandma's Tale
+
+                    const data = parseTParagraphData(scratchDemoParagraphData, 49, stbData);
+                    if (data) {
+                        const eventIdx = demoActor.stbData.getUint8(data.entryOffset);
+                        assert(eventIdx < l_eventBit.length);
+                        if (l_eventBit[eventIdx] !== undefined && this.dataId != oldDataId) {
+                            // dComIfGs_onEventBit(l_eventBit[eventIdx]);
+                            console.log(`[d_act${this.subtype}] Setting event bit: 0x${l_eventBit[eventIdx].toString(16)}`);
+                        }
+                    }
+                    break;
+                }
+
+                case 5: { // Acquire item
+                    if (this.dataId != oldDataId) {
+                        const data = parseTParagraphData(scratchDemoParagraphData, 49, stbData);
+                        if (data)
+                            console.log(`[d_act${this.subtype}] Acquiring item ID: ${demoActor.stbData.getUint8(data.entryOffset)}`);
+                    }
+                    break;
+                }
+
+                case 6: { // Monotone fading
+                    const data = parseTParagraphData(scratchDemoParagraphData, 33, stbData);
+                    if (data) {
+                        const fadeSpeed = demoActor.stbData.getUint8(data.entryOffset);
+                        console.log(`[d_act${this.subtype}] Set monotone fade speed: ${fadeSpeed}`);
+                        // TODO: mDoGph_gInf_c::setMonotoneRateSpeed(fadeSpeed); 
+                    }
+                    break;
+                }
+
+                case 7: { // Vibration
+                    const data = parseTParagraphData(scratchDemoParagraphData, 49, stbData);
+                    if (data) {
+                        const vibArg = demoActor.stbData.getUint8(data.entryOffset);
+                        if (vibArg < 100) {
+                            console.log(`[d_act${this.subtype}] Setting shock vibration: ${vibArg}`);
+                            // dComIfGp_getVibration().StartShock(vibArg, 1, cXyz(0.0f, 1.0f, 0.0f));
+                        } else if (vibArg != 0xFF) {
+                            console.log(`[d_act${this.subtype}] Setting quake vibration: ${vibArg - 100}`);
+                            // dComIfGp_getVibration().StartQuake(vibArg - 100, 1, cXyz(0.0f, 1.0f, 0.0f));
+                        } else {
+                            console.log(`[d_act${this.subtype}] Stopping vibration: ${vibArg - 100}`);
+                            // dComIfGp_getVibration().StopQuake(1);
+                        }
+                    }
+                    break;
+                }
+
+                case 9:
+                case 10: { // Color fading
+                    const data = parseTParagraphData(scratchDemoParagraphData, 33, stbData);
+                    if (data) {
+                        const fadeType = demoActor.stbData.getUint8(data.entryOffset);
+                        const fadeTime = demoActor.stbData.byteLength > 1 ? demoActor.stbData.getUint8(data.entryOffset + 1) : 0;
+                        if (this.dataId != oldDataId || fadeType != this.fadeType) {
+                            this.fadeType = fadeType;
+                            const fadeColor = (this.dataId === 9) ? OpaqueBlack : colorNewFromRGBA8(0xA0A0A0FF);
+                            if (fadeType === 0) {
+                                console.log(`[d_act${this.subtype}] Starting fade from ${this.dataId == 9 ? 'black' : 'white'} over ${fadeTime} seconds`);
+                                // TODO: dComIfGs_startColorFadeOut(fadeTime);
+                            } else {
+                                console.log(`[d_act${this.subtype}] Starting fade to ${this.dataId == 9 ? 'black' : 'white'} over ${fadeTime} seconds`);
+                                // TODO: dComIfGs_startColorFadeIn(fadeTime);
+                            }
+                            // TODO: mDoGph_gInf_c::setFadeColor(fadeColor);
+                        }
+                    }
+                    break;
+                }
+
+                default: {
+                    const data = parseTParagraphData(scratchDemoParagraphData, 51, stbData);
+                    if (data) {
+                        for (let i = 0; i < data.entryCount / 2; i++) {
+                            const idType = stbData.getUint32(data.entryOffset + i * 8 + 0);
+                            const idVal = stbData.getUint32(data.entryOffset + i * 8 + 4);
+                            switch (idType) {
+                                case 0: this.nextIds.btpId = idVal; break;
+                                case 1: this.nextIds.btkId = idVal; break;
+                                case 2: this.nextIds.plightId = idVal; break;
+                                case 3: /* Unused */ break
+                                case 4: this.nextIds.brkId = idVal; break;
+                                case 5: this.nextIds.shadowType = idVal; break;
+                                case 6: this.nextIds.btkId = idVal | 0x10000000; break;
+                                case 7: this.nextIds.brkId = idVal | 0x10000000; break;
+                            }
+                        }
+                    }
+                    break;
+                }
+
+            }
+        }
+
+        this.actionFunc(globals, deltaTimeFrames, demoActor);
+    }
+
+    private setShadowSize(globals: dGlobals): void {
+        const modelData = this.model!.modelData;
+
+        scratchBboxB.reset();
+        const bbox = scratchBboxB;
+        for (let i = 0; i < modelData.bmd.jnt1.joints.length; i++) {
+            // TODO: only if (joint->getKind() == 0)
+            const joint = modelData.bmd.jnt1.joints[i];
+            const anmMtx = this.model!.shapeInstanceState.jointToWorldMatrixArray[i];
+            scratchBboxA.transform(joint.bbox, anmMtx);
+            bbox.union(bbox, scratchBboxA);
+        }
+
+        bbox.centerPoint(this.shadowOffset);
+
+        const extents = vec3.sub(scratchVec3a, bbox.max, bbox.min);
+        this.shadowCasterSize = vec3.length(extents) * 3.0;
+        this.shadowSimpleScale = Math.hypot(extents[0], extents[2]) * 0.25;
+    }
+
+    private createHeap(globals: dGlobals, demoActor: dDemo_actor_c): void {
+        const demoArcName = globals.roomCtrl.demoArcName!;
+
+        if (this.nextIds.modelId !== -1) {
+            const arcInfo = assertExists(globals.resCtrl.findResInfo(demoArcName, globals.resCtrl.resObj));
+            const modelData = arcInfo.getResByID(ResType.Model, this.nextIds.modelId & 0xFFFF);
+
+            // Set the debug name to the model's name from the demo rarc, to make it easier to identify
+            const resEntry = arcInfo.res.find(r => r.file.id === (this.nextIds.modelId & 0xFFFF))!;
+            this.debugName = resEntry.file.name.replace(/\.[^.]*$/, '');
+            demoActor.name = `d_act${this.subtype}: ` + this.debugName;
+            console.log(`[d_act${this.subtype}] Loading model: \"${this.debugName}\" from ${demoArcName}`);
+
+            // TODO: These are used to modify the display list for model (DifferedDisplayList)
+            let modelFlags = 0x11000002;
+
+            // Load BTP (texture pattern, typically facial textures) animation if specified
+            if (this.nextIds.btpId !== -1) {
+                const btpRes = globals.resCtrl.getObjectIDRes(ResType.Btp, demoArcName, this.nextIds.btpId);
+                this.btp = new mDoExt_btpAnm();
+                this.btp.init(modelData, btpRes, true, -1 as LoopMode, 1.0, 0, -1);
+                modelFlags |= 0x04020000;
+            }
+
+            // Load BTK (texture matrix) animation if specified
+            const btkResID = this.nextIds.btkId;
+            if (btkResID !== -1) {
+                const btkRes = globals.resCtrl.getObjectIDRes(ResType.Btk, demoArcName, btkResID);
+                this.btk = new mDoExt_btkAnm();
+                this.btk.init(modelData, btkRes, true, -1 as LoopMode, 1.0, 0, -1);
+
+                if ((btkResID & 0x10000000) === 0)
+                    modelFlags |= 0x200;
+                else
+                    modelFlags |= 0x1200;
+            }
+
+            // Load BRK (color register) animation if specified
+            const brkResID = this.nextIds.brkId;
+            if (brkResID !== -1) {
+                const brkRes = globals.resCtrl.getObjectIDRes(ResType.Brk, demoArcName, brkResID);
+                this.brk = new mDoExt_brkAnm();
+                this.brk.init(modelData, brkRes, true, -1 as LoopMode, 1.0, 0, -1);
+            }
+
+            // Create model with or without BCK animation
+            if (this.nextIds.bckId === -1) {
+                this.morf = null;
+                this.model = new J3DModelInstance(modelData);
+            } else {
+                const bckRes = globals.resCtrl.getObjectIDRes(ResType.Bck, demoArcName, this.nextIds.bckId);
+                this.morf = new mDoExt_McaMorf(modelData, null, null, bckRes, -1 as LoopMode, 1.0, 0, -1);
+                this.model = this.morf.model;
+
+                // TODO: awaCheck()
+            }
+
+            // TODO: Create invisible model if needed (stbDataID === 3)
+
+            if (this.nextIds.shadowType !== -1) {
+                this.shadowId = 0;
+                this.model.calcAnim();
+                this.setShadowSize(globals);
+            }
+        }
+
+        // TODO: Setup point light if plightResID !== -1
+    }
+
+    private actStandby(globals: dGlobals, deltaTimeFrames: number, demoActor: dDemo_actor_c): void {
+        if (this.nextIds.modelId !== -1 || this.nextIds.plightId !== -1) {
+            this.currIds = { ...this.nextIds };
+            this.createHeap(globals, demoActor);
+
+            if (this.model != null) {
+                this.cullMtx = this.model.modelMatrix;
+                demoActor.model = this.model;
+                if (this.morf) {
+                    demoActor.animFrameMax = this.morf.frameCtrl.endFrame;
+                }
+            }
+
+            this.actionFunc = this.actPerformance;
+        }
+    }
+
+    private actPerformance(globals: dGlobals, deltaTimeFrames: number, demoActor: dDemo_actor_c): void {
+        // Check if model resources match current state
+        if (this.nextIds.modelId !== this.currIds.modelId || this.nextIds.plightId !== (this.currIds.plightId ?? -1)) {
+            this.actionFunc = this.actLeaving;
+            return;
+        }
+
+        if (this.model === null) {
+            // Handle point light only case
+            if (this.nextIds.plightId !== -1) {
+                // TODO: dDemo_setDemoData for point light only
+                // TODO: dKydm_demo_plight_execute
+            }
+        } else {
+            const arcName = globals.roomCtrl.demoArcName!;
+
+            // Reload BCK animation if changed
+            if (this.morf !== null && this.nextIds.bckId !== this.currIds.bckId) {
+                const bckRes = globals.resCtrl.getObjectIDRes(ResType.Bck, arcName, this.nextIds.bckId);
+                let morf = (demoActor.flags & EDemoActorFlags.HasAnimFrame) ? demoActor.animTransition : 0.0;
+                this.morf.setAnm(bckRes, -1 as LoopMode, morf, 1.0, 0.0, -1.0);
+                this.currIds.bckId = this.nextIds.bckId;
+            }
+
+            // Reload BTP animation if changed
+            if (this.currIds.btpId !== this.nextIds.btpId) {
+                const btpRes = globals.resCtrl.getObjectIDRes(ResType.Btp, arcName, this.nextIds.btpId);
+                this.btp!.init(this.model.modelData, btpRes, true, -1 as LoopMode, 1.0, 0, -1);
+                this.currIds.btpId = this.nextIds.btpId;
+            }
+
+            // Reload BTK animation if changed
+            if (this.currIds.btkId !== this.nextIds.btkId) {
+                const btkRes = globals.resCtrl.getObjectIDRes(ResType.Btk, arcName, this.nextIds.btkId);
+
+                const keepFrame = !!(this.nextIds.btkId & 0x10000000);
+                const startFrame = keepFrame ? this.btk!.frameCtrl.currentTimeInFrames : 0.0;
+                const loopMode = keepFrame ? LoopMode.Repeat : LoopMode.Once;
+
+                this.btk!.init(this.model.modelData, btkRes, true, loopMode, 1.0, startFrame, -1);
+                this.currIds.btkId = this.nextIds.btkId;
+            }
+
+            // Reload BRK animation if changed
+            if (this.currIds.brkId !== this.nextIds.brkId) {
+                const brkRes = globals.resCtrl.getObjectIDRes(ResType.Brk, arcName, this.nextIds.brkId);
+
+                const keepFrame = !!(this.nextIds.brkId & 0x10000000);
+                const startFrame = keepFrame ? this.brk!.frameCtrl.currentTimeInFrames : 0.0;
+                const loopMode = keepFrame ? LoopMode.Repeat : LoopMode.Once;
+
+                this.brk!.init(this.model.modelData, brkRes, true, loopMode, 1.0, startFrame, -1);
+                this.currIds.brkId = this.nextIds.brkId;
+            }
+
+            // Copy position and rotation from the demo to this actor
+            const channelMask = EDemoActorFlags.HasPos | EDemoActorFlags.HasRot | EDemoActorFlags.HasAnim;
+            assert(channelMask == 0x2a);
+            dDemo_setDemoData(globals, deltaTimeFrames, this, channelMask, null, null);
+
+            // Update ground check position
+            if (this.gndChk) {
+                vec3.set(this.gndChk.pos, this.pos[0], this.pos[1] + 100.0, this.pos[2]);
+                this.groundY = globals.scnPlay.bgS.GroundCross(this.gndChk);
+            }
+
+            // setBaseMtx()
+            MtxTrans(this.pos, false, this.model.modelMatrix);
+            mDoMtx_XYZrotM(this.model.modelMatrix, this.rot);
+            this.model.baseScale = this.scale;
+            this.cullMtx = this.model.modelMatrix;
+            if (this.currIds.bckId !== -1)
+                this.morf?.calc();
+            else
+                this.model.calcAnim();
+
+            // Play animations
+            if (!(demoActor.flags & EDemoActorFlags.HasAnimFrame)) {
+                // Auto-advance animations
+                if (this.morf !== null) {
+                    this.morf.play(deltaTimeFrames);
+                } else {
+                    if (this.btp !== null)
+                        this.btp.play(deltaTimeFrames);
+                    if (this.btk !== null)
+                        this.btk.play(deltaTimeFrames);
+                    if (this.brk !== null)
+                        this.brk.play(deltaTimeFrames);
+                }
+            } else {
+                // Set explicit frame
+                const frame = demoActor.animFrame;
+
+                if (frame <= 1.0) {
+                    // Simple frame set
+                    if (this.morf !== null) this.morf.frameCtrl.setFrame(frame);
+                    if (this.btp !== null) this.btp.frameCtrl.setFrame(frame);
+                    if (this.btk !== null) {
+                        if (!(this.currIds.btkId & 0x10000000))
+                            this.btk.frameCtrl.setFrame(frame);
+                        else
+                            this.btk.play(deltaTimeFrames);
+                    }
+                    if (this.brk !== null) {
+                        if (!(this.currIds.brkId & 0x10000000))
+                            this.brk.frameCtrl.setFrame(frame);
+                        else
+                            this.brk.play(deltaTimeFrames);
+                    }
+                } else {
+                    // Frame with sound trigger
+                    const soundFrame = frame - 1.0;
+
+                    if (this.morf !== null) {
+                        this.morf.frameCtrl.setFrame(soundFrame);
+
+                        // Would play a sound if within 20 units of the ground
+                        const onGround = Math.abs(this.gndChk.retY - this.pos[1]) < 20.0;
+
+                        this.morf.play(deltaTimeFrames);
+                    }
+
+                    if (this.btp !== null) {
+                        this.btp.frameCtrl.setFrame(soundFrame);
+                        this.btp.play(deltaTimeFrames);
+                    }
+
+                    if (this.btk !== null) {
+                        if (!(this.nextIds.bckId & 0x10000000))
+                            this.btk.frameCtrl.setFrame(soundFrame);
+                        this.btk.play(deltaTimeFrames);
+                    }
+
+                    if (this.brk !== null) {
+                        if (!(this.nextIds.bckId & 0x10000000))
+                            this.brk.frameCtrl.setFrame(soundFrame);
+                        this.brk.play(deltaTimeFrames);
+                    }
+                }
+            }
+
+            // Apply scale from demo
+            if (demoActor.flags & EDemoActorFlags.HasScale) {
+                vec3.copy(this.scale, demoActor.scaling);
+            }
+
+            // Update point light if present
+            if (this.nextIds.plightId !== -1) {
+                const lightPos = vec3.copy(scratchVec3a, this.pos);
+
+                // TODO: Check light data table for position override
+                // If light is attached to a joint, get joint position
+
+                // dKydm_demo_plight_execute(plight, lightPos)
+            }
+        }
+
+    }
+
+    private actLeaving(globals: dGlobals, deltaTimeFrames: number, demoActor: dDemo_actor_c): void {
+        // Clean up resources
+        this.model = null;
+        this.morf = null;
+        this.btp = null;
+        this.btk = null;
+        this.brk = null;
+        this.shadowId = null;
+        this.actionFunc = this.actStandby;
     }
 }
 
