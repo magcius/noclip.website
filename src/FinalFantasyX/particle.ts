@@ -2368,7 +2368,7 @@ class Electricity extends ScratchInstruction<ElectricData> implements BufferFill
         const perturbStrength = p.vecs[this.params][1];
         const targetStrength = p.vecs[this.params][2];
 
-        const count = newStart == newEnd ? 0 :
+        const count = newStart === newEnd ? 0 :
             newStart < newEnd ? newEnd - newStart + 1 :
                 this.maxLength - newStart + newEnd + 2;
 
@@ -5086,7 +5086,7 @@ function parseFlipbookFrame(buffer: ArrayBufferSlice, offs: number, decode: text
             offs += 0x08;
 
             for (let j = 0; j < 4; j++) {
-                vertices[currOffset + FLIPBOOK_VERTEX_STRIDE * j + 0] = j % 2 == 0 ? x0 : x1;
+                vertices[currOffset + FLIPBOOK_VERTEX_STRIDE * j + 0] = (j % 2) === 0 ? x0 : x1;
                 vertices[currOffset + FLIPBOOK_VERTEX_STRIDE * j + 1] = j < 2 ? y0 : y1;
             }
         }
@@ -5109,7 +5109,7 @@ function parseFlipbookFrame(buffer: ArrayBufferSlice, offs: number, decode: text
             vertices[currOffset + FLIPBOOK_VERTEX_STRIDE * j + 4] = b;
             vertices[currOffset + FLIPBOOK_VERTEX_STRIDE * j + 5] = a;
 
-            vertices[currOffset + FLIPBOOK_VERTEX_STRIDE * j + 6] = uMin + (j % 2 == 0 ? 0 : uRange);
+            vertices[currOffset + FLIPBOOK_VERTEX_STRIDE * j + 6] = uMin + ((j % 2) === 0 ? 0 : uRange);
             vertices[currOffset + FLIPBOOK_VERTEX_STRIDE * j + 7] = vMin + (j < 2 ? 0 : vRange);
         }
 

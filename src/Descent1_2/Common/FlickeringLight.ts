@@ -65,7 +65,7 @@ function applySegmentLightSub(
     if (depth < 2) {
         for (const side of segment.sides) {
             const neighbor = side.connection;
-            if (neighbor != null && !visited.has(neighbor.segmentNum)) {
+            if (neighbor !== null && !visited.has(neighbor.segmentNum)) {
                 visited.add(neighbor.segmentNum);
                 applySegmentLightSub(
                     segment,

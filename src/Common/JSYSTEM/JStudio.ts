@@ -1368,7 +1368,7 @@ namespace FVB {
 
                 const progress = time;
 
-                if( this.adjust != 0 ) {
+                if (this.adjust !== 0) {
                     debugger; // Untested. Remove once confirmed working
                 }
 

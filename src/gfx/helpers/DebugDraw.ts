@@ -239,14 +239,14 @@ class BufferPage {
         return (vertexCount * this.vertexStride) <= this.remainVertex() && indexCount <= this.remainIndex();
     }
 
-    public vertexPCF(v: ReadonlyVec3, c: Color, options: DebugDrawOptions): void {
+    public vertexPCF(v: ReadonlyVec3, c: Readonly<Color>, options: DebugDrawOptions): void {
         this.vertexDataOffs += fillVec3p(this.vertexData, this.vertexDataOffs, v);
         const flags = options.flags ?? DebugDrawFlags.Default;
-        const alpha = c.a + (flags * 2);
-        this.vertexDataOffs += fillColor(this.vertexData, this.vertexDataOffs, c, alpha);
+        const a = c.a + (flags * 2);
+        this.vertexDataOffs += fillColor(this.vertexData, this.vertexDataOffs, c, a);
     }
 
-    public vertexFont(modelMatrix: ReadonlyMat4, cx: number, cy: number, c: Color, options: DebugDrawOptions, charIdx: number): void {
+    public vertexFont(modelMatrix: ReadonlyMat4, cx: number, cy: number, c: Readonly<Color>, options: DebugDrawOptions, charIdx: number): void {
         vec3.set(DebugDraw.scratchVec3[0], cx, cy, 0);
         transformVec3Mat4w1(DebugDraw.scratchVec3[0], modelMatrix, DebugDraw.scratchVec3[0]);
         this.vertexDataOffs += fillVec3p(this.vertexData, this.vertexDataOffs, DebugDraw.scratchVec3[0]);
@@ -395,7 +395,7 @@ export class DebugDraw {
         return page;
     }
 
-    public drawLine(p0: ReadonlyVec3, p1: ReadonlyVec3, color0: Color, color1 = color0, options: DebugDrawOptions = defaultOptions): void {
+    public drawLine(p0: ReadonlyVec3, p1: ReadonlyVec3, color0: Readonly<Color>, color1 = color0, options: DebugDrawOptions = defaultOptions): void {
         const page = this.findPage(this.getBehaviorType(true, color0.a >= 1.0 && color1.a >= 1.0, options), 2, 2);
 
         const baseVertex = page.getCurrentVertexID();
@@ -406,7 +406,7 @@ export class DebugDraw {
             page.index(baseVertex + i);
     }
 
-    public drawVector(p0: ReadonlyVec3, dir: ReadonlyVec3, mag: number, color0: Color, color1 = color0, options: DebugDrawOptions = defaultOptions): void {
+    public drawVector(p0: ReadonlyVec3, dir: ReadonlyVec3, mag: number, color0: Readonly<Color>, color1 = color0, options: DebugDrawOptions = defaultOptions): void {
         vec3.scaleAndAdd(DebugDraw.scratchVec3[0], p0, dir, mag);
         this.drawLine(p0, DebugDraw.scratchVec3[0], color0, color1, options);
     }
@@ -457,12 +457,12 @@ export class DebugDraw {
             page.index(baseVertex + i);
     }
 
-    public drawDiscLineN(center: ReadonlyVec3, n: ReadonlyVec3, r: number, color: Color, sides = 32, options: DebugDrawOptions = defaultOptions): void {
+    public drawDiscLineN(center: ReadonlyVec3, n: ReadonlyVec3, r: number, color: Readonly<Color>, sides = 32, options: DebugDrawOptions = defaultOptions): void {
         branchlessONB(DebugDraw.scratchVec3[0], DebugDraw.scratchVec3[1], n);
         this.drawDiscLineRU(center, DebugDraw.scratchVec3[0], DebugDraw.scratchVec3[1], r, color, sides, options);
     }
 
-    public drawDiscLineRU(center: ReadonlyVec3, right: ReadonlyVec3, up: ReadonlyVec3, r: number, color: Color, sides = 32, options: DebugDrawOptions = defaultOptions): void {
+    public drawDiscLineRU(center: ReadonlyVec3, right: ReadonlyVec3, up: ReadonlyVec3, r: number, color: Readonly<Color>, sides = 32, options: DebugDrawOptions = defaultOptions): void {
         const page = this.findPage(this.getBehaviorType(true, color.a >= 1.0, options), sides, sides * 2);
 
         const baseVertex = page.getCurrentVertexID();
@@ -480,18 +480,18 @@ export class DebugDraw {
         }
     }
 
-    public drawSphereLine(center: ReadonlyVec3, r: number, color: Color, sides = 32, options: DebugDrawOptions = defaultOptions) {
+    public drawSphereLine(center: ReadonlyVec3, r: number, color: Readonly<Color>, sides = 32, options: DebugDrawOptions = defaultOptions) {
         this.drawDiscLineRU(center, Vec3UnitX, Vec3UnitY, r, color, sides, options);
         this.drawDiscLineRU(center, Vec3UnitX, Vec3UnitZ, r, color, sides, options);
         this.drawDiscLineRU(center, Vec3UnitY, Vec3UnitZ, r, color, sides, options);
     }
 
-    public drawDiscSolidN(center: ReadonlyVec3, n: ReadonlyVec3, r: number, color: Color, sides = 32, options: DebugDrawOptions = defaultOptions): void {
+    public drawDiscSolidN(center: ReadonlyVec3, n: ReadonlyVec3, r: number, color: Readonly<Color>, sides = 32, options: DebugDrawOptions = defaultOptions): void {
         branchlessONB(DebugDraw.scratchVec3[0], DebugDraw.scratchVec3[1], n);
         this.drawDiscSolidRU(center, DebugDraw.scratchVec3[0], DebugDraw.scratchVec3[1], r, color, sides, options);
     }
 
-    public drawDiscSolidRU(center: ReadonlyVec3, right: ReadonlyVec3, up: ReadonlyVec3, r: number, color: Color, sides = 32, options: DebugDrawOptions = defaultOptions): void {
+    public drawDiscSolidRU(center: ReadonlyVec3, right: ReadonlyVec3, up: ReadonlyVec3, r: number, color: Readonly<Color>, sides = 32, options: DebugDrawOptions = defaultOptions): void {
         const page = this.findPage(this.getBehaviorType(false, color.a >= 1.0, options), sides + 1, sides * 3);
 
         const baseVertex = page.getCurrentVertexID();
@@ -528,7 +528,7 @@ export class DebugDraw {
         }
     }
 
-    public drawTriSolidP(p0: ReadonlyVec3, p1: ReadonlyVec3, p2: ReadonlyVec3, color: Color, options: DebugDrawOptions = defaultOptions): void {
+    public drawTriSolidP(p0: ReadonlyVec3, p1: ReadonlyVec3, p2: ReadonlyVec3, color: Readonly<Color>, options: DebugDrawOptions = defaultOptions): void {
         const page = this.findPage(this.getBehaviorType(false, color.a >= 1.0, options), 3, 3);
 
         const baseVertex = page.getCurrentVertexID();
@@ -540,7 +540,7 @@ export class DebugDraw {
             page.index(baseVertex + i);
     }
 
-    public drawRectLineP(p0: ReadonlyVec3, p1: ReadonlyVec3, p2: ReadonlyVec3, p3: ReadonlyVec3, color: Color, options: DebugDrawOptions = defaultOptions): void {
+    public drawRectLineP(p0: ReadonlyVec3, p1: ReadonlyVec3, p2: ReadonlyVec3, p3: ReadonlyVec3, color: Readonly<Color>, options: DebugDrawOptions = defaultOptions): void {
         const page = this.findPage(this.getBehaviorType(true, color.a >= 1.0, options), 4, 8);
 
         const baseVertex = page.getCurrentVertexID();
@@ -555,12 +555,12 @@ export class DebugDraw {
         }
     }
 
-    public drawRectLineRU(center: ReadonlyVec3, right: ReadonlyVec3, up: ReadonlyVec3, rightMag: number, upMag: number, color: Color, options: DebugDrawOptions = defaultOptions): void {
+    public drawRectLineRU(center: ReadonlyVec3, right: ReadonlyVec3, up: ReadonlyVec3, rightMag: number, upMag: number, color: Readonly<Color>, options: DebugDrawOptions = defaultOptions): void {
         this.rectCorner(DebugDraw.scratchVec3, center, right, up, rightMag, upMag);
         this.drawRectLineP(DebugDraw.scratchVec3[0], DebugDraw.scratchVec3[1], DebugDraw.scratchVec3[2], DebugDraw.scratchVec3[3], color, options);
     }
 
-    public drawRectSolidP(p0: ReadonlyVec3, p1: ReadonlyVec3, p2: ReadonlyVec3, p3: ReadonlyVec3, color: Color, options: DebugDrawOptions = defaultOptions): void {
+    public drawRectSolidP(p0: ReadonlyVec3, p1: ReadonlyVec3, p2: ReadonlyVec3, p3: ReadonlyVec3, color: Readonly<Color>, options: DebugDrawOptions = defaultOptions): void {
         const page = this.findPage(this.getBehaviorType(false, color.a >= 1.0, options), 4, 6);
 
         const baseVertex = page.getCurrentVertexID();
@@ -572,7 +572,7 @@ export class DebugDraw {
         page.indexDataOffs += convertToTrianglesRange(page.indexData, page.indexDataOffs, GfxTopology.Quads, baseVertex, 4);
     }
 
-    public drawRectSolidRU(center: ReadonlyVec3, right: ReadonlyVec3, up: ReadonlyVec3, rightMag: number, upMag: number, color: Color, options: DebugDrawOptions = defaultOptions): void {
+    public drawRectSolidRU(center: ReadonlyVec3, right: ReadonlyVec3, up: ReadonlyVec3, rightMag: number, upMag: number, color: Readonly<Color>, options: DebugDrawOptions = defaultOptions): void {
         this.rectCorner(DebugDraw.scratchVec3, center, right, up, rightMag, upMag);
         this.drawRectSolidP(DebugDraw.scratchVec3[0], DebugDraw.scratchVec3[1], DebugDraw.scratchVec3[2], DebugDraw.scratchVec3[3], color, options);
     }
@@ -585,7 +585,7 @@ export class DebugDraw {
         return [fontTexture, fontScale];
     }
 
-    public drawTextMtx(modelMatrix: ReadonlyMat4, str: string, color: Color, options: DebugDrawOptions = defaultOptions): void {
+    public drawTextMtx(modelMatrix: ReadonlyMat4, str: string, color: Readonly<Color>, options: DebugDrawOptions = defaultOptions): void {
         const [fontTexture, fontScale] = this.getFontTexture(options);
 
         const iterString = (cb: (charIdx: number, x: number, y: number, advanceX: number) => void) => {
@@ -641,7 +641,7 @@ export class DebugDraw {
         page.indexDataOffs += convertToTrianglesRange(page.indexData, page.indexDataOffs, GfxTopology.Quads, baseVertex, charCount * 4);
     }
 
-    public drawScreenText(str: string, x: number, y: number, color: Color, options: DebugDrawOptions = defaultOptions): void {
+    public drawScreenText(str: string, x: number, y: number, color: Readonly<Color>, options: DebugDrawOptions = defaultOptions): void {
         const mtx = DebugDraw.scratchMat4;
         mat4.identity(mtx);
         mtx[12] = x;
@@ -650,7 +650,7 @@ export class DebugDraw {
         this.drawTextMtx(mtx, str, color, options);
     }
 
-    public screenPrintText(str: string, color: Color, options: DebugDrawOptions = defaultOptions): void {
+    public screenPrintText(str: string, color: Readonly<Color>, options: DebugDrawOptions = defaultOptions): void {
         str.split('\n').forEach((line) => {
             const x = this.screenTextOrigin[0] + this.screenTextPosition[0];
             const y = this.screenTextOrigin[1] + this.screenTextPosition[1];
@@ -662,7 +662,7 @@ export class DebugDraw {
         });
     }
 
-    public drawWorldTextMtx(str: string, mtx: mat4, color: Color, options: DebugDrawOptions = defaultOptions): void {
+    public drawWorldTextMtx(str: string, mtx: mat4, color: Readonly<Color>, options: DebugDrawOptions = defaultOptions): void {
         options = setFlags(options, DebugDrawFlags.WorldSpace);
         const flags = options.flags!;
         const space = flags & SpaceMask;
@@ -683,7 +683,7 @@ export class DebugDraw {
         this.drawTextMtx(mtx, str, color, options);
     }
 
-    public drawWorldTextRU(str: string, p: ReadonlyVec3, color: Color, right: ReadonlyVec3 = Vec3UnitX, up: ReadonlyVec3 = Vec3UnitY, options: DebugDrawOptions = defaultOptions): void {
+    public drawWorldTextRU(str: string, p: ReadonlyVec3, color: Readonly<Color>, right: ReadonlyVec3 = Vec3UnitX, up: ReadonlyVec3 = Vec3UnitY, options: DebugDrawOptions = defaultOptions): void {
         const mtx = DebugDraw.scratchMat4;
         vec3.cross(DebugDraw.scratchVec3[0], up, right);
         setMatrixAxis(mtx, right, up, DebugDraw.scratchVec3[0]);

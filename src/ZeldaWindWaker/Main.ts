@@ -454,7 +454,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
                 }
 
                 globals.particleCtrl.setDrawInfo(globals.camera.viewFromWorldMatrix, globals.camera.clipFromViewMatrix, texPrjMtx, globals.camera.frustum);
-                renderInstManager.setCurrentList(dlst.effect[group == ParticleGroup.Projection ? EffectDrawGroup.Indirect : EffectDrawGroup.Main]);
+                renderInstManager.setCurrentList(dlst.effect[group === ParticleGroup.Projection ? EffectDrawGroup.Indirect : EffectDrawGroup.Main]);
                 globals.particleCtrl.draw(device, this.renderHelper.renderInstManager, group);
             }
 
@@ -1023,7 +1023,7 @@ class DemoDesc extends SceneDesc implements Viewer.SceneDesc {
         }
 
         // From dStage_playerInit
-        if (this.stbFilename == 'title.stb') {
+        if (this.stbFilename === 'title.stb') {
             fopAcM_create(globals.frameworkGlobals, dProcName_e.d_a_title, 0, null, globals.mStayNo, null, null, 0xFF, -1);
         }
 
@@ -1044,7 +1044,7 @@ class DemoDesc extends SceneDesc implements Viewer.SceneDesc {
 
         if (demoData !== null) {
             globals.scnPlay.demo.create(this.id, demoData, this.layer, this.offsetPos, this.rotY, this.startFrame);
-            globals.camera.setTrimHeight(this.id != 'title' ? CameraTrimHeight.Cinematic : CameraTrimHeight.Default)
+            globals.camera.setTrimHeight(this.id !== 'title' ? CameraTrimHeight.Cinematic : CameraTrimHeight.Default)
             globals.camera.snapToCinematic();
         } else {
             console.warn('Failed to load demo data:', this.stbFilename);
