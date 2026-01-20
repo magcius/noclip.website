@@ -59,8 +59,8 @@ const bindingLayouts: GfxBindingLayoutDescriptor[] = [
 ];
 
 const debugDrawVS = `
-precision mediump float;
-precision mediump sampler2DArray;
+precision highp float;
+precision highp sampler2DArray;
 
 ${GfxShaderLibrary.MatrixLibrary}
 
@@ -135,8 +135,8 @@ void main() {
 `;
 
 const debugDrawFS = `
-precision mediump float;
-precision mediump sampler2DArray;
+precision highp float;
+precision highp sampler2DArray;
 
 in vec4 v_Color;
 in vec3 v_TexCoord;
