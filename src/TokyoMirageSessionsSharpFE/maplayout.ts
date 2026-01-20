@@ -16,6 +16,7 @@ export function parseLayout(buffer: ArrayBufferSlice): MapLayout
     const view = buffer.createDataView();
     const entry_count = view.getUint32(0x08, true);
 
+    const heal_point_entries: MapLayoutEntry[] = [];
     const treasurebox_01_entries: MapLayoutEntry[] = [];
     const treasurebox_02_entries: MapLayoutEntry[] = [];
     const blockside_entries: MapLayoutEntry[] = [];
@@ -75,7 +76,11 @@ export function parseLayout(buffer: ArrayBufferSlice): MapLayout
             case GROUP_INDEX_BLOCKWALL:
                 blockwall_entries.push({ group_index, unk_04, id, position, rotation, unknown });
                 break;
-            
+
+            case GROUP_INDEX_HEAL_POINT:
+                heal_point_entries.push({ group_index, unk_04, id, position, rotation, unknown });
+                break;
+
             case GROUP_INDEX_WARP:
                 warp_entries.push({ group_index, unk_04, id, position, rotation, unknown });
                 break;
@@ -110,6 +115,7 @@ export function parseLayout(buffer: ArrayBufferSlice): MapLayout
         treasurebox_02_entries,
         blockside_entries,
         blockwall_entries,
+        heal_point_entries,
         warp_entries,
         gate_entries,
         elevator_entries,
@@ -126,6 +132,7 @@ const ENTRY_SIZE = 0xA0;
 const GROUP_INDEX_TREASURE_BOX_01 = 8;
 const GROUP_INDEX_BLOCKSIDE = 9;
 const GROUP_INDEX_BLOCKWALL = 10;
+const GROUP_INDEX_HEAL_POINT = 16;
 const GROUP_INDEX_WARP = 17;
 const GROUP_INDEX_GATE = 18;
 const GROUP_INDEX_ELEVATOR = 21;
@@ -207,6 +214,7 @@ export interface MapLayout
     treasurebox_02_entries: MapLayoutEntry[];
     blockside_entries: MapLayoutEntry[];
     blockwall_entries: MapLayoutEntry[];
+    heal_point_entries: MapLayoutEntry[];
     warp_entries: MapLayoutEntry[];
     gate_entries: MapLayoutEntry[];
     elevator_entries: MapLayoutEntry[];

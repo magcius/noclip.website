@@ -230,6 +230,9 @@ const sceneDescs =
     new TMSFESceneDesc("f010_05", "Microwavin' with Mamorin Set", ["f010_05"]),
     new TMSFESceneDesc("f010_06", "Dressing Room", ["f010_06"]),
     new TMSFESceneDesc("f010_07", "Fashion Show Runway", ["f010_07", "f010_07_obj01", "f010_07_obj02"]),
+    new TMSFESceneDesc("guambeach_00", "Maiko Beach Cutscene Day", ["guambeach_00"]),
+    new TMSFESceneDesc("guambeach_02", "Maiko Beach Cutscene Sunset", ["guambeach_02"]),
+    new TMSFESceneDesc("largeprops01", "Raindrop Memories Set", ["largeprops01_00"]),
     "Extra",
     // new TMSFESceneDesc("d004_06", "Central Square 2"), wii u file
     // new TMSFESceneDesc("b000_00", "b000_00"), wii u file

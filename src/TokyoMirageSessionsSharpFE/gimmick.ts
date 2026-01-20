@@ -183,6 +183,17 @@ export async function create_common_gimmicks(layout: MapLayout, gate_type:number
         }
     }
 
+    // heal points
+    // TODO: these are particle effects, which aren't implemented yet
+    // if (layout.heal_point_entries.length > 0)
+    // {
+    //     for (let i = 0; i < layout.heal_point_entries.length; i++)
+    //     {
+    //         const entry = layout.heal_point_entries[i];
+
+    //     }
+    // }
+    
     if (layout.warp_entries.length > 0)
     {
         for (let i = 0; i < layout.warp_entries.length; i++)
