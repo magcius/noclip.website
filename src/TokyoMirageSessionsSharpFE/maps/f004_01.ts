@@ -5,7 +5,7 @@ import { DataFetcher } from "../../DataFetcher.js";
 import { GfxDevice } from "../../gfx/platform/GfxPlatform.js";
 import { gimmick, create_gimmick } from "./../gimmick.js";
 import { vec3 } from "gl-matrix";
-import { get_layout_point, MapLayout } from "./../maplayout.js";
+import { MapLayout } from "./../maplayout.js";
 
 export async function create_f004_01_gimmicks(layout: MapLayout, data_fetcher: DataFetcher, device: GfxDevice): Promise<gimmick[]>
 {

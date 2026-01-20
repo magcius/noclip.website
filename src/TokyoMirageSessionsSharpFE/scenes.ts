@@ -31,6 +31,8 @@ import { create_d007_07_gimmicks } from "./maps/d007_07.js";
 import { create_d007_08_gimmicks } from "./maps/d007_08.js";
 import { create_d007_09_gimmicks } from "./maps/d007_09.js";
 import { create_d010_01_gimmicks } from "./maps/d010_01.js";
+
+import { create_f003_02_gimmicks, create_f003_02_party_gimmicks } from "./maps/f003_02.js";
 import { create_f003_08_gimmicks } from "./maps/f003_08.js";
 
 import { create_f004_01_gimmicks, create_f004_01_music_fes_gimmicks } from "./maps/f004_01.js";
@@ -198,7 +200,8 @@ const sceneDescs =
     new TMSFESceneDesc("b015_01", "b015_01", ["b015_01", "obj01", "obj02", "obj03", "sky"]),
     new TMSFESceneDesc("b016_01", "b016_01", ["b016_01", "obj01", "obj02", "obj03", "sky"]),
     "Tokyo",
-    new TMSFESceneDesc("f003_02", "Fortuna Office", ["f003_02", "obj10", "obj11", "obj12", "obj13", "obj14", "sky"]),
+    new TMSFESceneDesc("f003_02", "Fortuna Office", ["f003_02", "obj10", "obj11", "obj12", "obj13", "obj14", "sky"], create_f003_02_gimmicks),
+    new TMSFESceneDesc("f003_02", "Fortuna Office Fifth Anniversary Party", ["f003_02", "obj10", "obj11", "obj12", "obj13", "obj14", "sky"], create_f003_02_party_gimmicks),
     new TMSFESceneDesc("f003_03", "Bloom Palace", ["f003_03", "obj01", "sky"]),
     new TMSFESceneDesc("f001_01", "Shibuya 1", ["f001_01", "obj01", "obj02", "obj10", "sky"]),
     new TMSFESceneDesc("f001_02", "Shibuya 2", ["f001_02", "obj01", "obj02", "obj04", "obj10", "sky"]),
@@ -235,8 +238,8 @@ const sceneDescs =
     new TMSFESceneDesc("f010_05", "Microwavin' with Mamorin Set", ["f010_05"]),
     new TMSFESceneDesc("f010_06", "Dressing Room", ["f010_06"]),
     new TMSFESceneDesc("f010_07", "Fashion Show Runway", ["f010_07", "f010_07_obj01", "f010_07_obj02"]),
-    new TMSFESceneDesc("guambeach_00", "Maiko Beach Cutscene Day", ["guambeach_00"]),
-    new TMSFESceneDesc("guambeach_02", "Maiko Beach Cutscene Sunset", ["guambeach_02"]),
+    new TMSFESceneDesc("guambeach_00", "Guam Beach Day", ["guambeach_00"]),
+    new TMSFESceneDesc("guambeach_02", "Guam Beach Sunset", ["guambeach_02"]),
     "Extra",
     // new TMSFESceneDesc("d004_06", "Central Square 2"), wii u file
     // new TMSFESceneDesc("b000_00", "b000_00"), wii u file
