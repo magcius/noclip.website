@@ -77,7 +77,7 @@ export function readPolymodel(reader: DescentDataReader, id: number) {
     for (let i = 0; i < POLYOBJ_MAX_SUBMODELS; ++i) {
         const parent = reader.readUint8();
         submodels[i].parent = parent;
-        if (parent != 255) {
+        if (parent !== 255) {
             submodels[parent].submodels.push(submodels[i]);
         }
     }
@@ -212,7 +212,7 @@ function executePolymodelCode(
                 if (!(pointCount & 1)) reader.readInt16();
 
                 const color =
-                    state.palette != null && color16 < state.palette.data.length
+                    state.palette !== null && color16 < state.palette.data.length
                         ? vec3FromPalette(state.palette.data[color16])
                         : vec3.fromValues(
                               ((color16 >> 10) & 31) / 31,
@@ -374,7 +374,7 @@ export function makePolymodelMesh(
     polymodel: DescentPolymodel,
     palette: DescentPalette | null,
 ): DescentPolymodelMesh {
-    if (polymodel.data == null) throw new Error("polymodel data not loaded");
+    if (polymodel.data === null) throw new Error("polymodel data not loaded");
     const reader = new DescentDataReader(polymodel.data);
     const mesh: DescentPolymodelMesh = { vertices: [], calls: [] };
     const matrix = mat4.create();

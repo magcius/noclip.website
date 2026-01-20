@@ -235,11 +235,11 @@ export class dDemo_actor_c extends TActor {
             }
         }
 
-        if (btpId == this.btpId) {
+        if (btpId === this.btpId) {
             return null;
         } else {
             this.btpId = btpId;
-            if ((btpId & 0x10000) != 0) {
+            if ((btpId & 0x10000) !== 0) {
                 arcName = globals.roomCtrl.demoArcName!;
             }
 
@@ -267,12 +267,12 @@ export class dDemo_actor_c extends TActor {
                 return null;
         }
 
-        if (btkId == this.btkId) {
+        if (btkId === this.btkId) {
             return null;
         }
 
         this.btkId = btkId;
-        if ((btkId & 0x10000) != 0) {
+        if ((btkId & 0x10000) !== 0) {
             arcName = globals.roomCtrl.demoArcName!;
         }
 

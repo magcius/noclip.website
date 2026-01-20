@@ -2987,8 +2987,8 @@ export class NaiveInterpreter {
                 case MIPS.SLTIU: this.regs[rt] = (this.regs[rs] >>> 0) < u_imm ? 1 : 0; break;
                 case MIPS.SLT: this.regs[rd] = this.regs[rs] < this.regs[rt] ? 1 : 0; break;
 
-                case MIPS.BEQ: shouldBranch = this.regs[rs] == this.regs[rt]; break;
-                case MIPS.BNE: shouldBranch = this.regs[rs] != this.regs[rt]; break;
+                case MIPS.BEQ: shouldBranch = this.regs[rs] === this.regs[rt]; break;
+                case MIPS.BNE: shouldBranch = this.regs[rs] !== this.regs[rt]; break;
                 case MIPS.BLTZ: shouldBranch = this.regs[rs] < 0; break;
                 case MIPS.BGEZ: shouldBranch = this.regs[rs] >= 0; break;
 

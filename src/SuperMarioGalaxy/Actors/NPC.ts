@@ -3,7 +3,7 @@
 
 import { quat, ReadonlyMat4, ReadonlyVec3, vec3 } from 'gl-matrix';
 import * as RARC from '../../Common/JSYSTEM/JKRArchive.js';
-import { getMatrixTranslation, isNearZero, MathConstants, quatFromEulerRadians, randomRangeInt, saturate, vec3SetAll, Vec3Zero } from '../../MathHelpers.js';
+import { getMatrixAxis, getMatrixTranslation, isNearZero, MathConstants, quatFromEulerRadians, randomRangeInt, saturate, vec3SetAll, Vec3UnitY, Vec3Zero } from '../../MathHelpers.js';
 import { assertExists, fallback, fallbackUndefined } from '../../util.js';
 import { adjustmentRailCoordSpeed, blendQuatUpFront, calcDistanceVertical, calcFrontVec, calcGravity, calcMtxFromGravityAndZAxis, calcUpVec, calcVecToPlayer, clampVecAngleDeg, connectToSceneIndirectNpc, connectToSceneMapObj, connectToSceneNpc, connectToSceneNpcMovement, faceToVectorDeg, getBckFrameMax, getCurrentRailPointArg0, getCurrentRailPointNo, getJointMtx, getJointMtxByName, getNextRailPointNo, getPlayerPos, getRailCoordSpeed, getRailDirection, getRailPointPosEnd, getRailPointPosStart, getRailPos, initDefaultPos, isActionEnd, isActionLoopedOrStopped, isBckExist, isBckLooped, isBckOneTimeAndStopped, isBckPlaying, isBckStopped, isExistRail, isNearPlayer, isRailGoingToEnd, isRailReachedGoal, isSameDirection, makeAxisFrontUp, makeMtxTRFromQuatVec, makeQuatUpFront, MapObjConnector, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordAndTransToRailStartPoint, moveCoordToStartPos, moveRailRider, quatGetAxisY, quatGetAxisZ, reverseRailDirection, rotateVecDegree, setBckFrameAtRandom, setBrkFrameAndStop, setBtkFrameAndStop, startAction, startBck, startBckNoInterpole, startBckWithInterpole, startBrk, startBtk, startBva, stopBck, syncStageSwitchAppear, tryStartAction, tryStartBck, turnDirectionToTargetRadians, turnQuatYDirRad, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead } from '../ActorUtil.js';
 import { getFirstPolyOnLineToMap, getFirstPolyOnLineToWaterSurface } from '../Collision.js';
@@ -21,6 +21,7 @@ import { calcNerveRate, calcNerveValue, isFirstStep, isGreaterEqualStep, isGreat
 import { createTalkCtrl, createTalkCtrlDirect, resetAndForwardNode, TalkMessageCtrl, tryTalkNearPlayer } from '../Talk.js';
 import { createPartsModelMapObj, PartsModel } from './PartsModel.js';
 import { drawWorldSpacePoint, getDebugOverlayCanvas2D } from '../../DebugJunk.js';
+import { White } from '../../Color.js';
 
 // Scratchpad
 const scratchVec3 = vec3.create();

@@ -65,7 +65,7 @@ export class DescentTextureList implements Destroyable {
 
     /** Returns a default fallback texture. */
     public getFallbackTexture(): GfxTexture {
-        if (this.gpuFallbackTexture != null) return this.gpuFallbackTexture;
+        if (this.gpuFallbackTexture !== null) return this.gpuFallbackTexture;
 
         const gfxTexture = this.gfxDevice.createTexture(
             makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, 64, 64, 1),
@@ -90,7 +90,7 @@ export class DescentTextureList implements Destroyable {
 
     /** Returns a transparent fallback texture. */
     public getTransparentTexture(): GfxTexture {
-        if (this.gpuTransparentTexture != null)
+        if (this.gpuTransparentTexture !== null)
             return this.gpuTransparentTexture;
         const texture = makeSolidColorTexture2D(
             this.gfxDevice,
@@ -103,7 +103,7 @@ export class DescentTextureList implements Destroyable {
     /** Load and page in bitmap data as a GPU texture. Returns `null` if bitmap not found. */
     public getBitmapAsTexture(bitmapId: number): DescentGfxTexture | null {
         const resultBitmap = this.assetCache.getBitmap(bitmapId);
-        if (resultBitmap == null) return null;
+        if (resultBitmap === null) return null;
 
         const { bitmap, data: palettizedBuffer } = resultBitmap;
         const rgbaData = new Uint8Array(bitmap.width * bitmap.height * 4);
@@ -159,7 +159,7 @@ export class DescentTextureList implements Destroyable {
             (_: any) => {
                 let texture: DescentGfxTexture | null =
                     this.getBitmapAsTexture(bitmapId);
-                if (texture == null) return -1; // constructor pushes fallback texture to this.texture
+                if (texture === null) return -1; // constructor pushes fallback texture to this.texture
 
                 const newTextureIndex = this.gfxTextures.length;
                 this.gfxTextures.push(texture);
@@ -173,7 +173,7 @@ export class DescentTextureList implements Destroyable {
         return this.tmapToTextureIdCache.computeIfAbsentOrNull(
             tmapId,
             (_: any) => {
-                if (tmapId == null) return null;
+                if (tmapId === null) return null;
                 const baseBitmapId = this.assetCache.getTmapBitmapIndex(tmapId);
 
                 // Get slide
@@ -183,7 +183,7 @@ export class DescentTextureList implements Destroyable {
                 const animation = this.assetCache.getTmapAnimation(tmapId);
                 let resolved: ResolvedTexture;
                 if (
-                    animation != null &&
+                    animation !== null &&
                     Number.isFinite(animation.timeMultiplier) &&
                     animation.bitmapIds.length > 0
                 ) {
@@ -210,7 +210,7 @@ export class DescentTextureList implements Destroyable {
     public resolveObjectBitmapToTexture(
         objectBitmapId: number | null,
     ): ResolvedTexture | null {
-        if (objectBitmapId == null) return null;
+        if (objectBitmapId === null) return null;
         return this.objBitmapToTextureIdCache.computeIfAbsentOrNull(
             objectBitmapId,
             (_: any) => {
@@ -219,7 +219,7 @@ export class DescentTextureList implements Destroyable {
                     this.assetCache.getObjectBitmapAnimation(objectBitmapId);
                 let resolved: ResolvedTexture;
                 if (
-                    animation != null &&
+                    animation !== null &&
                     Number.isFinite(animation.timeMultiplier) &&
                     animation.bitmapIds.length > 0
                 ) {
@@ -248,7 +248,7 @@ export class DescentTextureList implements Destroyable {
     public resolveVclipToTexture(vclipId: number): VclipTexture | null {
         const animation = this.assetCache.getVClipAnimation(vclipId);
         if (
-            animation == null ||
+            animation === null ||
             !Number.isFinite(animation.timeMultiplier) ||
             animation.bitmapIds.length === 0
         )
@@ -257,7 +257,7 @@ export class DescentTextureList implements Destroyable {
         const bitmap = this.assetCache.getBitmap(
             animation.bitmapIds[0],
         )!.bitmap;
-        if (bitmap == null) return null;
+        if (bitmap === null) return null;
 
         return {
             animated: true,
@@ -273,14 +273,14 @@ export class DescentTextureList implements Destroyable {
 
     /** Returns the GfxTexture to use for the specified ResolvedTexture at a given point in seconds. */
     public pickTexture(
-        texture: ResolvedTexture | null | undefined,
+        texture: ResolvedTexture | null,
         timeSeconds: number,
         fallbackTransparent?: boolean,
     ) {
         const fallback = fallbackTransparent
             ? () => this.getTransparentTexture()
             : () => this.getFallbackTexture();
-        if (texture == null) return fallback();
+        if (texture === null) return fallback();
         if (texture.animated) {
             const rollIndex =
                 ((timeSeconds * texture.timeMultiplier) %
@@ -309,11 +309,11 @@ export class DescentTextureList implements Destroyable {
                 device.destroyTexture(gfxTexture);
         this.gfxTextures.length = 0;
 
-        if (this.gpuFallbackTexture != null)
+        if (this.gpuFallbackTexture !== null)
             device.destroyTexture(this.gpuFallbackTexture);
         this.gpuFallbackTexture = null;
 
-        if (this.gpuTransparentTexture != null)
+        if (this.gpuTransparentTexture !== null)
             device.destroyTexture(this.gpuTransparentTexture);
         this.gpuTransparentTexture = null;
     }

@@ -44,9 +44,9 @@ export class DescentAssetCache {
         return this.bitmapCache.computeIfAbsentOrNull(bitmapId, (_: any) => {
             const pig = this.bitmapSource;
             const bitmap = pig.bitmaps[bitmapId];
-            if (bitmap == null) return null;
+            if (bitmap === null) return null;
             const data = pig.loadBitmap(bitmap);
-            if (data == null) return null;
+            if (data === null) return null;
             const result = { bitmap, data };
             this.bitmapCache.set(bitmapId, result);
             return result;
@@ -61,9 +61,9 @@ export class DescentAssetCache {
     /** Returns animation data for a TMAP index, or null if there isn't any. */
     public getTmapAnimation(tmapIndex: number): DescentAnimationData | null {
         const tmap = this.gameDataSource.tmaps[tmapIndex];
-        if (tmap == null || tmap.eclipNum === -1) return null;
+        if (tmap === null || tmap.eclipNum === -1) return null;
         const eclip = this.gameDataSource.eclips[tmap.eclipNum];
-        if (eclip == null) return null;
+        if (eclip === null) return null;
         return {
             timeMultiplier: 1.0 / eclip.vclip.frameTime,
             bitmapIds: eclip.vclip.bitmapIndex.slice(0, eclip.vclip.numFrames),
@@ -73,21 +73,21 @@ export class DescentAssetCache {
     /** Returns light data for a TMAP index, or null if there isn't any. */
     public getTmapLight(tmapIndex: number): number {
         const tmap = this.gameDataSource.tmaps[tmapIndex];
-        if (tmap == null) return 0;
+        if (tmap === null) return 0;
         return tmap.lighting;
     }
 
     /** Returns texture slide data for a TMAP index. */
     public getTmapSlide(tmapIndex: number): [number, number] {
         const tmap = this.gameDataSource.tmaps[tmapIndex];
-        if (tmap == null) return [0, 0];
+        if (tmap === null) return [0, 0];
         return [tmap.slideU, tmap.slideV];
     }
 
     /** Returns animation data for a VCLIP index, or null if not found. */
     public getVClipAnimation(vclipId: number): DescentVClipData | null {
         const vclip = this.gameDataSource.vclips[vclipId];
-        if (vclip == null) return null;
+        if (vclip === null) return null;
         return {
             timeMultiplier: 1.0 / vclip.frameTime,
             bitmapIds: vclip.bitmapIndex.slice(0, vclip.numFrames),
@@ -141,9 +141,9 @@ export class DescentAssetCache {
     ): DescentVClipData | null {
         const index = this.objEclipIndex;
         const eclipNum = index.get(resolvedObjectBitmapId);
-        if (eclipNum == null) return null;
+        if (eclipNum === undefined) return null;
         const eclip = this.gameDataSource.eclips[eclipNum];
-        if (eclip == null) return null;
+        if (eclip === null) return null;
         const vclip = eclip.vclip;
         return {
             timeMultiplier: 1.0 / vclip.frameTime,

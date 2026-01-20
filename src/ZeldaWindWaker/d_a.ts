@@ -373,7 +373,7 @@ class d_a_ep extends fopAc_ac_c {
 
         // When hit with an attack, emit a quick burst of flame before returning to normal
         if (this.burstTimer >= 0) {
-            if (this.burstTimer == 0x28 && !this.burstEmitter) {
+            if (this.burstTimer === 0x28 && !this.burstEmitter) {
                 const pos = vec3.set(scratchVec3a, this.posTop[0], this.posTop[1] + -240 + 235 + 8, this.posTop[2]);
                 this.burstEmitter = globals.particleCtrl.set(globals, 0, 0x01EA, pos)!;
             }
@@ -5372,7 +5372,7 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
         }
 
         // TODO:
-        // if (!checkNormalSwordEquip() && dStage_stagInfo_GetSTType(dComIfGp_getStageStagInfo()) != dStageType_FF1_e ||
+        // if (!checkNormalSwordEquip() && dStage_stagInfo_GetSTType(dComIfGp_getStageStagInfo()) !== dStageType_FF1_e ||
         //     checkCaughtShapeHide() || checkDemoShieldNoDraw()) {
         //     mpCLModelData->getJointNodePointer(0x0D)->getMesh()->getShape()->hide(); // cl_podA joint
         // } else {
@@ -5801,7 +5801,7 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
             }
         } else {
             // The demo anim archive is toggled based on if Aryll has been rescued. See dComIfGp_getLkDemoAnmArchive() 
-            const arcName = (globals.scnPlay.linkDemoAnmNo == 1) ? 'LkD01' : 'LkD00';
+            const arcName = (globals.scnPlay.linkDemoAnmNo === 1)  ? 'LkD01' : 'LkD00';
             const bck = globals.resCtrl.getObjectIDRes(ResType.Bck, arcName, anmBckId);
             this.anmBck.init(this.model.modelData, bck, true, bck.loopMode, 1.0, 0, bck.duration);
             this.anmBck.frameCtrl.setFrame(anmFrame);
@@ -5929,16 +5929,16 @@ class d_a_title extends fopAc_ac_c {
         if (this.delayFrameCounter > 0) {
             this.delayFrameCounter -= deltaTimeFrames;
 
-            if (this.delayFrameCounter == 0) {
+            if (this.delayFrameCounter === 0) {
                 // TODO: mDoAud_seStart(JA_SE_TITLE_WIND);
             }
         } else {
             this.calc_2d_alpha(globals, deltaTimeFrames);
         }
 
-        if (this.enterMode == 2) {
+        if (this.enterMode === 2) {
             this.enterMode = 3;
-        } else if (this.enterMode == 3) {
+        } else if (this.enterMode === 3) {
             this.shipFrameCounter += deltaTimeFrames;
         }
 
@@ -6030,7 +6030,7 @@ class d_a_title extends fopAc_ac_c {
     }
 
     private model_draw(globals: dGlobals, renderInstManager: GfxRenderInstManager) {
-        if (this.btkSubtitle.frameCtrl.getFrame() != 0.0) {
+        if (this.btkSubtitle.frameCtrl.getFrame() !== 0.0) {
             this.btkShimmer.entry(this.modelSubtitleShimmer)
             mDoExt_modelUpdateDL(globals, this.modelSubtitleShimmer, renderInstManager, globals.dlst.ui);
 
@@ -6038,7 +6038,7 @@ class d_a_title extends fopAc_ac_c {
             mDoExt_modelUpdateDL(globals, this.modelSubtitle, renderInstManager, globals.dlst.ui);
         }
 
-        if (this.bpkShip.frameCtrl.getFrame() != 0.0) {
+        if (this.bpkShip.frameCtrl.getFrame() !== 0.0) {
             this.bckShip.entry(this.modelShip);
             this.bpkShip.entry(this.modelShip);
             mDoExt_modelUpdateDL(globals, this.modelShip, renderInstManager, globals.dlst.ui);
@@ -6062,7 +6062,7 @@ class d_a_title extends fopAc_ac_c {
 
     private calc_2d_alpha(globals: dGlobals, deltaTimeFrames: number) {
         this.anmFrameCounter += deltaTimeFrames;
-        if (this.anmFrameCounter >= 200 && this.enterMode == 0) {
+        if (this.anmFrameCounter >= 200 && this.enterMode === 0) {
             this.enterMode = 1;
         }
 
@@ -6072,7 +6072,7 @@ class d_a_title extends fopAc_ac_c {
             0.0
         );
 
-        if (this.enterMode == 0) {
+        if (this.enterMode === 0) {
             if (this.shipFrameCounter < 0) {
                 this.shipFrameCounter += deltaTimeFrames;
             }
@@ -6095,7 +6095,7 @@ class d_a_title extends fopAc_ac_c {
             this.panes[TitlePane.JapanSubtitle].setAlpha(0.0);
 
             if (this.anmFrameCounter >= 80 && !this.sparkleEmitter) {
-                // if (daTitle_Kirakira_Sound_flag == true) {
+                // if (daTitle_Kirakira_Sound_flag === true) {
                 //     mDoAud_seStart(JA_SE_TITLE_KIRA);
                 //     daTitle_Kirakira_Sound_flag = false;
                 // }

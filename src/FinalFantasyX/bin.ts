@@ -1638,7 +1638,7 @@ export function parseActorGeometry(name: string, buffer: ArrayBufferSlice, textu
                 attrData[vtxIdx*VERTEX_STRIDE + 3] = view.getUint16(readOffs + 6, true) / texH;
 
                 if (p.runs) {
-                    if (perRun == p.runs[runIdx]) {
+                    if (perRun === p.runs[runIdx]) {
                         runIdx++;
                         perRun = 0;
                     }
@@ -1689,7 +1689,7 @@ export function parseActorGeometry(name: string, buffer: ArrayBufferSlice, textu
         vec3.scale(scale, scale, 1 / 0x1000); // actually just truncates the low bits?
         offs += 0x14;
         bones.push({
-            parent: parentIndex == i ? -1 : parentIndex,
+            parent: parentIndex === i ? -1 : parentIndex,
             euler, offset, scale
         });
     }
