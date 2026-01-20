@@ -2,7 +2,7 @@ import { vec3 } from "gl-matrix";
 import { AABB } from "../../Geometry";
 import type { BAMFile } from "../BAMFile";
 import { AssetVersion, type DataStream } from "../Common";
-import { type DebugInfo, dbgEnum, dbgNum, dbgRef, dbgRefs } from "./debug";
+import { type DebugInfo, dbgEnum, dbgFlags, dbgNum, dbgRef, dbgRefs } from "./debug";
 import { GeomPrimitive } from "./GeomPrimitive";
 import type {
   GeomVertexArrayFormat,
@@ -12,6 +12,7 @@ import { GeomVertexData } from "./GeomVertexData";
 import {
   BoundsType,
   Contents,
+  GeomRendering,
   NumericType,
   PrimitiveType,
   ShadeModel,
@@ -69,7 +70,7 @@ export class Geom extends TypedObject {
     info.set("primitives", dbgRefs(this.primitives));
     info.set("primitiveType", dbgEnum(this.primitiveType, PrimitiveType));
     info.set("shadeModel", dbgEnum(this.shadeModel, ShadeModel));
-    info.set("geomRendering", dbgNum(this.geomRendering));
+    info.set("geomRendering", dbgFlags(this.geomRendering, GeomRendering));
     if (this._version.compare(new AssetVersion(6, 19)) >= 0) {
       info.set("boundsType", dbgEnum(this.boundsType, BoundsType));
     }

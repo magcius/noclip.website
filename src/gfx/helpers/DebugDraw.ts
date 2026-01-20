@@ -26,7 +26,7 @@ export enum DebugDrawFlags {
 
     DepthTint = 1 << 2,
 
-    Default = DepthTint,
+    Default = 0,
 };
 
 interface DebugDrawOptions {
@@ -222,7 +222,7 @@ export class DebugDraw {
     private debugDrawProgram: GfxProgram;
     private depthSampler: GfxSampler;
     private currentPage: BufferPage | null = null; // for the batch system
-    private lineThickness = 3;
+    private lineThickness = 5;
 
     public static scratchVec3 = nArray(4, () => vec3.create());
 

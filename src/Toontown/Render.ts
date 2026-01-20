@@ -73,7 +73,6 @@ import {
   TransparencyMode,
   type VertexTransform,
 } from "./nodes";
-import { HierarchicalProfiler } from "./Profiler";
 import {
   createProgramProps,
   MAX_BONES,
@@ -128,11 +127,6 @@ export class ToontownRenderer implements Viewer.SceneGfx {
     string,
     { texture: GfxTexture; sampler: GfxSampler }
   > = new Map();
-  private profiler = new HierarchicalProfiler({
-    enabled: false,
-    historySize: 60,
-    printIntervalMs: 3000,
-  });
   private debugPanel: UI.Panel | null = null;
   private debugSceneGraphCheckbox: UI.Checkbox | null = null;
   private sceneGraphViewer: SceneGraphViewer | null = null;
@@ -544,7 +538,6 @@ export class ToontownRenderer implements Viewer.SceneGfx {
   }
 
   private prepareToRender(viewerInput: Viewer.ViewerRenderInput): void {
-    this.profiler.beginFrame();
     addFrameTime(viewerInput.deltaTime / 1000);
     intervalManager.step();
 
@@ -747,7 +740,6 @@ export class ToontownRenderer implements Viewer.SceneGfx {
     }
 
     // Start traversal from the found node with all bits on (default visibility)
-    this.profiler.begin("traverse");
     traverse.call(
       this,
       this.scene,
@@ -755,17 +747,8 @@ export class ToontownRenderer implements Viewer.SceneGfx {
       0xffffffff,
       this.scene.state,
     );
-    this.profiler.end("traverse");
 
-    // Submit all collected render insts to the render list in correct bin order
-    this.profiler.begin("submit");
-
-    this.profiler.begin("binFinish");
-    const sortedObjects = binCollector.finish();
-    this.profiler.end("binFinish");
-
-    this.profiler.begin("setupRenderInst");
-    for (const obj of sortedObjects) {
+    for (const obj of binCollector.finish()) {
       if (obj.geomData) {
         // Regular render
         this.renderInstListMain.submitRenderInst(
@@ -868,12 +851,6 @@ export class ToontownRenderer implements Viewer.SceneGfx {
         }
       }
     }
-    this.profiler.end("setupRenderInst");
-    this.profiler.end("submit");
-
-    // Output profiler info to debug console
-    viewerInput.debugConsole.addInfoLine(this.profiler.getInfoLine());
-    this.profiler.endFrame();
 
     renderInstManager.popTemplate();
     this.renderHelper.prepareToRender();
@@ -883,6 +860,13 @@ export class ToontownRenderer implements Viewer.SceneGfx {
     _device: GfxDevice,
     viewerInput: Viewer.ViewerRenderInput,
   ): void {
+    this.renderHelper.debugDraw.beginFrame(
+      viewerInput.camera.projectionMatrix,
+      viewerInput.camera.viewMatrix,
+      viewerInput.backbufferWidth,
+      viewerInput.backbufferHeight,
+    );
+
     const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
     // Create render targets
@@ -908,6 +892,14 @@ export class ToontownRenderer implements Viewer.SceneGfx {
       "Main Depth",
     );
 
+    // Prepare scene for rendering (before debug draw so transforms are ready)
+    this.prepareToRender(viewerInput);
+
+    // Draw scene graph viewer debug graphics
+    if (this.sceneGraphViewer !== null) {
+      this.sceneGraphViewer.drawDebugGraphics(this.renderHelper.debugDraw);
+    }
+
     // Main render pass
     builder.pushPass((pass) => {
       pass.setDebugName("Main");
@@ -924,23 +916,24 @@ export class ToontownRenderer implements Viewer.SceneGfx {
       });
     });
 
-    // Resolve to screen
+    this.renderHelper.debugDraw.pushPasses(
+      builder,
+      mainColorTargetID,
+      mainDepthTargetID,
+    );
+    this.renderHelper.antialiasingSupport.pushPasses(
+      builder,
+      viewerInput,
+      mainColorTargetID,
+    );
     builder.resolveRenderTargetToExternalTexture(
       mainColorTargetID,
       viewerInput.onscreenTexture,
     );
 
-    // Prepare and execute
-    this.prepareToRender(viewerInput);
+    // Execute render graph
     this.renderHelper.renderGraph.execute(builder);
     this.renderInstListMain.reset();
-
-    // Draw scene graph viewer debug overlays
-    if (this.sceneGraphViewer !== null) {
-      this.sceneGraphViewer.drawHighlightedAABB(
-        viewerInput.camera.clipFromWorldMatrix,
-      );
-    }
   }
 
   public destroy(device: GfxDevice): void {

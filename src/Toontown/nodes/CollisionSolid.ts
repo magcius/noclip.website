@@ -11,6 +11,9 @@ import {
 export const CollisionSolidFlags = {
   Tangible: 1 << 0,
   EffectiveNormal: 1 << 1,
+  VizGeomStale: 1 << 2,
+  IgnoreEffectiveNormal: 1 << 3,
+  InternalBoundsStale: 1 << 4,
 };
 
 export class CollisionSolid extends TypedObject {

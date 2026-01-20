@@ -50,8 +50,8 @@ export class GenericAnimatedProp extends AnimatedProp {
     const actor = new Actor();
     actor.addModel(this.node);
     actor.reparentTo(parent);
-    await actor.loadAnims({ anim: `${this._path}/${anim}` });
-    actor.pose("anim", 0);
+    // await actor.loadAnims({ anim: `${this._path}/${anim}` });
+    // actor.pose("anim", 0);
     this._actor = actor;
   }
 

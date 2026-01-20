@@ -112,7 +112,11 @@ export function dbgFlags(
   for (const [name, bit] of Object.entries(flagDefs)) {
     if (value & bit) {
       names.push(name);
+      value &= ~bit;
     }
+  }
+  if (value) {
+    names.push(`Unknown(${value})`);
   }
   return { type: "flags", value, names };
 }

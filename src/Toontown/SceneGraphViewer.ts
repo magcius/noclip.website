@@ -1,27 +1,44 @@
-import { mat4, type ReadonlyMat4 } from "gl-matrix";
-import { Cyan } from "../Color.js";
-import { FloatingPanel } from "../DebugFloaters.js";
-import { drawWorldSpaceAABB, getDebugOverlayCanvas2D } from "../DebugJunk.js";
-import { AABB } from "../Geometry.js";
-import { LAYER_ICON } from "../ui.js";
-import { composeDrawMask, isNodeVisible } from "./Geom.js";
-import type { DebugInfo, DebugValue } from "./nodes/debug.js";
-import { GeomNode } from "./nodes/GeomNode.js";
-import type { PandaNode } from "./nodes/PandaNode.js";
-import { pandaToNoclip } from "./Render.js";
+import {
+  mat4,
+  type ReadonlyMat4,
+  type ReadonlyVec4,
+  vec3,
+  vec4,
+} from "gl-matrix";
+import { type Color, Cyan, colorNewFromRGBA } from "../Color";
+import { branchlessONB } from "../DebugJunk";
+import { FloatingPanel } from "../DebugFloaters";
+import { AABB } from "../Geometry";
+import { DebugDraw } from "../gfx/helpers/DebugDraw";
+import { LAYER_ICON } from "../ui";
+import { composeDrawMask, isNodeVisible } from "./Geom";
+import {
+  CollisionBox,
+  CollisionNode,
+  CollisionPlane,
+  CollisionPolygon,
+  CollisionSphere,
+  CollisionTube,
+  type DebugInfo,
+  type DebugValue,
+  GeomNode,
+  type PandaNode,
+} from "./nodes";
+import { pandaToNoclip } from "./Render";
 
-/**
- * Represents a node in the scene graph tree UI
- */
+// Orange color for collision visualization (#ff9933)
+const CollisionColor: Color = colorNewFromRGBA(1.0, 0.6, 0.2, 1.0);
+
 interface SceneGraphTreeNode {
   node: PandaNode;
   worldTransform: mat4;
-  // Combined transform: pandaToNoclip * worldTransform (for AABB drawing)
+  // Combined transform: pandaToNoclip * worldTransform (for debug drawing)
   noclipTransform: mat4;
   depth: number;
   isExpanded: boolean;
   isVisible: boolean;
   hasGeomDescendants: boolean;
+  hasCollisionDescendants: boolean;
   // Local AABB (in node's local space, computed from geometry or children)
   localAABB: AABB | null;
   parent: SceneGraphTreeNode | null;
@@ -29,9 +46,6 @@ interface SceneGraphTreeNode {
   element: HTMLElement | null;
 }
 
-/**
- * Scene Graph Viewer - displays scene hierarchy with AABB highlighting
- */
 export class SceneGraphViewer {
   private panel: FloatingPanel;
   private treeContainer: HTMLElement;
@@ -135,7 +149,7 @@ export class SceneGraphViewer {
 
   /**
    * Apply the current filter query to find matching nodes.
-   * Case-insensitive fuzzy search across node type, name (contains), and tags.
+   * Case-insensitive fuzzy search across node type, name, and tags.
    */
   private applyFilter(): void {
     this.matchingNodes.clear();
@@ -154,7 +168,7 @@ export class SceneGraphViewer {
         return true;
       }
 
-      // Match node name (contains)
+      // Match node name
       if (node.name.toLowerCase().includes(query)) {
         return true;
       }
@@ -282,6 +296,7 @@ export class SceneGraphViewer {
         isExpanded: depth < 2,
         isVisible: isNodeVisible(drawMask),
         hasGeomDescendants: false,
+        hasCollisionDescendants: false,
         localAABB: null,
         parent,
         children: [],
@@ -303,6 +318,12 @@ export class SceneGraphViewer {
           childTreeNode.hasGeomDescendants
         ) {
           treeNode.hasGeomDescendants = true;
+        }
+        if (
+          childTreeNode.node instanceof CollisionNode ||
+          childTreeNode.hasCollisionDescendants
+        ) {
+          treeNode.hasCollisionDescendants = true;
         }
       }
 
@@ -391,7 +412,7 @@ export class SceneGraphViewer {
     row.style.transition = "background-color 0.1s";
 
     // Dim nodes that aren't visible (hidden via draw mask)
-    if (!treeNode.isVisible) {
+    if (!treeNode.isVisible && !(treeNode.node instanceof CollisionNode)) {
       row.style.opacity = "0.4";
     }
 
@@ -445,7 +466,12 @@ export class SceneGraphViewer {
     if (nodeName === "PandaNode") nodeName = "Node";
     typeBadge.textContent = nodeName;
     const isGeomNode = nodeName === "GeomNode" || treeNode.hasGeomDescendants;
-    if (isGeomNode) {
+    const isCollisionNode = treeNode.node instanceof CollisionNode;
+    const hasCollision = isCollisionNode || treeNode.hasCollisionDescendants;
+    if (isCollisionNode) {
+      typeBadge.style.backgroundColor = "#f93";
+      typeBadge.style.color = "#000";
+    } else if (isGeomNode) {
       typeBadge.style.backgroundColor = "#2a5";
       typeBadge.style.color = "#fff";
     } else {
@@ -454,10 +480,10 @@ export class SceneGraphViewer {
     }
     row.appendChild(typeBadge);
 
-    // Node name
+    // Node name (don't dim nodes with geometry or collision descendants)
     const name = document.createElement("span");
     name.textContent = treeNode.node.name || "(unnamed)";
-    name.style.color = isGeomNode ? "#fff" : "#888";
+    name.style.color = isGeomNode || hasCollision ? "#fff" : "#888";
     name.style.flex = "1";
     name.style.overflow = "hidden";
     name.style.textOverflow = "ellipsis";
@@ -764,13 +790,12 @@ export class SceneGraphViewer {
         break;
       case "mat4": {
         // Show matrix as 4 rows
-        const m = value.value;
         for (let r = 0; r < 4; r++) {
-          const rowStr = `[${m[r * 4 + 0].toFixed(3)}, ${m[r * 4 + 1].toFixed(3)}, ${m[r * 4 + 2].toFixed(3)}, ${m[r * 4 + 3].toFixed(3)}]`;
+          const row = value.value.slice(r * 4, r * 4 + 4) as ReadonlyVec4;
           container.appendChild(
             this.createDebugValueRow(
-              `row${r}`,
-              { type: "string", value: rowStr },
+              `m[${r}]`,
+              { type: "vec4", value: row },
               depth,
             ),
           );
@@ -856,24 +881,348 @@ export class SceneGraphViewer {
   }
 
   /**
-   * Draw the highlighted node's AABB on the debug canvas
-   * Called from the render loop
+   * Draw the highlighted node's collision solids and AABB on the debug canvas
    */
-  drawHighlightedAABB(clipFromWorldMatrix: ReadonlyMat4): void {
+  drawDebugGraphics(debugDraw: DebugDraw): void {
     if (!this.highlightedNode) return;
-    if (!this.highlightedNode.localAABB) return;
 
-    const ctx = getDebugOverlayCanvas2D();
+    // Draw collision solids for this node and all descendants
+    this.drawCollisionSolidsRecursive(debugDraw, this.highlightedNode);
 
-    // Draw the AABB using the noclip transform
-    // This draws the oriented bounding box (not axis-aligned in world space)
-    drawWorldSpaceAABB(
-      ctx,
-      clipFromWorldMatrix,
-      this.highlightedNode.localAABB,
-      this.highlightedNode.noclipTransform,
-      Cyan,
+    // Draw AABB if available
+    if (this.highlightedNode.localAABB) {
+      this.drawAABB(
+        debugDraw,
+        this.highlightedNode.localAABB,
+        this.highlightedNode.noclipTransform,
+        Cyan,
+      );
+    }
+  }
+
+  /**
+   * Draw an AABB (12 edges)
+   */
+  private drawAABB(
+    debugDraw: DebugDraw,
+    aabb: AABB,
+    transform: ReadonlyMat4,
+    color: Color,
+  ): void {
+    // Compute 8 corners
+    const corners: vec3[] = [
+      vec3.fromValues(aabb.min[0], aabb.min[1], aabb.min[2]),
+      vec3.fromValues(aabb.max[0], aabb.min[1], aabb.min[2]),
+      vec3.fromValues(aabb.min[0], aabb.max[1], aabb.min[2]),
+      vec3.fromValues(aabb.max[0], aabb.max[1], aabb.min[2]),
+      vec3.fromValues(aabb.min[0], aabb.min[1], aabb.max[2]),
+      vec3.fromValues(aabb.max[0], aabb.min[1], aabb.max[2]),
+      vec3.fromValues(aabb.min[0], aabb.max[1], aabb.max[2]),
+      vec3.fromValues(aabb.max[0], aabb.max[1], aabb.max[2]),
+    ];
+
+    // Transform corners to world space
+    for (const corner of corners) {
+      vec3.transformMat4(corner, corner, transform);
+    }
+
+    // Draw 12 edges
+    const edges: [number, number][] = [
+      [0, 1],
+      [1, 3],
+      [3, 2],
+      [2, 0], // bottom face
+      [4, 5],
+      [5, 7],
+      [7, 6],
+      [6, 4], // top face
+      [0, 4],
+      [1, 5],
+      [2, 6],
+      [3, 7], // vertical edges
+    ];
+
+    for (const [a, b] of edges) {
+      debugDraw.drawLine(corners[a], corners[b], color);
+    }
+  }
+
+  /**
+   * Recursively draw collision solids for a node and all its descendants
+   */
+  private drawCollisionSolidsRecursive(
+    debugDraw: DebugDraw,
+    treeNode: SceneGraphTreeNode,
+  ): void {
+    if (treeNode.node instanceof CollisionNode) {
+      this.drawCollisionSolids(
+        debugDraw,
+        treeNode.node,
+        treeNode.noclipTransform,
+      );
+    }
+
+    for (const child of treeNode.children) {
+      this.drawCollisionSolidsRecursive(debugDraw, child);
+    }
+  }
+
+  /**
+   * Draw all collision solids in a CollisionNode
+   */
+  private drawCollisionSolids(
+    debugDraw: DebugDraw,
+    node: CollisionNode,
+    transform: ReadonlyMat4,
+  ): void {
+    for (const solid of node.solids) {
+      if (solid instanceof CollisionSphere) {
+        this.drawCollisionSphere(debugDraw, solid, transform);
+      } else if (solid instanceof CollisionBox) {
+        this.drawCollisionBox(debugDraw, solid, transform);
+      } else if (solid instanceof CollisionTube) {
+        this.drawCollisionTube(debugDraw, solid, transform);
+      } else if (solid instanceof CollisionPolygon) {
+        this.drawCollisionPolygon(debugDraw, solid, transform);
+      } else if (solid instanceof CollisionPlane) {
+        this.drawCollisionPlane(debugDraw, solid, transform);
+      }
+    }
+  }
+
+  /**
+   * Draw a collision sphere
+   */
+  private drawCollisionSphere(
+    debugDraw: DebugDraw,
+    sphere: CollisionSphere,
+    transform: ReadonlyMat4,
+  ): void {
+    // Transform center to world space
+    const worldCenter = vec3.create();
+    vec3.transformMat4(worldCenter, sphere.center, transform);
+
+    // Scale the radius by the transform's scale
+    const scaledRadius = this.getScaledRadius(sphere.radius, transform);
+
+    debugDraw.drawSphereLine(worldCenter, scaledRadius, CollisionColor);
+  }
+
+  /**
+   * Draw a collision box
+   */
+  private drawCollisionBox(
+    debugDraw: DebugDraw,
+    box: CollisionBox,
+    transform: ReadonlyMat4,
+  ): void {
+    // Vertices are stored as 8 corners in the float array (24 floats = 8 * 3)
+    const vertices = box.vertices;
+    const worldVerts: vec3[] = [];
+
+    for (let i = 0; i < 8; i++) {
+      const v = vec3.fromValues(
+        vertices[i * 3 + 0],
+        vertices[i * 3 + 1],
+        vertices[i * 3 + 2],
+      );
+      vec3.transformMat4(v, v, transform);
+      worldVerts.push(v);
+    }
+
+    // Draw 12 edges of the box
+    const edges: [number, number][] = [
+      [0, 1],
+      [1, 3],
+      [3, 2],
+      [2, 0], // Bottom face
+      [4, 5],
+      [5, 7],
+      [7, 6],
+      [6, 4], // Top face
+      [0, 4],
+      [1, 5],
+      [2, 6],
+      [3, 7], // Vertical edges
+    ];
+
+    for (const [a, b] of edges) {
+      debugDraw.drawLine(worldVerts[a], worldVerts[b], CollisionColor);
+    }
+  }
+
+  /**
+   * Draw a collision tube/capsule
+   */
+  private drawCollisionTube(
+    debugDraw: DebugDraw,
+    tube: CollisionTube,
+    transform: ReadonlyMat4,
+  ): void {
+    // Transform endpoints to world space
+    const worldA = vec3.create();
+    const worldB = vec3.create();
+    vec3.transformMat4(worldA, tube.pointA, transform);
+    vec3.transformMat4(worldB, tube.pointB, transform);
+
+    // Scale the radius by the transform's scale
+    const scaledRadius = this.getScaledRadius(tube.radius, transform);
+
+    // Compute axis direction
+    const axis = vec3.create();
+    vec3.subtract(axis, worldB, worldA);
+    const length = vec3.length(axis);
+
+    if (length < 0.0001) {
+      // Degenerate capsule - draw sphere
+      debugDraw.drawSphereLine(worldA, scaledRadius, CollisionColor);
+      return;
+    }
+
+    vec3.scale(axis, axis, 1 / length);
+
+    // Draw end circles
+    debugDraw.drawDiscLineN(worldA, axis, scaledRadius, CollisionColor);
+    debugDraw.drawDiscLineN(worldB, axis, scaledRadius, CollisionColor);
+
+    // Get orthonormal basis for connecting lines
+    const axisX = vec3.create();
+    const axisY = vec3.create();
+    branchlessONB(axisX, axisY, axis);
+
+    // Draw 4 connecting lines
+    const tempA = vec3.create();
+    const tempB = vec3.create();
+
+    for (let i = 0; i < 4; i++) {
+      const angle = (i / 4) * Math.PI * 2;
+      const cosT = Math.cos(angle) * scaledRadius;
+      const sinT = Math.sin(angle) * scaledRadius;
+
+      vec3.scaleAndAdd(tempA, worldA, axisX, cosT);
+      vec3.scaleAndAdd(tempA, tempA, axisY, sinT);
+      vec3.scaleAndAdd(tempB, worldB, axisX, cosT);
+      vec3.scaleAndAdd(tempB, tempB, axisY, sinT);
+
+      debugDraw.drawLine(tempA, tempB, CollisionColor);
+    }
+  }
+
+  /**
+   * Draw a collision polygon
+   */
+  private drawCollisionPolygon(
+    debugDraw: DebugDraw,
+    polygon: CollisionPolygon,
+    transform: ReadonlyMat4,
+  ): void {
+    if (polygon.points.length < 3) return;
+
+    // to2dMatrix transforms 3D points to 2D. We need the inverse to go back.
+    const from2dMatrix = mat4.create();
+    mat4.invert(from2dMatrix, polygon.to2dMatrix);
+
+    // Combined transform: from2D -> local -> world (noclip)
+    const combinedTransform = mat4.create();
+    mat4.multiply(combinedTransform, transform, from2dMatrix);
+
+    // Project 2D points back to 3D world space
+    // Note: Panda stores 2D polygon points in XZ plane (Y=0)
+    const worldPoints: vec3[] = [];
+    for (const { point } of polygon.points) {
+      const local3D = vec3.fromValues(point[0], 0, point[1]);
+      const world3D = vec3.create();
+      vec3.transformMat4(world3D, local3D, combinedTransform);
+      worldPoints.push(world3D);
+    }
+
+    // Draw polygon outline
+    for (let i = 0; i < worldPoints.length; i++) {
+      const next = (i + 1) % worldPoints.length;
+      debugDraw.drawLine(worldPoints[i], worldPoints[next], CollisionColor);
+    }
+  }
+
+  /**
+   * Draw a collision plane (as a bounded grid)
+   */
+  private drawCollisionPlane(
+    debugDraw: DebugDraw,
+    plane: CollisionPlane,
+    transform: ReadonlyMat4,
+  ): void {
+    // Plane is stored as (nx, ny, nz, d) where normal points "into" the plane
+    const normal = vec3.fromValues(
+      plane.plane[0],
+      plane.plane[1],
+      plane.plane[2],
     );
+    const d = plane.plane[3];
+
+    // Find a point on the plane: p = normal * -d
+    const origin = vec3.create();
+    vec3.scale(origin, normal, -d);
+
+    // Transform to world space
+    const worldOrigin = vec3.create();
+    vec3.transformMat4(worldOrigin, origin, transform);
+
+    // Transform normal (direction only, use inverse transpose)
+    const worldNormal = vec3.create();
+    const normalMat = mat4.create();
+    mat4.invert(normalMat, transform);
+    mat4.transpose(normalMat, normalMat);
+    vec3.transformMat4(worldNormal, normal, normalMat);
+    vec3.normalize(worldNormal, worldNormal);
+
+    // Create orthonormal basis on the plane
+    const tangent = vec3.create();
+    const bitangent = vec3.create();
+    branchlessONB(tangent, bitangent, worldNormal);
+
+    // Draw a bounded grid (cross pattern) centered on origin
+    const size = 50;
+
+    // Draw cross through origin
+    const p1 = vec3.create();
+    const p2 = vec3.create();
+
+    vec3.scaleAndAdd(p1, worldOrigin, tangent, -size);
+    vec3.scaleAndAdd(p2, worldOrigin, tangent, size);
+    debugDraw.drawLine(p1, p2, CollisionColor);
+
+    vec3.scaleAndAdd(p1, worldOrigin, bitangent, -size);
+    vec3.scaleAndAdd(p2, worldOrigin, bitangent, size);
+    debugDraw.drawLine(p1, p2, CollisionColor);
+
+    // Draw a square outline around the plane
+    const corners: vec3[] = [];
+    for (let i = 0; i < 4; i++) {
+      const corner = vec3.create();
+      const sx = i === 0 || i === 3 ? -size : size;
+      const sy = i === 0 || i === 1 ? -size : size;
+      vec3.scaleAndAdd(corner, worldOrigin, tangent, sx);
+      vec3.scaleAndAdd(corner, corner, bitangent, sy);
+      corners.push(corner);
+    }
+
+    for (let i = 0; i < corners.length; i++) {
+      const next = (i + 1) % corners.length;
+      debugDraw.drawLine(corners[i], corners[next], CollisionColor);
+    }
+  }
+
+  /**
+   * Helper to scale a radius by a transform's scale factor
+   */
+  private getScaledRadius(radius: number, transform: ReadonlyMat4): number {
+    const radiusVec = vec3.fromValues(radius, 0, 0);
+    const scaledRadiusVec = vec3.create();
+    vec3.transformMat4(scaledRadiusVec, radiusVec, transform);
+    const origin = vec3.create();
+    vec3.transformMat4(origin, vec3.create(), transform);
+    vec3.subtract(scaledRadiusVec, scaledRadiusVec, origin);
+    return vec3.length(scaledRadiusVec);
   }
 
   /**
