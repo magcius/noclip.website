@@ -92,6 +92,15 @@ class TMSFESceneDesc implements SceneDesc
             {
                 console.error(`file ${file_name} not found`);
             }
+
+            // animation file
+            const animation_file_name = `${this.level_file_names[i]}.anm`
+            const animation_bfres_data = get_file_by_name(apak, animation_file_name);
+            if (animation_bfres_data != undefined)
+            {
+                const bfres = parseBFRES(animation_bfres_data);
+                console.log(bfres.fska[0]);
+            }
         }
 
         let scene = new TMSFEScene(device, fres_files, this.special_skybox);
@@ -123,7 +132,8 @@ const name = "MOVE THIS LATER Tokyo Mirage Sessions ♯FE";
 const sceneDescs =
 [
     "Illusory Daitama",
-    new TMSFESceneDesc("d002_01", "Illusory Daitama", ["d002_01", "obj01", "obj02", "obj03", "sky"], create_d002_01_gimmicks),
+    // new TMSFESceneDesc("d002_01", "Illusory Daitama", ["d002_01", "obj01", "obj02", "obj03", "sky"], create_d002_01_gimmicks),
+    new TMSFESceneDesc("d002_01", "Illusory Daitama", ["obj03"]),
     new TMSFESceneDesc("d002_02", "Blue Observatory", ["d002_02", "sky"]),
     new TMSFESceneDesc("d002_03", "Red Observatory", ["d002_03", "sky"]),
     "Illusory 106",

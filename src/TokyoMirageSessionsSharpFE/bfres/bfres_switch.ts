@@ -8,6 +8,7 @@
 
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { FMDL, parseFMDL } from "./fmdl.js";
+import { FSKA, parseFSKA } from "./fska.js";
 import { assert, readString } from "../../util.js";
 
 /**
@@ -27,6 +28,10 @@ export function parseBFRES(buffer: ArrayBufferSlice): FRES
     const fmdl_array_offset = view.getUint32(0x28, true);
     const fmdl_count = view.getUint16(0xDC, true);
     const fmdl = parseFMDL(buffer, fmdl_array_offset, fmdl_count, gpu_region_offset);
+
+    const fska_array_offset = view.getUint32(0x58, true);
+    const fska_count = view.getUint16(0xE2, true);
+    const fska = parseFSKA(buffer, fska_array_offset, fska_count, gpu_region_offset);
 
     // textures are stored in an embedded .bntx file
     const embedded_file_count = view.getUint16(0xEC, true);
@@ -58,7 +63,7 @@ export function parseBFRES(buffer: ArrayBufferSlice): FRES
         embedded_file_entry_offset += EMBEDDED_FILE_ENTRY_SIZE;
     }
 
-    return { fmdl, embedded_files: embedded_file_array };
+    return { fmdl, fska, embedded_files: embedded_file_array };
 }
 
 const EMBEDDED_FILE_ENTRY_SIZE = 0xC;
@@ -76,6 +81,7 @@ export function read_bfres_string(buffer: ArrayBufferSlice, offs: number, little
 export interface FRES
 {
     fmdl: FMDL[];
+    fska: FSKA[];
     embedded_files: EmbeddedFile[];
 }
 
