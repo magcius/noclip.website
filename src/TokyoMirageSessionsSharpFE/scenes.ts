@@ -33,6 +33,7 @@ import { create_d007_09_gimmicks } from "./maps/d007_09.js";
 import { create_d010_01_gimmicks } from "./maps/d010_01.js";
 import { create_f003_08_gimmicks } from "./maps/f003_08.js";
 
+import { create_f004_01_gimmicks, create_f004_01_music_fes_gimmicks } from "./maps/f004_01.js";
 import { create_f005_01_gimmicks, create_f005_01_music_fes_gimmicks } from "./maps/f005_01.js";
 
 /**
@@ -212,7 +213,8 @@ const sceneDescs =
     new TMSFESceneDesc("f002_01", "Daitama Observatory 1", ["f002_01", "obj01", "obj02", "obj03"]),
     new TMSFESceneDesc("f002_02", "Daitama Observatory 2", ["f002_02", "obj01", "obj02", "obj03"]),
     new TMSFESceneDesc("f002_03", "Daitama Observatory 3", ["f002_03", "obj01", "obj02", "sky"]),
-    new TMSFESceneDesc("f004_01", "Daitou TV 1", ["f004_01", "sky"], undefined, 5),
+    new TMSFESceneDesc("f004_01", "Daitou TV 1", ["f004_01", "sky"], create_f004_01_gimmicks, 5),
+    new TMSFESceneDesc("f004_01", "Daitou TV 1 Music Fes", ["f004_01", "sky"], create_f004_01_music_fes_gimmicks, 5),
     new TMSFESceneDesc("f004_02", "Daitou TV 2", ["f004_02", "obj01", "sky"], undefined, 5),
     new TMSFESceneDesc("f006_01", "Cosmic Egg 1", ["f006_01", "obj01", "obj02", "obj03", "sky"]),
     new TMSFESceneDesc("f006_02", "Cosmic Egg 2", ["f006_02", "sky"]),
@@ -235,7 +237,6 @@ const sceneDescs =
     new TMSFESceneDesc("f010_07", "Fashion Show Runway", ["f010_07", "f010_07_obj01", "f010_07_obj02"]),
     new TMSFESceneDesc("guambeach_00", "Maiko Beach Cutscene Day", ["guambeach_00"]),
     new TMSFESceneDesc("guambeach_02", "Maiko Beach Cutscene Sunset", ["guambeach_02"]),
-    new TMSFESceneDesc("largeprops01", "Raindrop Memories Set", ["largeprops01_00"]),
     "Extra",
     // new TMSFESceneDesc("d004_06", "Central Square 2"), wii u file
     // new TMSFESceneDesc("b000_00", "b000_00"), wii u file
