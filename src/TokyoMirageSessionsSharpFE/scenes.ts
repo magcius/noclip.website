@@ -38,6 +38,7 @@ import { create_f003_08_gimmicks } from "./maps/f003_08.js";
 import { create_f004_01_gimmicks, create_f004_01_music_fes_gimmicks } from "./maps/f004_01.js";
 import { create_f005_01_gimmicks, create_f005_01_music_fes_gimmicks } from "./maps/f005_01.js";
 import { create_f006_01_barrier_gimmicks } from "./maps/f006_01.js";
+import { create_f010_01_music_fes_gimmicks } from "./maps/f010_01.js";
 
 /**
  * Defines a single level from Tokyo Mirage Sessions ♯FE
@@ -224,6 +225,7 @@ const sceneDescs =
     new TMSFESceneDesc("f006_01", "Cosmic Egg Barrier", ["f006_01", "obj01", "obj02", "obj03", "sky"], create_f006_01_barrier_gimmicks),
     new TMSFESceneDesc("f006_02", "Cosmic Egg 2", ["f006_02", "sky"]),
     new TMSFESceneDesc("f010_01", "Toubu Rooftop", ["f010_01", "sky"]),
+    new TMSFESceneDesc("f010_01", "Toubu Rooftop Music Fes", ["f010_01", "sky"], create_f010_01_music_fes_gimmicks),
     new TMSFESceneDesc("f010_02", "Classroom Film Set", ["f010_02", "sky"]),
     new TMSFESceneDesc("f007_01", "Harajuku", ["f007_01", "sky"]),
     "Shops",
