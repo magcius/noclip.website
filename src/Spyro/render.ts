@@ -11,7 +11,7 @@ import { SkyboxData, LevelData } from "./bin";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { createBufferFromData } from "../gfx/helpers/BufferHelpers";
 
-export class LevelProgram extends DeviceProgram {
+class LevelProgram extends DeviceProgram {
     public static ub_SceneParams = 0;
 
     public override both = `
@@ -102,16 +102,31 @@ export class LevelRenderer {
     constructor(cache: GfxRenderCache, levelData: LevelData) {
         const device = cache.device;
         const atlas = levelData.atlas;
-        this.texture = device.createTexture({
-            width: atlas.width,
-            height: atlas.height,
-            numLevels: 1,
-            pixelFormat: GfxFormat.U8_RGBA_NORM,
-            usage: GfxTextureUsage.Sampled,
-            dimension: GfxTextureDimension.n2D,
-            depthOrArrayLayers: 1
-        });
-        device.uploadTextureData(this.texture, 0, [atlas.data]);
+        
+        if (atlas !== null) {
+            this.texture = device.createTexture({
+                width: atlas.width,
+                height: atlas.height,
+                numLevels: 1,
+                pixelFormat: GfxFormat.U8_RGBA_NORM,
+                usage: GfxTextureUsage.Sampled,
+                dimension: GfxTextureDimension.n2D,
+                depthOrArrayLayers: 1
+            });
+            device.uploadTextureData(this.texture, 0, [atlas.data]);
+        } else {
+            const whitePixel = new Uint8Array([255, 255, 255, 255]);
+            this.texture = device.createTexture({
+                width: 1,
+                height: 1,
+                numLevels: 1,
+                pixelFormat: GfxFormat.U8_RGBA_NORM,
+                usage: GfxTextureUsage.Sampled,
+                dimension: GfxTextureDimension.n2D,
+                depthOrArrayLayers: 1,
+            });
+            device.uploadTextureData(this.texture, 0, [whitePixel]);
+        }
 
         const { vertices, colors, faces, uvs } = levelData;
         const xs = vertices.map(v => v[0]);
@@ -209,6 +224,13 @@ export class LevelRenderer {
             { buffer: this.indexBuffer, byteOffset: 0 },
         );
         const renderInst = renderInstManager.newRenderInst();
+
+        // Temporary Spyro 2 support: disable culling entirely
+        // (Spyro 2 has per-face culling rules; this is the simplest correct fallback)
+        const megaState = renderInst.getMegaStateFlags();
+        megaState.cullMode = GfxCullMode.None;
+        renderInst.setMegaStateFlags(megaState);
+
         renderInst.setDrawCount(this.indexCount);
         renderInstManager.submitRenderInst(renderInst);
         renderInstManager.popTemplate();
@@ -223,7 +245,7 @@ export class LevelRenderer {
     }
 }
 
-export class SkyboxProgram extends DeviceProgram {
+class SkyboxProgram extends DeviceProgram {
     public static ub_SceneParams = 0;
 
     public override both = `

@@ -4,6 +4,8 @@ interface GroundFace {
     colorIndices: number[] | null;
     texture: number | null;
     rotation: number | null;
+    bothSides?: boolean;
+    inverse?: boolean;
 }
 
 interface SkyboxFace {
@@ -36,7 +38,7 @@ export type LevelData = {
   colors: number[][];
   faces: GroundFace[];
   uvs: number[][];
-  atlas: TileAtlas;
+  atlas: TileAtlas | null;
 };
 
 export interface SkyboxData {
@@ -50,7 +52,7 @@ class HeaderGround {
     static size = 2+2+2+2 + 1+1+1+1 + 1+1+1+1 + 4;
     y: number; x: number; i0: number; z: number;
     v1: number; c1: number; p1: number; i1: number;
-    v2: number; c2: number; p2: number; i2: number;
+    v2: number; c2: number; p2: number; w: number;
     f: number;
     constructor(view: DataView, offs: number) {
         this.y = view.getInt16(offs, true);
@@ -64,7 +66,7 @@ class HeaderGround {
         this.v2 = view.getUint8(offs+12);
         this.c2 = view.getUint8(offs+13);
         this.p2 = view.getUint8(offs+14);
-        this.i2 = view.getUint8(offs+15);
+        this.w = view.getUint8(offs+15);
         this.f = view.getUint32(offs+16, true);
     }
 }
@@ -92,9 +94,10 @@ class ColorGround {
 class Poly2Ground {
     v1: number; v2: number; v3: number; v4: number;
     c1: number; c2: number; c3: number; c4: number;
-    t: number; r: number;
-    s1: number; s2: number; s3: number; s4: number; s5: number;
-    constructor(view: DataView, offs: number) {
+    t: number; r: number; // S1 only
+    d1: number; d2: number; d3: number; d4: number; // S2 only
+    tt: number; ii: number; // S2 only
+    constructor(view: DataView, offs: number, gameNumber: number) {
         this.v1 = view.getUint8(offs);
         this.v2 = view.getUint8(offs+1);
         this.v3 = view.getUint8(offs+2);
@@ -103,13 +106,17 @@ class Poly2Ground {
         this.c2 = view.getUint8(offs+5);
         this.c3 = view.getUint8(offs+6);
         this.c4 = view.getUint8(offs+7);
-        this.t = view.getUint8(offs+8);
-        this.r = view.getUint8(offs+9);
-        this.s1 = view.getUint8(offs+10);
-        this.s2 = view.getUint8(offs+11);
-        this.s3 = view.getUint8(offs+12);
-        this.s4 = view.getUint8(offs+13);
-        this.s5 = view.getUint8(offs+14);
+        if (gameNumber == 1) {
+            this.t = view.getUint8(offs+8);
+            this.r = view.getUint8(offs+9);
+        } else if (gameNumber == 2) {
+            this.d1 = view.getUint8(offs+8);
+            this.d2 = view.getUint8(offs+9);
+            this.d3 = view.getUint8(offs+10);
+            this.d4 = view.getUint8(offs+11);
+            this.tt = view.getUint8(offs+12);
+            this.ii = view.getUint8(offs+13);
+        }
     }
 }
 
@@ -294,6 +301,239 @@ function decodeTileToRGBA(vram: VRAM, tex: Tile, width: number = tex.w, height: 
     }
 }
 
+function buildFaces1(poly: Poly2Ground, mdlVertStart: number, mdlColorStart: number, faces: GroundFace[], uvs: number[][], atlas: TileAtlas) {
+    const a = mdlVertStart + poly.v1;
+    const b = mdlVertStart + poly.v2;
+    const c = mdlVertStart + poly.v3;
+    const d = mdlVertStart + poly.v4;
+    const tileIndex = poly.t & 0x7F;
+    if (atlas && tileIndex >= 0 && tileIndex < atlas.uvs.length) {
+        const rect = atlas.uvs[tileIndex];
+
+        const uvBL: [number, number] = [rect.u0, rect.v1];
+        const uvBR: [number, number] = [rect.u1, rect.v1];
+        const uvTR: [number, number] = [rect.u1, rect.v0];
+        const uvTL: [number, number] = [rect.u0, rect.v0];
+
+        const uv1 = uvBL; // tex1
+        const uv2 = uvBR; // tex2
+        const uv3 = uvTR; // tex3
+        const uv4 = uvTL; // tex4
+        const ca = mdlColorStart + poly.c1;
+        const cb = mdlColorStart + poly.c2;
+        const cc = mdlColorStart + poly.c3;
+        const cd = mdlColorStart + poly.c4;
+
+        if (poly.v1 === poly.v2) {
+            const tl: [number, number] = [rect.u0, rect.v0];
+            const tr: [number, number] = [rect.u1, rect.v0];
+            const br: [number, number] = [rect.u1, rect.v1];
+            const bl: [number, number] = [rect.u0, rect.v1];
+            const rr = poly.r & 3;
+            const base = [bl, br, tr, tl]; // tex1, tex2, tex3, tex4
+            const perms = [
+                [0, 1, 2, 3], // r=0
+                [3, 0, 1, 2], // r=1
+                [2, 3, 0, 1], // r=2
+                [1, 2, 3, 0], // r=3
+            ];
+            const p = perms[rr];
+            const tex1 = base[p[0]];
+            const tex2 = base[p[1]];
+            const tex3 = base[p[2]];
+            const tex4 = base[p[3]];
+            const uv0 = uvs.push(tex4) - 1; // v4
+            const uv1 = uvs.push(tex3) - 1; // v3
+            const uv2 = uvs.push(tex1) - 1; // v2
+            faces.push({
+                indices: [d, c, b],
+                uvIndices: [uv0, uv1, uv2],
+                colorIndices: [cd, cc, ca],
+                texture: tileIndex,
+                rotation: rr
+            });
+        } else {
+            // v1 -> tex1, v2 -> tex2, v3 -> tex3, v4 -> tex4
+            const uvA = uvs.push(uv1) - 1; // v1
+            const uvB = uvs.push(uv2) - 1; // v2
+            const uvC = uvs.push(uv3) - 1; // v3
+            const uvD = uvs.push(uv4) - 1; // v4
+            faces.push({
+                indices: [a, b, c],  // v1, v2, v3
+                uvIndices: [uvA, uvB, uvC],
+                colorIndices:[ca, cb, cc],
+                texture: tileIndex,
+                rotation: 0
+            });
+            faces.push({
+                indices: [a, c, d],  // v1, v3, v4
+                uvIndices: [uvA, uvC, uvD],
+                colorIndices:[ca, cc, cd],
+                texture: tileIndex,
+                rotation: 0
+            });
+        }
+    } else {
+        faces.push({
+            indices: [a, b, c],
+            uvIndices: null,
+            colorIndices: null,
+            texture: poly.t,
+            rotation: poly.r,
+        });
+    }
+}
+
+function buildFaces2(poly: Poly2Ground, mdlVertStart: number, mdlColorStart: number, faces: GroundFace[]) {
+    const a = mdlVertStart + poly.v1;
+    const b = mdlVertStart + poly.v2;
+    const c = mdlVertStart + poly.v3;
+    const d = mdlVertStart + poly.v4;
+
+    const ca = mdlColorStart + poly.c1;
+    const cb = mdlColorStart + poly.c2;
+    const cc = mdlColorStart + poly.c3;
+    const cd = mdlColorStart + poly.c4;
+
+    // rotation bits (same as Pascal: i=1 or 2)
+    let rot = 0;
+    if (poly.ii & 0x04) rot = 1;
+    if (poly.ii & 0x08) rot = 2;
+
+    const inverse = (poly.ii & 0x20) !== 0;
+    const bothSides = (poly.ii & 0x40) !== 0;
+
+    // helper to push a triangle with optional inversion
+    const pushTri = (v0: number, v1: number, v2: number, c0: number, c1: number, c2: number) => {
+        let tri = [v0, v1, v2];
+        let cols = [c0, c1, c2];
+        if (inverse) {
+            [tri[1], tri[2]] = [tri[2], tri[1]];
+        }
+        faces.push({
+            indices: tri,
+            uvIndices: null,
+            colorIndices: cols,
+            texture: null,
+            rotation: rot,
+            bothSides,
+            inverse,
+        });
+        if (bothSides) {
+            faces.push({
+                indices: [tri[0], tri[2], tri[1]],
+                uvIndices: null,
+                colorIndices: cols,
+                texture: null,
+                rotation: rot,
+                bothSides,
+                inverse,
+            });
+        }
+    };
+
+    // helper to push a quad as two tris, with proper winding
+    const pushQuad = (v0: number, v1: number, v2: number, v3: number,
+                      c0: number, c1: number, c2: number, c3: number) => {
+        // base order
+        let qv = [v0, v1, v2, v3];
+        let qc = [c0, c1, c2, c3];
+
+        // apply rotation like Pascal (we only care about vertex order)
+        if (rot === 1) {
+            qv = [qv[1], qv[2], qv[3], qv[0]];
+            qc = [qc[1], qc[2], qc[3], qc[0]];
+        } else if (rot === 2) {
+            qv = [qv[3], qv[0], qv[1], qv[2]];
+            qc = [qc[3], qc[0], qc[1], qc[2]];
+        }
+
+        // two triangles from the quad
+        let t1 = [qv[0], qv[1], qv[2]];
+        let t2 = [qv[0], qv[2], qv[3]];
+        let cT1 = [qc[0], qc[1], qc[2]];
+        let cT2 = [qc[0], qc[2], qc[3]];
+
+        if (inverse) {
+            [t1[1], t1[2]] = [t1[2], t1[1]];
+            [t2[1], t2[2]] = [t2[2], t2[1]];
+        }
+
+        faces.push({
+            indices: t1,
+            uvIndices: null,
+            colorIndices: cT1,
+            texture: null,
+            rotation: rot,
+            bothSides,
+            inverse,
+        });
+        faces.push({
+            indices: t2,
+            uvIndices: null,
+            colorIndices: cT2,
+            texture: null,
+            rotation: rot,
+            bothSides,
+            inverse,
+        });
+
+        if (bothSides) {
+            faces.push({
+                indices: [t1[0], t1[2], t1[1]],
+                uvIndices: null,
+                colorIndices: cT1,
+                texture: null,
+                rotation: rot,
+                bothSides,
+                inverse,
+            });
+            faces.push({
+                indices: [t2[0], t2[2], t2[1]],
+                uvIndices: null,
+                colorIndices: cT2,
+                texture: null,
+                rotation: rot,
+                bothSides,
+                inverse,
+            });
+        }
+    };
+
+    // triangle vs quad logic (simplified from Pascal)
+    if (poly.v1 === poly.v2) {
+        // triangle case: Pascal uses different orders depending on flags,
+        // but the core pattern is "ignore v1/c1, use v2/v3/v4".
+        // We'll mirror the non-water, non-FAR MDL case:
+        if (rot === 1) {
+            // v4, v3, v2
+            pushTri(d, c, b, cd, cc, cb);
+        } else {
+            // v2, v3, v4
+            pushTri(b, c, d, cb, cc, cd);
+        }
+    } else {
+        // quad case: start from (v1, v2, v3, v4)
+        pushQuad(a, b, c, d, ca, cb, cc, cd);
+    }
+}
+
+function computeZScale(view: DataView, polyStart: number, polyCount: number, header: HeaderGround): number {
+    if (header.w !== 0)
+        return 2.0;
+    let p = polyStart;
+    for (let i = 0; i < polyCount; i++) {
+        const d1 = view.getUint8(p + 8);
+        const d2 = view.getUint8(p + 9);
+        const d3 = view.getUint8(p + 10);
+        const d4 = view.getUint8(p + 11);
+        if (d1 + d2 + d3 + d4 !== 0)
+            return 2.0;
+        p += 16;
+    }
+    return 0.25;
+}
+
 export function buildSkybox(view: DataView): SkyboxData {
     const size = view.byteLength;
     let p = 0;
@@ -325,24 +565,58 @@ export function buildSkybox(view: DataView): SkyboxData {
     };
 }
 
-export function buildLevelData(view: DataView, atlas: TileAtlas): LevelData {
+export function buildLevelData(view: DataView, atlas: TileAtlas | null, gameNumber: number): LevelData {
     const vertices: number[][] = [];
     const colors: number[][] = [];
     const faces: GroundFace[] = [];
     const uvs: number[][] = [];
     let offs = 0;
-    const partCount = view.getUint32(offs, true);
+    let partCount = view.getUint32(offs, true);
     offs += 4;
     const start = 8;
-    for (let part = 0; part < partCount; part++) {
-        const offset = view.getUint32(offs, true);
+    const partOffsets: number[] = [];
+    if (gameNumber == 2) {
+        offs = 0;
+        let partTableOffset = view.getUint32(offs, true);
         offs += 4;
-        const abs = offset + start;
-        let p = abs;
+        let partTablePos = partTableOffset;
+        partCount = view.getUint32(partTablePos, true);
+        partTablePos += 4;
+        for (let i = 0; i < partCount; i++) {
+            const off = view.getUint32(partTablePos, true);
+            partTablePos += 4;
+            partOffsets.push(off);
+        }
+    }
+    for (let part = 0; part < partCount; part++) {
+        let abs = 0;
+        let p = 0;
+        if (gameNumber == 1) {
+            const offset = view.getUint32(offs, true);
+            offs += 4;
+            abs = offset + start;
+            p = abs;
+        } else if (gameNumber == 2) {
+            abs = partOffsets[part] + 8;
+            p = abs;
+        }
         const header = new HeaderGround(view, p);
         p += HeaderGround.size;
+        let zScale = 1.0;
+        if (gameNumber == 2) {
+            let mdlPolyStart = abs
+                + HeaderGround.size
+                + header.v1 * 4
+                + header.c1 * 4
+                + header.p1 * 8
+                + header.v2 * 4
+                + header.c2 * 4
+                + header.c2 * 4;
+            zScale = computeZScale(view, mdlPolyStart, header.p2, header);
+        }
 
         // LOD vertices
+        const lodVertStart = vertices.length;
         for (let i = 0; i < header.v1; i++) {
             const v = new VertexGround(view, p);
             p += 4;
@@ -353,28 +627,75 @@ export function buildLevelData(view: DataView, atlas: TileAtlas): LevelData {
         }
 
         // LOD colors
+        const lodColorStart = colors.length;
         for (let i = 0; i < header.c1; i++) {
             const c = new ColorGround(view, p);
             p += 4;
             colors.push([c.r, c.g, c.b]);
         }
 
-        // LOD polys (untextured, ignored for noclip)
+        // LOD polys
         for (let i = 0; i < header.p1; i++) {
-            p += 8;
+            if (gameNumber == 1) {
+                p += 8;
+            } else if (gameNumber == 2) {
+                // const b0 = view.getUint8(p);
+                // const b1 = view.getUint8(p+1);
+                // const b2 = view.getUint8(p+2);
+                // const b3 = view.getUint8(p+3);
+                // const c0 = view.getUint8(p+4);
+                // const c1 = view.getUint8(p+5);
+                // const c2 = view.getUint8(p+6);
+                // const c3 = view.getUint8(p+7);
+                p += 8;
+                // const v1 = (b0 >> 3) | ((b1 & 0x03) << 5);
+                // const v2 = (b1 >> 2) | ((b2 & 0x01) << 6);
+                // const v3 = (b2 >> 1);
+                // const v4 = (b3 & 0x7F);
+                // const c1i = (c0 >> 4) | ((c1 & 0x07) << 4);
+                // const c2i = (c1 >> 3) | ((c2 & 0x03) << 5);
+                // const c3i = (c2 >> 2) | ((c3 & 0x01) << 6);
+                // const c4i = (c3 >> 1);
+                // const a = lodVertStart + v1;
+                // const b = lodVertStart + v2;
+                // const c = lodVertStart + v3;
+                // const d = lodVertStart + v4;
+                // const ca = lodColorStart + c1i;
+                // const cb = lodColorStart + c2i;
+                // const cc = lodColorStart + c3i;
+                // const cd = lodColorStart + c4i;
+                // if (v1 === v2) {
+                //     faces.push({ indices: [d, c, b], colorIndices: [cd, cc, cb], uvIndices: null, texture: null, rotation: 0, bothSides: false, inverse: false });
+                // } else if (v2 === v4) {
+                //     faces.push({ indices: [a, c, b], colorIndices: [ca, cc, cb], uvIndices: null, texture: null, rotation: 0, bothSides: false, inverse: false });
+                // } else if (v4 === v3) {
+                //     faces.push({ indices: [a, c, b], colorIndices: [ca, cd, cb], uvIndices: null, texture: null, rotation: 0, bothSides: false, inverse: false });
+                // } else if (v3 === v1) {
+                //     faces.push({ indices: [a, d, b], colorIndices: [ca, cd, cb], uvIndices: null, texture: null, rotation: 0, bothSides: false, inverse: false });
+                // } else {
+                //     faces.push({ indices: [b, a, c], colorIndices: [cb, ca, cc], uvIndices: null, texture: null, rotation: 0, bothSides: false, inverse: false });
+                //     faces.push({ indices: [b, c, d], colorIndices: [cb, cc, cd], uvIndices: null, texture: null, rotation: 0, bothSides: false, inverse: false });
+                // }
+            }
         }
 
         // MDL/FAR/TEX vertices
         const mdlVertStart = vertices.length;
-
         for (let i = 0; i < header.v2; i++) {
             const v = new VertexGround(view, p);
             p += 4;
-
-            const z = (v.b1 | ((v.b2 & 3) << 8)) + header.z;
+            let z = (v.b1 | ((v.b2 & 3) << 8)) + header.z;
+            if (gameNumber == 2) {
+                let zraw = (v.b1 | ((v.b2 & 3) << 8));
+                if (header.w > 0) {
+                    z = (zraw << 1) + header.z;
+                } else {
+                    z = (zraw >> 2) + header.z;
+                }
+                z *= zScale;
+            }
             const y = ((v.b2 >> 2) | ((v.b3 & 31) << 6)) + header.y;
             const x = ((v.b3 >> 5) | (v.b4 << 3)) + header.x;
-
             vertices.push([x, y, z]);
         }
 
@@ -391,91 +712,16 @@ export function buildLevelData(view: DataView, atlas: TileAtlas): LevelData {
 
         // Textured polys
         for (let i = 0; i < header.p2; i++) {
-            const poly = new Poly2Ground(view, p);
+            const poly = new Poly2Ground(view, p, gameNumber);
             p += 16;
-            const a = mdlVertStart + poly.v1;
-            const b = mdlVertStart + poly.v2;
-            const cIdx = mdlVertStart + poly.v3;
-            const d = mdlVertStart + poly.v4;
-            const tileIndex = poly.t & 0x7F;
-            if (atlas && tileIndex >= 0 && tileIndex < atlas.uvs.length) {
-                const rect = atlas.uvs[tileIndex];
-
-                const uvBL: [number, number] = [rect.u0, rect.v1];
-                const uvBR: [number, number] = [rect.u1, rect.v1];
-                const uvTR: [number, number] = [rect.u1, rect.v0];
-                const uvTL: [number, number] = [rect.u0, rect.v0];
-
-                const uv1 = uvBL; // tex1
-                const uv2 = uvBR; // tex2
-                const uv3 = uvTR; // tex3
-                const uv4 = uvTL; // tex4
-                const ca = mdlColorStart + poly.c1;
-                const cb = mdlColorStart + poly.c2;
-                const cc = mdlColorStart + poly.c3;
-                const cd = mdlColorStart + poly.c4;
-
-                if (poly.v1 === poly.v2) {
-                    const tl: [number, number] = [rect.u0, rect.v0];
-                    const tr: [number, number] = [rect.u1, rect.v0];
-                    const br: [number, number] = [rect.u1, rect.v1];
-                    const bl: [number, number] = [rect.u0, rect.v1];
-                    const rr = poly.r & 3;
-                    const base = [bl, br, tr, tl]; // tex1, tex2, tex3, tex4
-                    const perms = [
-                        [0, 1, 2, 3], // r=0
-                        [3, 0, 1, 2], // r=1
-                        [2, 3, 0, 1], // r=2
-                        [1, 2, 3, 0], // r=3
-                    ];
-                    const p = perms[rr];
-                    const tex1 = base[p[0]];
-                    const tex2 = base[p[1]];
-                    const tex3 = base[p[2]];
-                    const tex4 = base[p[3]];
-                    const uv0 = uvs.push(tex4) - 1; // v4
-                    const uv1 = uvs.push(tex3) - 1; // v3
-                    const uv2 = uvs.push(tex1) - 1; // v2
-                    faces.push({
-                        indices: [d, cIdx, b],
-                        uvIndices: [uv0, uv1, uv2],
-                        colorIndices: [cd, cc, ca],
-                        texture: tileIndex,
-                        rotation: rr
-                    });
-                } else {
-                    // v1 -> tex1, v2 -> tex2, v3 -> tex3, v4 -> tex4
-                    const uvA = uvs.push(uv1) - 1; // v1
-                    const uvB = uvs.push(uv2) - 1; // v2
-                    const uvC = uvs.push(uv3) - 1; // v3
-                    const uvD = uvs.push(uv4) - 1; // v4
-                    faces.push({
-                        indices: [a, b, cIdx],  // v1, v2, v3
-                        uvIndices: [uvA, uvB, uvC],
-                        colorIndices:[ca, cb, cc],
-                        texture: tileIndex,
-                        rotation: 0
-                    });
-                    faces.push({
-                        indices: [a, cIdx, d],  // v1, v3, v4
-                        uvIndices: [uvA, uvC, uvD],
-                        colorIndices:[ca, cc, cd],
-                        texture: tileIndex,
-                        rotation: 0
-                    });
-                }
-            } else {
-                faces.push({
-                    indices: [a, b, cIdx],
-                    uvIndices: null,
-                    colorIndices: null,
-                    texture: poly.t,
-                    rotation: poly.r,
-                });
+            if (gameNumber == 1 && atlas !== null) {
+                buildFaces1(poly, mdlVertStart, mdlColorStart, faces, uvs, atlas)
+            } else if (gameNumber == 2) {
+                buildFaces2(poly, mdlVertStart, mdlColorStart, faces)
             }
         }
     }
-    return { vertices, colors, faces, uvs, atlas };
+    return {vertices, colors, faces, uvs, atlas};
 }
 
 export function buildCombinedAtlas(vram: VRAM, groups: TileGroups, tilesPerRow: number = 8, slotSize: number = 32): TileAtlas {

@@ -78,6 +78,57 @@ class Spyro1Renderer implements SceneGfx {
     }
 }
 
+class Spyro2Renderer implements SceneGfx {
+    private renderHelper: GfxRenderHelper;
+    private renderInstListMain = new GfxRenderInstList();
+    private levelRenderer: LevelRenderer;
+    // private skyboxRenderer: SkyboxRenderer;
+    // private clearColor: number[];
+
+    constructor(device: GfxDevice, levelData: LevelData) {
+        this.renderHelper = new GfxRenderHelper(device);
+        const cache = this.renderHelper.renderCache;
+        this.levelRenderer = new LevelRenderer(cache, levelData);
+        // this.skyboxRenderer = new SkyboxRenderer(cache, skybox);
+        // this.clearColor = skybox.backgroundColor;
+    }
+
+    protected prepareToRender(device: GfxDevice, viewerInput: ViewerRenderInput): void {
+        this.renderHelper.renderInstManager.setCurrentList(this.renderInstListMain);
+        // this.skyboxRenderer.prepareToRender(device, this.renderHelper, viewerInput);
+        this.levelRenderer.prepareToRender(device, this.renderHelper, viewerInput);
+        this.renderHelper.prepareToRender();
+    }
+
+    public render(device: GfxDevice, viewerInput: ViewerRenderInput): void {
+        const builder = this.renderHelper.renderGraph.newGraphBuilder();
+        const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, opaqueBlackFullClearRenderPassDescriptor);
+        // mainColorDesc.clearColor = {r: this.clearColor[0] / 255, g: this.clearColor[1] / 255, b: this.clearColor[2] / 255, a: 1};
+        const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, opaqueBlackFullClearRenderPassDescriptor);
+        const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
+        const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
+        builder.pushPass((pass) => {
+            pass.setDebugName('Main');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
+            pass.exec((passRenderer) => {
+                this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
+            });
+        });
+        this.renderHelper.antialiasingSupport.pushPasses(builder, viewerInput, mainColorTargetID);
+        builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
+        this.prepareToRender(device, viewerInput);
+        this.renderHelper.renderGraph.execute(builder);
+        this.renderInstListMain.reset();
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.renderHelper.destroy();
+        // this.skyboxRenderer.destroy(device);
+        this.levelRenderer.destroy(device);
+    }
+}
+
 const pathBase1 = "Spyro1";
 class Spyro1Scene implements SceneDesc {
     public id: string;
@@ -93,7 +144,7 @@ class Spyro1Scene implements SceneDesc {
         const sky = await context.dataFetcher.fetchData(`${pathBase1}/sf${this.subFileID}_sky1.bin`);
         const tileGroups = parseTileGroups(textures.createDataView());
         const combinedAtlas = buildCombinedAtlas(new VRAM(vram.copyToBuffer()), tileGroups);
-        const renderer = new Spyro1Renderer(device, buildLevelData(ground.createDataView(), combinedAtlas), buildSkybox(sky.createDataView()));
+        const renderer = new Spyro1Renderer(device, buildLevelData(ground.createDataView(), combinedAtlas, 1), buildSkybox(sky.createDataView()));
         return renderer;
     }
 }
@@ -108,12 +159,12 @@ class Spyro2Scene implements SceneDesc {
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
         const ground = await context.dataFetcher.fetchData(`${pathBase2}/sf${this.subFileID}_ground.bin`);
-        const vram = await context.dataFetcher.fetchData(`${pathBase2}/sf${this.subFileID}_vram.bin`);
-        const textures = await context.dataFetcher.fetchData(`${pathBase2}/sf${this.subFileID}_list.bin`);
-        const sky = await context.dataFetcher.fetchData(`${pathBase2}/sf${this.subFileID}_sky.bin`);
-        const tileGroups = parseTileGroups(textures.createDataView());
-        const combinedAtlas = buildCombinedAtlas(new VRAM(vram.copyToBuffer()), tileGroups);
-        const renderer = new Spyro1Renderer(device, buildLevelData(ground.createDataView(), combinedAtlas), buildSkybox(sky.createDataView()));
+        // const vram = await context.dataFetcher.fetchData(`${pathBase2}/sf${this.subFileID}_vram.bin`);
+        // const textures = await context.dataFetcher.fetchData(`${pathBase2}/sf${this.subFileID}_list.bin`);
+        // const sky = await context.dataFetcher.fetchData(`${pathBase2}/sf${this.subFileID}_sky.bin`);
+        // const tileGroups = parseTileGroups(textures.createDataView());
+        // const combinedAtlas = buildCombinedAtlas(new VRAM(vram.copyToBuffer()), tileGroups);
+        const renderer = new Spyro2Renderer(device, buildLevelData(ground.createDataView(), null, 2));
         return renderer;
     }
 }
@@ -195,7 +246,7 @@ const name2 = "Spyro 2: Ripto's Rage!";
 const sceneDescs2 = [
     "Summer Forest",
     new Spyro2Scene(16, "Summer Forest Homeworld"),
-    new Spyro2Scene(999, "Glimmer"),
+    new Spyro2Scene(18, "Glimmer"),
     new Spyro2Scene(999, "Idol Springs"),
     new Spyro2Scene(999, "Colossus"),
     new Spyro2Scene(999, "Hurricos"),
