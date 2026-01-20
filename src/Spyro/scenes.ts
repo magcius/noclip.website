@@ -8,7 +8,26 @@ import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
 import { GfxRenderInstList } from "../gfx/render/GfxRenderInstManager.js";
 import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
 
-export class Spyro1Renderer implements SceneGfx {
+/*
+To-do list
+
+Spyro 1
+    Scrolling textures (ex. waterfall in Artisans)
+    Water in some flight levels doesn't render correctly
+    Better level shader
+    Clean up functions in bin.ts
+
+Nice to have
+
+Spyro 1
+    Gems, level entities, NPCs, etc. rendered in each level
+        The format for these will need to be figured out. They're in other "sub-subfiles" like the ground models and skybox.
+    Read directly from WAD.WAD by offset instead of extracting subfiles
+        Pass the offset and size for the level's subfile instead of the subfile number
+        Convert Python extraction logic to TypeScript
+*/
+
+class Spyro1Renderer implements SceneGfx {
     private renderHelper: GfxRenderHelper;
     private renderInstListMain = new GfxRenderInstList();
     private levelRenderer: LevelRenderer;
@@ -59,23 +78,6 @@ export class Spyro1Renderer implements SceneGfx {
     }
 }
 
-/*
-TODO
-
-Scrolling textures (ex. waterfall in Artisans)
-Water in some flight levels doesn't render correctly
-Better level shader
-Clean up functions in bin.ts
-
-Nice to have
-
-Gems, level entities, NPCs, etc. rendered in each level
-    The format for these will need to be figured out. They're in other "sub-subfiles" like the ground models and skybox.
-Read directly from WAD.WAD by offset instead of extracting subfiles
-    Pass the offset and size for the level's subfile instead of the subfile number
-    Convert Python extraction logic to TypeScript
-*/
-
 const pathBase1 = "Spyro1";
 class Spyro1Scene implements SceneDesc {
     public id: string;
@@ -85,13 +87,33 @@ class Spyro1Scene implements SceneDesc {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
-        const levelFile = await context.dataFetcher.fetchData(`${pathBase1}/sf${this.subFileID}_ground.bin`);
+        const ground = await context.dataFetcher.fetchData(`${pathBase1}/sf${this.subFileID}_ground.bin`);
         const vram = await context.dataFetcher.fetchData(`${pathBase1}/sf${this.subFileID}_vram.bin`);
-        const textureList = await context.dataFetcher.fetchData(`${pathBase1}/sf${this.subFileID}_list.bin`);
-        const skyFile = await context.dataFetcher.fetchData(`${pathBase1}/sf${this.subFileID}_sky1.bin`);
-        const tileGroups = parseTileGroups(textureList.createDataView());
+        const textures = await context.dataFetcher.fetchData(`${pathBase1}/sf${this.subFileID}_list.bin`);
+        const sky = await context.dataFetcher.fetchData(`${pathBase1}/sf${this.subFileID}_sky1.bin`);
+        const tileGroups = parseTileGroups(textures.createDataView());
         const combinedAtlas = buildCombinedAtlas(new VRAM(vram.copyToBuffer()), tileGroups);
-        const renderer = new Spyro1Renderer(device, buildLevelData(levelFile.createDataView(), combinedAtlas), buildSkybox(skyFile.createDataView()));
+        const renderer = new Spyro1Renderer(device, buildLevelData(ground.createDataView(), combinedAtlas), buildSkybox(sky.createDataView()));
+        return renderer;
+    }
+}
+
+const pathBase2 = "Spyro2";
+class Spyro2Scene implements SceneDesc {
+    public id: string;
+
+    constructor(public subFileID: number, public name: string) {
+        this.id = subFileID.toString();
+    }
+
+    public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
+        const ground = await context.dataFetcher.fetchData(`${pathBase2}/sf${this.subFileID}_ground.bin`);
+        const vram = await context.dataFetcher.fetchData(`${pathBase2}/sf${this.subFileID}_vram.bin`);
+        const textures = await context.dataFetcher.fetchData(`${pathBase2}/sf${this.subFileID}_list.bin`);
+        const sky = await context.dataFetcher.fetchData(`${pathBase2}/sf${this.subFileID}_sky.bin`);
+        const tileGroups = parseTileGroups(textures.createDataView());
+        const combinedAtlas = buildCombinedAtlas(new VRAM(vram.copyToBuffer()), tileGroups);
+        const renderer = new Spyro1Renderer(device, buildLevelData(ground.createDataView(), combinedAtlas), buildSkybox(sky.createDataView()));
         return renderer;
     }
 }
@@ -168,4 +190,41 @@ const sceneDescs1 = [
     new Spyro1Scene(100, "Gnasty Gnorc")
 ];
 
-export const sceneGroup1: SceneGroup = { id: id1, name: name1, sceneDescs: sceneDescs1 };
+const id2 = "Spyro2";
+const name2 = "Spyro 2: Ripto's Rage!";
+const sceneDescs2 = [
+    "Summer Forest",
+    new Spyro2Scene(16, "Summer Forest Homeworld"),
+    new Spyro2Scene(999, "Glimmer"),
+    new Spyro2Scene(999, "Idol Springs"),
+    new Spyro2Scene(999, "Colossus"),
+    new Spyro2Scene(999, "Hurricos"),
+    new Spyro2Scene(999, "Sunny Beach"),
+    new Spyro2Scene(999, "Aquaria Towers"),
+    new Spyro2Scene(999, "Ocean Speedway"),
+    new Spyro2Scene(999, "Crush's Dungeon"),
+    "Autumn Plains",
+    new Spyro2Scene(999, "Autumn Plains Homeworld"),
+    new Spyro2Scene(999, "Skelos Badlands"),
+    new Spyro2Scene(999, "Crystal Glacier"),
+    new Spyro2Scene(999, "Breeze Harbor"),
+    new Spyro2Scene(999, "Zephyr"),
+    new Spyro2Scene(999, "Scorch"),
+    new Spyro2Scene(999, "Fracture Hills"),
+    new Spyro2Scene(999, "Magma Cone"),
+    new Spyro2Scene(999, "Shady Oasis"),
+    new Spyro2Scene(999, "Metro Speedway"),
+    new Spyro2Scene(999, "Icy Speedway"),
+    new Spyro2Scene(999, "Gulp's Overlook"),
+    "Winter Tundra",
+    new Spyro2Scene(999, "Winter Tundra Homeworld"),
+    new Spyro2Scene(999, "Cloud Temples"),
+    new Spyro2Scene(999, "Robotica Farms"),
+    new Spyro2Scene(999, "Metropolis"),
+    new Spyro2Scene(999, "Canyon Speedway"),
+    new Spyro2Scene(999, "Ripto's Arena"),
+    new Spyro2Scene(999, "Dragon Shores")
+];
+
+export const sceneGroup1: SceneGroup = {id: id1, name: name1, sceneDescs: sceneDescs1};
+export const sceneGroup2: SceneGroup = {id: id2, name: name2, sceneDescs: sceneDescs2};

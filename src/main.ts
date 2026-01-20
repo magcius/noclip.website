@@ -247,7 +247,8 @@ const sceneGroups: (string | SceneGroup)[] = [
     Scenes_Descent1.sceneGroup,
     Scenes_Descent2.sceneGroup,
     Scenes_Descent2Vertigo.sceneGroup,
-    Scenes_Spyro.sceneGroup1
+    Scenes_Spyro.sceneGroup1,
+    Scenes_Spyro.sceneGroup2
 ];
 
 enum SaveStatesAction {
