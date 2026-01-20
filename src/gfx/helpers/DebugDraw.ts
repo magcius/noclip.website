@@ -488,7 +488,7 @@ export class DebugDraw {
 
     public drawCapsuleLine(r: number, height: number, m: ReadonlyMat4, color: Readonly<Color>, sides = 32, options: DebugDrawOptions = defaultOptions): void {
         const numPoints = sides - 1;
-        const page = this.findPage(this.getBehaviorType(true, color.a >= 1.0, options), sides * 7, numPoints * 8 + sides * 6 + 4);
+        const page = this.findPage(this.getBehaviorType(true, color.a >= 1.0, options), sides * 7, numPoints * 8 + sides * 6 + 8);
 
         const center = DebugDraw.scratchVec3[0], right = DebugDraw.scratchVec3[1], up = DebugDraw.scratchVec3[2], cross = DebugDraw.scratchVec3[3];
         getMatrixTranslation(center, m);
