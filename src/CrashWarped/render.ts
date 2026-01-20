@@ -26,7 +26,7 @@ export class WarpedProgram extends DeviceProgram {
     public static ub_TexParams = 2;
 
     public override both = `
-precision mediump float;
+precision highp float;
 
 ${GfxShaderLibrary.MatrixLibrary}
 
@@ -1001,7 +1001,7 @@ class WaterProgram extends DeviceProgram {
     public static ub_ModelParams = 1;
 
     public override both = `
-precision mediump float;
+precision highp float;
 
 ${GfxShaderLibrary.MatrixLibrary}
 
@@ -1163,7 +1163,7 @@ class TerrainProgram extends DeviceProgram {
     public static ub_DrawParams = 2;
 
     public override both = `
-precision mediump float;
+precision highp float;
 
 ${GfxShaderLibrary.MatrixLibrary}
 

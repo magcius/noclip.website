@@ -65,7 +65,7 @@ varying vec3 v_Position;
 `;
 
     public static common = `
-precision mediump float;
+precision highp float;
 
 ${GfxShaderLibrary.MatrixLibrary}
 

@@ -203,7 +203,7 @@ export class DescentRenderer implements Viewer.SceneGfx {
         const spawn = this.level.objects.find(
             (obj) => obj.type === 4 && obj.subtypeId === 0,
         );
-        if (spawn != null) {
+        if (spawn !== undefined) {
             // Spawn found, extract matrix from it
             const right = vec3.fromValues(
                 spawn.orientation[0],

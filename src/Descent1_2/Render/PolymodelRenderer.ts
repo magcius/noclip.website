@@ -67,7 +67,7 @@ class DescentPolymodelProgram extends DeviceProgram {
 
     public override both = `
 ${GfxShaderLibrary.MatrixLibrary}
-precision mediump float;
+precision highp float;
 
 layout(std140) uniform ub_SceneParams {
     Mat4x4 u_matProjection;
@@ -236,7 +236,7 @@ function buildMeshCollection(
     // Then bake polymodel meshes.
     for (const [modelNum, objects] of objectsGrouped.entries()) {
         const model = assetCache.getPolymodel(modelNum);
-        if (model != null) {
+        if (model !== null) {
             const mesh = makePolymodelMesh(
                 model,
                 level.gameVersion === 1 ? palette : null,
@@ -263,7 +263,7 @@ function buildMeshCollection(
             for (const sourceCall of mesh.calls) {
                 const objectTextureIndex = sourceCall.texture;
                 const objectBitmapId =
-                    objectTextureIndex != null
+                    objectTextureIndex !== null
                         ? assetCache.resolveObjectBitmap(
                               model,
                               objectTextureIndex,
@@ -281,7 +281,7 @@ function buildMeshCollection(
                         object.renderType as DescentObjectRenderTypePolyobj;
 
                     let objectMatrix = objectMatrices.get(object);
-                    if (objectMatrix == null)
+                    if (objectMatrix === undefined)
                         objectMatrices.set(
                             object,
                             (objectMatrix = makeObjectMatrices(object)),
@@ -509,7 +509,7 @@ export class DescentPolymodelRenderer {
         for (const textureCall of this.meshCalls) {
             const objectTemplate = renderInstManager.pushTemplate();
             const pickedTexture =
-                textureCall.texture != null
+                textureCall.texture !== null
                     ? this.textureList.pickTexture(textureCall.texture, time)
                     : null;
             this.textureMapping[0].gfxTexture =
@@ -544,7 +544,7 @@ export class DescentPolymodelRenderer {
                     this.level.segments[objectCall.segmentNum].light ?? 1.0;
                 mappedObject[offsetObject++] = objectCall.glow;
                 mappedObject[offsetObject++] =
-                    pickedTexture != null ? 1.0 : 0.0;
+                    pickedTexture !== null ? 1.0 : 0.0;
                 mappedObject[offsetObject++] = objectCall.isCloaked ? 1.0 : 0.0;
                 renderInst.setDrawCount(
                     objectCall.indexCount,
@@ -560,7 +560,7 @@ export class DescentPolymodelRenderer {
         // Rotate objects
         const rotMul = deltaTime * 2 * Math.PI;
         for (const matrices of this.objectMatrices) {
-            if (matrices.angularVelocity != null) {
+            if (matrices.angularVelocity !== null) {
                 mat4.rotateX(
                     matrices.current,
                     matrices.current,

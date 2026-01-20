@@ -238,7 +238,7 @@ export class dPa_control_c {
     }
 
     public setSimple(userID: number, pos: vec3, alpha: number, prmColor: Color, envColor: Color, isAffectedByWind: boolean): boolean {
-        const simple = this.simpleCallbacks.find(s => s.userID == userID);
+        const simple = this.simpleCallbacks.find(s => s.userID === userID);
         if (!simple)
             return false;
         return simple.set(pos, alpha / 0xFF, prmColor, envColor, isAffectedByWind);

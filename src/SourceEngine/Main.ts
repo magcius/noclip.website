@@ -1507,8 +1507,8 @@ const bindingLayoutsPost: GfxBindingLayoutDescriptor[] = [
 
 class FullscreenPostProgram extends DeviceProgram {
     public override both = `
-precision mediump float;
-precision lowp sampler3D;
+precision highp float;
+precision highp sampler3D;
 
 uniform sampler2D u_FramebufferColor;
 uniform sampler3D u_ColorCorrectTexture;

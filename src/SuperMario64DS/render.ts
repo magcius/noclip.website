@@ -35,7 +35,7 @@ export class NITRO_Program extends DeviceProgram {
     public static ub_DrawParams = 2;
 
     public static both = `
-precision mediump float;
+precision highp float;
 
 ${GfxShaderLibrary.MatrixLibrary}
 
@@ -120,7 +120,7 @@ void main() {
 }
 `;
     public override frag = `
-precision mediump float;
+precision highp float;
 in vec4 v_Color;
 in vec2 v_TexCoord;
 

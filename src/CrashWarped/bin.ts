@@ -1662,7 +1662,7 @@ function buildQuadList(frames: TexQuad[][]): QuadListGFX {
         f.sort((a, b) => a.texInd - b.texInd);
         let prevInd = -1;
         for (let rect of f) {
-            if (rect.texInd != prevInd || currDC === null) {
+            if (rect.texInd !== prevInd || currDC === null) {
                 currDC = { startIndex: indOffs, indexCount: 0, texAnimIndex: -1, textureIndex: rect.texInd, oneSided: false };
                 prevInd = rect.texInd;
                 frameDCs.push(currDC);

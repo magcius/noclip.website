@@ -24,6 +24,7 @@ export enum dProcName_e {
     d_a_kytag00         = 0x0181,
     d_a_kytag01         = 0x0182,
     d_a_obj_zouK        = 0x018F,
+    d_a_demo00          = 0x0199,
     d_a_npc_zl1         = 0x01AD,
     d_a_grass           = 0x01B8,
     d_thunder           = 0x01B9,

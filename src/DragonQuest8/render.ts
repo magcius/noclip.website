@@ -43,7 +43,7 @@ export class DQ8Program extends DeviceProgram {
 
 ${GfxShaderLibrary.MatrixLibrary}
 
-precision mediump float;
+precision highp float;
 layout(std140) uniform ub_SceneParams {
     Mat4x4 u_Projection;
 };
@@ -424,11 +424,6 @@ export class MDSInstance {
                 mat4.mul(scratchMatrix, viewerInput.camera.viewMatrix, scratchMatrix);
                 //Only some parent in the hierarchy is flagged as billboard sometimes, compute the rotation accordingly, it'll be passed down to the hierarchy using the transforms.
                 calcBillboardMatrix(scratchMatrix, scratchMatrix, CalcBillboardFlags.UseRollLocal | CalcBillboardFlags.PriorityZ | CalcBillboardFlags.UseZPlane);
-                //Hack: The above method is supposed to return a mat43 but we're working with mat44 here, fix the last column accordingly.
-                scratchMatrix[3] = 0;
-                scratchMatrix[7] = 0;
-                scratchMatrix[11] = 0;
-                scratchMatrix[15] = 1;
                 mat4.mul(scratchMatrix, viewerInput.camera.worldMatrix, scratchMatrix);
                 mat4.getRotation(scratchQuat, scratchMatrix);
                 mat4.fromRotationTranslationScale(this.jointMatrices[joint.id], scratchQuat, scratchVec3a, scratchVec3b);

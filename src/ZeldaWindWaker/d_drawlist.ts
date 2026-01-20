@@ -326,8 +326,8 @@ class ShadowVolumeProgram extends DeviceProgram {
         this.setDefineBool('SHADOWMAP', shadowMap);
 
         this.both = `
-precision mediump sampler2DArray;
-precision mediump float;
+precision highp sampler2DArray;
+precision highp float;
 
 ${GfxShaderLibrary.MatrixLibrary}
 ${GfxShaderLibrary.saturate}
@@ -381,6 +381,11 @@ void main() {
     if (!t_VisualizeShadowVolumes) {
         // Now that we have our object-space position, remove any samples outside of the box.
         if (any(lessThan(t_ObjectPos.xyz, vec3(-1))) || any(greaterThan(t_ObjectPos.xyz, vec3(1))))
+            discard;
+
+        // Don't apply shadows to surfaces facing away from the light (same math as the game)
+        vec3 normal = normalize(cross(dFdx(t_ObjectPos.xyz), dFdy(t_ObjectPos.xyz)));
+        if (dot(normal, vec3(0, 0, 1)) < 0.2)
             discard;
     }
 
@@ -505,7 +510,7 @@ class dDlst_shadowReal_c {
 
     public reset(): void {
         // Free this shadow if it was not set this frame
-        if (this.id !== 0 && this.models.length == 0) {
+        if (this.id !== 0 && this.models.length === 0) {
             this.id = 0;
         }
 
@@ -565,7 +570,7 @@ class dDlst_shadowReal_c {
             assertExists(tevStr); // The game allows passing a null tevStr (uses player's light pos), we do not.
             const lightPos = tevStr.lightObj.Position;
             this.alpha = this.setShadowRealMtx(globals, this.lightViewMtx, this.lightProjMtx, lightPos, casterCenter, casterSize, heightAboveGround,
-                shouldFade == 0 ? 0.0 : heightAboveGround * 0.0007);
+                shouldFade === 0 ? 0.0 : heightAboveGround * 0.0007);
 
             if (this.alpha === 0)
                 return 0;
@@ -665,7 +670,7 @@ class dDlst_shadowReal_c {
         }
 
         // Build the light view/proj matrices
-        mat4.lookAt(lightViewMtx, lightVec, casterCenter, Math.abs(rayDir[1]) == 1.0 ? Vec3UnitX : Vec3UnitY);
+        mat4.lookAt(lightViewMtx, lightVec, casterCenter, Math.abs(rayDir[1]) === 1.0 ? Vec3UnitX : Vec3UnitY);
         projectionMatrixForCuboid(lightProjMtx, -casterRadius, casterRadius, -casterRadius, casterRadius, 1.0, 10000.0);
         projectionMatrixConvertClipSpaceNearZ(lightProjMtx, globals.camera.clipSpaceNearZ, GfxClipSpaceNearZ.NegativeOne);
 
@@ -686,7 +691,7 @@ class dDlst_shadowReal_c {
         //     As an optimization, we'd like find the smallest volume that fits the models' bounding boxes in light space.
         //     However, some actors (most bosses) have bounding boxes that do not actually bound their geometry, resulting in shadow clipping.
         //     So, as a hacky compromise, we only do the tight fitting when the casterSize is 800.
-        const useBbox = this.casterSize == 800;
+        const useBbox = this.casterSize === 800;
 
         // Build an AABB containing all models in the light's view space
         const lightAABB = new AABB();
@@ -764,14 +769,14 @@ class dDlst_shadowSimple_c {
         const offsetY = scaleXZ * 16.0 * (1.0 - floorNrm[1]) + 1.0;
 
         // Avoid the rare case of the target position being exactly equal to the eye position
-        const normScale = (floorNrm[1] == 1 && (floorY - pos[1]) == 1) ? 2.0 : 1.0;
+        const normScale = (floorNrm[1] === 1 && (pos[1] - floorY) === 1) ? 2.0 : 1.0;
 
-        // Build the matrix which will transform a [-1, 1] cube into our shadow volume oriented to the floor plane (floor normal becomes Z+).
+        // Build the matrix which will transform a [-1, 1] cube into our shadow volume oriented to the floor plane (floor normal becomes Z-).
         // A physically accurate drop shadow would use a vertical box to project the shadow texture straight down, but the original
         // game chooses to use this approach which always keeps the shape of the shadow consistent, regardless of ground geometry.
         const yVec = vec3.rotateY(scratchVec3a, Vec3UnitX, Vec3Zero, cM_s2rad(rotY));
-        mat4.targetTo(this.modelMtx, [pos[0], floorY, pos[2]], vec3.scaleAndAdd(vec3.create(), pos, floorNrm, normScale), yVec);
-        mat4.scale(this.modelMtx, this.modelMtx, [scaleXZ, scaleXZ * scaleZ, offsetY + offsetY + 16.0]);
+        mat4.targetTo(this.modelMtx, [pos[0], floorY, pos[2]], vec3.scaleAndAdd(vec3.create(), pos, floorNrm, -normScale), yVec);
+        mat4.scale(this.modelMtx, this.modelMtx, [scaleXZ, scaleXZ * scaleZ, 2 * offsetY + 16.0]);
 
         let opacity = 1.0 - saturate((pos[1] - floorY) * 0.0007);
         this.alpha = opacity * 64.0;
@@ -949,8 +954,9 @@ class dDlst_shadowControl_c {
         });
     }
 
-    destroy(device: GfxDevice): void {
+    public destroy(device: GfxDevice): void {
         this.cache.destroy(device);
+        device.destroyTexture(this.shadowAtlas);
     }
 
     public reset(): void {

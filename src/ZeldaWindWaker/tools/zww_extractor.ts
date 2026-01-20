@@ -293,7 +293,6 @@ function extractExtra(binaries: Binary[]) {
     extractSymbol(datas, framework, 'd_grass.o', 'l_vtxDescList$4528');
 
     // main.dol : d_wood.o
-    // console.log(JSON.stringify(framework.map.entries.filter(e => e.filename == 'd_wood.o'), null, 2));
     extractSymbol(datas, framework, 'd_wood.o', 'l_matDL__Q25dWood20@unnamed@d_wood_cpp@');
     extractSymbol(datas, framework, 'd_wood.o', 'l_Oba_swood_b_cutDL__Q25dWood20@unnamed@d_wood_cpp@');
     extractSymbol(datas, framework, 'd_wood.o', 'l_Oba_swood_bDL__Q25dWood20@unnamed@d_wood_cpp@');

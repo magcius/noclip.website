@@ -70,7 +70,7 @@ class SceneDesc implements Viewer.SceneDesc {
         const viewerTextures: Viewer.Texture[] = [];
         for (const texture of renderer.textureList.getAllTextures()) {
             const canvas = descentGfxTextureToCanvas(texture);
-            if (canvas != null) viewerTextures.push(canvas);
+            if (canvas !== null) viewerTextures.push(canvas);
         }
         renderer.textureHolder = new FakeTextureHolder(viewerTextures);
         return renderer;

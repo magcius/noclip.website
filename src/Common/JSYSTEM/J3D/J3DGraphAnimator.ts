@@ -6,7 +6,7 @@ import { assertExists } from '../../../util.js';
 import { Color } from '../../../Color.js';
 import { J3DModelInstance, JointMatrixCalcNoAnm, MaterialInstance, J3DModelData, ShapeInstanceState } from './J3DGraphBase.js';
 import { mat4, quat, ReadonlyVec3, vec3 } from 'gl-matrix';
-import { quatFromEulerRadians, setMatrixTranslation } from '../../../MathHelpers.js';
+import { clamp, quatFromEulerRadians, setMatrixTranslation } from '../../../MathHelpers.js';
 import { getPointHermite } from '../../../Spline.js';
 
 function hermiteInterpolate(k0: AnimationKeyframe, k1: AnimationKeyframe, frame: number): number {
@@ -400,8 +400,8 @@ export class J3DTexNoAnm {
     }
 
     public calcTextureIndex(): number {
-        const animFrame = this.frameCtrl.currentTimeInFrames;
-        return this.animationEntry.textureIndices[(animFrame | 0)];
+        const animFrame = this.frameCtrl.currentTimeInFrames | 0;
+        return this.animationEntry.textureIndices[clamp(animFrame, 0, this.animationEntry.textureIndices.length - 1)];
     }
 }
 

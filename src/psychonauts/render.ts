@@ -94,7 +94,7 @@ class PsychonautsProgram extends DeviceProgram {
     public static ub_MeshFragParams = 1;
 
     public override both = `
-precision mediump float;
+precision highp float;
 
 ${GfxShaderLibrary.MatrixLibrary}
 

@@ -611,7 +611,7 @@ vec3 CalcPointLightSpecular(in PointLight t_PointLight, in vec3 t_PositionWorld,
 
 class MaterialProgram_Phn extends MaterialProgram_Base {
     public override both = `
-precision mediump float;
+precision highp float;
 
 ${MaterialProgram_Base.BindingDefinitions}
 
@@ -1050,7 +1050,7 @@ class MaterialInstance_Phn {
 
 class MaterialProgram_WaterHeight extends MaterialProgram_Base {
     public override both = `
-precision mediump float;
+precision highp float;
 
 ${MaterialProgram_Base.BindingDefinitions}
 
@@ -1117,7 +1117,7 @@ void main() {
 
 class MaterialProgram_Water extends MaterialProgram_Base {
     public override both = `
-precision mediump float;
+precision highp float;
 
 ${MaterialProgram_Base.BindingDefinitions}
 

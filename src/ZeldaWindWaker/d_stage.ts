@@ -345,8 +345,8 @@ function dStage_tgscInfoInit(globals: dGlobals, dt: dStage_dt, buffer: ArrayBuff
 }
 
 function layerLoader(globals: dGlobals, dt: dStage_dt, dzs: DZS): void {
-    const actrLayer = ['ACT0', 'ACT1', 'ACT2', 'ACT3', 'ACT4', 'ACT5', 'ACT6', 'ACT7', 'ACT8', 'ACT9', 'ACTA', 'ACTB'];
-    const scobLayer = ['SCO0', 'SCO1', 'SCO2', 'SCO3', 'SCO4', 'SCO5', 'SCO6', 'SCO7', 'SCO8', 'SCO9', 'SCOA', 'SCOB'];
+    const actrLayer = ['ACT0', 'ACT1', 'ACT2', 'ACT3', 'ACT4', 'ACT5', 'ACT6', 'ACT7', 'ACT8', 'ACT9', 'ACTa', 'ACTb'];
+    const scobLayer = ['SCO0', 'SCO1', 'SCO2', 'SCO3', 'SCO4', 'SCO5', 'SCO6', 'SCO7', 'SCO8', 'SCO9', 'SCOa', 'SCOb'];
     for (let i = 0; i < 12; i++) {
         dStage_dt_decode(globals, dt, dzs, {
             [actrLayer[i]]: dStage_actorInit,

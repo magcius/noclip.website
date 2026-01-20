@@ -724,8 +724,6 @@ export function calcBillboardMatrix(dst: mat4, m: ReadonlyMat4, flags: CalcBillb
     dst[13] = m[13];
     dst[14] = m[14];
 
-    // Fill with junk to try and signal when something has gone horribly wrong. This should go unused,
-    // since this is supposed to generate a mat4x3 matrix.
     dst[3] = 0.0;
     dst[7] = 0.0;
     dst[11] = 0.0;
