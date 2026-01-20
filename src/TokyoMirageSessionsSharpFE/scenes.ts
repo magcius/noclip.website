@@ -32,6 +32,8 @@ import { create_d007_08_gimmicks } from "./maps/d007_08.js";
 import { create_d007_09_gimmicks } from "./maps/d007_09.js";
 import { create_d010_01_gimmicks } from "./maps/d010_01.js";
 
+import { create_f002_03_gimmicks } from "./maps/f002_03.js";
+
 import { create_f003_02_gimmicks, create_f003_02_party_gimmicks } from "./maps/f003_02.js";
 import { create_f003_08_gimmicks } from "./maps/f003_08.js";
 
@@ -215,7 +217,7 @@ const sceneDescs =
     new TMSFESceneDesc("f005_02", "Daiba Studio 2", ["f005_02", "obj01", "sky"]),
     new TMSFESceneDesc("f002_01", "Daitama Observatory 1", ["f002_01", "obj01", "obj02", "obj03"]),
     new TMSFESceneDesc("f002_02", "Daitama Observatory 2", ["f002_02", "obj01", "obj02", "obj03"]),
-    new TMSFESceneDesc("f002_03", "Daitama Observatory 3", ["f002_03", "obj01", "obj02", "sky"]),
+    new TMSFESceneDesc("f002_03", "Daitama Observatory 3", ["f002_03", "obj01", "obj02", "sky"], create_f002_03_gimmicks),
     new TMSFESceneDesc("f004_01", "Daitou TV 1", ["f004_01", "sky"], create_f004_01_gimmicks, 5),
     new TMSFESceneDesc("f004_01", "Daitou TV 1 Music Fes", ["f004_01", "sky"], create_f004_01_music_fes_gimmicks, 5),
     new TMSFESceneDesc("f004_02", "Daitou TV 2", ["f004_02", "obj01", "sky"], undefined, 5),
