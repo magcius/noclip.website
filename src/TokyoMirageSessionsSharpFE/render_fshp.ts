@@ -123,23 +123,17 @@ export class fshp_renderer
             const transformation_matrix = recursive_bone_transform(fshp.bone_index, fskl);
             this.bone_matrix_array.push(transformation_matrix);
         }
-        if (fshp.skin_bone_count == 1)
+        if (fshp.skin_bone_count > 0)
         {
             assert(fskl.smooth_rigid_indices.length < BONE_MATRIX_MAX_LENGTH);
 
+            // add all the smooth and rigid bones 
             this.bone_matrix_array = [];
             for (let i = 0; i < fskl.smooth_rigid_indices.length; i++)
             {
                 const transformation_matrix = recursive_bone_transform(fskl.smooth_rigid_indices[i], fskl)
                 this.bone_matrix_array.push(transformation_matrix);
             }
-        }
-        if (fshp.skin_bone_count > 1)
-        {
-            // mesh uses it's bone's parent bone transformation matrix?? this seems incorrect but it works
-            const bone = fskl.bones[fshp.bone_index]
-            const transformation_matrix = recursive_bone_transform(bone.parent_index, fskl);
-            this.bone_matrix_array.push(transformation_matrix);
         }
 
         // setup sampler

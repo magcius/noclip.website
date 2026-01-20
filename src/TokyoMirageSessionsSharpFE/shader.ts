@@ -13,7 +13,7 @@ export class TMSFEProgram extends DeviceProgram
     // TODO: blend index is sometimes 8 uint and other times 8 8 uint??
     public static vertex_attribute_codes = [ '_p0', '_c0', '_u0', '_u1', '_u2', '_u3', '_u4', '_n0', '_t0', '_i0', '_w0' ];
     public static vertex_attribute_names = [ 'a_Position', 'a_Color', 'a_TexCoord0', 'a_TexCoord1', 'a_TexCoord2', 'a_TexCoord3', 'a_TexCoord4', 'a_Normal', 'a_Tangent', 'a_BlendIndex0', 'a_BlendWeight0' ];
-    public static vertex_attribute_types = [ 'vec3', 'vec4', 'vec2', 'vec2', 'vec2', 'vec2', 'vec2', 'vec4', 'vec4', 'uint', 'vec2' ];
+    public static vertex_attribute_types = [ 'vec3', 'vec4', 'vec2', 'vec2', 'vec2', 'vec2', 'vec2', 'vec4', 'vec4', 'placeholder', 'placeholder' ];
 
     public static ub_SceneParams = 0;
 
@@ -52,15 +52,13 @@ void mainVS()
     vec3 WorldPosition = UnpackMatrix(u_BoneMatrix[a_BlendIndex0]) * vec4(a_Position, 1.0);
 
     #elif ${this.fshp.skin_bone_count} == 2
-    // mat4x3 t_WorldFromLocalMatrix = mat4x3(0.0);
-    // t_WorldFromLocalMatrix += UnpackMatrix(u_BoneMatrix[a_BlendIndex0.x]) * a_BlendWeight0.x;
-    // t_WorldFromLocalMatrix += UnpackMatrix(u_BoneMatrix[a_BlendIndex0.y]) * a_BlendWeight0.y;
-    // vec3 WorldPosition = t_WorldFromLocalMatrix * vec4(a_Position, 1.0);
-
-    vec3 WorldPosition = UnpackMatrix(u_BoneMatrix[0]) * vec4(a_Position, 1.0);
+    mat4x3 t_WorldFromLocalMatrix = mat4x3(1.0);
+    // t_WorldFromLocalMatrix += UnpackMatrix(u_BoneMatrix[a_BlendIndex0.x]) * a_BlendWeight0.y;
+    vec3 WorldPosition = t_WorldFromLocalMatrix * vec4(a_Position, 1.0);
 
     #elif ${this.fshp.skin_bone_count} == 3
-    vec3 WorldPosition = UnpackMatrix(u_BoneMatrix[0]) * vec4(a_Position, 1.0);
+    mat4x3 t_WorldFromLocalMatrix = mat4x3(1.0);
+    vec3 WorldPosition = t_WorldFromLocalMatrix * vec4(a_Position, 1.0);
 
     #endif
     
@@ -128,10 +126,6 @@ void mainPS()
             {
                 switch(this.fshp.skin_bone_count)
                 {
-                    case 1:
-                        type = 'float';
-                        break;
-                    
                     case 2:
                         type = 'vec2';
                         break;
