@@ -33,6 +33,8 @@ import { create_d007_09_gimmicks } from "./maps/d007_09.js";
 import { create_d010_01_gimmicks } from "./maps/d010_01.js";
 import { create_f003_08_gimmicks } from "./maps/f003_08.js";
 
+import { create_f005_01_gimmicks, create_f005_01_music_fes_gimmicks } from "./maps/f005_01.js";
+
 /**
  * Defines a single level from Tokyo Mirage Sessions ♯FE
  */
@@ -204,7 +206,8 @@ const sceneDescs =
     new TMSFESceneDesc("f001_05", "Shibuya 5", ["f001_05", "obj01", "obj02", "obj10", "sky"]),
     new TMSFESceneDesc("f001_06", "Shibuya 6", ["f001_06", "obj01", "obj02", "obj04", "obj10", "sky"]),
     new TMSFESceneDesc("f001_07", "Shibuya 7", ["f001_07", "obj01", "obj02", "obj10", "sky"]),
-    new TMSFESceneDesc("f005_01", "Daiba Studio", ["f005_01", "sky"]),
+    new TMSFESceneDesc("f005_01", "Daiba Studio", ["f005_01", "sky"], create_f005_01_gimmicks),
+    new TMSFESceneDesc("f005_01", "Daiba Studio Music Fes", ["f005_01", "sky"], create_f005_01_music_fes_gimmicks),
     new TMSFESceneDesc("f005_02", "Daiba Studio 2", ["f005_02", "obj01", "sky"]),
     new TMSFESceneDesc("f002_01", "Daitama Observatory 1", ["f002_01", "obj01", "obj02", "obj03"]),
     new TMSFESceneDesc("f002_02", "Daitama Observatory 2", ["f002_02", "obj01", "obj02", "obj03"]),
