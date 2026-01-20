@@ -259,6 +259,7 @@ class BufferPage {
 
     public index(n: number): void {
         this.indexData[this.indexDataOffs++] = n;
+        assert(this.indexDataOffs <= this.indexData.length);
     }
 
     public endFrame(cache: GfxRenderCache, templateRenderInst: GfxRenderInst): void {
@@ -486,7 +487,8 @@ export class DebugDraw {
     }
 
     public drawCapsuleLine(r: number, height: number, m: ReadonlyMat4, color: Readonly<Color>, sides = 32, options: DebugDrawOptions = defaultOptions): void {
-        const page = this.findPage(this.getBehaviorType(true, color.a >= 1.0, options), sides * 7, sides * 11 + 4);
+        const numPoints = sides - 1;
+        const page = this.findPage(this.getBehaviorType(true, color.a >= 1.0, options), sides * 7, numPoints * 8 + sides * 6 + 4);
 
         const center = DebugDraw.scratchVec3[0], right = DebugDraw.scratchVec3[1], up = DebugDraw.scratchVec3[2], cross = DebugDraw.scratchVec3[3];
         getMatrixTranslation(center, m);
@@ -495,7 +497,6 @@ export class DebugDraw {
         const s = DebugDraw.scratchVec3[4];
 
         const baseVertex = page.getCurrentVertexID();
-        const numPoints = sides - 1;
         for (let i = 0; i < sides; i++) {
             const theta = i / numPoints * (MathConstants.TAU / 2);
             const sin = Math.sin(theta) * r, cos = Math.cos(theta) * r;
@@ -558,7 +559,7 @@ export class DebugDraw {
     }
 
     public drawBoxLine(aabb: AABB, m: ReadonlyMat4, color: Readonly<Color>, options: DebugDrawOptions = defaultOptions): void {
-        const page = this.findPage(this.getBehaviorType(true, color.a >= 1.0, options), 8, 12);
+        const page = this.findPage(this.getBehaviorType(true, color.a >= 1.0, options), 8, 24);
 
         const baseVertex = page.getCurrentVertexID();
         const p = DebugDraw.scratchVec3[0];
