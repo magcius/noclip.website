@@ -76,7 +76,7 @@ Read directly from WAD.WAD by offset instead of extracting subfiles
     Convert Python extraction logic to TypeScript
 */
 
-const pathBase = "Spyro1";
+const pathBase1 = "Spyro1";
 class Spyro1Scene implements SceneDesc {
     public id: string;
 
@@ -85,10 +85,10 @@ class Spyro1Scene implements SceneDesc {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
-        const levelFile = await context.dataFetcher.fetchData(`${pathBase}/sf${this.subFileID}_ground.bin`);
-        const vram = await context.dataFetcher.fetchData(`${pathBase}/sf${this.subFileID}_vram.bin`);
-        const textureList = await context.dataFetcher.fetchData(`${pathBase}/sf${this.subFileID}_list.bin`);
-        const skyFile = await context.dataFetcher.fetchData(`${pathBase}/sf${this.subFileID}_sky1.bin`);
+        const levelFile = await context.dataFetcher.fetchData(`${pathBase1}/sf${this.subFileID}_ground.bin`);
+        const vram = await context.dataFetcher.fetchData(`${pathBase1}/sf${this.subFileID}_vram.bin`);
+        const textureList = await context.dataFetcher.fetchData(`${pathBase1}/sf${this.subFileID}_list.bin`);
+        const skyFile = await context.dataFetcher.fetchData(`${pathBase1}/sf${this.subFileID}_sky1.bin`);
         const tileGroups = parseTileGroups(textureList.createDataView());
         const combinedAtlas = buildCombinedAtlas(new VRAM(vram.copyToBuffer()), tileGroups);
         const renderer = new Spyro1Renderer(device, buildLevelData(levelFile.createDataView(), combinedAtlas), buildSkybox(skyFile.createDataView()));
@@ -96,9 +96,9 @@ class Spyro1Scene implements SceneDesc {
     }
 }
 
-const id = "Spyro1";
-const name = "Spyro the Dragon";
-const sceneDescs = [
+const id1 = "Spyro1";
+const name1 = "Spyro the Dragon";
+const sceneDescs1 = [
     "Artisans",
     new Spyro1Scene(11, "Artisans Homeworld"),
     new Spyro1Scene(13, "Stone Hill"),
@@ -165,7 +165,7 @@ const sceneDescs = [
     new Spyro1Scene(102, "Jacques"),
     new Spyro1Scene(98, "Gnorc Cove"),
     new Spyro1Scene(101, "Twilight Harbor"),
-    new Spyro1Scene(100, "Gnasty Gnorc"),
+    new Spyro1Scene(100, "Gnasty Gnorc")
 ];
 
-export const sceneGroup: SceneGroup = { id, name, sceneDescs };
+export const sceneGroup1: SceneGroup = { id: id1, name: name1, sceneDescs: sceneDescs1 };
