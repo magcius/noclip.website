@@ -2,7 +2,7 @@
 import { ReadonlyMat4, ReadonlyVec3, mat4, vec2, vec3 } from "gl-matrix";
 import { Blue, Color, Green, Red } from "../../Color.js";
 import { branchlessONB } from "../../DebugJunk.js";
-import { MathConstants, Vec3UnitX, Vec3UnitY, Vec3UnitZ, getMatrixAxis, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, lerp, scaleMatrix, setMatrixAxis, setMatrixTranslation, transformVec3Mat4w0, transformVec3Mat4w1, vec3FromBasis2 } from "../../MathHelpers.js";
+import { MathConstants, Vec3UnitX, Vec3UnitY, Vec3UnitZ, getMatrixAxis, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, lerp, scaleMatrix, setMatrixAxis, setMatrixTranslation, transformVec3Mat4w0, transformVec3Mat4w1, vec3FromBasis2, vec3FromBasis3 } from "../../MathHelpers.js";
 import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBufferUsage, GfxColor, GfxCompareMode, GfxDevice, GfxFormat, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxMipFilterMode, GfxPrimitiveTopology, GfxProgram, GfxSampler, GfxSamplerFormatKind, GfxTexFilterMode, GfxTextureDimension, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxWrapMode } from "../platform/GfxPlatform.js";
 import { align, assert, nArray } from "../platform/GfxPlatformUtil.js";
 import { GfxRenderCache } from "../render/GfxRenderCache.js";
@@ -305,7 +305,7 @@ export class DebugDraw {
     private screenTextPosition = vec2.create();
     private screenTextOrigin = vec2.fromValues(128, 32);
 
-    public static scratchVec3 = nArray(6, () => vec3.create());
+    public static scratchVec3 = nArray(5, () => vec3.create());
     public static scratchMat4 = mat4.create();
 
     constructor(private renderCache: GfxRenderCache, uniformBuffer: GfxRenderDynamicUniformBuffer) {
@@ -486,13 +486,13 @@ export class DebugDraw {
     }
 
     public drawCapsuleLine(r: number, height: number, m: ReadonlyMat4, color: Readonly<Color>, sides = 32, options: DebugDrawOptions = defaultOptions): void {
-        const page = this.findPage(this.getBehaviorType(true, color.a >= 1.0, options), sides * 4, sides * 4 * 2 + 4);
+        const page = this.findPage(this.getBehaviorType(true, color.a >= 1.0, options), sides * 7, sides * 11 + 4);
 
         const center = DebugDraw.scratchVec3[0], right = DebugDraw.scratchVec3[1], up = DebugDraw.scratchVec3[2], cross = DebugDraw.scratchVec3[3];
         getMatrixTranslation(center, m);
         getMatrixAxis(right, up, cross, m);
 
-        const s0 = DebugDraw.scratchVec3[4], s1 = DebugDraw.scratchVec3[5];
+        const s = DebugDraw.scratchVec3[4];
 
         const baseVertex = page.getCurrentVertexID();
         const numPoints = sides - 1;
@@ -501,18 +501,18 @@ export class DebugDraw {
             const sin = Math.sin(theta) * r, cos = Math.cos(theta) * r;
 
             // Lower cap points
-            vec3FromBasis2(s0, center, right, cos, up, -(sin + height * 0.5));
-            page.vertexPCF(s0, color, options);
+            vec3FromBasis2(s, center, right, cos, up, -(sin + height * 0.5));
+            page.vertexPCF(s, color, options);
 
-            vec3FromBasis2(s0, center, cross, cos, up, -(sin + height * 0.5));
-            page.vertexPCF(s0, color, options);
+            vec3FromBasis2(s, center, cross, cos, up, -(sin + height * 0.5));
+            page.vertexPCF(s, color, options);
 
             // Upper cap points
-            vec3FromBasis2(s0, center, right, cos, up, sin + height * 0.5);
-            page.vertexPCF(s0, color, options);
+            vec3FromBasis2(s, center, right, cos, up, sin + height * 0.5);
+            page.vertexPCF(s, color, options);
 
-            vec3FromBasis2(s0, center, cross, cos, up, sin + height * 0.5);
-            page.vertexPCF(s0, color, options);
+            vec3FromBasis2(s, center, cross, cos, up, sin + height * 0.5);
+            page.vertexPCF(s, color, options);
 
             // Lower caps
             if (i < numPoints) {
@@ -528,6 +528,26 @@ export class DebugDraw {
                 page.index(baseVertex + i0 * 4 + 3);
                 page.index(baseVertex + i1 * 4 + 3);
             }
+        }
+
+        const baseVertexCircles = baseVertex + sides * 4;
+        // Draw three circles surrounding the capsule equator.
+        for (let i = 0; i < sides; i++) {
+            const theta = i / numPoints * MathConstants.TAU;
+            const sin = Math.sin(theta) * r, cos = Math.cos(theta) * r;
+            vec3FromBasis3(s, center, right, sin, cross, cos, up, height * 0.5);
+            page.vertexPCF(s, color, options);
+            vec3FromBasis2(s, center, right, sin, cross, cos);
+            page.vertexPCF(s, color, options);
+            vec3FromBasis3(s, center, right, sin, cross, cos, up, -height * 0.5);
+            page.vertexPCF(s, color, options);
+
+            page.index(baseVertexCircles + i * 3);
+            page.index(baseVertexCircles + ((i === numPoints) ? 0 : (i + 1)) * 3);
+            page.index(baseVertexCircles + i * 3 + 1);
+            page.index(baseVertexCircles + ((i === numPoints) ? 0 : (i + 1)) * 3 + 1);
+            page.index(baseVertexCircles + i * 3 + 2);
+            page.index(baseVertexCircles + ((i === numPoints) ? 0 : (i + 1)) * 3 + 2);
         }
 
         // Connecting lines
