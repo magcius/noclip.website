@@ -33,12 +33,11 @@ import { create_d007_09_gimmicks } from "./maps/d007_09.js";
 import { create_d010_01_gimmicks } from "./maps/d010_01.js";
 
 import { create_f002_03_gimmicks } from "./maps/f002_03.js";
-
 import { create_f003_02_gimmicks, create_f003_02_party_gimmicks } from "./maps/f003_02.js";
 import { create_f003_08_gimmicks } from "./maps/f003_08.js";
-
 import { create_f004_01_gimmicks, create_f004_01_music_fes_gimmicks } from "./maps/f004_01.js";
 import { create_f005_01_gimmicks, create_f005_01_music_fes_gimmicks } from "./maps/f005_01.js";
+import { create_f006_01_barrier_gimmicks } from "./maps/f006_01.js";
 
 /**
  * Defines a single level from Tokyo Mirage Sessions ♯FE
@@ -208,10 +207,10 @@ const sceneDescs =
     new TMSFESceneDesc("f001_01", "Shibuya 1", ["f001_01", "obj01", "obj02", "obj10", "sky"]),
     new TMSFESceneDesc("f001_02", "Shibuya 2", ["f001_02", "obj01", "obj02", "obj04", "obj10", "sky"]),
     new TMSFESceneDesc("f001_03", "Shibuya 3", ["f001_03", "obj01", "obj02", "obj04", "obj10", "sky"]),
-    new TMSFESceneDesc("f001_04", "Shibuya 4", ["f001_04", "obj01", "obj02", "obj10", "obj11", "obj12", "sky"]),
+    new TMSFESceneDesc("f001_04", "Shibuya Music Fes", ["f001_04", "obj01", "obj02", "obj10", "obj11", "obj12", "sky"]),
     new TMSFESceneDesc("f001_05", "Shibuya 5", ["f001_05", "obj01", "obj02", "obj10", "sky"]),
     new TMSFESceneDesc("f001_06", "Shibuya 6", ["f001_06", "obj01", "obj02", "obj04", "obj10", "sky"]),
-    new TMSFESceneDesc("f001_07", "Shibuya 7", ["f001_07", "obj01", "obj02", "obj10", "sky"]),
+    new TMSFESceneDesc("f001_07", "Shibuya Epilogue", ["f001_07", "obj01", "obj02", "obj10", "sky"]),
     new TMSFESceneDesc("f005_01", "Daiba Studio", ["f005_01", "sky"], create_f005_01_gimmicks),
     new TMSFESceneDesc("f005_01", "Daiba Studio Music Fes", ["f005_01", "sky"], create_f005_01_music_fes_gimmicks),
     new TMSFESceneDesc("f005_02", "Daiba Studio 2", ["f005_02", "obj01", "sky"]),
@@ -221,7 +220,8 @@ const sceneDescs =
     new TMSFESceneDesc("f004_01", "Daitou TV 1", ["f004_01", "sky"], create_f004_01_gimmicks, 5),
     new TMSFESceneDesc("f004_01", "Daitou TV 1 Music Fes", ["f004_01", "sky"], create_f004_01_music_fes_gimmicks, 5),
     new TMSFESceneDesc("f004_02", "Daitou TV 2", ["f004_02", "obj01", "sky"], undefined, 5),
-    new TMSFESceneDesc("f006_01", "Cosmic Egg 1", ["f006_01", "obj01", "obj02", "obj03", "sky"]),
+    new TMSFESceneDesc("f006_01", "Cosmic Egg", ["f006_01", "obj01", "obj02", "obj03", "sky"]),
+    new TMSFESceneDesc("f006_01", "Cosmic Egg Barrier", ["f006_01", "obj01", "obj02", "obj03", "sky"], create_f006_01_barrier_gimmicks),
     new TMSFESceneDesc("f006_02", "Cosmic Egg 2", ["f006_02", "sky"]),
     new TMSFESceneDesc("f010_01", "Toubu Rooftop", ["f010_01", "sky"]),
     new TMSFESceneDesc("f010_02", "Classroom Film Set", ["f010_02", "sky"]),
