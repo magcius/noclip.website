@@ -6757,14 +6757,14 @@ class d_a_demo00 extends fopAc_ac_c {
                     l_eventBit[1] = 0x2A80; // Acquire Hero's Clothes
                     l_eventBit[5] = 0x2401;
                     l_eventBit[17] = 0x2110;
-                    l_eventBit[22] = 0x2D01; // Aryll rescued from Forsaken Fortress
+                    l_eventBit[23] = 0x2D01; // Aryll rescued from Forsaken Fortress
                     l_eventBit[49] = 0x3802; // Triggered during Grandma's Tale
 
                     const data = parseTParagraphData(scratchDemoParagraphData, 49, stbData);
                     if (data) {
                         const eventIdx = demoActor.stbData.getUint8(data.entryOffset);
                         assert(eventIdx < l_eventBit.length);
-                        if (l_eventBit[eventIdx] != 0xFFFF && this.dataId != oldDataId) {
+                        if (l_eventBit[eventIdx] !== undefined && this.dataId != oldDataId) {
                             // dComIfGs_onEventBit(l_eventBit[eventIdx]);
                             console.log(`[d_act${this.subtype}] Setting event bit: 0x${l_eventBit[eventIdx].toString(16)}`);
                         }
