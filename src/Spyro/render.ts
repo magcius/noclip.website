@@ -65,8 +65,14 @@ void main() {
     vec3 dithered = lit + threshold;
     vec3 final5 = floor(dithered * 31.0) / 31.0;
 
-    float alpha = v_Color.a;
-    gl_FragColor = vec4(final5 * 1.6, alpha);
+    bool isWater = (v_Color.a < 0.99);
+    if (isWater) {
+        // Spyro 2 water tint (blue-green)
+        final5 = mix(final5, vec3(0.0, 0.25, 0.45), 0.25);
+    }
+
+    float brightness = isWater ? 2.0 : 1.6;
+    gl_FragColor = vec4(final5 * brightness, v_Color.a);
 }
 #endif
     `;

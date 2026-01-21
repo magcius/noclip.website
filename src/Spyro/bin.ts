@@ -104,11 +104,11 @@ class ColorGround {
     }
 }
 
-class Poly2Ground {
+class PolyGround {
     v1: number; v2: number; v3: number; v4: number;
     c1: number; c2: number; c3: number; c4: number;
     t: number; r: number; // S1 only
-    d1: number; d2: number; d3: number; d4: number; // S2 only
+    s1: number; s2: number; s3: number; s4: number; // S2 only
     tt: number; ii: number; // S2 only
     constructor(view: DataView, offs: number, gameNumber: number) {
         this.v1 = view.getUint8(offs);
@@ -123,10 +123,10 @@ class Poly2Ground {
             this.t = view.getUint8(offs+8);
             this.r = view.getUint8(offs+9);
         } else if (gameNumber == 2) {
-            this.d1 = view.getUint8(offs+8);
-            this.d2 = view.getUint8(offs+9);
-            this.d3 = view.getUint8(offs+10);
-            this.d4 = view.getUint8(offs+11);
+            this.s1 = view.getUint8(offs+8);
+            this.s2 = view.getUint8(offs+9);
+            this.s3 = view.getUint8(offs+10);
+            this.s4 = view.getUint8(offs+11);
             const t = view.getUint8(offs+12);
             this.tt = t & 0x7F;
             this.ii = view.getUint8(offs+13);
@@ -358,7 +358,7 @@ function decodeTileToRGBA(vram: VRAM, tex: Tile, width: number = tex.w, height: 
     }
 }
 
-function buildFaces1(poly: Poly2Ground, mdlVertStart: number, mdlColorStart: number, faces: GroundFace[], uvs: number[][], atlas: TileAtlas) {
+function buildFaces1(poly: PolyGround, mdlVertStart: number, mdlColorStart: number, faces: GroundFace[], uvs: number[][], atlas: TileAtlas) {
     const a = mdlVertStart + poly.v1;
     const b = mdlVertStart + poly.v2;
     const c = mdlVertStart + poly.v3;
@@ -441,23 +441,18 @@ function buildFaces1(poly: Poly2Ground, mdlVertStart: number, mdlColorStart: num
     }
 }
 
-function buildFaces2(poly: Poly2Ground, mdlVertStart: number, mdlColorStart: number, faces: GroundFace[], uvs: number[][], atlas: TileAtlas) {
+function buildFaces2(poly: PolyGround, mdlVertStart: number, mdlColorStart: number, faces: GroundFace[], uvs: number[][], atlas: TileAtlas) {
     const a = mdlVertStart + poly.v1;
     const b = mdlVertStart + poly.v2;
     const c = mdlVertStart + poly.v3;
     const d = mdlVertStart + poly.v4;
-
     const ca = mdlColorStart + poly.c1;
     const cb = mdlColorStart + poly.c2;
     const cc = mdlColorStart + poly.c3;
     const cd = mdlColorStart + poly.c4;
-
     const texIndex = poly.tt;
     const tileIndex = texIndex & 0x7f;
-
-    const isWater = atlas.awater === undefined ? false : atlas.awater[tileIndex];
     const rect = atlas.uvs[tileIndex];
-
     let A = [rect.u0, rect.v1];
     let B = [rect.u1, rect.v1];
     let C = [rect.u1, rect.v0];
@@ -480,30 +475,28 @@ function buildFaces2(poly: Poly2Ground, mdlVertStart: number, mdlColorStart: num
     }
 
     const tex = atlas.tiles![tileIndex];
+    const tileIsWater = tex.b > 0;
+    const polyIsWater = (poly.s1 === 0 && poly.s2 === 0 && poly.s3 === 0 && poly.s4 === 0);
+    const isWater = tileIsWater || polyIsWater;
     let texRot = tex.r & 7;
-
     const isTri = (poly.v1 === poly.v2);
-
     let polyRot = 0;
     if (isTri) {
         const rr = (poly.ii >> 4) & 3;
         polyRot = (texRot - rr) & 3;
         [A, B, C, D] = rotateUVCorners(polyRot, A, B, C, D);
     }
-
     const uvIndexA = uvs.length; uvs.push(A);
     const uvIndexB = uvs.length; uvs.push(B);
     const uvIndexC = uvs.length; uvs.push(C);
     const uvIndexD = uvs.length; uvs.push(D);
-
     const iByte = poly.ii;
     const bothSides = !!(iByte & 0x08);
-    const inverse   = !!(iByte & 0x04);
-
+    const inverse = !!(iByte & 0x04);
     if (isTri) {
         if (!inverse) {
             faces.push({
-                indices:   [b, c, d],
+                indices: [b, c, d],
                 uvIndices: [uvIndexA, uvIndexC, uvIndexD],
                 colorIndices: [cb, cc, cd],
                 texture: texIndex,
@@ -514,7 +507,7 @@ function buildFaces2(poly: Poly2Ground, mdlVertStart: number, mdlColorStart: num
             });
         } else {
             faces.push({
-                indices:   [d, c, b],
+                indices: [d, c, b],
                 uvIndices: [uvIndexD, uvIndexC, uvIndexA],
                 colorIndices: [cd, cc, cb],
                 texture: texIndex,
@@ -702,7 +695,7 @@ export function buildLevelData(view: DataView, atlas: TileAtlas, gameNumber: num
 
         // Textured polys
         for (let i = 0; i < header.p2; i++) {
-            const poly = new Poly2Ground(view, p, gameNumber);
+            const poly = new PolyGround(view, p, gameNumber);
             p += 16;
             if (gameNumber == 1) {
                 buildFaces1(poly, mdlVertStart, mdlColorStart, faces, uvs, atlas)
@@ -958,9 +951,15 @@ function textureCompute(tex: Tile, filePos: number, gameNumber: number): void {
 
     if (gameNumber == 2) {
         tex.w = 32;
+        tex.b = (tex.ss >> 5) & 0x03;
     } else {
         if ((tex.ff & 0x80) > 0) tex.w = 32;
         else tex.w = 16;
+        if (tex.ff & 0x80) {
+            tex.b = 1 + ((tex.ss & 0x7f) >> 5);
+        } else {
+            tex.b = 0;
+        }
     }
 
     if ((tex.x0 + tex.w - 1) !== tex.xx) tex.f = true;
@@ -995,21 +994,16 @@ function textureCompute(tex: Tile, filePos: number, gameNumber: number): void {
     tex.r = (tex.ff & 127) >> 4;
 
     tex.off = filePos - 8;
-
-    if (tex.ff & 0x80) {
-        tex.b = 1 + ((tex.ss & 0x7f) >> 5);
-    } else {
-        tex.b = 0;
-    }
 }
 
 function buildAWater(groups: TileGroups2): boolean[] {
-    const awater = new Array(128).fill(false);
-    const lod = groups.lod;
-    for (let i = 0; i < lod.length && i < 128; i++) {
-        if (lod[i].b > 0) {
-            awater[i] = true;
-        }
+    const aw = new Array(128).fill(false);
+    let offset = groups.lod.length
+               + groups.cor1.length
+               + groups.cor2.length
+               + groups.cor3.length;
+    for (let i = 0; i < groups.cor4.length; i++) {
+        aw[offset + i] = true;
     }
-    return awater;
+    return aw;
 }
