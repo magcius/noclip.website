@@ -12,28 +12,28 @@ import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor } fr
 To-do list
 
     Scrolling textures
-    Better level shader (remove color banding and make brighter)
+    Better level shader (smoothen the color banding)
     Clean up functions in bin.ts
 
     Spyro 1
-        Water in some flight levels doesn't render correctly (different than ground like the second game?)
+        Water in some flight levels/Gnasty's Loot doesn't render correctly (different than ground like the second game?)
         
     Spyro 2
-        The title screen needs its low-poly parts rendered to look correct (and possibly some others)
-            All levels are currently only showing high-poly/textured (see buildLevel in bin.ts)
-        Water is mostly correct but the tinting is hardcoded in the shader
+        Fix the credits flyover ("starring") levels. They crash when trying to load
+        The title screen needs its low-poly parts rendered to look correct (and possibly some other levels)
+            All levels currently only show high-poly/textured (see buildLevel in bin.ts)
+        Water is mostly correct but the tinting is hardcoded in the shader and the transparency is arbitrary
         There are a very small number of incorrect faces (unsure if all the same problem or different. Some could be invisible walls/collision related)
             Below the Ocean Speedway portal in Summer Forest there's stray faces
             The outdoor waterfall in Idol Springs has two black triangles
             Colossus has a z-fighting face in the hockey rink's ice
             Hurricos has black polygons in the gates that need spark plugs to open
-            Aquaria Towers has some of the tower numbers' faces being rendered as water
+            Aquaria Towers has some of the tower numbers' faces being rendered as water (the water at the bottom is expected to be there since you drain it and the textures move up)
             A missing face next to the destroyable wall in Autumn Plains
-            Zephyr has a stray face that's treated as water in the plant/seed section (the exploded building is expected!)
+            Zephyr has a stray face that's treated as water in the plant/seed section (the exploded building is expected since you blow it up while playing)
             Metropolis has some faces at the starting area that are incorrectly rendered as water
             Dragon Shores has a water triangle along the edge "ocean" that appears much brighter and has z-fighting
             Dragon Shores also has one of the dragon statues at the entrance with parts of its wings being treated as water
-        Shady Oasis and Mystic Marsh both appear to be squished. Probably an issue with z-scaling
 
 Nice to have
 
@@ -93,63 +93,14 @@ class SpyroRenderer implements SceneGfx {
     }
 }
 
-class SpyroRenderer2 implements SceneGfx {
-    private renderHelper: GfxRenderHelper;
-    private renderInstListMain = new GfxRenderInstList();
-    private levelRenderer: LevelRenderer;
-    private skyboxRenderer: SkyboxRenderer;
-    private clearColor: number[];
-
-    constructor(device: GfxDevice, level: Level, skybox: Skybox) {
-        this.renderHelper = new GfxRenderHelper(device);
-        const cache = this.renderHelper.renderCache;
-        this.levelRenderer = new LevelRenderer(cache, level);
-        this.skyboxRenderer = new SkyboxRenderer(cache, skybox);
-        this.clearColor = skybox.backgroundColor;
-    }
-
-    protected prepareToRender(device: GfxDevice, viewerInput: ViewerRenderInput): void {
-        this.renderHelper.renderInstManager.setCurrentList(this.renderInstListMain);
-        this.skyboxRenderer.prepareToRender(device, this.renderHelper, viewerInput);
-        this.levelRenderer.prepareToRender(device, this.renderHelper, viewerInput);
-        this.renderHelper.prepareToRender();
-    }
-
-    public render(device: GfxDevice, viewerInput: ViewerRenderInput): void {
-        const builder = this.renderHelper.renderGraph.newGraphBuilder();
-        const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, opaqueBlackFullClearRenderPassDescriptor);
-        mainColorDesc.clearColor = {r: this.clearColor[0] / 255, g: this.clearColor[1] / 255, b: this.clearColor[2] / 255, a: 1};
-        const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, opaqueBlackFullClearRenderPassDescriptor);
-        const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
-        const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
-        builder.pushPass((pass) => {
-            pass.setDebugName('Main');
-            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
-            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
-            pass.exec((passRenderer) => {
-                this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
-            });
-        });
-        this.renderHelper.antialiasingSupport.pushPasses(builder, viewerInput, mainColorTargetID);
-        builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
-        this.prepareToRender(device, viewerInput);
-        this.renderHelper.renderGraph.execute(builder);
-        this.renderInstListMain.reset();
-    }
-
-    public destroy(device: GfxDevice): void {
-        this.renderHelper.destroy();
-        this.skyboxRenderer.destroy(device);
-        this.levelRenderer.destroy(device);
-    }
-}
-
 const pathBase1 = "Spyro1";
 class SpyroScene implements SceneDesc {
     public id: string;
+    private gameNumber: number;
 
     constructor(public subFileID: number, public name: string) {
         this.id = subFileID.toString();
+        this.gameNumber = 1;
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
@@ -158,10 +109,10 @@ class SpyroScene implements SceneDesc {
         const textures = await context.dataFetcher.fetchData(`${pathBase1}/sf${this.subFileID}_list.bin`);
         const sky = await context.dataFetcher.fetchData(`${pathBase1}/sf${this.subFileID}_sky1.bin`);
 
-        const tileGroups = parseTileGroups(textures.createDataView(), 1);
-        const tileAtlas = buildTileAtlas(new VRAM(vram.copyToBuffer()), tileGroups, 1);
-        const level = buildLevel(ground.createDataView(), tileAtlas, 1);
-        const skybox = buildSkybox(sky.createDataView(), 1);
+        const tileGroups = parseTileGroups(textures.createDataView(), this.gameNumber);
+        const tileAtlas = buildTileAtlas(new VRAM(vram.copyToBuffer()), tileGroups, this.gameNumber);
+        const level = buildLevel(ground.createDataView(), tileAtlas, this.gameNumber);
+        const skybox = buildSkybox(sky.createDataView(), this.gameNumber);
         const renderer = new SpyroRenderer(device, level, skybox);
 
         return renderer;
@@ -171,9 +122,11 @@ class SpyroScene implements SceneDesc {
 const pathBase2 = "Spyro2";
 class SpyroScene2 implements SceneDesc {
     public id: string;
+    private gameNumber: number;
 
     constructor(public subFileID: number, public name: string) {
         this.id = subFileID.toString();
+        this.gameNumber = 2;
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
@@ -182,14 +135,14 @@ class SpyroScene2 implements SceneDesc {
         const textures = await context.dataFetcher.fetchData(`${pathBase2}/sf${this.subFileID}_list.bin`);
         const sky = await context.dataFetcher.fetchData(`${pathBase2}/sf${this.subFileID}_sky.bin`);
 
-        const tileGroups = parseTileGroups(textures.createDataView(), 2);
+        const tileGroups = parseTileGroups(textures.createDataView(), this.gameNumber);
         const vramObj = new VRAM(vram.copyToBuffer());
         vramObj.applyFontStripFix();
 
-        const tileAtlas = buildTileAtlas(vramObj, tileGroups, 2);
-        const level = buildLevel(ground.createDataView(), tileAtlas, 2);
-        const skybox = buildSkybox(sky.createDataView(), 2);
-        const renderer = new SpyroRenderer2(device, level, skybox);
+        const tileAtlas = buildTileAtlas(vramObj, tileGroups, this.gameNumber);
+        const level = buildLevel(ground.createDataView(), tileAtlas, this.gameNumber);
+        const skybox = buildSkybox(sky.createDataView(), this.gameNumber);
+        const renderer = new SpyroRenderer(device, level, skybox);
 
         return renderer;
     }

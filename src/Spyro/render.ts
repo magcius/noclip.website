@@ -121,10 +121,10 @@ export class LevelRenderer {
         );
 
         const expandedPos: number[] = [];
-        const expandedCol: number[] = [];
+        const expandedColor: number[] = [];
         const expandedUV: number[] = [];
-        const expandedIdxOpaque: number[] = [];
-        const expandedIdxWater: number[] = [];
+        const expandedIndexGround: number[] = [];
+        const expandedIndexWater: number[] = [];
         let runningIndex = 0;
 
         for (const face of faces) {
@@ -142,8 +142,7 @@ export class LevelRenderer {
                     g = c[1] / 255;
                     b = c[2] / 255;
                 }
-                const alpha = isWater ? 0.3 : 1.0;
-                expandedCol.push(r, g, b, alpha);
+                expandedColor.push(r, g, b, isWater ? 0.3 : 1.0);
                 if (uvIndices) {
                     const uvVal = uvs[uvIndices[k]];
                     expandedUV.push(uvVal[0], uvVal[1]);
@@ -151,28 +150,28 @@ export class LevelRenderer {
                     expandedUV.push(0, 0);
                 }
                 if (isWater) {
-                    expandedIdxWater.push(runningIndex);
+                    expandedIndexWater.push(runningIndex);
                 } else {
-                    expandedIdxOpaque.push(runningIndex);
+                    expandedIndexGround.push(runningIndex);
                 }
                 runningIndex++;
             }
         }
 
-        const idxOpaque = new Uint32Array(expandedIdxOpaque);
-        const idxWater  = new Uint32Array(expandedIdxWater);
+        const indexGround = new Uint32Array(expandedIndexGround);
+        const indexWater = new Uint32Array(expandedIndexWater);
         this.vertexBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, new Float32Array(expandedPos).buffer);
-        this.colorBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, new Float32Array(expandedCol).buffer);
+        this.colorBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, new Float32Array(expandedColor).buffer);
         this.uvBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, new Float32Array(expandedUV).buffer);
-        this.indexBufferGround = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, idxOpaque.buffer);
-        this.indexBufferWater = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, idxWater.buffer);
-        this.indexCountGround = idxOpaque.length;
-        this.indexCountWater = idxWater.length;
+        this.indexBufferGround = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, indexGround.buffer);
+        this.indexBufferWater = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, indexWater.buffer);
+        this.indexCountGround = indexGround.length;
+        this.indexCountWater = indexWater.length;
         this.inputLayout = cache.createInputLayout({
             vertexAttributeDescriptors: [
-                { location: 0, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0 },  // a_Position
-                { location: 1, bufferIndex: 1, format: GfxFormat.F32_RGBA, bufferByteOffset: 0 },  // a_Color
-                { location: 2, bufferIndex: 2, format: GfxFormat.F32_RG,  bufferByteOffset: 0 },  // a_UV
+                { location: 0, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0 }, // a_Position
+                { location: 1, bufferIndex: 1, format: GfxFormat.F32_RGBA, bufferByteOffset: 0 }, // a_Color
+                { location: 2, bufferIndex: 2, format: GfxFormat.F32_RG,  bufferByteOffset: 0 }, // a_UV
             ],
             vertexBufferDescriptors: [
                 { byteStride: 12, frequency: GfxVertexBufferFrequency.PerVertex }, // pos (x,y,z)
@@ -328,22 +327,22 @@ export class SkyboxRenderer {
         const device = cache.device;
         const { vertices, colors, faces } = sky;
         const expandedPos: number[] = [];
-        const expandedCol: number[] = [];
-        const expandedIdx: number[] = [];
+        const expandedColor: number[] = [];
+        const expandedIndex: number[] = [];
         let runningIndex = 0;
         for (const face of faces) {
             const { indices, colorIndices } = face;
             for (let k = 0; k < 3; k++) {
-                const v = vertices[indices[k]];
-                const c = colors[colorIndices[k]];
-                expandedPos.push(v[0], v[1], v[2]);
-                expandedCol.push(c[0] / 255, c[1] / 255, c[2] / 255);
-                expandedIdx.push(runningIndex++);
+                const vertex = vertices[indices[k]];
+                const color = colors[colorIndices[k]];
+                expandedPos.push(vertex[0], vertex[1], vertex[2]);
+                expandedColor.push(color[0] / 255, color[1] / 255, color[2] / 255);
+                expandedIndex.push(runningIndex++);
             }
         }
-        const idx = new Uint32Array(expandedIdx);
+        const idx = new Uint32Array(expandedIndex);
         this.vertexBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, new Float32Array(expandedPos).buffer);
-        this.colorBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, new Float32Array(expandedCol).buffer);
+        this.colorBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, new Float32Array(expandedColor).buffer);
         this.indexBuffer = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, idx.buffer);
         this.indexCount = idx.length;
         this.inputLayout = cache.createInputLayout({

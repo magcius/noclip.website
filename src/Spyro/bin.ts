@@ -524,34 +524,18 @@ function buildFaces2(poly: Poly, mdlVertStart: number, mdlColorStart: number, fa
     }
 }
 
-function computeZScale(view: DataView, polyStart: number, polyCount: number, header: Header): number {
-    if (header.w !== 0)
-        return 2.0;
-    let p = polyStart;
-    for (let i = 0; i < polyCount; i++) {
-        const d1 = view.getUint8(p + 8);
-        const d2 = view.getUint8(p + 9);
-        const d3 = view.getUint8(p + 10);
-        const d4 = view.getUint8(p + 11);
-        if (d1 + d2 + d3 + d4 !== 0)
-            return 2.0;
-        p += 16;
-    }
-    return 0.25;
-}
-
 export function buildSkybox(view: DataView, gameNumber: number): Skybox {
     const size = view.byteLength;
-    let p = 0;
-    const bgR = view.getUint8(p + 0);
-    const bgG = view.getUint8(p + 1);
-    const bgB = view.getUint8(p + 2);
-    p += 4;
+    let pointer = 0;
+    const bgR = view.getUint8(pointer + 0);
+    const bgG = view.getUint8(pointer + 1);
+    const bgB = view.getUint8(pointer + 2);
+    pointer += 4;
     const backgroundColor: [number, number, number] = [bgR, bgG, bgB];
     const partOffsets: number[] = [];
-    while (p + 4 <= size) {
-        const ptr = view.getUint32(p, true);
-        p += 4;
+    while (pointer + 4 <= size) {
+        const ptr = view.getUint32(pointer, true);
+        pointer += 4;
         if (ptr === 0) break;
         if (ptr >= size) break;
         partOffsets.push(ptr);
@@ -580,9 +564,10 @@ export function buildLevel(view: DataView, atlas: TileAtlas, gameNumber: number)
     offs += 4;
     const start = 8;
     const partOffsets: number[] = [];
+
     if (gameNumber == 2) {
         offs = 0;
-        let partTableOffset = view.getUint32(offs, true);
+        const partTableOffset = view.getUint32(offs, true);
         offs += 4;
         let partTablePos = partTableOffset;
         partCount = view.getUint32(partTablePos, true);
@@ -593,32 +578,26 @@ export function buildLevel(view: DataView, atlas: TileAtlas, gameNumber: number)
             partOffsets.push(off);
         }
     }
+
     for (let part = 0; part < partCount; part++) {
         let abs = 0;
-        let p = 0;
+        let pointer = 0;
         if (gameNumber == 1) {
             const offset = view.getUint32(offs, true);
             offs += 4;
             abs = offset + start;
-            p = abs;
+            pointer = abs;
         } else if (gameNumber == 2) {
             abs = partOffsets[part] + 8;
-            p = abs;
+            pointer = abs;
         }
-        const header = new Header(view, p);
-        p += Header.size;
-        let zScale = 1.0;
-        if (gameNumber == 2) {
-            let mdlPolyStart = abs + Header.size + header.v1 * 4
-                + header.c1 * 4 + header.p1 * 8 + header.v2 * 4
-                + header.c2 * 4 + header.c2 * 4;
-            zScale = computeZScale(view, mdlPolyStart, header.p2, header);
-        }
+        const header = new Header(view, pointer);
+        pointer += Header.size;
 
         // LOD vertices
         for (let i = 0; i < header.v1; i++) {
-            const v = new Vertex(view, p);
-            p += 4;
+            const v = new Vertex(view, pointer);
+            pointer += 4;
             const z = (v.b1 | ((v.b2 & 3) << 8)) + header.z;
             const y = ((v.b2 >> 2) | ((v.b3 & 31) << 6)) + header.y;
             const x = ((v.b3 >> 5) | (v.b4 << 3)) + header.x;
@@ -627,51 +606,68 @@ export function buildLevel(view: DataView, atlas: TileAtlas, gameNumber: number)
 
         // LOD colors
         for (let i = 0; i < header.c1; i++) {
-            const c = new Color(view, p);
-            p += 4;
+            const c = new Color(view, pointer);
+            pointer += 4;
             colors.push([c.r, c.g, c.b]);
         }
 
         // LOD polys
         for (let i = 0; i < header.p1; i++) {
-            p += 8;
+            pointer += 8;
         }
 
         // MDL/FAR/TEX vertices
+        let isWaterNonGround = false;
+        if (gameNumber === 2) {
+            let polyPos = pointer + header.v2 * 4 + header.c2 * 4 + header.c2 * 4;
+            for (let i = 0; i < header.p2; i++) {
+                const s1 = view.getUint8(polyPos + 8);
+                const s2 = view.getUint8(polyPos + 9);
+                const s3 = view.getUint8(polyPos + 10);
+                const s4 = view.getUint8(polyPos + 11);
+                if (s1 === 0 && s2 === 0 && s3 === 0 && s4 === 0) {
+                    isWaterNonGround = true;
+                    break;
+                }
+                polyPos += 16;
+            }
+        }
         const mdlVertStart = vertices.length;
         for (let i = 0; i < header.v2; i++) {
-            const v = new Vertex(view, p);
-            p += 4;
-            let z = (v.b1 | ((v.b2 & 3) << 8)) + header.z;
+            const vertex = new Vertex(view, pointer);
+            pointer += 4;
+            const zraw = (vertex.b1 | ((vertex.b2 & 3) << 8));
+            let z = zraw + header.z;
             if (gameNumber == 2) {
-                let zraw = (v.b1 | ((v.b2 & 3) << 8));
-                if (header.w > 0) {
+                // z-scaling
+                // non-ground water is usually flat water, while "ground" water is usually sloped (different signatures)
+                const far = header.v1 === 0 && header.f === 0xFFFFFFFF;
+                if ((far && !isWaterNonGround) || (far && isWaterNonGround && header.w > 0) || (!far && header.w > 0)) {
                     z = (zraw << 1) + header.z;
-                } else {
+                } else if ((far && isWaterNonGround && header.w <= 0) || (!far && header.w <= 0)) {
                     z = (zraw >> 2) + header.z;
                 }
-                // z *= zScale;
             }
-            const y = ((v.b2 >> 2) | ((v.b3 & 31) << 6)) + header.y;
-            const x = ((v.b3 >> 5) | (v.b4 << 3)) + header.x;
+            const y = ((vertex.b2 >> 2) | ((vertex.b3 & 31) << 6)) + header.y;
+            const x = ((vertex.b3 >> 5) | (vertex.b4 << 3)) + header.x;
             vertices.push([x, y, z]);
         }
 
         // MDL colors
         const mdlColorStart = colors.length;
         for (let i = 0; i < header.c2; i++) {
-            const c = new Color(view, p);
-            p += 4;
-            colors.push([c.r, c.g, c.b]);
+            const color = new Color(view, pointer);
+            pointer += 4;
+            colors.push([color.r, color.g, color.b]);
         }
 
         // FAR colors (ignored)
-        p += header.c2 * 4;
+        pointer += header.c2 * 4;
 
         // Textured polys
         for (let i = 0; i < header.p2; i++) {
-            const poly = new Poly(view, p, gameNumber);
-            p += 16;
+            const poly = new Poly(view, pointer, gameNumber);
+            pointer += 16;
             if (gameNumber == 1) {
                 buildFaces1(poly, mdlVertStart, mdlColorStart, faces, uvs, atlas)
             } else if (gameNumber == 2) {
