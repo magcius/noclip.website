@@ -2,7 +2,7 @@ import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase.js";
 import { SceneGfx, ViewerRenderInput } from "../viewer.js";
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
-import { buildCombinedAtlas, buildCombinedAtlas2, buildLevelData, buildSkybox, parseTileGroups, parseTileGroups2, VRAM, SkyboxData, LevelData } from "./bin.js"
+import { buildTileAtlas, buildLevel, buildSkybox, parseTileGroups, VRAM, Skybox, Level } from "./bin.js"
 import { LevelRenderer, SkyboxRenderer } from "./render.js"
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
 import { GfxRenderInstList } from "../gfx/render/GfxRenderInstManager.js";
@@ -20,7 +20,7 @@ To-do list
         
     Spyro 2
         The title screen needs its low-poly parts rendered to look correct (and possibly some others)
-            All levels are currently only showing high-poly/textured (see buildLevelData in bin.ts)
+            All levels are currently only showing high-poly/textured (see buildLevel in bin.ts)
         Water is mostly correct but the tinting is hardcoded in the shader
         There are a very small number of incorrect faces (unsure if all the same problem or different. Some could be invisible walls/collision related)
             Below the Ocean Speedway portal in Summer Forest there's stray faces
@@ -28,6 +28,7 @@ To-do list
             Colossus has a z-fighting face in the hockey rink's ice
             Hurricos has black polygons in the gates that need spark plugs to open
             Aquaria Towers has some of the tower numbers' faces being rendered as water
+            A missing face next to the destroyable wall in Autumn Plains
             Zephyr has a stray face that's treated as water in the plant/seed section (the exploded building is expected!)
             Metropolis has some faces at the starting area that are incorrectly rendered as water
             Dragon Shores has a water triangle along the edge "ocean" that appears much brighter and has z-fighting
@@ -41,17 +42,17 @@ Nice to have
     Read directly from WAD.WAD by offset instead of extracting subfiles (if better than extraction)
 */
 
-class Spyro1Renderer implements SceneGfx {
+class SpyroRenderer implements SceneGfx {
     private renderHelper: GfxRenderHelper;
     private renderInstListMain = new GfxRenderInstList();
     private levelRenderer: LevelRenderer;
     private skyboxRenderer: SkyboxRenderer;
     private clearColor: number[];
 
-    constructor(device: GfxDevice, levelData: LevelData, skybox: SkyboxData) {
+    constructor(device: GfxDevice, level: Level, skybox: Skybox) {
         this.renderHelper = new GfxRenderHelper(device);
         const cache = this.renderHelper.renderCache;
-        this.levelRenderer = new LevelRenderer(cache, levelData);
+        this.levelRenderer = new LevelRenderer(cache, level);
         this.skyboxRenderer = new SkyboxRenderer(cache, skybox);
         this.clearColor = skybox.backgroundColor;
     }
@@ -92,17 +93,17 @@ class Spyro1Renderer implements SceneGfx {
     }
 }
 
-class Spyro2Renderer implements SceneGfx {
+class SpyroRenderer2 implements SceneGfx {
     private renderHelper: GfxRenderHelper;
     private renderInstListMain = new GfxRenderInstList();
     private levelRenderer: LevelRenderer;
     private skyboxRenderer: SkyboxRenderer;
     private clearColor: number[];
 
-    constructor(device: GfxDevice, levelData: LevelData, skybox: SkyboxData) {
+    constructor(device: GfxDevice, level: Level, skybox: Skybox) {
         this.renderHelper = new GfxRenderHelper(device);
         const cache = this.renderHelper.renderCache;
-        this.levelRenderer = new LevelRenderer(cache, levelData);
+        this.levelRenderer = new LevelRenderer(cache, level);
         this.skyboxRenderer = new SkyboxRenderer(cache, skybox);
         this.clearColor = skybox.backgroundColor;
     }
@@ -144,7 +145,7 @@ class Spyro2Renderer implements SceneGfx {
 }
 
 const pathBase1 = "Spyro1";
-class Spyro1Scene implements SceneDesc {
+class SpyroScene implements SceneDesc {
     public id: string;
 
     constructor(public subFileID: number, public name: string) {
@@ -156,15 +157,19 @@ class Spyro1Scene implements SceneDesc {
         const vram = await context.dataFetcher.fetchData(`${pathBase1}/sf${this.subFileID}_vram.bin`);
         const textures = await context.dataFetcher.fetchData(`${pathBase1}/sf${this.subFileID}_list.bin`);
         const sky = await context.dataFetcher.fetchData(`${pathBase1}/sf${this.subFileID}_sky1.bin`);
-        const tileGroups = parseTileGroups(textures.createDataView());
-        const combinedAtlas = buildCombinedAtlas(new VRAM(vram.copyToBuffer()), tileGroups);
-        const renderer = new Spyro1Renderer(device, buildLevelData(ground.createDataView(), combinedAtlas, 1), buildSkybox(sky.createDataView(), 1));
+
+        const tileGroups = parseTileGroups(textures.createDataView(), 1);
+        const tileAtlas = buildTileAtlas(new VRAM(vram.copyToBuffer()), tileGroups, 1);
+        const level = buildLevel(ground.createDataView(), tileAtlas, 1);
+        const skybox = buildSkybox(sky.createDataView(), 1);
+        const renderer = new SpyroRenderer(device, level, skybox);
+
         return renderer;
     }
 }
 
 const pathBase2 = "Spyro2";
-class Spyro2Scene implements SceneDesc {
+class SpyroScene2 implements SceneDesc {
     public id: string;
 
     constructor(public subFileID: number, public name: string) {
@@ -176,11 +181,16 @@ class Spyro2Scene implements SceneDesc {
         const vram = await context.dataFetcher.fetchData(`${pathBase2}/sf${this.subFileID}_vram.bin`);
         const textures = await context.dataFetcher.fetchData(`${pathBase2}/sf${this.subFileID}_list.bin`);
         const sky = await context.dataFetcher.fetchData(`${pathBase2}/sf${this.subFileID}_sky.bin`);
-        const tileGroups = parseTileGroups2(textures.createDataView());
+
+        const tileGroups = parseTileGroups(textures.createDataView(), 2);
         const vramObj = new VRAM(vram.copyToBuffer());
-        vramObj.applySpyro2FontStripFix();
-        const combinedAtlas = buildCombinedAtlas2(vramObj, tileGroups);
-        const renderer = new Spyro2Renderer(device, buildLevelData(ground.createDataView(), combinedAtlas, 2), buildSkybox(sky.createDataView(), 2));
+        vramObj.applyFontStripFix();
+
+        const tileAtlas = buildTileAtlas(vramObj, tileGroups, 2);
+        const level = buildLevel(ground.createDataView(), tileAtlas, 2);
+        const skybox = buildSkybox(sky.createDataView(), 2);
+        const renderer = new SpyroRenderer2(device, level, skybox);
+
         return renderer;
     }
 }
@@ -189,133 +199,133 @@ const id1 = "Spyro1";
 const name1 = "Spyro the Dragon";
 const sceneDescs1 = [
     "Artisans",
-    new Spyro1Scene(11, "Artisans Homeworld"),
-    new Spyro1Scene(13, "Stone Hill"),
-    new Spyro1Scene(15, "Dark Hollow"),
-    new Spyro1Scene(17, "Town Square"),
-    new Spyro1Scene(21, "Sunny Flight"),
-    new Spyro1Scene(19, "Toasty"),
+    new SpyroScene(11, "Artisans Homeworld"),
+    new SpyroScene(13, "Stone Hill"),
+    new SpyroScene(15, "Dark Hollow"),
+    new SpyroScene(17, "Town Square"),
+    new SpyroScene(21, "Sunny Flight"),
+    new SpyroScene(19, "Toasty"),
     "Peace Keepers",
-    new Spyro1Scene(23, "Peace Keepers Homeworld"),
-    new Spyro1Scene(25, "Dry Canyon"),
-    new Spyro1Scene(27, "Cliff Town"),
-    new Spyro1Scene(29, "Ice Cavern"),
-    new Spyro1Scene(33, "Night Flight"),
-    new Spyro1Scene(31, "Doctor Shemp"),
+    new SpyroScene(23, "Peace Keepers Homeworld"),
+    new SpyroScene(25, "Dry Canyon"),
+    new SpyroScene(27, "Cliff Town"),
+    new SpyroScene(29, "Ice Cavern"),
+    new SpyroScene(33, "Night Flight"),
+    new SpyroScene(31, "Doctor Shemp"),
     "Magic Crafters",
-    new Spyro1Scene(35, "Magic Crafters Homeworld"),
-    new Spyro1Scene(37, "Alpine Ridge"),
-    new Spyro1Scene(39, "High Caves"),
-    new Spyro1Scene(41, "Wizard Peak"),
-    new Spyro1Scene(45, "Crystal Flight"),
-    new Spyro1Scene(43, "Blowhard"),
+    new SpyroScene(35, "Magic Crafters Homeworld"),
+    new SpyroScene(37, "Alpine Ridge"),
+    new SpyroScene(39, "High Caves"),
+    new SpyroScene(41, "Wizard Peak"),
+    new SpyroScene(45, "Crystal Flight"),
+    new SpyroScene(43, "Blowhard"),
     "Beast Makers",
-    new Spyro1Scene(47, "Beast Makers Homeworld"),
-    new Spyro1Scene(49, "Terrace Village"),
-    new Spyro1Scene(51, "Misty Bog"),
-    new Spyro1Scene(53, "Tree Tops"),
-    new Spyro1Scene(57, "Wild Flight"),
-    new Spyro1Scene(55, "Metalhead"),
+    new SpyroScene(47, "Beast Makers Homeworld"),
+    new SpyroScene(49, "Terrace Village"),
+    new SpyroScene(51, "Misty Bog"),
+    new SpyroScene(53, "Tree Tops"),
+    new SpyroScene(57, "Wild Flight"),
+    new SpyroScene(55, "Metalhead"),
     "Dream Weavers",
-    new Spyro1Scene(59, "Dream Weavers Homeworld"),
-    new Spyro1Scene(61, "Dark Passage"),
-    new Spyro1Scene(63, "Lofty Castle"),
-    new Spyro1Scene(65, "Haunted Towers"),
-    new Spyro1Scene(69, "Icy Flight"),
-    new Spyro1Scene(67, "Jacques"),
+    new SpyroScene(59, "Dream Weavers Homeworld"),
+    new SpyroScene(61, "Dark Passage"),
+    new SpyroScene(63, "Lofty Castle"),
+    new SpyroScene(65, "Haunted Towers"),
+    new SpyroScene(69, "Icy Flight"),
+    new SpyroScene(67, "Jacques"),
     "Gnorc Gnexus",
-    new Spyro1Scene(71, "Gnorc Gnexus Homeworld"),
-    new Spyro1Scene(73, "Gnorc Cove"),
-    new Spyro1Scene(75, "Twilight Harbor"),
-    new Spyro1Scene(77, "Gnasty Gnorc"),
-    new Spyro1Scene(79, "Gnasty's Loot"),
+    new SpyroScene(71, "Gnorc Gnexus Homeworld"),
+    new SpyroScene(73, "Gnorc Cove"),
+    new SpyroScene(75, "Twilight Harbor"),
+    new SpyroScene(77, "Gnasty Gnorc"),
+    new SpyroScene(79, "Gnasty's Loot"),
     "Cutscenes",
-    new Spyro1Scene(4, "Title Screen"),
-    new Spyro1Scene(5, "Introduction"),
-    new Spyro1Scene(6, "Ending"),
-    new Spyro1Scene(7, "Ending (Full Completion)"),
+    new SpyroScene(4, "Title Screen"),
+    new SpyroScene(5, "Introduction"),
+    new SpyroScene(6, "Ending"),
+    new SpyroScene(7, "Ending (Full Completion)"),
     "Credits Flyover",
-    new Spyro1Scene(83, "Artisans Homeworld"),
-    new Spyro1Scene(84, "Stone Hill"),
-    new Spyro1Scene(85, "Town Square"),
-    new Spyro1Scene(92, "Toasty"),
-    new Spyro1Scene(86, "Peace Keepers Homeworld"),
-    new Spyro1Scene(87, "Cliff Town"),
-    new Spyro1Scene(88, "Doctor Shemp"),
-    new Spyro1Scene(89, "Magic Crafters Homeworld"),
-    new Spyro1Scene(90, "High Caves"),
-    new Spyro1Scene(91, "Wizard Peak"),
-    new Spyro1Scene(93, "Terrace Village"),
-    new Spyro1Scene(97, "Wild Flight"),
-    new Spyro1Scene(94, "Metalhead"),
-    new Spyro1Scene(95, "Dark Passage"),
-    new Spyro1Scene(96, "Haunted Towers"),
-    new Spyro1Scene(99, "Icy Flight"),
-    new Spyro1Scene(102, "Jacques"),
-    new Spyro1Scene(98, "Gnorc Cove"),
-    new Spyro1Scene(101, "Twilight Harbor"),
-    new Spyro1Scene(100, "Gnasty Gnorc")
+    new SpyroScene(83, "Artisans Homeworld"),
+    new SpyroScene(84, "Stone Hill"),
+    new SpyroScene(85, "Town Square"),
+    new SpyroScene(92, "Toasty"),
+    new SpyroScene(86, "Peace Keepers Homeworld"),
+    new SpyroScene(87, "Cliff Town"),
+    new SpyroScene(88, "Doctor Shemp"),
+    new SpyroScene(89, "Magic Crafters Homeworld"),
+    new SpyroScene(90, "High Caves"),
+    new SpyroScene(91, "Wizard Peak"),
+    new SpyroScene(93, "Terrace Village"),
+    new SpyroScene(97, "Wild Flight"),
+    new SpyroScene(94, "Metalhead"),
+    new SpyroScene(95, "Dark Passage"),
+    new SpyroScene(96, "Haunted Towers"),
+    new SpyroScene(99, "Icy Flight"),
+    new SpyroScene(102, "Jacques"),
+    new SpyroScene(98, "Gnorc Cove"),
+    new SpyroScene(101, "Twilight Harbor"),
+    new SpyroScene(100, "Gnasty Gnorc")
 ];
 
 const id2 = "Spyro2";
 const name2 = "Spyro 2: Ripto's Rage!";
 const sceneDescs2 = [
     "Summer Forest",
-    new Spyro2Scene(16, "Summer Forest Homeworld"),
-    new Spyro2Scene(18, "Glimmer"),
-    new Spyro2Scene(20, "Idol Springs"),
-    new Spyro2Scene(22, "Colossus"),
-    new Spyro2Scene(24, "Hurricos"),
-    new Spyro2Scene(28, "Sunny Beach"),
-    new Spyro2Scene(26, "Aquaria Towers"),
-    new Spyro2Scene(30, "Ocean Speedway"),
-    new Spyro2Scene(32, "Crush's Dungeon"),
+    new SpyroScene2(16, "Summer Forest Homeworld"),
+    new SpyroScene2(18, "Glimmer"),
+    new SpyroScene2(20, "Idol Springs"),
+    new SpyroScene2(22, "Colossus"),
+    new SpyroScene2(24, "Hurricos"),
+    new SpyroScene2(28, "Sunny Beach"),
+    new SpyroScene2(26, "Aquaria Towers"),
+    new SpyroScene2(30, "Ocean Speedway"),
+    new SpyroScene2(32, "Crush's Dungeon"),
     "Autumn Plains",
-    new Spyro2Scene(34, "Autumn Plains Homeworld"),
-    new Spyro2Scene(36, "Skelos Badlands"),
-    new Spyro2Scene(38, "Crystal Glacier"),
-    new Spyro2Scene(40, "Breeze Harbor"),
-    new Spyro2Scene(42, "Zephyr"),
-    new Spyro2Scene(46, "Scorch"),
-    new Spyro2Scene(52, "Fracture Hills"),
-    new Spyro2Scene(50, "Magma Cone"),
-    new Spyro2Scene(48, "Shady Oasis"),
-    new Spyro2Scene(44, "Metro Speedway"),
-    new Spyro2Scene(54, "Icy Speedway"),
-    new Spyro2Scene(56, "Gulp's Overlook"),
+    new SpyroScene2(34, "Autumn Plains Homeworld"),
+    new SpyroScene2(36, "Skelos Badlands"),
+    new SpyroScene2(38, "Crystal Glacier"),
+    new SpyroScene2(40, "Breeze Harbor"),
+    new SpyroScene2(42, "Zephyr"),
+    new SpyroScene2(46, "Scorch"),
+    new SpyroScene2(52, "Fracture Hills"),
+    new SpyroScene2(50, "Magma Cone"),
+    new SpyroScene2(48, "Shady Oasis"),
+    new SpyroScene2(44, "Metro Speedway"),
+    new SpyroScene2(54, "Icy Speedway"),
+    new SpyroScene2(56, "Gulp's Overlook"),
     "Winter Tundra",
-    new Spyro2Scene(58, "Winter Tundra Homeworld"),
-    new Spyro2Scene(62, "Cloud Temples"),
-    new Spyro2Scene(60, "Mystic Marsh"),
-    new Spyro2Scene(66, "Robotica Farms"),
-    new Spyro2Scene(68, "Metropolis"),
-    new Spyro2Scene(64, "Canyon Speedway"),
-    new Spyro2Scene(72, "Ripto's Arena"),
-    new Spyro2Scene(70, "Dragon Shores"),
+    new SpyroScene2(58, "Winter Tundra Homeworld"),
+    new SpyroScene2(62, "Cloud Temples"),
+    new SpyroScene2(60, "Mystic Marsh"),
+    new SpyroScene2(66, "Robotica Farms"),
+    new SpyroScene2(68, "Metropolis"),
+    new SpyroScene2(64, "Canyon Speedway"),
+    new SpyroScene2(72, "Ripto's Arena"),
+    new SpyroScene2(70, "Dragon Shores"),
     "Cutscenes",
-    new Spyro2Scene(96, "Title Screen"),
-    new Spyro2Scene(74, "Introduction"),
-    new Spyro2Scene(76, "Glimmer (Intro)"),
-    new Spyro2Scene(78, "Summer Forest (Intro)"),
-    new Spyro2Scene(80, "Winter Tundra (Interlude)"),
-    new Spyro2Scene(82, "Crush's Dungeon (Outro)"),
-    new Spyro2Scene(84, "Autumn Plains (Intro)"),
-    new Spyro2Scene(86, "Gulp's Overlook (Intro)"),
-    new Spyro2Scene(88, "Gulp's Overlook (Outro)"),
-    new Spyro2Scene(90, "Winter Tundra (Intro)"),
-    new Spyro2Scene(92, "Ripto's Arena (Intro)"),
-    new Spyro2Scene(94, "Ripto's Arena (Outro)")
+    new SpyroScene2(96, "Title Screen"),
+    new SpyroScene2(74, "Introduction"),
+    new SpyroScene2(76, "Glimmer (Intro)"),
+    new SpyroScene2(78, "Summer Forest (Intro)"),
+    new SpyroScene2(80, "Winter Tundra (Interlude)"),
+    new SpyroScene2(82, "Crush's Dungeon (Outro)"),
+    new SpyroScene2(84, "Autumn Plains (Intro)"),
+    new SpyroScene2(86, "Gulp's Overlook (Intro)"),
+    new SpyroScene2(88, "Gulp's Overlook (Outro)"),
+    new SpyroScene2(90, "Winter Tundra (Intro)"),
+    new SpyroScene2(92, "Ripto's Arena (Intro)"),
+    new SpyroScene2(94, "Ripto's Arena (Outro)")
     // "Credits Flyover", // currently broken but these are the valid ids
-    // new Spyro2Scene(188, "Flyover"),
-    // new Spyro2Scene(189, "Flyover"),
-    // new Spyro2Scene(190, "Flyover"),
-    // new Spyro2Scene(191, "Flyover"),
-    // new Spyro2Scene(192, "Flyover"),
-    // new Spyro2Scene(193, "Flyover"),
-    // new Spyro2Scene(194, "Flyover"),
-    // new Spyro2Scene(195, "Flyover"),
-    // new Spyro2Scene(196, "Flyover"),
-    // new Spyro2Scene(197, "Flyover")
+    // new SpyroScene2(188, "Flyover"),
+    // new SpyroScene2(189, "Flyover"),
+    // new SpyroScene2(190, "Flyover"),
+    // new SpyroScene2(191, "Flyover"),
+    // new SpyroScene2(192, "Flyover"),
+    // new SpyroScene2(193, "Flyover"),
+    // new SpyroScene2(194, "Flyover"),
+    // new SpyroScene2(195, "Flyover"),
+    // new SpyroScene2(196, "Flyover"),
+    // new SpyroScene2(197, "Flyover")
 ];
 
 export const sceneGroup1: SceneGroup = {id: id1, name: name1, sceneDescs: sceneDescs1};

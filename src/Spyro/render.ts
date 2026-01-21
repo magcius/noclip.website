@@ -7,7 +7,7 @@ import { GfxBuffer, GfxInputLayout, GfxTexture } from "../gfx/platform/GfxPlatfo
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { DeviceProgram } from "../Program";
 import { ViewerRenderInput } from "../viewer";
-import { SkyboxData, LevelData } from "./bin";
+import { Skybox, Level } from "./bin";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { createBufferFromData } from "../gfx/helpers/BufferHelpers";
 
@@ -83,9 +83,9 @@ export class LevelRenderer {
     private vertexBuffer: GfxBuffer;
     private colorBuffer: GfxBuffer;
     private uvBuffer: GfxBuffer;
-    private indexBufferOpaque: GfxBuffer;
+    private indexBufferGround: GfxBuffer;
     private indexBufferWater: GfxBuffer;
-    private indexCountOpaque: number;
+    private indexCountGround: number;
     private indexCountWater: number;
     private inputLayout: GfxInputLayout;
     private texture: GfxTexture;
@@ -93,9 +93,9 @@ export class LevelRenderer {
     private levelMax: vec3;
     private levelCenter: vec3;
 
-    constructor(cache: GfxRenderCache, levelData: LevelData) {
+    constructor(cache: GfxRenderCache, level: Level) {
         const device = cache.device;
-        const atlas = levelData.atlas;
+        const atlas = level.atlas;
         
         this.texture = device.createTexture({
             width: atlas.width,
@@ -108,7 +108,7 @@ export class LevelRenderer {
         });
         device.uploadTextureData(this.texture, 0, [atlas.data]);
 
-        const { vertices, colors, faces, uvs } = levelData;
+        const { vertices, colors, faces, uvs } = level;
         const xs = vertices.map(v => v[0]);
         const ys = vertices.map(v => v[1]);
         const zs = vertices.map(v => v[2]);
@@ -164,9 +164,9 @@ export class LevelRenderer {
         this.vertexBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, new Float32Array(expandedPos).buffer);
         this.colorBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, new Float32Array(expandedCol).buffer);
         this.uvBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, new Float32Array(expandedUV).buffer);
-        this.indexBufferOpaque = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, idxOpaque.buffer);
+        this.indexBufferGround = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, idxOpaque.buffer);
         this.indexBufferWater = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, idxWater.buffer);
-        this.indexCountOpaque = idxOpaque.length;
+        this.indexCountGround = idxOpaque.length;
         this.indexCountWater = idxWater.length;
         this.inputLayout = cache.createInputLayout({
             vertexAttributeDescriptors: [
@@ -214,9 +214,9 @@ export class LevelRenderer {
             [
                 { buffer: this.vertexBuffer, byteOffset: 0 },
                 { buffer: this.colorBuffer, byteOffset: 0 },
-                { buffer: this.uvBuffer, byteOffset: 0 },
+                { buffer: this.uvBuffer, byteOffset: 0 }
             ],
-            { buffer: this.indexBufferOpaque, byteOffset: 0 },
+            { buffer: this.indexBufferGround, byteOffset: 0 }
         );
 
         {
@@ -235,11 +235,11 @@ export class LevelRenderer {
                 [
                     { buffer: this.vertexBuffer, byteOffset: 0 },
                     { buffer: this.colorBuffer, byteOffset: 0 },
-                    { buffer: this.uvBuffer, byteOffset: 0 },
+                    { buffer: this.uvBuffer, byteOffset: 0 }
                 ],
-                { buffer: this.indexBufferOpaque, byteOffset: 0 },
+                { buffer: this.indexBufferGround, byteOffset: 0 }
             );
-            renderInst.setDrawCount(this.indexCountOpaque);
+            renderInst.setDrawCount(this.indexCountGround);
             renderInstManager.submitRenderInst(renderInst);
         }
 
@@ -259,9 +259,9 @@ export class LevelRenderer {
                 [
                     { buffer: this.vertexBuffer, byteOffset: 0 },
                     { buffer: this.colorBuffer, byteOffset: 0 },
-                    { buffer: this.uvBuffer, byteOffset: 0 },
+                    { buffer: this.uvBuffer, byteOffset: 0 }
                 ],
-                { buffer: this.indexBufferWater, byteOffset: 0 },
+                { buffer: this.indexBufferWater, byteOffset: 0 }
             );
             renderInst.setDrawCount(this.indexCountWater);
             renderInstManager.submitRenderInst(renderInst);
@@ -274,7 +274,7 @@ export class LevelRenderer {
         device.destroyBuffer(this.vertexBuffer);
         device.destroyBuffer(this.colorBuffer);
         device.destroyBuffer(this.uvBuffer);
-        device.destroyBuffer(this.indexBufferOpaque);
+        device.destroyBuffer(this.indexBufferGround);
         device.destroyBuffer(this.indexBufferWater);
         device.destroyTexture(this.texture);
     }
@@ -324,7 +324,7 @@ export class SkyboxRenderer {
     private indexCount: number;
     private inputLayout: GfxInputLayout;
 
-    constructor(cache: GfxRenderCache, sky: SkyboxData) {
+    constructor(cache: GfxRenderCache, sky: Skybox) {
         const device = cache.device;
         const { vertices, colors, faces } = sky;
         const expandedPos: number[] = [];
@@ -349,13 +349,13 @@ export class SkyboxRenderer {
         this.inputLayout = cache.createInputLayout({
             vertexAttributeDescriptors: [
                 { location: 0, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0 },
-                { location: 1, bufferIndex: 1, format: GfxFormat.F32_RGB, bufferByteOffset: 0 },
+                { location: 1, bufferIndex: 1, format: GfxFormat.F32_RGB, bufferByteOffset: 0 }
             ],
             vertexBufferDescriptors: [
                 { byteStride: 12, frequency: GfxVertexBufferFrequency.PerVertex },
-                { byteStride: 12, frequency: GfxVertexBufferFrequency.PerVertex },
+                { byteStride: 12, frequency: GfxVertexBufferFrequency.PerVertex }
             ],
-            indexBufferFormat: GfxFormat.U32_R,
+            indexBufferFormat: GfxFormat.U32_R
         });
     }
 
@@ -390,9 +390,9 @@ export class SkyboxRenderer {
             this.inputLayout,
             [
                 { buffer: this.vertexBuffer, byteOffset: 0 },
-                { buffer: this.colorBuffer,  byteOffset: 0 },
+                { buffer: this.colorBuffer,  byteOffset: 0 }
             ],
-            { buffer: this.indexBuffer, byteOffset: 0 },
+            { buffer: this.indexBuffer, byteOffset: 0 }
         );
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setDrawCount(this.indexCount);

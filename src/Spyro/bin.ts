@@ -28,25 +28,15 @@ interface TileGroups {
     lod: Tile[];
 }
 
-interface TileGroups2 {
-    lod: Tile[];
-    cor1: Tile[];
-    cor2: Tile[];
-    cor3: Tile[];
-    cor4: Tile[];
-}
-
 interface TileAtlas {
     data: Uint8Array;
     width: number;
     height: number;
     uvs: {u0: number; v0: number; u1: number; v1: number}[];
     tiles?: Tile[];
-    groups?: TileGroups2;
-    awater?: boolean[];
 }
 
-export type LevelData = {
+export type Level = {
   vertices: number[][];
   colors: number[][];
   faces: GroundFace[];
@@ -54,14 +44,14 @@ export type LevelData = {
   atlas: TileAtlas;
 };
 
-export interface SkyboxData {
+export interface Skybox {
     backgroundColor: [number, number, number];
     vertices: [number, number, number][];
     colors: [number, number, number][]; 
     faces: SkyboxFace[];
 }
 
-class HeaderGround {
+class Header {
     static size = 2+2+2+2 + 1+1+1+1 + 1+1+1+1 + 4;
     y: number; x: number; i0: number; z: number;
     v1: number; c1: number; p1: number; i1: number;
@@ -84,7 +74,7 @@ class HeaderGround {
     }
 }
 
-class VertexGround {
+class Vertex {
     b1: number; b2: number; b3: number; b4: number;
     constructor(view: DataView, offs: number) {
         this.b1 = view.getUint8(offs);
@@ -94,7 +84,7 @@ class VertexGround {
     }
 }
 
-class ColorGround {
+class Color {
     r: number; g: number; b: number; n: number;
     constructor(view: DataView, offs: number) {
         this.r = view.getUint8(offs);
@@ -104,7 +94,7 @@ class ColorGround {
     }
 }
 
-class PolyGround {
+class Poly {
     v1: number; v2: number; v3: number; v4: number;
     c1: number; c2: number; c3: number; c4: number;
     t: number; r: number; // S1 only
@@ -127,8 +117,7 @@ class PolyGround {
             this.s2 = view.getUint8(offs+9);
             this.s3 = view.getUint8(offs+10);
             this.s4 = view.getUint8(offs+11);
-            const t = view.getUint8(offs+12);
-            this.tt = t & 0x7F;
+            this.tt = view.getUint8(offs+12) & 0x7F;
             this.ii = view.getUint8(offs+13);
         }
     }
@@ -156,7 +145,7 @@ export class VRAM {
         return this.data[wordIndex];
     }
 
-    applySpyro2FontStripFix() {
+    applyFontStripFix() {
         const width = 512;
         const y = 255;
         for (let x = 512; x <= 575; x++) {
@@ -358,7 +347,7 @@ function decodeTileToRGBA(vram: VRAM, tex: Tile, width: number = tex.w, height: 
     }
 }
 
-function buildFaces1(poly: PolyGround, mdlVertStart: number, mdlColorStart: number, faces: GroundFace[], uvs: number[][], atlas: TileAtlas) {
+function buildFaces1(poly: Poly, mdlVertStart: number, mdlColorStart: number, faces: GroundFace[], uvs: number[][], atlas: TileAtlas) {
     const a = mdlVertStart + poly.v1;
     const b = mdlVertStart + poly.v2;
     const c = mdlVertStart + poly.v3;
@@ -441,7 +430,7 @@ function buildFaces1(poly: PolyGround, mdlVertStart: number, mdlColorStart: numb
     }
 }
 
-function buildFaces2(poly: PolyGround, mdlVertStart: number, mdlColorStart: number, faces: GroundFace[], uvs: number[][], atlas: TileAtlas) {
+function buildFaces2(poly: Poly, mdlVertStart: number, mdlColorStart: number, faces: GroundFace[], uvs: number[][], atlas: TileAtlas) {
     const a = mdlVertStart + poly.v1;
     const b = mdlVertStart + poly.v2;
     const c = mdlVertStart + poly.v3;
@@ -458,13 +447,7 @@ function buildFaces2(poly: PolyGround, mdlVertStart: number, mdlColorStart: numb
     let C = [rect.u1, rect.v0];
     let D = [rect.u0, rect.v0];
 
-    function rotateUVCorners(
-        rot: number,
-        A: number[],
-        B: number[],
-        C: number[],
-        D: number[]
-    ) {
+    function rotateUVCorners(rot: number, A: number[], B: number[], C: number[], D: number[]) {
         switch (rot & 3) {
             case 0: return [A, B, C, D];
             case 1: return [B, C, D, A];
@@ -541,7 +524,7 @@ function buildFaces2(poly: PolyGround, mdlVertStart: number, mdlColorStart: numb
     }
 }
 
-function computeZScale(view: DataView, polyStart: number, polyCount: number, header: HeaderGround): number {
+function computeZScale(view: DataView, polyStart: number, polyCount: number, header: Header): number {
     if (header.w !== 0)
         return 2.0;
     let p = polyStart;
@@ -557,7 +540,7 @@ function computeZScale(view: DataView, polyStart: number, polyCount: number, hea
     return 0.25;
 }
 
-export function buildSkybox(view: DataView, gameNumber: number): SkyboxData {
+export function buildSkybox(view: DataView, gameNumber: number): Skybox {
     const size = view.byteLength;
     let p = 0;
     const bgR = view.getUint8(p + 0);
@@ -584,15 +567,10 @@ export function buildSkybox(view: DataView, gameNumber: number): SkyboxData {
             parseSkyboxPart2(view, size, partOffset, vertices, colors, faces);
         }
     }
-    return {
-        backgroundColor,
-        vertices,
-        colors,
-        faces,
-    };
+    return { backgroundColor, vertices, colors, faces };
 }
 
-export function buildLevelData(view: DataView, atlas: TileAtlas, gameNumber: number): LevelData {
+export function buildLevel(view: DataView, atlas: TileAtlas, gameNumber: number): Level {
     const vertices: number[][] = [];
     const colors: number[][] = [];
     const faces: GroundFace[] = [];
@@ -627,25 +605,19 @@ export function buildLevelData(view: DataView, atlas: TileAtlas, gameNumber: num
             abs = partOffsets[part] + 8;
             p = abs;
         }
-        const header = new HeaderGround(view, p);
-        p += HeaderGround.size;
+        const header = new Header(view, p);
+        p += Header.size;
         let zScale = 1.0;
         if (gameNumber == 2) {
-            let mdlPolyStart = abs
-                + HeaderGround.size
-                + header.v1 * 4
-                + header.c1 * 4
-                + header.p1 * 8
-                + header.v2 * 4
-                + header.c2 * 4
-                + header.c2 * 4;
+            let mdlPolyStart = abs + Header.size + header.v1 * 4
+                + header.c1 * 4 + header.p1 * 8 + header.v2 * 4
+                + header.c2 * 4 + header.c2 * 4;
             zScale = computeZScale(view, mdlPolyStart, header.p2, header);
         }
 
         // LOD vertices
-        const lodVertStart = vertices.length;
         for (let i = 0; i < header.v1; i++) {
-            const v = new VertexGround(view, p);
+            const v = new Vertex(view, p);
             p += 4;
             const z = (v.b1 | ((v.b2 & 3) << 8)) + header.z;
             const y = ((v.b2 >> 2) | ((v.b3 & 31) << 6)) + header.y;
@@ -654,9 +626,8 @@ export function buildLevelData(view: DataView, atlas: TileAtlas, gameNumber: num
         }
 
         // LOD colors
-        const lodColorStart = colors.length;
         for (let i = 0; i < header.c1; i++) {
-            const c = new ColorGround(view, p);
+            const c = new Color(view, p);
             p += 4;
             colors.push([c.r, c.g, c.b]);
         }
@@ -669,7 +640,7 @@ export function buildLevelData(view: DataView, atlas: TileAtlas, gameNumber: num
         // MDL/FAR/TEX vertices
         const mdlVertStart = vertices.length;
         for (let i = 0; i < header.v2; i++) {
-            const v = new VertexGround(view, p);
+            const v = new Vertex(view, p);
             p += 4;
             let z = (v.b1 | ((v.b2 & 3) << 8)) + header.z;
             if (gameNumber == 2) {
@@ -689,7 +660,7 @@ export function buildLevelData(view: DataView, atlas: TileAtlas, gameNumber: num
         // MDL colors
         const mdlColorStart = colors.length;
         for (let i = 0; i < header.c2; i++) {
-            const c = new ColorGround(view, p);
+            const c = new Color(view, p);
             p += 4;
             colors.push([c.r, c.g, c.b]);
         }
@@ -699,7 +670,7 @@ export function buildLevelData(view: DataView, atlas: TileAtlas, gameNumber: num
 
         // Textured polys
         for (let i = 0; i < header.p2; i++) {
-            const poly = new PolyGround(view, p, gameNumber);
+            const poly = new Poly(view, p, gameNumber);
             p += 16;
             if (gameNumber == 1) {
                 buildFaces1(poly, mdlVertStart, mdlColorStart, faces, uvs, atlas)
@@ -708,77 +679,27 @@ export function buildLevelData(view: DataView, atlas: TileAtlas, gameNumber: num
             }
         }
     }
-    return {vertices, colors, faces, uvs, atlas};
+    return { vertices, colors, faces, uvs, atlas };
 }
 
-export function buildCombinedAtlas(vram: VRAM, groups: TileGroups, tilesPerRow: number = 8, slotSize: number = 32): TileAtlas {
+export function buildTileAtlas(vram: VRAM, groups: TileGroups, gameNumber: number): TileAtlas {
+    const tilesPerRow = 8;
+    const slotSize = 32;
     const tileCount = groups.lod.length;
-    const rowsPerGroup = Math.ceil(tileCount / tilesPerRow);
     const width = tilesPerRow * slotSize;
-    const height = rowsPerGroup * slotSize * 5;
-    const data = new Uint8Array(width * height * 4);
-    const lodUVs: { u0: number; v0: number; u1: number; v1: number }[] = [];
-    function blitGroup(tiles: Tile[], outUVs: { u0: number; v0: number; u1: number; v1: number }[]) {
-        for (let i = 0; i < tileCount; i++) {
-            const tex = tiles[i];
-            const w = tex.w;
-            const h = tex.w;
-            let rgba = decodeTileToRGBA(vram, tex, w, h);
-            rgba = applyTileRotationRGBA(rgba, tex, w);
-            const atlasX = (i % tilesPerRow) * slotSize;
-            const atlasY = Math.floor(i / tilesPerRow) * slotSize;
-            for (let y = 0; y < h; y++) {
-                for (let x = 0; x < w; x++) {
-                    const src = (y * w + x) * 4;
-                    const dst = ((atlasY + y) * width + (atlasX + x)) * 4;
-                    data[dst + 0] = rgba[src + 0];
-                    data[dst + 1] = rgba[src + 1];
-                    data[dst + 2] = rgba[src + 2];
-                    data[dst + 3] = rgba[src + 3];
-                }
-            }
-            outUVs.push({
-                u0: atlasX / width,
-                v0: atlasY / height,
-                u1: (atlasX + slotSize) / width,
-                v1: (atlasY + slotSize) / height,
-            });
-        }
-    }
-    blitGroup(groups.lod, lodUVs);
-    return {
-        data: data,
-        width: width,
-        height: height,
-        uvs: lodUVs
-    };
-}
-
-export function buildCombinedAtlas2(vram: VRAM, groups: TileGroups2, tilesPerRow = 8, slotSize = 32): TileAtlas {
-    const allTiles: Tile[] = [
-        ...groups.lod,
-        ...groups.cor1,
-        ...groups.cor2,
-        ...groups.cor3,
-        ...groups.cor4,
-    ];
-
-    const tileCount = allTiles.length;
-    const rows = Math.ceil(tileCount / tilesPerRow);
-    const width = tilesPerRow * slotSize;
-    const height = rows * slotSize;
+    const height = Math.ceil(tileCount / tilesPerRow) * slotSize;
     const data = new Uint8Array(width * height * 4);
     const uvs: { u0: number; v0: number; u1: number; v1: number }[] = [];
-
     for (let i = 0; i < tileCount; i++) {
-        const tex = allTiles[i];
+        const tex = groups.lod[i];
         const w = tex.w;
         const h = tex.w;
-        const rgba = decodeTileToRGBA(vram, tex, w, h);
-
+        let rgba = decodeTileToRGBA(vram, tex, w, h);
+        if (gameNumber == 1) {
+            rgba = applyTileRotationRGBA(rgba, tex, w);
+        }
         const atlasX = (i % tilesPerRow) * slotSize;
         const atlasY = Math.floor(i / tilesPerRow) * slotSize;
-
         for (let y = 0; y < h; y++) {
             for (let x = 0; x < w; x++) {
                 const src = (y * w + x) * 4;
@@ -789,7 +710,6 @@ export function buildCombinedAtlas2(vram: VRAM, groups: TileGroups2, tilesPerRow
                 data[dst + 3] = rgba[src + 3];
             }
         }
-
         uvs.push({
             u0: atlasX / width,
             v0: atlasY / height,
@@ -797,63 +717,30 @@ export function buildCombinedAtlas2(vram: VRAM, groups: TileGroups2, tilesPerRow
             v1: (atlasY + slotSize) / height,
         });
     }
-
-    const awater = buildAWater(groups);
-
-    return { data, width, height, uvs, tiles: allTiles, groups, awater };
+    if (gameNumber == 1) {
+        return { data, width, height, uvs };
+    }
+    return { data, width, height, uvs, tiles: groups.lod };
 }
 
-export function parseTileGroups(view: DataView): TileGroups {
+export function parseTileGroups(view: DataView, gameNumber: number): TileGroups {
     let offs = 4;
     const lod: Tile[] = [];
-    const count = view.getUint32(offs, true);
-    offs += 4;
-
-    for (let i = 0; i < count; i++) {
-        offs += 8; // skip buffer
-        const tex = readTile(view, offs);
-        offs += 8;
-        textureCompute(tex, offs - 8, 1);
-        lod.push(tex);
-    }
-
-    return { lod };
-}
-
-export function parseTileGroups2(view: DataView): TileGroups2 {
-    let offs = 0;
-    const offset = view.getUint32(offs, true);
-    offs += 4;
     let count = view.getUint32(offs, true);
     offs += 4;
 
-    const lod: Tile[] = [];
-    const cor1: Tile[] = [];
-    const cor2: Tile[] = [];
-    const cor3: Tile[] = [];
-    const cor4: Tile[] = [];
-
-    count--;
-    for (let i = 0; i <= count; i++) {
+    for (let i = 0; i < count; i++) {
         offs += 8;
-        let tex = readTile(view, offs); offs += 8;
-        textureCompute(tex, offs - 8, 2);
+        const tex = readTile(view, offs);
+        offs += 8;
+        textureCompute(tex, offs - 8, gameNumber);
         lod.push(tex);
-        tex = readTile(view, offs); offs += 8;
-        textureCompute(tex, offs - 8, 2);
-        cor1.push(tex);
-        tex = readTile(view, offs); offs += 8;
-        textureCompute(tex, offs - 8, 2);
-        cor2.push(tex);
-        tex = readTile(view, offs); offs += 8;
-        textureCompute(tex, offs - 8, 2);
-        cor3.push(tex);
-        tex = readTile(view, offs); offs += 8;
-        textureCompute(tex, offs - 8, 2);
-        cor4.push(tex);
+        if (gameNumber == 2) {
+            offs += 32; // skip unused groups
+        }
     }
 
-    return {lod, cor1, cor2, cor3, cor4};
+    return { lod };
 }
 
 function readTile(view: DataView, offs: number): Tile {
@@ -1124,16 +1011,4 @@ function textureCompute(tex: Tile, filePos: number, gameNumber: number): void {
     tex.r = (tex.ff & 127) >> 4;
 
     tex.off = filePos - 8;
-}
-
-function buildAWater(groups: TileGroups2): boolean[] {
-    const aw = new Array(128).fill(false);
-    let offset = groups.lod.length
-               + groups.cor1.length
-               + groups.cor2.length
-               + groups.cor3.length;
-    for (let i = 0; i < groups.cor4.length; i++) {
-        aw[offset + i] = true;
-    }
-    return aw;
 }
