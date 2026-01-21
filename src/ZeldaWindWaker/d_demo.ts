@@ -155,7 +155,7 @@ export enum EDemoActorFlags {
     HasRot = 1 << 3,
     HasShape = 1 << 4,
     HasAnim = 1 << 5,
-    HasFrame = 1 << 6,
+    HasAnimFrame = 1 << 6,
     HasTexAnim = 1 << 7,
     HasTexFrame = 1 << 8,
 }
@@ -164,7 +164,7 @@ export class dDemo_actor_c extends TActor {
     public name: string;
     public flags: number;
     public translation = vec3.create();
-    public scaling = vec3.create();
+    public scaling = vec3.fromValues(1, 1, 1);
     public rotation = vec3.create();
     public shapeId: number;
     public nextBckId: number;
@@ -235,11 +235,11 @@ export class dDemo_actor_c extends TActor {
             }
         }
 
-        if (btpId == this.btpId) {
+        if (btpId === this.btpId) {
             return null;
         } else {
             this.btpId = btpId;
-            if ((btpId & 0x10000) != 0) {
+            if ((btpId & 0x10000) !== 0) {
                 arcName = globals.roomCtrl.demoArcName!;
             }
 
@@ -267,12 +267,12 @@ export class dDemo_actor_c extends TActor {
                 return null;
         }
 
-        if (btkId == this.btkId) {
+        if (btkId === this.btkId) {
             return null;
         }
 
         this.btkId = btkId;
-        if ((btkId & 0x10000) != 0) {
+        if ((btkId & 0x10000) !== 0) {
             arcName = globals.roomCtrl.demoArcName!;
         }
 
@@ -334,12 +334,12 @@ export class dDemo_actor_c extends TActor {
 
     public override JSGSetAnimationFrame(x: number): void {
         this.animFrame = x;
-        this.flags |= EDemoActorFlags.HasFrame;
+        this.flags |= EDemoActorFlags.HasAnimFrame;
     }
 
     public override JSGSetAnimationTransition(x: number): void {
         this.animTransition = x;
-        this.flags |= EDemoActorFlags.HasFrame;
+        this.flags |= EDemoActorFlags.HasAnimFrame;
     }
 
     public override JSGSetTextureAnimation(id: number): void {
@@ -545,7 +545,7 @@ export function dDemo_setDemoData(globals: dGlobals, dtFrames: number, actor: fo
         demoActor.animFrameMax = morf.frameCtrl.endFrame;
     }
 
-    if (enable & EDemoActorFlags.HasFrame) {
+    if (enable & EDemoActorFlags.HasAnimFrame) {
         if (demoActor.animFrame > dtFrames) {
             morf.frameCtrl.setFrame(demoActor.animFrame - dtFrames);
             morf.play(dtFrames);

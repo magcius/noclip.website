@@ -18,7 +18,7 @@ export class CacheMap<K, V> extends Map<K, V> {
     ): V | null {
         if (this.has(key)) return this.get(key)!;
         const value = compute(key);
-        if (value == null) return null;
+        if (value === null) return null;
         this.set(key, value);
         return value;
     }
@@ -28,7 +28,7 @@ export class CacheMap<K, V> extends Map<K, V> {
 export class MultiMap<K, V> extends Map<K, V[]> {
     public add(key: K, value: V) {
         let array = this.get(key);
-        if (array != null) {
+        if (array) {
             array.push(value);
         } else {
             array = [value];

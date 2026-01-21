@@ -205,7 +205,7 @@ export class Descent2Level extends DescentLevel {
                     makeSegmentSideKey(segNum, sideNum),
                 );
 
-                if (flickeringLight != null)
+                if (flickeringLight !== undefined)
                     for (let i = index; i < index + count; ++i)
                         flickeringLight.deltas.push(lightDeltas[i]);
             }

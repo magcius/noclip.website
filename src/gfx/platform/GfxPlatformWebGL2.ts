@@ -1327,6 +1327,21 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
     }
 
+    public copyCanvasToTexture(dst_: GfxTexture, dstZ: number, src: HTMLCanvasElement): void {
+        const gl = this.gl;
+
+        const dst = dst_ as GfxTextureP_GL;
+        assert(dst !== this._scTexture);
+        const gl_target = dst.gl_target;
+        assert(dst.width === src.width);
+        assert(dst.height === src.height);
+
+        const gl_format = this.translateTextureFormat(dst.pixelFormat);
+        const gl_type = this.translateTextureType(dst.pixelFormat);
+
+        gl.texSubImage3D(gl_target, 0, 0, 0, dstZ, dst.width, dst.height, 1, gl_format, gl_type, src);
+    }
+
     public uploadBufferData(buffer: GfxBuffer, dstByteOffset: number, data: Uint8Array, srcByteOffset: number = 0, byteSize: number = data.byteLength - srcByteOffset): void {
         const gl = this.gl;
         const { gl_target, byteSize: dstByteSize, pageByteSize: dstPageByteSize } = buffer as GfxBufferP_GL;

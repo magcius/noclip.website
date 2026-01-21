@@ -34,7 +34,7 @@ export class DescentHogFile {
     /** Gets lump data by name. */
     public getLumpDataByName(fileName: string): ArrayBufferSlice | null {
         const lump = this.lumpMap.get(fileName.toLowerCase());
-        if (lump == null) return null;
+        if (!lump) return null;
         return this.buffer.slice(lump.offset, lump.offset + lump.size);
     }
 

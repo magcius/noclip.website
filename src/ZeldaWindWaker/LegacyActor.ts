@@ -394,7 +394,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     // Grandma
     else if (actorName === 'Ba1') {
         // Only allow the sleeping grandma through, because how else can you live in life...
-        if (actor.parameters === 0x03 || globals.stageName != "LinkRM") {
+        if (actor.parameters === 0x03 || globals.stageName !== "LinkRM") {
             fetchArchive(`Ba`).then(rarc => {
                 const m = buildModel(rarc, `bdlm/ba.bdl`);
                 m.bindANK1(parseBCK(rarc, `bcks/wait02.bck`));

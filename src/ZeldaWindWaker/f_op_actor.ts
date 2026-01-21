@@ -207,7 +207,7 @@ export function fopAcM_create(globals: fGlobals, pcName: dProcName_e, parameters
 
 export function fopAcM_fastCreate(globals: dGlobals, pcName: string, parameters: number, pos: ReadonlyVec3 | null, roomNo: number, rot: ReadonlyVec3 | null, scale: ReadonlyVec3 | null, parentPcId: number): base_process_class | null {
     const objName = globals.dStage_searchName(pcName);
-    if (objName == null)
+    if (objName === null)
         return null;
 
     // Create on current layer.
