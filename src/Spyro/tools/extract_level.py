@@ -18,28 +18,29 @@ def extract_level(level_subfile):
     s = level_subfile.split('/sf')
     prefix = f"{s[0]}/sf{s[1].split(".")[0]}_"
     ground_file_name = f"{prefix}ground.bin"
-    sky_pattern = f"{prefix}sky*.bin"
+    sky_file_name = f"{prefix}sky1.bin"
     vram_file_name = f"{prefix}vram.bin"
     list_file_name = f"{prefix}list.bin"
 
-    extraction_success = False
     try:
         with open(level_subfile, "rb") as stream:
             start_offset = 0
-            wad_size = os.path.getsize(level_subfile)
+            sf_size = os.path.getsize(level_subfile)
 
-            if wad_size < 16:
+            if sf_size < 16:
                 raise RuntimeError("Too small")
 
+            # VRAM
             stream.seek(start_offset)
             vram_offset = struct.unpack("<I", stream.read(4))[0]
-            if start_offset + wad_size > os.path.getsize(level_subfile):
+            if start_offset + sf_size > os.path.getsize(level_subfile):
                 raise RuntimeError("Invalid offset")
             stream.seek(start_offset + vram_offset)
 
             with open(vram_file_name, "wb") as out_vram:
                 copy_from(out_vram, stream, VRAM_SIZE)
 
+            # Texture/list
             stream.seek(start_offset + 8)
             list_offset = struct.unpack("<I", stream.read(4))[0]
             list_size   = struct.unpack("<I", stream.read(4))[0]
@@ -53,6 +54,7 @@ def extract_level(level_subfile):
             with open(list_file_name, "wb") as out_list:
                 copy_from(out_list, stream, list_offset + 16)
 
+            # Ground
             stream.seek(start_offset)
             ground_offset = struct.unpack("<I", stream.read(4))[0]
             if (stream.tell() - start_offset + ground_offset - 8) > list_size or ground_offset < 4:
@@ -66,6 +68,7 @@ def extract_level(level_subfile):
             with open(ground_file_name, "wb") as out_ground:
                 copy_from(out_ground, stream, ground_offset - 4)
 
+            # Sky
             sky_offset = struct.unpack("<I", stream.read(4))[0]
             sky_test_pos = stream.tell()
             sky_count = sky_offset
@@ -86,12 +89,10 @@ def extract_level(level_subfile):
                 stream.seek(sky_test_pos)
                 sky_offset = sky_count
 
-            sky_name = sky_pattern.replace("*", "1")
-            with open(sky_name, "wb") as out_sky:
+            with open(sky_file_name, "wb") as out_sky:
                 copy_from(out_sky, stream, sky_offset - 4)
 
-            extraction_success = True
-
+            # Ignore extra skys for noclip but they are in the WAD
             # sky_index = 1
             # while True:
             #     sky_index += 1
@@ -119,5 +120,4 @@ def extract_level(level_subfile):
             #     with open(sky_name, "wb") as out_sky:
             #         copy_from(out_sky, stream, sky_offset - 4)
     except Exception as e:
-        if not extraction_success:
-            print(f"Exception: {e}")
+        print(f"Exception: {e}")

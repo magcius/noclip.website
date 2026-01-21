@@ -39,17 +39,16 @@ def check_pattern(pattern_bytes: bytes) -> bool:
     )
 
 
-def extract_level(level_subfile):
+def extract_level2(level_subfile):
     s = level_subfile.split('/sf')
     prefix = f"{s[0]}/sf{s[1].split(".")[0]}_"
     ground_file_name = f"{prefix}ground.bin"
     sky_file_name = f"{prefix}sky.bin"
     vram_file_name = f"{prefix}vram.bin"
     list_file_name = f"{prefix}list.bin"
-    good = False
     stream = None
     save = None
-    is_starring = "starring" in level_subfile
+
     try:
         stream = open(level_subfile, "rb")
         start = 0
@@ -61,7 +60,6 @@ def extract_level(level_subfile):
             raise RuntimeError("Subfile too small")
 
         # VRAM
-        print("Vram", end="\t\t...")
         stream.seek(start, os.SEEK_SET)
         offset = read_u32(stream)
         if start - startsub + size > sizesub:
@@ -86,11 +84,9 @@ def extract_level(level_subfile):
         stream.seek(-4, os.SEEK_CUR)
         with open(list_file_name, "wb") as save:
             copy_from(save, stream, offset + 16)
-        print("Ok!")
-        print("\t\tSky", end="\t\t...")
 
         # Sky
-        if is_starring:
+        if "starring" in level_subfile:
             stream.seek(start2, os.SEEK_SET)
             ss = read_u32(stream)
             cc = read_u32(stream)
@@ -98,7 +94,6 @@ def extract_level(level_subfile):
             sky_data = stream.read(sky_size)
             with open(sky_file_name, "wb") as save:
                 save.write(sky_data)
-            print("Ok! (starring)")
         else:
             try:
                 stream.seek(start2, os.SEEK_SET)
@@ -132,26 +127,18 @@ def extract_level(level_subfile):
                 offset = read_u32(stream)
                 with open(sky_file_name, "wb") as save:
                     copy_from(save, stream, offset - 4)
-                print("Ok!")
-            except Exception:
-                print("Error!")
+            except Exception as e:
+                print("Exception:", e)
 
         # Ground
-        print("\t\tGround  ", end="\t...")
         stream.seek(start2, os.SEEK_SET)
         offset = read_u32(stream)
         stream.seek(offset - 4, os.SEEK_CUR)
         offset = read_u32(stream)
         with open(ground_file_name, "wb") as save:
             copy_from(save, stream, offset - 4)
-        print("Ok!")
-        good = True
     except Exception as e:
-        if good:
-            print("Good")
-        else:
-            print("Error!")
-            print("Exception:", e)
+        print("Exception:", e)
     finally:
         if stream is not None:
             stream.close()
