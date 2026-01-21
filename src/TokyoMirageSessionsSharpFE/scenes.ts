@@ -74,23 +74,28 @@ class TMSFESceneDesc implements SceneDesc
         const dataFetcher = context.dataFetcher;
         const apak = parseAPAK(await dataFetcher.fetchData(`TokyoMirageSessionsSharpFE/maps/${this.id}/model.apak`));
         
-        let fres_files: FRES[] = [];
         if (this.gate_type == undefined) { this.gate_type = 1 };
         if (this.is_d018_03 == undefined) { this.is_d018_03 = false };
         if (this.special_skybox == undefined) { this.special_skybox = false };
 
         // get bfres files
+        let level_models: level_model[] = [];
+        let model_fres: FRES;
+        let animation_fres: FRES | null;
+
         for (let i = 0; i < this.level_file_names.length; i++)
         {
             const file_name = `${this.level_file_names[i]}.bfres`
             const bfres_data = get_file_by_name(apak, file_name);
             if (bfres_data != undefined)
             {
-                fres_files.push(parseBFRES(bfres_data));
+                model_fres = parseBFRES(bfres_data);
             }
             else
             {
+                // model BFRES files are necessary
                 console.error(`file ${file_name} not found`);
+                throw("whoops");
             }
 
             // animation file
@@ -98,12 +103,18 @@ class TMSFESceneDesc implements SceneDesc
             const animation_bfres_data = get_file_by_name(apak, animation_file_name);
             if (animation_bfres_data != undefined)
             {
-                const bfres = parseBFRES(animation_bfres_data);
-                console.log(bfres.fska[0]);
+                animation_fres = parseBFRES(animation_bfres_data);
             }
+            else
+            {
+                // animations are optional
+                animation_fres = null;
+            }
+
+            level_models.push({ model_fres, animation_fres });
         }
 
-        let scene = new TMSFEScene(device, fres_files, this.special_skybox);
+        let scene = new TMSFEScene(device, level_models, this.special_skybox);
 
         // add gimmicks (only if this level has a maplayout.layout file)
         const maplayout_data = get_file_by_name(apak, "maplayout.layout");
@@ -120,6 +131,12 @@ class TMSFESceneDesc implements SceneDesc
 
         return scene;
     }
+}
+
+export interface level_model
+{
+    model_fres: FRES;
+    animation_fres: FRES | null;
 }
 
 // sceneGroup
@@ -215,7 +232,8 @@ const sceneDescs =
     new TMSFESceneDesc("f003_02", "Fortuna Office", ["f003_02", "obj10", "obj11", "obj12", "obj13", "obj14", "sky"], create_f003_02_gimmicks),
     new TMSFESceneDesc("f003_02", "Fortuna Office Fifth Anniversary Party", ["f003_02", "obj10", "obj11", "obj12", "obj13", "obj14", "sky"], create_f003_02_party_gimmicks),
     new TMSFESceneDesc("f003_03", "Bloom Palace", ["f003_03", "obj01", "sky"]),
-    new TMSFESceneDesc("f001_01", "Shibuya 1", ["f001_01", "obj01", "obj02", "obj10", "sky"]),
+    // new TMSFESceneDesc("f001_01", "Shibuya 1", ["f001_01", "obj01", "obj02", "obj10", "sky"]),
+    new TMSFESceneDesc("f001_01", "Shibuya 1", ["obj01"]),
     new TMSFESceneDesc("f001_02", "Shibuya 2", ["f001_02", "obj01", "obj02", "obj04", "obj10", "sky"]),
     new TMSFESceneDesc("f001_03", "Shibuya 3", ["f001_03", "obj01", "obj02", "obj04", "obj10", "sky"]),
     new TMSFESceneDesc("f001_04", "Shibuya Music Fes", ["f001_04", "obj01", "obj02", "obj10", "obj11", "obj12", "sky"]),

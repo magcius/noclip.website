@@ -4,6 +4,7 @@
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { assert, readString } from "../../util.js";
 import { read_bfres_string } from "./bfres_switch.js";
+import { FSKA } from "./fska.js";
 import { vec3 } from "gl-matrix";
 import { user_data, parse_user_data } from "./user_data.js";
 import { mat4 } from "gl-matrix";
@@ -81,6 +82,35 @@ const SMOOTH_RIGID_INDEX_ENTRY_SIZE = 0x2;
 export function recursive_bone_transform(bone_index: number, fskl: FSKL): mat4
 {
     const bone = fskl.bones[bone_index];
+    let transform_matrix: mat4 = mat4.create();
+    computeModelMatrixSRT
+    (
+        transform_matrix,
+        bone.scale[0], bone.scale[1], bone.scale[2],
+        bone.rotation[0], bone.rotation[1], bone.rotation[2],
+        bone.translation[0], bone.translation[1], bone.translation[2],
+    );
+    if (bone.parent_index == -1)
+    {
+        return transform_matrix;
+    }
+    else
+    {
+        const new_matrix: mat4 = mat4.create();
+        mat4.multiply(new_matrix, recursive_bone_transform(bone.parent_index, fskl), transform_matrix)
+        return new_matrix;
+    }
+}
+
+/**
+ * animate the skeleton, then multiply a bone's transformation with all it's parent's transformations to get the real transformation matrix
+ */
+export function recursive_bone_transform_with_animation(bone_index: number, fskl: FSKL, fska: FSKA, animation_frame: number): mat4
+{
+    const bone = fskl.bones[bone_index];
+    // animate bone
+
+    
     let transform_matrix: mat4 = mat4.create();
     computeModelMatrixSRT
     (

@@ -2,15 +2,17 @@ import { FRES } from "./bfres/bfres_switch.js";
 import * as BNTX from '../fres_nx/bntx.js';
 import { deswizzle_and_upload_bntx_textures } from "./bntx_helpers.js";
 import { CameraController } from "../Camera.js";
+import { FSKA } from "./bfres/fska.js";
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
 import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 import { GfxDevice, GfxTexture} from "../gfx/platform/GfxPlatform.js";
 import { gimmick } from "./gimmick.js";
+import { vec3 } from "gl-matrix";
 import { fshp_renderer } from "./render_fshp.js";
 import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
+import { level_model } from "./scenes.js";
 import { SceneGfx, ViewerRenderInput } from "../viewer.js";
-import { vec3 } from "gl-matrix";
 
 export class TMSFEScene implements SceneGfx
 {
@@ -23,35 +25,52 @@ export class TMSFEScene implements SceneGfx
     private fshp_renderers: fshp_renderer[] = [];
     private special_skybox: boolean;
 
-    constructor(device: GfxDevice, fres_files: FRES[], special_skybox: boolean)
+    /**
+     * @param level_models array of level_model objects containing groups of FRES objects for a single model
+     * @param special_skybox this level has a smaller skybox that follows the camera
+     */
+    constructor(device: GfxDevice, level_models: level_model[], special_skybox: boolean)
     {
         this.special_skybox = special_skybox;
         this.renderHelper = new GfxRenderHelper(device);
 
-        for(let i = 0; i < fres_files.length; i++)
+        for(let level_models_index = 0; level_models_index < level_models.length; level_models_index++)
         {
-            const fres = fres_files[i];
+            const model_fres = level_models[level_models_index].model_fres;
 
             //initialize textures
-            const bntx = BNTX.parse(fres.embedded_files[0].buffer);
+            const bntx = BNTX.parse(model_fres.embedded_files[0].buffer);
             const gfx_texture_array: GfxTexture[] = deswizzle_and_upload_bntx_textures(bntx, device);
 
             // create all fshp_renderers
-            const fmdl = fres.fmdl[0];
+            const fmdl = model_fres.fmdl[0];
             const shapes = fmdl.fshp;
-            for (let i = 0; i < shapes.length; i++)
+            for (let shape_index = 0; shape_index < shapes.length; shape_index++)
             {
                 let special_skybox_mesh: boolean = false;
                 if (this.special_skybox && fmdl.name == "sky")
                 {
                     special_skybox_mesh = true;
                 }
+
+                let fska: FSKA | null = null;
+                if (level_models[level_models_index].animation_fres != null)
+                {
+                    const animation_fres = level_models[level_models_index].animation_fres;
+                    if (animation_fres?.fska != null)
+                    {
+                        fska = animation_fres.fska[0];
+                    }
+                }
+
                 const renderer = new fshp_renderer
                 (
                     device,
                     this.renderHelper,
-                    fmdl, i,
+                    fmdl,
+                    shape_index,
                     bntx,
+                    fska, 
                     gfx_texture_array,
                     vec3.fromValues(0.0, 0.0, 0.0),
                     vec3.fromValues(0.0, 0.0, 0.0),

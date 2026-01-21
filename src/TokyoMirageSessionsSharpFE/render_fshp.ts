@@ -5,6 +5,8 @@ import * as BNTX from '../fres_nx/bntx.js';
 import { createBufferFromSlice } from "../gfx/helpers/BufferHelpers.js";
 import { computeViewMatrixSkybox } from '../Camera.js';
 import { FMDL } from "./bfres/fmdl.js";
+import { FSKA } from './bfres/fska.js';
+import { FSKL } from './bfres/fskl.js';
 import { recursive_bone_transform } from "./bfres/fskl.js";
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
 import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
@@ -17,7 +19,6 @@ import { TMSFEProgram } from './shader.js';
 import { fillMatrix4x3, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers.js';
 import { assert } from "../util.js";
 import { ViewerRenderInput } from "../viewer.js";
-
 /**
  * renders a single mesh from a model
  */
@@ -34,12 +35,15 @@ export class fshp_renderer
     private program: TMSFEProgram;
     private sampler_bindings: GfxSamplerBinding[] = [];
     private do_not_render: boolean = false;
+    private fskl: FSKL | undefined;
+    private fska: FSKA | null;
     private special_skybox_mesh: boolean;
 
     /**
      * @param fmdl the model that contains this mesh
      * @param shape_index the index into fmdl's fshp array to render
      * @param bntx the bntx storing the model's textures
+     * @param fska fska storing this model's skeleton animation
      * @param gfx_texture_array array returned by deswizzle_and_upload_bntx_textures()
      * @param position translate this mesh
      * @param rotation rotate this mesh
@@ -53,6 +57,7 @@ export class fshp_renderer
         fmdl: FMDL,
         shape_index:number,
         bntx: BNTX.BNTX,
+        fska: FSKA | null,
         gfx_texture_array: GfxTexture[],
         position: vec3,
         rotation: vec3,
@@ -60,6 +65,7 @@ export class fshp_renderer
         special_skybox_mesh: boolean,
     )
     {
+        this.fska = fska;
         this.special_skybox_mesh = special_skybox_mesh;
 
         // create vertex buffers
@@ -116,22 +122,22 @@ export class fshp_renderer
         );
 
         // setup bone transformation matrices
-        const fskl = fmdl.fskl;
+        this.fskl = fmdl.fskl;
         if (fshp.skin_bone_count == 0)
         {
             // mesh uses it's bone's transformation matrix
-            const transformation_matrix = recursive_bone_transform(fshp.bone_index, fskl);
+            const transformation_matrix = recursive_bone_transform(fshp.bone_index, this.fskl);
             this.bone_matrix_array.push(transformation_matrix);
         }
         if (fshp.skin_bone_count > 0)
         {
-            assert(fskl.smooth_rigid_indices.length < BONE_MATRIX_MAX_LENGTH);
+            assert(this.fskl.smooth_rigid_indices.length < BONE_MATRIX_MAX_LENGTH);
 
             // add all the smooth and rigid bones 
             this.bone_matrix_array = [];
-            for (let i = 0; i < fskl.smooth_rigid_indices.length; i++)
+            for (let i = 0; i < this.fskl.smooth_rigid_indices.length; i++)
             {
-                const transformation_matrix = recursive_bone_transform(fskl.smooth_rigid_indices[i], fskl)
+                const transformation_matrix = recursive_bone_transform(this.fskl.smooth_rigid_indices[i], this.fskl)
                 this.bone_matrix_array.push(transformation_matrix);
             }
         }
