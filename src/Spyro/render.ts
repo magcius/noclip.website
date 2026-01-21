@@ -67,7 +67,7 @@ void main() {
 
     bool isWater = (v_Color.a < 0.99);
     if (isWater) {
-        // Spyro 2 water tint (blue-green)
+        // Blue-green tint
         final5 = mix(final5, vec3(0.0, 0.25, 0.45), 0.25);
     }
 

@@ -557,7 +557,7 @@ function computeZScale(view: DataView, polyStart: number, polyCount: number, hea
     return 0.25;
 }
 
-export function buildSkybox(view: DataView): SkyboxData {
+export function buildSkybox(view: DataView, gameNumber: number): SkyboxData {
     const size = view.byteLength;
     let p = 0;
     const bgR = view.getUint8(p + 0);
@@ -578,7 +578,11 @@ export function buildSkybox(view: DataView): SkyboxData {
     const colors: [number, number, number][] = [];
     const faces: SkyboxFace[] = [];
     for (const partOffset of uniqueOffsets) {
-        parseSkyboxPart(view, size, partOffset, vertices, colors, faces);
+        if (gameNumber == 1) {
+            parseSkyboxPart(view, size, partOffset, vertices, colors, faces);
+        } else if (gameNumber == 2) {
+            parseSkyboxPart2(view, size, partOffset, vertices, colors, faces);
+        }
     }
     return {
         backgroundColor,
@@ -931,6 +935,132 @@ function parseSkyboxPart(view: DataView, size: number, partOffset: number, verti
                 indices: [baseVertexIndex + vi1, baseVertexIndex + vi2, baseVertexIndex + vi3],
                 colorIndices: [baseColorIndex + ci1, baseColorIndex + ci2, baseColorIndex + ci3,]
             });
+        }
+    }
+}
+
+function parseSkyboxPart2(view: DataView, size: number, partOffset: number, vertices: [number, number, number][], colors: [number, number, number][], faces: SkyboxFace[]): void {
+    let p = partOffset;
+    if (p + 20 > size) return;
+
+    // Header
+    p += 8;
+    const globalY = view.getInt16(p + 0, true);
+    const globalZ = view.getInt16(p + 2, true);
+    const vCount = view.getUint8(p + 4);
+    const cCount = view.getUint8(p + 5);
+    const globalX = view.getInt16(p + 6, true);
+    const miscSize = view.getUint16(p + 8, true);
+    const poly1Size = view.getUint16(p + 10, true); // p1 = size in bytes of main polys
+    p += 12; // total header = 20 bytes
+
+    const baseVertexIndex = vertices.length;
+    const baseColorIndex  = colors.length;
+
+    // Vertices
+    for (let i = 0; i < vCount; i++) {
+        if (p + 4 > size) return;
+
+        const b1 = view.getUint8(p + 0);
+        const b2 = view.getUint8(p + 1);
+        const b3 = view.getUint8(p + 2);
+        const b4 = view.getUint8(p + 3);
+        p += 4;
+
+        const packedZ = (b1 | ((b2 & 0x03) << 8));
+        const packedY = ((b2 >> 2) | ((b3 & 0x1F) << 6));
+        const packedX = ((b3 >> 5) | (b4 << 3));
+
+        const z = packedZ - globalZ;
+        const y = packedY - globalY;
+        const x = packedX + globalX;
+
+        vertices.push([x, y, z]);
+    }
+
+    // Colors
+    for (let i = 0; i < cCount; i++) {
+        if (p + 4 > size) return;
+        const r = view.getUint8(p + 0);
+        const g = view.getUint8(p + 1);
+        const b = view.getUint8(p + 2);
+        p += 4;
+        colors.push([r, g, b]);
+    }
+
+    // Main polys
+    const poly1Start = p;
+    const poly1End = poly1Start + poly1Size;
+    if (poly1End > size) return;
+
+    let seeker = poly1End;
+    let remaining = poly1Size;
+
+    while (remaining > 3) {
+        if (p + 4 > size) return;
+        remaining -= 4;
+
+        const b1 = view.getUint8(p++);
+        const b2 = view.getUint8(p++);
+        const b3 = view.getUint8(p++);
+        let v0 = view.getUint8(p++);
+        let c0 = (b1 >> 3) | ((b2 & 0x03) << 5);
+        let c1 = (b2 >> 2) | ((b3 & 0x01) << 6);
+        const c2 = (b3 >> 1);
+        let pp = (b1 & 0x07);
+
+        if (seeker + 2 > size) return;
+        let v1 = view.getUint8(seeker++);
+        let v2 = view.getUint8(seeker++);
+
+        if (v0 >= vCount || v1 >= vCount || v2 >= vCount) {
+            // pass
+        } else if (c0 < cCount && c1 < cCount && c2 < cCount) {
+            faces.push({
+                indices: [
+                    baseVertexIndex + v0,
+                    baseVertexIndex + v1,
+                    baseVertexIndex + v2,
+                ],
+                colorIndices: [
+                    baseColorIndex + c0,
+                    baseColorIndex + c1,
+                    baseColorIndex + c2,
+                ],
+            });
+        }
+
+        let v3 = v0;
+        let c3 = c0;
+        while (pp > 0) {
+            pp--;
+            if (seeker + 2 > size) return;
+            const vN = view.getUint8(seeker++);
+            const cm = view.getUint8(seeker++);
+            const c2n = cm & 0x7F;
+            if (v0 < vCount && v1 < vCount && vN < vCount &&
+                c0 < cCount && c1 < cCount && c2n < cCount) {
+                faces.push({
+                    indices: [
+                        baseVertexIndex + v0,
+                        baseVertexIndex + v1,
+                        baseVertexIndex + vN,
+                    ],
+                    colorIndices: [
+                        baseColorIndex + c0,
+                        baseColorIndex + c1,
+                        baseColorIndex + c2n,
+                    ],
+                });
+            }
+            if ((cm & 0x80) !== 0) {
+                v1 = v3;
+                c1 = c3;
+            }
+            v3 = vN;
+            c3 = c2n;
+            v0 = vN;
+            c0 = c2n;
         }
     }
 }

@@ -11,20 +11,29 @@ import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor } fr
 /*
 To-do list
 
-Spyro 1
-    Scrolling textures (ex. waterfall in Artisans)
-    Water in some flight levels doesn't render correctly
-    Better level shader
+    Scrolling textures
+    Better level shader (get rid of the color banding)
     Clean up functions in bin.ts
+
+    Spyro 1
+        Water in some flight levels doesn't render correctly (different than ground like the second game?)
+        
+    Spyro 2
+        Water is mostly correct but the tinting is hardcoded
+        There are a very small number of incorrect faces (unsure if all the same problem or different)
+            Below the Ocean Speedway portal in Summer Forest there's stray faces
+            The outdoor waterfall in Idol Springs has two black triangles
+            Hurricos has black polygons in the gates that need spark plugs to open
+            Zephyr has a stray face that's treated as water in the plant/seed section (the exploded building is expected!)
+            Dragon Shores has a water triangle along the edge "ocean" that appears much brighter and has z-fighting
+            Dragon Shores also has one of the dragon statues at the entrance with parts of its wings being treated as water
+        Shady Oasis and Mystic Marsh both appear to be squished. Probably an issue with z-scaling.
 
 Nice to have
 
-Spyro 1
     Gems, level entities, NPCs, etc. rendered in each level
         The format for these will need to be figured out. They're in other "sub-subfiles" like the ground models and skybox.
-    Read directly from WAD.WAD by offset instead of extracting subfiles
-        Pass the offset and size for the level's subfile instead of the subfile number
-        Convert Python extraction logic to TypeScript
+    Read directly from WAD.WAD by offset instead of extracting subfiles (if better than extraction)
 */
 
 class Spyro1Renderer implements SceneGfx {
@@ -82,20 +91,20 @@ class Spyro2Renderer implements SceneGfx {
     private renderHelper: GfxRenderHelper;
     private renderInstListMain = new GfxRenderInstList();
     private levelRenderer: LevelRenderer;
-    // private skyboxRenderer: SkyboxRenderer;
-    // private clearColor: number[];
+    private skyboxRenderer: SkyboxRenderer;
+    private clearColor: number[];
 
-    constructor(device: GfxDevice, levelData: LevelData) {
+    constructor(device: GfxDevice, levelData: LevelData, skybox: SkyboxData) {
         this.renderHelper = new GfxRenderHelper(device);
         const cache = this.renderHelper.renderCache;
         this.levelRenderer = new LevelRenderer(cache, levelData);
-        // this.skyboxRenderer = new SkyboxRenderer(cache, skybox);
-        // this.clearColor = skybox.backgroundColor;
+        this.skyboxRenderer = new SkyboxRenderer(cache, skybox);
+        this.clearColor = skybox.backgroundColor;
     }
 
     protected prepareToRender(device: GfxDevice, viewerInput: ViewerRenderInput): void {
         this.renderHelper.renderInstManager.setCurrentList(this.renderInstListMain);
-        // this.skyboxRenderer.prepareToRender(device, this.renderHelper, viewerInput);
+        this.skyboxRenderer.prepareToRender(device, this.renderHelper, viewerInput);
         this.levelRenderer.prepareToRender(device, this.renderHelper, viewerInput);
         this.renderHelper.prepareToRender();
     }
@@ -103,7 +112,7 @@ class Spyro2Renderer implements SceneGfx {
     public render(device: GfxDevice, viewerInput: ViewerRenderInput): void {
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
         const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, opaqueBlackFullClearRenderPassDescriptor);
-        // mainColorDesc.clearColor = {r: this.clearColor[0] / 255, g: this.clearColor[1] / 255, b: this.clearColor[2] / 255, a: 1};
+        mainColorDesc.clearColor = {r: this.clearColor[0] / 255, g: this.clearColor[1] / 255, b: this.clearColor[2] / 255, a: 1};
         const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, opaqueBlackFullClearRenderPassDescriptor);
         const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
         const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
@@ -124,7 +133,7 @@ class Spyro2Renderer implements SceneGfx {
 
     public destroy(device: GfxDevice): void {
         this.renderHelper.destroy();
-        // this.skyboxRenderer.destroy(device);
+        this.skyboxRenderer.destroy(device);
         this.levelRenderer.destroy(device);
     }
 }
@@ -144,7 +153,7 @@ class Spyro1Scene implements SceneDesc {
         const sky = await context.dataFetcher.fetchData(`${pathBase1}/sf${this.subFileID}_sky1.bin`);
         const tileGroups = parseTileGroups(textures.createDataView());
         const combinedAtlas = buildCombinedAtlas(new VRAM(vram.copyToBuffer()), tileGroups);
-        const renderer = new Spyro1Renderer(device, buildLevelData(ground.createDataView(), combinedAtlas, 1), buildSkybox(sky.createDataView()));
+        const renderer = new Spyro1Renderer(device, buildLevelData(ground.createDataView(), combinedAtlas, 1), buildSkybox(sky.createDataView(), 1));
         return renderer;
     }
 }
@@ -161,12 +170,12 @@ class Spyro2Scene implements SceneDesc {
         const ground = await context.dataFetcher.fetchData(`${pathBase2}/sf${this.subFileID}_ground.bin`);
         const vram = await context.dataFetcher.fetchData(`${pathBase2}/sf${this.subFileID}_vram.bin`);
         const textures = await context.dataFetcher.fetchData(`${pathBase2}/sf${this.subFileID}_list.bin`);
-        // const sky = await context.dataFetcher.fetchData(`${pathBase2}/sf${this.subFileID}_sky.bin`);
+        const sky = await context.dataFetcher.fetchData(`${pathBase2}/sf${this.subFileID}_sky.bin`);
         const tileGroups = parseTileGroups2(textures.createDataView());
         const vramObj = new VRAM(vram.copyToBuffer());
         vramObj.applySpyro2FontStripFix();
         const combinedAtlas = buildCombinedAtlas2(vramObj, tileGroups);
-        const renderer = new Spyro2Renderer(device, buildLevelData(ground.createDataView(), combinedAtlas, 2));
+        const renderer = new Spyro2Renderer(device, buildLevelData(ground.createDataView(), combinedAtlas, 2), buildSkybox(sky.createDataView(), 2));
         return renderer;
     }
 }
