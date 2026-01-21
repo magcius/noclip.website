@@ -25,6 +25,7 @@ To-do list
         There are a very small number of incorrect faces (unsure if all the same problem or different. Some could be invisible walls/collision related)
             Below the Ocean Speedway portal in Summer Forest there's stray faces
             The outdoor waterfall in Idol Springs has two black triangles
+            Colossus has a z-fighting face in the hockey rink's ice
             Hurricos has black polygons in the gates that need spark plugs to open
             Aquaria Towers has some of the tower numbers' faces being rendered as water
             Zephyr has a stray face that's treated as water in the plant/seed section (the exploded building is expected!)

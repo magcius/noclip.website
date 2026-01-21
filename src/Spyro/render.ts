@@ -46,32 +46,17 @@ void main() {
 #ifdef FRAG
 void main() {
     vec4 texColor = texture(SAMPLER_2D(u_Texture), v_TexCoord);
-
     vec3 tex5 = floor(texColor.rgb * 31.0) / 31.0;
     vec3 col5 = floor(v_Color.rgb * 31.0) / 31.0;
-
-    vec3 lit = tex5 * col5;
-
-    float bayer4x4[16] = float[16](
-        0.0, 8.0, 2.0, 10.0,
-        12.0, 4.0, 14.0, 6.0,
-        3.0, 11.0, 1.0, 9.0,
-        15.0, 7.0, 13.0, 5.0
-    );
-    int xi = int(mod(gl_FragCoord.x, 4.0));
-    int yi = int(mod(gl_FragCoord.y, 4.0));
-    float threshold = (bayer4x4[yi * 4 + xi] / 16.0) * 0.03;
-
-    vec3 dithered = lit + threshold;
-    vec3 final5 = floor(dithered * 31.0) / 31.0;
+    vec3 final5 = tex5 * col5;
 
     bool isWater = (v_Color.a < 0.99);
     if (isWater) {
         // Blue-green tint
-        final5 = mix(final5, vec3(0.0, 0.25, 0.45), 0.25);
+        final5 = mix(final5, vec3(0.0, 0.81, 0.81), 0.25);
     }
 
-    float brightness = isWater ? 2.0 : 1.6;
+    float brightness = isWater ? 2.0 : 1.8;
     gl_FragColor = vec4(final5 * brightness, v_Color.a);
 }
 #endif
@@ -157,7 +142,7 @@ export class LevelRenderer {
                     g = c[1] / 255;
                     b = c[2] / 255;
                 }
-                const alpha = isWater ? 0.5 : 1.0;
+                const alpha = isWater ? 0.3 : 1.0;
                 expandedCol.push(r, g, b, alpha);
                 if (uvIndices) {
                     const uvVal = uvs[uvIndices[k]];
