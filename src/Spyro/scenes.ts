@@ -12,27 +12,31 @@ import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor } fr
 To-do list
 
     Scrolling textures
-    Better level shader (get rid of the color banding)
+    Better level shader (remove color banding and make brighter)
     Clean up functions in bin.ts
 
     Spyro 1
         Water in some flight levels doesn't render correctly (different than ground like the second game?)
         
     Spyro 2
-        Water is mostly correct but the tinting is hardcoded
-        There are a very small number of incorrect faces (unsure if all the same problem or different)
+        The title screen needs its low-poly parts rendered to look correct (and possibly some others)
+            All levels are currently only showing high-poly/textured (see buildLevelData in bin.ts)
+        Water is mostly correct but the tinting is hardcoded in the shader
+        There are a very small number of incorrect faces (unsure if all the same problem or different. Some could be invisible walls/collision related)
             Below the Ocean Speedway portal in Summer Forest there's stray faces
             The outdoor waterfall in Idol Springs has two black triangles
             Hurricos has black polygons in the gates that need spark plugs to open
+            Aquaria Towers has some of the tower numbers' faces being rendered as water
             Zephyr has a stray face that's treated as water in the plant/seed section (the exploded building is expected!)
+            Metropolis has some faces at the starting area that are incorrectly rendered as water
             Dragon Shores has a water triangle along the edge "ocean" that appears much brighter and has z-fighting
             Dragon Shores also has one of the dragon statues at the entrance with parts of its wings being treated as water
-        Shady Oasis and Mystic Marsh both appear to be squished. Probably an issue with z-scaling.
+        Shady Oasis and Mystic Marsh both appear to be squished. Probably an issue with z-scaling
 
 Nice to have
 
     Gems, level entities, NPCs, etc. rendered in each level
-        The format for these will need to be figured out. They're in other "sub-subfiles" like the ground models and skybox.
+        The format for these will need to be figured out. They're in other "sub-subfiles" like the ground models and skybox
     Read directly from WAD.WAD by offset instead of extracting subfiles (if better than extraction)
 */
 
@@ -286,7 +290,31 @@ const sceneDescs2 = [
     new Spyro2Scene(68, "Metropolis"),
     new Spyro2Scene(64, "Canyon Speedway"),
     new Spyro2Scene(72, "Ripto's Arena"),
-    new Spyro2Scene(70, "Dragon Shores")
+    new Spyro2Scene(70, "Dragon Shores"),
+    "Cutscenes",
+    new Spyro2Scene(96, "Title Screen"),
+    new Spyro2Scene(74, "Introduction"),
+    new Spyro2Scene(76, "Glimmer (Intro)"),
+    new Spyro2Scene(78, "Summer Forest (Intro)"),
+    new Spyro2Scene(80, "Winter Tundra (Interlude)"),
+    new Spyro2Scene(82, "Crush's Dungeon (Outro)"),
+    new Spyro2Scene(84, "Autumn Plains (Intro)"),
+    new Spyro2Scene(86, "Gulp's Overlook (Intro)"),
+    new Spyro2Scene(88, "Gulp's Overlook (Outro)"),
+    new Spyro2Scene(90, "Winter Tundra (Intro)"),
+    new Spyro2Scene(92, "Ripto's Arena (Intro)"),
+    new Spyro2Scene(94, "Ripto's Arena (Outro)")
+    // "Credits Flyover", // currently broken but these are the valid ids
+    // new Spyro2Scene(188, "Flyover"),
+    // new Spyro2Scene(189, "Flyover"),
+    // new Spyro2Scene(190, "Flyover"),
+    // new Spyro2Scene(191, "Flyover"),
+    // new Spyro2Scene(192, "Flyover"),
+    // new Spyro2Scene(193, "Flyover"),
+    // new Spyro2Scene(194, "Flyover"),
+    // new Spyro2Scene(195, "Flyover"),
+    // new Spyro2Scene(196, "Flyover"),
+    // new Spyro2Scene(197, "Flyover")
 ];
 
 export const sceneGroup1: SceneGroup = {id: id1, name: name1, sceneDescs: sceneDescs1};
