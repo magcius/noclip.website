@@ -36,7 +36,7 @@ export class RenderEffects extends TypedObject {
    * Creates a new RenderEffects instance with the given effect added.
    * Replaces existing effects of the same type.
    */
-  withEffect(effect: RenderEffect) {
+  addEffect(effect: RenderEffect) {
     const result = new RenderEffects();
     for (const existing of this.effects) {
       if (existing.constructor !== effect.constructor) {
@@ -44,6 +44,16 @@ export class RenderEffects extends TypedObject {
       }
     }
     result.effects.push(effect);
+    return result;
+  }
+
+  removeEffect(effect: new () => RenderEffect) {
+    const result = new RenderEffects();
+    for (const existing of this.effects) {
+      if (existing.constructor !== effect) {
+        result.effects.push(existing);
+      }
+    }
     return result;
   }
 

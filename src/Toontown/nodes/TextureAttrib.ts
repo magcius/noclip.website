@@ -160,6 +160,11 @@ export class TextureAttrib extends RenderAttrib {
     return info;
   }
 
+  override compose(other: this): this {
+    // TODO combine texture stages
+    return other;
+  }
+
   override applyToMaterial(material: MaterialData): void {
     if (this.texture !== null) {
       material.texture = this.texture;

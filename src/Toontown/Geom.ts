@@ -86,6 +86,7 @@ export interface MaterialData {
   cullReverse: boolean;
   depthTestMode: PandaCompareFunc;
   depthWrite: DepthWriteMode;
+  depthOffset: number | null;
   isDecal: boolean;
   billboardEffect: BillboardEffect | null;
   colorWriteChannels: number;
@@ -598,6 +599,7 @@ const DEFAULT_MATERIAL: MaterialData = {
   cullReverse: false,
   depthTestMode: PandaCompareFunc.Less,
   depthWrite: DepthWriteMode.On,
+  depthOffset: null,
   isDecal: false,
   billboardEffect: null,
   colorWriteChannels: ColorWriteChannels.All,

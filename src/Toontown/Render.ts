@@ -436,11 +436,18 @@ export class ToontownRenderer implements Viewer.SceneGfx {
         cullMode = GfxCullMode.None;
         break;
     }
+    let polygonOffset = false;
+    if (material.depthOffset !== null) {
+      if (material.depthOffset !== 1)
+        console.warn(`Unsupported depth offset value: ${material.depthOffset}`);
+      polygonOffset = true;
+    }
     renderInst.setMegaStateFlags({
       depthWrite,
       depthCompare: reverseDepthForCompareMode(depthCompare),
       cullMode,
       frontFace,
+      polygonOffset,
     });
     if (material.colorWriteChannels !== ColorWriteChannels.All) {
       setAttachmentStateSimple(renderInst.getMegaStateFlags(), {

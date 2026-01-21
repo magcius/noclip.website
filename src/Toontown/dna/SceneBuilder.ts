@@ -695,6 +695,14 @@ export class DNASceneBuilder {
     baselineFont: TextFont,
     parentNode: PandaNode,
   ): void {
+    let geomNode: PandaNode | null = parentNode;
+    while (geomNode && !(geomNode instanceof GeomNode)) {
+      geomNode = geomNode.parent;
+    }
+    if (geomNode instanceof GeomNode) {
+      geomNode.setEffect(new DecalEffect());
+    }
+
     const color = dnaText.color ?? baselineColor;
 
     let font = baselineFont;
@@ -753,6 +761,14 @@ export class DNASceneBuilder {
     layout: DNASignBaseline,
     parentNode: PandaNode,
   ): void {
+    let geomNode: PandaNode | null = parentNode;
+    while (geomNode && !(geomNode instanceof GeomNode)) {
+      geomNode = geomNode.parent;
+    }
+    if (geomNode instanceof GeomNode) {
+      geomNode.setEffect(new DecalEffect());
+    }
+
     const graphicNode = this.addGeometryFromCode(dnaGraphic.code, parentNode);
     if (!graphicNode) return;
 

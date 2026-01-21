@@ -46,9 +46,28 @@ export class CullFaceAttrib extends RenderAttrib {
     return info;
   }
 
+  override compose(other: this): this {
+    // Normal case
+    if (!this.reverse && other.mode !== CullFaceMode.CullUnchanged) {
+      return other;
+    }
+
+    const mode =
+      other.mode === CullFaceMode.CullUnchanged ? this.mode : other.mode;
+    const reverse = this.reverse !== other.reverse;
+    return CullFaceAttrib.create(mode, reverse) as this;
+  }
+
   override applyToMaterial(material: MaterialData): void {
     material.cullFaceMode = this.mode;
     material.cullReverse = this.reverse;
+  }
+
+  static create(mode: CullFaceMode, reverse = false): CullFaceAttrib {
+    const result = new CullFaceAttrib();
+    result.mode = mode;
+    result.reverse = reverse;
+    return result;
   }
 }
 

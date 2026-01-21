@@ -112,13 +112,24 @@ export class RenderState extends TypedObject {
     if (this.attribs.length === 0) return other;
     const result = this.attribs.slice();
     for (const entry of other.attribs) {
-      const existing = result.findIndex(
+      const idx = result.findIndex(
         (a) => a.attrib.constructor === entry.attrib.constructor,
       );
-      if (existing === -1) {
+      if (idx === -1) {
         result.push(entry);
-      } else if (entry.priority >= result[existing].priority) {
-        result[existing] = entry;
+        continue;
+      }
+      const existing = result[idx];
+      if (
+        entry.priority > existing.priority &&
+        existing.attrib.lowerAttribCanOverride()
+      ) {
+        result[idx] = entry;
+      } else if (entry.priority >= existing.priority) {
+        result[idx] = {
+          attrib: existing.attrib.compose(entry.attrib),
+          priority: entry.priority,
+        };
       }
     }
     const state = new RenderState();

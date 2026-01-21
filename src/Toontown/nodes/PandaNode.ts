@@ -1,4 +1,4 @@
-import { type ReadonlyVec3, type ReadonlyVec4, vec3 } from "gl-matrix";
+import { mat4, type ReadonlyVec3, type ReadonlyVec4, vec3 } from "gl-matrix";
 import type { BAMFile } from "../BAMFile";
 import { AssetVersion, type DataStream } from "../Common";
 import { ColorAttrib } from "./ColorAttrib";
@@ -66,6 +66,18 @@ export class PandaNode extends TypedObject {
       parent.removeChild(this);
     }
     target.addChild(this, sort);
+  }
+
+  wrtReparentTo(target: PandaNode, sort: number = 0): void {
+    const targetInvTransform = target.netTransform.getInverseMatrix();
+    const currTransform = this.netTransform.getMatrix();
+    for (const parent of this.parents.slice()) {
+      parent.removeChild(this);
+    }
+    target.addChild(this, sort);
+    const mtx = mat4.create();
+    mat4.multiply(mtx, targetInvTransform, currTransform);
+    this.transform = TransformState.fromMatrix(mtx);
   }
 
   /**
@@ -321,7 +333,11 @@ export class PandaNode extends TypedObject {
   }
 
   setEffect(effect: RenderEffect) {
-    this.effects = this.effects.withEffect(effect);
+    this.effects = this.effects.addEffect(effect);
+  }
+
+  clearEffect(effect: new () => RenderEffect) {
+    this.effects = this.effects.removeEffect(effect);
   }
 
   get pos(): ReadonlyVec3 {

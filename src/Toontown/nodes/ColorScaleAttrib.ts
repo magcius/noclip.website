@@ -46,6 +46,21 @@ export class ColorScaleAttrib extends RenderAttrib {
     );
   }
 
+  override compose(other: this): this {
+    if (other.off) return other;
+    const attrib = new ColorScaleAttrib();
+    attrib.off = this.off;
+    const scale = vec4.create();
+    vec4.multiply(scale, this.scale, other.scale);
+    attrib.scale = scale;
+    attrib.quantizeScale();
+    return attrib as this;
+  }
+
+  override lowerAttribCanOverride(): boolean {
+    return true;
+  }
+
   hasScale(): boolean {
     return !this.isIdentity();
   }

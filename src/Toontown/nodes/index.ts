@@ -63,6 +63,7 @@ export { ColorScaleAttrib } from "./ColorScaleAttrib";
 export { ColorWriteAttrib, ColorWriteChannels } from "./ColorWriteAttrib";
 export { CullBinAttrib } from "./CullBinAttrib";
 export { CullFaceAttrib, CullFaceMode } from "./CullFaceAttrib";
+export { DepthOffsetAttrib } from "./DepthOffsetAttrib";
 export { DepthTestAttrib } from "./DepthTestAttrib";
 export { DepthWriteAttrib, DepthWriteMode } from "./DepthWriteAttrib";
 export { MaterialAttrib } from "./MaterialAttrib";
