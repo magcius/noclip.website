@@ -36,15 +36,26 @@ export function parseFSKA(buffer: ArrayBufferSlice, offset: number, count: numbe
             const initial_scaling = (flags >> 3) & 0x1;
             const initial_rotation = (flags >> 4) & 0x1;
             const initial_translation = (flags >> 5) & 0x1;
-            const scale_x = (flags >> 6) & 0x1;
-            const scale_y = (flags >> 7) & 0x1;
-            const scale_z = (flags >> 8) & 0x1;
-            const rotate_x = (flags >> 9) & 0x1;
-            const rotate_y = (flags >> 10) & 0x1;
-            const rotate_z = (flags >> 11) & 0x1;
-            const translate_x = (flags >> 12) & 0x1;
-            const translate_y = (flags >> 13) & 0x1;
-            const translate_z = (flags >> 14) & 0x1;
+            // assuming every bone has these set
+            assert(initial_scaling == 1);
+            assert(initial_rotation == 1);
+            assert(initial_translation == 1);
+
+            const initial_value_array_offset = view.getUint32(bone_animation_entry_offset + 0x10, true);
+            let initial_values: number[] = [];
+            // scale xyz
+            initial_values.push(view.getFloat32(initial_value_array_offset, true));
+            initial_values.push(view.getFloat32(initial_value_array_offset + 0x4, true));
+            initial_values.push(view.getFloat32(initial_value_array_offset + 0x8, true));
+            // rotation xyz (4th component is always 1)
+            initial_values.push(view.getFloat32(initial_value_array_offset + 0xC, true));
+            initial_values.push(view.getFloat32(initial_value_array_offset + 0x10, true));
+            initial_values.push(view.getFloat32(initial_value_array_offset + 0x14, true));
+            initial_values.push(view.getFloat32(initial_value_array_offset + 0x18, true));
+            // translation xyz
+            initial_values.push(view.getFloat32(initial_value_array_offset + 0x1C, true));
+            initial_values.push(view.getFloat32(initial_value_array_offset + 0x20, true));
+            initial_values.push(view.getFloat32(initial_value_array_offset + 0x24, true));
 
             const curve_array_offset = view.getUint32(bone_animation_entry_offset + 0x8, true);
             const curve_count = view.getUint8(bone_animation_entry_offset + 0x2E);
@@ -115,7 +126,7 @@ export function parseFSKA(buffer: ArrayBufferSlice, offset: number, count: numbe
                 curve_entry_offset += CURVE_ENTRY_SIZE;
             }
 
-            bone_animations.push({ name: bone_name, flags, curves });
+            bone_animations.push({ name: bone_name, flags, initial_values, curves });
             bone_animation_entry_offset += BONE_ANIMATION_ENTRY_SIZE;
         }
 
@@ -141,6 +152,7 @@ export interface BoneAnimation
 {
     name: string;
     flags: number;
+    initial_values: number[];
     curves: Curve[];
 }
 

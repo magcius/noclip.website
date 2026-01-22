@@ -10,12 +10,12 @@ import { GfxDevice, GfxTexture } from "../gfx/platform/GfxPlatform";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { vec3 } from "gl-matrix";
 import { MapLayout, get_point_from_group } from "./maplayout.js";
-import { fshp_renderer } from "./render_fshp";
+import { fmdl_renderer } from "./render_fmdl.js";
 import { assert } from "../util.js";
 
 export class gimmick
 {
-    public fshp_renderers: fshp_renderer[] = [];
+    public fmdl_renderer: fmdl_renderer;
 
     /**
      * @param rotation euler XYZ rotation in radians
@@ -26,14 +26,20 @@ export class gimmick
         const bntx = BNTX.parse(fres.embedded_files[0].buffer);
         const gfx_texture_array: GfxTexture[] = deswizzle_and_upload_bntx_textures(bntx, device);
 
-        // create all fshp_renderers
         const fmdl = fres.fmdl[0];
-        const shapes = fmdl.fshp;
-        for (let i = 0; i < shapes.length; i++)
-        {
-            const renderer = new fshp_renderer(device, renderHelper, fmdl, i, bntx, null, gfx_texture_array, position, rotation, scale, false);
-            this.fshp_renderers.push(renderer);
-        }
+        this.fmdl_renderer = new fmdl_renderer
+        (
+            fmdl,
+            bntx,
+            gfx_texture_array,
+            null, 
+            position,
+            rotation,
+            scale,
+            false,
+            device,
+            renderHelper,
+        );
     }
 }
 

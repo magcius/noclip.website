@@ -104,6 +104,7 @@ class TMSFESceneDesc implements SceneDesc
             if (animation_bfres_data != undefined)
             {
                 animation_fres = parseBFRES(animation_bfres_data);
+                console.log(animation_fres);
             }
             else
             {
@@ -149,8 +150,7 @@ const name = "MOVE THIS LATER Tokyo Mirage Sessions ♯FE";
 const sceneDescs =
 [
     "Illusory Daitama",
-    // new TMSFESceneDesc("d002_01", "Illusory Daitama", ["d002_01", "obj01", "obj02", "obj03", "sky"], create_d002_01_gimmicks),
-    new TMSFESceneDesc("d002_01", "Illusory Daitama", ["obj03"]),
+    new TMSFESceneDesc("d002_01", "Illusory Daitama", ["d002_01", "obj01", "obj02", "obj03", "sky"], create_d002_01_gimmicks),
     new TMSFESceneDesc("d002_02", "Blue Observatory", ["d002_02", "sky"]),
     new TMSFESceneDesc("d002_03", "Red Observatory", ["d002_03", "sky"]),
     "Illusory 106",
