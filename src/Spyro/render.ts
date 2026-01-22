@@ -22,6 +22,10 @@ ${GfxShaderLibrary.MatrixLibrary}
 layout(std140) uniform ub_SceneParams {
     Mat4x4 u_ProjectionView;
     vec4 u_LevelCenter;
+    float u_Time;
+    float u_WaterAmp;
+    float u_WaterSpeed1;
+    float u_WaterSpeed2;
 };
 
 uniform sampler2D u_Texture;
@@ -39,6 +43,12 @@ void main() {
     v_TexCoord = a_UV;
 
     vec3 worldPos = a_Position - u_LevelCenter.xyz;
+    if (a_Color.a < 0.99) {
+        float phase = dot(worldPos.xz, vec2(0.03, 0.04));
+        float wave = sin(u_Time * u_WaterSpeed1 + phase) * 3.0 + sin(u_Time * u_WaterSpeed2 + phase * 1.7) * 1.5;
+        worldPos.z += wave * u_WaterAmp;
+    }
+
     gl_Position = UnpackMatrix(u_ProjectionView) * vec4(worldPos, 1.0);
 }
 #endif
@@ -46,18 +56,29 @@ void main() {
 #ifdef FRAG
 void main() {
     vec4 texColor = texture(SAMPLER_2D(u_Texture), v_TexCoord);
-    vec3 tex5 = floor(texColor.rgb * 31.0) / 31.0;
-    vec3 col5 = floor(v_Color.rgb * 31.0) / 31.0;
-    vec3 final5 = tex5 * col5;
-
+    vec3 lit = texColor.rgb * v_Color.rgb;
     bool isWater = (v_Color.a < 0.99);
     if (isWater) {
-        // Blue-green tint
-        final5 = mix(final5, vec3(0.0, 0.81, 0.81), 0.25);
+        lit = mix(lit, vec3(0.0, 0.81, 0.81), 0.25);
     }
 
-    float brightness = isWater ? 2.0 : 1.8;
-    gl_FragColor = vec4(final5 * brightness, v_Color.a);
+    float brightness = isWater ? 2.0 : 1.7;
+    lit *= brightness;
+
+    float bayer4x4[16] = float[16](
+         0.0,  8.0,  2.0, 10.0,
+        12.0,  4.0, 14.0,  6.0,
+         3.0, 11.0,  1.0,  9.0,
+        15.0,  7.0, 13.0,  5.0
+    );
+    int xi = int(mod(gl_FragCoord.x, 4.0));
+    int yi = int(mod(gl_FragCoord.y, 4.0));
+    float threshold = bayer4x4[yi * 4 + xi] / 16.0;
+
+    vec3 dithered = lit + threshold * (1.0 / 31.0);
+    vec3 final5 = floor(dithered * 31.0) / 31.0;
+
+    gl_FragColor = vec4(final5, v_Color.a);
 }
 #endif
     `;
@@ -203,11 +224,15 @@ export class LevelRenderer {
             }
         ]);
 
-        let offs = template.allocateUniformBuffer(LevelProgram.ub_SceneParams, 20);
+        let offs = template.allocateUniformBuffer(LevelProgram.ub_SceneParams, 24);
         const buf = template.mapUniformBufferF32(LevelProgram.ub_SceneParams);
         mat4.mul(scratchMat4a, viewerInput.camera.clipFromWorldMatrix, noclipSpaceFromSpyroSpace);
         offs += fillMatrix4x4(buf, offs, scratchMat4a);
         offs += fillVec4(buf, offs, this.levelCenter[0], this.levelCenter[1], this.levelCenter[2], 0);
+        buf[offs++] = viewerInput.time * 0.001 * 2; // u_Time
+        buf[offs++] = 1.0; // u_WaterAmp
+        buf[offs++] = 0.50; // u_WaterSpeed1
+        buf[offs++] = 0.23; // u_WaterSpeed2
         template.setVertexInput(
             this.inputLayout,
             [
