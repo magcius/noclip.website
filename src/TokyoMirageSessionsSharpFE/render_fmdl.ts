@@ -4,7 +4,7 @@
 import * as BNTX from '../fres_nx/bntx.js';
 import { FMDL } from "./bfres/fmdl";
 import { FSKA } from './bfres/fska.js';
-import { FSKL, recursive_bone_transform, recursive_bone_transform_with_animation } from './bfres/fskl.js';
+import { FSKL, FSKL_Bone, recursive_bone_transform, recursive_bone_transform_with_animation } from './bfres/fskl.js';
 import { GfxDevice, GfxTexture } from "../gfx/platform/GfxPlatform";
 import { vec3, mat4 } from "gl-matrix";
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
@@ -43,12 +43,8 @@ export class fmdl_renderer
         // setup skeleton
         this.fskl = fmdl.fskl;
         this.fska = fska;
+        console.log(this.fska);
         assert(this.fskl.smooth_rigid_indices.length < BONE_MATRIX_MAX_LENGTH);
-        for (let i = 0; i < this.fskl.smooth_rigid_indices.length; i++)
-        {
-            const transformation_matrix = recursive_bone_transform(this.fskl.smooth_rigid_indices[i], this.fskl)
-            this.smooth_rigid_matrix_array.push(transformation_matrix);
-        }
 
         // setup transformation matrix
         computeModelMatrixSRT
@@ -72,7 +68,7 @@ export class fmdl_renderer
             }
             else
             {
-                bone_matrix_length = this.smooth_rigid_matrix_array.length;
+                bone_matrix_length = this.fskl.smooth_rigid_indices.length;
             }
             const renderer = new fshp_renderer(fvtx, fshp, fmat, bntx, gfx_texture_array, bone_matrix_length, device, renderHelper);
             this.fshp_renderers.push(renderer);
@@ -82,12 +78,98 @@ export class fmdl_renderer
 
     render(renderHelper: GfxRenderHelper, viewerInput: ViewerRenderInput, renderInstListMain: GfxRenderInstList, renderInstListSkybox: GfxRenderInstList): void
     {
-        // update bone matrix
-        // viewerInput.deltaTime;
-        // const FPS = 30;
-        // const FPS_RATE = FPS/1000;
-        // this.current_animation_frame += viewerInput.deltaTime * FPS_RATE;
-        // console.log(this.current_animation_frame);
+        // animate skeleton
+        let current_bones: FSKL_Bone[] = [];
+        if (this.fska == null)
+        {
+            current_bones = this.fskl.bones;
+        }
+        else
+        {
+            const FPS = 30;
+            const FPS_RATE = FPS/1000;
+            this.current_animation_frame += viewerInput.deltaTime * FPS_RATE;
+            this.current_animation_frame = this.current_animation_frame % this.fska.frame_count;
+
+            for (let bone_index = 0; bone_index < this.fskl.bones.length; bone_index++)
+            {
+                let bone = this.fskl.bones[bone_index];
+                if (this.fska.name == "obj03" && bone.name == "obj3_down_A")
+                {
+                    let transformation_flags = this.fska.bone_animations[bone_index].flags >> 6;
+                    // which curve goes to which transformation is stored in the flags
+                    // iterate over each bit
+                    let transformation_values: number[] = [];
+                    let current_curve_index = 0;
+                    // TODO: are 10 bits of the flags really used? documentation says 9 but translation didn't line up
+                    for (let i = 0; i < 10; i++)
+                    {
+                        const has_curve = transformation_flags & 0x1;
+                        if (has_curve)
+                        {
+                            const curve = this.fska.bone_animations[bone_index].curves[current_curve_index];
+                            current_curve_index += 1;
+
+                            for (let frame_index = 0; frame_index < curve.frames.length; frame_index++)
+                            {
+                                if (this.current_animation_frame == curve.frames[frame_index])
+                                {
+                                    const value = curve.keys[0].value;
+                                    transformation_values.push(value);
+
+                                    break;
+                                }
+                                else if (this.current_animation_frame < curve.frames[frame_index])
+                                {
+                                    const before_key = curve.keys[frame_index - 1];
+                                    const before_frame = curve.frames[frame_index - 1];
+                                    const after_key = curve.keys[frame_index];
+                                    const after_frame = curve.frames[frame_index];
+
+                                    const frame_delta = after_frame - before_frame;
+                                    const t = (this.current_animation_frame - before_frame) / frame_delta;
+                                    const duration = frame_delta * (1.0 / 30)
+
+                                    const h3 = (3.0 * t * t) - (2.0 * t * t * t);
+                                    const h2 = (-1.0 * t * t) + (t * t * t);
+                                    const h1 = (t * t * t) - (2.0 * t * t) + t;
+                                    const h0 = 1.0 - h3;
+
+                                    const value = h0 * before_key.value + h3 * after_key.value + (h1 * before_key.velocity + h2 * after_key.velocity) * duration;
+                                    transformation_values.push(value);
+                                    break;
+                                }
+                            }
+                        }
+                        else
+                        {
+                            transformation_values.push(this.fska.bone_animations[bone_index].initial_values[i]);
+                        }
+
+                        transformation_flags >>= 1;
+                    }
+
+                    bone =
+                    {
+                        name: bone.name,
+                        parent_index: bone.parent_index,
+                        scale: bone.scale,
+                        rotation: bone.rotation,
+                        translation: vec3.fromValues(transformation_values[7], transformation_values[8], transformation_values[9]),
+                        user_data: bone.user_data,
+                    };
+                }
+                current_bones.push(bone);
+            }
+        }
+
+        // remake smooth rigid matrix
+        this.smooth_rigid_matrix_array = [];
+        for (let i = 0; i < this.fskl.smooth_rigid_indices.length; i++)
+        {
+            const transformation_matrix = recursive_bone_transform(this.fskl.smooth_rigid_indices[i], current_bones)
+            this.smooth_rigid_matrix_array.push(transformation_matrix);
+        }
 
         // render all fshp renderers
         for (let i = 0; i < this.fshp_renderers.length; i++)
@@ -95,7 +177,7 @@ export class fmdl_renderer
             let bone_matrix_array: mat4[] = [];
             if (this.fshp_renderers[i].skin_bone_count == 0)
             {
-                let transformation_matrix = recursive_bone_transform(this.fshp_renderers[i].bone_index, this.fskl);
+                let transformation_matrix = recursive_bone_transform(this.fshp_renderers[i].bone_index, current_bones);
                 bone_matrix_array.push(transformation_matrix);
             }
             else

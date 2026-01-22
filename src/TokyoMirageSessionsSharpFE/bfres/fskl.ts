@@ -79,9 +79,9 @@ const SMOOTH_RIGID_INDEX_ENTRY_SIZE = 0x2;
 /**
  * multiply a bone's transformation with all it's parent's transformations to get the real transformation matrix
  */
-export function recursive_bone_transform(bone_index: number, fskl: FSKL): mat4
+export function recursive_bone_transform(bone_index: number, bones: FSKL_Bone[]): mat4
 {
-    const bone = fskl.bones[bone_index];
+    const bone = bones[bone_index];
     let transform_matrix: mat4 = mat4.create();
     computeModelMatrixSRT
     (
@@ -97,7 +97,7 @@ export function recursive_bone_transform(bone_index: number, fskl: FSKL): mat4
     else
     {
         const new_matrix: mat4 = mat4.create();
-        mat4.multiply(new_matrix, recursive_bone_transform(bone.parent_index, fskl), transform_matrix)
+        mat4.multiply(new_matrix, recursive_bone_transform(bone.parent_index, bones), transform_matrix)
         return new_matrix;
     }
 }
@@ -105,6 +105,7 @@ export function recursive_bone_transform(bone_index: number, fskl: FSKL): mat4
 /**
  * animate the skeleton, then multiply a bone's transformation with all it's parent's transformations to get the real transformation matrix
  */
+// TODO delete this
 export function recursive_bone_transform_with_animation(bone_index: number, fskl: FSKL, fska: FSKA, animation_frame: number): mat4
 {
     const bone = fskl.bones[bone_index];

@@ -104,7 +104,6 @@ class TMSFESceneDesc implements SceneDesc
             if (animation_bfres_data != undefined)
             {
                 animation_fres = parseBFRES(animation_bfres_data);
-                console.log(animation_fres);
             }
             else
             {
@@ -122,7 +121,6 @@ class TMSFESceneDesc implements SceneDesc
         if (maplayout_data != undefined)
         {
             const layout = parseLayout(maplayout_data);
-            console.log(layout);
             scene.common_gimmicks = await create_common_gimmicks(layout, this.gate_type, this.is_d018_03, dataFetcher, device);
             if (this.map_gimmick_function != undefined)
             {
