@@ -90,7 +90,6 @@ impl Shape {
             self.header.tex_offsets[6],
             self.header.tex_offsets[7],
             self.header.unk4_0x110_offset,
-            self.header._pos_offset_dupe,
             self.header.display_list_offset,
             self.header.texture_list_offset,
         ];
@@ -141,6 +140,19 @@ impl Shape {
         }
     }
 
+    pub fn mystery_loc(&self) -> Option<FileLoc> {
+        let relative_offset = self.header.unk4_0x110_offset as usize;
+        if relative_offset == 0 {
+            None
+        } else {
+            Some(FileLoc {
+                file_id: self.file_id,
+                offset: self.offset + relative_offset,
+                length: self.next_offset(12) - relative_offset,
+            })
+        }
+    }
+
     pub fn get_aabb(&self) -> Vec<f32> {
         vec![
             self.header.aabb_min_x,
@@ -185,13 +197,17 @@ impl Shape {
             Some(FileLoc {
                 file_id: self.file_id,
                 offset: self.offset + relative_offset,
-                length: self.next_offset(14) - relative_offset,
+                length: self.next_offset(13) - relative_offset,
             })
         }
     }
 
     pub fn scale(&self) -> f32 {
         self.header.scale
+    }
+
+    pub fn display_list_offs(&self) -> u32 {
+        self.header.display_list_offset
     }
 }
 
