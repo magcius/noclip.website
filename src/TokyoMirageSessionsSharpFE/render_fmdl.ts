@@ -11,7 +11,7 @@ import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
 import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
 import { computeModelMatrixSRT } from '../MathHelpers.js';
 import { fshp_renderer } from "./render_fshp";
-import { getPointHermite } from '../Spline.js';
+import { getPointCubic } from '../Spline.js';
 import { assert } from '../util.js';
 import { ViewerRenderInput } from '../viewer.js';
 
@@ -190,21 +190,20 @@ export class fmdl_renderer
                     {
                         if (current_frame == curve.frames[frame_index])
                         {
-                            // interpolation is unnecessary, just return the key value
-                            const value = curve.keys[0].value;
+                            // interpolation is unnecessary, just return the constant
+                            const value = curve.keys[frame_index][3];
                             transformation_values.push(value);
                             break;
                         }
                         else if (current_frame < curve.frames[frame_index])
                         {
-                            // interpolate between two keyframes
+                            // interpolate the value
                             const before_frame = curve.frames[frame_index - 1];
                             const after_frame = curve.frames[frame_index];
                             const frame_delta = after_frame - before_frame;
                             const t = (current_frame - before_frame) / frame_delta;
-                            const before_key = curve.keys[frame_index - 1];
-                            const after_key = curve.keys[frame_index];
-                            const value = getPointHermite(before_key.value, after_key.value, before_key.velocity * frame_delta, after_key.velocity * frame_delta, t);
+                            const key_frame = curve.keys[frame_index - 1];
+                            const value = getPointCubic(key_frame, t);
                             transformation_values.push(value);
                             break;
                         }
