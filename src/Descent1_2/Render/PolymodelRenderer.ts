@@ -107,7 +107,7 @@ void main() {
     vec3 t_norm = normalize(mat3(t_matModel) * a_norm);
     float t_normLight = 0.25 + 0.75 * max(dot(t_look, t_norm), 0.0);
     v_uvl = a_uvl;
-    v_light = mix(1.0/33.0, 1.0, clamp(max(max(u_segmentLight * t_normLight, u_minLight), v_uvl.z), 0.0, 1.0));
+    v_light = mix(1.0/33.0, 1.0, clamp(max(max(u_segmentLight * t_normLight + u_glow, u_minLight), v_uvl.z), 0.0, 1.0));
 }
 `;
 
@@ -239,7 +239,7 @@ function buildMeshCollection(
     // Then bake polymodel meshes.
     for (const [modelNum, objects] of objectsGrouped.entries()) {
         const model = assetCache.getPolymodel(modelNum);
-        if (model != null) {
+        if (model !== null) {
             const mesh = makePolymodelMesh(
                 model,
                 level.gameVersion === 1 ? palette : null,
@@ -266,7 +266,7 @@ function buildMeshCollection(
             for (const sourceCall of mesh.calls) {
                 const objectTextureIndex = sourceCall.texture;
                 const objectBitmapId =
-                    objectTextureIndex != null
+                    objectTextureIndex !== null
                         ? assetCache.resolveObjectBitmap(
                               model,
                               objectTextureIndex,
@@ -300,7 +300,10 @@ function buildMeshCollection(
                         object.type === DescentObjectType.ROBOT &&
                         assetCache.getRobotInfo(object.subtypeId)?.cloakType ===
                             1 &&
-                        render.texture_override === -1;
+                        // Texture override overrides cloaking
+                        render.texture_override === -1 &&
+                        // Flat faces are never cloaked
+                        objectTextureIndex !== null;
                     const meshObjectCall = {
                         indexOffset,
                         indexCount,
@@ -521,7 +524,7 @@ export class DescentPolymodelRenderer {
             const isFlat = textureCall.texture === FLAT;
             const isCloaked = textureCall.texture === CLOAKED;
             const pickedTexture =
-                textureCall.texture != null &&
+                textureCall.texture !== null &&
                 typeof textureCall.texture !== "symbol"
                     ? this.textureList.pickTexture(textureCall.texture, time)
                     : null;
@@ -572,7 +575,7 @@ export class DescentPolymodelRenderer {
         // Rotate objects
         const rotMul = deltaTime * 2 * Math.PI;
         for (const matrices of this.objectMatrices) {
-            if (matrices.angularVelocity != null) {
+            if (matrices.angularVelocity !== null) {
                 mat4.rotateX(
                     matrices.current,
                     matrices.current,

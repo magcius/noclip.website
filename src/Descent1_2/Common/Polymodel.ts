@@ -212,7 +212,8 @@ function executePolymodelCode(
                 if (!(pointCount & 1)) reader.readInt16();
 
                 const color =
-                    state.palette != null && color16 < state.palette.data.length
+                    state.palette !== null &&
+                    color16 < state.palette.data.length
                         ? vec3FromPalette(state.palette.data[color16])
                         : vec3.fromValues(
                               ((color16 >> 10) & 31) / 31,
@@ -374,7 +375,6 @@ export function makePolymodelMesh(
     polymodel: DescentPolymodel,
     palette: DescentPalette | null,
 ): DescentPolymodelMesh {
-    if (polymodel.data == null) throw new Error("polymodel data not loaded");
     const reader = new DescentDataReader(polymodel.data);
     const mesh: DescentPolymodelMesh = { vertices: [], calls: [] };
     const matrix = mat4.create();

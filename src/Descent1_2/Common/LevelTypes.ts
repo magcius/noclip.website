@@ -25,7 +25,8 @@ export class DescentSide {
 
     public get mayBeRendered() {
         return (
-            this.wallNum != null || (!this.openFace && this.connection == null)
+            this.wallNum !== null ||
+            (!this.openFace && this.connection === null)
         );
     }
 
