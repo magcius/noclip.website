@@ -164,7 +164,7 @@ export enum CurveType
     StepInteger,
     BakedInteger,
     StepBoolean,
-    BakedBoolea,
+    BakedBoolean,
 }
 
 export interface Curve

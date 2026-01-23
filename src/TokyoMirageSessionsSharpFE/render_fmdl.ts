@@ -18,6 +18,7 @@ export class fmdl_renderer
 {
     private fskl: FSKL;
     private fska: FSKA | null;
+    private bone_to_bone_animation_indices: number[] = [];
     private smooth_rigid_matrix_array: mat4[] = [];
     private transform_matrix: mat4 = mat4.create();
     private fshp_renderers: fshp_renderer[] = [];
@@ -45,6 +46,21 @@ export class fmdl_renderer
         this.fska = fska;
         console.log(this.fska);
         assert(this.fskl.smooth_rigid_indices.length < BONE_MATRIX_MAX_LENGTH);
+
+        // for each bone, which element of the fska bone_animations array applies to this bone
+        if (this.fska != null)
+        {
+            for (let i = 0; i < this.fskl.bones.length; i++)
+            {
+                let bone_animation_index = -1;
+                const bone_animation = this.fska.bone_animations.find((f) => f.name === this.fskl.bones[i].name);
+                if (bone_animation != undefined)
+                {
+                    bone_animation_index = this.fska.bone_animations.indexOf(bone_animation);
+                }
+                this.bone_to_bone_animation_indices.push(bone_animation_index);
+            }
+        }
 
         // setup transformation matrix
         computeModelMatrixSRT
@@ -94,71 +110,82 @@ export class fmdl_renderer
             for (let bone_index = 0; bone_index < this.fskl.bones.length; bone_index++)
             {
                 let bone = this.fskl.bones[bone_index];
-                if (this.fska.name == "obj03" && bone.name == "obj3_down_A")
+                const bone_animation_index = this.bone_to_bone_animation_indices[bone_index];
+
+                if (bone_animation_index == -1)
                 {
-                    let transformation_flags = this.fska.bone_animations[bone_index].flags >> 6;
-                    // which curve goes to which transformation is stored in the flags
-                    // iterate over each bit
-                    let transformation_values: number[] = [];
-                    let current_curve_index = 0;
-                    // TODO: are 10 bits of the flags really used? documentation says 9 but translation didn't line up
-                    for (let i = 0; i < 10; i++)
+                    // no bone_animation, copy the bone and skip to the next one
+                    current_bones.push(bone);
+                    continue;
+                }
+
+                const bone_animation = this.fska.bone_animations[bone_animation_index]
+
+                let transformation_flags = bone_animation.flags >> 6;
+                let transformation_values: number[] = [];
+                let current_curve_index = 0;
+
+                // which curve goes to which transformation is stored in the flags
+                // iterate over each bit
+                // TODO: are 10 bits of the flags really used? documentation says 9 but translation didn't line up
+                for (let i = 0; i < 10; i++)
+                {
+                    const has_curve = transformation_flags & 0x1;
+                    if (has_curve)
                     {
-                        const has_curve = transformation_flags & 0x1;
-                        if (has_curve)
+                        const curve = bone_animation.curves[current_curve_index];
+                        current_curve_index += 1;
+
+                        // interpolate value
+                        for (let frame_index = 0; frame_index < curve.frames.length; frame_index++)
                         {
-                            const curve = this.fska.bone_animations[bone_index].curves[current_curve_index];
-                            current_curve_index += 1;
-
-                            for (let frame_index = 0; frame_index < curve.frames.length; frame_index++)
+                            if (this.current_animation_frame == curve.frames[frame_index])
                             {
-                                if (this.current_animation_frame == curve.frames[frame_index])
-                                {
-                                    const value = curve.keys[0].value;
-                                    transformation_values.push(value);
+                                const value = curve.keys[0].value;
+                                transformation_values.push(value);
 
-                                    break;
-                                }
-                                else if (this.current_animation_frame < curve.frames[frame_index])
-                                {
-                                    const before_key = curve.keys[frame_index - 1];
-                                    const before_frame = curve.frames[frame_index - 1];
-                                    const after_key = curve.keys[frame_index];
-                                    const after_frame = curve.frames[frame_index];
+                                break;
+                            }
+                            else if (this.current_animation_frame < curve.frames[frame_index])
+                            {
+                                const before_key = curve.keys[frame_index - 1];
+                                const before_frame = curve.frames[frame_index - 1];
+                                const after_key = curve.keys[frame_index];
+                                const after_frame = curve.frames[frame_index];
 
-                                    const frame_delta = after_frame - before_frame;
-                                    const t = (this.current_animation_frame - before_frame) / frame_delta;
-                                    const duration = frame_delta * (1.0 / 30)
+                                const frame_delta = after_frame - before_frame;
+                                const t = (this.current_animation_frame - before_frame) / frame_delta;
+                                const duration = frame_delta * (1.0 / FPS)
 
-                                    const h3 = (3.0 * t * t) - (2.0 * t * t * t);
-                                    const h2 = (-1.0 * t * t) + (t * t * t);
-                                    const h1 = (t * t * t) - (2.0 * t * t) + t;
-                                    const h0 = 1.0 - h3;
+                                const h3 = (3.0 * t * t) - (2.0 * t * t * t);
+                                const h2 = (-1.0 * t * t) + (t * t * t);
+                                const h1 = (t * t * t) - (2.0 * t * t) + t;
+                                const h0 = 1.0 - h3;
 
-                                    const value = h0 * before_key.value + h3 * after_key.value + (h1 * before_key.velocity + h2 * after_key.velocity) * duration;
-                                    transformation_values.push(value);
-                                    break;
-                                }
+                                const value = h0 * before_key.value + h3 * after_key.value + (h1 * before_key.velocity + h2 * after_key.velocity) * duration;
+                                transformation_values.push(value);
+                                break;
                             }
                         }
-                        else
-                        {
-                            transformation_values.push(this.fska.bone_animations[bone_index].initial_values[i]);
-                        }
-
-                        transformation_flags >>= 1;
+                    }
+                    else
+                    {
+                        transformation_values.push(bone_animation.initial_values[i]);
                     }
 
-                    bone =
-                    {
-                        name: bone.name,
-                        parent_index: bone.parent_index,
-                        scale: bone.scale,
-                        rotation: bone.rotation,
-                        translation: vec3.fromValues(transformation_values[7], transformation_values[8], transformation_values[9]),
-                        user_data: bone.user_data,
-                    };
+                    transformation_flags >>= 1;
                 }
+
+                bone =
+                {
+                    name: bone.name,
+                    parent_index: bone.parent_index,
+                    scale: vec3.fromValues(transformation_values[0], transformation_values[1], transformation_values[2]),
+                    rotation: vec3.fromValues(transformation_values[3], transformation_values[4], transformation_values[5]),
+                    translation: vec3.fromValues(transformation_values[7], transformation_values[8], transformation_values[9]),
+                    user_data: bone.user_data,
+                };
+            
                 current_bones.push(bone);
             }
         }
