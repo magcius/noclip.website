@@ -56,11 +56,7 @@ export class TMSFEScene implements SceneGfx
                 }
             }
 
-            let special_skybox_model: boolean = false;
-            if (special_skybox && fmdl.name == "sky")
-            {
-                special_skybox_model = true;
-            }
+            let special_skybox_model: boolean = special_skybox && fmdl.name == "sky";
 
             const renderer = new fmdl_renderer
             (
@@ -110,7 +106,7 @@ export class TMSFEScene implements SceneGfx
         const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, opaqueBlackFullClearRenderPassDescriptor);
         const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
 
-        // render skybox before everything else, also clear the depth buffer before rendering everything else
+        // render skybox first, then clear the depth buffer and render everything else
         builder.pushPass
         (
             (pass) =>

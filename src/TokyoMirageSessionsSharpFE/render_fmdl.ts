@@ -4,7 +4,7 @@
 import * as BNTX from '../fres_nx/bntx.js';
 import { FMDL } from "./bfres/fmdl";
 import { FSKA } from './bfres/fska.js';
-import { FSKL, FSKL_Bone, recursive_bone_transform, recursive_bone_transform_with_animation } from './bfres/fskl.js';
+import { FSKL, FSKL_Bone, recursive_bone_transform } from './bfres/fskl.js';
 import { GfxDevice, GfxTexture } from "../gfx/platform/GfxPlatform";
 import { vec3, mat4 } from "gl-matrix";
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
@@ -145,6 +145,10 @@ export class fmdl_renderer
         }
     }
 
+    /**
+     * returns a bone array of all the bones at a specified frame of the animation
+     * @param current_frame the frame to animate the skeleton at
+     */
     animate_skeleton(current_frame: number): FSKL_Bone[]
     {
         let bones: FSKL_Bone[] = [];
