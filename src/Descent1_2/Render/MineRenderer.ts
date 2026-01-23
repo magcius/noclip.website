@@ -262,11 +262,11 @@ function buildMineMesh(
         for (const side of segment.sides) {
             if (side.mayBeRendered) {
                 const sideWall =
-                    side.wallNum === null
+                    side.wallNum == null
                         ? null
                         : (level.walls[side.wallNum] ?? null);
                 const isRendered =
-                    sideWall === null || sideWall.type !== WALL_TYPE_OPEN;
+                    sideWall == null || sideWall.type !== WALL_TYPE_OPEN;
 
                 if (isRendered) {
                     sidesByTexture.add(makeSideTextureKey(side), side);
@@ -285,7 +285,7 @@ function buildMineMesh(
         const [baseTextureId, overlayTextureId, overlayRotation] =
             extractSideTextureKey(sideKey);
         const baseTexture = textureList.resolveTmapToTexture(baseTextureId);
-        if (baseTexture === null) continue;
+        if (baseTexture == null) continue;
 
         const overlayTexture =
             overlayTextureId > 0
@@ -450,7 +450,7 @@ export class DescentMineRenderer {
         for (const light of lightsOn) {
             const lightSide =
                 this.level.segments[light.segmentNum]?.sides[light.sideNum];
-            if (lightSide !== null) sidesOn.push(lightSide);
+            if (lightSide != null) sidesOn.push(lightSide);
             for (const delta of light.deltas) {
                 modifiedVertexBuffer = true;
                 const segment = this.level.segments[delta.segmentNum];
@@ -481,7 +481,7 @@ export class DescentMineRenderer {
         for (const light of lightsOff) {
             const lightSide =
                 this.level.segments[light.segmentNum]?.sides[light.sideNum];
-            if (lightSide !== null) sidesOff.push(lightSide);
+            if (lightSide != null) sidesOff.push(lightSide);
             for (const delta of light.deltas) {
                 modifiedVertexBuffer = true;
                 const segment = this.level.segments[delta.segmentNum];
