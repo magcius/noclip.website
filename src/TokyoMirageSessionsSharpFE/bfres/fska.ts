@@ -67,6 +67,7 @@ export function parseFSKA(buffer: ArrayBufferSlice, offset: number, count: numbe
                 const frame_type = flags & 0x3;
                 const key_type = (flags >> 0x2) & 0x3;
                 const curve_type: CurveType = (flags >> 0x4) & 0x7;
+                assert(curve_type == 0);
                 // console.log(`frame ${frame_type} key ${key_type} curve ${curve_type}`);
 
                 const key_count = view.getUint16(curve_entry_offset + 0x12, true);
@@ -84,7 +85,6 @@ export function parseFSKA(buffer: ArrayBufferSlice, offset: number, count: numbe
                 let frame_entry_offset = frame_array_offset;
                 for (let i = 0; i < key_count; i++)
                 {
-                    // TODO: frames might be different from a f32, read the flags
                     switch(frame_type)
                     {
                         case 0:
@@ -100,17 +100,18 @@ export function parseFSKA(buffer: ArrayBufferSlice, offset: number, count: numbe
                             frames.push(frame);
                             frame_entry_offset += 0x2;
                             break;
+
                         case 2:
                             // byte
                             // TODO: is this int or uint?
                             frames.push(view.getInt8(frame_entry_offset));
                             frame_entry_offset += 0x1;
                             break;
+
                         default:
                             console.error(`unknown frame type in bone ${bone_name}`);
                             throw("whoops");
                     }
-
                 }
 
                 const key_array_offset = view.getUint32(curve_entry_offset + 0x8, true);
@@ -119,12 +120,44 @@ export function parseFSKA(buffer: ArrayBufferSlice, offset: number, count: numbe
                 for (let i = 0; i < key_count; i++)
                 {
                     // the value for this key frame
+                    let a: number;
+                    let key_entry_size = -1;
+                    switch(key_type)
+                    {
+                        case 0:
+                            // f32
+                            a = view.getFloat32(key_entry_offset, true);
+                            key_entry_size = 4;
+                            break;
+
+                        case 1:
+                            // s16
+                            a = view.getInt16(key_entry_offset, true);
+                            key_entry_size = 2;
+                            break;
+
+                        case 2:
+                            // s8
+                            a = view.getInt8(key_entry_offset);
+                            key_entry_size = 1;
+                            break;
+
+                        default:
+                            console.error(`unknown key type in bone ${bone_name}`);
+                            throw("whoops");
+                    }
+                    key_entry_offset += key_entry_size;
                     // only value has data_offset added to it
-                    const a = view.getInt16(key_entry_offset + 0x0, true);
                     const value = a * data_scale + data_offset;
 
-                    // const c = view.getInt16(key_entry_offset + 0x4, true);
-                    // const d = view.getInt16(key_entry_offset + 0x6, true);
+                    // the difference between the next keyframe's value and this keyframe's value
+                    const b = view.getInt16(key_entry_offset, true);
+                    key_entry_offset += key_entry_size;
+
+                    // const c = view.getInt16(key_entry_offset, true);
+                    key_entry_offset += key_entry_size;
+                    // const d = view.getInt16(key_entry_offset, true);
+                    key_entry_offset += key_entry_size;
 
                     let velocity: number;
                     if (i == key_count - 1)
@@ -134,8 +167,6 @@ export function parseFSKA(buffer: ArrayBufferSlice, offset: number, count: numbe
                     }
                     else
                     {
-                        // the difference between the next keyframe's value and this keyframe's value
-                        const b = view.getInt16(key_entry_offset + 0x2, true);
                         const delta_value = b * data_scale;
 
                         const delta_time = frames[i + 1] - frames[i];
@@ -143,7 +174,6 @@ export function parseFSKA(buffer: ArrayBufferSlice, offset: number, count: numbe
                     }
 
                     keys.push({ value, velocity });
-                    key_entry_offset += 0x8;
                 }
 
                 curves.push({ curve_type, start_frame, end_frame, frames, keys });
