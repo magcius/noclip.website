@@ -3250,9 +3250,9 @@ function modeProcExec<T extends number>(globals: dGlobals, actor: ModeFuncExec<T
 }
 
 function modeProcInit<T extends number>(globals: dGlobals, actor: ModeFuncExec<T>, mode_tbl: ModeFunc[], mode: T): void {
-    actor.curMode = mode;
     const func = mode_tbl[actor.curMode * 2 + 0];
     func.call(actor, globals, 0);
+    actor.curMode = mode;
 }
 
 type dPathMoveCB = (dst: vec3, curr: dPath__Point, next: dPath__Point, speed: number) => boolean;
@@ -5136,10 +5136,10 @@ enum LinkDemoMode {
     Wait = 0x01,
     Walk = 0x02,
     Dash = 0x03,
-    SetPosRotEquip = 0x04,
+    InitWait = 0x04,
     WaitTurn = 0x05,
-    SetRot = 0x2B,
-    SetPosRot = 0x2C,
+    CutRoll = 0x2B,
+    PosInit = 0x2C,
     MAX = 0x4B,
 
     Tool = 0x200,
@@ -5228,7 +5228,6 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
     private static HEEL_POS = vec3.fromValues(-6.0, 3.25, 0.0);
 
     public curMode = d_a_py_lk_mode.wait;
-    public prevMode = d_a_py_lk_mode.wait;
 
     private model: J3DModelInstance;
     private modelSwordHilt: J3DModelInstance;
@@ -5252,6 +5251,9 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
 
     private rawPos = vec3.create(); // The position before it is manipulated by anim root/foot motion
     private vel = vec3.create(); // TODO: This should be part of fopAc_ac_c
+    private targetSpeed: number = 0;
+    private maxSpeed: number = 17;
+    private shouldChangeMode = false;
 
     private frontFoot: number = 2;
     private footData: LkFootData[] = nArray(2, i => ({ toePos: vec3.create(), heelPos: vec3.create() }));
@@ -5266,6 +5268,7 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
         this.procUnkInit, this.procUnk,
         this.procWaitInit, this.procWait,
         this.procToolInit, this.procTool,
+        this.procMoveInit, this.procMove,
     ];
 
     protected override subload(globals: dGlobals, prm: fopAcM_prm_class | null): cPhs__Status {
@@ -5471,6 +5474,7 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
 
         let targetPos: ReadonlyVec3 = this.pos;
         let targetRot: number = this.rot[1];
+        let demoMode = LinkDemoMode.Wait;
 
         const enable = demoActor.checkEnable(0xFF);
         if (enable & EDemoActorFlags.HasPos) { targetPos = demoActor.translation; }
@@ -5479,7 +5483,7 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
         // The demo mode determines which 'Proc' action function will be called. It maps into the DemoProc*FuncTables.
         // These functions can start anims (by indexing into AnmDataTable), play sounds, etc.
         if (enable & EDemoActorFlags.HasAnim) {
-            this.demoMode = demoActor.nextBckId;
+            demoMode = demoActor.nextBckId;
         }
 
         if (enable & EDemoActorFlags.HasShape) {
@@ -5491,14 +5495,14 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
         }
 
         // Limit actor modifications based on the current mode. E.g. Mode 0x18 only allows rotation
-        switch (this.demoMode) {
-            case LinkDemoMode.SetPosRotEquip:
-            case LinkDemoMode.SetPosRot:
+        switch (demoMode) {
+            case LinkDemoMode.InitWait:
+            case LinkDemoMode.PosInit:
                 vec3.copy(this.pos, targetPos);
                 this.rot[1] = targetRot;
                 break;
 
-            case LinkDemoMode.SetRot: {
+            case LinkDemoMode.CutRoll: {
                 debugger;
                 const moveVec = vec3.sub(scratchVec3a, targetPos, this.pos);
                 const newRot = cM_atan2s(moveVec[0], moveVec[2]);
@@ -5509,33 +5513,70 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
             case LinkDemoMode.Walk:
             case LinkDemoMode.Dash: {
                 const moveVec = vec3.sub(scratchVec3a, targetPos, this.pos);
+
+                if (this.targetSpeed / this.maxSpeed < 0.5) {
+                    demoMode = LinkDemoMode.Walk;
+                }
+
+                const distXZ = moveVec[0] * moveVec[0] + moveVec[2] * moveVec[2];
+                if (distXZ < 100.0 || (distXZ < 2500.0 && this.targetSpeed < 0.001)) {
+                    demoMode = LinkDemoMode.Wait;
+                    this.targetSpeed = 0;
+                } else if ((demoMode === LinkDemoMode.Walk && distXZ < 400.0) || distXZ < 2500.0) {
+                    this.targetSpeed = 12;
+                } else {
+                    this.targetSpeed = this.maxSpeed;
+                }
+                
+                // Immediately after setDemoData(), setStickData() is called. If the mode is Dash or Walk, set the stick to 1.0
+                // This value is used in procMove() to determine speed, which determines the blend of Walk vs Dash to play.
+
                 const newRot = cM_atan2s(moveVec[0], moveVec[2]);
                 this.rot[1] = newRot;
-                this.setSingleMoveAnime(globals, (this.demoMode === LinkDemoMode.Walk) ? LkAnim.WALK : LkAnim.DASH)
                 break;
             }
         }
 
+        this.demoMode = demoMode;
+
         return true;
     }
+
+    private checkNextMode(globals: dGlobals): boolean {
+        if (Math.abs(this.targetSpeed) <= 0.001) {
+            // Handle WaitTurn
+            return this.procWaitInit(globals);
+        } else {
+            return this.procMoveInit(globals);
+        }
+    };
 
     private changeDemoProc(globals: dGlobals): boolean {
         assert(this.demoMode < LinkDemoMode.MAX || this.demoMode === LinkDemoMode.Tool)
 
         switch (this.demoMode) {
             case LinkDemoMode.None: return false;
-            case LinkDemoMode.Tool: modeProcInit(globals, this, this.mode_tbl, d_a_py_lk_mode.tool); break;
-            case LinkDemoMode.SetPosRotEquip: modeProcInit(globals, this, this.mode_tbl, d_a_py_lk_mode.wait); break;
+            case LinkDemoMode.Tool: 
+                this.shouldChangeMode = true;
+                modeProcInit(globals, this, this.mode_tbl, d_a_py_lk_mode.tool); 
+                return true;
+
+            case LinkDemoMode.InitWait: modeProcInit(globals, this, this.mode_tbl, d_a_py_lk_mode.wait); break;
+
+            case LinkDemoMode.Wait:
+            case LinkDemoMode.Walk:
+            case LinkDemoMode.Dash:
+                if (this.shouldChangeMode) {
+                    this.shouldChangeMode = false;
+                    this.checkNextMode(globals);
+                }
+                return true;
 
             default:
-                if (this.prevMode !== d_a_py_lk_mode.unk) {
-                    console.warn('Unsupported demo mode:', this.demoMode);
-                    modeProcInit(globals, this, this.mode_tbl, d_a_py_lk_mode.unk);
-                }
+                console.warn('Unsupported demo mode:', this.demoMode);
+                modeProcInit(globals, this, this.mode_tbl, d_a_py_lk_mode.wait);
                 break;
         }
-
-        this.prevMode = this.curMode;
         return true;
     }
 
@@ -5623,6 +5664,9 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
         const moveVec = vec3.sub(scratchVec3e, toePos[this.frontFoot], this.footData[this.frontFoot].toePos);
         moveVec[1] = 0;
         let moveVel = vec3.length(moveVec);
+
+        // TODO: Blend between foot movement and targetSpeed
+        moveVel *= this.targetSpeed / this.maxSpeed;
 
         // Adjust speed when on slopes
         let groundAngle = 0;
@@ -5827,13 +5871,41 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
     }
 
     private procWaitInit(globals: dGlobals) {
-        if (this.prevMode !== d_a_py_lk_mode.wait) {
+        if (this.curMode === d_a_py_lk_mode.wait) {
+            return false; 
+        }
+
+        this.setSingleMoveAnime(globals, LkAnim.WAITS);
+        return true;
+    }
+
+    private procWait(globals: dGlobals) {
+        const modeChanged = this.checkNextMode(globals);
+        if (!modeChanged) {
+            // Wait animations
             this.setSingleMoveAnime(globals, LkAnim.WAITS);
         }
     }
 
-    private procWait() {
+    private procMoveInit(globals: dGlobals) {
+        // setBlendMoveAnime(m_HIO->mBasic.m.field_0xC);
+        this.setSingleMoveAnime(globals, LkAnim.WALK);
+        return true;
+    }
 
+    private procMove(globals: dGlobals) {
+        const modeChanged = this.checkNextMode(globals);
+        if (!modeChanged) {
+            if (this.demoMode == LinkDemoMode.Walk) {
+                this.targetSpeed = Math.min(this.targetSpeed, this.maxSpeed * 0.5);
+            }
+
+            // TODO: setBlendMoveAnime(-1.0f) blends between walk and dash based on speed.
+            if (this.demoMode == LinkDemoMode.Walk)
+                this.setSingleMoveAnime(globals, LkAnim.WALK);
+            else
+                this.setSingleMoveAnime(globals, LkAnim.DASH);
+        }
     }
 
     private setSwordModel(globals: dGlobals) {
