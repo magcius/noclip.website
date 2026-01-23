@@ -85,8 +85,32 @@ export function parseFSKA(buffer: ArrayBufferSlice, offset: number, count: numbe
                 for (let i = 0; i < key_count; i++)
                 {
                     // TODO: frames might be different from a f32, read the flags
-                    frames.push(view.getFloat32(frame_entry_offset, true));
-                    frame_entry_offset += 0x4;
+                    switch(frame_type)
+                    {
+                        case 0:
+                            // f32
+                            frames.push(view.getFloat32(frame_entry_offset, true));
+                            frame_entry_offset += 0x4;
+                            break;
+
+                        case 1:
+                            // 16 bit fixed point
+                            let frame = view.getInt16(frame_entry_offset, true);
+                            frame = frame / 32;
+                            frames.push(frame);
+                            frame_entry_offset += 0x2;
+                            break;
+                        case 2:
+                            // byte
+                            // TODO: is this int or uint?
+                            frames.push(view.getInt8(frame_entry_offset));
+                            frame_entry_offset += 0x1;
+                            break;
+                        default:
+                            console.error(`unknown frame type in bone ${bone_name}`);
+                            throw("whoops");
+                    }
+
                 }
 
                 const key_array_offset = view.getUint32(curve_entry_offset + 0x8, true);
