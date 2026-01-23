@@ -43,7 +43,7 @@ void main() {
     v_TexCoord = a_UV;
 
     vec3 worldPos = a_Position - u_LevelCenter.xyz;
-    if (a_Color.a < 0.99) {
+    if (a_Color.a < 0.5) {
         float phase = dot(worldPos.xz, vec2(0.03, 0.04));
         float wave = sin(u_Time * u_WaterSpeed1 + phase) * 3.0 + sin(u_Time * u_WaterSpeed2 + phase * 1.7) * 1.5;
         worldPos.z += wave * u_WaterAmp;
@@ -56,15 +56,26 @@ void main() {
 #ifdef FRAG
 void main() {
     vec4 texColor = texture(SAMPLER_2D(u_Texture), v_TexCoord);
-    vec3 lit = texColor.rgb * v_Color.rgb;
-    bool isWater = (v_Color.a < 0.99);
-    if (isWater) {
-        lit = mix(lit, vec3(0.0, 0.81, 0.81), 0.25);
+    bool isTransparent = v_Color.a < 0.99;
+    bool isBlackPixel = texColor.r < 0.001 && texColor.g < 0.001 && texColor.b < 0.001;
+    vec3 lit;
+    float outAlpha;
+    float brightness = 1.7;
+
+    if (isTransparent) {
+        if (isBlackPixel) {
+            discard;
+        }
+        float mask = max(texColor.r, max(texColor.g, texColor.b));
+        lit = v_Color.rgb * brightness;
+        // (tweak 0.5–0.8 to taste)
+        outAlpha = mask * 0.8;
+    } else {
+        lit = texColor.rgb * v_Color.rgb * brightness;
+        outAlpha = v_Color.a;
     }
 
-    float brightness = isWater ? 2.0 : 1.7;
-    lit *= brightness;
-
+    // 4x4 Bayer dither + 5-bit quantization, same as before
     float bayer4x4[16] = float[16](
          0.0,  8.0,  2.0, 10.0,
         12.0,  4.0, 14.0,  6.0,
@@ -78,7 +89,7 @@ void main() {
     vec3 dithered = lit + threshold * (1.0 / 31.0);
     vec3 final5 = floor(dithered * 31.0) / 31.0;
 
-    gl_FragColor = vec4(final5, v_Color.a);
+    gl_FragColor = vec4(final5, outAlpha);
 }
 #endif
     `;
@@ -105,9 +116,9 @@ export class LevelRenderer {
     private colorBuffer: GfxBuffer;
     private uvBuffer: GfxBuffer;
     private indexBufferGround: GfxBuffer;
-    private indexBufferWater: GfxBuffer;
+    private indexBufferTransparent: GfxBuffer;
     private indexCountGround: number;
-    private indexCountWater: number;
+    private indexCountTransparent: number;
     private inputLayout: GfxInputLayout;
     private texture: GfxTexture;
     private levelMin: vec3;
@@ -145,33 +156,33 @@ export class LevelRenderer {
         const expandedColor: number[] = [];
         const expandedUV: number[] = [];
         const expandedIndexGround: number[] = [];
-        const expandedIndexWater: number[] = [];
+        const expandedIndexTransparent: number[] = [];
         let runningIndex = 0;
 
         for (const face of faces) {
-            const { indices, uvIndices, colorIndices, texture: tex } = face;
-            const isWater = (face as any).isWater === true;
+            const { indices, uvIndices, colorIndices, isWater, isTransparent } = face;
             for (let k = 0; k < indices.length; k++) {
                 const v = vertices[indices[k]];
                 expandedPos.push(v[0], v[1], v[2]);
-                let r: number, g: number, b: number;
+                const c = colorIndices ? colors[colorIndices[k]] : [255, 255, 255];
+                const r = c[0] / 255;
+                const g = c[1] / 255;
+                const b = c[2] / 255;
+                let alpha = 1.0;
                 if (isWater) {
-                    r = g = b = 1.0;
-                } else {
-                    const c = colorIndices ? colors[colorIndices[k]] : [255, 255, 255];
-                    r = c[0] / 255;
-                    g = c[1] / 255;
-                    b = c[2] / 255;
+                    alpha = 0.4;
+                } else if (isTransparent) {
+                    alpha = 0.5;
                 }
-                expandedColor.push(r, g, b, isWater ? 0.3 : 1.0);
+                expandedColor.push(r, g, b, alpha);
                 if (uvIndices) {
                     const uvVal = uvs[uvIndices[k]];
                     expandedUV.push(uvVal[0], uvVal[1]);
                 } else {
                     expandedUV.push(0, 0);
                 }
-                if (isWater) {
-                    expandedIndexWater.push(runningIndex);
+                if (isWater || isTransparent) {
+                    expandedIndexTransparent.push(runningIndex);
                 } else {
                     expandedIndexGround.push(runningIndex);
                 }
@@ -180,14 +191,14 @@ export class LevelRenderer {
         }
 
         const indexGround = new Uint32Array(expandedIndexGround);
-        const indexWater = new Uint32Array(expandedIndexWater);
+        const indexTransparent = new Uint32Array(expandedIndexTransparent);
         this.vertexBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, new Float32Array(expandedPos).buffer);
         this.colorBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, new Float32Array(expandedColor).buffer);
         this.uvBuffer = createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, new Float32Array(expandedUV).buffer);
         this.indexBufferGround = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, indexGround.buffer);
-        this.indexBufferWater = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, indexWater.buffer);
+        this.indexBufferTransparent = createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, indexTransparent.buffer);
         this.indexCountGround = indexGround.length;
-        this.indexCountWater = indexWater.length;
+        this.indexCountTransparent = indexTransparent.length;
         this.inputLayout = cache.createInputLayout({
             vertexAttributeDescriptors: [
                 { location: 0, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0 }, // a_Position
@@ -267,7 +278,7 @@ export class LevelRenderer {
             renderInstManager.submitRenderInst(renderInst);
         }
 
-        if (this.indexCountWater > 0) {
+        if (this.indexCountTransparent > 0) {
             const renderInst = renderInstManager.newRenderInst();
             const megaState = renderInst.getMegaStateFlags();
             megaState.cullMode = GfxCullMode.None;
@@ -285,9 +296,9 @@ export class LevelRenderer {
                     { buffer: this.colorBuffer, byteOffset: 0 },
                     { buffer: this.uvBuffer, byteOffset: 0 }
                 ],
-                { buffer: this.indexBufferWater, byteOffset: 0 }
+                { buffer: this.indexBufferTransparent, byteOffset: 0 }
             );
-            renderInst.setDrawCount(this.indexCountWater);
+            renderInst.setDrawCount(this.indexCountTransparent);
             renderInstManager.submitRenderInst(renderInst);
         }
 
@@ -299,7 +310,7 @@ export class LevelRenderer {
         device.destroyBuffer(this.colorBuffer);
         device.destroyBuffer(this.uvBuffer);
         device.destroyBuffer(this.indexBufferGround);
-        device.destroyBuffer(this.indexBufferWater);
+        device.destroyBuffer(this.indexBufferTransparent);
         device.destroyTexture(this.texture);
     }
 }

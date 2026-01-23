@@ -10,20 +10,32 @@ header_bytes = 8
 sf_index = 0
 sf_no_header_strikes = 0
 wad_header_end = False
+subfile_type_map = [
+    {"level": range(10, 79, 2), "cutscene": range(3, 7, 1), "starring": range(82, 102, 1)},
+    {"level": range(15, 72, 2), "cutscene": range(73, 96, 2), "starring": range(187, 197, 1)},
+    {"level": range(97, 170, 2), "cutscene": range(6, 67, 3), "starring": range(183, 195, 1)}
+]
+
+base = "../../../data/"
+extract_path = f"{base}Spyro1/"
+extract_path2 = f"{base}Spyro2/"
+extract_path3 = f"{base}Spyro3/"
+wad_path = f"{base}Spyro1_raw/WAD.WAD"
+wad_path2 = f"{base}Spyro2_raw/WAD.WAD"
+wad_path3 = f"{base}Spyro3_raw/WAD.WAD"
+
 game_number = 1
-
-extract_path = "../../../data/Spyro1/"
-extract_path2 = "../../../data/Spyro2/"
-wad_path = "../../../data/Spyro1_raw/WAD.WAD"
-wad_path2 = "../../../data/Spyro2_raw/WAD.WAD"
-
-# Extract first game by default, or second game if argument of "2" is given
+# Extract first game by default, or 2nd/3rd game based on arg
 if len(sys.argv) > 1:
     arg = sys.argv[1:][0]
     if arg == '2':
         game_number = 2
         extract_path = extract_path2
         wad_path = wad_path2
+    elif arg == '3':
+        game_number = 3
+        extract_path = extract_path3
+        wad_path = wad_path3
     elif arg != '1':
         print("Unknown game number! Defaulting to Spyro 1...")
 
@@ -45,21 +57,10 @@ with open(wad_path, "rb") as f:
             else:
                 sf_no_header_strikes = 0
                 extension = "bin"
-                if game_number == 1:
-                    if sf_index % 2 == 0 and 10 <= sf_index <= 78:
-                        extension = "level"
-                    elif 3 <= sf_index <= 6:
-                        extension = "cutscene"
-                    elif 82 <= sf_index <= 101:
-                        extension = "starring"
-                else:
-                    if sf_index % 2 == 1 and 15 <= sf_index <= 71:
-                        extension = "level"
-                    elif sf_index % 2 == 1 and 73 <= sf_index <= 95:
-                        extension = "cutscene"
-                    elif 187 <= sf_index <= 196:
-                        extension = "starring"
-                if extension != "bin": # skip non-level subfiles
+                for t in ["level", "cutscene", "starring"]:
+                    if sf_index in subfile_type_map[game_number - 1][t]:
+                        extension = t
+                if extension != "bin": # skip non-level subfiles for noclip (overlays, menus, etc.)
                     print(f"Subfile {sf_index + 1}: offset={sf_offset}, size={sf_size}, type={extension}")
                     with open(f"{extract_path}/sf{sf_index + 1}.{extension}", "wb") as sf:
                         sf.write(wad[sf_offset:sf_offset+sf_size])
@@ -70,13 +71,16 @@ to_remove = []
 for file in os.listdir(extract_path):
     if ".level" in file or ".cutscene" in file or ".starring" in file:
         if game_number == 1:
-            extract_level(f"{extract_path}/{file}")
+            extract_level(f"{extract_path}{file}")
         else:
-            extract_level2(f"{extract_path}/{file}")
+            try:
+                extract_level2(f"{extract_path}{file}", game_number)
+            except Exception as e:
+                print(f"Unable to extract {file} ({e})")
         to_remove.append(file)
 
 # Delete leftover level subfiles
 for file in to_remove:
-    os.remove(f"{extract_path}/{file}")
+    os.remove(f"{extract_path}{file}")
 
 print("Done!")

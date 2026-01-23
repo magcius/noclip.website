@@ -7,138 +7,216 @@ MAX_SIZE = 1024 * 1024 * 16
 VRAM_SIZE = 524288
 
 
-def copy_from(dst_f, src_f, count):
-    if count > MAX_SIZE:
-        raise RuntimeError("Copy size too large")
-    if count > 0:
-        dst_f.write(src_f.read(count))
-
-
 def read_u32(f):
     data = f.read(4)
     if len(data) < 4:
-        raise EOFError("Unexpected EOF while reading u32")
+        raise Exception("Unexpected EOF")
     return struct.unpack("<I", data)[0]
 
 
-def check_pattern(pattern_bytes: bytes) -> bool:
-    p = pattern_bytes
+def copy_from(dst, src, count):
+    if count > MAX_SIZE:
+        raise Exception("Abort: too large")
+    if count > 0:
+        dst.write(src.read(count))
+
+
+def check_pattern(pattern) -> bool:
     return not (
-        ((p[0] & 0x0F) == 0) and
-        ((p[1] >> 4) == 0) and
-        (p[2] == 0) and
-        (p[3] == 0) and
-        ((p[4] & 0x0F) == 0) and
-        ((p[5] >> 4) == 0) and
-        (p[6] == 0) and
-        (p[7] == 0) and
-        ((p[8] & 0x0F) == 0) and
-        ((p[9] >> 4) == 0) and
-        (p[10] == 0) and
-        (p[11] == 0)
+        ((pattern[0] & 15) == 0) and
+        ((pattern[1] >> 4) == 0) and
+        (pattern[2] == 0) and
+        (pattern[3] == 0) and
+        ((pattern[4] & 15) == 0) and
+        ((pattern[5] >> 4) == 0) and
+        (pattern[6] == 0) and
+        (pattern[7] == 0) and
+        ((pattern[8] & 15) == 0) and
+        ((pattern[9] >> 4) == 0) and
+        (pattern[10] == 0) and
+        (pattern[11] == 0)
     )
 
 
-def extract_level2(level_subfile):
+def extract_level2(level_subfile, game_number):
+    if game_number == 3 and "43" in level_subfile:
+        return
     s = level_subfile.split('/sf')
     prefix = f"{s[0]}/sf{s[1].split(".")[0]}_"
     ground_file_name = f"{prefix}ground.bin"
     sky_file_name = f"{prefix}sky.bin"
     vram_file_name = f"{prefix}vram.bin"
     list_file_name = f"{prefix}list.bin"
-    stream = None
-    save = None
 
-    try:
-        stream = open(level_subfile, "rb")
+    with open(level_subfile, "rb") as stream:
         start = 0
-        stream.seek(0, os.SEEK_END)
-        size = stream.tell()
+        size = os.path.getsize(level_subfile)
         startsub = start
         sizesub = size
         if size < 16:
-            raise RuntimeError("Subfile too small")
+            raise Exception("Abort")
 
         # VRAM
-        stream.seek(start, os.SEEK_SET)
+        stream.seek(start)
         offset = read_u32(stream)
         if start - startsub + size > sizesub:
-            raise RuntimeError("Bounds error")
-        stream.seek(start + offset, os.SEEK_SET)
+            raise Exception("Abort")
+        stream.seek(start + offset)
+        count = VRAM_SIZE
+        remaining = sizesub - (stream.tell() - startsub)
+        if remaining < count:
+            count = remaining
+
         with open(vram_file_name, "wb") as save:
-            count = 524288
-            remaining = sizesub - (stream.tell() - startsub)
-            if remaining < count:
-                count = remaining
             copy_from(save, stream, count)
 
-        # Texture/list
-        stream.seek(start + 8, os.SEEK_SET)
+        # Texture list
+        stream.seek(start + 8)
         offset = read_u32(stream)
         size2 = read_u32(stream)
-        start2 = start + offset
-        if start2 - startsub + size2 > sizesub:
-            raise RuntimeError("Bounds error")
-        stream.seek(start2, os.SEEK_SET)
+
+        start = start + offset
+        if start - startsub + size2 > sizesub:
+            raise Exception("Abort")
+
+        stream.seek(start)
         offset = read_u32(stream)
         stream.seek(-4, os.SEEK_CUR)
+
         with open(list_file_name, "wb") as save:
             copy_from(save, stream, offset + 16)
 
         # Sky
-        if "starring" in level_subfile:
-            stream.seek(start2, os.SEEK_SET)
-            ss = read_u32(stream)
-            cc = read_u32(stream)
-            sky_size = ss + 4
-            sky_data = stream.read(sky_size)
-            with open(sky_file_name, "wb") as save:
-                save.write(sky_data)
-        else:
-            try:
-                stream.seek(start2, os.SEEK_SET)
-                offset = read_u32(stream)
-                stream.seek(offset - 4, os.SEEK_CUR)
-                offset = read_u32(stream)
-                stream.seek(offset - 4, os.SEEK_CUR)
-                offset = read_u32(stream)
-                stream.seek(offset - 4, os.SEEK_CUR)
-                offset = read_u32(stream)
-                stream.seek(offset - 4, os.SEEK_CUR)
-                test_pos = stream.tell()
-                pattern = stream.read(12)
-                if len(pattern) < 12:
-                    raise RuntimeError("Sky pattern read error")
-                if check_pattern(pattern):
-                    stream.seek(test_pos, os.SEEK_SET)
-                    offset = read_u32(stream)
-                    stream.seek(offset - 4, os.SEEK_CUR)
-                    offset = read_u32(stream)
-                    if offset == 0:
-                        stream.seek(test_pos, os.SEEK_SET)
-                    else:
-                        stream.seek(offset - 4, os.SEEK_CUR)
-                        offset = read_u32(stream)
-                        if offset == 0:
-                            stream.seek(test_pos, os.SEEK_SET)
-                        stream.seek(8, os.SEEK_CUR)
-                offset = read_u32(stream)
-                stream.seek(offset - 4, os.SEEK_CUR)
-                offset = read_u32(stream)
+        try:
+            stream.seek(start)
+
+            offset = read_u32(stream)
+            if (stream.tell() - start + offset - 8) > size2 or offset < 4:
+                raise Exception("Abort")
+            stream.seek(offset - 4, os.SEEK_CUR)
+
+            offset = read_u32(stream)
+            if (stream.tell() - start + offset - 8) > size2:
+                raise Exception("Abort")
+            stream.seek(offset - 4, os.SEEK_CUR)
+
+            offset = read_u32(stream)
+            if (stream.tell() - start + offset - 8) > size2 or offset < 4:
+                raise Exception("Abort")
+            stream.seek(offset - 4, os.SEEK_CUR)
+
+            offset = read_u32(stream)
+            if (stream.tell() - start + offset - 8) > size2 or offset < 4:
+                raise Exception("Abort")
+
+            stream.seek(offset - 4, os.SEEK_CUR)
+            test = stream.tell()
+
+            pattern = list(stream.read(12))
+
+            def goto_label():
+                off = read_u32(stream)
+                if (stream.tell() - start + off - 8) > size2 or off < 4:
+                    raise Exception("Abort")
                 with open(sky_file_name, "wb") as save:
-                    copy_from(save, stream, offset - 4)
-            except Exception as e:
-                print("Exception:", e)
+                    copy_from(save, stream, off - 4)
+                return True
+
+            if check_pattern(pattern):
+                stream.seek(test)
+                offset = read_u32(stream)
+                if (stream.tell() - start + offset - 8) > size2 or offset < 4:
+                    raise Exception("Abort")
+                stream.seek(offset - 4, os.SEEK_CUR)
+
+                offset = read_u32(stream)
+                if offset == 0:
+                    stream.seek(test)
+                    goto_label()
+                    return
+
+                if (stream.tell() - start + offset - 8) > size2 or offset < 4:
+                    raise Exception("Abort")
+                stream.seek(offset - 4, os.SEEK_CUR)
+
+                offset = read_u32(stream)
+                if offset == 0:
+                    stream.seek(test)
+                    goto_label()
+                    return
+
+                stream.seek(8, os.SEEK_CUR)
+
+            offset = read_u32(stream)
+            if (stream.tell() - start + offset - 8) > size2 or offset < 4:
+                raise Exception("Abort")
+            stream.seek(offset - 4, os.SEEK_CUR)
+
+            goto_label()
+        except:
+            print("Error!")
 
         # Ground
-        stream.seek(start2, os.SEEK_SET)
+        stream.seek(start)
         offset = read_u32(stream)
         stream.seek(offset - 4, os.SEEK_CUR)
         offset = read_u32(stream)
         with open(ground_file_name, "wb") as save:
             copy_from(save, stream, offset - 4)
-    except Exception as e:
-        print("Exception:", e)
-    finally:
-        if stream is not None:
-            stream.close()
+
+        # Sublevels' ground
+        if game_number == 3:
+            i = 1
+            while True:
+                i += 1
+                stream.seek(startsub + 16 * i, os.SEEK_SET)
+                offset = read_u32(stream)
+                size3 = read_u32(stream)
+
+                start = startsub + offset
+                if start - startsub + size3 > sizesub:
+                    break
+
+                stream.seek(start, os.SEEK_SET)
+                offset = read_u32(stream)
+                if (stream.tell() - start + offset - 8) > size3 or offset < 4:
+                    break
+                stream.seek(offset - 4, os.SEEK_CUR)
+
+                while True:
+                    if stream.tell() - start > size3 - 4:
+                        raise Exception("Abort 3")
+                    offset = read_u32(stream)
+                    if offset != 0:
+                        break
+                while True:
+                    if stream.tell() - start > size3 - 4:
+                        raise Exception("Abort 3")
+                    offset = read_u32(stream)
+                    if offset == 0:
+                        break
+                while True:
+                    if stream.tell() - start > size3 - 4:
+                        raise Exception("Abort 3")
+                    offset = read_u32(stream)
+                    if offset != 0:
+                        break
+                while True:
+                    if stream.tell() - start > size3 - 4:
+                        raise Exception("Abort 3")
+                    offset = read_u32(stream)
+                    if offset == 0:
+                        break
+                while True:
+                    if stream.tell() - start > size3 - 4:
+                        raise Exception("Abort 3")
+                    offset = read_u32(stream)
+                    if offset != 0:
+                        break
+
+                if (stream.tell() - start + offset - 8) > size3 or offset < 4:
+                    break
+
+                outname = ground_file_name.replace("ground", f"ground{i}")
+                with open(outname, "wb") as save:
+                    copy_from(save, stream, offset - 4)

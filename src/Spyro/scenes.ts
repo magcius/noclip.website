@@ -93,7 +93,7 @@ class SpyroRenderer implements SceneGfx {
     }
 }
 
-const pathBase1 = "Spyro1";
+const pathBase = "Spyro1";
 class SpyroScene implements SceneDesc {
     public id: string;
     private gameNumber: number;
@@ -104,10 +104,10 @@ class SpyroScene implements SceneDesc {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
-        const ground = await context.dataFetcher.fetchData(`${pathBase1}/sf${this.subFileID}_ground.bin`);
-        const vram = await context.dataFetcher.fetchData(`${pathBase1}/sf${this.subFileID}_vram.bin`);
-        const textures = await context.dataFetcher.fetchData(`${pathBase1}/sf${this.subFileID}_list.bin`);
-        const sky = await context.dataFetcher.fetchData(`${pathBase1}/sf${this.subFileID}_sky1.bin`);
+        const ground = await context.dataFetcher.fetchData(`${pathBase}/sf${this.subFileID}_ground.bin`);
+        const vram = await context.dataFetcher.fetchData(`${pathBase}/sf${this.subFileID}_vram.bin`);
+        const textures = await context.dataFetcher.fetchData(`${pathBase}/sf${this.subFileID}_list.bin`);
+        const sky = await context.dataFetcher.fetchData(`${pathBase}/sf${this.subFileID}_sky1.bin`);
 
         const tileGroups = parseTileGroups(textures.createDataView(), this.gameNumber);
         const tileAtlas = buildTileAtlas(new VRAM(vram.copyToBuffer()), tileGroups, this.gameNumber);
@@ -148,9 +148,43 @@ class SpyroScene2 implements SceneDesc {
     }
 }
 
-const id1 = "Spyro1";
-const name1 = "Spyro the Dragon";
-const sceneDescs1 = [
+const pathBase3 = "Spyro3";
+class SpyroScene3 implements SceneDesc {
+    public id: string;
+    private gameNumber: number;
+
+    constructor(public subFileID: number, public name: string, private subLevelID?: number) {
+        this.id = subFileID.toString();
+        if (this.subLevelID !== undefined) {
+            this.id = `${subFileID}_${subLevelID}`;
+        }
+        this.gameNumber = 3;
+    }
+
+    public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
+        let ground = null;
+        if (this.subLevelID === undefined) {
+            ground = await context.dataFetcher.fetchData(`${pathBase3}/sf${this.subFileID}_ground.bin`);
+        } else {
+            ground = await context.dataFetcher.fetchData(`${pathBase3}/sf${this.subFileID}_ground${this.subLevelID}.bin`);
+        }
+        const vram = await context.dataFetcher.fetchData(`${pathBase3}/sf${this.subFileID}_vram.bin`);
+        const textures = await context.dataFetcher.fetchData(`${pathBase3}/sf${this.subFileID}_list.bin`);
+        const sky = await context.dataFetcher.fetchData(`${pathBase3}/sf${this.subFileID}_sky.bin`);
+
+        const tileGroups = parseTileGroups(textures.createDataView(), this.gameNumber);
+        const tileAtlas = buildTileAtlas(new VRAM(vram.copyToBuffer()), tileGroups, this.gameNumber);
+        const level = buildLevel(ground.createDataView(), tileAtlas, this.gameNumber);
+        const skybox = buildSkybox(sky.createDataView(), this.gameNumber);
+        const renderer = new SpyroRenderer(device, level, skybox);
+
+        return renderer;
+    }
+}
+
+const id = "Spyro1";
+const name = "Spyro the Dragon";
+const sceneDescs = [
     "Artisans",
     new SpyroScene(11, "Artisans Homeworld"),
     new SpyroScene(13, "Stone Hill"),
@@ -281,5 +315,125 @@ const sceneDescs2 = [
     // new SpyroScene2(197, "Flyover")
 ];
 
-export const sceneGroup1: SceneGroup = {id: id1, name: name1, sceneDescs: sceneDescs1};
+const id3 = "Spyro3";
+const name3 = "Spyro: Year of the Dragon";
+const sceneDescs3 = [
+    "Sunrise Spring",
+    new SpyroScene3(98, "Sunrise Spring Home"),
+    new SpyroScene3(100, "Sunny Villa"),
+    new SpyroScene3(100, "Sunny Villa (Sheila)", 2),
+    new SpyroScene3(100, "Sunny Villa (Skate)", 3),
+    new SpyroScene3(102, "Cloud Spires"),
+    new SpyroScene3(102, "Cloud Spires (Sublevel 1)", 2),
+    new SpyroScene3(102, "Cloud Spires (Sublevel 2)", 3),
+    new SpyroScene3(104, "Molten Crater"),
+    new SpyroScene3(104, "Molten Crater (Sgt. Byrd)", 2),
+    new SpyroScene3(104, "Molten Crater (Sublevel)", 3),
+    new SpyroScene3(106, "Seashell Shore"),
+    new SpyroScene3(106, "Seashell Shore (Sheila)", 2),
+    new SpyroScene3(106, "Seashell Shore (Sublevel 1)", 3),
+    new SpyroScene3(106, "Seashell Shore (Sublevel 2)", 4),
+    new SpyroScene3(108, "Mushroom Speedway"),
+    new SpyroScene3(110, "Sheila's Alp"),
+    new SpyroScene3(112, "Buzz's Dungeon"),
+    new SpyroScene3(114, "Crawdad Farm"),
+    "Midday Gardens",
+    new SpyroScene3(116, "Midday Gardens Home"),
+    new SpyroScene3(118, "Icy Peak"),
+    new SpyroScene3(118, "Icy Peak (Sublevel 1)", 2),
+    new SpyroScene3(118, "Icy Peak (Sublevel 2)", 3),
+    new SpyroScene3(120, "Enchanted Towers"),
+    new SpyroScene3(120, "Enchanted Towers (Skate)", 2),
+    new SpyroScene3(120, "Enchanted Towers (Sublevel)", 3),
+    new SpyroScene3(122, "Spooky Swamp"),
+    new SpyroScene3(122, "Spooky Swamp (Sheila)", 3),
+    new SpyroScene3(122, "Spooky Swamp (Sublevel)", 2),
+    new SpyroScene3(124, "Bamboo Terrace"),
+    new SpyroScene3(124, "Bamboo Terrace (Bentley)", 3),
+    new SpyroScene3(124, "Bamboo Terrace (Sublevel)", 2),
+    new SpyroScene3(126, "Country Speedway"),
+    new SpyroScene3(128, "Sgt. Byrd's Base"),
+    new SpyroScene3(130, "Spike's Arena"),
+    new SpyroScene3(132, "Spider Town"),
+    "Evening Lake",
+    new SpyroScene3(134, "Evening Lake Home"),
+    new SpyroScene3(136, "Frozen Altars"),
+    new SpyroScene3(136, "Frozen Altars (Bentley)", 2),
+    new SpyroScene3(136, "Frozen Altars (Sublevel)", 3),
+    new SpyroScene3(138, "Lost Fleet"),
+    new SpyroScene3(138, "Lost Fleet (Sublevel)", 2),
+    new SpyroScene3(138, "Lost Fleet (Skate)", 3),
+    new SpyroScene3(140, "Fireworks Factory"),
+    new SpyroScene3(140, "Fireworks Factory (Agent 9)", 3),
+    new SpyroScene3(140, "Fireworks Factory (Sublevel 1)", 2),
+    new SpyroScene3(140, "Fireworks Factory (Sublevel 2)", 4),
+    new SpyroScene3(142, "Charmed Ridge"),
+    new SpyroScene3(142, "Charmed Ridge (Sgt. Byrd)", 2),
+    new SpyroScene3(142, "Charmed Ridge (Sublevel)", 3),
+    new SpyroScene3(144, "Honey Speedway"),
+    new SpyroScene3(146, "Bentley's Outpost"),
+    new SpyroScene3(148, "Scorch's Pit"),
+    new SpyroScene3(150, "Starfish Reef"),
+    "Midnight Mountain",
+    new SpyroScene3(152, "Midnight Mountain Home"),
+    new SpyroScene3(154, "Crystal Islands"),
+    new SpyroScene3(154, "Crystal Islands (Bentley)", 3),
+    new SpyroScene3(154, "Crystal Islands (Sublevel)", 2),
+    new SpyroScene3(156, "Desert Ruins"),
+    new SpyroScene3(156, "Desert Ruins (Sheila)", 2),
+    new SpyroScene3(156, "Desert Ruins (Sublevel)", 3),
+    new SpyroScene3(158, "Haunted Tomb"),
+    new SpyroScene3(158, "Haunted Tomb (Agent 9)", 3),
+    new SpyroScene3(158, "Haunted Tomb (Sublevel)", 2),
+    new SpyroScene3(160, "Dino Mines"),
+    new SpyroScene3(160, "Dino Mines (Agent 9)", 4),
+    new SpyroScene3(160, "Dino Mines (Sublevel 1)", 2),
+    new SpyroScene3(160, "Dino Mines (Sublevel 2)", 3),
+    new SpyroScene3(162, "Harbor Speedway"),
+    new SpyroScene3(164, "Agent 9's Lab"),
+    new SpyroScene3(166, "Sorceress's Lair"),
+    new SpyroScene3(168, "Bugbot Factory"),
+    new SpyroScene3(170, "Super Bonus Round"),
+    new SpyroScene3(170, "Super Bonus Round (Sublevel 1)", 2),
+    new SpyroScene3(170, "Super Bonus Round (Sublevel 2)", 3),
+    new SpyroScene3(170, "Super Bonus Round (Sublevel 3)", 4),
+    "Cutscenes",
+    new SpyroScene3(7, "Cutscene"),
+    new SpyroScene3(10, "Cutscene"),
+    new SpyroScene3(13, "Cutscene"),
+    new SpyroScene3(16, "Cutscene"),
+    new SpyroScene3(19, "Cutscene"),
+    new SpyroScene3(22, "Cutscene"),
+    new SpyroScene3(25, "Cutscene"),
+    new SpyroScene3(28, "Cutscene"),
+    new SpyroScene3(31, "Cutscene"),
+    new SpyroScene3(34, "Cutscene"),
+    new SpyroScene3(37, "Cutscene"),
+    new SpyroScene3(40, "Cutscene"),
+    // new SpyroScene3(43, "Cutscene"), // this subfile index has a size of zero in the WAD
+    new SpyroScene3(46, "Cutscene"),
+    new SpyroScene3(49, "Cutscene"),
+    new SpyroScene3(52, "Cutscene"),
+    new SpyroScene3(55, "Cutscene"),
+    new SpyroScene3(58, "Cutscene"),
+    new SpyroScene3(61, "Cutscene"),
+    new SpyroScene3(64, "Cutscene"),
+    new SpyroScene3(67, "Cutscene")
+    // "Credits Flyover",
+    // new SpyroScene3(184, "Flyover"),
+    // new SpyroScene3(185, "Flyover"),
+    // new SpyroScene3(186, "Flyover"),
+    // new SpyroScene3(187, "Flyover"),
+    // new SpyroScene3(188, "Flyover"),
+    // new SpyroScene3(189, "Flyover"),
+    // new SpyroScene3(190, "Flyover"),
+    // new SpyroScene3(191, "Flyover"),
+    // new SpyroScene3(192, "Flyover"),
+    // new SpyroScene3(193, "Flyover"),
+    // new SpyroScene3(194, "Flyover"),
+    // new SpyroScene3(195, "Flyover")
+];
+
+export const sceneGroup: SceneGroup = {id: id, name: name, sceneDescs: sceneDescs};
 export const sceneGroup2: SceneGroup = {id: id2, name: name2, sceneDescs: sceneDescs2};
+export const sceneGroup3: SceneGroup = {id: id3, name: name3, sceneDescs: sceneDescs3};

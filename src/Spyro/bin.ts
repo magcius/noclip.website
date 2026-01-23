@@ -2,11 +2,11 @@ interface GroundFace {
     indices: number[];
     uvIndices: number[] | null;
     colorIndices: number[] | null;
-    texture: number | null;
     rotation: number | null;
     bothSides?: boolean;
     inverse?: boolean;
     isWater?: boolean;
+    isTransparent?: boolean;
 }
 
 interface SkyboxFace {
@@ -99,7 +99,7 @@ class Poly {
     c1: number; c2: number; c3: number; c4: number;
     t: number; r: number; // S1 only
     s1: number; s2: number; s3: number; s4: number; // S2 only
-    tt: number; ii: number; // S2 only
+    tt: number; ii: number; isWater: boolean; // S2 only
     constructor(view: DataView, offs: number, gameNumber: number) {
         this.v1 = view.getUint8(offs);
         this.v2 = view.getUint8(offs+1);
@@ -112,11 +112,12 @@ class Poly {
         if (gameNumber == 1) {
             this.t = view.getUint8(offs+8);
             this.r = view.getUint8(offs+9);
-        } else if (gameNumber == 2) {
+        } else {
             this.s1 = view.getUint8(offs+8);
             this.s2 = view.getUint8(offs+9);
             this.s3 = view.getUint8(offs+10);
             this.s4 = view.getUint8(offs+11);
+            this.isWater = this.s1 === 0 && this.s2 === 0 && this.s3 === 0 && this.s4 === 0;
             this.tt = view.getUint8(offs+12) & 0x7F;
             this.ii = view.getUint8(offs+13);
         }
@@ -395,7 +396,6 @@ function buildFaces1(poly: Poly, mdlVertStart: number, mdlColorStart: number, fa
                 indices: [d, c, b],
                 uvIndices: [uv0, uv1, uv2],
                 colorIndices: [cd, cc, ca],
-                texture: tileIndex,
                 rotation: rr
             });
         } else {
@@ -408,14 +408,12 @@ function buildFaces1(poly: Poly, mdlVertStart: number, mdlColorStart: number, fa
                 indices: [a, b, c],  // v1, v2, v3
                 uvIndices: [uvA, uvB, uvC],
                 colorIndices:[ca, cb, cc],
-                texture: tileIndex,
                 rotation: 0
             });
             faces.push({
                 indices: [a, c, d],  // v1, v3, v4
                 uvIndices: [uvA, uvC, uvD],
                 colorIndices:[ca, cc, cd],
-                texture: tileIndex,
                 rotation: 0
             });
         }
@@ -424,13 +422,12 @@ function buildFaces1(poly: Poly, mdlVertStart: number, mdlColorStart: number, fa
             indices: [a, b, c],
             uvIndices: null,
             colorIndices: null,
-            texture: poly.t,
             rotation: poly.r,
         });
     }
 }
 
-function buildFaces2(poly: Poly, mdlVertStart: number, mdlColorStart: number, faces: GroundFace[], uvs: number[][], atlas: TileAtlas) {
+function buildFaces2(poly: Poly, mdlVertStart: number, mdlColorStart: number, faces: GroundFace[], uvs: number[][], atlas: TileAtlas, waterOverride: boolean) {
     const a = mdlVertStart + poly.v1;
     const b = mdlVertStart + poly.v2;
     const c = mdlVertStart + poly.v3;
@@ -458,9 +455,8 @@ function buildFaces2(poly: Poly, mdlVertStart: number, mdlColorStart: number, fa
     }
 
     const tex = atlas.tiles![tileIndex];
-    const tileIsWater = tex.b > 0;
-    const polyIsWater = (poly.s1 === 0 && poly.s2 === 0 && poly.s3 === 0 && poly.s4 === 0);
-    const isWater = tileIsWater || polyIsWater;
+    const isWater = waterOverride;
+    const isTransparent = tex.b > 0;
     let texRot = tex.r & 7;
     const isTri = (poly.v1 === poly.v2);
     let polyRot = 0;
@@ -482,22 +478,22 @@ function buildFaces2(poly: Poly, mdlVertStart: number, mdlColorStart: number, fa
                 indices: [b, c, d],
                 uvIndices: [uvIndexA, uvIndexC, uvIndexD],
                 colorIndices: [cb, cc, cd],
-                texture: texIndex,
                 rotation: polyRot,
                 bothSides,
                 inverse,
-                isWater
+                isWater,
+                isTransparent
             });
         } else {
             faces.push({
                 indices: [d, c, b],
                 uvIndices: [uvIndexD, uvIndexC, uvIndexA],
                 colorIndices: [cd, cc, cb],
-                texture: texIndex,
                 rotation: polyRot,
                 bothSides,
                 inverse,
-                isWater
+                isWater,
+                isTransparent
             });
         }
     } else {
@@ -505,21 +501,21 @@ function buildFaces2(poly: Poly, mdlVertStart: number, mdlColorStart: number, fa
             indices: [a, b, c],
             uvIndices: [uvIndexA, uvIndexB, uvIndexC],
             colorIndices: [ca, cb, cc],
-            texture: texIndex,
             rotation: 0,
             bothSides,
             inverse,
-            isWater
+            isWater,
+            isTransparent
         });
         faces.push({
             indices: [a, c, d],
             uvIndices: [uvIndexA, uvIndexC, uvIndexD],
             colorIndices: [ca, cc, cd],
-            texture: texIndex,
             rotation: 0,
             bothSides,
             inverse,
-            isWater
+            isWater,
+            isTransparent
         });
     }
 }
@@ -547,7 +543,7 @@ export function buildSkybox(view: DataView, gameNumber: number): Skybox {
     for (const partOffset of uniqueOffsets) {
         if (gameNumber == 1) {
             parseSkyboxPart(view, size, partOffset, vertices, colors, faces);
-        } else if (gameNumber == 2) {
+        } else {
             parseSkyboxPart2(view, size, partOffset, vertices, colors, faces);
         }
     }
@@ -565,7 +561,7 @@ export function buildLevel(view: DataView, atlas: TileAtlas, gameNumber: number)
     const start = 8;
     const partOffsets: number[] = [];
 
-    if (gameNumber == 2) {
+    if (gameNumber > 1) {
         offs = 0;
         const partTableOffset = view.getUint32(offs, true);
         offs += 4;
@@ -587,7 +583,7 @@ export function buildLevel(view: DataView, atlas: TileAtlas, gameNumber: number)
             offs += 4;
             abs = offset + start;
             pointer = abs;
-        } else if (gameNumber == 2) {
+        } else {
             abs = partOffsets[part] + 8;
             pointer = abs;
         }
@@ -617,8 +613,8 @@ export function buildLevel(view: DataView, atlas: TileAtlas, gameNumber: number)
         }
 
         // MDL/FAR/TEX vertices
-        let isWaterNonGround = false;
-        if (gameNumber === 2) {
+        let isWaterNonGround = header.w === 0;
+        if (gameNumber > 1 && !isWaterNonGround) {
             let polyPos = pointer + header.v2 * 4 + header.c2 * 4 + header.c2 * 4;
             for (let i = 0; i < header.p2; i++) {
                 const s1 = view.getUint8(polyPos + 8);
@@ -638,7 +634,7 @@ export function buildLevel(view: DataView, atlas: TileAtlas, gameNumber: number)
             pointer += 4;
             const zraw = (vertex.b1 | ((vertex.b2 & 3) << 8));
             let z = zraw + header.z;
-            if (gameNumber == 2) {
+            if (gameNumber > 1) {
                 // z-scaling
                 // non-ground water is usually flat water, while "ground" water is usually sloped (different signatures)
                 const far = header.v1 === 0 && header.f === 0xFFFFFFFF;
@@ -670,8 +666,8 @@ export function buildLevel(view: DataView, atlas: TileAtlas, gameNumber: number)
             pointer += 16;
             if (gameNumber == 1) {
                 buildFaces1(poly, mdlVertStart, mdlColorStart, faces, uvs, atlas)
-            } else if (gameNumber == 2) {
-                buildFaces2(poly, mdlVertStart, mdlColorStart, faces, uvs, atlas)
+            } else {
+                buildFaces2(poly, mdlVertStart, mdlColorStart, faces, uvs, atlas, header.w === 0)
             }
         }
     }
@@ -731,7 +727,7 @@ export function parseTileGroups(view: DataView, gameNumber: number): TileGroups 
         offs += 8;
         textureCompute(tex, offs - 8, gameNumber);
         lod.push(tex);
-        if (gameNumber == 2) {
+        if (gameNumber > 1) {
             offs += 32; // skip unused groups
         }
     }
@@ -962,7 +958,7 @@ function textureCompute(tex: Tile, filePos: number, gameNumber: number): void {
     if ((tex.ff & 0x0E) > 0) tex.f = true;
     if ((tex.ss & 0x08) === 0) tex.f = true;
 
-    if (gameNumber == 2) {
+    if (gameNumber > 1) {
         tex.w = 32;
         tex.b = (tex.ss >> 5) & 0x03;
     } else {
