@@ -115,7 +115,7 @@ export function parseFSKA(buffer: ArrayBufferSlice, offset: number, count: numbe
                         const delta_value = b * data_scale;
 
                         const delta_time = frames[i + 1] - frames[i];
-                        velocity = delta_value / delta_time
+                        velocity = delta_value / delta_time;
                     }
 
                     keys.push({ value, velocity });

@@ -11,6 +11,7 @@ import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
 import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
 import { computeModelMatrixSRT } from '../MathHelpers.js';
 import { fshp_renderer } from "./render_fshp";
+import { getPointHermite } from '../Spline.js';
 import { assert } from '../util.js';
 import { ViewerRenderInput } from '../viewer.js';
 
@@ -94,100 +95,20 @@ export class fmdl_renderer
 
     render(renderHelper: GfxRenderHelper, viewerInput: ViewerRenderInput, renderInstListMain: GfxRenderInstList, renderInstListSkybox: GfxRenderInstList): void
     {
-        // animate skeleton
         let current_bones: FSKL_Bone[] = [];
         if (this.fska == null)
         {
+            // this model doesn't have an animated skeleton
             current_bones = this.fskl.bones;
         }
         else
         {
-            const FPS = 30;
-            const FPS_RATE = FPS/1000;
+            // this model has an animated skeleton
+            // advance time
             this.current_animation_frame += viewerInput.deltaTime * FPS_RATE;
             this.current_animation_frame = this.current_animation_frame % this.fska.frame_count;
-
-            for (let bone_index = 0; bone_index < this.fskl.bones.length; bone_index++)
-            {
-                let bone = this.fskl.bones[bone_index];
-                const bone_animation_index = this.bone_to_bone_animation_indices[bone_index];
-
-                if (bone_animation_index == -1)
-                {
-                    // no bone_animation, copy the bone and skip to the next one
-                    current_bones.push(bone);
-                    continue;
-                }
-
-                const bone_animation = this.fska.bone_animations[bone_animation_index]
-
-                let transformation_flags = bone_animation.flags >> 6;
-                let transformation_values: number[] = [];
-                let current_curve_index = 0;
-
-                // which curve goes to which transformation is stored in the flags
-                // iterate over each bit
-                // TODO: are 10 bits of the flags really used? documentation says 9 but translation didn't line up
-                for (let i = 0; i < 10; i++)
-                {
-                    const has_curve = transformation_flags & 0x1;
-                    if (has_curve)
-                    {
-                        const curve = bone_animation.curves[current_curve_index];
-                        current_curve_index += 1;
-
-                        // interpolate value
-                        for (let frame_index = 0; frame_index < curve.frames.length; frame_index++)
-                        {
-                            if (this.current_animation_frame == curve.frames[frame_index])
-                            {
-                                const value = curve.keys[0].value;
-                                transformation_values.push(value);
-
-                                break;
-                            }
-                            else if (this.current_animation_frame < curve.frames[frame_index])
-                            {
-                                const before_key = curve.keys[frame_index - 1];
-                                const before_frame = curve.frames[frame_index - 1];
-                                const after_key = curve.keys[frame_index];
-                                const after_frame = curve.frames[frame_index];
-
-                                const frame_delta = after_frame - before_frame;
-                                const t = (this.current_animation_frame - before_frame) / frame_delta;
-                                const duration = frame_delta * (1.0 / FPS)
-
-                                const h3 = (3.0 * t * t) - (2.0 * t * t * t);
-                                const h2 = (-1.0 * t * t) + (t * t * t);
-                                const h1 = (t * t * t) - (2.0 * t * t) + t;
-                                const h0 = 1.0 - h3;
-
-                                const value = h0 * before_key.value + h3 * after_key.value + (h1 * before_key.velocity + h2 * after_key.velocity) * duration;
-                                transformation_values.push(value);
-                                break;
-                            }
-                        }
-                    }
-                    else
-                    {
-                        transformation_values.push(bone_animation.initial_values[i]);
-                    }
-
-                    transformation_flags >>= 1;
-                }
-
-                bone =
-                {
-                    name: bone.name,
-                    parent_index: bone.parent_index,
-                    scale: vec3.fromValues(transformation_values[0], transformation_values[1], transformation_values[2]),
-                    rotation: vec3.fromValues(transformation_values[3], transformation_values[4], transformation_values[5]),
-                    translation: vec3.fromValues(transformation_values[7], transformation_values[8], transformation_values[9]),
-                    user_data: bone.user_data,
-                };
-            
-                current_bones.push(bone);
-            }
+            // update each bone's transformations to the current frame
+            current_bones = this.animate_skeleton(this.current_animation_frame);
         }
 
         // remake smooth rigid matrix
@@ -212,16 +133,7 @@ export class fmdl_renderer
                 bone_matrix_array = this.smooth_rigid_matrix_array;
             }
 
-            this.fshp_renderers[i].render
-            (
-                renderHelper,
-                viewerInput,
-                renderInstListMain,
-                renderInstListSkybox,
-                this.transform_matrix,
-                bone_matrix_array,
-                this.special_skybox,
-            );
+            this.fshp_renderers[i].render(renderHelper, viewerInput, renderInstListMain, renderInstListSkybox, this.transform_matrix, bone_matrix_array, this.special_skybox);
         }
     }
 
@@ -232,6 +144,95 @@ export class fmdl_renderer
             this.fshp_renderers[i].destroy(device);
         }
     }
+
+    animate_skeleton(current_frame: number): FSKL_Bone[]
+    {
+        let bones: FSKL_Bone[] = [];
+        for (let bone_index = 0; bone_index < this.fskl.bones.length; bone_index++)
+        {
+            let bone = this.fskl.bones[bone_index];
+            const bone_animation_index = this.bone_to_bone_animation_indices[bone_index];
+
+            if (bone_animation_index == -1)
+            {
+                // no bone_animation, copy the bone and skip to the next one
+                bones.push(bone);
+                continue;
+            }
+            
+            if (this.fska == null)
+            {
+                console.error("trying to animated the skeleton of a fmdl with no fska");
+                throw("whoops");
+            }
+            const bone_animation = this.fska.bone_animations[bone_animation_index]
+
+            let transformation_flags = bone_animation.flags >> 6;
+            let transformation_values: number[] = [];
+            let curve_index = 0;
+
+            // which curve goes to which transformation is stored in the flags, iterate over each bit
+            // TODO: are 10 bits of the flags really used? documentation says 9 but translation didn't line up
+            for (let i = 0; i < 10; i++)
+            {
+                if (transformation_flags & 0x1)
+                {
+                    // this transformation has an animation curve
+                    const curve = bone_animation.curves[curve_index];
+                    curve_index += 1;
+
+                    // look through the keyframes in the animation
+                    for (let frame_index = 0; frame_index < curve.frames.length; frame_index++)
+                    {
+                        if (current_frame == curve.frames[frame_index])
+                        {
+                            // interpolation is unnecessary, just return the key value
+                            const value = curve.keys[0].value;
+                            transformation_values.push(value);
+                            break;
+                        }
+                        else if (current_frame < curve.frames[frame_index])
+                        {
+                            // interpolate between two keyframes
+                            const before_frame = curve.frames[frame_index - 1];
+                            const after_frame = curve.frames[frame_index];
+                            const frame_delta = after_frame - before_frame;
+                            const t = (current_frame - before_frame) / frame_delta;
+                            const before_key = curve.keys[frame_index - 1];
+                            const after_key = curve.keys[frame_index];
+                            const value = getPointHermite(before_key.value, after_key.value, before_key.velocity * frame_delta, after_key.velocity * frame_delta, t);
+                            transformation_values.push(value);
+                            break;
+                        }
+                    }
+                }
+                else
+                {
+                    // this transformation doesn't have an animation curve
+                    // use the initial value
+                    transformation_values.push(bone_animation.initial_values[i]);
+                }
+
+                transformation_flags >>= 1;
+            }
+
+            bone =
+            {
+                name: bone.name,
+                parent_index: bone.parent_index,
+                scale: vec3.fromValues(transformation_values[0], transformation_values[1], transformation_values[2]),
+                rotation: vec3.fromValues(transformation_values[3], transformation_values[4], transformation_values[5]),
+                translation: vec3.fromValues(transformation_values[7], transformation_values[8], transformation_values[9]),
+                user_data: bone.user_data,
+            };
+        
+            bones.push(bone);
+        }
+
+        return bones;
+    }
 }
 
+const FPS = 30;
+const FPS_RATE = FPS/1000;
 const BONE_MATRIX_MAX_LENGTH = 209;
