@@ -230,11 +230,11 @@ abstract class TAdaptor {
         public enableLogging = true,
     ) { }
 
-    public adaptor_do_prepare(obj: STBObject): void { };
-    public adaptor_do_begin(obj: STBObject): void { };
-    public adaptor_do_end(obj: STBObject): void { };
-    public adaptor_do_update(obj: STBObject, frameCount: number): void { };
-    public adaptor_do_data(obj: STBObject, id: number | null, data: DataView): void { };
+    public adaptor_do_prepare(obj: STBObject): void {}
+    public adaptor_do_begin(obj: STBObject): void {}
+    public adaptor_do_end(obj: STBObject): void {}
+    public adaptor_do_update(obj: STBObject, frameCount: number): void {}
+    public adaptor_do_data(obj: STBObject, id: number | null, data: DataView): void {}
 
     // Set a single VariableValue update function, with the option of using FuncVals 
     public adaptor_setVariableValue(obj: STBObject, keyIdx: number, data: ParagraphData) {
@@ -1117,10 +1117,10 @@ class TParticleAdaptor extends TAdaptor {
         this.variableValues[EParticleTrack.ColorG].setValue_immediate(255.0);
         this.variableValues[EParticleTrack.ColorB].setValue_immediate(255.0);
         this.variableValues[EParticleTrack.ColorA].setValue_immediate(255.0);
-        this.variableValues[EParticleTrack.Color1R ].setValue_immediate(255.0);
-        this.variableValues[EParticleTrack.Color1G ].setValue_immediate(255.0);
-        this.variableValues[EParticleTrack.Color1B ].setValue_immediate(255.0);
-        this.variableValues[EParticleTrack.Color1A ].setValue_immediate(255.0);
+        this.variableValues[EParticleTrack.Color1R].setValue_immediate(255.0);
+        this.variableValues[EParticleTrack.Color1G].setValue_immediate(255.0);
+        this.variableValues[EParticleTrack.Color1B].setValue_immediate(255.0);
+        this.variableValues[EParticleTrack.Color1A].setValue_immediate(255.0);
 
         this.variableValues[EParticleTrack.FadeIn].setOutput(this.TVVOOn_BEGIN_FADE_IN);
         this.variableValues[EParticleTrack.FadeOut].setOutput(this.TVVOOn_END_FADE_OUT);
