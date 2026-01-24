@@ -3,7 +3,7 @@ import { mat4, ReadonlyVec3, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
 import { LoopMode, TPT1, TTK1 } from "../Common/JSYSTEM/J3D/J3DLoader.js";
-import { JMessage, JStage, TActor, TCamera, TControl, TParse, TSystem } from "../Common/JSYSTEM/JStudio.js";
+import { JMessage, JStage, TActor, TCamera, TControl, TParse } from "../Common/JSYSTEM/JStudio.js";
 import { getMatrixAxisY } from "../MathHelpers.js";
 import { assert } from "../util.js";
 import { ResType } from "./d_resorce.js";
@@ -367,7 +367,7 @@ export class dDemo_actor_c extends TActor {
     }
 }
 
-class dDemo_system_c implements TSystem {
+class dDemo_system_c implements JStage.TSystem {
     private activeCamera: dDemo_camera_c | null;
     private actors: dDemo_actor_c[] = [];
     // private ambient: dDemo_ambient_c;

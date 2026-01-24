@@ -16,17 +16,11 @@ const scratchVec3c = vec3.create();
 const scratchMat4a = mat4.create();
 const scratchMat4b = mat4.create();
 
-// TODO: Setup the JMessage system in a separate file
-export namespace JMessage {
-    export class TControl {
-        public setMessageCode(packed: number): boolean { return true; };
-    }
-}
-
 //----------------------------------------------------------------------------------------------------------------------
-// STB Objects
-// These are created an managed by the game. Each Stage Object has a corresponding STB Object, connected by an Adaptor. 
-// The STB objects are manipulated by Sequences from the STB file each frame, and update the Stage Object via Adaptor.
+// JStage
+// Manages actors, cameras, lights, etc. in a scene. The game provides a method of finding and/or creating the objects, 
+// and then JStage modifies them according to cutscene data. 
+// NOTE: JStage, JMessage, etc are separate from JStudio. They'd be in separate files if they weren't so small. 
 //----------------------------------------------------------------------------------------------------------------------
 export namespace JStage {
     export enum EObject {
@@ -58,15 +52,24 @@ export namespace JStage {
             return 0;
         }
     }
+
+    //------------------------------------------------------------------------------------------------------------------
+    // System
+    // The main interface between a game and JStage. Provides a method of finding or creating objects that will then be 
+    // modified by a cutscene. Each game should override JSGFindObject() to supply or create objects for manipulation. 
+    //------------------------------------------------------------------------------------------------------------------
+    export interface TSystem {
+        JSGFindObject(objId: string, objType: JStage.EObject): JStage.TObject | null;
+    }
 }
 
 //----------------------------------------------------------------------------------------------------------------------
-// System
-// The main interface between a game and JStudio. Provides a method of finding or creating objects that will then be 
-// modified by a cutscene. Each game should override JSGFindObject() to supply or create objects for manipulation. 
+// JMessage
 //----------------------------------------------------------------------------------------------------------------------
-export interface TSystem {
-    JSGFindObject(objId: string, objType: JStage.EObject): JStage.TObject | null;
+export namespace JMessage {
+    export class TControl {
+        public setMessageCode(packed: number): boolean { return true; };
+    }
 }
 
 //----------------------------------------------------------------------------------------------------------------------
@@ -575,7 +578,7 @@ class TActorAdaptor extends TAdaptor {
     public animTexMode: number = 0; // See computeAnimFrame()
 
     constructor(
-        private system: TSystem,
+        private system: JStage.TSystem,
         public override object: TActor,
     ) { super(14); }
 
@@ -1082,7 +1085,7 @@ class TParticleAdaptor extends TAdaptor {
     public age: number = 0;
 
     constructor(
-        private system: TSystem,
+        private system: JStage.TSystem,
         private control: TControl,
         public emitterMgr: JPAEmitterManager,
         public createEmitterCb: CreateEmitterCallback,
@@ -2260,7 +2263,7 @@ export abstract class TBlockObject {
 
 // This combines JStudio::TControl and JStudio::stb::TControl into a single class, for simplicity.
 export class TControl {
-    public system: TSystem;
+    public system: JStage.TSystem;
     public particleManager: JPAEmitterManager | null = null;
     public createEmitterCb: CreateEmitterCallback | null = null;
     public msgControl: JMessage.TControl;
@@ -2279,7 +2282,7 @@ export class TControl {
     // A special object that the STB file can use to suspend the demo (such as while waiting for player input)
     private controlObject = new TControlObject(this);
 
-    constructor(system: TSystem, msgControl: JMessage.TControl, particleManager: JPAEmitterManager | null, createEmitterCb: CreateEmitterCallback | null) {
+    constructor(system: JStage.TSystem, msgControl: JMessage.TControl, particleManager: JPAEmitterManager | null, createEmitterCb: CreateEmitterCallback | null) {
         this.system = system;
         this.msgControl = msgControl;
         this.particleManager = particleManager;
