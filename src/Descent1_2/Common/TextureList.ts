@@ -256,8 +256,8 @@ export class DescentTextureList implements Destroyable {
 
         const bitmap = this.assetCache.getBitmap(
             animation.bitmapIds[0],
-        )!.bitmap;
-        if (bitmap === null) return null;
+        )?.bitmap;
+        if (bitmap === undefined) return null;
 
         return {
             animated: true,

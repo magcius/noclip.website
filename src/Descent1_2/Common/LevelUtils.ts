@@ -14,7 +14,7 @@ export default function postprocessLevel(
             assetCache.getRobotInfo(obj.subtypeId)?.bossFlag > 0,
     );
 
-    if (boss !== null) {
+    if (boss !== undefined) {
         // If boss is present, ghost out reactor. This is what the game does
         for (const object of level.objects) {
             if (object.type === DescentObjectType.CONTROLCEN) {
