@@ -45,7 +45,6 @@ export class fmdl_renderer
         // setup skeleton
         this.fskl = fmdl.fskl;
         this.fska = fska;
-        console.log(this.fska);
         assert(this.fskl.smooth_rigid_indices.length < BONE_MATRIX_MAX_LENGTH);
 
         // for each bone, which element of the fska bone_animations array applies to this bone
@@ -78,16 +77,22 @@ export class fmdl_renderer
             const fshp = fmdl.fshp[shape_index];
             const fvtx = fmdl.fvtx[fshp.fvtx_index];
             const fmat = fmdl.fmat[fshp.fmat_index];
-            let bone_matrix_length: number;
-            if (fshp.skin_bone_count == 0)
+            let bone_matrix_array_length = 1;
+            if (fshp.skin_bone_count > 0)
             {
-                bone_matrix_length = 1;
+                bone_matrix_array_length = this.fskl.smooth_rigid_indices.length;
             }
-            else
-            {
-                bone_matrix_length = this.fskl.smooth_rigid_indices.length;
-            }
-            const renderer = new fshp_renderer(fvtx, fshp, fmat, bntx, gfx_texture_array, bone_matrix_length, device, renderHelper);
+            const renderer = new fshp_renderer
+            (
+                fvtx,
+                fshp,
+                fmat,
+                bntx,
+                gfx_texture_array,
+                bone_matrix_array_length,
+                device,
+                renderHelper
+            );
             this.fshp_renderers.push(renderer);
         }
 
@@ -116,7 +121,19 @@ export class fmdl_renderer
         for (let i = 0; i < this.fskl.smooth_rigid_indices.length; i++)
         {
             const transformation_matrix = recursive_bone_transform(this.fskl.smooth_rigid_indices[i], current_bones)
-            this.smooth_rigid_matrix_array.push(transformation_matrix);
+
+            if (i < this.fskl.bone_local_from_bind_pose_matrices.length)
+            {
+                // smooth skinned vertices are stored in bind pose space, and need to be converted to bone local space
+                const new_matrix: mat4 = mat4.create();
+                mat4.multiply(new_matrix, transformation_matrix, this.fskl.bone_local_from_bind_pose_matrices[i])
+                this.smooth_rigid_matrix_array.push(new_matrix);
+            }
+            else
+            {
+                // rigid skinned vertices are stored in bone local space, so they are fine as is
+                this.smooth_rigid_matrix_array.push(transformation_matrix);
+            }
         }
 
         // render all fshp renderers
@@ -133,7 +150,16 @@ export class fmdl_renderer
                 bone_matrix_array = this.smooth_rigid_matrix_array;
             }
 
-            this.fshp_renderers[i].render(renderHelper, viewerInput, renderInstListMain, renderInstListSkybox, this.transform_matrix, bone_matrix_array, this.special_skybox);
+            this.fshp_renderers[i].render
+            (
+                renderHelper,
+                viewerInput,
+                renderInstListMain,
+                renderInstListSkybox,
+                this.transform_matrix,
+                bone_matrix_array,
+                this.special_skybox,
+            );
         }
     }
 
@@ -238,4 +264,4 @@ export class fmdl_renderer
 
 const FPS = 30;
 const FPS_RATE = FPS/1000;
-const BONE_MATRIX_MAX_LENGTH = 209;
+const BONE_MATRIX_MAX_LENGTH = 209; // shibuya lumps all the animated trees and street lamps into one model

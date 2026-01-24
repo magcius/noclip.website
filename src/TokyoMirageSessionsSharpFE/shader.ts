@@ -33,7 +33,7 @@ layout(std140) uniform ub_SceneParams
     Mat4x4 u_ClipFromViewMatrix;
     Mat3x4 u_ViewFromWorldMatrix;
     Mat3x4 u_TransformationMatrix;
-    Mat3x4 u_BoneMatrix[${this.bone_matrix_array_length}];
+    Mat3x4 u_BoneMatrices[${this.bone_matrix_array_length}];
 };
 
 uniform sampler2D s_diffuse;
@@ -46,21 +46,30 @@ out vec2 v_TexCoord0;
 void mainVS()
 {
     #if ${this.fshp.skin_bone_count} == 0
-    vec3 WorldPosition = UnpackMatrix(u_BoneMatrix[0]) * vec4(a_Position, 1.0);
+    vec3 WorldPosition = UnpackMatrix(u_BoneMatrices[0]) * vec4(a_Position, 1.0);
 
     #elif ${this.fshp.skin_bone_count} == 1
-    vec3 WorldPosition = UnpackMatrix(u_BoneMatrix[a_BlendIndex0]) * vec4(a_Position, 1.0);
+    vec3 WorldPosition = UnpackMatrix(u_BoneMatrices[a_BlendIndex0]) * vec4(a_Position, 1.0);
 
     #elif ${this.fshp.skin_bone_count} == 2
-    mat4x3 t_WorldFromLocalMatrix = mat4x3(1.0);
-
-    // mat4x3 t_WorldFromLocalMatrix = mat4x3(1.0) * a_BlendWeight0.x;
-    // t_WorldFromLocalMatrix += UnpackMatrix(u_BoneMatrix[a_BlendIndex0.y]) * (1.0 -a_BlendWeight0.x);
-    
+    mat4x3 t_WorldFromLocalMatrix = mat4x3(0.0);
+    t_WorldFromLocalMatrix += UnpackMatrix(u_BoneMatrices[a_BlendIndex0.x]) * a_BlendWeight0.x;
+    t_WorldFromLocalMatrix += UnpackMatrix(u_BoneMatrices[a_BlendIndex0.y]) * a_BlendWeight0.y;
     vec3 WorldPosition = t_WorldFromLocalMatrix * vec4(a_Position, 1.0);
 
     #elif ${this.fshp.skin_bone_count} == 3
-    mat4x3 t_WorldFromLocalMatrix = mat4x3(1.0);
+    mat4x3 t_WorldFromLocalMatrix = mat4x3(0.0);
+    t_WorldFromLocalMatrix += UnpackMatrix(u_BoneMatrices[a_BlendIndex0.x]) * a_BlendWeight0.x;
+    t_WorldFromLocalMatrix += UnpackMatrix(u_BoneMatrices[a_BlendIndex0.y]) * a_BlendWeight0.y;
+    t_WorldFromLocalMatrix += UnpackMatrix(u_BoneMatrices[a_BlendIndex0.z]) * a_BlendWeight0.z;
+    vec3 WorldPosition = t_WorldFromLocalMatrix * vec4(a_Position, 1.0);
+
+    #elif ${this.fshp.skin_bone_count} == 4
+    mat4x3 t_WorldFromLocalMatrix = mat4x3(0.0);
+    t_WorldFromLocalMatrix += UnpackMatrix(u_BoneMatrices[a_BlendIndex0.x]) * a_BlendWeight0.x;
+    t_WorldFromLocalMatrix += UnpackMatrix(u_BoneMatrices[a_BlendIndex0.y]) * a_BlendWeight0.y;
+    t_WorldFromLocalMatrix += UnpackMatrix(u_BoneMatrices[a_BlendIndex0.z]) * a_BlendWeight0.z;
+    t_WorldFromLocalMatrix += UnpackMatrix(u_BoneMatrices[a_BlendIndex0.w]) * a_BlendWeight0.w;
     vec3 WorldPosition = t_WorldFromLocalMatrix * vec4(a_Position, 1.0);
 
     #endif

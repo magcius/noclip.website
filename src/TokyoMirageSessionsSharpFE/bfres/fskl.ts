@@ -70,11 +70,35 @@ export function parseFSKL(buffer: ArrayBufferSlice, offset: number): FSKL
         smooth_rigid_index_entry_offset += SMOOTH_RIGID_INDEX_ENTRY_SIZE;
     }
 
-    return { bones: bone_array, smooth_rigid_indices: smooth_rigid_array, scaling_mode };
+    const bone_local_from_bind_pose_matrix_array_offset = view.getUint32(offset + 0x20, true);
+    let bone_local_from_bind_pose_matrices: mat4[] = [];
+    let bone_local_from_bind_pose_matrix_entry_offset = bone_local_from_bind_pose_matrix_array_offset;
+    for (let i = 0; i < smooth_count; i++)
+    {
+        const m00 = view.getFloat32(bone_local_from_bind_pose_matrix_entry_offset + 0x00, true);
+        const m10 = view.getFloat32(bone_local_from_bind_pose_matrix_entry_offset + 0x04, true);
+        const m20 = view.getFloat32(bone_local_from_bind_pose_matrix_entry_offset + 0x08, true);
+        const m30 = view.getFloat32(bone_local_from_bind_pose_matrix_entry_offset + 0x0C, true);
+        const m01 = view.getFloat32(bone_local_from_bind_pose_matrix_entry_offset + 0x10, true);
+        const m11 = view.getFloat32(bone_local_from_bind_pose_matrix_entry_offset + 0x14, true);
+        const m21 = view.getFloat32(bone_local_from_bind_pose_matrix_entry_offset + 0x18, true);
+        const m31 = view.getFloat32(bone_local_from_bind_pose_matrix_entry_offset + 0x1C, true);
+        const m02 = view.getFloat32(bone_local_from_bind_pose_matrix_entry_offset + 0x20, true);
+        const m12 = view.getFloat32(bone_local_from_bind_pose_matrix_entry_offset + 0x24, true);
+        const m22 = view.getFloat32(bone_local_from_bind_pose_matrix_entry_offset + 0x28, true);
+        const m32 = view.getFloat32(bone_local_from_bind_pose_matrix_entry_offset + 0x2C, true);
+        const matrix = mat4.fromValues(m00, m01, m02, 0.0, m10, m11, m12, 0.0, m20, m21, m22, 0.0, m30, m31, m32, 1.0);
+        bone_local_from_bind_pose_matrices.push(matrix);
+        
+        bone_local_from_bind_pose_matrix_entry_offset += MATRIX_ENTRY_SIZE;
+    }
+
+    return { bones: bone_array, smooth_rigid_indices: smooth_rigid_array, bone_local_from_bind_pose_matrices, scaling_mode };
 }
 
 const BONE_ENTRY_SIZE = 0x60;
 const SMOOTH_RIGID_INDEX_ENTRY_SIZE = 0x2;
+const MATRIX_ENTRY_SIZE = 0X30;
 
 /**
  * multiply a bone's transformation with all it's parent's transformations to get the real transformation matrix
@@ -106,6 +130,7 @@ export interface FSKL
 {
     bones: FSKL_Bone[];
     smooth_rigid_indices: number[];
+    bone_local_from_bind_pose_matrices: mat4[];
     scaling_mode: FSKL_Scaling_Mode
 }
 
