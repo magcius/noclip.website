@@ -1079,12 +1079,6 @@ enum EParticleTrack {
     FadeOut = 19,
 }
 
-export type CreateEmitterCallback = (
-    userId: number,
-    groupId: number,
-    roomId: number,
-) => JPABaseEmitter | null;
-
 class TParticleAdaptor extends TAdaptor {
     public emitter: JPABaseEmitter | null = null;
     public emitterCallback: TJPACallback = new TJPACallback(this, this.control);
