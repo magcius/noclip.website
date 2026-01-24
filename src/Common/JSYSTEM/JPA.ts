@@ -1397,10 +1397,6 @@ export function JPASetRMtxTVecfromMtx(m: ReadonlyMat4, rot: mat4, trans: vec3): 
     JPASetRMtxSTVecFromMtx(null, rot, trans, m);
 }
 
-export function JPASetRMtxSTVecfromMtx(m: ReadonlyMat4, rot: mat4, scale: vec3, trans: vec3): void {
-    JPASetRMtxSTVecFromMtx(scale, rot, trans, m);
-}
-
 function mirroredRepeat(t: number, duration: number): number {
     // Which loop are we on?
     const loopNum = (t / duration) | 0;
@@ -1758,7 +1754,7 @@ export class JPABaseEmitter {
     }
 
     public setGlobalSRTMatrix(m: mat4): void {
-        JPASetRMtxSTVecfromMtx(m, this.globalRotation, this.globalDynamicsScale, this.globalTranslation);
+        JPASetRMtxSTVecFromMtx(this.globalDynamicsScale, this.globalRotation, this.globalTranslation, m);
     }
 
     public setGlobalRotation(v: ReadonlyVec3): void {
