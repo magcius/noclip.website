@@ -89,6 +89,20 @@ export async function get_fres_from_apak(apak_path: string, bfres_name: string, 
     return fres;
 }
 
+export async function get_animations_from_apak(apak_path: string, data_fetcher: DataFetcher): Promise<FRES[]>
+{
+    const apak_data = await data_fetcher.fetchData(apak_path)
+    const apak = parseAPAK(apak_data);
+    const animation_files = get_files_of_type(apak, "anm");
+
+    let animations: FRES[] = [];
+    for (let i = 0; i < animation_files.length; i++)
+    {
+        animations.push(parseBFRES(animation_files[i]));
+    }
+    return animations;
+}
+
 export interface APAK
 {
     files: file[];

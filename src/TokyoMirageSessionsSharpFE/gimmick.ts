@@ -1,8 +1,8 @@
 // gimmick.ts
 // represents a dynamic or interactable object in levels, such as treasure boxes or warp pads
 
-import { parseAPAK, get_file_by_name, get_fres_from_apak } from "./apak.js";
-import { FRES, parseBFRES } from "./bfres/bfres_switch.js";
+import { get_fres_from_apak } from "./apak.js";
+import { FRES } from "./bfres/bfres_switch.js";
 import * as BNTX from '../fres_nx/bntx.js';
 import { deswizzle_and_upload_bntx_textures } from "./bntx_helpers";
 import { DataFetcher } from "../DataFetcher.js";
@@ -12,7 +12,6 @@ import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { vec3 } from "gl-matrix";
 import { MapLayout, get_point_from_group } from "./maplayout.js";
 import { fmdl_renderer } from "./render_fmdl.js";
-import { assert } from "../util.js";
 
 export class gimmick
 {
@@ -32,7 +31,7 @@ export class gimmick
         let fska: FSKA | null = null;
         if (animation_fres != undefined && animation_fres.fska.length > 0)
         {
-                fska = animation_fres.fska[0];
+            fska = animation_fres.fska[0];
         }
 
         this.fmdl_renderer = new fmdl_renderer
@@ -62,28 +61,18 @@ export async function create_gimmick
     device: GfxDevice
 ): Promise<gimmick>
 {
-    const apak = parseAPAK(await data_fetcher.fetchData(apak_path));
-    const bfres = get_file_by_name(apak, bfres_name);
-    if (bfres == undefined)
-    {
-        console.error(`file ${bfres_name} not found`);
-        throw("whoops");
-    }
-    else
-    {
-        const fres = parseBFRES(bfres);
-        const new_gimmick = new gimmick
-        (
-            position,
-            rotation,
-            scale,
-            fres,
-            device,
-            new GfxRenderHelper(device),
-            undefined,
-        );
-        return new_gimmick;
-    }
+    const fres = await get_fres_from_apak(apak_path, bfres_name, data_fetcher);
+    const new_gimmick = new gimmick
+    (
+        position,
+        rotation,
+        scale,
+        fres,
+        device,
+        new GfxRenderHelper(device),
+        undefined,
+    );
+    return new_gimmick;
 }
 
 /**

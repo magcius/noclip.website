@@ -17,6 +17,8 @@ import { ViewerRenderInput } from '../viewer.js';
 
 export class fmdl_renderer
 {
+    public animation_play: boolean = true;
+
     private fskl: FSKL;
     private fska: FSKA | null;
     private bone_to_bone_animation_indices: number[] = [];
@@ -110,8 +112,11 @@ export class fmdl_renderer
         {
             // this model has an animated skeleton
             // advance time
-            this.current_animation_frame += viewerInput.deltaTime * FPS_RATE;
-            this.current_animation_frame = this.current_animation_frame % this.fska.frame_count;
+            if (this.animation_play)
+            {
+                this.current_animation_frame += viewerInput.deltaTime * FPS_RATE;
+                this.current_animation_frame = this.current_animation_frame % this.fska.frame_count;
+            }
             // update each bone's transformations to the current frame
             current_bones = this.animate_skeleton(this.current_animation_frame);
         }
