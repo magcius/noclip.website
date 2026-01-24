@@ -442,11 +442,7 @@ export class dDemo_manager_c {
     constructor(
         private globals: dGlobals
     ) {
-        // TODO: If we made this a createSimpleEmitter function on JPAEmitterManager, we could have each game override it
-        const createEmitterCb = (userId: number, groupId: number, roomId: number) => {
-            return this.globals.particleCtrl.set(globals, groupId, userId, null);
-        };
-        this.control = new TControl(this.system, this.messageControl, this.globals.particleCtrl.emitterManager, createEmitterCb);
+        this.control = new TControl(this.system, this.messageControl, null);
     }
 
     public getName() { return this.name; }

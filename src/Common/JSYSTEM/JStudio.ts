@@ -73,6 +73,19 @@ export namespace JMessage {
 }
 
 //----------------------------------------------------------------------------------------------------------------------
+// JParticle
+// noclip modification: JStudio uses only the generic JPAEmitterManager to create/destroy emitters. The game manages 
+//   particle resources using JPAResourceManager which is shared with JPAEmitterManager. Instead, we allow the game to 
+//   control emitter creation/deletion via callbacks.
+//----------------------------------------------------------------------------------------------------------------------
+export namespace JParticle {
+    export class TControl {
+        public JPTCCreateEmitter(userId: number, groupId: number, roomId: number): JPABaseEmitter | null { return null; };
+        public JPTCDeleteEmitter(emitter: JPABaseEmitter): JPABaseEmitter | null { return null; };
+    }
+}
+
+//----------------------------------------------------------------------------------------------------------------------
 // TVariableValue
 // Manages a single float, which will be updated each frame. This float can be updated using a variety of operations: 
 // - Immediate(x): Set to single value. On Update(y), set the value to a single number then do nothing on future frames.  
@@ -1085,10 +1098,9 @@ class TParticleAdaptor extends TAdaptor {
     public age: number = 0;
 
     constructor(
-        private system: JStage.TSystem,
         private control: TControl,
-        public emitterMgr: JPAEmitterManager,
-        public createEmitterCb: CreateEmitterCallback,
+        public ptcControl: JParticle.TControl,
+        private system: JStage.TSystem,
     ) { super(20); }
 
     public override adaptor_do_prepare(obj: STBObject): void {
@@ -1150,10 +1162,10 @@ class TParticleAdaptor extends TAdaptor {
     private TVVOOn_BEGIN_FADE_IN(frame: number, tadaptor: TAdaptor) {
         const adaptor = tadaptor as TParticleAdaptor;
         if (adaptor.emitter !== null) {
-            adaptor.emitterMgr.forceDeleteEmitter(adaptor.emitter);
+            adaptor.ptcControl.JPTCDeleteEmitter(adaptor.emitter);
         }
 
-        adaptor.emitter = adaptor.createEmitterCb(
+        adaptor.emitter = adaptor.ptcControl.JPTCCreateEmitter(
             (adaptor.particleId & 0x0000FFFF),
             (adaptor.particleId & 0xFF000000) >> 24,
             (adaptor.particleId & 0x00FF0000) >> 16,
@@ -1202,7 +1214,7 @@ class TJPACallback extends JPAEmitterCallBack {
             adaptor.fadeType = 0;
             adaptor.lifetime = 0;
             adaptor.age = 0;
-            adaptor.emitterMgr.forceDeleteEmitter(emitter);
+            adaptor.ptcControl.JPTCDeleteEmitter(emitter);
             adaptor.emitter = null;
             return;
         }
@@ -2264,9 +2276,8 @@ export abstract class TBlockObject {
 // This combines JStudio::TControl and JStudio::stb::TControl into a single class, for simplicity.
 export class TControl {
     public system: JStage.TSystem;
-    public particleManager: JPAEmitterManager | null = null;
-    public createEmitterCb: CreateEmitterCallback | null = null;
-    public msgControl: JMessage.TControl;
+    public ptcControl: JParticle.TControl | null;
+    public msgControl: JMessage.TControl | null;
     public fvbControl = new FVB.TControl();
     public secondsPerFrame: number = 1 / 30.0;
     private suspendFrames: number;
@@ -2282,11 +2293,10 @@ export class TControl {
     // A special object that the STB file can use to suspend the demo (such as while waiting for player input)
     private controlObject = new TControlObject(this);
 
-    constructor(system: JStage.TSystem, msgControl: JMessage.TControl, particleManager: JPAEmitterManager | null, createEmitterCb: CreateEmitterCallback | null) {
+    constructor(system: JStage.TSystem, msgControl: JMessage.TControl | null, ptcControl: JParticle.TControl | null) {
         this.system = system;
         this.msgControl = msgControl;
-        this.particleManager = particleManager;
-        this.createEmitterCb = createEmitterCb;
+        this.ptcControl = ptcControl;
     }
 
     public isSuspended() { return this.suspendFrames > 0; }
@@ -2362,7 +2372,7 @@ export class TControl {
 
     public createMessageObject(blockObj: TBlockObject): STBObject | null {
         if (blockObj.type === 'JMSG') {
-            const adaptor = new TMessageAdaptor(this.msgControl);
+            const adaptor = new TMessageAdaptor(this.msgControl!);
             const obj = new TMessageObject(this, blockObj, adaptor);
 
             if (obj) { adaptor.adaptor_do_prepare(obj); }
@@ -2374,16 +2384,12 @@ export class TControl {
 
     public createParticleObject(blockObj: TBlockObject): STBObject | null {
         if (blockObj.type === 'JPTC') {
-            if (this.particleManager && this.createEmitterCb) {
-                const adaptor = new TParticleAdaptor(this.system, this, this.particleManager, this.createEmitterCb);
-                const obj = new TParticleObject(this, blockObj, adaptor);
+            const adaptor = new TParticleAdaptor(this, this.ptcControl!, this.system );
+            const obj = new TParticleObject(this, blockObj, adaptor);
 
-                if (obj) { adaptor.adaptor_do_prepare(obj); }
-                this.objects.push(obj);
-                return obj;
-            } else {
-                console.warn('STB Particle object requested, but no particle manager set');
-            }
+            if (obj) { adaptor.adaptor_do_prepare(obj); }
+            this.objects.push(obj);
+            return obj;
         }
         return null;
     }
@@ -2426,8 +2432,8 @@ export class TParse {
         }
 
         let obj = this.control.createStageObject(blockObj);
-        if (!obj) { obj = this.control.createMessageObject(blockObj); }
-        if (!obj) { obj = this.control.createParticleObject(blockObj); }
+        if (!obj && this.control.msgControl) { obj = this.control.createMessageObject(blockObj); }
+        if (!obj && this.control.ptcControl) { obj = this.control.createParticleObject(blockObj); }
 
         if (!obj) {
             if (flags & 0x40) {
