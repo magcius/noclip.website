@@ -110,7 +110,7 @@ import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_F
 
 import { UI, Panel } from './ui.js';
 import { serializeCamera, deserializeCamera, FPSCameraController } from './Camera.js';
-import { assertExists, assert, arrayRemoveIfExist } from './util.js';
+import { assertExists, assert } from './util.js';
 import { loadRustLib } from './rustlib.js';
 import { DataFetcher } from './DataFetcher.js';
 import { atob, btoa } from './Ascii85.js';
@@ -247,7 +247,7 @@ const sceneGroups: (string | SceneGroup)[] = [
     Scenes_Descent1.sceneGroup,
     Scenes_Descent2.sceneGroup,
     Scenes_Descent2Vertigo.sceneGroup,
-    Scenes_Spyro1.sceneGroup
+    Scenes_Spyro1.sceneGroup,
 ];
 
 enum SaveStatesAction {
@@ -967,6 +967,8 @@ class Main {
         // Unhide any hidden scene groups upon being loaded.
         if (sceneGroup.hidden)
             sceneGroup.hidden = false;
+        if (sceneDesc.hidden)
+            sceneDesc.hidden = false;
 
         this.currentSceneDesc = sceneDesc;
         this.ui.sceneSelect.setCurrentDesc(sceneGroup, this.currentSceneDesc);

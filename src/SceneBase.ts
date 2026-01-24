@@ -34,6 +34,7 @@ export interface SceneDesc {
     id: string;
     name: string;
     createScene(device: GfxDevice, sceneContext: SceneContext): PromiseLike<SceneGfx>;
+    hidden?: boolean;
 }
 
 export interface SceneGroup {
