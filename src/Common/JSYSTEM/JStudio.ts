@@ -7,7 +7,7 @@ import { JSystemFileReaderHelper } from "./J3D/J3DLoader.js";
 import { GfxColor } from "../../gfx/platform/GfxPlatform";
 import { clamp, MathConstants } from "../../MathHelpers.js";
 import { Endianness } from "../../endian.js";
-import { JPAEmitterManager } from "./JPA";
+import { JPABaseEmitter, JPAEmitterManager } from "./JPA";
 
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
@@ -1061,15 +1061,25 @@ enum EParticleTrack {
 }
 
 class TParticleAdaptor extends TAdaptor {
+    private emitter: JPABaseEmitter | null = null;
     private particleId: number = -1;
     private parent: JStage.TObject | null = null;
     private parentNodeID: number = -1;
     private parentEnabled: boolean = false;
 
+    public fadeType: number = 0;
+    public lifetime: number = 0;
+    public age: number = 0;
+
     constructor(
         private system: TSystem,
         private emitterMgr: JPAEmitterManager,
     ) { super(20); }
+
+    public override adaptor_do_prepare(obj: STBObject): void {
+        this.variableValues[EParticleTrack.FadeIn].setOutput(this.TVVOOn_BEGIN_FADE_IN);
+        this.variableValues[EParticleTrack.FadeOut].setOutput(this.TVVOOn_END_FADE_OUT);
+    }
  
     public adaptor_do_PARTICLE(data: ParagraphData): void {
         assert(data.dataOp === EDataOp.ObjectIdx);
@@ -1102,6 +1112,48 @@ class TParticleAdaptor extends TAdaptor {
         assert(data.dataOp === EDataOp.Immediate);
         this.log(`SetParentEnable: ${data.valueInt}`);
         this.parentEnabled = !!data.valueInt;
+    }
+
+    private TVVOOn_BEGIN_FADE_IN(frame: number, tadaptor: TAdaptor) {
+        const adaptor = tadaptor as TParticleAdaptor;
+        if (adaptor.emitter !== null) {
+            adaptor.emitterMgr.forceDeleteEmitter(adaptor.emitter);
+        }
+
+        // TODO: adaptor.emitterMgr.createSimpleEmitterID()
+        // u32 temp = adaptor_particle->mParticleId;
+        // JGeometry::TVec3<f32> pos = (Vec){0.0f, 0.0f, 0.0f};
+        // adaptor_particle->mEmitter = adaptor_particle->mEmitterManager->createSimpleEmitterID(
+        //     pos,
+        //     (temp & 0x0000FFFF),
+        //     (temp & 0xFF000000) >> 0x18,
+        //     (temp & 0x00FF0000) >> 0x10,
+        //     &adaptor_particle->mCallback,
+        //     NULL
+        // );
+
+        if (adaptor.emitter !== null) {
+            adaptor.emitter.becomeImmortalEmitter();
+            adaptor.fadeType = 1;
+            adaptor.lifetime = frame; debugger; // Is `frame` a value or the frame that this was called?
+            adaptor.age = 0;
+        }
+    }
+
+    private TVVOOn_END_FADE_OUT(frame: number, tadaptor: TAdaptor) {
+        const adaptor = tadaptor as TParticleAdaptor;
+        if (adaptor.emitter !== null) {
+            if (adaptor.fadeType === 1 && adaptor.age !== 0) {
+                adaptor.fadeType = 2;
+                const r = adaptor.lifetime / adaptor.age;
+                adaptor.lifetime = frame * r;
+                adaptor.age = frame * (r - 1.0);
+            } else {
+                adaptor.fadeType = 2;
+                adaptor.lifetime = frame;
+                adaptor.age = 0.0;
+            }
+        }
     }
 
     public override log(msg: string): void {
