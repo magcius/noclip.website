@@ -1063,7 +1063,6 @@ class TParticleAdaptor extends TAdaptor {
         switch (data.dataOp) {
             case EDataOp.ObjectName:
                 if (this.parent) {
-                    debugger; // TODO: Need to implement JSGFindNodeID in d_demo ( mModel->getModelData()->getJointName()->getIndex(name); )
                     this.parentNodeID = this.parent.JSGFindNodeID(data.value);
                 }
                 break;

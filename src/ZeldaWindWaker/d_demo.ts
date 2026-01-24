@@ -352,6 +352,15 @@ export class dDemo_actor_c extends TActor {
         this.flags |= EDemoActorFlags.HasTexFrame;
     }
 
+    public override JSGFindNodeID(name: string): number {
+        const joints = this.model.modelData.bmd.jnt1.joints;
+        for (let i = 0; i < joints.length; i++) {
+            if (joints[i].name === name)
+                return i;
+        }
+        return -1;
+    }
+
     override JSGDebugGetAnimationName(x: number): string | null {
         if (this.debugGetAnimName) { return this.debugGetAnimName(x); }
         else return null;
