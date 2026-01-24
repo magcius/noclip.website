@@ -1,5 +1,6 @@
 import type { BAMFile } from "../BAMFile";
-import { AssetVersion, type DataStream } from "../Common";
+import { AssetVersion } from "../Common";
+import type { DataStream } from "../util/DataStream";
 import type { AnimGroup } from "./AnimGroup";
 import { type DebugInfo, dbgRefs, dbgStr } from "./debug";
 import type { PartBundle } from "./PartBundle";
@@ -99,6 +100,21 @@ export class PartGroup extends TypedObject {
       }
     }
     return anyChanged;
+  }
+
+  findChild(name: string): PartGroup | null {
+    for (const child of this.children) {
+      if (child.name === name) {
+        return child;
+      }
+    }
+    for (const child of this.children) {
+      const found = child.findChild(name);
+      if (found) {
+        return found;
+      }
+    }
+    return null;
   }
 }
 

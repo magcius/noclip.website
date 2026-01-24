@@ -1,6 +1,6 @@
 import type { BAMFile } from "../BAMFile";
-import type { DataStream } from "../Common";
 import type { MaterialData } from "../Geom";
+import type { DataStream } from "../util/DataStream";
 import { type DebugInfo, dbgEnum } from "./debug";
 import { PandaCompareFunc, RenderAttrib } from "./RenderAttrib";
 import { type CopyContext, registerTypedObject } from "./TypedObject";

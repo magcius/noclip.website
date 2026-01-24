@@ -148,6 +148,43 @@ export class DNAStorage {
   }
 
   /**
+   * Get all codes in a texture category
+   */
+  getTextureCodesInCategory(category: string): Set<string> | undefined {
+    return this.texturesByCategory.get(category);
+  }
+
+  /**
+   * Get the number of catalog codes in a category (nodes or textures).
+   * Replicates Python's dnaStore.getNumCatalogCodes(category).
+   */
+  getNumCatalogCodes(category: string): number {
+    const nodes = this.nodesByCategory.get(category);
+    if (nodes) return nodes.size;
+    const textures = this.texturesByCategory.get(category);
+    if (textures) return textures.size;
+    return 0;
+  }
+
+  /**
+   * Get the catalog code at a given index in a category.
+   * Replicates Python's dnaStore.getCatalogCode(category, index).
+   */
+  getCatalogCode(category: string, index: number): string | undefined {
+    const nodes = this.nodesByCategory.get(category);
+    if (nodes) {
+      const codes = Array.from(nodes);
+      return codes[index];
+    }
+    const textures = this.texturesByCategory.get(category);
+    if (textures) {
+      const codes = Array.from(textures);
+      return codes[index];
+    }
+    return undefined;
+  }
+
+  /**
    * Check if a node code exists
    */
   hasNode(code: string): boolean {

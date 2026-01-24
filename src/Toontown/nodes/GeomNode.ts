@@ -1,6 +1,7 @@
+import type { ReadonlyMat4 } from "gl-matrix";
 import { AABB } from "../../Geometry";
 import type { BAMFile } from "../BAMFile";
-import type { DataStream } from "../Common";
+import type { DataStream } from "../util/DataStream";
 import {
   type DebugInfo,
   dbgArray,
@@ -69,14 +70,25 @@ export class GeomNode extends PandaNode {
     return info;
   }
 
-  getBoundingBox(): AABB {
+  override getBoundingBox(): AABB {
     if (!this._aabb) {
       this._aabb = new AABB();
       for (const { geom } of this.geoms) {
         this._aabb.union(this._aabb, geom.getBoundingBox());
       }
+      this.unionChildrenBounds(this._aabb);
     }
     return this._aabb;
+  }
+
+  protected override accumulateBounds(
+    aabb: AABB,
+    netTransform: ReadonlyMat4,
+  ): void {
+    for (const { geom } of this.geoms) {
+      geom.accumulateBounds(aabb, netTransform);
+    }
+    super.accumulateBounds(aabb, netTransform);
   }
 }
 

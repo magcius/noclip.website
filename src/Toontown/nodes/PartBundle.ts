@@ -1,7 +1,8 @@
 import { mat4 } from "gl-matrix";
 import type { AnimControl } from "../anim/AnimControl";
 import type { BAMFile } from "../BAMFile";
-import { AssetVersion, type DataStream } from "../Common";
+import { AssetVersion } from "../Common";
+import type { DataStream } from "../util/DataStream";
 import type { AnimBundle } from ".";
 import { type DebugInfo, dbgBool, dbgMat4, dbgNum, dbgRef } from "./debug";
 import { PartGroup } from "./PartGroup";

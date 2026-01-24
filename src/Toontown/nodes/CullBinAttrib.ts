@@ -1,6 +1,6 @@
 import type { BAMFile } from "../BAMFile";
-import type { DataStream } from "../Common";
 import type { MaterialData } from "../Geom";
+import type { DataStream } from "../util/DataStream";
 import { type DebugInfo, dbgNum, dbgStr } from "./debug";
 import { RenderAttrib } from "./RenderAttrib";
 import { type CopyContext, registerTypedObject } from "./TypedObject";

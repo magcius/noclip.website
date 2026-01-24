@@ -1,6 +1,6 @@
 import { mat4 } from "gl-matrix";
 import type { BAMFile } from "../BAMFile";
-import type { DataStream } from "../Common";
+import type { DataStream } from "../util/DataStream";
 import { CharacterJoint } from "./CharacterJoint";
 import { type DebugInfo, dbgRef } from "./debug";
 import { type CopyContext, registerTypedObject } from "./TypedObject";

@@ -1,5 +1,5 @@
 import type { BAMFile } from "../BAMFile";
-import type { DataStream } from "../Common";
+import type { DataStream } from "../util/DataStream";
 import { Character } from "./Character";
 import { type DebugInfo, dbgRef } from "./debug";
 import { RenderEffect } from "./RenderEffects";
@@ -28,6 +28,12 @@ export class CharacterJointEffect extends RenderEffect {
     const info = super.getDebugInfo();
     info.set("character", dbgRef(this.character));
     return info;
+  }
+
+  static make(character: Character | null = null): CharacterJointEffect {
+    const effect = new CharacterJointEffect();
+    effect.character = character;
+    return effect;
   }
 }
 

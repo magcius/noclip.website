@@ -10,6 +10,7 @@ export class TextNode {
   private _shadowOffset: vec2 | null = null;
   private _wordwrap = 0;
   private _align: TextAlignment = TextAlignment.Left;
+  private _lineHeight: number | null = null;
 
   private dirty = true;
   private assembler: TextAssembler | null = null;
@@ -69,14 +70,45 @@ export class TextNode {
     this._shadowOffset = value ? vec2.clone(value) : null;
   }
 
+  get lineHeight(): number {
+    if (this._lineHeight !== null) return this._lineHeight;
+    return this._font?.lineHeight ?? 1.0;
+  }
+  set lineHeight(value: number | null) {
+    this._lineHeight = value;
+    this.dirty = true;
+  }
+
   get width(): number {
     this.ensureAssembled();
-    return this.assembler?.textWidth ?? 0;
+    if (!this.assembler) return 0;
+    return this.assembler.lr[0] - this.assembler.ul[0];
   }
 
   get height(): number {
     this.ensureAssembled();
-    return this.assembler?.textHeight ?? 0;
+    if (!this.assembler) return 0;
+    return this.assembler.ul[1] - this.assembler.lr[1];
+  }
+
+  /** Upper-left corner of text bounds (x=left edge, y=top edge) */
+  get ul(): readonly [number, number] {
+    this.ensureAssembled();
+    return this.assembler?.ul ?? [0, 0];
+  }
+
+  /** Lower-right corner of text bounds (x=right edge, y=bottom edge) */
+  get lr(): readonly [number, number] {
+    this.ensureAssembled();
+    return this.assembler?.lr ?? [0, 0];
+  }
+
+  /**
+   * Returns the text frame as (left, right, bottom, top).
+   */
+  get frame(): readonly [number, number, number, number] {
+    this.ensureAssembled();
+    return this.assembler?.frame ?? [0, 0, 0, 0];
   }
 
   generate(): PandaNode {
@@ -100,7 +132,12 @@ export class TextNode {
       return;
     }
 
-    this.assembler = new TextAssembler(this._font, this._wordwrap, this._align);
+    this.assembler = new TextAssembler(
+      this._font,
+      this._wordwrap,
+      this._align,
+      this._lineHeight,
+    );
     this.assembler.assembleText(this._text);
     this.dirty = false;
   }

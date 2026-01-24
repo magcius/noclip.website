@@ -1,18 +1,12 @@
 import { Actor } from "./Actor";
 import { AnimatedProp, animatedPropMap } from "./AnimatedProp";
-import { getHoodId } from "./Globals";
 
 export class GenericAnimatedProp extends AnimatedProp {
   protected _path: string;
   protected _actor: Actor;
-  protected _zoneId: number;
-  protected _hoodId: number;
 
   override async init(): Promise<void> {
     await super.init();
-
-    this._zoneId = this.getZoneId();
-    this._hoodId = getHoodId(this._zoneId);
 
     const parent = this.node.parent;
     if (!parent) throw new Error("Node without parent");
@@ -66,20 +60,6 @@ export class GenericAnimatedProp extends AnimatedProp {
 
   override delete(): void {
     this._actor.cleanup();
-  }
-
-  private getZoneId(): number {
-    let node = this.node.parent;
-    while (node) {
-      if (node.tags.get("DNAType") === "DNAVisGroup") {
-        // 2000:safe_zone -> 2000
-        const zoneIdStr = node.name.split(":")[0];
-        const zoneId = parseInt(zoneIdStr, 10);
-        if (!Number.isNaN(zoneId)) return zoneId;
-      }
-      node = node.parent;
-    }
-    return -1;
   }
 }
 

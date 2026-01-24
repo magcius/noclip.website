@@ -1,7 +1,9 @@
 import { mat4 } from "gl-matrix";
 import type { BAMFile } from "../BAMFile";
-import { AssetVersion, type DataStream } from "../Common";
+import { AssetVersion } from "../Common";
+import type { DataStream } from "../util/DataStream";
 import { Character } from "./Character";
+import { CharacterJointEffect } from "./CharacterJointEffect";
 import { type DebugInfo, dbgMat4, dbgRef, dbgRefs } from "./debug";
 import { MovingPartMatrix } from "./MovingPartMatrix";
 import { PandaNode } from "./PandaNode";
@@ -28,7 +30,6 @@ export class CharacterJoint extends MovingPartMatrix {
   public initialNetTransformInverse = mat4.create();
 
   // Runtime fields (not serialized, computed during animation)
-  /** World-space transform, computed by chaining value with parent's netTransform */
   public netTransform = mat4.create();
   public vertexTransforms: VertexTransform[] = [];
 
@@ -115,6 +116,20 @@ export class CharacterJoint extends MovingPartMatrix {
     }
 
     return selfChanged || netChanged;
+  }
+
+  clearNetTransforms(): void {
+    for (const node of this.netNodes) {
+      node.clearEffect(CharacterJointEffect);
+    }
+    this.netNodes = [];
+  }
+
+  addNetTransform(node: PandaNode): void {
+    if (this.character)
+      node.setEffect(CharacterJointEffect.make(this.character));
+    node.transform = TransformState.fromMatrix(this.netTransform);
+    this.netNodes.push(node);
   }
 }
 

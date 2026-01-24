@@ -34,21 +34,33 @@ type TextRow = {
 
 export class TextAssembler {
   private rows: TextRow[] = [];
-  private _textWidth = 0;
-  private _textHeight = 0;
+  /** Upper-left corner of text bounds (x=left edge, y=top edge) */
+  private _ul: [number, number] = [0, 0];
+  /** Lower-right corner of text bounds (x=right edge, y=bottom edge) */
+  private _lr: [number, number] = [0, 0];
 
   constructor(
     private font: TextFont,
     private wordwrapWidth: number = 0,
     private align: TextAlignment = TextAlignment.Left,
+    private lineHeightOverride: number | null = null,
   ) {}
 
-  get textWidth(): number {
-    return this._textWidth;
+  /** Upper-left corner of text bounds (x=left edge, y=top edge) */
+  get ul(): readonly [number, number] {
+    return this._ul;
   }
 
-  get textHeight(): number {
-    return this._textHeight;
+  /** Lower-right corner of text bounds (x=right edge, y=bottom edge) */
+  get lr(): readonly [number, number] {
+    return this._lr;
+  }
+
+  /**
+   * Returns the text frame as (left, right, bottom, top).
+   */
+  get frame(): readonly [number, number, number, number] {
+    return [this._ul[0], this._lr[0], this._lr[1], this._ul[1]];
   }
 
   calcWidth(text: string): number {
@@ -67,68 +79,161 @@ export class TextAssembler {
 
   assembleText(text: string): void {
     this.rows = [];
-    this._textWidth = 0;
-    this._textHeight = 0;
+    this._ul = [0, 0];
+    this._lr = [0, 0];
 
     if (!text) return;
 
-    const words = this.wordwrapWidth > 0 ? this.splitIntoWords(text) : [text];
+    const lineHeight =
+      this.lineHeightOverride !== null
+        ? this.lineHeightOverride
+        : this.font.lineHeight;
 
-    let currentRow: TextRow = {
-      glyphs: [],
-      width: 0,
-      yPos: -this._textHeight,
-    };
-    let xPos = 0;
+    // First pass: word wrap text into lines
+    const lines = this.wordwrapText(text);
 
-    for (const word of words) {
-      const wordWidth = this.calcWidth(word);
+    // Second pass: assemble rows with positioned glyphs
+    let yPos = 0;
+    let numRows = 0;
 
-      if (
-        this.wordwrapWidth > 0 &&
-        currentRow.glyphs.length > 0 &&
-        xPos + wordWidth > this.wordwrapWidth
-      ) {
-        currentRow.width = xPos;
-        this.finishRow(currentRow);
-        currentRow = {
-          glyphs: [],
-          width: 0,
-          yPos: -this._textHeight,
-        };
-        xPos = 0;
+    for (const line of lines) {
+      if (numRows === 0) {
+        this._ul[1] = 0.8 * lineHeight;
+      } else {
+        yPos -= lineHeight;
       }
 
-      for (const char of word) {
-        const charCode = char.charCodeAt(0);
+      const row = this.assembleRow(line, yPos);
+      this.rows.push(row);
+
+      this._lr[1] = yPos - 0.2 * lineHeight;
+      numRows++;
+    }
+
+    // Ensure at least one row exists
+    if (this.rows.length === 0) {
+      this.rows.push({ glyphs: [], width: 0, yPos: 0 });
+      this._ul[1] = 0.8 * lineHeight;
+      this._lr[1] = -0.2 * lineHeight;
+    }
+
+    this.applyAlignment();
+  }
+
+  /**
+   * Split text into lines, handling word wrap and trimming trailing whitespace.
+   */
+  private wordwrapText(text: string): string[] {
+    if (this.wordwrapWidth <= 0) {
+      // No word wrap - split only on newlines
+      return text.split("\n");
+    }
+
+    const lines: string[] = [];
+    let p = 0;
+
+    while (p < text.length) {
+      // Skip leading whitespace (but not newlines) and track its width
+      let initialWidth = 0;
+      const lineStart = p;
+      while (p < text.length && text[p] === " ") {
+        initialWidth += this.font.spaceAdvance;
+        p++;
+      }
+
+      // Handle leading newlines
+      if (p < text.length && text[p] === "\n") {
+        lines.push(text.substring(lineStart, p));
+        p++;
+        continue;
+      }
+
+      // Scan forward to find where to break
+      let q = p;
+      let lastSpace = -1;
+      let width = initialWidth;
+
+      while (q < text.length && text[q] !== "\n") {
+        const charCode = text.charCodeAt(q);
 
         if (charCode === 32) {
-          xPos += this.font.spaceAdvance;
-        } else if (charCode === 10) {
-          currentRow.width = xPos;
-          this.finishRow(currentRow);
-          currentRow = {
-            glyphs: [],
-            width: 0,
-            yPos: -this._textHeight,
-          };
-          xPos = 0;
+          // Space - record as potential break point
+          lastSpace = q;
+        }
+
+        // Add character width
+        if (charCode === 32) {
+          width += this.font.spaceAdvance;
         } else {
           const glyph = this.getGlyphForChar(charCode);
-          if (glyph) {
-            currentRow.glyphs.push({ glyph, xPos });
-            xPos += glyph.advance;
+          if (glyph) width += glyph.advance;
+        }
+
+        q++;
+
+        // Check if we've exceeded wordwrap width
+        if (width > this.wordwrapWidth && q > p + 1) {
+          q--;
+          // Try to break at a space
+          if (lastSpace > p) {
+            q = lastSpace;
           }
+          break;
+        }
+      }
+
+      // Find where next line starts (skip whitespace after break point)
+      let nextStart = q;
+      while (nextStart < text.length && text[nextStart] === " ") {
+        nextStart++;
+      }
+
+      // Trim trailing whitespace from this line
+      while (q > lineStart && text[q - 1] === " ") {
+        q--;
+      }
+
+      // Add the line (from lineStart to q, trimmed)
+      lines.push(text.substring(lineStart, q));
+
+      // Handle newline at break point
+      if (nextStart < text.length && text[nextStart] === "\n") {
+        nextStart++;
+      }
+
+      p = nextStart;
+    }
+
+    // Handle trailing newline
+    if (text.length > 0 && text[text.length - 1] === "\n") {
+      lines.push("");
+    }
+
+    return lines.length > 0 ? lines : [""];
+  }
+
+  /**
+   * Assemble a single row of text into positioned glyphs.
+   */
+  private assembleRow(line: string, yPos: number): TextRow {
+    const glyphs: PositionedGlyph[] = [];
+    let xPos = 0;
+
+    for (const char of line) {
+      const charCode = char.charCodeAt(0);
+
+      if (charCode === 32) {
+        xPos += this.font.spaceAdvance;
+      } else if (charCode !== 10) {
+        const glyph = this.getGlyphForChar(charCode);
+        if (glyph) {
+          glyphs.push({ glyph, xPos });
+          xPos += glyph.advance;
         }
       }
     }
 
-    if (currentRow.glyphs.length > 0 || this.rows.length === 0) {
-      currentRow.width = xPos;
-      this.finishRow(currentRow);
-    }
-
-    this.applyAlignment();
+    return { glyphs, width: xPos, yPos };
   }
 
   generateGeometry(
@@ -169,46 +274,28 @@ export class TextAssembler {
     return root;
   }
 
-  private splitIntoWords(text: string): string[] {
-    const words: string[] = [];
-    let current = "";
-
-    for (const char of text) {
-      current += char;
-      if (char === " " || char === "\n") {
-        words.push(current);
-        current = "";
-      }
-    }
-
-    if (current) words.push(current);
-    return words;
-  }
-
-  private finishRow(row: TextRow): void {
-    this.rows.push(row);
-    this._textWidth = Math.max(this._textWidth, row.width);
-    this._textHeight += this.font.lineHeight;
-  }
-
   private applyAlignment(): void {
     for (const row of this.rows) {
-      let offset = 0;
+      let xOffset = 0;
 
       switch (this.align) {
         case TextAlignment.Left:
-          offset = 0;
-          break;
-        case TextAlignment.Center:
-          offset = -row.width / 2;
+          xOffset = 0;
+          this._lr[0] = Math.max(this._lr[0], row.width);
           break;
         case TextAlignment.Right:
-          offset = -row.width;
+          xOffset = -row.width;
+          this._ul[0] = Math.min(this._ul[0], xOffset);
+          break;
+        case TextAlignment.Center:
+          xOffset = -row.width / 2;
+          this._ul[0] = Math.min(this._ul[0], xOffset);
+          this._lr[0] = Math.max(this._lr[0], -xOffset);
           break;
       }
 
       for (const glyph of row.glyphs) {
-        glyph.xPos += offset;
+        glyph.xPos += xOffset;
       }
     }
   }

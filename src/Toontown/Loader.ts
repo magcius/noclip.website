@@ -20,7 +20,7 @@ export const pathBase = "Toontown";
 
 /// Load from multifiles directly via HTTP Range requests & manifest.json
 /// (manifest.json can be generated via tools/gen-manifest.ts)
-const USE_MULTIFILES = false;
+const USE_MULTIFILES = true;
 
 /// Use high-quality fonts extracted from Toontown Rewritten
 /// (Fonts must be in manifest or USE_MULTIFILES must be false)
@@ -72,9 +72,9 @@ export class ToontownLoader implements Destroyable {
     }
   }
 
-  public async loadFile(name: string): Promise<ArrayBufferSlice> {
+  public async loadFile(name: string, options: { direct?: boolean } = {}): Promise<ArrayBufferSlice> {
     let fileData: ArrayBufferSlice;
-    if (USE_MULTIFILES) {
+    if (!options.direct && USE_MULTIFILES) {
       const entry = this.manifest[name];
       if (!entry) throw new Error(`File not found in manifest: ${name}`);
       fileData = await this.dataFetcher.fetchData(`${pathBase}/${entry.file}`, {
@@ -107,12 +107,6 @@ export class ToontownLoader implements Destroyable {
     const model = file.getRoot();
     this.modelCache.set(name, model);
     return model;
-  }
-
-  public loadModelCached(path: string): PandaNode {
-    const cached = this.modelCache.get(path);
-    if (cached) return cached;
-    throw new Error(`Model ${path} not loaded`);
   }
 
   /**
@@ -186,7 +180,7 @@ export class ToontownLoader implements Destroyable {
     return { storage, sceneFile };
   }
 
-  private async loadDNAInternal(name: string): Promise<DNAFile> {
+  public async loadDNAInternal(name: string): Promise<DNAFile> {
     const cached = this.dnaCache.get(name);
     if (cached) return cached;
     const dnaPath = (await this.hasFile(`${name}.xml`))

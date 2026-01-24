@@ -17,6 +17,7 @@ import {
   GeomNode,
   type PandaNode,
 } from "./nodes";
+import { Actor } from "./objects";
 import { pandaToNoclip } from "./Render";
 
 // Orange color for collision visualization (#ff9933)
@@ -321,27 +322,7 @@ export class SceneGraphViewer {
       }
 
       // Compute local AABB
-      if (node instanceof GeomNode) {
-        // GeomNode has its own bounding box
-        treeNode.localAABB = node.getBoundingBox();
-      } else if (treeNode.children.length > 0) {
-        // For non-GeomNodes, union children's AABBs (transformed to this node's local space)
-        const aabb = new AABB();
-        for (const child of treeNode.children) {
-          if (child.localAABB) {
-            // Transform child's AABB by child's local transform
-            const childAABB = new AABB();
-            childAABB.transform(
-              child.localAABB,
-              child.node.transform.getMatrix(),
-            );
-            aabb.union(aabb, childAABB);
-          }
-        }
-        if (aabb.min[0] <= aabb.max[0]) {
-          treeNode.localAABB = aabb;
-        }
-      }
+      treeNode.localAABB = node.calcTightBounds();
 
       this.allNodes.push(treeNode);
       return treeNode;
@@ -573,6 +554,39 @@ export class SceneGraphViewer {
       treeNode.isVisible = true;
     };
     toolbar.appendChild(showBtn);
+
+    if (treeNode.node instanceof Actor) {
+      const actor = treeNode.node;
+      const animations = actor.getAllAnimations();
+      const animSelect = document.createElement("select");
+      animSelect.style.cursor = "pointer";
+      animSelect.onchange = () => {
+        if (animSelect.value) {
+          actor.loop(animSelect.value);
+        }
+      };
+      const defaultOption = document.createElement("option");
+      defaultOption.value = "";
+      defaultOption.textContent = "Animation";
+      defaultOption.disabled = true;
+      defaultOption.selected = true;
+      animSelect.appendChild(defaultOption);
+      for (const anim of animations) {
+        const option = document.createElement("option");
+        option.value = anim;
+        option.textContent = anim;
+        animSelect.appendChild(option);
+      }
+      toolbar.appendChild(animSelect);
+
+      const stopBtn = document.createElement("button");
+      stopBtn.textContent = "Stop";
+      stopBtn.style.cursor = "pointer";
+      stopBtn.onclick = () => {
+        actor.stop();
+      };
+      toolbar.appendChild(stopBtn);
+    }
 
     panel.contents.appendChild(toolbar);
 
@@ -900,11 +914,10 @@ export class SceneGraphViewer {
 
     // Draw AABB if available
     if (this.highlightedNode.localAABB) {
-      debugDraw.drawBoxLine(
-        this.highlightedNode.localAABB,
-        this.highlightedNode.noclipTransform,
-        Cyan,
-      );
+      const transform = this.highlightedNode.parent
+        ? this.highlightedNode.parent.noclipTransform
+        : pandaToNoclip;
+      debugDraw.drawBoxLine(this.highlightedNode.localAABB, transform, Cyan);
     }
   }
 

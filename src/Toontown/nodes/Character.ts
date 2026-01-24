@@ -1,5 +1,6 @@
 import type { BAMFile } from "../BAMFile";
-import { AssetVersion, type DataStream } from "../Common";
+import { AssetVersion } from "../Common";
+import type { DataStream } from "../util/DataStream";
 import { ComputedVertices } from "./ComputedVertices";
 import { type DebugInfo, dbgRef, dbgRefs, dbgTypedArray } from "./debug";
 import { PartBundleNode } from "./PartBundleNode";

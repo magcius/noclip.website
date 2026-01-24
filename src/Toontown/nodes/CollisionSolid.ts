@@ -1,6 +1,6 @@
 import { vec3 } from "gl-matrix";
 import type { BAMFile } from "../BAMFile";
-import type { DataStream } from "../Common";
+import type { DataStream } from "../util/DataStream";
 import { type DebugInfo, dbgFlags, dbgVec3 } from "./debug";
 import {
   type CopyContext,

@@ -1,6 +1,7 @@
 import type { vec2, vec3, vec4 } from "gl-matrix";
 import type { BAMFile } from "../BAMFile";
-import { AssetVersion, type DataStream } from "../Common";
+import { AssetVersion } from "../Common";
+import type { DataStream } from "../util/DataStream";
 import { type DebugInfo, dbgNum, dbgTypedArray } from "./debug";
 import {
   type CopyContext,

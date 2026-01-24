@@ -1209,8 +1209,8 @@ class SceneSelect extends Panel {
     }
 
     private setSceneDescs(sceneDescs: (string | SceneDesc)[]) {
-        this.sceneDescs = sceneDescs;
-        this.sceneDescList.setItems(sceneDescs.map((g): ScrollSelectItem => {
+        this.sceneDescs = sceneDescs.filter(g => typeof g === "string" || !g.hidden);
+        this.sceneDescList.setItems(this.sceneDescs.map((g): ScrollSelectItem => {
             if (typeof g === 'string')
                 return { type: ScrollSelectItemType.Header, name: g };
             else

@@ -1,6 +1,6 @@
 import { type mat4, vec2, vec3 } from "gl-matrix";
 import type { BAMFile } from "../BAMFile";
-import type { DataStream } from "../Common";
+import type { DataStream } from "../util/DataStream";
 import { CollisionSolid } from "./CollisionSolid";
 import {
   type DebugInfo,

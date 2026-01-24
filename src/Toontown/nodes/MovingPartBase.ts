@@ -1,5 +1,6 @@
 import type { BAMFile } from "../BAMFile";
-import { AssetVersion, type DataStream } from "../Common";
+import { AssetVersion } from "../Common";
+import type { DataStream } from "../util/DataStream";
 import { AnimChannelBase } from "./AnimChannelBase";
 import type { AnimGroup } from "./AnimGroup";
 import { type DebugInfo, dbgRef } from "./debug";

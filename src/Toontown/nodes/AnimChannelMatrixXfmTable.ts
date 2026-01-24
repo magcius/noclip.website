@@ -1,8 +1,9 @@
 import { mat4, quat, vec3 } from "gl-matrix";
 import type { BAMFile } from "../BAMFile";
-import { AssetVersion, type DataStream } from "../Common";
-import { FFTCompressor } from "../FFTCompressor";
-import { applyShear, hprToQuat } from "../Math";
+import { AssetVersion } from "../Common";
+import type { DataStream } from "../util/DataStream";
+import { FFTCompressor } from "../util/FFTCompressor";
+import { applyShear, hprToQuat } from "../util/Math";
 import { AnimChannelBase } from "./AnimChannelBase";
 import { type DebugInfo, dbgArray, dbgBool, dbgTypedArray } from "./debug";
 import { type CopyContext, registerTypedObject } from "./TypedObject";

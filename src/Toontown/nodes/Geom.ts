@@ -1,7 +1,8 @@
-import { vec3 } from "gl-matrix";
+import { type ReadonlyMat4, type ReadonlyVec3, vec3, vec4 } from "gl-matrix";
 import { AABB } from "../../Geometry";
 import type { BAMFile } from "../BAMFile";
-import { AssetVersion, type DataStream } from "../Common";
+import { AssetVersion } from "../Common";
+import type { DataStream } from "../util/DataStream";
 import { type DebugInfo, dbgEnum, dbgFlags, dbgRef, dbgRefs } from "./debug";
 import { GeomPrimitive } from "./GeomPrimitive";
 import type {
@@ -79,9 +80,14 @@ export class Geom extends TypedObject {
 
   getBoundingBox(): AABB {
     if (!this._aabb) {
-      this._aabb = computeAABBFromGeom(this);
+      this._aabb = new AABB();
+      accumulateBoundsFromGeom(this, this._aabb);
     }
     return this._aabb;
+  }
+
+  accumulateBounds(aabb: AABB, netTransform: ReadonlyMat4) {
+    accumulateBoundsFromGeom(this, aabb, netTransform);
   }
 }
 
@@ -90,9 +96,11 @@ registerTypedObject("Geom", Geom);
 /**
  * Compute AABB from vertex data by reading vertex positions
  */
-export function computeAABBFromGeom(geom: Geom): AABB {
-  const aabb = new AABB();
-
+export function accumulateBoundsFromGeom(
+  geom: Geom,
+  aabb: AABB,
+  netTransform: ReadonlyMat4 | null = null,
+): void {
   const vertexData = geom.data;
   if (!vertexData) throw new Error("Missing vertex data for geom");
 
@@ -118,12 +126,12 @@ export function computeAABBFromGeom(geom: Geom): AABB {
   }
 
   if (!positionColumn || positionArrayIdx < 0 || !positionArrayFormat) {
-    return aabb;
+    return;
   }
 
   // Get the vertex array data
   if (positionArrayIdx >= vertexData.arrays.length) {
-    return aabb;
+    return;
   }
 
   const arrayData = vertexData.arrays[positionArrayIdx];
@@ -135,7 +143,7 @@ export function computeAABBFromGeom(geom: Geom): AABB {
 
   // Calculate number of vertices
   const numVertices = Math.floor(buffer.byteLength / stride);
-  if (numVertices === 0) return aabb;
+  if (numVertices === 0) return;
 
   // Create a DataView for reading
   const dataView = new DataView(
@@ -145,34 +153,40 @@ export function computeAABBFromGeom(geom: Geom): AABB {
   );
 
   // Read vertex positions and expand AABB
-  const pos = vec3.create();
   if (
     numericType === NumericType.F32
     // || (!file.header.useDouble && numericType === NumericType.StdFloat)
   ) {
     if (numComponents === 2) {
+      const pos = vec3.create();
       for (let i = 0; i < numVertices; i++) {
         const baseOffset = i * stride + offset;
         pos[0] = dataView.getFloat32(baseOffset, true);
         pos[1] = dataView.getFloat32(baseOffset + 4, true);
+        pos[2] = 0;
+        if (netTransform) vec3.transformMat4(pos, pos, netTransform);
         aabb.unionPoint(pos);
       }
     } else if (numComponents === 3) {
+      const pos = vec3.create();
       for (let i = 0; i < numVertices; i++) {
         const baseOffset = i * stride + offset;
         pos[0] = dataView.getFloat32(baseOffset, true);
         pos[1] = dataView.getFloat32(baseOffset + 4, true);
         pos[2] = dataView.getFloat32(baseOffset + 8, true);
+        if (netTransform) vec3.transformMat4(pos, pos, netTransform);
         aabb.unionPoint(pos);
       }
     } else if (numComponents === 4) {
+      const pos = vec4.create();
       for (let i = 0; i < numVertices; i++) {
         const baseOffset = i * stride + offset;
-        const w = dataView.getFloat32(baseOffset + 12, true);
-        pos[0] = dataView.getFloat32(baseOffset, true) / w;
-        pos[1] = dataView.getFloat32(baseOffset + 4, true) / w;
-        pos[2] = dataView.getFloat32(baseOffset + 8, true) / w;
-        aabb.unionPoint(pos);
+        pos[0] = dataView.getFloat32(baseOffset, true);
+        pos[1] = dataView.getFloat32(baseOffset + 4, true);
+        pos[2] = dataView.getFloat32(baseOffset + 8, true);
+        pos[3] = dataView.getFloat32(baseOffset + 12, true);
+        if (netTransform) vec4.transformMat4(pos, pos, netTransform);
+        aabb.unionPoint(pos.slice(0, 3) as ReadonlyVec3);
       }
     } else {
       throw new Error(
@@ -184,28 +198,35 @@ export function computeAABBFromGeom(geom: Geom): AABB {
     // || (file.header.useDouble && numericType === NumericType.StdFloat)
   ) {
     if (numComponents === 2) {
+      const pos = vec3.create();
       for (let i = 0; i < numVertices; i++) {
         const baseOffset = i * stride + offset;
         pos[0] = dataView.getFloat64(baseOffset, true);
         pos[1] = dataView.getFloat64(baseOffset + 8, true);
+        pos[2] = 0;
+        if (netTransform) vec3.transformMat4(pos, pos, netTransform);
         aabb.unionPoint(pos);
       }
     } else if (numComponents === 3) {
+      const pos = vec3.create();
       for (let i = 0; i < numVertices; i++) {
         const baseOffset = i * stride + offset;
         pos[0] = dataView.getFloat64(baseOffset, true);
         pos[1] = dataView.getFloat64(baseOffset + 8, true);
         pos[2] = dataView.getFloat64(baseOffset + 16, true);
+        if (netTransform) vec3.transformMat4(pos, pos, netTransform);
         aabb.unionPoint(pos);
       }
     } else if (numComponents === 4) {
+      const pos = vec4.create();
       for (let i = 0; i < numVertices; i++) {
         const baseOffset = i * stride + offset;
-        const w = dataView.getFloat64(baseOffset + 24, true);
-        pos[0] = dataView.getFloat64(baseOffset, true) / w;
-        pos[1] = dataView.getFloat64(baseOffset + 8, true) / w;
-        pos[2] = dataView.getFloat64(baseOffset + 16, true) / w;
-        aabb.unionPoint(pos);
+        pos[0] = dataView.getFloat32(baseOffset, true);
+        pos[1] = dataView.getFloat32(baseOffset + 4, true);
+        pos[2] = dataView.getFloat32(baseOffset + 8, true);
+        pos[3] = dataView.getFloat32(baseOffset + 12, true);
+        if (netTransform) vec4.transformMat4(pos, pos, netTransform);
+        aabb.unionPoint(pos.slice(0, 3) as ReadonlyVec3);
       }
     } else {
       throw new Error(
@@ -215,6 +236,4 @@ export function computeAABBFromGeom(geom: Geom): AABB {
   } else {
     throw new Error(`Unsupported numeric type for vertex: ${numericType}`);
   }
-
-  return aabb;
 }

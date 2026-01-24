@@ -1,9 +1,12 @@
-import type { BAMFile } from "../BAMFile";
-import { AssetVersion, type DataStream } from "../Common";
+import { type BAMFile, DEFAULT_VERSION } from "../BAMFile";
+import type { DataStream } from "../util/DataStream";
 import type { DebugInfo } from "./debug";
 
 export type TypedObjectFactory<T extends TypedObject = TypedObject> =
   new () => T;
+
+export type AnyTypedObject<T extends TypedObject = TypedObject> =
+  abstract new () => T;
 
 // Central registry for TypedObject factories.
 // Node modules register themselves by calling registerTypedObject().
@@ -24,8 +27,6 @@ export function getTypedObjectFactory(
 ): TypedObjectFactory | undefined {
   return objectFactories.get(name);
 }
-
-const DEFAULT_VERSION = new AssetVersion(0, 0);
 
 export class CopyContext {
   private _objects = new Map<TypedObject, TypedObject>();
@@ -101,7 +102,7 @@ export function readTypedRefs<T extends TypedObject>(
   file: BAMFile,
   data: DataStream,
   numRefs: number,
-  clazz: new (...args: any[]) => T,
+  clazz: AnyTypedObject<T>,
 ): T[] {
   const refs: T[] = [];
   for (let i = 0; i < numRefs; i++) {

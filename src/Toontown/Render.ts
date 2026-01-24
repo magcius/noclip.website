@@ -1,4 +1,10 @@
-import { mat4, type ReadonlyMat4, vec3 } from "gl-matrix";
+import {
+  mat4,
+  quat,
+  type ReadonlyMat4,
+  type ReadonlyVec3,
+  vec3,
+} from "gl-matrix";
 import type { CameraController } from "../Camera";
 import { AABB } from "../Geometry";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
@@ -50,6 +56,7 @@ import {
 } from "./Geom";
 import { intervalManager } from "./interval";
 import type { ToontownLoader } from "./Loader";
+import type { SceneLoader } from "./loaders";
 import {
   BoundsType,
   Character,
@@ -69,6 +76,7 @@ import {
   RenderState,
   type Texture,
   TextureAttrib,
+  TransformState,
   TransparencyMode,
   type VertexTransform,
 } from "./nodes";
@@ -111,6 +119,24 @@ export const pandaToNoclip = mat4.fromValues(
   0,
   1,
 );
+export const noclipToPanda = mat4.fromValues(
+  1,
+  0,
+  0,
+  0,
+  0,
+  0,
+  1,
+  0,
+  0,
+  -1,
+  0,
+  0,
+  0,
+  0,
+  0,
+  1,
+);
 
 let musicEnabled = false;
 
@@ -143,19 +169,41 @@ export class ToontownRenderer implements Viewer.SceneGfx {
     private device: GfxDevice,
     private scene: PandaNode,
     private loader: ToontownLoader,
-    private musicFile: string | undefined,
+    private sceneLoader: SceneLoader,
   ) {
     this.renderHelper = new GfxRenderHelper(device);
     if (DEFAULT_SCENE_GRAPH_OPEN) {
       this.toggleSceneGraphViewer();
     }
-    if (this.musicFile && musicEnabled) {
-      startPlayback(this.loader, this.musicFile);
+    if (sceneLoader.musicFile && musicEnabled) {
+      startPlayback(this.loader, sceneLoader.musicFile);
     }
   }
 
-  public adjustCameraController(c: CameraController) {
+  adjustCameraController(c: CameraController) {
     c.setSceneMoveSpeedMult(0.02);
+  }
+
+  getDefaultWorldMatrix(dst: mat4): void {
+    const dropPoints = this.sceneLoader.getDropPoints();
+    if (dropPoints.length === 0) {
+      mat4.fromTranslation(dst, vec3.fromValues(0, 15, 0));
+      return;
+    }
+    const [point, heading] =
+      dropPoints[Math.floor(Math.random() * dropPoints.length)];
+    console.log("Spawning at", vec3.str(point), "with heading", heading);
+    this.dropPointToMtx(dst, point, heading);
+  }
+
+  private dropPointToMtx(dst: mat4, point: ReadonlyVec3, heading: number) {
+    const q = quat.create();
+    quat.fromEuler(q, 0, 0, heading);
+    mat4.fromRotationTranslation(dst, q, point);
+    mat4.multiply(dst, pandaToNoclip, dst);
+    mat4.multiply(dst, dst, noclipToPanda);
+    // Move camera up a bit
+    dst[13] += 5;
   }
 
   createPanels(): UI.Panel[] {
@@ -172,12 +220,12 @@ export class ToontownRenderer implements Viewer.SceneGfx {
     };
     this.debugPanel.contents.appendChild(this.debugSceneGraphCheckbox.elem);
 
-    if (this.musicFile) {
+    if (this.sceneLoader.musicFile) {
       const playButton = new UI.Checkbox("Play Music", musicEnabled);
       playButton.onchanged = async () => {
-        if (playButton.checked && this.musicFile) {
+        if (playButton.checked && this.sceneLoader.musicFile) {
           musicEnabled = true;
-          startPlayback(this.loader, this.musicFile);
+          startPlayback(this.loader, this.sceneLoader.musicFile);
         } else {
           stopPlayback();
         }
@@ -192,6 +240,29 @@ export class ToontownRenderer implements Viewer.SceneGfx {
         setVolume(value);
       };
       this.debugPanel.contents.appendChild(volumeSlider.elem);
+    }
+
+    const dropPoints = this.sceneLoader.getDropPoints();
+    if (dropPoints.length > 0) {
+      const dropPointSelect = new UI.SingleSelect();
+      dropPointSelect.setItems(
+        dropPoints.map(([point, angle]) => {
+          return {
+            type: UI.ScrollSelectItemType.Selectable,
+            name: `${point} (${angle}°)`,
+          };
+        }),
+      );
+      dropPointSelect.onselectionchange = async (index) => {
+        const [point, angle] = dropPoints[index];
+        this.dropPointToMtx(
+          window.main.viewer.camera.worldMatrix,
+          point,
+          angle,
+        );
+        window.main.viewer.camera.worldMatrixUpdated();
+      };
+      this.debugPanel.contents.appendChild(dropPointSelect.elem);
     }
 
     return [this.debugPanel];
@@ -236,11 +307,12 @@ export class ToontownRenderer implements Viewer.SceneGfx {
     device: GfxDevice,
     scene: PandaNode,
     loader: ToontownLoader,
-    musicFile: string | undefined,
+    sceneLoader: SceneLoader,
   ): Promise<ToontownRenderer> {
-    const renderer = new ToontownRenderer(device, scene, loader, musicFile);
+    const renderer = new ToontownRenderer(device, scene, loader, sceneLoader);
     // Load all textures used in the scene
     await renderer.ensureTexturesLoaded(loader);
+    sceneLoader.enter();
     return renderer;
   }
 
@@ -276,24 +348,33 @@ export class ToontownRenderer implements Viewer.SceneGfx {
       }
       allTextures.set(texture.name, texture);
     }
-    this.scene.traverse((node) => {
-      if (!(node instanceof GeomNode)) return;
-      for (const { state } of node.geoms) {
-        const renderState = node.state.compose(state);
-        const entry = renderState.attribs.find(
-          ({ attrib }) => attrib.constructor === TextureAttrib,
-        );
-        if (!entry) continue;
-        const attrib = entry.attrib as TextureAttrib;
-        for (const stage of attrib.onStages) {
-          addTexture(node, stage.texture);
-        }
-        if (attrib.texture) {
-          addTexture(node, attrib.texture);
+    function traverse(
+      this: ToontownRenderer,
+      node: PandaNode,
+      parentState: RenderState,
+    ): void {
+      const renderState = parentState.compose(node.state);
+      if (node instanceof GeomNode) {
+        for (const { state } of node.geoms) {
+          const geomState = renderState.compose(state);
+          const entry = geomState.attribs.find(
+            ({ attrib }) => attrib.constructor === TextureAttrib,
+          );
+          if (!entry) continue;
+          const attrib = entry.attrib as TextureAttrib;
+          for (const stage of attrib.onStages) {
+            addTexture(node, stage.texture);
+          }
+          if (attrib.texture) {
+            addTexture(node, attrib.texture);
+          }
         }
       }
-    });
-
+      for (const [child] of node.children) {
+        traverse.call(this, child, renderState);
+      }
+    }
+    traverse.call(this, this.scene, new RenderState());
     await Promise.all(
       Array.from(allTextures.values(), (texture) =>
         this.buildTexture(texture, loader),
@@ -584,15 +665,11 @@ export class ToontownRenderer implements Viewer.SceneGfx {
     // Update camera node position
     const cameraNode = this.scene.find("**/camera");
     if (!cameraNode) throw new Error("Camera node not found");
-    cameraNode.setPosHprScale(
-      vec3.fromValues(
-        viewerInput.camera.worldMatrix[12],
-        -viewerInput.camera.worldMatrix[14],
-        viewerInput.camera.worldMatrix[13],
-      ),
-      vec3.create(), // TODO
-      vec3.fromValues(1, 1, 1),
-    );
+    const noclipToPanda = mat4.create();
+    mat4.invert(noclipToPanda, pandaToNoclip);
+    const cameraWorldMatrix = mat4.create();
+    mat4.mul(cameraWorldMatrix, noclipToPanda, viewerInput.camera.worldMatrix);
+    cameraNode.transform = TransformState.fromMatrix(cameraWorldMatrix);
 
     // Rotate sky if present
     const skyNode = this.scene.find("**/=sky");
@@ -631,6 +708,9 @@ export class ToontownRenderer implements Viewer.SceneGfx {
 
       // Check if this node is visible (children may still be visible via showThrough)
       const thisNodeVisible = isNodeVisible(runningDrawMask);
+
+      // Update node
+      data.node.update(this.scene);
 
       // CompassEffect handling (always - affects child transforms)
       const compassEffect = data.node.effects.get(CompassEffect);
@@ -881,6 +961,8 @@ export class ToontownRenderer implements Viewer.SceneGfx {
   }
 
   public destroy(device: GfxDevice): void {
+    this.sceneLoader.exit();
+
     // Stop background music if playing
     stopPlayback();
 

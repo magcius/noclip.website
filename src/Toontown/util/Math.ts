@@ -5,7 +5,7 @@ import {
   type ReadonlyVec4,
   type vec3,
 } from "gl-matrix";
-import { MathConstants } from "../MathHelpers";
+import { MathConstants } from "../../MathHelpers";
 
 /**
  * Convert HPR (heading, pitch, roll) in degrees to quaternion.

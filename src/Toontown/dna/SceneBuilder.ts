@@ -90,7 +90,7 @@ export class DNASceneBuilder {
   /**
    * Preload all BAM models referenced by the storage
    */
-  private async preloadModels(): Promise<void> {
+  async preloadModels(): Promise<void> {
     const modelPaths = this.storage.getRequiredModelPaths();
     const texturePaths = this.storage.getRequiredTextures();
     const fontPaths = this.storage.getRequiredFontPaths();
@@ -828,6 +828,38 @@ export class DNASceneBuilder {
     for (const child of node.children) {
       this.visitNode(child, signNode);
     }
+  }
+
+  /**
+   * Visit a sign node for a toon interior. (See ToonInteriorLoader)
+   */
+  visitSignInterior(node: DNASign, parentNode: PandaNode): PandaNode | null {
+    const signOrigin = parentNode.find("**/*sign_origin");
+    if (!signOrigin) {
+      throw new Error(`No sign origin found for sign ${parentNode.name}`);
+    }
+
+    let signNode: PandaNode | null = null;
+    if (node.code) {
+      signNode = this.addGeometryFromCode(node.code, signOrigin);
+      signNode?.setName("sign");
+    } else {
+      signNode = signOrigin.attachNewNode("sign");
+    }
+    if (!signNode) return null;
+
+    signNode.transform = buildTransformState(node);
+    if (node.color) signNode.setColor(node.color);
+
+    for (const baseline of node.baselines) {
+      this.visitBaseline(baseline, signNode);
+    }
+
+    for (const child of node.children) {
+      this.visitNode(child, signNode);
+    }
+
+    return signNode;
   }
 
   private getNodeByCode(code: string): PandaNode | null {

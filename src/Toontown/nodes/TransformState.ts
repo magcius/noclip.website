@@ -8,8 +8,9 @@ import {
   vec3,
 } from "gl-matrix";
 import type { BAMFile } from "../BAMFile";
-import { AssetVersion, type DataStream } from "../Common";
-import { fromPandaQuat, hprToQuat, quatToHpr } from "../Math";
+import { AssetVersion } from "../Common";
+import type { DataStream } from "../util/DataStream";
+import { fromPandaQuat, hprToQuat, quatToHpr } from "../util/Math";
 import {
   type DebugInfo,
   dbgBool,
@@ -465,6 +466,25 @@ export class TransformState extends TypedObject {
     // Fall back to matrix composition
     const result = mat4.create();
     mat4.multiply(result, this.getMatrix(), other.getMatrix());
+    return TransformState.fromMatrix(result);
+  }
+
+  invertCompose(other: TransformState): TransformState {
+    // Handle identity cases
+    if (this.isIdentity) return other;
+
+    // Handle invalid cases
+    if (this.isInvalid) return this;
+    if (other.isInvalid) return other;
+
+    // Handle self-inverse case
+    if (other === this) return TransformState.makeIdentity();
+
+    // TODO: invertComposeComponentwise
+
+    // Fall back to matrix composition
+    const result = mat4.create();
+    mat4.multiply(result, this.getInverseMatrix(), other.getMatrix());
     return TransformState.fromMatrix(result);
   }
 

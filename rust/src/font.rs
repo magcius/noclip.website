@@ -99,7 +99,7 @@ impl FontMeshLoader {
         Ok(fontmesh::glyph_advance(&face, c).unwrap_or(0.5))
     }
 
-    /// Get the recommended line height (ascender - descender + line_gap)
+    /// Get the font height (ascender - descender)
     #[wasm_bindgen]
     pub fn get_line_height(&self) -> Result<f32, JsValue> {
         let face = self.parse()?;

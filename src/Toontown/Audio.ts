@@ -1,4 +1,4 @@
-import { Sequencer, WorkletSynthesizer } from "spessasynth_lib";
+import type { Sequencer, WorkletSynthesizer } from "spessasynth_lib";
 import type { ToontownLoader } from "./Loader";
 
 interface Player {
@@ -13,25 +13,28 @@ let currentVolume = 0.5;
 
 async function init(loader: ToontownLoader): Promise<Player> {
   if (player) return player;
-  // Load the Microsoft GS Wavetable Synth SoundFont
-  const sfont = await loader.loadFile("gm3.sf2");
   const ctx = new AudioContext();
-  // Gain node for volume control
-  const gainNode = ctx.createGain();
-  gainNode.gain.value = currentVolume;
-  gainNode.connect(ctx.destination);
-  // Load the audio worklet
   if (!ctx.audioWorklet) {
     throw new Error(
       "AudioWorklet unavailable (insecure context or unsupported browser)",
     );
   }
-  await ctx.audioWorklet.addModule(
-    new URL(
-      "spessasynth_lib/dist/spessasynth_processor.min.js",
-      import.meta.url,
+  // Gain node for volume control
+  const gainNode = ctx.createGain();
+  gainNode.gain.value = currentVolume;
+  gainNode.connect(ctx.destination);
+  // Load the synthesizer, sound font and audio worklet
+  const [{ Sequencer, WorkletSynthesizer }, sfont] = await Promise.all([
+    import("spessasynth_lib"),
+    // Microsoft GS Wavetable Synth SoundFont
+    loader.loadFile("gm3.sf2", { direct: true }),
+    ctx.audioWorklet.addModule(
+      new URL(
+        "spessasynth_lib/dist/spessasynth_processor.min.js",
+        import.meta.url,
+      ),
     ),
-  );
+  ]);
   // Create the synthesizer and sequencer
   const synth = new WorkletSynthesizer(ctx);
   synth.connect(gainNode);

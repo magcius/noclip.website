@@ -1,5 +1,6 @@
 import type { BAMFile } from "../BAMFile";
-import { AssetVersion, type DataStream } from "../Common";
+import { AssetVersion } from "../Common";
+import type { DataStream } from "../util/DataStream";
 import { CollisionSolid } from "./CollisionSolid";
 import { type DebugInfo, dbgFlags, dbgNum, dbgRefs } from "./debug";
 import { PandaNode } from "./PandaNode";

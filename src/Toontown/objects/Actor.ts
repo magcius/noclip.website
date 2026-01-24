@@ -94,30 +94,60 @@ export class Actor extends PandaNode {
     }
 
     const loader = getLoader();
+    const promises: Promise<void>[] = [];
     for (const [name, path] of Object.entries(animPaths)) {
-      const model = await loader.loadModel(path);
-      const animBundleNode = model.findNodeByType(AnimBundleNode);
-      if (!animBundleNode) {
-        console.error(`Failed to load animation ${path} for ${this.name}`);
-        continue;
-      }
-      const animBundle = animBundleNode.animBundle;
-      if (!animBundle) {
-        console.error(
-          `Failed to load animation bundle for ${path} for ${this.name}`,
-        );
-        continue;
-      }
-      anims.set(name, { animBundle: animBundle.clone(), animControl: null });
+      promises.push(
+        loader.loadModel(path).then(
+          (model) => {
+            const animBundleNode = model.findNodeByType(AnimBundleNode);
+            if (!animBundleNode) {
+              console.warn(
+                `Failed to load animation node ${path} for ${this.name}`,
+              );
+              return;
+            }
+            const animBundle = animBundleNode.animBundle;
+            if (!animBundle) {
+              console.warn(
+                `Failed to load animation bundle for ${path} for ${this.name}`,
+              );
+              return;
+            }
+            anims.set(name, {
+              animBundle: animBundle.clone(),
+              animControl: null,
+            });
+          },
+          () => {
+            console.warn(`Failed to load animation ${path} for ${this.name}`);
+          },
+        ),
+      );
     }
+    await Promise.all(promises);
   }
 
-  getAnimControls(animName: string | null = null): AnimControl[] {
-    const controls: AnimControl[] = [];
-    for (const [partName, animMap] of this._anims) {
+  getAnimControls(
+    animName: string | null = null,
+    partName: string | null = null,
+  ): AnimControl[] {
+    const parts: [PartDef, Map<string, AnimDef>][] = [];
+    if (partName) {
       const partDef = this._parts.get(partName);
-      if (!partDef) continue;
+      if (!partDef) return [];
+      const animMap = this._anims.get(partName);
+      if (!animMap) return [];
+      parts.push([partDef, animMap]);
+    } else {
+      for (const [partName, animMap] of this._anims) {
+        const partDef = this._parts.get(partName);
+        if (!partDef) continue;
+        parts.push([partDef, animMap]);
+      }
+    }
 
+    const controls: AnimControl[] = [];
+    for (const [partDef, animMap] of parts) {
       let anims = [];
       if (animName !== null) {
         const anim = animMap.get(animName);
@@ -147,25 +177,64 @@ export class Actor extends PandaNode {
     return new ActorInterval(this.getAnimControls(animName), options);
   }
 
-  pose(animName: string, frame: number): void {
-    for (const control of this.getAnimControls(animName)) {
+  pose(animName: string, frame: number, partName: string | null = null): void {
+    for (const control of this.getAnimControls(animName, partName)) {
       control.pose(frame);
     }
   }
 
-  loop(animName: string, restart = true): void {
-    for (const control of this.getAnimControls(animName)) {
+  loop(animName: string, restart = true, partName: string | null = null): void {
+    for (const control of this.getAnimControls(animName, partName)) {
       control.loop(restart);
     }
   }
 
-  stop(animName: string | null = null): void {
-    for (const control of this.getAnimControls(animName)) {
+  stop(animName: string | null = null, partName: string | null = null): void {
+    for (const control of this.getAnimControls(animName, partName)) {
       control.stop();
+    }
+  }
+
+  setPlayRate(
+    rate: number,
+    animName: string,
+    partName: string | null = null,
+  ): void {
+    for (const control of this.getAnimControls(animName, partName)) {
+      control.setRate(undefined, rate);
     }
   }
 
   cleanup(): void {
     // TODO
+  }
+
+  attach(sourcePart: string, targetPart: string, jointName: string) {
+    const source = this._parts.get(sourcePart);
+    const target = this._parts.get(targetPart);
+    if (!source || !target) return;
+
+    const joint = target.character.find(`**/${jointName}`);
+    if (!joint) return;
+
+    source.character.reparentTo(joint);
+  }
+
+  getPart(partName: string): Character | null {
+    return this._parts.get(partName)?.character ?? null;
+  }
+
+  getPartBundle(partName: string): PartBundle | null {
+    return this._parts.get(partName)?.partBundle ?? null;
+  }
+
+  getAllAnimations(): Set<string> {
+    const animations = new Set<string>();
+    for (const [_, animMap] of this._anims) {
+      for (const [name, _] of animMap) {
+        animations.add(name);
+      }
+    }
+    return animations;
   }
 }

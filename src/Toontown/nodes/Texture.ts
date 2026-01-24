@@ -1,6 +1,7 @@
 import { vec3, type vec4 } from "gl-matrix";
 import type { BAMFile } from "../BAMFile";
-import { AssetVersion, type DataStream } from "../Common";
+import { AssetVersion } from "../Common";
+import type { DataStream } from "../util/DataStream";
 import {
   type DebugInfo,
   dbgBytes,
@@ -341,6 +342,17 @@ export class Texture extends TypedObject {
     }
 
     return info;
+  }
+
+  static make(
+    textureFilename: string,
+    alphaFilename: string | null = null,
+  ): Texture {
+    const result = new Texture();
+    result.name = textureFilename;
+    result.filename = textureFilename;
+    if (alphaFilename !== null) result.alphaFilename = alphaFilename;
+    return result;
   }
 }
 

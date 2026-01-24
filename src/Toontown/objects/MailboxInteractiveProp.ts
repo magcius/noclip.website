@@ -5,7 +5,7 @@ import {
   HOOD_ID_MINNIES_MELODYLAND,
   HOOD_ID_THE_BRRRGH,
   HOOD_ID_TOONTOWN_CENTRAL,
-} from "./Globals";
+} from "../Globals";
 import {
   type IdleAnimDef,
   InteractiveAnimatedProp,

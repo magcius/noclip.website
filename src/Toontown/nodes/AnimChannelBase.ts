@@ -1,5 +1,5 @@
 import type { BAMFile } from "../BAMFile";
-import type { DataStream } from "../Common";
+import type { DataStream } from "../util/DataStream";
 import { AnimGroup } from "./AnimGroup";
 import { type DebugInfo, dbgNum } from "./debug";
 import type { CopyContext } from "./TypedObject";

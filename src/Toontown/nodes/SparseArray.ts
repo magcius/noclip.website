@@ -1,4 +1,4 @@
-import type { DataStream } from "../Common";
+import type { DataStream } from "../util/DataStream";
 
 /**
  * Represents a sparse set of integers as a collection of subranges.

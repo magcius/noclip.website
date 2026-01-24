@@ -1,5 +1,5 @@
 import type ArrayBufferSlice from "../ArrayBufferSlice";
-import { AssetVersion, DataStream, type DataStreamState } from "./Common";
+import { AssetVersion } from "./Common";
 import {
   type BAMObject,
   dbgBool,
@@ -9,8 +9,12 @@ import {
   getBAMObjectFactory,
   PandaNode,
 } from "./nodes";
+import type { AnyTypedObject } from "./nodes/TypedObject";
+import { DataStream, type DataStreamState } from "./util/DataStream";
 
 const BAM_MAGIC = [0x70, 0x62, 0x6a, 0x00, 0x0a, 0x0d]; // pbj\0\n\r
+
+export const DEFAULT_VERSION = new AssetVersion(6, 22);
 
 enum BAMObjectCode {
   Push = 0,
@@ -107,7 +111,7 @@ export class BAMFile {
 
   getTyped<T extends BAMObject>(
     objectId: number,
-    clazz: abstract new (...args: any[]) => T,
+    clazz: AnyTypedObject<T>,
   ): T | null {
     if (objectId === 0) return null;
     const object = this.getObject(objectId);

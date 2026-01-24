@@ -40,7 +40,7 @@ export class DynamicTextFont {
     this.familyName = this.loader.family_name();
 
     // Calculate line height from font metrics
-    const rawLineHeight = this.loader.get_line_height();
+    const rawLineHeight = this.loader.get_height();
     this._lineHeight = rawLineHeight * scale;
 
     // Space advance is typically about 0.25 of line height

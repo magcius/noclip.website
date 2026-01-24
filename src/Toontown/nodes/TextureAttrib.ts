@@ -1,6 +1,7 @@
 import type { BAMFile } from "../BAMFile";
-import { AssetVersion, type DataStream } from "../Common";
+import { AssetVersion } from "../Common";
 import type { MaterialData } from "../Geom";
+import type { DataStream } from "../util/DataStream";
 import {
   type DebugInfo,
   dbgArray,
@@ -183,6 +184,15 @@ export class TextureAttrib extends RenderAttrib {
         material.texture = this.onStages[0].texture;
       }
     }
+  }
+
+  static make(
+    textureFilename: string,
+    alphaFilename: string | null = null,
+  ): TextureAttrib {
+    const result = new TextureAttrib();
+    result.texture = Texture.make(textureFilename, alphaFilename);
+    return result;
   }
 }
 

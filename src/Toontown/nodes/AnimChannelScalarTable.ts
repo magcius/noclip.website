@@ -1,6 +1,6 @@
 import type { BAMFile } from "../BAMFile";
-import type { DataStream } from "../Common";
-import { FFTCompressor } from "../FFTCompressor";
+import type { DataStream } from "../util/DataStream";
+import { FFTCompressor } from "../util/FFTCompressor";
 import { AnimChannelBase } from "./AnimChannelBase";
 import { type DebugInfo, dbgTypedArray } from "./debug";
 import { type CopyContext, registerTypedObject } from "./TypedObject";

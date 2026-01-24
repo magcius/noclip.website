@@ -1,6 +1,6 @@
 import type { AnimControl } from "../anim/AnimControl";
 import type { BAMFile } from "../BAMFile";
-import type { DataStream } from "../Common";
+import type { DataStream } from "../util/DataStream";
 import type { AnimChannelBase } from "./AnimChannelBase";
 import { type DebugInfo, dbgNum } from "./debug";
 import { MovingPartBase } from "./MovingPartBase";

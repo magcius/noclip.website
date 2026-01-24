@@ -1,5 +1,5 @@
 import type { BAMFile } from "../BAMFile";
-import type { DataStream } from "../Common";
+import type { DataStream } from "../util/DataStream";
 import { AnimBundle } from "./AnimBundle";
 import { type DebugInfo, dbgRef } from "./debug";
 import { PandaNode } from "./PandaNode";

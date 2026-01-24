@@ -1,6 +1,6 @@
 import type { vec4 } from "gl-matrix";
 import type { BAMFile } from "../BAMFile";
-import type { DataStream } from "../Common";
+import type { DataStream } from "../util/DataStream";
 import { type DebugInfo, dbgNum } from "./debug";
 import { PiecewiseCurve } from "./PiecewiseCurve";
 import { type CopyContext, registerTypedObject } from "./TypedObject";

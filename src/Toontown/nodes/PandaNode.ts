@@ -1,8 +1,18 @@
-import { mat4, type ReadonlyVec3, type ReadonlyVec4, vec3 } from "gl-matrix";
+import {
+  mat4,
+  type ReadonlyMat4,
+  type ReadonlyVec3,
+  type ReadonlyVec4,
+  vec3,
+} from "gl-matrix";
+import { AABB } from "../../Geometry";
 import type { BAMFile } from "../BAMFile";
-import { AssetVersion, type DataStream } from "../Common";
+import { AssetVersion } from "../Common";
+import type { DataStream } from "../util/DataStream";
 import { ColorAttrib } from "./ColorAttrib";
 import { ColorScaleAttrib } from "./ColorScaleAttrib";
+import { CullFaceAttrib, CullFaceMode } from "./CullFaceAttrib";
+import { DepthWriteAttrib, DepthWriteMode } from "./DepthWriteAttrib";
 import {
   type DebugInfo,
   dbgArray,
@@ -18,13 +28,17 @@ import type { RenderAttrib } from "./RenderAttrib";
 import { type RenderEffect, RenderEffects } from "./RenderEffects";
 import { RenderState } from "./RenderState";
 import { TransformState } from "./TransformState";
+import { TransparencyAttrib, TransparencyMode } from "./TransparencyAttrib";
 import {
+  type AnyTypedObject,
   CopyContext,
   getTypedObjectFactory,
   registerTypedObject,
   TypedObject,
   type TypedObjectFactory,
 } from "./TypedObject";
+
+export type AnyPandaNode<T extends PandaNode> = AnyTypedObject<T>;
 
 export class PandaNode extends TypedObject {
   public name: string = "";
@@ -61,6 +75,24 @@ export class PandaNode extends TypedObject {
     }
   }
 
+  removeNode(): void {
+    for (const parent of this.parents.slice()) {
+      parent.removeChild(this);
+    }
+  }
+
+  stash(): void {
+    const parent = this.parent;
+    if (parent) {
+      parent.removeChild(this);
+      parent.stashed.push([this, 0]);
+    }
+  }
+
+  update(_scene: PandaNode): void {
+    // Child nodes may override to update on render traversal
+  }
+
   reparentTo(target: PandaNode, sort: number = 0): void {
     for (const parent of this.parents.slice()) {
       parent.removeChild(this);
@@ -69,15 +101,12 @@ export class PandaNode extends TypedObject {
   }
 
   wrtReparentTo(target: PandaNode, sort: number = 0): void {
-    const targetInvTransform = target.netTransform.getInverseMatrix();
-    const currTransform = this.netTransform.getMatrix();
+    const transform = this.getTransform(target);
     for (const parent of this.parents.slice()) {
       parent.removeChild(this);
     }
     target.addChild(this, sort);
-    const mtx = mat4.create();
-    mat4.multiply(mtx, targetInvTransform, currTransform);
-    this.transform = TransformState.fromMatrix(mtx);
+    this.transform = transform;
   }
 
   /**
@@ -228,9 +257,7 @@ export class PandaNode extends TypedObject {
   }
 
   /** TypeScript-friendly search by constructor type (searches entire subtree) */
-  findNodeByType<T extends PandaNode>(
-    type: new (...args: any[]) => T,
-  ): T | null {
+  findNodeByType<T extends PandaNode>(type: AnyPandaNode<T>): T | null {
     // Breadth-first search
     const queue: PandaNode[] = [this];
     while (queue.length > 0) {
@@ -244,9 +271,7 @@ export class PandaNode extends TypedObject {
   }
 
   /** TypeScript-friendly search for all nodes of a constructor type */
-  findAllNodesByType<T extends PandaNode>(
-    type: new (...args: any[]) => T,
-  ): T[] {
+  findAllNodesByType<T extends PandaNode>(type: AnyPandaNode<T>): T[] {
     const results: T[] = [];
     const queue: PandaNode[] = [this];
     while (queue.length > 0) {
@@ -284,6 +309,39 @@ export class PandaNode extends TypedObject {
     this.setAttrib(ColorScaleAttrib.make(scale));
   }
 
+  /**
+   * Sets or disables transparent rendering mode on this node.
+   * When enabled is true, uses Alpha transparency mode.
+   * For more control, pass a TransparencyMode value directly.
+   */
+  setTransparency(enabled: boolean | TransparencyMode, priority = 0): void {
+    const mode =
+      typeof enabled === "boolean"
+        ? enabled
+          ? TransparencyMode.Alpha
+          : TransparencyMode.None
+        : enabled;
+    this.setAttrib(TransparencyAttrib.create(mode), priority);
+  }
+
+  /**
+   * Sets or disables writing to the depth buffer on this node.
+   */
+  setDepthWrite(depthWrite: boolean, priority = 0): void {
+    const mode = depthWrite ? DepthWriteMode.On : DepthWriteMode.Off;
+    this.setAttrib(DepthWriteAttrib.create(mode), priority);
+  }
+
+  /**
+   * Sets or disables two-sided rendering mode on this node.
+   * When true, backfacing polygons will be drawn.
+   * When false, backfacing polygons will be culled.
+   */
+  setTwoSided(twoSided: boolean, priority = 0): void {
+    const mode = twoSided ? CullFaceMode.CullNone : CullFaceMode.CullClockwise;
+    this.setAttrib(CullFaceAttrib.create(mode), priority);
+  }
+
   setPosHprScale(pos: ReadonlyVec3, hpr: ReadonlyVec3, scale: ReadonlyVec3) {
     this.transform = TransformState.fromPosHprScale(pos, hpr, scale);
   }
@@ -316,6 +374,10 @@ export class PandaNode extends TypedObject {
     );
   }
 
+  get scale(): ReadonlyVec3 {
+    return this.transform.scale;
+  }
+
   set scale(scale: ReadonlyVec3) {
     this.setPosHprScale(this.transform.pos, this.transform.hpr, scale);
   }
@@ -332,6 +394,58 @@ export class PandaNode extends TypedObject {
     return parent.netTransform.compose(this.transform);
   }
 
+  getTransform(other: PandaNode): TransformState {
+    return other.netTransform.invertCompose(this.netTransform);
+  }
+
+  /**
+   * Calculate the local bounding box of this node.
+   */
+  getBoundingBox(): AABB {
+    const aabb = new AABB();
+    if (this.children.length === 1) {
+      const [child] = this.children[0];
+      if (child.isOverallHidden()) return aabb;
+      aabb.transform(child.getBoundingBox(), child.transform.getMatrix());
+      return aabb;
+    }
+    this.unionChildrenBounds(aabb);
+    return aabb;
+  }
+
+  protected unionChildrenBounds(aabb: AABB) {
+    if (this.children.length === 0) return;
+    const aabbTmp = new AABB();
+    const point = vec3.create();
+    for (const [child] of this.children) {
+      if (child.isOverallHidden()) continue;
+      const childAABB = child.getBoundingBox();
+      aabbTmp.transform(childAABB, child.transform.getMatrix());
+      for (let i = 0; i < 8; ++i) {
+        aabbTmp.cornerPoint(point, i);
+        aabb.unionPoint(point);
+      }
+    }
+  }
+
+  /**
+   * Calculate the pre-transformed, tight bounding box of this node.
+   */
+  calcTightBounds(): AABB {
+    const aabb = new AABB();
+    this.accumulateBounds(aabb, this.transform.getMatrix());
+    return aabb;
+  }
+
+  protected accumulateBounds(aabb: AABB, netTransform: ReadonlyMat4): void {
+    const tmp = mat4.create();
+    for (const [child] of this.children) {
+      if (child.isOverallHidden()) continue;
+      mat4.multiply(tmp, netTransform, child.transform.getMatrix());
+      child.accumulateBounds(aabb, tmp);
+    }
+  }
+
   setEffect(effect: RenderEffect) {
     this.effects = this.effects.addEffect(effect);
   }
@@ -342,6 +456,13 @@ export class PandaNode extends TypedObject {
 
   get pos(): ReadonlyVec3 {
     return this.transform.pos;
+  }
+
+  /**
+   * Returns the world-space position of this node.
+   */
+  get worldPos(): ReadonlyVec3 {
+    return this.netTransform.pos;
   }
 
   hide() {
