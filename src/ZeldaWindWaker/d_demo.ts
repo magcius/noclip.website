@@ -427,6 +427,7 @@ class dDemo_system_c implements JStage.TSystem {
     }
 }
 
+// noclip modification: Allow the game to fully control creation/deletion of emitters. See comment above JParticle.TControl
 class dDemo_paControl_c extends JParticle.TControl {
     constructor(private globals: dGlobals) {
         super();
