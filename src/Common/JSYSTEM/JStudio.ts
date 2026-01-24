@@ -1063,6 +1063,12 @@ enum EParticleTrack {
     FadeOut = 19,
 }
 
+export type CreateEmitterCallback = (
+    userId: number,
+    groupId: number,
+    roomId: number,
+) => JPABaseEmitter | null;
+
 class TParticleAdaptor extends TAdaptor {
     public emitter: JPABaseEmitter | null = null;
     public emitterCallback: TJPACallback = new TJPACallback(this, this.control);
@@ -1079,6 +1085,7 @@ class TParticleAdaptor extends TAdaptor {
         private system: TSystem,
         private control: TControl,
         public emitterMgr: JPAEmitterManager,
+        public createEmitterCb: CreateEmitterCallback,
     ) { super(20); }
 
     public override adaptor_do_prepare(obj: STBObject): void {
@@ -1143,17 +1150,11 @@ class TParticleAdaptor extends TAdaptor {
             adaptor.emitterMgr.forceDeleteEmitter(adaptor.emitter);
         }
 
-        // TODO: adaptor.emitterMgr.createSimpleEmitterID()
-        // u32 temp = adaptor_particle->mParticleId;
-        // JGeometry::TVec3<f32> pos = (Vec){0.0f, 0.0f, 0.0f};
-        // adaptor_particle->mEmitter = adaptor_particle->mEmitterManager->createSimpleEmitterID(
-        //     pos,
-        //     (temp & 0x0000FFFF),
-        //     (temp & 0xFF000000) >> 0x18,
-        //     (temp & 0x00FF0000) >> 0x10,
-        //     &adaptor_particle->mCallback,
-        //     NULL
-        // );
+        adaptor.emitter = adaptor.createEmitterCb(
+            (adaptor.particleId & 0x0000FFFF),
+            (adaptor.particleId & 0xFF000000) >> 24,
+            (adaptor.particleId & 0x00FF0000) >> 16,
+        );
 
         if (adaptor.emitter !== null) {
             adaptor.emitter.emitterCallBack = this.emitterCallback;
@@ -1179,8 +1180,6 @@ class TParticleAdaptor extends TAdaptor {
             }
         }
     }
-
-    // TODO: JPAEmitter callback
 
     public override log(msg: string): void {
         const tag = (this.particleId >= 0) ? `[JParticle: 0x${this.particleId.toString(16).toUpperCase()}]` : `[JParticle]`;
@@ -2262,7 +2261,8 @@ export abstract class TBlockObject {
 // This combines JStudio::TControl and JStudio::stb::TControl into a single class, for simplicity.
 export class TControl {
     public system: TSystem;
-    public particleManager: JPAEmitterManager;
+    public particleManager: JPAEmitterManager | null = null;
+    public createEmitterCb: CreateEmitterCallback | null = null;
     public msgControl: JMessage.TControl;
     public fvbControl = new FVB.TControl();
     public secondsPerFrame: number = 1 / 30.0;
@@ -2279,10 +2279,11 @@ export class TControl {
     // A special object that the STB file can use to suspend the demo (such as while waiting for player input)
     private controlObject = new TControlObject(this);
 
-    constructor(system: TSystem, msgControl: JMessage.TControl, particleManager: JPAEmitterManager) {
+    constructor(system: TSystem, msgControl: JMessage.TControl, particleManager: JPAEmitterManager | null, createEmitterCb: CreateEmitterCallback | null) {
         this.system = system;
         this.msgControl = msgControl;
         this.particleManager = particleManager;
+        this.createEmitterCb = createEmitterCb;
     }
 
     public isSuspended() { return this.suspendFrames > 0; }
@@ -2370,12 +2371,16 @@ export class TControl {
 
     public createParticleObject(blockObj: TBlockObject): STBObject | null {
         if (blockObj.type === 'JPTC') {
-            const adaptor = new TParticleAdaptor(this.system, this, this.particleManager);
-            const obj = new TParticleObject(this, blockObj, adaptor);
+            if (this.particleManager && this.createEmitterCb) {
+                const adaptor = new TParticleAdaptor(this.system, this, this.particleManager, this.createEmitterCb);
+                const obj = new TParticleObject(this, blockObj, adaptor);
 
-            if (obj) { adaptor.adaptor_do_prepare(obj); }
-            this.objects.push(obj);
-            return obj;
+                if (obj) { adaptor.adaptor_do_prepare(obj); }
+                this.objects.push(obj);
+                return obj;
+            } else {
+                console.warn('STB Particle object requested, but no particle manager set');
+            }
         }
         return null;
     }
