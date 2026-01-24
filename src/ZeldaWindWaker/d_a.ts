@@ -5364,6 +5364,10 @@ class d_a_py_lk extends fopAc_ac_c implements ModeFuncExec<d_a_py_lk_mode> {
 
             setLightTevColorType(globals, this.modelKatsura, this.tevStr, globals.camera);
             mDoExt_modelEntryDL(globals, this.modelKatsura, renderInstManager);
+        } else {
+            this.model.setShapeVisible(LkModelShape.Hat, true);
+            this.model.setShapeVisible(LkModelShape.Scabbard, globals.scnPlay.demo.getName() !== 'tale');
+            this.model.setShapeVisible(LkModelShape.Buckle, true);
         }
 
         if (this.equippedItem === LkEquipItem.Sword) {
