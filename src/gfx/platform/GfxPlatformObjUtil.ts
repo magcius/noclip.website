@@ -22,8 +22,7 @@ export function arrayEqual<T>(a: T[], b: T[], e: EqualFunc<T>): boolean {
 }
 
 export function gfxSamplerBindingCopy(a: Readonly<GfxSamplerBinding>): GfxSamplerBinding {
-    const gfxSampler = a.gfxSampler, gfxTexture = a.gfxTexture, lateBinding = a.lateBinding;
-    return { gfxSampler, gfxTexture, lateBinding };
+    return { ... a };
 }
 
 export function gfxSamplerBindingNew(): GfxSamplerBinding {
@@ -31,9 +30,7 @@ export function gfxSamplerBindingNew(): GfxSamplerBinding {
 }
 
 export function gfxBufferBindingCopy(a: Readonly<GfxBufferBinding>): GfxBufferBinding {
-    const buffer = a.buffer;
-    const byteSize = a.byteSize;
-    return { buffer, byteSize };
+    return { ... a };
 }
 
 export function gfxBindingsDescriptorCopy(a: Readonly<GfxBindingsDescriptor>): GfxBindingsDescriptor {
@@ -42,9 +39,9 @@ export function gfxBindingsDescriptorCopy(a: Readonly<GfxBindingsDescriptor>): G
     const uniformBufferBindings = arrayCopy(a.uniformBufferBindings, gfxBufferBindingCopy);
     return { bindingLayout, samplerBindings, uniformBufferBindings };
 }
+
 function gfxBindingLayoutSamplerDescriptorCopy(a: Readonly<GfxBindingLayoutSamplerDescriptor>): GfxBindingLayoutSamplerDescriptor {
-    const dimension = a.dimension, formatKind = a.formatKind, comparison = a.comparison === true;
-    return { dimension, formatKind, comparison };
+    return { ... a };
 }
 
 export function gfxBindingLayoutDescriptorCopy(a: Readonly<GfxBindingLayoutDescriptor>): GfxBindingLayoutDescriptor {
@@ -67,17 +64,11 @@ export function gfxRenderPipelineDescriptorCopy(a: Readonly<GfxRenderPipelineDes
 }
 
 export function gfxVertexAttributeDescriptorCopy(a: Readonly<GfxVertexAttributeDescriptor>): GfxVertexAttributeDescriptor {
-    const location = a.location, format = a.format, bufferIndex = a.bufferIndex, bufferByteOffset = a.bufferByteOffset;
-    return { location, format, bufferIndex, bufferByteOffset };
+    return { ... a };
 }
 
 export function gfxInputLayoutBufferDescriptorCopy(a: Readonly<GfxInputLayoutBufferDescriptor | null>): GfxInputLayoutBufferDescriptor | null {
-    if (a !== null) {
-        const byteStride = a.byteStride, frequency = a.frequency;
-        return { byteStride, frequency };
-    } else {
-        return null;
-    }
+    return a !== null ? { ... a } : null;
 }
 
 export function gfxInputLayoutDescriptorCopy(a: Readonly<GfxInputLayoutDescriptor>): GfxInputLayoutDescriptor {
@@ -86,14 +77,17 @@ export function gfxInputLayoutDescriptorCopy(a: Readonly<GfxInputLayoutDescripto
     const indexBufferFormat = a.indexBufferFormat;
     return { vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat };
 }
+
 function gfxBufferBindingEquals(a: Readonly<GfxBufferBinding>, b: Readonly<GfxBufferBinding>): boolean {
     return a.buffer === b.buffer && a.byteSize === b.byteSize;
 }
+
 function gfxSamplerBindingEquals(a: Readonly<GfxSamplerBinding | null>, b: Readonly<GfxSamplerBinding | null>): boolean {
     if (a === null) return b === null;
     if (b === null) return false;
     return a.gfxSampler === b.gfxSampler && a.gfxTexture === b.gfxTexture;
 }
+
 function gfxBindingLayoutSamplerDescriptorEqual(a: Readonly<GfxBindingLayoutSamplerDescriptor>, b: Readonly<GfxBindingLayoutSamplerDescriptor>): boolean {
     return a.dimension === b.dimension && a.formatKind === b.formatKind;
 }
@@ -113,15 +107,18 @@ export function gfxBindingsDescriptorEquals(a: Readonly<GfxBindingsDescriptor>, 
     if (!gfxBindingLayoutEquals(a.bindingLayout, b.bindingLayout)) return false;
     return true;
 }
+
 function gfxChannelBlendStateEquals(a: Readonly<GfxChannelBlendState>, b: Readonly<GfxChannelBlendState>): boolean {
     return a.blendMode === b.blendMode && a.blendSrcFactor === b.blendSrcFactor && a.blendDstFactor === b.blendDstFactor;
 }
+
 function gfxAttachmentStateEquals(a: Readonly<GfxAttachmentState>, b: Readonly<GfxAttachmentState>): boolean {
     if (!gfxChannelBlendStateEquals(a.rgbBlendState, b.rgbBlendState)) return false;
     if (!gfxChannelBlendStateEquals(a.alphaBlendState, b.alphaBlendState)) return false;
     if (a.channelWriteMask !== b.channelWriteMask) return false;
     return true;
 }
+
 function gfxMegaStateDescriptorEquals(a: GfxMegaStateDescriptor, b: GfxMegaStateDescriptor): boolean {
     if (!arrayEqual(a.attachmentsState, b.attachmentsState, gfxAttachmentStateEquals))
         return false;
@@ -137,12 +134,15 @@ function gfxMegaStateDescriptorEquals(a: GfxMegaStateDescriptor, b: GfxMegaState
         a.polygonOffset === b.polygonOffset
     );
 }
+
 function gfxBindingLayoutEquals(a: Readonly<GfxBindingLayoutDescriptor>, b: Readonly<GfxBindingLayoutDescriptor>): boolean {
     return a.numSamplers === b.numSamplers && a.numUniformBuffers === b.numUniformBuffers;
 }
+
 function gfxProgramEquals(a: Readonly<GfxProgram>, b: Readonly<GfxProgram>): boolean {
     return a.ResourceUniqueId === b.ResourceUniqueId;
 }
+
 function gfxFormatEquals(a: GfxFormat | null, b: GfxFormat | null): boolean {
     return a === b;
 }
@@ -204,5 +204,3 @@ export function gfxRenderAttachmentViewEquals(a: Readonly<GfxRenderAttachmentVie
     if (a === null || b === null) return false;
     return a.level === b.level && a.z === b.z;
 }
-
-
