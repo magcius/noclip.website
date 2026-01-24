@@ -1035,6 +1035,31 @@ class TMessageObject extends STBObject {
 //----------------------------------------------------------------------------------------------------------------------
 // Particle
 //----------------------------------------------------------------------------------------------------------------------
+enum EParticleTrack {
+    PosX = 0,
+    PosY = 1,
+    PosZ = 2,
+    RotX = 3,
+    RotY = 4,
+    RotZ = 5,
+    ScaleX = 6,
+    ScaleY = 7,
+    ScaleZ = 8,
+
+    ColorR = 9,
+    ColorG = 10,
+    ColorB = 11,
+    ColorA = 12,
+
+    Color1R = 13,
+    Color1G = 14,
+    Color1B = 15,
+    Color1A = 16,
+
+    FadeIn = 18,
+    FadeOut = 19,
+}
+
 class TParticleAdaptor extends TAdaptor {
     private particleId: number = -1;
     private parent: JStage.TObject | null = null;
@@ -1104,42 +1129,46 @@ class TParticleObject extends STBObject {
 
         switch (cmdType) {
             // Pos
-            case 0x09: keyIdx = 0; break;
-            case 0x0a: keyIdx = 1; break;
-            case 0x0b: keyIdx = 2; break;
-            case 0x0c: keyCount = 3; keyIdx = 0; break;
+            case 0x09: keyIdx = EParticleTrack.PosX; break;
+            case 0x0a: keyIdx = EParticleTrack.PosY; break;
+            case 0x0b: keyIdx = EParticleTrack.PosZ; break;
+            case 0x0c: keyCount = 3; keyIdx = EParticleTrack.PosX; break;
 
             // Rot
-            case 0x0d: keyIdx = 3; break;
-            case 0x0e: keyIdx = 4; break;
-            case 0x0f: keyIdx = 5; break;
-            case 0x10: keyCount = 3; keyIdx = 3; break;
+            case 0x0d: keyIdx = EParticleTrack.RotX; break;
+            case 0x0e: keyIdx = EParticleTrack.RotY; break;
+            case 0x0f: keyIdx = EParticleTrack.RotZ; break;
+            case 0x10: keyCount = 3; keyIdx = EParticleTrack.RotX; break;
 
             // Scale
-            case 0x11: keyIdx = 6; break;
-            case 0x12: keyIdx = 7; break;
-            case 0x13: keyIdx = 8; break;
-            case 0x14: keyCount = 3; keyIdx = 6; break;
+            case 0x11: keyIdx = EParticleTrack.ScaleX; break;
+            case 0x12: keyIdx = EParticleTrack.ScaleY; break;
+            case 0x13: keyIdx = EParticleTrack.ScaleZ; break;
+            case 0x14: keyCount = 3; keyIdx = EParticleTrack.ScaleX; break;
 
             // Color RGB
-            case 0x1d: keyIdx = 9; break;
-            case 0x1e: keyIdx = 10; break;
-            case 0x1f: keyIdx = 11; break;
-            case 0x20: keyIdx = 12; break;
-            case 0x21: keyCount = 3; keyIdx = 9; break;
+            case 0x1d: keyIdx = EParticleTrack.ColorR; break;
+            case 0x1e: keyIdx = EParticleTrack.ColorG; break;
+            case 0x1f: keyIdx = EParticleTrack.ColorB; break;
+            case 0x20: keyIdx = EParticleTrack.ColorA; break;
+            case 0x21: keyCount = 3; keyIdx = EParticleTrack.ColorR; break;
 
             // Color RGBA
-            case 0x22: keyCount = 4; keyIdx = 9; break;
+            case 0x22: keyCount = 4; keyIdx = EParticleTrack.ColorR; break;
+
+            // Fade in/out
+            case 0x2e: keyIdx = EParticleTrack.FadeIn; break;
+            case 0x2f: keyIdx = EParticleTrack.FadeOut; break;
 
             // Color1 RGB
-            case 0x45: keyIdx = 13; break;
-            case 0x46: keyIdx = 14; break;
-            case 0x47: keyIdx = 15; break;
-            case 0x48: keyIdx = 16; break;
-            case 0x49: keyCount = 3; keyIdx = 13; break;
+            case 0x45: keyIdx = EParticleTrack.Color1R; break;
+            case 0x46: keyIdx = EParticleTrack.Color1G; break;
+            case 0x47: keyIdx = EParticleTrack.Color1B; break;
+            case 0x48: keyIdx = EParticleTrack.Color1A; break;
+            case 0x49: keyCount = 3; keyIdx = EParticleTrack.Color1R; break;
 
             // Color1 RGBA
-            case 0x4a: keyCount = 4; keyIdx = 13; break;
+            case 0x4a: keyCount = 4; keyIdx = EParticleTrack.Color1R; break;
 
             // Parents
             case 0x30: this.adaptor.adaptor_do_PARENT(data); return;
@@ -1157,10 +1186,6 @@ class TParticleObject extends STBObject {
                 }
                 return;
 
-            // Fade in/out
-            case 0x2e: keyIdx = 18; break;
-            case 0x2f: keyIdx = 19; break;
-
             case 0x44: this.adaptor.adaptor_do_PARTICLE(data); return;
 
             default:
@@ -1174,6 +1199,9 @@ class TParticleObject extends STBObject {
             keyData[i] = readData(dataOp, dataOffset + i * 4, dataSize, file);
             this.adaptor.adaptor_setVariableValue(this, keyIdx + i, keyData[i]);
         }
+        
+        const keyName = EParticleTrack[keyIdx].slice(0, keyCount > 1 ? -1 : undefined);
+        this.adaptor.log(`Set${keyName}: ${EDataOp[dataOp]} [${keyData.map(k => k.value)}]`);
     }
 }
 
