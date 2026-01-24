@@ -1159,7 +1159,7 @@ class TParticleAdaptor extends TAdaptor {
         this.parentEnabled = !!data.valueInt;
     }
 
-    private TVVOOn_BEGIN_FADE_IN(frame: number, tadaptor: TAdaptor) {
+    private TVVOOn_BEGIN_FADE_IN(duration: number, tadaptor: TAdaptor) {
         const adaptor = tadaptor as TParticleAdaptor;
         if (adaptor.emitter !== null) {
             adaptor.ptcControl.JPTCDeleteEmitter(adaptor.emitter);
@@ -1175,22 +1175,22 @@ class TParticleAdaptor extends TAdaptor {
             adaptor.emitter.emitterCallBack = this.emitterCallback;
             adaptor.emitter.becomeImmortalEmitter();
             adaptor.fadeType = 1;
-            adaptor.lifetime = frame; debugger; // Is `frame` a value or the frame that this was called?
+            adaptor.lifetime = duration;
             adaptor.age = 0;
         }
     }
 
-    private TVVOOn_END_FADE_OUT(frame: number, tadaptor: TAdaptor) {
+    private TVVOOn_END_FADE_OUT(duration: number, tadaptor: TAdaptor) {
         const adaptor = tadaptor as TParticleAdaptor;
         if (adaptor.emitter !== null) {
             if (adaptor.fadeType === 1 && adaptor.age !== 0) {
                 adaptor.fadeType = 2;
                 const r = adaptor.lifetime / adaptor.age;
-                adaptor.lifetime = frame * r;
-                adaptor.age = frame * (r - 1.0);
+                adaptor.lifetime = duration * r;
+                adaptor.age = duration * (r - 1.0);
             } else {
                 adaptor.fadeType = 2;
-                adaptor.lifetime = frame;
+                adaptor.lifetime = duration;
                 adaptor.age = 0.0;
             }
         }
