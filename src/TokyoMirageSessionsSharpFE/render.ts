@@ -1,4 +1,3 @@
-import { FRES } from "./bfres/bfres_switch.js";
 import * as BNTX from '../fres_nx/bntx.js';
 import { deswizzle_and_upload_bntx_textures } from "./bntx_helpers.js";
 import { CameraController } from "../Camera.js";

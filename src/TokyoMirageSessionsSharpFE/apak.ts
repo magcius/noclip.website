@@ -3,7 +3,9 @@
 // as far as I'm aware Tokyo Mirage Sessions ♯FE is the only game that uses this
 
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { FRES, parseBFRES } from "./bfres/bfres_switch.js";
 import { assert, readString } from "../util.js";
+import { DataFetcher } from "../DataFetcher.js";
 
 /**
  * reads an APAK file and returns an APAK object
@@ -72,6 +74,19 @@ export function get_file_by_name(apak: APAK, name: string): ArrayBufferSlice | u
     {
         return undefined;
     }
+}
+
+export async function get_fres_from_apak(apak_path: string, bfres_name: string, data_fetcher: DataFetcher): Promise<FRES>
+{
+    const apak = parseAPAK(await data_fetcher.fetchData(apak_path));
+    const bfres = get_file_by_name(apak, bfres_name);
+    if (bfres == undefined)
+    {
+        console.error(`file ${bfres_name} not found`);
+        throw("whoops");
+    }
+    const fres = parseBFRES(bfres);
+    return fres;
 }
 
 export interface APAK

@@ -1,11 +1,12 @@
 // gimmick.ts
 // represents a dynamic or interactable object in levels, such as treasure boxes or warp pads
 
-import { parseAPAK, get_file_by_name } from "./apak.js";
+import { parseAPAK, get_file_by_name, get_fres_from_apak } from "./apak.js";
 import { FRES, parseBFRES } from "./bfres/bfres_switch.js";
 import * as BNTX from '../fres_nx/bntx.js';
 import { deswizzle_and_upload_bntx_textures } from "./bntx_helpers";
 import { DataFetcher } from "../DataFetcher.js";
+import { FSKA } from "./bfres/fska.js";
 import { GfxDevice, GfxTexture } from "../gfx/platform/GfxPlatform";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { vec3 } from "gl-matrix";
@@ -20,19 +21,26 @@ export class gimmick
     /**
      * @param rotation euler XYZ rotation in radians
      */
-    constructor (position: vec3, rotation: vec3, scale: vec3, fres: FRES, device: GfxDevice, renderHelper: GfxRenderHelper)
+    constructor (position: vec3, rotation: vec3, scale: vec3, model_fres: FRES, device: GfxDevice, renderHelper: GfxRenderHelper, animation_fres?: FRES)
     {
         //initialize textures
-        const bntx = BNTX.parse(fres.embedded_files[0].buffer);
+        const bntx = BNTX.parse(model_fres.embedded_files[0].buffer);
         const gfx_texture_array: GfxTexture[] = deswizzle_and_upload_bntx_textures(bntx, device);
 
-        const fmdl = fres.fmdl[0];
+        const fmdl = model_fres.fmdl[0];
+
+        let fska: FSKA | null = null;
+        if (animation_fres != undefined && animation_fres.fska.length > 0)
+        {
+                fska = animation_fres.fska[0];
+        }
+
         this.fmdl_renderer = new fmdl_renderer
         (
             fmdl,
             bntx,
             gfx_texture_array,
-            null, 
+            fska, 
             position,
             rotation,
             scale,
@@ -72,6 +80,7 @@ export async function create_gimmick
             fres,
             device,
             new GfxRenderHelper(device),
+            undefined,
         );
         return new_gimmick;
     }
@@ -90,103 +99,98 @@ export async function create_common_gimmicks(layout: MapLayout, gate_type:number
     let gimmicks: gimmick[] = [];
 
     // yellow treasure boxes
-    if (layout.treasurebox_01_entries.length > 0) // TODO can i remove these if statements?
+    const treasure_box_01_fres = await get_fres_from_apak("TokyoMirageSessionsSharpFE/gimmick/common/treasurebox/skin/01/model.apak", "treasurebox_01.bfres", data_fetcher);
+    const treasurebox_01_animation_fres = await get_fres_from_apak("TokyoMirageSessionsSharpFE/gimmick/common/treasurebox/skin/01/model_common.apak", "fd_idle_00.anm", data_fetcher);
+
+    for (let i = 0; i < layout.treasurebox_01_entries.length; i++)
     {
-        for (let i = 0; i < layout.treasurebox_01_entries.length; i++)
-        {
-            const entry = layout.treasurebox_01_entries[i];
-            gimmicks.push
+        const entry = layout.treasurebox_01_entries[i];
+        gimmicks.push
+        (
+            new gimmick
             (
-                await create_gimmick
-                (
-                    entry.position,
-                    entry.rotation,
-                    vec3.fromValues(1.0, 1.0, 1.0),
-                    "TokyoMirageSessionsSharpFE/gimmick/common/treasurebox/skin/01/model.apak",
-                    "treasurebox_01.bfres",
-                    data_fetcher,
-                    device
-                )
-            );
-        }
+                entry.position,
+                entry.rotation,
+                vec3.fromValues(1.0, 1.0, 1.0),
+                treasure_box_01_fres,
+                device,
+                new GfxRenderHelper(device),
+                treasurebox_01_animation_fres,
+            )
+        );
     }
 
     // blue treasure boxes in Illusory Area of Aspirations
-    if (layout.treasurebox_02_entries.length > 0)
+    const treasure_box_02_fres = await get_fres_from_apak("TokyoMirageSessionsSharpFE/gimmick/common/treasurebox/skin/02/model.apak", "treasurebox_02.bfres", data_fetcher);
+
+    for (let i = 0; i < layout.treasurebox_02_entries.length; i++)
     {
-        for (let i = 0; i < layout.treasurebox_02_entries.length; i++)
-        {
-            const entry = layout.treasurebox_02_entries[i];
-            let scale = vec3.fromValues(1.0, 1.0, 1.0);
-            // scale up the special chests at the end of each room
-            if (entry.id == 1130 || entry.id == 1230 || entry.id == 1430)
-            {  
-                scale = vec3.fromValues(D018_TREASURE_BOX_SCALE, D018_TREASURE_BOX_SCALE, D018_TREASURE_BOX_SCALE);
-            }
-            gimmicks.push
-            (
-                await create_gimmick
-                (
-                    entry.position,
-                    entry.rotation,
-                    scale,
-                    "TokyoMirageSessionsSharpFE/gimmick/common/treasurebox/skin/02/model.apak",
-                    "treasurebox_02.bfres",
-                    data_fetcher,
-                    device
-                )
-            );
+        const entry = layout.treasurebox_02_entries[i];
+        let scale = vec3.fromValues(1.0, 1.0, 1.0);
+        // scale up the special chests at the end of each room
+        if (entry.id == 1130 || entry.id == 1230 || entry.id == 1430)
+        {  
+            scale = vec3.fromValues(D018_TREASURE_BOX_SCALE, D018_TREASURE_BOX_SCALE, D018_TREASURE_BOX_SCALE);
         }
+        gimmicks.push
+        (
+            new gimmick
+            (
+                entry.position,
+                entry.rotation,
+                scale,
+                treasure_box_02_fres,
+                device,
+                new GfxRenderHelper(device),
+                treasurebox_01_animation_fres,
+            )
+        );
     }
 
-    if (layout.blockside_entries.length > 0)
+    const blockside_01_fres = await get_fres_from_apak("TokyoMirageSessionsSharpFE/gimmick/common/blockside/skin/01/model.apak", "blockside_01.bfres", data_fetcher);
+
+    for (let i = 0; i < layout.blockside_entries.length; i++)
     {
-        for (let i = 0; i < layout.blockside_entries.length; i++)
+        const entry = layout.blockside_entries[i];
+        let scale = vec3.fromValues(1.0, 1.0, 1.0);
+        let y_position = entry.position[1] - WALL_HEIGHT_OFFSET;
+        // this map has the blockside walls scaled down
+        if (is_d018_03)
         {
-            const entry = layout.blockside_entries[i];
-            let scale = vec3.fromValues(1.0, 1.0, 1.0);
-            let y_position = entry.position[1] - WALL_HEIGHT_OFFSET;
-            // this map has the blockside walls scaled down
-            if (is_d018_03)
-            {
-                scale = vec3.fromValues(D018_003_WALL_SCALE, D018_003_WALL_SCALE, D018_003_WALL_SCALE);
-                y_position = entry.position[1] - D018_003_WALL_HEIGHT_OFFSET;
-            }
-            gimmicks.push
-            (
-                await create_gimmick
-                (
-                    vec3.fromValues(entry.position[0], y_position, entry.position[2]),
-                    entry.rotation,
-                    scale,
-                    "TokyoMirageSessionsSharpFE/gimmick/common/blockside/skin/01/model.apak",
-                    "blockside_01.bfres",
-                    data_fetcher,
-                    device
-                )
-            );
+            scale = vec3.fromValues(D018_003_WALL_SCALE, D018_003_WALL_SCALE, D018_003_WALL_SCALE);
+            y_position = entry.position[1] - D018_003_WALL_HEIGHT_OFFSET;
         }
+        gimmicks.push
+        (
+            new gimmick
+            (
+                vec3.fromValues(entry.position[0], y_position, entry.position[2]),
+                entry.rotation,
+                scale,
+                blockside_01_fres,
+                device,
+                new GfxRenderHelper(device),
+            )
+        );
     }
 
-    if (layout.blockwall_entries.length > 0)
+    const blockwall_01_fres = await get_fres_from_apak("TokyoMirageSessionsSharpFE/gimmick/common/blockwall/skin/01/model.apak", "blockwall_01.bfres", data_fetcher);
+
+    for (let i = 0; i < layout.blockwall_entries.length; i++)
     {
-        for (let i = 0; i < layout.blockwall_entries.length; i++)
-        {
-            const entry = layout.blockwall_entries[i];
-            gimmicks.push
+        const entry = layout.blockwall_entries[i];
+        gimmicks.push
+        (
+            new gimmick
             (
-                await create_gimmick
-                (
-                    vec3.fromValues(entry.position[0], entry.position[1] - WALL_HEIGHT_OFFSET, entry.position[2]),
-                    entry.rotation,
-                    vec3.fromValues(1.0, 1.0, 1.0),
-                    "TokyoMirageSessionsSharpFE/gimmick/common/blockwall/skin/01/model.apak",
-                    "blockwall_01.bfres",
-                    data_fetcher,
-                    device
-                )
-            );
-        }
+                vec3.fromValues(entry.position[0], entry.position[1] - WALL_HEIGHT_OFFSET, entry.position[2]),
+                entry.rotation,
+                vec3.fromValues(1.0, 1.0, 1.0),
+                blockwall_01_fres,
+                device,
+                new GfxRenderHelper(device),
+            )
+        );
     }
 
     // heal points
@@ -200,53 +204,74 @@ export async function create_common_gimmicks(layout: MapLayout, gate_type:number
     //     }
     // }
     
-    if (layout.warp_entries.length > 0)
+    const warp_01_fres = await get_fres_from_apak("TokyoMirageSessionsSharpFE/gimmick/common/warp/skin/01/model.apak", "warp_01.bfres", data_fetcher);
+
+    for (let i = 0; i < layout.warp_entries.length; i++)
     {
-        for (let i = 0; i < layout.warp_entries.length; i++)
-        {
-            const entry = layout.warp_entries[i];
-            gimmicks.push
+        const entry = layout.warp_entries[i];
+        gimmicks.push
+        (
+            new gimmick
             (
-                await create_gimmick
-                (
-                    entry.position,
-                    entry.rotation,
-                    vec3.fromValues(1.0, 1.0, 1.0),
-                    "TokyoMirageSessionsSharpFE/gimmick/common/warp/skin/01/model.apak",
-                    "warp_01.bfres",
-                    data_fetcher,
-                    device
-                )
-            );
-        }
+                entry.position,
+                entry.rotation,
+                vec3.fromValues(1.0, 1.0, 1.0),
+                warp_01_fres,
+                device,
+                new GfxRenderHelper(device),
+            )
+        );
     }
 
-    if (layout.gate_entries.length > 0)
+    // GIMMICK_GATE_L = "common/gate/skin/01"
+    // GIMMICK_GATE_M = "common/gate/skin/02"
+    // GIMMICK_GATE_F004 = "common/gate/skin/05" this model is offset slightly forward so that a wall in daitou TV doesn't clip through
+    // GIMMICK_GATE_BLOOM = "common/gate/skin/06"
+    // GIMMICK_GATE_DLC = "common/gate/skin/07"
+
+    let gate_fres: FRES;
+    switch(gate_type)
     {
-        let gate_types = [1, 2, 5, 6, 7];
-        // GIMMICK_GATE_L = "common/gate/skin/01"
-        // GIMMICK_GATE_M = "common/gate/skin/02"
-        // GIMMICK_GATE_F004 = "common/gate/skin/05" this model is offset slightly forward so that a wall in daitou TV doesn't clip through
-        // GIMMICK_GATE_BLOOM = "common/gate/skin/06"
-        // GIMMICK_GATE_DLC = "common/gate/skin/07"
-        assert(gate_types.includes(gate_type));
-        for (let i = 0; i < layout.gate_entries.length; i++)
-        {
-            const entry = layout.gate_entries[i];
-            gimmicks.push
+        case 1:
+            gate_fres = await get_fres_from_apak("TokyoMirageSessionsSharpFE/gimmick/common/gate/skin/01/model.apak", "gate_01.bfres", data_fetcher);
+            break;
+
+        case 2:
+            gate_fres = await get_fres_from_apak("TokyoMirageSessionsSharpFE/gimmick/common/gate/skin/02/model.apak", "gate_02.bfres", data_fetcher);
+            break;
+
+        case 5:
+            gate_fres = await get_fres_from_apak("TokyoMirageSessionsSharpFE/gimmick/common/gate/skin/05/model.apak", "gate_05.bfres", data_fetcher);
+            break;
+
+        case 6:
+            gate_fres = await get_fres_from_apak("TokyoMirageSessionsSharpFE/gimmick/common/gate/skin/06/model.apak", "gate_06.bfres", data_fetcher);
+            break;
+
+        case 7:
+            gate_fres = await get_fres_from_apak("TokyoMirageSessionsSharpFE/gimmick/common/gate/skin/07/model.apak", "gate_07.bfres", data_fetcher);
+            break;
+    
+        default:
+            console.error(`invalid gate type ${gate_type}`);
+            throw("whoops");
+    }
+
+    for (let i = 0; i < layout.gate_entries.length; i++)
+    {
+        const entry = layout.gate_entries[i];
+        gimmicks.push
+        (
+            new gimmick
             (
-                await create_gimmick
-                (
-                    vec3.fromValues(entry.position[0], entry.position[1] - GATE_HEIGHT_OFFSET, entry.position[2]),
-                    entry.rotation,
-                    vec3.fromValues(1.0, 1.0, 1.0),
-                    `TokyoMirageSessionsSharpFE/gimmick/common/gate/skin/0${gate_type}/model.apak`,
-                    `gate_0${gate_type}.bfres`,
-                    data_fetcher,
-                    device
-                )
-            );
-        }
+                vec3.fromValues(entry.position[0], entry.position[1] - GATE_HEIGHT_OFFSET, entry.position[2]),
+                entry.rotation,
+                vec3.fromValues(1.0, 1.0, 1.0),
+                gate_fres,
+                device,
+                new GfxRenderHelper(device),
+            )
+        );
     }
 
     return gimmicks;
