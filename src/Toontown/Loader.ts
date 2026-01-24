@@ -20,11 +20,13 @@ export const pathBase = "Toontown";
 
 /// Load from multifiles directly via HTTP Range requests & manifest.json
 /// (manifest.json can be generated via tools/gen-manifest.ts)
-const USE_MULTIFILES = true;
+const USE_MULTIFILES =
+  import.meta.env.PUBLIC_TOONTOWN_USE_MULTIFILES === undefined ||
+  import.meta.env.PUBLIC_TOONTOWN_USE_MULTIFILES === "true";
 
 /// Use high-quality fonts extracted from Toontown Rewritten
 /// (Fonts must be in manifest or USE_MULTIFILES must be false)
-const USE_HQ_FONTS = false;
+const USE_HQ_FONTS = import.meta.env.PUBLIC_TOONTOWN_USE_HQ_FONTS === "true";
 
 type MultifileManifest = Record<string, MultifileManifestEntry>;
 

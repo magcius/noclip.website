@@ -83,6 +83,7 @@ export class Actor extends PandaNode {
   async loadAnims(
     animPaths: Record<string, string>,
     partName = "modelRoot",
+    options: { allowMissing?: boolean } = {},
   ): Promise<void> {
     const partDef = this._parts.get(partName);
     if (!partDef) throw new Error(`Part not found: ${partName}`);
@@ -119,7 +120,9 @@ export class Actor extends PandaNode {
             });
           },
           () => {
-            console.warn(`Failed to load animation ${path} for ${this.name}`);
+            if (!options.allowMissing) {
+              console.warn(`Failed to load animation ${path} for ${this.name}`);
+            }
           },
         ),
       );

@@ -11,7 +11,6 @@ import { TextAlignment } from "../text";
 import { TextNode } from "../text/TextNode";
 import { BaseLoader } from "./BaseLoader";
 
-// Train track configuration from CashbotHQExterior.py
 const TRACK_Z = -67;
 const TRAIN_TRACKS: {
   start: ReadonlyVec3;
@@ -35,12 +34,10 @@ const TRAIN_TRACKS: {
   },
 ];
 
-// Mint elevator sign text (from TTLocalizer)
 const MINT_NAMES = ["Coin Mint", "Dollar Mint", "Bullion Mint"];
 
 /**
- * Cashbot Cog HQ Loader.
- * Handles loading for CashbotHQ (Train Yard) and CashbotLobby.
+ * Cashbot HQ
  */
 export class CashbotCogHQLoader extends BaseLoader {
   private trains: Train[] = [];
@@ -85,9 +82,7 @@ export class CashbotCogHQLoader extends BaseLoader {
   }
 
   private async loadPlaceGeom(): Promise<void> {
-    // Mask off the last 2 digits to match zone constants
     const baseZone = this.zoneId - (this.zoneId % 100);
-
     if (baseZone === ZONE_ID_CASHBOT_HQ) {
       await this.loadCashbotHQExterior();
     } else if (baseZone === ZONE_ID_CASHBOT_LOBBY) {
@@ -116,7 +111,6 @@ export class CashbotCogHQLoader extends BaseLoader {
 
   /**
    * Sets up the three mint elevators.
-   * Mirrors DistributedMintElevatorExt.setupElevator() and setMintId()
    */
   private async setupMintElevators(): Promise<void> {
     const elevatorModel = await this.loader.loadModel(
@@ -125,7 +119,6 @@ export class CashbotCogHQLoader extends BaseLoader {
 
     const font = await this.loader.loadFont(SUIT_FONT_PATH);
 
-    // Mint ID to origin ID mapping from DistributedMintElevatorExt.setMintId()
     // CashbotMintIntA -> 1, CashbotMintIntB -> 2, CashbotMintIntC -> 0
     const originIds = [1, 2, 0];
 
@@ -189,7 +182,6 @@ export class CashbotCogHQLoader extends BaseLoader {
 
   /**
    * Sets up the animated trains.
-   * Mirrors CashbotHQExterior.load()
    */
   private async setupTrains(): Promise<void> {
     for (let i = 0; i < TRAIN_TRACKS.length; i++) {
@@ -222,7 +214,6 @@ export class CashbotCogHQLoader extends BaseLoader {
 
   /**
    * Sets up the CFO elevator in the Cashbot HQ Lobby.
-   * Mirrors DistributedCFOElevator.setupElevator()
    */
   private async setupLobbyElevator(): Promise<void> {
     const elevatorModel = await this.loader.loadModel(
@@ -235,7 +226,6 @@ export class CashbotCogHQLoader extends BaseLoader {
     const locator = this.scene.find("**/elevator_locator");
     if (locator) {
       elevator.reparentTo(locator);
-      // Note: CFO elevator doesn't rotate (unlike VP elevator)
     } else {
       console.warn("CashbotCogHQLoader: Could not find elevator_locator");
     }

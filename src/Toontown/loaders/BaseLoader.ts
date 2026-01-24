@@ -59,12 +59,16 @@ export class BaseLoader implements SceneLoader {
 
   enter(): void {
     // this.avatars.forEach((avatar) => avatar.enter());
-    this.animProps.forEach((prop) => prop.enter());
+    this.animProps.forEach((prop) => {
+      prop.enter();
+    });
   }
 
   exit(): void {
     // this.avatars.forEach((avatar) => avatar.enter());
-    this.animProps.forEach((prop) => prop.exit());
+    this.animProps.forEach((prop) => {
+      prop.exit();
+    });
   }
 
   getDropPoints(): readonly [ReadonlyVec3, number][] {

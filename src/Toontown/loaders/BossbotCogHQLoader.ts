@@ -10,8 +10,6 @@ import { TextAlignment } from "../text";
 import { TextNode } from "../text/TextNode";
 import { BaseLoader } from "./BaseLoader";
 
-// Sign configuration from BossbotCogHQLoader.makeSigns()
-// Maps topStr, signStr to the text to display
 const SIGN_CONFIG: {
   topStr: string;
   signStr: string;
@@ -24,7 +22,6 @@ const SIGN_CONFIG: {
   { topStr: "GateHouse", signStr: "Sign_5", text: "THE CLUBHOUSE" },
 ];
 
-// Cog kart positions from BossbotHQDataAI.createCogKarts()
 const KART_POSITIONS: { pos: ReadonlyVec3; hpr: ReadonlyVec3 }[] = [
   {
     pos: vec3.fromValues(154.762, 37.169, 0),
@@ -43,8 +40,7 @@ const KART_POSITIONS: { pos: ReadonlyVec3; hpr: ReadonlyVec3 }[] = [
 const SIGN_SCALE = 1.12;
 
 /**
- * Bossbot Cog HQ Loader.
- * Handles loading for BossbotHQ (Golf Hub) and BossbotLobby (Clubhouse/Courtyard).
+ * Bossbot HQ
  */
 export class BossbotCogHQLoader extends BaseLoader {
   constructor(
@@ -53,7 +49,6 @@ export class BossbotCogHQLoader extends BaseLoader {
     private zoneId: number,
   ) {
     super(scene, loader);
-    // Cog HQs don't use DNA storage files
     this.storageDNAFiles = [];
     this.dnaFile = null;
     this.skyFile = "phase_9/models/cogHQ/cog_sky";
@@ -77,7 +72,6 @@ export class BossbotCogHQLoader extends BaseLoader {
 
   private async loadPlaceGeom(): Promise<void> {
     const baseZone = this.zoneId - (this.zoneId % 100);
-
     if (baseZone === ZONE_ID_BOSSBOT_HQ) {
       await this.loadBossbotHQ();
     } else if (baseZone === ZONE_ID_BOSSBOT_LOBBY) {
@@ -121,7 +115,6 @@ export class BossbotCogHQLoader extends BaseLoader {
 
   /**
    * Creates the sign text on gates and tunnels.
-   * Mirrors BossbotCogHQLoader.makeSigns()
    */
   private async makeSigns(): Promise<void> {
     const font = await this.loader.loadFont(SUIT_FONT_PATH);
@@ -173,7 +166,6 @@ export class BossbotCogHQLoader extends BaseLoader {
 
   /**
    * Sets up the cog golf karts.
-   * Mirrors BossbotHQDataAI.createCogKarts() and DistributedCogKart
    */
   private async setupCogKarts(): Promise<void> {
     const kartModel = await this.loader.loadModel(
@@ -209,7 +201,6 @@ export class BossbotCogHQLoader extends BaseLoader {
 
   /**
    * Sets up the CEO elevator in the Bossbot Lobby.
-   * Mirrors DistributedBBElevator.setupElevator()
    */
   private async setupLobbyElevator(): Promise<void> {
     const elevatorModel = await this.loader.loadModel(

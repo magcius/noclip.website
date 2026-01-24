@@ -138,17 +138,7 @@ function getCullBinName(obj: CullableObject): string {
 
 function getTransparencyMode(obj: CullableObject): TransparencyMode {
   const transparencyAttrib = obj.renderState.get(TransparencyAttrib);
-  if (transparencyAttrib) return transparencyAttrib.mode;
-  if (obj.geomData === null) {
-    // If we're sorting a node instead of a specific geom, check for any transparency on child geoms
-    const geom = obj.geomNode.geoms.find(
-      (geom) =>
-        (geom.state?.get(TransparencyAttrib)?.mode ?? TransparencyMode.None) !==
-        TransparencyMode.None,
-    );
-    if (geom) return geom.state!.get(TransparencyAttrib)!.mode;
-  }
-  return TransparencyMode.None;
+  return transparencyAttrib?.mode ?? TransparencyMode.None;
 }
 
 const ALPHA_BINARY_LEVEL = 0.5;

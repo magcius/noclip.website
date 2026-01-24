@@ -165,13 +165,13 @@ export class Toon extends Avatar {
 
       // Swap muzzles (rabbit muzzles are reversed)
       if ((muzzleLen === "s" && !reversed) || (muzzleLen === "l" && reversed)) {
-        head
-          .findAllMatches("**/muzzle-long*")
-          .forEach((node) => node.removeNode());
+        head.findAllMatches("**/muzzle-long*").forEach((node) => {
+          node.removeNode();
+        });
       } else {
-        head
-          .findAllMatches("**/muzzle-short*")
-          .forEach((node) => node.removeNode());
+        head.findAllMatches("**/muzzle-short*").forEach((node) => {
+          node.removeNode();
+        });
       }
     }
 
@@ -224,7 +224,9 @@ export class Toon extends Avatar {
 
     // Load animations for dog heads only
     if (this._species === ToonSpecies.Dog) {
-      await this.loadAnims(buildAnimDict(headModelPrefix), "head");
+      await this.loadAnims(buildAnimDict(headModelPrefix), "head", {
+        allowMissing: true,
+      });
     }
   }
 
@@ -245,7 +247,9 @@ export class Toon extends Avatar {
     const torsoModelPrefix = TORSO_MODEL_PREFIXES[style];
     if (!torsoModelPrefix) throw new Error(`Invalid torso style: ${style}`);
     await this.loadModel(`phase_3${torsoModelPrefix}1000`, "torso");
-    await this.loadAnims(buildAnimDict(torsoModelPrefix), "torso");
+    await this.loadAnims(buildAnimDict(torsoModelPrefix), "torso", {
+      allowMissing: true,
+    });
     this.pose("neutral", 0, "torso");
 
     // Set torso color
@@ -336,7 +340,9 @@ export class Toon extends Avatar {
     const legModelPrefix = LEG_MODEL_PREFIXES[style];
     if (!legModelPrefix) throw new Error(`Invalid legs style: ${style}`);
     await this.loadModel(`phase_3${legModelPrefix}1000`, "legs");
-    await this.loadAnims(buildAnimDict(legModelPrefix), "legs");
+    await this.loadAnims(buildAnimDict(legModelPrefix), "legs", {
+      allowMissing: true,
+    });
     this.pose("neutral", 0, "legs");
 
     // Set legs color

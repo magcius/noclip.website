@@ -128,7 +128,6 @@ export class LawbotCogHQLoader extends BaseLoader {
 
   /**
    * Sets up the CJ (Chief Justice) elevator in the Courthouse Lobby.
-   * Mirrors DistributedCJElevator.setupElevator()
    */
   private async setupLobbyElevator(): Promise<void> {
     const elevatorModel = await this.loader.loadModel(
@@ -149,7 +148,6 @@ export class LawbotCogHQLoader extends BaseLoader {
 
   /**
    * Sets up the four DA's Office elevators.
-   * Mirrors DistributedLawOfficeElevatorExt.setupElevator() and setEntranceId()
    */
   private async setupOfficeElevators(): Promise<void> {
     const elevatorModel = await this.loader.loadModel(

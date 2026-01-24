@@ -8,15 +8,11 @@ import { SafeZoneLoader } from "./SafeZoneLoader";
 
 const BOSSBOT_SIGN_SCALE = 1.5;
 
-// Golf kart model path
 const GOLF_KART_MODEL = "phase_6/models/golf/golf_cart3";
-
-// Kart colors per golf course (RGB ranges from GolfGlobals.KartColors)
-// Course 0 = Front Three (Green), Course 1 = Middle Six (Yellow), Course 2 = Back Nine (Red)
 const KART_COLORS: ReadonlyVec3[] = [
-  vec3.fromValues(25 / 255, 172 / 255, 42 / 255), // Course 0: Green (midpoint of ranges)
-  vec3.fromValues(207 / 255, 207 / 255, 60 / 255), // Course 1: Yellow
-  vec3.fromValues(207 / 255, 55 / 255, 55 / 255), // Course 2: Red
+  vec3.fromValues(25 / 255, 172 / 255, 42 / 255), // Front Three (Green)
+  vec3.fromValues(207 / 255, 207 / 255, 60 / 255), // Middle Six (Yellow)
+  vec3.fromValues(207 / 255, 55 / 255, 55 / 255), // Back Nine (Red)
 ];
 
 /**
@@ -132,7 +128,7 @@ export class GZSafeZoneLoader extends SafeZoneLoader {
       const pos = worldTransform.pos;
       const hpr = worldTransform.hpr;
 
-      // Lift the kart off the ground slightly (from original code: pos += Point3(0, 0, 0.05))
+      // Lift the kart off the ground slightly
       const adjustedPos = vec3.fromValues(pos[0], pos[1], pos[2] + 0.05);
 
       // Clone and position the kart
@@ -150,8 +146,6 @@ export class GZSafeZoneLoader extends SafeZoneLoader {
       // Hide the DNA placeholder node
       kartNode.hide();
     }
-
-    console.log(`GZSafeZoneLoader: Set up ${golfKartNodes.length} golf karts`);
   }
 
   /**
@@ -169,7 +163,6 @@ export class GZSafeZoneLoader extends SafeZoneLoader {
     // Color the cart base with a desaturated version
     const cartBase = kart.find("**/cart_base*");
     if (cartBase) {
-      // Desaturate by reducing saturation by 1/3 (from original HSV manipulation)
       const desaturated = this.desaturateColor(color, 0.67);
       cartBase.setColorScale(
         vec4.fromValues(desaturated[0], desaturated[1], desaturated[2], 1),

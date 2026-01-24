@@ -11,18 +11,12 @@ import { TextAlignment } from "../text";
 import { TextNode } from "../text/TextNode";
 import { BaseLoader } from "./BaseLoader";
 
-// Used to compensate for scaling of Cog tunnel sign's
-// original aspect ratio of 1125x813 to a uniform ratio,
-// scale z by factor of 0.7227
 const ASPECT_SF = 0.7227;
-
 const COG_SIGN_SF = 23;
 const ELEVATOR_SIGN_SF = 15;
 
 /**
- * Sellbot Cog HQ Loader.
- * Handles loading for SellbotHQExterior, SellbotHQLobby, and SellbotFactoryExterior
- * based on the zone ID.
+ * Sellbot HQ
  */
 export class SellbotCogHQLoader extends BaseLoader {
   private cogSignModel: PandaNode | null = null;
@@ -33,7 +27,6 @@ export class SellbotCogHQLoader extends BaseLoader {
     private zoneId: number,
   ) {
     super(scene, loader);
-    // Cog HQs don't use DNA storage files
     this.storageDNAFiles = [];
     this.dnaFile = null;
     this.skyFile = "phase_9/models/cogHQ/cog_sky";
@@ -53,18 +46,12 @@ export class SellbotCogHQLoader extends BaseLoader {
     this.cogSignModel = await this.loader.loadModel(
       "phase_4/models/props/sign_sellBotHeadHQ",
     );
-
-    // Load place geometry based on zone
     await this.loadPlaceGeom();
-
-    // Load sky (handled by BaseLoader)
     await super.load();
   }
 
   private async loadPlaceGeom(): Promise<void> {
-    // Mask off the last 2 digits to match zone constants
     const baseZone = this.zoneId - (this.zoneId % 100);
-
     if (baseZone === ZONE_ID_SELLBOT_HQ) {
       await this.loadSellbotHQExterior();
     } else if (baseZone === ZONE_ID_SELLBOT_FACTORY_EXT) {
@@ -248,14 +235,12 @@ export class SellbotCogHQLoader extends BaseLoader {
 
   /**
    * Sets up the two factory exterior elevators.
-   * Mirrors DistributedFactoryElevatorExt.setupElevator()
    */
   private async setupFactoryElevators(): Promise<void> {
     const elevatorModel = await this.loader.loadModel(
       "phase_4/models/modules/elevator",
     );
 
-    // Elevator positions from DistributedFactoryElevatorExt.setEntranceId()
     const elevatorPositions: {
       pos: [number, number, number];
       hpr: [number, number, number];
@@ -274,7 +259,7 @@ export class SellbotCogHQLoader extends BaseLoader {
         vec3.fromValues(1.05, 1.05, 1.05),
       );
 
-      // Remove light panels (not used on factory elevators)
+      // Remove light panels
       elevator.find("**/light_panel")?.removeNode();
       elevator.find("**/light_panel_frame")?.removeNode();
     }
@@ -497,7 +482,6 @@ export class SellbotCogHQLoader extends BaseLoader {
 
   /**
    * Sets up the boss elevator in the Sellbot HQ Lobby.
-   * Mirrors DistributedBossElevator.setupElevator()
    */
   private async setupLobbyElevator(): Promise<void> {
     const elevatorModel = await this.loader.loadModel(

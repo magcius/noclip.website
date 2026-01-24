@@ -64,8 +64,6 @@ export class OZSafeZoneLoader extends SafeZoneLoader {
 
   /**
    * Loads and sets up the geyser animation.
-   * Note: TexProjectorEffect is not yet implemented, so the UV animation
-   * won't work until that's available.
    */
   private async setupGeyser(): Promise<void> {
     const geyserPlacer = this.scene.find("**/geyser*");
@@ -107,8 +105,6 @@ export class OZSafeZoneLoader extends SafeZoneLoader {
 
   /**
    * Loads and sets up the waterfall animation.
-   * Note: TexProjectorEffect is not yet implemented, so the UV animation
-   * won't work until that's available.
    */
   private async setupWaterfall(): Promise<void> {
     const waterfallPlacer = this.scene.find("**/waterfall*");

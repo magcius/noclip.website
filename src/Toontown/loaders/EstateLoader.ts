@@ -52,8 +52,7 @@ const CHIMNEY_COLORS = [
 ];
 
 /**
- * Estate loader.
- * Loads the estate scene with houses, mailboxes, and doors.
+ * Estate
  */
 export class EstateLoader extends BaseLoader {
   constructor(scene: PandaNode, loader: ToontownLoader) {
