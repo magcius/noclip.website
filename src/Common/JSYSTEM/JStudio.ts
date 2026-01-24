@@ -7,6 +7,7 @@ import { JSystemFileReaderHelper } from "./J3D/J3DLoader.js";
 import { GfxColor } from "../../gfx/platform/GfxPlatform";
 import { clamp, MathConstants } from "../../MathHelpers.js";
 import { Endianness } from "../../endian.js";
+import { JPAEmitterManager } from "./JPA";
 
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
@@ -1042,6 +1043,7 @@ class TParticleAdaptor extends TAdaptor {
 
     constructor(
         private system: TSystem,
+        private emitterMgr: JPAEmitterManager,
     ) { super(20); }
  
     public adaptor_do_PARTICLE(data: ParagraphData): void {
@@ -2066,6 +2068,7 @@ export abstract class TBlockObject {
 // This combines JStudio::TControl and JStudio::stb::TControl into a single class, for simplicity.
 export class TControl {
     public system: TSystem;
+    public particleManager: JPAEmitterManager;
     public msgControl: JMessage.TControl;
     public fvbControl = new FVB.TControl();
     public secondsPerFrame: number = 1 / 30.0;
@@ -2082,9 +2085,10 @@ export class TControl {
     // A special object that the STB file can use to suspend the demo (such as while waiting for player input)
     private controlObject = new TControlObject(this);
 
-    constructor(system: TSystem, msgControl: JMessage.TControl) {
+    constructor(system: TSystem, msgControl: JMessage.TControl, particleManager: JPAEmitterManager) {
         this.system = system;
         this.msgControl = msgControl;
+        this.particleManager = particleManager;
     }
 
     public isSuspended() { return this.suspendFrames > 0; }
@@ -2172,7 +2176,7 @@ export class TControl {
 
     public createParticleObject(blockObj: TBlockObject): STBObject | null {
         if (blockObj.type === 'JPTC') {
-            const adaptor = new TParticleAdaptor(this.system);
+            const adaptor = new TParticleAdaptor(this.system, this.particleManager);
             const obj = new TParticleObject(this, blockObj, adaptor);
     
             if (obj) { adaptor.adaptor_do_prepare(obj); }

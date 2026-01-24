@@ -224,7 +224,7 @@ export class dDemo_actor_c extends TActor {
                 return null;
             }
 
-            switch(this.stbDataId) {
+            switch (this.stbDataId) {
                 case 1: btpId = this.stbData.getInt16(1); break;
                 case 2: btpId = this.stbData.getInt16(2); break;
                 case 4: btpId = this.stbData.getInt32(1); break;
@@ -259,7 +259,7 @@ export class dDemo_actor_c extends TActor {
         }
 
         let btkId;
-        switch(this.stbDataId) {
+        switch (this.stbDataId) {
             case 2: btkId = this.stbData.getInt16(4); break;
             case 5: btkId = this.stbData.getInt32(6); break;
             case 6: btkId = this.stbData.getInt32(6); break;
@@ -353,7 +353,7 @@ export class dDemo_actor_c extends TActor {
     }
 
     override JSGDebugGetAnimationName(x: number): string | null {
-        if( this.debugGetAnimName ) { return this.debugGetAnimName(x); }
+        if (this.debugGetAnimName) { return this.debugGetAnimName(x); }
         else return null;
     }
 }
@@ -428,7 +428,7 @@ export class dDemo_manager_c {
     private parser: TParse;
     private system = new dDemo_system_c(this.globals);
     private messageControl = new JMessage.TControl(); // TODO
-    private control: TControl = new TControl(this.system, this.messageControl);
+    private control: TControl = new TControl(this.system, this.messageControl, this.globals.particleCtrl.emitterManager);
 
     constructor(
         private globals: dGlobals
@@ -530,7 +530,7 @@ export function dDemo_setDemoData(globals: dGlobals, dtFrames: number, actor: fo
 
         // Most actors which requires their own demo arc have demo/anim logic more complex than LegacyActor can handle.
         // If this branch is hit, it's likely a LegacyActor that needs to be converted to a full d_* Actor.
-        if( !arcName ) {
+        if (!arcName) {
             const name = globals.dStage__searchNameRev(actor.processName, actor.subtype);
             console.warn(`dDemo_setDemoData: Actor ${name} needs to pass a valid arcName. Animation disabled`);
             demoActor.flags &= ~EDemoActorFlags.HasAnim;

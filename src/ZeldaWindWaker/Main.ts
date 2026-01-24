@@ -882,6 +882,10 @@ class SceneDesc {
         context.destroyablePool.push(renderer);
         globals.renderer = renderer;
 
+        globals.particleCtrl = new dPa_control_c(renderer.renderCache);
+        globals.particleCtrl.createCommon(globals, JPA.parse(modelCache.getFileData(particleArchives[0])));
+        globals.particleCtrl.createRoomScene(globals, JPA.parse(modelCache.getFileData(particleArchives[1])));
+
         const pcId = fpcSCtRq_Request(framework, null, dProcName_e.d_s_play, null);
         assert(pcId !== null);
 
@@ -912,10 +916,6 @@ class SceneDesc {
             globals.mStayNo = Math.abs(this.roomList[0]);
 
         renderer.extraTextures = new ZWWExtraTextures(device, ZAtoon, ZBtoonEX);
-
-        globals.particleCtrl = new dPa_control_c(renderer.renderCache);
-        globals.particleCtrl.createCommon(globals, JPA.parse(modelCache.getFileData(particleArchives[0])));
-        globals.particleCtrl.createRoomScene(globals, JPA.parse(modelCache.getFileData(particleArchives[1])));
 
         // dStage_Create
         dKankyo_create(globals);
