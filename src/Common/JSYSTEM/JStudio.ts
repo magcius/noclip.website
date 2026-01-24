@@ -81,7 +81,7 @@ export namespace JMessage {
 export namespace JParticle {
     export class TControl {
         public JPTCCreateEmitter(userId: number, groupId: number, roomId: number): JPABaseEmitter | null { return null; };
-        public JPTCDeleteEmitter(emitter: JPABaseEmitter): JPABaseEmitter | null { return null; };
+        public JPTCDeleteEmitter(emitter: JPABaseEmitter): void { };
     }
 }
 
@@ -2384,7 +2384,7 @@ export class TControl {
 
     public createParticleObject(blockObj: TBlockObject): STBObject | null {
         if (blockObj.type === 'JPTC') {
-            const adaptor = new TParticleAdaptor(this, this.ptcControl!, this.system );
+            const adaptor = new TParticleAdaptor(this, this.ptcControl!, this.system);
             const obj = new TParticleObject(this, blockObj, adaptor);
 
             if (obj) { adaptor.adaptor_do_prepare(obj); }

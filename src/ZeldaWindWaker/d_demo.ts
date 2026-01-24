@@ -3,7 +3,7 @@ import { mat4, ReadonlyVec3, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
 import { LoopMode, TPT1, TTK1 } from "../Common/JSYSTEM/J3D/J3DLoader.js";
-import { JMessage, JStage, TActor, TCamera, TControl, TParse } from "../Common/JSYSTEM/JStudio.js";
+import { JMessage, JParticle, JStage, TActor, TCamera, TControl, TParse } from "../Common/JSYSTEM/JStudio.js";
 import { getMatrixAxisY } from "../MathHelpers.js";
 import { assert } from "../util.js";
 import { ResType } from "./d_resorce.js";
@@ -11,6 +11,7 @@ import { mDoExt_McaMorf } from "./m_do_ext.js";
 import { dGlobals } from "./Main.js";
 import { cM_deg2s, cM_sht2d } from "./SComponent.js";
 import { fopAc_ac_c, fopAcM_fastCreate, fopAcM_searchFromName } from "./f_op_actor.js";
+import { JPABaseEmitter } from "../Common/JSYSTEM/JPA.js";
 
 export enum EDemoMode {
     None,
@@ -427,6 +428,22 @@ class dDemo_system_c implements JStage.TSystem {
     }
 }
 
+class dDemo_paControl_c extends JParticle.TControl {
+    constructor(private globals: dGlobals) {
+        super();
+    }
+
+    public override JPTCCreateEmitter(userID: number, groupID: number, roomId: number): JPABaseEmitter | null {
+        const emitter = this.globals.particleCtrl.set(this.globals, groupID, userID, null);
+        console.warn('Failed to create demo emitter', userID.toString(16), groupID);
+        return emitter;
+    }
+
+    public override JPTCDeleteEmitter(emitter: JPABaseEmitter): void {
+        this.globals.particleCtrl.emitterManager.forceDeleteEmitter(emitter);
+    }
+}
+
 export class dDemo_manager_c {
     private frame: number;
     private frameNoMsg: number;
@@ -436,14 +453,11 @@ export class dDemo_manager_c {
 
     private parser: TParse;
     private system = new dDemo_system_c(this.globals);
-    private messageControl = new JMessage.TControl(); // TODO
-    private control: TControl;
+    private ptcControl = new dDemo_paControl_c(this.globals);
+    private msgControl = new JMessage.TControl(); // TODO
+    private control: TControl = new TControl(this.system, this.msgControl, this.ptcControl);
 
-    constructor(
-        private globals: dGlobals
-    ) {
-        this.control = new TControl(this.system, this.messageControl, null);
-    }
+    constructor(private globals: dGlobals) { }
 
     public getName() { return this.name; }
     public getFrame() { return this.frame; }
