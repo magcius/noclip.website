@@ -1158,9 +1158,9 @@ class TParticleObject extends STBObject {
                 }
                 return;
 
-            // Unknown
-            case 0x2e: keyIdx = 18; debugger; break;
-            case 0x2f: keyIdx = 19; debugger; break;
+            // Fade in/out
+            case 0x2e: keyIdx = 18; break;
+            case 0x2f: keyIdx = 19; break;
 
             case 0x44: this.adaptor.adaptor_do_PARTICLE(data); return;
 
