@@ -1172,7 +1172,7 @@ class TParticleAdaptor extends TAdaptor {
         );
 
         if (adaptor.emitter !== null) {
-            adaptor.emitter.emitterCallBack = this.emitterCallback;
+            adaptor.emitter.emitterCallBack = adaptor.emitterCallback;
             adaptor.emitter.becomeImmortalEmitter();
             adaptor.fadeType = 1;
             adaptor.lifetime = duration;
