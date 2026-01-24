@@ -1,6 +1,3 @@
-// DNAStorage - Holds registered resources from DNA storage files
-// Resources are registered from storage DNA files and then looked up when loading scene DNA
-
 import type { ToontownLoader } from "../Loader";
 import type { TextFont } from "../text/TextAssembler";
 import type {

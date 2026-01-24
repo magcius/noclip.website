@@ -72,7 +72,10 @@ export class ToontownLoader implements Destroyable {
     }
   }
 
-  public async loadFile(name: string, options: { direct?: boolean } = {}): Promise<ArrayBufferSlice> {
+  public async loadFile(
+    name: string,
+    options: { direct?: boolean } = {},
+  ): Promise<ArrayBufferSlice> {
     let fileData: ArrayBufferSlice;
     if (!options.direct && USE_MULTIFILES) {
       const entry = this.manifest[name];

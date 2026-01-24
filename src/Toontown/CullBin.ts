@@ -205,7 +205,7 @@ export class BinCollector {
     this.bins.set("ground", new CullBinFixed()); // 14 (Toontown)
     this.bins.set("shadow", new CullBinFixed()); // 15 (Toontown)
     this.bins.set("opaque", new CullBinFrontToBack(viewMatrix)); // 20
-    this.bins.set("water", new CullBinFixed()); // 29
+    this.bins.set("water", new CullBinFixed()); // 29 (Toontown)
     this.bins.set("transparent", new CullBinBackToFront(viewMatrix)); // 30
     this.bins.set("fixed", new CullBinFixed()); // 40
     this.bins.set("unsorted", new CullBinUnsorted()); // 50

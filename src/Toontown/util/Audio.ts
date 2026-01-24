@@ -1,5 +1,5 @@
 import type { Sequencer, WorkletSynthesizer } from "spessasynth_lib";
-import type { ToontownLoader } from "./Loader";
+import type { ToontownLoader } from "../Loader";
 
 interface Player {
   ctx: AudioContext;

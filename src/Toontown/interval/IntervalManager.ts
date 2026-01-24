@@ -2,9 +2,6 @@ import type { Interval } from "./Interval";
 
 /**
  * Manages active intervals and steps them each frame.
- *
- * Call `step()` once per frame from your render loop to advance all
- * active intervals.
  */
 export class IntervalManager {
   private _intervals = new Map<string, Interval>();
@@ -40,7 +37,7 @@ export class IntervalManager {
 
   /**
    * Step all active intervals.
-   * Call this once per frame from your render loop.
+   * Called once per frame from the render loop.
    */
   step(): void {
     const toRemove: string[] = [];
@@ -76,5 +73,5 @@ export class IntervalManager {
   }
 }
 
-// Create and register the global interval manager
+// Global interval manager
 export const intervalManager = new IntervalManager();

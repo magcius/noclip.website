@@ -65,7 +65,7 @@ impl FontMeshLoader {
     ///
     /// # Arguments
     /// * `char_code` - Unicode code point
-    /// * `subdivisions` - Quality level for bezier curve tessellation (1-4 recommended)
+    /// * `subdivisions` - Number of subdivisions per curve (higher = smoother, default 20)
     #[wasm_bindgen]
     pub fn get_glyph_mesh(&self, char_code: u32, subdivisions: u8) -> Result<GlyphMesh, JsValue> {
         let face = self.parse()?;
@@ -100,6 +100,13 @@ impl FontMeshLoader {
     }
 
     /// Get the font height (ascender - descender)
+    #[wasm_bindgen]
+    pub fn get_height(&self) -> Result<f32, JsValue> {
+        let face = self.parse()?;
+        Ok(face.height() as f32 / face.units_per_em() as f32)
+    }
+
+    /// Get the recommended line height (ascender - descender + line_gap)
     #[wasm_bindgen]
     pub fn get_line_height(&self) -> Result<f32, JsValue> {
         let face = self.parse()?;

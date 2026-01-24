@@ -43,7 +43,6 @@ import { CalcBillboardFlags, calcBillboardMatrix } from "../MathHelpers";
 import { TextureMapping } from "../TextureHolder";
 import * as UI from "../ui";
 import type * as Viewer from "../viewer";
-import { getVolume, setVolume, startPlayback, stopPlayback } from "./Audio";
 import { addFrameTime, getFrameTime, resetFrameTime } from "./Common";
 import { BinCollector, type CullableObject } from "./CullBin";
 import {
@@ -89,6 +88,12 @@ import {
 } from "./Program";
 import { SceneGraphViewer } from "./SceneGraphViewer";
 import { expandToRGBA, getSamplerDescriptor } from "./Textures";
+import {
+  getVolume,
+  setVolume,
+  startPlayback,
+  stopPlayback,
+} from "./util/Audio";
 
 // Whether to open the scene graph viewer by default
 // (Useful for debugging)
