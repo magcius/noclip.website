@@ -1030,6 +1030,152 @@ class TMessageObject extends STBObject {
     }
 }
 
+
+//----------------------------------------------------------------------------------------------------------------------
+// Particle
+//----------------------------------------------------------------------------------------------------------------------
+class TParticleAdaptor extends TAdaptor {
+    private particleId: number = -1;
+    private parent: JStage.TObject | null = null;
+    private parentNodeID: number = -1;
+    private parentEnabled: boolean = false;
+
+    constructor(
+        private system: TSystem,
+    ) { super(20); }
+ 
+    public adaptor_do_PARTICLE(data: ParagraphData): void {
+        assert(data.dataOp === EDataOp.ObjectIdx);
+        this.particleId = data.value;
+        this.log(`SetParticleId: 0x${data.value!.toString(16).toUpperCase()}`);
+    }
+
+    public adaptor_do_PARENT(data: ParagraphData): void {
+        assert(data.dataOp === EDataOp.ObjectName);
+        this.log(`SetParent: ${data.value}`);
+        this.parent = this.system.JSGFindObject(data.value, JStage.EObject.PreExistingActor);
+    }
+
+    public adaptor_do_PARENT_NODE(data: ParagraphData): void {
+        this.log(`SetParentNode: ${data.value}`);
+        switch (data.dataOp) {
+            case EDataOp.ObjectName:
+                if (this.parent) {
+                    debugger; // TODO: Need to implement JSGFindNodeID in d_demo ( mModel->getModelData()->getJointName()->getIndex(name); )
+                    this.parentNodeID = this.parent.JSGFindNodeID(data.value);
+                }
+                break;
+            case EDataOp.ObjectIdx:
+                this.parentNodeID = data.value;
+                break;
+            default: assert(false);
+        }
+    }
+
+    public adaptor_do_PARENT_ENABLE(data: ParagraphData): void {
+        assert(data.dataOp === EDataOp.Immediate);
+        this.log(`SetParentEnable: ${data.valueInt}`);
+        this.parentEnabled = !!data.valueInt;
+    }
+
+    public override log(msg: string): void {
+        const tag = (this.particleId >= 0) ? `[JParticle: 0x${this.particleId.toString(16).toUpperCase()}]` : `[JParticle]`;
+        if (this.enableLogging) { console.debug(`${tag} ${msg}`); }
+    }
+}
+
+class TParticleObject extends STBObject {
+    override adaptor: TParticleAdaptor;
+
+    constructor(
+        control: TControl,
+        blockObj: TBlockObject,
+        adaptor: TParticleAdaptor,
+    ) { super(control, blockObj, adaptor) }
+
+    public override do_paragraph(file: Reader, dataSize: number, dataOffset: number, param: number): void {
+        const dataOp = (param & 0x1F) as EDataOp;
+        const cmdType = param >> 5;
+
+        let keyCount = 1;
+        let keyIdx;
+        let data = readData(dataOp, dataOffset, dataSize, file);
+
+        switch (cmdType) {
+            // Pos
+            case 0x09: keyIdx = 0; break;
+            case 0x0a: keyIdx = 1; break;
+            case 0x0b: keyIdx = 2; break;
+            case 0x0c: keyCount = 3; keyIdx = 0; break;
+
+            // Rot
+            case 0x0d: keyIdx = 3; break;
+            case 0x0e: keyIdx = 4; break;
+            case 0x0f: keyIdx = 5; break;
+            case 0x10: keyCount = 3; keyIdx = 3; break;
+
+            // Scale
+            case 0x11: keyIdx = 6; break;
+            case 0x12: keyIdx = 7; break;
+            case 0x13: keyIdx = 8; break;
+            case 0x14: keyCount = 3; keyIdx = 6; break;
+
+            // Color RGB
+            case 0x1d: keyIdx = 9; break;
+            case 0x1e: keyIdx = 10; break;
+            case 0x1f: keyIdx = 11; break;
+            case 0x20: keyIdx = 12; break;
+            case 0x21: keyCount = 3; keyIdx = 9; break;
+
+            // Color RGBA
+            case 0x22: keyCount = 4; keyIdx = 9; break;
+
+            // Color1 RGB
+            case 0x45: keyIdx = 13; break;
+            case 0x46: keyIdx = 14; break;
+            case 0x47: keyIdx = 15; break;
+            case 0x48: keyIdx = 16; break;
+            case 0x49: keyCount = 3; keyIdx = 13; break;
+
+            // Color1 RGBA
+            case 0x4a: keyCount = 4; keyIdx = 13; break;
+
+            // Parents
+            case 0x30: this.adaptor.adaptor_do_PARENT(data); return;
+            case 0x31: this.adaptor.adaptor_do_PARENT_NODE(data); return;
+            case 0x32:
+                keyIdx = EActorTrack.Parent;
+                if (dataOp === EDataOp.FuncValIdx || dataOp === EDataOp.FuncValName) {
+                    debugger;
+                    this.adaptor.adaptor_setVariableValue(this, keyIdx, data);
+                    this.adaptor.variableValues[keyIdx].setOutput((enabled, adaptor) => {
+                        (adaptor as TActorAdaptor).adaptor_do_PARENT_ENABLE({ dataOp:EDataOp.Immediate, value: enabled, valueInt: enabled });
+                    });
+                } else {
+                    this.adaptor.adaptor_do_PARENT_ENABLE(data);
+                }
+                return;
+
+            // Unknown
+            case 0x2e: keyIdx = 18; debugger; break;
+            case 0x2f: keyIdx = 19; debugger; break;
+
+            case 0x44: this.adaptor.adaptor_do_PARTICLE(data); return;
+
+            default:
+                console.debug('Unsupported TParticle update: ', cmdType, ' ', dataOp);
+                debugger;
+                return;
+        }
+
+        let keyData = [];
+        for (let i = 0; i < keyCount; i++) {
+            keyData[i] = readData(dataOp, dataOffset + i * 4, dataSize, file);
+            this.adaptor.adaptor_setVariableValue(this, keyIdx + i, keyData[i]);
+        }
+    }
+}
+
 //----------------------------------------------------------------------------------------------------------------------
 // Parsing helpers
 //----------------------------------------------------------------------------------------------------------------------
@@ -2024,6 +2170,18 @@ export class TControl {
         return null;
     }
 
+    public createParticleObject(blockObj: TBlockObject): STBObject | null {
+        if (blockObj.type === 'JPTC') {
+            const adaptor = new TParticleAdaptor(this.system);
+            const obj = new TParticleObject(this, blockObj, adaptor);
+    
+            if (obj) { adaptor.adaptor_do_prepare(obj); }
+            this.objects.push(obj);
+            return obj;
+        }
+        return null;
+    }
+
     public destroyObject_all() {
         this.objects = [];
         this.fvbControl.destroyObject_all();
@@ -2063,6 +2221,7 @@ export class TParse {
 
         let obj = this.control.createStageObject(blockObj);
         if(!obj) { obj = this.control.createMessageObject(blockObj); } 
+        if(!obj) { obj = this.control.createParticleObject(blockObj); } 
 
         if (!obj) {
             if (flags & 0x40) {
