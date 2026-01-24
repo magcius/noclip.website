@@ -1104,6 +1104,24 @@ class TParticleAdaptor extends TAdaptor {
     ) { super(20); }
 
     public override adaptor_do_prepare(obj: STBObject): void {
+        this.variableValues[EParticleTrack.PosX].setValue_immediate(0.0);
+        this.variableValues[EParticleTrack.PosY].setValue_immediate(0.0);
+        this.variableValues[EParticleTrack.PosZ].setValue_immediate(0.0);
+        this.variableValues[EParticleTrack.RotX].setValue_immediate(0.0);
+        this.variableValues[EParticleTrack.RotY].setValue_immediate(0.0);
+        this.variableValues[EParticleTrack.RotZ].setValue_immediate(0.0);
+        this.variableValues[EParticleTrack.ScaleX].setValue_immediate(1.0);
+        this.variableValues[EParticleTrack.ScaleY].setValue_immediate(1.0);
+        this.variableValues[EParticleTrack.ScaleZ].setValue_immediate(1.0);
+        this.variableValues[EParticleTrack.ColorR].setValue_immediate(255.0);
+        this.variableValues[EParticleTrack.ColorG].setValue_immediate(255.0);
+        this.variableValues[EParticleTrack.ColorB].setValue_immediate(255.0);
+        this.variableValues[EParticleTrack.ColorA].setValue_immediate(255.0);
+        this.variableValues[EParticleTrack.Color1R ].setValue_immediate(255.0);
+        this.variableValues[EParticleTrack.Color1G ].setValue_immediate(255.0);
+        this.variableValues[EParticleTrack.Color1B ].setValue_immediate(255.0);
+        this.variableValues[EParticleTrack.Color1A ].setValue_immediate(255.0);
+
         this.variableValues[EParticleTrack.FadeIn].setOutput(this.TVVOOn_BEGIN_FADE_IN);
         this.variableValues[EParticleTrack.FadeOut].setOutput(this.TVVOOn_END_FADE_OUT);
     }
