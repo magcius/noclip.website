@@ -3,7 +3,7 @@ import { mat4, ReadonlyVec3, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
 import { LoopMode, TPT1, TTK1 } from "../Common/JSYSTEM/J3D/J3DLoader.js";
-import { JMessage, JStage, TActor, TCamera, TControl, TParse, TSystem } from "../Common/JSYSTEM/JStudio.js";
+import { JMessage, JParticle, JStage, TActor, TCamera, TControl, TParse } from "../Common/JSYSTEM/JStudio.js";
 import { getMatrixAxisY } from "../MathHelpers.js";
 import { assert } from "../util.js";
 import { ResType } from "./d_resorce.js";
@@ -11,6 +11,7 @@ import { mDoExt_McaMorf } from "./m_do_ext.js";
 import { dGlobals } from "./Main.js";
 import { cM_deg2s, cM_sht2d } from "./SComponent.js";
 import { fopAc_ac_c, fopAcM_fastCreate, fopAcM_searchFromName } from "./f_op_actor.js";
+import { JPABaseEmitter } from "../Common/JSYSTEM/JPA.js";
 
 export enum EDemoMode {
     None,
@@ -224,7 +225,7 @@ export class dDemo_actor_c extends TActor {
                 return null;
             }
 
-            switch(this.stbDataId) {
+            switch (this.stbDataId) {
                 case 1: btpId = this.stbData.getInt16(1); break;
                 case 2: btpId = this.stbData.getInt16(2); break;
                 case 4: btpId = this.stbData.getInt32(1); break;
@@ -259,7 +260,7 @@ export class dDemo_actor_c extends TActor {
         }
 
         let btkId;
-        switch(this.stbDataId) {
+        switch (this.stbDataId) {
             case 2: btkId = this.stbData.getInt16(4); break;
             case 5: btkId = this.stbData.getInt32(6); break;
             case 6: btkId = this.stbData.getInt32(6); break;
@@ -282,8 +283,7 @@ export class dDemo_actor_c extends TActor {
     public override JSGGetName() { return this.name; }
 
     public override JSGGetNodeTransformation(nodeId: number, mtx: mat4): number {
-        debugger; // I think this may be one of the shapeInstanceState matrices instead
-        mat4.copy(mtx, this.model.modelMatrix);
+        mat4.copy(mtx, this.model.shapeInstanceState.jointToWorldMatrixArray[nodeId]);
         return 1;
     }
 
@@ -352,13 +352,22 @@ export class dDemo_actor_c extends TActor {
         this.flags |= EDemoActorFlags.HasTexFrame;
     }
 
+    public override JSGFindNodeID(name: string): number {
+        const joints = this.model.modelData.bmd.jnt1.joints;
+        for (let i = 0; i < joints.length; i++) {
+            if (joints[i].name === name)
+                return i;
+        }
+        return -1;
+    }
+
     override JSGDebugGetAnimationName(x: number): string | null {
-        if( this.debugGetAnimName ) { return this.debugGetAnimName(x); }
+        if (this.debugGetAnimName) { return this.debugGetAnimName(x); }
         else return null;
     }
 }
 
-class dDemo_system_c implements TSystem {
+class dDemo_system_c implements JStage.TSystem {
     private activeCamera: dDemo_camera_c | null;
     private actors: dDemo_actor_c[] = [];
     // private ambient: dDemo_ambient_c;
@@ -418,6 +427,23 @@ class dDemo_system_c implements TSystem {
     }
 }
 
+// noclip modification: Allow the game to fully control creation/deletion of emitters. See comment above JParticle.TControl
+class dDemo_paControl_c extends JParticle.TControl {
+    constructor(private globals: dGlobals) {
+        super();
+    }
+
+    public override JPTCCreateEmitter(userID: number, groupID: number, roomId: number): JPABaseEmitter | null {
+        const emitter = this.globals.particleCtrl.set(this.globals, groupID, userID, null);
+        console.warn('Failed to create demo emitter', userID.toString(16), groupID);
+        return emitter;
+    }
+
+    public override JPTCDeleteEmitter(emitter: JPABaseEmitter): void {
+        this.globals.particleCtrl.emitterManager.forceDeleteEmitter(emitter);
+    }
+}
+
 export class dDemo_manager_c {
     private frame: number;
     private frameNoMsg: number;
@@ -427,12 +453,11 @@ export class dDemo_manager_c {
 
     private parser: TParse;
     private system = new dDemo_system_c(this.globals);
-    private messageControl = new JMessage.TControl(); // TODO
-    private control: TControl = new TControl(this.system, this.messageControl);
+    private ptcControl = new dDemo_paControl_c(this.globals);
+    private msgControl = new JMessage.TControl(); // TODO
+    private control: TControl = new TControl(this.system, this.msgControl, this.ptcControl);
 
-    constructor(
-        private globals: dGlobals
-    ) { }
+    constructor(private globals: dGlobals) { }
 
     public getName() { return this.name; }
     public getFrame() { return this.frame; }
@@ -530,7 +555,7 @@ export function dDemo_setDemoData(globals: dGlobals, dtFrames: number, actor: fo
 
         // Most actors which requires their own demo arc have demo/anim logic more complex than LegacyActor can handle.
         // If this branch is hit, it's likely a LegacyActor that needs to be converted to a full d_* Actor.
-        if( !arcName ) {
+        if (!arcName) {
             const name = globals.dStage__searchNameRev(actor.processName, actor.subtype);
             console.warn(`dDemo_setDemoData: Actor ${name} needs to pass a valid arcName. Animation disabled`);
             demoActor.flags &= ~EDemoActorFlags.HasAnim;

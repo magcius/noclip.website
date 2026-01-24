@@ -61,7 +61,7 @@ function setTextureMappingIndirect(m: GXTextureMapping, flipY: boolean): void {
 }
 
 export class dPa_control_c {
-    private emitterManager: JPAEmitterManager;
+    public emitterManager: JPAEmitterManager;
     private drawInfo = new JPADrawInfo();
     private jpacData: JPACData[] = [];
     private resourceDatas = new Map<number, JPAResourceData>();

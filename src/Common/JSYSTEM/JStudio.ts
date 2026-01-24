@@ -7,22 +7,20 @@ import { JSystemFileReaderHelper } from "./J3D/J3DLoader.js";
 import { GfxColor } from "../../gfx/platform/GfxPlatform";
 import { clamp, MathConstants } from "../../MathHelpers.js";
 import { Endianness } from "../../endian.js";
+import { JPABaseEmitter, JPAEmitterCallBack, JPAEmitterManager } from "./JPA";
+import { colorFromRGBA } from "../../Color";
 
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
 const scratchVec3c = vec3.create();
-
-// TODO: Setup the JMessage system in a separate file
-export namespace JMessage {
-    export class TControl {
-        public setMessageCode(packed: number): boolean { return true; };
-    }
-}
+const scratchMat4a = mat4.create();
+const scratchMat4b = mat4.create();
 
 //----------------------------------------------------------------------------------------------------------------------
-// STB Objects
-// These are created an managed by the game. Each Stage Object has a corresponding STB Object, connected by an Adaptor. 
-// The STB objects are manipulated by Sequences from the STB file each frame, and update the Stage Object via Adaptor.
+// JStage
+// Manages actors, cameras, lights, etc. in a scene. The game provides a method of finding and/or creating the objects, 
+// and then JStage modifies them according to cutscene data. 
+// NOTE: JStage, JMessage, etc are separate from JStudio. They'd be in separate files if they weren't so small. 
 //----------------------------------------------------------------------------------------------------------------------
 export namespace JStage {
     export enum EObject {
@@ -54,15 +52,37 @@ export namespace JStage {
             return 0;
         }
     }
+
+    //------------------------------------------------------------------------------------------------------------------
+    // System
+    // The main interface between a game and JStage. Provides a method of finding or creating objects that will then be 
+    // modified by a cutscene. Each game should override JSGFindObject() to supply or create objects for manipulation. 
+    //------------------------------------------------------------------------------------------------------------------
+    export interface TSystem {
+        JSGFindObject(objId: string, objType: JStage.EObject): JStage.TObject | null;
+    }
 }
 
 //----------------------------------------------------------------------------------------------------------------------
-// System
-// The main interface between a game and JStudio. Provides a method of finding or creating objects that will then be 
-// modified by a cutscene. Each game should override JSGFindObject() to supply or create objects for manipulation. 
+// JMessage
 //----------------------------------------------------------------------------------------------------------------------
-export interface TSystem {
-    JSGFindObject(objId: string, objType: JStage.EObject): JStage.TObject | null;
+export namespace JMessage {
+    export class TControl {
+        public setMessageCode(packed: number): boolean { return true; };
+    }
+}
+
+//----------------------------------------------------------------------------------------------------------------------
+// JParticle
+// noclip modification: JStudio uses only the generic JPAEmitterManager to create/destroy emitters. The game manages 
+//   particle resources using JPAResourceManager which is shared with JPAEmitterManager. Instead, we allow the game to 
+//   control emitter creation/deletion via callbacks.
+//----------------------------------------------------------------------------------------------------------------------
+export namespace JParticle {
+    export class TControl {
+        public JPTCCreateEmitter(userId: number, groupId: number, roomId: number): JPABaseEmitter | null { return null; };
+        public JPTCDeleteEmitter(emitter: JPABaseEmitter): void { };
+    }
 }
 
 //----------------------------------------------------------------------------------------------------------------------
@@ -210,11 +230,11 @@ abstract class TAdaptor {
         public enableLogging = true,
     ) { }
 
-    public adaptor_do_prepare(obj: STBObject): void {};
-    public adaptor_do_begin(obj: STBObject): void {};
-    public adaptor_do_end(obj: STBObject): void {};
-    public adaptor_do_update(obj: STBObject, frameCount: number): void {};
-    public adaptor_do_data(obj: STBObject, id: number | null, data: DataView): void {};
+    public adaptor_do_prepare(obj: STBObject): void {}
+    public adaptor_do_begin(obj: STBObject): void {}
+    public adaptor_do_end(obj: STBObject): void {}
+    public adaptor_do_update(obj: STBObject, frameCount: number): void {}
+    public adaptor_do_data(obj: STBObject, id: number | null, data: DataView): void {}
 
     // Set a single VariableValue update function, with the option of using FuncVals 
     public adaptor_setVariableValue(obj: STBObject, keyIdx: number, data: ParagraphData) {
@@ -483,7 +503,7 @@ abstract class STBObject {
             case 0x3: debugger; break;
 
             // Raw Data (no ID) 
-            case 0x80: 
+            case 0x80:
                 const data = file.buffer.createDataView(dataOffset, dataSize);
                 this.do_data(null, data);
                 break;
@@ -558,7 +578,7 @@ export abstract class TActor extends JStage.TObject {
     public JSGGetTextureAnimationFrame(): number { return 0.0; }
     public JSGSetTextureAnimationFrame(x: number): void { }
     public JSGGetTextureAnimationFrameMax(): number { return 0.0; }
-    
+
     public JSGDebugGetAnimationName(x: number): string | null { return null; }
 }
 
@@ -571,7 +591,7 @@ class TActorAdaptor extends TAdaptor {
     public animTexMode: number = 0; // See computeAnimFrame()
 
     constructor(
-        private system: TSystem,
+        private system: JStage.TSystem,
         public override object: TActor,
     ) { super(14); }
 
@@ -715,9 +735,9 @@ class TActorAdaptor extends TAdaptor {
     public adaptor_do_ANIMATION(data: ParagraphData): void {
         assert(data.dataOp === EDataOp.ObjectIdx);
         const animName = this.object.JSGDebugGetAnimationName(data.value);
-        if( animName )
+        if (animName)
             this.log(`SetAnimation: ${animName}`);
-        else 
+        else
             this.log(`SetAnimation: ${(data.value) & 0xFFFF} (${(data.value) >> 4 & 0x01})`);
         this.object.JSGSetAnimation(data.value);
     }
@@ -795,7 +815,7 @@ class TActorObject extends STBObject {
                     debugger;
                     this.adaptor.adaptor_setVariableValue(this, keyIdx, data);
                     this.adaptor.variableValues[keyIdx].setOutput((enabled, adaptor) => {
-                        (adaptor as TActorAdaptor).adaptor_do_PARENT_ENABLE({ dataOp:EDataOp.Immediate, value: enabled, valueInt: enabled });
+                        (adaptor as TActorAdaptor).adaptor_do_PARENT_ENABLE({ dataOp: EDataOp.Immediate, value: enabled, valueInt: enabled });
                     });
                 } else {
                     this.adaptor.adaptor_do_PARENT_ENABLE(data);
@@ -811,7 +831,7 @@ class TActorObject extends STBObject {
                     debugger;
                     this.adaptor.adaptor_setVariableValue(this, keyIdx, data);
                     this.adaptor.variableValues[keyIdx].setOutput((enabled, adaptor) => {
-                        (adaptor as TActorAdaptor).adaptor_do_RELATION_ENABLE({ dataOp:EDataOp.Immediate, value: enabled, valueInt: enabled });
+                        (adaptor as TActorAdaptor).adaptor_do_RELATION_ENABLE({ dataOp: EDataOp.Immediate, value: enabled, valueInt: enabled });
                     });
                 }
                 this.adaptor.adaptor_do_RELATION_ENABLE(data);
@@ -1000,10 +1020,10 @@ class TCameraObject extends STBObject {
 // Message
 //----------------------------------------------------------------------------------------------------------------------
 class TMessageAdaptor extends TAdaptor {
-    constructor( private messageControl: JMessage.TControl ) { super(0, []); }
- 
+    constructor(private messageControl: JMessage.TControl) { super(0, []); }
+
     public adaptor_do_MESSAGE(data: ParagraphData): void {
-        if(this.enableLogging) console.debug('JMSG:', data.value);
+        if (this.enableLogging) console.debug('JMSG:', data.value);
         switch (data.dataOp) {
             case EDataOp.ObjectIdx: this.messageControl.setMessageCode(data.value); break;
             default: assert(false);
@@ -1023,10 +1043,358 @@ class TMessageObject extends STBObject {
     public override do_paragraph(file: Reader, dataSize: number, dataOffset: number, param: number): void {
         const type = param >> 5;
         const dataOp = param & 0x1F;
-        switch( type ) {
+        switch (type) {
             case 0x42: return this.adaptor.adaptor_do_MESSAGE(readData(dataOp, dataOffset, dataSize, file));
             default: console.error('Unexpected JMSG paragraph type:', type);
         }
+    }
+}
+
+
+//----------------------------------------------------------------------------------------------------------------------
+// Particle
+//----------------------------------------------------------------------------------------------------------------------
+enum EParticleTrack {
+    PosX = 0,
+    PosY = 1,
+    PosZ = 2,
+    RotX = 3,
+    RotY = 4,
+    RotZ = 5,
+    ScaleX = 6,
+    ScaleY = 7,
+    ScaleZ = 8,
+
+    ColorR = 9,
+    ColorG = 10,
+    ColorB = 11,
+    ColorA = 12,
+
+    Color1R = 13,
+    Color1G = 14,
+    Color1B = 15,
+    Color1A = 16,
+
+    FadeIn = 18,
+    FadeOut = 19,
+}
+
+class TParticleAdaptor extends TAdaptor {
+    public emitter: JPABaseEmitter | null = null;
+    public emitterCallback: TJPACallback = new TJPACallback(this, this.control);
+    public particleId: number = -1;
+    public parent: JStage.TObject | null = null;
+    public parentNodeID: number = -1;
+    public parentEnabled: boolean = false;
+
+    public fadeType: number = 0;
+    public lifetime: number = 0;
+    public age: number = 0;
+
+    constructor(
+        private control: TControl,
+        public ptcControl: JParticle.TControl,
+        private system: JStage.TSystem,
+    ) { super(20); }
+
+    public override adaptor_do_prepare(obj: STBObject): void {
+        this.variableValues[EParticleTrack.PosX].setValue_immediate(0.0);
+        this.variableValues[EParticleTrack.PosY].setValue_immediate(0.0);
+        this.variableValues[EParticleTrack.PosZ].setValue_immediate(0.0);
+        this.variableValues[EParticleTrack.RotX].setValue_immediate(0.0);
+        this.variableValues[EParticleTrack.RotY].setValue_immediate(0.0);
+        this.variableValues[EParticleTrack.RotZ].setValue_immediate(0.0);
+        this.variableValues[EParticleTrack.ScaleX].setValue_immediate(1.0);
+        this.variableValues[EParticleTrack.ScaleY].setValue_immediate(1.0);
+        this.variableValues[EParticleTrack.ScaleZ].setValue_immediate(1.0);
+        this.variableValues[EParticleTrack.ColorR].setValue_immediate(255.0);
+        this.variableValues[EParticleTrack.ColorG].setValue_immediate(255.0);
+        this.variableValues[EParticleTrack.ColorB].setValue_immediate(255.0);
+        this.variableValues[EParticleTrack.ColorA].setValue_immediate(255.0);
+        this.variableValues[EParticleTrack.Color1R].setValue_immediate(255.0);
+        this.variableValues[EParticleTrack.Color1G].setValue_immediate(255.0);
+        this.variableValues[EParticleTrack.Color1B].setValue_immediate(255.0);
+        this.variableValues[EParticleTrack.Color1A].setValue_immediate(255.0);
+
+        this.variableValues[EParticleTrack.FadeIn].setOutput(this.TVVOOn_BEGIN_FADE_IN);
+        this.variableValues[EParticleTrack.FadeOut].setOutput(this.TVVOOn_END_FADE_OUT);
+    }
+
+    public override adaptor_do_update(obj: STBObject, frameCount: number): void {
+        if (this.lifetime === 0 || this.age >= this.lifetime) {
+            return;
+        }
+
+        this.age += frameCount;
+
+        if (this.age < this.lifetime) {
+            return;
+        }
+
+        if (this.fadeType === 1) {
+            this.fadeType = 0;
+        }
+        this.lifetime = 0;
+        this.age = 0;
+    }
+
+    public adaptor_do_PARTICLE(data: ParagraphData): void {
+        assert(data.dataOp === EDataOp.ObjectIdx);
+        this.particleId = data.value;
+        this.log(`SetParticleId: 0x${data.value!.toString(16).toUpperCase()}`);
+    }
+
+    public adaptor_do_PARENT(data: ParagraphData): void {
+        assert(data.dataOp === EDataOp.ObjectName);
+        this.log(`SetParent: ${data.value}`);
+        this.parent = this.system.JSGFindObject(data.value, JStage.EObject.PreExistingActor);
+    }
+
+    public adaptor_do_PARENT_NODE(data: ParagraphData): void {
+        this.log(`SetParentNode: ${data.value}`);
+        switch (data.dataOp) {
+            case EDataOp.ObjectName:
+                if (this.parent) {
+                    this.parentNodeID = this.parent.JSGFindNodeID(data.value);
+                }
+                break;
+            case EDataOp.ObjectIdx:
+                this.parentNodeID = data.value;
+                break;
+            default: assert(false);
+        }
+    }
+
+    public adaptor_do_PARENT_ENABLE(data: ParagraphData): void {
+        assert(data.dataOp === EDataOp.Immediate);
+        this.log(`SetParentEnable: ${data.valueInt}`);
+        this.parentEnabled = !!data.valueInt;
+    }
+
+    private TVVOOn_BEGIN_FADE_IN(duration: number, tadaptor: TAdaptor) {
+        const adaptor = tadaptor as TParticleAdaptor;
+        if (adaptor.emitter !== null) {
+            adaptor.ptcControl.JPTCDeleteEmitter(adaptor.emitter);
+        }
+
+        adaptor.emitter = adaptor.ptcControl.JPTCCreateEmitter(
+            (adaptor.particleId & 0x0000FFFF),
+            (adaptor.particleId & 0xFF000000) >> 24,
+            (adaptor.particleId & 0x00FF0000) >> 16,
+        );
+
+        if (adaptor.emitter !== null) {
+            adaptor.emitter.emitterCallBack = adaptor.emitterCallback;
+            adaptor.emitter.becomeImmortalEmitter();
+            adaptor.fadeType = 1;
+            adaptor.lifetime = duration;
+            adaptor.age = 0;
+        }
+    }
+
+    private TVVOOn_END_FADE_OUT(duration: number, tadaptor: TAdaptor) {
+        const adaptor = tadaptor as TParticleAdaptor;
+        if (adaptor.emitter !== null) {
+            if (adaptor.fadeType === 1 && adaptor.age !== 0) {
+                adaptor.fadeType = 2;
+                const r = adaptor.lifetime / adaptor.age;
+                adaptor.lifetime = duration * r;
+                adaptor.age = duration * (r - 1.0);
+            } else {
+                adaptor.fadeType = 2;
+                adaptor.lifetime = duration;
+                adaptor.age = 0.0;
+            }
+        }
+    }
+
+    public override log(msg: string): void {
+        const tag = (this.particleId >= 0) ? `[JParticle: 0x${this.particleId.toString(16).toUpperCase()}]` : `[JParticle]`;
+        if (this.enableLogging) { console.debug(`${tag} ${msg}`); }
+    }
+}
+
+class TJPACallback extends JPAEmitterCallBack {
+    constructor(private adaptor: TParticleAdaptor, private control: TControl) { super(); }
+
+    public override execute(emitter: JPABaseEmitter): void {
+        const adaptor = this.adaptor;
+        const ctrl = this.control;
+
+        // Check if emitter is marked for deletion
+        if (emitter.isEnableDeleteEmitter()) {
+            adaptor.fadeType = 0;
+            adaptor.lifetime = 0;
+            adaptor.age = 0;
+            adaptor.ptcControl.JPTCDeleteEmitter(emitter);
+            adaptor.emitter = null;
+            return;
+        }
+
+        let alpha = 1.0;
+        const val1 = adaptor.lifetime;
+        switch (adaptor.fadeType) {
+            case 1:
+                if (adaptor.lifetime !== 0) {
+                    const val2 = adaptor.age;
+                    alpha = val2 / val1;
+                }
+                break;
+            case 2:
+                if (adaptor.lifetime === 0) {
+                    alpha = 0.0;
+                    if (adaptor.emitter !== null) {
+                        adaptor.emitter.stopCreateParticle();
+                        adaptor.emitter.maxFrame = 1;
+                    }
+                } else {
+                    const val2 = adaptor.lifetime - adaptor.age;
+                    alpha = val2 / val1;
+                }
+                break;
+        }
+
+        emitter.stopDrawParticle();
+
+        const pos = scratchVec3a;
+        const rotDeg = scratchVec3b;
+        const scale = scratchVec3c;
+        adaptor.adaptor_getVariableValue_Vec(pos, EParticleTrack.PosX);
+        adaptor.adaptor_getVariableValue_Vec(rotDeg, EParticleTrack.RotX);
+        adaptor.adaptor_getVariableValue_Vec(scale, EParticleTrack.ScaleX);
+
+        if (!adaptor.parentEnabled) {
+            if (ctrl.isTransformEnabled()) {
+                vec3.transformMat4(pos, pos, ctrl.getTransformOnSet());
+                debugger; // Should that next rotation be here, and should it be negative?
+                rotDeg[1] += ctrl.transformRotY!;
+            }
+
+            const rot = vec3.scale(rotDeg, rotDeg, MathConstants.DEG_TO_RAD);
+            emitter.setGlobalRotation(rot);
+            emitter.setGlobalTranslation(pos);
+            emitter.setGlobalScale(scale);
+        } else {
+            if (adaptor.parent === null) {
+                return;
+            }
+            const mtx = scratchMat4a;
+            if (!adaptor.parent.JSGGetNodeTransformation(adaptor.parentNodeID, mtx)) {
+                return;
+            }
+            const local = mat4.fromTranslation(scratchMat4b, pos);
+            mat4.rotateX(local, local, rotDeg[0] * MathConstants.DEG_TO_RAD);
+            mat4.rotateY(local, local, rotDeg[1] * MathConstants.DEG_TO_RAD);
+            mat4.rotateZ(local, local, rotDeg[2] * MathConstants.DEG_TO_RAD);
+            mat4.scale(local, local, scale);
+            mat4.multiply(mtx, mtx, local);
+            emitter.setGlobalSRTMatrix(mtx);
+        }
+
+        const color = { r: 0, g: 0, b: 0, a: 0 };
+        adaptor.adaptor_getVariableValue_GXColor(color, EParticleTrack.ColorR);
+        alpha = Math.min(alpha * (color.a / 0xFF), 1.0);
+        colorFromRGBA(emitter.globalColorPrm, color.r / 0xFF, color.g / 0xFF, color.b / 0xFF, alpha);
+
+        adaptor.adaptor_getVariableValue_GXColor(color, EParticleTrack.Color1R);
+        colorFromRGBA(emitter.globalColorEnv, color.r / 0xFF, color.g / 0xFF, color.b / 0xFF, emitter.globalColorEnv.a);
+
+        emitter.playDrawParticle();
+    }
+}
+
+class TParticleObject extends STBObject {
+    override adaptor: TParticleAdaptor;
+
+    constructor(
+        control: TControl,
+        blockObj: TBlockObject,
+        adaptor: TParticleAdaptor,
+    ) { super(control, blockObj, adaptor) }
+
+    public override do_paragraph(file: Reader, dataSize: number, dataOffset: number, param: number): void {
+        const dataOp = (param & 0x1F) as EDataOp;
+        const cmdType = param >> 5;
+
+        let keyCount = 1;
+        let keyIdx;
+        let data = readData(dataOp, dataOffset, dataSize, file);
+
+        switch (cmdType) {
+            // Pos
+            case 0x09: keyIdx = EParticleTrack.PosX; break;
+            case 0x0a: keyIdx = EParticleTrack.PosY; break;
+            case 0x0b: keyIdx = EParticleTrack.PosZ; break;
+            case 0x0c: keyCount = 3; keyIdx = EParticleTrack.PosX; break;
+
+            // Rot
+            case 0x0d: keyIdx = EParticleTrack.RotX; break;
+            case 0x0e: keyIdx = EParticleTrack.RotY; break;
+            case 0x0f: keyIdx = EParticleTrack.RotZ; break;
+            case 0x10: keyCount = 3; keyIdx = EParticleTrack.RotX; break;
+
+            // Scale
+            case 0x11: keyIdx = EParticleTrack.ScaleX; break;
+            case 0x12: keyIdx = EParticleTrack.ScaleY; break;
+            case 0x13: keyIdx = EParticleTrack.ScaleZ; break;
+            case 0x14: keyCount = 3; keyIdx = EParticleTrack.ScaleX; break;
+
+            // Color RGB
+            case 0x1d: keyIdx = EParticleTrack.ColorR; break;
+            case 0x1e: keyIdx = EParticleTrack.ColorG; break;
+            case 0x1f: keyIdx = EParticleTrack.ColorB; break;
+            case 0x20: keyIdx = EParticleTrack.ColorA; break;
+            case 0x21: keyCount = 3; keyIdx = EParticleTrack.ColorR; break;
+
+            // Color RGBA
+            case 0x22: keyCount = 4; keyIdx = EParticleTrack.ColorR; break;
+
+            // Fade in/out
+            case 0x2e: keyIdx = EParticleTrack.FadeIn; break;
+            case 0x2f: keyIdx = EParticleTrack.FadeOut; break;
+
+            // Color1 RGB
+            case 0x45: keyIdx = EParticleTrack.Color1R; break;
+            case 0x46: keyIdx = EParticleTrack.Color1G; break;
+            case 0x47: keyIdx = EParticleTrack.Color1B; break;
+            case 0x48: keyIdx = EParticleTrack.Color1A; break;
+            case 0x49: keyCount = 3; keyIdx = EParticleTrack.Color1R; break;
+
+            // Color1 RGBA
+            case 0x4a: keyCount = 4; keyIdx = EParticleTrack.Color1R; break;
+
+            // Parents
+            case 0x30: this.adaptor.adaptor_do_PARENT(data); return;
+            case 0x31: this.adaptor.adaptor_do_PARENT_NODE(data); return;
+            case 0x32:
+                keyIdx = EActorTrack.Parent;
+                if (dataOp === EDataOp.FuncValIdx || dataOp === EDataOp.FuncValName) {
+                    debugger;
+                    this.adaptor.adaptor_setVariableValue(this, keyIdx, data);
+                    this.adaptor.variableValues[keyIdx].setOutput((enabled, adaptor) => {
+                        (adaptor as TActorAdaptor).adaptor_do_PARENT_ENABLE({ dataOp: EDataOp.Immediate, value: enabled, valueInt: enabled });
+                    });
+                } else {
+                    this.adaptor.adaptor_do_PARENT_ENABLE(data);
+                }
+                return;
+
+            case 0x44: this.adaptor.adaptor_do_PARTICLE(data); return;
+
+            default:
+                console.debug('Unsupported TParticle update: ', cmdType, ' ', dataOp);
+                debugger;
+                return;
+        }
+
+        let keyData = [];
+        for (let i = 0; i < keyCount; i++) {
+            keyData[i] = readData(dataOp, dataOffset + i * 4, dataSize, file);
+            this.adaptor.adaptor_setVariableValue(this, keyIdx + i, keyData[i]);
+        }
+
+        const keyName = EParticleTrack[keyIdx].slice(0, keyCount > 1 ? -1 : undefined);
+        this.adaptor.log(`Set${keyName}: ${EDataOp[dataOp]} [${keyData.map(k => k.value)}]`);
     }
 }
 
@@ -1089,21 +1457,21 @@ export function parseTParagraphData(dst: TParseData_fixed, checkType: number, da
 
     if (data.byteLength <= byteIdx)
         return null;
-    
+
     const check = data.getUint8(byteIdx++);
     const type = check & ~0x8;
     if (type !== checkType) {
         return null;
     }
-    
+
     dst.entryCount = 1;
-    if ( check & 0x8 ) {
+    if (check & 0x8) {
         dst.entryCount = data.getUint8(byteIdx++);
     }
     dst.entryOffset = byteIdx;
 
     const sizeIdx = check & 0x7;
-    if( sizeIdx === 0 ) {
+    if (sizeIdx === 0) {
         dst.entryNext = null;
         dst.entrySize = 0;
         return dst;
@@ -1263,7 +1631,7 @@ namespace FVB {
                         const interpType = file.view.getUint32(para.dataOffset + 0);
                         interp.set(interpType);
                         break;
-                    
+
                     case EPrepareOp.RangeOutside: {
                         assert(para.dataSize === 4);
                         const range = this.funcVal.getAttrRange();
@@ -1423,12 +1791,12 @@ namespace FVB {
                     case EAdjustType.BiasBegin: return this.extrapolate(progress + this.begin);
                     case EAdjustType.BiasEnd: return this.extrapolate(progress) + this.end;
                     case EAdjustType.BiasAve: return this.extrapolate(progress) + 0.5 * (this.begin + this.end);
-                    case EAdjustType.Remap: 
+                    case EAdjustType.Remap:
                         const temp = this.extrapolate(progress);
                         return startTime + ((temp - this.begin) * (endTime - startTime)) / this.diff;
-                    
-                    default: 
-                        debugger; 
+
+                    default:
+                        debugger;
                         return this.extrapolate(progress);
                 }
             }
@@ -1919,8 +2287,9 @@ export abstract class TBlockObject {
 
 // This combines JStudio::TControl and JStudio::stb::TControl into a single class, for simplicity.
 export class TControl {
-    public system: TSystem;
-    public msgControl: JMessage.TControl;
+    public system: JStage.TSystem;
+    public ptcControl: JParticle.TControl | null;
+    public msgControl: JMessage.TControl | null;
     public fvbControl = new FVB.TControl();
     public secondsPerFrame: number = 1 / 30.0;
     private suspendFrames: number;
@@ -1936,9 +2305,10 @@ export class TControl {
     // A special object that the STB file can use to suspend the demo (such as while waiting for player input)
     private controlObject = new TControlObject(this);
 
-    constructor(system: TSystem, msgControl: JMessage.TControl) {
+    constructor(system: JStage.TSystem, msgControl: JMessage.TControl | null, ptcControl: JParticle.TControl | null) {
         this.system = system;
         this.msgControl = msgControl;
+        this.ptcControl = ptcControl;
     }
 
     public isSuspended() { return this.suspendFrames > 0; }
@@ -2014,9 +2384,21 @@ export class TControl {
 
     public createMessageObject(blockObj: TBlockObject): STBObject | null {
         if (blockObj.type === 'JMSG') {
-            const adaptor = new TMessageAdaptor(this.msgControl);
+            const adaptor = new TMessageAdaptor(this.msgControl!);
             const obj = new TMessageObject(this, blockObj, adaptor);
-    
+
+            if (obj) { adaptor.adaptor_do_prepare(obj); }
+            this.objects.push(obj);
+            return obj;
+        }
+        return null;
+    }
+
+    public createParticleObject(blockObj: TBlockObject): STBObject | null {
+        if (blockObj.type === 'JPTC') {
+            const adaptor = new TParticleAdaptor(this, this.ptcControl!, this.system);
+            const obj = new TParticleObject(this, blockObj, adaptor);
+
             if (obj) { adaptor.adaptor_do_prepare(obj); }
             this.objects.push(obj);
             return obj;
@@ -2062,7 +2444,8 @@ export class TParse {
         }
 
         let obj = this.control.createStageObject(blockObj);
-        if(!obj) { obj = this.control.createMessageObject(blockObj); } 
+        if (!obj && this.control.msgControl) { obj = this.control.createMessageObject(blockObj); }
+        if (!obj && this.control.ptcControl) { obj = this.control.createParticleObject(blockObj); }
 
         if (!obj) {
             if (flags & 0x40) {
