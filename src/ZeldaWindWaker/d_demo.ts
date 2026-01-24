@@ -283,8 +283,7 @@ export class dDemo_actor_c extends TActor {
     public override JSGGetName() { return this.name; }
 
     public override JSGGetNodeTransformation(nodeId: number, mtx: mat4): number {
-        debugger; // I think this may be one of the shapeInstanceState matrices instead
-        mat4.copy(mtx, this.model.modelMatrix);
+        mat4.copy(mtx, this.model.shapeInstanceState.jointToWorldMatrixArray[nodeId]);
         return 1;
     }
 
