@@ -7,11 +7,14 @@ import { JSystemFileReaderHelper } from "./J3D/J3DLoader.js";
 import { GfxColor } from "../../gfx/platform/GfxPlatform";
 import { clamp, MathConstants } from "../../MathHelpers.js";
 import { Endianness } from "../../endian.js";
-import { JPABaseEmitter, JPAEmitterManager } from "./JPA";
+import { JPABaseEmitter, JPAEmitterCallBack, JPAEmitterManager } from "./JPA";
+import { colorFromRGBA } from "../../Color";
 
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
 const scratchVec3c = vec3.create();
+const scratchMat4a = mat4.create();
+const scratchMat4b = mat4.create();
 
 // TODO: Setup the JMessage system in a separate file
 export namespace JMessage {
@@ -211,11 +214,11 @@ abstract class TAdaptor {
         public enableLogging = true,
     ) { }
 
-    public adaptor_do_prepare(obj: STBObject): void {};
-    public adaptor_do_begin(obj: STBObject): void {};
-    public adaptor_do_end(obj: STBObject): void {};
-    public adaptor_do_update(obj: STBObject, frameCount: number): void {};
-    public adaptor_do_data(obj: STBObject, id: number | null, data: DataView): void {};
+    public adaptor_do_prepare(obj: STBObject): void { };
+    public adaptor_do_begin(obj: STBObject): void { };
+    public adaptor_do_end(obj: STBObject): void { };
+    public adaptor_do_update(obj: STBObject, frameCount: number): void { };
+    public adaptor_do_data(obj: STBObject, id: number | null, data: DataView): void { };
 
     // Set a single VariableValue update function, with the option of using FuncVals 
     public adaptor_setVariableValue(obj: STBObject, keyIdx: number, data: ParagraphData) {
@@ -484,7 +487,7 @@ abstract class STBObject {
             case 0x3: debugger; break;
 
             // Raw Data (no ID) 
-            case 0x80: 
+            case 0x80:
                 const data = file.buffer.createDataView(dataOffset, dataSize);
                 this.do_data(null, data);
                 break;
@@ -559,7 +562,7 @@ export abstract class TActor extends JStage.TObject {
     public JSGGetTextureAnimationFrame(): number { return 0.0; }
     public JSGSetTextureAnimationFrame(x: number): void { }
     public JSGGetTextureAnimationFrameMax(): number { return 0.0; }
-    
+
     public JSGDebugGetAnimationName(x: number): string | null { return null; }
 }
 
@@ -716,9 +719,9 @@ class TActorAdaptor extends TAdaptor {
     public adaptor_do_ANIMATION(data: ParagraphData): void {
         assert(data.dataOp === EDataOp.ObjectIdx);
         const animName = this.object.JSGDebugGetAnimationName(data.value);
-        if( animName )
+        if (animName)
             this.log(`SetAnimation: ${animName}`);
-        else 
+        else
             this.log(`SetAnimation: ${(data.value) & 0xFFFF} (${(data.value) >> 4 & 0x01})`);
         this.object.JSGSetAnimation(data.value);
     }
@@ -796,7 +799,7 @@ class TActorObject extends STBObject {
                     debugger;
                     this.adaptor.adaptor_setVariableValue(this, keyIdx, data);
                     this.adaptor.variableValues[keyIdx].setOutput((enabled, adaptor) => {
-                        (adaptor as TActorAdaptor).adaptor_do_PARENT_ENABLE({ dataOp:EDataOp.Immediate, value: enabled, valueInt: enabled });
+                        (adaptor as TActorAdaptor).adaptor_do_PARENT_ENABLE({ dataOp: EDataOp.Immediate, value: enabled, valueInt: enabled });
                     });
                 } else {
                     this.adaptor.adaptor_do_PARENT_ENABLE(data);
@@ -812,7 +815,7 @@ class TActorObject extends STBObject {
                     debugger;
                     this.adaptor.adaptor_setVariableValue(this, keyIdx, data);
                     this.adaptor.variableValues[keyIdx].setOutput((enabled, adaptor) => {
-                        (adaptor as TActorAdaptor).adaptor_do_RELATION_ENABLE({ dataOp:EDataOp.Immediate, value: enabled, valueInt: enabled });
+                        (adaptor as TActorAdaptor).adaptor_do_RELATION_ENABLE({ dataOp: EDataOp.Immediate, value: enabled, valueInt: enabled });
                     });
                 }
                 this.adaptor.adaptor_do_RELATION_ENABLE(data);
@@ -1001,10 +1004,10 @@ class TCameraObject extends STBObject {
 // Message
 //----------------------------------------------------------------------------------------------------------------------
 class TMessageAdaptor extends TAdaptor {
-    constructor( private messageControl: JMessage.TControl ) { super(0, []); }
- 
+    constructor(private messageControl: JMessage.TControl) { super(0, []); }
+
     public adaptor_do_MESSAGE(data: ParagraphData): void {
-        if(this.enableLogging) console.debug('JMSG:', data.value);
+        if (this.enableLogging) console.debug('JMSG:', data.value);
         switch (data.dataOp) {
             case EDataOp.ObjectIdx: this.messageControl.setMessageCode(data.value); break;
             default: assert(false);
@@ -1024,7 +1027,7 @@ class TMessageObject extends STBObject {
     public override do_paragraph(file: Reader, dataSize: number, dataOffset: number, param: number): void {
         const type = param >> 5;
         const dataOp = param & 0x1F;
-        switch( type ) {
+        switch (type) {
             case 0x42: return this.adaptor.adaptor_do_MESSAGE(readData(dataOp, dataOffset, dataSize, file));
             default: console.error('Unexpected JMSG paragraph type:', type);
         }
@@ -1061,11 +1064,12 @@ enum EParticleTrack {
 }
 
 class TParticleAdaptor extends TAdaptor {
-    private emitter: JPABaseEmitter | null = null;
-    private particleId: number = -1;
-    private parent: JStage.TObject | null = null;
-    private parentNodeID: number = -1;
-    private parentEnabled: boolean = false;
+    public emitter: JPABaseEmitter | null = null;
+    public emitterCallback: TJPACallback = new TJPACallback(this, this.control);
+    public particleId: number = -1;
+    public parent: JStage.TObject | null = null;
+    public parentNodeID: number = -1;
+    public parentEnabled: boolean = false;
 
     public fadeType: number = 0;
     public lifetime: number = 0;
@@ -1073,7 +1077,8 @@ class TParticleAdaptor extends TAdaptor {
 
     constructor(
         private system: TSystem,
-        private emitterMgr: JPAEmitterManager,
+        private control: TControl,
+        public emitterMgr: JPAEmitterManager,
     ) { super(20); }
 
     public override adaptor_do_prepare(obj: STBObject): void {
@@ -1151,6 +1156,7 @@ class TParticleAdaptor extends TAdaptor {
         // );
 
         if (adaptor.emitter !== null) {
+            adaptor.emitter.emitterCallBack = this.emitterCallback;
             adaptor.emitter.becomeImmortalEmitter();
             adaptor.fadeType = 1;
             adaptor.lifetime = frame; debugger; // Is `frame` a value or the frame that this was called?
@@ -1179,6 +1185,95 @@ class TParticleAdaptor extends TAdaptor {
     public override log(msg: string): void {
         const tag = (this.particleId >= 0) ? `[JParticle: 0x${this.particleId.toString(16).toUpperCase()}]` : `[JParticle]`;
         if (this.enableLogging) { console.debug(`${tag} ${msg}`); }
+    }
+}
+
+class TJPACallback extends JPAEmitterCallBack {
+    constructor(private adaptor: TParticleAdaptor, private control: TControl) { super(); }
+
+    public override execute(emitter: JPABaseEmitter): void {
+        const adaptor = this.adaptor;
+        const ctrl = this.control;
+
+        // Check if emitter is marked for deletion
+        if (emitter.isEnableDeleteEmitter()) {
+            adaptor.fadeType = 0;
+            adaptor.lifetime = 0;
+            adaptor.age = 0;
+            adaptor.emitterMgr.forceDeleteEmitter(emitter);
+            adaptor.emitter = null;
+            return;
+        }
+
+        let alpha = 1.0;
+        const val1 = adaptor.lifetime;
+        switch (adaptor.fadeType) {
+            case 1:
+                if (adaptor.lifetime !== 0) {
+                    const val2 = adaptor.age;
+                    alpha = val2 / val1;
+                }
+                break;
+            case 2:
+                if (adaptor.lifetime === 0) {
+                    alpha = 0.0;
+                    if (adaptor.emitter !== null) {
+                        adaptor.emitter.stopCreateParticle();
+                        adaptor.emitter.maxFrame = 1;
+                    }
+                } else {
+                    const val2 = adaptor.lifetime - adaptor.age;
+                    alpha = val2 / val1;
+                }
+                break;
+        }
+
+        emitter.stopDrawParticle();
+
+        const pos = scratchVec3a;
+        const rotDeg = scratchVec3b;
+        const scale = scratchVec3c;
+        adaptor.adaptor_getVariableValue_Vec(pos, EParticleTrack.PosX);
+        adaptor.adaptor_getVariableValue_Vec(rotDeg, EParticleTrack.RotX);
+        adaptor.adaptor_getVariableValue_Vec(scale, EParticleTrack.ScaleX);
+
+        if (!adaptor.parentEnabled) {
+            if (ctrl.isTransformEnabled()) {
+                vec3.transformMat4(pos, pos, ctrl.getTransformOnSet());
+                debugger; // Should that next rotation be here, and should it be negative?
+                rotDeg[1] += ctrl.transformRotY!;
+            }
+
+            const rot = vec3.scale(rotDeg, rotDeg, MathConstants.DEG_TO_RAD);
+            emitter.setGlobalRotation(rot);
+            emitter.setGlobalTranslation(pos);
+            emitter.setGlobalScale(scale);
+        } else {
+            if (adaptor.parent === null) {
+                return;
+            }
+            const mtx = scratchMat4a;
+            if (!adaptor.parent.JSGGetNodeTransformation(adaptor.parentNodeID, mtx)) {
+                return;
+            }
+            const local = mat4.fromTranslation(scratchMat4b, pos);
+            mat4.rotateX(local, local, rotDeg[0] * MathConstants.DEG_TO_RAD);
+            mat4.rotateY(local, local, rotDeg[1] * MathConstants.DEG_TO_RAD);
+            mat4.rotateZ(local, local, rotDeg[2] * MathConstants.DEG_TO_RAD);
+            mat4.scale(local, local, scale);
+            mat4.multiply(mtx, mtx, local);
+            emitter.setGlobalSRTMatrix(mtx);
+        }
+
+        const color = { r: 0, g: 0, b: 0, a: 0 };
+        adaptor.adaptor_getVariableValue_GXColor(color, EParticleTrack.ColorR);
+        alpha = Math.min(alpha * (color.a / 0xFF), 1.0);
+        colorFromRGBA(emitter.globalColorPrm, color.r / 0xFF, color.g / 0xFF, color.b / 0xFF, alpha);
+
+        adaptor.adaptor_getVariableValue_GXColor(color, EParticleTrack.Color1R);
+        colorFromRGBA(emitter.globalColorEnv, color.r / 0xFF, color.g / 0xFF, color.b / 0xFF, emitter.globalColorEnv.a);
+
+        emitter.playDrawParticle();
     }
 }
 
@@ -1251,7 +1346,7 @@ class TParticleObject extends STBObject {
                     debugger;
                     this.adaptor.adaptor_setVariableValue(this, keyIdx, data);
                     this.adaptor.variableValues[keyIdx].setOutput((enabled, adaptor) => {
-                        (adaptor as TActorAdaptor).adaptor_do_PARENT_ENABLE({ dataOp:EDataOp.Immediate, value: enabled, valueInt: enabled });
+                        (adaptor as TActorAdaptor).adaptor_do_PARENT_ENABLE({ dataOp: EDataOp.Immediate, value: enabled, valueInt: enabled });
                     });
                 } else {
                     this.adaptor.adaptor_do_PARENT_ENABLE(data);
@@ -1271,7 +1366,7 @@ class TParticleObject extends STBObject {
             keyData[i] = readData(dataOp, dataOffset + i * 4, dataSize, file);
             this.adaptor.adaptor_setVariableValue(this, keyIdx + i, keyData[i]);
         }
-        
+
         const keyName = EParticleTrack[keyIdx].slice(0, keyCount > 1 ? -1 : undefined);
         this.adaptor.log(`Set${keyName}: ${EDataOp[dataOp]} [${keyData.map(k => k.value)}]`);
     }
@@ -1336,21 +1431,21 @@ export function parseTParagraphData(dst: TParseData_fixed, checkType: number, da
 
     if (data.byteLength <= byteIdx)
         return null;
-    
+
     const check = data.getUint8(byteIdx++);
     const type = check & ~0x8;
     if (type !== checkType) {
         return null;
     }
-    
+
     dst.entryCount = 1;
-    if ( check & 0x8 ) {
+    if (check & 0x8) {
         dst.entryCount = data.getUint8(byteIdx++);
     }
     dst.entryOffset = byteIdx;
 
     const sizeIdx = check & 0x7;
-    if( sizeIdx === 0 ) {
+    if (sizeIdx === 0) {
         dst.entryNext = null;
         dst.entrySize = 0;
         return dst;
@@ -1510,7 +1605,7 @@ namespace FVB {
                         const interpType = file.view.getUint32(para.dataOffset + 0);
                         interp.set(interpType);
                         break;
-                    
+
                     case EPrepareOp.RangeOutside: {
                         assert(para.dataSize === 4);
                         const range = this.funcVal.getAttrRange();
@@ -1670,12 +1765,12 @@ namespace FVB {
                     case EAdjustType.BiasBegin: return this.extrapolate(progress + this.begin);
                     case EAdjustType.BiasEnd: return this.extrapolate(progress) + this.end;
                     case EAdjustType.BiasAve: return this.extrapolate(progress) + 0.5 * (this.begin + this.end);
-                    case EAdjustType.Remap: 
+                    case EAdjustType.Remap:
                         const temp = this.extrapolate(progress);
                         return startTime + ((temp - this.begin) * (endTime - startTime)) / this.diff;
-                    
-                    default: 
-                        debugger; 
+
+                    default:
+                        debugger;
                         return this.extrapolate(progress);
                 }
             }
@@ -2265,7 +2360,7 @@ export class TControl {
         if (blockObj.type === 'JMSG') {
             const adaptor = new TMessageAdaptor(this.msgControl);
             const obj = new TMessageObject(this, blockObj, adaptor);
-    
+
             if (obj) { adaptor.adaptor_do_prepare(obj); }
             this.objects.push(obj);
             return obj;
@@ -2275,9 +2370,9 @@ export class TControl {
 
     public createParticleObject(blockObj: TBlockObject): STBObject | null {
         if (blockObj.type === 'JPTC') {
-            const adaptor = new TParticleAdaptor(this.system, this.particleManager);
+            const adaptor = new TParticleAdaptor(this.system, this, this.particleManager);
             const obj = new TParticleObject(this, blockObj, adaptor);
-    
+
             if (obj) { adaptor.adaptor_do_prepare(obj); }
             this.objects.push(obj);
             return obj;
@@ -2323,8 +2418,8 @@ export class TParse {
         }
 
         let obj = this.control.createStageObject(blockObj);
-        if(!obj) { obj = this.control.createMessageObject(blockObj); } 
-        if(!obj) { obj = this.control.createParticleObject(blockObj); } 
+        if (!obj) { obj = this.control.createMessageObject(blockObj); }
+        if (!obj) { obj = this.control.createParticleObject(blockObj); }
 
         if (!obj) {
             if (flags & 0x40) {
