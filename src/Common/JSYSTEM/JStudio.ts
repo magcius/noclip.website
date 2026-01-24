@@ -1080,7 +1080,25 @@ class TParticleAdaptor extends TAdaptor {
         this.variableValues[EParticleTrack.FadeIn].setOutput(this.TVVOOn_BEGIN_FADE_IN);
         this.variableValues[EParticleTrack.FadeOut].setOutput(this.TVVOOn_END_FADE_OUT);
     }
- 
+
+    public override adaptor_do_update(obj: STBObject, frameCount: number): void {
+        if (this.lifetime === 0 || this.age >= this.lifetime) {
+            return;
+        }
+
+        this.age += frameCount;
+
+        if (this.age < this.lifetime) {
+            return;
+        }
+
+        if (this.fadeType === 1) {
+            this.fadeType = 0;
+        }
+        this.lifetime = 0;
+        this.age = 0;
+    }
+
     public adaptor_do_PARTICLE(data: ParagraphData): void {
         assert(data.dataOp === EDataOp.ObjectIdx);
         this.particleId = data.value;
@@ -1155,6 +1173,8 @@ class TParticleAdaptor extends TAdaptor {
             }
         }
     }
+
+    // TODO: JPAEmitter callback
 
     public override log(msg: string): void {
         const tag = (this.particleId >= 0) ? `[JParticle: 0x${this.particleId.toString(16).toUpperCase()}]` : `[JParticle]`;
