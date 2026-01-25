@@ -432,10 +432,11 @@ class dDemo_paControl_c extends JParticle.TControl {
     constructor(private globals: dGlobals) {
         super();
     }
-
-    public override JPTCCreateEmitter(userID: number, groupID: number, roomId: number): JPABaseEmitter | null {
-        const emitter = this.globals.particleCtrl.set(this.globals, groupID, userID, null);
-        console.warn('Failed to create demo emitter', userID.toString(16), groupID);
+    
+    public override JPTCCreateEmitter(userId: number, groupId: number, roomId: number): JPABaseEmitter | null {
+        const emitter = this.globals.particleCtrl.set(this.globals, groupId, userId, null);
+        if (emitter === null)
+            console.warn('Failed to create demo emitter', userId.toString(16), roomId, groupId);
         return emitter;
     }
 

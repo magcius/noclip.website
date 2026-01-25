@@ -19,6 +19,7 @@ import * as GX from '../gx/gx_enum.js';
 import { ColorKind, GXTextureMapping } from "../gx/gx_render.js";
 import { gfxDeviceNeedsFlipY } from "../gfx/helpers/GfxDeviceHelpers.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
+import { TJPACallback } from "../Common/JSYSTEM/JStudio.js";
 
 // Simple common particles
 const j_o_id: number[] = [ 0x0000, 0x0001, 0x0002, 0x0003, 0x03DA, 0x03DB, 0x03DC, 0x4004 ];
@@ -129,6 +130,10 @@ export class dPa_control_c {
 
             // Don't distance cull 2D/UI emitters
             if (emitter.drawGroupId >= ParticleGroup.TwoDfore)
+                continue;
+
+            // Don't cull demo emitters
+            if (emitter.emitterCallBack instanceof TJPACallback)
                 continue;
 
             let cullDistance = (emitter as any).cullDistance;

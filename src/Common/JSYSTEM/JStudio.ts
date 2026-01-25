@@ -1141,7 +1141,11 @@ class TParticleAdaptor extends TAdaptor {
     public adaptor_do_PARTICLE(data: ParagraphData): void {
         assert(data.dataOp === EDataOp.ObjectIdx);
         this.particleId = data.value;
-        this.log(`SetParticleId: 0x${data.value!.toString(16).toUpperCase()}`);
+
+        const userID =  (data.value & 0x0000FFFF) >> 0;
+        const groupId = (data.value & 0xFF000000) >> 24;
+        const roomId = (data.value & 0x00FF0000) >> 16;
+        this.log(`SetParticleId: [user: 0x${userID.toString(16).toUpperCase()} group: ${groupId} room: ${roomId}]`);
     }
 
     public adaptor_do_PARENT(data: ParagraphData): void {
@@ -1209,12 +1213,13 @@ class TParticleAdaptor extends TAdaptor {
     }
 
     public override log(msg: string): void {
-        const tag = (this.particleId >= 0) ? `[JParticle: 0x${this.particleId.toString(16).toUpperCase()}]` : `[JParticle]`;
+        const userId = this.particleId & 0x0000FFFF; 
+        const tag = (this.particleId >= 0) ? `[JParticle: 0x${userId.toString(16).toUpperCase()}]` : `[JParticle]`;
         if (this.enableLogging) { console.debug(`${tag} ${msg}`); }
     }
 }
 
-class TJPACallback extends JPAEmitterCallBack {
+export class TJPACallback extends JPAEmitterCallBack {
     constructor(private adaptor: TParticleAdaptor, private control: TControl) { super(); }
 
     public override execute(emitter: JPABaseEmitter): void {
