@@ -1,15 +1,24 @@
 // d_003_02.ts
 // Illusory 106 5F to 7F
 
+import { get_animations_from_apak, get_fres_from_apak } from "../apak.js";
 import { DataFetcher } from "../../DataFetcher.js";
 import { GfxDevice } from "../../gfx/platform/GfxPlatform.js";
 import { gimmick, create_gimmick } from "./../gimmick.js";
 import { vec3 } from "gl-matrix";
+import { MannequinBig } from "../mannequinbig.js";
 import { get_layout_point, MapLayout } from "./../maplayout.js";
 
 export async function create_d003_02_gimmicks(layout: MapLayout, data_fetcher: DataFetcher, device: GfxDevice): Promise<gimmick[]>
 {
     const gimmicks: gimmick[] = [];
+
+    const mannequinbig_03_fres = await get_fres_from_apak("TokyoMirageSessionsSharpFE/gimmick/d003/mannequinbig/skin/03/model.apak",
+                                                          "mannequinbig_03.bfres", data_fetcher);
+    const mannequinbig_04_fres = await get_fres_from_apak("TokyoMirageSessionsSharpFE/gimmick/d003/mannequinbig/skin/04/model.apak",
+                                                          "mannequinbig_04.bfres", data_fetcher);
+    const mannequinbig_animations = await get_animations_from_apak("TokyoMirageSessionsSharpFE/gimmick/d003/mannequinbig/skin/01/model_common.apak", data_fetcher);
+    
 
     const swA1_POINT_MANNEQUIN = 1510;
     const swA2_POINT_MANNEQUIN = 1511;
@@ -202,31 +211,13 @@ export async function create_d003_02_gimmicks(layout: MapLayout, data_fetcher: D
     const swA_mannequinbig_point = get_layout_point(layout, swA_POINT_MANNEQUIN_BIG, 0.0, 0.0, 0.0);
     gimmicks.push
     (
-        await create_gimmick
-        (
-            swA_mannequinbig_point.position,
-            swA_mannequinbig_point.rotation,
-            vec3.fromValues(1.0, 1.0, 1.0),
-            "TokyoMirageSessionsSharpFE/gimmick/d003/mannequinbig/skin/03/model.apak",
-            "mannequinbig_03.bfres",
-            data_fetcher,
-            device
-        )
+        new MannequinBig(swA_mannequinbig_point, mannequinbig_03_fres, mannequinbig_animations, device)
     );
 
     const swB_mannequinbig_point = get_layout_point(layout, swB_POINT_MANNEQUIN_BIG, 0.0, 0.0, 0.0);
     gimmicks.push
     (
-        await create_gimmick
-        (
-            swB_mannequinbig_point.position,
-            swB_mannequinbig_point.rotation,
-            vec3.fromValues(1.0, 1.0, 1.0),
-            "TokyoMirageSessionsSharpFE/gimmick/d003/mannequinbig/skin/04/model.apak",
-            "mannequinbig_04.bfres",
-            data_fetcher,
-            device
-        )
+        new MannequinBig(swB_mannequinbig_point, mannequinbig_04_fres, mannequinbig_animations, device)
     );
 
     return gimmicks;

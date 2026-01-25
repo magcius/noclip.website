@@ -22,7 +22,7 @@ export class MannequinBig extends gimmick
             vec3.fromValues(1.0, 1.0, 1.0),
             model_fres, device,
             new GfxRenderHelper(device),
-            animation_fres_array[2],
+            animation_fres_array[0],
         );
 
         this.animations = animation_fres_array;

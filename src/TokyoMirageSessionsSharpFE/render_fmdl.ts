@@ -197,7 +197,7 @@ export class fmdl_renderer
             
             if (this.fska == null)
             {
-                console.error("trying to animated the skeleton of a fmdl with no fska");
+                console.error("trying to animate the skeleton of a fmdl with no fska");
                 throw("whoops");
             }
             const bone_animation = this.fska.bone_animations[bone_animation_index]

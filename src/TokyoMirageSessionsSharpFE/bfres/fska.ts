@@ -1,5 +1,5 @@
 // fska.ts
-// Handles FSKA (caFe SKeletal Animation) data, which is a skeleton animation for a model
+// Handles FSKA (caFe SKeletal Animation) data, which is a skeletal animation for a model
 
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { read_bfres_string } from "./bfres_switch.js";

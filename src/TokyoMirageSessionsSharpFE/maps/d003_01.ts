@@ -117,10 +117,7 @@ export async function create_d003_01_gimmicks(layout: MapLayout, data_fetcher: D
     );
 
     const swA_mannequinbig_point = get_layout_point(layout, swA_POINT_MANNEQUIN_BIG, 0.0, 0.0, 0.0);
-    gimmicks.push
-    (
-        new MannequinBig(swA_mannequinbig_point, mannequinbig_01_fres, mannequinbig_animations, device)
-    );
+    gimmicks.push(new MannequinBig(swA_mannequinbig_point, mannequinbig_01_fres, mannequinbig_animations, device));
 
     const swB1_mannequin_point = get_layout_point(layout, swB1_POINT_MANNEQUIN, 0.0, 0.0, 0.0);
     gimmicks.push
@@ -213,10 +210,7 @@ export async function create_d003_01_gimmicks(layout: MapLayout, data_fetcher: D
     );
 
     const swB_mannequinbig_point = get_layout_point(layout, swB_POINT_MANNEQUIN_BIG, 0.0, 0.0, 0.0);
-    gimmicks.push
-    (
-        new MannequinBig(swB_mannequinbig_point, mannequinbig_02_fres, mannequinbig_animations, device)
-    );
+    gimmicks.push(new MannequinBig(swB_mannequinbig_point, mannequinbig_02_fres, mannequinbig_animations, device));
 
     return gimmicks;
 }
