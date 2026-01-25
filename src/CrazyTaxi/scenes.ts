@@ -1,5 +1,5 @@
 import * as Viewer from '../viewer.js';
-import { GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxProgram, GfxTexture, GfxVertexBufferDescriptor } from '../gfx/platform/GfxPlatform.js';
+import { GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxProgram, GfxTexture, GfxVertexBufferDescriptor } from '../gfx/platform/GfxPlatform.js';
 import { SceneContext } from '../SceneBase.js';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
 import { GfxRenderInst, gfxRenderInstCompareNone, GfxRenderInstExecutionOrder, GfxRenderInstList, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
@@ -131,14 +131,14 @@ const VATS = createVATs();
 
 interface Shape {
     name: string,
-    p0: vec3,
-    p1: vec3,
+    pos: vec3,
+    scale: vec3,
     isSkybox: boolean,
     vertexData: LoadedVertexData[],
     vertexLayouts: LoadedVertexLayout[],
     vertexFormats: Set<GX.VtxFmt>,
     textureIndices: number[],
-    scale: number,
+    bounding_radius: number,
     textures: string[],
 }
 
@@ -191,6 +191,7 @@ class ShapeRenderer {
         mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
         mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.TEXA, GX.CA.RASA, GX.CA.ZERO);
         mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setCullMode(GX.CullMode.BACK);
         this.materialHelper = new GXMaterialHelperGfx(mb.finish());
     }
 
@@ -214,8 +215,8 @@ class ShapeRenderer {
             const renderInst = renderInstManager.newRenderInst();
             this.materialHelper.setOnRenderInst(this.cache, renderInst);
             const m = mat4.create();
-            setMatrixTranslation(m, this.shape.p0);
-            scaleMatrix(m, m, this.shape.p1[0]);
+            setMatrixTranslation(m, this.shape.pos);
+            scaleMatrix(m, m, this.shape.scale[0]);
             if (this.shape.isSkybox) {
                 m[15] = 0;
             }
@@ -251,6 +252,7 @@ export class Scene implements Viewer.SceneGfx {
     constructor(device: GfxDevice, private manager: FileManager, public textureHolder: GXTextureHolder, public debugPos: vec3[][], public shapeNames: string[]) {
         this.renderHelper = new GXRenderHelperGfx(device);
 
+        console.log('creating shapes')
         for (const name of shapeNames) {
             const shape = this.manager.createShape(name);
             const renderer = new ShapeRenderer(
@@ -266,6 +268,7 @@ export class Scene implements Viewer.SceneGfx {
                 this.shapes.push(renderer);
             }
         }
+        console.log('done')
     }
 
     private drawDebugPoints(points: vec3[], viewerInput: Viewer.ViewerRenderInput, color?: Color, connect?: boolean) {
@@ -299,14 +302,13 @@ export class Scene implements Viewer.SceneGfx {
 
     private prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
         const renderInstManager = this.renderHelper.renderInstManager;
-
         const template = this.renderHelper.pushTemplateRenderInst();
-        const cameraPos = mat4.getTranslation(vec3.create(), viewerInput.camera.worldMatrix)
-
         fillSceneParamsDataOnTemplate(template, viewerInput);
 
+        const cameraPos = mat4.getTranslation(vec3.create(), viewerInput.camera.worldMatrix)
         renderInstManager.setCurrentList(this.renderInstListMain);
         for (const shape of this.shapes) {
+            shape.visible = vec3.dist(cameraPos, shape.shape.pos) < 10_000;
             shape.prepareToRender(renderInstManager, viewerInput);
         }
         renderInstManager.setCurrentList(this.renderInstListSky);
@@ -436,10 +438,10 @@ class FileManager {
     public createShape(name: string): Shape {
         const debug = name === "course_4b_048_a_ph.shp";
         const shape = this.fileStore.get_shape(name)!;
-        const scale = shape.scale();
-        let x = shape.get_aabb();
-        let p0 = vec3.fromValues(x[0], x[1], -x[2]); // FIXME why do we negate here
-        let p1 = vec3.fromValues(x[3], x[4], x[5]);
+        const bounding_radius = shape.bounding_radius();
+        let x = shape.pos_and_scale();
+        let pos = vec3.fromValues(x[0], x[1], -x[2]); // FIXME why do we negate here
+        let scale = vec3.fromValues(x[3], x[4], x[5]);
 
         const attrs: [GX.Attr, CTFileLoc | undefined][] = [
             [GX.Attr.POS, shape.pos_loc()],
@@ -500,19 +502,18 @@ class FileManager {
         const vertexData: LoadedVertexData[] = [];
         const textureIndices = [];
         const mystery = shape.mystery_loc()!;
-        const mysteryData = this.getData(mystery);
+        const mysteryData = this.getData(mystery).createDataView();
         const count = Math.floor(mysteryData.byteLength / 36);
         for (let i = 0; i < count; i++) {
             const offs = i * 36;
-            const data = mysteryData.subarray(offs, 36).createDataView();
-            const dlAddr = data.getUint32(0x0);
-            const vtxAddr = data.getUint32(0x4);
-            const texIdx = data.getUint32(0x8);
-            const unkNum0 = data.getFloat32(0xc);
-            const unkNum1 = data.getFloat32(0x10);
-            const unkNum2 = data.getFloat32(0x14);
-            const unkCount1 = data.getUint32(0x18);
-            const unkBytes = data.buffer.slice(0x1c);
+            const dlAddr = mysteryData.getUint32(offs + 0x0);
+            const vtxAddr = mysteryData.getUint32(offs + 0x4);
+            const texIdx = mysteryData.getUint32(offs + 0x8);
+            const unkNum0 = mysteryData.getFloat32(offs + 0xc);
+            const unkNum1 = mysteryData.getFloat32(offs + 0x10);
+            const unkNum2 = mysteryData.getFloat32(offs + 0x14);
+            const unkCount1 = mysteryData.getUint32(offs + 0x18);
+            const unkBytes = mysteryData.buffer.slice(offs + 0x1c, offs + 36);
             const dl = displayListsByAddr.get(dlAddr);
             if (!dl)
                 continue;
@@ -520,13 +521,22 @@ class FileManager {
             textureIndices.push(texIdx);
         }
 
-        // testing our assumption that VTXFMT1 means meshes are pre-scaled
+        const drawNames = textureIndices.map(i => textures[i]);
+        if (debug) console.log(drawNames);
+
+        // testing our assumption that VTXFMT1 means meshes are already scaled and translated
+        const prescaled = scale[0] === 1 && scale[1] === 1 && scale[2] === 1;
+        const pretranslated = pos[0] === 0 && pos[1] === 0 && pos[2] === 0;
         if (vertexFormats.has(1)) {
-            assert(p1[0] === 1);
+            assert(prescaled && pretranslated);
         }
+        if (prescaled && pretranslated && !vertexFormats.has(1)) {
+            console.log(name, vertexFormats)
+        }
+
         const isSkybox = ['solla.shp', 'enkei4.shp'].includes(name);
 
-        return { name, p0, p1, isSkybox, vertexData, vertexLayouts, vertexFormats, scale, textures, textureIndices };
+        return { name, pos, scale, isSkybox, vertexData, vertexLayouts, vertexFormats, bounding_radius, textures, textureIndices };
     }
 
     public createTexture(name: string): GXTexture.TextureInputGX {
