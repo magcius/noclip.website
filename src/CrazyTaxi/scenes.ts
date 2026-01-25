@@ -174,7 +174,7 @@ class ShapeRenderer {
             console.warn(`no textures`)
         }
         this.shape.textures.forEach(texture => {
-            if (this.textureHolder.findTexture(texture) === null) {
+            if (this.textureHolder.findTextureEntryIndex(texture) === -1) {
                 console.warn(`missing texture ${texture}`)
             }
         })
@@ -671,7 +671,9 @@ class SceneDesc implements Viewer.SceneDesc {
             names.push(filename);
         }
         const textureHolder = new GXTextureHolder();
-        textureHolder.addTextures(gfxDevice, textures);
+        for (const texture of textures) {
+            textureHolder.addTexture(gfxDevice, texture);
+        }
         const scene = new Scene(gfxDevice, manager, textureHolder, [pos, pos2, pos3], names);
         return scene;
     }
