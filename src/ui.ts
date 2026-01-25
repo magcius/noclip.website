@@ -2590,6 +2590,7 @@ class PanelButton extends SingleIconButton {
 class ShareButton extends PanelButton {
     public currentShareURLEntry: TextField;
     public copyButton: HTMLElement;
+    private shareURL: string = '';
     private copyButtonState: 'copy' | 'copied';
 
     constructor() {
@@ -2645,8 +2646,24 @@ class ShareButton extends PanelButton {
     }
 
     public setShareURL(shareURL: string) {
+        if (this.shareURL === shareURL)
+            return;
+
+        this.shareURL = shareURL;
+
+        if (!this.isOpen)
+            return;
+
         this.setCopyButtonState('copy');
-        this.currentShareURLEntry.setValue(shareURL);
+        this.currentShareURLEntry.setValue(this.shareURL);
+    }
+
+    public override setIsOpen(v: boolean): void {
+        super.setIsOpen(v);
+        if (this.isOpen) {
+            this.setCopyButtonState('copy');
+            this.currentShareURLEntry.setValue(this.shareURL);
+        }
     }
 }
 
