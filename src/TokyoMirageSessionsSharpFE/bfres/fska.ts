@@ -9,7 +9,7 @@ import { assert, readString } from "../../util.js";
 /**
  * reads from a bfres file and returns an array of FSKA objects
  */
-export function parseFSKA(buffer: ArrayBufferSlice, offset: number, count: number, gpu_region_offset: number): FSKA[]
+export function parseFSKA(buffer: ArrayBufferSlice, offset: number, count: number): FSKA[]
 {
     const view = buffer.createDataView();
 

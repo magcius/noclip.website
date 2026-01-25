@@ -31,7 +31,7 @@ export function parseBFRES(buffer: ArrayBufferSlice): FRES
 
     const fska_array_offset = view.getUint32(0x58, true);
     const fska_count = view.getUint16(0xE2, true);
-    const fska = parseFSKA(buffer, fska_array_offset, fska_count, gpu_region_offset);
+    const fska = parseFSKA(buffer, fska_array_offset, fska_count);
 
     // textures are stored in an embedded .bntx file
     const embedded_file_count = view.getUint16(0xEC, true);
