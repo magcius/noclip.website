@@ -3251,7 +3251,7 @@ function modeProcExec<T extends number>(globals: dGlobals, actor: ModeFuncExec<T
 }
 
 function modeProcInit<T extends number>(globals: dGlobals, actor: ModeFuncExec<T>, mode_tbl: ModeFunc[], mode: T): void {
-    const func = mode_tbl[actor.curMode * 2 + 0];
+    const func = mode_tbl[mode * 2 + 0];
     func.call(actor, globals, 0);
     actor.curMode = mode;
 }
