@@ -644,7 +644,7 @@ export class DkrAnimationTrack {
         if (this.actor !== null) {
             if (this.actorName === 'AnimCamera') {
                 this.actor.setOverrideAlpha(1.0);
-                if (DkrControlGlobals.ENABLE_ANIM_CAMERA.on && this.channel === DkrControlGlobals.ANIM_TRACK_SELECT.currentChannel && !DkrControlGlobals.ANIM_THIRD_PERSON.on)
+                if (DkrControlGlobals.ENABLE_ANIM_CAMERA.on)
                     this.actor.setOverrideAlpha(0.0);
             }
             this.actor.prepareToRender(device, renderInstManager, viewerInput);
@@ -658,7 +658,8 @@ export class DkrAnimationTrack {
 
 interface ActorTrack {
    [key: string]: DkrAnimationTrack;
-} 
+}
+
 export class DkrAnimationTracksChannel {
     private actorTracks: ActorTrack = {};
     private actorTrackKeys: string[] = [];
@@ -727,14 +728,14 @@ export class DkrAnimationTracksChannel {
 
     private internalProgresses: { [k: string]: number } = {}; // Only used for non-camera tracks.
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, animChannel: number): void {
         for(const key of this.actorTrackKeys) {
-            if(this.animCameraKey !== null && DkrControlGlobals.ANIM_TRACK_SELECT.currentChannel !== this.channel) {
+            if (this.animCameraKey !== null && this.channel !== animChannel)
                 continue;
-            }
             this.actorTracks[key].prepareToRender(device, renderInstManager, viewerInput);
         }
-        if(this.animCameraKey === null && this.hasBeenCompiled) {
+
+        if (this.animCameraKey === null && this.hasBeenCompiled) {
             // This will animate the tracks that don't have an animation camera.
             for(const key of this.actorTrackKeys) {
                 if(this.internalProgresses[key] === undefined) {
@@ -762,6 +763,7 @@ export class DkrAnimationTracks {
     private hasBeenCompiled = false;
     private channels: Channels = {};
     private channelKeys: string[] = [];
+    private animChannel = -1;
 
     constructor() {
     }
@@ -787,50 +789,11 @@ export class DkrAnimationTracks {
 
         for(const key of this.channelKeys)
             this.channels[key].compile(level, renderCache, dataManager, textureCache);
-        this.getCameraChannels();
         this.hasBeenCompiled = true;
     }
 
-    private getCameraChannels(): void {
-        if(!!DkrControlGlobals.ANIM_TRACK_SELECT.trackSelectOptions) {
-            DkrControlGlobals.ANIM_TRACK_SELECT.selectableChannels = [];
-
-            let hasFlyby = -1;
-
-            let trackSelectStrings = []
-
-            for(const key of this.channelKeys) {
-                if(!this.channels[key].hasAnimationCamera()) {
-                    continue;
-                }
-                if(key === '1') {
-                    hasFlyby = trackSelectStrings.length;
-                }
-                let indexStr = parseInt(key).toString(16).toUpperCase();
-                if(indexStr.length === 1) {
-                    indexStr = '0' + indexStr;
-                }
-                let trackName;
-                try {
-                    trackName = DkrControlGlobals.ANIM_TRACK_SELECT.trackSelectOptions[key];
-                } catch(e) {
-                    trackName = '<NOT DEFINED>';
-                }
-                trackSelectStrings.push(indexStr + ': ' + trackName);
-                DkrControlGlobals.ANIM_TRACK_SELECT.selectableChannels!.push(parseInt(key));
-            }
-
-            if(DkrControlGlobals.ANIM_TRACK_SELECT.elem !== null) {
-                const trackSelect = DkrControlGlobals.ANIM_TRACK_SELECT.elem as SingleSelect;
-                trackSelect.setStrings(trackSelectStrings);
-
-                if(hasFlyby > -1) {
-                    trackSelect.selectItem(hasFlyby);
-                } else {
-                    trackSelect.selectItem(0);
-                }
-            }
-        }
+    public setAnimChannel(channel: number): void {
+        this.animChannel = channel;
     }
 
     public hasChannel(channel: number): boolean {
@@ -870,7 +833,7 @@ export class DkrAnimationTracks {
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         if(!!this.channelKeys){
             for(const key of this.channelKeys) {
-                this.channels[key].prepareToRender(device, renderInstManager, viewerInput);
+                this.channels[key].prepareToRender(device, renderInstManager, viewerInput, this.animChannel);
             }
         }
     }

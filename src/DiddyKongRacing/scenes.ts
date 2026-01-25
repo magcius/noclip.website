@@ -177,16 +177,6 @@ class DKRSceneDesc implements Viewer.SceneDesc {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
-        if(this.trackParams.animTracks !== null) {
-            DkrControlGlobals.ANIM_TRACK_SELECT.trackSelectOptions = this.trackParams.animTracks;
-            DkrControlGlobals.ANIM_TRACK_SELECT.trackSelectOptionKeys = Object.keys(this.trackParams.animTracks);
-        } else {
-            DkrControlGlobals.ANIM_TRACK_SELECT.trackSelectOptions = {};
-            DkrControlGlobals.ANIM_TRACK_SELECT.trackSelectOptionKeys = Object.keys({});
-        }
-        DkrControlGlobals.ANIM_TRACK_SELECT.selectableChannels = null;
-        DkrControlGlobals.ANIM_TRACK_SELECT.selectedIndex = -1;
-        DkrControlGlobals.ANIM_TRACK_SELECT.selectedIndexUpdated();
         this.renderer = new DKRRenderer(device);
 
         const renderCache = this.renderer.renderHelper.renderCache;
