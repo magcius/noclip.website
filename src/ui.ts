@@ -1283,6 +1283,8 @@ export class TextureViewer extends Panel {
     private surfaceView: HTMLElement;
     private fullSurfaceView: HTMLElement;
     private properties: HTMLElement;
+    private searchBar: TextEntry;
+    private filteredTextureNames: string[] = [];
     private newTexturesDebouncer = new FrameDebouncer();
     private textureList: TextureListHolder | null = null;
 
@@ -1291,6 +1293,14 @@ export class TextureViewer extends Panel {
 
         this.setTitle(TEXTURES_ICON, 'Textures');
         this.setVisible(false);
+
+        this.searchBar = new TextEntry();
+        this.searchBar.ontext = (text) => {
+            this.filterTextures(text);
+        };
+        this.searchBar.setIcon(SEARCH_ICON);
+        this.searchBar.setPlaceholder('Search...');
+        this.contents.appendChild(this.searchBar.elem);
 
         this.scrollList = new SingleSelect();
         this.scrollList.elem.style.height = `200px`;
@@ -1328,11 +1338,18 @@ export class TextureViewer extends Panel {
 
         this.newTexturesDebouncer.callback = () => {
             if (this.textureList !== null)
-                this.scrollList.setStrings(this.textureList.textureNames);
+                this.scrollList.setStrings(this.filteredTextureNames);
             else
                 this.scrollList.setStrings([]);
         };
         this.setTextureList(null);
+    }
+
+    private filterTextures(search: string) {
+        this.filteredTextureNames = this.textureList!.textureNames.filter(name => {
+            return name.toLowerCase().includes(search.toLowerCase());
+        });
+        this.newTexturesDebouncer.trigger();
     }
 
     private showInSurfaceView(surface: HTMLCanvasElement) {
@@ -1357,11 +1374,14 @@ export class TextureViewer extends Panel {
         }
     }
 
-    private async selectTexture(i: number) {
-        const texture = await this.textureList!.getViewerTexture(i);
+    private async selectTexture(filteredNameIdx: number) {
+        const name = this.filteredTextureNames[filteredNameIdx];
+        const textureIdx = this.textureList!.textureNames.findIndex(haystack => haystack === name);
+        assert(textureIdx !== undefined);
+        const texture = await this.textureList!.getViewerTexture(textureIdx);
         assert(texture.surfaces.length > 0);
 
-        this.scrollList.setHighlighted(i);
+        this.scrollList.setHighlighted(filteredNameIdx);
 
         const properties = new Map<string, string>();
         properties.set('Name', texture.name);
@@ -1396,6 +1416,7 @@ export class TextureViewer extends Panel {
         this.textureList = textureList;
 
         if (this.textureList !== null) {
+            this.filteredTextureNames = this.textureList.textureNames;
             this.textureList.onnewtextures = () => {
                 this.newTexturesDebouncer.trigger();
             };
