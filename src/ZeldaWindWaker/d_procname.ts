@@ -4,6 +4,8 @@ export enum dProcName_e {
     d_kankyo            = 0x0015,
     d_envse             = 0x0017,
     d_a_sea             = 0x0028,
+    d_a_obj_pirateship  = 0x003B,
+    d_a_obj_tousekiki   = 0x003C,
     d_a_mgameboard      = 0x0040,
     d_a_obj_ikada       = 0x0046,
     d_a_obj_lpalm       = 0x004B,

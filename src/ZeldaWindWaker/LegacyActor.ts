@@ -46,7 +46,7 @@ function computeActorModelMatrix(m: mat4, actor: fopAcM_prm_class): void {
 const chk = new dBgS_GndChk();
 
 // "Legacy actor" for noclip
-class d_a_noclip_legacy extends fopAc_ac_c {
+export class d_a_noclip_legacy extends fopAc_ac_c {
     private phase = cPhs__Status.Started;
     public morf: mDoExt_McaMorf;
     public shadowChk: dBgS_GndChk;
