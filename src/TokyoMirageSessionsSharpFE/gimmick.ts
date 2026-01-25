@@ -22,13 +22,14 @@ export class gimmick
      */
     constructor (position: vec3, rotation: vec3, scale: vec3, model_fres: FRES, device: GfxDevice, renderHelper: GfxRenderHelper, animation_fres?: FRES)
     {
-        //initialize textures
+        // initialize textures
         const bntx = BNTX.parse(model_fres.embedded_files[0].buffer);
         const gfx_texture_array: GfxTexture[] = deswizzle_and_upload_bntx_textures(bntx, device);
 
         const fmdl = model_fres.fmdl[0];
 
-        let fska: FSKA | null = null;
+        // get skeletal animation (if there is one)
+        let fska: FSKA | undefined = undefined;
         if (animation_fres != undefined && animation_fres.fska.length > 0)
         {
             fska = animation_fres.fska[0];

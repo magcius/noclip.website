@@ -112,8 +112,8 @@ export class fshp_renderer
             const texture = bntx.textures.find((f) => f.name === texture_name);
             if (texture !== undefined)
             {
-                const texture_index = bntx.textures.indexOf(texture);
-                const gfx_texture = gfx_texture_array[texture_index];
+                const gfx_texture_index = bntx.textures.indexOf(texture);
+                const gfx_texture = gfx_texture_array[gfx_texture_index];
                 const sampler_descriptor = fmat.sampler_descriptors[i];
                 const gfx_sampler = renderHelper.renderCache.createSampler(sampler_descriptor);
                 this.sampler_bindings.push({ gfxTexture: gfx_texture, gfxSampler: gfx_sampler, lateBinding: null })
@@ -123,6 +123,10 @@ export class fshp_renderer
                 console.error(`texture ${texture_name} not found (fshp ${fshp.name})`);
                 throw("whoops");
             }
+        }
+        if (this.sampler_bindings.length == 0)
+        {
+            this.do_not_render = true;
         }
 
         // initialize shader

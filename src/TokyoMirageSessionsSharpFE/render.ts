@@ -37,22 +37,16 @@ export class TMSFEScene implements SceneGfx
             const model_fres = level_models[level_models_index].model_fres;
             const fmdl = model_fres.fmdl[0];
 
-            //initialize textures
+            // initialize textures
             const bntx = BNTX.parse(model_fres.embedded_files[0].buffer);
             const gfx_texture_array: GfxTexture[] = deswizzle_and_upload_bntx_textures(bntx, device);
             
-            // TODO: is there a less insane way to do this
-            let fska: FSKA | null = null;
-            if (level_models[level_models_index].animation_fres != null)
+            // get skeletal animation (if there is one)
+            let fska: FSKA | undefined = undefined;
+            const animation_fres = level_models[level_models_index].animation_fres;
+            if (animation_fres != undefined && animation_fres.fska.length > 0)
             {
-                const animation_fres = level_models[level_models_index].animation_fres;
-                if (animation_fres?.fska != null)
-                {
-                    if (animation_fres.fska.length > 0)
-                    {
-                        fska = animation_fres.fska[0];
-                    }
-                }
+                fska = animation_fres.fska[0];
             }
 
             let special_skybox_model: boolean = special_skybox && fmdl.name == "sky";

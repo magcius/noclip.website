@@ -20,7 +20,7 @@ export class fmdl_renderer
     public animation_play: boolean = true;
 
     private fskl: FSKL;
-    private fska: FSKA | null;
+    private fska: FSKA | undefined;
     private bone_to_bone_animation_indices: number[] = [];
     private smooth_rigid_matrix_array: mat4[] = [];
     private transform_matrix: mat4 = mat4.create();
@@ -33,7 +33,7 @@ export class fmdl_renderer
         fmdl: FMDL,
         bntx: BNTX.BNTX,
         gfx_texture_array: GfxTexture[],
-        fska: FSKA | null,
+        fska: FSKA | undefined,
         position: vec3,
         rotation: vec3,
         scale: vec3,
@@ -50,7 +50,7 @@ export class fmdl_renderer
         assert(this.fskl.smooth_rigid_indices.length < BONE_MATRIX_MAX_LENGTH);
 
         // for each bone, which element of the fska bone_animations array applies to this bone
-        if (this.fska != null)
+        if (this.fska != undefined)
         {
             for (let i = 0; i < this.fskl.bones.length; i++)
             {
@@ -115,7 +115,7 @@ export class fmdl_renderer
     render(renderHelper: GfxRenderHelper, viewerInput: ViewerRenderInput, renderInstListMain: GfxRenderInstList, renderInstListSkybox: GfxRenderInstList): void
     {
         let current_bones: FSKL_Bone[] = [];
-        if (this.fska == null)
+        if (this.fska == undefined)
         {
             // this model doesn't have an animated skeleton
             current_bones = this.fskl.bones;
@@ -207,7 +207,7 @@ export class fmdl_renderer
                 continue;
             }
             
-            if (this.fska == null)
+            if (this.fska == undefined)
             {
                 console.error("trying to animate the skeleton of a fmdl with no fska");
                 throw("whoops");
